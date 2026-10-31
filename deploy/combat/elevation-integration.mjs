@@ -46,7 +46,7 @@ try {
   await until(()=>rooms.every(r=>r.state?.players?.size===4 &&
     Number(r.state?.fortification?.height)===4),6500,"four players and synchronized wall");
   assert.ok(rooms.every(r=>r.roomId===a.roomId));
-  assert.equal(fort().ladderFootX,6.1);
+  assert.ok(Math.abs(fort().ladderFootX-6.1)<.005, "Colyseus float32 ladder sync");
   assert.equal(fort().x,8);
   console.log("PASS: four players share authoritative 4m wall and ladder");
 
