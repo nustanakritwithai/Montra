@@ -55,6 +55,9 @@ jobs:
               "@colyseus/schema": "5.0.14",
               "@colyseus/sdk": "0.18.1"
             },
+            "overrides": {
+              "@colyseus/core": "0.18.23"
+            },
             "devDependencies": {
               "typescript": "5.9.3",
               "@types/node": "^22.0.0",
