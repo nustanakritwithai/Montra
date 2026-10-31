@@ -519,6 +519,106 @@
       demoDest = target;
     }
   }
+  function ownServerCharacter() {
+    return mode === "live" ? room?.state?.players?.get?.(localId) : null;
+  }
+  function hasLiveElevation() {
+    return mode === "live" && room && Number.isFinite(Number(room.state?.fortification?.height));
+  }
+  function setRangedMode(armed) {
+    rangedMode = Boolean(armed);
+    const button = $("shoot");
+    if (!button) return;
+    button.classList.toggle("shoot-active",rangedMode);
+    button.setAttribute("aria-pressed",String(rangedMode));
+  }
+  function shootAtTarget(targetId) {
+    if (!targetId) return;
+    if (!hasLiveElevation()) {
+      toast("ต้องติดตั้ง Server ความสูงและการยิงบน VPS ก่อน");
+      return;
+    }
+    const me=ownServerCharacter();
+    if (!me || me.alive===false) { toast("ยังยิงไม่ได้ · รอเกิดใหม่"); return; }
+    if (me.combatState==="climbing") { toast("ปีนกำแพงให้เสร็จก่อนยิง");return; }
+    rangedTargetId=targetId;
+    selectedPkTargetId=targetId===MONSTER_ID ? null : targetId;
+    syncPKHud();
+    try {room.send("shoot",{targetId});}
+    catch(err){ console.error("MONTRA shot failed",err); toast("ส่งคำสั่งยิงไม่สำเร็จ"); }
+  }
+  function toggleRangedMode() {
+    if (!hasLiveElevation()) {
+      toast("การยิงอาคมจากที่สูงใช้ได้ใน LIVE เมื่ออัปเดต VPS แล้ว");
+      return;
+    }
+    setRangedMode(!rangedMode);
+    if (rangedMode) {
+      if (rangedTargetId) shootAtTarget(rangedTargetId);
+      else toast("โหมดยิงอาคม · แตะผีหรือผู้เล่นเพื่อยิง");
+    } else {
+      toast("กลับสู่โหมดโจมตีระยะประชิด");
+    }
+  }
+  function syncClimbButton() {
+    const button=$("climb");
+    if (!button) return;
+    const player=ownServerCharacter();
+    const onWall=Number(player?.y)>activeFort.height-0.12;
+    const label=button.querySelector("span:last-child");
+    if(label)label.textContent=onWall?"ลงกำแพง":"ปีน";
+    button.classList.toggle("climb-active", Boolean(player?.combatState==="climbing"));
+  }
+  function requestClimb() {
+    if (!hasLiveElevation()) {
+      toast("ระบบปีนกำแพงต้องติดตั้งบน VPS ก่อน");
+      return;
+    }
+    const me=ownServerCharacter();
+    if (!me || me.alive===false) {toast("ตัวละครยังไม่พร้อม");return;}
+    if (me.combatState==="climbing") {toast("กำลังปีนกำแพง");return;}
+    const onWall=Math.abs(Number(me.y)-activeFort.height)<.15;
+    const direction=onWall?"down":"up";
+    const to=onWall
+      ? {x:activeFort.ladderTopX,z:activeFort.ladderTopZ}
+      : {x:activeFort.ladderFootX,z:activeFort.ladderFootZ};
+    const distance=Math.hypot(Number(me.x)-to.x,Number(me.z)-to.z);
+    if (distance > (onWall?1.2:1.55)) {
+      pointMove(to.x,to.z);
+      pendingClimb={direction,to};
+      toast(onWall?"กำลังเดินไปจุดลงกำแพง":"กำลังเดินไปที่บันไดปีนกำแพง");
+    } else {
+      pendingClimb=null;
+      try{room.send("climb",{structureId:activeFort.id,direction});}
+      catch(err){console.error(err);toast("ส่งคำสั่งปีนไม่สำเร็จ");}
+    }
+  }
+  function checkClimbApproach() {
+    if(!pendingClimb || !room || mode!=="live")return;
+    const player=ownServerCharacter();
+    if(!player)return;
+    if(player.combatState==="climbing"){pendingClimb=null;return;}
+    const dist=Math.hypot(Number(player.x)-pendingClimb.to.x,
+                           Number(player.z)-pendingClimb.to.z);
+    if(dist>1.1)return;
+    const {direction}=pendingClimb;
+    pendingClimb=null;
+    try {room.send("climb",{structureId:activeFort.id,direction});}
+    catch(err){console.error(err);toast("ส่งคำสั่งปีนไม่สำเร็จ");}
+  }
+  function renderMagicBolt(event) {
+    const from=event?.from,to=event?.to;
+    if(!from || !to)return;
+    const xyz=[from.x,from.y,from.z,to.x,to.y,to.z].map(Number);
+    if(!xyz.every(Number.isFinite))return;
+    const mesh=B.MeshBuilder.CreateLines("elevated magic shot",{
+      points:[new B.Vector3(...xyz.slice(0,3)),new B.Vector3(...xyz.slice(3,6))]
+    },scene);
+    mesh.color=B.Color3.FromHexString("#8ce7ff");
+    mesh.isPickable=false;
+    rangedEffects.push({mesh,until:performance.now()+240});
+  }
+
   const localHpBar = document.querySelector(".bar.hp i");
   function shortPkName(id) {
     return "ผู้เล่น-" + String(id || "").slice(0, 4);
