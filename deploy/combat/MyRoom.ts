@@ -56,6 +56,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private monsterReturning = false;
   // RRT only replaces NPC navigation. All AI intent/combat rules stay put.
   private monsterNavigator = new MonsterRRTNavigator();
+  private rrtDebugAt = -Infinity;
 
   // All guardian state lives on the server; no client may select NPC stats.
   private lastSummonAt = new Map<string, number>();
@@ -763,6 +764,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const waypoint = this.monsterNavigator.nextWaypoint(
       monster, target, this.simulatedMs, intent
     );
+    if (intent.startsWith("chase:") && this.simulatedMs - this.rrtDebugAt >= 1500) {
+      this.rrtDebugAt = this.simulatedMs;
+      console.log("MONTRA RRT chase diag", {
+        at: this.simulatedMs,
+        monster:{x:monster.x,z:monster.z},
+        target:{x:target.x,z:target.z}, waypoint,
+        route:this.monsterNavigator.debug()
+      });
+    }
     if (!waypoint) return; // Never fall back to walking through the wall.
 
     const dx = waypoint.x-monster.x;
