@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — ต้นแบบ MMORPG 3D ไสยศาสตร์ไทยสำหรับมือถือ แบบแตะพื้นเพื่อเดิน" />
   <title>MONTRA — หมู่บ้านอาคม | Alpha 0.1</title>
-  <link rel="stylesheet" href="./styles.css?v=0.1.8" />
+  <link rel="stylesheet" href="./styles.css?v=0.1.9" />
 </head>
 <body>
   <main id="game" aria-label="MONTRA เกมต้นแบบสามมิติ">
@@ -39,13 +39,15 @@
       <small id="pkHint">แตะตัวผู้เล่นคนอื่นเพื่อโจมตี</small>
     </section>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <div class="tap-tip">แตะพื้นเพื่อเดิน · ลากเพื่อหมุนกล้อง</div>
+    <div class="tap-tip">แตะพื้นเดิน · แตะกำแพงปีน · กด ยิงอาคม เพื่อเล็งจากที่สูง</div>
 
     <section class="controls" aria-label="ปุ่มควบคุม">
       <div class="skill-bar">
         <button id="summon" class="skill" type="button" aria-pressed="false" title="อัญเชิญหรือเก็บวิญญาณของคุณ"><span class="glyph violet">♧</span><span>เรียกผี</span></button>
         <button id="possess" class="skill" type="button"><span class="glyph amber">✴</span><span>เข้าสิง</span></button>
         <button id="attack" class="skill" type="button"><span class="glyph red">⚔</span><span>โจมตี</span></button>
+        <button id="shoot" class="skill" type="button" aria-pressed="false" title="เลือกเป้าหมายแล้วยิงอาคม"><span class="glyph blue">✹</span><span>ยิงอาคม</span></button>
+        <button id="climb" class="skill" type="button" title="ปีนหรือไต่ลงกำแพง"><span class="glyph amber">⇧</span><span>ปีน</span></button>
         <button id="bag" class="skill" type="button"><span class="glyph dark">▣</span><span>กระเป๋า</span></button>
       </div>
       <nav class="nav-bar" aria-label="เมนูเกม">
@@ -61,10 +63,10 @@
       <div class="drawer-header"><h2 id="drawerTitle">แผนที่</h2><button id="drawerClose" class="close" aria-label="ปิด">✕</button></div>
       <div id="drawerBody" class="drawer-body"></div>
     </section>
-    <footer class="version">ALPHA V0.1.8 · ภาพและระบบเล่นทดสอบ ไม่ใช่ MMORPG ที่เปิดให้บริการแล้ว</footer>
+    <footer class="version">ALPHA V0.1.9 · ภาพและระบบเล่นทดสอบ ไม่ใช่ MMORPG ที่เปิดให้บริการแล้ว</footer>
   </main>
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
-  <script src="./main.js?v=0.1.8" defer></script>
+  <script src="./main.js?v=0.1.9" defer></script>
 </body>
 </html>

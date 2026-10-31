@@ -58,10 +58,29 @@ export const SummonedGuardian = schema({
 
 export type SummonedGuardian = SchemaType<typeof SummonedGuardian>;
 
+/**
+ * The room synchronizes actual climbable geometry to clients. No client may
+ * invent a higher wall or choose their player.y.
+ */
+export const Fortification = schema({
+  id: t.string().default("watchwall-1"),
+  x: t.number().default(8),
+  z: t.number().default(4),
+  width: t.number().default(1.4),
+  length: t.number().default(8),
+  height: t.number().default(4),
+  ladderFootX: t.number().default(6.1),
+  ladderFootZ: t.number().default(2.5),
+  ladderTopX: t.number().default(8),
+  ladderTopZ: t.number().default(2.5),
+}, "MontraFortification");
+export type Fortification = SchemaType<typeof Fortification>;
+
 export const MyRoomState = schema({
   players: t.map(Player),
   monster: Monster,
   summons: t.map(SummonedGuardian),
+  fortification: Fortification,
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

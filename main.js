@@ -101,6 +101,97 @@
     mesh.isPickable = pickable;
     return mesh;
   }
+  // The watchwall is rendered from server-synchronized fortification data.
+  // Local values are only a DEMO placeholder and never authorize climbing.
+  const defaultFort = {
+    id:"watchwall-1", x:8, z:4, width:1.4, length:8, height:4,
+    ladderFootX:6.1, ladderFootZ:2.5,
+    ladderTopX:8, ladderTopZ:2.5
+  };
+  let activeFort = { ...defaultFort };
+  let fortVisualKey = "";
+  const fortRoot = new B.TransformNode("watchwall-root", scene);
+  const fortBody = B.MeshBuilder.CreateBox("solid watchwall", {size:1}, scene);
+  fortBody.parent=fortRoot;
+  fortBody.material=stoneMat;
+  fortBody.metadata={climbableWall:true};
+  const fortTop = B.MeshBuilder.CreateBox("walkable watchwall crest", {size:1}, scene);
+  fortTop.parent=fortRoot;
+  fortTop.material=woodenAlt;
+  fortTop.metadata={walkable:true, elevatedTop:true};
+  const ladderHitbox = B.MeshBuilder.CreateBox("ladder pick target", {size:1}, scene);
+  ladderHitbox.parent=fortRoot;
+  ladderHitbox.visibility=.004;
+  ladderHitbox.isPickable=true;
+  ladderHitbox.metadata={climbableWall:true};
+  const ladderRails=[];
+  for(let side of [-1,1]){
+    const rail=B.MeshBuilder.CreateCylinder("ladder rail",
+      {height:1,diameter:.105,tessellation:8},scene);
+    rail.parent=fortRoot;rail.material=gold;rail.isPickable=false;
+    ladderRails.push(rail);
+  }
+  const ladderRungs=[];
+  for(let i=1;i<=9;i++){
+    const rung=B.MeshBuilder.CreateBox("ladder rung",{size:1},scene);
+    rung.parent=fortRoot;
+    rung.material=woodenAlt;
+    rung.isPickable=false;
+    ladderRungs.push(rung);
+  }
+  function applyFortVisual(config, enabled = true) {
+    fortRoot.setEnabled(Boolean(enabled));
+    if(!enabled)return;
+    const keys=["x","z","width","length","height",
+      "ladderFootX","ladderFootZ","ladderTopX","ladderTopZ"];
+    const next={id:"watchwall-1"};
+    for(const key of keys){
+      const value=Number(config?.[key]);
+      if(!Number.isFinite(value))return;
+      next[key]=value;
+    }
+    const key=JSON.stringify(next);
+    activeFort=next;
+    if(key===fortVisualKey)return;
+    fortVisualKey=key;
+    fortBody.scaling.set(next.width,next.height,next.length);
+    fortBody.position.set(next.x,next.height/2,next.z);
+    fortTop.scaling.set(next.width+.16,.18,next.length);
+    // Crest top aligns with authoritative player feet elevation (y=height).
+    fortTop.position.set(next.x,next.height-.09,next.z);
+    const dx=next.ladderTopX-next.ladderFootX;
+    const dy=next.height;
+    const dist=Math.hypot(dx,dy);
+    for(let side=0;side<2;side++){
+      const r=ladderRails[side];
+      r.scaling.y=dist;
+      r.position.set(
+        (next.ladderFootX+next.ladderTopX)/2,
+        next.height/2,
+        next.ladderFootZ+(side===0?-.43:.43));
+      r.rotation.z=-Math.atan2(dx,dy);
+    }
+    ladderRungs.forEach((r,i)=>{
+      const t=(i+1)/(ladderRungs.length+1);
+      r.position.set(next.ladderFootX+dx*t,next.height*t,next.ladderFootZ);
+      r.scaling.set(.12,.12,1);
+    });
+    ladderHitbox.position.set(
+      (next.ladderFootX+next.ladderTopX)/2,
+      next.height/2,
+      next.ladderFootZ);
+    ladderHitbox.scaling.set(Math.abs(dx)+.9,next.height+.5,1.2);
+  }
+  applyFortVisual(defaultFort);
+  function syncFortification(state){
+    const fort=state?.fortification;
+    if(mode==="live" && (!fort || !Number.isFinite(Number(fort.height)))){
+      fortRoot.setEnabled(false);
+      return;
+    }
+    applyFortVisual(fort||defaultFort);
+  }
+
   function makeLantern(x, z) {
     cube("lantern pole", [x, 1.1, z], [0.13, 2.2, 0.13], darkWood);
     cube("lantern cap", [x, 2.25, z], [.52, .12, .52], roofMat);
@@ -199,7 +290,8 @@
     hitbox.isPickable = !local;
     hitbox.metadata = { pkPlayerId: id };
     return {
-      node: parent, local, x: 0, z: 0, targetX: 0, targetZ: 0,
+      node: parent, local, x: 0, y: 0, z: 0,
+      targetX: 0, targetY: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
       serverFacing: null, hitFlashUntil: 0
     };
@@ -265,7 +357,8 @@
     }
     parent.position.set(x, 0, z);
     return {
-      node: parent, ownerId, x, z, targetX: x, targetZ: z,
+      node: parent, ownerId, x, y:0, z,
+      targetX: x, targetY:0, targetZ: z,
       facing: 0, desiredFacing: 0, action: "follow", hitUntil: 0
     };
   }
@@ -290,6 +383,10 @@
   }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
   let selectedPkTargetId = null;
+  let rangedMode = false;
+  let rangedTargetId = null;
+  let pendingClimb = null;
+  const rangedEffects = [];
   let spiritShown = false, possessed = false, spirit = null;
   const enemy = B.MeshBuilder.CreateSphere("possessed enemy", { diameter: 1.7, segments: 12 }, scene);
   enemy.position.copyFromFloats(1.1, .88, 10.4); enemy.scaling.set(.7,1.1,.8);
@@ -387,18 +484,24 @@
   }
 
   function updateStatus() {
+    const worldY = Number(room?.state?.players?.get?.(localId)?.y);
+    const altitude = Number.isFinite(worldY) ? Math.round(worldY * 10) / 10 : 0;
     ui.onlineCount.textContent = mode === "live"
-      ? `ผู้เล่นในฉาก: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} (LIVE)`
+      ? `ผู้เล่น: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} · สูง ${altitude}ม. (LIVE)`
       : "ผู้เล่นในฉาก: 1 (จำลอง)";
     setModeBadge(mode === "live");
   }
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo";
+    applyFortVisual(defaultFort);
     onlinePlayers.clear(); clearAvatars(); clearSummons();
     player = ensureAvatar("demo",true,0,0);
     demoDest = null; resetDemoMonster();
     selectedPkTargetId = null;
+    rangedTargetId = null;
+    pendingClimb = null;
+    setRangedMode(false);
     ui.pkPanel.hidden = true;
     if (localHpBar) localHpBar.style.width = "88%";
     updateStatus();
@@ -408,6 +511,7 @@
     const target = { x: Math.round(Math.max(-20,Math.min(20,x))*100)/100, z: Math.round(Math.max(-20,Math.min(20,z))*100)/100 };
     marker.position.x = target.x; marker.position.z = target.z;
     marker.setEnabled(true);
+    pendingClimb = null;
     selectedPkTargetId = null;
     syncPKHud();
     demoAutoAttack = false;
@@ -418,6 +522,106 @@
       demoDest = target;
     }
   }
+  function ownServerCharacter() {
+    return mode === "live" ? room?.state?.players?.get?.(localId) : null;
+  }
+  function hasLiveElevation() {
+    return mode === "live" && room && Number.isFinite(Number(room.state?.fortification?.height));
+  }
+  function setRangedMode(armed) {
+    rangedMode = Boolean(armed);
+    const button = $("shoot");
+    if (!button) return;
+    button.classList.toggle("shoot-active",rangedMode);
+    button.setAttribute("aria-pressed",String(rangedMode));
+  }
+  function shootAtTarget(targetId) {
+    if (!targetId) return;
+    if (!hasLiveElevation()) {
+      toast("ต้องติดตั้ง Server ความสูงและการยิงบน VPS ก่อน");
+      return;
+    }
+    const me=ownServerCharacter();
+    if (!me || me.alive===false) { toast("ยังยิงไม่ได้ · รอเกิดใหม่"); return; }
+    if (me.combatState==="climbing") { toast("ปีนกำแพงให้เสร็จก่อนยิง");return; }
+    rangedTargetId=targetId;
+    selectedPkTargetId=targetId===MONSTER_ID ? null : targetId;
+    syncPKHud();
+    try {room.send("shoot",{targetId});}
+    catch(err){ console.error("MONTRA shot failed",err); toast("ส่งคำสั่งยิงไม่สำเร็จ"); }
+  }
+  function toggleRangedMode() {
+    if (!hasLiveElevation()) {
+      toast("การยิงอาคมจากที่สูงใช้ได้ใน LIVE เมื่ออัปเดต VPS แล้ว");
+      return;
+    }
+    setRangedMode(!rangedMode);
+    if (rangedMode) {
+      if (rangedTargetId) shootAtTarget(rangedTargetId);
+      else toast("โหมดยิงอาคม · แตะผีหรือผู้เล่นเพื่อยิง");
+    } else {
+      toast("กลับสู่โหมดโจมตีระยะประชิด");
+    }
+  }
+  function syncClimbButton() {
+    const button=$("climb");
+    if (!button) return;
+    const player=ownServerCharacter();
+    const onWall=Number(player?.y)>activeFort.height-0.12;
+    const label=button.querySelector("span:last-child");
+    if(label)label.textContent=onWall?"ลงกำแพง":"ปีน";
+    button.classList.toggle("climb-active", Boolean(player?.combatState==="climbing"));
+  }
+  function requestClimb() {
+    if (!hasLiveElevation()) {
+      toast("ระบบปีนกำแพงต้องติดตั้งบน VPS ก่อน");
+      return;
+    }
+    const me=ownServerCharacter();
+    if (!me || me.alive===false) {toast("ตัวละครยังไม่พร้อม");return;}
+    if (me.combatState==="climbing") {toast("กำลังปีนกำแพง");return;}
+    const onWall=Math.abs(Number(me.y)-activeFort.height)<.15;
+    const direction=onWall?"down":"up";
+    const to=onWall
+      ? {x:activeFort.ladderTopX,z:activeFort.ladderTopZ}
+      : {x:activeFort.ladderFootX,z:activeFort.ladderFootZ};
+    const distance=Math.hypot(Number(me.x)-to.x,Number(me.z)-to.z);
+    if (distance > (onWall?1.2:1.55)) {
+      pointMove(to.x,to.z);
+      pendingClimb={direction,to};
+      toast(onWall?"กำลังเดินไปจุดลงกำแพง":"กำลังเดินไปที่บันไดปีนกำแพง");
+    } else {
+      pendingClimb=null;
+      try{room.send("climb",{structureId:activeFort.id,direction});}
+      catch(err){console.error(err);toast("ส่งคำสั่งปีนไม่สำเร็จ");}
+    }
+  }
+  function checkClimbApproach() {
+    if(!pendingClimb || !room || mode!=="live")return;
+    const player=ownServerCharacter();
+    if(!player)return;
+    if(player.combatState==="climbing"){pendingClimb=null;return;}
+    const dist=Math.hypot(Number(player.x)-pendingClimb.to.x,
+                           Number(player.z)-pendingClimb.to.z);
+    if(dist>1.1)return;
+    const {direction}=pendingClimb;
+    pendingClimb=null;
+    try {room.send("climb",{structureId:activeFort.id,direction});}
+    catch(err){console.error(err);toast("ส่งคำสั่งปีนไม่สำเร็จ");}
+  }
+  function renderMagicBolt(event) {
+    const from=event?.from,to=event?.to;
+    if(!from || !to)return;
+    const xyz=[from.x,from.y,from.z,to.x,to.y,to.z].map(Number);
+    if(!xyz.every(Number.isFinite))return;
+    const mesh=B.MeshBuilder.CreateLines("elevated magic shot",{
+      points:[new B.Vector3(...xyz.slice(0,3)),new B.Vector3(...xyz.slice(3,6))]
+    },scene);
+    mesh.color=B.Color3.FromHexString("#8ce7ff");
+    mesh.isPickable=false;
+    rangedEffects.push({mesh,until:performance.now()+240});
+  }
+
   const localHpBar = document.querySelector(".bar.hp i");
   function shortPkName(id) {
     return "ผู้เล่น-" + String(id || "").slice(0, 4);
@@ -491,11 +695,12 @@
     }
   }
 
-  function setOnlinePlayer(id, x, z, facing, hp, maxHp) {
+  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     onlinePlayers.set(id,{x,z});
     const a = ensureAvatar(id,id === localId,x,z);
     a.targetX = x;
+    a.targetY = Number.isFinite(y) ? y : 0;
     a.targetZ = z;
 
     // S1 server facing is authoritative. Old servers omit this field;
@@ -532,6 +737,7 @@
         summonAvatars.set(ownerId, actor);
       }
       actor.targetX = x;
+      actor.targetY = Number.isFinite(Number(npc.y)) ? Number(npc.y) : 0;
       actor.targetZ = z;
       actor.action = typeof npc.action === "string" ? npc.action : "follow";
       const yaw = Number(npc.facing);
@@ -548,16 +754,18 @@
   function syncState(state) {
     syncMonsterState(state);
     syncSummons(state);
+    syncFortification(state);
     const players = state?.players;
     if (!players || typeof players.forEach !== "function") return false;
     const seen = new Set();
     players.forEach((p,id) => {
       seen.add(id);
       setOnlinePlayer(id, Number(p.x), Number(p.z),
-        Number(p.facing), Number(p.hp), Number(p.maxHp));
+        Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y));
     });
     for (const id of onlinePlayers.keys()) if (!seen.has(id)) removeOnlinePlayer(id);
     syncPKHud();
+    syncClimbButton();
     return true;
   }
   let syncPoll = null;
@@ -586,10 +794,14 @@
       room = joined;
       mode = "live"; localId = joined.sessionId;
       clearAvatars(); clearSummons(); demoDest = null;
+      pendingClimb = null;
+      rangedTargetId = null;
+      setRangedMode(false);
       onlinePlayers.clear(); enemy.setEnabled(false);
       selectedPkTargetId = null;
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
       ui.monsterStatus.hidden = true;
+      syncFortification(joined.state);
       if (spirit) { spirit.dispose(); spirit = null; }
       spiritShown = false; possessed = false;
       updateStatus();
@@ -618,6 +830,28 @@
       });
       joined.onMessage("monster_respawn", () => {
         if (room === joined) toast("มอนสเตอร์ปรากฏตัวอีกครั้ง");
+      });
+      joined.onMessage("climb_started", notice => {
+        if (room!==joined)return;
+        if (notice?.playerId===localId) {
+          toast(notice.direction==="up"?"กำลังปีนขึ้นกำแพง":"กำลังไต่ลงกำแพง");
+          pendingClimb=null;
+        }
+        syncClimbButton();
+      });
+      joined.onMessage("climb_finished", notice => {
+        if(room!==joined)return;
+        if(notice?.playerId===localId) {
+          toast(Number(notice.height)>1?"ขึ้นถึงยอดกำแพงแล้ว · ยิงจากที่สูงได้":"ลงถึงพื้นแล้ว");
+        }
+        syncClimbButton();
+      });
+      joined.onMessage("ranged_hit", data => {
+        if(room!==joined)return;
+        renderMagicBolt(data);
+        if(data?.attackerId===localId) {
+          toast("ยิงอาคมโดนเป้าหมาย -" + data.damage + " HP");
+        }
       });
       joined.onMessage("summon_spawn", notice => {
         if (room !== joined) return;
@@ -692,6 +926,15 @@
         else if (info?.reason === "summon_limit") toast("เรียกวิญญาณพร้อมกันได้สูงสุด 1 ตัว");
         else if (info?.reason === "summon_cooldown") toast("อัญเชิญเร็วเกินไป · รอคูลดาวน์");
         else if (info?.reason === "summon_rate_limited") toast("กดเรียกวิญญาณถี่เกินไป");
+        else if (info?.reason === "shot_out_of_range") toast("เป้าหมายอยู่นอกระยะยิง");
+        else if (info?.reason === "shot_blocked") toast("กำแพงบังแนวกระสุนอาคม");
+        else if (info?.reason === "shot_cooldown") toast("รอพลังยิงอาคมอีกครู่");
+        else if (info?.reason === "climbing") toast("ยังโจมตีหรือเดินไม่ได้ขณะปีน");
+        else if (info?.reason === "ladder_too_far") toast("เดินเข้าหาบันไดก่อนปีน");
+        else if (info?.reason === "melee_height_blocked") toast("โจมตีประชิดข้ามระดับความสูงไม่ได้ · ใช้ยิงอาคม");
+        else if (info?.reason === "must_descend") toast("ต้องลงบันไดก่อนเดินไปพื้นด้านล่าง");
+        else if (info?.reason === "invalid_climb") toast("คำสั่งปีนกำแพงไม่ถูกต้อง");
+        else if (info?.reason === "invalid_shoot") toast("คำสั่งยิงอาคมไม่ถูกต้อง");
         else if (info?.reason === "invalid_summon" || info?.reason === "invalid_unsummon") {
           toast("คำสั่งวิญญาณไม่ถูกต้อง");
         }
@@ -704,7 +947,7 @@
           cb.onAdd("players", (p, id) => {
             const applyServerPlayer = () => setOnlinePlayer(
               id, Number(p.x), Number(p.z),
-              Number(p.facing), Number(p.hp), Number(p.maxHp)
+              Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y)
             );
             applyServerPlayer();
             if (typeof cb.listen === "function") {
@@ -712,6 +955,7 @@
               cb.listen(p, "z", applyServerPlayer);
               cb.listen(p, "facing", applyServerPlayer);
               cb.listen(p, "hp", applyServerPlayer);
+              cb.listen(p, "y", applyServerPlayer);
               cb.listen(p, "maxHp", applyServerPlayer);
             }
           });
@@ -763,23 +1007,32 @@
     const px = event.clientX - rect.left;
     const py = event.clientY - rect.top;
     if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
-    // One depth-sorted pick: remote players, the monster or ground.
-    // Never attack people through walls/terrain merely because they overlap
-    // the screen projection (alpha map currently has no solid obstacles).
+    // Depth-sorted pick includes the climbable wall, its crest, players,
+    // monster and walkable ground. Fire only where the target is visible.
     const picked = scene.pick(px, py, mesh =>
       mesh.metadata?.walkable === true ||
       (mesh === enemy && enemy.isEnabled()) ||
+      (fortRoot.isEnabled() && mesh.metadata?.climbableWall) ||
       (mode === "live" && mesh.metadata?.pkPlayerId &&
        mesh.metadata.pkPlayerId !== localId)
     );
     if (!picked?.hit) return;
-    const otherId = picked.pickedMesh?.metadata?.pkPlayerId;
-    if (otherId && mode === "live") {
-      tapPlayerForPK(otherId);
-    } else if (picked.pickedMesh === enemy) {
-      requestMonsterAttack();
-    } else if (picked.pickedMesh?.metadata?.walkable && picked.pickedPoint) {
-      pointMove(picked.pickedPoint.x, picked.pickedPoint.z);
+    const hitMesh=picked.pickedMesh;
+    const otherId=hitMesh?.metadata?.pkPlayerId;
+    if (otherId && mode==="live") {
+      if(rangedMode) shootAtTarget(otherId);
+      else tapPlayerForPK(otherId);
+    } else if (hitMesh === enemy) {
+      if(rangedMode) shootAtTarget(MONSTER_ID);
+      else requestMonsterAttack();
+    } else if(hitMesh?.metadata?.climbableWall) {
+      requestClimb();
+    } else if(hitMesh?.metadata?.elevatedTop && picked.pickedPoint) {
+      const me=ownServerCharacter();
+      if(!me || Math.abs(Number(me.y)-activeFort.height)>.15) requestClimb();
+      else pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
+    } else if(hitMesh?.metadata?.walkable && picked.pickedPoint) {
+      pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
     }
   });
   ui.world.addEventListener("pointercancel",()=> { pointer=null; });
@@ -814,6 +1067,17 @@
       }
     }
     ctx.fillStyle="#d2ad68";ctx.fillRect(sx(-4.2)-3,sy(-1.5)-3,6,6);
+    if(fortRoot.isEnabled()) {
+      ctx.strokeStyle="#c7ad84";ctx.lineWidth=large?5:3;
+      ctx.beginPath();
+      ctx.moveTo(sx(activeFort.x),sy(activeFort.z-activeFort.length/2));
+      ctx.lineTo(sx(activeFort.x),sy(activeFort.z+activeFort.length/2));
+      ctx.stroke();
+      ctx.fillStyle="#f1dda0";
+      ctx.beginPath();
+      ctx.arc(sx(activeFort.ladderFootX),sy(activeFort.ladderFootZ),
+        large?5:3,0,Math.PI*2);ctx.fill();
+    }
     ctx.fillStyle="#e15855"; ctx.beginPath();ctx.arc(sx(1.1),sy(10.4),large?6:3,0,Math.PI*2);ctx.fill();
     if (marker.isEnabled()) {
       ctx.strokeStyle="#ffe2a1";ctx.lineWidth=1.8;
@@ -891,18 +1155,29 @@
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
   $("attack").onclick = () => {
+    setRangedMode(false);
     if (mode === "live" && room && selectedPkTargetId) {
       tapPlayerForPK(selectedPkTargetId);
     } else {
       requestMonsterAttack();
     }
   };
+  $("shoot").onclick = toggleRangedMode;
+  $("climb").onclick = requestClimb;
 
   let elapsed=0;
   engine.runRenderLoop(() => {
     const dt=Math.min(engine.getDeltaTime()/1000,.06);
     elapsed+=dt;
     const now = performance.now();
+    checkClimbApproach();
+    for(let i=rangedEffects.length-1;i>=0;i--){
+      const fx=rangedEffects[i];
+      if(now>=fx.until){
+        fx.mesh.dispose();
+        rangedEffects.splice(i,1);
+      }
+    }
     if (mode === "demo") {
       if (demoRespawnAt > 0 && now >= demoRespawnAt) {
         resetDemoMonster();
@@ -950,6 +1225,7 @@
       const beforeX = a.x, beforeZ = a.z;
       const blend = 1 - Math.exp(-dt * 14);
       a.x += (a.targetX - a.x) * blend;
+      a.y += (a.targetY - a.y) * blend;
       a.z += (a.targetZ - a.z) * blend;
 
       // Infer every character's facing from the SERVER-SYNCED position
@@ -972,11 +1248,12 @@
       a.node.rotation.y = a.heading;
       const flash = (a.hitFlashUntil || 0) > now;
       a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
-      a.node.position.set(a.x, 0, a.z);
+      a.node.position.set(a.x, a.y, a.z);
     }
     for (const npc of summonAvatars.values()) {
       const blend = 1 - Math.exp(-dt * 12);
       npc.x += (npc.targetX - npc.x) * blend;
+      npc.y += (npc.targetY - npc.y) * blend;
       npc.z += (npc.targetZ - npc.z) * blend;
       const rotationDelta = Math.atan2(
         Math.sin(npc.desiredFacing - npc.facing),
@@ -985,7 +1262,7 @@
       npc.facing += rotationDelta * (1 - Math.exp(-dt * 10));
       npc.node.rotation.y = npc.facing;
       const bob = Math.sin(elapsed * 2.4 + npc.ownerId.length) * .09;
-      npc.node.position.set(npc.x, bob, npc.z);
+      npc.node.position.set(npc.x, npc.y+bob, npc.z);
       const striking = npc.action === "attack" || npc.hitUntil > now;
       const scale = striking ? 1.13 : 1;
       npc.node.scaling.set(scale, scale, scale);
@@ -997,7 +1274,7 @@
       const follow = 1 - Math.exp(-dt * 3.8);
       const target = camera.target;
       target.x += (me.x - target.x) * follow;
-      target.y += (.65 - target.y) * follow;
+      target.y += (me.y + .65 - target.y) * follow;
       target.z += (me.z + 1.5 - target.z) * follow;
     }
     enemy.position.y=.9+Math.sin(elapsed*1.8)*.07;

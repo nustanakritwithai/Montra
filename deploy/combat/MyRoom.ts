@@ -13,8 +13,16 @@ import {
   planarDistance,
   stepTowards,
 } from "./GameRules.js";
+import {
+  FORT, distance3d, isOnPlatform, isOnGround, isOnTop, touchesWallBody,
+  parseClimbRequest, progressClimb, step3d, wallBlocksShot,
+  type WorldPoint,
+} from "./HeightRules.js";
 
-type Gates = { move: CommandBucket; attack: CommandBucket; summon: CommandBucket };
+type Gates = {
+  move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
+  climb: CommandBucket;
+};
 
 /**
  * MONTRA S1: one 20-Hz authoritative simulation per room.
@@ -47,6 +55,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   // All guardian state lives on the server; no client may select NPC stats.
   private lastSummonAt = new Map<string, number>();
   private lastSummonAttackAt = new Map<string, number>();
+  private climbs = new Map<string, WorldPoint>();
 
   messages = {
     move: (client: Client, message: unknown) => {
@@ -54,6 +63,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!destination) return this.reject(client, "invalid_move");
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (this.climbs.has(client.sessionId)) return this.reject(client, "climbing");
+      if (isOnPlatform(player.y) && !isOnTop(destination.x, destination.z)) {
+        return this.reject(client, "must_descend");
+      }
       if (!this.gates.get(client.sessionId)?.move.consume(this.simulatedMs)) {
         return this.reject(client, "move_rate_limited");
       }
@@ -73,6 +86,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const attackerId = client.sessionId;
       const attacker = this.state.players.get(attackerId);
       if (!attacker || !attacker.alive) return this.reject(client, "not_alive");
+      if (this.climbs.has(attackerId)) return this.reject(client, "climbing");
       if (!this.gates.get(attackerId)?.attack.consume(this.simulatedMs)) {
         return this.reject(client, "attack_rate_limited");
       }
@@ -95,7 +109,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       attacker.targetId = targetId;
 
       const attackRange = monsterOrder ? RULES.playerAttackRange : RULES.pkAttackRange;
-      if (planarDistance(attacker, target) > attackRange) {
+      // Wall/vertical separation cannot be solved by a ground-only chase.
+      if (Math.abs(attacker.y - target.y) > attackRange) {
+        this.attackTargets.delete(attackerId);
+        attacker.targetId = "";
+        return this.reject(client, "melee_height_blocked");
+      }
+      if (distance3d(attacker, target) > attackRange) {
         attacker.combatState = "approaching";
         client.send("combat_notice", { reason: "approaching" });
       } else {
@@ -120,7 +140,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       const guardian = new SummonedGuardian({
         ownerId: id, kind: "guardian",
-        x: clampToMap(owner.x - 1.1), y: 0, z: clampToMap(owner.z + 0.9),
+        x: clampToMap(owner.x - 1.1), y: owner.y, z: clampToMap(owner.z + 0.9),
         facing: owner.facing, action: "follow", targetId: "",
       });
       this.state.summons.set(id, guardian);
@@ -137,6 +157,112 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return this.reject(client, "summon_rate_limited");
       }
       this.despawnSummon(id, "dismissed");
+    },
+
+    // The client never writes Y. A validated ladder is the only route
+    // between ground y=0 and the watchwall top y=4.
+    climb: (client: Client, message: unknown) => {
+      const order = parseClimbRequest(message);
+      if (!order) return this.reject(client, "invalid_climb");
+      const id = client.sessionId;
+      const player = this.state.players.get(id);
+      if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (this.climbs.has(id)) return this.reject(client, "already_climbing");
+      if (!this.gates.get(id)?.climb.consume(this.simulatedMs)) {
+        return this.reject(client, "climb_rate_limited");
+      }
+
+      const upward = order.direction === "up";
+      if (upward && !isOnGround(player.y)) return this.reject(client, "not_on_ground");
+      if (!upward && !isOnPlatform(player.y)) return this.reject(client, "not_on_wall");
+
+      const ladderPosition = upward
+        ? {x:FORT.ladderFootX,z:FORT.ladderFootZ}
+        : {x:FORT.ladderTopX,z:FORT.ladderTopZ};
+      const maxReach = upward ? FORT.climbTriggerRadius : FORT.descendTriggerRadius;
+      if (planarDistance(player, ladderPosition) > maxReach) {
+        return this.reject(client, "ladder_too_far");
+      }
+
+      this.attackTargets.delete(id);
+      this.destinations.delete(id);
+      player.targetId = "";
+      player.combatState = "climbing";
+      this.climbs.set(id, upward
+        ? {x:FORT.ladderTopX,y:FORT.height,z:FORT.ladderTopZ}
+        : {x:FORT.ladderFootX,y:0,z:FORT.ladderFootZ});
+      this.broadcast("climb_started", { playerId:id, direction:order.direction },
+        { afterNextPatch:true });
+    },
+
+    // One targeted magic projectile per valid click; server computes muzzle,
+    // target body position, 3D range, line of sight, damage and cooldown.
+    shoot: (client: Client, message: unknown) => {
+      const monsterOrder = parseAttackCommand(message);
+      const pkOrder = monsterOrder ? null : parsePkTargetCommand(message);
+      if (!monsterOrder && !pkOrder) return this.reject(client, "invalid_shoot");
+      const id = client.sessionId;
+      const shooter = this.state.players.get(id);
+      if (!shooter || !shooter.alive) return this.reject(client, "not_alive");
+      if (this.climbs.has(id)) return this.reject(client, "climbing");
+      if (!this.gates.get(id)?.attack.consume(this.simulatedMs)) {
+        return this.reject(client, "attack_rate_limited");
+      }
+
+      const targetId = monsterOrder ? RULES.monsterId : pkOrder!.targetId;
+      if (targetId === id) return this.reject(client, "self_attack");
+      const target = monsterOrder
+        ? this.state.monster
+        : this.state.players.get(targetId);
+      if (!target || !target.alive) return this.reject(client, "target_unavailable");
+
+      const from = { x:shooter.x, y:shooter.y+FORT.shootOriginHeight, z:shooter.z };
+      const to = { x:target.x, y:target.y + FORT.targetBodyHeight, z:target.z };
+      if (distance3d(from,to) > FORT.rangedRange) {
+        return this.reject(client, "shot_out_of_range");
+      }
+      if (wallBlocksShot(from,to)) {
+        return this.reject(client, "shot_blocked");
+      }
+
+      const last = this.lastAttackMs.get(id) ?? -Infinity;
+      if (this.simulatedMs-last < FORT.rangedCooldownMs) {
+        return this.reject(client, "shot_cooldown");
+      }
+      this.lastAttackMs.set(id,this.simulatedMs);
+      shooter.facing = facingTo(target.x-shooter.x, target.z-shooter.z);
+
+      if (monsterOrder) {
+        const ghost = this.state.monster;
+        ghost.hp = Math.max(0,ghost.hp-FORT.rangedDamage);
+        ghost.hitSeq += 1;
+        this.broadcast("combat_hit", {
+          attackerId:id,targetId,damage:FORT.rangedDamage,
+          hp:ghost.hp,maxHp:ghost.maxHp,hitSeq:ghost.hitSeq,source:"ranged",
+        }, { afterNextPatch:true });
+        if (ghost.hp===0) this.killMonster();
+      } else {
+        const victim=target as Player;
+        victim.hp=Math.max(0,victim.hp-FORT.rangedDamage);
+        victim.hitSeq+=1;
+        this.broadcast("pvp_hit", {
+          attackerId:id,targetId,damage:FORT.rangedDamage,
+          hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"ranged",
+        }, { afterNextPatch:true });
+        if (victim.hp===0) {
+          shooter.pkKills+=1;
+          victim.pkDeaths+=1;
+          this.knockoutPlayer(targetId,"pk",id);
+          this.broadcast("pvp_kill", {
+            winnerId:id,loserId:targetId,source:"ranged",
+            kills:shooter.pkKills,deaths:victim.pkDeaths,
+          }, { afterNextPatch:true });
+        }
+      }
+
+      this.broadcast("ranged_hit", {
+        attackerId:id,targetId,damage:FORT.rangedDamage,from,to,
+      }, { afterNextPatch:true });
     },
   };
 
@@ -167,7 +293,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!target || !target.alive) continue;
       // Guard's combat tether prevents hits across the map even if another
       // client sends a valid but distant target ID.
-      if (planarDistance(owner, target) > RULES.summonEngageDistance) continue;
+      if (distance3d(owner, target) > RULES.summonEngageDistance) continue;
       return { targetId, target };
     }
     return null;
@@ -181,7 +307,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         continue;
       }
 
-      const distanceToOwner = planarDistance(guardian, owner);
+      const distanceToOwner = distance3d(guardian, owner);
       const candidate = distanceToOwner <= RULES.summonLeashDistance
         ? this.findSummonTarget(ownerId, owner) : null;
 
@@ -189,7 +315,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const { targetId, target } = candidate;
         const dx = target.x - guardian.x;
         const dz = target.z - guardian.z;
-        const distance = Math.hypot(dx, dz);
+        const distance = distance3d(guardian,target);
         guardian.targetId = targetId;
         if (distance > 0.001) guardian.facing = facingTo(dx, dz);
 
@@ -198,11 +324,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           this.trySummonAttack(ownerId, guardian, targetId);
         } else {
           guardian.action = "chase";
-          const next = stepTowards(
+          const next = step3d(
             guardian, target, RULES.summonMoveSpeed * dt
           );
-          guardian.x = clampToMap(next.x);
-          guardian.z = clampToMap(next.z);
+          guardian.x = clampToMap(next.point.x);
+          guardian.y = next.point.y;
+          guardian.z = clampToMap(next.point.z);
         }
         continue;
       }
@@ -212,18 +339,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       guardian.targetId = "";
       const desired = {
         x: clampToMap(owner.x - 1.0),
+        y: owner.y,
         z: clampToMap(owner.z + 0.85),
       };
       const dx = desired.x - guardian.x;
       const dz = desired.z - guardian.z;
-      const distance = Math.hypot(dx, dz);
+      const distance = distance3d(guardian,desired);
       guardian.action = "follow";
       if (distance > RULES.summonFollowDistance) {
-        const next = stepTowards(
+        const next = step3d(
           guardian, desired, RULES.summonMoveSpeed * dt
         );
-        guardian.x = clampToMap(next.x);
-        guardian.z = clampToMap(next.z);
+        guardian.x = clampToMap(next.point.x);
+        guardian.y = next.point.y;
+        guardian.z = clampToMap(next.point.z);
         if (next.moved) guardian.facing = facingTo(dx, dz);
       } else {
         guardian.facing = owner.facing;
@@ -240,8 +369,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const target = isMonster
       ? this.state.monster : this.state.players.get(targetId);
     if (!target || !target.alive || targetId === ownerId) return;
-    if (planarDistance(owner, target) > RULES.summonEngageDistance) return;
-    if (planarDistance(guardian, target) > RULES.summonAttackRange + 0.00001) return;
+    if (distance3d(owner, target) > RULES.summonEngageDistance) return;
+    if (distance3d(guardian, target) > RULES.summonAttackRange + 0.00001) return;
 
     const last = this.lastSummonAttackAt.get(ownerId) ?? -Infinity;
     if (this.simulatedMs - last < RULES.summonAttackCooldownMs) return;
@@ -308,21 +437,63 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.tick(ctx.dt);
     }, RULES.tickRate);
 
-    console.log("MONTRA S1 + FreePK Engine started:", this.roomId);
+    const fort = this.state.fortification;
+    fort.id = FORT.id;
+    fort.x = FORT.x;
+    fort.z = FORT.z;
+    fort.width = FORT.width;
+    fort.length = FORT.length;
+    fort.height = FORT.height;
+    fort.ladderFootX = FORT.ladderFootX;
+    fort.ladderFootZ = FORT.ladderFootZ;
+    fort.ladderTopX = FORT.ladderTopX;
+    fort.ladderTopZ = FORT.ladderTopZ;
+
+    console.log("MONTRA Elevation Engine started:", this.roomId);
   }
 
   private tick(dt: number) {
     this.updateRespawns();
+    this.updateClimbs(dt);
     this.updatePlayerMovement(dt);
     this.updateMonsterAI(dt);
     this.updatePlayerAttacks();
     this.updateSummons(dt);
   }
 
+  private updateClimbs(dt: number) {
+    for (const [id,destination] of [...this.climbs]) {
+      const player = this.state.players.get(id);
+      if (!player || !player.alive) {
+        this.climbs.delete(id);
+        continue;
+      }
+      const next = progressClimb(player, destination, dt);
+      player.x = clampToMap(next.point.x);
+      player.y = next.point.y;
+      player.z = clampToMap(next.point.z);
+      player.facing = facingTo(destination.x-player.x, destination.z-player.z);
+      player.combatState = "climbing";
+      if (next.arrived) {
+        this.climbs.delete(id);
+        player.combatState = "idle";
+        this.broadcast("climb_finished", {
+          playerId:id, height:player.y,
+        }, { afterNextPatch:true });
+      }
+    }
+  }
+
+  private canOccupy(x: number, z: number, feetY: number): boolean {
+    if (isOnPlatform(feetY)) return isOnTop(x,z);
+    if (isOnGround(feetY)) return !touchesWallBody(x,z);
+    return false; // Only the server's climb state can cross heights.
+  }
+
   private updatePlayerMovement(dt: number) {
     const monster = this.state.monster;
     for (const [sessionId, player] of this.state.players) {
-      if (!player.alive) continue;
+      if (!player.alive || this.climbs.has(sessionId)) continue;
 
       const targetId = this.attackTargets.get(sessionId);
       if (targetId) {
@@ -337,11 +508,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         }
         const dx = target.x - player.x;
         const dz = target.z - player.z;
-        const distance = Math.hypot(dx, dz);
+        const distance = distance3d(player, target);
         player.targetId = targetId;
         player.facing = facingTo(dx, dz);
 
         const attackRange = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
+        if (Math.abs(player.y - target.y) > attackRange) {
+          this.endAttack(sessionId, player);
+          continue;
+        }
         if (distance <= attackRange) {
           player.combatState = "attacking";
           continue;
@@ -356,9 +531,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           z: clampToMap(player.z + dz * ratio),
         };
         const next = stepTowards(player, approach, RULES.playerSpeed * dt);
-        player.x = next.x;
-        player.z = next.z;
-        player.combatState = "approaching";
+        if (this.canOccupy(next.x,next.z,player.y)) {
+          player.x=next.x; player.z=next.z;
+          player.combatState = "approaching";
+        } else {
+          this.endAttack(sessionId,player);
+        }
         continue;
       }
 
@@ -372,10 +550,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const dz = target.z - player.z;
       const next = stepTowards(player, target, RULES.playerSpeed * dt);
       if (next.moved) player.facing = facingTo(dx, dz);
-      player.x = next.x;
-      player.z = next.z;
-      player.combatState = next.arrived ? "idle" : "moving";
-      if (next.arrived) this.destinations.delete(sessionId);
+      if (this.canOccupy(next.x,next.z,player.y)) {
+        player.x=next.x;
+        player.z=next.z;
+      } else {
+        // Slide on the wall face if a legal axis exists; never tunnel through
+        // solid geometry via client destinations or elevated edge tapping.
+        if (this.canOccupy(next.x,player.z,player.y)) player.x=next.x;
+        else if (this.canOccupy(player.x,next.z,player.y)) player.z=next.z;
+        else {
+          this.destinations.delete(sessionId);
+          player.combatState = "idle";
+          continue;
+        }
+      }
+      const arrived = Math.hypot(target.x-player.x,target.z-player.z) < .035;
+      player.combatState = arrived ? "idle" : "moving";
+      if (arrived) this.destinations.delete(sessionId);
     }
   }
 
@@ -398,7 +589,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
 
       const range = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
-      if (planarDistance(attacker, target) > range + 0.00001) continue;
+      if (distance3d(attacker,target) > range + 0.00001 ||
+          wallBlocksShot(
+            {x:attacker.x,y:attacker.y+1.1,z:attacker.z},
+            {x:target.x,y:target.y+1.0,z:target.z}
+          )) continue;
       attacker.facing = facingTo(target.x - attacker.x, target.z - attacker.z);
       attacker.combatState = "attacking";
 
@@ -450,6 +645,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     victim.alive = false;
     victim.combatState = "dead";
     victim.targetId = "";
+    this.climbs.delete(id);
     this.despawnSummon(id, "owner_dead");
     this.destinations.delete(id);
     this.attackTargets.delete(id);
@@ -507,7 +703,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Keep an existing target if it is alive and remains in the combat area.
     let targetId = monster.targetId;
     let target = targetId ? this.state.players.get(targetId) : undefined;
-    if (!target || !target.alive ||
+    if (!target || !target.alive || !isOnGround(target.y) ||
         planarDistance(monster, target) > RULES.monsterGiveUpRadius) {
       target = undefined;
       targetId = "";
@@ -517,7 +713,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!target) {
       let nearest: number = RULES.monsterAggroRadius;
       for (const [id, player] of this.state.players) {
-        if (!player.alive) continue;
+        if (!player.alive || !isOnGround(player.y)) continue;
         const distance = planarDistance(monster, player);
         if (distance < nearest) {
           nearest = distance;
@@ -558,13 +754,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const dz = target.z - monster.z;
     const next = stepTowards(monster, target, step);
     if (next.moved) monster.facing = facingTo(dx, dz);
-    monster.x = clampToMap(next.x);
-    monster.z = clampToMap(next.z);
+    if (!touchesWallBody(next.x, next.z)) {
+      monster.x = clampToMap(next.x);
+      monster.z = clampToMap(next.z);
+    }
   }
 
   private monsterAttack(targetId: string, target: Player) {
     if (!target.alive) return;
-    if (planarDistance(this.state.monster, target) > RULES.monsterAttackRange) return;
+    if (distance3d(this.state.monster, target) > RULES.monsterAttackRange) return;
     if (this.simulatedMs - this.lastMonsterAttackMs < RULES.monsterAttackCooldownMs) return;
     this.lastMonsterAttackMs = this.simulatedMs;
 
@@ -609,7 +807,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.hp = player.maxHp;
       player.alive = true;
       player.x = spawn.x;
+      player.y = 0;
       player.z = spawn.z;
+      this.climbs.delete(id);
       player.facing = 0;
       player.combatState = "idle";
       player.targetId = "";
@@ -641,6 +841,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       summon: new CommandBucket(
         RULES.summonCommandBurst, RULES.summonCommandRatePerSecond, this.simulatedMs
       ),
+      climb: new CommandBucket(3, 1, this.simulatedMs),
     });
     console.log("MONTRA S1 join:", client.sessionId, "room", this.roomId);
   }
@@ -649,6 +850,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = client.sessionId;
     this.despawnSummon(id, "owner_left");
     this.lastSummonAt.delete(id);
+    this.climbs.delete(id);
     this.destinations.delete(id);
     this.attackTargets.delete(id);
     this.lastAttackMs.delete(id);
@@ -679,6 +881,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastSummonAt.clear();
     this.lastSummonAttackAt.clear();
     this.state.summons.clear();
-    console.log("MONTRA Summon room disposed:", this.roomId);
+    this.climbs.clear();
+    console.log("MONTRA Elevation room disposed:", this.roomId);
   }
 }
