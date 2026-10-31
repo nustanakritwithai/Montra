@@ -15,6 +15,8 @@ export const Player = schema({
   combatState: t.string().default("idle"), // idle|moving|approaching|attacking|dead
   targetId: t.string().default(""),
   hitSeq: t.number().default(0),
+  duelWith: t.string().default(""), // Colyseus sessionId of duel opponent
+  duelState: t.string().default("none"), // none|outgoing|incoming|active
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
