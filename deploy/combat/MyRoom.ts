@@ -458,10 +458,39 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updateSummons(dt);
   }
 
+  private updateClimbs(dt: number) {
+    for (const [id,destination] of [...this.climbs]) {
+      const player = this.state.players.get(id);
+      if (!player || !player.alive) {
+        this.climbs.delete(id);
+        continue;
+      }
+      const next = progressClimb(player, destination, dt);
+      player.x = clampToMap(next.point.x);
+      player.y = next.point.y;
+      player.z = clampToMap(next.point.z);
+      player.facing = facingTo(destination.x-player.x, destination.z-player.z);
+      player.combatState = "climbing";
+      if (next.arrived) {
+        this.climbs.delete(id);
+        player.combatState = "idle";
+        this.broadcast("climb_finished", {
+          playerId:id, height:player.y,
+        }, { afterNextPatch:true });
+      }
+    }
+  }
+
+  private canOccupy(x: number, z: number, feetY: number): boolean {
+    if (isOnPlatform(feetY)) return isOnTop(x,z);
+    if (isOnGround(feetY)) return !touchesWallBody(x,z);
+    return false; // Only the server's climb state can cross heights.
+  }
+
   private updatePlayerMovement(dt: number) {
     const monster = this.state.monster;
     for (const [sessionId, player] of this.state.players) {
-      if (!player.alive) continue;
+      if (!player.alive || this.climbs.has(sessionId)) continue;
 
       const targetId = this.attackTargets.get(sessionId);
       if (targetId) {
@@ -476,11 +505,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         }
         const dx = target.x - player.x;
         const dz = target.z - player.z;
-        const distance = Math.hypot(dx, dz);
+        const distance = distance3d(player, target);
         player.targetId = targetId;
         player.facing = facingTo(dx, dz);
 
         const attackRange = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
+        if (Math.abs(player.y - target.y) > attackRange) {
+          this.endAttack(sessionId, player);
+          continue;
+        }
         if (distance <= attackRange) {
           player.combatState = "attacking";
           continue;
@@ -495,9 +528,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           z: clampToMap(player.z + dz * ratio),
         };
         const next = stepTowards(player, approach, RULES.playerSpeed * dt);
-        player.x = next.x;
-        player.z = next.z;
-        player.combatState = "approaching";
+        if (this.canOccupy(next.x,next.z,player.y)) {
+          player.x=next.x; player.z=next.z;
+          player.combatState = "approaching";
+        } else {
+          this.endAttack(sessionId,player);
+        }
         continue;
       }
 
@@ -511,10 +547,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const dz = target.z - player.z;
       const next = stepTowards(player, target, RULES.playerSpeed * dt);
       if (next.moved) player.facing = facingTo(dx, dz);
-      player.x = next.x;
-      player.z = next.z;
-      player.combatState = next.arrived ? "idle" : "moving";
-      if (next.arrived) this.destinations.delete(sessionId);
+      if (this.canOccupy(next.x,next.z,player.y)) {
+        player.x=next.x;
+        player.z=next.z;
+      } else {
+        // Slide on the wall face if a legal axis exists; never tunnel through
+        // solid geometry via client destinations or elevated edge tapping.
+        if (this.canOccupy(next.x,player.z,player.y)) player.x=next.x;
+        else if (this.canOccupy(player.x,next.z,player.y)) player.z=next.z;
+        else {
+          this.destinations.delete(sessionId);
+          player.combatState = "idle";
+          continue;
+        }
+      }
+      const arrived = Math.hypot(target.x-player.x,target.z-player.z) < .035;
+      player.combatState = arrived ? "idle" : "moving";
+      if (arrived) this.destinations.delete(sessionId);
     }
   }
 
@@ -537,7 +586,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
 
       const range = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
-      if (planarDistance(attacker, target) > range + 0.00001) continue;
+      if (distance3d(attacker,target) > range + 0.00001 ||
+          wallBlocksShot(
+            {x:attacker.x,y:attacker.y+1.1,z:attacker.z},
+            {x:target.x,y:target.y+1.0,z:target.z}
+          )) continue;
       attacker.facing = facingTo(target.x - attacker.x, target.z - attacker.z);
       attacker.combatState = "attacking";
 
@@ -589,6 +642,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     victim.alive = false;
     victim.combatState = "dead";
     victim.targetId = "";
+    this.climbs.delete(id);
     this.despawnSummon(id, "owner_dead");
     this.destinations.delete(id);
     this.attackTargets.delete(id);
@@ -748,7 +802,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.hp = player.maxHp;
       player.alive = true;
       player.x = spawn.x;
+      player.y = 0;
       player.z = spawn.z;
+      this.climbs.delete(id);
       player.facing = 0;
       player.combatState = "idle";
       player.targetId = "";
@@ -780,6 +836,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       summon: new CommandBucket(
         RULES.summonCommandBurst, RULES.summonCommandRatePerSecond, this.simulatedMs
       ),
+      climb: new CommandBucket(3, 1, this.simulatedMs),
     });
     console.log("MONTRA S1 join:", client.sessionId, "room", this.roomId);
   }
@@ -788,6 +845,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = client.sessionId;
     this.despawnSummon(id, "owner_left");
     this.lastSummonAt.delete(id);
+    this.climbs.delete(id);
     this.destinations.delete(id);
     this.attackTargets.delete(id);
     this.lastAttackMs.delete(id);
@@ -818,6 +876,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastSummonAt.clear();
     this.lastSummonAttackAt.clear();
     this.state.summons.clear();
-    console.log("MONTRA Summon room disposed:", this.roomId);
+    this.climbs.clear();
+    console.log("MONTRA Elevation room disposed:", this.roomId);
   }
 }
