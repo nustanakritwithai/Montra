@@ -28,6 +28,7 @@ jobs:
           cp deploy/combat/GameRules.ts combat-verify/src/rooms/GameRules.ts
           cp deploy/combat/smoke-test.mjs combat-verify/smoke-test.mjs
           cp deploy/combat/s1-integration.mjs combat-verify/s1-integration.mjs
+          cp deploy/combat/s1-monster-ai.mjs combat-verify/s1-monster-ai.mjs
           cp deploy/combat/s1-rules.test.ts combat-verify/src/rooms/s1-rules.test.ts
           cat > combat-verify/src/index.ts <<'EOF'
           import { defineServer, defineRoom } from "colyseus";
@@ -92,6 +93,7 @@ jobs:
         run: |
           node --check deploy/combat/smoke-test.mjs
           node --check deploy/combat/s1-integration.mjs
+          node --check deploy/combat/s1-monster-ai.mjs
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
@@ -116,6 +118,11 @@ jobs:
           }
           MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 75s node s1-integration.mjs || {
             echo "=== S1 SERVER LOG ==="
+            cat server.log
+            exit 1
+          }
+          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 25s node s1-monster-ai.mjs || {
+            echo "=== MONSTER AI LOG ==="
             cat server.log
             exit 1
           }
