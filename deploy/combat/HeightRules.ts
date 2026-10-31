@@ -29,6 +29,32 @@ export const FORT = Object.freeze({
 
 export type WorldPoint = { x: number; y: number; z: number };
 export type GroundPoint = { x: number; z: number };
+export type ClimbRequest = { structureId: "watchwall-1"; direction: "up" | "down" };
+
+export function parseClimbRequest(value: unknown): ClimbRequest | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const o = value as Record<string, unknown>;
+  const keys = Object.keys(o);
+  if (keys.length !== 2 || !keys.includes("structureId") || !keys.includes("direction")) return null;
+  if (o.structureId !== FORT.id || (o.direction !== "up" && o.direction !== "down")) return null;
+  return { structureId: FORT.id, direction: o.direction };
+}
+
+/** Limited 3D movement (e.g. climbing and floating spirit companions). */
+export function step3d(from: WorldPoint, to: WorldPoint, maxStep: number):
+  { point: WorldPoint; arrived: boolean; moved: boolean } {
+  const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+  const d = Math.hypot(dx, dy, dz);
+  if (d < 0.00001) return { point:{ ...from }, arrived:true, moved:false };
+  const step = Math.max(0, maxStep);
+  if (step <= 0) return { point:{ ...from }, arrived:false, moved:false };
+  if (step >= d) return { point:{ ...to }, arrived:true, moved:true };
+  return { point:{
+    x: from.x + dx / d * step,
+    y: from.y + dy / d * step,
+    z: from.z + dz / d * step,
+  }, arrived:false, moved:true };
+}
 
 export function distance3d(a: WorldPoint, b: WorldPoint): number {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
@@ -60,17 +86,8 @@ export function touchesWallBody(x: number, z: number, radius = FORT.capsuleRadiu
 export function progressClimb(
   from: WorldPoint, to: WorldPoint, dt: number,
 ): { point: WorldPoint; arrived: boolean } {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const dz = to.z - from.z;
-  const d = Math.hypot(dx,dy,dz);
-  const step = Math.max(0, FORT.climbSpeed * dt);
-  if (d < 0.001 || step >= d) return { point:{ ...to }, arrived:true };
-  return { point: {
-    x: from.x + dx / d * step,
-    y: from.y + dy / d * step,
-    z: from.z + dz / d * step,
-  }, arrived:false };
+  const next = step3d(from, to, FORT.climbSpeed * dt);
+  return { point: next.point, arrived: next.arrived };
 }
 
 /** Ray (muzzle -> target torso) intersects the solid axis-aligned wall body.
