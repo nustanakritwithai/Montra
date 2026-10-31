@@ -173,6 +173,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updatePlayerMovement(dt);
     this.updateMonsterAI(dt);
     this.updatePlayerAttacks();
+    this.updateSummons(dt);
   }
 
   private updatePlayerMovement(dt: number) {
@@ -306,6 +307,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     victim.alive = false;
     victim.combatState = "dead";
     victim.targetId = "";
+    this.despawnSummon(id, "owner_dead");
     this.destinations.delete(id);
     this.attackTargets.delete(id);
     this.playerRespawnAt.set(id, this.simulatedMs + RULES.playerRespawnMs);
@@ -493,12 +495,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.gates.set(client.sessionId, {
       move: new CommandBucket(RULES.moveBurst, RULES.moveRatePerSecond, this.simulatedMs),
       attack: new CommandBucket(RULES.attackBurst, RULES.attackRatePerSecond, this.simulatedMs),
+      summon: new CommandBucket(
+        RULES.summonCommandBurst, RULES.summonCommandRatePerSecond, this.simulatedMs
+      ),
     });
     console.log("MONTRA S1 join:", client.sessionId, "room", this.roomId);
   }
 
   onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    this.despawnSummon(id, "owner_left");
+    this.lastSummonAt.delete(id);
     this.destinations.delete(id);
     this.attackTargets.delete(id);
     this.lastAttackMs.delete(id);
@@ -526,6 +533,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.playerSpawn.clear();
     this.gates.clear();
     this.lastRejectNoticeMs.clear();
-    console.log("MONTRA S1 room disposed:", this.roomId);
+    this.lastSummonAt.clear();
+    this.lastSummonAttackAt.clear();
+    this.state.summons.clear();
+    console.log("MONTRA Summon room disposed:", this.roomId);
   }
 }
