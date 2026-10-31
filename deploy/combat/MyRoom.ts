@@ -139,24 +139,32 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for (const [sessionId, player] of this.state.players) {
       if (!player.alive) continue;
 
-      if (this.attackTargets.has(sessionId)) {
-        if (!monster.alive) {
+      const targetId = this.attackTargets.get(sessionId);
+      if (targetId) {
+        const isMonster = targetId === RULES.monsterId;
+        const target = isMonster
+          ? (monster.alive ? monster : undefined)
+          : this.state.players.get(targetId);
+
+        if (!target || !target.alive || targetId === sessionId) {
           this.endAttack(sessionId, player);
           continue;
         }
-        const dx = monster.x - player.x;
-        const dz = monster.z - player.z;
+        const dx = target.x - player.x;
+        const dz = target.z - player.z;
         const distance = Math.hypot(dx, dz);
-        player.targetId = RULES.monsterId;
+        player.targetId = targetId;
         player.facing = facingTo(dx, dz);
 
-        if (distance <= RULES.playerAttackRange) {
+        const attackRange = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
+        if (distance <= attackRange) {
           player.combatState = "attacking";
           continue;
         }
 
-        // Re-evaluate target position every server tick: monsters can move.
-        const stopDistance = RULES.playerAttackRange - 0.4;
+        // Recalculate every fixed tick so moving players can be chased.
+        // Never teleport, regardless of where the client taps.
+        const stopDistance = attackRange - 0.4;
         const ratio = Math.max(0, (distance - stopDistance) / distance);
         const approach = {
           x: clampToMap(player.x + dx * ratio),
