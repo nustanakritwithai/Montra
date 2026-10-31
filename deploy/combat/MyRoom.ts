@@ -291,24 +291,34 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for (const [sessionId, player] of this.state.players) {
       if (!player.alive) continue;
 
-      if (this.attackTargets.has(sessionId)) {
-        if (!monster.alive) {
+      const attackTargetId = this.attackTargets.get(sessionId);
+      if (attackTargetId) {
+        const isMonster = attackTargetId === RULES.monsterId;
+        const target = isMonster
+          ? (monster.alive ? monster : undefined)
+          : (this.isActiveDuel(sessionId, attackTargetId)
+              ? this.state.players.get(attackTargetId) : undefined);
+
+        if (!target) {
           this.endAttack(sessionId, player);
           continue;
         }
-        const dx = monster.x - player.x;
-        const dz = monster.z - player.z;
+
+        const dx = target.x - player.x;
+        const dz = target.z - player.z;
         const distance = Math.hypot(dx, dz);
-        player.targetId = RULES.monsterId;
+        player.targetId = attackTargetId;
         player.facing = facingTo(dx, dz);
 
-        if (distance <= RULES.playerAttackRange) {
+        const attackRange = isMonster
+          ? RULES.playerAttackRange : RULES.duelAttackRange;
+        if (distance <= attackRange) {
           player.combatState = "attacking";
           continue;
         }
 
-        // Re-evaluate target position every server tick: monsters can move.
-        const stopDistance = RULES.playerAttackRange - 0.4;
+        // Dynamic approach follows a moving human or AI target on each tick.
+        const stopDistance = attackRange - 0.4;
         const ratio = Math.max(0, (distance - stopDistance) / distance);
         const approach = {
           x: clampToMap(player.x + dx * ratio),
