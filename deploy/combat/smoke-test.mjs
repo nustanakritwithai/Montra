@@ -42,6 +42,8 @@ try {
   let seenB = 0;
   roomA.onMessage("combat_hit", () => seenA++);
   roomB.onMessage("combat_hit", () => seenB++);
+  // The server sends this notice to the attacker during auto-approach.
+  roomA.onMessage("combat_notice", () => {});
 
   // The player begins far away; the server must auto-approach and hit.
   roomA.send("attack", { targetId: "possessed-1" });
@@ -52,13 +54,19 @@ try {
     return hpA < first && hpA === hpB && seenA > 0 && seenB > 0 ? hpA : null;
   }, 12000, "authoritative synchronized combat damage");
 
-  // Stop auto-attacking by issuing a manual move.
+  // Manual movement must stop automatic attacks (not merely accept the command).
   roomA.send("move", { x: 0, z: 0 });
-  await sleep(150);
+  await sleep(250);
+  const hpAfterCancel = Number(roomA.state.monster.hp);
+  await sleep(1350); // longer than the server's 1000ms cooldown
+  if (Number(roomA.state.monster.hp) !== hpAfterCancel ||
+      Number(roomB.state.monster.hp) !== hpAfterCancel) {
+    throw new Error("Auto-attack continued after a manual move");
+  }
   console.log("PASS: two users in room " + roomA.roomId);
   console.log("PASS: shared monster HP " + first + " -> " + after);
   console.log("PASS: combat_hit observed by both clients");
-  console.log("PASS: manual move command issued to cancel auto-attack");
+  console.log("PASS: manual move cancelled auto-attack");
 } catch (error) {
   console.error("MONTRA COMBAT SMOKE TEST FAILED:", error);
   process.exitCode = 1;
