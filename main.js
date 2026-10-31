@@ -85,6 +85,8 @@
   const friendMat = mat("friend character", "#6bb9c6", "#0b2530");
   const spiritMat = mat("friendly spirit", "#ad99e2", "#46337a");
   spiritMat.alpha = .8;
+  const otherGuardianMat = mat("allied spirit", "#68b7c8", "#216778");
+  otherGuardianMat.alpha = .8;
 
   const ground = B.MeshBuilder.CreateGround("walkableGround", { width: 40, height: 40 }, scene);
   ground.position.y = -0.12;
@@ -232,6 +234,60 @@
     avatars.delete(id);
   }
   function clearAvatars() { [...avatars.keys()].forEach(deleteAvatar); }
+
+  // Distinct server-owned 3D NPCs; ownerId matches the Colyseus session ID.
+  const summonAvatars = new Map();
+  function createSummonAvatar(ownerId, x, z) {
+    const parent = new B.TransformNode("guardian-" + ownerId, scene);
+    const body = B.MeshBuilder.CreateSphere("guardian-body-" + ownerId,
+      { diameter: 1.05, segments: 12 }, scene);
+    body.parent = parent;
+    body.position.y = .98;
+    body.scaling.set(.7, 1.08, .7);
+    body.material = ownerId === localId ? spiritMat : otherGuardianMat;
+    body.isPickable = false;
+
+    const aura = B.MeshBuilder.CreateTorus("guardian-aura-" + ownerId,
+      { diameter: 1.05, thickness: .06 }, scene);
+    aura.parent = parent;
+    aura.rotation.x = Math.PI / 2;
+    aura.position.y = .18;
+    aura.material = ownerId === localId ? spiritMat : otherGuardianMat;
+    aura.isPickable = false;
+
+    for (const side of [-1, 1]) {
+      const eye = B.MeshBuilder.CreateSphere("guardian-eye-" + ownerId,
+        { diameter: .13, segments: 6 }, scene);
+      eye.parent = parent;
+      eye.position.set(side * .19, 1.05, -.35);
+      eye.material = ownerId === localId ? gold : glowMat;
+      eye.isPickable = false;
+    }
+    parent.position.set(x, 0, z);
+    return {
+      node: parent, ownerId, x, z, targetX: x, targetZ: z,
+      facing: 0, desiredFacing: 0, action: "follow", hitUntil: 0
+    };
+  }
+  function deleteSummonAvatar(ownerId) {
+    const actor = summonAvatars.get(ownerId);
+    if (!actor) return;
+    actor.node.getChildMeshes().forEach(mesh => mesh.dispose());
+    actor.node.dispose();
+    summonAvatars.delete(ownerId);
+  }
+  function clearSummons() {
+    for (const id of [...summonAvatars.keys()]) deleteSummonAvatar(id);
+    updateSummonButton(false);
+  }
+  function updateSummonButton(summoned) {
+    const button = $("summon");
+    if (!button) return;
+    button.classList.toggle("summon-active", Boolean(summoned));
+    button.setAttribute("aria-pressed", String(Boolean(summoned)));
+    const title = button.querySelector("span:last-child");
+    if (title) title.textContent = summoned ? "เก็บผี" : "เรียกผี";
+  }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
   let selectedPkTargetId = null;
   let spiritShown = false, possessed = false, spirit = null;
