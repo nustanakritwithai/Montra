@@ -32,10 +32,21 @@ export const RULES = Object.freeze({
   moveRatePerSecond: 12,
   attackBurst: 4,
   attackRatePerSecond: 4,
+  // Opt-in 1v1 duels only; player attacks outside an accepted duel are rejected.
+  duelInviteTimeoutMs: 15000,
+  duelDurationMs: 90000,
+  duelMaxInviteDistance: 18,
+  duelAttackDamage: 12,
+  duelAttackCooldownMs: 1000,
+  duelAttackRange: 2.8,
+  duelBurst: 2,
+  duelRatePerSecond: 0.5,
 });
 
 export type Vec2 = { x: number; z: number };
 export type AttackCommand = { targetId: typeof RULES.monsterId };
+export type PlayerTargetCommand = { targetId: string };
+export type DuelReplyCommand = { targetId: string; accept: boolean };
 
 function hasExactKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -59,6 +70,24 @@ export function parseAttackCommand(message: unknown): AttackCommand | null {
   return message.targetId === RULES.monsterId
     ? { targetId: RULES.monsterId }
     : null;
+}
+
+/**
+ * Public session IDs are ephemeral, scoped to this Colyseus room. The Room
+ * must additionally verify membership and the accepted duel pairing.
+ */
+export function parsePlayerTargetCommand(message: unknown): PlayerTargetCommand | null {
+  if (!hasExactKeys(message, ["targetId"])) return null;
+  if (typeof message.targetId !== "string" ||
+      !/^[a-zA-Z0-9_-]{4,80}$/.test(message.targetId)) return null;
+  return { targetId: message.targetId };
+}
+
+export function parseDuelReplyCommand(message: unknown): DuelReplyCommand | null {
+  if (!hasExactKeys(message, ["targetId", "accept"])) return null;
+  const parsed = parsePlayerTargetCommand({ targetId: message.targetId });
+  if (!parsed || typeof message.accept !== "boolean") return null;
+  return { targetId: parsed.targetId, accept: message.accept };
 }
 
 export function planarDistance(a: Vec2, b: Vec2): number {
