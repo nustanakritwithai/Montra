@@ -25,7 +25,11 @@ jobs:
           mkdir -p combat-verify/src/rooms/schema
           cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
           cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
+          cp deploy/combat/GameRules.ts combat-verify/src/rooms/GameRules.ts
           cp deploy/combat/smoke-test.mjs combat-verify/smoke-test.mjs
+          cp deploy/combat/s1-integration.mjs combat-verify/s1-integration.mjs
+          cp deploy/combat/s1-monster-ai.mjs combat-verify/s1-monster-ai.mjs
+          cp deploy/combat/s1-rules.test.ts combat-verify/src/rooms/s1-rules.test.ts
           cat > combat-verify/src/index.ts <<'EOF'
           import { defineServer, defineRoom } from "colyseus";
           import { MyRoom } from "./rooms/MyRoom.js";
@@ -71,6 +75,13 @@ jobs:
         working-directory: combat-verify
         run: npx tsc --noEmit
 
+      - name: Validate mobile S1 client adapter
+        shell: bash
+        run: |
+          node --check main.js
+          grep -q "serverFacing" main.js
+          grep -q "main.js?v=0.1.6" index.html
+
       - name: Parse Windows PowerShell installer
         shell: pwsh
         run: |
@@ -84,8 +95,16 @@ jobs:
           }
           Write-Host "Windows installer syntax OK"
 
-      - name: Syntax-check smoke test
-        run: node --check deploy/combat/smoke-test.mjs
+      - name: Syntax-check test scripts
+        shell: bash
+        run: |
+          node --check deploy/combat/smoke-test.mjs
+          node --check deploy/combat/s1-integration.mjs
+          node --check deploy/combat/s1-monster-ai.mjs
+
+      - name: Test strict message validation and movement math
+        working-directory: combat-verify
+        run: npx tsx --test src/rooms/s1-rules.test.ts
 
       - name: Two-player server-authoritative combat integration test
         shell: bash
@@ -99,8 +118,18 @@ jobs:
             if (echo > /dev/tcp/127.0.0.1/4108) 2>/dev/null; then break; fi
             sleep 0.25
           done
-          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 22s node smoke-test.mjs || {
+          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 24s node smoke-test.mjs || {
             echo "=== SERVER LOG ==="
+            cat server.log
+            exit 1
+          }
+          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 75s node s1-integration.mjs || {
+            echo "=== S1 SERVER LOG ==="
+            cat server.log
+            exit 1
+          }
+          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 25s node s1-monster-ai.mjs || {
+            echo "=== MONSTER AI LOG ==="
             cat server.log
             exit 1
           }
