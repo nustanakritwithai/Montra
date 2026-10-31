@@ -102,3 +102,27 @@ test("RRT navigation gives up safely when goal is invalid",()=>{
   nav.clear();
   assert.equal(nav.nextWaypoint({x:1,z:1},{x:1,z:1},0,"chase:a"),null);
 });
+
+test("Colyseus Schema-like getter coordinates are converted into ordinary waypoints",()=>{
+  // Colyseus Schema 5 stores serializable values behind nonenumerable getters:
+  // spreading an instance copies internal symbols, NOT public x and z.
+  function schemaLike(x:number,z:number):{x:number;z:number} {
+    const point={};
+    Object.defineProperties(point,{
+      x:{get:()=>x,enumerable:false},
+      z:{get:()=>z,enumerable:false},
+    });
+    return point as {x:number;z:number};
+  }
+  const from=schemaLike(2.2,10.4);
+  const goal=schemaLike(5,7);
+  assert.deepEqual(Object.keys(from),[]);
+  const planned=planMonsterRRT(from,goal);
+  assert.ok(planned.found && planned.direct);
+  assert.deepEqual(planned.path,[{x:2.2,z:10.4},{x:5,z:7}]);
+
+  const navigator=new MonsterRRTNavigator();
+  const next=navigator.nextWaypoint(from,goal,2000,"chase:owner");
+  assert.deepEqual(next,{x:5,z:7});
+  assert.ok(Number.isFinite(next?.x) && Number.isFinite(next?.z));
+});
