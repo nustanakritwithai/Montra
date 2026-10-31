@@ -1004,23 +1004,32 @@
     const px = event.clientX - rect.left;
     const py = event.clientY - rect.top;
     if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
-    // One depth-sorted pick: remote players, the monster or ground.
-    // Never attack people through walls/terrain merely because they overlap
-    // the screen projection (alpha map currently has no solid obstacles).
+    // Depth-sorted pick includes the climbable wall, its crest, players,
+    // monster and walkable ground. Fire only where the target is visible.
     const picked = scene.pick(px, py, mesh =>
       mesh.metadata?.walkable === true ||
       (mesh === enemy && enemy.isEnabled()) ||
+      (fortRoot.isEnabled() && mesh.metadata?.climbableWall) ||
       (mode === "live" && mesh.metadata?.pkPlayerId &&
        mesh.metadata.pkPlayerId !== localId)
     );
     if (!picked?.hit) return;
-    const otherId = picked.pickedMesh?.metadata?.pkPlayerId;
-    if (otherId && mode === "live") {
-      tapPlayerForPK(otherId);
-    } else if (picked.pickedMesh === enemy) {
-      requestMonsterAttack();
-    } else if (picked.pickedMesh?.metadata?.walkable && picked.pickedPoint) {
-      pointMove(picked.pickedPoint.x, picked.pickedPoint.z);
+    const hitMesh=picked.pickedMesh;
+    const otherId=hitMesh?.metadata?.pkPlayerId;
+    if (otherId && mode==="live") {
+      if(rangedMode) shootAtTarget(otherId);
+      else tapPlayerForPK(otherId);
+    } else if (hitMesh === enemy) {
+      if(rangedMode) shootAtTarget(MONSTER_ID);
+      else requestMonsterAttack();
+    } else if(hitMesh?.metadata?.climbableWall) {
+      requestClimb();
+    } else if(hitMesh?.metadata?.elevatedTop && picked.pickedPoint) {
+      const me=ownServerCharacter();
+      if(!me || Math.abs(Number(me.y)-activeFort.height)>.15) requestClimb();
+      else pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
+    } else if(hitMesh?.metadata?.walkable && picked.pickedPoint) {
+      pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
     }
   });
   ui.world.addEventListener("pointercancel",()=> { pointer=null; });
@@ -1055,6 +1064,17 @@
       }
     }
     ctx.fillStyle="#d2ad68";ctx.fillRect(sx(-4.2)-3,sy(-1.5)-3,6,6);
+    if(fortRoot.isEnabled()) {
+      ctx.strokeStyle="#c7ad84";ctx.lineWidth=large?5:3;
+      ctx.beginPath();
+      ctx.moveTo(sx(activeFort.x),sy(activeFort.z-activeFort.length/2));
+      ctx.lineTo(sx(activeFort.x),sy(activeFort.z+activeFort.length/2));
+      ctx.stroke();
+      ctx.fillStyle="#f1dda0";
+      ctx.beginPath();
+      ctx.arc(sx(activeFort.ladderFootX),sy(activeFort.ladderFootZ),
+        large?5:3,0,Math.PI*2);ctx.fill();
+    }
     ctx.fillStyle="#e15855"; ctx.beginPath();ctx.arc(sx(1.1),sy(10.4),large?6:3,0,Math.PI*2);ctx.fill();
     if (marker.isEnabled()) {
       ctx.strokeStyle="#ffe2a1";ctx.lineWidth=1.8;
@@ -1132,18 +1152,29 @@
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
   $("attack").onclick = () => {
+    setRangedMode(false);
     if (mode === "live" && room && selectedPkTargetId) {
       tapPlayerForPK(selectedPkTargetId);
     } else {
       requestMonsterAttack();
     }
   };
+  $("shoot").onclick = toggleRangedMode;
+  $("climb").onclick = requestClimb;
 
   let elapsed=0;
   engine.runRenderLoop(() => {
     const dt=Math.min(engine.getDeltaTime()/1000,.06);
     elapsed+=dt;
     const now = performance.now();
+    checkClimbApproach();
+    for(let i=rangedEffects.length-1;i>=0;i--){
+      const fx=rangedEffects[i];
+      if(now>=fx.until){
+        fx.mesh.dispose();
+        rangedEffects.splice(i,1);
+      }
+    }
     if (mode === "demo") {
       if (demoRespawnAt > 0 && now >= demoRespawnAt) {
         resetDemoMonster();
