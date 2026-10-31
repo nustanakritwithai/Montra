@@ -140,6 +140,149 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
   };
 
+  private despawnSummon(ownerId: string, reason: string) {
+    if (!this.state.summons.has(ownerId)) return;
+    this.state.summons.delete(ownerId);
+    this.lastSummonAttackAt.delete(ownerId);
+    this.broadcast("summon_despawn", { ownerId, reason },
+      { afterNextPatch: true });
+  }
+
+  private findSummonTarget(ownerId: string, owner: Player) {
+    const intended = this.attackTargets.get(ownerId);
+    const candidates: string[] = [];
+    if (intended) candidates.push(intended);
+
+    // A guardian defends its owner when another player is actively attacking.
+    // It does not randomly attack neutral people in this Free PK world.
+    for (const [otherId, targetId] of this.attackTargets) {
+      if (otherId !== ownerId && targetId === ownerId) candidates.push(otherId);
+    }
+    if (this.state.monster.targetId === ownerId) candidates.push(RULES.monsterId);
+
+    for (const targetId of candidates) {
+      if (targetId === ownerId) continue;
+      const target = targetId === RULES.monsterId
+        ? this.state.monster : this.state.players.get(targetId);
+      if (!target || !target.alive) continue;
+      // Guard's combat tether prevents hits across the map even if another
+      // client sends a valid but distant target ID.
+      if (planarDistance(owner, target) > RULES.summonEngageDistance) continue;
+      return { targetId, target };
+    }
+    return null;
+  }
+
+  private updateSummons(dt: number) {
+    for (const [ownerId, guardian] of [...this.state.summons]) {
+      const owner = this.state.players.get(ownerId);
+      if (!owner || !owner.alive) {
+        this.despawnSummon(ownerId, "owner_unavailable");
+        continue;
+      }
+
+      const distanceToOwner = planarDistance(guardian, owner);
+      const candidate = distanceToOwner <= RULES.summonLeashDistance
+        ? this.findSummonTarget(ownerId, owner) : null;
+
+      if (candidate) {
+        const { targetId, target } = candidate;
+        const dx = target.x - guardian.x;
+        const dz = target.z - guardian.z;
+        const distance = Math.hypot(dx, dz);
+        guardian.targetId = targetId;
+        if (distance > 0.001) guardian.facing = facingTo(dx, dz);
+
+        if (distance <= RULES.summonAttackRange) {
+          guardian.action = "attack";
+          this.trySummonAttack(ownerId, guardian, targetId);
+        } else {
+          guardian.action = "chase";
+          const next = stepTowards(
+            guardian, target, RULES.summonMoveSpeed * dt
+          );
+          guardian.x = clampToMap(next.x);
+          guardian.z = clampToMap(next.z);
+        }
+        continue;
+      }
+
+      // Follow the owner on the left side, rather than standing at spawn.
+      // All positions and animation states are resolved by fixed server ticks.
+      guardian.targetId = "";
+      const desired = {
+        x: clampToMap(owner.x - 1.0),
+        z: clampToMap(owner.z + 0.85),
+      };
+      const dx = desired.x - guardian.x;
+      const dz = desired.z - guardian.z;
+      const distance = Math.hypot(dx, dz);
+      guardian.action = "follow";
+      if (distance > RULES.summonFollowDistance) {
+        const next = stepTowards(
+          guardian, desired, RULES.summonMoveSpeed * dt
+        );
+        guardian.x = clampToMap(next.x);
+        guardian.z = clampToMap(next.z);
+        if (next.moved) guardian.facing = facingTo(dx, dz);
+      } else {
+        guardian.facing = owner.facing;
+      }
+    }
+  }
+
+  private trySummonAttack(ownerId: string, guardian: SummonedGuardian, targetId: string) {
+    const owner = this.state.players.get(ownerId);
+    const sameGuardian = this.state.summons.get(ownerId) === guardian;
+    if (!owner || !owner.alive || !sameGuardian) return;
+
+    const isMonster = targetId === RULES.monsterId;
+    const target = isMonster
+      ? this.state.monster : this.state.players.get(targetId);
+    if (!target || !target.alive || targetId === ownerId) return;
+    if (planarDistance(owner, target) > RULES.summonEngageDistance) return;
+    if (planarDistance(guardian, target) > RULES.summonAttackRange + 0.00001) return;
+
+    const last = this.lastSummonAttackAt.get(ownerId) ?? -Infinity;
+    if (this.simulatedMs - last < RULES.summonAttackCooldownMs) return;
+    this.lastSummonAttackAt.set(ownerId, this.simulatedMs);
+    guardian.hitSeq += 1;
+
+    if (isMonster) {
+      const monster = this.state.monster;
+      monster.hp = Math.max(0, monster.hp - RULES.summonAttackDamage);
+      monster.hitSeq += 1;
+      this.broadcast("summon_hit", {
+        ownerId, summonId: ownerId, targetId,
+        damage: RULES.summonAttackDamage, hp: monster.hp,
+        hitSeq: guardian.hitSeq,
+      }, { afterNextPatch: true });
+      if (monster.hp === 0) this.killMonster();
+      return;
+    }
+
+    // Summon can help in Free PK only when its owner selected or was attacked
+    // by this opponent. Damage/kill attribution belongs to the owner.
+    const victim = target as Player;
+    victim.hp = Math.max(0, victim.hp - RULES.summonAttackDamage);
+    victim.hitSeq += 1;
+    this.broadcast("pvp_hit", {
+      attackerId: ownerId, source: "summon", summonOwnerId: ownerId,
+      targetId, damage: RULES.summonAttackDamage,
+      hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
+    }, { afterNextPatch: true });
+    if (victim.hp === 0) {
+      owner.pkKills += 1;
+      victim.pkDeaths += 1;
+      this.knockoutPlayer(targetId, "pk", ownerId);
+      this.broadcast("pvp_kill", {
+        winnerId: ownerId, loserId: targetId,
+        source: "summon",
+        kills: owner.pkKills, deaths: victim.pkDeaths,
+      }, { afterNextPatch: true });
+    }
+  }
+
   private reject(client: Client, reason: string) {
     // Avoid amplifying floods with unlimited rejection responses.
     const previous = this.lastRejectNoticeMs.get(client.sessionId) ?? -Infinity;
