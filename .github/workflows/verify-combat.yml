@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - 'deploy/combat/**'
+      - 'main.js'
+      - 'index.html'
       - '.github/workflows/verify-combat.yml'
   workflow_dispatch:
 
