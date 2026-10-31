@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — ต้นแบบ MMORPG 3D ไสยศาสตร์ไทยสำหรับมือถือ แบบแตะพื้นเพื่อเดิน" />
   <title>MONTRA — หมู่บ้านอาคม | Alpha 0.1</title>
-  <link rel="stylesheet" href="./styles.css?v=0.1.4" />
+  <link rel="stylesheet" href="./styles.css?v=0.1.7" />
 </head>
 <body>
   <main id="game" aria-label="MONTRA เกมต้นแบบสามมิติ">
@@ -33,6 +33,16 @@
       <div class="monster-hp-track"><div id="monsterBar"></div></div>
       <small id="monsterHint">แตะตัวผีเพื่อโจมตี</small>
     </section>
+    <section id="duelPanel" class="duel-panel panel" aria-label="ระบบท้าประลอง PvP" aria-live="polite" hidden>
+      <div class="duel-panel-header"><strong id="duelTitle">การท้าประลอง</strong><span id="duelHpLabel"></span></div>
+      <div class="duel-hp-track" id="duelHpTrack" hidden><div id="duelHpBar"></div></div>
+      <div id="duelHint" class="duel-hint">แตะผู้เล่นเพื่อส่งคำท้าประลอง</div>
+      <div class="duel-actions">
+        <button id="duelAccept" type="button" hidden>รับคำท้า</button>
+        <button id="duelDecline" type="button" hidden>ปฏิเสธ</button>
+        <button id="duelQuit" type="button" hidden>ยกเลิก</button>
+      </div>
+    </section>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <div class="tap-tip">แตะพื้นเพื่อเดิน · ลากเพื่อหมุนกล้อง</div>
 
@@ -56,10 +66,10 @@
       <div class="drawer-header"><h2 id="drawerTitle">แผนที่</h2><button id="drawerClose" class="close" aria-label="ปิด">✕</button></div>
       <div id="drawerBody" class="drawer-body"></div>
     </section>
-    <footer class="version">ALPHA V0.1.6 · ภาพและระบบเล่นทดสอบ ไม่ใช่ MMORPG ที่เปิดให้บริการแล้ว</footer>
+    <footer class="version">ALPHA V0.1.7 · ภาพและระบบเล่นทดสอบ ไม่ใช่ MMORPG ที่เปิดให้บริการแล้ว</footer>
   </main>
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
-  <script src="./main.js?v=0.1.6" defer></script>
+  <script src="./main.js?v=0.1.7" defer></script>
 </body>
 </html>
