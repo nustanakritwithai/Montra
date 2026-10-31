@@ -1,36 +1,56 @@
-# MONTRA — 3D Mobile Web MMORPG Prototype
+# MONTRA — Thai Occult MMORPG Alpha
 
-**Alpha V0.1: หมู่บ้านอาคม** — vertical mobile-first, tap-to-move browser prototype.
+**Playable web client:** https://nustanakritwithai.github.io/Montra/  
+**Code:** GitHub Pages frontend + Windows VPS Colyseus 0.18 / Schema 5 backend.
 
-- **GitHub Pages client:** `https://nustanakritwithai.github.io/Montra/`
-- **Current mode:** local demo with a simple 3D village, walking, minimap, simulated spirit/possession visuals.
-- **Optional online mode:** Colyseus 0.18 `my_room` server with `players` schema and `move: {x,z}` message.
+MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the same `my_room` see each other walking and attacking a possessed ghost. The server is authoritative for movement/combat; GitHub Pages only renders the world.
+
+## Current development stages
+
+- **Alpha 0.1.5:** playable multiplayer movement, camera orbit, tap-to-attack and synchronized monster HP.
+- **S1 Server Engine / frontend 0.1.6:** fixed server ticks, authoritative facing, player HP, strict movement/combat commands, monster AI (patrol/chase/attack/return), cooldowns and respawns.
+- **S0/S2 are not complete:** Node auto-start after Windows restart, player accounts, database, saves, trading and persistent inventory are NOT implemented.
+
+**S1 code in GitHub does not change the live Windows VPS automatically.** Use the safe installer in the linked runbook, then restart only the MONTRA Node process and execute the live smoke tests.
+
+## S1 server source of truth
+
+- [Windows VPS install, test and rollback (Thai)](deploy/combat/S1-WINDOWS-VPS-TH.md)
+- [Colyseus room](deploy/combat/MyRoom.ts)
+- [Schema](deploy/combat/MyRoomState.ts)
+- [Validated rules / rate limits](deploy/combat/GameRules.ts)
+- [2-player smoke test](deploy/combat/smoke-test.mjs)
+- [4-player S1 integration test](deploy/combat/s1-integration.mjs)
+- [Monster AI test](deploy/combat/s1-monster-ai.mjs)
+- [Rule tests](deploy/combat/s1-rules.test.ts)
+- [Reversible Windows installer](deploy/combat/install-windows.ps1)
+- [Server verification workflow](.github/workflows/verify-combat.yml)
 
 ## Publish
 
-This is a static site. Under **Settings → Pages**, set **Deploy from a branch → main → /(root)**. No build process is required. The first Pages deployment may take a few minutes. `index.html` is the entry point.
+GitHub Pages is deployed from **GitHub Actions** via
+`/.github/workflows/deploy-pages.yml`. Every successful push to `main`
+publishes the static frontend automatically. Do not change Pages to
+"Deploy from a branch" for this repository.
 
-## Important: VPS connectivity
+## Networking
 
-GitHub Pages is HTTPS. The browser cannot connect to a public plain-HTTP Colyseus server from an HTTPS page. MONTRA needs a public HTTPS origin that reverse-proxies to the existing loopback server (`127.0.0.1:4108`) with **WebSocket upgrade (WSS)**. Enter the HTTPS origin using the in-game **ออนไลน์** panel. Do **not** expose the `4108` development port or `/playground` and `/monitor` publicly; run a production process and restrict those routes before enabling online players.
+```text
+Mobile web client (HTTPS GitHub Pages)
+  → WSS through montra.157-85-96-139.sslip.io
+  → Caddy HTTPS reverse proxy
+  → Colyseus on 127.0.0.1:4108 (Windows VPS)
+```
 
-No VPS configuration, accounts, database, or existing CityManager files are modified by this repo.
+The server must run with `NODE_ENV=production`. Never publicly expose port
+4108, Colyseus Playground or Monitor. Caddy currently also serves other VPS
+projects, so deployments must not overwrite its shared configuration.
 
 ## Current limits
 
-- Test village is decorative; no obstacle-aware pathfinding or collision.
-- DEMO controls are **local-only**, not saved or multiplayer.
-- Server movement is limited to `[-20,20]` on x/z and supported by the existing Colyseus room.
-- Combat, spirit summons and inventory are not connected to the server yet. No real trades or player data persistence.
-- Third-party Babylon and Colyseus browser libraries are loaded from pinned/official CDNs, so internet access is needed.
-
-## Development
-
-Open `index.html` via any HTTP static web server (not `file://`). For local VPS testing, enter `http://127.0.0.1:4108` in the online panel from a browser running **on that VPS**. For GitHub Pages use an `https://` server origin only.
-
-## Files
-
-- `index.html` — mobile HUD, sheets and CDN scripts
-- `styles.css` — portrait-first UI
-- `main.js` — Babylon scene, demo movement, Colyseus client adapter
-- `.nojekyll` — serve static assets directly
+- Four users **per room**, not four users across the whole MMO.
+- One illustrative monster; AI is server-side but no navmesh, obstacle collision or true line-of-sight yet.
+- The server uses fixed 20 Hz ticks. No client prediction/rewind system has been enabled.
+- The user session is transient; no persistent character identity or database.
+- No spirit ownership, trading, economy or real reward payouts.
+- This is a technical Alpha, not a production-secure MMORPG.
