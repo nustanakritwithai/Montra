@@ -8,11 +8,13 @@ import {
   facingTo,
   parseMoveCommand,
   parseAttackCommand,
+  parsePlayerTargetCommand,
+  parseDuelReplyCommand,
   planarDistance,
   stepTowards,
 } from "./GameRules.js";
 
-type Gates = { move: CommandBucket; attack: CommandBucket };
+type Gates = { move: CommandBucket; attack: CommandBucket; duel: CommandBucket };
 
 /**
  * MONTRA S1: one 20-Hz authoritative simulation per room.
@@ -41,6 +43,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
   private monsterReturning = false;
+  private duelDeadlineMs = new Map<string, number>();
 
   messages = {
     move: (client: Client, message: unknown) => {
@@ -60,31 +63,133 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
 
     attack: (client: Client, message: unknown) => {
-      const order = parseAttackCommand(message);
-      if (!order) return this.reject(client, "invalid_attack");
+      const monsterOrder = parseAttackCommand(message);
+      const playerOrder = monsterOrder ? null : parsePlayerTargetCommand(message);
+      if (!monsterOrder && !playerOrder) return this.reject(client, "invalid_attack");
+
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.alive) return this.reject(client, "not_alive");
       if (!this.gates.get(client.sessionId)?.attack.consume(this.simulatedMs)) {
         return this.reject(client, "attack_rate_limited");
       }
-      const monster = this.state.monster;
-      if (!monster.alive) {
-        client.send("combat_notice", { reason: "monster_down" });
-        return;
+
+      const targetId = monsterOrder ? RULES.monsterId : playerOrder!.targetId;
+      let target: Vec2 | undefined;
+      if (targetId === RULES.monsterId) {
+        if (player.duelState === "active") return this.reject(client, "duel_in_progress");
+        if (!this.state.monster.alive) {
+          client.send("combat_notice", { reason: "monster_down" });
+          return;
+        }
+        target = this.state.monster;
+      } else {
+        if (!this.isActiveDuel(client.sessionId, targetId)) {
+          return this.reject(client, "duel_not_active");
+        }
+        const opponent = this.state.players.get(targetId);
+        if (!opponent || !opponent.alive) return this.reject(client, "target_unavailable");
+        target = opponent;
       }
 
-      // Selecting an enemy from far away NEVER causes remote damage:
-      // the player must physically enter attack range during server ticks.
       this.destinations.delete(client.sessionId);
-      this.attackTargets.set(client.sessionId, order.targetId);
-      player.targetId = order.targetId;
+      this.attackTargets.set(client.sessionId, targetId);
+      player.targetId = targetId;
 
-      if (planarDistance(player, monster) > RULES.playerAttackRange) {
+      if (planarDistance(player, target) > RULES.playerAttackRange) {
         player.combatState = "approaching";
         client.send("combat_notice", { reason: "approaching" });
       } else {
         player.combatState = "attacking";
       }
+    },
+
+    duel_request: (client: Client, message: unknown) => {
+      const requested = parsePlayerTargetCommand(message);
+      if (!requested) return this.reject(client, "invalid_duel_request");
+
+      const fromId = client.sessionId;
+      const toId = requested.targetId;
+      const challenger = this.state.players.get(fromId);
+      const challenged = this.state.players.get(toId);
+
+      if (!challenger || !challenged || fromId === toId) {
+        return this.reject(client, "invalid_duel_target");
+      }
+      if (!challenger.alive || !challenged.alive) return this.reject(client, "not_alive");
+      if (challenger.duelState !== "none" || challenged.duelState !== "none") {
+        return this.reject(client, "duel_busy");
+      }
+      if (planarDistance(challenger, challenged) > RULES.duelMaxInviteDistance) {
+        return this.reject(client, "duel_too_far");
+      }
+      if (!this.gates.get(fromId)?.duel.consume(this.simulatedMs)) {
+        return this.reject(client, "duel_rate_limited");
+      }
+
+      challenger.duelWith = toId;
+      challenger.duelState = "outgoing";
+      challenged.duelWith = fromId;
+      challenged.duelState = "incoming";
+      const expires = this.simulatedMs + RULES.duelInviteTimeoutMs;
+      this.duelDeadlineMs.set(fromId, expires);
+      this.duelDeadlineMs.set(toId, expires);
+
+      client.send("duel_invite_sent", { targetId: toId });
+      this.clients.find(c => c.sessionId === toId)?.send("duel_invite", { fromId });
+    },
+
+    duel_reply: (client: Client, message: unknown) => {
+      const reply = parseDuelReplyCommand(message);
+      if (!reply) return this.reject(client, "invalid_duel_reply");
+
+      const defenderId = client.sessionId;
+      const attackerId = reply.targetId;
+      const defender = this.state.players.get(defenderId);
+      const attacker = this.state.players.get(attackerId);
+      if (!defender || !attacker ||
+          defender.duelState !== "incoming" || defender.duelWith !== attackerId ||
+          attacker.duelState !== "outgoing" || attacker.duelWith !== defenderId) {
+        return this.reject(client, "duel_not_pending");
+      }
+      if ((this.duelDeadlineMs.get(defenderId) ?? 0) <= this.simulatedMs) {
+        this.finishDuel(defenderId, "expired");
+        return;
+      }
+      if (!reply.accept) {
+        this.finishDuel(defenderId, "declined");
+        return;
+      }
+      if (!defender.alive || !attacker.alive) {
+        this.finishDuel(defenderId, "cancelled");
+        return;
+      }
+
+      // Both players explicitly opted in. The Monster NPC ignores duelists.
+      defender.duelState = "active";
+      attacker.duelState = "active";
+      defender.hp = defender.maxHp;
+      attacker.hp = attacker.maxHp;
+      this.cancelAutoCombat(defenderId);
+      this.cancelAutoCombat(attackerId);
+      const activeUntil = this.simulatedMs + RULES.duelDurationMs;
+      this.duelDeadlineMs.set(defenderId, activeUntil);
+      this.duelDeadlineMs.set(attackerId, activeUntil);
+      if (this.state.monster.targetId === defenderId ||
+          this.state.monster.targetId === attackerId) this.state.monster.targetId = "";
+      this.broadcast("duel_started", { playerA: attackerId, playerB: defenderId },
+        { afterNextPatch: true });
+    },
+
+    duel_cancel: (client: Client, message: unknown) => {
+      const target = parsePlayerTargetCommand(message);
+      if (!target) return this.reject(client, "invalid_duel_cancel");
+
+      const player = this.state.players.get(client.sessionId);
+      if (!player || player.duelState === "none" || player.duelWith !== target.targetId) {
+        return this.reject(client, "duel_not_active");
+      }
+      const winnerId = player.duelState === "active" ? target.targetId : "";
+      this.finishDuel(client.sessionId, "forfeit", winnerId);
     },
   };
 
