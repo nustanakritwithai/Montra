@@ -38,7 +38,8 @@ $files = @(
   @{ Name = "GameRules.ts"; Target = "src\rooms\GameRules.ts"; Check = "CommandBucket" },
   @{ Name = "smoke-test.mjs"; Target = "montra-combat-smoke-test.mjs"; Check = "combat_hit" },
   @{ Name = "s1-integration.mjs"; Target = "montra-s1-integration.mjs"; Check = "MONTRA S1" },
-  @{ Name = "s1-monster-ai.mjs"; Target = "montra-s1-monster-ai.mjs"; Check = "MONTRA S1" }
+  @{ Name = "s1-monster-ai.mjs"; Target = "montra-s1-monster-ai.mjs"; Check = "MONTRA S1" },
+  @{ Name = "free-pk-integration.mjs"; Target = "montra-free-pk-integration.mjs"; Check = "MONTRA Free PK" }
 )
 
 New-Item -ItemType Directory -Path $download -Force | Out-Null
@@ -96,6 +97,7 @@ try {
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
   Write-Host "Then test: node C:\Montra\online-server\montra-s1-integration.mjs"
   Write-Host "AI test: node C:\Montra\online-server\montra-s1-monster-ai.mjs"
+  Write-Host "Free PK test: node C:\Montra\online-server\montra-free-pk-integration.mjs"
 } catch {
   Write-Warning "S1 installation failed. Restoring MONTRA source files and build."
   foreach ($entry in $files) {
