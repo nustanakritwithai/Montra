@@ -21,8 +21,8 @@ test("RRT from RRT-Game-Lab adapts to X/Z and navigates around the watchwall",()
   const start={x:6,z:4},goal={x:11,z:4};
   assert.equal(isMonsterSegmentClear(start,goal),false,
     "the direct segment must cross the wall");
-  for(const seed of [2,11,71,91,155]){
-    const result=planMonsterRRT(start,goal,{seed,iterations:900});
+  for(const seed of [2,11,71,91,155,991,2026]){
+    const result=planMonsterRRT(start,goal,{seed,iterations:MONSTER_NAV.iterations});
     assert.ok(result.found,
       "RRT must find walkable route from both sides; seed="+seed+
       " nodes="+result.nodes+" iterations="+result.iterations);
