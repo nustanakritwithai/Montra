@@ -551,6 +551,55 @@
       joined.onMessage("monster_respawn", () => {
         if (room === joined) toast("มอนสเตอร์ปรากฏตัวอีกครั้ง");
       });
+      joined.onMessage("duel_invite", event => {
+        if (room !== joined || typeof event?.fromId !== "string") return;
+        toast(shortPlayerName(event.fromId) + " ส่งคำท้าประลอง");
+        syncDuelUI();
+      });
+      joined.onMessage("duel_invite_sent", () => {
+        if (room === joined) syncDuelUI();
+      });
+      joined.onMessage("duel_started", event => {
+        if (room !== joined) return;
+        if (event?.playerA === localId || event?.playerB === localId) {
+          toast("เริ่มประลองแล้ว! แตะอีกฝ่ายเพื่อโจมตี");
+          syncDuelUI();
+        }
+      });
+      joined.onMessage("duel_end", event => {
+        if (room !== joined) return;
+        if (event?.playerA === localId || event?.playerB === localId) {
+          if (event?.reason === "knockout") {
+            toast(event.winnerId === localId ? "ชนะการประลอง!" : "แพ้การประลอง!");
+          } else if (event?.reason === "declined") {
+            toast("อีกฝ่ายปฏิเสธคำท้า");
+          } else if (event?.reason === "expired") {
+            toast("หมดเวลารับคำท้า");
+          } else if (event?.reason === "forfeit") {
+            toast(event.winnerId === localId ? "คู่ต่อสู้ยอมแพ้" : "จบการประลอง");
+          } else {
+            toast("การประลองสิ้นสุด: " + String(event?.reason || "จบ"));
+          }
+          selectedPvPTargetId = null;
+          syncDuelUI();
+        }
+      });
+      joined.onMessage("pvp_hit", event => {
+        if (room !== joined || !event) return;
+        const target = avatars.get(event.targetId);
+        const attacker = avatars.get(event.attackerId);
+        if (target) target.hitFlashUntil = performance.now() + 240;
+        if (attacker && target) {
+          faceAvatarToward(event.attackerId, target.x, target.z);
+        }
+        if (event.targetId === localId) {
+          toast("ถูกผู้เล่นโจมตี -" + String(event.damage) + " HP");
+        } else if (event.attackerId === localId) {
+          toast("โจมตี " + shortPlayerName(event.targetId) +
+            " -" + String(event.damage) + " HP");
+        }
+        syncDuelUI();
+      });
       joined.onMessage("monster_hit", hit => {
         if (room === joined && hit?.targetId === localId) {
           toast("ถูกผีโจมตี -" + Number(hit.damage || 0) + " HP");
@@ -570,6 +619,11 @@
         if (room !== joined) return;
         if (info?.reason === "not_alive") toast("ยังสั่งเดินหรือโจมตีไม่ได้");
         else if (info?.reason === "attack_rate_limited") toast("สั่งโจมตีถี่เกินไป");
+        else if (info?.reason === "duel_not_active") toast("ต้องรับคำท้าประลองก่อนโจมตีผู้เล่น");
+        else if (info?.reason === "duel_busy") toast("ผู้เล่นนี้กำลังรอหรืออยู่ในการประลอง");
+        else if (info?.reason === "duel_too_far") toast("ผู้เล่นอยู่ไกลเกินระยะท้าประลอง");
+        else if (info?.reason === "duel_rate_limited") toast("ส่งคำท้าถี่เกินไป");
+        else if (info?.reason === "duel_in_progress") toast("กำลังประลอง · โจมตีคู่ดวลก่อน");
       });
       // Colyseus 0.18 schema callbacks are the reliable way to subscribe to nested maps.
       try {
