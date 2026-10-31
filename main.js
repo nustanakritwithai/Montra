@@ -1,0 +1,453 @@
+/* MONTRA Alpha 0.1 — GitHub Pages 3D client.
+   No secret keys. Online actions are validated by the Colyseus server.
+   This static client deliberately keeps demo and live play separate. */
+(() => {
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+  const ui = {
+    loading: $("loading"), loadingText: $("loadingText"), world: $("world"), toast: $("toast"),
+    modeBadge: $("modeBadge"), onlineCount: $("onlineCount"), drawer: $("drawer"),
+    drawerBody: $("drawerBody"), drawerTitle: $("drawerTitle"), shade: $("shade"),
+    minimap: $("minimap"), quest: $("quest"),
+  };
+  let toastTimer;
+  function toast(message) {
+    ui.toast.textContent = message;
+    ui.toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => ui.toast.classList.remove("show"), 2800);
+  }
+  function setModeBadge(live) {
+    ui.modeBadge.textContent = live ? "LIVE" : "DEMO";
+    ui.modeBadge.classList.toggle("live", live);
+  }
+  if (!window.BABYLON) {
+    ui.loadingText.textContent = "โหลด Babylon.js ไม่สำเร็จ ตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วโหลดใหม่";
+    return;
+  }
+
+  const B = window.BABYLON;
+  let engine;
+  try { engine = new B.Engine(ui.world, true, { antialias: true, stencil: false, preserveDrawingBuffer: false }); }
+  catch (err) {
+    ui.loadingText.textContent = "อุปกรณ์นี้ไม่สามารถเปิด WebGL ได้: " + (err.message || err);
+    return;
+  }
+  engine.setHardwareScalingLevel(Math.min(1.7, Math.max(1, devicePixelRatio / 1.5)));
+  const scene = new B.Scene(engine);
+  scene.clearColor = B.Color4.FromHexString("#111c27ff");
+  scene.fogMode = B.Scene.FOGMODE_EXP2;
+  scene.fogDensity = 0.012;
+  scene.fogColor = B.Color3.FromHexString("#293b40");
+  const camera = new B.ArcRotateCamera("portrait", -Math.PI / 2, 1.07, 23,
+    new B.Vector3(0, 0, 0), scene);
+  camera.lowerRadiusLimit = 15;
+  camera.upperRadiusLimit = 29;
+  camera.lowerBetaLimit = 0.65;
+  camera.upperBetaLimit = 1.35;
+  camera.fov = 0.69;
+  camera.minZ = 0.2;
+  const moon = new B.HemisphericLight("moon", new B.Vector3(0.1, 1, 0.2), scene);
+  moon.intensity = 0.7;
+  moon.diffuse = B.Color3.FromHexString("#c3d9f3");
+  const warm = new B.PointLight("lantern glow", new B.Vector3(0, 4, 3), scene);
+  warm.diffuse = B.Color3.FromHexString("#f6b16d");
+  warm.intensity = 1.6;
+  warm.range = 19;
+
+  function mat(name, hex, emissive) {
+    const m = new B.StandardMaterial(name, scene);
+    m.diffuseColor = B.Color3.FromHexString(hex);
+    m.specularColor = B.Color3.FromHexString("#1b2429");
+    if (emissive) m.emissiveColor = B.Color3.FromHexString(emissive);
+    return m;
+  }
+  const groundMat = mat("stone and soil", "#30453f");
+  const wooden = mat("dark teak", "#624330");
+  const woodenAlt = mat("wet teak", "#775238");
+  const darkWood = mat("wood black", "#2b2c28");
+  const roofMat = mat("thai roof", "#482a2c");
+  const gold = mat("gold", "#aa7d3e", "#39290d");
+  const water = mat("water", "#102935", "#081c28");
+  water.alpha = 0.96;
+  const glowMat = mat("lantern", "#ffbc77", "#ff9e3b");
+  const stoneMat = mat("flagstones", "#556057");
+  const ghostMat = mat("spirit", "#7b94a3", "#243b48");
+  const eyesMat = mat("eyes", "#ff443a", "#ba1010");
+  const heroMat = mat("character", "#d7b57d", "#2c190b");
+  const friendMat = mat("friend character", "#6bb9c6", "#0b2530");
+  const spiritMat = mat("friendly spirit", "#ad99e2", "#46337a");
+  spiritMat.alpha = .8;
+
+  const ground = B.MeshBuilder.CreateGround("walkableGround", { width: 40, height: 40 }, scene);
+  ground.position.y = -0.12;
+  ground.material = groundMat;
+  ground.metadata = { walkable: true };
+
+  function cube(name, position, scale, material, pickable = false) {
+    const mesh = B.MeshBuilder.CreateBox(name, { size: 1 }, scene);
+    mesh.position.copyFromFloats(...position);
+    mesh.scaling.copyFromFloats(...scale);
+    mesh.material = material;
+    mesh.isPickable = pickable;
+    return mesh;
+  }
+  function makeLantern(x, z) {
+    cube("lantern pole", [x, 1.1, z], [0.13, 2.2, 0.13], darkWood);
+    cube("lantern cap", [x, 2.25, z], [.52, .12, .52], roofMat);
+    cube("lantern flame", [x, 1.95, z], [.29, .45, .28], glowMat);
+    const l = new B.PointLight("flame", new B.Vector3(x, 1.95, z), scene);
+    l.diffuse = B.Color3.FromHexString("#ef9e5d");
+    l.intensity = .45;
+    l.range = 7;
+  }
+  // Wide central boardwalk: all visual props are non-pickable; taps project to the walkable ground.
+  for (let z = -18; z <= 18; z += 1.15) {
+    cube("plank", [0, -.035, z], [11.1, .12, .97], z % 3 === 0 ? woodenAlt : wooden);
+    cube("plank seam", [0, -.092, z + .52], [11.12, .035, .07], darkWood);
+  }
+  for (const x of [-6.1, 6.1]) {
+    for (let z = -18; z <= 18; z += 4.2) {
+      cube("boardwalk post", [x, .95, z], [.27, 2.2, .27], darkWood);
+      if (Math.round(z) % 2 === 0) makeLantern(x + Math.sign(x) * .3, z);
+    }
+  }
+  for (const x of [-14.1, 14.1]) {
+    cube("canal", [x, -.23, 0], [11.2, .08, 40], water);
+    for (let z = -17; z < 19; z += 3.1) {
+      cube("water reflection", [x + Math.sin(z) * 1.1, -.17, z], [1.7, .015, .16], mat("water streak" + x + z, "#42646a", "#142b36"));
+    }
+  }
+  function house(x, z, size = 3.4) {
+    const sign = Math.sign(x);
+    cube("house posts", [x, 1.4, z], [size, 2.8, size], wooden);
+    cube("house door", [x - sign * (size / 2 + .015), .85, z], [.07, 1.6, .9], darkWood);
+    cube("house window", [x - sign * (size / 2 + .05), 1.7, z + .95], [.07, .6, .57], glowMat);
+    const roof = B.MeshBuilder.CreateCylinder("gabled roof", { diameter: size * 1.52, height: 1.1, tessellation: 4 }, scene);
+    roof.position.copyFromFloats(x, 3.28, z);
+    roof.rotation.y = Math.PI / 4;
+    roof.material = roofMat;
+    roof.isPickable = false;
+    cube("roof ridge", [x, 3.8, z], [size * 1.05, .1, .12], gold);
+  }
+  [[-10,-13,4], [10,-13,3.5],[-10,-4,3.5],[10,3.4,4.1],[-10,12,3.5],[10,15,3.5]].forEach(v => house(...v));
+  // A small shrine and small ritual objects signal the Thai occult direction.
+  cube("shrine platform", [-4.2,.65,-1.5], [2.2,1.3,1.6], darkWood);
+  cube("shrine chamber", [-4.2,1.65,-1.5], [1.55,1.1,1.15], woodenAlt);
+  cube("shrine roof", [-4.2,2.3,-1.5], [2.15,.22,1.65], roofMat);
+  cube("shrine sigil", [-4.2,1.8,-.91], [.4,.5,.03], glowMat);
+  [[-4,-1], [4,6], [4,-11], [-4,13]].forEach(([x,z]) => makeLantern(x,z));
+  for (let i = 0; i < 15; i++) {
+    const x = (i % 2 ? -1 : 1) * (18 + Math.sin(i * 4.1) * 1.1);
+    const z = (i * 7.19) % 38 - 19;
+    const trunk = B.MeshBuilder.CreateCylinder("tree trunk", { diameter: .42, height: 2.5 }, scene);
+    trunk.position.set(x, 1.1, z); trunk.material = darkWood; trunk.isPickable = false;
+    const canopy = B.MeshBuilder.CreateSphere("canopy", { diameter: 2.45, segments: 6 }, scene);
+    canopy.position.set(x, 3.1, z); canopy.material = groundMat; canopy.isPickable = false;
+  }
+  const markerMat = mat("waypoint gold", "#ffdb81", "#dd9a37");
+  const marker = B.MeshBuilder.CreateTorus("destination", { diameter: 1.1, thickness: .08 }, scene);
+  marker.material = markerMat;
+  marker.rotation.x = Math.PI / 2;
+  marker.position.y = .105;
+  marker.isPickable = false;
+  marker.setEnabled(false);
+
+  function avatarMesh(id, local) {
+    const parent = new B.TransformNode("avatar-" + id, scene);
+    const robe = B.MeshBuilder.CreateCylinder("robe", { height: 1.15, diameterTop: .6, diameterBottom: .92, tessellation: 7 }, scene);
+    robe.parent = parent; robe.position.y = .67; robe.material = local ? heroMat : friendMat; robe.isPickable = false;
+    const head = B.MeshBuilder.CreateSphere("head", { diameter: .53, segments: 10 }, scene);
+    head.parent = parent; head.position.y = 1.52; head.material = mat("head" + id, local ? "#ccaa8b" : "#9dbdb7"); head.isPickable = false;
+    const hair = B.MeshBuilder.CreateSphere("hair", { diameter: .56, segments: 10 }, scene);
+    hair.parent = parent; hair.position.y = 1.68; hair.scaling.y = .55; hair.material = darkWood; hair.isPickable = false;
+    const belt = B.MeshBuilder.CreateBox("amulet", { size: .24 }, scene);
+    belt.parent = parent; belt.position.set(0,.95,-.37); belt.material = gold; belt.isPickable = false;
+    return { node: parent, local, x: 0, z: 0, targetX: 0, targetZ: 0 };
+  }
+  const avatars = new Map();
+  function ensureAvatar(id, local = false, x = 0, z = 0) {
+    if (avatars.has(id)) return avatars.get(id);
+    const a = avatarMesh(id, local);
+    a.x = a.targetX = x; a.z = a.targetZ = z;
+    a.node.position.copyFromFloats(x,0,z);
+    avatars.set(id,a);
+    return a;
+  }
+  function deleteAvatar(id) {
+    const a = avatars.get(id);
+    if (!a) return;
+    a.node.getChildMeshes().forEach(m => m.dispose());
+    a.node.dispose();
+    avatars.delete(id);
+  }
+  function clearAvatars() { [...avatars.keys()].forEach(deleteAvatar); }
+  let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
+  let spiritShown = false, possessed = false, spirit = null;
+  const enemy = B.MeshBuilder.CreateSphere("possessed enemy", { diameter: 1.7, segments: 12 }, scene);
+  enemy.position.copyFromFloats(1.1, .88, 10.4); enemy.scaling.set(.7,1.1,.8);
+  enemy.material = ghostMat; enemy.isPickable = false;
+  const eyeA = B.MeshBuilder.CreateSphere("left possessed eye", { diameter: .19 }, scene);
+  eyeA.parent = enemy; eyeA.position.set(-.2,.14,-.65); eyeA.material = eyesMat; eyeA.isPickable = false;
+  const eyeB = eyeA.clone("right possessed eye"); eyeB.position.x = .2;
+  let player = ensureAvatar("demo",true,0,0);
+
+  function updateStatus() {
+    ui.onlineCount.textContent = mode === "live" ? `ผู้เล่นในฉาก: ${onlinePlayers.size} (ออนไลน์จริง)` : "ผู้เล่นในฉาก: 1 (จำลอง)";
+    setModeBadge(mode === "live");
+  }
+  function showDemo() {
+    if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
+    room = null; mode = "demo"; localId = "demo";
+    onlinePlayers.clear(); clearAvatars(); player = ensureAvatar("demo",true,0,0);
+    demoDest = null; enemy.setEnabled(true); updateStatus();
+  }
+  function getLocalAvatar() { return avatars.get(localId); }
+  function pointMove(x,z) {
+    const target = { x: Math.round(Math.max(-20,Math.min(20,x))*100)/100, z: Math.round(Math.max(-20,Math.min(20,z))*100)/100 };
+    marker.position.x = target.x; marker.position.z = target.z;
+    marker.setEnabled(true);
+    if (mode === "live" && room) {
+      try { room.send("move", target); } catch (err) { toast("ส่งคำสั่งเดินไม่สำเร็จ"); }
+    } else if (mode === "demo") {
+      demoDest = target;
+    }
+  }
+  function setOnlinePlayer(id, x, z) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    onlinePlayers.set(id,{x,z});
+    const a = ensureAvatar(id,id === localId,x,z);
+    a.targetX = x; a.targetZ = z;
+    updateStatus();
+  }
+  function removeOnlinePlayer(id) { onlinePlayers.delete(id); deleteAvatar(id); updateStatus(); }
+  function syncState(state) {
+    const players = state?.players;
+    if (!players || typeof players.forEach !== "function") return false;
+    const seen = new Set();
+    players.forEach((p,id) => { seen.add(id); setOnlinePlayer(id,Number(p.x),Number(p.z)); });
+    for (const id of onlinePlayers.keys()) if (!seen.has(id)) removeOnlinePlayer(id);
+    return true;
+  }
+  let syncPoll = null;
+  function clearSyncPoll() { if (syncPoll) clearInterval(syncPoll); syncPoll = null; }
+  function stopOnline(reason) {
+    clearSyncPoll();
+    if (mode === "live") { showDemo(); toast(reason || "การเชื่อมต่อสิ้นสุด กลับสู่โหมดทดลอง"); }
+  }
+  async function connectOnline(endpoint) {
+    if (!window.Colyseus?.Client) { toast("ไม่พบ Colyseus SDK — ตรวจการโหลดสคริปต์"); return; }
+    const isLocal = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/i.test(endpoint)
+      && location.protocol === "http:" && ["localhost","127.0.0.1"].includes(location.hostname);
+    if (!/^https:\/\/[a-z0-9.-]+(?::\d+)?\/?$/i.test(endpoint) && !isLocal) {
+      toast("โปรดใช้ HTTPS ของ VPS (การทดสอบ Localhost ใช้ HTTP ได้เฉพาะในเครื่อง)");
+      return;
+    }
+    ui.onlineCount.textContent = "กำลังเชื่อมต่อเซิร์ฟเวอร์...";
+    const connectButton = $("connectOnline");
+    if (connectButton) connectButton.disabled = true;
+    try {
+      const client = new window.Colyseus.Client(endpoint);
+      const joined = await client.joinOrCreate("my_room");
+      room = joined;
+      mode = "live"; localId = joined.sessionId;
+      clearAvatars(); demoDest = null;
+      onlinePlayers.clear(); enemy.setEnabled(false);
+      if (spirit) { spirit.dispose(); spirit = null; }
+      spiritShown = false; possessed = false;
+      updateStatus();
+      const ok = syncState(joined.state);
+      console.info("MONTRA room joined", {roomId:joined.roomId, sessionId:joined.sessionId, initialStateReady:ok});
+      joined.onStateChange(state => syncState(state));
+      // Colyseus 0.18 schema callbacks are the reliable way to subscribe to nested maps.
+      try {
+        const callbackApi = window.Colyseus.Callbacks;
+        if (callbackApi?.get) {
+          const cb = callbackApi.get(joined);
+          cb.onAdd("players", (p, id) => {
+            setOnlinePlayer(id,Number(p.x),Number(p.z));
+            if (typeof cb.listen === "function") {
+              cb.listen(p, "x", x => setOnlinePlayer(id,Number(x),Number(p.z)));
+              cb.listen(p, "z", z => setOnlinePlayer(id,Number(p.x),Number(z)));
+            }
+          });
+          cb.onRemove("players", (_,id) => removeOnlinePlayer(id));
+        }
+      } catch (err) { console.warn("Callbacks fallback to state updates",err); }
+      // Some SDK/room combinations expose the collection only after the first full state sync.
+      clearSyncPoll(); syncPoll = setInterval(() => { if (room === joined) syncState(joined.state); },350);
+      joined.onLeave(() => stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กลับสู่โหมดทดลอง"));
+      joined.onError((code,message) => { console.error("MONTRA room error",code,message); toast("เซิร์ฟเวอร์แจ้งข้อผิดพลาด " + code); });
+      try { localStorage.setItem("montra_endpoint",endpoint); } catch (_) { /* optional */ }
+      closeDrawer();
+      toast(ok ? "เชื่อมต่อโลกออนไลน์แล้ว" : "เชื่อมต่อแล้ว กำลังรอข้อมูลตัวละคร");
+    } catch (err) {
+      console.error("MONTRA connection failed",err);
+      ui.onlineCount.textContent = "การเชื่อมต่อไม่สำเร็จ · ยังเป็นโหมดทดลอง";
+      toast("เชื่อมต่อไม่สำเร็จ: " + (err.message || String(err)).slice(0,105));
+      if (connectButton) connectButton.disabled = false;
+    }
+  }
+
+  let pointer = null;
+  ui.world.addEventListener("pointerdown", event => {
+    if (event.button !== 0 && event.pointerType === "mouse") return;
+    pointer = { id:event.pointerId, x:event.clientX, y:event.clientY, alpha:camera.alpha, moved:false };
+    try { ui.world.setPointerCapture(event.pointerId); } catch (_) {}
+  });
+  ui.world.addEventListener("pointermove",event => {
+    if (!pointer || pointer.id !== event.pointerId) return;
+    const dx = event.clientX - pointer.x;
+    const dy = event.clientY - pointer.y;
+    if (Math.abs(dx)+Math.abs(dy)>9) pointer.moved=true;
+    if (pointer.moved) {
+      camera.alpha = pointer.alpha - dx * .006;
+      camera.beta = Math.max(.65, Math.min(1.3, 1.07 + dy * .003));
+    }
+  });
+  ui.world.addEventListener("pointerup",event => {
+    if (!pointer || pointer.id !== event.pointerId) return;
+    const wasMoved = pointer.moved;
+    pointer = null;
+    if (wasMoved) return;
+    const rect = ui.world.getBoundingClientRect();
+    const px = (event.clientX-rect.left)*engine.getRenderWidth()/rect.width;
+    const py = (event.clientY-rect.top)*engine.getRenderHeight()/rect.height;
+    const picked = scene.pick(px,py,mesh => mesh.metadata?.walkable === true);
+    if (picked?.hit && picked.pickedPoint) pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
+  });
+  ui.world.addEventListener("pointercancel",()=> { pointer=null; });
+  ui.world.addEventListener("wheel",e=> { e.preventDefault(); camera.radius=Math.max(15,Math.min(29,camera.radius + Math.sign(e.deltaY))); },{passive:false});
+
+  let drawerActive = null;
+  function closeDrawer() {
+    ui.drawer.hidden=true; ui.shade.hidden=true; drawerActive=null;
+  }
+  function openDrawer(name,title,html) {
+    ui.drawerTitle.textContent=title;
+    ui.drawerBody.innerHTML=html;
+    ui.drawer.hidden=false; ui.shade.hidden=false;
+    drawerActive=name;
+  }
+  $("drawerClose").addEventListener("click",closeDrawer);
+  ui.shade.addEventListener("click",closeDrawer);
+  function drawMap(ctx,width,height,large=false) {
+    ctx.clearRect(0,0,width,height);
+    ctx.fillStyle="#20342e"; ctx.fillRect(0,0,width,height);
+    const sx=x => width/2 + x*(width/40);
+    const sy=z => height/2 + z*(height/40);
+    ctx.fillStyle="#103446";
+    ctx.fillRect(0,0,sx(-6.2),height);
+    ctx.fillRect(sx(6.2),0,width-sx(6.2),height);
+    ctx.fillStyle="#79583c";
+    ctx.fillRect(sx(-6.2),0,sx(6.2)-sx(-6.2),height);
+    ctx.fillStyle="#b39365";
+    for (const z of [-13,-4,3,12]) {
+      for (const x of [-10,10]) {
+        const w=large?13:7; ctx.fillRect(sx(x)-w/2,sy(z)-w/2,w,w);
+      }
+    }
+    ctx.fillStyle="#d2ad68";ctx.fillRect(sx(-4.2)-3,sy(-1.5)-3,6,6);
+    ctx.fillStyle="#e15855"; ctx.beginPath();ctx.arc(sx(1.1),sy(10.4),large?6:3,0,Math.PI*2);ctx.fill();
+    if (marker.isEnabled()) {
+      ctx.strokeStyle="#ffe2a1";ctx.lineWidth=1.8;
+      ctx.beginPath();ctx.arc(sx(marker.position.x),sy(marker.position.z),large?7:4,0,Math.PI*2);ctx.stroke();
+    }
+    for (const [id,a] of avatars) {
+      ctx.fillStyle = id===localId ? "#ffda79":"#6de5df";
+      ctx.beginPath();ctx.arc(sx(a.x),sy(a.z),large?6:3.5,0,Math.PI*2);ctx.fill();
+    }
+    if(large) {
+      ctx.font="12px system-ui";ctx.textAlign="center";ctx.fillStyle="#f9dda9";
+      ctx.fillText("ศาลอาคม",sx(-4),sy(-2.5)-8);
+      ctx.fillText("เรือนพัก",sx(10),sy(-13)-10);
+      ctx.fillText("ท่าน้ำ",sx(0),sy(15));
+      ctx.fillStyle="#e9988a";ctx.fillText("เขตผีสิง",sx(1),sy(10)+25);
+    }
+  }
+  function openMap() {
+    openDrawer("map","แผนที่หมู่บ้านอาคม",`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>◆ จุดหมาย</span><span>■ อาคาร</span><span>● ศัตรูทดสอบ</span></div><p class="note">แผนที่ V0.1 แสดงตำแหน่งจากห้องเกม (หากอยู่ในโหมดออนไลน์) หรือจากการเดินจำลองในเครื่อง (หากอยู่ในโหมด DEMO)</p>`);
+    drawMap($("bigMap").getContext("2d"),420,320,true);
+  }
+  function openOnline() {
+    openDrawer("online","เชื่อมต่อ MONTRA Server",`<div class="offline-banner"><b>ตอนนี้เปิดเล่นโหมดทดลองได้ทันที</b><p class="note">เกมที่เผยแพร่บน GitHub Pages จะเล่นออนไลน์กับ VPS ได้เมื่อมีปลายทาง HTTPS/WSS สาธารณะที่ปลอดภัยแล้วเท่านั้น ยังไม่ควรใช้พอร์ตพัฒนา 4108 โดยตรง</p></div><div class="status-line"><span>โหมดปัจจุบัน</span><strong id="currentMode">${mode==="live"?"ออนไลน์จริง":"ทดลองในเครื่อง"}</strong></div><label class="field" for="serverUrl">ที่อยู่เซิร์ฟเวอร์ HTTPS (ไม่ใส่ /playground)</label><input id="serverUrl" type="url" spellcheck="false" placeholder="https://game.your-domain.com" autocomplete="url"/><button class="primary" id="connectOnline" type="button">เชื่อมต่อออนไลน์</button><button class="secondary" id="returnDemo" type="button">กลับสู่โหมดทดลอง</button><p class="note">สำหรับทดสอบบน VPS เครื่องเดียวกันผ่าน HTTP localhost สามารถใช้ http://127.0.0.1:4108 ได้ แต่เมื่อใช้ GitHub Pages ต้องเป็น HTTPS ที่เปิด WebSocket แบบ WSS</p>`);
+    try { $("serverUrl").value=localStorage.getItem("montra_endpoint") || ""; } catch (_) {}
+    $("connectOnline").onclick=()=>connectOnline($("serverUrl").value.trim().replace(/\/$/,""));
+    $("returnDemo").onclick=()=> { showDemo(); closeDrawer(); toast("กลับสู่โหมดทดลองแล้ว"); };
+  }
+  function openHelp() {
+    openDrawer("help","วิธีเล่น MONTRA V0.1",`<h3>การเคลื่อนที่</h3><p>แตะพื้นที่ต้องการเดิน · ลากนิ้วในฉากเพื่อเปลี่ยนมุมกล้อง · ใช้ล้อเมาส์เพื่อซูมเมื่อเล่นบนคอมพิวเตอร์</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เมื่อมี URL HTTPS ของ VPS ให้ใส่ในหน้าออนไลน์ แล้วผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>ระบบบัญชี เซฟ ตลาดซื้อขาย ไอเทมถาวร การชนอาคาร และการต่อสู้กับศัตรูจริง</p>`);
+  }
+  function openBag() {
+    openDrawer("bag","กระเป๋าไอเทม",`<div class="offline-banner">กระเป๋าไอเทมยังเป็นหน้าตัวอย่าง ไม่มีของจริงและยังไม่เชื่อมฐานข้อมูล</div><div class="status-line"><span>ตำราพื้นฐาน</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>เครื่องราง</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>แลกของกับผู้เล่น</span><strong>ยังไม่เปิดใช้</strong></div>`);
+  }
+  $("mapButton").onclick=openMap;
+  $("mapShortcut").onclick=openMap;
+  $("modeButton").onclick=openOnline;
+  $("helpButton").onclick=openHelp;
+  $("bag").onclick=openBag;
+  $("summon").onclick=()=> {
+    if(mode==="live") { toast("วิญญาณออนไลน์จะเปิดในรุ่นถัดไป");return; }
+    spiritShown=!spiritShown;
+    if (spiritShown) {
+      spirit=B.MeshBuilder.CreateSphere("summoned guardian",{diameter:1.05,segments:12},scene);
+      spirit.material=spiritMat;spirit.isPickable=false;
+      toast("เรียกวิญญาณผู้พิทักษ์ (จำลอง)");
+    } else { spirit?.dispose();spirit=null;toast("เก็บวิญญาณกลับแล้ว"); }
+  };
+  $("possess").onclick=()=> {
+    if(mode==="live") { toast("เข้าสิงออนไลน์จะเปิดในรุ่นถัดไป");return; }
+    possessed=!possessed;
+    heroMat.emissiveColor = B.Color3.FromHexString(possessed?"#7c459b":"#2c190b");
+    toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
+  };
+  $("attack").onclick=()=> {
+    if(mode==="live") { toast("ระบบโจมตีออนไลน์ยังไม่เปิดใช้");return; }
+    const me=getLocalAvatar();
+    const dist=me?Math.hypot(me.x-enemy.position.x,me.z-enemy.position.z):999;
+    if(dist>4) { toast("ยังไกลศัตรู · แตะเดินเข้าไปใกล้ก่อน");return; }
+    enemy.scaling.y=1.25;
+    setTimeout(()=>{ enemy.scaling.y=1.1; },220);
+    toast("โจมตีตัวอย่างสำเร็จ · ยังไม่มีระบบ HP ศัตรูจริง");
+  };
+
+  let elapsed=0;
+  engine.runRenderLoop(() => {
+    const dt=Math.min(engine.getDeltaTime()/1000,.06);
+    elapsed+=dt;
+    if(mode==="demo" && demoDest) {
+      const me=getLocalAvatar();
+      if(me) {
+        const dx=demoDest.x-me.targetX, dz=demoDest.z-me.targetZ, d=Math.hypot(dx,dz);
+        const step=(possessed?4.6:3)*dt;
+        if(d<=step) { me.targetX=demoDest.x;me.targetZ=demoDest.z;demoDest=null; }
+        else if(d>0){ me.targetX+=dx/d*step;me.targetZ+=dz/d*step; }
+      }
+    }
+    for(const a of avatars.values()) {
+      const blend=1-Math.exp(-dt*14);
+      a.x+=(a.targetX-a.x)*blend;a.z+=(a.targetZ-a.z)*blend;
+      a.node.position.set(a.x,0,a.z);
+    }
+    const me=getLocalAvatar();
+    if(me) {
+      const target=new B.Vector3(me.x,.65,me.z+1.5);
+      camera.setTarget(B.Vector3.Lerp(camera.target,target,1-Math.exp(-dt*3.8)));
+    }
+    enemy.position.y=.9+Math.sin(elapsed*1.8)*.07;
+    if(spirit && me) { spirit.position.set(me.x-1.2,1.5+Math.sin(elapsed*3)*.2,me.z+.8); }
+    marker.rotation.z+=dt*.2;
+    const mapCtx=ui.minimap.getContext("2d");
+    drawMap(mapCtx,ui.minimap.width,ui.minimap.height);
+    if(drawerActive==="map") {
+      const large=$("bigMap");if(large)drawMap(large.getContext("2d"),large.width,large.height,true);
+    }
+    scene.render();
+  });
+  window.addEventListener("resize",()=>engine.resize());
+  window.addEventListener("pagehide",()=> { clearSyncPoll();if(room)try{room.leave();}catch(_){} });
+  updateStatus();
+  ui.loading.hidden=true;
+  toast("เริ่มต้นในโหมด DEMO · แตะพื้นเพื่อเดิน");
+})();
