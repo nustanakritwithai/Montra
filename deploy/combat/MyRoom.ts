@@ -373,7 +373,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const dz = desired.z - guardian.z;
       const distance = distance3d(guardian,desired);
       guardian.action = "follow";
-      if (distance > RULES.summonFollowDistance) {
+      // The horizontal comfort radius must not leave a spirit floating >1m
+      // above a guardian who just descended from the watchwall.
+      if (distance > RULES.summonFollowDistance || Math.abs(guardian.y - owner.y) > 0.18) {
         const next = step3d(
           guardian, desired, RULES.summonMoveSpeed * dt
         );
