@@ -140,7 +140,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       const guardian = new SummonedGuardian({
         ownerId: id, kind: "guardian",
-        x: clampToMap(owner.x - 1.1), y: 0, z: clampToMap(owner.z + 0.9),
+        x: clampToMap(owner.x - 1.1), y: owner.y, z: clampToMap(owner.z + 0.9),
         facing: owner.facing, action: "follow", targetId: "",
       });
       this.state.summons.set(id, guardian);
@@ -293,7 +293,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!target || !target.alive) continue;
       // Guard's combat tether prevents hits across the map even if another
       // client sends a valid but distant target ID.
-      if (planarDistance(owner, target) > RULES.summonEngageDistance) continue;
+      if (distance3d(owner, target) > RULES.summonEngageDistance) continue;
       return { targetId, target };
     }
     return null;
@@ -307,7 +307,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         continue;
       }
 
-      const distanceToOwner = planarDistance(guardian, owner);
+      const distanceToOwner = distance3d(guardian, owner);
       const candidate = distanceToOwner <= RULES.summonLeashDistance
         ? this.findSummonTarget(ownerId, owner) : null;
 
@@ -315,7 +315,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const { targetId, target } = candidate;
         const dx = target.x - guardian.x;
         const dz = target.z - guardian.z;
-        const distance = Math.hypot(dx, dz);
+        const distance = distance3d(guardian,target);
         guardian.targetId = targetId;
         if (distance > 0.001) guardian.facing = facingTo(dx, dz);
 
@@ -324,11 +324,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           this.trySummonAttack(ownerId, guardian, targetId);
         } else {
           guardian.action = "chase";
-          const next = stepTowards(
+          const next = step3d(
             guardian, target, RULES.summonMoveSpeed * dt
           );
-          guardian.x = clampToMap(next.x);
-          guardian.z = clampToMap(next.z);
+          guardian.x = clampToMap(next.point.x);
+          guardian.y = next.point.y;
+          guardian.z = clampToMap(next.point.z);
         }
         continue;
       }
@@ -338,18 +339,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       guardian.targetId = "";
       const desired = {
         x: clampToMap(owner.x - 1.0),
+        y: owner.y,
         z: clampToMap(owner.z + 0.85),
       };
       const dx = desired.x - guardian.x;
       const dz = desired.z - guardian.z;
-      const distance = Math.hypot(dx, dz);
+      const distance = distance3d(guardian,desired);
       guardian.action = "follow";
       if (distance > RULES.summonFollowDistance) {
-        const next = stepTowards(
+        const next = step3d(
           guardian, desired, RULES.summonMoveSpeed * dt
         );
-        guardian.x = clampToMap(next.x);
-        guardian.z = clampToMap(next.z);
+        guardian.x = clampToMap(next.point.x);
+        guardian.y = next.point.y;
+        guardian.z = clampToMap(next.point.z);
         if (next.moved) guardian.facing = facingTo(dx, dz);
       } else {
         guardian.facing = owner.facing;
@@ -366,8 +369,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const target = isMonster
       ? this.state.monster : this.state.players.get(targetId);
     if (!target || !target.alive || targetId === ownerId) return;
-    if (planarDistance(owner, target) > RULES.summonEngageDistance) return;
-    if (planarDistance(guardian, target) > RULES.summonAttackRange + 0.00001) return;
+    if (distance3d(owner, target) > RULES.summonEngageDistance) return;
+    if (distance3d(guardian, target) > RULES.summonAttackRange + 0.00001) return;
 
     const last = this.lastSummonAttackAt.get(ownerId) ?? -Infinity;
     if (this.simulatedMs - last < RULES.summonAttackCooldownMs) return;
@@ -700,7 +703,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Keep an existing target if it is alive and remains in the combat area.
     let targetId = monster.targetId;
     let target = targetId ? this.state.players.get(targetId) : undefined;
-    if (!target || !target.alive ||
+    if (!target || !target.alive || !isOnGround(target.y) ||
         planarDistance(monster, target) > RULES.monsterGiveUpRadius) {
       target = undefined;
       targetId = "";
@@ -710,7 +713,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!target) {
       let nearest: number = RULES.monsterAggroRadius;
       for (const [id, player] of this.state.players) {
-        if (!player.alive) continue;
+        if (!player.alive || !isOnGround(player.y)) continue;
         const distance = planarDistance(monster, player);
         if (distance < nearest) {
           nearest = distance;
@@ -751,13 +754,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const dz = target.z - monster.z;
     const next = stepTowards(monster, target, step);
     if (next.moved) monster.facing = facingTo(dx, dz);
-    monster.x = clampToMap(next.x);
-    monster.z = clampToMap(next.z);
+    if (!touchesWallBody(next.x, next.z)) {
+      monster.x = clampToMap(next.x);
+      monster.z = clampToMap(next.z);
+    }
   }
 
   private monsterAttack(targetId: string, target: Player) {
     if (!target.alive) return;
-    if (planarDistance(this.state.monster, target) > RULES.monsterAttackRange) return;
+    if (distance3d(this.state.monster, target) > RULES.monsterAttackRange) return;
     if (this.simulatedMs - this.lastMonsterAttackMs < RULES.monsterAttackCooldownMs) return;
     this.lastMonsterAttackMs = this.simulatedMs;
 
