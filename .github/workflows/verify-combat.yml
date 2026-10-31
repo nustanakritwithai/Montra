@@ -33,6 +33,7 @@ jobs:
           cp deploy/combat/s1-monster-ai.mjs combat-verify/s1-monster-ai.mjs
           cp deploy/combat/free-pk-integration.mjs combat-verify/free-pk-integration.mjs
           cp deploy/combat/summon-integration.mjs combat-verify/summon-integration.mjs
+          cp deploy/combat/elevation-integration.mjs combat-verify/elevation-integration.mjs
           cp deploy/combat/s1-rules.test.ts combat-verify/src/rooms/s1-rules.test.ts
           cat > combat-verify/src/index.ts <<'EOF'
           import { defineServer, defineRoom } from "colyseus";
@@ -84,7 +85,12 @@ jobs:
         run: |
           node --check main.js
           grep -q "serverFacing" main.js
-          grep -q "main.js?v=0.1.8" index.html
+          grep -q "main.js?v=0.1.9" index.html
+          grep -q 'id="climb"' index.html
+          grep -q 'id="shoot"' index.html
+          grep -q 'function syncFortification' main.js
+          grep -q 'room.send("climb"' main.js
+          grep -q 'room.send("shoot"' main.js
           grep -q "function syncSummons" main.js
           grep -q 'room.send(active ? "unsummon" : "summon", {})' main.js
           grep -q 'tapPlayerForPK' main.js
@@ -112,6 +118,7 @@ jobs:
           node --check deploy/combat/s1-monster-ai.mjs
           node --check deploy/combat/free-pk-integration.mjs
           node --check deploy/combat/summon-integration.mjs
+          node --check deploy/combat/elevation-integration.mjs
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
@@ -151,6 +158,11 @@ jobs:
           }
           MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 75s node summon-integration.mjs || {
             echo "=== SUMMON SERVER LOG ==="
+            cat server.log
+            exit 1
+          }
+          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 75s node elevation-integration.mjs || {
+            echo "=== ELEVATION SERVER LOG ==="
             cat server.log
             exit 1
           }
