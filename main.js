@@ -1181,7 +1181,10 @@
       '<button class="primary" id="renameCharacterButton" type="button">บันทึกชื่อบนเซิร์ฟเวอร์</button>' +
       '<p class="note">บันทึกอัตโนมัติประมาณทุก 15 วินาทีและตอนออกเกม ปลอดภัยสุดเมื่อออกเกมตามปกติ</p>' +
       '<button class="secondary" id="copyCharacterKey" type="button">คัดลอกรหัสกู้คืนตัวละคร</button>' +
-      '<p class="note">รหัสกู้คืนเทียบเท่ารหัสผ่าน ห้ามแชร์ให้ผู้อื่น หากล้างข้อมูลเบราว์เซอร์โดยไม่เก็บรหัสไว้จะกู้ตัวละครไม่ได้</p>');
+      '<p class="note">รหัสกู้คืนเทียบเท่ารหัสผ่าน ห้ามแชร์ให้ผู้อื่น หากล้างข้อมูลเบราว์เซอร์โดยไม่เก็บรหัสไว้จะกู้ตัวละครไม่ได้</p>' +
+      '<label class="field" for="restoreCharacterKey">มีรหัสกู้คืนจากเครื่องเดิม?</label>' +
+      '<input id="restoreCharacterKey" type="password" autocomplete="off" spellcheck="false" placeholder="วางรหัสกู้คืนของคุณ"/>' +
+      '<button class="secondary" id="restoreCharacterButton" type="button">ใช้รหัสกู้คืนบนอุปกรณ์นี้</button>');
     $("profileSaveStatus").textContent = durable ? "เก็บบน VPS" : "ยังไม่เปิดใช้ (DEMO/Server เดิม)";
     $("profileName").textContent = String(me?.characterName || "นที");
     $("profileLevel").textContent = "LV. " + (me?.level ?? 1) + " · XP " + (me?.experience ?? 0);
@@ -1209,6 +1212,27 @@
         await navigator.clipboard.writeText(key);
         toast("คัดลอกรหัสกู้คืนแล้ว · โปรดเก็บเป็นความลับ");
       } catch (error) { toast("คัดลอกรหัสไม่ได้: " + (error.message || error)); }
+    };
+    $("restoreCharacterButton").onclick = () => {
+      const incoming = $("restoreCharacterKey").value.trim();
+      if (!TOKEN_PATTERN.test(incoming)) {
+        toast("รหัสกู้คืนไม่ถูกต้อง โปรดตรวจสอบอีกครั้ง");
+        return;
+      }
+      try {
+        const endpoint = currentCharacterEndpoint();
+        const key = tokenStorageKey(endpoint);
+        if (localStorage.getItem(key) === incoming) {
+          toast("กำลังใช้งานตัวละครนี้อยู่แล้ว");
+          return;
+        }
+        localStorage.setItem(key, incoming);
+        // The next join must use the recovered identity; never attach
+        // a different account to an already-running Colyseus session.
+        window.location.reload();
+      } catch (error) {
+        toast("บันทึกรหัสกู้คืนไม่สำเร็จ: " + (error.message || error));
+      }
     };
   }
   function openHelp() {
