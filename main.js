@@ -12,6 +12,8 @@
     modeBadge: $("modeBadge"), onlineCount: $("onlineCount"), drawer: $("drawer"),
     drawerBody: $("drawerBody"), drawerTitle: $("drawerTitle"), shade: $("shade"),
     minimap: $("minimap"), quest: $("quest"),
+    pkPanel: $("pkPanel"), pkTitle: $("pkTitle"), pkText: $("pkText"),
+    pkHpTrack: $("pkHpTrack"), pkHpBar: $("pkHpBar"), pkHint: $("pkHint"),
     monsterStatus: $("monsterStatus"), monsterText: $("monsterText"),
     monsterBar: $("monsterBar"), monsterHint: $("monsterHint"),
   };
@@ -184,10 +186,20 @@
     frontSash.position.set(0, .87, -.43);
     frontSash.material = local ? gold : glowMat;
     frontSash.isPickable = false;
+
+    // Remote avatars are touch targets. The player's own avatar remains
+    // unpickable so tapping nearby ground still works.
+    const hitbox = B.MeshBuilder.CreateBox("pk-hitbox-" + id,
+      { width: 1.05, height: 2.05, depth: 1.05 }, scene);
+    hitbox.parent = parent;
+    hitbox.position.y = 1.025;
+    hitbox.visibility = .005;
+    hitbox.isPickable = !local;
+    hitbox.metadata = { pkPlayerId: id };
     return {
       node: parent, local, x: 0, z: 0, targetX: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
-      serverFacing: null
+      serverFacing: null, hitFlashUntil: 0
     };
   }
   const avatars = new Map();
@@ -221,6 +233,7 @@
   }
   function clearAvatars() { [...avatars.keys()].forEach(deleteAvatar); }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
+  let selectedPkTargetId = null;
   let spiritShown = false, possessed = false, spirit = null;
   const enemy = B.MeshBuilder.CreateSphere("possessed enemy", { diameter: 1.7, segments: 12 }, scene);
   enemy.position.copyFromFloats(1.1, .88, 10.4); enemy.scaling.set(.7,1.1,.8);
@@ -324,6 +337,8 @@
     room = null; mode = "demo"; localId = "demo";
     onlinePlayers.clear(); clearAvatars(); player = ensureAvatar("demo",true,0,0);
     demoDest = null; resetDemoMonster();
+    selectedPkTargetId = null;
+    ui.pkPanel.hidden = true;
     if (localHpBar) localHpBar.style.width = "88%";
     updateStatus();
   }
@@ -332,6 +347,8 @@
     const target = { x: Math.round(Math.max(-20,Math.min(20,x))*100)/100, z: Math.round(Math.max(-20,Math.min(20,z))*100)/100 };
     marker.position.x = target.x; marker.position.z = target.z;
     marker.setEnabled(true);
+    selectedPkTargetId = null;
+    syncPKHud();
     demoAutoAttack = false;
     if (!ui.monsterStatus.hidden) ui.monsterHint.textContent = "แตะผีเพื่อโจมตี";
     if (mode === "live" && room) {
@@ -369,6 +386,7 @@
         Number(p.facing), Number(p.hp), Number(p.maxHp));
     });
     for (const id of onlinePlayers.keys()) if (!seen.has(id)) removeOnlinePlayer(id);
+    syncPKHud();
     return true;
   }
   let syncPoll = null;
@@ -398,6 +416,7 @@
       mode = "live"; localId = joined.sessionId;
       clearAvatars(); demoDest = null;
       onlinePlayers.clear(); enemy.setEnabled(false);
+      selectedPkTargetId = null;
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
       ui.monsterStatus.hidden = true;
       if (spirit) { spirit.dispose(); spirit = null; }
