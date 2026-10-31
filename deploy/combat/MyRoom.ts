@@ -124,7 +124,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.tick(ctx.dt);
     }, RULES.tickRate);
 
-    console.log("MONTRA S1 Game Engine started:", this.roomId);
+    console.log("MONTRA S1 + FreePK Engine started:", this.roomId);
   }
 
   private tick(dt: number) {
@@ -395,14 +395,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }, { afterNextPatch: true });
 
     if (target.hp === 0) {
-      target.alive = false;
-      target.combatState = "dead";
-      target.targetId = "";
-      this.destinations.delete(targetId);
-      this.attackTargets.delete(targetId);
-      this.playerRespawnAt.set(targetId, this.simulatedMs + RULES.playerRespawnMs);
-      this.state.monster.targetId = "";
-      this.broadcast("player_down", { playerId: targetId });
+      this.knockoutPlayer(targetId, "monster");
     }
   }
 
@@ -475,7 +468,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastRejectNoticeMs.delete(id);
     this.state.players.delete(id);
     if (this.state.monster.targetId === id) this.state.monster.targetId = "";
-    console.log("MONTRA S1 leave:", id, code);
+    // Remote player targets cannot remain locked to disconnected sessions.
+    for (const [otherId, targetId] of [...this.attackTargets]) {
+      if (targetId !== id) continue;
+      const attacker = this.state.players.get(otherId);
+      if (attacker) this.endAttack(otherId, attacker);
+      else this.attackTargets.delete(otherId);
+    }
+    console.log("MONTRA FreePK leave:", id, code);
   }
 
   onDispose() {
