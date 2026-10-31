@@ -15,8 +15,14 @@ export const Player = schema({
   combatState: t.string().default("idle"), // idle|moving|approaching|attacking|dead
   targetId: t.string().default(""),
   hitSeq: t.number().default(0),
-  pkKills: t.number().default(0), // per-room alpha tally, not a permanent character stat
+  pkKills: t.number().default(0), // S2 persistent for guest characters
   pkDeaths: t.number().default(0),
+  // Append only: keep the preceding Colyseus Schema indexes unchanged.
+  characterId: t.string().default(""), // public short digest, never the secret guest token
+  characterName: t.string().default("นที"),
+  level: t.number().default(1),
+  experience: t.number().default(0),
+  persistent: t.boolean().default(false),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
