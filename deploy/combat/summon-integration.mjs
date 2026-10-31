@@ -46,7 +46,6 @@ try {
     });
     r.onMessage("command_rejected", notice => {
       if (i === 0) denied.push(notice.reason);
-      console.log("SUMMON TEST REJECT", i, notice.reason);
     });
     r.onError((code, message) => {
       console.log("SUMMON TEST ROOM ERROR", i, code, message);
@@ -63,7 +62,9 @@ try {
   a.send("summon", { ownerId: bId, damage: 999, x: 9999 });
   a.send("summon", { kind: "dragon" });
   a.send("unsummon", { ownerId: bId });
-  a.send("summon_hit", { targetId: "possessed-1", damage: 9999 });
+  // Never submit the server-to-client "summon_hit" event here: Colyseus
+  // correctly disconnects clients sending unsupported message types (4002).
+  // Damage injection is already covered by the invalid "summon" payload.
   await sleep(240);
   assert.ok(rooms.every(r => r.state.summons.size === 0 && r.state.monster.hp === 100));
   console.log("PASS: forged summon owner, kind, position and damage rejected");
