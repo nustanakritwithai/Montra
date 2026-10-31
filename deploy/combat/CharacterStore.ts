@@ -9,6 +9,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const CHARACTER_SAVE_INTERVAL_MS = 15_000;
 export type SpawnPoint = { x: number; z: number };
@@ -89,8 +90,10 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
 
 export class CharacterStore {
   private readonly writes = new Map<string, Promise<void>>();
+  // Resolve from the module location, not process.cwd(): a Windows service
+  // can start Node from an unexpected directory after a machine restart.
   constructor(readonly directory: string = process.env.MONTRA_CHARACTER_DIR ||
-    path.resolve(process.cwd(), "data", "characters")) {}
+    fileURLToPath(new URL("../../data/characters", import.meta.url))) {}
 
   private location(id: string): string {
     if (!/^[0-9a-f]{64}$/.test(id)) throw new Error("invalid_character_id");
