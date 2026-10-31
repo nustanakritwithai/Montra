@@ -1,0 +1,66 @@
+name: Verify MONTRA Combat Server
+
+on:
+  push:
+    paths:
+      - 'deploy/combat/**'
+      - '.github/workflows/verify-combat.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Prepare Colyseus 0.18 test project
+        shell: bash
+        run: |
+          mkdir -p combat-verify/src/rooms/schema
+          cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
+          cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
+          cat > combat-verify/package.json <<'EOF'
+          {
+            "private": true,
+            "type": "module",
+            "dependencies": {
+              "colyseus": "0.18.2",
+              "@colyseus/schema": "5.0.14"
+            },
+            "devDependencies": {
+              "typescript": "5.9.3",
+              "@types/node": "^22.0.0"
+            }
+          }
+          EOF
+          cat > combat-verify/tsconfig.json <<'EOF'
+          {
+            "compilerOptions": {
+              "target": "ES2022",
+              "module": "NodeNext",
+              "moduleResolution": "NodeNext",
+              "strict": true,
+              "skipLibCheck": true,
+              "noEmit": true,
+              "types": ["node"]
+            },
+            "include": ["src/**/*.ts"]
+          }
+          EOF
+
+      - name: Install server dependencies
+        working-directory: combat-verify
+        run: npm install --no-audit --no-fund
+
+      - name: Type-check combat server
+        working-directory: combat-verify
+        run: npx tsc --noEmit
+
+      - name: Syntax-check smoke test
+        run: node --check deploy/combat/smoke-test.mjs
