@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — ต้นแบบ MMORPG 3D ไสยศาสตร์ไทยสำหรับมือถือ แบบแตะพื้นเพื่อเดิน" />
   <title>MONTRA — หมู่บ้านอาคม | Alpha 0.1</title>
-  <link rel="stylesheet" href="./styles.css?v=0.1.10" />
+  <link rel="stylesheet" href="./styles.css?v=0.2.0" />
 </head>
 <body>
   <main id="game" aria-label="MONTRA เกมต้นแบบสามมิติ">
@@ -16,7 +16,7 @@
     <header class="top-hud">
       <section class="identity panel" aria-label="ข้อมูลตัวละคร">
         <div class="brand-row"><div class="brand">MONTRA <small>มนตรา</small></div><span id="modeBadge" class="badge">DEMO</span></div>
-        <div class="character"><div class="portrait">น</div><div class="character-info"><div class="name">นที <span>LV. 1</span></div><div class="bar hp"><i></i></div><div class="bar mp"><i></i></div></div></div>
+        <div class="character"><div class="portrait">น</div><div class="character-info"><div class="name"><button id="characterProfile" class="profile-trigger" type="button" title="ข้อมูลตัวละคร"><span id="characterName">นที</span><span id="characterLevel">LV. 1</span></button></div><div class="bar hp"><i></i></div><div class="bar mp"><i></i></div></div></div>
       </section>
       <section class="location-area">
         <button id="mapShortcut" class="mini-map" aria-label="เปิดแผนที่" title="เปิดแผนที่"><canvas id="minimap" width="160" height="160"></canvas><span class="mini-north">N</span></button>
@@ -63,10 +63,10 @@
       <div class="drawer-header"><h2 id="drawerTitle">แผนที่</h2><button id="drawerClose" class="close" aria-label="ปิด">✕</button></div>
       <div id="drawerBody" class="drawer-body"></div>
     </section>
-    <footer class="version">ALPHA V0.1.10 · ภาพและระบบเล่นทดสอบ ไม่ใช่ MMORPG ที่เปิดให้บริการแล้ว</footer>
+    <footer class="version">ALPHA V0.2.0 · บันทึก Guest ต้องเปิด S2 บน VPS · ยังเป็นเกมทดสอบ</footer>
   </main>
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
-  <script src="./main.js?v=0.1.10" defer></script>
+  <script src="./main.js?v=0.2.0" defer></script>
 </body>
 </html>
