@@ -12,6 +12,8 @@
     modeBadge: $("modeBadge"), onlineCount: $("onlineCount"), drawer: $("drawer"),
     drawerBody: $("drawerBody"), drawerTitle: $("drawerTitle"), shade: $("shade"),
     minimap: $("minimap"), quest: $("quest"),
+    monsterStatus: $("monsterStatus"), monsterText: $("monsterText"),
+    monsterBar: $("monsterBar"), monsterHint: $("monsterHint"),
   };
   let toastTimer;
   function toast(message) {
@@ -189,11 +191,93 @@
   let spiritShown = false, possessed = false, spirit = null;
   const enemy = B.MeshBuilder.CreateSphere("possessed enemy", { diameter: 1.7, segments: 12 }, scene);
   enemy.position.copyFromFloats(1.1, .88, 10.4); enemy.scaling.set(.7,1.1,.8);
-  enemy.material = ghostMat; enemy.isPickable = false;
+  enemy.material = ghostMat; enemy.isPickable = true;
+  enemy.metadata = { monsterId: "possessed-1" };
   const eyeA = B.MeshBuilder.CreateSphere("left possessed eye", { diameter: .19 }, scene);
   eyeA.parent = enemy; eyeA.position.set(-.2,.14,-.65); eyeA.material = eyesMat; eyeA.isPickable = false;
   const eyeB = eyeA.clone("right possessed eye"); eyeB.position.x = .2;
   let player = ensureAvatar("demo",true,0,0);
+  const MONSTER_ID = "possessed-1";
+  let monsterReady = false;
+  let demoMonsterHp = 100;
+  let demoRespawnAt = 0;
+  let demoLastHitAt = -Infinity;
+  let demoAutoAttack = false;
+  let hitFlashRemaining = 0;
+  let lastMonsterHitSeq = 0;
+
+  function updateMonsterUI(hp, maxHp, alive, simulated = false) {
+    const max = Math.max(1, Number(maxHp) || 100);
+    const current = Math.max(0, Math.min(max, Number(hp) || 0));
+    ui.monsterStatus.hidden = false;
+    ui.monsterBar.style.width = (100 * current / max) + "%";
+    ui.monsterText.textContent = alive
+      ? "HP " + Math.ceil(current) + "/" + Math.ceil(max)
+      : "ตายแล้ว · รอเกิดใหม่";
+    ui.monsterHint.textContent = simulated
+      ? "ทดลองในเครื่อง · แตะผีเพื่อโจมตี"
+      : "ออนไลน์ · แตะผีเพื่อโจมตี";
+  }
+
+  function resetDemoMonster() {
+    demoMonsterHp = 100;
+    demoRespawnAt = 0;
+    demoLastHitAt = -Infinity;
+    demoAutoAttack = false;
+    hitFlashRemaining = 0;
+    monsterReady = false;
+    enemy.position.x = 1.1;
+    enemy.position.z = 10.4;
+    enemy.setEnabled(true);
+    updateMonsterUI(100, 100, true, true);
+  }
+
+  function syncMonsterState(state) {
+    if (mode !== "live") return;
+    const monster = state?.monster;
+    if (!monster || !Number.isFinite(Number(monster.hp))) {
+      monsterReady = false;
+      enemy.setEnabled(false);
+      ui.monsterStatus.hidden = true;
+      return;
+    }
+
+    monsterReady = true;
+    const maxHp = Math.max(1, Number(monster.maxHp) || 100);
+    const hp = Math.max(0, Math.min(maxHp, Number(monster.hp)));
+    const alive = hp > 0 && monster.alive !== false;
+    const x = Number(monster.x), z = Number(monster.z);
+    if (Number.isFinite(x)) enemy.position.x = x;
+    if (Number.isFinite(z)) enemy.position.z = z;
+    enemy.setEnabled(alive);
+    const seq = Number(monster.hitSeq);
+    if (Number.isFinite(seq) && seq > lastMonsterHitSeq) hitFlashRemaining = .22;
+    if (Number.isFinite(seq)) lastMonsterHitSeq = Math.max(lastMonsterHitSeq, seq);
+    updateMonsterUI(hp, maxHp, alive);
+  }
+
+  function requestMonsterAttack() {
+    if (mode === "live") {
+      if (!room || !monsterReady) {
+        toast("เซิร์ฟเวอร์ยังไม่เปิดระบบโจมตี · ติดตั้ง Combat บน VPS ก่อน");
+        return;
+      }
+      if (!enemy.isEnabled()) { toast("มอนสเตอร์ตายแล้ว · รอเกิดใหม่"); return; }
+      marker.setEnabled(false);
+      try {
+        room.send("attack", { targetId: MONSTER_ID });
+        ui.monsterHint.textContent = "กำลังสั่งโจมตีผ่านเซิร์ฟเวอร์";
+      } catch (err) {
+        console.error("MONTRA attack request failed", err);
+        toast("ส่งคำสั่งโจมตีไม่สำเร็จ");
+      }
+      return;
+    }
+    if (demoMonsterHp <= 0) { toast("ผีถูกปราบแล้ว · รอเกิดใหม่"); return; }
+    marker.setEnabled(false);
+    demoAutoAttack = true;
+    toast("แตะผีเพื่อโจมตี · DEMO");
+  }
 
   function updateStatus() {
     ui.onlineCount.textContent = mode === "live" ? `ผู้เล่นในฉาก: ${onlinePlayers.size} (ออนไลน์จริง)` : "ผู้เล่นในฉาก: 1 (จำลอง)";
@@ -203,13 +287,15 @@
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo";
     onlinePlayers.clear(); clearAvatars(); player = ensureAvatar("demo",true,0,0);
-    demoDest = null; enemy.setEnabled(true); updateStatus();
+    demoDest = null; resetDemoMonster(); updateStatus();
   }
   function getLocalAvatar() { return avatars.get(localId); }
   function pointMove(x,z) {
     const target = { x: Math.round(Math.max(-20,Math.min(20,x))*100)/100, z: Math.round(Math.max(-20,Math.min(20,z))*100)/100 };
     marker.position.x = target.x; marker.position.z = target.z;
     marker.setEnabled(true);
+    demoAutoAttack = false;
+    if (!ui.monsterStatus.hidden) ui.monsterHint.textContent = "แตะผีเพื่อโจมตี";
     if (mode === "live" && room) {
       try { room.send("move", target); } catch (err) { toast("ส่งคำสั่งเดินไม่สำเร็จ"); }
     } else if (mode === "demo") {
@@ -225,6 +311,7 @@
   }
   function removeOnlinePlayer(id) { onlinePlayers.delete(id); deleteAvatar(id); updateStatus(); }
   function syncState(state) {
+    syncMonsterState(state);
     const players = state?.players;
     if (!players || typeof players.forEach !== "function") return false;
     const seen = new Set();
@@ -259,12 +346,32 @@
       mode = "live"; localId = joined.sessionId;
       clearAvatars(); demoDest = null;
       onlinePlayers.clear(); enemy.setEnabled(false);
+      monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
+      ui.monsterStatus.hidden = true;
       if (spirit) { spirit.dispose(); spirit = null; }
       spiritShown = false; possessed = false;
       updateStatus();
       const ok = syncState(joined.state);
       console.info("MONTRA room joined", {roomId:joined.roomId, sessionId:joined.sessionId, initialStateReady:ok});
       joined.onStateChange(state => syncState(state));
+      joined.onMessage("combat_hit", hit => {
+        if (room !== joined || hit?.targetId !== MONSTER_ID) return;
+        hitFlashRemaining = .22;
+        if (Number.isFinite(Number(hit.hp)) && Number.isFinite(Number(hit.maxHp))) {
+          updateMonsterUI(Number(hit.hp), Number(hit.maxHp), Number(hit.hp) > 0);
+        }
+        toast(hit.attackerId === localId
+          ? "โจมตีผีสำเร็จ -" + String(hit.damage) + " HP"
+          : "ผู้เล่นอื่นโจมตีผี -" + String(hit.damage) + " HP");
+      });
+      joined.onMessage("combat_notice", notice => {
+        if (room !== joined) return;
+        if (notice?.reason === "approaching") toast("กำลังเดินเข้าระยะโจมตี...");
+        else if (notice?.reason === "monster_down") toast("มอนสเตอร์ถูกปราบแล้ว");
+      });
+      joined.onMessage("monster_respawn", () => {
+        if (room === joined) toast("มอนสเตอร์ปรากฏตัวอีกครั้ง");
+      });
       // Colyseus 0.18 schema callbacks are the reliable way to subscribe to nested maps.
       try {
         const callbackApi = window.Colyseus.Callbacks;
@@ -325,6 +432,12 @@
     const px = event.clientX - rect.left;
     const py = event.clientY - rect.top;
     if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
+    // Monster receives tap priority over the ground behind its model.
+    const monsterHit = enemy.isEnabled() && scene.pick(px, py, mesh => mesh === enemy);
+    if (monsterHit?.hit) {
+      requestMonsterAttack();
+      return;
+    }
     const picked = scene.pick(px,py,mesh => mesh.metadata?.walkable === true);
     if (picked?.hit && picked.pickedPoint) pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
   });
@@ -416,20 +529,47 @@
     heroMat.emissiveColor = B.Color3.FromHexString(possessed?"#7c459b":"#2c190b");
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
-  $("attack").onclick=()=> {
-    if(mode==="live") { toast("ระบบโจมตีออนไลน์ยังไม่เปิดใช้");return; }
-    const me=getLocalAvatar();
-    const dist=me?Math.hypot(me.x-enemy.position.x,me.z-enemy.position.z):999;
-    if(dist>4) { toast("ยังไกลศัตรู · แตะเดินเข้าไปใกล้ก่อน");return; }
-    enemy.scaling.y=1.25;
-    setTimeout(()=>{ enemy.scaling.y=1.1; },220);
-    toast("โจมตีตัวอย่างสำเร็จ · ยังไม่มีระบบ HP ศัตรูจริง");
-  };
+  $("attack").onclick = requestMonsterAttack;
 
   let elapsed=0;
   engine.runRenderLoop(() => {
     const dt=Math.min(engine.getDeltaTime()/1000,.06);
     elapsed+=dt;
+    const now = performance.now();
+    if (mode === "demo") {
+      if (demoRespawnAt > 0 && now >= demoRespawnAt) {
+        resetDemoMonster();
+      }
+      if (demoAutoAttack && demoMonsterHp > 0) {
+        const me = getLocalAvatar();
+        if (me) {
+          const dx = enemy.position.x - me.targetX;
+          const dz = enemy.position.z - me.targetZ;
+          const distance = Math.hypot(dx, dz);
+          if (distance > 2.6) {
+            const ratio = (distance - 2.4) / distance;
+            demoDest = {
+              x: me.targetX + dx * ratio,
+              z: me.targetZ + dz * ratio
+            };
+          } else {
+            demoDest = null;
+            if (now - demoLastHitAt >= 1000) {
+              demoLastHitAt = now;
+              demoMonsterHp = Math.max(0, demoMonsterHp - 20);
+              hitFlashRemaining = .22;
+              updateMonsterUI(demoMonsterHp, 100, demoMonsterHp > 0, true);
+              if (demoMonsterHp <= 0) {
+                enemy.setEnabled(false);
+                demoAutoAttack = false;
+                demoRespawnAt = now + 6000;
+                toast("ปราบผีสำเร็จ · DEMO · เกิดใหม่ใน 6 วินาที");
+              }
+            }
+          }
+        }
+      }
+    }
     if(mode==="demo" && demoDest) {
       const me=getLocalAvatar();
       if(me) {
@@ -455,6 +595,8 @@
       target.z += (me.z + 1.5 - target.z) * follow;
     }
     enemy.position.y=.9+Math.sin(elapsed*1.8)*.07;
+    hitFlashRemaining = Math.max(0, hitFlashRemaining - dt);
+    enemy.scaling.y = hitFlashRemaining > 0 ? 1.3 : 1.1;
     if(spirit && me) { spirit.position.set(me.x-1.2,1.5+Math.sin(elapsed*3)*.2,me.z+.8); }
     marker.rotation.z+=dt*.2;
     const mapCtx=ui.minimap.getContext("2d");
@@ -466,6 +608,7 @@
   });
   window.addEventListener("resize",()=>engine.resize());
   window.addEventListener("pagehide",()=> { clearSyncPoll();if(room)try{room.leave();}catch(_){} });
+  resetDemoMonster();
   updateStatus();
   ui.loading.hidden=true;
   toast("เริ่มต้นในโหมด DEMO · แตะพื้นเพื่อเดิน");
