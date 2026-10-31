@@ -193,6 +193,63 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
   };
 
+  private isActiveDuel(aId: string, bId: string): boolean {
+    if (aId === bId) return false;
+    const a = this.state.players.get(aId);
+    const b = this.state.players.get(bId);
+    return Boolean(
+      a?.alive && b?.alive &&
+      a.duelState === "active" && b.duelState === "active" &&
+      a.duelWith === bId && b.duelWith === aId
+    );
+  }
+
+  private cancelAutoCombat(id: string) {
+    this.attackTargets.delete(id);
+    this.destinations.delete(id);
+    const player = this.state.players.get(id);
+    if (player && player.alive) {
+      player.targetId = "";
+      player.combatState = "idle";
+    }
+  }
+
+  private finishDuel(id: string, reason: string, winnerId = "") {
+    const origin = this.state.players.get(id);
+    if (!origin || origin.duelState === "none") return;
+    const opponentId = origin.duelWith;
+    const opponent = this.state.players.get(opponentId);
+
+    // Clear both directions atomically inside this fixed-step room.
+    for (const [sessionId, otherId] of [[id, opponentId], [opponentId, id]]) {
+      const player = this.state.players.get(sessionId);
+      if (!player || player.duelWith !== otherId) continue;
+      player.duelState = "none";
+      player.duelWith = "";
+      this.duelDeadlineMs.delete(sessionId);
+      if (this.attackTargets.get(sessionId) === otherId) {
+        this.cancelAutoCombat(sessionId);
+      }
+    }
+    if (!opponent) this.duelDeadlineMs.delete(opponentId);
+
+    this.broadcast("duel_end", {
+      playerA: id, playerB: opponentId, reason, winnerId,
+    }, { afterNextPatch: true });
+  }
+
+  private updateDuelDeadlines() {
+    for (const [id, deadline] of [...this.duelDeadlineMs]) {
+      if (this.simulatedMs < deadline) continue;
+      const player = this.state.players.get(id);
+      if (!player || player.duelState === "none") {
+        this.duelDeadlineMs.delete(id);
+      } else {
+        this.finishDuel(id, player.duelState === "active" ? "timeout" : "expired");
+      }
+    }
+  }
+
   private reject(client: Client, reason: string) {
     // Avoid amplifying floods with unlimited rejection responses.
     const previous = this.lastRejectNoticeMs.get(client.sessionId) ?? -Infinity;
@@ -222,6 +279,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private tick(dt: number) {
+    this.updateDuelDeadlines();
     this.updateRespawns();
     this.updatePlayerMovement(dt);
     this.updateMonsterAI(dt);
