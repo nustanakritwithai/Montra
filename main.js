@@ -619,6 +619,28 @@
       joined.onMessage("monster_respawn", () => {
         if (room === joined) toast("มอนสเตอร์ปรากฏตัวอีกครั้ง");
       });
+      joined.onMessage("summon_spawn", notice => {
+        if (room !== joined) return;
+        if (notice?.ownerId === localId) toast("อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
+        syncSummons(joined.state);
+      });
+      joined.onMessage("summon_despawn", notice => {
+        if (room !== joined) return;
+        if (notice?.ownerId === localId) {
+          toast(notice.reason === "owner_dead"
+            ? "วิญญาณกลับภพเมื่อเจ้าของหมดสติ"
+            : "เก็บวิญญาณผู้พิทักษ์แล้ว");
+        }
+        syncSummons(joined.state);
+      });
+      joined.onMessage("summon_hit", hit => {
+        if (room !== joined || !hit) return;
+        const actor = summonAvatars.get(hit.ownerId);
+        if (actor) actor.hitUntil = performance.now() + 260;
+        if (hit.ownerId === localId) {
+          toast("วิญญาณโจมตีผี -" + String(hit.damage) + " HP");
+        }
+      });
       joined.onMessage("pvp_hit", hit => {
         if (room !== joined || !hit || typeof hit.targetId !== "string") return;
         const victim = avatars.get(hit.targetId);
@@ -667,6 +689,12 @@
         else if (info?.reason === "self_attack") toast("ไม่สามารถโจมตีตัวเองได้");
         else if (info?.reason === "target_unavailable") toast("เป้าหมายไม่อยู่ในห้องหรือไม่พร้อมต่อสู้");
         else if (info?.reason === "invalid_attack") toast("คำสั่งโจมตีไม่ถูกต้อง");
+        else if (info?.reason === "summon_limit") toast("เรียกวิญญาณพร้อมกันได้สูงสุด 1 ตัว");
+        else if (info?.reason === "summon_cooldown") toast("อัญเชิญเร็วเกินไป · รอคูลดาวน์");
+        else if (info?.reason === "summon_rate_limited") toast("กดเรียกวิญญาณถี่เกินไป");
+        else if (info?.reason === "invalid_summon" || info?.reason === "invalid_unsummon") {
+          toast("คำสั่งวิญญาณไม่ถูกต้อง");
+        }
       });
       // Colyseus 0.18 schema callbacks are the reliable way to subscribe to nested maps.
       try {
@@ -832,13 +860,29 @@
   $("helpButton").onclick=openHelp;
   $("bag").onclick=openBag;
   $("summon").onclick=()=> {
-    if(mode==="live") { toast("วิญญาณออนไลน์จะเปิดในรุ่นถัดไป");return; }
+    if (mode === "live") {
+      if (!room?.state?.summons?.has) {
+        toast("เซิร์ฟเวอร์ยังไม่รองรับวิญญาณออนไลน์ · ติดตั้ง Summon บน VPS ก่อน");
+        return;
+      }
+      const owner = room.state?.players?.get?.(localId);
+      if (owner?.alive === false) { toast("ยังอัญเชิญไม่ได้ · รอเกิดใหม่"); return; }
+      const active = room.state.summons.has(localId);
+      try {
+        room.send(active ? "unsummon" : "summon", {});
+      } catch (err) {
+        console.error("MONTRA summon request failed", err);
+        toast("ส่งคำสั่งอัญเชิญไม่สำเร็จ");
+      }
+      return;
+    }
     spiritShown=!spiritShown;
     if (spiritShown) {
       spirit=B.MeshBuilder.CreateSphere("summoned guardian",{diameter:1.05,segments:12},scene);
       spirit.material=spiritMat;spirit.isPickable=false;
       toast("เรียกวิญญาณผู้พิทักษ์ (จำลอง)");
     } else { spirit?.dispose();spirit=null;toast("เก็บวิญญาณกลับแล้ว"); }
+    updateSummonButton(spiritShown);
   };
   $("possess").onclick=()=> {
     if(mode==="live") { toast("เข้าสิงออนไลน์จะเปิดในรุ่นถัดไป");return; }
