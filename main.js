@@ -293,7 +293,7 @@
   let pointer = null;
   ui.world.addEventListener("pointerdown", event => {
     if (event.button !== 0 && event.pointerType === "mouse") return;
-    pointer = { id:event.pointerId, x:event.clientX, y:event.clientY, alpha:camera.alpha, moved:false };
+    pointer = { id:event.pointerId, x:event.clientX, y:event.clientY, alpha:camera.alpha, beta:camera.beta, moved:false };
     try { ui.world.setPointerCapture(event.pointerId); } catch (_) {}
   });
   ui.world.addEventListener("pointermove",event => {
@@ -303,7 +303,7 @@
     if (Math.abs(dx)+Math.abs(dy)>9) pointer.moved=true;
     if (pointer.moved) {
       camera.alpha = pointer.alpha - dx * .006;
-      camera.beta = Math.max(.65, Math.min(1.3, 1.07 + dy * .003));
+      camera.beta = Math.max(.65, Math.min(1.3, pointer.beta + dy * .003));
     }
   });
   ui.world.addEventListener("pointerup",event => {
@@ -436,8 +436,13 @@
     }
     const me=getLocalAvatar();
     if(me) {
-      const target=new B.Vector3(me.x,.65,me.z+1.5);
-      camera.setTarget(B.Vector3.Lerp(camera.target,target,1-Math.exp(-dt*3.8)));
+      // Follow the moving player without calling camera.setTarget(): that
+      // method recomputes alpha/beta/radius and cancels manual camera rotation.
+      const follow = 1 - Math.exp(-dt * 3.8);
+      const target = camera.target;
+      target.x += (me.x - target.x) * follow;
+      target.y += (.65 - target.y) * follow;
+      target.z += (me.z + 1.5 - target.z) * follow;
     }
     enemy.position.y=.9+Math.sin(elapsed*1.8)*.07;
     if(spirit && me) { spirit.position.set(me.x-1.2,1.5+Math.sin(elapsed*3)*.2,me.z+.8); }
