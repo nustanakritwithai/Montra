@@ -157,7 +157,8 @@
     fortBody.scaling.set(next.width,next.height,next.length);
     fortBody.position.set(next.x,next.height/2,next.z);
     fortTop.scaling.set(next.width+.16,.18,next.length);
-    fortTop.position.set(next.x,next.height+.065,next.z);
+    // Crest top aligns with authoritative player feet elevation (y=height).
+    fortTop.position.set(next.x,next.height-.09,next.z);
     const dx=next.ladderTopX-next.ladderFootX;
     const dy=next.height;
     const dist=Math.hypot(dx,dy);
