@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#121d20" />
+  <meta name="description" content="MONTRA — ต้นแบบ MMORPG 3D ไสยศาสตร์ไทยสำหรับมือถือ แบบแตะพื้นเพื่อเดิน" />
+  <title>MONTRA — หมู่บ้านอาคม | Alpha 0.1</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main id="game" aria-label="MONTRA เกมต้นแบบสามมิติ">
+    <canvas id="world" tabindex="0" aria-label="พื้นที่เกมสามมิติ แตะพื้นเพื่อเดิน"></canvas>
+    <div id="loading" class="loading"><div class="loader-mark">๛</div><strong>MONTRA</strong><span id="loadingText">กำลังเตรียมหมู่บ้านอาคม...</span></div>
+
+    <header class="top-hud">
+      <section class="identity panel" aria-label="ข้อมูลตัวละคร">
+        <div class="brand-row"><div class="brand">MONTRA <small>มนตรา</small></div><span id="modeBadge" class="badge">DEMO</span></div>
+        <div class="character"><div class="portrait">น</div><div class="character-info"><div class="name">นที <span>LV. 1</span></div><div class="bar hp"><i></i></div><div class="bar mp"><i></i></div></div></div>
+      </section>
+      <section class="location-area">
+        <button id="mapShortcut" class="mini-map" aria-label="เปิดแผนที่" title="เปิดแผนที่"><canvas id="minimap" width="160" height="160"></canvas><span class="mini-north">N</span></button>
+        <div class="place-name">หมู่บ้านอาคม · ริมน้ำ</div>
+      </section>
+    </header>
+
+    <div id="quest" class="quest panel"><span class="quest-icon">◇</span><div><strong>ภารกิจทดลอง</strong><span>แตะทางเดินไม้เพื่อสำรวจหมู่บ้าน</span></div></div>
+    <div class="online-count panel" id="onlineCount">ผู้เล่นในฉาก: 1 (จำลอง)</div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div class="tap-tip">แตะพื้นเพื่อเดิน · ลากเพื่อหมุนกล้อง</div>
+
+    <section class="controls" aria-label="ปุ่มควบคุม">
+      <div class="skill-bar">
+        <button id="summon" class="skill" type="button"><span class="glyph violet">♧</span><span>เรียกผี</span></button>
+        <button id="possess" class="skill" type="button"><span class="glyph amber">✴</span><span>เข้าสิง</span></button>
+        <button id="attack" class="skill" type="button"><span class="glyph red">⚔</span><span>โจมตี</span></button>
+        <button id="bag" class="skill" type="button"><span class="glyph dark">▣</span><span>กระเป๋า</span></button>
+      </div>
+      <nav class="nav-bar" aria-label="เมนูเกม">
+        <button id="mapButton"><span>⌖</span>แผนที่</button>
+        <button id="modeButton"><span>◎</span>ออนไลน์</button>
+        <button id="helpButton"><span>?</span>วิธีเล่น</button>
+      </nav>
+    </section>
+
+    <div id="shade" class="shade" hidden></div>
+    <section id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+      <div class="drawer-grip"></div>
+      <div class="drawer-header"><h2 id="drawerTitle">แผนที่</h2><button id="drawerClose" class="close" aria-label="ปิด">✕</button></div>
+      <div id="drawerBody" class="drawer-body"></div>
+    </section>
+    <footer class="version">ALPHA V0.1 · ภาพและระบบเล่นทดสอบ ไม่ใช่ MMORPG ที่เปิดให้บริการแล้ว</footer>
+  </main>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
+  <script src="./main.js" defer></script>
+</body>
+</html>
