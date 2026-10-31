@@ -75,6 +75,13 @@ jobs:
         working-directory: combat-verify
         run: npx tsc --noEmit
 
+      - name: Validate mobile S1 client adapter
+        shell: bash
+        run: |
+          node --check main.js
+          grep -q "serverFacing" main.js
+          grep -q "main.js?v=0.1.6" index.html
+
       - name: Parse Windows PowerShell installer
         shell: pwsh
         run: |
