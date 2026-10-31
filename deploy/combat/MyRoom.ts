@@ -196,41 +196,91 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private updatePlayerAttacks() {
     const monster = this.state.monster;
-    if (!monster.alive) return;
-
-    for (const [id] of this.attackTargets) {
-      const player = this.state.players.get(id);
-      if (!player || !player.alive) {
-        this.attackTargets.delete(id);
+    for (const [attackerId, targetId] of [...this.attackTargets]) {
+      const attacker = this.state.players.get(attackerId);
+      if (!attacker || !attacker.alive) {
+        this.attackTargets.delete(attackerId);
         continue;
       }
 
-      const distance = planarDistance(player, monster);
-      if (distance > RULES.playerAttackRange + 0.00001) continue;
-      player.facing = facingTo(monster.x - player.x, monster.z - player.z);
-      player.combatState = "attacking";
+      const isMonster = targetId === RULES.monsterId;
+      const target = isMonster
+        ? (monster.alive ? monster : undefined)
+        : this.state.players.get(targetId);
+      if (!target || !target.alive || targetId === attackerId) {
+        this.endAttack(attackerId, attacker);
+        continue;
+      }
 
-      const last = this.lastAttackMs.get(id) ?? -Infinity;
-      if (this.simulatedMs - last < RULES.playerAttackCooldownMs) continue;
-      this.lastAttackMs.set(id, this.simulatedMs);
+      const range = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
+      if (planarDistance(attacker, target) > range + 0.00001) continue;
+      attacker.facing = facingTo(target.x - attacker.x, target.z - attacker.z);
+      attacker.combatState = "attacking";
 
-      monster.hp = Math.max(0, monster.hp - RULES.playerAttackDamage);
-      monster.hitSeq += 1;
+      // Same cooldown clock for PvP and PvE. Switching targets cannot
+      // bypass cooldown or borrow a timestamp supplied by the browser.
+      const cooldown = isMonster ? RULES.playerAttackCooldownMs : RULES.pkCooldownMs;
+      const last = this.lastAttackMs.get(attackerId) ?? -Infinity;
+      if (this.simulatedMs - last < cooldown) continue;
+      this.lastAttackMs.set(attackerId, this.simulatedMs);
 
-      this.broadcast("combat_hit", {
-        targetId: RULES.monsterId,
-        attackerId: id,
-        damage: RULES.playerAttackDamage,
-        hp: monster.hp,
-        maxHp: monster.maxHp,
-        hitSeq: monster.hitSeq,
+      if (isMonster) {
+        monster.hp = Math.max(0, monster.hp - RULES.playerAttackDamage);
+        monster.hitSeq += 1;
+        this.broadcast("combat_hit", {
+          targetId: RULES.monsterId,
+          attackerId, damage: RULES.playerAttackDamage,
+          hp: monster.hp, maxHp: monster.maxHp, hitSeq: monster.hitSeq,
+        }, { afterNextPatch: true });
+        if (monster.hp === 0) this.killMonster();
+        continue;
+      }
+
+      // FREE PK: health, range, damage, respawn and kill credit are wholly
+      // server-owned. The client only submits another session's targetId.
+      const victim = target as Player;
+      victim.hp = Math.max(0, victim.hp - RULES.pkDamage);
+      victim.hitSeq += 1;
+      this.broadcast("pvp_hit", {
+        attackerId, targetId, damage: RULES.pkDamage,
+        hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
       }, { afterNextPatch: true });
 
-      if (monster.hp === 0) {
-        this.killMonster();
-        break;
+      if (victim.hp === 0) {
+        attacker.pkKills += 1;
+        victim.pkDeaths += 1;
+        this.knockoutPlayer(targetId, "pk", attackerId);
+        this.broadcast("pvp_kill", {
+          winnerId: attackerId, loserId: targetId,
+          kills: attacker.pkKills, deaths: victim.pkDeaths,
+        }, { afterNextPatch: true });
       }
     }
+  }
+
+  private knockoutPlayer(id: string, cause: "pk" | "monster", attackerId = "") {
+    const victim = this.state.players.get(id);
+    if (!victim || !victim.alive) return;
+    victim.hp = 0;
+    victim.alive = false;
+    victim.combatState = "dead";
+    victim.targetId = "";
+    this.destinations.delete(id);
+    this.attackTargets.delete(id);
+    this.playerRespawnAt.set(id, this.simulatedMs + RULES.playerRespawnMs);
+
+    // Everyone chasing this human stops when the target dies. No
+    // duplicated damage on a corpse, and no stale targets after respawn.
+    for (const [otherId, targetId] of [...this.attackTargets]) {
+      if (targetId !== id) continue;
+      const other = this.state.players.get(otherId);
+      if (other) this.endAttack(otherId, other);
+      else this.attackTargets.delete(otherId);
+    }
+    if (this.state.monster.targetId === id) this.state.monster.targetId = "";
+    this.broadcast("player_down", {
+      playerId: id, source: cause, attackerId,
+    }, { afterNextPatch: true });
   }
 
   private killMonster() {
