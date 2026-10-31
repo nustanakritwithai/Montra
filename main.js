@@ -484,8 +484,10 @@
   }
 
   function updateStatus() {
+    const worldY = Number(room?.state?.players?.get?.(localId)?.y);
+    const altitude = Number.isFinite(worldY) ? Math.round(worldY * 10) / 10 : 0;
     ui.onlineCount.textContent = mode === "live"
-      ? `ผู้เล่นในฉาก: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} (LIVE)`
+      ? `ผู้เล่น: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} · สูง ${altitude}ม. (LIVE)`
       : "ผู้เล่นในฉาก: 1 (จำลอง)";
     setModeBadge(mode === "live");
   }
