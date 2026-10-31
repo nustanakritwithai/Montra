@@ -5,6 +5,8 @@
   "use strict";
 
   const $ = (id) => document.getElementById(id);
+  // Separate HTTPS origin for the Windows VPS. Caddy must proxy it to 127.0.0.1:4108.
+  const MONTRA_VPS_URL = "https://montra.157-85-96-139.sslip.io";
   const ui = {
     loading: $("loading"), loadingText: $("loadingText"), world: $("world"), toast: $("toast"),
     modeBadge: $("modeBadge"), onlineCount: $("onlineCount"), drawer: $("drawer"),
@@ -236,7 +238,9 @@
     clearSyncPoll();
     if (mode === "live") { showDemo(); toast(reason || "การเชื่อมต่อสิ้นสุด กลับสู่โหมดทดลอง"); }
   }
+  let connectionPending = false;
   async function connectOnline(endpoint) {
+    if (connectionPending) return;
     if (!window.Colyseus?.Client) { toast("ไม่พบ Colyseus SDK — ตรวจการโหลดสคริปต์"); return; }
     const isLocal = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/i.test(endpoint)
       && location.protocol === "http:" && ["localhost","127.0.0.1"].includes(location.hostname);
@@ -244,6 +248,7 @@
       toast("โปรดใช้ HTTPS ของ VPS (การทดสอบ Localhost ใช้ HTTP ได้เฉพาะในเครื่อง)");
       return;
     }
+    connectionPending = true;
     ui.onlineCount.textContent = "กำลังเชื่อมต่อเซิร์ฟเวอร์...";
     const connectButton = $("connectOnline");
     if (connectButton) connectButton.disabled = true;
@@ -287,6 +292,8 @@
       ui.onlineCount.textContent = "การเชื่อมต่อไม่สำเร็จ · ยังเป็นโหมดทดลอง";
       toast("เชื่อมต่อไม่สำเร็จ: " + (err.message || String(err)).slice(0,105));
       if (connectButton) connectButton.disabled = false;
+    } finally {
+      connectionPending = false;
     }
   }
 
@@ -375,13 +382,16 @@
     drawMap($("bigMap").getContext("2d"),420,320,true);
   }
   function openOnline() {
-    openDrawer("online","เชื่อมต่อ MONTRA Server",`<div class="offline-banner"><b>ตอนนี้เปิดเล่นโหมดทดลองได้ทันที</b><p class="note">เกมที่เผยแพร่บน GitHub Pages จะเล่นออนไลน์กับ VPS ได้เมื่อมีปลายทาง HTTPS/WSS สาธารณะที่ปลอดภัยแล้วเท่านั้น ยังไม่ควรใช้พอร์ตพัฒนา 4108 โดยตรง</p></div><div class="status-line"><span>โหมดปัจจุบัน</span><strong id="currentMode">${mode==="live"?"ออนไลน์จริง":"ทดลองในเครื่อง"}</strong></div><label class="field" for="serverUrl">ที่อยู่เซิร์ฟเวอร์ HTTPS (ไม่ใส่ /playground)</label><input id="serverUrl" type="url" spellcheck="false" placeholder="https://game.your-domain.com" autocomplete="url"/><button class="primary" id="connectOnline" type="button">เชื่อมต่อออนไลน์</button><button class="secondary" id="returnDemo" type="button">กลับสู่โหมดทดลอง</button><p class="note">สำหรับทดสอบบน VPS เครื่องเดียวกันผ่าน HTTP localhost สามารถใช้ http://127.0.0.1:4108 ได้ แต่เมื่อใช้ GitHub Pages ต้องเป็น HTTPS ที่เปิด WebSocket แบบ WSS</p>`);
-    try { $("serverUrl").value=localStorage.getItem("montra_endpoint") || ""; } catch (_) {}
+    openDrawer("online","เชื่อมต่อ MONTRA Server",`<div class="offline-banner"><b>MONTRA Online Alpha</b><p class="note">ตั้งค่าเซิร์ฟเวอร์ HTTPS/WSS ที่ VPS แล้ว เกมจะพยายามเชื่อมต่ออัตโนมัติและยังกลับมาเล่น DEMO ได้หากเซิร์ฟเวอร์ไม่พร้อม (ไม่เปิดพอร์ต 4108 สู่สาธารณะ)</p></div><div class="status-line"><span>โหมดปัจจุบัน</span><strong id="currentMode">${mode==="live"?"ออนไลน์จริง":"ทดลองในเครื่อง"}</strong></div><label class="field" for="serverUrl">ที่อยู่เซิร์ฟเวอร์ HTTPS (ไม่ใส่ /playground)</label><input id="serverUrl" type="url" spellcheck="false" placeholder="${MONTRA_VPS_URL}" autocomplete="url"/><button class="primary" id="connectOnline" type="button">เชื่อมต่อออนไลน์</button><button class="secondary" id="returnDemo" type="button">กลับสู่โหมดทดลอง</button><p class="note">สำหรับทดสอบบน VPS เครื่องเดียวกันผ่าน HTTP localhost สามารถใช้ http://127.0.0.1:4108 ได้ แต่เมื่อใช้ GitHub Pages ต้องเป็น HTTPS ที่เปิด WebSocket แบบ WSS</p>`);
+    try {
+      const saved = localStorage.getItem("montra_endpoint");
+      $("serverUrl").value = saved && /^https:\/\//i.test(saved) ? saved : MONTRA_VPS_URL;
+    } catch (_) { $("serverUrl").value = MONTRA_VPS_URL; }
     $("connectOnline").onclick=()=>connectOnline($("serverUrl").value.trim().replace(/\/$/,""));
     $("returnDemo").onclick=()=> { showDemo(); closeDrawer(); toast("กลับสู่โหมดทดลองแล้ว"); };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.1",`<h3>การเคลื่อนที่</h3><p>แตะพื้นที่ต้องการเดิน · ลากนิ้วในฉากเพื่อเปลี่ยนมุมกล้อง · ใช้ล้อเมาส์เพื่อซูมเมื่อเล่นบนคอมพิวเตอร์</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เมื่อมี URL HTTPS ของ VPS ให้ใส่ในหน้าออนไลน์ แล้วผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>ระบบบัญชี เซฟ ตลาดซื้อขาย ไอเทมถาวร การชนอาคาร และการต่อสู้กับศัตรูจริง</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.1",`<h3>การเคลื่อนที่</h3><p>แตะพื้นที่ต้องการเดิน · ลากนิ้วในฉากเพื่อเปลี่ยนมุมกล้อง · ใช้ล้อเมาส์เพื่อซูมเมื่อเล่นบนคอมพิวเตอร์</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เมื่อ Caddy ของ VPS พร้อม เกมจะเชื่อมต่อได้โดยอัตโนมัติ หรือกดเมนูออนไลน์เพื่อเชื่อมต่ออีกครั้ง ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>ระบบบัญชี เซฟ ตลาดซื้อขาย ไอเทมถาวร การชนอาคาร และการต่อสู้กับศัตรูจริง</p>`);
   }
   function openBag() {
     openDrawer("bag","กระเป๋าไอเทม",`<div class="offline-banner">กระเป๋าไอเทมยังเป็นหน้าตัวอย่าง ไม่มีของจริงและยังไม่เชื่อมฐานข้อมูล</div><div class="status-line"><span>ตำราพื้นฐาน</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>เครื่องราง</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>แลกของกับผู้เล่น</span><strong>ยังไม่เปิดใช้</strong></div>`);
@@ -459,4 +469,9 @@
   updateStatus();
   ui.loading.hidden=true;
   toast("เริ่มต้นในโหมด DEMO · แตะพื้นเพื่อเดิน");
+  // Only on published Pages: attempt the secure VPS endpoint once.
+  // A failed attempt never blocks local DEMO movement or effects.
+  if (location.protocol === "https:" && location.hostname === "nustanakritwithai.github.io") {
+    setTimeout(() => { if (mode === "demo" && !room) connectOnline(MONTRA_VPS_URL); }, 900);
+  }
 })();
