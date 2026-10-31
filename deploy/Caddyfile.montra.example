@@ -1,0 +1,10 @@
+# MONTRA public HTTPS/WSS endpoint (append to your existing Caddyfile).
+# DO NOT replace your Caddyfile: existing CityManager/Ramagan routes must stay untouched.
+# Requirements: hostname resolves to VPS, Caddy serves TCP 80/443,
+# and Colyseus 0.18 is listening on the VPS at 127.0.0.1:4108
+# with NODE_ENV=production.  /monitor and Playground must NOT be public.
+montra.157-85-96-139.sslip.io {
+    @blocked path / /monitor /monitor/* /playground /playground/*
+    respond @blocked "Not Found" 404
+    reverse_proxy 127.0.0.1:4108
+}
