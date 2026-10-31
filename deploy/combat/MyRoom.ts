@@ -1,4 +1,8 @@
 import { Room, type Client, type CloseCode } from "colyseus";
+import {
+  CHARACTER_SAVE_INTERVAL_MS, characterStore, characterIdFromToken,
+  claimCharacter, releaseCharacter, getGuestToken, parseCharacterName,
+} from "./CharacterStore.js";
 import { MyRoomState, Player, SummonedGuardian } from "./schema/MyRoomState.js";
 import {
   RULES,
@@ -50,6 +54,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private playerSpawn = new Map<string, Vec2>();
   private gates = new Map<string, Gates>();
   private lastRejectNoticeMs = new Map<string, number>();
+  private persistentCharacters = new Map<string, string>(); // session -> digest, never token
+  private lastRenameMs = new Map<string, number>();
+  private nextCharacterSaveMs = CHARACTER_SAVE_INTERVAL_MS;
 
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
@@ -63,6 +70,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private climbs = new Map<string, WorldPoint>();
 
   messages = {
+    rename_character: (client: Client, message: unknown) => {
+      const name = parseCharacterName(message);
+      if (!name) return this.reject(client, "invalid_character_name");
+      const id = client.sessionId;
+      const player = this.state.players.get(id);
+      if (!player || !this.persistentCharacters.has(id)) return this.reject(client, "character_not_persistent");
+      if (this.simulatedMs - (this.lastRenameMs.get(id) ?? -Infinity) < 5_000) {
+        return this.reject(client, "rename_cooldown");
+      }
+      if (player.characterName === name) return;
+      this.lastRenameMs.set(id, this.simulatedMs);
+      player.characterName = name;
+      void this.saveCharacter(id);
+    },
     move: (client: Client, message: unknown) => {
       const destination = parseMoveCommand(message);
       if (!destination) return this.reject(client, "invalid_move");
@@ -258,6 +279,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           shooter.pkKills+=1;
           victim.pkDeaths+=1;
           this.knockoutPlayer(targetId,"pk",id);
+          void this.saveCharacter(id);
           this.broadcast("pvp_kill", {
             winnerId:id,loserId:targetId,source:"ranged",
             kills:shooter.pkKills,deaths:victim.pkDeaths,
@@ -409,6 +431,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       owner.pkKills += 1;
       victim.pkDeaths += 1;
       this.knockoutPlayer(targetId, "pk", ownerId);
+      void this.saveCharacter(ownerId);
       this.broadcast("pvp_kill", {
         winnerId: ownerId, loserId: targetId,
         source: "summon",
@@ -464,6 +487,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updateMonsterAI(dt);
     this.updatePlayerAttacks();
     this.updateSummons(dt);
+    if (this.simulatedMs >= this.nextCharacterSaveMs) {
+      this.nextCharacterSaveMs = this.simulatedMs + CHARACTER_SAVE_INTERVAL_MS;
+      for (const id of this.persistentCharacters.keys()) void this.saveCharacter(id);
+    }
   }
 
   private updateClimbs(dt: number) {
@@ -635,6 +662,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         attacker.pkKills += 1;
         victim.pkDeaths += 1;
         this.knockoutPlayer(targetId, "pk", attackerId);
+        void this.saveCharacter(attackerId);
         this.broadcast("pvp_kill", {
           winnerId: attackerId, loserId: targetId,
           kills: attacker.pkKills, deaths: victim.pkDeaths,
@@ -655,6 +683,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.destinations.delete(id);
     this.attackTargets.delete(id);
     this.playerRespawnAt.set(id, this.simulatedMs + RULES.playerRespawnMs);
+    void this.saveCharacter(id);
 
     // Everyone chasing this human stops when the target dies. No
     // duplicated damage on a corpse, and no stale targets after respawn.
@@ -831,6 +860,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.targetId = "";
       this.lastAttackMs.delete(id);
       this.broadcast("player_respawn", { playerId: id });
+      void this.saveCharacter(id);
     }
   }
 
@@ -840,30 +870,80 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     player.combatState = "idle";
   }
 
-  onJoin(client: Client) {
-    const spawnX = this.state.players.size * 2;
-    const spawn = { x: spawnX, z: 0 };
-    const player = new Player({
-      x: spawnX, y: 0, z: 0,
-      facing: 0, hp: RULES.playerMaxHp, maxHp: RULES.playerMaxHp,
-      alive: true, combatState: "idle", targetId: "",
-    });
-
-    this.state.players.set(client.sessionId, player);
-    this.playerSpawn.set(client.sessionId, spawn);
-    this.gates.set(client.sessionId, {
-      move: new CommandBucket(RULES.moveBurst, RULES.moveRatePerSecond, this.simulatedMs),
-      attack: new CommandBucket(RULES.attackBurst, RULES.attackRatePerSecond, this.simulatedMs),
-      summon: new CommandBucket(
-        RULES.summonCommandBurst, RULES.summonCommandRatePerSecond, this.simulatedMs
-      ),
-      climb: new CommandBucket(3, 1, this.simulatedMs),
-    });
-    console.log("MONTRA S1 join:", client.sessionId, "room", this.roomId);
+  private async saveCharacter(id: string): Promise<void> {
+    const characterId = this.persistentCharacters.get(id);
+    const player = this.state.players.get(id);
+    if (!characterId || !player) return;
+    try {
+      await characterStore.save({
+        version: 1, id: characterId, name: player.characterName,
+        level: player.level, experience: player.experience,
+        pkKills: player.pkKills, pkDeaths: player.pkDeaths,
+        x: player.x, y: player.y, z: player.z, hp: Math.max(0, Math.round(player.hp)),
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("MONTRA S2 save failed for", id, error);
+      this.clients.find((client) => client.sessionId === id)
+        ?.send("character_save_error", { reason: "disk_write_failed" });
+    }
   }
 
-  onLeave(client: Client, code: CloseCode) {
+  async onJoin(client: Client, options?: unknown) {
+    const spawnX = this.state.players.size * 2;
+    const spawn = { x: spawnX, z: 0 };
+    // Old smoke tests and clients without browser storage remain transient.
+    // A valid guest token is a secret bearer credential, never sent in Schema.
+    const token = getGuestToken(options);
+    const characterId = token ? characterIdFromToken(token) : null;
+    if (characterId && !claimCharacter(characterId, client.sessionId)) {
+      throw new Error("character_already_online");
+    }
+
+    try {
+      const saved = token ? (await characterStore.loadOrCreate(token, spawn)).character : null;
+      // A saved location is restored only if the current server geometry allows it.
+      const validPosition = saved && Math.abs(saved.x) <= RULES.mapLimit &&
+        Math.abs(saved.z) <= RULES.mapLimit && this.canOccupy(saved.x, saved.z, saved.y);
+      const player = new Player({
+        x: validPosition ? saved.x : spawn.x,
+        y: validPosition ? saved.y : 0,
+        z: validPosition ? saved.z : spawn.z,
+        facing: 0,
+        hp: saved && saved.hp > 0 ? Math.min(saved.hp, RULES.playerMaxHp) : RULES.playerMaxHp,
+        maxHp: RULES.playerMaxHp,
+        alive: true, combatState: "idle", targetId: "",
+        pkKills: saved?.pkKills ?? 0, pkDeaths: saved?.pkDeaths ?? 0,
+        characterId: characterId ? characterId.slice(0, 12) : "",
+        characterName: saved?.name ?? "นที",
+        level: saved?.level ?? 1, experience: saved?.experience ?? 0,
+        persistent: Boolean(saved),
+      });
+
+      this.state.players.set(client.sessionId, player);
+      if (characterId) this.persistentCharacters.set(client.sessionId, characterId);
+      this.playerSpawn.set(client.sessionId, spawn);
+      this.gates.set(client.sessionId, {
+        move: new CommandBucket(RULES.moveBurst, RULES.moveRatePerSecond, this.simulatedMs),
+        attack: new CommandBucket(RULES.attackBurst, RULES.attackRatePerSecond, this.simulatedMs),
+        summon: new CommandBucket(
+          RULES.summonCommandBurst, RULES.summonCommandRatePerSecond, this.simulatedMs
+        ),
+        climb: new CommandBucket(3, 1, this.simulatedMs),
+      });
+      console.log("MONTRA S2 join:", client.sessionId, "room", this.roomId,
+        saved ? "persistent" : "transient");
+    } catch (error) {
+      if (characterId) releaseCharacter(characterId, client.sessionId);
+      throw error;
+    }
+  }
+
+  async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    const characterId = this.persistentCharacters.get(id);
+    // Capture the snapshot BEFORE removing the player from server Schema.
+    const saving = this.saveCharacter(id);
     this.despawnSummon(id, "owner_left");
     this.lastSummonAt.delete(id);
     this.climbs.delete(id);
@@ -875,6 +955,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.gates.delete(id);
     this.lastRejectNoticeMs.delete(id);
     this.state.players.delete(id);
+    this.lastRenameMs.delete(id);
     if (this.state.monster.targetId === id) this.state.monster.targetId = "";
     // Remote player targets cannot remain locked to disconnected sessions.
     for (const [otherId, targetId] of [...this.attackTargets]) {
@@ -883,10 +964,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (attacker) this.endAttack(otherId, attacker);
       else this.attackTargets.delete(otherId);
     }
-    console.log("MONTRA FreePK leave:", id, code);
+    try {
+      await saving;
+    } finally {
+      this.persistentCharacters.delete(id);
+      if (characterId) releaseCharacter(characterId, id);
+    }
+    console.log("MONTRA S2 leave:", id, code);
   }
 
-  onDispose() {
+  async onDispose() {
+    const pending = [...this.persistentCharacters].map(async ([id, characterId]) => {
+      try { await this.saveCharacter(id); }
+      finally { releaseCharacter(characterId, id); }
+    });
+    await Promise.allSettled(pending);
+    this.persistentCharacters.clear();
+    this.lastRenameMs.clear();
     this.destinations.clear();
     this.attackTargets.clear();
     this.lastAttackMs.clear();
