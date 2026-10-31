@@ -30,12 +30,15 @@ jobs:
           cp deploy/combat/GameRules.ts combat-verify/src/rooms/GameRules.ts
           cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
           cp deploy/combat/MonsterRRT.ts combat-verify/src/rooms/MonsterRRT.ts
+          cp deploy/combat/CharacterStore.ts combat-verify/src/rooms/CharacterStore.ts
           cp deploy/combat/height-rules.test.ts combat-verify/src/rooms/height-rules.test.ts
           cp deploy/combat/monster-rrt.test.ts combat-verify/src/rooms/monster-rrt.test.ts
+          cp deploy/combat/character-store.test.ts combat-verify/src/rooms/character-store.test.ts
           cp deploy/combat/smoke-test.mjs combat-verify/smoke-test.mjs
           cp deploy/combat/s1-integration.mjs combat-verify/s1-integration.mjs
           cp deploy/combat/s1-monster-ai.mjs combat-verify/s1-monster-ai.mjs
           cp deploy/combat/monster-rrt-integration.mjs combat-verify/monster-rrt-integration.mjs
+          cp deploy/combat/character-persistence-integration.mjs combat-verify/character-persistence-integration.mjs
           cp deploy/combat/free-pk-integration.mjs combat-verify/free-pk-integration.mjs
           cp deploy/combat/summon-integration.mjs combat-verify/summon-integration.mjs
           cp deploy/combat/elevation-integration.mjs combat-verify/elevation-integration.mjs
@@ -104,6 +107,9 @@ jobs:
           grep -q 'tapPlayerForPK' main.js
           grep -q 'pvp_hit' main.js
           grep -q 'id="pkPanel"' index.html
+          grep -q 'id="characterProfile"' index.html
+          grep -q 'guestToken' main.js
+          grep -q 'rename_character' main.js
 
       - name: Parse Windows PowerShell installer
         shell: pwsh
@@ -125,22 +131,25 @@ jobs:
           node --check deploy/combat/s1-integration.mjs
           node --check deploy/combat/s1-monster-ai.mjs
           node --check deploy/combat/monster-rrt-integration.mjs
+          node --check deploy/combat/character-persistence-integration.mjs
           node --check deploy/combat/free-pk-integration.mjs
           node --check deploy/combat/summon-integration.mjs
           node --check deploy/combat/elevation-integration.mjs
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts
+        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts
 
       - name: Two-player server-authoritative combat integration test
         shell: bash
         working-directory: combat-verify
         run: |
           export PORT=4108
+          export MONTRA_CHARACTER_DIR="$(mktemp -d)"
+          export MONTRA_S2_TEST_TOKEN="mt1_$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')"
           npx tsx src/index.ts > server.log 2>&1 &
           SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for attempt in $(seq 1 60); do
             if (echo > /dev/tcp/127.0.0.1/4108) 2>/dev/null; then break; fi
             sleep 0.25
@@ -178,5 +187,25 @@ jobs:
           MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 75s node summon-integration.mjs || {
             echo "=== SUMMON SERVER LOG ==="
             cat server.log
+            exit 1
+          }
+          MONTRA_TEST_URL=http://127.0.0.1:4108 MONTRA_S2_TEST_STAGE=write timeout 20s node character-persistence-integration.mjs || {
+            echo "=== S2 WRITE SERVER LOG ==="
+            cat server.log
+            exit 1
+          }
+          # Restart Node with the SAME private data directory: this verifies
+          # actual disk durability, not an in-memory room/session cache.
+          kill "$SERVER_PID" 2>/dev/null || true
+          wait "$SERVER_PID" 2>/dev/null || true
+          npx tsx src/index.ts > restarted-server.log 2>&1 &
+          SERVER_PID=$!
+          for attempt in $(seq 1 60); do
+            if (echo > /dev/tcp/127.0.0.1/4108) 2>/dev/null; then break; fi
+            sleep 0.25
+          done
+          MONTRA_TEST_URL=http://127.0.0.1:4108 MONTRA_S2_TEST_STAGE=read timeout 20s node character-persistence-integration.mjs || {
+            echo "=== S2 RESTART SERVER LOG ==="
+            cat restarted-server.log
             exit 1
           }
