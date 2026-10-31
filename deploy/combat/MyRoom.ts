@@ -350,39 +350,69 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private updatePlayerAttacks() {
     const monster = this.state.monster;
-    if (!monster.alive) return;
-
-    for (const [id] of this.attackTargets) {
-      const player = this.state.players.get(id);
-      if (!player || !player.alive) {
+    for (const [id, targetId] of [...this.attackTargets]) {
+      const attacker = this.state.players.get(id);
+      if (!attacker || !attacker.alive) {
         this.attackTargets.delete(id);
         continue;
       }
 
-      const distance = planarDistance(player, monster);
-      if (distance > RULES.playerAttackRange + 0.00001) continue;
-      player.facing = facingTo(monster.x - player.x, monster.z - player.z);
-      player.combatState = "attacking";
+      const isMonster = targetId === RULES.monsterId;
+      const target = isMonster
+        ? (monster.alive ? monster : undefined)
+        : (this.isActiveDuel(id, targetId)
+            ? this.state.players.get(targetId) : undefined);
 
+      if (!target) {
+        this.endAttack(id, attacker);
+        continue;
+      }
+      const range = isMonster ? RULES.playerAttackRange : RULES.duelAttackRange;
+      if (planarDistance(attacker, target) > range + 0.00001) continue;
+
+      attacker.facing = facingTo(target.x - attacker.x, target.z - attacker.z);
+      attacker.combatState = "attacking";
+
+      const cooldown = isMonster
+        ? RULES.playerAttackCooldownMs : RULES.duelAttackCooldownMs;
       const last = this.lastAttackMs.get(id) ?? -Infinity;
-      if (this.simulatedMs - last < RULES.playerAttackCooldownMs) continue;
+      if (this.simulatedMs - last < cooldown) continue;
       this.lastAttackMs.set(id, this.simulatedMs);
 
-      monster.hp = Math.max(0, monster.hp - RULES.playerAttackDamage);
-      monster.hitSeq += 1;
+      if (isMonster) {
+        monster.hp = Math.max(0, monster.hp - RULES.playerAttackDamage);
+        monster.hitSeq += 1;
+        this.broadcast("combat_hit", {
+          targetId: RULES.monsterId, attackerId: id,
+          damage: RULES.playerAttackDamage, hp: monster.hp,
+          maxHp: monster.maxHp, hitSeq: monster.hitSeq,
+        }, { afterNextPatch: true });
+        if (monster.hp === 0) this.killMonster();
+        continue;
+      }
 
-      this.broadcast("combat_hit", {
-        targetId: RULES.monsterId,
-        attackerId: id,
-        damage: RULES.playerAttackDamage,
-        hp: monster.hp,
-        maxHp: monster.maxHp,
-        hitSeq: monster.hitSeq,
+      // Damage, target identity, range, cooldown and health are server-owned.
+      const victim = target as Player;
+      victim.hp = Math.max(0, victim.hp - RULES.duelAttackDamage);
+      victim.hitSeq += 1;
+
+      this.broadcast("pvp_hit", {
+        attackerId: id, targetId,
+        damage: RULES.duelAttackDamage,
+        hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
       }, { afterNextPatch: true });
 
-      if (monster.hp === 0) {
-        this.killMonster();
-        break;
+      if (victim.hp === 0) {
+        victim.alive = false;
+        victim.combatState = "dead";
+        victim.targetId = "";
+        this.destinations.delete(targetId);
+        this.attackTargets.delete(targetId);
+        this.playerRespawnAt.set(targetId, this.simulatedMs + RULES.playerRespawnMs);
+        this.finishDuel(id, "knockout", id);
+        this.broadcast("player_down", {
+          playerId: targetId, source: "duel", winnerId: id,
+        }, { afterNextPatch: true });
       }
     }
   }
