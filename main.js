@@ -486,9 +486,12 @@
   function updateStatus() {
     const worldY = Number(room?.state?.players?.get?.(localId)?.y);
     const altitude = Number.isFinite(worldY) ? Math.round(worldY * 10) / 10 : 0;
+    const mobilePortrait = window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches;
     ui.onlineCount.textContent = mode === "live"
-      ? `ผู้เล่น: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} · สูง ${altitude}ม. (LIVE)`
-      : "ผู้เล่นในฉาก: 1 (จำลอง)";
+      ? (mobilePortrait
+        ? `${onlinePlayers.size} คน · ${summonAvatars.size} ผี · ↑${altitude}ม.`
+        : `ผู้เล่น: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} · สูง ${altitude}ม. (LIVE)`)
+      : (mobilePortrait ? "DEMO · 1 คน" : "ผู้เล่นในฉาก: 1 (จำลอง)");
     setModeBadge(mode === "live");
   }
   function showDemo() {
@@ -1118,6 +1121,13 @@
   function openBag() {
     openDrawer("bag","กระเป๋าไอเทม",`<div class="offline-banner">กระเป๋าไอเทมยังเป็นหน้าตัวอย่าง ไม่มีของจริงและยังไม่เชื่อมฐานข้อมูล</div><div class="status-line"><span>ตำราพื้นฐาน</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>เครื่องราง</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>แลกของกับผู้เล่น</span><strong>ยังไม่เปิดใช้</strong></div>`);
   }
+  // Compact portrait HUD: a small quest chip opens the existing detail drawer.
+  ui.quest.addEventListener("click", () => {
+    const title = ui.quest.querySelector("strong")?.textContent || "ภารกิจ";
+    const description = ui.quest.querySelector(".quest-content > span")?.textContent || "";
+    openDrawer("quest", title, '<p class="note"></p>');
+    ui.drawerBody.querySelector("p").textContent = description;
+  });
   $("mapButton").onclick=openMap;
   $("mapShortcut").onclick=openMap;
   $("modeButton").onclick=openOnline;
@@ -1295,7 +1305,7 @@
     }
     scene.render();
   });
-  window.addEventListener("resize",()=>engine.resize());
+  window.addEventListener("resize",()=>{ engine.resize(); updateStatus(); });
   window.addEventListener("pagehide",()=> { clearSyncPoll();if(room)try{room.leave();}catch(_){} });
   resetDemoMonster();
   updateStatus();

@@ -200,3 +200,131 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   .skill-bar .glyph { width:37px; height:37px; font-size:22px; }
   .skill-bar .skill { font-size:9px; }
 }
+
+
+/* MONTRA V0.1.10 - portrait combat HUD. Keep playable 3D space clear.
+   Information lives in small top chips; full quest text opens in the drawer.
+   Landscape and desktop retain their existing layouts. */
+@media (max-width: 640px) and (orientation: portrait) {
+  :root { --portrait-hud-top: max(7px, env(safe-area-inset-top)); }
+  .top-hud {
+    top: var(--portrait-hud-top);
+    left: 8px; right: 8px;
+    gap: 5px;
+  }
+  .identity {
+    width: min(53vw, 192px);
+    padding: 6px 8px;
+    border-radius: 10px;
+  }
+  .brand-row { gap: 2px; margin-bottom: 4px; }
+  .brand { font-size: clamp(15px, 4.5vw, 19px); letter-spacing: .6px; }
+  .brand small { font-size: 8px; margin-left: 2px; }
+  .badge { padding: 2px 5px; font-size: 9px; }
+  .character { gap: 6px; }
+  .portrait { width: 26px; height: 26px; font-size: 13px; }
+  .name { font-size: 10px; margin-bottom: 3px; }
+  .name span { font-size: 9px; }
+  .bar { height: 4px; margin-top: 3px; }
+  .location-area { width: 72px; }
+  .mini-map { width: 68px; height: 68px; }
+  .place-name { display: none; }
+
+  /* The quest becomes a tappable one-line shortcut rather than a large card. */
+  .quest {
+    top: calc(var(--portrait-hud-top) + 76px);
+    left: 8px;
+    width: min(51vw, 190px);
+    min-height: 29px;
+    padding: 4px 7px;
+    gap: 5px;
+    border-radius: 9px;
+    align-items: center;
+    text-align: left;
+    cursor: pointer;
+    pointer-events: auto;
+    color: inherit;
+  }
+  .quest-icon { font-size: 16px; line-height: 16px; }
+  .quest .quest-content {
+    display: block;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+  .quest strong {
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .quest .quest-content > span { display: none; }
+  .quest::after { content: "›"; color: #dcb27a; font-size: 17px; line-height: 1; }
+
+  /* The live-online count stays visible without obscuring the world. */
+  .online-count {
+    top: calc(var(--portrait-hud-top) + 76px);
+    right: 8px;
+    width: min(44vw, 160px);
+    min-height: 29px;
+    padding: 4px 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    text-align: center;
+    white-space: nowrap;
+    border-radius: 9px;
+  }
+
+  /* Both combat panels share one narrow row directly below the quest. */
+  .monster-status {
+    top: calc(var(--portrait-hud-top) + 112px);
+    left: 8px;
+    width: min(52vw, 190px);
+    padding: 6px 7px;
+    border-radius: 9px;
+  }
+  .monster-heading { gap: 4px; font-size: 9px; }
+  .monster-heading > span {
+    display: block;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .monster-heading strong { font-size: 9px; flex-shrink: 0; }
+  .monster-hp-track { margin-top: 4px; height: 5px; }
+  #monsterHint { display: none; }
+
+  .pk-panel {
+    top: calc(var(--portrait-hud-top) + 112px);
+    right: 8px;
+    width: min(44vw, 164px);
+    min-height: 27px;
+    padding: 6px 7px;
+    border-radius: 9px;
+  }
+  .pk-heading { gap: 3px; }
+  .pk-heading strong { font-size: 9px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .pk-heading span { font-size: 9px; white-space: nowrap; }
+  .pk-hp-track { margin: 4px 0 0; height: 5px; }
+  #pkHint { display: none; }
+
+  /* Six existing skills stay fully usable but use less vertical space. */
+  .tap-tip { display: none; }
+  .controls { bottom: calc(9px + env(safe-area-inset-bottom)); }
+  .skill-bar { padding: 0 8px; gap: 3px; margin-bottom: 7px; }
+  .skill-bar .skill { font-size: 9px; gap: 3px; }
+  .skill-bar .glyph {
+    width: clamp(36px, 10.5vw, 46px);
+    height: clamp(36px, 10.5vw, 46px);
+    font-size: 22px;
+    border-radius: 11px;
+  }
+  .nav-bar { width: calc(100% - 16px); border-radius: 12px; }
+  .nav-bar button { min-height: 40px; font-size: 11px; gap: 4px; }
+  .nav-bar button span { font-size: 15px; }
+  .version { display: none; }
+  .toast { bottom: calc(122px + env(safe-area-inset-bottom)); font-size: 11px; max-width: 86vw; }
+}
