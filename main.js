@@ -380,6 +380,103 @@
     if (selectedPvPTargetId === id) selectedPvPTargetId = null;
     updateStatus();
   }
+  function shortPlayerName(id) {
+    return "ผู้เล่น-" + String(id || "").slice(0, 4);
+  }
+
+  // All duel states are synchronized from the server, not decided by UI.
+  function syncDuelUI() {
+    if (mode !== "live" || !room || !room.state?.players) {
+      ui.duelPanel.hidden = true;
+      return;
+    }
+    const me = room.state.players.get?.(localId);
+    if (!me || typeof me.duelState !== "string" || me.duelState === "none") {
+      ui.duelPanel.hidden = true;
+      return;
+    }
+
+    const opponentId = String(me.duelWith || "");
+    const opponent = room.state.players.get(opponentId);
+    const otherName = shortPlayerName(opponentId);
+    ui.duelPanel.hidden = false;
+    ui.duelAccept.hidden = true;
+    ui.duelDecline.hidden = true;
+    ui.duelQuit.hidden = true;
+    ui.duelHpTrack.hidden = true;
+    ui.duelHpLabel.textContent = "";
+
+    if (me.duelState === "incoming") {
+      ui.duelTitle.textContent = "ได้รับคำท้าจาก " + otherName;
+      ui.duelHint.textContent = "รับคำท้าเพื่อเริ่มต่อสู้ (ไม่เสียไอเทม)";
+      ui.duelAccept.hidden = false;
+      ui.duelDecline.hidden = false;
+    } else if (me.duelState === "outgoing") {
+      ui.duelTitle.textContent = "ท้าประลอง " + otherName;
+      ui.duelHint.textContent = "รอผู้เล่นอีกฝ่ายยอมรับ";
+      ui.duelQuit.textContent = "ยกเลิก";
+      ui.duelQuit.hidden = false;
+    } else if (me.duelState === "active") {
+      selectedPvPTargetId = opponentId;
+      const hp = Math.max(0, Number(opponent?.hp) || 0);
+      const maxHp = Math.max(1, Number(opponent?.maxHp) || 100);
+      ui.duelTitle.textContent = "กำลังดวลกับ " + otherName;
+      ui.duelHpLabel.textContent = "HP " + Math.ceil(hp) + "/" + Math.ceil(maxHp);
+      ui.duelHpTrack.hidden = false;
+      ui.duelHpBar.style.width = Math.max(0, Math.min(100, hp / maxHp * 100)) + "%";
+      ui.duelHint.textContent = "แตะตัวอีกฝ่าย หรือกดโจมตีเพื่อสู้";
+      ui.duelQuit.textContent = "ยอมแพ้";
+      ui.duelQuit.hidden = false;
+    } else {
+      ui.duelPanel.hidden = true;
+    }
+  }
+
+  function sendDuelChoice(accept) {
+    if (!room || mode !== "live") return;
+    const me = room.state?.players?.get?.(localId);
+    if (me?.duelState !== "incoming" || !me.duelWith) return;
+    room.send("duel_reply", { targetId: me.duelWith, accept: Boolean(accept) });
+  }
+
+  function quitDuel() {
+    if (!room || mode !== "live") return;
+    const me = room.state?.players?.get?.(localId);
+    if (!me?.duelWith || me.duelState === "none") return;
+    room.send("duel_cancel", { targetId: me.duelWith });
+  }
+
+  // Tap a remote avatar: request consent first, then attack during an active duel.
+  function tapOtherPlayer(targetId) {
+    if (mode !== "live" || !room || !targetId || targetId === localId) return;
+    const me = room.state?.players?.get?.(localId);
+    const opponent = room.state?.players?.get?.(targetId);
+    if (!me || !opponent) return;
+    if (typeof me.duelState !== "string") {
+      toast("ต้องอัปเดต MONTRA PvP Server บน VPS ก่อน");
+      return;
+    }
+    selectedPvPTargetId = targetId;
+    if (me.duelState === "active" && me.duelWith === targetId) {
+      room.send("attack", { targetId });
+      return;
+    }
+    if (me.duelState === "none") {
+      room.send("duel_request", { targetId });
+      toast("ส่งคำท้าประลองไปยัง " + shortPlayerName(targetId));
+      return;
+    }
+    if (me.duelState === "incoming" && me.duelWith === targetId) {
+      toast("มีคำท้ารออยู่ · เลือกรับหรือปฏิเสธในแผงประลอง");
+    } else {
+      toast("กำลังรอหรืออยู่ในการประลองกับผู้เล่นอื่น");
+    }
+  }
+
+  ui.duelAccept.onclick = () => sendDuelChoice(true);
+  ui.duelDecline.onclick = () => sendDuelChoice(false);
+  ui.duelQuit.onclick = quitDuel;
+
   function syncState(state) {
     syncMonsterState(state);
     const players = state?.players;
