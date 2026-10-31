@@ -12,6 +12,7 @@ MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the
 - **Free PK Alpha / frontend 0.1.7:** tap another player to attack immediately without duel consent. Server validates target, range, movement, damage, cooldown, kills/deaths and respawn. No safe zones or permanent PK rewards in this alpha.
 - **Summon NPC Alpha / frontend 0.1.8:** each online player may create one server-owned guardian spirit. NPCs replicate to everyone in the room, follow their owner, defend against attackers and assist in PvE and Free PK. Server owns stats, attack range/cooldown and cleanup on owner death or disconnect.
 - **Elevation Alpha / frontend 0.1.9:** server-owned vertical positioning (Y), one climbable 4-unit-high wall with a ladder, solid ground collision, an elevated walkable crest, magic projectiles with a 3D range and wall line-of-sight checks, and floating summons following owner altitude.
+- **Monster navigation RRT patch (server only):** adapt the RRT path planner from [RRT-Game-Lab/multi_target_core.js](https://github.com/nustanakritwithai/RRT-Game-Lab/blob/main/multi_target_core.js) to MONTRA X/Z; monsters follow obstacle-safe waypoints for patrol/chase/return instead of getting stuck walking into the watchwall. Slow bounded replanning is intentional, and no combat or frontend rules change.
 - **S0/S2 are not complete:** Node auto-start after Windows restart, player accounts, database, saves, trading and persistent inventory are NOT implemented.
 
 **S1 code in GitHub does not change the live Windows VPS automatically.** Use the safe installer in the linked runbook, then restart only the MONTRA Node process and execute the live smoke tests.
@@ -25,6 +26,10 @@ MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the
 - [2-player smoke test](deploy/combat/smoke-test.mjs)
 - [4-player S1 integration test](deploy/combat/s1-integration.mjs)
 - [Monster AI test](deploy/combat/s1-monster-ai.mjs)
+- [Monster RRT path planner](deploy/combat/MonsterRRT.ts)
+- [Monster RRT unit tests](deploy/combat/monster-rrt.test.ts)
+- [Live Monster RRT wall detour test](deploy/combat/monster-rrt-integration.mjs)
+- [Monster RRT Windows VPS install/rollback](deploy/combat/MONSTER-RRT-WINDOWS-TH.md)
 - [4-player Free PK anti-cheat test](deploy/combat/free-pk-integration.mjs)
 - [Free PK Windows install & rollback guide (Thai)](deploy/combat/FREE-PK-WINDOWS-TH.md)
 - [Summon NPC Windows install, tests and rollback guide (Thai)](deploy/combat/SUMMON-WINDOWS-TH.md)
@@ -59,7 +64,7 @@ projects, so deployments must not overwrite its shared configuration.
 ## Current limits
 
 - Four users **per room**, not four users across the whole MMO.
-- One illustrative monster, one physically solid fortification, and basic server ray-vs-wall line of sight; general-purpose navmesh, universal house collisions, ballistic physics and jumping are not yet available.
+- One illustrative monster with RRT wall-avoidance, one physically solid fortification, and basic server ray-vs-wall line of sight. The RRT planner currently knows only the watchwall collider; general-purpose navmesh, universal house collisions, ballistic physics and jumping are not yet available.
 - The server uses fixed 20 Hz ticks. No client prediction/rewind system has been enabled.
 - The user session is transient; no persistent character identity or database.
 - Free PK is enabled between any living players in the same room. There is no consent flow or safe-zone protection yet.
