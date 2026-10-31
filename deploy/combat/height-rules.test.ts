@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  FORT, distance3d, isOnGround, isOnPlatform, isOnTop, touchesWallBody,
+  FORT, type WorldPoint, distance3d, isOnGround, isOnPlatform, isOnTop, touchesWallBody,
   parseClimbRequest, progressClimb, wallBlocksShot,
 } from "./HeightRules.js";
 
@@ -22,8 +22,8 @@ test("Only ladder up/down commands with exact structure ID are valid", () => {
 });
 
 test("Climb speed is server-limited and completes at exact top height", () => {
-  let p={x:FORT.ladderFootX,y:0,z:FORT.ladderFootZ};
-  const top={x:FORT.ladderTopX,y:FORT.height,z:FORT.ladderTopZ};
+  let p: WorldPoint={x:FORT.ladderFootX,y:0,z:FORT.ladderFootZ};
+  const top: WorldPoint={x:FORT.ladderTopX,y:FORT.height,z:FORT.ladderTopZ};
   const first=progressClimb(p,top,1/20);
   assert.ok(distance3d(p,first.point)<=FORT.climbSpeed/20+1e-8);
   assert.ok(first.point.y>0 && first.point.y<FORT.height);
