@@ -48,7 +48,7 @@ try {
     5500,"lure player walks near west wall");
   await until(()=>monster().targetId===a.sessionId,4000,
     "monster locks onto west-side lure");
-  await until(()=>monster().x>3.2 && monster().z<9.5,7500,
+  await until(()=>monster().x>3.55 && monster().z<9.2,7500,
     "monster advances to west-side lure at original chase speed");
 
   const b=await clients[1].joinById(a.roomId);
@@ -65,8 +65,8 @@ try {
   b.send("move",{x:10,z:9.7});
   await until(()=>closeTo(a.state?.players?.get(b.sessionId),10,9.7),
     4400,"B walks around northern end without a teleport");
-  b.send("move",{x:9,z:7});
-  await until(()=>closeTo(a.state?.players?.get(b.sessionId),9,7),
+  b.send("move",{x:9.2,z:7});
+  await until(()=>closeTo(a.state?.players?.get(b.sessionId),9.2,7),
     3500,"B waits east of wall");
 
   assert.equal(monster().alive,true);
@@ -75,7 +75,7 @@ try {
     monster:{x:monster().x,z:monster().z,targetId:monster().targetId},
     eastPlayer:{x:a.state.players.get(b.sessionId)?.x,z:a.state.players.get(b.sessionId)?.z},
   });
-  assert.ok(Math.hypot(monster().x-9,monster().z-7)<6,
+  assert.ok(Math.hypot(monster().x-9.2,monster().z-7)<6,
     "The unchanged 6-unit aggro radius must include the east-side target");
   await a.leave();
   left.add(a);
