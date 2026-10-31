@@ -168,9 +168,41 @@
     hair.parent = parent; hair.position.y = 1.68; hair.scaling.y = .55; hair.material = darkWood; hair.isPickable = false;
     const belt = B.MeshBuilder.CreateBox("amulet", { size: .24 }, scene);
     belt.parent = parent; belt.position.set(0,.95,-.37); belt.material = gold; belt.isPickable = false;
-    return { node: parent, local, x: 0, z: 0, targetX: 0, targetZ: 0 };
+    // A clearly visible front side makes online facing readable even with
+    // simple prototype meshes. Local avatar forward is negative Z.
+    for (const side of [-1, 1]) {
+      const eye = B.MeshBuilder.CreateSphere("avatar eye", { diameter: .10, segments: 6 }, scene);
+      eye.parent = parent;
+      eye.position.set(side * .115, 1.54, -.255);
+      eye.material = darkWood;
+      eye.isPickable = false;
+    }
+    const frontSash = B.MeshBuilder.CreateBox("front sash", {
+      width: .32, height: .42, depth: .08
+    }, scene);
+    frontSash.parent = parent;
+    frontSash.position.set(0, .87, -.43);
+    frontSash.material = local ? gold : glowMat;
+    frontSash.isPickable = false;
+    return {
+      node: parent, local, x: 0, z: 0, targetX: 0, targetZ: 0,
+      heading: 0, desiredHeading: 0, facingLockUntil: 0
+    };
   }
   const avatars = new Map();
+  // Forward of the prototype avatar faces local -Z when rotation.y == 0.
+  // Keep this local to rendering; no change to server movement or combat.
+  function facingFromTravel(dx, dz) {
+    return Math.atan2(-dx, -dz);
+  }
+  function faceAvatarToward(id, x, z) {
+    const avatar = avatars.get(id);
+    if (!avatar) return;
+    const dx = x - avatar.x, dz = z - avatar.z;
+    if (Math.hypot(dx, dz) < .02) return;
+    avatar.desiredHeading = facingFromTravel(dx, dz);
+    avatar.facingLockUntil = performance.now() + 450;
+  }
   function ensureAvatar(id, local = false, x = 0, z = 0) {
     if (avatars.has(id)) return avatars.get(id);
     const a = avatarMesh(id, local);
@@ -356,6 +388,11 @@
       joined.onStateChange(state => syncState(state));
       joined.onMessage("combat_hit", hit => {
         if (room !== joined || hit?.targetId !== MONSTER_ID) return;
+        // Players also visibly turn toward the monster while attacking,
+        // even when standing still. All clients receive the same event.
+        if (typeof hit.attackerId === "string") {
+          faceAvatarToward(hit.attackerId, enemy.position.x, enemy.position.z);
+        }
         hitFlashRemaining = .22;
         if (Number.isFinite(Number(hit.hp)) && Number.isFinite(Number(hit.maxHp))) {
           updateMonsterUI(Number(hit.hp), Number(hit.maxHp), Number(hit.hp) > 0);
@@ -580,9 +617,28 @@
       }
     }
     for(const a of avatars.values()) {
-      const blend=1-Math.exp(-dt*14);
-      a.x+=(a.targetX-a.x)*blend;a.z+=(a.targetZ-a.z)*blend;
-      a.node.position.set(a.x,0,a.z);
+      const beforeX = a.x, beforeZ = a.z;
+      const blend = 1 - Math.exp(-dt * 14);
+      a.x += (a.targetX - a.x) * blend;
+      a.z += (a.targetZ - a.z) * blend;
+
+      // Infer every character's facing from the SERVER-SYNCED position
+      // change (or local demo movement). Preserve the last facing at rest.
+      // This works with the existing Colyseus x/z schema, so no VPS update.
+      const travelX = a.x - beforeX, travelZ = a.z - beforeZ;
+      if (Math.hypot(travelX, travelZ) > .002 &&
+          performance.now() >= a.facingLockUntil) {
+        a.desiredHeading = facingFromTravel(travelX, travelZ);
+      }
+      // Interpolate using the shortest circular angle: handles ±PI without
+      // spinning the long way around when changing movement direction.
+      const angleDelta = Math.atan2(
+        Math.sin(a.desiredHeading - a.heading),
+        Math.cos(a.desiredHeading - a.heading)
+      );
+      a.heading += angleDelta * (1 - Math.exp(-dt * 11));
+      a.node.rotation.y = a.heading;
+      a.node.position.set(a.x, 0, a.z);
     }
     const me=getLocalAvatar();
     if(me) {
