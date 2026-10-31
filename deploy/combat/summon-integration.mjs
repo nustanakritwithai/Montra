@@ -46,6 +46,10 @@ try {
     });
     r.onMessage("command_rejected", notice => {
       if (i === 0) denied.push(notice.reason);
+      console.log("SUMMON TEST REJECT", i, notice.reason);
+    });
+    r.onError((code, message) => {
+      console.log("SUMMON TEST ROOM ERROR", i, code, message);
     });
     for (const msg of [
       "combat_hit", "combat_notice", "monster_respawn", "monster_hit",
@@ -135,6 +139,13 @@ try {
   console.log("PASS: MONTRA Summon 4-player integration complete");
 } catch (error) {
   console.error("FAIL: MONTRA Summon integration:", error);
+  console.error("SUMMON TEST STATE DEBUG", rooms.map(r => ({
+    roomId: r.roomId,
+    id: r.sessionId,
+    summonSize: r.state?.summons?.size,
+    summonIds: r.state?.summons ? [...r.state.summons.keys()] : null,
+    playerCount: r.state?.players?.size,
+  })));
   process.exitCode = 1;
 } finally {
   for (const r of rooms.reverse()) {
