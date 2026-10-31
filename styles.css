@@ -169,3 +169,34 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   border-radius: 11px;
 }
 #summon.summon-active { color: #e6ccff; }
+
+/* Elevation watchwall mobile controls; six one-thumb actions fit portrait. */
+.skill-bar .skill {
+  flex:1 1 0;
+  min-width:0;
+  width:auto;
+  font-size:10px;
+}
+.skill-bar .glyph {
+  width:clamp(39px,11.5vw,60px);
+  height:clamp(39px,11.5vw,60px);
+  font-size:25px;
+  border-radius:13px;
+}
+.glyph.blue {
+  background:radial-gradient(circle,#335678,#172638);
+  color:#bcf2ff;
+}
+#shoot.shoot-active .glyph {
+  border-color:#8ee2ff;
+  box-shadow:0 0 0 2px #5ebeea8c,0 0 17px #59bff596;
+}
+#climb.climb-active .glyph {
+  border-color:#ffd089;
+  box-shadow:0 0 0 2px #c8983b88,0 0 15px #ffd77675;
+}
+@media(max-width:370px) {
+  .skill-bar { padding:0 8px; gap:3px; }
+  .skill-bar .glyph { width:37px; height:37px; font-size:22px; }
+  .skill-bar .skill { font-size:9px; }
+}
