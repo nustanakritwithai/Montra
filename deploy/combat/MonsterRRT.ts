@@ -233,3 +233,76 @@ export function planMonsterRRT(
     found:true,iterations:used,nodes:nodes.length,direct:false,
   };
 }
+
+/**
+ * Cache a route and consume its waypoints each fixed server tick.
+ *
+ * Planning is intentionally slower than movement updates. Even if clients
+ * update their targets frequently, RRT is attempted at most once per
+ * replanMs window per monster and never in a per-render-frame loop.
+ */
+export class MonsterRRTNavigator {
+  private route:{
+    intent:string;
+    goal:Vec2;
+    waypoints:Vec2[];
+    index:number;
+    plannedAt:number;
+  }|null=null;
+
+  clear():void { this.route=null; }
+
+  nextWaypoint(
+    position:Vec2,goal:Vec2,serverNowMs:number,intent:string,
+  ):Vec2|null {
+    if(!isMonsterFree(position)||!isMonsterFree(goal)) {
+      this.route=null;
+      return null;
+    }
+    if(distanceXZ(position,goal)<MONSTER_NAV.waypointRadius)return null;
+
+    const elapsed=serverNowMs-(this.route?.plannedAt??-Infinity);
+    const needsPlan= !this.route ||
+      this.route.intent!==intent ||
+      (elapsed>=MONSTER_NAV.replanMs && (
+        distanceXZ(this.route.goal,goal)>=MONSTER_NAV.goalShift ||
+        this.route.index>=this.route.waypoints.length
+      )) ||
+      // Retry failed plans only on the bounded interval.
+      (this.route.waypoints.length===0 && elapsed>=MONSTER_NAV.replanMs);
+
+    if(needsPlan) {
+      // Use a deterministic seed derived from stable per-room state.
+      // No client timestamp or random, untrusted input enters planning.
+      const seed=(
+        Math.imul(Math.round(position.x*17)+1021,198491317)^
+        Math.imul(Math.round(position.z*17)+4093,6542989)^
+        Math.imul(Math.floor(serverNowMs/MONSTER_NAV.replanMs)+1,357239)
+      )>>>0;
+      const result=planMonsterRRT(position,goal,{seed});
+      this.route={
+        intent,
+        goal:{...goal},
+        waypoints:result.path,
+        index:1,
+        plannedAt:serverNowMs,
+      };
+    }
+
+    const route=this.route;
+    while(route.index<route.waypoints.length &&
+          distanceXZ(position,route.waypoints[route.index])<=MONSTER_NAV.waypointRadius){
+      route.index++;
+    }
+    if(route.index>=route.waypoints.length)return null;
+
+    const candidate=route.waypoints[route.index];
+    if(!isMonsterSegmentClear(position,candidate)) {
+      // Do not move through blocked geometry; a future plan may recover.
+      route.waypoints=[];
+      route.index=0;
+      return null;
+    }
+    return candidate;
+  }
+}
