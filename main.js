@@ -1193,7 +1193,7 @@
     $("copyCharacterKey").disabled = !durable;
     $("renameCharacterButton").onclick = () => {
       const name = $("renameCharacter").value.normalize("NFC").trim();
-      if (!/^[\\p{L}\\p{N}][\\p{L}\\p{M}\\p{N} ._-]*$/u.test(name) ||
+      if (!/^[\p{L}\p{N}][\p{L}\p{M}\p{N} ._-]*$/u.test(name) ||
           Array.from(name).length < 2 || Array.from(name).length > 20) {
         toast("ชื่อตัวละครต้องมี 2–20 ตัวอักษร");
         return;
