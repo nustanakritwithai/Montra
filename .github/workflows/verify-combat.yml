@@ -136,6 +136,11 @@ jobs:
             if (echo > /dev/tcp/127.0.0.1/4108) 2>/dev/null; then break; fi
             sleep 0.25
           done
+          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 75s node elevation-integration.mjs || {
+            echo "=== ELEVATION SERVER LOG ==="
+            cat server.log
+            exit 1
+          }
           MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 24s node smoke-test.mjs || {
             echo "=== SERVER LOG ==="
             cat server.log
@@ -158,11 +163,6 @@ jobs:
           }
           MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 75s node summon-integration.mjs || {
             echo "=== SUMMON SERVER LOG ==="
-            cat server.log
-            exit 1
-          }
-          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 75s node elevation-integration.mjs || {
-            echo "=== ELEVATION SERVER LOG ==="
             cat server.log
             exit 1
           }
