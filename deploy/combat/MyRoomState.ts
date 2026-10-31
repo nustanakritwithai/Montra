@@ -15,6 +15,8 @@ export const Player = schema({
   combatState: t.string().default("idle"), // idle|moving|approaching|attacking|dead
   targetId: t.string().default(""),
   hitSeq: t.number().default(0),
+  pkKills: t.number().default(0), // per-room alpha tally, not a permanent character stat
+  pkDeaths: t.number().default(0),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
