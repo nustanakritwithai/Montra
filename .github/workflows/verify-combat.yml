@@ -81,7 +81,10 @@ jobs:
         run: |
           node --check main.js
           grep -q "serverFacing" main.js
-          grep -q "main.js?v=0.1.6" index.html
+          grep -q "main.js?v=0.1.7" index.html
+          grep -q 'tapPlayerForPK' main.js
+          grep -q 'pvp_hit' main.js
+          grep -q 'id="pkPanel"' index.html
 
       - name: Parse Windows PowerShell installer
         shell: pwsh
