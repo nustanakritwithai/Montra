@@ -71,6 +71,19 @@ jobs:
         working-directory: combat-verify
         run: npx tsc --noEmit
 
+      - name: Parse Windows PowerShell installer
+        shell: pwsh
+        run: |
+          $parseErrors = $null
+          $tokens = $null
+          $script = (Resolve-Path 'deploy/combat/install-windows.ps1').Path
+          [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | Format-Table
+            exit 1
+          }
+          Write-Host "Windows installer syntax OK"
+
       - name: Syntax-check smoke test
         run: node --check deploy/combat/smoke-test.mjs
 
