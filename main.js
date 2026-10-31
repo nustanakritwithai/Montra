@@ -387,13 +387,16 @@
   }
 
   function updateStatus() {
-    ui.onlineCount.textContent = mode === "live" ? `ผู้เล่นในฉาก: ${onlinePlayers.size} (ออนไลน์จริง)` : "ผู้เล่นในฉาก: 1 (จำลอง)";
+    ui.onlineCount.textContent = mode === "live"
+      ? `ผู้เล่นในฉาก: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} (LIVE)`
+      : "ผู้เล่นในฉาก: 1 (จำลอง)";
     setModeBadge(mode === "live");
   }
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo";
-    onlinePlayers.clear(); clearAvatars(); player = ensureAvatar("demo",true,0,0);
+    onlinePlayers.clear(); clearAvatars(); clearSummons();
+    player = ensureAvatar("demo",true,0,0);
     demoDest = null; resetDemoMonster();
     selectedPkTargetId = null;
     ui.pkPanel.hidden = true;
@@ -510,8 +513,41 @@
     if (selectedPkTargetId === id) selectedPkTargetId = null;
     updateStatus();
   }
+  function syncSummons(state) {
+    if (mode !== "live") return;
+    const synced = state?.summons;
+    if (!synced || typeof synced.forEach !== "function") {
+      clearSummons();
+      return;
+    }
+
+    const present = new Set();
+    synced.forEach((npc, ownerId) => {
+      const x = Number(npc.x), z = Number(npc.z);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+      present.add(ownerId);
+      let actor = summonAvatars.get(ownerId);
+      if (!actor) {
+        actor = createSummonAvatar(ownerId, x, z);
+        summonAvatars.set(ownerId, actor);
+      }
+      actor.targetX = x;
+      actor.targetZ = z;
+      actor.action = typeof npc.action === "string" ? npc.action : "follow";
+      const yaw = Number(npc.facing);
+      if (Number.isFinite(yaw)) actor.desiredFacing = yaw;
+    });
+
+    for (const id of [...summonAvatars.keys()]) {
+      if (!present.has(id)) deleteSummonAvatar(id);
+    }
+    updateSummonButton(summonAvatars.has(localId));
+    updateStatus();
+  }
+
   function syncState(state) {
     syncMonsterState(state);
+    syncSummons(state);
     const players = state?.players;
     if (!players || typeof players.forEach !== "function") return false;
     const seen = new Set();
@@ -549,7 +585,7 @@
       const joined = await client.joinOrCreate("my_room");
       room = joined;
       mode = "live"; localId = joined.sessionId;
-      clearAvatars(); demoDest = null;
+      clearAvatars(); clearSummons(); demoDest = null;
       onlinePlayers.clear(); enemy.setEnabled(false);
       selectedPkTargetId = null;
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
@@ -758,6 +794,10 @@
     for (const [id,a] of avatars) {
       ctx.fillStyle = id===localId ? "#ffda79":"#6de5df";
       ctx.beginPath();ctx.arc(sx(a.x),sy(a.z),large?6:3.5,0,Math.PI*2);ctx.fill();
+    }
+    for (const [ownerId, npc] of summonAvatars) {
+      ctx.fillStyle = ownerId === localId ? "#cb97f1" : "#78d5e2";
+      ctx.beginPath(); ctx.arc(sx(npc.x), sy(npc.z), large ? 5 : 2.5, 0, Math.PI*2);ctx.fill();
     }
     if(large) {
       ctx.font="12px system-ui";ctx.textAlign="center";ctx.fillStyle="#f9dda9";
