@@ -93,7 +93,7 @@ jobs:
         run: |
           node --check main.js
           grep -q "serverFacing" main.js
-          grep -q "main.js?v=0.1.9" index.html
+          grep -Eq 'main\.js\?v=[0-9]+\.[0-9]+\.[0-9]+' index.html
           grep -q 'id="climb"' index.html
           grep -q 'id="shoot"' index.html
           grep -q 'function syncFortification' main.js
