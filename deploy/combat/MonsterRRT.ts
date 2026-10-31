@@ -265,18 +265,6 @@ export class MonsterRRTNavigator {
 
   clear():void { this.route=null; }
 
-  /** Temporary diagnostic for the integration fixture; not network-exposed. */
-  debug(){
-    const route=this.route;
-    return route?{
-      intent:route.intent,
-      goal:route.goal,
-      index:route.index,
-      plannedAt:route.plannedAt,
-      waypoints:route.waypoints,
-    }:null;
-  }
-
   nextWaypoint(
     position:Vec2,goal:Vec2,serverNowMs:number,intent:string,
   ):Vec2|null {
