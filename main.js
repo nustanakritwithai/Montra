@@ -289,7 +289,8 @@
     hitbox.isPickable = !local;
     hitbox.metadata = { pkPlayerId: id };
     return {
-      node: parent, local, x: 0, z: 0, targetX: 0, targetZ: 0,
+      node: parent, local, x: 0, y: 0, z: 0,
+      targetX: 0, targetY: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
       serverFacing: null, hitFlashUntil: 0
     };
@@ -355,7 +356,8 @@
     }
     parent.position.set(x, 0, z);
     return {
-      node: parent, ownerId, x, z, targetX: x, targetZ: z,
+      node: parent, ownerId, x, y:0, z,
+      targetX: x, targetY:0, targetZ: z,
       facing: 0, desiredFacing: 0, action: "follow", hitUntil: 0
     };
   }
@@ -485,6 +487,7 @@
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo";
+    applyFortVisual(defaultFort);
     onlinePlayers.clear(); clearAvatars(); clearSummons();
     player = ensureAvatar("demo",true,0,0);
     demoDest = null; resetDemoMonster();
@@ -581,11 +584,12 @@
     }
   }
 
-  function setOnlinePlayer(id, x, z, facing, hp, maxHp) {
+  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     onlinePlayers.set(id,{x,z});
     const a = ensureAvatar(id,id === localId,x,z);
     a.targetX = x;
+    a.targetY = Number.isFinite(y) ? y : 0;
     a.targetZ = z;
 
     // S1 server facing is authoritative. Old servers omit this field;
@@ -622,6 +626,7 @@
         summonAvatars.set(ownerId, actor);
       }
       actor.targetX = x;
+      actor.targetY = Number.isFinite(Number(npc.y)) ? Number(npc.y) : 0;
       actor.targetZ = z;
       actor.action = typeof npc.action === "string" ? npc.action : "follow";
       const yaw = Number(npc.facing);
@@ -638,13 +643,14 @@
   function syncState(state) {
     syncMonsterState(state);
     syncSummons(state);
+    syncFortification(state);
     const players = state?.players;
     if (!players || typeof players.forEach !== "function") return false;
     const seen = new Set();
     players.forEach((p,id) => {
       seen.add(id);
       setOnlinePlayer(id, Number(p.x), Number(p.z),
-        Number(p.facing), Number(p.hp), Number(p.maxHp));
+        Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y));
     });
     for (const id of onlinePlayers.keys()) if (!seen.has(id)) removeOnlinePlayer(id);
     syncPKHud();
@@ -794,7 +800,7 @@
           cb.onAdd("players", (p, id) => {
             const applyServerPlayer = () => setOnlinePlayer(
               id, Number(p.x), Number(p.z),
-              Number(p.facing), Number(p.hp), Number(p.maxHp)
+              Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y)
             );
             applyServerPlayer();
             if (typeof cb.listen === "function") {
@@ -802,6 +808,7 @@
               cb.listen(p, "z", applyServerPlayer);
               cb.listen(p, "facing", applyServerPlayer);
               cb.listen(p, "hp", applyServerPlayer);
+              cb.listen(p, "y", applyServerPlayer);
               cb.listen(p, "maxHp", applyServerPlayer);
             }
           });
@@ -1040,6 +1047,7 @@
       const beforeX = a.x, beforeZ = a.z;
       const blend = 1 - Math.exp(-dt * 14);
       a.x += (a.targetX - a.x) * blend;
+      a.y += (a.targetY - a.y) * blend;
       a.z += (a.targetZ - a.z) * blend;
 
       // Infer every character's facing from the SERVER-SYNCED position
@@ -1062,11 +1070,12 @@
       a.node.rotation.y = a.heading;
       const flash = (a.hitFlashUntil || 0) > now;
       a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
-      a.node.position.set(a.x, 0, a.z);
+      a.node.position.set(a.x, a.y, a.z);
     }
     for (const npc of summonAvatars.values()) {
       const blend = 1 - Math.exp(-dt * 12);
       npc.x += (npc.targetX - npc.x) * blend;
+      npc.y += (npc.targetY - npc.y) * blend;
       npc.z += (npc.targetZ - npc.z) * blend;
       const rotationDelta = Math.atan2(
         Math.sin(npc.desiredFacing - npc.facing),
@@ -1075,7 +1084,7 @@
       npc.facing += rotationDelta * (1 - Math.exp(-dt * 10));
       npc.node.rotation.y = npc.facing;
       const bob = Math.sin(elapsed * 2.4 + npc.ownerId.length) * .09;
-      npc.node.position.set(npc.x, bob, npc.z);
+      npc.node.position.set(npc.x, npc.y+bob, npc.z);
       const striking = npc.action === "attack" || npc.hitUntil > now;
       const scale = striking ? 1.13 : 1;
       npc.node.scaling.set(scale, scale, scale);
@@ -1087,7 +1096,7 @@
       const follow = 1 - Math.exp(-dt * 3.8);
       const target = camera.target;
       target.x += (me.x - target.x) * follow;
-      target.y += (.65 - target.y) * follow;
+      target.y += (me.y + .65 - target.y) * follow;
       target.z += (me.z + 1.5 - target.z) * follow;
     }
     enemy.position.y=.9+Math.sin(elapsed*1.8)*.07;
