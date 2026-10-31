@@ -312,8 +312,12 @@
     pointer = null;
     if (wasMoved) return;
     const rect = ui.world.getBoundingClientRect();
-    const px = (event.clientX-rect.left)*engine.getRenderWidth()/rect.width;
-    const py = (event.clientY-rect.top)*engine.getRenderHeight()/rect.height;
+    // Babylon scene.pick() uses CSS pixels relative to the canvas, just like
+    // scene.pointerX/Y. Do NOT multiply by engine render width/height here:
+    // on high-DPI mobiles that shifts the destination away from the tap.
+    const px = event.clientX - rect.left;
+    const py = event.clientY - rect.top;
+    if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
     const picked = scene.pick(px,py,mesh => mesh.metadata?.walkable === true);
     if (picked?.hit && picked.pickedPoint) pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
   });
