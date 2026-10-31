@@ -974,6 +974,22 @@
       a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
       a.node.position.set(a.x, 0, a.z);
     }
+    for (const npc of summonAvatars.values()) {
+      const blend = 1 - Math.exp(-dt * 12);
+      npc.x += (npc.targetX - npc.x) * blend;
+      npc.z += (npc.targetZ - npc.z) * blend;
+      const rotationDelta = Math.atan2(
+        Math.sin(npc.desiredFacing - npc.facing),
+        Math.cos(npc.desiredFacing - npc.facing)
+      );
+      npc.facing += rotationDelta * (1 - Math.exp(-dt * 10));
+      npc.node.rotation.y = npc.facing;
+      const bob = Math.sin(elapsed * 2.4 + npc.ownerId.length) * .09;
+      npc.node.position.set(npc.x, bob, npc.z);
+      const striking = npc.action === "attack" || npc.hitUntil > now;
+      const scale = striking ? 1.13 : 1;
+      npc.node.scaling.set(scale, scale, scale);
+    }
     const me=getLocalAvatar();
     if(me) {
       // Follow the moving player without calling camera.setTarget(): that
