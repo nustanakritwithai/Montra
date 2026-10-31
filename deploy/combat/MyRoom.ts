@@ -158,6 +158,112 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       this.despawnSummon(id, "dismissed");
     },
+
+    // The client never writes Y. A validated ladder is the only route
+    // between ground y=0 and the watchwall top y=4.
+    climb: (client: Client, message: unknown) => {
+      const order = parseClimbRequest(message);
+      if (!order) return this.reject(client, "invalid_climb");
+      const id = client.sessionId;
+      const player = this.state.players.get(id);
+      if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (this.climbs.has(id)) return this.reject(client, "already_climbing");
+      if (!this.gates.get(id)?.climb.consume(this.simulatedMs)) {
+        return this.reject(client, "climb_rate_limited");
+      }
+
+      const upward = order.direction === "up";
+      if (upward && !isOnGround(player.y)) return this.reject(client, "not_on_ground");
+      if (!upward && !isOnPlatform(player.y)) return this.reject(client, "not_on_wall");
+
+      const ladderPosition = upward
+        ? {x:FORT.ladderFootX,z:FORT.ladderFootZ}
+        : {x:FORT.ladderTopX,z:FORT.ladderTopZ};
+      const maxReach = upward ? FORT.climbTriggerRadius : FORT.descendTriggerRadius;
+      if (planarDistance(player, ladderPosition) > maxReach) {
+        return this.reject(client, "ladder_too_far");
+      }
+
+      this.attackTargets.delete(id);
+      this.destinations.delete(id);
+      player.targetId = "";
+      player.combatState = "climbing";
+      this.climbs.set(id, upward
+        ? {x:FORT.ladderTopX,y:FORT.height,z:FORT.ladderTopZ}
+        : {x:FORT.ladderFootX,y:0,z:FORT.ladderFootZ});
+      this.broadcast("climb_started", { playerId:id, direction:order.direction },
+        { afterNextPatch:true });
+    },
+
+    // One targeted magic projectile per valid click; server computes muzzle,
+    // target body position, 3D range, line of sight, damage and cooldown.
+    shoot: (client: Client, message: unknown) => {
+      const monsterOrder = parseAttackCommand(message);
+      const pkOrder = monsterOrder ? null : parsePkTargetCommand(message);
+      if (!monsterOrder && !pkOrder) return this.reject(client, "invalid_shoot");
+      const id = client.sessionId;
+      const shooter = this.state.players.get(id);
+      if (!shooter || !shooter.alive) return this.reject(client, "not_alive");
+      if (this.climbs.has(id)) return this.reject(client, "climbing");
+      if (!this.gates.get(id)?.attack.consume(this.simulatedMs)) {
+        return this.reject(client, "attack_rate_limited");
+      }
+
+      const targetId = monsterOrder ? RULES.monsterId : pkOrder!.targetId;
+      if (targetId === id) return this.reject(client, "self_attack");
+      const target = monsterOrder
+        ? this.state.monster
+        : this.state.players.get(targetId);
+      if (!target || !target.alive) return this.reject(client, "target_unavailable");
+
+      const from = { x:shooter.x, y:shooter.y+FORT.shootOriginHeight, z:shooter.z };
+      const to = { x:target.x, y:target.y + FORT.targetBodyHeight, z:target.z };
+      if (distance3d(from,to) > FORT.rangedRange) {
+        return this.reject(client, "shot_out_of_range");
+      }
+      if (wallBlocksShot(from,to)) {
+        return this.reject(client, "shot_blocked");
+      }
+
+      const last = this.lastAttackMs.get(id) ?? -Infinity;
+      if (this.simulatedMs-last < FORT.rangedCooldownMs) {
+        return this.reject(client, "shot_cooldown");
+      }
+      this.lastAttackMs.set(id,this.simulatedMs);
+      shooter.facing = facingTo(target.x-shooter.x, target.z-shooter.z);
+
+      if (monsterOrder) {
+        const ghost = this.state.monster;
+        ghost.hp = Math.max(0,ghost.hp-FORT.rangedDamage);
+        ghost.hitSeq += 1;
+        this.broadcast("combat_hit", {
+          attackerId:id,targetId,damage:FORT.rangedDamage,
+          hp:ghost.hp,maxHp:ghost.maxHp,hitSeq:ghost.hitSeq,source:"ranged",
+        }, { afterNextPatch:true });
+        if (ghost.hp===0) this.killMonster();
+      } else {
+        const victim=target as Player;
+        victim.hp=Math.max(0,victim.hp-FORT.rangedDamage);
+        victim.hitSeq+=1;
+        this.broadcast("pvp_hit", {
+          attackerId:id,targetId,damage:FORT.rangedDamage,
+          hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"ranged",
+        }, { afterNextPatch:true });
+        if (victim.hp===0) {
+          shooter.pkKills+=1;
+          victim.pkDeaths+=1;
+          this.knockoutPlayer(targetId,"pk",id);
+          this.broadcast("pvp_kill", {
+            winnerId:id,loserId:targetId,source:"ranged",
+            kills:shooter.pkKills,deaths:victim.pkDeaths,
+          }, { afterNextPatch:true });
+        }
+      }
+
+      this.broadcast("ranged_hit", {
+        attackerId:id,targetId,damage:FORT.rangedDamage,from,to,
+      }, { afterNextPatch:true });
+    },
   };
 
   private despawnSummon(ownerId: string, reason: string) {
