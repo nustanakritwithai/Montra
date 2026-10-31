@@ -1,196 +1,422 @@
-import { Room, Client, CloseCode } from "colyseus";
+import { Room, type Client, type CloseCode } from "colyseus";
 import { MyRoomState, Player } from "./schema/MyRoomState.js";
+import {
+  RULES,
+  CommandBucket,
+  type Vec2,
+  clampToMap,
+  facingTo,
+  parseMoveCommand,
+  parseAttackCommand,
+  planarDistance,
+  stepTowards,
+} from "./GameRules.js";
 
-type Destination = { x: number; z: number };
+type Gates = { move: CommandBucket; attack: CommandBucket };
 
-const MAP_LIMIT = 20;
-const MOVE_SPEED = 3;
-
-// Alpha combat rules. Server-authoritative, identical for all connected clients.
-const MONSTER_ID = "possessed-1";
-const ATTACK_RANGE = 2.8;
-const DAMAGE_PER_HIT = 20;
-const ATTACK_COOLDOWN_MS = 1000;
-const RESPAWN_MS = 6000;
-
+/**
+ * MONTRA S1: one 20-Hz authoritative simulation per room.
+ *
+ * Clients only send "move" {x,z} and "attack" {targetId}; no damage, position
+ * updates, HP or timestamps are trusted. Server movements are speed-limited;
+ * all combat/AI/respawn timers use the SERVER'S fixed-step simulation clock.
+ *
+ * Existing public contract retained:
+ *   room type "my_room"; monster id "possessed-1";
+ *   state.players, state.monster; "combat_hit"/"combat_notice"/"monster_respawn".
+ */
 export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients = 4;
   state = new MyRoomState();
 
-  private destinations = new Map<string, Destination>();
+  private simulatedMs = 0;
+  private destinations = new Map<string, Vec2>();
   private attackTargets = new Map<string, string>();
-  private lastAttackAt = new Map<string, number>();
-  private respawnAt = 0;
+  private lastAttackMs = new Map<string, number>();
+  private playerRespawnAt = new Map<string, number>();
+  private playerSpawn = new Map<string, Vec2>();
+  private gates = new Map<string, Gates>();
+  private lastRejectNoticeMs = new Map<string, number>();
+
+  private monsterRespawnAt = 0;
+  private lastMonsterAttackMs = -Infinity;
+  private monsterReturning = false;
 
   messages = {
     move: (client: Client, message: unknown) => {
-      if (!message || typeof message !== "object" || Array.isArray(message)) return;
-      const { x, z } = message as Record<string, unknown>;
+      const destination = parseMoveCommand(message);
+      if (!destination) return this.reject(client, "invalid_move");
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (!this.gates.get(client.sessionId)?.move.consume(this.simulatedMs)) {
+        return this.reject(client, "move_rate_limited");
+      }
 
-      if (
-        typeof x !== "number" || typeof z !== "number" ||
-        !Number.isFinite(x) || !Number.isFinite(z) ||
-        Math.abs(x) > MAP_LIMIT || Math.abs(z) > MAP_LIMIT
-      ) return;
-
-      if (!this.state.players.has(client.sessionId)) return;
-
-      // Manual tap-to-move overrides auto-approach and auto-attack.
+      // A manual tap cancels auto-approach AND auto-attack (even if walking).
       this.attackTargets.delete(client.sessionId);
-      this.destinations.set(client.sessionId, { x, z });
+      player.targetId = "";
+      player.combatState = "moving";
+      this.destinations.set(client.sessionId, destination);
     },
 
     attack: (client: Client, message: unknown) => {
-      if (!message || typeof message !== "object" || Array.isArray(message)) return;
-      const { targetId } = message as Record<string, unknown>;
-      if (targetId !== MONSTER_ID) return;
-
+      const order = parseAttackCommand(message);
+      if (!order) return this.reject(client, "invalid_attack");
       const player = this.state.players.get(client.sessionId);
+      if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (!this.gates.get(client.sessionId)?.attack.consume(this.simulatedMs)) {
+        return this.reject(client, "attack_rate_limited");
+      }
       const monster = this.state.monster;
-      if (!player) return;
-
       if (!monster.alive) {
         client.send("combat_notice", { reason: "monster_down" });
         return;
       }
 
-      // The client only chooses a target. It cannot choose damage or HP.
-      this.attackTargets.set(client.sessionId, MONSTER_ID);
-      const dx = monster.x - player.x;
-      const dz = monster.z - player.z;
-      const distance = Math.hypot(dx, dz);
+      // Selecting an enemy from far away NEVER causes remote damage:
+      // the player must physically enter attack range during server ticks.
+      this.destinations.delete(client.sessionId);
+      this.attackTargets.set(client.sessionId, order.targetId);
+      player.targetId = order.targetId;
 
-      if (distance > ATTACK_RANGE) {
-        // Approach the monster, stopping inside attack range.
-        const desiredDistance = ATTACK_RANGE - 0.4;
-        const ratio = (distance - desiredDistance) / distance;
-        const x = Math.max(-MAP_LIMIT, Math.min(MAP_LIMIT, player.x + dx * ratio));
-        const z = Math.max(-MAP_LIMIT, Math.min(MAP_LIMIT, player.z + dz * ratio));
-        this.destinations.set(client.sessionId, { x, z });
+      if (planarDistance(player, monster) > RULES.playerAttackRange) {
+        player.combatState = "approaching";
         client.send("combat_notice", { reason: "approaching" });
       } else {
-        this.destinations.delete(client.sessionId);
-        // Allow the very first hit immediately when already in range.
-        this.tryAttack(client.sessionId);
+        player.combatState = "attacking";
       }
     },
   };
 
-  private tryAttack(sessionId: string) {
-    const monster = this.state.monster;
-    const player = this.state.players.get(sessionId);
-
-    if (!player || !monster.alive) {
-      this.attackTargets.delete(sessionId);
-      return;
-    }
-
-    // Reject damage attempts made from beyond the server-defined range.
-    if (Math.hypot(monster.x - player.x, monster.z - player.z) > ATTACK_RANGE) {
-      return;
-    }
-
-    const now = Date.now();
-    if (now - (this.lastAttackAt.get(sessionId) ?? 0) < ATTACK_COOLDOWN_MS) {
-      return;
-    }
-
-    this.lastAttackAt.set(sessionId, now);
-    monster.hp = Math.max(0, monster.hp - DAMAGE_PER_HIT);
-    monster.hitSeq += 1;
-
-    // Cosmetic notification to all room members; Schema HP is the truth.
-    this.broadcast("combat_hit", {
-      targetId: MONSTER_ID,
-      attackerId: sessionId,
-      damage: DAMAGE_PER_HIT,
-      hp: monster.hp,
-      maxHp: monster.maxHp,
-      hitSeq: monster.hitSeq,
-    }, { afterNextPatch: true });
-
-    console.log("MONTRA HIT", sessionId, "monsterHP", monster.hp);
-
-    if (monster.hp <= 0) {
-      monster.alive = false;
-      this.respawnAt = now + RESPAWN_MS;
-
-      // Stop auto-attacks and auto-approach for the defeated target.
-      for (const session of this.attackTargets.keys()) {
-        this.destinations.delete(session);
-      }
-      this.attackTargets.clear();
+  private reject(client: Client, reason: string) {
+    // Avoid amplifying floods with unlimited rejection responses.
+    const previous = this.lastRejectNoticeMs.get(client.sessionId) ?? -Infinity;
+    if (this.simulatedMs - previous >= 500) {
+      this.lastRejectNoticeMs.set(client.sessionId, this.simulatedMs);
+      client.send("command_rejected", { reason });
     }
   }
 
   onCreate() {
-    console.log("MONTRA Combat Room created:", this.roomId);
+    this.state.monster.id = RULES.monsterId;
+    this.state.monster.x = RULES.monsterSpawnX;
+    this.state.monster.z = RULES.monsterSpawnZ;
+    this.state.monster.hp = RULES.monsterMaxHp;
+    this.state.monster.maxHp = RULES.monsterMaxHp;
+    this.state.monster.alive = true;
+    this.state.monster.aiState = "patrol";
 
-    this.setTimestep((deltaTime) => {
-      const dt = Math.max(0, Math.min(deltaTime, 100)) / 1000;
-      const step = MOVE_SPEED * dt;
-      const monster = this.state.monster;
+    // Simulation time and collision/combat logic advance in exact 50ms steps,
+    // independently of client FPS, render speed and message arrival cadence.
+    this.setFixedTimestep((ctx) => {
+      this.simulatedMs += ctx.dtMs;
+      this.tick(ctx.dt);
+    }, RULES.tickRate);
 
-      if (!monster.alive && this.respawnAt && Date.now() >= this.respawnAt) {
-        monster.hp = monster.maxHp;
-        monster.alive = true;
-        this.respawnAt = 0;
-        this.broadcast("monster_respawn", { targetId: MONSTER_ID });
-      }
+    console.log("MONTRA S1 Game Engine started:", this.roomId);
+  }
 
-      for (const [id, destination] of this.destinations) {
-        const player = this.state.players.get(id);
-        if (!player) {
-          this.destinations.delete(id);
-          this.attackTargets.delete(id);
+  private tick(dt: number) {
+    this.updateRespawns();
+    this.updatePlayerMovement(dt);
+    this.updateMonsterAI(dt);
+    this.updatePlayerAttacks();
+  }
+
+  private updatePlayerMovement(dt: number) {
+    const monster = this.state.monster;
+    for (const [sessionId, player] of this.state.players) {
+      if (!player.alive) continue;
+
+      if (this.attackTargets.has(sessionId)) {
+        if (!monster.alive) {
+          this.endAttack(sessionId, player);
           continue;
         }
-
-        if (this.attackTargets.has(id) && monster.alive &&
-            Math.hypot(monster.x - player.x, monster.z - player.z) <= ATTACK_RANGE) {
-          this.destinations.delete(id);
-          continue;
-        }
-
-        const dx = destination.x - player.x;
-        const dz = destination.z - player.z;
+        const dx = monster.x - player.x;
+        const dz = monster.z - player.z;
         const distance = Math.hypot(dx, dz);
+        player.targetId = RULES.monsterId;
+        player.facing = facingTo(dx, dz);
 
-        if (distance <= step) {
-          player.x = destination.x;
-          player.z = destination.z;
-          this.destinations.delete(id);
-        } else if (distance > 0) {
-          player.x += (dx / distance) * step;
-          player.z += (dz / distance) * step;
+        if (distance <= RULES.playerAttackRange) {
+          player.combatState = "attacking";
+          continue;
+        }
+
+        // Re-evaluate target position every server tick: monsters can move.
+        const stopDistance = RULES.playerAttackRange - 0.4;
+        const ratio = Math.max(0, (distance - stopDistance) / distance);
+        const approach = {
+          x: clampToMap(player.x + dx * ratio),
+          z: clampToMap(player.z + dz * ratio),
+        };
+        const next = stepTowards(player, approach, RULES.playerSpeed * dt);
+        player.x = next.x;
+        player.z = next.z;
+        player.combatState = "approaching";
+        continue;
+      }
+
+      const target = this.destinations.get(sessionId);
+      if (!target) {
+        player.combatState = "idle";
+        player.targetId = "";
+        continue;
+      }
+      const dx = target.x - player.x;
+      const dz = target.z - player.z;
+      const next = stepTowards(player, target, RULES.playerSpeed * dt);
+      if (next.moved) player.facing = facingTo(dx, dz);
+      player.x = next.x;
+      player.z = next.z;
+      player.combatState = next.arrived ? "idle" : "moving";
+      if (next.arrived) this.destinations.delete(sessionId);
+    }
+  }
+
+  private updatePlayerAttacks() {
+    const monster = this.state.monster;
+    if (!monster.alive) return;
+
+    for (const [id] of this.attackTargets) {
+      const player = this.state.players.get(id);
+      if (!player || !player.alive) {
+        this.attackTargets.delete(id);
+        continue;
+      }
+
+      const distance = planarDistance(player, monster);
+      if (distance > RULES.playerAttackRange + 0.00001) continue;
+      player.facing = facingTo(monster.x - player.x, monster.z - player.z);
+      player.combatState = "attacking";
+
+      const last = this.lastAttackMs.get(id) ?? -Infinity;
+      if (this.simulatedMs - last < RULES.playerAttackCooldownMs) continue;
+      this.lastAttackMs.set(id, this.simulatedMs);
+
+      monster.hp = Math.max(0, monster.hp - RULES.playerAttackDamage);
+      monster.hitSeq += 1;
+
+      this.broadcast("combat_hit", {
+        targetId: RULES.monsterId,
+        attackerId: id,
+        damage: RULES.playerAttackDamage,
+        hp: monster.hp,
+        maxHp: monster.maxHp,
+        hitSeq: monster.hitSeq,
+      }, { afterNextPatch: true });
+
+      if (monster.hp === 0) {
+        this.killMonster();
+        break;
+      }
+    }
+  }
+
+  private killMonster() {
+    const monster = this.state.monster;
+    monster.alive = false;
+    monster.hp = 0;
+    monster.aiState = "dead";
+    monster.targetId = "";
+    this.monsterRespawnAt = this.simulatedMs + RULES.monsterRespawnMs;
+    this.monsterReturning = false;
+
+    // A corpse should not keep moving, nor should clients autoattack it.
+    for (const [id] of this.attackTargets) {
+      const player = this.state.players.get(id);
+      if (player && player.alive) {
+        player.targetId = "";
+        player.combatState = "idle";
+      }
+    }
+    this.attackTargets.clear();
+  }
+
+  private updateMonsterAI(dt: number) {
+    const monster = this.state.monster;
+    if (!monster.alive) return;
+
+    const spawn = { x: RULES.monsterSpawnX, z: RULES.monsterSpawnZ };
+    if (planarDistance(monster, spawn) >= RULES.monsterLeashRadius) {
+      this.monsterReturning = true;
+    }
+    if (this.monsterReturning) {
+      monster.targetId = "";
+      monster.aiState = "return";
+      this.moveMonster(spawn, RULES.monsterChaseSpeed * dt);
+      if (planarDistance(monster, spawn) < 0.2) this.monsterReturning = false;
+      return;
+    }
+
+    // Keep an existing target if it is alive and remains in the combat area.
+    let targetId = monster.targetId;
+    let target = targetId ? this.state.players.get(targetId) : undefined;
+    if (!target || !target.alive ||
+        planarDistance(monster, target) > RULES.monsterGiveUpRadius) {
+      target = undefined;
+      targetId = "";
+    }
+
+    // No shared targeting oracle: this NPC sees only characters within aggro.
+    if (!target) {
+      let nearest = RULES.monsterAggroRadius;
+      for (const [id, player] of this.state.players) {
+        if (!player.alive) continue;
+        const distance = planarDistance(monster, player);
+        if (distance < nearest) {
+          nearest = distance;
+          target = player;
+          targetId = id;
         }
       }
+    }
 
-      // The server performs every attack, never trusting client damage values.
-      for (const sessionId of this.attackTargets.keys()) {
-        this.tryAttack(sessionId);
+    if (target) {
+      monster.targetId = targetId;
+      const distance = planarDistance(monster, target);
+      monster.facing = facingTo(target.x - monster.x, target.z - monster.z);
+      if (distance > RULES.monsterAttackRange) {
+        monster.aiState = "chase";
+        this.moveMonster(target, RULES.monsterChaseSpeed * dt);
+      } else {
+        monster.aiState = "attack";
+        this.monsterAttack(targetId, target);
       }
-    }, 50);
+      return;
+    }
+
+    monster.targetId = "";
+    // Simple deterministic patrol around the spawn, controlled by server time.
+    const phase = this.simulatedMs / 2500;
+    const destination = {
+      x: spawn.x + Math.cos(phase) * RULES.monsterPatrolRadius,
+      z: spawn.z + Math.sin(phase) * RULES.monsterPatrolRadius,
+    };
+    monster.aiState = "patrol";
+    this.moveMonster(destination, RULES.monsterPatrolSpeed * dt);
+  }
+
+  private moveMonster(target: Vec2, step: number) {
+    const monster = this.state.monster;
+    const dx = target.x - monster.x;
+    const dz = target.z - monster.z;
+    const next = stepTowards(monster, target, step);
+    if (next.moved) monster.facing = facingTo(dx, dz);
+    monster.x = clampToMap(next.x);
+    monster.z = clampToMap(next.z);
+  }
+
+  private monsterAttack(targetId: string, target: Player) {
+    if (!target.alive) return;
+    if (planarDistance(this.state.monster, target) > RULES.monsterAttackRange) return;
+    if (this.simulatedMs - this.lastMonsterAttackMs < RULES.monsterAttackCooldownMs) return;
+    this.lastMonsterAttackMs = this.simulatedMs;
+
+    target.hp = Math.max(0, target.hp - RULES.monsterAttackDamage);
+    target.hitSeq += 1;
+    this.broadcast("monster_hit", {
+      targetId,
+      attackerId: RULES.monsterId,
+      damage: RULES.monsterAttackDamage,
+      hp: target.hp,
+      maxHp: target.maxHp,
+      hitSeq: target.hitSeq,
+    }, { afterNextPatch: true });
+
+    if (target.hp === 0) {
+      target.alive = false;
+      target.combatState = "dead";
+      target.targetId = "";
+      this.destinations.delete(targetId);
+      this.attackTargets.delete(targetId);
+      this.playerRespawnAt.set(targetId, this.simulatedMs + RULES.playerRespawnMs);
+      this.state.monster.targetId = "";
+      this.broadcast("player_down", { playerId: targetId });
+    }
+  }
+
+  private updateRespawns() {
+    const monster = this.state.monster;
+    if (!monster.alive && this.monsterRespawnAt &&
+        this.simulatedMs >= this.monsterRespawnAt) {
+      monster.hp = monster.maxHp;
+      monster.x = RULES.monsterSpawnX;
+      monster.z = RULES.monsterSpawnZ;
+      monster.facing = 0;
+      monster.alive = true;
+      monster.aiState = "patrol";
+      monster.targetId = "";
+      this.monsterRespawnAt = 0;
+      this.lastMonsterAttackMs = -Infinity;
+      this.broadcast("monster_respawn", { targetId: RULES.monsterId });
+    }
+
+    for (const [id, atMs] of this.playerRespawnAt) {
+      if (this.simulatedMs < atMs) continue;
+      this.playerRespawnAt.delete(id);
+      const player = this.state.players.get(id);
+      if (!player) continue;
+      const spawn = this.playerSpawn.get(id) ?? { x: 0, z: 0 };
+      player.hp = player.maxHp;
+      player.alive = true;
+      player.x = spawn.x;
+      player.z = spawn.z;
+      player.facing = 0;
+      player.combatState = "idle";
+      player.targetId = "";
+      this.lastAttackMs.delete(id);
+      this.broadcast("player_respawn", { playerId: id });
+    }
+  }
+
+  private endAttack(id: string, player: Player) {
+    this.attackTargets.delete(id);
+    player.targetId = "";
+    player.combatState = "idle";
   }
 
   onJoin(client: Client) {
     const spawnX = this.state.players.size * 2;
-    this.state.players.set(
-      client.sessionId,
-      new Player({ x: spawnX, y: 0, z: 0 })
-    );
-    console.log(client.sessionId, "joined MONTRA Combat Room");
+    const spawn = { x: spawnX, z: 0 };
+    const player = new Player({
+      x: spawnX, y: 0, z: 0,
+      facing: 0, hp: RULES.playerMaxHp, maxHp: RULES.playerMaxHp,
+      alive: true, combatState: "idle", targetId: "",
+    });
+
+    this.state.players.set(client.sessionId, player);
+    this.playerSpawn.set(client.sessionId, spawn);
+    this.gates.set(client.sessionId, {
+      move: new CommandBucket(RULES.moveBurst, RULES.moveRatePerSecond, this.simulatedMs),
+      attack: new CommandBucket(RULES.attackBurst, RULES.attackRatePerSecond, this.simulatedMs),
+    });
+    console.log("MONTRA S1 join:", client.sessionId, "room", this.roomId);
   }
 
   onLeave(client: Client, code: CloseCode) {
-    this.destinations.delete(client.sessionId);
-    this.attackTargets.delete(client.sessionId);
-    this.lastAttackAt.delete(client.sessionId);
-    this.state.players.delete(client.sessionId);
-    console.log(client.sessionId, "left", code);
+    const id = client.sessionId;
+    this.destinations.delete(id);
+    this.attackTargets.delete(id);
+    this.lastAttackMs.delete(id);
+    this.playerRespawnAt.delete(id);
+    this.playerSpawn.delete(id);
+    this.gates.delete(id);
+    this.lastRejectNoticeMs.delete(id);
+    this.state.players.delete(id);
+    if (this.state.monster.targetId === id) this.state.monster.targetId = "";
+    console.log("MONTRA S1 leave:", id, code);
   }
 
   onDispose() {
-    console.log("MONTRA Combat Room disposed:", this.roomId);
+    this.destinations.clear();
+    this.attackTargets.clear();
+    this.lastAttackMs.clear();
+    this.playerRespawnAt.clear();
+    this.playerSpawn.clear();
+    this.gates.clear();
+    this.lastRejectNoticeMs.clear();
+    console.log("MONTRA S1 room disposed:", this.roomId);
   }
 }
