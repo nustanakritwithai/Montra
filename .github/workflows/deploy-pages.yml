@@ -28,6 +28,16 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
+      - name: Validate client JavaScript
+        run: node --check main.js
+
+      - name: Verify combat HUD wiring
+        shell: bash
+        run: |
+          grep -q 'id="monsterStatus"' index.html
+          grep -q 'requestMonsterAttack' main.js
+          grep -q 'syncMonsterState' main.js
+
       - name: Prepare website
         shell: bash
         run: |
