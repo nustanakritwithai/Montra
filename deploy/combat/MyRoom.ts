@@ -275,7 +275,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.tick(ctx.dt);
     }, RULES.tickRate);
 
-    console.log("MONTRA S1 Game Engine started:", this.roomId);
+    console.log("MONTRA S1 + PvP Duel Engine started:", this.roomId);
   }
 
   private tick(dt: number) {
@@ -456,7 +456,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Keep an existing target if it is alive and remains in the combat area.
     let targetId = monster.targetId;
     let target = targetId ? this.state.players.get(targetId) : undefined;
-    if (!target || !target.alive ||
+    if (!target || !target.alive || target.duelState === "active" ||
         planarDistance(monster, target) > RULES.monsterGiveUpRadius) {
       target = undefined;
       targetId = "";
@@ -466,7 +466,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!target) {
       let nearest: number = RULES.monsterAggroRadius;
       for (const [id, player] of this.state.players) {
-        if (!player.alive) continue;
+        if (!player.alive || player.duelState === "active") continue;
         const distance = planarDistance(monster, player);
         if (distance < nearest) {
           nearest = distance;
@@ -512,7 +512,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private monsterAttack(targetId: string, target: Player) {
-    if (!target.alive) return;
+    if (!target.alive || target.duelState === "active") return;
     if (planarDistance(this.state.monster, target) > RULES.monsterAttackRange) return;
     if (this.simulatedMs - this.lastMonsterAttackMs < RULES.monsterAttackCooldownMs) return;
     this.lastMonsterAttackMs = this.simulatedMs;
@@ -536,6 +536,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.attackTargets.delete(targetId);
       this.playerRespawnAt.set(targetId, this.simulatedMs + RULES.playerRespawnMs);
       this.state.monster.targetId = "";
+      if (target.duelState !== "none") this.finishDuel(targetId, "cancelled");
       this.broadcast("player_down", { playerId: targetId });
     }
   }
@@ -594,12 +595,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.gates.set(client.sessionId, {
       move: new CommandBucket(RULES.moveBurst, RULES.moveRatePerSecond, this.simulatedMs),
       attack: new CommandBucket(RULES.attackBurst, RULES.attackRatePerSecond, this.simulatedMs),
+      duel: new CommandBucket(RULES.duelBurst, RULES.duelRatePerSecond, this.simulatedMs),
     });
     console.log("MONTRA S1 join:", client.sessionId, "room", this.roomId);
   }
 
   onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    const leaving = this.state.players.get(id);
+    if (leaving && leaving.duelState !== "none") {
+      this.finishDuel(id, "disconnect",
+        leaving.duelState === "active" ? leaving.duelWith : "");
+    }
+    this.duelDeadlineMs.delete(id);
     this.destinations.delete(id);
     this.attackTargets.delete(id);
     this.lastAttackMs.delete(id);
@@ -620,6 +628,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.playerSpawn.clear();
     this.gates.clear();
     this.lastRejectNoticeMs.clear();
-    console.log("MONTRA S1 room disposed:", this.roomId);
+    this.duelDeadlineMs.clear();
+    console.log("MONTRA PvP room disposed:", this.roomId);
   }
 }
