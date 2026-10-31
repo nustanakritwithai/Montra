@@ -26,7 +26,8 @@ if (!(Test-Path (Join-Path $base "src\rooms\MyRoom.ts"))) {
 if (!(Test-Path (Join-Path $base "src\rooms\schema\MyRoomState.ts"))) {
   throw "Existing MONTRA Schema file is missing"
 }
-if (!(Get-Content (Join-Path $base "src\rooms\MyRoom.ts") -Raw).Contains("export class MyRoom")) {
+$existingRoom = Get-Content (Join-Path $base "src\rooms\MyRoom.ts") -Raw
+if (-not $existingRoom.Contains("export class MyRoom")) {
   throw "Existing MyRoom.ts does not look like the expected MONTRA room"
 }
 
