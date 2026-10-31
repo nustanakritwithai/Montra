@@ -12,6 +12,10 @@
     modeBadge: $("modeBadge"), onlineCount: $("onlineCount"), drawer: $("drawer"),
     drawerBody: $("drawerBody"), drawerTitle: $("drawerTitle"), shade: $("shade"),
     minimap: $("minimap"), quest: $("quest"),
+    duelPanel: $("duelPanel"), duelTitle: $("duelTitle"), duelHint: $("duelHint"),
+    duelHpLabel: $("duelHpLabel"), duelHpTrack: $("duelHpTrack"),
+    duelHpBar: $("duelHpBar"), duelAccept: $("duelAccept"),
+    duelDecline: $("duelDecline"), duelQuit: $("duelQuit"),
     monsterStatus: $("monsterStatus"), monsterText: $("monsterText"),
     monsterBar: $("monsterBar"), monsterHint: $("monsterHint"),
   };
@@ -184,6 +188,16 @@
     frontSash.position.set(0, .87, -.43);
     frontSash.material = local ? gold : glowMat;
     frontSash.isPickable = false;
+
+    // Invisible-but-pickable hitbox for tap-to-challenge / tap-to-attack.
+    // Only enabled as an interactive target when the opponent is in LIVE.
+    const hitbox = B.MeshBuilder.CreateBox("player hit target-" + id,
+      { width: 1.0, height: 2.1, depth: 1.0 }, scene);
+    hitbox.parent = parent;
+    hitbox.position.y = 1.02;
+    hitbox.isPickable = true;
+    hitbox.visibility = .001; // remain pickable; virtually invisible
+    hitbox.metadata = { pvpPlayerId: id };
     return {
       node: parent, local, x: 0, z: 0, targetX: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
@@ -221,6 +235,7 @@
   }
   function clearAvatars() { [...avatars.keys()].forEach(deleteAvatar); }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
+  let selectedPvPTargetId = null;
   let spiritShown = false, possessed = false, spirit = null;
   const enemy = B.MeshBuilder.CreateSphere("possessed enemy", { diameter: 1.7, segments: 12 }, scene);
   enemy.position.copyFromFloats(1.1, .88, 10.4); enemy.scaling.set(.7,1.1,.8);
@@ -324,6 +339,8 @@
     room = null; mode = "demo"; localId = "demo";
     onlinePlayers.clear(); clearAvatars(); player = ensureAvatar("demo",true,0,0);
     demoDest = null; resetDemoMonster();
+    selectedPvPTargetId = null;
+    ui.duelPanel.hidden = true;
     if (localHpBar) localHpBar.style.width = "88%";
     updateStatus();
   }
@@ -357,7 +374,12 @@
     }
     updateStatus();
   }
-  function removeOnlinePlayer(id) { onlinePlayers.delete(id); deleteAvatar(id); updateStatus(); }
+  function removeOnlinePlayer(id) {
+    onlinePlayers.delete(id);
+    deleteAvatar(id);
+    if (selectedPvPTargetId === id) selectedPvPTargetId = null;
+    updateStatus();
+  }
   function syncState(state) {
     syncMonsterState(state);
     const players = state?.players;
@@ -369,6 +391,7 @@
         Number(p.facing), Number(p.hp), Number(p.maxHp));
     });
     for (const id of onlinePlayers.keys()) if (!seen.has(id)) removeOnlinePlayer(id);
+    syncDuelUI();
     return true;
   }
   let syncPoll = null;
@@ -398,6 +421,8 @@
       mode = "live"; localId = joined.sessionId;
       clearAvatars(); demoDest = null;
       onlinePlayers.clear(); enemy.setEnabled(false);
+      selectedPvPTargetId = null;
+      ui.duelPanel.hidden = true;
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
       ui.monsterStatus.hidden = true;
       if (spirit) { spirit.dispose(); spirit = null; }
