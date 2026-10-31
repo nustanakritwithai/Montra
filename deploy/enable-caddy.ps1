@@ -67,7 +67,7 @@ montra.157-85-96-139.sslip.io {
 
 try {
   # Append without rewriting any of the old Caddyfile bytes.
-  [System.IO.File]::AppendAllText($config, "$([Environment]::NewLine)$site$([Environment]::NewLine)", (New-Object System.Text.UTF8Encoding($false)))
+  [System.IO.File]::AppendAllText($config, "$([Environment]::NewLine)$site$([Environment]::NewLine)", ([System.Text.UTF8Encoding]::new($false)))
 
   & $binary validate --config $config --adapter caddyfile
   if ($LASTEXITCODE -ne 0) { throw "Caddy validate failed" }
