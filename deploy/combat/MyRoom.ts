@@ -18,6 +18,9 @@ import {
   parseClimbRequest, progressClimb, step3d, wallBlocksShot,
   type WorldPoint,
 } from "./HeightRules.js";
+import {
+  MonsterRRTNavigator, isMonsterSegmentClear,
+} from "./MonsterRRT.js";
 
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
@@ -51,6 +54,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
   private monsterReturning = false;
+  // RRT only replaces NPC navigation. All AI intent/combat rules stay put.
+  private monsterNavigator = new MonsterRRTNavigator();
 
   // All guardian state lives on the server; no client may select NPC stats.
   private lastSummonAt = new Map<string, number>();
@@ -669,6 +674,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const monster = this.state.monster;
     monster.alive = false;
     monster.hp = 0;
+    this.monsterNavigator.clear();
     monster.aiState = "dead";
     monster.targetId = "";
     this.monsterRespawnAt = this.simulatedMs + RULES.monsterRespawnMs;
@@ -695,7 +701,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (this.monsterReturning) {
       monster.targetId = "";
       monster.aiState = "return";
-      this.moveMonster(spawn, RULES.monsterChaseSpeed * dt);
+      this.moveMonster(spawn, RULES.monsterChaseSpeed * dt, "return");
       if (planarDistance(monster, spawn) < 0.2) this.monsterReturning = false;
       return;
     }
@@ -729,7 +735,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       monster.facing = facingTo(target.x - monster.x, target.z - monster.z);
       if (distance > RULES.monsterAttackRange) {
         monster.aiState = "chase";
-        this.moveMonster(target, RULES.monsterChaseSpeed * dt);
+        this.moveMonster(target, RULES.monsterChaseSpeed * dt, "chase:" + targetId);
       } else {
         monster.aiState = "attack";
         this.monsterAttack(targetId, target);
@@ -745,19 +751,28 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       z: spawn.z + Math.sin(phase) * RULES.monsterPatrolRadius,
     };
     monster.aiState = "patrol";
-    this.moveMonster(destination, RULES.monsterPatrolSpeed * dt);
+    this.moveMonster(destination, RULES.monsterPatrolSpeed * dt, "patrol");
   }
 
-  private moveMonster(target: Vec2, step: number) {
+  /** RRT routes around obstacles; movement speed remains RULES-based.
+   * Planning runs roughly once every 1.3 seconds for a moving target, while
+   * the server still applies at most one legal movement step per 20Hz tick.
+   */
+  private moveMonster(target: Vec2, step: number, intent: string) {
     const monster = this.state.monster;
-    const dx = target.x - monster.x;
-    const dz = target.z - monster.z;
-    const next = stepTowards(monster, target, step);
-    if (next.moved) monster.facing = facingTo(dx, dz);
-    if (!touchesWallBody(next.x, next.z)) {
-      monster.x = clampToMap(next.x);
-      monster.z = clampToMap(next.z);
-    }
+    const waypoint = this.monsterNavigator.nextWaypoint(
+      monster, target, this.simulatedMs, intent
+    );
+    if (!waypoint) return; // Never fall back to walking through the wall.
+
+    const dx = waypoint.x-monster.x;
+    const dz = waypoint.z-monster.z;
+    const next = stepTowards(monster, waypoint, step);
+    if (!next.moved || !isMonsterSegmentClear(monster, next)) return;
+
+    monster.facing = facingTo(dx,dz);
+    monster.x = clampToMap(next.x);
+    monster.z = clampToMap(next.z);
   }
 
   private monsterAttack(targetId: string, target: Player) {
@@ -787,6 +802,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!monster.alive && this.monsterRespawnAt &&
         this.simulatedMs >= this.monsterRespawnAt) {
       monster.hp = monster.maxHp;
+      this.monsterNavigator.clear();
       monster.x = RULES.monsterSpawnX;
       monster.z = RULES.monsterSpawnZ;
       monster.facing = 0;
@@ -878,6 +894,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.playerSpawn.clear();
     this.gates.clear();
     this.lastRejectNoticeMs.clear();
+    this.monsterNavigator.clear();
     this.lastSummonAt.clear();
     this.lastSummonAttackAt.clear();
     this.state.summons.clear();
