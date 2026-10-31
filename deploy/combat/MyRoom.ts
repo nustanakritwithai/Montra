@@ -261,7 +261,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     // No shared targeting oracle: this NPC sees only characters within aggro.
     if (!target) {
-      let nearest = RULES.monsterAggroRadius;
+      let nearest: number = RULES.monsterAggroRadius;
       for (const [id, player] of this.state.players) {
         if (!player.alive) continue;
         const distance = planarDistance(monster, player);
