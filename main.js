@@ -382,6 +382,10 @@
   }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
   let selectedPkTargetId = null;
+  let rangedMode = false;
+  let rangedTargetId = null;
+  let pendingClimb = null;
+  const rangedEffects = [];
   let spiritShown = false, possessed = false, spirit = null;
   const enemy = B.MeshBuilder.CreateSphere("possessed enemy", { diameter: 1.7, segments: 12 }, scene);
   enemy.position.copyFromFloats(1.1, .88, 10.4); enemy.scaling.set(.7,1.1,.8);
@@ -492,6 +496,9 @@
     player = ensureAvatar("demo",true,0,0);
     demoDest = null; resetDemoMonster();
     selectedPkTargetId = null;
+    rangedTargetId = null;
+    pendingClimb = null;
+    setRangedMode(false);
     ui.pkPanel.hidden = true;
     if (localHpBar) localHpBar.style.width = "88%";
     updateStatus();
@@ -501,6 +508,7 @@
     const target = { x: Math.round(Math.max(-20,Math.min(20,x))*100)/100, z: Math.round(Math.max(-20,Math.min(20,z))*100)/100 };
     marker.position.x = target.x; marker.position.z = target.z;
     marker.setEnabled(true);
+    pendingClimb = null;
     selectedPkTargetId = null;
     syncPKHud();
     demoAutoAttack = false;
@@ -682,6 +690,9 @@
       room = joined;
       mode = "live"; localId = joined.sessionId;
       clearAvatars(); clearSummons(); demoDest = null;
+      pendingClimb = null;
+      rangedTargetId = null;
+      setRangedMode(false);
       onlinePlayers.clear(); enemy.setEnabled(false);
       selectedPkTargetId = null;
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
