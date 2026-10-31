@@ -1,5 +1,5 @@
 <#
-MONTRA S1 + Free PK + Summon + Elevation deployment — Windows PowerShell.
+MONTRA Monster RRT navigation deployment — Windows PowerShell.
 SAFE STAGING ONLY:
   * Backs up the existing MONTRA Room sources and compiled build.
   * Downloads only files from the owner's MONTRA GitHub repository.
@@ -11,8 +11,8 @@ Run from an Administrator PowerShell:
 $ErrorActionPreference = "Stop"
 $base = "C:\Montra\online-server"
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$backup = Join-Path $base "backup-before-elevation-$stamp"
-$download = Join-Path $env:TEMP "montra-elevation-$stamp"
+$backup = Join-Path $base "backup-before-rrt-$stamp"
+$download = Join-Path $env:TEMP "montra-rrt-$stamp"
 $remote = "https://raw.githubusercontent.com/nustanakritwithai/Montra/main/deploy/combat"
 
 $packageFile = Join-Path $base "package.json"
@@ -37,16 +37,18 @@ $files = @(
   @{ Name = "MyRoomState.ts"; Target = "src\rooms\schema\MyRoomState.ts"; Check = "MontraFortification" },
   @{ Name = "GameRules.ts"; Target = "src\rooms\GameRules.ts"; Check = "summonLimitPerPlayer" },
   @{ Name = "HeightRules.ts"; Target = "src\rooms\HeightRules.ts"; Check = "wallBlocksShot" },
+  @{ Name = "MonsterRRT.ts"; Target = "src\rooms\MonsterRRT.ts"; Check = "class MonsterRRTNavigator" },
   @{ Name = "smoke-test.mjs"; Target = "montra-combat-smoke-test.mjs"; Check = "combat_hit" },
   @{ Name = "s1-integration.mjs"; Target = "montra-s1-integration.mjs"; Check = "MONTRA S1" },
   @{ Name = "s1-monster-ai.mjs"; Target = "montra-s1-monster-ai.mjs"; Check = "MONTRA S1" },
   @{ Name = "free-pk-integration.mjs"; Target = "montra-free-pk-integration.mjs"; Check = "MONTRA Free PK" },
   @{ Name = "summon-integration.mjs"; Target = "montra-summon-integration.mjs"; Check = "MONTRA Summon" },
-  @{ Name = "elevation-integration.mjs"; Target = "montra-elevation-integration.mjs"; Check = "MONTRA Elevation" }
+  @{ Name = "elevation-integration.mjs"; Target = "montra-elevation-integration.mjs"; Check = "MONTRA Elevation" },
+  @{ Name = "monster-rrt-integration.mjs"; Target = "montra-monster-rrt-integration.mjs"; Check = "MONTRA Monster RRT integration" }
 )
 
 New-Item -ItemType Directory -Path $download -Force | Out-Null
-Write-Host "MONTRA Elevation: downloading sources before any changes..." -ForegroundColor Cyan
+Write-Host "MONTRA Monster RRT: downloading sources before any changes..." -ForegroundColor Cyan
 foreach ($entry in $files) {
   $localFile = Join-Path $download $entry.Name
   Invoke-WebRequest -Uri "$remote/$($entry.Name)" -OutFile $localFile -UseBasicParsing -ErrorAction Stop
@@ -83,7 +85,7 @@ try {
 
   Push-Location $base
   try {
-    Write-Host "Compiling MONTRA S1 + Free PK + Summon + Elevation Server Engine..." -ForegroundColor Cyan
+    Write-Host "Compiling MONTRA Monster RRT navigation on the existing Server Engine..." -ForegroundColor Cyan
     & npm.cmd run build
     if ($LASTEXITCODE -ne 0) {
       throw "MONTRA S1 TypeScript build failed. Exit code: $LASTEXITCODE"
@@ -95,7 +97,7 @@ try {
     Pop-Location
   }
   Write-Host ""
-  Write-Host "MONTRA ELEVATION BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA MONSTER RRT BUILD PASSED." -ForegroundColor Green
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
   Write-Host "Then test: node C:\Montra\online-server\montra-s1-integration.mjs"
@@ -103,6 +105,7 @@ try {
   Write-Host "Free PK test: node C:\Montra\online-server\montra-free-pk-integration.mjs"
   Write-Host "Summon test: node C:\Montra\online-server\montra-summon-integration.mjs"
   Write-Host "Height test: node C:\Montra\online-server\montra-elevation-integration.mjs"
+  Write-Host "RRT test: node C:\Montra\online-server\montra-monster-rrt-integration.mjs"
 } catch {
   Write-Warning "S1 installation failed. Restoring MONTRA source files and build."
   foreach ($entry in $files) {

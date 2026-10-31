@@ -29,10 +29,13 @@ jobs:
           cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
           cp deploy/combat/GameRules.ts combat-verify/src/rooms/GameRules.ts
           cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
+          cp deploy/combat/MonsterRRT.ts combat-verify/src/rooms/MonsterRRT.ts
           cp deploy/combat/height-rules.test.ts combat-verify/src/rooms/height-rules.test.ts
+          cp deploy/combat/monster-rrt.test.ts combat-verify/src/rooms/monster-rrt.test.ts
           cp deploy/combat/smoke-test.mjs combat-verify/smoke-test.mjs
           cp deploy/combat/s1-integration.mjs combat-verify/s1-integration.mjs
           cp deploy/combat/s1-monster-ai.mjs combat-verify/s1-monster-ai.mjs
+          cp deploy/combat/monster-rrt-integration.mjs combat-verify/monster-rrt-integration.mjs
           cp deploy/combat/free-pk-integration.mjs combat-verify/free-pk-integration.mjs
           cp deploy/combat/summon-integration.mjs combat-verify/summon-integration.mjs
           cp deploy/combat/elevation-integration.mjs combat-verify/elevation-integration.mjs
@@ -51,6 +54,9 @@ jobs:
               "colyseus": "0.18.2",
               "@colyseus/schema": "5.0.14",
               "@colyseus/sdk": "0.18.1"
+            },
+            "overrides": {
+              "@colyseus/core": "0.18.23"
             },
             "devDependencies": {
               "typescript": "5.9.3",
@@ -118,13 +124,14 @@ jobs:
           node --check deploy/combat/smoke-test.mjs
           node --check deploy/combat/s1-integration.mjs
           node --check deploy/combat/s1-monster-ai.mjs
+          node --check deploy/combat/monster-rrt-integration.mjs
           node --check deploy/combat/free-pk-integration.mjs
           node --check deploy/combat/summon-integration.mjs
           node --check deploy/combat/elevation-integration.mjs
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts
+        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts
 
       - name: Two-player server-authoritative combat integration test
         shell: bash
@@ -138,6 +145,11 @@ jobs:
             if (echo > /dev/tcp/127.0.0.1/4108) 2>/dev/null; then break; fi
             sleep 0.25
           done
+          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 48s node monster-rrt-integration.mjs || {
+            echo "=== MONSTER RRT SERVER LOG ==="
+            cat server.log
+            exit 1
+          }
           MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 75s node elevation-integration.mjs || {
             echo "=== ELEVATION SERVER LOG ==="
             cat server.log
