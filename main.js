@@ -186,7 +186,8 @@
     frontSash.isPickable = false;
     return {
       node: parent, local, x: 0, z: 0, targetX: 0, targetZ: 0,
-      heading: 0, desiredHeading: 0, facingLockUntil: 0
+      heading: 0, desiredHeading: 0, facingLockUntil: 0,
+      serverFacing: null
     };
   }
   const avatars = new Map();
@@ -319,7 +320,9 @@
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo";
     onlinePlayers.clear(); clearAvatars(); player = ensureAvatar("demo",true,0,0);
-    demoDest = null; resetDemoMonster(); updateStatus();
+    demoDest = null; resetDemoMonster();
+    if (localHpBar) localHpBar.style.width = "88%";
+    updateStatus();
   }
   function getLocalAvatar() { return avatars.get(localId); }
   function pointMove(x,z) {
@@ -334,11 +337,21 @@
       demoDest = target;
     }
   }
-  function setOnlinePlayer(id, x, z) {
+  const localHpBar = document.querySelector(".bar.hp i");
+  function setOnlinePlayer(id, x, z, facing, hp, maxHp) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     onlinePlayers.set(id,{x,z});
     const a = ensureAvatar(id,id === localId,x,z);
-    a.targetX = x; a.targetZ = z;
+    a.targetX = x;
+    a.targetZ = z;
+
+    // S1 server facing is authoritative. Old servers omit this field;
+    // fallback to the V0.1.5 movement-derived direction in that case.
+    a.serverFacing = Number.isFinite(facing) ? facing : null;
+    if (id === localId && localHpBar &&
+        Number.isFinite(hp) && Number.isFinite(maxHp) && maxHp > 0) {
+      localHpBar.style.width = Math.max(0, Math.min(100, 100 * hp / maxHp)) + "%";
+    }
     updateStatus();
   }
   function removeOnlinePlayer(id) { onlinePlayers.delete(id); deleteAvatar(id); updateStatus(); }
@@ -347,7 +360,11 @@
     const players = state?.players;
     if (!players || typeof players.forEach !== "function") return false;
     const seen = new Set();
-    players.forEach((p,id) => { seen.add(id); setOnlinePlayer(id,Number(p.x),Number(p.z)); });
+    players.forEach((p,id) => {
+      seen.add(id);
+      setOnlinePlayer(id, Number(p.x), Number(p.z),
+        Number(p.facing), Number(p.hp), Number(p.maxHp));
+    });
     for (const id of onlinePlayers.keys()) if (!seen.has(id)) removeOnlinePlayer(id);
     return true;
   }
@@ -409,16 +426,43 @@
       joined.onMessage("monster_respawn", () => {
         if (room === joined) toast("มอนสเตอร์ปรากฏตัวอีกครั้ง");
       });
+      joined.onMessage("monster_hit", hit => {
+        if (room === joined && hit?.targetId === localId) {
+          toast("ถูกผีโจมตี -" + Number(hit.damage || 0) + " HP");
+        }
+      });
+      joined.onMessage("player_down", info => {
+        if (room === joined && info?.playerId === localId) {
+          toast("ตัวละครหมดสติ · รอเกิดใหม่");
+        }
+      });
+      joined.onMessage("player_respawn", info => {
+        if (room === joined && info?.playerId === localId) {
+          toast("ฟื้นตัวแล้ว · กลับเข้าเกมได้");
+        }
+      });
+      joined.onMessage("command_rejected", info => {
+        if (room !== joined) return;
+        if (info?.reason === "not_alive") toast("ยังสั่งเดินหรือโจมตีไม่ได้");
+        else if (info?.reason === "attack_rate_limited") toast("สั่งโจมตีถี่เกินไป");
+      });
       // Colyseus 0.18 schema callbacks are the reliable way to subscribe to nested maps.
       try {
         const callbackApi = window.Colyseus.Callbacks;
         if (callbackApi?.get) {
           const cb = callbackApi.get(joined);
           cb.onAdd("players", (p, id) => {
-            setOnlinePlayer(id,Number(p.x),Number(p.z));
+            const applyServerPlayer = () => setOnlinePlayer(
+              id, Number(p.x), Number(p.z),
+              Number(p.facing), Number(p.hp), Number(p.maxHp)
+            );
+            applyServerPlayer();
             if (typeof cb.listen === "function") {
-              cb.listen(p, "x", x => setOnlinePlayer(id,Number(x),Number(p.z)));
-              cb.listen(p, "z", z => setOnlinePlayer(id,Number(p.x),Number(z)));
+              cb.listen(p, "x", applyServerPlayer);
+              cb.listen(p, "z", applyServerPlayer);
+              cb.listen(p, "facing", applyServerPlayer);
+              cb.listen(p, "hp", applyServerPlayer);
+              cb.listen(p, "maxHp", applyServerPlayer);
             }
           });
           cb.onRemove("players", (_,id) => removeOnlinePlayer(id));
@@ -626,8 +670,10 @@
       // change (or local demo movement). Preserve the last facing at rest.
       // This works with the existing Colyseus x/z schema, so no VPS update.
       const travelX = a.x - beforeX, travelZ = a.z - beforeZ;
-      if (Math.hypot(travelX, travelZ) > .002 &&
-          performance.now() >= a.facingLockUntil) {
+      if (mode === "live" && Number.isFinite(a.serverFacing)) {
+        a.desiredHeading = a.serverFacing;
+      } else if (Math.hypot(travelX, travelZ) > .002 &&
+                 performance.now() >= a.facingLockUntil) {
         a.desiredHeading = facingFromTravel(travelX, travelZ);
       }
       // Interpolate using the shortest circular angle: handles ±PI without
