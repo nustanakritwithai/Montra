@@ -1,5 +1,5 @@
 import { Room, type Client, type CloseCode } from "colyseus";
-import { MyRoomState, Player } from "./schema/MyRoomState.js";
+import { MyRoomState, Player, SummonedGuardian } from "./schema/MyRoomState.js";
 import {
   RULES,
   CommandBucket,
@@ -9,11 +9,12 @@ import {
   parseMoveCommand,
   parseAttackCommand,
   parsePkTargetCommand,
+  parseEmptyCommand,
   planarDistance,
   stepTowards,
 } from "./GameRules.js";
 
-type Gates = { move: CommandBucket; attack: CommandBucket };
+type Gates = { move: CommandBucket; attack: CommandBucket; summon: CommandBucket };
 
 /**
  * MONTRA S1: one 20-Hz authoritative simulation per room.
@@ -42,6 +43,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
   private monsterReturning = false;
+
+  // All guardian state lives on the server; no client may select NPC stats.
+  private lastSummonAt = new Map<string, number>();
+  private lastSummonAttackAt = new Map<string, number>();
 
   messages = {
     move: (client: Client, message: unknown) => {
@@ -96,6 +101,42 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       } else {
         attacker.combatState = "attacking";
       }
+    },
+
+    summon: (client: Client, message: unknown) => {
+      const id = client.sessionId;
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_summon");
+      const owner = this.state.players.get(id);
+      if (!owner || !owner.alive) return this.reject(client, "not_alive");
+      if (this.state.summons.has(id)) return this.reject(client, "summon_limit");
+      if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) {
+        return this.reject(client, "summon_rate_limited");
+      }
+      const last = this.lastSummonAt.get(id) ?? -Infinity;
+      if (this.simulatedMs - last < RULES.summonCooldownMs) {
+        return this.reject(client, "summon_cooldown");
+      }
+      this.lastSummonAt.set(id, this.simulatedMs);
+
+      const guardian = new SummonedGuardian({
+        ownerId: id, kind: "guardian",
+        x: clampToMap(owner.x - 1.1), y: 0, z: clampToMap(owner.z + 0.9),
+        facing: owner.facing, action: "follow", targetId: "",
+      });
+      this.state.summons.set(id, guardian);
+      this.lastSummonAttackAt.delete(id);
+      this.broadcast("summon_spawn", { ownerId: id, kind: "guardian" },
+        { afterNextPatch: true });
+    },
+
+    unsummon: (client: Client, message: unknown) => {
+      const id = client.sessionId;
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_unsummon");
+      if (!this.state.summons.has(id)) return this.reject(client, "no_summon");
+      if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) {
+        return this.reject(client, "summon_rate_limited");
+      }
+      this.despawnSummon(id, "dismissed");
     },
   };
 
