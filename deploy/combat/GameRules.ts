@@ -32,10 +32,15 @@ export const RULES = Object.freeze({
   moveRatePerSecond: 12,
   attackBurst: 4,
   attackRatePerSecond: 4,
+  // Free PK alpha: tap any other living player in the same room to attack.
+  pkAttackRange: 2.8,
+  pkDamage: 12,
+  pkCooldownMs: 1000,
 });
 
 export type Vec2 = { x: number; z: number };
 export type AttackCommand = { targetId: typeof RULES.monsterId };
+export type PkTargetCommand = { targetId: string };
 
 function hasExactKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -59,6 +64,19 @@ export function parseAttackCommand(message: unknown): AttackCommand | null {
   return message.targetId === RULES.monsterId
     ? { targetId: RULES.monsterId }
     : null;
+}
+
+/**
+ * Player IDs are server-issued per-room Colyseus session IDs. The Room must
+ * verify membership, that the target is alive, and that attacker !== victim.
+ * Exact keys prevent injected damage, HP, speed, position or cooldown fields.
+ */
+export function parsePkTargetCommand(message: unknown): PkTargetCommand | null {
+  if (!hasExactKeys(message, ["targetId"])) return null;
+  const id = message.targetId;
+  if (typeof id !== "string" || !/^[A-Za-z0-9_-]{6,64}$/.test(id)) return null;
+  if (id === RULES.monsterId) return null;
+  return { targetId: id };
 }
 
 export function planarDistance(a: Vec2, b: Vec2): number {

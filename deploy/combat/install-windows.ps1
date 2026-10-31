@@ -1,5 +1,5 @@
 <#
-MONTRA S1 Game Engine deployment — Windows PowerShell.
+MONTRA S1 + Free PK deployment — Windows PowerShell.
 SAFE STAGING ONLY:
   * Backs up the existing MONTRA Room sources and compiled build.
   * Downloads only files from the owner's MONTRA GitHub repository.
@@ -38,7 +38,8 @@ $files = @(
   @{ Name = "GameRules.ts"; Target = "src\rooms\GameRules.ts"; Check = "CommandBucket" },
   @{ Name = "smoke-test.mjs"; Target = "montra-combat-smoke-test.mjs"; Check = "combat_hit" },
   @{ Name = "s1-integration.mjs"; Target = "montra-s1-integration.mjs"; Check = "MONTRA S1" },
-  @{ Name = "s1-monster-ai.mjs"; Target = "montra-s1-monster-ai.mjs"; Check = "MONTRA S1" }
+  @{ Name = "s1-monster-ai.mjs"; Target = "montra-s1-monster-ai.mjs"; Check = "MONTRA S1" },
+  @{ Name = "free-pk-integration.mjs"; Target = "montra-free-pk-integration.mjs"; Check = "MONTRA Free PK" }
 )
 
 New-Item -ItemType Directory -Path $download -Force | Out-Null
@@ -79,7 +80,7 @@ try {
 
   Push-Location $base
   try {
-    Write-Host "Compiling MONTRA S1 Server Engine..." -ForegroundColor Cyan
+    Write-Host "Compiling MONTRA S1 + Free PK Server Engine..." -ForegroundColor Cyan
     & npm.cmd run build
     if ($LASTEXITCODE -ne 0) {
       throw "MONTRA S1 TypeScript build failed. Exit code: $LASTEXITCODE"
@@ -91,11 +92,13 @@ try {
     Pop-Location
   }
   Write-Host ""
-  Write-Host "MONTRA S1 BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA S1 + FREE PK BUILD PASSED." -ForegroundColor Green
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
   Write-Host "Then test: node C:\Montra\online-server\montra-s1-integration.mjs"
   Write-Host "AI test: node C:\Montra\online-server\montra-s1-monster-ai.mjs"
+  Write-Host "Free PK test: node C:\Montra\online-server\montra-free-pk-integration.mjs"
+  Write-Host "Free PK test: node C:\Montra\online-server\montra-free-pk-integration.mjs"
 } catch {
   Write-Warning "S1 installation failed. Restoring MONTRA source files and build."
   foreach ($entry in $files) {

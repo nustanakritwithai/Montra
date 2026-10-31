@@ -9,6 +9,7 @@ MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the
 
 - **Alpha 0.1.5:** playable multiplayer movement, camera orbit, tap-to-attack and synchronized monster HP.
 - **S1 Server Engine / frontend 0.1.6:** fixed server ticks, authoritative facing, player HP, strict movement/combat commands, monster AI (patrol/chase/attack/return), cooldowns and respawns.
+- **Free PK Alpha / frontend 0.1.7:** tap another player to attack immediately without duel consent. Server validates target, range, movement, damage, cooldown, kills/deaths and respawn. No safe zones or permanent PK rewards in this alpha.
 - **S0/S2 are not complete:** Node auto-start after Windows restart, player accounts, database, saves, trading and persistent inventory are NOT implemented.
 
 **S1 code in GitHub does not change the live Windows VPS automatically.** Use the safe installer in the linked runbook, then restart only the MONTRA Node process and execute the live smoke tests.
@@ -22,6 +23,8 @@ MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the
 - [2-player smoke test](deploy/combat/smoke-test.mjs)
 - [4-player S1 integration test](deploy/combat/s1-integration.mjs)
 - [Monster AI test](deploy/combat/s1-monster-ai.mjs)
+- [4-player Free PK anti-cheat test](deploy/combat/free-pk-integration.mjs)
+- [Free PK Windows install & rollback guide (Thai)](deploy/combat/FREE-PK-WINDOWS-TH.md)
 - [Rule tests](deploy/combat/s1-rules.test.ts)
 - [Reversible Windows installer](deploy/combat/install-windows.ps1)
 - [Server verification workflow](.github/workflows/verify-combat.yml)
@@ -52,5 +55,6 @@ projects, so deployments must not overwrite its shared configuration.
 - One illustrative monster; AI is server-side but no navmesh, obstacle collision or true line-of-sight yet.
 - The server uses fixed 20 Hz ticks. No client prediction/rewind system has been enabled.
 - The user session is transient; no persistent character identity or database.
+- Free PK is enabled between any living players in the same room. There is no consent flow or safe-zone protection yet.
 - No spirit ownership, trading, economy or real reward payouts.
 - This is a technical Alpha, not a production-secure MMORPG.

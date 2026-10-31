@@ -8,6 +8,7 @@ import {
   facingTo,
   parseMoveCommand,
   parseAttackCommand,
+  parsePkTargetCommand,
   planarDistance,
   stepTowards,
 } from "./GameRules.js";
@@ -60,30 +61,40 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
 
     attack: (client: Client, message: unknown) => {
-      const order = parseAttackCommand(message);
-      if (!order) return this.reject(client, "invalid_attack");
-      const player = this.state.players.get(client.sessionId);
-      if (!player || !player.alive) return this.reject(client, "not_alive");
-      if (!this.gates.get(client.sessionId)?.attack.consume(this.simulatedMs)) {
+      const monsterOrder = parseAttackCommand(message);
+      const pkOrder = monsterOrder ? null : parsePkTargetCommand(message);
+      if (!monsterOrder && !pkOrder) return this.reject(client, "invalid_attack");
+
+      const attackerId = client.sessionId;
+      const attacker = this.state.players.get(attackerId);
+      if (!attacker || !attacker.alive) return this.reject(client, "not_alive");
+      if (!this.gates.get(attackerId)?.attack.consume(this.simulatedMs)) {
         return this.reject(client, "attack_rate_limited");
       }
-      const monster = this.state.monster;
-      if (!monster.alive) {
-        client.send("combat_notice", { reason: "monster_down" });
-        return;
+
+      // Only the server-issued session ID of ANOTHER live player in the
+      // same room is eligible for PK. No duel agreement is required.
+      const targetId = monsterOrder ? RULES.monsterId : pkOrder!.targetId;
+      if (targetId === attackerId) return this.reject(client, "self_attack");
+      const target = monsterOrder
+        ? (this.state.monster.alive ? this.state.monster : undefined)
+        : this.state.players.get(targetId);
+
+      if (!target || !target.alive) {
+        return this.reject(client, monsterOrder ? "monster_down" : "target_unavailable");
       }
 
-      // Selecting an enemy from far away NEVER causes remote damage:
-      // the player must physically enter attack range during server ticks.
-      this.destinations.delete(client.sessionId);
-      this.attackTargets.set(client.sessionId, order.targetId);
-      player.targetId = order.targetId;
+      // Tap to attack: cancel manual travel, then follow the target each tick.
+      this.destinations.delete(attackerId);
+      this.attackTargets.set(attackerId, targetId);
+      attacker.targetId = targetId;
 
-      if (planarDistance(player, monster) > RULES.playerAttackRange) {
-        player.combatState = "approaching";
+      const attackRange = monsterOrder ? RULES.playerAttackRange : RULES.pkAttackRange;
+      if (planarDistance(attacker, target) > attackRange) {
+        attacker.combatState = "approaching";
         client.send("combat_notice", { reason: "approaching" });
       } else {
-        player.combatState = "attacking";
+        attacker.combatState = "attacking";
       }
     },
   };
@@ -113,7 +124,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.tick(ctx.dt);
     }, RULES.tickRate);
 
-    console.log("MONTRA S1 Game Engine started:", this.roomId);
+    console.log("MONTRA S1 + FreePK Engine started:", this.roomId);
   }
 
   private tick(dt: number) {
@@ -128,24 +139,32 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for (const [sessionId, player] of this.state.players) {
       if (!player.alive) continue;
 
-      if (this.attackTargets.has(sessionId)) {
-        if (!monster.alive) {
+      const targetId = this.attackTargets.get(sessionId);
+      if (targetId) {
+        const isMonster = targetId === RULES.monsterId;
+        const target = isMonster
+          ? (monster.alive ? monster : undefined)
+          : this.state.players.get(targetId);
+
+        if (!target || !target.alive || targetId === sessionId) {
           this.endAttack(sessionId, player);
           continue;
         }
-        const dx = monster.x - player.x;
-        const dz = monster.z - player.z;
+        const dx = target.x - player.x;
+        const dz = target.z - player.z;
         const distance = Math.hypot(dx, dz);
-        player.targetId = RULES.monsterId;
+        player.targetId = targetId;
         player.facing = facingTo(dx, dz);
 
-        if (distance <= RULES.playerAttackRange) {
+        const attackRange = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
+        if (distance <= attackRange) {
           player.combatState = "attacking";
           continue;
         }
 
-        // Re-evaluate target position every server tick: monsters can move.
-        const stopDistance = RULES.playerAttackRange - 0.4;
+        // Recalculate every fixed tick so moving players can be chased.
+        // Never teleport, regardless of where the client taps.
+        const stopDistance = attackRange - 0.4;
         const ratio = Math.max(0, (distance - stopDistance) / distance);
         const approach = {
           x: clampToMap(player.x + dx * ratio),
@@ -177,41 +196,91 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private updatePlayerAttacks() {
     const monster = this.state.monster;
-    if (!monster.alive) return;
-
-    for (const [id] of this.attackTargets) {
-      const player = this.state.players.get(id);
-      if (!player || !player.alive) {
-        this.attackTargets.delete(id);
+    for (const [attackerId, targetId] of [...this.attackTargets]) {
+      const attacker = this.state.players.get(attackerId);
+      if (!attacker || !attacker.alive) {
+        this.attackTargets.delete(attackerId);
         continue;
       }
 
-      const distance = planarDistance(player, monster);
-      if (distance > RULES.playerAttackRange + 0.00001) continue;
-      player.facing = facingTo(monster.x - player.x, monster.z - player.z);
-      player.combatState = "attacking";
+      const isMonster = targetId === RULES.monsterId;
+      const target = isMonster
+        ? (monster.alive ? monster : undefined)
+        : this.state.players.get(targetId);
+      if (!target || !target.alive || targetId === attackerId) {
+        this.endAttack(attackerId, attacker);
+        continue;
+      }
 
-      const last = this.lastAttackMs.get(id) ?? -Infinity;
-      if (this.simulatedMs - last < RULES.playerAttackCooldownMs) continue;
-      this.lastAttackMs.set(id, this.simulatedMs);
+      const range = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
+      if (planarDistance(attacker, target) > range + 0.00001) continue;
+      attacker.facing = facingTo(target.x - attacker.x, target.z - attacker.z);
+      attacker.combatState = "attacking";
 
-      monster.hp = Math.max(0, monster.hp - RULES.playerAttackDamage);
-      monster.hitSeq += 1;
+      // Same cooldown clock for PvP and PvE. Switching targets cannot
+      // bypass cooldown or borrow a timestamp supplied by the browser.
+      const cooldown = isMonster ? RULES.playerAttackCooldownMs : RULES.pkCooldownMs;
+      const last = this.lastAttackMs.get(attackerId) ?? -Infinity;
+      if (this.simulatedMs - last < cooldown) continue;
+      this.lastAttackMs.set(attackerId, this.simulatedMs);
 
-      this.broadcast("combat_hit", {
-        targetId: RULES.monsterId,
-        attackerId: id,
-        damage: RULES.playerAttackDamage,
-        hp: monster.hp,
-        maxHp: monster.maxHp,
-        hitSeq: monster.hitSeq,
+      if (isMonster) {
+        monster.hp = Math.max(0, monster.hp - RULES.playerAttackDamage);
+        monster.hitSeq += 1;
+        this.broadcast("combat_hit", {
+          targetId: RULES.monsterId,
+          attackerId, damage: RULES.playerAttackDamage,
+          hp: monster.hp, maxHp: monster.maxHp, hitSeq: monster.hitSeq,
+        }, { afterNextPatch: true });
+        if (monster.hp === 0) this.killMonster();
+        continue;
+      }
+
+      // FREE PK: health, range, damage, respawn and kill credit are wholly
+      // server-owned. The client only submits another session's targetId.
+      const victim = target as Player;
+      victim.hp = Math.max(0, victim.hp - RULES.pkDamage);
+      victim.hitSeq += 1;
+      this.broadcast("pvp_hit", {
+        attackerId, targetId, damage: RULES.pkDamage,
+        hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
       }, { afterNextPatch: true });
 
-      if (monster.hp === 0) {
-        this.killMonster();
-        break;
+      if (victim.hp === 0) {
+        attacker.pkKills += 1;
+        victim.pkDeaths += 1;
+        this.knockoutPlayer(targetId, "pk", attackerId);
+        this.broadcast("pvp_kill", {
+          winnerId: attackerId, loserId: targetId,
+          kills: attacker.pkKills, deaths: victim.pkDeaths,
+        }, { afterNextPatch: true });
       }
     }
+  }
+
+  private knockoutPlayer(id: string, cause: "pk" | "monster", attackerId = "") {
+    const victim = this.state.players.get(id);
+    if (!victim || !victim.alive) return;
+    victim.hp = 0;
+    victim.alive = false;
+    victim.combatState = "dead";
+    victim.targetId = "";
+    this.destinations.delete(id);
+    this.attackTargets.delete(id);
+    this.playerRespawnAt.set(id, this.simulatedMs + RULES.playerRespawnMs);
+
+    // Everyone chasing this human stops when the target dies. No
+    // duplicated damage on a corpse, and no stale targets after respawn.
+    for (const [otherId, targetId] of [...this.attackTargets]) {
+      if (targetId !== id) continue;
+      const other = this.state.players.get(otherId);
+      if (other) this.endAttack(otherId, other);
+      else this.attackTargets.delete(otherId);
+    }
+    if (this.state.monster.targetId === id) this.state.monster.targetId = "";
+    this.broadcast("player_down", {
+      playerId: id, source: cause, attackerId,
+    }, { afterNextPatch: true });
   }
 
   private killMonster() {
@@ -223,15 +292,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.monsterRespawnAt = this.simulatedMs + RULES.monsterRespawnMs;
     this.monsterReturning = false;
 
-    // A corpse should not keep moving, nor should clients autoattack it.
-    for (const [id] of this.attackTargets) {
+    // Only cancel PvE attacks on this monster. Concurrent Free PK fights
+    // must continue even when someone else defeats the ghost.
+    for (const [id, targetId] of [...this.attackTargets]) {
+      if (targetId !== RULES.monsterId) continue;
       const player = this.state.players.get(id);
-      if (player && player.alive) {
-        player.targetId = "";
-        player.combatState = "idle";
-      }
+      if (player) this.endAttack(id, player);
+      else this.attackTargets.delete(id);
     }
-    this.attackTargets.clear();
   }
 
   private updateMonsterAI(dt: number) {
@@ -326,14 +394,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }, { afterNextPatch: true });
 
     if (target.hp === 0) {
-      target.alive = false;
-      target.combatState = "dead";
-      target.targetId = "";
-      this.destinations.delete(targetId);
-      this.attackTargets.delete(targetId);
-      this.playerRespawnAt.set(targetId, this.simulatedMs + RULES.playerRespawnMs);
-      this.state.monster.targetId = "";
-      this.broadcast("player_down", { playerId: targetId });
+      this.knockoutPlayer(targetId, "monster");
     }
   }
 
@@ -406,7 +467,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastRejectNoticeMs.delete(id);
     this.state.players.delete(id);
     if (this.state.monster.targetId === id) this.state.monster.targetId = "";
-    console.log("MONTRA S1 leave:", id, code);
+    // Remote player targets cannot remain locked to disconnected sessions.
+    for (const [otherId, targetId] of [...this.attackTargets]) {
+      if (targetId !== id) continue;
+      const attacker = this.state.players.get(otherId);
+      if (attacker) this.endAttack(otherId, attacker);
+      else this.attackTargets.delete(otherId);
+    }
+    console.log("MONTRA FreePK leave:", id, code);
   }
 
   onDispose() {

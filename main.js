@@ -12,6 +12,8 @@
     modeBadge: $("modeBadge"), onlineCount: $("onlineCount"), drawer: $("drawer"),
     drawerBody: $("drawerBody"), drawerTitle: $("drawerTitle"), shade: $("shade"),
     minimap: $("minimap"), quest: $("quest"),
+    pkPanel: $("pkPanel"), pkTitle: $("pkTitle"), pkText: $("pkText"),
+    pkHpTrack: $("pkHpTrack"), pkHpBar: $("pkHpBar"), pkHint: $("pkHint"),
     monsterStatus: $("monsterStatus"), monsterText: $("monsterText"),
     monsterBar: $("monsterBar"), monsterHint: $("monsterHint"),
   };
@@ -184,10 +186,20 @@
     frontSash.position.set(0, .87, -.43);
     frontSash.material = local ? gold : glowMat;
     frontSash.isPickable = false;
+
+    // Remote avatars are touch targets. The player's own avatar remains
+    // unpickable so tapping nearby ground still works.
+    const hitbox = B.MeshBuilder.CreateBox("pk-hitbox-" + id,
+      { width: 1.05, height: 2.05, depth: 1.05 }, scene);
+    hitbox.parent = parent;
+    hitbox.position.y = 1.025;
+    hitbox.visibility = .005;
+    hitbox.isPickable = !local;
+    hitbox.metadata = { pkPlayerId: id };
     return {
       node: parent, local, x: 0, z: 0, targetX: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
-      serverFacing: null
+      serverFacing: null, hitFlashUntil: 0
     };
   }
   const avatars = new Map();
@@ -221,6 +233,7 @@
   }
   function clearAvatars() { [...avatars.keys()].forEach(deleteAvatar); }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
+  let selectedPkTargetId = null;
   let spiritShown = false, possessed = false, spirit = null;
   const enemy = B.MeshBuilder.CreateSphere("possessed enemy", { diameter: 1.7, segments: 12 }, scene);
   enemy.position.copyFromFloats(1.1, .88, 10.4); enemy.scaling.set(.7,1.1,.8);
@@ -293,6 +306,8 @@
   }
 
   function requestMonsterAttack() {
+    selectedPkTargetId = null;
+    syncPKHud();
     if (mode === "live") {
       if (!room || !monsterReady) {
         toast("เซิร์ฟเวอร์ยังไม่เปิดระบบโจมตี · ติดตั้ง Combat บน VPS ก่อน");
@@ -324,6 +339,8 @@
     room = null; mode = "demo"; localId = "demo";
     onlinePlayers.clear(); clearAvatars(); player = ensureAvatar("demo",true,0,0);
     demoDest = null; resetDemoMonster();
+    selectedPkTargetId = null;
+    ui.pkPanel.hidden = true;
     if (localHpBar) localHpBar.style.width = "88%";
     updateStatus();
   }
@@ -332,6 +349,8 @@
     const target = { x: Math.round(Math.max(-20,Math.min(20,x))*100)/100, z: Math.round(Math.max(-20,Math.min(20,z))*100)/100 };
     marker.position.x = target.x; marker.position.z = target.z;
     marker.setEnabled(true);
+    selectedPkTargetId = null;
+    syncPKHud();
     demoAutoAttack = false;
     if (!ui.monsterStatus.hidden) ui.monsterHint.textContent = "แตะผีเพื่อโจมตี";
     if (mode === "live" && room) {
@@ -341,6 +360,78 @@
     }
   }
   const localHpBar = document.querySelector(".bar.hp i");
+  function shortPkName(id) {
+    return "ผู้เล่น-" + String(id || "").slice(0, 4);
+  }
+
+  // Server Schema is the only source of player HP and the PK scoreboard.
+  function syncPKHud() {
+    if (mode !== "live" || !room?.state?.players?.get) {
+      ui.pkPanel.hidden = true;
+      return;
+    }
+
+    const players = room.state.players;
+    const me = players.get(localId);
+    if (!me) {
+      ui.pkPanel.hidden = true;
+      return;
+    }
+
+    ui.pkPanel.hidden = false;
+    if (!Number.isFinite(me.pkKills)) {
+      ui.pkTitle.textContent = "⚔ FREE PK";
+      ui.pkText.textContent = "รอ Server";
+      ui.pkHpTrack.hidden = true;
+      ui.pkHint.textContent = "ต้องอัปเดต MONTRA Free PK บน VPS ก่อน";
+      return;
+    }
+
+    const opponent = selectedPkTargetId && selectedPkTargetId !== localId
+      ? players.get(selectedPkTargetId) : null;
+    if (!opponent) {
+      selectedPkTargetId = null;
+      ui.pkTitle.textContent = "⚔ FREE PK";
+      ui.pkText.textContent = "K " + me.pkKills + " · D " + me.pkDeaths;
+      ui.pkHpTrack.hidden = true;
+      ui.pkHint.textContent = "แตะตัวผู้เล่นคนอื่นเพื่อโจมตีทันที";
+      return;
+    }
+
+    const hp = Math.max(0, Number(opponent.hp) || 0);
+    const maxHp = Math.max(1, Number(opponent.maxHp) || 100);
+    ui.pkTitle.textContent = shortPkName(selectedPkTargetId);
+    ui.pkText.textContent = "HP " + Math.ceil(hp) + "/" + Math.ceil(maxHp);
+    ui.pkHpTrack.hidden = false;
+    ui.pkHpBar.style.width = Math.max(0, Math.min(100, 100 * hp / maxHp)) + "%";
+    ui.pkHint.textContent = opponent.alive === false
+      ? "เป้าหมายถูกปราบแล้ว · รอเกิดใหม่"
+      : "Free PK เปิด · แตะเพื่อโจมตี / แตะพื้นเพื่อยกเลิก";
+  }
+
+  function tapPlayerForPK(targetId) {
+    if (mode !== "live" || !room || !targetId || targetId === localId) return;
+    const me = room.state?.players?.get?.(localId);
+    const enemyPlayer = room.state?.players?.get?.(targetId);
+    if (!me || !enemyPlayer) return;
+    if (!Number.isFinite(me.pkKills)) {
+      toast("MONTRA Server ยังไม่มีระบบ Free PK · ต้องติดตั้ง VPS ก่อน");
+      return;
+    }
+    if (me.alive === false) { toast("ยังโจมตีไม่ได้ · รอเกิดใหม่"); return; }
+    if (enemyPlayer.alive === false) { toast("เป้าหมายตายแล้ว · รอเกิดใหม่"); return; }
+
+    selectedPkTargetId = targetId;
+    marker.setEnabled(false);
+    syncPKHud();
+    try {
+      room.send("attack", { targetId });
+    } catch (error) {
+      console.error("MONTRA FreePK command failed", error);
+      toast("ส่งคำสั่งโจมตีผู้เล่นไม่สำเร็จ");
+    }
+  }
+
   function setOnlinePlayer(id, x, z, facing, hp, maxHp) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     onlinePlayers.set(id,{x,z});
@@ -357,7 +448,12 @@
     }
     updateStatus();
   }
-  function removeOnlinePlayer(id) { onlinePlayers.delete(id); deleteAvatar(id); updateStatus(); }
+  function removeOnlinePlayer(id) {
+    onlinePlayers.delete(id);
+    deleteAvatar(id);
+    if (selectedPkTargetId === id) selectedPkTargetId = null;
+    updateStatus();
+  }
   function syncState(state) {
     syncMonsterState(state);
     const players = state?.players;
@@ -369,6 +465,7 @@
         Number(p.facing), Number(p.hp), Number(p.maxHp));
     });
     for (const id of onlinePlayers.keys()) if (!seen.has(id)) removeOnlinePlayer(id);
+    syncPKHud();
     return true;
   }
   let syncPoll = null;
@@ -398,6 +495,7 @@
       mode = "live"; localId = joined.sessionId;
       clearAvatars(); demoDest = null;
       onlinePlayers.clear(); enemy.setEnabled(false);
+      selectedPkTargetId = null;
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
       ui.monsterStatus.hidden = true;
       if (spirit) { spirit.dispose(); spirit = null; }
@@ -429,6 +527,32 @@
       joined.onMessage("monster_respawn", () => {
         if (room === joined) toast("มอนสเตอร์ปรากฏตัวอีกครั้ง");
       });
+      joined.onMessage("pvp_hit", hit => {
+        if (room !== joined || !hit || typeof hit.targetId !== "string") return;
+        const victim = avatars.get(hit.targetId);
+        const attacker = avatars.get(hit.attackerId);
+        if (victim) victim.hitFlashUntil = performance.now() + 250;
+        if (attacker && victim) {
+          faceAvatarToward(hit.attackerId, victim.x, victim.z);
+        }
+        if (hit.targetId === localId) {
+          toast("ถูก " + shortPkName(hit.attackerId) + " โจมตี -" + hit.damage + " HP");
+        } else if (hit.attackerId === localId) {
+          toast("โจมตี " + shortPkName(hit.targetId) + " -" + hit.damage + " HP");
+        }
+        syncPKHud();
+      });
+      joined.onMessage("pvp_kill", info => {
+        if (room !== joined || !info) return;
+        const winner = shortPkName(info.winnerId);
+        const loser = shortPkName(info.loserId);
+        toast(info.winnerId === localId
+          ? "ชนะ Free PK! ปราบ " + loser
+          : info.loserId === localId
+            ? "แพ้ Free PK · รอเกิดใหม่"
+            : winner + " ปราบ " + loser);
+        syncPKHud();
+      });
       joined.onMessage("monster_hit", hit => {
         if (room === joined && hit?.targetId === localId) {
           toast("ถูกผีโจมตี -" + Number(hit.damage || 0) + " HP");
@@ -448,6 +572,9 @@
         if (room !== joined) return;
         if (info?.reason === "not_alive") toast("ยังสั่งเดินหรือโจมตีไม่ได้");
         else if (info?.reason === "attack_rate_limited") toast("สั่งโจมตีถี่เกินไป");
+        else if (info?.reason === "self_attack") toast("ไม่สามารถโจมตีตัวเองได้");
+        else if (info?.reason === "target_unavailable") toast("เป้าหมายไม่อยู่ในห้องหรือไม่พร้อมต่อสู้");
+        else if (info?.reason === "invalid_attack") toast("คำสั่งโจมตีไม่ถูกต้อง");
       });
       // Colyseus 0.18 schema callbacks are the reliable way to subscribe to nested maps.
       try {
@@ -516,14 +643,24 @@
     const px = event.clientX - rect.left;
     const py = event.clientY - rect.top;
     if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
-    // Monster receives tap priority over the ground behind its model.
-    const monsterHit = enemy.isEnabled() && scene.pick(px, py, mesh => mesh === enemy);
-    if (monsterHit?.hit) {
+    // One depth-sorted pick: remote players, the monster or ground.
+    // Never attack people through walls/terrain merely because they overlap
+    // the screen projection (alpha map currently has no solid obstacles).
+    const picked = scene.pick(px, py, mesh =>
+      mesh.metadata?.walkable === true ||
+      (mesh === enemy && enemy.isEnabled()) ||
+      (mode === "live" && mesh.metadata?.pkPlayerId &&
+       mesh.metadata.pkPlayerId !== localId)
+    );
+    if (!picked?.hit) return;
+    const otherId = picked.pickedMesh?.metadata?.pkPlayerId;
+    if (otherId && mode === "live") {
+      tapPlayerForPK(otherId);
+    } else if (picked.pickedMesh === enemy) {
       requestMonsterAttack();
-      return;
+    } else if (picked.pickedMesh?.metadata?.walkable && picked.pickedPoint) {
+      pointMove(picked.pickedPoint.x, picked.pickedPoint.z);
     }
-    const picked = scene.pick(px,py,mesh => mesh.metadata?.walkable === true);
-    if (picked?.hit && picked.pickedPoint) pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
   });
   ui.world.addEventListener("pointercancel",()=> { pointer=null; });
   ui.world.addEventListener("wheel",e=> { e.preventDefault(); camera.radius=Math.max(15,Math.min(29,camera.radius + Math.sign(e.deltaY))); },{passive:false});
@@ -613,7 +750,13 @@
     heroMat.emissiveColor = B.Color3.FromHexString(possessed?"#7c459b":"#2c190b");
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
-  $("attack").onclick = requestMonsterAttack;
+  $("attack").onclick = () => {
+    if (mode === "live" && room && selectedPkTargetId) {
+      tapPlayerForPK(selectedPkTargetId);
+    } else {
+      requestMonsterAttack();
+    }
+  };
 
   let elapsed=0;
   engine.runRenderLoop(() => {
@@ -687,6 +830,8 @@
       );
       a.heading += angleDelta * (1 - Math.exp(-dt * 11));
       a.node.rotation.y = a.heading;
+      const flash = (a.hitFlashUntil || 0) > now;
+      a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
       a.node.position.set(a.x, 0, a.z);
     }
     const me=getLocalAvatar();

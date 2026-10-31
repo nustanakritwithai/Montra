@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  RULES, CommandBucket, parseMoveCommand, parseAttackCommand,
+  RULES, CommandBucket, parseMoveCommand, parseAttackCommand, parsePkTargetCommand,
   facingTo, planarDistance, stepTowards,
 } from "./GameRules.js";
 
@@ -56,4 +56,20 @@ test("Rate limiting rejects bursts beyond the token budget", () => {
   assert.equal(bucket.consume(250), true);
   assert.equal(bucket.consume(251), false);
   assert.equal(bucket.consume(1251), true);
+});
+
+test("Free PK messages accept only exact server-shaped player targets", () => {
+  assert.deepEqual(parsePkTargetCommand({ targetId: "ggKwDJXRe" }),
+    { targetId: "ggKwDJXRe" });
+  for (const bad of [
+    null, [], {}, { targetId: "x" }, { targetId: 123 },
+    { targetId: RULES.monsterId },
+    { targetId: "unknown player id" },
+    { targetId: "ggKwDJXRe", hp: 0 },
+    { targetId: "ggKwDJXRe", damage: 1000000 },
+    { targetId: "ggKwDJXRe", speed: 300 },
+    { targetId: "ggKwDJXRe", timestamp: -1 },
+  ]) {
+    assert.equal(parsePkTargetCommand(bad), null);
+  }
 });
