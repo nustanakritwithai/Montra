@@ -1,5 +1,5 @@
 <#
-MONTRA Monster RRT navigation deployment — Windows PowerShell.
+MONTRA S2 guest-character staging — Windows PowerShell (includes all S1 features).
 SAFE STAGING ONLY:
   * Backs up the existing MONTRA Room sources and compiled build.
   * Downloads only files from the owner's MONTRA GitHub repository.
@@ -11,8 +11,8 @@ Run from an Administrator PowerShell:
 $ErrorActionPreference = "Stop"
 $base = "C:\Montra\online-server"
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$backup = Join-Path $base "backup-before-rrt-$stamp"
-$download = Join-Path $env:TEMP "montra-rrt-$stamp"
+$backup = Join-Path $base "backup-before-s2-$stamp"
+$download = Join-Path $env:TEMP "montra-s2-$stamp"
 $remote = "https://raw.githubusercontent.com/nustanakritwithai/Montra/main/deploy/combat"
 
 $packageFile = Join-Path $base "package.json"
@@ -38,17 +38,19 @@ $files = @(
   @{ Name = "GameRules.ts"; Target = "src\rooms\GameRules.ts"; Check = "summonLimitPerPlayer" },
   @{ Name = "HeightRules.ts"; Target = "src\rooms\HeightRules.ts"; Check = "wallBlocksShot" },
   @{ Name = "MonsterRRT.ts"; Target = "src\rooms\MonsterRRT.ts"; Check = "class MonsterRRTNavigator" },
+  @{ Name = "CharacterStore.ts"; Target = "src\rooms\CharacterStore.ts"; Check = "class CharacterStore" },
   @{ Name = "smoke-test.mjs"; Target = "montra-combat-smoke-test.mjs"; Check = "combat_hit" },
   @{ Name = "s1-integration.mjs"; Target = "montra-s1-integration.mjs"; Check = "MONTRA S1" },
   @{ Name = "s1-monster-ai.mjs"; Target = "montra-s1-monster-ai.mjs"; Check = "MONTRA S1" },
   @{ Name = "free-pk-integration.mjs"; Target = "montra-free-pk-integration.mjs"; Check = "MONTRA Free PK" },
   @{ Name = "summon-integration.mjs"; Target = "montra-summon-integration.mjs"; Check = "MONTRA Summon" },
   @{ Name = "elevation-integration.mjs"; Target = "montra-elevation-integration.mjs"; Check = "MONTRA Elevation" },
-  @{ Name = "monster-rrt-integration.mjs"; Target = "montra-monster-rrt-integration.mjs"; Check = "MONTRA Monster RRT integration" }
+  @{ Name = "monster-rrt-integration.mjs"; Target = "montra-monster-rrt-integration.mjs"; Check = "MONTRA Monster RRT integration" },
+  @{ Name = "character-persistence-integration.mjs"; Target = "montra-s2-character-integration.mjs"; Check = "MONTRA S2 integration" }
 )
 
 New-Item -ItemType Directory -Path $download -Force | Out-Null
-Write-Host "MONTRA Monster RRT: downloading sources before any changes..." -ForegroundColor Cyan
+Write-Host "MONTRA S2: downloading sources before any changes..." -ForegroundColor Cyan
 foreach ($entry in $files) {
   $localFile = Join-Path $download $entry.Name
   Invoke-WebRequest -Uri "$remote/$($entry.Name)" -OutFile $localFile -UseBasicParsing -ErrorAction Stop
@@ -73,6 +75,17 @@ $oldBuildExists = Test-Path -LiteralPath $build
 if ($oldBuildExists) {
   Copy-Item -LiteralPath $build -Destination (Join-Path $backup "build") -Recurse
 }
+# Back up existing character data separately, outside the build/rollback area.
+# A rollback of code must NEVER delete newly saved character records.
+$characterData = if ($env:MONTRA_CHARACTER_DIR) {
+  $env:MONTRA_CHARACTER_DIR
+} else {
+  Join-Path $base "data\characters"
+}
+if (Test-Path -LiteralPath $characterData) {
+  Copy-Item -LiteralPath $characterData -Destination (Join-Path $backup "character-data") -Recurse -Force
+  Write-Host "MONTRA existing character data backed up (not modified)." -ForegroundColor Cyan
+}
 Write-Host "MONTRA backup saved at: $backup" -ForegroundColor Cyan
 
 try {
@@ -85,7 +98,7 @@ try {
 
   Push-Location $base
   try {
-    Write-Host "Compiling MONTRA Monster RRT navigation on the existing Server Engine..." -ForegroundColor Cyan
+    Write-Host "Compiling MONTRA S2 persistence + existing combat systems..." -ForegroundColor Cyan
     & npm.cmd run build
     if ($LASTEXITCODE -ne 0) {
       throw "MONTRA S1 TypeScript build failed. Exit code: $LASTEXITCODE"
@@ -97,7 +110,7 @@ try {
     Pop-Location
   }
   Write-Host ""
-  Write-Host "MONTRA MONSTER RRT BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA S2 BUILD PASSED." -ForegroundColor Green
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
   Write-Host "Then test: node C:\Montra\online-server\montra-s1-integration.mjs"
@@ -106,8 +119,9 @@ try {
   Write-Host "Summon test: node C:\Montra\online-server\montra-summon-integration.mjs"
   Write-Host "Height test: node C:\Montra\online-server\montra-elevation-integration.mjs"
   Write-Host "RRT test: node C:\Montra\online-server\montra-monster-rrt-integration.mjs"
+  Write-Host "S2 persistence test: use an ISOLATED test server with MONTRA_CHARACTER_DIR set to a TEMP folder (see runbook)."
 } catch {
-  Write-Warning "S1 installation failed. Restoring MONTRA source files and build."
+  Write-Warning "S2 installation failed. Restoring MONTRA source files and build (character data untouched)."
   foreach ($entry in $files) {
     $target = Join-Path $base $entry.Target
     $saved = Join-Path $backup $entry.Target

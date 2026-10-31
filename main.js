@@ -7,6 +7,30 @@
   const $ = (id) => document.getElementById(id);
   // Separate HTTPS origin for the Windows VPS. Caddy must proxy it to 127.0.0.1:4108.
   const MONTRA_VPS_URL = "https://montra.157-85-96-139.sslip.io";
+  // One high-entropy guest credential per HTTPS server. The secret stays in
+  // this browser's localStorage and is never broadcast to other players.
+  const TOKEN_PATTERN = /^mt1_[0-9a-f]{64}$/;
+  function tokenStorageKey(endpoint) {
+    return "montra_s2_guest_token:" + new URL(endpoint).host;
+  }
+  function getOrCreateGuestToken(endpoint) {
+    const key = tokenStorageKey(endpoint);
+    const existing = localStorage.getItem(key);
+    if (existing) {
+      if (!TOKEN_PATTERN.test(existing)) throw new Error("รหัสตัวละครในเครื่องไม่ถูกต้อง");
+      return existing;
+    }
+    if (!window.crypto?.getRandomValues) throw new Error("อุปกรณ์ไม่รองรับรหัสตัวละครปลอดภัย");
+    const bytes = new Uint8Array(32);
+    window.crypto.getRandomValues(bytes);
+    const token = "mt1_" + Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+    localStorage.setItem(key, token);
+    return token;
+  }
+  function currentCharacterEndpoint() {
+    try { return localStorage.getItem("montra_endpoint") || MONTRA_VPS_URL; }
+    catch (_) { return MONTRA_VPS_URL; }
+  }
   const ui = {
     loading: $("loading"), loadingText: $("loadingText"), world: $("world"), toast: $("toast"),
     modeBadge: $("modeBadge"), onlineCount: $("onlineCount"), drawer: $("drawer"),
@@ -507,6 +531,7 @@
     setRangedMode(false);
     ui.pkPanel.hidden = true;
     if (localHpBar) localHpBar.style.width = "88%";
+    updateCharacterHud(null);
     updateStatus();
   }
   function getLocalAvatar() { return avatars.get(localId); }
@@ -626,6 +651,16 @@
   }
 
   const localHpBar = document.querySelector(".bar.hp i");
+  function updateCharacterHud(me) {
+    const name = typeof me?.characterName === "string" && me.characterName
+      ? me.characterName : "นที";
+    $("characterName").textContent = name;
+    $("characterLevel").textContent = "LV. " + (
+      Number.isFinite(me?.level) ? me.level : 1
+    );
+    $("characterProfile").title = me?.persistent
+      ? "แตะดูตัวละครถาวรและเปลี่ยนชื่อ" : "แตะดูข้อมูลตัวละคร";
+  }
   function shortPkName(id) {
     return "ผู้เล่น-" + String(id || "").slice(0, 4);
   }
@@ -767,6 +802,7 @@
         Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y));
     });
     for (const id of onlinePlayers.keys()) if (!seen.has(id)) removeOnlinePlayer(id);
+    updateCharacterHud(players.get(localId));
     syncPKHud();
     syncClimbButton();
     return true;
@@ -793,7 +829,13 @@
     if (connectButton) connectButton.disabled = true;
     try {
       const client = new window.Colyseus.Client(endpoint);
-      const joined = await client.joinOrCreate("my_room");
+      let guestToken = null;
+      try { guestToken = getOrCreateGuestToken(endpoint); }
+      catch (error) {
+        console.warn("MONTRA guest character persistence unavailable", error);
+      }
+      const joined = await client.joinOrCreate("my_room",
+        guestToken ? { guestToken } : {});
       room = joined;
       mode = "live"; localId = joined.sessionId;
       clearAvatars(); clearSummons(); demoDest = null;
@@ -919,11 +961,17 @@
           toast("ฟื้นตัวแล้ว · กลับเข้าเกมได้");
         }
       });
+      joined.onMessage("character_save_error", () => {
+        if (room === joined) toast("บันทึกตัวละครไม่สำเร็จ · ตรวจสอบพื้นที่ VPS");
+      });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
         if (info?.reason === "not_alive") toast("ยังสั่งเดินหรือโจมตีไม่ได้");
         else if (info?.reason === "attack_rate_limited") toast("สั่งโจมตีถี่เกินไป");
         else if (info?.reason === "self_attack") toast("ไม่สามารถโจมตีตัวเองได้");
+        else if (info?.reason === "invalid_character_name") toast("ชื่อตัวละครต้องมี 2–20 ตัวอักษร");
+        else if (info?.reason === "character_not_persistent") toast("ยังไม่ได้เปิดระบบตัวละครถาวรบนเซิร์ฟเวอร์");
+        else if (info?.reason === "rename_cooldown") toast("โปรดเว้น 5 วินาทีก่อนเปลี่ยนชื่อ");
         else if (info?.reason === "target_unavailable") toast("เป้าหมายไม่อยู่ในห้องหรือไม่พร้อมต่อสู้");
         else if (info?.reason === "invalid_attack") toast("คำสั่งโจมตีไม่ถูกต้อง");
         else if (info?.reason === "summon_limit") toast("เรียกวิญญาณพร้อมกันได้สูงสุด 1 ตัว");
@@ -971,7 +1019,11 @@
       joined.onError((code,message) => { console.error("MONTRA room error",code,message); toast("เซิร์ฟเวอร์แจ้งข้อผิดพลาด " + code); });
       try { localStorage.setItem("montra_endpoint",endpoint); } catch (_) { /* optional */ }
       closeDrawer();
-      toast(ok ? "เชื่อมต่อโลกออนไลน์แล้ว" : "เชื่อมต่อแล้ว กำลังรอข้อมูลตัวละคร");
+      const active = joined.state?.players?.get?.(joined.sessionId);
+      toast(active?.persistent
+        ? "เชื่อมต่อแล้ว · ตัวละครบันทึกบนเซิร์ฟเวอร์"
+        : ok ? "เชื่อมต่อแล้ว · ตัวละครยังไม่บันทึกถาวร"
+             : "เชื่อมต่อแล้ว กำลังรอข้อมูลตัวละคร");
     } catch (err) {
       console.error("MONTRA connection failed",err);
       ui.onlineCount.textContent = "การเชื่อมต่อไม่สำเร็จ · ยังเป็นโหมดทดลอง";
@@ -1115,6 +1167,74 @@
     $("connectOnline").onclick=()=>connectOnline($("serverUrl").value.trim().replace(/\/$/,""));
     $("returnDemo").onclick=()=> { showDemo(); closeDrawer(); toast("กลับสู่โหมดทดลองแล้ว"); };
   }
+  function openCharacterProfile() {
+    const me = ownServerCharacter();
+    const durable = me?.persistent === true;
+    openDrawer("character","ตัวละคร MONTRA",
+      '<div class="status-line"><span>สถานะบันทึก</span><strong id="profileSaveStatus"></strong></div>' +
+      '<div class="status-line"><span>ชื่อ</span><strong id="profileName"></strong></div>' +
+      '<div class="status-line"><span>ระดับ / ค่าประสบการณ์</span><strong id="profileLevel"></strong></div>' +
+      '<div class="status-line"><span>สถิติ PK</span><strong id="profilePk"></strong></div>' +
+      '<div class="status-line"><span>รหัสตัวละคร</span><strong id="profileId"></strong></div>' +
+      '<label class="field" for="renameCharacter">ชื่อใหม่ (ภาษาไทย/อังกฤษ 2–20 ตัวอักษร)</label>' +
+      '<input id="renameCharacter" maxlength="40" autocomplete="off" spellcheck="false"/>' +
+      '<button class="primary" id="renameCharacterButton" type="button">บันทึกชื่อบนเซิร์ฟเวอร์</button>' +
+      '<p class="note">บันทึกอัตโนมัติประมาณทุก 15 วินาทีและตอนออกเกม ปลอดภัยสุดเมื่อออกเกมตามปกติ</p>' +
+      '<button class="secondary" id="copyCharacterKey" type="button">คัดลอกรหัสกู้คืนตัวละคร</button>' +
+      '<p class="note">รหัสกู้คืนเทียบเท่ารหัสผ่าน ห้ามแชร์ให้ผู้อื่น หากล้างข้อมูลเบราว์เซอร์โดยไม่เก็บรหัสไว้จะกู้ตัวละครไม่ได้</p>' +
+      '<label class="field" for="restoreCharacterKey">มีรหัสกู้คืนจากเครื่องเดิม?</label>' +
+      '<input id="restoreCharacterKey" type="password" autocomplete="off" spellcheck="false" placeholder="วางรหัสกู้คืนของคุณ"/>' +
+      '<button class="secondary" id="restoreCharacterButton" type="button">ใช้รหัสกู้คืนบนอุปกรณ์นี้</button>');
+    $("profileSaveStatus").textContent = durable ? "เก็บบน VPS" : "ยังไม่เปิดใช้ (DEMO/Server เดิม)";
+    $("profileName").textContent = String(me?.characterName || "นที");
+    $("profileLevel").textContent = "LV. " + (me?.level ?? 1) + " · XP " + (me?.experience ?? 0);
+    $("profilePk").textContent = "K " + (me?.pkKills ?? 0) + " / D " + (me?.pkDeaths ?? 0);
+    $("profileId").textContent = me?.characterId || "—";
+    $("renameCharacter").value = durable ? String(me.characterName) : "";
+    $("renameCharacter").disabled = !durable;
+    $("renameCharacterButton").disabled = !durable;
+    $("copyCharacterKey").disabled = !durable;
+    $("renameCharacterButton").onclick = () => {
+      const name = $("renameCharacter").value.normalize("NFC").trim();
+      if (!/^[\p{L}\p{N}][\p{L}\p{M}\p{N} ._-]*$/u.test(name) ||
+          Array.from(name).length < 2 || Array.from(name).length > 20) {
+        toast("ชื่อตัวละครต้องมี 2–20 ตัวอักษร");
+        return;
+      }
+      room?.send("rename_character", { name });
+      toast("ส่งคำขอเปลี่ยนชื่อแล้ว");
+    };
+    $("copyCharacterKey").onclick = async () => {
+      try {
+        const key = localStorage.getItem(tokenStorageKey(currentCharacterEndpoint()));
+        if (!key || !TOKEN_PATTERN.test(key)) throw new Error("ไม่พบรหัสในเครื่อง");
+        if (!navigator.clipboard?.writeText) throw new Error("เบราว์เซอร์ไม่รองรับการคัดลอก");
+        await navigator.clipboard.writeText(key);
+        toast("คัดลอกรหัสกู้คืนแล้ว · โปรดเก็บเป็นความลับ");
+      } catch (error) { toast("คัดลอกรหัสไม่ได้: " + (error.message || error)); }
+    };
+    $("restoreCharacterButton").onclick = () => {
+      const incoming = $("restoreCharacterKey").value.trim();
+      if (!TOKEN_PATTERN.test(incoming)) {
+        toast("รหัสกู้คืนไม่ถูกต้อง โปรดตรวจสอบอีกครั้ง");
+        return;
+      }
+      try {
+        const endpoint = currentCharacterEndpoint();
+        const key = tokenStorageKey(endpoint);
+        if (localStorage.getItem(key) === incoming) {
+          toast("กำลังใช้งานตัวละครนี้อยู่แล้ว");
+          return;
+        }
+        localStorage.setItem(key, incoming);
+        // The next join must use the recovered identity; never attach
+        // a different account to an already-running Colyseus session.
+        window.location.reload();
+      } catch (error) {
+        toast("บันทึกรหัสกู้คืนไม่สำเร็จ: " + (error.message || error));
+      }
+    };
+  }
   function openHelp() {
     openDrawer("help","วิธีเล่น MONTRA V0.1",`<h3>การเคลื่อนที่</h3><p>แตะพื้นที่ต้องการเดิน · ลากนิ้วในฉากเพื่อเปลี่ยนมุมกล้อง · ใช้ล้อเมาส์เพื่อซูมเมื่อเล่นบนคอมพิวเตอร์</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เมื่อ Caddy ของ VPS พร้อม เกมจะเชื่อมต่อได้โดยอัตโนมัติ หรือกดเมนูออนไลน์เพื่อเชื่อมต่ออีกครั้ง ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>ระบบบัญชี เซฟ ตลาดซื้อขาย ไอเทมถาวร การชนอาคาร และการต่อสู้กับศัตรูจริง</p>`);
   }
@@ -1128,6 +1248,7 @@
     openDrawer("quest", title, '<p class="note"></p>');
     ui.drawerBody.querySelector("p").textContent = description;
   });
+  $("characterProfile").onclick=openCharacterProfile;
   $("mapButton").onclick=openMap;
   $("mapShortcut").onclick=openMap;
   $("modeButton").onclick=openOnline;

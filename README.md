@@ -13,13 +13,18 @@ MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the
 - **Summon NPC Alpha / frontend 0.1.8:** each online player may create one server-owned guardian spirit. NPCs replicate to everyone in the room, follow their owner, defend against attackers and assist in PvE and Free PK. Server owns stats, attack range/cooldown and cleanup on owner death or disconnect.
 - **Elevation Alpha / frontend 0.1.9:** server-owned vertical positioning (Y), one climbable 4-unit-high wall with a ladder, solid ground collision, an elevated walkable crest, magic projectiles with a 3D range and wall line-of-sight checks, and floating summons following owner altitude.
 - **Monster navigation RRT patch (server only):** adapt the RRT path planner from [RRT-Game-Lab/multi_target_core.js](https://github.com/nustanakritwithai/RRT-Game-Lab/blob/main/multi_target_core.js) to MONTRA X/Z; monsters follow obstacle-safe waypoints for patrol/chase/return instead of getting stuck walking into the watchwall. Slow bounded replanning is intentional, and no combat or frontend rules change.
-- **S0/S2 are not complete:** Node auto-start after Windows restart, player accounts, database, saves, trading and persistent inventory are NOT implemented.
+- **S2 Guest Character Persistence / frontend 0.2.0 (staged in GitHub):** browser-generated 256-bit guest token, hashed server-side filename, file-backed atomic snapshots, 15-second autosave and disconnect saves; character name, ID, level, XP, HP, safe position, PK kills/deaths survive Node restart. Mobile profile supports renaming plus export/import of a secret recovery key. Legacy non-token clients still play transiently.
+- **Still not complete:** password-backed accounts, permanent inventory/trading, XP earning/level progression, multi-node shared storage and Windows auto-start. This S2 code does NOT update the running VPS until the safe installer is executed.
 
-**S1 code in GitHub does not change the live Windows VPS automatically.** Use the safe installer in the linked runbook, then restart only the MONTRA Node process and execute the live smoke tests.
+**Code pushed to GitHub does not change the live Windows VPS automatically.** Use the safe S2 Windows installer in the linked runbook, then restart ONLY MONTRA Node and run non-destructive live checks. Keep all character data backups; do not run persistence integration tests against live players.
 
 ## S1 server source of truth
 
-- [Windows VPS install, test and rollback (Thai)](deploy/combat/S1-WINDOWS-VPS-TH.md)
+- [S2 Guest Character safe Windows deployment / backup / rollback (Thai)](deploy/combat/S2-CHARACTERS-WINDOWS-TH.md)
+- [S1 Windows VPS install, test and rollback (Thai)](deploy/combat/S1-WINDOWS-VPS-TH.md)
+- [S2 file-backed durable CharacterStore](deploy/combat/CharacterStore.ts)
+- [S2 unit tests for credential validation and atomic snapshots](deploy/combat/character-store.test.ts)
+- [S2 isolated Node-restart integration test](deploy/combat/character-persistence-integration.mjs)
 - [Colyseus room](deploy/combat/MyRoom.ts)
 - [Schema](deploy/combat/MyRoomState.ts)
 - [Validated rules / rate limits](deploy/combat/GameRules.ts)
@@ -66,8 +71,8 @@ projects, so deployments must not overwrite its shared configuration.
 - Four users **per room**, not four users across the whole MMO.
 - One illustrative monster with RRT wall-avoidance, one physically solid fortification, and basic server ray-vs-wall line of sight. The RRT planner currently knows only the watchwall collider; general-purpose navmesh, universal house collisions, ballistic physics and jumping are not yet available.
 - The server uses fixed 20 Hz ticks. No client prediction/rewind system has been enabled.
-- The user session is transient; no persistent character identity or database.
+- S2 persists a single Guest character per recovery token to private JSON files on the VPS (only after S2 has been deployed on Windows). No username/password identity, recovery service, remote backup or relational database. Clearing browser data without exporting the token loses access.
 - Free PK is enabled between any living players in the same room. There is no consent flow or safe-zone protection yet.
 - Guardian ownership is transient (one per connected session) and not saved to a database. Guardian NPCs cannot yet be damaged or upgraded.
-- No persistent spirit ownership, trading, economy or real reward payouts.
+- Guardian summon remains transient; only character identity/name/stats/location are stored. No persistent inventory, trading, economy or real reward payouts.
 - This is a technical Alpha, not a production-secure MMORPG.

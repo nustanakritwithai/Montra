@@ -21,6 +21,17 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .character-info { flex:1; min-width:0; }
 .name { font-size:12px; font-weight:700; margin-bottom:5px; }
 .name span { float:right; font-size:10px; font-weight:400; color:#d9bb83; }
+/* Character sheet opens by tapping the existing compact identity chip. */
+.profile-trigger { width:100%; min-width:0; padding:0; border:0; background:none;
+  display:flex; align-items:center; justify-content:space-between; gap:6px;
+  color:inherit; font:inherit; text-align:left; }
+.name .profile-trigger span { float:none; font-size:inherit; }
+.name .profile-trigger #characterName { min-width:0; flex:1; overflow:hidden;
+  white-space:nowrap; text-overflow:ellipsis; }
+.name .profile-trigger #characterLevel { flex-shrink:0; font-size:10px;
+  font-weight:400; color:#d9bb83; white-space:nowrap; }
+.profile-trigger:active #characterName { color:#f4d59f; }
+
 .bar { height:5px; border-radius:10px; background:#070f11; overflow:hidden; margin-top:4px; border:1px solid #ffffff1c; }
 .bar i { display:block; height:100%; border-radius:10px; }
 .bar.hp i { width:88%; background:linear-gradient(90deg,#ad3a3d,#e36e66); }
