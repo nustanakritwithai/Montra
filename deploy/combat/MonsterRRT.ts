@@ -60,7 +60,7 @@ function seededRandom(seed:number):()=>number {
 export function isMonsterFree(
   point:Vec2,
   obstacles:readonly WallRect[]=MONSTER_WALLS,
-  radius=MONSTER_NAV.radius,
+  radius:number=MONSTER_NAV.radius,
   bounds:NavigationBounds=MONSTER_NAV.bounds,
 ):boolean {
   if(!Number.isFinite(point.x)||!Number.isFinite(point.z))return false;
@@ -99,7 +99,7 @@ function segmentIntersectsExpandedWall(
 export function isMonsterSegmentClear(
   a:Vec2,b:Vec2,
   obstacles:readonly WallRect[]=MONSTER_WALLS,
-  radius=MONSTER_NAV.radius,
+  radius:number=MONSTER_NAV.radius,
   bounds:NavigationBounds=MONSTER_NAV.bounds,
 ):boolean {
   return isMonsterFree(a,obstacles,radius,bounds)&&
@@ -123,7 +123,7 @@ function sampleDisk(rng:()=>number,center:Vec2,radius:number):Vec2 {
 export function smoothMonsterPath(
   path:readonly Vec2[],
   obstacles:readonly WallRect[]=MONSTER_WALLS,
-  radius=MONSTER_NAV.radius,
+  radius:number=MONSTER_NAV.radius,
   bounds:NavigationBounds=MONSTER_NAV.bounds,
 ):Vec2[] {
   if(path.length<3)return [...path];
@@ -290,6 +290,7 @@ export class MonsterRRTNavigator {
     }
 
     const route=this.route;
+    if(!route)return null;
     while(route.index<route.waypoints.length &&
           distanceXZ(position,route.waypoints[route.index])<=MONSTER_NAV.waypointRadius){
       route.index++;
