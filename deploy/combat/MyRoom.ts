@@ -13,8 +13,16 @@ import {
   planarDistance,
   stepTowards,
 } from "./GameRules.js";
+import {
+  FORT, distance3d, isOnPlatform, isOnGround, isOnTop, touchesWallBody,
+  parseClimbRequest, progressClimb, step3d, wallBlocksShot,
+  type WorldPoint,
+} from "./HeightRules.js";
 
-type Gates = { move: CommandBucket; attack: CommandBucket; summon: CommandBucket };
+type Gates = {
+  move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
+  climb: CommandBucket;
+};
 
 /**
  * MONTRA S1: one 20-Hz authoritative simulation per room.
@@ -47,6 +55,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   // All guardian state lives on the server; no client may select NPC stats.
   private lastSummonAt = new Map<string, number>();
   private lastSummonAttackAt = new Map<string, number>();
+  private climbs = new Map<string, WorldPoint>();
 
   messages = {
     move: (client: Client, message: unknown) => {
@@ -54,6 +63,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!destination) return this.reject(client, "invalid_move");
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (this.climbs.has(client.sessionId)) return this.reject(client, "climbing");
+      if (isOnPlatform(player.y) && !isOnTop(destination.x, destination.z)) {
+        return this.reject(client, "must_descend");
+      }
       if (!this.gates.get(client.sessionId)?.move.consume(this.simulatedMs)) {
         return this.reject(client, "move_rate_limited");
       }
@@ -73,6 +86,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const attackerId = client.sessionId;
       const attacker = this.state.players.get(attackerId);
       if (!attacker || !attacker.alive) return this.reject(client, "not_alive");
+      if (this.climbs.has(attackerId)) return this.reject(client, "climbing");
       if (!this.gates.get(attackerId)?.attack.consume(this.simulatedMs)) {
         return this.reject(client, "attack_rate_limited");
       }
@@ -95,7 +109,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       attacker.targetId = targetId;
 
       const attackRange = monsterOrder ? RULES.playerAttackRange : RULES.pkAttackRange;
-      if (planarDistance(attacker, target) > attackRange) {
+      // Wall/vertical separation cannot be solved by a ground-only chase.
+      if (Math.abs(attacker.y - target.y) > attackRange) {
+        this.attackTargets.delete(attackerId);
+        attacker.targetId = "";
+        return this.reject(client, "melee_height_blocked");
+      }
+      if (distance3d(attacker, target) > attackRange) {
         attacker.combatState = "approaching";
         client.send("combat_notice", { reason: "approaching" });
       } else {
@@ -308,11 +328,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.tick(ctx.dt);
     }, RULES.tickRate);
 
-    console.log("MONTRA S1 + FreePK Engine started:", this.roomId);
+    const fort = this.state.fortification;
+    fort.id = FORT.id;
+    fort.x = FORT.x;
+    fort.z = FORT.z;
+    fort.width = FORT.width;
+    fort.length = FORT.length;
+    fort.height = FORT.height;
+    fort.ladderFootX = FORT.ladderFootX;
+    fort.ladderFootZ = FORT.ladderFootZ;
+    fort.ladderTopX = FORT.ladderTopX;
+    fort.ladderTopZ = FORT.ladderTopZ;
+
+    console.log("MONTRA Elevation Engine started:", this.roomId);
   }
 
   private tick(dt: number) {
     this.updateRespawns();
+    this.updateClimbs(dt);
     this.updatePlayerMovement(dt);
     this.updateMonsterAI(dt);
     this.updatePlayerAttacks();
