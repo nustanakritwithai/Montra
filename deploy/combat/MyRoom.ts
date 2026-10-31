@@ -292,15 +292,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.monsterRespawnAt = this.simulatedMs + RULES.monsterRespawnMs;
     this.monsterReturning = false;
 
-    // A corpse should not keep moving, nor should clients autoattack it.
-    for (const [id] of this.attackTargets) {
+    // Only cancel PvE attacks on this monster. Concurrent Free PK fights
+    // must continue even when someone else defeats the ghost.
+    for (const [id, targetId] of [...this.attackTargets]) {
+      if (targetId !== RULES.monsterId) continue;
       const player = this.state.players.get(id);
-      if (player && player.alive) {
-        player.targetId = "";
-        player.combatState = "idle";
-      }
+      if (player) this.endAttack(id, player);
+      else this.attackTargets.delete(id);
     }
-    this.attackTargets.clear();
   }
 
   private updateMonsterAI(dt: number) {
