@@ -71,10 +71,6 @@ try {
 
   assert.equal(monster().alive,true);
   assert.ok(!inWall(monster()),"monster entered wall before the RRT test");
-  console.log("RRT TEST BEFORE RETARGET", {
-    monster:{x:monster().x,z:monster().z,targetId:monster().targetId},
-    eastPlayer:{x:a.state.players.get(b.sessionId)?.x,z:a.state.players.get(b.sessionId)?.z},
-  });
   assert.ok(Math.hypot(monster().x-9.2,monster().z-7)<6,
     "The unchanged 6-unit aggro radius must include the east-side target");
   await a.leave();
