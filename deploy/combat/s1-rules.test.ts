@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   RULES, CommandBucket, parseMoveCommand, parseAttackCommand,
   facingTo, planarDistance, stepTowards,
+  parsePlayerTargetCommand, parseDuelReplyCommand,
 } from "./GameRules.js";
 
 test("Only exact finite in-bounds tap destinations are accepted", () => {
@@ -56,4 +57,28 @@ test("Rate limiting rejects bursts beyond the token budget", () => {
   assert.equal(bucket.consume(250), true);
   assert.equal(bucket.consume(251), false);
   assert.equal(bucket.consume(1251), true);
+});
+
+test("PvP commands accept only valid session IDs and exact consent payloads", () => {
+  const targetId = "ggKwDJXRe";
+  assert.deepEqual(parsePlayerTargetCommand({ targetId }), { targetId });
+  assert.deepEqual(parseDuelReplyCommand({ targetId, accept: true }),
+    { targetId, accept: true });
+  assert.deepEqual(parseDuelReplyCommand({ targetId, accept: false }),
+    { targetId, accept: false });
+
+  for (const payload of [
+    null, { targetId: "" }, { targetId: 1 }, { targetId: "ab" },
+    { targetId, damage: 999999 }, { targetId, hp: 0 },
+    { targetId, speed: 300 }, { targetId, authorized: true },
+  ]) {
+    assert.equal(parsePlayerTargetCommand(payload), null);
+  }
+  for (const payload of [
+    { targetId, accept: "yes" }, { targetId, accept: 1 },
+    { targetId, accept: true, damage: 999 }, { targetId },
+    { targetId: "bad id", accept: true },
+  ]) {
+    assert.equal(parseDuelReplyCommand(payload), null);
+  }
 });
