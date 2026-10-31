@@ -527,6 +527,32 @@
       joined.onMessage("monster_respawn", () => {
         if (room === joined) toast("มอนสเตอร์ปรากฏตัวอีกครั้ง");
       });
+      joined.onMessage("pvp_hit", hit => {
+        if (room !== joined || !hit || typeof hit.targetId !== "string") return;
+        const victim = avatars.get(hit.targetId);
+        const attacker = avatars.get(hit.attackerId);
+        if (victim) victim.hitFlashUntil = performance.now() + 250;
+        if (attacker && victim) {
+          faceAvatarToward(hit.attackerId, victim.x, victim.z);
+        }
+        if (hit.targetId === localId) {
+          toast("ถูก " + shortPkName(hit.attackerId) + " โจมตี -" + hit.damage + " HP");
+        } else if (hit.attackerId === localId) {
+          toast("โจมตี " + shortPkName(hit.targetId) + " -" + hit.damage + " HP");
+        }
+        syncPKHud();
+      });
+      joined.onMessage("pvp_kill", info => {
+        if (room !== joined || !info) return;
+        const winner = shortPkName(info.winnerId);
+        const loser = shortPkName(info.loserId);
+        toast(info.winnerId === localId
+          ? "ชนะ Free PK! ปราบ " + loser
+          : info.loserId === localId
+            ? "แพ้ Free PK · รอเกิดใหม่"
+            : winner + " ปราบ " + loser);
+        syncPKHud();
+      });
       joined.onMessage("monster_hit", hit => {
         if (room === joined && hit?.targetId === localId) {
           toast("ถูกผีโจมตี -" + Number(hit.damage || 0) + " HP");
