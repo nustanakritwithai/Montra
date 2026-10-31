@@ -36,6 +36,18 @@ export const RULES = Object.freeze({
   pkAttackRange: 2.8,
   pkDamage: 12,
   pkCooldownMs: 1000,
+  // First summon prototype: one server-owned spirit guardian per player.
+  summonLimitPerPlayer: 1,
+  summonCooldownMs: 2500,
+  summonCommandBurst: 3,
+  summonCommandRatePerSecond: 2,
+  summonMoveSpeed: 3.8,
+  summonFollowDistance: 1.35,
+  summonLeashDistance: 7,
+  summonEngageDistance: 8,
+  summonAttackRange: 1.8,
+  summonAttackDamage: 8,
+  summonAttackCooldownMs: 1500,
 });
 
 export type Vec2 = { x: number; z: number };
@@ -77,6 +89,12 @@ export function parsePkTargetCommand(message: unknown): PkTargetCommand | null {
   if (typeof id !== "string" || !/^[A-Za-z0-9_-]{6,64}$/.test(id)) return null;
   if (id === RULES.monsterId) return null;
   return { targetId: id };
+}
+
+export function parseEmptyCommand(message: unknown): boolean {
+  // Never accept client-selected summons, positions, speed, damage or owner IDs.
+  return message !== null && typeof message === "object" &&
+    !Array.isArray(message) && Object.keys(message).length === 0;
 }
 
 export function planarDistance(a: Vec2, b: Vec2): number {

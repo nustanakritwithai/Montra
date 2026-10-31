@@ -85,6 +85,8 @@
   const friendMat = mat("friend character", "#6bb9c6", "#0b2530");
   const spiritMat = mat("friendly spirit", "#ad99e2", "#46337a");
   spiritMat.alpha = .8;
+  const otherGuardianMat = mat("allied spirit", "#68b7c8", "#216778");
+  otherGuardianMat.alpha = .8;
 
   const ground = B.MeshBuilder.CreateGround("walkableGround", { width: 40, height: 40 }, scene);
   ground.position.y = -0.12;
@@ -232,6 +234,60 @@
     avatars.delete(id);
   }
   function clearAvatars() { [...avatars.keys()].forEach(deleteAvatar); }
+
+  // Distinct server-owned 3D NPCs; ownerId matches the Colyseus session ID.
+  const summonAvatars = new Map();
+  function createSummonAvatar(ownerId, x, z) {
+    const parent = new B.TransformNode("guardian-" + ownerId, scene);
+    const body = B.MeshBuilder.CreateSphere("guardian-body-" + ownerId,
+      { diameter: 1.05, segments: 12 }, scene);
+    body.parent = parent;
+    body.position.y = .98;
+    body.scaling.set(.7, 1.08, .7);
+    body.material = ownerId === localId ? spiritMat : otherGuardianMat;
+    body.isPickable = false;
+
+    const aura = B.MeshBuilder.CreateTorus("guardian-aura-" + ownerId,
+      { diameter: 1.05, thickness: .06 }, scene);
+    aura.parent = parent;
+    aura.rotation.x = Math.PI / 2;
+    aura.position.y = .18;
+    aura.material = ownerId === localId ? spiritMat : otherGuardianMat;
+    aura.isPickable = false;
+
+    for (const side of [-1, 1]) {
+      const eye = B.MeshBuilder.CreateSphere("guardian-eye-" + ownerId,
+        { diameter: .13, segments: 6 }, scene);
+      eye.parent = parent;
+      eye.position.set(side * .19, 1.05, -.35);
+      eye.material = ownerId === localId ? gold : glowMat;
+      eye.isPickable = false;
+    }
+    parent.position.set(x, 0, z);
+    return {
+      node: parent, ownerId, x, z, targetX: x, targetZ: z,
+      facing: 0, desiredFacing: 0, action: "follow", hitUntil: 0
+    };
+  }
+  function deleteSummonAvatar(ownerId) {
+    const actor = summonAvatars.get(ownerId);
+    if (!actor) return;
+    actor.node.getChildMeshes().forEach(mesh => mesh.dispose());
+    actor.node.dispose();
+    summonAvatars.delete(ownerId);
+  }
+  function clearSummons() {
+    for (const id of [...summonAvatars.keys()]) deleteSummonAvatar(id);
+    updateSummonButton(false);
+  }
+  function updateSummonButton(summoned) {
+    const button = $("summon");
+    if (!button) return;
+    button.classList.toggle("summon-active", Boolean(summoned));
+    button.setAttribute("aria-pressed", String(Boolean(summoned)));
+    const title = button.querySelector("span:last-child");
+    if (title) title.textContent = summoned ? "เก็บผี" : "เรียกผี";
+  }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
   let selectedPkTargetId = null;
   let spiritShown = false, possessed = false, spirit = null;
@@ -331,13 +387,16 @@
   }
 
   function updateStatus() {
-    ui.onlineCount.textContent = mode === "live" ? `ผู้เล่นในฉาก: ${onlinePlayers.size} (ออนไลน์จริง)` : "ผู้เล่นในฉาก: 1 (จำลอง)";
+    ui.onlineCount.textContent = mode === "live"
+      ? `ผู้เล่นในฉาก: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} (LIVE)`
+      : "ผู้เล่นในฉาก: 1 (จำลอง)";
     setModeBadge(mode === "live");
   }
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo";
-    onlinePlayers.clear(); clearAvatars(); player = ensureAvatar("demo",true,0,0);
+    onlinePlayers.clear(); clearAvatars(); clearSummons();
+    player = ensureAvatar("demo",true,0,0);
     demoDest = null; resetDemoMonster();
     selectedPkTargetId = null;
     ui.pkPanel.hidden = true;
@@ -454,8 +513,41 @@
     if (selectedPkTargetId === id) selectedPkTargetId = null;
     updateStatus();
   }
+  function syncSummons(state) {
+    if (mode !== "live") return;
+    const synced = state?.summons;
+    if (!synced || typeof synced.forEach !== "function") {
+      clearSummons();
+      return;
+    }
+
+    const present = new Set();
+    synced.forEach((npc, ownerId) => {
+      const x = Number(npc.x), z = Number(npc.z);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+      present.add(ownerId);
+      let actor = summonAvatars.get(ownerId);
+      if (!actor) {
+        actor = createSummonAvatar(ownerId, x, z);
+        summonAvatars.set(ownerId, actor);
+      }
+      actor.targetX = x;
+      actor.targetZ = z;
+      actor.action = typeof npc.action === "string" ? npc.action : "follow";
+      const yaw = Number(npc.facing);
+      if (Number.isFinite(yaw)) actor.desiredFacing = yaw;
+    });
+
+    for (const id of [...summonAvatars.keys()]) {
+      if (!present.has(id)) deleteSummonAvatar(id);
+    }
+    updateSummonButton(summonAvatars.has(localId));
+    updateStatus();
+  }
+
   function syncState(state) {
     syncMonsterState(state);
+    syncSummons(state);
     const players = state?.players;
     if (!players || typeof players.forEach !== "function") return false;
     const seen = new Set();
@@ -493,7 +585,7 @@
       const joined = await client.joinOrCreate("my_room");
       room = joined;
       mode = "live"; localId = joined.sessionId;
-      clearAvatars(); demoDest = null;
+      clearAvatars(); clearSummons(); demoDest = null;
       onlinePlayers.clear(); enemy.setEnabled(false);
       selectedPkTargetId = null;
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
@@ -526,6 +618,28 @@
       });
       joined.onMessage("monster_respawn", () => {
         if (room === joined) toast("มอนสเตอร์ปรากฏตัวอีกครั้ง");
+      });
+      joined.onMessage("summon_spawn", notice => {
+        if (room !== joined) return;
+        if (notice?.ownerId === localId) toast("อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
+        syncSummons(joined.state);
+      });
+      joined.onMessage("summon_despawn", notice => {
+        if (room !== joined) return;
+        if (notice?.ownerId === localId) {
+          toast(notice.reason === "owner_dead"
+            ? "วิญญาณกลับภพเมื่อเจ้าของหมดสติ"
+            : "เก็บวิญญาณผู้พิทักษ์แล้ว");
+        }
+        syncSummons(joined.state);
+      });
+      joined.onMessage("summon_hit", hit => {
+        if (room !== joined || !hit) return;
+        const actor = summonAvatars.get(hit.ownerId);
+        if (actor) actor.hitUntil = performance.now() + 260;
+        if (hit.ownerId === localId) {
+          toast("วิญญาณโจมตีผี -" + String(hit.damage) + " HP");
+        }
       });
       joined.onMessage("pvp_hit", hit => {
         if (room !== joined || !hit || typeof hit.targetId !== "string") return;
@@ -575,6 +689,12 @@
         else if (info?.reason === "self_attack") toast("ไม่สามารถโจมตีตัวเองได้");
         else if (info?.reason === "target_unavailable") toast("เป้าหมายไม่อยู่ในห้องหรือไม่พร้อมต่อสู้");
         else if (info?.reason === "invalid_attack") toast("คำสั่งโจมตีไม่ถูกต้อง");
+        else if (info?.reason === "summon_limit") toast("เรียกวิญญาณพร้อมกันได้สูงสุด 1 ตัว");
+        else if (info?.reason === "summon_cooldown") toast("อัญเชิญเร็วเกินไป · รอคูลดาวน์");
+        else if (info?.reason === "summon_rate_limited") toast("กดเรียกวิญญาณถี่เกินไป");
+        else if (info?.reason === "invalid_summon" || info?.reason === "invalid_unsummon") {
+          toast("คำสั่งวิญญาณไม่ถูกต้อง");
+        }
       });
       // Colyseus 0.18 schema callbacks are the reliable way to subscribe to nested maps.
       try {
@@ -703,6 +823,10 @@
       ctx.fillStyle = id===localId ? "#ffda79":"#6de5df";
       ctx.beginPath();ctx.arc(sx(a.x),sy(a.z),large?6:3.5,0,Math.PI*2);ctx.fill();
     }
+    for (const [ownerId, npc] of summonAvatars) {
+      ctx.fillStyle = ownerId === localId ? "#cb97f1" : "#78d5e2";
+      ctx.beginPath(); ctx.arc(sx(npc.x), sy(npc.z), large ? 5 : 2.5, 0, Math.PI*2);ctx.fill();
+    }
     if(large) {
       ctx.font="12px system-ui";ctx.textAlign="center";ctx.fillStyle="#f9dda9";
       ctx.fillText("ศาลอาคม",sx(-4),sy(-2.5)-8);
@@ -736,13 +860,29 @@
   $("helpButton").onclick=openHelp;
   $("bag").onclick=openBag;
   $("summon").onclick=()=> {
-    if(mode==="live") { toast("วิญญาณออนไลน์จะเปิดในรุ่นถัดไป");return; }
+    if (mode === "live") {
+      if (!room?.state?.summons?.has) {
+        toast("เซิร์ฟเวอร์ยังไม่รองรับวิญญาณออนไลน์ · ติดตั้ง Summon บน VPS ก่อน");
+        return;
+      }
+      const owner = room.state?.players?.get?.(localId);
+      if (owner?.alive === false) { toast("ยังอัญเชิญไม่ได้ · รอเกิดใหม่"); return; }
+      const active = room.state.summons.has(localId);
+      try {
+        room.send(active ? "unsummon" : "summon", {});
+      } catch (err) {
+        console.error("MONTRA summon request failed", err);
+        toast("ส่งคำสั่งอัญเชิญไม่สำเร็จ");
+      }
+      return;
+    }
     spiritShown=!spiritShown;
     if (spiritShown) {
       spirit=B.MeshBuilder.CreateSphere("summoned guardian",{diameter:1.05,segments:12},scene);
       spirit.material=spiritMat;spirit.isPickable=false;
       toast("เรียกวิญญาณผู้พิทักษ์ (จำลอง)");
     } else { spirit?.dispose();spirit=null;toast("เก็บวิญญาณกลับแล้ว"); }
+    updateSummonButton(spiritShown);
   };
   $("possess").onclick=()=> {
     if(mode==="live") { toast("เข้าสิงออนไลน์จะเปิดในรุ่นถัดไป");return; }
@@ -833,6 +973,22 @@
       const flash = (a.hitFlashUntil || 0) > now;
       a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
       a.node.position.set(a.x, 0, a.z);
+    }
+    for (const npc of summonAvatars.values()) {
+      const blend = 1 - Math.exp(-dt * 12);
+      npc.x += (npc.targetX - npc.x) * blend;
+      npc.z += (npc.targetZ - npc.z) * blend;
+      const rotationDelta = Math.atan2(
+        Math.sin(npc.desiredFacing - npc.facing),
+        Math.cos(npc.desiredFacing - npc.facing)
+      );
+      npc.facing += rotationDelta * (1 - Math.exp(-dt * 10));
+      npc.node.rotation.y = npc.facing;
+      const bob = Math.sin(elapsed * 2.4 + npc.ownerId.length) * .09;
+      npc.node.position.set(npc.x, bob, npc.z);
+      const striking = npc.action === "attack" || npc.hitUntil > now;
+      const scale = striking ? 1.13 : 1;
+      npc.node.scaling.set(scale, scale, scale);
     }
     const me=getLocalAvatar();
     if(me) {

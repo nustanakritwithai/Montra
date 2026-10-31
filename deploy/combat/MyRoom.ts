@@ -1,5 +1,5 @@
 import { Room, type Client, type CloseCode } from "colyseus";
-import { MyRoomState, Player } from "./schema/MyRoomState.js";
+import { MyRoomState, Player, SummonedGuardian } from "./schema/MyRoomState.js";
 import {
   RULES,
   CommandBucket,
@@ -9,11 +9,12 @@ import {
   parseMoveCommand,
   parseAttackCommand,
   parsePkTargetCommand,
+  parseEmptyCommand,
   planarDistance,
   stepTowards,
 } from "./GameRules.js";
 
-type Gates = { move: CommandBucket; attack: CommandBucket };
+type Gates = { move: CommandBucket; attack: CommandBucket; summon: CommandBucket };
 
 /**
  * MONTRA S1: one 20-Hz authoritative simulation per room.
@@ -42,6 +43,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
   private monsterReturning = false;
+
+  // All guardian state lives on the server; no client may select NPC stats.
+  private lastSummonAt = new Map<string, number>();
+  private lastSummonAttackAt = new Map<string, number>();
 
   messages = {
     move: (client: Client, message: unknown) => {
@@ -97,7 +102,186 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         attacker.combatState = "attacking";
       }
     },
+
+    summon: (client: Client, message: unknown) => {
+      const id = client.sessionId;
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_summon");
+      const owner = this.state.players.get(id);
+      if (!owner || !owner.alive) return this.reject(client, "not_alive");
+      if (this.state.summons.has(id)) return this.reject(client, "summon_limit");
+      if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) {
+        return this.reject(client, "summon_rate_limited");
+      }
+      const last = this.lastSummonAt.get(id) ?? -Infinity;
+      if (this.simulatedMs - last < RULES.summonCooldownMs) {
+        return this.reject(client, "summon_cooldown");
+      }
+      this.lastSummonAt.set(id, this.simulatedMs);
+
+      const guardian = new SummonedGuardian({
+        ownerId: id, kind: "guardian",
+        x: clampToMap(owner.x - 1.1), y: 0, z: clampToMap(owner.z + 0.9),
+        facing: owner.facing, action: "follow", targetId: "",
+      });
+      this.state.summons.set(id, guardian);
+      this.lastSummonAttackAt.delete(id);
+      this.broadcast("summon_spawn", { ownerId: id, kind: "guardian" },
+        { afterNextPatch: true });
+    },
+
+    unsummon: (client: Client, message: unknown) => {
+      const id = client.sessionId;
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_unsummon");
+      if (!this.state.summons.has(id)) return this.reject(client, "no_summon");
+      if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) {
+        return this.reject(client, "summon_rate_limited");
+      }
+      this.despawnSummon(id, "dismissed");
+    },
   };
+
+  private despawnSummon(ownerId: string, reason: string) {
+    if (!this.state.summons.has(ownerId)) return;
+    this.state.summons.delete(ownerId);
+    this.lastSummonAttackAt.delete(ownerId);
+    this.broadcast("summon_despawn", { ownerId, reason },
+      { afterNextPatch: true });
+  }
+
+  private findSummonTarget(ownerId: string, owner: Player) {
+    const intended = this.attackTargets.get(ownerId);
+    const candidates: string[] = [];
+    if (intended) candidates.push(intended);
+
+    // A guardian defends its owner when another player is actively attacking.
+    // It does not randomly attack neutral people in this Free PK world.
+    for (const [otherId, targetId] of this.attackTargets) {
+      if (otherId !== ownerId && targetId === ownerId) candidates.push(otherId);
+    }
+    if (this.state.monster.targetId === ownerId) candidates.push(RULES.monsterId);
+
+    for (const targetId of candidates) {
+      if (targetId === ownerId) continue;
+      const target = targetId === RULES.monsterId
+        ? this.state.monster : this.state.players.get(targetId);
+      if (!target || !target.alive) continue;
+      // Guard's combat tether prevents hits across the map even if another
+      // client sends a valid but distant target ID.
+      if (planarDistance(owner, target) > RULES.summonEngageDistance) continue;
+      return { targetId, target };
+    }
+    return null;
+  }
+
+  private updateSummons(dt: number) {
+    for (const [ownerId, guardian] of [...this.state.summons]) {
+      const owner = this.state.players.get(ownerId);
+      if (!owner || !owner.alive) {
+        this.despawnSummon(ownerId, "owner_unavailable");
+        continue;
+      }
+
+      const distanceToOwner = planarDistance(guardian, owner);
+      const candidate = distanceToOwner <= RULES.summonLeashDistance
+        ? this.findSummonTarget(ownerId, owner) : null;
+
+      if (candidate) {
+        const { targetId, target } = candidate;
+        const dx = target.x - guardian.x;
+        const dz = target.z - guardian.z;
+        const distance = Math.hypot(dx, dz);
+        guardian.targetId = targetId;
+        if (distance > 0.001) guardian.facing = facingTo(dx, dz);
+
+        if (distance <= RULES.summonAttackRange) {
+          guardian.action = "attack";
+          this.trySummonAttack(ownerId, guardian, targetId);
+        } else {
+          guardian.action = "chase";
+          const next = stepTowards(
+            guardian, target, RULES.summonMoveSpeed * dt
+          );
+          guardian.x = clampToMap(next.x);
+          guardian.z = clampToMap(next.z);
+        }
+        continue;
+      }
+
+      // Follow the owner on the left side, rather than standing at spawn.
+      // All positions and animation states are resolved by fixed server ticks.
+      guardian.targetId = "";
+      const desired = {
+        x: clampToMap(owner.x - 1.0),
+        z: clampToMap(owner.z + 0.85),
+      };
+      const dx = desired.x - guardian.x;
+      const dz = desired.z - guardian.z;
+      const distance = Math.hypot(dx, dz);
+      guardian.action = "follow";
+      if (distance > RULES.summonFollowDistance) {
+        const next = stepTowards(
+          guardian, desired, RULES.summonMoveSpeed * dt
+        );
+        guardian.x = clampToMap(next.x);
+        guardian.z = clampToMap(next.z);
+        if (next.moved) guardian.facing = facingTo(dx, dz);
+      } else {
+        guardian.facing = owner.facing;
+      }
+    }
+  }
+
+  private trySummonAttack(ownerId: string, guardian: SummonedGuardian, targetId: string) {
+    const owner = this.state.players.get(ownerId);
+    const sameGuardian = this.state.summons.get(ownerId) === guardian;
+    if (!owner || !owner.alive || !sameGuardian) return;
+
+    const isMonster = targetId === RULES.monsterId;
+    const target = isMonster
+      ? this.state.monster : this.state.players.get(targetId);
+    if (!target || !target.alive || targetId === ownerId) return;
+    if (planarDistance(owner, target) > RULES.summonEngageDistance) return;
+    if (planarDistance(guardian, target) > RULES.summonAttackRange + 0.00001) return;
+
+    const last = this.lastSummonAttackAt.get(ownerId) ?? -Infinity;
+    if (this.simulatedMs - last < RULES.summonAttackCooldownMs) return;
+    this.lastSummonAttackAt.set(ownerId, this.simulatedMs);
+    guardian.hitSeq += 1;
+
+    if (isMonster) {
+      const monster = this.state.monster;
+      monster.hp = Math.max(0, monster.hp - RULES.summonAttackDamage);
+      monster.hitSeq += 1;
+      this.broadcast("summon_hit", {
+        ownerId, summonId: ownerId, targetId,
+        damage: RULES.summonAttackDamage, hp: monster.hp,
+        hitSeq: guardian.hitSeq,
+      }, { afterNextPatch: true });
+      if (monster.hp === 0) this.killMonster();
+      return;
+    }
+
+    // Summon can help in Free PK only when its owner selected or was attacked
+    // by this opponent. Damage/kill attribution belongs to the owner.
+    const victim = target as Player;
+    victim.hp = Math.max(0, victim.hp - RULES.summonAttackDamage);
+    victim.hitSeq += 1;
+    this.broadcast("pvp_hit", {
+      attackerId: ownerId, source: "summon", summonOwnerId: ownerId,
+      targetId, damage: RULES.summonAttackDamage,
+      hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
+    }, { afterNextPatch: true });
+    if (victim.hp === 0) {
+      owner.pkKills += 1;
+      victim.pkDeaths += 1;
+      this.knockoutPlayer(targetId, "pk", ownerId);
+      this.broadcast("pvp_kill", {
+        winnerId: ownerId, loserId: targetId,
+        source: "summon",
+        kills: owner.pkKills, deaths: victim.pkDeaths,
+      }, { afterNextPatch: true });
+    }
+  }
 
   private reject(client: Client, reason: string) {
     // Avoid amplifying floods with unlimited rejection responses.
@@ -132,6 +316,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updatePlayerMovement(dt);
     this.updateMonsterAI(dt);
     this.updatePlayerAttacks();
+    this.updateSummons(dt);
   }
 
   private updatePlayerMovement(dt: number) {
@@ -265,6 +450,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     victim.alive = false;
     victim.combatState = "dead";
     victim.targetId = "";
+    this.despawnSummon(id, "owner_dead");
     this.destinations.delete(id);
     this.attackTargets.delete(id);
     this.playerRespawnAt.set(id, this.simulatedMs + RULES.playerRespawnMs);
@@ -452,12 +638,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.gates.set(client.sessionId, {
       move: new CommandBucket(RULES.moveBurst, RULES.moveRatePerSecond, this.simulatedMs),
       attack: new CommandBucket(RULES.attackBurst, RULES.attackRatePerSecond, this.simulatedMs),
+      summon: new CommandBucket(
+        RULES.summonCommandBurst, RULES.summonCommandRatePerSecond, this.simulatedMs
+      ),
     });
     console.log("MONTRA S1 join:", client.sessionId, "room", this.roomId);
   }
 
   onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    this.despawnSummon(id, "owner_left");
+    this.lastSummonAt.delete(id);
     this.destinations.delete(id);
     this.attackTargets.delete(id);
     this.lastAttackMs.delete(id);
@@ -485,6 +676,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.playerSpawn.clear();
     this.gates.clear();
     this.lastRejectNoticeMs.clear();
-    console.log("MONTRA S1 room disposed:", this.roomId);
+    this.lastSummonAt.clear();
+    this.lastSummonAttackAt.clear();
+    this.state.summons.clear();
+    console.log("MONTRA Summon room disposed:", this.roomId);
   }
 }

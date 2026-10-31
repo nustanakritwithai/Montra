@@ -161,3 +161,11 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   line-height: 1.4;
 }
 @media(max-height:640px) { .pk-panel { top: 240px; } }
+
+
+/* Ownable, replicated spirit companion. Active button follows server state. */
+#summon.summon-active .glyph {
+  box-shadow: 0 0 0 2px rgba(189,147,243,.72), 0 0 18px rgba(149,102,238,.55);
+  border-radius: 11px;
+}
+#summon.summon-active { color: #e6ccff; }

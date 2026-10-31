@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  RULES, CommandBucket, parseMoveCommand, parseAttackCommand, parsePkTargetCommand,
+  RULES, CommandBucket, parseMoveCommand, parseAttackCommand, parsePkTargetCommand, parseEmptyCommand,
   facingTo, planarDistance, stepTowards,
 } from "./GameRules.js";
 
@@ -72,4 +72,18 @@ test("Free PK messages accept only exact server-shaped player targets", () => {
   ]) {
     assert.equal(parsePkTargetCommand(bad), null);
   }
+});
+
+test("Summon commands reject all forged owner IDs, kinds, positions and damage", () => {
+  assert.equal(parseEmptyCommand({}), true);
+  for (const invalid of [
+    null, undefined, [], 0, "", { ownerId: "someone-else" },
+    { x: 7, z: 9 }, { damage: 99999 }, { hp: 1 },
+    { speed: 1000 }, { kind: "dragon" }, { cooldownMs: 0 },
+    { ownerId: "another", kind: "guardian" },
+  ]) {
+    assert.equal(parseEmptyCommand(invalid), false);
+  }
+  assert.equal(RULES.summonLimitPerPlayer, 1);
+  assert.ok(RULES.summonAttackDamage < RULES.playerAttackDamage);
 });

@@ -40,9 +40,28 @@ export const Monster = schema({
 
 export type Monster = SchemaType<typeof Monster>;
 
+/**
+ * Each summon belongs to one room session and is replicated to every player.
+ * Map key is the authoritative owner's Colyseus sessionId.
+ */
+export const SummonedGuardian = schema({
+  ownerId: t.string().default(""),
+  kind: t.string().default("guardian"),
+  x: t.number().default(0),
+  y: t.number().default(0),
+  z: t.number().default(0),
+  facing: t.number().default(0),
+  action: t.string().default("follow"), // follow|chase|attack
+  targetId: t.string().default(""),
+  hitSeq: t.number().default(0),
+}, "MontraSummonedGuardian");
+
+export type SummonedGuardian = SchemaType<typeof SummonedGuardian>;
+
 export const MyRoomState = schema({
   players: t.map(Player),
   monster: Monster,
+  summons: t.map(SummonedGuardian),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;
