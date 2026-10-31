@@ -8,6 +8,7 @@ import {
   facingTo,
   parseMoveCommand,
   parseAttackCommand,
+  parsePkTargetCommand,
   planarDistance,
   stepTowards,
 } from "./GameRules.js";
@@ -60,30 +61,40 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
 
     attack: (client: Client, message: unknown) => {
-      const order = parseAttackCommand(message);
-      if (!order) return this.reject(client, "invalid_attack");
-      const player = this.state.players.get(client.sessionId);
-      if (!player || !player.alive) return this.reject(client, "not_alive");
-      if (!this.gates.get(client.sessionId)?.attack.consume(this.simulatedMs)) {
+      const monsterOrder = parseAttackCommand(message);
+      const pkOrder = monsterOrder ? null : parsePkTargetCommand(message);
+      if (!monsterOrder && !pkOrder) return this.reject(client, "invalid_attack");
+
+      const attackerId = client.sessionId;
+      const attacker = this.state.players.get(attackerId);
+      if (!attacker || !attacker.alive) return this.reject(client, "not_alive");
+      if (!this.gates.get(attackerId)?.attack.consume(this.simulatedMs)) {
         return this.reject(client, "attack_rate_limited");
       }
-      const monster = this.state.monster;
-      if (!monster.alive) {
-        client.send("combat_notice", { reason: "monster_down" });
-        return;
+
+      // Only the server-issued session ID of ANOTHER live player in the
+      // same room is eligible for PK. No duel agreement is required.
+      const targetId = monsterOrder ? RULES.monsterId : pkOrder!.targetId;
+      if (targetId === attackerId) return this.reject(client, "self_attack");
+      const target = monsterOrder
+        ? (this.state.monster.alive ? this.state.monster : undefined)
+        : this.state.players.get(targetId);
+
+      if (!target || !target.alive) {
+        return this.reject(client, monsterOrder ? "monster_down" : "target_unavailable");
       }
 
-      // Selecting an enemy from far away NEVER causes remote damage:
-      // the player must physically enter attack range during server ticks.
-      this.destinations.delete(client.sessionId);
-      this.attackTargets.set(client.sessionId, order.targetId);
-      player.targetId = order.targetId;
+      // Tap to attack: cancel manual travel, then follow the target each tick.
+      this.destinations.delete(attackerId);
+      this.attackTargets.set(attackerId, targetId);
+      attacker.targetId = targetId;
 
-      if (planarDistance(player, monster) > RULES.playerAttackRange) {
-        player.combatState = "approaching";
+      const attackRange = monsterOrder ? RULES.playerAttackRange : RULES.pkAttackRange;
+      if (planarDistance(attacker, target) > attackRange) {
+        attacker.combatState = "approaching";
         client.send("combat_notice", { reason: "approaching" });
       } else {
-        player.combatState = "attacking";
+        attacker.combatState = "attacking";
       }
     },
   };
