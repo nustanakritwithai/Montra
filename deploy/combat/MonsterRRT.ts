@@ -171,7 +171,7 @@ export function planMonsterRRT(
      !isMonsterFree(goal,obstacles,radius,bounds))return fail();
 
   if(isMonsterSegmentClear(start,goal,obstacles,radius,bounds)){
-    return {path:[{...start},{...goal}],found:true,iterations:0,nodes:2,direct:true};
+    return {path:[{x:start.x,z:start.z},{x:goal.x,z:goal.z}],found:true,iterations:0,nodes:2,direct:true};
   }
 
   const step=Math.max(.25,options.step??MONSTER_NAV.step);
@@ -182,7 +182,7 @@ export function planMonsterRRT(
   const cornerBias=Math.min(1-goalBias-corridorBias,
     Math.max(0,options.cornerBias??MONSTER_NAV.cornerBias));
   const rand=seededRandom(options.seed??71);
-  const nodes:{p:Vec2;parent:number}[]=[{p:{...start},parent:-1}];
+  const nodes:{p:Vec2;parent:number}[]=[{p:{x:start.x,z:start.z},parent:-1}];
   let end=-1,used=0;
 
   for(let k=0;k<iterations;k++){
@@ -190,7 +190,7 @@ export function planMonsterRRT(
     let sample:Vec2;
     const choice=rand();
     if(choice<goalBias){
-      sample=goal;
+      sample={x:goal.x,z:goal.z};
     }else if(choice<goalBias+corridorBias){
       const t=rand();
       const center={
@@ -227,7 +227,7 @@ export function planMonsterRRT(
 
     if(distanceXZ(next,goal)<step*1.5 &&
        isMonsterSegmentClear(next,goal,obstacles,radius,bounds)){
-      nodes.push({p:{...goal},parent:nodes.length-1});
+      nodes.push({p:{x:goal.x,z:goal.z},parent:nodes.length-1});
       end=nodes.length-1;
       break;
     }
@@ -304,10 +304,15 @@ export class MonsterRRTNavigator {
         Math.imul(Math.round(position.z*17)+4093,6542989)^
         Math.imul(Math.floor(serverNowMs/MONSTER_NAV.replanMs)+1,357239)
       )>>>0;
-      const result=planMonsterRRT(position,goal,{seed});
+      // Colyseus Schema 5 exposes x/z via getters/internal Symbols. Spreading
+      // a Schema instance ({...goal}) does NOT copy those coordinates.
+      // Convert at the planner boundary to ordinary numeric waypoints.
+      const from={x:position.x,z:position.z};
+      const destination={x:goal.x,z:goal.z};
+      const result=planMonsterRRT(from,destination,{seed});
       this.route={
         intent,
-        goal:{...goal},
+        goal:{x:goal.x,z:goal.z},
         waypoints:result.path,
         index:1,
         plannedAt:serverNowMs,
