@@ -147,7 +147,9 @@ try {
   a.send("climb",{structureId:"watchwall-1",direction:"down"});
   await until(()=>rooms.every(r=>Math.abs(p(r,aId)?.y)<.025),4900,
     "authorized descent");
-  assert.ok(finishEvents.some(e=>e.playerId===aId&&e.height===0));
+  // afterNextPatch messages can arrive just after the state patch on CI.
+  await until(()=>finishEvents.some(e=>e.playerId===aId&&e.height===0),
+    1800,"climb_finished descends event after state sync");
   await until(()=>Math.abs(a.state.summons.get(aId)?.y)<1.1,
     3500,"spirit follows owner down");
   console.log("PASS: legal ladder descent and guardian altitude follow synchronized");
