@@ -21,6 +21,7 @@ async function until(check, timeout, label) {
 const clients = Array.from({ length: 4 }, () => new Client(url));
 const rooms = [];
 let leftD = false;
+let disconnectedRoom = null;
 try {
   const a = await clients[0].create("my_room");
   rooms.push(a);
@@ -130,6 +131,7 @@ try {
   await sleep(150);
   await d.leave();
   leftD = true;
+  disconnectedRoom = d;
   await until(() => player(cId)?.targetId === "" && !player(dId),
     3500, "dead session target cleanup");
   console.log("PASS: opponent disconnect cleans up PK target and movement");
@@ -142,7 +144,7 @@ try {
   for(const room of rooms.reverse()) {
     // The disconnected client already left during the test. Calling
     // room.leave() twice can leave a pending promise/socket on Colyseus 0.18.
-    if (room === rooms.find(r => r.sessionId === dId) && leftD) continue;
+    if (room === disconnectedRoom && leftD) continue;
     try { await room.leave(); } catch (_) {}
   }
 }
