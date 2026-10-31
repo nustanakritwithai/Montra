@@ -80,3 +80,44 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .offline-banner { border-left:3px solid #f1b761; padding:10px 12px; background:#4c392452; border-radius:6px; margin:12px 0; }
 @media(max-height:640px){.quest{top:92px}.tap-tip{bottom:160px}.skill-bar{margin-bottom:6px}.glyph{height:46px;width:46px}.controls{bottom:20px}.online-count{top:128px}}
 @media(min-width:700px){#game{max-width:none}.identity{width:270px}.mini-map{width:122px;height:122px}.quest{top:120px}.tap-tip{bottom:177px}}
+
+/* MONTRA online combat: shared boss HP fed by authoritative server state. */
+.monster-status {
+  position:absolute;
+  z-index:3;
+  top:185px;
+  left:12px;
+  width:min(68vw,310px);
+  padding:10px 11px;
+  border-radius:12px;
+  pointer-events:none;
+}
+.monster-status[hidden] { display:none; }
+.monster-heading {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  font-size:11px;
+  font-weight:700;
+  color:#facbba;
+}
+.monster-heading strong { white-space:nowrap; color:#ffe5d5; font-size:10px; }
+.monster-hp-track {
+  margin-top:7px;
+  width:100%;
+  height:9px;
+  background:#24161a;
+  border:1px solid #8d5655;
+  border-radius:999px;
+  overflow:hidden;
+}
+#monsterBar {
+  width:100%;
+  height:100%;
+  background:linear-gradient(90deg,#a7323c,#f07865);
+  border-radius:999px;
+  transition:width .15s ease;
+}
+#monsterHint { display:block; margin-top:5px; color:#c9c8c1; font-size:10px; }
+@media(max-height:640px) { .monster-status { top:164px; } }
