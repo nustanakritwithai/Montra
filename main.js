@@ -572,6 +572,9 @@
         if (room !== joined) return;
         if (info?.reason === "not_alive") toast("ยังสั่งเดินหรือโจมตีไม่ได้");
         else if (info?.reason === "attack_rate_limited") toast("สั่งโจมตีถี่เกินไป");
+        else if (info?.reason === "self_attack") toast("ไม่สามารถโจมตีตัวเองได้");
+        else if (info?.reason === "target_unavailable") toast("เป้าหมายไม่อยู่ในห้องหรือไม่พร้อมต่อสู้");
+        else if (info?.reason === "invalid_attack") toast("คำสั่งโจมตีไม่ถูกต้อง");
       });
       // Colyseus 0.18 schema callbacks are the reliable way to subscribe to nested maps.
       try {
@@ -640,14 +643,24 @@
     const px = event.clientX - rect.left;
     const py = event.clientY - rect.top;
     if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
-    // Monster receives tap priority over the ground behind its model.
-    const monsterHit = enemy.isEnabled() && scene.pick(px, py, mesh => mesh === enemy);
-    if (monsterHit?.hit) {
+    // One depth-sorted pick: remote players, the monster or ground.
+    // Never attack people through walls/terrain merely because they overlap
+    // the screen projection (alpha map currently has no solid obstacles).
+    const picked = scene.pick(px, py, mesh =>
+      mesh.metadata?.walkable === true ||
+      (mesh === enemy && enemy.isEnabled()) ||
+      (mode === "live" && mesh.metadata?.pkPlayerId &&
+       mesh.metadata.pkPlayerId !== localId)
+    );
+    if (!picked?.hit) return;
+    const otherId = picked.pickedMesh?.metadata?.pkPlayerId;
+    if (otherId && mode === "live") {
+      tapPlayerForPK(otherId);
+    } else if (picked.pickedMesh === enemy) {
       requestMonsterAttack();
-      return;
+    } else if (picked.pickedMesh?.metadata?.walkable && picked.pickedPoint) {
+      pointMove(picked.pickedPoint.x, picked.pickedPoint.z);
     }
-    const picked = scene.pick(px,py,mesh => mesh.metadata?.walkable === true);
-    if (picked?.hit && picked.pickedPoint) pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
   });
   ui.world.addEventListener("pointercancel",()=> { pointer=null; });
   ui.world.addEventListener("wheel",e=> { e.preventDefault(); camera.radius=Math.max(15,Math.min(29,camera.radius + Math.sign(e.deltaY))); },{passive:false});
@@ -737,7 +750,13 @@
     heroMat.emissiveColor = B.Color3.FromHexString(possessed?"#7c459b":"#2c190b");
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
-  $("attack").onclick = requestMonsterAttack;
+  $("attack").onclick = () => {
+    if (mode === "live" && room && selectedPkTargetId) {
+      tapPlayerForPK(selectedPkTargetId);
+    } else {
+      requestMonsterAttack();
+    }
+  };
 
   let elapsed=0;
   engine.runRenderLoop(() => {
@@ -811,6 +830,8 @@
       );
       a.heading += angleDelta * (1 - Math.exp(-dt * 11));
       a.node.rotation.y = a.heading;
+      const flash = (a.hitFlashUntil || 0) > now;
+      a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
       a.node.position.set(a.x, 0, a.z);
     }
     const me=getLocalAvatar();
