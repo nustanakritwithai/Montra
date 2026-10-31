@@ -25,6 +25,7 @@ jobs:
           mkdir -p combat-verify/src/rooms/schema
           cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
           cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
+          cp deploy/combat/GameRules.ts combat-verify/src/rooms/GameRules.ts
           cp deploy/combat/smoke-test.mjs combat-verify/smoke-test.mjs
           cat > combat-verify/src/index.ts <<'EOF'
           import { defineServer, defineRoom } from "colyseus";
