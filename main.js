@@ -762,6 +762,7 @@
     });
     for (const id of onlinePlayers.keys()) if (!seen.has(id)) removeOnlinePlayer(id);
     syncPKHud();
+    syncClimbButton();
     return true;
   }
   let syncPoll = null;
@@ -797,6 +798,7 @@
       selectedPkTargetId = null;
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
       ui.monsterStatus.hidden = true;
+      syncFortification(joined.state);
       if (spirit) { spirit.dispose(); spirit = null; }
       spiritShown = false; possessed = false;
       updateStatus();
@@ -825,6 +827,28 @@
       });
       joined.onMessage("monster_respawn", () => {
         if (room === joined) toast("มอนสเตอร์ปรากฏตัวอีกครั้ง");
+      });
+      joined.onMessage("climb_started", notice => {
+        if (room!==joined)return;
+        if (notice?.playerId===localId) {
+          toast(notice.direction==="up"?"กำลังปีนขึ้นกำแพง":"กำลังไต่ลงกำแพง");
+          pendingClimb=null;
+        }
+        syncClimbButton();
+      });
+      joined.onMessage("climb_finished", notice => {
+        if(room!==joined)return;
+        if(notice?.playerId===localId) {
+          toast(Number(notice.height)>1?"ขึ้นถึงยอดกำแพงแล้ว · ยิงจากที่สูงได้":"ลงถึงพื้นแล้ว");
+        }
+        syncClimbButton();
+      });
+      joined.onMessage("ranged_hit", data => {
+        if(room!==joined)return;
+        renderMagicBolt(data);
+        if(data?.attackerId===localId) {
+          toast("ยิงอาคมโดนเป้าหมาย -" + data.damage + " HP");
+        }
       });
       joined.onMessage("summon_spawn", notice => {
         if (room !== joined) return;
@@ -899,6 +923,15 @@
         else if (info?.reason === "summon_limit") toast("เรียกวิญญาณพร้อมกันได้สูงสุด 1 ตัว");
         else if (info?.reason === "summon_cooldown") toast("อัญเชิญเร็วเกินไป · รอคูลดาวน์");
         else if (info?.reason === "summon_rate_limited") toast("กดเรียกวิญญาณถี่เกินไป");
+        else if (info?.reason === "shot_out_of_range") toast("เป้าหมายอยู่นอกระยะยิง");
+        else if (info?.reason === "shot_blocked") toast("กำแพงบังแนวกระสุนอาคม");
+        else if (info?.reason === "shot_cooldown") toast("รอพลังยิงอาคมอีกครู่");
+        else if (info?.reason === "climbing") toast("ยังโจมตีหรือเดินไม่ได้ขณะปีน");
+        else if (info?.reason === "ladder_too_far") toast("เดินเข้าหาบันไดก่อนปีน");
+        else if (info?.reason === "melee_height_blocked") toast("โจมตีประชิดข้ามระดับความสูงไม่ได้ · ใช้ยิงอาคม");
+        else if (info?.reason === "must_descend") toast("ต้องลงบันไดก่อนเดินไปพื้นด้านล่าง");
+        else if (info?.reason === "invalid_climb") toast("คำสั่งปีนกำแพงไม่ถูกต้อง");
+        else if (info?.reason === "invalid_shoot") toast("คำสั่งยิงอาคมไม่ถูกต้อง");
         else if (info?.reason === "invalid_summon" || info?.reason === "invalid_unsummon") {
           toast("คำสั่งวิญญาณไม่ถูกต้อง");
         }
