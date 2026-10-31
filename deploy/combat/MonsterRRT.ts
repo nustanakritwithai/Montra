@@ -29,9 +29,10 @@ export const MONSTER_NAV = Object.freeze({
   bounds: { minX:-RULES.mapLimit, maxX:RULES.mapLimit,
     minZ:-RULES.mapLimit, maxZ:RULES.mapLimit },
   step: 1.8,
-  iterations: 900,         // Slow RRT planning is acceptable for a single monster.
+  iterations: 1400,        // The user prioritizes reliable detours over fast planning.
   goalBias: 0.20,
-  corridorBias: 0.53,
+  corridorBias: 0.45,
+  cornerBias: 0.22,        // Sample around solid corners to escape narrow detours.
   replanMs: 1300,          // DO NOT run RRT on every 50ms simulation tick.
   goalShift: 1.0,          // Replan if a moving target shifts significantly.
   waypointRadius: 0.18,
@@ -154,6 +155,7 @@ export function planMonsterRRT(
     step?:number;
     goalBias?:number;
     corridorBias?:number;
+    cornerBias?:number;
     radius?:number;
     obstacles?:readonly WallRect[];
     bounds?:NavigationBounds;
@@ -177,6 +179,8 @@ export function planMonsterRRT(
   const goalBias=Math.min(1,Math.max(0,options.goalBias??MONSTER_NAV.goalBias));
   const corridorBias=Math.min(1-goalBias,
     Math.max(0,options.corridorBias??MONSTER_NAV.corridorBias));
+  const cornerBias=Math.min(1-goalBias-corridorBias,
+    Math.max(0,options.cornerBias??MONSTER_NAV.cornerBias));
   const rand=seededRandom(options.seed??71);
   const nodes:{p:Vec2;parent:number}[]=[{p:{...start},parent:-1}];
   let end=-1,used=0;
@@ -195,6 +199,15 @@ export function planMonsterRRT(
       };
       sample=sampleDisk(rand,center,
         Math.max(step*2,2+distanceXZ(start,goal)*.38));
+    }else if(choice<goalBias+corridorBias+cornerBias&&obstacles.length){
+      // Goal/corridor-only RRT can waste its budget against a long wall.
+      // Bias a portion of samples toward expanded wall corners, but the
+      // actual connections remain RRT nearest-neighbor swept-collision safe.
+      const w=obstacles[Math.floor(rand()*obstacles.length)];
+      const clearance=radius+Math.max(.55,step*.65);
+      const cx=rand()<.5 ? w.x-clearance : w.x+w.width+clearance;
+      const cz=rand()<.5 ? w.z-clearance : w.z+w.length+clearance;
+      sample=sampleDisk(rand,{x:cx,z:cz},step*.28);
     }else{
       sample={
         x:bounds.minX+rand()*(bounds.maxX-bounds.minX),
