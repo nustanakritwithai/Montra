@@ -232,6 +232,7 @@
   let player = ensureAvatar("demo",true,0,0);
   const MONSTER_ID = "possessed-1";
   let monsterReady = false;
+  let serverMonsterFacing = null;
   let demoMonsterHp = 100;
   let demoRespawnAt = 0;
   let demoLastHitAt = -Infinity;
@@ -282,6 +283,8 @@
     const x = Number(monster.x), z = Number(monster.z);
     if (Number.isFinite(x)) enemy.position.x = x;
     if (Number.isFinite(z)) enemy.position.z = z;
+    const newFacing = Number(monster.facing);
+    serverMonsterFacing = Number.isFinite(newFacing) ? newFacing : null;
     enemy.setEnabled(alive);
     const seq = Number(monster.hitSeq);
     if (Number.isFinite(seq) && seq > lastMonsterHitSeq) hitFlashRemaining = .22;
@@ -697,6 +700,12 @@
       target.z += (me.z + 1.5 - target.z) * follow;
     }
     enemy.position.y=.9+Math.sin(elapsed*1.8)*.07;
+    // Monster orientation also comes from the server's AI decision.
+    if (mode === "live" && Number.isFinite(serverMonsterFacing)) {
+      const turn = Math.atan2(Math.sin(serverMonsterFacing - enemy.rotation.y),
+                              Math.cos(serverMonsterFacing - enemy.rotation.y));
+      enemy.rotation.y += turn * (1 - Math.exp(-dt * 9));
+    }
     hitFlashRemaining = Math.max(0, hitFlashRemaining - dt);
     enemy.scaling.y = hitFlashRemaining > 0 ? 1.3 : 1.1;
     if(spirit && me) { spirit.position.set(me.x-1.2,1.5+Math.sin(elapsed*3)*.2,me.z+.8); }
