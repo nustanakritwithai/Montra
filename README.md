@@ -19,12 +19,16 @@ MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the
 - **Alpha 0.2.3 — server-authoritative Dash:** quick directional swipe anywhere on the bottom existing skill/nav menu triggers dash with no new button. Camera-relative direction only; Colyseus validates a unit vector, moves at 13.5 units/s for up to 4.5 units, 1.8s cooldown, swept wall/map/platform collision at 20Hz, forbids dash during climbing/death, and syncs all players. Old servers are detected by `dashAvailable`; browser DEMO simulates dash locally, LIVE requires installing the updated VPS build.
 - **Alpha 0.2.4 — high overhead camera/raised swipe zone:** farther bird's-eye mobile view and expanded invisible swipe-dash region above the existing bottom skills.
 - **Alpha 0.2.5 — server-owned 6m flight:** button toggles a 6m airborne layer from ground or the existing walkable 4m watchwall; tap to move horizontally while flying and descend safely to 4m wall crest or 0m ground. Landing into the solid wall is rejected. Vertical speed is limited to 4m/s at 20Hz, and flight cannot stack with dash/climb. Preserves the original 3 Guest character files and v1 save format; saved Y=6 resumes as flight after Node restart. DEMO works in browser; LIVE requires the updated Windows VPS build.
-- **Still not complete:** password-backed accounts, permanent inventory/trading, XP earning/level progression, multi-node shared storage and Windows auto-start. This S2 code does NOT update the running VPS until the safe installer is executed.
+- **Alpha 0.2.6 — permanent 12-slot inventory + small health potions:** each Guest character save owns 12 server-owned item slots. Grant three `health_potion` items to existing/new characters **exactly once**, restored independently for slots 1–3. The potion heals up to 30 real HP with a 1s cooldown; the server validates item selection and persists the decremented count **before** acknowledging use. Legacy save JSON is upgraded atomically in place with no ID migration. Mobile bag supports tap-to-select and use; offline DEMO inventory is never persisted.
+- **Still not complete:** password-backed accounts, shops, trading, loot, equipment, XP earning/level progression, multi-node shared storage and Windows auto-start. Changes in GitHub do NOT update the live VPS until safely installed.
 
-**Code pushed to GitHub does not change the live Windows VPS automatically.** To enable LIVE dash, stage/build the 0.2.3 server sources using the safe installer and then restart ONLY MONTRA Node. Keep all character-data backups and do not run destructive integration tests against live players.
+**Code pushed to GitHub does not change the live Windows VPS automatically.** To enable LIVE permanent inventory, stage/build the V0.2.6 server using the safe installer, back up all existing character JSON files, then restart ONLY MONTRA Node. Keep all backups; do not run integration tests against live players. Do not roll back to a pre-inventory server without explicitly preserving inventory data, because older servers can drop the new inventory field when saving.
 
 ## S1 server source of truth
 
+- [Alpha 0.2.6 Inventory / health potion Windows VPS install + data preservation (Thai)](deploy/combat/INVENTORY-WINDOWS-VPS-TH.md)
+- [Validated server-owned 12-slot item/potion rules](deploy/combat/ItemRules.ts)
+- [Health potion input/cooldown and anti-cheat unit tests](deploy/combat/item-rules.test.ts)
 - [Alpha 0.2.5 flight / watchwall Windows VPS deployment and rollback (Thai)](deploy/combat/FLIGHT-WINDOWS-VPS-TH.md)
 - [Isolated real Colyseus 6m flight integration test](deploy/combat/flight-integration.mjs)
 - [Alpha 0.2.3 Dash Windows VPS stage/build/test/rollback (Thai)](deploy/combat/DASH-WINDOWS-VPS-TH.md)
@@ -86,5 +90,5 @@ projects, so deployments must not overwrite its shared configuration.
 - Alpha 0.2.1 supports **three character saves per recovery token** on a single Windows VPS. Slot 1 keeps the original S2 file. No username/password account, automated lost-token recovery, remote backup or relational database. Clearing browser data without exporting the token loses access to all 3 slots.
 - Free PK is enabled between any living players in the same room. There is no consent flow or safe-zone protection yet.
 - Guardian ownership is transient (one per connected session) and not saved to a database. Guardian NPCs cannot yet be damaged or upgraded.
-- Guardian summon remains transient; only character identity/name/stats/location are stored. No persistent inventory, trading, economy or real reward payouts.
+- Guardian summon remains transient; character identity/name/stats/location and one health potion stack in a 12-slot inventory are saved per character. No item drops, trading, equipment, economy or real reward payouts.
 - This is a technical Alpha, not a production-secure MMORPG.
