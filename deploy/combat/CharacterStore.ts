@@ -12,6 +12,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const CHARACTER_SAVE_INTERVAL_MS = 15_000;
+export const CHARACTER_SLOTS = [1, 2, 3] as const;
+export type CharacterSlot = typeof CHARACTER_SLOTS[number];
+export type SlotSummary = { slot: CharacterSlot; occupied: boolean; name: string; level: number; unavailable?: boolean };
 export type SpawnPoint = { x: number; z: number };
 export type CharacterSnapshot = {
   version: 1;
@@ -43,9 +46,19 @@ export function getGuestToken(options: unknown): string | null {
   return options.guestToken;
 }
 
-export function characterIdFromToken(token: string): string {
+export function parseCharacterSlot(options: unknown): CharacterSlot {
+  const slot = isRecord(options) ? options.characterSlot : undefined;
+  if (slot === undefined || slot === 1) return 1; // old S2 clients/saves stay in slot 1
+  if (slot === 2 || slot === 3) return slot;
+  throw new Error("invalid_character_slot");
+}
+
+/** Slot 1 preserves the exact S2 sha256(token) JSON filename. */
+export function characterIdFromToken(token: string, slot: CharacterSlot = 1): string {
   if (!TOKEN_PATTERN.test(token)) throw new Error("invalid_character_token");
-  return createHash("sha256").update(token, "utf8").digest("hex");
+  if (!CHARACTER_SLOTS.includes(slot)) throw new Error("invalid_character_slot");
+  const input = slot === 1 ? token : "MONTRA/CHARACTER-SLOT/v1/" + slot + "/" + token;
+  return createHash("sha256").update(input, "utf8").digest("hex");
 }
 
 export function claimCharacter(id: string, sessionId: string): boolean {
@@ -114,8 +127,8 @@ export class CharacterStore {
     }
   }
 
-  async loadOrCreate(token: string, spawn: SpawnPoint): Promise<{ character: CharacterSnapshot; created: boolean }> {
-    const id = characterIdFromToken(token);
+  async loadOrCreate(token: string, spawn: SpawnPoint, slot: CharacterSlot = 1): Promise<{ character: CharacterSnapshot; created: boolean }> {
+    const id = characterIdFromToken(token, slot);
     try {
       const stored = JSON.parse(await readFile(this.location(id), "utf8")) as unknown;
       return { character: validateSnapshot(stored, id), created: false };
@@ -131,6 +144,24 @@ export class CharacterStore {
     // Never silently turn a read/corruption/disk error into a reset character.
     await this.atomicWrite(fresh);
     return { character: fresh, created: true };
+  }
+
+  /** Read-only slot previews. Never create/delete saves while listing. */
+  async listSlots(ids: readonly string[]): Promise<SlotSummary[]> {
+    if (ids.length !== CHARACTER_SLOTS.length) throw new Error("invalid_slot_ids");
+    return await Promise.all(CHARACTER_SLOTS.map(async (slot, index): Promise<SlotSummary> => {
+      try {
+        const id = ids[index];
+        const record = validateSnapshot(JSON.parse(await readFile(this.location(id), "utf8")) as unknown, id);
+        return { slot, occupied: true, name: record.name, level: record.level };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          return { slot, occupied: false, name: "", level: 0 };
+        }
+        // If a slot has a corrupt record, hide its data; never overwrite it.
+        return { slot, occupied: true, name: "", level: 0, unavailable: true };
+      }
+    }));
   }
 
   async save(character: CharacterSnapshot): Promise<void> {
