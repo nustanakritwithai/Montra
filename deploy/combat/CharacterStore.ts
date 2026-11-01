@@ -8,11 +8,13 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeStarterInventory, grantStarterWeapons, validateInventory, type InventorySnapshot } from "./ItemRules.js";
 import { DEFAULT_MAP_ID, getWorldMap } from "./WorldMaps.js";
 import { emptyAllocations, PROGRESSION, validateAllocations, type Allocations } from "./Progression.js";
+import { EconomyStore } from "./EconomyStore.js";
 
 export const CHARACTER_SAVE_INTERVAL_MS = 15_000;
 export const CHARACTER_SLOTS = [1, 2, 3] as const;
@@ -122,10 +124,24 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
 
 export class CharacterStore {
   private readonly writes = new Map<string, Promise<void>>();
+  private economyDb: EconomyStore | undefined;
   // Resolve from the module location, not process.cwd(): a Windows service
   // can start Node from an unexpected directory after a machine restart.
   constructor(readonly directory: string = process.env.MONTRA_CHARACTER_DIR ||
-    fileURLToPath(new URL("../../data/characters", import.meta.url))) {}
+    fileURLToPath(new URL("../../data/characters", import.meta.url)), readonly economyEnabled = false) {}
+
+  get economy(): EconomyStore {
+    if (!this.economyEnabled) throw new Error("economy_disabled");
+    if (!this.economyDb) {
+      mkdirSync(this.directory, { recursive: true, mode: 0o700 });
+      this.economyDb = new EconomyStore(path.join(this.directory, "economy.sqlite"));
+    }
+    return this.economyDb;
+  }
+  close(): void { this.economyDb?.close(); this.economyDb = undefined; }
+  private guardLegacyMode(): void {
+    if (!this.economyEnabled && existsSync(path.join(this.directory, "economy.sqlite"))) throw new Error("economy_database_requires_economy_mode");
+  }
 
   private location(id: string): string {
     if (!/^[0-9a-f]{64}$/.test(id)) throw new Error("invalid_character_id");
@@ -148,6 +164,11 @@ export class CharacterStore {
 
   async loadOrCreate(token: string, spawn: SpawnPoint, slot: CharacterSlot = 1): Promise<{ character: CharacterSnapshot; created: boolean }> {
     const id = characterIdFromToken(token, slot);
+    this.guardLegacyMode();
+    if (this.economyEnabled) {
+      const saved = this.economy.getCharacter(id);
+      if (saved !== null) return { character: validateSnapshot(saved, id), created: false };
+    }
     let contents: string | undefined;
     try {
       contents = await readFile(this.location(id), "utf8");
@@ -159,6 +180,7 @@ export class CharacterStore {
     if (contents !== undefined) {
       const previous = validateSnapshot(JSON.parse(contents) as unknown, id);
       if (previous.inventory?.equippedWeaponSlot !== undefined) {
+        if (this.economyEnabled) await this.save(previous);
         return { character: previous, created: false };
       }
       // Legacy S2/0.2.5 without inventory gets 3 potions + 3 weapons once.
@@ -184,17 +206,19 @@ export class CharacterStore {
     };
     // A new character must already exist on disk before joining the world.
     // Never silently turn a read/corruption/disk error into a reset character.
-    await this.atomicWrite(fresh);
+    if (this.economyEnabled) await this.save(fresh); else await this.atomicWrite(fresh);
     return { character: fresh, created: true };
   }
 
   /** Read-only slot previews. Never create/delete saves while listing. */
   async listSlots(ids: readonly string[]): Promise<SlotSummary[]> {
     if (ids.length !== CHARACTER_SLOTS.length) throw new Error("invalid_slot_ids");
+    this.guardLegacyMode();
     return await Promise.all(CHARACTER_SLOTS.map(async (slot, index): Promise<SlotSummary> => {
       try {
         const id = ids[index];
-        const record = validateSnapshot(JSON.parse(await readFile(this.location(id), "utf8")) as unknown, id);
+        const current = this.economyEnabled ? this.economy.getCharacter(id) : null;
+        const record = validateSnapshot(current ?? JSON.parse(await readFile(this.location(id), "utf8")) as unknown, id);
         return { slot, occupied: true, name: record.name, level: record.level };
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -208,9 +232,14 @@ export class CharacterStore {
 
   async save(character: CharacterSnapshot): Promise<void> {
     const snapshot = validateSnapshot(character, character.id);
+    this.guardLegacyMode();
     // Upgraded servers must never overwrite a real inventory with a legacy
     // HP-only snapshot, which would re-grant starter potions on next login.
     if (snapshot.inventory === undefined) throw new Error("inventory_record_missing");
+    if (this.economyEnabled) {
+      this.economy.saveCharacter(snapshot.id, snapshot, snapshot.inventory);
+      return;
+    }
     const previous = this.writes.get(snapshot.id) || Promise.resolve();
     const next = previous.catch(() => {}).then(() => this.atomicWrite(snapshot));
     this.writes.set(snapshot.id, next);
@@ -222,4 +251,4 @@ export class CharacterStore {
   }
 }
 
-export const characterStore = new CharacterStore();
+export const characterStore = new CharacterStore(undefined, process.env.MONTRA_ECONOMY_ENABLED === "1");

@@ -106,6 +106,7 @@ export const MyRoomState = schema({
   worldMapsAvailable: t.boolean().default(true), // server supports map-aware travel
   chatAvailable: t.boolean().default(true), // append-only: server relays map chat
   progressionAvailable: t.boolean().default(true),
+  economyAvailable: t.boolean().default(false),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;
