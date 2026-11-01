@@ -376,13 +376,27 @@
     marker.setEnabled(false);
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
   }
-  $("warpButton").addEventListener("click",()=>{
-    if(mode!=="live" || !room || warpPending || room.state?.worldMapsAvailable!==true)return;
+  function requestPortalWarp() {
+    if (warpPending) return;
+    if (mode !== "live" || !room) {
+      toast("ต้องเข้าออนไลน์กับเซิร์ฟเวอร์ V0.2.8 ก่อนเดินทาง");
+      return;
+    }
+    if (room.state?.worldMapsAvailable !== true) {
+      toast("เซิร์ฟเวอร์นี้ยังไม่รองรับวาร์ป · ต้องอัปเดตเป็น V0.2.8");
+      return;
+    }
     const portal=portals[activeMapId];warpPending=true;$("warpLoading").hidden=false;
     try { room.send("warp",{portalId:portal.id}); }
     catch (_) { warpPending=false;$("warpLoading").hidden=true;toast("ส่งคำสั่งเดินทางไม่สำเร็จ");return; }
     warpTimer=setTimeout(()=>{warpPending=false;$("warpLoading").hidden=true;toast("ยังไม่ได้รับผลการเดินทาง");},8000);
-  });
+  }
+  function isNearPortal(player, portal) {
+    return Boolean(player && Number.isFinite(Number(player.x)) &&
+      Number.isFinite(Number(player.y)) && Number.isFinite(Number(player.z)) &&
+      Math.hypot(Number(player.x)-portal.x,Number(player.y),Number(player.z)-portal.z)<=1.9);
+  }
+  $("warpButton").addEventListener("click",requestPortalWarp);
   const markerMat = mat("waypoint gold", "#ffdb81", "#dd9a37");
   const marker = B.MeshBuilder.CreateTorus("destination", { diameter: 1.1, thickness: .08 }, scene);
   marker.material = markerMat;
@@ -1635,8 +1649,14 @@
     const hitMesh=picked.pickedMesh;
     const otherId=hitMesh?.metadata?.pkPlayerId;
     if (hitMesh?.metadata?.portalId) {
-      const portal=portals[activeMapId];pointMove(portal.x,portal.z);
-      toast("เดินเข้าใกล้ประตูเพื่อเดินทาง");
+      const portal=portals[activeMapId];
+      if (mode !== "live" || !room || room.state?.worldMapsAvailable !== true ||
+          isNearPortal(ownServerCharacter(),portal)) {
+        requestPortalWarp();
+      } else {
+        pointMove(portal.x,portal.z);
+        toast("กำลังเดินไปประตู · แตะประตูอีกครั้งเมื่อถึง");
+      }
     } else if (otherId && mode==="live") {
       if(rangedMode) shootAtTarget(otherId);
       else tapPlayerForPK(otherId);
@@ -2371,8 +2391,8 @@
     const me=getLocalAvatar();
     const portal=portals[activeMapId], authoritative=ownServerCharacter();
     const warpButton=$("warpButton");
-    warpButton.hidden=!(mode==="live" && room?.state?.worldMapsAvailable===true && authoritative &&
-      Math.hypot(Number(authoritative.x)-portal.x,Number(authoritative.y),Number(authoritative.z)-portal.z)<=1.9 && !warpPending);
+    warpButton.hidden=!(mode==="live" && room?.state?.worldMapsAvailable===true &&
+      isNearPortal(authoritative,portal) && !warpPending);
     warpButton.textContent=portal.label;
     if(me) {
       // Follow the moving player without calling camera.setTarget(): that
