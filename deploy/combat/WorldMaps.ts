@@ -5,12 +5,24 @@ export type WorldObstacle = Readonly<{ id: string; x: number; z: number; radius:
 export type WorldPortal = Readonly<{
   id: string; x: number; z: number; targetMapId: string; targetSpawn: WorldPoint;
 }>;
+export type HuntCamp = Readonly<{id:string; name:string; x:number; z:number; levels:readonly number[]}>;
+export type RestArea = Readonly<{x:number; z:number; radius:number; name:string}>;
+export const WORLD_EXPANSION = process.env.MONTRA_WORLD_EXPANSION === "1";
+export const FOREST_CAMPS: readonly HuntCamp[] = [
+  {id:"west",name:"ชายป่ากระซิบ",x:-26,z:-10,levels:[1,2,3,4]},
+  {id:"east",name:"ดงรากอาคม",x:26,z:-24,levels:[4,5,6,7]},
+  {id:"deep_west",name:"ค่ายเงาไม้",x:-28,z:-55,levels:[7,8,9,10]},
+  {id:"deep_east",name:"ดงวิญญาณ",x:26,z:-72,levels:[9,10,11,12]},
+];
 export type WorldMapDefinition = Readonly<{
   id: string; name: string;
   bounds: Readonly<{ minX: number; maxX: number; minZ: number; maxZ: number }>;
   spawn: WorldPoint;
   obstacles: readonly WorldObstacle[];
   portals: readonly WorldPortal[];
+  restAreas?: readonly RestArea[];
+  camps?: readonly HuntCamp[];
+  paths?: readonly (readonly {x:number; z:number}[])[];
 }>;
 export const DEFAULT_MAP_ID = "ritual_village";
 export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.freeze({
@@ -19,13 +31,22 @@ export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.f
     bounds: { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
     spawn: { x: 0, y: 0, z: 0 },
     obstacles: [],
+    restAreas: WORLD_EXPANSION ? [{x:0,z:0,radius:6,name:"ลานพักและตลาดอาคม"},{x:-4,z:-16,radius:3,name:"ประตูป่า"}] : [],
     portals: [{ id: "village_to_forest", x: -4, z: -17,
       targetMapId: "forbidden_forest", targetSpawn: { x: 0, y: 0, z: 12 } }],
   },
   forbidden_forest: {
     id: "forbidden_forest", name: "ป่าต้องห้าม",
-    bounds: { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
+    bounds: WORLD_EXPANSION ? {minX:-60,maxX:60,minZ:-100,maxZ:20} : {minX:-20,maxX:20,minZ:-20,maxZ:20},
     spawn: { x: 0, y: 0, z: 12 },
+    restAreas: WORLD_EXPANSION ? [{x:0,z:12,radius:6,name:"ศาลพักชายป่า"}] : [],
+    camps: WORLD_EXPANSION ? FOREST_CAMPS : [],
+    paths: WORLD_EXPANSION ? [
+      [{x:0,z:14},{x:0,z:0},{x:-26,z:-10},{x:-28,z:-55},{x:0,z:-88}],
+      [{x:0,z:0},{x:26,z:-24},{x:26,z:-72},{x:0,z:-88}],
+      [{x:-26,z:-10},{x:0,z:-30},{x:26,z:-24}],
+      [{x:-28,z:-55},{x:0,z:-46},{x:26,z:-72}],
+    ] : [],
     obstacles: [
       { id: "tree-west-1", x: -6, z: 6, radius: 1.4 },
       { id: "tree-east-1", x: 7, z: 7, radius: 1.4 },
@@ -39,6 +60,12 @@ export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.f
       { id: "tree-east-5", x: 15, z: 14, radius: 1.4 },
       { id: "stone-north-1", x: 5, z: -9, radius: 1.8 },
       { id: "stone-west-1", x: -9, z: -3, radius: 1.5 },
+      ...(WORLD_EXPANSION ? [
+        {id:"north-grove-1",x:-49,z:-35,radius:2},
+        {id:"north-grove-2",x:48,z:-51,radius:2},
+        {id:"north-stone",x:8,z:-62,radius:2.2},
+        {id:"west-stone",x:-8,z:-76,radius:1.8},
+      ] : []),
     ],
     portals: [{ id: "forest_to_village", x: 0, z: 14,
       targetMapId: "ritual_village", targetSpawn: { x: -4, y: 0, z: -15 } }],
@@ -46,6 +73,19 @@ export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.f
 });
 export function getWorldMap(mapId: string): WorldMapDefinition | undefined {
   return Object.prototype.hasOwnProperty.call(WORLD_MAPS, mapId) ? WORLD_MAPS[mapId] : undefined;
+}
+/** Rest zones protect actors at every height, including flying attackers. */
+export function isRestArea(mapId: string, point: {x:number; z:number}): boolean {
+  return getWorldMap(mapId)?.restAreas?.some(a => Math.hypot(point.x-a.x,point.z-a.z) <= a.radius) ?? false;
+}
+export function isWorldSegmentClear(mapId:string, from:{x:number;z:number}, to:{x:number;z:number}):boolean {
+  if(!WORLD_EXPANSION || mapId===DEFAULT_MAP_ID)return true;
+  const map=getWorldMap(mapId);if(!map)return false;
+  const dx=to.x-from.x,dz=to.z-from.z,length=dx*dx+dz*dz;
+  return map.obstacles.every(o=>{
+    const t=length>0?Math.max(0,Math.min(1,((o.x-from.x)*dx+(o.z-from.z)*dz)/length)):0;
+    return Math.hypot(o.x-from.x-t*dx,o.z-from.z-t*dz)>o.radius;
+  });
 }
 export function isSafeWorldPoint(map: WorldMapDefinition, point: WorldPoint, radius = 0.4): boolean {
   if (![point.x, point.y, point.z, radius].every(Number.isFinite) || radius < 0) return false;

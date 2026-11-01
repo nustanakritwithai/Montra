@@ -3,7 +3,7 @@
  * The client provides only a horizontal, near-unit direction. Distance, speed
  * and cooldown come from RULES, never from the browser.
  */
-import { RULES, type Vec2 } from "./GameRules.js";
+import { RULES, DEFAULT_BOUNDS, type MapBounds, type Vec2 } from "./GameRules.js";
 
 export type DashDirection = { dx: number; dz: number };
 export const DASH_SWEEP_STEP = 0.10;
@@ -26,6 +26,7 @@ export function advanceDash(
   direction: DashDirection,
   maxStep: number,
   canOccupy: (x: number, z: number) => boolean,
+  bounds: MapBounds = DEFAULT_BOUNDS,
 ): { x: number; z: number; moved: number; blocked: boolean } {
   if (!Number.isFinite(maxStep) || maxStep <= 0 ||
       !Number.isFinite(current.x) || !Number.isFinite(current.z)) {
@@ -39,7 +40,7 @@ export function advanceDash(
     const step = Math.min(DASH_SWEEP_STEP, distance - moved);
     const nextX = x + direction.dx * step;
     const nextZ = z + direction.dz * step;
-    if (Math.abs(nextX) > RULES.mapLimit || Math.abs(nextZ) > RULES.mapLimit ||
+    if (nextX < bounds.minX || nextX > bounds.maxX || nextZ < bounds.minZ || nextZ > bounds.maxZ ||
         !canOccupy(nextX, nextZ)) {
       return { x, z, moved, blocked: true };
     }

@@ -5,7 +5,7 @@ import {
   claimCharacter, releaseCharacter, getGuestToken, parseCharacterName,
   parseCharacterSlot, CHARACTER_SLOTS,
 } from "./CharacterStore.js";
-import { MyRoomState, Player, SummonedGuardian } from "./schema/MyRoomState.js";
+import { MyRoomState, Player, SummonedGuardian, type Monster } from "./schema/MyRoomState.js";
 import {
   RULES,
   CommandBucket,
@@ -30,7 +30,7 @@ import {
 } from "./MonsterRRT.js";
 import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.js";
 import type { CharacterSnapshot } from "./CharacterStore.js";
-import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint } from "./WorldMaps.js";
+import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
 import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
@@ -42,6 +42,8 @@ import {
   useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon,
   equippedWeaponId, weaponBonuses, type InventorySnapshot,
 } from "./ItemRules.js";
+
+import { ForestEncounters } from "./ForestEncounters.js";
 
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
@@ -67,6 +69,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients = 4;
   state = new MyRoomState();
 
+  private forest = new ForestEncounters(this.state.monsters);
+  private getMonster(id:string): Monster | undefined { return id === RULES.monsterId ? this.state.monster : this.state.monsters.get(id); }
   private simulatedMs = 0;
   private destinations = new Map<string, Vec2>();
   private activeDashes = new Map<string, ActiveDash>();
@@ -113,14 +117,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private sameCombatMap(ownerId: string, targetId: string): boolean {
     const owner = this.state.players.get(ownerId);
     if (!owner || this.pendingWarps.has(ownerId) || this.pendingWarps.has(targetId)) return false;
-    if (targetId === RULES.monsterId) return owner.mapId === DEFAULT_MAP_ID;
+    if (isRestArea(owner.mapId, owner)) return false;
+    const monster = this.getMonster(targetId);
+    if (monster) return owner.mapId === monster.mapId && !isRestArea(monster.mapId, monster);
     const target = this.state.players.get(targetId);
-    return Boolean(target && target.mapId === owner.mapId);
+    return Boolean(target && target.mapId === owner.mapId && !isRestArea(target.mapId,target));
   }
 
   private recordCombat(ownerId: string, targetId: string): void {
     this.lastCombatMs.set(ownerId, this.simulatedMs);
-    if (targetId !== RULES.monsterId) this.lastCombatMs.set(targetId, this.simulatedMs);
+    if (!this.getMonster(targetId)) this.lastCombatMs.set(targetId, this.simulatedMs);
   }
 
   private applyStats(player: Player, allocations: Allocations): void {
@@ -134,7 +140,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     player.xpToNext = player.level >= PROGRESSION.maxLevel ? 0 : xpForNextLevel(player.level);
   }
 
-  private grantMonsterExperience(id: string): void {
+  private grantMonsterExperience(id: string, monsterLevel: number = PROGRESSION.monsterLevel): void {
     const player = this.state.players.get(id);
     if (!player || !this.persistentCharacters.has(id) || this.pendingRewards.has(id)) return;
     // Freeze the winner while the previous item mutation and EXP write finish;
@@ -146,7 +152,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (priorItem) await priorItem.catch(() => {});
         const current = this.state.players.get(id), snapshot = this.captureCharacterSnapshot(id);
         if (!current || !snapshot) return;
-        const amount = current.level >= PROGRESSION.maxLevel ? 0 : monsterExperience(current.level, PROGRESSION.monsterLevel);
+        const amount = current.level >= PROGRESSION.maxLevel ? 0 : monsterExperience(current.level, monsterLevel);
         if (amount <= 0) return;
         const next = addExperience(current.level, current.experience, amount);
         await characterStore.save({ ...snapshot, ...next, updatedAt: new Date().toISOString() });
@@ -296,7 +302,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const player = this.state.players.get(id);
       if (!player || !this.persistentCharacters.has(id)) return this.reject(client, "character_not_persistent");
       if (this.pendingItemUses.has(id) || this.pendingWarps.has(id)) return this.reject(client, "character_busy");
-      const engaged = this.attackTargets.has(id) || this.state.monster.targetId === id ||
+      const engaged = this.attackTargets.has(id) || this.state.monster.targetId === id || this.forest.engaged(id) ||
         [...this.attackTargets.values()].includes(id);
       const result = checkWarp(message, {
         mapId: player.mapId, position: player, alive: player.alive,
@@ -340,6 +346,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
             }
           }
           if (this.state.monster.targetId === id) this.state.monster.targetId = "";
+          this.forest.clearTarget(id);
           this.despawnSummon(id, "warp");
           this.playerSpawn.set(id, getSafeMapSpawn(portal.targetMapId));
           this.lastWarpMs.set(id, this.simulatedMs);
@@ -555,7 +562,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     move: (client: Client, message: unknown) => {
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
-      const destination = parseMoveCommand(message);
+      const destination = parseMoveCommand(message, getWorldMap(this.state.players.get(client.sessionId)?.mapId ?? DEFAULT_MAP_ID)?.bounds);
       if (!destination) return this.reject(client, "invalid_move");
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.alive) return this.reject(client, "not_alive");
@@ -594,11 +601,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       // Only the server-issued session ID of ANOTHER live player in the
       // same room is eligible for PK. No duel agreement is required.
-      const targetId = monsterOrder ? RULES.monsterId : pkOrder!.targetId;
+      const targetId = monsterOrder ? monsterOrder.targetId : pkOrder!.targetId;
       if (targetId === attackerId) return this.reject(client, "self_attack");
       if (!this.sameCombatMap(attackerId, targetId)) return this.reject(client, "target_unavailable");
       const target = monsterOrder
-        ? (this.state.monster.alive ? this.state.monster : undefined)
+        ? this.getMonster(targetId)
         : this.state.players.get(targetId);
 
       if (!target || !target.alive) {
@@ -644,7 +651,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       const guardian = new SummonedGuardian({
         ownerId: id, kind: "guardian",
-        x: clampToMap(owner.x - 1.1), y: owner.y, z: clampToMap(owner.z + 0.9),
+        x: clampToMap(owner.x - 1.1, getWorldMap(owner.mapId)!.bounds, "x"), y: owner.y, z: clampToMap(owner.z + 0.9, getWorldMap(owner.mapId)!.bounds, "z"),
         facing: owner.facing, action: "follow", targetId: "",
       });
       this.state.summons.set(id, guardian);
@@ -721,11 +728,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return this.reject(client, "attack_rate_limited");
       }
 
-      const targetId = monsterOrder ? RULES.monsterId : pkOrder!.targetId;
+      const targetId = monsterOrder ? monsterOrder.targetId : pkOrder!.targetId;
       if (targetId === id) return this.reject(client, "self_attack");
       if (!this.sameCombatMap(id, targetId)) return this.reject(client, "target_unavailable");
       const target = monsterOrder
-        ? this.state.monster
+        ? this.getMonster(targetId)
         : this.state.players.get(targetId);
       if (!target || !target.alive) return this.reject(client, "target_unavailable");
 
@@ -734,7 +741,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (distance3d(from,to) > FORT.rangedRange) {
         return this.reject(client, "shot_out_of_range");
       }
-      if (shooter.mapId === DEFAULT_MAP_ID && wallBlocksShot(from,to)) {
+      if ((shooter.mapId === DEFAULT_MAP_ID && wallBlocksShot(from,to)) || !isWorldSegmentClear(shooter.mapId,from,to)) {
         return this.reject(client, "shot_blocked");
       }
 
@@ -746,18 +753,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.recordCombat(id, targetId);
       shooter.facing = facingTo(target.x-shooter.x, target.z-shooter.z);
       const rangedAttack = shooter.magicAtk + weaponBonuses(this.inventories.get(id)).ranged;
-      const rangedDamage = monsterOrder ? calculateDamage(rangedAttack, 100, 1) :
+      const rangedDamage = monsterOrder ? calculateDamage(rangedAttack, (target as Monster).defense, (target as Monster).level) :
         calculateDamage(rangedAttack, (target as Player).magicDef, (target as Player).level);
 
       if (monsterOrder) {
-        const ghost = this.state.monster;
+        const ghost = this.getMonster(targetId)!;
         ghost.hp = Math.max(0,ghost.hp-rangedDamage);
         ghost.hitSeq += 1;
         this.broadcast("combat_hit", {
           attackerId:id,targetId,damage:rangedDamage,
           hp:ghost.hp,maxHp:ghost.maxHp,hitSeq:ghost.hitSeq,source:"ranged",
         }, { afterNextPatch:true });
-        if (ghost.hp===0) this.killMonster(id);
+        if (ghost.hp===0) this.killMonster(id, targetId);
       } else {
         const victim=target as Player;
         victim.hp=Math.max(0,victim.hp-rangedDamage);
@@ -803,12 +810,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (otherId !== ownerId && targetId === ownerId) candidates.push(otherId);
     }
     if (this.state.monster.targetId === ownerId) candidates.push(RULES.monsterId);
+    for (const m of this.state.monsters.values()) if (m.targetId === ownerId) candidates.push(m.id);
 
     for (const targetId of candidates) {
       if (targetId === ownerId) continue;
       if (!this.sameCombatMap(ownerId, targetId)) continue;
-      const target = targetId === RULES.monsterId
-        ? this.state.monster : this.state.players.get(targetId);
+      const target = this.getMonster(targetId) ?? this.state.players.get(targetId);
       if (!target || !target.alive) continue;
       // Guard's combat tether prevents hits across the map even if another
       // client sends a valid but distant target ID.
@@ -846,9 +853,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           const next = step3d(
             guardian, target, RULES.summonMoveSpeed * dt
           );
-          guardian.x = clampToMap(next.point.x);
+          guardian.x = clampToMap(next.point.x, getWorldMap(owner.mapId)!.bounds, "x");
           guardian.y = next.point.y;
-          guardian.z = clampToMap(next.point.z);
+          guardian.z = clampToMap(next.point.z, getWorldMap(owner.mapId)!.bounds, "z");
         }
         continue;
       }
@@ -857,9 +864,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // All positions and animation states are resolved by fixed server ticks.
       guardian.targetId = "";
       const desired = {
-        x: clampToMap(owner.x - 1.0),
+        x: clampToMap(owner.x - 1.0, getWorldMap(owner.mapId)!.bounds, "x"),
         y: owner.y,
-        z: clampToMap(owner.z + 0.85),
+        z: clampToMap(owner.z + 0.85, getWorldMap(owner.mapId)!.bounds, "z"),
       };
       const dx = desired.x - guardian.x;
       const dz = desired.z - guardian.z;
@@ -871,9 +878,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const next = step3d(
           guardian, desired, RULES.summonMoveSpeed * dt
         );
-        guardian.x = clampToMap(next.point.x);
+        guardian.x = clampToMap(next.point.x, getWorldMap(owner.mapId)!.bounds, "x");
         guardian.y = next.point.y;
-        guardian.z = clampToMap(next.point.z);
+        guardian.z = clampToMap(next.point.z, getWorldMap(owner.mapId)!.bounds, "z");
         if (next.moved) guardian.facing = facingTo(dx, dz);
       } else {
         guardian.facing = owner.facing;
@@ -886,13 +893,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const sameGuardian = this.state.summons.get(ownerId) === guardian;
     if (!owner || !owner.alive || !sameGuardian) return;
 
-    const isMonster = targetId === RULES.monsterId;
+    const monster = this.getMonster(targetId);
     if (!this.sameCombatMap(ownerId, targetId)) return;
-    const target = isMonster
-      ? this.state.monster : this.state.players.get(targetId);
+    const target = monster ?? this.state.players.get(targetId);
     if (!target || !target.alive || targetId === ownerId) return;
     if (distance3d(owner, target) > RULES.summonEngageDistance) return;
-    if (distance3d(guardian, target) > RULES.summonAttackRange + 0.00001) return;
+    if (distance3d(guardian, target) > RULES.summonAttackRange + 0.00001 || !isWorldSegmentClear(owner.mapId,guardian,target)) return;
 
     const last = this.lastSummonAttackAt.get(ownerId) ?? -Infinity;
     if (this.simulatedMs - last < RULES.summonAttackCooldownMs) return;
@@ -900,9 +906,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.recordCombat(ownerId, targetId);
     guardian.hitSeq += 1;
 
-    if (isMonster) {
-      const monster = this.state.monster;
-      const damage = calculateDamage(RULES.summonAttackDamage, 100, 1);
+    if (monster) {
+      const damage = calculateDamage(RULES.summonAttackDamage, monster.defense, monster.level);
       monster.hp = Math.max(0, monster.hp - damage);
       monster.hitSeq += 1;
       this.broadcast("summon_hit", {
@@ -910,7 +915,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         damage, hp: monster.hp,
         hitSeq: guardian.hitSeq,
       }, { afterNextPatch: true });
-      if (monster.hp === 0) this.killMonster(ownerId);
+      if (monster.hp === 0) this.killMonster(ownerId, targetId);
       return;
     }
 
@@ -949,6 +954,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   onCreate() {
     this.state.economyAvailable = characterStore.economyEnabled;
+    this.forest.initialize();
+    this.state.worldDefinition = WORLD_EXPANSION ? JSON.stringify({version:1,maps:WORLD_MAPS}) : "";
     this.state.monster.id = RULES.monsterId;
     this.state.monster.x = RULES.monsterSpawnX;
     this.state.monster.z = RULES.monsterSpawnZ;
@@ -985,6 +992,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updateFlights(dt);
     this.updatePlayerMovement(dt);
     this.updateMonsterAI(dt);
+    this.forest.update(this.simulatedMs, dt, this.state.players, this.pendingWarps, (id,m) => {
+      const p=this.state.players.get(id);
+      if (!p || !this.sameCombatMap(id,m.id)) return;
+      const damage=calculateDamage(10+3*m.level,p.def,p.level);
+      p.hp=Math.max(0,p.hp-damage);p.hitSeq++;this.lastCombatMs.set(id,this.simulatedMs);
+      this.broadcast("monster_hit",{targetId:id,attackerId:m.id,damage,hp:p.hp,maxHp:p.maxHp,hitSeq:p.hitSeq},{afterNextPatch:true});
+      if(p.hp===0)this.knockoutPlayer(id,"monster",m.id);
+    }, id => this.broadcast("monster_respawn",{targetId:id}));
     this.updatePlayerAttacks();
     this.updateSummons(dt);
     this.updateResources(dt);
@@ -997,7 +1012,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private updateResources(dt: number): void {
     for (const [id, player] of this.state.players) {
       if (!player.alive || this.pendingWarps.has(id)) continue;
-      const fighting = this.attackTargets.has(id) || this.state.monster.targetId === id ||
+      const fighting = this.attackTargets.has(id) || this.state.monster.targetId === id || this.forest.engaged(id) ||
         this.simulatedMs - (this.lastCombatMs.get(id) ?? -Infinity) < PROGRESSION.combatQuietMs;
       // HP saves are integer-valued in legacy snapshots. Keep fractional regen
       // in a transient accumulator instead of rounding up on each save/rejoin.
@@ -1017,9 +1032,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         continue;
       }
       const next = progressClimb(player, destination, dt);
-      player.x = clampToMap(next.point.x);
+      player.x = clampToMap(next.point.x, getWorldMap(player.mapId)!.bounds, "x");
       player.y = next.point.y;
-      player.z = clampToMap(next.point.z);
+      player.z = clampToMap(next.point.z, getWorldMap(player.mapId)!.bounds, "z");
       player.facing = facingTo(destination.x-player.x, destination.z-player.z);
       player.combatState = "climbing";
       if (next.arrived) {
@@ -1069,7 +1084,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private updatePlayerMovement(dt: number) {
-    const monster = this.state.monster;
     for (const [sessionId, player] of this.state.players) {
       if (!player.alive || this.pendingWarps.has(sessionId) || this.climbs.has(sessionId) || this.flightTransitions.has(sessionId)) {
         this.activeDashes.delete(sessionId);
@@ -1082,6 +1096,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           player, dash,
           Math.min(dash.remaining, RULES.dashSpeed * dt),
           (x, z) => this.canOccupy(x, z, player.y, player.flying, player.mapId),
+          getWorldMap(player.mapId)!.bounds,
         );
         player.x = move.x;
         player.z = move.z;
@@ -1101,9 +1116,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       const targetId = this.attackTargets.get(sessionId);
       if (targetId) {
-        const isMonster = targetId === RULES.monsterId;
+        const monster = this.getMonster(targetId);
+        const isMonster = Boolean(monster);
         const target = isMonster
-          ? (monster.alive ? monster : undefined)
+          ? (monster?.alive ? monster : undefined)
           : this.state.players.get(targetId);
 
         if (!target || !target.alive || targetId === sessionId || !this.sameCombatMap(sessionId, targetId)) {
@@ -1131,8 +1147,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const stopDistance = attackRange - 0.4;
         const ratio = Math.max(0, (distance - stopDistance) / distance);
         const approach = {
-          x: clampToMap(player.x + dx * ratio),
-          z: clampToMap(player.z + dz * ratio),
+          x: clampToMap(player.x + dx * ratio, getWorldMap(player.mapId)!.bounds, "x"),
+          z: clampToMap(player.z + dz * ratio, getWorldMap(player.mapId)!.bounds, "z"),
         };
         const next = stepTowards(player, approach,
           (player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed) * dt);
@@ -1177,7 +1193,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private updatePlayerAttacks() {
-    const monster = this.state.monster;
     for (const [attackerId, targetId] of [...this.attackTargets]) {
       const attacker = this.state.players.get(attackerId);
       if (!attacker || !attacker.alive) {
@@ -1185,9 +1200,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         continue;
       }
 
-      const isMonster = targetId === RULES.monsterId;
+      const monster = this.getMonster(targetId);
+      const isMonster = Boolean(monster);
       const target = isMonster
-        ? (monster.alive ? monster : undefined)
+        ? (monster?.alive ? monster : undefined)
         : this.state.players.get(targetId);
       if (!target || !target.alive || targetId === attackerId || !this.sameCombatMap(attackerId, targetId)) {
         this.endAttack(attackerId, attacker);
@@ -1195,7 +1211,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
 
       const range = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
-      if (distance3d(attacker,target) > range + 0.00001 ||
+      if (!isWorldSegmentClear(attacker.mapId,attacker,target) || distance3d(attacker,target) > range + 0.00001 ||
           (attacker.mapId === DEFAULT_MAP_ID && wallBlocksShot(
             {x:attacker.x,y:attacker.y+1.1,z:attacker.z},
             {x:target.x,y:target.y+1.0,z:target.z}
@@ -1212,16 +1228,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.recordCombat(attackerId, targetId);
 
       const meleeBonus = weaponBonuses(this.inventories.get(attackerId)).melee;
-      if (isMonster) {
-        const meleeDamage = calculateDamage(attacker.atk + meleeBonus, 100, 1);
+      if (monster) {
+        const meleeDamage = calculateDamage(attacker.atk + meleeBonus, monster.defense, monster.level);
         monster.hp = Math.max(0, monster.hp - meleeDamage);
         monster.hitSeq += 1;
         this.broadcast("combat_hit", {
-          targetId: RULES.monsterId,
+          targetId,
           attackerId, damage: meleeDamage,
           hp: monster.hp, maxHp: monster.maxHp, hitSeq: monster.hitSeq,
         }, { afterNextPatch: true });
-        if (monster.hp === 0) this.killMonster(attackerId);
+        if (monster.hp === 0) this.killMonster(attackerId, targetId);
         continue;
       }
 
@@ -1276,12 +1292,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       else this.attackTargets.delete(otherId);
     }
     if (this.state.monster.targetId === id) this.state.monster.targetId = "";
+    this.forest.clearTarget(id);
     this.broadcast("player_down", {
       playerId: id, source: cause, attackerId,
     }, { afterNextPatch: true });
   }
 
-  private killMonster(winnerId: string) {
+  private killMonster(winnerId: string, targetId: string = RULES.monsterId) {
+    if (targetId !== RULES.monsterId) {
+      const m=this.state.monsters.get(targetId);
+      if(!m || !this.forest.kill(targetId,this.simulatedMs))return;
+      this.grantMonsterExperience(winnerId,m.level);
+      for(const [id,target] of this.attackTargets) if(target===targetId){const p=this.state.players.get(id);if(p)this.endAttack(id,p);}
+      return;
+    }
     const monster = this.state.monster;
     monster.alive = false;
     monster.hp = 0;
@@ -1321,7 +1345,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Keep an existing target if it is alive and remains in the combat area.
     let targetId = monster.targetId;
     let target = targetId ? this.state.players.get(targetId) : undefined;
-    if (!target || !target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID || !isOnGround(target.y) ||
+    if (!target || !target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID || isRestArea(target.mapId,target) || !isOnGround(target.y) ||
         planarDistance(monster, target) > RULES.monsterGiveUpRadius) {
       target = undefined;
       targetId = "";
@@ -1331,7 +1355,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!target) {
       let nearest: number = RULES.monsterAggroRadius;
       for (const [id, player] of this.state.players) {
-        if (!player.alive || this.pendingWarps.has(id) || player.mapId !== DEFAULT_MAP_ID || !isOnGround(player.y)) continue;
+        if (!player.alive || this.pendingWarps.has(id) || player.mapId !== DEFAULT_MAP_ID || isRestArea(player.mapId,player) || !isOnGround(player.y)) continue;
         const distance = planarDistance(monster, player);
         if (distance < nearest) {
           nearest = distance;
@@ -1388,7 +1412,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private monsterAttack(targetId: string, target: Player) {
-    if (!target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID) return;
+    if (!target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID || isRestArea(target.mapId,target)) return;
     if (distance3d(this.state.monster, target) > RULES.monsterAttackRange) return;
     if (this.simulatedMs - this.lastMonsterAttackMs < RULES.monsterAttackCooldownMs) return;
     this.lastMonsterAttackMs = this.simulatedMs;
@@ -1499,6 +1523,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   async onJoin(client: Client, options?: unknown) {
+    if (WORLD_EXPANSION && (!options || typeof options !== "object" || Array.isArray(options) || (options as Record<string,unknown>).worldVersion !== 1)) throw new Error("world_client_update_required");
     const spawnX = this.state.players.size * 2;
     const spawn = { x: spawnX, z: 0 };
     // Old smoke tests and clients without browser storage remain transient.
@@ -1604,6 +1629,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastRenameMs.delete(id);
     this.lastSlotListMs.delete(id);
     if (this.state.monster.targetId === id) this.state.monster.targetId = "";
+    this.forest.clearTarget(id);
     // Remote player targets cannot remain locked to disconnected sessions.
     for (const [otherId, targetId] of [...this.attackTargets]) {
       if (targetId !== id) continue;

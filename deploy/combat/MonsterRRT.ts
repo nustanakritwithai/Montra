@@ -255,6 +255,7 @@ export function planMonsterRRT(
  * replanMs window per monster and never in a per-render-frame loop.
  */
 export class MonsterRRTNavigator {
+  constructor(private obstacles:readonly WallRect[]=MONSTER_WALLS, private bounds:NavigationBounds=MONSTER_NAV.bounds) {}
   private route:{
     intent:string;
     goal:Vec2;
@@ -268,7 +269,7 @@ export class MonsterRRTNavigator {
   nextWaypoint(
     position:Vec2,goal:Vec2,serverNowMs:number,intent:string,
   ):Vec2|null {
-    if(!isMonsterFree(position)||!isMonsterFree(goal)) {
+    if(!isMonsterFree(position,this.obstacles,MONSTER_NAV.radius,this.bounds)||!isMonsterFree(goal,this.obstacles,MONSTER_NAV.radius,this.bounds)) {
       this.route=null;
       return null;
     }
@@ -297,7 +298,7 @@ export class MonsterRRTNavigator {
       // Convert at the planner boundary to ordinary numeric waypoints.
       const from={x:position.x,z:position.z};
       const destination={x:goal.x,z:goal.z};
-      const result=planMonsterRRT(from,destination,{seed});
+      const result=planMonsterRRT(from,destination,{seed,obstacles:this.obstacles,bounds:this.bounds});
       this.route={
         intent,
         goal:{x:goal.x,z:goal.z},
@@ -316,7 +317,7 @@ export class MonsterRRTNavigator {
     if(route.index>=route.waypoints.length)return null;
 
     const candidate=route.waypoints[route.index];
-    if(!isMonsterSegmentClear(position,candidate)) {
+    if(!isMonsterSegmentClear(position,candidate,this.obstacles,MONSTER_NAV.radius,this.bounds)) {
       // Do not move through blocked geometry; a future plan may recover.
       route.waypoints=[];
       route.index=0;

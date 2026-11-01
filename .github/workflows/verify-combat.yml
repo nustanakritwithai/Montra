@@ -32,6 +32,9 @@ jobs:
           cp deploy/combat/dash-rules.test.ts combat-verify/src/rooms/dash-rules.test.ts
           cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
           cp deploy/combat/WorldMaps.ts combat-verify/src/rooms/WorldMaps.ts
+          cp deploy/combat/ForestEncounters.ts combat-verify/src/rooms/ForestEncounters.ts
+          cp deploy/combat/map-expansion.test.ts combat-verify/src/rooms/map-expansion.test.ts
+          cp deploy/combat/map-expansion-integration.mjs combat-verify/map-expansion-integration.mjs
           cp deploy/combat/WarpRules.ts combat-verify/src/rooms/WarpRules.ts
           cp deploy/combat/ChatRules.ts combat-verify/src/rooms/ChatRules.ts
           cp deploy/combat/chat-rules.test.ts combat-verify/src/rooms/chat-rules.test.ts
@@ -226,6 +229,26 @@ jobs:
       - name: Test strict message validation and movement math
         working-directory: combat-verify
         run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/economy-migration.test.ts
+
+      - name: Expanded forest rules and real server restart
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export MONTRA_WORLD_EXPANSION=1 MONTRA_ECONOMY_ENABLED=0 PORT=4110
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-world-test-expansion-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4110
+          npx tsx --test src/rooms/map-expansion.test.ts
+          node --import tsx src/index.ts > expansion-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4110) 2>/dev/null; then break; fi; sleep 0.25; done
+          MONTRA_MAP_TEST_STAGE=write timeout 65s node map-expansion-integration.mjs || { cat expansion-server.log; exit 1; }
+          kill "$SERVER_PID" 2>/dev/null || true
+          wait "$SERVER_PID" 2>/dev/null || true
+          node --import tsx src/index.ts > expansion-server.log 2>&1 &
+          SERVER_PID=$!
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4110) 2>/dev/null; then break; fi; sleep 0.25; done
+          MONTRA_MAP_TEST_STAGE=read timeout 25s node map-expansion-integration.mjs || { cat expansion-server.log; exit 1; }
 
       - name: Isolated economy transactions and restart
         shell: bash
