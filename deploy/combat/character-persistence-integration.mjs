@@ -59,6 +59,43 @@ try {
         await sleep(150);
         assert.equal(own(room).characterName, item.name, "invalid rename must be rejected");
       }
+      if (item.slot === 2) {
+        // Use one of three starter potions via a REAL Colyseus message.
+        // An anonymous PK attacker reduces HP; the potion restores it.
+        const inventoryUpdates = [], itemEvents = [];
+        room.onMessage("inventory_state", payload => inventoryUpdates.push(payload));
+        room.onMessage("item_used", event => itemEvents.push(event));
+        room.send("get_inventory", {});
+        await until(() => inventoryUpdates.at(-1)?.slots?.[0]?.quantity === 3,
+          3500, "3 starter potions in slot 2");
+        room.send("use_item", { slot: 0, quantity: 9999 });
+        await sleep(180);
+        assert.equal(inventoryUpdates.at(-1).slots[0].quantity,3,
+          "forged item quantity must be rejected");
+        const attacker = await new Client(endpoint).joinById(room.roomId);
+        try {
+          await until(() => attacker.state?.players?.has(room.sessionId),
+            3000, "second player sees potion tester");
+          attacker.send("attack", { targetId: room.sessionId });
+          await until(() => own(room)?.hp <= 88 && own(room)?.hp > 0,
+            2900, "legitimate damage before potion");
+        } finally {
+          await close(attacker);
+        }
+        const woundedHp = own(room).hp;
+        room.send("use_item", { slot: 0 });
+        // Attempt a duplicate command before the first write confirms.
+        room.send("use_item", { slot: 0 });
+        await until(() => inventoryUpdates.at(-1)?.slots?.[0]?.quantity === 2 &&
+          itemEvents.length === 1, 4500, "durable potion use confirmed");
+        assert.equal(itemEvents[0].itemId,"health_potion");
+        assert.equal(own(room).hp,Math.min(100,woundedHp+30));
+        assert.ok(itemEvents[0].healed > 0 && itemEvents[0].healed <= 30);
+        await sleep(200);
+        assert.equal(inventoryUpdates.at(-1).slots[0].quantity,2,
+          "rapid repeated use must not duplicate or consume two potions");
+        console.log("PASS: server-only health potion consumes exactly one durable stack and heals real PK damage");
+      }
       room.send("move", { x: item.x, z: item.z });
       await until(() => Math.hypot(own(room)?.x - item.x, own(room)?.z - item.z) < 0.16,
         6500, "move in slot " + item.slot);
@@ -91,6 +128,15 @@ try {
       assert.ok(Math.abs(me.y - (item.slot === 3 ? 6 : 0)) < .02,
         "wrong persistent altitude for slot " + item.slot);
       assert.equal(me.pkKills, 0);
+      const inventoryUpdates = [];
+      room.onMessage("inventory_state", payload => inventoryUpdates.push(payload));
+      room.send("get_inventory", {});
+      await until(() => Array.isArray(inventoryUpdates.at(-1)?.slots),
+        3500, "inventory loaded after Node restart in slot " + item.slot);
+      assert.equal(inventoryUpdates.at(-1).slots.length, 12);
+      assert.equal(inventoryUpdates.at(-1).slots[0]?.quantity,
+        item.slot === 2 ? 2 : 3,
+        "potions must persist without re-granting between restarts/slots");
       savedIds.add(me.characterId);
 
       if (item.slot === 1) {
@@ -121,6 +167,7 @@ try {
       /invalid_character_slot|join|error/i
     );
     console.log("PASS: all three slots survive a full Node restart and keep separate data");
+    console.log("PASS: potion count survives full Node restart; no double grant or shared inventory");
     console.log("PASS: account lease blocks cross-slot duplicate login, invalid slots and old anonymous clients");
   }
 } finally {
