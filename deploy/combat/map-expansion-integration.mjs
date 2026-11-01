@@ -22,6 +22,7 @@ try{
    for(const e of expected){const r=await open(e.token,undefined,e.slot);const p=own(r);assert.equal(p.mapId,e.mapId);assert.equal(p.x,e.x);assert.equal(p.z,e.z);assert.equal(p.level,e.level);assert.equal(p.experience,e.experience);await leave(r);const disk=JSON.parse(await readFile(file(e.token,e.slot),'utf8'));assert.equal(disk.inventory.slots[0].quantity,2);}
    console.log('PASS: actual process restart preserves all 3 expanded-map slots and inventory');
  }else{
+   await assert.rejects(new Client(endpoint).create('my_room',{}),/world_client_update_required/);
    await mkdir(dir,{recursive:true});
    for(const slot of [1,2,3])await seed(token(1),'forbidden_forest',30+slot,-40,slot);
    await seed(token(2),'ritual_village',0,0);await seed(token(3),'forbidden_forest',-33,-20);await seed(token(4),'ritual_village',2,0);
