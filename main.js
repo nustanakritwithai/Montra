@@ -978,6 +978,7 @@
     syncPKHud();
     syncClimbButton();
     updateFlightButton();
+    if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
     return true;
   }
   let syncPoll = null;
