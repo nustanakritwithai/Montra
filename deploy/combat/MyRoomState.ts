@@ -23,6 +23,7 @@ export const Player = schema({
   level: t.number().default(1),
   experience: t.number().default(0),
   persistent: t.boolean().default(false),
+  characterSlot: t.number().default(1), // append only: preserve all S2 Schema indexes
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
