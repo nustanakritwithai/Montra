@@ -49,7 +49,19 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .toast { position:absolute; z-index:9; width:max-content; max-width:min(90vw,360px); left:50%; bottom:197px; transform:translateX(-50%); padding:9px 13px; font-size:12px; line-height:1.5; border-radius:12px; background:#101d20e8; border:1px solid #c9a36c77; text-align:center; box-shadow:0 7px 20px #0009; opacity:0; pointer-events:none; transition:opacity .2s; }
 .toast.show { opacity:1; }
 .tap-tip { position:absolute; z-index:2; bottom:176px; left:0; right:0; text-align:center; font-size:11px; color:#f1e8d6; text-shadow:0 2px 4px #000; pointer-events:none; }
-.controls { position:absolute; bottom:calc(26px + env(safe-area-inset-bottom)); left:0; right:0; z-index:4; pointer-events:auto; touch-action:none; -webkit-user-select:none; user-select:none; }
+/* The transparent padding is a real touch target for swipe-dash above the
+   bottom skills. Buttons stay at their original bottom-anchored positions.
+   Avoid adding a visible overlay or intercepting the central gameplay area. */
+.controls {
+  --dash-swipe-reach: clamp(54px, 9dvh, 86px);
+  position:absolute;
+  bottom:calc(26px + env(safe-area-inset-bottom));
+  left:0; right:0; z-index:4;
+  padding-top:var(--dash-swipe-reach);
+  pointer-events:auto;
+  touch-action:none;
+  -webkit-user-select:none; user-select:none;
+}
 .controls button { pointer-events:auto; }
 .skill-bar { width:min(100%,520px); padding:0 14px; display:flex; justify-content:space-around; gap:7px; margin:0 auto 12px; }
 .skill { width:min(22%,86px); padding:0; border:0; background:transparent; display:flex; align-items:center; flex-direction:column; gap:4px; font-size:12px; text-shadow:0 2px 4px #000; }
@@ -324,7 +336,10 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 
   /* Six existing skills stay fully usable but use less vertical space. */
   .tap-tip { display: none; }
-  .controls { bottom: calc(9px + env(safe-area-inset-bottom)); }
+  .controls {
+    bottom: calc(9px + env(safe-area-inset-bottom));
+    --dash-swipe-reach: clamp(80px, 12dvh, 108px);
+  }
   .skill-bar { padding: 0 8px; gap: 3px; margin-bottom: 7px; }
   .skill-bar .skill { font-size: 9px; gap: 3px; }
   .skill-bar .glyph {

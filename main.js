@@ -99,13 +99,20 @@
   const scene = new B.Scene(engine);
   scene.clearColor = B.Color4.FromHexString("#111c27ff");
   scene.fogMode = B.Scene.FOGMODE_EXP2;
-  scene.fogDensity = 0.012;
+  // Keep the wider bird's-eye view legible: heavy distance fog would wash
+  // out the entire village at the new default camera height.
+  scene.fogDensity = 0.0085;
   scene.fogColor = B.Color3.FromHexString("#293b40");
-  // A wider view of the village; keep the existing close-up limit intact.
-  // Shared by mouse wheel and mobile pinch so neither can exceed the camera's range.
+  // MONTRA is viewed from ABOVE: the player should appear small enough to
+  // read nearby terrain and opponents. Retain the old close-up zoom option.
+  // Babylon ArcRotateCamera beta is measured downward from the vertical axis:
+  // a smaller beta means a higher, more top-down view.
   const CAMERA_ZOOM_MIN = 15;
-  const CAMERA_ZOOM_MAX = 55;
-  const camera = new B.ArcRotateCamera("portrait", -Math.PI / 2, 1.07, 32,
+  const CAMERA_ZOOM_MAX = 85;
+  const CAMERA_DEFAULT_RADIUS = 52;
+  const CAMERA_DEFAULT_BETA = 0.70;
+  const camera = new B.ArcRotateCamera("portrait", -Math.PI / 2,
+    CAMERA_DEFAULT_BETA, CAMERA_DEFAULT_RADIUS,
     new B.Vector3(0, 0, 0), scene);
   camera.lowerRadiusLimit = CAMERA_ZOOM_MIN;
   camera.upperRadiusLimit = CAMERA_ZOOM_MAX;
@@ -113,8 +120,8 @@
     if (!Number.isFinite(radius)) return;
     camera.radius = Math.max(CAMERA_ZOOM_MIN, Math.min(CAMERA_ZOOM_MAX, radius));
   }
-  camera.lowerBetaLimit = 0.65;
-  camera.upperBetaLimit = 1.35;
+  camera.lowerBetaLimit = 0.40;
+  camera.upperBetaLimit = 1.30;
   camera.fov = 0.69;
   camera.minZ = 0.2;
   const moon = new B.HemisphericLight("moon", new B.Vector3(0.1, 1, 0.2), scene);
@@ -1192,7 +1199,8 @@
     if (Math.abs(dx)+Math.abs(dy)>9) pointer.moved=true;
     if (pointer.moved) {
       camera.alpha = pointer.alpha - dx * .006;
-      camera.beta = Math.max(.65, Math.min(1.3, pointer.beta + dy * .003));
+      camera.beta = Math.max(camera.lowerBetaLimit,
+        Math.min(camera.upperBetaLimit, pointer.beta + dy * .003));
     }
   });
   ui.world.addEventListener("pointerup",event => {
@@ -1299,9 +1307,10 @@
     toast("พุ่ง! · DEMO");
   }
 
-  // Swipe begins anywhere inside the bottom skill/nav menu. A short touch
-  // still clicks the skill; a deliberate ~50px swipe becomes one dash instead.
-  // No dash button and no gesture listener on the 3D scene/camera canvas.
+  // The invisible gesture area extends ABOVE the existing bottom skill row
+  // via CSS --dash-swipe-reach. It is intentionally not a new button.
+  // Short skill taps retain their normal click; a >=50px swipe fires one dash.
+  // Canvas drag/pinch still rotates or zooms wherever this region does not cover.
   const dashZone = document.querySelector(".controls");
   let dashSwipe = null;
   let suppressMenuClick = false;
@@ -1553,7 +1562,7 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.1",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดอย่างรวดเร็วบนแถบเมนูล่างเพื่อพุ่งตามทิศที่ปัด (ไม่ต้องมีปุ่มพุ่ง)</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ไอเทมถาวร และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.1",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลหรือบนแถบเมนูล่างเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ไอเทมถาวร และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
   }
   function openBag() {
     openDrawer("bag","กระเป๋าไอเทม",`<div class="offline-banner">กระเป๋าไอเทมยังเป็นหน้าตัวอย่าง ไม่มีของจริงและยังไม่เชื่อมฐานข้อมูล</div><div class="status-line"><span>ตำราพื้นฐาน</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>เครื่องราง</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>แลกของกับผู้เล่น</span><strong>ยังไม่เปิดใช้</strong></div>`);
