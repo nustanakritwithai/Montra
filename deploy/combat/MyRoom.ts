@@ -57,6 +57,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastRejectNoticeMs = new Map<string, number>();
   private persistentCharacters = new Map<string, string>(); // session -> selected slot digest
   private activeGuestAccounts = new Map<string, string>(); // session -> legacy account digest
+  private pendingCharacterLeaves = new Map<string, Promise<void>>(); // do not release before disk save
   private guestSlotIds = new Map<string, readonly string[]>(); // 3 derived IDs, never raw token
   private lastSlotListMs = new Map<string, number>();
   private lastRenameMs = new Map<string, number>();
@@ -971,6 +972,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const accountId = this.activeGuestAccounts.get(id);
     // Capture the snapshot BEFORE removing the player from server Schema.
     const saving = this.saveCharacter(id);
+    this.pendingCharacterLeaves.set(id, saving);
     this.despawnSummon(id, "owner_left");
     this.lastSummonAt.delete(id);
     this.climbs.delete(id);
@@ -995,6 +997,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try {
       await saving;
     } finally {
+      this.pendingCharacterLeaves.delete(id);
       this.persistentCharacters.delete(id);
       this.guestSlotIds.delete(id);
       this.activeGuestAccounts.delete(id);
@@ -1005,7 +1008,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onDispose() {
     const pending = [...this.persistentCharacters.keys()].map(async id => {
-      try { await this.saveCharacter(id); }
+      try { await (this.pendingCharacterLeaves.get(id) ?? this.saveCharacter(id)); }
       finally {
         const accountId = this.activeGuestAccounts.get(id);
         if (accountId) releaseCharacter(accountId, id);
@@ -1014,6 +1017,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     await Promise.allSettled(pending);
     this.persistentCharacters.clear();
     this.activeGuestAccounts.clear();
+    this.pendingCharacterLeaves.clear();
     this.guestSlotIds.clear();
     this.lastSlotListMs.clear();
     this.lastRenameMs.clear();
