@@ -26,11 +26,14 @@ import {
 import {
   MonsterRRTNavigator, isMonsterSegmentClear,
 } from "./MonsterRRT.js";
+import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.js";
 
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
-  climb: CommandBucket;
+  climb: CommandBucket; dash: CommandBucket;
 };
+
+type ActiveDash = DashDirection & { remaining: number };
 
 /**
  * MONTRA S1: one 20-Hz authoritative simulation per room.
@@ -49,6 +52,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private simulatedMs = 0;
   private destinations = new Map<string, Vec2>();
+  private activeDashes = new Map<string, ActiveDash>();
+  private lastDashMs = new Map<string, number>();
   private attackTargets = new Map<string, string>();
   private lastAttackMs = new Map<string, number>();
   private playerRespawnAt = new Map<string, number>();
@@ -75,6 +80,32 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private climbs = new Map<string, WorldPoint>();
 
   messages = {
+    dash: (client: Client, message: unknown) => {
+      const direction = parseDashCommand(message);
+      if (!direction) return this.reject(client, "invalid_dash");
+      const id = client.sessionId;
+      const player = this.state.players.get(id);
+      if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (this.climbs.has(id)) return this.reject(client, "climbing");
+      if (this.activeDashes.has(id)) return this.reject(client, "dash_in_progress");
+      if (this.simulatedMs - (this.lastDashMs.get(id) ?? -Infinity) < RULES.dashCooldownMs) {
+        return this.reject(client, "dash_cooldown");
+      }
+      if (!this.gates.get(id)?.dash.consume(this.simulatedMs)) {
+        return this.reject(client, "dash_rate_limited");
+      }
+
+      // Dash replaces an attack approach or tap-to-move order; the client
+      // cannot set the start point, height, distance, elapsed time or speed.
+      this.attackTargets.delete(id);
+      this.destinations.delete(id);
+      player.targetId = "";
+      player.facing = facingTo(direction.dx, direction.dz);
+      player.combatState = "dashing";
+      this.activeDashes.set(id, { ...direction, remaining: RULES.dashDistance });
+      this.lastDashMs.set(id, this.simulatedMs);
+      this.broadcast("dash_started", { playerId: id }, { afterNextPatch: true });
+    },
     get_character_slots: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_slot_request");
       const id = client.sessionId;
@@ -107,6 +138,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(client.sessionId)) return this.reject(client, "climbing");
+      if (this.activeDashes.has(client.sessionId)) return this.reject(client, "dashing");
       if (isOnPlatform(player.y) && !isOnTop(destination.x, destination.z)) {
         return this.reject(client, "must_descend");
       }
@@ -130,6 +162,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const attacker = this.state.players.get(attackerId);
       if (!attacker || !attacker.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(attackerId)) return this.reject(client, "climbing");
+      if (this.activeDashes.has(attackerId)) return this.reject(client, "dashing");
       if (!this.gates.get(attackerId)?.attack.consume(this.simulatedMs)) {
         return this.reject(client, "attack_rate_limited");
       }
@@ -211,6 +244,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const player = this.state.players.get(id);
       if (!player || !player.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(id)) return this.reject(client, "already_climbing");
+      if (this.activeDashes.has(id)) return this.reject(client, "dashing");
       if (!this.gates.get(id)?.climb.consume(this.simulatedMs)) {
         return this.reject(client, "climb_rate_limited");
       }
@@ -248,6 +282,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const shooter = this.state.players.get(id);
       if (!shooter || !shooter.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(id)) return this.reject(client, "climbing");
+      if (this.activeDashes.has(id)) return this.reject(client, "dashing");
       if (!this.gates.get(id)?.attack.consume(this.simulatedMs)) {
         return this.reject(client, "attack_rate_limited");
       }
@@ -544,7 +579,33 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private updatePlayerMovement(dt: number) {
     const monster = this.state.monster;
     for (const [sessionId, player] of this.state.players) {
-      if (!player.alive || this.climbs.has(sessionId)) continue;
+      if (!player.alive || this.climbs.has(sessionId)) {
+        this.activeDashes.delete(sessionId);
+        continue;
+      }
+
+      const dash = this.activeDashes.get(sessionId);
+      if (dash) {
+        const move = advanceDash(
+          player, dash,
+          Math.min(dash.remaining, RULES.dashSpeed * dt),
+          (x, z) => this.canOccupy(x, z, player.y),
+        );
+        player.x = move.x;
+        player.z = move.z;
+        player.facing = facingTo(dash.dx, dash.dz);
+        dash.remaining = Math.max(0, dash.remaining - move.moved);
+        if (move.blocked || dash.remaining < 0.0001) {
+          this.activeDashes.delete(sessionId);
+          player.combatState = "idle";
+          this.broadcast("dash_finished", {
+            playerId: sessionId, blocked: move.blocked,
+          }, { afterNextPatch: true });
+        } else {
+          player.combatState = "dashing";
+        }
+        continue;
+      }
 
       const targetId = this.attackTargets.get(sessionId);
       if (targetId) {
@@ -698,6 +759,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     victim.combatState = "dead";
     victim.targetId = "";
     this.climbs.delete(id);
+    this.activeDashes.delete(id);
     this.despawnSummon(id, "owner_dead");
     this.destinations.delete(id);
     this.attackTargets.delete(id);
@@ -874,6 +936,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.y = 0;
       player.z = spawn.z;
       this.climbs.delete(id);
+      this.activeDashes.delete(id);
       player.facing = 0;
       player.combatState = "idle";
       player.targetId = "";
@@ -958,6 +1021,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           RULES.summonCommandBurst, RULES.summonCommandRatePerSecond, this.simulatedMs
         ),
         climb: new CommandBucket(3, 1, this.simulatedMs),
+        dash: new CommandBucket(RULES.dashCommandBurst,
+          RULES.dashCommandRatePerSecond, this.simulatedMs),
       });
       console.log("MONTRA 3-slot join:", client.sessionId, "room", this.roomId,
         saved ? "persistent" : "transient", "slot", slot);
@@ -976,6 +1041,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.despawnSummon(id, "owner_left");
     this.lastSummonAt.delete(id);
     this.climbs.delete(id);
+    this.activeDashes.delete(id);
+    this.lastDashMs.delete(id);
     this.destinations.delete(id);
     this.attackTargets.delete(id);
     this.lastAttackMs.delete(id);
@@ -1033,6 +1100,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastSummonAttackAt.clear();
     this.state.summons.clear();
     this.climbs.clear();
+    this.activeDashes.clear();
+    this.lastDashMs.clear();
     console.log("MONTRA Elevation room disposed:", this.roomId);
   }
 }

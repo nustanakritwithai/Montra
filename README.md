@@ -15,12 +15,18 @@ MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the
 - **Monster navigation RRT patch (server only):** adapt the RRT path planner from [RRT-Game-Lab/multi_target_core.js](https://github.com/nustanakritwithai/RRT-Game-Lab/blob/main/multi_target_core.js) to MONTRA X/Z; monsters follow obstacle-safe waypoints for patrol/chase/return instead of getting stuck walking into the watchwall. Slow bounded replanning is intentional, and no combat or frontend rules change.
 - **S2 Guest Character Persistence / frontend 0.2.0 (staged in GitHub):** browser-generated 256-bit guest token, hashed server-side filename, file-backed atomic snapshots, 15-second autosave and disconnect saves; character name, ID, level, XP, HP, safe position, PK kills/deaths survive Node restart. Mobile profile supports renaming plus export/import of a secret recovery key. Legacy non-token clients still play transiently.
 - **Alpha 0.2.1 — three saves per Guest ID (requires latest VPS code):** each 256-bit guest token owns 3 independent character slots. Slot 1 uses the **original S2 filename** and preserves existing progress without migration; slots 2–3 are new domain-separated SHA-256 filenames. The mobile character selector appears before LIVE and can be reopened through the profile. The server rejects concurrent logins into different slots of the same Guest ID. A legacy S2 server is safely refused for slots 2–3 rather than silently joining slot 1. No existing saves are deleted.
+- **Alpha 0.2.2 — wider camera/pinch:** camera radius expanded for mobile views; two-finger pinch zoom preserves tap-to-move.
+- **Alpha 0.2.3 — server-authoritative Dash:** quick directional swipe anywhere on the bottom existing skill/nav menu triggers dash with no new button. Camera-relative direction only; Colyseus validates a unit vector, moves at 13.5 units/s for up to 4.5 units, 1.8s cooldown, swept wall/map/platform collision at 20Hz, forbids dash during climbing/death, and syncs all players. Old servers are detected by `dashAvailable`; browser DEMO simulates dash locally, LIVE requires installing the updated VPS build.
 - **Still not complete:** password-backed accounts, permanent inventory/trading, XP earning/level progression, multi-node shared storage and Windows auto-start. This S2 code does NOT update the running VPS until the safe installer is executed.
 
-**Code pushed to GitHub does not change the live Windows VPS automatically.** Use the safe S2 Windows installer in the linked runbook, then restart ONLY MONTRA Node and run non-destructive live checks. Keep all character data backups; do not run persistence integration tests against live players.
+**Code pushed to GitHub does not change the live Windows VPS automatically.** To enable LIVE dash, stage/build the 0.2.3 server sources using the safe installer and then restart ONLY MONTRA Node. Keep all character-data backups and do not run destructive integration tests against live players.
 
 ## S1 server source of truth
 
+- [Alpha 0.2.3 Dash Windows VPS stage/build/test/rollback (Thai)](deploy/combat/DASH-WINDOWS-VPS-TH.md)
+- [Dash collision and direction validation](deploy/combat/DashRules.ts)
+- [Dash rules anti-cheat tests](deploy/combat/dash-rules.test.ts)
+- [Dash real-room integration test](deploy/combat/dash-integration.mjs)
 - [0.2.1 Three-save-slot Windows VPS installation + backups (Thai)](deploy/combat/THREE-SLOTS-WINDOWS-TH.md)
 - [S2 Guest Character safe Windows deployment / backup / rollback (Thai)](deploy/combat/S2-CHARACTERS-WINDOWS-TH.md)
 - [S1 Windows VPS install, test and rollback (Thai)](deploy/combat/S1-WINDOWS-VPS-TH.md)
@@ -71,7 +77,7 @@ projects, so deployments must not overwrite its shared configuration.
 ## Current limits
 
 - Four users **per room**, not four users across the whole MMO.
-- One illustrative monster with RRT wall-avoidance, one physically solid fortification, and basic server ray-vs-wall line of sight. The RRT planner currently knows only the watchwall collider; general-purpose navmesh, universal house collisions, ballistic physics and jumping are not yet available.
+- One illustrative monster with RRT wall-avoidance, one physically solid fortification, and basic server ray-vs-wall line of sight. Dash uses the **server's real watchwall/platform/map boundaries**, not decorative house/tree meshes. General-purpose navmesh, universal house collisions, ballistic physics and jumping are not yet available.
 - The server uses fixed 20 Hz ticks. No client prediction/rewind system has been enabled.
 - Alpha 0.2.1 supports **three character saves per recovery token** on a single Windows VPS. Slot 1 keeps the original S2 file. No username/password account, automated lost-token recovery, remote backup or relational database. Clearing browser data without exporting the token loses access to all 3 slots.
 - Free PK is enabled between any living players in the same room. There is no consent flow or safe-zone protection yet.

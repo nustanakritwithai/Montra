@@ -28,6 +28,8 @@ jobs:
           cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
           cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
           cp deploy/combat/GameRules.ts combat-verify/src/rooms/GameRules.ts
+          cp deploy/combat/DashRules.ts combat-verify/src/rooms/DashRules.ts
+          cp deploy/combat/dash-rules.test.ts combat-verify/src/rooms/dash-rules.test.ts
           cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
           cp deploy/combat/MonsterRRT.ts combat-verify/src/rooms/MonsterRRT.ts
           cp deploy/combat/CharacterStore.ts combat-verify/src/rooms/CharacterStore.ts
@@ -38,6 +40,7 @@ jobs:
           cp deploy/combat/s1-integration.mjs combat-verify/s1-integration.mjs
           cp deploy/combat/s1-monster-ai.mjs combat-verify/s1-monster-ai.mjs
           cp deploy/combat/monster-rrt-integration.mjs combat-verify/monster-rrt-integration.mjs
+          cp deploy/combat/dash-integration.mjs combat-verify/dash-integration.mjs
           cp deploy/combat/character-persistence-integration.mjs combat-verify/character-persistence-integration.mjs
           cp deploy/combat/free-pk-integration.mjs combat-verify/free-pk-integration.mjs
           cp deploy/combat/summon-integration.mjs combat-verify/summon-integration.mjs
@@ -111,7 +114,17 @@ jobs:
           grep -q 'guestToken' main.js
           grep -q 'characterSlot' main.js
           grep -q 'slotChoice' main.js
-          grep -q '0.2.2' index.html
+          grep -q '0.2.3' index.html
+          grep -q 'room.send("dash", direction)' main.js
+          grep -q 'function requestSwipeDash' main.js
+          grep -q 'dashAvailable' main.js
+          grep -q 'pointerdown' main.js
+          grep -q 'suppressMenuClick' main.js
+          grep -q 'touch-action:none' styles.css
+          if grep -q 'id="dash"' index.html; then
+            echo "Dash must use a bottom-menu swipe, not a new HUD button"
+            exit 1
+          fi
           grep -q 'CAMERA_ZOOM_MAX = 55' main.js
           grep -q 'touchSeparation()' main.js
           grep -q 'setCameraZoom(' main.js
@@ -137,6 +150,7 @@ jobs:
           node --check deploy/combat/s1-integration.mjs
           node --check deploy/combat/s1-monster-ai.mjs
           node --check deploy/combat/monster-rrt-integration.mjs
+          node --check deploy/combat/dash-integration.mjs
           node --check deploy/combat/character-persistence-integration.mjs
           node --check deploy/combat/free-pk-integration.mjs
           node --check deploy/combat/summon-integration.mjs
@@ -144,7 +158,7 @@ jobs:
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts
+        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/dash-rules.test.ts
 
       - name: Two-player server-authoritative combat integration test
         shell: bash
@@ -160,6 +174,11 @@ jobs:
             if (echo > /dev/tcp/127.0.0.1/4108) 2>/dev/null; then break; fi
             sleep 0.25
           done
+          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 25s node dash-integration.mjs || {
+            echo "=== DASH SERVER LOG ==="
+            cat server.log
+            exit 1
+          }
           MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 48s node monster-rrt-integration.mjs || {
             echo "=== MONSTER RRT SERVER LOG ==="
             cat server.log
