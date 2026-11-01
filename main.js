@@ -101,10 +101,18 @@
   scene.fogMode = B.Scene.FOGMODE_EXP2;
   scene.fogDensity = 0.012;
   scene.fogColor = B.Color3.FromHexString("#293b40");
-  const camera = new B.ArcRotateCamera("portrait", -Math.PI / 2, 1.07, 23,
+  // A wider view of the village; keep the existing close-up limit intact.
+  // Shared by mouse wheel and mobile pinch so neither can exceed the camera's range.
+  const CAMERA_ZOOM_MIN = 15;
+  const CAMERA_ZOOM_MAX = 55;
+  const camera = new B.ArcRotateCamera("portrait", -Math.PI / 2, 1.07, 32,
     new B.Vector3(0, 0, 0), scene);
-  camera.lowerRadiusLimit = 15;
-  camera.upperRadiusLimit = 29;
+  camera.lowerRadiusLimit = CAMERA_ZOOM_MIN;
+  camera.upperRadiusLimit = CAMERA_ZOOM_MAX;
+  function setCameraZoom(radius) {
+    if (!Number.isFinite(radius)) return;
+    camera.radius = Math.max(CAMERA_ZOOM_MIN, Math.min(CAMERA_ZOOM_MAX, radius));
+  }
   camera.lowerBetaLimit = 0.65;
   camera.upperBetaLimit = 1.35;
   camera.fov = 0.69;
@@ -1115,12 +1123,47 @@
   }
 
   let pointer = null;
+  // Do not attach Babylon's default camera controls: we intentionally keep
+  // one-finger rotation and tap-to-walk separate from two-finger pinch zoom.
+  const touchPoints = new Map();
+  let pinchStart = null;
+  let ignoreTapUntilTouchesLift = false;
+  function touchSeparation() {
+    const [a,b] = [...touchPoints.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
   ui.world.addEventListener("pointerdown", event => {
     if (event.button !== 0 && event.pointerType === "mouse") return;
+    if (event.pointerType === "touch") {
+      touchPoints.set(event.pointerId, {x:event.clientX, y:event.clientY});
+      if (touchPoints.size >= 2) {
+        ignoreTapUntilTouchesLift = true;
+        pointer = null; // never turn a pinch into a tap-to-move
+        pinchStart = touchPoints.size === 2
+          ? {separation:Math.max(1,touchSeparation()), radius:camera.radius}
+          : null;
+        try { ui.world.setPointerCapture(event.pointerId); } catch (_) {}
+        return;
+      }
+      if (ignoreTapUntilTouchesLift) return;
+    }
     pointer = { id:event.pointerId, x:event.clientX, y:event.clientY, alpha:camera.alpha, beta:camera.beta, moved:false };
     try { ui.world.setPointerCapture(event.pointerId); } catch (_) {}
   });
   ui.world.addEventListener("pointermove",event => {
+    if (event.pointerType === "touch" && touchPoints.has(event.pointerId)) {
+      touchPoints.set(event.pointerId, {x:event.clientX,y:event.clientY});
+      if (touchPoints.size >= 2) {
+        if (touchPoints.size === 2) {
+          const separation = Math.max(1, touchSeparation());
+          if (!pinchStart) pinchStart = {separation,radius:camera.radius};
+          // Pinching fingers together zooms out; spreading zooms in.
+          setCameraZoom(pinchStart.radius * pinchStart.separation / separation);
+        }
+        return;
+      }
+      if (ignoreTapUntilTouchesLift) return;
+    }
     if (!pointer || pointer.id !== event.pointerId) return;
     const dx = event.clientX - pointer.x;
     const dy = event.clientY - pointer.y;
@@ -1131,7 +1174,13 @@
     }
   });
   ui.world.addEventListener("pointerup",event => {
-    if (!pointer || pointer.id !== event.pointerId) return;
+    const suppressTap = event.pointerType === "touch" && ignoreTapUntilTouchesLift;
+    if (event.pointerType === "touch") {
+      touchPoints.delete(event.pointerId);
+      if (touchPoints.size < 2) pinchStart = null;
+      if (touchPoints.size === 0) ignoreTapUntilTouchesLift = false;
+    }
+    if (suppressTap || !pointer || pointer.id !== event.pointerId) return;
     const wasMoved = pointer.moved;
     pointer = null;
     if (wasMoved) return;
@@ -1170,8 +1219,18 @@
       pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
     }
   });
-  ui.world.addEventListener("pointercancel",()=> { pointer=null; });
-  ui.world.addEventListener("wheel",e=> { e.preventDefault(); camera.radius=Math.max(15,Math.min(29,camera.radius + Math.sign(e.deltaY))); },{passive:false});
+  ui.world.addEventListener("pointercancel",event => {
+    if (event.pointerType === "touch") {
+      touchPoints.delete(event.pointerId);
+      if (touchPoints.size < 2) pinchStart = null;
+      if (touchPoints.size === 0) ignoreTapUntilTouchesLift = false;
+    }
+    if (pointer?.id === event.pointerId) pointer = null;
+  });
+  ui.world.addEventListener("wheel", e => {
+    e.preventDefault();
+    setCameraZoom(camera.radius + Math.sign(e.deltaY) * 2);
+  }, {passive:false});
 
   let drawerActive = null;
   function closeDrawer() {
@@ -1376,7 +1435,7 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.1",`<h3>การเคลื่อนที่</h3><p>แตะพื้นที่ต้องการเดิน · ลากนิ้วในฉากเพื่อเปลี่ยนมุมกล้อง · ใช้ล้อเมาส์เพื่อซูมเมื่อเล่นบนคอมพิวเตอร์</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ไอเทมถาวร และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.1",`<h3>การเคลื่อนที่</h3><p>แตะพื้นที่ต้องการเดิน · ลากหนึ่งนิ้วเพื่อหมุนกล้อง · หุบสองนิ้วเพื่อซูมออก / กางสองนิ้วเพื่อซูมเข้า · คอมพิวเตอร์ใช้ล้อเมาส์ซูม</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ไอเทมถาวร และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
   }
   function openBag() {
     openDrawer("bag","กระเป๋าไอเทม",`<div class="offline-banner">กระเป๋าไอเทมยังเป็นหน้าตัวอย่าง ไม่มีของจริงและยังไม่เชื่อมฐานข้อมูล</div><div class="status-line"><span>ตำราพื้นฐาน</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>เครื่องราง</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>แลกของกับผู้เล่น</span><strong>ยังไม่เปิดใช้</strong></div>`);
