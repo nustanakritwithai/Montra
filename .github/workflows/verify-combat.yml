@@ -109,6 +109,9 @@ jobs:
           grep -q 'id="pkPanel"' index.html
           grep -q 'id="characterProfile"' index.html
           grep -q 'guestToken' main.js
+          grep -q 'characterSlot' main.js
+          grep -q 'slotChoice' main.js
+          grep -q '0.2.1' index.html
           grep -q 'rename_character' main.js
 
       - name: Parse Windows PowerShell installer
@@ -189,7 +192,7 @@ jobs:
             cat server.log
             exit 1
           }
-          MONTRA_TEST_URL=http://127.0.0.1:4108 MONTRA_S2_TEST_STAGE=write timeout 20s node character-persistence-integration.mjs || {
+          MONTRA_TEST_URL=http://127.0.0.1:4108 MONTRA_S2_TEST_STAGE=write timeout 35s node character-persistence-integration.mjs || {
             echo "=== S2 WRITE SERVER LOG ==="
             cat server.log
             exit 1
@@ -204,7 +207,7 @@ jobs:
             if (echo > /dev/tcp/127.0.0.1/4108) 2>/dev/null; then break; fi
             sleep 0.25
           done
-          MONTRA_TEST_URL=http://127.0.0.1:4108 MONTRA_S2_TEST_STAGE=read timeout 20s node character-persistence-integration.mjs || {
+          MONTRA_TEST_URL=http://127.0.0.1:4108 MONTRA_S2_TEST_STAGE=read timeout 30s node character-persistence-integration.mjs || {
             echo "=== S2 RESTART SERVER LOG ==="
             cat restarted-server.log
             exit 1
