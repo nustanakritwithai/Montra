@@ -117,7 +117,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           POTION_COOLDOWN_MS) return this.reject(client, "item_cooldown");
       const result = useInventoryItem(
         inventory, slot, player.hp, player.maxHp, player.alive);
-      if (!result.ok) return this.reject(client, result.reason);
+      // The Windows VPS build uses different TS strictness from CI.
+      // An explicit property guard narrows ItemUseResult in both modes.
+      if ("reason" in result) return this.reject(client, result.reason);
       const snapshot = this.captureCharacterSnapshot(id, result.inventory, result.hp);
       if (!snapshot) return this.reject(client, "inventory_unavailable");
 
