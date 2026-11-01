@@ -31,6 +31,37 @@
     try { return localStorage.getItem("montra_endpoint") || MONTRA_VPS_URL; }
     catch (_) { return MONTRA_VPS_URL; }
   }
+  function preferredSlotKey(endpoint) {
+    return "montra_character_slot:" + new URL(endpoint).host;
+  }
+  function slotPreviewKey(endpoint) {
+    return "montra_character_slots_preview:" + new URL(endpoint).host;
+  }
+  function getPreferredSlot(endpoint) {
+    try {
+      const slot = Number(localStorage.getItem(preferredSlotKey(endpoint)) || 1);
+      return [1,2,3].includes(slot) ? slot : 1;
+    } catch (_) { return 1; }
+  }
+  function readSlotPreviews(endpoint) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(slotPreviewKey(endpoint)) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) { return []; }
+  }
+  function rememberSlotPreviews(endpoint, slots) {
+    if (!Array.isArray(slots) || slots.length !== 3) return;
+    const cleaned = slots.map((entry, index) => ({
+      slot: index + 1,
+      occupied: entry?.occupied === true,
+      unavailable: entry?.unavailable === true,
+      name: typeof entry?.name === "string" ? entry.name.slice(0, 24) : "",
+      level: Number.isSafeInteger(entry?.level) ? entry.level : 0,
+    }));
+    try { localStorage.setItem(slotPreviewKey(endpoint), JSON.stringify(cleaned)); }
+    catch (_) { /* only local preview, server remains authoritative */ }
+  }
+  let activeCharacterSlot = null;
   const ui = {
     loading: $("loading"), loadingText: $("loadingText"), world: $("world"), toast: $("toast"),
     modeBadge: $("modeBadge"), onlineCount: $("onlineCount"), drawer: $("drawer"),
@@ -520,7 +551,7 @@
   }
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
-    room = null; mode = "demo"; localId = "demo";
+    room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
     applyFortVisual(defaultFort);
     onlinePlayers.clear(); clearAvatars(); clearSummons();
     player = ensureAvatar("demo",true,0,0);
@@ -655,7 +686,8 @@
     const name = typeof me?.characterName === "string" && me.characterName
       ? me.characterName : "นที";
     $("characterName").textContent = name;
-    $("characterLevel").textContent = "LV. " + (
+    const slot = me?.persistent ? (Number(me.characterSlot) || activeCharacterSlot || 1) : null;
+    $("characterLevel").textContent = (slot ? "S" + slot + " · " : "") + "LV. " + (
       Number.isFinite(me?.level) ? me.level : 1
     );
     $("characterProfile").title = me?.persistent
