@@ -119,6 +119,12 @@ jobs:
           grep -q 'function requestSwipeDash' main.js
           grep -q 'dashAvailable' main.js
           grep -q 'pointerdown' main.js
+          grep -q 'suppressMenuClick' main.js
+          grep -q 'touch-action:none' styles.css
+          if grep -q 'id="dash"' index.html; then
+            echo "Dash must use a bottom-menu swipe, not a new HUD button"
+            exit 1
+          fi
           grep -q 'CAMERA_ZOOM_MAX = 55' main.js
           grep -q 'touchSeparation()' main.js
           grep -q 'setCameraZoom(' main.js
