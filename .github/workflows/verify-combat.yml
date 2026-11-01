@@ -97,6 +97,12 @@ jobs:
         working-directory: combat-verify
         run: npx tsc --noEmit
 
+      # Windows VPS tsconfig.build.json can use strictNullChecks=false.
+      # Build both ways so a discriminated-union failure cannot slip past CI.
+      - name: Type-check Windows-compatible non-strict server
+        working-directory: combat-verify
+        run: npx tsc --noEmit --strict false
+
       - name: Validate mobile S1 client adapter
         shell: bash
         run: |
