@@ -1433,6 +1433,10 @@
       return;
     }
     if (mode !== "demo") return;
+    if (demoFlying || demoFlightTarget) {
+      toast("กำลังบินอยู่ · ลงจอดก่อนจึงพุ่งได้");
+      return;
+    }
     if (performance.now() < demoDashNextAt) {
       toast("รอคูลดาวน์พุ่ง · DEMO");
       return;
