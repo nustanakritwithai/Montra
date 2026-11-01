@@ -8,6 +8,12 @@ export const RULES = Object.freeze({
   tickRate: 20,               // Colyseus fixed-step simulation: 50 ms
   mapLimit: 20,
   playerSpeed: 3,
+  // Fixed-tick dash: fast but finite, with server-owned range and cooldown.
+  dashSpeed: 13.5,
+  dashDistance: 4.5,
+  dashCooldownMs: 1800,
+  dashCommandBurst: 2,
+  dashCommandRatePerSecond: 2,
   playerMaxHp: 100,
   playerAttackRange: 2.8,
   playerAttackDamage: 20,
