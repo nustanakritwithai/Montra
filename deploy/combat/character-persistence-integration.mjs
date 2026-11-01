@@ -55,6 +55,10 @@ try {
       room.send("rename_character", { name: item.name });
       await until(() => own(room)?.characterName === item.name, 3000, "rename slot " + item.slot);
       if (item.slot === 1) {
+        // Permanently change the starter dagger to the arcane sword.
+        room.send("equip_weapon", { slot:2 });
+        await until(()=>own(room)?.equippedWeaponId === "arcane_sword",
+          3400,"equip sword in saved slot 1");
         room.send("rename_character", { name: "<script>" });
         await sleep(150);
         assert.equal(own(room).characterName, item.name, "invalid rename must be rejected");
@@ -128,12 +132,20 @@ try {
       assert.ok(Math.abs(me.y - (item.slot === 3 ? 6 : 0)) < .02,
         "wrong persistent altitude for slot " + item.slot);
       assert.equal(me.pkKills, 0);
+      assert.equal(me.equippedWeaponId,
+        item.slot === 1 ? "arcane_sword" : "ritual_dagger",
+        "per-character weapon loadout must survive Node restart");
       const inventoryUpdates = [];
       room.onMessage("inventory_state", payload => inventoryUpdates.push(payload));
       room.send("get_inventory", {});
       await until(() => Array.isArray(inventoryUpdates.at(-1)?.slots),
         3500, "inventory loaded after Node restart in slot " + item.slot);
       assert.equal(inventoryUpdates.at(-1).slots.length, 12);
+      assert.deepEqual(inventoryUpdates.at(-1).slots.slice(1,4).map(s=>s?.itemId),
+        ["ritual_dagger","arcane_sword","spirit_staff"]);
+      assert.equal(inventoryUpdates.at(-1).equippedWeaponSlot,
+        item.slot === 1 ? 2 : 1);
+      assert.equal(inventoryUpdates.at(-1).slots[2]?.quantity,1);
       assert.equal(inventoryUpdates.at(-1).slots[0]?.quantity,
         item.slot === 2 ? 2 : 3,
         "potions must persist without re-granting between restarts/slots");
@@ -168,6 +180,7 @@ try {
     );
     console.log("PASS: all three slots survive a full Node restart and keep separate data");
     console.log("PASS: potion count survives full Node restart; no double grant or shared inventory");
+    console.log("PASS: three permanent weapon kits and equipped choice survive Node restart separately");
     console.log("PASS: account lease blocks cross-slot duplicate login, invalid slots and old anonymous clients");
   }
 } finally {
