@@ -21,6 +21,7 @@ import {
 import {
   FORT, distance3d, isOnPlatform, isOnGround, isOnTop, touchesWallBody,
   parseClimbRequest, progressClimb, step3d, wallBlocksShot,
+  FLIGHT, isFlightAltitude, flightLandingHeight, progressFlightHeight,
   type WorldPoint,
 } from "./HeightRules.js";
 import {
@@ -30,7 +31,7 @@ import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.j
 
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
-  climb: CommandBucket; dash: CommandBucket;
+  climb: CommandBucket; dash: CommandBucket; flight: CommandBucket;
 };
 
 type ActiveDash = DashDirection & { remaining: number };
@@ -78,8 +79,43 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastSummonAt = new Map<string, number>();
   private lastSummonAttackAt = new Map<string, number>();
   private climbs = new Map<string, WorldPoint>();
+  private flightTransitions = new Map<string, { targetY: number; landing: boolean }>();
 
   messages = {
+    fly: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_flight");
+      const id = client.sessionId;
+      const player = this.state.players.get(id);
+      if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (this.climbs.has(id)) return this.reject(client, "climbing");
+      if (this.activeDashes.has(id)) return this.reject(client, "dashing");
+      if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
+      if (!this.gates.get(id)?.flight.consume(this.simulatedMs)) {
+        return this.reject(client, "flight_rate_limited");
+      }
+      const landing = player.flying;
+      // Do NOT allow a landing into the wall's solid body or off map.
+      const landingY = landing ? flightLandingHeight(player.x, player.z) : null;
+      if (landing && (landingY === null ||
+          !this.canOccupy(player.x, player.z, landingY))) {
+        return this.reject(client, "landing_blocked");
+      }
+      if (!landing && !isOnGround(player.y) && !isOnPlatform(player.y)) {
+        return this.reject(client, "flight_unavailable");
+      }
+      const targetY = landing ? landingY! : FLIGHT.altitude;
+      this.attackTargets.delete(id);
+      this.destinations.delete(id);
+      player.targetId = "";
+      player.combatState = landing ? "descending" : "ascending";
+      // Flying stays true during descent so its state is never persisted as
+      // a partial/in-between height; only completion returns ground/wall mode.
+      player.flying = true;
+      this.flightTransitions.set(id, { targetY, landing });
+      this.broadcast("flight_started", {
+        playerId: id, direction: landing ? "down" : "up", targetY,
+      }, { afterNextPatch: true });
+    },
     dash: (client: Client, message: unknown) => {
       const direction = parseDashCommand(message);
       if (!direction) return this.reject(client, "invalid_dash");
@@ -87,6 +123,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const player = this.state.players.get(id);
       if (!player || !player.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(id)) return this.reject(client, "climbing");
+      if (player.flying || this.flightTransitions.has(id)) return this.reject(client, "flying");
       if (this.activeDashes.has(id)) return this.reject(client, "dash_in_progress");
       if (this.simulatedMs - (this.lastDashMs.get(id) ?? -Infinity) < RULES.dashCooldownMs) {
         return this.reject(client, "dash_cooldown");
@@ -139,7 +176,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!player || !player.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(client.sessionId)) return this.reject(client, "climbing");
       if (this.activeDashes.has(client.sessionId)) return this.reject(client, "dashing");
-      if (isOnPlatform(player.y) && !isOnTop(destination.x, destination.z)) {
+      if (this.flightTransitions.has(client.sessionId)) return this.reject(client, "flight_in_progress");
+      if (!player.flying && isOnPlatform(player.y) && !isOnTop(destination.x, destination.z)) {
         return this.reject(client, "must_descend");
       }
       if (!this.gates.get(client.sessionId)?.move.consume(this.simulatedMs)) {
@@ -163,6 +201,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!attacker || !attacker.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(attackerId)) return this.reject(client, "climbing");
       if (this.activeDashes.has(attackerId)) return this.reject(client, "dashing");
+      if (this.flightTransitions.has(attackerId)) return this.reject(client, "flight_in_progress");
       if (!this.gates.get(attackerId)?.attack.consume(this.simulatedMs)) {
         return this.reject(client, "attack_rate_limited");
       }
@@ -245,6 +284,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!player || !player.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(id)) return this.reject(client, "already_climbing");
       if (this.activeDashes.has(id)) return this.reject(client, "dashing");
+      if (player.flying || this.flightTransitions.has(id)) return this.reject(client, "flying");
       if (!this.gates.get(id)?.climb.consume(this.simulatedMs)) {
         return this.reject(client, "climb_rate_limited");
       }
@@ -283,6 +323,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!shooter || !shooter.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(id)) return this.reject(client, "climbing");
       if (this.activeDashes.has(id)) return this.reject(client, "dashing");
+      if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
       if (!this.gates.get(id)?.attack.consume(this.simulatedMs)) {
         return this.reject(client, "attack_rate_limited");
       }
