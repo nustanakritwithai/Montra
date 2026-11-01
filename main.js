@@ -613,6 +613,7 @@
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
   let economyGold = null, economyListings = [], activeTrade = null, economyPending = false;
   let economyTimer = null, economyTab = "market", tradeUnread = false;
+  let partyState = null, partyInvitation = null, partyUnread = false;
   // Inventory is never stored in localStorage: LIVE comes from VPS each join.
   const INVENTORY_SLOTS = 12;
   const POTION_ITEM_ID = "health_potion";
@@ -761,6 +762,7 @@
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
+    partyState=null; partyInvitation=null; partyUnread=false; updatePartyBadge();
     clearChatHistory(true);
     switchWorld("ritual_village");
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
@@ -787,6 +789,7 @@
     if (localHpBar) localHpBar.style.width = demoHp + "%";
     updateCharacterHud(null);
     updateStatus();
+    renderParty();
   }
   function getLocalAvatar() { return avatars.get(localId); }
   function pointMove(x,z) {
@@ -1164,6 +1167,7 @@
     updateFlightButton();
     if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
     if (drawerActive === "character") renderProgressionProfile();
+    if (drawerActive === "party") renderParty();
     const me=players.get(localId), staminaBar=$("staminaBar");
     if (state?.progressionAvailable === true && me && Number(me.maxStamina)>0) {
       const pct=Math.max(0,Math.min(100,100*Number(me.stamina)/Number(me.maxStamina)));
@@ -1240,6 +1244,7 @@
       room = joined;
       clearChatHistory(true);
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; tradeUnread=false; updateTradeBadge();
+      partyState=null; partyInvitation=null; partyUnread=false; updatePartyBadge();
       inventoryState = null;
       itemUsePending = false;
       itemUseSequence += 1;
@@ -1277,6 +1282,26 @@
         }
         updateChatBadge();
         if (drawerActive === "chat") renderChat();
+      });
+      joined.onMessage("party_state", message => {
+        if (room!==joined || !Array.isArray(message?.members) || message.members.length>4) return;
+        partyState=typeof message.partyId==="string" ? {partyId:message.partyId,leaderId:message.leaderId,members:message.members.filter(m=>m && typeof m.sessionId==="string" && typeof m.name==="string")} : null;
+        if (partyState) { partyInvitation=null; partyUnread=false; updatePartyBadge(); }
+        renderParty();
+      });
+      joined.onMessage("party_invitation", message => {
+        if (room!==joined || typeof message?.inviteId!=="string" || typeof message?.fromName!=="string") return;
+        partyInvitation=message; partyUnread=drawerActive!=="party"; updatePartyBadge();
+        if (partyUnread) toast("มีคำเชิญเข้าปาร์ตี้ · เปิดเมนูปาร์ตี้");
+        renderParty();
+      });
+      joined.onMessage("party_invitation_closed",()=>{ if(room!==joined)return;partyInvitation=null;partyUnread=false;updatePartyBadge();renderParty(); });
+      joined.onMessage("party_notice",message=>{ if(room!==joined)return;toast(message?.reason==="invitation_declined" ? "ผู้เล่นปฏิเสธคำเชิญ" : "ส่งคำเชิญปาร์ตี้แล้ว"); });
+      joined.onMessage("party_error",message=>{
+        if(room!==joined)return;
+        const reasons={party_invalid_target:"ไม่พบผู้เล่นที่ชวนได้",party_leader_only:"เฉพาะหัวหน้าปาร์ตี้ที่ชวนได้",party_full:"ปาร์ตี้เต็มแล้ว",party_target_joined:"ผู้เล่นอยู่ในปาร์ตี้แล้ว",party_invite_expired:"คำเชิญหมดอายุหรือถูกยกเลิก"};
+        if(message?.reason==="party_invite_expired") partyInvitation=null;
+        toast(reasons[message?.reason] || "ทำรายการปาร์ตี้ไม่สำเร็จ");renderParty();
       });
       joined.onMessage("economy_state", message => {
         if (room !== joined || !Number.isSafeInteger(message?.gold) || message.gold < 0) return;
@@ -1521,6 +1546,7 @@
       });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
         if (["economy_unavailable","economy_rate_limited","invalid_economy_request","invalid_trade","trade_unavailable","trade_expired","character_busy"].includes(info?.reason) && (drawerActive === "economy" || economyPending)) {
           finishEconomyPending();
           if (["trade_unavailable","trade_expired"].includes(info.reason)) activeTrade=null;
@@ -2189,7 +2215,7 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์ การตีบวก และระบบอาชีพ</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์ การตีบวก และระบบอาชีพ</p>`);
   }
   function currentBagSlots() {
     if (mode === "live") return inventoryState?.slots || null;
@@ -2472,6 +2498,49 @@
     fillTradeTargets(); renderEconomy();
     if (economyReady()) { economySend("get_economy",{}); economySend("market_list",{}); }
   }
+  function updatePartyBadge() { const badge=$("partyUnread"); if(badge)badge.hidden=!partyUnread; }
+  function partyReady() { return mode==="live" && room?.state?.partyAvailable===true && ownServerCharacter()?.persistent===true; }
+  function renderParty() {
+    if(drawerActive!=="party" || !$("partyStatus")) return;
+    const ready=partyReady();
+    $("partyStatus").textContent=ready ? (partyState ? "สมาชิก " + partyState.members.length + " / 4" : "ยังไม่ได้อยู่ในปาร์ตี้") : "เข้า LIVE ที่เปิดระบบปาร์ตี้ก่อน";
+    $("partyInvitationBox").hidden=!partyInvitation;
+    if(partyInvitation) $("partyInviter").textContent=String(partyInvitation.fromName);
+    $("partyAccept").disabled=!ready; $("partyDecline").disabled=!ready;
+    const list=$("partyMembers"); list.replaceChildren();
+    if(partyState) for(const member of partyState.members) {
+      const row=document.createElement("div");row.className="party-member";
+      const name=document.createElement("strong"); name.textContent=member.name + (member.sessionId===partyState.leaderId ? " · หัวหน้า" : "") + (member.sessionId===localId ? " · คุณ" : "");
+      const hp=document.createElement("span"), player=room?.state?.players?.get?.(member.sessionId);
+      hp.textContent=player ? "HP " + Math.max(0,Math.round(Number(player.hp)||0)) + " / " + Math.max(0,Math.round(Number(player.maxHp)||0)) : "กำลังเชื่อมต่อ";
+      row.append(name,hp);list.appendChild(row);
+    }
+    else {const empty=document.createElement("p");empty.className="note";empty.textContent="ชวนผู้เล่นในห้องเพื่อเริ่มปาร์ตี้";list.appendChild(empty);}
+    const select=$("partyTarget"), old=select.value, choices=[];
+    room?.state?.players?.forEach?.((player,id)=>{if(id!==localId && player.persistent===true && !(partyState?.members || []).some(m=>m.sessionId===id)) choices.push({id,name:String(player.characterName || "ผู้เล่น")});});
+    const signature=JSON.stringify(choices);
+    if(select.dataset.signature!==signature) {
+      select.replaceChildren();
+      for(const candidate of choices){const option=document.createElement("option");option.value=candidate.id;option.textContent=candidate.name;select.appendChild(option);}
+      if(!choices.length){const option=document.createElement("option");option.value="";option.textContent="ไม่มีผู้เล่นในห้องที่ชวนได้";select.appendChild(option);}
+      if(choices.some(candidate=>candidate.id===old))select.value=old;
+      select.dataset.signature=signature;
+    }
+    const isLeader=!partyState || partyState.leaderId===localId;
+    $("partyInvite").disabled=!ready || !isLeader || (partyState?.members.length || 0)>=4 || !select.value;
+    $("partyLeaderHint").textContent=isLeader ? "ชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน" : "หัวหน้าปาร์ตี้เป็นผู้ส่งคำเชิญ";
+    $("partyLeave").hidden=!partyState; $("partyLeave").disabled=!ready;
+  }
+  function openParty() {
+    partyUnread=false;updatePartyBadge();
+    openDrawer("party","ปาร์ตี้",
+      '<div class="economy-balance" id="partyStatus" role="status"></div><div id="partyInvitationBox" class="party-invitation" hidden><strong><span id="partyInviter"></span> ชวนเข้าปาร์ตี้</strong><div class="party-actions"><button id="partyAccept" type="button">เข้าร่วม</button><button id="partyDecline" type="button">ปฏิเสธ</button></div></div><h3>สมาชิก</h3><div id="partyMembers"></div><p class="note">EXP อิงเลเวลผู้ปราบ แล้วแบ่งเท่ากันให้สมาชิกที่มีชีวิต อยู่แผนที่เดียวกัน และห่างจากมอนสเตอร์ไม่เกิน 20 หน่วย เศษปัดลง · โจมตีเพื่อนร่วมปาร์ตี้ไม่ได้</p><label class="field" for="partyTarget">ชวนผู้เล่นในห้อง</label><select id="partyTarget"></select><p class="note" id="partyLeaderHint"></p><button class="primary" id="partyInvite" type="button">ส่งคำเชิญ</button><button class="secondary" id="partyLeave" type="button" hidden>ออกจากปาร์ตี้</button>');
+    $("partyInvite").onclick=()=>{const targetId=$("partyTarget").value;if(partyReady() && targetId)room.send("party_invite",{targetId});};
+    $("partyAccept").onclick=()=>{if(partyReady() && partyInvitation)room.send("party_accept",{inviteId:partyInvitation.inviteId});};
+    $("partyDecline").onclick=()=>{if(partyReady() && partyInvitation)room.send("party_decline",{inviteId:partyInvitation.inviteId});};
+    $("partyLeave").onclick=()=>{if(partyReady())room.send("party_leave",{});};
+    renderParty(); if(partyReady())room.send("get_party",{});
+  }
   // Compact portrait HUD: a small quest chip opens the existing detail drawer.
   ui.quest.addEventListener("click", () => {
     const title = ui.quest.querySelector("strong")?.textContent || "ภารกิจ";
@@ -2483,6 +2552,7 @@
   $("mapButton").onclick=openMap;
   $("chatButton").onclick=openChat;
   $("marketButton").onclick=openEconomy;
+  $("partyButton").onclick=openParty;
   $("mapShortcut").onclick=openMap;
   $("modeButton").onclick=openOnline;
   $("helpButton").onclick=openHelp;

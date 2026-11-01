@@ -35,6 +35,7 @@ import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
+import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { PROGRESSION, addExperience, calculateDamage, calculateStats, emptyAllocations,
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
@@ -46,7 +47,7 @@ import {
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
   climb: CommandBucket; dash: CommandBucket; flight: CommandBucket;
-  chat: CommandBucket; economy: CommandBucket;
+  chat: CommandBucket; economy: CommandBucket; party: CommandBucket;
 };
 
 type ActiveDash = DashDirection & { remaining: number };
@@ -97,6 +98,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastInventoryReadMs = new Map<string, number>();
   private lastWeaponEquipMs = new Map<string, number>();
   private trades = new Map<string, TradeSession>();
+  private parties = new PartyManager();
 
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
@@ -114,6 +116,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const owner = this.state.players.get(ownerId);
     if (!owner || this.pendingWarps.has(ownerId) || this.pendingWarps.has(targetId)) return false;
     if (targetId === RULES.monsterId) return owner.mapId === DEFAULT_MAP_ID;
+    if (this.parties.get(ownerId)?.members.includes(targetId)) return false;
     const target = this.state.players.get(targetId);
     return Boolean(target && target.mapId === owner.mapId);
   }
@@ -134,19 +137,22 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     player.xpToNext = player.level >= PROGRESSION.maxLevel ? 0 : xpForNextLevel(player.level);
   }
 
-  private grantMonsterExperience(id: string): void {
+  private grantMonsterExperience(id: string, sharedAmount?: number): void {
     const player = this.state.players.get(id);
-    if (!player || !this.persistentCharacters.has(id) || this.pendingRewards.has(id)) return;
+    const priorReward=this.pendingRewards.get(id);
+    if (!player || !this.persistentCharacters.has(id) || (this.pendingWarps.has(id) && !priorReward)) return;
     // Freeze the winner while the previous item mutation and EXP write finish;
     // onLeave/saveCharacter await this task before capturing the final snapshot.
     this.pendingWarps.add(id);
     const priorItem = this.pendingItemUses.get(id);
-    const task = (async () => {
+    let task: Promise<void>;
+    task = Promise.resolve().then(async () => {
       try {
+        if (priorReward) await priorReward.catch(() => {});
         if (priorItem) await priorItem.catch(() => {});
         const current = this.state.players.get(id), snapshot = this.captureCharacterSnapshot(id);
         if (!current || !snapshot) return;
-        const amount = current.level >= PROGRESSION.maxLevel ? 0 : monsterExperience(current.level, PROGRESSION.monsterLevel);
+        const amount = current.level >= PROGRESSION.maxLevel ? 0 : (sharedAmount ?? monsterExperience(current.level, PROGRESSION.monsterLevel));
         if (amount <= 0) return;
         const next = addExperience(current.level, current.experience, amount);
         await characterStore.save({ ...snapshot, ...next, updatedAt: new Date().toISOString() });
@@ -157,10 +163,51 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         console.error("MONTRA EXP save failed:", id, error);
         this.clients.find(client => client.sessionId === id)?.send("character_save_error", { reason: "disk_write_failed" });
       } finally {
-        this.pendingWarps.delete(id); this.pendingRewards.delete(id);
+        if (this.pendingRewards.get(id)===task) { this.pendingWarps.delete(id); this.pendingRewards.delete(id); }
       }
-    })();
+    });
     this.pendingRewards.set(id, task);
+  }
+
+  private awardMonsterExperience(winnerId:string): void {
+    const winner=this.state.players.get(winnerId), party=this.parties.get(winnerId);
+    if (!winner || !party) { this.grantMonsterExperience(winnerId); return; }
+    const eligible=party.members.filter(id=>{
+      const player=this.state.players.get(id);
+      return Boolean(player && player.alive && player.mapId===DEFAULT_MAP_ID && player.level<PROGRESSION.maxLevel && this.persistentCharacters.has(id) && (!this.pendingWarps.has(id) || this.pendingRewards.has(id)) && distance3d(player,this.state.monster)<=PARTY_XP_RADIUS);
+    });
+    if (!eligible.length) return;
+    const reward=Math.floor(monsterExperience(winner.level,PROGRESSION.monsterLevel)/eligible.length);
+    if (reward>0) for (const id of eligible) this.grantMonsterExperience(id,reward);
+  }
+
+  private partyAction(client:Client, action:()=>void): void {
+    if (!this.gates.get(client.sessionId)?.party.consume(this.simulatedMs)) return this.reject(client,"party_rate_limited");
+    if (!this.persistentCharacters.has(client.sessionId) || this.pendingCharacterLeaves.has(client.sessionId)) return this.reject(client,"party_unavailable");
+    try { action(); } catch(error) {
+      const reasons=["party_invalid_target","party_leader_only","party_full","party_target_joined","party_invite_expired"];
+      const reason=error instanceof Error && reasons.includes(error.message) ? error.message : "party_error";
+      if (reason==="party_error") console.error("MONTRA party error",error);
+      client.send("party_error",{reason});
+    }
+  }
+  private sendPartyState(party:Party): void {
+    const members=party.members.map(sessionId=>({sessionId,name:this.state.players.get(sessionId)?.characterName ?? "ผู้เล่น"}));
+    for(const id of party.members) {
+      const client=this.clients.find(c=>c.sessionId===id);
+      try { client?.send("party_state",{partyId:party.id,leaderId:party.leader,members,xpRadius:PARTY_XP_RADIUS}); } catch { /* disconnected */ }
+    }
+  }
+  private leaveParty(id:string):void {
+    const result=this.parties.leave(id); if(!result) return;
+    const client=this.clients.find(c=>c.sessionId===id);
+    try { client?.send("party_state",{partyId:null,leaderId:null,members:[]}); } catch { /* disconnected */ }
+    if (result.current) this.sendPartyState(result.current);
+  }
+  private parsePartyInvitation(message:unknown):string|null {
+    if (!message || typeof message!=="object" || Array.isArray(message)) return null;
+    const value=message as Record<string,unknown>;
+    return Object.keys(value).length===1 && typeof value.inviteId==="string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value.inviteId) ? value.inviteId : null;
   }
 
   private economyId(client: Client): string | null {
@@ -210,6 +257,36 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   messages = {
+    get_party: (client:Client,message:unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client,"party_invalid_request");
+      this.partyAction(client,()=>{const party=this.parties.get(client.sessionId);if(party)this.sendPartyState(party);else client.send("party_state",{partyId:null,leaderId:null,members:[]});});
+    },
+    party_invite: (client:Client,message:unknown) => {
+      const request=parseTradeRequest(message); if(!request) return this.reject(client,"party_invalid_request");
+      this.partyAction(client,()=>{
+        const target=this.clients.find(c=>c.sessionId===request.targetId), player=this.state.players.get(client.sessionId);
+        if(!target || !player || !this.persistentCharacters.has(request.targetId) || this.pendingCharacterLeaves.has(request.targetId)) throw new Error("party_invalid_target");
+        const invite=this.parties.invite(client.sessionId,request.targetId,this.simulatedMs);
+        target.send("party_invitation",{inviteId:invite.id,fromId:client.sessionId,fromName:player.characterName,expiresIn:60});
+        client.send("party_notice",{reason:"invitation_sent"});
+      });
+    },
+    party_accept: (client:Client,message:unknown) => {
+      const inviteId=this.parsePartyInvitation(message); if(!inviteId) return this.reject(client,"party_invalid_request");
+      this.partyAction(client,()=>{
+        const invite=this.parties.invitation(client.sessionId,inviteId,this.simulatedMs);
+        if(!this.state.players.has(invite.from) || !this.persistentCharacters.has(invite.from) || this.pendingCharacterLeaves.has(invite.from)) throw new Error("party_invite_expired");
+        this.sendPartyState(this.parties.accept(client.sessionId,inviteId,this.simulatedMs));
+      });
+    },
+    party_decline: (client:Client,message:unknown) => {
+      const inviteId=this.parsePartyInvitation(message); if(!inviteId) return this.reject(client,"party_invalid_request");
+      this.partyAction(client,()=>{const invite=this.parties.decline(client.sessionId,inviteId,this.simulatedMs);this.clients.find(c=>c.sessionId===invite.from)?.send("party_notice",{reason:"invitation_declined"});client.send("party_invitation_closed",{});});
+    },
+    party_leave: (client:Client,message:unknown) => {
+      if(!parseEmptyCommand(message)) return this.reject(client,"party_invalid_request");
+      this.partyAction(client,()=>this.leaveParty(client.sessionId));
+    },
     get_economy: (client:Client, message:unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client,"invalid_economy_request");
       this.economyAction(client,id=>this.syncEconomy(client,id));
@@ -551,6 +628,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (player.characterName === name) return;
       this.lastRenameMs.set(id, this.simulatedMs);
       player.characterName = name;
+      const party=this.parties.get(id); if(party) this.sendPartyState(party);
       void this.saveCharacter(id);
     },
     move: (client: Client, message: unknown) => {
@@ -1290,7 +1368,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     monster.targetId = "";
     this.monsterRespawnAt = this.simulatedMs + RULES.monsterRespawnMs;
     this.monsterReturning = false;
-    this.grantMonsterExperience(winnerId);
+    this.awardMonsterExperience(winnerId);
 
     // Only cancel PvE attacks on this monster. Concurrent Free PK fights
     // must continue even when someone else defeats the ghost.
@@ -1568,6 +1646,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         flight: new CommandBucket(3, 2, this.simulatedMs),
         chat: new CommandBucket(3, 0.5, this.simulatedMs),
         economy: new CommandBucket(8, 3, this.simulatedMs),
+        party: new CommandBucket(6, 2, this.simulatedMs),
       });
       console.log("MONTRA 3-slot join:", client.sessionId, "room", this.roomId,
         saved ? "persistent" : "transient", "slot", slot);
@@ -1579,6 +1658,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    this.leaveParty(id);
     for (const trade of this.trades.values()) if (trade.a===id || trade.b===id) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }
     const accountId = this.activeGuestAccounts.get(id);
     // Capture the snapshot BEFORE removing the player from server Schema.
@@ -1635,6 +1715,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onDispose() {
     this.trades.clear();
+    this.parties.clear();
     const pending = [...this.persistentCharacters.keys()].map(async id => {
       try { await (this.pendingCharacterLeaves.get(id) ?? this.saveCharacter(id)); }
       finally {
