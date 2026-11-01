@@ -322,6 +322,10 @@
   marker.position.y = .105;
   marker.isPickable = false;
   marker.setEnabled(false);
+  const weaponSteel = mat("weapon forged steel", "#b7c4cb", "#233d44");
+  const weaponEdge = mat("weapon arcane edge", "#b9e8ee", "#5a99bc");
+  const weaponWood = mat("weapon oak handle", "#71523e", "#2b1b0b");
+  const weaponCrystal = mat("weapon spirit crystal", "#9d7bdd", "#6550aa");
 
   function avatarMesh(id, local) {
     const parent = new B.TransformNode("avatar-" + id, scene);
@@ -368,14 +372,74 @@
     halo.material = local ? gold : glowMat;
     halo.isPickable = false;
     halo.setEnabled(false);
+
+    // Three low-poly handheld props. All parts are unpickable, so weapon
+    // visuals never steal tap-to-walk or Free PK selection raycasts.
+    function createHeldWeapon(kind) {
+      const root = new B.TransformNode("held-" + kind + "-" + id, scene);
+      root.parent = parent;
+      root.position.set(.55, 1.04, -.12);
+      root.rotation.z = -.24;
+      const staff = kind === "spirit_staff";
+      const sword = kind === "arcane_sword";
+      const handle = B.MeshBuilder.CreateCylinder("weapon handle", {
+        height: staff ? 1.7 : .42, diameter: staff ? .085 : .13,
+        tessellation: 8,
+      },scene);
+      handle.parent=root;
+      handle.position.y=staff ? .25 : -.11;
+      handle.material=weaponWood; handle.isPickable=false;
+      if (staff) {
+        const orb=B.MeshBuilder.CreateSphere("spirit staff orb",{
+          diameter:.37,segments:8,
+        },scene);
+        orb.parent=root;orb.position.y=1.17;
+        orb.material=weaponCrystal;orb.isPickable=false;
+        const rim=B.MeshBuilder.CreateTorus("spirit staff crest",{
+          diameter:.52,thickness:.07,tessellation:12,
+        },scene);
+        rim.parent=root;rim.position.y=1.17;rim.rotation.x=Math.PI/2;
+        rim.material=weaponEdge;rim.isPickable=false;
+      } else {
+        const blade=B.MeshBuilder.CreateBox("arcane steel blade",{
+          height:sword?1.15:.62,width:sword?.19:.14,depth:.07,
+        },scene);
+        blade.parent=root;
+        blade.position.y=sword?.62:.36;
+        blade.material=sword?weaponEdge:weaponSteel;
+        blade.isPickable=false;
+        const guard=B.MeshBuilder.CreateBox("weapon crossguard",{
+          height:.07,width:sword?.48:.29,depth:.11,
+        },scene);
+        guard.parent=root;guard.position.y=.11;
+        guard.material=gold;guard.isPickable=false;
+      }
+      root.setEnabled(false);
+      return root;
+    }
+    const weaponModels = {
+      ritual_dagger: createHeldWeapon("ritual_dagger"),
+      arcane_sword: createHeldWeapon("arcane_sword"),
+      spirit_staff: createHeldWeapon("spirit_staff"),
+    };
     return {
       node: parent, local, x: 0, y: 0, z: 0,
       targetX: 0, targetY: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
-      serverFacing: null, hitFlashUntil: 0, dashUntil: 0, flightHalo: halo
+      serverFacing: null, hitFlashUntil: 0, dashUntil: 0, flightHalo: halo,
+      weaponModels, weaponId: ""
     };
   }
   const avatars = new Map();
+  function setAvatarWeapon(avatar, weaponId) {
+    if (!avatar?.weaponModels) return;
+    const safeId = Object.hasOwn(avatar.weaponModels,weaponId) ? weaponId : "";
+    if (avatar.weaponId === safeId) return;
+    avatar.weaponId = safeId;
+    for(const [id,model] of Object.entries(avatar.weaponModels)) {
+      model.setEnabled(id === safeId);
+    }
+  }
   // Forward of the prototype avatar faces local -Z when rotation.y == 0.
   // Keep this local to rendering; no change to server movement or combat.
   function facingFromTravel(dx, dz) {
@@ -464,6 +528,12 @@
   // Inventory is never stored in localStorage: LIVE comes from VPS each join.
   const INVENTORY_SLOTS = 12;
   const POTION_ITEM_ID = "health_potion";
+  const WEAPON_META = Object.freeze({
+    ritual_dagger: { name: "มีดหมอ", symbol: "🗡️", bonus: "โจมตีประชิด +4" },
+    arcane_sword: { name: "กระบี่อาคม", symbol: "⚔️", bonus: "โจมตีประชิด +8" },
+    spirit_staff: { name: "คทาวิญญาณ", symbol: "🔱", bonus: "ยิงอาคม +6" },
+  });
+  let demoWeaponSlot = 1;
   let inventoryState = null;
   let itemUsePending = false;
   let itemUseSequence = 0;
@@ -493,6 +563,7 @@
   eyeA.parent = enemy; eyeA.position.set(-.2,.14,-.65); eyeA.material = eyesMat; eyeA.isPickable = false;
   const eyeB = eyeA.clone("right possessed eye"); eyeB.position.x = .2;
   let player = ensureAvatar("demo",true,0,0);
+  setAvatarWeapon(player,"ritual_dagger");
   const MONSTER_ID = "possessed-1";
   let monsterReady = false;
   let serverMonsterFacing = null;
@@ -598,6 +669,7 @@
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
     inventoryState = null;
+    demoWeaponSlot = 1;
     itemUsePending = false;
     itemUseSequence += 1;
     selectedBagSlot = 0;
@@ -606,6 +678,7 @@
     applyFortVisual(defaultFort);
     onlinePlayers.clear(); clearAvatars(); clearSummons();
     player = ensureAvatar("demo",true,0,0);
+    setAvatarWeapon(player,"ritual_dagger");
     demoDest = null; demoDash = null; demoDashNextAt = 0;
     demoFlightTarget = null; demoFlying = false;
     resetDemoMonster();
@@ -905,13 +978,14 @@
     }
   }
 
-  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0) {
+  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0, weaponId = "") {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     onlinePlayers.set(id,{x,z});
     const a = ensureAvatar(id,id === localId,x,z);
     a.targetX = x;
     a.targetY = Number.isFinite(y) ? y : 0;
     a.targetZ = z;
+    setAvatarWeapon(a,weaponId);
 
     // S1 server facing is authoritative. Old servers omit this field;
     // fallback to the V0.1.5 movement-derived direction in that case.
@@ -971,7 +1045,8 @@
     players.forEach((p,id) => {
       seen.add(id);
       setOnlinePlayer(id, Number(p.x), Number(p.z),
-        Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y));
+        Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
+        p.equippedWeaponId);
     });
     for (const id of onlinePlayers.keys()) if (!seen.has(id)) removeOnlinePlayer(id);
     updateCharacterHud(players.get(localId));
@@ -1209,13 +1284,37 @@
             !Array.isArray(payload.slots) ||
             payload.slots.length !== INVENTORY_SLOTS) return;
         // Defensive view parsing: only display known items and sane counts.
-        const slots = payload.slots.map(stack =>
-          stack?.itemId === POTION_ITEM_ID && Number.isSafeInteger(stack.quantity) &&
-          stack.quantity >= 1 && stack.quantity <= 99
-            ? { itemId: POTION_ITEM_ID, quantity: stack.quantity } : null);
-        inventoryState = { version: 1, slots };
+        const slots = payload.slots.map(stack => {
+          if (stack?.itemId === POTION_ITEM_ID &&
+              Number.isSafeInteger(stack.quantity) &&
+              stack.quantity >= 1 && stack.quantity <= 99) {
+            return { itemId: POTION_ITEM_ID, quantity: stack.quantity };
+          }
+          if (Object.hasOwn(WEAPON_META,stack?.itemId) &&
+              stack?.quantity === 1) {
+            return { itemId: stack.itemId, quantity: 1 };
+          }
+          return null;
+        });
+        const selected = payload.equippedWeaponSlot;
+        const equippedWeaponSlot = selected === null ? null :
+          Number.isSafeInteger(selected) && selected >= 0 &&
+            selected < INVENTORY_SLOTS && Object.hasOwn(WEAPON_META,
+              slots[selected]?.itemId)
+            ? selected : undefined;
+        inventoryState = { version: 1, slots, equippedWeaponSlot };
         itemUsePending = false;
         renderBag();
+      });
+      joined.onMessage("weapon_equipped", event => {
+        if (room !== joined) return;
+        itemUsePending = false;
+        const id = typeof event?.weaponId === "string" &&
+          Object.hasOwn(WEAPON_META,event.weaponId) ? event.weaponId : "";
+        setAvatarWeapon(getLocalAvatar(),id);
+        renderBag();
+        toast(id ? "สวมใส่ " + WEAPON_META[id].name + " สำเร็จ · บันทึกแล้ว"
+          : "ถอดอาวุธแล้ว · บันทึกบน VPS");
       });
       joined.onMessage("item_used", event => {
         if (room !== joined) return;
@@ -1226,7 +1325,7 @@
         if (room !== joined) return;
         itemUsePending = false;
         renderBag();
-        toast("ใช้ยาไม่สำเร็จ · VPS บันทึกไอเท็มไม่ได้");
+        toast("การใช้ไอเท็มหรือสวมอาวุธไม่สำเร็จ · VPS บันทึกไม่ได้");
       });
       joined.onMessage("dash_started", info => {
         if (room !== joined || typeof info?.playerId !== "string") return;
@@ -1242,7 +1341,9 @@
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
         if (["item_busy", "item_cooldown", "item_unavailable",
-             "hp_full", "invalid_item_use", "not_alive", "inventory_unavailable"]
+             "hp_full", "invalid_item_use", "not_alive", "inventory_unavailable",
+             "invalid_weapon_equip", "equipment_busy", "equipment_cooldown",
+             "not_weapon", "already_equipped", "not_consumable"]
               .includes(info?.reason)) {
           itemUsePending = false;
           renderBag();
@@ -1265,7 +1366,13 @@
         else if (info?.reason === "invalid_item_use" || info?.reason === "invalid_inventory_request") toast("คำสั่งไอเท็มไม่ถูกต้อง");
         else if (info?.reason === "item_busy") toast("กำลังบันทึกการใช้ยา · รอสักครู่");
         else if (info?.reason === "item_cooldown") toast("รอคูลดาวน์ยาเลือด 1 วินาที");
-        else if (info?.reason === "item_unavailable") toast("ไม่มียาเลือดในช่องนี้แล้ว");
+        else if (info?.reason === "item_unavailable") toast("ไม่มีไอเท็มในช่องนี้แล้ว");
+        else if (info?.reason === "invalid_weapon_equip") toast("คำสั่งสวมอาวุธไม่ถูกต้อง");
+        else if (info?.reason === "equipment_busy") toast("ต้องรอให้เคลื่อนไหวพิเศษเสร็จก่อนสวมอาวุธ");
+        else if (info?.reason === "equipment_cooldown") toast("เปลี่ยนอาวุธเร็วเกินไป · รอครู่หนึ่ง");
+        else if (info?.reason === "not_weapon") toast("ไอเท็มนี้ไม่ใช่อาวุธ");
+        else if (info?.reason === "already_equipped") toast("อาวุธนี้สวมใส่อยู่แล้ว");
+        else if (info?.reason === "not_consumable") toast("อาวุธต้องสวมใส่ ไม่ใช่ใช้เป็นยา");
         else if (info?.reason === "hp_full") toast("HP เต็ม · ไม่ใช้ยาโดยเปล่าประโยชน์");
         else if (info?.reason === "dash_cooldown") toast("พุ่งยังไม่พร้อม · รอคูลดาวน์");
         else if (info?.reason === "dash_in_progress" || info?.reason === "dashing") toast("กำลังพุ่งอยู่");
@@ -1295,7 +1402,8 @@
           cb.onAdd("players", (p, id) => {
             const applyServerPlayer = () => setOnlinePlayer(
               id, Number(p.x), Number(p.z),
-              Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y)
+              Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
+              p.equippedWeaponId
             );
             applyServerPlayer();
             if (typeof cb.listen === "function") {
@@ -1305,6 +1413,7 @@
               cb.listen(p, "hp", applyServerPlayer);
               cb.listen(p, "y", applyServerPlayer);
               cb.listen(p, "maxHp", applyServerPlayer);
+              cb.listen(p, "equippedWeaponId", applyServerPlayer);
             }
           });
           cb.onRemove("players", (_,id) => removeOnlinePlayer(id));
@@ -1765,54 +1874,80 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.6",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ไอเท็มถาวรเริ่มทดลองด้วยยาเลือดเล็กในกระเป๋า 12 ช่อง เก็บข้อมูลและหักจำนวนบน VPS เท่านั้น</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ไอเท็มสวมใส่ ไอเท็มประเภทอื่น และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ชุดเกราะ อาวุธดรอปจากมอนสเตอร์ การตีบวก และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
   }
   function currentBagSlots() {
     if (mode === "live") return inventoryState?.slots || null;
-    return Array.from({ length: INVENTORY_SLOTS }, (_, i) =>
-      i === 0 && demoPotionCount > 0
-        ? { itemId: POTION_ITEM_ID, quantity: demoPotionCount } : null);
+    return Array.from({ length: INVENTORY_SLOTS }, (_, i) => {
+      if (i === 0 && demoPotionCount > 0) {
+        return { itemId: POTION_ITEM_ID, quantity: demoPotionCount };
+      }
+      const weaponId = ["ritual_dagger","arcane_sword","spirit_staff"][i-1];
+      return weaponId ? { itemId: weaponId, quantity: 1 } : null;
+    });
+  }
+  function currentEquippedWeaponSlot() {
+    return mode === "live" ? inventoryState?.equippedWeaponSlot : demoWeaponSlot;
   }
   function renderBag() {
     if (drawerActive !== "bag") return;
     const slots = currentBagSlots();
     const status = $("bagSaveStatus");
     if (!status) return;
+    const hasWeapons = mode !== "live" || room?.state?.weaponsAvailable === true;
     status.textContent = mode === "live"
       ? (room?.state?.inventoryAvailable !== true
-        ? "VPS ยังไม่รองรับกระเป๋าถาวร · ต้องติดตั้ง MONTRA 0.2.6" :
-        slots ? "บันทึกถาวรบน VPS · แยกตามช่องตัวละคร" :
-          "กำลังโหลดกระเป๋าจาก VPS...")
-      : "โหมด DEMO · กระเป๋าทดลองไม่บันทึก";
+        ? "VPS ยังไม่รองรับกระเป๋าถาวร · ต้องอัปเดต MONTRA Server"
+        : !slots ? "กำลังโหลดกระเป๋าจาก VPS..."
+        : hasWeapons ? "ยาและชุดอาวุธบันทึกบน VPS · แยกตามตัวละคร"
+        : "ยาเลือดพร้อม · ต้องอัปเดต VPS V0.2.7 เพื่อสวมอาวุธ")
+      : "โหมด DEMO · อาวุธและกระเป๋าทดลอง ไม่บันทึก";
     const currentHp = mode === "live"
       ? Number(ownServerCharacter()?.hp || 0) : demoHp;
     const maxHp = mode === "live"
       ? Number(ownServerCharacter()?.maxHp || 100) : 100;
     $("bagHp").textContent = Math.max(0, Math.ceil(currentHp)) +
       " / " + Math.max(1, Math.ceil(maxHp));
+    const equipped = currentEquippedWeaponSlot();
+    const equippedItem = equipped === null || equipped === undefined
+      ? null : slots?.[equipped];
+    $("bagEquipped").textContent = equippedItem && Object.hasOwn(WEAPON_META,equippedItem.itemId)
+      ? WEAPON_META[equippedItem.itemId].name + " · " +
+        WEAPON_META[equippedItem.itemId].bonus : "มือเปล่า";
     for (let i = 0; i < INVENTORY_SLOTS; i++) {
       const slot = $("bagSlot" + i);
       if (!slot) continue;
-      const item = slots?.[i];
+      const item = slots?.[i], weapon = item && Object.hasOwn(WEAPON_META,item.itemId);
       slot.classList.toggle("bag-filled", Boolean(item));
+      slot.classList.toggle("bag-weapon", Boolean(weapon));
+      slot.classList.toggle("bag-equipped", Boolean(weapon && i === equipped));
       slot.classList.toggle("bag-selected", i === selectedBagSlot);
       slot.setAttribute("aria-pressed", String(i === selectedBagSlot));
-      slot.querySelector(".bag-symbol").textContent = item ? "🧪" : "·";
-      slot.querySelector(".bag-quantity").textContent = item
-        ? "×" + item.quantity : "";
+      slot.querySelector(".bag-symbol").textContent = !item ? "·" :
+        weapon ? WEAPON_META[item.itemId].symbol : "🧪";
+      slot.querySelector(".bag-quantity").textContent = !item ? "" :
+        weapon && i === equipped ? "✓" : "×" + item.quantity;
     }
     const chosen = slots?.[selectedBagSlot];
-    const ready = Boolean(chosen && currentHp > 0 && currentHp < maxHp &&
-      (mode !== "live" || ownServerCharacter()?.alive === true));
-    $("bagItemName").textContent = chosen ? "ยาเลือดเล็ก" : "ช่องว่าง";
-    $("bagItemDescription").textContent = chosen
-      ? "ฟื้น HP สูงสุด 30 · ใช้ได้เมื่อ HP ไม่เต็ม · ขวดที่เหลือจะถูกหักจากเซฟ"
-      : "ไอเท็มใหม่จะปรากฏในช่องกระเป๋านี้ในอนาคต";
+    const weapon = chosen && Object.hasOwn(WEAPON_META,chosen.itemId);
+    const canAct = mode !== "live" || ownServerCharacter()?.alive === true;
+    const ready = Boolean(chosen && canAct && (weapon
+      ? hasWeapons : currentHp > 0 && currentHp < maxHp));
+    $("bagItemName").textContent = !chosen ? "ช่องว่าง" : weapon
+      ? WEAPON_META[chosen.itemId].name : "ยาเลือดเล็ก";
+    $("bagItemDescription").textContent = !chosen
+      ? "ช่องนี้ยังไม่มีไอเท็ม"
+      : weapon
+        ? WEAPON_META[chosen.itemId].bonus +
+          " · เลือกสวมใส่ได้ทีละ 1 อาวุธ · ไม่ถูกใช้หมด"
+        : "ฟื้น HP สูงสุด 30 · ไม่ใช้เมื่อ HP เต็ม · หักจำนวนและบันทึกบน VPS";
     const use = $("useBagItem");
     use.disabled = !ready || itemUsePending;
-    use.textContent = itemUsePending ? "กำลังบันทึกการใช้ยา..." :
+    use.textContent = itemUsePending ? "กำลังบันทึกบน VPS..." :
       !chosen ? "ไม่มีไอเท็มในช่องนี้" :
-      currentHp >= maxHp ? "HP เต็ม" : "ใช้ยาเลือด";
+      weapon ? !hasWeapons ? "ต้องติดตั้งชุดอาวุธบน VPS" :
+        selectedBagSlot === equipped ? "ถอดอาวุธ" : "สวมใส่อาวุธ" :
+        currentHp >= maxHp ? "HP เต็ม" : "ใช้ยาเลือด";
   }
   function openBag() {
     const grid = Array.from({ length: INVENTORY_SLOTS }, (_, i) =>
@@ -1820,66 +1955,92 @@
       '" aria-pressed="false" aria-label="ช่องไอเท็ม ' + (i + 1) + '">' +
       '<span class="bag-symbol">·</span>' +
       '<span class="bag-quantity"></span></button>').join("");
-    openDrawer("bag", "กระเป๋าไอเท็ม · 12 ช่อง",
+    openDrawer("bag", "กระเป๋าและชุดอาวุธ · 12 ช่อง",
       '<div class="status-line"><span>สถานะกระเป๋า</span><strong id="bagSaveStatus"></strong></div>' +
       '<div class="status-line"><span>พลังชีวิต HP</span><strong id="bagHp"></strong></div>' +
+      '<div class="status-line"><span>อาวุธที่สวมใส่</span><strong id="bagEquipped"></strong></div>' +
       '<div class="bag-grid" role="group" aria-label="ช่องไอเท็ม 12 ช่อง">' + grid + '</div>' +
       '<div class="bag-detail"><strong id="bagItemName"></strong>' +
       '<p class="note" id="bagItemDescription"></p></div>' +
-      '<button class="primary" id="useBagItem" type="button">ใช้ยาเลือด</button>' +
-      '<p class="note">ตัวละครแต่ละช่องได้รับยาเลือด 3 ขวดครั้งเดียวเท่านั้น · ใช้ยาแล้วบันทึกทันที · ขณะ HP เต็มจะไม่เสียยา</p>');
+      '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
+      '<p class="note">ยาเลือดและอาวุธถาวรแยกตาม 3 เซฟ · สวมใส่ทีละหนึ่งชิ้น · ใช้ยาเมื่อ HP ไม่เต็ม · การสวมใส่บันทึกบน VPS</p>');
     for (let i = 0; i < INVENTORY_SLOTS; i++) {
       $("bagSlot" + i).onclick = () => {
         selectedBagSlot = i;
         renderBag();
       };
     }
+    function sendBagCommand(command,payload) {
+      const requestedRoom=room;
+      itemUsePending = true;
+      const sequence=++itemUseSequence;
+      renderBag();
+      try { room.send(command,payload); }
+      catch (error) {
+        itemUsePending=false;
+        renderBag();
+        toast("ส่งคำสั่งไอเท็มไม่สำเร็จ");
+        return;
+      }
+      setTimeout(() => {
+        if (!itemUsePending || itemUseSequence !== sequence ||
+            mode !== "live" || room !== requestedRoom) return;
+        itemUsePending=false;
+        try { room.send("get_inventory", {}); } catch (_) {}
+        renderBag();
+        toast("ยังไม่ได้รับผลจาก VPS · กรุณาตรวจสถานะไอเท็มอีกครั้ง");
+      },3500);
+    }
     $("useBagItem").onclick = () => {
       if (itemUsePending) return;
-      const item = currentBagSlots()?.[selectedBagSlot];
-      if (!item || item.itemId !== POTION_ITEM_ID) return;
-      if (mode === "live") {
+      const item=currentBagSlots()?.[selectedBagSlot];
+      if (!item) return;
+      const weapon=Object.hasOwn(WEAPON_META,item.itemId);
+      if (weapon) {
+        if (mode==="live") {
+          if (!room || room.state?.weaponsAvailable !== true || !inventoryState) {
+            toast("VPS ยังไม่รองรับชุดอาวุธ · ต้องติดตั้ง Server V0.2.7");
+            return;
+          }
+          if (ownServerCharacter()?.alive !== true) {
+            toast("ยังสวมอาวุธไม่ได้ · รอเกิดใหม่"); return;
+          }
+          const nextSlot=currentEquippedWeaponSlot()===selectedBagSlot
+            ? null : selectedBagSlot;
+          sendBagCommand("equip_weapon",{slot:nextSlot});
+        } else {
+          demoWeaponSlot=demoWeaponSlot===selectedBagSlot ? null : selectedBagSlot;
+          const selected=demoWeaponSlot===null ? "" :
+            currentBagSlots()[demoWeaponSlot]?.itemId || "";
+          setAvatarWeapon(getLocalAvatar(),selected);
+          toast(selected ? "DEMO สวมใส่ " + WEAPON_META[selected].name
+            : "DEMO ถอดอาวุธแล้ว");
+          renderBag();
+        }
+        return;
+      }
+      if (item.itemId !== POTION_ITEM_ID) return;
+      if (mode==="live") {
         if (!room || room.state?.inventoryAvailable !== true || !inventoryState) {
-          toast("ยังไม่ได้รับกระเป๋าถาวร · ต้องอัปเดต MONTRA บน VPS");
-          return;
+          toast("ยังไม่เชื่อมต่อกระเป๋าถาวรบน VPS"); return;
         }
         if (Number(ownServerCharacter()?.hp || 0) >=
             Number(ownServerCharacter()?.maxHp || 100)) {
           toast("HP เต็มแล้ว"); return;
         }
-        itemUsePending = true;
-        const requestedRoom = room;
-        const sequence = ++itemUseSequence;
-        renderBag();
-        try { room.send("use_item", { slot: selectedBagSlot }); }
-        catch (error) {
-          itemUsePending = false;
-          renderBag();
-          toast("ส่งคำสั่งใช้ยาไม่สำเร็จ");
-          return;
-        }
-        // If an old server throttles the rejection or packets are lost,
-        // never leave the only item-use control permanently disabled.
-        setTimeout(() => {
-          if (!itemUsePending || itemUseSequence !== sequence ||
-              mode !== "live" || room !== requestedRoom) return;
-          itemUsePending = false;
-          try { room.send("get_inventory", {}); } catch (_) {}
-          renderBag();
-          toast("ยังไม่ได้ยืนยันการใช้ยา · ตรวจสอบจำนวนบน VPS อีกครั้ง");
-        }, 3500);
+        sendBagCommand("use_item",{slot:selectedBagSlot});
         return;
       }
       if (demoHp >= 100) { toast("HP เต็มแล้ว · DEMO"); return; }
-      const healed = Math.min(30, 100 - demoHp);
-      demoHp += healed;
-      demoPotionCount -= 1;
-      if (localHpBar) localHpBar.style.width = demoHp + "%";
+      const healed=Math.min(30,100-demoHp);
+      demoHp+=healed;
+      demoPotionCount--;
+      if (localHpBar) localHpBar.style.width=demoHp+"%";
       toast("DEMO ใช้ยาเลือด +" + healed + " HP · ไม่บันทึก");
       renderBag();
     };
     if (mode === "live") {
-      try { room?.send("get_inventory", {}); } catch (_) { /* old VPS */ }
+      try { room?.send("get_inventory", {}); } catch (_) {}
     }
     renderBag();
   }

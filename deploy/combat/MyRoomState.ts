@@ -25,6 +25,7 @@ export const Player = schema({
   persistent: t.boolean().default(false),
   characterSlot: t.number().default(1), // append only: preserve all S2 Schema indexes
   flying: t.boolean().default(false), // appended: active in the server-owned 6m air layer
+  equippedWeaponId: t.string().default(""), // append-only: visible weapon ID, no private bag data
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
@@ -92,6 +93,7 @@ export const MyRoomState = schema({
   dashAvailable: t.boolean().default(true), // append: live server dash capability
   flightAvailable: t.boolean().default(true), // append: server supports fly/land commands
   inventoryAvailable: t.boolean().default(true), // append: server-owned permanent item slots
+  weaponsAvailable: t.boolean().default(true), // append: permanent weapon kit + equip commands
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;
