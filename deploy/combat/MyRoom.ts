@@ -31,6 +31,7 @@ import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.j
 import type { CharacterSnapshot } from "./CharacterStore.js";
 import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint } from "./WorldMaps.js";
 import { checkWarp } from "./WarpRules.js";
+import { parseChatMessage } from "./ChatRules.js";
 import {
   POTION_ID, POTION_COOLDOWN_MS, parseUseItemCommand,
   useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon,
@@ -40,6 +41,7 @@ import {
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
   climb: CommandBucket; dash: CommandBucket; flight: CommandBucket;
+  chat: CommandBucket;
 };
 
 type ActiveDash = DashDirection & { remaining: number };
@@ -112,6 +114,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   messages = {
+    chat: (client: Client, message: unknown) => {
+      const command = parseChatMessage(message);
+      if (command === null) return this.reject(client, "invalid_chat");
+      const id = client.sessionId;
+      const player = this.state.players.get(id);
+      if (!player || this.pendingWarps.has(id)) return this.reject(client, "chat_unavailable");
+      if (!this.gates.get(id)?.chat.consume(this.simulatedMs)) return this.reject(client, "chat_rate_limited");
+      // Only server-assigned identity and map are sent; payload cannot choose recipients.
+      const event = { senderId: id, name: player.characterName, mapId: player.mapId,
+        channel: command.channel, text: command.text };
+      for (const peer of this.clients) {
+        const recipient = this.state.players.get(peer.sessionId);
+        if (recipient && (command.channel === "world" || recipient.mapId === player.mapId) &&
+            !this.pendingWarps.has(peer.sessionId)) {
+          peer.send("chat_message", event);
+        }
+      }
+    },
     warp: (client: Client, message: unknown) => {
       const id = client.sessionId;
       const player = this.state.players.get(id);
@@ -1353,6 +1373,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         dash: new CommandBucket(RULES.dashCommandBurst,
           RULES.dashCommandRatePerSecond, this.simulatedMs),
         flight: new CommandBucket(3, 2, this.simulatedMs),
+        chat: new CommandBucket(3, 0.5, this.simulatedMs),
       });
       console.log("MONTRA 3-slot join:", client.sessionId, "room", this.roomId,
         saved ? "persistent" : "transient", "slot", slot);

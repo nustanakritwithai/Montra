@@ -96,6 +96,7 @@ export const MyRoomState = schema({
   inventoryAvailable: t.boolean().default(true), // append: server-owned permanent item slots
   weaponsAvailable: t.boolean().default(true), // append: permanent weapon kit + equip commands
   worldMapsAvailable: t.boolean().default(true), // server supports map-aware travel
+  chatAvailable: t.boolean().default(true), // append-only: server relays map chat
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;
