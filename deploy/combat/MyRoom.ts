@@ -31,7 +31,8 @@ import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.j
 import type { CharacterSnapshot } from "./CharacterStore.js";
 import {
   POTION_ID, POTION_COOLDOWN_MS, parseUseItemCommand,
-  useInventoryItem, type InventorySnapshot,
+  useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon,
+  equippedWeaponId, weaponBonuses, type InventorySnapshot,
 } from "./ItemRules.js";
 
 type Gates = {
@@ -78,6 +79,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private pendingItemUses = new Map<string, Promise<void>>();
   private lastItemUseMs = new Map<string, number>();
   private lastInventoryReadMs = new Map<string, number>();
+  private lastWeaponEquipMs = new Map<string, number>();
 
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
@@ -92,6 +94,51 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private flightTransitions = new Map<string, { targetY: number; landing: boolean }>();
 
   messages = {
+    equip_weapon: (client: Client, message: unknown) => {
+      const order = parseEquipWeaponCommand(message);
+      if (!order) return this.reject(client, "invalid_weapon_equip");
+      const id = client.sessionId;
+      const player = this.state.players.get(id);
+      if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (this.climbs.has(id) || this.flightTransitions.has(id) ||
+          this.activeDashes.has(id)) return this.reject(client, "equipment_busy");
+      const inventory = this.inventories.get(id);
+      if (!inventory || !this.persistentCharacters.has(id)) {
+        return this.reject(client, "inventory_unavailable");
+      }
+      if (this.pendingItemUses.has(id)) return this.reject(client, "item_busy");
+      if (this.simulatedMs - (this.lastWeaponEquipMs.get(id) ?? -Infinity) < 700) {
+        return this.reject(client, "equipment_cooldown");
+      }
+      const change = equipInventoryWeapon(inventory, order.slot);
+      // Explicit guard works under both strict and non-strict Windows TS.
+      if ("reason" in change) return this.reject(client, change.reason);
+      const snapshot = this.captureCharacterSnapshot(id, change.inventory);
+      if (!snapshot) return this.reject(client, "inventory_unavailable");
+
+      // Save before activating the combat bonus or acknowledging equipment.
+      // Weapon equip and potion use share one private mutation lock.
+      const task = (async () => {
+        try {
+          await characterStore.save(snapshot);
+          const current = this.state.players.get(id);
+          if (!current || this.inventories.get(id) !== inventory) return;
+          this.inventories.set(id, change.inventory);
+          current.equippedWeaponId = change.weaponId ?? "";
+          this.lastWeaponEquipMs.set(id, this.simulatedMs);
+          client.send("inventory_state", change.inventory);
+          client.send("weapon_equipped", {
+            slot: order.slot, weaponId: change.weaponId,
+          });
+        } catch (error) {
+          console.error("MONTRA weapon equip write failed:", id, error);
+          client.send("item_use_failed", { reason: "disk_write_failed" });
+        } finally {
+          this.pendingItemUses.delete(id);
+        }
+      })();
+      this.pendingItemUses.set(id, task);
+    },
     get_inventory: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_inventory_request");
       const id = client.sessionId;
@@ -422,22 +469,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       this.lastAttackMs.set(id,this.simulatedMs);
       shooter.facing = facingTo(target.x-shooter.x, target.z-shooter.z);
+      const rangedDamage = FORT.rangedDamage +
+        weaponBonuses(this.inventories.get(id)).ranged;
 
       if (monsterOrder) {
         const ghost = this.state.monster;
-        ghost.hp = Math.max(0,ghost.hp-FORT.rangedDamage);
+        ghost.hp = Math.max(0,ghost.hp-rangedDamage);
         ghost.hitSeq += 1;
         this.broadcast("combat_hit", {
-          attackerId:id,targetId,damage:FORT.rangedDamage,
+          attackerId:id,targetId,damage:rangedDamage,
           hp:ghost.hp,maxHp:ghost.maxHp,hitSeq:ghost.hitSeq,source:"ranged",
         }, { afterNextPatch:true });
         if (ghost.hp===0) this.killMonster();
       } else {
         const victim=target as Player;
-        victim.hp=Math.max(0,victim.hp-FORT.rangedDamage);
+        victim.hp=Math.max(0,victim.hp-rangedDamage);
         victim.hitSeq+=1;
         this.broadcast("pvp_hit", {
-          attackerId:id,targetId,damage:FORT.rangedDamage,
+          attackerId:id,targetId,damage:rangedDamage,
           hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"ranged",
         }, { afterNextPatch:true });
         if (victim.hp===0) {
@@ -453,7 +502,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
 
       this.broadcast("ranged_hit", {
-        attackerId:id,targetId,damage:FORT.rangedDamage,from,to,
+        attackerId:id,targetId,damage:rangedDamage,from,to,
       }, { afterNextPatch:true });
     },
   };
@@ -857,12 +906,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.simulatedMs - last < cooldown) continue;
       this.lastAttackMs.set(attackerId, this.simulatedMs);
 
+      const meleeBonus = weaponBonuses(this.inventories.get(attackerId)).melee;
       if (isMonster) {
-        monster.hp = Math.max(0, monster.hp - RULES.playerAttackDamage);
+        const meleeDamage = RULES.playerAttackDamage + meleeBonus;
+        monster.hp = Math.max(0, monster.hp - meleeDamage);
         monster.hitSeq += 1;
         this.broadcast("combat_hit", {
           targetId: RULES.monsterId,
-          attackerId, damage: RULES.playerAttackDamage,
+          attackerId, damage: meleeDamage,
           hp: monster.hp, maxHp: monster.maxHp, hitSeq: monster.hitSeq,
         }, { afterNextPatch: true });
         if (monster.hp === 0) this.killMonster();
@@ -872,10 +923,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // FREE PK: health, range, damage, respawn and kill credit are wholly
       // server-owned. The client only submits another session's targetId.
       const victim = target as Player;
-      victim.hp = Math.max(0, victim.hp - RULES.pkDamage);
+      const meleeDamage = RULES.pkDamage + meleeBonus;
+      victim.hp = Math.max(0, victim.hp - meleeDamage);
       victim.hitSeq += 1;
       this.broadcast("pvp_hit", {
-        attackerId, targetId, damage: RULES.pkDamage,
+        attackerId, targetId, damage: meleeDamage,
         hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
       }, { afterNextPatch: true });
 
@@ -1167,6 +1219,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         level: saved?.level ?? 1, experience: saved?.experience ?? 0,
         persistent: Boolean(saved), characterSlot: slot,
         flying: Boolean(validPosition && restoreFlight),
+        equippedWeaponId: equippedWeaponId(saved?.inventory) ?? "",
       });
 
       this.state.players.set(client.sessionId, player);
@@ -1237,6 +1290,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.inventories.delete(id);
       this.lastItemUseMs.delete(id);
       this.lastInventoryReadMs.delete(id);
+      this.lastWeaponEquipMs.delete(id);
       this.pendingCharacterLeaves.delete(id);
       this.persistentCharacters.delete(id);
       this.guestSlotIds.delete(id);
@@ -1260,6 +1314,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.pendingItemUses.clear();
     this.lastItemUseMs.clear();
     this.lastInventoryReadMs.clear();
+    this.lastWeaponEquipMs.clear();
     this.activeGuestAccounts.clear();
     this.pendingCharacterLeaves.clear();
     this.guestSlotIds.clear();
