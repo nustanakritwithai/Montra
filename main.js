@@ -1284,13 +1284,37 @@
             !Array.isArray(payload.slots) ||
             payload.slots.length !== INVENTORY_SLOTS) return;
         // Defensive view parsing: only display known items and sane counts.
-        const slots = payload.slots.map(stack =>
-          stack?.itemId === POTION_ITEM_ID && Number.isSafeInteger(stack.quantity) &&
-          stack.quantity >= 1 && stack.quantity <= 99
-            ? { itemId: POTION_ITEM_ID, quantity: stack.quantity } : null);
-        inventoryState = { version: 1, slots };
+        const slots = payload.slots.map(stack => {
+          if (stack?.itemId === POTION_ITEM_ID &&
+              Number.isSafeInteger(stack.quantity) &&
+              stack.quantity >= 1 && stack.quantity <= 99) {
+            return { itemId: POTION_ITEM_ID, quantity: stack.quantity };
+          }
+          if (Object.hasOwn(WEAPON_META,stack?.itemId) &&
+              stack?.quantity === 1) {
+            return { itemId: stack.itemId, quantity: 1 };
+          }
+          return null;
+        });
+        const selected = payload.equippedWeaponSlot;
+        const equippedWeaponSlot = selected === null ? null :
+          Number.isSafeInteger(selected) && selected >= 0 &&
+            selected < INVENTORY_SLOTS && Object.hasOwn(WEAPON_META,
+              slots[selected]?.itemId)
+            ? selected : undefined;
+        inventoryState = { version: 1, slots, equippedWeaponSlot };
         itemUsePending = false;
         renderBag();
+      });
+      joined.onMessage("weapon_equipped", event => {
+        if (room !== joined) return;
+        itemUsePending = false;
+        const id = typeof event?.weaponId === "string" &&
+          Object.hasOwn(WEAPON_META,event.weaponId) ? event.weaponId : "";
+        setAvatarWeapon(getLocalAvatar(),id);
+        renderBag();
+        toast(id ? "สวมใส่ " + WEAPON_META[id].name + " สำเร็จ · บันทึกแล้ว"
+          : "ถอดอาวุธแล้ว · บันทึกบน VPS");
       });
       joined.onMessage("item_used", event => {
         if (room !== joined) return;
@@ -1301,7 +1325,7 @@
         if (room !== joined) return;
         itemUsePending = false;
         renderBag();
-        toast("ใช้ยาไม่สำเร็จ · VPS บันทึกไอเท็มไม่ได้");
+        toast("การใช้ไอเท็มหรือสวมอาวุธไม่สำเร็จ · VPS บันทึกไม่ได้");
       });
       joined.onMessage("dash_started", info => {
         if (room !== joined || typeof info?.playerId !== "string") return;
@@ -1317,7 +1341,9 @@
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
         if (["item_busy", "item_cooldown", "item_unavailable",
-             "hp_full", "invalid_item_use", "not_alive", "inventory_unavailable"]
+             "hp_full", "invalid_item_use", "not_alive", "inventory_unavailable",
+             "invalid_weapon_equip", "equipment_busy", "equipment_cooldown",
+             "not_weapon", "already_equipped", "not_consumable"]
               .includes(info?.reason)) {
           itemUsePending = false;
           renderBag();
@@ -1340,7 +1366,13 @@
         else if (info?.reason === "invalid_item_use" || info?.reason === "invalid_inventory_request") toast("คำสั่งไอเท็มไม่ถูกต้อง");
         else if (info?.reason === "item_busy") toast("กำลังบันทึกการใช้ยา · รอสักครู่");
         else if (info?.reason === "item_cooldown") toast("รอคูลดาวน์ยาเลือด 1 วินาที");
-        else if (info?.reason === "item_unavailable") toast("ไม่มียาเลือดในช่องนี้แล้ว");
+        else if (info?.reason === "item_unavailable") toast("ไม่มีไอเท็มในช่องนี้แล้ว");
+        else if (info?.reason === "invalid_weapon_equip") toast("คำสั่งสวมอาวุธไม่ถูกต้อง");
+        else if (info?.reason === "equipment_busy") toast("ต้องรอให้เคลื่อนไหวพิเศษเสร็จก่อนสวมอาวุธ");
+        else if (info?.reason === "equipment_cooldown") toast("เปลี่ยนอาวุธเร็วเกินไป · รอครู่หนึ่ง");
+        else if (info?.reason === "not_weapon") toast("ไอเท็มนี้ไม่ใช่อาวุธ");
+        else if (info?.reason === "already_equipped") toast("อาวุธนี้สวมใส่อยู่แล้ว");
+        else if (info?.reason === "not_consumable") toast("อาวุธต้องสวมใส่ ไม่ใช่ใช้เป็นยา");
         else if (info?.reason === "hp_full") toast("HP เต็ม · ไม่ใช้ยาโดยเปล่าประโยชน์");
         else if (info?.reason === "dash_cooldown") toast("พุ่งยังไม่พร้อม · รอคูลดาวน์");
         else if (info?.reason === "dash_in_progress" || info?.reason === "dashing") toast("กำลังพุ่งอยู่");
