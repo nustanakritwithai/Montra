@@ -173,7 +173,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict"];
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict"];
       const reason=error instanceof Error && allowed.includes(error.message) ? error.message : "economy_failed";
       if (reason==="economy_failed") console.error("MONTRA economy failed",error);
       client.send("economy_error",{reason});
@@ -216,7 +216,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     market_list: (client:Client, message:unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client,"invalid_economy_request");
-      this.economyAction(client,()=>client.send("market_state",{listings:characterStore.economy.list().map(x=>({id:x.id,seller:x.seller.slice(0,12),item:x.item,price:x.price}))}));
+      this.economyAction(client,id=>client.send("market_state",{listings:characterStore.economy.list(id).map(x=>({id:x.id,seller:x.seller.slice(0,12),item:x.item,price:x.price}))}));
     },
     market_create: (client:Client, message:unknown) => {
       const order=parseMarketCreate(message); if (!order) return this.reject(client,"invalid_economy_request");

@@ -611,6 +611,8 @@
     if (title) title.textContent = summoned ? "เก็บผี" : "เรียกผี";
   }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
+  let economyGold = null, economyListings = [], activeTrade = null, economyPending = false;
+  let economyTimer = null, economyTab = "market", tradeUnread = false;
   // Inventory is never stored in localStorage: LIVE comes from VPS each join.
   const INVENTORY_SLOTS = 12;
   const POTION_ITEM_ID = "health_potion";
@@ -757,6 +759,8 @@
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
+    economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
+    clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     clearChatHistory(true);
     switchWorld("ritual_village");
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
@@ -1235,6 +1239,7 @@
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
       clearChatHistory(true);
+      economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; tradeUnread=false; updateTradeBadge();
       inventoryState = null;
       itemUsePending = false;
       itemUseSequence += 1;
@@ -1272,6 +1277,38 @@
         }
         updateChatBadge();
         if (drawerActive === "chat") renderChat();
+      });
+      joined.onMessage("economy_state", message => {
+        if (room !== joined || !Number.isSafeInteger(message?.gold) || message.gold < 0) return;
+        economyGold=message.gold; renderEconomy();
+      });
+      joined.onMessage("market_state", message => {
+        if (room !== joined || !Array.isArray(message?.listings)) return;
+        economyListings=message.listings.filter(x => x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && typeof x.seller==="string" && /^[a-f0-9]{12}$/.test(x.seller) && x.item && (x.item.itemId===POTION_ITEM_ID || Object.hasOwn(WEAPON_META,x.item.itemId)) && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 && Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000).slice(0,120);
+        renderEconomy();
+      });
+      joined.onMessage("market_result", message => {
+        if (room !== joined) return;
+        finishEconomyPending(); toast(message?.action === "buy" ? "ซื้อสำเร็จ · ของเข้ากระเป๋าแล้ว" : message?.action === "cancel" ? "ยกเลิกฝากขายแล้ว" : "ฝากขายสำเร็จ");
+        try { joined.send("market_list",{}); } catch (_) {} renderEconomy();
+      });
+      joined.onMessage("economy_error", message => {
+        if (room !== joined) return;
+        finishEconomyPending();
+        const reasons={insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
+        toast(reasons[message?.reason] || "ทำรายการไม่สำเร็จ · ลองตรวจข้อมูลอีกครั้ง"); renderEconomy();
+      });
+      joined.onMessage("trade_update", message => {
+        if (room !== joined || typeof message?.tradeId !== "string") return;
+        const wasNew=!activeTrade || activeTrade.tradeId!==message.tradeId;
+        activeTrade=message;
+        if (wasNew && drawerActive!=="economy") { tradeUnread=true; updateTradeBadge(); toast("มีคำขอเทรด · เปิดเมนูตลาด"); }
+        if (wasNew && drawerActive==="economy") { economyTab="trade"; toast("มีคำขอเทรด"); }
+        renderEconomy();
+      });
+      for (const [name,notice] of [["trade_complete","เทรดสำเร็จ"],["trade_cancelled","ยกเลิกการเทรดแล้ว"]]) joined.onMessage(name, message => {
+        if (room !== joined || (activeTrade && message?.tradeId!==activeTrade.tradeId)) return;
+        activeTrade=null; tradeUnread=false; updateTradeBadge(); toast(notice); renderEconomy();
       });
       joined.onMessage("combat_hit", hit => {
         if (room !== joined || activeMapId !== "ritual_village" || hit?.targetId !== MONSTER_ID) return;
@@ -1448,6 +1485,7 @@
         inventoryState = { version: 1, slots, equippedWeaponSlot };
         itemUsePending = false;
         renderBag();
+        renderEconomy();
       });
       joined.onMessage("weapon_equipped", event => {
         if (room !== joined) return;
@@ -1483,6 +1521,12 @@
       });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        if (["economy_unavailable","economy_rate_limited","invalid_economy_request","invalid_trade","trade_unavailable","trade_expired","character_busy"].includes(info?.reason) && (drawerActive === "economy" || economyPending)) {
+          finishEconomyPending();
+          if (["trade_unavailable","trade_expired"].includes(info.reason)) activeTrade=null;
+          const reason={economy_unavailable:"ต้องเข้า LIVE ที่เปิดระบบตลาด",economy_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",character_busy:"กำลังบันทึกข้อมูล · ลองใหม่",trade_expired:"ข้อเสนอเทรดหมดอายุ",trade_unavailable:"ไม่พบข้อเสนอเทรด"};
+          toast(reason[info.reason] || "คำขอไม่ถูกต้อง"); renderEconomy(); return;
+        }
         if (["invalid_chat", "chat_rate_limited", "chat_unavailable"].includes(info?.reason)) {
           finishChatPending();
           toast(info.reason === "chat_rate_limited" ? "ส่งข้อความเร็วเกินไป · รอสักครู่" :
@@ -2315,6 +2359,119 @@
     }
     renderBag();
   }
+  function updateTradeBadge() { const badge=$("tradeUnread"); if (badge) badge.hidden=!tradeUnread; }
+  function finishEconomyPending() { economyPending=false; clearTimeout(economyTimer); }
+  function economyReady() { return mode === "live" && room?.state?.economyAvailable === true && ownServerCharacter()?.persistent === true; }
+  function economyItemName(item) {
+    if (!item) return "ไม่มีไอเท็ม";
+    const name=item.itemId===POTION_ITEM_ID ? "ยาเลือดเล็ก" : WEAPON_META[item.itemId]?.name || "ไอเท็ม";
+    return name + " ×" + Number(item.quantity || 0);
+  }
+  function economySend(command, payload, durable=false) {
+    if (!economyReady() || !room) { toast("เข้า LIVE ที่เปิดระบบตลาดก่อน"); return; }
+    if (durable && economyPending) return;
+    const target=room;
+    if (durable) {
+      economyPending=true; clearTimeout(economyTimer);
+      economyTimer=setTimeout(()=>{
+        if (room!==target || !economyPending) return;
+        finishEconomyPending(); toast("ยังไม่ได้รับผล · ตรวจยอดและรายการก่อนทำซ้ำ");
+        try { target.send("get_economy",{}); target.send("market_list",{}); } catch (_) {}
+        renderEconomy();
+      },6000);
+    }
+    try { target.send(command,payload); } catch (_) { finishEconomyPending(); toast("ส่งคำขอไม่สำเร็จ"); }
+    renderEconomy();
+  }
+  function economyRequestId() {
+    const bytes=new Uint8Array(16); window.crypto.getRandomValues(bytes);
+    return "eco_" + Array.from(bytes,b=>b.toString(16).padStart(2,"0")).join("");
+  }
+  function fillEconomySlots(select, includeNone) {
+    if (!select) return;
+    const old=select.value; select.replaceChildren();
+    if (includeNone) { const option=document.createElement("option"); option.value="none"; option.textContent="ไม่เสนอไอเท็ม"; select.appendChild(option); }
+    for (const [i,item] of (inventoryState?.slots || []).entries()) {
+      if (!item || i===inventoryState?.equippedWeaponSlot) continue;
+      const option=document.createElement("option"); option.value=String(i); option.textContent="ช่อง " + (i+1) + " · " + economyItemName(item); select.appendChild(option);
+    }
+    if ([...select.options].some(option=>option.value===old)) select.value=old;
+  }
+  function fillTradeTargets() {
+    const select=$("tradeTarget"); if (!select) return;
+    const old=select.value; select.replaceChildren();
+    const me=room?.state?.players?.get?.(localId);
+    room?.state?.players?.forEach?.((p,id)=>{
+      if (!me || id===localId || p.mapId!==me.mapId || p.persistent!==true || !p.alive || Math.hypot(Number(p.x)-Number(me.x),Number(p.y)-Number(me.y),Number(p.z)-Number(me.z))>5) return;
+      const option=document.createElement("option"); option.value=id; option.textContent=String(p.characterName || "ผู้เล่น"); select.appendChild(option);
+    });
+    if ([...select.options].some(option=>option.value===old)) select.value=old;
+    if (!select.options.length) { const option=document.createElement("option"); option.value=""; option.textContent="ไม่มีผู้เล่นใกล้ตัว"; select.appendChild(option); }
+  }
+  function renderEconomy() {
+    if (drawerActive!=="economy" || !$('economyStatus')) return;
+    const ready=economyReady();
+    $("economyStatus").textContent=ready ? "เงินในตัว " + (economyGold===null ? "กำลังโหลด…" : economyGold.toLocaleString("th-TH")) : "เข้า LIVE ที่เปิดระบบตลาดเพื่อใช้งาน";
+    $("economyMarketTab").setAttribute("aria-pressed",String(economyTab==="market"));
+    $("economyTradeTab").setAttribute("aria-pressed",String(economyTab==="trade"));
+    $("economyMarketPanel").hidden=economyTab!=="market";
+    $("economyTradePanel").hidden=economyTab!=="trade";
+    fillEconomySlots($("marketItem"),false); fillEconomySlots($("tradeItem"),true);
+    const list=$("marketListings"); list.replaceChildren();
+    if (!economyListings.length) { const p=document.createElement("p"); p.className="note"; p.textContent=ready ? "ยังไม่มีรายการฝากขาย" : "รายการจะแสดงเมื่อเชื่อมต่อ"; list.appendChild(p); }
+    const ownId=String(ownServerCharacter()?.characterId || "");
+    for (const listing of economyListings) {
+      const row=document.createElement("div"); row.className="market-row";
+      const details=document.createElement("div"), title=document.createElement("strong"), sub=document.createElement("small");
+      title.textContent=economyItemName(listing.item); sub.textContent=listing.price.toLocaleString("th-TH") + " เงิน · " + (listing.seller===ownId ? "ของคุณ" : "ผู้ขาย " + listing.seller.slice(0,6));
+      details.append(title,sub); const action=document.createElement("button"); action.type="button"; action.textContent=listing.seller===ownId ? "ยกเลิก" : "ซื้อ"; action.disabled=!ready || economyPending;
+      action.onclick=()=>{
+        if (action.dataset.confirm!=="yes") { action.dataset.confirm="yes"; action.textContent=listing.seller===ownId ? "ยืนยันยกเลิก" : "ยืนยันซื้อ"; return; }
+        economySend(listing.seller===ownId ? "market_cancel" : "market_buy",{requestId:economyRequestId(),listingId:listing.id},true);
+      };
+      row.append(details,action); list.appendChild(row);
+    }
+    $("marketSell").disabled=!ready || economyPending || !$("marketItem").options.length;
+    $("marketRefresh").disabled=!ready || economyPending;
+    $("tradeInviteArea").hidden=Boolean(activeTrade);
+    $("tradeActiveArea").hidden=!activeTrade;
+    $("tradeInvite").disabled=!ready || economyPending;
+    if (activeTrade) {
+      const fmt=offer=>offer ? (offer.item ? economyItemName(offer.item) : "ไม่มีไอเท็ม") + " · " + Number(offer.gold || 0).toLocaleString("th-TH") + " เงิน" : "ยังไม่เสนอ";
+      $("tradePartner").textContent=String(activeTrade.otherName || "ผู้เล่น");
+      $("tradeOwnOffer").textContent=fmt(activeTrade.own) + (activeTrade.ownConfirmed ? " ✓" : "");
+      $("tradeOtherOffer").textContent=fmt(activeTrade.other) + (activeTrade.otherConfirmed ? " ✓" : "");
+      $("tradeConfirm").disabled=!ready || !activeTrade.own || !activeTrade.other || activeTrade.ownConfirmed;
+      $("tradeConfirm").textContent=activeTrade.ownConfirmed ? "ยืนยันแล้ว · รออีกฝ่าย" : "ยืนยันข้อเสนอทั้งสองฝ่าย";
+    }
+  }
+  function openEconomy() {
+    tradeUnread=false; updateTradeBadge(); if (activeTrade) economyTab="trade";
+    openDrawer("economy","ตลาดและการค้า",
+      '<div class="economy-balance" id="economyStatus" role="status"></div><div class="chat-tabs" role="group" aria-label="เลือกตลาดหรือเทรด"><button id="economyMarketTab" type="button">ตลาดฝากขาย</button><button id="economyTradeTab" type="button">เทรดใกล้ตัว</button></div>' +
+      '<section id="economyMarketPanel"><div class="economy-heading"><h3>รายการฝากขาย</h3><button id="marketRefresh" type="button">รีเฟรช</button></div><div id="marketListings" class="market-list"></div><h3>ฝากขายไอเท็ม</h3><label class="field" for="marketItem">ไอเท็มที่ไม่ได้สวมใส่</label><select id="marketItem"></select><div class="economy-inputs"><label>จำนวน<input id="marketAmount" type="number" inputmode="numeric" min="1" max="99" value="1"></label><label>ราคาเงิน<input id="marketPrice" type="number" inputmode="numeric" min="1" max="1000000000" value="100"></label></div><button class="primary" id="marketSell" type="button">ฝากขาย</button><p class="note">ของจะออกจากกระเป๋าระหว่างฝากขาย · ยกเลิกได้เมื่อมีที่ว่าง</p></section>' +
+      '<section id="economyTradePanel" hidden><div id="tradeInviteArea"><p class="note">อยู่ใกล้ผู้เล่นในแผนที่เดียวกันไม่เกิน 5 หน่วย</p><label class="field" for="tradeTarget">ผู้เล่นใกล้ตัว</label><select id="tradeTarget"></select><button class="secondary" id="tradeRefresh" type="button">ค้นหาผู้เล่นใกล้ตัว</button><button class="primary" id="tradeInvite" type="button">ขอเทรด</button></div><div id="tradeActiveArea" hidden><h3>เทรดกับ <span id="tradePartner"></span></h3><div class="status-line"><span>ของคุณ</span><strong id="tradeOwnOffer"></strong></div><div class="status-line"><span>อีกฝ่ายเสนอ</span><strong id="tradeOtherOffer"></strong></div><label class="field" for="tradeItem">ไอเท็มของคุณ</label><select id="tradeItem"></select><div class="economy-inputs"><label>จำนวน<input id="tradeAmount" type="number" inputmode="numeric" min="0" max="99" value="1"></label><label>เงินที่เสนอ<input id="tradeGold" type="number" inputmode="numeric" min="0" max="1000000000" value="0"></label></div><button class="secondary" id="tradeSetOffer" type="button">ตั้งข้อเสนอของฉัน</button><button class="primary" id="tradeConfirm" type="button">ยืนยันข้อเสนอทั้งสองฝ่าย</button><button class="secondary" id="tradeCancel" type="button">ยกเลิกเทรด</button><p class="note">ตรวจของและเงินทั้งสองฝ่ายก่อนยืนยัน · แก้ข้อเสนอแล้วต้องยืนยันใหม่ · คำขออยู่ได้ 60 วินาที</p></div></section>');
+    $("economyMarketTab").onclick=()=>{economyTab="market";renderEconomy();};
+    $("economyTradeTab").onclick=()=>{economyTab="trade";fillTradeTargets();renderEconomy();};
+    $("marketRefresh").onclick=()=>{economySend("get_economy",{});economySend("market_list",{});};
+    $("marketSell").onclick=()=>{
+      const slot=Number($("marketItem").value), amount=Number($("marketAmount").value), price=Number($("marketPrice").value);
+      if (!$("marketItem").value || !Number.isSafeInteger(slot) || !Number.isSafeInteger(amount) || amount<1 || amount>99 || !Number.isSafeInteger(price) || price<1 || price>1_000_000_000) return toast("ตรวจจำนวนและราคาก่อนฝากขาย");
+      economySend("market_create",{requestId:economyRequestId(),slot,amount,price},true);
+    };
+    $("tradeRefresh").onclick=fillTradeTargets;
+    $("tradeInvite").onclick=()=>{const targetId=$("tradeTarget").value;if (!targetId) return toast("ยังไม่มีผู้เล่นใกล้ตัว");economySend("trade_request",{targetId});};
+    $("tradeSetOffer").onclick=()=>{
+      if (!activeTrade) return;
+      const item=$("tradeItem").value, slot=item==="none" ? null : Number(item), amount=slot===null ? 0 : Number($("tradeAmount").value), gold=Number($("tradeGold").value);
+      if ((slot!==null && (!Number.isSafeInteger(slot) || !Number.isSafeInteger(amount) || amount<1 || amount>99)) || !Number.isSafeInteger(gold) || gold<0 || gold>1_000_000_000) return toast("ตรวจจำนวนไอเท็มและเงินที่เสนอ");
+      economySend("trade_offer",{tradeId:activeTrade.tradeId,slot,amount,gold});
+    };
+    $("tradeConfirm").onclick=()=>{if(activeTrade) economySend("trade_confirm",{tradeId:activeTrade.tradeId});};
+    $("tradeCancel").onclick=()=>{if(activeTrade) economySend("trade_cancel",{tradeId:activeTrade.tradeId});};
+    fillTradeTargets(); renderEconomy();
+    if (economyReady()) { economySend("get_economy",{}); economySend("market_list",{}); }
+  }
   // Compact portrait HUD: a small quest chip opens the existing detail drawer.
   ui.quest.addEventListener("click", () => {
     const title = ui.quest.querySelector("strong")?.textContent || "ภารกิจ";
@@ -2325,6 +2482,7 @@
   $("characterProfile").onclick=openCharacterProfile;
   $("mapButton").onclick=openMap;
   $("chatButton").onclick=openChat;
+  $("marketButton").onclick=openEconomy;
   $("mapShortcut").onclick=openMap;
   $("modeButton").onclick=openOnline;
   $("helpButton").onclick=openHelp;

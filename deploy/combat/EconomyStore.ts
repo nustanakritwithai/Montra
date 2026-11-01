@@ -119,8 +119,12 @@ export class EconomyStore {
     return this.account(id);
   }
   getAccount(id: string): Account { return this.account(id); }
-  list(): Listing[] {
-    return this.db.prepare("SELECT id,seller,item,price,state FROM listings WHERE state='open' ORDER BY rowid DESC LIMIT 100").all().map(row => ({
+  list(id?: string): Listing[] {
+    if (id !== undefined) characterId(id);
+    const latest=this.db.prepare("SELECT id,seller,item,price,state FROM listings WHERE state='open' ORDER BY rowid DESC LIMIT 100").all();
+    const own=id ? this.db.prepare("SELECT id,seller,item,price,state FROM listings WHERE state='open' AND seller=? ORDER BY rowid DESC").all(id) : [];
+    const seen=new Set<string>();
+    return [...own,...latest].filter(row=>{const key=String(row.id); if (seen.has(key)) return false; seen.add(key); return true;}).map(row => ({
       id: String(row.id), seller: String(row.seller), item: JSON.parse(String(row.item)) as InventoryStack,
       price: Number(row.price), state: String(row.state),
     }));
@@ -128,6 +132,8 @@ export class EconomyStore {
   listItem(id: string, request: string, slot: number, amount: number, price: number): { listingId: string } {
     positiveInteger(price, MAX_GOLD);
     return this.once(id, request, "list", { slot, amount, price }, () => {
+      const count=this.db.prepare("SELECT COUNT(*) AS total FROM listings WHERE seller=? AND state='open'").get(id);
+      if (typeof count?.total !== "number" || count.total>=20) throw new Error("listing_limit");
       const seller = this.account(id), removed = take(seller.inventory, slot, amount);
       seller.inventory = removed.inventory; this.put(id, seller);
       const listingId = randomUUID();

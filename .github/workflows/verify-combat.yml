@@ -155,7 +155,7 @@ jobs:
           grep -q 'guestToken' main.js
           grep -q 'characterSlot' main.js
           grep -q 'slotChoice' main.js
-          grep -q '0.3.0' index.html
+          grep -q '0.3.1' index.html
           grep -q 'bagEquipped' main.js
           grep -q 'equip_weapon' main.js
           grep -q 'weaponsAvailable' deploy/combat/MyRoomState.ts
