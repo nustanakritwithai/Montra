@@ -4,9 +4,10 @@ export type StatKey = typeof STAT_KEYS[number];
 export type Allocations = Record<StatKey, number>;
 export type CombatStats = { maxHp: number; atk: number; def: number; magicAtk: number; magicDef: number; maxStamina: number };
 export const PROGRESSION = Object.freeze({
-  maxLevel: 1000, maxExperience: 1_000_000_000,
-  pointsPerLevel: 3, monsterExperience: 50,
-  xpBase: 100, xpPerLevel: 50,
+  maxLevel: 100, maxExperience: 1_000_000_000,
+  legacyMaxLevel: 1000, pointsPerLevel: 3,
+  monsterBaseExperience: 100, monsterLevel: 1,
+  xpBase: 100, xpQuadratic: 50,
   baseHp: 240, baseAtk: 20, baseDef: 30, baseMagicAtk: 15, baseMagicDef: 20,
   baseStamina: 100, maxHp: 10_000, maxStamina: 300,
   combatQuietMs: 5_000, hpRegenOut: 4, hpRegenIn: 0.8,
@@ -17,7 +18,8 @@ export function emptyAllocations(): Allocations {
   return { hp: 0, atk: 0, def: 0, magicAtk: 0, magicDef: 0, stamina: 0 };
 }
 export function pointsAvailable(level: number, allocations: Allocations): number {
-  return Math.max(0, (level - 1) * PROGRESSION.pointsPerLevel - STAT_KEYS.reduce((sum, key) => sum + allocations[key], 0));
+  validateAllocations(allocations, level);
+  return 0; // The current system grows automatically; old allocations remain readable.
 }
 export function validateAllocations(value: unknown, level: number): Allocations {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_stat_allocations");
@@ -26,7 +28,7 @@ export function validateAllocations(value: unknown, level: number): Allocations 
   const result = emptyAllocations();
   for (const key of STAT_KEYS) {
     const n = record[key];
-    if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0 || n > PROGRESSION.maxLevel * PROGRESSION.pointsPerLevel) {
+    if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0 || n > PROGRESSION.legacyMaxLevel * PROGRESSION.pointsPerLevel) {
       throw new Error("invalid_stat_allocations");
     }
     result[key] = n;
@@ -41,12 +43,16 @@ export function parseAllocateStat(payload: unknown): StatKey | null {
   return STAT_KEYS.find(key => key === value.stat) ?? null;
 }
 export function xpForNextLevel(level: number): number {
-  return PROGRESSION.xpBase + Math.max(0, level - 1) * PROGRESSION.xpPerLevel;
+  return PROGRESSION.xpBase + PROGRESSION.xpQuadratic * level * level;
+}
+export function monsterExperience(playerLevel: number, monsterLevel: number): number {
+  return Math.floor(PROGRESSION.monsterBaseExperience * monsterLevel * Math.max(0, 1 - 0.05 * (playerLevel - monsterLevel)));
 }
 export function addExperience(level: number, experience: number, amount: number): { level: number; experience: number } {
-  if (!Number.isSafeInteger(level) || level < 1 || level > PROGRESSION.maxLevel ||
+  if (!Number.isSafeInteger(level) || level < 1 || level > PROGRESSION.legacyMaxLevel ||
       !Number.isSafeInteger(experience) || experience < 0 || experience > PROGRESSION.maxExperience ||
       !Number.isSafeInteger(amount) || amount < 0) throw new Error("invalid_progression");
+  if (level >= PROGRESSION.maxLevel) return { level, experience };
   let xp = Math.min(PROGRESSION.maxExperience, experience + amount);
   while (level < PROGRESSION.maxLevel && xp >= xpForNextLevel(level)) {
     xp -= xpForNextLevel(level); level++;

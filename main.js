@@ -100,7 +100,6 @@
   const chatHistory = { map: [], world: [] }, chatUnread = { map: 0, world: 0 };
   const chatDraft = { map: "", world: "" };
   let chatChannel = "map", chatPending = null, chatTimer = null;
-  let statUpgradePending = false, statUpgradeTimer = null;
   const scene = new B.Scene(engine);
   scene.clearColor = B.Color4.FromHexString("#111c27ff");
   scene.fogMode = B.Scene.FOGMODE_EXP2;
@@ -759,7 +758,6 @@
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
     clearChatHistory(true);
-    clearTimeout(statUpgradeTimer); statUpgradePending = false;
     switchWorld("ritual_village");
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
     inventoryState = null;
@@ -1416,18 +1414,13 @@
       });
       joined.onMessage("character_save_error", () => {
         if (room !== joined) return;
-        clearTimeout(statUpgradeTimer); statUpgradePending=false; renderProgressionProfile();
+        renderProgressionProfile();
         toast("บันทึกตัวละครไม่สำเร็จ · ตรวจสอบพื้นที่ VPS");
       });
       joined.onMessage("experience_gained", info => {
         if(room !== joined) return;
         toast("ได้รับ EXP +" + Number(info?.amount || 0));
         renderProgressionProfile();
-      });
-      joined.onMessage("stat_allocated", () => {
-        if(room !== joined) return;
-        clearTimeout(statUpgradeTimer); statUpgradePending=false;
-        toast("บันทึกสเตตัสแล้ว"); renderProgressionProfile();
       });
       joined.onMessage("inventory_state", payload => {
         if (room !== joined || payload?.version !== 1 ||
@@ -1497,12 +1490,7 @@
           if (drawerActive === "chat") renderChat();
           return;
         }
-        if (["invalid_stat_request","status_unavailable","no_stat_points","stat_at_cap","insufficient_stamina"].includes(info?.reason) ||
-            (statUpgradePending && ["character_busy","movement_busy","combat_locked"].includes(info?.reason))) {
-          clearTimeout(statUpgradeTimer); statUpgradePending=false;
-          const reasons={invalid_stat_request:"คำขออัปสเตตัสไม่ถูกต้อง",status_unavailable:"ต้องเข้าเซฟออนไลน์ก่อนอัปสเตตัส",no_stat_points:"ไม่มีแต้มสเตตัสเหลือ",stat_at_cap:"สเตตัสนี้ถึงขีดจำกัดแล้ว",insufficient_stamina:"กำลังไม่พอสำหรับพุ่ง",character_busy:"กำลังบันทึกข้อมูล",movement_busy:"หยุดเคลื่อนไหวก่อนอัปสเตตัส",combat_locked:"รอให้พ้นการต่อสู้ก่อนอัปสเตตัส"};
-          toast(reasons[info.reason]);renderProgressionProfile();return;
-        }
+        if (info?.reason === "insufficient_stamina") { toast("กำลังไม่พอสำหรับพุ่ง"); return; }
         if(warpPending) {
           clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
           const warpReasons={portal_too_far:"อยู่ไกลจากประตูเกินไป",combat_locked:"รอให้พ้นการต่อสู้ก่อนเดินทาง",warp_cooldown:"รอคูลดาวน์ก่อนเดินทาง",movement_busy:"หยุดบิน ปีน หรือพุ่งก่อนเดินทาง",character_busy:"กำลังบันทึกข้อมูล"};
@@ -2071,11 +2059,10 @@
   function renderProgressionProfile() {
     if (drawerActive !== "character" || !$('profileStats')) return;
     const p = ownServerCharacter(), supported = mode === "live" && room?.state?.progressionAvailable === true && p;
-    $("profileProgressionStatus").textContent = supported ? "แต้มที่เหลือ: " + Number(p.statPoints || 0) : "เข้า LIVE กับเซิร์ฟเวอร์ที่รองรับระบบสเตตัส";
+    $("profileProgressionStatus").textContent = supported ? "สเตตัสเพิ่มอัตโนมัติเมื่อเลเวลขึ้น" : "เข้า LIVE กับเซิร์ฟเวอร์ที่รองรับระบบสเตตัส";
     $("profileLevel").textContent = "LV. " + (p?.level ?? 1) + " · EXP " + (p?.experience ?? 0) + (supported && p.xpToNext ? " / " + p.xpToNext : "");
     for (const [key,,field] of progressionStats) {
       $("statValue-" + key).textContent = supported ? String(Math.round(Number(p[field]) || 0)) : "—";
-      $("statButton-" + key).disabled = !supported || !p.persistent || Number(p.statPoints) < 1 || statUpgradePending;
     }
     $("profileStamina").textContent = supported ? Math.round(Number(p.stamina)) + " / " + Math.round(Number(p.maxStamina)) : "—";
   }
@@ -2088,8 +2075,8 @@
       '<button class="secondary" id="switchCharacterSlot" type="button">เลือกช่องเซฟ 1–3</button>' +
       '<div class="status-line"><span>ชื่อ</span><strong id="profileName"></strong></div>' +
       '<div class="status-line"><span>ระดับ / ค่าประสบการณ์</span><strong id="profileLevel"></strong></div>' +
-      '<div id="profileStats"><p class="note" id="profileProgressionStatus"></p><p class="note">ใช้ 1 แต้ม: HP +20, โจมตี/ป้องกัน +2 หรือกำลัง +5</p>' +
-      progressionStats.map(([key,label]) => '<div class="status-line stat-row"><span>' + label + '</span><strong id="statValue-' + key + '">—</strong><button type="button" id="statButton-' + key + '" aria-label="ใช้ 1 แต้มเพิ่ม ' + label + '">+1 แต้ม</button></div>').join("") +
+      '<div id="profileStats"><p class="note" id="profileProgressionStatus"></p>' +
+      progressionStats.map(([key,label]) => '<div class="status-line stat-row"><span>' + label + '</span><strong id="statValue-' + key + '">—</strong></div>').join("") +
       '<div class="status-line"><span>กำลังปัจจุบัน</span><strong id="profileStamina">—</strong></div></div>' +
       '<div class="status-line"><span>สถิติ PK</span><strong id="profilePk"></strong></div>' +
       '<div class="status-line"><span>รหัสตัวละคร</span><strong id="profileId"></strong></div>' +
@@ -2107,14 +2094,6 @@
     $("switchCharacterSlot").onclick = openOnline;
     $("profileName").textContent = String(me?.characterName || "นที");
     $("profileLevel").textContent = "LV. " + (me?.level ?? 1) + " · XP " + (me?.experience ?? 0);
-    for (const [key] of progressionStats) $("statButton-" + key).onclick = () => {
-      if (!room || statUpgradePending) return;
-      statUpgradePending=true;
-      try { room.send("allocate_stat", { stat:key }); }
-      catch (_) { statUpgradePending=false;toast("ส่งคำขออัปสเตตัสไม่สำเร็จ");renderProgressionProfile();return; }
-      statUpgradeTimer=setTimeout(()=>{statUpgradePending=false;toast("ยังไม่ได้รับผลการอัปสเตตัส");renderProgressionProfile();},5000);
-      renderProgressionProfile();
-    };
     renderProgressionProfile();
     $("profilePk").textContent = "K " + (me?.pkKills ?? 0) + " / D " + (me?.pkDeaths ?? 0);
     $("profileId").textContent = me?.characterId || "—";

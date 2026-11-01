@@ -34,7 +34,7 @@ export const Player = schema({
   magicDef: t.number().default(20),
   stamina: t.number().default(100),
   maxStamina: t.number().default(100),
-  xpToNext: t.number().default(100),
+  xpToNext: t.number().default(150),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;

@@ -29,36 +29,29 @@ try {
   }
   room=await new Client(endpoint).create("my_room",{guestToken:token});
   const own=()=>room.state?.players?.get(room.sessionId);
-  const rejected=[], upgrades=[];
+  const rejected=[];
   room.onMessage("command_rejected",m=>rejected.push(m.reason));
-  room.onMessage("stat_allocated",m=>upgrades.push(m));
   room.onMessage("experience_gained",()=>{});
   await until(()=>own() && room.state?.progressionAvailable===true,"progression state");
   if(stage==="write") {
     assert.equal(own().maxHp,240);assert.ok(own().hp<150,"legacy HP must not be reset to full");
     assert.equal(own().experience,50);assert.equal(own().equippedWeaponId,"arcane_sword");
     room.send("attack",{targetId:"possessed-1"});
-    await until(()=>own()?.level===2 && own()?.statPoints===3,"real monster EXP and level",20000);
+    await until(()=>own()?.level===2 && own()?.statPoints===0,"real monster EXP and level",20000);
     assert.equal(own().experience,0);
-    room.send("move",{x:-7,z:-7});
-    await until(()=>Math.hypot(own().x-1.1,own().z-10.4)>10,"leave monster aggro",7000);
-    await sleep(5400);
     room.send("allocate_stat",{stat:"atk",amount:99});
-    await until(()=>rejected.includes("invalid_stat_request"),"forged stat rejected");
-    assert.equal(own().statPoints,3);
-    await sleep(600);
-    const before=own().atk;
-    room.send("allocate_stat",{stat:"atk"});
-    await until(()=>upgrades.length===1 && own().statPoints===2 && own().atk>before,"stat saved");
+    await until(()=>rejected.includes("automatic_stats"),"stat allocation rejected");
+    assert.equal(own().statPoints,0);
+    assert.ok(own().maxHp > 240, "stats grow automatically");
     const saved=JSON.parse(await readFile(file,"utf8"));
-    assert.equal(saved.statAllocations.atk,1);assert.equal(saved.level,2);assert.equal(saved.experience,0);
+    assert.equal(saved.statAllocations.atk,0);assert.equal(saved.level,2);assert.equal(saved.experience,0);
     assert.equal(saved.inventory.slots[0].quantity,2);assert.equal(saved.inventory.equippedWeaponSlot,2);
-    console.log("PASS: legacy HP and inventory preserved; real monster awards EXP, levels and durable stat allocation");
+    console.log("PASS: legacy HP and inventory preserved; real monster awards EXP and automatic stat growth");
   } else {
-    assert.equal(own().level,2);assert.equal(own().experience,0);assert.equal(own().statPoints,2);
+    assert.equal(own().level,2);assert.equal(own().experience,0);assert.equal(own().statPoints,0);
     assert.equal(own().equippedWeaponId,"arcane_sword");
     const saved=JSON.parse(await readFile(file,"utf8"));
-    assert.equal(saved.statAllocations.atk,1);assert.equal(saved.inventory.slots[0].quantity,2);
-    console.log("PASS: EXP, stat allocation, weapon and potion count survive Node restart");
+    assert.equal(saved.statAllocations.atk,0);assert.equal(saved.inventory.slots[0].quantity,2);
+    console.log("PASS: EXP, automatic stats, weapon and potion count survive Node restart");
   }
 } finally { if(room) await room.leave().catch(()=>{}); }

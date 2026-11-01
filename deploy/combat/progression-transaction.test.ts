@@ -7,7 +7,7 @@ import { characterStore } from "./CharacterStore.js";
 import { makeStarterInventory, type InventorySnapshot } from "./ItemRules.js";
 import { emptyAllocations, type Allocations } from "./Progression.js";
 
-test("failed stat save never spends points or changes active stats", async () => {
+test("client cannot allocate stats in the automatic progression system", () => {
   const room = new MyRoom();
   const id = "test-session";
   const p = new Player({ level:2, experience:0, hp:100, maxHp:240, statPoints:3, atk:21, alive:true });
@@ -23,19 +23,12 @@ test("failed stat save never spends points or changes active stats", async () =>
   state.inventories.set(id,makeStarterInventory());
   const notices: string[] = [];
   const client = { sessionId:id, send: (kind: string) => { notices.push(kind); } } as unknown as Client;
-  const save = characterStore.save;
-  characterStore.save = async () => { throw new Error("simulated_disk_failure"); };
-  try {
-    room.messages.allocate_stat(client,{stat:"atk"});
-    const pending = state.pendingItemUses.get(id);
-    assert.ok(pending);
-    await pending;
-    assert.equal(p.statPoints,3);
-    assert.equal(p.atk,21);
-    assert.equal(state.statAllocations.get(id)?.atk,0);
-    assert.ok(notices.includes("character_save_error"));
-    assert.ok(!notices.includes("stat_allocated"));
-  } finally { characterStore.save = save; }
+  room.messages.allocate_stat(client,{stat:"atk"});
+  assert.equal(p.statPoints,3);
+  assert.equal(p.atk,21);
+  assert.equal(state.statAllocations.get(id)?.atk,0);
+  assert.ok(notices.includes("command_rejected"));
+  assert.ok(!state.pendingItemUses.has(id));
 });
 
 test("failed EXP save never grants or acknowledges the reward", async () => {

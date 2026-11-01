@@ -33,7 +33,7 @@ import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint } from "
 import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { PROGRESSION, addExperience, calculateDamage, calculateStats, emptyAllocations,
-  parseAllocateStat, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
+  monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
   POTION_ID, POTION_COOLDOWN_MS, parseUseItemCommand,
   useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon,
@@ -141,11 +141,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (priorItem) await priorItem.catch(() => {});
         const current = this.state.players.get(id), snapshot = this.captureCharacterSnapshot(id);
         if (!current || !snapshot) return;
-        const next = addExperience(current.level, current.experience, PROGRESSION.monsterExperience);
+        const amount = current.level >= PROGRESSION.maxLevel ? 0 : monsterExperience(current.level, PROGRESSION.monsterLevel);
+        if (amount <= 0) return;
+        const next = addExperience(current.level, current.experience, amount);
         await characterStore.save({ ...snapshot, ...next, updatedAt: new Date().toISOString() });
         current.level = next.level; current.experience = next.experience;
         this.applyStats(current, this.statAllocations.get(id) ?? emptyAllocations());
-        try { this.clients.find(client => client.sessionId === id)?.send("experience_gained", { amount: PROGRESSION.monsterExperience, level: next.level, experience: next.experience }); } catch { /* disconnected */ }
+        try { this.clients.find(client => client.sessionId === id)?.send("experience_gained", { amount, level: next.level, experience: next.experience }); } catch { /* disconnected */ }
       } catch (error) {
         console.error("MONTRA EXP save failed:", id, error);
         this.clients.find(client => client.sessionId === id)?.send("character_save_error", { reason: "disk_write_failed" });
@@ -175,36 +177,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         }
       }
     },
-    allocate_stat: (client: Client, message: unknown) => {
-      const key = parseAllocateStat(message), id = client.sessionId;
-      if (!key) return this.reject(client, "invalid_stat_request");
-      const player = this.state.players.get(id), current = this.statAllocations.get(id);
-      if (!player || !player.alive || !current || !this.persistentCharacters.has(id)) return this.reject(client, "status_unavailable");
-      if (this.pendingWarps.has(id) || this.pendingItemUses.has(id) || this.pendingRewards.has(id)) return this.reject(client, "character_busy");
-      if (this.activeDashes.has(id) || this.climbs.has(id) || this.flightTransitions.has(id)) return this.reject(client, "movement_busy");
-      if (this.attackTargets.has(id) || this.state.monster.targetId === id || [...this.attackTargets.values()].includes(id) ||
-          this.simulatedMs - (this.lastCombatMs.get(id) ?? -Infinity) < PROGRESSION.combatQuietMs) return this.reject(client, "combat_locked");
-      if (pointsAvailable(player.level, current) < 1) return this.reject(client, "no_stat_points");
-      const next = { ...current, [key]: current[key] + 1 };
-      const before = calculateStats(player.level, current), after = calculateStats(player.level, next);
-      if ((key === "hp" && before.maxHp === after.maxHp) || (key === "stamina" && before.maxStamina === after.maxStamina)) return this.reject(client, "stat_at_cap");
-      const snapshot = this.captureCharacterSnapshot(id);
-      if (!snapshot) return this.reject(client, "status_unavailable");
-      this.pendingWarps.add(id);
-      const task = (async () => {
-        try {
-          await characterStore.save({ ...snapshot, statAllocations: next, updatedAt: new Date().toISOString() });
-          const p = this.state.players.get(id);
-          if (!p) return;
-          this.statAllocations.set(id, next); this.applyStats(p, next);
-          try { client.send("stat_allocated", { stat: key, points: p.statPoints }); } catch { /* disconnected */ }
-        } catch (error) {
-          console.error("MONTRA stat save failed:", id, error);
-          try { client.send("character_save_error", { reason: "disk_write_failed" }); } catch { /* disconnected */ }
-        } finally { this.pendingWarps.delete(id); this.pendingItemUses.delete(id); }
-      })();
-      this.pendingItemUses.set(id, task);
-    },
+    allocate_stat: (client: Client, _message: unknown) => this.reject(client, "automatic_stats"),
     warp: (client: Client, message: unknown) => {
       const id = client.sessionId;
       const player = this.state.players.get(id);
