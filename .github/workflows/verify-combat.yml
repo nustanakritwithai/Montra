@@ -105,10 +105,19 @@ jobs:
         run: npx tsc --noEmit --strict false
 
       # Windows tsconfig.build.json can combine strictNullChecks=false with
-      # noImplicitAny=true; this catches TS7011 that the above modes miss.
+      # noImplicitAny=true. Mirror a production BUILD (exclude unit-test files
+      # that aren't compiled on VPS): catches TS7011 in runtime sources.
       - name: Type-check Windows noImplicitAny without strictNullChecks
         working-directory: combat-verify
-        run: npx tsc --noEmit --strict false --noImplicitAny true
+        shell: bash
+        run: |
+          cat > tsconfig.windows-build.json <<'EOF'
+          {
+            "extends": "./tsconfig.json",
+            "exclude": ["src/**/*.test.ts"]
+          }
+          EOF
+          npx tsc --noEmit -p tsconfig.windows-build.json --strict false --noImplicitAny true
 
       - name: Validate mobile S1 client adapter
         shell: bash
