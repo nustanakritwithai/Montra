@@ -1,5 +1,5 @@
 <#
-MONTRA 0.2.3 — dash + 3 character save slots / safe Windows PowerShell staging.
+MONTRA 0.2.5 — server flight + wall walking + dash + 3 slots / Windows safe staging.
 SAFE STAGING ONLY:
   * Backs up the existing MONTRA Room sources and compiled build.
   * Downloads only files from the owner's MONTRA GitHub repository.
@@ -33,11 +33,11 @@ if (!((Get-Content $roomFile -Raw).Contains("export class MyRoom"))) {
 }
 
 $files = @(
-  @{ Name = "MyRoom.ts"; Target = "src\rooms\MyRoom.ts"; Check = "private updateClimbs" },
-  @{ Name = "MyRoomState.ts"; Target = "src\rooms\schema\MyRoomState.ts"; Check = "MontraFortification" },
+  @{ Name = "MyRoom.ts"; Target = "src\rooms\MyRoom.ts"; Check = "flightTransitions" },
+  @{ Name = "MyRoomState.ts"; Target = "src\rooms\schema\MyRoomState.ts"; Check = "flightAvailable" },
   @{ Name = "GameRules.ts"; Target = "src\rooms\GameRules.ts"; Check = "dashCooldownMs" },
   @{ Name = "DashRules.ts"; Target = "src\rooms\DashRules.ts"; Check = "advanceDash" },
-  @{ Name = "HeightRules.ts"; Target = "src\rooms\HeightRules.ts"; Check = "wallBlocksShot" },
+  @{ Name = "HeightRules.ts"; Target = "src\rooms\HeightRules.ts"; Check = "flightLandingHeight" },
   @{ Name = "MonsterRRT.ts"; Target = "src\rooms\MonsterRRT.ts"; Check = "class MonsterRRTNavigator" },
   @{ Name = "CharacterStore.ts"; Target = "src\rooms\CharacterStore.ts"; Check = "class CharacterStore" },
   @{ Name = "smoke-test.mjs"; Target = "montra-combat-smoke-test.mjs"; Check = "combat_hit" },
@@ -48,6 +48,7 @@ $files = @(
   @{ Name = "elevation-integration.mjs"; Target = "montra-elevation-integration.mjs"; Check = "MONTRA Elevation" },
   @{ Name = "monster-rrt-integration.mjs"; Target = "montra-monster-rrt-integration.mjs"; Check = "MONTRA Monster RRT integration" },
   @{ Name = "dash-integration.mjs"; Target = "montra-dash-integration.mjs"; Check = "MONTRA authoritative dash integration" },
+  @{ Name = "flight-integration.mjs"; Target = "montra-flight-integration.mjs"; Check = "MONTRA V0.2.5" },
   @{ Name = "character-persistence-integration.mjs"; Target = "montra-s2-character-integration.mjs"; Check = "MONTRA three-slot integration" }
 )
 
@@ -114,6 +115,7 @@ try {
   Write-Host ""
   Write-Host "MONTRA 3-SLOTS BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA DASH BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA FLIGHT BUILD PASSED." -ForegroundColor Green
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
   Write-Host "Then test: node C:\Montra\online-server\montra-s1-integration.mjs"
@@ -122,7 +124,7 @@ try {
   Write-Host "Summon test: node C:\Montra\online-server\montra-summon-integration.mjs"
   Write-Host "Height test: node C:\Montra\online-server\montra-elevation-integration.mjs"
   Write-Host "RRT test: node C:\Montra\online-server\montra-monster-rrt-integration.mjs"
-  Write-Host "Dash test: run ONLY on a separate LOCAL test Node instance/port, never live players."
+  Write-Host "Dash/Flight tests: run ONLY on an ISOLATED test Node instance, never live players."
   Write-Host "S2 persistence test: use an ISOLATED test server with MONTRA_CHARACTER_DIR set to a TEMP folder (see runbook)."
 } catch {
   Write-Warning "3-SLOTS installation failed. Restoring MONTRA source files and build (character data untouched)."
