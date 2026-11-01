@@ -569,7 +569,7 @@
     applyFortVisual(defaultFort);
     onlinePlayers.clear(); clearAvatars(); clearSummons();
     player = ensureAvatar("demo",true,0,0);
-    demoDest = null; demoDash = null; resetDemoMonster();
+    demoDest = null; demoDash = null; demoDashNextAt = 0; resetDemoMonster();
     selectedPkTargetId = null;
     rangedTargetId = null;
     pendingClimb = null;
@@ -1253,6 +1253,102 @@
     e.preventDefault();
     setCameraZoom(camera.radius + Math.sign(e.deltaY) * 2);
   }, {passive:false});
+
+  // Direction is relative to the CURRENT camera, not fixed world north.
+  // With alpha=-PI/2 (the default), swipe up = +Z and right = +X.
+  function dashDirectionFromSwipe(screenDx, screenDy) {
+    const distance = Math.hypot(screenDx, screenDy);
+    if (!Number.isFinite(distance) || distance < 1) return null;
+    const right = screenDx / distance;
+    const forward = -screenDy / distance;
+    const alpha = camera.alpha;
+    const x = -right * Math.sin(alpha) - forward * Math.cos(alpha);
+    const z = right * Math.cos(alpha) - forward * Math.sin(alpha);
+    const length = Math.hypot(x, z);
+    return length > 0 ? { dx: x / length, dz: z / length } : null;
+  }
+
+  function requestSwipeDash(screenDx, screenDy) {
+    const direction = dashDirectionFromSwipe(screenDx, screenDy);
+    if (!direction) return;
+    if (mode === "live" && room) {
+      // Fail visibly against an old VPS that doesn't know the dash message.
+      if (room.state?.dashAvailable !== true) {
+        toast("VPS ยังไม่รองรับพุ่ง · ต้องติดตั้ง MONTRA Server รุ่นใหม่");
+        return;
+      }
+      try { room.send("dash", direction); }
+      catch (error) { console.error("MONTRA dash send failed", error); toast("ส่งคำสั่งพุ่งไม่สำเร็จ"); }
+      return;
+    }
+    if (mode !== "demo") return;
+    if (performance.now() < demoDashNextAt) {
+      toast("รอคูลดาวน์พุ่ง · DEMO");
+      return;
+    }
+    const me = getLocalAvatar();
+    if (!me) return;
+    demoDest = null;
+    demoAutoAttack = false;
+    marker.setEnabled(false);
+    me.targetX = me.x;
+    me.targetZ = me.z;
+    me.dashUntil = performance.now() + 460;
+    demoDash = { ...direction, remaining: DASH_DEMO_DISTANCE };
+    demoDashNextAt = performance.now() + DASH_DEMO_COOLDOWN_MS;
+    toast("พุ่ง! · DEMO");
+  }
+
+  // Swipe begins anywhere inside the bottom skill/nav menu. A short touch
+  // still clicks the skill; a deliberate ~50px swipe becomes one dash instead.
+  // No dash button and no gesture listener on the 3D scene/camera canvas.
+  const dashZone = document.querySelector(".controls");
+  let dashSwipe = null;
+  let suppressMenuClick = false;
+  if (dashZone) {
+    dashZone.addEventListener("pointerdown", event => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      if (event.isPrimary === false) {
+        dashSwipe = null;
+        suppressMenuClick = true;
+        return;
+      }
+      suppressMenuClick = false;
+      dashSwipe = {
+        id: event.pointerId,
+        x: event.clientX, y: event.clientY,
+        startedAt: performance.now(),
+      };
+    }, true);
+    // Cancel an in-progress menu swipe if a second finger is added.
+    window.addEventListener("pointerdown", event => {
+      if (dashSwipe && dashSwipe.id !== event.pointerId) {
+        dashSwipe = null;
+        suppressMenuClick = true;
+      }
+    }, true);
+    window.addEventListener("pointerup", event => {
+      if (!dashSwipe || dashSwipe.id !== event.pointerId) return;
+      const swipe = dashSwipe;
+      dashSwipe = null;
+      const dx = event.clientX - swipe.x;
+      const dy = event.clientY - swipe.y;
+      const length = Math.hypot(dx, dy);
+      const elapsedMs = performance.now() - swipe.startedAt;
+      if (length < 50 || elapsedMs > 850) return;
+      suppressMenuClick = true;
+      requestSwipeDash(dx, dy);
+    }, true);
+    window.addEventListener("pointercancel", event => {
+      if (dashSwipe?.id === event.pointerId) dashSwipe = null;
+    }, true);
+    dashZone.addEventListener("click", event => {
+      if (!suppressMenuClick) return;
+      suppressMenuClick = false;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+  }
 
   let drawerActive = null;
   function closeDrawer() {
