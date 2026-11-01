@@ -133,15 +133,21 @@ export class CharacterStore {
 
   async loadOrCreate(token: string, spawn: SpawnPoint, slot: CharacterSlot = 1): Promise<{ character: CharacterSnapshot; created: boolean }> {
     const id = characterIdFromToken(token, slot);
+    let contents: string | undefined;
     try {
-      const stored = JSON.parse(await readFile(this.location(id), "utf8")) as unknown;
-      const previous = validateSnapshot(stored, id);
+      contents = await readFile(this.location(id), "utf8");
+    } catch (error) {
+      // Only a missing INPUT file creates a new character. Any later
+      // migration write error, even ENOENT, must FAIL CLOSED.
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (contents !== undefined) {
+      const previous = validateSnapshot(JSON.parse(contents) as unknown, id);
       if (previous.inventory !== undefined) {
         return { character: previous, created: false };
       }
-      // S2/0.2.5 legacy records get THREE potions exactly once, per character
-      // slot. Complete the atomic migration BEFORE admitting the player.
-      // If storage fails, reject the join rather than granting duplicates.
+      // Grant three potions exactly once to old S2/0.2.5 save files,
+      // including original slot 1. Persist BEFORE admitting this character.
       const migrated: CharacterSnapshot = {
         ...previous,
         inventory: makeStarterInventory(),
@@ -149,8 +155,6 @@ export class CharacterStore {
       };
       await this.save(migrated);
       return { character: migrated, created: false };
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     const fresh: CharacterSnapshot = {
       version: 1, id, name: "นักเดินทาง", level: 1, experience: 0,
