@@ -611,8 +611,17 @@
       toast("กำลังเปลี่ยนระดับความสูง · รอให้ถึงก่อน");
       return;
     }
-    demoDash = null; // a manual tap cancels a local DEMO dash
     const target = { x: Math.round(Math.max(-20,Math.min(20,x))*100)/100, z: Math.round(Math.max(-20,Math.min(20,z))*100)/100 };
+    // DEMO must retain the same wall-top edge rule as the real 20Hz server.
+    const demoMe = getLocalAvatar();
+    if (mode === "demo" && demoMe && !demoFlying &&
+        Math.abs(demoMe.targetY - activeFort.height) < .1 &&
+        (Math.abs(target.x - activeFort.x) > activeFort.width/2 - .16 ||
+         Math.abs(target.z - activeFort.z) > activeFort.length/2 - .16)) {
+      toast("เดินออกนอกยอดกำแพงไม่ได้ · กดบินก่อน");
+      return;
+    }
+    demoDash = null; // a manual tap cancels a local DEMO dash
     marker.position.x = target.x; marker.position.z = target.z;
     const currentAltitude = mode === "live"
       ? Number(ownServerCharacter()?.y || 0)
