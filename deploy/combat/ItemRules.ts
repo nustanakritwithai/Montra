@@ -50,9 +50,10 @@ function isWeaponId(value: unknown): value is WeaponItemId {
 }
 
 export function makeStarterInventory(): InventorySnapshot {
-  const slots: Array<InventoryStack | null> = Array.from(
-    { length: INVENTORY_SLOT_COUNT }, () => null
-  );
+  // A typed allocation avoids TS7011 on Windows builds configured with
+  // noImplicitAny=true and strictNullChecks=false. Every slot starts empty.
+  const slots: Array<InventoryStack | null> =
+    new Array<InventoryStack | null>(INVENTORY_SLOT_COUNT).fill(null);
   slots[0] = { itemId: POTION_ID, quantity: STARTER_POTION_COUNT };
   STARTER_WEAPON_IDS.forEach((weaponId, index) => {
     slots[index + 1] = { itemId: weaponId, quantity: 1 };
