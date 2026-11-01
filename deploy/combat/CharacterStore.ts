@@ -10,7 +10,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeStarterInventory, validateInventory, type InventorySnapshot } from "./ItemRules.js";
+import { makeStarterInventory, grantStarterWeapons, validateInventory, type InventorySnapshot } from "./ItemRules.js";
 
 export const CHARACTER_SAVE_INTERVAL_MS = 15_000;
 export const CHARACTER_SLOTS = [1, 2, 3] as const;
@@ -143,16 +143,20 @@ export class CharacterStore {
     }
     if (contents !== undefined) {
       const previous = validateSnapshot(JSON.parse(contents) as unknown, id);
-      if (previous.inventory !== undefined) {
+      if (previous.inventory?.equippedWeaponSlot !== undefined) {
         return { character: previous, created: false };
       }
-      // Grant three potions exactly once to old S2/0.2.5 save files,
-      // including original slot 1. Persist BEFORE admitting this character.
+      // Legacy S2/0.2.5 without inventory gets 3 potions + 3 weapons once.
+      // Existing V0.2.6 inventories get ONLY the three weapons: preserve
+      // the EXACT potion stock, including zero, without duplicate grants.
       const migrated: CharacterSnapshot = {
         ...previous,
-        inventory: makeStarterInventory(),
+        inventory: previous.inventory
+          ? grantStarterWeapons(previous.inventory)
+          : makeStarterInventory(),
         updatedAt: new Date().toISOString(),
       };
+      // Persist BEFORE admitting the character: on disk error, fail closed.
       await this.save(migrated);
       return { character: migrated, created: false };
     }
