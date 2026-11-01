@@ -41,28 +41,17 @@ footer{padding:8px 22px 24px;text-align:center;font-size:12px;color:#9da0b0;line
 </main>
 <script>
 (()=>{'use strict';
-const N=22,model=document.getElementById('sword'),status=document.getElementById('status'),message=document.getElementById('message'),fill=document.getElementById('fill'),loading=document.getElementById('loading'),detail=document.getElementById('detail');let currentUrl=null;
-const files=Array(N),limit=5;let done=0,next=0;
-async function work(){
- while(next<N){const i=next++;const name='chunks/part-'+String(i).padStart(2,'0')+'.b64';
- const resp=await fetch(name,{cache:'force-cache'});if(!resp.ok)throw Error(name+' HTTP '+resp.status);
- files[i]=(await resp.text()).trim();done++;fill.style.width=(done/N*80)+'%';status.textContent='กำลังโหลดโมเดล '+Math.round(done/N*100)+'%';}
-}
-async function load(){
- try{await Promise.all(Array.from({length:limit},()=>work()));status.textContent='กำลังเตรียม GLB และ PBR';fill.style.width='86%';
- const str=atob(files.join(''));const bytes=new Uint8Array(str.length);
- for(let i=0;i<str.length;i++)bytes[i]=str.charCodeAt(i);
- const blob=new Blob([bytes],{type:'model/gltf-binary'});currentUrl=URL.createObjectURL(blob);
- document.getElementById('download').disabled=false;
- model.addEventListener('load',()=>{loading.style.display='none';detail.textContent='GLB '+(blob.size/1e6).toFixed(2)+' MB • PBR 1K • WebGL';},{once:true});
- model.addEventListener('error',e=>{message.className='error';message.textContent='โมเดลโหลดไม่ได้ในเบราว์เซอร์นี้ กรุณาเปิดด้วย Chrome เวอร์ชันล่าสุด';status.textContent='ไม่สามารถแสดงผล 3D';},{once:true});
- status.textContent='กำลังแสดงโมเดล 3D';fill.style.width='100%';model.src=currentUrl;
- }catch(err){console.error(err);status.textContent='โหลดโมเดลไม่สำเร็จ';message.className='error';message.textContent='ลองรีเฟรชหน้านี้หรือตรวจการเชื่อมต่ออินเทอร์เน็ต: '+String(err.message||err);}
-}
+const model=document.getElementById('sword'),status=document.getElementById('status'),message=document.getElementById('message'),fill=document.getElementById('fill'),loading=document.getElementById('loading'),detail=document.getElementById('detail');
+const url='./crescent-blade-lod2.glb';let loaded=false;
+model.addEventListener('progress',ev=>{const p=Math.round((ev.detail?.totalProgress||0)*100);fill.style.width=p+'%';status.textContent='กำลังโหลดโมเดล PBR '+p+'%';});
+model.addEventListener('load',()=>{loaded=true;loading.style.display='none';detail.textContent='GLB 6.31 MB • LOD2 1,530 tris • PBR 1K';});
+model.addEventListener('error',()=>{status.textContent='ไม่สามารถแสดงโมเดล 3D';message.textContent='ตรวจสอบเครือข่ายหรือเปิดใน Chrome รุ่นล่าสุด';message.className='error';});
+model.setAttribute('src',url);
+document.getElementById('download').disabled=false;
 document.getElementById('rotate').onclick=e=>{model.autoRotate=!model.autoRotate;e.currentTarget.textContent=model.autoRotate?'⏸ หยุดหมุน':'▶ หมุนอัตโนมัติ';};
 document.getElementById('reset').onclick=()=>{model.setAttribute('camera-orbit','auto auto auto');model.setAttribute('camera-target','auto auto auto');if(model.jumpCameraToGoal)model.jumpCameraToGoal();};
-document.getElementById('light').onclick=e=>{const bright=model.exposure<1.8;model.exposure=bright?2.1:1.3;e.currentTarget.textContent=bright?'☾ แสงสว่าง':'☀ แสงปกติ';};
-document.getElementById('download').onclick=()=>{if(!currentUrl)return;const a=document.createElement('a');a.href=currentUrl;a.download='Crescent_Blade_LOD2_Mobile1K_PBR.glb';a.click();};
-load();
+document.getElementById('light').onclick=e=>{const bright=Number(model.exposure||1.3)<1.8;model.exposure=bright?2.1:1.3;e.currentTarget.textContent=bright?'☾ แสงสว่าง':'☀ แสงปกติ';};
+document.getElementById('download').onclick=()=>{const a=document.createElement('a');a.href=url;a.download='Crescent_Blade_LOD2_Mobile1K_PBR.glb';a.click();};
+setTimeout(()=>{if(!loaded && !customElements.get('model-viewer')){status.textContent='เว็บเบราว์เซอร์โหลดตัวแสดง 3D ไม่ได้';message.textContent='คุณยังดาวน์โหลด GLB ได้จากปุ่มด้านล่าง';message.className='error';}},15000);
 })();
 </script></body></html>

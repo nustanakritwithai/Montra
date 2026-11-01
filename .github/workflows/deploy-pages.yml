@@ -43,7 +43,10 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html main.js styles.css _site/
-          if [ -d weapon-preview ]; then cp -R weapon-preview _site/; fi
+          mkdir -p _site/weapon-preview/lod2
+          cp weapon-preview/lod2/index.html _site/weapon-preview/lod2/index.html
+          cat weapon-preview/lod2/chunks/part-*.b64 | base64 --decode > _site/weapon-preview/lod2/crescent-blade-lod2.glb
+          test "$(wc -c < _site/weapon-preview/lod2/crescent-blade-lod2.glb)" -eq 6307460
           touch _site/.nojekyll
 
       - name: Upload Pages artifact
