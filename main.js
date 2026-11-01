@@ -1878,50 +1878,76 @@
   }
   function currentBagSlots() {
     if (mode === "live") return inventoryState?.slots || null;
-    return Array.from({ length: INVENTORY_SLOTS }, (_, i) =>
-      i === 0 && demoPotionCount > 0
-        ? { itemId: POTION_ITEM_ID, quantity: demoPotionCount } : null);
+    return Array.from({ length: INVENTORY_SLOTS }, (_, i) => {
+      if (i === 0 && demoPotionCount > 0) {
+        return { itemId: POTION_ITEM_ID, quantity: demoPotionCount };
+      }
+      const weaponId = ["ritual_dagger","arcane_sword","spirit_staff"][i-1];
+      return weaponId ? { itemId: weaponId, quantity: 1 } : null;
+    });
+  }
+  function currentEquippedWeaponSlot() {
+    return mode === "live" ? inventoryState?.equippedWeaponSlot : demoWeaponSlot;
   }
   function renderBag() {
     if (drawerActive !== "bag") return;
     const slots = currentBagSlots();
     const status = $("bagSaveStatus");
     if (!status) return;
+    const hasWeapons = mode !== "live" || room?.state?.weaponsAvailable === true;
     status.textContent = mode === "live"
       ? (room?.state?.inventoryAvailable !== true
-        ? "VPS ยังไม่รองรับกระเป๋าถาวร · ต้องติดตั้ง MONTRA 0.2.6" :
-        slots ? "บันทึกถาวรบน VPS · แยกตามช่องตัวละคร" :
-          "กำลังโหลดกระเป๋าจาก VPS...")
-      : "โหมด DEMO · กระเป๋าทดลองไม่บันทึก";
+        ? "VPS ยังไม่รองรับกระเป๋าถาวร · ต้องอัปเดต MONTRA Server"
+        : !slots ? "กำลังโหลดกระเป๋าจาก VPS..."
+        : hasWeapons ? "ยาและชุดอาวุธบันทึกบน VPS · แยกตามตัวละคร"
+        : "ยาเลือดพร้อม · ต้องอัปเดต VPS V0.2.7 เพื่อสวมอาวุธ")
+      : "โหมด DEMO · อาวุธและกระเป๋าทดลอง ไม่บันทึก";
     const currentHp = mode === "live"
       ? Number(ownServerCharacter()?.hp || 0) : demoHp;
     const maxHp = mode === "live"
       ? Number(ownServerCharacter()?.maxHp || 100) : 100;
     $("bagHp").textContent = Math.max(0, Math.ceil(currentHp)) +
       " / " + Math.max(1, Math.ceil(maxHp));
+    const equipped = currentEquippedWeaponSlot();
+    const equippedItem = equipped === null || equipped === undefined
+      ? null : slots?.[equipped];
+    $("bagEquipped").textContent = equippedItem && Object.hasOwn(WEAPON_META,equippedItem.itemId)
+      ? WEAPON_META[equippedItem.itemId].name + " · " +
+        WEAPON_META[equippedItem.itemId].bonus : "มือเปล่า";
     for (let i = 0; i < INVENTORY_SLOTS; i++) {
       const slot = $("bagSlot" + i);
       if (!slot) continue;
-      const item = slots?.[i];
+      const item = slots?.[i], weapon = item && Object.hasOwn(WEAPON_META,item.itemId);
       slot.classList.toggle("bag-filled", Boolean(item));
+      slot.classList.toggle("bag-weapon", Boolean(weapon));
+      slot.classList.toggle("bag-equipped", Boolean(weapon && i === equipped));
       slot.classList.toggle("bag-selected", i === selectedBagSlot);
       slot.setAttribute("aria-pressed", String(i === selectedBagSlot));
-      slot.querySelector(".bag-symbol").textContent = item ? "🧪" : "·";
-      slot.querySelector(".bag-quantity").textContent = item
-        ? "×" + item.quantity : "";
+      slot.querySelector(".bag-symbol").textContent = !item ? "·" :
+        weapon ? WEAPON_META[item.itemId].symbol : "🧪";
+      slot.querySelector(".bag-quantity").textContent = !item ? "" :
+        weapon && i === equipped ? "✓" : "×" + item.quantity;
     }
     const chosen = slots?.[selectedBagSlot];
-    const ready = Boolean(chosen && currentHp > 0 && currentHp < maxHp &&
-      (mode !== "live" || ownServerCharacter()?.alive === true));
-    $("bagItemName").textContent = chosen ? "ยาเลือดเล็ก" : "ช่องว่าง";
-    $("bagItemDescription").textContent = chosen
-      ? "ฟื้น HP สูงสุด 30 · ใช้ได้เมื่อ HP ไม่เต็ม · ขวดที่เหลือจะถูกหักจากเซฟ"
-      : "ไอเท็มใหม่จะปรากฏในช่องกระเป๋านี้ในอนาคต";
+    const weapon = chosen && Object.hasOwn(WEAPON_META,chosen.itemId);
+    const canAct = mode !== "live" || ownServerCharacter()?.alive === true;
+    const ready = Boolean(chosen && canAct && (weapon
+      ? hasWeapons : currentHp > 0 && currentHp < maxHp));
+    $("bagItemName").textContent = !chosen ? "ช่องว่าง" : weapon
+      ? WEAPON_META[chosen.itemId].name : "ยาเลือดเล็ก";
+    $("bagItemDescription").textContent = !chosen
+      ? "ช่องนี้ยังไม่มีไอเท็ม"
+      : weapon
+        ? WEAPON_META[chosen.itemId].bonus +
+          " · เลือกสวมใส่ได้ทีละ 1 อาวุธ · ไม่ถูกใช้หมด"
+        : "ฟื้น HP สูงสุด 30 · ไม่ใช้เมื่อ HP เต็ม · หักจำนวนและบันทึกบน VPS";
     const use = $("useBagItem");
     use.disabled = !ready || itemUsePending;
-    use.textContent = itemUsePending ? "กำลังบันทึกการใช้ยา..." :
+    use.textContent = itemUsePending ? "กำลังบันทึกบน VPS..." :
       !chosen ? "ไม่มีไอเท็มในช่องนี้" :
-      currentHp >= maxHp ? "HP เต็ม" : "ใช้ยาเลือด";
+      weapon ? !hasWeapons ? "ต้องติดตั้งชุดอาวุธบน VPS" :
+        selectedBagSlot === equipped ? "ถอดอาวุธ" : "สวมใส่อาวุธ" :
+        currentHp >= maxHp ? "HP เต็ม" : "ใช้ยาเลือด";
   }
   function openBag() {
     const grid = Array.from({ length: INVENTORY_SLOTS }, (_, i) =>
@@ -1929,66 +1955,92 @@
       '" aria-pressed="false" aria-label="ช่องไอเท็ม ' + (i + 1) + '">' +
       '<span class="bag-symbol">·</span>' +
       '<span class="bag-quantity"></span></button>').join("");
-    openDrawer("bag", "กระเป๋าไอเท็ม · 12 ช่อง",
+    openDrawer("bag", "กระเป๋าและชุดอาวุธ · 12 ช่อง",
       '<div class="status-line"><span>สถานะกระเป๋า</span><strong id="bagSaveStatus"></strong></div>' +
       '<div class="status-line"><span>พลังชีวิต HP</span><strong id="bagHp"></strong></div>' +
+      '<div class="status-line"><span>อาวุธที่สวมใส่</span><strong id="bagEquipped"></strong></div>' +
       '<div class="bag-grid" role="group" aria-label="ช่องไอเท็ม 12 ช่อง">' + grid + '</div>' +
       '<div class="bag-detail"><strong id="bagItemName"></strong>' +
       '<p class="note" id="bagItemDescription"></p></div>' +
-      '<button class="primary" id="useBagItem" type="button">ใช้ยาเลือด</button>' +
-      '<p class="note">ตัวละครแต่ละช่องได้รับยาเลือด 3 ขวดครั้งเดียวเท่านั้น · ใช้ยาแล้วบันทึกทันที · ขณะ HP เต็มจะไม่เสียยา</p>');
+      '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
+      '<p class="note">ยาเลือดและอาวุธถาวรแยกตาม 3 เซฟ · สวมใส่ทีละหนึ่งชิ้น · ใช้ยาเมื่อ HP ไม่เต็ม · การสวมใส่บันทึกบน VPS</p>');
     for (let i = 0; i < INVENTORY_SLOTS; i++) {
       $("bagSlot" + i).onclick = () => {
         selectedBagSlot = i;
         renderBag();
       };
     }
+    function sendBagCommand(command,payload) {
+      const requestedRoom=room;
+      itemUsePending = true;
+      const sequence=++itemUseSequence;
+      renderBag();
+      try { room.send(command,payload); }
+      catch (error) {
+        itemUsePending=false;
+        renderBag();
+        toast("ส่งคำสั่งไอเท็มไม่สำเร็จ");
+        return;
+      }
+      setTimeout(() => {
+        if (!itemUsePending || itemUseSequence !== sequence ||
+            mode !== "live" || room !== requestedRoom) return;
+        itemUsePending=false;
+        try { room.send("get_inventory", {}); } catch (_) {}
+        renderBag();
+        toast("ยังไม่ได้รับผลจาก VPS · กรุณาตรวจสถานะไอเท็มอีกครั้ง");
+      },3500);
+    }
     $("useBagItem").onclick = () => {
       if (itemUsePending) return;
-      const item = currentBagSlots()?.[selectedBagSlot];
-      if (!item || item.itemId !== POTION_ITEM_ID) return;
-      if (mode === "live") {
+      const item=currentBagSlots()?.[selectedBagSlot];
+      if (!item) return;
+      const weapon=Object.hasOwn(WEAPON_META,item.itemId);
+      if (weapon) {
+        if (mode==="live") {
+          if (!room || room.state?.weaponsAvailable !== true || !inventoryState) {
+            toast("VPS ยังไม่รองรับชุดอาวุธ · ต้องติดตั้ง Server V0.2.7");
+            return;
+          }
+          if (ownServerCharacter()?.alive !== true) {
+            toast("ยังสวมอาวุธไม่ได้ · รอเกิดใหม่"); return;
+          }
+          const nextSlot=currentEquippedWeaponSlot()===selectedBagSlot
+            ? null : selectedBagSlot;
+          sendBagCommand("equip_weapon",{slot:nextSlot});
+        } else {
+          demoWeaponSlot=demoWeaponSlot===selectedBagSlot ? null : selectedBagSlot;
+          const selected=demoWeaponSlot===null ? "" :
+            currentBagSlots()[demoWeaponSlot]?.itemId || "";
+          setAvatarWeapon(getLocalAvatar(),selected);
+          toast(selected ? "DEMO สวมใส่ " + WEAPON_META[selected].name
+            : "DEMO ถอดอาวุธแล้ว");
+          renderBag();
+        }
+        return;
+      }
+      if (item.itemId !== POTION_ITEM_ID) return;
+      if (mode==="live") {
         if (!room || room.state?.inventoryAvailable !== true || !inventoryState) {
-          toast("ยังไม่ได้รับกระเป๋าถาวร · ต้องอัปเดต MONTRA บน VPS");
-          return;
+          toast("ยังไม่เชื่อมต่อกระเป๋าถาวรบน VPS"); return;
         }
         if (Number(ownServerCharacter()?.hp || 0) >=
             Number(ownServerCharacter()?.maxHp || 100)) {
           toast("HP เต็มแล้ว"); return;
         }
-        itemUsePending = true;
-        const requestedRoom = room;
-        const sequence = ++itemUseSequence;
-        renderBag();
-        try { room.send("use_item", { slot: selectedBagSlot }); }
-        catch (error) {
-          itemUsePending = false;
-          renderBag();
-          toast("ส่งคำสั่งใช้ยาไม่สำเร็จ");
-          return;
-        }
-        // If an old server throttles the rejection or packets are lost,
-        // never leave the only item-use control permanently disabled.
-        setTimeout(() => {
-          if (!itemUsePending || itemUseSequence !== sequence ||
-              mode !== "live" || room !== requestedRoom) return;
-          itemUsePending = false;
-          try { room.send("get_inventory", {}); } catch (_) {}
-          renderBag();
-          toast("ยังไม่ได้ยืนยันการใช้ยา · ตรวจสอบจำนวนบน VPS อีกครั้ง");
-        }, 3500);
+        sendBagCommand("use_item",{slot:selectedBagSlot});
         return;
       }
       if (demoHp >= 100) { toast("HP เต็มแล้ว · DEMO"); return; }
-      const healed = Math.min(30, 100 - demoHp);
-      demoHp += healed;
-      demoPotionCount -= 1;
-      if (localHpBar) localHpBar.style.width = demoHp + "%";
+      const healed=Math.min(30,100-demoHp);
+      demoHp+=healed;
+      demoPotionCount--;
+      if (localHpBar) localHpBar.style.width=demoHp+"%";
       toast("DEMO ใช้ยาเลือด +" + healed + " HP · ไม่บันทึก");
       renderBag();
     };
     if (mode === "live") {
-      try { room?.send("get_inventory", {}); } catch (_) { /* old VPS */ }
+      try { room?.send("get_inventory", {}); } catch (_) {}
     }
     renderBag();
   }
