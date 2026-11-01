@@ -32,6 +32,8 @@ import type { CharacterSnapshot } from "./CharacterStore.js";
 import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint } from "./WorldMaps.js";
 import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
+import { PROGRESSION, addExperience, calculateDamage, calculateStats, emptyAllocations,
+  monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
   POTION_ID, POTION_COOLDOWN_MS, parseUseItemCommand,
   useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon,
@@ -70,6 +72,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastCombatMs = new Map<string, number>();
   private lastWarpMs = new Map<string, number>();
   private pendingWarps = new Set<string>();
+  private statAllocations = new Map<string, Allocations>();
+  private pendingRewards = new Map<string, Promise<void>>();
+  private hpRegenRemainder = new Map<string, number>();
   private playerRespawnAt = new Map<string, number>();
   private playerSpawn = new Map<string, Vec2>();
   private gates = new Map<string, Gates>();
@@ -113,6 +118,46 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (targetId !== RULES.monsterId) this.lastCombatMs.set(targetId, this.simulatedMs);
   }
 
+  private applyStats(player: Player, allocations: Allocations): void {
+    const stats = calculateStats(player.level, allocations);
+    player.maxHp = stats.maxHp; player.atk = stats.atk; player.def = stats.def;
+    player.magicAtk = stats.magicAtk; player.magicDef = stats.magicDef;
+    player.maxStamina = stats.maxStamina;
+    player.hp = Math.min(player.hp, stats.maxHp);
+    player.stamina = Math.min(player.stamina, stats.maxStamina);
+    player.statPoints = pointsAvailable(player.level, allocations);
+    player.xpToNext = player.level >= PROGRESSION.maxLevel ? 0 : xpForNextLevel(player.level);
+  }
+
+  private grantMonsterExperience(id: string): void {
+    const player = this.state.players.get(id);
+    if (!player || !this.persistentCharacters.has(id) || this.pendingRewards.has(id)) return;
+    // Freeze the winner while the previous item mutation and EXP write finish;
+    // onLeave/saveCharacter await this task before capturing the final snapshot.
+    this.pendingWarps.add(id);
+    const priorItem = this.pendingItemUses.get(id);
+    const task = (async () => {
+      try {
+        if (priorItem) await priorItem.catch(() => {});
+        const current = this.state.players.get(id), snapshot = this.captureCharacterSnapshot(id);
+        if (!current || !snapshot) return;
+        const amount = current.level >= PROGRESSION.maxLevel ? 0 : monsterExperience(current.level, PROGRESSION.monsterLevel);
+        if (amount <= 0) return;
+        const next = addExperience(current.level, current.experience, amount);
+        await characterStore.save({ ...snapshot, ...next, updatedAt: new Date().toISOString() });
+        current.level = next.level; current.experience = next.experience;
+        this.applyStats(current, this.statAllocations.get(id) ?? emptyAllocations());
+        try { this.clients.find(client => client.sessionId === id)?.send("experience_gained", { amount, level: next.level, experience: next.experience }); } catch { /* disconnected */ }
+      } catch (error) {
+        console.error("MONTRA EXP save failed:", id, error);
+        this.clients.find(client => client.sessionId === id)?.send("character_save_error", { reason: "disk_write_failed" });
+      } finally {
+        this.pendingWarps.delete(id); this.pendingRewards.delete(id);
+      }
+    })();
+    this.pendingRewards.set(id, task);
+  }
+
   messages = {
     chat: (client: Client, message: unknown) => {
       const command = parseChatMessage(message);
@@ -132,6 +177,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         }
       }
     },
+    allocate_stat: (client: Client, _message: unknown) => this.reject(client, "automatic_stats"),
     warp: (client: Client, message: unknown) => {
       const id = client.sessionId;
       const player = this.state.players.get(id);
@@ -353,6 +399,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!this.gates.get(id)?.dash.consume(this.simulatedMs)) {
         return this.reject(client, "dash_rate_limited");
       }
+      if (player.stamina < PROGRESSION.dashCost) return this.reject(client, "insufficient_stamina");
+      player.stamina -= PROGRESSION.dashCost;
 
       // Dash replaces an attack approach or tap-to-move order; the client
       // cannot set the start point, height, distance, elapsed time or speed.
@@ -584,8 +632,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.lastAttackMs.set(id,this.simulatedMs);
       this.recordCombat(id, targetId);
       shooter.facing = facingTo(target.x-shooter.x, target.z-shooter.z);
-      const rangedDamage = FORT.rangedDamage +
-        weaponBonuses(this.inventories.get(id)).ranged;
+      const rangedAttack = shooter.magicAtk + weaponBonuses(this.inventories.get(id)).ranged;
+      const rangedDamage = monsterOrder ? calculateDamage(rangedAttack, 100, 1) :
+        calculateDamage(rangedAttack, (target as Player).magicDef, (target as Player).level);
 
       if (monsterOrder) {
         const ghost = this.state.monster;
@@ -595,7 +644,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           attackerId:id,targetId,damage:rangedDamage,
           hp:ghost.hp,maxHp:ghost.maxHp,hitSeq:ghost.hitSeq,source:"ranged",
         }, { afterNextPatch:true });
-        if (ghost.hp===0) this.killMonster();
+        if (ghost.hp===0) this.killMonster(id);
       } else {
         const victim=target as Player;
         victim.hp=Math.max(0,victim.hp-rangedDamage);
@@ -740,25 +789,27 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     if (isMonster) {
       const monster = this.state.monster;
-      monster.hp = Math.max(0, monster.hp - RULES.summonAttackDamage);
+      const damage = calculateDamage(RULES.summonAttackDamage, 100, 1);
+      monster.hp = Math.max(0, monster.hp - damage);
       monster.hitSeq += 1;
       this.broadcast("summon_hit", {
         ownerId, summonId: ownerId, targetId,
-        damage: RULES.summonAttackDamage, hp: monster.hp,
+        damage, hp: monster.hp,
         hitSeq: guardian.hitSeq,
       }, { afterNextPatch: true });
-      if (monster.hp === 0) this.killMonster();
+      if (monster.hp === 0) this.killMonster(ownerId);
       return;
     }
 
     // Summon can help in Free PK only when its owner selected or was attacked
     // by this opponent. Damage/kill attribution belongs to the owner.
     const victim = target as Player;
-    victim.hp = Math.max(0, victim.hp - RULES.summonAttackDamage);
+    const damage = calculateDamage(RULES.summonAttackDamage, victim.magicDef, victim.level);
+    victim.hp = Math.max(0, victim.hp - damage);
     victim.hitSeq += 1;
     this.broadcast("pvp_hit", {
       attackerId: ownerId, source: "summon", summonOwnerId: ownerId,
-      targetId, damage: RULES.summonAttackDamage,
+      targetId, damage,
       hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
     }, { afterNextPatch: true });
     if (victim.hp === 0) {
@@ -822,9 +873,25 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updateMonsterAI(dt);
     this.updatePlayerAttacks();
     this.updateSummons(dt);
+    this.updateResources(dt);
     if (this.simulatedMs >= this.nextCharacterSaveMs) {
       this.nextCharacterSaveMs = this.simulatedMs + CHARACTER_SAVE_INTERVAL_MS;
       for (const id of this.persistentCharacters.keys()) void this.saveCharacter(id);
+    }
+  }
+
+  private updateResources(dt: number): void {
+    for (const [id, player] of this.state.players) {
+      if (!player.alive || this.pendingWarps.has(id)) continue;
+      const fighting = this.attackTargets.has(id) || this.state.monster.targetId === id ||
+        this.simulatedMs - (this.lastCombatMs.get(id) ?? -Infinity) < PROGRESSION.combatQuietMs;
+      // HP saves are integer-valued in legacy snapshots. Keep fractional regen
+      // in a transient accumulator instead of rounding up on each save/rejoin.
+      const pending = (this.hpRegenRemainder.get(id) ?? 0) + (fighting ? PROGRESSION.hpRegenIn : PROGRESSION.hpRegenOut) * dt;
+      const healed = Math.floor(pending + 1e-9);
+      player.hp = Math.min(player.maxHp, player.hp + healed);
+      this.hpRegenRemainder.set(id, player.hp >= player.maxHp ? 0 : pending - healed);
+      player.stamina = Math.min(player.maxStamina, player.stamina + (fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut) * dt);
     }
   }
 
@@ -1032,7 +1099,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       const meleeBonus = weaponBonuses(this.inventories.get(attackerId)).melee;
       if (isMonster) {
-        const meleeDamage = RULES.playerAttackDamage + meleeBonus;
+        const meleeDamage = calculateDamage(attacker.atk + meleeBonus, 100, 1);
         monster.hp = Math.max(0, monster.hp - meleeDamage);
         monster.hitSeq += 1;
         this.broadcast("combat_hit", {
@@ -1040,14 +1107,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           attackerId, damage: meleeDamage,
           hp: monster.hp, maxHp: monster.maxHp, hitSeq: monster.hitSeq,
         }, { afterNextPatch: true });
-        if (monster.hp === 0) this.killMonster();
+        if (monster.hp === 0) this.killMonster(attackerId);
         continue;
       }
 
       // FREE PK: health, range, damage, respawn and kill credit are wholly
       // server-owned. The client only submits another session's targetId.
       const victim = target as Player;
-      const meleeDamage = RULES.pkDamage + meleeBonus;
+      const meleeDamage = calculateDamage(attacker.atk + meleeBonus, victim.def, victim.level);
       victim.hp = Math.max(0, victim.hp - meleeDamage);
       victim.hitSeq += 1;
       this.broadcast("pvp_hit", {
@@ -1072,6 +1139,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const victim = this.state.players.get(id);
     if (!victim || !victim.alive) return;
     victim.hp = 0;
+    this.hpRegenRemainder.delete(id);
     victim.alive = false;
     victim.combatState = "dead";
     victim.targetId = "";
@@ -1099,7 +1167,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }, { afterNextPatch: true });
   }
 
-  private killMonster() {
+  private killMonster(winnerId: string) {
     const monster = this.state.monster;
     monster.alive = false;
     monster.hp = 0;
@@ -1108,6 +1176,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     monster.targetId = "";
     this.monsterRespawnAt = this.simulatedMs + RULES.monsterRespawnMs;
     this.monsterReturning = false;
+    this.grantMonsterExperience(winnerId);
 
     // Only cancel PvE attacks on this monster. Concurrent Free PK fights
     // must continue even when someone else defeats the ghost.
@@ -1211,12 +1280,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastMonsterAttackMs = this.simulatedMs;
     this.lastCombatMs.set(targetId, this.simulatedMs);
 
-    target.hp = Math.max(0, target.hp - RULES.monsterAttackDamage);
+    const damage = calculateDamage(RULES.monsterAttackDamage, target.def, target.level);
+    target.hp = Math.max(0, target.hp - damage);
     target.hitSeq += 1;
     this.broadcast("monster_hit", {
       targetId,
       attackerId: RULES.monsterId,
-      damage: RULES.monsterAttackDamage,
+      damage,
       hp: target.hp,
       maxHp: target.maxHp,
       hitSeq: target.hitSeq,
@@ -1286,6 +1356,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       level: player.level, experience: player.experience,
       pkKills: player.pkKills, pkDeaths: player.pkDeaths,
       mapId: player.mapId,
+      statAllocations: this.statAllocations.get(id) ?? emptyAllocations(),
+      stamina: player.stamina,
       x: player.x,
       // Keep stable flight altitude when a transition is mid-flight.
       y: player.flying ? FLIGHT.altitude : player.y,
@@ -1301,6 +1373,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // pending. OnLeave/onDispose also wait so no final write can re-grant it.
       const itemTask = this.pendingItemUses.get(id);
       if (itemTask) await itemTask.catch(() => {});
+      const rewardTask = this.pendingRewards.get(id);
+      if (rewardTask) await rewardTask.catch(() => {});
       const snapshot = this.captureCharacterSnapshot(id);
       if (snapshot) await characterStore.save(snapshot);
     } catch (error) {
@@ -1327,6 +1401,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     try {
       const saved = token ? (await characterStore.loadOrCreate(token, spawn, slot)).character : null;
+      const allocations = saved?.statAllocations ?? emptyAllocations();
+      const initialStats = calculateStats(saved?.level ?? 1, allocations);
       const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
       const map = getWorldMap(mapId);
       if (!map) throw new Error("unknown_character_map");
@@ -1340,8 +1416,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         y: validPosition ? saved.y : safeSpawn.y,
         z: validPosition ? saved.z : safeSpawn.z,
         facing: 0,
-        hp: saved && saved.hp > 0 ? Math.min(saved.hp, RULES.playerMaxHp) : RULES.playerMaxHp,
-        maxHp: RULES.playerMaxHp,
+        hp: saved && saved.hp > 0 ? Math.min(saved.hp, initialStats.maxHp) : initialStats.maxHp,
+        maxHp: initialStats.maxHp,
         alive: true, combatState: "idle", targetId: "",
         pkKills: saved?.pkKills ?? 0, pkDeaths: saved?.pkDeaths ?? 0,
         characterId: characterId ? characterId.slice(0, 12) : "",
@@ -1351,8 +1427,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         flying: Boolean(validPosition && restoreFlight),
         equippedWeaponId: equippedWeaponId(saved?.inventory) ?? "",
         mapId,
+        stamina: Math.min(saved?.stamina ?? initialStats.maxStamina, initialStats.maxStamina),
       });
 
+      this.statAllocations.set(client.sessionId, allocations);
+      this.applyStats(player, allocations);
       this.state.players.set(client.sessionId, player);
       if (characterId && accountId && token) {
         if (!saved?.inventory) throw new Error("inventory_migration_missing");
@@ -1421,6 +1500,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     } finally {
       this.state.players.delete(id);
       this.pendingItemUses.delete(id);
+      this.pendingRewards.delete(id);
+      this.statAllocations.delete(id);
+      this.hpRegenRemainder.delete(id);
       this.inventories.delete(id);
       this.lastItemUseMs.delete(id);
       this.lastInventoryReadMs.delete(id);
@@ -1447,6 +1529,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.persistentCharacters.clear();
     this.inventories.clear();
     this.pendingItemUses.clear();
+    this.pendingRewards.clear();
+    this.statAllocations.clear();
+    this.hpRegenRemainder.clear();
     this.lastItemUseMs.clear();
     this.lastInventoryReadMs.clear();
     this.lastWeaponEquipMs.clear();

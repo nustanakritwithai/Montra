@@ -27,6 +27,14 @@ export const Player = schema({
   flying: t.boolean().default(false), // appended: active in the server-owned 6m air layer
   equippedWeaponId: t.string().default(""), // append-only: visible weapon ID, no private bag data
   mapId: t.string().default("ritual_village"), // logical zone, server-owned
+  statPoints: t.number().default(0),
+  atk: t.number().default(20),
+  def: t.number().default(30),
+  magicAtk: t.number().default(15),
+  magicDef: t.number().default(20),
+  stamina: t.number().default(100),
+  maxStamina: t.number().default(100),
+  xpToNext: t.number().default(150),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
@@ -97,6 +105,7 @@ export const MyRoomState = schema({
   weaponsAvailable: t.boolean().default(true), // append: permanent weapon kit + equip commands
   worldMapsAvailable: t.boolean().default(true), // server supports map-aware travel
   chatAvailable: t.boolean().default(true), // append-only: server relays map chat
+  progressionAvailable: t.boolean().default(true),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

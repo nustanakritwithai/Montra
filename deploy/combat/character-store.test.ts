@@ -313,3 +313,23 @@ test("world maps: legacy saves default to village, map IDs persist per slot and 
     assert.equal(await readFile(thirdFile, "utf8"), corrupt);
   });
 });
+
+test("progression: legacy slots retain level, HP and inventory; invalid allocations fail closed", async () => {
+  await withTempStore(async (store, dir) => {
+    const first = (await store.loadOrCreate(tokenA, spawn, 1)).character;
+    const second = (await store.loadOrCreate(tokenA, spawn, 2)).character;
+    const file = path.join(dir, first.id + ".json");
+    const legacy = { ...first, level: 3, experience: 112, hp: 61 };
+    delete legacy.statAllocations; delete legacy.stamina;
+    await writeFile(file, JSON.stringify(legacy));
+    const loaded = (await store.loadOrCreate(tokenA, spawn, 1)).character;
+    assert.equal(loaded.level, 3); assert.equal(loaded.experience, 112); assert.equal(loaded.hp, 61);
+    assert.deepEqual(loaded.inventory, first.inventory);
+    assert.equal(loaded.statAllocations?.atk, 0);
+    assert.equal((await store.loadOrCreate(tokenA, spawn, 2)).character.id, second.id);
+    const corrupt = JSON.stringify({ ...loaded, statAllocations: { ...loaded.statAllocations, atk: 999 } });
+    await writeFile(file, corrupt);
+    await assert.rejects(store.loadOrCreate(tokenA, spawn, 1), /invalid_stat_allocations/);
+    assert.equal(await readFile(file,"utf8"),corrupt);
+  });
+});

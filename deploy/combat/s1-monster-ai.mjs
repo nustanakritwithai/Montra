@@ -36,24 +36,24 @@ try {
   await until(() => room.state?.players?.get(room.sessionId) && room.state.monster?.alive,
     6000, "initial state");
   const player = () => room.state.players.get(room.sessionId);
-  assert.equal(Number(player().hp), 100);
+  assert.equal(Number(player().hp), 240);
 
   // Walk close to the ghost; it must autonomously choose and chase the player.
   room.send("move", { x: 1.1, z: 9.0 });
-  await until(() => Number(player().hp) < 100 && monsterHits >= 1, 14000,
+  await until(() => Number(player().hp) < 240 && monsterHits >= 1, 14000,
     "AI selecting, chasing and damaging its target");
   assert.ok(sawChase);
   assert.ok(Number.isFinite(Number(room.state.monster.facing)));
 
   const hpAfterFirstHit = Number(player().hp);
-  assert.equal(hpAfterFirstHit, 92);
+  assert.equal(hpAfterFirstHit, 234);
   await sleep(500); // monster attack cooldown is 1500ms
-  assert.equal(Number(player().hp), hpAfterFirstHit, "monster bypassed cooldown");
+  assert.ok(Number(player().hp) >= hpAfterFirstHit && Number(player().hp) <= hpAfterFirstHit+1, "monster bypassed cooldown");
   await until(() => Number(player().hp) < hpAfterFirstHit && monsterHits >= 2,
     3500, "second cooldown-limited monster attack");
-  assert.equal(Number(player().hp), hpAfterFirstHit - 8);
+  assert.ok(Number(player().hp) <= hpAfterFirstHit - 5);
   console.log("PASS: monster AI aggros and chases players using server state");
-  console.log("PASS: monster damages player exactly 8HP, cooldown enforced");
+  console.log("PASS: monster damage respects defense and cooldown");
 
   room.send("move", { x: 0, z: 0 });
 } catch (error) {

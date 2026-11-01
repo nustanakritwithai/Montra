@@ -116,19 +116,19 @@ try {
   // Elevated muzzle clears wall parapet and damages the same enemy that
   // ground shots could not reach. No client chooses damage or Y.
   a.send("shoot",{targetId:bId});
-  await until(()=>bP().hp===beforeB-10 &&
-    rooms.every(r=>p(r,bId)?.hp===beforeB-10),3500,
+  await until(()=>bP().hp===beforeB-13 &&
+    rooms.every(r=>p(r,bId)?.hp===beforeB-13),3500,
     "elevated PvP ranged hit");
   await until(()=>shotHits.some(h=>h.targetId===bId) &&
     shotHits.filter(h=>h.targetId===bId).length===4,3000,
     "four clients observe ranged projectile");
   assert.equal(aP().pkKills,0);
-  console.log("PASS: elevated 3D shot damages another player by server-defined 10HP");
+  console.log("PASS: elevated 3D shot applies server-defined magic damage and defense");
 
   await sleep(1250);
   const initialMonsterHp=a.state.monster.hp;
   a.send("shoot",{targetId:"possessed-1"});
-  await until(()=>a.state.monster.hp===initialMonsterHp-10,2600,
+  await until(()=>a.state.monster.hp===initialMonsterHp-8,2600,
     "shoot monster from elevated wall");
   assert.ok(rooms.every(r=>r.state.monster.hp===a.state.monster.hp));
   console.log("PASS: elevated shot also works against shared monster AI");

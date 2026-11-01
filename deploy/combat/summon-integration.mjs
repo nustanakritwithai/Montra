@@ -116,7 +116,7 @@ try {
   console.log("PASS: guardian assists owner in Free PK without client damage values");
 
   await until(() => player(cId)?.alive === false || player(dId)?.alive === false,
-    13000, "PvP death");
+    25000, "PvP death");
   const downId = player(cId).alive ? dId : cId;
   await until(() => rooms.every(r => !r.state.summons.has(downId)), 2300,
     "owner death despawns NPC");

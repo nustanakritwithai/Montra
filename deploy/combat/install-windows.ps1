@@ -1,5 +1,5 @@
 <#
-MONTRA 0.2.9 — chat and world maps / safe Windows staging.
+MONTRA 0.3.0 — status and EXP / safe Windows staging.
 SAFE STAGING ONLY:
   * Backs up the existing MONTRA Room sources and compiled build.
   * Downloads only files from the owner's MONTRA GitHub repository.
@@ -41,6 +41,7 @@ $files = @(
   @{ Name = "WorldMaps.ts"; Target = "src\rooms\WorldMaps.ts"; Check = "DEFAULT_MAP_ID" },
   @{ Name = "WarpRules.ts"; Target = "src\rooms\WarpRules.ts"; Check = "checkWarp" },
   @{ Name = "ChatRules.ts"; Target = "src\rooms\ChatRules.ts"; Check = "parseChatMessage" },
+  @{ Name = "Progression.ts"; Target = "src\rooms\Progression.ts"; Check = "calculateStats" },
   @{ Name = "MonsterRRT.ts"; Target = "src\rooms\MonsterRRT.ts"; Check = "class MonsterRRTNavigator" },
   @{ Name = "CharacterStore.ts"; Target = "src\rooms\CharacterStore.ts"; Check = "inventory_record_missing" },
   @{ Name = "ItemRules.ts"; Target = "src\rooms\ItemRules.ts"; Check = "grantStarterWeapons" },
@@ -56,7 +57,8 @@ $files = @(
   @{ Name = "character-persistence-integration.mjs"; Target = "montra-s2-character-integration.mjs"; Check = "MONTRA three-slot integration" },
   @{ Name = "weapon-integration.mjs"; Target = "montra-weapon-integration.mjs"; Check = "MONTRA V0.2.7" }
   @{ Name = "world-warp-integration.mjs"; Target = "montra-world-warp-integration.mjs"; Check = "montra-world-test-" },
-  @{ Name = "chat-integration.mjs"; Target = "montra-chat-integration.mjs"; Check = "montra-chat-test-" }
+  @{ Name = "chat-integration.mjs"; Target = "montra-chat-integration.mjs"; Check = "montra-chat-test-" },
+  @{ Name = "progression-integration.mjs"; Target = "montra-progression-integration.mjs"; Check = "montra-progression-test-" }
 )
 
 New-Item -ItemType Directory -Path $download -Force | Out-Null
@@ -108,7 +110,7 @@ try {
 
   Push-Location $base
   try {
-    Write-Host "Compiling MONTRA V0.2.9 chat + world maps + inventory/combat..." -ForegroundColor Cyan
+    Write-Host "Compiling MONTRA V0.3.0 status + EXP..." -ForegroundColor Cyan
     & npm.cmd run build
     if ($LASTEXITCODE -ne 0) {
       throw "MONTRA S1 TypeScript build failed. Exit code: $LASTEXITCODE"
@@ -127,6 +129,7 @@ try {
   Write-Host "MONTRA WEAPON BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA WORLD MAP BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA CHAT BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA STATUS AND EXP BUILD PASSED." -ForegroundColor Green
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
   Write-Host "All integration tests require an ISOLATED Node instance and TEMP character folder; never run them against LIVE."
