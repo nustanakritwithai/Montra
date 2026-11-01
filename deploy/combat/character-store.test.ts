@@ -8,6 +8,7 @@ import {
   CHARACTER_SLOTS, parseCharacterSlot,
   parseCharacterName, claimCharacter, releaseCharacter,
 } from "./CharacterStore.js";
+import { makeStarterInventory, useInventoryItem } from "./ItemRules.js";
 
 const tokenA = "mt1_" + "ab".repeat(32);
 const tokenB = "mt1_" + "cd".repeat(32);
@@ -151,5 +152,77 @@ test("S3: listing save slots is read-only; corrupt slot stays untouched", async 
     ]);
     await assert.rejects(store.loadOrCreate(tokenB, spawn, 2));
     assert.equal(await readFile(path.join(dir, ids[1] + ".json"), "utf8"), "{truncated");
+  });
+});
+
+test("S4: old Guest save receives exactly 3 potions ONCE without changing its identity/progress", async () => {
+  await withTempStore(async (store, dir) => {
+    const first = (await store.loadOrCreate(tokenA, spawn)).character;
+    const original = {
+      ...first, name: "นักบวชเก่า", x: 5, z: -2,
+      hp: 61, pkKills: 14, level: 3, experience: 112,
+      updatedAt: new Date().toISOString(),
+    };
+    delete (original as Partial<typeof original>).inventory;
+    const file = path.join(dir, first.id + ".json");
+    await writeFile(file, JSON.stringify(original) + "\n");
+    const before = await readFile(file,"utf8");
+    assert.equal(JSON.parse(before).inventory,undefined);
+    // Merely listing slots must never grant or alter an existing save.
+    const ids=CHARACTER_SLOTS.map(slot => characterIdFromToken(tokenA,slot));
+    await store.listSlots(ids);
+    assert.equal(await readFile(file,"utf8"),before);
+
+    const migrated=(await new CharacterStore(dir).loadOrCreate(tokenA,spawn)).character;
+    assert.equal(migrated.id,first.id);
+    assert.equal(migrated.name,original.name);
+    assert.equal(migrated.level,3);
+    assert.equal(migrated.experience,112);
+    assert.equal(migrated.hp,61);
+    assert.equal(migrated.pkKills,14);
+    assert.equal(migrated.x,5);
+    assert.equal(migrated.inventory!.slots[0]!.quantity,3);
+    const result=useInventoryItem(migrated.inventory!,0,migrated.hp,100,true);
+    assert.equal(result.ok,true);
+    if (!result.ok) return;
+    await store.save({...migrated, inventory:result.inventory,hp:result.hp, updatedAt:new Date().toISOString()});
+    const loaded=(await new CharacterStore(dir).loadOrCreate(tokenA,spawn)).character;
+    assert.equal(loaded.inventory!.slots[0]!.quantity,2,"not re-granted after item use");
+    assert.equal(loaded.hp,91);
+    assert.equal((await new CharacterStore(dir).loadOrCreate(tokenA,spawn)).character.inventory!.slots[0]!.quantity,2);
+  });
+});
+
+test("S4: potion inventories belong to character slots, not to a shared Guest account", async () => {
+  await withTempStore(async (store,dir) => {
+    const slots=CHARACTER_SLOTS;
+    const characters=await Promise.all(slots.map(slot=>store.loadOrCreate(tokenB,spawn,slot)));
+    assert.deepEqual(characters.map(x=>x.character.inventory!.slots[0]!.quantity),[3,3,3]);
+    const target=characters[1].character;
+    const consumed=useInventoryItem(target.inventory!,0,70,100,true);
+    assert.equal(consumed.ok,true);
+    if(!consumed.ok)return;
+    await store.save({...target, inventory:consumed.inventory, hp:consumed.hp,
+      updatedAt:new Date().toISOString()});
+    const reopened=new CharacterStore(dir);
+    const stocks=await Promise.all(slots.map(async slot => (
+      await reopened.loadOrCreate(tokenB,spawn,slot)).character.inventory!.slots[0]!.quantity));
+    assert.deepEqual(stocks,[3,2,3],"slot 2 must not drain or refill slot 1 or 3");
+    assert.equal((await readFile(path.join(dir,characterIdFromToken(tokenB,2)+".json"),"utf8")).includes(tokenB),false);
+  });
+});
+
+test("S4: invalid potions fail closed and legacy writes cannot strip an inventory", async () => {
+  await withTempStore(async (store,dir) => {
+    const saved=(await store.loadOrCreate(tokenA,spawn)).character;
+    await assert.rejects(store.save({...saved,inventory:undefined}),/inventory_record_missing/);
+    assert.equal((await store.loadOrCreate(tokenA,spawn)).character.inventory!.slots[0]!.quantity,3);
+    const file=path.join(dir,saved.id+".json");
+    const forged={...saved,inventory:{version:1,slots:makeStarterInventory().slots}};
+    forged.inventory.slots[0]={itemId:"health_potion",quantity:99999};
+    await writeFile(file,JSON.stringify(forged));
+    await assert.rejects(new CharacterStore(dir).loadOrCreate(tokenA,spawn),/inventory_record_invalid/);
+    assert.equal(JSON.parse(await readFile(file,"utf8")).inventory.slots[0].quantity,99999,
+      "corruption is never overwritten by fresh starter items");
   });
 });
