@@ -464,6 +464,12 @@
   // Inventory is never stored in localStorage: LIVE comes from VPS each join.
   const INVENTORY_SLOTS = 12;
   const POTION_ITEM_ID = "health_potion";
+  const WEAPON_META = Object.freeze({
+    ritual_dagger: { name: "มีดหมอ", symbol: "🗡️", bonus: "โจมตีประชิด +4" },
+    arcane_sword: { name: "กระบี่อาคม", symbol: "⚔️", bonus: "โจมตีประชิด +8" },
+    spirit_staff: { name: "คทาวิญญาณ", symbol: "🔱", bonus: "ยิงอาคม +6" },
+  });
+  let demoWeaponSlot = 1;
   let inventoryState = null;
   let itemUsePending = false;
   let itemUseSequence = 0;
@@ -493,6 +499,7 @@
   eyeA.parent = enemy; eyeA.position.set(-.2,.14,-.65); eyeA.material = eyesMat; eyeA.isPickable = false;
   const eyeB = eyeA.clone("right possessed eye"); eyeB.position.x = .2;
   let player = ensureAvatar("demo",true,0,0);
+  setAvatarWeapon(player,"ritual_dagger");
   const MONSTER_ID = "possessed-1";
   let monsterReady = false;
   let serverMonsterFacing = null;
@@ -598,6 +605,7 @@
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
     inventoryState = null;
+    demoWeaponSlot = 1;
     itemUsePending = false;
     itemUseSequence += 1;
     selectedBagSlot = 0;
@@ -606,6 +614,7 @@
     applyFortVisual(defaultFort);
     onlinePlayers.clear(); clearAvatars(); clearSummons();
     player = ensureAvatar("demo",true,0,0);
+    setAvatarWeapon(player,"ritual_dagger");
     demoDest = null; demoDash = null; demoDashNextAt = 0;
     demoFlightTarget = null; demoFlying = false;
     resetDemoMonster();
