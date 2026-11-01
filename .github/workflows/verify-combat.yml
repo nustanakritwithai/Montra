@@ -44,6 +44,7 @@ jobs:
           cp deploy/combat/monster-rrt-integration.mjs combat-verify/monster-rrt-integration.mjs
           cp deploy/combat/dash-integration.mjs combat-verify/dash-integration.mjs
           cp deploy/combat/flight-integration.mjs combat-verify/flight-integration.mjs
+          cp deploy/combat/weapon-integration.mjs combat-verify/weapon-integration.mjs
           cp deploy/combat/character-persistence-integration.mjs combat-verify/character-persistence-integration.mjs
           cp deploy/combat/free-pk-integration.mjs combat-verify/free-pk-integration.mjs
           cp deploy/combat/summon-integration.mjs combat-verify/summon-integration.mjs
@@ -123,7 +124,12 @@ jobs:
           grep -q 'guestToken' main.js
           grep -q 'characterSlot' main.js
           grep -q 'slotChoice' main.js
-          grep -q '0.2.6' index.html
+          grep -q '0.2.7' index.html
+          grep -q 'bagEquipped' main.js
+          grep -q 'equip_weapon' main.js
+          grep -q 'weaponsAvailable' deploy/combat/MyRoomState.ts
+          grep -q 'grantStarterWeapons' deploy/combat/CharacterStore.ts
+          grep -q 'MONTRA WEAPON BUILD PASSED.' deploy/combat/install-windows.ps1
           grep -q 'bagSlot' main.js
           grep -Fq 'room.send("use_item"' main.js
           grep -Fq 'inventory_state' main.js
@@ -177,6 +183,7 @@ jobs:
           node --check deploy/combat/monster-rrt-integration.mjs
           node --check deploy/combat/dash-integration.mjs
           node --check deploy/combat/flight-integration.mjs
+          node --check deploy/combat/weapon-integration.mjs
           node --check deploy/combat/character-persistence-integration.mjs
           node --check deploy/combat/free-pk-integration.mjs
           node --check deploy/combat/summon-integration.mjs
@@ -200,6 +207,11 @@ jobs:
             if (echo > /dev/tcp/127.0.0.1/4108) 2>/dev/null; then break; fi
             sleep 0.25
           done
+          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 45s node weapon-integration.mjs || {
+            echo "=== WEAPON SERVER LOG ==="
+            cat server.log
+            exit 1
+          }
           MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 50s node flight-integration.mjs || {
             echo "=== FLIGHT SERVER LOG ==="
             cat server.log
