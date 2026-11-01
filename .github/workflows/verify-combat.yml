@@ -131,7 +131,7 @@ jobs:
           grep -q 'grantStarterWeapons' deploy/combat/CharacterStore.ts
           grep -q 'MONTRA WEAPON BUILD PASSED.' deploy/combat/install-windows.ps1
           grep -q 'bagSlot' main.js
-          grep -Fq 'room.send("use_item"' main.js
+          grep -Fq 'sendBagCommand("use_item"' main.js
           grep -Fq 'inventory_state' main.js
           grep -Fq 'inventoryAvailable' deploy/combat/MyRoomState.ts
           grep -Fq 'inventory_record_missing' deploy/combat/CharacterStore.ts
