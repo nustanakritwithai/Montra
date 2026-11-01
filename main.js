@@ -466,6 +466,7 @@
   const POTION_ITEM_ID = "health_potion";
   let inventoryState = null;
   let itemUsePending = false;
+  let itemUseSequence = 0;
   let selectedBagSlot = 0;
   let demoPotionCount = 3, demoHp = 65;
   // DEMO mirrors only the feel of dash; LIVE positions remain server owned.
@@ -598,6 +599,7 @@
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
     inventoryState = null;
     itemUsePending = false;
+    itemUseSequence += 1;
     selectedBagSlot = 0;
     demoPotionCount = 3;
     demoHp = 65;
@@ -1044,6 +1046,7 @@
       room = joined;
       inventoryState = null;
       itemUsePending = false;
+      itemUseSequence += 1;
       selectedBagSlot = 0;
       mode = "live"; localId = joined.sessionId; activeCharacterSlot = requestedSlot;
       clearAvatars(); clearSummons(); demoDest = null;
@@ -1775,8 +1778,10 @@
     const status = $("bagSaveStatus");
     if (!status) return;
     status.textContent = mode === "live"
-      ? (slots ? "บันทึกถาวรบน VPS · แยกตามช่องตัวละคร" :
-        "รอข้อมูลจาก VPS · หากไม่โหลด ต้องอัปเดต MONTRA Server 0.2.6")
+      ? (room?.state?.inventoryAvailable !== true
+        ? "VPS ยังไม่รองรับกระเป๋าถาวร · ต้องติดตั้ง MONTRA 0.2.6" :
+        slots ? "บันทึกถาวรบน VPS · แยกตามช่องตัวละคร" :
+          "กำลังโหลดกระเป๋าจาก VPS...")
       : "โหมด DEMO · กระเป๋าทดลองไม่บันทึก";
     const currentHp = mode === "live"
       ? Number(ownServerCharacter()?.hp || 0) : demoHp;
@@ -1833,8 +1838,8 @@
       const item = currentBagSlots()?.[selectedBagSlot];
       if (!item || item.itemId !== POTION_ITEM_ID) return;
       if (mode === "live") {
-        if (!room || !inventoryState) {
-          toast("ยังไม่ได้รับข้อมูลไอเท็มจาก VPS");
+        if (!room || room.state?.inventoryAvailable !== true || !inventoryState) {
+          toast("ยังไม่ได้รับกระเป๋าถาวร · ต้องอัปเดต MONTRA บน VPS");
           return;
         }
         if (Number(ownServerCharacter()?.hp || 0) >=
@@ -1842,13 +1847,26 @@
           toast("HP เต็มแล้ว"); return;
         }
         itemUsePending = true;
+        const requestedRoom = room;
+        const sequence = ++itemUseSequence;
         renderBag();
         try { room.send("use_item", { slot: selectedBagSlot }); }
         catch (error) {
           itemUsePending = false;
           renderBag();
           toast("ส่งคำสั่งใช้ยาไม่สำเร็จ");
+          return;
         }
+        // If an old server throttles the rejection or packets are lost,
+        // never leave the only item-use control permanently disabled.
+        setTimeout(() => {
+          if (!itemUsePending || itemUseSequence !== sequence ||
+              mode !== "live" || room !== requestedRoom) return;
+          itemUsePending = false;
+          try { room.send("get_inventory", {}); } catch (_) {}
+          renderBag();
+          toast("ยังไม่ได้ยืนยันการใช้ยา · ตรวจสอบจำนวนบน VPS อีกครั้ง");
+        }, 3500);
         return;
       }
       if (demoHp >= 100) { toast("HP เต็มแล้ว · DEMO"); return; }
