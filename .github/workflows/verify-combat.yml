@@ -41,6 +41,7 @@ jobs:
           cp deploy/combat/s1-monster-ai.mjs combat-verify/s1-monster-ai.mjs
           cp deploy/combat/monster-rrt-integration.mjs combat-verify/monster-rrt-integration.mjs
           cp deploy/combat/dash-integration.mjs combat-verify/dash-integration.mjs
+          cp deploy/combat/flight-integration.mjs combat-verify/flight-integration.mjs
           cp deploy/combat/character-persistence-integration.mjs combat-verify/character-persistence-integration.mjs
           cp deploy/combat/free-pk-integration.mjs combat-verify/free-pk-integration.mjs
           cp deploy/combat/summon-integration.mjs combat-verify/summon-integration.mjs
@@ -114,7 +115,12 @@ jobs:
           grep -q 'guestToken' main.js
           grep -q 'characterSlot' main.js
           grep -q 'slotChoice' main.js
-          grep -q '0.2.4' index.html
+          grep -q '0.2.5' index.html
+          grep -q 'id="fly"' index.html
+          grep -Fq 'room.send("fly", {})' main.js
+          grep -Fq 'flightAvailable' main.js
+          grep -Fq 'flight_started' main.js
+          grep -Fq 'flight_finished' main.js
           grep -q 'room.send("dash", direction)' main.js
           grep -q 'function requestSwipeDash' main.js
           grep -q 'dashAvailable' main.js
@@ -156,6 +162,7 @@ jobs:
           node --check deploy/combat/s1-monster-ai.mjs
           node --check deploy/combat/monster-rrt-integration.mjs
           node --check deploy/combat/dash-integration.mjs
+          node --check deploy/combat/flight-integration.mjs
           node --check deploy/combat/character-persistence-integration.mjs
           node --check deploy/combat/free-pk-integration.mjs
           node --check deploy/combat/summon-integration.mjs
@@ -179,6 +186,11 @@ jobs:
             if (echo > /dev/tcp/127.0.0.1/4108) 2>/dev/null; then break; fi
             sleep 0.25
           done
+          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 50s node flight-integration.mjs || {
+            echo "=== FLIGHT SERVER LOG ==="
+            cat server.log
+            exit 1
+          }
           MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 25s node dash-integration.mjs || {
             echo "=== DASH SERVER LOG ==="
             cat server.log
