@@ -1,5 +1,5 @@
 <#
-MONTRA S2 guest-character staging — Windows PowerShell (includes all S1 features).
+MONTRA 0.2.1 — 3 character save slots / safe Windows PowerShell staging.
 SAFE STAGING ONLY:
   * Backs up the existing MONTRA Room sources and compiled build.
   * Downloads only files from the owner's MONTRA GitHub repository.
@@ -11,8 +11,8 @@ Run from an Administrator PowerShell:
 $ErrorActionPreference = "Stop"
 $base = "C:\Montra\online-server"
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$backup = Join-Path $base "backup-before-s2-$stamp"
-$download = Join-Path $env:TEMP "montra-s2-$stamp"
+$backup = Join-Path $base "backup-before-3slots-$stamp"
+$download = Join-Path $env:TEMP "montra-3slots-$stamp"
 $remote = "https://raw.githubusercontent.com/nustanakritwithai/Montra/main/deploy/combat"
 
 $packageFile = Join-Path $base "package.json"
@@ -46,11 +46,11 @@ $files = @(
   @{ Name = "summon-integration.mjs"; Target = "montra-summon-integration.mjs"; Check = "MONTRA Summon" },
   @{ Name = "elevation-integration.mjs"; Target = "montra-elevation-integration.mjs"; Check = "MONTRA Elevation" },
   @{ Name = "monster-rrt-integration.mjs"; Target = "montra-monster-rrt-integration.mjs"; Check = "MONTRA Monster RRT integration" },
-  @{ Name = "character-persistence-integration.mjs"; Target = "montra-s2-character-integration.mjs"; Check = "MONTRA S2 integration" }
+  @{ Name = "character-persistence-integration.mjs"; Target = "montra-s2-character-integration.mjs"; Check = "MONTRA three-slot integration" }
 )
 
 New-Item -ItemType Directory -Path $download -Force | Out-Null
-Write-Host "MONTRA S2: downloading sources before any changes..." -ForegroundColor Cyan
+Write-Host "MONTRA 3-SLOTS: downloading sources before any changes..." -ForegroundColor Cyan
 foreach ($entry in $files) {
   $localFile = Join-Path $download $entry.Name
   Invoke-WebRequest -Uri "$remote/$($entry.Name)" -OutFile $localFile -UseBasicParsing -ErrorAction Stop
@@ -98,7 +98,7 @@ try {
 
   Push-Location $base
   try {
-    Write-Host "Compiling MONTRA S2 persistence + existing combat systems..." -ForegroundColor Cyan
+    Write-Host "Compiling MONTRA 3-SLOTS persistence + existing combat systems..." -ForegroundColor Cyan
     & npm.cmd run build
     if ($LASTEXITCODE -ne 0) {
       throw "MONTRA S1 TypeScript build failed. Exit code: $LASTEXITCODE"
@@ -110,7 +110,7 @@ try {
     Pop-Location
   }
   Write-Host ""
-  Write-Host "MONTRA S2 BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA 3-SLOTS BUILD PASSED." -ForegroundColor Green
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
   Write-Host "Then test: node C:\Montra\online-server\montra-s1-integration.mjs"
@@ -121,7 +121,7 @@ try {
   Write-Host "RRT test: node C:\Montra\online-server\montra-monster-rrt-integration.mjs"
   Write-Host "S2 persistence test: use an ISOLATED test server with MONTRA_CHARACTER_DIR set to a TEMP folder (see runbook)."
 } catch {
-  Write-Warning "S2 installation failed. Restoring MONTRA source files and build (character data untouched)."
+  Write-Warning "3-SLOTS installation failed. Restoring MONTRA source files and build (character data untouched)."
   foreach ($entry in $files) {
     $target = Join-Path $base $entry.Target
     $saved = Join-Path $backup $entry.Target

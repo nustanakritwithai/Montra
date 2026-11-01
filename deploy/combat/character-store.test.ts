@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   CharacterStore, characterIdFromToken, getGuestToken,
+  CHARACTER_SLOTS, parseCharacterSlot,
   parseCharacterName, claimCharacter, releaseCharacter,
 } from "./CharacterStore.js";
 
@@ -90,5 +91,65 @@ test("S2: corrupt character records fail closed instead of resetting progress", 
 
     await writeFile(file, JSON.stringify({ ...original, pkKills: 999999999999 }));
     await assert.rejects(store.loadOrCreate(tokenA, spawn), /character_record_invalid/);
+  });
+});
+
+test("S3: one Guest ID owns exactly three deterministic, independent slots", async () => {
+  await withTempStore(async (store, dir) => {
+    assert.deepEqual(CHARACTER_SLOTS, [1, 2, 3]);
+    assert.equal(parseCharacterSlot({ guestToken: tokenA }), 1); // S2 clients
+    assert.equal(parseCharacterSlot({ guestToken: tokenA, characterSlot: 1 }), 1);
+    assert.equal(parseCharacterSlot({ guestToken: tokenA, characterSlot: 2 }), 2);
+    assert.equal(parseCharacterSlot({ guestToken: tokenA, characterSlot: 3 }), 3);
+    for (const slot of [-1, 0, 4, 1.5, "2", null, NaN]) {
+      assert.throws(() => parseCharacterSlot({ characterSlot: slot }), /invalid_character_slot/);
+    }
+    const ids = CHARACTER_SLOTS.map(slot => characterIdFromToken(tokenA, slot));
+    assert.equal(new Set(ids).size, 3);
+    assert.equal(ids[0], characterIdFromToken(tokenA),
+      "slot 1 must use the exact legacy S2 JSON filename");
+
+    // Seed legacy S2 slot 1; adding slot 2 or 3 must never change it.
+    const first = (await store.loadOrCreate(tokenA, { x: -4, z: 2 })).character;
+    const legacy = { ...first, name: "นักเดินทางเดิม", pkKills: 17,
+      x: -4, z: 2, updatedAt: new Date().toISOString() };
+    await store.save(legacy);
+    const oldBytes = await readFile(path.join(dir, ids[0] + ".json"), "utf8");
+    const second = await store.loadOrCreate(tokenA, { x: 1, z: -1 }, 2);
+    const third = await store.loadOrCreate(tokenA, { x: 3, z: 3 }, 3);
+    assert.equal(second.created, true);
+    assert.equal(third.created, true);
+    assert.equal(await readFile(path.join(dir, ids[0] + ".json"), "utf8"), oldBytes);
+    assert.equal(second.character.pkKills, 0);
+    assert.equal(third.character.pkKills, 0);
+
+    await store.save({ ...second.character, name: "แม่มดสอง", pkKills: 2,
+      updatedAt: new Date().toISOString() });
+    const summaries = await new CharacterStore(dir).listSlots(ids);
+    assert.deepEqual(summaries.map(s => s.name),
+      ["นักเดินทางเดิม", "แม่มดสอง", "นักเดินทาง"]);
+    assert.deepEqual(summaries.map(s => s.occupied), [true, true, true]);
+    assert.equal((await new CharacterStore(dir).loadOrCreate(tokenA, {x:0,z:0}, 1)).character.pkKills,17);
+    assert.equal((await new CharacterStore(dir).loadOrCreate(tokenA, {x:0,z:0}, 2)).character.pkKills,2);
+    assert.equal((await new CharacterStore(dir).loadOrCreate(tokenA, {x:0,z:0}, 3)).character.pkKills,0);
+  });
+});
+
+test("S3: listing save slots is read-only; corrupt slot stays untouched", async () => {
+  await withTempStore(async (store, dir) => {
+    const ids = CHARACTER_SLOTS.map(slot => characterIdFromToken(tokenB, slot));
+    const empty = await store.listSlots(ids);
+    assert.deepEqual(empty.map(s => s.occupied), [false,false,false]);
+    await store.loadOrCreate(tokenB, spawn, 1);
+    await writeFile(path.join(dir, ids[1] + ".json"), "{truncated");
+    assert.deepEqual((await store.listSlots(ids)).map(s => ({
+      occupied: s.occupied, unavailable: Boolean(s.unavailable),
+    })), [
+      { occupied:true, unavailable:false },
+      { occupied:true, unavailable:true },
+      { occupied:false, unavailable:false }
+    ]);
+    await assert.rejects(store.loadOrCreate(tokenB, spawn, 2));
+    assert.equal(await readFile(path.join(dir, ids[1] + ".json"), "utf8"), "{truncated");
   });
 });

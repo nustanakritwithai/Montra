@@ -2,6 +2,7 @@ import { Room, type Client, type CloseCode } from "colyseus";
 import {
   CHARACTER_SAVE_INTERVAL_MS, characterStore, characterIdFromToken,
   claimCharacter, releaseCharacter, getGuestToken, parseCharacterName,
+  parseCharacterSlot, CHARACTER_SLOTS,
 } from "./CharacterStore.js";
 import { MyRoomState, Player, SummonedGuardian } from "./schema/MyRoomState.js";
 import {
@@ -54,7 +55,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private playerSpawn = new Map<string, Vec2>();
   private gates = new Map<string, Gates>();
   private lastRejectNoticeMs = new Map<string, number>();
-  private persistentCharacters = new Map<string, string>(); // session -> digest, never token
+  private persistentCharacters = new Map<string, string>(); // session -> selected slot digest
+  private activeGuestAccounts = new Map<string, string>(); // session -> legacy account digest
+  private pendingCharacterLeaves = new Map<string, Promise<void>>(); // do not release before disk save
+  private guestSlotIds = new Map<string, readonly string[]>(); // 3 derived IDs, never raw token
+  private lastSlotListMs = new Map<string, number>();
   private lastRenameMs = new Map<string, number>();
   private nextCharacterSaveMs = CHARACTER_SAVE_INTERVAL_MS;
 
@@ -70,6 +75,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private climbs = new Map<string, WorldPoint>();
 
   messages = {
+    get_character_slots: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_slot_request");
+      const id = client.sessionId;
+      const ids = this.guestSlotIds.get(id);
+      if (!ids) return this.reject(client, "character_not_persistent");
+      const previous = this.lastSlotListMs.get(id) ?? -Infinity;
+      if (this.simulatedMs - previous < 2_000) return;
+      this.lastSlotListMs.set(id, this.simulatedMs);
+      void characterStore.listSlots(ids).then(slots => {
+        if (this.guestSlotIds.get(id) === ids) client.send("character_slots", { slots });
+      }).catch(error => console.error("MONTRA slot list failed", error));
+    },
     rename_character: (client: Client, message: unknown) => {
       const name = parseCharacterName(message);
       if (!name) return this.reject(client, "invalid_character_name");
@@ -897,13 +914,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Old smoke tests and clients without browser storage remain transient.
     // A valid guest token is a secret bearer credential, never sent in Schema.
     const token = getGuestToken(options);
-    const characterId = token ? characterIdFromToken(token) : null;
-    if (characterId && !claimCharacter(characterId, client.sessionId)) {
+    const slot = parseCharacterSlot(options);
+    if (!token && slot !== 1) throw new Error("guest_token_required");
+    const accountId = token ? characterIdFromToken(token, 1) : null;
+    const characterId = token ? characterIdFromToken(token, slot) : null;
+    // A single Guest ID may own three saves but can play only ONE at a time.
+    if (accountId && !claimCharacter(accountId, client.sessionId)) {
       throw new Error("character_already_online");
     }
 
     try {
-      const saved = token ? (await characterStore.loadOrCreate(token, spawn)).character : null;
+      const saved = token ? (await characterStore.loadOrCreate(token, spawn, slot)).character : null;
       // A saved location is restored only if the current server geometry allows it.
       const validPosition = saved && Math.abs(saved.x) <= RULES.mapLimit &&
         Math.abs(saved.z) <= RULES.mapLimit && this.canOccupy(saved.x, saved.z, saved.y);
@@ -919,11 +940,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         characterId: characterId ? characterId.slice(0, 12) : "",
         characterName: saved?.name ?? "นที",
         level: saved?.level ?? 1, experience: saved?.experience ?? 0,
-        persistent: Boolean(saved),
+        persistent: Boolean(saved), characterSlot: slot,
       });
 
       this.state.players.set(client.sessionId, player);
-      if (characterId) this.persistentCharacters.set(client.sessionId, characterId);
+      if (characterId && accountId && token) {
+        this.persistentCharacters.set(client.sessionId, characterId);
+        this.activeGuestAccounts.set(client.sessionId, accountId);
+        this.guestSlotIds.set(client.sessionId,
+          CHARACTER_SLOTS.map(candidate => characterIdFromToken(token, candidate)));
+      }
       this.playerSpawn.set(client.sessionId, spawn);
       this.gates.set(client.sessionId, {
         move: new CommandBucket(RULES.moveBurst, RULES.moveRatePerSecond, this.simulatedMs),
@@ -933,19 +959,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         ),
         climb: new CommandBucket(3, 1, this.simulatedMs),
       });
-      console.log("MONTRA S2 join:", client.sessionId, "room", this.roomId,
-        saved ? "persistent" : "transient");
+      console.log("MONTRA 3-slot join:", client.sessionId, "room", this.roomId,
+        saved ? "persistent" : "transient", "slot", slot);
     } catch (error) {
-      if (characterId) releaseCharacter(characterId, client.sessionId);
+      if (accountId) releaseCharacter(accountId, client.sessionId);
       throw error;
     }
   }
 
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
-    const characterId = this.persistentCharacters.get(id);
+    const accountId = this.activeGuestAccounts.get(id);
     // Capture the snapshot BEFORE removing the player from server Schema.
     const saving = this.saveCharacter(id);
+    this.pendingCharacterLeaves.set(id, saving);
     this.despawnSummon(id, "owner_left");
     this.lastSummonAt.delete(id);
     this.climbs.delete(id);
@@ -958,6 +985,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastRejectNoticeMs.delete(id);
     this.state.players.delete(id);
     this.lastRenameMs.delete(id);
+    this.lastSlotListMs.delete(id);
     if (this.state.monster.targetId === id) this.state.monster.targetId = "";
     // Remote player targets cannot remain locked to disconnected sessions.
     for (const [otherId, targetId] of [...this.attackTargets]) {
@@ -969,19 +997,29 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try {
       await saving;
     } finally {
+      this.pendingCharacterLeaves.delete(id);
       this.persistentCharacters.delete(id);
-      if (characterId) releaseCharacter(characterId, id);
+      this.guestSlotIds.delete(id);
+      this.activeGuestAccounts.delete(id);
+      if (accountId) releaseCharacter(accountId, id);
     }
     console.log("MONTRA S2 leave:", id, code);
   }
 
   async onDispose() {
-    const pending = [...this.persistentCharacters].map(async ([id, characterId]) => {
-      try { await this.saveCharacter(id); }
-      finally { releaseCharacter(characterId, id); }
+    const pending = [...this.persistentCharacters.keys()].map(async id => {
+      try { await (this.pendingCharacterLeaves.get(id) ?? this.saveCharacter(id)); }
+      finally {
+        const accountId = this.activeGuestAccounts.get(id);
+        if (accountId) releaseCharacter(accountId, id);
+      }
     });
     await Promise.allSettled(pending);
     this.persistentCharacters.clear();
+    this.activeGuestAccounts.clear();
+    this.pendingCharacterLeaves.clear();
+    this.guestSlotIds.clear();
+    this.lastSlotListMs.clear();
     this.lastRenameMs.clear();
     this.destinations.clear();
     this.attackTargets.clear();
