@@ -121,6 +121,9 @@ jobs:
           grep -q 'bagSlot' main.js
           grep -Fq 'room.send("use_item"' main.js
           grep -Fq 'inventory_state' main.js
+          grep -Fq 'inventoryAvailable' deploy/combat/MyRoomState.ts
+          grep -Fq 'inventory_record_missing' deploy/combat/CharacterStore.ts
+          grep -Fq 'MONTRA INVENTORY BUILD PASSED.' deploy/combat/install-windows.ps1
           grep -q 'id="fly"' index.html
           grep -Fq 'room.send("fly", {})' main.js
           grep -Fq 'flightAvailable' main.js
