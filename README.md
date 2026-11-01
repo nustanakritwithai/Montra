@@ -27,6 +27,9 @@ MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the
 
 ## S1 server source of truth
 
+- [V0.2.8 world map Windows staging and rollback (Thai)](deploy/combat/WORLD-MAPS-WINDOWS-TH.md)
+- V0.2.8 uses one Colyseus room with map-aware simulation and client rendering. Zone data remains replicated to the room; this is not a privacy boundary or distributed World Server.
+
 - [Alpha 0.2.7 permanent weapons Windows VPS deployment + rollback (Thai)](deploy/combat/WEAPONS-WINDOWS-VPS-TH.md)
 - [Isolated real weapon equip + PvP/ranged combat integration](deploy/combat/weapon-integration.mjs)
 - [Alpha 0.2.6 Inventory / health potion Windows VPS install + data preservation (Thai)](deploy/combat/INVENTORY-WINDOWS-VPS-TH.md)

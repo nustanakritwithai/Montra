@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { checkWarp, parseWarpCommand } from "./WarpRules.js";
 import { DEFAULT_MAP_ID, getSafeMapSpawn, getWorldMap } from "./WorldMaps.js";
 const context = {
-  mapId: DEFAULT_MAP_ID, position: { x: -12, y: 0, z: -12 },
+  mapId: DEFAULT_MAP_ID, position: { x: -4, y: 0, z: -17 },
   alive: true, flying: false, climbing: false, dashing: false,
   changingHeight: false, lastCombatMs: -Infinity,
   lastWarpMs: -Infinity, nowMs: 10_000
@@ -32,4 +32,20 @@ test("forest return portal and safe saved-spawn fallback", () => {
   }).ok, true);
   assert.deepEqual(getSafeMapSpawn("forbidden_forest", { x: -6, y: 0, z: 6 }), getWorldMap("forbidden_forest")?.spawn);
   assert.throws(() => getSafeMapSpawn("not_a_map"), /unknown_character_map/);
+});
+
+test("unsafe altitudes and village wall positions fall back without changing map", () => {
+  const village = getWorldMap("ritual_village")!;
+  const forest = getWorldMap("forbidden_forest")!;
+  assert.deepEqual(getSafeMapSpawn(village.id, { x: 0, y: 50, z: 0 }), village.spawn);
+  assert.deepEqual(getSafeMapSpawn(village.id, { x: 8, y: 0, z: 4 }), village.spawn);
+  assert.deepEqual(getSafeMapSpawn(forest.id, { x: 0, y: 4, z: 0 }), forest.spawn);
+  assert.deepEqual(getSafeMapSpawn(village.id, { x: 8, y: 4, z: 4 }), { x: 8, y: 4, z: 4 });
+  assert.deepEqual(getSafeMapSpawn(forest.id, { x: 0, y: 6, z: 0 }), { x: 0, y: 6, z: 0 });
+});
+
+test("portal proximity includes authoritative height", () => {
+  assert.equal(checkWarp({ portalId: "village_to_forest" }, {
+    ...context, position: { x: -4, y: 4, z: -17 }
+  }).ok, false);
 });

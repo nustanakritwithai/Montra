@@ -112,7 +112,7 @@ export function isOnTop(x: number, z: number, padding = FORT.topPadding): boolea
  * Ground actors cannot traverse the physical wall body. The client may ask
  * for destinations across it; server physics, not client, blocks penetration.
  */
-export function touchesWallBody(x: number, z: number, radius = FORT.capsuleRadius): boolean {
+export function touchesWallBody(x: number, z: number, radius: number = FORT.capsuleRadius): boolean {
   return Math.abs(x - FORT.x) < FORT.width / 2 + radius &&
     Math.abs(z - FORT.z) < FORT.length / 2 + radius;
 }

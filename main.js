@@ -96,6 +96,7 @@
     return;
   }
   engine.setHardwareScalingLevel(Math.min(1.7, Math.max(1, devicePixelRatio / 1.5)));
+  let activeMapId = "ritual_village", warpPending = false, warpTimer = null;
   const scene = new B.Scene(engine);
   scene.clearColor = B.Color4.FromHexString("#111c27ff");
   scene.fogMode = B.Scene.FOGMODE_EXP2;
@@ -254,6 +255,7 @@
   }
   applyFortVisual(defaultFort);
   function syncFortification(state){
+    if(activeMapId !== "ritual_village") { fortRoot.setEnabled(false); return; }
     const fort=state?.fortification;
     if(mode==="live" && (!fort || !Number.isFinite(Number(fort.height)))){
       fortRoot.setEnabled(false);
@@ -315,6 +317,72 @@
     const canopy = B.MeshBuilder.CreateSphere("canopy", { diameter: 2.45, segments: 6 }, scene);
     canopy.position.set(x, 3.1, z); canopy.material = groundMat; canopy.isPickable = false;
   }
+  // Both maps share one scene and ground. Their static meshes are created once
+  // and toggled; switching maps must not accumulate scenes or WebGL resources.
+  const villageMeshes = scene.meshes.filter(mesh => mesh !== ground);
+  const villageLights = scene.lights.filter(light => light !== moon && light !== warm);
+  const forestRoot = new B.TransformNode("forbidden-forest", scene);
+  const forestLeaf = mat("forest leaves", "#203b30");
+  const forestStone = mat("forest stone", "#44504a");
+  const forestPath = mat("forest path", "#575143");
+  const portalMat = mat("portal glow", "#a0e1d2", "#287e75");
+  const portals = {
+    ritual_village: { id:"village_to_forest", x:-4, z:-17, label:"เดินทางไปป่าต้องห้าม" },
+    forbidden_forest: { id:"forest_to_village", x:0, z:14, label:"กลับหมู่บ้านอาคม" }
+  };
+  const forestPathMesh=cube("forest path",[0,-.035,0],[5,.12,40],forestPath);
+  forestPathMesh.parent=forestRoot;
+  for(const [x,z] of [[-6,6],[7,7],[-15,-15],[-16,-8],[-14,2],[-15,12],[15,-15],[15,-5],[15,3],[15,14]]) {
+    const trunk=B.MeshBuilder.CreateCylinder("forest tree",{diameter:1.2,height:4,tessellation:7},scene);
+    trunk.position.set(x,2,z);trunk.material=darkWood;trunk.isPickable=false;trunk.parent=forestRoot;
+    const crown=B.MeshBuilder.CreateCylinder("forest canopy",{diameterTop:0,diameterBottom:4,height:4,tessellation:7},scene);
+    crown.position.set(x,5,z);crown.material=forestLeaf;crown.isPickable=false;crown.parent=forestRoot;
+  }
+  for(const [x,z,r] of [[5,-9,1.8],[-9,-3,1.5]]) {
+    const rock=B.MeshBuilder.CreateSphere("forest rock",{diameter:r*2,segments:5},scene);
+    rock.position.set(x,r*.45,z);rock.scaling.y=.6;rock.material=forestStone;rock.isPickable=false;rock.parent=forestRoot;
+  }
+  const altar=cube("abandoned shrine",[0,.65,-12],[3,1.3,2],forestStone);altar.parent=forestRoot;
+  const roof=cube("shrine roof",[0,2.25,-12],[3.5,.25,2.4],darkWood);roof.parent=forestRoot;
+  for(const x of [-1.35,1.35]) { const post=cube("shrine post",[x,1.5,-12],[.2,2,.2],darkWood);post.parent=forestRoot; }
+  function makePortal(mapId, parent) {
+    const info=portals[mapId];
+    const ring=B.MeshBuilder.CreateTorus("portal-"+mapId,{diameter:3,thickness:.22,tessellation:24},scene);
+    ring.rotation.x=Math.PI/2;ring.position.set(info.x,1.7,info.z);ring.material=portalMat;
+    ring.metadata={portalId:info.id};if(parent)ring.parent=parent;
+    const labelTexture=new B.DynamicTexture("portal-label-"+mapId,{width:512,height:128},scene,false);
+    labelTexture.hasAlpha=true;
+    labelTexture.drawText(mapId==="ritual_village" ? "ป่าต้องห้าม" : "หมู่บ้านอาคม",null,78,"bold 50px sans-serif","#effff4","transparent",true);
+    const labelMat=new B.StandardMaterial("portal-label-mat-"+mapId,scene);
+    labelMat.diffuseTexture=labelTexture;labelMat.opacityTexture=labelTexture;
+    labelMat.emissiveColor=B.Color3.White();labelMat.disableLighting=true;labelMat.backFaceCulling=false;
+    const label=B.MeshBuilder.CreatePlane("portal-label",{width:3.6,height:.9},scene);
+    label.position.set(info.x,3.9,info.z);label.billboardMode=B.Mesh.BILLBOARDMODE_ALL;
+    label.material=labelMat;label.isPickable=false;if(parent)label.parent=parent;
+    else villageMeshes.push(label);
+    return ring;
+  }
+  const villagePortal=makePortal("ritual_village");
+  const forestPortal=makePortal("forbidden_forest",forestRoot);forestRoot.setEnabled(false);
+  function switchWorld(mapId) {
+    if(!portals[mapId] || activeMapId===mapId)return;
+    activeMapId=mapId;
+    const village=mapId==="ritual_village";
+    for(const mesh of villageMeshes) mesh.setEnabled(village);
+    for(const light of villageLights) light.setEnabled(village);
+    villagePortal.setEnabled(village);forestRoot.setEnabled(!village);
+    scene.fogDensity=village ? .0085 : .025;
+    $("worldMapName").textContent=village?"หมู่บ้านอาคม":"ป่าต้องห้าม";
+    marker.setEnabled(false);
+    clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
+  }
+  $("warpButton").addEventListener("click",()=>{
+    if(mode!=="live" || !room || warpPending || room.state?.worldMapsAvailable!==true)return;
+    const portal=portals[activeMapId];warpPending=true;$("warpLoading").hidden=false;
+    try { room.send("warp",{portalId:portal.id}); }
+    catch (_) { warpPending=false;$("warpLoading").hidden=true;toast("ส่งคำสั่งเดินทางไม่สำเร็จ");return; }
+    warpTimer=setTimeout(()=>{warpPending=false;$("warpLoading").hidden=true;toast("ยังไม่ได้รับผลการเดินทาง");},8000);
+  });
   const markerMat = mat("waypoint gold", "#ffdb81", "#dd9a37");
   const marker = B.MeshBuilder.CreateTorus("destination", { diameter: 1.1, thickness: .08 }, scene);
   marker.material = markerMat;
@@ -602,6 +670,9 @@
 
   function syncMonsterState(state) {
     if (mode !== "live") return;
+    if(activeMapId !== "ritual_village") {
+      monsterReady=false; enemy.setEnabled(false); ui.monsterStatus.hidden=true; return;
+    }
     const monster = state?.monster;
     if (!monster || !Number.isFinite(Number(monster.hp))) {
       monsterReady = false;
@@ -668,6 +739,8 @@
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
+    switchWorld("ritual_village");
+    clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
     inventoryState = null;
     demoWeaponSlot = 1;
     itemUsePending = false;
@@ -1012,6 +1085,7 @@
 
     const present = new Set();
     synced.forEach((npc, ownerId) => {
+      if (state.players?.get?.(ownerId)?.mapId && state.players.get(ownerId).mapId !== activeMapId) return;
       const x = Number(npc.x), z = Number(npc.z);
       if (!Number.isFinite(x) || !Number.isFinite(z)) return;
       present.add(ownerId);
@@ -1036,6 +1110,9 @@
   }
 
   function syncState(state) {
+    const mine=state?.players?.get?.(localId);
+    const previousMapId=activeMapId;
+    switchWorld(mine?.mapId || "ritual_village");
     syncMonsterState(state);
     syncSummons(state);
     syncFortification(state);
@@ -1043,11 +1120,20 @@
     if (!players || typeof players.forEach !== "function") return false;
     const seen = new Set();
     players.forEach((p,id) => {
+      if ((p.mapId || "ritual_village") !== activeMapId) return;
       seen.add(id);
       setOnlinePlayer(id, Number(p.x), Number(p.z),
         Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
         p.equippedWeaponId);
     });
+    if(previousMapId !== activeMapId && mine) {
+      const actor=avatars.get(localId);
+      if(actor) {
+        actor.x=actor.targetX=Number(mine.x);actor.y=actor.targetY=Number(mine.y);actor.z=actor.targetZ=Number(mine.z);
+        actor.node.position.set(actor.x,actor.y,actor.z);
+        camera.target.set(actor.x,actor.y+.65,actor.z+1.5);
+      }
+    }
     for (const id of onlinePlayers.keys()) if (!seen.has(id)) removeOnlinePlayer(id);
     updateCharacterHud(players.get(localId));
     syncPKHud();
@@ -1141,7 +1227,7 @@
       console.info("MONTRA room joined", {roomId:joined.roomId, sessionId:joined.sessionId, initialStateReady:ok});
       joined.onStateChange(state => syncState(state));
       joined.onMessage("combat_hit", hit => {
-        if (room !== joined || hit?.targetId !== MONSTER_ID) return;
+        if (room !== joined || activeMapId !== "ritual_village" || hit?.targetId !== MONSTER_ID) return;
         // Players also visibly turn toward the monster while attacking,
         // even when standing still. All clients receive the same event.
         if (typeof hit.attackerId === "string") {
@@ -1161,6 +1247,7 @@
         else if (notice?.reason === "monster_down") toast("มอนสเตอร์ถูกปราบแล้ว");
       });
       joined.onMessage("monster_respawn", () => {
+        if(activeMapId !== "ritual_village") return;
         if (room === joined) toast("มอนสเตอร์ปรากฏตัวอีกครั้ง");
       });
       joined.onMessage("climb_started", notice => {
@@ -1203,6 +1290,7 @@
       });
       joined.onMessage("ranged_hit", data => {
         if(room!==joined)return;
+        if((joined.state?.players?.get?.(data?.attackerId)?.mapId || "ritual_village") !== activeMapId)return;
         renderMagicBolt(data);
         if(data?.attackerId===localId) {
           toast("ยิงอาคมโดนเป้าหมาย -" + data.damage + " HP");
@@ -1247,6 +1335,7 @@
       });
       joined.onMessage("pvp_kill", info => {
         if (room !== joined || !info) return;
+        if ((joined.state?.players?.get?.(info.winnerId)?.mapId || "ritual_village") !== activeMapId) return;
         const winner = shortPkName(info.winnerId);
         const loser = shortPkName(info.loserId);
         toast(info.winnerId === localId
@@ -1340,6 +1429,11 @@
       });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        if(warpPending) {
+          clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
+          const warpReasons={portal_too_far:"อยู่ไกลจากประตูเกินไป",combat_locked:"รอให้พ้นการต่อสู้ก่อนเดินทาง",warp_cooldown:"รอคูลดาวน์ก่อนเดินทาง",movement_busy:"หยุดบิน ปีน หรือพุ่งก่อนเดินทาง",character_busy:"กำลังบันทึกข้อมูล"};
+          toast(warpReasons[info?.reason] || "ยังเดินทางไม่ได้ · " + (info?.reason || ""));
+        }
         if (["item_busy", "item_cooldown", "item_unavailable",
              "hp_full", "invalid_item_use", "not_alive", "inventory_unavailable",
              "invalid_weapon_equip", "equipment_busy", "equipment_cooldown",
@@ -1394,17 +1488,23 @@
           toast("คำสั่งวิญญาณไม่ถูกต้อง");
         }
       });
+      joined.onMessage("warp_complete", () => { if(room===joined) toast("เดินทางสำเร็จ"); });
+      joined.onMessage("warp_failed", () => {
+        if(room!==joined)return;
+        clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
+        toast("บันทึกไม่สำเร็จ · ยังอยู่แผนที่เดิม");
+      });
       // Colyseus 0.18 schema callbacks are the reliable way to subscribe to nested maps.
       try {
         const callbackApi = window.Colyseus.Callbacks;
         if (callbackApi?.get) {
           const cb = callbackApi.get(joined);
           cb.onAdd("players", (p, id) => {
-            const applyServerPlayer = () => setOnlinePlayer(
-              id, Number(p.x), Number(p.z),
-              Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
-              p.equippedWeaponId
-            );
+            const applyServerPlayer = () => {
+              if ((p.mapId || "ritual_village") !== activeMapId) { removeOnlinePlayer(id); return; }
+              setOnlinePlayer(id, Number(p.x), Number(p.z),
+                Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y), p.equippedWeaponId);
+            };
             applyServerPlayer();
             if (typeof cb.listen === "function") {
               cb.listen(p, "x", applyServerPlayer);
@@ -1414,6 +1514,7 @@
               cb.listen(p, "y", applyServerPlayer);
               cb.listen(p, "maxHp", applyServerPlayer);
               cb.listen(p, "equippedWeaponId", applyServerPlayer);
+              cb.listen(p, "mapId", () => syncState(joined.state));
             }
           });
           cb.onRemove("players", (_,id) => removeOnlinePlayer(id));
@@ -1524,6 +1625,7 @@
     // monster and walkable ground. Fire only where the target is visible.
     const picked = scene.pick(px, py, mesh =>
       mesh.metadata?.walkable === true ||
+      mesh.metadata?.portalId ||
       (mesh === enemy && enemy.isEnabled()) ||
       (fortRoot.isEnabled() && mesh.metadata?.climbableWall) ||
       (mode === "live" && mesh.metadata?.pkPlayerId &&
@@ -1532,7 +1634,10 @@
     if (!picked?.hit) return;
     const hitMesh=picked.pickedMesh;
     const otherId=hitMesh?.metadata?.pkPlayerId;
-    if (otherId && mode==="live") {
+    if (hitMesh?.metadata?.portalId) {
+      const portal=portals[activeMapId];pointMove(portal.x,portal.z);
+      toast("เดินเข้าใกล้ประตูเพื่อเดินทาง");
+    } else if (otherId && mode==="live") {
       if(rangedMode) shootAtTarget(otherId);
       else tapPlayerForPK(otherId);
     } else if (hitMesh === enemy) {
@@ -1688,6 +1793,7 @@
     ctx.fillStyle="#20342e"; ctx.fillRect(0,0,width,height);
     const sx=x => width/2 + x*(width/40);
     const sy=z => height/2 + z*(height/40);
+    if(activeMapId === "ritual_village") {
     ctx.fillStyle="#103446";
     ctx.fillRect(0,0,sx(-6.2),height);
     ctx.fillRect(sx(6.2),0,width-sx(6.2),height);
@@ -1712,6 +1818,15 @@
         large?5:3,0,Math.PI*2);ctx.fill();
     }
     ctx.fillStyle="#e15855"; ctx.beginPath();ctx.arc(sx(1.1),sy(10.4),large?6:3,0,Math.PI*2);ctx.fill();
+    } else {
+      ctx.fillStyle="#505043";ctx.fillRect(sx(-2.5),0,sx(2.5)-sx(-2.5),height);
+      for(const [x,z,r] of [[-6,6,1.4],[7,7,1.4],[-15,-15,1.4],[-16,-8,1.4],[-14,2,1.4],[-15,12,1.4],[15,-15,1.4],[15,-5,1.4],[15,3,1.4],[15,14,1.4],[5,-9,1.8],[-9,-3,1.5]]) {
+        ctx.fillStyle="#668060";ctx.beginPath();ctx.arc(sx(x),sy(z),r*width/40,0,Math.PI*2);ctx.fill();
+      }
+      ctx.fillStyle="#b7a677";ctx.fillRect(sx(0)-4,sy(-12)-4,8,8);
+    }
+    const portal=portals[activeMapId];ctx.fillStyle="#85f6dd";
+    ctx.beginPath();ctx.arc(sx(portal.x),sy(portal.z),large?6:4,0,Math.PI*2);ctx.fill();
     if (marker.isEnabled()) {
       ctx.strokeStyle="#ffe2a1";ctx.lineWidth=1.8;
       ctx.beginPath();ctx.arc(sx(marker.position.x),sy(marker.position.z),large?7:4,0,Math.PI*2);ctx.stroke();
@@ -1724,7 +1839,7 @@
       ctx.fillStyle = ownerId === localId ? "#cb97f1" : "#78d5e2";
       ctx.beginPath(); ctx.arc(sx(npc.x), sy(npc.z), large ? 5 : 2.5, 0, Math.PI*2);ctx.fill();
     }
-    if(large) {
+    if(large && activeMapId === "ritual_village") {
       ctx.font="12px system-ui";ctx.textAlign="center";ctx.fillStyle="#f9dda9";
       ctx.fillText("ศาลอาคม",sx(-4),sy(-2.5)-8);
       ctx.fillText("เรือนพัก",sx(10),sy(-13)-10);
@@ -1733,7 +1848,7 @@
     }
   }
   function openMap() {
-    openDrawer("map","แผนที่หมู่บ้านอาคม",`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>◆ จุดหมาย</span><span>■ อาคาร</span><span>● ศัตรูทดสอบ</span></div><p class="note">แผนที่ V0.1 แสดงตำแหน่งจากห้องเกม (หากอยู่ในโหมดออนไลน์) หรือจากการเดินจำลองในเครื่อง (หากอยู่ในโหมด DEMO)</p>`);
+    openDrawer("map",activeMapId === "ritual_village" ? "แผนที่หมู่บ้านอาคม" : "แผนที่ป่าต้องห้าม",`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span></div>`);
     drawMap($("bigMap").getContext("2d"),420,320,true);
   }
 
@@ -2254,6 +2369,11 @@
       npc.node.scaling.set(scale, scale, scale);
     }
     const me=getLocalAvatar();
+    const portal=portals[activeMapId], authoritative=ownServerCharacter();
+    const warpButton=$("warpButton");
+    warpButton.hidden=!(mode==="live" && room?.state?.worldMapsAvailable===true && authoritative &&
+      Math.hypot(Number(authoritative.x)-portal.x,Number(authoritative.y),Number(authoritative.z)-portal.z)<=1.9 && !warpPending);
+    warpButton.textContent=portal.label;
     if(me) {
       // Follow the moving player without calling camera.setTarget(): that
       // method recomputes alpha/beta/radius and cancels manual camera rotation.
@@ -2274,6 +2394,8 @@
     enemy.scaling.y = hitFlashRemaining > 0 ? 1.3 : 1.1;
     if(spirit && me) { spirit.position.set(me.x-1.2,1.5+Math.sin(elapsed*3)*.2,me.z+.8); }
     marker.rotation.z+=dt*.2;
+    const pulse=1+Math.sin(elapsed*2.5)*.04;
+    villagePortal.scaling.setAll(pulse);forestPortal.scaling.setAll(pulse);
     const mapCtx=ui.minimap.getContext("2d");
     drawMap(mapCtx,ui.minimap.width,ui.minimap.height);
     if(drawerActive==="map") {

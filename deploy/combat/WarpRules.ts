@@ -28,10 +28,14 @@ export function checkWarp(payload: unknown, ctx: WarpContext): WarpResult {
     return { ok: false, reason: "movement_busy" };
   }
   if (!Number.isFinite(ctx.nowMs) || !Number.isFinite(ctx.position.x) ||
-      !Number.isFinite(ctx.position.z)) return { ok: false, reason: "invalid_position" };
+      !Number.isFinite(ctx.position.y) || !Number.isFinite(ctx.position.z)) {
+    return { ok: false, reason: "invalid_position" };
+  }
   if (ctx.nowMs - ctx.lastWarpMs < WARP_COOLDOWN_MS) return { ok: false, reason: "warp_cooldown" };
   if (ctx.nowMs - ctx.lastCombatMs < WARP_COMBAT_LOCK_MS) return { ok: false, reason: "combat_locked" };
-  if (Math.hypot(ctx.position.x - portal.x, ctx.position.z - portal.z) > WARP_RANGE) {
+  // Current portal definitions are on ground level; horizontal proximity alone
+  // must not admit someone on a different vertical level.
+  if (Math.hypot(ctx.position.x - portal.x, ctx.position.y, ctx.position.z - portal.z) > WARP_RANGE) {
     return { ok: false, reason: "portal_too_far" };
   }
   const target = getWorldMap(portal.targetMapId);

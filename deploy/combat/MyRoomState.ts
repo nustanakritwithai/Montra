@@ -26,6 +26,7 @@ export const Player = schema({
   characterSlot: t.number().default(1), // append only: preserve all S2 Schema indexes
   flying: t.boolean().default(false), // appended: active in the server-owned 6m air layer
   equippedWeaponId: t.string().default(""), // append-only: visible weapon ID, no private bag data
+  mapId: t.string().default("ritual_village"), // logical zone, server-owned
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
@@ -94,6 +95,7 @@ export const MyRoomState = schema({
   flightAvailable: t.boolean().default(true), // append: server supports fly/land commands
   inventoryAvailable: t.boolean().default(true), // append: server-owned permanent item slots
   weaponsAvailable: t.boolean().default(true), // append: permanent weapon kit + equip commands
+  worldMapsAvailable: t.boolean().default(true), // server supports map-aware travel
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

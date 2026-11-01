@@ -1,5 +1,5 @@
 <#
-MONTRA 0.2.7 — permanent weapons + potions/flight/dash/3 slots / safe Windows staging.
+MONTRA 0.2.8 — world maps / safe Windows staging.
 SAFE STAGING ONLY:
   * Backs up the existing MONTRA Room sources and compiled build.
   * Downloads only files from the owner's MONTRA GitHub repository.
@@ -38,6 +38,8 @@ $files = @(
   @{ Name = "GameRules.ts"; Target = "src\rooms\GameRules.ts"; Check = "dashCooldownMs" },
   @{ Name = "DashRules.ts"; Target = "src\rooms\DashRules.ts"; Check = "advanceDash" },
   @{ Name = "HeightRules.ts"; Target = "src\rooms\HeightRules.ts"; Check = "flightLandingHeight" },
+  @{ Name = "WorldMaps.ts"; Target = "src\rooms\WorldMaps.ts"; Check = "DEFAULT_MAP_ID" },
+  @{ Name = "WarpRules.ts"; Target = "src\rooms\WarpRules.ts"; Check = "checkWarp" },
   @{ Name = "MonsterRRT.ts"; Target = "src\rooms\MonsterRRT.ts"; Check = "class MonsterRRTNavigator" },
   @{ Name = "CharacterStore.ts"; Target = "src\rooms\CharacterStore.ts"; Check = "inventory_record_missing" },
   @{ Name = "ItemRules.ts"; Target = "src\rooms\ItemRules.ts"; Check = "grantStarterWeapons" },
@@ -52,6 +54,7 @@ $files = @(
   @{ Name = "flight-integration.mjs"; Target = "montra-flight-integration.mjs"; Check = "MONTRA V0.2.5" },
   @{ Name = "character-persistence-integration.mjs"; Target = "montra-s2-character-integration.mjs"; Check = "MONTRA three-slot integration" },
   @{ Name = "weapon-integration.mjs"; Target = "montra-weapon-integration.mjs"; Check = "MONTRA V0.2.7" }
+  @{ Name = "world-warp-integration.mjs"; Target = "montra-world-warp-integration.mjs"; Check = "montra-world-test-" }
 )
 
 New-Item -ItemType Directory -Path $download -Force | Out-Null
@@ -103,7 +106,7 @@ try {
 
   Push-Location $base
   try {
-    Write-Host "Compiling MONTRA V0.2.7 weapon equipment + inventory/combat..." -ForegroundColor Cyan
+    Write-Host "Compiling MONTRA V0.2.8 world maps + inventory/combat..." -ForegroundColor Cyan
     & npm.cmd run build
     if ($LASTEXITCODE -ne 0) {
       throw "MONTRA S1 TypeScript build failed. Exit code: $LASTEXITCODE"
@@ -120,16 +123,10 @@ try {
   Write-Host "MONTRA FLIGHT BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA INVENTORY BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA WEAPON BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA WORLD MAP BUILD PASSED." -ForegroundColor Green
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
-  Write-Host "Then test: node C:\Montra\online-server\montra-s1-integration.mjs"
-  Write-Host "AI test: node C:\Montra\online-server\montra-s1-monster-ai.mjs"
-  Write-Host "Free PK test: node C:\Montra\online-server\montra-free-pk-integration.mjs"
-  Write-Host "Summon test: node C:\Montra\online-server\montra-summon-integration.mjs"
-  Write-Host "Height test: node C:\Montra\online-server\montra-elevation-integration.mjs"
-  Write-Host "RRT test: node C:\Montra\online-server\montra-monster-rrt-integration.mjs"
-  Write-Host "Dash/Flight tests: run ONLY on an ISOLATED test Node instance, never live players."
-  Write-Host "Weapon/item/persistence tests: use ONLY an ISOLATED test server with MONTRA_CHARACTER_DIR set to a TEMP folder."
+  Write-Host "All integration tests require an ISOLATED Node instance and TEMP character folder; never run them against LIVE."
 } catch {
   Write-Warning "3-SLOTS installation failed. Restoring MONTRA source files and build (character data untouched)."
   foreach ($entry in $files) {
