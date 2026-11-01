@@ -111,7 +111,10 @@ jobs:
           grep -q 'guestToken' main.js
           grep -q 'characterSlot' main.js
           grep -q 'slotChoice' main.js
-          grep -q '0.2.1' index.html
+          grep -q '0.2.2' index.html
+          grep -q 'CAMERA_ZOOM_MAX = 55' main.js
+          grep -q 'touchSeparation()' main.js
+          grep -q 'setCameraZoom(' main.js
           grep -q 'rename_character' main.js
 
       - name: Parse Windows PowerShell installer
