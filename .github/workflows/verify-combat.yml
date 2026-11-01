@@ -33,6 +33,8 @@ jobs:
           cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
           cp deploy/combat/MonsterRRT.ts combat-verify/src/rooms/MonsterRRT.ts
           cp deploy/combat/CharacterStore.ts combat-verify/src/rooms/CharacterStore.ts
+          cp deploy/combat/ItemRules.ts combat-verify/src/rooms/ItemRules.ts
+          cp deploy/combat/item-rules.test.ts combat-verify/src/rooms/item-rules.test.ts
           cp deploy/combat/height-rules.test.ts combat-verify/src/rooms/height-rules.test.ts
           cp deploy/combat/monster-rrt.test.ts combat-verify/src/rooms/monster-rrt.test.ts
           cp deploy/combat/character-store.test.ts combat-verify/src/rooms/character-store.test.ts
@@ -115,7 +117,13 @@ jobs:
           grep -q 'guestToken' main.js
           grep -q 'characterSlot' main.js
           grep -q 'slotChoice' main.js
-          grep -q '0.2.5' index.html
+          grep -q '0.2.6' index.html
+          grep -q 'bagSlot' main.js
+          grep -Fq 'room.send("use_item"' main.js
+          grep -Fq 'inventory_state' main.js
+          grep -Fq 'inventoryAvailable' deploy/combat/MyRoomState.ts
+          grep -Fq 'inventory_record_missing' deploy/combat/CharacterStore.ts
+          grep -Fq 'MONTRA INVENTORY BUILD PASSED.' deploy/combat/install-windows.ps1
           grep -q 'id="fly"' index.html
           grep -Fq 'room.send("fly", {})' main.js
           grep -Fq 'flightAvailable' main.js
@@ -170,7 +178,7 @@ jobs:
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/dash-rules.test.ts
+        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts
 
       - name: Two-player server-authoritative combat integration test
         shell: bash
@@ -231,7 +239,7 @@ jobs:
             cat server.log
             exit 1
           }
-          MONTRA_TEST_URL=http://127.0.0.1:4108 MONTRA_S2_TEST_STAGE=write timeout 35s node character-persistence-integration.mjs || {
+          MONTRA_TEST_URL=http://127.0.0.1:4108 MONTRA_S2_TEST_STAGE=write timeout 45s node character-persistence-integration.mjs || {
             echo "=== S2 WRITE SERVER LOG ==="
             cat server.log
             exit 1

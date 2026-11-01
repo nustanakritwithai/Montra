@@ -91,6 +91,7 @@ export const MyRoomState = schema({
   fortification: Fortification,
   dashAvailable: t.boolean().default(true), // append: live server dash capability
   flightAvailable: t.boolean().default(true), // append: server supports fly/land commands
+  inventoryAvailable: t.boolean().default(true), // append: server-owned permanent item slots
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

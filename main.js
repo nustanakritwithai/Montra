@@ -461,6 +461,14 @@
     if (title) title.textContent = summoned ? "เก็บผี" : "เรียกผี";
   }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
+  // Inventory is never stored in localStorage: LIVE comes from VPS each join.
+  const INVENTORY_SLOTS = 12;
+  const POTION_ITEM_ID = "health_potion";
+  let inventoryState = null;
+  let itemUsePending = false;
+  let itemUseSequence = 0;
+  let selectedBagSlot = 0;
+  let demoPotionCount = 3, demoHp = 65;
   // DEMO mirrors only the feel of dash; LIVE positions remain server owned.
   let demoDash = null;
   let demoDashNextAt = 0;
@@ -589,6 +597,12 @@
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
+    inventoryState = null;
+    itemUsePending = false;
+    itemUseSequence += 1;
+    selectedBagSlot = 0;
+    demoPotionCount = 3;
+    demoHp = 65;
     applyFortVisual(defaultFort);
     onlinePlayers.clear(); clearAvatars(); clearSummons();
     player = ensureAvatar("demo",true,0,0);
@@ -601,7 +615,7 @@
     pendingClimb = null;
     setRangedMode(false);
     ui.pkPanel.hidden = true;
-    if (localHpBar) localHpBar.style.width = "88%";
+    if (localHpBar) localHpBar.style.width = demoHp + "%";
     updateCharacterHud(null);
     updateStatus();
   }
@@ -964,6 +978,7 @@
     syncPKHud();
     syncClimbButton();
     updateFlightButton();
+    if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
     return true;
   }
   let syncPoll = null;
@@ -1030,6 +1045,10 @@
       joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot });
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
+      inventoryState = null;
+      itemUsePending = false;
+      itemUseSequence += 1;
+      selectedBagSlot = 0;
       mode = "live"; localId = joined.sessionId; activeCharacterSlot = requestedSlot;
       clearAvatars(); clearSummons(); demoDest = null;
       pendingClimb = null;
@@ -1185,6 +1204,30 @@
       joined.onMessage("character_save_error", () => {
         if (room === joined) toast("บันทึกตัวละครไม่สำเร็จ · ตรวจสอบพื้นที่ VPS");
       });
+      joined.onMessage("inventory_state", payload => {
+        if (room !== joined || payload?.version !== 1 ||
+            !Array.isArray(payload.slots) ||
+            payload.slots.length !== INVENTORY_SLOTS) return;
+        // Defensive view parsing: only display known items and sane counts.
+        const slots = payload.slots.map(stack =>
+          stack?.itemId === POTION_ITEM_ID && Number.isSafeInteger(stack.quantity) &&
+          stack.quantity >= 1 && stack.quantity <= 99
+            ? { itemId: POTION_ITEM_ID, quantity: stack.quantity } : null);
+        inventoryState = { version: 1, slots };
+        itemUsePending = false;
+        renderBag();
+      });
+      joined.onMessage("item_used", event => {
+        if (room !== joined) return;
+        toast("ใช้ยาเลือดแล้ว · +" + Number(event?.healed || 0) + " HP · บันทึกบน VPS");
+        renderBag();
+      });
+      joined.onMessage("item_use_failed", () => {
+        if (room !== joined) return;
+        itemUsePending = false;
+        renderBag();
+        toast("ใช้ยาไม่สำเร็จ · VPS บันทึกไอเท็มไม่ได้");
+      });
       joined.onMessage("dash_started", info => {
         if (room !== joined || typeof info?.playerId !== "string") return;
         const actor = avatars.get(info.playerId);
@@ -1198,6 +1241,12 @@
       });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        if (["item_busy", "item_cooldown", "item_unavailable",
+             "hp_full", "invalid_item_use", "not_alive", "inventory_unavailable"]
+              .includes(info?.reason)) {
+          itemUsePending = false;
+          renderBag();
+        }
         if (info?.reason === "not_alive") toast("ยังสั่งเดินหรือโจมตีไม่ได้");
         else if (info?.reason === "attack_rate_limited") toast("สั่งโจมตีถี่เกินไป");
         else if (info?.reason === "self_attack") toast("ไม่สามารถโจมตีตัวเองได้");
@@ -1212,6 +1261,12 @@
         else if (info?.reason === "shot_out_of_range") toast("เป้าหมายอยู่นอกระยะยิง");
         else if (info?.reason === "shot_blocked") toast("กำแพงบังแนวกระสุนอาคม");
         else if (info?.reason === "shot_cooldown") toast("รอพลังยิงอาคมอีกครู่");
+        else if (info?.reason === "inventory_unavailable") toast("เซิร์ฟเวอร์ยังไม่รองรับกระเป๋าถาวร");
+        else if (info?.reason === "invalid_item_use" || info?.reason === "invalid_inventory_request") toast("คำสั่งไอเท็มไม่ถูกต้อง");
+        else if (info?.reason === "item_busy") toast("กำลังบันทึกการใช้ยา · รอสักครู่");
+        else if (info?.reason === "item_cooldown") toast("รอคูลดาวน์ยาเลือด 1 วินาที");
+        else if (info?.reason === "item_unavailable") toast("ไม่มียาเลือดในช่องนี้แล้ว");
+        else if (info?.reason === "hp_full") toast("HP เต็ม · ไม่ใช้ยาโดยเปล่าประโยชน์");
         else if (info?.reason === "dash_cooldown") toast("พุ่งยังไม่พร้อม · รอคูลดาวน์");
         else if (info?.reason === "dash_in_progress" || info?.reason === "dashing") toast("กำลังพุ่งอยู่");
         else if (info?.reason === "dash_rate_limited") toast("สั่งพุ่งถี่เกินไป");
@@ -1266,6 +1321,7 @@
         localStorage.setItem(preferredSlotKey(endpoint), String(requestedSlot));
       } catch (_) { /* optional */ }
       try { joined.send("get_character_slots", {}); } catch (_) { /* old S2 server */ }
+      try { joined.send("get_inventory", {}); } catch (_) { /* older VPS */ }
       closeDrawer();
       const active = joined.state?.players?.get?.(joined.sessionId);
       toast(active?.persistent
@@ -1709,10 +1765,123 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.5",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ไอเทมถาวร และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.6",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ไอเท็มถาวรเริ่มทดลองด้วยยาเลือดเล็กในกระเป๋า 12 ช่อง เก็บข้อมูลและหักจำนวนบน VPS เท่านั้น</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ไอเท็มสวมใส่ ไอเท็มประเภทอื่น และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
+  }
+  function currentBagSlots() {
+    if (mode === "live") return inventoryState?.slots || null;
+    return Array.from({ length: INVENTORY_SLOTS }, (_, i) =>
+      i === 0 && demoPotionCount > 0
+        ? { itemId: POTION_ITEM_ID, quantity: demoPotionCount } : null);
+  }
+  function renderBag() {
+    if (drawerActive !== "bag") return;
+    const slots = currentBagSlots();
+    const status = $("bagSaveStatus");
+    if (!status) return;
+    status.textContent = mode === "live"
+      ? (room?.state?.inventoryAvailable !== true
+        ? "VPS ยังไม่รองรับกระเป๋าถาวร · ต้องติดตั้ง MONTRA 0.2.6" :
+        slots ? "บันทึกถาวรบน VPS · แยกตามช่องตัวละคร" :
+          "กำลังโหลดกระเป๋าจาก VPS...")
+      : "โหมด DEMO · กระเป๋าทดลองไม่บันทึก";
+    const currentHp = mode === "live"
+      ? Number(ownServerCharacter()?.hp || 0) : demoHp;
+    const maxHp = mode === "live"
+      ? Number(ownServerCharacter()?.maxHp || 100) : 100;
+    $("bagHp").textContent = Math.max(0, Math.ceil(currentHp)) +
+      " / " + Math.max(1, Math.ceil(maxHp));
+    for (let i = 0; i < INVENTORY_SLOTS; i++) {
+      const slot = $("bagSlot" + i);
+      if (!slot) continue;
+      const item = slots?.[i];
+      slot.classList.toggle("bag-filled", Boolean(item));
+      slot.classList.toggle("bag-selected", i === selectedBagSlot);
+      slot.setAttribute("aria-pressed", String(i === selectedBagSlot));
+      slot.querySelector(".bag-symbol").textContent = item ? "🧪" : "·";
+      slot.querySelector(".bag-quantity").textContent = item
+        ? "×" + item.quantity : "";
+    }
+    const chosen = slots?.[selectedBagSlot];
+    const ready = Boolean(chosen && currentHp > 0 && currentHp < maxHp &&
+      (mode !== "live" || ownServerCharacter()?.alive === true));
+    $("bagItemName").textContent = chosen ? "ยาเลือดเล็ก" : "ช่องว่าง";
+    $("bagItemDescription").textContent = chosen
+      ? "ฟื้น HP สูงสุด 30 · ใช้ได้เมื่อ HP ไม่เต็ม · ขวดที่เหลือจะถูกหักจากเซฟ"
+      : "ไอเท็มใหม่จะปรากฏในช่องกระเป๋านี้ในอนาคต";
+    const use = $("useBagItem");
+    use.disabled = !ready || itemUsePending;
+    use.textContent = itemUsePending ? "กำลังบันทึกการใช้ยา..." :
+      !chosen ? "ไม่มีไอเท็มในช่องนี้" :
+      currentHp >= maxHp ? "HP เต็ม" : "ใช้ยาเลือด";
   }
   function openBag() {
-    openDrawer("bag","กระเป๋าไอเทม",`<div class="offline-banner">กระเป๋าไอเทมยังเป็นหน้าตัวอย่าง ไม่มีของจริงและยังไม่เชื่อมฐานข้อมูล</div><div class="status-line"><span>ตำราพื้นฐาน</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>เครื่องราง</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>แลกของกับผู้เล่น</span><strong>ยังไม่เปิดใช้</strong></div>`);
+    const grid = Array.from({ length: INVENTORY_SLOTS }, (_, i) =>
+      '<button type="button" class="bag-slot" id="bagSlot' + i +
+      '" aria-pressed="false" aria-label="ช่องไอเท็ม ' + (i + 1) + '">' +
+      '<span class="bag-symbol">·</span>' +
+      '<span class="bag-quantity"></span></button>').join("");
+    openDrawer("bag", "กระเป๋าไอเท็ม · 12 ช่อง",
+      '<div class="status-line"><span>สถานะกระเป๋า</span><strong id="bagSaveStatus"></strong></div>' +
+      '<div class="status-line"><span>พลังชีวิต HP</span><strong id="bagHp"></strong></div>' +
+      '<div class="bag-grid" role="group" aria-label="ช่องไอเท็ม 12 ช่อง">' + grid + '</div>' +
+      '<div class="bag-detail"><strong id="bagItemName"></strong>' +
+      '<p class="note" id="bagItemDescription"></p></div>' +
+      '<button class="primary" id="useBagItem" type="button">ใช้ยาเลือด</button>' +
+      '<p class="note">ตัวละครแต่ละช่องได้รับยาเลือด 3 ขวดครั้งเดียวเท่านั้น · ใช้ยาแล้วบันทึกทันที · ขณะ HP เต็มจะไม่เสียยา</p>');
+    for (let i = 0; i < INVENTORY_SLOTS; i++) {
+      $("bagSlot" + i).onclick = () => {
+        selectedBagSlot = i;
+        renderBag();
+      };
+    }
+    $("useBagItem").onclick = () => {
+      if (itemUsePending) return;
+      const item = currentBagSlots()?.[selectedBagSlot];
+      if (!item || item.itemId !== POTION_ITEM_ID) return;
+      if (mode === "live") {
+        if (!room || room.state?.inventoryAvailable !== true || !inventoryState) {
+          toast("ยังไม่ได้รับกระเป๋าถาวร · ต้องอัปเดต MONTRA บน VPS");
+          return;
+        }
+        if (Number(ownServerCharacter()?.hp || 0) >=
+            Number(ownServerCharacter()?.maxHp || 100)) {
+          toast("HP เต็มแล้ว"); return;
+        }
+        itemUsePending = true;
+        const requestedRoom = room;
+        const sequence = ++itemUseSequence;
+        renderBag();
+        try { room.send("use_item", { slot: selectedBagSlot }); }
+        catch (error) {
+          itemUsePending = false;
+          renderBag();
+          toast("ส่งคำสั่งใช้ยาไม่สำเร็จ");
+          return;
+        }
+        // If an old server throttles the rejection or packets are lost,
+        // never leave the only item-use control permanently disabled.
+        setTimeout(() => {
+          if (!itemUsePending || itemUseSequence !== sequence ||
+              mode !== "live" || room !== requestedRoom) return;
+          itemUsePending = false;
+          try { room.send("get_inventory", {}); } catch (_) {}
+          renderBag();
+          toast("ยังไม่ได้ยืนยันการใช้ยา · ตรวจสอบจำนวนบน VPS อีกครั้ง");
+        }, 3500);
+        return;
+      }
+      if (demoHp >= 100) { toast("HP เต็มแล้ว · DEMO"); return; }
+      const healed = Math.min(30, 100 - demoHp);
+      demoHp += healed;
+      demoPotionCount -= 1;
+      if (localHpBar) localHpBar.style.width = demoHp + "%";
+      toast("DEMO ใช้ยาเลือด +" + healed + " HP · ไม่บันทึก");
+      renderBag();
+    };
+    if (mode === "live") {
+      try { room?.send("get_inventory", {}); } catch (_) { /* old VPS */ }
+    }
+    renderBag();
   }
   // Compact portrait HUD: a small quest chip opens the existing detail drawer.
   ui.quest.addEventListener("click", () => {

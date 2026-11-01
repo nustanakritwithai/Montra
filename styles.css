@@ -378,3 +378,45 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 
 /* Swipe gestures originate in the existing menu region, never a new button. */
 .skill-bar, .nav-bar { touch-action:none; }
+
+
+/* MONTRA 0.2.6: 12 persistent inventory slots, touch-friendly at portrait width. */
+.bag-grid {
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  margin:14px 0 12px;
+}
+.bag-slot {
+  position:relative;
+  aspect-ratio:1;
+  min-width:0;
+  min-height:60px;
+  padding:5px;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  border:1px solid #74827e;
+  border-radius:13px;
+  background:linear-gradient(150deg,#22363a,#101e21);
+  touch-action:manipulation;
+}
+.bag-slot.bag-filled { border-color:#c0a56c; background:linear-gradient(155deg,#51402c,#1e2c2f); }
+.bag-slot.bag-selected { outline:2px solid #f2ca83; outline-offset:1px; }
+.bag-symbol { font-size:clamp(19px,6vw,29px); line-height:1; color:#758b8b; }
+.bag-slot.bag-filled .bag-symbol { color:#fce1a7; }
+.bag-quantity {
+  position:absolute; right:5px; bottom:3px;
+  font-size:11px; font-weight:750;
+  font-variant-numeric:tabular-nums;
+  color:#fff5d8; text-shadow:0 1px 3px #000;
+}
+.bag-detail {
+  min-height:70px; padding:10px 12px;
+  border-radius:11px; background:#1e3133;
+  border:1px solid #96785770;
+}
+.bag-detail strong { color:#f7d79c; }
+.bag-detail p { margin:4px 0 0; }
+#useBagItem[disabled] { opacity:.52; cursor:not-allowed; }
+@media (max-width:360px) { .bag-grid{gap:6px}.bag-slot{min-height:52px} }

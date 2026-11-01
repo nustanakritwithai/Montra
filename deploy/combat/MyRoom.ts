@@ -28,6 +28,11 @@ import {
   MonsterRRTNavigator, isMonsterSegmentClear,
 } from "./MonsterRRT.js";
 import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.js";
+import type { CharacterSnapshot } from "./CharacterStore.js";
+import {
+  POTION_ID, POTION_COOLDOWN_MS, parseUseItemCommand,
+  useInventoryItem, type InventorySnapshot,
+} from "./ItemRules.js";
 
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
@@ -68,6 +73,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastSlotListMs = new Map<string, number>();
   private lastRenameMs = new Map<string, number>();
   private nextCharacterSaveMs = CHARACTER_SAVE_INTERVAL_MS;
+  // Inventory remains private per character, never broadcasts via Room Schema.
+  private inventories = new Map<string, InventorySnapshot>();
+  private pendingItemUses = new Map<string, Promise<void>>();
+  private lastItemUseMs = new Map<string, number>();
+  private lastInventoryReadMs = new Map<string, number>();
 
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
@@ -82,6 +92,66 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private flightTransitions = new Map<string, { targetY: number; landing: boolean }>();
 
   messages = {
+    get_inventory: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_inventory_request");
+      const id = client.sessionId;
+      const inventory = this.inventories.get(id);
+      if (!inventory) return this.reject(client, "inventory_unavailable");
+      const last = this.lastInventoryReadMs.get(id) ?? -Infinity;
+      if (this.simulatedMs - last < 1_000) return;
+      this.lastInventoryReadMs.set(id, this.simulatedMs);
+      client.send("inventory_state", inventory);
+    },
+    use_item: (client: Client, message: unknown) => {
+      const slot = parseUseItemCommand(message);
+      if (slot === null) return this.reject(client, "invalid_item_use");
+      const id = client.sessionId;
+      const player = this.state.players.get(id);
+      if (!player || !player.alive) return this.reject(client, "not_alive");
+      const inventory = this.inventories.get(id);
+      if (!inventory || !this.persistentCharacters.has(id)) {
+        return this.reject(client, "inventory_unavailable");
+      }
+      if (this.pendingItemUses.has(id)) return this.reject(client, "item_busy");
+      if (this.simulatedMs - (this.lastItemUseMs.get(id) ?? -Infinity) <
+          POTION_COOLDOWN_MS) return this.reject(client, "item_cooldown");
+      const result = useInventoryItem(
+        inventory, slot, player.hp, player.maxHp, player.alive);
+      if (!result.ok) return this.reject(client, result.reason);
+      const snapshot = this.captureCharacterSnapshot(id, result.inventory, result.hp);
+      if (!snapshot) return this.reject(client, "inventory_unavailable");
+
+      // Durability-first transaction: the server writes the decremented stack
+      // atomically BEFORE updating HP or acknowledging the potion. If disk is
+      // full, neither HP nor potion count changes for the player.
+      const task = (async () => {
+        try {
+          await characterStore.save(snapshot);
+          const current = this.state.players.get(id);
+          if (!current || this.inventories.get(id) !== inventory) return;
+          this.inventories.set(id, result.inventory);
+          const beforeHp = current.hp;
+          if (current.alive) {
+            // Apply the heal on top of any damage that occurred DURING I/O.
+            // Never resurrect a player killed while a save was pending.
+            current.hp = Math.min(current.maxHp, current.hp + result.healed);
+          }
+          this.lastItemUseMs.set(id, this.simulatedMs);
+          client.send("inventory_state", result.inventory);
+          client.send("item_used", {
+            slot, itemId: POTION_ID,
+            healed: Math.max(0, current.hp - beforeHp),
+            hp: current.hp,
+          });
+        } catch (error) {
+          console.error("MONTRA item use persistence failed:", id, error);
+          client.send("item_use_failed", { reason: "disk_write_failed" });
+        } finally {
+          this.pendingItemUses.delete(id);
+        }
+      })();
+      this.pendingItemUses.set(id, task);
+    },
     fly: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_flight");
       const id = client.sessionId;
@@ -1025,24 +1095,36 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     player.combatState = "idle";
   }
 
-  private async saveCharacter(id: string): Promise<void> {
+  private captureCharacterSnapshot(
+    id: string, inventoryOverride?: InventorySnapshot, hpOverride?: number,
+  ): CharacterSnapshot | null {
     const characterId = this.persistentCharacters.get(id);
     const player = this.state.players.get(id);
-    if (!characterId || !player) return;
+    const inventory = inventoryOverride ?? this.inventories.get(id);
+    if (!characterId || !player || !inventory) return null;
+    return {
+      version: 1, id: characterId, name: player.characterName,
+      level: player.level, experience: player.experience,
+      pkKills: player.pkKills, pkDeaths: player.pkDeaths,
+      x: player.x,
+      // Keep stable flight altitude when a transition is mid-flight.
+      y: player.flying ? FLIGHT.altitude : player.y,
+      z: player.z,
+      hp: Math.max(0, Math.round(hpOverride ?? player.hp)),
+      inventory, updatedAt: new Date().toISOString(),
+    };
+  }
+
+  private async saveCharacter(id: string): Promise<void> {
     try {
-      await characterStore.save({
-        version: 1, id: characterId, name: player.characterName,
-        level: player.level, experience: player.experience,
-        pkKills: player.pkKills, pkDeaths: player.pkDeaths,
-        x: player.x,
-        // A half-finished ascent/landing must never become a corrupt save.
-        // Resume at the stable 6m air layer if a flight transition is active.
-        y: player.flying ? FLIGHT.altitude : player.y,
-        z: player.z, hp: Math.max(0, Math.round(player.hp)),
-        updatedAt: new Date().toISOString(),
-      });
+      // Do not snapshot old potion counts while a disk-backed item use is
+      // pending. OnLeave/onDispose also wait so no final write can re-grant it.
+      const itemTask = this.pendingItemUses.get(id);
+      if (itemTask) await itemTask.catch(() => {});
+      const snapshot = this.captureCharacterSnapshot(id);
+      if (snapshot) await characterStore.save(snapshot);
     } catch (error) {
-      console.error("MONTRA S2 save failed for", id, error);
+      console.error("MONTRA S2+inventory save failed for", id, error);
       this.clients.find((client) => client.sessionId === id)
         ?.send("character_save_error", { reason: "disk_write_failed" });
     }
@@ -1087,7 +1169,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       this.state.players.set(client.sessionId, player);
       if (characterId && accountId && token) {
+        if (!saved?.inventory) throw new Error("inventory_migration_missing");
         this.persistentCharacters.set(client.sessionId, characterId);
+        this.inventories.set(client.sessionId, saved.inventory);
         this.activeGuestAccounts.set(client.sessionId, accountId);
         this.guestSlotIds.set(client.sessionId,
           CHARACTER_SLOTS.map(candidate => characterIdFromToken(token, candidate)));
@@ -1131,7 +1215,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.playerSpawn.delete(id);
     this.gates.delete(id);
     this.lastRejectNoticeMs.delete(id);
-    this.state.players.delete(id);
+    // Keep the player and inventory readable until an in-flight potion write
+    // and the final save have completed; otherwise the final snapshot is lost.
     this.lastRenameMs.delete(id);
     this.lastSlotListMs.delete(id);
     if (this.state.monster.targetId === id) this.state.monster.targetId = "";
@@ -1145,6 +1230,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try {
       await saving;
     } finally {
+      this.state.players.delete(id);
+      this.pendingItemUses.delete(id);
+      this.inventories.delete(id);
+      this.lastItemUseMs.delete(id);
+      this.lastInventoryReadMs.delete(id);
       this.pendingCharacterLeaves.delete(id);
       this.persistentCharacters.delete(id);
       this.guestSlotIds.delete(id);
@@ -1164,6 +1254,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     });
     await Promise.allSettled(pending);
     this.persistentCharacters.clear();
+    this.inventories.clear();
+    this.pendingItemUses.clear();
+    this.lastItemUseMs.clear();
+    this.lastInventoryReadMs.clear();
     this.activeGuestAccounts.clear();
     this.pendingCharacterLeaves.clear();
     this.guestSlotIds.clear();
