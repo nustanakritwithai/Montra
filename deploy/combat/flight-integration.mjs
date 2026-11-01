@@ -38,6 +38,8 @@ try {
   a.send("fly", {height: 99, speed: 50000});
   await until(()=>rejects.includes("invalid_flight"),2400,"forged flight rejected");
   assert.equal(me().y,0);
+  // Room rate-limits rejection notices to 1 per 500ms.
+  await sleep(570);
 
   a.send("fly", {});
   await until(() => me()?.y > 0.09 && me()?.y < 6, 2600,
@@ -59,6 +61,7 @@ try {
 
   a.send("dash", {dx: 1, dz: 0});
   await until(()=>rejects.includes("flying"),2300,"no dash in flight");
+  await sleep(570);
   a.send("climb", {structureId:"watchwall-1",direction:"up"});
   // Climb is also rejected while flying.
   await until(()=>rejects.filter(reason=>reason==="flying").length>=2,2500,
