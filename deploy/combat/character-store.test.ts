@@ -8,7 +8,10 @@ import {
   CHARACTER_SLOTS, parseCharacterSlot,
   parseCharacterName, claimCharacter, releaseCharacter,
 } from "./CharacterStore.js";
-import { makeStarterInventory, useInventoryItem } from "./ItemRules.js";
+import {
+  makeStarterInventory, useInventoryItem, equipInventoryWeapon,
+  RITUAL_DAGGER_ID, ARCANE_SWORD_ID, SPIRIT_STAFF_ID,
+} from "./ItemRules.js";
 
 const tokenA = "mt1_" + "ab".repeat(32);
 const tokenB = "mt1_" + "cd".repeat(32);
@@ -224,5 +227,67 @@ test("S4: invalid potions fail closed and legacy writes cannot strip an inventor
     await assert.rejects(new CharacterStore(dir).loadOrCreate(tokenA,spawn),/inventory_record_invalid/);
     assert.equal(JSON.parse(await readFile(file,"utf8")).inventory.slots[0].quantity,99999,
       "corruption is never overwritten by fresh starter items");
+  });
+});
+
+test("S5: migrate real V0.2.6 save without regranting used potions, preserving all character fields", async () => {
+  await withTempStore(async (store,dir) => {
+    const character=(await store.loadOrCreate(tokenA,spawn,1)).character;
+    const slots=Array.from({length:12},()=>null) as Array<
+      {itemId:"health_potion";quantity:number}|null>;
+    slots[0]={itemId:"health_potion",quantity:2};
+    const old={
+      ...character,name:"อาวุธรักษา",level:4,experience:160,
+      pkKills:7,x:4,z:-3,y:6,hp:71,
+      inventory:{version:1 as const,slots},
+      updatedAt:new Date().toISOString(),
+    };
+    const location=path.join(dir,character.id+".json");
+    await writeFile(location,JSON.stringify(old)+"\n");
+    const migrated=(await new CharacterStore(dir).loadOrCreate(tokenA,spawn,1)).character;
+    assert.equal(migrated.id,character.id);
+    assert.equal(migrated.name,old.name);
+    assert.equal(migrated.level,4);
+    assert.equal(migrated.experience,160);
+    assert.equal(migrated.pkKills,7);
+    assert.equal(migrated.hp,71);
+    assert.equal(migrated.y,6);
+    assert.equal(migrated.inventory!.slots[0]!.quantity,2);
+    assert.deepEqual(migrated.inventory!.slots.slice(1,4).map(x=>x?.itemId),
+      [RITUAL_DAGGER_ID,ARCANE_SWORD_ID,SPIRIT_STAFF_ID]);
+    assert.equal(migrated.inventory!.equippedWeaponSlot,1);
+    const originalBytes=await readFile(location,"utf8");
+    const again=(await new CharacterStore(dir).loadOrCreate(tokenA,spawn,1)).character;
+    assert.deepEqual(again.inventory,migrated.inventory);
+    assert.equal(await readFile(location,"utf8"),originalBytes,
+      "second login must never migrate or grant a second time");
+    const sword=equipInventoryWeapon(again.inventory!,2);
+    assert.equal(sword.ok,true);
+    if ("reason" in sword)return;
+    await store.save({...again,inventory:sword.inventory,updatedAt:new Date().toISOString()});
+    const reloaded=(await new CharacterStore(dir).loadOrCreate(tokenA,spawn,1)).character;
+    assert.equal(reloaded.inventory!.equippedWeaponSlot,2);
+    assert.equal(reloaded.inventory!.slots[0]!.quantity,2);
+  });
+});
+
+test("S5: all three character slots independently migrate an empty potion stock", async () => {
+  await withTempStore(async (store,dir) => {
+    const all=[];
+    for(const slot of CHARACTER_SLOTS){
+      const previous=(await store.loadOrCreate(tokenB,spawn,slot)).character;
+      const emptySlots=Array.from({length:12},()=>null);
+      await writeFile(path.join(dir,previous.id+".json"),
+        JSON.stringify({...previous, inventory:{version:1,slots:emptySlots}})+"\n");
+      all.push(previous.id);
+    }
+    assert.equal(new Set(all).size,3);
+    for(const slot of CHARACTER_SLOTS){
+      const upgraded=(await new CharacterStore(dir).loadOrCreate(tokenB,spawn,slot)).character;
+      assert.equal(upgraded.inventory!.slots[0]?.itemId,RITUAL_DAGGER_ID);
+      assert.equal(upgraded.inventory!.slots.some(item=>item?.itemId==="health_potion"),false,
+        "spent potion stock must never be restored as a starter bundle");
+      assert.equal(upgraded.inventory!.equippedWeaponSlot,0);
+    }
   });
 });
