@@ -27,6 +27,40 @@ export const FORT = Object.freeze({
   topPadding: 0.16,
 });
 
+/**
+ * The flight layer sits two units ABOVE the existing watchwall crest.
+ * Ascend/descend speed and both landing options are server-controlled.
+ * A player can land on the crest only inside its walkable padded footprint.
+ */
+export const FLIGHT = Object.freeze({
+  altitude: FORT.height + 2,
+  verticalSpeed: 4,
+  horizontalSpeed: 4,
+  minLandingDelayMs: 0,
+});
+
+export function isFlightAltitude(y: number): boolean {
+  return Number.isFinite(y) && Math.abs(y - FLIGHT.altitude) < 0.08;
+}
+
+export function flightLandingHeight(x: number, z: number): number | null {
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+  if (isOnTop(x, z)) return FORT.height;
+  if (touchesWallBody(x, z)) return null; // don't descend into solid stone
+  return 0;
+}
+
+/** Vertical progress is a continuous, rate-limited server tick, not a teleport. */
+export function progressFlightHeight(fromY: number, toY: number, dt: number):
+  { y: number; arrived: boolean } {
+  if (!Number.isFinite(fromY) || ![0, FORT.height, FLIGHT.altitude].includes(toY) ||
+      !Number.isFinite(dt) || dt < 0) throw new Error("invalid_flight_step");
+  const dy = toY - fromY;
+  const step = FLIGHT.verticalSpeed * Math.min(dt, 0.1);
+  if (Math.abs(dy) <= step + 0.000001) return { y: toY, arrived: true };
+  return { y: fromY + Math.sign(dy) * step, arrived: false };
+}
+
 export type WorldPoint = { x: number; y: number; z: number };
 export type GroundPoint = { x: number; z: number };
 export type ClimbRequest = { structureId: "watchwall-1"; direction: "up" | "down" };
