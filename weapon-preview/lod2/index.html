@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#090b12">
+<title>Montra • Crescent Blade LOD2 PBR</title>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<style>
+:root{font-family:system-ui,-apple-system,"Noto Sans Thai",sans-serif;color-scheme:dark;color:#eee6d6;background:#0a0d15}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;overscroll-behavior:none}body{background:radial-gradient(ellipse at 45% 39%,#34313a,#141723 55%,#090b12)}
+header{padding:17px 18px 8px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.brand{font-size:12px;letter-spacing:2px;color:#dab785;font-weight:800}h1{font-size:22px;line-height:1.25;margin:5px 0 2px;font-weight:800}
+.sub{font-size:12px;color:#aeb0bd}.tag{font-size:11px;border:1px solid #977650aa;border-radius:30px;color:#f5cc8e;padding:7px 9px;white-space:nowrap}
+main{max-width:860px;margin:auto}
+.stage{position:relative;height:min(66svh,620px);min-height:350px;overflow:hidden;background:radial-gradient(ellipse at 50% 38%,#51403788,transparent 50%)}
+.stage::after{content:"";pointer-events:none;position:absolute;inset:55% 0 0;background:linear-gradient(to bottom,transparent,#0e1016bb)}
+model-viewer{position:absolute;inset:0;width:100%;height:100%;background:transparent;z-index:1;--progress-bar-color:#d6a967;outline:0}
+.loading{position:absolute;z-index:3;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:13px;background:radial-gradient(ellipse at center,#30303eaa,#090b12df);text-align:center;padding:20px}
+.loading strong{font-size:16px}.loading small{font-size:12px;color:#d4bf9e;max-width:270px;line-height:1.7}
+.spinner{width:42px;height:42px;border:3px solid #b38a5966;border-top-color:#edc487;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.progress{height:5px;width:min(230px,70vw);background:#343b4d;border-radius:50px;overflow:hidden}.fill{height:100%;width:0%;background:#e4b16e;transition:width .2s}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 15px 10px}
+button,a.button{appearance:none;background:#1d2230;color:#eee9e3;border:1px solid #665944;padding:12px 14px;border-radius:12px;font:inherit;font-size:13px;font-weight:650;cursor:pointer;text-decoration:none;min-height:44px}
+button.primary,a.button.primary{background:#c29257;color:#111317;border-color:#e4b47e}
+button:disabled{opacity:.45;cursor:not-allowed}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:6px 16px 12px;max-width:640px;margin:auto}
+.stat{background:#181c28c4;border:1px solid #85745a4d;border-radius:12px;text-align:center;padding:10px 4px}
+.stat b{display:block;color:#f1d1a4;font-size:16px}.stat span{font-size:10px;color:#b1b0bb}
+footer{padding:8px 22px 24px;text-align:center;font-size:12px;color:#9da0b0;line-height:1.7}
+.error{color:#ffb49e!important}a{color:#f0c58c}
+@media(max-height:650px){.stage{height:48svh;min-height:260px}}@media(min-width:800px){h1{font-size:26px}.stage{height:620px}}
+</style></head>
+<body><main>
+<header><div><div class="brand">MONTRA • 3D ASSET LAB</div><h1>ดาบโค้งแฟนตาซี</h1><div class="sub">Crescent Blade — LOD2 • PBR Mobile 1K</div></div><div class="tag">3D LIVE VIEW</div></header>
+<div class="stage">
+<model-viewer id="sword" alt="โมเดลดาบโค้งแฟนตาซีแบบสามมิติ LOD2" camera-controls auto-rotate rotation-per-second="12deg" shadow-intensity="0.8" shadow-softness="0.7" exposure="1.3" environment-image="neutral" touch-action="pan-y" interaction-prompt="none" loading="eager"></model-viewer>
+<div class="loading" id="loading"><div class="spinner" id="spinner"></div><strong id="status">กำลังเตรียมโมเดล PBR</strong><div class="progress"><div id="fill" class="fill"></div></div><small id="message">โหลดข้อมูล 3D จาก GitHub Pages • ใช้ข้อมูล 1K ต้นฉบับ</small></div>
+</div>
+<div class="stats"><div class="stat"><b>1,530</b><span>TRIANGLES</span></div><div class="stat"><b>1K</b><span>PBR TEXTURES</span></div><div class="stat"><b>6.31 MB</b><span>GLB ORIGINAL</span></div></div>
+<div class="row"><button class="primary" id="rotate">⏸ หยุดหมุน</button><button id="reset">↺ ตั้งกล้องใหม่</button><button id="light">☀ แสงปกติ</button><button id="download" disabled>↓ ดาวน์โหลด GLB</button></div>
+<footer>ใช้หนึ่งนิ้วหมุนมุมกล้อง • ใช้สองนิ้วซูมเข้าออก<br>แสดงรูปทรง Low-Poly และวัสดุ PBR จากโมเดลที่สร้างสำหรับเกมมือถือ<br><span id="detail">Powered by GitHub Pages • MONTRA</span></footer>
+</main>
+<script>
+(()=>{'use strict';
+const N=22,model=document.getElementById('sword'),status=document.getElementById('status'),message=document.getElementById('message'),fill=document.getElementById('fill'),loading=document.getElementById('loading'),detail=document.getElementById('detail');let currentUrl=null;
+const files=Array(N),limit=5;let done=0,next=0;
+async function work(){
+ while(next<N){const i=next++;const name='chunks/part-'+String(i).padStart(2,'0')+'.b64';
+ const resp=await fetch(name,{cache:'force-cache'});if(!resp.ok)throw Error(name+' HTTP '+resp.status);
+ files[i]=(await resp.text()).trim();done++;fill.style.width=(done/N*80)+'%';status.textContent='กำลังโหลดโมเดล '+Math.round(done/N*100)+'%';}
+}
+async function load(){
+ try{await Promise.all(Array.from({length:limit},()=>work()));status.textContent='กำลังเตรียม GLB และ PBR';fill.style.width='86%';
+ const str=atob(files.join(''));const bytes=new Uint8Array(str.length);
+ for(let i=0;i<str.length;i++)bytes[i]=str.charCodeAt(i);
+ const blob=new Blob([bytes],{type:'model/gltf-binary'});currentUrl=URL.createObjectURL(blob);
+ document.getElementById('download').disabled=false;
+ model.addEventListener('load',()=>{loading.style.display='none';detail.textContent='GLB '+(blob.size/1e6).toFixed(2)+' MB • PBR 1K • WebGL';},{once:true});
+ model.addEventListener('error',e=>{message.className='error';message.textContent='โมเดลโหลดไม่ได้ในเบราว์เซอร์นี้ กรุณาเปิดด้วย Chrome เวอร์ชันล่าสุด';status.textContent='ไม่สามารถแสดงผล 3D';},{once:true});
+ status.textContent='กำลังแสดงโมเดล 3D';fill.style.width='100%';model.src=currentUrl;
+ }catch(err){console.error(err);status.textContent='โหลดโมเดลไม่สำเร็จ';message.className='error';message.textContent='ลองรีเฟรชหน้านี้หรือตรวจการเชื่อมต่ออินเทอร์เน็ต: '+String(err.message||err);}
+}
+document.getElementById('rotate').onclick=e=>{model.autoRotate=!model.autoRotate;e.currentTarget.textContent=model.autoRotate?'⏸ หยุดหมุน':'▶ หมุนอัตโนมัติ';};
+document.getElementById('reset').onclick=()=>{model.setAttribute('camera-orbit','auto auto auto');model.setAttribute('camera-target','auto auto auto');if(model.jumpCameraToGoal)model.jumpCameraToGoal();};
+document.getElementById('light').onclick=e=>{const bright=model.exposure<1.8;model.exposure=bright?2.1:1.3;e.currentTarget.textContent=bright?'☾ แสงสว่าง':'☀ แสงปกติ';};
+document.getElementById('download').onclick=()=>{if(!currentUrl)return;const a=document.createElement('a');a.href=currentUrl;a.download='Crescent_Blade_LOD2_Mobile1K_PBR.glb';a.click();};
+load();
+})();
+</script></body></html>
