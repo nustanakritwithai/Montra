@@ -31,6 +31,9 @@ jobs:
           cp deploy/combat/DashRules.ts combat-verify/src/rooms/DashRules.ts
           cp deploy/combat/dash-rules.test.ts combat-verify/src/rooms/dash-rules.test.ts
           cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
+          cp deploy/combat/WorldMaps.ts combat-verify/src/rooms/WorldMaps.ts
+          cp deploy/combat/WarpRules.ts combat-verify/src/rooms/WarpRules.ts
+          cp deploy/combat/world-warp-rules.test.ts combat-verify/src/rooms/world-warp-rules.test.ts
           cp deploy/combat/MonsterRRT.ts combat-verify/src/rooms/MonsterRRT.ts
           cp deploy/combat/CharacterStore.ts combat-verify/src/rooms/CharacterStore.ts
           cp deploy/combat/ItemRules.ts combat-verify/src/rooms/ItemRules.ts
@@ -45,6 +48,7 @@ jobs:
           cp deploy/combat/dash-integration.mjs combat-verify/dash-integration.mjs
           cp deploy/combat/flight-integration.mjs combat-verify/flight-integration.mjs
           cp deploy/combat/weapon-integration.mjs combat-verify/weapon-integration.mjs
+          cp deploy/combat/world-warp-integration.mjs combat-verify/world-warp-integration.mjs
           cp deploy/combat/character-persistence-integration.mjs combat-verify/character-persistence-integration.mjs
           cp deploy/combat/free-pk-integration.mjs combat-verify/free-pk-integration.mjs
           cp deploy/combat/summon-integration.mjs combat-verify/summon-integration.mjs
@@ -139,7 +143,7 @@ jobs:
           grep -q 'guestToken' main.js
           grep -q 'characterSlot' main.js
           grep -q 'slotChoice' main.js
-          grep -q '0.2.7' index.html
+          grep -q '0.2.8' index.html
           grep -q 'bagEquipped' main.js
           grep -q 'equip_weapon' main.js
           grep -q 'weaponsAvailable' deploy/combat/MyRoomState.ts
@@ -199,6 +203,7 @@ jobs:
           node --check deploy/combat/dash-integration.mjs
           node --check deploy/combat/flight-integration.mjs
           node --check deploy/combat/weapon-integration.mjs
+          node --check deploy/combat/world-warp-integration.mjs
           node --check deploy/combat/character-persistence-integration.mjs
           node --check deploy/combat/free-pk-integration.mjs
           node --check deploy/combat/summon-integration.mjs
@@ -206,14 +211,14 @@ jobs:
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts
+        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts
 
       - name: Two-player server-authoritative combat integration test
         shell: bash
         working-directory: combat-verify
         run: |
           export PORT=4108
-          export MONTRA_CHARACTER_DIR="$(mktemp -d)"
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-world-test-XXXXXX)"
           export MONTRA_S2_TEST_TOKEN="mt1_$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')"
           npx tsx src/index.ts > server.log 2>&1 &
           SERVER_PID=$!
@@ -222,6 +227,11 @@ jobs:
             if (echo > /dev/tcp/127.0.0.1/4108) 2>/dev/null; then break; fi
             sleep 0.25
           done
+          MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 60s node world-warp-integration.mjs || {
+            echo "=== WORLD WARP SERVER LOG ==="
+            cat server.log
+            exit 1
+          }
           MONTRA_TEST_URL=http://127.0.0.1:4108 timeout 45s node weapon-integration.mjs || {
             echo "=== WEAPON SERVER LOG ==="
             cat server.log

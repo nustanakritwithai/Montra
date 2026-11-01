@@ -430,3 +430,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .bag-slot.bag-equipped .bag-quantity { color:#8fffe9; font-size:14px; }
 .bag-slot.bag-weapon .bag-symbol { font-size:clamp(21px,6vw,30px); }
 #bagEquipped { max-width:61%; text-align:right; overflow-wrap:anywhere; }
+
+.warp-button { position:absolute; z-index:12; left:50%; bottom:calc(170px + env(safe-area-inset-bottom)); transform:translateX(-50%); min-height:48px; padding:10px 18px; border:1px solid #a8f4dc; border-radius:14px; color:#e9fff7; background:#164d45; box-shadow:0 0 18px #78eac677; font:inherit; font-weight:700; white-space:nowrap; }
+.warp-loading { position:absolute; inset:0; z-index:30; display:grid; place-items:center; color:#effff9; background:#0a1a1be8; font-size:1.2rem; }
+.warp-button[hidden], .warp-loading[hidden] { display:none; }

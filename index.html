@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — ต้นแบบ MMORPG 3D ไสยศาสตร์ไทยสำหรับมือถือ แบบแตะพื้นเพื่อเดิน" />
-  <title>MONTRA — หมู่บ้านอาคม | Alpha 0.2.7</title>
-  <link rel="stylesheet" href="./styles.css?v=0.2.7" />
+  <title>MONTRA — โลกอาคม | Alpha 0.2.8</title>
+  <link rel="stylesheet" href="./styles.css?v=0.2.8" />
 </head>
 <body>
   <main id="game" aria-label="MONTRA เกมต้นแบบสามมิติ">
@@ -20,7 +20,7 @@
       </section>
       <section class="location-area">
         <button id="mapShortcut" class="mini-map" aria-label="เปิดแผนที่" title="เปิดแผนที่"><canvas id="minimap" width="160" height="160"></canvas><span class="mini-north">N</span></button>
-        <div class="place-name">หมู่บ้านอาคม · ริมน้ำ</div>
+        <div class="place-name" id="worldMapName">หมู่บ้านอาคม</div>
       </section>
     </header>
 
@@ -39,6 +39,8 @@
       <small id="pkHint">แตะตัวผู้เล่นคนอื่นเพื่อโจมตี</small>
     </section>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <button id="warpButton" class="warp-button" type="button" hidden></button>
+    <div id="warpLoading" class="warp-loading" role="status" hidden>กำลังเดินทาง…</div>
     <div class="tap-tip">แตะพื้นเดิน · ปัดเหนือสกิลเพื่อพุ่ง · กดบินขึ้นระดับสูงแล้วแตะพื้นเพื่อเคลื่อนที่</div>
 
     <section class="controls" aria-label="ปุ่มควบคุมและพื้นที่ปัดพุ่งเหนือแถบสกิล">
@@ -64,10 +66,10 @@
       <div class="drawer-header"><h2 id="drawerTitle">แผนที่</h2><button id="drawerClose" class="close" aria-label="ปิด">✕</button></div>
       <div id="drawerBody" class="drawer-body"></div>
     </section>
-    <footer class="version">ALPHA V0.2.7 · ชุดอาวุธถาวร · 3 เซฟ</footer>
+    <footer class="version">ALPHA V0.2.8 · โลกอาคม · 3 เซฟ</footer>
   </main>
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
-  <script src="./main.js?v=0.2.7" defer></script>
+  <script src="./main.js?v=0.2.8" defer></script>
 </body>
 </html>

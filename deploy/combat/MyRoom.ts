@@ -29,6 +29,8 @@ import {
 } from "./MonsterRRT.js";
 import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.js";
 import type { CharacterSnapshot } from "./CharacterStore.js";
+import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint } from "./WorldMaps.js";
+import { checkWarp } from "./WarpRules.js";
 import {
   POTION_ID, POTION_COOLDOWN_MS, parseUseItemCommand,
   useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon,
@@ -63,6 +65,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastDashMs = new Map<string, number>();
   private attackTargets = new Map<string, string>();
   private lastAttackMs = new Map<string, number>();
+  private lastCombatMs = new Map<string, number>();
+  private lastWarpMs = new Map<string, number>();
+  private pendingWarps = new Set<string>();
   private playerRespawnAt = new Map<string, number>();
   private playerSpawn = new Map<string, Vec2>();
   private gates = new Map<string, Gates>();
@@ -93,13 +98,87 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private climbs = new Map<string, WorldPoint>();
   private flightTransitions = new Map<string, { targetY: number; landing: boolean }>();
 
+  private sameCombatMap(ownerId: string, targetId: string): boolean {
+    const owner = this.state.players.get(ownerId);
+    if (!owner || this.pendingWarps.has(ownerId) || this.pendingWarps.has(targetId)) return false;
+    if (targetId === RULES.monsterId) return owner.mapId === DEFAULT_MAP_ID;
+    const target = this.state.players.get(targetId);
+    return Boolean(target && target.mapId === owner.mapId);
+  }
+
+  private recordCombat(ownerId: string, targetId: string): void {
+    this.lastCombatMs.set(ownerId, this.simulatedMs);
+    if (targetId !== RULES.monsterId) this.lastCombatMs.set(targetId, this.simulatedMs);
+  }
+
   messages = {
+    warp: (client: Client, message: unknown) => {
+      const id = client.sessionId;
+      const player = this.state.players.get(id);
+      if (!player || !this.persistentCharacters.has(id)) return this.reject(client, "character_not_persistent");
+      if (this.pendingItemUses.has(id) || this.pendingWarps.has(id)) return this.reject(client, "character_busy");
+      const engaged = this.attackTargets.has(id) || this.state.monster.targetId === id ||
+        [...this.attackTargets.values()].includes(id);
+      const result = checkWarp(message, {
+        mapId: player.mapId, position: player, alive: player.alive,
+        flying: player.flying, climbing: this.climbs.has(id),
+        dashing: this.activeDashes.has(id), changingHeight: this.flightTransitions.has(id),
+        lastCombatMs: engaged ? this.simulatedMs : (this.lastCombatMs.get(id) ?? -Infinity),
+        lastWarpMs: this.lastWarpMs.get(id) ?? -Infinity, nowMs: this.simulatedMs,
+      });
+      if ("reason" in result) return this.reject(client, result.reason);
+      const snapshot = this.captureCharacterSnapshot(id);
+      if (!snapshot) return this.reject(client, "character_not_persistent");
+      const portal = result.portal;
+      const destination = { ...snapshot, mapId: portal.targetMapId, ...portal.targetSpawn,
+        updatedAt: new Date().toISOString() };
+      // Freeze the actor during disk I/O. All other save paths wait for this
+      // shared item/character mutation lock before taking their snapshots.
+      this.pendingWarps.add(id);
+      const task = (async () => {
+        try {
+          try {
+            await characterStore.save(destination);
+          } catch (error) {
+            console.error("MONTRA warp save failed:", id, error);
+            try { client.send("warp_failed", { reason: "disk_write_failed" }); } catch { /* disconnected */ }
+            return;
+          }
+          const current = this.state.players.get(id);
+          if (!current) return;
+          // Once the durable write succeeds, commit the destination before
+          // any optional notifications so a disconnected client cannot turn
+          // a committed warp into a misleading disk-failure result.
+          current.mapId = portal.targetMapId;
+          current.x = portal.targetSpawn.x; current.y = portal.targetSpawn.y; current.z = portal.targetSpawn.z;
+          current.targetId = ""; current.combatState = "idle"; current.flying = false;
+          this.destinations.delete(id);
+          this.attackTargets.delete(id);
+          for (const [otherId, targetId] of this.attackTargets) {
+            if (targetId === id) {
+              const other = this.state.players.get(otherId);
+              if (other) this.endAttack(otherId, other);
+            }
+          }
+          if (this.state.monster.targetId === id) this.state.monster.targetId = "";
+          this.despawnSummon(id, "warp");
+          this.playerSpawn.set(id, getSafeMapSpawn(portal.targetMapId));
+          this.lastWarpMs.set(id, this.simulatedMs);
+          try { client.send("warp_complete", { mapId: current.mapId }); } catch { /* disconnected */ }
+        } finally {
+          this.pendingWarps.delete(id);
+          this.pendingItemUses.delete(id);
+        }
+      })();
+      this.pendingItemUses.set(id, task);
+    },
     equip_weapon: (client: Client, message: unknown) => {
       const order = parseEquipWeaponCommand(message);
       if (!order) return this.reject(client, "invalid_weapon_equip");
       const id = client.sessionId;
       const player = this.state.players.get(id);
       if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (this.pendingWarps.has(id)) return this.reject(client, "character_busy");
       if (this.climbs.has(id) || this.flightTransitions.has(id) ||
           this.activeDashes.has(id)) return this.reject(client, "equipment_busy");
       const inventory = this.inventories.get(id);
@@ -150,6 +229,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("inventory_state", inventory);
     },
     use_item: (client: Client, message: unknown) => {
+      if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const slot = parseUseItemCommand(message);
       if (slot === null) return this.reject(client, "invalid_item_use");
       const id = client.sessionId;
@@ -202,6 +282,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.pendingItemUses.set(id, task);
     },
     fly: (client: Client, message: unknown) => {
+      if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_flight");
       const id = client.sessionId;
       const player = this.state.players.get(id);
@@ -214,9 +295,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       const landing = player.flying;
       // Do NOT allow a landing into the wall's solid body or off map.
-      const landingY = landing ? flightLandingHeight(player.x, player.z) : null;
+      const landingY = landing ? (player.mapId === DEFAULT_MAP_ID
+        ? flightLandingHeight(player.x, player.z) : 0) : null;
       if (landing && (landingY === null ||
-          !this.canOccupy(player.x, player.z, landingY))) {
+          !this.canOccupy(player.x, player.z, landingY, false, player.mapId))) {
         return this.reject(client, "landing_blocked");
       }
       if (!landing && !isOnGround(player.y) && !isOnPlatform(player.y)) {
@@ -236,6 +318,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }, { afterNextPatch: true });
     },
     dash: (client: Client, message: unknown) => {
+      if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const direction = parseDashCommand(message);
       if (!direction) return this.reject(client, "invalid_dash");
       const id = client.sessionId;
@@ -275,6 +358,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }).catch(error => console.error("MONTRA slot list failed", error));
     },
     rename_character: (client: Client, message: unknown) => {
+      if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const name = parseCharacterName(message);
       if (!name) return this.reject(client, "invalid_character_name");
       const id = client.sessionId;
@@ -289,6 +373,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       void this.saveCharacter(id);
     },
     move: (client: Client, message: unknown) => {
+      if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const destination = parseMoveCommand(message);
       if (!destination) return this.reject(client, "invalid_move");
       const player = this.state.players.get(client.sessionId);
@@ -311,6 +396,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
 
     attack: (client: Client, message: unknown) => {
+      if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const monsterOrder = parseAttackCommand(message);
       const pkOrder = monsterOrder ? null : parsePkTargetCommand(message);
       if (!monsterOrder && !pkOrder) return this.reject(client, "invalid_attack");
@@ -329,6 +415,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // same room is eligible for PK. No duel agreement is required.
       const targetId = monsterOrder ? RULES.monsterId : pkOrder!.targetId;
       if (targetId === attackerId) return this.reject(client, "self_attack");
+      if (!this.sameCombatMap(attackerId, targetId)) return this.reject(client, "target_unavailable");
       const target = monsterOrder
         ? (this.state.monster.alive ? this.state.monster : undefined)
         : this.state.players.get(targetId);
@@ -340,6 +427,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // Tap to attack: cancel manual travel, then follow the target each tick.
       this.destinations.delete(attackerId);
       this.attackTargets.set(attackerId, targetId);
+      this.lastCombatMs.set(attackerId, this.simulatedMs);
       attacker.targetId = targetId;
 
       const attackRange = monsterOrder ? RULES.playerAttackRange : RULES.pkAttackRange;
@@ -358,6 +446,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
 
     summon: (client: Client, message: unknown) => {
+      if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const id = client.sessionId;
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_summon");
       const owner = this.state.players.get(id);
@@ -384,6 +473,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
 
     unsummon: (client: Client, message: unknown) => {
+      if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const id = client.sessionId;
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_unsummon");
       if (!this.state.summons.has(id)) return this.reject(client, "no_summon");
@@ -396,11 +486,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // The client never writes Y. A validated ladder is the only route
     // between ground y=0 and the watchwall top y=4.
     climb: (client: Client, message: unknown) => {
+      if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const order = parseClimbRequest(message);
       if (!order) return this.reject(client, "invalid_climb");
       const id = client.sessionId;
       const player = this.state.players.get(id);
       if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (player.mapId !== DEFAULT_MAP_ID) return this.reject(client, "no_ladder_in_map");
       if (this.climbs.has(id)) return this.reject(client, "already_climbing");
       if (this.activeDashes.has(id)) return this.reject(client, "dashing");
       if (player.flying || this.flightTransitions.has(id)) return this.reject(client, "flying");
@@ -434,6 +526,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // One targeted magic projectile per valid click; server computes muzzle,
     // target body position, 3D range, line of sight, damage and cooldown.
     shoot: (client: Client, message: unknown) => {
+      if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const monsterOrder = parseAttackCommand(message);
       const pkOrder = monsterOrder ? null : parsePkTargetCommand(message);
       if (!monsterOrder && !pkOrder) return this.reject(client, "invalid_shoot");
@@ -449,6 +542,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       const targetId = monsterOrder ? RULES.monsterId : pkOrder!.targetId;
       if (targetId === id) return this.reject(client, "self_attack");
+      if (!this.sameCombatMap(id, targetId)) return this.reject(client, "target_unavailable");
       const target = monsterOrder
         ? this.state.monster
         : this.state.players.get(targetId);
@@ -459,7 +553,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (distance3d(from,to) > FORT.rangedRange) {
         return this.reject(client, "shot_out_of_range");
       }
-      if (wallBlocksShot(from,to)) {
+      if (shooter.mapId === DEFAULT_MAP_ID && wallBlocksShot(from,to)) {
         return this.reject(client, "shot_blocked");
       }
 
@@ -468,6 +562,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return this.reject(client, "shot_cooldown");
       }
       this.lastAttackMs.set(id,this.simulatedMs);
+      this.recordCombat(id, targetId);
       shooter.facing = facingTo(target.x-shooter.x, target.z-shooter.z);
       const rangedDamage = FORT.rangedDamage +
         weaponBonuses(this.inventories.get(id)).ranged;
@@ -529,6 +624,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     for (const targetId of candidates) {
       if (targetId === ownerId) continue;
+      if (!this.sameCombatMap(ownerId, targetId)) continue;
       const target = targetId === RULES.monsterId
         ? this.state.monster : this.state.players.get(targetId);
       if (!target || !target.alive) continue;
@@ -609,6 +705,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!owner || !owner.alive || !sameGuardian) return;
 
     const isMonster = targetId === RULES.monsterId;
+    if (!this.sameCombatMap(ownerId, targetId)) return;
     const target = isMonster
       ? this.state.monster : this.state.players.get(targetId);
     if (!target || !target.alive || targetId === ownerId) return;
@@ -618,6 +715,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const last = this.lastSummonAttackAt.get(ownerId) ?? -Infinity;
     if (this.simulatedMs - last < RULES.summonAttackCooldownMs) return;
     this.lastSummonAttackAt.set(ownerId, this.simulatedMs);
+    this.recordCombat(ownerId, targetId);
     guardian.hitSeq += 1;
 
     if (isMonster) {
@@ -755,7 +853,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
-  private canOccupy(x: number, z: number, feetY: number, flying = false): boolean {
+  private canOccupy(x: number, z: number, feetY: number, flying = false, mapId = DEFAULT_MAP_ID): boolean {
+    if (mapId !== DEFAULT_MAP_ID) {
+      const map = getWorldMap(mapId);
+      return Boolean(map && (isOnGround(feetY) || (flying && isFlightAltitude(feetY))) &&
+        isSafeWorldPoint(map, { x, y: feetY, z }));
+    }
     if (!Number.isFinite(x) || !Number.isFinite(z) ||
         Math.abs(x) > RULES.mapLimit || Math.abs(z) > RULES.mapLimit) return false;
     if (flying && isFlightAltitude(feetY)) return true; // 6m flight lane
@@ -767,7 +870,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private updatePlayerMovement(dt: number) {
     const monster = this.state.monster;
     for (const [sessionId, player] of this.state.players) {
-      if (!player.alive || this.climbs.has(sessionId) || this.flightTransitions.has(sessionId)) {
+      if (!player.alive || this.pendingWarps.has(sessionId) || this.climbs.has(sessionId) || this.flightTransitions.has(sessionId)) {
         this.activeDashes.delete(sessionId);
         continue;
       }
@@ -777,7 +880,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const move = advanceDash(
           player, dash,
           Math.min(dash.remaining, RULES.dashSpeed * dt),
-          (x, z) => this.canOccupy(x, z, player.y, player.flying),
+          (x, z) => this.canOccupy(x, z, player.y, player.flying, player.mapId),
         );
         player.x = move.x;
         player.z = move.z;
@@ -802,7 +905,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           ? (monster.alive ? monster : undefined)
           : this.state.players.get(targetId);
 
-        if (!target || !target.alive || targetId === sessionId) {
+        if (!target || !target.alive || targetId === sessionId || !this.sameCombatMap(sessionId, targetId)) {
           this.endAttack(sessionId, player);
           continue;
         }
@@ -832,7 +935,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         };
         const next = stepTowards(player, approach,
           (player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed) * dt);
-        if (this.canOccupy(next.x,next.z,player.y,player.flying)) {
+        if (this.canOccupy(next.x,next.z,player.y,player.flying,player.mapId)) {
           player.x=next.x; player.z=next.z;
           player.combatState = "approaching";
         } else {
@@ -852,14 +955,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const next = stepTowards(player, target,
         (player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed) * dt);
       if (next.moved) player.facing = facingTo(dx, dz);
-      if (this.canOccupy(next.x,next.z,player.y,player.flying)) {
+      if (this.canOccupy(next.x,next.z,player.y,player.flying,player.mapId)) {
         player.x=next.x;
         player.z=next.z;
       } else {
         // Slide on the wall face if a legal axis exists; never tunnel through
         // solid geometry via client destinations or elevated edge tapping.
-        if (this.canOccupy(next.x,player.z,player.y,player.flying)) player.x=next.x;
-        else if (this.canOccupy(player.x,next.z,player.y,player.flying)) player.z=next.z;
+        if (this.canOccupy(next.x,player.z,player.y,player.flying,player.mapId)) player.x=next.x;
+        else if (this.canOccupy(player.x,next.z,player.y,player.flying,player.mapId)) player.z=next.z;
         else {
           this.destinations.delete(sessionId);
           player.combatState = "idle";
@@ -885,17 +988,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const target = isMonster
         ? (monster.alive ? monster : undefined)
         : this.state.players.get(targetId);
-      if (!target || !target.alive || targetId === attackerId) {
+      if (!target || !target.alive || targetId === attackerId || !this.sameCombatMap(attackerId, targetId)) {
         this.endAttack(attackerId, attacker);
         continue;
       }
 
       const range = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
       if (distance3d(attacker,target) > range + 0.00001 ||
-          wallBlocksShot(
+          (attacker.mapId === DEFAULT_MAP_ID && wallBlocksShot(
             {x:attacker.x,y:attacker.y+1.1,z:attacker.z},
             {x:target.x,y:target.y+1.0,z:target.z}
-          )) continue;
+          ))) continue;
       attacker.facing = facingTo(target.x - attacker.x, target.z - attacker.z);
       attacker.combatState = "attacking";
 
@@ -905,6 +1008,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const last = this.lastAttackMs.get(attackerId) ?? -Infinity;
       if (this.simulatedMs - last < cooldown) continue;
       this.lastAttackMs.set(attackerId, this.simulatedMs);
+      this.recordCombat(attackerId, targetId);
 
       const meleeBonus = weaponBonuses(this.inventories.get(attackerId)).melee;
       if (isMonster) {
@@ -1014,7 +1118,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Keep an existing target if it is alive and remains in the combat area.
     let targetId = monster.targetId;
     let target = targetId ? this.state.players.get(targetId) : undefined;
-    if (!target || !target.alive || !isOnGround(target.y) ||
+    if (!target || !target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID || !isOnGround(target.y) ||
         planarDistance(monster, target) > RULES.monsterGiveUpRadius) {
       target = undefined;
       targetId = "";
@@ -1024,7 +1128,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!target) {
       let nearest: number = RULES.monsterAggroRadius;
       for (const [id, player] of this.state.players) {
-        if (!player.alive || !isOnGround(player.y)) continue;
+        if (!player.alive || this.pendingWarps.has(id) || player.mapId !== DEFAULT_MAP_ID || !isOnGround(player.y)) continue;
         const distance = planarDistance(monster, player);
         if (distance < nearest) {
           nearest = distance;
@@ -1081,10 +1185,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private monsterAttack(targetId: string, target: Player) {
-    if (!target.alive) return;
+    if (!target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID) return;
     if (distance3d(this.state.monster, target) > RULES.monsterAttackRange) return;
     if (this.simulatedMs - this.lastMonsterAttackMs < RULES.monsterAttackCooldownMs) return;
     this.lastMonsterAttackMs = this.simulatedMs;
+    this.lastCombatMs.set(targetId, this.simulatedMs);
 
     target.hp = Math.max(0, target.hp - RULES.monsterAttackDamage);
     target.hitSeq += 1;
@@ -1160,6 +1265,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       version: 1, id: characterId, name: player.characterName,
       level: player.level, experience: player.experience,
       pkKills: player.pkKills, pkDeaths: player.pkDeaths,
+      mapId: player.mapId,
       x: player.x,
       // Keep stable flight altitude when a transition is mid-flight.
       y: player.flying ? FLIGHT.altitude : player.y,
@@ -1201,14 +1307,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     try {
       const saved = token ? (await characterStore.loadOrCreate(token, spawn, slot)).character : null;
+      const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
+      const map = getWorldMap(mapId);
+      if (!map) throw new Error("unknown_character_map");
       // A saved location is restored only if the current server geometry allows it.
       const restoreFlight = Boolean(saved && isFlightAltitude(saved.y));
       const validPosition = saved && this.canOccupy(
-        saved.x, saved.z, saved.y, restoreFlight);
+        saved.x, saved.z, saved.y, restoreFlight, mapId);
+      const safeSpawn = mapId === DEFAULT_MAP_ID ? { ...spawn, y: 0 } : getSafeMapSpawn(mapId);
       const player = new Player({
-        x: validPosition ? saved.x : spawn.x,
-        y: validPosition ? saved.y : 0,
-        z: validPosition ? saved.z : spawn.z,
+        x: validPosition ? saved.x : safeSpawn.x,
+        y: validPosition ? saved.y : safeSpawn.y,
+        z: validPosition ? saved.z : safeSpawn.z,
         facing: 0,
         hp: saved && saved.hp > 0 ? Math.min(saved.hp, RULES.playerMaxHp) : RULES.playerMaxHp,
         maxHp: RULES.playerMaxHp,
@@ -1220,6 +1330,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         persistent: Boolean(saved), characterSlot: slot,
         flying: Boolean(validPosition && restoreFlight),
         equippedWeaponId: equippedWeaponId(saved?.inventory) ?? "",
+        mapId,
       });
 
       this.state.players.set(client.sessionId, player);
@@ -1231,7 +1342,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.guestSlotIds.set(client.sessionId,
           CHARACTER_SLOTS.map(candidate => characterIdFromToken(token, candidate)));
       }
-      this.playerSpawn.set(client.sessionId, spawn);
+      this.playerSpawn.set(client.sessionId, safeSpawn);
       this.gates.set(client.sessionId, {
         move: new CommandBucket(RULES.moveBurst, RULES.moveRatePerSecond, this.simulatedMs),
         attack: new CommandBucket(RULES.attackBurst, RULES.attackRatePerSecond, this.simulatedMs),
@@ -1266,6 +1377,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.destinations.delete(id);
     this.attackTargets.delete(id);
     this.lastAttackMs.delete(id);
+    this.lastCombatMs.delete(id);
+    this.lastWarpMs.delete(id);
     this.playerRespawnAt.delete(id);
     this.playerSpawn.delete(id);
     this.gates.delete(id);
@@ -1291,6 +1404,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.lastItemUseMs.delete(id);
       this.lastInventoryReadMs.delete(id);
       this.lastWeaponEquipMs.delete(id);
+      this.playerSpawn.delete(id);
       this.pendingCharacterLeaves.delete(id);
       this.persistentCharacters.delete(id);
       this.guestSlotIds.delete(id);
@@ -1323,6 +1437,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.destinations.clear();
     this.attackTargets.clear();
     this.lastAttackMs.clear();
+    this.lastCombatMs.clear();
+    this.lastWarpMs.clear();
+    this.pendingWarps.clear();
     this.playerRespawnAt.clear();
     this.playerSpawn.clear();
     this.gates.clear();

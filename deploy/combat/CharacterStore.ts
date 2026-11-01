@@ -11,6 +11,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeStarterInventory, grantStarterWeapons, validateInventory, type InventorySnapshot } from "./ItemRules.js";
+import { DEFAULT_MAP_ID, getWorldMap } from "./WorldMaps.js";
 
 export const CHARACTER_SAVE_INTERVAL_MS = 15_000;
 export const CHARACTER_SLOTS = [1, 2, 3] as const;
@@ -29,6 +30,8 @@ export type CharacterSnapshot = {
   y: number;
   z: number;
   hp: number;
+  /** Missing only in pre-world-map saves; they belong to the village. */
+  mapId?: string;
   /** Undefined only when loading a legacy S2/three-slot snapshot for migration. */
   inventory?: InventorySnapshot;
   updatedAt: string;
@@ -102,7 +105,11 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
     throw new Error("character_record_invalid");
   }
   if (value.inventory !== undefined) validateInventory(value.inventory);
-  return value as CharacterSnapshot;
+  if (value.mapId !== undefined &&
+      (typeof value.mapId !== "string" || !getWorldMap(value.mapId))) {
+    throw new Error("unknown_character_map");
+  }
+  return { ...(value as CharacterSnapshot), mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID };
 }
 
 export class CharacterStore {
@@ -162,7 +169,7 @@ export class CharacterStore {
     }
     const fresh: CharacterSnapshot = {
       version: 1, id, name: "นักเดินทาง", level: 1, experience: 0,
-      pkKills: 0, pkDeaths: 0, x: spawn.x, y: 0, z: spawn.z, hp: 100,
+      pkKills: 0, pkDeaths: 0, x: spawn.x, y: 0, z: spawn.z, hp: 100, mapId: DEFAULT_MAP_ID,
       inventory: makeStarterInventory(),
       updatedAt: new Date().toISOString(),
     };

@@ -291,3 +291,25 @@ test("S5: all three character slots independently migrate an empty potion stock"
     }
   });
 });
+
+test("world maps: legacy saves default to village, map IDs persist per slot and invalid IDs fail closed", async () => {
+  await withTempStore(async (store, dir) => {
+    const first = (await store.loadOrCreate(tokenA, spawn, 1)).character;
+    const second = (await store.loadOrCreate(tokenA, spawn, 2)).character;
+    const third = (await store.loadOrCreate(tokenA, spawn, 3)).character;
+    const file = path.join(dir, first.id + ".json");
+    const legacy = { ...first };
+    delete legacy.mapId;
+    await writeFile(file, JSON.stringify(legacy));
+    assert.equal((await store.loadOrCreate(tokenA, spawn, 1)).character.mapId, "ritual_village");
+    await store.save({ ...second, mapId: "forbidden_forest", x: 0, y: 0, z: 12 });
+    const restarted = new CharacterStore(dir);
+    assert.equal((await restarted.loadOrCreate(tokenA, spawn, 2)).character.mapId, "forbidden_forest");
+    assert.equal((await restarted.loadOrCreate(tokenA, spawn, 3)).character.mapId, "ritual_village");
+    const corrupt = JSON.stringify({ ...third, mapId: "nonexistent" });
+    const thirdFile = path.join(dir, third.id + ".json");
+    await writeFile(thirdFile, corrupt);
+    await assert.rejects(restarted.loadOrCreate(tokenA, spawn, 3), /unknown_character_map/);
+    assert.equal(await readFile(thirdFile, "utf8"), corrupt);
+  });
+});
