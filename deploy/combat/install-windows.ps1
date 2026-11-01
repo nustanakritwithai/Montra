@@ -19,6 +19,14 @@ $packageFile = Join-Path $base "package.json"
 $roomFile = Join-Path $base "src\rooms\MyRoom.ts"
 $schemaFile = Join-Path $base "src\rooms\schema\MyRoomState.ts"
 
+# SQLite backups must be taken while MONTRA is stopped. This installer stages
+# code only; it never starts or stops an existing process on the user's behalf.
+if (Get-NetTCPConnection -LocalPort 4108 -State Listen -ErrorAction SilentlyContinue) {
+  throw "Stop MONTRA on port 4108 before backing up and staging the economy build. No files were modified."
+}
+& node.exe --no-warnings -e "require('node:sqlite')" 2>$null
+if ($LASTEXITCODE -ne 0) { throw "Node.js with node:sqlite support is required. No files were modified." }
+
 if (!(Test-Path -LiteralPath $packageFile -PathType Leaf) -or
     !(Test-Path -LiteralPath $roomFile -PathType Leaf) -or
     !(Test-Path -LiteralPath $schemaFile -PathType Leaf) -or
@@ -42,6 +50,8 @@ $files = @(
   @{ Name = "WarpRules.ts"; Target = "src\rooms\WarpRules.ts"; Check = "checkWarp" },
   @{ Name = "ChatRules.ts"; Target = "src\rooms\ChatRules.ts"; Check = "parseChatMessage" },
   @{ Name = "Progression.ts"; Target = "src\rooms\Progression.ts"; Check = "calculateStats" },
+  @{ Name = "EconomyStore.ts"; Target = "src\rooms\EconomyStore.ts"; Check = "class EconomyStore" },
+  @{ Name = "EconomyRules.ts"; Target = "src\rooms\EconomyRules.ts"; Check = "parseMarketCreate" },
   @{ Name = "MonsterRRT.ts"; Target = "src\rooms\MonsterRRT.ts"; Check = "class MonsterRRTNavigator" },
   @{ Name = "CharacterStore.ts"; Target = "src\rooms\CharacterStore.ts"; Check = "inventory_record_missing" },
   @{ Name = "ItemRules.ts"; Target = "src\rooms\ItemRules.ts"; Check = "grantStarterWeapons" },
@@ -59,6 +69,7 @@ $files = @(
   @{ Name = "world-warp-integration.mjs"; Target = "montra-world-warp-integration.mjs"; Check = "montra-world-test-" },
   @{ Name = "chat-integration.mjs"; Target = "montra-chat-integration.mjs"; Check = "montra-chat-test-" },
   @{ Name = "progression-integration.mjs"; Target = "montra-progression-integration.mjs"; Check = "montra-progression-test-" }
+  @{ Name = "economy-integration.mjs"; Target = "montra-economy-integration.mjs"; Check = "montra-economy-test-" }
 )
 
 New-Item -ItemType Directory -Path $download -Force | Out-Null

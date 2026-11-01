@@ -1,4 +1,5 @@
 import { Room, type Client, type CloseCode } from "colyseus";
+import { randomUUID } from "node:crypto";
 import {
   CHARACTER_SAVE_INTERVAL_MS, characterStore, characterIdFromToken,
   claimCharacter, releaseCharacter, getGuestToken, parseCharacterName,
@@ -32,6 +33,8 @@ import type { CharacterSnapshot } from "./CharacterStore.js";
 import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint } from "./WorldMaps.js";
 import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
+import { parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
+import type { TradeOffer } from "./EconomyStore.js";
 import { PROGRESSION, addExperience, calculateDamage, calculateStats, emptyAllocations,
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
@@ -43,10 +46,11 @@ import {
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
   climb: CommandBucket; dash: CommandBucket; flight: CommandBucket;
-  chat: CommandBucket;
+  chat: CommandBucket; economy: CommandBucket;
 };
 
 type ActiveDash = DashDirection & { remaining: number };
+type TradeSession = { id:string; a:string; b:string; expires:number; offers:Record<string, TradeOffer>; items:Record<string,{itemId:string;quantity:number}|null>; fingerprints:Record<string,string>; confirmed:Set<string> };
 
 /**
  * MONTRA S1: one 20-Hz authoritative simulation per room.
@@ -92,6 +96,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastItemUseMs = new Map<string, number>();
   private lastInventoryReadMs = new Map<string, number>();
   private lastWeaponEquipMs = new Map<string, number>();
+  private trades = new Map<string, TradeSession>();
 
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
@@ -158,7 +163,115 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.pendingRewards.set(id, task);
   }
 
+  private economyId(client: Client): string | null {
+    const id=client.sessionId, player=this.state.players.get(id), characterId=this.persistentCharacters.get(id);
+    if (!characterStore.economyEnabled || !player || !player.alive || !characterId) { this.reject(client,"economy_unavailable"); return null; }
+    if (this.pendingWarps.has(id) || this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id)) { this.reject(client,"character_busy"); return null; }
+    return characterId;
+  }
+  private economyAction(client: Client, action: (id:string)=>void): void {
+    if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
+    const id=this.economyId(client); if (!id) return;
+    try { action(id); } catch (error) {
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict"];
+      const reason=error instanceof Error && allowed.includes(error.message) ? error.message : "economy_failed";
+      if (reason==="economy_failed") console.error("MONTRA economy failed",error);
+      client.send("economy_error",{reason});
+    }
+  }
+  private syncEconomy(client: Client, id: string): void {
+    const account=characterStore.economy.getAccount(id), player=this.state.players.get(client.sessionId);
+    if (!player) return;
+    this.inventories.set(client.sessionId,account.inventory);
+    player.equippedWeaponId=equippedWeaponId(account.inventory) ?? "";
+    try { client.send("inventory_state",account.inventory); client.send("economy_state",{gold:account.gold}); } catch { /* disconnect does not roll back committed assets */ }
+  }
+  private tradeFor(client: Client, tradeId:string): TradeSession | null {
+    const trade=this.trades.get(tradeId);
+    if (!trade || (trade.a!==client.sessionId && trade.b!==client.sessionId)) { this.reject(client,"trade_unavailable"); return null; }
+    if (this.simulatedMs >= trade.expires) { this.trades.delete(tradeId); this.reject(client,"trade_expired"); return null; }
+    return trade;
+  }
+  private tradeSnapshot(id:string, offer:TradeOffer): string {
+    const bag=this.inventories.get(id);
+    if (!bag) throw new Error("invalid_trade");
+    if (offer.slot===null) return "no_item";
+    const stack=bag.slots[offer.slot];
+    if (!stack || stack.quantity<offer.amount || bag.equippedWeaponSlot===offer.slot) throw new Error("item_unavailable");
+    return JSON.stringify({stack, equipped:bag.equippedWeaponSlot});
+  }
+  private notifyTrade(trade:TradeSession, event:string): void {
+    for (const id of [trade.a,trade.b]) {
+      const client=this.clients.find(c=>c.sessionId===id); if (!client) continue;
+      const other=id===trade.a?trade.b:trade.a;
+      const describe=(who:string)=>trade.offers[who] ? {...trade.offers[who],item:trade.items[who]} : null;
+      try { client.send(event,{tradeId:trade.id,otherId:other,otherName:this.state.players.get(other)?.characterName ?? "",own:describe(id),other:describe(other),ownConfirmed:trade.confirmed.has(id),otherConfirmed:trade.confirmed.has(other)}); } catch { /* disconnected */ }
+    }
+  }
+
   messages = {
+    get_economy: (client:Client, message:unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>this.syncEconomy(client,id));
+    },
+    market_list: (client:Client, message:unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>client.send("market_state",{listings:characterStore.economy.list(id).map(x=>({id:x.id,seller:x.seller.slice(0,12),item:x.item,price:x.price}))}));
+    },
+    market_create: (client:Client, message:unknown) => {
+      const order=parseMarketCreate(message); if (!order) return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{const result=characterStore.economy.listItem(id,order.requestId,order.slot,order.amount,order.price); this.syncEconomy(client,id); client.send("market_result",{action:"create",...result,requestId:order.requestId});});
+    },
+    market_buy: (client:Client, message:unknown) => {
+      const order=parseMarketAction(message); if (!order) return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{const result=characterStore.economy.buy(id,order.requestId,order.listingId); this.syncEconomy(client,id); client.send("market_result",{action:"buy",...result,requestId:order.requestId});});
+    },
+    market_cancel: (client:Client, message:unknown) => {
+      const order=parseMarketAction(message); if (!order) return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{const result=characterStore.economy.cancel(id,order.requestId,order.listingId); this.syncEconomy(client,id); client.send("market_result",{action:"cancel",...result,requestId:order.requestId});});
+    },
+    trade_request: (client:Client, message:unknown) => {
+      const order=parseTradeRequest(message); if (!order) return this.reject(client,"invalid_trade");
+      this.economyAction(client,()=>{
+        const id=client.sessionId, target=this.clients.find(c=>c.sessionId===order.targetId), a=this.state.players.get(id), b=this.state.players.get(order.targetId);
+        for (const [key,trade] of this.trades) if (this.simulatedMs>=trade.expires) this.trades.delete(key);
+        if (!target || !a || !b || id===order.targetId || !this.economyId(target) || a.mapId!==b.mapId || distance3d(a,b)>5 || [...this.trades.values()].some(t=>[t.a,t.b].includes(id)||[t.a,t.b].includes(order.targetId))) throw new Error("invalid_trade");
+        const trade:TradeSession={id:randomUUID(),a:id,b:order.targetId,expires:this.simulatedMs+60_000,offers:{},items:{},fingerprints:{},confirmed:new Set()};
+        this.trades.set(trade.id,trade); this.notifyTrade(trade,"trade_update");
+      });
+    },
+    trade_offer: (client:Client, message:unknown) => {
+      const order=parseTradeOffer(message); if (!order) return this.reject(client,"invalid_trade");
+      this.economyAction(client,id=>{
+        const trade=this.tradeFor(client,order.tradeId); if (!trade) return;
+        const offer:TradeOffer={slot:order.slot,amount:order.amount,gold:order.gold};
+        if (characterStore.economy.getAccount(id).gold<offer.gold) throw new Error("insufficient_gold");
+        trade.fingerprints[client.sessionId]=this.tradeSnapshot(client.sessionId,offer);
+        const stack=offer.slot===null ? null : this.inventories.get(client.sessionId)?.slots[offer.slot];
+        trade.items[client.sessionId]=stack ? {itemId:stack.itemId,quantity:offer.amount} : null;
+        trade.offers[client.sessionId]=offer; trade.confirmed.clear(); this.notifyTrade(trade,"trade_update");
+      });
+    },
+    trade_confirm: (client:Client, message:unknown) => {
+      const order=parseTradeId(message); if (!order) return this.reject(client,"invalid_trade");
+      this.economyAction(client,()=>{
+        const trade=this.tradeFor(client,order.tradeId); if (!trade) return;
+        const aClient=this.clients.find(c=>c.sessionId===trade.a), bClient=this.clients.find(c=>c.sessionId===trade.b);
+        const a=this.state.players.get(trade.a), b=this.state.players.get(trade.b);
+        if (!aClient || !bClient || !a || !b || !trade.offers[trade.a] || !trade.offers[trade.b] || a.mapId!==b.mapId || distance3d(a,b)>5) throw new Error("invalid_trade");
+        const aId=this.economyId(aClient), bId=this.economyId(bClient);
+        if (!aId || !bId) throw new Error("invalid_trade");
+        if ([trade.a,trade.b].some(id=>this.tradeSnapshot(id,trade.offers[id])!==trade.fingerprints[id])) { trade.confirmed.clear(); throw new Error("invalid_trade"); }
+        trade.confirmed.add(client.sessionId);
+        if (trade.confirmed.size<2) { this.notifyTrade(trade,"trade_update"); return; }
+        characterStore.economy.trade(aId,bId,trade.id,trade.offers[trade.a],trade.offers[trade.b]);
+        this.trades.delete(trade.id); this.syncEconomy(aClient,aId); this.syncEconomy(bClient,bId); this.notifyTrade(trade,"trade_complete");
+      });
+    },
+    trade_cancel: (client:Client, message:unknown) => {
+      const order=parseTradeId(message); if (!order) return this.reject(client,"invalid_trade");
+      this.economyAction(client,()=>{const trade=this.tradeFor(client,order.tradeId); if (trade) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }});
+    },
     chat: (client: Client, message: unknown) => {
       const command = parseChatMessage(message);
       if (command === null) return this.reject(client, "invalid_chat");
@@ -835,6 +948,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   onCreate() {
+    this.state.economyAvailable = characterStore.economyEnabled;
     this.state.monster.id = RULES.monsterId;
     this.state.monster.x = RULES.monsterSpawnX;
     this.state.monster.z = RULES.monsterSpawnZ;
@@ -1453,6 +1567,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           RULES.dashCommandRatePerSecond, this.simulatedMs),
         flight: new CommandBucket(3, 2, this.simulatedMs),
         chat: new CommandBucket(3, 0.5, this.simulatedMs),
+        economy: new CommandBucket(8, 3, this.simulatedMs),
       });
       console.log("MONTRA 3-slot join:", client.sessionId, "room", this.roomId,
         saved ? "persistent" : "transient", "slot", slot);
@@ -1464,6 +1579,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    for (const trade of this.trades.values()) if (trade.a===id || trade.b===id) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }
     const accountId = this.activeGuestAccounts.get(id);
     // Capture the snapshot BEFORE removing the player from server Schema.
     const saving = this.saveCharacter(id);
@@ -1518,6 +1634,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   async onDispose() {
+    this.trades.clear();
     const pending = [...this.persistentCharacters.keys()].map(async id => {
       try { await (this.pendingCharacterLeaves.get(id) ?? this.saveCharacter(id)); }
       finally {
