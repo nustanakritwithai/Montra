@@ -24,6 +24,7 @@ export const Player = schema({
   experience: t.number().default(0),
   persistent: t.boolean().default(false),
   characterSlot: t.number().default(1), // append only: preserve all S2 Schema indexes
+  flying: t.boolean().default(false), // appended: active in the server-owned 6m air layer
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
@@ -89,6 +90,7 @@ export const MyRoomState = schema({
   summons: t.map(SummonedGuardian),
   fortification: Fortification,
   dashAvailable: t.boolean().default(true), // append: live server dash capability
+  flightAvailable: t.boolean().default(true), // append: server supports fly/land commands
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

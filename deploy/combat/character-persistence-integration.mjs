@@ -62,6 +62,13 @@ try {
       room.send("move", { x: item.x, z: item.z });
       await until(() => Math.hypot(own(room)?.x - item.x, own(room)?.z - item.z) < 0.16,
         6500, "move in slot " + item.slot);
+      if (item.slot === 3) {
+        // Persist flight within the existing v1 snapshot's Y field; no new
+        // account identity or file-migration contract is necessary.
+        room.send("fly", {});
+        await until(() => own(room)?.flying === true &&
+          Math.abs(own(room)?.y - 6) < .02, 3600, "flight save for slot 3");
+      }
       await close(room);
       room = null;
     }
@@ -79,6 +86,10 @@ try {
         "wrong saved position in slot " + item.slot);
       assert.equal(me.level, 1);
       assert.equal(me.experience, 0);
+      assert.equal(me.flying, item.slot === 3,
+        "saved flying state restored from Y only for slot 3");
+      assert.ok(Math.abs(me.y - (item.slot === 3 ? 6 : 0)) < .02,
+        "wrong persistent altitude for slot " + item.slot);
       assert.equal(me.pkKills, 0);
       savedIds.add(me.characterId);
 

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   FORT, type WorldPoint, distance3d, isOnGround, isOnPlatform, isOnTop, touchesWallBody,
   parseClimbRequest, progressClimb, wallBlocksShot,
+  FLIGHT, isFlightAltitude, flightLandingHeight, progressFlightHeight,
 } from "./HeightRules.js";
 
 test("Only ladder up/down commands with exact structure ID are valid", () => {
@@ -56,4 +57,41 @@ test("Vertical difference contributes to real combat range", () => {
   const ground={x:1,y:0,z:3}, top={x:1,y:FORT.height,z:3};
   assert.equal(distance3d(ground,top),FORT.height);
   assert.ok(distance3d(ground,top)>2.8);
+});
+
+test("Flight 6m air layer is distinct from ground 0m and wall 4m", () => {
+  assert.equal(FLIGHT.altitude, FORT.height+2);
+  assert.equal(isFlightAltitude(FLIGHT.altitude),true);
+  assert.equal(isFlightAltitude(0),false);
+  assert.equal(isFlightAltitude(FORT.height),false);
+  assert.equal(isFlightAltitude(5.7),false);
+  assert.equal(isFlightAltitude(Number.POSITIVE_INFINITY),false);
+  assert.equal(flightLandingHeight(FORT.x,FORT.z),FORT.height);
+  assert.equal(flightLandingHeight(0,0),0);
+  // Inside wall collider but beyond padded walkable top: do NOT drop into stone.
+  assert.equal(flightLandingHeight(FORT.x + .60,FORT.z),null);
+  assert.equal(flightLandingHeight(NaN,0),null);
+});
+
+test("Flight ascent and descent progress at fixed safe server speed", () => {
+  let y=0;
+  const samples=[];
+  for(let i=0;i<100&&y<FLIGHT.altitude;i++){
+    const p=progressFlightHeight(y,FLIGHT.altitude,1/20);
+    assert.ok(p.y-y<=FLIGHT.verticalSpeed/20+1e-9);
+    assert.ok(p.y>=y && p.y<=FLIGHT.altitude);
+    samples.push(p);
+    y=p.y;
+  }
+  assert.equal(y,FLIGHT.altitude);
+  assert.equal(samples.length,30);
+  for(let i=0;i<30&&y>FORT.height;i++){
+    const p=progressFlightHeight(y,FORT.height,1/20);
+    assert.ok(y-p.y<=FLIGHT.verticalSpeed/20+1e-9);
+    y=p.y;
+  }
+  assert.equal(y,FORT.height);
+  assert.throws(()=>progressFlightHeight(0,50,0.05),/invalid_flight_step/);
+  assert.throws(()=>progressFlightHeight(Infinity,6,0.05),/invalid_flight_step/);
+  assert.throws(()=>progressFlightHeight(0,6,-1),/invalid_flight_step/);
 });

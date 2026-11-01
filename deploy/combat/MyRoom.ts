@@ -21,6 +21,7 @@ import {
 import {
   FORT, distance3d, isOnPlatform, isOnGround, isOnTop, touchesWallBody,
   parseClimbRequest, progressClimb, step3d, wallBlocksShot,
+  FLIGHT, isFlightAltitude, flightLandingHeight, progressFlightHeight,
   type WorldPoint,
 } from "./HeightRules.js";
 import {
@@ -30,7 +31,7 @@ import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.j
 
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
-  climb: CommandBucket; dash: CommandBucket;
+  climb: CommandBucket; dash: CommandBucket; flight: CommandBucket;
 };
 
 type ActiveDash = DashDirection & { remaining: number };
@@ -78,8 +79,43 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastSummonAt = new Map<string, number>();
   private lastSummonAttackAt = new Map<string, number>();
   private climbs = new Map<string, WorldPoint>();
+  private flightTransitions = new Map<string, { targetY: number; landing: boolean }>();
 
   messages = {
+    fly: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_flight");
+      const id = client.sessionId;
+      const player = this.state.players.get(id);
+      if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (this.climbs.has(id)) return this.reject(client, "climbing");
+      if (this.activeDashes.has(id)) return this.reject(client, "dashing");
+      if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
+      if (!this.gates.get(id)?.flight.consume(this.simulatedMs)) {
+        return this.reject(client, "flight_rate_limited");
+      }
+      const landing = player.flying;
+      // Do NOT allow a landing into the wall's solid body or off map.
+      const landingY = landing ? flightLandingHeight(player.x, player.z) : null;
+      if (landing && (landingY === null ||
+          !this.canOccupy(player.x, player.z, landingY))) {
+        return this.reject(client, "landing_blocked");
+      }
+      if (!landing && !isOnGround(player.y) && !isOnPlatform(player.y)) {
+        return this.reject(client, "flight_unavailable");
+      }
+      const targetY = landing ? landingY! : FLIGHT.altitude;
+      this.attackTargets.delete(id);
+      this.destinations.delete(id);
+      player.targetId = "";
+      player.combatState = landing ? "descending" : "ascending";
+      // Flying stays true during descent so its state is never persisted as
+      // a partial/in-between height; only completion returns ground/wall mode.
+      player.flying = true;
+      this.flightTransitions.set(id, { targetY, landing });
+      this.broadcast("flight_started", {
+        playerId: id, direction: landing ? "down" : "up", targetY,
+      }, { afterNextPatch: true });
+    },
     dash: (client: Client, message: unknown) => {
       const direction = parseDashCommand(message);
       if (!direction) return this.reject(client, "invalid_dash");
@@ -87,6 +123,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const player = this.state.players.get(id);
       if (!player || !player.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(id)) return this.reject(client, "climbing");
+      if (player.flying || this.flightTransitions.has(id)) return this.reject(client, "flying");
       if (this.activeDashes.has(id)) return this.reject(client, "dash_in_progress");
       if (this.simulatedMs - (this.lastDashMs.get(id) ?? -Infinity) < RULES.dashCooldownMs) {
         return this.reject(client, "dash_cooldown");
@@ -139,7 +176,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!player || !player.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(client.sessionId)) return this.reject(client, "climbing");
       if (this.activeDashes.has(client.sessionId)) return this.reject(client, "dashing");
-      if (isOnPlatform(player.y) && !isOnTop(destination.x, destination.z)) {
+      if (this.flightTransitions.has(client.sessionId)) return this.reject(client, "flight_in_progress");
+      if (!player.flying && isOnPlatform(player.y) && !isOnTop(destination.x, destination.z)) {
         return this.reject(client, "must_descend");
       }
       if (!this.gates.get(client.sessionId)?.move.consume(this.simulatedMs)) {
@@ -163,6 +201,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!attacker || !attacker.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(attackerId)) return this.reject(client, "climbing");
       if (this.activeDashes.has(attackerId)) return this.reject(client, "dashing");
+      if (this.flightTransitions.has(attackerId)) return this.reject(client, "flight_in_progress");
       if (!this.gates.get(attackerId)?.attack.consume(this.simulatedMs)) {
         return this.reject(client, "attack_rate_limited");
       }
@@ -245,6 +284,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!player || !player.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(id)) return this.reject(client, "already_climbing");
       if (this.activeDashes.has(id)) return this.reject(client, "dashing");
+      if (player.flying || this.flightTransitions.has(id)) return this.reject(client, "flying");
       if (!this.gates.get(id)?.climb.consume(this.simulatedMs)) {
         return this.reject(client, "climb_rate_limited");
       }
@@ -283,6 +323,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!shooter || !shooter.alive) return this.reject(client, "not_alive");
       if (this.climbs.has(id)) return this.reject(client, "climbing");
       if (this.activeDashes.has(id)) return this.reject(client, "dashing");
+      if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
       if (!this.gates.get(id)?.attack.consume(this.simulatedMs)) {
         return this.reject(client, "attack_rate_limited");
       }
@@ -537,6 +578,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private tick(dt: number) {
     this.updateRespawns();
     this.updateClimbs(dt);
+    this.updateFlights(dt);
     this.updatePlayerMovement(dt);
     this.updateMonsterAI(dt);
     this.updatePlayerAttacks();
@@ -570,16 +612,41 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
-  private canOccupy(x: number, z: number, feetY: number): boolean {
-    if (isOnPlatform(feetY)) return isOnTop(x,z);
-    if (isOnGround(feetY)) return !touchesWallBody(x,z);
-    return false; // Only the server's climb state can cross heights.
+  /** Flight transitions are vertical only; horizontal movement begins on arrival. */
+  private updateFlights(dt: number) {
+    for (const [id, transition] of [...this.flightTransitions]) {
+      const player = this.state.players.get(id);
+      if (!player || !player.alive) {
+        this.flightTransitions.delete(id);
+        continue;
+      }
+      const next = progressFlightHeight(player.y, transition.targetY, dt);
+      player.y = next.y;
+      player.combatState = transition.landing ? "descending" : "ascending";
+      if (!next.arrived) continue;
+      this.flightTransitions.delete(id);
+      player.flying = !transition.landing;
+      player.combatState = "idle";
+      this.broadcast("flight_finished", {
+        playerId: id, altitude: player.y, flying: player.flying,
+      }, { afterNextPatch: true });
+      void this.saveCharacter(id);
+    }
+  }
+
+  private canOccupy(x: number, z: number, feetY: number, flying = false): boolean {
+    if (!Number.isFinite(x) || !Number.isFinite(z) ||
+        Math.abs(x) > RULES.mapLimit || Math.abs(z) > RULES.mapLimit) return false;
+    if (flying && isFlightAltitude(feetY)) return true; // 6m flight lane
+    if (isOnPlatform(feetY)) return isOnTop(x,z); // solid wall crest (4m)
+    if (isOnGround(feetY)) return !touchesWallBody(x,z); // ground 0m
+    return false; // Never trust arbitrary Y from a client/save.
   }
 
   private updatePlayerMovement(dt: number) {
     const monster = this.state.monster;
     for (const [sessionId, player] of this.state.players) {
-      if (!player.alive || this.climbs.has(sessionId)) {
+      if (!player.alive || this.climbs.has(sessionId) || this.flightTransitions.has(sessionId)) {
         this.activeDashes.delete(sessionId);
         continue;
       }
@@ -589,7 +656,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const move = advanceDash(
           player, dash,
           Math.min(dash.remaining, RULES.dashSpeed * dt),
-          (x, z) => this.canOccupy(x, z, player.y),
+          (x, z) => this.canOccupy(x, z, player.y, player.flying),
         );
         player.x = move.x;
         player.z = move.z;
@@ -642,8 +709,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           x: clampToMap(player.x + dx * ratio),
           z: clampToMap(player.z + dz * ratio),
         };
-        const next = stepTowards(player, approach, RULES.playerSpeed * dt);
-        if (this.canOccupy(next.x,next.z,player.y)) {
+        const next = stepTowards(player, approach,
+          (player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed) * dt);
+        if (this.canOccupy(next.x,next.z,player.y,player.flying)) {
           player.x=next.x; player.z=next.z;
           player.combatState = "approaching";
         } else {
@@ -660,16 +728,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       const dx = target.x - player.x;
       const dz = target.z - player.z;
-      const next = stepTowards(player, target, RULES.playerSpeed * dt);
+      const next = stepTowards(player, target,
+        (player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed) * dt);
       if (next.moved) player.facing = facingTo(dx, dz);
-      if (this.canOccupy(next.x,next.z,player.y)) {
+      if (this.canOccupy(next.x,next.z,player.y,player.flying)) {
         player.x=next.x;
         player.z=next.z;
       } else {
         // Slide on the wall face if a legal axis exists; never tunnel through
         // solid geometry via client destinations or elevated edge tapping.
-        if (this.canOccupy(next.x,player.z,player.y)) player.x=next.x;
-        else if (this.canOccupy(player.x,next.z,player.y)) player.z=next.z;
+        if (this.canOccupy(next.x,player.z,player.y,player.flying)) player.x=next.x;
+        else if (this.canOccupy(player.x,next.z,player.y,player.flying)) player.z=next.z;
         else {
           this.destinations.delete(sessionId);
           player.combatState = "idle";
@@ -759,6 +828,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     victim.combatState = "dead";
     victim.targetId = "";
     this.climbs.delete(id);
+    this.flightTransitions.delete(id);
+    victim.flying = false;
     this.activeDashes.delete(id);
     this.despawnSummon(id, "owner_dead");
     this.destinations.delete(id);
@@ -936,6 +1007,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.y = 0;
       player.z = spawn.z;
       this.climbs.delete(id);
+      this.flightTransitions.delete(id);
+      player.flying = false;
       this.activeDashes.delete(id);
       player.facing = 0;
       player.combatState = "idle";
@@ -961,7 +1034,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         version: 1, id: characterId, name: player.characterName,
         level: player.level, experience: player.experience,
         pkKills: player.pkKills, pkDeaths: player.pkDeaths,
-        x: player.x, y: player.y, z: player.z, hp: Math.max(0, Math.round(player.hp)),
+        x: player.x,
+        // A half-finished ascent/landing must never become a corrupt save.
+        // Resume at the stable 6m air layer if a flight transition is active.
+        y: player.flying ? FLIGHT.altitude : player.y,
+        z: player.z, hp: Math.max(0, Math.round(player.hp)),
         updatedAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -989,8 +1066,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try {
       const saved = token ? (await characterStore.loadOrCreate(token, spawn, slot)).character : null;
       // A saved location is restored only if the current server geometry allows it.
-      const validPosition = saved && Math.abs(saved.x) <= RULES.mapLimit &&
-        Math.abs(saved.z) <= RULES.mapLimit && this.canOccupy(saved.x, saved.z, saved.y);
+      const restoreFlight = Boolean(saved && isFlightAltitude(saved.y));
+      const validPosition = saved && this.canOccupy(
+        saved.x, saved.z, saved.y, restoreFlight);
       const player = new Player({
         x: validPosition ? saved.x : spawn.x,
         y: validPosition ? saved.y : 0,
@@ -1004,6 +1082,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         characterName: saved?.name ?? "นที",
         level: saved?.level ?? 1, experience: saved?.experience ?? 0,
         persistent: Boolean(saved), characterSlot: slot,
+        flying: Boolean(validPosition && restoreFlight),
       });
 
       this.state.players.set(client.sessionId, player);
@@ -1023,6 +1102,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         climb: new CommandBucket(3, 1, this.simulatedMs),
         dash: new CommandBucket(RULES.dashCommandBurst,
           RULES.dashCommandRatePerSecond, this.simulatedMs),
+        flight: new CommandBucket(3, 2, this.simulatedMs),
       });
       console.log("MONTRA 3-slot join:", client.sessionId, "room", this.roomId,
         saved ? "persistent" : "transient", "slot", slot);
@@ -1041,6 +1121,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.despawnSummon(id, "owner_left");
     this.lastSummonAt.delete(id);
     this.climbs.delete(id);
+    this.flightTransitions.delete(id);
     this.activeDashes.delete(id);
     this.lastDashMs.delete(id);
     this.destinations.delete(id);
@@ -1100,6 +1181,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastSummonAttackAt.clear();
     this.state.summons.clear();
     this.climbs.clear();
+    this.flightTransitions.clear();
     this.activeDashes.clear();
     this.lastDashMs.clear();
     console.log("MONTRA Elevation room disposed:", this.roomId);

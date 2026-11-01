@@ -359,11 +359,20 @@
     hitbox.visibility = .005;
     hitbox.isPickable = !local;
     hitbox.metadata = { pkPlayerId: id };
+    const halo = B.MeshBuilder.CreateTorus("flight halo", {
+      diameter: 1.3, thickness: .07, tessellation: 18,
+    }, scene);
+    halo.parent = parent;
+    halo.position.y = .14;
+    halo.rotation.x = Math.PI / 2;
+    halo.material = local ? gold : glowMat;
+    halo.isPickable = false;
+    halo.setEnabled(false);
     return {
       node: parent, local, x: 0, y: 0, z: 0,
       targetX: 0, targetY: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
-      serverFacing: null, hitFlashUntil: 0, dashUntil: 0
+      serverFacing: null, hitFlashUntil: 0, dashUntil: 0, flightHalo: halo
     };
   }
   const avatars = new Map();
@@ -455,6 +464,10 @@
   // DEMO mirrors only the feel of dash; LIVE positions remain server owned.
   let demoDash = null;
   let demoDashNextAt = 0;
+  let demoFlightTarget = null;
+  let demoFlying = false;
+  const DEMO_FLIGHT_HEIGHT = 6;
+  const DEMO_FLIGHT_SPEED = 4;
   const DASH_DEMO_DISTANCE = 4.5;
   const DASH_DEMO_SPEED = 13.5;
   const DASH_DEMO_COOLDOWN_MS = 1800;
@@ -560,14 +573,17 @@
   }
 
   function updateStatus() {
-    const worldY = Number(room?.state?.players?.get?.(localId)?.y);
+    const worldY = mode === "live"
+      ? Number(room?.state?.players?.get?.(localId)?.y)
+      : Number(getLocalAvatar()?.targetY || 0);
     const altitude = Number.isFinite(worldY) ? Math.round(worldY * 10) / 10 : 0;
     const mobilePortrait = window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches;
     ui.onlineCount.textContent = mode === "live"
       ? (mobilePortrait
         ? `${onlinePlayers.size} คน · ${summonAvatars.size} ผี · ↑${altitude}ม.`
         : `ผู้เล่น: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} · สูง ${altitude}ม. (LIVE)`)
-      : (mobilePortrait ? "DEMO · 1 คน" : "ผู้เล่นในฉาก: 1 (จำลอง)");
+      : (mobilePortrait ? `DEMO · ↑${altitude}ม.`
+        : `ผู้เล่นในฉาก: 1 (จำลอง) · สูง ${altitude}ม.`);
     setModeBadge(mode === "live");
   }
   function showDemo() {
@@ -576,7 +592,10 @@
     applyFortVisual(defaultFort);
     onlinePlayers.clear(); clearAvatars(); clearSummons();
     player = ensureAvatar("demo",true,0,0);
-    demoDest = null; demoDash = null; demoDashNextAt = 0; resetDemoMonster();
+    demoDest = null; demoDash = null; demoDashNextAt = 0;
+    demoFlightTarget = null; demoFlying = false;
+    resetDemoMonster();
+    updateFlightButton();
     selectedPkTargetId = null;
     rangedTargetId = null;
     pendingClimb = null;
@@ -588,9 +607,26 @@
   }
   function getLocalAvatar() { return avatars.get(localId); }
   function pointMove(x,z) {
-    demoDash = null; // a manual tap cancels a local DEMO dash
+    if (mode === "demo" && demoFlightTarget) {
+      toast("กำลังเปลี่ยนระดับความสูง · รอให้ถึงก่อน");
+      return;
+    }
     const target = { x: Math.round(Math.max(-20,Math.min(20,x))*100)/100, z: Math.round(Math.max(-20,Math.min(20,z))*100)/100 };
+    // DEMO must retain the same wall-top edge rule as the real 20Hz server.
+    const demoMe = getLocalAvatar();
+    if (mode === "demo" && demoMe && !demoFlying &&
+        Math.abs(demoMe.targetY - activeFort.height) < .1 &&
+        (Math.abs(target.x - activeFort.x) > activeFort.width/2 - .16 ||
+         Math.abs(target.z - activeFort.z) > activeFort.length/2 - .16)) {
+      toast("เดินออกนอกยอดกำแพงไม่ได้ · กดบินก่อน");
+      return;
+    }
+    demoDash = null; // a manual tap cancels a local DEMO dash
     marker.position.x = target.x; marker.position.z = target.z;
+    const currentAltitude = mode === "live"
+      ? Number(ownServerCharacter()?.y || 0)
+      : Number(getLocalAvatar()?.targetY || 0);
+    marker.position.y = Math.max(.105, currentAltitude + .105);
     marker.setEnabled(true);
     pendingClimb = null;
     selectedPkTargetId = null;
@@ -644,6 +680,71 @@
       toast("กลับสู่โหมดโจมตีระยะประชิด");
     }
   }
+  function updateFlightButton() {
+    const button = $("fly");
+    if (!button) return;
+    const data = ownServerCharacter();
+    const active = mode === "live" ? data?.flying === true : demoFlying;
+    const changing = mode === "live"
+      ? ["ascending", "descending"].includes(data?.combatState)
+      : Boolean(demoFlightTarget);
+    const label = button.querySelector("span:last-child");
+    if (label) label.textContent = changing ? "กำลังบิน" : active ? "ลง" : "บิน";
+    button.classList.toggle("fly-active", Boolean(active));
+    button.setAttribute("aria-pressed", String(Boolean(active)));
+    button.title = active ? "ลดระดับความสูงและลงจอด" : "ขึ้นบินเหนือกำแพง แล้วแตะพื้นเพื่อเคลื่อนที่";
+  }
+
+  function toggleFlight() {
+    if (mode === "live") {
+      if (!room || room.state?.flightAvailable !== true) {
+        toast("VPS ยังไม่รองรับระบบบิน · ต้องติดตั้ง Server รุ่นใหม่");
+        return;
+      }
+      const me = ownServerCharacter();
+      if (!me || me.alive === false) {
+        toast("ตัวละครยังไม่พร้อมบิน");
+        return;
+      }
+      if (["ascending", "descending"].includes(me.combatState)) {
+        toast("กำลังเปลี่ยนระดับความสูง");
+        return;
+      }
+      pendingClimb = null;
+      marker.setEnabled(false);
+      try { room.send("fly", {}); }
+      catch (error) { console.error("MONTRA flight failed", error); toast("ส่งคำสั่งบินไม่สำเร็จ"); }
+      return;
+    }
+    const me = getLocalAvatar();
+    if (!me || demoFlightTarget) {
+      toast("กำลังเปลี่ยนระดับความสูง");
+      return;
+    }
+    const x = me.targetX, z = me.targetZ;
+    const fort = activeFort;
+    const onTop = Math.abs(x - fort.x) <= fort.width / 2 - .16 &&
+      Math.abs(z - fort.z) <= fort.length / 2 - .16;
+    const insideSolid = Math.abs(x - fort.x) < fort.width / 2 + .32 &&
+      Math.abs(z - fort.z) < fort.length / 2 + .32;
+    if (demoFlying && !onTop && insideSolid) {
+      toast("ลงตรงนี้ไม่ได้ · บินออกจากกำแพงก่อน");
+      return;
+    }
+    const landing = demoFlying;
+    const targetY = landing ? (onTop ? fort.height : 0) : DEMO_FLIGHT_HEIGHT;
+    demoDest = null;
+    demoDash = null;
+    demoAutoAttack = false;
+    marker.setEnabled(false);
+    me.targetX = me.x;
+    me.targetZ = me.z;
+    demoFlightTarget = { targetY, landing };
+    demoFlying = true; // remains true throughout ascent/descent
+    updateFlightButton();
+    toast(landing ? "กำลังลดระดับลงจอด · DEMO" : "กำลังบินขึ้น · DEMO");
+  }
+
   function syncClimbButton() {
     const button=$("climb");
     if (!button) return;
@@ -661,6 +762,7 @@
     const me=ownServerCharacter();
     if (!me || me.alive===false) {toast("ตัวละครยังไม่พร้อม");return;}
     if (me.combatState==="climbing") {toast("กำลังปีนกำแพง");return;}
+    if (me.flying) {toast("ลงจอดก่อนจึงใช้บันไดได้");return;}
     const onWall=Math.abs(Number(me.y)-activeFort.height)<.15;
     const direction=onWall?"down":"up";
     const to=onWall
@@ -681,7 +783,9 @@
     if(!pendingClimb || !room || mode!=="live")return;
     const player=ownServerCharacter();
     if(!player)return;
-    if(player.combatState==="climbing"){pendingClimb=null;return;}
+    if(player.combatState==="climbing" || player.flying){
+      pendingClimb=null;return;
+    }
     const dist=Math.hypot(Number(player.x)-pendingClimb.to.x,
                            Number(player.z)-pendingClimb.to.z);
     if(dist>1.1)return;
@@ -859,6 +963,7 @@
     updateCharacterHud(players.get(localId));
     syncPKHud();
     syncClimbButton();
+    updateFlightButton();
     return true;
   }
   let syncPoll = null;
@@ -975,8 +1080,31 @@
       joined.onMessage("climb_finished", notice => {
         if(room!==joined)return;
         if(notice?.playerId===localId) {
-          toast(Number(notice.height)>1?"ขึ้นถึงยอดกำแพงแล้ว · ยิงจากที่สูงได้":"ลงถึงพื้นแล้ว");
+          toast(Number(notice.height)>1?"ขึ้นถึงยอดกำแพงแล้ว · เดินบนกำแพงได้":"ลงถึงพื้นแล้ว");
         }
+        syncClimbButton();
+        updateFlightButton();
+      });
+      joined.onMessage("flight_started", info => {
+        if (room !== joined) return;
+        if (info?.playerId === localId) {
+          pendingClimb = null;
+          toast(info.direction === "up"
+            ? "กำลังขึ้นบิน · ระดับ 6 เมตร"
+            : "กำลังลงจอด · พื้นหรือยอดกำแพง");
+        }
+        updateFlightButton();
+      });
+      joined.onMessage("flight_finished", info => {
+        if (room !== joined) return;
+        if (info?.playerId === localId) {
+          toast(info.flying
+            ? "บินสำเร็จ · แตะพื้นเพื่อเคลื่อนที่ในอากาศ"
+            : Number(info.altitude) > 1
+              ? "ลงบนยอดกำแพงแล้ว · เดินต่อได้"
+              : "ลงถึงพื้นแล้ว");
+        }
+        updateFlightButton();
         syncClimbButton();
       });
       joined.onMessage("ranged_hit", data => {
@@ -1088,6 +1216,12 @@
         else if (info?.reason === "dash_in_progress" || info?.reason === "dashing") toast("กำลังพุ่งอยู่");
         else if (info?.reason === "dash_rate_limited") toast("สั่งพุ่งถี่เกินไป");
         else if (info?.reason === "invalid_dash") toast("ทิศทางการพุ่งไม่ถูกต้อง");
+        else if (info?.reason === "invalid_flight") toast("คำสั่งบินไม่ถูกต้อง");
+        else if (info?.reason === "flight_in_progress") toast("กำลังขึ้นหรือลง · รอให้ถึงระดับก่อน");
+        else if (info?.reason === "flight_rate_limited") toast("กดบินถี่เกินไป");
+        else if (info?.reason === "flight_unavailable") toast("ตอนนี้ยังบินขึ้นไม่ได้");
+        else if (info?.reason === "landing_blocked") toast("ลงจอดตรงนี้ไม่ได้ · บินไปพ้นขอบกำแพงก่อน");
+        else if (info?.reason === "flying") toast("ต้องลงจอดก่อนใช้พุ่งหรือปีน");
         else if (info?.reason === "climbing") toast("ยังโจมตีหรือเดินไม่ได้ขณะปีน");
         else if (info?.reason === "ladder_too_far") toast("เดินเข้าหาบันไดก่อนปีน");
         else if (info?.reason === "melee_height_blocked") toast("โจมตีประชิดข้ามระดับความสูงไม่ได้ · ใช้ยิงอาคม");
@@ -1240,11 +1374,20 @@
       if(rangedMode) shootAtTarget(MONSTER_ID);
       else requestMonsterAttack();
     } else if(hitMesh?.metadata?.climbableWall) {
-      requestClimb();
+      const flying = mode === "live" ? ownServerCharacter()?.flying : demoFlying;
+      if (flying && picked.pickedPoint) {
+        pointMove(picked.pickedPoint.x, picked.pickedPoint.z);
+      } else {
+        requestClimb();
+      }
     } else if(hitMesh?.metadata?.elevatedTop && picked.pickedPoint) {
       const me=ownServerCharacter();
-      if(!me || Math.abs(Number(me.y)-activeFort.height)>.15) requestClimb();
-      else pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
+      if ((mode === "live" ? me?.flying : demoFlying) ||
+          (me && Math.abs(Number(me.y)-activeFort.height)<.15)) {
+        pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
+      } else {
+        requestClimb();
+      }
     } else if(hitMesh?.metadata?.walkable && picked.pickedPoint) {
       pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
     }
@@ -1290,6 +1433,10 @@
       return;
     }
     if (mode !== "demo") return;
+    if (demoFlying || demoFlightTarget) {
+      toast("กำลังบินอยู่ · ลงจอดก่อนจึงพุ่งได้");
+      return;
+    }
     if (performance.now() < demoDashNextAt) {
       toast("รอคูลดาวน์พุ่ง · DEMO");
       return;
@@ -1562,7 +1709,7 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.1",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลหรือบนแถบเมนูล่างเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ไอเทมถาวร และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.5",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ไอเทมถาวร และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
   }
   function openBag() {
     openDrawer("bag","กระเป๋าไอเทม",`<div class="offline-banner">กระเป๋าไอเทมยังเป็นหน้าตัวอย่าง ไม่มีของจริงและยังไม่เชื่อมฐานข้อมูล</div><div class="status-line"><span>ตำราพื้นฐาน</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>เครื่องราง</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>แลกของกับผู้เล่น</span><strong>ยังไม่เปิดใช้</strong></div>`);
@@ -1621,6 +1768,7 @@
   };
   $("shoot").onclick = toggleRangedMode;
   $("climb").onclick = requestClimb;
+  $("fly").onclick = toggleFlight;
 
   let elapsed=0;
   engine.runRenderLoop(() => {
@@ -1669,6 +1817,29 @@
         }
       }
     }
+    if (mode === "demo" && demoFlightTarget) {
+      const me = getLocalAvatar();
+      if (me) {
+        const dy = demoFlightTarget.targetY - me.targetY;
+        const step = DEMO_FLIGHT_SPEED * dt;
+        if (Math.abs(dy) <= step + .00001) {
+          me.targetY = demoFlightTarget.targetY;
+          demoFlying = !demoFlightTarget.landing;
+          demoFlightTarget = null;
+          updateFlightButton();
+          updateStatus();
+          toast(demoFlying
+            ? "บินระดับ 6 เมตรแล้ว · แตะพื้นเพื่อเคลื่อนที่"
+            : me.targetY > 1
+              ? "ลงบนกำแพงแล้ว · DEMO"
+              : "ลงถึงพื้นแล้ว · DEMO");
+        } else {
+          me.targetY += Math.sign(dy) * step;
+        }
+      } else {
+        demoFlightTarget = null;
+      }
+    }
     if (mode === "demo" && demoDash) {
       const me = getLocalAvatar();
       if (!me) demoDash = null;
@@ -1698,7 +1869,7 @@
       const me=getLocalAvatar();
       if(me) {
         const dx=demoDest.x-me.targetX, dz=demoDest.z-me.targetZ, d=Math.hypot(dx,dz);
-        const step=(possessed?4.6:3)*dt;
+        const step=(demoFlying?4:(possessed?4.6:3))*dt;
         if(d<=step) { me.targetX=demoDest.x;me.targetZ=demoDest.z;demoDest=null; }
         else if(d>0){ me.targetX+=dx/d*step;me.targetZ+=dz/d*step; }
       }
@@ -1733,6 +1904,7 @@
       const flash = (a.hitFlashUntil || 0) > now;
       a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
       a.node.position.set(a.x, a.y, a.z);
+      a.flightHalo?.setEnabled(a.y > 4.4);
     }
     for (const npc of summonAvatars.values()) {
       const blend = 1 - Math.exp(-dt * 12);
@@ -1783,6 +1955,7 @@
   window.addEventListener("pagehide",()=> { clearSyncPoll();if(room)try{room.leave();}catch(_){} });
   resetDemoMonster();
   updateStatus();
+  updateFlightButton();
   ui.loading.hidden=true;
   toast("เริ่มต้นในโหมด DEMO · แตะพื้นเพื่อเดิน");
   // Choose one of three character saves BEFORE joining an online room.

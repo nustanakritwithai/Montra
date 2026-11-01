@@ -193,7 +193,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 #summon.summon-active { color: #e6ccff; }
 
-/* Elevation watchwall mobile controls; six one-thumb actions fit portrait. */
+/* Seven compact skills (including fly) fit portrait; dash has no button. */
 .skill-bar .skill {
   flex:1 1 0;
   min-width:0;
@@ -210,6 +210,16 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   background:radial-gradient(circle,#335678,#172638);
   color:#bcf2ff;
 }
+.glyph.sky {
+  background:radial-gradient(circle,#2c6374,#142b3b);
+  color:#cafaff;
+}
+#fly.fly-active .glyph {
+  border-color:#80ecff;
+  box-shadow:0 0 0 2px #60cde894,0 0 18px #7edbf693;
+}
+#fly.fly-active { color:#c9f7ff; }
+
 #shoot.shoot-active .glyph {
   border-color:#8ee2ff;
   box-shadow:0 0 0 2px #5ebeea8c,0 0 17px #59bff596;
@@ -334,13 +344,13 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   .pk-hp-track { margin: 4px 0 0; height: 5px; }
   #pkHint { display: none; }
 
-  /* Six existing skills stay fully usable but use less vertical space. */
+  /* Seven one-thumb actions stay visible without covering the playfield. */
   .tap-tip { display: none; }
   .controls {
     bottom: calc(9px + env(safe-area-inset-bottom));
     --dash-swipe-reach: clamp(80px, 12dvh, 108px);
   }
-  .skill-bar { padding: 0 8px; gap: 3px; margin-bottom: 7px; }
+  .skill-bar { padding: 0 6px; gap: 2px; margin-bottom: 7px; }
   .skill-bar .skill { font-size: 9px; gap: 3px; }
   .skill-bar .glyph {
     width: clamp(36px, 10.5vw, 46px);
