@@ -1238,20 +1238,76 @@
     openDrawer("map","แผนที่หมู่บ้านอาคม",`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>◆ จุดหมาย</span><span>■ อาคาร</span><span>● ศัตรูทดสอบ</span></div><p class="note">แผนที่ V0.1 แสดงตำแหน่งจากห้องเกม (หากอยู่ในโหมดออนไลน์) หรือจากการเดินจำลองในเครื่อง (หากอยู่ในโหมด DEMO)</p>`);
     drawMap($("bigMap").getContext("2d"),420,320,true);
   }
+
   function openOnline() {
-    openDrawer("online","เชื่อมต่อ MONTRA Server",`<div class="offline-banner"><b>MONTRA Online Alpha</b><p class="note">ตั้งค่าเซิร์ฟเวอร์ HTTPS/WSS ที่ VPS แล้ว เกมจะพยายามเชื่อมต่ออัตโนมัติและยังกลับมาเล่น DEMO ได้หากเซิร์ฟเวอร์ไม่พร้อม (ไม่เปิดพอร์ต 4108 สู่สาธารณะ)</p></div><div class="status-line"><span>โหมดปัจจุบัน</span><strong id="currentMode">${mode==="live"?"ออนไลน์จริง":"ทดลองในเครื่อง"}</strong></div><label class="field" for="serverUrl">ที่อยู่เซิร์ฟเวอร์ HTTPS (ไม่ใส่ /playground)</label><input id="serverUrl" type="url" spellcheck="false" placeholder="${MONTRA_VPS_URL}" autocomplete="url"/><button class="primary" id="connectOnline" type="button">เชื่อมต่อออนไลน์</button><button class="secondary" id="returnDemo" type="button">กลับสู่โหมดทดลอง</button><p class="note">สำหรับทดสอบบน VPS เครื่องเดียวกันผ่าน HTTP localhost สามารถใช้ http://127.0.0.1:4108 ได้ แต่เมื่อใช้ GitHub Pages ต้องเป็น HTTPS ที่เปิด WebSocket แบบ WSS</p>`);
-    try {
-      const saved = localStorage.getItem("montra_endpoint");
-      $("serverUrl").value = saved && /^https:\/\//i.test(saved) ? saved : MONTRA_VPS_URL;
-    } catch (_) { $("serverUrl").value = MONTRA_VPS_URL; }
-    $("connectOnline").onclick=()=>connectOnline($("serverUrl").value.trim().replace(/\/$/,""));
-    $("returnDemo").onclick=()=> { showDemo(); closeDrawer(); toast("กลับสู่โหมดทดลองแล้ว"); };
+    let endpoint = currentCharacterEndpoint();
+    let pendingSlot = activeCharacterSlot || getPreferredSlot(endpoint);
+    const slotButtons = [1,2,3].map(slot =>
+      '<button type="button" class="slot-choice" id="slotChoice' + slot +
+      '" aria-pressed="false"><strong>ช่องเซฟ ' + slot +
+      '</strong><span id="slotPreview' + slot + '">ยังไม่มีข้อมูล</span></button>'
+    ).join("");
+    openDrawer("online", "เลือกตัวละคร MONTRA", 
+      '<p class="note">1 Guest ID มี 3 เซฟอิสระ · เซฟ 1 เดิมไม่ถูกลบ · เลือกเซฟก่อนเข้าเล่น</p>' +
+      '<div class="slot-choices" role="group" aria-label="เลือกช่องบันทึกตัวละคร">' +
+      slotButtons + '</div>' +
+      '<p id="slotStatusHint" class="note">รายชื่อเซฟมาจาก VPS หลังเข้าเล่น; รายชื่อในเครื่องอาจยังไม่อัปเดต</p>' +
+      '<label class="field" for="serverUrl">MONTRA Server HTTPS</label>' +
+      '<input id="serverUrl" type="url" spellcheck="false" autocomplete="url"/>' +
+      '<button class="primary" id="connectOnline" type="button">เข้าเล่นช่องเซฟที่เลือก</button>' +
+      '<button class="secondary" id="returnDemo" type="button">กลับสู่โหมดทดลอง</button>' +
+      '<p class="note">ใช้รหัสกู้คืน Guest เดิมเพื่อเข้าถึงทั้ง 3 ช่องจากอุปกรณ์อื่น; สามารถเปลี่ยนช่องได้จากหน้าโปรไฟล์</p>');
+    $("serverUrl").value = endpoint;
+    const drawSlots = () => {
+      const summaries = readSlotPreviews(endpoint);
+      for (const slot of [1,2,3]) {
+        const preview = summaries.find(item => item?.slot === slot);
+        const label = !preview ? "ยังไม่มีข้อมูลจาก VPS" :
+          preview.unavailable ? "เซฟอ่านไม่ได้ · ตรวจสอบ VPS" :
+          !preview.occupied ? "ช่องใหม่ (ยังไม่มีตัวละคร)" :
+          preview.name + " · LV. " + preview.level;
+        const button = $("slotChoice" + slot);
+        const summary = $("slotPreview" + slot);
+        if (!button || !summary) continue;
+        button.classList.toggle("selected", slot === pendingSlot);
+        button.classList.toggle("playing", mode === "live" && slot === activeCharacterSlot);
+        button.setAttribute("aria-pressed", String(slot === pendingSlot));
+        summary.textContent = label + (mode === "live" && slot === activeCharacterSlot ? " · กำลังเล่น" : "");
+      }
+    };
+    refreshCharacterSlotCards = drawSlots;
+    for (const slot of [1,2,3]) {
+      $("slotChoice" + slot).onclick = () => {
+        pendingSlot = slot;
+        drawSlots();
+      };
+    }
+    $("serverUrl").addEventListener("change", () => {
+      const typed = $("serverUrl").value.trim().replace(/\/$/, "");
+      if (typed && typed !== endpoint) {
+        endpoint = typed;
+        pendingSlot = getPreferredSlot(endpoint);
+        drawSlots();
+      }
+    });
+    $("connectOnline").onclick = () => {
+      endpoint = $("serverUrl").value.trim().replace(/\/$/, "");
+      void connectOnline(endpoint, pendingSlot);
+    };
+    $("returnDemo").onclick = () => {
+      showDemo();
+      closeDrawer();
+      toast("กลับสู่โหมดทดลองแล้ว");
+    };
+    drawSlots();
   }
   function openCharacterProfile() {
     const me = ownServerCharacter();
     const durable = me?.persistent === true;
     openDrawer("character","ตัวละคร MONTRA",
       '<div class="status-line"><span>สถานะบันทึก</span><strong id="profileSaveStatus"></strong></div>' +
+      '<div class="status-line"><span>ช่องตัวละคร</span><strong id="profileSlot"></strong></div>' +
+      '<button class="secondary" id="switchCharacterSlot" type="button">เลือกช่องเซฟ 1–3</button>' +
       '<div class="status-line"><span>ชื่อ</span><strong id="profileName"></strong></div>' +
       '<div class="status-line"><span>ระดับ / ค่าประสบการณ์</span><strong id="profileLevel"></strong></div>' +
       '<div class="status-line"><span>สถิติ PK</span><strong id="profilePk"></strong></div>' +
@@ -1266,6 +1322,8 @@
       '<input id="restoreCharacterKey" type="password" autocomplete="off" spellcheck="false" placeholder="วางรหัสกู้คืนของคุณ"/>' +
       '<button class="secondary" id="restoreCharacterButton" type="button">ใช้รหัสกู้คืนบนอุปกรณ์นี้</button>');
     $("profileSaveStatus").textContent = durable ? "เก็บบน VPS" : "ยังไม่เปิดใช้ (DEMO/Server เดิม)";
+    $("profileSlot").textContent = durable ? "เซฟที่ " + (activeCharacterSlot || 1) + " / 3" : "ยังไม่ได้เข้าออนไลน์";
+    $("switchCharacterSlot").onclick = openOnline;
     $("profileName").textContent = String(me?.characterName || "นที");
     $("profileLevel").textContent = "LV. " + (me?.level ?? 1) + " · XP " + (me?.experience ?? 0);
     $("profilePk").textContent = "K " + (me?.pkKills ?? 0) + " / D " + (me?.pkDeaths ?? 0);
@@ -1307,6 +1365,8 @@
           return;
         }
         localStorage.setItem(key, incoming);
+        localStorage.removeItem(slotPreviewKey(endpoint));
+        localStorage.setItem(preferredSlotKey(endpoint), "1");
         // The next join must use the recovered identity; never attach
         // a different account to an already-running Colyseus session.
         window.location.reload();
@@ -1512,9 +1572,11 @@
   updateStatus();
   ui.loading.hidden=true;
   toast("เริ่มต้นในโหมด DEMO · แตะพื้นเพื่อเดิน");
-  // Only on published Pages: attempt the secure VPS endpoint once.
-  // A failed attempt never blocks local DEMO movement or effects.
+  // Choose one of three character saves BEFORE joining an online room.
+  // Offline DEMO remains usable if the player closes the selector.
   if (location.protocol === "https:" && location.hostname === "nustanakritwithai.github.io") {
-    setTimeout(() => { if (mode === "demo" && !room) connectOnline(MONTRA_VPS_URL); }, 900);
+    setTimeout(() => {
+      if (mode === "demo" && !room && !drawerActive) openOnline();
+    }, 900);
   }
 })();
