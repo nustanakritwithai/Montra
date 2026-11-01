@@ -25,6 +25,7 @@ export const Player = schema({
   persistent: t.boolean().default(false),
   characterSlot: t.number().default(1), // append only: preserve all S2 Schema indexes
   flying: t.boolean().default(false), // appended: active in the server-owned 6m air layer
+  equippedWeaponId: t.string().default(""), // append-only: visible weapon ID, no private bag data
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
