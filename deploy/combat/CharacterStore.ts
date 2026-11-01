@@ -10,6 +10,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { makeStarterInventory, validateInventory, type InventorySnapshot } from "./ItemRules.js";
 
 export const CHARACTER_SAVE_INTERVAL_MS = 15_000;
 export const CHARACTER_SLOTS = [1, 2, 3] as const;
@@ -28,6 +29,8 @@ export type CharacterSnapshot = {
   y: number;
   z: number;
   hp: number;
+  /** Undefined only when loading a legacy S2/three-slot snapshot for migration. */
+  inventory?: InventorySnapshot;
   updatedAt: string;
 };
 const TOKEN_PATTERN = /^mt1_[0-9a-f]{64}$/;
@@ -98,6 +101,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
       typeof value.updatedAt !== "string" || !Number.isFinite(Date.parse(value.updatedAt))) {
     throw new Error("character_record_invalid");
   }
+  if (value.inventory !== undefined) validateInventory(value.inventory);
   return value as CharacterSnapshot;
 }
 
@@ -131,13 +135,27 @@ export class CharacterStore {
     const id = characterIdFromToken(token, slot);
     try {
       const stored = JSON.parse(await readFile(this.location(id), "utf8")) as unknown;
-      return { character: validateSnapshot(stored, id), created: false };
+      const previous = validateSnapshot(stored, id);
+      if (previous.inventory !== undefined) {
+        return { character: previous, created: false };
+      }
+      // S2/0.2.5 legacy records get THREE potions exactly once, per character
+      // slot. Complete the atomic migration BEFORE admitting the player.
+      // If storage fails, reject the join rather than granting duplicates.
+      const migrated: CharacterSnapshot = {
+        ...previous,
+        inventory: makeStarterInventory(),
+        updatedAt: new Date().toISOString(),
+      };
+      await this.save(migrated);
+      return { character: migrated, created: false };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     const fresh: CharacterSnapshot = {
       version: 1, id, name: "นักเดินทาง", level: 1, experience: 0,
       pkKills: 0, pkDeaths: 0, x: spawn.x, y: 0, z: spawn.z, hp: 100,
+      inventory: makeStarterInventory(),
       updatedAt: new Date().toISOString(),
     };
     // A new character must already exist on disk before joining the world.
@@ -166,6 +184,9 @@ export class CharacterStore {
 
   async save(character: CharacterSnapshot): Promise<void> {
     const snapshot = validateSnapshot(character, character.id);
+    // Upgraded servers must never overwrite a real inventory with a legacy
+    // HP-only snapshot, which would re-grant starter potions on next login.
+    if (snapshot.inventory === undefined) throw new Error("inventory_record_missing");
     const previous = this.writes.get(snapshot.id) || Promise.resolve();
     const next = previous.catch(() => {}).then(() => this.atomicWrite(snapshot));
     this.writes.set(snapshot.id, next);
