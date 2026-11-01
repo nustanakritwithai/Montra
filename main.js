@@ -322,6 +322,10 @@
   marker.position.y = .105;
   marker.isPickable = false;
   marker.setEnabled(false);
+  const weaponSteel = mat("weapon forged steel", "#b7c4cb", "#233d44");
+  const weaponEdge = mat("weapon arcane edge", "#b9e8ee", "#5a99bc");
+  const weaponWood = mat("weapon oak handle", "#71523e", "#2b1b0b");
+  const weaponCrystal = mat("weapon spirit crystal", "#9d7bdd", "#6550aa");
 
   function avatarMesh(id, local) {
     const parent = new B.TransformNode("avatar-" + id, scene);
@@ -368,14 +372,74 @@
     halo.material = local ? gold : glowMat;
     halo.isPickable = false;
     halo.setEnabled(false);
+
+    // Three low-poly handheld props. All parts are unpickable, so weapon
+    // visuals never steal tap-to-walk or Free PK selection raycasts.
+    function createHeldWeapon(kind) {
+      const root = new B.TransformNode("held-" + kind + "-" + id, scene);
+      root.parent = parent;
+      root.position.set(.55, 1.04, -.12);
+      root.rotation.z = -.24;
+      const staff = kind === "spirit_staff";
+      const sword = kind === "arcane_sword";
+      const handle = B.MeshBuilder.CreateCylinder("weapon handle", {
+        height: staff ? 1.7 : .42, diameter: staff ? .085 : .13,
+        tessellation: 8,
+      },scene);
+      handle.parent=root;
+      handle.position.y=staff ? .25 : -.11;
+      handle.material=weaponWood; handle.isPickable=false;
+      if (staff) {
+        const orb=B.MeshBuilder.CreateSphere("spirit staff orb",{
+          diameter:.37,segments:8,
+        },scene);
+        orb.parent=root;orb.position.y=1.17;
+        orb.material=weaponCrystal;orb.isPickable=false;
+        const rim=B.MeshBuilder.CreateTorus("spirit staff crest",{
+          diameter:.52,thickness:.07,tessellation:12,
+        },scene);
+        rim.parent=root;rim.position.y=1.17;rim.rotation.x=Math.PI/2;
+        rim.material=weaponEdge;rim.isPickable=false;
+      } else {
+        const blade=B.MeshBuilder.CreateBox("arcane steel blade",{
+          height:sword?1.15:.62,width:sword?.19:.14,depth:.07,
+        },scene);
+        blade.parent=root;
+        blade.position.y=sword?.62:.36;
+        blade.material=sword?weaponEdge:weaponSteel;
+        blade.isPickable=false;
+        const guard=B.MeshBuilder.CreateBox("weapon crossguard",{
+          height:.07,width:sword?.48:.29,depth:.11,
+        },scene);
+        guard.parent=root;guard.position.y=.11;
+        guard.material=gold;guard.isPickable=false;
+      }
+      root.setEnabled(false);
+      return root;
+    }
+    const weaponModels = {
+      ritual_dagger: createHeldWeapon("ritual_dagger"),
+      arcane_sword: createHeldWeapon("arcane_sword"),
+      spirit_staff: createHeldWeapon("spirit_staff"),
+    };
     return {
       node: parent, local, x: 0, y: 0, z: 0,
       targetX: 0, targetY: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
-      serverFacing: null, hitFlashUntil: 0, dashUntil: 0, flightHalo: halo
+      serverFacing: null, hitFlashUntil: 0, dashUntil: 0, flightHalo: halo,
+      weaponModels, weaponId: ""
     };
   }
   const avatars = new Map();
+  function setAvatarWeapon(avatar, weaponId) {
+    if (!avatar?.weaponModels) return;
+    const safeId = Object.hasOwn(avatar.weaponModels,weaponId) ? weaponId : "";
+    if (avatar.weaponId === safeId) return;
+    avatar.weaponId = safeId;
+    for(const [id,model] of Object.entries(avatar.weaponModels)) {
+      model.setEnabled(id === safeId);
+    }
+  }
   // Forward of the prototype avatar faces local -Z when rotation.y == 0.
   // Keep this local to rendering; no change to server movement or combat.
   function facingFromTravel(dx, dz) {
@@ -914,13 +978,14 @@
     }
   }
 
-  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0) {
+  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0, weaponId = "") {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     onlinePlayers.set(id,{x,z});
     const a = ensureAvatar(id,id === localId,x,z);
     a.targetX = x;
     a.targetY = Number.isFinite(y) ? y : 0;
     a.targetZ = z;
+    setAvatarWeapon(a,weaponId);
 
     // S1 server facing is authoritative. Old servers omit this field;
     // fallback to the V0.1.5 movement-derived direction in that case.
@@ -980,7 +1045,8 @@
     players.forEach((p,id) => {
       seen.add(id);
       setOnlinePlayer(id, Number(p.x), Number(p.z),
-        Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y));
+        Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
+        p.equippedWeaponId);
     });
     for (const id of onlinePlayers.keys()) if (!seen.has(id)) removeOnlinePlayer(id);
     updateCharacterHud(players.get(localId));
@@ -1304,7 +1370,8 @@
           cb.onAdd("players", (p, id) => {
             const applyServerPlayer = () => setOnlinePlayer(
               id, Number(p.x), Number(p.z),
-              Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y)
+              Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
+              p.equippedWeaponId
             );
             applyServerPlayer();
             if (typeof cb.listen === "function") {
@@ -1314,6 +1381,7 @@
               cb.listen(p, "hp", applyServerPlayer);
               cb.listen(p, "y", applyServerPlayer);
               cb.listen(p, "maxHp", applyServerPlayer);
+              cb.listen(p, "equippedWeaponId", applyServerPlayer);
             }
           });
           cb.onRemove("players", (_,id) => removeOnlinePlayer(id));
