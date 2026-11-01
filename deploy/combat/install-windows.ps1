@@ -1,5 +1,5 @@
 <#
-MONTRA 0.3.0 — status and EXP / safe Windows staging.
+MONTRA 0.3.2 — party / safe Windows staging.
 SAFE STAGING ONLY:
   * Backs up the existing MONTRA Room sources and compiled build.
   * Downloads only files from the owner's MONTRA GitHub repository.
@@ -50,6 +50,7 @@ $files = @(
   @{ Name = "WarpRules.ts"; Target = "src\rooms\WarpRules.ts"; Check = "checkWarp" },
   @{ Name = "ChatRules.ts"; Target = "src\rooms\ChatRules.ts"; Check = "parseChatMessage" },
   @{ Name = "Progression.ts"; Target = "src\rooms\Progression.ts"; Check = "calculateStats" },
+  @{ Name = "PartyManager.ts"; Target = "src\rooms\PartyManager.ts"; Check = "class PartyManager" },
   @{ Name = "EconomyStore.ts"; Target = "src\rooms\EconomyStore.ts"; Check = "class EconomyStore" },
   @{ Name = "EconomyRules.ts"; Target = "src\rooms\EconomyRules.ts"; Check = "parseMarketCreate" },
   @{ Name = "MonsterRRT.ts"; Target = "src\rooms\MonsterRRT.ts"; Check = "class MonsterRRTNavigator" },
@@ -70,6 +71,7 @@ $files = @(
   @{ Name = "chat-integration.mjs"; Target = "montra-chat-integration.mjs"; Check = "montra-chat-test-" },
   @{ Name = "progression-integration.mjs"; Target = "montra-progression-integration.mjs"; Check = "montra-progression-test-" }
   @{ Name = "economy-integration.mjs"; Target = "montra-economy-integration.mjs"; Check = "montra-economy-test-" }
+  @{ Name = "party-integration.mjs"; Target = "montra-party-integration.mjs"; Check = "montra-party-test-" }
 )
 
 New-Item -ItemType Directory -Path $download -Force | Out-Null
@@ -121,7 +123,7 @@ try {
 
   Push-Location $base
   try {
-    Write-Host "Compiling MONTRA V0.3.0 status + EXP..." -ForegroundColor Cyan
+    Write-Host "Compiling MONTRA V0.3.2 party..." -ForegroundColor Cyan
     & npm.cmd run build
     if ($LASTEXITCODE -ne 0) {
       throw "MONTRA S1 TypeScript build failed. Exit code: $LASTEXITCODE"
@@ -141,6 +143,7 @@ try {
   Write-Host "MONTRA WORLD MAP BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA CHAT BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA STATUS AND EXP BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA PARTY BUILD PASSED." -ForegroundColor Green
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
   Write-Host "All integration tests require an ISOLATED Node instance and TEMP character folder; never run them against LIVE."

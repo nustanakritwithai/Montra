@@ -36,6 +36,10 @@ jobs:
           cp deploy/combat/ChatRules.ts combat-verify/src/rooms/ChatRules.ts
           cp deploy/combat/chat-rules.test.ts combat-verify/src/rooms/chat-rules.test.ts
           cp deploy/combat/Progression.ts combat-verify/src/rooms/Progression.ts
+          cp deploy/combat/PartyManager.ts combat-verify/src/rooms/PartyManager.ts
+          cp deploy/combat/party-manager.test.ts combat-verify/src/rooms/party-manager.test.ts
+          cp deploy/combat/party-experience.test.ts combat-verify/src/rooms/party-experience.test.ts
+          cp deploy/combat/party-integration.mjs combat-verify/party-integration.mjs
           cp deploy/combat/EconomyStore.ts combat-verify/src/rooms/EconomyStore.ts
           cp deploy/combat/EconomyRules.ts combat-verify/src/rooms/EconomyRules.ts
           cp deploy/combat/economy-store.test.ts combat-verify/src/rooms/economy-store.test.ts
@@ -155,7 +159,7 @@ jobs:
           grep -q 'guestToken' main.js
           grep -q 'characterSlot' main.js
           grep -q 'slotChoice' main.js
-          grep -q '0.3.1' index.html
+          grep -q '0.3.2' index.html
           grep -q 'bagEquipped' main.js
           grep -q 'equip_weapon' main.js
           grep -q 'weaponsAvailable' deploy/combat/MyRoomState.ts
@@ -225,7 +229,20 @@ jobs:
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/economy-migration.test.ts
+        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts
+
+      - name: Isolated party and EXP integration
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4110 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-party-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4110
+          node --import tsx src/index.ts > party-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4110) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 35s node party-integration.mjs || { cat party-server.log; exit 1; }
 
       - name: Isolated economy transactions and restart
         shell: bash
