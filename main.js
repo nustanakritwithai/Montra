@@ -461,6 +461,12 @@
     if (title) title.textContent = summoned ? "เก็บผี" : "เรียกผี";
   }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
+  // Inventory is never stored in localStorage: LIVE comes from VPS each join.
+  const INVENTORY_SLOTS = 12;
+  const POTION_ITEM_ID = "health_potion";
+  let inventoryState = null;
+  let selectedBagSlot = 0;
+  let demoPotionCount = 3, demoHp = 65;
   // DEMO mirrors only the feel of dash; LIVE positions remain server owned.
   let demoDash = null;
   let demoDashNextAt = 0;
@@ -589,6 +595,10 @@
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
+    inventoryState = null;
+    selectedBagSlot = 0;
+    demoPotionCount = 3;
+    demoHp = 65;
     applyFortVisual(defaultFort);
     onlinePlayers.clear(); clearAvatars(); clearSummons();
     player = ensureAvatar("demo",true,0,0);
@@ -601,7 +611,7 @@
     pendingClimb = null;
     setRangedMode(false);
     ui.pkPanel.hidden = true;
-    if (localHpBar) localHpBar.style.width = "88%";
+    if (localHpBar) localHpBar.style.width = demoHp + "%";
     updateCharacterHud(null);
     updateStatus();
   }
@@ -1030,6 +1040,8 @@
       joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot });
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
+      inventoryState = null;
+      selectedBagSlot = 0;
       mode = "live"; localId = joined.sessionId; activeCharacterSlot = requestedSlot;
       clearAvatars(); clearSummons(); demoDest = null;
       pendingClimb = null;
@@ -1185,6 +1197,26 @@
       joined.onMessage("character_save_error", () => {
         if (room === joined) toast("บันทึกตัวละครไม่สำเร็จ · ตรวจสอบพื้นที่ VPS");
       });
+      joined.onMessage("inventory_state", payload => {
+        if (room !== joined || payload?.version !== 1 ||
+            !Array.isArray(payload.slots) ||
+            payload.slots.length !== INVENTORY_SLOTS) return;
+        // Defensive view parsing: only display known items and sane counts.
+        const slots = payload.slots.map(stack =>
+          stack?.itemId === POTION_ITEM_ID && Number.isSafeInteger(stack.quantity) &&
+          stack.quantity >= 1 && stack.quantity <= 99
+            ? { itemId: POTION_ITEM_ID, quantity: stack.quantity } : null);
+        inventoryState = { version: 1, slots };
+        renderBag();
+      });
+      joined.onMessage("item_used", event => {
+        if (room !== joined) return;
+        toast("ใช้ยาเลือดแล้ว · +" + Number(event?.healed || 0) + " HP · บันทึกบน VPS");
+        renderBag();
+      });
+      joined.onMessage("item_use_failed", () => {
+        if (room === joined) toast("ใช้ยาไม่สำเร็จ · VPS บันทึกไอเท็มไม่ได้");
+      });
       joined.onMessage("dash_started", info => {
         if (room !== joined || typeof info?.playerId !== "string") return;
         const actor = avatars.get(info.playerId);
@@ -1212,6 +1244,12 @@
         else if (info?.reason === "shot_out_of_range") toast("เป้าหมายอยู่นอกระยะยิง");
         else if (info?.reason === "shot_blocked") toast("กำแพงบังแนวกระสุนอาคม");
         else if (info?.reason === "shot_cooldown") toast("รอพลังยิงอาคมอีกครู่");
+        else if (info?.reason === "inventory_unavailable") toast("เซิร์ฟเวอร์ยังไม่รองรับกระเป๋าถาวร");
+        else if (info?.reason === "invalid_item_use" || info?.reason === "invalid_inventory_request") toast("คำสั่งไอเท็มไม่ถูกต้อง");
+        else if (info?.reason === "item_busy") toast("กำลังบันทึกการใช้ยา · รอสักครู่");
+        else if (info?.reason === "item_cooldown") toast("รอคูลดาวน์ยาเลือด 1 วินาที");
+        else if (info?.reason === "item_unavailable") toast("ไม่มียาเลือดในช่องนี้แล้ว");
+        else if (info?.reason === "hp_full") toast("HP เต็ม · ไม่ใช้ยาโดยเปล่าประโยชน์");
         else if (info?.reason === "dash_cooldown") toast("พุ่งยังไม่พร้อม · รอคูลดาวน์");
         else if (info?.reason === "dash_in_progress" || info?.reason === "dashing") toast("กำลังพุ่งอยู่");
         else if (info?.reason === "dash_rate_limited") toast("สั่งพุ่งถี่เกินไป");
@@ -1266,6 +1304,7 @@
         localStorage.setItem(preferredSlotKey(endpoint), String(requestedSlot));
       } catch (_) { /* optional */ }
       try { joined.send("get_character_slots", {}); } catch (_) { /* old S2 server */ }
+      try { joined.send("get_inventory", {}); } catch (_) { /* older VPS */ }
       closeDrawer();
       const active = joined.state?.players?.get?.(joined.sessionId);
       toast(active?.persistent
