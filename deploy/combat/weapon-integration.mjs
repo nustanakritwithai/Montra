@@ -61,7 +61,8 @@ try{
   await until(()=>attacker().equippedWeaponId==="arcane_sword" &&
     inventory.at(-1)?.equippedWeaponSlot===2 && equipEvents.at(-1)?.weaponId==="arcane_sword",
     3200,"equip sword written and replicated");
-  assert.equal(b.state.players.get(attackerId).equippedWeaponId,"arcane_sword");
+  await until(()=>b.state.players.get(attackerId)?.equippedWeaponId==="arcane_sword",
+    2500,"peer sees equipped sword");
   a.send("attack",{targetId:victimId});
   await until(()=>victim()?.hp===80,3100,"sword melee PvP damage 12 + 8");
   const swordHit=pvp.find(hit=>hit.attackerId===attackerId && hit.damage===20);
@@ -94,6 +95,7 @@ try{
   // slot receives its saved equipment marker, not a second starter kit.
   for(const r of rooms.reverse())await r.leave().catch(()=>{});
   rooms.length=0;
+  await sleep(350); // Colyseus finishes character save + account lease release
   const resumed=await new Client(endpoint).create("my_room",{guestToken,characterSlot:1});
   rooms.push(resumed);
   await until(()=>resumed.state?.players?.get(resumed.sessionId),3000,"rejoin same guest");
