@@ -88,6 +88,7 @@ export const MyRoomState = schema({
   monster: Monster,
   summons: t.map(SummonedGuardian),
   fortification: Fortification,
+  dashAvailable: t.boolean().default(true), // append: live server dash capability
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;
