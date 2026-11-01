@@ -25,8 +25,9 @@ try {
   rooms.push(a);
   const b=await clients[1].joinById(a.roomId);
   rooms.push(b);
-  await until(()=>a.state?.players?.size===2 && b.state?.players?.size===2,
-    4000,"two avatars share room");
+  await until(()=>a.state?.players?.size===2 && b.state?.players?.size===2 &&
+    a.state?.dashAvailable===true && b.state?.dashAvailable===true,
+    4000,"two avatars share a dash-capable room");
   const id=a.sessionId;
   const me=()=>a.state.players.get(id);
   const dashStarted=[], dashFinished=[], rejects=[];
