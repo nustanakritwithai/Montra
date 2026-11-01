@@ -846,8 +846,36 @@
     if (mode === "live") { showDemo(); toast(reason || "การเชื่อมต่อสิ้นสุด กลับสู่โหมดทดลอง"); }
   }
   let connectionPending = false;
-  async function connectOnline(endpoint) {
+  let refreshCharacterSlotCards = null;
+  async function verifyJoinedSlot(joined, desiredSlot) {
+    for (let attempt = 0; attempt < 75; attempt++) {
+      const me = joined.state?.players?.get?.(joined.sessionId);
+      if (me) {
+        if (desiredSlot !== 1 &&
+            (!me.persistent || Number(me.characterSlot) !== desiredSlot)) {
+          throw new Error("VPS ยังไม่รองรับ 3 ช่องเซฟ · ต้องติดตั้งระบบใหม่ก่อนเข้าเซฟ " + desiredSlot);
+        }
+        if (me.characterSlot !== undefined && Number(me.characterSlot) !== desiredSlot) {
+          throw new Error("เซิร์ฟเวอร์ส่งช่องเซฟไม่ตรงที่เลือก");
+        }
+        return me;
+      }
+      await new Promise(resolve => setTimeout(resolve, 80));
+    }
+    throw new Error("ไม่ได้รับข้อมูลตัวละครจากเซิร์ฟเวอร์");
+  }
+  async function connectOnline(endpoint, requestedSlot = getPreferredSlot(endpoint)) {
     if (connectionPending) return;
+    if (![1,2,3].includes(requestedSlot)) {
+      toast("เลือกช่องเซฟ 1, 2 หรือ 3 เท่านั้น");
+      return;
+    }
+    if (room && mode === "live" && activeCharacterSlot === requestedSlot &&
+        currentCharacterEndpoint() === endpoint) {
+      closeDrawer();
+      toast("กำลังเล่นช่องเซฟ " + requestedSlot + " อยู่แล้ว");
+      return;
+    }
     if (!window.Colyseus?.Client) { toast("ไม่พบ Colyseus SDK — ตรวจการโหลดสคริปต์"); return; }
     const isLocal = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/i.test(endpoint)
       && location.protocol === "http:" && ["localhost","127.0.0.1"].includes(location.hostname);
@@ -859,17 +887,23 @@
     ui.onlineCount.textContent = "กำลังเชื่อมต่อเซิร์ฟเวอร์...";
     const connectButton = $("connectOnline");
     if (connectButton) connectButton.disabled = true;
+    let joined = null;
     try {
-      const client = new window.Colyseus.Client(endpoint);
-      let guestToken = null;
-      try { guestToken = getOrCreateGuestToken(endpoint); }
-      catch (error) {
-        console.warn("MONTRA guest character persistence unavailable", error);
+      // Switching slots must finish saving and release the old account lease.
+      if (room && mode === "live") {
+        const old = room;
+        room = null;
+        clearSyncPoll();
+        showDemo();
+        try { await old.leave(); } catch (error) { console.warn("MONTRA old room leave", error); }
+        await new Promise(resolve => setTimeout(resolve, 350));
       }
-      const joined = await client.joinOrCreate("my_room",
-        guestToken ? { guestToken } : {});
+      const client = new window.Colyseus.Client(endpoint);
+      const guestToken = getOrCreateGuestToken(endpoint);
+      joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot });
+      await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
-      mode = "live"; localId = joined.sessionId;
+      mode = "live"; localId = joined.sessionId; activeCharacterSlot = requestedSlot;
       clearAvatars(); clearSummons(); demoDest = null;
       pendingClimb = null;
       rangedTargetId = null;
@@ -993,6 +1027,11 @@
           toast("ฟื้นตัวแล้ว · กลับเข้าเกมได้");
         }
       });
+      joined.onMessage("character_slots", message => {
+        if (room !== joined || !Array.isArray(message?.slots)) return;
+        rememberSlotPreviews(endpoint, message.slots);
+        if (drawerActive === "online" && refreshCharacterSlotCards) refreshCharacterSlotCards();
+      });
       joined.onMessage("character_save_error", () => {
         if (room === joined) toast("บันทึกตัวละครไม่สำเร็จ · ตรวจสอบพื้นที่ VPS");
       });
@@ -1047,9 +1086,15 @@
       } catch (err) { console.warn("Callbacks fallback to state updates",err); }
       // Some SDK/room combinations expose the collection only after the first full state sync.
       clearSyncPoll(); syncPoll = setInterval(() => { if (room === joined) syncState(joined.state); },350);
-      joined.onLeave(() => stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กลับสู่โหมดทดลอง"));
+      joined.onLeave(() => {
+        if (room === joined) stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กลับสู่โหมดทดลอง");
+      });
       joined.onError((code,message) => { console.error("MONTRA room error",code,message); toast("เซิร์ฟเวอร์แจ้งข้อผิดพลาด " + code); });
-      try { localStorage.setItem("montra_endpoint",endpoint); } catch (_) { /* optional */ }
+      try {
+        localStorage.setItem("montra_endpoint", endpoint);
+        localStorage.setItem(preferredSlotKey(endpoint), String(requestedSlot));
+      } catch (_) { /* optional */ }
+      try { joined.send("get_character_slots", {}); } catch (_) { /* old S2 server */ }
       closeDrawer();
       const active = joined.state?.players?.get?.(joined.sessionId);
       toast(active?.persistent
@@ -1057,6 +1102,9 @@
         : ok ? "เชื่อมต่อแล้ว · ตัวละครยังไม่บันทึกถาวร"
              : "เชื่อมต่อแล้ว กำลังรอข้อมูลตัวละคร");
     } catch (err) {
+      if (joined && room !== joined) {
+        try { await joined.leave(); } catch (_) { /* release rejected slot */ }
+      }
       console.error("MONTRA connection failed",err);
       ui.onlineCount.textContent = "การเชื่อมต่อไม่สำเร็จ · ยังเป็นโหมดทดลอง";
       toast("เชื่อมต่อไม่สำเร็จ: " + (err.message || String(err)).slice(0,105));
