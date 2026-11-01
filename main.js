@@ -356,7 +356,7 @@
       node: parent, local, x: 0, y: 0, z: 0,
       targetX: 0, targetY: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
-      serverFacing: null, hitFlashUntil: 0
+      serverFacing: null, hitFlashUntil: 0, dashUntil: 0
     };
   }
   const avatars = new Map();
@@ -445,6 +445,12 @@
     if (title) title.textContent = summoned ? "เก็บผี" : "เรียกผี";
   }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
+  // DEMO mirrors only the feel of dash; LIVE positions remain server owned.
+  let demoDash = null;
+  let demoDashNextAt = 0;
+  const DASH_DEMO_DISTANCE = 4.5;
+  const DASH_DEMO_SPEED = 13.5;
+  const DASH_DEMO_COOLDOWN_MS = 1800;
   let selectedPkTargetId = null;
   let rangedMode = false;
   let rangedTargetId = null;
@@ -563,7 +569,7 @@
     applyFortVisual(defaultFort);
     onlinePlayers.clear(); clearAvatars(); clearSummons();
     player = ensureAvatar("demo",true,0,0);
-    demoDest = null; resetDemoMonster();
+    demoDest = null; demoDash = null; resetDemoMonster();
     selectedPkTargetId = null;
     rangedTargetId = null;
     pendingClimb = null;
@@ -575,6 +581,7 @@
   }
   function getLocalAvatar() { return avatars.get(localId); }
   function pointMove(x,z) {
+    demoDash = null; // a manual tap cancels a local DEMO dash
     const target = { x: Math.round(Math.max(-20,Math.min(20,x))*100)/100, z: Math.round(Math.max(-20,Math.min(20,z))*100)/100 };
     marker.position.x = target.x; marker.position.z = target.z;
     marker.setEnabled(true);
@@ -1043,6 +1050,17 @@
       joined.onMessage("character_save_error", () => {
         if (room === joined) toast("บันทึกตัวละครไม่สำเร็จ · ตรวจสอบพื้นที่ VPS");
       });
+      joined.onMessage("dash_started", info => {
+        if (room !== joined || typeof info?.playerId !== "string") return;
+        const actor = avatars.get(info.playerId);
+        if (actor) actor.dashUntil = performance.now() + 460;
+        if (info.playerId === localId) toast("พุ่ง!");
+      });
+      joined.onMessage("dash_finished", info => {
+        if (room === joined && info?.playerId === localId && info?.blocked) {
+          toast("พุ่งหยุดเพราะสิ่งกีดขวาง");
+        }
+      });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
         if (info?.reason === "not_alive") toast("ยังสั่งเดินหรือโจมตีไม่ได้");
@@ -1059,6 +1077,10 @@
         else if (info?.reason === "shot_out_of_range") toast("เป้าหมายอยู่นอกระยะยิง");
         else if (info?.reason === "shot_blocked") toast("กำแพงบังแนวกระสุนอาคม");
         else if (info?.reason === "shot_cooldown") toast("รอพลังยิงอาคมอีกครู่");
+        else if (info?.reason === "dash_cooldown") toast("พุ่งยังไม่พร้อม · รอคูลดาวน์");
+        else if (info?.reason === "dash_in_progress" || info?.reason === "dashing") toast("กำลังพุ่งอยู่");
+        else if (info?.reason === "dash_rate_limited") toast("สั่งพุ่งถี่เกินไป");
+        else if (info?.reason === "invalid_dash") toast("ทิศทางการพุ่งไม่ถูกต้อง");
         else if (info?.reason === "climbing") toast("ยังโจมตีหรือเดินไม่ได้ขณะปีน");
         else if (info?.reason === "ladder_too_far") toast("เดินเข้าหาบันไดก่อนปีน");
         else if (info?.reason === "melee_height_blocked") toast("โจมตีประชิดข้ามระดับความสูงไม่ได้ · ใช้ยิงอาคม");
@@ -1435,7 +1457,7 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.1",`<h3>การเคลื่อนที่</h3><p>แตะพื้นที่ต้องการเดิน · ลากหนึ่งนิ้วเพื่อหมุนกล้อง · หุบสองนิ้วเพื่อซูมออก / กางสองนิ้วเพื่อซูมเข้า · คอมพิวเตอร์ใช้ล้อเมาส์ซูม</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ไอเทมถาวร และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.1",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดอย่างรวดเร็วบนแถบเมนูล่างเพื่อพุ่งตามทิศที่ปัด (ไม่ต้องมีปุ่มพุ่ง)</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ ส่วนคาถาและไอเทมยังไม่เปิดเป็นระบบออนไลน์</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ไอเทมถาวร และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
   }
   function openBag() {
     openDrawer("bag","กระเป๋าไอเทม",`<div class="offline-banner">กระเป๋าไอเทมยังเป็นหน้าตัวอย่าง ไม่มีของจริงและยังไม่เชื่อมฐานข้อมูล</div><div class="status-line"><span>ตำราพื้นฐาน</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>เครื่องราง</span><strong>เตรียมระบบ</strong></div><div class="status-line"><span>แลกของกับผู้เล่น</span><strong>ยังไม่เปิดใช้</strong></div>`);
@@ -1542,6 +1564,31 @@
         }
       }
     }
+    if (mode === "demo" && demoDash) {
+      const me = getLocalAvatar();
+      if (!me) demoDash = null;
+      else {
+        const distance = Math.min(demoDash.remaining, DASH_DEMO_SPEED * dt);
+        let moved = 0, blocked = false;
+        while (moved + 1e-8 < distance) {
+          const micro = Math.min(0.1, distance - moved);
+          const x = me.targetX + demoDash.dx * micro;
+          const z = me.targetZ + demoDash.dz * micro;
+          const wall = activeFort;
+          if (Math.abs(x) > 20 || Math.abs(z) > 20 ||
+              (Math.abs(x-wall.x) < wall.width/2 + .32 &&
+               Math.abs(z-wall.z) < wall.length/2 + .32)) {
+            blocked = true;
+            break;
+          }
+          me.targetX = x;
+          me.targetZ = z;
+          moved += micro;
+        }
+        demoDash.remaining = Math.max(0, demoDash.remaining - moved);
+        if (blocked || demoDash.remaining < 0.0001) demoDash = null;
+      }
+    }
     if(mode==="demo" && demoDest) {
       const me=getLocalAvatar();
       if(me) {
@@ -1553,7 +1600,8 @@
     }
     for(const a of avatars.values()) {
       const beforeX = a.x, beforeZ = a.z;
-      const blend = 1 - Math.exp(-dt * 14);
+      const dashing = a.dashUntil > now;
+      const blend = 1 - Math.exp(-dt * (dashing ? 25 : 14));
       a.x += (a.targetX - a.x) * blend;
       a.y += (a.targetY - a.y) * blend;
       a.z += (a.targetZ - a.z) * blend;
@@ -1576,6 +1624,7 @@
       );
       a.heading += angleDelta * (1 - Math.exp(-dt * 11));
       a.node.rotation.y = a.heading;
+      a.node.scaling.set(dashing ? 1.07 : 1, dashing ? 0.94 : 1, dashing ? 1.07 : 1);
       const flash = (a.hitFlashUntil || 0) > now;
       a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
       a.node.position.set(a.x, a.y, a.z);
