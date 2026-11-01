@@ -114,7 +114,7 @@ jobs:
           grep -q 'guestToken' main.js
           grep -q 'characterSlot' main.js
           grep -q 'slotChoice' main.js
-          grep -q '0.2.3' index.html
+          grep -q '0.2.4' index.html
           grep -q 'room.send("dash", direction)' main.js
           grep -q 'function requestSwipeDash' main.js
           grep -q 'dashAvailable' main.js
@@ -125,7 +125,12 @@ jobs:
             echo "Dash must use a bottom-menu swipe, not a new HUD button"
             exit 1
           fi
-          grep -q 'CAMERA_ZOOM_MAX = 55' main.js
+          grep -q 'CAMERA_ZOOM_MAX = 85' main.js
+          grep -q 'CAMERA_DEFAULT_RADIUS = 52' main.js
+          grep -q 'CAMERA_DEFAULT_BETA = 0.70' main.js
+          grep -Fq -- 'padding-top:var(--dash-swipe-reach)' styles.css
+          grep -Fq -- '--dash-swipe-reach: clamp(80px, 12dvh, 108px)' styles.css
+          grep -Fq 'pointer.beta + dy * .003' main.js
           grep -q 'touchSeparation()' main.js
           grep -q 'setCameraZoom(' main.js
           grep -q 'rename_character' main.js
