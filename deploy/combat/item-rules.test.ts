@@ -38,8 +38,8 @@ test("Inventory: rejects counterfeits, unknown items, corrupt quantities and bad
   }
   const source=makeStarterInventory();
   const checked=validateInventory(source);
-  checked.slots[0].quantity=1;
-  assert.equal(source.slots[0].quantity,STARTER_POTION_COUNT,"validation must clone input");
+  checked.slots[0]!.quantity=1;
+  assert.equal(source.slots[0]!.quantity,STARTER_POTION_COUNT,"validation must clone input");
 });
 
 test("Inventory: only exact server-assigned slot index is accepted", () => {
@@ -61,14 +61,14 @@ test("Inventory: health potion restores at most 30 HP and consumes exactly one",
   assert.equal(used.healed,30);
   assert.equal(used.hp,81);
   assert.equal(used.itemId,POTION_ID);
-  assert.equal(used.inventory.slots[0].quantity,2);
-  assert.equal(original.slots[0].quantity,3,"usage may not mutate saved input");
+  assert.equal(used.inventory.slots[0]!.quantity,2);
+  assert.equal(original.slots[0]!.quantity,3,"usage may not mutate saved input");
   const last=useInventoryItem(used.inventory,0,95,100,true);
   assert.equal(last.ok,true);
   if (!last.ok) return;
   assert.equal(last.hp,100);
   assert.equal(last.healed,5);
-  assert.equal(last.inventory.slots[0].quantity,1);
+  assert.equal(last.inventory.slots[0]!.quantity,1);
   const gone=useInventoryItem(last.inventory,0,42,100,true);
   assert.equal(gone.ok,true);
   if (!gone.ok) return;
@@ -85,5 +85,5 @@ test("Inventory: cannot waste potion at full HP or resurrect a dead character", 
     {ok:false,reason:"not_alive"});
   assert.deepEqual(useInventoryItem(original,11,55,100,true),
     {ok:false,reason:"item_unavailable"});
-  assert.equal(original.slots[0].quantity,3);
+  assert.equal(original.slots[0]!.quantity,3);
 });
