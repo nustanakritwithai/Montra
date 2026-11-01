@@ -14,12 +14,14 @@ MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the
 - **Elevation Alpha / frontend 0.1.9:** server-owned vertical positioning (Y), one climbable 4-unit-high wall with a ladder, solid ground collision, an elevated walkable crest, magic projectiles with a 3D range and wall line-of-sight checks, and floating summons following owner altitude.
 - **Monster navigation RRT patch (server only):** adapt the RRT path planner from [RRT-Game-Lab/multi_target_core.js](https://github.com/nustanakritwithai/RRT-Game-Lab/blob/main/multi_target_core.js) to MONTRA X/Z; monsters follow obstacle-safe waypoints for patrol/chase/return instead of getting stuck walking into the watchwall. Slow bounded replanning is intentional, and no combat or frontend rules change.
 - **S2 Guest Character Persistence / frontend 0.2.0 (staged in GitHub):** browser-generated 256-bit guest token, hashed server-side filename, file-backed atomic snapshots, 15-second autosave and disconnect saves; character name, ID, level, XP, HP, safe position, PK kills/deaths survive Node restart. Mobile profile supports renaming plus export/import of a secret recovery key. Legacy non-token clients still play transiently.
+- **Alpha 0.2.1 — three saves per Guest ID (requires latest VPS code):** each 256-bit guest token owns 3 independent character slots. Slot 1 uses the **original S2 filename** and preserves existing progress without migration; slots 2–3 are new domain-separated SHA-256 filenames. The mobile character selector appears before LIVE and can be reopened through the profile. The server rejects concurrent logins into different slots of the same Guest ID. A legacy S2 server is safely refused for slots 2–3 rather than silently joining slot 1. No existing saves are deleted.
 - **Still not complete:** password-backed accounts, permanent inventory/trading, XP earning/level progression, multi-node shared storage and Windows auto-start. This S2 code does NOT update the running VPS until the safe installer is executed.
 
 **Code pushed to GitHub does not change the live Windows VPS automatically.** Use the safe S2 Windows installer in the linked runbook, then restart ONLY MONTRA Node and run non-destructive live checks. Keep all character data backups; do not run persistence integration tests against live players.
 
 ## S1 server source of truth
 
+- [0.2.1 Three-save-slot Windows VPS installation + backups (Thai)](deploy/combat/THREE-SLOTS-WINDOWS-TH.md)
 - [S2 Guest Character safe Windows deployment / backup / rollback (Thai)](deploy/combat/S2-CHARACTERS-WINDOWS-TH.md)
 - [S1 Windows VPS install, test and rollback (Thai)](deploy/combat/S1-WINDOWS-VPS-TH.md)
 - [S2 file-backed durable CharacterStore](deploy/combat/CharacterStore.ts)
@@ -71,7 +73,7 @@ projects, so deployments must not overwrite its shared configuration.
 - Four users **per room**, not four users across the whole MMO.
 - One illustrative monster with RRT wall-avoidance, one physically solid fortification, and basic server ray-vs-wall line of sight. The RRT planner currently knows only the watchwall collider; general-purpose navmesh, universal house collisions, ballistic physics and jumping are not yet available.
 - The server uses fixed 20 Hz ticks. No client prediction/rewind system has been enabled.
-- S2 persists a single Guest character per recovery token to private JSON files on the VPS (only after S2 has been deployed on Windows). No username/password identity, recovery service, remote backup or relational database. Clearing browser data without exporting the token loses access.
+- Alpha 0.2.1 supports **three character saves per recovery token** on a single Windows VPS. Slot 1 keeps the original S2 file. No username/password account, automated lost-token recovery, remote backup or relational database. Clearing browser data without exporting the token loses access to all 3 slots.
 - Free PK is enabled between any living players in the same room. There is no consent flow or safe-zone protection yet.
 - Guardian ownership is transient (one per connected session) and not saved to a database. Guardian NPCs cannot yet be damaged or upgraded.
 - Guardian summon remains transient; only character identity/name/stats/location are stored. No persistent inventory, trading, economy or real reward payouts.
