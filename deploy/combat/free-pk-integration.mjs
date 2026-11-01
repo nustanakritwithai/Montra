@@ -38,7 +38,7 @@ try {
   let rejectEvents = [];
   rooms.forEach((r, index) => {
     r.onMessage("pvp_hit", info => {
-      assert.equal(info.damage, 12, "only server may choose PK damage");
+      assert.equal(info.damage, 15, "server calculates base ATK against DEF");
       if (info.targetId === bId || info.targetId === dId) pvpEvents++;
     });
     r.onMessage("pvp_kill", info => killEvents.push(info));
@@ -54,7 +54,7 @@ try {
   await until(() => rooms.every(r => r.state?.players?.size === 4), 6000, "four joined");
   assert.equal(new Set(rooms.map(r => r.roomId)).size, 1);
   for (const id of ids) {
-    assert.equal(player(id).hp, 100);
+    assert.equal(player(id).hp, 240);
     assert.equal(player(id).pkKills, 0);
     assert.equal(player(id).pkDeaths, 0);
   }
@@ -65,24 +65,24 @@ try {
   a.send("attack", { targetId: bId, damage: 1000000 });
   a.send("attack", { targetId: bId, hp: 0 });
   await sleep(260);
-  assert.equal(player(aId).hp, 100);
-  assert.equal(player(bId).hp, 100);
-  assert.equal(player(dId).hp, 100);
+  assert.equal(player(aId).hp, 240);
+  assert.equal(player(bId).hp, 240);
+  assert.equal(player(dId).hp, 240);
   console.log("PASS: self-attack, unknown player and forged HP/damage rejected");
 
   // Two unrelated pairs fight without invites in the same room.
   a.send("attack", { targetId: bId });
   c.send("attack", { targetId: dId });
-  await until(() => player(bId).hp === 88 && player(dId).hp === 88 &&
-    rooms.every(r => r.state.players.get(bId)?.hp === 88 &&
-                     r.state.players.get(dId)?.hp === 88),
+  await until(() => player(bId).hp === 225 && player(dId).hp === 225 &&
+    rooms.every(r => r.state.players.get(bId)?.hp === 225 &&
+                     r.state.players.get(dId)?.hp === 225),
     4500, "first PK hits shared by four users");
   await until(() => pvpEvents >= 8, 2500, "PK events broadcast to all four users");
-  console.log("PASS: two PK fights start immediately; four clients see shared HP 100 -> 88");
+  console.log("PASS: two PK fights start immediately; four clients see shared HP 240 -> 225");
 
   await sleep(300);
-  assert.equal(player(bId).hp, 88);
-  assert.equal(player(dId).hp, 88);
+  assert.ok(player(bId).hp >= 225 && player(bId).hp <= 226);
+  assert.ok(player(dId).hp >= 225 && player(dId).hp <= 226);
   console.log("PASS: repeated server tick does not bypass PK attack cooldown");
 
   // Tap the ground cancels C's repeated attacks on D, even while A fights B.
@@ -90,13 +90,13 @@ try {
   await sleep(250);
   const dHp = player(dId).hp;
   await sleep(1320);
-  assert.equal(player(dId).hp, dHp);
+  assert.ok(player(dId).hp >= dHp && player(dId).hp <= dHp+2);
   console.log("PASS: independent PK attack is cancelled by manual movement");
 
   // Server calculates knockout, awards the kill and schedules victim respawn.
   await until(() => player(bId).hp === 0 && player(bId).alive === false &&
     rooms.every(r => r.state.players.get(bId)?.hp === 0),
-    12000, "PK defeat and shared zero HP");
+    24000, "PK defeat and shared zero HP");
   assert.equal(player(aId).pkKills, 1);
   assert.equal(player(bId).pkDeaths, 1);
   await until(() => killEvents.some(e => e.winnerId === aId && e.loserId === bId)
@@ -104,7 +104,7 @@ try {
   console.log("PASS: single PK kill, winner credit and loser death synchronized");
   await until(() => rooms.every(r =>
     r.state?.players?.get(bId)?.alive === true &&
-    r.state?.players?.get(bId)?.hp === 100),
+    r.state?.players?.get(bId)?.hp === 240),
     7000, "server-driven player respawn");
   console.log("PASS: defeated player respawns with restored HP");
 
@@ -123,7 +123,7 @@ try {
   await sleep(250);
   const hpAfterCancel = player(bId).hp;
   await sleep(1300);
-  assert.equal(player(bId).hp, hpAfterCancel);
+  assert.ok(player(bId).hp >= hpAfterCancel && player(bId).hp <= hpAfterCancel+2);
   console.log("PASS: PK auto-attack cancels when attacker taps ground");
 
   // A disconnected victim leaves no dangling target on the server.

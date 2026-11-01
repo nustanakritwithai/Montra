@@ -64,11 +64,11 @@ try{
   await until(()=>b.state.players.get(attackerId)?.equippedWeaponId==="arcane_sword",
     2500,"peer sees equipped sword");
   a.send("attack",{targetId:victimId});
-  await until(()=>victim()?.hp===80,3100,"sword melee PvP damage 12 + 8");
-  const swordHit=pvp.find(hit=>hit.attackerId===attackerId && hit.damage===20);
+  await until(()=>pvp.some(hit=>hit.attackerId===attackerId && hit.damage===22),3100,"sword melee PvP damage after defense");
+  const swordHit=pvp.find(hit=>hit.attackerId===attackerId && hit.damage===22);
   assert.ok(swordHit,"sword has exact server-calculated PvP bonus");
   a.send("move",{x:0,z:0}); // cancel auto attack
-  console.log("PASS: equipped arcane sword adds 8 to real server PvP melee damage");
+  console.log("PASS: sword adds 8 attack before server applies defense");
 
   await sleep(900);
   a.send("equip_weapon",{slot:3});
@@ -77,9 +77,9 @@ try{
   await sleep(1250); // shared melee/ranged attack timer
   a.send("shoot",{targetId:victimId});
   await until(()=>pvp.some(hit=>hit.source==="ranged" &&
-    hit.damage===16 && hit.targetId===victimId),2600,
-    "staff ranged PvP damage 10 + 6");
-  console.log("PASS: spirit staff boosts SERVER calculated magic shot from 10 to 16");
+    hit.damage===18 && hit.targetId===victimId),2600,
+    "staff ranged PvP damage after magic defense");
+  console.log("PASS: spirit staff adds 6 magic attack before server applies magic defense");
 
   await sleep(850);
   a.send("equip_weapon",{slot:null});

@@ -73,6 +73,7 @@ try {
 
   // A tap-to-move command is rejected during dash (no movement stacking).
   await sleep(1900);
+  await until(()=>me().stamina>=50,16000,"stamina recovers for the next dash");
   a.send("dash",{dx:0,dz:-1});
   await until(()=>dashStarted.filter(m=>m.playerId===id).length>=3,
     3500,"dash away from wall");

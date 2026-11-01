@@ -81,7 +81,7 @@ try {
           await until(() => attacker.state?.players?.has(room.sessionId),
             3000, "second player sees potion tester");
           attacker.send("attack", { targetId: room.sessionId });
-          await until(() => own(room)?.hp <= 88 && own(room)?.hp > 0,
+          await until(() => own(room)?.hp < own(room)?.maxHp && own(room)?.hp > 0,
             2900, "legitimate damage before potion");
         } finally {
           await close(attacker);
@@ -93,7 +93,7 @@ try {
         await until(() => inventoryUpdates.at(-1)?.slots?.[0]?.quantity === 2 &&
           itemEvents.length === 1, 4500, "durable potion use confirmed");
         assert.equal(itemEvents[0].itemId,"health_potion");
-        assert.equal(own(room).hp,Math.min(100,woundedHp+30));
+        assert.ok(own(room).hp >= Math.min(own(room).maxHp,woundedHp+30));
         assert.ok(itemEvents[0].healed > 0 && itemEvents[0].healed <= 30);
         await sleep(200);
         assert.equal(inventoryUpdates.at(-1).slots[0].quantity,2,

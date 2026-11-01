@@ -100,6 +100,7 @@
   const chatHistory = { map: [], world: [] }, chatUnread = { map: 0, world: 0 };
   const chatDraft = { map: "", world: "" };
   let chatChannel = "map", chatPending = null, chatTimer = null;
+  let statUpgradePending = false, statUpgradeTimer = null;
   const scene = new B.Scene(engine);
   scene.clearColor = B.Color4.FromHexString("#111c27ff");
   scene.fogMode = B.Scene.FOGMODE_EXP2;
@@ -758,6 +759,7 @@
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
     clearChatHistory(true);
+    clearTimeout(statUpgradeTimer); statUpgradePending = false;
     switchWorld("ritual_village");
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
     inventoryState = null;
@@ -1159,6 +1161,15 @@
     syncClimbButton();
     updateFlightButton();
     if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
+    if (drawerActive === "character") renderProgressionProfile();
+    const me=players.get(localId), staminaBar=$("staminaBar");
+    if (state?.progressionAvailable === true && me && Number(me.maxStamina)>0) {
+      const pct=Math.max(0,Math.min(100,100*Number(me.stamina)/Number(me.maxStamina)));
+      staminaBar.querySelector("i").style.width=pct+"%";
+      staminaBar.setAttribute("aria-valuemin","0");staminaBar.setAttribute("aria-valuemax",String(me.maxStamina));
+      staminaBar.setAttribute("aria-valuenow",String(Math.round(me.stamina)));
+      staminaBar.title="กำลัง " + Math.round(me.stamina) + "/" + Math.round(me.maxStamina);
+    }
     return true;
   }
   let syncPoll = null;
@@ -1404,7 +1415,19 @@
         if (drawerActive === "online" && refreshCharacterSlotCards) refreshCharacterSlotCards();
       });
       joined.onMessage("character_save_error", () => {
-        if (room === joined) toast("บันทึกตัวละครไม่สำเร็จ · ตรวจสอบพื้นที่ VPS");
+        if (room !== joined) return;
+        clearTimeout(statUpgradeTimer); statUpgradePending=false; renderProgressionProfile();
+        toast("บันทึกตัวละครไม่สำเร็จ · ตรวจสอบพื้นที่ VPS");
+      });
+      joined.onMessage("experience_gained", info => {
+        if(room !== joined) return;
+        toast("ได้รับ EXP +" + Number(info?.amount || 0));
+        renderProgressionProfile();
+      });
+      joined.onMessage("stat_allocated", () => {
+        if(room !== joined) return;
+        clearTimeout(statUpgradeTimer); statUpgradePending=false;
+        toast("บันทึกสเตตัสแล้ว"); renderProgressionProfile();
       });
       joined.onMessage("inventory_state", payload => {
         if (room !== joined || payload?.version !== 1 ||
@@ -1473,6 +1496,12 @@
             info.reason === "chat_unavailable" ? "ยังส่งแชทไม่ได้ขณะเดินทาง" : "ข้อความไม่ถูกต้องหรือยาวเกิน 200 ตัวอักษร");
           if (drawerActive === "chat") renderChat();
           return;
+        }
+        if (["invalid_stat_request","status_unavailable","no_stat_points","stat_at_cap","insufficient_stamina"].includes(info?.reason) ||
+            (statUpgradePending && ["character_busy","movement_busy","combat_locked"].includes(info?.reason))) {
+          clearTimeout(statUpgradeTimer); statUpgradePending=false;
+          const reasons={invalid_stat_request:"คำขออัปสเตตัสไม่ถูกต้อง",status_unavailable:"ต้องเข้าเซฟออนไลน์ก่อนอัปสเตตัส",no_stat_points:"ไม่มีแต้มสเตตัสเหลือ",stat_at_cap:"สเตตัสนี้ถึงขีดจำกัดแล้ว",insufficient_stamina:"กำลังไม่พอสำหรับพุ่ง",character_busy:"กำลังบันทึกข้อมูล",movement_busy:"หยุดเคลื่อนไหวก่อนอัปสเตตัส",combat_locked:"รอให้พ้นการต่อสู้ก่อนอัปสเตตัส"};
+          toast(reasons[info.reason]);renderProgressionProfile();return;
         }
         if(warpPending) {
           clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
@@ -2035,6 +2064,21 @@
     };
     drawSlots();
   }
+  const progressionStats = [
+    ["hp","HP สูงสุด","maxHp"],["atk","โจมตีกายภาพ","atk"],["def","ป้องกันกายภาพ","def"],
+    ["magicAtk","โจมตีเวท","magicAtk"],["magicDef","ป้องกันเวท","magicDef"],["stamina","กำลังสูงสุด","maxStamina"]
+  ];
+  function renderProgressionProfile() {
+    if (drawerActive !== "character" || !$('profileStats')) return;
+    const p = ownServerCharacter(), supported = mode === "live" && room?.state?.progressionAvailable === true && p;
+    $("profileProgressionStatus").textContent = supported ? "แต้มที่เหลือ: " + Number(p.statPoints || 0) : "เข้า LIVE กับเซิร์ฟเวอร์ที่รองรับระบบสเตตัส";
+    $("profileLevel").textContent = "LV. " + (p?.level ?? 1) + " · EXP " + (p?.experience ?? 0) + (supported && p.xpToNext ? " / " + p.xpToNext : "");
+    for (const [key,,field] of progressionStats) {
+      $("statValue-" + key).textContent = supported ? String(Math.round(Number(p[field]) || 0)) : "—";
+      $("statButton-" + key).disabled = !supported || !p.persistent || Number(p.statPoints) < 1 || statUpgradePending;
+    }
+    $("profileStamina").textContent = supported ? Math.round(Number(p.stamina)) + " / " + Math.round(Number(p.maxStamina)) : "—";
+  }
   function openCharacterProfile() {
     const me = ownServerCharacter();
     const durable = me?.persistent === true;
@@ -2044,6 +2088,9 @@
       '<button class="secondary" id="switchCharacterSlot" type="button">เลือกช่องเซฟ 1–3</button>' +
       '<div class="status-line"><span>ชื่อ</span><strong id="profileName"></strong></div>' +
       '<div class="status-line"><span>ระดับ / ค่าประสบการณ์</span><strong id="profileLevel"></strong></div>' +
+      '<div id="profileStats"><p class="note" id="profileProgressionStatus"></p><p class="note">ใช้ 1 แต้ม: HP +20, โจมตี/ป้องกัน +2 หรือกำลัง +5</p>' +
+      progressionStats.map(([key,label]) => '<div class="status-line stat-row"><span>' + label + '</span><strong id="statValue-' + key + '">—</strong><button type="button" id="statButton-' + key + '" aria-label="ใช้ 1 แต้มเพิ่ม ' + label + '">+1 แต้ม</button></div>').join("") +
+      '<div class="status-line"><span>กำลังปัจจุบัน</span><strong id="profileStamina">—</strong></div></div>' +
       '<div class="status-line"><span>สถิติ PK</span><strong id="profilePk"></strong></div>' +
       '<div class="status-line"><span>รหัสตัวละคร</span><strong id="profileId"></strong></div>' +
       '<label class="field" for="renameCharacter">ชื่อใหม่ (ภาษาไทย/อังกฤษ 2–20 ตัวอักษร)</label>' +
@@ -2060,6 +2107,15 @@
     $("switchCharacterSlot").onclick = openOnline;
     $("profileName").textContent = String(me?.characterName || "นที");
     $("profileLevel").textContent = "LV. " + (me?.level ?? 1) + " · XP " + (me?.experience ?? 0);
+    for (const [key] of progressionStats) $("statButton-" + key).onclick = () => {
+      if (!room || statUpgradePending) return;
+      statUpgradePending=true;
+      try { room.send("allocate_stat", { stat:key }); }
+      catch (_) { statUpgradePending=false;toast("ส่งคำขออัปสเตตัสไม่สำเร็จ");renderProgressionProfile();return; }
+      statUpgradeTimer=setTimeout(()=>{statUpgradePending=false;toast("ยังไม่ได้รับผลการอัปสเตตัส");renderProgressionProfile();},5000);
+      renderProgressionProfile();
+    };
+    renderProgressionProfile();
     $("profilePk").textContent = "K " + (me?.pkKills ?? 0) + " / D " + (me?.pkDeaths ?? 0);
     $("profileId").textContent = me?.characterId || "—";
     $("renameCharacter").value = durable ? String(me.characterName) : "";
@@ -2110,7 +2166,7 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ชุดเกราะ อาวุธดรอปจากมอนสเตอร์ การตีบวก และระบบอาชีพ/ค่าประสบการณ์จริง</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ตลาดซื้อขาย ชุดเกราะ อาวุธดรอปจากมอนสเตอร์ การตีบวก และระบบอาชีพ</p>`);
   }
   function currentBagSlots() {
     if (mode === "live") return inventoryState?.slots || null;
