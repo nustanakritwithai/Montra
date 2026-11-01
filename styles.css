@@ -431,6 +431,19 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .bag-slot.bag-weapon .bag-symbol { font-size:clamp(21px,6vw,30px); }
 #bagEquipped { max-width:61%; text-align:right; overflow-wrap:anywhere; }
 
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+#chatUnread { min-width:18px; padding:1px 4px; border-radius:10px; background:#a34a38; font-size:10px; }
+.chat-tabs { display:flex; gap:8px; }
+.chat-tabs button { flex:1; min-height:42px; border:1px solid #997a54; border-radius:10px; background:#25393b; }
+.chat-tabs button[aria-pressed="true"] { background:#6a4a2c; border-color:#f1c681; }
+.chat-log { height:min(32dvh,240px); min-height:110px; overflow-y:auto; padding:10px; border:1px solid #9b805669; border-radius:10px; background:#091719; overflow-wrap:anywhere; }
+.chat-line { margin:3px 0; white-space:pre-wrap; }
+.chat-line strong { color:#efc787; }
+.chat-empty { opacity:.7; }
+.chat-form { display:flex; gap:8px; margin-top:10px; }
+.drawer-body .chat-form input { min-width:0; flex:1; font-size:16px; }
+.chat-form button { min-width:58px; min-height:46px; border:1px solid #d7ab6c; border-radius:10px; background:#7a4d27; }
+
 .warp-button { position:absolute; z-index:12; left:50%; bottom:calc(170px + env(safe-area-inset-bottom)); transform:translateX(-50%); min-height:48px; padding:10px 18px; border:1px solid #a8f4dc; border-radius:14px; color:#e9fff7; background:#164d45; box-shadow:0 0 18px #78eac677; font:inherit; font-weight:700; white-space:nowrap; }
 .warp-loading { position:absolute; inset:0; z-index:30; display:grid; place-items:center; color:#effff9; background:#0a1a1be8; font-size:1.2rem; }
 .warp-button[hidden], .warp-loading[hidden] { display:none; }

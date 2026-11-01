@@ -97,6 +97,9 @@
   }
   engine.setHardwareScalingLevel(Math.min(1.7, Math.max(1, devicePixelRatio / 1.5)));
   let activeMapId = "ritual_village", warpPending = false, warpTimer = null;
+  const chatHistory = { map: [], world: [] }, chatUnread = { map: 0, world: 0 };
+  const chatDraft = { map: "", world: "" };
+  let chatChannel = "map", chatPending = null, chatTimer = null;
   const scene = new B.Scene(engine);
   scene.clearColor = B.Color4.FromHexString("#111c27ff");
   scene.fogMode = B.Scene.FOGMODE_EXP2;
@@ -367,6 +370,7 @@
   function switchWorld(mapId) {
     if(!portals[mapId] || activeMapId===mapId)return;
     activeMapId=mapId;
+    clearChatHistory(false);
     const village=mapId==="ritual_village";
     for(const mesh of villageMeshes) mesh.setEnabled(village);
     for(const light of villageLights) light.setEnabled(village);
@@ -753,6 +757,7 @@
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
+    clearChatHistory(true);
     switchWorld("ritual_village");
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
     inventoryState = null;
@@ -1220,6 +1225,7 @@
       joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot });
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
+      clearChatHistory(true);
       inventoryState = null;
       itemUsePending = false;
       itemUseSequence += 1;
@@ -1240,6 +1246,24 @@
       const ok = syncState(joined.state);
       console.info("MONTRA room joined", {roomId:joined.roomId, sessionId:joined.sessionId, initialStateReady:ok});
       joined.onStateChange(state => syncState(state));
+      joined.onMessage("chat_message", message => {
+        if (room !== joined || !message || !["map", "world"].includes(message.channel) ||
+            typeof message.text !== "string" || typeof message.name !== "string" ||
+            typeof message.senderId !== "string" ||
+            (message.channel === "map" && message.mapId !== activeMapId)) return;
+        const channel = message.channel;
+        const own = message.senderId === localId;
+        chatHistory[channel].push({ name: message.name.slice(0, 80), text: message.text.slice(0, 400), own });
+        if (chatHistory[channel].length > 100) chatHistory[channel].shift();
+        if (own && chatPending && chatPending.channel === channel && chatPending.text === message.text) {
+          if (chatDraft[channel].normalize("NFC").trim() === message.text) chatDraft[channel] = "";
+          finishChatPending();
+        } else if (!own && (drawerActive !== "chat" || chatChannel !== channel)) {
+          chatUnread[channel] = Math.min(99, chatUnread[channel] + 1);
+        }
+        updateChatBadge();
+        if (drawerActive === "chat") renderChat();
+      });
       joined.onMessage("combat_hit", hit => {
         if (room !== joined || activeMapId !== "ritual_village" || hit?.targetId !== MONSTER_ID) return;
         // Players also visibly turn toward the monster while attacking,
@@ -1443,6 +1467,13 @@
       });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        if (["invalid_chat", "chat_rate_limited", "chat_unavailable"].includes(info?.reason)) {
+          finishChatPending();
+          toast(info.reason === "chat_rate_limited" ? "ส่งข้อความเร็วเกินไป · รอสักครู่" :
+            info.reason === "chat_unavailable" ? "ยังส่งแชทไม่ได้ขณะเดินทาง" : "ข้อความไม่ถูกต้องหรือยาวเกิน 200 ตัวอักษร");
+          if (drawerActive === "chat") renderChat();
+          return;
+        }
         if(warpPending) {
           clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
           const warpReasons={portal_too_far:"อยู่ไกลจากประตูเกินไป",combat_locked:"รอให้พ้นการต่อสู้ก่อนเดินทาง",warp_cooldown:"รอคูลดาวน์ก่อนเดินทาง",movement_busy:"หยุดบิน ปีน หรือพุ่งก่อนเดินทาง",character_busy:"กำลังบันทึกข้อมูล"};
@@ -1805,6 +1836,76 @@
     ui.drawerBody.innerHTML=html;
     ui.drawer.hidden=false; ui.shade.hidden=false;
     drawerActive=name;
+  }
+  function updateChatBadge() {
+    const total = Math.min(99, chatUnread.map + chatUnread.world);
+    const badge = $("chatUnread");
+    badge.hidden = total === 0;
+    badge.textContent = total ? String(total) : "";
+    $("chatButton").setAttribute("aria-label", total ? `เปิดแชท มีข้อความใหม่ ${total} ข้อความ` : "เปิดแชท");
+  }
+  function finishChatPending() {
+    clearTimeout(chatTimer); chatTimer = null; chatPending = null;
+  }
+  function clearChatHistory(all) {
+    chatHistory.map.length = 0; chatUnread.map = 0;
+    if (all) {
+      chatHistory.world.length = 0; chatUnread.world = 0;
+      chatDraft.map = ""; chatDraft.world = ""; finishChatPending();
+    }
+    updateChatBadge();
+    if (drawerActive === "chat") renderChat();
+  }
+  function renderChat() {
+    if (drawerActive !== "chat") return;
+    const log = $("chatLog"), input = $("chatInput"), send = $("chatSend");
+    if (!log || !input || !send) return;
+    const canChat = mode === "live" && room?.state?.chatAvailable === true;
+    $("chatStatus").textContent = mode !== "live" ? "เข้าออนไลน์เพื่อใช้แชท" :
+      canChat ? "ข้อความจะไม่ถูกบันทึกหลังออกเกม" : "เซิร์ฟเวอร์ยังไม่รองรับแชท · ต้องอัปเดต VPS";
+    for (const channel of ["map", "world"]) {
+      const tab = $(channel === "map" ? "chatMapTab" : "chatWorldTab");
+      tab.setAttribute("aria-pressed", String(channel === chatChannel));
+      const label = channel === "map" ? "แผนที่" : "รวมในห้อง";
+      tab.textContent = label + (chatUnread[channel] ? ` (${chatUnread[channel]})` : "");
+    }
+    const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+    log.replaceChildren();
+    for (const item of chatHistory[chatChannel]) {
+      const row = document.createElement("div"); row.className = "chat-line";
+      const name = document.createElement("strong"); name.textContent = item.name + (item.own ? " (คุณ): " : ": ");
+      const body = document.createElement("span"); body.textContent = item.text;
+      row.append(name, body); log.append(row);
+    }
+    if (!chatHistory[chatChannel].length) {
+      const empty = document.createElement("p"); empty.className = "chat-empty"; empty.textContent = "ยังไม่มีข้อความ"; log.append(empty);
+    }
+    if (nearBottom) log.scrollTop = log.scrollHeight;
+    if (input.value !== chatDraft[chatChannel]) input.value = chatDraft[chatChannel];
+    input.disabled = !canChat; send.disabled = !canChat || Boolean(chatPending);
+  }
+  function openChat() {
+    chatUnread[chatChannel] = 0; updateChatBadge();
+    openDrawer("chat", "แชท", '<div class="chat-tabs" role="group" aria-label="เลือกช่องแชท"><button id="chatMapTab" type="button">แผนที่</button><button id="chatWorldTab" type="button">รวมในห้อง</button></div><p id="chatStatus" class="note" role="status"></p><div id="chatLog" class="chat-log" role="log" aria-live="polite"></div><form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">ข้อความแชท</label><input id="chatInput" maxlength="400" autocomplete="off" placeholder="พิมพ์ข้อความ (ไม่เกิน 200 ตัวอักษร)"><button id="chatSend" type="submit">ส่ง</button></form>');
+    for (const channel of ["map", "world"]) {
+      $(channel === "map" ? "chatMapTab" : "chatWorldTab").onclick = () => {
+        chatChannel = channel; chatUnread[channel] = 0; updateChatBadge(); renderChat();
+      };
+    }
+    $("chatInput").addEventListener("input", event => { chatDraft[chatChannel] = event.target.value; });
+    $("chatForm").addEventListener("submit", event => {
+      event.preventDefault();
+      if (chatPending || mode !== "live" || !room || room.state?.chatAvailable !== true) return;
+      const text = chatDraft[chatChannel].normalize("NFC").trim();
+      if (!text || Array.from(text).length > 200) { toast("พิมพ์ข้อความไม่เกิน 200 ตัวอักษร"); return; }
+      const channel = chatChannel;
+      chatPending = { text, channel };
+      try { room.send("chat", { text, channel }); }
+      catch (_) { finishChatPending(); toast("ส่งข้อความไม่สำเร็จ"); renderChat(); return; }
+      chatTimer = setTimeout(() => { finishChatPending(); toast("ยังไม่ได้รับการยืนยันข้อความ"); renderChat(); }, 5000);
+      renderChat();
+    });
+    renderChat();
   }
   $("drawerClose").addEventListener("click",closeDrawer);
   ui.shade.addEventListener("click",closeDrawer);
@@ -2188,6 +2289,7 @@
   });
   $("characterProfile").onclick=openCharacterProfile;
   $("mapButton").onclick=openMap;
+  $("chatButton").onclick=openChat;
   $("mapShortcut").onclick=openMap;
   $("modeButton").onclick=openOnline;
   $("helpButton").onclick=openHelp;

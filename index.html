@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — ต้นแบบ MMORPG 3D ไสยศาสตร์ไทยสำหรับมือถือ แบบแตะพื้นเพื่อเดิน" />
-  <title>MONTRA — โลกอาคม | Alpha 0.2.8</title>
-  <link rel="stylesheet" href="./styles.css?v=0.2.8" />
+  <title>MONTRA — โลกอาคม | Alpha 0.2.9</title>
+  <link rel="stylesheet" href="./styles.css?v=0.2.9" />
 </head>
 <body>
   <main id="game" aria-label="MONTRA เกมต้นแบบสามมิติ">
@@ -55,6 +55,7 @@
       </div>
       <nav class="nav-bar" aria-label="เมนูเกม">
         <button id="mapButton"><span>⌖</span>แผนที่</button>
+        <button id="chatButton" type="button" aria-label="เปิดแชท"><span>✉</span>แชท <b id="chatUnread" hidden></b></button>
         <button id="modeButton"><span>◎</span>ออนไลน์</button>
         <button id="helpButton"><span>?</span>วิธีเล่น</button>
       </nav>
@@ -66,10 +67,10 @@
       <div class="drawer-header"><h2 id="drawerTitle">แผนที่</h2><button id="drawerClose" class="close" aria-label="ปิด">✕</button></div>
       <div id="drawerBody" class="drawer-body"></div>
     </section>
-    <footer class="version">ALPHA V0.2.8 · โลกอาคม · 3 เซฟ</footer>
+    <footer class="version">ALPHA V0.2.9 · แชท · 3 เซฟ</footer>
   </main>
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
-  <script src="./main.js?v=0.2.8" defer></script>
+  <script src="./main.js?v=0.2.9" defer></script>
 </body>
 </html>
