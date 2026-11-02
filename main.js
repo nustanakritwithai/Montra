@@ -414,6 +414,22 @@
       key: "#a5c8cf", keyI: .4, mist: "#2c463a", mistAlpha: .24, mote: ["#d4ff7a", "#7dffc2"], skyLevel: .8 },
     bound_temple: { clear: "#0e080c", fog: "#22141a", fogNear: 4, fogFar: 96, hemi: .44, carry: .4, sky: "#c2aab4", ground: "#2e1c18",
       key: "#e6c3aa", keyI: .38, mist: "#402c33", mistAlpha: .24, mote: ["#ffa25c", "#ffd18c"], skyLevel: .9 },
+    // Atlas regions: each has its own night (marsh-light green, cold moon,
+    // dusk ridge, sunless cave, smouldering ruin, volcanic crimson, void violet).
+    drowned_marsh: { clear: "#060d0a", fog: "#13241c", fogNear: 2, fogFar: 85, hemi: .5, carry: .55, sky: "#8fb59a", ground: "#1d2a1f",
+      key: "#a8c9b0", keyI: .32, mist: "#2e4a38", mistAlpha: .36, mote: ["#b6ff7a", "#6dffb0"], skyLevel: .7 },
+    moon_cemetery: { clear: "#070812", fog: "#171a2a", fogNear: 4, fogFar: 92, hemi: .6, carry: .45, sky: "#aab4e0", ground: "#22202c",
+      key: "#c9d2ff", keyI: .5, mist: "#3a3d55", mistAlpha: .36, mote: ["#e6e8ff", "#b7b2ff"], skyLevel: 1.15 },
+    hex_ridge: { clear: "#0b0c08", fog: "#1f2116", fogNear: 6, fogFar: 100, hemi: .54, carry: .5, sky: "#c2c09a", ground: "#2a2618",
+      key: "#e8d4a4", keyI: .42, mist: "#3c3a2a", mistAlpha: .2, mote: ["#ffd36a", "#ffe9a8"], skyLevel: 1 },
+    naga_cavern: { clear: "#030809", fog: "#0a1a1c", fogNear: 0, fogFar: 70, hemi: .44, carry: .75, sky: "#7fb6c0", ground: "#13201f",
+      key: "#89d0d8", keyI: .22, mist: "#1f3a3c", mistAlpha: .3, mote: ["#7ffff0", "#b49cff"], skyLevel: 0 },
+    fallen_city: { clear: "#0c0a08", fog: "#211b14", fogNear: 4, fogFar: 92, hemi: .5, carry: .55, sky: "#c4ab88", ground: "#2a2018",
+      key: "#f0c890", keyI: .4, mist: "#3d3326", mistAlpha: .26, mote: ["#ffb062", "#ffdca0"], skyLevel: .9 },
+    asura_peak: { clear: "#0f0505", fog: "#2a0f0c", fogNear: 2, fogFar: 85, hemi: .46, carry: .45, sky: "#d49a8a", ground: "#3a1610",
+      key: "#ffb08a", keyI: .45, mist: "#4a1d16", mistAlpha: .24, mote: ["#ff6a2a", "#ffb05a"], skyLevel: .7 },
+    spirit_rift: { clear: "#07051a", fog: "#1a1238", fogNear: 6, fogFar: 110, hemi: .55, carry: .5, sky: "#b9a6ff", ground: "#1e1636",
+      key: "#d2c2ff", keyI: .45, mist: "#3a2c66", mistAlpha: .3, mote: ["#d7c2ff", "#8fe9ff"], skyLevel: 1.25 },
   };
   let atmosphere = ATMOSPHERES.ritual_village;
   function applyAtmosphere(mapId) {
@@ -1477,6 +1493,10 @@
         for(let row=0;row<8;row++)for(let col=-1;col<5;col++)ink.strokeRect(col*64+row%2*32,row*32,64,32);
       }
       terrain.update();terrain.uScale=9;terrain.vScale=12;floor.diffuseTexture=terrain;
+      // Night grade: the atlas palette is kept but pulled down toward moonlight.
+      floor.diffuseColor.scaleInPlace(.58);court.diffuseColor.scaleInPlace(.5);road.diffuseColor.scaleInPlace(.66);
+      stone.diffuseColor.scaleInPlace(.8);deep.diffuseColor.scaleInPlace(.7);
+      court.diffuseTexture=terrain;glowMats.add(light);
       regionPaints.set(id,{floor,road,court,stone,light,deep});
     }
     return regionPaints.get(id);
@@ -1514,7 +1534,7 @@
       cone(-52+i*6,tall*.32,side===1?39+i%4:-74-i%4,tall,6+i%4,0,floor,6);
     }
     for(const w of map.water||[]){
-      box(w.x+w.width/2,.035,w.z+w.length/2,w.width,.07,w.length,deep);
+      box(w.x+w.width/2,.035,w.z+w.length/2,w.width,.07,w.length,regionWater(map.id));
       for(let i=1;i<=Math.floor(w.width/6);i++)box(w.x+i*5.5,.079,w.z+.8+(i%2),marsh?1.7:1.1,.025,.10,light);
     }
     for(const z of new Set((map.water||[]).map(w=>w.z+2)))for(const x of [-22,22]){
@@ -1609,15 +1629,182 @@
         for(const side of [-1,0,1]){
           const h=side===0?4.7:2.7;pillar(side,h/2,0,h,1.35,.25,side===0?light:paint.court,5).rotation.z=-side*.3;
         }
-        ring(x,.18,z,3.1*s,light);
       }
       finish("relic",true);
     }
     if(map.boss){
       const {x,z}=map.boss;
-      ring(x,.13,z,14,light);ring(x,.14,z,15.2,stone);
-      for(let i=0;i<8;i++){const a=i*Math.PI/4;cone(x+Math.cos(a)*7.4,.26,z+Math.sin(a)*7.4,.5,.65,.3,light,4);}
       finish("boss arena");expansionLabel(map.boss.name+" · Boss Lv.100",x,z,12,5);
+    }
+  }
+  // ---- Atlas region dressing: decorative only, kept clear of every trail,
+  // court, gate, rest ward, wall, pool and obstacle the server defines. ----
+  const regionWaters=new Map();
+  function regionWater(id){
+    if(!regionWaters.has(id)){
+      const m=water.clone(id+" water"),t=riverRipple.clone();t.uScale=3;t.vScale=1;m.emissiveTexture=t;
+      const tint={drowned_marsh:["#0b1f17","#05130c"],spirit_rift:["#160c2c","#0d0624"]}[id];
+      if(tint){m.diffuseColor=B.Color3.FromHexString(tint[0]);m.emissiveColor=B.Color3.FromHexString(tint[1]);}
+      regionWaters.set(id,m);
+    }
+    return regionWaters.get(id);
+  }
+  function crackTexture(name,rgb,glowRgb){
+    return paintTexture(name,256,(c,s)=>{
+      c.clearRect(0,0,s,s);c.lineCap="round";c.shadowColor=`rgb(${glowRgb})`;c.shadowBlur=10;
+      for(let k=0;k<7;k++){
+        let x=s/2,y=s/2,a=k*.9+noise(k,name.length)*1.2;
+        c.strokeStyle=`rgba(${rgb},.9)`;c.lineWidth=4;c.beginPath();c.moveTo(x,y);
+        for(let j=0;j<7;j++){a+=(noise(k*7+j,211)-.5)*1.1;x+=Math.cos(a)*17;y+=Math.sin(a)*17;c.lineTo(x,y);c.lineWidth=Math.max(1,4-j*.5);}
+        c.stroke();
+      }
+    });
+  }
+  const decor={
+    bone:mat("bone white","#d6cfbb"),ash:mat("ash grey","#3b3734"),deadWood:mat("dead wood","#4a4038"),
+    rock:mat("dark rock","#36343a"),pine:mat("ridge pine","#1b2c22"),pineHi:mat("ridge pine high","#284032"),
+    bamboo:mat("bamboo","#8a7a4a"),flagWhite:mat("funeral flag","#e7e1d2","#26241e"),
+    ember:mat("ember","#ff8a3d","#ff5a1a"),willo:mat("will-o-wisp","#c4ff9e","#6aff5a"),
+    crystal:mat("naga crystal","#86f5e8","#2fd8c8"),crystalV:mat("rift crystal","#c9a6ff","#8a4dff"),
+    iron:mat("rusted iron","#4a3a32"),awning:mat("tattered awning","#8a6a2a"),
+  };
+  for(const m of [decor.ember,decor.willo,decor.crystal,decor.crystalV])glowMats.add(m);
+  const lavaMat=additiveMat("lava cracks",crackTexture("lava cracks","255,120,40","255,70,20"));
+  const voidMat=additiveMat("void cracks",crackTexture("void cracks","190,140,255","140,80,255"));
+  const greenPool=additiveMat("marsh light",radialTexture("marsh light",128,[[0,"rgba(150,255,120,.5)"],[.35,"rgba(110,230,120,.2)"],[1,"rgba(80,200,100,0)"]]));
+  const violetPool=additiveMat("rift light",radialTexture("rift light",128,[[0,"rgba(190,150,255,.55)"],[.35,"rgba(150,110,255,.22)"],[1,"rgba(120,80,255,0)"]]));
+  const bloodSeal=additiveMat("blood seal",squareYantraTexture("blood seal","rgba(255,80,60,.9)","#ff3020"));
+  const riftSeal=additiveMat("rift seal",squareYantraTexture("rift seal","rgba(200,160,255,.85)","#9a60ff"));
+  function dressRegion(map,paint){
+    let parts=[];
+    const put=(mesh,x,y,z,m)=>{mesh.position.set(x,y,z);mesh.material=m;mesh.isPickable=false;parts.push(mesh);return mesh;};
+    const box=(x,y,z,w,h,d,m)=>put(B.MeshBuilder.CreateBox("region dressing",{width:w,height:h,depth:d},scene),x,y,z,m);
+    const cone=(x,y,z,h,b,t,m,n=6)=>put(B.MeshBuilder.CreateCylinder("region dressing",{height:h,diameterBottom:b,diameterTop:t,tessellation:n},scene),x,y,z,m);
+    const ball=(x,y,z,d,m,seg=4)=>put(B.MeshBuilder.CreateSphere("region dressing",{diameter:d,segments:seg},scene),x,y,z,m);
+    const decal=(x,z,size,m,rot=0,y=.05)=>{const g=put(B.MeshBuilder.CreateGround("region decal",{width:size,height:size},scene),x,y,z,m);g.rotation.y=rot;return g;};
+    const b=map.bounds,id=map.id,{stone,deep,light,court,road}=paint;
+    const nearPath=(x,z,d)=>(map.paths||[]).some(path=>path.some((p,i)=>{if(!i)return false;const a=path[i-1],dx=p.x-a.x,dz=p.z-a.z,l=dx*dx+dz*dz||1;
+      const t=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/l));return Math.hypot(x-a.x-t*dx,z-a.z-t*dz)<d;}));
+    const clear=(x,z,courts=12.5)=>!nearPath(x,z,3)&&
+      !(map.camps||[]).some(c=>Math.hypot(x-c.x,z-c.z)<courts)&&!(map.portals||[]).some(p=>Math.hypot(x-p.x,z-p.z)<6)&&
+      !(map.restAreas||[]).some(r=>Math.hypot(x-r.x,z-r.z)<r.radius+1)&&!(map.obstacles||[]).some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+1.4)&&
+      !(map.walls||[]).some(w=>x>w.x-1&&x<w.x+w.width+1&&z>w.z-1&&z<w.z+w.length+1)&&
+      !(map.water||[]).some(w=>x>w.x-.8&&x<w.x+w.width+.8&&z>w.z-.8&&z<w.z+w.length+.8);
+    const scatter=(count,seed,fn,courts)=>{for(let i=0,n=0;i<count*8&&n<count;i++){
+      const x=b.minX+2.5+noise(i,seed)*(b.maxX-b.minX-5),z=b.minZ+2.5+noise(i,seed+1)*(b.maxZ-b.minZ-5);
+      if(clear(x,z,courts)){fn(x,z,n);n++;}}};
+    // Points just beyond the playfield rim, for skyline silhouettes.
+    const rim=(count,seed,fn)=>{for(let i=0;i<count;i++){
+      const t=i/count,d=4+noise(i,seed)*12,w=b.maxX-b.minX,h=b.maxZ-b.minZ;
+      const [x,z]=t<.3?[b.minX-d,b.minZ+h*t/.3]:t<.6?[b.maxX+d,b.minZ+h*(t-.3)/.3]:[b.minX+w*(t-.6)/.4,b.minZ-d];
+      fn(x,z,i);
+    }};
+    // Lamps every ~10 units along each trail, offset to alternating verges.
+    const alongTrails=(step,offset,fn)=>(map.paths||[]).forEach((path,pi)=>{for(let i=1;i<path.length;i++){
+      const a=path[i-1],c=path[i],len=Math.hypot(c.x-a.x,c.z-a.z),nx=-(c.z-a.z)/len,nz=(c.x-a.x)/len;
+      for(let t=step/2;t<len;t+=step){const side=((Math.round(t)+i+pi)%2)?1:-1,x=a.x+(c.x-a.x)*t/len+nx*offset*side,z=a.z+(c.z-a.z)*t/len+nz*offset*side;
+        if(!(map.portals||[]).some(p=>Math.hypot(x-p.x,z-p.z)<6)&&!(map.walls||[]).some(w=>x>w.x-.6&&x<w.x+w.width+.6&&z>w.z-.6&&z<w.z+w.length+.6))fn(x,z);}
+    }});
+    const deadTree=(x,z,k,m=decor.deadWood)=>{
+      const h=4+noise(k,301)*3;cone(x,h/2,z,h,.8,.14,m,5).rotation.z=(noise(k,302)-.5)*.3;
+      for(let j=0;j<4;j++){const br=cone(x+(j-1.5)*.35,h*(.5+j*.12),z,2.2-j*.35,.2,.02,m,4);br.rotation.z=(j-1)*.9+(noise(k+j,303)-.5)*.4;br.rotation.y=j*2.1;}
+    };
+    const brazier=(x,z,flame=decor.ember,pool=lightPoolMat)=>{
+      cone(x,.45,z,.9,.18,.3,decor.iron,6);cone(x,.98,z,.24,.42,.7,decor.iron,8);cone(x,1.25,z,.5,.42,0,flame,5);decal(x,z,4.2,pool,0,.05);
+    };
+    const reliquary=(x,z,k,m=decor.bone)=>{
+      const sz=1.1+noise(k,311)*.8,lean=(noise(k,312)-.5)*.2;
+      box(x,sz*.2,z,sz,sz*.4,sz,deep);
+      const bell=cone(x,sz*.62,z,sz*.5,sz*.75,sz*.4,m,8);bell.rotation.z=lean;
+      const spire=cone(x+lean*sz*.6,sz*1.1,z,sz*.6,sz*.28,0,m,8);spire.rotation.z=lean;
+    };
+    if(id==="drowned_marsh"){
+      scatter(34,321,(x,z,k)=>{deadTree(x,z,k);for(let j=0;j<2;j++)box(x+(j?.4:-.3),2.2,z,.05,1.2+noise(k+j,322)*.8,.05,mossMat);});
+      scatter(70,323,(x,z,k)=>{for(let j=0;j<4;j++){const h=.7+noise(k*4+j,324)*.9;cone(x+(noise(k*4+j,325)-.5)*1.2,h/2,z+(noise(k*4+j,326)-.5)*1.2,h,.1,0,reedMat,3);}},12.5);
+      for(const w of map.water||[])for(let t=1.5;t<w.width;t+=2.6)if(noise(t+w.x,327)>.45)cone(w.x+t,.08,w.z+.6+noise(t,328)*(w.length-1.2),.02,.8,.8,lotusPad,10);
+      alongTrails(10,2.8,(x,z)=>{cone(x,1.1,z,2.2,.1,.08,decor.deadWood,5);box(x,2.2,z,.6,.06,.06,decor.deadWood);cone(x+.25,1.95,z,.34,.26,.2,decor.willo,6);decal(x+.25,z,3.6,greenPool);});
+      rim(16,331,(x,z,k)=>{const sz=4+noise(k,332)*2;for(const dx of [-1,1])for(const dz of [-1,1])cone(x+dx*sz*.4,.8,z+dz*sz*.4,2,.25,.2,decor.deadWood,5);
+        box(x,2.6,z,sz,1.8,sz*.8,deep);box(x-sz*.5-.02,2.6,z,.05,.5,.6,decor.willo);
+        for(const side of [-1,1])box(x+side*sz*.28,3.95,z,sz*.66,.14,sz*.95,roofMat).rotation.z=-side*.75;});
+      const lm=map.obstacles.find(o=>o.id==="landmark");
+      if(lm){for(let k=0;k<9;k++){const a=k/9*Math.PI*2;cone(lm.x+Math.cos(a)*3.6,.2,lm.z+Math.sin(a)*3.6,.4,.12,.12,waxMat,6);cone(lm.x+Math.cos(a)*3.6,.48,lm.z+Math.sin(a)*3.6,.16,.1,0,decor.willo,4);}
+        decal(lm.x,lm.z,9,greenPool);}
+    }else if(id==="moon_cemetery"){
+      scatter(85,341,(x,z,k)=>{if(k%3)reliquary(x,z,k,k%2?decor.bone:stone);else{const slab=box(x,.5,z,.7,1,.18,stone);slab.rotation.z=(noise(k,342)-.5)*.3;slab.rotation.y=noise(k,343)*.6;}});
+      scatter(12,345,(x,z,k)=>{const h=6+noise(k,346)*2;cone(x,h/2,z,h,.12,.08,decor.bamboo,5);
+        for(let j=0;j<7;j++)box(x+.2,h-.4-j*.42,z,.34,.36,.02,decor.flagWhite).rotation.z=Math.sin(j*.9+k)*.12;});
+      scatter(20,347,(x,z,k)=>deadTree(x,z,k,decor.ash));
+      const pyre=map.camps.find(c=>c.id==="court2");
+      if(pyre){for(let j=0;j<4;j++)for(let l=0;l<3;l++)box(pyre.x,.2+j*.32,pyre.z-.9+l*.9,2.6,.26,.26,decor.deadWood).rotation.y=j%2?Math.PI/2:0;
+        cone(pyre.x,1.7,pyre.z,1.2,1.4,0,decor.ember,6);decal(pyre.x,pyre.z,8,lightPoolMat);}
+      alongTrails(11,2.6,(x,z)=>{for(let j=0;j<3;j++){cone(x+j*.22-.22,.15,z,.3,.09,.09,waxMat,6);cone(x+j*.22-.22,.36,z,.12,.07,0,candleMat,4);}decal(x,z,2.6,lightPoolMat);});
+      rim(24,349,(x,z,k)=>reliquary(x,z,k+50,stone));
+    }else if(id==="hex_ridge"){
+      scatter(30,361,(x,z,k)=>{const h=4+noise(k,362)*3;cone(x,h*.3,z,h*.6,.35,.2,decor.deadWood,5).rotation.z=(noise(k,363)-.5)*.35;
+        cone(x,h*.62,z,h*.45,2.6,.4,decor.pine,6);cone(x,h*.95,z,h*.4,1.6,0,decor.pineHi,6);});
+      scatter(40,365,(x,z,k)=>{const d=.8+noise(k,366)*1.4;ball(x,d*.25,z,d,decor.rock).scaling.y=.6;},12.5);
+      for(const w of map.walls||[])for(let t=1;t<w.width;t+=2.2)for(const side of [-1,1]){const k=t*7+side;if(noise(k,367)<.4)continue;
+        const d=.8+noise(k,368)*1.2;ball(w.x+t,d*.3,w.z+w.length/2+side*(w.length/2+.5),d,decor.rock).scaling.y=.65;}
+      scatter(10,369,(x,z,k)=>{const tab=box(x,1.1,z,1.2,2.2,.4,stone);tab.rotation.y=noise(k,370)*3;for(let j=0;j<4;j++)box(x,.5+j*.42,z,.9,.06,.44,light).rotation.y=tab.rotation.y;});
+      for(const camp of map.camps)for(let side=0;side<2;side++){
+        const a=side*Math.PI+.8,x1=camp.x+Math.cos(a)*13,z1=camp.z+Math.sin(a)*13,x2=camp.x+Math.cos(a+.9)*13,z2=camp.z+Math.sin(a+.9)*13;
+        for(const [x,z] of [[x1,z1],[x2,z2]])cone(x,1.6,z,3.2,.1,.08,decor.deadWood,5);
+        for(let j=1;j<9;j++){const t=j/9;box(x1+(x2-x1)*t,3-Math.sin(t*Math.PI)*.5,z1+(z2-z1)*t,.26,.34,.02,[clothRed,talismanPaper,lotusPad,decor.flagWhite][j%4]).rotation.y=-Math.atan2(z2-z1,x2-x1);}
+      }
+      rim(30,371,(x,z,k)=>{const h=8+noise(k,372)*8;cone(x,h/2,z,h,8+noise(k,373)*5,1,decor.rock,5);});
+    }else if(id==="naga_cavern"){
+      scatter(80,381,(x,z,k)=>{const h=1+noise(k,382)*2.6;cone(x,h/2,z,h,.5+noise(k,383)*.5,0,decor.rock,5);},12.5);
+      scatter(26,385,(x,z,k)=>{const m=k%3?decor.crystal:decor.crystalV;for(let j=0;j<4;j++){const h=.8+noise(k*4+j,386)*1.4;
+        const c=cone(x+(j-1.5)*.3,h/2,z+(noise(j+k,387)-.5)*.5,h,.36,0,m,5);c.rotation.z=(j-1.5)*.28;}decal(x,z,4,k%3?ghostPoolMat:violetPool);});
+      const lm=map.obstacles.find(o=>o.id==="landmark");
+      if(lm){for(let k=0;k<22;k++){const a=k/22*Math.PI*1.7+.4,r=3.4+Math.sin(k*.7)*.3;ball(lm.x+Math.cos(a)*r,.45+Math.sin(k*.9)*.2,lm.z+Math.sin(a)*r,.9-k*.02,k%2?templeBronze:gold,5);}
+        const head=cone(lm.x+Math.cos(.4)*3.4,1.3,lm.z+Math.sin(.4)*3.4,1.6,.8,.2,templeBronze,6);head.rotation.x=-.4;
+        for(const fan of [-1,0,1])cone(lm.x+Math.cos(.4)*3.4+fan*.3,2.2,lm.z+Math.sin(.4)*3.4,.8,.2,0,gold,4).rotation.z=-fan*.5;}
+      rim(44,389,(x,z,k)=>{const h=7+noise(k,390)*9;cone(x,h/2,z,h,5+noise(k,391)*5,.6,decor.rock,5);});
+    }else if(id==="fallen_city"){
+      scatter(45,401,(x,z,k)=>{for(let j=0;j<3;j++)box(x+(noise(k*3+j,402)-.5)*1.8,.3,z+(noise(k*3+j,403)-.5)*1.8,.95,.55,.6,j%2?stone:deep).rotation.y=noise(k+j,404)*3;},12.5);
+      for(const w of map.walls||[]){
+        for(const side of [-1,1])box(w.x+w.width/2+side*w.width*.24,4.9,w.z+w.length/2,w.width*.56,.18,w.length+.6,roofMat).rotation.z=-side*.55;
+        box(w.x-.05,2.2,w.z+w.length*.3,.06,.7,.6,glowMat);
+      }
+      const market=map.camps.find(c=>c.id==="court1");
+      if(market)for(let k=0;k<6;k++){const a=k/6*Math.PI*2+.3,x=market.x+Math.cos(a)*14,z=market.z+Math.sin(a)*14;if(!clear(x,z,13))continue;
+        for(const dx of [-.8,.8])cone(x+dx,1,z,2,.1,.1,decor.deadWood,5);
+        box(x,2.05,z,2,.06,1.4,k%2?decor.awning:clothRed).rotation.z=.25;box(x,.6,z,1.6,.5,.9,crateWood);}
+      alongTrails(10,2.7,(x,z)=>{cone(x,1.6,z,3.2,.12,.1,decor.iron,6);box(x,3.2,z,.5,.06,.06,decor.iron);cone(x+.22,2.9,z,.38,.3,.24,lanternPaper,6);decal(x+.22,z,3.6,lightPoolMat);});
+      rim(30,405,(x,z,k)=>{const w=4+noise(k,406)*4,h=4+noise(k,407)*7;box(x,h/2,z,w,h,w*.8,deep);
+        if(k%2)for(const side of [-1,1])box(x+side*w*.25,h+.6,z,w*.6,.2,w*.9,roofMat).rotation.z=-side*.6;else cone(x,h+1.6,z,3.2,w*.5,0,stone,6);});
+    }else if(id==="asura_peak"){
+      scatter(30,421,(x,z,k)=>decal(x,z,5+noise(k,422)*4,lavaMat,noise(k,423)*3,.05),11);
+      scatter(34,425,(x,z,k)=>{const d=.9+noise(k,426)*1.6;ball(x,d*.25,z,d,decor.rock).scaling.y=.6;if(k%3===0)cone(x,d*.55,z,.3,.3,0,decor.ember,4);},12.5);
+      alongTrails(12,2.8,(x,z)=>brazier(x,z));
+      const spears=map.camps.find(c=>c.id==="court2");
+      if(spears)for(let k=0;k<10;k++){const a=k/10*Math.PI*2,x=spears.x+Math.cos(a)*12.8,z=spears.z+Math.sin(a)*12.8;if(nearPath(x,z,2.6))continue;
+        const sp=cone(x,1.5,z,3,.08,.08,decor.iron,5);sp.rotation.z=Math.cos(a)*.25;sp.rotation.x=-Math.sin(a)*.25;cone(x,3.1,z,.5,.16,0,decor.ember,4);}
+      scatter(8,429,(x,z,k)=>{const h=6;cone(x,h/2,z,h,.14,.1,decor.iron,5);box(x+.4,h-1.2,z,.8,2,.03,clothRed);});
+      rim(28,431,(x,z,k)=>{const h=9+noise(k,432)*10;cone(x,h/2,z,h,7+noise(k,433)*6,.4,decor.rock,5);if(k%4===0)cone(x,h*.85,z,h*.3,2,0,decor.ember,5);});
+      // Ruined asura head on the northern skyline.
+      box(0,4,b.minZ-12,7,8,6,deep);box(0,5.6,b.minZ-8.9,5.4,.6,.2,decor.ember);
+      for(const side of [-1,0,1])cone(side*2,9.5,b.minZ-12,3+(side?0:1.5),1.6,0,gold,5).rotation.z=-side*.25;
+      for(const side of [-1,1])cone(side*2.6,2,b.minZ-8.6,1.6,.6,0,decor.bone,4).rotation.x=Math.PI;
+    }else if(id==="spirit_rift"){
+      scatter(22,441,(x,z,k)=>decal(x,z,5+noise(k,442)*4,voidMat,noise(k,443)*3,.05),11);
+      scatter(22,445,(x,z,k)=>{for(let j=0;j<3;j++){const h=1.2+noise(k*3+j,446)*2.4;const c=cone(x+(j-1)*.4,h/2,z,h,.45,0,decor.crystalV,5);c.rotation.z=(j-1)*.3;}decal(x,z,4,violetPool);});
+      rim(26,447,(x,z,k)=>{const d=3+noise(k,448)*5,y=4+noise(k,449)*7;cone(x,y,z,d*1.2,.4,d,decor.rock,6);ball(x,y+d*.6,z,d*.9,deep,5).scaling.y=.4;});
+      for(let k=0;k<12;k++){const x=b.minX+8+noise(k,451)*(b.maxX-b.minX-16),z=b.minZ+8+noise(k,452)*(b.maxZ-b.minZ-16),y=7+noise(k,453)*6,d=1.2+noise(k,454)*2;
+        cone(x,y,z,d*1.3,.2,d,decor.rock,5);ball(x,y+d*.65,z,d,deep,4).scaling.y=.35;}
+      for(const o of map.obstacles)if(o.id.startsWith("relic-"))decal(o.x,o.z,5,riftSeal,0,.06);
+      const last=map.camps.find(c=>c.id==="court3");if(last)decal(last.x,last.z,16,riftSeal,Math.PI/4,.055);
+      if(map.boss){const {x,z}=map.boss;decal(x,z,16,bloodSeal,0,.06);
+        for(let k=0;k<8;k++){const a=k*Math.PI/4+Math.PI/8,ox=x+Math.cos(a)*8.6,oz=z+Math.sin(a)*8.6;
+          box(ox,1.6,oz,.7,3.2,.7,deep);cone(ox,3.6,oz,.9,.9,0,decor.crystalV,4);
+          const nx=x+Math.cos(a+Math.PI/4)*8.6,nz=z+Math.sin(a+Math.PI/4)*8.6;
+          box((ox+nx)/2,2.4,(oz+nz)/2,Math.hypot(nx-ox,nz-oz),.06,.06,clothRed).rotation.y=-Math.atan2(nz-oz,nx-ox);}}
+    }
+    for(const material of new Set(parts.map(p=>p.material))){
+      const group=parts.filter(p=>p.material===material);
+      const mesh=group.length===1?group[0]:B.Mesh.MergeMeshes(group,true,true);
+      if(mesh){mesh.name=id+" dressing";mesh.parent=expansionRoot;mesh.isPickable=false;}
     }
   }
   function fadeTempleWalls(hero) {
@@ -1685,7 +1872,7 @@
       if(!map.portals.some(p=>p.targetMapId==="drowned_marsh"))expansionLabel("ทางสู่บึงพราย · ยังไม่เปิด",48,-84);
     }
     if(inTemple)buildTemple(map);
-    if(paint)buildRegion(map,paint);
+    if(paint){buildRegion(map,paint);dressRegion(map,paint);}
     for(const portal of (map.portals||[]).slice(portals[activeMapId]?1:0))makePortal(activeMapId,expansionRoot,portal);
   }
   function makeForestMonster(monster,id) {
