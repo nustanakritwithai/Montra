@@ -2611,6 +2611,7 @@
   let economyGold = null, economyListings = [], activeTrade = null, economyPending = false;
   let economyTimer = null, economyTab = "market", tradeUnread = false;
   let partyState = null, partyInvitation = null, partyUnread = false;
+  let guildState = null, guildInvitation = null, guildUnread = false;
   // Inventory is never stored in localStorage: LIVE comes from VPS each join.
   const INVENTORY_SLOTS = 12;
   const POTION_ITEM_ID = "health_potion";
@@ -2765,7 +2766,8 @@
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
-    partyState=null; partyInvitation=null; partyUnread=false; updatePartyBadge();
+    partyState=null; partyInvitation=null; partyUnread=false;
+    guildState=null; guildInvitation=null; guildUnread=false; updatePartyBadge();
     clearChatHistory(true);
     switchWorld("ritual_village");
     syncWorldDefinition(null);syncForestMonsters(null);
@@ -3176,6 +3178,7 @@
     if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
     if (drawerActive === "character") renderProgressionProfile();
     if (drawerActive === "party") renderParty();
+    if (drawerActive === "guild") renderGuild();
     const me=players.get(localId), staminaBar=$("staminaBar");
     if (state?.progressionAvailable === true && me && Number(me.maxStamina)>0) {
       const pct=Math.max(0,Math.min(100,100*Number(me.stamina)/Number(me.maxStamina)));
@@ -3252,7 +3255,8 @@
       room = joined;
       clearChatHistory(true);
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; tradeUnread=false; updateTradeBadge();
-      partyState=null; partyInvitation=null; partyUnread=false; updatePartyBadge();
+      partyState=null; partyInvitation=null; partyUnread=false;
+    guildState=null; guildInvitation=null; guildUnread=false; updatePartyBadge();
       inventoryState = null;
       itemUsePending = false;
       itemUseSequence += 1;
@@ -3290,6 +3294,39 @@
         }
         updateChatBadge();
         if (drawerActive === "chat") renderChat();
+      });
+      joined.onMessage("guild_state", message => {
+        if(room!==joined)return;
+        if(message===null)guildState=null;
+        else if(typeof message?.id==="string" && typeof message.name==="string" &&
+          typeof message.ownId==="string" && typeof message.leaderId==="string" &&
+          Array.isArray(message.members) && message.members.length<=30)
+          guildState={id:message.id,name:message.name,ownId:message.ownId,leaderId:message.leaderId,
+            members:message.members.filter(m=>m && typeof m.id==="string" && typeof m.name==="string")};
+        else return;
+        if(guildState){guildInvitation=null;guildUnread=false;updatePartyBadge();}
+        renderGuild();
+      });
+      joined.onMessage("guild_invitation", message=>{
+        if(room!==joined || typeof message?.inviteId!=="string" || typeof message.guildName!=="string" || typeof message.fromName!=="string")return;
+        guildInvitation=message;guildUnread=drawerActive!=="guild";updatePartyBadge();
+        if(guildUnread)toast("มีคำเชิญเข้ากิลด์ · เปิดเมนูปาร์ตี้");
+        renderGuild();
+      });
+      joined.onMessage("guild_invitation_closed",()=>{
+        if(room!==joined)return;guildInvitation=null;guildUnread=false;updatePartyBadge();renderGuild();
+      });
+      joined.onMessage("guild_notice", message=>{
+        if(room!==joined)return;toast(message?.reason==="invitation_declined"?"ผู้เล่นปฏิเสธคำเชิญกิลด์":"ส่งคำเชิญกิลด์แล้ว");
+      });
+      joined.onMessage("guild_error", message=>{
+        if(room!==joined)return;
+        const reasons={guild_already_member:"ตัวละครนี้อยู่ในกิลด์แล้ว",guild_name_taken:"ชื่อกิลด์นี้ถูกใช้แล้ว",
+          guild_leader_only:"เฉพาะหัวหน้ากิลด์ที่ทำรายการนี้ได้",guild_full:"กิลด์มีสมาชิกครบ 30 คนแล้ว",
+          guild_not_member:"ยังไม่ได้อยู่ในกิลด์",guild_transfer_first:"ส่งต่อหัวหน้ากิลด์ก่อนออก",
+          guild_invalid_member:"ไม่พบสมาชิก",guild_invite_expired:"คำเชิญหมดอายุ",guild_invalid_target:"ไม่พบผู้เล่นที่ชวนได้"};
+        if(message?.reason==="guild_invite_expired"){guildInvitation=null;guildUnread=false;updatePartyBadge();}
+        toast(reasons[message?.reason]||"ทำรายการกิลด์ไม่สำเร็จ");renderGuild();
       });
       joined.onMessage("party_state", message => {
         if (room!==joined || !Array.isArray(message?.members) || message.members.length>4) return;
@@ -3558,6 +3595,7 @@
       });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        if (typeof info?.reason==="string" && info.reason.startsWith("guild_")) { const reason={guild_invalid_name:"ชื่อกิลด์ต้องมี 2–24 ตัวอักษร และใช้ตัวอักษรหรือตัวเลข",guild_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",guild_unavailable:"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว"};toast(reason[info.reason] || "ไม่สามารถทำรายการกิลด์ได้");return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
         if (["economy_unavailable","economy_rate_limited","invalid_economy_request","invalid_trade","trade_unavailable","trade_expired","character_busy"].includes(info?.reason) && (drawerActive === "economy" || economyPending)) {
           finishEconomyPending();
@@ -4710,7 +4748,7 @@
     fillTradeTargets(); renderEconomy();
     if (economyReady()) { economySend("get_economy",{}); economySend("market_list",{}); }
   }
-  function updatePartyBadge() { const badge=$("partyUnread"); if(badge)badge.hidden=!partyUnread; }
+  function updatePartyBadge() { const badge=$("partyUnread"); if(badge)badge.hidden=!(partyUnread || guildUnread); const guildBadge=$("guildBadge");if(guildBadge)guildBadge.hidden=!guildUnread; }
   function partyReady() { return mode==="live" && room?.state?.partyAvailable===true && ownServerCharacter()?.persistent===true; }
   function renderParty() {
     if(drawerActive!=="party" || !$("partyStatus")) return;
@@ -4746,12 +4784,62 @@
   function openParty() {
     partyUnread=false;updatePartyBadge();
     openDrawer("party","ปาร์ตี้",
-      '<div class="economy-balance" id="partyStatus" role="status"></div><div id="partyInvitationBox" class="party-invitation" hidden><strong><span id="partyInviter"></span> ชวนเข้าปาร์ตี้</strong><div class="party-actions"><button id="partyAccept" type="button">เข้าร่วม</button><button id="partyDecline" type="button">ปฏิเสธ</button></div></div><h3>สมาชิก</h3><div id="partyMembers"></div><p class="note">EXP อิงเลเวลผู้ปราบ แล้วแบ่งเท่ากันให้สมาชิกที่มีชีวิต อยู่แผนที่เดียวกัน และห่างจากมอนสเตอร์ไม่เกิน 20 หน่วย เศษปัดลง · โจมตีเพื่อนร่วมปาร์ตี้ไม่ได้</p><label class="field" for="partyTarget">ชวนผู้เล่นในห้อง</label><select id="partyTarget"></select><p class="note" id="partyLeaderHint"></p><button class="primary" id="partyInvite" type="button">ส่งคำเชิญ</button><button class="secondary" id="partyLeave" type="button" hidden>ออกจากปาร์ตี้</button>');
+      '<button class="secondary" id="openGuild" type="button">กิลด์ <span id="guildBadge" hidden> · มีคำเชิญ</span></button><div class="economy-balance" id="partyStatus" role="status"></div><div id="partyInvitationBox" class="party-invitation" hidden><strong><span id="partyInviter"></span> ชวนเข้าปาร์ตี้</strong><div class="party-actions"><button id="partyAccept" type="button">เข้าร่วม</button><button id="partyDecline" type="button">ปฏิเสธ</button></div></div><h3>สมาชิก</h3><div id="partyMembers"></div><p class="note">EXP อิงเลเวลผู้ปราบ แล้วแบ่งเท่ากันให้สมาชิกที่มีชีวิต อยู่แผนที่เดียวกัน และห่างจากมอนสเตอร์ไม่เกิน 20 หน่วย เศษปัดลง · โจมตีเพื่อนร่วมปาร์ตี้ไม่ได้</p><label class="field" for="partyTarget">ชวนผู้เล่นในห้อง</label><select id="partyTarget"></select><p class="note" id="partyLeaderHint"></p><button class="primary" id="partyInvite" type="button">ส่งคำเชิญ</button><button class="secondary" id="partyLeave" type="button" hidden>ออกจากปาร์ตี้</button>');
+    $("openGuild").onclick=openGuild;
+    $("guildBadge").hidden=!guildUnread;
     $("partyInvite").onclick=()=>{const targetId=$("partyTarget").value;if(partyReady() && targetId)room.send("party_invite",{targetId});};
     $("partyAccept").onclick=()=>{if(partyReady() && partyInvitation)room.send("party_accept",{inviteId:partyInvitation.inviteId});};
     $("partyDecline").onclick=()=>{if(partyReady() && partyInvitation)room.send("party_decline",{inviteId:partyInvitation.inviteId});};
     $("partyLeave").onclick=()=>{if(partyReady())room.send("party_leave",{});};
     renderParty(); if(partyReady())room.send("get_party",{});
+  }
+  function guildReady(){return mode==="live" && room?.state?.guildAvailable===true && ownServerCharacter()?.persistent===true;}
+  function renderGuild(){
+    if(drawerActive!=="guild" || !$("guildStatus"))return;
+    const ready=guildReady(),leader=guildState && guildState.ownId===guildState.leaderId;
+    $("guildStatus").textContent=!ready?"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว":guildState?guildState.name+" · สมาชิก "+guildState.members.length+" / 30":"ยังไม่มีกิลด์";
+    $("guildCreateArea").hidden=!!guildState || !ready;
+    $("guildMemberArea").hidden=!guildState;
+    $("guildInvitationBox").hidden=!guildInvitation || !!guildState;
+    if(guildInvitation){$("guildInviteName").textContent=guildInvitation.guildName;$("guildInviterName").textContent=guildInvitation.fromName;}
+    $("guildAccept").disabled=!ready;$("guildDecline").disabled=!ready;
+    const list=$("guildMembers");list.replaceChildren();
+    for(const member of guildState?.members||[]){
+      const row=document.createElement("div");row.className="guild-member";
+      const info=document.createElement("div"),name=document.createElement("strong"),status=document.createElement("small");
+      name.textContent=member.name+(member.id===guildState.leaderId?" · หัวหน้า":"")+(member.id===guildState.ownId?" · คุณ":"");
+      status.textContent=member.online?"ออนไลน์":"ออฟไลน์";info.append(name,status);row.append(info);
+      if(leader && member.id!==guildState.ownId){
+        const actions=document.createElement("div");actions.className="guild-actions";
+        for(const [action,label] of [["transfer","ตั้งหัวหน้า"],["kick","นำออก"]]){
+          const button=document.createElement("button");button.type="button";button.textContent=label;
+          button.onclick=()=>{if(guildReady() && window.confirm(label+" "+member.name+" ใช่หรือไม่"))room.send("guild_manage",{memberId:member.id,action});};
+          actions.append(button);
+        }
+        row.append(actions);
+      }
+      list.append(row);
+    }
+    const select=$("guildTarget"),previous=select.value;select.replaceChildren();
+    room?.state?.players?.forEach?.((player,id)=>{
+      if(id===localId || player.persistent!==true || (guildState?.members||[]).some(m=>m.publicId && m.publicId===player.characterId))return;
+      const option=document.createElement("option");option.value=id;option.textContent=String(player.characterName || "ผู้เล่น");select.append(option);
+    });
+    if([...select.options].some(o=>o.value===previous))select.value=previous;
+    $("guildInviteArea").hidden=!leader;$("guildInvite").disabled=!ready || !select.value || (guildState?.members.length||0)>=30;
+    $("guildLeave").disabled=!ready;
+  }
+  function openGuild(){
+    guildUnread=false;updatePartyBadge();
+    openDrawer("guild","กิลด์",
+      '<button class="secondary" id="backToParty" type="button">← ปาร์ตี้</button><div class="economy-balance" id="guildStatus" role="status"></div><div id="guildInvitationBox" class="party-invitation" hidden><strong><span id="guildInviterName"></span> ชวนเข้ากิลด์ <span id="guildInviteName"></span></strong><div class="party-actions"><button id="guildAccept" type="button">เข้าร่วม</button><button id="guildDecline" type="button">ปฏิเสธ</button></div><p class="note">คำเชิญมีอายุ 60 วินาที</p></div><div id="guildCreateArea" hidden><label class="field" for="guildName">ชื่อกิลด์ 2–24 ตัวอักษร</label><input id="guildName" maxlength="48" autocomplete="off"><button class="primary" id="guildCreate" type="button">สร้างกิลด์</button></div><div id="guildMemberArea" hidden><h3>สมาชิกกิลด์</h3><div id="guildMembers"></div><div id="guildInviteArea" hidden><label class="field" for="guildTarget">เชิญผู้เล่นในห้อง</label><select id="guildTarget"></select><button class="primary" id="guildInvite" type="button">ส่งคำเชิญ</button></div><button class="secondary" id="guildLeave" type="button">ออกจากกิลด์</button><p class="note">หัวหน้าที่มีสมาชิกต้องส่งต่อตำแหน่งก่อนออก · หากเป็นสมาชิกคนสุดท้าย การออกจะยุบกิลด์</p></div>');
+    $("backToParty").onclick=openParty;
+    $("guildCreate").onclick=()=>{const name=$("guildName").value.normalize("NFC").trim();if(guildReady() && name)room.send("guild_create",{name});};
+    $("guildInvite").onclick=()=>{const targetId=$("guildTarget").value;if(guildReady() && targetId)room.send("guild_invite",{targetId});};
+    $("guildAccept").onclick=()=>{if(guildReady() && guildInvitation)room.send("guild_accept",{inviteId:guildInvitation.inviteId});};
+    $("guildDecline").onclick=()=>{if(guildReady() && guildInvitation)room.send("guild_decline",{inviteId:guildInvitation.inviteId});};
+    $("guildLeave").onclick=()=>{if(guildReady() && window.confirm("ออกจากกิลด์ใช่หรือไม่"))room.send("guild_leave",{});};
+    renderGuild();if(guildReady())room.send("get_guild",{});
   }
   // Compact portrait HUD: a small quest chip opens the existing detail drawer.
   ui.quest.addEventListener("click", () => {
