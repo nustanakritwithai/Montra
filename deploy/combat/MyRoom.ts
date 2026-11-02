@@ -284,17 +284,28 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     const snapshot=this.captureCharacterSnapshot(id);
     if (!snapshot) return this.reject(client,"build_unavailable");
-    this.pendingWarps.add(id);
+    const freezesPlayer=action!=="equip";
+    if (freezesPlayer) this.pendingWarps.add(id);
     const task=characterStore.save({...snapshot,swordTree:next}).then(()=>{
-      this.swordTrees.set(id,next);
+      // Shortcut assignments are allowed in combat. Preserve training and
+      // cooldown changes that happened while the save was in flight.
+      const committed=action==="equip" ? this.swordTrees.get(id) : next;
+      if (!committed) return;
+      if (action==="equip") committed.loadouts=next.loadouts;
+      this.swordTrees.set(id,committed);
       if (action === "school" || action === "reset") { this.swordGuards.delete(id); this.swordCombos.delete(id); }
-      player.swordTreeData=JSON.stringify(next);
-      client.send("sword_tree_changed",{action,id:value});
+      player.swordTreeData=JSON.stringify(committed);
+      try {
+        client.send("sword_tree_changed",{action,id:value});
+      } catch (error) {
+        // A disconnected client must not make a committed save look like a disk failure.
+        console.warn("MONTRA sword tree confirmation was not delivered",error);
+      }
     }).catch(error=>{
       console.error("MONTRA sword tree save failed",error);
       this.reject(client,"sword_tree_save_failed");
     }).finally(()=>{
-      this.pendingWarps.delete(id);
+      if (freezesPlayer) this.pendingWarps.delete(id);
       this.pendingItemUses.delete(id);
     });
     this.pendingItemUses.set(id,task);

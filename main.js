@@ -4532,7 +4532,7 @@
   $("classSkill").onclick = () => { if (mode === "live") room?.send("cast_class_skill", {}); };
 
 
-  let selectedSwordSkill = "", swordTreeRenderKey = "", swordCombo = 0, swordComboUntil = 0;
+  let selectedSwordSkill = "", swordTreeRenderKey = "", swordTreeViewedSchool = "", swordCombo = 0, swordComboUntil = 0;
   function swordData() {
     const me=ownServerCharacter();
     try {
@@ -4582,6 +4582,7 @@
     const data=swordData();
     if (!data || data.me.pathId!=="phutthaisawan") { toast("เลือกอาชีพนักดาบก่อนเรียนวิชา"); return; }
     swordTreeRenderKey="";
+    swordTreeViewedSchool=data.tree.school;
     openDrawer("swordTree","ตำราวิชาดาบ",'<div id="swordTreeBody"></div>');
     renderSwordTree();
   }
@@ -4589,33 +4590,41 @@
     const data=swordData(), container=$("swordTreeBody");
     if (!data || !container) return;
     const {me,tree,catalog}=data;
+    if (!Object.hasOwn(catalog.schools,swordTreeViewedSchool)) swordTreeViewedSchool=tree.school;
+    // Keep the slot selector stable while the player is choosing an option.
+    if (container.contains(document.activeElement) && document.activeElement.matches("select[data-equip]")) return;
+    const focus=document.activeElement;
+    const focusAttributes=["data-view-school","data-learn","data-cast","data-clear-slot","id"];
+    const focusAttribute=container.contains(focus) ? focusAttributes.find(name=>focus.hasAttribute(name)) : null;
+    const focusValue=focusAttribute ? focus.getAttribute(focusAttribute) : null;
     const hasCooldown=Object.values(tree.cooldowns).some(readyAt=>readyAt>Date.now());
-    const key=me.level+"|"+me.alive+"|"+me.equippedWeaponId+"|"+me.swordTreeData+"|"+(hasCooldown?Math.floor(Date.now()/1000):0);
+    const key=swordTreeViewedSchool+"|"+me.level+"|"+me.alive+"|"+me.equippedWeaponId+"|"+me.swordTreeData+"|"+(hasCooldown?Math.floor(Date.now()/1000):0);
     if (key===swordTreeRenderKey) return;
     swordTreeRenderKey=key;
     const points=1+Math.floor((Math.min(me.level,100)-1)/2)-tree.learned.length;
     const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
     const schoolButtons=Object.entries(catalog.schools).map(([id,school])=>
-      '<button type="button" class="sword-school'+(tree.school===id?' selected':'')+'" data-school="'+clean(id)+'" '+(tree.school===id?'disabled':'')+'>'+clean(school.name)+' · Lv.'+school.level+'</button>').join("");
-    const groups=[["common","วิชาพื้นฐาน"],[tree.school,catalog.schools[tree.school].name]];
+      '<button type="button" class="sword-school'+(swordTreeViewedSchool===id?' selected':'')+'" data-view-school="'+clean(id)+'" aria-pressed="'+String(swordTreeViewedSchool===id)+'">'+clean(school.name)+' · Lv.'+school.level+(tree.school===id?' · ใช้อยู่':'')+'</button>').join("");
+    const groups=[["common","วิชาพื้นฐาน"],[swordTreeViewedSchool,catalog.schools[swordTreeViewedSchool].name]];
     const sections=groups.map(([group,title])=>{
       const rows=Object.entries(catalog.nodes).filter(([,node])=>node.school===group).map(([id,node])=>{
         const learned=tree.learned.includes(id);
+        const availableSchool=node.school==="common" || node.school===tree.school;
         const requirements=node.requires.filter(required=>!tree.learned.includes(required));
         const reqText=requirements.map(required=>catalog.nodes[required]?.name || required).join(", ");
         const remaining=Math.max(0,Math.ceil(((tree.cooldowns[id]||0)-Date.now())/1000));
         const trainingNames={strikes:"ฟันสำเร็จ",blocks:"รับสำเร็จ",finishes:"คอมโบครบ"};
         const training=node.training ? tree.training[node.training.id] || 0 : 0;
         const needsTraining=node.training && training<node.training.count;
-        const locked=me.level<node.level || requirements.length>0 || points<1 || needsTraining;
+        const locked=me.level<node.level || requirements.length>0 || points<1 || needsTraining || !availableSchool;
         let effectInfo="";
         if (["strike","step","counter","flurry","area"].includes(node.effect)) {
           const hits=node.effect==="flurry" ? (id==="twin_finale" ? 3 : 2) : 1;
           effectInfo="พลัง "+Math.round(node.power*100)+"% × "+hits+" · ระยะ "+node.range+" หน่วย"+(node.effect==="area" ? " · สูงสุด 5 ตัวด้านหน้า" : "");
         } else if (node.effect==="guard") effectInfo="รับ"+(id==="circle_guard"?"รอบตัว":"ด้านหน้า")+" ลดดาเมจ "+Math.round((1-node.power)*100)+"% นาน 1.2 วิ · สวนได้ 3 วิเมื่อรับสำเร็จ";
         const slotIndex=(tree.loadouts?.[tree.school] || []).indexOf(id);
-        const slotSelect=learned && node.effect!=="passive" ? '<label class="sword-slot-label">ช่องลัด <select data-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2].map(slot=>'<option value="'+slot+'" '+(slot===slotIndex?'selected':'')+'>ช่อง '+(slot+1)+'</option>').join("")+'</select></label>' : "";
-        const button=learned ? (node.effect==="passive" ? '<span class="sword-passive">ติดตัวแล้ว</span>' :
+        const slotSelect=learned && availableSchool && node.effect!=="passive" ? '<label class="sword-slot-label">ช่องลัด <select data-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2].map(slot=>'<option value="'+slot+'" '+(slot===slotIndex?'selected':'')+'>ช่อง '+(slot+1)+'</option>').join("")+'</select></label>' : "";
+        const button=learned ? (!availableSchool ? '<span class="sword-passive">เรียนแล้ว</span>' : node.effect==="passive" ? '<span class="sword-passive">ติดตัวแล้ว</span>' :
           '<button type="button" data-cast="'+clean(id)+'" '+(remaining || !me.alive?'disabled':'')+'>'+(remaining?remaining+' วิ':'ใช้วิชา')+'</button>') :
           '<button type="button" data-learn="'+clean(id)+'" '+(locked?'disabled':'')+'>เรียน 1 แต้ม</button>';
         return '<article class="sword-node'+(learned?' learned':'')+'"><div><strong>'+clean(node.name)+'</strong> <small>Lv.'+node.level+'</small><p>'+clean(node.description)+'</p>'+
@@ -4627,21 +4636,29 @@
       return '<section><h3>'+clean(title)+'</h3>'+rows+'</section>';
     }).join("");
     container.innerHTML='<p class="note">แต้มวิชาคงเหลือ '+points+' · เลเวล '+me.level+' · เพิ่มแต้มทุก 2 เลเวล · สวมกระบี่อาคมเพื่อใช้วิชา</p>'+
-      (catalog.schools[tree.school].note?'<p class="note">'+clean(catalog.schools[tree.school].note)+'</p>':'')+
+      (catalog.schools[swordTreeViewedSchool].note?'<p class="note">'+clean(catalog.schools[swordTreeViewedSchool].note)+'</p>':'')+
       '<p class="note">ฝึกฟัน '+tree.training.strikes+' · รับ '+tree.training.blocks+' · คอมโบครบ '+tree.training.finishes+' · คอมโบปัจจุบัน '+(performance.now()<swordComboUntil?swordCombo:0)+' / 3</p>'+
       '<p class="note">เรียนและเปลี่ยนสำนักที่ลานพักหลังออกจากการต่อสู้ ความรู้ของแต่ละสำนักจะเก็บไว้ · คืนแต้มแล้วเก็บผลฝึกและคูลดาวน์ · เปลี่ยนสำนักอื่นต้อง Lv.10 ฟัน 10 และรับสำเร็จ 1 ครั้ง · พลังวิชาคำนวณก่อนหักป้องกัน</p>'+
-      '<div class="sword-schools">'+schoolButtons+'</div>'+sections+
+      '<div class="sword-schools">'+schoolButtons+'</div>'+
+      '<p class="note">กำลังดูสำนัก '+clean(catalog.schools[swordTreeViewedSchool].name)+(tree.school===swordTreeViewedSchool?' · ใช้งานอยู่':' · เลือกใช้ที่ลานพัก')+'</p>'+
+      '<button type="button" id="chooseSwordSchool" class="secondary" '+(tree.school===swordTreeViewedSchool?'disabled':'')+'>เลือกใช้สำนักนี้</button>'+sections+
       '<p class="note">ช่องลัดของสำนักนี้จะเก็บแยกกัน</p><div class="sword-schools">'+(tree.loadouts?.[tree.school] || []).map((id,slot)=>'<button type="button" data-clear-slot="'+slot+'" '+(!id?'disabled':'')+'>ล้างช่อง '+(slot+1)+'</button>').join("")+'</div>'+
       '<button type="button" id="resetSwordTree" class="secondary">คืนแต้มวิชาทุกสำนักที่ลานพัก</button>';
-    $("resetSwordTree").onclick=()=>room.send("sword_tree_reset",{});
-    container.querySelectorAll("[data-school]").forEach(button=>button.onclick=()=>{
-      room.send("sword_tree_school",{school:button.dataset.school});
+    $("resetSwordTree").onclick=()=>{
+      if (window.confirm("คืนแต้มวิชาที่เรียนทุกสำนักและล้างช่องลัดทั้งหมดหรือไม่? ผลฝึกและคูลดาวน์จะยังอยู่")) room.send("sword_tree_reset",{});
+    };
+    $("chooseSwordSchool").onclick=()=>room.send("sword_tree_school",{school:swordTreeViewedSchool});
+    container.querySelectorAll("[data-view-school]").forEach(button=>button.onclick=()=>{
+      swordTreeViewedSchool=button.dataset.viewSchool;
+      swordTreeRenderKey="";
+      renderSwordTree();
     });
     container.querySelectorAll("[data-learn]").forEach(button=>button.onclick=()=>{
       room.send("sword_tree_learn",{skillId:button.dataset.learn});
     });
     container.querySelectorAll("[data-equip]").forEach(select=>select.onchange=()=>{
       if (select.value!=="") room.send("sword_tree_equip",{skillId:select.dataset.equip,slot:Number(select.value)});
+      select.blur();
     });
     container.querySelectorAll("[data-clear-slot]").forEach(button=>button.onclick=()=>{
       room.send("sword_tree_equip",{skillId:null,slot:Number(button.dataset.clearSlot)});
@@ -4649,6 +4666,10 @@
     container.querySelectorAll("[data-cast]").forEach(button=>button.onclick=()=>{
       const id=button.dataset.cast; closeDrawer(); useSwordSkill(id);
     });
+    if (focusAttribute) {
+      const replacement=[...container.querySelectorAll("["+focusAttribute+"]")].find(element=>element.getAttribute(focusAttribute)===focusValue);
+      replacement?.focus({preventScroll:true});
+    }
   }
   function ancestryHint(player) {
     const map = worldDefinitions?.[player.mapId];
