@@ -273,6 +273,7 @@
   const floatLayer = document.createElement("div"); floatLayer.className = "float-layer"; floatLayer.setAttribute("aria-hidden", "true");
   document.getElementById("game")?.append(floatLayer);
   const floatProj = new B.Vector3();
+  const METAL_KINDS = new Set(["dealt", "skill", "taken", "heal", "spirit", "onoma", "cry", "levelup"]);
   function floatText(x, y, z, text, kind = "dealt", opts = {}) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect(), w = engine.getRenderWidth(), h = engine.getRenderHeight();
@@ -285,6 +286,7 @@
     el._world = [x, y, z]; // re-projected every frame so the text stays on its target while the camera moves
     el._lift = opts.lift || 0; el._side = opts.side || 0;
     el.textContent = text;
+    if (METAL_KINDS.has(kind)) { el.classList.add("metal"); el.dataset.t = text; } // gradient face drawn by ::after over the stroked base
     const drift = (opts.drift ?? (Math.random() - .5) * 70) | 0;
     el.style.left = sx + "px"; el.style.top = sy + "px"; el.style.setProperty("--dx", drift + "px"); el.style.setProperty("--rise", (opts.rise ?? 46) + "px");
     if (opts.delay) el.style.animationDelay = opts.delay + "ms";
@@ -492,6 +494,92 @@
     m.emissiveTexture = texture; m.opacityTexture = texture; texture.hasAlpha = true;
     m.disableLighting = true; m.backFaceCulling = false; m.alphaMode = B.Engine.ALPHA_ADD;
     return m;
+  }
+  // ---- Far-camera combat VFX: hit starbursts, ground shock rings, wind-up telegraphs, target ring ----
+  // Sized in world units so they still read at the default radius-85 view; pooled and additive.
+  let worldFxMats = null; const worldFx = [], worldFxPool = [];
+  function worldFxMaterials() {
+    if (worldFxMats) return worldFxMats;
+    const star = (name, core, edge) => paintTexture(name, 128, (c, s) => {
+      c.clearRect(0, 0, s, s); const h = s / 2;
+      const g = c.createRadialGradient(h, h, 0, h, h, h * .55);
+      g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(.35, core); g.addColorStop(1, "rgba(0,0,0,0)");
+      c.fillStyle = g; c.fillRect(0, 0, s, s);
+      c.translate(h, h); c.fillStyle = edge;
+      for (let i = 0; i < 8; i++) { const L = i % 2 ? h * .62 : h * .98, W = i % 2 ? 4 : 6;
+        c.beginPath(); c.moveTo(0, -W); c.lineTo(L, 0); c.lineTo(0, W); c.closePath(); c.fill(); c.rotate(Math.PI / 4); }
+      c.setTransform(1, 0, 0, 1, 0, 0);
+    });
+    const ring = (name, color, width, dashes = 0) => paintTexture(name, 256, (c, s) => {
+      c.clearRect(0, 0, s, s); const h = s / 2; c.strokeStyle = color; c.lineWidth = width;
+      c.shadowColor = color; c.shadowBlur = 14;
+      if (dashes) { for (let i = 0; i < dashes; i++) { const a = i / dashes * Math.PI * 2; c.beginPath(); c.arc(h, h, h - width - 10, a, a + Math.PI * 2 / dashes * .6); c.stroke(); } }
+      else { c.beginPath(); c.arc(h, h, h - width - 10, 0, Math.PI * 2); c.stroke(); }
+    });
+    const disc = (name, color) => radialTexture(name, 128, [[0, "rgba(0,0,0,0)"], [.55, "rgba(0,0,0,0)"], [.8, color], [.96, color], [1, "rgba(0,0,0,0)"]]);
+    worldFxMats = {
+      starGold: additiveMat("fxStarGold", star("fxStarGoldT", "rgba(255,196,64,.95)", "rgba(255,232,150,.95)")),
+      starRed: additiveMat("fxStarRed", star("fxStarRedT", "rgba(255,70,50,.95)", "rgba(255,150,120,.9)")),
+      starCyan: additiveMat("fxStarCyan", star("fxStarCyanT", "rgba(90,220,255,.95)", "rgba(190,245,255,.9)")),
+      shockGold: additiveMat("fxShockGold", ring("fxShockGoldT", "rgba(255,210,110,1)", 10)),
+      shockRed: additiveMat("fxShockRed", ring("fxShockRedT", "rgba(255,80,60,1)", 10)),
+      warn: additiveMat("fxWarn", disc("fxWarnT", "rgba(255,40,30,.85)")),
+      warnEdge: additiveMat("fxWarnEdge", ring("fxWarnEdgeT", "rgba(255,70,50,1)", 9, 12)),
+      target: additiveMat("fxTarget", ring("fxTargetT", "rgba(255,206,90,1)", 9, 6)),
+    };
+    for (const [k, m] of Object.entries(worldFxMats)) { m.fogEnabled = false; if (k.startsWith("star")) { m.disableDepthWrite = true; m.depthFunction = B.Engine.ALWAYS; } else m.zOffset = -2; }
+    return worldFxMats;
+  }
+  function spawnWorldFx(mat, x, y, z, o = {}) {
+    if (worldFx.length > 40) return null;
+    const mats = worldFxMaterials();
+    let m = worldFxPool.pop();
+    if (!m) { m = B.MeshBuilder.CreatePlane("worldFx", { size: 1 }, scene); m.isPickable = false; }
+    m.material = mats[mat]; m.setEnabled(true); m.position.set(x, y, z);
+    m.billboardMode = o.ground ? B.Mesh.BILLBOARDMODE_NONE : B.Mesh.BILLBOARDMODE_ALL;
+    m.rotation.set(o.ground ? Math.PI / 2 : 0, 0, o.ground ? 0 : Math.random() * Math.PI);
+    worldFx.push({ m, born: performance.now() + (o.delay || 0), life: o.life || 380, s0: o.s0 ?? .4, s1: o.s1 ?? 4, a0: o.a0 ?? 1, a1: o.a1 ?? 0, spin: o.spin || 0, follow: o.follow || null, pulse: o.pulse || 0 });
+    m.scaling.setAll(.001); m.visibility = 0;
+    return worldFx[worldFx.length - 1];
+  }
+  function updateWorldFx(now) {
+    for (let i = worldFx.length - 1; i >= 0; i--) {
+      const f = worldFx[i], k = (now - f.born) / f.life;
+      if (k < 0) continue;
+      if (k >= 1 || (f.follow && !f.follow.isEnabled?.())) { f.m.setEnabled(false); worldFxPool.push(f.m); worldFx.splice(i, 1); continue; }
+      const e = 1 - Math.pow(1 - k, 3), s = f.s0 + (f.s1 - f.s0) * e;
+      f.m.scaling.setAll(s * (1 + f.pulse * Math.sin(now / 60)));
+      f.m.visibility = f.a0 + (f.a1 - f.a0) * k;
+      if (f.spin) f.m.rotation[f.m.billboardMode ? "z" : "y"] += f.spin * .016;
+      if (f.follow) { f.m.position.x = f.follow.position.x; f.m.position.z = f.follow.position.z; }
+    }
+  }
+  // Big readable hit flash: a starburst plus a ground shock ring; ours are gold, hits on us red, others cyan.
+  function hitBurst(x, z, tone = "gold", heavy = false, y = 0) {
+    const star = tone === "red" ? "starRed" : tone === "cyan" ? "starCyan" : "starGold";
+    const scale = heavy ? 1.45 : 1;
+    spawnWorldFx(star, x, y + 1.6, z, { life: 280, s0: 1.6 * scale, s1: 6 * scale, a0: 1, a1: 0 });
+    spawnWorldFx(star, x, y + 1.6, z, { life: 180, s0: 3 * scale, s1: 1.4 * scale, a0: .9, a1: 0, delay: 30 });
+    spawnWorldFx(tone === "red" ? "shockRed" : "shockGold", x, y + .15, z, { ground: true, life: 420, s0: 1, s1: 6.5 * scale, a0: .95, a1: 0 });
+  }
+  // Wind-up telegraph: a red danger disc that tightens onto the ghost until it strikes.
+  function windupTelegraph(mesh, g) {
+    const r = Math.max(3, (g.tall || 1.8) * 1.8), y = (g.ty ?? 0) + .1;
+    spawnWorldFx("warn", mesh.position.x, y, mesh.position.z, { ground: true, life: 650, s0: r * 2.4, s1: r * 1.6, a0: .25, a1: .85, follow: mesh });
+    spawnWorldFx("warnEdge", mesh.position.x, y + .02, mesh.position.z, { ground: true, life: 650, s0: r * 3, s1: r * 1.7, a0: .5, a1: 1, spin: 2.2, follow: mesh });
+  }
+  // Persistent rotating gold ring under the selected target.
+  let targetRingMesh = null;
+  function updateTargetRing(now) {
+    const id = selectedForestTarget, mesh = id ? (forestMonsters.get(id) || (id === MONSTER_ID ? enemy : null)) : null;
+    if (!mesh || !mesh.isEnabled()) { if (targetRingMesh) targetRingMesh.setEnabled(false); return; }
+    if (!targetRingMesh) { targetRingMesh = B.MeshBuilder.CreatePlane("targetRing", { size: 1 }, scene); targetRingMesh.isPickable = false; targetRingMesh.rotation.x = Math.PI / 2; targetRingMesh.material = worldFxMaterials().target; }
+    const g = mesh.metadata?.ghost, r = Math.max(2.6, (g?.tall || 1.8) * 1.5);
+    targetRingMesh.setEnabled(true);
+    targetRingMesh.position.set(mesh.position.x, (g?.ty ?? 0) + .14, mesh.position.z);
+    targetRingMesh.rotation.y = now / 900;
+    targetRingMesh.scaling.setAll(r * 2 * (1 + .06 * Math.sin(now / 220)));
+    targetRingMesh.visibility = .8 + .2 * Math.sin(now / 220);
   }
   // Lantern light is faked with additive pools: dozens of real point lights
   // exceed the 4-light material limit and cost too much on phones.
@@ -3444,7 +3532,7 @@
   // Contact sound at the target, chosen by the attacker's weapon and move.
   const HIT_WORDS = { blade: ["ฉัวะ!", "เฉือน!", "ฟึ่บ!"], fist: ["ปั้ก!", "ผัวะ!", "ตุบ!"], elbow: ["เพี้ยะ!", "ป้าบ!"], kick: ["ตุ้บ!", "อั้ก!"],
     blunt: ["โป๊ก!", "ตึง!"], rice: ["ซ่า!", "เปาะ!"], talisman: ["แปะ!", "ฉึบ!"], slam: ["ตูม!"] };
-  function impactAt(attackerId, x, z, source, ghost, kind) {
+  function impactAt(attackerId, x, z, source, ghost, kind, victimId) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     const a = avatars.get(attackerId), w = a?.weaponId || "", move = a?.action?.type || "";
     let name = "fist", intensity = 1;
@@ -3454,6 +3542,7 @@
     else if (w === "spirit_staff") name = "blunt";
     else if (w === "muay_wraps") name = /elbow|counter/.test(move) ? "elbow" : /knee|teep|throw/.test(move) ? "kick" : "fist";
     SFX(name, { x, z, intensity });
+    { const mine = attackerId === localId; hitBurst(x, z, mine ? "gold" : victimId === localId ? "red" : "cyan", mine && (SKILL_SOURCES.has(source) || name === "slam" || name === "blunt"), a?.y ?? getLocalAvatar()?.y ?? 0); }
     // Comic hit word (short Thai onomatopoeia), only for hits that involve us, to keep the far view readable.
     if (attackerId === localId) { const words = HIT_WORDS[name] || HIT_WORDS.fist; floatText(x, 2.4, z, words[Math.random() * words.length | 0], "onoma", { side: 46, drift: 30, rise: 26, life: 900 }); }
     if (ghost && kind) SFX("ghost", { kind, ev: "hurt", x, z, delay: .03, intensity: .8 });
@@ -6121,8 +6210,11 @@
     if (g.deathAt) return;
     if (g.windup && !g.wasWindup) {
       ghostVoice(g, mesh, "attack"); g.criedAt = now;
+      { const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 45) windupTelegraph(mesh, g); }
       { const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 32) {
-        const cries = GHOST_CRIES[g.design?.kind] || ["แฮ่!"]; floatText(mesh.position.x, mesh.position.y + (g.tall || 1.8) * .6, mesh.position.z, cries[Math.random() * cries.length | 0], "cry", { side: -34, drift: -10, rise: 20, life: 1000 }); } }
+        const cries = GHOST_CRIES[g.design?.kind] || ["แฮ่!"]; // Push the cry to the ghost's outer side on screen so it never sits on the hero's shout bubble.
+        const r = camera.getDirection(B.Axis.X), away = (mesh.position.x - hero.x) * r.x + (mesh.position.z - hero.z) * r.z >= 0 ? 1 : -1;
+        floatText(mesh.position.x, mesh.position.y + (g.tall || 1.8) * .6, mesh.position.z, cries[Math.random() * cries.length | 0], "cry", { side: 52 * away, drift: 12 * away, rise: 20, life: 1000, lift: 14 }); } }
       const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 15) lastCombatAt = now; // music goes to combat
     }
     g.wasWindup = g.windup;
@@ -7551,7 +7643,7 @@
         const attacker = avatars.get(hit.attackerId);
         if (victim) { victim.hitFlashUntil = performance.now() + 250; playAction(victim, "hit"); }
         playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
-        if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, false);
+        if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, false, undefined, hit.targetId);
         { const dmg = Math.round(Number(hit.damage) || 0); if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), hit.targetId === localId ? "taken" : hit.attackerId === localId ? (SKILL_SOURCES.has(hit.source) ? "skill" : "dealt") : "ally"); }
         if (attacker && victim) {
           faceAvatarToward(hit.attackerId, victim.x, victim.z);
@@ -7578,6 +7670,7 @@
       joined.onMessage("monster_hit", hit => {
         if (room === joined) {
           playAction(avatars.get(hit?.targetId), "hit");
+          { const v = avatars.get(hit?.targetId); if (v) hitBurst(v.x, v.z, hit.targetId === localId ? "red" : "cyan", false, v.y || 0); }
           { const dmg = Math.round(Number(hit?.damage) || 0); if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), hit.targetId === localId ? "taken" : "ally"); }
           if (hit?.targetId === localId && !(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };
           const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost; if (g) g.attackAt = performance.now();
@@ -10335,6 +10428,7 @@
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
     if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
     updateFloatText();
+    updateWorldFx(now); updateTargetRing(now);
     { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);
       // Music state: combat for 6 s after any fight action, war in a live battle, elite when one is near.
       if ((musicSyncIn -= dt) <= 0 && hero) {
