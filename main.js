@@ -2012,6 +2012,96 @@
   const weaponWood = mat("weapon oak handle", "#71523e", "#2b1b0b");
   const weaponCrystal = mat("weapon spirit crystal", "#9d7bdd", "#6550aa");
 
+  // ---- Sak yant master: articulated low-poly avatar (visual only) ----
+  // Parts of each rigid segment are merged into one multi-material mesh and
+  // parented to a pivot, so walking only rotates a handful of nodes.
+  function khomRow(c, x, y, width, size, ink) {
+    c.strokeStyle = ink; c.lineWidth = Math.max(1.2, size * .16); c.beginPath();
+    for (let gx = x; gx < x + width; gx += size * .9) {
+      const k = gx * 7 + y * 3, h = size * (.55 + noise(k, 601) * .45);
+      c.moveTo(gx, y); c.quadraticCurveTo(gx + size * .35, y - h, gx + size * .55, y - h * .35);
+      if (noise(k, 602) > .5) c.arc(gx + size * .3, y - h * .2, size * .14, 0, Math.PI * 2);
+    }
+    c.stroke();
+  }
+  function sunYantra(c, x, y, r, ink) {
+    c.strokeStyle = ink; c.lineWidth = 2;
+    for (const k of [1, .72, .4]) { c.beginPath(); c.arc(x, y, r * k, 0, Math.PI * 2); c.stroke(); }
+    c.beginPath();
+    for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8; c.moveTo(x + Math.cos(a) * r * .4, y + Math.sin(a) * r * .4); c.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+    c.stroke(); c.beginPath();
+    for (let i = 0; i <= 8; i++) { const a = i * Math.PI * 3 / 4 - Math.PI / 2; c.lineTo(x + Math.cos(a) * r * .38, y + Math.sin(a) * r * .38); }
+    c.stroke();
+  }
+  const SKIN = "#b07a52", INK = "rgba(28,20,18,.82)";
+  const tattooSkin = mat("sak yant skin", "#ffffff");
+  tattooSkin.diffuseTexture = paintTexture("sak yant torso", 512, (c, s) => {
+    c.fillStyle = SKIN; c.fillRect(0, 0, s, s);
+    for (const cx of [s * .25, s * .75]) {
+      // Gao Yord: nine spires over rows of Khom script, a sun yantra above.
+      c.strokeStyle = INK; c.lineWidth = 2.4;
+      for (let i = 0; i < 9; i++) {
+        const x = cx - 64 + i * 16, top = s * (.3 - Math.sin(i / 8 * Math.PI) * .07);
+        c.beginPath(); c.moveTo(x, s * .56); c.lineTo(x, top + 18); c.quadraticCurveTo(x + 8, top - 6, x + 16, top + 18); c.lineTo(x + 16, s * .56); c.stroke();
+      }
+      c.strokeRect(cx - 70, s * .56, 156, 10);
+      for (let row = 0; row < 4; row++) khomRow(c, cx - 70, s * (.64 + row * .07), 150, 13, INK);
+      sunYantra(c, cx + 8, s * .14, 34, INK);
+    }
+  });
+  const tattooArm = mat("sak yant arms", "#ffffff");
+  tattooArm.diffuseTexture = paintTexture("sak yant arms", 256, (c, s) => {
+    c.fillStyle = SKIN; c.fillRect(0, 0, s, s);
+    for (let row = 0; row < 9; row++) khomRow(c, 6, 18 + row * 26, s - 12, 12, INK);
+    sunYantra(c, s * .25, s * .5, 22, INK); sunYantra(c, s * .75, s * .5, 22, INK);
+  });
+  const plainSkin = mat("bare skin", SKIN);
+  const hairMat = mat("long black hair", "#16110f");
+  const beadMat = mat("prayer beads", "#2c1a12"); beadMat.specularColor = B.Color3.FromHexString("#5a4030");
+  const plaid = (name, a, b) => {
+    const m = mat(name, "#ffffff");
+    m.diffuseTexture = paintTexture(name, 64, (c, s) => {
+      c.fillStyle = a; c.fillRect(0, 0, s, s); c.fillStyle = b;
+      for (let i = 0; i < s; i += 16) { c.globalAlpha = .55; c.fillRect(i, 0, 6, s); c.fillRect(0, i, s, 6); }
+      c.globalAlpha = 1;
+    });
+    return m;
+  };
+  const sashHero = plaid("pha khao ma red", "#8c2a20", "#e6d7b8"), sashFriend = plaid("pha khao ma teal", "#1f5f63", "#d9e6d8");
+  const pantsHero = mat("dark cotton trousers", "#1e1819"), pantsFriend = mat("traveller trousers", "#17262a");
+  const pouchCloth = mat("rice pouch", "#3a332b"), ropeRed = mat("red cord", "#8e2a22"), jarClay = mat("spirit jar", "#2b2321"), waxRed = mat("seal wax", "#5c1a12");
+  const jarCarved = mat("carved spirit jar", "#ffffff");
+  jarCarved.diffuseTexture = paintTexture("spirit jar script", 256, (c, s) => {
+    c.fillStyle = "#3a302d"; c.fillRect(0, 0, s, s);
+    for (let row = 0; row < 7; row++) { c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(0, 22 + row * 34, s, 3); khomRow(c, 4, 48 + row * 34, s - 8, 14, "rgba(150,110,96,.85)"); }
+    for (let i = 0; i < 26; i++) { c.fillStyle = "rgba(80,10,8,.5)"; c.fillRect(noise(i, 611) * s, noise(i, 612) * s * .4, 3, 18 + noise(i, 613) * 40); }
+  });
+  const blackSteel = mat("black steel", "#2a2a2f"); blackSteel.specularColor = B.Color3.FromHexString("#8a8f9a"); blackSteel.specularPower = 48;
+  const copper = mat("engraved copper", "#8a5a3a", "#24140a"), leatherWrap = mat("wrapped grip", "#1b1615");
+  const emberEdge = mat("ember edge", "#ff6a3a", "#e2381a"); glowMats.add(emberEdge);
+  // Far-camera identity: a yantra shawl (read from above), glowing amulets
+  // and three familiar spirits orbiting the shaman.
+  const shawlCloth = (name, base, trim) => {
+    const m = mat(name, "#ffffff", "#140404");
+    m.diffuseTexture = paintTexture(name, 128, (c, s) => {
+      c.fillStyle = base; c.fillRect(0, 0, s, s);
+      c.strokeStyle = trim; c.lineWidth = 6; c.strokeRect(6, 6, s - 12, s - 12);
+      c.lineWidth = 3; c.strokeRect(34, 34, s - 68, s - 68);
+      c.beginPath(); c.moveTo(34, 34); c.lineTo(s - 34, s - 34); c.moveTo(s - 34, 34); c.lineTo(34, s - 34); c.stroke();
+      c.beginPath(); c.arc(s / 2, s / 2, 16, 0, Math.PI * 2); c.stroke();
+    });
+    return m;
+  };
+  const shawlHero = shawlCloth("hero yantra shawl", "#9c1f18", "#e8b85a"), shawlFriend = shawlCloth("ally yantra shawl", "#1d3f6e", "#9fe3e0");
+  const amuletGlow = mat("glowing amulet", "#f2c66a", "#c8861c"); glowMats.add(amuletGlow);
+  const familiarMats = [["phi phrai", "#8dffbf", "#2fe08a"], ["kuman thong", "#ffd76a", "#e0a11c"], ["phi hong", "#ff7a62", "#e02f1e"]]
+    .map(([name, hex, glowHex]) => { const m = mat(name, hex, glowHex); m.alpha = .88; glowMats.add(m); return m; });
+  function mergedSegment(parts, pivot, name) {
+    for (const p of parts) p.isPickable = false;
+    const mesh = parts.length > 1 ? B.Mesh.MergeMeshes(parts, true, true, undefined, false, true) : parts[0];
+    mesh.name = name; mesh.parent = pivot; mesh.isPickable = false;
+    return mesh;
+  }
   function avatarMesh(id, local) {
     const parent = new B.TransformNode("avatar-" + id, scene);
     if(local) {
@@ -2021,37 +2111,124 @@
       locator.parent=parent;locator.position.y=.06;
       locator.material=playerLocatorMat;locator.isPickable=false;
     }
-    const robe = B.MeshBuilder.CreateCylinder("robe", { height: 1.15, diameterTop: .6, diameterBottom: .92, tessellation: 7 }, scene);
-    robe.parent = parent; robe.position.y = .67; robe.material = local ? heroMat : friendMat; robe.isPickable = false;
-    const head = B.MeshBuilder.CreateSphere("head", { diameter: .53, segments: 10 }, scene);
-    head.parent = parent; head.position.y = 1.52; head.material = local ? heroSkin : friendSkin; head.isPickable = false;
-    const hair = B.MeshBuilder.CreateSphere("hair", { diameter: .56, segments: 10 }, scene);
-    hair.parent = parent; hair.position.y = 1.68; hair.scaling.y = .55; hair.material = darkWood; hair.isPickable = false;
-    const belt = B.MeshBuilder.CreateBox("amulet", { size: .24 }, scene);
-    belt.parent = parent; belt.position.set(0,.95,-.37); belt.material = gold; belt.isPickable = false;
-    // A clearly visible front side makes online facing readable even with
-    // simple prototype meshes. Local avatar forward is negative Z.
+    const pants = local ? pantsHero : pantsFriend, sash = local ? sashHero : sashFriend;
+    let parts = [];
+    const at = (mesh, x, y, z, m) => { mesh.position.set(x, y, z); mesh.material = m; parts.push(mesh); return mesh; };
+    const box = (x, y, z, w, h, d, m) => at(B.MeshBuilder.CreateBox("avatar part", { width: w, height: h, depth: d }, scene), x, y, z, m);
+    const cyl = (x, y, z, h, top, bottom, m, n = 8) => at(B.MeshBuilder.CreateCylinder("avatar part", { height: h, diameterTop: top, diameterBottom: bottom, tessellation: n }, scene), x, y, z, m);
+    const ball = (x, y, z, d, m, seg = 6) => at(B.MeshBuilder.CreateSphere("avatar part", { diameter: d, segments: seg }, scene), x, y, z, m);
+    const node = (name, p, x, y, z) => { const n = new B.TransformNode(name, scene); n.parent = p; n.position.set(x, y, z); return n; };
+    const flush = (pivot, name) => { const m = mergedSegment(parts, pivot, name); parts = []; return m; };
+    const body = node("body", parent, 0, 0, 0);
+    body.scaling.setAll(1.2); // reads at the farthest camera; hitbox is unchanged
+    const shawl = local ? shawlHero : shawlFriend;
+    // Lofted body: rings of [y, halfWidth, halfDepth, zOffset] in pivot space.
+    // Proportions follow a 7.5-head male figure, 2.0 units tall before the
+    // 1.2 body scale: chin 1.75, shoulders 1.62, waist 1.2, crotch 1.0,
+    // knee .52, wrist at crotch height.
+    const loft = (rings, m, segs = 12) => {
+      const paths = rings.map(([y, w, d, zo = 0]) => {
+        const ring = [];
+        for (let i = 0; i <= segs; i++) { const a = i / segs * Math.PI * 2; ring.push(new B.Vector3(Math.cos(a) * w, y, zo + Math.sin(a) * d)); }
+        return ring;
+      });
+      const mesh = B.MeshBuilder.CreateRibbon("avatar loft", { pathArray: paths, sideOrientation: B.Mesh.DOUBLESIDE }, scene);
+      mesh.material = m; parts.push(mesh); return mesh;
+    };
+    // Torso: V-shaped back and chest tapering to the waist.
+    loft([[1.1, .155, .105], [1.2, .148, .1, -.004], [1.32, .168, .108, -.01], [1.43, .198, .118, -.018],
+      [1.52, .212, .12, -.018], [1.6, .2, .108, -.008], [1.665, .15, .088], [1.71, .07, .06, .005]], tattooSkin);
+    for (const side of [-1, 1]) ball(side * .205, 1.615, 0, .13, tattooArm, 8).scaling.set(1, .9, 1.05); // deltoids
+    cyl(0, 1.75, .01, .1, .085, .095, plainSkin, 8);
+    // Head: skull, jaw, ears, brow, nose; hair swept back into a topknot.
+    ball(0, 1.885, 0, .23, plainSkin, 10).scaling.set(.86, 1.06, .98);
+    ball(0, 1.815, -.025, .16, plainSkin, 8).scaling.set(.92, .78, 1);
     for (const side of [-1, 1]) {
-      const eye = B.MeshBuilder.CreateSphere("avatar eye", { diameter: .10, segments: 6 }, scene);
-      eye.parent = parent;
-      eye.position.set(side * .115, 1.54, -.255);
-      eye.material = darkWood;
-      eye.isPickable = false;
+      ball(side * .1, 1.875, .01, .05, plainSkin, 4).scaling.set(.5, 1, .8);
+      ball(side * .04, 1.885, -.103, .03, darkWood, 4);
+      box(side * .042, 1.912, -.1, .055, .014, .02, hairMat).rotation.z = -side * .2;
     }
-    const frontSash = B.MeshBuilder.CreateBox("front sash", {
-      width: .32, height: .42, depth: .08
-    }, scene);
-    frontSash.parent = parent;
-    frontSash.position.set(0, .87, -.43);
-    frontSash.material = local ? gold : glowMat;
-    frontSash.isPickable = false;
+    box(0, 1.86, -.112, .03, .05, .035, plainSkin);
+    box(0, 1.828, -.104, .08, .016, .02, hairMat);
+    box(0, 1.785, -.085, .045, .05, .03, hairMat);
+    ball(0, 1.93, .02, .245, hairMat, 8).scaling.set(.92, .74, 1);
+    ball(0, 2.03, .05, .1, hairMat, 6);
+    cyl(0, 1.995, .045, .03, .07, .07, shawl, 8);
+    box(0, 1.76, .1, .15, .3, .04, hairMat).rotation.x = .12;
+    cyl(0, 1.93, .005, .03, .245, .245, shawl, 12);
+    // Loose fisherman trousers with a cloth sash at the waist.
+    loft([[.96, .19, .13], [1.04, .185, .125], [1.12, .162, .11]], pants);
+    cyl(0, 1.12, -.002, .07, .335, .33, sash, 12).scaling.z = .68;
+    box(.07, 1.03, -.115, .08, .17, .025, sash).rotation.z = .15;
+    // Yantra shawl over the shoulders and down the back; cross-chest band.
+    loft([[1.565, .245, .15, .005], [1.64, .215, .125], [1.695, .12, .08, .005]], shawl, 14);
+    const cape = box(0, 1.33, .135, .38, .56, .025, shawl); cape.rotation.x = .1;
+    const band = box(.01, 1.4, -.125, .06, .5, .02, shawl); band.rotation.z = .6;
+    // Prayer beads ending in glowing amulets.
+    for (const [drop, width] of [[.17, .085], [.26, .11]]) {
+      for (let i = 0; i <= 8; i++) {
+        const t = i / 4 - 1, y = 1.7 - (1 - t * t) * drop;
+        ball(t * width, y, -.08 - (1 - t * t) * .055, .04, beadMat, 4);
+      }
+      box(0, 1.7 - drop - .045, -.14, .055, .075, .02, amuletGlow);
+    }
+    // Rice pouch at the right hip, tied with red cord and a gold seal.
+    ball(.2, .96, -.03, .16, pouchCloth, 6).scaling.set(1, 1.15, .85);
+    cyl(.2, 1.06, -.03, .05, .05, .075, pouchCloth, 6);
+    cyl(.2, 1.04, -.03, .025, .095, .095, ropeRed, 8);
+    cyl(.2, .96, -.1, .015, .05, .05, gold, 10).rotation.x = Math.PI / 2;
+    // Spirit-binding jar at the left hip: onion body, pointed base, carved
+    // script, crossed red cord, talisman strips, wax seals, horn handles.
+    const jx = -.22, jy = .93, jz = .05, j = .68;
+    box(jx + .015, jy + .17, jz, .015, .11, .015, ropeRed).rotation.z = -.2;
+    ball(jx, jy, jz, .3 * j, jarCarved, 8).scaling.set(1, 1.08, 1);
+    cyl(jx, jy - .2 * j, jz, .14 * j, .15 * j, 0, jarClay, 8).rotation.x = Math.PI;
+    cyl(jx, jy + .17 * j, jz, .07 * j, .1 * j, .16 * j, jarClay, 8);
+    for (const r of [-.7, .7]) { const cord = box(jx, jy, jz, .305 * j, .014, .014, ropeRed); cord.rotation.z = r; cord.rotation.y = Math.PI / 2; }
+    box(jx, jy, jz, .31 * j, .014, .31 * j, ropeRed);
+    for (const side of [-1, 1]) {
+      box(jx + side * .07, jy + .02, jz - .045, .04, .18, .008, talismanPaper).rotation.z = side * .25;
+      cyl(jx + side * .11, jy + .08, jz, .11, .015, .035, jarClay, 5).rotation.z = -side * .55;
+    }
+    for (const dx of [-.028, 0, .028]) cyl(jx + dx, jy + .13, jz - .05, .012, .032, .032, waxRed, 8).rotation.x = -1.1;
+    flush(body, "shaman torso");
+    // Arms: shoulder pivot -> upper arm, elbow pivot -> forearm and hand.
+    const arms = [], elbows = [];
+    for (const side of [-1, 1]) {
+      const shoulder = node("shoulder", body, side * .215, 1.6, 0);
+      loft([[.02, .06, .062], [-.08, .058, .06], [-.19, .05, .052], [-.3, .04, .043]], tattooArm, 10);
+      flush(shoulder, "upper arm");
+      const elbow = node("elbow", shoulder, 0, -.3, 0);
+      loft([[0, .042, .044], [-.07, .046, .044], [-.19, .034, .032], [-.27, .027, .025]], tattooArm, 10);
+      cyl(0, -.245, 0, .035, .066, .066, beadMat, 8);
+      box(0, -.335, -.005, .055, .12, .08, plainSkin);
+      box(-side * .03, -.3, -.04, .025, .07, .03, plainSkin).rotation.z = side * .4;
+      flush(elbow, "forearm");
+      shoulder.rotation.z = side * .14; elbow.rotation.x = .22;
+      arms.push(shoulder); elbows.push(elbow);
+    }
+    // Legs: hip pivot -> loose trouser thigh, knee pivot -> trouser hem at
+    // mid-calf, bare calf, ankle and foot.
+    const legs = [], knees = [];
+    for (const side of [-1, 1]) {
+      const hip = node("hip", body, side * .095, 1.0, 0);
+      loft([[.04, .115, .115], [-.12, .11, .108], [-.3, .095, .095], [-.47, .08, .082]], pants, 10);
+      flush(hip, "thigh");
+      const knee = node("knee", hip, 0, -.48, 0);
+      loft([[.01, .082, .084], [-.13, .094, .092], [-.27, .104, .1], [-.285, .098, .095]], pants, 10);
+      loft([[-.25, .052, .056, .005], [-.33, .048, .05, .008], [-.43, .033, .036]], plainSkin, 8);
+      const foot = box(0, -.475, -.055, .085, .055, .23, plainSkin); foot.scaling.x = .95;
+      ball(0, -.47, .03, .07, plainSkin, 4);
+      flush(knee, "shin");
+      legs.push(hip); knees.push(knee);
+    }
 
     // Remote avatars are touch targets. The player's own avatar remains
     // unpickable so tapping nearby ground still works.
     const hitbox = B.MeshBuilder.CreateBox("pk-hitbox-" + id,
-      { width: 1.05, height: 2.05, depth: 1.05 }, scene);
+      { width: 1.05, height: 2.25, depth: 1.05 }, scene);
     hitbox.parent = parent;
-    hitbox.position.y = 1.025;
+    hitbox.position.y = 1.125;
     hitbox.visibility = .005;
     hitbox.isPickable = !local;
     hitbox.metadata = { pkPlayerId: id };
@@ -2065,47 +2242,52 @@
     halo.isPickable = false;
     halo.setEnabled(false);
 
-    // Three low-poly handheld props. All parts are unpickable, so weapon
-    // visuals never steal tap-to-walk or Free PK selection raycasts.
+    // Weapons ride in the right fist, so they swing with the arm.
+    function curvedBlade(length, base, segs, edge) {
+      let x = 0, y = .05, a = 0;
+      for (let i = 0; i < segs; i++) {
+        const w = base * (1 - i / (segs + 1) * .55), l = length / segs;
+        const seg = box(x - Math.sin(a) * l / 2, y + Math.cos(a) * l / 2, 0, w, l * 1.04, .025, blackSteel); seg.rotation.z = a;
+        if (edge) { const e = box(x - Math.sin(a) * l / 2 + Math.cos(a) * w / 2, y + Math.cos(a) * l / 2 + Math.sin(a) * w / 2, 0, .022, l * 1.04, .03, edge); e.rotation.z = a; }
+        else if (i % 2 === 0) { const c = box(x - Math.sin(a) * l / 2 - Math.cos(a) * w * .2, y + Math.cos(a) * l / 2, -.014, w * .25, l * .7, .005, copper); c.rotation.z = a; }
+        x -= Math.sin(a) * l; y += Math.cos(a) * l; a += .16;
+      }
+      cyl(x - Math.sin(a) * .06, y + Math.cos(a) * .06, 0, .14, 0, base * .4, blackSteel, 4).rotation.z = a;
+    }
     function createHeldWeapon(kind) {
       const root = new B.TransformNode("held-" + kind + "-" + id, scene);
-      root.parent = parent;
-      root.position.set(.55, 1.04, -.12);
-      root.rotation.z = -.24;
-      const staff = kind === "spirit_staff";
-      const sword = kind === "arcane_sword";
-      const handle = B.MeshBuilder.CreateCylinder("weapon handle", {
-        height: staff ? 1.7 : .42, diameter: staff ? .085 : .13,
-        tessellation: 8,
-      },scene);
-      handle.parent=root;
-      handle.position.y=staff ? .25 : -.11;
-      handle.material=weaponWood; handle.isPickable=false;
-      if (staff) {
-        const orb=B.MeshBuilder.CreateSphere("spirit staff orb",{
-          diameter:.37,segments:8,
-        },scene);
-        orb.parent=root;orb.position.y=1.17;
-        orb.material=weaponCrystal;orb.isPickable=false;
-        const rim=B.MeshBuilder.CreateTorus("spirit staff crest",{
-          diameter:.52,thickness:.07,tessellation:12,
-        },scene);
-        rim.parent=root;rim.position.y=1.17;rim.rotation.x=Math.PI/2;
-        rim.material=weaponEdge;rim.isPickable=false;
+      root.parent = elbows[1];
+      root.position.set(0, -.34, -.02);
+      if (kind === "ritual_dagger") {
+        // Curved black mo-du knife with copper-bound grip and hanging charms.
+        cyl(0, -.12, 0, .24, .07, .075, leatherWrap, 8);
+        for (const y of [-.03, -.2]) cyl(0, y, 0, .025, .085, .085, copper, 8);
+        cyl(0, -.25, 0, .05, .12, .08, blackSteel, 8);
+        box(0, .02, 0, .16, .04, .07, copper);
+        curvedBlade(.5, .09, 5, null);
+        box(.05, -.3, 0, .01, .1, .01, ropeRed); box(.05, -.37, 0, .035, .05, .012, gold); ball(.05, -.33, 0, .03, beadMat, 4);
+        root.rotation.x = -1.2;
+      } else if (kind === "arcane_sword") {
+        // Great curved blade with an ember edge and a flame-tongued guard.
+        cyl(0, -.17, 0, .32, .085, .09, leatherWrap, 8);
+        for (const y of [-.05, -.15, -.27]) cyl(0, y, 0, .025, .1, .1, copper, 8);
+        ball(0, -.35, 0, .11, copper, 6);
+        for (const k of [-1, 0, 1]) cyl(k * .08, .1, 0, .2, 0, .07, copper, 4).rotation.z = -k * .6;
+        curvedBlade(1.05, .17, 7, emberEdge);
+        root.rotation.x = -2.3; // carried low, the crescent edge sweeping forward
       } else {
-        const blade=B.MeshBuilder.CreateBox("arcane steel blade",{
-          height:sword?1.15:.62,width:sword?.19:.14,depth:.07,
-        },scene);
-        blade.parent=root;
-        blade.position.y=sword?.62:.36;
-        blade.material=sword?weaponEdge:weaponSteel;
-        blade.isPickable=false;
-        const guard=B.MeshBuilder.CreateBox("weapon crossguard",{
-          height:.07,width:sword?.48:.29,depth:.11,
-        },scene);
-        guard.parent=root;guard.position.y=.11;
-        guard.material=gold;guard.isPickable=false;
+        // Naga staff: banded shaft, coiled neck, flame crest and spirit orb.
+        cyl(0, .2, 0, 1.75, .07, .08, blackSteel, 8);
+        for (let y = -.4; y < .9; y += .22) cyl(0, y, 0, .03, .095, .095, copper, 8);
+        cyl(0, -.7, 0, .16, .08, 0, blackSteel, 5).rotation.x = Math.PI;
+        for (let i = 0; i < 4; i++) ball(Math.sin(i * .8) * .07, 1.12 + i * .1, -i * .035, .13 - i * .012, i % 2 ? copper : bronzeMat, 6);
+        const head = cyl(0, 1.56, -.16, .26, .07, .15, bronzeMat, 6); head.rotation.x = -1.25;
+        for (const k of [-2, -1, 0, 1, 2]) { const fin = cyl(k * .05, 1.68, -.06, .34 - Math.abs(k) * .05, 0, .06, gold, 4); fin.rotation.z = -k * .32; fin.rotation.x = .25; }
+        ball(0, 1.53, -.29, .16, weaponCrystal, 8);
+        for (const side of [-1, 1]) ball(side * .045, 1.6, -.22, .03, eyesMat, 4);
+        root.rotation.x = -.2;
       }
+      flush(root, "held " + kind);
       root.setEnabled(false);
       return root;
     }
@@ -2114,13 +2296,212 @@
       arcane_sword: createHeldWeapon("arcane_sword"),
       spirit_staff: createHeldWeapon("spirit_staff"),
     };
-    return {
-      node: parent, local, x: 0, y: 0, z: 0,
+    attachCrescentBlade(weaponModels.arcane_sword);
+    // Three familiar spirits: a glowing head with a tapering wisp tail.
+    const familiars = familiarMats.map((material, k) => {
+      const spirit = new B.TransformNode("familiar", scene); spirit.parent = parent;
+      const head = B.MeshBuilder.CreateSphere("familiar head", { diameter: .5, segments: 6 }, scene);
+      const tail = B.MeshBuilder.CreateCylinder("familiar tail", { height: .95, diameterTop: .44, diameterBottom: 0, tessellation: 6 }, scene);
+      tail.position.set(0, -.42, .24); tail.rotation.x = -.6;
+      for (const m of [head, tail]) { m.parent = spirit; m.material = material; m.isPickable = false; }
+      return { node: spirit, radius: 1.45 + k * .3, height: 1.8 + k * .4, speed: (1.1 + k * .25) * (k % 2 ? -1 : 1), offset: k * 2.1 };
+    });
+    const avatar = {
+      id, node: parent, local, x: 0, y: 0, z: 0,
       targetX: 0, targetY: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
       serverFacing: null, hitFlashUntil: 0, dashUntil: 0, flightHalo: halo,
-      weaponModels, weaponId: ""
+      weaponModels, weaponId: "",
+      rig: { body, arms, elbows, legs, knees, familiars }, phase: 0, moveBlend: 0, swingUntil: 0,
     };
+    attachShamanModel(avatar);
+    return avatar;
+  }
+  // Crescent Blade (assets/weapons/crescent-blade-lod2.glb, 1,530 tris, 256px
+  // PBR) replaces the procedural arcane sword once loaded; the procedural
+  // blade stays as the fallback if the loader or file is unavailable.
+  const crescentWaiting = [];
+  let crescentBlade = null;
+  function attachCrescentBlade(root) {
+    if (crescentBlade === null) { crescentWaiting.push(root); return; }
+    if (!crescentBlade) return;
+    const copy = crescentBlade.instantiateModelsToScene(name => name, false);
+    const model = copy.rootNodes[0];
+    model.parent = root;
+    // Model units: grip spans y -1.19..0.51, blade tip at y 3.54.
+    model.scaling.setAll(.27); model.position.set(.02, .16, 0);
+    for (const m of model.getChildMeshes()) m.isPickable = false;
+    for (const m of root.getChildMeshes(true)) if (m.name === "held arcane_sword") m.setEnabled(false);
+  }
+  if (B.SceneLoader?.IsPluginForExtensionAvailable?.(".glb")) {
+    B.SceneLoader.LoadAssetContainerAsync("./assets/weapons/", "crescent-blade-lod2.glb", scene).then(container => {
+      for (const material of container.materials) {
+        // No environment map at night: soften metal so direct light reads.
+        if ("metallic" in material) { material.metallic = .45; material.environmentIntensity = 0; material.directIntensity = 1.6; }
+      }
+      crescentBlade = container;
+      crescentWaiting.splice(0).forEach(attachCrescentBlade);
+    }).catch(error => { console.warn("MONTRA crescent blade", error); crescentBlade = false; crescentWaiting.length = 0; });
+  } else crescentBlade = false;
+  // ---- Skinned Thai male body (assets/characters/thai-male.glb) ----
+  // 8,472-triangle mobile mesh with a 25-joint T-pose skeleton (every rest
+  // rotation is identity) and 17 sockets; 512px PBR maps with sak yant
+  // painted across the back. Bones are posed in code; the shaman's gear is
+  // built in model space (metres, facing +Z) and rides on bones/sockets.
+  // The lofted body above remains the fallback if the file cannot load.
+  const SHAMAN_SCALE = 1.3;
+  const SHAMAN_JOINTS = { Hips: [0, .88, 0], Chest: [0, 1.336, -.004], Head: [0, 1.538, .004],
+    LeftUpLeg: [.09, .822, .004], RightUpLeg: [-.09, .822, .004], LeftLeg: [.094, .472, -.002], RightLeg: [-.094, .472, -.002] };
+  const shamanWaiting = [];
+  let shamanBody = null;
+  if (B.SceneLoader?.IsPluginForExtensionAvailable?.(".glb")) {
+    B.SceneLoader.LoadAssetContainerAsync("./assets/characters/", "thai-male.glb", scene).then(container => {
+      for (const m of container.materials) if ("metallic" in m) { m.environmentIntensity = 0; m.directIntensity = 1.5; m.metallic = 0; }
+      shamanBody = container;
+      shamanWaiting.splice(0).forEach(attachShamanModel);
+    }).catch(error => { console.warn("MONTRA shaman body", error); shamanBody = false; shamanWaiting.length = 0; });
+  } else shamanBody = false;
+  function shamanGear(a, nodes) {
+    const shawl = a.local ? shawlHero : shawlFriend, pants = a.local ? pantsHero : pantsFriend, sash = a.local ? sashHero : sashFriend;
+    let parts = [];
+    const at = (mesh, x, y, z, m) => { mesh.position.set(x, y, z); mesh.material = m; mesh.isPickable = false; parts.push(mesh); return mesh; };
+    const box = (x, y, z, w, h, d, m) => at(B.MeshBuilder.CreateBox("gear", { width: w, height: h, depth: d }, scene), x, y, z, m);
+    const cyl = (x, y, z, h, top, bottom, m, n = 8) => at(B.MeshBuilder.CreateCylinder("gear", { height: h, diameterTop: top, diameterBottom: bottom, tessellation: n }, scene), x, y, z, m);
+    const ball = (x, y, z, d, m, seg = 6) => at(B.MeshBuilder.CreateSphere("gear", { diameter: d, segments: seg }, scene), x, y, z, m);
+    const loft = (rings, m, segs = 12) => {
+      const paths = rings.map(([y, w, d, zo = 0]) => {
+        const ring = [];
+        for (let i = 0; i <= segs; i++) { const t = i / segs * Math.PI * 2; ring.push(new B.Vector3(Math.cos(t) * w, y, zo + Math.sin(t) * d)); }
+        return ring;
+      });
+      const mesh = B.MeshBuilder.CreateRibbon("gear loft", { pathArray: paths, sideOrientation: B.Mesh.DOUBLESIDE }, scene);
+      mesh.material = m; mesh.isPickable = false; parts.push(mesh); return mesh;
+    };
+    // Built in model space, then re-based onto the bone's rest joint.
+    const onBone = (bone, joint = SHAMAN_JOINTS[bone]) => {
+      if (!parts.length) return;
+      const mesh = mergedSegment(parts, nodes[bone], "gear " + bone);
+      if (joint) mesh.position.set(-joint[0], -joint[1], -joint[2]);
+      parts = [];
+    };
+    // Chest: yantra shawl over the shoulders, back cape, cross band, beads.
+    loft([[1.35, .245, .145, -.012], [1.405, .21, .125, -.01], [1.445, .115, .085, -.006]], shawl, 14);
+    box(0, 1.17, -.14, .34, .4, .02, shawl).rotation.x = .08;
+    box(0, 1.205, .125, .05, .46, .015, shawl).rotation.z = .62;
+    for (const [drop, width] of [[.15, .07], [.22, .09]]) {
+      for (let i = 0; i <= 8; i++) { const t = i / 4 - 1, y = 1.44 - (1 - t * t) * drop; ball(t * width, y, .075 + (1 - t * t) * .05, .03, beadMat, 4); }
+      box(0, 1.44 - drop - .028, .128, .028, .04, .012, amuletGlow);
+    }
+    onBone("Chest");
+    // Head: red yantra headband, topknot and a tail of hair down the nape.
+    cyl(0, 1.655, -.004, .028, .19, .19, shawl, 12).scaling.z = 1.12;
+    ball(0, 1.74, -.04, .075, hairMat, 6);
+    cyl(0, 1.715, -.035, .022, .055, .055, shawl, 8);
+    onBone("Head");
+    // Hips: trouser seat, cloth sash with a knot, rice pouch, spirit jar.
+    loft([[.7, .2, .15], [.78, .205, .148], [.88, .19, .135], [.97, .158, .112]], pants, 16);
+    cyl(0, .965, 0, .055, .305, .3, sash, 12).scaling.z = .72;
+    box(-.06, .9, .108, .055, .12, .015, sash).rotation.z = -.15;
+    ball(-.178, .85, .035, .12, pouchCloth, 6).scaling.set(1, 1.15, .85);
+    cyl(-.178, .925, .035, .035, .035, .055, pouchCloth, 6);
+    cyl(-.178, .91, .035, .018, .07, .07, ropeRed, 8);
+    cyl(-.178, .85, .088, .012, .04, .04, gold, 10).rotation.x = Math.PI / 2;
+    const jx = .18, jy = .83, jz = -.01, j = .48;
+    box(jx - .01, jy + .12, jz, .012, .08, .012, ropeRed).rotation.z = .2;
+    ball(jx, jy, jz, .3 * j, jarCarved, 8).scaling.set(1, 1.08, 1);
+    cyl(jx, jy - .2 * j, jz, .14 * j, .15 * j, 0, jarClay, 8).rotation.x = Math.PI;
+    cyl(jx, jy + .17 * j, jz, .07 * j, .1 * j, .16 * j, jarClay, 8);
+    box(jx, jy, jz, .31 * j, .01, .31 * j, ropeRed);
+    for (const side of [-1, 1]) box(jx + side * .05, jy + .015, jz + .03, .03, .13, .006, talismanPaper).rotation.z = side * .25;
+    for (const dx of [-.02, 0, .02]) cyl(jx + dx, jy + .095, jz + .035, .01, .024, .024, waxRed, 8).rotation.x = 1.1;
+    onBone("Hips");
+    // Loose fisherman trousers to mid-calf, in bone-local space.
+    for (const side of ["Left", "Right"]) {
+      loft([[.06, .118, .112], [-.06, .108, .104], [-.22, .088, .088], [-.35, .08, .082], [-.41, .078, .08]], pants, 12);
+      onBone(side + "UpLeg", [0, 0, 0]);
+      loft([[.07, .082, .084], [0, .084, .086], [-.11, .084, .084], [-.2, .088, .086], [-.212, .083, .082]], pants, 12);
+      onBone(side + "Leg", [0, 0, 0]);
+    }
+  }
+  // Rotation taking local +Y (a weapon's blade/shaft axis) onto `dir`.
+  function quatFromUp(dir) {
+    const up = B.Vector3.Up(), d = dir.normalizeToNew(), axis = B.Vector3.Cross(up, d);
+    const angle = Math.acos(B.Scalar.Clamp(B.Vector3.Dot(up, d), -1, 1));
+    return axis.lengthSquared() < 1e-6 ? B.Quaternion.Identity() : B.Quaternion.RotationAxis(axis.normalize(), angle);
+  }
+  // Right-hand socket frame equals model space at rest: fingers point -X,
+  // forward is +Z, and +X runs back up the arm once the arm hangs down.
+  const HAND_GRIPS = { ritual_dagger: new B.Vector3(-.3, 0, 1), arcane_sword: new B.Vector3(-.6, 0, .8), spirit_staff: new B.Vector3(1, 0, .12) };
+  function attachShamanModel(a) {
+    if (shamanBody === null) { shamanWaiting.push(a); return; }
+    if (!shamanBody || a.node.isDisposed()) return;
+    const copy = shamanBody.instantiateModelsToScene(name => name, false);
+    const holder = new B.TransformNode("shaman body", scene);
+    holder.parent = a.node; holder.rotation.y = Math.PI; holder.scaling.setAll(SHAMAN_SCALE);
+    const model = copy.rootNodes[0]; model.parent = holder;
+    const nodes = {};
+    for (const n of model.getDescendants(false)) nodes[n.name] = n;
+    for (const m of model.getChildMeshes()) { m.isPickable = false; m.alwaysSelectAsActiveMesh = true; }
+    shamanGear(a, nodes);
+    const socket = nodes.Socket_Hand_Weapon_R;
+    for (const [kind, root] of Object.entries(a.weaponModels)) {
+      root.parent = socket; root.position.set(0, 0, 0); root.scaling.setAll(.92);
+      root.rotationQuaternion = quatFromUp(HAND_GRIPS[kind]);
+    }
+    a.rig.body.setEnabled(false);
+    a.skin = { nodes, copy, rest: { hipsY: nodes.Hips.position.y } };
+  }
+  function animateSkin(a, m, s, c, t, flying, now) {
+    const n = a.skin.nodes, q = (x, y, z) => B.Quaternion.RotationYawPitchRoll(y, x, z);
+    const lower = flying ? .95 : 1.22, breath = Math.sin(t * 2.1) * (1 - m);
+    n.LeftUpLeg.rotationQuaternion = q(flying ? -.35 : -s * .55 * m, 0, 0);
+    n.RightUpLeg.rotationQuaternion = q(flying ? -.12 : s * .55 * m, 0, 0);
+    n.LeftLeg.rotationQuaternion = q(flying ? .75 : Math.max(0, c) * .8 * m + .04, 0, 0);
+    n.RightLeg.rotationQuaternion = q(flying ? .55 : Math.max(0, -c) * .8 * m + .04, 0, 0);
+    n.LeftArm.rotationQuaternion = q((flying ? -.2 : s * .42 * m), 0, -lower + breath * .02);
+    let rightPitch = flying ? -.2 : -s * .42 * m, rightBend = .25 + .2 * m;
+    if ((a.swingUntil || 0) > now) {
+      const p = 1 - (a.swingUntil - now) / 380;
+      rightPitch = p < .35 ? -2.4 * (p / .35) : -2.4 + 3.0 * ((p - .35) / .65); rightBend = .2;
+    }
+    n.RightArm.rotationQuaternion = q(rightPitch, 0, lower - breath * .02);
+    n.LeftForeArm.rotationQuaternion = q(0, -(.25 + .2 * m), 0);
+    n.RightForeArm.rotationQuaternion = q(0, rightBend, 0);
+    n.Spine.rotationQuaternion = q(.06 * m + ((a.dashUntil || 0) > now ? .3 : 0), s * .06 * m, 0);
+    n.Chest.rotationQuaternion = q(breath * .02, -s * .08 * m, 0);
+    n.Hips.position.y = a.skin.rest.hipsY + Math.abs(c) * .025 * m;
+    n.Hips.rotationQuaternion = q(0, s * .07 * m, 0);
+  }
+  // Procedural gait: legs and arms counter-swing with speed, the body bobs and
+  // leans, breathes at rest, tucks while flying and swings the weapon arm.
+  function animateRig(a, speed, dt, now) {
+    const r = a.rig; if (!r) return;
+    const target = Math.min(1, speed / 3.2);
+    a.moveBlend += (target - a.moveBlend) * (1 - Math.exp(-dt * 8));
+    const m = a.moveBlend, flying = a.y > 4.4;
+    a.phase = (a.phase + dt * 9.5 * m) % (Math.PI * 2);
+    const s = Math.sin(a.phase), c = Math.cos(a.phase), t = now / 1000;
+    if (a.skin) animateSkin(a, m, s, c, t, flying, now);
+    for (let i = 0; i < 2; i++) {
+      const dir = i ? -1 : 1;
+      r.legs[i].rotation.x = flying ? .25 + i * .2 : dir * s * .6 * m;
+      r.knees[i].rotation.x = flying ? -.6 : -Math.max(0, dir * c) * .75 * m - .04;
+      r.arms[i].rotation.x = -dir * s * .5 * m + (flying ? -.2 : 0);
+      r.arms[i].rotation.z = (i ? 1 : -1) * (flying ? .55 : .1 + Math.sin(t * 1.6) * .015 * (1 - m));
+      r.elbows[i].rotation.x = .22 + m * .25;
+    }
+    r.body.position.y = Math.abs(c) * .05 * m + Math.sin(t * 2.1) * .012 * (1 - m);
+    for (const f of r.familiars) {
+      const angle = t * f.speed + f.offset, sign = Math.sign(f.speed);
+      f.node.position.set(Math.cos(angle) * f.radius, f.height + Math.sin(t * 2.3 + f.offset) * .22, Math.sin(angle) * f.radius);
+      f.node.rotation.y = -angle - sign * Math.PI / 2; // tail trails behind the orbit
+    }
+    r.body.rotation.x = .07 * m + ((a.dashUntil || 0) > now ? .3 : 0);
+    if ((a.swingUntil || 0) > now) {
+      const p = 1 - (a.swingUntil - now) / 380;
+      r.arms[1].rotation.x = p < .35 ? -2.5 * (p / .35) : -2.5 + 3.3 * ((p - .35) / .65);
+      r.elbows[1].rotation.x = .35;
+    }
   }
   const avatars = new Map();
   function setAvatarWeapon(avatar, weaponId) {
@@ -2144,6 +2525,7 @@
     if (Math.hypot(dx, dz) < .02) return;
     avatar.desiredHeading = facingFromTravel(dx, dz);
     avatar.facingLockUntil = performance.now() + 450;
+    avatar.swingUntil = performance.now() + 380;
   }
   function ensureAvatar(id, local = false, x = 0, z = 0) {
     if (avatars.has(id)) return avatars.get(id);
@@ -2157,6 +2539,7 @@
     const a = avatars.get(id);
     if (!a) return;
     a.node.getChildMeshes().forEach(m => m.dispose());
+    a.skin?.copy.skeletons.forEach(skeleton => skeleton.dispose());
     a.node.dispose();
     avatars.delete(id);
   }
@@ -4555,6 +4938,7 @@
       const flash = (a.hitFlashUntil || 0) > now;
       a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
       a.node.position.set(a.x, a.y, a.z);
+      animateRig(a, Math.hypot(travelX, travelZ) / Math.max(dt, 1e-3), dt, now);
       a.flightHalo?.setEnabled(a.y > 4.4);
     }
     for (const npc of summonAvatars.values()) {
