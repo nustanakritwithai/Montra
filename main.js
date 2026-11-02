@@ -2284,6 +2284,9 @@
   const blackSteel = mat("black steel", "#2a2a2f"); blackSteel.specularColor = B.Color3.FromHexString("#8a8f9a"); blackSteel.specularPower = 48;
   const copper = mat("engraved copper", "#8a5a3a", "#24140a"), leatherWrap = mat("wrapped grip", "#1b1615");
   const emberEdge = mat("ember edge", "#ff6a3a", "#e2381a"); glowMats.add(emberEdge);
+  // Thai daab: bright steel with a pale moonlit edge so the pair reads far away.
+  const daabSteel = mat("daab steel", "#a8b0b8", "#161a20"); daabSteel.specularColor = B.Color3.FromHexString("#eef4ff"); daabSteel.specularPower = 64;
+  const daabEdge = mat("daab edge", "#e8f0ff", "#5a6a88");
   // Far-camera identity: a yantra shawl (read from above), glowing amulets
   // and three familiar spirits orbiting the shaman.
   const shawlCloth = (name, base, trim) => {
@@ -2448,16 +2451,16 @@
     halo.setEnabled(false);
 
     // Weapons ride in the right fist, so they swing with the arm.
-    function curvedBlade(length, base, segs, edge) {
+    function curvedBlade(length, base, segs, edge, steel = blackSteel) {
       let x = 0, y = .05, a = 0;
       for (let i = 0; i < segs; i++) {
         const w = base * (1 - i / (segs + 1) * .55), l = length / segs;
-        const seg = box(x - Math.sin(a) * l / 2, y + Math.cos(a) * l / 2, 0, w, l * 1.04, .025, blackSteel); seg.rotation.z = a;
+        const seg = box(x - Math.sin(a) * l / 2, y + Math.cos(a) * l / 2, 0, w, l * 1.04, .025, steel); seg.rotation.z = a;
         if (edge) { const e = box(x - Math.sin(a) * l / 2 + Math.cos(a) * w / 2, y + Math.cos(a) * l / 2 + Math.sin(a) * w / 2, 0, .022, l * 1.04, .03, edge); e.rotation.z = a; }
         else if (i % 2 === 0) { const c = box(x - Math.sin(a) * l / 2 - Math.cos(a) * w * .2, y + Math.cos(a) * l / 2, -.014, w * .25, l * .7, .005, copper); c.rotation.z = a; }
         x -= Math.sin(a) * l; y += Math.cos(a) * l; a += .16;
       }
-      cyl(x - Math.sin(a) * .06, y + Math.cos(a) * .06, 0, .14, 0, base * .4, blackSteel, 4).rotation.z = a;
+      cyl(x - Math.sin(a) * .06, y + Math.cos(a) * .06, 0, .14, 0, base * .4, steel, 4).rotation.z = a;
     }
     function createHeldWeapon(kind) {
       const root = new B.TransformNode("held-" + kind + "-" + id, scene);
@@ -2467,7 +2470,8 @@
         cyl(0, -.12, 0, .24, .055, .055, leatherWrap, 8);
         for (const y of [-.03, -.11, -.2]) cyl(0, y, 0, .018, .065, .065, copper, 8);
         ball(0, -.25, 0, .075, bronzeMat, 6);
-        curvedBlade(.95, .105, 7, null);
+        box(0, .03, 0, .15, .03, .06, gold); // small cross guard
+        curvedBlade(.95, .105, 7, daabEdge, daabSteel);
         root.rotation.x = -2.1;
       } else if (kind === "ritual_dagger") {
         // Curved black mo-du knife with copper-bound grip and hanging charms.
@@ -2578,6 +2582,7 @@
   function shamanGear(a, nodes) {
     const shawl = a.local ? shawlHero : shawlFriend, pants = a.local ? pantsHero : pantsFriend, sash = a.local ? sashHero : sashFriend;
     let parts = [];
+    const gearMeshes = [];
     const at = (mesh, x, y, z, m) => { mesh.position.set(x, y, z); mesh.material = m; mesh.isPickable = false; parts.push(mesh); return mesh; };
     const box = (x, y, z, w, h, d, m) => at(B.MeshBuilder.CreateBox("gear", { width: w, height: h, depth: d }, scene), x, y, z, m);
     const cyl = (x, y, z, h, top, bottom, m, n = 8) => at(B.MeshBuilder.CreateCylinder("gear", { height: h, diameterTop: top, diameterBottom: bottom, tessellation: n }, scene), x, y, z, m);
@@ -2596,7 +2601,7 @@
       if (!parts.length) return;
       const mesh = mergedSegment(parts, nodes[bone], "gear " + bone);
       if (joint) mesh.position.set(-joint[0], -joint[1], -joint[2]);
-      parts = [];
+      gearMeshes.push(mesh); parts = [];
     };
     // Chest: yantra shawl over the shoulders, back cape, cross band, beads.
     loft([[1.35, .245, .145, -.012], [1.405, .21, .125, -.01], [1.445, .115, .085, -.006]], shawl, 14);
@@ -2629,6 +2634,7 @@
     for (const dx of [-.02, 0, .02]) cyl(jx + dx, jy + .095, jz + .035, .01, .024, .024, waxRed, 8).rotation.x = 1.1;
     onBone("Hips");
     // Trousers are skinned (see skinnedTrousers), so no rigid leg pieces here.
+    return gearMeshes;
   }
   // Fisherman trousers cut from the body mesh itself: every triangle between
   // the waist and mid-calf, pushed out along its normal and kept on the same
@@ -2694,9 +2700,9 @@
     const nodes = {};
     for (const n of model.getDescendants(false)) nodes[n.name] = n;
     for (const m of model.getChildMeshes()) { m.isPickable = false; m.alwaysSelectAsActiveMesh = true; }
-    shamanGear(a, nodes);
+    const shamanLook = shamanGear(a, nodes);
     const body = model.getChildMeshes().find(m => m.skeleton);
-    if (body) skinnedTrousers(body, a.local ? pantsHero : pantsFriend);
+    if (body) shamanLook.push(skinnedTrousers(body, a.local ? pantsHero : pantsFriend));
     // Every weapon rides a hand socket; the left blade of a Thai dual pair
     // goes to the left hand, and unknown weapons use the standard fist grip.
     for (const [kind, root] of Object.entries(a.weaponModels)) {
@@ -2706,7 +2712,101 @@
     }
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;
-    a.skin = { nodes, copy, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
+    a.skin = { nodes, copy, body, shamanLook: shamanLook.filter(Boolean), rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
+    a.skin.look = "";
+    applyLook(a);
+  }
+  // ---- Thai swordsman (path phutthaisawan) ----
+  // Same skinned body, an Ayutthaya fighter's dress instead of the shaman's
+  // shawl, jar and familiars: open sleeveless jacket, jongkraben, white
+  // wrist and shin wraps, and a headband, armbands and sash in the colour of
+  // the sword school, which is what tells the schools apart from far away.
+  const SWORD_SCHOOL_COLORS = {
+    phutthaisawan: ["#b01e1e", "#4a0606"], sritrairat: ["#ece6d2", "#3a3428"],
+    atamat: ["#2c3266", "#0a0c24"], chumphon: ["#1f5aa8", "#06183a"],
+  };
+  const swordSchoolMats = {};
+  function swordSchoolMat(school) {
+    const key = Object.hasOwn(SWORD_SCHOOL_COLORS, school) ? school : "phutthaisawan";
+    if (!swordSchoolMats[key]) {
+      const [hex, glow] = SWORD_SCHOOL_COLORS[key];
+      swordSchoolMats[key] = applySurface(mat("sword school " + key, hex, glow), clothSurface("sword school " + key, hex, "rgba(0,0,0,.25)", "rgba(0,0,0,.15)", 0), "#ffffff");
+      swordSchoolMats[key].backFaceCulling = false;
+    }
+    return swordSchoolMats[key];
+  }
+  const swordTreeCache = new Map();
+  function swordSchoolOf(a) {
+    const p = a.local ? ownServerCharacter() : room?.state?.players?.get?.(a.id);
+    const raw = p?.swordTreeData || "";
+    if (!swordTreeCache.has(raw)) { let school = ""; try { school = JSON.parse(raw || "null")?.school || ""; } catch {} swordTreeCache.set(raw, school); }
+    return swordTreeCache.get(raw) || "phutthaisawan";
+  }
+  function swordsmanGear(a) {
+    const { nodes, body } = a.skin, school = swordSchoolMat(swordSchoolOf(a)), out = { meshes: [], accents: [] };
+    const keep = (mesh, accent) => { if (!mesh) return mesh; out.meshes.push(mesh); if (accent) out.accents.push(mesh); return mesh; };
+    if (body) {
+      // Sleeveless jacket, open down the breastbone.
+      keep(skinnedCut(body, "sword jacket", (x, y, z) => y > .95 && y < 1.47 && Math.abs(x) < .2 && !(z > .02 && Math.abs(x) < .045 && y < 1.42),
+        (x, y) => .016 + (y < 1.06 ? .014 : 0), swordCloth.jacket));
+      // Jongkraben: loose over the thigh and knee, gathered just under it.
+      keep(skinnedCut(body, "sword jongkraben", (x, y) => y > .4 && y < 1.0 && Math.abs(x) < .3, (x, y) => {
+        const t = Math.min(1, Math.max(0, (y - .4) / .6));
+        return .02 + .035 * Math.sin(Math.PI * Math.min(1, t * 1.2)) + .022 * Math.exp(-Math.pow((y - .47) / .07, 2)) + .02 * Math.exp(-Math.pow((y - .83) / .06, 2));
+      }, swordCloth.jongkraben));
+      keep(skinnedCut(body, "sword shin wraps", (x, y) => y > .2 && y < .41 && Math.abs(x) < .3, (x, y) => .011 + .004 * Math.sin(y * 90), swordCloth.wrap));
+      keep(skinnedCut(body, "sword wrist wraps", x => Math.abs(x) > .49 && Math.abs(x) < .62, (x) => .01 + .003 * Math.sin(x * 120), swordCloth.wrap));
+      // Prajiad: yantra armbands knotted round both upper arms.
+      keep(skinnedCut(body, "sword prajiad", (x, y) => Math.abs(x) > .25 && Math.abs(x) < .29 && y > 1.3, () => .018, school), true);
+    }
+    const rigid = (bone, list, accent) => {
+      const joint = SHAMAN_JOINTS[bone] || [0, 0, 0];
+      const mesh = mergedSegment(list, nodes[bone], "sword gear " + bone);
+      mesh.position.set(-joint[0], -joint[1], -joint[2]);
+      keep(mesh, accent); return mesh;
+    };
+    const part = (mesh, x, y, z, m) => { mesh.position.set(x, y, z); mesh.material = m; return mesh; };
+    // Pha khao ma headband and sash in the school colour.
+    const band = part(B.MeshBuilder.CreateCylinder("headband", { height: .034, diameter: .195, tessellation: 14 }, scene), 0, 1.66, -.004, school);
+    band.scaling.z = 1.12;
+    const knot = part(B.MeshBuilder.CreateSphere("headband knot", { diameter: .05, segments: 4 }, scene), 0, 1.655, -.112, school);
+    rigid("Head", [band, knot], true);
+    const sash = part(B.MeshBuilder.CreateCylinder("sword sash", { height: .06, diameterTop: .34, diameterBottom: .335, tessellation: 14 }, scene), 0, .975, 0, school);
+    sash.scaling.z = .74;
+    const flap = part(B.MeshBuilder.CreateBox("sash flap", { width: .1, height: .3, depth: .012 }, scene), .03, .8, .142, school);
+    flap.rotation.x = -.12;
+    const buckle = part(B.MeshBuilder.CreateBox("sash buckle", { width: .07, height: .05, depth: .02 }, scene), .03, .975, .128, gold);
+    rigid("Hips", [sash, flap, buckle], true);
+    // Two headband tails trail from the knot and stream back with speed.
+    const tails = new B.TransformNode("headband tails", scene);
+    tails.parent = nodes.Head; tails.position.set(0, 1.655 - SHAMAN_JOINTS.Head[1], -.115 - SHAMAN_JOINTS.Head[2]);
+    for (const side of [-1, 1]) {
+      const tail = B.MeshBuilder.CreateBox("headband tail", { width: .032, height: .3, depth: .006 }, scene);
+      tail.material = school; tail.parent = tails; tail.position.set(side * .018, -.14, -.01); tail.rotation.z = side * .12; tail.isPickable = false;
+      keep(tail, true);
+    }
+    keep(tails);
+    out.tails = tails;
+    for (const m of out.meshes) if (m.getClassName?.() !== "TransformNode") { m.isPickable = false; m.alwaysSelectAsActiveMesh = true; }
+    out.school = swordSchoolOf(a);
+    return out;
+  }
+  // Switches an avatar between the shaman and swordsman dress; cheap to call
+  // every frame (it only acts when the path or the sword school changes).
+  function applyLook(a) {
+    const skin = a.skin; if (!skin) return;
+    const want = a.pathId === "phutthaisawan" ? "sword" : "shaman";
+    if (want === "sword" && !skin.sword) skin.sword = swordsmanGear(a);
+    if (skin.look !== want) {
+      skin.look = want;
+      for (const m of skin.shamanLook) m.setEnabled(want === "shaman");
+      if (skin.sword) for (const m of skin.sword.meshes) m.setEnabled(want === "sword");
+      for (const f of a.rig.familiars) f.node.setEnabled(want === "shaman");
+    }
+    if (want === "sword") {
+      const school = swordSchoolOf(a);
+      if (school !== skin.sword.school) { skin.sword.school = school; const m = swordSchoolMat(school); for (const mesh of skin.sword.accents) mesh.material = m; }
+    }
   }
   // ---- Action animation set (visual only) ----
   // Every action maps to something the game already replicates: server
@@ -2718,10 +2818,10 @@
   // elbow (negative on the left, positive on the right).
   const ACTIONS = {
     stab: { dur: .34, swing: true }, slash: { dur: .48, swing: true }, smash: { dur: .58, swing: true },
-    punch: { dur: .32, swing: true }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
+    punch: { dur: .32, swing: true }, twin: { dur: .42, swing: true }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
     drink: { dur: 1.15 }, dash: { dur: .46 }, rise: { dur: 1.0 }, arrive: { dur: .85 },
   };
-  const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash" };
+  const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash", thai_dual: "twin" };
   const POSE_BONES = ["Hips", "Spine", "Spine1", "Chest", "Neck", "Head", "LeftShoulder", "RightShoulder",
     "LeftArm", "RightArm", "LeftForeArm", "RightForeArm", "LeftHand", "RightHand",
     "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg", "LeftFoot", "RightFoot"];
@@ -2729,6 +2829,7 @@
     if (!a || !ACTIONS[type]) return;
     const now = performance.now();
     a.action = { type, start: now, end: now + ACTIONS[type].dur * 1000 };
+    if (type === "twin") a.action.side = (a.twinFlip = !a.twinFlip) ? 1 : -1; // alternate right / left blade
     if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
   }
   function playAttack(attackerId, ranged, targetX, targetZ) {
@@ -2763,7 +2864,7 @@
     m.opacityTexture = fxGradient; m.disableLighting = true; m.backFaceCulling = false; m.alphaMode = B.Engine.ALPHA_ADD;
     return m;
   };
-  const SLASH_MATS = { stab: fxMat("dagger trail", "#cfd8ff"), slash: fxMat("blade trail", "#ff7436"), smash: fxMat("staff trail", "#8ff5df"), punch: fxMat("fist trail", "#ffe2a0") };
+  const SLASH_MATS = { stab: fxMat("dagger trail", "#cfd8ff"), slash: fxMat("blade trail", "#ff7436"), smash: fxMat("staff trail", "#8ff5df"), punch: fxMat("fist trail", "#ffe2a0"), twin: fxMat("twin blade trail", "#ffd27a") };
   const castOrbMat = mat("cast orb", "#bff8ff", "#59d8ff"); glowMats.add(castOrbMat);
   const vialMat = mat("potion vial", "#ff5a5a", "#d01c2c"); glowMats.add(vialMat);
   const summonSeal = additiveMat("summon seal", squareYantraTexture("summon seal", "rgba(255,190,120,.95)", "#ff9a3a"));
@@ -2799,6 +2900,9 @@
     return (a.fx = fx);
   }
   function animateSkin(a, m, speed, s, c, t, now, dt) {
+    applyLook(a);
+    const tails = a.skin.look === "sword" && a.skin.sword?.tails;
+    if (tails) tails.rotation.set(.3 + m * .9 + Math.sin(t * 3.4) * .07 * (1 + m), 0, Math.sin(t * 2.3) * .08);
     const n = a.skin.nodes, P = {};
     for (const b of POSE_BONES) P[b] = [0, 0, 0];
     const off = [0, 0, 0]; // hips translation (model units): weight shift and crouch
@@ -2829,7 +2933,14 @@
     set("LeftUpLeg", -.34, .18, .17); set("LeftLeg", .14, 0, 0);
     set("RightUpLeg", .14, -.1, -.11); set("RightLeg", .32, 0, 0);
     set("LeftShoulder", 0, 0, -.04); set("RightShoulder", 0, 0, .04);
-    if (weapon === "arcane_sword") {
+    if (weapon === "thai_dual") {
+      // Dual-blade guard: right blade raised before the face, edge out;
+      // left blade low and back along the forearm, ready to cover.
+      set("RightArm", -.95, .25, .95); set("RightForeArm", 0, 1.35, 0); set("RightHand", .35, 0, .1);
+      set("LeftArm", -.2, .1, -1.15); set("LeftForeArm", 0, -.45, 0); set("LeftHand", 1.9, 0, -.1);
+      add("RightShoulder", 0, .08, -.06); off[1] = -.06;
+      add("LeftLeg", .12, 0, 0); add("RightLeg", .14, 0, 0);
+    } else if (weapon === "arcane_sword") {
       // Low guard: crescent blade trailing forward-down at the right hip,
       // free hand loose and open toward the opponent.
       set("RightArm", -.22, .15, 1.08); set("RightForeArm", 0, .55, 0); set("RightHand", 1.0, 0, 0);
@@ -2855,12 +2966,13 @@
     // the chest counter-twists, the hip drops over the swinging leg.
     if (m > .001) {
       const W = {}; for (const b of POSE_BONES) W[b] = [0, 0, 0];
-      const amp = .55 + .25 * run, armAmp = .42 + .45 * run, grip = { spirit_staff: 1.45, arcane_sword: 1.2, ritual_dagger: .9 }[weapon];
+      const amp = .55 + .25 * run, armAmp = .42 + .45 * run, grip = { spirit_staff: 1.45, arcane_sword: 1.2, ritual_dagger: .9, thai_dual: 1.1 }[weapon];
       W.Hips = [.02 * run, s * .14 * (1 + run), -s * .05];
       W.Spine = [.04 + .12 * run, s * .02, s * .03]; W.Spine1 = [.02 + .06 * run, -s * .06, 0]; W.Chest = [.01, -s * .12 * (1 + run), -s * .03];
       W.LeftUpLeg = [-s * amp, 0, .03]; W.RightUpLeg = [s * amp, 0, -.03];
       W.LeftLeg = [Math.max(0, c) * (.8 + .6 * run) + .06, 0, 0]; W.RightLeg = [Math.max(0, -c) * (.8 + .6 * run) + .06, 0, 0];
-      W.LeftArm = [s * armAmp, 0, -1.24]; W.LeftForeArm = [0, -(.28 + 1.1 * run), 0];
+      W.LeftArm = weapon === "thai_dual" ? [-.25 + s * armAmp * .4, -.1, -1.18] : [s * armAmp, 0, -1.24];
+      W.LeftForeArm = [0, weapon === "thai_dual" ? -1.1 : -(.28 + 1.1 * run), 0];
       W.RightArm = grip ? [-.25 - s * armAmp * .4, .1, 1.18] : [-s * armAmp, 0, 1.24];
       W.RightForeArm = [0, grip ?? (.28 + 1.1 * run), 0];
       for (const b of POSE_BONES) mix(b, W[b][0], W[b][1], W[b][2], m);
@@ -2941,6 +3053,19 @@
           pose("RightArm", [-2.9, -.4, 1.3], [-.45, .95, 1.05]); pose("RightForeArm", [0, .9, 0], [0, .15, 0]);
           pose("LeftArm", [-.9, .3, -1.0], [.35, 0, -1.3]); pose("LeftForeArm", [0, -1.2, 0], [0, -.3, 0]);
           trail(); break;
+        case "twin": {
+          // One blade cuts across while the other draws back to guard; the
+          // torso winds the opposite way first so the twist carries the cut.
+          const d = act.side, R = d > 0 ? "Right" : "Left", L = d > 0 ? "Left" : "Right";
+          weight(strike, 1.0); spine([-.02, -.75 * d, .18 * d], [.36, .75 * d, -.15 * d]);
+          pose(R + "Shoulder", [0, -.2 * d, -.12 * d], [0, .28 * d, .05 * d]);
+          pose(R + "Arm", [-2.6, -.35 * d, 1.25 * d], [-.5, .9 * d, 1.0 * d]); pose(R + "ForeArm", [0, .85 * d, 0], [0, .15 * d, 0]);
+          pose(L + "Arm", [-.5, .2 * d, -1.05 * d], [-1.0, -.2 * d, -.95 * d]); pose(L + "ForeArm", [0, -.6 * d, 0], [0, -1.4 * d, 0]);
+          const arc = fx.slashes.twin, k = Math.max(0, 1 - Math.abs(p - .52) / .2);
+          arc.setEnabled(k > 0); arc.visibility = k * .9;
+          fx.pivot.rotation.set(0, (p - .52) * -3 * d, .45 * d); arc.scaling.set(1.05 * d, 1, 1.05);
+          break;
+        }
         case "smash":
           weight(strike, 1.2); spine([-.38, -.2, 0], [.75, .15, 0]);
           pose("RightArm", [-2.95, 0, 1.35], [-1.05, 0, .95]); pose("LeftArm", [-2.95, 0, -1.35], [-1.05, 0, -.95]);
@@ -3064,6 +3189,8 @@
     if (!avatar?.weaponModels) return;
     const modelId = pathId === "phutthaisawan" && weaponId === "arcane_sword" ? "thai_dual" : weaponId === "shrine_glaive" ? "arcane_sword" : weaponId;
     const safeId = modelId === "thai_dual" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
+    avatar.pathId = pathId || "";
+    applyLook(avatar);
     if (avatar.weaponId === safeId) return;
     avatar.weaponId = safeId;
     for(const [id,model] of Object.entries(avatar.weaponModels)) {
@@ -3758,6 +3885,13 @@
   applySurface(cloth.leafSilk, clothSurface("leaf silk", "#5a8a4a", "rgba(20,40,10,.4)", "rgba(220,200,90,.2)", 0), "#ffffff");
   applySurface(cloth.schoolShirt, clothSurface("school shirt", "#eceae4", "rgba(90,90,100,.35)", "rgba(70,20,20,.35)", 0), "#ffffff");
   applySurface(cloth.schoolBlack, clothSurface("school black", "#24242a", "rgba(0,0,0,.5)", "rgba(60,60,70,.3)", 1), "#ffffff");
+  // Swordsman dress: tamarind jacket with gilt bands, indigo jongkraben, white wraps.
+  const swordCloth = {
+    jacket: applySurface(mat("sword jacket", "#ffffff", "#140a06"), brocade("sword jacket", "#4a2a1a", "rgba(214,168,82,.75)"), "#ffffff"),
+    jongkraben: applySurface(mat("sword jongkraben", "#ffffff", "#06080e"), brocade("sword jongkraben", "#232a44", "rgba(190,150,80,.45)"), "#ffffff"),
+    wrap: applySurface(mat("sword wraps", "#ffffff", "#1a1810"), clothSurface("sword wraps", "#ddd5c0", "rgba(80,70,50,.4)", "rgba(100,80,50,.3)", 0), "#ffffff"),
+  };
+  for (const m of Object.values(swordCloth)) m.backFaceCulling = false;
   // Patchwork: squares of festival cloth stitched together.
   applySurface(cloth.patchwork, surface("patchwork", 256, (c, s) => {
     const cols = ["#c8302a", "#e8b030", "#2a6ab0", "#e86aa0", "#1e8a4a", "#8a3ac0", "#f0e8d8"];
@@ -5893,6 +6027,7 @@
         if (!caster || (caster.mapId || "ritual_village")!==activeMapId) return;
         const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
         if (target) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
+        playAction(avatars.get(result.playerId), "twin");
         const ring=B.MeshBuilder.CreateTorus("sword skill ring",{diameter:1.3,thickness:.045,tessellation:16},scene);
         ring.position.set(caster.x,caster.y+.12,caster.z);ring.rotation.x=Math.PI/2;ring.material=gold;ring.isPickable=false;
         skillEffects.push({mesh:ring,mapId:activeMapId,until:performance.now()+450});
