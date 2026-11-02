@@ -3036,6 +3036,8 @@
       box: (x, y, z, w, h, d, m) => at(B.MeshBuilder.CreateBox("ghost part", { width: w, height: h, depth: d }, scene), x, y, z, m),
       cyl: (x, y, z, h, top, bottom, m, n = 8) => at(B.MeshBuilder.CreateCylinder("ghost part", { height: h, diameterTop: top, diameterBottom: bottom, tessellation: n }, scene), x, y, z, m),
       ball: (x, y, z, d, m, seg = 6) => at(B.MeshBuilder.CreateSphere("ghost part", { diameter: d, segments: seg }, scene), x, y, z, m),
+      // Rounded limb along local Y, centred on (x, y, z).
+      cap: (x, y, z, h, r, m) => at(B.MeshBuilder.CreateCapsule("ghost part", { height: Math.max(h, r * 2.01), radius: r, tessellation: 8, subdivisions: 1, capSubdivisions: 3 }, scene), x, y, z, m),
       joint: (name, parent, x, y, z) => { const n = new B.TransformNode(name, scene); n.parent = parent || root; n.position.set(x, y, z); return n; },
       flush: (joint, name) => { if (!parts.length) return null; const mesh = mergedSegment(parts, joint, name); parts = []; return mesh; },
     };
@@ -3058,115 +3060,140 @@
     // shroud skirt dissolving into smoke, bare feet dragging.
     corpse(root, o) {
       const b = ghostBuilder(root), body = b.joint("body", root, 0, 0, 0);
-      b.cyl(0, .62, 0, .9, .52, .78, gm.shroud, 10); b.cyl(0, .16, .05, .7, .76, .1, gm.smoke, 10);
-      for (const s of [-1, 1]) { b.cyl(s * .1, .14, -.04, .34, .07, .06, gm.corpse, 6); b.box(s * .1, .0, -.1, .09, .04, .2, gm.corpse); }
+      // Shroud skirt with ragged strips, bare feet dragging out of the smoke.
+      b.cyl(0, .66, 0, .8, .44, .74, gm.shroud, 12); b.cyl(0, .2, .06, .62, .74, .08, gm.smoke, 12);
+      for (const s of [-1, 1]) { b.cap(s * .11, .2, -.02, .36, .045, gm.corpse); b.box(s * .11, .02, -.09, .085, .035, .19, gm.corpse); }
       b.flush(body, "corpse skirt");
-      const chest = b.joint("chest", body, 0, 1.05, 0); chest.rotation.x = .38;
-      b.cyl(0, .32, 0, .66, .48, .42, gm.shirt, 8); b.box(.09, .45, -.2, .2, .2, .04, gm.corpse);
-      for (const s of [-1, 1]) b.ball(s * .2, .58, 0, .2, gm.shirt, 5);
+      const rags = [0, 1, 2, 3, 4, 5].map(i => { const a = i / 6 * Math.PI * 2;
+        return strand(b, body, Math.cos(a) * .34, .32, Math.sin(a) * .34, 2, .2, .14, gm.shroud, .5); });
+      const chest = b.joint("chest", body, 0, 1.02, 0);
+      b.cap(0, .3, 0, .62, .2, gm.shirt).scaling.z = .78;
+      b.ball(0, .46, .1, .34, gm.shirt, 6).scaling.set(1.2, .7, .8); // hunched back
+      b.box(.06, .5, -.15, .16, .2, .04, gm.corpse); // open collar, chest skin
+      for (const s of [-1, 1]) b.ball(s * .2, .54, 0, .2, gm.shirt, 6);
       b.flush(chest, "corpse chest");
-      const head = b.joint("head", chest, 0, .7, -.06); head.rotation.x = .5;
-      b.ball(0, .14, 0, .3, gm.corpse, 8).scaling.set(.85, 1.12, .95);
-      b.box(0, .03, -.1, .14, .08, .08, gm.corpse);
-      for (const s of [-1, 1]) b.ball(s * .06, .16, -.13, .055, o.eye, 4);
-      b.box(0, .07, -.135, .07, .02, .02, gm.mouth);
-      b.ball(0, .22, .03, .32, hairMat, 6).scaling.set(.95, .7, 1);
+      const head = b.joint("head", chest, 0, .66, -.08);
+      b.ball(0, .13, 0, .27, gm.corpse, 8).scaling.set(.86, 1.15, .95);
+      b.ball(0, .04, -.07, .15, gm.corpse, 6).scaling.set(1, .8, .8); // jaw
+      for (const s of [-1, 1]) { b.ball(s * .058, .155, -.115, .065, gm.mouth, 4); b.ball(s * .058, .155, -.13, .04, o.eye, 4); }
+      b.box(0, .045, -.135, .08, .018, .02, gm.mouth);
+      b.ball(0, .23, .03, .3, hairMat, 6).scaling.set(1, .62, 1.05);
       b.flush(head, "corpse head");
-      const hair = [-.11, -.04, .04, .11, -.15, .15].map((x, i) => strand(b, head, x, .16, i < 4 ? -.12 : 0, 3, .14, .045, hairMat, .4));
+      // Lank hair parted down the middle, framing the face.
+      const hair = [-.13, -.1, .1, .13, -.06, .06].map((x, i) => strand(b, head, x, .2, i < 4 ? -.05 : .1, 4, .13, .05, hairMat, .45));
       const arms = [-1, 1].map(s => {
-        const sh = b.joint("shoulder", chest, s * .26, .56, 0);
-        b.cyl(0, -.24, 0, .48, .07, .055, gm.corpse, 6); b.flush(sh, "upper arm");
-        const el = b.joint("elbow", sh, 0, -.48, 0);
-        b.cyl(0, -.24, 0, .48, .055, .045, gm.corpse, 6);
-        for (let f = -1; f <= 1; f++) b.cyl(f * .03, -.55, -.03, .16, .012, .025, gm.corpse, 4).rotation.x = .3;
-        b.flush(el, "forearm"); sh.rotation.z = s * .08; el.rotation.x = -.2; return { sh, el };
+        const sh = b.joint("shoulder", chest, s * .24, .52, 0);
+        b.cap(0, -.25, 0, .54, .05, gm.corpse); b.flush(sh, "upper arm");
+        const el = b.joint("elbow", sh, 0, -.5, 0);
+        b.cap(0, -.24, 0, .52, .04, gm.corpse); b.ball(0, -.52, -.02, .1, gm.corpse, 5).scaling.set(1, .8, .6);
+        for (let f = -1.5; f <= 1.5; f++) b.cap(f * .025, -.64, -.04, .16, .012, gm.corpse).rotation.x = .35;
+        b.flush(el, "forearm"); sh.rotation.z = s * .1; return { sh, el, s };
       });
       return (k) => {
         const { t, move, atk, hurt } = k, bob = Math.sin(t * 1.6) * .06;
-        body.position.y = .18 + bob; body.rotation.x = .08 + move * .25 - hurt * .4 + atk * .35;
-        body.rotation.z = Math.sin(t * .9) * .05;
-        head.rotation.x = .5 + Math.sin(t * 1.3) * .08 - atk * .5; head.rotation.z = Math.sin(t * 3.7) * Math.sin(t * .6) * .25;
-        arms.forEach((a, i) => { a.sh.rotation.x = Math.sin(t * 1.2 + i * 2) * .12 - atk * 1.6 - move * .1; a.el.rotation.x = -.2 - atk * .5; });
-        hair.forEach((h, i) => swayStrand(h, t, i, .08 + move * .1));
+        body.position.y = .18 + bob; body.rotation.x = move * .2 - hurt * .35 + atk * .25; body.rotation.z = Math.sin(t * .9) * .05;
+        chest.rotation.x = .42 + move * .15 + atk * .2; chest.rotation.y = Math.sin(t * .7) * .1;
+        head.rotation.x = .3 + Math.sin(t * 1.3) * .08 - atk * .55; head.rotation.z = Math.sin(t * 3.7) * Math.sin(t * .6) * .3;
+        arms.forEach((a, i) => { a.sh.rotation.x = -.15 + Math.sin(t * 1.2 + i * 2) * .1 - atk * 1.7 - move * .25; a.sh.rotation.z = a.s * (.1 + atk * .25); a.el.rotation.x = -.35 - atk * .4; });
+        hair.forEach((h, i) => swayStrand(h, t, i, .06 + move * .1));
+        rags.forEach((r, i) => swayStrand(r, t * 1.4, i, .12 + move * .3));
       };
     },
     // ผีผมยาวลอยฟ้า: pale woman in a white dress gliding almost flat, hair
     // splitting into black tentacles, clawed arm reaching forward.
     longhair(root, o) {
-      const b = ghostBuilder(root), body = b.joint("body", root, 0, 1.3, 0);
-      b.cyl(0, -.25, 0, .8, .4, .58, gm.dress, 10); b.cyl(0, -.9, .05, .6, .58, .05, gm.smokeWhite, 10);
-      b.cyl(0, .3, 0, .4, .3, .38, gm.dress, 8);
-      b.flush(body, "dress");
-      const head = b.joint("head", body, 0, .62, -.04);
-      b.ball(0, .1, 0, .3, gm.pale, 8).scaling.set(.85, 1.1, .9);
-      for (const s of [-1, 1]) b.ball(s * .065, .13, -.125, .06, gm.eyeRed, 4);
-      b.box(0, .01, -.13, .1, .05, .02, gm.mouth);
-      b.ball(0, .16, .05, .36, hairMat, 6).scaling.set(1, .8, 1.15); b.box(0, -.12, .16, .34, .5, .08, hairMat);
+      const b = ghostBuilder(root), body = b.joint("body", root, 0, 1.25, 0);
+      b.cap(0, .18, 0, .62, .19, gm.dress);
+      for (const s of [-1, 1]) b.ball(s * .17, .42, 0, .16, gm.dress, 6);
+      b.flush(body, "bodice");
+      // The dress streams back from the waist and frays into white smoke.
+      const train = b.joint("train", body, 0, -.05, .05);
+      const dress = b.cyl(0, -.45, 0, .9, .4, .7, gm.dress, 12); dress.rotation.x = 0;
+      b.cyl(0, -1.15, 0, .55, .7, .05, gm.smokeWhite, 12);
+      b.flush(train, "dress train");
+      const head = b.joint("head", body, 0, .56, -.04);
+      b.ball(0, .1, 0, .27, gm.pale, 8).scaling.set(.85, 1.12, .92);
+      for (const s of [-1, 1]) { b.ball(s * .058, .13, -.11, .07, gm.mouth, 4); b.ball(s * .058, .13, -.125, .045, gm.eyeRed, 4); }
+      b.box(0, .02, -.12, .09, .06, .02, gm.mouth);
+      b.ball(0, .17, .06, .36, hairMat, 6).scaling.set(1.05, .82, 1.15);
+      b.cap(0, -.15, .14, .5, .17, hairMat).scaling.x = 1.2;
       b.flush(head, "pale head");
-      const tentacles = [-.6, -.35, -.12, .12, .35, .6].map((a, i) => {
-        const j = strand(b, head, Math.sin(a) * .15, .2, .14, 6, .22, .07, hairMat, .75); j[0].rotation.set(-1.9, a * 1.5, a); return j;
+      // Hair splits into long black tentacles that coil out behind her.
+      const tentacles = [-1.25, -.75, -.25, .25, .75, 1.25].map((a, i) => {
+        const j = strand(b, head, Math.sin(a) * .14, .16, .12, 8, .26, .11, hairMat, .8);
+        j[0].rotation.set(-2.2 + Math.abs(a) * .3, 0, a * .9); return j;
       });
       const arms = [-1, 1].map(s => {
-        const sh = b.joint("shoulder", body, s * .2, .45, 0);
-        b.cyl(0, -.22, 0, .44, .07, .055, gm.pale, 6); b.flush(sh, "arm");
+        const sh = b.joint("shoulder", body, s * .2, .42, 0);
+        b.cap(0, -.22, 0, .46, .045, gm.pale); b.flush(sh, "arm");
         const el = b.joint("elbow", sh, 0, -.44, 0);
-        b.cyl(0, -.2, 0, .4, .055, .045, gm.pale, 6);
-        for (let f = -2; f <= 2; f++) b.cyl(f * .025, -.47, -.02, .14, .01, .025, gm.pale, 4).rotation.x = .5;
+        b.cap(0, -.2, 0, .42, .038, gm.pale);
+        for (let f = -2; f <= 2; f++) b.cap(f * .022, -.5, -.03, .17, .011, gm.pale).rotation.x = .55;
         b.flush(el, "claw"); return { sh, el, s };
       });
       return (k) => {
         const { t, move, atk, hurt } = k;
-        body.position.y = 1.3 + Math.sin(t * 1.4) * .15 - atk * .3; body.rotation.x = .9 + move * .25 + atk * .3 - hurt * .5;
-        head.rotation.x = -.85 - atk * .2;
-        arms.forEach((a, i) => { a.sh.rotation.x = (i ? -2.6 : -1.9) - atk * .5 + Math.sin(t * 2 + i) * .15; a.el.rotation.x = -.3 + atk * .3; });
-        tentacles.forEach((j, i) => { for (let n = 1; n < j.length; n++) j[n].rotation.x = Math.sin(t * 2.5 + i * .9 + n * .8) * (.35 + atk * .3); });
+        body.position.y = 1.25 + Math.sin(t * 1.4) * .15 - atk * .25; body.rotation.x = .45 + move * .2 + atk * .35 - hurt * .4;
+        train.rotation.x = .75 + move * .35 + Math.sin(t * 1.8) * .08;
+        head.rotation.x = -.4 - atk * .25; head.rotation.z = Math.sin(t * 1.1) * .08;
+        arms.forEach((a, i) => { a.sh.rotation.x = (i ? -1.5 : -.6) - atk * 1.1 + Math.sin(t * 2 + i) * .12; a.sh.rotation.z = a.s * .15; a.el.rotation.x = -.4 + atk * .35; });
+        tentacles.forEach((j, i) => { for (let n = 1; n < j.length; n++) { j[n].rotation.x = -.22 + Math.sin(t * 2.4 + i * .9 + n * .7) * (.25 + atk * .3); j[n].rotation.z = Math.sin(t * 1.7 + i + n * .5) * .15; } });
       };
     },
     // เงารากไม้: a tree stump possessed — root legs, branch arms with twig
     // claws, a hollow glowing face and tri-colour pha phrae around the trunk.
     stump(root, o) {
-      const b = ghostBuilder(root), body = b.joint("trunk", root, 0, .55, 0);
-      b.cyl(0, .55, 0, 1.25, .62, .9, gm.bark, 8); b.cyl(0, 1.25, 0, .3, .2, .62, gm.bark, 7);
-      for (let i = 0; i < 3; i++) { const band = b.cyl(0, .35 + i * .1, 0, .07, .87 - i * .02, .88 - i * .02, gm.sash3[i], 10); band.rotation.z = .05 - i * .04; }
-      b.box(0, .78, -.29, .42, .3, .1, gm.mouth);
-      for (const s of [-1, 1]) b.ball(s * .12, .85, -.31, .11, gm.eyeGreen, 5);
-      b.box(0, .55, -.32, .22, .1, .05, gm.eyeGreen);
-      for (let i = 0; i < 5; i++) { const twig = b.cyl(Math.cos(i * 1.3) * .2, 1.6, Math.sin(i * 1.3) * .2, .7, .02, .1, gm.bark, 5); twig.rotation.set(Math.sin(i * 1.3) * .6, 0, -Math.cos(i * 1.3) * .6); }
-      b.ball(0, 1.45, 0, .5, mossMat, 5).scaling.y = .4;
+      const b = ghostBuilder(root), body = b.joint("trunk", root, 0, .5, 0);
+      // Gnarled trunk: three leaning bark sections and burls.
+      b.cyl(0, .3, 0, .65, .78, .98, gm.bark, 7).rotation.y = .3;
+      b.cyl(.03, .85, .02, .55, .6, .78, gm.bark, 7).rotation.z = .06;
+      b.cyl(-.02, 1.3, 0, .45, .38, .6, gm.bark, 6).rotation.z = -.08;
+      for (let i = 0; i < 5; i++) b.ball(Math.cos(i * 2.1) * .38, .3 + noise(i, 731) * .9, Math.sin(i * 2.1) * .36, .22, gm.bark, 5);
+      for (let i = 0; i < 3; i++) b.cyl(0, .22 + i * .09, 0, .06, .95 - i * .02, .96 - i * .02, gm.sash3[i], 12).rotation.z = .05 - i * .04;
+      // Carved hollow face with green spirit light inside.
+      for (const s of [-1, 1]) { b.ball(s * .13, 1.0, -.28, .2, gm.mouth, 6).scaling.set(1, 1.2, .5); b.ball(s * .13, 1.0, -.33, .09, gm.eyeGreen, 5); }
+      b.ball(0, .7, -.3, .3, gm.mouth, 6).scaling.set(1.2, .55, .45);
+      for (let i = -2; i <= 2; i++) b.cyl(i * .06, .66, -.39, .1, 0, .04, gm.bark, 3).rotation.x = Math.PI;
+      b.ball(0, .7, -.36, .12, gm.eyeGreen, 4).scaling.set(1.6, .4, .5);
+      // Crown of dead, splayed branches with moss.
+      for (let i = 0; i < 7; i++) { const a = i * .9, tw = b.cyl(Math.cos(a) * .15, 1.75, Math.sin(a) * .15, .9, .02, .12, gm.bark, 5); tw.rotation.set(Math.sin(a) * .8, 0, -Math.cos(a) * .8); }
+      b.ball(0, 1.55, 0, .62, mossMat, 5).scaling.y = .35;
       b.flush(body, "stump trunk");
-      const legs = [0, 1, 2, 3].map(i => {
-        const a = i * Math.PI / 2 + Math.PI / 4, j = b.joint("root leg", body, Math.cos(a) * .32, .05, Math.sin(a) * .32);
-        const r = b.cyl(Math.cos(a) * .22, -.3, Math.sin(a) * .22, .75, .18, .05, gm.bark, 5); r.rotation.set(Math.sin(a) * .5, 0, -Math.cos(a) * .5);
+      const legs = [0, 1, 2, 3, 4].map(i => {
+        const a = i / 5 * Math.PI * 2 + .3, j = b.joint("root leg", body, Math.cos(a) * .36, .05, Math.sin(a) * .36);
+        const r1 = b.cap(Math.cos(a) * .16, -.12, Math.sin(a) * .16, .42, .09, gm.bark); r1.rotation.set(Math.sin(a) * .9, 0, -Math.cos(a) * .9);
+        const r2 = b.cyl(Math.cos(a) * .36, -.42, Math.sin(a) * .36, .4, .08, .02, gm.bark, 5); r2.rotation.set(Math.sin(a) * .3, 0, -Math.cos(a) * .3);
         b.flush(j, "root"); return j;
       });
       const arms = [-1, 1].map(s => {
-        const sh = b.joint("branch", body, s * .38, 1.0, 0);
-        b.cyl(0, -.35, 0, .75, .12, .09, gm.bark, 6); b.flush(sh, "branch arm");
+        const sh = b.joint("branch", body, s * .38, 1.15, 0);
+        b.cap(0, -.35, 0, .78, .09, gm.bark); b.flush(sh, "branch arm");
         const el = b.joint("branch tip", sh, 0, -.72, 0);
-        b.cyl(0, -.25, 0, .5, .09, .05, gm.bark, 5);
-        for (let f = -1; f <= 1; f++) b.cyl(f * .06, -.6, 0, .28, .01, .04, gm.bark, 4).rotation.z = f * .4;
-        b.flush(el, "twig claw"); sh.rotation.z = s * .5; return { sh, el, s };
+        b.cap(0, -.25, 0, .5, .06, gm.bark);
+        for (let f = -1; f <= 1; f++) b.cyl(f * .07, -.62, -.04, .34, .01, .045, gm.bark, 4).rotation.z = f * .45;
+        b.flush(el, "twig claw"); return { sh, el, s };
       });
       return (k) => {
         const { t, move, atk, hurt, walk } = k;
-        body.rotation.z = Math.sin(walk) * .1 * move + Math.sin(t * .7) * .03; body.rotation.x = -hurt * .25 + atk * .35;
-        body.position.y = .55 + Math.abs(Math.sin(walk)) * .08 * move;
-        legs.forEach((l, i) => { l.rotation.x = Math.sin(walk + i * Math.PI / 2) * .35 * move; });
-        arms.forEach(a => { a.sh.rotation.x = -atk * 2.4 + Math.sin(t * 1.1 + a.s) * .12; a.sh.rotation.z = a.s * (.5 - atk * .3); a.el.rotation.x = -.4 - atk * .6; });
+        body.rotation.z = Math.sin(walk) * .1 * move + Math.sin(t * .7) * .03; body.rotation.x = .08 - hurt * .25 + atk * .35;
+        body.position.y = .5 + Math.abs(Math.sin(walk)) * .08 * move;
+        legs.forEach((l, i) => { l.rotation.x = Math.sin(walk + i * 1.26) * .3 * move; });
+        arms.forEach(a => { a.sh.rotation.x = -.35 - atk * 2.3 + Math.sin(t * 1.1 + a.s) * .12; a.sh.rotation.z = a.s * (.55 - atk * .35); a.el.rotation.x = -.6 - atk * .5; });
       };
     },
     // Possessed statue: door guardian (ภูตทวารบาล) or the elite shrine
     // keeper — carved stone and lacquer, spirit light leaking from cracks.
     statue(root, o) {
       const b = ghostBuilder(root), body = b.joint("statue", root, 0, 0, 0);
-      for (const s of [-1, 1]) { b.cyl(s * .2, .45, 0, .9, .26, .32, gm.stone, 6); b.box(s * .2, .05, -.06, .3, .1, .42, gm.stone); }
-      b.box(0, 1.05, 0, .62, .35, .4, o.cloth); b.cyl(0, 1.0, -.21, .4, .26, .22, o.cloth, 4);
+      // Squat yaksha legs in a wide stance under a lacquered waist cloth.
+      for (const s of [-1, 1]) { b.cap(s * .24, .52, 0, .8, .15, gm.stone); b.box(s * .25, .06, -.07, .3, .12, .44, gm.stone); }
+      b.cyl(0, 1.0, 0, .45, .7, .78, o.cloth, 8).scaling.z = .75; b.box(0, .78, -.24, .22, .5, .04, gold);
       b.flush(body, "statue legs");
       const torso = b.joint("torso", body, 0, 1.2, 0);
-      b.cyl(0, .38, 0, .76, .82, .6, gm.stone, 8).scaling.z = .7;
+      b.cyl(0, .42, 0, .84, .92, .62, gm.stone, 8).scaling.z = .7; b.ball(0, .1, 0, .7, gm.stone, 6).scaling.set(1, .55, .75);
       b.box(0, .5, -.23, .5, .08, .04, gold); b.box(0, .25, -.22, .3, .06, .04, gold);
       for (let i = 0; i < 6; i++) b.box(-.25 + noise(i, 721) * .5, .1 + noise(i, 722) * .6, -.215 - noise(i, 723) * .02, .03, .12 + noise(i, 724) * .14, .02, gm.crack).rotation.z = (noise(i, 725) - .5) * 1.4;
-      for (const s of [-1, 1]) b.ball(s * .42, .7, 0, .34, o.cloth, 5);
+
       b.flush(torso, "statue torso");
       const head = b.joint("head", torso, 0, .82, 0);
       b.box(0, .17, 0, .4, .4, .38, gm.stone);
@@ -3180,9 +3207,9 @@
       b.flush(head, "statue head");
       const arms = [-1, 1].map(s => {
         const sh = b.joint("shoulder", torso, s * .46, .62, 0);
-        b.cyl(0, -.28, 0, .56, .2, .17, gm.stone, 6); b.flush(sh, "stone arm");
+        b.ball(0, 0, 0, .34, gold, 6).scaling.y = .7; b.cap(0, -.28, 0, .58, .12, gm.stone); b.flush(sh, "stone arm");
         const el = b.joint("elbow", sh, 0, -.56, 0);
-        b.cyl(0, -.24, 0, .48, .17, .15, gm.stone, 6); b.box(0, -.52, 0, .2, .18, .2, gm.stone);
+        b.cap(0, -.24, 0, .5, .1, gm.stone); b.cyl(0, -.12, 0, .08, .24, .24, gold, 8); b.ball(0, -.52, 0, .22, gm.stone, 5);
         if (s > 0) { b.cyl(0, -.55, -.55, 1.4, .16, .1, o.cloth, 6).rotation.x = Math.PI / 2; b.cyl(0, -.55, -1.25, .3, .26, .16, gold, 6).rotation.x = Math.PI / 2; }
         b.flush(el, "stone forearm"); return { sh, el, s };
       });
@@ -3238,7 +3265,10 @@
       b.cyl(0, .66, 0, .25, .2, .35, templeBronze, 8);
       for (let i = 0; i < 3; i++) b.box(.2 + i * .1, -.1 + i * .15, -.5 + i * .04, .03, .3, .02, gm.crack).rotation.z = .3 + i * .2;
       b.ball(0, -.25, 0, .5, gm.mouth, 6).scaling.y = .4;
-      for (const s of [-1, 1]) b.ball(s * .12, -.3, -.15, .1, o.eye, 4);
+      // A pale face pressed into the mouth of the bell.
+      b.ball(0, -.38, -.18, .3, gm.pale, 6).scaling.set(1, 1.1, .5);
+      for (const s of [-1, 1]) { b.ball(s * .07, -.34, -.25, .07, gm.mouth, 4); b.ball(s * .07, -.34, -.27, .045, o.eye, 4); }
+      b.box(0, -.47, -.25, .08, .07, .02, gm.mouth);
       b.flush(body, "bell");
       const ropes = [0, 1, 2, 3].map(i => strand(b, body, Math.cos(i * 1.57) * .1, .8, Math.sin(i * 1.57) * .1, 4, .2, .04, ropeRed, .2).map((j, n) => { if (!n) j.rotation.x = Math.PI; return j; }));
       const arms = [-1, 1].map(s => {
@@ -3267,8 +3297,8 @@
       b.flush(yoke, "yoke beam");
       const body = b.joint("hanged body", yoke, 0, -.1, 0);
       for (const s of [-1, 1]) { b.box(s * .15, -.1, 0, .03, .3, .03, gm.iron); b.cyl(s * .1, -.3, 0, .35, .1, .12, gm.robe, 6); }
-      b.cyl(0, -.75, 0, .7, .4, .32, gm.shirt, 8);
-      b.ball(0, -1.2, -.02, .32, gm.corpse, 8).scaling.set(.9, 1.05, .95);
+      b.cap(0, -.75, 0, .78, .22, gm.shirt).scaling.z = .8;
+      b.ball(0, -1.25, -.02, .36, gm.corpse, 8).scaling.set(.9, 1.08, .95);
       b.box(0, -1.28, -.15, .16, .14, .04, gm.mouth);
       for (let f = -1; f <= 1; f++) for (const r of [-1, 1]) b.cyl(f * .045, -1.28 + r * .05, -.16, .05, 0, .02, gm.pale, 3).rotation.x = r > 0 ? 0 : Math.PI;
       for (const s of [-1, 1]) b.ball(s * .07, -1.17, -.14, .06, o.eye, 4);
@@ -3346,8 +3376,8 @@
       const move = Math.min(1, g.speed / 2.5);
       g.walk += dt * (2 + 6 * move);
       const atkAge = (now - g.attackAt) / 1000, hurtAge = (now - g.hurtAt) / 1000;
-      const atk = atkAge < .7 ? Math.sin(Math.min(1, atkAge / .7) * Math.PI) : 0;
-      const hurt = hurtAge < .3 ? Math.sin(hurtAge / .3 * Math.PI) : 0;
+      const atk = g.hold?.atk ?? (atkAge < .7 ? Math.sin(Math.min(1, atkAge / .7) * Math.PI) : 0); // hold: preview frames
+      const hurt = g.hold?.hurt ?? (hurtAge < .3 ? Math.sin(hurtAge / .3 * Math.PI) : 0);
       g.update({ t: t + (mesh.uniqueId % 17), move, atk, hurt, walk: g.walk, wind: g.windup ? 1 : 0 });
       // Spawn: rises out of the ground; death: sinks, shrinks and lets the soul go.
       const spawnP = Math.min(1, (now - g.spawnAt) / 700);
