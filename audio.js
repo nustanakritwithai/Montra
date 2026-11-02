@@ -157,20 +157,75 @@
     drum: (d, t, p) => { const k = p.intensity; for (const dt of [0, .22, .44]) { tone(d, t + dt, { freq: 78, to: 52, glide: .12, decay: .22, gain: .5 * k }); noise(d, t + dt, { type: "lowpass", freq: 260, decay: .1, gain: .25 * k }); } },
     thunder: (d, t, p) => { noise(d, t, { type: "lowpass", freq: 900, to: 120, glide: 1.6, attack: .02, decay: 2.2, gain: .55 * p.intensity }); noise(d, t + .1, { type: "lowpass", freq: 200, decay: 1.6, gain: .35 * p.intensity }); },
   };
+  // ---- Ghost voices ----------------------------------------------------
+  // Families of synthesised voices; each ghost kind picks a family, a pitch
+  // and a texture. Events shape them: spawn rises, attack is a full cry,
+  // hurt is short and choked, die falls away, idle is a faint murmur.
+  const SHAPE = {
+    spawn: { len: 1.0, gain: .7, rise: 1.35, fall: 1 }, attack: { len: .7, gain: 1, rise: 1.15, fall: .8 },
+    hurt: { len: .28, gain: .8, rise: 1.25, fall: .7 }, die: { len: 1.4, gain: .9, rise: 1, fall: .45 }, idle: { len: 1.2, gain: .35, rise: 1.05, fall: .9 },
+  };
+  // Formant-filtered voice: a buzzy source through two vowel bands, with vibrato and a pitch contour.
+  function vocal(d, t, { base, wave = "sawtooth", f1 = 700, f2 = 1200, q = 6, vib = 5, vibD = .02, len, gain, rise, fall, breath = .2 }) {
+    const o = ctx.createOscillator(), g = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain();
+    o.type = wave; o.frequency.setValueAtTime(base, t);
+    o.frequency.exponentialRampToValueAtTime(base * rise, t + len * .3); o.frequency.exponentialRampToValueAtTime(base * fall, t + len);
+    lfo.frequency.value = vib; lg.gain.value = base * vibD; lfo.connect(lg); lg.connect(o.frequency);
+    const b1 = ctx.createBiquadFilter(), b2 = ctx.createBiquadFilter(); b1.type = b2.type = "bandpass";
+    b1.frequency.value = f1; b2.frequency.value = f2; b1.Q.value = b2.Q.value = q;
+    o.connect(b1); o.connect(b2); b1.connect(g); b2.connect(g);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + Math.min(.12, len * .25)); g.gain.exponentialRampToValueAtTime(.0001, t + len);
+    g.connect(d); o.start(t); lfo.start(t); o.stop(t + len + .05); lfo.stop(t + len + .05);
+    if (breath > 0) noise(d, t, { freq: f2, q: 2, attack: len * .2, decay: len * .8, gain: gain * breath });
+  }
+  const FAMILY = {
+    wail: (d, t, e, k) => vocal(d, t, { base: k.base, wave: "triangle", f1: 800, f2: 2400, q: 5, vib: 6, vibD: .035, ...e, breath: .35 }),
+    moan: (d, t, e, k) => vocal(d, t, { base: k.base, f1: 450, f2: 900, q: 7, vib: 3.5, vibD: .025, ...e, breath: .15 }),
+    whine: (d, t, e, k) => { vocal(d, t, { base: k.base, wave: "sine", f1: 1800, f2: 3200, q: 9, vib: 9, vibD: .03, ...e, breath: .25 }); },
+    growl: (d, t, e, k) => { vocal(d, t, { base: k.base, f1: 350, f2: 700, q: 4, vib: 28, vibD: .09, ...e, breath: .4 }); noise(d, t, { type: "lowpass", freq: 500, decay: e.len, gain: e.gain * .25 }); },
+    giggle: (d, t, e, k) => { const n = Math.max(2, Math.round(e.len * 7)); for (let i = 0; i < n; i++) tone(d, t + i * .13, { type: "triangle", freq: k.base * (1.2 - i * .04) * (e.rise > 1.2 ? 1.1 : 1), to: k.base * .8, glide: .08, decay: .09, gain: e.gain * .3 }); },
+    bell: (d, t, e, k) => metal(d, t, k.base, [[1, 1, 1], [2.4, .5, .6], [3.8, .3, .4], [5.4, .15, .3]], { gain: e.gain * .35, decay: e.len * 1.6 }),
+    creak: (d, t, e, k) => { noise(d, t, { freq: k.base * 4, to: k.base * 2.5, glide: e.len, q: 30, attack: .05, decay: e.len, gain: e.gain * .5 }); FAMILY.moan(d, t + .05, { ...e, gain: e.gain * .5 }, { base: k.base * .8 }); },
+    gurgle: (d, t, e, k) => { const n = Math.round(e.len * 14); for (let i = 0; i < n; i++) tone(d, t + Math.random() * e.len, { freq: rnd(200, 700), to: rnd(700, 1400), glide: .04, decay: .05, gain: e.gain * .18 }); FAMILY.moan(d, t, { ...e, gain: e.gain * .6 }, k); },
+    fire: (d, t, e, k) => { const n = Math.round(e.len * 30); for (let i = 0; i < n; i++) noise(d, t + Math.random() * e.len, { freq: rnd(1500, 5000), q: 3, decay: .01, gain: e.gain * .3 }); noise(d, t, { type: "lowpass", freq: 700, attack: e.len * .3, decay: e.len * .7, gain: e.gain * .3 }); FAMILY.wail(d, t, { ...e, gain: e.gain * .5 }, k); },
+    trumpet: (d, t, e, k) => { vocal(d, t, { base: k.base, f1: 600, f2: 1600, q: 3, vib: 7, vibD: .02, ...e, rise: e.rise * 1.25, breath: .1 }); tone(d, t, { freq: 48, decay: .25, gain: e.gain * .5 }); },
+    choir: (d, t, e, k) => { for (const r of [1, 1.5, 2.01]) tone(d, t, { freq: k.base * r, attack: e.len * .35, decay: e.len * .65, gain: e.gain * .1, detune: rnd(-8, 8) }); },
+    rattle: (d, t, e, k) => { const n = Math.round(e.len * 12); for (let i = 0; i < n; i++) metal(d, t + i * e.len / n + rnd(0, .02), rnd(1100, 1500), [[1, 1], [2.3, .4, .5]], { gain: e.gain * .12, decay: .15 }); FAMILY.giggle(d, t + .05, { ...e, gain: e.gain * .6 }, { base: k.base }); },
+    grind: (d, t, e, k) => { noise(d, t, { type: "lowpass", freq: 220, to: 380, glide: e.len, attack: .08, decay: e.len, gain: e.gain * .6 }); FAMILY.growl(d, t, { ...e, gain: e.gain * .5 }, k); },
+    rustle: (d, t, e, k) => { noise(d, t, { type: "highpass", freq: 3000, attack: e.len * .3, decay: e.len * .7, gain: e.gain * .25 }); FAMILY.wail(d, t, { ...e, gain: e.gain * .6 }, k); },
+  };
+  // kind -> [family, base pitch Hz, extra texture family?]
+  const GHOST_VOICES = {
+    corpse: ["moan", 110], graveborn: ["moan", 92, "grind"], unaware: ["moan", 130], headless: ["moan", 85, "creak"], drowned: ["gurgle", 120],
+    boatman: ["gurgle", 100], waterspirit: ["gurgle", 240, "choir"], pyrekeeper: ["fire", 180], phiphong: ["fire", 260], krasue: ["fire", 520],
+    krahang: ["growl", 120, "rustle"], preta: ["whine", 880], phipop: ["growl", 140], kongkoi: ["growl", 170], phitakhon: ["rattle", 300],
+    longhair: ["wail", 420], maenak: ["wail", 360, "choir"], takhian: ["wail", 400, "rustle"], nangmai: ["rustle", 460], dancer: ["wail", 480, "bell"],
+    childghost: ["giggle", 700], moonspirit: ["choir", 330], elephant: ["trumpet", 210], statue: ["grind", 75], crawler: ["growl", 160],
+    stump: ["creak", 90], bell: ["bell", 196], hanged: ["creak", 110],
+  };
+  // Per-kind loudness trim, measured so every ghost's attack cry peaks alike.
+  const GHOST_TRIM = {"drowned": 1.38, "boatman": 1.29, "waterspirit": 1.05, "graveborn": 0.96, "pyrekeeper": 2.44, "moonspirit": 1.22, "krasue": 2.2, "krahang": 0.63, "preta": 1.83, "phiphong": 2.2, "kongkoi": 0.55, "takhian": 1.38, "unaware": 0.92, "childghost": 1.16, "elephant": 0.55, "phitakhon": 1.57, "maenak": 1.29, "phipop": 0.55, "dancer": 0.88, "headless": 1.0, "statue": 0.92, "crawler": 0.58, "bell": 0.55, "hanged": 2.0, "corpse": 1.05, "nangmai": 1.05, "stump": 2.0, "longhair": 1.29};
+  R.ghost = (d, t, p) => {
+    const v = GHOST_VOICES[p.kind] || GHOST_VOICES.corpse, e = { ...(SHAPE[p.ev] || SHAPE.attack) };
+    e.gain *= p.intensity * (GHOST_TRIM[p.kind] || 1); const k = { base: v[1] * rnd(.94, 1.06) };
+    FAMILY[v[0]](d, t, e, k);
+    if (v[2]) FAMILY[v[2]](d, t + .04, { ...e, gain: e.gain * .45 }, { base: v[2] === "bell" ? 1568 : v[2] === "choir" ? v[1] * .75 : v[1] });
+  };
   // Which bus, how much reverb and base loudness for each sound.
   const META = {
     tap: ["ui", 0, .9], open: ["ui", .05, .9], close: ["ui", .05, .9], toast: ["ui", .25, 1], error: ["ui", 0, 1], coin: ["ui", .2, 1], levelup: ["ui", .4, 1],
-    gong: ["sfx", .5, 1], drum: ["sfx", .35, 1], thunder: ["ambience", .5, 1],
+    gong: ["sfx", .5, 1], drum: ["sfx", .35, 1], thunder: ["ambience", .5, 1], ghost: ["sfx", .4, .9],
   };
-  const DUR = { gong: 3.5, levelup: 3.5, down: 3.5, summon: 4.5, thunder: 3, ghost_die: 1.6, warp: 1.8, fly: 1.6, respawn: 1.4, toast: .9 };
+  const DUR = { ghost: 2.6, gong: 3.5, levelup: 3.5, down: 3.5, summon: 4.5, thunder: 3, ghost_die: 1.6, warp: 1.8, fly: 1.6, respawn: 1.4, toast: .9 };
 
   // ---- Public API -------------------------------------------------------
   function play(name, opts = {}) {
     if (!ctx || ctx.state !== "running" || settings.muted || !R[name]) return false;
-    const now = performance.now(), last = recent.get(name) || [];
+    const key = name === "ghost" ? name + ":" + opts.kind + ":" + opts.ev : name;
+    const now = performance.now(), last = recent.get(key) || [];
     const fresh = last.filter(t0 => now - t0 < 100);
     if (fresh.length >= 3) return false; // throttle identical sounds
-    fresh.push(now); recent.set(name, fresh);
+    fresh.push(now); recent.set(key, fresh);
     if (voices.size >= MAX_VOICES && !opts.important) return false;
     let gain = opts.gain ?? 1, pan = 0;
     if (Number.isFinite(opts.x) && Number.isFinite(opts.z)) {
@@ -183,7 +238,7 @@
     const [bus, wet, base] = META[name] || ["sfx", .18, 1];
     const t = ctx.currentTime + Math.max(0, opts.delay || 0);
     const out = voice(bus, { gain: gain * base, pan, wet: opts.wet ?? wet, dur: (DUR[name] || .8) + (opts.delay || 0) });
-    R[name](out, t, { intensity: opts.intensity ?? 1, pitch: opts.pitch, len: opts.len, freq: opts.freq });
+    R[name](out, t, { intensity: opts.intensity ?? 1, pitch: opts.pitch, len: opts.len, freq: opts.freq, kind: opts.kind, ev: opts.ev });
     return true;
   }
   window.MontraAudio = {

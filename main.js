@@ -2726,8 +2726,8 @@
       if(ghost){
         // Ghost rigs play a death (soul released) before hiding, and rise on respawn.
         const alive=monster.alive!==false;
-        if(!alive&&ghost.wasAlive){ghost.deathAt=performance.now();releaseSoul(mesh.position.x,mesh.position.y+.4,mesh.position.z);}
-        if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();}
+        if(!alive&&ghost.wasAlive){ghost.deathAt=performance.now();ghostVoice(ghost,mesh,"die");releaseSoul(mesh.position.x,mesh.position.y+.4,mesh.position.z);}
+        if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();ghostVoice(ghost,mesh,"spawn",.8);}
         ghost.wasAlive=alive;if(alive)mesh.setEnabled(true);else if(!ghost.deathAt)mesh.setEnabled(false);
         ghost.tx=Number(monster.x);ghost.tz=Number(monster.z);ghost.ty=Number(monster.y)||0;ghost.tf=Number(monster.facing)||0;
         ghost.windup=monster.aiState==="windup";ghost.ai=monster.aiState;
@@ -3386,7 +3386,7 @@
     }
   }
   // Contact sound at the target, chosen by the attacker's weapon and move.
-  function impactAt(attackerId, x, z, source, ghost) {
+  function impactAt(attackerId, x, z, source, ghost, kind) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     const a = avatars.get(attackerId), w = a?.weaponId || "", move = a?.action?.type || "";
     let name = "fist", intensity = 1;
@@ -3396,7 +3396,8 @@
     else if (w === "spirit_staff") name = "blunt";
     else if (w === "muay_wraps") name = /elbow|counter/.test(move) ? "elbow" : /knee|teep|throw/.test(move) ? "kick" : "fist";
     SFX(name, { x, z, intensity });
-    if (ghost) SFX("ghost_hit", { x, z, delay: .02, intensity: .8 });
+    if (ghost && kind) SFX("ghost", { kind, ev: "hurt", x, z, delay: .03, intensity: .8 });
+    else if (ghost) SFX("ghost_hit", { x, z, delay: .02, intensity: .8 });
   }
   function playAction(a, type, opts) {
     if (!a || !ACTIONS[type]) return;
@@ -6043,6 +6044,21 @@
     tail.parent = soul; tail.position.y = -.45; tail.material = gm.soul; tail.isPickable = false;
     soulMeshes.push({ soul, born: performance.now() });
   }
+  // Ghost voices: a cry on the attack wind-up (an audible warning before the
+  // hit lands) and an occasional murmur when near the hero.
+  let lastGhostMurmur = 0;
+  const ghostVoice = (g, mesh, ev, intensity = 1) => SFX("ghost", { kind: g.design?.kind, ev, x: mesh.position.x, z: mesh.position.z, intensity });
+  function ghostVoices(mesh, g, now) {
+    if (g.deathAt) return;
+    if (g.windup && !g.wasWindup) { ghostVoice(g, mesh, "attack"); g.criedAt = now; }
+    g.wasWindup = g.windup;
+    if (!g.nextMurmur) g.nextMurmur = now + 2000 + Math.random() * 8000;
+    if (now > g.nextMurmur) {
+      g.nextMurmur = now + 6000 + Math.random() * 9000;
+      const hero = getLocalAvatar();
+      if (hero && now - lastGhostMurmur > 900 && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 26) { lastGhostMurmur = now; ghostVoice(g, mesh, "idle"); }
+    }
+  }
   function animateGhosts(dt, now) {
     const t = now / 1000;
     const tick = (mesh) => {
@@ -6054,6 +6070,7 @@
         const sp = Math.hypot(mesh.position.x - ox, mesh.position.z - oz) / Math.max(dt, 1e-3);
         g.speed += (sp - g.speed) * (1 - Math.exp(-dt * 6));
       }
+      ghostVoices(mesh, g, now);
       const move = Math.min(1, g.speed / 2.5);
       g.walk += dt * (2 + 6 * move);
       const atkAge = (now - g.attackAt) / 1000, hurtAge = (now - g.hurtAt) / 1000;
@@ -6542,11 +6559,13 @@
   }
 
   const localHpBar = document.querySelector(".bar.hp i");
+  let hudLevel = 0;
   function updateCharacterHud(me) {
     const name = typeof me?.characterName === "string" && me.characterName
       ? me.characterName : "นที";
     $("characterName").textContent = name;
     const slot = me?.persistent ? (Number(me.characterSlot) || activeCharacterSlot || 1) : null;
+    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) SFX("levelup", { important: true }); hudLevel = me.level; }
     $("characterLevel").textContent = (slot ? "S" + slot + " · " : "") + "LV. " + (
       Number.isFinite(me?.level) ? me.level : 1
     );
@@ -7021,7 +7040,7 @@
         if (typeof hit?.attackerId === "string") {
           const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
           playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
-          impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true);
+          impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true, struck?.design?.kind);
         }
         const talisman = hit?.source === "talisman";
         if (forestTarget) {
@@ -7234,6 +7253,7 @@
         if (ownServerCharacter()?.pathId === "muay_boran") playAction(avatars.get(localId), "m_wai");
       });
       joined.onMessage("possession_changed", notice => {
+        if(room===joined && notice?.active){ const who=avatars.get(notice.playerId); if(who) SFX("possess",{x:who.x,z:who.z}); }
         if(room!==joined || notice?.playerId!==localId)return;
         toast(notice.active ? "วิญญาณเข้าสิง · เพิ่มโจมตีและป้องกัน 20% นาน 60 วินาที" : "สถานะเข้าสิงสิ้นสุด");
         syncPossessionButton();
@@ -7278,7 +7298,8 @@
       joined.onMessage("monster_hit", hit => {
         if (room === joined) {
           playAction(avatars.get(hit?.targetId), "hit");
-          const g = forestMonsters.get(hit?.attackerId)?.metadata?.ghost; if (g) g.attackAt = performance.now();
+          const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost; if (g) g.attackAt = performance.now();
+          if (g && !(performance.now() - (g.criedAt || 0) < 1500)) { ghostVoice(g, gm2, "attack"); g.criedAt = performance.now(); }
           if (hit?.attackerId === MONSTER_ID) villageGhost.metadata.ghost.attackAt = performance.now();
         }
         if (room === joined && hit?.targetId === localId) {
@@ -9441,7 +9462,7 @@
       if(!room || room.state?.buffsAvailable!==true){toast("เซิร์ฟเวอร์ยังไม่รองรับเข้าสิง");return;}
       try{room.send("possess",{});}catch(_){toast("ส่งคำสั่งเข้าสิงไม่สำเร็จ");}return;
     }
-    possessed=!possessed;syncPossessionButton();
+    possessed=!possessed;syncPossessionButton();if(possessed)SFX("possess");
     const possessedHero=getLocalAvatar(); if(possessedHero) possessedHero.possessed=possessed;
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
@@ -9496,6 +9517,7 @@
               demoLastHitAt = now;
               playAttack(localId, false, enemy.position.x, enemy.position.z);
               villageGhost.metadata.ghost.hurtAt = now;
+              impactAt(localId, villageGhost.position.x, villageGhost.position.z, "", true, villageGhost.metadata.ghost.design?.kind);
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
               hitFlashRemaining = .22;
               updateMonsterUI(demoMonsterHp, 100, demoMonsterHp > 0, true);
