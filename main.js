@@ -1632,13 +1632,13 @@
         for(const deck of rampart.deck){
           const top=B.MeshBuilder.CreateBox("walkable city wall",{width:deck.width,height:.5,depth:deck.length},scene);
           top.parent=expansionRoot;top.position.set(deck.x+deck.width/2,rampart.height-.25,deck.z+deck.length/2);
-          top.material=paint.road;top.metadata={walkable:true,elevatedTop:true};
+          top.material=provinceFx.deck(kind==="territory",deck.width>deck.length,Math.max(deck.width,deck.length));top.metadata={walkable:true,elevatedTop:true};
         }
         for(const [i,g] of rampart.gates.entries()){
           const b=g.box,x=b.x+b.width/2,z=b.z+b.length/2,horizontal=b.width>b.length;
           const span=Math.max(b.width,b.length);
           for(const side of [-1,1]){
-            box(x+(horizontal?side*(span/2+.2):0),1.75,z+(horizontal?0:side*(span/2+.2)),horizontal?.55:3.1,3.5,horizontal?3.1:.55,deep);
+            box(x+(horizontal?side*(span/2+.2):0),1.75,z+(horizontal?0:side*(span/2+.2)),horizontal?.55:3.1,3.5,horizontal?3.1:.55,kind==="territory"?provinceFx.timber:provinceFx.laterite);
           }
           if(kind==="territory" && i===0){
             provinceDoor=B.MeshBuilder.CreateBox("reinforced city gate",{width:b.width,height:3.45,depth:b.length},scene);
@@ -1653,7 +1653,7 @@
             const t=(j+.5)/10,h=(j+1)*rampart.height/10;
             const step=B.MeshBuilder.CreateBox("city stair",{width:dx?.67:2.2,depth:dz?.67:2.2,height:h},scene);
             step.parent=expansionRoot;step.position.set(stair.foot.x+t*dx,h/2,stair.foot.z+t*dz);
-            step.material=j%2?paint.road:stone;step.metadata={walkable:true,stairId:stair.id};
+            step.material=kind==="territory"?(j%2?provinceFx.plank:provinceFx.timber):(j%2?provinceFx.laterite:provinceFx.brick);step.metadata={walkable:true,stairId:stair.id};
           }
           expansionLabel("บันได "+(idx+1)+" · ขึ้น / ลง",stair.foot.x,stair.foot.z,9,3);
         }
@@ -1664,37 +1664,60 @@
         // Each gatehouse and bastion is its own cover so it fades when it sits between camera and hero.
         for(const g of rampart.gates){
           const b=g.box,gx=b.x+b.width/2,gz=b.z+b.length/2,horizontal=b.width>b.length,span=Math.max(b.width,b.length)+1.6,th=Math.min(b.width,b.length);
-          box(gx,H-.62,gz,horizontal?span-1.6:th+.2,.24,horizontal?th+.2:span-1.6,gold);
-          for(const a of [-1,1])for(const c of [-1,1])cone(gx+(horizontal?a*span/2:c*(th/2-.15)),H+1.0,gz+(horizontal?c*(th/2-.15):a*span/2),2.0,.28,.24,templeLacquer,6);
+          const post=kind==="territory"?provinceFx.timber:templeLacquer;
+          box(gx,H-.62,gz,horizontal?span-1.6:th+.2,.24,horizontal?th+.2:span-1.6,kind==="territory"?darkWood:gold);
+          for(const a of [-1,1])for(const c of [-1,1])cone(gx+(horizontal?a*span/2:c*(th/2-.15)),H+1.0,gz+(horizontal?c*(th/2-.15):a*span/2),2.0,.28,.24,post,6);
           roof(gx,H+2.3,gz,horizontal?span*.8:th+.8,horizontal?th+.8:span*.8);
           finish("gatehouse",true);
         }
         for(const c of rampart.corners){
-          for(const a of [-1,1])for(const d of [-1,1])cone(c.x+a*1.25,H+1.2,c.z+d*1.25,2.4,.26,.22,templeLacquer,6);
-          box(c.x,H+2.45,c.z,3.1,.18,3.1,gold);roof(c.x,H+3.1,c.z,3.4,3.4);cone(c.x,H+4.6,c.z,1.4,.5,0,gold,6);
+          if(kind==="territory"){
+            // Ho rop: a timber lookout tower with a plank floor, railing and roof.
+            for(const a of [-1,1])for(const d of [-1,1])cone(c.x+a*1.3,H+1.9,c.z+d*1.3,3.8,.3,.26,provinceFx.timber,6);
+            box(c.x,H+2.4,c.z,3.2,.2,3.2,provinceFx.plank);
+            for(const a of [-1,1]){box(c.x+a*1.5,H+2.95,c.z,.12,.9,3.1,provinceFx.timber);box(c.x,H+2.95,c.z+a*1.5,3.1,.9,.12,provinceFx.timber);}
+            roof(c.x,H+4.3,c.z,3.6,3.6);
+          }else{
+            for(const a of [-1,1])for(const d of [-1,1])cone(c.x+a*1.25,H+1.2,c.z+d*1.25,2.4,.26,.22,templeLacquer,6);
+            box(c.x,H+2.45,c.z,3.1,.18,3.1,gold);roof(c.x,H+3.1,c.z,3.4,3.4);cone(c.x,H+4.6,c.z,1.4,.5,0,gold,6);
+          }
           finish("bastion",true);
         }
       }
       for(const w of map.walls||[]){
         const x=w.x+w.width/2,z=w.z+w.length/2;
         if(w.rampart){
-          // Ayutthaya curtain wall: whitewashed brick in 4 m courses (so the
-          // texture keeps its scale), a dark plinth, a cornice and sema merlons.
           const along=w.width>w.length,len=Math.max(w.width,w.length),thick=Math.min(w.width,w.length);
-          const courses=Math.max(1,Math.round(len/4));
-          for(let i=0;i<courses;i++){const t=(i+.5)/courses,seg=len/courses+.02;
-            box(along?w.x+w.width*t:x,1.95,along?z:w.z+w.length*t,along?seg:thick,3.1,along?thick:seg,provinceFx.brick);}
-          box(x,.22,z,w.width+(along?0:.5),.44,w.length+(along?.5:0),deep);
-          box(x,3.6,z,w.width+(along?0:.3),.2,w.length+(along?.3:0),paint.court);
-          const n=Math.floor(len/2.2);
-          for(let i=0;i<n;i++){const t=(i+.5)/n,mx=along?w.x+w.width*t:w.x+.3,mz=along?w.z+.3:w.z+w.length*t;
-            box(mx,4.22,mz,along?.85:.36,.45,along?.36:.85,provinceFx.brick);cone(mx,4.6,mz,.34,.62,0,provinceFx.brick,4).rotation.y=Math.PI/4;}
+          // Outer face points away from the enclosure's centre.
+          const cs=rampart.corners,ox=(cs[0].x+cs[2].x)/2,oz=(cs[0].z+cs[2].z)/2,out=along?Math.sign(z-oz)||1:Math.sign(x-ox)||1;
+          const courses=Math.max(1,Math.round(len/4)),seg=len/courses+.02,at=t=>[along?w.x+w.width*t:x,along?z:w.z+w.length*t];
+          if(kind==="territory"){
+            // Khai mai: a timber stockade on a laterite footing. Sharpened logs
+            // stand on the outer face above the walk; planks line the inside.
+            for(let i=0;i<courses;i++){const [cx,cz]=at((i+.5)/courses);box(cx,.5,cz,along?seg:thick+.3,1,along?thick+.3:seg,provinceFx.laterite);}
+            box(x,2.5,z,along?w.width:thick-.5,3,along?thick-.5:w.length,provinceFx.timber);
+            const n=Math.floor(len/.46),ex=along?0:out*(thick/2),ez=along?out*(thick/2):0;
+            for(let i=0;i<n;i++){const [cx,cz]=at((i+.5)/n),h=4.2+noise(i+w.x,591)*.5;
+              cone(cx+ex,h/2+.6,cz+ez,h,.44,.4,provinceFx.timber,6);cone(cx+ex,h+.6+.3,cz+ez,.6,.4,0,provinceFx.timber,6);}
+            for(const y of [1.6,3.4])box(x+(along?0:ex*1.08),y,z+(along?ez*1.08:0),along?w.width:.14,.18,along?.14:w.length,darkWood);
+          }else{
+            // Krung kamphaeng: laterite footing courses under exposed Mon brick,
+            // a moulded brick cornice and bai sema merlons on the outer edge.
+            for(let i=0;i<courses;i++){const [cx,cz]=at((i+.5)/courses);
+              box(cx,.6,cz,along?seg:thick+.4,1.2,along?thick+.4:seg,provinceFx.laterite);
+              box(cx,2.35,cz,along?seg:thick,2.3,along?thick:seg,provinceFx.brick);}
+            box(x,3.6,z,w.width+(along?0:.3),.22,w.length+(along?.3:0),provinceFx.laterite);
+            const n=Math.floor(len/2.2),edge=thick/2-.3;
+            for(let i=0;i<n;i++){const [cx,cz]=at((i+.5)/n),mx=cx+(along?0:out*edge),mz=cz+(along?out*edge:0);
+              box(mx,4.22,mz,along?.85:.36,.45,along?.36:.85,provinceFx.brick);cone(mx,4.6,mz,.34,.62,0,provinceFx.brick,4).rotation.y=Math.PI/4;}
+          }
         }else if(city){
-          box(x,1.7,z,w.width,3.4,w.length,stone);roof(x,3.7,z,w.width+.75,w.length+.7);
+          box(x,.5,z,w.width+.3,1,w.length+.3,provinceFx.laterite);box(x,2.2,z,w.width,2.4,w.length,provinceFx.brick);
+          box(x,3.45,z,w.width+.2,.18,w.length+.2,provinceFx.timber);roof(x,3.7,z,w.width+.75,w.length+.7);
           box(x,1.7,w.z-.04,w.width*.25,2,.12,darkWood);
           for(const side of [-1,1])box(x+side*w.width*.32,2.1,w.z-.12,.62,.9,.10,lanternPaper);
         }else{
-          box(x,1.45,z,w.width,2.9,w.length,stone);
+          box(x,.5,z,w.width+.2,1,w.length+.2,provinceFx.laterite);box(x,1.95,z,w.width,1.9,w.length,provinceFx.timber);
           const count=Math.max(1,Math.floor(Math.max(w.width,w.length)/2));
           for(let i=0;i<count;i++){
             const t=(i+.5)/count;
@@ -1734,7 +1757,7 @@
           for(let i=0;i<3;i++)box(x+3,.5,z+i-1,.9,1,.9,crateWood);
         }else if(s.kind==="shrine"){
           // San lak mueang: a stepped plinth, red columns and a gilt prang over the city pillar.
-          box(x,.2,z,5.6,.4,5.6,stone);box(x,.55,z,4.6,.3,4.6,paint.court);
+          box(x,.2,z,5.6,.4,5.6,provinceFx.laterite);box(x,.55,z,4.6,.3,4.6,provinceFx.brick);
           for(const dx of [-1,1])for(const dz of [-1,1])cone(x+dx*1.8,2.05,z+dz*1.8,2.7,.3,.26,templeLacquer,6);
           box(x,3.5,z,4.3,.25,4.3,gold);roof(x,4.05,z,4.6,4.6);
           for(let k=0;k<4;k++)cone(x,5.0+k*.55,z,.6,1.5-k*.3,1.3-k*.3,k%2?templeGold:gold,8);
@@ -1937,17 +1960,54 @@
     floatLamp:mat("floating lamp","#ffd08a","#ff9a3a"),jar:mat("dragon jar","#5a3422","#120804"),naga:mat("naga lacquer","#3a7a6a","#0c2a24"),
   };
   glowMats.add(provinceFx.ore);glowMats.add(provinceFx.floatLamp);
-  provinceFx.brick.diffuseTexture=paintTexture("whitewashed brick",256,(c,s)=>{
-    c.fillStyle="#d6cfbf";c.fillRect(0,0,s,s);
-    const rows=10,cols=6,rh=s/rows;
-    for(let r=0;r<rows;r++)for(let k=-1;k<cols;k++){
-      const bx=(k+(r%2)*.5)*s/cols,v=noise(r*13+k,551);
-      c.fillStyle=`rgba(${150+v*40|0},${120+v*30|0},${100+v*20|0},${.10+v*.18})`;c.fillRect(bx+2,r*rh+2,s/cols-4,rh-4);
+  // Ayutthaya building stock: exposed Mon brick (thin red-orange bricks in
+  // dark mortar), porous laterite blocks for footings, and weathered timber.
+  provinceFx.brick.diffuseTexture=paintTexture("mon brick",256,(c,s)=>{
+    c.fillStyle="#4a2a1e";c.fillRect(0,0,s,s);
+    const rows=16,cols=5,rh=s/rows;
+    for(let r=0;r<rows;r++)for(let k=-1;k<=cols;k++){
+      const bx=(k+(r%2)*.5)*s/cols,v=noise(r*17+k,561),w=noise(r*5+k,562);
+      c.fillStyle=`rgb(${150+v*55|0},${70+v*30+w*10|0},${44+v*18|0})`;c.fillRect(bx+1.5,r*rh+1.5,s/cols-3,rh-3);
+      if(w>.8){c.fillStyle="rgba(30,18,12,.45)";c.fillRect(bx+4,r*rh+3,s/cols*.4,rh-6);} // burnt or chipped brick
     }
-    c.fillStyle="rgba(60,50,40,.35)";for(let r=1;r<rows;r++)c.fillRect(0,r*rh-1,s,2);
-    for(let i=0;i<14;i++){const g=c.createRadialGradient(noise(i,552)*s,s,0,noise(i,552)*s,s,30+noise(i,553)*70);g.addColorStop(0,"rgba(40,46,34,.55)");g.addColorStop(1,"rgba(40,46,34,0)");c.fillStyle=g;c.fillRect(0,0,s,s);}
-    for(let i=0;i<9;i++){c.fillStyle="rgba(150,70,50,.35)";const w=10+noise(i,554)*30;c.fillRect(noise(i,555)*s,noise(i,556)*s*.7,w,w*.5);} // whitewash flaked to brick
+    for(let i=0;i<10;i++){const g=c.createRadialGradient(noise(i,563)*s,s,0,noise(i,563)*s,s,40+noise(i,564)*80);g.addColorStop(0,"rgba(30,40,24,.6)");g.addColorStop(1,"rgba(30,40,24,0)");c.fillStyle=g;c.fillRect(0,0,s,s);} // moss and damp from the ground up
   });
+  provinceFx.brick.diffuseColor=B.Color3.FromHexString("#e8d8cc");provinceFx.brick.emissiveColor=B.Color3.FromHexString("#1a0c08");
+  provinceFx.laterite=mat("laterite","#ffffff","#140a06");
+  const paintLaterite=(c,s)=>{
+    c.fillStyle="#3a2418";c.fillRect(0,0,s,s);
+    const rows=4,cols=3,rh=s/rows;
+    for(let r=0;r<rows;r++)for(let k=-1;k<=cols;k++){
+      const bx=(k+(r%2)*.5)*s/cols,v=noise(r*11+k,571);
+      c.fillStyle=`rgb(${120+v*40|0},${62+v*22|0},${38+v*14|0})`;c.fillRect(bx+3,r*rh+3,s/cols-6,rh-6);
+    }
+    for(let i=0;i<520;i++){c.fillStyle=i%3?"rgba(40,20,12,.55)":"rgba(190,120,70,.35)";c.beginPath();c.arc(noise(i,572)*s,noise(i,573)*s,1+noise(i,574)*3.2,0,6.28);c.fill();} // pitted laterite
+  };
+  provinceFx.laterite.diffuseTexture=paintTexture("laterite",256,paintLaterite);
+  // Wall-walk paving tiled to the deck's length (one texture per direction).
+  const deckMats={};
+  provinceFx.deck=(timber,along,len)=>{
+    const key=(timber?"plank":"laterite")+(along?"x":"z")+Math.round(len);
+    if(!deckMats[key]){
+      const m=mat("wall walk "+key,"#ffffff",timber?"#0c0806":"#140a06"),reps=Math.max(1,Math.round(len/(timber?2:3)));
+      m.diffuseTexture=timber?paintTexture("wall walk "+key,128,paintPlank):paintTexture("wall walk "+key,256,paintLaterite);
+      m.diffuseTexture.uScale=along?1:reps;m.diffuseTexture.vScale=along?reps:1;deckMats[key]=m; // box top faces map u along z
+    }
+    return deckMats[key];
+  };
+  provinceFx.timber=mat("stockade timber","#ffffff","#0e0906");
+  provinceFx.timber.diffuseTexture=paintTexture("stockade timber",128,(c,s)=>{
+    c.fillStyle="#5a3e2a";c.fillRect(0,0,s,s);
+    for(let i=0;i<40;i++){c.fillStyle=i%2?"rgba(30,18,10,.45)":"rgba(140,104,70,.25)";c.fillRect(noise(i,581)*s,0,1+noise(i,582)*2.5,s);}
+    for(let i=0;i<6;i++){c.fillStyle="rgba(25,14,8,.6)";c.beginPath();c.ellipse(noise(i,583)*s,noise(i,584)*s,2,5,0,0,6.28);c.fill();} // knots
+  });
+  provinceFx.plank=mat("plank deck","#ffffff","#0c0806");
+  const paintPlank=(c,s)=>{
+    c.fillStyle="#4a3424";c.fillRect(0,0,s,s);
+    for(let y=0;y<s;y+=16){c.fillStyle=`rgb(${80+noise(y,585)*30|0},${56+noise(y,586)*20|0},${38+noise(y,587)*12|0})`;c.fillRect(0,y+1,s,14);}
+  };
+  provinceFx.plank.diffuseTexture=paintTexture("plank deck",128,paintPlank);
+  provinceFx.plank.diffuseTexture.uScale=4;provinceFx.plank.diffuseTexture.vScale=4;
   const lavaMat=additiveMat("lava cracks",crackTexture("lava cracks","255,120,40","255,70,20"));
   const voidMat=additiveMat("void cracks",crackTexture("void cracks","190,140,255","140,80,255"));
   const greenPool=additiveMat("marsh light",radialTexture("marsh light",128,[[0,"rgba(150,255,120,.5)"],[.35,"rgba(110,230,120,.2)"],[1,"rgba(80,200,100,0)"]]));
@@ -1991,8 +2051,11 @@
       for(const path of map.paths)for(let i=1;i<path.length;i++){const a=path[i-1],c=path[i],len=Math.hypot(c.x-a.x,c.z-a.z);
         for(let t=9;t<len-4;t+=18){const nx=-(c.z-a.z)/len,nz=(c.x-a.x)/len,x=a.x+(c.x-a.x)*t/len+nx*3.6,z=a.z+(c.z-a.z)*t/len+nz*3.6;if(clear(x,z,1.5))flagPole(x,z,i+t);}}
       for(let i=0;i<14;i++){const side=i%2?1:-1,x=side*(48+noise(i,615)*8),z=-60+i*6.5,h=7+noise(i,616)*5;
-        cone(x,1,z,2,4.4,4,stone,8);ball(x,3.2,z,3.6,provinceFx.brick,8);cone(x,3.2+h/2,z,h,1.2,.05,provinceFx.brick,8);cone(x,3.6+h,z,1.2,.2,0,gold,6);}
-      for(let i=0;i<8;i++){const x=-36+i*10,z=-74-noise(i,617)*5,h=6+noise(i,618)*4;cone(x,h/2,z,h,4,.4,provinceFx.brick,8);cone(x,h+.6,z,1.2,.4,0,gold,6);}
+        // Ruined Ayutthaya chedi: laterite base, brick bell and a broken spire.
+        box(x,.7,z,5,1.4,5,provinceFx.laterite);cone(x,1.9,z,1,4.2,4.4,provinceFx.brick,8);ball(x,3.6,z,3.6,provinceFx.brick,8);
+        const spire=cone(x,3.6+h/2,z,h*(i%3?1:.6),1.2,i%3?.05:.5,provinceFx.brick,8);spire.rotation.z=(noise(i,619)-.5)*.12;}
+      for(let i=0;i<8;i++){const x=-36+i*10,z=-74-noise(i,617)*5,h=6+noise(i,618)*4;box(x,.6,z,4.6,1.2,4.6,provinceFx.laterite);
+        for(let k=0;k<3;k++)box(x,1.4+k*.7,z,3.8-k*.7,.7,3.8-k*.7,provinceFx.brick);cone(x,3.4+h/2,z,h,1.8,.3,provinceFx.brick,4).rotation.y=Math.PI/4;}
     }else if(map.strategic.kind==="territory"){
       // War camp: tents, cannons on carriages, stacked supplies, braziers and a palisade rim.
       scatter(9,621,(x,z,k)=>{cone(x,1.1,z,2.2,3.2,0,provinceFx.tent,4).rotation.y=Math.PI/4;cone(x,2.4,z,.5,.1,.06,darkWood,4);box(x,.6,z+1.3,.8,1.2,.04,provinceFx.banner);},4);
