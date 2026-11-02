@@ -8663,7 +8663,8 @@
     if (!skill) return;
     const seconds = Math.max(0, Math.ceil((player.classSkillReadyAt - Date.now()) / 1000));
     button.disabled = !player.alive || seconds > 0 || player.stamina < skill.stamina;
-    button.lastElementChild.textContent = seconds ? seconds + " วิ" : skill.skill;
+    button.lastElementChild.textContent = seconds ? seconds + " วิ" : skill.skill + " ⚡" + skill.stamina;
+    button.classList.toggle("no-stamina", player.stamina < skill.stamina);
     button.title = skill.skill + " · " + skill.stamina + " กำลัง";
     button.setAttribute("aria-label", button.title);
   }
@@ -8703,7 +8704,7 @@
     if(bladeRequestKey!==requestKey && room){bladeRequestKey=requestKey;bladeRequestAt=performance.now();room.send("blade_book_get",{});}
     const data=bladeBookState;if(!data){bar.hidden=true;return;}
     const ids=data.book.slots,times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
-    const key=JSON.stringify([ids,times,me.alive]);bar.hidden=false;if(key===bladeHotbarKey)return;bladeHotbarKey=key;bar.replaceChildren();
+    const key=JSON.stringify([ids,times,me.alive,affordKey(ids,data.lessons,me)]);bar.hidden=false;if(key===bladeHotbarKey)return;bladeHotbarKey=key;bar.replaceChildren();
     ids.forEach((id,index)=>{const node=id && data.lessons[id],slot=document.createElement("button");slot.type="button";slot.className="sword-hotkey";
       slot.textContent=node ? node.name+(times[index]?" "+times[index]+" วิ":"") : "ช่องว่าง";slot.disabled=!node || !me.alive || Boolean(times[index]);
       slot.onclick=()=>{
@@ -8712,7 +8713,7 @@
           if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId)castAtTarget(targetId);
           else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
         }else room.send("blade_skill",{skillId:id});
-      };bar.append(slot);
+      };if(node && !times[index])staminaCost(slot,node.stamina,me);bar.append(slot);
     });positionSwordToast();
   }
   function openBladeBook() {
@@ -8764,7 +8765,7 @@
     const data=occultBookState;
     if (!data || data.path!==me.pathId) {bar.hidden=true;return;}
     const path=me.pathId,ids=data.book.loadouts[path],times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
-    const key=JSON.stringify([path,ids,times,me.alive,me.possessionActive]);
+    const key=JSON.stringify([path,ids,times,me.alive,me.possessionActive,affordKey(ids,data.lessons,me)]);
     bar.hidden=false;if(key===occultHotbarKey)return;occultHotbarKey=key;bar.replaceChildren();
     ids.forEach((id,index)=>{
       const node=id && data.lessons[id],slot=document.createElement("button");
@@ -8781,6 +8782,7 @@
           chooseOccultAlly(id,node.name);
         } else room.send("occult_skill",{skillId:id});
       };
+      if(node && !times[index])staminaCost(slot,node.stamina,me);
       bar.append(slot);
     });
     positionSwordToast();
@@ -8863,7 +8865,8 @@
     let cooldowns={}; try { cooldowns=JSON.parse(me.muayData); } catch { return; }
     const ids=data.book.slots, timing=ids.map(id=>id ? Math.max(0,Math.ceil(((cooldowns[id]||0)-Date.now())/1000)) : 0);
     const ready=performance.now()<muayCounterUntil, holding=Boolean(muayGrabTarget && performance.now()<muayGrabUntil), followupReady=Boolean(muayFollowupSkill && performance.now()<muayFollowupUntil), key=JSON.stringify([ids,timing,ready,holding,followupReady,muayFollowupSkill,me.alive,me.equippedWeaponId]);
-    bar.hidden=false; if(key===muayHotbarKey)return; muayHotbarKey=key; bar.replaceChildren();
+    const muayKey=key+affordKey(ids,data.catalog.skills,me);
+    bar.hidden=false; if(muayKey===muayHotbarKey)return; muayHotbarKey=muayKey; bar.replaceChildren();
     ids.forEach((id,index)=>{
       const button=document.createElement("button"); button.type="button"; button.className="sword-hotkey";
       const node=id && data.catalog.skills[id], counter=node?.effect==="counter" || node?.effect==="counter_sidestep";
@@ -8881,6 +8884,7 @@
         if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId) castAtTarget(targetId);
         else toast(node.name+" · แตะมอนสเตอร์หรือผู้เล่นเพื่อใช้วิชา");
       };
+      if(node && !throwing && !timing[index])staminaCost(button,node.stamina,me);
       bar.append(button);
     });
     positionSwordToast();
@@ -8962,6 +8966,16 @@
     if (targetId) castAtTarget(targetId);
     else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
   }
+  // Stamina cost on a skill button; greyed out (and disabled) while there is not enough.
+  function staminaCost(button, cost, me) {
+    if (!button || !(cost > 0)) return;
+    const short = (Number(me?.stamina) || 0) < cost;
+    const tag = document.createElement("small"); tag.className = "stamina-cost"; tag.textContent = "⚡" + cost;
+    button.append(tag);
+    button.classList.toggle("no-stamina", short);
+    if (short) { button.disabled = true; button.title = "กำลังไม่พอ · ต้องใช้ " + cost; }
+  }
+  const affordKey = (ids, table, me) => ids.map(id => id && table[id]?.stamina > (Number(me?.stamina) || 0) ? 1 : 0).join("");
   function syncSwordHotbar() {
     const bar=$("swordHotbar"), data=swordData();
     if (!data || data.me.pathId!=="phutthaisawan") {
@@ -8972,7 +8986,7 @@
     const {me,tree,catalog}=data, slots=tree.loadouts?.[tree.school] || [null,null,null];
     bar.hidden=false;
     const timing=slots.map(id=>id ? Math.max(0,Math.ceil(((tree.cooldowns[id]||0)-Date.now())/1000)) : 0);
-    const key=JSON.stringify([slots,timing,me.alive,me.equippedWeaponId]);
+    const key=JSON.stringify([slots,timing,me.alive,me.equippedWeaponId,affordKey(slots,catalog.nodes,me)]);
     if(key===swordHotbarKey)return;
     swordHotbarKey=key;
     bar.replaceChildren();
@@ -8983,6 +8997,7 @@
       button.disabled=!node || !me.alive || Boolean(timing[slot]);
       button.setAttribute("aria-label",node ? "ช่อง "+(slot+1)+" "+node.name : "ช่องวิชาว่าง "+(slot+1));
       if(node)button.onclick=()=>useSwordSkill(id);
+      if(node && !timing[slot])staminaCost(button,node.stamina,me);
       bar.append(button);
     });
     positionSwordToast();
@@ -9191,6 +9206,7 @@
       $("statValue-" + key).textContent = String(num(v));
       const bits = [];
       if (key === "atk" && melee) bits.push("+" + melee + " อาวุธประชิด");
+      if (key === "stamina") bits.push("ใช้กับแดชและวิชา · ฟื้น 4/วิ (สู้อยู่ 2/วิ)");
       if (poss && ["atk", "def", "magicAtk", "magicDef"].includes(key)) bits.push("+20% เข้าสิง");
       $("statBonus-" + key).textContent = bits.join(" · ");
     }
@@ -9753,7 +9769,7 @@
       if(id===localId || player.persistent!==true || (guildState?.members||[]).some(m=>m.publicId && m.publicId===player.characterId))return;
       candidates.push({id,name:String(player.characterName || "ผู้เล่น")});
     });
-    const key=JSON.stringify({ready,roles,guildState,guildInvitation,candidates});
+    const key=JSON.stringify({ready,roles,guildState,guildInvitation,candidates,owners:territoryState?.owners});
     if(guildRenderKey===key)return;
     guildRenderKey=key;
     $("guildStatus").textContent=!ready?"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว":guildState?guildState.name+" · สมาชิก "+guildState.members.length+" / 30":"ยังไม่มีกิลด์";
@@ -9762,16 +9778,40 @@
     $("guildInvitationBox").hidden=!guildInvitation || !!guildState;
     if(guildInvitation){$("guildInviteName").textContent=guildInvitation.guildName;$("guildInviterName").textContent=guildInvitation.fromName;}
     $("guildAccept").disabled=!ready;$("guildDecline").disabled=!ready;
+    if(guildState){
+      // Seal, counts, own rank.
+      const members=guildState.members,online=members.filter(m=>m.online).length,ownRank=own?.id===guildState.leaderId?"commander":own?.rank||"member";
+      $("gdSeal").textContent=Array.from(guildState.name)[0] || "ก";
+      $("gdName").textContent=guildState.name;
+      $("gdCounts").textContent="สมาชิก "+members.length+" / 30 · ออนไลน์ "+online;
+      $("gdRank").textContent="ตำแหน่งของคุณ · "+(guildRankLabels[ownRank] || "สมาชิก");$("gdRank").dataset.rank=ownRank;
+      // Forts: which strategic sites this guild holds, and who holds the rest.
+      const owners=territoryState?.owners||{},sites=Object.keys(owners);
+      $("gdForts").innerHTML=sites.length?sites.map(site=>{const mine=owners[site]===guildState.name,name=worldDefinitions?.[site]?.name||site;
+        return '<div class="gd-fort'+(mine?' mine':'')+'"><i>'+(mine?'⚑':'⚐')+'</i><div><strong></strong><small></small></div></div>';}).join(""):'<p class="note">ยังไม่มีข้อมูลด่าน · เข้าใกล้ด่านสงครามเพื่ออัปเดต</p>';
+      [...$("gdForts").querySelectorAll(".gd-fort")].forEach((el,i)=>{const site=sites[i],mine=owners[site]===guildState.name;
+        el.querySelector("strong").textContent=worldDefinitions?.[site]?.name||site;el.querySelector("small").textContent=mine?"กิลด์เราครองอยู่":owners[site]?"ครองโดย "+owners[site]:"เป็นกลาง";});
+      // Squads: six squads of up to five, plus the unassigned.
+      const squads=[1,2,3,4,5,6].map(n=>members.filter(m=>m.squad===n).length),free=members.filter(m=>!m.squad).length;
+      $("gdSquads").innerHTML=squads.map((n,i)=>'<span class="gd-squad'+(n?' used':'')+'">หน่วย '+(i+1)+'<b>'+n+'/5</b></span>').join("")+'<span class="gd-squad free">ยังไม่เข้าหน่วย<b>'+free+'</b></span>';
+    }
     const list=$("guildMembers");
     const expanded=new Set([...list.querySelectorAll("details[open]")].map(el=>el.dataset.memberId));
     list.replaceChildren();
-    for(const member of guildState?.members||[]){
+    const rankOrder={commander:0,officer:1,squad_leader:2,member:3};
+    const sorted=[...(guildState?.members||[])].sort((a,b)=>{const ra=a.id===guildState.leaderId?"commander":a.rank||"member",rb=b.id===guildState.leaderId?"commander":b.rank||"member";
+      return (rankOrder[ra]-rankOrder[rb]) || (Number(b.online)-Number(a.online)) || String(a.name).localeCompare(String(b.name),"th");});
+    for(const member of sorted){
       const rank=member.id===guildState.leaderId?"commander":member.rank || "member";
-      const row=document.createElement("div");row.className="guild-member";
+      const row=document.createElement("div");row.className="guild-member gd-member"+(member.online?" online":"");row.dataset.rank=rank;
       const info=document.createElement("div"),name=document.createElement("strong"),status=document.createElement("small");
       name.textContent=member.name+(member.id===guildState.ownId?" · คุณ":"");
       const labels=[guildRankLabels[rank] || "สมาชิก",member.squad?"หน่วย "+member.squad:"ยังไม่เข้าหน่วย",guildSpecialtyLabels[member.specialty] || "ทั่วไป",member.online?"ออนไลน์":"ออฟไลน์"];
-      status.textContent=labels.join(" · ");info.append(name,status);row.append(info);
+      // Chips instead of one long line: rank, squad, role (online shown by the dot).
+      status.className="gd-chips";
+      for(const [text,cls] of [[labels[0],"rank"],[labels[1],"squad"],[labels[2],"role"]]){const chip=document.createElement("span");chip.className="gd-chip "+cls;chip.textContent=text;status.append(chip);}
+      const dot=document.createElement("i");dot.className="gd-dot";dot.title=labels[3];
+      row.append(dot);info.append(name,status);row.append(info);
       const canOrganize=roles && (commander || (officer && rank!=="commander" && rank!=="officer"));
       const canManage=commander && member.id!==guildState.ownId;
       if(canOrganize || canManage){
@@ -9820,7 +9860,7 @@
   function openGuild(){
     guildRenderKey="";guildUnread=false;updatePartyBadge();
     openDrawer("guild","กิลด์",
-      '<button class="secondary" id="backToParty" type="button">← ปาร์ตี้</button><div class="economy-balance" id="guildStatus" role="status"></div><div id="guildInvitationBox" class="party-invitation" hidden><strong><span id="guildInviterName"></span> ชวนเข้ากิลด์ <span id="guildInviteName"></span></strong><div class="party-actions"><button id="guildAccept" type="button">เข้าร่วม</button><button id="guildDecline" type="button">ปฏิเสธ</button></div><p class="note">คำเชิญมีอายุ 60 วินาที</p></div><div id="guildCreateArea" hidden><label class="field" for="guildName">ชื่อกิลด์ 2–24 ตัวอักษร</label><input id="guildName" maxlength="48" autocomplete="off"><button class="primary" id="guildCreate" type="button">สร้างกิลด์</button></div><div id="guildMemberArea" hidden><p class="note" id="guildRolesNote" hidden>ผู้บัญชาการแต่งตั้งนายทหารและหัวหน้าหน่วย · นายทหารช่วยจัดหน่วยและเชิญสมาชิก · หน่วยละไม่เกิน 5 คน</p><h3>สมาชิกกิลด์</h3><div id="guildMembers"></div><div id="guildInviteArea" hidden><label class="field" for="guildTarget">เชิญผู้เล่นในห้อง</label><select id="guildTarget"></select><button class="primary" id="guildInvite" type="button">ส่งคำเชิญ</button></div><button class="secondary" id="guildLeave" type="button">ออกจากกิลด์</button><p class="note">หัวหน้าที่มีสมาชิกต้องส่งต่อตำแหน่งก่อนออก · หากเป็นสมาชิกคนสุดท้าย การออกจะยุบกิลด์</p></div>');
+      '<button class="secondary" id="backToParty" type="button">← ปาร์ตี้</button><div class="economy-balance" id="guildStatus" role="status"></div><div id="guildInvitationBox" class="party-invitation" hidden><strong><span id="guildInviterName"></span> ชวนเข้ากิลด์ <span id="guildInviteName"></span></strong><div class="party-actions"><button id="guildAccept" type="button">เข้าร่วม</button><button id="guildDecline" type="button">ปฏิเสธ</button></div><p class="note">คำเชิญมีอายุ 60 วินาที</p></div><div id="guildCreateArea" hidden><label class="field" for="guildName">ชื่อกิลด์ 2–24 ตัวอักษร</label><input id="guildName" maxlength="48" autocomplete="off"><button class="primary" id="guildCreate" type="button">สร้างกิลด์</button></div><div id="guildMemberArea" hidden><div class="gd-hero"><div class="gd-seal" id="gdSeal">ก</div><div class="gd-info"><strong id="gdName"></strong><span id="gdCounts"></span><em id="gdRank"></em></div></div><h3 class="cp-h">ด่านที่ครอง</h3><div id="gdForts" class="gd-forts"></div><h3 class="cp-h">หน่วยรบ</h3><div id="gdSquads" class="gd-squads"></div><p class="note" id="guildRolesNote" hidden>ผู้บัญชาการแต่งตั้งนายทหารและหัวหน้าหน่วย · นายทหารช่วยจัดหน่วยและเชิญสมาชิก · หน่วยละไม่เกิน 5 คน</p><h3>สมาชิกกิลด์</h3><div id="guildMembers"></div><div id="guildInviteArea" hidden><label class="field" for="guildTarget">เชิญผู้เล่นในห้อง</label><select id="guildTarget"></select><button class="primary" id="guildInvite" type="button">ส่งคำเชิญ</button></div><button class="secondary" id="guildLeave" type="button">ออกจากกิลด์</button><p class="note">หัวหน้าที่มีสมาชิกต้องส่งต่อตำแหน่งก่อนออก · หากเป็นสมาชิกคนสุดท้าย การออกจะยุบกิลด์</p></div>');
     $("backToParty").onclick=openParty;
     $("guildCreate").onclick=()=>{const name=$("guildName").value.normalize("NFC").trim();if(guildReady() && name)room.send("guild_create",{name});};
     $("guildInvite").onclick=()=>{const targetId=$("guildTarget").value;if(guildReady() && targetId)room.send("guild_invite",{targetId});};

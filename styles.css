@@ -680,3 +680,42 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .cp-offline { padding: 18px 14px; border-radius: 14px; background: #0f1b1d; border: 1px solid #b18b5055; text-align: center; margin-bottom: 12px; }
 .cp-offline p { margin: 0 0 12px; color: #e0d4c3; }
 .cp-offline[hidden], .cp-tabs[hidden] { display: none; }
+/* Stamina cost on skill buttons */
+.sword-hotkey .stamina-cost { display: block; margin-top: 1px; font-size: 9px; font-weight: 700; color: #9fd4ff; letter-spacing: .2px; }
+.sword-hotkey.no-stamina { opacity: .55; filter: grayscale(.6); }
+.sword-hotkey.no-stamina .stamina-cost { color: #ff9a8a; }
+#classSkill.no-stamina .glyph { filter: grayscale(.7); opacity: .6; }
+
+/* ===== Guild panel ===== */
+.gd-hero { display: flex; align-items: center; gap: 14px; padding: 12px; margin: 6px 0 4px; border-radius: 14px; background: radial-gradient(circle at 15% 30%, #3c2a16, #14211f 70%); border: 1px solid #c49a5a66; }
+.gd-seal { flex-shrink: 0; width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; font: 800 26px/1 Georgia, serif; color: #2a1a08; background: radial-gradient(circle at 40% 35%, #ffe0a0, #c08a3a 70%); box-shadow: 0 0 0 3px #3a2a14, 0 0 0 5px #d3a75e, 0 4px 14px #000a; }
+.gd-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.gd-info strong { font-size: 18px; color: #ffe2a6; }
+.gd-info span { font-size: 12px; color: #d9cfbc; }
+.gd-info em { font-style: normal; font-size: 11px; align-self: flex-start; padding: 1px 8px; border-radius: 8px; background: #2a3a3c; color: #e8d9b8; }
+.gd-info em[data-rank="commander"] { background: #e0b864; color: #1d1408; }
+.gd-info em[data-rank="officer"] { background: #5a3a7a; color: #f0e0ff; }
+.gd-forts { display: grid; gap: 6px; }
+.gd-fort { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: #0f1b1d; border: 1px solid #b18b5040; }
+.gd-fort i { font-style: normal; font-size: 18px; color: #8b9a96; width: 22px; text-align: center; }
+.gd-fort strong { display: block; font-size: 13px; color: #f0e2c4; }
+.gd-fort small { font-size: 11px; color: #bfb39b; }
+.gd-fort.mine { border-color: #e0b86499; background: linear-gradient(90deg, #3a2a10, #0f1b1d); }
+.gd-fort.mine i { color: #f6cf7c; }
+.gd-squads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.gd-squad { display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 9px; background: #0f1b1d; border: 1px solid #b18b5033; font-size: 10.5px; color: #bfb39b; }
+.gd-squad b { font-size: 13px; color: #8b9a96; }
+.gd-squad.used b { color: #ffe2a6; }
+.gd-squad.free { grid-column: span 2; }
+.gd-member { display: flex; align-items: flex-start; gap: 10px; }
+.gd-dot { flex-shrink: 0; width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: #5a6462; }
+.gd-member.online .gd-dot { background: #5fe0a0; box-shadow: 0 0 6px #5fe0a0aa; }
+.gd-member > div:first-of-type { flex: 1; min-width: 0; }
+.gd-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.gd-chip { font-size: 10px; padding: 1px 7px; border-radius: 8px; background: #1c2a2d; border: 1px solid #b18b5033; color: #d9cfbc; }
+.gd-member[data-rank="commander"] .gd-chip.rank { background: #e0b864; color: #1d1408; border-color: transparent; }
+.gd-member[data-rank="officer"] .gd-chip.rank { background: #5a3a7a; color: #f0e0ff; border-color: transparent; }
+.gd-member[data-rank="squad_leader"] .gd-chip.rank { background: #1f4f6a; color: #d8f0ff; border-color: transparent; }
+#guildMembers .gd-member { display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-start; column-gap: 10px; }
+#guildMembers .gd-member > div:first-of-type { flex: 1 1 0; }
+#guildMembers .gd-member > details { flex: 1 0 100%; padding-left: 19px; }
