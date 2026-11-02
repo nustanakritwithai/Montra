@@ -2176,12 +2176,12 @@
       }else mesh.setEnabled(monster.mapId===activeMapId&&monster.alive);
       if(mesh.metadata.warning){
         const charging=monster.aiState==="windup";
-        if(charging && !mesh.metadata.warning.isEnabled(false) && monster.targetId===room?.sessionId)toast(monster.displayName+" กำลังฟาด · แตะพื้นออกจากวงส้ม");
+        if(charging && !mesh.metadata.warning.isEnabled(false) && monster.targetId===room?.sessionId)toast(monsterName(monster,id)+" กำลังฟาด · แตะพื้นออกจากวงส้ม");
         mesh.metadata.warning.setEnabled(charging);
       }
       if(!ghost){mesh.position.set(Number(monster.x),monster.tier==="boss"?2.25:monster.tier==="elite"?1.74:.88,Number(monster.z));mesh.rotation.y=Number(monster.facing)||0;}
       if(id===selectedForestTarget&&monster.mapId===activeMapId){updateMonsterUI(monster.hp,monster.maxHp,monster.alive);
-        ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monster.displayName+" · Lv "+monster.level;}
+        ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monsterName(monster,id)+" · Lv "+monster.level;}
     });
     for(const [id,mesh] of forestMonsters)if(!seen.has(id)){mesh.metadata?.ghost?.rig?.metadata?.skeletons?.forEach(s=>s.dispose());mesh.dispose();forestMonsters.delete(id);}
     const me=ownServerCharacter(),map=worldDefinitions?.[activeMapId];
@@ -2201,7 +2201,7 @@
     selectedForestTarget=id;selectedPkTargetId=null;syncPKHud();marker.setEnabled(false);
     if(targetedSkill) castAtTarget(id);
     else try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }
-    updateMonsterUI(target.hp,target.maxHp,target.alive);ui.monsterHint.textContent=target.displayName+" · Lv "+target.level;
+    updateMonsterUI(target.hp,target.maxHp,target.alive);ui.monsterHint.textContent=monsterName(target,id)+" · Lv "+target.level;
   }
 
   function switchWorld(mapId) {
@@ -3323,7 +3323,10 @@
         const leg = part(B.MeshBuilder.CreateCylinder("elephant leg", { height: 1.65, diameterTop: .45, diameterBottom: .4, tessellation: 10 }, scene), hip); leg.material = hideMat; leg.position.y = -.82;
         const foot = part(B.MeshBuilder.CreateCylinder("elephant foot", { height: .14, diameter: .48, tessellation: 10 }, scene), hip); foot.material = hideMat; foot.position.y = -1.6; return hip; });
       // Tattered caparison and a broken howdah.
-      const cloak = part(lathe("caparison", [[0, .95], [.75, .9], [1.05, .55], [1.1, .1], [1.05, -.1]], cloth.danceRed, 18)); cloak.rotation.x = Math.PI / 2; cloak.scaling.set(1, 1.25, 1); cloak.position.y = 2.15; cloak.scaling.z = .95;
+      // Caparison: a curved cloth draped over the back, hanging down both flanks.
+      const cloak = part(B.MeshBuilder.CreateCylinder("caparison", { height: 2.1, diameter: 2.05, arc: .55, tessellation: 24, enclose: false, sideOrientation: B.Mesh.DOUBLESIDE }, scene));
+      cloak.material = cloth.danceRed; cloak.rotation.set(Math.PI / 2, 0, Math.PI / 2 + Math.PI * .55 / 2 * 0 - Math.PI * .275 + Math.PI / 2); cloak.position.y = 2.15;
+      const fringe = part(B.MeshBuilder.CreateTorus("caparison fringe", { diameter: 2.2, thickness: .05, tessellation: 24 }, scene)); fringe.material = gold; fringe.position.y = 1.55; fringe.scaling.set(.75, 1, 1.15);
       const howdah = part(B.MeshBuilder.CreateBox("howdah", { width: .9, height: .4, depth: .9 }, scene)); howdah.material = gm.beam; howdah.position.y = 3.05;
       for (const [x, z] of [[-.4, -.4], [.4, -.4], [-.4, .4], [.4, .4]]) part(B.MeshBuilder.CreateCylinder("howdah post", { height: .7, diameter: .05, tessellation: 5 }, scene)).position.set(x, 3.5, z);
       const tail = new B.TransformNode("tail", scene); tail.parent = body; tail.position.set(0, 2.3, 1.3); part(tube("tail", [[0, 0, 0], [0, -.4, .1], [0, -.8, .05]], .04, .015, hideMat, 5), tail);
@@ -4406,7 +4409,7 @@
       return k => {
         const { t, move, hurt } = k, T = ghostTimeline(k.g, k.now);
         const flap = Math.sin(t * (6 + move * 4 + T.wind * 6));
-        holder.position.y = .9 + Math.sin(t * 2) * .15 + T.wind * .5 - T.hit * .5 - ease(T.die) * 1.0 - (1 - ease(T.rise)) * .8;
+        holder.position.y = 1.35 + Math.sin(t * 2) * .15 + T.wind * .5 - T.hit * .7 - ease(T.die) * 1.4 - (1 - ease(T.rise)) * 1.2;
         const p = clonePose(base);
         p.LeftArm[2] = -.1 + flap * .55; p.RightArm[2] = .1 - flap * .55;
         p.LeftUpLeg[0] += Math.sin(t * 2.5) * .1; p.RightUpLeg[0] += Math.sin(t * 2.5 + 1) * .1;
@@ -4831,6 +4834,15 @@
     return update;
   }
   // Which rig each server monster uses (names come from the server roster).
+  // The HUD names each ghost after what it looks like; the server's roster
+  // name is kept for designs that already match it.
+  const GHOST_NAMES = { nangmai: "นางไม้", krasue: "ผีกระสือ", krahang: "ผีกระหัง", preta: "ผีเปรต", phiphong: "ผีโพง", kongkoi: "ผีกองกอย", takhian: "ผีนางตะเคียน",
+    maenak: "ผีแม่นาค", phipop: "ผีปอบ", dancer: "ผีนางรำ", headless: "ผีหัวขาด", phitakhon: "ผีตาโขน", unaware: "ผีตายโหง", childghost: "ผีเด็ก", elephant: "ผีช้าง" };
+  function monsterName(monster, id) {
+    if (!monster || monster.tier === "boss") return monster?.displayName || "";
+    const kind = forestMonsters.get(id)?.metadata?.ghost?.design?.kind || ghostDesign(monster, String(id || monster.id || "")).kind;
+    return GHOST_NAMES[kind] || monster.displayName;
+  }
   // Atlas regions with ghost designs, per court (atlas_<map>_<court>_<n>).
   const ATLAS_GHOSTS = {
     drowned_marsh: [{ kind: "drowned", fallback: "corpse" }, { kind: "boatman", fallback: "corpse" }, { kind: "waterspirit", fallback: "longhair" }],
@@ -4849,7 +4861,7 @@
     if (atlas) {
       const parts = String(id).split("_"), court = Math.max(1, Math.min(3, Number(parts.at(-2)) || 1)) - 1, spawn = Math.max(1, Number(parts.at(-1)) || 1) - 1;
       const entry = atlas[court], d = Array.isArray(entry) ? entry[spawn % entry.length] : entry;
-      return { ...d, scale: { preta: 1.45, childghost: .62, elephant: 1.1, phipop: .95 }[d.kind] ?? (d.lead ? 1.2 : 1 + court * .04), eye: gm.eyeRed };
+      return { ...d, scale: { preta: 1.45, childghost: .62, elephant: 1.1, phipop: .95, krahang: 1.2 }[d.kind] ?? (d.lead ? 1.2 : 1 + court * .04), eye: gm.eyeRed };
     }
     if (monster.tier === "elite" && monster.mapId === "forbidden_forest")
       return { kind: "statue", scale: 1.55, eye: gm.eyeAmber, cloth: gm.lacquer, spire: 1, elite: true };
@@ -4926,7 +4938,17 @@
       } else g.rig.rotation.z = 0;
       g.rig.scaling.setAll(Math.max(.01, s)); g.rig.position.y = -g.tall / 2 + sink;
     };
-    for (const mesh of forestMonsters.values()) tick(mesh);
+    // Ghosts well beyond the farthest camera view skip their skeleton update
+    // (rendering is already frustum-culled); dying ghosts always finish.
+    const ct = camera.target, reach = camera.radius * .75 + 20;
+    for (const mesh of forestMonsters.values()) {
+      const g = mesh.metadata?.ghost;
+      if (g && !g.deathAt && Math.hypot(mesh.position.x - ct.x, mesh.position.z - ct.z) > reach) {
+        if (g.tx !== undefined) { mesh.position.x = g.tx; mesh.position.z = g.tz; }
+        continue;
+      }
+      tick(mesh);
+    }
     if (villageGhost) {
       villageGhost.position.set(enemy.position.x, enemy.position.y, enemy.position.z); villageGhost.rotation.y = enemy.rotation.y;
       villageGhost.setEnabled(enemy.isEnabled() && activeMapId === "ritual_village"); tick(villageGhost);
@@ -5822,7 +5844,7 @@
           if (forestTarget.mapId !== activeMapId) return;
           syncForestMonsters(joined.state);
           if (talisman) showTalisman(forestMonsters.get(hit.targetId));
-          if (hit.attackerId === localId) toast((talisman ? "แปะยันต์ใส่" : "โจมตี ") + forestTarget.displayName + " -" + hit.damage + " HP");
+          if (hit.attackerId === localId) toast((talisman ? "แปะยันต์ใส่" : "โจมตี ") + monsterName(forestTarget, hit.targetId) + " -" + hit.damage + " HP");
           return;
         }
         if(activeMapId !== "ritual_village" || hit?.targetId !== MONSTER_ID)return;
