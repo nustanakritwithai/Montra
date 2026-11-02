@@ -30,6 +30,7 @@ import {
 } from "./MonsterRRT.js";
 import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.js";
 import type { CharacterSnapshot } from "./CharacterStore.js";
+import { isAtlasMap } from "./WorldAtlas.js";
 import { TEMPLE_ID } from "./TempleMap.js";
 import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
 import { checkWarp } from "./WarpRules.js";
@@ -83,6 +84,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastAttackMs = new Map<string, number>();
   private lastCombatMs = new Map<string, number>();
   private lastWarpMs = new Map<string, number>();
+  private atlasClients = new Set<string>();
   private templeClients = new Set<string>();
   private pendingWarps = new Set<string>();
   private statAllocations = new Map<string, Allocations>();
@@ -163,9 +165,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const current = this.state.players.get(id), snapshot = this.captureCharacterSnapshot(id);
         if (!current || !snapshot) return;
         const amount = current.level >= PROGRESSION.maxLevel ? 0 : (sharedAmount ?? monsterExperience(current.level, monsterLevel, tier));
-        if (amount <= 0) return;
+        if (amount <= 0 && tier !== "boss") return;
         const next = addExperience(current.level, current.experience, amount);
-        const prize = tier === "elite" && snapshot.inventory ? grantRewardPotion(snapshot.inventory) : null;
+        const dropsPotion = tier === "elite" || tier === "boss";
+        const prize = dropsPotion && snapshot.inventory ? grantRewardPotion(snapshot.inventory) : null;
         await characterStore.save({ ...snapshot, ...next, inventory:prize ?? snapshot.inventory, updatedAt: new Date().toISOString() });
         if (prize) this.inventories.set(id,prize);
         current.level = next.level; current.experience = next.experience;
@@ -174,7 +177,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           const recipient = this.clients.find(client => client.sessionId === id);
           if (prize) recipient?.send("inventory_state",prize);
           recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,
-            ...(tier === "elite" ? {elitePotion:prize ? "granted" : "bag_full"} : {})});
+            ...(tier === "boss" ? {riftVictory:true} : {}),
+            ...(dropsPotion ? {elitePotion:prize ? "granted" : "bag_full"} : {})});
         } catch { /* The committed reward remains available on reconnect. */ }
       } catch (error) {
         console.error("MONTRA EXP save failed:", id, error);
@@ -405,6 +409,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const snapshot = this.captureCharacterSnapshot(id);
       if (!snapshot) return this.reject(client, "character_not_persistent");
       const portal = result.portal;
+      if(isAtlasMap(portal.targetMapId) && !this.atlasClients.has(id))return this.reject(client,"world_client_update_required");
       if(portal.targetMapId===TEMPLE_ID && !this.templeClients.has(id))return this.reject(client,"world_client_update_required");
       const destination = { ...snapshot, mapId: portal.targetMapId, ...portal.targetSpawn,
         updatedAt: new Date().toISOString() };
@@ -567,6 +572,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.climbs.has(id)) return this.reject(client, "climbing");
       if (this.activeDashes.has(id)) return this.reject(client, "dashing");
       if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
+      if (!player.flying && getWorldMap(player.mapId)?.region?.noFlight) return this.reject(client, "flight_forbidden");
       if (!this.gates.get(id)?.flight.consume(this.simulatedMs)) {
         return this.reject(client, "flight_rate_limited");
       }
@@ -912,7 +918,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // Guard's combat tether prevents hits across the map even if another
       // client sends a valid but distant target ID.
       if (distance3d(owner, target) > RULES.summonEngageDistance) continue;
-      if(owner.mapId===TEMPLE_ID && !isWorldSegmentClear(owner.mapId,owner,target))continue;
+      if(getWorldMap(owner.mapId)?.walls?.length && !isWorldSegmentClear(owner.mapId,owner,target))continue;
       return { targetId, target };
     }
     return null;
@@ -1639,6 +1645,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const allocations = saved?.statAllocations ?? emptyAllocations();
       const initialStats = calculateStats(saved?.level ?? 1, allocations);
       const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
+      const atlasReady=(options as {atlasVersion?:unknown}|undefined)?.atlasVersion===1;
+      if(isAtlasMap(mapId) && !atlasReady)throw new Error("world_client_update_required");
       const templeReady=(options as {templeVersion?:unknown}|undefined)?.templeVersion===1;
       if(mapId===TEMPLE_ID && !templeReady)throw new Error("world_client_update_required");
       const map = getWorldMap(mapId);
@@ -1670,6 +1678,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.statAllocations.set(client.sessionId, allocations);
       this.applyStats(player, allocations);
       this.state.players.set(client.sessionId, player);
+      if(atlasReady)this.atlasClients.add(client.sessionId);
       if(templeReady)this.templeClients.add(client.sessionId);
       if (characterId && accountId && token) {
         if (!saved?.inventory) throw new Error("inventory_migration_missing");
@@ -1705,6 +1714,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
     this.templeClients.delete(id);
+    this.atlasClients.delete(id);
     this.leaveParty(id);
     for (const trade of this.trades.values()) if (trade.a===id || trade.b===id) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }
     const accountId = this.activeGuestAccounts.get(id);

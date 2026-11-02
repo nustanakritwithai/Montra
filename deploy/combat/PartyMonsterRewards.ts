@@ -21,8 +21,9 @@ export function partyMonsterShares(winnerLevel:number, monster:RewardMonster, me
     if(!member.sessionId || unique.has(member.sessionId) || ![member.x,member.y,member.z].every(Number.isFinite) || !Number.isSafeInteger(member.level) || member.level<1 || member.level>1000) throw new Error("invalid_party_member");
     unique.add(member.sessionId);
   }
-  const eligible=members.filter(member=>member.alive && member.persistent && !member.inTransit && member.level<PROGRESSION.maxLevel && member.mapId===monster.mapId && Math.hypot(member.x-monster.x,member.y-monster.y,member.z-monster.z)<=radius);
+  const eligible=members.filter(member=>member.alive && member.persistent && !member.inTransit && (monster.tier==="boss" || member.level<PROGRESSION.maxLevel) && member.mapId===monster.mapId && Math.hypot(member.x-monster.x,member.y-monster.y,member.z-monster.z)<=radius);
   if(!eligible.length)return [];
-  const amount=Math.floor(monsterReward(winnerLevel,monster.level,monster.tier,PROGRESSION.monsterBaseExperience)/eligible.length);
-  return amount>0 ? eligible.map(member=>({sessionId:member.sessionId,amount})) : [];
+  const earning=eligible.filter(member=>member.level<PROGRESSION.maxLevel).length;
+  const amount=earning ? Math.floor(monsterReward(winnerLevel,monster.level,monster.tier,PROGRESSION.monsterBaseExperience)/earning) : 0;
+  return eligible.filter(member=>amount>0 || monster.tier==="boss").map(member=>({sessionId:member.sessionId,amount:member.level<PROGRESSION.maxLevel?amount:0}));
 }
