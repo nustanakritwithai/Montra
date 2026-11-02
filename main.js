@@ -495,91 +495,242 @@
     m.disableLighting = true; m.backFaceCulling = false; m.alphaMode = B.Engine.ALPHA_ADD;
     return m;
   }
-  // ---- Far-camera combat VFX: hit starbursts, ground shock rings, wind-up telegraphs, target ring ----
-  // Sized in world units so they still read at the default radius-85 view; pooled and additive.
-  let worldFxMats = null; const worldFx = [], worldFxPool = [];
-  function worldFxMaterials() {
-    if (worldFxMats) return worldFxMats;
-    const star = (name, core, edge) => paintTexture(name, 128, (c, s) => {
-      c.clearRect(0, 0, s, s); const h = s / 2;
+  // ---- World-space VFX for the far camera: hits, telegraphs, target ring and every skill in the game ----
+  // Sized in world units so they read at the default radius-85 view. Pooled additive planes; textures are
+  // painted once per (shape, colour) and shared.
+  const FX_COL = {
+    gold: [255, 206, 90], red: [255, 70, 50], cyan: [100, 225, 255], violet: [190, 120, 255], green: [110, 255, 140],
+    white: [235, 242, 255], orange: [255, 140, 50], pink: [255, 150, 200], blood: [220, 30, 60], jade: [90, 255, 210],
+  };
+  const fxMatCache = new Map();
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+  const FX_SHAPES = {
+    star(c, s, col) { const h = s / 2;
       const g = c.createRadialGradient(h, h, 0, h, h, h * .55);
-      g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(.35, core); g.addColorStop(1, "rgba(0,0,0,0)");
-      c.fillStyle = g; c.fillRect(0, 0, s, s);
-      c.translate(h, h); c.fillStyle = edge;
-      for (let i = 0; i < 8; i++) { const L = i % 2 ? h * .62 : h * .98, W = i % 2 ? 4 : 6;
-        c.beginPath(); c.moveTo(0, -W); c.lineTo(L, 0); c.lineTo(0, W); c.closePath(); c.fill(); c.rotate(Math.PI / 4); }
-      c.setTransform(1, 0, 0, 1, 0, 0);
-    });
-    const ring = (name, color, width, dashes = 0) => paintTexture(name, 256, (c, s) => {
-      c.clearRect(0, 0, s, s); const h = s / 2; c.strokeStyle = color; c.lineWidth = width;
-      c.shadowColor = color; c.shadowBlur = 14;
-      if (dashes) { for (let i = 0; i < dashes; i++) { const a = i / dashes * Math.PI * 2; c.beginPath(); c.arc(h, h, h - width - 10, a, a + Math.PI * 2 / dashes * .6); c.stroke(); } }
-      else { c.beginPath(); c.arc(h, h, h - width - 10, 0, Math.PI * 2); c.stroke(); }
-    });
-    const disc = (name, color) => radialTexture(name, 128, [[0, "rgba(0,0,0,0)"], [.55, "rgba(0,0,0,0)"], [.8, color], [.96, color], [1, "rgba(0,0,0,0)"]]);
-    worldFxMats = {
-      starGold: additiveMat("fxStarGold", star("fxStarGoldT", "rgba(255,196,64,.95)", "rgba(255,232,150,.95)")),
-      starRed: additiveMat("fxStarRed", star("fxStarRedT", "rgba(255,70,50,.95)", "rgba(255,150,120,.9)")),
-      starCyan: additiveMat("fxStarCyan", star("fxStarCyanT", "rgba(90,220,255,.95)", "rgba(190,245,255,.9)")),
-      shockGold: additiveMat("fxShockGold", ring("fxShockGoldT", "rgba(255,210,110,1)", 10)),
-      shockRed: additiveMat("fxShockRed", ring("fxShockRedT", "rgba(255,80,60,1)", 10)),
-      warn: additiveMat("fxWarn", disc("fxWarnT", "rgba(255,40,30,.85)")),
-      warnEdge: additiveMat("fxWarnEdge", ring("fxWarnEdgeT", "rgba(255,70,50,1)", 9, 12)),
-      target: additiveMat("fxTarget", ring("fxTargetT", "rgba(255,206,90,1)", 9, 6)),
-    };
-    for (const [k, m] of Object.entries(worldFxMats)) { m.fogEnabled = false; if (k.startsWith("star")) { m.disableDepthWrite = true; m.depthFunction = B.Engine.ALWAYS; } else m.zOffset = -2; }
-    return worldFxMats;
+      g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(.35, rgba(col, .95)); g.addColorStop(1, rgba(col, 0));
+      c.fillStyle = g; c.fillRect(0, 0, s, s); c.translate(h, h); c.fillStyle = `rgba(${col.map(v => Math.min(255, v + 70)).join(",")},.95)`;
+      for (let i = 0; i < 8; i++) { const L = i % 2 ? h * .62 : h * .98, W = i % 2 ? s / 32 : s / 21;
+        c.beginPath(); c.moveTo(0, -W); c.lineTo(L, 0); c.lineTo(0, W); c.closePath(); c.fill(); c.rotate(Math.PI / 4); } },
+    ring(c, s, col) { const h = s / 2; c.strokeStyle = rgba(col, 1); c.lineWidth = s / 26; c.shadowColor = rgba(col, 1); c.shadowBlur = s / 18;
+      c.beginPath(); c.arc(h, h, h - s / 12, 0, Math.PI * 2); c.stroke(); c.lineWidth = s / 80; c.strokeStyle = "rgba(255,255,255,.9)"; c.stroke(); },
+    dash(c, s, col) { const h = s / 2, n = 12; c.strokeStyle = rgba(col, 1); c.lineWidth = s / 28; c.shadowColor = rgba(col, 1); c.shadowBlur = s / 18;
+      for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; c.beginPath(); c.arc(h, h, h - s / 12, a, a + Math.PI * 2 / n * .6); c.stroke(); } },
+    seg6(c, s, col) { const h = s / 2, n = 6; c.strokeStyle = rgba(col, 1); c.lineWidth = s / 28; c.shadowColor = rgba(col, 1); c.shadowBlur = s / 18;
+      for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; c.beginPath(); c.arc(h, h, h - s / 12, a, a + Math.PI * 2 / n * .6); c.stroke(); } },
+    disc(c, s, col) { const h = s / 2, g = c.createRadialGradient(h, h, 0, h, h, h);
+      g.addColorStop(0, rgba(col, 0)); g.addColorStop(.55, rgba(col, 0)); g.addColorStop(.8, rgba(col, .85)); g.addColorStop(.96, rgba(col, .85)); g.addColorStop(1, rgba(col, 0));
+      c.fillStyle = g; c.fillRect(0, 0, s, s); },
+    glow(c, s, col) { const h = s / 2, g = c.createRadialGradient(h, h, 0, h, h, h);
+      g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(.25, rgba(col, .9)); g.addColorStop(1, rgba(col, 0)); c.fillStyle = g; c.fillRect(0, 0, s, s); },
+    // Crescent slash: bright edge along the top arc, tapering to points at both ends.
+    arc(c, s, col) { const h = s / 2;
+      c.translate(h, s * .9);
+      for (let k = 0; k < 3; k++) { const R = s * .78 - k * s * .05, w = [s * .1, s * .05, s * .02][k];
+        c.beginPath(); c.arc(0, 0, R, -Math.PI * .86, -Math.PI * .14); c.arc(0, -w * .4, R - w, -Math.PI * .2, -Math.PI * .8, true); c.closePath();
+        c.fillStyle = k === 2 ? "rgba(255,255,255,1)" : rgba(col, k ? .95 : .55); c.shadowColor = rgba(col, 1); c.shadowBlur = s / 14; c.fill(); } },
+    // Forward thrust streak.
+    streak(c, s, col) { const g = c.createLinearGradient(0, s, 0, 0);
+      g.addColorStop(0, rgba(col, 0)); g.addColorStop(.7, rgba(col, .9)); g.addColorStop(1, "rgba(255,255,255,1)");
+      c.fillStyle = g; c.beginPath(); c.moveTo(s * .5, 0); c.lineTo(s * .62, s * .5); c.lineTo(s * .5, s); c.lineTo(s * .38, s * .5); c.closePath();
+      c.shadowColor = rgba(col, 1); c.shadowBlur = s / 16; c.fill(); },
+    // Vertical light column (cylindrical billboard).
+    beam(c, s, col) { const g = c.createLinearGradient(0, 0, s, 0);
+      g.addColorStop(0, rgba(col, 0)); g.addColorStop(.35, rgba(col, .55)); g.addColorStop(.5, "rgba(255,255,255,.95)"); g.addColorStop(.65, rgba(col, .55)); g.addColorStop(1, rgba(col, 0));
+      c.fillStyle = g; c.fillRect(0, 0, s, s); c.globalCompositeOperation = "destination-in";
+      const v = c.createLinearGradient(0, 0, 0, s); v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(.25, "rgba(0,0,0,1)"); v.addColorStop(.85, "rgba(0,0,0,1)"); v.addColorStop(1, "rgba(0,0,0,0)");
+      c.fillStyle = v; c.fillRect(0, 0, s, s); c.globalCompositeOperation = "source-over"; },
+    // Yantra seal (ยันต์): double ring, Thai syllables, square and triangle, used for casts, wai and rallies.
+    yantra(c, s, col) { const h = s / 2; c.strokeStyle = rgba(col, 1); c.fillStyle = rgba(col, 1); c.shadowColor = rgba(col, 1); c.shadowBlur = s / 30;
+      c.lineWidth = s / 64; for (const r of [.47, .37, .2]) { c.beginPath(); c.arc(h, h, s * r, 0, Math.PI * 2); c.stroke(); }
+      c.lineWidth = s / 90; c.beginPath(); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; c.lineTo(h + Math.cos(a) * s * .36, h + Math.sin(a) * s * .36); } c.closePath(); c.stroke();
+      c.beginPath(); for (let i = 0; i < 3; i++) { const a = -Math.PI / 2 + i * Math.PI * 2 / 3; c.lineTo(h + Math.cos(a) * s * .3, h + Math.sin(a) * s * .3); } c.closePath(); c.stroke();
+      c.font = `900 ${s * .06 | 0}px "Noto Sans Thai", system-ui, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle";
+      const syl = ["นะ", "โม", "พุท", "ธา", "ยะ", "มะ", "อะ", "อุ"];
+      syl.forEach((t, i) => { const a = i / syl.length * Math.PI * 2; c.save(); c.translate(h + Math.cos(a) * s * .42, h + Math.sin(a) * s * .42); c.rotate(a + Math.PI / 2); c.fillText(t, 0, 0); c.restore(); });
+      for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; c.beginPath(); c.arc(h + Math.cos(a) * s * .285, h + Math.sin(a) * s * .285, s / 110, 0, Math.PI * 2); c.fill(); }
+      c.beginPath(); c.arc(h, h, s / 34, 0, Math.PI * 2); c.fill(); },
+  };
+  function vfxMat(shape, color) {
+    const key = shape + ":" + color; let m = fxMatCache.get(key); if (m) return m;
+    const col = FX_COL[color] || FX_COL.gold, size = shape === "yantra" ? 256 : shape === "glow" ? 64 : 128;
+    const tex = paintTexture("fx " + key, size, (c, s) => { c.clearRect(0, 0, s, s); FX_SHAPES[shape](c, s, col); c.setTransform(1, 0, 0, 1, 0, 0); });
+    m = additiveMat("fx " + key, tex); m.fogEnabled = false;
+    if (shape === "star" || shape === "glow") { m.disableDepthWrite = true; m.depthFunction = B.Engine.ALWAYS; } // flashes punch through scenery
+    else { m.disableDepthWrite = true; m.zOffset = -2; }
+    fxMatCache.set(key, m); return m;
   }
-  function spawnWorldFx(mat, x, y, z, o = {}) {
-    if (worldFx.length > 40) return null;
-    const mats = worldFxMaterials();
+  const worldFx = [], worldFxPool = [], FX_MAX = 140;
+  const fxNear = (x, z, r = 48) => Math.hypot(x - camera.target.x, z - camera.target.z) < r;
+  // orient: "bill" (faces camera), "ground" (flat, spins with yaw), "flat" (flat at height, aimed by yaw), "pillar" (Y-billboard column)
+  function spawnFx(shape, color, x, y, z, o = {}) {
+    if (worldFx.length >= FX_MAX) return null;
     let m = worldFxPool.pop();
     if (!m) { m = B.MeshBuilder.CreatePlane("worldFx", { size: 1 }, scene); m.isPickable = false; }
-    m.material = mats[mat]; m.setEnabled(true); m.position.set(x, y, z);
-    m.billboardMode = o.ground ? B.Mesh.BILLBOARDMODE_NONE : B.Mesh.BILLBOARDMODE_ALL;
-    m.rotation.set(o.ground ? Math.PI / 2 : 0, 0, o.ground ? 0 : Math.random() * Math.PI);
-    worldFx.push({ m, born: performance.now() + (o.delay || 0), life: o.life || 380, s0: o.s0 ?? .4, s1: o.s1 ?? 4, a0: o.a0 ?? 1, a1: o.a1 ?? 0, spin: o.spin || 0, follow: o.follow || null, pulse: o.pulse || 0 });
-    m.scaling.setAll(.001); m.visibility = 0;
-    return worldFx[worldFx.length - 1];
+    const orient = o.orient || "bill";
+    m.material = vfxMat(shape, color); m.setEnabled(true); m.position.set(x, y, z);
+    m.billboardMode = orient === "bill" ? B.Mesh.BILLBOARDMODE_ALL : orient === "pillar" ? B.Mesh.BILLBOARDMODE_Y : B.Mesh.BILLBOARDMODE_NONE;
+    m.rotation.set(orient === "ground" || orient === "flat" ? Math.PI / 2 : 0, o.yaw || 0, orient === "bill" ? (o.roll ?? Math.random() * Math.PI) : 0);
+    const f = { m, orient, born: performance.now() + (o.delay || 0), life: o.life || 380, s0: o.s0 ?? .4, s1: o.s1 ?? 4, a0: o.a0 ?? 1, a1: o.a1 ?? 0,
+      spin: o.spin || 0, follow: o.follow || null, fx: 0, fz: 0, pulse: o.pulse || 0, h: o.h || 0, vel: o.vel || null, grav: o.grav || 0, last: 0, fade: o.fade || 0 };
+    if (f.follow) { const p = f.follow.position || f.follow; f.fx = x - p.x; f.fz = z - p.z; }
+    m.scaling.setAll(.001); m.visibility = 0; worldFx.push(f);
+    return f;
   }
   function updateWorldFx(now) {
     for (let i = worldFx.length - 1; i >= 0; i--) {
       const f = worldFx[i], k = (now - f.born) / f.life;
       if (k < 0) continue;
-      if (k >= 1 || (f.follow && !f.follow.isEnabled?.())) { f.m.setEnabled(false); worldFxPool.push(f.m); worldFx.splice(i, 1); continue; }
-      const e = 1 - Math.pow(1 - k, 3), s = f.s0 + (f.s1 - f.s0) * e;
-      f.m.scaling.setAll(s * (1 + f.pulse * Math.sin(now / 60)));
-      f.m.visibility = f.a0 + (f.a1 - f.a0) * k;
-      if (f.spin) f.m.rotation[f.m.billboardMode ? "z" : "y"] += f.spin * .016;
-      if (f.follow) { f.m.position.x = f.follow.position.x; f.m.position.z = f.follow.position.z; }
+      const gone = f.follow && (f.follow.isEnabled ? !f.follow.isEnabled() : f.follow.node && !f.follow.node.isEnabled?.());
+      if (k >= 1 || gone) { f.m.setEnabled(false); worldFxPool.push(f.m); worldFx.splice(i, 1); continue; }
+      const e = 1 - Math.pow(1 - k, 3), s = (f.s0 + (f.s1 - f.s0) * e) * (1 + f.pulse * Math.sin(now / 60));
+      if (f.h) f.m.scaling.set(s, f.h * (k < .2 ? k / .2 : 1), 1); else f.m.scaling.setAll(s);
+      // a0 → a1 linearly, optionally holding then fading in the last `fade` fraction
+      f.m.visibility = f.fade ? (k < 1 - f.fade ? f.a0 : f.a0 * (1 - k) / f.fade) : f.a0 + (f.a1 - f.a0) * k;
+      const dt = f.last ? Math.min(.05, (now - f.last) / 1000) : 0; f.last = now;
+      if (f.spin) { if (f.orient === "bill") f.m.rotation.z += f.spin * dt; else f.m.rotation.y += f.spin * dt; }
+      if (f.vel) { f.vel[1] -= f.grav * dt; f.fx += f.vel[0] * dt; f.m.position.y += f.vel[1] * dt; f.fz += f.vel[2] * dt; if (!f.follow) { f.m.position.x += f.vel[0] * dt; f.m.position.z += f.vel[2] * dt; } }
+      if (f.follow) { const p = f.follow.position || f.follow; f.m.position.x = p.x + f.fx; f.m.position.z = p.z + f.fz; }
     }
   }
-  // Big readable hit flash: a starburst plus a ground shock ring; ours are gold, hits on us red, others cyan.
+  // Burst of glowing motes: `n` sparks flung from (x,y,z); up>0 makes them rise like embers instead of falling.
+  function sparks(color, x, y, z, n = 8, o = {}) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, sp = (o.speed ?? 6) * (.5 + Math.random() * .7);
+      spawnFx("glow", color, x, y, z, { life: (o.life ?? 520) * (.7 + Math.random() * .6), s0: o.size ?? .9, s1: (o.size ?? .9) * .3, a0: 1, a1: 0, delay: (o.delay || 0) + Math.random() * (o.spread || 60),
+        vel: [Math.cos(a) * sp, (o.up ?? 4) * (.6 + Math.random() * .8), Math.sin(a) * sp], grav: o.grav ?? 9, follow: o.follow });
+    }
+  }
+  // Hit flash: starburst plus a ground shock ring; ours are gold, hits on us red, others cyan.
   function hitBurst(x, z, tone = "gold", heavy = false, y = 0) {
-    const star = tone === "red" ? "starRed" : tone === "cyan" ? "starCyan" : "starGold";
-    const scale = heavy ? 1.45 : 1;
-    spawnWorldFx(star, x, y + 1.6, z, { life: 280, s0: 1.6 * scale, s1: 6 * scale, a0: 1, a1: 0 });
-    spawnWorldFx(star, x, y + 1.6, z, { life: 180, s0: 3 * scale, s1: 1.4 * scale, a0: .9, a1: 0, delay: 30 });
-    spawnWorldFx(tone === "red" ? "shockRed" : "shockGold", x, y + .15, z, { ground: true, life: 420, s0: 1, s1: 6.5 * scale, a0: .95, a1: 0 });
+    const sc = heavy ? 1.45 : 1;
+    spawnFx("star", tone, x, y + 1.6, z, { life: 280, s0: 1.6 * sc, s1: 6 * sc, a0: 1, a1: 0 });
+    spawnFx("star", tone, x, y + 1.6, z, { life: 180, s0: 3 * sc, s1: 1.4 * sc, a0: .9, a1: 0, delay: 30 });
+    spawnFx("ring", tone === "red" ? "red" : "gold", x, y + .15, z, { orient: "ground", life: 420, s0: 1, s1: 6.5 * sc, a0: .95, a1: 0 });
+    if (heavy || tone !== "cyan") sparks(tone, x, y + 1.4, z, heavy ? 10 : 6, { speed: 8, up: 5, size: .8, life: 420 });
   }
   // Wind-up telegraph: a red danger disc that tightens onto the ghost until it strikes.
   function windupTelegraph(mesh, g) {
     const r = Math.max(3, (g.tall || 1.8) * 1.8), y = (g.ty ?? 0) + .1;
-    spawnWorldFx("warn", mesh.position.x, y, mesh.position.z, { ground: true, life: 650, s0: r * 2.4, s1: r * 1.6, a0: .25, a1: .85, follow: mesh });
-    spawnWorldFx("warnEdge", mesh.position.x, y + .02, mesh.position.z, { ground: true, life: 650, s0: r * 3, s1: r * 1.7, a0: .5, a1: 1, spin: 2.2, follow: mesh });
+    spawnFx("disc", "red", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 650, s0: r * 2.4, s1: r * 1.6, a0: .25, a1: .85, follow: mesh });
+    spawnFx("dash", "red", mesh.position.x, y + .02, mesh.position.z, { orient: "ground", life: 650, s0: r * 3, s1: r * 1.7, a0: .5, a1: 1, spin: 2.2, follow: mesh });
   }
   // Persistent rotating gold ring under the selected target.
   let targetRingMesh = null;
   function updateTargetRing(now) {
     const id = selectedForestTarget, mesh = id ? (forestMonsters.get(id) || (id === MONSTER_ID ? enemy : null)) : null;
     if (!mesh || !mesh.isEnabled()) { if (targetRingMesh) targetRingMesh.setEnabled(false); return; }
-    if (!targetRingMesh) { targetRingMesh = B.MeshBuilder.CreatePlane("targetRing", { size: 1 }, scene); targetRingMesh.isPickable = false; targetRingMesh.rotation.x = Math.PI / 2; targetRingMesh.material = worldFxMaterials().target; }
+    if (!targetRingMesh) { targetRingMesh = B.MeshBuilder.CreatePlane("targetRing", { size: 1 }, scene); targetRingMesh.isPickable = false; targetRingMesh.rotation.x = Math.PI / 2; targetRingMesh.material = vfxMat("seg6", "gold"); }
     const g = mesh.metadata?.ghost, r = Math.max(2.6, (g?.tall || 1.8) * 1.5);
     targetRingMesh.setEnabled(true);
     targetRingMesh.position.set(mesh.position.x, (g?.ty ?? 0) + .14, mesh.position.z);
     targetRingMesh.rotation.y = now / 900;
     targetRingMesh.scaling.setAll(r * 2 * (1 + .06 * Math.sin(now / 220)));
     targetRingMesh.visibility = .8 + .2 * Math.sin(now / 220);
+  }
+  // ---- Skill VFX: every action an avatar plays gets a readable effect, timed to its strike frame ----
+  const SCHOOL_COL = { ritual_dagger: "violet", arcane_sword: "cyan", spirit_staff: "jade", thai_dual: "gold", muay_wraps: "orange" };
+  function actionFx(a, type) {
+    if (!a || !fxNear(a.x, a.z)) return;
+    const d = ACTIONS[type].dur * 1000, y = a.y || 0, h = a.heading || 0, fwd = [-Math.sin(h), -Math.cos(h)];
+    const col = SCHOOL_COL[a.weaponId] || "gold", side = a.action?.side || 1;
+    const P = (dist, up = 1.2) => [a.x + fwd[0] * dist, y + up, a.z + fwd[1] * dist];
+    // Horizontal crescent in front of the avatar; roll tilts it for alternating left/right swings.
+    const slash = (at, size = 4.4, c = col, dist = 1.2, yawOff = 0, life = 260) => { const [x, yy, z] = P(dist, 1.25);
+      spawnFx("arc", c, x, yy, z, { orient: "flat", yaw: h + Math.PI + yawOff, delay: d * at, life, s0: size * .55, s1: size, a0: 1, a1: 0, follow: a }); };
+    const thrust = (at, len = 5, c = col) => { const [x, yy, z] = P(1.6, 1.25);
+      spawnFx("streak", c, x, yy, z, { orient: "flat", yaw: h + Math.PI, delay: d * at, life: 200, s0: len * .5, s1: len, a0: 1, a1: 0, follow: a }); };
+    const pop = (at, c = col, size = 2.4, dist = 1.3) => { const [x, yy, z] = P(dist, 1.3); spawnFx("star", c, x, yy, z, { delay: d * at, life: 200, s0: size * .4, s1: size, a0: 1, a1: 0 }); };
+    const shock = (at, c = col, size = 6, dist = 0) => { const [x, , z] = P(dist); spawnFx("ring", c, x, y + .15, z, { orient: "ground", delay: d * at, life: 480, s0: 1, s1: size, a0: .95, a1: 0 }); };
+    const seal = (c, size = 5, life = d, spin = 1.4) => spawnFx("yantra", c, a.x, y + .12, a.z, { orient: "ground", life: Math.max(700, life), s0: size * .6, s1: size, a0: .95, a1: .95, fade: .35, spin, follow: a });
+    const beam = (c, at = 0, life = 800, tall = 9, wide = 2.2) => spawnFx("beam", c, a.x, y + tall / 2, a.z, { orient: "pillar", delay: d * at, life, s0: wide, s1: wide * .7, h: tall, a0: .9, a1: .9, fade: .5, follow: a });
+    const embers = (c, n = 10, at = 0, o = {}) => sparks(c, a.x, y + .6, a.z, n, { speed: 1.6, up: 5, grav: -1, life: 900, size: .7, spread: 400, delay: d * at, follow: a, ...o });
+    const shield = (c, life = d) => { spawnFx("dash", c, a.x, y + 1.2, a.z, { life, s0: 2.6, s1: 3.1, a0: .9, a1: .9, fade: .3, spin: 2, pulse: .04, follow: a });
+      spawnFx("glow", c, a.x, y + 1.2, a.z, { life, s0: 3.2, s1: 3.4, a0: .35, a1: .35, fade: .3, follow: a }); };
+    switch (type) {
+      case "stab": thrust(.32); pop(.38, col, 2.2, 2.6); break;
+      case "slash": slash(.35); pop(.42, col, 2, 1.8); break;
+      case "twin": slash(.33, 4.2, col, 1.2, side * .35); pop(.4, col, 2, 1.6); break;
+      case "smash": slash(.4, 3, col, 1.2, 0, 200); shock(.5, col, 6.5, 1.4); pop(.5, col, 2.6, 1.4); break;
+      case "punch": case "m_basic": case "m_jab": pop(.42, col, 1.8); break;
+      case "m_cross": pop(.45, col, 2.4); break;
+      case "m_hook": slash(.42, 2.6, col, .9, side * .5, 200); pop(.5, col, 2.2); break;
+      case "m_elbow": slash(.42, 2.4, "red", .8, 0, 200); pop(.48, "red", 2.8, 1); break;
+      case "m_knee": pop(.45, "red", 2.8, 1); shock(.48, "orange", 4, 1); break;
+      case "m_teep": thrust(.4, 3, "orange"); pop(.48, "orange", 2.4, 1.6); break;
+      case "m_step": case "m_side": case "m_retreat": shock(.1, "white", 3.5); sparks("white", a.x, y + .3, a.z, 5, { speed: 4, up: 1.5, life: 380 }); break;
+      case "m_flurry": case "m_rush": for (let i = 0; i < 4; i++) pop(.15 + i * .2, i % 2 ? "red" : "orange", 2.2, 1.1 + (type === "m_rush" ? i * .4 : 0)); break;
+      case "m_guard": case "guard": shield(type === "guard" ? "white" : "orange"); break;
+      case "m_parry": spawnFx("ring", "white", a.x, y + 1.2, a.z, { life: 260, s0: 1.4, s1: 4.4, a0: 1, a1: 0 }); pop(.1, "white", 2.8, .9); break;
+      case "m_evade": for (let i = 0; i < 4; i++) spawnFx("glow", "cyan", a.x - fwd[0] * i * .5, y + 1.1, a.z - fwd[1] * i * .5, { delay: i * 40, life: 320, s0: 2.6 - i * .4, s1: 1, a0: .6, a1: 0 }); break;
+      case "m_counter": case "counter": spawnFx("ring", "white", a.x, y + 1.2, a.z, { life: 220, s0: 1.4, s1: 3.6, a0: 1, a1: 0 }); slash(.45, 3.4, type === "counter" ? col : "red", 1.1, 0, 220); pop(.5, "white", 3); break;
+      case "m_clinch": spawnFx("ring", "orange", a.x + fwd[0] * .8, y + 1.2, a.z + fwd[1] * .8, { life: d, s0: 2.4, s1: 2, a0: .7, a1: .7, fade: .3, spin: 3 }); break;
+      case "m_throw": shock(.55, "orange", 8, 1.4); pop(.55, "orange", 3.4, 1.4); sparks("orange", ...P(1.4, .3), 10, { speed: 7, up: 3, delay: d * .55 }); break;
+      case "m_wai": seal("gold", 6); beam("gold", .25, 1000, 8); embers("gold", 12, .2); break;
+      case "lunge": for (let i = 0; i < 5; i++) spawnFx("glow", col, a.x - fwd[0] * i * .6, y + 1, a.z - fwd[1] * i * .6, { delay: d * .1 + i * 35, life: 360, s0: 2 - i * .25, s1: .6, a0: .7, a1: 0 }); thrust(.55, 4.2); pop(.6, col, 3, 2); break;
+      case "flurry": for (let i = 0; i < 4; i++) slash(.12 + i * .24, 3, col, 1.1, (i % 2 ? 1 : -1) * .4, 180); break;
+      case "sweep": spawnFx("ring", col, a.x, y + 1.1, a.z, { orient: "flat", delay: d * .4, life: 360, s0: 2, s1: 8, a0: 1, a1: 0 });
+        for (let i = 0; i < 4; i++) slash(.35 + i * .04, 3.6, col, 1.3, i * Math.PI / 2, 220); shock(.45, col, 9); break;
+      case "rally": seal("gold", 7, d, .9); beam("gold", .2, 1000, 10); embers("gold", 14, .15); shock(.25, "gold", 10); break;
+      case "finale": slash(.3, 4.2, col, 1.2, -.5, 260); slash(.55, 4.6, col, 1.2, .5, 260); shock(.7, col, 11, 1); beam(col, .65, 600, 9, 2.8); pop(.7, "white", 4.4, 1.2); break;
+      case "dance": seal("pink", 6.5, d, 2); embers("pink", 16, .1, { speed: 3 }); embers("gold", 10, .4); break;
+      case "cast": seal(a.weaponId === "ritual_dagger" ? "violet" : "cyan", 4.6, 900, 2.4); pop(.55, a.weaponId === "ritual_dagger" ? "violet" : "cyan", 2.6, .9); embers("cyan", 8, .1, { speed: 1 }); break;
+      case "summon": seal("orange", 6.5, d, 1.6); beam("orange", .35, 900, 9, 2.6); embers("orange", 16, .3, { speed: 2.4 }); shock(.5, "orange", 8); break;
+      case "drink": spawnFx("ring", "green", a.x, y + .15, a.z, { orient: "ground", delay: d * .5, life: 700, s0: 1, s1: 5, a0: .9, a1: 0 }); embers("green", 10, .5, { speed: 1 }); break;
+      case "dash": shock(0, "white", 4.4); for (let i = 0; i < 5; i++) spawnFx("glow", "white", a.x, y + .9, a.z, { delay: i * 60, life: 320, s0: 2, s1: .6, a0: .55, a1: 0, follow: a }); break;
+      case "rise": beam("white", 0, 1100, 10, 2.4); seal("white", 5, 1100, .8); embers("white", 10); break;
+      case "arrive": beam("cyan", 0, 900, 10, 2.6); shock(.05, "cyan", 7); embers("cyan", 10, 0, { speed: 2 }); break;
+    }
+  }
+  // Standalone effects for events that are not avatar actions.
+  function auraFx(a, kind) {
+    if (!a || !fxNear(a.x, a.z)) return;
+    const y = a.y || 0;
+    if (kind === "levelup") {
+      spawnFx("beam", "gold", a.x, y + 6, a.z, { orient: "pillar", life: 1800, s0: 3.4, s1: 2.4, h: 12, a0: 1, a1: 1, fade: .45, follow: a });
+      spawnFx("yantra", "gold", a.x, y + .12, a.z, { orient: "ground", life: 1800, s0: 3, s1: 8, a0: 1, a1: 1, fade: .4, spin: 1.2, follow: a });
+      sparks("gold", a.x, y + .6, a.z, 22, { speed: 2.5, up: 7, grav: -1, life: 1300, size: .8, spread: 900, follow: a });
+    } else if (kind === "possess") {
+      spawnFx("beam", "blood", a.x, y + 5, a.z, { orient: "pillar", life: 1400, s0: 3, s1: 2, h: 10, a0: .95, a1: .95, fade: .5, follow: a });
+      spawnFx("yantra", "blood", a.x, y + .12, a.z, { orient: "ground", life: 1400, s0: 8, s1: 4.5, a0: 1, a1: 1, fade: .4, spin: -2, follow: a });
+      sparks("violet", a.x, y + .6, a.z, 16, { speed: 2, up: 6, grav: -1, life: 1100, spread: 700, follow: a });
+    } else if (kind === "heal") {
+      spawnFx("ring", "green", a.x, y + .15, a.z, { orient: "ground", life: 700, s0: 5, s1: 1.4, a0: .4, a1: 1, follow: a });
+      sparks("green", a.x, y + .4, a.z, 12, { speed: 1.2, up: 5, grav: -1, life: 1000, spread: 500, follow: a });
+    } else if (kind === "kill") {
+      spawnFx("ring", "gold", a.x, y + .15, a.z, { orient: "ground", life: 700, s0: 1, s1: 10, a0: 1, a1: 0 });
+      spawnFx("beam", "white", a.x, y + 4, a.z, { orient: "pillar", life: 650, s0: 2.6, s1: .6, h: 8, a0: .9, a1: .9, fade: .6 });
+      sparks("gold", a.x, y + 1.2, a.z, 16, { speed: 7, up: 6, life: 700 });
+    }
+  }
+  // Ghost death / spawn, downed players, curses and cloaks.
+  function eventFx(kind, t, o = {}) {
+    const pos = t?.position || t; if (!pos || !fxNear(pos.x, pos.z)) return;
+    const x = pos.x, z = pos.z, y = o.y ?? (t.y || 0), follow = o.follow || null;
+    switch (kind) {
+      case "ghost_die":
+        spawnFx("yantra", "violet", x, y + .12, z, { orient: "ground", life: 1400, s0: 7, s1: 3, a0: 1, a1: 1, fade: .5, spin: -2.4 });
+        spawnFx("beam", "violet", x, y + 4.5, z, { orient: "pillar", life: 1300, s0: 1.8, s1: .5, h: 9, a0: .85, a1: .85, fade: .6 });
+        spawnFx("star", "white", x, y + 1.5, z, { life: 260, s0: 2, s1: 6.5, a0: 1, a1: 0 });
+        sparks("violet", x, y + .8, z, 18, { speed: 1.8, up: 6, grav: -1, life: 1300, size: .8, spread: 700 }); break;
+      case "ghost_spawn":
+        spawnFx("disc", "blood", x, y + .1, z, { orient: "ground", life: 900, s0: 1, s1: 5.5, a0: .9, a1: 0 });
+        spawnFx("dash", "red", x, y + .12, z, { orient: "ground", life: 900, s0: 6, s1: 3, a0: .2, a1: 1, fade: .3, spin: 3 });
+        sparks("blood", x, y + .2, z, 12, { speed: 2.2, up: 4, grav: -1, life: 900, spread: 400 }); break;
+      case "down":
+        spawnFx("ring", "red", x, y + .15, z, { orient: "ground", life: 800, s0: 1, s1: 7, a0: .9, a1: 0 });
+        spawnFx("glow", "blood", x, y + .6, z, { life: 900, s0: 4, s1: 2, a0: .6, a1: 0 });
+        sparks("white", x, y + 1.4, z, 10, { speed: 1, up: 3, grav: -1.5, life: 1200, spread: 500 }); break;
+      case "curse":
+        spawnFx("dash", "violet", x, y + .14, z, { orient: "ground", life: o.life || 3000, s0: 3.4, s1: 3.4, a0: .85, a1: .85, fade: .15, spin: -1.6, pulse: .05, follow });
+        spawnFx("yantra", "blood", x, y + 1.2, z, { life: 900, s0: 1, s1: 3.2, a0: 1, a1: 0, follow });
+        sparks("violet", x, y + .4, z, 10, { speed: .8, up: 3, grav: -1, life: 1400, spread: 1200, follow }); break;
+      case "cloak":
+        for (let i = 0; i < 6; i++) spawnFx("glow", "violet", x + (Math.random() - .5) * 2, y + .8 + Math.random(), z + (Math.random() - .5) * 2, { delay: i * 50, life: 800, s0: 1.6, s1: 4, a0: .6, a1: 0, vel: [0, 1.2, 0] });
+        spawnFx("ring", "violet", x, y + .15, z, { orient: "ground", life: 600, s0: 4.5, s1: 1, a0: .3, a1: 1 }); break;
+      case "unsummon": sparks("orange", x, y + .5, z, 12, { speed: 1.4, up: 5, grav: -1, life: 1000, spread: 300 });
+        spawnFx("ring", "orange", x, y + .15, z, { orient: "ground", life: 600, s0: 1, s1: 4.5, a0: .8, a1: 0 }); break;
+      case "bolt": spawnFx("star", o.color || "cyan", x, y, z, { life: 220, s0: 1, s1: 3.6, a0: 1, a1: 0 }); sparks(o.color || "cyan", x, y, z, 6, { speed: 5, up: 3, life: 360, size: .6 }); break;
+    }
   }
   // Lantern light is faked with additive pools: dozens of real point lights
   // exceed the 4-light material limit and cost too much on phones.
@@ -2869,8 +3020,8 @@
       if(ghost){
         // Ghost rigs play a death (soul released) before hiding, and rise on respawn.
         const alive=monster.alive!==false;
-        if(!alive&&ghost.wasAlive){ghost.deathAt=performance.now();ghostVoice(ghost,mesh,"die");releaseSoul(mesh.position.x,mesh.position.y+.4,mesh.position.z);}
-        if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();ghostVoice(ghost,mesh,"spawn",.8);}
+        if(!alive&&ghost.wasAlive){ghost.deathAt=performance.now();ghostVoice(ghost,mesh,"die");eventFx("ghost_die",mesh,{y:ghost.ty??0});releaseSoul(mesh.position.x,mesh.position.y+.4,mesh.position.z);}
+        if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();ghostVoice(ghost,mesh,"spawn",.8);eventFx("ghost_spawn",mesh,{y:ghost.ty??0});}
         ghost.wasAlive=alive;if(alive)mesh.setEnabled(true);else if(!ghost.deathAt)mesh.setEnabled(false);
         ghost.tx=Number(monster.x);ghost.tz=Number(monster.z);ghost.ty=Number(monster.y)||0;ghost.tf=Number(monster.facing)||0;
         ghost.windup=monster.aiState==="windup";ghost.ai=monster.aiState;
@@ -3558,6 +3709,7 @@
     if (type !== "hit" && type !== "rise") flashStrike(a, type);
     if (a.local && (ACTIONS[type].swing || type === "hit" || type === "cast")) lastCombatAt = performance.now();
     actionSound(a, type, a.action);
+    actionFx(a, type);
     if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
   }
   // A sword skill's motion follows its effect type in the server catalog,
@@ -6728,6 +6880,7 @@
       mesh.position.copyFrom(start);
       mesh.isPickable = false;
       skillEffects.push({mesh, mapId: activeMapId, start, end, until: performance.now() + 300});
+      eventFx("bolt",{x:end.x,z:end.z,y:end.y},{color:"gold",y:end.y});
       return;
     }
     const mesh=B.MeshBuilder.CreateLines("elevated magic shot",{
@@ -6735,6 +6888,7 @@
     },scene);
     mesh.color=B.Color3.FromHexString("#8ce7ff");
     mesh.isPickable=false;
+    eventFx("bolt",{x:xyz[3],z:xyz[5]},{y:xyz[4]});
     skillEffects.push({mesh, mapId: activeMapId, until:performance.now()+240});
   }
 
@@ -6745,7 +6899,7 @@
       ? me.characterName : "นที";
     $("characterName").textContent = name;
     const slot = me?.persistent ? (Number(me.characterSlot) || activeCharacterSlot || 1) : null;
-    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) { SFX("levelup", { important: true }); floatAtPlayer(localId, "LEVEL UP!", "levelup", { drift: 0, rise: 80, life: 2200 }); } hudLevel = me.level; }
+    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) { SFX("levelup", { important: true }); floatAtPlayer(localId, "LEVEL UP!", "levelup", { drift: 0, rise: 80, life: 2200 }); auraFx(getLocalAvatar(), "levelup"); } hudLevel = me.level; }
     $("characterLevel").textContent = (slot ? "S" + slot + " · " : "") + "LV. " + (
       Number.isFinite(me?.level) ? me.level : 1
     );
@@ -7362,7 +7516,7 @@
           if (hit.attackerId === localId) { hudTarget = { id: hit.targetId, until: performance.now() + 8000 }; if (Number(hit.hp) === 0) hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1; }
           { const mine = hit.attackerId === localId, dmg = Math.round(Number(hit.damage) || 0);
             if (dmg > 0) floatAtMonster(hit.targetId, String(dmg), mine ? (SKILL_SOURCES.has(hit.source) ? "skill" : "dealt") : "ally", { big: mine && SKILL_SOURCES.has(hit.source) });
-            if (mine && Number(hit.hp) === 0) floatAtMonster(hit.targetId, "ปราบ!", "status", { delay: 180, rise: 70, drift: 0 }); }
+            if (mine && Number(hit.hp) === 0) { floatAtMonster(hit.targetId, "ปราบ!", "status", { delay: 180, rise: 70, drift: 0 }); if (Number.isFinite(Number(at?.x))) auraFx({ x: Number(at.x), z: Number(at.z), y: Number(at.y) || 0 }, "kill"); } }
         }
         const talisman = hit?.source === "talisman";
         if (forestTarget) {
@@ -7458,6 +7612,7 @@
       });
       joined.onMessage("summon_despawn", notice => {
         if (room !== joined) return;
+        { const s=summonAvatars.get(notice?.ownerId); if (s) eventFx("unsummon",{x:s.x??s.node?.position.x,z:s.z??s.node?.position.z,y:s.y||0}); }
         if (notice?.ownerId === localId && notice.reason !== "possessed") {
           toast(notice.reason === "owner_dead"
             ? "วิญญาณกลับภพเมื่อเจ้าของหมดสติ"
@@ -7485,6 +7640,7 @@
       joined.onMessage("blade_cloak_changed",data=>{
         if(room!==joined)return;
         bladeCloakUntil=data?.active ? performance.now()+Math.max(0,Math.min(5000,Number(data.durationMs)||0)) : 0;
+        if (data?.active) eventFx("cloak",getLocalAvatar());
         syncBladeUI(ownServerCharacter());toast(data?.active ? "อำพรางตัวแล้ว" : data?.reason==="interrupted" ? "การร่ายพรางถูกขัดจังหวะ" : "การอำพรางสิ้นสุด");
       });
       joined.onMessage("blade_cloak_cast",data=>{if(room===joined){playAction(avatars.get(data?.playerId),"cast");if(data?.playerId===localId)toast("กำลังร่ายพรางกาย");}});
@@ -7501,6 +7657,7 @@
       joined.onMessage("occult_curse_state", data => {
         if (room!==joined) return;
         occultCurseUntil=data?.active ? performance.now()+Math.max(0,Math.min(6500,Number(data.durationMs)||0)) : 0;
+        if (data?.active) { const me=getLocalAvatar(); eventFx("curse",me,{follow:me,life:Math.max(800,occultCurseUntil-performance.now())}); }
         syncOccultUI(ownServerCharacter());
         toast(data?.active ? "ติดคำสาปอาคม" : data?.reason==="cleansed" ? "ถอนคำสาปแล้ว" : "คำสาปสิ้นสุด");
       });
@@ -7623,7 +7780,7 @@
         if (result?.skill) floatAtPlayer(localId, result.skill + "!", "shout", { drift: 0, side: 0, rise: 34, life: 1600 });
       });
       joined.onMessage("possession_changed", notice => {
-        if(room===joined && notice?.active){ const who=avatars.get(notice.playerId); if(who) SFX("possess",{x:who.x,z:who.z}); floatAtPlayer(notice.playerId,"เข้าสิง!","status",{big:true,drift:0}); }
+        if(room===joined && notice?.active){ const who=avatars.get(notice.playerId); if(who) { SFX("possess",{x:who.x,z:who.z}); auraFx(who,"possess"); } floatAtPlayer(notice.playerId,"เข้าสิง!","status",{big:true,drift:0}); }
         if(room!==joined || notice?.playerId!==localId)return;
         toast(notice.active ? "วิญญาณเข้าสิง · เพิ่มโจมตีและป้องกัน 20% นาน 60 วินาที" : "สถานะเข้าสิงสิ้นสุด");
         syncPossessionButton();
@@ -7682,7 +7839,7 @@
         }
       });
       joined.onMessage("player_down", info => {
-        { const fallen=avatars.get(info?.playerId); if (room === joined && fallen) SFX("down",{x:fallen.x,z:fallen.z,important:true}); }
+        { const fallen=avatars.get(info?.playerId); if (room === joined && fallen) { SFX("down",{x:fallen.x,z:fallen.z,important:true}); eventFx("down",fallen); } }
         if (room === joined && info?.playerId === localId) {
           toast("ตัวละครหมดสติ · รอเกิดใหม่");
         }
@@ -7751,7 +7908,7 @@
       joined.onMessage("item_used", event => {
         if (room !== joined) return;
         playAction(getLocalAvatar(), "drink");
-        if (Number(event?.healed) > 0) floatAtPlayer(localId, "+" + Math.round(event.healed), "heal", { big: true, drift: 0 });
+        if (Number(event?.healed) > 0) { floatAtPlayer(localId, "+" + Math.round(event.healed), "heal", { big: true, drift: 0 }); auraFx(getLocalAvatar(), "heal"); }
         toast("ใช้ยาเลือดแล้ว · +" + Number(event?.healed || 0) + " HP · บันทึกบน VPS");
         renderBag();
       });
