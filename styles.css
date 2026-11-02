@@ -481,3 +481,11 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .party-member { display:flex; justify-content:space-between; gap:8px; padding:9px 0; border-bottom:1px solid #fff2; }
 .party-member strong { overflow-wrap:anywhere; color:#f7dbab; }
 .party-member span { white-space:nowrap; color:#b9d6ca; }
+
+.guild-member { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 0; border-bottom:1px solid #fff2; }
+.guild-member > div:first-child { display:flex; flex-direction:column; min-width:0; overflow-wrap:anywhere; }
+.guild-member strong { color:#f7dbab; }
+.guild-member small { color:#b9d6ca; }
+.guild-actions { display:flex; flex-wrap:wrap; gap:5px; justify-content:flex-end; }
+.guild-actions button { min-height:40px; padding:5px 9px; border:1px solid #c8a46d; border-radius:9px; background:#59402a; color:#fff1d3; }
+#guildCreateArea[hidden], #guildMemberArea[hidden], #guildInviteArea[hidden], #guildInvitationBox[hidden] { display:none; }

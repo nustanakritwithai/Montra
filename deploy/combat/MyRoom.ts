@@ -37,6 +37,7 @@ import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
+import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
 import type { MonsterTier } from "./MonsterProfiles.js";
@@ -53,7 +54,7 @@ import { ForestEncounters } from "./ForestEncounters.js";
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
   climb: CommandBucket; dash: CommandBucket; flight: CommandBucket;
-  chat: CommandBucket; economy: CommandBucket; party: CommandBucket;
+  chat: CommandBucket; economy: CommandBucket; party: CommandBucket; guild: CommandBucket;
 };
 
 type ActiveDash = DashDirection & { remaining: number };
@@ -109,6 +110,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastWeaponEquipMs = new Map<string, number>();
   private trades = new Map<string, TradeSession>();
   private parties = new PartyManager();
+  private guildSubscriptions = new Map<string,()=>void>();
+  private guildInvites = new Map<string,{from:string;to:string;guildId:string;expires:number}>();
 
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
@@ -204,6 +207,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for(const share of shares)this.grantMonsterExperience(share.sessionId,share.amount,monster.level,tier);
   }
 
+  private guildAction(client:Client, action:(character:string)=>void):void {
+    const character=this.persistentCharacters.get(client.sessionId);
+    if(!character || this.pendingCharacterLeaves.has(client.sessionId))return this.reject(client,"guild_unavailable");
+    if(!this.gates.get(client.sessionId)?.guild.consume(this.simulatedMs))return this.reject(client,"guild_rate_limited");
+    try { action(character); }
+    catch(error){
+      const reasons=["guild_already_member","guild_name_taken","guild_leader_only","guild_full",
+        "guild_not_member","guild_transfer_first","guild_invalid_member","guild_invite_expired","guild_invalid_target"];
+      const reason=error instanceof Error && reasons.includes(error.message)?error.message:"guild_error";
+      if(reason==="guild_error")console.error("MONTRA guild action failed",error);
+      client.send("guild_error",{reason});
+    }
+  }
+  private sendGuild(client:Client,character:string):void {
+    client.send("guild_state",guildStore().view(character,guildOnline));
+  }
+
   private partyAction(client:Client, action:()=>void): void {
     if (!this.gates.get(client.sessionId)?.party.consume(this.simulatedMs)) return this.reject(client,"party_rate_limited");
     if (!this.persistentCharacters.has(client.sessionId) || this.pendingCharacterLeaves.has(client.sessionId)) return this.reject(client,"party_unavailable");
@@ -280,6 +300,68 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   messages = {
+    get_guild: (client:Client,message:unknown) => {
+      if(!parseEmptyCommand(message))return this.reject(client,"guild_invalid_request");
+      this.guildAction(client,character=>this.sendGuild(client,character));
+    },
+    guild_create: (client:Client,message:unknown) => {
+      const name=parseGuildName(message);if(!name)return this.reject(client,"guild_invalid_name");
+      this.guildAction(client,character=>{
+        const player=this.state.players.get(client.sessionId);if(!player)throw new Error("guild_invalid_target");
+        guildStore().create(character,player.characterName,name);notifyGuilds();
+      });
+    },
+    guild_invite: (client:Client,message:unknown) => {
+      const request=parseTradeRequest(message);if(!request)return this.reject(client,"guild_invalid_request");
+      this.guildAction(client,character=>{
+        const guild=guildStore().view(character,guildOnline),target=this.clients.find(c=>c.sessionId===request.targetId);
+        const targetCharacter=this.persistentCharacters.get(request.targetId);
+        if(!guild || guild.ownId!==guild.leaderId)throw new Error("guild_leader_only");
+        if(guild.members.length>=GUILD_MAX_MEMBERS)throw new Error("guild_full");
+        if(!target || !targetCharacter || request.targetId===client.sessionId || this.pendingCharacterLeaves.has(request.targetId))throw new Error("guild_invalid_target");
+        if(guildStore().view(targetCharacter,guildOnline))throw new Error("guild_already_member");
+        for(const [id,invite] of this.guildInvites)if(invite.expires<=this.simulatedMs || invite.to===request.targetId)this.guildInvites.delete(id);
+        const id=randomUUID();
+        this.guildInvites.set(id,{from:client.sessionId,to:request.targetId,guildId:guild.id,expires:this.simulatedMs+60000});
+        target.send("guild_invitation",{inviteId:id,guildName:guild.name,fromName:this.state.players.get(client.sessionId)?.characterName ?? "",expiresIn:60});
+        client.send("guild_notice",{reason:"invitation_sent"});
+      });
+    },
+    guild_accept: (client:Client,message:unknown) => {
+      const inviteId=this.parsePartyInvitation(message);if(!inviteId)return this.reject(client,"guild_invalid_request");
+      this.guildAction(client,character=>{
+        const invite=this.guildInvites.get(inviteId),leader=invite && this.persistentCharacters.get(invite.from);
+        if(!invite || invite.to!==client.sessionId || invite.expires<=this.simulatedMs || !leader || this.pendingCharacterLeaves.has(invite.from)){
+          if(invite && invite.expires<=this.simulatedMs)this.guildInvites.delete(inviteId);
+          throw new Error("guild_invite_expired");
+        }
+        const player=this.state.players.get(client.sessionId);if(!player)throw new Error("guild_invalid_target");
+        if(guildStore().view(leader,guildOnline)?.id!==invite.guildId)throw new Error("guild_invite_expired");
+        guildStore().add(leader,character,player.characterName);
+        this.guildInvites.delete(inviteId);client.send("guild_invitation_closed",{});notifyGuilds();
+      });
+    },
+    guild_decline: (client:Client,message:unknown) => {
+      const inviteId=this.parsePartyInvitation(message);if(!inviteId)return this.reject(client,"guild_invalid_request");
+      this.guildAction(client,()=>{
+        const invite=this.guildInvites.get(inviteId);
+        if(!invite || invite.to!==client.sessionId || invite.expires<=this.simulatedMs)throw new Error("guild_invite_expired");
+        this.guildInvites.delete(inviteId);client.send("guild_invitation_closed",{});
+        this.clients.find(c=>c.sessionId===invite.from)?.send("guild_notice",{reason:"invitation_declined"});
+      });
+    },
+    guild_leave: (client:Client,message:unknown) => {
+      if(!parseEmptyCommand(message))return this.reject(client,"guild_invalid_request");
+      this.guildAction(client,character=>{guildStore().leave(character);notifyGuilds();});
+    },
+    guild_manage: (client:Client,message:unknown) => {
+      if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"guild_invalid_request");
+      const value=message as Record<string,unknown>;
+      if(Object.keys(value).length!==2 || typeof value.memberId!=="string" ||
+         !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value.memberId) ||
+         (value.action!=="kick" && value.action!=="transfer"))return this.reject(client,"guild_invalid_request");
+      this.guildAction(client,character=>{guildStore().manage(character,value.memberId as string,value.action as "kick"|"transfer");notifyGuilds();});
+    },
     get_party: (client:Client,message:unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client,"party_invalid_request");
       this.partyAction(client,()=>{const party=this.parties.get(client.sessionId);if(party)this.sendPartyState(party);else client.send("party_state",{partyId:null,leaderId:null,members:[]});});
@@ -656,6 +738,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.lastRenameMs.set(id, this.simulatedMs);
       player.characterName = name;
       const party=this.parties.get(id); if(party) this.sendPartyState(party);
+      const guildCharacter=this.persistentCharacters.get(id);
+      if(guildCharacter){try{if(guildStore().rename(guildCharacter,name))notifyGuilds();}catch(error){console.error("MONTRA guild rename failed",error);}}
       void this.saveCharacter(id);
     },
     move: (client: Client, message: unknown) => {
@@ -1683,6 +1767,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (characterId && accountId && token) {
         if (!saved?.inventory) throw new Error("inventory_migration_missing");
         this.persistentCharacters.set(client.sessionId, characterId);
+        this.guildSubscriptions.set(client.sessionId,subscribeGuild(characterId,()=>this.sendGuild(client,characterId)));
         this.inventories.set(client.sessionId, saved.inventory);
         this.activeGuestAccounts.set(client.sessionId, accountId);
         this.guestSlotIds.set(client.sessionId,
@@ -1702,7 +1787,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         chat: new CommandBucket(3, 0.5, this.simulatedMs),
         economy: new CommandBucket(8, 3, this.simulatedMs),
         party: new CommandBucket(6, 2, this.simulatedMs),
+        guild: new CommandBucket(6, 2, this.simulatedMs),
       });
+      if(characterId){try{guildStore().rename(characterId,player.characterName);notifyGuilds();}catch(error){console.error("MONTRA guild join failed",error);}}
       console.log("MONTRA 3-slot join:", client.sessionId, "room", this.roomId,
         saved ? "persistent" : "transient", "slot", slot);
     } catch (error) {
@@ -1716,6 +1803,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.templeClients.delete(id);
     this.atlasClients.delete(id);
     this.leaveParty(id);
+    const guildCharacter=this.persistentCharacters.get(id);
+    if(guildCharacter){this.guildSubscriptions.get(id)?.();this.guildSubscriptions.delete(id);notifyGuilds();}
+    for(const [inviteId,invite] of this.guildInvites)if(invite.from===id || invite.to===id){
+      this.guildInvites.delete(inviteId);
+      this.clients.find(c=>c.sessionId===invite.to)?.send("guild_invitation_closed",{});
+    }
     for (const trade of this.trades.values()) if (trade.a===id || trade.b===id) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }
     const accountId = this.activeGuestAccounts.get(id);
     // Capture the snapshot BEFORE removing the player from server Schema.
@@ -1774,6 +1867,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   async onDispose() {
     this.trades.clear();
     this.parties.clear();
+    this.guildInvites.clear();
+    for(const unsubscribe of this.guildSubscriptions.values())unsubscribe();
+    this.guildSubscriptions.clear();
+    notifyGuilds();
     const pending = [...this.persistentCharacters.keys()].map(async id => {
       try { await (this.pendingCharacterLeaves.get(id) ?? this.saveCharacter(id)); }
       finally {

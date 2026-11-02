@@ -56,6 +56,7 @@ $files = @(
   @{ Name = "MonsterProfiles.ts"; Target = "src\rooms\MonsterProfiles.ts"; Check = "monsterReward" },
   @{ Name = "PartyMonsterRewards.ts"; Target = "src\rooms\PartyMonsterRewards.ts"; Check = "partyMonsterShares" },
   @{ Name = "forest-party-monster-integration.mjs"; Target = "montra-forest-party-monster-integration.mjs"; Check = "montra-monster-test-" },
+  @{ Name = "GuildStore.ts"; Target = "src\rooms\GuildStore.ts"; Check = "class GuildStore" },
   @{ Name = "PartyManager.ts"; Target = "src\rooms\PartyManager.ts"; Check = "class PartyManager" },
   @{ Name = "EconomyStore.ts"; Target = "src\rooms\EconomyStore.ts"; Check = "class EconomyStore" },
   @{ Name = "EconomyRules.ts"; Target = "src\rooms\EconomyRules.ts"; Check = "parseMarketCreate" },
