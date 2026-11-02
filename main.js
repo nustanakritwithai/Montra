@@ -3141,45 +3141,52 @@
         tentacles.forEach((j, i) => { for (let n = 1; n < j.length; n++) { j[n].rotation.x = -.22 + Math.sin(t * 2.4 + i * .9 + n * .7) * (.25 + atk * .3); j[n].rotation.z = Math.sin(t * 1.7 + i + n * .5) * .15; } });
       };
     },
-    // เงารากไม้: a tree stump possessed — root legs, branch arms with twig
-    // claws, a hollow glowing face and tri-colour pha phrae around the trunk.
+    // เงารากไม้: a gnarled stump possessed by a tree spirit. The trunk is a
+    // noise-displaced lathe; roots, branch arms and twigs are tapered tubes.
     stump(root, o) {
-      const b = ghostBuilder(root), body = b.joint("trunk", root, 0, .5, 0);
-      // Gnarled trunk: three leaning bark sections and burls.
-      b.cyl(0, .3, 0, .65, .78, .98, gm.bark, 7).rotation.y = .3;
-      b.cyl(.03, .85, .02, .55, .6, .78, gm.bark, 7).rotation.z = .06;
-      b.cyl(-.02, 1.3, 0, .45, .38, .6, gm.bark, 6).rotation.z = -.08;
-      for (let i = 0; i < 5; i++) b.ball(Math.cos(i * 2.1) * .38, .3 + noise(i, 731) * .9, Math.sin(i * 2.1) * .36, .22, gm.bark, 5);
-      for (let i = 0; i < 3; i++) b.cyl(0, .22 + i * .09, 0, .06, .95 - i * .02, .96 - i * .02, gm.sash3[i], 12).rotation.z = .05 - i * .04;
-      // Carved hollow face with green spirit light inside.
-      for (const s of [-1, 1]) { b.ball(s * .13, 1.0, -.28, .2, gm.mouth, 6).scaling.set(1, 1.2, .5); b.ball(s * .13, 1.0, -.33, .09, gm.eyeGreen, 5); }
-      b.ball(0, .7, -.3, .3, gm.mouth, 6).scaling.set(1.2, .55, .45);
-      for (let i = -2; i <= 2; i++) b.cyl(i * .06, .66, -.39, .1, 0, .04, gm.bark, 3).rotation.x = Math.PI;
-      b.ball(0, .7, -.36, .12, gm.eyeGreen, 4).scaling.set(1.6, .4, .5);
-      // Crown of dead, splayed branches with moss.
-      for (let i = 0; i < 7; i++) { const a = i * .9, tw = b.cyl(Math.cos(a) * .15, 1.75, Math.sin(a) * .15, .9, .02, .12, gm.bark, 5); tw.rotation.set(Math.sin(a) * .8, 0, -Math.cos(a) * .8); }
-      b.ball(0, 1.55, 0, .62, mossMat, 5).scaling.y = .35;
-      b.flush(body, "stump trunk");
+      const trunk = new B.TransformNode("trunk", scene); trunk.parent = root;
+      const prof = []; for (let i = 0; i <= 10; i++) { const y = i / 10 * 1.75; prof.push([.5 - .22 * (y / 1.75) + .08 * Math.sin(y * 4.3), y]); }
+      prof.push([0, 1.78]);
+      const bark = lathe("stump trunk", prof, gm.bark, 14);
+      const pos = bark.getVerticesData(B.VertexBuffer.PositionKind);
+      for (let i = 0; i < pos.length; i += 3) {
+        const a = Math.atan2(pos[i + 2], pos[i]), y = pos[i + 1], k = 1 + .14 * Math.sin(a * 3 + y * 5) + .08 * Math.sin(a * 7 - y * 9);
+        pos[i] *= k; pos[i + 2] *= k;
+      }
+      bark.updateVerticesData(B.VertexBuffer.PositionKind, pos); bark.createNormals(true); bark.parent = trunk;
+      const parts = (mesh, parent = trunk) => { mesh.parent = parent; mesh.isPickable = false; return mesh; };
+      for (let i = 0; i < 3; i++) { const band = B.MeshBuilder.CreateTorus("pha phrae", { diameter: 1.02 - i * .03, thickness: .07, tessellation: 20 }, scene); band.material = gm.sash3[i]; band.position.y = .55 + i * .08; band.rotation.z = .06 - i * .05; parts(band); }
+      // Carved hollow face: deep sockets, green pupils, a jagged maw.
+      for (const s of [-1, 1]) {
+        const sock = parts(B.MeshBuilder.CreateSphere("hollow eye", { diameter: .26, segments: 6 }, scene)); sock.material = gm.mouth; sock.position.set(s * .14, 1.2, -.4); sock.scaling.set(1, 1.25, .45);
+        const eye = parts(B.MeshBuilder.CreateSphere("spirit eye", { diameter: .1, segments: 5 }, scene)); eye.material = gm.eyeGreen; eye.position.set(s * .14, 1.2, -.46);
+        const brow = parts(B.MeshBuilder.CreateBox("brow", { width: .24, height: .06, depth: .1 }, scene)); brow.material = gm.bark; brow.position.set(s * .14, 1.34, -.43); brow.rotation.z = s * .35;
+      }
+      const maw = parts(B.MeshBuilder.CreateSphere("maw", { diameter: .4, segments: 6 }, scene)); maw.material = gm.mouth; maw.position.set(0, .88, -.43); maw.scaling.set(1.1, .5, .35);
+      const glow = parts(B.MeshBuilder.CreateSphere("maw glow", { diameter: .16, segments: 5 }, scene)); glow.material = gm.eyeGreen; glow.position.set(0, .88, -.47); glow.scaling.set(2, .35, .5);
+      for (let i = -3; i <= 3; i++) for (const r of [-1, 1]) { const tooth = parts(B.MeshBuilder.CreateCylinder("splinter tooth", { height: .08, diameterTop: 0, diameterBottom: .04, tessellation: 3 }, scene)); tooth.material = gm.bark; tooth.position.set(i * .05, .88 + r * .06, -.5); tooth.rotation.x = r > 0 ? Math.PI : 0; }
+      // Crown of dead branches with moss.
+      for (let i = 0; i < 7; i++) { const a = i * .9, len = .5 + noise(i, 751) * .4;
+        parts(tube("dead branch", [[Math.cos(a) * .12, 1.7, Math.sin(a) * .12], [Math.cos(a) * .3, 1.9 + len * .4, Math.sin(a) * .3], [Math.cos(a) * (.4 + len * .5), 2.0 + len * .7, Math.sin(a) * (.4 + len * .5)]], .07, .01, gm.bark, 5)); }
+      const moss = parts(B.MeshBuilder.CreateSphere("moss cap", { diameter: .8, segments: 6 }, scene)); moss.material = mossMat; moss.position.y = 1.72; moss.scaling.y = .35;
+      // Root legs: curved tubes hinged at the trunk base.
       const legs = [0, 1, 2, 3, 4].map(i => {
-        const a = i / 5 * Math.PI * 2 + .3, j = b.joint("root leg", body, Math.cos(a) * .36, .05, Math.sin(a) * .36);
-        const r1 = b.cap(Math.cos(a) * .16, -.12, Math.sin(a) * .16, .42, .09, gm.bark); r1.rotation.set(Math.sin(a) * .9, 0, -Math.cos(a) * .9);
-        const r2 = b.cyl(Math.cos(a) * .36, -.42, Math.sin(a) * .36, .4, .08, .02, gm.bark, 5); r2.rotation.set(Math.sin(a) * .3, 0, -Math.cos(a) * .3);
-        b.flush(j, "root"); return j;
+        const a = i / 5 * Math.PI * 2 + .3, j = new B.TransformNode("root", scene); j.parent = trunk; j.position.set(Math.cos(a) * .42, .25, Math.sin(a) * .42); j.rotation.y = -a;
+        parts(tube("root leg", [[0, 0, 0], [.25, -.05, 0], [.45, -.2, 0], [.55, -.42, 0]], .12, .02, gm.bark, 6), j); return j;
       });
+      // Branch arms with twig claws.
       const arms = [-1, 1].map(s => {
-        const sh = b.joint("branch", body, s * .38, 1.15, 0);
-        b.cap(0, -.35, 0, .78, .09, gm.bark); b.flush(sh, "branch arm");
-        const el = b.joint("branch tip", sh, 0, -.72, 0);
-        b.cap(0, -.25, 0, .5, .06, gm.bark);
-        for (let f = -1; f <= 1; f++) b.cyl(f * .07, -.62, -.04, .34, .01, .045, gm.bark, 4).rotation.z = f * .45;
-        b.flush(el, "twig claw"); return { sh, el, s };
+        const sh = new B.TransformNode("branch", scene); sh.parent = trunk; sh.position.set(s * .38, 1.25, 0);
+        parts(tube("branch arm", [[0, 0, 0], [s * .3, -.1, -.05], [s * .45, -.45, -.12], [s * .5, -.85, -.1]], .1, .05, gm.bark, 6), sh);
+        for (let f = -1; f <= 1; f++) parts(tube("twig claw", [[s * .5, -.85, -.1], [s * (.5 + f * .08), -1.05, -.18], [s * (.52 + f * .14), -1.2, -.3]], .045, .008, gm.bark, 4), sh);
+        return { sh, s };
       });
       return (k) => {
         const { t, move, atk, hurt, walk } = k;
-        body.rotation.z = Math.sin(walk) * .1 * move + Math.sin(t * .7) * .03; body.rotation.x = .08 - hurt * .25 + atk * .35;
-        body.position.y = .5 + Math.abs(Math.sin(walk)) * .08 * move;
-        legs.forEach((l, i) => { l.rotation.x = Math.sin(walk + i * 1.26) * .3 * move; });
-        arms.forEach(a => { a.sh.rotation.x = -.35 - atk * 2.3 + Math.sin(t * 1.1 + a.s) * .12; a.sh.rotation.z = a.s * (.55 - atk * .35); a.el.rotation.x = -.6 - atk * .5; });
+        trunk.rotation.z = Math.sin(walk) * .08 * move + Math.sin(t * .7) * .03; trunk.rotation.x = .06 - hurt * .25 + atk * .3;
+        trunk.position.y = Math.abs(Math.sin(walk)) * .08 * move + .12;
+        legs.forEach((l, i) => { l.rotation.z = Math.sin(walk + i * 1.26) * .3 * move; });
+        arms.forEach(a => { a.sh.rotation.x = -atk * 2.2 + Math.sin(t * 1.1 + a.s) * .1; a.sh.rotation.z = a.s * (Math.sin(t * .9) * .05 - atk * .3); });
       };
     },
     // Possessed statue: door guardian (ภูตทวารบาล) or the elite shrine
@@ -3258,34 +3265,39 @@
         hair.forEach((h, i) => swayStrand(h, t, i, .12));
       };
     },
-    // วิญญาณเสียงระฆัง: a cracked bronze bell floating on frayed ropes, ghost
-    // arms hanging from its mouth and a face glowing inside; rings on attack.
+    // วิญญาณเสียงระฆัง: a lathe-turned bronze temple bell, cracked and bound
+    // in frayed red rope, with a pale face and ghost arms hanging from its mouth.
     bell(root, o) {
-      const b = ghostBuilder(root), body = b.joint("bell", root, 0, 1.7, 0);
-      b.cyl(0, .1, 0, .95, .55, 1.15, templeBronze, 14); b.cyl(0, -.42, 0, .1, 1.24, 1.24, gold, 14);
-      b.cyl(0, .66, 0, .25, .2, .35, templeBronze, 8);
-      for (let i = 0; i < 3; i++) b.box(.2 + i * .1, -.1 + i * .15, -.5 + i * .04, .03, .3, .02, gm.crack).rotation.z = .3 + i * .2;
-      b.ball(0, -.25, 0, .5, gm.mouth, 6).scaling.y = .4;
-      // A pale face pressed into the mouth of the bell.
-      b.ball(0, -.38, -.18, .3, gm.pale, 6).scaling.set(1, 1.1, .5);
-      for (const s of [-1, 1]) { b.ball(s * .07, -.34, -.25, .07, gm.mouth, 4); b.ball(s * .07, -.34, -.27, .045, o.eye, 4); }
-      b.box(0, -.47, -.25, .08, .07, .02, gm.mouth);
-      b.flush(body, "bell");
-      const ropes = [0, 1, 2, 3].map(i => strand(b, body, Math.cos(i * 1.57) * .1, .8, Math.sin(i * 1.57) * .1, 4, .2, .04, ropeRed, .2).map((j, n) => { if (!n) j.rotation.x = Math.PI; return j; }));
-      const arms = [-1, 1].map(s => {
-        const sh = b.joint("ghost arm", body, s * .25, -.4, 0);
-        b.cyl(0, -.3, 0, .6, .07, .05, gm.corpse, 6);
-        for (let f = -1; f <= 1; f++) b.cyl(f * .03, -.68, -.02, .16, .012, .025, gm.corpse, 4);
-        b.flush(sh, "bell arm"); return { sh, s };
-      });
+      const body = new B.TransformNode("bell", scene); body.parent = root; body.position.y = 1.8;
+      const parts = (mesh, parent = body) => { mesh.parent = parent; mesh.isPickable = false; return mesh; };
+      parts(lathe("bronze bell", [[.0, .62], [.18, .6], [.3, .52], [.36, .3], [.38, .05], [.44, -.2], [.56, -.38], [.6, -.44], [.56, -.46], [.46, -.42]], templeBronze, 20));
+      parts(lathe("bell lip", [[.6, -.43], [.64, -.47], [.6, -.5]], gold, 20));
+      parts(lathe("bell bands", [[.37, .14], [.395, .16], [.37, .19]], gold, 20));
+      const loop = parts(B.MeshBuilder.CreateTorus("hanging loop", { diameter: .26, thickness: .06, tessellation: 12 }, scene)); loop.material = templeBronze; loop.position.y = .72; loop.rotation.x = Math.PI / 2;
+      for (let i = 0; i < 4; i++) { const c = parts(B.MeshBuilder.CreateBox("crack", { width: .015, height: .22, depth: .02 }, scene)); c.material = gm.crack; const a = -.5 + i * .3; c.position.set(Math.sin(a) * .42, -.05 + i * .04, -Math.cos(a) * .42); c.rotation.set(0, -a, .3 * (i % 2 ? 1 : -1)); }
+      const mouth = parts(B.MeshBuilder.CreateDisc("bell mouth", { radius: .55, tessellation: 20 }, scene)); mouth.material = gm.mouth; mouth.rotation.x = Math.PI / 2; mouth.position.y = -.4;
+      // Pale face pressed out of the mouth of the bell.
+      const face = parts(B.MeshBuilder.CreateSphere("bell face", { diameter: .34, segments: 8 }, scene)); face.material = gm.pale; face.position.set(0, -.45, -.18); face.scaling.set(.9, 1.15, .6);
+      for (const s of [-1, 1]) {
+        const sock = parts(B.MeshBuilder.CreateSphere("socket", { diameter: .09, segments: 5 }, scene)); sock.material = gm.mouth; sock.position.set(s * .065, -.41, -.27); sock.scaling.z = .4;
+        const eye = parts(B.MeshBuilder.CreateSphere("eye", { diameter: .05, segments: 5 }, scene)); eye.material = o.eye; eye.position.set(s * .065, -.41, -.29);
+      }
+      const jaw = parts(B.MeshBuilder.CreateSphere("wail", { diameter: .1, segments: 5 }, scene)); jaw.material = gm.mouth; jaw.position.set(0, -.54, -.27); jaw.scaling.set(.8, 1.4, .4);
+      // Frayed red ropes rising into the dark.
+      const ropes = [0, 1, 2].map(i => { const n = new B.TransformNode("rope", scene); n.parent = body; n.position.y = .78;
+        parts(tube("red rope", [[0, 0, 0], [(i - 1) * .1, .5, .05], [(i - 1) * .22, 1.0, -.02], [(i - 1) * .3, 1.5, .06]], .03, .012, ropeRed, 5), n); return n; });
+      // Ghost arms hanging out of the bell, ending in hooked claws.
+      const arms = [-1, 1].map(s => { const sh = new B.TransformNode("ghost arm", scene); sh.parent = body; sh.position.set(s * .28, -.42, 0);
+        parts(tube("ghost arm", [[0, 0, 0], [s * .05, -.3, -.03], [s * .04, -.62, -.08]], .05, .035, gm.corpse, 6), sh);
+        for (let f = -1; f <= 1; f++) parts(tube("claw", [[s * .04, -.62, -.08], [s * (.04 + f * .03), -.74, -.12], [s * (.04 + f * .04), -.8, -.2]], .014, .004, gm.corpse, 4), sh);
+        return { sh, s }; });
       const ring = B.MeshBuilder.CreateGround("bell shockwave", { width: 1, height: 1 }, scene);
       ring.parent = root; ring.position.y = .08; ring.material = ringMat; ring.isPickable = false; ring.setEnabled(false);
       return (k) => {
         const { t, move, atk, hurt } = k;
-        body.position.y = 1.7 + Math.sin(t * 1.3) * .12; body.rotation.z = Math.sin(t * 1.1) * .12 + atk * Math.sin(t * 30) * .25 - hurt * .3;
-        body.rotation.x = move * .2;
-        arms.forEach(a => { a.sh.rotation.x = Math.sin(t * 1.7 + a.s) * .2 - atk * 1.2; a.sh.rotation.z = a.s * (.2 + atk * .5); });
-        ropes.forEach((r, i) => swayStrand(r.slice(1), t, i, .15, "z"));
+        body.position.y = 1.8 + Math.sin(t * 1.3) * .12; body.rotation.z = Math.sin(t * 1.1) * .1 + atk * Math.sin(t * 30) * .2 - hurt * .3; body.rotation.x = move * .2;
+        arms.forEach(a => { a.sh.rotation.x = Math.sin(t * 1.7 + a.s) * .2 - atk * 1.1; a.sh.rotation.z = a.s * (.15 + atk * .45); });
+        ropes.forEach((r, i) => { r.rotation.z = Math.sin(t * 1.3 + i) * .08; r.rotation.x = Math.sin(t * 1.1 + i * 2) * .06; });
         ring.setEnabled(atk > .05); ring.scaling.setAll(1 + (1 - atk) * 6); ring.visibility = atk;
       };
     },
