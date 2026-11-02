@@ -2438,7 +2438,8 @@
             const y = pos[v * 3 + 1];
             // Looser over thigh and knee, snug at waist and hem.
             const t = Math.min(1, Math.max(0, (y - HEM) / (WAIST - HEM)));
-            const thick = .016 + .03 * Math.sin(Math.PI * Math.min(1, t * 1.25)) * (t < .85 ? 1 : .4);
+            const knee = Math.exp(-Math.pow((y - .47) / .07, 2)); // extra room where the joint folds
+            const thick = .016 + .03 * Math.sin(Math.PI * Math.min(1, t * 1.25)) * (t < .85 ? 1 : .4) + .022 * knee;
             for (let k = 0; k < 3; k++) { out.positions.push(pos[v * 3 + k] + nor[v * 3 + k] * thick); out.normals.push(nor[v * 3 + k]); }
             for (let k = 0; k < 4; k++) { out.mi.push(mi[v * 4 + k]); out.mw.push(mw[v * 4 + k]); }
           }
@@ -2672,8 +2673,9 @@
       // Cross-legged levitation; arms lift while rising and open while landing.
       for (const b of ["Hips", "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg", "LeftFoot", "RightFoot"]) set(b, 0, 0, 0);
       off[0] = 0; off[1] = 0;
-      set("LeftUpLeg", -1.45, -.15, .5); set("RightUpLeg", -1.45, .15, -.5);
-      set("LeftLeg", 2.35, .55, 0); set("RightLeg", 2.35, -.55, 0); set("LeftFoot", .5, 0, 0); set("RightFoot", .5, 0, 0);
+      // Knees fold to ~100 degrees: deeper folds collapse the skinned knee.
+      set("LeftUpLeg", -1.4, -.15, .5); set("RightUpLeg", -1.4, .15, -.5);
+      set("LeftLeg", 1.75, .45, 0); set("RightLeg", 1.75, -.45, 0); set("LeftFoot", .35, 0, 0); set("RightFoot", .35, 0, 0);
       set("Hips", -.08, 0, 0); bend(.15 + .3 * m, 0, 0);
       if (rising) { set("LeftArm", -2.75, 0, -1.0); set("RightArm", -2.75, 0, 1.0); set("LeftForeArm", 0, -.3, 0); set("RightForeArm", 0, .3, 0); }
       else if (landing) { set("LeftArm", 0, 0, -.4); set("RightArm", 0, 0, .4); set("LeftForeArm", 0, -.2, 0); set("RightForeArm", 0, .2, 0); }
