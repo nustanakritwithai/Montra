@@ -108,6 +108,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .drawer-body .status-line strong { color:#f0d39d; }
 .drawer-map { width:100%; max-height:325px; aspect-ratio:1.4; display:block; border:1px solid #c8a46399; background:#0b1214; border-radius:12px; box-shadow: 0 0 0 3px #120c08, 0 0 0 4px #6d522a88, 0 8px 24px #000a; }
 .legend { display:flex; flex-wrap:wrap; gap:10px 15px; margin:10px 0; font-size:12px; }
+.terrain-scale { display:flex; align-items:center; gap:8px; margin-top:9px; color:#eadfc7; font-size:12px; font-variant-numeric:tabular-nums; }
+.terrain-scale i { flex:1; height:7px; border:1px solid #afaa8559; border-radius:4px; }
 .legend b { color:#f2c87b; }
 .offline-banner { border-left:3px solid #f1b761; padding:10px 12px; background:#4c392452; border-radius:6px; margin:12px 0; }
 @media(max-height:640px){.quest{top:92px}.tap-tip{bottom:160px}.skill-bar{margin-bottom:6px}.glyph{height:46px;width:46px}.controls{bottom:20px}.online-count{top:128px}}

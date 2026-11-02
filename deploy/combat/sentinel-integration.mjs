@@ -9,18 +9,19 @@ if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url||"") || new URL(url).port==="4108" ||
   throw Error("Requires an isolated localhost server and disposable montra-sentinel-test-* directory");
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(read,label,timeout=10000){const end=Date.now()+timeout;while(Date.now()<end){const value=read();if(value)return value;await sleep(20);}throw Error("timeout: "+label);}
-const sdk=new Client(url),rooms=new Set(),tokens=Array.from({length:14},()=>"mt1_"+randomBytes(32).toString("hex"));
-async function seed(index,book,z=-9,x=8,level=25,pathId="sentinel",hp=160){
+const sdk=new Client(url),rooms=new Set(),tokens=Array.from({length:16},()=>"mt1_"+randomBytes(32).toString("hex"));
+async function seed(index,book,z=-9,x=8,level=25,pathId="sentinel",hp=160,mapId="ritual_village",y=0){
   const id=createHash("sha256").update(tokens[index]).digest("hex"),slots=Array(12).fill(null);
   slots[0]={itemId:"health_potion",quantity:2};slots[1]={itemId:"ritual_dagger",quantity:1};
   await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"Guardian"+index,level,experience:0,pkKills:0,pkDeaths:0,
-    x,y:0,z,hp,mapId:"ritual_village",build:{path:pathId,ancestry:"woodland"},
+    x,y,z,hp,mapId,build:{path:pathId,ancestry:"woodland"},
     inventory:{version:1,slots,equippedWeaponSlot:1},...(pathId==="sentinel"?{sentinelBook:book}:{}),updatedAt:new Date().toISOString()}),{flag:"wx"});
 }
 const all=["guard","step","fortitude","anchor","bash","sweep","slam","counter","taunt","ward","intercept","party_ward"];
 const book=slots=>({learned:all,slots,practice:{guard:20,stun:20,assist:20},cooldowns:{}});
 async function join(index,roomId){
-  const options={guestToken:tokens[index],worldVersion:1,templeVersion:1,atlasVersion:1};
+  const options={guestToken:tokens[index],worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,
+    terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1};
   const room=roomId?await sdk.joinById(roomId,options):await sdk.create("my_room",options);rooms.add(room);
   const events=[];room.onMessage("*",(type,data)=>events.push({type,data}));
   await until(()=>room.state?.players?.get(room.sessionId)?.persistent,"join");
@@ -37,7 +38,9 @@ try{
     seed(8,null,-11,8,25,"seer"),
     seed(9,book(["bash","slam","guard","counter"])),seed(10,book(["guard","taunt","ward","intercept"]),-11.5),
     seed(11,book(["guard","taunt","ward","intercept"]),-9,8,25,"sentinel",1),
-    seed(12,book(["guard","taunt","ward","intercept"]),-10),seed(13,book(["guard","taunt","ward","intercept"]),-11)]);
+    seed(12,book(["guard","taunt","ward","intercept"]),-10),seed(13,book(["guard","taunt","ward","intercept"]),-11),
+    seed(14,book(["step","bash","guard","counter"]),50,0,25,"sentinel",160,"twin_neck_pass",2),
+    seed(15,book(["guard","taunt","ward","intercept"]),47,0,25,"sentinel",160,"twin_neck_pass",2.375)]);
   const fighter=await join(0),victim=await join(1,fighter.room.roomId);
   assert.equal(fighter.room.state.sentinelAvailable,true);
   await send(fighter,"sentinel_skill",{skillId:"bash",targetId:victim.room.sessionId,damage:99999},"command_rejected",e=>e.reason==="invalid_sentinel_skill");
@@ -104,5 +107,12 @@ try{
   await foe.room.leave();rooms.delete(foe.room);await sleep(350);
   const returningFoe=await join(13,friend.room.roomId);
   assert.equal(returningFoe.me().pkKills,1,"interception knockout kill credit persists");
-  console.log("PASS: monster control, PvP stun immunity, delayed range, player and summon interception, knockout credit and book persistence");
+  const climber=await join(14),hillTarget=await join(15,climber.room.roomId);
+  const yBefore=climber.me().y;
+  await send(climber,"sentinel_skill",{skillId:"step",targetId:hillTarget.room.sessionId},"sentinel_skill_used",e=>e.skillId==="step");
+  await until(()=>climber.me().y>yBefore+0.05,"guardian step follows rising ground");
+  assert.ok(Math.abs(climber.me().y-(66-climber.me().z)/8)<0.08,"guardian remains on terrain surface");
+  hillTarget.events.length=0;climber.room.send("sentinel_skill",{skillId:"bash",targetId:hillTarget.room.sessionId});
+  await event(hillTarget,"sentinel_stun",e=>e.playerId===hillTarget.room.sessionId);
+  console.log("PASS: monster control, PvP stun immunity, delayed range, party interception, saved knockout credit and elevated terrain");
 }finally{await Promise.allSettled([...rooms].map(room=>room.leave()));}

@@ -98,7 +98,14 @@ try{
     await event(attacker,"territory_state",s=>s.local?.progress>0);
     const win=await event(attacker,"territory_state",s=>s.owners.moon_pass==="Moon Banner",75000);
     assert.equal(win.local.phase,"protected");assert.equal(win.owners.river_watch,null);
-    await event(outsider,"territory_state",s=>s.owners.moon_pass==="Moon Banner");
+    const publicState=await event(outsider,"territory_state",s=>s.owners.moon_pass==="Moon Banner");
+    assert.equal(publicState.local.government,undefined);assert.equal(win.local.government,undefined);
+    const memberView=await event(allies[4],"territory_state",s=>!!s.local?.government);
+    const estate=memberView.local.government;assert.equal(estate.market,1);assert.equal(estate.officer,false);
+    const order={site:"moon_pass",revision:estate.revision,action:"collect"};
+    await send(allies[4],"territory_govern",order,"territory_error",s=>s.reason==="war_government_role");
+    await send(outsider,"territory_govern",order,"territory_error",s=>s.reason==="war_not_owner");
+    await send(attacker,"territory_govern",order,"territory_error",s=>s.reason==="war_government_location");
     console.log("PASS common battlefield, side limits, gate defense and breach, shots uphill and downhill, full wall lap, second staircase and capture");
   }
 }finally{await Promise.allSettled([...open].map(r=>r.leave()));}

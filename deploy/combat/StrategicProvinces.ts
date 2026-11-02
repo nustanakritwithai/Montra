@@ -1,11 +1,12 @@
 import type { WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
 import {CASTLE_ENABLED, CASTLE_ID, castleObjectives, forwardCamps} from "./CastlePilot.js";
+import {RIVER_CITY,CITY_CELL,riverFacilities,riverGateSpecs,riverNodes,riverPaths,riverPosts,gridPoint} from "./RiverCity.js";
 
 type Side="north"|"south"|"east"|"west";
 type Opening=readonly [side:Side,at:number,span:number,name:string];
 type StairSpec=readonly [side:Side,at:number];
-function enclosure(x1:number,x2:number,z1:number,z2:number,openings:Opening[],stairs:StairSpec[]){
-  const thickness=2.8,height=4;
+function enclosure(x1:number,x2:number,z1:number,z2:number,openings:Opening[],stairs:StairSpec[],thickness=2.8,stairRun=6){
+  const height=4;
   function strip(side:Side,a:number,b:number):WorldWall{
     const horizontal=side==="north"||side==="south";
     const fixed=side==="north"?z1:side==="south"?z2:side==="west"?x1:x2;
@@ -22,7 +23,7 @@ function enclosure(x1:number,x2:number,z1:number,z2:number,openings:Opening[],st
   }
   const steps=stairs.map(([side,at],i)=>{
     const top={x:side==="west"?x1:side==="east"?x2:at,z:side==="north"?z1:side==="south"?z2:at};
-    const foot={x:top.x+(side==="west"?6:side==="east"?-6:0),z:top.z+(side==="north"?6:side==="south"?-6:0)};
+    const foot={x:top.x+(side==="west"?stairRun:side==="east"?-stairRun:0),z:top.z+(side==="north"?stairRun:side==="south"?-stairRun:0)};
     return {id:"wall-stair-"+i,foot,top};
   });
   return {height,deck,bodies,gates,stairs:steps,corners:[{x:x1,z:z1},{x:x2,z:z1},{x:x2,z:z2},{x:x1,z:z2}]};
@@ -40,6 +41,18 @@ function grandWalls():Rampart {
   return {height:4,deck:rings.flatMap(r=>r.deck),corners:rings.flatMap(r=>r.corners),
     gates:rings.flatMap((r,i)=>r.gates.map(g=>({...g,id:["outer","middle","inner"][i]+"-"+g.side}))),
     bodies:rings.flatMap(r=>r.bodies),stairs:rings.flatMap((r,ring)=>r.stairs.map((s,i)=>({...s,id:"castle-"+ring+"-stair-"+i})))};
+}
+function riverWalls():Rampart{
+  const rings=[[4,26,3,18],[12,21,6,12]].map(([west,east,north,south],i)=>{
+    const nw=gridPoint(west,north),se=gridPoint(east,south);
+    const gates=riverGateSpecs.filter(g=>g.ring===i);
+    const stairs:StairSpec[]=i===0?[["south",gridPoint(6,18).x],["north",gridPoint(24,3).x]]:[["south",gridPoint(14,12).x],["north",gridPoint(19,6).x]];
+    const r=enclosure(nw.x,se.x,nw.z,se.z,gates.map(g=>[g.side,g.at,12,g.name]),stairs,6,CITY_CELL);
+    return {...r,gates:r.gates.map(g=>({...g,id:gates.find(s=>s.side===g.side)!.id})),
+      stairs:r.stairs.map((s,j)=>({...s,id:"b01-stair-"+(i*2+j+1)}))};
+  });
+  return {height:4,deck:rings.flatMap(r=>r.deck),corners:rings.flatMap(r=>r.corners),gates:rings.flatMap(r=>r.gates),
+    bodies:rings.flatMap(r=>r.bodies),stairs:rings.flatMap(r=>r.stairs)};
 }
 const ramparts={
   mantra_capital:enclosure(-34,34,-58,26,[["south",0,10,"ประตูหมู่บ้าน"],["north",0,10,"ประตูด่านจันทร์"],["west",-14,10,"ประตูดงไผ่"],["east",-14,10,"ประตูบัวนาค"]],[["west",-30],["east",-28],["south",15],["north",-14]]),
@@ -79,6 +92,7 @@ export type Province = Readonly<{
   kind:"capital"|"territory"|"hunting"; hint:string; sites:readonly ProvinceSite[];
   safeRoads?:readonly number[];railPath?:number;rampart?:Rampart;
   huntTrail?:Readonly<{name:string;path:number}>;
+  riverCity?:Readonly<{facilities:typeof riverFacilities;nodes:typeof riverNodes;posts:typeof riverPosts}>;
   objectives?:typeof castleObjectives;activeObjectives?:readonly number[];forwardCamps?:typeof forwardCamps;
   relay?:Readonly<{name:string;x:number;z:number;radius:number;effect:"gate"|"banner"}>;
 }>;
@@ -87,6 +101,13 @@ const wall=(x:number,z:number,width:number,length:number):WorldWall=>({x,z,width
 const trails=(...routes:XY[][])=>routes.map(route=>route.map(([x,z])=>({x,z})));
 
 export const PROVINCES:Readonly<Record<string,Province>>={
+  [RIVER_CITY]:{kind:"territory",rampart:riverWalls(),riverCity:{facilities:riverFacilities,nodes:riverNodes,posts:riverPosts},
+    hint:"จากค่ายใต้ข้ามสะพานไม้สองฝั่ง คุมตลาดหรือคลังแล้วเข้าลานบัญชาการทางประตูใต้หรือประตูข้าง",
+    sites:[{kind:"fort",name:"ลานบัญชาการ",...riverNodes.T},{kind:"market",name:"ตลาดท่าเรือ",...riverNodes.M},
+      {kind:"port",name:"คลังเสบียง",...riverNodes.S},{kind:"mine",name:"โรงช่าง",...riverNodes.F},
+      {kind:"shrine",name:"บ่อน้ำสามลาน",...riverNodes.W},{kind:"grove",name:"ค่ายบุกใต้",...riverNodes.A},
+      {kind:"grove",name:"ค่ายรับชั้นใน",...riverNodes.D},{kind:"bridge",name:"สะพานท่าตะวันตก",...gridPoint(8,21)},
+      {kind:"bridge",name:"สะพานตลาดตะวันออก",...gridPoint(22,21)}]},
   ...(CASTLE_ENABLED?{[CASTLE_ID]:{kind:"territory" as const,rampart:grandWalls(),safeRoads:[0],objectives:castleObjectives,forwardCamps,
     activeObjectives:castleObjectives.map(p=>p.id),hint:"เปิดศึกที่ธงใต้ · แบ่งกำลังชิงหกจุด แล้วเปิดทางเข้าท้องพระโรงในนาทีที่ 30",
     sites:[site("fort","ธงรวมพลไตรเวียง",0,880),site("bridge","สะพานขบวนเสบียง",0,630),
@@ -179,5 +200,10 @@ export function makeHubs(portalsFor:(id:string)=>WorldPortal[]):Record<string,Wo
       portals,restAreas:[...portals.map(p=>({x:p.x,z:p.z,radius:4,name:"เขตพักประตู"})),
         ...PROVINCES[id].sites.filter(s=>s.kind==="market" && PROVINCES[id].kind==="territory").map(s=>({x:s.x,z:s.z,radius:5,name:"เขตพักตลาด"}))],camps:[] as const}];
   }));
-  return CASTLE_ENABLED?{...small,[CASTLE_ID]:makeCastle(portalsFor)}:small;
+  const river:WorldMapDefinition={id:RIVER_CITY,name:"เวียงปากน้ำสามลาน",bounds:{minX:-248,maxX:248,minZ:-200,maxZ:200},
+    spawn:{...riverNodes.A,y:0},portals:portalsFor(RIVER_CITY),obstacles:[],camps:[],strategic:PROVINCES[RIVER_CITY],
+    restAreas:[{...riverNodes.A,radius:4,name:"ค่ายบุกใต้"},{...riverNodes.D,radius:4,name:"ค่ายรับชั้นใน"}],
+    walls:[...PROVINCES[RIVER_CITY].rampart!.bodies.map(w=>({...w,rampart:true})),...riverFacilities.map(p=>wall(p.x-CITY_CELL/2,p.z-CITY_CELL/2,CITY_CELL,CITY_CELL))],
+    water:[wall(-248,136,128,16),wall(-104,136,208,16),wall(120,136,128,16)],paths:riverPaths};
+  return {...small,[RIVER_CITY]:river,...(CASTLE_ENABLED?{[CASTLE_ID]:makeCastle(portalsFor)}:{})};
 }
