@@ -138,8 +138,8 @@
   keyLight.intensity = .45;
   const warm = new B.PointLight("lantern glow", new B.Vector3(0, 4, 3), scene);
   warm.diffuse = B.Color3.FromHexString("#f6b16d");
-  warm.intensity = .9;
-  warm.range = 19;
+  warm.intensity = .75;
+  warm.range = 15; // follows the local hero like a carried lantern
 
   function mat(name, hex, emissive) {
     const m = new B.StandardMaterial(name, scene);
@@ -148,14 +148,40 @@
     if (emissive) m.emissiveColor = B.Color3.FromHexString(emissive);
     return m;
   }
-  const groundMat = mat("stone and soil", "#486149");
-  const wooden = mat("dark teak", "#624330");
-  const woodenAlt = mat("wet teak", "#775238");
-  const darkWood = mat("wood black", "#2b2c28");
-  const roofMat = mat("thai roof", "#482a2c");
-  const gold = mat("gold", "#aa7d3e", "#39290d");
-  const water = mat("water", "#102935", "#081c28");
-  water.alpha = 0.96;
+  // Night palette: dark wet teak, oxblood roof tiles and moonlit canals.
+  const groundMat = mat("stone and soil", "#3b4535");
+  const wooden = mat("dark teak", "#563a2a");
+  const woodenAlt = mat("wet teak", "#6a4631");
+  wooden.specularColor = woodenAlt.specularColor = B.Color3.FromHexString("#3a3530");
+  const darkWood = mat("wood black", "#241e1a");
+  const roofMat = mat("thai roof", "#6b2a22");
+  const gold = mat("gold", "#b48640", "#3d2a0c");
+  const water = mat("water", "#0a1c27", "#04111a");
+  water.specularColor = B.Color3.FromHexString("#7f93a8");
+  water.specularPower = 48;
+  function paintTexture(name, size, paint, repeat = 1) {
+    const texture = new B.DynamicTexture(name, size, scene, true);
+    paint(texture.getContext(), size);
+    texture.update();
+    texture.uScale = texture.vScale = repeat;
+    return texture;
+  }
+  // Deterministic noise keeps every client's scenery identical.
+  const noise = (i, seed = 0) => { const v = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return v - Math.floor(v); };
+  groundMat.diffuseTexture = paintTexture("village earth", 256, (c, s) => {
+    c.fillStyle = "#c9c4b4"; c.fillRect(0, 0, s, s);
+    for (let i = 0; i < 420; i++) {
+      c.fillStyle = ["#aaa694", "#b8b4a2", "#d6d0bf", "#9fa58f"][i % 4];
+      c.fillRect(noise(i, 1) * s, noise(i, 2) * s, 2 + noise(i, 3) * 6, 1 + noise(i, 4) * 3);
+    }
+  }, 9);
+  roofMat.diffuseTexture = paintTexture("roof tiles", 128, (c, s) => {
+    c.fillStyle = "#e0cfc6"; c.fillRect(0, 0, s, s);
+    for (let y = 0; y < s; y += 16) {
+      c.fillStyle = "#9d827a"; c.fillRect(0, y + 13, s, 3);
+      for (let x = (y / 16) % 2 ? 8 : 0; x < s; x += 16) { c.fillStyle = "#b9a197"; c.fillRect(x, y, 2, 13); }
+    }
+  }, 3);
   const glowMat = mat("lantern", "#ffbc77", "#ff9e3b");
   const stoneMat = mat("flagstones", "#556057");
   const ghostMat = mat("spirit", "#9fcddd", "#294959");
@@ -169,6 +195,167 @@
   spiritMat.alpha = .8;
   const otherGuardianMat = mat("allied spirit", "#68b7c8", "#216778");
   otherGuardianMat.alpha = .8;
+
+  // ---- Night atmosphere (visual only): sky dome, glow, mist, drifting motes ----
+  function radialTexture(name, size, stops) {
+    return paintTexture(name, size, (c) => {
+      const g = c.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      for (const [offset, color] of stops) g.addColorStop(offset, color);
+      c.clearRect(0, 0, size, size); c.fillStyle = g; c.fillRect(0, 0, size, size);
+    });
+  }
+  function additiveMat(name, texture) {
+    const m = new B.StandardMaterial(name, scene);
+    m.diffuseColor = B.Color3.Black(); m.specularColor = B.Color3.Black();
+    m.emissiveTexture = texture; m.opacityTexture = texture; texture.hasAlpha = true;
+    m.disableLighting = true; m.backFaceCulling = false; m.alphaMode = B.Engine.ALPHA_ADD;
+    return m;
+  }
+  // Lantern light is faked with additive pools: dozens of real point lights
+  // exceed the 4-light material limit and cost too much on phones.
+  const lightPoolMat = additiveMat("lantern light pool", radialTexture("light pool", 128, [
+    [0, "rgba(255,176,92,.62)"], [.32, "rgba(255,140,60,.26)"], [1, "rgba(255,110,40,0)"]]));
+  function lightPool(x, z, radius, y = .04) {
+    const pool = B.MeshBuilder.CreateGround("lantern pool", { width: radius * 2, height: radius * 2 }, scene);
+    pool.position.set(x, y, z); pool.material = lightPoolMat; pool.isPickable = false;
+    return pool;
+  }
+  function yantraTexture(name, ink, glowInk) {
+    return paintTexture(name, 256, (c, s) => {
+      const r = s / 2; c.clearRect(0, 0, s, s); c.translate(r, r);
+      c.strokeStyle = ink; c.fillStyle = ink; c.shadowColor = glowInk; c.shadowBlur = 8;
+      for (const [radius, width] of [[118, 5], [104, 2], [70, 3], [30, 2]]) {
+        c.lineWidth = width; c.beginPath(); c.arc(0, 0, radius, 0, Math.PI * 2); c.stroke();
+      }
+      c.lineWidth = 3; c.beginPath();
+      for (let i = 0; i <= 8; i++) { const a = i * Math.PI * 3 / 4; c.lineTo(Math.cos(a) * 70, Math.sin(a) * 70); }
+      c.stroke();
+      c.font = "bold 17px sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
+      const glyphs = "นะมะพะธะอะอุมะ";
+      for (let i = 0; i < glyphs.length; i++) {
+        const a = i / glyphs.length * Math.PI * 2;
+        c.save(); c.rotate(a); c.fillText(glyphs[i], 0, -111 + 0); c.restore();
+      }
+      c.beginPath(); c.arc(0, 0, 9, 0, Math.PI * 2); c.fill();
+    });
+  }
+  const portalYantraMat = additiveMat("portal yantra", yantraTexture("portal yantra", "rgba(150,255,230,.9)", "#5fffe0"));
+  const restYantraMat = additiveMat("rest yantra", yantraTexture("rest yantra", "rgba(255,206,120,.42)", "#ffb35a"));
+  const yantraDiscs = [];
+  function yantraDisc(x, z, radius, material, parent, y = .05) {
+    const disc = B.MeshBuilder.CreateGround("yantra seal", { width: radius * 2, height: radius * 2 }, scene);
+    disc.position.set(x, y, z); disc.material = material; disc.isPickable = false;
+    if (parent) disc.parent = parent;
+    yantraDiscs.push(disc);
+    return disc;
+  }
+
+  // Sky: gradient night, stars and a cloud-veiled crescent moon. It is only
+  // seen at shallow camera angles but keeps the horizon from reading as void.
+  const skyTexture = new B.DynamicTexture("night sky", { width: 1024, height: 512 }, scene, false);
+  {
+    const c = skyTexture.getContext();
+    const g = c.createLinearGradient(0, 0, 0, 512);
+    g.addColorStop(0, "#03050a"); g.addColorStop(.38, "#0b1220"); g.addColorStop(.5, "#1f2a36"); g.addColorStop(.6, "#10140f"); g.addColorStop(1, "#0c100c");
+    c.fillStyle = g; c.fillRect(0, 0, 1024, 512);
+    for (let i = 0; i < 320; i++) {
+      const y = noise(i, 7) * 230, a = .25 + noise(i, 8) * .7;
+      c.fillStyle = `rgba(230,236,255,${a * (1 - y / 260)})`;
+      c.fillRect(noise(i, 9) * 1024, y, noise(i, 5) > .93 ? 2 : 1, noise(i, 5) > .93 ? 2 : 1);
+    }
+    const moon = document.createElement("canvas"); moon.width = moon.height = 128;
+    const m = moon.getContext("2d");
+    const halo = m.createRadialGradient(64, 64, 10, 64, 64, 64);
+    halo.addColorStop(0, "rgba(220,230,255,.35)"); halo.addColorStop(1, "rgba(220,230,255,0)");
+    m.fillStyle = halo; m.fillRect(0, 0, 128, 128);
+    m.fillStyle = "#eef1ff"; m.beginPath(); m.arc(64, 64, 22, 0, Math.PI * 2); m.fill();
+    m.globalCompositeOperation = "destination-out"; m.beginPath(); m.arc(75, 57, 20, 0, Math.PI * 2); m.fill();
+    c.drawImage(moon, 300, 90);
+    for (let i = 0; i < 26; i++) {
+      const x = noise(i, 11) * 1024, y = 120 + noise(i, 12) * 140, w = 60 + noise(i, 13) * 160;
+      const cloud = c.createRadialGradient(x, y, 0, x, y, w);
+      cloud.addColorStop(0, "rgba(40,48,60,.55)"); cloud.addColorStop(1, "rgba(40,48,60,0)");
+      c.fillStyle = cloud; c.beginPath(); c.ellipse(x, y, w, w * .32, 0, 0, Math.PI * 2); c.fill();
+    }
+    skyTexture.update();
+  }
+  const skyMat = new B.StandardMaterial("night sky", scene);
+  skyMat.emissiveTexture = skyTexture; skyMat.diffuseColor = B.Color3.Black(); skyMat.specularColor = B.Color3.Black();
+  skyMat.disableLighting = true; skyMat.backFaceCulling = false; skyMat.fogEnabled = false;
+  const sky = B.MeshBuilder.CreateSphere("night sky", { diameter: 560, segments: 12, sideOrientation: B.Mesh.BACKSIDE }, scene);
+  sky.material = skyMat; sky.infiniteDistance = true; sky.isPickable = false; sky.applyFog = false;
+
+  // Only lanterns, candles, portals and spirits bloom; everything else stays matte.
+  const glowMats = new Set([glowMat, eyesMat, playerLocatorMat]);
+  const glow = new B.GlowLayer("lantern bloom", scene, { mainTextureRatio: .25, blurKernelSize: 24 });
+  glow.intensity = .85;
+  glow.customEmissiveColorSelector = (mesh, subMesh, material, result) => {
+    const e = glowMats.has(material) && material.emissiveColor;
+    if (e) result.set(e.r, e.g, e.b, 1); else result.set(0, 0, 0, 0);
+  };
+
+  // Low drifting mist around the camera target.
+  const mistTexture = paintTexture("mist", 256, (c, s) => {
+    c.clearRect(0, 0, s, s);
+    for (let i = 0; i < 18; i++) {
+      const x = s * (.2 + noise(i, 21) * .6), y = s * (.2 + noise(i, 22) * .6), r = s * (.12 + noise(i, 23) * .2);
+      const g = c.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, "rgba(255,255,255,.34)"); g.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = g; c.fillRect(0, 0, s, s);
+    }
+  });
+  mistTexture.hasAlpha = true;
+  const mistMat = new B.StandardMaterial("ground mist", scene);
+  mistMat.diffuseColor = B.Color3.Black(); mistMat.specularColor = B.Color3.Black();
+  mistMat.opacityTexture = mistTexture; mistMat.disableLighting = true; mistMat.backFaceCulling = false;
+  const mistLayers = [];
+  for (let i = 0; i < 4; i++) {
+    const layer = B.MeshBuilder.CreateGround("ground mist", { width: 38, height: 38 }, scene);
+    layer.material = mistMat; layer.isPickable = false;
+    layer.metadata = { ox: noise(i, 31) * 80 - 40, oz: noise(i, 32) * 80 - 40, vx: .35 + noise(i, 33) * .5, vz: (noise(i, 34) - .5) * .3, y: .55 + i * .3 };
+    mistLayers.push(layer);
+  }
+  function driftMist(elapsed, target) {
+    for (const layer of mistLayers) {
+      const m = layer.metadata;
+      const wrap = v => ((v + 45) % 90 + 90) % 90 - 45;
+      layer.position.set(target.x + wrap(m.ox + elapsed * m.vx), m.y, target.z + wrap(m.oz + elapsed * m.vz));
+    }
+  }
+
+  // Fireflies / embers / spirit motes depending on the map.
+  const motes = new B.ParticleSystem("spirit motes", 150, scene);
+  motes.particleTexture = radialTexture("mote", 64, [[0, "rgba(255,255,255,1)"], [.3, "rgba(255,255,255,.7)"], [1, "rgba(255,255,255,0)"]]);
+  motes.emitter = new B.Vector3(0, 0, 0);
+  motes.minEmitBox = new B.Vector3(-30, .3, -34); motes.maxEmitBox = new B.Vector3(30, 4, 26);
+  motes.minSize = .14; motes.maxSize = .34; motes.minLifeTime = 3; motes.maxLifeTime = 7; motes.emitRate = 24;
+  motes.direction1 = new B.Vector3(-.2, .25, -.2); motes.direction2 = new B.Vector3(.2, .55, .2);
+  motes.minEmitPower = .2; motes.maxEmitPower = .6;
+  motes.blendMode = B.ParticleSystem.BLENDMODE_ADD;
+  motes.start();
+
+  const ATMOSPHERES = {
+    ritual_village: { clear: "#080e17", fog: "#141d27", fogNear: 4, fogFar: 92, hemi: .66, carry: .75, sky: "#9aaed0", ground: "#3a2a22",
+      key: "#b3c5e2", keyI: .44, mist: "#34424f", mistAlpha: .3, mote: ["#ffb562", "#ff8a3a"], skyLevel: 1 },
+    forbidden_forest: { clear: "#060f0d", fog: "#10201b", fogNear: 6, fogFar: 92, hemi: .58, carry: .6, sky: "#8db5a6", ground: "#1f2b20",
+      key: "#a5c8cf", keyI: .4, mist: "#2c463a", mistAlpha: .24, mote: ["#d4ff7a", "#7dffc2"], skyLevel: .8 },
+    bound_temple: { clear: "#0e080c", fog: "#22141a", fogNear: 4, fogFar: 96, hemi: .44, carry: .4, sky: "#c2aab4", ground: "#2e1c18",
+      key: "#e6c3aa", keyI: .38, mist: "#402c33", mistAlpha: .24, mote: ["#ffa25c", "#ffd18c"], skyLevel: .9 },
+  };
+  let atmosphere = ATMOSPHERES.ritual_village;
+  function applyAtmosphere(mapId) {
+    atmosphere = ATMOSPHERES[mapId] || ATMOSPHERES.ritual_village;
+    const a = atmosphere, c3 = hex => B.Color3.FromHexString(hex);
+    scene.clearColor = B.Color4.FromHexString(a.clear + "ff");
+    scene.fogColor = c3(a.fog);
+    moon.intensity = a.hemi; moon.diffuse = c3(a.sky); moon.groundColor = c3(a.ground);
+    keyLight.diffuse = c3(a.key); keyLight.intensity = a.keyI; warm.intensity = a.carry;
+    mistMat.emissiveColor = c3(a.mist); mistMat.alpha = a.mistAlpha;
+    skyTexture.level = a.skyLevel;
+    const [c1, c2] = a.mote.map(h => B.Color4.FromHexString(h + "ff"));
+    motes.color1 = c1; motes.color2 = c2; motes.colorDead = new B.Color4(c2.r, c2.g, c2.b, 0);
+  }
+  applyAtmosphere("ritual_village");
 
   const ground = B.MeshBuilder.CreateGround("walkableGround", { width: 40, height: 40 }, scene);
   ground.position.y = -0.12;
@@ -275,69 +462,208 @@
     applyFortVisual(fort||defaultFort);
   }
 
-  function makeLantern(x, z) {
-    cube("lantern pole", [x, 1.1, z], [0.13, 2.2, 0.13], darkWood);
-    cube("lantern cap", [x, 2.25, z], [.52, .12, .52], roofMat);
-    cube("lantern flame", [x, 1.95, z], [.29, .45, .28], glowMat);
-    const l = new B.PointLight("flame", new B.Vector3(x, 1.95, z), scene);
-    l.diffuse = B.Color3.FromHexString("#ef9e5d");
-    l.intensity = .45;
-    l.range = 7;
+  // ---- Ritual village: a night canal quarter of teak stilt houses ----
+  // Everything here is decorative and non-pickable (taps still land on the
+  // walkable ground). Parts are merged by material to keep draw calls low.
+  const villageParts = [];
+  const lanternPaper = mat("red paper lantern", "#b8452f", "#d4572a");
+  const candleMat = mat("candle flame", "#ffe2b0", "#ffb24a");
+  const waxMat = mat("candle wax", "#e9dcc2");
+  const clothRed = mat("talisman cloth", "#7c1f1b", "#2a0705");
+  const burlap = mat("rice sacks", "#6f5f48");
+  const crateWood = mat("cargo crate", "#4a3122");
+  const leafDark = mat("night leaves", "#1b3125");
+  const leafMid = mat("moonlit leaves", "#28473a");
+  const bronzeMat = mat("temple bronze", "#6f6247", "#1e170b");
+  const shrineWhite = mat("spirit house plaster", "#b4a993");
+  const moonStreak = mat("moon on water", "#53708a", "#2a4258");
+  moonStreak.alpha = .5;
+  [lanternPaper, candleMat].forEach(m => glowMats.add(m));
+  function vbox(name, x, y, z, w, h, d, material, parent) {
+    const m = B.MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene);
+    m.position.set(x, y, z); m.material = material; m.isPickable = false;
+    if (parent) m.parent = parent;
+    villageParts.push(m); return m;
   }
-  // Wide central boardwalk: all visual props are non-pickable; taps project to the walkable ground.
+  function vcyl(name, x, y, z, height, bottom, top, material, sides = 8, parent) {
+    const m = B.MeshBuilder.CreateCylinder(name, { height, diameterBottom: bottom, diameterTop: top, tessellation: sides }, scene);
+    m.position.set(x, y, z); m.material = material; m.isPickable = false;
+    if (parent) m.parent = parent;
+    villageParts.push(m); return m;
+  }
+  function vpool(x, z, radius, y) { villageParts.push(lightPool(x, z, radius, y)); }
+  function makeLantern(x, z) {
+    vbox("lantern pole", x, 1.1, z, .13, 2.2, .13, darkWood);
+    vbox("lantern arm", x, 2.18, z, .5, .07, .07, darkWood);
+    vbox("lantern cap", x, 2.3, z, .42, .08, .42, roofMat);
+    vcyl("lantern flame", x, 1.95, z, .42, .3, .34, glowMat, 6);
+    vpool(x, z, 2.8, .07);
+  }
+  function candles(x, z, count, spread = .45, y = 0) {
+    for (let i = 0; i < count; i++) {
+      const a = i * 2.4, r = spread * (.35 + noise(i + x * 7, z) * .65);
+      const h = .18 + noise(i, x + z) * .22, cx = x + Math.cos(a) * r, cz = z + Math.sin(a) * r;
+      vcyl("candle", cx, y + h / 2, cz, h, .09, .09, waxMat, 6);
+      vcyl("candle flame", cx, y + h + .06, cz, .12, .07, 0, candleMat, 4);
+    }
+    vpool(x, z, 1.6 + spread, y + .03);
+  }
+  // Steep Thai gable with gilded bargeboards and chofa finials at both ends.
+  function thaiRoof(x, y, z, span, depth, pitch = .82, parent) {
+    const half = span / 2, rise = half * Math.tan(pitch), length = half / Math.cos(pitch);
+    for (const side of [-1, 1]) {
+      vbox("roof slope", x + side * half / 2, y + rise / 2, z, length, .14, depth, roofMat, parent).rotation.z = -side * pitch;
+      vbox("roof eave", x + side * (half - .05), y - .02, z, .12, .1, depth + .1, gold, parent);
+    }
+    vbox("roof ridge", x, y + rise + .04, z, .16, .14, depth + .3, gold, parent);
+    for (const end of [-1, 1]) {
+      vcyl("chofa", x, y + rise + .38, z + end * (depth / 2 + .2), .8, .12, 0, gold, 5, parent).rotation.x = end * .55;
+      vbox("gable board", x, y + rise * .45, z + end * depth / 2, span * .55, rise * .8, .08, darkWood, parent);
+    }
+    return y + rise;
+  }
+  // Teak house raised on stilts over the canal, veranda facing the boardwalk.
+  function house(x, z, size = 3.4, veranda = true) {
+    const sign = Math.sign(x), front = x - sign * (size / 2);
+    for (const dx of [-1, 1]) for (const dz of [-1, 1]) vbox("stilt", x + dx * size * .44, .35, z + dz * size * .44, .2, 1.3, .2, darkWood);
+    vbox("raised floor", x, 1.02, z, size + .5, .14, size + .5, wooden);
+    if (veranda) {
+      vbox("veranda", front - sign * .65, 1.0, z, 1.3, .12, size + .5, woodenAlt);
+      for (let i = 0; i < 5; i++) vbox("veranda post", front - sign * 1.25, 1.35, z - size / 2 + i * size / 4, .08, .6, .08, darkWood);
+      vbox("veranda rail", front - sign * 1.25, 1.62, z, .08, .07, size + .4, darkWood);
+    }
+    vbox("teak walls", x, 2.0, z, size, 1.8, size, woodenAlt);
+    for (let i = -1; i <= 1; i++) vbox("wall batten", front - sign * .02, 2.0, z + i * size * .32, .05, 1.8, .12, darkWood);
+    vbox("house door", front - sign * .04, 1.85, z - size * .16, .06, 1.35, .75, darkWood);
+    vbox("lit window", front - sign * .05, 2.15, z + size * .22, .05, .55, .62, glowMat);
+    vbox("window shutter", front - sign * .06, 2.15, z + size * .22 + .45, .04, .6, .26, wooden);
+    thaiRoof(x, 2.9, z, size + 1.1, size + .7);
+    const lanternX = front - sign * (veranda ? 1.2 : .25);
+    vcyl("hanging lantern", lanternX, 2.3, z + size / 2 - .1, .36, .26, .3, lanternPaper, 8);
+    vpool(lanternX, z + size / 2 - .1, 2.2, .07);
+  }
+  function longTailBoat(x, z, angle) {
+    const node = new B.TransformNode("boat", scene); node.position.set(x, 0, z); node.rotation.y = angle;
+    vbox("boat hull", 0, -.02, 0, .95, .34, 3.2, darkWood, node);
+    vbox("boat floor", 0, .14, 0, .75, .04, 3.0, wooden, node);
+    for (const end of [-1, 1]) {
+      vcyl("boat prow", 0, .02, end * 2.05, 1.0, .95, 0, darkWood, 4, node).rotation.x = end * Math.PI / 2;
+      vbox("boat seat", 0, .2, end * .8, .8, .06, .22, woodenAlt, node);
+    }
+    vcyl("prow garland", 0, .32, -2.35, .34, .14, .02, clothRed, 5, node).rotation.x = -.9;
+    return node;
+  }
+  const boatNodes = [];
+  // Central boardwalk of wet planks with lantern posts.
   for (let z = -18; z <= 18; z += 1.15) {
-    cube("plank", [0, -.035, z], [11.1, .12, .97], z % 3 === 0 ? woodenAlt : wooden);
-    cube("plank seam", [0, -.092, z + .52], [11.12, .035, .07], darkWood);
+    const k = Math.round((z + 18) / 1.15);
+    vbox("plank", 0, -.035, z, 11.1, .12, .97, k % 3 === 0 ? woodenAlt : wooden);
+    vbox("plank seam", 0, -.092, z + .52, 11.12, .035, .07, darkWood);
   }
   for (const x of [-6.1, 6.1]) {
+    vbox("boardwalk beam", x, .05, 0, .22, .16, 37, darkWood);
     for (let z = -18; z <= 18; z += 4.2) {
-      cube("boardwalk post", [x, .95, z], [.27, 2.2, .27], darkWood);
+      vbox("boardwalk post", x, .95, z, .27, 2.2, .27, darkWood);
       if (Math.round(z) % 2 === 0) makeLantern(x + Math.sign(x) * .3, z);
     }
   }
+  // Canals (visible just above the walkable ground) and the southern river.
   for (const x of [-14.1, 14.1]) {
-    cube("canal", [x, -.23, 0], [11.2, .08, 40], water);
-    for (let z = -17; z < 19; z += 3.1) {
-      cube("water reflection", [x + Math.sin(z) * 1.1, -.17, z], [1.7, .015, .16], mat("water streak" + x + z, "#42646a", "#142b36"));
+    vbox("canal", x, -.09, -10, 11.2, .08, 100, water);
+    for (let i = 0; i < 14; i++) {
+      const z = -19 + i * 2.9;
+      vbox("moon streak", x + (noise(i, x) - .5) * 6, -.04, z, 1.2 + noise(i, 3) * 1.6, .01, .12, moonStreak);
     }
   }
-  function house(x, z, size = 3.4) {
-    const sign = Math.sign(x);
-    cube("house posts", [x, 1.4, z], [size, 2.8, size], wooden);
-    cube("house door", [x - sign * (size / 2 + .015), .85, z], [.07, 1.6, .9], darkWood);
-    cube("house window", [x - sign * (size / 2 + .05), 1.7, z + .95], [.07, .6, .57], glowMat);
-    const roof = B.MeshBuilder.CreateCylinder("gabled roof", { diameter: size * 1.52, height: 1.1, tessellation: 4 }, scene);
-    roof.position.copyFromFloats(x, 3.28, z);
-    roof.rotation.y = Math.PI / 4;
-    roof.material = roofMat;
-    roof.isPickable = false;
-    cube("roof ridge", [x, 3.8, z], [size * 1.05, .1, .12], gold);
+  vbox("river", 0, -.13, 44, 160, .08, 48, water);
+  for (let i = 0; i < 26; i++) vbox("moon streak", (noise(i, 41) - .5) * 70, -.08, 22 + noise(i, 42) * 30, 1.5 + noise(i, 43) * 3, .01, .14, moonStreak);
+  // South pier: stepped landing, mooring posts and moored long-tail boats.
+  for (let s = 0; s < 3; s++) vbox("pier step", 0, -.08 - s * .07, 19.4 + s * .9, 8.5 - s * .6, .12, .9, woodenAlt);
+  for (const x of [-4, 4]) vbox("mooring post", x, .3, 22, .25, 1.4, .25, darkWood);
+  boatNodes.push(longTailBoat(-6.2, 24.5, .25), longTailBoat(6.5, 25.2, -.18), longTailBoat(-14.4, 15.5, .05), longTailBoat(13.6, -16.5, Math.PI - .08));
+  // The east house at z 3.4 stands behind the climbable watchwall: no veranda there.
+  [[-10,-13,4], [10,-13,3.5],[-10,-4,3.5],[10,3.4,4.1,false],[-10,12,3.5],[10,15,3.5]].forEach(v => house(...v));
+  // Darker second row beyond the canals gives the quarter depth.
+  for (const side of [-1, 1]) for (let i = 0; i < 5; i++) {
+    const x = side * (26 + noise(i, side) * 3), z = -20 + i * 10 + noise(i, 5) * 3, size = 4.4 + noise(i, 6) * 1.6;
+    for (const dx of [-1, 1]) vbox("far stilt", x + dx * size * .4, .3, z, .25, 1.2, size * .9, darkWood);
+    vbox("far house", x, 2.1, z, size, 2.4, size, wooden);
+    vbox("far window", x - side * (size / 2 + .03), 2.3, z, .05, .5, .6, glowMat);
+    thaiRoof(x, 3.3, z, size + 1.2, size + .8);
   }
-  [[-10,-13,4], [10,-13,3.5],[-10,-4,3.5],[10,3.4,4.1],[-10,12,3.5],[10,15,3.5]].forEach(v => house(...v));
-  // A small shrine and small ritual objects signal the Thai occult direction.
-  cube("shrine platform", [-4.2,.65,-1.5], [2.2,1.3,1.6], darkWood);
-  cube("shrine chamber", [-4.2,1.65,-1.5], [1.55,1.1,1.15], woodenAlt);
-  cube("shrine roof", [-4.2,2.3,-1.5], [2.15,.22,1.65], roofMat);
-  cube("shrine sigil", [-4.2,1.8,-.91], [.4,.5,.03], glowMat);
+  // Spirit house shrine with candles, offerings and talisman flags.
+  vbox("shrine platform", -4.2, .35, -1.5, 2.2, .7, 1.6, darkWood);
+  vcyl("shrine pillar", -4.2, 1.05, -1.5, .9, .42, .36, shrineWhite, 8);
+  vbox("shrine dais", -4.2, 1.55, -1.5, 1.5, .12, 1.15, gold);
+  vbox("shrine chamber", -4.2, 2.0, -1.5, 1.0, .8, .8, clothRed);
+  vbox("shrine sigil", -4.2, 2.0, -1.07, .34, .44, .04, glowMat);
+  const shrineTop = thaiRoof(-4.2, 2.42, -1.5, 1.5, 1.0, .9);
+  vcyl("shrine spire", -4.2, shrineTop + .5, -1.5, 1.0, .22, 0, gold, 8);
+  candles(-4.2, -.45, 6, .5, .7);
+  for (const dx of [-1.25, 1.25]) {
+    vbox("flag pole", -4.2 + dx, 1.4, -2.3, .07, 2.8, .07, darkWood);
+    vbox("talisman flag", -4.2 + dx + Math.sign(dx) * .22, 2.2, -2.3, .4, 1.0, .03, clothRed);
+  }
   [[-4,-1], [4,6], [4,-11], [-4,13]].forEach(([x,z]) => makeLantern(x,z));
-  for (let i = 0; i < 15; i++) {
-    const x = (i % 2 ? -1 : 1) * (18 + Math.sin(i * 4.1) * 1.1);
-    const z = (i * 7.19) % 38 - 19;
-    const trunk = B.MeshBuilder.CreateCylinder("tree trunk", { diameter: .42, height: 2.5 }, scene);
-    trunk.position.set(x, 1.1, z); trunk.material = darkWood; trunk.isPickable = false;
-    const canopy = B.MeshBuilder.CreateSphere("canopy", { diameter: 2.45, segments: 6 }, scene);
-    canopy.position.set(x, 3.1, z); canopy.material = groundMat; canopy.isPickable = false;
+  // Caged bronze bell beside the pier.
+  vbox("bell deck", 7.4, .1, 17.2, 2.0, .2, 2.0, woodenAlt);
+  for (const dx of [-.8, .8]) vbox("bell post", 7.4 + dx, 1.6, 17.2, .16, 3.0, .16, darkWood);
+  vbox("bell beam", 7.4, 3.05, 17.2, 1.9, .14, .2, darkWood);
+  vcyl("bronze bell", 7.4, 2.35, 17.2, 1.0, .95, .5, bronzeMat, 12);
+  vcyl("bell lip", 7.4, 1.86, 17.2, .1, 1.02, 1.02, gold, 12);
+  thaiRoof(7.4, 3.15, 17.2, 2.2, 1.6, .9);
+  // Cargo along the land strips between boardwalk and canal.
+  for (const [x, z] of [[-7.3, -9], [7.2, -6], [-7.2, 7.5], [7.3, 10.5], [-7.4, 17]]) {
+    for (let i = 0; i < 3; i++) vbox("crate", x + (noise(i, z) - .5) * .9, .3 + (i === 2 ? .55 : 0), z + (i - 1) * .7, .6, .55, .6, crateWood);
+    for (let i = 0; i < 4; i++) {
+      const sack = vcyl("rice sack", x + (noise(i, x) - .5) * 1.1, .2, z + 1.4 + (noise(i, z + 1) - .5) * 1.1, .4, .62, .5, burlap, 7);
+      sack.scaling.z = .7;
+    }
+  }
+  // North gate toward the forbidden forest.
+  for (const dx of [-5.8, 5.8]) {
+    vbox("gate post", dx, 2.2, -19.4, .45, 4.4, .45, clothRed);
+    vbox("gate base", dx, .25, -19.4, .7, .5, .7, darkWood);
+  }
+  vbox("gate lintel", 0, 4.2, -19.4, 12.6, .3, .5, darkWood);
+  vbox("gate plaque", 0, 3.75, -19.4, 2.4, .6, .1, gold);
+  thaiRoof(0, 4.4, -19.4, 1.6, 13.2, .7);
+  // Trees framing the quarter: layered dark canopies.
+  for (let i = 0; i < 18; i++) {
+    const x = (i % 2 ? -1 : 1) * (21 + noise(i, 51) * 2.5);
+    const z = -21 + (i >> 1) * 4.8 + noise(i, 52) * 2;
+    const h = 2.2 + noise(i, 53) * 1.2;
+    vcyl("tree trunk", x, h / 2, z, h, .45, .3, darkWood, 6);
+    vcyl("canopy low", x, h + .5, z, 1.6, 3.2, 1.6, leafDark, 7);
+    vcyl("canopy high", x, h + 1.6, z, 1.6, 2.2, .2, leafMid, 7);
+  }
+  for (let i = 0; i < 26; i++) {
+    const x = -40 + i * 3.2, z = -27 - noise(i, 61) * 6, h = 3 + noise(i, 62) * 2;
+    vcyl("forest edge", x, h * .55, z, h * 1.1, 4 + noise(i, 63) * 2, .2, i % 2 ? leafDark : leafMid, 6);
+  }
+  {
+    const byMaterial = new Map();
+    for (const part of villageParts) {
+      if (!byMaterial.has(part.material)) byMaterial.set(part.material, []);
+      byMaterial.get(part.material).push(part);
+    }
+    for (const parts of byMaterial.values()) {
+      const merged = parts.length > 1 ? B.Mesh.MergeMeshes(parts, true, true) : parts[0];
+      if (merged) merged.isPickable = false;
+    }
+    boatNodes.forEach(node => node.dispose());
   }
   // Both maps share one scene and ground. Their static meshes are created once
   // and toggled; switching maps must not accumulate scenes or WebGL resources.
-  const villageMeshes = scene.meshes.filter(mesh => mesh !== ground);
-  const villageLights = scene.lights.filter(light => light !== moon && light !== keyLight);
+  const villageMeshes = scene.meshes.filter(mesh => mesh !== ground && mesh !== sky && !mistLayers.includes(mesh));
+  const villageLights = scene.lights.filter(light => light !== moon && light !== keyLight && light !== warm);
   const forestRoot = new B.TransformNode("forbidden-forest", scene);
-  const forestLeaf = mat("forest leaves", "#2e5a3e");
-  const forestStone = mat("forest stone", "#879387");
-  const forestPath = mat("forest path", "#9d8967");
-  const forestClearing = mat("forest clearing", "#6c7b50");
-  const portalMat = mat("portal glow", "#a0e1d2", "#287e75");
+  const forestLeaf = mat("forest leaves", "#203f2e");
+  const forestStone = mat("forest stone", "#66706a");
+  const forestPath = mat("forest path", "#75644b");
+  const forestClearing = mat("forest clearing", "#4c573a");
+  const portalMat = mat("portal glow", "#a0e1d2", "#2f9c8f");
+  glowMats.add(portalMat);
   const portals = {
     ritual_village: { id:"village_to_forest", x:-4, z:-17, label:"เดินทางไปป่าต้องห้าม" },
     forbidden_forest: { id:"forest_to_village", x:0, z:14, label:"กลับหมู่บ้านอาคม" }
@@ -350,7 +676,7 @@
     deep_east: {glyph:"โคมวิญญาณ", color:"#79d9d6", soil:"#577976"},
   };
   for (const look of Object.values(campLooks)) look.material=mat(look.glyph,look.color);
-  const forestFloor=mat("moss understory","#557552");
+  const forestFloor=mat("moss understory","#3d5340");
   const litter=new B.DynamicTexture("forest leaf litter",128,scene,true);
   const soil=litter.getContext();
   soil.fillStyle="#dce2cc";soil.fillRect(0,0,128,128);
@@ -360,16 +686,27 @@
     soil.fillRect(x,z,2+i%4,1+i%2);
   }
   litter.update();litter.uScale=litter.vScale=24;forestFloor.diffuseTexture=litter;
+  const forestGrass=mat("night grass","#2b4a30"), forestFern=mat("fern","#355a3a");
+  const mushStem=mat("mushroom stem","#a9a48f"), mushCap=mat("spirit mushroom","#69d8c8","#2fb7a3");
+  glowMats.add(mushCap);
   const rootSpiritMat=mat("root spirit","#84b894","#21452e");
   const elderSpiritMat=mat("night spirit","#baacd9","#3b2d54");
-  const templeFloor=mat("temple sandstone","#847f71");
-  const templeCourt=mat("weathered courtyard","#a39581");
-  const templePaving=mat("limestone walk","#c1ad83");
+  const templeFloor=mat("temple sandstone","#6a655b");
+  const templeCourt=mat("weathered courtyard","#7c7163");
+  const templePaving=mat("limestone walk","#7a6a4f");
   const templeBrick=mat("exposed laterite","#925d43");
   const templeStone=mat("carved lintel","#8c9281");
   const templeLacquer=mat("binding lacquer","#953f37");
   const templeBronze=mat("oxidised bronze","#578984");
   const templeGold=mat("aged gilding","#c39850","#221909");
+  const templeBanner=mat("talisman banner","#ffffff","#2a0a06");
+  templeBanner.diffuseTexture=paintTexture("talisman banner",128,(c,s)=>{
+    c.fillStyle="#7a1a16";c.fillRect(0,0,s,s);
+    c.strokeStyle="#d6a64e";c.lineWidth=4;c.strokeRect(8,6,s-16,s-12);
+    c.lineWidth=3;c.beginPath();c.arc(s/2,s*.42,s*.24,0,Math.PI*2);c.stroke();
+    c.beginPath();for(let i=0;i<=5;i++){const a=i*Math.PI*4/5-Math.PI/2;c.lineTo(s/2+Math.cos(a)*s*.2,s*.42+Math.sin(a)*s*.2);}c.stroke();
+    c.fillStyle="#d6a64e";c.font="bold 18px sans-serif";c.textAlign="center";c.fillText("นะ มะ พะ ธะ",s/2,s*.86);
+  });
   const tile=new B.DynamicTexture("worn temple pavers",256,scene,true);
   const tileInk=tile.getContext();tileInk.fillStyle="#e6e3ce";tileInk.fillRect(0,0,256,256);
   for(let row=0;row<8;row++)for(let col=-1;col<5;col++){
@@ -382,6 +719,7 @@
   const templeSight=new B.Ray(B.Vector3.Zero(),new B.Vector3(0,0,1));
   const keeperMat=mat("guardian indigo","#605079","#251a34");
   const strikeMat=mat("guardian strike","#ff9850","#de481f");
+  glowMats.add(strikeMat);
   const forestPathMesh=cube("forest path",[0,-.035,0],[5,.12,40],forestPath);
   forestPathMesh.parent=forestRoot;
   for(const [x,z] of [[-6,6],[7,7],[-15,-15],[-16,-8],[-14,2],[-15,12],[15,-15],[15,-5],[15,3],[15,14]]) {
@@ -402,6 +740,8 @@
     const ring=B.MeshBuilder.CreateTorus("portal-"+mapId,{diameter:3,thickness:.22,tessellation:24},scene);
     ring.rotation.x=Math.PI/2;ring.position.set(info.x,1.7,info.z);ring.material=portalMat;
     ring.metadata={portalId:info.id};if(parent)ring.parent=parent;
+    const seal=yantraDisc(info.x,info.z,2.6,portalYantraMat,parent);
+    if(!parent && !override)villageMeshes.push(seal);
     const labelTexture=new B.DynamicTexture("portal-label-"+mapId,{width:512,height:128},scene,false);
     labelTexture.hasAlpha=true;
     labelTexture.drawText(override ? (worldDefinitions?.[override.targetMapId]?.name || override.targetMapId) : (mapId==="ritual_village" ? "ป่าต้องห้าม" : "หมู่บ้านอาคม"),null,78,"bold 50px sans-serif","#effff4","transparent",true);
@@ -438,8 +778,9 @@
     const texture=new B.DynamicTexture("world-label",{width:768,height:128},scene,false);
     texture.hasAlpha=true;
     const ink=texture.getContext();ink.font="bold 44px sans-serif";ink.textAlign="center";
-    ink.lineWidth=7;ink.strokeStyle="#192a28";ink.strokeText(text,384,83,742);
-    ink.fillStyle="#fff1cc";ink.fillText(text,384,83,742);texture.update();
+    ink.lineJoin="round";ink.lineWidth=9;ink.strokeStyle="rgba(14,9,6,.92)";ink.strokeText(text,384,83,742);
+    ink.shadowColor="rgba(255,170,70,.75)";ink.shadowBlur=14;
+    ink.fillStyle="#ffe4a8";ink.fillText(text,384,83,742);texture.update();
     const material=new B.StandardMaterial("world-label",scene);
     material.diffuseTexture=texture;material.opacityTexture=texture;material.emissiveColor=B.Color3.White();material.disableLighting=true;
     const mesh=B.MeshBuilder.CreatePlane("world-label",{width,height:2.2},scene);
@@ -512,6 +853,28 @@
         column(x+sign*3,3.5,z-3,1.15,.8,0,gold,4);
       }
       expansionLabel("ผู้พิทักษ์ศาลร้าง · Elite 12",x,z-3,17);
+    }
+    // Understory: grass tufts, glowing spirit mushrooms and camp spirit lanterns.
+    const paths=map.paths||[];
+    const nearPath=(x,z)=>paths.some(path=>path.some((p,i)=>{
+      if(!i)return false;const a=path[i-1],dx=p.x-a.x,dz=p.z-a.z,l=dx*dx+dz*dz||1;
+      const t=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/l));
+      return Math.hypot(x-a.x-t*dx,z-a.z-t*dz)<3;
+    }));
+    const clearOfProps=(x,z)=>!(map.camps||[]).some(c=>Math.hypot(x-c.x,z-c.z)<12.5)&&
+      !map.obstacles.some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+.6)&&!nearPath(x,z);
+    const spanX=bounds.maxX-bounds.minX,spanZ=bounds.maxZ-bounds.minZ;
+    for(let i=0;i<420;i++){
+      const x=bounds.minX+noise(i,71)*spanX,z=bounds.minZ+noise(i,72)*spanZ;
+      if(!clearOfProps(x,z))continue;
+      const h=.35+noise(i,73)*.45;
+      column(x,h/2,z,h,.3+noise(i,74)*.35,0,i%3?forestGrass:forestFern,3);
+      if(i%19===0){column(x+.5,.12,z+.3,.24,.12,.12,mushStem,5);column(x+.5,.28,z+.3,.12,.42,.1,mushCap,6);}
+    }
+    for(const camp of map.camps||[])for(let k=0;k<4;k++){
+      const a=k*Math.PI/2+Math.PI/4,x=camp.x+Math.cos(a)*10.8,z=camp.z+Math.sin(a)*10.8;
+      column(x,1,z,2,.16,.12,darkWood,5);column(x,2.1,z,.4,.34,.28,glowMat,6);
+      place(lightPool(x,z,2.8,.05),x,.05,z,lightPoolMat);
     }
     // Batch static decorations by material; crowns remain individually fadeable.
     for(const parts of groups.values()){
@@ -635,6 +998,29 @@
       block(side*4.8,3.7,18,1.1,.18,.18,templeGold);
     }
     finish("temple gate roof",true);
+    // Votive candles pool warm light; talisman banners hang on both wall faces.
+    for(const o of map.obstacles){
+      if(!(o.id.includes("lamp")||o.id.startsWith("votive-")))continue;
+      place(lightPool(o.x,o.z,3.6,.05),o.x,.05,o.z,lightPoolMat);
+      for(let i=0;i<5;i++){
+        const a=i*1.26,cx=o.x+Math.cos(a)*(o.radius+.5),cz=o.z+Math.sin(a)*(o.radius+.5),h=.2+noise(i,o.x)*.25;
+        column(cx,h/2,cz,h,.1,.1,waxMat,6);column(cx,h+.06,cz,.13,.08,0,candleMat,4);
+      }
+    }
+    for(const side of [-1,1]){
+      place(lightPool(side*4.8,19.6,3,.05),side*4.8,.05,19.6,lightPoolMat);
+      for(let i=0;i<6;i++)column(side*4.8+(noise(i,side)-.5)*1.2,.15,19.4+(noise(i,7)-.5)*.8,.3,.1,.1,candleMat,5);
+    }
+    finish("temple candles");
+    for(const wall of map.walls||[]){
+      const alongX=wall.width>wall.length,span=Math.max(wall.width,wall.length),thick=Math.min(wall.width,wall.length);
+      const cx=wall.x+wall.width/2,cz=wall.z+wall.length/2;
+      for(let i=2.5;i<span-1.5;i+=7)for(const side of [-1,1]){
+        const off=thick/2+.07,dx=alongX?i-span/2:side*off,dz=alongX?side*off:i-span/2;
+        block(cx+dx,5.6,cz+dz,alongX?1.2:.06,2.6,alongX?.06:1.2,templeBanner);
+      }
+    }
+    finish("temple banners");
     expansionLabel("วัดร้างพันธนาการ · Lv 8–20",0,18,18,10.5);
   }
   function fadeTempleWalls(hero) {
@@ -684,12 +1070,13 @@
       // fight for the same depth pixels at the wide camera distance.
       clearing.parent=expansionRoot;clearing.rotation.x=inTemple?0:Math.PI/2;clearing.position.set(camp.x,-.06,camp.z);clearing.material=inTemple?templeCourt:forestClearing;clearing.isPickable=false;
       const look=campLooks[camp.id];
-      if(look){const soilMat=mat("camp soil",look.soil);expansionResources.push(soilMat);clearing.material=soilMat;}
+      if(look){const soilMat=mat("camp soil",look.soil);soilMat.diffuseColor.scaleInPlace(.72);expansionResources.push(soilMat);clearing.material=soilMat;}
       expansionLabel(camp.name+" · Lv "+Math.min(...camp.levels)+"–"+Math.max(...camp.levels),camp.x,camp.z);
     }
     for(const area of map.restAreas||[]){
       const ring=B.MeshBuilder.CreateTorus("rest boundary",{diameter:area.radius*2,thickness:.15,tessellation:48},scene);
       ring.parent=expansionRoot;ring.position.set(area.x,.08,area.z);ring.material=portalMat;ring.isPickable=false;
+      yantraDisc(area.x,area.z,area.radius,restYantraMat,expansionRoot,.045);
       if(!map.portals.some(p=>Math.hypot(p.x-area.x,p.z-area.z)<3))expansionLabel(area.name,area.x,area.z,10);
     }
     if(activeMapId==="forbidden_forest"){
@@ -786,6 +1173,7 @@
   function switchWorld(mapId) {
     if(activeMapId===mapId || !(portals[mapId] || worldDefinitions?.[mapId]))return;
     activeMapId=mapId;
+    applyAtmosphere(mapId);
     clearChatHistory(false);
     const village=mapId==="ritual_village";
     for(const mesh of villageMeshes) mesh.setEnabled(village);
@@ -820,6 +1208,7 @@
   }
   $("warpButton").addEventListener("click",requestPortalWarp);
   const markerMat = mat("waypoint gold", "#ffdb81", "#dd9a37");
+  glowMats.add(markerMat);
   const marker = B.MeshBuilder.CreateTorus("destination", { diameter: 1.1, thickness: .08 }, scene);
   marker.material = markerMat;
   marker.rotation.x = Math.PI / 2;
@@ -2439,83 +2828,196 @@
   }
   $("drawerClose").addEventListener("click",closeDrawer);
   ui.shade.addEventListener("click",closeDrawer);
+  // Inked night-map style shared by the minimap and the full map drawer.
+  const MAP_THEMES = {
+    ritual_village: { inner: "#1d2b2e", outer: "#080f12", land: "#2a3328", ink: "#e2c487", grid: "rgba(226,196,135,.06)" },
+    forbidden_forest: { inner: "#1b2a22", outer: "#07100c", land: "#22301f", ink: "#cfe0a0", grid: "rgba(207,224,160,.06)" },
+    bound_temple: { inner: "#2c1f1d", outer: "#0f0909", land: "#30241f", ink: "#f0c58c", grid: "rgba(240,197,140,.06)" },
+  };
+  function mapText(ctx, text, x, y, size, color, weight = 600) {
+    ctx.font = `${weight} ${size}px system-ui, "Noto Sans Thai", sans-serif`;
+    ctx.textAlign = "center"; ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(3, size * .32); ctx.strokeStyle = "rgba(6,8,8,.88)"; ctx.strokeText(text, x, y);
+    ctx.fillStyle = color; ctx.fillText(text, x, y);
+  }
+  function mapDot(ctx, x, y, r, fill, stroke = "rgba(5,6,6,.85)", glowColor) {
+    if (glowColor) { ctx.shadowColor = glowColor; ctx.shadowBlur = r * 2.5; }
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill();
+    ctx.shadowBlur = 0; ctx.lineWidth = Math.max(1, r * .35); ctx.strokeStyle = stroke; ctx.stroke();
+  }
   function drawMap(ctx,width,height,large=false) {
-    ctx.clearRect(0,0,width,height);
-    ctx.fillStyle="#20342e"; ctx.fillRect(0,0,width,height);
-    const bounds=mapBounds(),scale=Math.min(width/(bounds.maxX-bounds.minX),height/(bounds.maxZ-bounds.minZ));
-    const sx=x=>width/2+(x-(bounds.minX+bounds.maxX)/2)*scale;
-    const sy=z=>height/2+(z-(bounds.minZ+bounds.maxZ)/2)*scale;
-    if(activeMapId === "ritual_village") {
-    ctx.fillStyle="#103446";
-    ctx.fillRect(0,0,sx(-6.2),height);
-    ctx.fillRect(sx(6.2),0,width-sx(6.2),height);
-    ctx.fillStyle="#79583c";
-    ctx.fillRect(sx(-6.2),0,sx(6.2)-sx(-6.2),height);
-    ctx.fillStyle="#b39365";
-    for (const z of [-13,-4,3,12]) {
-      for (const x of [-10,10]) {
-        const w=large?13:7; ctx.fillRect(sx(x)-w/2,sy(z)-w/2,w,w);
-      }
-    }
-    ctx.fillStyle="#d2ad68";ctx.fillRect(sx(-4.2)-3,sy(-1.5)-3,6,6);
-    if(fortRoot.isEnabled()) {
-      ctx.strokeStyle="#c7ad84";ctx.lineWidth=large?5:3;
-      ctx.beginPath();
-      ctx.moveTo(sx(activeFort.x),sy(activeFort.z-activeFort.length/2));
-      ctx.lineTo(sx(activeFort.x),sy(activeFort.z+activeFort.length/2));
+    const theme = MAP_THEMES[activeMapId] || MAP_THEMES.ritual_village;
+    const map = worldDefinitions?.[activeMapId];
+    const bounds = mapBounds(), pad = large ? 14 : 8;
+    const scale = Math.min((width - pad * 2) / (bounds.maxX - bounds.minX), (height - pad * 2) / (bounds.maxZ - bounds.minZ));
+    const sx = x => width / 2 + (x - (bounds.minX + bounds.maxX) / 2) * scale;
+    const sy = z => height / 2 + (z - (bounds.minZ + bounds.maxZ) / 2) * scale;
+    const u = large ? 1 : .62; // symbol size unit
+    ctx.save();
+    ctx.clearRect(0, 0, width, height);
+    const bg = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, Math.max(width, height) * .7);
+    bg.addColorStop(0, theme.inner); bg.addColorStop(1, theme.outer);
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, width, height);
+    // Playable area as a soft plate with a fine survey grid.
+    const left = sx(bounds.minX), top = sy(bounds.minZ), w = (bounds.maxX - bounds.minX) * scale, h = (bounds.maxZ - bounds.minZ) * scale;
+    ctx.fillStyle = theme.land; ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 12;
+    ctx.fillRect(left, top, w, h); ctx.shadowBlur = 0;
+    if (large) {
+      ctx.strokeStyle = theme.grid; ctx.lineWidth = 1; ctx.beginPath();
+      const step = (bounds.maxX - bounds.minX) > 60 ? 20 : 5;
+      for (let x = Math.ceil(bounds.minX / step) * step; x <= bounds.maxX; x += step) { ctx.moveTo(sx(x), top); ctx.lineTo(sx(x), top + h); }
+      for (let z = Math.ceil(bounds.minZ / step) * step; z <= bounds.maxZ; z += step) { ctx.moveTo(left, sy(z)); ctx.lineTo(left + w, sy(z)); }
       ctx.stroke();
-      ctx.fillStyle="#f1dda0";
-      ctx.beginPath();
-      ctx.arc(sx(activeFort.ladderFootX),sy(activeFort.ladderFootZ),
-        large?5:3,0,Math.PI*2);ctx.fill();
     }
-    ctx.fillStyle="#e15855"; ctx.beginPath();ctx.arc(sx(1.1),sy(10.4),large?6:3,0,Math.PI*2);ctx.fill();
+    if (activeMapId === "ritual_village") {
+      // Canals with moonlit ripples, the boardwalk and stilt houses.
+      for (const [a, b] of [[bounds.minX, -8.5], [8.5, bounds.maxX]]) {
+        const water = ctx.createLinearGradient(sx(a), 0, sx(b), 0);
+        water.addColorStop(0, "#0e2a3a"); water.addColorStop(.5, "#14384b"); water.addColorStop(1, "#0e2a3a");
+        ctx.fillStyle = water; ctx.fillRect(sx(a), top, sx(b) - sx(a), h);
+        ctx.strokeStyle = "rgba(150,190,220,.18)"; ctx.lineWidth = 1;
+        for (let z = bounds.minZ + 2; z < bounds.maxZ; z += 3.4) {
+          const mid = (a + b) / 2 + Math.sin(z) * 2;
+          ctx.beginPath(); ctx.moveTo(sx(mid - 1.4), sy(z)); ctx.lineTo(sx(mid + 1.4), sy(z)); ctx.stroke();
+        }
+      }
+      ctx.fillStyle = "#5a3e2b"; ctx.fillRect(sx(-5.55), top, sx(5.55) - sx(-5.55), h);
+      if (large) {
+        ctx.strokeStyle = "rgba(20,12,8,.45)"; ctx.lineWidth = 1; ctx.beginPath();
+        for (let z = bounds.minZ; z <= bounds.maxZ; z += 1.15) { ctx.moveTo(sx(-5.55), sy(z)); ctx.lineTo(sx(5.55), sy(z)); }
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "#2a1c13"; ctx.lineWidth = 1.5 * u; ctx.strokeRect(sx(-5.55), top, sx(5.55) - sx(-5.55), h);
+      for (const [x, z, size] of [[-10,-13,4],[10,-13,3.5],[-10,-4,3.5],[10,3.4,4.1],[-10,12,3.5],[10,15,3.5]]) {
+        const hx = sx(x - size / 2), hy = sy(z - size / 2), hs = size * scale;
+        ctx.shadowColor = "rgba(0,0,0,.7)"; ctx.shadowBlur = 6 * u; ctx.shadowOffsetY = 2 * u;
+        ctx.fillStyle = "#6e2c22"; ctx.fillRect(hx, hy, hs, hs);
+        ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+        ctx.strokeStyle = "#c79a4c"; ctx.lineWidth = 1.2 * u;
+        ctx.beginPath(); ctx.moveTo(sx(x), hy); ctx.lineTo(sx(x), hy + hs); ctx.stroke();
+        ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.strokeRect(hx, hy, hs, hs);
+      }
+      mapDot(ctx, sx(-4.2), sy(-1.5), 3.4 * u, "#e9b95e", "#3a2410", "#ffb04a");
+      for (const [x, z] of [[-6.1,-18],[6.1,-18],[-6.1,-9.6],[6.1,-9.6],[-6.1,-1.2],[6.1,-1.2],[-6.1,7.2],[6.1,7.2],[-6.1,15.6],[6.1,15.6]])
+        if (large) mapDot(ctx, sx(x), sy(z), 1.6, "#ffcf7a", "rgba(0,0,0,0)", "#ff9d3a");
+      if (fortRoot.isEnabled()) {
+        ctx.strokeStyle = "#cdb48a"; ctx.lineWidth = large ? 5 : 3; ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(sx(activeFort.x), sy(activeFort.z - activeFort.length / 2));
+        ctx.lineTo(sx(activeFort.x), sy(activeFort.z + activeFort.length / 2));
+        ctx.stroke(); ctx.lineCap = "butt";
+        mapDot(ctx, sx(activeFort.ladderFootX), sy(activeFort.ladderFootZ), large ? 4 : 2.4, "#f1dda0");
+      }
+      mapDot(ctx, sx(1.1), sy(10.4), large ? 5.5 : 3, "#e15855", "#3a0d0d", "#ff4a3a");
     } else {
-      if(activeMapId==="forbidden_forest"){ctx.fillStyle="#505043";ctx.fillRect(sx(-2.5),sy(-20),5*scale,40*scale);}
-      for(const obstacle of worldDefinitions?.[activeMapId]?.obstacles||[]){
-        ctx.fillStyle="#668060";ctx.beginPath();ctx.arc(sx(obstacle.x),sy(obstacle.z),Math.max(1,obstacle.radius*scale),0,Math.PI*2);ctx.fill();
+      // Trails: dark verge, packed earth, faint centre line.
+      const trail = (width_, color) => {
+        ctx.strokeStyle = color; ctx.lineWidth = width_; ctx.lineCap = "round"; ctx.lineJoin = "round";
+        for (const path of map?.paths || []) { ctx.beginPath(); path.forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
+      };
+      if (activeMapId === "forbidden_forest") { ctx.fillStyle = "#4a3f2e"; ctx.fillRect(sx(-2.5), sy(-20), 5 * scale, 40 * scale); }
+      trail(Math.max(3, 5.5 * scale), "rgba(10,8,6,.55)");
+      trail(Math.max(2, 4 * scale), activeMapId === "bound_temple" ? "#8a7552" : "#7a6546");
+      for (const camp of map?.camps || []) {
+        const soil = campLooks[camp.id]?.soil || "#7d6f63";
+        if (activeMapId === "bound_temple") {
+          ctx.fillStyle = "#6e6152"; ctx.fillRect(sx(camp.x - 10.5), sy(camp.z - 9.5), 21 * scale, 19 * scale);
+          ctx.strokeStyle = "rgba(240,197,140,.55)"; ctx.lineWidth = 1.2 * u; ctx.strokeRect(sx(camp.x - 10.5), sy(camp.z - 9.5), 21 * scale, 19 * scale);
+        } else {
+          const g = ctx.createRadialGradient(sx(camp.x), sy(camp.z), 0, sx(camp.x), sy(camp.z), 12 * scale);
+          g.addColorStop(0, soil); g.addColorStop(1, "rgba(30,35,25,.35)");
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx(camp.x), sy(camp.z), 12 * scale, 0, Math.PI * 2); ctx.fill();
+          ctx.setLineDash([4 * u, 3 * u]); ctx.strokeStyle = "rgba(255,230,170,.45)"; ctx.lineWidth = 1.2 * u; ctx.stroke(); ctx.setLineDash([]);
+        }
       }
-      if(activeMapId==="forbidden_forest"){ctx.fillStyle="#b7a677";ctx.fillRect(sx(0)-4,sy(-12)-4,8,8);}
-    }
-    const map=worldDefinitions?.[activeMapId];
-    for(const path of map?.paths||[]){ctx.strokeStyle="#9f8963";ctx.lineWidth=large?5:2;ctx.beginPath();path.forEach((p,i)=>i?ctx.lineTo(sx(p.x),sy(p.z)):ctx.moveTo(sx(p.x),sy(p.z)));ctx.stroke();}
-    for(const camp of map?.camps||[]){ctx.fillStyle=campLooks[camp.id]?.soil || "#95867b";if(activeMapId==="bound_temple"){ctx.fillRect(sx(camp.x-10.5),sy(camp.z-9.5),21*scale,19*scale);}else{ctx.beginPath();ctx.arc(sx(camp.x),sy(camp.z),12*scale,0,Math.PI*2);ctx.fill();}if(large){ctx.font="12px system-ui";ctx.fillStyle="#fff2d8";ctx.textAlign="center";ctx.fillText("Lv "+Math.min(...camp.levels)+"–"+Math.max(...camp.levels),sx(camp.x),sy(camp.z)-12*scale-3);}}
-    for(const wall of map?.walls || []){
-      ctx.fillStyle="#e9bf86";ctx.fillRect(sx(wall.x),sy(wall.z),Math.max(1.3,scale*wall.width),Math.max(1.3,scale*wall.length));
-    }
-    if(map?.guardian && large){
-      ctx.font="bold 12px system-ui";ctx.textAlign="center";ctx.fillStyle="#ffe095";
-      ctx.fillText("◆ ศาล Elite",sx(map.guardian.x),sy(map.guardian.z)-9);
-    }
-    for(const area of map?.restAreas||[]){ctx.strokeStyle="#85f6dd";ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx(area.x),sy(area.z),area.radius*scale,0,Math.PI*2);ctx.stroke();}
-    room?.state?.monsters?.forEach(m=>{if(m.mapId===activeMapId&&m.alive){if(m.tier==="elite"){
-        const x=sx(m.x),y=sy(m.z),r=large?6:3;ctx.fillStyle="#ffe084";ctx.beginPath();ctx.moveTo(x,y-r);ctx.lineTo(x+r,y);ctx.lineTo(x,y+r);ctx.lineTo(x-r,y);ctx.closePath();ctx.fill();
-      }else{ctx.fillStyle="#f1786c";ctx.beginPath();ctx.arc(sx(m.x),sy(m.z),large?3:1.5,0,Math.PI*2);ctx.fill();}}});
-    for(const portal of activePortals()){ctx.fillStyle="#85f6dd";ctx.beginPath();ctx.arc(sx(portal.x),sy(portal.z),large?6:4,0,Math.PI*2);ctx.fill();
-      if(large && (portal.id==="forest_to_temple" || portal.id==="temple_to_forest")){
-        ctx.fillStyle="#c3faed";ctx.textAlign="center";ctx.font="bold 12px system-ui";
-        ctx.fillText(portal.id==="forest_to_temple"?"ไปวัดร้าง Lv.8–20":"กลับป่าต้องห้าม",Math.max(65,Math.min(width-65,sx(portal.x))),sy(portal.z)-10);
+      for (const o of map?.obstacles || []) {
+        const x = sx(o.x), y = sy(o.z), r = Math.max(1, o.radius * scale);
+        if (activeMapId === "bound_temple") {
+          ctx.fillStyle = "#6f6a5e"; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+          ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.lineWidth = 1; ctx.strokeRect(x - r, y - r, r * 2, r * 2);
+        } else {
+          ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.arc(x + r * .25, y + r * .3, r, 0, Math.PI * 2); ctx.fill();
+          const g = ctx.createRadialGradient(x - r * .3, y - r * .3, 0, x, y, r);
+          g.addColorStop(0, o.id.includes("stone") ? "#8a948c" : "#3f6a46"); g.addColorStop(1, o.id.includes("stone") ? "#4d554f" : "#1f3a26");
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        }
       }
+      if (activeMapId === "forbidden_forest") mapDot(ctx, sx(0), sy(-12), 3.4 * u, "#c9b682", "#2b2414");
+      for (const wall of map?.walls || []) {
+        ctx.shadowColor = "rgba(0,0,0,.7)"; ctx.shadowBlur = 5 * u; ctx.shadowOffsetY = 2 * u;
+        ctx.fillStyle = "#9b5f43"; ctx.fillRect(sx(wall.x), sy(wall.z), Math.max(1.3, scale * wall.width), Math.max(1.3, scale * wall.length));
+        ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+        ctx.strokeStyle = "#e3b878"; ctx.lineWidth = 1; ctx.strokeRect(sx(wall.x), sy(wall.z), Math.max(1.3, scale * wall.width), Math.max(1.3, scale * wall.length));
+      }
+    }
+    for (const area of map?.restAreas || []) {
+      const x = sx(area.x), y = sy(area.z), r = area.radius * scale;
+      ctx.fillStyle = "rgba(133,246,221,.1)"; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.setLineDash([3 * u, 2.5 * u]); ctx.strokeStyle = "#85f6dd"; ctx.lineWidth = 1.6 * u; ctx.stroke(); ctx.setLineDash([]);
+    }
+    room?.state?.monsters?.forEach(m => {
+      if (m.mapId !== activeMapId || !m.alive) return;
+      const x = sx(m.x), y = sy(m.z);
+      if (m.tier === "elite") {
+        const r = large ? 7 : 4;
+        ctx.shadowColor = "#ffcf5a"; ctx.shadowBlur = r * 2;
+        ctx.fillStyle = "#ffe084"; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); ctx.fill();
+        ctx.shadowBlur = 0; ctx.strokeStyle = "#3a2508"; ctx.lineWidth = 1.2; ctx.stroke();
+      } else mapDot(ctx, x, y, large ? 3.2 : 1.8, "#f1786c", "rgba(40,6,6,.9)");
+    });
+    for (const portal of activePortals()) {
+      const x = sx(portal.x), y = sy(portal.z), r = large ? 7 : 4.2;
+      ctx.shadowColor = "#5fffe0"; ctx.shadowBlur = r * 2.2;
+      ctx.strokeStyle = "#9ffbe8"; ctx.lineWidth = large ? 2.4 : 1.6; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.shadowBlur = 0; mapDot(ctx, x, y, r * .38, "#d8fff6", "rgba(0,0,0,0)");
     }
     if (marker.isEnabled()) {
-      ctx.strokeStyle="#ffe2a1";ctx.lineWidth=1.8;
-      ctx.beginPath();ctx.arc(sx(marker.position.x),sy(marker.position.z),large?7:4,0,Math.PI*2);ctx.stroke();
+      ctx.strokeStyle = "#ffe2a1"; ctx.lineWidth = 1.8; ctx.setLineDash([3, 2]);
+      ctx.beginPath(); ctx.arc(sx(marker.position.x), sy(marker.position.z), large ? 7 : 4, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
     }
-    for (const [id,a] of avatars) {
-      ctx.fillStyle = id===localId ? "#ffda79":"#6de5df";
-      ctx.beginPath();ctx.arc(sx(a.x),sy(a.z),large?6:3.5,0,Math.PI*2);ctx.fill();
+    for (const [ownerId, npc] of summonAvatars) mapDot(ctx, sx(npc.x), sy(npc.z), large ? 4 : 2.2, ownerId === localId ? "#cb97f1" : "#78d5e2");
+    for (const [id, a] of avatars) if (id !== localId) mapDot(ctx, sx(a.x), sy(a.z), large ? 4.6 : 2.8, "#6de5df", "rgba(4,24,24,.9)");
+    const me = avatars.get(localId);
+    if (me) {
+      // Heading arrow: avatars face atan2(-dx,-dz), so travel is (-sin, -cos).
+      const x = sx(me.x), y = sy(me.z), r = large ? 9 : 6, h = Number(me.heading) || 0;
+      ctx.translate(x, y); ctx.rotate(-h);
+      ctx.shadowColor = "#ffcf6a"; ctx.shadowBlur = r * 1.6;
+      ctx.fillStyle = "#ffda79"; ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(r * .7, r * .7); ctx.lineTo(0, r * .35); ctx.lineTo(-r * .7, r * .7); ctx.closePath(); ctx.fill();
+      ctx.shadowBlur = 0; ctx.strokeStyle = "#3a2508"; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
-    for (const [ownerId, npc] of summonAvatars) {
-      ctx.fillStyle = ownerId === localId ? "#cb97f1" : "#78d5e2";
-      ctx.beginPath(); ctx.arc(sx(npc.x), sy(npc.z), large ? 5 : 2.5, 0, Math.PI*2);ctx.fill();
+    if (large) {
+      if (activeMapId === "ritual_village") {
+        mapText(ctx, "ศาลพระภูมิ", sx(-4.2), sy(-1.5) - 10, 12, theme.ink);
+        mapText(ctx, "เรือนพัก", sx(10), sy(-13) - 22, 12, theme.ink);
+        mapText(ctx, "คลองตะวันตก", sx(-15), sy(4), 11, "#9fc3d8", 500);
+        mapText(ctx, "คลองตะวันออก", sx(15), sy(-4), 11, "#9fc3d8", 500);
+        mapText(ctx, "ท่าน้ำ", sx(0), sy(17.5), 12, theme.ink);
+        mapText(ctx, "เขตผีสิง", sx(1.1), sy(10.4) + 18, 12, "#f09a8c");
+      }
+      for (const camp of map?.camps || []) {
+        const lv = "Lv " + Math.min(...camp.levels) + "–" + Math.max(...camp.levels);
+        const ty = activeMapId === "bound_temple" ? sy(camp.z - 9.5) - 4 : sy(camp.z) - 12 * scale - 4;
+        mapText(ctx, lv, sx(camp.x), ty, 12, "#fff0d0");
+      }
+      if (map?.guardian) mapText(ctx, "◆ ศาล Elite", sx(map.guardian.x), sy(map.guardian.z) - 11, 12, "#ffe095", 700);
+      for (const portal of activePortals()) {
+        if (portal.id !== "forest_to_temple" && portal.id !== "temple_to_forest") continue;
+        mapText(ctx, portal.id === "forest_to_temple" ? "ไปวัดร้าง Lv.8–20" : "กลับป่าต้องห้าม",
+          Math.max(65, Math.min(width - 65, sx(portal.x))), sy(portal.z) - 12, 12, "#c3faed");
+      }
+      // Compass rose.
+      ctx.translate(width - 24, 26); ctx.fillStyle = theme.ink; ctx.globalAlpha = .85;
+      ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(4, 0); ctx.lineTo(0, 13); ctx.lineTo(-4, 0); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1; ctx.setTransform(1, 0, 0, 1, 0, 0);
+      mapText(ctx, "N", width - 24, 9, 10, theme.ink, 700);
     }
-    if(large && activeMapId === "ritual_village") {
-      ctx.font="12px system-ui";ctx.textAlign="center";ctx.fillStyle="#f9dda9";
-      ctx.fillText("ศาลอาคม",sx(-4),sy(-2.5)-8);
-      ctx.fillText("เรือนพัก",sx(10),sy(-13)-10);
-      ctx.fillText("ท่าน้ำ",sx(0),sy(15));
-      ctx.fillStyle="#e9988a";ctx.fillText("เขตผีสิง",sx(1),sy(10)+25);
-    }
+    // Vignette pulls the eye to the centre and softens the edges.
+    const v = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * .35, width / 2, height / 2, Math.max(width, height) * .72);
+    v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,.55)");
+    ctx.fillStyle = v; ctx.fillRect(0, 0, width, height);
+    ctx.restore();
   }
   function openMap() {
     openDrawer("map","แผนที่"+(worldDefinitions?.[activeMapId]?.name || (activeMapId==="ritual_village"?"หมู่บ้านอาคม":"ป่าต้องห้าม")),`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>วงสีเขียว: เขตพัก</span></div>${worldDefinitions?.[activeMapId]?.guardian ? '<p class="note">◆ ศาลเหนือ · Elite Lv.12 เกิดใหม่ 2 นาที<br>หลบวงฟาดสีส้ม · EXP ×3 แบ่งตามกฎปาร์ตี้ ผู้ได้รับ EXP รับยาคนละ 1 ขวดเมื่อกระเป๋ามีที่</p>' : ''}`);
@@ -3062,7 +3564,7 @@
   $("climb").onclick = requestClimb;
   $("fly").onclick = toggleFlight;
 
-  let elapsed=0;
+  let elapsed=0, lastMapDraw=0;
   engine.runRenderLoop(() => {
     const dt=Math.min(engine.getDeltaTime()/1000,.06);
     elapsed+=dt;
@@ -3243,16 +3745,28 @@
     marker.rotation.z+=dt*.2;
     const pulse=1+Math.sin(elapsed*2.5)*.04;
     villagePortal.scaling.setAll(pulse);forestPortal.scaling.setAll(pulse);
-    const mapCtx=ui.minimap.getContext("2d");
-    drawMap(mapCtx,ui.minimap.width,ui.minimap.height);
-    if(drawerActive==="map") {
-      const large=$("bigMap");if(large)drawMap(large.getContext("2d"),large.width,large.height,true);
+    // Maps are 2D canvases with soft shadows: ~10 redraws per second is plenty.
+    if(now-lastMapDraw>100){
+      lastMapDraw=now;
+      drawMap(ui.minimap.getContext("2d"),ui.minimap.width,ui.minimap.height);
+      if(drawerActive==="map") {
+        const large=$("bigMap");if(large)drawMap(large.getContext("2d"),large.width,large.height,true);
+      }
     }
     // Keep the same clear area around the hero at every pinch/wheel zoom.
     if(me && activeMapId==="forbidden_forest")fadeForestCrowns(me);
     if(me && activeMapId==="bound_temple")fadeTempleWalls(me);
-    scene.fogStart = camera.radius + 24;
-    scene.fogEnd = camera.radius + 120;
+    scene.fogStart = camera.radius + atmosphere.fogNear;
+    scene.fogEnd = camera.radius + atmosphere.fogFar;
+    driftMist(elapsed, camera.target);
+    // The horizon only enters the portrait frustum at shallow camera tilts.
+    sky.setEnabled(camera.beta > 1.05);
+    motes.emitter.copyFrom(camera.target);
+    for (let i = yantraDiscs.length - 1; i >= 0; i--) {
+      if (yantraDiscs[i].isDisposed()) yantraDiscs.splice(i, 1);
+      else yantraDiscs[i].rotation.y += dt * (yantraDiscs[i].material === portalYantraMat ? .5 : .08);
+    }
+    if (me) warm.position.set(me.x, me.y + 3.4, me.z + .6);
     scene.render();
   });
   window.addEventListener("resize",()=>{ engine.resize(); updateStatus(); });
