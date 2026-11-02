@@ -1155,7 +1155,7 @@
     const material=new B.StandardMaterial("world-label",scene);
     material.diffuseTexture=texture;material.opacityTexture=texture;material.emissiveColor=B.Color3.White();material.disableLighting=true;
     const mesh=B.MeshBuilder.CreatePlane("world-label",{width,height:2.2},scene);
-    mesh.parent=expansionRoot;mesh.material=material;mesh.position.set(x,elevation,z);mesh.billboardMode=B.Mesh.BILLBOARDMODE_ALL;mesh.isPickable=false;
+    mesh.parent=expansionRoot;mesh.material=material;mesh.position.set(x,elevation+(worldDefinitions?.[activeMapId]?.reliefLabels?terrainHeight(worldDefinitions[activeMapId].terrain,x,z):0),z);mesh.billboardMode=B.Mesh.BILLBOARDMODE_ALL;mesh.isPickable=false;
     expansionResources.push(texture,material);expansionLabels.push(mesh);
   }
   function buildForestDetails(map) {
@@ -1582,7 +1582,79 @@
     const a=t.heights[j][i],b=t.heights[j][i+1],c=t.heights[j+1][i],d=t.heights[j+1][i+1];
     return a+(u>=v?(b-a)*u+(d-b)*v:(d-c)*u+(c-a)*v);
   }
-  function buildRidgeGround(map,paint){
+  // Clip each footprint against the actual terrain faces. A road crossing a ridge
+  // must bend exactly at its edges or the rock can poke through the ribbon.
+  function reliefPatches(name,t,patches,lift,material){
+    const positions=[],normals=[],indices=[],uvs=[];
+    for(const polygon of patches){
+      const px=polygon.map(p=>p[0]),pz=polygon.map(p=>p[1]);
+      const minI=terrainCell(t.xs,Math.min(...px)),maxI=terrainCell(t.xs,Math.max(...px));
+      const minJ=terrainCell(t.zs,Math.min(...pz)),maxJ=terrainCell(t.zs,Math.max(...pz));
+      for(let j=minJ;j<=maxJ;j++)for(let i=minI;i<=maxI;i++){
+        const a=[t.xs[i],t.zs[j]],b=[t.xs[i+1],t.zs[j]],c=[t.xs[i],t.zs[j+1]],d=[t.xs[i+1],t.zs[j+1]];
+        for(const face of [[a,b,d],[a,d,c]]){
+          let pts=polygon;
+          for(let edge=0;edge<3 && pts.length;edge++){
+            const [x,z]=face[edge],[ex,ez]=face[(edge+1)%3],out=[];
+            const distance=p=>(ex-x)*(p[1]-z)-(ez-z)*(p[0]-x);
+            let prev=pts[pts.length-1],pd=distance(prev);
+            for(const p of pts){
+              const cd=distance(p);
+              if((pd<0)!==(cd<0)){const u=pd/(pd-cd);out.push([prev[0]+u*(p[0]-prev[0]),prev[1]+u*(p[1]-prev[1])]);}
+              if(cd>=0)out.push(p);
+              prev=p;pd=cd;
+            }
+            pts=out;
+          }
+          if(pts.length<3)continue;
+          const start=positions.length/3;
+          for(const [x,z] of pts){positions.push(x,terrainHeight(t,x,z)+lift,z);uvs.push(x/12,z/12);}
+          for(let k=2;k<pts.length;k++)indices.push(start,start+k-1,start+k);
+        }
+      }
+    }
+    if(!indices.length)return;
+    B.VertexData.ComputeNormals(positions,indices,normals);
+    const mesh=new B.Mesh(name,scene),data=new B.VertexData();
+    Object.assign(data,{positions,indices,uvs,normals});data.applyToMesh(mesh);mesh.material=material;mesh.parent=expansionRoot;mesh.isPickable=false;
+  }
+  const reliefDisk=(x,z,r,n)=>Array.from({length:n},(_,i)=>[x+r*Math.cos(i*2*Math.PI/n),z+r*Math.sin(i*2*Math.PI/n)]);
+  function buildReliefRoads(map,paint){
+    const patches=[],r=2;
+    for(const path of map.paths||[]){
+      for(let i=0;i<path.length;i++){
+        const a=path[i];patches.push(reliefDisk(a.x,a.z,r,12));
+        if(!i)continue;
+        const b=path[i-1],dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz);
+        if(!len)continue;
+        const nx=-dz*r/len,nz=dx*r/len;
+        patches.push([[a.x+nx,a.z+nz],[a.x-nx,a.z-nz],[b.x-nx,b.z-nz],[b.x+nx,b.z+nz]]);
+      }
+    }
+    reliefPatches("graded hunt roads",map.terrain,patches,.045,paint.road);
+  }
+  function buildReliefContours(map,paint){
+    const t=map.terrain,lines=[];
+    for(let j=0;j<t.zs.length-1;j++)for(let i=0;i<t.xs.length-1;i++){
+      const point=(a,b)=>new B.Vector3(t.xs[i+a],t.heights[j+b][i+a],t.zs[j+b]);
+      const a=point(0,0),b=point(1,0),c=point(0,1),d=point(1,1);
+      for(const face of [[a,b,d],[a,d,c]]){
+        const ys=face.map(p=>p.y);
+        for(let level=Math.ceil(Math.min(...ys)-.5)+.5;level<Math.max(...ys);level++){
+          const ends=[];
+          for(let side=0;side<3;side++){
+            const p=face[side],q=face[(side+1)%3];
+            if((p.y<level)===(q.y<level))continue;
+            const v=B.Vector3.Lerp(p,q,(level-p.y)/(q.y-p.y));v.y+=.018;ends.push(v);
+          }
+          if(ends.length===2)lines.push(ends);
+        }
+      }
+    }
+    if(lines.length){const contours=B.MeshBuilder.CreateLineSystem("natural terrace edges",{lines},scene);
+      contours.color=paint.stone.diffuseColor;contours.alpha=.42;contours.isPickable=false;contours.parent=expansionRoot;}
+  }
+  function buildTerrainGround(map,paint){
     const t=map.terrain,positions=[],normals=[],colors=[],uvs=[],indices=[];
     for(let j=0;j<t.zs.length-1;j++)for(let i=0;i<t.xs.length-1;i++){
       const point=(a,b)=>new B.Vector3(t.xs[i+a],t.heights[j+b][i+a],t.zs[j+b]);
@@ -1597,9 +1669,10 @@
         }
       }
     }
-    const mesh=new B.Mesh("B02 walkable terrain",scene),data=new B.VertexData();
+    const mesh=new B.Mesh(map.reliefLabels?map.id+" walkable terrain":"B02 walkable terrain",scene),data=new B.VertexData();
     Object.assign(data,{positions,normals,colors,uvs,indices});data.applyToMesh(mesh);
     mesh.parent=expansionRoot;mesh.material=paint.floor;mesh.metadata={walkable:true};
+    if(map.reliefLabels){buildReliefRoads(map,paint);buildReliefContours(map,paint);return;}
     const paths=map.paths||[];
     for(const [i,path] of paths.entries())for(let k=1;k<path.length;k++){
       const a=path[k-1],b=path[k],len=Math.hypot(b.x-a.x,b.z-a.z),steps=Math.ceil(len/1.5);
@@ -1660,8 +1733,9 @@
   }
   function buildRegion(map,paint) {
     let parts=[];
+    const elevation=(x,z)=>map.reliefLabels?terrainHeight(map.terrain,x,z):0;
     function put(mesh,x,y,z,material){
-      mesh.position.set(x,y,z);mesh.material=material;mesh.isPickable=false;parts.push(mesh);return mesh;
+      mesh.position.set(x,y+elevation(x,z),z);mesh.material=material;mesh.isPickable=false;parts.push(mesh);return mesh;
     }
     function box(x,y,z,w,h,d,m){
       return put(B.MeshBuilder.CreateBox("region block",{width:w,height:h,depth:d},scene),x,y,z,m);
@@ -1704,7 +1778,7 @@
       };
       const relay=map.strategic.relay,bounds=map.bounds,river=map.strategic.riverCity;
       const huntTrail=map.strategic.huntTrail;
-      if(relay || huntTrail || river)box((bounds.minX+bounds.maxX)/2,-1.05,(bounds.minZ+bounds.maxZ)/2,bounds.maxX-bounds.minX+56,.6,bounds.maxZ-bounds.minZ+56,deep);
+      if(relay || huntTrail || river)box((bounds.minX+bounds.maxX)/2,map.reliefLabels?-12:-1.05,(bounds.minZ+bounds.maxZ)/2,bounds.maxX-bounds.minX+56,.6,bounds.maxZ-bounds.minZ+56,deep);
       else if(!castle)box(0,-1.05,-16,220,.6,228,deep);
       if(relay || huntTrail || river){
         for(let i=0;i<22;i++)for(const side of [-1,1]){
@@ -2037,7 +2111,7 @@
     const outerHunt=map.huntTrail;
     if(outerHunt){
       const b=map.bounds,w=b.maxX-b.minX,d=b.maxZ-b.minZ;
-      box((b.maxX+b.minX)/2,-1.2,(b.maxZ+b.minZ)/2,w+50,.65,d+50,deep);
+      box((b.maxX+b.minX)/2,map.reliefLabels?-12:-1.2,(b.maxZ+b.minZ)/2,w+50,.65,d+50,deep);
       for(let i=0;i<20;i++)for(const side of [-1,1]){
         const t=(i+.5)/20,h=4+noise(i,113)*6;
         cone(side<0?b.minX-5:b.maxX+5,h*.35,b.minZ+t*d,h,7,marsh?1:0,stone,5);
@@ -2340,7 +2414,7 @@
   }
   function dressRegion(map,paint){
     let parts=[];
-    const put=(mesh,x,y,z,m)=>{mesh.position.set(x,y,z);mesh.material=m;mesh.isPickable=false;parts.push(mesh);return mesh;};
+    const put=(mesh,x,y,z,m)=>{mesh.position.set(x,y+(map.reliefLabels?terrainHeight(map.terrain,x,z):0),z);mesh.material=m;mesh.isPickable=false;parts.push(mesh);return mesh;};
     const box=(x,y,z,w,h,d,m)=>put(B.MeshBuilder.CreateBox("region dressing",{width:w,height:h,depth:d},scene),x,y,z,m);
     const cone=(x,y,z,h,b,t,m,n=6)=>put(B.MeshBuilder.CreateCylinder("region dressing",{height:h,diameterBottom:b,diameterTop:t,tessellation:n},scene),x,y,z,m);
     const ball=(x,y,z,d,m,seg=4)=>put(B.MeshBuilder.CreateSphere("region dressing",{diameter:d,segments:seg},scene),x,y,z,m);
@@ -2502,22 +2576,28 @@
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
     const map=worldDefinitions?.[activeMapId];ground.setEnabled(!map?.terrain);if(!map)return;
-    if(map.terrain)buildRidgeGround(map,paint);
+    if(map.terrain)buildTerrainGround(map,paint);
     else (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic || map.huntTrail)));
     for(const camp of map.camps||[]){
-      const clearing=inTemple ? B.MeshBuilder.CreateGround("temple court",{width:21,height:19},scene) : B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
-      // Between the soil (-.12) and trail tops (+.015), so their colors never
-      // fight for the same depth pixels at the wide camera distance.
-      clearing.parent=expansionRoot;clearing.rotation.x=inTemple?0:Math.PI/2;clearing.position.set(camp.x,-.06,camp.z);clearing.material=paint?paint.court:inTemple?templeCourt:forestClearing;clearing.isPickable=false;
-      const look=campLooks[camp.id];
-      if(look){const soilMat=mat("camp soil",look.soil);soilMat.diffuseColor.scaleInPlace(.72);expansionResources.push(soilMat);clearing.material=soilMat;}
+      if(map.reliefLabels)reliefPatches("terraced hunt clearing",map.terrain,[reliefDisk(camp.x,camp.z,12,32)],.023,paint.court);
+      else {
+        const clearing=inTemple ? B.MeshBuilder.CreateGround("temple court",{width:21,height:19},scene) : B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
+        // Between the soil (-.12) and trail tops (+.015), so their colors never
+        // fight for the same depth pixels at the wide camera distance.
+        clearing.parent=expansionRoot;clearing.rotation.x=inTemple?0:Math.PI/2;clearing.position.set(camp.x,-.06,camp.z);clearing.material=paint?paint.court:inTemple?templeCourt:forestClearing;clearing.isPickable=false;
+        const look=campLooks[camp.id];
+        if(look){const soilMat=mat("camp soil",look.soil);soilMat.diffuseColor.scaleInPlace(.72);expansionResources.push(soilMat);clearing.material=soilMat;}
+      }
       const range=camp.levels.length===1?String(camp.levels[0]):Math.min(...camp.levels)+"–"+Math.max(...camp.levels);
-      expansionLabel(camp.name+" · Lv "+range+(camp.tier==="strong"?" ◆":""),camp.x,camp.z);
+      const heightTag=map.reliefLabels?" · "+terrainHeight(map.terrain,camp.x,camp.z).toFixed(1)+" ม.":"";
+      expansionLabel(camp.name+" · Lv "+range+(camp.tier==="strong"?" ◆":"")+heightTag,camp.x,camp.z);
     }
     for(const area of map.restAreas||[]){
-      if(map.terrain)continue;
-      sacredCordWard(area.x,area.z,area.radius,expansionRoot);
-      if(!map.portals.some(p=>Math.hypot(p.x-area.x,p.z-area.z)<3))yantraDisc(area.x,area.z,area.radius,restYantraMat,expansionRoot,.045);
+      if(map.terrain && !map.reliefLabels)continue;
+      const wardParent=map.reliefLabels?new B.TransformNode("rest terrace",scene):expansionRoot;
+      if(map.reliefLabels){wardParent.parent=expansionRoot;wardParent.position.y=terrainHeight(map.terrain,area.x,area.z);}
+      sacredCordWard(area.x,area.z,area.radius,wardParent);
+      if(!map.portals.some(p=>Math.hypot(p.x-area.x,p.z-area.z)<3))yantraDisc(area.x,area.z,area.radius,restYantraMat,wardParent,.045);
       if(!map.portals.some(p=>Math.hypot(p.x-area.x,p.z-area.z)<3))expansionLabel(area.name,area.x,area.z,10);
     }
     if(activeMapId==="forbidden_forest"){
@@ -2533,7 +2613,7 @@
       if(!map.portals.some(p=>p.targetMapId==="drowned_marsh"))expansionLabel("ทางสู่บึงพราย · ยังไม่เปิด",48,-84);
     }
     if(inTemple)buildTemple(map);
-    if(paint && !map.terrain){buildRegion(map,paint);if(!map.strategic)dressRegion(map,paint);}
+    if(paint && (!map.terrain || map.reliefLabels)){buildRegion(map,paint);if(!map.strategic)dressRegion(map,paint);}
     for(const portal of (map.portals||[]).slice(portals[activeMapId]?1:0)){
       if(map.strategic?.relay && portal.targetMapId===map.id)continue;
       makePortal(activeMapId,expansionRoot,portal);
@@ -2620,7 +2700,7 @@
         if(charging && !mesh.metadata.warning.isEnabled(false) && monster.targetId===room?.sessionId)toast(monsterName(monster,id)+" กำลังฟาด · แตะพื้นออกจากวงส้ม");
         mesh.metadata.warning.setEnabled(charging);
       }
-      if(!ghost){mesh.position.set(Number(monster.x),monster.tier==="boss"?2.25:monster.tier==="elite"?1.74:.88,Number(monster.z));mesh.rotation.y=Number(monster.facing)||0;}
+      if(!ghost){mesh.position.set(Number(monster.x),Number(monster.y)+(monster.tier==="boss"?2.25:monster.tier==="elite"?1.74:.88),Number(monster.z));mesh.rotation.y=Number(monster.facing)||0;}
       if(id===selectedForestTarget&&monster.mapId===activeMapId){updateMonsterUI(monster.hp,monster.maxHp,monster.alive);
         ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monsterName(monster,id)+" · Lv "+monster.level;}
     });
@@ -3513,7 +3593,7 @@
     const r = a.rig; if (!r) return;
     const target = Math.min(1, speed / 3.2);
     a.moveBlend += (target - a.moveBlend) * (1 - Math.exp(-dt * 8));
-    const m = a.moveBlend, flying = a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain;
+    const m = a.moveBlend, flying = a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain);
     a.phase = (a.phase + dt * 9.5 * m) % (Math.PI * 2);
     const s = Math.sin(a.phase), c = Math.cos(a.phase), t = now / 1000;
     const flare = a.skin ? animateSkin(a, m, speed, s, c, t, now, dt) : 0;
@@ -6131,7 +6211,7 @@
       }
       const client = new window.Colyseus.Client(endpoint);
       const guestToken = getOrCreateGuestToken(endpoint);
-      const opts={guestToken,characterSlot:requestedSlot,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1};
+      const opts={guestToken,characterSlot:requestedSlot,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1};
       let transferFailed=false;
       if(transfer?.roomId){
         try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
@@ -7194,6 +7274,21 @@
     ctx.shadowBlur = 0; ctx.lineWidth = Math.max(1, r * .35); ctx.strokeStyle = stroke; ctx.stroke();
   }
   function huntRoute(map){return map?.huntTrail ?? map?.strategic?.huntTrail;}
+  // Paint the static relief once; both map canvases update player markers several times a second.
+  const terrainTints=new WeakMap();
+  function terrainTint(t){
+    let canvas=terrainTints.get(t);if(canvas)return canvas;
+    canvas=document.createElement("canvas");canvas.width=384;canvas.height=320;
+    const ink=canvas.getContext("2d"),sx=v=>(v-t.xs[0])*canvas.width/(t.xs.at(-1)-t.xs[0]),sz=v=>(v-t.zs[0])*canvas.height/(t.zs.at(-1)-t.zs[0]);
+    for(let j=0;j<t.zs.length-1;j++)for(let i=0;i<t.xs.length-1;i++){
+      for(const face of [[[0,0],[1,0],[1,1]],[[0,0],[1,1],[0,1]]]){
+        const level=face.reduce((h,[di,dj])=>h+t.heights[j+dj][i+di],0)/3;
+        ink.fillStyle=level< -1?"#274650":level<1?"#344e40":level<3?"#59684c":level<4?"#637459":level<5.5?"#807958":"#93916f";
+        ink.beginPath();face.forEach(([di,dj],k)=>{const px=sx(t.xs[i+di]),py=sz(t.zs[j+dj]);if(k)ink.lineTo(px,py);else ink.moveTo(px,py);});ink.closePath();ink.fill();
+      }
+    }
+    terrainTints.set(t,canvas);return canvas;
+  }
   function drawMap(ctx,width,height,large=false) {
     const theme = mapTheme(activeMapId);
     const map = worldDefinitions?.[activeMapId];
@@ -7212,16 +7307,8 @@
     ctx.fillStyle = theme.land; ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 12;
     ctx.fillRect(left, top, w, h); ctx.shadowBlur = 0;
     if(map?.terrain){
-      const t=map.terrain;
-      for(let j=0;j<t.zs.length-1;j++)for(let i=0;i<t.xs.length-1;i++){
-        for(const face of [[[0,0],[1,0],[1,1]],[[0,0],[1,1],[0,1]]]){
-          const heights=face.map(([di,dj])=>t.heights[j+dj][i+di]);
-          const level=(heights[0]+heights[1]+heights[2])/3;
-          ctx.fillStyle=level<1?"#344e40":level<3?"#59684c":level<4?"#637459":level<6?"#807958":"#93916f";
-          ctx.beginPath();face.forEach(([di,dj],k)=>{const x=sx(t.xs[i+di]),y=sy(t.zs[j+dj]);if(k)ctx.lineTo(x,y);else ctx.moveTo(x,y);});ctx.closePath();ctx.fill();
-        }
-      }
-      if(large)for(const [x,z,label] of [[157,100,"เชิงเขา 0 ม."],[156,2,"ลานกลาง 3 ม."],[156,-95,"สันสูง 6 ม."]])
+      ctx.drawImage(terrainTint(map.terrain),left,top,w,h);
+      if(large && !map.reliefLabels)for(const [x,z,label] of [[157,100,"เชิงเขา 0 ม."],[156,2,"ลานกลาง 3 ม."],[156,-95,"สันสูง 6 ม."]])
         mapText(ctx,label,sx(x),sy(z),11,"#ffedbd");
     }
     const grain = mapGrain(activeMapId);
@@ -7722,7 +7809,8 @@
       const button=document.createElement("button");button.type="button";button.className="primary";button.id="openStrategicMap";
       button.textContent="เปิดแผนที่ยุทธศาสตร์ · "+Object.keys(worldDefinitions).length+" พื้นที่";button.onclick=openStrategicMap;
       $("bigMap").parentElement.prepend(button);
-      if(map.terrain)note.textContent+=" · "+map.region.hint;
+      if(map.reliefLabels)note.textContent+=" · "+map.reliefLabels.map(p=>p.name+" "+terrainHeight(map.terrain,p.x,p.z).toFixed(1)+" ม.").join(" · ");
+      else if(map.terrain)note.textContent+=" · "+map.region.hint;
       if(map.strategic?.riverCity){
         note.textContent+=" · 496 × 400 เมตร\nA ค่ายบุก · D ค่ายรับ · T ลานบัญชาการ · M ตลาด · S คลัง · F โรงช่าง · W บ่อน้ำ · U1–U4 บันไดขึ้นลง";
         note.style.whiteSpace="pre-line";
@@ -8944,7 +9032,7 @@
       a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
       a.node.position.set(a.x, a.y, a.z);
       animateRig(a, Math.hypot(travelX, travelZ) / Math.max(dt, 1e-3), dt, now);
-      a.flightHalo?.setEnabled(a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain);
+      a.flightHalo?.setEnabled(a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain));
     }
     for (const npc of summonAvatars.values()) {
       const blend = 1 - Math.exp(-dt * 12);

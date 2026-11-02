@@ -1,5 +1,6 @@
 import type { HuntCamp, RestArea, WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
 
+import { atlasRelief } from "./AtlasRelief.js";
 import { PROVINCES } from "./StrategicProvinces.js";
 import {CASTLE_ENABLED, CASTLE_ID} from "./CastlePilot.js";
 import {RIDGE_ENABLED,RIDGE_PASS,ridgeTerrain,groundSample} from "./GroundTerrain.js";
@@ -172,7 +173,7 @@ export const ATLAS_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freez
     boss:region.id==="spirit_rift"?RIFT_WARDEN:undefined,
     water:region.pools?[...(water??[]),...region.pools]:water,
     obstacles:[{id:"landmark",...point(region.marker),radius:2.2},...region.scatter.map((p,i)=>({id:"relic-"+i,...point(p),radius:1.1}))]};
-  return [map.id,map];
+  return [map.id,{...map,...atlasRelief(map)}];
 })));
 export function isAtlasMap(id:string){return Object.prototype.hasOwnProperty.call(ATLAS_MAPS,id);}
 export type AtlasSpawn={id:string;name:string;mapId:string;x:number;z:number;level:number;tier:"normal"|"strong"|"boss"};

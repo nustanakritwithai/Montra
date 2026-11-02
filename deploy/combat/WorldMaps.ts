@@ -50,6 +50,7 @@ export type WorldMapDefinition = Readonly<{
   id: string; name: string;
   bounds: Readonly<{ minX: number; maxX: number; minZ: number; maxZ: number }>;
   terrain?: GroundTerrain;
+  reliefLabels?: readonly {name:string;x:number;z:number}[];
   spawn: WorldPoint;
   obstacles: readonly WorldObstacle[];
   walls?: readonly WorldWall[];
@@ -183,8 +184,12 @@ export function isSafeWorldPoint(map: WorldMapDefinition, point: WorldPoint, rad
       point.z - radius < map.bounds.minZ || point.z + radius > map.bounds.maxZ) return false;
   if(map.terrain){
     const surface=groundSample(map.terrain,point.x,point.z);
-    if(surface.grade>map.terrain.maxGrade || Math.abs(point.y-surface.height)>=.08)return false;
-    point={...point,y:0};
+    const offset=point.y-surface.height;
+    if(isOnGround(offset)){
+      if(surface.grade>map.terrain.maxGrade)return false;
+      point={...point,y:0};
+    }else if(!map.region?.noFlight && isFlightAltitude(offset))point={...point,y:offset};
+    else return false;
   }
   const rampart=map.strategic?.rampart;
   if(rampart && isOnPlatform(point.y))return onRampart(rampart,point.x,point.z);

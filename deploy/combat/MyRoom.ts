@@ -131,6 +131,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastWarpMs = new Map<string, number>();
   private provinceClients = new Set<string>();
   private castleClients = new Set<string>();
+  private reliefClients = new Set<string>();
   private terrainClients = new Set<string>();
   private riverClients = new Set<string>();
   private atlasClients = new Set<string>();
@@ -1573,6 +1574,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const snapshot = this.captureCharacterSnapshot(id);
       if (!snapshot) return this.reject(client, "character_not_persistent");
       const portal = result.portal;
+      if(isAtlasMap(portal.targetMapId) && getWorldMap(portal.targetMapId)?.terrain && !this.reliefClients.has(id))return this.reject(client,"world_client_update_required");
       if(portal.targetMapId===RIDGE_PASS && !this.terrainClients.has(id))return this.reject(client,"world_client_update_required");
       if(portal.targetMapId===RIVER_CITY && !this.riverClients.has(id))return this.reject(client,"world_client_update_required");
       if(portal.targetMapId===CASTLE_ID && !this.castleClients.has(id))return this.reject(client,"world_client_update_required");
@@ -1764,7 +1766,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           !this.canOccupy(player.x, player.z, landingY, false, player.mapId))) {
         return this.reject(client, "landing_blocked");
       }
-      if (!landing && !isOnGround(player.y) && !isOnPlatform(player.y)) {
+      if (!landing && !onMapGround(player) && !(isOnPlatform(player.y) && (flightMap?.strategic?.rampart || player.mapId===DEFAULT_MAP_ID))) {
         return this.reject(client, "flight_unavailable");
       }
       const targetY = landing ? landingY! : FLIGHT.altitude;
@@ -1777,7 +1779,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.flying = true;
       this.flightTransitions.set(id, { targetY, landing });
       this.broadcast("flight_started", {
-        playerId: id, direction: landing ? "down" : "up", targetY,
+        playerId: id, direction: landing ? "down" : "up", targetY:targetY+groundAt(player.mapId,player.x,player.z),
       }, { afterNextPatch: true });
     },
     dash: (client: Client, message: unknown) => {
@@ -2059,7 +2061,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     const from = { x:shooter.x, y:shooter.y+FORT.shootOriginHeight, z:shooter.z };
     const to = { x:target.x, y:target.y + FORT.targetBodyHeight, z:target.z };
-    const map=getWorldMap(shooter.mapId),downhill=map?.terrain?shooter.y-target.y>=2:map?.strategic?.rampart && isOnPlatform(shooter.y) && isOnGround(target.y);
+    const map=getWorldMap(shooter.mapId),downhill=map?.terrain?onMapGround(shooter) && onMapGround(target) && shooter.y-target.y>=2:map?.strategic?.rampart && isOnPlatform(shooter.y) && isOnGround(target.y);
     if (distance3d(from,to) > FORT.rangedRange+(downhill?3:0)) {
       return this.reject(client, "shot_out_of_range");
     }
@@ -2125,6 +2127,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     const map = getWorldMap(owner.mapId)!;
     const besideOwner = {x:clampToMap(owner.x - 1.1, map.bounds, "x"), y:owner.y, z:clampToMap(owner.z + 0.9, map.bounds, "z")};
+    if(map.terrain)besideOwner.y+=groundAt(map.id,besideOwner.x,besideOwner.z)-groundAt(map.id,owner.x,owner.z);
     const blocked = kind === "pot_spirit" && (!isSafeWorldPoint(map, besideOwner) || !this.bodyPathClear(map.id, owner, besideOwner));
     const spawn = blocked ? owner : besideOwner;
     const guardian = new SummonedGuardian({
@@ -2225,7 +2228,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
             guardian, target, RULES.summonMoveSpeed * dt
           );
           guardian.x = clampToMap(next.point.x, getWorldMap(owner.mapId)!.bounds, "x");
-          guardian.y = next.point.y;
+          guardian.y = Math.max(next.point.y,groundAt(owner.mapId,next.point.x,next.point.z));
           guardian.z = clampToMap(next.point.z, getWorldMap(owner.mapId)!.bounds, "z");
         }
         continue;
@@ -2250,7 +2253,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           guardian, desired, RULES.summonMoveSpeed * dt
         );
         guardian.x = clampToMap(next.point.x, getWorldMap(owner.mapId)!.bounds, "x");
-        guardian.y = next.point.y;
+        guardian.y = Math.max(next.point.y,groundAt(owner.mapId,next.point.x,next.point.z));
         guardian.z = clampToMap(next.point.z, getWorldMap(owner.mapId)!.bounds, "z");
         if (next.moved) guardian.facing = facingTo(dx, dz);
       } else {
@@ -2443,8 +2446,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.flightTransitions.delete(id);
         continue;
       }
-      const next = progressFlightHeight(player.y, transition.targetY, dt);
-      player.y = next.y;
+      const base=groundAt(player.mapId,player.x,player.z);
+      const next = progressFlightHeight(player.y-base, transition.targetY, dt);
+      player.y = next.y+base;
       player.combatState = transition.landing ? "descending" : "ascending";
       if (!next.arrived) continue;
       this.flightTransitions.delete(id);
@@ -2460,7 +2464,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private canOccupy(x: number, z: number, feetY: number, flying = false, mapId = DEFAULT_MAP_ID): boolean {
     if (mapId !== DEFAULT_MAP_ID) {
       const map = getWorldMap(mapId);
-      if(map?.terrain)return !flying && isSafeWorldPoint(map,{x,z,y:groundAt(mapId,x,z)});
+      if(map?.terrain)return isSafeWorldPoint(map,{x,z,y:groundAt(mapId,x,z)+(flying?FLIGHT.altitude:0)});
       const r=map?.strategic?.rampart;
       if(r && isOnPlatform(feetY))return onRampart(r,x,z);
       if(r && this.closedFieldGates.size && r.gates.some(g=>this.closedFieldGates.has(g.id) && segmentIntersectsExpandedWall({x,z},{x,z},g.box,.4)))return false;
@@ -2476,9 +2480,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return false; // Never trust arbitrary Y from a client/save.
   }
 
-  private moveOnSurface(player:{x:number;y:number;z:number;mapId:string},x:number,z:number){
+  private moveOnSurface(player:{x:number;y:number;z:number;mapId:string;flying?:boolean},x:number,z:number){
     player.x=x;player.z=z;
-    if(getWorldMap(player.mapId)?.terrain)player.y=groundAt(player.mapId,x,z);
+    if(getWorldMap(player.mapId)?.terrain)player.y=groundAt(player.mapId,x,z)+(player.flying?FLIGHT.altitude:0);
   }
 
   private updatePlayerMovement(dt: number) {
@@ -2935,7 +2939,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       stamina: player.stamina,
       x: player.x,
       // Keep stable flight altitude when a transition is mid-flight.
-      y: player.flying ? FLIGHT.altitude : player.y,
+      y: player.flying ? FLIGHT.altitude : isAtlasMap(player.mapId) ? 0 : player.y,
       z: player.z,
       hp: Math.max(0, Math.round(hpOverride ?? player.hp)),
       inventory, updatedAt: new Date().toISOString(),
@@ -2987,6 +2991,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const castleReady=(options as {castleVersion?:unknown}|undefined)?.castleVersion===2;
       const riverReady=(options as {riverCityVersion?:unknown}|undefined)?.riverCityVersion===1;
       const terrainReady=(options as {terrainVersion?:unknown}|undefined)?.terrainVersion===1;
+      const reliefReady=(options as {atlasReliefVersion?:unknown}|undefined)?.atlasReliefVersion===1;
+      if(isAtlasMap(mapId) && getWorldMap(mapId)?.terrain && !reliefReady)throw new Error("world_client_update_required");
       if(mapId===RIDGE_PASS && !terrainReady)throw new Error("world_client_update_required");
       if(mapId===RIVER_CITY && !riverReady)throw new Error("world_client_update_required");
       if(mapId===CASTLE_ID && !castleReady)throw new Error("world_client_update_required");
@@ -2998,9 +3004,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const map = getWorldMap(mapId);
       if (!map) throw new Error("unknown_character_map");
       // A saved location is restored only if the current server geometry allows it.
-      const restoreFlight = Boolean(saved && !map.terrain && isFlightAltitude(saved.y));
-      let validPosition = saved && (!map.terrain || isSafeWorldPoint(map,saved)) && this.canOccupy(
-        saved.x, saved.z, saved.y, restoreFlight, mapId);
+      // Atlas saves keep the pre-relief ground/flight layer on disk; project onto the current surface at admission.
+      const restoreFlight = Boolean(saved && (!map.terrain || !map.region?.noFlight) && isFlightAltitude(saved.y));
+      const savedY=saved ? saved.y+(isAtlasMap(mapId)?groundAt(mapId,saved.x,saved.z):0) : 0;
+      let validPosition = saved && (!map.terrain || isSafeWorldPoint(map,{...saved,y:savedY})) && this.canOccupy(
+        saved.x, saved.z, savedY, restoreFlight, mapId);
       let safeSpawn = mapId === DEFAULT_MAP_ID ? { ...spawn, y: 0 } : getSafeMapSpawn(mapId);
       if(this.field){
         const credential=characterId && admissions.get(characterId),war=guildStore().war,member=characterId && war.member(characterId);
@@ -3027,7 +3035,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         validPosition=false;
       }
       const player = new Player({
-        ...(validPosition && saved ? {x:saved.x,y:saved.y,z:saved.z} : safeSpawn),
+        ...(validPosition && saved ? {x:saved.x,y:savedY,z:saved.z} : safeSpawn),
         facing: 0,
         hp: saved && saved.hp > 0 ? Math.min(saved.hp, initialStats.maxHp) : initialStats.maxHp,
         maxHp: initialStats.maxHp,
@@ -3059,6 +3067,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.applyStats(client.sessionId,player, allocations);
       this.state.players.set(client.sessionId, player);
       if((options as Record<string,unknown>)?.warVersion===1)this.warClients.add(client.sessionId);
+      if(reliefReady)this.reliefClients.add(client.sessionId);
       if(terrainReady)this.terrainClients.add(client.sessionId);
       if(riverReady)this.riverClients.add(client.sessionId);
       if(castleReady)this.castleClients.add(client.sessionId);
@@ -3117,7 +3126,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.templeClients.delete(id);
     this.atlasClients.delete(id);
     this.crestTurns.delete(id);this.gateActions.delete(id);this.warSeats.delete(id);this.warClients.delete(id);this.warSent.delete(id);
-    this.riverClients.delete(id);this.terrainClients.delete(id);
+    this.riverClients.delete(id);this.terrainClients.delete(id);this.reliefClients.delete(id);
     this.castleClients.delete(id);
     this.provinceClients.delete(id);
     this.leaveParty(id);

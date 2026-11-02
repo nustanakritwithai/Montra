@@ -32,6 +32,9 @@ jobs:
           cp deploy/combat/dash-rules.test.ts combat-verify/src/rooms/dash-rules.test.ts
           cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
           cp deploy/combat/TempleMap.ts combat-verify/src/rooms/TempleMap.ts
+          cp deploy/combat/AtlasRelief.ts combat-verify/src/rooms/AtlasRelief.ts
+          cp deploy/combat/atlas-relief.test.ts combat-verify/src/rooms/atlas-relief.test.ts
+          cp deploy/combat/atlas-relief-integration.mjs combat-verify/atlas-relief-integration.mjs
           cp deploy/combat/GroundTerrain.ts combat-verify/src/rooms/GroundTerrain.ts
           cp deploy/combat/terrain.test.ts combat-verify/src/rooms/terrain.test.ts
           cp deploy/combat/terrain-integration.mjs combat-verify/terrain-integration.mjs
@@ -327,6 +330,19 @@ jobs:
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4110) 2>/dev/null; then break; fi; sleep 0.25; done
           timeout 35s node party-integration.mjs || { cat party-server.log; exit 1; }
+
+      - name: Existing hunt terrain, ground AI and flight saves
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4118 MONTRA_ATLAS_RELIEF=1 MONTRA_WORLD_EXPANSION=1 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_TEST_URL=http://127.0.0.1:4118 MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-relief-test-XXXXXX)"
+          npx tsx --test src/rooms/atlas-relief.test.ts
+          node --import tsx src/index.ts > relief-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4118) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 130s node atlas-relief-integration.mjs || { cat relief-server.log; exit 1; }
 
       - name: Two-level ridge ramps and cross-elevation combat
         shell: bash
