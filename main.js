@@ -3570,9 +3570,17 @@
   gm.moonBeam = additiveMat("moonbeam", paintTexture("moonbeam", 64, (c, s) => { const g = c.createLinearGradient(0, 0, s, 0); g.addColorStop(0, "rgba(180,210,255,0)"); g.addColorStop(.5, "rgba(200,225,255,.7)"); g.addColorStop(1, "rgba(180,210,255,0)"); c.fillStyle = g; c.fillRect(0, 0, s, s); }));
   for (const m of [gm.flameMat, gm.eyeMoon, gm.moonGlow]) glowMats.add(m);
   Object.assign(gm, { gutDark: mat("entrails", "#5a1e22", "#1a0406"), gutGlow: mat("glowing entrails", "#c8504a", "#7a1410"), heartGlow: mat("krasue heart", "#ff6a5a", "#e02818"),
-    basket: mat("winnowing basket", "#9a804e", "#100c05"), tongue: mat("pop tongue", "#6a1218", "#2a0306"), whiteHair: mat("white wild hair", "#b8b4aa", "#121110"),
+    basket: mat("winnowing basket", "#9a804e", "#100c05"), leaf: mat("nymph leaf", "#4f8a3e", "#0a1a06"), vine: mat("lash vine", "#3a5a2a", "#061004"), tongue: mat("pop tongue", "#6a1218", "#2a0306"), whiteHair: mat("white wild hair", "#b8b4aa", "#121110"),
     steelBlade: mat("dap steel", "#9aa2a8", "#101418") });
   gm.steelBlade.specularColor = B.Color3.FromHexString("#e0e8f0"); gm.steelBlade.specularPower = 64;
+  // Phi Ta Khon mask paint: bold festival bands, dots and flame curls.
+  gm.maskPaint = mat("ta khon mask", "#ffffff", "#140a06");
+  gm.maskPaint.diffuseTexture = paintTexture("ta khon paint", 256, (c, s) => {
+    const cols = ["#c8302a", "#e8b030", "#2a6ab0", "#e8e4d8", "#1e8a4a", "#1a1414"];
+    for (let y = 0; y < s; y += 22) { c.fillStyle = cols[(y / 22) % cols.length]; c.fillRect(0, y, s, 22); }
+    for (let i = 0; i < 120; i++) { c.fillStyle = cols[i % cols.length]; c.beginPath(); c.arc(R(i, 951) * s, R(i, 952) * s, 3 + R(i, 953) * 6, 0, 6.28); c.fill(); }
+    c.strokeStyle = "#1a1414"; c.lineWidth = 3; for (let i = 0; i < 18; i++) { const x = R(i, 954) * s, y = R(i, 955) * s; c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo(x + 14, y - 18, x + 26, y - 4); c.quadraticCurveTo(x + 30, y + 8, x + 18, y + 6); c.stroke(); }
+  });
   for (const m of [gm.gutGlow, gm.heartGlow]) glowMats.add(m);
   gm.krasueAura = additiveMat("krasue aura", radialTexture("krasue aura", 128, [[0, "rgba(140,255,120,.0)"], [.45, "rgba(140,255,120,.25)"], [.7, "rgba(100,230,90,.12)"], [1, "rgba(80,200,70,0)"]]));
   gm.basket.diffuseTexture = paintTexture("basket weave", 128, (c, s) => { c.fillStyle = "#9a804e"; c.fillRect(0, 0, s, s);
@@ -3581,7 +3589,7 @@
     rags: mat("grave rags", "#6c665c", "#100e0c"), shroud: mat("grave shroud", "#1b1f29", "#06080e"), white: mat("ghost white", "#d9d6cc", "#26262a"),
     saffron: mat("scribe saffron", "#8a4f22", "#140a03"), weed: mat("weed rags", "#3e4a36", "#060a05"), burial: mat("burial cloth", "#cfc8b4", "#141210"),
     ash: mat("ash cloth", "#2a2420", "#060403"), sabai: mat("sabai cloth", "#5a2a3a", "#0e0408"), phaSin: mat("pha sin", "#3a2a4a", "#08050c"),
-    danceGold: mat("dancer gold brocade", "#b88a3a", "#1e1404"), soldier: mat("siamese soldier jacket", "#8a2420", "#140404"), danceRed: mat("dancer red brocade", "#8a1e22", "#140304"), tealSilk: mat("teal silk", "#3f7f78", "#0a1e1c"), moonSilk: mat("moon silk", "#b8c8e8", "#1a2440"), blue: mat("dead blue shirt", "#7d8ea6", "#0e1218"), lacquer: mat("statue lacquer cloth", "#7a2622", "#120404"),
+    danceGold: mat("dancer gold brocade", "#b88a3a", "#1e1404"), leafSilk: mat("leaf silk", "#5a8a4a", "#0a1806"), patchwork: mat("patchwork robe", "#ffffff", "#0a0806"), soldier: mat("siamese soldier jacket", "#8a2420", "#140404"), danceRed: mat("dancer red brocade", "#8a1e22", "#140304"), tealSilk: mat("teal silk", "#3f7f78", "#0a1e1c"), moonSilk: mat("moon silk", "#b8c8e8", "#1a2440"), blue: mat("dead blue shirt", "#7d8ea6", "#0e1218"), lacquer: mat("statue lacquer cloth", "#7a2622", "#120404"),
   };
   for (const m of Object.values(cloth)) m.backFaceCulling = false;
   // ---- Procedural surface detail for the ghosts ----
@@ -3655,6 +3663,14 @@
   applySurface(cloth.danceGold, brocade("dancer gold", "#b88a3a", "rgba(120,40,20,.6)"), "#ffffff");
   applySurface(cloth.danceRed, brocade("dancer red", "#8a1e22", "rgba(230,190,90,.75)"), "#ffffff");
   applySurface(cloth.soldier, brocade("soldier jacket", "#8a2420", "rgba(230,180,80,.7)"), "#ffffff");
+  applySurface(cloth.leafSilk, clothSurface("leaf silk", "#5a8a4a", "rgba(20,40,10,.4)", "rgba(220,200,90,.2)", 0), "#ffffff");
+  // Patchwork: squares of festival cloth stitched together.
+  applySurface(cloth.patchwork, surface("patchwork", 256, (c, s) => {
+    const cols = ["#c8302a", "#e8b030", "#2a6ab0", "#e86aa0", "#1e8a4a", "#8a3ac0", "#f0e8d8"];
+    for (let y = 0; y < s; y += 32) for (let x = 0; x < s; x += 32) { c.fillStyle = cols[((x / 32) * 3 + (y / 32) * 5) % cols.length]; c.fillRect(x, y, 32, 32);
+      c.strokeStyle = "rgba(0,0,0,.4)"; c.setLineDash([3, 3]); c.strokeRect(x + 2, y + 2, 28, 28); c.setLineDash([]); }
+    speckle(c, s, 300, 956, ["rgba(0,0,0,.15)", "rgba(255,255,255,.1)"], .5, 1.6);
+  }, (h, s) => { for (let y = 0; y < s; y += 32) { h.fillStyle = "#505050"; h.fillRect(0, y, s, 2); } for (let x = 0; x < s; x += 32) { h.fillStyle = "#505050"; h.fillRect(x, 0, 2, s); } }, 3, 2), "#ffffff");
   for (const [m, base] of [[cloth.lacquer, "#8a2b24"], [templeLacquer, "#953f37"]]) applySurface(m, surface(m.name + " lacquer", 256, (c, s) => {
     c.fillStyle = base; c.fillRect(0, 0, s, s);
     // Gilt kranok border bands on lacquered cloth.
@@ -4423,6 +4439,89 @@
         hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 2.6 + i) * .15; h.rotation.z = Math.sin(t * 1.9 + i * 1.7) * .2; });
       };
     },
+    // นางไม้: a tree nymph — a pale green woman whose hips flow into a gnarled
+    // trunk and roots, leaf crown, vine-laced hair, pha phrae at the waist;
+    // she lashes with vines.
+    nangmai(nodes, body, holder, o, root) {
+      body.material = ghostSkin(body, "nang mai", "#8aa88a", "#0c1a0e");
+      nodes.Spine.scaling.set(.84, 1, .84);
+      skinnedCut(body, "leaf bodice", (x, y) => y > 1.1 && y < 1.42 && Math.abs(x) < .2, () => .016, cloth.leafSilk);
+      for (const n of ["LeftUpLeg", "RightUpLeg"]) nodes[n].scaling.setAll(.001);
+      // Trunk from the hips down, merging into roots on the ground.
+      const prof = []; for (let i = 0; i <= 8; i++) { const y = .98 - i / 8 * 1.0; prof.push([.17 + (1 - y / .98) * .25 + .03 * Math.sin(i * 1.7), y]); } prof.push([0, -.02]);
+      const trunk = lathe("nang mai trunk", prof, gm.bark, 12); onBone(nodes, "Hips", trunk);
+      for (let i = 0; i < 3; i++) { const band = lathe("pha phrae", [[.19 + i * .015, .9 - i * .07], [.2 + i * .015, .86 - i * .07], [.19 + i * .015, .83 - i * .07]], gm.sash3[i], 14); onBone(nodes, "Hips", band); }
+      const roots = []; for (let i = 0; i < 5; i++) { const a = i / 5 * 6.28 + .4, n = new B.TransformNode("nymph root", scene); n.parent = root; n.position.set(Math.cos(a) * .3, .05, Math.sin(a) * .3); n.rotation.y = -a;
+        tube("nymph root", [[0, 0, 0], [.2, -.02, 0], [.4, -.05, 0], [.55, -.06, 0]], .07, .015, gm.bark, 5).parent = n; roots.push(n); }
+      ghostEyes(nodes, gm.eyeGreen, .028);
+      const crown = new B.TransformNode("leaf crown", scene); crown.parent = nodes.Head; crown.position.set(0, .16, -.01);
+      for (let i = 0; i < 9; i++) { const a = i / 9 * 6.28, leaf = B.MeshBuilder.CreateSphere("crown leaf", { diameter: .06, segments: 4 }, scene);
+        leaf.material = i % 3 ? gm.leaf : lotusBloom; leaf.parent = crown; leaf.position.set(Math.cos(a) * .085, .01, Math.sin(a) * .085); leaf.scaling.set(.5, 1.8, .25); leaf.rotation.set(Math.sin(a) * .6, 0, -Math.cos(a) * .6); leaf.isPickable = false; }
+      const hair = ghostHair(nodes, [-1.2, -.7, -.2, .2, .7, 1.2].map(a => { const x = Math.sin(a) * .08;
+        return [[x, 1.72, -.03], [x * 1.4, 1.58, -.1], [x * 1.6, 1.38, -.12], [x * 1.5, 1.12, -.1], [x * 1.3, .9, -.07]]; }), hairMat);
+      const vines = [-1, 1].map(s => { const n = new B.TransformNode("lash vine", scene); n.parent = nodes[s > 0 ? "LeftHand" : "RightHand"]; n.position.set(s * .08, 0, 0);
+        tube("lash vine", [[0, 0, 0], [s * .25, -.05, .05], [s * .5, .02, .02], [s * .75, -.04, .06], [s * 1.0, 0, 0]], .02, .006, gm.vine, 5).parent = n; n.scaling.setAll(.3); return n; });
+      const base = { Spine: [-.05, .1, .05], Head: [.1, -.2, .12], LeftArm: [-.6, .5, -.9], RightArm: [-.2, -.2, 1.15], LeftForeArm: [0, -1.1, 0], RightForeArm: [0, .5, 0], LeftHand: [-.6, 0, 0], RightHand: [-.4, 0, 0] };
+      const call = { Spine: [-.3, 0, 0], Head: [-.3, 0, 0], LeftArm: [-2.7, 0, -1.0], RightArm: [-2.7, 0, 1.0], LeftForeArm: [0, -.3, 0], RightForeArm: [0, .3, 0] };
+      const lash = { Spine: [.35, .4, 0], LeftArm: [-1.5, .4, -1.2], RightArm: [-1.5, -.4, 1.2], LeftForeArm: [0, 0, 0], RightForeArm: [0, 0, 0] };
+      const wither = { Spine: [.9, 0, .3], Neck: [.4, 0, 0], Head: [.5, .4, 0], LeftArm: [.2, 0, -1.4], RightArm: [.2, 0, 1.4] };
+      return k => {
+        const { t, move, hurt } = k, T = ghostTimeline(k.g, k.now);
+        holder.position.y = -.02 - ease(T.die) * .4 - (1 - ease(T.rise)) * 1.6;
+        const p = clonePose(base);
+        p.Spine[2] = Math.sin(t * .8) * .08; p.LeftArm[2] += Math.sin(t * 1.1) * .12; p.RightArm[2] -= Math.sin(t * 1.1 + 1) * .1;
+        blendPose(p, call, T.wind); blendPose(p, lash, T.hit); blendPose(p, { Spine: [-.3, .3, 0] }, Math.max(hurt, T.hurt)); blendPose(p, wither, ease(T.die));
+        poseBones(nodes, p);
+        vines.forEach(v => v.scaling.setAll(.3 + T.hit * 1.4 + T.wind * .3));
+        roots.forEach((r, i) => { r.rotation.z = Math.sin(t * 1.3 + i) * .05 + move * Math.sin(k.walk + i) * .15; });
+        hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 1.4 + i) * .1; });
+      };
+    },
+    // ผีตาโขน: a Phi Ta Khon masked spirit — huge carved mask with a hooked
+    // nose, horns and grinning teeth under a rice-steamer hat, patchwork robe
+    // and cowbells; it dances a bouncing festival shuffle and spins to strike.
+    phitakhon(nodes, body, holder, o) {
+      body.material = ghostSkin(body, "ta khon", "#6a5a4c", "#0a0705");
+      skinnedCut(body, "patchwork robe", (x, y) => y > .35 && y < 1.5 && Math.abs(x) < .62, (x, y) => .03 + (y < .9 ? .03 : 0), cloth.patchwork);
+      const robe = lathe("patchwork hem", [[.2, 1.0], [.27, .7], [.32, .4], [.33, .3]], cloth.patchwork, 16); onBone(nodes, "Hips", robe);
+      // Mask: a tall carved face, hooked nose, grin, horns and painted ears.
+      const mask = new B.TransformNode("ta khon mask", scene); mask.parent = nodes.Head; mask.position.set(0, .1, .06);
+      const face = B.MeshBuilder.CreateSphere("mask face", { diameter: .34, segments: 10 }, scene); face.material = gm.maskPaint; face.parent = mask; face.scaling.set(.9, 1.35, .55); face.position.z = .02; face.isPickable = false;
+      tube("mask nose", [[0, .02, .1], [0, -.02, .19], [0, -.1, .24], [0, -.16, .2]], .035, .012, gm.maskPaint, 6).parent = mask;
+      const grin = B.MeshBuilder.CreateBox("mask grin", { width: .2, height: .05, depth: .04 }, scene); grin.material = gm.mouth; grin.parent = mask; grin.position.set(0, -.15, .1); grin.isPickable = false;
+      for (let i = -3; i <= 3; i++) { const tooth = B.MeshBuilder.CreateBox("mask tooth", { width: .022, height: .03, depth: .02 }, scene); tooth.material = gm.pale; tooth.parent = mask; tooth.position.set(i * .026, -.135, .115); tooth.isPickable = false; }
+      for (const s of [-1, 1]) {
+        const eye = B.MeshBuilder.CreateSphere("mask eye", { diameter: .07, segments: 6 }, scene); eye.material = gm.eyeRed; eye.parent = mask; eye.position.set(s * .065, .05, .09); eye.scaling.z = .5; eye.isPickable = false;
+        tube("mask horn", [[s * .08, .17, .02], [s * .16, .28, .0], [s * .2, .4, -.05], [s * .16, .48, -.08]], .03, .006, gm.maskPaint, 6).parent = mask;
+        const ear = B.MeshBuilder.CreateSphere("mask ear", { diameter: .12, segments: 5 }, scene); ear.material = gm.maskPaint; ear.parent = mask; ear.position.set(s * .17, .0, -.01); ear.scaling.set(.3, 1, .6); ear.isPickable = false;
+      }
+      const hat = lathe("huad hat", [[0, .55], [.04, .5], [.12, .35], [.17, .22], [.24, .2], [.26, .18], [0, .18]], gm.basket, 16); hat.parent = mask; hat.position.y = .02;
+      const hatBand = lathe("hat band", [[.17, .2], [.18, .23], [.17, .26]], cloth.danceRed, 16); hatBand.parent = mask;
+      // Cowbells at the waist.
+      const bells = []; for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28, bell = lathe("cowbell", [[0, .05], [.03, .04], [.04, -.03], [.045, -.05], [0, -.05]], templeBronze, 8);
+        bell.position.set(Math.cos(a) * .22, .9, Math.sin(a) * .16); onBone(nodes, "Hips", bell); bells.push(bell); }
+      const sword = new B.TransformNode("wooden sword", scene); sword.parent = nodes.Socket_Hand_Weapon_R; sword.rotationQuaternion = quatFromUp(new B.Vector3(0, .3, 1));
+      const blade = lathe("painted wooden sword", [[0, -.12], [.022, -.1], [.03, .1], [.035, .55], [0, .72]], gm.maskPaint, 6); blade.parent = sword; blade.scaling.z = .45;
+      const base = { Spine: [.12, 0, 0], Neck: [.05, 0, 0], RightArm: [-.6, .2, 1.0], RightForeArm: [0, 1.0, 0], LeftArm: [-.9, -.3, -1.0], LeftForeArm: [0, -.9, 0],
+        LeftUpLeg: [-.3, 0, .2], RightUpLeg: [-.3, 0, -.2], LeftLeg: [.55, 0, 0], RightLeg: [.55, 0, 0], LeftFoot: [-.25, 0, 0], RightFoot: [-.25, 0, 0] };
+      const spinUp = { Spine: [-.15, -.6, 0], RightArm: [-2.6, 0, .9], LeftArm: [-1.8, 0, -1.2] };
+      const spinCut = { Spine: [.4, .6, 0], RightArm: [-1.5, .4, 1.2], RightForeArm: [0, .1, 0], LeftArm: [-.3, 0, -1.3] };
+      const slump = { Hips: [.2, 0, 0], Spine: [.9, 0, .25], Neck: [.4, 0, 0], LeftUpLeg: [-1.5, 0, .3], LeftLeg: [1.8, 0, 0], RightUpLeg: [-1.3, 0, -.3], RightLeg: [1.9, 0, 0], RightArm: [.2, 0, 1.4], LeftArm: [.2, 0, -1.4] };
+      return k => {
+        const { t, move, hurt } = k, T = ghostTimeline(k.g, k.now);
+        // Festival shuffle: knees pump to a bouncing beat, hips and mask sway.
+        const beat = t * 4.2, b = Math.sin(beat);
+        holder.position.y = -.08 + Math.abs(b) * .07 - ease(T.die) * .3 - (1 - ease(T.rise)) * 1.6;
+        holder.rotation.y = Math.PI + T.hit * Math.PI * 2 * ease((k.now - k.g.attackAt) / 450);
+        const p = clonePose(base);
+        p.Hips = [0, Math.sin(beat * .5) * .25, b * .08]; p.LeftLeg[0] += Math.max(0, b) * .35; p.RightLeg[0] += Math.max(0, -b) * .35;
+        p.LeftUpLeg[0] -= Math.max(0, b) * .25; p.RightUpLeg[0] -= Math.max(0, -b) * .25;
+        p.Neck[2] = Math.sin(beat * .5) * .2; p.LeftArm[2] += b * .2; p.RightArm[0] += Math.sin(beat * .5) * .25;
+        blendPose(p, spinUp, T.wind); blendPose(p, spinCut, T.hit); blendPose(p, { Spine: [-.3, .3, 0] }, Math.max(hurt, T.hurt)); blendPose(p, slump, ease(T.die));
+        poseBones(nodes, p);
+        bells.forEach((bl, i) => { bl.rotation.z = Math.sin(beat * 2 + i) * .4; });
+      };
+    },
   };
   const HUMANOID_KINDS = new Set(Object.keys(HUMANOID));
   const ghostWaiting = [];
@@ -4445,6 +4544,7 @@
     drowned_marsh: [{ kind: "drowned", fallback: "corpse" }, { kind: "boatman", fallback: "corpse" }, { kind: "waterspirit", fallback: "longhair" }],
     moon_cemetery: [{ kind: "graveborn", fallback: "corpse" }, { kind: "pyrekeeper", fallback: "corpse" }, { kind: "moonspirit", fallback: "longhair" }],
     hex_ridge: [{ kind: "krasue", fallback: "longhair" }, { kind: "krahang", fallback: "corpse" }, { kind: "preta", fallback: "corpse" }],
+    asura_peak: [{ kind: "phitakhon", fallback: "corpse" }, { kind: "phitakhon", fallback: "corpse" }, { kind: "phitakhon", fallback: "corpse", lead: true }],
     // A court may list variants; spawns cycle through them (atlas_<map>_<court>_<n>).
     fallen_city: [[{ kind: "maenak", fallback: "longhair" }, { kind: "phipop", fallback: "corpse" }, { kind: "maenak", fallback: "longhair" }],
       { kind: "dancer", fallback: "longhair", spire: 1 }, [{ kind: "headless", fallback: "corpse" }, { kind: "headless", fallback: "corpse", lead: true }]],
@@ -4466,7 +4566,9 @@
       return { kind: "hanged", scale: 1 + (level - 17) * .03, eye: gm.eyeRed };
     }
     if (level < 5) return { kind: "corpse", scale: .9 + level * .03, eye: gm.eyeAmber };
-    if (level < 9) return { kind: "stump", scale: 1 + (level - 5) * .04, eye: gm.eyeGreen };
+    if (level < 9) return Number(String(id).split("_").at(-1)) % 2 === 0
+      ? { kind: "nangmai", fallback: "stump", scale: 1 + (level - 5) * .03, eye: gm.eyeGreen }
+      : { kind: "stump", scale: 1 + (level - 5) * .04, eye: gm.eyeGreen };
     return { kind: "longhair", scale: 1 + (level - 9) * .03, eye: gm.eyeRed };
   }
   const soulMeshes = [];
