@@ -43,8 +43,9 @@ import { checkWarp, WARP_COMBAT_LOCK_MS } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { saveBugReport } from "./BugReports.js";
 import { BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCooldown } from "./Buffs.js";
-import { BUILD_CATALOG, DEFAULT_WARD_TALENT, DUAL_SWORD, talentGroup, classSkill, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
+import { BUILD_CATALOG, DEFAULT_WARD_TALENT, DUAL_SWORD, isOccultPath, talentGroup, classSkill, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 import { BuffLedger } from "./BuffLedger.js";
+import { OCCULT_LESSONS, OCCULT_MASTERY_LABELS, OCCULT_MASTERY_REQUIREMENTS, newOccultBook, occultPoints, validateOccultBook, type OccultBook, type OccultLesson, type OccultSkillId, type OccultPath, type OccultMastery } from "./OccultRules.js";
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, SWORD_SCHOOLS, SWORD_NODES, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
@@ -82,7 +83,7 @@ async function battleRoom(field:Battlefield):Promise<string>{
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
   climb: CommandBucket; dash: CommandBucket; flight: CommandBucket;
-  chat: CommandBucket; bugReport: CommandBucket; possession: CommandBucket; build: CommandBucket; swordTree: CommandBucket; economy: CommandBucket; party: CommandBucket; guild: CommandBucket;
+  chat: CommandBucket; bugReport: CommandBucket; possession: CommandBucket; build: CommandBucket; swordTree: CommandBucket; occult: CommandBucket; economy: CommandBucket; party: CommandBucket; guild: CommandBucket;
 };
 
 type ActiveDash = DashDirection & { remaining: number };
@@ -163,6 +164,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private muayGrappleImmunity = new Map<string,number>();
   private muayGrappleCounters = new Map<string,{targetId:string;until:number}>();
   private muayBooks = new Map<string, MuayBook>();
+  // Occult books are private; sending them on request avoids inflating world snapshots.
+  private occultBooks = new Map<string, OccultBook>();
+  private occultMarks = new Map<string,{targetId:string;until:number}>();
+  private occultCurses = new Map<string,{ownerId:string;until:number;nextTick:number;damage:number}>();
+  private occultSpiritOrders = new Map<string,{targetId:string;until:number;skillId:"seer_spirit"|"seer_spirit_bind"}>();
+  // Base spirit practice counts at most once per summon; commanded strikes count individually.
+  private occultSpiritPracticed = new Set<string>();
+  private occultHealingFields = new Map<string,{mapId:string;x:number;y:number;z:number;until:number;nextTick:number;power:number;range:number}>();
   private muayWrapGranted = new Set<string>();
   private swordCombos = new Map<string, {count:number; until:number}>();
   private swordGuards = new Map<string, {until:number; factor:number; direction:boolean; counterUntil:number}>();
@@ -195,11 +204,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return Boolean(target && target.mapId === owner.mapId && !isRestArea(target.mapId,target));
   }
 
-  private buildPlayer(client: Client, gate: "build" | "swordTree" = "build"): Player | undefined {
+  private buildPlayer(client: Client, gate: "build" | "swordTree" | "occult" = "build"): Player | undefined {
     const id = client.sessionId, player = this.state.players.get(id);
     if(this.muayControlled(id)) { this.reject(client,"muay_controlled"); return; }
     if (!this.gates.get(id)?.[gate].consume(this.simulatedMs)) {
-      this.reject(client, gate === "swordTree" ? "sword_tree_rate_limited" : "build_rate_limited");
+      this.reject(client, gate === "swordTree" ? "sword_tree_rate_limited" : gate === "occult" ? "occult_rate_limited" : "build_rate_limited");
     } else if (!player?.alive || !this.persistentCharacters.has(id)) {
       this.reject(client, "build_unavailable");
     } else if (this.pendingWarps.has(id) || this.pendingItemUses.has(id) || this.pendingCharacterLeaves.has(id) || this.pendingRewards.has(id)) {
@@ -246,6 +255,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     this.pendingWarps.add(id);
     const task = characterStore.save({ ...snapshot, build: selection, ...(grantedInventory ? {inventory:grantedInventory, muayWrapGranted:true} : {}) }).then(() => {
+      // Change temporary ritual state only after the new build is safely saved.
+      if (player.pathId !== build.path) {
+        this.occultMarks.delete(id);
+        this.occultSpiritOrders.delete(id);
+        this.occultSpiritPracticed.delete(id);
+        this.occultHealingFields.delete(id);
+        for (const [target,curse] of this.occultCurses) if (curse.ownerId===id) this.clearOccultCurse(target,"class_changed");
+      }
+      if (!isOccultPath(build.path)) {
+        this.endPossession(id, "class_changed");
+        this.despawnSummon(id, "class_changed");
+      }
       player.pathId = build.path;
       player.ancestryId = build.ancestry;
       this.swordGuards.delete(id);
@@ -261,6 +282,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.wardTalentId = build.path === "sentinel" ? talent : "";
       player.bladeTalentId = build.path === "blade" ? talent : "";
       client.send("build_selected", selection);
+      if (isOccultPath(build.path)) this.sendOccultBook(client);
     }, error => {
       console.error("MONTRA build save failed", error);
       this.reject(client, "build_save_failed");
@@ -562,6 +584,295 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(opponent.hp===0){player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(hold.targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:hold.targetId,source:"muay",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});}
     }
     this.broadcast("muay_skill_used",{playerId:id,skillId:"grapple",targetId:hold.targetId},{afterNextPatch:true});void this.saveCharacter(id);
+  }
+
+  private sendOccultBook(client:Client):void {
+    const player=this.state.players.get(client.sessionId),book=this.occultBooks.get(client.sessionId);
+    if (!player || !book || !isOccultPath(player.pathId)) return;
+    try {
+      client.send("occult_book_state",{path:player.pathId,book,lessons:OCCULT_LESSONS,points:occultPoints(player.level),
+        masteryLabels:OCCULT_MASTERY_LABELS,masteryRequirements:OCCULT_MASTERY_REQUIREMENTS});
+    } catch(error) { console.warn("MONTRA occult book notice was not delivered",error); }
+  }
+
+  private recordOccultTraining<P extends OccultPath>(id:string,path:P,categories:readonly (keyof OccultMastery[P])[]):void {
+    const book=this.occultBooks.get(id),player=this.state.players.get(id);
+    if (!book || player?.pathId!==path) return;
+    book.training[path]=Math.min(1_000_000,book.training[path]+1);
+    const counters=book.mastery[path] as Record<string,number>;
+    for (const category of new Set(categories)) {
+      const key=String(category);
+      if (Object.hasOwn(counters,key)) counters[key]=Math.min(1_000_000,counters[key]+1);
+    }
+    const client=this.clients.find(c=>c.sessionId===id);
+    if (client) this.sendOccultBook(client);
+  }
+
+  private clearOccultCurse(targetId:string,reason:string):boolean {
+    if (!this.occultCurses.delete(targetId)) return false;
+    const client=this.clients.find(c=>c.sessionId===targetId);
+    try {client?.send("occult_curse_state",{active:false,reason});}
+    catch(error) {console.warn("MONTRA curse notice was not delivered",error);}
+    return true;
+  }
+
+  private changeOccultBook(client:Client,message:unknown):void {
+    if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_occult_book");
+    const input=message as Record<string,unknown>,keys=Object.keys(input),action=input.action;
+    if (action==="learn") {
+      if (keys.length!==2 || typeof input.skillId!=="string") return this.reject(client,"invalid_occult_book");
+    } else if (action==="equip") {
+      if (keys.length!==3 || !Number.isInteger(input.slot) || (input.slot as number)<0 || (input.slot as number)>3 ||
+          (input.skillId!==null && typeof input.skillId!=="string")) return this.reject(client,"invalid_occult_book");
+    } else if (action==="reset") {
+      if (keys.length!==1) return this.reject(client,"invalid_occult_book");
+    } else return this.reject(client,"invalid_occult_book");
+    const id=client.sessionId,player=this.buildPlayer(client,"occult"),book=this.occultBooks.get(id);
+    if (!player || !book) return;
+    if (!isOccultPath(player.pathId)) return this.reject(client,"occult_class_required");
+    if (player.mapId!==DEFAULT_MAP_ID || !isOnGround(player.y) || Math.hypot(player.x,player.z)>6 ||
+        this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)
+      return this.reject(client,"occult_book_needs_shrine");
+    const path=player.pathId,next=validateOccultBook(book,player.level);
+    if (action==="learn") {
+      const skillId=input.skillId as string;
+      if (!Object.hasOwn(OCCULT_LESSONS,skillId)) return this.reject(client,"invalid_occult_book");
+      const lesson:OccultLesson=OCCULT_LESSONS[skillId as OccultSkillId];
+      if (lesson.path!==path) return this.reject(client,"occult_wrong_path");
+      if (next.learned[path].includes(skillId as OccultSkillId)) return this.reject(client,"occult_already_learned");
+      if (player.level<lesson.level) return this.reject(client,"occult_level");
+      if (next.learned[path].length>=occultPoints(player.level)) return this.reject(client,"occult_no_points");
+      if (lesson.requires.some(required=>!next.learned[path].includes(required as OccultSkillId))) return this.reject(client,"occult_prerequisite");
+      if (next.training[path]<lesson.training) return this.reject(client,"occult_training");
+      const mastery=OCCULT_MASTERY_REQUIREMENTS[skillId as OccultSkillId];
+      const counters=next.mastery[path] as Readonly<Record<string,number>>;
+      if (mastery && Object.entries(mastery).some(([category,count])=>(counters[category] ?? 0)<count))
+        return this.reject(client,"occult_mastery");
+      next.learned[path].push(skillId as OccultSkillId);
+    } else if (action==="equip") {
+      const skillId=input.skillId as OccultSkillId|null;
+      if (skillId!==null && !next.learned[path].includes(skillId)) return this.reject(client,"occult_skill_locked");
+      for (let i=0;i<4;i++) if (skillId!==null && next.loadouts[path][i]===skillId) next.loadouts[path][i]=null;
+      next.loadouts[path][input.slot as number]=skillId;
+    } else {
+      if (!next.learned[path].length) return this.reject(client,"occult_book_empty");
+      next.learned[path]=[];next.loadouts[path]=[null,null,null,null];
+    }
+    const snapshot=this.captureCharacterSnapshot(id);
+    if (!snapshot) return this.reject(client,"build_unavailable");
+    this.pendingWarps.add(id);
+    const task=characterStore.save({...snapshot,occultBook:next}).then(()=>{
+      this.occultBooks.set(id,next);this.sendOccultBook(client);
+      try {client.send("occult_book_changed",{action});} catch(error) {console.warn("MONTRA occult book confirmation was not delivered",error);}
+    },error=>{console.error("MONTRA occult book save failed",error);this.reject(client,"occult_book_save_failed");})
+      .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
+    this.pendingItemUses.set(id,task);
+  }
+
+  private castOccultSkill(client:Client,message:unknown):void {
+    if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_occult_skill");
+    const input=message as Record<string,unknown>,keys=Object.keys(input);
+    if ((keys.length!==1 && keys.length!==2) || typeof input.skillId!=="string" ||
+        (keys.length===2 && (typeof input.targetId!=="string" || !Object.hasOwn(input,"targetId"))) ||
+        !Object.hasOwn(OCCULT_LESSONS,input.skillId)) return this.reject(client,"invalid_occult_skill");
+    const id=client.sessionId,skillId=input.skillId as OccultSkillId,lesson:OccultLesson=OCCULT_LESSONS[skillId];
+    const caster=this.spellCaster(client),book=this.occultBooks.get(id);
+    if (!caster || !book) return;
+    if (!isOccultPath(caster.pathId)) return this.reject(client,"occult_class_required");
+    const path=caster.pathId;
+    if (lesson.path!==path || !book.learned[path].includes(skillId) || !book.loadouts[path].includes(skillId))
+      return this.reject(client,"occult_skill_locked");
+    if (Date.now()<(book.cooldowns[skillId] ?? 0)) return this.reject(client,"occult_cooldown");
+    if (caster.stamina<lesson.stamina) return this.reject(client,"insufficient_stamina");
+    const offensive=["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind"].includes(lesson.effect);
+    const targetId=typeof input.targetId==="string" ? input.targetId : id;
+    let monster:Monster|undefined, opponent:Player|undefined;
+    let targets:Array<[string,Player]>=[];
+    if (offensive) {
+      if (targetId===id || !this.sameCombatMap(id,targetId)) return this.reject(client,"target_unavailable");
+      monster=this.getMonster(targetId);
+      if (!monster && (lesson.effect==="curse" || lesson.effect==="curse_burst")) opponent=this.state.players.get(targetId);
+      const target=monster ?? opponent;
+      if (!target?.alive) return this.reject(client,"target_unavailable");
+      if (distance3d(caster,target)>lesson.range) return this.reject(client,"occult_out_of_range");
+      if (!this.bodyPathClear(caster.mapId,caster,target)) return this.reject(client,"occult_blocked");
+      const mark=this.occultMarks.get(id);
+      if (lesson.effect==="detonate" && (!mark || mark.targetId!==targetId || mark.until<=this.simulatedMs))
+        return this.reject(client,"occult_mark_required");
+      const curse=this.occultCurses.get(targetId);
+      if (lesson.effect==="curse_burst" && (!curse || curse.ownerId!==id || curse.until<=this.simulatedMs))
+        return this.reject(client,"occult_curse_required");
+      if (lesson.effect==="spirit" || lesson.effect==="spirit_bind") {
+        const spirit=this.state.summons.get(id);
+        if (!spirit || spirit.kind!=="pot_spirit") return this.reject(client,"possession_needs_summon");
+        if (distance3d(caster,target)>RULES.summonEngageDistance) return this.reject(client,"occult_out_of_range");
+        if (!this.bodyPathClear(caster.mapId,spirit,target)) return this.reject(client,"occult_blocked");
+      }
+    } else {
+      const party=(this.parties.get(id)?.members ?? [id]).filter(member=>
+        !this.field || member===id || this.warSeats.get(member)?.side===this.warSeats.get(id)?.side);
+      if (["heal_area","ward_area","cleanse_area"].includes(lesson.effect) || (lesson.effect==="trance" && path==="mender")) {
+        targets=party.map(member=>[member,this.state.players.get(member)] as const)
+          .filter((entry):entry is [string,Player]=>Boolean(entry[1]?.alive && !this.pendingWarps.has(entry[0]) &&
+            !this.pendingItemUses.has(entry[0]) && !this.pendingRewards.has(entry[0]) && !this.pendingCharacterLeaves.has(entry[0]) && entry[1].mapId===caster.mapId &&
+            distance3d(caster,entry[1])<=lesson.range && (entry[0]===id ||
+              (isWorldSegmentClear(caster.mapId,caster,entry[1]) && this.bodyPathClear(caster.mapId,caster,entry[1])))));
+      } else {
+        if (!party.includes(targetId)) return this.reject(client,"occult_party_required");
+        const target=this.state.players.get(targetId);
+        if (!target?.alive || target.mapId!==caster.mapId || this.pendingWarps.has(targetId) ||
+            this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId)) return this.reject(client,"target_unavailable");
+        if (distance3d(caster,target)>lesson.range || (targetId!==id &&
+            (!isWorldSegmentClear(caster.mapId,caster,target) || !this.bodyPathClear(caster.mapId,caster,target))))
+          return this.reject(client,"occult_out_of_range");
+        targets=[[targetId,target]];
+      }
+      if (lesson.effect==="trance" && !caster.possessionActive) return this.reject(client,"occult_trance_required");
+      if ((lesson.effect==="spirit_ward" || lesson.effect==="spirit_heal") &&
+          this.state.summons.get(id)?.kind!=="pot_spirit") return this.reject(client,"possession_needs_summon");
+      if (lesson.effect==="heal" || lesson.effect==="spirit_heal") targets=targets.filter(([,target])=>target.hp<target.maxHp);
+      if (!targets.length) return this.reject(client,"class_skill_no_target");
+      if (lesson.effect==="cleanse" && !this.occultCurses.has(targetId)) return this.reject(client,"occult_no_curse");
+      if (lesson.effect==="cleanse_area" && !targets.some(([member])=>this.occultCurses.has(member))) return this.reject(client,"occult_no_curse");
+      if (lesson.effect==="ward" || lesson.effect==="ward_area" || lesson.effect==="spirit_ward" || lesson.effect==="trance") {
+        for (const [member] of targets) {
+          const active=this.effects.modifiers(member);
+          if (active.length>=STACKING_RULES.maxModifiers && !active.some(effect=>effect.id===skillId && effect.sourceId===id))
+            return this.reject(client,"occult_effect_limit");
+        }
+      }
+    }
+
+    caster.stamina-=lesson.stamina;
+    book.cooldowns[skillId]=Date.now()+lesson.cooldownMs;
+    if (offensive) {
+      const target=monster ?? opponent!;
+      caster.facing=facingTo(target.x-caster.x,target.z-caster.z);
+      this.recordCombat(id,targetId);
+      const mark=this.occultMarks.get(id),hasMark=mark?.targetId===targetId && mark.until>this.simulatedMs;
+      if (lesson.effect==="spirit" || lesson.effect==="spirit_bind") {
+        this.occultSpiritOrders.set(id,{targetId,until:this.simulatedMs+6000,skillId:skillId as "seer_spirit"|"seer_spirit_bind"});
+        this.lastSummonAttackAt.delete(id);
+      } else {
+        let power=lesson.power;
+        if (lesson.effect==="rice" && hasMark) power*=1.3;
+        if (lesson.effect==="detonate") this.occultMarks.delete(id);
+        if (lesson.effect==="curse_burst") this.clearOccultCurse(targetId,"detonated");
+        const attack=caster.magicAtk+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").ranged;
+        const damage=calculateDamage(attack*power*(opponent?0.65:1),monster?.defense ?? opponent!.magicDef,target.level);
+        this.occultDamage(id,targetId,damage);
+        if (lesson.effect==="rice_area" && monster) {
+          const others=[this.state.monster,...this.state.monsters.values()]
+            .filter(other=>other.id!==targetId && other.alive && other.mapId===caster.mapId &&
+              distance3d(other,monster!)<=3 && this.sameCombatMap(id,other.id) &&
+              this.bodyPathClear(caster.mapId,caster,other) && this.bodyPathClear(caster.mapId,monster!,other))
+            .sort((a,b)=>distance3d(a,monster!)-distance3d(b,monster!)).slice(0,2);
+          for (const other of others) {this.recordCombat(id,other.id);this.occultDamage(id,other.id,calculateDamage(attack*power,other.defense,other.level));}
+        }
+        if (target.alive && monster && lesson.effect==="interrupt") this.interruptMuayTarget(monster,700);
+        if (target.alive && lesson.effect==="mark") this.occultMarks.set(id,{targetId,until:this.simulatedMs+8000});
+        if (target.alive && lesson.effect==="curse") {
+          this.occultCurses.set(targetId,{ownerId:id,until:this.simulatedMs+6500,nextTick:this.simulatedMs+2000,damage:Math.max(1,Math.round(damage*0.35))});
+          const victim=this.clients.find(c=>c.sessionId===targetId);
+          try {victim?.send("occult_curse_state",{active:true,durationMs:6500});}
+          catch(error) {console.warn("MONTRA curse notice was not delivered",error);}
+        }
+      }
+      if (monster && lesson.effect!=="spirit" && lesson.effect!=="spirit_bind") {
+        const category=lesson.effect==="rice" || lesson.effect==="rice_area" ? "rice" :
+          lesson.effect==="curse" || lesson.effect==="curse_burst" ? "curse" : "talisman";
+        this.recordOccultTraining(id,"seer",[category]);
+      }
+    } else {
+      let trained=false;
+      for (const [member,target] of targets) {
+        if (lesson.effect==="heal" || lesson.effect==="heal_area" || lesson.effect==="spirit_heal") {
+          const amount=Math.max(1,Math.round(target.maxHp*lesson.power));
+          if (target.hp<target.maxHp) {target.hp=Math.min(target.maxHp,target.hp+amount);trained=true;void this.saveCharacter(member);}
+        } else if (lesson.effect==="cleanse" || lesson.effect==="cleanse_area") {
+          trained=this.clearOccultCurse(member,"cleansed") || trained;
+        } else {
+          const bonuses=path==="seer" ? {magicAtk:lesson.power} : {def:lesson.power,magicDef:lesson.power};
+          this.effects.grant(member,{id:skillId,sourceId:id,group:"occult_ward",bonuses},this.simulatedMs+8000);
+          this.applyStats(member,target,this.statAllocations.get(member) ?? emptyAllocations());
+          if (skillId==="mender_trance") {
+            target.stamina=Math.min(target.maxStamina,target.stamina+15);
+            void this.saveCharacter(member);
+          }
+          if (this.simulatedMs-(this.lastCombatMs.get(member) ?? -Infinity)<PROGRESSION.combatQuietMs) trained=true;
+        }
+      }
+      if (lesson.effect==="heal_area") this.occultHealingFields.set(id,{mapId:caster.mapId,x:caster.x,y:caster.y,z:caster.z,
+        until:this.simulatedMs+6500,nextTick:this.simulatedMs+2000,power:0.03,range:lesson.range});
+      if (trained && path==="mender") {
+        const categories:(keyof OccultMastery["mender"])[] =
+          lesson.effect==="heal" || lesson.effect==="heal_area" ? ["healing"] :
+          lesson.effect==="spirit_heal" ? ["healing","spirit"] :
+          lesson.effect==="cleanse" || lesson.effect==="cleanse_area" ? ["cleanse"] :
+          lesson.effect==="spirit_ward" || lesson.effect==="trance" ? ["protection","spirit"] : ["protection"];
+        this.recordOccultTraining(id,"mender",categories);
+      } else if (trained && path==="seer") this.recordOccultTraining(id,"seer",["spirit"]);
+    }
+    this.sendOccultBook(client);
+    this.broadcast("occult_skill_used",{playerId:id,skillId,targetId:offensive?targetId:targets[0]?.[0] ?? id},{afterNextPatch:true});
+    void this.saveCharacter(id);
+  }
+
+  private occultDamage(ownerId:string,targetId:string,damage:number):void {
+    const monster=this.getMonster(targetId);
+    if (monster?.alive) {this.hitMonsterWithSpell(ownerId,monster,damage,"talisman");return;}
+    const owner=this.state.players.get(ownerId),victim=this.state.players.get(targetId);
+    if (!owner?.alive || !victim?.alive || !this.sameCombatMap(ownerId,targetId)) return;
+    damage=this.swordGuardDamage(targetId,owner,damage);
+    victim.hp=Math.max(0,victim.hp-damage);victim.hitSeq++;
+    this.broadcast("pvp_hit",{attackerId:ownerId,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"occult"},{afterNextPatch:true});
+    if (victim.hp===0) {
+      owner.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",ownerId);
+      this.broadcast("pvp_kill",{winnerId:ownerId,loserId:targetId,source:"occult",kills:owner.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
+      void this.saveCharacter(ownerId);
+    }
+  }
+
+  private updateOccultEffects():void {
+    for (const [owner,mark] of this.occultMarks) {
+      const target=this.getMonster(mark.targetId);
+      if (this.simulatedMs>=mark.until || !target?.alive || !this.sameCombatMap(owner,mark.targetId)) this.occultMarks.delete(owner);
+    }
+    for (const [targetId,curse] of this.occultCurses) {
+      const owner=this.state.players.get(curse.ownerId),target=this.getMonster(targetId) ?? this.state.players.get(targetId);
+      if (this.simulatedMs>=curse.until || !owner?.alive || owner.pathId!=="seer" || !target?.alive ||
+          !this.sameCombatMap(curse.ownerId,targetId)) {this.clearOccultCurse(targetId,"expired");continue;}
+      if (this.simulatedMs>=curse.nextTick) {
+        curse.nextTick+=2000;
+        this.recordCombat(curse.ownerId,targetId);
+        this.occultDamage(curse.ownerId,targetId,curse.damage);
+      }
+    }
+    for (const [owner,order] of this.occultSpiritOrders)
+      if (this.simulatedMs>=order.until || !this.state.summons.has(owner)) this.occultSpiritOrders.delete(owner);
+    for (const [ownerId,field] of this.occultHealingFields) {
+      const owner=this.state.players.get(ownerId);
+      if (this.simulatedMs>=field.until || !owner?.alive || owner.pathId!=="mender" || owner.mapId!==field.mapId) {
+        this.occultHealingFields.delete(ownerId);continue;
+      }
+      if (this.simulatedMs<field.nextTick) continue;
+      field.nextTick+=2000;
+      const party=this.parties.get(ownerId)?.members ?? [ownerId];
+      let healed=false;
+      for (const member of party) {
+        const target=this.state.players.get(member);
+        if (!target?.alive || target.mapId!==field.mapId || target.hp>=target.maxHp ||
+            this.pendingWarps.has(member) || this.pendingItemUses.has(member) || this.pendingCharacterLeaves.has(member) ||
+            this.pendingRewards.has(member) ||
+            (this.field && member!==ownerId && this.warSeats.get(member)?.side!==this.warSeats.get(ownerId)?.side) ||
+            distance3d(target,field)>field.range || !isWorldSegmentClear(field.mapId,field,target) ||
+            !this.bodyPathClear(field.mapId,field,target)) continue;
+        target.hp=Math.min(target.maxHp,target.hp+Math.max(1,Math.round(target.maxHp*field.power)));
+        healed=true;
+        void this.saveCharacter(member);
+      }
+      if (healed) {this.recordOccultTraining(ownerId,"mender",["healing"]);void this.saveCharacter(ownerId);}
+    }
   }
 
   private changeMuayBook(client:Client,message:unknown):void {
@@ -1509,6 +1820,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     grapple_escape: (client: Client, message: unknown) => this.escapeMuayGrapple(client, message),
     grapple_counter: (client: Client, message: unknown) => this.counterMuayGrapple(client, message),
     muay_book: (client: Client, message: unknown) => this.changeMuayBook(client, message),
+    occult_book_get: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client,"invalid_occult_book");
+      const player=this.state.players.get(client.sessionId);
+      if (!player || !isOccultPath(player.pathId)) return this.reject(client,"occult_class_required");
+      if (!this.gates.get(client.sessionId)?.occult.consume(this.simulatedMs)) return this.reject(client,"occult_rate_limited");
+      this.sendOccultBook(client);
+    },
+    occult_book: (client: Client, message: unknown) => this.changeOccultBook(client,message),
+    occult_skill: (client: Client, message: unknown) => this.castOccultSkill(client,message),
     cast_class_skill: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_build");
       this.castClassSkill(client);
@@ -1888,6 +2208,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(this.pendingWarps.has(id))return this.reject(client,"character_busy");
       const player=this.state.players.get(id);
       if(!player || !player.alive)return this.reject(client,"not_alive");
+      if(!isOccultPath(player.pathId))return this.reject(client,"occult_class_required");
       if(!this.gates.get(id)?.possession.consume(this.simulatedMs))return this.reject(client,"possession_rate_limited");
       if(player.possessionActive){this.endPossession(id,"cancelled");return;}
       if(POSSESSION_BUFF.requiresSummon && !this.state.summons.has(id))return this.reject(client,"possession_needs_summon");
@@ -1987,6 +2308,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!order) return this.reject(client, "invalid_talisman_target");
     const id = client.sessionId, caster = this.spellCaster(client);
     if (!caster) return;
+    if (!isOccultPath(caster.pathId)) return this.reject(client, "occult_class_required");
     const target = this.getMonster(order.targetId);
     if (!target?.alive || !this.sameCombatMap(id, target.id)) return this.reject(client, "target_unavailable");
     if (distance3d(caster, target) > TALISMAN.range) return this.reject(client, "talisman_out_of_range");
@@ -2000,6 +2322,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const magic = caster.magicAtk + weaponBonuses(this.inventories.get(id), "pve").ranged;
     const damage = calculateDamage(magic * TALISMAN.magicMultiplier, target.defense, target.level);
     this.hitMonsterWithSpell(id, target, damage, "talisman");
+    this.recordOccultTraining(id,"seer",["talisman"]);
   }
 
   private castBlessedRice(client: Client, message: unknown) {
@@ -2008,6 +2331,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!monsterOrder && !pkOrder) return this.reject(client, "invalid_shoot");
     const id = client.sessionId, shooter = this.spellCaster(client);
     if (!shooter) return;
+    if (!isOccultPath(shooter.pathId)) return this.reject(client, "occult_class_required");
     const targetId = monsterOrder ? monsterOrder.targetId : pkOrder!.targetId;
     if (targetId === id) return this.reject(client, "self_attack");
     if (!this.sameCombatMap(id, targetId)) return this.reject(client, "target_unavailable");
@@ -2039,6 +2363,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     if (monsterOrder) {
       this.hitMonsterWithSpell(id, target as Monster, rangedDamage, "ranged");
+      this.recordOccultTraining(id,"seer",["rice"]);
     } else {
       const victim=target as Player;
       rangedDamage=this.swordGuardDamage(targetId,shooter,rangedDamage);
@@ -2071,6 +2396,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!parseEmptyCommand(message)) return this.reject(client, "invalid_summon");
     const owner = this.state.players.get(id);
     if (!owner || !owner.alive) return this.reject(client, "not_alive");
+    if (!isOccultPath(owner.pathId)) return this.reject(client, "occult_class_required");
     if (owner.possessionActive) return this.reject(client, "possession_active");
     if (this.state.summons.has(id)) return this.reject(client, "summon_limit");
     if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) {
@@ -2097,6 +2423,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private despawnSummon(ownerId: string, reason: string) {
+    this.occultSpiritOrders.delete(ownerId);
+    this.occultSpiritPracticed.delete(ownerId);
     if (!this.state.summons.has(ownerId)) return;
     this.state.summons.delete(ownerId);
     this.lastSummonAttackAt.delete(ownerId);
@@ -2107,6 +2435,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private findSummonTarget(ownerId: string, owner: Player, guardian: SummonedGuardian) {
     const intended = this.attackTargets.get(ownerId);
     const candidates: string[] = [];
+    const spiritOrder=this.occultSpiritOrders.get(ownerId);
+    if (spiritOrder && spiritOrder.until>this.simulatedMs) candidates.push(spiritOrder.targetId);
     if (intended) candidates.push(intended);
 
     // A guardian defends its owner when another player is actively attacking.
@@ -2237,9 +2567,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     guardian.hitSeq += 1;
 
     if (monster) {
-      const damage = calculateDamage(RULES.summonAttackDamage, monster.defense, monster.level);
+      const order=this.occultSpiritOrders.get(ownerId);
+      const empowered=order?.targetId===targetId && order.until>this.simulatedMs;
+      const damage = calculateDamage(RULES.summonAttackDamage*(empowered?OCCULT_LESSONS[order.skillId].power:1), monster.defense, monster.level);
+      if (empowered) this.occultSpiritOrders.delete(ownerId);
+      if (guardian.kind==="pot_spirit" && (empowered || !this.occultSpiritPracticed.has(ownerId))) {
+        this.occultSpiritPracticed.add(ownerId);
+        if (owner.pathId==="seer") this.recordOccultTraining(ownerId,"seer",["spirit"]);
+        else if (owner.pathId==="mender") this.recordOccultTraining(ownerId,"mender",["spirit"]);
+      }
       monster.hp = Math.max(0, monster.hp - damage);
       monster.hitSeq += 1;
+      if (empowered && order.skillId==="seer_spirit_bind" && monster.hp>0) this.interruptMuayTarget(monster,700);
       this.broadcast("summon_hit", {
         ownerId, summonId: ownerId, targetId,
         damage, hp: monster.hp,
@@ -2329,6 +2668,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private tick(dt: number) {
     this.updateTerritory();
+    this.updateOccultEffects();
     this.updateMuayGrapples();
     this.updateMuayDefense();
     for(const id of this.buffs.expired(this.simulatedMs))this.endPossession(id,"expired");
@@ -2886,6 +3226,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       swordTree: this.swordTrees.get(id),
       muayCooldowns: this.muayCooldowns.get(id),
       muayBook: this.muayBooks.get(id),
+      occultBook: this.occultBooks.get(id),
       muayWrapGranted: this.muayWrapGranted.has(id),
       stamina: player.stamina,
       x: player.x,
@@ -3002,6 +3343,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.swordTrees.set(client.sessionId, saved?.swordTree ?? newSwordTree());
       this.muayCooldowns.set(client.sessionId, saved?.muayCooldowns ?? {});
       this.muayBooks.set(client.sessionId, saved?.muayBook ?? newMuayBook());
+      this.occultBooks.set(client.sessionId, saved?.occultBook ?? newOccultBook());
       if (saved?.muayWrapGranted) this.muayWrapGranted.add(client.sessionId);
       this.statAllocations.set(client.sessionId, allocations);
       this.applyStats(client.sessionId,player, allocations);
@@ -3035,6 +3377,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         bugReport: new CommandBucket(1, 1 / 30, this.simulatedMs),
         build: new CommandBucket(3, 1, this.simulatedMs),
         swordTree: new CommandBucket(6, 2, this.simulatedMs),
+        occult: new CommandBucket(6, 2, this.simulatedMs),
         possession: new CommandBucket(2, 0.5, this.simulatedMs),
         economy: new CommandBucket(8, 3, this.simulatedMs),
         party: new CommandBucket(6, 2, this.simulatedMs),
@@ -3117,6 +3460,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.muayCombos.delete(id);
       this.muayFollowups.delete(id);
       this.muayBooks.delete(id);
+      this.occultBooks.delete(id);
+      this.occultMarks.delete(id);
+      this.occultSpiritOrders.delete(id);
+      this.occultHealingFields.delete(id);
+      this.clearOccultCurse(id,"left");
+      for (const [target,curse] of this.occultCurses) if (curse.ownerId===id) this.clearOccultCurse(target,"owner_left");
       this.muayWrapGranted.delete(id);
       this.swordCombos.delete(id);
       this.swordGuards.delete(id);
@@ -3164,6 +3513,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.muayDefenseWindows.clear();
     this.muayGrappleCounters.clear();
     this.muayBooks.clear();
+    this.occultBooks.clear();
+    this.occultSpiritPracticed.clear();
+    this.occultMarks.clear();
+    this.occultSpiritOrders.clear();
+    this.occultHealingFields.clear();
+    this.occultCurses.clear();
     this.muayWrapGranted.clear();
     this.hpRegenRemainder.clear();
     this.lastItemUseMs.clear();

@@ -6,8 +6,12 @@
  */
 import assert from "node:assert/strict";
 import { Client } from "@colyseus/sdk";
+import { randomBytes } from "node:crypto";
+import path from "node:path";
 
 const endpoint=process.env.MONTRA_TEST_URL||"http://127.0.0.1:4108";
+if (!/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(endpoint) ||
+    !/^montra-world-test-/.test(path.basename(process.env.MONTRA_CHARACTER_DIR || ""))) throw Error("requires isolated elevation test data");
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(check,timeout,label) {
   const since=Date.now();
@@ -20,8 +24,9 @@ async function until(check,timeout,label) {
 const clients=Array.from({length:4},()=>new Client(endpoint));
 const rooms=[];
 try {
-  rooms.push(await clients[0].create("my_room"));
-  for(let i=1;i<4;i++)rooms.push(await clients[i].joinById(rooms[0].roomId));
+  const options=()=>({guestToken:"mt1_"+randomBytes(32).toString("hex")});
+  rooms.push(await clients[0].create("my_room",options()));
+  for(let i=1;i<4;i++)rooms.push(await clients[i].joinById(rooms[0].roomId,options()));
   const [a,b,c,d]=rooms;
   const [aId,bId,cId,dId]=rooms.map(r=>r.sessionId);
   const p=(r,id)=>r.state?.players?.get(id);
@@ -48,6 +53,8 @@ try {
   assert.ok(rooms.every(r=>r.roomId===a.roomId));
   assert.ok(Math.abs(fort().ladderFootX-6.1)<.005, "Colyseus float32 ladder sync");
   assert.equal(fort().x,8);
+  for (const r of rooms) r.send("select_build",{path:"seer",ancestry:"woodland"});
+  await until(()=>rooms.every(r=>r.state.players.get(r.sessionId)?.pathId==="seer"),6500,"occult classes selected");
   console.log("PASS: four players share authoritative 4m wall and ladder");
 
   // Browser can only send x/z destinations, never y, teleport or climb speed.
