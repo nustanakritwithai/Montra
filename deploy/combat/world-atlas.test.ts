@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {ATLAS_MAPS, ATLAS_SPAWNS, RIFT_WARDEN} from "./WorldAtlas.js";
-import {WORLD_MAPS, isRestArea, isSafeWorldPoint, isWorldSegmentClear, getSafeMapSpawn} from "./WorldMaps.js";
+import {WORLD_MAPS, isRestArea, isSafeWorldPoint, isWorldSegmentClear, getSafeMapSpawn, provinceShotClear} from "./WorldMaps.js";
+import {crestCorners} from "./StrategicProvinces.js";
 import {parseAttackCommand} from "./GameRules.js";
 import {checkWarp} from "./WarpRules.js";
 import {ForestEncounters} from "./ForestEncounters.js";
@@ -78,6 +79,29 @@ test("territories protect through traffic and have separate attack crossings and
     for(const path of [map.paths![2],map.paths![3]])assert.deepEqual(path[path.length-1],{x:fort.x,z:fort.z});
   }
   assert.ok(isRestArea("mantra_capital",{x:16,z:-20}));
+});
+test("the city and both forts have continuous crests, usable stair endpoints and overhead gate passages",()=>{
+  for(const id of ["mantra_capital","moon_pass","river_watch"]){
+    const map=WORLD_MAPS[id],r=map.strategic!.rampart!;
+    assert.equal(r.stairs.length,id==="mantra_capital"?4:2);
+    for(const stair of r.stairs){
+      assert.ok(isSafeWorldPoint(map,{...stair.foot,y:0}));
+      assert.ok(isSafeWorldPoint(map,{...stair.top,y:4}));
+      assert.ok(!isSafeWorldPoint(map,{...stair.top,y:0}));
+    }
+    for(const from of [...r.corners,...r.stairs.map(s=>s.top)])for(const to of r.corners){
+      const route=[from,...crestCorners(r,from,to),to];
+      for(let i=1;i<route.length;i++)for(let j=0;j<=100;j++){
+        const a=route[i-1],b=route[i],t=j/100;
+        assert.ok(isSafeWorldPoint(map,{x:a.x+(b.x-a.x)*t,y:4,z:a.z+(b.z-a.z)*t}),id);
+      }
+    }
+    const g=r.gates[0].box,x=g.x+g.width/2,z=g.z+g.length/2;
+    assert.ok(isSafeWorldPoint(map,{x,y:0,z}));assert.ok(isSafeWorldPoint(map,{x,y:4,z}));
+    const low={x,y:1.55,z:z+8},inside={x,y:1,z:z-6},top={x,y:5,z};
+    assert.ok(provinceShotClear(map,low,inside));assert.ok(!provinceShotClear(map,low,inside,true));
+    assert.ok(provinceShotClear(map,low,top,true));assert.ok(provinceShotClear(map,top,low,true));
+  }
 });
 test("all occupied atlas zones replicate and the warden's respawn clock survives an empty zone",()=>{
   const state=new MyRoomState(),forest=new ForestEncounters(state.monsters);
