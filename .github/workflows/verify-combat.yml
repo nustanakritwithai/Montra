@@ -70,6 +70,7 @@ jobs:
           cp deploy/combat/blade-advanced-integration.mjs combat-verify/blade-advanced-integration.mjs
           cp deploy/combat/occult-rules.test.ts combat-verify/src/rooms/occult-rules.test.ts
           cp deploy/combat/occult-integration.mjs combat-verify/occult-integration.mjs
+          cp deploy/combat/class-balance-integration.mjs combat-verify/class-balance-integration.mjs
           cp deploy/combat/occult-depth-integration.mjs combat-verify/occult-depth-integration.mjs
           cp deploy/combat/muay-combo.test.ts combat-verify/src/rooms/muay-combo.test.ts
           cp deploy/combat/muay-mastery.test.ts combat-verify/src/rooms/muay-mastery.test.ts
@@ -325,6 +326,13 @@ jobs:
         working-directory: combat-verify
         run: npx tsx --test src/rooms/occult-rules.test.ts src/rooms/blade-rules.test.ts src/rooms/sentinel-rules.test.ts
 
+      - name: Check class balance fixtures
+        shell: bash
+        run: |
+          combat-verify/node_modules/.bin/tsc scripts/class-balance.ts scripts/class-rotation.ts --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --typeRoots combat-verify/node_modules/@types
+          combat-verify/node_modules/.bin/tsx scripts/class-balance.ts > /dev/null
+          combat-verify/node_modules/.bin/tsx scripts/class-rotation.ts > /dev/null
+
       - name: Isolated occult class
         shell: bash
         working-directory: combat-verify
@@ -338,6 +346,7 @@ jobs:
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4115) 2>/dev/null; then break; fi; sleep 0.25; done
           timeout 100s node occult-integration.mjs || { cat occult-server.log; exit 1; }
           timeout 100s node occult-depth-integration.mjs || { cat occult-server.log; exit 1; }
+          timeout 60s node class-balance-integration.mjs || { cat occult-server.log; exit 1; }
 
       - name: Isolated blade book
         shell: bash
