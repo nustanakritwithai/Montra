@@ -1,4 +1,5 @@
 import { readForged, type Forged } from "./ForgeRules.js";
+import { MUAY_WRAP_ID } from "./MuayRules.js";
 /**
  * MONTRA V0.2.7 — authoritative permanent equipment.
  * Existing v0.2.6 inventory JSON (version:1, slots:[...]) stays readable.
@@ -25,7 +26,7 @@ export const SHRINE_RECIPE = Object.freeze({
   id: "shrine_glaive", ingredient: SHRINE_SHARD, quantity: 1, gold: 100, output: SHRINE_GLAIVE,
   itemLevel: 12, rarity: "rare", meleeBonus: 10, pvpMeleeBonus: 8,
 });
-export type WeaponItemId = typeof STARTER_WEAPON_IDS[number] | typeof SHRINE_GLAIVE;
+export type WeaponItemId = typeof STARTER_WEAPON_IDS[number] | typeof SHRINE_GLAIVE | typeof MUAY_WRAP_ID;
 export type StackableId = typeof POTION_ID | typeof SHRINE_SHARD;
 export function isStackableItem(value: unknown): value is StackableId {
   return value === POTION_ID || value === SHRINE_SHARD;
@@ -52,13 +53,14 @@ export const WEAPON_STATS: Readonly<Record<WeaponItemId, Readonly<{
   [ARCANE_SWORD_ID]: Object.freeze({ meleeBonus: 8, rangedBonus: 0 }),
   [SPIRIT_STAFF_ID]: Object.freeze({ meleeBonus: 0, rangedBonus: 6 }),
   [SHRINE_GLAIVE]: Object.freeze({ meleeBonus: SHRINE_RECIPE.meleeBonus, rangedBonus: 0 }),
+  [MUAY_WRAP_ID]: Object.freeze({ meleeBonus: 4, rangedBonus: 0 }),
 });
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isWeaponId(value: unknown): value is WeaponItemId {
-  return value === SHRINE_GLAIVE || STARTER_WEAPON_IDS.some(id => id === value);
+  return value === SHRINE_GLAIVE || value === MUAY_WRAP_ID || STARTER_WEAPON_IDS.some(id => id === value);
 }
 
 export function makeStarterInventory(): InventorySnapshot {

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — ต้นแบบ MMORPG 3D ไสยศาสตร์ไทยสำหรับมือถือ แบบแตะพื้นเพื่อเดิน" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=0.7.2-castle-camps" />
+  <link rel="stylesheet" href="./styles.css?v=0.7.5-hunt-trails-muay" />
 </head>
 <body>
   <main id="game" aria-label="MONTRA เกมต้นแบบสามมิติ">
@@ -45,8 +45,11 @@
     <div class="tap-tip">แตะพื้นเดิน · ปัดเหนือสกิลเพื่อพุ่ง · กดบินขึ้นระดับสูงแล้วแตะพื้นเพื่อเคลื่อนที่</div>
 
     <section class="controls" aria-label="ปุ่มควบคุมและพื้นที่ปัดพุ่งเหนือแถบสกิล">
+      <div id="grappleResponse" class="sword-hotbar" aria-live="polite" hidden><button id="grappleResponseButton" class="sword-hotkey" type="button"></button></div>
       <div id="swordStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
       <div id="swordHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาดาบ" hidden></div>
+      <div id="muayStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
+      <div id="muayHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชามวย" hidden></div>
       <div class="skill-bar">
         <button id="summon" class="skill" type="button" aria-pressed="false" title="เสกผีจากหม้อ ช่วยโจมตีมอนสเตอร์ใกล้ตัว"><span class="glyph violet" aria-hidden="true">🏺</span><span>เสกผีจากหม้อ</span></button>
         <button id="possess" class="skill" type="button"><span class="glyph amber">✴</span><span>เข้าสิง</span></button>
@@ -64,6 +67,7 @@
         <button id="partyButton" type="button" aria-label="เปิดปาร์ตี้"><span>♧</span>ปาร์ตี้ <b id="partyUnread" hidden>!</b></button>
         <button id="marketButton" type="button" aria-label="เปิดตลาดและการค้า"><span>♢</span>ตลาด <b id="tradeUnread" hidden>!</b></button>
         <button id="swordTreeButton" type="button" hidden><span>⚔</span>วิชาดาบ</button>
+        <button id="muayBookButton" type="button" hidden><span>✊</span>วิชามวย</button>
         <button id="modeButton"><span>◎</span>ออนไลน์</button>
         <button id="helpButton"><span>?</span>วิธีเล่น</button>
       </nav>
@@ -80,6 +84,6 @@
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
-  <script src="./main.js?v=0.7.4-hunt-trails" defer></script>
+  <script src="./main.js?v=0.7.5-hunt-trails-muay" defer></script>
 </body>
 </html>

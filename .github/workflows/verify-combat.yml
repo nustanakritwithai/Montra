@@ -58,6 +58,21 @@ jobs:
           cp deploy/combat/ForgeRules.ts combat-verify/src/rooms/ForgeRules.ts
           cp deploy/combat/forge.test.ts combat-verify/src/rooms/forge.test.ts
           cp deploy/combat/CharacterBuilds.ts combat-verify/src/rooms/CharacterBuilds.ts
+          cp deploy/combat/MuayRules.ts combat-verify/src/rooms/MuayRules.ts
+          cp deploy/combat/muay-combo.test.ts combat-verify/src/rooms/muay-combo.test.ts
+          cp deploy/combat/muay-mastery.test.ts combat-verify/src/rooms/muay-mastery.test.ts
+          cp deploy/combat/muay-integration.mjs combat-verify/muay-integration.mjs
+          cp deploy/combat/muay-book-integration.mjs combat-verify/muay-book-integration.mjs
+          cp deploy/combat/muay-schools-integration.mjs combat-verify/muay-schools-integration.mjs
+          cp deploy/combat/muay-combo-integration.mjs combat-verify/muay-combo-integration.mjs
+          cp deploy/combat/muay-pvp-integration.mjs combat-verify/muay-pvp-integration.mjs
+          cp deploy/combat/muay-grapple-integration.mjs combat-verify/muay-grapple-integration.mjs
+          cp deploy/combat/muay-followup-integration.mjs combat-verify/muay-followup-integration.mjs
+          cp deploy/combat/muay-defense-integration.mjs combat-verify/muay-defense-integration.mjs
+          cp deploy/combat/muay-schools-depth-integration.mjs combat-verify/muay-schools-depth-integration.mjs
+          cp deploy/combat/muay-grapple-response-integration.mjs combat-verify/muay-grapple-response-integration.mjs
+          cp deploy/combat/muay-mastery-integration.mjs combat-verify/muay-mastery-integration.mjs
+          cp deploy/combat/muay-territory-integration.mjs combat-verify/muay-territory-integration.mjs
           cp deploy/combat/build-integration.mjs combat-verify/build-integration.mjs
           cp deploy/combat/ward-integration.mjs combat-verify/ward-integration.mjs
           cp deploy/combat/blade-integration.mjs combat-verify/blade-integration.mjs
@@ -312,7 +327,7 @@ jobs:
           export MONTRA_WORLD_EXPANSION=1 MONTRA_ECONOMY_ENABLED=0 PORT=4110
           export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-world-test-expansion-XXXXXX)"
           export MONTRA_TEST_URL=http://127.0.0.1:4110
-          npx tsx --test src/rooms/map-expansion.test.ts src/rooms/forest-monster-config.test.ts src/rooms/temple-map.test.ts src/rooms/world-atlas.test.ts src/rooms/territory-war.test.ts
+          npx tsx --test src/rooms/map-expansion.test.ts src/rooms/forest-monster-config.test.ts src/rooms/temple-map.test.ts src/rooms/world-atlas.test.ts src/rooms/territory-war.test.ts src/rooms/muay-combo.test.ts src/rooms/muay-mastery.test.ts
           node --import tsx src/index.ts > expansion-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
@@ -394,6 +409,19 @@ jobs:
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4112) 2>/dev/null; then break; fi; sleep 0.25; done
           timeout 30s node private-chat-integration.mjs || { cat private-chat-server.log; exit 1; }
 
+      - name: Isolated Muay and territory battlefield
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4114 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-muay-war-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4114
+          node --import tsx src/index.ts > muay-war-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4114) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 90s node muay-territory-integration.mjs || { cat muay-war-server.log; exit 1; }
+
       - name: Isolated possession buffs
         shell: bash
         working-directory: combat-verify
@@ -411,6 +439,17 @@ jobs:
           timeout 40s node blade-integration.mjs || { cat buff-server.log; exit 1; }
           timeout 30s node ritual-skills-integration.mjs || { cat buff-server.log; exit 1; }
           timeout 35s node phutthaisawan-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 50s node muay-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 50s node muay-book-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 60s node muay-schools-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 50s node muay-combo-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 55s node muay-pvp-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 35s node muay-grapple-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 40s node muay-followup-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 35s node muay-defense-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 45s node muay-schools-depth-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 40s node muay-grapple-response-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 65s node muay-mastery-integration.mjs || { cat buff-server.log; exit 1; }
           timeout 60s node sword-tree-integration.mjs || { cat buff-server.log; exit 1; }
           timeout 75s node sword-tree-combat-integration.mjs || { cat buff-server.log; exit 1; }
           timeout 35s node sword-tree-party-integration.mjs || { cat buff-server.log; exit 1; }
