@@ -19,6 +19,7 @@ import { EconomyStore } from "./EconomyStore.js";
 import { validateSwordTree, type SwordTree } from "./SkillCatalog.js";
 import { validateMuayBook, validateMuayCooldowns, type MuayBook, type MuayCooldowns } from "./MuayRules.js";
 import { validateOccultBook, type OccultBook } from "./OccultRules.js";
+import { validateBladeBook, type BladeBook } from "./BladeRules.js";
 
 import { parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 
@@ -50,6 +51,7 @@ export type CharacterSnapshot = {
   muayCooldowns?: MuayCooldowns;
   muayBook?: MuayBook;
   occultBook?: OccultBook;
+  bladeBook?: BladeBook;
   stamina?: number;
   /** Undefined only when loading a legacy S2/three-slot snapshot for migration. */
   inventory?: InventorySnapshot;
@@ -137,6 +139,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
   const muayCooldowns = value.muayCooldowns === undefined ? undefined : validateMuayCooldowns(value.muayCooldowns);
   const muayBook = value.muayBook === undefined ? undefined : validateMuayBook(value.muayBook,value.level as number);
   const occultBook = value.occultBook === undefined ? undefined : validateOccultBook(value.occultBook,value.level as number);
+  const bladeBook = value.bladeBook === undefined ? undefined : validateBladeBook(value.bladeBook,value.level as number);
   if (value.inventory !== undefined) validateInventory(value.inventory);
   const statAllocations = value.statAllocations === undefined ? emptyAllocations() :
     validateAllocations(value.statAllocations, value.level as number);
@@ -145,13 +148,13 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
   }
   if(value.mapId===CASTLE_ID && !getWorldMap(CASTLE_ID)){
     const exit=getWorldMap("fallen_city") ?? getWorldMap(DEFAULT_MAP_ID)!;
-    return {...(value as CharacterSnapshot),...exit.spawn,mapId:exit.id,statAllocations,swordTree,muayCooldowns,muayBook,occultBook};
+    return {...(value as CharacterSnapshot),...exit.spawn,mapId:exit.id,statAllocations,swordTree,muayCooldowns,muayBook,occultBook,bladeBook};
   }
   if (value.mapId !== undefined &&
       (typeof value.mapId !== "string" || !getWorldMap(value.mapId))) {
     throw new Error("unknown_character_map");
   }
-  return { ...(value as CharacterSnapshot), mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, swordTree, muayCooldowns, muayBook, occultBook };
+  return { ...(value as CharacterSnapshot), mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, swordTree, muayCooldowns, muayBook, occultBook, bladeBook };
 }
 
 export class CharacterStore {

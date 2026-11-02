@@ -77,6 +77,7 @@ $files = @(
   @{ Name = "CharacterBuilds.ts"; Target = "src\rooms\CharacterBuilds.ts"; Check = "parseBuild" },
   @{ Name = "MuayRules.ts"; Target = "src\rooms\MuayRules.ts"; Check = "MUAY_SKILLS" },
   @{ Name = "OccultRules.ts"; Target = "src\rooms\OccultRules.ts"; Check = "OCCULT_LESSONS" },
+  @{ Name = "BladeRules.ts"; Target = "src\rooms\BladeRules.ts"; Check = "BLADE_LESSONS" },
   @{ Name = "BuffLedger.ts"; Target = "src\rooms\BuffLedger.ts"; Check = "class BuffLedger" },
   @{ Name = "StatModifiers.ts"; Target = "src\rooms\StatModifiers.ts"; Check = "calculateModifiedStats" },
   @{ Name = "SkillCatalog.ts"; Target = "src\rooms\SkillCatalog.ts"; Check = "POSSESSION_MODIFIER" },
@@ -207,6 +208,7 @@ try {
   Write-Host "MONTRA PARTY BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA MUAY BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA OCCULT BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA BLADE BUILD PASSED." -ForegroundColor Green
   Write-Host "Source revision: $Revision"
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
