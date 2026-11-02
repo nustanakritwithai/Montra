@@ -3386,7 +3386,8 @@
   function ghostSkin(body, key, albedo, emissive, keepTexture = true) {
     if (!skinVariants.has(key)) {
       const m = body.material.clone("ghost skin " + key);
-      m.albedoColor = B.Color3.FromHexString(albedo); m.emissiveColor = B.Color3.FromHexString(emissive);
+      // PBR colours are linear: convert from the sRGB hex values used everywhere else.
+      m.albedoColor = B.Color3.FromHexString(albedo).toLinearSpace(); m.emissiveColor = B.Color3.FromHexString(emissive).toLinearSpace();
       if (!keepTexture) m.albedoTexture = null;
       m.metallic = 0; m.roughness = 1; m.environmentIntensity = 0; m.directIntensity = 1.0;
       skinVariants.set(key, m);
