@@ -4892,7 +4892,17 @@
       } else g.rig.rotation.z = 0;
       g.rig.scaling.setAll(Math.max(.01, s)); g.rig.position.y = -g.tall / 2 + sink;
     };
-    for (const mesh of forestMonsters.values()) tick(mesh);
+    // Ghosts well beyond the farthest camera view skip their skeleton update
+    // (rendering is already frustum-culled); dying ghosts always finish.
+    const ct = camera.target, reach = camera.radius * .75 + 20;
+    for (const mesh of forestMonsters.values()) {
+      const g = mesh.metadata?.ghost;
+      if (g && !g.deathAt && Math.hypot(mesh.position.x - ct.x, mesh.position.z - ct.z) > reach) {
+        if (g.tx !== undefined) { mesh.position.x = g.tx; mesh.position.z = g.tz; }
+        continue;
+      }
+      tick(mesh);
+    }
     if (villageGhost) {
       villageGhost.position.set(enemy.position.x, enemy.position.y, enemy.position.z); villageGhost.rotation.y = enemy.rotation.y;
       villageGhost.setEnabled(enemy.isEnabled() && activeMapId === "ritual_village"); tick(villageGhost);
