@@ -36,10 +36,12 @@ import { parseChatMessage } from "./ChatRules.js";
 import { parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
+import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
+import type { MonsterTier } from "./MonsterProfiles.js";
 import { PROGRESSION, addExperience, calculateDamage, calculateStats, emptyAllocations,
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
-  POTION_ID, POTION_COOLDOWN_MS, parseUseItemCommand,
+  POTION_ID, POTION_COOLDOWN_MS, grantRewardPotion, parseUseItemCommand,
   useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon,
   equippedWeaponId, weaponBonuses, type InventorySnapshot,
 } from "./ItemRules.js";
@@ -143,7 +145,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     player.xpToNext = player.level >= PROGRESSION.maxLevel ? 0 : xpForNextLevel(player.level);
   }
 
-  private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel): void {
+  private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal"): void {
     const player = this.state.players.get(id);
     const priorReward=this.pendingRewards.get(id);
     if (!player || !this.persistentCharacters.has(id) || (this.pendingWarps.has(id) && !priorReward)) return;
@@ -158,13 +160,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (priorItem) await priorItem.catch(() => {});
         const current = this.state.players.get(id), snapshot = this.captureCharacterSnapshot(id);
         if (!current || !snapshot) return;
-        const amount = current.level >= PROGRESSION.maxLevel ? 0 : (sharedAmount ?? monsterExperience(current.level, monsterLevel));
+        const amount = current.level >= PROGRESSION.maxLevel ? 0 : (sharedAmount ?? monsterExperience(current.level, monsterLevel, tier));
         if (amount <= 0) return;
         const next = addExperience(current.level, current.experience, amount);
-        await characterStore.save({ ...snapshot, ...next, updatedAt: new Date().toISOString() });
+        const prize = tier === "elite" && snapshot.inventory ? grantRewardPotion(snapshot.inventory) : null;
+        await characterStore.save({ ...snapshot, ...next, inventory:prize ?? snapshot.inventory, updatedAt: new Date().toISOString() });
+        if (prize) this.inventories.set(id,prize);
         current.level = next.level; current.experience = next.experience;
         this.applyStats(current, this.statAllocations.get(id) ?? emptyAllocations());
-        try { this.clients.find(client => client.sessionId === id)?.send("experience_gained", { amount, level: next.level, experience: next.experience }); } catch { /* disconnected */ }
+        try {
+          const recipient = this.clients.find(client => client.sessionId === id);
+          if (prize) recipient?.send("inventory_state",prize);
+          recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,
+            ...(tier === "elite" ? {elitePotion:prize ? "granted" : "bag_full"} : {})});
+        } catch { /* The committed reward remains available on reconnect. */ }
       } catch (error) {
         console.error("MONTRA EXP save failed:", id, error);
         this.clients.find(client => client.sessionId === id)?.send("character_save_error", { reason: "disk_write_failed" });
@@ -175,16 +184,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.pendingRewards.set(id, task);
   }
 
-  private awardMonsterExperience(winnerId:string, monster:Monster = this.state.monster): void {
+  private awardMonsterExperience(winnerId:string, monster:Monster = this.state.monster, tier:MonsterTier = "normal"): void {
     const winner=this.state.players.get(winnerId), party=this.parties.get(winnerId);
-    if (!winner || !party) { this.grantMonsterExperience(winnerId,undefined,monster.level); return; }
-    const eligible=party.members.filter(id=>{
+    if (!winner || !party) { this.grantMonsterExperience(winnerId,undefined,monster.level,tier); return; }
+    const members:PartyRewardMember[]=[];
+    for(const id of party.members){
       const player=this.state.players.get(id);
-      return Boolean(player && player.alive && player.mapId===monster.mapId && player.level<PROGRESSION.maxLevel && this.persistentCharacters.has(id) && (!this.pendingWarps.has(id) || this.pendingRewards.has(id)) && distance3d(player,monster)<=PARTY_XP_RADIUS);
-    });
-    if (!eligible.length) return;
-    const reward=Math.floor(monsterExperience(winner.level,monster.level)/eligible.length);
-    if (reward>0) for (const id of eligible) this.grantMonsterExperience(id,reward);
+      if(player)members.push({sessionId:id,mapId:player.mapId,x:player.x,y:player.y,z:player.z,alive:player.alive,
+        persistent:this.persistentCharacters.has(id),level:player.level,
+        inTransit:this.pendingWarps.has(id) && !this.pendingRewards.has(id)});
+    }
+    const shares=partyMonsterShares(winner.level,{mapId:monster.mapId,level:monster.level,tier,x:monster.x,y:monster.y,z:monster.z},members,PARTY_XP_RADIUS);
+    for(const share of shares)this.grantMonsterExperience(share.sessionId,share.amount,monster.level,tier);
   }
 
   private partyAction(client:Client, action:()=>void): void {
@@ -1070,10 +1081,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updateFlights(dt);
     this.updatePlayerMovement(dt);
     this.updateMonsterAI(dt);
-    this.forest.update(this.simulatedMs, dt, this.state.players, this.pendingWarps, (id,m) => {
+    this.forest.update(this.simulatedMs, dt, this.state.players, this.pendingWarps, (id,m,force=1) => {
       const p=this.state.players.get(id);
       if (!p || !this.sameCombatMap(id,m.id)) return;
-      const damage=calculateDamage(10+3*m.level,p.def,p.level);
+      const profile=this.forest.profile(m.id); if(!profile)return;
+      const damage=calculateDamage(profile.attack*force,p.def,p.level);
       p.hp=Math.max(0,p.hp-damage);p.hitSeq++;this.lastCombatMs.set(id,this.simulatedMs);
       this.broadcast("monster_hit",{targetId:id,attackerId:m.id,damage,hp:p.hp,maxHp:p.maxHp,hitSeq:p.hitSeq},{afterNextPatch:true});
       if(p.hp===0)this.knockoutPlayer(id,"monster",m.id);
@@ -1379,8 +1391,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private killMonster(winnerId: string, targetId: string = RULES.monsterId) {
     if (targetId !== RULES.monsterId) {
       const m=this.state.monsters.get(targetId);
-      if(!m || !this.forest.kill(targetId,this.simulatedMs))return;
-      this.awardMonsterExperience(winnerId,m);
+      const profile=this.forest.profile(targetId);
+      if(!m || !profile || !this.forest.kill(targetId,this.simulatedMs,this.state.players,this.pendingWarps))return;
+      this.awardMonsterExperience(winnerId,m,profile.tier);
       for(const [id,target] of this.attackTargets) if(target===targetId){const p=this.state.players.get(id);if(p)this.endAttack(id,p);}
       return;
     }

@@ -1,4 +1,5 @@
 /** Server-owned provisional Hybrid progression. Values are tuning parameters. */
+import { monsterReward, type MonsterTier } from "./MonsterProfiles.js";
 export const STAT_KEYS = ["hp", "atk", "def", "magicAtk", "magicDef", "stamina"] as const;
 export type StatKey = typeof STAT_KEYS[number];
 export type Allocations = Record<StatKey, number>;
@@ -45,8 +46,8 @@ export function parseAllocateStat(payload: unknown): StatKey | null {
 export function xpForNextLevel(level: number): number {
   return PROGRESSION.xpBase + PROGRESSION.xpQuadratic * level * level;
 }
-export function monsterExperience(playerLevel: number, monsterLevel: number): number {
-  return Math.floor(PROGRESSION.monsterBaseExperience * monsterLevel * Math.max(0, 1 - 0.05 * (playerLevel - monsterLevel)));
+export function monsterExperience(playerLevel: number, monsterLevel: number, tier: MonsterTier = "normal"): number {
+  return monsterReward(playerLevel,monsterLevel,tier,PROGRESSION.monsterBaseExperience);
 }
 export function addExperience(level: number, experience: number, amount: number): { level: number; experience: number } {
   if (!Number.isSafeInteger(level) || level < 1 || level > PROGRESSION.legacyMaxLevel ||

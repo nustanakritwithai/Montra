@@ -39,6 +39,13 @@ jobs:
           cp deploy/combat/ChatRules.ts combat-verify/src/rooms/ChatRules.ts
           cp deploy/combat/chat-rules.test.ts combat-verify/src/rooms/chat-rules.test.ts
           cp deploy/combat/Progression.ts combat-verify/src/rooms/Progression.ts
+          cp deploy/combat/MonsterProfiles.ts combat-verify/src/rooms/MonsterProfiles.ts
+          cp deploy/combat/PartyMonsterRewards.ts combat-verify/src/rooms/PartyMonsterRewards.ts
+          cp deploy/combat/monster-profiles.test.ts combat-verify/src/rooms/monster-profiles.test.ts
+          cp deploy/combat/party-monster-rewards.test.ts combat-verify/src/rooms/party-monster-rewards.test.ts
+          cp deploy/combat/forest-monster-config.test.ts combat-verify/src/rooms/forest-monster-config.test.ts
+          cp deploy/combat/forest-guardian-integration.mjs combat-verify/forest-guardian-integration.mjs
+          cp deploy/combat/forest-party-monster-integration.mjs combat-verify/forest-party-monster-integration.mjs
           cp deploy/combat/PartyManager.ts combat-verify/src/rooms/PartyManager.ts
           cp deploy/combat/party-manager.test.ts combat-verify/src/rooms/party-manager.test.ts
           cp deploy/combat/party-experience.test.ts combat-verify/src/rooms/party-experience.test.ts
@@ -216,6 +223,7 @@ jobs:
       - name: Syntax-check test scripts
         shell: bash
         run: |
+          node --check deploy/combat/forest-party-monster-integration.mjs
           node --check deploy/combat/smoke-test.mjs
           node --check deploy/combat/s1-integration.mjs
           node --check deploy/combat/s1-monster-ai.mjs
@@ -233,7 +241,7 @@ jobs:
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts
+        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts
 
       - name: Isolated party and EXP integration
         shell: bash
@@ -255,7 +263,7 @@ jobs:
           export MONTRA_WORLD_EXPANSION=1 MONTRA_ECONOMY_ENABLED=0 PORT=4110
           export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-world-test-expansion-XXXXXX)"
           export MONTRA_TEST_URL=http://127.0.0.1:4110
-          npx tsx --test src/rooms/map-expansion.test.ts
+          npx tsx --test src/rooms/map-expansion.test.ts src/rooms/forest-monster-config.test.ts
           node --import tsx src/index.ts > expansion-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
@@ -267,6 +275,26 @@ jobs:
           SERVER_PID=$!
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4110) 2>/dev/null; then break; fi; sleep 0.25; done
           MONTRA_MAP_TEST_STAGE=read timeout 25s node map-expansion-integration.mjs || { cat expansion-server.log; exit 1; }
+
+      - name: Isolated forest party monster rewards
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4111 MONTRA_WORLD_EXPANSION=1 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-monster-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4111
+          node --import tsx src/index.ts > monster-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4111) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 40s node forest-party-monster-integration.mjs || { cat monster-server.log; exit 1; }
+          timeout 50s node forest-guardian-integration.mjs
+          kill "$SERVER_PID"
+          wait "$SERVER_PID" || true
+          node --import tsx src/index.ts > guardian-restart.log 2>&1 &
+          SERVER_PID=$!
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4111) 2>/dev/null; then break; fi; sleep 0.25; done
+          MONTRA_GUARDIAN_STAGE=read timeout 30s node forest-guardian-integration.mjs
 
       - name: Isolated economy transactions and restart
         shell: bash

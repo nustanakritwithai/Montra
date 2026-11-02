@@ -1,38 +1,58 @@
 import { Monster, type MyRoomState, type Player } from "./schema/MyRoomState.js";
-import { FOREST_CAMPS, WORLD_EXPANSION, getWorldMap, isRestArea } from "./WorldMaps.js";
+import { FOREST_CAMPS, SHRINE_GUARDIAN, WORLD_EXPANSION, getWorldMap, isRestArea } from "./WorldMaps.js";
 import { facingTo, planarDistance, stepTowards } from "./GameRules.js";
 import { MonsterRRTNavigator, isMonsterSegmentClear, MONSTER_NAV } from "./MonsterRRT.js";
 import { isOnGround } from "./HeightRules.js";
+import { FOREST_MONSTER_TIERS, MONSTER_CONFIG, monsterProfile, monsterRespawnDelay, type MonsterProfile, type MonsterTier } from "./MonsterProfiles.js";
 
-export const FOREST_RESPAWN_MS = 25_000;
-type Life = {x:number; z:number; respawnAt:number; lastAttack:number; returning:boolean; nav:MonsterRRTNavigator};
+export const FOREST_RESPAWN_MS = MONSTER_CONFIG.respawnMs;
+type Life = {windupUntil:number; nextChargeAt:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; nav:MonsterRRTNavigator};
 /** Bounded population, independent clocks and server-owned AI; no player-selected stats. */
 export class ForestEncounters {
   private lives = new Map<string,Life>();
   private map = getWorldMap("forbidden_forest")!;
   private obstacles = this.map.obstacles.map(o=>({x:o.x-o.radius,z:o.z-o.radius,width:o.radius*2,length:o.radius*2}));
-  constructor(private monsters: MyRoomState["monsters"]) {}
+  constructor(private monsters: MyRoomState["monsters"], private tiers:Readonly<Record<string,MonsterTier>> = FOREST_MONSTER_TIERS) {}
   initialize():void {
     if(!WORLD_EXPANSION)return;
-    const offsets=[[-7,-7],[7,-7],[-7,7],[7,7]];
-    for(const camp of FOREST_CAMPS) camp.levels.forEach((level,i)=>{
-      const id=`forest_${camp.id}_${i+1}`,x=camp.x+offsets[i][0],z=camp.z+offsets[i][1];
-      const hp=120+18*(level-1);
-      this.monsters.set(id,new Monster({id,x,y:0,z,hp,maxHp:hp,alive:true,mapId:this.map.id,
-        level,displayName:level<5?"ผีหลงป่า":level<9?"เงารากไม้":"วิญญาณอาคม",defense:30+4*level}));
-      this.lives.set(id,{x,z,respawnAt:0,lastAttack:-Infinity,returning:false,nav:new MonsterRRTNavigator(this.obstacles,this.map.bounds)});
-    });
+    const offsets = [[-7,-7],[7,-7],[-7,7],[7,7]];
+    const normalSpawns = FOREST_CAMPS.flatMap(camp => camp.levels.map((level, i) => ({
+      id: `forest_${camp.id}_${i + 1}`, level,
+      name: level < 5 ? "ผีหลงป่า" : level < 9 ? "เงารากไม้" : "วิญญาณอาคม",
+      x: camp.x + offsets[i][0], z: camp.z + offsets[i][1],
+    })));
+    const spawnIds = new Set(normalSpawns.map(spawn => spawn.id));
+    if (normalSpawns.length + 2 > MONSTER_CONFIG.maxSpawnPointsPerRoom) throw new Error("monster_spawn_cap_exceeded");
+    for (const [id, tier] of Object.entries(this.tiers)) {
+      if (!spawnIds.has(id)) throw new Error("unknown_monster_spawn_tier");
+      monsterProfile(1, tier);
+    }
+    for (const spawn of [...normalSpawns, SHRINE_GUARDIAN]) {
+      const {id, x, z, level, name} = spawn;
+      const tier = id === SHRINE_GUARDIAN.id ? "elite" : (this.tiers[id] ?? "normal");
+      const profile = monsterProfile(level, tier);
+      this.monsters.set(id,new Monster({id,x,y:0,z,hp:profile.maxHp,maxHp:profile.maxHp,
+        alive:true,mapId:this.map.id,level,tier,displayName:name,defense:profile.defense}));
+      this.lives.set(id,{x,z,profile,respawnAt:0,lastAttack:-Infinity,returning:false,
+        nextChargeAt:0,windupUntil:0,nav:new MonsterRRTNavigator(this.obstacles,this.map.bounds)});
+    }
   }
-  kill(id:string,now:number):boolean {
+  profile(id:string):MonsterProfile | null { return this.lives.get(id)?.profile ?? null; }
+  kill(id:string,now:number,players?:MyRoomState["players"],blocked?:ReadonlySet<string>):boolean {
     const m=this.monsters.get(id),life=this.lives.get(id);
     if(!m||!life||!m.alive)return false;
+    let nearby=0;
+    if(players) for(const [playerId,player] of players) {
+      if(player.alive && player.mapId===m.mapId && !blocked?.has(playerId) && !isRestArea(player.mapId,player) && planarDistance(player,m)<=MONSTER_CONFIG.populationRadius) nearby++;
+    }
     m.alive=false;m.hp=0;m.targetId="";m.aiState="dead";
-    life.respawnAt=now+FOREST_RESPAWN_MS;life.returning=false;life.nav.clear();return true;
+    life.windupUntil=0;life.nextChargeAt=0;
+    life.respawnAt=now+(id===SHRINE_GUARDIAN.id ? SHRINE_GUARDIAN.respawnMs : monsterRespawnDelay(nearby));life.returning=false;life.nav.clear();return true;
   }
   clearTarget(id:string):void {for(const m of this.monsters.values())if(m.targetId===id)m.targetId="";}
   engaged(id:string):boolean {return [...this.monsters.values()].some(m=>m.alive&&m.targetId===id);}
   update(now:number,dt:number,players:MyRoomState["players"],blocked:ReadonlySet<string>,
-    hit:(targetId:string,monster:Monster)=>void,respawn:(id:string)=>void):void {
+    hit:(targetId:string,monster:Monster,force?:number)=>void,respawn:(id:string)=>void):void {
     for(const [id,life] of this.lives){
       const m=this.monsters.get(id)!;
       if(!m.alive){
@@ -42,6 +62,16 @@ export class ForestEncounters {
       }
       const eligible=(pid:string,p:Player|undefined):p is Player=>Boolean(p&&p.alive&&p.mapId===m.mapId&&
         !blocked.has(pid)&&isOnGround(p.y)&&!isRestArea(p.mapId,p));
+      if (life.windupUntil > 0) {
+        const target = players.get(m.targetId);
+        if (now < life.windupUntil && eligible(m.targetId,target)) continue;
+        life.windupUntil = 0;
+        life.lastAttack = now;
+        if (eligible(m.targetId,target) && planarDistance(m,target) <= SHRINE_GUARDIAN.strikeRadius &&
+            isMonsterSegmentClear(m,target,this.obstacles,MONSTER_NAV.radius,this.map.bounds)) hit(m.targetId,m,1.6);
+        m.aiState="patrol";
+        continue;
+      }
       if(planarDistance(m,life)>=9)life.returning=true;
       let target=m.targetId?players.get(m.targetId):undefined;
       if(!eligible(m.targetId,target)||planarDistance(m,target)>11){target=undefined;m.targetId="";}
@@ -54,7 +84,13 @@ export class ForestEncounters {
       else if(target){m.facing=facingTo(target.x-m.x,target.z-m.z);
         if(planarDistance(m,target)<=1.65){m.aiState="attack";
           if(now-life.lastAttack>=1500&&isMonsterSegmentClear(m,target,this.obstacles,MONSTER_NAV.radius,this.map.bounds)){
-            life.lastAttack=now;hit(m.targetId,m);
+            if(id===SHRINE_GUARDIAN.id && now>=life.nextChargeAt) {
+              m.aiState="windup";
+              life.windupUntil=now+1400;
+              life.nextChargeAt=now+8000;
+            } else {
+              life.lastAttack=now;hit(m.targetId,m);
+            }
           }continue;
         }m.aiState="chase";destination=target;speed=1.9;
       }else{m.aiState="patrol";const phase=now/3000+life.x;

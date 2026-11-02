@@ -27,7 +27,7 @@ try{
    for(const slot of [1,2,3])await seed(token(1),'forbidden_forest',30+slot,-40,slot);
    await seed(token(2),'ritual_village',0,0);await seed(token(3),'forbidden_forest',-33,-20);await seed(token(4),'ritual_village',2,0);
    const a=await open(token(1)),b=await open(token(2),a.roomId),c=await open(token(3),a.roomId),d=await open(token(4),a.roomId);
-   await until(()=>a.state.monsters?.size===16,'16 enemies');assert.equal(a.state.players.size,4);
+   await until(()=>a.state.monsters?.size===17,'16 enemies plus the guardian');assert.equal(a.state.players.size,4);
    const manifest=JSON.parse(a.state.worldDefinition);assert.equal(manifest.maps.forbidden_forest.bounds.maxX,60);
    const rejects=[];b.onMessage('command_rejected',e=>rejects.push(e.reason));
    b.send('attack',{targetId:d.sessionId});await until(()=>rejects.includes('target_unavailable'),'safe town rejects PK');
@@ -49,6 +49,6 @@ try{
    await sleep(3100);w.send('warp',{portalId:'forest_to_village'});await until(()=>own(w).mapId==='ritual_village','return to village');await leave(w);
    const expected=[];for(const slot of [1,2,3]){const disk=JSON.parse(await readFile(file(token(1),slot),'utf8'));assert.equal(disk.inventory.slots[0].quantity,2);expected.push({token:token(1),slot,mapId:disk.mapId,x:disk.x,z:disk.z,level:disk.level,experience:disk.experience});}
    await writeFile(path.join(dir,'map-restart-expectations.json'),JSON.stringify(expected));
-   console.log('PASS: four players, 16 enemies, safe zones, cross-map rejection, extended walk/dash/flight/summon, EXP, bounds and return warp');
+   console.log('PASS: four players, 16 enemies plus the guardian, safe zones, cross-map rejection, extended walk/dash/flight/summon, EXP, bounds and return warp');
  }
 }finally{for(const r of [...rooms].reverse())await r.leave().catch(()=>{});}
