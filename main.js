@@ -3321,7 +3321,7 @@
     }
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;
-    a.skin = { nodes, copy, holder, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
+    a.skin = { nodes, copy, holder, body, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
   }
   // ---- Action animation set (visual only) ----
   // Every action maps to something the game already replicates: server
@@ -3336,18 +3336,25 @@
     punch: { dur: .32, swing: true }, twin: { dur: .42, swing: true },
     // Thai sword school skills (see swordSkillAction).
     lunge: { dur: .62, swing: true }, guard: { dur: 1.1 }, counter: { dur: .7, swing: true }, flurry: { dur: .85, swing: true },
-    sweep: { dur: .8, swing: true }, rally: { dur: 1.05 }, finale: { dur: 1.1, swing: true }, dance: { dur: 1.5 }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
+    sweep: { dur: .8, swing: true }, rally: { dur: 1.05 }, finale: { dur: 1.1, swing: true }, dance: { dur: 1.5 },
+    // Muay Boran (see muayAction).
+    m_basic: { dur: .36, swing: true }, m_jab: { dur: .34, swing: true }, m_cross: { dur: .46, swing: true }, m_hook: { dur: .6, swing: true },
+    m_elbow: { dur: .46, swing: true }, m_knee: { dur: .5, swing: true }, m_teep: { dur: .55, swing: true }, m_step: { dur: .6, swing: true },
+    m_side: { dur: .6, swing: true }, m_flurry: { dur: .72, swing: true }, m_rush: { dur: .85, swing: true }, m_retreat: { dur: .62, swing: true },
+    m_guard: { dur: 1.2 }, m_parry: { dur: .55 }, m_evade: { dur: .55 }, m_counter: { dur: .66, swing: true },
+    m_clinch: { dur: 1.5 }, m_throw: { dur: .75, swing: true }, m_held: { dur: 1.5 }, m_thrown: { dur: .85 }, m_wai: { dur: 1.3 }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
     drink: { dur: 1.15 }, dash: { dur: .46 }, rise: { dur: 1.0 }, arrive: { dur: .85 },
   };
-  const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash", thai_dual: "twin" };
+  const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash", thai_dual: "twin", muay_wraps: "m_basic" };
   const POSE_BONES = ["Hips", "Spine", "Spine1", "Chest", "Neck", "Head", "LeftShoulder", "RightShoulder",
     "LeftArm", "RightArm", "LeftForeArm", "RightForeArm", "LeftHand", "RightHand",
     "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg", "LeftFoot", "RightFoot"];
-  function playAction(a, type) {
+  function playAction(a, type, opts) {
     if (!a || !ACTIONS[type]) return;
     const now = performance.now();
     a.action = { type, start: now, end: now + ACTIONS[type].dur * 1000 };
-    if (type === "twin") a.action.side = (a.twinFlip = !a.twinFlip) ? 1 : -1; // alternate right / left blade
+    if (type === "twin" || type === "m_basic" || type === "m_side") a.action.side = (a.twinFlip = !a.twinFlip) ? 1 : -1; // alternate right / left
+    if (opts) Object.assign(a.action, opts);
     if (type !== "hit" && type !== "rise") flashStrike(a, type);
     if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
   }
@@ -3360,6 +3367,57 @@
     const raw = room?.state?.swordTreeCatalog || "";
     if (raw !== swordCatalogRaw) { swordCatalogRaw = raw; try { swordCatalogNodes = JSON.parse(raw || "null")?.nodes || {}; } catch { swordCatalogNodes = {}; } }
     return SWORD_EFFECT_ACTIONS[swordCatalogNodes[skillId]?.effect] || "twin";
+  }
+  // ---- Muay Boran motion map ----
+  // Skill id -> [motion, strike move]. Mirrors MuayRules (effect + combo move);
+  // an unknown skill falls back to its catalog effect, so new skills still move.
+  const MUAY_MOTIONS = {
+    step: ["m_step", "punch"], punch: ["m_jab", "punch"], guard: ["m_guard"], chaiya_cover: ["m_guard"], parry: ["m_parry"], evade: ["m_evade"],
+    counter: ["m_counter", "elbow"], teep: ["m_teep", "kick"], chaiya_elbow: ["m_elbow", "elbow"], chaiya_knee: ["m_counter", "knee"],
+    chaiya_finish: ["m_elbow", "elbow"], chaiya_return: ["m_counter", "elbow"], korat_heavy: ["m_cross", "punch"], korat_swing: ["m_hook", "punch"],
+    korat_finish: ["m_hook", "punch"], korat_pierce: ["m_cross", "punch"], korat_press: ["m_cross", "punch"], lopburi_angle: ["m_side", "punch"],
+    lopburi_counter: ["m_counter", "elbow"], lopburi_finish: ["m_side", "punch"], lopburi_reverse: ["m_side", "punch"], lopburi_slipcounter: ["m_side", "elbow"],
+    thasao_step: ["m_step", "punch"], thasao_flurry: ["m_flurry", "punch"], thasao_finish: ["m_flurry", "punch"], thasao_rush: ["m_rush", "punch"], thasao_retreat: ["m_retreat", "punch"],
+  };
+  const MUAY_EFFECT_MOTIONS = { step: "m_step", strike: "m_cross", guard: "m_guard", parry: "m_parry", evade: "m_evade", counter: "m_counter", teep: "m_teep",
+    sidestep: "m_side", counter_sidestep: "m_side", flurry: "m_flurry", step_flurry: "m_rush", retreat_strike: "m_retreat", grapple: "m_clinch" };
+  let muayCatalogRaw = null, muayCatalogSkills = {};
+  function muayMotion(skillId) {
+    if (MUAY_MOTIONS[skillId]) return MUAY_MOTIONS[skillId];
+    const raw = room?.state?.muayBookCatalog || "";
+    if (raw !== muayCatalogRaw) { muayCatalogRaw = raw; try { muayCatalogSkills = JSON.parse(raw || "null")?.skills || {}; } catch { muayCatalogSkills = {}; } }
+    return [MUAY_EFFECT_MOTIONS[muayCatalogSkills[skillId]?.effect] || "m_cross", "punch"];
+  }
+  // A player's sword or Muay school, from the replicated book/tree data.
+  const schoolCache = new Map();
+  function muaySchoolOf(a) {
+    const p = a.local ? ownServerCharacter() : room?.state?.players?.get?.(a.id);
+    const raw = p?.muayBookData || "";
+    if (!schoolCache.has(raw)) { let school = "chaiya"; try { school = JSON.parse(raw || "null")?.school || "chaiya"; } catch {} schoolCache.set(raw, school); }
+    return schoolCache.get(raw);
+  }
+  // Grapple: the first "grapple" use is the grab, a second while holding is the throw.
+  function playMuaySkill(playerId, skillId, targetId) {
+    const a = avatars.get(playerId); if (!a) return;
+    const now = performance.now(), victim = targetId ? avatars.get(targetId) : null;
+    if (skillId === "grapple") {
+      if ((a.muayHoldUntil || 0) > now) {
+        a.muayHoldUntil = 0; playAction(a, "m_throw");
+        if (victim) playAction(victim, "m_thrown");
+      } else {
+        a.muayHoldUntil = now + 1500; playAction(a, "m_clinch");
+        if (victim) { playAction(victim, "m_held"); faceAvatarToward(targetId, a.x, a.z); victim.facingLockUntil = now + 1500; }
+        a.facingLockUntil = now + 1500;
+      }
+      return;
+    }
+    const [motion, move] = muayMotion(skillId);
+    playAction(a, motion, { move, reverse: skillId === "lopburi_reverse", finisher: /_finish$/.test(skillId) });
+  }
+  function releaseMuayHold(id) {
+    const a = avatars.get(id); if (!a) return;
+    a.muayHoldUntil = 0;
+    if (a.action && (a.action.type === "m_clinch" || a.action.type === "m_held")) a.action.end = performance.now();
   }
   function playAttack(attackerId, ranged, targetX, targetZ) {
     const a = avatars.get(attackerId);
@@ -3428,6 +3486,16 @@
     fx.seal.parent = a.node; fx.seal.position.y = .06; fx.seal.isPickable = false; fx.seal.setEnabled(false);
     return (a.fx = fx);
   }
+  let muayWrapMats = null;
+  function muayWraps(body) {
+    if (!muayWrapMats) {
+      muayWrapMats = [mat("muay hand wrap", "#e6dcc4", "#1c1a14"), mat("muay wrist rope", "#c8a060", "#241608")];
+      for (const m of muayWrapMats) m.backFaceCulling = false;
+    }
+    const hands = skinnedCut(body, "muay hand wraps", x => Math.abs(x) > .6, x => .011 + .003 * Math.sin(Math.abs(x) * 160), muayWrapMats[0]);
+    const rope = skinnedCut(body, "muay wrist rope", x => Math.abs(x) > .5 && Math.abs(x) < .61, (x, y, z) => .017 + .007 * Math.sin(Math.atan2(z, y - 1.354) * 2 + Math.abs(x) * 95), muayWrapMats[1]);
+    return [hands, rope];
+  }
   function animateSkin(a, m, speed, s, c, t, now, dt) {
     const n = a.skin.nodes, P = {};
     for (const b of POSE_BONES) P[b] = [0, 0, 0];
@@ -3450,6 +3518,11 @@
     const run = Math.min(1, Math.max(0, (speed - 3.6) / 3));
     const breath = Math.sin(t * 2.1), idle = 1 - m;
     const weapon = a.weaponId || "";
+    // Muay Boran "weapon": white cloth hand wraps with twisted rope at the wrists, cut from the body.
+    if (weapon === "muay_wraps" && !a.skin.wraps && a.skin.body) a.skin.wraps = muayWraps(a.skin.body);
+    if (a.skin.wraps) for (const mesh of a.skin.wraps) mesh.setEnabled(weapon === "muay_wraps");
+    // Wrapped hands are drawn a little smaller so they read as fists.
+    for (const side of ["LeftHand", "RightHand"]) a.skin.nodes[side]?.scaling.setAll(weapon === "muay_wraps" ? .82 : 1);
     // ---- Combat stance at rest: side-on to the opponent, left shoulder
     // leading, weight sunk into the back (right) leg, head turned forward.
     const turn = weapon === "spirit_staff" ? -.55 : -.82;
@@ -3459,7 +3532,24 @@
     set("LeftUpLeg", -.34, .18, .17); set("LeftLeg", .14, 0, 0);
     set("RightUpLeg", .14, -.1, -.11); set("RightLeg", .32, 0, 0);
     set("LeftShoulder", 0, 0, -.04); set("RightShoulder", 0, 0, .04);
-    if (weapon === "thai_dual") {
+    if (weapon === "muay_wraps") {
+      // Muay guard: squarer than the blade stances, fists up at the chin,
+      // elbows in, weight on the rear leg; each school carries it differently.
+      const school = muaySchoolOf(a);
+      const st = { chaiya: { turn: -.42, low: -.09, lean: .2, arm: -1.0, fore: 2.3, bob: 2.2, bobA: .008, knee: 1 },
+        korat: { turn: -.62, low: -.07, lean: .12, arm: -.75, fore: 1.65, bob: 1.8, bobA: .01, knee: 0, wide: .14 },
+        lopburi: { turn: -.95, low: -.04, lean: .06, arm: -1.2, fore: 1.9, bob: 3.2, bobA: .012, knee: 0, reach: 1 },
+        thasao: { turn: -.5, low: -.05, lean: .1, arm: -1.25, fore: 2.25, bob: 6.5, bobA: .03, knee: 0 } }[school] || {};
+      set("Hips", 0, st.turn, -.03); off[1] = st.low + Math.abs(Math.sin(t * st.bob)) * st.bobA * idle; bend(st.lean, -st.turn * .35, .04);
+      set("LeftUpLeg", -.22 - (st.knee ? .3 : 0), .08, .12 + (st.wide || 0)); set("LeftLeg", .32 + (st.knee ? .45 : 0), 0, 0);
+      set("RightUpLeg", .1, -.06, -.1 - (st.wide || 0)); set("RightLeg", .42, 0, 0);
+      // Fists in front of the face, elbows closed in front of the ribs.
+      set("RightArm", st.arm - .35, .45, 1.2); set("RightForeArm", 0, st.fore + .1, 0); set("RightHand", 0, 0, .15);
+      if (st.reach) { set("LeftArm", -1.5, -.25, -1.15); set("LeftForeArm", 0, -1.3, 0); }
+      else { set("LeftArm", st.arm - .45, -.45, -1.2); set("LeftForeArm", 0, -st.fore - .05, 0); }
+      set("LeftHand", 0, 0, -.15);
+      if (school === "thasao") { add("RightArm", Math.sin(t * 6.5) * .05, 0, 0); add("LeftArm", -Math.sin(t * 6.5) * .05, 0, 0); }
+    } else if (weapon === "thai_dual") {
       // Dual-blade guard: right blade raised before the face, edge out;
       // left blade low and back along the forearm, ready to cover.
       set("RightArm", -.95, .25, .95); set("RightForeArm", 0, 1.35, 0); set("RightHand", .35, 0, .1);
@@ -3501,6 +3591,11 @@
       W.LeftForeArm = [0, weapon === "thai_dual" ? -1.1 : -(.28 + 1.1 * run), 0];
       W.RightArm = grip ? [-.25 - s * armAmp * .4, .1, 1.18] : [-s * armAmp, 0, 1.24];
       W.RightForeArm = [0, grip ?? (.28 + 1.1 * run), 0];
+      if (weapon === "muay_wraps") { // guard stays up while moving
+        W.RightArm = [-1.35 - s * .1, .45, 1.2]; W.RightForeArm = [0, 2.3, 0];
+        W.LeftArm = [-1.4 + s * .1, -.45, -1.2]; W.LeftForeArm = [0, -2.3, 0];
+        W.Spine[0] += .06; W.Chest[1] *= .6;
+      }
       for (const b of POSE_BONES) mix(b, W[b][0], W[b][1], W[b][2], m);
       off[0] *= idle; off[1] = off[1] * idle + (Math.abs(c) * .03 * (1 + run) - .02 * run) * m;
     }
@@ -3586,7 +3681,132 @@
         arc.setEnabled(true); arc.visibility = k * .9;
         fx.pivot.rotation.set(0, (p - center) / width * -.6 * d, tilt * d); arc.scaling.set(1.05 * d, 1, 1.05);
       };
+      // ---- Muay pieces: guard arms, straight/hook punch, elbow, knee, teep.
+      // d = 1 right (rear) hand or leg, -1 left (lead).
+      const G = { Right: { Arm: [-1.35, .45, 1.2], ForeArm: [0, 2.3, 0] }, Left: { Arm: [-1.4, -.45, -1.2], ForeArm: [0, -2.3, 0] } };
+      const guardArm = (side, ww) => { const g = G[side]; mix(side + "Arm", g.Arm[0], g.Arm[1], g.Arm[2], ww); mix(side + "ForeArm", g.ForeArm[0], g.ForeArm[1], g.ForeArm[2], ww); };
+      const lpw = (bone, A, Bv, k, ww) => { const v = lerp(A, Bv, k); mix(bone, v[0], v[1], v[2], ww); };
+      const sideOf = d => d > 0 ? "Right" : "Left";
+      const punchMove = (d, k, ww, hook = false) => {
+        const R = sideOf(d), g = G[R], twist = hook ? 1.0 : .6;
+        guardArm(sideOf(-d), ww);
+        if (hook) { lpw(R + "Arm", g.Arm, [-1.35, .95 * d, .35 * d], k, ww); lpw(R + "ForeArm", g.ForeArm, [0, 1.45 * d, 0], k, ww); }
+        else { lpw(R + "Arm", g.Arm, [-1.52, .08 * d, 1.22 * d], k, ww); lpw(R + "ForeArm", g.ForeArm, [0, .06 * d, 0], k, ww); }
+        const v = lerp([0, -.35 * twist * d, 0], [.12, .55 * twist * d, 0], k); bend(v[0], v[1], v[2], ww);
+        lpw("Hips", [0, -.3 * d, 0], [.04, .3 * d, 0], k, ww);
+        lpw(R + "Shoulder", [0, -.1 * d, 0], [0, .25 * d, -.05 * d], k, ww);
+        lpw(R + "UpLeg", [.1, 0, 0], [.28, 0, 0], k, ww * .6);
+        off[2] += .06 * k * ww; off[1] -= .03 * ww;
+      };
+      const elbowMove = (d, k, ww) => {
+        const R = sideOf(d);
+        guardArm(sideOf(-d), ww);
+        lpw(R + "Arm", G[R].Arm, [-1.25, .9 * d, .25 * d], k, ww); mix(R + "ForeArm", 0, 2.55 * d, 0, ww);
+        const v = lerp([-.05, -.5 * d, .15 * d], [.35, .65 * d, -.12 * d], k); bend(v[0], v[1], v[2], ww);
+        lpw("Hips", [0, -.35 * d, 0], [.05, .35 * d, 0], k, ww); off[2] += .05 * k * ww; off[1] -= .05 * ww;
+      };
+      const kneeMove = (d, k, ww) => {
+        const S = sideOf(d);
+        lpw(S + "UpLeg", [0, 0, 0], [-1.65, 0, 0], k, ww); lpw(S + "Leg", [.3, 0, 0], [1.75, 0, 0], k, ww); lpw(S + "Foot", [0, 0, 0], [.6, 0, 0], k, ww);
+        for (const [side, e] of [["Right", 1], ["Left", -1]]) { lpw(side + "Arm", G[side].Arm, [-1.45, .35 * e, .9 * e], k, ww); lpw(side + "ForeArm", G[side].ForeArm, [0, 1.3 * e, 0], k, ww); }
+        bend(-.18 * k, 0, 0, ww); lpw("Hips", [0, 0, 0], [-.15, 0, 0], k, ww); off[2] += .1 * k * ww; off[1] += .03 * k * ww;
+      };
+      const teepMove = (k, ww) => {
+        const chamber = ease(k / .45), ext = ease((k - .4) / .35);
+        mix("LeftUpLeg", -1.45 * chamber, 0, .05, ww); mix("LeftLeg", 1.7 * chamber * (1 - ext) + .1, 0, 0, ww); mix("LeftFoot", -.5 * ext, 0, 0, ww);
+        bend(-.35 * chamber, 0, 0, ww); mix("RightLeg", .3, 0, 0, ww); guardArm("Left", ww); guardArm("Right", ww * (1 - ext)); mix("RightArm", .35, 0, 1.2, ww * ext);
+        off[2] -= .05 * ext * ww;
+      };
+      const coverMove = ww => {
+        for (const [side, e] of [["Right", 1], ["Left", -1]]) { mix(side + "Arm", -1.6, .55 * e, 1.1 * e, ww); mix(side + "ForeArm", 0, 2.5 * e, 0, ww); }
+        bend(.25, 0, 0, ww); off[1] -= .1 * ww; mix("LeftUpLeg", -.75, 0, .1, ww); mix("LeftLeg", 1.0, 0, 0, ww);
+      };
+      const lungeMove = ww => {
+        mix("Hips", .12, 0, 0, ww); bend(.45, 0, 0, ww); guardArm("Right", ww); guardArm("Left", ww);
+        mix("LeftUpLeg", -.95, 0, .05, ww); mix("LeftLeg", .5, 0, 0, ww); mix("RightUpLeg", .6, 0, -.05, ww); mix("RightLeg", .85, 0, 0, ww); off[1] -= .1 * ww;
+      };
+      const fistArc = (center, d, tilt = 0, width = .12) => {
+        const arc = fx.slashes.punch, k = Math.max(0, 1 - Math.abs(p - center) / width);
+        if (k <= 0) return;
+        arc.setEnabled(true); arc.visibility = k * .8;
+        fx.pivot.rotation.set(0, (p - center) / width * -.4 * d, tilt * d); arc.scaling.set(.75 * d, 1, .75);
+      };
       switch (act.type) {
+        case "m_basic": punchMove(act.side, strike, w); fistArc(.52, act.side); break;
+        case "m_jab": punchMove(-1, ease((p - .2) / .25), w); fistArc(.45, -1); break;
+        case "m_cross": punchMove(1, strike, w); fistArc(.52, 1); if (act.finisher) flare = w * .4; break;
+        case "m_hook": punchMove(1, ease((p - .3) / .3), w, true); fistArc(.58, 1, .9, .16); if (act.finisher) flare = w * .4; break;
+        case "m_elbow": elbowMove(1, ease((p - .25) / .3), w); fistArc(.52, 1, .6); if (act.finisher) flare = w * .4; break;
+        case "m_knee": kneeMove(1, ease((p - .2) / .3), w); break;
+        case "m_teep": teepMove(Math.min(1, p / .7), w); break;
+        case "m_step": { const go = w * (1 - ease((p - .4) / .15)); lungeMove(go); punchMove(1, ease((p - .45) / .2), w - go); fistArc(.62, 1); break; }
+        case "m_side": {
+          // Chak: hop off the line, then strike from the new angle.
+          const d = (act.side || 1) * (act.reverse ? -1 : 1), hop = w * (1 - ease((p - .4) / .15)), k = ease((p - .45) / .2);
+          bend(.1, 0, .25 * d, hop); off[0] += .14 * d * hop; guardArm("Right", hop); guardArm("Left", hop);
+          mix("LeftUpLeg", -.2, 0, .3, hop); mix("RightUpLeg", -.2, 0, -.3, hop); mix("LeftLeg", .5, 0, 0, hop); mix("RightLeg", .5, 0, 0, hop);
+          if (act.move === "elbow") elbowMove(-d, k, w - hop); else punchMove(-d, k, w - hop);
+          fistArc(.62, -d); break;
+        }
+        case "m_flurry": case "m_rush": {
+          const lead = act.type === "m_rush" ? .3 : 0, go = lead ? w * (1 - ease((p - .25) / .08)) : 0;
+          if (lead) lungeMove(go);
+          const q0 = Math.max(0, (p - lead) / (1 - lead)), beats = lead ? 3 : 4, beat = Math.min(beats - 1, Math.floor(q0 * beats)), q = q0 * beats - beat, d = beat % 2 ? 1 : -1;
+          punchMove(d, ease((q - .1) / .45), w - go); fistArc(lead + (beat + .5) / beats * (1 - lead), d, 0, .06); break;
+        }
+        case "m_retreat": {
+          const back = ease((p - .5) / .2) * (1 - ease((p - .85) / .15));
+          punchMove(-1, ease((p - .1) / .25), w * (1 - ease((p - .5) / .15))); fistArc(.3, -1);
+          bend(-.2 * back, 0, 0, w); off[2] -= .15 * back * w; guardArm("Right", back * w); guardArm("Left", back * w); break;
+        }
+        case "m_guard": coverMove(w); break;
+        case "m_parry": {
+          const k = Math.sin(Math.min(1, p / .6) * Math.PI);
+          guardArm("Right", w); lpw("LeftArm", G.Left.Arm, [-1.45, -.7, -.9], k, w); lpw("LeftForeArm", G.Left.ForeArm, [0, -.6, 0], k, w); bend(.05, .3 * k, 0, w); break;
+        }
+        case "m_evade": {
+          const k = Math.sin(Math.min(1, p / .8) * Math.PI);
+          bend(-.55 * k, 0, 0, w); mix("Head", -.2 * k, 0, 0, w); mix("Hips", -.15 * k, 0, 0, w); mix("RightLeg", .6, 0, 0, w);
+          guardArm("Right", w); guardArm("Left", w); off[2] -= .12 * k * w; off[1] -= .04 * k * w; break;
+        }
+        case "m_counter": {
+          const block = w * (1 - ease((p - .3) / .12)), k = ease((p - .35) / .25);
+          coverMove(block);
+          if (act.move === "knee") kneeMove(1, k, w - block); else elbowMove(1, k, w - block);
+          if (act.move !== "knee") fistArc(.6, 1, .6); break;
+        }
+        case "m_clinch": {
+          // Plum: both hands locked behind the opponent's neck, pulling down.
+          for (const [side, e] of [["Right", 1], ["Left", -1]]) { mix(side + "Arm", -1.5, .75 * e, 1.05 * e, w); mix(side + "ForeArm", 0, 1.35 * e, 0, w); mix(side + "Hand", 0, 0, -.3 * e, w); }
+          bend(.3 + Math.sin(t * 9) * .03, 0, 0, w); off[1] -= .08 * w; mix("LeftLeg", .4, 0, 0, w); mix("RightLeg", .5, 0, 0, w); break;
+        }
+        case "m_throw": {
+          const k = ease(p / .6);
+          bend(.35, -1.1 * k, 0, w); mix("Hips", 0, -.8 * k, 0, w);
+          mix("RightArm", -.9, -.4, 1.0, w); mix("RightForeArm", 0, 1.2, 0, w); mix("LeftArm", -1.3, .6, -.6, w); mix("LeftForeArm", 0, -1.0, 0, w);
+          mix("LeftUpLeg", -.4 * k, 0, .2, w); off[1] -= .1 * w; flare = w * .3; break;
+        }
+        case "m_held": {
+          bend(.6, 0, 0, w); mix("Head", .4, 0, 0, w); off[1] -= .1 * w; off[2] += .05 * w;
+          for (const [side, e] of [["Right", 1], ["Left", -1]]) { mix(side + "Arm", -1.2, -.3 * e, 1.0 * e, w); mix(side + "ForeArm", 0, 1.4 * e, 0, w); }
+          break;
+        }
+        case "m_thrown": {
+          const k = Math.sin(Math.min(1, p * 1.3) * Math.PI);
+          bend(-.6 * k, .8 * k, .3 * k, w); mix("LeftArm", -.3, 0, -.5, w * k); mix("RightArm", -.3, 0, .5, w * k);
+          mix("LeftLeg", .5, 0, 0, w * k); mix("RightLeg", .7, 0, 0, w * k); off[1] -= .2 * k * w; spin = .9 * k; break;
+        }
+        case "m_wai": {
+          // Wai khru: kneel and bow over joined hands, rise, then a slow turn with arms spread like wings.
+          const bow = 1 - ease((p - .42) / .12), rise = w * (1 - bow), wing = ease((p - .5) / .2);
+          bend(.4, 0, 0, w * bow); mix("Head", .35, 0, 0, w * bow); off[1] -= .35 * w * bow;
+          mix("LeftUpLeg", -.9, 0, .1, w * bow); mix("LeftLeg", 1.4, 0, 0, w * bow); mix("RightUpLeg", .2, 0, -.1, w * bow); mix("RightLeg", 1.6, 0, 0, w * bow);
+          guardArm("Right", w * bow); guardArm("Left", w * bow); mix("RightHand", 0, 0, -.6, w * bow); mix("LeftHand", 0, 0, .6, w * bow);
+          mix("RightArm", -.3, .1, .15, rise * wing); mix("RightForeArm", 0, .6, 0, rise * wing); mix("LeftArm", -.3, -.1, -.15, rise * wing); mix("LeftForeArm", 0, -.6, 0, rise * wing);
+          mix("LeftUpLeg", -.5, 0, .05, rise * wing); mix("LeftLeg", .9, 0, 0, rise * wing); bend(-.12, 0, 0, rise);
+          spin = ease((p - .55) / .4) * Math.PI * 2;
+          fx.seal.setEnabled(true); fx.seal.material = summonSeal; fx.seal.scaling.setAll(2.2); fx.seal.visibility = w * .7; fx.seal.rotation.y = p * 2; flare = w * .35; break;
+        }
         case "stab": case "punch":
           weight(strike, .9); spine([.05, -.6, .08], [.32, .55, -.05]);
           pose("RightShoulder", [0, -.15, .05], [0, .3, -.05]);
@@ -3800,7 +4020,7 @@
   function setAvatarWeapon(avatar, weaponId, pathId = avatar?.local ? ownServerCharacter()?.pathId : "") {
     if (!avatar?.weaponModels) return;
     const modelId = pathId === "phutthaisawan" && weaponId === "arcane_sword" ? "thai_dual" : weaponId === "shrine_glaive" ? "arcane_sword" : weaponId;
-    const safeId = modelId === "thai_dual" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
+    const safeId = modelId === "thai_dual" || modelId === "muay_wraps" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
     if (avatar.weaponId === safeId) return;
     avatar.weaponId = safeId;
     for(const [id,model] of Object.entries(avatar.weaponModels)) {
@@ -6876,6 +7096,7 @@
         } else if(data?.phase==="held" && data.role==="victim") {
           setGrappleResponse("escape",data.durationMs,data.escapeStamina);toast("ถูกจับ · กดแก้จับก่อนถูกทุ่ม");
         } else if(data?.phase==="released") {
+          releaseMuayHold(localId); if(muayGrabTarget)releaseMuayHold(muayGrabTarget);
           if(grappleResponseMode==="escape")setGrappleResponse(null);
           if(data.reason==="escaped" && muayGrabTarget)toast("เป้าหมายแก้จับหลุดแล้ว");
           muayGrabTarget="";muayGrabUntil=0;
@@ -6886,6 +7107,15 @@
         if(data?.active===true){setGrappleResponse("counter",data.durationMs,data.stamina);toast("แก้จับสำเร็จ · กดสวนผู้จับได้");}
         else if(grappleResponseMode==="counter")setGrappleResponse(null);
       }});
+      joined.onMessage("muay_skill_used", result => {
+        if (room!==joined || typeof result?.playerId!=="string") return;
+        const caster=joined.state?.players?.get?.(result.playerId);
+        if (caster && (caster.mapId || "ritual_village")===activeMapId) {
+          const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
+          if (target && !["guard","parry","evade","chaiya_cover"].includes(result.skillId)) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
+          playMuaySkill(result.playerId,result.skillId,result.targetId);
+        }
+      });
       joined.onMessage("muay_skill_used", result => { if (room===joined && result?.playerId===localId && !["teep","grapple","parry","evade"].includes(result.skillId)) toast((muayBookData()?.catalog?.skills?.[result.skillId]?.name || "วิชามวย")+" สำเร็จ"); });
       joined.onMessage("muay_book_changed", () => { if(room===joined){selectedMuaySkill="";if(targetedSkill==="muay")setTargetedSkill(null);muayBookRenderKey="";renderMuayBook();toast("บันทึกตำรามวยแล้ว");} });
       joined.onMessage("sword_combo", data => { if (room===joined) {
@@ -6934,6 +7164,7 @@
         if (room !== joined) return;
         toast(result.skill + " · มีผล " + result.targets + " คน");
         if (ownServerCharacter()?.pathId === "phutthaisawan") playAction(avatars.get(localId), "dance");
+        if (ownServerCharacter()?.pathId === "muay_boran") playAction(avatars.get(localId), "m_wai");
       });
       joined.onMessage("possession_changed", notice => {
         if(room!==joined || notice?.playerId!==localId)return;
