@@ -9,7 +9,7 @@ const pass="twin_neck_pass",sdk=new Client(url),rooms=new Set(),nap=ms=>new Prom
 async function until(fn,label,timeout=12000){const end=Date.now()+timeout;while(Date.now()<end){const v=fn();if(v)return v;await nap(50);}throw Error("timeout "+label);}
 async function fixture(mapId,x,y,z){
   const token="mt1_"+randomBytes(32).toString("hex"),id=createHash("sha256").update(token).digest("hex");
-  await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"Scout",level:24,experience:0,pkKills:0,pkDeaths:0,x,y,z,hp:360,mapId,inventory:{version:1,slots:Array(12).fill(null),equippedWeaponSlot:null},updatedAt:new Date().toISOString()}),{flag:"wx"});return token;
+  await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"Scout",build:{path:"seer",ancestry:"woodland"},level:24,experience:0,pkKills:0,pkDeaths:0,x,y,z,hp:360,mapId,inventory:{version:1,slots:Array(12).fill(null),equippedWeaponSlot:null},updatedAt:new Date().toISOString()}),{flag:"wx"});return token;
 }
 async function join(token,id,version=1){const opts={guestToken:token,worldVersion:1,atlasVersion:1,templeVersion:1,provinceVersion:1,terrainVersion:version};
   const r=id?await sdk.joinById(id,opts):await sdk.create("my_room",opts);rooms.add(r);

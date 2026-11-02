@@ -9,7 +9,7 @@ const sdk=new Client(url),rooms=new Set(),nap=ms=>new Promise(ok=>setTimeout(ok,
 async function until(fn,label,timeout=14000){const end=Date.now()+timeout;while(Date.now()<end){const v=fn();if(v)return v;await nap(60);}throw Error("timeout "+label);}
 async function fixture(mapId,x,z,y=0){
   const token="mt1_"+randomBytes(32).toString("hex"),id=createHash("sha256").update(token).digest("hex");
-  await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"Scout",level:95,experience:0,pkKills:0,pkDeaths:0,x,y,z,hp:990,mapId,inventory:{version:1,slots:Array(12).fill(null),equippedWeaponSlot:null},updatedAt:new Date().toISOString()}),{flag:"wx"});return token;
+  await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"Scout",build:{path:"seer",ancestry:"woodland"},level:95,experience:0,pkKills:0,pkDeaths:0,x,y,z,hp:990,mapId,inventory:{version:1,slots:Array(12).fill(null),equippedWeaponSlot:null},updatedAt:new Date().toISOString()}),{flag:"wx"});return token;
 }
 async function join(token,ver=1){
   const r=await sdk.create("my_room",{guestToken:token,worldVersion:1,atlasVersion:1,templeVersion:1,provinceVersion:1,terrainVersion:1,atlasReliefVersion:ver});rooms.add(r);
