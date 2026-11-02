@@ -9,10 +9,10 @@ export type OccultLesson = Readonly<{
   training:number; effect:OccultEffect; stamina:number; cooldownMs:number; range:number; power:number;
 }>;
 export const OCCULT_LESSONS = {
-  seer_mark: {name:"ยันต์ตีตรา",description:"โจมตีและติดตราให้วิชาข้าวสารหรือระเบิดยันต์",path:"seer",level:1,requires:[],training:0,effect:"mark",stamina:12,cooldownMs:4000,range:8,power:0.8},
-  seer_rice: {name:"ข้าวสารฝังอาคม",description:"โจมตีเป้าเดียว แรงขึ้นเมื่อเป้าติดตราของตน",path:"seer",level:3,requires:["seer_mark"],training:3,effect:"rice",stamina:16,cooldownMs:5000,range:15,power:1.25},
+  seer_mark: {name:"ยันต์ตีตรา",description:"โจมตีและติดตราให้วิชาข้าวสารหรือระเบิดยันต์",path:"seer",level:1,requires:[],training:0,effect:"mark",stamina:12,cooldownMs:4000,range:8,power:0.9},
+  seer_rice: {name:"ข้าวสารฝังอาคม",description:"โจมตีเป้าเดียว แรงขึ้นเมื่อเป้าติดตราของตน",path:"seer",level:3,requires:["seer_mark"],training:3,effect:"rice",stamina:16,cooldownMs:5000,range:15,power:1.4},
   seer_scatter: {name:"ข้าวสารแตกกระจาย",description:"ซัดข้าวสารใส่มอนสเตอร์ใกล้เป้าหมายสูงสุด 3 ตัว",path:"seer",level:5,requires:["seer_rice"],training:6,effect:"rice_area",stamina:24,cooldownMs:10000,range:12,power:0.75},
-  seer_burst: {name:"ระเบิดยันต์",description:"ใช้ตราของตนเพื่อโจมตีเป้าหมายอย่างรุนแรง",path:"seer",level:5,requires:["seer_rice"],training:6,effect:"detonate",stamina:24,cooldownMs:10000,range:12,power:2.0},
+  seer_burst: {name:"ระเบิดยันต์",description:"ใช้ตราของตนเพื่อโจมตีเป้าหมายอย่างรุนแรง",path:"seer",level:5,requires:["seer_rice"],training:6,effect:"detonate",stamina:24,cooldownMs:10000,range:12,power:2.15},
   seer_seal: {name:"ยันต์สะกด",description:"โจมตีและหยุดจังหวะมอนสเตอร์ทั่วไปชั่วคราว Elite และบอสไม่ถูกหยุด",path:"seer",level:8,requires:["seer_mark"],training:10,effect:"interrupt",stamina:20,cooldownMs:12000,range:8,power:0.9},
   seer_curse: {name:"คำสาปกัดกิน",description:"โจมตีและสาปเป้าหมายเป็นช่วงสั้น ๆ ใน PvP พลังลดลง",path:"seer",level:8,requires:["seer_mark"],training:10,effect:"curse",stamina:22,cooldownMs:12000,range:12,power:0.7},
   seer_spirit: {name:"สั่งผีจู่โจม",description:"สั่งผีจากหม้อโจมตีมอนสเตอร์ที่เลือก",path:"seer",level:10,requires:["seer_rice"],training:15,effect:"spirit",stamina:18,cooldownMs:9000,range:8,power:1.4},

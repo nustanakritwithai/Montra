@@ -52,7 +52,7 @@ import { OCCULT_LESSONS, OCCULT_MASTERY_LABELS, OCCULT_MASTERY_REQUIREMENTS, new
 import { BLADE_LESSONS, BLADE_PRACTICE_LABELS, bladePoints, newBladeBook, validateBladeBook, type BladeBook, type BladeLesson, type BladeSkillId } from "./BladeRules.js";
 import { SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_CONTROL, sentinelPoints, newSentinelBook, validateSentinelBook, type SentinelBook, type SentinelLesson, type SentinelSkillId } from "./SentinelRules.js";
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
-import { POSSESSION_MODIFIER, TALISMAN, SWORD_SCHOOLS, SWORD_NODES, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
+import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_SCHOOLS, SWORD_NODES, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
 import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
@@ -1078,7 +1078,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!player || !book || !isOccultPath(player.pathId)) return;
     try {
       client.send("occult_book_state",{path:player.pathId,book,lessons:OCCULT_LESSONS,points:occultPoints(player.level),
-        masteryLabels:OCCULT_MASTERY_LABELS,masteryRequirements:OCCULT_MASTERY_REQUIREMENTS});
+        masteryLabels:OCCULT_MASTERY_LABELS,masteryRequirements:OCCULT_MASTERY_REQUIREMENTS,menderRicePve:MENDER_PVE_RICE_MULTIPLIER});
     } catch(error) { console.warn("MONTRA occult book notice was not delivered",error); }
   }
 
@@ -1740,7 +1740,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         for (let count=0;count<hits && victim.target.alive;count++) {
           this.recordCombat(id,victim.id);
           const defense=victim.monster ? (victim.target as Monster).defense : (victim.target as Player).def;
-          let damage=calculateDamage(base*skill.power,defense,victim.target.level);
+          let damage=calculateDamage(base*skill.power*(victim.monster?1:SWORD_PVP_DAMAGE_MULTIPLIER),defense,victim.target.level);
           if (victim.monster) this.hitMonsterWithSpell(id,victim.target as Monster,damage,"sword");
           else {
             const opponent=victim.target as Player;
@@ -2990,7 +2990,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.recordCombat(id, targetId);
     shooter.facing = facingTo(target.x-shooter.x, target.z-shooter.z);
     const rangedAttack = shooter.magicAtk + weaponBonuses(this.inventories.get(id), monsterOrder ? "pve" : "pvp").ranged;
-    let rangedDamage = monsterOrder ? calculateDamage(rangedAttack, (target as Monster).defense, (target as Monster).level) :
+    let rangedDamage = monsterOrder ? calculateDamage(rangedAttack*(shooter.pathId==="mender"?MENDER_PVE_RICE_MULTIPLIER:1), (target as Monster).defense, (target as Monster).level) :
       calculateDamage(rangedAttack, (target as Player).magicDef, (target as Player).level);
 
     if (monsterOrder) {
@@ -3272,7 +3272,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.economyAvailable = characterStore.economyEnabled;
     this.forest.initialize();
     this.state.worldDefinition=worldDefinition;
-    this.state.swordTreeCatalog = JSON.stringify({schools:SWORD_SCHOOLS,nodes:SWORD_NODES});
+    this.state.swordTreeCatalog = JSON.stringify({schools:SWORD_SCHOOLS,nodes:SWORD_NODES,pvpDamage:SWORD_PVP_DAMAGE_MULTIPLIER});
     this.state.muayBookCatalog = JSON.stringify({skills:MUAY_SKILLS,lessons:MUAY_LESSONS,base:MUAY_BASE_SKILLS,schools:MUAY_SCHOOLS,combos:MUAY_COMBOS,followups:MUAY_FOLLOWUPS,masteryGuides:MUAY_MASTERY_GUIDES,masteryLabels:MUAY_MASTERY_LABELS,masteryRequirements:MUAY_MASTERY_REQUIREMENTS,pvpDamage:MUAY_PVP_DAMAGE_MULTIPLIER,pvpCombo:MUAY_PVP_COMBO_MULTIPLIER});
     this.state.monster.id = RULES.monsterId;
     this.state.monster.x = RULES.monsterSpawnX;

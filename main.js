@@ -9484,7 +9484,9 @@
       return '<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small></div>'+control+'</article>';
     }).join("");
     const summary=Object.entries(labels).map(([category,label])=>clean(label)+" "+(progress[category] || 0)).join(" · ");
-    container.innerHTML='<p>สาย'+(path==="seer"?"ผู้ร่ายเวท":"ผู้เยียวยา")+' · แต้มว่าง '+points+' · ผลฝึกรวม '+training+'</p>'+(summary?'<p>ผลฝึกแยกหมวด: '+summary+'</p><p class="note">ผีจากหม้อนับครั้งแรกที่โจมตีมอนสเตอร์ต่อการเรียกหนึ่งครั้ง ส่วนผีที่ได้รับคำสั่งนับเมื่อโจมตีสำเร็จ</p>':'')+'<p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · คืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetOccultBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
+    container.innerHTML='<p>สาย'+(path==="seer"?"ผู้ร่ายเวท":"ผู้เยียวยา")+' · แต้มว่าง '+points+' · ผลฝึกรวม '+training+'</p>'+(summary?'<p>ผลฝึกแยกหมวด: '+summary+'</p><p class="note">ผีจากหม้อนับครั้งแรกที่โจมตีมอนสเตอร์ต่อการเรียกหนึ่งครั้ง ส่วนผีที่ได้รับคำสั่งนับเมื่อโจมตีสำเร็จ</p>':'')+
+      (path==="mender" && Number.isFinite(data.menderRicePve)?'<p class="note">ข้าวสารพื้นฐานโจมตีมอนสเตอร์ '+Math.round(data.menderRicePve*100)+'% · PvP ใช้ค่าเดิม</p>':'')+
+      '<p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · คืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetOccultBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
     container.querySelectorAll("[data-occult-learn]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"learn",skillId:button.dataset.occultLearn}));
     container.querySelectorAll("[data-occult-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("occult_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.occultEquip});select.blur();});
     $("resetOccultBook").onclick=()=>{if(window.confirm("คืนแต้มสายนี้? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("occult_book",{action:"reset"});};
@@ -9703,6 +9705,7 @@
       (catalog.schools[swordTreeViewedSchool].note?'<p class="note">'+clean(catalog.schools[swordTreeViewedSchool].note)+'</p>':'')+
       '<p class="note">ฝึกฟัน '+tree.training.strikes+' · รับ '+tree.training.blocks+' · คอมโบครบ '+tree.training.finishes+' · คอมโบปัจจุบัน '+(performance.now()<swordComboUntil?swordCombo:0)+' / 3</p>'+
       '<p class="note">เรียนและเปลี่ยนสำนักที่ลานพักหลังออกจากการต่อสู้ ความรู้ของแต่ละสำนักจะเก็บไว้ · คืนแต้มแล้วเก็บผลฝึกและคูลดาวน์ · เปลี่ยนสำนักอื่นต้อง Lv.10 ฟัน 10 และรับสำเร็จ 1 ครั้ง · พลังวิชาคำนวณก่อนหักป้องกัน</p>'+
+      (Number.isFinite(catalog.pvpDamage)?'<p class="note">PvP ใช้พลังวิชาดาบ '+Math.round(catalog.pvpDamage*100)+'% ก่อนหักป้องกัน · การโจมตีปกติใช้ค่าเดิม</p>':'')+
       '<div class="sword-schools">'+schoolButtons+'</div>'+
       '<p class="note">กำลังดูสำนัก '+clean(catalog.schools[swordTreeViewedSchool].name)+(tree.school===swordTreeViewedSchool?' · ใช้งานอยู่':' · เลือกใช้ที่ลานพัก')+'</p>'+
       '<button type="button" id="chooseSwordSchool" class="secondary" '+(tree.school===swordTreeViewedSchool?'disabled':'')+'>เลือกใช้สำนักนี้</button>'+sections+

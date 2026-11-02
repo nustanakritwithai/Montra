@@ -12,9 +12,13 @@ export const POSSESSION_MODIFIER:StatModifier = Object.freeze({
 });
 
 export const TALISMAN = Object.freeze({ range:2.8, magicMultiplier:1.5, cooldownMs:4_000 });
+/** Solo PvE support for the healing path; never applied to player targets. */
+export const MENDER_PVE_RICE_MULTIPLIER=1.1;
 
 
 /** Trial sword tree. Levels, costs, and combat values are server-owned. */
+/** PvP only: sword skills retain a small setup-based burst advantage. */
+export const SWORD_PVP_DAMAGE_MULTIPLIER=0.8;
 export const SWORD_SCHOOLS = {
   phutthaisawan: {name:"พุทไธสวรรค์", level:1},
   sritrairat: {name:"ศรีไตรรัตน์", level:10},
