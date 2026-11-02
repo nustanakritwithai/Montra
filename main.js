@@ -677,6 +677,7 @@
     motes.color1 = c1; motes.color2 = c2; motes.colorDead = new B.Color4(c2.r, c2.g, c2.b, 0);
   }
   applyAtmosphere("ritual_village");
+  window.MontraAudio?.ambience("ritual_village");
 
   const ground = B.MeshBuilder.CreateGround("walkableGround", { width: 40, height: 40 }, scene);
   ground.position.y = -0.12;
@@ -2770,6 +2771,7 @@
     spellTargetId=null;
     setTargetedSkill(null);
     applyAtmosphere(mapId);
+    window.MontraAudio?.ambience(mapId);
     clearChatHistory(false);
     const village=mapId==="ritual_village";
     for(const mesh of villageMeshes) mesh.setEnabled(village);
@@ -8918,7 +8920,7 @@
     const a = window.MontraAudio?.settings; if (!a) return "";
     const row = (key, label) => `<label class="field sound-row">${label}<input type="range" min="0" max="100" step="5" data-sound="${key}" value="${Math.round(a[key] * 100)}"></label>`;
     return `<section class="sound-settings"><h3>เสียง</h3><label class="field sound-row"><input type="checkbox" data-sound="muted" ${a.muted ? "" : "checked"}> เปิดเสียง</label>` +
-      row("master", "ความดังรวม") + row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
+      row("master", "ความดังรวม") + row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
   }
   function bindSoundSettings(root) {
     for (const input of root.querySelectorAll("[data-sound]")) input.addEventListener("input", () => {

@@ -53,7 +53,8 @@
   // First gesture unlocks audio (required on iOS and Android).
   function unlock() {
     if (!init()) return;
-    if (ctx.state !== "running") ctx.resume().catch(() => {});
+    if (ctx.state !== "running") ctx.resume().then(() => { if (ambienceWanted) setAmbience(ambienceWanted); }).catch(() => {});
+    else if (ambienceWanted && !ambience) setAmbience(ambienceWanted);
     // iOS also wants a buffer started inside the gesture.
     const src = ctx.createBufferSource(); src.buffer = ctx.createBuffer(1, 1, 22050); src.connect(ctx.destination); src.start();
   }
@@ -218,6 +219,102 @@
   };
   const DUR = { ghost: 2.6, gong: 3.5, levelup: 3.5, down: 3.5, summon: 4.5, thunder: 3, ghost_die: 1.6, warp: 1.8, fly: 1.6, respawn: 1.4, toast: .9 };
 
+  // ---- Ambience --------------------------------------------------------
+  // Each map is a mix of continuous beds (looped, filtered noise or drones
+  // with slow modulation) plus one-shots scattered in time and stereo.
+  // Changing map crossfades over 2.5 s; nothing runs until audio is unlocked.
+  const A = {
+    cricket: (d, t) => { const f = rnd(4000, 4800); for (let i = 0; i < 3 + (Math.random() * 3 | 0); i++) tone(d, t + i * .055, { freq: f, decay: .03, gain: .05 }); },
+    frog: (d, t) => { const f = rnd(95, 150), n = 2 + (Math.random() * 3 | 0); for (let i = 0; i < n; i++) vocal(d, t + i * .16, { base: f, f1: 420, f2: 900, q: 5, vib: 45, vibD: .25, len: .12, gain: .22, rise: 1.05, fall: .9, breath: 0 }); },
+    owl: (d, t) => { tone(d, t, { freq: 390, to: 360, glide: .25, attack: .04, decay: .3, gain: .12 }); tone(d, t + .45, { freq: 375, to: 330, glide: .4, attack: .05, decay: .5, gain: .1 }); },
+    nightbird: (d, t) => { const f = rnd(2200, 3000); tone(d, t, { freq: f, to: f * 1.4, glide: .18, decay: .2, gain: .045 }); tone(d, t + .25, { freq: f * 1.3, to: f * .9, glide: .2, decay: .25, gain: .04 }); },
+    howl: (d, t) => vocal(d, t, { base: 420, wave: "triangle", f1: 900, f2: 1800, q: 4, vib: 5, vibD: .02, len: 2.4, gain: .09, rise: 1.4, fall: .7, breath: .2 }),
+    raven: (d, t) => { for (let i = 0; i < 2 + (Math.random() * 2 | 0); i++) vocal(d, t + i * .32, { base: rnd(520, 620), f1: 1200, f2: 2400, q: 3, vib: 60, vibD: .08, len: .22, gain: .12, rise: 1.05, fall: .8, breath: .4 }); },
+    templebell: (d, t) => metal(d, t, rnd(250, 290), [[1, 1, 1], [2.76, .45, .6], [5.4, .2, .35], [8.9, .08, .25]], { gain: .12, decay: 4 }),
+    chime: (d, t) => { const notes = [1568, 1760, 2093, 2349, 2637]; for (let i = 0; i < 3 + (Math.random() * 3 | 0); i++) metal(d, t + i * rnd(.08, .22), notes[Math.random() * notes.length | 0], [[1, 1], [2.7, .3, .5]], { gain: .035, decay: 1.4 }); },
+    gongfar: (d, t) => metal(d, t, rnd(88, 104), [[1, 1, 1], [1.48, .5, .8], [2.02, .4, .6], [2.76, .2, .4]], { gain: .09, decay: 4, attack: .02 }),
+    drumfar: (d, t) => { for (const dt of [0, .5, .75, 1.25]) { tone(d, t + dt, { freq: 70, to: 50, glide: .15, decay: .3, gain: .12 }); noise(d, t + dt, { type: "lowpass", freq: 200, decay: .15, gain: .06 }); } },
+    drip: (d, t) => { const f = rnd(1100, 1700); for (const [dt, g] of [[0, .09], [.23, .035], [.46, .015]]) tone(d, t + dt, { freq: f, to: f * .55, glide: .04, decay: .07, gain: g }); },
+    creak: (d, t) => noise(d, t, { freq: rnd(280, 420), to: rnd(220, 300), glide: .7, q: 28, attack: .1, decay: .7, gain: .09 }),
+    crackle: (d, t) => { for (let i = 0; i < 6; i++) noise(d, t + Math.random() * .4, { freq: rnd(1800, 5000), q: 3, decay: .012, gain: .07 }); },
+    rumble: (d, t) => noise(d, t, { type: "lowpass", freq: 120, attack: .8, decay: 2.5, gain: .14 }),
+    whisper: (d, t) => { for (let i = 0; i < 4; i++) noise(d, t + i * .18 + rnd(0, .1), { freq: rnd(1800, 3200), q: 6, attack: .05, decay: .2, gain: .035 }); },
+    shout: (d, t) => vocal(d, t, { base: rnd(180, 240), f1: 700, f2: 1300, q: 5, vib: 6, vibD: .03, len: .6, gain: .05, rise: 1.2, fall: .85, breath: .3 }),
+  };
+  // Beds: [kind, level]. Events: [sound, min gap s, max gap s].
+  const AMBIENCE = {
+    ritual_village: { beds: [["insects", .5], ["wind", .18]], events: [["cricket", 1, 3], ["gongfar", 25, 45], ["frog", 12, 25], ["chime", 10, 20]] },
+    forbidden_forest: { beds: [["wind", .45], ["insects", .35]], events: [["owl", 10, 22], ["nightbird", 7, 15], ["creak", 14, 26], ["cricket", 2, 5]] },
+    bound_temple: { beds: [["wind", .35], ["insects", .15]], events: [["templebell", 14, 24], ["chime", 6, 11], ["creak", 18, 30], ["whisper", 25, 40]] },
+    drowned_marsh: { beds: [["water", .3], ["insects", .35]], events: [["frog", 2, 5], ["nightbird", 10, 20], ["whisper", 30, 50]] },
+    lotus_basin: { beds: [["water", .35], ["insects", .3]], events: [["frog", 3, 6], ["templebell", 30, 50], ["chime", 18, 30]] },
+    moon_cemetery: { beds: [["wind", .55]], events: [["howl", 18, 32], ["raven", 12, 22], ["chime", 14, 24], ["whisper", 20, 35]] },
+    hex_ridge: { beds: [["wind", .65]], events: [["raven", 10, 20], ["creak", 12, 22]] },
+    naga_cavern: { beds: [["drone", .35], ["water", .12]], events: [["drip", 1.5, 4], ["rumble", 15, 30], ["whisper", 25, 40]] },
+    fallen_city: { beds: [["wind", .45], ["fire", .12]], events: [["crackle", 3, 7], ["raven", 12, 24], ["creak", 15, 25]] },
+    asura_peak: { beds: [["wind", .5], ["fire", .3]], events: [["crackle", 1, 3], ["rumble", 10, 20]] },
+    spirit_rift: { beds: [["drone", .45], ["wind", .2]], events: [["chime", 6, 12], ["whisper", 8, 16], ["rumble", 20, 35]] },
+    mantra_capital: { beds: [["crowd", .3], ["insects", .2]], events: [["drumfar", 20, 35], ["gongfar", 30, 50], ["chime", 8, 16], ["shout", 6, 14]] },
+    moon_pass: { beds: [["wind", .35], ["crowd", .1]], events: [["drumfar", 15, 25], ["creak", 10, 20], ["shout", 12, 25]] },
+    river_watch: { beds: [["water", .3], ["wind", .25], ["crowd", .1]], events: [["drumfar", 15, 25], ["creak", 10, 20], ["frog", 8, 16]] },
+    bamboo_frontier: { beds: [["wind", .4], ["insects", .3]], events: [["creak", 4, 8], ["owl", 12, 24], ["cricket", 2, 5]] },
+    tri_wiang_castle: { beds: [["wind", .4], ["crowd", .15]], events: [["drumfar", 12, 20], ["gongfar", 25, 40], ["shout", 8, 18]] },
+  };
+  function loopNoise(dest, { type, freq, q = 1 }) {
+    const src = ctx.createBufferSource(), f = ctx.createBiquadFilter();
+    src.buffer = noiseBuf; src.loop = true; f.type = type; f.frequency.value = freq; f.Q.value = q;
+    src.connect(f); f.connect(dest); src.start();
+    return { src, f };
+  }
+  function lfo(param, rate, depth) {
+    const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = rate; g.gain.value = depth; o.connect(g); g.connect(param); o.start(); return o;
+  }
+  // Each bed returns its stoppable sources.
+  const BEDS = {
+    wind: d => { const n = loopNoise(d, { type: "lowpass", freq: 520, q: .7 }); return [n.src, lfo(n.f.frequency, .07, 260), lfo(d.gain, .11, d.gain.value * .45)]; },
+    insects: d => { const g = ctx.createGain(); g.gain.value = .5; g.connect(d); const n = loopNoise(g, { type: "bandpass", freq: 4600, q: 9 }); return [n.src, lfo(g.gain, 27, .45), lfo(n.f.frequency, .3, 300)]; },
+    water: d => { const n = loopNoise(d, { type: "bandpass", freq: 850, q: .6 }); const m = loopNoise(d, { type: "highpass", freq: 2600, q: .5 }); return [n.src, m.src, lfo(n.f.frequency, .2, 220), lfo(d.gain, .17, d.gain.value * .35)]; },
+    drone: d => { const out = []; for (const [f, g] of [[55, .5], [82.4, .35], [110.5, .15]]) { const o = ctx.createOscillator(), gg = ctx.createGain(); o.frequency.value = f; gg.gain.value = g; o.connect(gg); gg.connect(d); o.start(); out.push(o, lfo(gg.gain, .05 + f / 2000, g * .4)); } return out; },
+    crowd: d => { const out = []; for (const f of [420, 760, 1150]) { const g = ctx.createGain(); g.gain.value = .3; g.connect(d); const n = loopNoise(g, { type: "bandpass", freq: f, q: 4 }); out.push(n.src, lfo(g.gain, rnd(1.5, 3.5), .25)); } return out; },
+    fire: d => { const n = loopNoise(d, { type: "lowpass", freq: 260, q: .8 }); return [n.src, lfo(d.gain, .4, d.gain.value * .4)]; },
+  };
+  let ambienceWanted = null, ambience = null;
+  function startAmbience(mapId) {
+    const prof = AMBIENCE[mapId] || AMBIENCE.ritual_village, out = ctx.createGain();
+    out.gain.value = .0001; out.connect(buses.ambience);
+    const wet = ctx.createGain(); wet.gain.value = .25; out.connect(wet); wet.connect(reverb);
+    const sources = [];
+    // Per-bed trims, measured so wind, insects, water, drone, crowd and fire sit at similar loudness.
+    const TRIM = { wind: 1.0, insects: 1.2, water: .35, drone: .3, crowd: 2.6, fire: 1.0 };
+    for (const [kind, level] of prof.beds) { const g = ctx.createGain(); g.gain.value = level * TRIM[kind]; g.connect(out); sources.push(...BEDS[kind](g)); }
+    const due = prof.events.map(([, lo, hi]) => ctx.currentTime + rnd(lo * .3, hi * .6));
+    out.gain.exponentialRampToValueAtTime(1, ctx.currentTime + 2.5);
+    return { mapId, out, sources, prof, due };
+  }
+  function stopAmbience(a) {
+    const t = ctx.currentTime; a.out.gain.cancelScheduledValues(t); a.out.gain.setValueAtTime(Math.max(.0001, a.out.gain.value), t); a.out.gain.exponentialRampToValueAtTime(.0001, t + 2.5);
+    setTimeout(() => { for (const s of a.sources) { try { s.stop(); } catch (_) { /* already stopped */ } } try { a.out.disconnect(); } catch (_) { /* gone */ } }, 2800);
+  }
+  function setAmbience(mapId) {
+    ambienceWanted = mapId;
+    if (!ctx || ctx.state !== "running" || ambience?.mapId === mapId) return;
+    if (ambience) stopAmbience(ambience);
+    ambience = startAmbience(mapId);
+  }
+  // Scheduler: one-shots a little ahead of time, each in its own stereo spot.
+  setInterval(() => {
+    if (!ctx || ctx.state !== "running") return;
+    if (ambienceWanted && ambience?.mapId !== ambienceWanted) setAmbience(ambienceWanted);
+    const a = ambience; if (!a || settings.muted || settings.ambience === 0) return;
+    a.prof.events.forEach(([name, lo, hi], i) => {
+      if (ctx.currentTime + .3 < a.due[i]) return;
+      const t = Math.max(ctx.currentTime, a.due[i]); a.due[i] = t + rnd(lo, hi);
+      if (voices.size >= MAX_VOICES - 4) return; // combat keeps priority
+      const v = voice("ambience", { gain: rnd(1.5, 2.5), pan: rnd(-.8, .8), wet: .4, dur: 5 });
+      A[name](v, t);
+    });
+  }, 250);
+
   // ---- Public API -------------------------------------------------------
   function play(name, opts = {}) {
     if (!ctx || ctx.state !== "running" || settings.muted || !R[name]) return false;
@@ -249,5 +346,6 @@
     get ready() { return Boolean(ctx && ctx.state === "running"); },
     get voices() { return voices.size; },
     unlock,
+    ambience: setAmbience,
   };
 })();
