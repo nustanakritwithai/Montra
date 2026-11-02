@@ -385,6 +385,7 @@ jobs:
           MONTRA_ATLAS_STAGE=hunts timeout 300s node world-atlas-integration.mjs
           MONTRA_ATLAS_STAGE=marsh-moon timeout 300s node world-atlas-integration.mjs
           MONTRA_ATLAS_STAGE=ridge-naga timeout 300s node world-atlas-integration.mjs
+          MONTRA_ATLAS_STAGE=endgame timeout 300s node world-atlas-integration.mjs
           timeout 85s node temple-integration.mjs
           timeout 50s node forest-guardian-integration.mjs
           kill "$SERVER_PID"

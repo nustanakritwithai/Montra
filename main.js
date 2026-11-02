@@ -442,12 +442,12 @@
       key: "#f0d6a2", keyI: .58, mist: "#504932", mistAlpha: .13, mote: ["#ffd36a", "#ffe9a8"], skyLevel: 1 },
     naga_cavern: { clear: "#0c191d", fog: "#1a3037", fogNear: 19, fogFar: 118, hemi: .80, carry: .7, sky: "#b3d3d9", ground: "#2d3940",
       key: "#a9dde1", keyI: .50, mist: "#294750", mistAlpha: .14, mote: ["#7ffff0", "#b49cff"], skyLevel: 0 },
-    fallen_city: { clear: "#0c0a08", fog: "#211b14", fogNear: 4, fogFar: 92, hemi: .5, carry: .55, sky: "#c4ab88", ground: "#2a2018",
-      key: "#f0c890", keyI: .4, mist: "#3d3326", mistAlpha: .26, mote: ["#ffb062", "#ffdca0"], skyLevel: .9 },
-    asura_peak: { clear: "#0f0505", fog: "#2a0f0c", fogNear: 2, fogFar: 85, hemi: .46, carry: .45, sky: "#d49a8a", ground: "#3a1610",
-      key: "#ffb08a", keyI: .45, mist: "#4a1d16", mistAlpha: .24, mote: ["#ff6a2a", "#ffb05a"], skyLevel: .7 },
-    spirit_rift: { clear: "#07051a", fog: "#1a1238", fogNear: 6, fogFar: 110, hemi: .55, carry: .5, sky: "#b9a6ff", ground: "#1e1636",
-      key: "#d2c2ff", keyI: .45, mist: "#3a2c66", mistAlpha: .3, mote: ["#d7c2ff", "#8fe9ff"], skyLevel: 1.25 },
+    fallen_city: { clear: "#28201c", fog: "#493c33", fogNear: 23, fogFar: 134, hemi: .83, carry: .55, sky: "#dbc5ad", ground: "#453a31",
+      key: "#f6d4a9", keyI: .55, mist: "#51402c", mistAlpha: .13, mote: ["#ffb062", "#ffdca0"], skyLevel: .9 },
+    asura_peak: { clear: "#291518", fog: "#49282a", fogNear: 22, fogFar: 130, hemi: .82, carry: .5, sky: "#e3baaf", ground: "#47302d",
+      key: "#ffc29b", keyI: .54, mist: "#542d28", mistAlpha: .14, mote: ["#ff6a2a", "#ffb05a"], skyLevel: .7 },
+    spirit_rift: { clear: "#19172c", fog: "#33304a", fogNear: 23, fogFar: 132, hemi: .82, carry: .5, sky: "#d4c8f8", ground: "#39314f",
+      key: "#d5d3ff", keyI: .51, mist: "#44395c", mistAlpha: .14, mote: ["#d7c2ff", "#8fe9ff"], skyLevel: 1.25 },
   };
   let atmosphere = ATMOSPHERES.ritual_village;
   function applyAtmosphere(mapId) {
@@ -1917,6 +1917,12 @@
           for(let i=-3;i<=3;i++)box(x+i*.79,.1,z,.75,.15,5.5,wooden);
           for(const dx of [-2.9,2.9])for(const dz of [-2.7,2.7])cone(x+dx,1,z+dz,2.2,.3,.26,darkWood);
           for(const dx of [-2.8,2.8])cone(x+dx,2.3,z-2.7,.65,.58,.38,decor.willo,8);
+        }else if(rift){
+          for(const side of [-1,1]){
+            cone(x+side*2.8,1.2,z-1.8,2.4,1.1,.45,stone,6);
+            cone(x+side*2.8,2.8,z-1.8,.8,.5,0,decor.crystalV,5);
+          }
+          ring(x,.17,z,4.6,light);
         }else if(map.id==="naga_cavern"){
           for(const side of [-1,1]){
             cone(x+side*2.7,1.1,z-2,2.3,1.2,.68,stone,5);
@@ -1933,7 +1939,30 @@
           }
         }
       }
-      const arena=map.camps.find(c=>c.tier==="strong");
+      const outerCamp=map.camps.find(c=>c.id==="court4");
+      if(outerCamp){
+        const {x,z}=outerCamp;
+        if(map.id==="fallen_city"){
+          for(const dx of [-2.5,2.5])box(x+dx,1.45,z-5,.2,2.9,.2,darkWood);
+          box(x,2.7,z-5,5.3,.14,.18,wooden);
+          for(const dx of [-1.6,0,1.6]){
+            box(x+dx,1.95,z-5,1.1,1.35,.12,talismanPaper);
+            box(x+dx,1.95,z-4.91,.46,.46,.06,clothRed).rotation.z=Math.PI/4;
+          }
+        }else if(map.id==="asura_peak"){
+          box(x,.6,z-5,2.8,1.2,1.6,stone);box(x-.25,1.49,z-5,3.9,.58,1.15,decor.iron);
+          for(const dx of [3,3.8,4.6]){
+            cone(x+dx,1.5,z-5,3,.15,.15,wooden,5);
+            cone(x+dx,3.3,z-5,.8,.48,.02,gold,5);
+          }
+        }else if(rift){
+          for(const side of [-1,1]){
+            const shard=cone(x+side*3,2.1,z-4.5,4.3,.95,.1,decor.crystalV,5);
+            shard.rotation.z=side*.3;
+          }
+        }
+      }
+      const arena=map.camps.find(c=>c.tier==="strong" && trail.some(p=>p.x===c.x && p.z===c.z));
       if(arena){
         const {x,z}=arena;
         if(marsh){
@@ -1956,6 +1985,28 @@
           }
           cone(x,1.1,z-7,2.2,3.8,2.8,stone,8);
           cone(x,2.7,z-7,1.1,.6,1.8,light,6);cone(x,3.8,z-7,1.1,1.8,.2,light,6);
+        }else if(map.id==="fallen_city"){
+          // The bronze drum hangs across the plaza; the hunt approaches between the standards.
+          for(const side of [-1,1]){
+            box(x+side*2.4,2.4,z-6,.44,4.8,.55,darkWood);
+            box(x+side*6,2.1,z-3,.16,4.2,.16,gold);
+            box(x+side*5.35,3.2,z-3,1.35,1.8,.12,clothRed);
+          }
+          box(x,4.7,z-6,5.8,.45,.6,wooden);
+          cone(x,2.5,z-6,3.6,3.3,3.3,templeBronze,16).rotation.z=Math.PI/2;
+          for(const side of [-1,1])cone(x+side*1.84,2.5,z-6,.16,3.35,3.35,gold,16).rotation.z=Math.PI/2;
+        }else if(map.id==="asura_peak"){
+          for(const side of [-1,1]){
+            cone(x+side*3.4,2.3,z-6,4.6,2.8,2,stone,6);
+            cone(x+side*3.4,5.35,z-6,1.6,1.2,.1,decor.ember,5);
+          }
+          box(x,4.4,z-6,6.8,1.4,2.6,deep);
+          box(x,.35,z-6,5.2,.65,2.2,stone);
+          for(const dx of [-1.45,0,1.45])cone(x+dx,1.25,z-6,1.8,1.25,0,decor.ember,5);
+        }else if(rift){
+          for(const side of [-1,1])cone(x+side*3.1,1.15,z-6,2.3,1.6,.85,stone,6);
+          const halo=ring(x,4,z-6,6.2,decor.crystalV);halo.rotation.x=Math.PI/2;
+          cone(x,3.4,z-6,1.4,.05,1.5,light,5);cone(x,4.8,z-6,1.4,1.5,.05,light,5);
         }else if(map.id==="moon_cemetery"){
           for(const side of [-1,1])box(x+side*2.5,2.2,z-6,.5,4.4,.55,stone);
           box(x,4.5,z-6,6.2,.45,.7,darkWood);
@@ -2090,8 +2141,9 @@
         m.emissiveTexture=null;m.disableLighting=true;
         m.emissiveColor=B.Color3.FromHexString(id==="naga_cavern"?"#286579":"#32645f");
       }
-      const tint={spirit_rift:["#160c2c","#0d0624"]}[id];
-      if(tint){m.diffuseColor=B.Color3.FromHexString(tint[0]);m.emissiveColor=B.Color3.FromHexString(tint[1]);}
+      if(id==="spirit_rift"){
+        m.diffuseColor=B.Color3.FromHexString("#33284e");m.emissiveColor=B.Color3.FromHexString("#483568");
+      }
       regionWaters.set(id,m);
     }
     return regionWaters.get(id);
@@ -5091,11 +5143,14 @@
       { kind: "phiphong", fallback: "corpse" }, { kind: "phitakhon", fallback: "corpse", lead: true }],
     naga_cavern: [{ kind: "phiphong", fallback: "corpse" }, { kind: "kongkoi", fallback: "corpse" }, { kind: "takhian", fallback: "longhair" },
       { kind: "waterspirit", fallback: "longhair" }, { kind: "statue", fallback: "corpse", spire: 1, lead: true }],
-    spirit_rift: [{ kind: "unaware", fallback: "corpse" }, { kind: "childghost", fallback: "corpse" }, { kind: "elephant" }],
-    asura_peak: [{ kind: "phitakhon", fallback: "corpse" }, { kind: "phitakhon", fallback: "corpse" }, { kind: "phitakhon", fallback: "corpse", lead: true }],
+    spirit_rift: [{ kind: "unaware", fallback: "corpse" }, { kind: "childghost", fallback: "corpse" }, { kind: "elephant" },
+      { kind: "moonspirit", fallback: "longhair" }, { kind: "dancer", fallback: "longhair", spire: 1, lead: true }],
+    asura_peak: [{ kind: "phitakhon", fallback: "corpse" }, { kind: "phitakhon", fallback: "corpse" }, { kind: "phitakhon", fallback: "corpse", lead: true },
+      { kind: "headless", fallback: "corpse" }, { kind: "pyrekeeper", fallback: "corpse", lead: true }],
     // A court may list variants; spawns cycle through them (atlas_<map>_<court>_<n>).
     fallen_city: [[{ kind: "maenak", fallback: "longhair" }, { kind: "phipop", fallback: "corpse" }, { kind: "maenak", fallback: "longhair" }],
-      { kind: "dancer", fallback: "longhair", spire: 1 }, [{ kind: "headless", fallback: "corpse" }, { kind: "headless", fallback: "corpse", lead: true }]],
+      { kind: "dancer", fallback: "longhair", spire: 1 }, [{ kind: "headless", fallback: "corpse" }, { kind: "headless", fallback: "corpse", lead: true }],
+      { kind: "unaware", fallback: "corpse" }, { kind: "statue", fallback: "corpse", lead: true }],
   };
   function ghostDesign(monster, id) {
     const level = Number(monster.level) || 1;
@@ -7233,13 +7288,14 @@
       if (map?.boss) {
         ctx.setLineDash([4, 3]); ctx.strokeStyle = "rgba(255,140,90,.7)"; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(sx(map.boss.x), sy(map.boss.z), 7 * scale, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-        mapText(ctx, "◆ Boss Lv.100", sx(map.boss.x), sy(map.boss.z) - 7 * scale - 4, 12, "#ffe5a8", 700);
+        mapText(ctx, "◆ Boss Lv.100", sx(map.boss.x), sy(map.boss.z) - 7 * scale - 20, 12, "#ffe5a8", 700);
       }
       for (const portal of activePortals()) {
         if (!portal.targetMapId || portal.targetMapId===activeMapId) continue;
-        const dest = worldDefinitions?.[portal.targetMapId];
+        const dest = worldDefinitions?.[portal.targetMapId], py=sy(portal.z);
+        const below=py<30 || (huntRoute(map) && py>height/2 && py+22<height-4);
         mapText(ctx, "ไป" + (dest?.name || portal.targetMapId), Math.max(60, Math.min(width - 60, sx(portal.x))),
-          sy(portal.z) + (sy(portal.z) < 30 ? 22 : -12), 12, "#c3faed");
+          py + (below ? 22 : -12), 12, "#c3faed");
       }
       // Compass rose.
       ctx.translate(width - 24, 26); ctx.fillStyle = theme.ink; ctx.globalAlpha = .85;

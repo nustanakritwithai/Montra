@@ -144,7 +144,8 @@ try{
   const pairs={
     hunts:[[51,"bamboo_frontier","moon_cemetery",35],[52,"lotus_basin","river_watch",52]],
     "marsh-moon":[[71,"drowned_marsh","moon_cemetery",22],[72,"moon_cemetery","moon_pass",32,[18,25]]],
-    "ridge-naga":[[91,"hex_ridge","naga_cavern",45],[92,"naga_cavern","river_watch",58]]
+    "ridge-naga":[[91,"hex_ridge","naga_cavern",45],[92,"naga_cavern","river_watch",58]],
+    endgame:[[111,"fallen_city","asura_peak",72],[112,"asura_peak","spirit_rift",85],[113,"spirit_rift","asura_peak",98]]
   };
   if(Object.hasOwn(pairs,stage)){
     const trials=pairs[stage].map(args=>verifyHuntTrail(...args));
