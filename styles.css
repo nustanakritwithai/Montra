@@ -677,3 +677,6 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .cp-weapon i { font-style: normal; font-size: 26px; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 10px; background: #1c2a2d; border: 1px solid #c49a5a66; }
 .cp-weapon strong { display: block; color: #ffe2a6; }
 .cp-weapon small { font-size: 11px; color: #bfb39b; }
+.cp-offline { padding: 18px 14px; border-radius: 14px; background: #0f1b1d; border: 1px solid #b18b5055; text-align: center; margin-bottom: 12px; }
+.cp-offline p { margin: 0 0 12px; color: #e0d4c3; }
+.cp-offline[hidden], .cp-tabs[hidden] { display: none; }

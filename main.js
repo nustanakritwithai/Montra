@@ -9157,31 +9157,35 @@
     renderCharacterSheet(p, supported);
   }
   // ---- Character sheet (status / class / account tabs) ----
-  const DEMO_SHEET = { level: 1, experience: 40, xpToNext: 150, hp: 65, maxHp: 100, stamina: 100, maxStamina: 100, atk: 20, def: 30, magicAtk: 15, magicDef: 20, pkKills: 0, pkDeaths: 0 };
   function weaponMeleeBonus(id) { const m = /([+-]\d+)/.exec(WEAPON_META[id]?.bonus || ""); return m ? Number(m[1]) : 0; }
   function renderCharacterSheet(p, supported) {
     if (!$("cpRing")) return;
-    const live = Boolean(supported), c = live ? p : DEMO_SHEET, now = Date.now();
+    const live = Boolean(supported), c = p, now = Date.now();
     const num = v => Math.round(Number(v) || 0);
-    $("cpDemo").hidden = live; $("cpGoOnline").hidden = live;
+    // Offline: the sheet is an online feature; show only a notice and the account tab.
+    $("cpOffline").hidden = live;
+    const tabs = ui.drawerBody.querySelector(".cp-tabs");
+    if (tabs) tabs.hidden = !live;
+    if (!live) { for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = true; return; }
+    if (tabs.dataset.shown !== "1") { tabs.dataset.shown = "1"; for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = pg.dataset.page !== (tabs.querySelector(".on")?.dataset.cp || "status"); }
     // Hero: glyph, level ring (EXP share), role and school.
     const xpMax = Number(c.xpToNext) || 0, xpShare = xpMax ? Math.min(1, (Number(c.experience) || 0) / xpMax) : 1;
     $("cpRing").style.setProperty("--p", (xpShare * 100).toFixed(1));
     $("cpLevel").textContent = String(num(c.level) || 1);
     $("cpGlyph").textContent = PATH_GLYPHS[p?.pathId] || "๛";
     const path = getBuildCatalog()?.paths?.[p?.pathId];
-    $("cpRole").textContent = path ? path.role + " · " + path.name : live ? "ยังไม่เลือกสายอาชีพ" : "หมอผี · ตัวอย่าง";
+    $("cpRole").textContent = path ? path.role + " · " + path.name : "ยังไม่เลือกสายอาชีพ";
     const sword = p?.pathId === "phutthaisawan" ? swordData() : null, muay = p?.pathId === "muay_boran" ? muayBookData() : null;
     const schoolName = sword?.catalog?.schools?.[sword?.tree?.school]?.name || muay?.catalog?.schools?.[muay?.book?.school]?.name || "";
     const ancestry = getBuildCatalog()?.ancestries?.[p?.ancestryId]?.name || "";
     $("cpSchool").textContent = [schoolName && "สำนัก" + schoolName, ancestry && "เผ่า" + ancestry].filter(Boolean).join(" · ");
     // Bars.
     $("cpHpBar").style.width = pctOf(c.hp, c.maxHp); $("cpHp").textContent = num(c.hp) + " / " + num(c.maxHp);
-    $("cpStBar").style.width = pctOf(c.stamina, c.maxStamina); if (!live) $("profileStamina").textContent = num(c.stamina) + " / " + num(c.maxStamina);
+    $("cpStBar").style.width = pctOf(c.stamina, c.maxStamina);
     $("cpXpBar").style.width = (xpShare * 100).toFixed(1) + "%";
     $("profileLevel").textContent = xpMax ? num(c.experience) + " / " + xpMax + " · อีก " + Math.max(0, Math.round((1 - xpShare) * 100)) + "%" : "เลเวลสูงสุด";
     // Stat tiles with bonuses we can account for: weapon melee and possession.
-    const poss = live && p.possessionActive, wpn = live ? p.equippedWeaponId : "", melee = weaponMeleeBonus(wpn);
+    const poss = p.possessionActive, wpn = p.equippedWeaponId || "", melee = weaponMeleeBonus(wpn);
     const values = { hp: c.maxHp, stamina: c.maxStamina, atk: c.atk, def: c.def, magicAtk: c.magicAtk, magicDef: c.magicDef };
     for (const [key, v] of Object.entries(values)) {
       $("statValue-" + key).textContent = String(num(v));
@@ -9193,9 +9197,9 @@
     // Active effects and unspent points.
     const fx = [];
     if (poss) fx.push('<span class="cp-fx good">วิญญาณเข้าสิง · โจมตี ป้องกัน เวท +20%</span>');
-    if (live && Number(p.classSkillReadyAt) > now) fx.push('<span class="cp-fx">สกิลอาชีพพร้อมใน ' + Math.ceil((p.classSkillReadyAt - now) / 1000) + ' วิ</span>');
+    if (Number(p.classSkillReadyAt) > now) fx.push('<span class="cp-fx">สกิลอาชีพพร้อมใน ' + Math.ceil((p.classSkillReadyAt - now) / 1000) + ' วิ</span>');
     $("cpEffects").innerHTML = fx.join("");
-    const pts = live ? num(p.statPoints) : 0;
+    const pts = num(p.statPoints);
     $("cpPoints").hidden = pts <= 0; $("cpPoints").textContent = "มีแต้มสเตตัสเหลือ " + pts + " แต้ม";
     // Hexagon: relative strengths (HP and stamina scaled to the attack/defence range).
     const axes = [["HP", num(c.maxHp) / 10], ["โจมตี", num(c.atk)], ["ป้องกัน", num(c.def)], ["กำลัง", num(c.maxStamina) / 5], ["ป้องกันเวท", num(c.magicDef)], ["เวท", num(c.magicAtk)]];
@@ -9209,7 +9213,7 @@
     $("cpRadar").innerHTML = svg;
     // Class tab.
     const talent = buildTalentGroup(getBuildCatalog(), p?.pathId)?.variants[p?.bladeTalentId || p?.wardTalentId];
-    $("cpClassText").textContent = path ? path.role + " · " + path.name + " · สกิลอาชีพ " + path.skill + (talent ? " · พรสวรรค์ " + talent.name : "") : (live ? "เลือกสายอาชีพได้ที่ลานพักกลางหมู่บ้าน (ด้านล่าง)" : "เข้าเล่นออนไลน์เพื่อเลือกสายอาชีพ");
+    $("cpClassText").textContent = path ? path.role + " · " + path.name + " · สกิลอาชีพ " + path.skill + (talent ? " · พรสวรรค์ " + talent.name : "") : "เลือกสายอาชีพได้ที่ลานพักกลางหมู่บ้าน (ด้านล่าง)";
     const schoolCard = $("cpSchoolCard"), body = $("cpSchoolBody");
     if (muay) {
       const m = muay.book.mastery?.[muay.book.school] || { technique: 0, sequences: 0 }, slots = (muay.book.slots || []).map(id => muay.catalog.skills?.[id]?.name || "ว่าง");
@@ -9221,7 +9225,7 @@
       body.innerHTML = '<div class="status-line"><span>การฝึก</span><strong>ฟัน ' + (tr.strikes || 0) + ' · รับ ' + (tr.blocks || 0) + ' · ปิดเพลง ' + (tr.finishes || 0) + '</strong></div><div class="cp-slots">' + slots.map(n => '<span>' + n + '</span>').join("") + '</div>';
     } else schoolCard.hidden = true;
     const meta = WEAPON_META[wpn];
-    $("cpWeapon").innerHTML = meta ? '<i>' + meta.symbol + '</i><div><strong>' + meta.name + '</strong><small>' + meta.bonus + '</small></div>' : '<small>' + (live ? "ยังไม่ได้ถืออาวุธ" : "มีดหมอ · ตัวอย่าง") + '</small>';
+    $("cpWeapon").innerHTML = meta ? '<i>' + meta.symbol + '</i><div><strong>' + meta.name + '</strong><small>' + meta.bonus + '</small></div>' : '<small>ยังไม่ได้ถืออาวุธ</small>';
     const kills = Object.entries(hudKills).filter(([, n]) => n > 0).map(([id, n]) => '<div class="status-line"><span>ปราบผี · ' + (worldDefinitions?.[id]?.name || (id === "ritual_village" ? "หมู่บ้านอาคม" : id)) + '</span><strong>' + n + '</strong></div>');
     $("cpKills").innerHTML = kills.join("") || '<p class="note">ยังไม่ได้ปราบผีในรอบนี้</p>';
   }
@@ -9233,9 +9237,10 @@
     const tile = (key, label, icon) => '<div class="cp-tile"><i>' + icon + '</i><span>' + label + '</span><strong id="statValue-' + key + '">—</strong><small id="statBonus-' + key + '"></small></div>';
     openDrawer("character","ตัวละคร",
       '<div class="cp-tabs" role="tablist"><button type="button" data-cp="status" class="on">สถานะ</button><button type="button" data-cp="class">อาชีพและวิชา</button><button type="button" data-cp="account">บัญชีและเซฟ</button></div>' +
+      '<div id="cpOffline" class="cp-offline" hidden><p>แผงสถานะตัวละครใช้ได้เมื่อเล่นออนไลน์</p><button class="primary" id="cpGoOnline" type="button">เข้าเล่นออนไลน์</button></div>' +
       '<section class="cp-page" data-page="status">' +
         '<div class="cp-hero"><div class="cp-ring" id="cpRing"><div class="cp-glyph" id="cpGlyph">๛</div><b id="cpLevel">1</b></div>' +
-        '<div class="cp-hero-info"><strong id="profileName"></strong><span id="cpRole"></span><span id="cpSchool"></span><em id="cpDemo" hidden>ตัวอย่าง · โหมดทดลอง</em></div></div>' +
+        '<div class="cp-hero-info"><strong id="profileName"></strong><span id="cpRole"></span><span id="cpSchool"></span></div></div>' +
         '<div class="cp-bars">' +
           '<div class="cp-bar hp"><span>พลังชีวิต</span><div><i id="cpHpBar"></i></div><strong id="cpHp"></strong></div>' +
           '<div class="cp-bar st"><span>กำลัง</span><div><i id="cpStBar"></i></div><strong id="profileStamina">—</strong></div>' +
@@ -9247,7 +9252,6 @@
           tile("hp","HP สูงสุด","❤") + tile("stamina","กำลังสูงสุด","✦") + tile("atk","โจมตีกาย","⚔") + tile("def","ป้องกันกาย","⛨") + tile("magicAtk","โจมตีเวท","☸") + tile("magicDef","ป้องกันเวท","◈") +
         '</div></div>' +
         '<h3 class="cp-h">จุดเด่นของตัวละคร</h3><svg id="cpRadar" class="cp-radar" viewBox="0 0 220 200" role="img" aria-label="กราฟจุดเด่นสเตตัส"></svg>' +
-        '<button class="primary" id="cpGoOnline" type="button" hidden>เข้าเล่นออนไลน์เพื่อเก็บค่าจริง</button>' +
       '</section>' +
       '<section class="cp-page" data-page="class" hidden>' +
         '<div class="cp-card" id="cpClassCard"><h4>สายอาชีพ</h4><p id="cpClassText" class="note"></p></div>' +
