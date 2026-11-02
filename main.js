@@ -2037,7 +2037,7 @@
     for(const portal of (map.portals||[]).slice(portals[activeMapId]?1:0))makePortal(activeMapId,expansionRoot,portal);
   }
   function makeForestMonster(monster,id) {
-    if(monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||ATLAS_GHOSTS[monster.mapId])return makeGhostMonster(monster,id);
+    if(monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||(ATLAS_GHOSTS[monster.mapId]&&monster.tier!=="boss"))return makeGhostMonster(monster,id);
     const mesh=enemy.clone("monster-"+id);
     // The legacy tap sphere is hidden in the village; atlas monsters still show it.
     mesh.visibility=1;for(const child of mesh.getChildMeshes())child.setEnabled(true);
@@ -3216,6 +3216,42 @@
   const swayStrand = (joints, t, phase, amp, axis = "x") => joints.forEach((j, i) => { j.rotation[axis] = Math.sin(t * 2.2 + phase + i * .7) * amp * (1 + i * .25); });
 
   const GHOST_KINDS = {
+    // ผีช้าง: a spectral war elephant — translucent hide, tattered caparison,
+    // long tusks and a swaying trunk; it rears and slams down with the trunk.
+    elephant(root, o) {
+      const body = new B.TransformNode("elephant", scene); body.parent = root;
+      const hideMat = gm.elephantHide, part = (m, p = body) => { m.parent = p; m.isPickable = false; if (m instanceof B.Mesh && !m.material) m.material = hideMat; return m; };
+      const torso = part(lathe("elephant body", [[0, -.85], [.55, -.8], [.85, -.4], [.95, 0], [.88, .4], [.6, .78], [0, .85]], hideMat, 18)); torso.rotation.x = Math.PI / 2; torso.scaling.set(1, 1.45, .95); torso.position.y = 2.05;
+      const head = new B.TransformNode("elephant head", scene); head.parent = body; head.position.set(0, 2.45, -1.25);
+      const skull = part(B.MeshBuilder.CreateSphere("elephant head", { diameter: 1.15, segments: 10 }, scene), head); skull.material = hideMat; skull.scaling.set(1, 1.05, .95);
+      for (const s of [-1, 1]) {
+        const ear = part(B.MeshBuilder.CreateDisc("elephant ear", { radius: .55, tessellation: 18 }, scene), head); ear.material = hideMat; ear.position.set(s * .55, .05, .2); ear.rotation.y = s * 1.2; ear.scaling.set(.8, 1.15, 1);
+        const eye = part(B.MeshBuilder.CreateSphere("elephant eye", { diameter: .1, segments: 5 }, scene), head); eye.material = gm.eyeRed; eye.position.set(s * .32, .12, -.42);
+        part(tube("tusk", [[s * .22, -.3, -.4], [s * .3, -.6, -.75], [s * .25, -.55, -1.15], [s * .15, -.3, -1.4]], .07, .02, gm.pale, 8), head);
+      }
+      const trunk = []; let tp = head;
+      for (let i = 0; i < 6; i++) { const seg = new B.TransformNode("trunk seg", scene); seg.parent = tp; seg.position.set(0, i ? -.24 : -.35, i ? 0 : -.45);
+        part(B.MeshBuilder.CreateCylinder("trunk", { height: .27, diameterTop: .28 - i * .035, diameterBottom: .25 - i * .035, tessellation: 10 }, scene), seg).position.y = -.12; part(seg, tp).rotation.x = .12; trunk.push(seg); tp = seg; }
+      const legs = [[-.55, -.7], [.55, -.7], [-.55, .75], [.55, .75]].map(([x, z]) => { const hip = new B.TransformNode("leg", scene); hip.parent = body; hip.position.set(x, 1.6, z);
+        const leg = part(B.MeshBuilder.CreateCylinder("elephant leg", { height: 1.65, diameterTop: .45, diameterBottom: .4, tessellation: 10 }, scene), hip); leg.material = hideMat; leg.position.y = -.82;
+        const foot = part(B.MeshBuilder.CreateCylinder("elephant foot", { height: .14, diameter: .48, tessellation: 10 }, scene), hip); foot.material = hideMat; foot.position.y = -1.6; return hip; });
+      // Tattered caparison and a broken howdah.
+      const cloak = part(lathe("caparison", [[0, .95], [.75, .9], [1.05, .55], [1.1, .1], [1.05, -.1]], cloth.danceRed, 18)); cloak.rotation.x = Math.PI / 2; cloak.scaling.set(1, 1.25, 1); cloak.position.y = 2.15; cloak.scaling.z = .95;
+      const howdah = part(B.MeshBuilder.CreateBox("howdah", { width: .9, height: .4, depth: .9 }, scene)); howdah.material = gm.beam; howdah.position.y = 3.05;
+      for (const [x, z] of [[-.4, -.4], [.4, -.4], [-.4, .4], [.4, .4]]) part(B.MeshBuilder.CreateCylinder("howdah post", { height: .7, diameter: .05, tessellation: 5 }, scene)).position.set(x, 3.5, z);
+      const tail = new B.TransformNode("tail", scene); tail.parent = body; tail.position.set(0, 2.3, 1.3); part(tube("tail", [[0, 0, 0], [0, -.4, .1], [0, -.8, .05]], .04, .015, hideMat, 5), tail);
+      const mist = part(B.MeshBuilder.CreateGround("elephant mist", { width: 4, height: 5 }, scene), root); mist.material = gm.elephantMist; mist.position.y = .05;
+      return k => {
+        const { t, move, hurt, walk } = k, T = ghostTimeline(k.g, k.now), gait = Math.min(1, move + T.chase * .3);
+        body.position.y = Math.abs(Math.sin(walk * .5)) * .06 * gait + T.wind * .1 - ease(T.die) * .9 - (1 - ease(T.rise)) * 3;
+        body.rotation.x = -T.wind * .35 + T.hit * .15 + Math.max(hurt, T.hurt) * -.1; body.rotation.z = ease(T.die) * .9;
+        legs.forEach((l, i) => { l.rotation.x = Math.sin(walk * .5 + (i === 0 || i === 3 ? 0 : Math.PI)) * .3 * gait - (i < 2 ? T.wind * .6 : 0); });
+        trunk.forEach((s, i) => { s.rotation.x = .12 + Math.sin(t * 1.3 - i * .5) * .12 - T.wind * .35 + T.hit * .45; s.rotation.z = Math.sin(t * .9 - i * .4) * .1; });
+        head.rotation.x = -T.wind * .3 + T.hit * .25; head.rotation.y = Math.sin(t * .5) * .1;
+        tail.rotation.z = Math.sin(t * 2) * .3; mist.visibility = .6 + Math.sin(t) * .2;
+      };
+    },
+
     // ผีตายซาก: gaunt hunched corpse, head hanging, long arms, a black
     // shroud skirt dissolving into smoke, bare feet dragging.
     corpse(root, o) {
@@ -3571,7 +3607,16 @@
   for (const m of [gm.flameMat, gm.eyeMoon, gm.moonGlow]) glowMats.add(m);
   Object.assign(gm, { gutDark: mat("entrails", "#5a1e22", "#1a0406"), gutGlow: mat("glowing entrails", "#c8504a", "#7a1410"), heartGlow: mat("krasue heart", "#ff6a5a", "#e02818"),
     basket: mat("winnowing basket", "#9a804e", "#100c05"), leaf: mat("nymph leaf", "#4f8a3e", "#0a1a06"), vine: mat("lash vine", "#3a5a2a", "#061004"), tongue: mat("pop tongue", "#6a1218", "#2a0306"), whiteHair: mat("white wild hair", "#b8b4aa", "#121110"),
-    steelBlade: mat("dap steel", "#9aa2a8", "#101418") });
+    steelBlade: mat("dap steel", "#9aa2a8", "#101418"), fur: mat("matted fur", "#2e2820", "#050403"), scalp: mat("shaved scalp", "#8a8e92", "#0c0e10"),
+    eyeVoid: mat("void eyes", "#050505", "#000000"), phongGlow: mat("phong nose light", "#c8ff9a", "#7aff3a") });
+  gm.eyeVoid.specularColor = B.Color3.FromHexString("#606060");
+  glowMats.add(gm.phongGlow);
+  gm.phongBeam = additiveMat("phong beam", paintTexture("phong beam", 64, (c, s) => { const g = c.createLinearGradient(0, 0, s, 0); g.addColorStop(0, "rgba(150,255,100,0)"); g.addColorStop(.5, "rgba(170,255,120,.6)"); g.addColorStop(1, "rgba(150,255,100,0)"); c.fillStyle = g; c.fillRect(0, 0, s, s); }));
+  gm.phongPool = additiveMat("phong pool", radialTexture("phong pool", 128, [[0, "rgba(140,255,90,.35)"], [1, "rgba(140,255,90,0)"]]));
+  gm.elephantHide = new B.StandardMaterial("ghost elephant hide", scene); gm.elephantHide.diffuseColor = B.Color3.FromHexString("#7f8fa8"); gm.elephantHide.emissiveColor = B.Color3.FromHexString("#2a3a58"); gm.elephantHide.alpha = .72; gm.elephantHide.specularColor = B.Color3.Black();
+  gm.elephantHide.diffuseTexture = paintTexture("elephant wrinkles", 128, (c, s) => { c.fillStyle = "#d8dde6"; c.fillRect(0, 0, s, s); c.strokeStyle = "rgba(40,50,70,.5)"; c.lineWidth = 1.2;
+    for (let i = 0; i < 40; i++) { const y = R(i, 961) * s; c.beginPath(); c.moveTo(0, y); for (let x = 0; x <= s; x += 16) c.lineTo(x, y + Math.sin(x * .1 + i) * 4); c.stroke(); } }, 3);
+  gm.elephantMist = additiveMat("elephant mist", radialTexture("elephant mist", 128, [[0, "rgba(140,170,230,.35)"], [1, "rgba(140,170,230,0)"]]));
   gm.steelBlade.specularColor = B.Color3.FromHexString("#e0e8f0"); gm.steelBlade.specularPower = 64;
   // Phi Ta Khon mask paint: bold festival bands, dots and flame curls.
   gm.maskPaint = mat("ta khon mask", "#ffffff", "#140a06");
@@ -3589,7 +3634,7 @@
     rags: mat("grave rags", "#6c665c", "#100e0c"), shroud: mat("grave shroud", "#1b1f29", "#06080e"), white: mat("ghost white", "#d9d6cc", "#26262a"),
     saffron: mat("scribe saffron", "#8a4f22", "#140a03"), weed: mat("weed rags", "#3e4a36", "#060a05"), burial: mat("burial cloth", "#e2dccb", "#1a1814"),
     ash: mat("ash cloth", "#2a2420", "#060403"), sabai: mat("sabai cloth", "#5a2a3a", "#0e0408"), phaSin: mat("pha sin", "#3a2a4a", "#08050c"),
-    danceGold: mat("dancer gold brocade", "#b88a3a", "#1e1404"), leafSilk: mat("leaf silk", "#5a8a4a", "#0a1806"), patchwork: mat("patchwork robe", "#ffffff", "#0a0806"), soldier: mat("siamese soldier jacket", "#8a2420", "#140404"), danceRed: mat("dancer red brocade", "#8a1e22", "#140304"), tealSilk: mat("teal silk", "#3f7f78", "#0a1e1c"), moonSilk: mat("moon silk", "#b8c8e8", "#1a2440"), blue: mat("dead blue shirt", "#7d8ea6", "#0e1218"), lacquer: mat("statue lacquer cloth", "#7a2622", "#120404"),
+    danceGold: mat("dancer gold brocade", "#b88a3a", "#1e1404"), schoolShirt: mat("school shirt", "#e8e6e0", "#18181a"), schoolBlack: mat("school black", "#1c1c22", "#040406"), leafSilk: mat("leaf silk", "#5a8a4a", "#0a1806"), patchwork: mat("patchwork robe", "#ffffff", "#0a0806"), soldier: mat("siamese soldier jacket", "#8a2420", "#140404"), danceRed: mat("dancer red brocade", "#8a1e22", "#140304"), tealSilk: mat("teal silk", "#3f7f78", "#0a1e1c"), moonSilk: mat("moon silk", "#b8c8e8", "#1a2440"), blue: mat("dead blue shirt", "#7d8ea6", "#0e1218"), lacquer: mat("statue lacquer cloth", "#7a2622", "#120404"),
   };
   for (const m of Object.values(cloth)) m.backFaceCulling = false;
   // ---- Procedural surface detail for the ghosts ----
@@ -3664,6 +3709,8 @@
   applySurface(cloth.danceRed, brocade("dancer red", "#8a1e22", "rgba(230,190,90,.75)"), "#ffffff");
   applySurface(cloth.soldier, brocade("soldier jacket", "#8a2420", "rgba(230,180,80,.7)"), "#ffffff");
   applySurface(cloth.leafSilk, clothSurface("leaf silk", "#5a8a4a", "rgba(20,40,10,.4)", "rgba(220,200,90,.2)", 0), "#ffffff");
+  applySurface(cloth.schoolShirt, clothSurface("school shirt", "#eceae4", "rgba(90,90,100,.35)", "rgba(70,20,20,.35)", 0), "#ffffff");
+  applySurface(cloth.schoolBlack, clothSurface("school black", "#24242a", "rgba(0,0,0,.5)", "rgba(60,60,70,.3)", 1), "#ffffff");
   // Patchwork: squares of festival cloth stitched together.
   applySurface(cloth.patchwork, surface("patchwork", 256, (c, s) => {
     const cols = ["#c8302a", "#e8b030", "#2a6ab0", "#e86aa0", "#1e8a4a", "#8a3ac0", "#f0e8d8"];
@@ -4530,6 +4577,156 @@
         bells.forEach((bl, i) => { bl.rotation.z = Math.sin(beat * 2 + i) * .4; });
       };
     },
+    // ---- ถ้ำนาค (naga cavern) ----
+    // ผีโพง: a stooped, starved man whose nostrils blaze with a green light;
+    // he sniffs for prey and lunges after the scent.
+    phiphong(nodes, body, holder, o) {
+      body.material = ghostSkin(body, "phong", "#5e6250", "#080a05");
+      nodes.Spine.scaling.set(.82, 1, .8);
+      skinnedCut(body, "phong loincloth", (x, y) => y > .74 && y < 1.0, () => .02, cloth.ash);
+      ghostEyes(nodes, gm.eyeGreen, .026);
+      const nose = B.MeshBuilder.CreateSphere("phong nose light", { diameter: .05, segments: 6 }, scene); nose.material = gm.phongGlow; nose.position.set(0, 1.6, .115); nose.isPickable = false; onBone(nodes, "Head", nose);
+      const beam = B.MeshBuilder.CreateCylinder("phong beam", { height: 1.2, diameterTop: .05, diameterBottom: .5, tessellation: 12 }, scene); beam.material = gm.phongBeam; beam.isPickable = false;
+      beam.position.set(0, 1.6, .7); beam.rotation.x = Math.PI / 2; onBone(nodes, "Head", beam);
+      const glow = B.MeshBuilder.CreateGround("phong pool", { width: 3, height: 3 }, scene); glow.material = gm.phongPool; glow.isPickable = false; glow.position.y = .04;
+      const hair = ghostHair(nodes, [-.6, 0, .6].map(a => [[Math.sin(a) * .06, 1.73, -.02], [Math.sin(a) * .08, 1.66, -.1], [Math.sin(a) * .09, 1.5, -.13]]), hairMat, [.9, .6, .95], .015, .005);
+      const base = { Hips: [.25, 0, 0], Spine: [.45, 0, 0], Spine1: [.25, 0, 0], Neck: [-.35, 0, 0], Head: [-.25, 0, 0], LeftArm: [-.8, .2, -1.25], RightArm: [-.8, -.2, 1.25], LeftForeArm: [0, -.8, 0], RightForeArm: [0, .8, 0],
+        LeftUpLeg: [-.6, 0, .15], RightUpLeg: [-.5, 0, -.15], LeftLeg: [.9, 0, 0], RightLeg: [.8, 0, 0], LeftFoot: [-.3, 0, 0], RightFoot: [-.3, 0, 0] };
+      const sniff = { Neck: [-.7, 0, 0], Head: [-.4, 0, 0], Spine: [.2, 0, 0] };
+      const pounce = { Hips: [.6, 0, 0], Spine: [.3, 0, 0], LeftArm: [-1.9, .3, -1.1], RightArm: [-1.9, -.3, 1.1], LeftForeArm: [0, -.2, 0], RightForeArm: [0, .2, 0], LeftUpLeg: [.1, 0, .1], RightUpLeg: [.2, 0, -.1], LeftLeg: [.3, 0, 0], RightLeg: [.3, 0, 0] };
+      const curl = { Hips: [1.3, 0, .5], Spine: [.6, 0, 0], LeftUpLeg: [-1.4, 0, .2], RightUpLeg: [-1.2, 0, -.2], LeftLeg: [1.8, 0, 0], RightLeg: [1.8, 0, 0] };
+      return k => {
+        const { t, move, hurt, walk } = k, T = ghostTimeline(k.g, k.now), gait = Math.min(1, move + T.chase * .5);
+        holder.position.y = -.18 + Math.abs(Math.sin(walk)) * .04 * gait + T.hit * .3 - ease(T.die) * .35 - (1 - ease(T.rise)) * 1.5; holder.position.z = T.hit * .5;
+        const p = clonePose(base);
+        p.LeftUpLeg[0] -= Math.sin(walk) * .4 * gait; p.RightUpLeg[0] += Math.sin(walk) * .4 * gait;
+        p.Head[1] = Math.sin(t * 1.7) * .5 * (1 - T.chase * .6); p.Neck[0] += Math.sin(t * 6) * .05;
+        blendPose(p, sniff, T.wind); blendPose(p, pounce, T.hit); blendPose(p, { Spine: [-.2, .4, 0] }, Math.max(hurt, T.hurt)); blendPose(p, curl, ease(T.die));
+        poseBones(nodes, p);
+        const flick = .7 + Math.sin(t * 17) * .15 + Math.sin(t * 5.3) * .15;
+        nose.scaling.setAll(flick + T.wind * .6); beam.visibility = (.35 + T.chase * .3 + T.wind * .3) * (1 - ease(T.die)); beam.scaling.y = 1 + T.chase * .5;
+        glow.visibility = flick * (1 - ease(T.die));
+        hair.forEach((h, i) => { h.rotation.z = Math.sin(t * 1.9 + i) * .1; });
+      };
+    },
+    // ผีกองกอย: a one-legged forest imp, matted with hair, hopping on its
+    // single backward foot and leaping onto prey with a shrill cry.
+    kongkoi(nodes, body, holder, o) {
+      body.material = ghostSkin(body, "kong koi", "#3f3a30", "#060504");
+      nodes.LeftUpLeg.scaling.setAll(.001); nodes.Spine.scaling.set(1.05, .9, 1.05); nodes.Head.scaling.setAll(1.2);
+      skinnedCut(body, "kong koi fur", (x, y) => y > .5 && y < 1.55 && Math.abs(x) < .4, (x, y) => .03 + .02 * Math.sin(y * 40 + x * 30), gm.fur);
+      ghostEyes(nodes, gm.eyeAmber, .04, 1.632, .1);
+      const mane = ghostHair(nodes, [-1.5, -1.1, -.7, -.3, .3, .7, 1.1, 1.5].map(a => { const x = Math.sin(a) * .1, z = -Math.cos(a) * .06;
+        return [[x, 1.72, z], [x * 1.6, 1.65, z - .06], [x * 1.9, 1.5, z - .08], [x * 1.8, 1.32, z - .05]]; }), gm.fur, [1.2, 1, 1.2], .03, .008);
+      const mouth = B.MeshBuilder.CreateSphere("koi mouth", { diameter: .06, segments: 5 }, scene); mouth.material = gm.mouth; mouth.position.set(0, 1.56, .11); mouth.scaling.set(1.2, .9, .5); onBone(nodes, "Head", mouth);
+      const base = { Hips: [.2, 0, -.08], Spine: [.35, 0, .08], Neck: [-.3, 0, 0], Head: [-.15, 0, 0], LeftArm: [-.6, .3, -1.2], RightArm: [-.6, -.3, 1.2], LeftForeArm: [0, -1.1, 0], RightForeArm: [0, 1.1, 0], LeftHand: [.6, 0, 0], RightHand: [.6, 0, 0],
+        RightUpLeg: [-.5, 0, .05], RightLeg: [.9, 0, 0], RightFoot: [-.4, Math.PI, 0] };
+      const crouch = { Spine: [.6, 0, 0], RightUpLeg: [-1.1, 0, .05], RightLeg: [1.9, 0, 0], LeftArm: [-.2, 0, -1.3], RightArm: [-.2, 0, 1.3] };
+      const spring = { Hips: [.5, 0, 0], Spine: [.1, 0, 0], RightUpLeg: [.2, 0, .05], RightLeg: [.1, 0, 0], LeftArm: [-2.4, .3, -1.0], RightArm: [-2.4, -.3, 1.0], LeftForeArm: [0, -.2, 0], RightForeArm: [0, .2, 0] };
+      const sprawl = { Hips: [1.45, 0, .4], Spine: [.1, 0, 0], RightUpLeg: [-.3, 0, 0], RightLeg: [.4, 0, 0], LeftArm: [-2.6, 0, -.6], RightArm: [-.5, 0, 1.4] };
+      return k => {
+        const { t, move, hurt } = k, T = ghostTimeline(k.g, k.now);
+        // Hops: a bouncing beat that quickens while moving or hunting.
+        const hop = Math.max(0, Math.sin(t * (5 + (move + T.chase) * 4)));
+        holder.position.y = -.12 + hop * (.12 + move * .25) - T.wind * .15 + T.hit * .7 - ease(T.die) * .5 - (1 - ease(T.rise)) * 1.4; holder.position.z = T.hit * .7;
+        const p = clonePose(base);
+        p.RightLeg[0] += (1 - hop) * .5; p.RightUpLeg[0] -= (1 - hop) * .3; p.Head[2] = Math.sin(t * 4.1) * .2;
+        blendPose(p, crouch, T.wind); blendPose(p, spring, T.hit); blendPose(p, { Spine: [-.2, .4, 0] }, Math.max(hurt, T.hurt)); blendPose(p, sprawl, ease(T.die));
+        poseBones(nodes, p);
+        mane.forEach((h, i) => { h.rotation.x = Math.sin(t * 3 + i) * .12 + hop * .2; });
+      };
+    },
+    // ผีนางตะเคียน: the Takhian-tree spirit — a woman in red-and-gold sabai
+    // with wild hair, drifting beside her garlanded Takhian log; nails rake.
+    takhian(nodes, body, holder, o, root) {
+      body.material = ghostSkin(body, "takhian", "#b0a898", "#140f0c");
+      nodes.Spine.scaling.set(.84, 1, .84);
+      skinnedCut(body, "takhian sabai", (x, y) => y > 1.1 && y < 1.42 && Math.abs(x) < .21, () => .016, cloth.danceRed);
+      const skirt = lathe("takhian sin", [[.17, 1.0], [.2, .8], [.23, .5], [.2, .25], [.12, .05]], cloth.phaSin, 16); onBone(nodes, "Hips", skirt);
+      for (const n of ["LeftUpLeg", "RightUpLeg"]) nodes[n].scaling.setAll(.001);
+      ghostEyes(nodes, gm.eyeRed, .03);
+      const hair = ghostHair(nodes, [-1.5, -1.1, -.7, -.3, .3, .7, 1.1, 1.5].map(a => { const x = Math.sin(a) * .09, z = -Math.cos(a) * .05;
+        return [[x, 1.72, z], [x * 1.7, 1.6, z - .1], [x * 2.3, 1.4, z - .16], [x * 2.6, 1.15, z - .18], [x * 2.6, .9, z - .14]]; }), hairMat, [1.1, .9, 1.1], .03, .008);
+      for (const side of ["Left", "Right"]) { const sx = side === "Left" ? 1 : -1;
+        for (let f = 0; f < 4; f++) { const nail = B.MeshBuilder.CreateCylinder("talon", { height: .12, diameterTop: 0, diameterBottom: .012, tessellation: 4 }, scene);
+          nail.material = gm.mouth; nail.position.set(sx * .75, 1.35, -.03 + f * .02); nail.rotation.z = sx * -Math.PI / 2; nail.isPickable = false; onBone(nodes, side + "Hand", nail); } }
+      // The Takhian log, bound with pha phrae and a jasmine garland.
+      const log = new B.TransformNode("takhian log", scene); log.parent = root; log.position.set(.9, .3, .4); log.rotation.set(0, .5, Math.PI / 2 - .15);
+      const trunk = lathe("takhian trunk", [[0, -1.2], [.22, -1.15], [.26, -.6], [.24, 0], [.27, .6], [.22, 1.15], [0, 1.2]], gm.bark, 12); trunk.parent = log;
+      for (let i = 0; i < 3; i++) { const band = B.MeshBuilder.CreateTorus("log pha phrae", { diameter: .56, thickness: .05, tessellation: 16 }, scene); band.material = gm.sash3[i]; band.parent = log; band.position.y = -.2 + i * .1; band.isPickable = false; }
+      for (let i = 0; i < 10; i++) { const a = i / 10 * 6.28, bud = B.MeshBuilder.CreateSphere("jasmine", { diameter: .05, segments: 4 }, scene); bud.material = cloth.burial; bud.parent = log; bud.position.set(Math.cos(a) * .3, .3, Math.sin(a) * .3); bud.isPickable = false; }
+      const base = { Hips: [.25, 0, 0], Spine: [-.05, .15, 0], Head: [.1, -.15, .1], LeftArm: [-.5, .3, -1.0], RightArm: [-.9, -.2, 1.1], LeftForeArm: [0, -.8, 0], RightForeArm: [0, .4, 0], LeftHand: [-.5, 0, 0], RightHand: [-.5, 0, 0] };
+      const rise = { Spine: [-.3, 0, 0], Neck: [-.3, 0, 0], LeftArm: [-2.6, .2, -1.0], RightArm: [-2.6, -.2, 1.0], LeftForeArm: [0, -.6, 0], RightForeArm: [0, .6, 0] };
+      const rake = { Hips: [.7, 0, 0], Spine: [.35, 0, 0], LeftArm: [-1.4, .3, -1.2], RightArm: [-1.4, -.3, 1.2], LeftForeArm: [0, 0, 0], RightForeArm: [0, 0, 0], LeftHand: [.6, 0, 0], RightHand: [.6, 0, 0] };
+      const fade = { Hips: [0, 0, 0], Spine: [-.5, 0, 0], Neck: [-.5, 0, 0], LeftArm: [-.5, 0, -.4], RightArm: [-.5, 0, .4] };
+      return k => {
+        const { t, hurt } = k, T = ghostTimeline(k.g, k.now);
+        holder.position.y = .55 + Math.sin(t * 1.2) * .12 + T.wind * .25 - T.hit * .2 + ease(T.die) * .8 - (1 - ease(T.rise)) * 1.2;
+        log.position.y = .3 + Math.sin(t * .9 + 1) * .05; log.rotation.y = .5 + Math.sin(t * .4) * .1;
+        const p = clonePose(base);
+        p.Spine[2] = Math.sin(t * .8) * .08; p.LeftArm[2] += Math.sin(t * 1.2) * .1;
+        blendPose(p, rise, T.wind); blendPose(p, rake, T.hit); blendPose(p, { Spine: [-.3, .3, 0] }, Math.max(hurt, T.hurt)); blendPose(p, fade, ease(T.die));
+        poseBones(nodes, p);
+        hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 1.3 + i * .8) * .15 - T.wind * .3; h.rotation.y = Math.sin(t + i) * .12; });
+      };
+    },
+    // ---- รอยแยกแดนวิญญาณ (spirit rift) ----
+    // ผีตายโหงที่ตายไม่รู้ตัว: a student killed suddenly who still walks to
+    // school, unaware — until it notices you and its head wrenches around.
+    unaware(nodes, body, holder, o) {
+      body.material = ghostSkin(body, "unaware", "#a9a6a0", "#121212");
+      skinnedCut(body, "school shirt", (x, y) => y > .92 && y < 1.5 && Math.abs(x) < .38, () => .016, cloth.schoolShirt);
+      skinnedCut(body, "school trousers", (x, y) => y > .1 && y < 1.0, () => .02, cloth.schoolBlack);
+      const tie = B.MeshBuilder.CreateBox("school tie", { width: .05, height: .3, depth: .015 }, scene); tie.material = cloth.schoolBlack; tie.position.set(0, 1.3, .13); tie.isPickable = false; onBone(nodes, "Chest", tie);
+      const badge = B.MeshBuilder.CreateBox("school badge", { width: .05, height: .03, depth: .01 }, scene); badge.material = gold; badge.position.set(.09, 1.36, .125); badge.isPickable = false; onBone(nodes, "Chest", badge);
+      ghostEyes(nodes, gm.eyeVoid, .034);
+      const hair = ghostHair(nodes, [-.8, -.4, 0, .4, .8].map(a => { const x = Math.sin(a) * .08; return [[x, 1.75, .02], [x * 1.2, 1.7, .07], [x * 1.25, 1.62, .1]]; }), hairMat, [1, .75, 1.05], .025, .01);
+      const wound = B.MeshBuilder.CreateSphere("death wound", { diameter: .08, segments: 5 }, scene); wound.material = gm.mouth; wound.position.set(-.04, 1.69, .07); wound.scaling.set(1, .6, .4); wound.isPickable = false; onBone(nodes, "Head", wound);
+      const base = { Spine: [.03, 0, 0], Head: [.05, 0, 0], LeftArm: [.05, 0, -1.3], RightArm: [.05, 0, 1.3], LeftForeArm: [0, -.25, 0], RightForeArm: [0, .25, 0] };
+      const notice = { Neck: [0, 1.6, 0], Head: [-.1, 1.4, .3], Spine: [0, .2, 0], LeftArm: [-.2, 0, -1.1], RightArm: [-.2, 0, 1.1] };
+      const grab = { Neck: [-.3, 3.1, 0], Head: [-.4, 0, .2], LeftArm: [-1.5, .2, -1.2], RightArm: [-1.5, -.2, 1.2], LeftForeArm: [0, 0, 0], RightForeArm: [0, 0, 0], Spine: [.3, 0, 0] };
+      const collapse = { Hips: [-1.45, 0, .2], Spine: [0, 0, 0], Neck: [0, 2.6, 0], LeftArm: [-.3, 0, -.6], RightArm: [-.3, 0, .6], LeftUpLeg: [-.1, 0, .1], RightUpLeg: [-.3, 0, -.1], LeftLeg: [.3, 0, 0], RightLeg: [.6, 0, 0] };
+      return k => {
+        const { t, move, hurt, walk } = k, T = ghostTimeline(k.g, k.now);
+        // An ordinary, slightly sleepwalking stride.
+        const gait = Math.max(move, .35 * (1 - T.chase));
+        holder.position.y = -.02 + Math.abs(Math.cos(walk)) * .025 * gait - ease(T.die) * .74 - (1 - ease(T.rise)) * 1.6;
+        const p = clonePose(base);
+        p.LeftUpLeg = [-Math.sin(walk) * .45 * gait, 0, .02]; p.RightUpLeg = [Math.sin(walk) * .45 * gait, 0, -.02];
+        p.LeftLeg = [Math.max(0, Math.cos(walk)) * .6 * gait + .05, 0, 0]; p.RightLeg = [Math.max(0, -Math.cos(walk)) * .6 * gait + .05, 0, 0];
+        p.LeftArm[0] += Math.sin(walk) * .3 * gait; p.RightArm[0] -= Math.sin(walk) * .3 * gait;
+        blendPose(p, notice, T.chase * (1 - T.hit)); blendPose(p, grab, Math.max(T.hit, T.wind)); blendPose(p, { Spine: [-.3, .3, 0] }, Math.max(hurt, T.hurt)); blendPose(p, collapse, ease(T.die));
+        poseBones(nodes, p);
+      };
+    },
+    // ผีเด็ก: a small ghost child with a topknot, oversized head and black
+    // eyes — skipping and giggling, then springing to bite.
+    childghost(nodes, body, holder, o) {
+      body.material = ghostSkin(body, "child", "#b8bcc0", "#121418");
+      nodes.Head.scaling.setAll(1.45); nodes.Neck.scaling.set(.8, .7, .8);
+      skinnedCut(body, "child loincloth", (x, y) => y > .74 && y < 1.0, () => .02, cloth.danceRed);
+      ghostEyes(nodes, gm.eyeVoid, .045, 1.63, .097);
+      const topknot = B.MeshBuilder.CreateSphere("topknot", { diameter: .07, segments: 6 }, scene); topknot.material = hairMat; topknot.position.set(0, 1.77, -.01); topknot.isPickable = false; onBone(nodes, "Head", topknot);
+      const ring = B.MeshBuilder.CreateTorus("topknot ring", { diameter: .06, thickness: .012, tessellation: 12 }, scene); ring.material = gold; ring.position.set(0, 1.745, -.01); ring.isPickable = false; onBone(nodes, "Head", ring);
+      const cap = B.MeshBuilder.CreateSphere("shaved scalp", { diameter: .21, segments: 8 }, scene); cap.material = gm.scalp; cap.position.set(0, 1.665, -.012); cap.scaling.set(1, .8, 1.05); cap.isPickable = false; onBone(nodes, "Head", cap);
+      const grin = B.MeshBuilder.CreateBox("child grin", { width: .07, height: .015, depth: .02 }, scene); grin.material = gm.mouth; grin.position.set(0, 1.57, .1); grin.isPickable = false; onBone(nodes, "Head", grin);
+      const base = { Spine: [.05, 0, 0], Head: [.1, 0, .2], LeftArm: [-.3, 0, -1.2], RightArm: [-.3, 0, 1.2], LeftForeArm: [0, -.5, 0], RightForeArm: [0, .5, 0] };
+      const crouch = { Spine: [.5, 0, 0], LeftUpLeg: [-1.0, 0, .1], RightUpLeg: [-1.0, 0, -.1], LeftLeg: [1.7, 0, 0], RightLeg: [1.7, 0, 0], LeftArm: [-.2, 0, -1.3], RightArm: [-.2, 0, 1.3] };
+      const bite = { Hips: [.4, 0, 0], Neck: [-.5, 0, 0], LeftArm: [-2.2, .3, -1.0], RightArm: [-2.2, -.3, 1.0], LeftUpLeg: [.2, 0, .1], RightUpLeg: [.2, 0, -.1] };
+      const sit = { Hips: [0, 0, 0], LeftUpLeg: [-1.5, 0, .4], RightUpLeg: [-1.5, 0, -.4], LeftLeg: [.3, 0, 0], RightLeg: [.3, 0, 0], Spine: [.6, 0, 0], Head: [.6, 0, .3], LeftArm: [-.6, 0, -1.3], RightArm: [-.6, 0, 1.3] };
+      return k => {
+        const { t, move, hurt, walk } = k, T = ghostTimeline(k.g, k.now);
+        const skip = Math.max(0, Math.sin(walk * 1.4)) * (move + T.chase * .5);
+        holder.position.y = -.01 + skip * .15 + T.hit * .5 - T.wind * .12 - ease(T.die) * .45 - (1 - ease(T.rise)) * 1.0; holder.position.z = T.hit * .6;
+        const p = clonePose(base);
+        p.LeftUpLeg = [-Math.sin(walk * 1.4) * .6 * move, 0, .03]; p.RightUpLeg = [Math.sin(walk * 1.4) * .6 * move, 0, -.03];
+        p.LeftLeg = [Math.max(0, Math.cos(walk * 1.4)) * .8 * move + .05, 0, 0]; p.RightLeg = [Math.max(0, -Math.cos(walk * 1.4)) * .8 * move + .05, 0, 0];
+        p.Head[2] = Math.sin(t * 1.3) * .3; p.Head[1] = Math.sin(t * .7) * .3; // curious, tilting head
+        p.LeftArm[2] += Math.sin(t * 2) * .2; p.RightArm[2] -= Math.sin(t * 2 + 1) * .2;
+        blendPose(p, crouch, T.wind); blendPose(p, bite, T.hit); blendPose(p, { Spine: [-.3, .3, 0] }, Math.max(hurt, T.hurt)); blendPose(p, sit, ease(T.die));
+        poseBones(nodes, p);
+      };
+    },
   };
   const HUMANOID_KINDS = new Set(Object.keys(HUMANOID));
   const ghostWaiting = [];
@@ -4552,6 +4749,8 @@
     drowned_marsh: [{ kind: "drowned", fallback: "corpse" }, { kind: "boatman", fallback: "corpse" }, { kind: "waterspirit", fallback: "longhair" }],
     moon_cemetery: [{ kind: "graveborn", fallback: "corpse" }, { kind: "pyrekeeper", fallback: "corpse" }, { kind: "moonspirit", fallback: "longhair" }],
     hex_ridge: [{ kind: "krasue", fallback: "longhair" }, { kind: "krahang", fallback: "corpse" }, { kind: "preta", fallback: "corpse" }],
+    naga_cavern: [{ kind: "phiphong", fallback: "corpse" }, { kind: "kongkoi", fallback: "corpse" }, { kind: "takhian", fallback: "longhair" }],
+    spirit_rift: [{ kind: "unaware", fallback: "corpse" }, { kind: "childghost", fallback: "corpse" }, { kind: "elephant" }],
     asura_peak: [{ kind: "phitakhon", fallback: "corpse" }, { kind: "phitakhon", fallback: "corpse" }, { kind: "phitakhon", fallback: "corpse", lead: true }],
     // A court may list variants; spawns cycle through them (atlas_<map>_<court>_<n>).
     fallen_city: [[{ kind: "maenak", fallback: "longhair" }, { kind: "phipop", fallback: "corpse" }, { kind: "maenak", fallback: "longhair" }],
@@ -4563,7 +4762,7 @@
     if (atlas) {
       const parts = String(id).split("_"), court = Math.max(1, Math.min(3, Number(parts.at(-2)) || 1)) - 1, spawn = Math.max(1, Number(parts.at(-1)) || 1) - 1;
       const entry = atlas[court], d = Array.isArray(entry) ? entry[spawn % entry.length] : entry;
-      return { ...d, scale: (d.kind === "preta" ? 1.45 : d.lead ? 1.2 : d.kind === "phipop" ? .95 : 1) + court * .04, eye: gm.eyeRed };
+      return { ...d, scale: { preta: 1.45, childghost: .62, elephant: 1.1, phipop: .95 }[d.kind] ?? (d.lead ? 1.2 : 1 + court * .04), eye: gm.eyeRed };
     }
     if (monster.tier === "elite" && monster.mapId === "forbidden_forest")
       return { kind: "statue", scale: 1.55, eye: gm.eyeAmber, cloth: gm.lacquer, spire: 1, elite: true };
@@ -4583,7 +4782,7 @@
   // Builds the pickable root plus the visual rig for one monster.
   function makeGhostMonster(monster, id) {
     const design = ghostDesign(monster, id);
-    const tall = { hanged: 3.4, bell: 2.6, longhair: 2.2, statue: 2.4, waterspirit: 2.4, moonspirit: 2.4, boatman: 2.2, preta: 3.2, krahang: 2.4, krasue: 2.2 }[design.kind] || 2;
+    const tall = { hanged: 3.4, bell: 2.6, longhair: 2.2, statue: 2.4, waterspirit: 2.4, moonspirit: 2.4, boatman: 2.2, preta: 3.2, krahang: 2.4, krasue: 2.2, takhian: 2.4, elephant: 3.6, childghost: 1.3 }[design.kind] || 2;
     const root = B.MeshBuilder.CreateBox("monster-" + id, { width: 1.3, height: tall, depth: 1.3 }, scene);
     root.visibility = .001; root.isPickable = true;
     const rig = new B.TransformNode("ghost rig", scene); rig.parent = root; rig.position.y = -tall / 2; rig.scaling.setAll(design.scale);
