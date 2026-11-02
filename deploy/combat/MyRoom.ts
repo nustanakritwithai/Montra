@@ -1612,7 +1612,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return mapId === DEFAULT_MAP_ID
       ? !wallBlocksShot({ x: from.x, y: from.y + FORT.targetBodyHeight, z: from.z },
           { x: target.x, y: target.y + FORT.targetBodyHeight, z: target.z })
-      : provinceShotClear(WORLD_MAPS[mapId],{...from,y:from.y+1},{...target,y:target.y+1},this.gateClosed);
+      : provinceShotClear(WORLD_MAPS[mapId],{x:from.x,y:from.y+1,z:from.z},{x:target.x,y:target.y+1,z:target.z},this.gateClosed);
   }
 
   private updateSummons(dt: number) {
