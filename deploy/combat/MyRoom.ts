@@ -1,6 +1,7 @@
 import { FORGE } from "./ForgeRules.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
 import { WAR_SIDE_SIZE, WAR_HOLD, warSites, type Battlefield, type WarSide } from "./TerritoryWar.js";
+import {CASTLE_ID,CASTLE_ENABLED,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
 import { Encoder } from "@colyseus/schema";
 import { randomUUID } from "node:crypto";
 import {
@@ -37,7 +38,7 @@ import { isAtlasMap } from "./WorldAtlas.js";
 import { TEMPLE_ID } from "./TempleMap.js";
 import { SHRINE_GUARDIAN, DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, VILLAGE_ARRIVALS, WORLD_ROOM_CAPACITY, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
 import { provinceShotClear, segmentIntersectsExpandedWall } from "./WorldMaps.js";
-import { crestCorners, onRampart } from "./StrategicProvinces.js";
+import { crestCorners, onRampart, wallRing } from "./StrategicProvinces.js";
 import { checkWarp, WARP_COMBAT_LOCK_MS } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { saveBugReport } from "./BugReports.js";
@@ -46,6 +47,7 @@ import { BUILD_CATALOG, DEFAULT_WARD_TALENT, DUAL_SWORD, talentGroup, classSkill
 import { BuffLedger } from "./BuffLedger.js";
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, SWORD_SCHOOLS, SWORD_NODES, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
+import { MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
 import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
@@ -63,11 +65,11 @@ import {
 import { ForestEncounters } from "./ForestEncounters.js";
 
 // A full world snapshot spans up to 48 KiB with ten occupied maps, before summons.
-Encoder.BUFFER_SIZE = Math.max(Encoder.BUFFER_SIZE, 64 * 1024);
+Encoder.BUFFER_SIZE = Math.max(Encoder.BUFFER_SIZE, (CASTLE_ENABLED?128:64) * 1024);
 
 const warRoomKey=randomUUID();
 const battleRooms=new Map<number,Promise<string>>();
-const admissions=new Map<string,{roomId:string;ticket:string;guild:string;side:WarSide;expires:number}>();
+const admissions=new Map<string,{roomId:string;ticket:string;guild:string;side:WarSide;point:number;expires:number}>();
 async function battleRoom(field:Battlefield):Promise<string>{
   let room=battleRooms.get(field.seq);
   if(!room){
@@ -98,18 +100,20 @@ type TradeSession = { id:string; a:string; b:string; expires:number; offers:Reco
  *   state.players, state.monster; "combat_hit"/"combat_notice"/"monster_respawn".
  */
 export class MyRoom extends Room<{ state: MyRoomState }> {
-  maxClients = WORLD_ROOM_CAPACITY;
+  maxClients:number = WORLD_ROOM_CAPACITY;
   state = new MyRoomState();
 
   private forest = new ForestEncounters(this.state.monsters);
   private getMonster(id:string): Monster | undefined { return id === RULES.monsterId ? this.state.monster : this.state.monsters.get(id); }
   private simulatedMs = 0;
   private field?:Battlefield;
-  private warSeats=new Map<string,{guild:string;side:WarSide}>();
+  private warSeats=new Map<string,{guild:string;side:WarSide;camp:number}>();
   private warClients=new Set<string>();
   private warSent=new Map<string,string>();
   private nextWarSample=0;
+  private previousPilotSample?:number;
   private gateClosed=false;
+  private closedCastleGates=new Set<string>();
   private gateActions=new Map<string,number>();
   private battleActive=false;
   private destinations = new Map<string, Vec2>();
@@ -121,6 +125,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastCombatMs = new Map<string, number>();
   private lastWarpMs = new Map<string, number>();
   private provinceClients = new Set<string>();
+  private castleClients = new Set<string>();
   private atlasClients = new Set<string>();
   private templeClients = new Set<string>();
   private pendingWarps = new Set<string>();
@@ -149,6 +154,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private buffs = new BuffBook();
   private effects = new BuffLedger();
   private swordTrees = new Map<string, SwordTree>();
+  private muayCooldowns = new Map<string, MuayCooldowns>();
+  private muayCombos = new Map<string,MuayComboState>();
+  private muayFollowups = new Map<string,{school:MuaySchool;targetId:string;until:number}>();
+  private muayDefenseWindows = new Map<string,{kind:"parry"|"evade";until:number}>();
+  private muayGrapples = new Map<string,{targetId:string;until:number}>();
+  private muayHeldBy = new Map<string,string>();
+  private muayGrappleImmunity = new Map<string,number>();
+  private muayGrappleCounters = new Map<string,{targetId:string;until:number}>();
+  private muayBooks = new Map<string, MuayBook>();
+  private muayWrapGranted = new Set<string>();
   private swordCombos = new Map<string, {count:number; until:number}>();
   private swordGuards = new Map<string, {until:number; factor:number; direction:boolean; counterUntil:number}>();
   private guildSubscriptions = new Map<string,()=>void>();
@@ -156,6 +171,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
+  private monsterInterruptUntil = 0;
+  private monsterInterruptResistUntil = 0;
   private monsterReturning = false;
   // RRT only replaces NPC navigation. All AI intent/combat rules stay put.
   private monsterNavigator = new MonsterRRTNavigator();
@@ -180,6 +197,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private buildPlayer(client: Client, gate: "build" | "swordTree" = "build"): Player | undefined {
     const id = client.sessionId, player = this.state.players.get(id);
+    if(this.muayControlled(id)) { this.reject(client,"muay_controlled"); return; }
     if (!this.gates.get(id)?.[gate].consume(this.simulatedMs)) {
       this.reject(client, gate === "swordTree" ? "sword_tree_rate_limited" : "build_rate_limited");
     } else if (!player?.alive || !this.persistentCharacters.has(id)) {
@@ -216,10 +234,30 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const selection = group && talent !== group.defaultId ? {...base, [group.field]:talent} : base;
     const snapshot = this.captureCharacterSnapshot(id);
     if (!snapshot) return;
+    let grantedInventory: InventorySnapshot | undefined;
+    if (build.path === "muay_boran" && !this.muayWrapGranted.has(id)) {
+      const inventory = this.inventories.get(id);
+      if (!inventory) return this.reject(client,"build_unavailable");
+      const slots = inventory.slots.slice(), existing = slots.findIndex(slot => slot?.itemId === MUAY_WRAP_ID);
+      const slot = existing >= 0 ? existing : slots.findIndex(item => item === null);
+      if (slot < 0) return this.reject(client,"muay_inventory_full");
+      if (existing < 0) slots[slot] = {itemId:MUAY_WRAP_ID,quantity:1};
+      grantedInventory = {...inventory, slots, equippedWeaponSlot:slot};
+    }
     this.pendingWarps.add(id);
-    const task = characterStore.save({ ...snapshot, build: selection }).then(() => {
+    const task = characterStore.save({ ...snapshot, build: selection, ...(grantedInventory ? {inventory:grantedInventory, muayWrapGranted:true} : {}) }).then(() => {
       player.pathId = build.path;
       player.ancestryId = build.ancestry;
+      this.swordGuards.delete(id);
+      this.clearMuayDefense(id,"cancelled");
+      this.swordCombos.delete(id);
+      this.clearMuayCombo(id);
+      if (grantedInventory) {
+        this.muayWrapGranted.add(id);
+        this.inventories.set(id,grantedInventory);
+        player.equippedWeaponId=MUAY_WRAP_ID;
+        try { client.send("inventory_state",grantedInventory); } catch (error) { console.warn("MONTRA inventory notice was not delivered",error); }
+      }
       player.wardTalentId = build.path === "sentinel" ? talent : "";
       player.bladeTalentId = build.path === "blade" ? talent : "";
       client.send("build_selected", selection);
@@ -352,8 +390,244 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     player.swordTreeData=JSON.stringify(tree);
   }
 
+  private recordMuayTraining(id:string, field:"strikes"|"blocks"):void {
+    const player=this.state.players.get(id), book=this.muayBooks.get(id);
+    if (!player || player.pathId!=="muay_boran" || !book) return;
+    book.training[field]=Math.min(1_000_000,book.training[field]+1);
+    player.muayBookData=JSON.stringify(book);
+  }
+  private recordMuayMastery(id:string,school:MuaySchool,technique:boolean,sequence:boolean):void {
+    const player=this.state.players.get(id),book=this.muayBooks.get(id);
+    if(!player || player.pathId!=="muay_boran" || !book || book.school!==school || (!technique && !sequence))return;
+    const mastery=book.mastery[school];
+    if(technique)mastery.technique=Math.min(1_000_000,mastery.technique+1);
+    if(sequence)mastery.sequences=Math.min(1_000_000,mastery.sequences+1);
+    player.muayBookData=JSON.stringify(book);
+  }
 
-  private sendSwordNotice(client:Client|undefined, type:string, payload:Record<string,number>):void {
+  private clearMuayCombo(id:string):void {
+    if(this.muayCombos.delete(id))this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"muay_combo",{count:0});
+    this.clearMuayFollowup(id);
+  }
+  private clearMuayFollowup(id:string):void {
+    if(this.muayFollowups.delete(id))this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"muay_followup",{active:false});
+  }
+  private clearMuayCombosForTarget(targetId:string):void {
+    for(const [id,combo] of this.muayCombos)if(combo.targetId===targetId)this.clearMuayCombo(id);
+    for(const [id,opening] of this.muayFollowups)if(opening.targetId===targetId)this.clearMuayFollowup(id);
+  }
+  private advanceMuaySkillCombo(id:string,school:MuaySchool,targetId:string,skillId:Exclude<MuaySkillId,"guard"|"parry"|"evade"|"grapple"|"chaiya_cover">,pvp:boolean):number {
+    const previous=this.muayCombos.get(id);
+    const result=advanceMuayCombo(previous,school,targetId,MUAY_COMBO_MOVES[skillId],this.simulatedMs);
+    if(result.state)this.muayCombos.set(id,result.state);else this.muayCombos.delete(id);
+    const bonus=pvp ? MUAY_PVP_COMBO_MULTIPLIER : MUAY_COMBO_MULTIPLIER;
+    if(result.count || previous)this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"muay_combo",
+      {count:result.count,completed:result.completed,next:result.next ?? "",durationMs:MUAY_COMBO_WINDOW_MS,bonusPercent:Math.round((bonus-1)*100)});
+    return result.completed ? bonus : 1;
+  }
+  private interruptMuayTarget(target:Monster,durationMs=MUAY_INTERRUPT_MS):"applied"|"immune"|"resisted"|"unavailable" {
+    if(!target.alive)return "unavailable";
+    if(target.id!==RULES.monsterId)return this.forest.interrupt(target.id,this.simulatedMs,durationMs,MUAY_INTERRUPT_IMMUNITY_MS);
+    if(target.tier==="elite" || target.tier==="boss")return "immune";
+    if(this.simulatedMs<this.monsterInterruptResistUntil)return "resisted";
+    this.monsterInterruptUntil=this.simulatedMs+durationMs;
+    this.monsterInterruptResistUntil=this.simulatedMs+MUAY_INTERRUPT_IMMUNITY_MS;
+    this.monsterNavigator.clear();target.aiState="stagger";
+    return "applied";
+  }
+
+  private muayControlled(id:string):boolean { return this.muayGrapples.has(id) || this.muayHeldBy.has(id); }
+  private releaseMuayGrapple(holderId:string,reason:string):void {
+    const hold=this.muayGrapples.get(holderId); if(!hold)return;
+    this.muayGrapples.delete(holderId);this.muayHeldBy.delete(hold.targetId);
+    if(hold.targetId===RULES.monsterId)this.monsterInterruptUntil=Math.min(this.monsterInterruptUntil,this.simulatedMs);
+    else if(this.getMonster(hold.targetId))this.forest.endInterrupt(hold.targetId,this.simulatedMs);
+    for(const id of [holderId,hold.targetId])this.sendSwordNotice(this.clients.find(c=>c.sessionId===id),"muay_grapple",{phase:"released",reason});
+  }
+  private releaseMuayFor(id:string,reason:string):void {
+    this.releaseMuayGrapple(id,reason);
+    const holder=this.muayHeldBy.get(id); if(holder)this.releaseMuayGrapple(holder,reason);
+  }
+  private clearGrappleCounter(id:string,reason:string):void {
+    if(this.muayGrappleCounters.delete(id))this.sendSwordNotice(this.clients.find(c=>c.sessionId===id),"muay_grapple_counter",{active:false,reason});
+  }
+  private clearGrappleCountersFor(id:string,reason:string):void {
+    this.clearGrappleCounter(id,reason);
+    for(const [owner,window] of this.muayGrappleCounters)if(window.targetId===id)this.clearGrappleCounter(owner,reason);
+  }
+  private updateMuayGrapples():void {
+    for(const [id,hold] of this.muayGrapples) {
+      const actor=this.state.players.get(id), target=this.getMonster(hold.targetId) ?? this.state.players.get(hold.targetId);
+      if(this.simulatedMs>=hold.until || !actor?.alive || !target?.alive || !this.sameCombatMap(id,hold.targetId) ||
+        distance3d(actor,target)>2.1 || equippedWeaponId(this.inventories.get(id))!==MUAY_WRAP_ID || actor.pathId!=="muay_boran")
+        this.releaseMuayGrapple(id,"ended");
+    }
+    for(const [id,until] of this.muayGrappleImmunity)if(this.simulatedMs>=until)this.muayGrappleImmunity.delete(id);
+    for(const [id,window] of this.muayGrappleCounters) {
+      const owner=this.state.players.get(id), target=this.state.players.get(window.targetId);
+      if(this.simulatedMs>=window.until || !owner?.alive || !target?.alive || !this.sameCombatMap(id,window.targetId))this.clearGrappleCounter(id,"ended");
+    }
+  }
+
+  private startMuayGrapple(client:Client,player:Player,target:Monster|Player,monster:Monster|undefined,targetId:string):boolean {
+    const id=client.sessionId;
+    if(this.muayControlled(targetId) || this.muayHeldBy.has(targetId)) { this.reject(client,"muay_grapple_busy"); return false; }
+    if(!monster && ((target as Player).flying || !isOnGround(target.y) || this.activeDashes.has(targetId) || this.climbs.has(targetId) || this.flightTransitions.has(targetId))) {
+      this.reject(client,"target_unavailable");return false;
+    }
+    if(monster) {
+      const result=this.interruptMuayTarget(monster,MUAY_GRAPPLE_HOLD_MS);
+      if(result!=="applied") {this.reject(client,result==="immune" ? "muay_grapple_immune" : "muay_grapple_resisted");return false;}
+    } else {
+      const immunityKey=this.persistentCharacters.get(targetId) ?? targetId;
+      if(this.simulatedMs<(this.muayGrappleImmunity.get(immunityKey) ?? 0)) {this.reject(client,"muay_grapple_resisted");return false;}
+      this.muayGrappleImmunity.set(immunityKey,this.simulatedMs+MUAY_INTERRUPT_IMMUNITY_MS);
+      if(this.muayDefenseWindows.has(targetId)){this.swordGuards.delete(targetId);this.clearMuayDefense(targetId,"cancelled");}
+      this.destinations.delete(targetId);this.attackTargets.delete(targetId);
+      target.targetId="";(target as Player).combatState="idle";
+    }
+    if(this.muayDefenseWindows.has(id)){this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");}
+    this.destinations.delete(id);this.attackTargets.delete(id);player.targetId="";player.combatState="idle";
+    this.clearMuayCombo(id);this.clearGrappleCounter(id,"new_hold");this.clearGrappleCounter(targetId,"new_hold");this.recordCombat(id,targetId);
+    this.muayGrapples.set(id,{targetId,until:this.simulatedMs+MUAY_GRAPPLE_HOLD_MS});this.muayHeldBy.set(targetId,id);
+    this.sendSwordNotice(client,"muay_grapple",{phase:"held",role:"holder",targetId,durationMs:MUAY_GRAPPLE_HOLD_MS});
+    this.sendSwordNotice(this.clients.find(c=>c.sessionId===targetId),"muay_grapple",{phase:"held",role:"victim",durationMs:MUAY_GRAPPLE_HOLD_MS,escapeStamina:MUAY_GRAPPLE_ESCAPE_STAMINA});
+    return true;
+  }
+  private escapeMuayGrapple(client:Client,message:unknown):void {
+    if(!parseEmptyCommand(message))return this.reject(client,"invalid_grapple_response");
+    const id=client.sessionId,holderId=this.muayHeldBy.get(id),hold=holderId ? this.muayGrapples.get(holderId) : undefined;
+    const player=this.state.players.get(id),holder=holderId ? this.state.players.get(holderId) : undefined;
+    if(!holderId || !hold || hold.targetId!==id || this.simulatedMs>=hold.until || !player?.alive || !holder?.alive) {
+      if(holderId)this.releaseMuayGrapple(holderId,"ended");return this.reject(client,"muay_grapple_ended");
+    }
+    if(!this.sameCombatMap(holderId,id) || distance3d(holder,player)>2.1 || holder.pathId!=="muay_boran" || equippedWeaponId(this.inventories.get(holderId))!==MUAY_WRAP_ID) {
+      this.releaseMuayGrapple(holderId,"ended");return this.reject(client,"muay_grapple_ended");
+    }
+    if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
+      this.pendingItemUses.has(holderId) || this.pendingRewards.has(holderId) || this.pendingCharacterLeaves.has(holderId))return this.reject(client,"character_busy");
+    if(!this.gates.get(id)?.attack.consume(this.simulatedMs))return this.reject(client,"attack_rate_limited");
+    if(player.stamina<MUAY_GRAPPLE_ESCAPE_STAMINA)return this.reject(client,"insufficient_stamina");
+    player.stamina-=MUAY_GRAPPLE_ESCAPE_STAMINA;
+    this.releaseMuayGrapple(holderId,"escaped");
+    this.clearGrappleCounter(id,"replaced");
+    this.muayGrappleCounters.set(id,{targetId:holderId,until:this.simulatedMs+MUAY_GRAPPLE_COUNTER_WINDOW_MS});
+    this.sendSwordNotice(client,"muay_grapple_counter",{active:true,durationMs:MUAY_GRAPPLE_COUNTER_WINDOW_MS,stamina:MUAY_GRAPPLE_COUNTER_STAMINA});
+    void this.saveCharacter(id);
+  }
+  private counterMuayGrapple(client:Client,message:unknown):void {
+    if(!parseEmptyCommand(message))return this.reject(client,"invalid_grapple_response");
+    const id=client.sessionId,window=this.muayGrappleCounters.get(id);
+    if(!window || this.simulatedMs>=window.until) {this.clearGrappleCounter(id,"ended");return this.reject(client,"muay_grapple_counter_ended");}
+    if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
+    const player=this.spellCaster(client),opponent=this.state.players.get(window.targetId);
+    if(!player)return;
+    if(!opponent?.alive || !this.sameCombatMap(id,window.targetId) || this.pendingItemUses.has(window.targetId) ||
+      this.pendingRewards.has(window.targetId) || this.pendingCharacterLeaves.has(window.targetId))return this.reject(client,"target_unavailable");
+    if(player.flying || !isOnGround(player.y) || distance3d(player,opponent)>MUAY_GRAPPLE_COUNTER_RANGE || Math.abs(player.y-opponent.y)>1.1)return this.reject(client,"muay_out_of_range");
+    if(!this.bodyPathClear(player.mapId,player,opponent))return this.reject(client,"muay_blocked");
+    if(player.stamina<MUAY_GRAPPLE_COUNTER_STAMINA)return this.reject(client,"insufficient_stamina");
+    player.stamina-=MUAY_GRAPPLE_COUNTER_STAMINA;this.clearGrappleCounter(id,"used");
+    player.facing=facingTo(opponent.x-player.x,opponent.z-player.z);this.recordCombat(id,window.targetId);
+    const attack=(player.atk+weaponBonuses(this.inventories.get(id),"pvp").melee)*MUAY_PVP_DAMAGE_MULTIPLIER;
+    const damage=this.swordGuardDamage(window.targetId,player,calculateDamage(attack,opponent.def,opponent.level));
+    opponent.hp=Math.max(0,opponent.hp-damage);opponent.hitSeq++;
+    this.broadcast("pvp_hit",{attackerId:id,targetId:window.targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"grapple_counter"},{afterNextPatch:true});
+    if(opponent.hp===0){player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(window.targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:window.targetId,source:"grapple_counter",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});}
+    void this.saveCharacter(id);
+  }
+  private finishMuayGrapple(client:Client,targetId:unknown):void {
+    const id=client.sessionId,hold=this.muayGrapples.get(id),player=this.state.players.get(id);
+    if(!hold || targetId!==hold.targetId || this.simulatedMs>=hold.until || !player?.alive) {this.releaseMuayGrapple(id,"ended");return this.reject(client,"muay_grapple_ended");}
+    const monster=this.getMonster(hold.targetId),target=monster ?? this.state.players.get(hold.targetId);
+    if(!target?.alive || !this.sameCombatMap(id,hold.targetId) || distance3d(player,target)>2.1 || equippedWeaponId(this.inventories.get(id))!==MUAY_WRAP_ID ||
+      this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
+      (!monster && (this.pendingItemUses.has(hold.targetId) || this.pendingRewards.has(hold.targetId) || this.pendingCharacterLeaves.has(hold.targetId)))) {
+      this.releaseMuayGrapple(id,"ended");return this.reject(client,"muay_grapple_ended");
+    }
+    const dx=target.x-player.x,dz=target.z-player.z,length=Math.hypot(dx,dz), nx=length>0.001 ? dx/length : -Math.sin(player.facing),nz=length>0.001 ? dz/length : -Math.cos(player.facing);
+    const next={x:target.x+nx*1.5,y:target.y,z:target.z+nz*1.5},map=getWorldMap(target.mapId);
+    if(!map || !this.canOccupy(next.x,next.z,next.y,false,target.mapId) || isRestArea(target.mapId,next) || !this.bodyPathClear(target.mapId,target,next) ||
+      (monster && (monster.id===RULES.monsterId ? !isMonsterSegmentClear(monster,next) : !this.forest.canDisplace(monster.id,next))))return this.reject(client,"muay_throw_blocked");
+    const sweep=advanceDash(target,{dx:nx,dz:nz},1.5,(x,z)=>this.canOccupy(x,z,target.y,false,target.mapId) && !isRestArea(target.mapId,{x,z}),map.bounds);
+    if(sweep.blocked || sweep.moved<1.4999)return this.reject(client,"muay_throw_blocked");
+    target.x=next.x;target.z=next.z;
+    this.releaseMuayGrapple(id,"thrown");this.recordCombat(id,hold.targetId);this.recordMuayTraining(id,"strikes");
+    const pvp=!monster,attack=(player.atk+weaponBonuses(this.inventories.get(id),pvp?"pvp":"pve").melee)*MUAY_SKILLS.grapple.power*(pvp?MUAY_PVP_DAMAGE_MULTIPLIER:1);
+    if(monster)this.hitMonsterWithSpell(id,monster,calculateDamage(attack,monster.defense,monster.level),"muay");
+    else {
+      const opponent=target as Player,damage=this.swordGuardDamage(hold.targetId,player,calculateDamage(attack,opponent.def,opponent.level));
+      opponent.hp=Math.max(0,opponent.hp-damage);opponent.hitSeq++;
+      this.broadcast("pvp_hit",{attackerId:id,targetId:hold.targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"muay"},{afterNextPatch:true});
+      if(opponent.hp===0){player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(hold.targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:hold.targetId,source:"muay",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});}
+    }
+    this.broadcast("muay_skill_used",{playerId:id,skillId:"grapple",targetId:hold.targetId},{afterNextPatch:true});void this.saveCharacter(id);
+  }
+
+  private changeMuayBook(client:Client,message:unknown):void {
+    if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_muay_book");
+    const input=message as Record<string,unknown>, keys=Object.keys(input), action=input.action;
+    if(action==="learn") {
+      if(keys.length!==2 || typeof input.skillId!=="string")return this.reject(client,"invalid_muay_book");
+    } else if(action==="school") {
+      if(keys.length!==2 || typeof input.school!=="string")return this.reject(client,"invalid_muay_book");
+    } else if(action==="equip") {
+      if(keys.length!==3 || !Number.isInteger(input.slot) || (input.slot as number)<0 || (input.slot as number)>3 || (input.skillId!==null && typeof input.skillId!=="string"))return this.reject(client,"invalid_muay_book");
+    } else if(action==="reset") {
+      if(keys.length!==1)return this.reject(client,"invalid_muay_book");
+    } else return this.reject(client,"invalid_muay_book");
+    const id=client.sessionId, player=this.buildPlayer(client), book=this.muayBooks.get(id);
+    if(!player || !book)return;
+    if(player.pathId!=="muay_boran")return this.reject(client,"muay_class_required");
+    if(player.mapId!==DEFAULT_MAP_ID || !isOnGround(player.y) || Math.hypot(player.x,player.z)>6 ||
+      this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)return this.reject(client,"muay_book_needs_shrine");
+    const next:MuayBook={learned:[...book.learned],training:{...book.training},mastery:{chaiya:{...book.mastery.chaiya},korat:{...book.mastery.korat},lopburi:{...book.mastery.lopburi},thasao:{...book.mastery.thasao}},school:book.school,slots:[...book.slots],
+      loadouts:{chaiya:[...book.loadouts.chaiya],korat:[...book.loadouts.korat],lopburi:[...book.loadouts.lopburi],thasao:[...book.loadouts.thasao]}};
+    if(action==="learn") {
+      const skillId=input.skillId as string;
+      if(!Object.hasOwn(MUAY_LESSONS,skillId))return this.reject(client,"invalid_muay_book");
+      const lesson=MUAY_LESSONS[skillId as MuayLessonId];
+      if(lesson.school!==next.school)return this.reject(client,"muay_wrong_school");
+      if(next.learned.includes(skillId as MuayLessonId))return this.reject(client,"muay_book_already_learned");
+      if(player.level<lesson.level)return this.reject(client,"muay_book_level");
+      if(next.learned.length>=muayPoints(player.level))return this.reject(client,"muay_book_no_points");
+      if((lesson.requires as readonly string[]).some(req=>!next.learned.includes(req as MuayLessonId)))return this.reject(client,"muay_book_prerequisite");
+      if(next.training.strikes<lesson.training.strikes || next.training.blocks<lesson.training.blocks)return this.reject(client,"muay_book_training");
+      const mastery=MUAY_MASTERY_REQUIREMENTS[skillId as MuayLessonId],progress=next.mastery[lesson.school];
+      if(mastery && (progress.technique<mastery.technique || progress.sequences<mastery.sequences))return this.reject(client,"muay_book_mastery");
+      next.learned.push(skillId as MuayLessonId);
+    } else if(action==="school") {
+      const school=input.school as string;
+      if(!Object.hasOwn(MUAY_SCHOOLS,school))return this.reject(client,"invalid_muay_book");
+      const selected=school as MuaySchool, requirements=MUAY_SCHOOLS[selected];
+      if(next.school===selected)return this.reject(client,"muay_school_selected");
+      if(player.level<requirements.level)return this.reject(client,"muay_book_level");
+      if(next.training.strikes<requirements.strikes || next.training.blocks<requirements.blocks)return this.reject(client,"muay_book_training");
+      next.school=selected;next.slots=[...next.loadouts[selected]];
+    } else if(action==="equip") {
+      const skillId=input.skillId as MuaySkillId|null;
+      if(skillId!==null && (!Object.hasOwn(MUAY_SKILLS,skillId) || (!MUAY_BASE_SKILLS.some(skill=>skill===skillId) &&
+        (!next.learned.includes(skillId as MuayLessonId) || MUAY_LESSONS[skillId as MuayLessonId].school!==next.school))))return this.reject(client,"muay_skill_locked");
+      for(let i=0;i<next.slots.length;i++)if(skillId!==null && next.slots[i]===skillId)next.slots[i]=null;
+      next.slots[input.slot as number]=skillId;
+      next.loadouts[next.school]=[...next.slots];
+    } else {
+      if(!next.learned.length)return this.reject(client,"muay_book_empty");
+      next.learned=[];next.loadouts=newMuayLoadouts();next.slots=[...next.loadouts[next.school]];
+    }
+    const snapshot=this.captureCharacterSnapshot(id);
+    if(!snapshot)return this.reject(client,"build_unavailable");
+    this.pendingWarps.add(id);
+    const task=characterStore.save({...snapshot,muayBook:next}).then(()=>{
+      this.muayBooks.set(id,next);player.muayBookData=JSON.stringify(next);
+      if(action==="school" || action==="reset") {this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");this.clearMuayCombo(id);this.sendSwordNotice(client,"muay_counter_cleared",{});}
+      try {client.send("muay_book_changed",{action});} catch(error) {console.warn("MONTRA Muay book confirmation was not delivered",error);}
+    },error=>{console.error("MONTRA Muay book save failed",error);this.reject(client,"muay_book_save_failed");}).finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
+    this.pendingItemUses.set(id,task);
+  }
+
+
+  private sendSwordNotice(client:Client|undefined, type:string, payload:Record<string,unknown>):void {
     if (!client) return;
     try {
       client.send(type,payload);
@@ -363,16 +637,160 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
-  private swordGuardDamage(id:string, attacker:{x:number;z:number}, damage:number):number {
+  private clearMuayDefense(id:string,phase:"cancelled"|"miss"|"success"):void {
+    const window=this.muayDefenseWindows.get(id);if(!window)return;
+    this.muayDefenseWindows.delete(id);
+    this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"muay_defense",{kind:window.kind,phase});
+  }
+  private updateMuayDefense():void {
+    for(const [id,window] of this.muayDefenseWindows) {
+      if(this.swordGuards.get(id)?.until!==window.until)this.clearMuayDefense(id,"cancelled");
+      else if(this.simulatedMs>=window.until)this.clearMuayDefense(id,"miss");
+    }
+  }
+
+  private swordGuardDamage(id:string, attacker:{x:number;z:number}, damage:number,guardPierce=0):number {
     const guard=this.swordGuards.get(id), player=this.state.players.get(id);
     if (!guard || !player || this.simulatedMs>=guard.until) return damage;
     const dx=attacker.x-player.x, dz=attacker.z-player.z, length=Math.hypot(dx,dz);
     const front=length<0.001 || (-Math.sin(player.facing)*dx-Math.cos(player.facing)*dz)/length>=0;
     if (guard.direction && !front) return damage;
+    const defense=this.muayDefenseWindows.get(id);
+    const kind=defense && defense.until===guard.until && this.simulatedMs<defense.until ? defense.kind : undefined;
     guard.counterUntil=this.simulatedMs+3000;
     this.recordSwordTraining(id,"blocks");
-    this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"sword_guarded",{until:guard.counterUntil});
-    return Math.max(1,Math.round(damage*guard.factor));
+    if(kind!=="evade")this.recordMuayTraining(id,"blocks");
+    if(kind) {guard.until=this.simulatedMs;this.clearMuayDefense(id,"success");}
+    this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),player.pathId === "muay_boran" ? "muay_guarded" : "sword_guarded",{until:guard.counterUntil,kind:kind ?? "guard"});
+    return Math.max(1,Math.round(damage*(guard.factor+(1-guard.factor)*guardPierce)));
+  }
+
+  private castMuaySkill(client:Client, message:unknown):void {
+    if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_muay_skill");
+    const input=message as Record<string,unknown>;
+    if (typeof input.skillId!=="string" || !Object.hasOwn(MUAY_SKILLS,input.skillId) ||
+        Object.keys(input).some(key=>key!=="skillId" && key!=="targetId") ||
+        (input.targetId!==undefined && typeof input.targetId!=="string")) return this.reject(client,"invalid_muay_skill");
+    const id=client.sessionId, skillId=input.skillId as MuaySkillId, skill=MUAY_SKILLS[skillId];
+    if(this.muayHeldBy.has(id))return this.reject(client,"muay_controlled");
+    if(this.muayGrapples.has(id)) {
+      if(skillId!=="grapple")return this.reject(client,"muay_controlled");
+      return this.finishMuayGrapple(client,input.targetId);
+    }
+    if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
+    const player=this.spellCaster(client), cooldowns=this.muayCooldowns.get(id);
+    if (!player || !cooldowns) return;
+    if (player.pathId!=="muay_boran") return this.reject(client,"muay_class_required");
+    if (equippedWeaponId(this.inventories.get(id))!==MUAY_WRAP_ID) return this.reject(client,"muay_wrap_required");
+    const book=this.muayBooks.get(id);
+    if (!book) return this.reject(client,"muay_class_required");
+    if (Object.hasOwn(MUAY_LESSONS,skillId) && (!book?.learned.includes(skillId as MuayLessonId) || MUAY_LESSONS[skillId as MuayLessonId].school!==book.school)) return this.reject(client,"muay_skill_locked");
+    if (player.flying || !isOnGround(player.y)) return this.reject(client,"flying");
+    if (isRestArea(player.mapId,player)) return this.reject(client,"muay_safe_area");
+    const now=Date.now();
+    if (now<(cooldowns[skillId] ?? 0)) return this.reject(client,"muay_cooldown");
+    if (player.stamina<skill.stamina) return this.reject(client,"insufficient_stamina");
+    const guard=this.swordGuards.get(id);
+    const isCounter=skill.effect==="counter" || skill.effect==="counter_sidestep";
+    if (isCounter && (!guard || this.simulatedMs>=guard.counterUntil)) return this.reject(client,"muay_counter_required");
+    let target:Monster|Player|undefined, monster:Monster|undefined, targetId="";
+    if (skill.effect!=="guard" && skill.effect!=="parry" && skill.effect!=="evade") {
+      const order=parseAttackCommand({targetId:input.targetId}) ?? parsePkTargetCommand({targetId:input.targetId});
+      if (!order) return this.reject(client,"invalid_muay_target");
+      targetId=order.targetId;monster=this.getMonster(targetId);
+      target=monster ?? this.state.players.get(targetId);
+      if (!target?.alive || targetId===id || !this.sameCombatMap(id,targetId)) { this.clearMuayCombo(id); return this.reject(client,"target_unavailable"); }
+      if (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))) return this.reject(client,"target_unavailable");
+      if (distance3d(player,target)>skill.range || Math.abs(player.y-target.y)>1.1) return this.reject(client,"muay_out_of_range");
+      if (!this.bodyPathClear(player.mapId,player,target)) return this.reject(client,"muay_blocked");
+    }
+    const followup=MUAY_FOLLOWUPS[book.school],opening=this.muayFollowups.get(id);
+    if(skillId===followup.finisher && (!opening || opening.school!==book.school || opening.targetId!==targetId || this.simulatedMs>=opening.until))
+      return this.reject(client,"muay_followup_required");
+    if(skill.effect==="evade") {
+      const dx=Math.sin(player.facing),dz=Math.cos(player.facing),distance=1.2;
+      const next={x:player.x+dx*distance,y:player.y,z:player.z+dz*distance},map=getWorldMap(player.mapId);
+      if(!map || !this.canOccupy(next.x,next.z,next.y,false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"muay_blocked");
+      const sweep=advanceDash(player,{dx,dz},distance,(x,z)=>this.canOccupy(x,z,player.y,false,player.mapId) && !isRestArea(player.mapId,{x,z}),map.bounds);
+      if(sweep.blocked || sweep.moved+0.00001<distance)return this.reject(client,"muay_blocked");
+      this.destinations.delete(id);this.attackTargets.delete(id);player.targetId="";player.combatState="idle";
+      player.x=next.x;player.z=next.z;
+    }
+    let retreatPoint:{x:number;y:number;z:number}|undefined,muayMoved=false;
+    if(skill.effect==="retreat_strike" && target) {
+      const dx=player.x-target.x,dz=player.z-target.z,length=Math.hypot(dx,dz),vx=length>0.001?dx/length:Math.sin(player.facing),vz=length>0.001?dz/length:Math.cos(player.facing),travel=1.2;
+      const next={x:player.x+vx*travel,y:player.y,z:player.z+vz*travel},map=getWorldMap(player.mapId);
+      if(!map || !this.canOccupy(next.x,next.z,next.y,false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"muay_blocked");
+      const sweep=advanceDash(player,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,player.y,false,player.mapId) && !isRestArea(player.mapId,{x,z}),map.bounds);
+      if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"muay_blocked");
+      retreatPoint=next;
+    }
+    if ((skill.effect==="step" || skill.effect==="sidestep" || skill.effect==="step_flurry" || skill.effect==="counter_sidestep") && target) {
+      const dx=target.x-player.x,dz=target.z-player.z,distance=Math.hypot(dx,dz),move=Math.max(0,distance-1.7);
+      const side=skill.effect==="sidestep" || skill.effect==="counter_sidestep" ? (skillId==="lopburi_reverse" ? -0.8 : 0.8) : 0, divisor=Math.max(distance,0.001);
+      const next={x:player.x+(dx*move-dz*side)/divisor,y:player.y,z:player.z+(dz*move+dx*side)/divisor};
+      if (!this.canOccupy(next.x,next.z,next.y,false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next)) return this.reject(client,"muay_blocked");
+      const vx=next.x-player.x,vz=next.z-player.z,travel=Math.hypot(vx,vz);
+      if (travel>0.00001) {
+        const sweep=advanceDash(player,{dx:vx/travel,dz:vz/travel},travel,
+          (x,z)=>this.canOccupy(x,z,player.y,false,player.mapId) && !isRestArea(player.mapId,{x,z}),getWorldMap(player.mapId)!.bounds);
+        if (sweep.blocked || sweep.moved+0.00001<travel) return this.reject(client,"muay_blocked");
+      }
+      muayMoved=travel>0.1;
+      this.destinations.delete(id); player.x=next.x; player.z=next.z;
+    }
+    if(skill.effect==="grapple" && target && !this.startMuayGrapple(client,player,target,monster,targetId))return;
+    if(opening && (skillId===followup.finisher || (targetId && opening.targetId!==targetId)))this.clearMuayFollowup(id);
+    player.stamina-=skill.stamina;
+    cooldowns[skillId]=now+skill.cooldownMs;
+    player.muayData=JSON.stringify(cooldowns);
+    if (skill.effect==="guard" || skill.effect==="parry" || skill.effect==="evade") {
+      this.clearMuayDefense(id,"cancelled");
+      const duration=skill.effect==="guard" ? (skillId==="chaiya_cover" ? 1800 : 1200) : skill.effect==="parry" ? 600 : 450;
+      const until=this.simulatedMs+duration;
+      this.swordGuards.set(id,{until,factor:skill.power,direction:true,counterUntil:0});
+      if(skill.effect!=="guard") {
+        this.muayDefenseWindows.set(id,{kind:skill.effect,until});
+        this.sendSwordNotice(client,"muay_defense",{kind:skill.effect,phase:"start",durationMs:duration});
+      }
+      this.sendSwordNotice(client,"muay_counter_cleared",{});
+    } else if (target && skill.effect!=="grapple") {
+      player.facing=facingTo(target.x-player.x,target.z-player.z);
+      if (isCounter && guard) { guard.counterUntil=0; this.sendSwordNotice(client,"muay_counter_cleared",{}); }
+      this.recordCombat(id,targetId);
+      this.recordMuayTraining(id,"strikes");
+      const pvp=!monster,comboMultiplier=this.advanceMuaySkillCombo(id,book.school,targetId,skillId as Exclude<MuaySkillId,"guard"|"parry"|"evade"|"grapple"|"chaiya_cover">,pvp);
+      const attack=(player.atk+weaponBonuses(this.inventories.get(id),pvp?"pvp":"pve").melee)*skill.power*comboMultiplier*(pvp?MUAY_PVP_DAMAGE_MULTIPLIER:1);
+      const hits=skill.effect==="flurry" || skill.effect==="step_flurry" ? 2 : 1;
+      for(let hit=0;hit<hits && target.alive;hit++) {
+        if(monster) {
+          const damage=calculateDamage(attack,monster.defense,monster.level);
+          this.hitMonsterWithSpell(id,monster,damage,"muay");
+        } else {
+          const opponent=target as Player;
+          const damage=this.swordGuardDamage(targetId,player,calculateDamage(attack,opponent.def,opponent.level),skillId==="korat_pierce" ? 0.25 : 0);
+          opponent.hp=Math.max(0,opponent.hp-damage);opponent.hitSeq++;
+          this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"muay"},{afterNextPatch:true});
+          if(opponent.hp===0) {
+            player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.clearMuayCombo(id);
+            this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,source:"muay",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
+          }
+        }
+      }
+      if(skill.effect==="teep" && target.alive)this.sendSwordNotice(client,"muay_interrupt",{result:monster ? this.interruptMuayTarget(monster) : "pvp_no_interrupt"});
+      if(skillId==="chaiya_finish")player.stamina=Math.min(player.maxStamina,player.stamina+10);
+      if(skillId==="chaiya_return")player.stamina=Math.min(player.maxStamina,player.stamina+8);
+      if(skillId==="korat_finish" && monster && target.alive)this.sendSwordNotice(client,"muay_interrupt",{result:this.interruptMuayTarget(monster,500),source:"korat_finish"});
+      if(skillId==="korat_press" && monster && target.alive)this.sendSwordNotice(client,"muay_interrupt",{result:this.interruptMuayTarget(monster,600),source:"korat_press"});
+      if(retreatPoint){this.destinations.delete(id);this.attackTargets.delete(id);player.targetId="";player.combatState="idle";player.x=retreatPoint.x;player.z=retreatPoint.z;muayMoved=true;}
+      if(monster)this.recordMuayMastery(id,book.school,countsMuayTechnique(book.school,skillId,muayMoved),comboMultiplier>1 || skillId===followup.finisher);
+      if(skillId===followup.opener && target.alive && book.learned.includes(followup.finisher)) {
+        this.muayFollowups.set(id,{school:book.school,targetId,until:this.simulatedMs+MUAY_FOLLOWUP_WINDOW_MS});
+        this.sendSwordNotice(client,"muay_followup",{active:true,skillId:followup.finisher,targetId,durationMs:MUAY_FOLLOWUP_WINDOW_MS});
+      }
+    }
+    this.broadcast("muay_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
+    void this.saveCharacter(id);
   }
 
   private castSwordSkill(client:Client, message:unknown):void {
@@ -672,10 +1090,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
-  private async enterTerritory(client:Client,start:boolean){
+  private async enterTerritory(client:Client,start:boolean,message:unknown){
     const id=client.sessionId,p=this.state.players.get(id),character=this.persistentCharacters.get(id);
     if(!p || !character || !WORLD_EXPANSION || this.field || !this.warClients.has(id) ||
        !this.gates.get(id)?.guild.consume(this.simulatedMs))return;
+    let point=2;
+    if(!parseEmptyCommand(message)){
+      const request=message as {objectiveId?:number};
+      const legacy=!start && p.mapId===CASTLE_ID && guildStore().war.inspect(CASTLE_ID,Date.now()).pilot?.throne===undefined;
+      if(p.mapId!==CASTLE_ID || !request || Object.keys(request).length!==1 || !(legacy?[2,4,5]:musterNodes).includes(request.objectiveId!))return this.reject(client,"invalid_request");
+      point=request.objectiveId!;
+    }
     const fort=warSites[p.mapId];
     if(!fort || !p.alive || p.flying || this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
        this.attackTargets.has(id) || [...this.attackTargets.values()].includes(id) ||
@@ -695,8 +1120,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!(target instanceof MyRoom))throw Error("war_unavailable");
       const occupied=[...target.warSeats.values()].filter(s=>s.side===side).length;
       const reserved=[...admissions].filter(([who,s])=>who!==character && s.roomId===roomId && s.side===side).length;
-      if(occupied+reserved>=WAR_SIDE_SIZE)throw Error("war_side_full");
-      admissions.set(character,{roomId,ticket,side,guild:member.id,expires:Date.now()+30_000});
+      if(occupied+reserved>=(field.site===CASTLE_ID?CASTLE_SEATS:WAR_SIDE_SIZE))throw Error("war_side_full");
+      admissions.set(character,{roomId,ticket,side,point,guild:member.id,expires:Date.now()+30_000});
       client.send("territory_transfer",{roomId,ticket});
     }catch(error){
       const reason=error instanceof Error?error.message:"";
@@ -705,47 +1130,138 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
   private useCityGate(client:Client,message:unknown){
-    if(!this.field || !parseEmptyCommand(message))return;
+    if(!this.field)return;
+    const castle=this.field.site===CASTLE_ID;
+    const req=message as {gateId?:string;repair?:boolean}|null;
+    if(castle?(!req || typeof req.gateId!=="string" || (req.repair!==undefined && req.repair!==true)):!parseEmptyCommand(message))return;
     const id=client.sessionId,p=this.state.players.get(id),seat=this.warSeats.get(id),character=this.persistentCharacters.get(id);
-    if(!p?.alive || !seat || !character || !isOnGround(p.y) || this.climbs.has(id) || this.pendingCharacterLeaves.has(id))return;
+    if(!p?.alive || p.flying || !seat || !character || !isOnGround(p.y) || this.climbs.has(id) || this.pendingCharacterLeaves.has(id))return;
     const now=Date.now();
     if(now-(this.gateActions.get(id)??-Infinity)<1000)return;
-    const war=guildStore().war,gate=WORLD_MAPS[this.field.site].strategic!.rampart!.gates[0].box;
-    if(war.member(character)?.id!==seat.guild || !segmentIntersectsExpandedWall(p,p,gate,2.5) ||
-      (seat.side==="defend" && p.z>=gate.z+gate.length/2))return client.send("territory_error",{reason:"war_gate_near"});
-    const occupied=[...this.state.players.values()].some(peer=>peer.alive && isOnGround(peer.y) && segmentIntersectsExpandedWall(peer,peer,gate,.4));
+    const war=guildStore().war,gates=WORLD_MAPS[this.field.site].strategic!.rampart!.gates;
+    const gate=castle?gates.find(g=>g.id===req!.gateId):gates[0];
+    if(!gate || war.member(character)?.id!==seat.guild)return;
+    const b=gate.box,cx=b.x+b.width/2,cz=b.z+b.length/2;
+    const inside=gate.side==="south"?p.z<cz:gate.side==="north"?p.z>cz:gate.side==="east"?p.x<cx:p.x>cx;
+    if(!segmentIntersectsExpandedWall(p,p,b,2.5) || (seat.side==="defend" && !inside))
+      return client.send("territory_error",{reason:"war_gate_near"});
+    const occupied=[...this.state.players.values()].some(peer=>peer.alive && isOnGround(peer.y) && segmentIntersectsExpandedWall(peer,peer,b,.4));
     this.gateActions.set(id,now);
-    try{war.gate(this.field,seat.side,occupied,now);this.gateClosed=war.inspect(this.field.site,now).gateClosed;this.nextWarSample=0;}
-    catch(e){const reason=e instanceof Error ? e.message:"";if(!reason.startsWith("war_"))console.error("MONTRA gate",e);client.send("territory_error",{reason:reason.startsWith("war_")?reason:"war_unavailable"});}
+    try{
+      if(castle){
+        // Settle the elapsed interval using the previous door state before changing a supply route.
+        this.nextWarSample=0;this.updateTerritory();
+        const states=war.castleGate(this.field,gate.id,seat.side,occupied,now,req!.repair===true);
+        this.closedCastleGates=new Set(Object.keys(states).filter(key=>states[key].closed));
+      }else{war.gate(this.field,seat.side,occupied,now,this.fieldCensus().relaySide);this.gateClosed=war.inspect(this.field.site,now).gateClosed;}
+      this.nextWarSample=0;
+    }catch(e){const reason=e instanceof Error?e.message:"";if(!reason.startsWith("war_"))console.error("MONTRA gate",e);client.send("territory_error",{reason:reason.startsWith("war_")?reason:"war_unavailable"});}
   }
-  private updateTerritory(){
-    if(!WORLD_EXPANSION || (!this.warClients.size && !this.field) || this.simulatedMs<this.nextWarSample)return;
-    this.nextWarSample=this.simulatedMs+1000;
-    const now=Date.now(),war=guildStore().war;
+  private fieldCensus(){
     let attack=0,defend=0;
-    if(this.field){
-      const fort=warSites[this.field.site];
+    const field=this.field,relay=field && WORLD_MAPS[field.site].strategic?.relay;
+    const relayHolders={attack:0,defend:0};
+    const counts=field?.site===CASTLE_ID?castleObjectives.map(()=>({attack:0,defend:0})):undefined;
+    const campCounts=counts?forwardCamps.map(()=>({attack:0,defend:0})):undefined;
+    if(field){
+      const war=guildStore().war;
       for(const [id,seat] of this.warSeats){
         const p=this.state.players.get(id),character=this.persistentCharacters.get(id);
         if(!p || !character || this.pendingCharacterLeaves.has(id))continue;
         if(war.member(character)?.id!==seat.guild){this.clients.find(c=>c.sessionId===id)?.leave(4000,"war_membership_changed");continue;}
-        if(p.alive && isOnGround(p.y) && !p.flying && p.mapId===this.field.site && planarDistance(p,fort)<=5){
-          if(seat.side==="attack")attack++;else defend++;
-        }
+        if(!p.alive || !isOnGround(p.y) || p.flying || p.mapId!==field.site || this.climbs.has(id) || this.pendingWarps.has(id))continue;
+        if(counts){
+          const i=castleObjectives.findIndex(node=>planarDistance(p,node)<=CAPTURE_RADIUS);
+          if(i>=0)counts[i][seat.side]++;
+          const camp=forwardCamps.find(c=>planarDistance(p,c)<=CAPTURE_RADIUS);
+          if(camp)campCounts![camp.id-1][seat.side]++;
+        }else if(planarDistance(p,warSites[field.site])<=5){if(seat.side==="attack")attack++;else defend++;}
+        else if(relay && planarDistance(p,relay)<=relay.radius)relayHolders[seat.side]++;
       }
-      war.advance(this.field,now,attack,defend);
+    }
+    const contested=relayHolders.attack>0 && relayHolders.defend>0;
+    const relaySide:WarSide|null=contested?null:relayHolders.attack?"attack":relayHolders.defend?"defend":null;
+    return {attack,defend,counts,campCounts,relaySide,contested};
+  }
+  private canMarch(id:string){
+    const p=this.state.players.get(id),base=this.playerSpawn.get(id);
+    return Boolean(base && p?.alive && isOnGround(p.y) && !p.flying && planarDistance(p,base)<=5 &&
+      !this.climbs.has(id) && !this.activeDashes.has(id) && !this.flightTransitions.has(id) && !this.pendingWarps.has(id) &&
+      !this.pendingCharacterLeaves.has(id) && !this.attackTargets.has(id) && ![...this.attackTargets.values()].includes(id) &&
+      this.simulatedMs-(this.lastCombatMs.get(id)??-Infinity)>=WARP_COMBAT_LOCK_MS);
+  }
+  private fieldCamp(id:string,campId:number){
+    const field=this.field,seat=this.warSeats.get(id),character=this.persistentCharacters.get(id);
+    if(!field || field.site!==CASTLE_ID || !seat || !character || this.pendingCharacterLeaves.has(id))return;
+    const war=guildStore().war,now=Date.now(),s=war.inspect(field.site,now);
+    if(s.seq!==field.seq || s.phase!=="battle" || !s.seconds || !s.pilot?.throne || war.member(character)?.id!==seat.guild)return;
+    const camp=forwardCamps.find(c=>c.id===campId);
+    if(!camp)return;
+    const census=this.fieldCensus();
+    const supply=castleLogistics(s.pilot,census.counts!,census.campCounts!,seat.side);
+    if(!supply?.camps.some(c=>c.id===campId && c.status==="ready"))return;
+    const slot=parseInt(character.slice(-2),16)%9;
+    const dest={x:camp.x+slot%3-1,z:camp.z+Math.floor(slot/3)-1};
+    return this.canOccupy(dest.x,dest.z,0,false,field.site)?dest:undefined;
+  }
+  private orderCamp(client:Client,message:unknown){
+    const id=client.sessionId,field=this.field,seat=this.warSeats.get(id),character=this.persistentCharacters.get(id);
+    if(!field || field.site!==CASTLE_ID || !seat || !character || !this.gates.get(id)?.guild.consume(this.simulatedMs))return;
+    const req=message as {action?:unknown;campId?:unknown}|null;
+    if(!req || Object.keys(req).length!==2 || (req.action!=="select" && req.action!=="march") || typeof req.campId!=="number" ||
+      (req.campId!==0 && !forwardCamps.some(c=>c.id===req.campId)))return this.reject(client,"invalid_request");
+    const campId=req.campId,war=guildStore().war;
+    const error=(reason:string)=>client.send("territory_error",{reason});
+    const s=war.inspect(field.site,Date.now());
+    if(s.seq!==field.seq || s.phase!=="battle" || !s.seconds || !s.pilot?.throne || war.member(character)?.id!==seat.guild)return error("war_ended");
+    const dest=campId?this.fieldCamp(id,campId):undefined;
+    if(campId && !dest)return error("war_camp_cut");
+    if(req.action==="select")seat.camp=war.campPreference(field,character,campId);
+    else{
+      if(!dest || campId!==seat.camp || !this.canMarch(id))return error("war_camp_base");
+      const p=this.state.players.get(id)!;
+      this.destinations.delete(id);this.crestTurns.delete(id);this.despawnSummon(id,"warp");
+      p.x=dest.x;p.z=dest.z;p.targetId="";p.combatState="idle";
+    }
+    this.nextWarSample=0;
+  }
+  private updateTerritory(){
+    const now=Date.now();
+    const clock=this.field?.site===CASTLE_ID?now:this.simulatedMs;
+    if(!WORLD_EXPANSION || (!this.warClients.size && !this.field) || clock<this.nextWarSample)return;
+    this.nextWarSample=clock+1000;
+    const war=guildStore().war;
+    const {attack,defend,counts,campCounts,relaySide,contested}=this.fieldCensus();
+    if(this.field){
+      war.advance(this.field,now,attack,defend,counts,this.previousPilotSample,relaySide);
+      if(counts)this.previousPilotSample=now;
     }
     const states=Object.fromEntries(Object.keys(warSites).map(site=>[site,war.inspect(site,now)]));
-    if(this.field){const s=states[this.field.site];this.battleActive=s.seq===this.field.seq && s.phase==="battle";this.gateClosed=this.battleActive && s.gateClosed;}
+    if(this.field){
+      const s=states[this.field.site];this.battleActive=s.seq===this.field.seq && s.phase==="battle";
+      this.gateClosed=this.battleActive && this.field.site!==CASTLE_ID && s.gateClosed;
+      if(this.field.site===CASTLE_ID)this.closedCastleGates=new Set(Object.entries(this.battleActive?s.pilot?.gates??{}:{}).filter(([,g])=>g.closed).map(([id])=>id));
+    }
     const owners=Object.fromEntries(Object.entries(states).map(([site,s])=>[site,s.owner]));
     const teams=this.field?Object.fromEntries([...this.warSeats].map(([id,seat])=>[id,seat.side])):undefined;
+    const pilot=this.field && states[this.field.site].pilot;
+    const supplies=this.battleActive && counts && campCounts && pilot?.throne?{
+      attack:castleLogistics(pilot,counts,campCounts,"attack"),defend:castleLogistics(pilot,counts,campCounts,"defend")
+    }:undefined;
     for(const c of this.clients){
       if(!this.warClients.has(c.sessionId))continue;
       const p=this.state.players.get(c.sessionId);if(!p)continue;
       const s=states[p.mapId],character=this.persistentCharacters.get(c.sessionId),member=s&&character?war.member(character):null;
       const inField=Boolean(this.field),ownBattle=!inField || this.field?.seq===s?.seq;
+      const seat=this.warSeats.get(c.sessionId);
+      const supply=seat && member?.id===seat.guild && supplies?.[seat.side];
+      const view=ownBattle?s?.pilot:undefined;
+      const visiblePilot=view?.throne && s.phase==="battle"?{...view,points:view.points.map(point=>
+        point.id>=4 && (!inField || !p.alive || planarDistance(p,castleObjectives[point.id-1])>18)?{...point,progress:0}:point)}:view;
       const local=s?{site:p.mapId,phase:ownBattle?s.phase:"finished",owner:s.owner,attackName:s.attackName,defendName:s.defendName,
         progress:Math.trunc(s.progress),goal:WAR_HOLD,seconds:s.seconds,attack,defend,inField,side:this.warSeats.get(c.sessionId)?.side,
+        pilot:visiblePilot,supply:supply?{...supply,selected:seat!.camp,atBase:this.canMarch(c.sessionId)}:undefined,
+        relay:inField && ownBattle && this.battleActive && WORLD_MAPS[p.mapId].strategic?.relay?{side:relaySide,contested}:undefined,
         gateHp:s.gateHp,gateClosed:inField && this.gateClosed,
         canStart:!inField && s.phase==="open" && member?.officer===true && member.id!==s.ownerId,
         canJoin:!inField && s.phase==="battle" && !!member && (member.id===s.attacker || member.id===s.defender || (!s.owner && !s.defendName && member.officer))}:null;
@@ -755,11 +1271,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
   messages = {
     territory_gate:(client:Client,message:unknown)=>this.useCityGate(client,message),
+    territory_camp:(client:Client,message:unknown)=>this.orderCamp(client,message),
     get_territories:(client:Client,message:unknown)=>{
       if(parseEmptyCommand(message) && this.warClients.has(client.sessionId) && this.gates.get(client.sessionId)?.guild.consume(this.simulatedMs))this.warSent.delete(client.sessionId);
     },
-    territory_start:(client:Client,message:unknown)=>{if(parseEmptyCommand(message))void this.enterTerritory(client,true);},
-    territory_join:(client:Client,message:unknown)=>{if(parseEmptyCommand(message))void this.enterTerritory(client,false);},
+    territory_start:(client:Client,message:unknown)=>{void this.enterTerritory(client,true,message);},
+    territory_join:(client:Client,message:unknown)=>{void this.enterTerritory(client,false,message);},
     get_guild: (client:Client,message:unknown) => {
       if(!parseEmptyCommand(message))return this.reject(client,"guild_invalid_request");
       this.guildAction(client,character=>this.sendGuild(client,character));
@@ -988,6 +1505,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     sword_tree_reset: (client: Client, message: unknown) => this.changeSwordTree(client, message, "reset"),
     sword_tree_equip: (client: Client, message: unknown) => this.changeSwordTree(client, message, "equip"),
     sword_skill: (client: Client, message: unknown) => this.castSwordSkill(client, message),
+    muay_skill: (client: Client, message: unknown) => this.castMuaySkill(client, message),
+    grapple_escape: (client: Client, message: unknown) => this.escapeMuayGrapple(client, message),
+    grapple_counter: (client: Client, message: unknown) => this.counterMuayGrapple(client, message),
+    muay_book: (client: Client, message: unknown) => this.changeMuayBook(client, message),
     cast_class_skill: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_build");
       this.castClassSkill(client);
@@ -996,6 +1517,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     warp: (client: Client, message: unknown) => {
       if(this.field)return client.send("territory_error",{reason:"war_exit"});
       const id = client.sessionId;
+      if(this.muayControlled(id))return this.reject(client,"muay_controlled");
       const player = this.state.players.get(id);
       if (!player || !this.persistentCharacters.has(id)) return this.reject(client, "character_not_persistent");
       if (this.pendingItemUses.has(id) || this.pendingWarps.has(id)) return this.reject(client, "character_busy");
@@ -1012,6 +1534,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const snapshot = this.captureCharacterSnapshot(id);
       if (!snapshot) return this.reject(client, "character_not_persistent");
       const portal = result.portal;
+      if(portal.targetMapId===CASTLE_ID && !this.castleClients.has(id))return this.reject(client,"world_client_update_required");
       if(getWorldMap(portal.targetMapId)?.strategic && !this.provinceClients.has(id))return this.reject(client,"world_client_update_required");
       if(isAtlasMap(portal.targetMapId) && !this.atlasClients.has(id))return this.reject(client,"world_client_update_required");
       if(portal.targetMapId===TEMPLE_ID && !this.templeClients.has(id))return this.reject(client,"world_client_update_required");
@@ -1037,6 +1560,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           current.mapId = portal.targetMapId;
           current.x = portal.targetSpawn.x; current.y = portal.targetSpawn.y; current.z = portal.targetSpawn.z;
           current.targetId = ""; current.combatState = "idle"; current.flying = false;
+          if(current.pathId==="muay_boran"){this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");this.sendSwordNotice(client,"muay_counter_cleared",{});}
+          this.clearMuayCombo(id);
+          this.clearMuayCombosForTarget(id);
+          this.clearGrappleCountersFor(id,"warp");
           this.destinations.delete(id);
           this.attackTargets.delete(id);
           for (const [otherId, targetId] of this.attackTargets) {
@@ -1090,6 +1617,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           if (!current || this.inventories.get(id) !== inventory) return;
           this.inventories.set(id, change.inventory);
           current.equippedWeaponId = change.weaponId ?? "";
+          if (current.pathId === "muay_boran" && change.weaponId !== MUAY_WRAP_ID) {
+            this.swordGuards.delete(id);
+            this.clearMuayDefense(id,"cancelled");
+            this.clearMuayCombo(id);
+            this.sendSwordNotice(client,"muay_counter_cleared",{});
+          }
           this.lastWeaponEquipMs.set(id, this.simulatedMs);
           client.send("inventory_state", change.inventory);
           client.send("weapon_equipped", {
@@ -1168,6 +1701,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.pendingItemUses.set(id, task);
     },
     fly: (client: Client, message: unknown) => {
+      if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_flight");
       const id = client.sessionId;
@@ -1206,6 +1740,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }, { afterNextPatch: true });
     },
     dash: (client: Client, message: unknown) => {
+      if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const direction = parseDashCommand(message);
       if (!direction) return this.reject(client, "invalid_dash");
@@ -1266,6 +1801,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       void this.saveCharacter(id);
     },
     move: (client: Client, message: unknown) => {
+      if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const destination = parseMoveCommand(message, getWorldMap(this.state.players.get(client.sessionId)?.mapId ?? DEFAULT_MAP_ID)?.bounds);
       if (!destination) return this.reject(client, "invalid_move");
@@ -1281,17 +1817,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return this.reject(client, "move_rate_limited");
       }
 
+      const rampart=getWorldMap(player.mapId)?.strategic?.rampart;
+      if(rampart && isOnPlatform(player.y) && wallRing(rampart,player.x,player.z)!==wallRing(rampart,destination.x,destination.z))return this.reject(client,"must_descend");
       // A manual tap cancels auto-approach AND auto-attack (even if walking).
       this.attackTargets.delete(client.sessionId);
       player.targetId = "";
       player.combatState = "moving";
-      const r=getWorldMap(player.mapId)?.strategic?.rampart;
-      if(r && isOnPlatform(player.y))this.crestTurns.set(client.sessionId,crestCorners(r,player,destination));
+      if(rampart && isOnPlatform(player.y))this.crestTurns.set(client.sessionId,crestCorners(rampart,player,destination));
       else this.crestTurns.delete(client.sessionId);
       this.destinations.set(client.sessionId, destination);
     },
 
     attack: (client: Client, message: unknown) => {
+      if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const monsterOrder = parseAttackCommand(message);
       const pkOrder = monsterOrder ? null : parsePkTargetCommand(message);
@@ -1376,6 +1914,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // The client never writes Y. A validated ladder is the only route
     // between ground y=0 and the watchwall top y=4.
     climb: (client: Client, message: unknown) => {
+      if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const villageOrder=parseClimbRequest(message);
       const id = client.sessionId;
@@ -1424,6 +1963,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private spellCaster(client: Client) {
     const id = client.sessionId;
+    if(this.muayControlled(id))return this.reject(client,"muay_controlled");
     const player = this.state.players.get(id);
     if (this.pendingWarps.has(id)) return this.reject(client, "character_busy");
     if (!player?.alive) return this.reject(client, "not_alive");
@@ -1434,7 +1974,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return player;
   }
 
-  private hitMonsterWithSpell(id: string, target: Monster, damage: number, source: "ranged" | "talisman" | "sword") {
+  private hitMonsterWithSpell(id: string, target: Monster, damage: number, source: "ranged" | "talisman" | "sword" | "muay") {
     target.hp = Math.max(0, target.hp - damage);
     target.hitSeq++;
     this.broadcast("combat_hit", {attackerId:id, targetId:target.id, damage, hp:target.hp,
@@ -1482,7 +2022,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (distance3d(from,to) > FORT.rangedRange+(downhill?3:0)) {
       return this.reject(client, "shot_out_of_range");
     }
-    if (!map || (shooter.mapId === DEFAULT_MAP_ID && wallBlocksShot(from,to)) || !provinceShotClear(map,from,to,this.gateClosed)) {
+    if (!map || (shooter.mapId === DEFAULT_MAP_ID && wallBlocksShot(from,to)) || !provinceShotClear(map,from,to,shooter.mapId===CASTLE_ID?this.closedCastleGates:this.gateClosed)) {
       return this.reject(client, "shot_blocked");
     }
 
@@ -1612,7 +2152,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return mapId === DEFAULT_MAP_ID
       ? !wallBlocksShot({ x: from.x, y: from.y + FORT.targetBodyHeight, z: from.z },
           { x: target.x, y: target.y + FORT.targetBodyHeight, z: target.z })
-      : provinceShotClear(WORLD_MAPS[mapId],{x:from.x,y:from.y+1,z:from.z},{x:target.x,y:target.y+1,z:target.z},this.gateClosed);
+      : provinceShotClear(WORLD_MAPS[mapId],{x:from.x,y:from.y+1,z:from.z},{x:target.x,y:target.y+1,z:target.z},mapId===CASTLE_ID?this.closedCastleGates:this.gateClosed);
   }
 
   private updateSummons(dt: number) {
@@ -1745,6 +2285,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   async onCreate(options?:{warRoomKey?:string;field?:Battlefield}) {
     if(options?.warRoomKey===warRoomKey && options.field){
       this.field=options.field;
+      if(this.field.site===CASTLE_ID)this.maxClients=CASTLE_SEATS*2;
       await this.setPrivate(true);
     }
     this.state.territoryWarAvailable=WORLD_EXPANSION;
@@ -1755,6 +2296,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.forest.initialize();
     this.state.worldDefinition = WORLD_EXPANSION ? JSON.stringify({version:1,maps:WORLD_MAPS}) : "";
     this.state.swordTreeCatalog = JSON.stringify({schools:SWORD_SCHOOLS,nodes:SWORD_NODES});
+    this.state.muayBookCatalog = JSON.stringify({skills:MUAY_SKILLS,lessons:MUAY_LESSONS,base:MUAY_BASE_SKILLS,schools:MUAY_SCHOOLS,combos:MUAY_COMBOS,followups:MUAY_FOLLOWUPS,masteryGuides:MUAY_MASTERY_GUIDES,masteryLabels:MUAY_MASTERY_LABELS,masteryRequirements:MUAY_MASTERY_REQUIREMENTS,pvpDamage:MUAY_PVP_DAMAGE_MULTIPLIER,pvpCombo:MUAY_PVP_COMBO_MULTIPLIER});
     this.state.monster.id = RULES.monsterId;
     this.state.monster.x = RULES.monsterSpawnX;
     this.state.monster.z = RULES.monsterSpawnZ;
@@ -1787,6 +2329,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private tick(dt: number) {
     this.updateTerritory();
+    this.updateMuayGrapples();
+    this.updateMuayDefense();
     for(const id of this.buffs.expired(this.simulatedMs))this.endPossession(id,"expired");
     for(const id of this.effects.expire(this.simulatedMs)) {const p=this.state.players.get(id);if(p)this.applyStats(id,p,this.statAllocations.get(id) ?? emptyAllocations());}
     this.updateRespawns();
@@ -1877,6 +2421,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const map = getWorldMap(mapId);
       const r=map?.strategic?.rampart;
       if(r && isOnPlatform(feetY))return onRampart(r,x,z);
+      if(r && mapId===CASTLE_ID && this.closedCastleGates.size && r.gates.some(g=>this.closedCastleGates.has(g.id) && segmentIntersectsExpandedWall({x,z},{x,z},g.box,.4)))return false;
       if(r && this.gateClosed && segmentIntersectsExpandedWall({x,z},{x,z},r.gates[0].box,.4))return false;
       return Boolean(map && (isOnGround(feetY) || (flying && isFlightAltitude(feetY))) &&
         isSafeWorldPoint(map, { x, y: feetY, z }));
@@ -2044,6 +2589,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (previousCount===2) this.recordSwordTraining(attackerId,"finishes");
         this.sendSwordNotice(this.clients.find(client=>client.sessionId===attackerId),"sword_combo",{count});
       }
+      if (attacker.pathId === "muay_boran" && equippedWeaponId(this.inventories.get(attackerId)) === MUAY_WRAP_ID) this.recordMuayTraining(attackerId,"strikes");
 
       const meleeBonus = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp").melee;
       const swordMastery = dualSword && this.swordTrees.get(attackerId)?.learned.includes("rhythm") ? 1.05 : 1;
@@ -2085,8 +2631,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private knockoutPlayer(id: string, cause: "pk" | "monster", attackerId = "") {
+    this.releaseMuayFor(id,"knockout");
+    this.clearGrappleCountersFor(id,"knockout");
     this.swordCombos.delete(id);
     this.swordGuards.delete(id);
+    this.clearMuayDefense(id,"cancelled");
+    this.clearMuayCombo(id);
+    this.clearMuayCombosForTarget(id);
     const victim = this.state.players.get(id);
     if (!victim || !victim.alive) return;
     this.endPossession(id,"owner_dead");
@@ -2123,15 +2674,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private killMonster(winnerId: string, targetId: string = RULES.monsterId) {
+    this.releaseMuayFor(targetId,"knockout");
     if (targetId !== RULES.monsterId) {
       const m=this.state.monsters.get(targetId);
       const profile=this.forest.profile(targetId);
       if(!m || !profile || !this.forest.kill(targetId,this.simulatedMs,this.state.players,this.pendingWarps))return;
+      this.clearMuayCombosForTarget(targetId);
       this.awardMonsterExperience(winnerId,m,profile.tier);
       for(const [id,target] of this.attackTargets) if(target===targetId){const p=this.state.players.get(id);if(p)this.endAttack(id,p);}
       return;
     }
     const monster = this.state.monster;
+    this.clearMuayCombosForTarget(targetId);
+    this.monsterInterruptUntil=0;this.monsterInterruptResistUntil=0;
     monster.alive = false;
     monster.hp = 0;
     this.monsterNavigator.clear();
@@ -2154,6 +2709,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private updateMonsterAI(dt: number) {
     const monster = this.state.monster;
     if (!monster.alive) return;
+    if(this.simulatedMs<this.monsterInterruptUntil){monster.aiState="stagger";return;}
 
     const spawn = { x: RULES.monsterSpawnX, z: RULES.monsterSpawnZ };
     if (planarDistance(monster, spawn) >= RULES.monsterLeashRadius) {
@@ -2283,7 +2839,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.playerRespawnAt.delete(id);
       const player = this.state.players.get(id);
       if (!player) continue;
-      const spawn = this.playerSpawn.get(id) ?? { x: 0, z: 0 };
+      const camp=this.warSeats.get(id)?.camp;
+      const front=camp?this.fieldCamp(id,camp):undefined;
+      const spawn=front ?? this.playerSpawn.get(id) ?? {x:0,z:0};
+      if(camp && !front)this.clients.find(c=>c.sessionId===id)?.send("territory_error",{reason:"war_camp_fallback"});
       player.hp = player.maxHp;
       player.alive = true;
       player.x = spawn.x;
@@ -2325,6 +2884,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       classSkillReadyAt: player.classSkillReadyAt,
       talismanReadyAt: player.talismanReadyAt,
       swordTree: this.swordTrees.get(id),
+      muayCooldowns: this.muayCooldowns.get(id),
+      muayBook: this.muayBooks.get(id),
+      muayWrapGranted: this.muayWrapGranted.has(id),
       stamina: player.stamina,
       x: player.x,
       // Keep stable flight altitude when a transition is mid-flight.
@@ -2369,7 +2931,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try {
       // Reserve before the asynchronous save lookup so simultaneous arrivals get different starts.
       const reserved = [...this.playerSpawn.values()];
-      const spawn = VILLAGE_ARRIVALS.find(p => !reserved.some(other => other.x === p.x && other.z === p.z));
+      const spawn = this.field?.site===CASTLE_ID ? VILLAGE_ARRIVALS[0] : VILLAGE_ARRIVALS.find(p => !reserved.some(other => other.x === p.x && other.z === p.z));
       if (!spawn) throw new Error("world_room_full");
       this.playerSpawn.set(client.sessionId, spawn);
       const saved = token ? (await characterStore.loadOrCreate(token, spawn, slot)).character : null;
@@ -2377,6 +2939,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const initialStats = calculateStats(saved?.level ?? 1, allocations);
       const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
       const provinceReady=(options as {provinceVersion?:unknown}|undefined)?.provinceVersion===1;
+      const castleReady=(options as {castleVersion?:unknown}|undefined)?.castleVersion===2;
+      if(mapId===CASTLE_ID && !castleReady)throw new Error("world_client_update_required");
       if(getWorldMap(mapId)?.strategic && !provinceReady)throw new Error("world_client_update_required");
       const atlasReady=(options as {atlasVersion?:unknown}|undefined)?.atlasVersion===1;
       if(isAtlasMap(mapId) && !atlasReady)throw new Error("world_client_update_required");
@@ -2395,11 +2959,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
            credential.ticket!==(options as Record<string,unknown>)?.warTicket || !member || mapId!==this.field.site)throw Error("war_admission");
         const side=war.side(this.field,member,Date.now());
         if(side!==credential.side || member.id!==credential.guild)throw Error("war_admission");
-        if([...this.warSeats.values()].filter(s=>s.side===side).length>=WAR_SIDE_SIZE)throw Error("war_side_full");
+        const sideSize=[...this.warSeats.values()].filter(s=>s.side===side).length;
+        if(sideSize>=(mapId===CASTLE_ID?CASTLE_SEATS:WAR_SIDE_SIZE))throw Error("war_side_full");
         war.side(this.field,member,Date.now(),true);admissions.delete(characterId!);
-        this.warSeats.set(client.sessionId,{guild:member.id,side});
-        const gate=WORLD_MAPS[mapId].portals.find(p=>p.z===(side==="attack"?26:-58))!;
-        safeSpawn={x:gate.x,y:0,z:gate.z};validPosition=false;
+        const seat={guild:member.id,side,camp:0};
+        this.warSeats.set(client.sessionId,seat);
+        if(mapId===CASTLE_ID){
+          const defended=war.inspect(mapId,Date.now()).pilot?.throne?.defended;
+          safeSpawn=pilotSpawn(war.muster(this.field,characterId!,credential.point),side,sideSize,defended);
+          seat.camp=war.campPreference(this.field,characterId!);
+        }else{
+          const gate=WORLD_MAPS[mapId].portals.find(p=>p.z===(side==="attack"?26:-58))!;
+          safeSpawn={x:gate.x,y:0,z:gate.z};
+        }
+        validPosition=false;
       }
       const player = new Player({
         ...(validPosition && saved ? {x:saved.x,y:saved.y,z:saved.z} : safeSpawn),
@@ -2415,6 +2988,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         classSkillReadyAt: saved?.classSkillReadyAt ?? 0,
         talismanReadyAt: saved?.talismanReadyAt ?? 0,
         swordTreeData: JSON.stringify(saved?.swordTree ?? newSwordTree()),
+        muayData: JSON.stringify(saved?.muayCooldowns ?? {}),
+        muayBookData: JSON.stringify(saved?.muayBook ?? newMuayBook()),
         bladeTalentId: saved?.build?.path === "blade" ? saved.build.bladeTalent ?? talentGroup("blade")!.defaultId : "",
         wardTalentId: saved?.build?.path === "sentinel" ? saved.build.wardTalent ?? DEFAULT_WARD_TALENT : "",
         persistent: Boolean(saved), characterSlot: slot,
@@ -2425,10 +3000,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       });
 
       this.swordTrees.set(client.sessionId, saved?.swordTree ?? newSwordTree());
+      this.muayCooldowns.set(client.sessionId, saved?.muayCooldowns ?? {});
+      this.muayBooks.set(client.sessionId, saved?.muayBook ?? newMuayBook());
+      if (saved?.muayWrapGranted) this.muayWrapGranted.add(client.sessionId);
       this.statAllocations.set(client.sessionId, allocations);
       this.applyStats(client.sessionId,player, allocations);
       this.state.players.set(client.sessionId, player);
       if((options as Record<string,unknown>)?.warVersion===1)this.warClients.add(client.sessionId);
+      if(castleReady)this.castleClients.add(client.sessionId);
       if(provinceReady)this.provinceClients.add(client.sessionId);
       if(atlasReady)this.atlasClients.add(client.sessionId);
       if(templeReady)this.templeClients.add(client.sessionId);
@@ -2474,12 +3053,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    this.clearGrappleCountersFor(id,"disconnect");
+    this.clearMuayDefense(id,"cancelled");
+    this.releaseMuayFor(id,"disconnect");this.muayGrappleImmunity.delete(id);
+    this.clearMuayCombosForTarget(id);
     this.endPossession(id,"owner_left");
     this.buffs.forget(id);
     this.effects.forget(id);
     this.templeClients.delete(id);
     this.atlasClients.delete(id);
     this.crestTurns.delete(id);this.gateActions.delete(id);this.warSeats.delete(id);this.warClients.delete(id);this.warSent.delete(id);
+    this.castleClients.delete(id);
     this.provinceClients.delete(id);
     this.leaveParty(id);
     const guildCharacter=this.persistentCharacters.get(id);
@@ -2529,6 +3113,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.pendingRewards.delete(id);
       this.statAllocations.delete(id);
       this.swordTrees.delete(id);
+      this.muayCooldowns.delete(id);
+      this.muayCombos.delete(id);
+      this.muayFollowups.delete(id);
+      this.muayBooks.delete(id);
+      this.muayWrapGranted.delete(id);
       this.swordCombos.delete(id);
       this.swordGuards.delete(id);
       this.hpRegenRemainder.delete(id);
@@ -2569,6 +3158,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.pendingItemUses.clear();
     this.pendingRewards.clear();
     this.statAllocations.clear();
+    this.muayCooldowns.clear();
+    this.muayCombos.clear();
+    this.muayFollowups.clear();
+    this.muayDefenseWindows.clear();
+    this.muayGrappleCounters.clear();
+    this.muayBooks.clear();
+    this.muayWrapGranted.clear();
     this.hpRegenRemainder.clear();
     this.lastItemUseMs.clear();
     this.lastInventoryReadMs.clear();

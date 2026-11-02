@@ -9,7 +9,7 @@ import { FOREST_MONSTER_TIERS, MONSTER_CONFIG, monsterProfile, monsterRespawnDel
 
 export const FOREST_RESPAWN_MS = MONSTER_CONFIG.respawnMs;
 type Navigation = {map:WorldMapDefinition; obstacles:WorldWall[]};
-type Life = {actor:Monster;zone:Navigation; windupUntil:number; nextChargeAt:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; nav:MonsterRRTNavigator};
+type Life = {actor:Monster;zone:Navigation; windupUntil:number; nextChargeAt:number; interruptUntil:number; interruptResistUntil:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; nav:MonsterRRTNavigator};
 /** Bounded population, independent clocks and server-owned AI; no player-selected stats. */
 export class ForestEncounters {
   private lives = new Map<string,Life>();
@@ -28,7 +28,7 @@ export class ForestEncounters {
       x: camp.x + offsets[i][0], z: camp.z + offsets[i][1],
     })));
     const spawnIds = new Set(normalSpawns.map(spawn => spawn.id));
-    // All seven atlas regions can be occupied concurrently in a ten-seat room.
+    // A full world room can populate every atlas hunting region at once.
     const totalSpawns = normalSpawns.length + TEMPLE_SPAWNS.length + ATLAS_SPAWNS.length + 2;
     if (totalSpawns > MONSTER_CONFIG.maxSpawnPointsPerRoom) throw new Error("monster_spawn_cap_exceeded");
     for (const [id, tier] of Object.entries(this.tiers)) {
@@ -51,10 +51,27 @@ export class ForestEncounters {
         alive:true,mapId:zone.map.id,level,tier,displayName:name,defense:profile.defense});
       if(!zone.map.region)this.monsters.set(id,actor);
       this.lives.set(id,{actor,zone,x,z,profile,respawnAt:0,lastAttack:-Infinity,returning:false,
-        nextChargeAt:0,windupUntil:0,nav:new MonsterRRTNavigator(zone.obstacles,zone.map.bounds)});
+        nextChargeAt:0,windupUntil:0,interruptUntil:0,interruptResistUntil:0,nav:new MonsterRRTNavigator(zone.obstacles,zone.map.bounds)});
     }
   }
   profile(id:string):MonsterProfile | null { return this.lives.get(id)?.profile ?? null; }
+  interrupt(id:string,now:number,durationMs:number,immunityMs:number):"applied"|"immune"|"resisted"|"unavailable" {
+    const life=this.lives.get(id),monster=this.monsters.get(id);
+    if(!life || !monster?.alive)return "unavailable";
+    if(life.profile.tier==="elite" || life.profile.tier==="boss")return "immune";
+    if(now<life.interruptResistUntil)return "resisted";
+    life.interruptUntil=now+durationMs;life.interruptResistUntil=now+immunityMs;
+    life.nav.clear();monster.aiState="stagger";
+    return "applied";
+  }
+  endInterrupt(id:string,now:number):void {
+    const life=this.lives.get(id); if(life)life.interruptUntil=Math.min(life.interruptUntil,now);
+  }
+  canDisplace(id:string,to:{x:number;z:number}):boolean {
+    const life=this.lives.get(id), monster=this.monsters.get(id);
+    return Boolean(life && monster?.alive && !isRestArea(monster.mapId,to) &&
+      isMonsterSegmentClear(monster,to,life.zone.obstacles,MONSTER_NAV.radius,life.zone.map.bounds));
+  }
   kill(id:string,now:number,players?:MyRoomState["players"],blocked?:ReadonlySet<string>):boolean {
     const m=this.monsters.get(id),life=this.lives.get(id);
     if(!m||!life||!m.alive)return false;
@@ -63,7 +80,7 @@ export class ForestEncounters {
       if(player.alive && player.mapId===m.mapId && !blocked?.has(playerId) && !isRestArea(player.mapId,player) && planarDistance(player,m)<=MONSTER_CONFIG.populationRadius) nearby++;
     }
     m.alive=false;m.hp=0;m.targetId="";m.aiState="dead";
-    life.windupUntil=0;life.nextChargeAt=0;
+    life.windupUntil=0;life.nextChargeAt=0;life.interruptUntil=0;life.interruptResistUntil=0;
     life.respawnAt=now+(id===RIFT_WARDEN.id ? RIFT_WARDEN.respawnMs : id===SHRINE_GUARDIAN.id ? SHRINE_GUARDIAN.respawnMs : monsterRespawnDelay(nearby));life.returning=false;life.nav.clear();return true;
   }
   clearTarget(id:string):void {for(const m of this.monsters.values())if(m.targetId===id)m.targetId="";}
@@ -90,6 +107,7 @@ export class ForestEncounters {
         continue;
       }
       if(!occupied.has(m.mapId))continue;
+      if(now<life.interruptUntil){m.aiState="stagger";continue;}
       const eligible=(pid:string,p:Player|undefined):p is Player=>Boolean(p&&p.alive&&p.mapId===m.mapId&&
         !blocked.has(pid)&&isOnGround(p.y)&&!isRestArea(p.mapId,p));
       if (life.windupUntil > 0) {

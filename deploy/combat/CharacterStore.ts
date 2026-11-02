@@ -13,9 +13,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeStarterInventory, grantStarterWeapons, validateInventory, type InventorySnapshot } from "./ItemRules.js";
 import { DEFAULT_MAP_ID, getWorldMap } from "./WorldMaps.js";
+import {CASTLE_ID} from "./CastlePilot.js";
 import { emptyAllocations, PROGRESSION, validateAllocations, type Allocations } from "./Progression.js";
 import { EconomyStore } from "./EconomyStore.js";
 import { validateSwordTree, type SwordTree } from "./SkillCatalog.js";
+import { validateMuayBook, validateMuayCooldowns, type MuayBook, type MuayCooldowns } from "./MuayRules.js";
 
 import { parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 
@@ -43,6 +45,9 @@ export type CharacterSnapshot = {
   classSkillReadyAt?: number;
   talismanReadyAt?: number;
   swordTree?: SwordTree;
+  muayWrapGranted?: boolean;
+  muayCooldowns?: MuayCooldowns;
+  muayBook?: MuayBook;
   stamina?: number;
   /** Undefined only when loading a legacy S2/three-slot snapshot for migration. */
   inventory?: InventorySnapshot;
@@ -102,16 +107,21 @@ function isCount(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) &&
     value >= 0 && value <= MAX_COUNTER;
 }
-function isCoordinate(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= 100;
+function isCoordinate(value: unknown, min=-100, max=100): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value>=min && value<=max;
 }
 
 function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
-  if (!isRecord(value) || value.version !== 1 || value.id !== id ||
+  if (!isRecord(value))throw new Error("character_record_invalid");
+  const bounds=typeof value.mapId==="string"?getWorldMap(value.mapId)?.bounds:undefined;
+  // Existing snapshots used a symmetric envelope, including when the castle pilot is disabled.
+  const legacy=value.mapId===CASTLE_ID?1000:100;
+  if (value.version !== 1 || value.id !== id ||
       typeof value.name !== "string" || parseCharacterName({ name: value.name }) !== value.name ||
       !isCount(value.level) || value.level < 1 || value.level > 1000 ||
       !isCount(value.experience) || !isCount(value.pkKills) || !isCount(value.pkDeaths) ||
-      !isCoordinate(value.x) || !isCoordinate(value.y) || !isCoordinate(value.z) ||
+      !isCoordinate(value.x,Math.min(-legacy,bounds?.minX??0),Math.max(legacy,bounds?.maxX??0)) || !isCoordinate(value.y) ||
+      !isCoordinate(value.z,Math.min(-legacy,bounds?.minZ??0),Math.max(legacy,bounds?.maxZ??0)) ||
       !isCount(value.hp) || value.hp > 100_000 ||
       typeof value.updatedAt !== "string" || !Number.isFinite(Date.parse(value.updatedAt))) {
     throw new Error("character_record_invalid");
@@ -121,17 +131,24 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
     if (readyAt !== undefined && (typeof readyAt !== "number" || !Number.isSafeInteger(readyAt) || readyAt < 0)) throw new Error("invalid_skill_cooldown");
   }
   const swordTree = value.swordTree === undefined ? undefined : validateSwordTree(value.swordTree, value.level as number);
+  if (value.muayWrapGranted !== undefined && typeof value.muayWrapGranted !== "boolean") throw new Error("invalid_muay_grant");
+  const muayCooldowns = value.muayCooldowns === undefined ? undefined : validateMuayCooldowns(value.muayCooldowns);
+  const muayBook = value.muayBook === undefined ? undefined : validateMuayBook(value.muayBook,value.level as number);
   if (value.inventory !== undefined) validateInventory(value.inventory);
   const statAllocations = value.statAllocations === undefined ? emptyAllocations() :
     validateAllocations(value.statAllocations, value.level as number);
   if (value.stamina !== undefined && (typeof value.stamina !== "number" || !Number.isFinite(value.stamina) || value.stamina < 0 || value.stamina > PROGRESSION.maxStamina)) {
     throw new Error("invalid_character_stamina");
   }
+  if(value.mapId===CASTLE_ID && !getWorldMap(CASTLE_ID)){
+    const exit=getWorldMap("fallen_city") ?? getWorldMap(DEFAULT_MAP_ID)!;
+    return {...(value as CharacterSnapshot),...exit.spawn,mapId:exit.id,statAllocations,swordTree};
+  }
   if (value.mapId !== undefined &&
       (typeof value.mapId !== "string" || !getWorldMap(value.mapId))) {
     throw new Error("unknown_character_map");
   }
-  return { ...(value as CharacterSnapshot), mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, swordTree };
+  return { ...(value as CharacterSnapshot), mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, swordTree, muayCooldowns, muayBook };
 }
 
 export class CharacterStore {

@@ -8,12 +8,27 @@ SAFE STAGING ONLY:
 Run from an Administrator PowerShell:
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Montra\deploy\install-s1.ps1
 #>
+[CmdletBinding()]
+param(
+  [ValidatePattern('^(main|[0-9a-f]{40})$')]
+  [string]$Revision = "main"
+)
 $ErrorActionPreference = "Stop"
 $base = "C:\Montra\online-server"
-$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$backup = Join-Path $base "backup-before-3slots-$stamp"
+$stamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
+$backup = Join-Path $base "backup-before-muay-$stamp"
 $download = Join-Path $env:TEMP "montra-3slots-$stamp"
-$remote = "https://raw.githubusercontent.com/nustanakritwithai/Montra/main/deploy/combat"
+$remote = "https://raw.githubusercontent.com/nustanakritwithai/Montra/$Revision/deploy/combat"
+if ($Revision -eq "main") { Write-Warning "main can change during download; use -Revision with the verified 40-character commit SHA." }
+
+function Get-MontraFileHash([string]$Path) {
+  $stream = [System.IO.File]::OpenRead($Path)
+  try {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { return [System.Convert]::ToBase64String($sha.ComputeHash($stream)) }
+    finally { $sha.Dispose() }
+  } finally { $stream.Dispose() }
+}
 
 $packageFile = Join-Path $base "package.json"
 $roomFile = Join-Path $base "src\rooms\MyRoom.ts"
@@ -48,6 +63,7 @@ $files = @(
   @{ Name = "HeightRules.ts"; Target = "src\rooms\HeightRules.ts"; Check = "flightLandingHeight" },
   @{ Name = "ForestEncounters.ts"; Target = "src\rooms\ForestEncounters.ts"; Check = "ForestEncounters" },
   @{ Name = "TempleMap.ts"; Target = "src\rooms\TempleMap.ts"; Check = "TEMPLE_MAP" },
+  @{ Name = "CastlePilot.ts"; Target = "src\rooms\CastlePilot.ts"; Check = "CASTLE_ENABLED" },
   @{ Name = "StrategicProvinces.ts"; Target = "src\rooms\StrategicProvinces.ts"; Check = "PROVINCES" },
   @{ Name = "WorldAtlas.ts"; Target = "src\rooms\WorldAtlas.ts"; Check = "ATLAS_MAPS" },
   @{ Name = "WorldMaps.ts"; Target = "src\rooms\WorldMaps.ts"; Check = "DEFAULT_MAP_ID" },
@@ -59,6 +75,7 @@ $files = @(
   @{ Name = "Buffs.ts"; Target = "src\rooms\Buffs.ts"; Check = "class BuffBook" },
   @{ Name = "ForgeRules.ts"; Target = "src\rooms\ForgeRules.ts"; Check = "rollForge" },
   @{ Name = "CharacterBuilds.ts"; Target = "src\rooms\CharacterBuilds.ts"; Check = "parseBuild" },
+  @{ Name = "MuayRules.ts"; Target = "src\rooms\MuayRules.ts"; Check = "MUAY_SKILLS" },
   @{ Name = "BuffLedger.ts"; Target = "src\rooms\BuffLedger.ts"; Check = "class BuffLedger" },
   @{ Name = "StatModifiers.ts"; Target = "src\rooms\StatModifiers.ts"; Check = "calculateModifiedStats" },
   @{ Name = "SkillCatalog.ts"; Target = "src\rooms\SkillCatalog.ts"; Check = "POSSESSION_MODIFIER" },
@@ -125,9 +142,34 @@ $characterData = if ($env:MONTRA_CHARACTER_DIR) {
 } else {
   Join-Path $base "data\characters"
 }
+if ($env:MONTRA_CHARACTER_DIR -and !(Test-Path -LiteralPath $characterData -PathType Container)) {
+  throw "MONTRA_CHARACTER_DIR does not exist or is not a directory. No project files were changed."
+}
 if (Test-Path -LiteralPath $characterData) {
-  Copy-Item -LiteralPath $characterData -Destination (Join-Path $backup "character-data") -Recurse -Force
-  Write-Host "MONTRA existing character data backed up (not modified)." -ForegroundColor Cyan
+  if (!(Test-Path -LiteralPath $characterData -PathType Container)) { throw "Character data path is not a directory. No project files were changed." }
+  $dataRoot = (Resolve-Path -LiteralPath $characterData).Path.TrimEnd('\')
+  $backupRoot = [System.IO.Path]::GetFullPath($backup).TrimEnd('\')
+  if ($dataRoot -eq [System.IO.Path]::GetPathRoot($dataRoot).TrimEnd('\') -or
+      $backupRoot.Equals($dataRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+      $backupRoot.StartsWith($dataRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Character data path overlaps the backup folder or is a drive root. No project files were changed."
+  }
+  $dataBackup = Join-Path $backup "character-data"
+  Copy-Item -LiteralPath $dataRoot -Destination $dataBackup -Recurse -Force
+  foreach ($file in Get-ChildItem -LiteralPath $dataRoot -File -Recurse) {
+    if (!$file.FullName.StartsWith($dataRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+      throw "Unexpected data path while checking backup. No project files were changed."
+    }
+    $relative = $file.FullName.Substring($dataRoot.Length).TrimStart('\')
+    $copied = Join-Path $dataBackup $relative
+    if (!(Test-Path -LiteralPath $copied -PathType Leaf) -or
+        (Get-MontraFileHash $file.FullName) -ne (Get-MontraFileHash $copied)) {
+      throw "Character data backup verification failed. No project files were changed."
+    }
+  }
+  Write-Host "MONTRA existing character data backup verified (not modified)." -ForegroundColor Cyan
+} else {
+  Write-Warning "No character data directory was found at the default path; verify MONTRA_CHARACTER_DIR before starting MONTRA."
 }
 Write-Host "MONTRA backup saved at: $backup" -ForegroundColor Cyan
 
@@ -162,6 +204,8 @@ try {
   Write-Host "MONTRA CHAT BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA STATUS AND EXP BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA PARTY BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA MUAY BUILD PASSED." -ForegroundColor Green
+  Write-Host "Source revision: $Revision"
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
   Write-Host "All integration tests require an ISOLATED Node instance and TEMP character folder; never run them against LIVE."

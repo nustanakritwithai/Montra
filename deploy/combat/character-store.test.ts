@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import {CASTLE_ENABLED,CASTLE_ID} from "./CastlePilot.js";
+import {getWorldMap} from "./WorldMaps.js";
 import { test } from "node:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -23,6 +25,28 @@ async function withTempStore(callback: (store: CharacterStore, dir: string) => P
   finally { await rm(dir, { recursive: true, force: true }); }
 }
 
+test("closing the pilot returns a castle save to a safe public exit without losing its loadout",{skip:CASTLE_ENABLED},async()=>{
+  await withTempStore(async(store,dir)=>{
+    const {character}=await store.loadOrCreate(tokenA,spawn);
+    const old={...character,mapId:CASTLE_ID,x:997,y:4,z:-964};
+    await writeFile(path.join(dir,old.id+".json"),JSON.stringify(old));
+    const {character:restored}=await store.loadOrCreate(tokenA,spawn);
+    const exit=getWorldMap("fallen_city") ?? getWorldMap("ritual_village")!;
+    assert.equal(restored.mapId,exit.id);assert.deepEqual([restored.x,restored.y,restored.z],[exit.spawn.x,exit.spawn.y,exit.spawn.z]);
+    assert.deepEqual(restored.inventory,old.inventory);assert.equal(restored.experience,old.experience);
+  });
+});
+test("expanded hunting coordinates survive save/reload and still reject out-of-envelope coordinates",{skip:!getWorldMap("lotus_basin")},async()=>{
+  await withTempStore(async(store)=>{
+    const {character}=await store.loadOrCreate(tokenA,spawn);
+    for(const [mapId,x,z] of [["lotus_basin",110,-13],["bamboo_frontier",-116,-75],["river_watch",-103,-108]] as const){
+      await store.save({...character,mapId,x,z});const loaded=(await store.loadOrCreate(tokenA,spawn)).character;
+      assert.deepEqual([loaded.mapId,loaded.x,loaded.z],[mapId,x,z]);
+    }
+    await assert.rejects(store.save({...character,mapId:"lotus_basin",x:133,z:-13}),/character_record_invalid/);
+    await assert.rejects(store.save({...character,mapId:"lotus_basin",x:110,z:-111}),/character_record_invalid/);
+  });
+});
 test("S2: guest token validation, session claim and no public raw token", () => {
   assert.equal(getGuestToken({}), null);
   assert.equal(getGuestToken(null), null);
