@@ -1884,7 +1884,10 @@
     for(const portal of (map.portals||[]).slice(portals[activeMapId]?1:0))makePortal(activeMapId,expansionRoot,portal);
   }
   function makeForestMonster(monster,id) {
+    if(monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple")return makeGhostMonster(monster,id);
     const mesh=enemy.clone("monster-"+id);
+    // The legacy tap sphere is hidden in the village; atlas monsters still show it.
+    mesh.visibility=1;for(const child of mesh.getChildMeshes())child.setEnabled(true);
     mesh.metadata={monsterId:id};
     if(monster.tier==="elite" || monster.tier==="boss") {
       const boss=monster.tier==="boss",scale=boss?2.3:1.75,height=boss?2.65:2.05;
@@ -1945,13 +1948,23 @@
       if(monster.mapId!==activeMapId)return;
       seen.add(id);let mesh=forestMonsters.get(id);
       if(!mesh){mesh=makeForestMonster(monster,id);forestMonsters.set(id,mesh);}
-      mesh.setEnabled(monster.mapId===activeMapId&&monster.alive);
+      const ghost=mesh.metadata.ghost;
+      if(ghost){
+        // Ghost rigs play a death (soul released) before hiding, and rise on respawn.
+        const alive=monster.alive!==false;
+        if(!alive&&ghost.wasAlive){ghost.deathAt=performance.now();releaseSoul(mesh.position.x,mesh.position.y+.4,mesh.position.z);}
+        if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();}
+        ghost.wasAlive=alive;if(alive)mesh.setEnabled(true);else if(!ghost.deathAt)mesh.setEnabled(false);
+        ghost.tx=Number(monster.x);ghost.tz=Number(monster.z);ghost.ty=Number(monster.y)||0;ghost.tf=Number(monster.facing)||0;
+        ghost.windup=monster.aiState==="windup";
+        if(ghost.tx0===undefined){ghost.tx0=1;mesh.position.set(ghost.tx,ghost.ty+ghost.tall/2,ghost.tz);mesh.rotation.y=ghost.tf;}
+      }else mesh.setEnabled(monster.mapId===activeMapId&&monster.alive);
       if(mesh.metadata.warning){
         const charging=monster.aiState==="windup";
         if(charging && !mesh.metadata.warning.isEnabled(false) && monster.targetId===room?.sessionId)toast(monster.displayName+" กำลังฟาด · แตะพื้นออกจากวงส้ม");
         mesh.metadata.warning.setEnabled(charging);
       }
-      mesh.position.set(Number(monster.x),monster.tier==="boss"?2.25:monster.tier==="elite"?1.74:.88,Number(monster.z));mesh.rotation.y=Number(monster.facing)||0;
+      if(!ghost){mesh.position.set(Number(monster.x),monster.tier==="boss"?2.25:monster.tier==="elite"?1.74:.88,Number(monster.z));mesh.rotation.y=Number(monster.facing)||0;}
       if(id===selectedForestTarget&&monster.mapId===activeMapId){updateMonsterUI(monster.hp,monster.maxHp,monster.alive);
         ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monster.displayName+" · Lv "+monster.level;}
     });
@@ -2985,6 +2998,386 @@
   const eyeA = B.MeshBuilder.CreateSphere("left possessed eye", { diameter: .19 }, scene);
   eyeA.parent = enemy; eyeA.position.set(-.2,.14,-.65); eyeA.material = eyesMat; eyeA.isPickable = false;
   const eyeB = eyeA.clone("right possessed eye"); eyeB.position.x = .2;
+  // ==== Thai ghost monsters (forest, temple and the village DEMO ghost) ====
+  // Every monster is a spirit inside a host: a corpse, a tree stump, a
+  // possessed statue, a cracked bell or a chained body. Visual only: the
+  // server still owns position, HP, AI and damage. Rigs stand on y=0 and
+  // face -Z (the server facing), built from primitives and merged per joint.
+  const gm = {
+    corpse: mat("corpse skin", "#7f93a6", "#121c26"), pale: mat("pale ghost skin", "#d6d8d0", "#2a2a2a"),
+    shirt: mat("burial shirt", "#5f574d"), shroud: mat("black shroud", "#151418"), dress: mat("white ghost dress", "#cfcbbe", "#1d1d1d"),
+    robe: mat("scribe robe", "#7a4a26"), bark: mat("possessed bark", "#3a2b20"), sash3: [mat("pha phrae red", "#9b2b22"), mat("pha phrae gold", "#c99a2e"), mat("pha phrae green", "#2f6b3c")],
+    stone: mat("possessed statue", "#77786f"), lacquer: mat("statue lacquer", "#7d2a24"), iron: mat("chain iron", "#2d2c2e"), beam: mat("old beam", "#3d2a1d"),
+    eyeRed: mat("ghost eyes red", "#ff3b2e", "#ff2010"), eyeGreen: mat("ghost eyes green", "#9dff6a", "#58ff2a"), eyeAmber: mat("ghost eyes amber", "#ffc25a", "#ff9a10"),
+    crack: mat("spirit cracks", "#ff8a3a", "#ff5a10"), mouth: mat("ghost mouth", "#1a0505", "#5a0808"), soul: mat("released soul", "#c8fff0", "#7fffe0"),
+  };
+  for (const m of [gm.eyeRed, gm.eyeGreen, gm.eyeAmber, gm.crack, gm.soul]) glowMats.add(m);
+  gm.corpse.diffuseTexture = paintTexture("corpse veins", 128, (c, s) => {
+    c.fillStyle = "#e8eef2"; c.fillRect(0, 0, s, s); c.strokeStyle = "rgba(60,40,70,.5)"; c.lineWidth = 1.2;
+    for (let i = 0; i < 26; i++) { let x = noise(i, 701) * s, y = noise(i, 702) * s; c.beginPath(); c.moveTo(x, y);
+      for (let k = 0; k < 5; k++) { x += (noise(i * 5 + k, 703) - .5) * 30; y += (noise(i * 5 + k, 704) - .5) * 30; c.lineTo(x, y); } c.stroke(); }
+  });
+  // Smoke skirt / tail: opaque at the top, fading toward the bottom.
+  gm.smoke = new B.StandardMaterial("ghost smoke", scene);
+  gm.smoke.diffuseColor = B.Color3.FromHexString("#0d0d12"); gm.smoke.emissiveColor = B.Color3.FromHexString("#14182a"); gm.smoke.specularColor = B.Color3.Black();
+  gm.smoke.opacityTexture = paintTexture("smoke fade", 64, (c, s) => {
+    const g = c.createLinearGradient(0, 0, 0, s); g.addColorStop(0, "rgba(255,255,255,.95)"); g.addColorStop(.55, "rgba(255,255,255,.55)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    c.clearRect(0, 0, s, s); c.fillStyle = g; c.fillRect(0, 0, s, s);
+  });
+  gm.smoke.opacityTexture.hasAlpha = true; gm.smoke.backFaceCulling = false;
+  gm.smokeWhite = gm.smoke.clone("white ghost smoke"); gm.smokeWhite.diffuseColor = B.Color3.FromHexString("#bdbab0"); gm.smokeWhite.emissiveColor = B.Color3.FromHexString("#2a2a2e");
+  const ringMat = additiveMat("bell shockwave", radialTexture("bell ring", 128, [[0, "rgba(255,210,140,0)"], [.72, "rgba(255,210,140,0)"], [.85, "rgba(255,200,120,.85)"], [1, "rgba(255,200,120,0)"]]));
+
+  // Rig builder: joints are TransformNodes; parts are merged per joint.
+  function ghostBuilder(root) {
+    let parts = [];
+    const at = (mesh, x, y, z, m) => { mesh.position.set(x, y, z); mesh.material = m; mesh.isPickable = false; parts.push(mesh); return mesh; };
+    const b = {
+      box: (x, y, z, w, h, d, m) => at(B.MeshBuilder.CreateBox("ghost part", { width: w, height: h, depth: d }, scene), x, y, z, m),
+      cyl: (x, y, z, h, top, bottom, m, n = 8) => at(B.MeshBuilder.CreateCylinder("ghost part", { height: h, diameterTop: top, diameterBottom: bottom, tessellation: n }, scene), x, y, z, m),
+      ball: (x, y, z, d, m, seg = 6) => at(B.MeshBuilder.CreateSphere("ghost part", { diameter: d, segments: seg }, scene), x, y, z, m),
+      joint: (name, parent, x, y, z) => { const n = new B.TransformNode(name, scene); n.parent = parent || root; n.position.set(x, y, z); return n; },
+      flush: (joint, name) => { if (!parts.length) return null; const mesh = mergedSegment(parts, joint, name); parts = []; return mesh; },
+    };
+    return b;
+  }
+  // A dangling chain of segments (hair strands, roots, tentacles).
+  function strand(b, parent, x, y, z, count, len, width, material, taper = .7) {
+    const joints = []; let p = b.joint("strand", parent, x, y, z);
+    for (let i = 0; i < count; i++) {
+      const w = width * (1 - taper * i / count);
+      b.box(0, -len / 2, 0, w, len * 1.08, w, material); b.flush(p, "strand seg"); joints.push(p);
+      p = b.joint("strand", p, 0, -len, 0);
+    }
+    return joints;
+  }
+  const swayStrand = (joints, t, phase, amp, axis = "x") => joints.forEach((j, i) => { j.rotation[axis] = Math.sin(t * 2.2 + phase + i * .7) * amp * (1 + i * .25); });
+
+  const GHOST_KINDS = {
+    // ผีตายซาก: gaunt hunched corpse, head hanging, long arms, a black
+    // shroud skirt dissolving into smoke, bare feet dragging.
+    corpse(root, o) {
+      const b = ghostBuilder(root), body = b.joint("body", root, 0, 0, 0);
+      b.cyl(0, .62, 0, .9, .52, .78, gm.shroud, 10); b.cyl(0, .16, .05, .7, .76, .1, gm.smoke, 10);
+      for (const s of [-1, 1]) { b.cyl(s * .1, .14, -.04, .34, .07, .06, gm.corpse, 6); b.box(s * .1, .0, -.1, .09, .04, .2, gm.corpse); }
+      b.flush(body, "corpse skirt");
+      const chest = b.joint("chest", body, 0, 1.05, 0); chest.rotation.x = .38;
+      b.cyl(0, .32, 0, .66, .48, .42, gm.shirt, 8); b.box(.09, .45, -.2, .2, .2, .04, gm.corpse);
+      for (const s of [-1, 1]) b.ball(s * .2, .58, 0, .2, gm.shirt, 5);
+      b.flush(chest, "corpse chest");
+      const head = b.joint("head", chest, 0, .7, -.06); head.rotation.x = .5;
+      b.ball(0, .14, 0, .3, gm.corpse, 8).scaling.set(.85, 1.12, .95);
+      b.box(0, .03, -.1, .14, .08, .08, gm.corpse);
+      for (const s of [-1, 1]) b.ball(s * .06, .16, -.13, .055, o.eye, 4);
+      b.box(0, .07, -.135, .07, .02, .02, gm.mouth);
+      b.ball(0, .22, .03, .32, hairMat, 6).scaling.set(.95, .7, 1);
+      b.flush(head, "corpse head");
+      const hair = [-.11, -.04, .04, .11, -.15, .15].map((x, i) => strand(b, head, x, .16, i < 4 ? -.12 : 0, 3, .14, .045, hairMat, .4));
+      const arms = [-1, 1].map(s => {
+        const sh = b.joint("shoulder", chest, s * .26, .56, 0);
+        b.cyl(0, -.24, 0, .48, .07, .055, gm.corpse, 6); b.flush(sh, "upper arm");
+        const el = b.joint("elbow", sh, 0, -.48, 0);
+        b.cyl(0, -.24, 0, .48, .055, .045, gm.corpse, 6);
+        for (let f = -1; f <= 1; f++) b.cyl(f * .03, -.55, -.03, .16, .012, .025, gm.corpse, 4).rotation.x = .3;
+        b.flush(el, "forearm"); sh.rotation.z = s * .08; el.rotation.x = -.2; return { sh, el };
+      });
+      return (k) => {
+        const { t, move, atk, hurt } = k, bob = Math.sin(t * 1.6) * .06;
+        body.position.y = .18 + bob; body.rotation.x = .08 + move * .25 - hurt * .4 + atk * .35;
+        body.rotation.z = Math.sin(t * .9) * .05;
+        head.rotation.x = .5 + Math.sin(t * 1.3) * .08 - atk * .5; head.rotation.z = Math.sin(t * 3.7) * Math.sin(t * .6) * .25;
+        arms.forEach((a, i) => { a.sh.rotation.x = Math.sin(t * 1.2 + i * 2) * .12 - atk * 1.6 - move * .1; a.el.rotation.x = -.2 - atk * .5; });
+        hair.forEach((h, i) => swayStrand(h, t, i, .08 + move * .1));
+      };
+    },
+    // ผีผมยาวลอยฟ้า: pale woman in a white dress gliding almost flat, hair
+    // splitting into black tentacles, clawed arm reaching forward.
+    longhair(root, o) {
+      const b = ghostBuilder(root), body = b.joint("body", root, 0, 1.3, 0);
+      b.cyl(0, -.25, 0, .8, .4, .58, gm.dress, 10); b.cyl(0, -.9, .05, .6, .58, .05, gm.smokeWhite, 10);
+      b.cyl(0, .3, 0, .4, .3, .38, gm.dress, 8);
+      b.flush(body, "dress");
+      const head = b.joint("head", body, 0, .62, -.04);
+      b.ball(0, .1, 0, .3, gm.pale, 8).scaling.set(.85, 1.1, .9);
+      for (const s of [-1, 1]) b.ball(s * .065, .13, -.125, .06, gm.eyeRed, 4);
+      b.box(0, .01, -.13, .1, .05, .02, gm.mouth);
+      b.ball(0, .16, .05, .36, hairMat, 6).scaling.set(1, .8, 1.15); b.box(0, -.12, .16, .34, .5, .08, hairMat);
+      b.flush(head, "pale head");
+      const tentacles = [-.6, -.35, -.12, .12, .35, .6].map((a, i) => {
+        const j = strand(b, head, Math.sin(a) * .15, .2, .14, 6, .22, .07, hairMat, .75); j[0].rotation.set(-1.9, a * 1.5, a); return j;
+      });
+      const arms = [-1, 1].map(s => {
+        const sh = b.joint("shoulder", body, s * .2, .45, 0);
+        b.cyl(0, -.22, 0, .44, .07, .055, gm.pale, 6); b.flush(sh, "arm");
+        const el = b.joint("elbow", sh, 0, -.44, 0);
+        b.cyl(0, -.2, 0, .4, .055, .045, gm.pale, 6);
+        for (let f = -2; f <= 2; f++) b.cyl(f * .025, -.47, -.02, .14, .01, .025, gm.pale, 4).rotation.x = .5;
+        b.flush(el, "claw"); return { sh, el, s };
+      });
+      return (k) => {
+        const { t, move, atk, hurt } = k;
+        body.position.y = 1.3 + Math.sin(t * 1.4) * .15 - atk * .3; body.rotation.x = .9 + move * .25 + atk * .3 - hurt * .5;
+        head.rotation.x = -.85 - atk * .2;
+        arms.forEach((a, i) => { a.sh.rotation.x = (i ? -2.6 : -1.9) - atk * .5 + Math.sin(t * 2 + i) * .15; a.el.rotation.x = -.3 + atk * .3; });
+        tentacles.forEach((j, i) => { for (let n = 1; n < j.length; n++) j[n].rotation.x = Math.sin(t * 2.5 + i * .9 + n * .8) * (.35 + atk * .3); });
+      };
+    },
+    // เงารากไม้: a tree stump possessed — root legs, branch arms with twig
+    // claws, a hollow glowing face and tri-colour pha phrae around the trunk.
+    stump(root, o) {
+      const b = ghostBuilder(root), body = b.joint("trunk", root, 0, .55, 0);
+      b.cyl(0, .55, 0, 1.25, .62, .9, gm.bark, 8); b.cyl(0, 1.25, 0, .3, .2, .62, gm.bark, 7);
+      for (let i = 0; i < 3; i++) { const band = b.cyl(0, .35 + i * .1, 0, .07, .87 - i * .02, .88 - i * .02, gm.sash3[i], 10); band.rotation.z = .05 - i * .04; }
+      b.box(0, .78, -.29, .42, .3, .1, gm.mouth);
+      for (const s of [-1, 1]) b.ball(s * .12, .85, -.31, .11, gm.eyeGreen, 5);
+      b.box(0, .55, -.32, .22, .1, .05, gm.eyeGreen);
+      for (let i = 0; i < 5; i++) { const twig = b.cyl(Math.cos(i * 1.3) * .2, 1.6, Math.sin(i * 1.3) * .2, .7, .02, .1, gm.bark, 5); twig.rotation.set(Math.sin(i * 1.3) * .6, 0, -Math.cos(i * 1.3) * .6); }
+      b.ball(0, 1.45, 0, .5, mossMat, 5).scaling.y = .4;
+      b.flush(body, "stump trunk");
+      const legs = [0, 1, 2, 3].map(i => {
+        const a = i * Math.PI / 2 + Math.PI / 4, j = b.joint("root leg", body, Math.cos(a) * .32, .05, Math.sin(a) * .32);
+        const r = b.cyl(Math.cos(a) * .22, -.3, Math.sin(a) * .22, .75, .18, .05, gm.bark, 5); r.rotation.set(Math.sin(a) * .5, 0, -Math.cos(a) * .5);
+        b.flush(j, "root"); return j;
+      });
+      const arms = [-1, 1].map(s => {
+        const sh = b.joint("branch", body, s * .38, 1.0, 0);
+        b.cyl(0, -.35, 0, .75, .12, .09, gm.bark, 6); b.flush(sh, "branch arm");
+        const el = b.joint("branch tip", sh, 0, -.72, 0);
+        b.cyl(0, -.25, 0, .5, .09, .05, gm.bark, 5);
+        for (let f = -1; f <= 1; f++) b.cyl(f * .06, -.6, 0, .28, .01, .04, gm.bark, 4).rotation.z = f * .4;
+        b.flush(el, "twig claw"); sh.rotation.z = s * .5; return { sh, el, s };
+      });
+      return (k) => {
+        const { t, move, atk, hurt, walk } = k;
+        body.rotation.z = Math.sin(walk) * .1 * move + Math.sin(t * .7) * .03; body.rotation.x = -hurt * .25 + atk * .35;
+        body.position.y = .55 + Math.abs(Math.sin(walk)) * .08 * move;
+        legs.forEach((l, i) => { l.rotation.x = Math.sin(walk + i * Math.PI / 2) * .35 * move; });
+        arms.forEach(a => { a.sh.rotation.x = -atk * 2.4 + Math.sin(t * 1.1 + a.s) * .12; a.sh.rotation.z = a.s * (.5 - atk * .3); a.el.rotation.x = -.4 - atk * .6; });
+      };
+    },
+    // Possessed statue: door guardian (ภูตทวารบาล) or the elite shrine
+    // keeper — carved stone and lacquer, spirit light leaking from cracks.
+    statue(root, o) {
+      const b = ghostBuilder(root), body = b.joint("statue", root, 0, 0, 0);
+      for (const s of [-1, 1]) { b.cyl(s * .2, .45, 0, .9, .26, .32, gm.stone, 6); b.box(s * .2, .05, -.06, .3, .1, .42, gm.stone); }
+      b.box(0, 1.05, 0, .62, .35, .4, o.cloth); b.cyl(0, 1.0, -.21, .4, .26, .22, o.cloth, 4);
+      b.flush(body, "statue legs");
+      const torso = b.joint("torso", body, 0, 1.2, 0);
+      b.cyl(0, .38, 0, .76, .82, .6, gm.stone, 8).scaling.z = .7;
+      b.box(0, .5, -.23, .5, .08, .04, gold); b.box(0, .25, -.22, .3, .06, .04, gold);
+      for (let i = 0; i < 6; i++) b.box(-.25 + noise(i, 721) * .5, .1 + noise(i, 722) * .6, -.215 - noise(i, 723) * .02, .03, .12 + noise(i, 724) * .14, .02, gm.crack).rotation.z = (noise(i, 725) - .5) * 1.4;
+      for (const s of [-1, 1]) b.ball(s * .42, .7, 0, .34, o.cloth, 5);
+      b.flush(torso, "statue torso");
+      const head = b.joint("head", torso, 0, .82, 0);
+      b.box(0, .17, 0, .4, .4, .38, gm.stone);
+      b.box(0, .12, -.2, .36, .14, .04, gm.stone);
+      for (const s of [-1, 1]) { b.ball(s * .09, .22, -.2, .085, o.eye, 4); b.cyl(s * .1, .02, -.2, .1, 0, .04, bronzeMat, 4).rotation.x = Math.PI; }
+      b.box(0, .03, -.205, .22, .05, .02, gm.mouth);
+      // Tiered chada crown with a tall spire.
+      for (let i = 0; i < 4; i++) b.cyl(0, .42 + i * .13, 0, .13, .4 - i * .09, .46 - i * .09, i % 2 ? gold : o.cloth, 8);
+      b.cyl(0, 1.0 + o.spire * .5, 0, .4 + o.spire, .02, .12, gold, 6);
+      for (const s of [-1, 1]) b.cyl(s * .24, .3, 0, .3, .02, .1, gold, 4).rotation.z = -s * .9;
+      b.flush(head, "statue head");
+      const arms = [-1, 1].map(s => {
+        const sh = b.joint("shoulder", torso, s * .46, .62, 0);
+        b.cyl(0, -.28, 0, .56, .2, .17, gm.stone, 6); b.flush(sh, "stone arm");
+        const el = b.joint("elbow", sh, 0, -.56, 0);
+        b.cyl(0, -.24, 0, .48, .17, .15, gm.stone, 6); b.box(0, -.52, 0, .2, .18, .2, gm.stone);
+        if (s > 0) { b.cyl(0, -.55, -.55, 1.4, .16, .1, o.cloth, 6).rotation.x = Math.PI / 2; b.cyl(0, -.55, -1.25, .3, .26, .16, gold, 6).rotation.x = Math.PI / 2; }
+        b.flush(el, "stone forearm"); return { sh, el, s };
+      });
+      return (k) => {
+        const { t, move, atk, hurt, walk, wind } = k;
+        body.position.y = Math.abs(Math.sin(walk)) * .06 * move; body.rotation.z = Math.sin(walk) * .06 * move;
+        torso.rotation.x = .05 + atk * .45 - wind * .25 - hurt * .2; torso.rotation.y = Math.sin(t * .5) * .04 - wind * .3 + atk * .3;
+        head.rotation.x = -.05 + Math.sin(t * 1.9) * .03;
+        const club = arms[1], free = arms[0];
+        club.sh.rotation.x = -.35 - wind * 2.5 - atk * 1.1 + (wind > 0 ? 0 : atk * 1.4); club.el.rotation.x = -.9 + wind * .6;
+        free.sh.rotation.x = Math.sin(walk) * .3 * move - wind * .4; free.sh.rotation.z = -.15; free.el.rotation.x = -.5;
+      };
+    },
+    // เงาผู้จารึก: a possessed scribe in a backbend, crawling face-up on hands
+    // and feet with the head hanging back toward the victim.
+    crawler(root, o) {
+      const b = ghostBuilder(root), body = b.joint("pelvis", root, 0, .78, 0);
+      b.cyl(0, 0, .15, .5, .42, .46, gm.robe, 8).rotation.x = Math.PI / 2;
+      b.box(0, .08, .05, .38, .1, .6, gm.robe);
+      b.flush(body, "crawler hips");
+      const chest = b.joint("chest", body, 0, .05, -.18); chest.rotation.x = -.35;
+      b.cyl(0, 0, -.28, .55, .4, .42, gm.robe, 8).rotation.x = Math.PI / 2;
+      b.ball(0, -.06, -.3, .28, gm.corpse, 5).scaling.set(1.2, .5, 1.3);
+      b.flush(chest, "crawler chest");
+      const head = b.joint("head", chest, 0, -.05, -.6);
+      b.ball(0, -.13, -.06, .28, gm.corpse, 8).scaling.set(.9, 1.1, .95);
+      for (const s of [-1, 1]) b.ball(s * .06, -.18, -.17, .055, o.eye, 4);
+      b.box(0, -.06, -.17, .12, .07, .03, gm.mouth);
+      b.flush(head, "crawler head");
+      const hair = [-.1, 0, .1].map(x => strand(b, head, x, -.05, .06, 4, .14, .06, hairMat, .3));
+      const limbs = [[-1, -.55], [1, -.55], [-1, .25], [1, .25]].map(([s, z], i) => {
+        const hip = b.joint("limb", i < 2 ? chest : body, s * .22, 0, i < 2 ? z + .2 : z);
+        b.cyl(0, -.22, 0, .45, .08, .065, i < 2 ? gm.corpse : gm.robe, 6); b.flush(hip, "upper limb");
+        const kn = b.joint("knee", hip, 0, -.45, 0);
+        b.cyl(0, -.2, 0, .42, .065, .05, gm.corpse, 6); b.box(0, -.43, -.06, .1, .04, .18, gm.corpse);
+        b.flush(kn, "lower limb"); hip.rotation.z = s * .5; kn.rotation.z = -s * .9; return { hip, kn, s, i };
+      });
+      return (k) => {
+        const { t, move, atk, hurt, walk } = k;
+        body.position.y = .78 + Math.abs(Math.sin(walk * 2)) * .05 * move - hurt * .1 + atk * .25;
+        chest.rotation.x = -.35 - atk * .7; body.rotation.z = Math.sin(walk) * .08 * move;
+        head.rotation.y = Math.sin(t * 4.3) * Math.sin(t * .8) * .5; head.rotation.x = Math.sin(t * 1.7) * .1;
+        limbs.forEach(l => { const ph = walk + (l.i % 3 === 0 ? 0 : Math.PI);
+          l.hip.rotation.x = Math.sin(ph) * .5 * move - (l.i < 2 ? atk * 1.6 : 0); l.kn.rotation.x = Math.max(0, Math.cos(ph)) * .6 * move; });
+        hair.forEach((h, i) => swayStrand(h, t, i, .12));
+      };
+    },
+    // วิญญาณเสียงระฆัง: a cracked bronze bell floating on frayed ropes, ghost
+    // arms hanging from its mouth and a face glowing inside; rings on attack.
+    bell(root, o) {
+      const b = ghostBuilder(root), body = b.joint("bell", root, 0, 1.7, 0);
+      b.cyl(0, .1, 0, .95, .55, 1.15, templeBronze, 14); b.cyl(0, -.42, 0, .1, 1.24, 1.24, gold, 14);
+      b.cyl(0, .66, 0, .25, .2, .35, templeBronze, 8);
+      for (let i = 0; i < 3; i++) b.box(.2 + i * .1, -.1 + i * .15, -.5 + i * .04, .03, .3, .02, gm.crack).rotation.z = .3 + i * .2;
+      b.ball(0, -.25, 0, .5, gm.mouth, 6).scaling.y = .4;
+      for (const s of [-1, 1]) b.ball(s * .12, -.3, -.15, .1, o.eye, 4);
+      b.flush(body, "bell");
+      const ropes = [0, 1, 2, 3].map(i => strand(b, body, Math.cos(i * 1.57) * .1, .8, Math.sin(i * 1.57) * .1, 4, .2, .04, ropeRed, .2).map((j, n) => { if (!n) j.rotation.x = Math.PI; return j; }));
+      const arms = [-1, 1].map(s => {
+        const sh = b.joint("ghost arm", body, s * .25, -.4, 0);
+        b.cyl(0, -.3, 0, .6, .07, .05, gm.corpse, 6);
+        for (let f = -1; f <= 1; f++) b.cyl(f * .03, -.68, -.02, .16, .012, .025, gm.corpse, 4);
+        b.flush(sh, "bell arm"); return { sh, s };
+      });
+      const ring = B.MeshBuilder.CreateGround("bell shockwave", { width: 1, height: 1 }, scene);
+      ring.parent = root; ring.position.y = .08; ring.material = ringMat; ring.isPickable = false; ring.setEnabled(false);
+      return (k) => {
+        const { t, move, atk, hurt } = k;
+        body.position.y = 1.7 + Math.sin(t * 1.3) * .12; body.rotation.z = Math.sin(t * 1.1) * .12 + atk * Math.sin(t * 30) * .25 - hurt * .3;
+        body.rotation.x = move * .2;
+        arms.forEach(a => { a.sh.rotation.x = Math.sin(t * 1.7 + a.s) * .2 - atk * 1.2; a.sh.rotation.z = a.s * (.2 + atk * .5); });
+        ropes.forEach((r, i) => swayStrand(r.slice(1), t, i, .15, "z"));
+        ring.setEnabled(atk > .05); ring.scaling.setAll(1 + (1 - atk) * 6); ring.visibility = atk;
+      };
+    },
+    // ผู้เฝ้าพันธนาการ: hung upside down from a floating yoke beam by chains,
+    // fanged mouth gaping, hair streaming down, clawed hands gripping the beam.
+    hanged(root, o) {
+      const b = ghostBuilder(root), yoke = b.joint("yoke", root, 0, 3.0, 0);
+      b.box(0, 0, 0, 1.8, .2, .24, gm.beam);
+      for (const s of [-1, 1]) { b.box(s * .95, 0, 0, .1, .34, .34, gold); }
+      b.flush(yoke, "yoke beam");
+      const body = b.joint("hanged body", yoke, 0, -.1, 0);
+      for (const s of [-1, 1]) { b.box(s * .15, -.1, 0, .03, .3, .03, gm.iron); b.cyl(s * .1, -.3, 0, .35, .1, .12, gm.robe, 6); }
+      b.cyl(0, -.75, 0, .7, .4, .32, gm.shirt, 8);
+      b.ball(0, -1.2, -.02, .32, gm.corpse, 8).scaling.set(.9, 1.05, .95);
+      b.box(0, -1.28, -.15, .16, .14, .04, gm.mouth);
+      for (let f = -1; f <= 1; f++) for (const r of [-1, 1]) b.cyl(f * .045, -1.28 + r * .05, -.16, .05, 0, .02, gm.pale, 3).rotation.x = r > 0 ? 0 : Math.PI;
+      for (const s of [-1, 1]) b.ball(s * .07, -1.17, -.14, .06, o.eye, 4);
+      for (let i = 0; i < 3; i++) b.box(0, -.5 - i * .15, -.18, .44, .03, .03, gm.iron);
+      b.flush(body, "hanged body");
+      const hair = [-.12, -.04, .04, .12, 0].map((x, i) => strand(b, body, x, -1.3, i === 4 ? .1 : 0, 4, .18, .07, hairMat, .5));
+      const arms = [-1, 1].map(s => {
+        const sh = b.joint("arm", body, s * .22, -.5, 0);
+        b.cyl(0, .22, 0, .44, .055, .07, gm.corpse, 6);
+        for (let f = -1; f <= 1; f++) b.cyl(f * .025, .5, -.02, .14, .025, .01, gm.corpse, 4);
+        b.flush(sh, "reaching arm"); sh.rotation.z = -s * .5; return { sh, s };
+      });
+      return (k) => {
+        const { t, move, atk, hurt } = k;
+        yoke.position.y = 3.0 + Math.sin(t * 1.1) * .1; yoke.rotation.z = Math.sin(t * .8) * .06;
+        body.rotation.x = Math.sin(t * 1.3) * .18 + move * .3 - atk * .9 + hurt * .4; body.rotation.z = Math.sin(t * 1.05) * .12;
+        body.position.y = -.1 - atk * .6;
+        arms.forEach(a => { a.sh.rotation.x = -atk * 1.4 + Math.sin(t * 2 + a.s) * .1; a.sh.rotation.z = -a.s * (.5 - atk * .4); });
+        hair.forEach((h, i) => swayStrand(h, t, i, .1 + atk * .2));
+      };
+    },
+  };
+  // Which rig each server monster uses (names come from the server roster).
+  function ghostDesign(monster, id) {
+    const level = Number(monster.level) || 1;
+    if (monster.tier === "elite" && monster.mapId === "forbidden_forest")
+      return { kind: "statue", scale: 1.55, eye: gm.eyeAmber, cloth: gm.lacquer, spire: 1, elite: true };
+    if (monster.mapId === "bound_temple") {
+      if (id.startsWith("temple_forecourt_")) return { kind: "statue", scale: .95 + (level - 8) * .03, eye: gm.eyeRed, cloth: templeLacquer, spire: .2 };
+      if (id.startsWith("temple_cloister_")) return { kind: "crawler", scale: 1 + (level - 11) * .03, eye: gm.eyeRed };
+      if (id.startsWith("temple_belfry_")) return { kind: "bell", scale: 1 + (level - 14) * .03, eye: gm.eyeAmber };
+      return { kind: "hanged", scale: 1 + (level - 17) * .03, eye: gm.eyeRed };
+    }
+    if (level < 5) return { kind: "corpse", scale: .9 + level * .03, eye: gm.eyeAmber };
+    if (level < 9) return { kind: "stump", scale: 1 + (level - 5) * .04, eye: gm.eyeGreen };
+    return { kind: "longhair", scale: 1 + (level - 9) * .03, eye: gm.eyeRed };
+  }
+  const soulMeshes = [];
+  // Builds the pickable root plus the visual rig for one monster.
+  function makeGhostMonster(monster, id) {
+    const design = ghostDesign(monster, id);
+    const tall = { hanged: 3.4, bell: 2.6, longhair: 2.2, statue: 2.4 }[design.kind] || 2;
+    const root = B.MeshBuilder.CreateBox("monster-" + id, { width: 1.3, height: tall, depth: 1.3 }, scene);
+    root.visibility = .001; root.isPickable = true;
+    const rig = new B.TransformNode("ghost rig", scene); rig.parent = root; rig.position.y = -tall / 2; rig.scaling.setAll(design.scale);
+    const update = GHOST_KINDS[design.kind](rig, design);
+    root.metadata = { monsterId: id, ghost: { update, rig, tall, design, attackAt: -1e9, hurtAt: -1e9, deathAt: 0, spawnAt: performance.now(), walk: 0, speed: 0 } };
+    if (design.elite) {
+      const radius = worldDefinitions?.forbidden_forest?.guardian?.strikeRadius ?? 2.8;
+      const warning = B.MeshBuilder.CreateTorus("keeper strike boundary", { diameter: 2 * radius, thickness: .12, tessellation: 40 }, scene);
+      warning.parent = root; warning.position.y = -tall / 2 + .11; warning.isPickable = false; warning.material = strikeMat; warning.setEnabled(false);
+      root.metadata.warning = warning;
+    }
+    return root;
+  }
+  // Rising soul released when a ghost is destroyed.
+  function releaseSoul(x, y, z) {
+    const soul = B.MeshBuilder.CreateSphere("released soul", { diameter: .45, segments: 6 }, scene);
+    soul.material = gm.soul; soul.isPickable = false; soul.position.set(x, y, z);
+    const tail = B.MeshBuilder.CreateCylinder("soul tail", { height: .8, diameterTop: .4, diameterBottom: 0, tessellation: 6 }, scene);
+    tail.parent = soul; tail.position.y = -.45; tail.material = gm.soul; tail.isPickable = false;
+    soulMeshes.push({ soul, born: performance.now() });
+  }
+  function animateGhosts(dt, now) {
+    const t = now / 1000;
+    const tick = (mesh) => {
+      const g = mesh.metadata?.ghost; if (!g || !mesh.isEnabled()) return;
+      if (g.tx !== undefined) {
+        const k = 1 - Math.exp(-dt * 10), ox = mesh.position.x, oz = mesh.position.z;
+        mesh.position.x += (g.tx - ox) * k; mesh.position.z += (g.tz - oz) * k; mesh.position.y = g.ty + g.tall / 2;
+        const turn = Math.atan2(Math.sin(g.tf - mesh.rotation.y), Math.cos(g.tf - mesh.rotation.y)); mesh.rotation.y += turn * k;
+        const sp = Math.hypot(mesh.position.x - ox, mesh.position.z - oz) / Math.max(dt, 1e-3);
+        g.speed += (sp - g.speed) * (1 - Math.exp(-dt * 6));
+      }
+      const move = Math.min(1, g.speed / 2.5);
+      g.walk += dt * (2 + 6 * move);
+      const atkAge = (now - g.attackAt) / 1000, hurtAge = (now - g.hurtAt) / 1000;
+      const atk = atkAge < .7 ? Math.sin(Math.min(1, atkAge / .7) * Math.PI) : 0;
+      const hurt = hurtAge < .3 ? Math.sin(hurtAge / .3 * Math.PI) : 0;
+      g.update({ t: t + (mesh.uniqueId % 17), move, atk, hurt, walk: g.walk, wind: g.windup ? 1 : 0 });
+      // Spawn: rises out of the ground; death: sinks, shrinks and lets the soul go.
+      const spawnP = Math.min(1, (now - g.spawnAt) / 700);
+      let s = g.design.scale * (.3 + .7 * ease(spawnP)), sink = (1 - ease(spawnP)) * -.8;
+      if (g.deathAt) {
+        const p = (now - g.deathAt) / 900;
+        if (p >= 1) { mesh.setEnabled(false); g.deathAt = 0; return; }
+        s *= 1 - ease(p) * .85; sink = -ease(p) * .9; g.rig.rotation.z = ease(p) * .6;
+      } else g.rig.rotation.z = 0;
+      g.rig.scaling.setAll(s); g.rig.position.y = -g.tall / 2 + sink;
+    };
+    for (const mesh of forestMonsters.values()) tick(mesh);
+    if (villageGhost) {
+      villageGhost.position.set(enemy.position.x, enemy.position.y, enemy.position.z); villageGhost.rotation.y = enemy.rotation.y;
+      villageGhost.setEnabled(enemy.isEnabled() && activeMapId === "ritual_village"); tick(villageGhost);
+    }
+    for (let i = soulMeshes.length - 1; i >= 0; i--) {
+      const s = soulMeshes[i], p = (now - s.born) / 1600;
+      if (p >= 1) { s.soul.dispose(); soulMeshes.splice(i, 1); continue; }
+      s.soul.position.y += dt * 2.2; s.soul.position.x += Math.sin(t * 6 + i) * dt * .6; s.soul.visibility = 1 - p; s.soul.scaling.setAll(1 - p * .5);
+    }
+  }
+  // The village DEMO ghost: a corpse rig following the legacy tap target.
+  const villageGhost = (() => {
+    const holder = makeGhostMonster({ level: 3, mapId: "ritual_village" }, "possessed-1");
+    holder.isPickable = false; holder.metadata.monsterId = null;
+    const g = holder.metadata.ghost; g.tall = 2; g.rig.position.y = -.88;
+    enemy.visibility = .001; eyeA.setEnabled(false); eyeB.setEnabled(false);
+    return holder;
+  })();
   let player = ensureAvatar("demo",true,0,0);
   setAvatarWeapon(player,"ritual_dagger");
   const MONSTER_ID = "possessed-1";
@@ -3722,6 +4115,8 @@
       joined.onMessage("combat_hit", hit => {
         if (room !== joined) return;
         const forestTarget=joined.state?.monsters?.get?.(hit?.targetId);
+        const struck=(forestMonsters.get(hit?.targetId)||(hit?.targetId===MONSTER_ID?villageGhost:null))?.metadata?.ghost;
+        if(struck)struck.hurtAt=performance.now();
         if (typeof hit?.attackerId === "string") {
           const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
           playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
@@ -3848,7 +4243,11 @@
         syncPKHud();
       });
       joined.onMessage("monster_hit", hit => {
-        if (room === joined) playAction(avatars.get(hit?.targetId), "hit");
+        if (room === joined) {
+          playAction(avatars.get(hit?.targetId), "hit");
+          const g = forestMonsters.get(hit?.attackerId)?.metadata?.ghost; if (g) g.attackAt = performance.now();
+          if (hit?.attackerId === MONSTER_ID) villageGhost.metadata.ghost.attackAt = performance.now();
+        }
         if (room === joined && hit?.targetId === localId) {
           toast("ถูกผีโจมตี -" + Number(hit.damage || 0) + " HP");
         }
@@ -5328,10 +5727,12 @@
             if (now - demoLastHitAt >= 1000) {
               demoLastHitAt = now;
               playAttack(localId, false, enemy.position.x, enemy.position.z);
+              villageGhost.metadata.ghost.hurtAt = now;
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
               hitFlashRemaining = .22;
               updateMonsterUI(demoMonsterHp, 100, demoMonsterHp > 0, true);
               if (demoMonsterHp <= 0) {
+                releaseSoul(enemy.position.x, enemy.position.y + .4, enemy.position.z);
                 enemy.setEnabled(false);
                 demoAutoAttack = false;
                 demoRespawnAt = now + 6000;
@@ -5487,6 +5888,7 @@
     // Keep the same clear area around the hero at every pinch/wheel zoom.
     if(me && activeMapId==="forbidden_forest")fadeForestCrowns(me);
     if(me && templeCover.length)fadeTempleWalls(me);
+    animateGhosts(dt, now);
     scene.fogStart = camera.radius + atmosphere.fogNear;
     scene.fogEnd = camera.radius + atmosphere.fogFar;
     driftMist(elapsed, camera.target);
