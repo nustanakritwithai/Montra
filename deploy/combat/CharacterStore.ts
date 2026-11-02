@@ -16,6 +16,8 @@ import { DEFAULT_MAP_ID, getWorldMap } from "./WorldMaps.js";
 import { emptyAllocations, PROGRESSION, validateAllocations, type Allocations } from "./Progression.js";
 import { EconomyStore } from "./EconomyStore.js";
 
+import { parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
+
 export const CHARACTER_SAVE_INTERVAL_MS = 15_000;
 export const CHARACTER_SLOTS = [1, 2, 3] as const;
 export type CharacterSlot = typeof CHARACTER_SLOTS[number];
@@ -36,6 +38,8 @@ export type CharacterSnapshot = {
   /** Missing only in pre-world-map saves; they belong to the village. */
   mapId?: string;
   statAllocations?: Allocations;
+  build?: CharacterBuild;
+  classSkillReadyAt?: number;
   stamina?: number;
   /** Undefined only when loading a legacy S2/three-slot snapshot for migration. */
   inventory?: InventorySnapshot;
@@ -109,6 +113,8 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
       typeof value.updatedAt !== "string" || !Number.isFinite(Date.parse(value.updatedAt))) {
     throw new Error("character_record_invalid");
   }
+  if (value.build !== undefined && !parseBuild(value.build)) throw new Error("invalid_character_build");
+  if (value.classSkillReadyAt !== undefined && (typeof value.classSkillReadyAt !== "number" || !Number.isSafeInteger(value.classSkillReadyAt) || value.classSkillReadyAt < 0)) throw new Error("invalid_skill_cooldown");
   if (value.inventory !== undefined) validateInventory(value.inventory);
   const statAllocations = value.statAllocations === undefined ? emptyAllocations() :
     validateAllocations(value.statAllocations, value.level as number);

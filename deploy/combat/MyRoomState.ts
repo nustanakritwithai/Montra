@@ -1,4 +1,7 @@
-import { schema, t, type SchemaType } from "@colyseus/schema";
+import { Encoder, schema, t, type SchemaType } from "@colyseus/schema";
+
+// The initial state carries all atlas and character skill definitions.
+Encoder.BUFFER_SIZE = Math.max(Encoder.BUFFER_SIZE, 32 * 1024);
 
 /**
  * Keep the original x/y/z field order so the current Web client retains its
@@ -36,6 +39,9 @@ export const Player = schema({
   maxStamina: t.number().default(100),
   xpToNext: t.number().default(150),
   possessionActive: t.boolean().default(false), // append-only: temporary server-owned buff
+  pathId: t.string().default(""),
+  ancestryId: t.string().default(""),
+  classSkillReadyAt: t.number().default(0),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
@@ -118,6 +124,8 @@ export const MyRoomState = schema({
   worldDefinition: t.string().default(""),
   extendedChatAvailable: t.boolean().default(true),
   buffsAvailable: t.boolean().default(true),
+  forgeCatalog: t.string().default(""),
+  buildCatalog: t.string().default(""),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

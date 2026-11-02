@@ -9,7 +9,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(fn,label,ms=8000){const end=Date.now()+ms;while(Date.now()<end){const v=fn();if(v)return v;await sleep(40);}throw Error("timeout: "+label);}
 const token="mt1_"+randomBytes(32).toString("hex"), rooms=[];
 try {
-  const client=new Client(endpoint), a=await client.create("my_room",{guestToken:token});rooms.push(a);
+  const client=new Client(endpoint), a=await client.create("my_room",{guestToken:token,worldVersion:1,templeVersion:1,atlasVersion:1});rooms.push(a);
   const events=[];a.onMessage("*",(type,data)=>events.push({type,data}));
   const reject=reason=>events.some(e=>e.type==="command_rejected"&&e.data.reason===reason);
   const me=()=>a.state.players.get(a.sessionId);
@@ -25,7 +25,7 @@ try {
   await sleep(1100);a.send("summon",{});await until(()=>a.state.summons.has(a.sessionId),"summon again");
   await sleep(1100);a.send("possess",{});await until(()=>reject("possession_cooldown"),"cooldown enforced");
   await a.leave();rooms.pop();await sleep(400);
-  const b=await client.create("my_room",{guestToken:token});rooms.push(b);
+  const b=await client.create("my_room",{guestToken:token,worldVersion:1,templeVersion:1,atlasVersion:1});rooms.push(b);
   await until(()=>b.state?.players?.get(b.sessionId)?.persistent,"rejoin");const p=b.state.players.get(b.sessionId);
   assert.equal(p.possessionActive,false);assert.equal(p.atk,base.atk);assert.equal(p.def,base.def);
   const rejected=[];b.onMessage("command_rejected",e=>rejected.push(e.reason));

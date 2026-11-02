@@ -1,3 +1,4 @@
+import { FORGE } from "./ForgeRules.js";
 import { Room, type Client, type CloseCode } from "colyseus";
 import { randomUUID } from "node:crypto";
 import {
@@ -36,8 +37,12 @@ import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestA
 import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { saveBugReport } from "./BugReports.js";
-import { applyBuffs, BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCooldown } from "./Buffs.js";
-import { parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
+import { BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCooldown } from "./Buffs.js";
+import { BUILD_CATALOG, PATHS, SUPPORT_RADIUS, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
+import { BuffLedger } from "./BuffLedger.js";
+import { calculateModifiedStats } from "./StatModifiers.js";
+import { POSSESSION_MODIFIER } from "./SkillCatalog.js";
+import { parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
@@ -55,7 +60,7 @@ import { ForestEncounters } from "./ForestEncounters.js";
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
   climb: CommandBucket; dash: CommandBucket; flight: CommandBucket;
-  chat: CommandBucket; bugReport: CommandBucket; possession: CommandBucket; economy: CommandBucket; party: CommandBucket;
+  chat: CommandBucket; bugReport: CommandBucket; possession: CommandBucket; build: CommandBucket; economy: CommandBucket; party: CommandBucket;
 };
 
 type ActiveDash = DashDirection & { remaining: number };
@@ -112,6 +117,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private trades = new Map<string, TradeSession>();
   private parties = new PartyManager();
   private buffs = new BuffBook();
+  private effects = new BuffLedger();
 
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
@@ -136,13 +142,82 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return Boolean(target && target.mapId === owner.mapId && !isRestArea(target.mapId,target));
   }
 
+  private buildPlayer(client: Client): Player | undefined {
+    const id = client.sessionId, player = this.state.players.get(id);
+    if (!this.gates.get(id)?.build.consume(this.simulatedMs)) {
+      this.reject(client, "build_rate_limited");
+    } else if (!player?.alive || !this.persistentCharacters.has(id)) {
+      this.reject(client, "build_unavailable");
+    } else if (this.pendingWarps.has(id) || this.pendingItemUses.has(id) || this.pendingCharacterLeaves.has(id) || this.pendingRewards.has(id)) {
+      this.reject(client, "character_busy");
+    } else {
+      return player;
+    }
+  }
+
+  private selectBuild(client: Client, build: CharacterBuild): void {
+    const id = client.sessionId, player = this.buildPlayer(client);
+    if (!player) return;
+    const atShrine = player.mapId === DEFAULT_MAP_ID && isOnGround(player.y) && Math.hypot(player.x, player.z) <= 6;
+    if (!atShrine || this.simulatedMs - (this.lastCombatMs.get(id) ?? -Infinity) < PROGRESSION.combatQuietMs)
+      return this.reject(client, "build_needs_shrine");
+    if (player.classSkillReadyAt > Date.now()) return this.reject(client, "class_skill_cooldown");
+    if (player.pathId === build.path && player.ancestryId === build.ancestry) return;
+    const snapshot = this.captureCharacterSnapshot(id);
+    if (!snapshot) return;
+    this.pendingWarps.add(id);
+    const task = characterStore.save({ ...snapshot, build }).then(() => {
+      player.pathId = build.path;
+      player.ancestryId = build.ancestry;
+      client.send("build_selected", build);
+    }, error => {
+      console.error("MONTRA build save failed", error);
+      this.reject(client, "build_save_failed");
+    }).finally(() => {
+      this.pendingWarps.delete(id);
+      this.pendingItemUses.delete(id);
+    });
+    this.pendingItemUses.set(id, task);
+  }
+
+  private castClassSkill(client: Client): void {
+    const id = client.sessionId, player = this.buildPlayer(client);
+    if (!player) return;
+    const build = parseBuild({ path: player.pathId, ancestry: player.ancestryId });
+    if (!build) return this.reject(client, "build_required");
+    const skill = PATHS[build.path], now = Date.now();
+    if (now < player.classSkillReadyAt) return this.reject(client, "class_skill_cooldown");
+    if (player.stamina < skill.stamina) return this.reject(client, "insufficient_stamina");
+    const members = skill.targets === "party" ? this.parties.get(id)?.members ?? [id] : [id];
+    const targets: [string, Player][] = [];
+    for (const member of members) {
+      const target = this.state.players.get(member);
+      if (!target?.alive || target.mapId !== player.mapId || distance3d(player, target) > SUPPORT_RADIUS ||
+          this.pendingWarps.has(member) || this.pendingItemUses.has(member) || this.pendingCharacterLeaves.has(member)) continue;
+      if (member !== id && !isWorldSegmentClear(player.mapId, player, target)) continue;
+      if (skill.effect.kind !== "heal" || target.hp < target.maxHp) targets.push([member, target]);
+    }
+    if (!targets.length) return this.reject(client, "class_skill_no_target");
+    player.stamina -= skill.stamina;
+    player.classSkillReadyAt = now + skill.cooldownMs;
+    for (const [member, target] of targets) {
+      if (skill.effect.kind === "heal") {
+        target.hp = Math.min(target.maxHp, target.hp + Math.round(target.maxHp * skill.effect.fraction));
+      } else {
+        this.effects.grant(member, {id: build.path, sourceId: id, group: "class_skill", bonuses: skill.effect.bonuses}, this.simulatedMs + skill.effect.durationMs);
+        this.applyStats(member, target, this.statAllocations.get(member) ?? emptyAllocations());
+      }
+    }
+    client.send("class_skill_used", {skill: skill.skill, targets: targets.length});
+  }
+
   private recordCombat(ownerId: string, targetId: string): void {
     this.lastCombatMs.set(ownerId, this.simulatedMs);
     if (!this.getMonster(targetId)) this.lastCombatMs.set(targetId, this.simulatedMs);
   }
 
-  private applyStats(player: Player, allocations: Allocations): void {
-    const stats = applyBuffs(calculateStats(player.level, allocations),player.possessionActive ? ["possession"] : []);
+  private applyStats(id:string, player: Player, allocations: Allocations): void {
+    const stats = calculateModifiedStats(calculateStats(player.level, allocations),this.effects.modifiers(id));
     player.maxHp = stats.maxHp; player.atk = stats.atk; player.def = stats.def;
     player.magicAtk = stats.magicAtk; player.magicDef = stats.magicDef;
     player.maxStamina = stats.maxStamina;
@@ -155,8 +230,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private endPossession(id:string, reason:string):void {
     if(!this.buffs.end(id,this.simulatedMs))return;
     rememberPossessionCooldown(this.persistentCharacters.get(id));
+    this.effects.remove(id,POSSESSION_MODIFIER.id,POSSESSION_MODIFIER.sourceId);
     const player=this.state.players.get(id);
-    if(player){player.possessionActive=false;this.applyStats(player,this.statAllocations.get(id) ?? emptyAllocations());}
+    if(player){player.possessionActive=false;this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());}
     this.broadcast("possession_changed",{playerId:id,active:false,reason},{afterNextPatch:true});
   }
 
@@ -183,7 +259,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         await characterStore.save({ ...snapshot, ...next, inventory:prize ?? snapshot.inventory, updatedAt: new Date().toISOString() });
         if (prize) this.inventories.set(id,prize);
         current.level = next.level; current.experience = next.experience;
-        this.applyStats(current, this.statAllocations.get(id) ?? emptyAllocations());
+        this.applyStats(id,current, this.statAllocations.get(id) ?? emptyAllocations());
         try {
           const recipient = this.clients.find(client => client.sessionId === id);
           if (prize) recipient?.send("inventory_state",prize);
@@ -254,7 +330,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict"];
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","forge_max_rank","forge_item_changed"];
       const reason=error instanceof Error && allowed.includes(error.message) ? error.message : "economy_failed";
       if (reason==="economy_failed") console.error("MONTRA economy failed",error);
       client.send("economy_error",{reason});
@@ -359,7 +435,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (characterStore.economy.getAccount(id).gold<offer.gold) throw new Error("insufficient_gold");
         trade.fingerprints[client.sessionId]=this.tradeSnapshot(client.sessionId,offer);
         const stack=offer.slot===null ? null : this.inventories.get(client.sessionId)?.slots[offer.slot];
-        trade.items[client.sessionId]=stack ? {itemId:stack.itemId,quantity:offer.amount} : null;
+        trade.items[client.sessionId]=stack ? {...stack,quantity:offer.amount} : null;
         trade.offers[client.sessionId]=offer; trade.confirmed.clear(); this.notifyTrade(trade,"trade_update");
       });
     },
@@ -413,6 +489,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           (command.channel==="private" && (peer.sessionId===id || peer.sessionId===target!.sessionId));
         if(deliver) peer.send("chat_message",event);
       }
+    },
+    forge_weapon: (client: Client, message: unknown) => {
+      const order = parseForge(message);
+      if (!order) return this.reject(client, "invalid_economy_request");
+      this.economyAction(client, id => {
+        const result = characterStore.economy.forgeWeapon(id, order.requestId, order.slot, order.stamp, order.action);
+        this.syncEconomy(client, id);
+        client.send("forge_result", { requestId: order.requestId, action: order.action, ...result });
+      });
+    },
+    select_build: (client: Client, message: unknown) => {
+      const build = parseBuild(message);
+      if (!build) return this.reject(client, "invalid_build");
+      this.selectBuild(client, build);
+    },
+    cast_class_skill: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_build");
+      this.castClassSkill(client);
     },
     allocate_stat: (client: Client, _message: unknown) => this.reject(client, "automatic_stats"),
     warp: (client: Client, message: unknown) => {
@@ -791,12 +885,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!player || !player.alive)return this.reject(client,"not_alive");
       if(!this.gates.get(id)?.possession.consume(this.simulatedMs))return this.reject(client,"possession_rate_limited");
       if(player.possessionActive){this.endPossession(id,"cancelled");return;}
-      if(!this.state.summons.has(id))return this.reject(client,"possession_needs_summon");
+      if(POSSESSION_BUFF.requiresSummon && !this.state.summons.has(id))return this.reject(client,"possession_needs_summon");
       if(possessionCoolingDown(this.persistentCharacters.get(id)))return this.reject(client,"possession_cooldown");
       const result=this.buffs.activate(id,this.simulatedMs);
       if(result!=="ok")return this.reject(client,result==="cooldown" ? "possession_cooldown" : "possession_active");
+      this.effects.grant(id,POSSESSION_MODIFIER,this.simulatedMs+POSSESSION_BUFF.durationMs);
       this.despawnSummon(id,"possessed");
-      player.possessionActive=true;this.applyStats(player,this.statAllocations.get(id) ?? emptyAllocations());
+      player.possessionActive=true;this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
       this.broadcast("possession_changed",{playerId:id,active:true,durationMs:POSSESSION_BUFF.durationMs},{afterNextPatch:true});
     },
 
@@ -892,7 +987,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.lastAttackMs.set(id,this.simulatedMs);
       this.recordCombat(id, targetId);
       shooter.facing = facingTo(target.x-shooter.x, target.z-shooter.z);
-      const rangedAttack = shooter.magicAtk + weaponBonuses(this.inventories.get(id)).ranged;
+      const rangedAttack = shooter.magicAtk + weaponBonuses(this.inventories.get(id), monsterOrder ? "pve" : "pvp").ranged;
       const rangedDamage = monsterOrder ? calculateDamage(rangedAttack, (target as Monster).defense, (target as Monster).level) :
         calculateDamage(rangedAttack, (target as Player).magicDef, (target as Player).level);
 
@@ -1094,6 +1189,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   onCreate() {
+    this.state.forgeCatalog = JSON.stringify(FORGE);
+    this.state.buildCatalog = BUILD_CATALOG;
     this.state.economyAvailable = characterStore.economyEnabled;
     this.forest.initialize();
     this.state.worldDefinition = WORLD_EXPANSION ? JSON.stringify({version:1,maps:WORLD_MAPS}) : "";
@@ -1129,6 +1226,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private tick(dt: number) {
     for(const id of this.buffs.expired(this.simulatedMs))this.endPossession(id,"expired");
+    for(const id of this.effects.expire(this.simulatedMs)) {const p=this.state.players.get(id);if(p)this.applyStats(id,p,this.statAllocations.get(id) ?? emptyAllocations());}
     this.updateRespawns();
     this.updateClimbs(dt);
     this.updateFlights(dt);
@@ -1370,7 +1468,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.lastAttackMs.set(attackerId, this.simulatedMs);
       this.recordCombat(attackerId, targetId);
 
-      const meleeBonus = weaponBonuses(this.inventories.get(attackerId)).melee;
+      const meleeBonus = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp").melee;
       if (monster) {
         const meleeDamage = calculateDamage(attacker.atk + meleeBonus, monster.defense, monster.level);
         monster.hp = Math.max(0, monster.hp - meleeDamage);
@@ -1412,6 +1510,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const victim = this.state.players.get(id);
     if (!victim || !victim.alive) return;
     this.endPossession(id,"owner_dead");
+    this.effects.forget(id);
+    this.applyStats(id, victim, this.statAllocations.get(id) ?? emptyAllocations());
     victim.hp = 0;
     this.hpRegenRemainder.delete(id);
     victim.alive = false;
@@ -1641,6 +1741,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       pkKills: player.pkKills, pkDeaths: player.pkDeaths,
       mapId: player.mapId,
       statAllocations: this.statAllocations.get(id) ?? emptyAllocations(),
+      build: parseBuild({path: player.pathId, ancestry: player.ancestryId}) ?? undefined,
+      classSkillReadyAt: player.classSkillReadyAt,
       stamina: player.stamina,
       x: player.x,
       // Keep stable flight altitude when a transition is mid-flight.
@@ -1712,6 +1814,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         characterId: characterId ? characterId.slice(0, 12) : "",
         characterName: saved?.name ?? "นที",
         level: saved?.level ?? 1, experience: saved?.experience ?? 0,
+        pathId: saved?.build?.path ?? "", ancestryId: saved?.build?.ancestry ?? "",
+        classSkillReadyAt: saved?.classSkillReadyAt ?? 0,
         persistent: Boolean(saved), characterSlot: slot,
         flying: Boolean(validPosition && restoreFlight),
         equippedWeaponId: equippedWeaponId(saved?.inventory) ?? "",
@@ -1720,7 +1824,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       });
 
       this.statAllocations.set(client.sessionId, allocations);
-      this.applyStats(player, allocations);
+      this.applyStats(client.sessionId,player, allocations);
       this.state.players.set(client.sessionId, player);
       if(atlasReady)this.atlasClients.add(client.sessionId);
       if(templeReady)this.templeClients.add(client.sessionId);
@@ -1745,6 +1849,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         flight: new CommandBucket(3, 2, this.simulatedMs),
         chat: new CommandBucket(3, 0.5, this.simulatedMs),
         bugReport: new CommandBucket(1, 1 / 30, this.simulatedMs),
+        build: new CommandBucket(3, 1, this.simulatedMs),
         possession: new CommandBucket(2, 0.5, this.simulatedMs),
         economy: new CommandBucket(8, 3, this.simulatedMs),
         party: new CommandBucket(6, 2, this.simulatedMs),
@@ -1761,6 +1866,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = client.sessionId;
     this.endPossession(id,"owner_left");
     this.buffs.forget(id);
+    this.effects.forget(id);
     this.templeClients.delete(id);
     this.atlasClients.delete(id);
     this.leaveParty(id);
@@ -1821,6 +1927,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onDispose() {
     this.buffs.clear();
+    this.effects.clear();
     this.trades.clear();
     this.parties.clear();
     const pending = [...this.persistentCharacters.keys()].map(async id => {

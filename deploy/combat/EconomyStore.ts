@@ -1,3 +1,4 @@
+import { forgeStamp, quoteForge, rollForge, type ForgeAction } from "./ForgeRules.js";
 /** Single-process transactional economy. This store must own inventories before it is wired to gameplay. */
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
@@ -25,7 +26,7 @@ function take(inventory: InventorySnapshot, slot: number, amount: number): { inv
   if (original.equippedWeaponSlot === slot) throw new Error("item_equipped");
   const slots = original.slots.slice();
   slots[slot] = item.quantity === amount ? null : { ...item, quantity: item.quantity - amount };
-  return { inventory: validateInventory({ ...original, slots }), item: { itemId: item.itemId, quantity: amount } };
+  return { inventory: validateInventory({ ...original, slots }), item: { ...item, quantity: amount } };
 }
 function add(inventory: InventorySnapshot, item: InventoryStack): InventorySnapshot {
   const original = validateInventory(inventory), slots = original.slots.map(x => x ? { ...x } : null);
@@ -43,7 +44,7 @@ function add(inventory: InventorySnapshot, item: InventoryStack): InventorySnaps
   if (remaining) {
     const free = slots.findIndex(slot => slot === null);
     if (free < 0) throw new Error("inventory_full");
-    slots[free] = { itemId: item.itemId, quantity: remaining };
+    slots[free] = { ...item, quantity: remaining };
   }
   return validateInventory({ ...original, slots });
 }
@@ -128,6 +129,20 @@ export class EconomyStore {
       id: String(row.id), seller: String(row.seller), item: JSON.parse(String(row.item)) as InventoryStack,
       price: Number(row.price), state: String(row.state),
     }));
+  }
+  forgeWeapon(id: string, request: string, slot: number, stamp: string, action: ForgeAction) {
+    return this.once(id, request, "forge", {slot, stamp, action}, () => {
+      const account = this.account(id);
+      const stack = account.inventory.slots[slot];
+      if (!stack || stack.itemId === "health_potion" || forgeStamp(stack) !== stamp) throw Error("forge_item_changed");
+      const {cost} = quoteForge(stack.forge, action);
+      if (account.gold < cost) throw Error("insufficient_gold");
+      const result = rollForge(stack.forge, action);
+      account.gold -= cost;
+      account.inventory.slots[slot] = {...stack, forge: result.forge};
+      this.put(id, account);
+      return result;
+    });
   }
   listItem(id: string, request: string, slot: number, amount: number, price: number): { listingId: string } {
     positiveInteger(price, MAX_GOLD);

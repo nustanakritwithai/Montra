@@ -1,3 +1,4 @@
+import { readForged, type Forged } from "./ForgeRules.js";
 /**
  * MONTRA V0.2.7 — authoritative permanent equipment.
  * Existing v0.2.6 inventory JSON (version:1, slots:[...]) stays readable.
@@ -20,7 +21,7 @@ export const STARTER_WEAPON_IDS = [
 
 export type WeaponItemId = typeof STARTER_WEAPON_IDS[number];
 export type ItemId = typeof POTION_ID | WeaponItemId;
-export type InventoryStack = { itemId: ItemId; quantity: number };
+export type InventoryStack = { itemId: ItemId; quantity: number; forge?: Forged };
 export type InventorySnapshot = {
   version: 1;
   slots: Array<InventoryStack | null>;
@@ -76,12 +77,12 @@ export function validateInventory(value: unknown): InventorySnapshot {
   const seenWeapons = new Set<WeaponItemId>();
   const slots = value.slots.map((entry: unknown): InventoryStack | null => {
     if (entry === null) return null;
-    if (!record(entry) || Object.keys(entry).length !== 2 ||
+    if (!record(entry) || Object.keys(entry).some(key => !["itemId","quantity","forge"].includes(key)) ||
         !Number.isSafeInteger(entry.quantity)) {
       throw new Error("inventory_record_invalid");
     }
     if (entry.itemId === POTION_ID) {
-      if ((entry.quantity as number) < 1 ||
+      if (Object.hasOwn(entry,"forge") || (entry.quantity as number) < 1 ||
           (entry.quantity as number) > INVENTORY_STACK_LIMIT) {
         throw new Error("inventory_record_invalid");
       }
@@ -92,7 +93,7 @@ export function validateInventory(value: unknown): InventorySnapshot {
       throw new Error("inventory_record_invalid");
     }
     seenWeapons.add(entry.itemId);
-    return { itemId: entry.itemId, quantity: 1 };
+    return {itemId: entry.itemId, quantity: 1, ...(Object.hasOwn(entry,"forge") ? {forge:readForged(entry.forge)} : {})};
   });
   if (!upgraded) return { version: 1, slots };
   const selected = value.equippedWeaponSlot;
@@ -171,11 +172,16 @@ export function equippedWeaponId(inventory: InventorySnapshot | undefined): Weap
   const item = inventory.slots[inventory.equippedWeaponSlot];
   return item && isWeaponId(item.itemId) ? item.itemId : null;
 }
-export function weaponBonuses(inventory: InventorySnapshot | undefined):
+export function weaponBonuses(inventory: InventorySnapshot | undefined, mode: "pve" | "pvp" = "pve"):
   {melee: number; ranged: number} {
   const id = equippedWeaponId(inventory);
   const stats = id ? WEAPON_STATS[id] : null;
-  return { melee: stats?.meleeBonus ?? 0, ranged: stats?.rangedBonus ?? 0 };
+  const forge = mode === "pve" ? inventory?.slots[inventory.equippedWeaponSlot ?? -1]?.forge : undefined;
+  const extra = forge?.rank ?? 0, affix = forge?.affix;
+  return {
+    melee: (stats?.meleeBonus ?? 0) + (id && id !== SPIRIT_STAFF_ID ? extra : 0) + (affix?.stat === "melee" ? affix.tier : 0),
+    ranged: (stats?.rangedBonus ?? 0) + (id === SPIRIT_STAFF_ID ? extra : 0) + (affix?.stat === "ranged" ? affix.tier : 0),
+  };
 }
 
 /** Browser sends {slot: 0}, not item ID, quantity, HP or heal amount. */

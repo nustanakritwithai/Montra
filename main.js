@@ -1377,7 +1377,7 @@
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
-    possessed=false;syncPossessionButton();
+    possessed=false;syncPossessionButton();$("classSkill").hidden=true;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false; updatePartyBadge();
@@ -1789,6 +1789,7 @@
     syncClimbButton();
     updateFlightButton();
     syncPossessionButton();
+    syncClassSkill(mine);
     if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
     if (drawerActive === "character") renderProgressionProfile();
     if (drawerActive === "party") renderParty();
@@ -1938,12 +1939,18 @@
       });
       joined.onMessage("economy_state", message => {
         if (room !== joined || !Number.isSafeInteger(message?.gold) || message.gold < 0) return;
-        economyGold=message.gold; renderEconomy();
+        economyGold=message.gold; renderEconomy(); renderBag();
       });
       joined.onMessage("market_state", message => {
         if (room !== joined || !Array.isArray(message?.listings)) return;
         economyListings=message.listings.filter(x => x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && typeof x.seller==="string" && /^[a-f0-9]{12}$/.test(x.seller) && x.item && (x.item.itemId===POTION_ITEM_ID || Object.hasOwn(WEAPON_META,x.item.itemId)) && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 && Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000).slice(0,120);
         renderEconomy();
+      });
+      joined.onMessage("forge_result", result => {
+        if (room !== joined) return;
+        finishEconomyPending();
+        toast(result.action === "reroll" ? "สุ่มออปชันแล้ว" : result.success ? "ตีบวกสำเร็จ +" + result.forge.rank : "ตีบวกพลาด · ระดับเดิมยังอยู่");
+        renderBag();
       });
       joined.onMessage("market_result", message => {
         if (room !== joined) return;
@@ -1953,7 +1960,7 @@
       joined.onMessage("economy_error", message => {
         if (room !== joined) return;
         finishEconomyPending();
-        const reasons={insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
+        const reasons={forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
         toast(reasons[message?.reason] || "ทำรายการไม่สำเร็จ · ลองตรวจข้อมูลอีกครั้ง"); renderEconomy();
       });
       joined.onMessage("trade_update", message => {
@@ -2055,6 +2062,12 @@
         }
         syncSummons(joined.state);
       });
+      joined.onMessage("build_selected", () => {
+        if (room === joined) toast("บันทึกสายอาชีพและเผ่าแล้ว");
+      });
+      joined.onMessage("class_skill_used", result => {
+        if (room === joined) toast(result.skill + " · มีผล " + result.targets + " คน");
+      });
       joined.onMessage("possession_changed", notice => {
         if(room!==joined || notice?.playerId!==localId)return;
         toast(notice.active ? "วิญญาณเข้าสิง · เพิ่มโจมตีและป้องกัน 20% นาน 60 วินาที" : "สถานะเข้าสิงสิ้นสุด");
@@ -2139,7 +2152,7 @@
           }
           if (Object.hasOwn(WEAPON_META,stack?.itemId) &&
               stack?.quantity === 1) {
-            return { itemId: stack.itemId, quantity: 1 };
+            return { itemId: stack.itemId, quantity: 1, forge: stack.forge };
           }
           return null;
         });
@@ -2188,6 +2201,8 @@
       });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        const buildReasons = {build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
+        if (Object.hasOwn(buildReasons, info?.reason)) { toast(buildReasons[info.reason]); return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
         if (["economy_unavailable","economy_rate_limited","invalid_economy_request","invalid_trade","trade_unavailable","trade_expired","character_busy"].includes(info?.reason) && (drawerActive === "economy" || economyPending)) {
           finishEconomyPending();
@@ -2802,10 +2817,64 @@
     ["hp","HP สูงสุด","maxHp"],["atk","โจมตีกายภาพ","atk"],["def","ป้องกันกายภาพ","def"],
     ["magicAtk","โจมตีเวท","magicAtk"],["magicDef","ป้องกันเวท","magicDef"],["stamina","กำลังสูงสุด","maxStamina"]
   ];
+  let catalogKey = "", buildCatalog = null;
+  function getBuildCatalog() {
+    const raw = room?.state?.buildCatalog || "";
+    if (raw !== catalogKey) {
+      catalogKey = raw;
+      try { buildCatalog = raw ? JSON.parse(raw) : null; } catch { buildCatalog = null; }
+    }
+    return buildCatalog;
+  }
+  function syncClassSkill(player) {
+    const skill = getBuildCatalog()?.paths?.[player?.pathId], button = $("classSkill");
+    button.hidden = !skill;
+    if (!skill) return;
+    const seconds = Math.max(0, Math.ceil((player.classSkillReadyAt - Date.now()) / 1000));
+    button.disabled = !player.alive || seconds > 0 || player.stamina < skill.stamina;
+    button.lastElementChild.textContent = seconds ? seconds + " วิ" : skill.skill;
+    button.title = skill.skill + " · " + skill.stamina + " กำลัง";
+    button.setAttribute("aria-label", button.title);
+  }
+  $("classSkill").onclick = () => { if (mode === "live") room?.send("cast_class_skill", {}); };
+
+  function ancestryHint(player) {
+    const map = worldDefinitions?.[player.mapId];
+    const camps = player.ancestryId === "woodland";
+    const places = (camps ? map?.camps : map?.restAreas) || [];
+    if (!places.length) return camps ? "บริเวณนี้ไม่มีค่ายล่า" : "บริเวณนี้ไม่มีเขตพัก";
+    const distance = point => Math.hypot(point.x-player.x, point.z-player.z);
+    const place = places.reduce((a,b) => distance(a) <= distance(b) ? a : b);
+    if (distance(place) < 1) return "อยู่ที่ " + place.name;
+    const bearing = Math.round(Math.atan2(place.x-player.x, player.z-place.z) / (Math.PI/4));
+    const direction = ["เหนือ","ตะวันออกเฉียงเหนือ","ตะวันออก","ตะวันออกเฉียงใต้","ใต้","ตะวันตกเฉียงใต้","ตะวันตก","ตะวันตกเฉียงเหนือ"][(bearing+8)%8];
+    return place.name + " · ทิศ" + direction + " ระยะ " + Math.round(distance(place)) + " หน่วย";
+  }
+  function openBuildFields(player) {
+    const catalog = getBuildCatalog();
+    if (!catalog || !player?.persistent) return;
+    $("buildFields").hidden = false;
+    for (const [key, path] of Object.entries(catalog.paths)) $("buildPath").add(new Option(path.role + " · " + path.name, key));
+    for (const [key, origin] of Object.entries(catalog.ancestries)) $("buildAncestry").add(new Option(origin.name + " · " + origin.trait, key));
+    if (player.pathId) $("buildPath").value = player.pathId;
+    if (player.ancestryId) $("buildAncestry").value = player.ancestryId;
+    const preview = () => {
+      const path = catalog.paths[$("buildPath").value], effect = path.effect;
+      const statLabels = {atk:"โจมตี", def:"ป้องกัน", magicAtk:"โจมตีเวท", magicDef:"ป้องกันเวท"};
+      const bonus = effect.kind === "heal" ? "ฟื้น HP " + Math.round(100*effect.fraction) + "%" :
+        Object.entries(effect.bonuses).map(([stat,v]) => statLabels[stat] + " +" + Math.round(v*100) + "%").join(" · ") + " นาน " + effect.durationMs/1000 + " วินาที";
+      $("buildPreview").textContent = path.skill + " · " + bonus + (path.targets === "party" ? " ให้สมาชิกในระยะ " + catalog.supportRadius + " หน่วย" : " ให้ตัวเอง") + " · ใช้ " + path.stamina + " กำลัง · รอ " + path.cooldownMs/1000 + " วินาที";
+    };
+    $("buildPath").onchange = preview;
+    $("buildSave").onclick = () => room?.send("select_build", {path: $("buildPath").value, ancestry: $("buildAncestry").value});
+    preview();
+  }
   function renderProgressionProfile() {
     if (drawerActive !== "character" || !$('profileStats')) return;
     const p = ownServerCharacter(), supported = mode === "live" && room?.state?.progressionAvailable === true && p;
     $("profileProgressionStatus").textContent = supported ? (p.possessionActive ? "วิญญาณเข้าสิง · ATK / DEF / เวท +20%" : "สเตตัสเพิ่มอัตโนมัติเมื่อเลเวลขึ้น") : "เข้า LIVE กับเซิร์ฟเวอร์ที่รองรับระบบสเตตัส";
+    const selectedPath = getBuildCatalog()?.paths?.[p?.pathId];
+    if ($("currentBuild")) $("currentBuild").textContent = selectedPath ? selectedPath.role + " · " + selectedPath.name + " · " + getBuildCatalog().ancestries[p.ancestryId].name + " · " + ancestryHint(p) : "ยังไม่ได้เลือกสายอาชีพ";
     $("profileLevel").textContent = "LV. " + (p?.level ?? 1) + " · EXP " + (p?.experience ?? 0) + (supported && p.xpToNext ? " / " + p.xpToNext : "");
     for (const [key,,field] of progressionStats) {
       $("statValue-" + key).textContent = supported ? String(Math.round(Number(p[field]) || 0)) : "—";
@@ -2821,6 +2890,7 @@
       '<button class="secondary" id="switchCharacterSlot" type="button">เลือกช่องเซฟ 1–3</button>' +
       '<div class="status-line"><span>ชื่อ</span><strong id="profileName"></strong></div>' +
       '<div class="status-line"><span>ระดับ / ค่าประสบการณ์</span><strong id="profileLevel"></strong></div>' +
+      '<section id="buildFields" hidden><h3>สายอาชีพและเผ่า</h3><p id="currentBuild"></p><label class="field" for="buildPath">สายอาชีพ</label><select id="buildPath"></select><p class="note" id="buildPreview"></p><label class="field" for="buildAncestry">เผ่าและพรสวรรค์</label><select id="buildAncestry"></select><button type="button" class="secondary" id="buildSave">ยืนยันที่ลานพักกลางหมู่บ้าน</button></section>' +
       '<div id="profileStats"><p class="note" id="profileProgressionStatus"></p>' +
       progressionStats.map(([key,label]) => '<div class="status-line stat-row"><span>' + label + '</span><strong id="statValue-' + key + '">—</strong></div>').join("") +
       '<div class="status-line"><span>กำลังปัจจุบัน</span><strong id="profileStamina">—</strong></div></div>' +
@@ -2835,6 +2905,7 @@
       '<label class="field" for="restoreCharacterKey">มีรหัสกู้คืนจากเครื่องเดิม?</label>' +
       '<input id="restoreCharacterKey" type="password" autocomplete="off" spellcheck="false" placeholder="วางรหัสกู้คืนของคุณ"/>' +
       '<button class="secondary" id="restoreCharacterButton" type="button">ใช้รหัสกู้คืนบนอุปกรณ์นี้</button>');
+    openBuildFields(me);
     $("profileSaveStatus").textContent = durable ? "เก็บบน VPS" : "ยังไม่เปิดใช้ (DEMO/Server เดิม)";
     $("profileSlot").textContent = durable ? "เซฟที่ " + (activeCharacterSlot || 1) + " / 3" : "ยังไม่ได้เข้าออนไลน์";
     $("switchCharacterSlot").onclick = openOnline;
@@ -2891,7 +2962,7 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์ การตีบวก และระบบอาชีพ</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
   }
   function currentBagSlots() {
     if (mode === "live") return inventoryState?.slots || null;
@@ -2929,7 +3000,7 @@
     const equippedItem = equipped === null || equipped === undefined
       ? null : slots?.[equipped];
     $("bagEquipped").textContent = equippedItem && Object.hasOwn(WEAPON_META,equippedItem.itemId)
-      ? WEAPON_META[equippedItem.itemId].name + " · " +
+      ? WEAPON_META[equippedItem.itemId].name + forgeLabel(equippedItem) + " · " +
         WEAPON_META[equippedItem.itemId].bonus : "มือเปล่า";
     for (let i = 0; i < INVENTORY_SLOTS; i++) {
       const slot = $("bagSlot" + i);
@@ -2951,7 +3022,8 @@
     const ready = Boolean(chosen && canAct && (weapon
       ? hasWeapons : currentHp > 0 && currentHp < maxHp));
     $("bagItemName").textContent = !chosen ? "ช่องว่าง" : weapon
-      ? WEAPON_META[chosen.itemId].name : "ยาเลือดเล็ก";
+      ? WEAPON_META[chosen.itemId].name + forgeLabel(chosen) : "ยาเลือดเล็ก";
+    renderForge(chosen);
     $("bagItemDescription").textContent = !chosen
       ? "ช่องนี้ยังไม่มีไอเท็ม"
       : weapon
@@ -2965,6 +3037,28 @@
       weapon ? !hasWeapons ? "ต้องติดตั้งชุดอาวุธบน VPS" :
         selectedBagSlot === equipped ? "ถอดอาวุธ" : "สวมใส่อาวุธ" :
         currentHp >= maxHp ? "HP เต็ม" : "ใช้ยาเลือด";
+  }
+  function forgeLabel(item) {
+    const f = item?.forge;
+    if (!f) return "";
+    const stat = f.affix?.stat === "melee" ? "ประชิด" : "เวท";
+    return " +" + f.rank + (f.affix ? " · " + stat + " +" + f.affix.tier : "");
+  }
+  function renderForge(item) {
+    const panel = $("forgePanel"), raw = room?.state?.forgeCatalog;
+    if (!panel) return;
+    panel.hidden = !economyReady() || !raw || !Object.hasOwn(WEAPON_META, item?.itemId);
+    if (panel.hidden) return;
+    const config = JSON.parse(raw), f = item.forge, rank = f?.rank ?? 0;
+    const cost = config.goldPerStep * (rank + 1), max = rank >= config.chances.length;
+    const chance = f?.misses === config.maxMisses ? 100 : config.chances[rank];
+    const upgrade = $("forgeEnhance"), reroll = $("forgeReroll");
+    upgrade.textContent = max ? "ตีบวกเต็มแล้ว" : "ตี +" + (rank + 1) + " · " + cost + " ทอง · สำเร็จ " + chance + "%";
+    reroll.textContent = "สุ่มออปชันใหม่ · " + config.rerollCost + " ทอง";
+    upgrade.disabled = max || economyPending || economyGold === null || economyGold < cost;
+    reroll.disabled = economyPending || economyGold === null || economyGold < config.rerollCost;
+    const tierOdds = f?.rerollMisses === config.rareAfter ? "ครั้งนี้รับประกันขั้น 3" : "ขั้น 1/2/3 มีโอกาส " + [config.tier1Weight, config.tier2Weight, 100-config.tier1Weight-config.tier2Weight].join("/") + "%";
+    $("forgeInfo").textContent = "มี " + (economyGold ?? "…") + " ทอง · โบนัสช่างอาคมใช้เมื่อต่อสู้กับมอนสเตอร์ ตีบวกเพิ่มพลังอาวุธขั้นละ 1 พลาด " + config.maxMisses + " ครั้งรับประกันครั้งถัดไป · ออปชันประชิดหรือเวทอย่างละ 50% " + tierOdds + " · สุ่มใหม่แทนออปชันเดิม";
   }
   function openBag() {
     const grid = Array.from({ length: INVENTORY_SLOTS }, (_, i) =>
@@ -2980,6 +3074,7 @@
       '<div class="bag-detail"><strong id="bagItemName"></strong>' +
       '<p class="note" id="bagItemDescription"></p></div>' +
       '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
+      '<div id="forgePanel" hidden><h3>ช่างอาคม</h3><p class="note" id="forgeInfo"></p><button class="secondary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeReroll"></button></div>' +
       '<p class="note">ยาเลือดและอาวุธถาวรแยกตาม 3 เซฟ · สวมใส่ทีละหนึ่งชิ้น · ใช้ยาเมื่อ HP ไม่เต็ม · การสวมใส่บันทึกบน VPS</p>');
     for (let i = 0; i < INVENTORY_SLOTS; i++) {
       $("bagSlot" + i).onclick = () => {
@@ -2987,6 +3082,16 @@
         renderBag();
       };
     }
+    function submitForge(action) {
+      const item = currentBagSlots()?.[selectedBagSlot];
+      if (!item || !Object.hasOwn(WEAPON_META, item.itemId)) return;
+      const stamp = item.forge ? item.forge.instanceId + "." + item.forge.revision : item.itemId;
+      economySend("forge_weapon", {slot:selectedBagSlot, stamp, action, requestId:economyRequestId()}, true);
+      renderBag();
+    }
+    $("forgeEnhance").onclick = () => submitForge("enhance");
+    $("forgeReroll").onclick = () => submitForge("reroll");
+    if (economyReady()) economySend("get_economy", {});
     function sendBagCommand(command,payload) {
       const requestedRoom=room;
       itemUsePending = true;
@@ -3067,7 +3172,7 @@
   function economyItemName(item) {
     if (!item) return "ไม่มีไอเท็ม";
     const name=item.itemId===POTION_ITEM_ID ? "ยาเลือดเล็ก" : WEAPON_META[item.itemId]?.name || "ไอเท็ม";
-    return name + " ×" + Number(item.quantity || 0);
+    return name + forgeLabel(item) + " ×" + Number(item.quantity || 0);
   }
   function economySend(command, payload, durable=false) {
     if (!economyReady() || !room) { toast("เข้า LIVE ที่เปิดระบบตลาดก่อน"); return; }

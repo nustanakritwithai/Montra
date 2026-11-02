@@ -482,3 +482,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 #chatTargetField[hidden] { display:none; }
 
 .skill[aria-pressed="true"] .glyph { box-shadow:0 0 16px #b677ef; outline:2px solid #e0bcff; }
+
+#classSkill[hidden], #buildFields[hidden] { display:none; }
+#classSkill:disabled { opacity:.6; }
+@media(max-width:400px) { .skill-bar:has(#classSkill:not([hidden])) .glyph { width:min(10vw,38px); height:min(10vw,38px); } }

@@ -48,6 +48,17 @@ jobs:
           cp deploy/combat/chat-rules.test.ts combat-verify/src/rooms/chat-rules.test.ts
           cp deploy/combat/Progression.ts combat-verify/src/rooms/Progression.ts
           cp deploy/combat/Buffs.ts combat-verify/src/rooms/Buffs.ts
+          cp deploy/combat/StatModifiers.ts combat-verify/src/rooms/StatModifiers.ts
+          cp deploy/combat/SkillCatalog.ts combat-verify/src/rooms/SkillCatalog.ts
+          cp deploy/combat/ForgeRules.ts combat-verify/src/rooms/ForgeRules.ts
+          cp deploy/combat/forge.test.ts combat-verify/src/rooms/forge.test.ts
+          cp deploy/combat/CharacterBuilds.ts combat-verify/src/rooms/CharacterBuilds.ts
+          cp deploy/combat/build-integration.mjs combat-verify/build-integration.mjs
+          cp deploy/combat/BuffLedger.ts combat-verify/src/rooms/BuffLedger.ts
+          cp deploy/combat/stat-modifiers.test.ts combat-verify/src/rooms/stat-modifiers.test.ts
+          cp deploy/combat/buff-ledger.test.ts combat-verify/src/rooms/buff-ledger.test.ts
+          cp deploy/combat/BalanceEstimates.ts combat-verify/src/rooms/BalanceEstimates.ts
+          cp deploy/combat/balance-estimates.test.ts combat-verify/src/rooms/balance-estimates.test.ts
           cp deploy/combat/buffs.test.ts combat-verify/src/rooms/buffs.test.ts
           cp deploy/combat/buff-integration.mjs combat-verify/buff-integration.mjs
           cp deploy/combat/MonsterProfiles.ts combat-verify/src/rooms/MonsterProfiles.ts
@@ -254,7 +265,7 @@ jobs:
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts
+        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts
 
       - name: Isolated party and EXP integration
         shell: bash
@@ -330,7 +341,7 @@ jobs:
         shell: bash
         working-directory: combat-verify
         run: |
-          export PORT=4113 MONTRA_ECONOMY_ENABLED=1
+          export PORT=4113 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1
           export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-buff-test-XXXXXX)"
           export MONTRA_TEST_URL=http://127.0.0.1:4113
           node --import tsx src/index.ts > buff-server.log 2>&1 &
@@ -338,6 +349,7 @@ jobs:
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4113) 2>/dev/null; then break; fi; sleep 0.25; done
           timeout 30s node buff-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 30s node build-integration.mjs || { cat buff-server.log; exit 1; }
 
       - name: Isolated economy transactions and restart
         shell: bash

@@ -27,3 +27,10 @@ export function parseTradeOffer(v:unknown): ({tradeId:string}&TradeOffer)|null {
   if ((v.slot===null)!==(v.amount===0)) return null;
   return {tradeId:v.tradeId,slot:v.slot as number | null,amount:v.amount,gold:v.gold};
 }
+
+export function parseForge(v: unknown) {
+  if (!keys(v, ["requestId","slot","stamp","action"]) || !requestId(v.requestId) || !amount(v.slot,11) ||
+      typeof v.stamp !== "string" || !/^[a-zA-Z0-9_.-]{1,64}$/.test(v.stamp) ||
+      (v.action !== "enhance" && v.action !== "reroll")) return null;
+  return {requestId:v.requestId, slot:v.slot, stamp:v.stamp, action:v.action as "enhance" | "reroll"};
+}

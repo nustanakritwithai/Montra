@@ -1,15 +1,13 @@
 import type { CombatStats } from "./Progression.js";
-
-/** Trial tuning: change here after live playtesting, never from client payloads. */
-export const POSSESSION_BUFF = Object.freeze({id:"possession",durationMs:60_000,cooldownMs:30_000,statMultiplier:1.2});
+import { calculateModifiedStats } from "./StatModifiers.js";
+import { POSSESSION_BUFF, POSSESSION_MODIFIER } from "./SkillCatalog.js";
+export { POSSESSION_BUFF } from "./SkillCatalog.js";
 export type BuffId = typeof POSSESSION_BUFF.id;
-/** Always recalculate from unbuffed stats so refreshes and level-ups cannot stack. */
+/** Resolve only server-owned registered effects, always from the original stats. */
 export function applyBuffs(base:CombatStats, active:readonly BuffId[]):CombatStats {
   const ids=new Set(active);
   if(active.some(id=>id!==POSSESSION_BUFF.id)) throw new Error("invalid_buff_id");
-  const multiplier=ids.has(POSSESSION_BUFF.id)?POSSESSION_BUFF.statMultiplier:1;
-  return {...base,atk:Math.round(base.atk*multiplier),def:Math.round(base.def*multiplier),
-    magicAtk:Math.round(base.magicAtk*multiplier),magicDef:Math.round(base.magicDef*multiplier)};
+  return calculateModifiedStats(base,ids.has(POSSESSION_BUFF.id)?[POSSESSION_MODIFIER]:[]);
 }
 /** Server simulation time only; never trusts client duration or bonuses. */
 export class BuffBook {
