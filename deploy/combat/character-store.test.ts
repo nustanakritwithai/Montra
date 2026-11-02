@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {CASTLE_ENABLED,CASTLE_ID} from "./CastlePilot.js";
+import {newOccultBook} from "./OccultRules.js";
 import {getWorldMap} from "./WorldMaps.js";
 import { test } from "node:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -28,12 +29,15 @@ async function withTempStore(callback: (store: CharacterStore, dir: string) => P
 test("closing the pilot returns a castle save to a safe public exit without losing its loadout",{skip:CASTLE_ENABLED},async()=>{
   await withTempStore(async(store,dir)=>{
     const {character}=await store.loadOrCreate(tokenA,spawn);
-    const old={...character,mapId:CASTLE_ID,x:997,y:4,z:-964};
+    const occultBook=newOccultBook();
+    occultBook.learned.seer=["seer_mark"];occultBook.loadouts.seer[0]="seer_mark";occultBook.training.seer=5;
+    const old={...character,mapId:CASTLE_ID,x:997,y:4,z:-964,occultBook};
     await writeFile(path.join(dir,old.id+".json"),JSON.stringify(old));
     const {character:restored}=await store.loadOrCreate(tokenA,spawn);
     const exit=getWorldMap("fallen_city") ?? getWorldMap("ritual_village")!;
     assert.equal(restored.mapId,exit.id);assert.deepEqual([restored.x,restored.y,restored.z],[exit.spawn.x,exit.spawn.y,exit.spawn.z]);
     assert.deepEqual(restored.inventory,old.inventory);assert.equal(restored.experience,old.experience);
+    assert.deepEqual(restored.occultBook,occultBook);
   });
 });
 test("expanded hunting coordinates survive save/reload and still reject out-of-envelope coordinates",{skip:!getWorldMap("lotus_basin")},async()=>{

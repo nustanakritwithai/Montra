@@ -139,6 +139,7 @@ export const MyRoomState = schema({
   swordTreeCatalog: t.string().default(""),
   territoryWarAvailable: t.boolean().default(false),
   muayBookCatalog: t.string().default(""),
+  occultAvailable: t.boolean().default(true), // append-only: protects newer clients connecting to older servers
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

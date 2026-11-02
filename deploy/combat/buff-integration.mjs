@@ -14,6 +14,8 @@ try {
   const reject=reason=>events.some(e=>e.type==="command_rejected"&&e.data.reason===reason);
   const me=()=>a.state.players.get(a.sessionId);
   await until(()=>a.state?.buffsAvailable && me()?.persistent,"player ready");
+  a.send("select_build",{path:"seer",ancestry:"woodland"});
+  await until(()=>me().pathId==="seer","occult class selected");
   const base={atk:me().atk,def:me().def,magicAtk:me().magicAtk,magicDef:me().magicDef,maxHp:me().maxHp};
   a.send("possess",{});await until(()=>reject("possession_needs_summon"),"requires summon");
   a.send("summon",{});await until(()=>a.state.summons.has(a.sessionId),"summoned");

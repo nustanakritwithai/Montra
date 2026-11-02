@@ -1,5 +1,5 @@
 <#
-MONTRA 0.3.2 — party / safe Windows staging.
+MONTRA — occult class / safe Windows staging.
 SAFE STAGING ONLY:
   * Backs up the existing MONTRA Room sources and compiled build.
   * Downloads only files from the owner's MONTRA GitHub repository.
@@ -16,7 +16,7 @@ param(
 $ErrorActionPreference = "Stop"
 $base = "C:\Montra\online-server"
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
-$backup = Join-Path $base "backup-before-muay-$stamp"
+$backup = Join-Path $base "backup-before-occult-$stamp"
 $download = Join-Path $env:TEMP "montra-3slots-$stamp"
 $remote = "https://raw.githubusercontent.com/nustanakritwithai/Montra/$Revision/deploy/combat"
 if ($Revision -eq "main") { Write-Warning "main can change during download; use -Revision with the verified 40-character commit SHA." }
@@ -76,6 +76,7 @@ $files = @(
   @{ Name = "ForgeRules.ts"; Target = "src\rooms\ForgeRules.ts"; Check = "rollForge" },
   @{ Name = "CharacterBuilds.ts"; Target = "src\rooms\CharacterBuilds.ts"; Check = "parseBuild" },
   @{ Name = "MuayRules.ts"; Target = "src\rooms\MuayRules.ts"; Check = "MUAY_SKILLS" },
+  @{ Name = "OccultRules.ts"; Target = "src\rooms\OccultRules.ts"; Check = "OCCULT_LESSONS" },
   @{ Name = "BuffLedger.ts"; Target = "src\rooms\BuffLedger.ts"; Check = "class BuffLedger" },
   @{ Name = "StatModifiers.ts"; Target = "src\rooms\StatModifiers.ts"; Check = "calculateModifiedStats" },
   @{ Name = "SkillCatalog.ts"; Target = "src\rooms\SkillCatalog.ts"; Check = "POSSESSION_MODIFIER" },
@@ -110,7 +111,7 @@ $files = @(
 )
 
 New-Item -ItemType Directory -Path $download -Force | Out-Null
-Write-Host "MONTRA 3-SLOTS: downloading sources before any changes..." -ForegroundColor Cyan
+Write-Host "MONTRA OCCULT: downloading sources before any changes..." -ForegroundColor Cyan
 foreach ($entry in $files) {
   $localFile = Join-Path $download $entry.Name
   Invoke-WebRequest -Uri "$remote/$($entry.Name)" -OutFile $localFile -UseBasicParsing -ErrorAction Stop
@@ -183,7 +184,7 @@ try {
 
   Push-Location $base
   try {
-    Write-Host "Compiling MONTRA V0.3.2 party..." -ForegroundColor Cyan
+    Write-Host "Compiling MONTRA occult class..." -ForegroundColor Cyan
     & npm.cmd run build
     if ($LASTEXITCODE -ne 0) {
       throw "MONTRA S1 TypeScript build failed. Exit code: $LASTEXITCODE"
@@ -205,12 +206,13 @@ try {
   Write-Host "MONTRA STATUS AND EXP BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA PARTY BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA MUAY BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA OCCULT BUILD PASSED." -ForegroundColor Green
   Write-Host "Source revision: $Revision"
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
   Write-Host "All integration tests require an ISOLATED Node instance and TEMP character folder; never run them against LIVE."
 } catch {
-  Write-Warning "3-SLOTS installation failed. Restoring MONTRA source files and build (character data untouched)."
+  Write-Warning "MONTRA occult installation failed. Restoring MONTRA source files and build (character data untouched)."
   foreach ($entry in $files) {
     $target = Join-Path $base $entry.Target
     $saved = Join-Path $backup $entry.Target
