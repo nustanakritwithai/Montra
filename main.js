@@ -2418,11 +2418,11 @@
     // Loose fisherman trousers to mid-calf, in bone-local space.
     for (const side of ["Left", "Right"]) {
       // Loose cloth sits well outside the skin so bent knees never poke through.
-      loft([[.06, .132, .126], [-.06, .124, .12], [-.22, .104, .104], [-.35, .095, .097], [-.42, .092, .094]], pants, 12);
-      ball(0, .02, 0, .25, pants, 8);
+      loft([[.06, .132, .126], [-.06, .126, .122], [-.22, .112, .112], [-.35, .106, .108], [-.42, .102, .104]], pants, 12);
+      ball(0, .02, 0, .25, pants, 8); ball(0, -.43, .01, .21, pants, 8);
       onBone(side + "UpLeg", [0, 0, 0]);
       loft([[.07, .097, .099], [0, .098, .1], [-.11, .094, .095], [-.2, .096, .095], [-.212, .09, .09]], pants, 12);
-      ball(0, -.005, -.005, .21, pants, 8);
+      ball(0, -.005, -.005, .23, pants, 8);
       onBone(side + "Leg", [0, 0, 0]);
     }
   }
@@ -2454,7 +2454,8 @@
       root.rotationQuaternion = quatFromUp(HAND_GRIPS[kind]);
     }
     a.rig.body.setEnabled(false);
-    a.skin = { nodes, copy, rest: { hipsY: nodes.Hips.position.y } };
+    const hips = nodes.Hips.position;
+    a.skin = { nodes, copy, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
   }
   // ---- Action animation set (visual only) ----
   // Every action maps to something the game already replicates: server
@@ -2470,8 +2471,9 @@
     drink: { dur: 1.15 }, dash: { dur: .46 }, rise: { dur: 1.0 }, arrive: { dur: .85 },
   };
   const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash" };
-  const POSE_BONES = ["Hips", "Spine", "Chest", "Neck", "Head", "LeftArm", "RightArm", "LeftForeArm", "RightForeArm",
-    "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg"];
+  const POSE_BONES = ["Hips", "Spine", "Spine1", "Chest", "Neck", "Head", "LeftShoulder", "RightShoulder",
+    "LeftArm", "RightArm", "LeftForeArm", "RightForeArm", "LeftHand", "RightHand",
+    "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg", "LeftFoot", "RightFoot"];
   function playAction(a, type) {
     if (!a || !ACTIONS[type]) return;
     const now = performance.now();
@@ -2548,9 +2550,13 @@
   function animateSkin(a, m, speed, s, c, t, now, dt) {
     const n = a.skin.nodes, P = {};
     for (const b of POSE_BONES) P[b] = [0, 0, 0];
-    let hipsY = 0, damping = 14;
+    const off = [0, 0, 0]; // hips translation (model units): weight shift and crouch
+    let damping = 12;
     const set = (b, x, y, z) => { P[b][0] = x; P[b][1] = y; P[b][2] = z; };
     const mix = (b, x, y, z, w) => { const v = P[b]; v[0] += (x - v[0]) * w; v[1] += (y - v[1]) * w; v[2] += (z - v[2]) * w; };
+    const add = (b, x, y, z) => { const v = P[b]; v[0] += x; v[1] += y; v[2] += z; };
+    // Spread a torso bend across both spine joints and the chest.
+    const bend = (x, y, z, w = 1) => { mix("Spine", x * .4, y * .35, z * .4, w); mix("Spine1", x * .3, y * .3, z * .3, w); mix("Chest", x * .3, y * .35, z * .3, w); };
     const live = mode === "live";
     const dead = live && a.serverAlive === false;
     const combat = live ? a.serverCombat || "idle" : "idle";
@@ -2559,55 +2565,90 @@
     const landing = combat === "descending" || (demoLocal && demoFlightTarget?.landing);
     const flying = !dead && (a.y > 4.4 || a.serverFlying || rising || landing || (demoLocal && demoFlying));
     const climbing = combat === "climbing";
+    const grounded = !dead && !flying && !climbing;
     const run = Math.min(1, Math.max(0, (speed - 3.6) / 3));
-    const breath = Math.sin(t * 2.1) * (1 - m);
-    // Standing base: arms lowered from the T-pose, weapon-ready forearm.
-    const grip = { spirit_staff: 1.45, arcane_sword: .75, ritual_dagger: .85 }[a.weaponId] ?? .3;
-    set("LeftArm", 0, 0, -1.22 + breath * .02); set("RightArm", a.weaponId === "arcane_sword" ? -.15 : 0, 0, 1.22 - breath * .02);
-    set("LeftForeArm", 0, -.28, 0); set("RightForeArm", 0, grip, 0);
-    set("Chest", breath * .02, 0, 0);
-    // Locomotion: walk blending into a run.
-    const amp = .55 + .25 * run;
-    set("LeftUpLeg", -s * amp * m, 0, 0); set("RightUpLeg", s * amp * m, 0, 0);
-    set("LeftLeg", Math.max(0, c) * (.8 + .6 * run) * m + .04, 0, 0); set("RightLeg", Math.max(0, -c) * (.8 + .6 * run) * m + .04, 0, 0);
-    P.LeftArm[0] += s * (.42 + .45 * run) * m; P.RightArm[0] -= s * (.42 + .45 * run) * m;
-    P.LeftForeArm[1] -= .9 * run * m; P.RightForeArm[1] += .6 * run * m;
-    set("Spine", .06 * m + .16 * run, s * .06 * m, 0); P.Chest[1] = -s * .08 * m;
-    set("Hips", 0, s * .07 * m, 0);
-    hipsY = Math.abs(c) * .025 * m * (1 + run);
+    const breath = Math.sin(t * 2.1), idle = 1 - m;
+    const weapon = a.weaponId || "";
+    // ---- Combat stance at rest: side-on to the opponent, left shoulder
+    // leading, weight sunk into the back (right) leg, head turned forward.
+    const turn = weapon === "spirit_staff" ? -.55 : -.82;
+    set("Hips", 0, turn, -.06);
+    off[0] = -.035 + Math.sin(t * .7) * .006; off[1] = -.035;
+    bend(.08, -.12, .1);
+    set("LeftUpLeg", -.34, .18, .17); set("LeftLeg", .14, 0, 0);
+    set("RightUpLeg", .14, -.1, -.11); set("RightLeg", .32, 0, 0);
+    set("LeftShoulder", 0, 0, -.04); set("RightShoulder", 0, 0, .04);
+    if (weapon === "arcane_sword") {
+      // Low guard: crescent blade trailing forward-down at the right hip,
+      // free hand loose and open toward the opponent.
+      set("RightArm", -.22, .15, 1.08); set("RightForeArm", 0, .55, 0); set("RightHand", 1.0, 0, 0);
+      set("LeftArm", -.42, .1, -1.06); set("LeftForeArm", 0, -.55, 0); set("LeftHand", 0, 0, -.2);
+      add("RightShoulder", 0, .1, -.08);
+    } else if (weapon === "ritual_dagger") {
+      // Low knife-fighter crouch: blade forward, guard hand up.
+      off[1] = -.09; bend(.2, -.1, .06);
+      set("LeftLeg", .42, 0, 0); set("RightLeg", .55, 0, 0); add("LeftUpLeg", -.12, 0, 0); add("RightUpLeg", -.05, 0, 0);
+      set("RightArm", -.8, .15, 1.05); set("RightForeArm", 0, 1.0, 0); set("RightHand", 0, 0, .25);
+      set("LeftArm", -1.05, -.15, -1.12); set("LeftForeArm", 0, -1.8, 0); set("LeftHand", 0, 0, -.3);
+    } else if (weapon === "spirit_staff") {
+      // Staff planted at the side, free hand raised in a ritual mudra.
+      set("RightArm", -.12, 0, 1.18); set("RightForeArm", 0, 1.55, 0); set("RightHand", 0, 0, -.25);
+      set("LeftArm", -.95, .25, -1.2); set("LeftForeArm", 0, -2.15, 0); set("LeftHand", .3, 0, 0);
+    } else {
+      // Unarmed: arms folded across the chest.
+      set("RightArm", -.62, -.35, 1.12); set("RightForeArm", 0, 2.0, 0);
+      set("LeftArm", -.58, .35, -1.12); set("LeftForeArm", 0, -2.0, 0);
+    }
+    add("Chest", breath * .03 * idle, 0, 0); add("LeftShoulder", 0, 0, breath * .025 * idle); add("RightShoulder", 0, 0, -breath * .025 * idle);
+    // ---- Locomotion blends over the stance: pelvis turns with the stride,
+    // the chest counter-twists, the hip drops over the swinging leg.
+    if (m > .001) {
+      const W = {}; for (const b of POSE_BONES) W[b] = [0, 0, 0];
+      const amp = .55 + .25 * run, armAmp = .42 + .45 * run, grip = { spirit_staff: 1.45, arcane_sword: 1.2, ritual_dagger: .9 }[weapon];
+      W.Hips = [.02 * run, s * .14 * (1 + run), -s * .05];
+      W.Spine = [.04 + .12 * run, s * .02, s * .03]; W.Spine1 = [.02 + .06 * run, -s * .06, 0]; W.Chest = [.01, -s * .12 * (1 + run), -s * .03];
+      W.LeftUpLeg = [-s * amp, 0, .03]; W.RightUpLeg = [s * amp, 0, -.03];
+      W.LeftLeg = [Math.max(0, c) * (.8 + .6 * run) + .06, 0, 0]; W.RightLeg = [Math.max(0, -c) * (.8 + .6 * run) + .06, 0, 0];
+      W.LeftArm = [s * armAmp, 0, -1.24]; W.LeftForeArm = [0, -(.28 + 1.1 * run), 0];
+      W.RightArm = grip ? [-.25 - s * armAmp * .4, .1, 1.18] : [-s * armAmp, 0, 1.24];
+      W.RightForeArm = [0, grip ?? (.28 + 1.1 * run), 0];
+      for (const b of POSE_BONES) mix(b, W[b][0], W[b][1], W[b][2], m);
+      off[0] *= idle; off[1] = off[1] * idle + (Math.abs(c) * .03 * (1 + run) - .02 * run) * m;
+    }
     if (a.possessed) {
-      // Possessed: hunched, head hanging, arms loose and twitching.
-      mix("Spine", .32, 0, Math.sin(t * 23) * .04, .85); mix("Head", .4, Math.sin(t * 3.1) * .25, 0, .85);
-      mix("LeftArm", -.3, 0, -1.38, .8); mix("RightArm", -.3, 0, 1.38, .8);
-      mix("LeftForeArm", 0, -.6, 0, .8); mix("RightForeArm", 0, .6, 0, .8);
+      bend(.5, 0, Math.sin(t * 23) * .06, .85); mix("Head", .45, Math.sin(t * 3.1) * .3, 0, .85);
+      mix("LeftArm", -.3, 0, -1.38, .8); mix("RightArm", -.3, 0, 1.38, .8); mix("LeftForeArm", 0, -.6, 0, .8); mix("RightForeArm", 0, .6, 0, .8);
+      mix("LeftLeg", .45, 0, 0, .8); mix("RightLeg", .45, 0, 0, .8); off[1] -= .08;
     }
     if (dead) {
-      // Collapsed on the back, limbs slack.
       damping = 6;
-      set("Hips", -1.45, .2, 0); hipsY = -.74;
-      set("Spine", -.05, 0, 0); set("Chest", 0, 0, 0); set("Head", -.2, .5, 0);
+      for (const b of POSE_BONES) set(b, 0, 0, 0);
+      set("Hips", -1.45, .2, 0); off[0] = 0; off[1] = -.74;
+      set("Head", -.2, .5, 0); set("Spine1", -.05, .1, 0);
       set("LeftArm", -.2, 0, -.45); set("RightArm", -.2, 0, .5); set("LeftForeArm", 0, -.3, 0); set("RightForeArm", 0, .4, 0);
       set("LeftUpLeg", -.15, 0, .12); set("RightUpLeg", -.3, 0, -.1); set("LeftLeg", .25, 0, 0); set("RightLeg", .5, 0, 0);
+      set("LeftFoot", .6, 0, 0); set("RightFoot", .5, 0, 0);
     } else if (climbing) {
-      // Hand over hand up the ladder.
       const k = Math.sin(t * 6);
+      for (const b of POSE_BONES) set(b, 0, 0, 0); off[0] = 0; off[1] = 0;
       set("LeftArm", -2.7 + .45 * k, 0, -1.35); set("RightArm", -2.7 - .45 * k, 0, 1.35);
       set("LeftForeArm", 0, -.5, 0); set("RightForeArm", 0, .5, 0);
       set("LeftUpLeg", -.9 - .5 * k, 0, 0); set("RightUpLeg", -.9 + .5 * k, 0, 0);
-      set("LeftLeg", 1.3, 0, 0); set("RightLeg", 1.3, 0, 0); set("Spine", .12, 0, 0); set("Hips", 0, 0, 0);
-      hipsY = 0;
+      set("LeftLeg", 1.3, 0, 0); set("RightLeg", 1.3, 0, 0); set("Spine", .12, 0, k * .05); set("Hips", 0, 0, -k * .06);
     } else if (flying) {
-      // Levitating in a cross-legged meditation; arms lift while rising
-      // and open to the sides while landing.
+      // Cross-legged levitation; arms lift while rising and open while landing.
+      for (const b of ["Hips", "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg", "LeftFoot", "RightFoot"]) set(b, 0, 0, 0);
+      off[0] = 0; off[1] = 0;
       set("LeftUpLeg", -1.45, -.15, .5); set("RightUpLeg", -1.45, .15, -.5);
-      set("LeftLeg", 2.35, .55, 0); set("RightLeg", 2.35, -.55, 0);
-      set("Hips", -.08, 0, 0); set("Spine", .1 + .25 * m, 0, 0); hipsY = 0;
+      set("LeftLeg", 2.35, .55, 0); set("RightLeg", 2.35, -.55, 0); set("LeftFoot", .5, 0, 0); set("RightFoot", .5, 0, 0);
+      set("Hips", -.08, 0, 0); bend(.15 + .3 * m, 0, 0);
       if (rising) { set("LeftArm", -2.75, 0, -1.0); set("RightArm", -2.75, 0, 1.0); set("LeftForeArm", 0, -.3, 0); set("RightForeArm", 0, .3, 0); }
       else if (landing) { set("LeftArm", 0, 0, -.4); set("RightArm", 0, 0, .4); set("LeftForeArm", 0, -.2, 0); set("RightForeArm", 0, .2, 0); }
-      else { set("LeftArm", -.55, 0, -1.05); set("RightArm", -.55, 0, 1.05); set("LeftForeArm", 0, -.7, 0); set("RightForeArm", 0, .7, 0); }
-      P.Chest[0] = Math.sin(t * 1.7) * .04;
+      else if (!weapon) { set("LeftArm", -.55, 0, -1.05); set("RightArm", -.55, 0, 1.05); set("LeftForeArm", 0, -.7, 0); set("RightForeArm", 0, .7, 0); }
+      add("Chest", Math.sin(t * 1.7) * .04, 0, 0);
     }
-    // Transient actions blend over the state pose with an attack envelope.
+    // ---- Transient actions: coil, strike and follow-through with the hips
+    // leading the shoulders and the weight moving onto the front foot.
     const act = a.action, fx = avatarFx(a);
     for (const arc of Object.values(fx.slashes)) arc.setEnabled(false);
     fx.orb.setEnabled(false); fx.vial.setEnabled(false); fx.seal.setEnabled(false);
@@ -2617,9 +2658,16 @@
       const w = Math.min(1, p / .12, (1 - p) / .22);
       const strike = ease((p - .3) / .25);
       damping = 26;
-      const lerp3 = (A, Bv, k) => [A[0] + (Bv[0] - A[0]) * k, A[1] + (Bv[1] - A[1]) * k, A[2] + (Bv[2] - A[2]) * k];
-      const pose = (bone, A, Bv, k = strike) => { const v = lerp3(A, Bv, k); mix(bone, v[0], v[1], v[2], w); };
-      const lunge = k => { pose("LeftUpLeg", [0, 0, 0], [-.55, 0, 0], k); pose("RightUpLeg", [0, 0, 0], [.35, 0, 0], k); pose("LeftLeg", [.1, 0, 0], [.45, 0, 0], k); pose("RightLeg", [.1, 0, 0], [.3, 0, 0], k); };
+      const lerp = (A, Bv, k) => A.map((v, i) => v + (Bv[i] - v) * k);
+      const pose = (bone, A, Bv, k = strike) => { const v = lerp(A, Bv, k); mix(bone, v[0], v[1], v[2], w); };
+      const spine = (A, Bv, k = strike) => { const v = lerp(A, Bv, k); bend(v[0], v[1], v[2], w); };
+      // Weight transfer: back-foot load while coiling, front-foot lunge on impact.
+      const weight = (k, depth = 1) => {
+        pose("Hips", [0, -.55, -.06], [.06, .25, .06], k);
+        pose("LeftUpLeg", [-.2, .1, .12], [-.75 * depth, .05, .1], k); pose("LeftLeg", [.2, 0, 0], [.55 * depth, 0, 0], k);
+        pose("RightUpLeg", [.05, 0, -.1], [.42 * depth, 0, -.06], k); pose("RightLeg", [.5, 0, 0], [.18, 0, 0], k);
+        off[0] += (-.05 + .09 * k) * w; off[1] -= (.04 + .07 * k * depth) * w; off[2] += .06 * k * w;
+      };
       const trail = () => {
         const arc = fx.slashes[act.type]; if (!arc) return;
         const k = Math.max(0, 1 - Math.abs(p - .52) / .2);
@@ -2630,63 +2678,84 @@
       };
       switch (act.type) {
         case "stab": case "punch":
-          pose("RightArm", [.6, 0, 1.1], [-1.5, .1, 1.18]); pose("RightForeArm", [0, 1.7, 0], [0, .08, 0]);
-          pose("Chest", [0, -.35, 0], [0, .35, 0]); pose("Spine", [0, 0, 0], [.22, 0, 0]); lunge(strike); trail(); break;
+          weight(strike, .9); spine([.05, -.6, .08], [.32, .55, -.05]);
+          pose("RightShoulder", [0, -.15, .05], [0, .3, -.05]);
+          pose("RightArm", [.65, 0, 1.1], [-1.5, .12, 1.18]); pose("RightForeArm", [0, 1.75, 0], [0, .06, 0]);
+          pose("LeftArm", [-1.1, -.1, -1.1], [.35, 0, -1.2]); pose("LeftForeArm", [0, -1.6, 0], [0, -.4, 0]);
+          trail(); break;
         case "slash":
+          weight(strike, 1.1); spine([-.05, -.85, .22], [.42, .85, -.18]);
+          pose("RightShoulder", [0, -.2, -.15], [0, .3, .05]);
           pose("RightArm", [-2.9, -.4, 1.3], [-.45, .95, 1.05]); pose("RightForeArm", [0, .9, 0], [0, .15, 0]);
-          pose("LeftArm", [-.2, 0, -1.0], [.25, 0, -1.25]);
-          pose("Chest", [0, -.6, 0], [0, .65, 0]); pose("Spine", [-.05, 0, 0], [.28, 0, 0]); lunge(strike); trail(); break;
+          pose("LeftArm", [-.9, .3, -1.0], [.35, 0, -1.3]); pose("LeftForeArm", [0, -1.2, 0], [0, -.3, 0]);
+          trail(); break;
         case "smash":
+          weight(strike, 1.2); spine([-.38, -.2, 0], [.75, .15, 0]);
           pose("RightArm", [-2.95, 0, 1.35], [-1.05, 0, .95]); pose("LeftArm", [-2.95, 0, -1.35], [-1.05, 0, -.95]);
           pose("RightForeArm", [0, .3, 0], [0, .2, 0]); pose("LeftForeArm", [0, -.3, 0], [0, -.2, 0]);
-          pose("Spine", [-.28, 0, 0], [.48, 0, 0]); pose("LeftLeg", [.1, 0, 0], [.55, 0, 0]); pose("RightLeg", [.1, 0, 0], [.55, 0, 0]);
-          pose("LeftUpLeg", [0, 0, 0], [-.4, 0, 0]); pose("RightUpLeg", [0, 0, 0], [-.4, 0, 0]);
-          hipsY -= .09 * strike * w; trail(); break;
+          pose("Head", [-.2, 0, 0], [.35, 0, 0]);
+          off[1] += (.04 * (1 - strike)) * w; trail(); break;
         case "cast": {
+          weight(strike * .6, .7); spine([-.15, .45, .12], [.2, -.4, -.05]);
           pose("RightArm", [-2.3, 0, 1.0], [-1.65, 0, 1.12]);
           pose("LeftArm", [.35, 0, -1.1], [-1.5, -.25, -1.18]); pose("LeftForeArm", [0, -1.5, 0], [0, -.05, 0]);
-          pose("Spine", [-.12, 0, 0], [.16, 0, 0]); pose("Chest", [0, .3, 0], [0, -.2, 0]); lunge(strike * .7);
+          pose("LeftShoulder", [0, .2, 0], [0, -.3, 0]);
           fx.orb.setEnabled(true); const g = p < .55 ? .6 + p * 1.8 : Math.max(0, 1.6 - (p - .55) * 4); fx.orb.scaling.setAll(Math.max(.01, g));
           break;
         }
         case "hit": {
           const k = Math.sin(Math.min(1, p * 1.6) * Math.PI);
-          mix("Spine", -.42 * k, .25 * k, 0, w); mix("Chest", -.2 * k, -.2 * k, 0, w); mix("Head", -.35 * k, 0, 0, w);
+          bend(-.5 * k, .45 * k, .15 * k, w); mix("Head", -.35 * k, -.2 * k, 0, w); mix("Hips", -.1 * k, .2 * k, 0, w);
           mix("LeftArm", -.3, 0, -.75, w * k); mix("RightArm", -.3, 0, .75, w * k);
-          mix("LeftLeg", .35, 0, 0, w * k); mix("RightLeg", .35, 0, 0, w * k); hipsY -= .05 * k * w; break;
+          mix("LeftLeg", .4, 0, 0, w * k); mix("RightLeg", .4, 0, 0, w * k); off[1] -= .06 * k * w; off[2] -= .08 * k * w; break;
         }
         case "summon": {
           const up = ease(p / .35), shake = Math.sin(t * 30) * .06 * (p > .35 ? 1 : 0);
+          mix("Hips", 0, 0, 0, w); bend(-.4 * up, 0, 0, w);
           mix("LeftArm", -2.85 + shake, 0, -.55 * up - .3, w); mix("RightArm", -2.85 - shake, 0, .55 * up + .3, w);
-          mix("LeftForeArm", 0, -.15, 0, w); mix("RightForeArm", 0, .15, 0, w);
-          mix("Spine", -.22 * up, 0, 0, w); mix("Head", -.4 * up, 0, 0, w);
+          mix("LeftForeArm", 0, -.15, 0, w); mix("RightForeArm", 0, .15, 0, w); mix("Head", -.45 * up, 0, 0, w);
+          mix("LeftUpLeg", -.1, 0, .25, w); mix("RightUpLeg", -.1, 0, -.25, w); mix("LeftLeg", .2, 0, 0, w); mix("RightLeg", .2, 0, 0, w);
+          off[1] -= .05 * w;
           flare = w; fx.seal.setEnabled(true); fx.seal.material = summonSeal;
           fx.seal.scaling.setAll(1.5 + 3.5 * ease(p / .5)); fx.seal.visibility = w; fx.seal.rotation.y = p * 2; break;
         }
         case "drink": {
           const lift = ease(p / .3) * (1 - ease((p - .8) / .2));
-          mix("LeftArm", -1.25, .2, -.95, lift); mix("LeftForeArm", 0, -2.35, 0, lift); mix("Head", -.4 * ease((p - .3) / .2), 0, 0, lift);
+          mix("LeftArm", -1.25, .2, -.95, lift); mix("LeftForeArm", 0, -2.35, 0, lift);
+          bend(-.18 * ease((p - .3) / .2), 0, 0, lift); mix("Head", -.45 * ease((p - .3) / .2), 0, 0, lift);
           fx.vial.setEnabled(p < .9); break;
         }
         case "dash":
-          mix("Spine", .5, 0, 0, w); mix("LeftArm", .95, 0, -1.0, w); mix("RightArm", .95, 0, 1.0, w);
-          mix("LeftUpLeg", -1.0, 0, 0, w); mix("RightUpLeg", .7, 0, 0, w); mix("LeftLeg", .35, 0, 0, w); mix("RightLeg", .95, 0, 0, w);
-          hipsY -= .06 * w; break;
+          mix("Hips", .15, 0, 0, w); bend(.6, 0, 0, w); mix("LeftArm", .95, 0, -1.0, w); mix("RightArm", .95, 0, 1.0, w);
+          mix("LeftUpLeg", -1.0, 0, 0, w); mix("RightUpLeg", .7, 0, 0, w); mix("LeftLeg", .45, 0, 0, w); mix("RightLeg", .95, 0, 0, w);
+          off[1] -= .1 * w; break;
         case "rise": {
-          // From lying down: kneel, then stand.
           const kneel = 1 - ease((p - .45) / .45);
           mix("LeftUpLeg", -1.45, 0, 0, kneel); mix("RightUpLeg", .2, 0, 0, kneel);
-          mix("LeftLeg", 1.5, 0, 0, kneel); mix("RightLeg", 2.0, 0, 0, kneel);
-          mix("Spine", .35, 0, 0, kneel); mix("LeftArm", -.6, 0, -1.1, kneel); hipsY -= .38 * kneel; damping = 9; break;
+          mix("LeftLeg", 1.5, 0, 0, kneel); mix("RightLeg", 2.0, 0, 0, kneel); mix("RightFoot", .9, 0, 0, kneel);
+          bend(.5, 0, 0, kneel); mix("LeftArm", -.6, 0, -1.1, kneel); off[1] -= .38 * kneel; damping = 9; break;
         }
         case "arrive": {
           const k = 1 - ease(p);
           mix("LeftUpLeg", -.7, 0, .1, k); mix("RightUpLeg", -.7, 0, -.1, k); mix("LeftLeg", 1.1, 0, 0, k); mix("RightLeg", 1.1, 0, 0, k);
-          mix("Spine", .3, 0, 0, k); mix("LeftArm", -.3, 0, -.6, k); mix("RightArm", -.3, 0, .6, k); hipsY -= .2 * k;
+          bend(.4, 0, 0, k); mix("LeftArm", -.3, 0, -.6, k); mix("RightArm", -.3, 0, .6, k); off[1] -= .2 * k;
           fx.seal.setEnabled(true); fx.seal.material = arriveSeal; fx.seal.scaling.setAll(2 + 2.5 * p); fx.seal.visibility = 1 - p; break;
         }
       }
     } else if (act && now >= act.end) a.action = null;
+    if (!dead) {
+      // Gaze stays on the opponent: neck and head undo most of the torso twist and bend.
+      const yaw = P.Hips[1] + P.Spine[1] + P.Spine1[1] + P.Chest[1], pitch = P.Spine[0] + P.Spine1[0] + P.Chest[0];
+      add("Neck", -pitch * .2, -yaw * .45, -(P.Hips[2] + P.Spine[2] + P.Chest[2]) * .4);
+      add("Head", -pitch * .25, -yaw * .4, 0);
+    }
+    if (grounded) {
+      // Feet stay flat on the ground under the leg chain.
+      for (const side of ["Left", "Right"]) {
+        const upleg = P[side + "UpLeg"], leg = P[side + "Leg"];
+        add(side + "Foot", -(P.Hips[0] + upleg[0] + leg[0]), 0, -(P.Hips[2] + upleg[2]) * .9);
+      }
+    }
     // Ease the skeleton toward the target pose.
     const blend = 1 - Math.exp(-dt * damping), cur = a.poseCur || (a.poseCur = {});
     for (const b of POSE_BONES) {
@@ -2695,8 +2764,9 @@
       const node = n[b]; if (!node) continue;
       node.rotationQuaternion = B.Quaternion.RotationYawPitchRoll(v[1], v[0], v[2]);
     }
-    cur.hipsY = (cur.hipsY ?? hipsY) + (hipsY - (cur.hipsY ?? hipsY)) * blend;
-    n.Hips.position.y = a.skin.rest.hipsY + cur.hipsY;
+    const o = cur.off || (cur.off = off.slice());
+    for (let i = 0; i < 3; i++) o[i] += (off[i] - o[i]) * blend;
+    n.Hips.position.set(a.skin.rest.hipsX + o[0], a.skin.rest.hipsY + o[1], a.skin.rest.hipsZ + o[2]);
     return flare;
   }
   // Procedural gait: legs and arms counter-swing with speed, the body bobs and
