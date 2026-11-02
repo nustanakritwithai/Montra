@@ -1,4 +1,5 @@
 import type { WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
+import {CASTLE_ENABLED, CASTLE_ID, castleObjectives, forwardCamps} from "./CastlePilot.js";
 
 type Side="north"|"south"|"east"|"west";
 type Opening=readonly [side:Side,at:number,span:number,name:string];
@@ -10,12 +11,12 @@ function enclosure(x1:number,x2:number,z1:number,z2:number,openings:Opening[],st
     const fixed=side==="north"?z1:side==="south"?z2:side==="west"?x1:x2;
     return horizontal?{x:a,z:fixed-thickness/2,width:b-a,length:thickness}:{x:fixed-thickness/2,z:a,width:thickness,length:b-a};
   }
-  const deck:WorldWall[]=[],bodies:WorldWall[]=[],gates:{name:string;box:WorldWall}[]=[];
+  const deck:WorldWall[]=[],bodies:WorldWall[]=[],gates:{id:string;side:Side;name:string;box:WorldWall}[]=[];
   for(const side of ["south","north","east","west"] as const){
     const horizontal=side==="south"||side==="north",start=(horizontal?x1:z1)-thickness/2,end=(horizontal?x2:z2)+thickness/2;
     deck.push(strip(side,start,end));let cursor=start;
     for(const [,at,span,name] of openings.filter(g=>g[0]===side).sort((a,b)=>a[1]-b[1])){
-      bodies.push(strip(side,cursor,at-span/2));gates.push({name,box:strip(side,at-span/2,at+span/2)});cursor=at+span/2;
+      bodies.push(strip(side,cursor,at-span/2));gates.push({id:side+"-"+at,side,name,box:strip(side,at-span/2,at+span/2)});cursor=at+span/2;
     }
     bodies.push(strip(side,cursor,end));
   }
@@ -27,14 +28,30 @@ function enclosure(x1:number,x2:number,z1:number,z2:number,openings:Opening[],st
   return {height,deck,bodies,gates,stairs:steps,corners:[{x:x1,z:z1},{x:x2,z:z1},{x:x2,z:z2},{x:x1,z:z2}]};
 }
 export type Rampart=ReturnType<typeof enclosure>;
+function grandWalls():Rampart {
+  const rings=[
+    enclosure(-570,570,-660,540,[["south",0,16,"ประตูสะพานใต้"],["west",100,16,"ประตูท่าน้ำ"],["east",100,16,"ประตูช่องเขา"],["north",0,16,"ประตูส่งกำลังเหนือ"]],
+      [["west",-410],["west",355],["east",-410],["east",355],["north",-245],["north",245],["south",-245],["south",245]]),
+    enclosure(-360,360,-470,265,[["south",0,14,"ประตูลานกลอง"],["west",-85,14,"ประตูคลังหลวง"],["east",-85,14,"ประตูโรงช่าง"]],
+      [["west",-300],["east",-300],["north",-140],["north",140],["south",-145],["south",145]]),
+    enclosure(-165,165,-330,0,[["west",-175,12,"ประตูพระราชฐานตะวันตก"],["east",-175,12,"ประตูพระราชฐานตะวันออก"]],
+      [["west",-270],["east",-70],["north",-55],["south",55]])
+  ];
+  return {height:4,deck:rings.flatMap(r=>r.deck),corners:rings.flatMap(r=>r.corners),
+    gates:rings.flatMap((r,i)=>r.gates.map(g=>({...g,id:["outer","middle","inner"][i]+"-"+g.side}))),
+    bodies:rings.flatMap(r=>r.bodies),stairs:rings.flatMap((r,ring)=>r.stairs.map((s,i)=>({...s,id:"castle-"+ring+"-stair-"+i})))};
+}
 const ramparts={
   mantra_capital:enclosure(-34,34,-58,26,[["south",0,10,"ประตูหมู่บ้าน"],["north",0,10,"ประตูด่านจันทร์"],["west",-14,10,"ประตูดงไผ่"],["east",-14,10,"ประตูบัวนาค"]],[["west",-30],["east",-28],["south",15],["north",-14]]),
   moon_pass:enclosure(2,22,-44,-28,[["south",12,6,"ประตูเมืองจันทรา"],["east",-36,6,"ประตูข้างเหมือง"]],[["west",-37],["east",-31]]),
   river_watch:enclosure(-30,-8,-40,-20,[["south",-18,7,"ประตูเมืองปากชล"],["north",-22,8,"ประตูท่าเรือ"]],[["west",-29],["east",-34]]),
 };
-export function onRampart(r:Rampart,x:number,z:number){
+export function wallRing(r:Rampart,x:number,z:number){
   // The deck slabs overlap at corners so the wall can be walked as a complete loop.
-  return r.deck.some(b=>x>=b.x+.16 && x<=b.x+b.width-.16 && z>=b.z+.16 && z<=b.z+b.length-.16);
+  return Math.floor(r.deck.findIndex(b=>x>=b.x+.16 && x<=b.x+b.width-.16 && z>=b.z+.16 && z<=b.z+b.length-.16)/4);
+}
+export function onRampart(r:Rampart,x:number,z:number){
+  return wallRing(r,x,z)>=0;
 }
 
 export function crestCorners(r:Rampart,from:{x:number;z:number},to:{x:number;z:number}){
@@ -60,49 +77,107 @@ export type ProvinceSite = Readonly<{
 }>;
 export type Province = Readonly<{
   kind:"capital"|"territory"|"hunting"; hint:string; sites:readonly ProvinceSite[];
-  safeRoads?:readonly number[];rampart?:Rampart;
+  safeRoads?:readonly number[];railPath?:number;rampart?:Rampart;
+  huntTrail?:Readonly<{name:string;path:number}>;
+  objectives?:typeof castleObjectives;activeObjectives?:readonly number[];forwardCamps?:typeof forwardCamps;
+  relay?:Readonly<{name:string;x:number;z:number;radius:number;effect:"gate"|"banner"}>;
 }>;
 const site=(kind:ProvinceSite["kind"],name:string,x:number,z:number,direction?:"east"):ProvinceSite=>({kind,name,x,z,direction});
 const wall=(x:number,z:number,width:number,length:number):WorldWall=>({x,z,width,length});
 const trails=(...routes:XY[][])=>routes.map(route=>route.map(([x,z])=>({x,z})));
 
 export const PROVINCES:Readonly<Record<string,Province>>={
+  ...(CASTLE_ENABLED?{[CASTLE_ID]:{kind:"territory" as const,rampart:grandWalls(),safeRoads:[0],objectives:castleObjectives,forwardCamps,
+    activeObjectives:castleObjectives.map(p=>p.id),hint:"เปิดศึกที่ธงใต้ · แบ่งกำลังชิงหกจุด แล้วเปิดทางเข้าท้องพระโรงในนาทีที่ 30",
+    sites:[site("fort","ธงรวมพลไตรเวียง",0,880),site("bridge","สะพานขบวนเสบียง",0,630),
+      site("port","ท่าน้ำตะวันตก",-687,100),site("shrine","ช่องเขาตะวันออก",697,100),site("market","คลังเสบียงหลวง",-258,-110),
+      site("tower","หอกลองหลวง",9,155),site("mine","โรงช่างประตู",257,-110),site("palace","มหาปราสาทไตรเวียง",0,-196)]}}:{}),
   mantra_capital:{kind:"capital",rampart:ramparts.mantra_capital,hint:"ลานพระนครเชื่อมหมู่บ้าน สองเขตล่า และด่านจันทรา",sites:[
     site("palace","คุ้มหลวงเวียงมนตรา",0,-35),site("market","ตลาดสี่ประตู",-16,1),
     site("tower","หอกลองประกาศ",17,-14),site("shrine","ศาลหลักเมือง",0,-14)]},
-  moon_pass:{kind:"territory",rampart:ramparts.moon_pass,hint:"ประตูเมืองอยู่ตรงสะพานเสบียง ทางเหมืองอ้อมเข้าประตูข้าง บันไดด้านในขึ้นเดินรอบกำแพงได้",safeRoads:[0,1],sites:[
+  moon_pass:{kind:"territory",rampart:ramparts.moon_pass,hint:"ข้ามสะพานรางแร่ไปโรงคัดแร่ทางตะวันออก แล้วเลาะช่องขนเงินกลับประตูข้างเหมือง ห้องโลกมีรถรางขึ้นลงเหมือง",safeRoads:[0,1],
+    railPath:4,relay:{name:"โรงคัดแร่จันทร์",x:82,z:-58,radius:4,effect:"gate"},sites:[
     site("fort","ลานธงจันทรา",12,-36),site("market","ตลาดชายด่าน",-24,-20),site("mine","เหมืองเงินจันทร์",32,-25),
-    site("bridge","สะพานตลาด",-30,-4),site("bridge","สะพานเสบียง",0,-4),site("bridge","ทางข้ามเหมือง",27,-4)]},
-  river_watch:{kind:"territory",rampart:ramparts.river_watch,hint:"ประตูเมืองคุมทางสะพานเสบียง ประตูท่าเรืออยู่ด้านหลัง ขึ้นลงกำแพงได้ทั้งฝั่งตะวันตกและตะวันออก",safeRoads:[0,1],sites:[
+    site("bridge","สะพานตลาด",-30,-4),site("bridge","สะพานเสบียง",0,-4),site("bridge","ทางข้ามเหมือง",27,-4),
+    site("bridge","สะพานรางแร่",76,-4),site("mine","ลานแต่งแร่",88,-61),site("shrine","ศาลช่องขนเงิน",49,-89)]},
+  river_watch:{kind:"territory",rampart:ramparts.river_watch,hint:"เลียบคุ้งตะวันตกไปลานเสบียงริมน้ำ หรือข้ามสะพานต้นน้ำย้อนเข้าประตูท่าเรือ ห้องโลกมีเรือข้ามคุ้งสองทาง",safeRoads:[0,1],
+    relay:{name:"ลานเสบียงคุ้งนอก",x:-67,z:-56,radius:4,effect:"banner"},sites:[
     site("fort","ลานธงปากชล",-18,-29),site("port","ท่าเรือลำเลียง",-23,-49),site("market","ตลาดท่าข้าว",24,9),
-    site("bridge","สะพานท่าน้ำ",-4,12,"east"),site("bridge","สะพานคลังเสบียง",-4,-14,"east"),site("bridge","สะพานท่าลับ",-4,-46,"east")]},
-  bamboo_frontier:{kind:"hunting",hint:"ตามธงจากเวียงผ่านค่ายไผ่ หรือเลาะป่าตะวันออกไปป่าช้า",sites:[
+    site("bridge","สะพานท่าน้ำ",-4,12,"east"),site("bridge","สะพานคลังเสบียง",-4,-14,"east"),site("bridge","สะพานท่าลับ",-4,-46,"east"),
+    site("bridge","สะพานต้นน้ำ",-4,-83,"east"),site("bridge","สะพานคุ้งแพ",-82,16),
+    site("port","ยุ้งข้าวริมน้ำ",-73,-61),site("grove","ชายเลนคุ้งนอก",-89,24)]},
+  bamboo_frontier:{kind:"hunting",huntTrail:{name:"ทางพรานตะวันตก",path:3},hint:"จากประตูเวียง เลี้ยวตะวันตกเข้าลานไผ่คราม พักที่เพิงพรานตาน้ำ แล้วอ้อมดงไผ่ผนึกกลับประตูป่าช้า",sites:[
     site("grove","แนวไผ่บังตา",-31,5),site("tower","หอส่องทาง",30,-22),site("shrine","ศาลปลายดง",-12,-46)]},
-  lotus_basin:{kind:"hunting",hint:"ล่าภูตตามบ่อบัว ข้ามสะพานตะวันตกหรือตะวันออกไปท่าปากชล",sites:[
-    site("port","ศาลาท่าบัว",32,-18),site("grove","ดงบัวธูป",-34,7),site("shrine","บ่อนาคหลับ",-9,-50)]},
+  lotus_basin:{kind:"hunting",huntTrail:{name:"ทางเกาะตะวันออก",path:3},hint:"จากประตูเวียง ไปสะพานเกาะบัวเพลิง พักที่ศาลาคุ้งบัว แล้วข้ามสะพานไข่มุกไปลานนาคน้ำลึกก่อนกลับประตูปากชล",sites:[
+    site("port","ศาลาท่าบัว",32,-18),site("grove","ดงบัวธูป",-34,7),site("shrine","บ่อนาคหลับ",-9,-50),
+    site("bridge","สะพานบ่อตะวันตก",-22,-4),site("bridge","สะพานคุ้งเรือ",22,-4),site("bridge","สะพานเกาะบัวเพลิง",72,-4),
+    site("bridge","สะพานเกล็ดนาค",-22,-27),site("bridge","สะพานท่าบัว",22,-27),site("bridge","สะพานไข่มุก",104,-27)]},
 };
 
-type Hub = Pick<WorldMapDefinition,"name"|"paths"|"water"|"walls"|"obstacles">;
+type Hub = Pick<WorldMapDefinition,"name"|"paths"|"water"|"walls"|"obstacles"> & {
+  bounds?:WorldMapDefinition["bounds"];
+  stations?:readonly [readonly [id:string,x:number,z:number,label:string],readonly [id:string,x:number,z:number,label:string]];
+};
 const hubs:Record<string,Hub>={
   mantra_capital:{name:"นครเวียงมนตรา",paths:trails([[0,26],[0,-14],[0,-58]],[[-34,-14],[0,-14],[34,-14]],
     [[0,12],[-17,8],[-22,-14],[-16,-32],[0,-40],[18,-32],[22,-14],[18,8],[0,12]]),
     walls:[wall(-16,-45,6,5),wall(10,-45,6,5),wall(-15,-4,7,3),wall(9,-5,7,4),wall(24,-25,4,4)],obstacles:[]},
-  moon_pass:{name:"ด่านผนึกจันทรา",paths:trails([[0,26],[-30,16],[-30,6],[-30,-45],[0,-58]],[[-30,6],[-34,6]],
-    [[0,26],[0,10],[0,-4],[0,-18],[12,-24],[12,-36]],[[0,10],[20,10],[27,0],[27,-25],[27,-36],[12,-36]]),
-    water:[wall(-42,-6,9,4),wall(-27,-6,24,4),wall(3,-6,21,4),wall(30,-6,12,4)],
-    walls:[wall(31,-26,4,3)],obstacles:[]},
-  river_watch:{name:"ป้อมท่าปากชล",paths:trails([[0,26],[30,16],[30,-14],[30,-44],[0,-58]],[[30,-14],[34,-14]],
+  moon_pass:{name:"ด่านผนึกจันทรา",bounds:{minX:-58,maxX:122,minZ:-106,maxZ:66},
+    stations:[["moon_cart_up",41,17,"ขึ้นรถรางไปเหมืองบน"],["moon_cart_down",93,-76,"นั่งรถรางกลับลานล่าง"]],
+    paths:trails([[0,26],[-30,16],[-30,6],[-30,-45],[0,-58]],[[-30,6],[-34,6]],
+    [[0,26],[0,10],[0,-4],[0,-18],[12,-24],[12,-36]],[[0,10],[20,10],[27,0],[27,-25],[27,-36],[12,-36]],
+    [[41,17],[57,23],[77,36],[82,22],[76,8],[76,-4],[76,-22],[83,-40],[82,-58],[93,-76]],
+    [[27,-25],[29,-30],[43,-29],[61,-24],[76,-22]],[[93,-76],[73,-89],[48,-84],[26,-66],[0,-58]],
+    [[20,10],[41,17]],[[82,-58],[61,-51],[42,-48],[27,-36]],[[0,26],[22,39],[48,42],[77,36]]),
+    water:[wall(-58,-6,25,4),wall(-27,-6,24,4),wall(3,-6,21,4),wall(30,-6,43,4),wall(79,-6,43,4)],
+    walls:[wall(31,-26,4,3),wall(46,-44,8,3),wall(62,-14,6,3),wall(93,-65,7,2.5)],
+    obstacles:[{id:"moon-scree",x:96,z:-41,radius:3.8},{id:"moon-tailings",x:60,z:-65,radius:3.4},{id:"moon-south-rock",x:58,z:11,radius:2.3}]},
+  river_watch:{name:"ป้อมท่าปากชล",bounds:{minX:-110,maxX:80,minZ:-124,maxZ:58},
+    stations:[["river_ferry_out",-35,18,"ลงเรือไปท่าคุ้งนอก"],["river_ferry_home",-90,-91,"ลงเรือกลับท่าตลาด"]],
+    paths:trails([[0,26],[30,16],[30,-14],[30,-44],[0,-58]],[[30,-14],[34,-14]],
     [[30,-14],[-12,-14],[-18,-21],[-18,-29]],[[30,-44],[10,-46],[-18,-46],[-27,-32],[-18,-29]],
-    [[0,26],[0,12],[-18,12],[-22,-14],[-12,-14]]),
-    water:[wall(-6,-65,4,16),wall(-6,-43,4,26),wall(-6,-11,4,20),wall(-6,15,4,17)],
-    walls:[],obstacles:[]},
+    [[0,26],[0,12],[-18,12],[-22,-14],[-12,-14]],
+    [[-18,12],[-35,18],[-35,25],[-56,32],[-82,25],[-82,16],[-82,8],[-87,8],[-84,-13],[-72,-35],[-67,-56]],
+    [[-18,-46],[-38,-48],[-50,-55],[-67,-56]],
+    [[-67,-56],[-82,-72],[-90,-91],[-69,-104],[-41,-101],[-21,-83],[-4,-83],[16,-83],[28,-64],[30,-44]],
+    [[-72,-35],[-55,-24],[-43,-23],[-37,-30],[-38,-48]],[[30,16],[50,20],[59,3],[54,-23],[30,-44]]),
+    water:[wall(-6,-124,4,38),wall(-6,-80,4,31),wall(-6,-43,4,26),wall(-6,-11,4,20),wall(-6,15,4,43),
+      wall(-109,-99,15,133),wall(-94,-70,12,37),wall(-75,-19,13,28),
+      wall(-94,14,9,4),wall(-79,14,25,4),wall(-54,12,16,8)],
+    walls:[wall(-60,-47,7,3),wall(-82,-64,5,2.5),wall(45,-24,5,3)],
+    obstacles:[{id:"river-west-mangrove",x:-54,z:-78,radius:3},{id:"river-bank",x:-86,z:39,radius:2.5},{id:"river-reeds",x:64,z:-50,radius:2}]},
 };
+function makeCastle(portalsFor:(id:string)=>WorldPortal[]):WorldMapDefinition {
+  const province=PROVINCES[CASTLE_ID],r=province.rampart!;
+  const portals:WorldPortal[]=[...portalsFor(CASTLE_ID),
+    {id:"castle_cart_north",label:"ขึ้นเกวียนไปประตูเหนือ",x:-18,z:900,targetMapId:CASTLE_ID,targetSpawn:{x:-18,y:0,z:-898}},
+    {id:"castle_cart_south",label:"ขึ้นเกวียนไปประตูใต้",x:-18,z:-900,targetMapId:CASTLE_ID,targetSpawn:{x:-18,y:0,z:898}}];
+  return {id:CASTLE_ID,name:"มหาปราสาทไตรเวียง",bounds:{minX:-1000,maxX:1000,minZ:-1000,maxZ:1000},spawn:{x:0,y:0,z:895},
+    strategic:province,portals,obstacles:[],camps:[],restAreas:portals.map(p=>({x:p.x,z:p.z,radius:6,name:"เขตพักประตู"})),
+    walls:[...r.bodies.map(b=>({...b,rampart:true})),wall(-10,-226,20,9),wall(-29,-211,11,7),wall(18,-211,11,7),
+      ...forwardCamps.map(c=>wall(c.x-4,c.z-6,8,1.5))],
+    water:[wall(-265,628,260,4),wall(5,628,265,4),wall(-745,-150,14,245),wall(-745,106,14,245)],
+    paths:trails([[0,900],[-540,900],[-875,825],[-875,-815],[-550,-900],[0,-900]],
+      [[0,900],[0,630],[0,540],[0,350],[0,265],[0,155]],[[0,790],[-295,745],[-625,650],[-685,585],[-680,100]],
+      [[0,790],[295,745],[625,650],[685,585],[690,100]],
+      [[-680,100],[-570,100],[-455,90],[-420,-85],[-360,-85],[-250,-110]],
+      [[690,100],[570,100],[455,90],[420,-85],[360,-85],[250,-110]],
+      [[-455,90],[-400,290],[0,350],[400,290],[455,90]],
+      [[-250,-110],[-230,82],[0,155],[230,82],[250,-110]],
+      [[-250,-110],[-215,-175],[-165,-175],[0,-175],[165,-175],[215,-175],[250,-110]],
+      [[0,-900],[0,-660],[0,-525],[-400,-525],[-420,-85]],[[0,-525],[400,-525],[420,-85]])};
+}
 export function makeHubs(portalsFor:(id:string)=>WorldPortal[]):Record<string,WorldMapDefinition>{
-  return Object.fromEntries(Object.entries(hubs).map(([id,data])=>{
+  const small=Object.fromEntries(Object.entries(hubs).map(([id,{stations,bounds,...data}])=>{
     const portals=portalsFor(id);
+    stations?.forEach(([stop,x,z,label],i)=>{
+      const [,tx,tz]=stations[1-i];
+      portals.push({id:stop,x,z,label,targetMapId:id,targetSpawn:{x:tx,y:0,z:tz+1.25}});
+    });
     const province=PROVINCES[id];
-    return [id,{...data,id,strategic:province,walls:[...data.walls??[],...province.rampart!.bodies.map(b=>({...b,rampart:true}))],bounds:{minX:-42,maxX:42,minZ:-65,maxZ:32},spawn:{x:0,y:0,z:25},
+    return [id,{...data,id,strategic:province,walls:[...data.walls??[],...province.rampart!.bodies.map(b=>({...b,rampart:true}))],bounds:bounds??{minX:-42,maxX:42,minZ:-65,maxZ:32},spawn:{x:0,y:0,z:25},
       portals,restAreas:[...portals.map(p=>({x:p.x,z:p.z,radius:4,name:"เขตพักประตู"})),
         ...PROVINCES[id].sites.filter(s=>s.kind==="market" && PROVINCES[id].kind==="territory").map(s=>({x:s.x,z:s.z,radius:5,name:"เขตพักตลาด"}))],camps:[] as const}];
   }));
+  return CASTLE_ENABLED?{...small,[CASTLE_ID]:makeCastle(portalsFor)}:small;
 }

@@ -44,9 +44,44 @@ async function warp(c,to){
   assert.ok(Math.hypot(c.me().x-gate.targetSpawn.x,c.me().z-gate.targetSpawn.z)<.04);
   if(JSON.parse(c.r.state.worldDefinition).maps[to].camps?.length)await until(()=>Array.from(c.r.state.monsters.values()).some(m=>m.mapId===to),"destination enemies");
 }
-async function walk(c,x,z){c.r.send("move",{x,z});await until(()=>Math.hypot(c.me().x-x,c.me().z-z)<.28,"walk",15000);}
+async function walk(c,x,z,timeout=15000){c.r.send("move",{x,z});await until(()=>Math.hypot(c.me().x-x,c.me().z-z)<.28,"walk "+c.me().mapId+" "+x+","+z,timeout);}
+async function verifyHuntTrail(i,id,destination,level){
+  await seed(i,id,0,26,level);
+  let c=await join(i);
+  const map=JSON.parse(c.r.state.worldDefinition).maps[id],trail=map.paths[map.strategic.huntTrail.path];
+  const rest=map.restAreas.find(a=>trail.some(p=>p.x===a.x && p.z===a.z) && !map.portals.some(p=>p.x===a.x && p.z===a.z));
+  const guardId="atlas_"+id+"_5_1",warden=map.camps[4];
+  assert.ok(rest);let visits=0;
+  for(const p of trail.slice(1)){
+    await walk(c,p.x,p.z,45000);
+    if(p.x===rest.x && p.z===rest.z){
+      visits++;await leave(c);c=await join(i);
+      assert.equal(c.me().mapId,id);assert.ok(Math.hypot(c.me().x-p.x,c.me().z-p.z)<.3);
+    }
+    if(p.x===warden.x && p.z===warden.z){
+      visits++;const guard=c.r.state.monsters.get(guardId);assert.equal(guard.tier,"strong");
+      await seed(i+10,id,p.x+4,p.z+2,level);const ally=await join(i+10,c.r.roomId);
+      try{
+        c.r.send("party_invite",{targetId:ally.r.sessionId});
+        const invitation=await until(()=>ally.events.find(e=>e.type==="party_invitation")?.data,"invite");
+        ally.r.send("party_accept",{inviteId:invitation.inviteId});
+        await until(()=>c.events.some(e=>e.type==="party_state" && e.data.members?.length===2),"party of two");
+        for(const hunter of [c,ally]){hunter.events.length=0;hunter.r.send("attack",{targetId:guardId});}
+        await until(()=>c.r.state.monsters.get(guardId)?.alive===false,"replicated Strong death "+id,100000);
+        for(const hunter of [c,ally]){
+          const reward=await until(()=>hunter.events.find(e=>e.type==="experience_gained")?.data,"strong hunt XP "+id);
+          assert.ok(reward.amount>0 && hunter.me().alive);
+        }
+      }finally{await leave(ally);}
+    }
+  }
+  assert.equal(visits,2);
+  await until(()=>c.r.state.monsters.get(guardId)?.alive,"strong respawn",35000);
+  await warp(c,destination);await leave(c);
+  console.log("PASS",id,"walked both new camps, restored shelter save, won Strong XP, saw respawn and reached",destination);
+}
 const read=process.env.MONTRA_ATLAS_STAGE==="read";
-try{
+async function verifyAtlas(){
   for(const [i,[from,x,z,to]] of routes.entries()){
     if(!read)await seed(i,from,x,z);
     if(i===0){
@@ -92,4 +127,10 @@ try{
     for(let i=0;i<4;i++){const c=await join(30+i);assert.equal(c.me().mapId,"spirit_rift");assert.equal((await bag(c)).slots[0].quantity,3);await leave(c);}
   }
   console.log("PASS atlas",read?"return gates and boss loot after restart":"outward gates, compatibility, bridge, cave and four-player warden");
+}
+try{
+  if(process.env.MONTRA_ATLAS_STAGE==="hunts"){
+    const results=await Promise.allSettled([verifyHuntTrail(51,"bamboo_frontier","moon_cemetery",35),verifyHuntTrail(52,"lotus_basin","river_watch",52)]);
+    for(const result of results)if(result.status==="rejected")throw result.reason;
+  }else await verifyAtlas();
 }finally{await Promise.allSettled([...open].map(r=>r.leave()));}

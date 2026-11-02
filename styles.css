@@ -96,6 +96,10 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .drawer-body h3 { margin:14px 0 6px; font-size:14px; color:#f4d59f; }
 .drawer-body p { margin:7px 0; }
 .drawer-body .note { font-size:12px; opacity:.85; }
+#castleSupply { margin:10px 0; padding:0 12px 8px; border:1px solid #807456; border-radius:10px; background:#142628; }
+#castleSupply:not([open]) { padding-bottom:0; }
+#castleSupply summary { min-height:44px; align-content:center; color:#f4d59f; cursor:pointer; }
+#castleSupply label { display:block; margin:8px 0 4px; }
 .drawer-body .field { display:block; margin:12px 0 6px; font-weight:700; }
 .drawer-body input { width:100%; padding:13px 12px; background:#081316; color:#f8e5c5; border:1px solid #a88b60; border-radius:10px; font-size:14px; }
 .drawer-body .primary { margin-top:10px; width:100%; padding:13px; background:#7a4d27; border:1px solid #d7ab6c; border-radius:12px; font-weight:700; }

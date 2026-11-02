@@ -32,6 +32,9 @@ jobs:
           cp deploy/combat/dash-rules.test.ts combat-verify/src/rooms/dash-rules.test.ts
           cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
           cp deploy/combat/TempleMap.ts combat-verify/src/rooms/TempleMap.ts
+          cp deploy/combat/CastlePilot.ts combat-verify/src/rooms/CastlePilot.ts
+          cp deploy/combat/castle-pilot.test.ts combat-verify/src/rooms/castle-pilot.test.ts
+          cp deploy/combat/castle-pilot-integration.mjs combat-verify/castle-pilot-integration.mjs
           cp deploy/combat/StrategicProvinces.ts combat-verify/src/rooms/StrategicProvinces.ts
           cp deploy/combat/WorldAtlas.ts combat-verify/src/rooms/WorldAtlas.ts
           cp deploy/combat/world-atlas.test.ts combat-verify/src/rooms/world-atlas.test.ts
@@ -97,6 +100,7 @@ jobs:
           cp deploy/combat/TerritoryWar.ts combat-verify/src/rooms/TerritoryWar.ts
           cp deploy/combat/territory-war.test.ts combat-verify/src/rooms/territory-war.test.ts
           cp deploy/combat/territory-integration.mjs combat-verify/territory-integration.mjs
+          cp deploy/combat/province-fronts-integration.mjs combat-verify/province-fronts-integration.mjs
           cp deploy/combat/GuildStore.ts combat-verify/src/rooms/GuildStore.ts
           cp deploy/combat/guild-store.test.ts combat-verify/src/rooms/guild-store.test.ts
           cp deploy/combat/guild-integration.mjs combat-verify/guild-integration.mjs
@@ -336,6 +340,32 @@ jobs:
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4110) 2>/dev/null; then break; fi; sleep 0.25; done
           MONTRA_MAP_TEST_STAGE=read timeout 25s node map-expansion-integration.mjs || { cat expansion-server.log; exit 1; }
 
+      - name: Three-ring castle pilot geometry and scoring
+        working-directory: combat-verify
+        run: |
+          export MONTRA_WORLD_EXPANSION=1 MONTRA_CASTLE_PILOT=1 MONTRA_ECONOMY_ENABLED=1 PORT=4115
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-castle-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4115
+          npx tsx --test src/rooms/castle-pilot.test.ts
+          node --import tsx src/index.ts > castle-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4115) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 540s node --import tsx castle-pilot-integration.mjs || { cat castle-server.log; exit 1; }
+
+      - name: Expanded borderland transit and siege support
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4116 MONTRA_WORLD_EXPANSION=1 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-front-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4116
+          node --import tsx src/index.ts > front-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4116) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 240s node --import tsx province-fronts-integration.mjs || { cat front-server.log; exit 1; }
+
       - name: Isolated forest party monster rewards
         shell: bash
         working-directory: combat-verify
@@ -352,6 +382,7 @@ jobs:
           timeout 90s node guild-integration.mjs
           timeout 230s node territory-integration.mjs
           timeout 120s node world-atlas-integration.mjs
+          MONTRA_ATLAS_STAGE=hunts timeout 300s node world-atlas-integration.mjs
           timeout 85s node temple-integration.mjs
           timeout 50s node forest-guardian-integration.mjs
           kill "$SERVER_PID"
