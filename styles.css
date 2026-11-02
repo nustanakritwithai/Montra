@@ -551,3 +551,15 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .sound-settings { margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(210, 170, 90, .25); }
 .sound-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
 .sound-row input[type="range"] { flex: 1; max-width: 60%; accent-color: #c9973f; }
+
+/* Bottom menu: icon above label so all seven entries fit a 360-390 px phone. */
+.nav-bar button { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 1px; padding: 4px 1px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px; }
+.nav-bar button span { font-size: 16px; line-height: 1; }
+.nav-bar button b { position: absolute; transform: translate(14px, -10px); }
+.nav-bar button { position: relative; }
+
+/* Sound settings: label left, control right, one tidy row each. */
+.drawer-body .sound-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; font-weight: 600; }
+.drawer-body .sound-row input[type="range"] { width: 55%; max-width: 220px; padding: 0; border: 0; background: none; }
+.drawer-body .sound-row input[type="checkbox"] { width: 22px; height: 22px; padding: 0; margin: 0 8px 0 0; accent-color: #c9973f; }
+.drawer-body .sound-row:first-of-type { justify-content: flex-start; }
