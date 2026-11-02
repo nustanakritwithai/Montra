@@ -9,7 +9,7 @@ import { FOREST_MONSTER_TIERS, MONSTER_CONFIG, monsterProfile, monsterRespawnDel
 
 export const FOREST_RESPAWN_MS = MONSTER_CONFIG.respawnMs;
 type Navigation = {map:WorldMapDefinition; obstacles:WorldWall[]};
-type Life = {actor:Monster;zone:Navigation; windupUntil:number; nextChargeAt:number; interruptUntil:number; interruptResistUntil:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; nav:MonsterRRTNavigator};
+type Life = {actor:Monster;zone:Navigation; windupUntil:number; nextChargeAt:number; interruptUntil:number; interruptResistUntil:number; tauntOwner:string; tauntUntil:number; tauntResistUntil:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; nav:MonsterRRTNavigator};
 /** Bounded population, independent clocks and server-owned AI; no player-selected stats. */
 export class ForestEncounters {
   private lives = new Map<string,Life>();
@@ -51,7 +51,7 @@ export class ForestEncounters {
         alive:true,mapId:zone.map.id,level,tier,displayName:name,defense:profile.defense});
       if(!zone.map.region)this.monsters.set(id,actor);
       this.lives.set(id,{actor,zone,x,z,profile,respawnAt:0,lastAttack:-Infinity,returning:false,
-        nextChargeAt:0,windupUntil:0,interruptUntil:0,interruptResistUntil:0,nav:new MonsterRRTNavigator(zone.obstacles,zone.map.bounds)});
+        nextChargeAt:0,windupUntil:0,interruptUntil:0,interruptResistUntil:0,tauntOwner:"",tauntUntil:0,tauntResistUntil:0,nav:new MonsterRRTNavigator(zone.obstacles,zone.map.bounds)});
     }
   }
   profile(id:string):MonsterProfile | null { return this.lives.get(id)?.profile ?? null; }
@@ -67,6 +67,14 @@ export class ForestEncounters {
   endInterrupt(id:string,now:number):void {
     const life=this.lives.get(id); if(life)life.interruptUntil=Math.min(life.interruptUntil,now);
   }
+  taunt(id:string,owner:string,now:number,durationMs:number,immunityMs:number):"applied"|"immune"|"resisted"|"unavailable" {
+    const life=this.lives.get(id),monster=this.monsters.get(id);
+    if(!life || !monster?.alive || life.returning || planarDistance(monster,life)>=9)return "unavailable";
+    if(life.profile.tier!=="normal")return "immune";
+    if(now<life.tauntResistUntil)return "resisted";
+    life.tauntOwner=owner;life.tauntUntil=now+durationMs;life.tauntResistUntil=now+immunityMs;
+    monster.targetId=owner;life.nav.clear();return "applied";
+  }
   canDisplace(id:string,to:{x:number;z:number}):boolean {
     const life=this.lives.get(id), monster=this.monsters.get(id);
     return Boolean(life && monster?.alive && !isRestArea(monster.mapId,to) &&
@@ -80,10 +88,10 @@ export class ForestEncounters {
       if(player.alive && player.mapId===m.mapId && !blocked?.has(playerId) && !isRestArea(player.mapId,player) && planarDistance(player,m)<=MONSTER_CONFIG.populationRadius) nearby++;
     }
     m.alive=false;m.hp=0;m.targetId="";m.aiState="dead";
-    life.windupUntil=0;life.nextChargeAt=0;life.interruptUntil=0;life.interruptResistUntil=0;
+    life.windupUntil=0;life.nextChargeAt=0;life.interruptUntil=0;life.interruptResistUntil=0;life.tauntOwner="";life.tauntUntil=0;life.tauntResistUntil=0;
     life.respawnAt=now+(id===RIFT_WARDEN.id ? RIFT_WARDEN.respawnMs : id===SHRINE_GUARDIAN.id ? SHRINE_GUARDIAN.respawnMs : monsterRespawnDelay(nearby));life.returning=false;life.nav.clear();return true;
   }
-  clearTarget(id:string):void {for(const m of this.monsters.values())if(m.targetId===id)m.targetId="";}
+  clearTarget(id:string):void {for(const m of this.monsters.values())if(m.targetId===id)m.targetId="";for(const life of this.lives.values())if(life.tauntOwner===id){life.tauntOwner="";life.tauntUntil=0;}}
   engaged(id:string):boolean {return [...this.monsters.values()].some(m=>m.alive&&m.targetId===id);}
   update(now:number,dt:number,players:MyRoomState["players"],blocked:ReadonlySet<string>,
     hit:(targetId:string,monster:Monster,force?:number)=>void,respawn:(id:string)=>void,
@@ -93,7 +101,7 @@ export class ForestEncounters {
     if(regions.size!==this.activeRegions.size || [...regions].some(id=>!this.activeRegions.has(id))){
       // Withdraw first, then add. Room-owned life clocks survive the last player leaving.
       for(const [id,life] of this.lives)if(life.zone.map.region && this.activeRegions.has(life.zone.map.id) && !regions.has(life.zone.map.id)){
-        life.actor.targetId="";life.windupUntil=0;life.nav.clear();this.monsters.delete(id);
+        life.actor.targetId="";life.windupUntil=0;life.tauntOwner="";life.tauntUntil=0;life.nav.clear();this.monsters.delete(id);
       }
       for(const [id,life] of this.lives)if(regions.has(life.zone.map.id) && !this.activeRegions.has(life.zone.map.id))this.monsters.set(id,life.actor);
       this.activeRegions=regions;
@@ -124,6 +132,9 @@ export class ForestEncounters {
       if(planarDistance(m,life)>=9)life.returning=true;
       let target=m.targetId?players.get(m.targetId):undefined;
       if(!eligible(m.targetId,target)||planarDistance(m,target)>11){target=undefined;m.targetId="";}
+      const forced=life.tauntUntil>now ? players.get(life.tauntOwner) : undefined;
+      if(!life.returning && eligible(life.tauntOwner,forced) && planarDistance(m,forced)<=11){target=forced;m.targetId=life.tauntOwner;}
+      else if(life.tauntUntil<=now || !eligible(life.tauntOwner,forced)){life.tauntOwner="";life.tauntUntil=0;}
       if(!life.returning&&!target){let closest=6;for(const [pid,p] of players){
         if(!eligible(pid,p))continue;const d=planarDistance(m,p);if(d<closest){closest=d;target=p;m.targetId=pid;}
       }}

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — ต้นแบบ MMORPG 3D ไสยศาสตร์ไทยสำหรับมือถือ แบบแตะพื้นเพื่อเดิน" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=0.8.7-terrain-combat" />
+  <link rel="stylesheet" href="./styles.css?v=0.8.8-sentinel-terrain" />
 </head>
 <body>
   <main id="game" aria-label="MONTRA เกมต้นแบบสามมิติ">
@@ -54,6 +54,8 @@
       <div id="occultHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาอาคม" hidden></div>
       <div id="bladeStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
       <div id="bladeHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาคมดาบ" hidden></div>
+      <div id="sentinelStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
+      <div id="sentinelHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาผู้พิทักษ์" hidden></div>
       <div class="skill-bar">
         <button id="summon" class="skill" type="button" aria-pressed="false" title="เสกผีจากหม้อ ช่วยโจมตีมอนสเตอร์ใกล้ตัว" hidden><span class="glyph violet" aria-hidden="true">🏺</span><span>เสกผีจากหม้อ</span></button>
         <button id="possess" class="skill" type="button" hidden><span class="glyph amber">✴</span><span>เข้าทรง</span></button>
@@ -74,6 +76,7 @@
         <button id="muayBookButton" type="button" hidden><span>✊</span>วิชามวย</button>
         <button id="occultBookButton" type="button" hidden><span>✧</span>ตำราอาคม</button>
         <button id="bladeBookButton" type="button" aria-label="เปิดตำราความรู้คมดาบ" hidden><span>◈</span>คมดาบ</button>
+        <button id="sentinelBookButton" type="button" aria-label="เปิดตำราผู้พิทักษ์" hidden><span>⬟</span>พิทักษ์</button>
         <button id="modeButton"><span>◎</span>ออนไลน์</button>
         <button id="helpButton"><span>?</span>วิธีเล่น</button>
       </nav>
@@ -91,6 +94,6 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
   <script src="./audio.js?v=0.8.5-release" defer></script>
-  <script src="./main.js?v=0.8.7-terrain-combat" defer></script>
+  <script src="./main.js?v=0.8.8-sentinel-terrain" defer></script>
 </body>
 </html>

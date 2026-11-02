@@ -50,6 +50,7 @@ import { BUILD_CATALOG, DEFAULT_WARD_TALENT, DUAL_SWORD, isOccultPath, talentGro
 import { BuffLedger } from "./BuffLedger.js";
 import { OCCULT_LESSONS, OCCULT_MASTERY_LABELS, OCCULT_MASTERY_REQUIREMENTS, newOccultBook, occultPoints, validateOccultBook, type OccultBook, type OccultLesson, type OccultSkillId, type OccultPath, type OccultMastery } from "./OccultRules.js";
 import { BLADE_LESSONS, BLADE_PRACTICE_LABELS, bladePoints, newBladeBook, validateBladeBook, type BladeBook, type BladeLesson, type BladeSkillId } from "./BladeRules.js";
+import { SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_CONTROL, sentinelPoints, newSentinelBook, validateSentinelBook, type SentinelBook, type SentinelLesson, type SentinelSkillId } from "./SentinelRules.js";
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, SWORD_SCHOOLS, SWORD_NODES, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
@@ -62,7 +63,7 @@ import type { MonsterTier } from "./MonsterProfiles.js";
 import { PROGRESSION, addExperience, calculateDamage, calculateStats, emptyAllocations,
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
-  POTION_ID, POTION_COOLDOWN_MS, grantRewardPotion, grantStackReward, SHRINE_RECIPE, SHRINE_SHARD, parseUseItemCommand,
+  POTION_ID, POTION_COOLDOWN_MS, grantRewardPotion, grantStackReward, SHRINE_RECIPE, SHRINE_SHARD, SHRINE_GLAIVE, parseUseItemCommand,
   useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon,
   equippedWeaponId, weaponBonuses, type InventorySnapshot,
 } from "./ItemRules.js";
@@ -177,6 +178,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   // Occult books are private; sending them on request avoids inflating world snapshots.
   private occultBooks = new Map<string, OccultBook>();
   private bladeBooks = new Map<string, BladeBook>();
+  private sentinelBooks = new Map<string, SentinelBook>();
+  private sentinelStuns = new Map<string, number>();
+  private sentinelStunResists = new Map<string, number>();
+  private sentinelWindups = new Map<string, {targetId:string;until:number;power:number}>();
+  private sentinelCounters = new Map<string, number>();
+  private sentinelAnchors = new Map<string, number>();
+  private sentinelInterceptions = new Map<string, {ownerId:string;until:number;fraction:number}>();
+  private sentinelLegacyTaunt = {ownerId:"",until:0,resistUntil:0};
   private bladeCloaks = new Map<string, number>();
   private bladeCasts = new Map<string, number>();
   private bladeMarks = new Map<string,{targetId:string;until:number}>();
@@ -241,6 +250,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private buildPlayer(client: Client, gate: "build" | "swordTree" | "occult" = "build"): Player | undefined {
     const id = client.sessionId, player = this.state.players.get(id);
+    if(this.sentinelStuns.has(id)) { this.reject(client,"sentinel_stunned"); return; }
+    if(this.sentinelWindups.has(id)) { this.reject(client,"sentinel_windup_active"); return; }
     if(this.muayControlled(id)) { this.reject(client,"muay_controlled"); return; }
     if (!this.gates.get(id)?.[gate].consume(this.simulatedMs)) {
       this.reject(client, gate === "swordTree" ? "sword_tree_rate_limited" : gate === "occult" ? "occult_rate_limited" : "build_rate_limited");
@@ -292,6 +303,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const task = characterStore.save({ ...snapshot, build: selection, ...(grantedInventory ? {inventory:grantedInventory, muayWrapGranted:true} : {}) }).then(() => {
       // Change temporary ritual state only after the new build is safely saved.
       if (player.pathId !== build.path) {
+        this.sentinelAnchors.delete(id);this.sentinelCounters.delete(id);this.sentinelWindups.delete(id);
+        this.effects.remove(id,"sentinel_step",id);this.effects.remove(id,"sentinel_anchor",id);
+        for(const [member,link] of this.sentinelInterceptions)if(link.ownerId===id)this.sentinelInterceptions.delete(member);
         this.endBladeCloak(id,"class_changed");
         this.clearBladeMark(id);this.bladeOpenings.delete(id);this.bladeEvades.delete(id);this.bladeWindups.delete(id);this.bladeCasts.delete(id);
         this.effects.remove(id,"blade_focus",id);this.effects.remove(id,"blade_veil_guard",id);
@@ -321,6 +335,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.wardTalentId = build.path === "sentinel" ? talent : "";
       player.bladeTalentId = build.path === "blade" ? talent : "";
       if(build.path==="blade" && !this.bladeBooks.has(id))this.bladeBooks.set(id,newBladeBook());
+      if(build.path==="sentinel" && !this.sentinelBooks.has(id))this.sentinelBooks.set(id,newSentinelBook());
+      this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
       client.send("build_selected", selection);
       if (isOccultPath(build.path)) this.sendOccultBook(client);
     }, error => {
@@ -499,6 +515,26 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private muayControlled(id:string):boolean { return this.muayGrapples.has(id) || this.muayHeldBy.has(id); }
+  private sentinelInterrupt(id:string,targetId:string):string {
+    const monster=this.getMonster(targetId);
+    if(monster){
+      const result=this.interruptMuayTarget(monster,SENTINEL_CONTROL.monsterStunMs);
+      if(result==="applied"){this.recordSentinelPractice(id,"stun");this.sentinelCounters.set(id,this.simulatedMs+3000);}
+      return result;
+    }
+    const target=this.state.players.get(targetId);
+    if(!target?.alive || target.flying || !onMapGround(target) || this.climbs.has(targetId) || this.flightTransitions.has(targetId))return "unavailable";
+    if(this.simulatedMs<(this.sentinelStunResists.get(targetId) ?? 0))return "resisted";
+    this.releaseMuayFor(targetId,"stunned");
+    this.sentinelWindups.delete(targetId);this.bladeWindups.delete(targetId);this.bladeCasts.delete(targetId);
+    this.destinations.delete(targetId);this.attackTargets.delete(targetId);this.activeDashes.delete(targetId);
+    target.targetId="";target.combatState="idle";target.stunned=true;
+    this.sentinelStuns.set(targetId,this.simulatedMs+SENTINEL_CONTROL.playerStunMs);
+    this.sentinelStunResists.set(targetId,this.simulatedMs+SENTINEL_CONTROL.immunityMs);
+    this.sentinelCounters.set(id,this.simulatedMs+3000);
+    this.broadcast("sentinel_stun",{playerId:targetId,durationMs:SENTINEL_CONTROL.playerStunMs},{afterNextPatch:true});
+    return "applied";
+  }
   private releaseMuayGrapple(holderId:string,reason:string):void {
     const hold=this.muayGrapples.get(holderId); if(!hold)return;
     this.muayGrapples.delete(holderId);this.muayHeldBy.delete(hold.targetId);
@@ -633,6 +669,64 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     catch(error) { console.warn("MONTRA blade book notice was not delivered",error); }
   }
 
+  private sendSentinelBook(client:Client):void {
+    const player=this.state.players.get(client.sessionId),book=this.sentinelBooks.get(client.sessionId);
+    if(!player || player.pathId!=="sentinel" || !book)return;
+    try{client.send("sentinel_book_state",{book,lessons:SENTINEL_LESSONS,practiceLabels:SENTINEL_PRACTICE_LABELS,points:sentinelPoints(player.level)});}
+    catch(error){console.warn("MONTRA sentinel book notice was not delivered",error);}
+  }
+
+  private recordSentinelPractice(id:string,category:keyof SentinelBook["practice"]):void {
+    const player=this.state.players.get(id),book=this.sentinelBooks.get(id);
+    if(player?.pathId!=="sentinel" || !book)return;
+    book.practice[category]=Math.min(1_000_000,book.practice[category]+1);
+    const client=this.clients.find(c=>c.sessionId===id);if(client)this.sendSentinelBook(client);
+  }
+
+  private changeSentinelBook(client:Client,message:unknown):void {
+    if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_sentinel_book");
+    const input=message as Record<string,unknown>,keys=Object.keys(input),action=input.action;
+    if(action==="learn") {if(keys.length!==2 || typeof input.skillId!=="string")return this.reject(client,"invalid_sentinel_book");}
+    else if(action==="equip") {if(keys.length!==3 || !Number.isInteger(input.slot) || (input.slot as number)<0 || (input.slot as number)>3 || (input.skillId!==null && typeof input.skillId!=="string"))return this.reject(client,"invalid_sentinel_book");}
+    else if(action==="reset") {if(keys.length!==1)return this.reject(client,"invalid_sentinel_book");}
+    else return this.reject(client,"invalid_sentinel_book");
+    const id=client.sessionId,player=this.buildPlayer(client,"occult"),book=this.sentinelBooks.get(id);
+    if(!player)return;
+    if(player.pathId!=="sentinel")return this.reject(client,"sentinel_class_required");
+    if(!book)return this.reject(client,"build_unavailable");
+    if(player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 || this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)return this.reject(client,"sentinel_book_needs_shrine");
+    const next=validateSentinelBook(book,player.level);
+    if(action==="learn"){
+      const id=input.skillId as SentinelSkillId;if(!Object.hasOwn(SENTINEL_LESSONS,id))return this.reject(client,"invalid_sentinel_book");
+      const lesson:SentinelLesson=SENTINEL_LESSONS[id];
+      if(next.learned.includes(id))return this.reject(client,"sentinel_already_learned");
+      if(player.level<lesson.level)return this.reject(client,"sentinel_level");
+      if(next.learned.length>=sentinelPoints(player.level))return this.reject(client,"sentinel_no_points");
+      if(lesson.requires.some(req=>!next.learned.includes(req as SentinelSkillId)))return this.reject(client,"sentinel_prerequisite");
+      if(Object.entries(lesson.practice).some(([category,needed])=>next.practice[category as keyof typeof next.practice]<(needed ?? 0)))return this.reject(client,"sentinel_practice");
+      next.learned.push(id);
+    }else if(action==="equip"){
+      const skillId=input.skillId as SentinelSkillId|null;
+      if(skillId!==null && (!next.learned.includes(skillId) || SENTINEL_LESSONS[skillId].effect==="passive"))return this.reject(client,"sentinel_skill_locked");
+      for(let i=0;i<4;i++)if(skillId!==null && next.slots[i]===skillId)next.slots[i]=null;
+      next.slots[input.slot as number]=skillId;
+    }else{if(!next.learned.length)return this.reject(client,"sentinel_book_empty");next.learned=[];next.slots=[null,null,null,null];}
+    const snapshot=this.captureCharacterSnapshot(id);if(!snapshot)return this.reject(client,"build_unavailable");
+    this.pendingWarps.add(id);
+    const task=characterStore.save({...snapshot,sentinelBook:next}).then(()=>{
+      this.sentinelBooks.set(id,next);this.sendSentinelBook(client);
+      if(action==="reset"){
+        this.sentinelAnchors.delete(id);this.sentinelCounters.delete(id);this.swordGuards.delete(id);
+        this.effects.remove(id,"sentinel_step",id);this.effects.remove(id,"sentinel_anchor",id);
+        for(const [member,link] of this.sentinelInterceptions)if(link.ownerId===id)this.sentinelInterceptions.delete(member);
+      }
+      this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
+      try{client.send("sentinel_book_changed",{action});}catch(error){console.warn("MONTRA sentinel book confirmation was not delivered",error);}
+    },error=>{console.error("MONTRA sentinel book save failed",error);this.reject(client,"sentinel_book_save_failed");})
+      .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
+    this.pendingItemUses.set(id,task);
+  }
+
   private endBladeCloak(id:string,reason:string):boolean {
     if(!this.bladeCloaks.delete(id)) return false;
     const player=this.state.players.get(id),book=this.bladeBooks.get(id);
@@ -644,6 +738,127 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try {this.clients.find(client=>client.sessionId===id)?.send("blade_cloak_changed",{active:false,reason});}
     catch(error) {console.warn("MONTRA blade cloak notice was not delivered",error);}
     return true;
+  }
+
+  private sentinelDamage(id:string,targetId:string,power:number,stun:boolean,range=3):boolean {
+    const actor=this.state.players.get(id),monster=this.getMonster(targetId),target=monster ?? this.state.players.get(targetId);
+    if(!actor?.alive || actor.pathId!=="sentinel" || !target?.alive || !this.sameCombatMap(id,targetId) ||
+       this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
+       (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))) ||
+       distance3d(actor,target)>range || meleeHeightBlocked(actor,target,1.1) || !this.bodyPathClear(actor.mapId,actor,target))return false;
+    this.recordCombat(id,targetId);
+    const attack=(actor.atk+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee)*power*(monster?1:0.75);
+    if(monster)this.hitMonsterWithSpell(id,monster,calculateDamage(attack,monster.defense,monster.level),"sword");
+    else {
+      const victim=target as Player,damage=this.swordGuardDamage(targetId,actor,calculateDamage(attack,victim.def,victim.level));
+      victim.hp=Math.max(0,victim.hp-damage);victim.hitSeq++;
+      this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"sentinel"},{afterNextPatch:true});
+      if(victim.hp===0){actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});}
+    }
+    if(stun && target.alive) {
+      const result=this.sentinelInterrupt(id,targetId);
+      this.sendSwordNotice(this.clients.find(c=>c.sessionId===id),"sentinel_control",{targetId,result});
+    }
+    return true;
+  }
+
+  private castSentinelSkill(client:Client,message:unknown):void {
+    if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_sentinel_skill");
+    const input=message as Record<string,unknown>;
+    if(typeof input.skillId!=="string" || !Object.hasOwn(SENTINEL_LESSONS,input.skillId) ||
+      Object.keys(input).some(k=>k!=="skillId" && k!=="targetId") || (input.targetId!==undefined && typeof input.targetId!=="string"))
+      return this.reject(client,"invalid_sentinel_skill");
+    const id=client.sessionId,skillId=input.skillId as SentinelSkillId,skill:SentinelLesson=SENTINEL_LESSONS[skillId];
+    const actor=this.spellCaster(client),book=this.sentinelBooks.get(id);
+    if(!actor || !book)return;
+    if(actor.pathId!=="sentinel" || !this.persistentCharacters.has(id))return this.reject(client,"sentinel_class_required");
+    if(!book.learned.includes(skillId) || !book.slots.includes(skillId) || skill.effect==="passive")return this.reject(client,"sentinel_skill_locked");
+    if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
+    if(actor.flying || !onMapGround(actor) || isRestArea(actor.mapId,actor))return this.reject(client,"sentinel_location");
+    if(Date.now()<(book.cooldowns[skillId] ?? 0))return this.reject(client,"sentinel_cooldown");
+    if(actor.stamina<skill.stamina)return this.reject(client,"insufficient_stamina");
+    if(skill.effect==="counter" && this.simulatedMs>=(this.sentinelCounters.get(id) ?? 0))return this.reject(client,"sentinel_counter_required");
+    if((skill.effect==="step" || skill.effect==="anchor") && this.effects.modifiers(id).length>=STACKING_RULES.maxModifiers &&
+      !this.effects.modifiers(id).some(effect=>effect.id==="sentinel_"+skillId && effect.sourceId===id))return this.reject(client,"sentinel_effect_limit");
+    const targetId=typeof input.targetId==="string"?input.targetId:id;
+    const offensive=["stun","slam","counter","step"].includes(skill.effect);
+    let target:Monster|Player|undefined;
+    if(offensive){
+      target=this.getMonster(targetId) ?? this.state.players.get(targetId);
+      if(targetId===id || !target?.alive || !this.sameCombatMap(id,targetId) ||
+        this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))return this.reject(client,"target_unavailable");
+      if(distance3d(actor,target)>skill.range || meleeHeightBlocked(actor,target,1.1) || !this.bodyPathClear(actor.mapId,actor,target))return this.reject(client,"sentinel_out_of_range");
+    }
+    const party=(this.parties.get(id)?.members ?? [id]).filter(member=>!this.field || member===id || this.warSeats.get(member)?.side===this.warSeats.get(id)?.side);
+    let allies:Array<[string,Player]>=[];
+    if(["ward","intercept","party_ward"].includes(skill.effect)){
+      const members=skill.effect==="party_ward"?party:[targetId];
+      if(members.some(member=>!party.includes(member)) || (skill.effect==="intercept" && targetId===id))return this.reject(client,"sentinel_party_required");
+      allies=members.map(member=>[member,this.state.players.get(member)] as const).filter((entry):entry is [string,Player]=>Boolean(entry[1]?.alive && entry[1].mapId===actor.mapId &&
+        !this.pendingWarps.has(entry[0]) && !this.pendingItemUses.has(entry[0]) && !this.pendingRewards.has(entry[0]) && !this.pendingCharacterLeaves.has(entry[0]) &&
+        distance3d(actor,entry[1])<=skill.range && (entry[0]===id || this.bodyPathClear(actor.mapId,actor,entry[1]))));
+      if(!allies.length || (skill.effect!=="party_ward" && allies.length!==1))return this.reject(client,"target_unavailable");
+      if(skill.effect!=="intercept")for(const [member] of allies){
+        const active=this.effects.modifiers(member);
+        if(active.length>=STACKING_RULES.maxModifiers && !active.some(effect=>effect.id===skillId && effect.sourceId===id))return this.reject(client,"sentinel_effect_limit");
+      }
+    }
+    let next:{x:number;y:number;z:number}|undefined;
+    if(skill.effect==="step" || skill.effect==="intercept"){
+      const destination=skill.effect==="intercept"?allies[0][1]:target!;
+      const dx=destination.x-actor.x,dz=destination.z-actor.z,length=Math.hypot(dx,dz),travel=Math.max(0,length-1.7);
+      const vx=length>0.001?dx/length:0,vz=length>0.001?dz/length:0;
+      next={x:actor.x+vx*travel,y:actor.y,z:actor.z+vz*travel};
+      next.y=groundAt(actor.mapId,next.x,next.z)+surfaceLayer(actor);
+      const map=getWorldMap(actor.mapId);
+      if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(actor),false,actor.mapId) || isRestArea(actor.mapId,next) || !this.bodyPathClear(actor.mapId,actor,next))return this.reject(client,"sentinel_blocked");
+      if(travel>0.00001){const sweep=advanceDash(actor,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,surfaceLayer(actor),false,actor.mapId) && !isRestArea(actor.mapId,{x,z}),map.bounds);
+        if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"sentinel_blocked");}
+    }
+    actor.stamina-=skill.stamina;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
+    if(offensive && target)actor.facing=facingTo(target.x-actor.x,target.z-actor.z);
+    if(next){this.destinations.delete(id);this.attackTargets.delete(id);actor.targetId="";actor.combatState="idle";this.moveOnSurface(actor,next.x,next.z);}
+    if(skill.effect==="guard")this.swordGuards.set(id,{until:this.simulatedMs+2500,factor:skill.power,direction:true,counterUntil:0});
+    else if(skill.effect==="step" || skill.effect==="anchor"){
+      this.effects.grant(id,{id:"sentinel_"+skillId,sourceId:id,group:"sentinel_self",bonuses:{def:skill.power}},this.simulatedMs+6000);
+      this.applyStats(id,actor,this.statAllocations.get(id) ?? emptyAllocations());
+      if(skill.effect==="anchor")this.sentinelAnchors.set(id,this.simulatedMs+6000);
+    } else if(skill.effect==="slam"){
+      this.destinations.delete(id);this.attackTargets.delete(id);actor.targetId="";actor.combatState="attacking";
+      this.sentinelWindups.set(id,{targetId,until:this.simulatedMs+800,power:skill.power});
+      this.broadcast("sentinel_windup",{playerId:id,targetId,durationMs:800},{afterNextPatch:true});
+    } else if(skill.effect==="stun" || skill.effect==="counter"){
+      if(skill.effect==="counter")this.sentinelCounters.delete(id);
+      this.sentinelDamage(id,targetId,skill.power,skill.effect==="stun");
+    } else if(skill.effect==="sweep"){
+      let hit=0;
+      for(const monster of [this.state.monster,...this.state.monsters.values()]){
+        const dx=monster.x-actor.x,dz=monster.z-actor.z,d=Math.hypot(dx,dz);
+        if(hit<3 && monster.alive && d<=skill.range && (d<0.001 || (-Math.sin(actor.facing)*dx-Math.cos(actor.facing)*dz)/d>=0.5) && this.sentinelDamage(id,monster.id,skill.power,false,skill.range))hit++;
+      }
+    } else if(skill.effect==="taunt"){
+      let applied=0;
+      for(const monster of [this.state.monster,...this.state.monsters.values()]){
+        if(applied>=3 || !monster.alive || distance3d(actor,monster)>skill.range || !this.sameCombatMap(id,monster.id) || !this.bodyPathClear(actor.mapId,actor,monster))continue;
+        if(monster.id===RULES.monsterId){
+          if(monster.tier==="normal" && !this.monsterReturning && this.simulatedMs>=this.sentinelLegacyTaunt.resistUntil){
+            this.sentinelLegacyTaunt={ownerId:id,until:this.simulatedMs+SENTINEL_CONTROL.tauntMs,resistUntil:this.simulatedMs+SENTINEL_CONTROL.tauntImmunityMs};monster.targetId=id;this.monsterNavigator.clear();applied++;
+          }
+        }else if(this.forest.taunt(monster.id,id,this.simulatedMs,SENTINEL_CONTROL.tauntMs,SENTINEL_CONTROL.tauntImmunityMs)==="applied")applied++;
+      }
+      this.sendSwordNotice(client,"sentinel_taunt",{applied});
+    } else if(skill.effect==="ward" || skill.effect==="party_ward"){
+      let assisted=false;
+      for(const [member,ally] of allies){
+        this.effects.grant(member,{id:skillId,sourceId:id,group:"sentinel_support",bonuses:{def:skill.power}},this.simulatedMs+8000);
+        this.applyStats(member,ally,this.statAllocations.get(member) ?? emptyAllocations());
+        if(member!==id && (this.forest.engaged(member) || this.state.monster.targetId===member || Boolean(this.getMonster(this.attackTargets.get(member) ?? ""))))assisted=true;
+      }
+      if(assisted)this.recordSentinelPractice(id,"assist");
+    } else if(skill.effect==="intercept")this.sentinelInterceptions.set(targetId,{ownerId:id,until:this.simulatedMs+6000,fraction:skill.power});
+    this.sendSentinelBook(client);
+    this.broadcast("sentinel_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
+    void this.saveCharacter(id);
   }
 
   private castBladeCloak(client:Client,message:unknown):void {
@@ -1233,7 +1448,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
-  private swordGuardDamage(id:string, attacker:{x:number;z:number}, damage:number,guardPierce=0):number {
+  private swordGuardDamage(id:string, attacker:{x:number;z:number}, damage:number,guardPierce=0, summonOwnerId?:string):number {
+    if(this.sentinelWindups.delete(id)) {
+      const winding=this.state.players.get(id);if(winding?.alive)winding.combatState="idle";
+      this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"sentinel_windup_result",{result:"interrupted"});
+    }
     if(this.bladeCasts.delete(id)) {
       const casting=this.state.players.get(id);if(casting?.alive)casting.combatState="idle";
       this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"blade_cloak_changed",{active:false,reason:"interrupted"});
@@ -1243,13 +1462,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"blade_windup",{result:"interrupted"});
     }
     const guard=this.swordGuards.get(id), player=this.state.players.get(id);
-    if (!guard || !player || this.simulatedMs>=guard.until) return damage;
+    if (!guard || !player || this.simulatedMs>=guard.until) return this.sentinelShareDamage(id,attacker,damage,summonOwnerId);
     const dx=attacker.x-player.x, dz=attacker.z-player.z, length=Math.hypot(dx,dz);
     const front=length<0.001 || (-Math.sin(player.facing)*dx-Math.cos(player.facing)*dz)/length>=0;
-    if (guard.direction && !front) return damage;
+    if (guard.direction && !front) return this.sentinelShareDamage(id,attacker,damage,summonOwnerId);
     const defense=this.muayDefenseWindows.get(id);
     const kind=defense && defense.until===guard.until && this.simulatedMs<defense.until ? defense.kind : undefined;
     guard.counterUntil=this.simulatedMs+3000;
+    if(player.pathId==="sentinel"){
+      this.sentinelCounters.set(id,this.simulatedMs+3000);
+      if(attacker===this.state.monster || [...this.state.monsters.values()].some(monster=>monster===attacker))this.recordSentinelPractice(id,"guard");
+    }
     if(player.pathId==="blade" && this.simulatedMs<(this.bladeEvades.get(id) ?? 0)) {
       this.bladeEvades.delete(id);guard.until=this.simulatedMs;
       if(attacker===this.state.monster || [...this.state.monsters.values()].some(monster=>monster===attacker))this.recordBladePractice(id,"evade");
@@ -1259,7 +1482,40 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(kind!=="evade")this.recordMuayTraining(id,"blocks");
     if(kind) {guard.until=this.simulatedMs;this.clearMuayDefense(id,"success");}
     this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),player.pathId === "muay_boran" ? "muay_guarded" : "sword_guarded",{until:guard.counterUntil,kind:kind ?? "guard"});
-    return Math.max(1,Math.round(damage*(guard.factor+(1-guard.factor)*guardPierce)));
+    return this.sentinelShareDamage(id,attacker,Math.max(1,Math.round(damage*(guard.factor+(1-guard.factor)*guardPierce))),summonOwnerId);
+  }
+
+  private sentinelShareDamage(id:string,attacker:{x:number;z:number},damage:number,summonOwnerId?:string):number {
+    const link=this.sentinelInterceptions.get(id),victim=this.state.players.get(id);
+    if(!link || !victim)return damage;
+    const owner=this.state.players.get(link.ownerId),party=this.parties.get(id);
+    if(this.simulatedMs>=link.until || !owner?.alive || owner.pathId!=="sentinel" || !party?.members.includes(link.ownerId) ||
+       owner.mapId!==victim.mapId || distance3d(owner,victim)>6 || isRestArea(owner.mapId,owner) ||
+       this.pendingWarps.has(link.ownerId) || this.pendingItemUses.has(link.ownerId) || this.pendingRewards.has(link.ownerId) ||
+       this.pendingCharacterLeaves.has(link.ownerId)){
+      this.sentinelInterceptions.delete(id);return damage;
+    }
+    const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
+    const summonOwner=summonOwnerId && this.state.summons.get(summonOwnerId)===attacker ? this.state.players.get(summonOwnerId) : undefined;
+    const aggressor=summonOwner ? [summonOwnerId!,summonOwner] as const : [...this.state.players.entries()].find(([,p])=>p===attacker);
+    if(monster ? !this.sameCombatMap(link.ownerId,monster.id) : !aggressor || !this.sameCombatMap(aggressor[0],link.ownerId))return damage;
+    const shared=Math.min(damage-1,Math.floor(damage*link.fraction));
+    if(shared<=0)return damage;
+    if(this.sentinelWindups.delete(link.ownerId)){
+      owner.combatState="idle";
+      this.sendSwordNotice(this.clients.find(client=>client.sessionId===link.ownerId),"sentinel_windup_result",{result:"interrupted"});
+    }
+    owner.hp=Math.max(0,owner.hp-shared);owner.hitSeq++;this.lastCombatMs.set(link.ownerId,this.simulatedMs);
+    if(monster)this.recordSentinelPractice(link.ownerId,"assist");
+    this.broadcast("sentinel_intercept",{playerId:link.ownerId,targetId:id,damage:shared,hp:owner.hp,maxHp:owner.maxHp,hitSeq:owner.hitSeq,attackerId:aggressor?.[0] ?? monster?.id,source:summonOwner?"summon":monster?"monster":"player"},{afterNextPatch:true});
+    if(owner.hp===0){
+      this.sentinelInterceptions.delete(id);
+      if(aggressor){aggressor[1].pkKills++;owner.pkDeaths++;this.knockoutPlayer(link.ownerId,"pk",aggressor[0]);
+        void this.saveCharacter(aggressor[0]);
+        this.broadcast("pvp_kill",{winnerId:aggressor[0],loserId:link.ownerId,kills:aggressor[1].pkKills,deaths:owner.pkDeaths},{afterNextPatch:true});}
+      else this.knockoutPlayer(link.ownerId,"monster",monster!.id);
+    }
+    return damage-shared;
   }
 
   private castMuaySkill(client:Client, message:unknown):void {
@@ -1511,7 +1767,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private applyStats(id:string, player: Player, allocations: Allocations): void {
     const stats = calculateModifiedStats(calculateStats(player.level, allocations),this.effects.modifiers(id));
-    player.maxHp = stats.maxHp; player.atk = stats.atk; player.def = stats.def;
+    player.maxHp = stats.maxHp; player.atk = stats.atk;
+    player.def = player.pathId==="sentinel" && this.sentinelBooks.get(id)?.learned.includes("fortitude") && equippedWeaponId(this.inventories.get(id))===SHRINE_GLAIVE
+      ? Math.round(stats.def*(1+SENTINEL_LESSONS.fortitude.power)) : stats.def;
     player.magicAtk = stats.magicAtk; player.magicDef = stats.magicDef;
     player.maxStamina = stats.maxStamina;
     player.hp = Math.min(player.hp, stats.maxHp);
@@ -2159,6 +2417,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     blade_book: (client: Client, message: unknown) => this.changeBladeBook(client,message),
     blade_skill: (client: Client, message: unknown) => this.castBladeSkill(client,message),
+    sentinel_book_get: (client:Client,message:unknown) => {
+      if(!parseEmptyCommand(message))return this.reject(client,"invalid_sentinel_book");
+      const player=this.buildPlayer(client,"occult");if(!player)return;
+      if(player.pathId!=="sentinel")return this.reject(client,"sentinel_class_required");
+      this.sendSentinelBook(client);
+    },
+    sentinel_book: (client:Client,message:unknown) => this.changeSentinelBook(client,message),
+    sentinel_skill: (client:Client,message:unknown) => this.castSentinelSkill(client,message),
     cast_class_skill: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_build");
       this.castClassSkill(client);
@@ -2169,6 +2435,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
       if(this.field)return client.send("territory_error",{reason:"war_exit"});
       const id = client.sessionId;
+      if(this.sentinelStuns.has(id))return this.reject(client,"sentinel_stunned");
+      if(this.sentinelWindups.has(id))return this.reject(client,"sentinel_windup_active");
       if(this.muayControlled(id))return this.reject(client,"muay_controlled");
       const player = this.state.players.get(id);
       if (!player || !this.persistentCharacters.has(id)) return this.reject(client, "character_not_persistent");
@@ -2242,6 +2510,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.pendingItemUses.set(id, task);
     },
     equip_weapon: (client: Client, message: unknown) => {
+      if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
+      if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
       const order = parseEquipWeaponCommand(message);
       if (!order) return this.reject(client, "invalid_weapon_equip");
       const id = client.sessionId;
@@ -2273,6 +2543,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           if (!current || this.inventories.get(id) !== inventory) return;
           this.inventories.set(id, change.inventory);
           current.equippedWeaponId = change.weaponId ?? "";
+          this.applyStats(id,current,this.statAllocations.get(id) ?? emptyAllocations());
           if (current.pathId === "muay_boran" && change.weaponId !== MUAY_WRAP_ID) {
             this.swordGuards.delete(id);
             this.clearMuayDefense(id,"cancelled");
@@ -2304,6 +2575,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("inventory_state", inventory);
     },
     use_item: (client: Client, message: unknown) => {
+      if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
+      if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const slot = parseUseItemCommand(message);
       if (slot === null) return this.reject(client, "invalid_item_use");
@@ -2359,6 +2632,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     fly: (client: Client, message: unknown) => {
       if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
       if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
+      if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
+      if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
       if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_flight");
@@ -2400,6 +2675,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     dash: (client: Client, message: unknown) => {
       if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
       if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
+      if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
+      if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
       if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const direction = parseDashCommand(message);
@@ -2462,6 +2739,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     move: (client: Client, message: unknown) => {
       if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
+      if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
+      if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
       if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const destination = parseMoveCommand(message, getWorldMap(this.state.players.get(client.sessionId)?.mapId ?? DEFAULT_MAP_ID)?.bounds);
@@ -2491,6 +2770,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     attack: (client: Client, message: unknown) => {
       if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
+      if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
+      if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
       if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const monsterOrder = parseAttackCommand(message);
@@ -2546,6 +2827,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     possess: (client:Client,message:unknown) => {
       const id=client.sessionId;
+      if(this.sentinelStuns.has(id))return this.reject(client,"sentinel_stunned");
+      if(this.sentinelWindups.has(id))return this.reject(client,"sentinel_windup_active");
       if(!parseEmptyCommand(message))return this.reject(client,"invalid_possession");
       if(this.pendingWarps.has(id))return this.reject(client,"character_busy");
       const player=this.state.players.get(id);
@@ -2579,6 +2862,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     climb: (client: Client, message: unknown) => {
       if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
       if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
+      if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
+      if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
       if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const villageOrder=parseClimbRequest(message);
@@ -2628,6 +2913,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private spellCaster(client: Client) {
     const id = client.sessionId;
+    if(this.sentinelStuns.has(id))return this.reject(client,"sentinel_stunned");
+    if(this.sentinelWindups.has(id))return this.reject(client,"sentinel_windup_active");
     if(this.bladeWindups.has(id) || this.bladeCasts.has(id))return this.reject(client,"blade_windup_active");
     if(this.muayControlled(id))return this.reject(client,"muay_controlled");
     const player = this.state.players.get(id);
@@ -2736,6 +3023,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private summonSpirit(client: Client, message: unknown, kind: "guardian" | "pot_spirit") {
+    if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
+    if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
     if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
     const id = client.sessionId;
     if (!parseEmptyCommand(message)) return this.reject(client, "invalid_summon");
@@ -2940,7 +3229,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Summon can help in Free PK only when its owner selected or was attacked
     // by this opponent. Damage/kill attribution belongs to the owner.
     const victim = target as Player;
-    const damage = this.swordGuardDamage(targetId,guardian,calculateDamage(RULES.summonAttackDamage, victim.magicDef, victim.level));
+    const damage = this.swordGuardDamage(targetId,guardian,calculateDamage(RULES.summonAttackDamage, victim.magicDef, victim.level),0,ownerId);
     victim.hp = Math.max(0, victim.hp - damage);
     victim.hitSeq += 1;
     this.broadcast("pvp_hit", {
@@ -3017,6 +3306,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private tick(dt: number) {
+    for(const [id,until] of this.sentinelStuns)if(this.simulatedMs>=until){
+      this.sentinelStuns.delete(id);const player=this.state.players.get(id);if(player)player.stunned=false;
+    }
+    for(const [id,until] of this.sentinelStunResists)if(this.simulatedMs>=until)this.sentinelStunResists.delete(id);
+    for(const [id,until] of this.sentinelAnchors)if(this.simulatedMs>=until)this.sentinelAnchors.delete(id);
+    for(const [id,until] of this.sentinelCounters)if(this.simulatedMs>=until)this.sentinelCounters.delete(id);
+    for(const [id,link] of this.sentinelInterceptions)if(this.simulatedMs>=link.until)this.sentinelInterceptions.delete(id);
+    for(const [id,windup] of this.sentinelWindups)if(this.simulatedMs>=windup.until){
+      this.sentinelWindups.delete(id);const actor=this.state.players.get(id);if(actor?.alive)actor.combatState="idle";
+      const hit=this.sentinelDamage(id,windup.targetId,windup.power,true);
+      this.sendSwordNotice(this.clients.find(c=>c.sessionId===id),"sentinel_windup_result",{result:hit?"hit":"miss"});
+    }
     this.updateBladeEffects();
     for(const [id,until] of this.bladeCloaks) {
       const player=this.state.players.get(id);
@@ -3144,11 +3445,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private updatePlayerMovement(dt: number) {
     for (const [sessionId, player] of this.state.players) {
-      if (!player.alive || this.pendingWarps.has(sessionId) || this.climbs.has(sessionId) || this.flightTransitions.has(sessionId)) {
+      if (!player.alive || this.sentinelStuns.has(sessionId) || this.sentinelWindups.has(sessionId) || this.pendingWarps.has(sessionId) || this.climbs.has(sessionId) || this.flightTransitions.has(sessionId)) {
         this.activeDashes.delete(sessionId);
         continue;
       }
-      const moveSpeed=player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed *
+      const moveSpeed=player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed * (this.sentinelAnchors.has(sessionId)?0.6:1) *
         (this.bladeCloaks.has(sessionId) && this.bladeBooks.get(sessionId)?.learned.includes("quiet_step") ? 1+BLADE_LESSONS.quiet_step.power : 1);
 
       const dash = this.activeDashes.get(sessionId);
@@ -3337,6 +3638,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private knockoutPlayer(id: string, cause: "pk" | "monster", attackerId = "") {
+    this.sentinelStuns.delete(id);this.sentinelWindups.delete(id);this.sentinelCounters.delete(id);this.sentinelAnchors.delete(id);this.sentinelInterceptions.delete(id);
+    for(const [member,link] of this.sentinelInterceptions)if(link.ownerId===id)this.sentinelInterceptions.delete(member);
     this.endBladeCloak(id,"dead");this.bladeCasts.delete(id);this.bladeWindups.delete(id);
     this.releaseMuayFor(id,"knockout");
     this.clearGrappleCountersFor(id,"knockout");
@@ -3347,6 +3650,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.clearMuayCombosForTarget(id);
     const victim = this.state.players.get(id);
     if (!victim || !victim.alive) return;
+    victim.stunned=false;
     this.endPossession(id,"owner_dead");
     this.effects.forget(id);
     this.applyStats(id, victim, this.statAllocations.get(id) ?? emptyAllocations());
@@ -3394,6 +3698,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const monster = this.state.monster;
     this.clearMuayCombosForTarget(targetId);
     this.monsterInterruptUntil=0;this.monsterInterruptResistUntil=0;
+    this.sentinelLegacyTaunt={ownerId:"",until:0,resistUntil:0};
     monster.alive = false;
     monster.hp = 0;
     this.monsterNavigator.clear();
@@ -3438,6 +3743,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       target = undefined;
       targetId = "";
     }
+    const taunt=this.sentinelLegacyTaunt,forced=this.state.players.get(taunt.ownerId);
+    if(this.simulatedMs<taunt.until && forced?.alive && forced.mapId===DEFAULT_MAP_ID &&
+       !this.pendingWarps.has(taunt.ownerId) && !isRestArea(forced.mapId,forced) &&
+       onMapGround(forced) && !this.bladeCloaks.has(taunt.ownerId) && planarDistance(monster,forced)<=RULES.monsterGiveUpRadius){
+      target=forced;targetId=taunt.ownerId;
+    }else if(this.simulatedMs>=taunt.until || !forced?.alive){taunt.ownerId="";taunt.until=0;}
 
     // No shared targeting oracle: this NPC sees only characters within aggro.
     if (!target) {
@@ -3598,6 +3909,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       muayBook: this.muayBooks.get(id),
       occultBook: this.occultBooks.get(id),
       bladeBook: this.bladeBooks.get(id),
+      sentinelBook: this.sentinelBooks.get(id),
       muayWrapGranted: this.muayWrapGranted.has(id),
       stamina: player.stamina,
       x: player.x,
@@ -3730,6 +4042,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.muayBooks.set(client.sessionId, saved?.muayBook ?? newMuayBook());
       this.occultBooks.set(client.sessionId, saved?.occultBook ?? newOccultBook());
       if(saved?.bladeBook || player.pathId==="blade")this.bladeBooks.set(client.sessionId, saved?.bladeBook ?? newBladeBook());
+      if(saved?.sentinelBook || player.pathId==="sentinel")this.sentinelBooks.set(client.sessionId, saved?.sentinelBook ?? newSentinelBook());
       if (saved?.muayWrapGranted) this.muayWrapGranted.add(client.sessionId);
       this.statAllocations.set(client.sessionId, allocations);
       this.applyStats(client.sessionId,player, allocations);
@@ -3855,6 +4168,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.muayBooks.delete(id);
       this.occultBooks.delete(id);
       this.bladeBooks.delete(id);
+      this.sentinelBooks.delete(id);
+      this.sentinelStuns.delete(id);this.sentinelStunResists.delete(id);this.sentinelWindups.delete(id);this.sentinelCounters.delete(id);this.sentinelAnchors.delete(id);this.sentinelInterceptions.delete(id);
+      for(const [member,link] of this.sentinelInterceptions)if(link.ownerId===id)this.sentinelInterceptions.delete(member);
       this.bladeCloaks.delete(id);
       this.bladeCasts.delete(id);
       this.bladeMarks.delete(id);this.bladeOpenings.delete(id);this.bladeEvades.delete(id);this.bladeWindups.delete(id);
@@ -3912,6 +4228,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.muayBooks.clear();
     this.occultBooks.clear();
     this.bladeBooks.clear();
+    this.sentinelBooks.clear();
+    this.sentinelStuns.clear();this.sentinelStunResists.clear();this.sentinelWindups.clear();this.sentinelCounters.clear();this.sentinelAnchors.clear();this.sentinelInterceptions.clear();
     this.bladeCloaks.clear();
     this.bladeCasts.clear();
     this.bladeMarks.clear();this.bladeOpenings.clear();this.bladeEvades.clear();this.bladeWindups.clear();
