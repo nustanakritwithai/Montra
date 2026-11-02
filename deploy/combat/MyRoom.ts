@@ -1,4 +1,5 @@
 import { Room, type Client, type CloseCode } from "colyseus";
+import { Encoder } from "@colyseus/schema";
 import { randomUUID } from "node:crypto";
 import {
   CHARACTER_SAVE_INTERVAL_MS, characterStore, characterIdFromToken,
@@ -32,7 +33,7 @@ import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.j
 import type { CharacterSnapshot } from "./CharacterStore.js";
 import { isAtlasMap } from "./WorldAtlas.js";
 import { TEMPLE_ID } from "./TempleMap.js";
-import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
+import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, VILLAGE_ARRIVALS, WORLD_ROOM_CAPACITY, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
 import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
@@ -50,6 +51,9 @@ import {
 } from "./ItemRules.js";
 
 import { ForestEncounters } from "./ForestEncounters.js";
+
+// A full world snapshot spans up to 48 KiB with ten occupied maps, before summons.
+Encoder.BUFFER_SIZE = Math.max(Encoder.BUFFER_SIZE, 64 * 1024);
 
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
@@ -72,7 +76,7 @@ type TradeSession = { id:string; a:string; b:string; expires:number; offers:Reco
  *   state.players, state.monster; "combat_hit"/"combat_notice"/"monster_respawn".
  */
 export class MyRoom extends Room<{ state: MyRoomState }> {
-  maxClients = 4;
+  maxClients = WORLD_ROOM_CAPACITY;
   state = new MyRoomState();
 
   private forest = new ForestEncounters(this.state.monsters);
@@ -85,6 +89,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastAttackMs = new Map<string, number>();
   private lastCombatMs = new Map<string, number>();
   private lastWarpMs = new Map<string, number>();
+  private provinceClients = new Set<string>();
   private atlasClients = new Set<string>();
   private templeClients = new Set<string>();
   private pendingWarps = new Set<string>();
@@ -506,6 +511,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const snapshot = this.captureCharacterSnapshot(id);
       if (!snapshot) return this.reject(client, "character_not_persistent");
       const portal = result.portal;
+      if(getWorldMap(portal.targetMapId)?.strategic && !this.provinceClients.has(id))return this.reject(client,"world_client_update_required");
       if(isAtlasMap(portal.targetMapId) && !this.atlasClients.has(id))return this.reject(client,"world_client_update_required");
       if(portal.targetMapId===TEMPLE_ID && !this.templeClients.has(id))return this.reject(client,"world_client_update_required");
       const destination = { ...snapshot, mapId: portal.targetMapId, ...portal.targetSpawn,
@@ -669,7 +675,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.climbs.has(id)) return this.reject(client, "climbing");
       if (this.activeDashes.has(id)) return this.reject(client, "dashing");
       if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
-      if (!player.flying && getWorldMap(player.mapId)?.region?.noFlight) return this.reject(client, "flight_forbidden");
+      const flightMap=getWorldMap(player.mapId);
+      if (!player.flying && (flightMap?.region?.noFlight || flightMap?.strategic?.kind==="territory")) return this.reject(client, "flight_forbidden");
       if (!this.gates.get(id)?.flight.consume(this.simulatedMs)) {
         return this.reject(client, "flight_rate_limited");
       }
@@ -1725,8 +1732,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onJoin(client: Client, options?: unknown) {
     if (WORLD_EXPANSION && (!options || typeof options !== "object" || Array.isArray(options) || (options as Record<string,unknown>).worldVersion !== 1)) throw new Error("world_client_update_required");
-    const spawnX = this.state.players.size * 2;
-    const spawn = { x: spawnX, z: 0 };
     // Old smoke tests and clients without browser storage remain transient.
     // A valid guest token is a secret bearer credential, never sent in Schema.
     const token = getGuestToken(options);
@@ -1740,10 +1745,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
 
     try {
+      // Reserve before the asynchronous save lookup so simultaneous arrivals get different starts.
+      const reserved = [...this.playerSpawn.values()];
+      const spawn = VILLAGE_ARRIVALS.find(p => !reserved.some(other => other.x === p.x && other.z === p.z));
+      if (!spawn) throw new Error("world_room_full");
+      this.playerSpawn.set(client.sessionId, spawn);
       const saved = token ? (await characterStore.loadOrCreate(token, spawn, slot)).character : null;
       const allocations = saved?.statAllocations ?? emptyAllocations();
       const initialStats = calculateStats(saved?.level ?? 1, allocations);
       const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
+      const provinceReady=(options as {provinceVersion?:unknown}|undefined)?.provinceVersion===1;
+      if(getWorldMap(mapId)?.strategic && !provinceReady)throw new Error("world_client_update_required");
       const atlasReady=(options as {atlasVersion?:unknown}|undefined)?.atlasVersion===1;
       if(isAtlasMap(mapId) && !atlasReady)throw new Error("world_client_update_required");
       const templeReady=(options as {templeVersion?:unknown}|undefined)?.templeVersion===1;
@@ -1777,6 +1789,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.statAllocations.set(client.sessionId, allocations);
       this.applyStats(player, allocations);
       this.state.players.set(client.sessionId, player);
+      if(provinceReady)this.provinceClients.add(client.sessionId);
       if(atlasReady)this.atlasClients.add(client.sessionId);
       if(templeReady)this.templeClients.add(client.sessionId);
       if (characterId && accountId && token) {
@@ -1808,6 +1821,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       console.log("MONTRA 3-slot join:", client.sessionId, "room", this.roomId,
         saved ? "persistent" : "transient", "slot", slot);
     } catch (error) {
+      this.playerSpawn.delete(client.sessionId);
       if (accountId) releaseCharacter(accountId, client.sessionId);
       throw error;
     }
@@ -1817,6 +1831,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = client.sessionId;
     this.templeClients.delete(id);
     this.atlasClients.delete(id);
+    this.provinceClients.delete(id);
     this.leaveParty(id);
     const guildCharacter=this.persistentCharacters.get(id);
     if(guildCharacter){this.guildSubscriptions.get(id)?.();this.guildSubscriptions.delete(id);notifyGuilds();}

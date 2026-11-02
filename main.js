@@ -311,8 +311,8 @@
     const m = mat(name, hex); m.opacityTexture = vergeTexture; m.backFaceCulling = false; m.specularColor = B.Color3.Black();
     return m;
   }
-  function buildRoad(points, width, material, verge, parent, seed = 0) {
-    const smooth = smoothPath(points), y = .012 + (seed % 5) * .002, parts = [];
+  function buildRoad(points, width, material, verge, parent, seed = 0, straight = false) {
+    const smooth = straight ? points : smoothPath(points), y = .012 + (seed % 5) * .002, parts = [];
     parts.push(ribbonMesh("road verge", smooth, width + 1.8, verge, y - .006, seed, .2));
     parts.push(ribbonMesh("road", smooth, width, material, y, seed));
     for (const end of [smooth[0], smooth[smooth.length - 1]]) {
@@ -1475,6 +1475,11 @@
   }
   // Palette and silhouettes are local art. Traversable geometry always comes from the room.
   const regionStyles = {
+    mantra_capital:["#8a9276","#d7b582","#adb79a","#8b7d68","#ffdc93","#425955"],
+    moon_pass:["#758358","#c4ab7c","#9caa74","#77756d","#f5cf81","#405a63"],
+    river_watch:["#758b82","#c4aa78","#8caaa0","#706a60","#97e5dc","#354f63"],
+    bamboo_frontier:["#62884c","#b89a68","#89ad69","#645b45","#b9e991","#344b3d"],
+    lotus_basin:["#61887b","#bda885","#91ac8a","#616e74","#eca4b4","#344b65"],
     drowned_marsh: ["#537861","#aa936d","#819769","#5b5643","#99e9bb","#376f79"],
     moon_cemetery: ["#696e78","#b3a58e","#858799","#767885","#e7cda0","#4b445d"],
     hex_ridge: ["#718153","#bca27b","#94a46a","#746d61","#f0cb65","#405747"],
@@ -1484,6 +1489,7 @@
     spirit_rift: ["#686190","#b0a1cc","#857daf","#64567f","#c4abff","#373458"],
   };
   const regionPaints=new Map();
+  const civicRoad=mat('protected jade paving','#8eb6a0','#243e38');
   function regionPaint(id) {
     if(!regionStyles[id])return null;
     if(!regionPaints.has(id)){
@@ -1496,13 +1502,15 @@
         ink.fillStyle=i%4===0?"#c4c9c0":"#dadbd0";
         ink.fillRect(x,y,2+i%7,1+i%3);
       }
-      if(id==="fallen_city"){
+      const province=worldDefinitions?.[id]?.strategic;
+      if(id==="fallen_city" || province?.kind==="capital"){
         ink.strokeStyle="#bcc1b8";ink.lineWidth=2;
         for(let row=0;row<8;row++)for(let col=-1;col<5;col++)ink.strokeRect(col*64+row%2*32,row*32,64,32);
       }
       terrain.update();terrain.uScale=9;terrain.vScale=12;floor.diffuseTexture=terrain;
       // Night grade: the atlas palette is kept but pulled down toward moonlight.
-      floor.diffuseColor.scaleInPlace(.58);court.diffuseColor.scaleInPlace(.5);road.diffuseColor.scaleInPlace(.66);
+      floor.diffuseColor.scaleInPlace(province?.kind ? .88 : .58);court.diffuseColor.scaleInPlace(province?.kind ? .83 : .5);road.diffuseColor.scaleInPlace(province?.kind ? .94 : .66);
+      if(province){floor.emissiveColor=floor.diffuseColor.scale(.22);road.emissiveColor=road.diffuseColor.scale(.17);}
       stone.diffuseColor.scaleInPlace(.8);deep.diffuseColor.scaleInPlace(.7);
       court.diffuseTexture=terrain;glowMats.add(light);
       regionPaints.set(id,{floor,road,court,stone,light,deep});
@@ -1533,6 +1541,141 @@
       parts=[];
     }
     const {floor,road,stone,light,deep}=paint;
+    if(map.strategic){
+      const {kind,sites}=map.strategic;
+      const city=kind==="capital",bamboo=map.id==="bamboo_frontier",lotus=map.id==="lotus_basin";
+      const roof=(x,y,z,width,depth)=>{
+        for(const side of [-1,1]){
+          const tile=box(x+side*width*.23,y,z,width*.58,.28,depth,roofMat);
+          tile.rotation.z=-side*.40;
+          box(x+side*width*.49,y-width*.10,z,.16,.20,depth+.25,gold);
+        }
+        box(x,y+width*.10,z,.27,.3,depth+.5,gold);
+      };
+      const pavilion=(x,z,width,height)=>{
+        for(const dx of [-1,1])for(const dz of [-1,1])cone(x+dx*width*.4,height/2,z+dz*width*.3,height,.34,.30,templeLacquer,6);
+        roof(x,height,z,width,width*.85);
+      };
+      const lamp=(x,z)=>{
+        box(x,1,z,.17,2,.17,darkWood);box(x,2.16,z,.55,.58,.55,lanternPaper);
+        cone(x,2.58,z,.37,1,.1,deep,4);box(x,.04,z,1.3,.05,1.3,paint.court);
+      };
+      box(0,-1.05,-16,220,.6,228,deep);
+      for(let i=0;i<18;i++)for(const side of [-1,1]){
+        const h=4+(i*7)%6;
+        cone(side*(46+i%4),h*.33,-65+i*5.6,h,6+i%4,.25,bamboo||lotus?forestLeaf:stone,6);
+        cone(-48+i*5.6,h*.32,side>0?36+i%3:-72-i%4,h,6+i%5,.2,floor,6);
+      }
+      for(const w of map.water||[]){
+        box(w.x+w.width/2,.05,w.z+w.length/2,w.width,.10,w.length,regionWater(map.id));
+        const horizontal=w.width>w.length,span=Math.max(w.width,w.length);
+        for(const side of [-1,1]){
+          const edgeX=w.x+w.width/2+(horizontal?0:side*(w.width/2-.12));
+          const edgeZ=w.z+w.length/2+(horizontal?side*(w.length/2-.12):0);
+          box(edgeX,.12,edgeZ,horizontal?w.width:.24,.13,horizontal?.24:w.length,civicRoad);
+        }
+        for(let k=2;k<span-1;k+=4){
+          const offset=.8+1.9*noise(k,29),x=w.x+(horizontal?k:offset),z=w.z+(horizontal?offset:k);
+          box(x,.14,z,horizontal?1.55:.23,.035,horizontal?.14:1.55,paint.court);
+          if(lotus && k%8===2){cone(x,.19,z,.1,1.15,1.25,civicRoad,7);cone(x,.49,z,.6,.85,.14,light,6);}
+        }
+      }
+      const crossings=sites.filter(s=>s.kind==="bridge");
+      if(lotus)for(const z of [-4,-27])for(const x of [-22,22])crossings.push({x,z});
+      for(const s of crossings){
+        const cross=s.direction==="east";
+        for(let i=-4;i<=4;i++)box(s.x+(cross?i*.72:0),.13,s.z+(cross?0:i*.72),cross?.64:5.7,.18,cross?5.7:.64,wooden);
+        for(const side of [-1,1]){
+          box(s.x+(cross?0:side*2.9),.83,s.z+(cross?side*2.9:0),cross?6.6:.14,.17,cross?.14:6.6,gold);
+          for(const end of [-1,1])box(s.x+(cross?end*3.1:side*2.9),.55,s.z+(cross?side*2.9:end*3.1),.32,1.1,.32,stone);
+        }
+      }
+      finish("landscape");
+      for(const w of map.walls||[]){
+        const x=w.x+w.width/2,z=w.z+w.length/2;
+        if(city){
+          box(x,1.7,z,w.width,3.4,w.length,stone);roof(x,3.7,z,w.width+.75,w.length+.7);
+          box(x,1.7,w.z-.04,w.width*.25,2,.12,darkWood);
+          for(const side of [-1,1])box(x+side*w.width*.32,2.1,w.z-.12,.62,.9,.10,lanternPaper);
+        }else{
+          box(x,1.45,z,w.width,2.9,w.length,stone);
+          const count=Math.max(1,Math.floor(Math.max(w.width,w.length)/2));
+          for(let i=0;i<count;i++){
+            const t=(i+.5)/count;
+            box(w.width>w.length?w.x+t*w.width:x,3.1,w.width>w.length?z:w.z+t*w.length,1,.7,1,deep);
+          }
+        }
+        finish("buildings",true);
+      }
+      for(const s of sites){
+        const {x,z}=s;
+        if(s.kind==="palace"){
+          for(const side of [-1,1]){
+            pavilion(x+side*7,z,5,4);cone(x+side*7,6.2,z,3,1.5,.03,gold);
+          }
+          roof(x,6.3,z,13,4.8);roof(x,7.4,z,8,3.8);cone(x,9.2,z,3,1.3,0,gold);
+        }else if(s.kind==="fort"){
+          ring(x,.12,z,10.5,gold);ring(x,.13,z,9.8,stone);
+          for(const side of [-1,1]){
+            box(x+side*6,1.4,z-3,2.5,2.8,2.5,deep);
+            roof(x+side*6,3.5,z-3,3.6,3.6);
+          }
+          box(x,3,z, .17,6,.17,gold);box(x+1.1,5.3,z,2.2,1.45,.08,clothRed);
+        }else if(s.kind==="market"){
+          for(let i=0;i<3;i++){
+            const mx=x+(i-1)*2.8;pavilion(mx,z,2.6,2.35);box(mx,.65,z,1.8,1.3,.9,crateWood);
+            box(mx,1.42,z,.8,.24,.5,i%2?gold:paint.light);
+          }
+        }else if(s.kind==="tower"){
+          for(let i=0;i<3;i++){box(x,1+i*1.8,z,3.6-i*.6,1.8,3.6-i*.6,stone);roof(x,2+i*1.8,z,4.3-i*.7,4.1-i*.65);}
+          cone(x,7,z,2,.85,0,gold);
+        }else if(s.kind==="mine"){
+          for(const side of [-1,1]){box(x+side*1.3,1.45,z,.55,2.9,.6,darkWood);cone(x+side*2,.8,z+1,1.8,1.5,.2,paint.light,5);}
+          box(x,3,z,3.5,.65,1,wooden);box(x,.9,z+.6,2.1,1.8,.4,deep);
+        }else if(s.kind==="port"){
+          box(x,.22,z,5,.45,3.7,wooden);pavilion(x,z,4.6,3.4);
+          for(let i=0;i<3;i++)box(x+3,.5,z+i-1,.9,1,.9,crateWood);
+        }else if(s.kind==="shrine"){
+          cone(x,.5,z,1,3.2,2.5,stone,8);cone(x,2,z,2,1.8,.55,templeGold,8);cone(x,3.6,z,1.8,.5,0,gold);
+        }else if(s.kind==="grove"){
+          for(let i=0;i<8;i++){const a=i*2.4;cone(x+Math.cos(a)*1.2,2,z+Math.sin(a)*1.2,4+i%3,.32,.20,forestLeaf);}
+        }
+        if(s.kind!=="bridge")lamp(x+2.2,z+1.5);
+        finish(s.kind,true);
+        expansionLabel(s.name,x,z,10,s.kind==="palace"?11:s.kind==="fort"?7:4.5);
+      }
+      for(const [i,route] of map.paths.entries())for(let j=1;j<route.length;j++){
+        const a=route[j-1],b=route[j],dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz);
+        for(let d=6;d<len-2;d+=11)lamp(a.x+dx*d/len+dz*3/len,a.z+dz*d/len-dx*3/len);
+      }
+      // Low field dressing stays out of roads and clearings. The blocked groves use the server footprints.
+      for(const o of map.obstacles)if(!sites.some(s=>s.x===o.x&&s.z===o.z)){
+        cone(o.x,.65,o.z,1.35,o.radius*2,.7,stone);
+      }
+      if(bamboo || lotus){
+        for(let i=0;i<54;i++){
+          const x=-35+70*noise(i,83),z=-57+81*noise(i,26);
+          if(!sceneryClear(x,z,2.8,map))continue;
+          if(bamboo){
+            for(let j=0;j<4;j++){
+              const bx=x+(j-1.5)*.57,bz=z+Math.sin(j)*.7,h=2.6+noise(i+j,16)*2;
+              cone(bx,h/2,bz,h,.27,.19,decor.bamboo,6);
+              for(const dir of [-1,1]){const leaf=cone(bx+dir*.5,h*.78,bz,.36,1.8,.35,paint.court,4);leaf.rotation.z=dir*.43;}
+            }
+          }else{
+            for(let j=0;j<3;j++){const reed=cone(x+j*.46,.86,z,.98+j*.29,.19,.1,decor.bamboo,5);reed.rotation.z=(j-1)*.22;}
+            cone(x,.14,z,.12,1.1,1.28,civicRoad,8);cone(x,.44,z,.53,.8,.15,light,6);
+          }
+        }
+      }
+      if(bamboo || lotus)for(let i=0;i<36;i++){
+        const x=(i%2?1:-1)*(35+i%4),z=-58+(i*29)%83;
+        if(bamboo){for(let j=0;j<4;j++){cone(x+j*.3,2,z+j*.2,4+j*.7,.21,.13,forestLeaf,5).rotation.z=(j-2)*.07;}}
+        else {cone(x,.12,z,.16,1.7,1.8,forestLeaf,8);cone(x,.4,z,.4,.8,.3,paint.light,6);}
+      }
+      finish("lanterns and fields");
+      return;
+    }
     const marsh=map.id==="drowned_marsh",rift=map.id==="spirit_rift";
     // Distant slopes frame the playfield even when the camera follows an outer gate.
     box(0,-1.2,-16,226,.65,239,deep);
@@ -1651,6 +1794,11 @@
   function regionWater(id){
     if(!regionWaters.has(id)){
       const m=water.clone(id+" water"),t=riverRipple.clone();t.uScale=3;t.vScale=1;m.emissiveTexture=t;
+      if(["moon_pass","river_watch","lotus_basin"].includes(id)){
+        // Opaque water keeps the available bridge gaps legible at the tactical camera distance.
+        m.emissiveTexture=null;m.disableLighting=true;
+        m.emissiveColor=B.Color3.FromHexString(id==="lotus_basin"?"#337b71":id==="moon_pass"?"#357782":"#396e8a");
+      }
       const tint={drowned_marsh:["#0b1f17","#05130c"],spirit_rift:["#160c2c","#0d0624"]}[id];
       if(tint){m.diffuseColor=B.Color3.FromHexString(tint[0]);m.emissiveColor=B.Color3.FromHexString(tint[1]);}
       regionWaters.set(id,m);
@@ -1683,6 +1831,17 @@
   const violetPool=additiveMat("rift light",radialTexture("rift light",128,[[0,"rgba(190,150,255,.55)"],[.35,"rgba(150,110,255,.22)"],[1,"rgba(120,80,255,0)"]]));
   const bloodSeal=additiveMat("blood seal",squareYantraTexture("blood seal","rgba(255,80,60,.9)","#ff3020"));
   const riftSeal=additiveMat("rift seal",squareYantraTexture("rift seal","rgba(200,160,255,.85)","#9a60ff"));
+  function nearMapPath(map,x,z,d){
+    return (map.paths||[]).some(path=>path.some((p,i)=>{if(!i)return false;const a=path[i-1],dx=p.x-a.x,dz=p.z-a.z,l=dx*dx+dz*dz||1;
+      const t=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/l));return Math.hypot(x-a.x-t*dx,z-a.z-t*dz)<d;}));
+  }
+  function sceneryClear(x,z,courts,map){
+    return !nearMapPath(map,x,z,3)&&
+      !(map.camps||[]).some(c=>Math.hypot(x-c.x,z-c.z)<courts)&&!(map.portals||[]).some(p=>Math.hypot(x-p.x,z-p.z)<6)&&
+      !(map.restAreas||[]).some(r=>Math.hypot(x-r.x,z-r.z)<r.radius+1)&&!(map.obstacles||[]).some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+1.4)&&
+      !(map.walls||[]).some(w=>x>w.x-1&&x<w.x+w.width+1&&z>w.z-1&&z<w.z+w.length+1)&&
+      !(map.water||[]).some(w=>x>w.x-.8&&x<w.x+w.width+.8&&z>w.z-.8&&z<w.z+w.length+.8);
+  }
   function dressRegion(map,paint){
     let parts=[];
     const put=(mesh,x,y,z,m)=>{mesh.position.set(x,y,z);mesh.material=m;mesh.isPickable=false;parts.push(mesh);return mesh;};
@@ -1691,13 +1850,7 @@
     const ball=(x,y,z,d,m,seg=4)=>put(B.MeshBuilder.CreateSphere("region dressing",{diameter:d,segments:seg},scene),x,y,z,m);
     const decal=(x,z,size,m,rot=0,y=.05)=>{const g=put(B.MeshBuilder.CreateGround("region decal",{width:size,height:size},scene),x,y,z,m);g.rotation.y=rot;return g;};
     const b=map.bounds,id=map.id,{stone,deep,light,court,road}=paint;
-    const nearPath=(x,z,d)=>(map.paths||[]).some(path=>path.some((p,i)=>{if(!i)return false;const a=path[i-1],dx=p.x-a.x,dz=p.z-a.z,l=dx*dx+dz*dz||1;
-      const t=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/l));return Math.hypot(x-a.x-t*dx,z-a.z-t*dz)<d;}));
-    const clear=(x,z,courts=12.5)=>!nearPath(x,z,3)&&
-      !(map.camps||[]).some(c=>Math.hypot(x-c.x,z-c.z)<courts)&&!(map.portals||[]).some(p=>Math.hypot(x-p.x,z-p.z)<6)&&
-      !(map.restAreas||[]).some(r=>Math.hypot(x-r.x,z-r.z)<r.radius+1)&&!(map.obstacles||[]).some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+1.4)&&
-      !(map.walls||[]).some(w=>x>w.x-1&&x<w.x+w.width+1&&z>w.z-1&&z<w.z+w.length+1)&&
-      !(map.water||[]).some(w=>x>w.x-.8&&x<w.x+w.width+.8&&z>w.z-.8&&z<w.z+w.length+.8);
+    const clear=(x,z,courts=12.5)=>sceneryClear(x,z,courts,map);
     const scatter=(count,seed,fn,courts)=>{for(let i=0,n=0;i<count*8&&n<count;i++){
       const x=b.minX+2.5+noise(i,seed)*(b.maxX-b.minX-5),z=b.minZ+2.5+noise(i,seed+1)*(b.maxZ-b.minZ-5);
       if(clear(x,z,courts)){fn(x,z,n);n++;}}};
@@ -1787,7 +1940,7 @@
       scatter(34,425,(x,z,k)=>{const d=.9+noise(k,426)*1.6;ball(x,d*.25,z,d,decor.rock).scaling.y=.6;if(k%3===0)cone(x,d*.55,z,.3,.3,0,decor.ember,4);},12.5);
       alongTrails(12,2.8,(x,z)=>brazier(x,z));
       const spears=map.camps.find(c=>c.id==="court2");
-      if(spears)for(let k=0;k<10;k++){const a=k/10*Math.PI*2,x=spears.x+Math.cos(a)*12.8,z=spears.z+Math.sin(a)*12.8;if(nearPath(x,z,2.6))continue;
+      if(spears)for(let k=0;k<10;k++){const a=k/10*Math.PI*2,x=spears.x+Math.cos(a)*12.8,z=spears.z+Math.sin(a)*12.8;if(nearMapPath(map,x,z,2.6))continue;
         const sp=cone(x,1.5,z,3,.08,.08,decor.iron,5);sp.rotation.z=Math.cos(a)*.25;sp.rotation.x=-Math.sin(a)*.25;cone(x,3.1,z,.5,.16,0,decor.ember,4);}
       scatter(8,429,(x,z,k)=>{const h=6;cone(x,h/2,z,h,.14,.1,decor.iron,5);box(x+.4,h-1.2,z,.8,2,.03,clothRed);});
       rim(28,431,(x,z,k)=>{const h=9+noise(k,432)*10;cone(x,h/2,z,h,7+noise(k,433)*6,.4,decor.rock,5);if(k%4===0)cone(x,h*.85,z,h*.3,2,0,decor.ember,5);});
@@ -1852,7 +2005,7 @@
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
     const map=worldDefinitions?.[activeMapId];if(!map)return;
-    (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i));
+    (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic)));
     for(const camp of map.camps||[]){
       const clearing=inTemple ? B.MeshBuilder.CreateGround("temple court",{width:21,height:19},scene) : B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
       // Between the soil (-.12) and trail tops (+.015), so their colors never
@@ -1880,7 +2033,7 @@
       if(!map.portals.some(p=>p.targetMapId==="drowned_marsh"))expansionLabel("ทางสู่บึงพราย · ยังไม่เปิด",48,-84);
     }
     if(inTemple)buildTemple(map);
-    if(paint){buildRegion(map,paint);dressRegion(map,paint);}
+    if(paint){buildRegion(map,paint);if(!map.strategic)dressRegion(map,paint);}
     for(const portal of (map.portals||[]).slice(portals[activeMapId]?1:0))makePortal(activeMapId,expansionRoot,portal);
   }
   function makeForestMonster(monster,id) {
@@ -1969,7 +2122,13 @@
         ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monster.displayName+" · Lv "+monster.level;}
     });
     for(const [id,mesh] of forestMonsters)if(!seen.has(id)){mesh.metadata?.ghost?.rig?.metadata?.skeletons?.forEach(s=>s.dispose());mesh.dispose();forestMonsters.delete(id);}
-    const me=ownServerCharacter(),area=worldDefinitions?.[activeMapId]?.restAreas?.find(a=>me&&Math.hypot(me.x-a.x,me.z-a.z)<=a.radius);
+    const me=ownServerCharacter(),map=worldDefinitions?.[activeMapId];
+    const area=map?.strategic?.kind==="capital" || map?.restAreas?.some(a=>me&&Math.hypot(me.x-a.x,me.z-a.z)<=a.radius) ||
+      (me && map?.strategic?.safeRoads?.some(index=>map.paths[index].some((b,i,route)=>{
+        if(!i)return false;const a=route[i-1],dx=b.x-a.x,dz=b.z-a.z;
+        const t=Math.max(0,Math.min(1,((me.x-a.x)*dx+(me.z-a.z)*dz)/(dx*dx+dz*dz)));
+        return Math.hypot(me.x-a.x-t*dx,me.z-a.z-t*dz)<=3;
+      })));
     if(area){$("pkTitle").textContent="เขตพักปลอดภัย";$("pkText").textContent="พักและเตรียมตัว";$("pkHint").textContent="ไม่สามารถโจมตีจากในเขตพักหรือโจมตีผู้ที่อยู่ในเขตพักได้";}
     if(worldDefinitions)$("worldMapName").textContent=(worldDefinitions[activeMapId]?.name||activeMapId)+(area?" · เขตพักปลอดภัย":"");
     for(const label of expansionLabels)label.setEnabled(!me||Math.hypot(me.x-label.position.x,me.z-label.position.z)<45);
@@ -1995,7 +2154,7 @@
     const name=worldDefinitions?.[mapId]?.name || (village?"หมู่บ้านอาคม":"ป่าต้องห้าม");
     $("worldMapName").textContent=name;
     $("quest").querySelector(".quest-content strong").textContent=village?"เตรียมตัวออกสำรวจ":"สำรวจ"+name;
-    $("quest").querySelector(".quest-content span").textContent=village?"พัก จัดกระเป๋า แล้วเดินทางไปป่า":worldDefinitions?.[mapId]?.region?.hint || (mapId==="bound_temple"?"เลือกช่องกำแพง หรืออ้อมตามระเบียงวัด":"เปิดแผนที่เพื่อเลือกค่ายล่าตามเลเวล");
+    $("quest").querySelector(".quest-content span").textContent=village?"พัก จัดกระเป๋า แล้วเดินทางไปป่า":worldDefinitions?.[mapId]?.strategic?.hint || worldDefinitions?.[mapId]?.region?.hint || (mapId==="bound_temple"?"เลือกช่องกำแพง หรืออ้อมตามระเบียงวัด":"เปิดแผนที่เพื่อเลือกค่ายล่าตามเลเวล");
     marker.setEnabled(false);
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
   }
@@ -4121,12 +4280,13 @@
       ? ["ascending", "descending"].includes(data?.combatState)
       : Boolean(demoFlightTarget);
     const label = button.querySelector("span:last-child");
-    const forbidden=mode==="live" && worldDefinitions?.[activeMapId]?.region?.noFlight===true;
+    const definition=worldDefinitions?.[activeMapId];
+    const forbidden=mode==="live" && (definition?.region?.noFlight===true || definition?.strategic?.kind==="territory");
     button.disabled=forbidden;
     if (label) label.textContent = forbidden ? "เขตห้ามบิน" : changing ? "กำลังบิน" : active ? "ลง" : "บิน";
     button.classList.toggle("fly-active", Boolean(active));
     button.setAttribute("aria-pressed", String(Boolean(active)));
-    button.title = forbidden ? "ใช้การเดินหรือ Dash ภายในถ้ำ" : active ? "ลดระดับความสูงและลงจอด" : "ขึ้นบินเหนือกำแพง แล้วแตะพื้นเพื่อเคลื่อนที่";
+    button.title = forbidden ? "เดินหรือพุ่งผ่านเส้นทางภาคพื้นในเขตนี้" : active ? "ลดระดับความสูงและลงจอด" : "ขึ้นบินเหนือกำแพง แล้วแตะพื้นเพื่อเคลื่อนที่";
   }
 
   function toggleFlight() {
@@ -4490,7 +4650,7 @@
       }
       const client = new window.Colyseus.Client(endpoint);
       const guestToken = getOrCreateGuestToken(endpoint);
-      joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot, worldVersion: 1, templeVersion: 1, atlasVersion: 1 });
+      joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot, worldVersion: 1, templeVersion: 1, atlasVersion: 1, provinceVersion: 1 });
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
       clearChatHistory(true);
@@ -4915,7 +5075,7 @@
         else if (info?.reason === "flight_in_progress") toast("กำลังขึ้นหรือลง · รอให้ถึงระดับก่อน");
         else if (info?.reason === "flight_rate_limited") toast("กดบินถี่เกินไป");
         else if (info?.reason === "flight_unavailable") toast("ตอนนี้ยังบินขึ้นไม่ได้");
-        else if (info?.reason === "flight_forbidden") toast("ถ้ำนาคใช้การเดินหรือ Dash");
+        else if (info?.reason === "flight_forbidden") toast("เขตนี้ใช้การเดินหรือ Dash");
         else if (info?.reason === "landing_blocked") toast("ลงจอดตรงนี้ไม่ได้ · บินไปพ้นขอบกำแพงก่อน");
         else if (info?.reason === "flying") toast("ต้องลงจอดก่อนใช้พุ่งหรือปีน");
         else if (info?.reason === "climbing") toast("ยังโจมตีหรือเดินไม่ได้ขณะปีน");
@@ -5429,7 +5589,7 @@
       // Trails: dark verge, packed earth, faint centre line.
       const trail = (width_, color) => {
         ctx.strokeStyle = color; ctx.lineWidth = width_; ctx.lineCap = "round"; ctx.lineJoin = "round";
-        for (const path of map?.paths || []) { ctx.beginPath(); smoothPath(path).forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
+        for (const path of map?.paths || []) { ctx.beginPath(); (map.strategic ? path : smoothPath(path)).forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
       };
       if (activeMapId === "forbidden_forest") { ctx.fillStyle = "#4a3f2e"; ctx.fillRect(sx(-2.5), sy(-20), 5 * scale, 40 * scale); }
       for (const pool of map?.water || []) {
@@ -5439,6 +5599,11 @@
       }
       trail(Math.max(3, 5.5 * scale), "rgba(10,8,6,.55)");
       trail(Math.max(2, 4 * scale), theme.road || (activeMapId === "bound_temple" ? "#8a7552" : "#7a6546"));
+      for (const index of map?.strategic?.safeRoads || []) {
+        ctx.strokeStyle = "#71d7b4"; ctx.lineWidth = Math.max(1, 1.5 * scale); ctx.beginPath();
+        map.paths[index].forEach((p,i)=>i ? ctx.lineTo(sx(p.x),sy(p.z)) : ctx.moveTo(sx(p.x),sy(p.z)));
+        ctx.stroke();
+      }
       for (const camp of map?.camps || []) {
         const soil = campLooks[camp.id]?.soil || theme.court || "#7d6f63";
         if (activeMapId === "bound_temple") {
@@ -5470,6 +5635,13 @@
         ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
         ctx.strokeStyle = "#e3b878"; ctx.lineWidth = 1; ctx.strokeRect(sx(wall.x), sy(wall.z), Math.max(1.3, scale * wall.width), Math.max(1.3, scale * wall.length));
       }
+    }
+    for (const site of map?.strategic?.sites || []) {
+      const major=site.kind==="fort" || site.kind==="palace";
+      if(!large && !major)continue;
+      const x=sx(site.x),y=sy(site.z);
+      mapDot(ctx,x,y,major?5*u:2.8*u,major?"#ffcf76":"#c3e0b1","#263732");
+      if(large && site.kind!=="bridge")mapText(ctx,site.name,x,y-7,10,major?"#ffe5ab":"#dfebd4");
     }
     for (const area of map?.restAreas || []) {
       const x = sx(area.x), y = sy(area.z), r = area.radius * scale;
@@ -5551,18 +5723,80 @@
     ctx.fillStyle = v; ctx.fillRect(0, 0, width, height);
     ctx.restore();
   }
+  // Coordinates set the atlas layout. Connectivity and route advice come from live portal pairs.
+  const atlasCells = {
+    ritual_village:[89,41], forbidden_forest:[82,125], bound_temple:[61,212],
+    drowned_marsh:[189,201], moon_cemetery:[105,301], bamboo_frontier:[210,285],
+    mantra_capital:[310,116], moon_pass:[245,391], hex_ridge:[70,429],
+    naga_cavern:[66,519], river_watch:[193,556], lotus_basin:[318,478],
+    fallen_city:[107,637], asura_peak:[222,710], spirit_rift:[112,780]
+  };
+  const provinceTitle={capital:"เมืองหลวง",territory:"ด่านสงคราม",hunting:"พื้นที่เก็บเลเวล"};
+  function openStrategicMap(){
+    const maps=worldDefinitions,origin=activeMapId;
+    if(!maps?.[origin])return;
+    openDrawer("strategy","แผนที่ยุทธศาสตร์",`<button class="atlas-back" id="backLocalMap">‹ แผนที่พื้นที่ปัจจุบัน</button>
+      <div class="atlas-summary" id="atlasDetail" aria-live="polite"></div>
+      <p class="note">แตะพื้นที่เพื่อหาเส้นทาง · เลื่อนเพื่อดูอาณาจักรทั้งหมด</p>
+      <div class="atlas-scroll"><div class="atlas-board" id="atlasBoard"></div></div>
+      <div class="legend"><span>♛ เมืองหลวง</span><span>⚑ ด่านสงคราม</span><span>◆ เขตล่า</span><span>● จุดที่ยืน</span></div>`);
+    $("backLocalMap").onclick=openMap;
+    const board=$("atlasBoard"),detail=$("atlasDetail"),cells=new Map(),lines=[];
+    const ids=Object.keys(maps).filter(id=>atlasCells[id]);
+    const linkLayer=document.createElementNS("http://www.w3.org/2000/svg","svg");
+    linkLayer.setAttribute("viewBox","0 0 400 827");linkLayer.setAttribute("preserveAspectRatio","none");linkLayer.setAttribute("aria-hidden","true");board.append(linkLayer);
+    for(const id of ids){
+      const [x,y]=atlasCells[id],map=maps[id];
+      for(const gate of map.portals){
+        const other=gate.targetMapId;
+        if(!atlasCells[other] || other<=id)continue;
+        const line=document.createElementNS(linkLayer.namespaceURI,"line"),[endX,endY]=atlasCells[other];
+        for(const [key,value] of Object.entries({x1:x,y1:y,x2:endX,y2:endY}))line.setAttribute(key,String(value));
+        linkLayer.append(line);lines.push({id,other,line});
+      }
+      const kind=map.strategic?.kind || (id==="ritual_village"?"village":"hunting");
+      const button=document.createElement("button");button.type="button";button.className="atlas-cell "+kind;
+      button.style.left=(x/4)+"%";button.style.top=(y/827*100)+"%";
+      const icon=document.createElement("b");icon.setAttribute("aria-hidden","true");
+      icon.textContent=kind==="capital"?"♛":kind==="territory"?"⚑":kind==="village"?"⌂":"◆";
+      const label=document.createElement("span");label.textContent=map.name;button.append(icon,label);
+      button.setAttribute("aria-label",map.name+(id===origin?" · คุณอยู่ที่นี่":""));
+      if(id===origin)button.classList.add("here");
+      board.append(button);cells.set(id,button);button.onclick=()=>select(id);
+    }
+    const previous=new Map([[origin,null]]),queue=[origin];
+    for(let i=0;i<queue.length;i++)for(const gate of maps[queue[i]].portals){
+      if(!maps[gate.targetMapId]||previous.has(gate.targetMapId))continue;
+      previous.set(gate.targetMapId,queue[i]);queue.push(gate.targetMapId);
+    }
+    function select(id){
+      const map=maps[id],path=[];
+      if(previous.has(id))for(let at=id;at!==null;at=previous.get(at))path.unshift(at);
+      for(const [key,button] of cells)button.setAttribute("aria-pressed",String(key===id));
+      for(const edge of lines)edge.line.classList.toggle("route",path.some((a,i)=>i>0 &&
+        ((a===edge.id && path[i-1]===edge.other)||(a===edge.other && path[i-1]===edge.id))));
+      const title=document.createElement("strong"),description=document.createElement("p"),directions=document.createElement("p");
+      title.textContent=map.name+" · "+(provinceTitle[map.strategic?.kind] || (id==="ritual_village"?"หมู่บ้าน":"พื้นที่เก็บเลเวล"))+
+        (map.region?.range?" · Lv."+map.region.range.join("–"):"");
+      description.textContent=map.strategic?.hint || map.region?.hint || (id===origin?"คุณอยู่ที่นี่":"ประตูเชื่อม "+map.portals.map(p=>maps[p.targetMapId].name).join(" / "));
+      const gate=maps[origin].portals.find(p=>p.targetMapId===path[1]);
+      directions.textContent=gate?"ผ่าน "+(path.length-1)+" ประตู · "+path.map(p=>maps[p].name).join(" → ")+" · ประตูแรก ("+gate.x+", "+gate.z+")":id===origin?"● คุณอยู่ที่นี่":"ยังไม่มีเส้นทางจากจุดปัจจุบัน";
+      detail.replaceChildren(title,description,directions);
+    }
+    select(origin);
+    const scroll=board.parentElement;
+    scroll.scrollTop=atlasCells[origin][1]-scroll.clientHeight/2;
+  }
   function openMap() {
     openDrawer("map","แผนที่"+(worldDefinitions?.[activeMapId]?.name || (activeMapId==="ritual_village"?"หมู่บ้านอาคม":"ป่าต้องห้าม")),`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>วงสีเขียว: เขตพัก</span></div>${worldDefinitions?.[activeMapId]?.guardian ? '<p class="note">◆ ศาลเหนือ · Elite Lv.12 เกิดใหม่ 2 นาที<br>หลบวงฟาดสีส้ม · EXP ×3 แบ่งตามกฎปาร์ตี้ ผู้ได้รับ EXP รับยาคนละ 1 ขวดเมื่อกระเป๋ามีที่</p>' : ''}`);
     if(worldDefinitions?.spirit_rift){
       const note=document.createElement("p");note.className="note";
       const map=worldDefinitions[activeMapId],range=map.region?.range;
       note.textContent=map.name+(range?" · Lv."+range.join("–"):"")+" · ประตูไป"+map.portals.map(p=>worldDefinitions[p.targetMapId].name).join(" / ");
-      const route=document.createElement("details"),title=document.createElement("summary");
-      title.textContent="เส้นทางทั้งโลก · 10 แผนที่";route.append(title);route.className="note";
-      for(const line of ["หมู่บ้านอาคม → ป่าต้องห้าม (1–12)","เลือก วัดร้างพันธนาการ (8–20) หรือ บึงพราย (10–22)","สองเส้นทางพบกันที่ป่าช้าเงาจันทร์ (18–32)","ดงอาคมบนเขา (28–45) → ถ้ำนาค (40–58)","เมืองอาคมล่ม (55–72) → เขาอสุรา (68–85)","รอยแยกแดนวิญญาณ (80–100) · เลือกล่าเดี่ยวหรือเข้าลานราชัน"]){
-        const row=document.createElement("div");row.textContent=line;route.append(row);
-      }
-      $("bigMap").parentElement.append(note,route);
+      const button=document.createElement("button");button.type="button";button.className="primary";button.id="openStrategicMap";
+      button.textContent="เปิดแผนที่ยุทธศาสตร์ · "+Object.keys(worldDefinitions).length+" พื้นที่";button.onclick=openStrategicMap;
+      $("bigMap").parentElement.prepend(button);
+      $("bigMap").parentElement.append(note);
     }
     drawMap($("bigMap").getContext("2d"),420,320,true);
   }
