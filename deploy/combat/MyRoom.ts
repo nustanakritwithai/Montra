@@ -1,7 +1,7 @@
 import { FORGE } from "./ForgeRules.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
 import { WAR_SIDE_SIZE, WAR_HOLD, warSites, type Battlefield, type WarSide } from "./TerritoryWar.js";
-import {CASTLE_ID,CASTLE_ENABLED,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn} from "./CastlePilot.js";
+import {CASTLE_ID,CASTLE_ENABLED,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
 import { Encoder } from "@colyseus/schema";
 import { randomUUID } from "node:crypto";
 import {
@@ -106,7 +106,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private getMonster(id:string): Monster | undefined { return id === RULES.monsterId ? this.state.monster : this.state.monsters.get(id); }
   private simulatedMs = 0;
   private field?:Battlefield;
-  private warSeats=new Map<string,{guild:string;side:WarSide}>();
+  private warSeats=new Map<string,{guild:string;side:WarSide;camp:number}>();
   private warClients=new Set<string>();
   private warSent=new Map<string,string>();
   private nextWarSample=0;
@@ -743,26 +743,78 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.nextWarSample=0;
     }catch(e){const reason=e instanceof Error?e.message:"";if(!reason.startsWith("war_"))console.error("MONTRA gate",e);client.send("territory_error",{reason:reason.startsWith("war_")?reason:"war_unavailable"});}
   }
+  private fieldCensus(){
+    let attack=0,defend=0;
+    const field=this.field;
+    const counts=field?.site===CASTLE_ID?castleObjectives.map(()=>({attack:0,defend:0})):undefined;
+    const campCounts=counts?forwardCamps.map(()=>({attack:0,defend:0})):undefined;
+    if(field){
+      const war=guildStore().war;
+      for(const [id,seat] of this.warSeats){
+        const p=this.state.players.get(id),character=this.persistentCharacters.get(id);
+        if(!p || !character || this.pendingCharacterLeaves.has(id))continue;
+        if(war.member(character)?.id!==seat.guild){this.clients.find(c=>c.sessionId===id)?.leave(4000,"war_membership_changed");continue;}
+        if(!p.alive || !isOnGround(p.y) || p.flying || p.mapId!==field.site || this.climbs.has(id) || this.pendingWarps.has(id))continue;
+        if(counts){
+          const i=castleObjectives.findIndex(node=>planarDistance(p,node)<=CAPTURE_RADIUS);
+          if(i>=0)counts[i][seat.side]++;
+          const camp=forwardCamps.find(c=>planarDistance(p,c)<=CAPTURE_RADIUS);
+          if(camp)campCounts![camp.id-1][seat.side]++;
+        }else if(planarDistance(p,warSites[field.site])<=5){if(seat.side==="attack")attack++;else defend++;}
+      }
+    }
+    return {attack,defend,counts,campCounts};
+  }
+  private canMarch(id:string){
+    const p=this.state.players.get(id),base=this.playerSpawn.get(id);
+    return Boolean(base && p?.alive && isOnGround(p.y) && !p.flying && planarDistance(p,base)<=5 &&
+      !this.climbs.has(id) && !this.activeDashes.has(id) && !this.flightTransitions.has(id) && !this.pendingWarps.has(id) &&
+      !this.pendingCharacterLeaves.has(id) && !this.attackTargets.has(id) && ![...this.attackTargets.values()].includes(id) &&
+      this.simulatedMs-(this.lastCombatMs.get(id)??-Infinity)>=WARP_COMBAT_LOCK_MS);
+  }
+  private fieldCamp(id:string,campId:number){
+    const field=this.field,seat=this.warSeats.get(id),character=this.persistentCharacters.get(id);
+    if(!field || field.site!==CASTLE_ID || !seat || !character || this.pendingCharacterLeaves.has(id))return;
+    const war=guildStore().war,now=Date.now(),s=war.inspect(field.site,now);
+    if(s.seq!==field.seq || s.phase!=="battle" || !s.seconds || !s.pilot?.throne || war.member(character)?.id!==seat.guild)return;
+    const camp=forwardCamps.find(c=>c.id===campId);
+    if(!camp)return;
+    const census=this.fieldCensus();
+    const supply=castleLogistics(s.pilot,census.counts!,census.campCounts!,seat.side);
+    if(!supply?.camps.some(c=>c.id===campId && c.status==="ready"))return;
+    const slot=parseInt(character.slice(-2),16)%9;
+    const dest={x:camp.x+slot%3-1,z:camp.z+Math.floor(slot/3)-1};
+    return this.canOccupy(dest.x,dest.z,0,false,field.site)?dest:undefined;
+  }
+  private orderCamp(client:Client,message:unknown){
+    const id=client.sessionId,field=this.field,seat=this.warSeats.get(id),character=this.persistentCharacters.get(id);
+    if(!field || field.site!==CASTLE_ID || !seat || !character || !this.gates.get(id)?.guild.consume(this.simulatedMs))return;
+    const req=message as {action?:unknown;campId?:unknown}|null;
+    if(!req || Object.keys(req).length!==2 || (req.action!=="select" && req.action!=="march") || typeof req.campId!=="number" ||
+      (req.campId!==0 && !forwardCamps.some(c=>c.id===req.campId)))return this.reject(client,"invalid_request");
+    const campId=req.campId,war=guildStore().war;
+    const error=(reason:string)=>client.send("territory_error",{reason});
+    const s=war.inspect(field.site,Date.now());
+    if(s.seq!==field.seq || s.phase!=="battle" || !s.seconds || !s.pilot?.throne || war.member(character)?.id!==seat.guild)return error("war_ended");
+    const dest=campId?this.fieldCamp(id,campId):undefined;
+    if(campId && !dest)return error("war_camp_cut");
+    if(req.action==="select")seat.camp=war.campPreference(field,character,campId);
+    else{
+      if(!dest || campId!==seat.camp || !this.canMarch(id))return error("war_camp_base");
+      const p=this.state.players.get(id)!;
+      this.destinations.delete(id);this.crestTurns.delete(id);this.despawnSummon(id,"warp");
+      p.x=dest.x;p.z=dest.z;p.targetId="";p.combatState="idle";
+    }
+    this.nextWarSample=0;
+  }
   private updateTerritory(){
     const now=Date.now();
     const clock=this.field?.site===CASTLE_ID?now:this.simulatedMs;
     if(!WORLD_EXPANSION || (!this.warClients.size && !this.field) || clock<this.nextWarSample)return;
     this.nextWarSample=clock+1000;
     const war=guildStore().war;
-    let attack=0,defend=0;
+    const {attack,defend,counts,campCounts}=this.fieldCensus();
     if(this.field){
-      const fort=warSites[this.field.site];
-      const counts=this.field.site===CASTLE_ID?castleObjectives.map(()=>({attack:0,defend:0})):undefined;
-      for(const [id,seat] of this.warSeats){
-        const p=this.state.players.get(id),character=this.persistentCharacters.get(id);
-        if(!p || !character || this.pendingCharacterLeaves.has(id))continue;
-        if(war.member(character)?.id!==seat.guild){this.clients.find(c=>c.sessionId===id)?.leave(4000,"war_membership_changed");continue;}
-        if(!p.alive || !isOnGround(p.y) || p.flying || p.mapId!==this.field.site || this.climbs.has(id) || this.pendingWarps.has(id))continue;
-        if(counts){
-          const i=castleObjectives.findIndex(node=>planarDistance(p,node)<=CAPTURE_RADIUS);
-          if(i>=0)counts[i][seat.side]++;
-        }else if(planarDistance(p,fort)<=5){if(seat.side==="attack")attack++;else defend++;}
-      }
       war.advance(this.field,now,attack,defend,counts,this.previousPilotSample);
       if(counts)this.previousPilotSample=now;
     }
@@ -774,14 +826,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     const owners=Object.fromEntries(Object.entries(states).map(([site,s])=>[site,s.owner]));
     const teams=this.field?Object.fromEntries([...this.warSeats].map(([id,seat])=>[id,seat.side])):undefined;
+    const pilot=this.field && states[this.field.site].pilot;
+    const supplies=this.battleActive && counts && campCounts && pilot?.throne?{
+      attack:castleLogistics(pilot,counts,campCounts,"attack"),defend:castleLogistics(pilot,counts,campCounts,"defend")
+    }:undefined;
     for(const c of this.clients){
       if(!this.warClients.has(c.sessionId))continue;
       const p=this.state.players.get(c.sessionId);if(!p)continue;
       const s=states[p.mapId],character=this.persistentCharacters.get(c.sessionId),member=s&&character?war.member(character):null;
       const inField=Boolean(this.field),ownBattle=!inField || this.field?.seq===s?.seq;
+      const seat=this.warSeats.get(c.sessionId);
+      const supply=seat && member?.id===seat.guild && supplies?.[seat.side];
+      const view=ownBattle?s?.pilot:undefined;
+      const visiblePilot=view?.throne && s.phase==="battle"?{...view,points:view.points.map(point=>
+        point.id>=4 && (!inField || !p.alive || planarDistance(p,castleObjectives[point.id-1])>18)?{...point,progress:0}:point)}:view;
       const local=s?{site:p.mapId,phase:ownBattle?s.phase:"finished",owner:s.owner,attackName:s.attackName,defendName:s.defendName,
         progress:Math.trunc(s.progress),goal:WAR_HOLD,seconds:s.seconds,attack,defend,inField,side:this.warSeats.get(c.sessionId)?.side,
-        pilot:s.pilot,gateHp:s.gateHp,gateClosed:inField && this.gateClosed,
+        pilot:visiblePilot,supply:supply?{...supply,selected:seat!.camp,atBase:this.canMarch(c.sessionId)}:undefined,
+        gateHp:s.gateHp,gateClosed:inField && this.gateClosed,
         canStart:!inField && s.phase==="open" && member?.officer===true && member.id!==s.ownerId,
         canJoin:!inField && s.phase==="battle" && !!member && (member.id===s.attacker || member.id===s.defender || (!s.owner && !s.defendName && member.officer))}:null;
       const payload={owners,local,teams},signature=JSON.stringify(payload);
@@ -790,6 +852,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
   messages = {
     territory_gate:(client:Client,message:unknown)=>this.useCityGate(client,message),
+    territory_camp:(client:Client,message:unknown)=>this.orderCamp(client,message),
     get_territories:(client:Client,message:unknown)=>{
       if(parseEmptyCommand(message) && this.warClients.has(client.sessionId) && this.gates.get(client.sessionId)?.guild.consume(this.simulatedMs))this.warSent.delete(client.sessionId);
     },
@@ -2322,7 +2385,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.playerRespawnAt.delete(id);
       const player = this.state.players.get(id);
       if (!player) continue;
-      const spawn = this.playerSpawn.get(id) ?? { x: 0, z: 0 };
+      const camp=this.warSeats.get(id)?.camp;
+      const front=camp?this.fieldCamp(id,camp):undefined;
+      const spawn=front ?? this.playerSpawn.get(id) ?? {x:0,z:0};
+      if(camp && !front)this.clients.find(c=>c.sessionId===id)?.send("territory_error",{reason:"war_camp_fallback"});
       player.hp = player.maxHp;
       player.alive = true;
       player.x = spawn.x;
@@ -2439,10 +2505,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const sideSize=[...this.warSeats.values()].filter(s=>s.side===side).length;
         if(sideSize>=(mapId===CASTLE_ID?CASTLE_SEATS:WAR_SIDE_SIZE))throw Error("war_side_full");
         war.side(this.field,member,Date.now(),true);admissions.delete(characterId!);
-        this.warSeats.set(client.sessionId,{guild:member.id,side});
+        const seat={guild:member.id,side,camp:0};
+        this.warSeats.set(client.sessionId,seat);
         if(mapId===CASTLE_ID){
           const defended=war.inspect(mapId,Date.now()).pilot?.throne?.defended;
           safeSpawn=pilotSpawn(war.muster(this.field,characterId!,credential.point),side,sideSize,defended);
+          seat.camp=war.campPreference(this.field,characterId!);
         }else{
           const gate=WORLD_MAPS[mapId].portals.find(p=>p.z===(side==="attack"?26:-58))!;
           safeSpawn={x:gate.x,y:0,z:gate.z};

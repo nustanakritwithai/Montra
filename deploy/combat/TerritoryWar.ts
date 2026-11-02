@@ -20,6 +20,8 @@ export class TerritoryWar {
       CREATE TABLE IF NOT EXISTS castle_pilot_musters(battle INTEGER NOT NULL,character TEXT NOT NULL,point INTEGER NOT NULL,PRIMARY KEY(battle,character));
       CREATE INDEX IF NOT EXISTS territory_recent ON territory_battles(site,seq DESC);
       CREATE UNIQUE INDEX IF NOT EXISTS territory_one_battle ON territory_battles(site) WHERE ended IS NULL;`);
+    const musters=db.prepare("PRAGMA table_info(castle_pilot_musters)").all();
+    if(!musters.some(c=>c.name==="camp"))db.exec("ALTER TABLE castle_pilot_musters ADD COLUMN camp INTEGER NOT NULL DEFAULT 0");
     const cols=db.prepare("PRAGMA table_info(territory_battles)").all();
     if(!cols.some(c=>c.name==="gate_hp"))db.exec("ALTER TABLE territory_battles ADD COLUMN gate_hp INTEGER NOT NULL DEFAULT 120");
     if(!cols.some(c=>c.name==="gate_open"))db.exec("ALTER TABLE territory_battles ADD COLUMN gate_open INTEGER NOT NULL DEFAULT 0");
@@ -101,6 +103,11 @@ export class TerritoryWar {
   muster(field:Battlefield,character:string,point:number):number {
     this.db.prepare("INSERT OR IGNORE INTO castle_pilot_musters(battle,character,point) VALUES(?,?,?)").run(field.seq,character,point);
     return (this.db.prepare("SELECT point FROM castle_pilot_musters WHERE battle=? AND character=?").get(field.seq,character) as {point:number}).point;
+  }
+  campPreference(field:Battlefield,character:string,select?:number):number {
+    if(select!==undefined)this.db.prepare("UPDATE castle_pilot_musters SET camp=? WHERE battle=? AND character=?").run(select,field.seq,character);
+    const row=this.db.prepare("SELECT camp FROM castle_pilot_musters WHERE battle=? AND character=?").get(field.seq,character);
+    return Number(row?.camp??0);
   }
   gate(field:Battlefield,side:WarSide,occupied:boolean,now:number):void{
     this.atomic(()=>{

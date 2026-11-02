@@ -1686,6 +1686,12 @@
         finish("buildings",true);
       }
       if(castle){
+        for(const camp of map.strategic.forwardCamps || []){
+          box(camp.x-3.5,2,camp.z-5.2,.22,4,.22,wooden);
+          box(camp.x-2.4,3.4,camp.z-5.2,2.2,.9,.12,clothRed);
+          ring(camp.x,.11,camp.z,5,paint.road);
+          expansionLabel(camp.name,camp.x,camp.z,12,5);
+        }
         for(const obj of objectives){
           const active=map.strategic.activeObjectives.includes(obj.id);
           const marker=ring(obj.x,.16,obj.z,14,active?gold:stone);
@@ -5753,7 +5759,10 @@
       });
       joined.onMessage("territory_state",message=>{
         if(room!==joined)return;
+        const oldDrums=territoryState?.local?.supply?.drums || [];
         territoryState=message;syncGateVisual();syncCastleRings();
+        const alerts=message.local?.supply?.drums?.filter(id=>!oldDrums.includes(id)) || [];
+        if(alerts.length)toast("เสียงกลอง · กำลังชิง "+alerts.map(id=>message.local.pilot.points.find(p=>p.id===id)?.name || id).join(" · "));
         if(drawerActive==="war")renderWarPanel();
         if(drawerActive==="strategy")updateAtlasOwner();
         const local=message.local;
@@ -6829,8 +6838,23 @@
         if(state.closed){ctx.beginPath();ctx.moveTo(gx-2,gz-2);ctx.lineTo(gx+2,gz+2);ctx.moveTo(gx+2,gz-2);ctx.lineTo(gx-2,gz+2);ctx.stroke();}
       }
     }
+    if(large && castleWar?.supply){
+      for(const camp of map.strategic.forwardCamps || []){
+        const info=castleWar.supply.camps.find(c=>c.id===camp.id),selected=castleWar.supply.selected===camp.id;
+        if(info?.status!=="ready" && !selected)continue;
+        const x=sx(camp.x),y=sy(camp.z),px=x+(camp.x<0?-12:12),py=y+14;
+        ctx.strokeStyle=selected?"#ffe8a8":"#9be2c2";ctx.lineWidth=1.5;
+        ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(px,py);ctx.lineTo(px,py-10);ctx.stroke();
+        ctx.fillStyle=info?.status==="ready"?"#66c797":"#cf8274";
+        ctx.beginPath();ctx.moveTo(px,py-10);ctx.lineTo(px+7,py-7);ctx.lineTo(px,py-4);ctx.closePath();ctx.fill();ctx.stroke();
+      }
+    }
     for(const obj of map?.strategic?.objectives || []){
       const active=map.strategic.activeObjectives.includes(obj.id),point=territoryState?.local?.pilot?.points.find(p=>p.id===obj.id);
+      if(castleWar?.supply?.drums.includes(obj.id)){
+        ctx.strokeStyle="#ffb283";ctx.lineWidth=large?2.5:1.5;ctx.beginPath();
+        ctx.arc(sx(obj.x),sy(obj.z),large?12:4.8,0,2*Math.PI);ctx.stroke();
+      }
       const locked=obj.id===7 && castleWar?.seconds>900;
       const color=point?.owner==="attack"?"#ff917d":point?.owner==="defend"?"#80e8db":locked?"#858b9c":active?"#ffcf76":"#a5aaa3";
       mapDot(ctx,sx(obj.x),sy(obj.z),large?8:2.5,color,"#122825");
@@ -6940,18 +6964,26 @@
     fallen_city:[107,637], tri_wiang_castle:[321,635], asura_peak:[222,710], spirit_rift:[112,780]
   };
   const provinceTitle={capital:"เมืองหลวง",territory:"ด่านสงคราม",hunting:"พื้นที่เก็บเลเวล"};
-  const warErrors={war_guild:"ต้องเป็นสมาชิกกิลด์ก่อนเข้าศึก",war_flag:"เดินเข้าวงธงกลางป้อมก่อนเปิดศึก",war_officer:"ให้ผู้บัญชาการหรือนายทหารเปิดศึก",
+  const warErrors={war_camp_cut:"ส่งกำลังไม่ได้ ตรวจธง ประตู และผู้ท้าชิงในวง",war_camp_base:"เลือกค่ายที่เปิดแล้วยืนที่ฐานรวมพลโดยพ้นการต่อสู้",war_camp_fallback:"ค่ายหน้าใช้ไม่ได้ คุณเกิดที่ฐานรวมพลเดิม",
+    war_guild:"ต้องเป็นสมาชิกกิลด์ก่อนเข้าศึก",war_flag:"เดินเข้าวงธงกลางป้อมก่อนเปิดศึก",war_officer:"ให้ผู้บัญชาการหรือนายทหารเปิดศึก",
     war_other_guild:"สนามนี้มีฝ่ายบุกและฝ่ายรับแล้ว",war_side_full:"ผู้เล่นฝ่ายของคุณเต็มแล้ว",war_busy:"รอให้พ้นการต่อสู้และยืนบนพื้นในด่าน",
     war_gate_repair:"ต้องครองโรงช่างและประตูต้องพ้นการโจมตี 5 วินาที",war_gate_near:"ฝ่ายรับต้องยืนที่ประตูด้านใน",war_gate_occupied:"มีผู้เล่นยืนขวางประตู",war_gate_open:"ประตูเปิดอยู่",war_gate_inactive:"ประตูใช้การไม่ได้แล้ว",
     war_ended:"ศึกนี้จบแล้ว",war_exit:"กลับห้องโลกผ่านหน้าด่านกิลด์",war_unavailable:"ด่านยังเปิดศึกไม่ได้"};
   const warPhase=p=>({open:"เปิดให้ท้าชิง",battle:"กำลังรบ",protected:"อยู่ในความคุ้มครอง",finished:"จบศึกแล้ว"})[p] || "กำลังตรวจด่าน";
   const warTime=s=>Math.floor(s/60)+" นาที "+s%60+" วินาที";
+  const campStatus={ready:"เปิด",contested:"กำลังถูกชิง",cut:"เส้นทางขาด",unheld:"ยังไม่ได้ครอง"};
   function openWarPanel(){
     openDrawer("war","สงครามยึดด่าน",`<h3 id="warHeading"></h3><p id="warOwner"></p><p id="warStatus" role="status"></p>
       <progress id="warGauge" max="60" aria-label="ความคืบหน้าการยึดธง"></progress><p id="warCount"></p>
       <p class="note" id="warFlag"></p><p class="note">ผู้บัญชาการหรือนายทหารเปิดศึกที่วงธง สมาชิกเข้าร่วมได้จากภายในด่าน ฝั่งละ 5 คน ศึกมีเวลา 5 นาที จำนวนคนที่ยืนวงมากกว่าจะดันเกจได้ เมื่อทั้งสองฝ่ายยืนเท่ากัน เกจจะหยุด</p>
       <p class="note">แตะบันไดหรือกดขึ้นกำแพงที่ตีนบันไดด้านใน เดินและซัดข้าวสารปลุกเสกได้ตลอดแนว เมื่อถึงหัวบันไดกดลงกำแพง วงเขียวคือฝ่ายเดียวกัน สามเหลี่ยมแดงคือฝ่ายตรงข้าม หลังจบศึกด่านคุ้มครอง 8 ชั่วโมง</p><button id="warAction" class="primary" type="button" hidden></button>`);
     if(activeMapId==="tri_wiang_castle"){
+      const supplyPanel=document.createElement("details");supplyPanel.id="castleSupply";supplyPanel.hidden=true;
+      supplyPanel.innerHTML='<summary id="supplyTitle">ค่ายหน้า</summary><p id="campHelp"></p><label for="respawnCamp">เกิดครั้งถัดไปที่</label><select id="respawnCamp"><option value="0">ฐานรวมพลเดิม</option></select><button class="secondary" type="button" id="campMarch">ส่งกำลังจากฐานไปค่าย</button>';
+      $("warCount").after(supplyPanel);
+      for(const c of worldDefinitions[activeMapId].strategic.forwardCamps || [])$("respawnCamp").add(new Option(c.name,String(c.id)));
+      $("respawnCamp").onchange=e=>room?.send("territory_camp",{action:"select",campId:Number(e.target.value)});
+      $("campMarch").onclick=()=>room?.send("territory_camp",{action:"march",campId:Number($("respawnCamp").value)});
       const label=document.createElement("label");label.textContent="แนวรวมพลครั้งแรกในศึกนี้ ";
       const select=document.createElement("select");select.id="castleFront";
       const local=territoryState?.local;
@@ -7000,6 +7032,26 @@
       }else{
         lines.push("ยึดจุด 1–6 เพื่อเก็บคะแนน กลุ่มที่เชื่อมกันตั้งแต่ 3 จุดได้เพิ่ม 20%",
           "นาทีที่ 30 เปิดท้องพระโรง ยึดจุดนอก 2 จุดและจุดกลาง 2 จุด เปิดทางเข้าพระราชฐาน แล้วยืนบัลลังก์ 120 วินาที");
+      }
+      const supply=s.supply,panel=$("castleSupply");
+      if(panel)panel.hidden=!supply;
+      if(supply && panel){
+        const camps=worldDefinitions[activeMapId].strategic.forwardCamps;
+        const ready=supply.camps.filter(c=>c.status==="ready");
+        $("supplyTitle").textContent="ค่ายหน้า · เปิด "+ready.length+"/"+camps.length;
+        for(const c of supply.camps){
+          const opt=$("respawnCamp").querySelector('option[value="'+c.id+'"]');
+          if(!opt)continue;
+          const label=c.id+" "+camps.find(p=>p.id===c.id).name+" · "+campStatus[c.status];
+          if(opt.textContent!==label)opt.textContent=label;
+          opt.disabled=c.status!=="ready";
+        }
+        if($("respawnCamp").value!==String(supply.selected))$("respawnCamp").value=String(supply.selected);
+        const chosen=ready.some(c=>c.id===supply.selected);
+        $("campMarch").disabled=!supply.atBase || !chosen;
+        $("campHelp").textContent=supply.selected && !chosen?"ค่ายที่เลือกใช้ไม่ได้ หากล้มจะกลับฐานรวมพล":supply.atBase?"อยู่ที่ฐาน เลือกค่ายที่เปิดเพื่อส่งกำลังได้ทันที":"เลือกค่ายสำหรับเกิดใหม่ได้ที่นี่ หากจะส่งกำลังขณะมีชีวิต ให้กลับฐานรวมพลประจำตัว";
+        if(supply.drums.length)lines.unshift("เสียงกลอง · กำลังชิง "+supply.drums.map(id=>v.points.find(p=>p.id===id).name).join(" · "));
+        else if(v.points.find(p=>p.id===5)?.owner===s.side)lines.push("กลองพร้อม · จุดกลางของฝ่ายเรายังสงบ");
       }
       $("warCount").textContent=lines.join("\n");
       $("warCount").style.whiteSpace="pre-line";
@@ -7078,7 +7130,7 @@
       const note=document.createElement("p");note.className="note";
       const map=worldDefinitions[activeMapId],range=map.region?.range;
       note.textContent=map.name+(range?" · Lv."+range.join("–"):"")+" · ประตูไป"+map.portals.filter(p=>p.targetMapId!==activeMapId).map(p=>worldDefinitions[p.targetMapId].name).join(" / ");
-      if(map.strategic?.objectives)note.textContent+=" · 1–6 จุดทำคะแนน · 7 บัลลังก์ · จุดฟ้าคือบันได · ในสนามรบ กากบาทแดงคือประตูปิด กรอบเขียวคือทางผ่าน";
+      if(map.strategic?.objectives)note.textContent+=" · 1–6 จุดทำคะแนน · 7 บัลลังก์ · จุดฟ้าคือบันได · กากบาทแดงคือประตูปิด · ธงเขียวคือค่ายที่ส่งกำลังได้ วงส้มคือสัญญาณกลอง";
       const button=document.createElement("button");button.type="button";button.className="primary";button.id="openStrategicMap";
       button.textContent="เปิดแผนที่ยุทธศาสตร์ · "+Object.keys(worldDefinitions).length+" พื้นที่";button.onclick=openStrategicMap;
       $("bigMap").parentElement.prepend(button);

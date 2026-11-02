@@ -1,5 +1,5 @@
 import type { WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
-import {CASTLE_ENABLED, CASTLE_ID, castleObjectives} from "./CastlePilot.js";
+import {CASTLE_ENABLED, CASTLE_ID, castleObjectives, forwardCamps} from "./CastlePilot.js";
 
 type Side="north"|"south"|"east"|"west";
 type Opening=readonly [side:Side,at:number,span:number,name:string];
@@ -78,14 +78,14 @@ export type ProvinceSite = Readonly<{
 export type Province = Readonly<{
   kind:"capital"|"territory"|"hunting"; hint:string; sites:readonly ProvinceSite[];
   safeRoads?:readonly number[];rampart?:Rampart;
-  objectives?:typeof castleObjectives;activeObjectives?:readonly number[];
+  objectives?:typeof castleObjectives;activeObjectives?:readonly number[];forwardCamps?:typeof forwardCamps;
 }>;
 const site=(kind:ProvinceSite["kind"],name:string,x:number,z:number,direction?:"east"):ProvinceSite=>({kind,name,x,z,direction});
 const wall=(x:number,z:number,width:number,length:number):WorldWall=>({x,z,width,length});
 const trails=(...routes:XY[][])=>routes.map(route=>route.map(([x,z])=>({x,z})));
 
 export const PROVINCES:Readonly<Record<string,Province>>={
-  ...(CASTLE_ENABLED?{[CASTLE_ID]:{kind:"territory" as const,rampart:grandWalls(),safeRoads:[0],objectives:castleObjectives,
+  ...(CASTLE_ENABLED?{[CASTLE_ID]:{kind:"territory" as const,rampart:grandWalls(),safeRoads:[0],objectives:castleObjectives,forwardCamps,
     activeObjectives:castleObjectives.map(p=>p.id),hint:"เปิดศึกที่ธงใต้ · แบ่งกำลังชิงหกจุด แล้วเปิดทางเข้าท้องพระโรงในนาทีที่ 30",
     sites:[site("fort","ธงรวมพลไตรเวียง",0,880),site("bridge","สะพานขบวนเสบียง",0,630),
       site("port","ท่าน้ำตะวันตก",-687,100),site("shrine","ช่องเขาตะวันออก",697,100),site("market","คลังเสบียงหลวง",-258,-110),
@@ -127,7 +127,8 @@ function makeCastle(portalsFor:(id:string)=>WorldPortal[]):WorldMapDefinition {
     {id:"castle_cart_south",label:"ขึ้นเกวียนไปประตูใต้",x:-18,z:-900,targetMapId:CASTLE_ID,targetSpawn:{x:-18,y:0,z:898}}];
   return {id:CASTLE_ID,name:"มหาปราสาทไตรเวียง",bounds:{minX:-1000,maxX:1000,minZ:-1000,maxZ:1000},spawn:{x:0,y:0,z:895},
     strategic:province,portals,obstacles:[],camps:[],restAreas:portals.map(p=>({x:p.x,z:p.z,radius:6,name:"เขตพักประตู"})),
-    walls:[...r.bodies.map(b=>({...b,rampart:true})),wall(-10,-226,20,9),wall(-29,-211,11,7),wall(18,-211,11,7)],
+    walls:[...r.bodies.map(b=>({...b,rampart:true})),wall(-10,-226,20,9),wall(-29,-211,11,7),wall(18,-211,11,7),
+      ...forwardCamps.map(c=>wall(c.x-4,c.z-6,8,1.5))],
     water:[wall(-265,628,260,4),wall(5,628,265,4),wall(-745,-150,14,245),wall(-745,106,14,245)],
     paths:trails([[0,900],[-540,900],[-875,825],[-875,-815],[-550,-900],[0,-900]],
       [[0,900],[0,630],[0,540],[0,350],[0,265],[0,155]],[[0,790],[-295,745],[-625,650],[-685,585],[-680,100]],

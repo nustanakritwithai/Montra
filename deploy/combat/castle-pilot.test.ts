@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
-import {CASTLE_ID,CASTLE_DURATION,castleObjectives,newPilot,tickPilot,pilotView,pilotWinner,changeCastleGate,pilotSpawn,type Side} from "./CastlePilot.js";
+import {CASTLE_ID,CASTLE_DURATION,CAPTURE_RADIUS,castleObjectives,forwardCamps,castleLogistics,newPilot,tickPilot,pilotView,pilotWinner,changeCastleGate,pilotSpawn,type Side} from "./CastlePilot.js";
 import {WORLD_MAPS,isSafeWorldPoint,isRestArea,getSafeMapSpawn,provinceShotClear} from "./WorldMaps.js";
 import {crestCorners,wallRing} from "./StrategicProvinces.js";
 import {GuildStore} from "./GuildStore.js";
@@ -40,6 +40,50 @@ test("full castle road, gates, stairs, crest circuits and both previous world ne
     assert.equal(wallRing(r,from.x,from.z),Math.floor(i/4));assert.ok(route.length>=3);
     for(let j=1;j<route.length;j++){const a=route[j-1],b=route[j];for(let t=0;t<=100;t++)assert.ok(isSafeWorldPoint(m,{x:a.x+(b.x-a.x)*t/100,z:a.z+(b.z-a.z)*t/100,y:4}));}
   }
+});
+test("camp formations are outside capture rings, behind real cover and escapable on two sides",()=>{
+  const map=WORLD_MAPS[CASTLE_ID];
+  for(const camp of forwardCamps){
+    for(const dx of [-1,0,1])for(const dz of [-1,0,1]){
+      const p={x:camp.x+dx,z:camp.z+dz,y:0};assert.ok(isSafeWorldPoint(map,p));
+      assert.ok(castleObjectives.every(n=>Math.hypot(n.x-p.x,n.z-p.z)>CAPTURE_RADIUS));
+      for(let offset=-9;offset<=9;offset++)assert.ok(isSafeWorldPoint(map,{...p,x:p.x+offset}));
+    }
+    assert.equal(provinceShotClear(map,{x:camp.x,z:camp.z-12,y:1},{x:camp.x,z:camp.z,y:1}),false);
+  }
+});
+test("only uncontested owned nodes on passable supply lines feed the warehouse, including alternate lanes",()=>{
+  const s=newPilot(true),counts=roster([]),campCounts=forwardCamps.map(()=>({attack:0,defend:0}));
+  const get=()=>castleLogistics(pilotView(s),counts,campCounts,"defend")!;
+  for(const i of [0,1,3,4])s.points[i].owner="defend";
+  const gate=s.siege!.gates,status=(id:number)=>get().camps.find(c=>c.id===id)!.status;
+  assert.equal(status(2),"cut");assert.equal(status(4),"cut");
+  gate["outer-west"].open=true;assert.equal(status(2),"ready");assert.equal(status(4),"cut");
+  gate["middle-west"].hp=0;assert.equal(status(4),"ready");
+  campCounts[3].attack=1;assert.equal(status(4),"contested");assert.deepEqual(get().drums,[]);
+  campCounts[3].attack=0;
+  counts[1]={attack:1,defend:2};assert.equal(status(2),"contested");assert.equal(status(4),"cut");
+  gate["outer-south"].open=true;gate["middle-south"].open=true;assert.equal(status(4),"ready");
+  counts[4].attack=1;assert.equal(status(4),"cut");assert.deepEqual(get().drums,[5]);
+  counts[3]={attack:1,defend:1};assert.equal(status(4),"contested");assert.deepEqual(get().drums,[4,5]);
+  assert.deepEqual(castleLogistics(pilotView(s),counts,campCounts,"attack")!.drums,[]);
+  counts[3].attack=0;s.points[3].pressure=12345;assert.deepEqual(get().drums,[5]);
+  s.points[4].owner="attack";assert.deepEqual(get().drums,[]);assert.equal(status(3),"unheld");
+  const {siege,...old}=s;old.points=old.points.slice(0,3);
+  assert.equal(castleLogistics(pilotView(old),counts,campCounts,"attack"),undefined);
+});
+test("old musters migrate, retain their starting lane and scope camp preference to this battle and character",()=>{
+  const dir=mkdtempSync(path.join(tmpdir(),"montra-camp-save-")),file=path.join(dir,"guilds.sqlite");
+  const db=new DatabaseSync(file);
+  db.exec("CREATE TABLE castle_pilot_musters(battle INTEGER,character TEXT,point INTEGER,PRIMARY KEY(battle,character));INSERT INTO castle_pilot_musters VALUES(7,'first',2)");db.close();
+  let store=new GuildStore(file);
+  try{
+    const f={site:CASTLE_ID,seq:7},later={...f,seq:8};
+    assert.equal(store.war.muster(f,"first",3),2);assert.equal(store.war.campPreference(f,"first"),0);
+    store.war.campPreference(f,"first",4);store.close();store=new GuildStore(file);
+    assert.equal(store.war.campPreference(f,"first"),4);assert.equal(store.war.campPreference(f,"peer"),0);
+    assert.equal(store.war.muster(later,"first",1),1);assert.equal(store.war.campPreference(later,"first"),0);
+  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
 test("three occupied nodes award 288 hold points per minute; contest, cut and flip do not re-award first capture",()=>{
   const s=newPilot(),all=roster([2,4,5]);

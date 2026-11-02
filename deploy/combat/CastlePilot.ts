@@ -14,6 +14,10 @@ export const castleObjectives=[
 const legacyNodes=castleObjectives.filter(p=>[2,4,5].includes(p.id));
 const scoringNodes=castleObjectives.filter(p=>p.id<7);
 export const musterNodes=[1,2,3];
+export const forwardCamps=[
+  {id:1,name:"ค่ายสะพานใต้",x:14,z:654},{id:2,name:"ค่ายท่าน้ำ",x:-700,z:122},
+  {id:3,name:"ค่ายช่องเขา",x:710,z:122},{id:4,name:"ค่ายคลังหลวง",x:-270,z:-90}
+] as const;
 export type Side="attack"|"defend";
 const sides=["attack","defend"] as const;
 const sidesAtZero=()=>({attack:0,defend:0});
@@ -45,29 +49,48 @@ export function newPilot(defended=false):PilotState {
     score:sidesAtZero(),middleTime:sidesAtZero(),siege:{gates:Object.fromEntries(gateIds.map(id=>[id,{open:!defended,hp:120,lastHit:null}])),
       throne:sidesAtZero(),cutMs:sidesAtZero(),defended,victor:null}};
 }
+function reachable(starts:readonly number[],canEnter:(id:number)=>boolean,passable:(gate:string)=>boolean){
+  const found=new Set(starts);
+  for(const id of found)for(const [a,b,doors] of links){
+    const next=a===id?b:b===id?a:0;
+    if(next && !found.has(next) && canEnter(next) && doors.every(passable))found.add(next);
+  }
+  return found;
+}
 function fronts(s:PilotState,side:Side){
   const nodes=s.siege?scoringNodes:legacyNodes;
   const owned=nodes.filter((_,i)=>s.points[i].owner===side).map(p=>Number(p.id));
   const seen=new Set<number>(),linked=new Set<number>();
-  function connected(start:number,checkDoors:boolean){
-    const found=new Set([start]);
-    for(const id of found)for(const [a,b,doors] of links){
-      const next=a===id?b:b===id?a:0;
-      if(owned.includes(next) && (!checkDoors || doors.every(passable)))found.add(next);
-    }
-    return found;
-  }
+  const held=(id:number)=>owned.includes(id);
   function passable(id:string){const g=s.siege!.gates[id];return g.open || g.hp===0;}
   for(const id of owned)if(!seen.has(id)){
-    const group=connected(id,false);
+    const group=reachable([id],held,()=>true);
     for(const k of group){seen.add(k);if(group.size>=3)linked.add(k);}
   }
   const outer=owned.filter(id=>id<=3),middle=owned.length-outer.length;
   const route=!!s.siege && outer.some(id=>{
-    const group=connected(id,true);
+    const group=reachable([id],held,passable);
     return (group.has(4)&&passable("inner-west")) || (group.has(6)&&passable("inner-east"));
   });
   return {linked,outer:outer.length,middle,route,eligible:outer.length>=2 && middle>=2 && route};
+}
+// Dispatch and respawn re-evaluate this same rule against live ground presence, even between score samples.
+export function castleLogistics(v:ReturnType<typeof pilotView>,counts:PilotPresence,campCounts:PilotPresence,side:Side){
+  if(!v.throne || !v.gates)return undefined;
+  const enemy=side==="attack"?"defend":"attack";
+  const held=(id:number)=>v.points[id-1].owner===side;
+  const contested=(id:number)=>counts[id-1][enemy]>0;
+  const supplied=(id:number)=>held(id) && !contested(id);
+  const passable=(id:string)=>!v.gates![id].closed;
+  const exits=["outer-south","outer-west","outer-east"];
+  const starts=musterNodes.filter(id=>supplied(id) && (!v.throne!.defended || side!=="defend" || passable(exits[id-1])));
+  const connected=reachable(starts,supplied,passable);
+  const camps=forwardCamps.map(({id})=>{
+    const threatened=contested(id) || campCounts[id-1][enemy]>0;
+    const status=!held(id)?"unheld":threatened?"contested":connected.has(id)?"ready":"cut";
+    return {id,status};
+  });
+  return {camps,drums:held(5)?[4,5,6].filter(id=>held(id) && contested(id)):[]};
 }
 export function changeCastleGate(s:PilotState,id:string,side:Side,occupied:boolean,now:number,repair=false){
   const siege=s.siege,gate=siege && Object.hasOwn(siege.gates,id)?siege.gates[id]:undefined;
