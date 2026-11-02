@@ -5,6 +5,10 @@
 
 MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the same `my_room` see each other walking and attacking a possessed ghost. The server is authoritative for movement/combat; GitHub Pages only renders the world.
 
+## Expanded forest preview
+
+Optional `MONTRA_WORLD_EXPANSION=1`: a 120 × 120 forest with four hunting camps, 16 server-owned level 1–12 enemies, protected rest areas, map-aware movement and a server-supplied client map. Disabled by default; deploy matching client/server before enabling. See [Thai staging and rollback guide](deploy/combat/WORLD-EXPANSION-TH.md).
+
 ## Current development stages
 
 - **Alpha 0.1.5:** playable multiplayer movement, camera orbit, tap-to-attack and synchronized monster HP.

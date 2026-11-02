@@ -54,6 +54,10 @@ export const Monster = schema({
   facing: t.number().default(0),
   aiState: t.string().default("patrol"), // patrol|chase|attack|return|dead
   targetId: t.string().default(""),
+  mapId: t.string().default("ritual_village"),
+  level: t.number().default(1),
+  displayName: t.string().default("ผีสิง"),
+  defense: t.number().default(100),
 }, "MontraMonster");
 
 export type Monster = SchemaType<typeof Monster>;
@@ -108,6 +112,8 @@ export const MyRoomState = schema({
   progressionAvailable: t.boolean().default(true),
   economyAvailable: t.boolean().default(false),
   partyAvailable: t.boolean().default(true),
+  monsters: t.map(Monster),
+  worldDefinition: t.string().default(""),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

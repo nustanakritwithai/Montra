@@ -57,7 +57,9 @@ export const RULES = Object.freeze({
 });
 
 export type Vec2 = { x: number; z: number };
-export type AttackCommand = { targetId: typeof RULES.monsterId };
+export type MapBounds = Readonly<{ minX:number; maxX:number; minZ:number; maxZ:number }>;
+export const DEFAULT_BOUNDS: MapBounds = {minX:-20,maxX:20,minZ:-20,maxZ:20};
+export type AttackCommand = { targetId: string };
 export type PkTargetCommand = { targetId: string };
 
 function hasExactKeys(value: unknown, expected: readonly string[]): value is Record<string, unknown> {
@@ -66,21 +68,21 @@ function hasExactKeys(value: unknown, expected: readonly string[]): value is Rec
   return keys.length === expected.length && keys.every(key => expected.includes(key));
 }
 
-export function parseMoveCommand(message: unknown): Vec2 | null {
+export function parseMoveCommand(message: unknown, bounds: MapBounds = DEFAULT_BOUNDS): Vec2 | null {
   if (!hasExactKeys(message, ["x", "z"])) return null;
   const { x, z } = message;
   if (
     typeof x !== "number" || typeof z !== "number" ||
     !Number.isFinite(x) || !Number.isFinite(z) ||
-    Math.abs(x) > RULES.mapLimit || Math.abs(z) > RULES.mapLimit
+    x < bounds.minX || x > bounds.maxX || z < bounds.minZ || z > bounds.maxZ
   ) return null;
   return { x, z };
 }
 
 export function parseAttackCommand(message: unknown): AttackCommand | null {
   if (!hasExactKeys(message, ["targetId"])) return null;
-  return message.targetId === RULES.monsterId
-    ? { targetId: RULES.monsterId }
+  return message.targetId === RULES.monsterId || (typeof message.targetId === "string" && /^forest_(?:west|east|deep_west|deep_east)_[1-4]$/.test(message.targetId))
+    ? { targetId: message.targetId as string }
     : null;
 }
 
@@ -134,8 +136,8 @@ export function stepTowards(position: Vec2, destination: Vec2, maxStep: number):
   };
 }
 
-export function clampToMap(value: number): number {
-  return Math.max(-RULES.mapLimit, Math.min(RULES.mapLimit, value));
+export function clampToMap(value: number, bounds: MapBounds = DEFAULT_BOUNDS, axis: "x"|"z" = "x"): number {
+  return Math.max(axis === "x" ? bounds.minX : bounds.minZ, Math.min(axis === "x" ? bounds.maxX : bounds.maxZ, value));
 }
 
 /**
