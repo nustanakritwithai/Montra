@@ -63,6 +63,7 @@ $files = @(
   @{ Name = "HeightRules.ts"; Target = "src\rooms\HeightRules.ts"; Check = "flightLandingHeight" },
   @{ Name = "ForestEncounters.ts"; Target = "src\rooms\ForestEncounters.ts"; Check = "ForestEncounters" },
   @{ Name = "TempleMap.ts"; Target = "src\rooms\TempleMap.ts"; Check = "TEMPLE_MAP" },
+  @{ Name = "RiverCity.ts"; Target = "src\rooms\RiverCity.ts"; Check = "newRiverBattle" },
   @{ Name = "CastlePilot.ts"; Target = "src\rooms\CastlePilot.ts"; Check = "CASTLE_ENABLED" },
   @{ Name = "StrategicProvinces.ts"; Target = "src\rooms\StrategicProvinces.ts"; Check = "PROVINCES" },
   @{ Name = "WorldAtlas.ts"; Target = "src\rooms\WorldAtlas.ts"; Check = "ATLAS_MAPS" },

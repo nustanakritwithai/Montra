@@ -2,7 +2,8 @@ import { FORGE } from "./ForgeRules.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
 import { WAR_SIDE_SIZE, WAR_HOLD, warSites, type Battlefield, type WarSide } from "./TerritoryWar.js";
 import {parseGovernmentOrder} from "./TerritoryGovernment.js";
-import {CASTLE_ID,CASTLE_ENABLED,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
+import {RIVER_CITY,riverNodes,riverPosts,riverSupplied} from "./RiverCity.js";
+import {CASTLE_ID,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
 import { Encoder } from "@colyseus/schema";
 import { randomUUID } from "node:crypto";
 import {
@@ -65,8 +66,10 @@ import {
 
 import { ForestEncounters } from "./ForestEncounters.js";
 
-// A full world snapshot spans up to 48 KiB with ten occupied maps, before summons.
-Encoder.BUFFER_SIZE = Math.max(Encoder.BUFFER_SIZE, (CASTLE_ENABLED?128:64) * 1024);
+const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:WORLD_MAPS}):"";
+// Leave room for replicated players, occupied hunts and summons in addition to the UTF-8 static atlas.
+const encoderBlock=64*1024;
+Encoder.BUFFER_SIZE=Math.max(Encoder.BUFFER_SIZE,Math.ceil((Buffer.byteLength(worldDefinition)+32*1024)/encoderBlock)*encoderBlock);
 
 const warRoomKey=randomUUID();
 const battleRooms=new Map<number,Promise<string>>();
@@ -114,7 +117,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private nextWarSample=0;
   private previousPilotSample?:number;
   private gateClosed=false;
-  private closedCastleGates=new Set<string>();
+  private closedFieldGates=new Set<string>();
   private gateActions=new Map<string,number>();
   private battleActive=false;
   private destinations = new Map<string, Vec2>();
@@ -127,6 +130,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastWarpMs = new Map<string, number>();
   private provinceClients = new Set<string>();
   private castleClients = new Set<string>();
+  private riverClients = new Set<string>();
   private atlasClients = new Set<string>();
   private templeClients = new Set<string>();
   private pendingWarps = new Set<string>();
@@ -1102,7 +1106,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(p.mapId!==CASTLE_ID || !request || Object.keys(request).length!==1 || !(legacy?[2,4,5]:musterNodes).includes(request.objectiveId!))return this.reject(client,"invalid_request");
       point=request.objectiveId!;
     }
-    const fort=warSites[p.mapId];
+    const fort=p.mapId===RIVER_CITY?riverNodes.A:warSites[p.mapId];
     if(!fort || !p.alive || p.flying || this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
        this.attackTargets.has(id) || [...this.attackTargets.values()].includes(id) ||
        this.simulatedMs-(this.lastCombatMs.get(id)??-Infinity)<WARP_COMBAT_LOCK_MS)
@@ -1134,13 +1138,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!this.field)return;
     const castle=this.field.site===CASTLE_ID;
     const req=message as {gateId?:string;repair?:boolean}|null;
-    if(castle?(!req || typeof req.gateId!=="string" || (req.repair!==undefined && req.repair!==true)):!parseEmptyCommand(message))return;
+    const river=this.field.site===RIVER_CITY;
+    if((castle || river)?(!req || typeof req.gateId!=="string" || (req.repair!==undefined && (!castle || req.repair!==true))):!parseEmptyCommand(message))return;
     const id=client.sessionId,p=this.state.players.get(id),seat=this.warSeats.get(id),character=this.persistentCharacters.get(id);
     if(!p?.alive || p.flying || !seat || !character || !isOnGround(p.y) || this.climbs.has(id) || this.pendingCharacterLeaves.has(id))return;
     const now=Date.now();
     if(now-(this.gateActions.get(id)??-Infinity)<1000)return;
     const war=guildStore().war,gates=WORLD_MAPS[this.field.site].strategic!.rampart!.gates;
-    const gate=castle?gates.find(g=>g.id===req!.gateId):gates[0];
+    const gate=castle || river?gates.find(g=>g.id===req!.gateId):gates[0];
     if(!gate || war.member(character)?.id!==seat.guild)return;
     const b=gate.box,cx=b.x+b.width/2,cz=b.z+b.length/2;
     const inside=gate.side==="south"?p.z<cz:gate.side==="north"?p.z>cz:gate.side==="east"?p.x<cx:p.x>cx;
@@ -1153,7 +1158,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         // Settle the elapsed interval using the previous door state before changing a supply route.
         this.nextWarSample=0;this.updateTerritory();
         const states=war.castleGate(this.field,gate.id,seat.side,occupied,now,req!.repair===true);
-        this.closedCastleGates=new Set(Object.keys(states).filter(key=>states[key].closed));
+        this.closedFieldGates=new Set(Object.keys(states).filter(key=>states[key].closed));
+      }else if(river){
+        const states=war.riverGate(this.field,gate.id,seat.side,occupied,now);
+        this.closedFieldGates=new Set(Object.keys(states).filter(key=>states[key].closed));
       }else{war.gate(this.field,seat.side,occupied,now,this.fieldCensus().relaySide);this.gateClosed=war.inspect(this.field.site,now).gateClosed;}
       this.nextWarSample=0;
     }catch(e){const reason=e instanceof Error?e.message:"";if(!reason.startsWith("war_"))console.error("MONTRA gate",e);client.send("territory_error",{reason:reason.startsWith("war_")?reason:"war_unavailable"});}
@@ -1162,6 +1170,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     let attack=0,defend=0;
     const field=this.field,relay=field && WORLD_MAPS[field.site].strategic?.relay;
     const relayHolders={attack:0,defend:0};
+    const riverPresence=field?.site===RIVER_CITY?riverPosts.map(()=>({attack:0,defend:0})):undefined;
     const counts=field?.site===CASTLE_ID?castleObjectives.map(()=>({attack:0,defend:0})):undefined;
     const campCounts=counts?forwardCamps.map(()=>({attack:0,defend:0})):undefined;
     if(field){
@@ -1171,6 +1180,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if(!p || !character || this.pendingCharacterLeaves.has(id))continue;
         if(war.member(character)?.id!==seat.guild){this.clients.find(c=>c.sessionId===id)?.leave(4000,"war_membership_changed");continue;}
         if(!p.alive || !isOnGround(p.y) || p.flying || p.mapId!==field.site || this.climbs.has(id) || this.pendingWarps.has(id))continue;
+        if(riverPresence){
+          const i=riverPosts.findIndex(post=>planarDistance(p,post)<=4);
+          if(i>=0)riverPresence[i][seat.side]++;
+        }
         if(counts){
           const i=castleObjectives.findIndex(node=>planarDistance(p,node)<=CAPTURE_RADIUS);
           if(i>=0)counts[i][seat.side]++;
@@ -1182,7 +1195,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     const contested=relayHolders.attack>0 && relayHolders.defend>0;
     const relaySide:WarSide|null=contested?null:relayHolders.attack?"attack":relayHolders.defend?"defend":null;
-    return {attack,defend,counts,campCounts,relaySide,contested};
+    return {attack,defend,counts,campCounts,relaySide,contested,riverPresence};
   }
   private canMarch(id:string){
     const p=this.state.players.get(id),base=this.playerSpawn.get(id);
@@ -1232,16 +1245,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!WORLD_EXPANSION || (!this.warClients.size && !this.field) || clock<this.nextWarSample)return;
     this.nextWarSample=clock+1000;
     const war=guildStore().war;
-    const {attack,defend,counts,campCounts,relaySide,contested}=this.fieldCensus();
+    const {attack,defend,counts,campCounts,relaySide,contested,riverPresence}=this.fieldCensus();
     if(this.field){
-      war.advance(this.field,now,attack,defend,counts,this.previousPilotSample,relaySide);
+      war.advance(this.field,now,attack,defend,counts,this.previousPilotSample,relaySide,riverPresence);
       if(counts)this.previousPilotSample=now;
     }
     const states=Object.fromEntries(Object.keys(warSites).map(site=>[site,war.inspect(site,now)]));
     if(this.field){
       const s=states[this.field.site];this.battleActive=s.seq===this.field.seq && s.phase==="battle";
-      this.gateClosed=this.battleActive && this.field.site!==CASTLE_ID && s.gateClosed;
-      if(this.field.site===CASTLE_ID)this.closedCastleGates=new Set(Object.entries(this.battleActive?s.pilot?.gates??{}:{}).filter(([,g])=>g.closed).map(([id])=>id));
+      this.gateClosed=this.battleActive && !s.river && !s.pilot && s.gateClosed;
+      const gates=s.river?.gates ?? s.pilot?.gates;
+      if(gates)this.closedFieldGates=new Set(Object.entries(this.battleActive?gates:{}).filter(([,g])=>g.closed).map(([id])=>id));
     }
     const owners=Object.fromEntries(Object.entries(states).map(([site,s])=>[site,s.owner]));
     const teams=this.field?Object.fromEntries([...this.warSeats].map(([id,seat])=>[id,seat.side])):undefined;
@@ -1261,7 +1275,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         point.id>=4 && (!inField || !p.alive || planarDistance(p,castleObjectives[point.id-1])>18)?{...point,progress:0}:point)}:view;
       const local=s?{site:p.mapId,phase:ownBattle?s.phase:"finished",owner:s.owner,attackName:s.attackName,defendName:s.defendName,
         progress:Math.trunc(s.progress),goal:WAR_HOLD,seconds:s.seconds,attack,defend,inField,side:this.warSeats.get(c.sessionId)?.side,
-        pilot:visiblePilot,supply:supply?{...supply,selected:seat!.camp,atBase:this.canMarch(c.sessionId)}:undefined,
+        pilot:visiblePilot,river:inField && ownBattle && s.river?{...s.river,supplied:seat && riverSupplied(s.river,seat.side)}:undefined,
+        supply:supply?{...supply,selected:seat!.camp,atBase:this.canMarch(c.sessionId)}:undefined,
         relay:inField && ownBattle && this.battleActive && WORLD_MAPS[p.mapId].strategic?.relay?{side:relaySide,contested}:undefined,
         government:!inField && member && member.id===s.ownerId?war.government.view(p.mapId,member,now):undefined,
         gateHp:s.gateHp,gateClosed:inField && this.gateClosed,
@@ -1556,6 +1571,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const snapshot = this.captureCharacterSnapshot(id);
       if (!snapshot) return this.reject(client, "character_not_persistent");
       const portal = result.portal;
+      if(portal.targetMapId===RIVER_CITY && !this.riverClients.has(id))return this.reject(client,"world_client_update_required");
       if(portal.targetMapId===CASTLE_ID && !this.castleClients.has(id))return this.reject(client,"world_client_update_required");
       if(getWorldMap(portal.targetMapId)?.strategic && !this.provinceClients.has(id))return this.reject(client,"world_client_update_required");
       if(isAtlasMap(portal.targetMapId) && !this.atlasClients.has(id))return this.reject(client,"world_client_update_required");
@@ -2044,7 +2060,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (distance3d(from,to) > FORT.rangedRange+(downhill?3:0)) {
       return this.reject(client, "shot_out_of_range");
     }
-    if (!map || (shooter.mapId === DEFAULT_MAP_ID && wallBlocksShot(from,to)) || !provinceShotClear(map,from,to,shooter.mapId===CASTLE_ID?this.closedCastleGates:this.gateClosed)) {
+    if (!map || (shooter.mapId === DEFAULT_MAP_ID && wallBlocksShot(from,to)) || !provinceShotClear(map,from,to,(shooter.mapId===CASTLE_ID || shooter.mapId===RIVER_CITY)?this.closedFieldGates:this.gateClosed)) {
       return this.reject(client, "shot_blocked");
     }
 
@@ -2174,7 +2190,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return mapId === DEFAULT_MAP_ID
       ? !wallBlocksShot({ x: from.x, y: from.y + FORT.targetBodyHeight, z: from.z },
           { x: target.x, y: target.y + FORT.targetBodyHeight, z: target.z })
-      : provinceShotClear(WORLD_MAPS[mapId],{x:from.x,y:from.y+1,z:from.z},{x:target.x,y:target.y+1,z:target.z},mapId===CASTLE_ID?this.closedCastleGates:this.gateClosed);
+      : provinceShotClear(WORLD_MAPS[mapId],{x:from.x,y:from.y+1,z:from.z},{x:target.x,y:target.y+1,z:target.z},(mapId===CASTLE_ID || mapId===RIVER_CITY)?this.closedFieldGates:this.gateClosed);
   }
 
   private updateSummons(dt: number) {
@@ -2316,7 +2332,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.buildCatalog = BUILD_CATALOG;
     this.state.economyAvailable = characterStore.economyEnabled;
     this.forest.initialize();
-    this.state.worldDefinition = WORLD_EXPANSION ? JSON.stringify({version:1,maps:WORLD_MAPS}) : "";
+    this.state.worldDefinition=worldDefinition;
     this.state.swordTreeCatalog = JSON.stringify({schools:SWORD_SCHOOLS,nodes:SWORD_NODES});
     this.state.muayBookCatalog = JSON.stringify({skills:MUAY_SKILLS,lessons:MUAY_LESSONS,base:MUAY_BASE_SKILLS,schools:MUAY_SCHOOLS,combos:MUAY_COMBOS,followups:MUAY_FOLLOWUPS,masteryGuides:MUAY_MASTERY_GUIDES,masteryLabels:MUAY_MASTERY_LABELS,masteryRequirements:MUAY_MASTERY_REQUIREMENTS,pvpDamage:MUAY_PVP_DAMAGE_MULTIPLIER,pvpCombo:MUAY_PVP_COMBO_MULTIPLIER});
     this.state.monster.id = RULES.monsterId;
@@ -2443,7 +2459,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const map = getWorldMap(mapId);
       const r=map?.strategic?.rampart;
       if(r && isOnPlatform(feetY))return onRampart(r,x,z);
-      if(r && mapId===CASTLE_ID && this.closedCastleGates.size && r.gates.some(g=>this.closedCastleGates.has(g.id) && segmentIntersectsExpandedWall({x,z},{x,z},g.box,.4)))return false;
+      if(r && this.closedFieldGates.size && r.gates.some(g=>this.closedFieldGates.has(g.id) && segmentIntersectsExpandedWall({x,z},{x,z},g.box,.4)))return false;
       if(r && this.gateClosed && segmentIntersectsExpandedWall({x,z},{x,z},r.gates[0].box,.4))return false;
       return Boolean(map && (isOnGround(feetY) || (flying && isFlightAltitude(feetY))) &&
         isSafeWorldPoint(map, { x, y: feetY, z }));
@@ -2962,6 +2978,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
       const provinceReady=(options as {provinceVersion?:unknown}|undefined)?.provinceVersion===1;
       const castleReady=(options as {castleVersion?:unknown}|undefined)?.castleVersion===2;
+      const riverReady=(options as {riverCityVersion?:unknown}|undefined)?.riverCityVersion===1;
+      if(mapId===RIVER_CITY && !riverReady)throw new Error("world_client_update_required");
       if(mapId===CASTLE_ID && !castleReady)throw new Error("world_client_update_required");
       if(getWorldMap(mapId)?.strategic && !provinceReady)throw new Error("world_client_update_required");
       const atlasReady=(options as {atlasVersion?:unknown}|undefined)?.atlasVersion===1;
@@ -2990,6 +3008,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           const defended=war.inspect(mapId,Date.now()).pilot?.throne?.defended;
           safeSpawn=pilotSpawn(war.muster(this.field,characterId!,credential.point),side,sideSize,defended);
           seat.camp=war.campPreference(this.field,characterId!);
+        }else if(mapId===RIVER_CITY){
+          const node=side==="attack"?riverNodes.A:riverNodes.D;
+          safeSpawn={x:node.x+sideSize*.6-1.2,y:0,z:node.z};
         }else{
           const gate=WORLD_MAPS[mapId].portals.find(p=>p.z===(side==="attack"?26:-58))!;
           safeSpawn={x:gate.x,y:0,z:gate.z};
@@ -3029,6 +3050,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.applyStats(client.sessionId,player, allocations);
       this.state.players.set(client.sessionId, player);
       if((options as Record<string,unknown>)?.warVersion===1)this.warClients.add(client.sessionId);
+      if(riverReady)this.riverClients.add(client.sessionId);
       if(castleReady)this.castleClients.add(client.sessionId);
       if(provinceReady)this.provinceClients.add(client.sessionId);
       if(atlasReady)this.atlasClients.add(client.sessionId);
@@ -3085,6 +3107,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.templeClients.delete(id);
     this.atlasClients.delete(id);
     this.crestTurns.delete(id);this.gateActions.delete(id);this.warSeats.delete(id);this.warClients.delete(id);this.warSent.delete(id);
+    this.riverClients.delete(id);
     this.castleClients.delete(id);
     this.provinceClients.delete(id);
     this.leaveParty(id);

@@ -9,7 +9,7 @@ import {ForestEncounters} from "./ForestEncounters.js";
 import {MyRoomState,Player} from "./schema/MyRoomState.js";
 import {partyMonsterShares} from "./PartyMonsterRewards.js";
 
-test("all fifteen maps connect to the village and every gate has a safe return",()=>{
+test("all sixteen maps connect to the village and every gate has a safe return",()=>{
   const seen=new Set<string>(),queue=["ritual_village"];
   while(queue.length){
     const id=queue.pop()!;
@@ -24,7 +24,7 @@ test("all fifteen maps connect to the village and every gate has a safe return",
       queue.push(dest.id);
     }
   }
-  assert.equal(seen.size,15);assert.equal(Object.keys(WORLD_MAPS).length,15);
+  assert.equal(seen.size,16);assert.equal(Object.keys(WORLD_MAPS).length,16);
   assert.deepEqual(WORLD_MAPS.moon_cemetery.portals.map(p=>p.targetMapId).sort(),["bamboo_frontier","bound_temple","drowned_marsh","moon_pass"]);
 });
 

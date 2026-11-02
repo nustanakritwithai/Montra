@@ -12,7 +12,7 @@ import {WAR_PROTECTION} from "./TerritoryWar.js";
 const roster=(ids:number[],side:Side="attack",count=1)=>castleObjectives.map(p=>({attack:side==="attack" && ids.includes(p.id)?count:0,defend:side==="defend" && ids.includes(p.id)?count:0}));
 test("full castle road, gates, stairs, crest circuits and both previous world neighbours",()=>{
   const m=WORLD_MAPS[CASTLE_ID],r=m.strategic!.rampart!;
-  assert.equal(Object.keys(WORLD_MAPS).length,16);assert.deepEqual(m.bounds,{minX:-1000,maxX:1000,minZ:-1000,maxZ:1000});
+  assert.equal(Object.keys(WORLD_MAPS).length,17);assert.deepEqual(m.bounds,{minX:-1000,maxX:1000,minZ:-1000,maxZ:1000});
   assert.equal(r.deck.length,12);assert.equal(r.gates.length,9);assert.equal(new Set(r.stairs.map(s=>s.id)).size,18);
   assert.equal(m.strategic!.objectives!.length,7);assert.deepEqual(m.strategic!.activeObjectives,[1,2,3,4,5,6,7]);
   assert.deepEqual(r.gates.map(g=>g.id).sort(),Object.keys(newPilot().siege!.gates).sort());

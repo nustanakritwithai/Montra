@@ -32,6 +32,9 @@ jobs:
           cp deploy/combat/dash-rules.test.ts combat-verify/src/rooms/dash-rules.test.ts
           cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
           cp deploy/combat/TempleMap.ts combat-verify/src/rooms/TempleMap.ts
+          cp deploy/combat/RiverCity.ts combat-verify/src/rooms/RiverCity.ts
+          cp deploy/combat/river-city.test.ts combat-verify/src/rooms/river-city.test.ts
+          cp deploy/combat/river-city-integration.mjs combat-verify/river-city-integration.mjs
           cp deploy/combat/CastlePilot.ts combat-verify/src/rooms/CastlePilot.ts
           cp deploy/combat/castle-pilot.test.ts combat-verify/src/rooms/castle-pilot.test.ts
           cp deploy/combat/castle-pilot-integration.mjs combat-verify/castle-pilot-integration.mjs
@@ -388,6 +391,8 @@ jobs:
           MONTRA_ATLAS_STAGE=marsh-moon timeout 300s node world-atlas-integration.mjs
           MONTRA_ATLAS_STAGE=ridge-naga timeout 300s node world-atlas-integration.mjs
           MONTRA_ATLAS_STAGE=endgame timeout 300s node world-atlas-integration.mjs
+          npx tsx --test src/rooms/river-city.test.ts
+          timeout 780s node --import tsx river-city-integration.mjs
           timeout 85s node temple-integration.mjs
           timeout 50s node forest-guardian-integration.mjs
           kill "$SERVER_PID"
