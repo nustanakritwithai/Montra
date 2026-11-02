@@ -28,7 +28,7 @@ import {
 } from "./GameRules.js";
 import {
   FORT, distance3d, isOnPlatform, isOnGround, isOnTop, touchesWallBody,
-  parseClimbRequest, progressClimb, step3d, wallBlocksShot,
+  parseClimbRequest, progressClimb, step3d,
   FLIGHT, isFlightAltitude, flightLandingHeight, progressFlightHeight,
   type WorldPoint,
 } from "./HeightRules.js";
@@ -39,7 +39,7 @@ import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.j
 import type { CharacterSnapshot } from "./CharacterStore.js";
 import { isAtlasMap } from "./WorldAtlas.js";
 import { TEMPLE_ID } from "./TempleMap.js";
-import { SHRINE_GUARDIAN, DEFAULT_MAP_ID, getWorldMap, groundAt, surfaceLayer, onMapGround, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, VILLAGE_ARRIVALS, WORLD_ROOM_CAPACITY, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
+import { SHRINE_GUARDIAN, DEFAULT_MAP_ID, getWorldMap, groundAt, surfaceLayer, meleeHeightBlocked, onMapGround, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, VILLAGE_ARRIVALS, WORLD_ROOM_CAPACITY, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
 import { provinceShotClear, segmentIntersectsExpandedWall } from "./WorldMaps.js";
 import { crestCorners, onRampart, wallRing } from "./StrategicProvinces.js";
 import { checkWarp, WARP_COMBAT_LOCK_MS } from "./WarpRules.js";
@@ -294,7 +294,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const target = this.state.players.get(member);
       if (!target?.alive || target.mapId !== player.mapId || distance3d(player, target) > skill.radius ||
           this.pendingWarps.has(member) || this.pendingItemUses.has(member) || this.pendingCharacterLeaves.has(member)) continue;
-      if (member !== id && !isWorldSegmentClear(player.mapId, player, target)) continue;
+      if (member !== id && !this.combatSegmentClear(player.mapId,player,target)) continue;
       if (skill.effect.kind !== "heal" || target.hp < target.maxHp) targets.push([member, target]);
     }
     if (!targets.length) return this.reject(client, "class_skill_no_target");
@@ -1911,7 +1911,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       const attackRange = monsterOrder ? RULES.playerAttackRange : RULES.pkAttackRange;
       // Wall/vertical separation cannot be solved by a ground-only chase.
-      if (Math.abs(attacker.y - target.y) > attackRange) {
+      if (meleeHeightBlocked(attacker,target,attackRange)) {
         this.attackTargets.delete(attackerId);
         attacker.targetId = "";
         return this.reject(client, "melee_height_blocked");
@@ -2067,7 +2067,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (distance3d(from,to) > FORT.rangedRange+(downhill?3:0)) {
       return this.reject(client, "shot_out_of_range");
     }
-    if (!map || (shooter.mapId === DEFAULT_MAP_ID && wallBlocksShot(from,to)) || !provinceShotClear(map,from,to,(shooter.mapId===CASTLE_ID || shooter.mapId===RIVER_CITY)?this.closedFieldGates:this.gateClosed)) {
+    if (!map || !provinceShotClear(map,from,to,this.closedGatesFor(shooter.mapId))) {
       return this.reject(client, "shot_blocked");
     }
 
@@ -2173,7 +2173,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // Guard's combat tether prevents hits across the map even if another
       // client sends a valid but distant target ID.
       if (distance3d(owner, target) > RULES.summonEngageDistance) continue;
-      if(getWorldMap(owner.mapId)?.walls?.length && !isWorldSegmentClear(owner.mapId,owner,target))continue;
+      if(getWorldMap(owner.mapId)?.walls?.length && !this.combatSegmentClear(owner.mapId,owner,target))continue;
       if (fromPot && !reachable(target)) continue;
       return { targetId, target };
     }
@@ -2194,11 +2194,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return nearest ? { targetId: nearest.id, target: nearest } : null;
   }
 
+  private closedGatesFor(mapId:string){
+    return (mapId===CASTLE_ID || mapId===RIVER_CITY)?this.closedFieldGates:this.gateClosed;
+  }
+  private combatSegmentClear(mapId:string,from:WorldPoint,to:WorldPoint){
+    return isWorldSegmentClear(mapId,from,to,this.closedGatesFor(mapId));
+  }
   private bodyPathClear(mapId: string, from: WorldPoint, target: WorldPoint) {
-    return mapId === DEFAULT_MAP_ID
-      ? isWorldSegmentClear(mapId,from,target) && !wallBlocksShot({ x: from.x, y: from.y + FORT.targetBodyHeight, z: from.z },
-          { x: target.x, y: target.y + FORT.targetBodyHeight, z: target.z })
-      : provinceShotClear(WORLD_MAPS[mapId],{x:from.x,y:from.y+1,z:from.z},{x:target.x,y:target.y+1,z:target.z},(mapId===CASTLE_ID || mapId===RIVER_CITY)?this.closedFieldGates:this.gateClosed);
+    return provinceShotClear(WORLD_MAPS[mapId],{x:from.x,y:from.y+1,z:from.z},{x:target.x,y:target.y+1,z:target.z},this.closedGatesFor(mapId));
   }
 
   private updateSummons(dt: number) {
@@ -2274,7 +2277,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const target = monster ?? this.state.players.get(targetId);
     if (!target || !target.alive || targetId === ownerId) return;
     if (distance3d(owner, target) > RULES.summonEngageDistance) return;
-    if (distance3d(guardian, target) > RULES.summonAttackRange + 0.00001 || !isWorldSegmentClear(owner.mapId,guardian,target)) return;
+    if (distance3d(guardian, target) > RULES.summonAttackRange + 0.00001 || !this.combatSegmentClear(owner.mapId,guardian,target)) return;
 
     const last = this.lastSummonAttackAt.get(ownerId) ?? -Infinity;
     if (this.simulatedMs - last < RULES.summonAttackCooldownMs) return;
@@ -2540,7 +2543,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         player.facing = facingTo(dx, dz);
 
         const attackRange = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
-        if (Math.abs(player.y - target.y) > attackRange) {
+        if (meleeHeightBlocked(player,target,attackRange)) {
           this.endAttack(sessionId, player);
           continue;
         }
@@ -2619,11 +2622,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
 
       const range = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
-      if (!isWorldSegmentClear(attacker.mapId,attacker,target) || distance3d(attacker,target) > range + 0.00001 ||
-          (attacker.mapId === DEFAULT_MAP_ID && wallBlocksShot(
-            {x:attacker.x,y:attacker.y+1.1,z:attacker.z},
-            {x:target.x,y:target.y+1.0,z:target.z}
-          ))) continue;
+      if (distance3d(attacker,target)>range+.00001 || !this.combatSegmentClear(attacker.mapId,attacker,target))continue;
       attacker.facing = facingTo(target.x - attacker.x, target.z - attacker.z);
       attacker.combatState = "attacking";
 

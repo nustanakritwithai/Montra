@@ -11,8 +11,9 @@ async function fixture(mapId,x,z,y=0){
   const token="mt1_"+randomBytes(32).toString("hex"),id=createHash("sha256").update(token).digest("hex");
   await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"Scout",level:85,experience:0,pkKills:0,pkDeaths:0,x,y,z,hp:900,mapId,inventory:{version:1,slots:Array(12).fill(null),equippedWeaponSlot:null},updatedAt:new Date().toISOString()}),{flag:"wx"});return token;
 }
-async function join(token,ver=1){
-  const r=await sdk.create("my_room",{guestToken:token,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,castleVersion:2,riverCityVersion:1,atlasReliefVersion:1,originalReliefVersion:ver});
+async function join(token,ver=1,roomId){
+  const opts={guestToken:token,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,castleVersion:2,riverCityVersion:1,atlasReliefVersion:1,originalReliefVersion:ver};
+  const r=roomId?await sdk.joinById(roomId,opts):await sdk.create("my_room",opts);
   clients.add(r);const c={r,me:()=>r.state.players?.get(r.sessionId),events:[]};r.onMessage("*",(type,data)=>c.events.push({type,data}));await until(c.me,"character");return c;
 }
 async function leave(c){await c.r.leave();clients.delete(c.r);await nap(230);}
@@ -39,4 +40,24 @@ try{
     const token=await fixture(site,x,z);c=await join(token);assert.equal(c.me().mapId,site);assert.ok(c.me().y>minY,site);await leave(c);
   }
   console.log("PASS old saves at all five cities and war sites including the 18 m pass");
+  const city="sam_lan_estuary";
+  for(const [name,start,end] of [
+    ["walk up the command court", [23,-76,0],[23,-64,0]],
+    ["fight on the same wall", [50,96,4],[51.5,96,4]],
+    ["wall separates ground and crest",[50,100.5,0],[50,96,4]]
+  ]){
+    const a=await join(await fixture(city,...start)),b=await join(await fixture(city,...end),1,a.r.roomId);
+    await until(()=>a.r.state.players.size===2 && b.r.state.players.size===2,"both fighters present");
+    const hp=b.me().hp,fromY=a.me().y;
+    a.r.send("attack",{targetId:b.r.sessionId});
+    if(start[2]===end[2]){
+      await until(()=>b.me().hp<hp || a.events.some(e=>e.type==="command_rejected"),name);
+      assert.ok(b.me().hp<hp,name+" "+JSON.stringify(a.events.filter(e=>e.type==="command_rejected")));
+      if(start[1]!==end[1])assert.ok(a.me().y>fromY+2 && Math.hypot(a.me().x-b.me().x,a.me().z-b.me().z)<2.9,"close distance on foot before hitting");
+    }else{
+      await until(()=>a.events.some(e=>e.type==="command_rejected" && e.data.reason==="melee_height_blocked"),name);
+      assert.equal(b.me().hp,hp);
+    }
+    await leave(b);await leave(a);console.log("PASS",name);
+  }
 }finally{await Promise.allSettled([...clients].map(r=>r.leave()));}

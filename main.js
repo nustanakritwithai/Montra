@@ -5639,12 +5639,13 @@
       ? Number(room?.state?.players?.get?.(localId)?.y)
       : Number(getLocalAvatar()?.targetY || 0);
     const altitude = Number.isFinite(worldY) ? Math.round(worldY * 10) / 10 : 0;
+    const heightText=altitude<0?"↓"+Math.abs(altitude)+"ม.":altitude>0?"↑"+altitude+"ม.":"0ม.";
     const mobilePortrait = window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches;
     ui.onlineCount.textContent = mode === "live"
       ? (mobilePortrait
-        ? `${onlinePlayers.size} คน · ${summonAvatars.size} ผี · ↑${altitude}ม.`
+        ? `${onlinePlayers.size} คน · ${summonAvatars.size} ผี · ${heightText}`
         : `ผู้เล่น: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} · สูง ${altitude}ม. (LIVE)`)
-      : (mobilePortrait ? `DEMO · ↑${altitude}ม.`
+      : (mobilePortrait ? `DEMO · ${heightText}`
         : `ผู้เล่นในฉาก: 1 (จำลอง) · สูง ${altitude}ม.`);
     setModeBadge(mode === "live");
   }
@@ -6510,7 +6511,7 @@
         if (info?.playerId === localId) {
           pendingClimb = null;
           toast(info.direction === "up"
-            ? "กำลังขึ้นบิน · ระดับ 6 เมตร"
+            ? "กำลังขึ้นบิน · สูงจากพื้น 6 เมตร"
             : "กำลังลงจอด · พื้นหรือยอดกำแพง");
         }
         updateFlightButton();
@@ -6520,7 +6521,7 @@
         if (info?.playerId === localId) {
           toast(info.flying
             ? "บินสำเร็จ · แตะพื้นเพื่อเคลื่อนที่ในอากาศ"
-            : Number(info.altitude) > 1
+            : Math.abs(playerLayer(ownServerCharacter())-activeFort.height)<.15
               ? "ลงบนยอดกำแพงแล้ว · เดินต่อได้"
               : "ลงถึงพื้นแล้ว");
         }
@@ -7313,17 +7314,54 @@
   function huntRoute(map){return map?.huntTrail ?? map?.strategic?.huntTrail;}
   // Paint the static relief once; both map canvases update player markers several times a second.
   const terrainTints=new WeakMap();
+  const terrainPalette=[[-6,30,53,69],[0,52,78,64],[3,88,104,76],[6,144,141,105],[12,177,161,121],[18,208,192,149]];
+  function paintHeightPixel(data,k,h,shade){
+    let hi=1;while(hi<terrainPalette.length-1 && h>terrainPalette[hi][0])hi++;
+    const lo=terrainPalette[hi-1],up=terrainPalette[hi],mix=Math.max(0,Math.min(1,(h-lo[0])/(up[0]-lo[0])));
+    for(let i=1;i<=3;i++)data[k++]=(lo[i]+mix*(up[i]-lo[i]))*shade;
+    data[k]=255;
+  }
+  function showTerrainScale(t,canvas){
+    let min=Infinity,max=-Infinity;
+    for(const row of t.heights){min=Math.min(min,...row);max=Math.max(max,...row);}
+    if(max<=min)return;
+    const scale=document.createElement("div"),bar=document.createElement("i");
+    scale.className="terrain-scale";bar.setAttribute("aria-hidden","true");
+    const levels=[min,...terrainPalette.map(p=>p[0]).filter(h=>h>min && h<max),max];
+    bar.style.background="linear-gradient(to right,"+levels.map(h=>{
+      const rgb=new Uint8ClampedArray(4);paintHeightPixel(rgb,0,h,1);
+      return "rgb("+rgb[0]+","+rgb[1]+","+rgb[2]+") "+((h-min)*100/(max-min))+"%";
+    }).join(",")+")";
+    scale.append("พื้นต่ำ "+Number(min.toFixed(1))+" ม.",bar,"พื้นสูง "+Number(max.toFixed(1))+" ม.");
+    canvas.after(scale);
+  }
   function terrainTint(t){
     let canvas=terrainTints.get(t);if(canvas)return canvas;
     canvas=document.createElement("canvas");canvas.width=384;canvas.height=320;
-    const ink=canvas.getContext("2d"),sx=v=>(v-t.xs[0])*canvas.width/(t.xs.at(-1)-t.xs[0]),sz=v=>(v-t.zs[0])*canvas.height/(t.zs.at(-1)-t.zs[0]);
-    for(let j=0;j<t.zs.length-1;j++)for(let i=0;i<t.xs.length-1;i++){
-      for(const face of [[[0,0],[1,0],[1,1]],[[0,0],[1,1],[0,1]]]){
-        const level=face.reduce((h,[di,dj])=>h+t.heights[j+dj][i+di],0)/3;
-        ink.fillStyle=level< -1?"#274650":level<1?"#344e40":level<3?"#59684c":level<4?"#637459":level<5.5?"#807958":"#93916f";
-        ink.beginPath();face.forEach(([di,dj],k)=>{const px=sx(t.xs[i+di]),py=sz(t.zs[j+dj]);if(k)ink.lineTo(px,py);else ink.moveTo(px,py);});ink.closePath();ink.fill();
+    const ink=canvas.getContext("2d"),pixels=ink.createImageData(canvas.width,canvas.height);
+    // Use the same diagonal as the walkable mesh. Precompute column and row coordinates once per map.
+    function samples(cuts,size){
+      let cell=0;
+      return Array.from({length:size},(_,i)=>{
+        const coord=cuts[0]+(i+.5)/size*(cuts.at(-1)-cuts[0]);
+        while(cell<cuts.length-2 && coord>cuts[cell+1])cell++;
+        const span=cuts[cell+1]-cuts[cell];
+        return {cell,fraction:(coord-cuts[cell])/span,span};
+      });
+    }
+    const cols=samples(t.xs,canvas.width),rows=samples(t.zs,canvas.height);
+    let k=0;
+    for(const row of rows){
+      const top=t.heights[row.cell],bottom=t.heights[row.cell+1];
+      for(const col of cols){
+        const i=col.cell,a=top[i],b=top[i+1],c=bottom[i],d=bottom[i+1],upper=col.fraction>=row.fraction;
+        const dx=upper?b-a:d-c,dz=upper?d-b:c-a;
+        const h=a+dx*col.fraction+dz*row.fraction;
+        const shade=Math.max(.82,Math.min(1.18,1+.18*(dx/col.span+dz/row.span)));
+        paintHeightPixel(pixels.data,k,h,shade);k+=4;
       }
     }
+    ink.putImageData(pixels,0,0);
     terrainTints.set(t,canvas);return canvas;
   }
   function drawMap(ctx,width,height,large=false) {
@@ -7846,6 +7884,7 @@
       const button=document.createElement("button");button.type="button";button.className="primary";button.id="openStrategicMap";
       button.textContent="เปิดแผนที่ยุทธศาสตร์ · "+Object.keys(worldDefinitions).length+" พื้นที่";button.onclick=openStrategicMap;
       $("bigMap").parentElement.prepend(button);
+      if(map.terrain)showTerrainScale(map.terrain,$("bigMap"));
       if(map.reliefLabels)note.textContent+=" · "+map.reliefLabels.map(p=>p.name+" "+terrainHeight(map.terrain,p.x,p.z).toFixed(1)+" ม.").join(" · ");
       else if(map.terrain)note.textContent+=" · "+map.region.hint;
       if(map.strategic?.riverCity){

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {WORLD_MAPS,isSafeWorldPoint,isWorldSegmentClear,groundAt,onMapGround,provinceShotClear} from "./WorldMaps.js";
+import {WORLD_MAPS,isSafeWorldPoint,isWorldSegmentClear,meleeHeightBlocked,groundAt,onMapGround,provinceShotClear} from "./WorldMaps.js";
 import {groundSample} from "./GroundTerrain.js";
 import {FORT} from "./HeightRules.js";
 import {RIVER_CITY,riverNodes} from "./RiverCity.js";
@@ -33,6 +33,15 @@ test("replicated actors can fight at close range on relief, including a below-gr
     const p=new Player({mapId:id,x,z,y:groundAt(id,x,z)}),m=new Monster({mapId:id,x:x+.3,z,y:groundAt(id,x+.3,z)});
     assert.ok(isSafeWorldPoint(WORLD_MAPS[id],p));assert.ok(isWorldSegmentClear(id,p,m));assert.ok(isWorldSegmentClear(id,m,p));
   }
+});
+test("melee approach follows the court slope while gates and different wall layers still block attacks",()=>{
+  const map=WORLD_MAPS[RIVER_CITY],feet=(x:number,z:number,layer=0)=>({mapId:map.id,x,z,y:groundAt(map.id,x,z)+layer});
+  const low=feet(23,-76),high=feet(23,-64);
+  assert.ok(high.y-low.y>2.8);assert.equal(meleeHeightBlocked(low,high,2.8),false);
+  assert.ok(isWorldSegmentClear(map.id,feet(50,96,4),feet(51.5,96,4)));
+  assert.ok(meleeHeightBlocked(feet(50,100.5),feet(50,96,4),2.8));
+  assert.ok(isWorldSegmentClear(map.id,feet(0,100),feet(0,92)));
+  assert.equal(isWorldSegmentClear(map.id,feet(0,100),feet(0,92),new Set(["G11"])),false);
 });
 test("solid foundations support stair feet, deck loops and independently closed gates",()=>{
   for(const id of ids){
