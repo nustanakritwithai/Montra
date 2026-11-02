@@ -1,17 +1,21 @@
 import { DatabaseSync } from "node:sqlite";
 import { PROVINCES } from "./StrategicProvinces.js";
+import {TerritoryGovernment,type GovernmentOrder} from "./TerritoryGovernment.js";
+import {RIVER_CITY,RIVER_WAR_DURATION,newRiverBattle,changeRiverGate,sampleRiverPosts,riverSupplied,type RiverBattle,type RiverCensus} from "./RiverCity.js";
 import {CASTLE_ID,CASTLE_DURATION,newPilot,tickPilot,pilotView,pilotWinner,changeCastleGate,type PilotPresence,type PilotState} from "./CastlePilot.js";
 
 export const WAR_DURATION=5*60_000, WAR_PROTECTION=8*60*60_000, WAR_HOLD=60, WAR_SIDE_SIZE=5;
+const warDuration=(site:string)=>site===CASTLE_ID?CASTLE_DURATION:site===RIVER_CITY?RIVER_WAR_DURATION:WAR_DURATION;
 export const warSites=Object.fromEntries(Object.entries(PROVINCES).filter(([,p])=>p.kind==="territory")
   .map(([id,p])=>[id,p.sites.find(s=>s.kind==="fort")!]));
-export type WarMember={id:string;officer:boolean};
+export type WarMember={id:string;officer:boolean;commander?:boolean};
 type Battle={seq:number;site:string;incumbent:string|null;attacker:string;defender:string|null;started:number;
-  progress:number;sample:number;ended:number|null;winner:string|null;gate_hp:number;gate_open:number;pilot_json:string|null};
+  progress:number;sample:number;ended:number|null;winner:string|null;gate_hp:number;gate_open:number;pilot_json:string|null;city_json:string|null};
 export type Battlefield={site:string;seq:number};
 export type WarSide="attack"|"defend";
 
 export class TerritoryWar {
+  readonly government:TerritoryGovernment;
   private castleWriter:{seq:number;sample:number}|undefined;
   constructor(private readonly db:DatabaseSync){
     db.exec(`CREATE TABLE IF NOT EXISTS territory_battles(
@@ -26,6 +30,8 @@ export class TerritoryWar {
     if(!cols.some(c=>c.name==="gate_hp"))db.exec("ALTER TABLE territory_battles ADD COLUMN gate_hp INTEGER NOT NULL DEFAULT 120");
     if(!cols.some(c=>c.name==="gate_open"))db.exec("ALTER TABLE territory_battles ADD COLUMN gate_open INTEGER NOT NULL DEFAULT 0");
     if(!cols.some(c=>c.name==="pilot_json"))db.exec("ALTER TABLE territory_battles ADD COLUMN pilot_json TEXT");
+    if(!cols.some(c=>c.name==="city_json"))db.exec("ALTER TABLE territory_battles ADD COLUMN city_json TEXT");
+    this.government=new TerritoryGovernment(db);
   }
   private atomic<T>(work:()=>T):T {
     this.db.exec("BEGIN IMMEDIATE");
@@ -33,8 +39,8 @@ export class TerritoryWar {
     catch(e){this.db.exec("ROLLBACK");throw e;}
   }
   member(character:string):WarMember|undefined {
-    const row=this.db.prepare("SELECT g.id,(g.leader=m.character_id OR m.rank='officer') AS officer FROM guild_members m JOIN guilds g ON g.id=m.guild_id WHERE m.character_id=?").get(character) as {id:string;officer:number}|undefined;
-    return row && {id:row.id,officer:Boolean(row.officer)};
+    const row=this.db.prepare("SELECT g.id,g.leader=m.character_id AS commander,m.rank FROM guild_members m JOIN guilds g ON g.id=m.guild_id WHERE m.character_id=?").get(character) as {id:string;commander:number;rank:string}|undefined;
+    return row && {id:row.id,officer:!!row.commander || row.rank==="officer",commander:!!row.commander};
   }
   private guildName(id:string|null|undefined):string|null {
     if(!id)return null;
@@ -45,12 +51,23 @@ export class TerritoryWar {
     return this.db.prepare("SELECT * FROM territory_battles WHERE site=? ORDER BY seq DESC LIMIT 1").get(site) as Battle|undefined;
   }
   private finish(b:Battle,winner:string|null,ended:number){
-    this.db.prepare("UPDATE territory_battles SET ended=?,winner=? WHERE seq=? AND ended IS NULL").run(ended,winner,b.seq);
+    // inspect() can finish an expired war outside an existing write transaction.
+    this.db.exec("SAVEPOINT settle_territory");
+    try{
+      const changed=this.db.prepare("UPDATE territory_battles SET ended=?,winner=? WHERE seq=? AND ended IS NULL").run(ended,winner,b.seq).changes;
+      if(changed){
+        const siege=b.pilot_json?(JSON.parse(b.pilot_json) as PilotState).siege:undefined;
+        const gates=siege?.gates ?? (b.city_json?(JSON.parse(b.city_json) as RiverBattle).gates:undefined);
+        const breached=gates?Object.values(gates).some(g=>g.hp===0):b.gate_hp===0;
+        this.government.settleVictory(b.site,winner,ended,breached);
+      }
+      this.db.exec("RELEASE settle_territory");
+    }catch(error){this.db.exec("ROLLBACK TO settle_territory; RELEASE settle_territory");throw error;}
   }
   private current(site:string,now:number):Battle|undefined {
     const b=this.latest(site);
     if(!b || b.ended!==null)return b;
-    const end=b.started+(site===CASTLE_ID?CASTLE_DURATION:WAR_DURATION);
+    const end=b.started+warDuration(site);
     if(this.guildName(b.attacker)){
       if(now<end)return b;
       // Let a live field commit the interval ending at the deadline before a world-room observer settles it.
@@ -76,16 +93,28 @@ export class TerritoryWar {
       attackName:active?this.guildName(b.attacker):null,defendName:active?this.guildName(b.defender):null,
       gateHp:active?b.gate_hp:120,gateClosed:!!(active && b.gate_hp>0 && !b.gate_open),
       pilot:b?.pilot_json?pilotView(JSON.parse(b.pilot_json)):undefined,
-      progress:active?b.progress:0,seconds:active?Math.max(0,Math.ceil((b.started+(site===CASTLE_ID?CASTLE_DURATION:WAR_DURATION)-now)/1000)):0};
+      river:b?.city_json?JSON.parse(b.city_json) as RiverBattle:undefined,
+      progress:active?b.progress:0,seconds:active?Math.max(0,Math.ceil((b.started+warDuration(site)-now)/1000)):0};
+  }
+  govern(character:string,order:GovernmentOrder,now:number){
+    return this.atomic(()=>{
+      const s=this.inspect(order.site,now);
+      if(s.phase==="battle")throw Error("war_government_battle");
+      const member=this.member(character);
+      if(!member || member.id!==s.ownerId)throw Error("war_not_owner");
+      return this.government.apply(order,member,now);
+    });
   }
   start(site:string,member:WarMember,now:number):Battlefield {
     return this.atomic(()=>{
       const s=this.inspect(site,now);
       if(!member.officer)throw Error("war_officer");
       if(s.phase!=="open" || s.ownerId===member.id)throw Error("war_unavailable");
+      this.government.beginBattle(site,s.ownerId??null,now);
       const row=this.db.prepare("INSERT INTO territory_battles(site,incumbent,attacker,defender,started,sample) VALUES(?,?,?,?,?,?)")
         .run(site,s.ownerId??null,member.id,s.ownerId??null,now,now);
       if(site===CASTLE_ID)this.db.prepare("UPDATE territory_battles SET pilot_json=? WHERE seq=?").run(JSON.stringify(newPilot(!!s.ownerId)),row.lastInsertRowid);
+      if(site===RIVER_CITY)this.db.prepare("UPDATE territory_battles SET city_json=? WHERE seq=?").run(JSON.stringify(newRiverBattle(!!s.ownerId)),row.lastInsertRowid);
       return {site,seq:Number(row.lastInsertRowid)};
     });
   }
@@ -123,6 +152,16 @@ export class TerritoryWar {
       }
     });
   }
+  riverGate(field:Battlefield,id:string,side:WarSide,occupied:boolean,now:number){
+    return this.atomic(()=>{
+      const b=this.current(field.site,now);
+      if(!b?.city_json || field.seq!==b.seq || b.ended!==null)throw Error("war_gate_inactive");
+      const city=JSON.parse(b.city_json) as RiverBattle;
+      changeRiverGate(city,id,side,occupied);
+      this.db.prepare("UPDATE territory_battles SET city_json=? WHERE seq=?").run(JSON.stringify(city),b.seq);
+      return city.gates;
+    });
+  }
   castleGate(field:Battlefield,id:string,side:WarSide,occupied:boolean,now:number,repair:boolean){
     return this.atomic(()=>{
       const b=this.current(field.site,now);
@@ -133,12 +172,20 @@ export class TerritoryWar {
       return pilotView(state).gates!;
     });
   }
-  advance(field:Battlefield,now:number,attack:number,defend:number,presence?:PilotPresence,previousSample?:number,relaySide:WarSide|null=null):void {
+  advance(field:Battlefield,now:number,attack:number,defend:number,presence?:PilotPresence,previousSample?:number,relaySide:WarSide|null=null,riverPresence?:RiverCensus):void {
     this.atomic(()=>{
       const b=field.site===CASTLE_ID?this.latest(field.site):this.current(field.site,now);
       if(!b || b.seq!==field.seq || b.ended!==null || now<=b.sample)return;
       // Only sampled live seconds count. Never credit a vacant or stopped room for elapsed time.
-      const elapsed=Math.min(1,(now-b.sample)/1000),net=Math.max(-2,Math.min(2,attack-defend));
+      const elapsed=Math.min(1,(now-b.sample)/1000);
+      let net=Math.max(-2,Math.min(2,attack-defend));
+      if(b.city_json){
+        if(!riverPresence)return;
+        const city=JSON.parse(b.city_json) as RiverBattle;
+        sampleRiverPosts(city,riverPresence,elapsed);
+        if(net && !riverSupplied(city,net>0?"attack":"defend"))net=0;
+        this.db.prepare("UPDATE territory_battles SET city_json=? WHERE seq=?").run(JSON.stringify(city),b.seq);
+      }
       if(b.pilot_json){
         if(!presence)return;
         const pilot:PilotState=JSON.parse(b.pilot_json);

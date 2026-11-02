@@ -63,6 +63,9 @@ $files = @(
   @{ Name = "HeightRules.ts"; Target = "src\rooms\HeightRules.ts"; Check = "flightLandingHeight" },
   @{ Name = "ForestEncounters.ts"; Target = "src\rooms\ForestEncounters.ts"; Check = "ForestEncounters" },
   @{ Name = "TempleMap.ts"; Target = "src\rooms\TempleMap.ts"; Check = "TEMPLE_MAP" },
+  @{ Name = "AtlasRelief.ts"; Target = "src\rooms\AtlasRelief.ts"; Check = "atlasRelief" },
+  @{ Name = "GroundTerrain.ts"; Target = "src\rooms\GroundTerrain.ts"; Check = "groundSample" },
+  @{ Name = "RiverCity.ts"; Target = "src\rooms\RiverCity.ts"; Check = "newRiverBattle" },
   @{ Name = "CastlePilot.ts"; Target = "src\rooms\CastlePilot.ts"; Check = "CASTLE_ENABLED" },
   @{ Name = "StrategicProvinces.ts"; Target = "src\rooms\StrategicProvinces.ts"; Check = "PROVINCES" },
   @{ Name = "WorldAtlas.ts"; Target = "src\rooms\WorldAtlas.ts"; Check = "ATLAS_MAPS" },
@@ -78,6 +81,7 @@ $files = @(
   @{ Name = "MuayRules.ts"; Target = "src\rooms\MuayRules.ts"; Check = "MUAY_SKILLS" },
   @{ Name = "OccultRules.ts"; Target = "src\rooms\OccultRules.ts"; Check = "OCCULT_LESSONS" },
   @{ Name = "BladeRules.ts"; Target = "src\rooms\BladeRules.ts"; Check = "BLADE_LESSONS" },
+  @{ Name = "SentinelRules.ts"; Target = "src\rooms\SentinelRules.ts"; Check = "SENTINEL_LESSONS" },
   @{ Name = "BuffLedger.ts"; Target = "src\rooms\BuffLedger.ts"; Check = "class BuffLedger" },
   @{ Name = "StatModifiers.ts"; Target = "src\rooms\StatModifiers.ts"; Check = "calculateModifiedStats" },
   @{ Name = "SkillCatalog.ts"; Target = "src\rooms\SkillCatalog.ts"; Check = "POSSESSION_MODIFIER" },
@@ -85,6 +89,7 @@ $files = @(
   @{ Name = "MonsterProfiles.ts"; Target = "src\rooms\MonsterProfiles.ts"; Check = "monsterReward" },
   @{ Name = "PartyMonsterRewards.ts"; Target = "src\rooms\PartyMonsterRewards.ts"; Check = "partyMonsterShares" },
   @{ Name = "forest-party-monster-integration.mjs"; Target = "montra-forest-party-monster-integration.mjs"; Check = "montra-monster-test-" },
+  @{ Name = "TerritoryGovernment.ts"; Target = "src\rooms\TerritoryGovernment.ts"; Check = "class TerritoryGovernment" },
   @{ Name = "TerritoryWar.ts"; Target = "src\rooms\TerritoryWar.ts"; Check = "class TerritoryWar" },
   @{ Name = "GuildStore.ts"; Target = "src\rooms\GuildStore.ts"; Check = "class GuildStore" },
   @{ Name = "PartyManager.ts"; Target = "src\rooms\PartyManager.ts"; Check = "class PartyManager" },
@@ -209,6 +214,7 @@ try {
   Write-Host "MONTRA MUAY BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA OCCULT BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA BLADE BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA SENTINEL BUILD PASSED." -ForegroundColor Green
   Write-Host "Source revision: $Revision"
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
