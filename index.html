@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — ต้นแบบ MMORPG 3D ไสยศาสตร์ไทยสำหรับมือถือ แบบแตะพื้นเพื่อเดิน" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=0.4.2-talisman1" />
+  <link rel="stylesheet" href="./styles.css?v=0.4.2-swordtree1" />
 </head>
 <body>
   <main id="game" aria-label="MONTRA เกมต้นแบบสามมิติ">
@@ -44,6 +44,7 @@
     <div class="tap-tip">แตะพื้นเดิน · ปัดเหนือสกิลเพื่อพุ่ง · กดบินขึ้นระดับสูงแล้วแตะพื้นเพื่อเคลื่อนที่</div>
 
     <section class="controls" aria-label="ปุ่มควบคุมและพื้นที่ปัดพุ่งเหนือแถบสกิล">
+      <div id="swordHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาดาบ" hidden></div>
       <div class="skill-bar">
         <button id="summon" class="skill" type="button" aria-pressed="false" title="เสกผีจากหม้อ ช่วยโจมตีมอนสเตอร์ใกล้ตัว"><span class="glyph violet" aria-hidden="true">🏺</span><span>เสกผีจากหม้อ</span></button>
         <button id="possess" class="skill" type="button"><span class="glyph amber">✴</span><span>เข้าสิง</span></button>
@@ -60,6 +61,7 @@
         <button id="chatButton" type="button" aria-label="เปิดแชท"><span>✉</span>แชท <b id="chatUnread" hidden></b></button>
         <button id="partyButton" type="button" aria-label="เปิดปาร์ตี้"><span>♧</span>ปาร์ตี้ <b id="partyUnread" hidden>!</b></button>
         <button id="marketButton" type="button" aria-label="เปิดตลาดและการค้า"><span>♢</span>ตลาด <b id="tradeUnread" hidden>!</b></button>
+        <button id="swordTreeButton" type="button" hidden><span>⚔</span>วิชาดาบ</button>
         <button id="modeButton"><span>◎</span>ออนไลน์</button>
         <button id="helpButton"><span>?</span>วิธีเล่น</button>
       </nav>
@@ -76,6 +78,6 @@
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
-  <script src="./main.js?v=0.4.2-swords1" defer></script>
+  <script src="./main.js?v=0.4.2-swordtree1" defer></script>
 </body>
 </html>

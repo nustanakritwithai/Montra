@@ -15,6 +15,7 @@ import { makeStarterInventory, grantStarterWeapons, validateInventory, type Inve
 import { DEFAULT_MAP_ID, getWorldMap } from "./WorldMaps.js";
 import { emptyAllocations, PROGRESSION, validateAllocations, type Allocations } from "./Progression.js";
 import { EconomyStore } from "./EconomyStore.js";
+import { validateSwordTree, type SwordTree } from "./SkillCatalog.js";
 
 import { parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 
@@ -41,6 +42,7 @@ export type CharacterSnapshot = {
   build?: CharacterBuild;
   classSkillReadyAt?: number;
   talismanReadyAt?: number;
+  swordTree?: SwordTree;
   stamina?: number;
   /** Undefined only when loading a legacy S2/three-slot snapshot for migration. */
   inventory?: InventorySnapshot;
@@ -118,6 +120,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
   for (const readyAt of [value.classSkillReadyAt, value.talismanReadyAt]) {
     if (readyAt !== undefined && (typeof readyAt !== "number" || !Number.isSafeInteger(readyAt) || readyAt < 0)) throw new Error("invalid_skill_cooldown");
   }
+  const swordTree = value.swordTree === undefined ? undefined : validateSwordTree(value.swordTree, value.level as number);
   if (value.inventory !== undefined) validateInventory(value.inventory);
   const statAllocations = value.statAllocations === undefined ? emptyAllocations() :
     validateAllocations(value.statAllocations, value.level as number);
@@ -128,7 +131,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
       (typeof value.mapId !== "string" || !getWorldMap(value.mapId))) {
     throw new Error("unknown_character_map");
   }
-  return { ...(value as CharacterSnapshot), mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations };
+  return { ...(value as CharacterSnapshot), mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, swordTree };
 }
 
 export class CharacterStore {

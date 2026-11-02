@@ -45,6 +45,7 @@ export const Player = schema({
   wardTalentId: t.string().default(""),
   bladeTalentId: t.string().default(""),
   talismanReadyAt: t.number().default(0),
+  swordTreeData: t.string().default(""),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
@@ -131,6 +132,7 @@ export const MyRoomState = schema({
   buildCatalog: t.string().default(""),
   craftRecipe: t.string().default(""),
   ritualSkillsAvailable: t.boolean().default(true),
+  swordTreeCatalog: t.string().default(""),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

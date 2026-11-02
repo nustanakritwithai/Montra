@@ -489,3 +489,20 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 #classSkill[hidden], #talisman[hidden], #buildFields[hidden] { display:none; }
 #classSkill:disabled, #talisman:disabled { opacity:.6; }
 @media(max-width:400px) { .skill-bar:has(#classSkill:not([hidden])) .glyph { width:min(9.1vw,38px); height:min(9.1vw,38px); } }
+
+#swordTreeButton[hidden] { display:none; }
+.sword-schools { display:flex; flex-wrap:wrap; gap:6px; }
+.sword-school.selected { outline:2px solid #e5c586; }
+.sword-node { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; margin:7px 0; border:1px solid #8e7654; border-radius:9px; background:#25221f; }
+.sword-node.learned { border-color:#d5b46e; }
+.sword-node p { margin:4px 0; }
+.sword-node small { display:block; opacity:.8; }
+.sword-node button { flex:none; min-height:42px; }
+.sword-passive { color:#e8cb8c; white-space:nowrap; }
+
+.sword-hotbar { display:flex; justify-content:center; gap:5px; margin:0 auto 7px; padding:0 8px; }
+.sword-hotbar[hidden] { display:none; }
+.sword-hotkey { min-width:0; max-width:110px; min-height:40px; padding:4px 8px; border:1px solid #c4a265; border-radius:8px; background:#30291fdf; color:#fff0c8; font-size:11px; }
+.sword-hotkey:disabled { opacity:.55; }
+.sword-slot-label { display:block; margin-top:5px; font-size:12px; }
+.sword-slot-label select { max-width:115px; margin-left:6px; }

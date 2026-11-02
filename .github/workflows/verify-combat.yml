@@ -58,6 +58,11 @@ jobs:
           cp deploy/combat/blade-integration.mjs combat-verify/blade-integration.mjs
           cp deploy/combat/ritual-skills-integration.mjs combat-verify/ritual-skills-integration.mjs
           cp deploy/combat/phutthaisawan-integration.mjs combat-verify/phutthaisawan-integration.mjs
+          cp deploy/combat/sword-tree-integration.mjs combat-verify/sword-tree-integration.mjs
+          cp deploy/combat/sword-tree-combat-integration.mjs combat-verify/sword-tree-combat-integration.mjs
+          cp deploy/combat/sword-tree-party-integration.mjs combat-verify/sword-tree-party-integration.mjs
+          cp deploy/combat/sword-tree-area-integration.mjs combat-verify/sword-tree-area-integration.mjs
+          cp deploy/combat/sword-tree-pvp-integration.mjs combat-verify/sword-tree-pvp-integration.mjs
           cp deploy/combat/BuffLedger.ts combat-verify/src/rooms/BuffLedger.ts
           cp deploy/combat/stat-modifiers.test.ts combat-verify/src/rooms/stat-modifiers.test.ts
           cp deploy/combat/buff-ledger.test.ts combat-verify/src/rooms/buff-ledger.test.ts
@@ -360,6 +365,11 @@ jobs:
           timeout 40s node blade-integration.mjs || { cat buff-server.log; exit 1; }
           timeout 30s node ritual-skills-integration.mjs || { cat buff-server.log; exit 1; }
           timeout 35s node phutthaisawan-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 60s node sword-tree-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 75s node sword-tree-combat-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 35s node sword-tree-party-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 40s node sword-tree-area-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 30s node sword-tree-pvp-integration.mjs || { cat buff-server.log; exit 1; }
 
       - name: Isolated economy transactions and restart
         shell: bash

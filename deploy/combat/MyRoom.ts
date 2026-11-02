@@ -40,8 +40,8 @@ import { saveBugReport } from "./BugReports.js";
 import { BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCooldown } from "./Buffs.js";
 import { BUILD_CATALOG, DEFAULT_WARD_TALENT, DUAL_SWORD, talentGroup, classSkill, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 import { BuffLedger } from "./BuffLedger.js";
-import { calculateModifiedStats } from "./StatModifiers.js";
-import { POSSESSION_MODIFIER, TALISMAN } from "./SkillCatalog.js";
+import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
+import { POSSESSION_MODIFIER, TALISMAN, SWORD_SCHOOLS, SWORD_NODES, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
@@ -60,7 +60,7 @@ import { ForestEncounters } from "./ForestEncounters.js";
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
   climb: CommandBucket; dash: CommandBucket; flight: CommandBucket;
-  chat: CommandBucket; bugReport: CommandBucket; possession: CommandBucket; build: CommandBucket; economy: CommandBucket; party: CommandBucket;
+  chat: CommandBucket; bugReport: CommandBucket; possession: CommandBucket; build: CommandBucket; swordTree: CommandBucket; economy: CommandBucket; party: CommandBucket;
 };
 
 type ActiveDash = DashDirection & { remaining: number };
@@ -118,6 +118,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private parties = new PartyManager();
   private buffs = new BuffBook();
   private effects = new BuffLedger();
+  private swordTrees = new Map<string, SwordTree>();
+  private swordCombos = new Map<string, {count:number; until:number}>();
+  private swordGuards = new Map<string, {until:number; factor:number; direction:boolean; counterUntil:number}>();
 
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
@@ -142,10 +145,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return Boolean(target && target.mapId === owner.mapId && !isRestArea(target.mapId,target));
   }
 
-  private buildPlayer(client: Client): Player | undefined {
+  private buildPlayer(client: Client, gate: "build" | "swordTree" = "build"): Player | undefined {
     const id = client.sessionId, player = this.state.players.get(id);
-    if (!this.gates.get(id)?.build.consume(this.simulatedMs)) {
-      this.reject(client, "build_rate_limited");
+    if (!this.gates.get(id)?.[gate].consume(this.simulatedMs)) {
+      this.reject(client, gate === "swordTree" ? "sword_tree_rate_limited" : "build_rate_limited");
     } else if (!player?.alive || !this.persistentCharacters.has(id)) {
       this.reject(client, "build_unavailable");
     } else if (this.pendingWarps.has(id) || this.pendingItemUses.has(id) || this.pendingCharacterLeaves.has(id) || this.pendingRewards.has(id)) {
@@ -226,6 +229,198 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     }
     client.send("class_skill_used", {skill: skill.skill, targets: targets.length});
+  }
+
+
+  private changeSwordTree(client: Client, message: unknown, action: "learn" | "school" | "reset" | "equip"): void {
+    if (!message || typeof message !== "object" || Array.isArray(message)) return this.reject(client, "invalid_sword_tree");
+    const field = action === "learn" ? "skillId" : "school";
+    const input = message as Record<string, unknown>;
+    const keys=Object.keys(input);
+    if (action === "equip") {
+      if (keys.length!==2 || !Number.isInteger(input.slot) || (input.slot as number)<0 || (input.slot as number)>2 ||
+          (input.skillId!==null && typeof input.skillId!=="string")) return this.reject(client,"invalid_sword_tree");
+    } else if (action === "reset") {
+      if (keys.length!==0) return this.reject(client,"invalid_sword_tree");
+    } else if (keys.length!==1 || typeof input[field]!=="string") {
+      return this.reject(client,"invalid_sword_tree");
+    }
+    const id=client.sessionId, player=this.buildPlayer(client,"swordTree"), tree=this.swordTrees.get(id);
+    if (!player || !tree) return;
+    if (player.pathId !== "phutthaisawan") return this.reject(client, "sword_class_required");
+    if (action !== "equip" && (player.mapId !== DEFAULT_MAP_ID || !isOnGround(player.y) || Math.hypot(player.x,player.z)>6 ||
+        this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)) {
+      return this.reject(client,"sword_tree_needs_shrine");
+    }
+    const next: SwordTree={school:tree.school,learned:[...tree.learned],cooldowns:{...tree.cooldowns},training:{...tree.training},
+      loadouts:{phutthaisawan:[...tree.loadouts.phutthaisawan],sritrairat:[...tree.loadouts.sritrairat],atamat:[...tree.loadouts.atamat],chumphon:[...tree.loadouts.chumphon]}};
+    const value=action === "equip" ? input.skillId as string|null : action === "reset" ? "" : input[field] as string;
+    if (action === "equip") {
+      const skillId=input.skillId as string|null, slots=next.loadouts[next.school];
+      if (skillId!==null && (!Object.hasOwn(SWORD_NODES,skillId) || !next.learned.includes(skillId) || SWORD_NODES[skillId].effect==="passive" || (SWORD_NODES[skillId].school!=="common" && SWORD_NODES[skillId].school!==next.school))) return this.reject(client,"sword_skill_locked");
+      for (let i=0;i<slots.length;i++) if (skillId!==null && slots[i]===skillId) slots[i]=null;
+      slots[input.slot as number]=skillId;
+    } else if (action === "reset") {
+      if (!next.learned.length) return this.reject(client,"sword_tree_empty");
+      next.learned=[];
+      next.loadouts=emptySwordLoadouts();
+    } else if (action === "school") {
+      if (typeof value!=="string" || !Object.hasOwn(SWORD_SCHOOLS,value)) return this.reject(client,"invalid_sword_tree");
+      const school=value as SwordSchool;
+      if (player.level < SWORD_SCHOOLS[school].level) return this.reject(client,"sword_tree_level");
+      if (school!=="phutthaisawan" && (tree.training.strikes<10 || tree.training.blocks<1)) return this.reject(client,"sword_trial_incomplete");
+      if (next.school === school) return this.reject(client,"sword_tree_already_selected");
+      next.school=school;
+    } else {
+      if (typeof value!=="string" || !Object.hasOwn(SWORD_NODES,value)) return this.reject(client,"invalid_sword_tree");
+      const skill=SWORD_NODES[value];
+      if (next.learned.includes(value)) return this.reject(client,"sword_tree_already_learned");
+      if (player.level < skill.level) return this.reject(client,"sword_tree_level");
+      if (skill.school !== "common" && skill.school !== next.school) return this.reject(client,"sword_tree_wrong_school");
+      if (skill.requires.some(required=>!next.learned.includes(required))) return this.reject(client,"sword_tree_prerequisite");
+      if (skill.training && tree.training[skill.training.id]<skill.training.count) return this.reject(client,"sword_trial_incomplete");
+      if (next.learned.length >= swordPoints(player.level)) return this.reject(client,"sword_tree_no_points");
+      next.learned.push(value);
+    }
+    const snapshot=this.captureCharacterSnapshot(id);
+    if (!snapshot) return this.reject(client,"build_unavailable");
+    this.pendingWarps.add(id);
+    const task=characterStore.save({...snapshot,swordTree:next}).then(()=>{
+      this.swordTrees.set(id,next);
+      if (action === "school" || action === "reset") { this.swordGuards.delete(id); this.swordCombos.delete(id); }
+      player.swordTreeData=JSON.stringify(next);
+      client.send("sword_tree_changed",{action,id:value});
+    }).catch(error=>{
+      console.error("MONTRA sword tree save failed",error);
+      this.reject(client,"sword_tree_save_failed");
+    }).finally(()=>{
+      this.pendingWarps.delete(id);
+      this.pendingItemUses.delete(id);
+    });
+    this.pendingItemUses.set(id,task);
+  }
+
+
+  private recordSwordTraining(id:string, field:"strikes"|"blocks"|"finishes"):void {
+    const player=this.state.players.get(id),tree=this.swordTrees.get(id);
+    if (!player || player.pathId!=="phutthaisawan" || !tree) return;
+    tree.training[field]=Math.min(1_000_000,tree.training[field]+1);
+    player.swordTreeData=JSON.stringify(tree);
+  }
+
+  private swordGuardDamage(id:string, attacker:{x:number;z:number}, damage:number):number {
+    const guard=this.swordGuards.get(id), player=this.state.players.get(id);
+    if (!guard || !player || this.simulatedMs>guard.until) return damage;
+    const dx=attacker.x-player.x, dz=attacker.z-player.z, length=Math.hypot(dx,dz);
+    const front=length<0.001 || (-Math.sin(player.facing)*dx-Math.cos(player.facing)*dz)/length>=0;
+    if (guard.direction && !front) return damage;
+    guard.counterUntil=this.simulatedMs+3000;
+    this.recordSwordTraining(id,"blocks");
+    this.clients.find(client=>client.sessionId===id)?.send("sword_guarded",{until:guard.counterUntil});
+    return Math.max(1,Math.round(damage*guard.factor));
+  }
+
+  private castSwordSkill(client:Client, message:unknown):void {
+    if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_sword_skill");
+    const input=message as Record<string,unknown>, keys=Object.keys(input);
+    if (typeof input.skillId!=="string" || !Object.hasOwn(SWORD_NODES,input.skillId) ||
+        keys.some(key=>key!=="skillId" && key!=="targetId") ||
+        (input.targetId!==undefined && typeof input.targetId!=="string")) return this.reject(client,"invalid_sword_skill");
+    const id=client.sessionId, skillId=input.skillId, skill=SWORD_NODES[skillId];
+    const player=this.spellCaster(client), tree=this.swordTrees.get(id);
+    if (!player || !tree) return;
+    if (player.pathId!=="phutthaisawan" || equippedWeaponId(this.inventories.get(id))!==DUAL_SWORD.weaponId)
+      return this.reject(client,"sword_weapon_required");
+    if (!tree.learned.includes(skillId) || (skill.school!=="common" && skill.school!==tree.school) || skill.effect==="passive")
+      return this.reject(client,"sword_skill_locked");
+    if (player.flying) return this.reject(client,"flying");
+    const now=Date.now();
+    if (now<(tree.cooldowns[skillId] ?? 0)) return this.reject(client,"sword_skill_cooldown");
+    if (player.stamina<skill.stamina) return this.reject(client,"insufficient_stamina");
+    const guard=this.swordGuards.get(id);
+    if (skill.effect==="counter" && (!guard || this.simulatedMs>guard.counterUntil)) return this.reject(client,"sword_counter_required");
+    const combo=this.swordCombos.get(id);
+    if (skillId==="twin_finale" && (!combo || combo.count<3 || this.simulatedMs>combo.until)) return this.reject(client,"sword_combo_required");
+
+    let targetId="", target:Monster|Player|undefined, monster:Monster|undefined;
+    if (skill.effect!=="guard" && skill.effect!=="support") {
+      const order=parseAttackCommand({targetId:input.targetId}) ?? parsePkTargetCommand({targetId:input.targetId});
+      if (!order) return this.reject(client,"invalid_sword_target");
+      targetId=order.targetId;
+      monster=this.getMonster(targetId);
+      target=monster ?? this.state.players.get(targetId);
+      if (!target?.alive || targetId===id || !this.sameCombatMap(id,targetId)) return this.reject(client,"target_unavailable");
+      if (skill.effect==="area" && !monster) return this.reject(client,"invalid_sword_target");
+      if (distance3d(player,target)>skill.range || Math.abs(player.y-target.y)>1.1) return this.reject(client,"sword_out_of_range");
+      if (!this.bodyPathClear(player.mapId,player,target)) return this.reject(client,"sword_blocked");
+    }
+    if ((skill.effect==="step" || skillId==="riposte") && target) {
+      const dx=target.x-player.x,dz=target.z-player.z,distance=Math.hypot(dx,dz);
+      const move=Math.max(0,distance-1.7);
+      const side=skillId==="circle_step" || skillId==="riposte" ? 0.8 : 0;
+      const next={x:player.x+(dx*move-dz*side)/Math.max(distance,0.001),y:player.y,z:player.z+(dz*move+dx*side)/Math.max(distance,0.001)};
+      if (!this.canOccupy(next.x,next.z,next.y,false,player.mapId) || isRestArea(player.mapId,next) ||
+          !this.bodyPathClear(player.mapId,player,next)) return this.reject(client,"sword_blocked");
+      this.destinations.delete(id);
+      player.x=next.x; player.z=next.z;
+    }
+    player.stamina-=skill.stamina;
+    tree.cooldowns[skillId]=now+skill.cooldownMs;
+    player.swordTreeData=JSON.stringify(tree);
+    if (skill.effect==="guard") {
+      this.swordGuards.set(id,{until:this.simulatedMs+1200,factor:skill.power,direction:skillId!=="circle_guard",counterUntil:0});
+    } else if (skill.effect==="support") {
+      const members=this.parties.get(id)?.members ?? [id];
+      for (const memberId of members) {
+        const member=this.state.players.get(memberId);
+        if (!member?.alive || member.mapId!==player.mapId || this.pendingWarps.has(memberId) ||
+            distance3d(player,member)>skill.range || !this.bodyPathClear(player.mapId,player,member)) continue;
+        const active=this.effects.modifiers(memberId);
+        if (active.length>=STACKING_RULES.maxModifiers && !active.some(effect=>effect.id===skillId && effect.sourceId===id)) continue;
+        this.effects.grant(memberId,{id:skillId,sourceId:id,group:"sword_support",bonuses:{def:skill.power}},this.simulatedMs+8000);
+        this.applyStats(memberId,member,this.statAllocations.get(memberId) ?? emptyAllocations());
+      }
+    } else if (target) {
+      player.facing=facingTo(target.x-player.x,target.z-player.z);
+      const base=(player.atk+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee) *
+        (tree.learned.includes("rhythm") ? 1.05 : 1);
+      const victims: {id:string; target:Monster|Player; monster:boolean}[]=[{id:targetId,target,monster:Boolean(monster)}];
+      if (skill.effect==="area") {
+        const dx=target.x-player.x,dz=target.z-player.z,length=Math.max(0.001,Math.hypot(dx,dz));
+        const consider=(candidate:Monster) => {
+          const vx=candidate.x-player.x,vz=candidate.z-player.z,d=Math.hypot(vx,vz);
+          if (candidate.id!==targetId && candidate.alive && d<=skill.range && Math.abs(candidate.y-player.y)<=1.1 &&
+              (d<0.001 || (dx*vx+dz*vz)/(length*d)>=0.5) && this.sameCombatMap(id,candidate.id) &&
+              this.bodyPathClear(player.mapId,player,candidate)) victims.push({id:candidate.id,target:candidate,monster:true});
+        };
+        consider(this.state.monster);
+        this.state.monsters.forEach(consider);
+      }
+      const hits=skill.effect==="flurry" ? (skillId==="twin_finale"?3:2) : 1;
+      if (skill.effect==="counter" && guard) guard.counterUntil=0;
+      if (skillId==="twin_finale") { this.swordCombos.delete(id); client.send("sword_combo",{count:0}); }
+      for (const victim of victims.slice(0,5)) {
+        for (let count=0;count<hits && victim.target.alive;count++) {
+          this.recordCombat(id,victim.id);
+          const defense=victim.monster ? (victim.target as Monster).defense : (victim.target as Player).def;
+          let damage=calculateDamage(base*skill.power,defense,victim.target.level);
+          if (victim.monster) this.hitMonsterWithSpell(id,victim.target as Monster,damage,"sword");
+          else {
+            const opponent=victim.target as Player;
+            damage=this.swordGuardDamage(victim.id,player,damage);
+            opponent.hp=Math.max(0,opponent.hp-damage); opponent.hitSeq++;
+            this.broadcast("pvp_hit",{attackerId:id,targetId:victim.id,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"sword"},{afterNextPatch:true});
+            if (opponent.hp===0) {
+              player.pkKills++; opponent.pkDeaths++; this.knockoutPlayer(victim.id,"pk",id);
+              void this.saveCharacter(id);
+              this.broadcast("pvp_kill",{winnerId:id,loserId:victim.id,source:"sword",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
+            }
+          }
+        }
+      }
+    }
+    this.broadcast("sword_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
+    void this.saveCharacter(id);
   }
 
   private recordCombat(ownerId: string, targetId: string): void {
@@ -540,6 +735,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!build) return this.reject(client, "invalid_build");
       this.selectBuild(client, build);
     },
+    sword_tree_learn: (client: Client, message: unknown) => this.changeSwordTree(client, message, "learn"),
+    sword_tree_school: (client: Client, message: unknown) => this.changeSwordTree(client, message, "school"),
+    sword_tree_reset: (client: Client, message: unknown) => this.changeSwordTree(client, message, "reset"),
+    sword_tree_equip: (client: Client, message: unknown) => this.changeSwordTree(client, message, "equip"),
+    sword_skill: (client: Client, message: unknown) => this.castSwordSkill(client, message),
     cast_class_skill: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_build");
       this.castClassSkill(client);
@@ -974,7 +1174,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return player;
   }
 
-  private hitMonsterWithSpell(id: string, target: Monster, damage: number, source: "ranged" | "talisman") {
+  private hitMonsterWithSpell(id: string, target: Monster, damage: number, source: "ranged" | "talisman" | "sword") {
     target.hp = Math.max(0, target.hp - damage);
     target.hitSeq++;
     this.broadcast("combat_hit", {attackerId:id, targetId:target.id, damage, hp:target.hp,
@@ -1033,13 +1233,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.recordCombat(id, targetId);
     shooter.facing = facingTo(target.x-shooter.x, target.z-shooter.z);
     const rangedAttack = shooter.magicAtk + weaponBonuses(this.inventories.get(id), monsterOrder ? "pve" : "pvp").ranged;
-    const rangedDamage = monsterOrder ? calculateDamage(rangedAttack, (target as Monster).defense, (target as Monster).level) :
+    let rangedDamage = monsterOrder ? calculateDamage(rangedAttack, (target as Monster).defense, (target as Monster).level) :
       calculateDamage(rangedAttack, (target as Player).magicDef, (target as Player).level);
 
     if (monsterOrder) {
       this.hitMonsterWithSpell(id, target as Monster, rangedDamage, "ranged");
     } else {
       const victim=target as Player;
+      rangedDamage=this.swordGuardDamage(targetId,shooter,rangedDamage);
       victim.hp=Math.max(0,victim.hp-rangedDamage);
       victim.hitSeq+=1;
       this.broadcast("pvp_hit", {
@@ -1250,7 +1451,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Summon can help in Free PK only when its owner selected or was attacked
     // by this opponent. Damage/kill attribution belongs to the owner.
     const victim = target as Player;
-    const damage = calculateDamage(RULES.summonAttackDamage, victim.magicDef, victim.level);
+    const damage = this.swordGuardDamage(targetId,guardian,calculateDamage(RULES.summonAttackDamage, victim.magicDef, victim.level));
     victim.hp = Math.max(0, victim.hp - damage);
     victim.hitSeq += 1;
     this.broadcast("pvp_hit", {
@@ -1287,6 +1488,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.economyAvailable = characterStore.economyEnabled;
     this.forest.initialize();
     this.state.worldDefinition = WORLD_EXPANSION ? JSON.stringify({version:1,maps:WORLD_MAPS}) : "";
+    this.state.swordTreeCatalog = JSON.stringify({schools:SWORD_SCHOOLS,nodes:SWORD_NODES});
     this.state.monster.id = RULES.monsterId;
     this.state.monster.x = RULES.monsterSpawnX;
     this.state.monster.z = RULES.monsterSpawnZ;
@@ -1329,7 +1531,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const p=this.state.players.get(id);
       if (!p || !this.sameCombatMap(id,m.id)) return;
       const profile=this.forest.profile(m.id); if(!profile)return;
-      const damage=calculateDamage(profile.attack*force,p.def,p.level);
+      const damage=this.swordGuardDamage(id,m,calculateDamage(profile.attack*force,p.def,p.level));
       p.hp=Math.max(0,p.hp-damage);p.hitSeq++;this.lastCombatMs.set(id,this.simulatedMs);
       this.broadcast("monster_hit",{targetId:id,attackerId:m.id,damage,hp:p.hp,maxHp:p.maxHp,hitSeq:p.hitSeq},{afterNextPatch:true});
       if(p.hp===0)this.knockoutPlayer(id,"monster",m.id);
@@ -1561,10 +1763,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.simulatedMs - last < cooldown) continue;
       this.lastAttackMs.set(attackerId, this.simulatedMs);
       this.recordCombat(attackerId, targetId);
+      if (dualSword) {
+        const previous=this.swordCombos.get(attackerId);
+        const previousCount=previous && previous.until>=this.simulatedMs ? previous.count : 0;
+        const count=Math.min(3,previousCount+1);
+        this.swordCombos.set(attackerId,{count,until:this.simulatedMs+3500});
+        this.recordSwordTraining(attackerId,"strikes");
+        if (previousCount===2) this.recordSwordTraining(attackerId,"finishes");
+        this.clients.find(client=>client.sessionId===attackerId)?.send("sword_combo",{count});
+      }
 
       const meleeBonus = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp").melee;
+      const swordMastery = dualSword && this.swordTrees.get(attackerId)?.learned.includes("rhythm") ? 1.05 : 1;
       if (monster) {
-        const meleeDamage = calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1), monster.defense, monster.level);
+        const meleeDamage = calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, monster.defense, monster.level);
         monster.hp = Math.max(0, monster.hp - meleeDamage);
         monster.hitSeq += 1;
         this.broadcast("combat_hit", {
@@ -1579,7 +1791,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // FREE PK: health, range, damage, respawn and kill credit are wholly
       // server-owned. The client only submits another session's targetId.
       const victim = target as Player;
-      const meleeDamage = calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1), victim.def, victim.level);
+      const meleeDamage = this.swordGuardDamage(targetId,attacker,calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, victim.def, victim.level));
       victim.hp = Math.max(0, victim.hp - meleeDamage);
       victim.hitSeq += 1;
       this.broadcast("pvp_hit", {
@@ -1601,6 +1813,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private knockoutPlayer(id: string, cause: "pk" | "monster", attackerId = "") {
+    this.swordCombos.delete(id);
+    this.swordGuards.delete(id);
     const victim = this.state.players.get(id);
     if (!victim || !victim.alive) return;
     this.endPossession(id,"owner_dead");
@@ -1758,7 +1972,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastMonsterAttackMs = this.simulatedMs;
     this.lastCombatMs.set(targetId, this.simulatedMs);
 
-    const damage = calculateDamage(RULES.monsterAttackDamage, target.def, target.level);
+    const damage = this.swordGuardDamage(targetId,this.state.monster,calculateDamage(RULES.monsterAttackDamage, target.def, target.level));
     target.hp = Math.max(0, target.hp - damage);
     target.hitSeq += 1;
     this.broadcast("monster_hit", {
@@ -1838,6 +2052,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       build: this.playerBuild(player) ?? undefined,
       classSkillReadyAt: player.classSkillReadyAt,
       talismanReadyAt: player.talismanReadyAt,
+      swordTree: this.swordTrees.get(id),
       stamina: player.stamina,
       x: player.x,
       // Keep stable flight altitude when a transition is mid-flight.
@@ -1912,6 +2127,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         pathId: saved?.build?.path ?? "", ancestryId: saved?.build?.ancestry ?? "",
         classSkillReadyAt: saved?.classSkillReadyAt ?? 0,
         talismanReadyAt: saved?.talismanReadyAt ?? 0,
+        swordTreeData: JSON.stringify(saved?.swordTree ?? newSwordTree()),
         bladeTalentId: saved?.build?.path === "blade" ? saved.build.bladeTalent ?? talentGroup("blade")!.defaultId : "",
         wardTalentId: saved?.build?.path === "sentinel" ? saved.build.wardTalent ?? DEFAULT_WARD_TALENT : "",
         persistent: Boolean(saved), characterSlot: slot,
@@ -1921,6 +2137,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         stamina: Math.min(saved?.stamina ?? initialStats.maxStamina, initialStats.maxStamina),
       });
 
+      this.swordTrees.set(client.sessionId, saved?.swordTree ?? newSwordTree());
       this.statAllocations.set(client.sessionId, allocations);
       this.applyStats(client.sessionId,player, allocations);
       this.state.players.set(client.sessionId, player);
@@ -1948,6 +2165,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         chat: new CommandBucket(3, 0.5, this.simulatedMs),
         bugReport: new CommandBucket(1, 1 / 30, this.simulatedMs),
         build: new CommandBucket(3, 1, this.simulatedMs),
+        swordTree: new CommandBucket(6, 2, this.simulatedMs),
         possession: new CommandBucket(2, 0.5, this.simulatedMs),
         economy: new CommandBucket(8, 3, this.simulatedMs),
         party: new CommandBucket(6, 2, this.simulatedMs),
@@ -2008,6 +2226,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.pendingItemUses.delete(id);
       this.pendingRewards.delete(id);
       this.statAllocations.delete(id);
+      this.swordTrees.delete(id);
+      this.swordCombos.delete(id);
+      this.swordGuards.delete(id);
       this.hpRegenRemainder.delete(id);
       this.inventories.delete(id);
       this.lastItemUseMs.delete(id);

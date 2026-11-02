@@ -793,6 +793,20 @@
     }
     boatNodes.forEach(node => node.dispose());
   }
+  // Village sword mentor; teaching remains server-authoritative at the rest area.
+  const trainerPosition={x:2.4,z:2.4};
+  const trainerBody=B.MeshBuilder.CreateCylinder("sword mentor",{height:1.2,diameterTop:.48,diameterBottom:.7,tessellation:8},scene);
+  trainerBody.position.set(trainerPosition.x,.75,trainerPosition.z); trainerBody.material=woodenAlt; trainerBody.isPickable=false;
+  const trainerHead=B.MeshBuilder.CreateSphere("sword mentor head",{diameter:.4,segments:8},scene);
+  trainerHead.position.set(trainerPosition.x,1.55,trainerPosition.z); trainerHead.material=mat("mentor skin","#c99c6d"); trainerHead.isPickable=false;
+  const trainerLabelMaterial=mat("sword mentor label","#ffffff","#493b1e");
+  trainerLabelMaterial.diffuseTexture=paintTexture("sword mentor name",256,(ctx,size)=>{ctx.clearRect(0,0,size,size);ctx.fillStyle="#fff0bc";ctx.textAlign="center";ctx.font="bold 44px sans-serif";ctx.fillText("ครูดาบ",size/2,size/2);});
+  trainerLabelMaterial.diffuseTexture.hasAlpha=true; trainerLabelMaterial.useAlphaFromDiffuseTexture=true;
+  const trainerLabel=B.MeshBuilder.CreatePlane("sword mentor label",{width:1.8,height:1.8},scene);
+  trainerLabel.position.set(trainerPosition.x,2.65,trainerPosition.z);trainerLabel.material=trainerLabelMaterial;trainerLabel.billboardMode=B.Mesh.BILLBOARDMODE_ALL;trainerLabel.isPickable=false;
+  const trainerHitbox=B.MeshBuilder.CreateBox("sword mentor interaction",{width:1,height:2,depth:1},scene);
+  trainerHitbox.position.set(trainerPosition.x,1,trainerPosition.z);trainerHitbox.visibility=.001;trainerHitbox.metadata={swordMentor:true};
+
   // Both maps share one scene and ground. Their static meshes are created once
   // and toggled; switching maps must not accumulate scenes or WebGL resources.
   const villageMeshes = scene.meshes.filter(mesh => mesh !== ground && mesh !== sky && !mistLayers.includes(mesh));
@@ -2775,7 +2789,7 @@
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
-    possessed=false;syncPossessionButton();syncTalismanButton(null);$("classSkill").hidden=true;
+    possessed=false;syncPossessionButton();syncTalismanButton(null);syncSwordTreeButton(null);syncSwordHotbar();swordCombo=0; swordComboUntil=0;$("classSkill").hidden=true;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false; updatePartyBadge();
@@ -2860,6 +2874,12 @@
     return id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get(id);
   }
   function castAtTarget(id) {
+    if (targetedSkill === "sword") {
+      if (!id || !selectedSwordSkill) return;
+      spellTargetId=id;
+      room.send("sword_skill",{skillId:selectedSwordSkill,targetId:id});
+      return;
+    }
     if (targetedSkill !== "talisman") return shootAtTarget(id);
     const monster = monsterForSpell(id), me = ownServerCharacter();
     if (!monster?.alive || monster.mapId !== activeMapId) { toast("แปะยันต์ได้เฉพาะมอนสเตอร์ที่ยังมีชีวิต"); return; }
@@ -3246,6 +3266,9 @@
     syncPossessionButton();
     syncClassSkill(mine);
     syncTalismanButton(mine);
+    syncSwordTreeButton(mine);
+    syncSwordHotbar();
+    if (drawerActive === "swordTree") renderSwordTree();
     if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
     if (drawerActive === "character") renderProgressionProfile();
     if (drawerActive === "party") renderParty();
@@ -3540,6 +3563,27 @@
       joined.onMessage("build_selected", () => {
         if (room === joined) toast("บันทึกสายอาชีพและเผ่าแล้ว");
       });
+      joined.onMessage("sword_combo", data => { if (room===joined) {
+        const firstFull=data.count===3 && (swordCombo<3 || performance.now()>=swordComboUntil);
+        swordCombo=data.count; swordComboUntil=performance.now()+3500;
+        if (firstFull) toast("จังหวะเพลงดาบ 3 / 3");
+      } });
+      joined.onMessage("sword_tree_changed", () => { if (room===joined) { swordTreeRenderKey=""; renderSwordTree(); toast("บันทึกตำราวิชาดาบแล้ว"); } });
+      joined.onMessage("sword_guarded", () => { if (room===joined) toast("รับสำเร็จ · ใช้วิชาสวนได้ 3 วินาที"); });
+      joined.onMessage("sword_skill_used", result => {
+        if (room!==joined) return;
+        const caster=joined.state?.players?.get?.(result?.playerId);
+        if (!caster || (caster.mapId || "ritual_village")!==activeMapId) return;
+        const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
+        if (target) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
+        const ring=B.MeshBuilder.CreateTorus("sword skill ring",{diameter:1.3,thickness:.045,tessellation:16},scene);
+        ring.position.set(caster.x,caster.y+.12,caster.z);ring.rotation.x=Math.PI/2;ring.material=gold;ring.isPickable=false;
+        skillEffects.push({mesh:ring,mapId:activeMapId,until:performance.now()+450});
+        if (result.playerId===localId) {
+          const name=swordData()?.catalog?.nodes?.[result.skillId]?.name || "วิชาดาบ";
+          toast(name+" สำเร็จ");
+        }
+      });
       joined.onMessage("class_skill_used", result => {
         if (room === joined) toast(result.skill + " · มีผล " + result.targets + " คน");
       });
@@ -3677,6 +3721,8 @@
       });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        const swordReasons={invalid_sword_tree:"คำสั่งวิชาไม่ถูกต้อง",sword_class_required:"เลือกอาชีพนักดาบก่อน",sword_tree_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อน",sword_tree_level:"เลเวลยังไม่ถึง",sword_tree_no_points:"แต้มวิชาไม่พอ",sword_tree_prerequisite:"ต้องเรียนวิชาก่อนหน้า",sword_tree_wrong_school:"เลือกสำนักนี้ก่อน",sword_tree_already_learned:"เรียนวิชานี้แล้ว",sword_tree_already_selected:"เลือกสำนักนี้อยู่แล้ว",sword_tree_empty:"ยังไม่มีแต้มวิชาที่ต้องคืน",sword_tree_rate_limited:"กดถี่เกินไป รอสักครู่",sword_tree_save_failed:"บันทึกวิชาไม่สำเร็จ",sword_trial_incomplete:"ฝึกตามเงื่อนไขของครูดาบก่อน",invalid_sword_skill:"คำสั่งสกิลไม่ถูกต้อง",sword_weapon_required:"สวมกระบี่อาคมก่อนใช้วิชาดาบ",sword_skill_locked:"วิชายังไม่พร้อมใช้ในสำนักนี้",sword_skill_cooldown:"วิชาดาบกำลังฟื้น",sword_counter_required:"รับการโจมตีให้สำเร็จก่อนสวน",sword_combo_required:"โจมตีต่อเนื่องให้ครบ 3 จังหวะ",invalid_sword_target:"เลือกเป้าหมายที่ใช้วิชานี้ได้",sword_out_of_range:"เข้าใกล้เป้าหมายก่อนใช้วิชา",sword_blocked:"มีสิ่งกีดขวางระหว่างทาง"};
+        if (Object.hasOwn(swordReasons,info?.reason)) { toast(swordReasons[info.reason]); return; }
         const buildReasons = {build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
         if (Object.hasOwn(buildReasons, info?.reason)) { toast(buildReasons[info.reason]); return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
@@ -3686,6 +3732,7 @@
           const reason={economy_unavailable:"ต้องเข้า LIVE ที่เปิดระบบตลาด",economy_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",character_busy:"กำลังบันทึกข้อมูล · ลองใหม่",trade_expired:"ข้อเสนอเทรดหมดอายุ",trade_unavailable:"ไม่พบข้อเสนอเทรด"};
           toast(reason[info.reason] || "คำขอไม่ถูกต้อง"); renderEconomy(); return;
         }
+        if (info?.reason === "character_busy") { toast("กำลังบันทึกข้อมูล รอสักครู่"); return; }
         if (["invalid_chat", "chat_rate_limited", "chat_unavailable", "chat_party_unavailable", "chat_target_unavailable", "chat_bug_rate_limited"].includes(info?.reason)) {
           finishChatPending();
           const chatErrors={chat_rate_limited:"ส่งข้อความเร็วเกินไป · รอสักครู่",chat_unavailable:"ยังส่งแชทไม่ได้ขณะเดินทาง",chat_party_unavailable:"เข้าปาร์ตี้ก่อนส่งข้อความ",chat_target_unavailable:"ผู้รับไม่พร้อมใช้งานหรือออกจากห้องแล้ว",chat_bug_rate_limited:"ส่งรายงานได้ทุก 30 วินาที",invalid_chat:"ข้อความไม่ถูกต้องหรือยาวเกิน 200 ตัวอักษร"};
@@ -3693,7 +3740,7 @@
           if (drawerActive === "chat") renderChat();
           return;
         }
-        if (info?.reason === "insufficient_stamina") { toast("กำลังไม่พอสำหรับพุ่ง"); return; }
+        if (info?.reason === "insufficient_stamina") { toast("กำลังไม่พอสำหรับใช้สกิล"); return; }
         if(warpPending) {
           clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
           const warpReasons={portal_too_far:"อยู่ไกลจากประตูเกินไป",combat_locked:"รอให้พ้นการต่อสู้ก่อนเดินทาง",warp_cooldown:"รอคูลดาวน์ก่อนเดินทาง",movement_busy:"หยุดบิน ปีน หรือพุ่งก่อนเดินทาง",character_busy:"กำลังบันทึกข้อมูล"};
@@ -3902,7 +3949,7 @@
     // monster and walkable ground. Fire only where the target is visible.
     const picked = scene.pick(px, py, mesh => mesh.isEnabled() && (
       mesh.metadata?.walkable === true ||
-      mesh.metadata?.portalId ||
+      mesh.metadata?.portalId || mesh.metadata?.swordMentor ||
       (mesh === enemy && enemy.isEnabled()) ||
       (mode === "live" && mesh.isEnabled() && forestMonsters.get(mesh.metadata?.monsterId) === mesh) ||
       (fortRoot.isEnabled() && mesh.metadata?.climbableWall) ||
@@ -3912,7 +3959,12 @@
     if (!picked?.hit) return;
     const hitMesh=picked.pickedMesh;
     const otherId=hitMesh?.metadata?.pkPlayerId;
-    if (hitMesh?.metadata?.portalId) {
+    if (hitMesh?.metadata?.swordMentor) {
+      const me=ownServerCharacter();
+      if (!me) toast("เข้า LIVE เพื่อพูดคุยกับครูดาบ");
+      else if (Math.hypot(me.x-trainerPosition.x,me.z-trainerPosition.z)>3) { pointMove(trainerPosition.x,trainerPosition.z);toast("เดินไปหาครูดาบแล้วแตะอีกครั้ง"); }
+      else openSwordTree();
+    } else if (hitMesh?.metadata?.portalId) {
       const portal=activePortal(hitMesh.metadata.portalId);
       if (!portal)return;
       if (mode !== "live" || !room || room.state?.worldMapsAvailable !== true ||
@@ -4479,6 +4531,125 @@
   }
   $("classSkill").onclick = () => { if (mode === "live") room?.send("cast_class_skill", {}); };
 
+
+  let selectedSwordSkill = "", swordTreeRenderKey = "", swordCombo = 0, swordComboUntil = 0;
+  function swordData() {
+    const me=ownServerCharacter();
+    try {
+      const tree=JSON.parse(me?.swordTreeData || "null"), catalog=JSON.parse(room?.state?.swordTreeCatalog || "null");
+      return tree && catalog ? {me,tree,catalog} : null;
+    } catch { return null; }
+  }
+  function syncSwordTreeButton(me) {
+    const button=$("swordTreeButton");
+    button.hidden=!(mode==="live" && me?.pathId==="phutthaisawan" && room?.state?.swordTreeCatalog);
+  }
+
+  let swordHotbarKey="";
+  function useSwordSkill(id) {
+    const data=swordData(), node=data?.catalog?.nodes?.[id];
+    if (!data || !node || !data.tree.learned.includes(id)) return;
+    if (data.me.equippedWeaponId!=="arcane_sword") { toast("สวมกระบี่อาคมก่อนใช้วิชาดาบ"); return; }
+    if ((data.tree.cooldowns[id]||0)>Date.now()) { toast("วิชาดาบกำลังฟื้น"); return; }
+    if (node.effect==="guard" || node.effect==="support") { room.send("sword_skill",{skillId:id}); return; }
+    selectedSwordSkill=id;
+    setTargetedSkill("sword");
+    const targetId=spellTargetId || data.me.targetId;
+    if (targetId) castAtTarget(targetId);
+    else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
+  }
+  function syncSwordHotbar() {
+    const bar=$("swordHotbar"), data=swordData();
+    if (!data || data.me.pathId!=="phutthaisawan") { bar.hidden=true; swordHotbarKey=""; return; }
+    const {me,tree,catalog}=data, slots=tree.loadouts?.[tree.school] || [null,null,null];
+    bar.hidden=false;
+    const timing=slots.map(id=>id ? Math.max(0,Math.ceil(((tree.cooldowns[id]||0)-Date.now())/1000)) : 0);
+    const key=JSON.stringify([slots,timing,me.alive,me.equippedWeaponId]);
+    if(key===swordHotbarKey)return;
+    swordHotbarKey=key;
+    bar.replaceChildren();
+    slots.forEach((id,slot)=>{
+      const button=document.createElement("button"), node=id && catalog.nodes[id];
+      button.type="button";button.className="sword-hotkey";
+      button.textContent=node ? (timing[slot] ? timing[slot]+" วิ" : node.name) : "ช่อง "+(slot+1);
+      button.disabled=!node || !me.alive || Boolean(timing[slot]);
+      button.setAttribute("aria-label",node ? "ช่อง "+(slot+1)+" "+node.name : "ช่องวิชาว่าง "+(slot+1));
+      if(node)button.onclick=()=>useSwordSkill(id);
+      bar.append(button);
+    });
+  }
+  function openSwordTree() {
+    const data=swordData();
+    if (!data || data.me.pathId!=="phutthaisawan") { toast("เลือกอาชีพนักดาบก่อนเรียนวิชา"); return; }
+    swordTreeRenderKey="";
+    openDrawer("swordTree","ตำราวิชาดาบ",'<div id="swordTreeBody"></div>');
+    renderSwordTree();
+  }
+  function renderSwordTree() {
+    const data=swordData(), container=$("swordTreeBody");
+    if (!data || !container) return;
+    const {me,tree,catalog}=data;
+    const hasCooldown=Object.values(tree.cooldowns).some(readyAt=>readyAt>Date.now());
+    const key=me.level+"|"+me.alive+"|"+me.equippedWeaponId+"|"+me.swordTreeData+"|"+(hasCooldown?Math.floor(Date.now()/1000):0);
+    if (key===swordTreeRenderKey) return;
+    swordTreeRenderKey=key;
+    const points=1+Math.floor((Math.min(me.level,100)-1)/2)-tree.learned.length;
+    const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+    const schoolButtons=Object.entries(catalog.schools).map(([id,school])=>
+      '<button type="button" class="sword-school'+(tree.school===id?' selected':'')+'" data-school="'+clean(id)+'" '+(tree.school===id?'disabled':'')+'>'+clean(school.name)+' · Lv.'+school.level+'</button>').join("");
+    const groups=[["common","วิชาพื้นฐาน"],[tree.school,catalog.schools[tree.school].name]];
+    const sections=groups.map(([group,title])=>{
+      const rows=Object.entries(catalog.nodes).filter(([,node])=>node.school===group).map(([id,node])=>{
+        const learned=tree.learned.includes(id);
+        const requirements=node.requires.filter(required=>!tree.learned.includes(required));
+        const reqText=requirements.map(required=>catalog.nodes[required]?.name || required).join(", ");
+        const remaining=Math.max(0,Math.ceil(((tree.cooldowns[id]||0)-Date.now())/1000));
+        const trainingNames={strikes:"ฟันสำเร็จ",blocks:"รับสำเร็จ",finishes:"คอมโบครบ"};
+        const training=node.training ? tree.training[node.training.id] || 0 : 0;
+        const needsTraining=node.training && training<node.training.count;
+        const locked=me.level<node.level || requirements.length>0 || points<1 || needsTraining;
+        let effectInfo="";
+        if (["strike","step","counter","flurry","area"].includes(node.effect)) {
+          const hits=node.effect==="flurry" ? (id==="twin_finale" ? 3 : 2) : 1;
+          effectInfo="พลัง "+Math.round(node.power*100)+"% × "+hits+" · ระยะ "+node.range+" หน่วย"+(node.effect==="area" ? " · สูงสุด 5 ตัวด้านหน้า" : "");
+        } else if (node.effect==="guard") effectInfo="รับ"+(id==="circle_guard"?"รอบตัว":"ด้านหน้า")+" ลดดาเมจ "+Math.round((1-node.power)*100)+"% นาน 1.2 วิ · สวนได้ 3 วิเมื่อรับสำเร็จ";
+        const slotIndex=(tree.loadouts?.[tree.school] || []).indexOf(id);
+        const slotSelect=learned && node.effect!=="passive" ? '<label class="sword-slot-label">ช่องลัด <select data-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2].map(slot=>'<option value="'+slot+'" '+(slot===slotIndex?'selected':'')+'>ช่อง '+(slot+1)+'</option>').join("")+'</select></label>' : "";
+        const button=learned ? (node.effect==="passive" ? '<span class="sword-passive">ติดตัวแล้ว</span>' :
+          '<button type="button" data-cast="'+clean(id)+'" '+(remaining || !me.alive?'disabled':'')+'>'+(remaining?remaining+' วิ':'ใช้วิชา')+'</button>') :
+          '<button type="button" data-learn="'+clean(id)+'" '+(locked?'disabled':'')+'>เรียน 1 แต้ม</button>';
+        return '<article class="sword-node'+(learned?' learned':'')+'"><div><strong>'+clean(node.name)+'</strong> <small>Lv.'+node.level+'</small><p>'+clean(node.description)+'</p>'+
+          (requirements.length?'<small>ต้องเรียน '+clean(reqText)+'</small>':'')+
+          (node.training?'<small>'+clean(trainingNames[node.training.id])+': '+training+' / '+node.training.count+'</small>':'')+
+          (effectInfo?'<small>'+clean(effectInfo)+'</small>':'')+
+          (node.effect!=="passive"?'<small>กำลัง '+node.stamina+' · รอ '+(node.cooldownMs/1000)+' วิ</small>':'')+slotSelect+'</div>'+button+'</article>';
+      }).join("");
+      return '<section><h3>'+clean(title)+'</h3>'+rows+'</section>';
+    }).join("");
+    container.innerHTML='<p class="note">แต้มวิชาคงเหลือ '+points+' · เลเวล '+me.level+' · เพิ่มแต้มทุก 2 เลเวล · สวมกระบี่อาคมเพื่อใช้วิชา</p>'+
+      (catalog.schools[tree.school].note?'<p class="note">'+clean(catalog.schools[tree.school].note)+'</p>':'')+
+      '<p class="note">ฝึกฟัน '+tree.training.strikes+' · รับ '+tree.training.blocks+' · คอมโบครบ '+tree.training.finishes+' · คอมโบปัจจุบัน '+(performance.now()<swordComboUntil?swordCombo:0)+' / 3</p>'+
+      '<p class="note">เรียนและเปลี่ยนสำนักที่ลานพักหลังออกจากการต่อสู้ ความรู้ของแต่ละสำนักจะเก็บไว้ · คืนแต้มแล้วเก็บผลฝึกและคูลดาวน์ · เปลี่ยนสำนักอื่นต้อง Lv.10 ฟัน 10 และรับสำเร็จ 1 ครั้ง · พลังวิชาคำนวณก่อนหักป้องกัน</p>'+
+      '<div class="sword-schools">'+schoolButtons+'</div>'+sections+
+      '<p class="note">ช่องลัดของสำนักนี้จะเก็บแยกกัน</p><div class="sword-schools">'+(tree.loadouts?.[tree.school] || []).map((id,slot)=>'<button type="button" data-clear-slot="'+slot+'" '+(!id?'disabled':'')+'>ล้างช่อง '+(slot+1)+'</button>').join("")+'</div>'+
+      '<button type="button" id="resetSwordTree" class="secondary">คืนแต้มวิชาทุกสำนักที่ลานพัก</button>';
+    $("resetSwordTree").onclick=()=>room.send("sword_tree_reset",{});
+    container.querySelectorAll("[data-school]").forEach(button=>button.onclick=()=>{
+      room.send("sword_tree_school",{school:button.dataset.school});
+    });
+    container.querySelectorAll("[data-learn]").forEach(button=>button.onclick=()=>{
+      room.send("sword_tree_learn",{skillId:button.dataset.learn});
+    });
+    container.querySelectorAll("[data-equip]").forEach(select=>select.onchange=()=>{
+      if (select.value!=="") room.send("sword_tree_equip",{skillId:select.dataset.equip,slot:Number(select.value)});
+    });
+    container.querySelectorAll("[data-clear-slot]").forEach(button=>button.onclick=()=>{
+      room.send("sword_tree_equip",{skillId:null,slot:Number(button.dataset.clearSlot)});
+    });
+    container.querySelectorAll("[data-cast]").forEach(button=>button.onclick=()=>{
+      const id=button.dataset.cast; closeDrawer(); useSwordSkill(id);
+    });
+  }
   function ancestryHint(player) {
     const map = worldDefinitions?.[player.mapId];
     const camps = player.ancestryId === "woodland";
@@ -4545,7 +4716,8 @@
     $("profileProgressionStatus").textContent = supported ? (p.possessionActive ? "วิญญาณเข้าสิง · ATK / DEF / เวท +20%" : "สเตตัสเพิ่มอัตโนมัติเมื่อเลเวลขึ้น") : "เข้า LIVE กับเซิร์ฟเวอร์ที่รองรับระบบสเตตัส";
     const selectedPath = getBuildCatalog()?.paths?.[p?.pathId];
     const talent = buildTalentGroup(getBuildCatalog(), p?.pathId)?.variants[p?.bladeTalentId || p?.wardTalentId];
-    if ($("currentBuild")) $("currentBuild").textContent = selectedPath ? selectedPath.role + " · " + selectedPath.name + (talent ? " · " + talent.name : "") + " · " + getBuildCatalog().ancestries[p.ancestryId].name + " · " + ancestryHint(p) : "ยังไม่ได้เลือกสายอาชีพ";
+    const swordSchool=p?.pathId==="phutthaisawan" ? swordData()?.catalog?.schools?.[swordData()?.tree?.school]?.name : "";
+    if ($("currentBuild")) $("currentBuild").textContent = selectedPath ? selectedPath.role + " · " + selectedPath.name + (swordSchool ? " · สำนัก" + swordSchool : "") + (talent ? " · " + talent.name : "") + " · " + getBuildCatalog().ancestries[p.ancestryId].name + " · " + ancestryHint(p) : "ยังไม่ได้เลือกสายอาชีพ";
     $("profileLevel").textContent = "LV. " + (p?.level ?? 1) + " · EXP " + (p?.experience ?? 0) + (supported && p.xpToNext ? " / " + p.xpToNext : "");
     for (const [key,,field] of progressionStats) {
       $("statValue-" + key).textContent = supported ? String(Math.round(Number(p[field]) || 0)) : "—";
@@ -5028,6 +5200,7 @@
   $("partyButton").onclick=openParty;
   $("mapShortcut").onclick=openMap;
   $("modeButton").onclick=openOnline;
+  $("swordTreeButton").onclick=openSwordTree;
   $("helpButton").onclick=openHelp;
   $("bag").onclick=openBag;
   $("summon").onclick=()=> {
