@@ -32,7 +32,7 @@ export type WorldObstacle = Readonly<{ id: string; x: number; z: number; radius:
 export type WorldPortal = Readonly<{
   id: string; x: number; z: number; targetMapId: string; targetSpawn: WorldPoint; label?:string;
 }>;
-export type HuntCamp = Readonly<{id:string; name:string; x:number; z:number; levels:readonly number[]}>;
+export type HuntCamp = Readonly<{id:string; name:string; x:number; z:number; levels:readonly number[];tier?:"strong"}>;
 export type RestArea = Readonly<{x:number; z:number; radius:number; name:string}>;
 export const WORLD_EXPANSION = process.env.MONTRA_WORLD_EXPANSION === "1";
 export const SHRINE_GUARDIAN = Object.freeze({

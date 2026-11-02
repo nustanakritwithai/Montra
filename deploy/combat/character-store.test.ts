@@ -36,6 +36,17 @@ test("closing the pilot returns a castle save to a safe public exit without losi
     assert.deepEqual(restored.inventory,old.inventory);assert.equal(restored.experience,old.experience);
   });
 });
+test("expanded hunting coordinates survive save/reload and still reject out-of-envelope coordinates",{skip:!getWorldMap("lotus_basin")},async()=>{
+  await withTempStore(async(store)=>{
+    const {character}=await store.loadOrCreate(tokenA,spawn);
+    for(const [mapId,x,z] of [["lotus_basin",110,-13],["bamboo_frontier",-116,-75],["river_watch",-103,-108]] as const){
+      await store.save({...character,mapId,x,z});const loaded=(await store.loadOrCreate(tokenA,spawn)).character;
+      assert.deepEqual([loaded.mapId,loaded.x,loaded.z],[mapId,x,z]);
+    }
+    await assert.rejects(store.save({...character,mapId:"lotus_basin",x:133,z:-13}),/character_record_invalid/);
+    await assert.rejects(store.save({...character,mapId:"lotus_basin",x:110,z:-111}),/character_record_invalid/);
+  });
+});
 test("S2: guest token validation, session claim and no public raw token", () => {
   assert.equal(getGuestToken({}), null);
   assert.equal(getGuestToken(null), null);

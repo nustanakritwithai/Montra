@@ -103,16 +103,21 @@ function isCount(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) &&
     value >= 0 && value <= MAX_COUNTER;
 }
-function isCoordinate(value: unknown, limit=100): value is number {
-  return typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= limit;
+function isCoordinate(value: unknown, min=-100, max=100): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value>=min && value<=max;
 }
 
 function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
-  if (!isRecord(value) || value.version !== 1 || value.id !== id ||
+  if (!isRecord(value))throw new Error("character_record_invalid");
+  const bounds=typeof value.mapId==="string"?getWorldMap(value.mapId)?.bounds:undefined;
+  // Existing snapshots used a symmetric envelope, including when the castle pilot is disabled.
+  const legacy=value.mapId===CASTLE_ID?1000:100;
+  if (value.version !== 1 || value.id !== id ||
       typeof value.name !== "string" || parseCharacterName({ name: value.name }) !== value.name ||
       !isCount(value.level) || value.level < 1 || value.level > 1000 ||
       !isCount(value.experience) || !isCount(value.pkKills) || !isCount(value.pkDeaths) ||
-      !isCoordinate(value.x,value.mapId===CASTLE_ID?1000:100) || !isCoordinate(value.y) || !isCoordinate(value.z,value.mapId===CASTLE_ID?1000:100) ||
+      !isCoordinate(value.x,Math.min(-legacy,bounds?.minX??0),Math.max(legacy,bounds?.maxX??0)) || !isCoordinate(value.y) ||
+      !isCoordinate(value.z,Math.min(-legacy,bounds?.minZ??0),Math.max(legacy,bounds?.maxZ??0)) ||
       !isCount(value.hp) || value.hp > 100_000 ||
       typeof value.updatedAt !== "string" || !Number.isFinite(Date.parse(value.updatedAt))) {
     throw new Error("character_record_invalid");

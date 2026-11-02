@@ -112,6 +112,7 @@
   }
   resizeGameRenderer();
   let activeMapId = "ritual_village", warpPending = false, warpTimer = null;
+  let trackedHuntMap=null;
   const chatHistory = { map: [], world: [], party: [], private: [], bug: [] }, chatUnread = { map: 0, world: 0, party: 0, private: 0, bug: 0 };
   const chatDraft = { map: "", world: "", party: "", private: "", bug: "" };
   let chatTargetId = "";
@@ -1602,16 +1603,17 @@
         cone(x,2.58,z,.37,1,.1,deep,4);box(x,.04,z,1.3,.05,1.3,paint.court);
       };
       const relay=map.strategic.relay,bounds=map.bounds;
-      if(relay)box((bounds.minX+bounds.maxX)/2,-1.05,(bounds.minZ+bounds.maxZ)/2,bounds.maxX-bounds.minX+56,.6,bounds.maxZ-bounds.minZ+56,deep);
+      const huntTrail=map.strategic.huntTrail;
+      if(relay || huntTrail)box((bounds.minX+bounds.maxX)/2,-1.05,(bounds.minZ+bounds.maxZ)/2,bounds.maxX-bounds.minX+56,.6,bounds.maxZ-bounds.minZ+56,deep);
       else if(!castle)box(0,-1.05,-16,220,.6,228,deep);
-      if(relay){
+      if(relay || huntTrail){
         for(let i=0;i<22;i++)for(const side of [-1,1]){
           const t=(i+.5)/22,h=3+5*noise(i,51);
           cone(side<0?bounds.minX-4:bounds.maxX+4,h*.34,bounds.minZ+t*(bounds.maxZ-bounds.minZ),h,7,.3,stone,6);
           cone(bounds.minX+t*(bounds.maxX-bounds.minX),h*.34,side<0?bounds.minZ-4:bounds.maxZ+4,h,7,.4,floor,6);
         }
       }
-      for(let i=0;!castle && !relay && i<18;i++)for(const side of [-1,1]){
+      for(let i=0;!castle && !relay && !huntTrail && i<18;i++)for(const side of [-1,1]){
         const h=4+(i*7)%6;
         cone(side*(46+i%4),h*.33,-65+i*5.6,h,6+i%4,.25,bamboo||lotus?forestLeaf:stone,6);
         cone(-48+i*5.6,h*.32,side>0?36+i%3:-72-i%4,h,6+i%5,.2,floor,6);
@@ -1681,7 +1683,7 @@
         finish("outer district");
       }
       const crossings=sites.filter(s=>s.kind==="bridge");
-      if(lotus)for(const z of [-4,-27])for(const x of [-22,22])crossings.push({x,z});
+      if(lotus && !crossings.length)for(const z of [-4,-27])for(const x of [-22,22])crossings.push({x,z});
       for(const s of crossings){
         const cross=s.direction==="east";
         for(let i=-4;i<=4;i++)box(s.x+(cross?i*.72:0),.13,s.z+(cross?0:i*.72),cross?.64:5.7,.18,cross?5.7:.64,wooden);
@@ -1730,6 +1732,13 @@
           box(x,1.77,z,w.width,3.54,w.length,stone);
           const along=w.width>w.length,n=Math.ceil(Math.max(w.width,w.length)/(castle?18:3));
           for(let i=0;i<n;i++){const t=(i+.5)/n;box(along?w.x+w.width*t:w.x+.26,4.13,along?w.z+.26:w.z+w.length*t,along?.8:.42,.26,along?.42:.8,deep);}
+        }else if(bamboo){
+          const along=w.width>w.length,n=Math.ceil(Math.max(w.width,w.length)/1.1);
+          box(x,1.05,z,w.width,2.1,w.length,deep);
+          for(let j=0;j<n;j++){
+            const t=(j+.5)/n,bx=along?w.x+t*w.width:x,bz=along?z:w.z+t*w.length;
+            cone(bx,1.7,bz,3.4,.48,.31,decor.bamboo,5);cone(bx,3.05,bz,.75,1.45,.36,forestLeaf,5);
+          }
         }else if(city){
           box(x,1.7,z,w.width,3.4,w.length,stone);roof(x,3.7,z,w.width+.75,w.length+.7);
           box(x,1.7,w.z-.04,w.width*.25,2,.12,darkWood);
@@ -1810,16 +1819,41 @@
       }
       for(const [i,route] of map.paths.entries())for(let j=1;j<route.length;j++){
         const a=route[j-1],b=route[j],dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz);
-        for(let d=6;d<len-2;d+=castle?140:11)lamp(a.x+dx*d/len+dz*3/len,a.z+dz*d/len-dx*3/len);
+        for(let d=6;d<len-2;d+=castle?140:huntTrail && i>=huntTrail.path?28:11)lamp(a.x+dx*d/len+dz*3/len,a.z+dz*d/len-dx*3/len);
       }
       // Low field dressing stays out of roads and clearings. The blocked groves use the server footprints.
       for(const o of map.obstacles)if(!sites.some(s=>s.x===o.x&&s.z===o.z)){
         cone(o.x,.65,o.z,1.35,o.radius*2,.7,stone);
       }
       if(bamboo || lotus){
-        for(let i=0;i<54;i++){
-          const x=-35+70*noise(i,83),z=-57+81*noise(i,26);
-          if(!sceneryClear(x,z,2.8,map))continue;
+        if(huntTrail){
+          const rest=map.restAreas.find(a=>map.portals.every(p=>Math.hypot(p.x-a.x,p.z-a.z)>5));
+          if(rest){
+            const {x,z}=rest;pavilion(x,z-2.3,5.6,3.4);box(x,1,z-3.7,2.9,.24,.7,wooden);
+            if(lotus)box(x,.07,z-1,6.4,.2,5,crateWood);
+            for(const side of [-1,1])lamp(x+side*3.1,z+1);
+          }
+          for(const camp of map.camps.slice(3)){
+            const {x,z}=camp;
+            if(bamboo){
+              for(const side of [-1,1]){
+                cone(x+side*5.2,2.25,z-5,4.5,.46,.30,decor.bamboo);
+                box(x+side*5.2+.7,3.55,z-5,1.4,.9,.1,camp.tier?gold:clothRed);
+              }
+              if(camp.tier)box(x,4.2,z-5,11.2,.35,.42,wooden);
+            }else{
+              for(let i=0;i<8;i++){
+                const a=i*Math.PI/4,bx=x+Math.cos(a)*7,bz=z+Math.sin(a)*7;
+                cone(bx,.16,bz,.18,1.6,1.85,forestLeaf,8);cone(bx,.51,bz,.68,.7,.21,camp.tier?gold:light,6);
+              }
+              if(camp.tier){ring(x,.17,z,8,gold);cone(x+6,1.3,z-5,2.6,1.9,.7,stone,8);cone(x+6,3,z-5,1.2,.3,1.25,light,8);}
+            }
+          }
+        }
+        for(let i=0;i<(huntTrail?135:54);i++){
+          const x=i<54?-35+70*noise(i,83):bounds.minX+5+(bounds.maxX-bounds.minX-10)*noise(i,83);
+          const z=i<54?-57+81*noise(i,26):bounds.minZ+5+(bounds.maxZ-bounds.minZ-10)*noise(i,26);
+          if(!sceneryClear(x,z,huntTrail?8:2.8,map))continue;
           if(bamboo){
             for(let j=0;j<4;j++){
               const bx=x+(j-1.5)*.57,bz=z+Math.sin(j)*.7,h=2.6+noise(i+j,16)*2;
@@ -1833,7 +1867,9 @@
         }
       }
       if(bamboo || lotus)for(let i=0;i<36;i++){
-        const x=(i%2?1:-1)*(35+i%4),z=-58+(i*29)%83;
+        const x=huntTrail?(i%2?bounds.maxX-4:bounds.minX+4):(i%2?1:-1)*(35+i%4);
+        const z=huntTrail?bounds.minZ+6+(bounds.maxZ-bounds.minZ-12)*noise(i,197):-58+(i*29)%83;
+        if(huntTrail && !sceneryClear(x,z,8,map))continue;
         if(bamboo){for(let j=0;j<4;j++){cone(x+j*.3,2,z+j*.2,4+j*.7,.21,.13,forestLeaf,5).rotation.z=(j-2)*.07;}}
         else {cone(x,.12,z,.16,1.7,1.8,forestLeaf,8);cone(x,.4,z,.4,.8,.3,paint.light,6);}
       }
@@ -2178,7 +2214,8 @@
       clearing.parent=expansionRoot;clearing.rotation.x=inTemple?0:Math.PI/2;clearing.position.set(camp.x,-.06,camp.z);clearing.material=paint?paint.court:inTemple?templeCourt:forestClearing;clearing.isPickable=false;
       const look=campLooks[camp.id];
       if(look){const soilMat=mat("camp soil",look.soil);soilMat.diffuseColor.scaleInPlace(.72);expansionResources.push(soilMat);clearing.material=soilMat;}
-      expansionLabel(camp.name+" · Lv "+Math.min(...camp.levels)+"–"+Math.max(...camp.levels),camp.x,camp.z);
+      const range=camp.levels.length===1?String(camp.levels[0]):Math.min(...camp.levels)+"–"+Math.max(...camp.levels);
+      expansionLabel(camp.name+" · Lv "+range+(camp.tier==="strong"?" ◆":""),camp.x,camp.z);
     }
     for(const area of map.restAreas||[]){
       sacredCordWard(area.x,area.z,area.radius,expansionRoot);
@@ -4954,6 +4991,8 @@
   }
   // Atlas regions with ghost designs, per court (atlas_<map>_<court>_<n>).
   const ATLAS_GHOSTS = {
+    bamboo_frontier: [{kind:"kongkoi",fallback:"corpse"},{kind:"phiphong",fallback:"corpse"},{kind:"takhian",fallback:"longhair"},{kind:"phipop",fallback:"corpse"},{kind:"phitakhon",fallback:"corpse",lead:true}],
+    lotus_basin: [{kind:"waterspirit",fallback:"longhair"},{kind:"boatman",fallback:"corpse"},{kind:"drowned",fallback:"corpse"},{kind:"moonspirit",fallback:"longhair"},{kind:"waterspirit",fallback:"longhair",lead:true}],
     drowned_marsh: [{ kind: "drowned", fallback: "corpse" }, { kind: "boatman", fallback: "corpse" }, { kind: "waterspirit", fallback: "longhair" }],
     moon_cemetery: [{ kind: "graveborn", fallback: "corpse" }, { kind: "pyrekeeper", fallback: "corpse" }, { kind: "moonspirit", fallback: "longhair" }],
     hex_ridge: [{ kind: "krasue", fallback: "longhair" }, { kind: "krahang", fallback: "corpse" }, { kind: "preta", fallback: "corpse" }],
@@ -4968,7 +5007,7 @@
     const level = Number(monster.level) || 1;
     const atlas = ATLAS_GHOSTS[monster.mapId];
     if (atlas) {
-      const parts = String(id).split("_"), court = Math.max(1, Math.min(3, Number(parts.at(-2)) || 1)) - 1, spawn = Math.max(1, Number(parts.at(-1)) || 1) - 1;
+      const parts = String(id).split("_"), court = Math.max(1, Math.min(atlas.length, Number(parts.at(-2)) || 1)) - 1, spawn = Math.max(1, Number(parts.at(-1)) || 1) - 1;
       const entry = atlas[court], d = Array.isArray(entry) ? entry[spawn % entry.length] : entry;
       return { ...d, scale: { preta: 1.45, childghost: .62, elephant: 1.1, phipop: .95, krahang: 1.2 }[d.kind] ?? (d.lead ? 1.2 : 1 + court * .04), eye: gm.eyeRed };
     }
@@ -6857,6 +6896,11 @@
       }
       trail(Math.max(3, 5.5 * scale), "rgba(10,8,6,.55)");
       trail(Math.max(2, 4 * scale), theme.road || (activeMapId === "bound_temple" ? "#8a7552" : "#7a6546"));
+      const hunt=map?.strategic?.huntTrail;
+      if(hunt && trackedHuntMap===activeMapId){
+        ctx.save();ctx.strokeStyle="#ffdc83";ctx.lineWidth=large?2.6:1.5;ctx.setLineDash(large?[6,3]:[3,2]);ctx.beginPath();
+        map.paths[hunt.path].forEach((p,i)=>i?ctx.lineTo(sx(p.x),sy(p.z)):ctx.moveTo(sx(p.x),sy(p.z)));ctx.stroke();ctx.restore();
+      }
       const rail=map?.paths?.[map.strategic?.railPath];
       if(large && rail){
         ctx.save();ctx.strokeStyle="#d0c5a9";ctx.lineWidth=1.4;ctx.setLineDash([4,3]);ctx.beginPath();
@@ -6956,6 +7000,8 @@
       const x = sx(area.x), y = sy(area.z), r = area.radius * scale;
       ctx.fillStyle = "rgba(133,246,221,.1)"; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
       ctx.setLineDash([3 * u, 2.5 * u]); ctx.strokeStyle = "#85f6dd"; ctx.lineWidth = 1.6 * u; ctx.stroke(); ctx.setLineDash([]);
+      if(large && map.strategic?.huntTrail && trackedHuntMap===activeMapId && map.portals.every(p=>Math.hypot(p.x-area.x,p.z-area.z)>5))
+        mapText(ctx,"พัก",x,y+3,11,"#b5ffe5");
     }
     room?.state?.monsters?.forEach(m => {
       if (m.mapId !== activeMapId || !m.alive) return;
@@ -7013,9 +7059,11 @@
         mapText(ctx, "เขตผีสิง", sx(1.1), sy(10.4) + 18, 12, "#f09a8c");
       }
       for (const camp of map?.camps || []) {
-        const lv = "Lv " + Math.min(...camp.levels) + "–" + Math.max(...camp.levels);
+        const lv="Lv "+(camp.levels.length===1?camp.levels[0]:Math.min(...camp.levels)+"–"+Math.max(...camp.levels));
         const ty = activeMapId === "bound_temple" ? sy(camp.z - 9.5) - 4 : sy(camp.z) - 12 * scale - 4;
-        mapText(ctx, lv, sx(camp.x), ty, 12, "#fff0d0");
+        const marked=map.strategic?.huntTrail && trackedHuntMap===activeMapId && map.paths[map.strategic.huntTrail.path].some(p=>p.x===camp.x && p.z===camp.z);
+        mapText(ctx,(camp.tier==="strong"?"◆ ":"")+lv,sx(camp.x),ty,12,"#fff0d0");
+        if(marked)mapText(ctx,camp.name,sx(camp.x),sy(camp.z)+12*scale+9,11,"#ffdc83");
       }
       if (map?.guardian) mapText(ctx, "◆ ศาล Elite", sx(map.guardian.x), sy(map.guardian.z) - 11, 12, "#ffe095", 700);
       if (map?.boss) {
@@ -7230,6 +7278,14 @@
       button.textContent="เปิดแผนที่ยุทธศาสตร์ · "+Object.keys(worldDefinitions).length+" พื้นที่";button.onclick=openStrategicMap;
       $("bigMap").parentElement.prepend(button);
       $("bigMap").parentElement.append(note);
+      const hunt=map.strategic?.huntTrail;
+      if(hunt){
+        note.textContent+=" · "+map.strategic.hint+" · ◆ กำกับค่ายที่มีศัตรูชั้น Strong";
+        const track=document.createElement("button");track.type="button";track.id="huntTrailButton";track.className="secondary";
+        const sync=()=>{const on=trackedHuntMap===activeMapId;track.setAttribute("aria-pressed",String(on));track.textContent=(on?"ซ่อน":"แสดง")+"เส้นทาง · "+hunt.name;};
+        track.onclick=()=>{trackedHuntMap=trackedHuntMap===activeMapId?null:activeMapId;sync();drawMap($("bigMap").getContext("2d"),420,320,true);};
+        sync();$("bigMap").before(track);
+      }
     }
     if(territoryState?.local?.site===activeMapId){
       const button=document.createElement("button");button.className="secondary";button.textContent="⚑ ดูด่านและสงครามกิลด์";button.onclick=openWarPanel;

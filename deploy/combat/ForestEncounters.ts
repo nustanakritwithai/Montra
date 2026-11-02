@@ -28,7 +28,7 @@ export class ForestEncounters {
       x: camp.x + offsets[i][0], z: camp.z + offsets[i][1],
     })));
     const spawnIds = new Set(normalSpawns.map(spawn => spawn.id));
-    // All seven atlas regions can be occupied concurrently in a ten-seat room.
+    // A full world room can populate every atlas hunting region at once.
     const totalSpawns = normalSpawns.length + TEMPLE_SPAWNS.length + ATLAS_SPAWNS.length + 2;
     if (totalSpawns > MONSTER_CONFIG.maxSpawnPointsPerRoom) throw new Error("monster_spawn_cap_exceeded");
     for (const [id, tier] of Object.entries(this.tiers)) {

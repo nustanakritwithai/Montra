@@ -78,6 +78,7 @@ export type ProvinceSite = Readonly<{
 export type Province = Readonly<{
   kind:"capital"|"territory"|"hunting"; hint:string; sites:readonly ProvinceSite[];
   safeRoads?:readonly number[];railPath?:number;rampart?:Rampart;
+  huntTrail?:Readonly<{name:string;path:number}>;
   objectives?:typeof castleObjectives;activeObjectives?:readonly number[];forwardCamps?:typeof forwardCamps;
   relay?:Readonly<{name:string;x:number;z:number;radius:number;effect:"gate"|"banner"}>;
 }>;
@@ -105,10 +106,12 @@ export const PROVINCES:Readonly<Record<string,Province>>={
     site("bridge","สะพานท่าน้ำ",-4,12,"east"),site("bridge","สะพานคลังเสบียง",-4,-14,"east"),site("bridge","สะพานท่าลับ",-4,-46,"east"),
     site("bridge","สะพานต้นน้ำ",-4,-83,"east"),site("bridge","สะพานคุ้งแพ",-82,16),
     site("port","ยุ้งข้าวริมน้ำ",-73,-61),site("grove","ชายเลนคุ้งนอก",-89,24)]},
-  bamboo_frontier:{kind:"hunting",hint:"ตามธงจากเวียงผ่านค่ายไผ่ หรือเลาะป่าตะวันออกไปป่าช้า",sites:[
+  bamboo_frontier:{kind:"hunting",huntTrail:{name:"ทางพรานตะวันตก",path:3},hint:"จากประตูเวียง เลี้ยวตะวันตกเข้าลานไผ่คราม พักที่เพิงพรานตาน้ำ แล้วอ้อมดงไผ่ผนึกกลับประตูป่าช้า",sites:[
     site("grove","แนวไผ่บังตา",-31,5),site("tower","หอส่องทาง",30,-22),site("shrine","ศาลปลายดง",-12,-46)]},
-  lotus_basin:{kind:"hunting",hint:"ล่าภูตตามบ่อบัว ข้ามสะพานตะวันตกหรือตะวันออกไปท่าปากชล",sites:[
-    site("port","ศาลาท่าบัว",32,-18),site("grove","ดงบัวธูป",-34,7),site("shrine","บ่อนาคหลับ",-9,-50)]},
+  lotus_basin:{kind:"hunting",huntTrail:{name:"ทางเกาะตะวันออก",path:3},hint:"จากประตูเวียง ไปสะพานเกาะบัวเพลิง พักที่ศาลาคุ้งบัว แล้วข้ามสะพานไข่มุกไปลานนาคน้ำลึกก่อนกลับประตูปากชล",sites:[
+    site("port","ศาลาท่าบัว",32,-18),site("grove","ดงบัวธูป",-34,7),site("shrine","บ่อนาคหลับ",-9,-50),
+    site("bridge","สะพานบ่อตะวันตก",-22,-4),site("bridge","สะพานคุ้งเรือ",22,-4),site("bridge","สะพานเกาะบัวเพลิง",72,-4),
+    site("bridge","สะพานเกล็ดนาค",-22,-27),site("bridge","สะพานท่าบัว",22,-27),site("bridge","สะพานไข่มุก",104,-27)]},
 };
 
 type Hub = Pick<WorldMapDefinition,"name"|"paths"|"water"|"walls"|"obstacles"> & {

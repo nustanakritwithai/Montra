@@ -1,15 +1,16 @@
-import type { HuntCamp, WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
+import type { HuntCamp, RestArea, WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
 
 import { PROVINCES } from "./StrategicProvinces.js";
 import {CASTLE_ENABLED, CASTLE_ID} from "./CastlePilot.js";
 
 type XZ = {x:number; z:number};
 type XY = readonly [number,number];
-type Court = readonly [string,number,number,readonly number[],string];
+type Court = readonly [name:string,x:number,z:number,levels:readonly number[],enemy:string,tier?:"strong"];
 type Region = {
   id:string; name:string; range:readonly [number,number]; hint:string; courts:readonly Court[];
   routes:readonly (readonly XY[])[]; marker:XY; scatter:readonly XY[];
-  walls?:WorldWall[]; crossings?:number[]; noFlight?:boolean;
+  bounds?:WorldMapDefinition["bounds"]; rest?:RestArea;
+  walls?:WorldWall[]; pools?:WorldWall[]; crossings?:number[]; noFlight?:boolean;
 };
 const point=([x,z]:XY):XZ=>({x,z});
 const wall=(x:number,z:number,width:number,length:number):WorldWall=>({x,z,width,length});
@@ -22,12 +23,22 @@ const islandRoutes:XY[][]=[
 ];
 const regions:Region[]=[
   {id:"bamboo_frontier",name:"ดงไผ่ชายเวียง",range:[25,35],hint:PROVINCES.bamboo_frontier.hint,
-   courts:[["ลานหน่อไผ่",-20,4,[25,26,27],"ผีตาไผ่"],["ค่ายพรานเก่า",20,-17,[29,31],"พรานพราย"],["ลานรากแดง",0,-41,[33,35],"อสูรรากไผ่"]],
-   routes:[[[0,26],[-20,13],[-20,4],[-23,-22],[0,-41],[0,-58]],[[0,26],[20,7],[20,-17],[18,-30],[0,-41]],[[-20,4],[0,-8],[20,-17]]],
-   marker:[-12,-46],scatter:[[-31,5],[30,-22],[11,-45],[-32,-30]]},
+   bounds:{minX:-124,maxX:62,minZ:-100,maxZ:52},rest:{name:"เพิงพรานตาน้ำ",x:-92,z:-27,radius:5},
+   courts:[["ลานหน่อไผ่",-20,4,[25,26,27],"ผีตาไผ่"],["ค่ายพรานเก่า",20,-17,[29,31],"พรานพราย"],["ลานรากแดง",0,-41,[33,35],"อสูรรากไผ่"],
+     ["ลานไผ่คราม",-73,6,[30,32],"พรายไผ่คราม"],["ดงไผ่ผนึก",-86,-74,[35],"ขุนพรานเฝ้าผนึก","strong"]],
+   routes:[[[0,26],[-20,13],[-20,4],[-23,-22],[0,-41],[0,-58]],[[0,26],[20,7],[20,-17],[18,-30],[0,-41]],[[-20,4],[0,-8],[20,-17]],
+     [[0,26],[-32,27],[-46,19],[-58,11],[-73,6],[-85,-10],[-92,-27],[-90,-43],[-82,-60],[-86,-74],[-68,-82],[-48,-72],[-34,-58],[0,-58]],
+     [[-23,-22],[-46,-22],[-65,-28],[-92,-27]],[[-86,-74],[-64,-59],[-51,-58],[-45,-42],[-40,-28],[-23,-22]]],
+   walls:[wall(-119,-14,26,3),wall(-78,-16,24,3),wall(-108,-55,16,3),wall(-73,-53,18,3),wall(-58,-40,4,9)],
+   marker:[-12,-46],scatter:[[-31,5],[30,-22],[11,-45],[-32,-30],[-106,17],[-68,-37],[-104,-72],[-48,-86]]},
   {id:"lotus_basin",name:"บึงบัวนาค",range:[40,52],hint:PROVINCES.lotus_basin.hint,crossings:[-6,-29],
-   courts:[["บ่อตะวันตก",-22,8,[40,41,43],"ภูตบัวธูป"],["คุ้งเรือแตก",22,-17,[45,47],"พรายคนพาย"],["ค่ายเกล็ดนาค",0,-43,[50,52],"อสรพิษบึง"]],
-   routes:islandRoutes,marker:[-9,-50],scatter:[[-34,7],[32,-18],[-32,-39],[15,-45]]},
+   bounds:{minX:-60,maxX:132,minZ:-110,maxZ:54},rest:{name:"ศาลาพักคุ้งบัว",x:110,z:-13,radius:4.5},
+   courts:[["บ่อตะวันตก",-22,8,[40,41,43],"ภูตบัวธูป"],["คุ้งเรือแตก",22,-17,[45,47],"พรายคนพาย"],["ค่ายเกล็ดนาค",0,-43,[50,52],"อสรพิษบึง"],
+     ["เกาะบัวเพลิง",72,-16,[46,48],"ภูตเกสรเพลิง"],["ลานนาคน้ำลึก",96,-65,[52],"ผู้เฝ้าไข่มุกนาค","strong"]],
+   routes:[...islandRoutes,[[0,26],[30,34],[54,32],[72,15],[72,-4],[72,-16],[90,-17],[110,-13],[104,-27],[104,-43],[96,-65],[76,-80],[52,-74],[32,-62],[0,-58]],
+     [[22,-17],[31,-13],[42,-13],[58,-21],[72,-16]],[[0,-43],[34,-44],[58,-50],[78,-60],[96,-65]]],
+   pools:[wall(48,-99,20,14),wall(108,-68,24,14),wall(85,24,32,11)],
+   marker:[-9,-50],scatter:[[-34,7],[32,-18],[-32,-39],[15,-45],[58,13],[88,-45],[39,-83],[119,-85]]},
   {id:"drowned_marsh",name:"บึงพราย",range:[10,22],hint:"ข้ามสะพานไม้ระหว่างเกาะ ติดตามโคมเขียวไปท่าน้ำเหนือ",crossings:[-6,-29],
    courts:[["เกาะกกผี",-22,8,[10,12,14],"พรายกอกก"],["ท่าน้ำจมน้ำ",22,-17,[15,17],"เงาคนแจว"],["ศาลพราย",0,-43,[19,22],"ผีเฝ้าศาลน้ำ"]],
    routes:islandRoutes,marker:[-9,-50],scatter:[[-34,7],[34,-17],[-32,-39],[15,-45]]},
@@ -51,7 +62,7 @@ const regions:Region[]=[
    routes:[[[0,26],[0,4],[-23,4],[-23,-16],[0,-16],[23,-16],[23,-43],[0,-43],[0,-58]],[[0,4],[23,4],[23,-16]],[[0,4],[0,-43]],[[-23,-16],[-23,-43],[0,-43]]],
    marker:[-11,-49],scatter:[[-34,4],[34,-16],[11,-46],[-32,-30]]},
   {id:"asura_peak",name:"เขาอสุรา",range:[68,85],hint:"ทางเลียบผาผ่านค่ายหน้า ทางแท่นบูชามีอสุราที่แข็งแรงกว่า",
-   courts:[["ค่ายเชิงผา",-21,2,[68,71,73],"อสุราลาดตระเวน"],["ลานหอกเพลิง",20,-17,[75,78],"พลหอกอสุรา"],["แท่นสังเวย",-4,-43,[82,85],"องครักษ์เพลิง"]],
+   courts:[["ค่ายเชิงผา",-21,2,[68,71,73],"อสุราลาดตระเวน"],["ลานหอกเพลิง",20,-17,[75,78],"พลหอกอสุรา"],["แท่นสังเวย",-4,-43,[82,85],"องครักษ์เพลิง","strong"]],
    walls:[wall(-12,-9,19,2),wall(-15,-30,25,2)],
    routes:[[[0,26],[-21,12],[-21,2],[-23,-16],[20,-17],[24,-34],[-4,-43],[0,-58]],[[0,26],[18,7],[20,-17]],[[-23,-16],[-28,-34],[-4,-43]]],
    marker:[-16,-46],scatter:[[-33,2],[31,-17],[8,-47],[34,-37]]},
@@ -91,30 +102,40 @@ export function atlasPortals(mapId:string): WorldPortal[] {
   }
   return portals;
 }
-function channels(z:number): WorldWall[] {
-  // Solid ground spans the two 7-unit bridge gaps at X ±22.
-  return [wall(-42,z,16.5,4),wall(-18.5,z,37,4),wall(25.5,z,16.5,4)];
+function channels(z:number,minX:number,maxX:number,bridges:number[]):WorldWall[] {
+  let edge=minX;
+  const water:WorldWall[]=[];
+  for(const x of bridges.sort((a,b)=>a-b)){
+    water.push(wall(edge,z,x-3.5-edge,4));edge=x+3.5;
+  }
+  water.push(wall(edge,z,maxX-edge,4));return water;
 }
 export const ATLAS_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freeze(Object.fromEntries(regions.map(region=>{
   const portals=atlasPortals(region.id);
-  const camps:HuntCamp[]=region.courts.map(([name,x,z,levels],i)=>({id:"court"+(i+1),name,x,z,levels}));
+  const camps:HuntCamp[]=region.courts.map(([name,x,z,levels,,tier],i)=>({id:"court"+(i+1),name,x,z,levels,tier}));
+  const bounds=region.bounds??{minX:-42,maxX:42,minZ:-65,maxZ:32};
+  const province=PROVINCES[region.id];
+  const water=region.crossings?.flatMap(z=>{
+    const bridges=province?.sites.filter(s=>s.kind==="bridge" && s.z===z+2).map(s=>s.x);
+    return channels(z,bounds.minX,bounds.maxX,bridges?.length?bridges:[-22,22]);
+  });
   const spawn=region.id==="moon_cemetery"?{x:0,y:0,z:21}:{x:0,y:0,z:24.75};
-  const map:WorldMapDefinition={id:region.id,name:region.name,bounds:{minX:-42,maxX:42,minZ:-65,maxZ:32},spawn,portals,camps,
+  const map:WorldMapDefinition={id:region.id,name:region.name,bounds,spawn,portals,camps,
     region:{range:region.range,hint:region.hint,noFlight:region.noFlight===true},
-    restAreas:[{...spawn,radius:4.5,name:"ศาลพักทางเข้า"},...portals.filter(p=>Math.hypot(p.x-spawn.x,p.z-spawn.z)>4).map(p=>({x:p.x,z:p.z,radius:3.6,name:"ศาลประตู"}))],
-    strategic:PROVINCES[region.id],
+    restAreas:[{...spawn,radius:4.5,name:"ศาลพักทางเข้า"},...portals.filter(p=>Math.hypot(p.x-spawn.x,p.z-spawn.z)>4).map(p=>({x:p.x,z:p.z,radius:3.6,name:"ศาลประตู"})),...(region.rest?[region.rest]:[])],
+    strategic:province,
     paths:region.routes.map(route=>route.map(point)),walls:region.walls,
     boss:region.id==="spirit_rift"?RIFT_WARDEN:undefined,
-    water:region.crossings?.flatMap(channels),
+    water:region.pools?[...(water??[]),...region.pools]:water,
     obstacles:[{id:"landmark",...point(region.marker),radius:2.2},...region.scatter.map((p,i)=>({id:"relic-"+i,...point(p),radius:1.1}))]};
   return [map.id,map];
 })));
 export function isAtlasMap(id:string){return Object.prototype.hasOwnProperty.call(ATLAS_MAPS,id);}
 export type AtlasSpawn={id:string;name:string;mapId:string;x:number;z:number;level:number;tier:"normal"|"strong"|"boss"};
 export const ATLAS_SPAWNS:readonly AtlasSpawn[]=[
-  ...regions.flatMap(region=>region.courts.flatMap(([,x,z,levels,name],camp)=>
+  ...regions.flatMap(region=>region.courts.flatMap(([,x,z,levels,name,tier],camp)=>
     levels.map((level,i):AtlasSpawn=>({id:`atlas_${region.id}_${camp+1}_${i+1}`,name,mapId:region.id,level,
-      x:x+[-4,4,0][i],z:z+[-3,3,5][i],tier:region.id==="asura_peak"&&camp===2?"strong":"normal"})))),
+      x:x+[-4,4,0][i],z:z+[-3,3,5][i],tier:tier??"normal"})))),
   {...RIFT_WARDEN,mapId:"spirit_rift",tier:"boss"},
 ];
 export const ATLAS_TARGETS:ReadonlySet<string>=new Set(ATLAS_SPAWNS.map(s=>s.id));
