@@ -1,5 +1,6 @@
 /** MONTRA V0.2.8: declarative world geometry. No client coordinates are trusted. */
 import { isFlightAltitude, isOnGround, isOnPlatform, isOnTop, touchesWallBody, rayHitsBox } from "./HeightRules.js";
+import { groundSample, terrainRayClear, RIDGE_ENABLED, RIDGE_PASS, makeRidgePass, type GroundTerrain } from "./GroundTerrain.js";
 import { TEMPLE_ID, TEMPLE_GATE, TEMPLE_MAP } from "./TempleMap.js";
 import { ATLAS_MAPS, MARSH_GATE, atlasPortals } from "./WorldAtlas.js";
 import { makeHubs, onRampart, type Province } from "./StrategicProvinces.js";
@@ -30,7 +31,7 @@ export function segmentIntersectsExpandedWall(
 export type WorldPoint = Readonly<{ x: number; y: number; z: number }>;
 export type WorldObstacle = Readonly<{ id: string; x: number; z: number; radius: number }>;
 export type WorldPortal = Readonly<{
-  id: string; x: number; z: number; targetMapId: string; targetSpawn: WorldPoint; label?:string;
+  id: string; x: number; z: number; targetMapId: string; targetSpawn: WorldPoint; label?:string; groundY?:number;
 }>;
 export type HuntCamp = Readonly<{id:string; name:string; x:number; z:number; levels:readonly number[];tier?:"strong"}>;
 export type RestArea = Readonly<{x:number; z:number; radius:number; name:string}>;
@@ -48,6 +49,7 @@ export const FOREST_CAMPS: readonly HuntCamp[] = [
 export type WorldMapDefinition = Readonly<{
   id: string; name: string;
   bounds: Readonly<{ minX: number; maxX: number; minZ: number; maxZ: number }>;
+  terrain?: GroundTerrain;
   spawn: WorldPoint;
   obstacles: readonly WorldObstacle[];
   walls?: readonly WorldWall[];
@@ -71,7 +73,7 @@ export const VILLAGE_ARRIVALS = [
 ] as const;
 export const WORLD_ROOM_CAPACITY = VILLAGE_ARRIVALS.length;
 export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.freeze<Record<string, WorldMapDefinition>>({
-  ...(WORLD_EXPANSION ? {[TEMPLE_ID]:TEMPLE_MAP,...ATLAS_MAPS,...makeHubs(atlasPortals)} : {}),
+  ...(WORLD_EXPANSION ? {[TEMPLE_ID]:TEMPLE_MAP,...ATLAS_MAPS,...makeHubs(atlasPortals), ...(RIDGE_ENABLED?{[RIDGE_PASS]:makeRidgePass(atlasPortals(RIDGE_PASS))}:{})} : {}),
   ritual_village: {
     id: "ritual_village", name: "หมู่บ้านอาคม",
     bounds: { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
@@ -146,9 +148,18 @@ export function isRestArea(mapId: string, point: {x:number; z:number}): boolean 
   }
   return map.restAreas?.some(a=>Math.hypot(point.x-a.x,point.z-a.z)<=a.radius) ?? false;
 }
-export function isWorldSegmentClear(mapId:string, from:{x:number;z:number}, to:{x:number;z:number}):boolean {
+export function groundAt(mapId:string,x:number,z:number){
+  const t=getWorldMap(mapId)?.terrain;
+  return t?groundSample(t,x,z).height:0;
+}
+export function onMapGround(p:{mapId:string;x:number;y:number;z:number}){return isOnGround(p.y-groundAt(p.mapId,p.x,p.z));}
+export function isWorldSegmentClear(mapId:string, from:{x:number;z:number;y?:number}, to:{x:number;z:number;y?:number}):boolean {
   if(!WORLD_EXPANSION || mapId===DEFAULT_MAP_ID)return true;
   const map=getWorldMap(mapId);if(!map)return false;
+  if(map.terrain){
+    const body=(p:typeof from)=>({...p,y:(p.y??groundAt(mapId,p.x,p.z))+1});
+    if(!terrainRayClear(map.terrain,body(from),body(to)))return false;
+  }
   const dx=to.x-from.x,dz=to.z-from.z,length=dx*dx+dz*dz;
   if(map.walls?.some(w=>segmentIntersectsExpandedWall(from,to,w,0)))return false;
   return map.obstacles.every(o=>{
@@ -158,6 +169,7 @@ export function isWorldSegmentClear(mapId:string, from:{x:number;z:number}, to:{
 }
 export function provinceShotClear(map:WorldMapDefinition,from:WorldPoint,to:WorldPoint,closedGate:boolean|ReadonlySet<string>=false):boolean{
   const r=map.strategic?.rampart;
+  if(map.terrain && !terrainRayClear(map.terrain,from,to))return false;
   if(!r)return isWorldSegmentClear(map.id,from,to);
   const hits=(b:WorldWall,base:number,top:number)=>rayHitsBox(from,to,{x:b.x,z:b.z,y:base},{x:b.x+b.width,z:b.z+b.length,y:top});
   // The empty passage under each lintel is distinct from the solid deck above it.
@@ -169,6 +181,11 @@ export function isSafeWorldPoint(map: WorldMapDefinition, point: WorldPoint, rad
   if (![point.x, point.y, point.z, radius].every(Number.isFinite) || radius < 0) return false;
   if (point.x - radius < map.bounds.minX || point.x + radius > map.bounds.maxX ||
       point.z - radius < map.bounds.minZ || point.z + radius > map.bounds.maxZ) return false;
+  if(map.terrain){
+    const surface=groundSample(map.terrain,point.x,point.z);
+    if(surface.grade>map.terrain.maxGrade || Math.abs(point.y-surface.height)>=.08)return false;
+    point={...point,y:0};
+  }
   const rampart=map.strategic?.rampart;
   if(rampart && isOnPlatform(point.y))return onRampart(rampart,point.x,point.z);
   // A saved height must be an actual walkable level, not just a finite number.

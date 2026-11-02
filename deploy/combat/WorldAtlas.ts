@@ -2,6 +2,7 @@ import type { HuntCamp, RestArea, WorldMapDefinition, WorldPortal, WorldWall } f
 
 import { PROVINCES } from "./StrategicProvinces.js";
 import {CASTLE_ENABLED, CASTLE_ID} from "./CastlePilot.js";
+import {RIDGE_ENABLED,RIDGE_PASS,ridgeTerrain,groundSample} from "./GroundTerrain.js";
 import {RIVER_CITY,riverNodes} from "./RiverCity.js";
 
 type XZ = {x:number; z:number};
@@ -122,6 +123,7 @@ const edges:readonly (readonly [GateEnd,GateEnd])[]=[
   [["mantra_capital",0,-58],["moon_pass",-34,6]],
   [["mantra_capital",34,-14],["lotus_basin",0,26]],
   [["lotus_basin",0,-58],["river_watch",34,-14]],
+  ...(RIDGE_ENABLED ? [ [["hex_ridge",14,-66],[RIDGE_PASS,0,76]], [[RIDGE_PASS,0,-52],["naga_cavern",-10,26]] ] as const : []),
   [["hex_ridge",0,-58],["naga_cavern",0,26]],
   [["naga_cavern",0,-58],["river_watch",0,26]],
   [["river_watch",0,-58],["fallen_city",0,26]],
@@ -135,8 +137,10 @@ export function atlasPortals(mapId:string): WorldPortal[] {
     const source=a[0]===mapId?a:b[0]===mapId?b:undefined;
     if(!source)continue;
     const target=source===a?b:a;
+    const z=target[2]+(target[2]>0?-1.25:1.25);
     portals.push({id:source[0]+"_to_"+target[0],x:source[1],z:source[2],targetMapId:target[0],
-      targetSpawn:{x:target[1],y:0,z:target[2]+(target[2]>0?-1.25:1.25)}});
+      ...(mapId===RIDGE_PASS?{groundY:groundSample(ridgeTerrain,source[1],source[2]).height}:{}),
+      targetSpawn:{x:target[1],y:target[0]===RIDGE_PASS?groundSample(ridgeTerrain,target[1],z).height:0,z}});
   }
   return portals;
 }
