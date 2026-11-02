@@ -2683,6 +2683,7 @@
   // the thumb axis, so blades point forward-up and the staff stands upright
   // once the elbow bends.
   const HAND_GRIPS = { ritual_dagger: new B.Vector3(0, .15, 1), arcane_sword: new B.Vector3(0, .1, 1), spirit_staff: new B.Vector3(0, 0, 1) };
+  const DEFAULT_GRIP = new B.Vector3(0, .1, 1);
   function attachShamanModel(a) {
     if (shamanBody === null) { shamanWaiting.push(a); return; }
     if (!shamanBody || a.node.isDisposed()) return;
@@ -2696,10 +2697,12 @@
     shamanGear(a, nodes);
     const body = model.getChildMeshes().find(m => m.skeleton);
     if (body) skinnedTrousers(body, a.local ? pantsHero : pantsFriend);
-    const socket = nodes.Socket_Hand_Weapon_R;
+    // Every weapon rides a hand socket; the left blade of a Thai dual pair
+    // goes to the left hand, and unknown weapons use the standard fist grip.
     for (const [kind, root] of Object.entries(a.weaponModels)) {
-      root.parent = socket; root.position.set(0, 0, 0); root.scaling.setAll(.92);
-      root.rotationQuaternion = quatFromUp(HAND_GRIPS[kind]);
+      root.parent = kind === "thai_left" ? nodes.Socket_Hand_Weapon_L : nodes.Socket_Hand_Weapon_R;
+      root.position.set(0, 0, 0); root.scaling.setAll(.92);
+      root.rotationQuaternion = quatFromUp(HAND_GRIPS[kind] || DEFAULT_GRIP);
     }
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;
