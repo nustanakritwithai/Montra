@@ -79,7 +79,10 @@
     const game=$("game").getBoundingClientRect(), area=anchor.getBoundingClientRect();
     ui.toast.style.bottom=Math.max(0,game.bottom-area.top+8)+"px";
   }
+  // Sound effects (audio.js). Safe no-op until audio is unlocked by the first tap.
+  const SFX = (name, opts) => window.MontraAudio?.play(name, opts);
   function toast(message) {
+    SFX("toast");
     positionSwordToast();
     ui.toast.textContent = message;
     ui.toast.classList.add("show");
@@ -365,7 +368,7 @@
   function stormFlash(dt) {
     const tint = STORM_MAPS[activeMapId];
     if (!tint) { stormT = -1; return; }
-    if ((stormIn -= dt) <= 0) { stormIn = 10 + Math.random() * 15; stormT = 0; }
+    if ((stormIn -= dt) <= 0) { stormIn = 10 + Math.random() * 15; stormT = 0; window.MontraAudio?.play("thunder", { delay: .3 + Math.random() * .7, intensity: .8 + Math.random() * .4 }); }
     if (stormT < 0) return;
     stormT += dt;
     const k = Math.max(Math.exp(-stormT * 18), stormT > .16 ? Math.exp(-(stormT - .16) * 9) * .8 : 0);
@@ -674,6 +677,7 @@
     motes.color1 = c1; motes.color2 = c2; motes.colorDead = new B.Color4(c2.r, c2.g, c2.b, 0);
   }
   applyAtmosphere("ritual_village");
+  window.MontraAudio?.ambience("ritual_village");
 
   const ground = B.MeshBuilder.CreateGround("walkableGround", { width: 40, height: 40 }, scene);
   ground.position.y = -0.12;
@@ -2723,8 +2727,8 @@
       if(ghost){
         // Ghost rigs play a death (soul released) before hiding, and rise on respawn.
         const alive=monster.alive!==false;
-        if(!alive&&ghost.wasAlive){ghost.deathAt=performance.now();releaseSoul(mesh.position.x,mesh.position.y+.4,mesh.position.z);}
-        if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();}
+        if(!alive&&ghost.wasAlive){ghost.deathAt=performance.now();ghostVoice(ghost,mesh,"die");releaseSoul(mesh.position.x,mesh.position.y+.4,mesh.position.z);}
+        if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();ghostVoice(ghost,mesh,"spawn",.8);}
         ghost.wasAlive=alive;if(alive)mesh.setEnabled(true);else if(!ghost.deathAt)mesh.setEnabled(false);
         ghost.tx=Number(monster.x);ghost.tz=Number(monster.z);ghost.ty=Number(monster.y)||0;ghost.tf=Number(monster.facing)||0;
         ghost.windup=monster.aiState==="windup";ghost.ai=monster.aiState;
@@ -2767,6 +2771,7 @@
     spellTargetId=null;
     setTargetedSkill(null);
     applyAtmosphere(mapId);
+    window.MontraAudio?.ambience(mapId);
     clearChatHistory(false);
     const village=mapId==="ritual_village";
     for(const mesh of villageMeshes) mesh.setEnabled(village);
@@ -3321,7 +3326,7 @@
     }
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;
-    a.skin = { nodes, copy, holder, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
+    a.skin = { nodes, copy, holder, body, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
   }
   // ---- Action animation set (visual only) ----
   // Every action maps to something the game already replicates: server
@@ -3336,19 +3341,76 @@
     punch: { dur: .32, swing: true }, twin: { dur: .42, swing: true },
     // Thai sword school skills (see swordSkillAction).
     lunge: { dur: .62, swing: true }, guard: { dur: 1.1 }, counter: { dur: .7, swing: true }, flurry: { dur: .85, swing: true },
-    sweep: { dur: .8, swing: true }, rally: { dur: 1.05 }, finale: { dur: 1.1, swing: true }, dance: { dur: 1.5 }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
+    sweep: { dur: .8, swing: true }, rally: { dur: 1.05 }, finale: { dur: 1.1, swing: true }, dance: { dur: 1.5 },
+    // Muay Boran (see muayAction).
+    m_basic: { dur: .36, swing: true }, m_jab: { dur: .34, swing: true }, m_cross: { dur: .46, swing: true }, m_hook: { dur: .6, swing: true },
+    m_elbow: { dur: .46, swing: true }, m_knee: { dur: .5, swing: true }, m_teep: { dur: .55, swing: true }, m_step: { dur: .6, swing: true },
+    m_side: { dur: .6, swing: true }, m_flurry: { dur: .72, swing: true }, m_rush: { dur: .85, swing: true }, m_retreat: { dur: .62, swing: true },
+    m_guard: { dur: 1.2 }, m_parry: { dur: .55 }, m_evade: { dur: .55 }, m_counter: { dur: .66, swing: true },
+    m_clinch: { dur: 1.5 }, m_throw: { dur: .75, swing: true }, m_held: { dur: 1.5 }, m_thrown: { dur: .85 }, m_wai: { dur: 1.3 }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
     drink: { dur: 1.15 }, dash: { dur: .46 }, rise: { dur: 1.0 }, arrive: { dur: .85 },
   };
-  const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash", thai_dual: "twin" };
+  const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash", thai_dual: "twin", muay_wraps: "m_basic" };
   const POSE_BONES = ["Hips", "Spine", "Spine1", "Chest", "Neck", "Head", "LeftShoulder", "RightShoulder",
     "LeftArm", "RightArm", "LeftForeArm", "RightForeArm", "LeftHand", "RightHand",
     "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg", "LeftFoot", "RightFoot"];
-  function playAction(a, type) {
+  // Swing, cast and movement sounds timed to the strike frame of each action.
+  const at = (a, name, delay, opts = {}) => SFX(name, { x: a.x, z: a.z, delay, ...opts });
+  function actionSound(a, type, act) {
+    const d = ACTIONS[type].dur;
+    switch (type) {
+      case "stab": at(a, "whoosh", d * .32, { pitch: 1.35, len: .7, intensity: .8 }); break;
+      case "slash": case "twin": at(a, "whoosh", d * .35, { pitch: 1.1, intensity: .9 }); break;
+      case "smash": at(a, "whoosh", d * .35, { pitch: .7, len: 1.3 }); break;
+      case "punch": case "m_basic": case "m_jab": case "m_cross": case "m_step": case "m_side": case "m_retreat":
+        at(a, "whoosh", d * (type === "m_step" || type === "m_side" ? .55 : .35), { pitch: 1.6, len: .45, intensity: .55 }); break;
+      case "m_hook": case "m_elbow": at(a, "whoosh", d * .4, { pitch: 1.2, len: .6, intensity: .75 }); break;
+      case "m_knee": case "m_teep": at(a, "whoosh", d * .4, { pitch: .8, len: .7, intensity: .7 }); break;
+      case "m_counter": at(a, "block", d * .1, { intensity: .6 }); at(a, "whoosh", d * .45, { pitch: 1.2, len: .6, intensity: .75 }); break;
+      case "m_flurry": case "m_rush": for (let i = 0; i < 4; i++) at(a, "whoosh", d * (.15 + i * .2), { pitch: 1.7, len: .4, intensity: .5 }); break;
+      case "m_guard": case "m_parry": case "guard": at(a, "block", .05, { intensity: .45 }); break;
+      case "m_evade": at(a, "whoosh", .05, { pitch: .9, len: .8, intensity: .4 }); break;
+      case "m_clinch": at(a, "fist", .05, { intensity: .4 }); break;
+      case "m_throw": at(a, "whoosh", .1, { pitch: .6, len: 1.4, intensity: .8 }); at(a, "slam", d * .55); break;
+      case "m_wai": case "dance": case "rally": at(a, "gong", .1, { freq: type === "rally" ? 196 : 147, gain: .6 }); break;
+      case "lunge": at(a, "dash", .05); at(a, "whoosh", d * .55, { pitch: 1.1 }); break;
+      case "counter": at(a, "clash", d * .2, { intensity: .7 }); at(a, "whoosh", d * .5, { pitch: 1.3, len: .7 }); break;
+      case "flurry": for (let i = 0; i < 4; i++) at(a, "whoosh", d * (.12 + i * .24), { pitch: 1.2, len: .6, intensity: .7 }); break;
+      case "finale": at(a, "whoosh", d * .12, { pitch: 1.1 }); at(a, "whoosh", d * .44, { pitch: 1.1 }); at(a, "whoosh", d * .78, { pitch: .8, len: 1.2, intensity: 1.2 }); break;
+      case "sweep": at(a, "whoosh", d * .2, { pitch: .9, len: 2.2, intensity: 1.1 }); break;
+      case "cast": at(a, "cast", .02); break;
+      case "summon": at(a, "summon", .02, { important: true }); break;
+      case "drink": at(a, "drink", .25); break;
+      case "dash": at(a, "dash", 0); break;
+      case "hit": at(a, "hurt", 0, { intensity: .8 }); break;
+      case "rise": at(a, "respawn", .2); break;
+      case "arrive": at(a, "warp", 0); break;
+    }
+  }
+  // Contact sound at the target, chosen by the attacker's weapon and move.
+  function impactAt(attackerId, x, z, source, ghost, kind) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    const a = avatars.get(attackerId), w = a?.weaponId || "", move = a?.action?.type || "";
+    let name = "fist", intensity = 1;
+    if (source === "ranged") name = "rice";
+    else if (source === "talisman") name = "talisman";
+    else if (w === "thai_dual" || w === "arcane_sword" || w === "ritual_dagger") { name = "blade"; intensity = w === "ritual_dagger" ? .7 : 1; }
+    else if (w === "spirit_staff") name = "blunt";
+    else if (w === "muay_wraps") name = /elbow|counter/.test(move) ? "elbow" : /knee|teep|throw/.test(move) ? "kick" : "fist";
+    SFX(name, { x, z, intensity });
+    if (ghost && kind) SFX("ghost", { kind, ev: "hurt", x, z, delay: .03, intensity: .8 });
+    else if (ghost) SFX("ghost_hit", { x, z, delay: .02, intensity: .8 });
+  }
+  let lastCombatAt = -1e9, musicSyncIn = 0;
+  function playAction(a, type, opts) {
     if (!a || !ACTIONS[type]) return;
     const now = performance.now();
     a.action = { type, start: now, end: now + ACTIONS[type].dur * 1000 };
-    if (type === "twin") a.action.side = (a.twinFlip = !a.twinFlip) ? 1 : -1; // alternate right / left blade
+    if (type === "twin" || type === "m_basic" || type === "m_side") a.action.side = (a.twinFlip = !a.twinFlip) ? 1 : -1; // alternate right / left
+    if (opts) Object.assign(a.action, opts);
     if (type !== "hit" && type !== "rise") flashStrike(a, type);
+    if (a.local && (ACTIONS[type].swing || type === "hit" || type === "cast")) lastCombatAt = performance.now();
+    actionSound(a, type, a.action);
     if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
   }
   // A sword skill's motion follows its effect type in the server catalog,
@@ -3360,6 +3422,57 @@
     const raw = room?.state?.swordTreeCatalog || "";
     if (raw !== swordCatalogRaw) { swordCatalogRaw = raw; try { swordCatalogNodes = JSON.parse(raw || "null")?.nodes || {}; } catch { swordCatalogNodes = {}; } }
     return SWORD_EFFECT_ACTIONS[swordCatalogNodes[skillId]?.effect] || "twin";
+  }
+  // ---- Muay Boran motion map ----
+  // Skill id -> [motion, strike move]. Mirrors MuayRules (effect + combo move);
+  // an unknown skill falls back to its catalog effect, so new skills still move.
+  const MUAY_MOTIONS = {
+    step: ["m_step", "punch"], punch: ["m_jab", "punch"], guard: ["m_guard"], chaiya_cover: ["m_guard"], parry: ["m_parry"], evade: ["m_evade"],
+    counter: ["m_counter", "elbow"], teep: ["m_teep", "kick"], chaiya_elbow: ["m_elbow", "elbow"], chaiya_knee: ["m_counter", "knee"],
+    chaiya_finish: ["m_elbow", "elbow"], chaiya_return: ["m_counter", "elbow"], korat_heavy: ["m_cross", "punch"], korat_swing: ["m_hook", "punch"],
+    korat_finish: ["m_hook", "punch"], korat_pierce: ["m_cross", "punch"], korat_press: ["m_cross", "punch"], lopburi_angle: ["m_side", "punch"],
+    lopburi_counter: ["m_counter", "elbow"], lopburi_finish: ["m_side", "punch"], lopburi_reverse: ["m_side", "punch"], lopburi_slipcounter: ["m_side", "elbow"],
+    thasao_step: ["m_step", "punch"], thasao_flurry: ["m_flurry", "punch"], thasao_finish: ["m_flurry", "punch"], thasao_rush: ["m_rush", "punch"], thasao_retreat: ["m_retreat", "punch"],
+  };
+  const MUAY_EFFECT_MOTIONS = { step: "m_step", strike: "m_cross", guard: "m_guard", parry: "m_parry", evade: "m_evade", counter: "m_counter", teep: "m_teep",
+    sidestep: "m_side", counter_sidestep: "m_side", flurry: "m_flurry", step_flurry: "m_rush", retreat_strike: "m_retreat", grapple: "m_clinch" };
+  let muayCatalogRaw = null, muayCatalogSkills = {};
+  function muayMotion(skillId) {
+    if (MUAY_MOTIONS[skillId]) return MUAY_MOTIONS[skillId];
+    const raw = room?.state?.muayBookCatalog || "";
+    if (raw !== muayCatalogRaw) { muayCatalogRaw = raw; try { muayCatalogSkills = JSON.parse(raw || "null")?.skills || {}; } catch { muayCatalogSkills = {}; } }
+    return [MUAY_EFFECT_MOTIONS[muayCatalogSkills[skillId]?.effect] || "m_cross", "punch"];
+  }
+  // A player's sword or Muay school, from the replicated book/tree data.
+  const schoolCache = new Map();
+  function muaySchoolOf(a) {
+    const p = a.local ? ownServerCharacter() : room?.state?.players?.get?.(a.id);
+    const raw = p?.muayBookData || "";
+    if (!schoolCache.has(raw)) { let school = "chaiya"; try { school = JSON.parse(raw || "null")?.school || "chaiya"; } catch {} schoolCache.set(raw, school); }
+    return schoolCache.get(raw);
+  }
+  // Grapple: the first "grapple" use is the grab, a second while holding is the throw.
+  function playMuaySkill(playerId, skillId, targetId) {
+    const a = avatars.get(playerId); if (!a) return;
+    const now = performance.now(), victim = targetId ? avatars.get(targetId) : null;
+    if (skillId === "grapple") {
+      if ((a.muayHoldUntil || 0) > now) {
+        a.muayHoldUntil = 0; playAction(a, "m_throw");
+        if (victim) playAction(victim, "m_thrown");
+      } else {
+        a.muayHoldUntil = now + 1500; playAction(a, "m_clinch");
+        if (victim) { playAction(victim, "m_held"); faceAvatarToward(targetId, a.x, a.z); victim.facingLockUntil = now + 1500; }
+        a.facingLockUntil = now + 1500;
+      }
+      return;
+    }
+    const [motion, move] = muayMotion(skillId);
+    playAction(a, motion, { move, reverse: skillId === "lopburi_reverse", finisher: /_finish$/.test(skillId) });
+  }
+  function releaseMuayHold(id) {
+    const a = avatars.get(id); if (!a) return;
+    a.muayHoldUntil = 0;
+    if (a.action && (a.action.type === "m_clinch" || a.action.type === "m_held")) a.action.end = performance.now();
   }
   function playAttack(attackerId, ranged, targetX, targetZ) {
     const a = avatars.get(attackerId);
@@ -3428,6 +3541,16 @@
     fx.seal.parent = a.node; fx.seal.position.y = .06; fx.seal.isPickable = false; fx.seal.setEnabled(false);
     return (a.fx = fx);
   }
+  let muayWrapMats = null;
+  function muayWraps(body) {
+    if (!muayWrapMats) {
+      muayWrapMats = [mat("muay hand wrap", "#e6dcc4", "#1c1a14"), mat("muay wrist rope", "#c8a060", "#241608")];
+      for (const m of muayWrapMats) m.backFaceCulling = false;
+    }
+    const hands = skinnedCut(body, "muay hand wraps", x => Math.abs(x) > .6, x => .011 + .003 * Math.sin(Math.abs(x) * 160), muayWrapMats[0]);
+    const rope = skinnedCut(body, "muay wrist rope", x => Math.abs(x) > .5 && Math.abs(x) < .61, (x, y, z) => .017 + .007 * Math.sin(Math.atan2(z, y - 1.354) * 2 + Math.abs(x) * 95), muayWrapMats[1]);
+    return [hands, rope];
+  }
   function animateSkin(a, m, speed, s, c, t, now, dt) {
     const n = a.skin.nodes, P = {};
     for (const b of POSE_BONES) P[b] = [0, 0, 0];
@@ -3450,6 +3573,11 @@
     const run = Math.min(1, Math.max(0, (speed - 3.6) / 3));
     const breath = Math.sin(t * 2.1), idle = 1 - m;
     const weapon = a.weaponId || "";
+    // Muay Boran "weapon": white cloth hand wraps with twisted rope at the wrists, cut from the body.
+    if (weapon === "muay_wraps" && !a.skin.wraps && a.skin.body) a.skin.wraps = muayWraps(a.skin.body);
+    if (a.skin.wraps) for (const mesh of a.skin.wraps) mesh.setEnabled(weapon === "muay_wraps");
+    // Wrapped hands are drawn a little smaller so they read as fists.
+    for (const side of ["LeftHand", "RightHand"]) a.skin.nodes[side]?.scaling.setAll(weapon === "muay_wraps" ? .82 : 1);
     // ---- Combat stance at rest: side-on to the opponent, left shoulder
     // leading, weight sunk into the back (right) leg, head turned forward.
     const turn = weapon === "spirit_staff" ? -.55 : -.82;
@@ -3459,7 +3587,24 @@
     set("LeftUpLeg", -.34, .18, .17); set("LeftLeg", .14, 0, 0);
     set("RightUpLeg", .14, -.1, -.11); set("RightLeg", .32, 0, 0);
     set("LeftShoulder", 0, 0, -.04); set("RightShoulder", 0, 0, .04);
-    if (weapon === "thai_dual") {
+    if (weapon === "muay_wraps") {
+      // Muay guard: squarer than the blade stances, fists up at the chin,
+      // elbows in, weight on the rear leg; each school carries it differently.
+      const school = muaySchoolOf(a);
+      const st = { chaiya: { turn: -.42, low: -.09, lean: .2, arm: -1.0, fore: 2.3, bob: 2.2, bobA: .008, knee: 1 },
+        korat: { turn: -.62, low: -.07, lean: .12, arm: -.75, fore: 1.65, bob: 1.8, bobA: .01, knee: 0, wide: .14 },
+        lopburi: { turn: -.95, low: -.04, lean: .06, arm: -1.2, fore: 1.9, bob: 3.2, bobA: .012, knee: 0, reach: 1 },
+        thasao: { turn: -.5, low: -.05, lean: .1, arm: -1.25, fore: 2.25, bob: 6.5, bobA: .03, knee: 0 } }[school] || {};
+      set("Hips", 0, st.turn, -.03); off[1] = st.low + Math.abs(Math.sin(t * st.bob)) * st.bobA * idle; bend(st.lean, -st.turn * .35, .04);
+      set("LeftUpLeg", -.22 - (st.knee ? .3 : 0), .08, .12 + (st.wide || 0)); set("LeftLeg", .32 + (st.knee ? .45 : 0), 0, 0);
+      set("RightUpLeg", .1, -.06, -.1 - (st.wide || 0)); set("RightLeg", .42, 0, 0);
+      // Fists in front of the face, elbows closed in front of the ribs.
+      set("RightArm", st.arm - .35, .45, 1.2); set("RightForeArm", 0, st.fore + .1, 0); set("RightHand", 0, 0, .15);
+      if (st.reach) { set("LeftArm", -1.5, -.25, -1.15); set("LeftForeArm", 0, -1.3, 0); }
+      else { set("LeftArm", st.arm - .45, -.45, -1.2); set("LeftForeArm", 0, -st.fore - .05, 0); }
+      set("LeftHand", 0, 0, -.15);
+      if (school === "thasao") { add("RightArm", Math.sin(t * 6.5) * .05, 0, 0); add("LeftArm", -Math.sin(t * 6.5) * .05, 0, 0); }
+    } else if (weapon === "thai_dual") {
       // Dual-blade guard: right blade raised before the face, edge out;
       // left blade low and back along the forearm, ready to cover.
       set("RightArm", -.95, .25, .95); set("RightForeArm", 0, 1.35, 0); set("RightHand", .35, 0, .1);
@@ -3501,6 +3646,11 @@
       W.LeftForeArm = [0, weapon === "thai_dual" ? -1.1 : -(.28 + 1.1 * run), 0];
       W.RightArm = grip ? [-.25 - s * armAmp * .4, .1, 1.18] : [-s * armAmp, 0, 1.24];
       W.RightForeArm = [0, grip ?? (.28 + 1.1 * run), 0];
+      if (weapon === "muay_wraps") { // guard stays up while moving
+        W.RightArm = [-1.35 - s * .1, .45, 1.2]; W.RightForeArm = [0, 2.3, 0];
+        W.LeftArm = [-1.4 + s * .1, -.45, -1.2]; W.LeftForeArm = [0, -2.3, 0];
+        W.Spine[0] += .06; W.Chest[1] *= .6;
+      }
       for (const b of POSE_BONES) mix(b, W[b][0], W[b][1], W[b][2], m);
       off[0] *= idle; off[1] = off[1] * idle + (Math.abs(c) * .03 * (1 + run) - .02 * run) * m;
     }
@@ -3586,7 +3736,132 @@
         arc.setEnabled(true); arc.visibility = k * .9;
         fx.pivot.rotation.set(0, (p - center) / width * -.6 * d, tilt * d); arc.scaling.set(1.05 * d, 1, 1.05);
       };
+      // ---- Muay pieces: guard arms, straight/hook punch, elbow, knee, teep.
+      // d = 1 right (rear) hand or leg, -1 left (lead).
+      const G = { Right: { Arm: [-1.35, .45, 1.2], ForeArm: [0, 2.3, 0] }, Left: { Arm: [-1.4, -.45, -1.2], ForeArm: [0, -2.3, 0] } };
+      const guardArm = (side, ww) => { const g = G[side]; mix(side + "Arm", g.Arm[0], g.Arm[1], g.Arm[2], ww); mix(side + "ForeArm", g.ForeArm[0], g.ForeArm[1], g.ForeArm[2], ww); };
+      const lpw = (bone, A, Bv, k, ww) => { const v = lerp(A, Bv, k); mix(bone, v[0], v[1], v[2], ww); };
+      const sideOf = d => d > 0 ? "Right" : "Left";
+      const punchMove = (d, k, ww, hook = false) => {
+        const R = sideOf(d), g = G[R], twist = hook ? 1.0 : .6;
+        guardArm(sideOf(-d), ww);
+        if (hook) { lpw(R + "Arm", g.Arm, [-1.35, .95 * d, .35 * d], k, ww); lpw(R + "ForeArm", g.ForeArm, [0, 1.45 * d, 0], k, ww); }
+        else { lpw(R + "Arm", g.Arm, [-1.52, .08 * d, 1.22 * d], k, ww); lpw(R + "ForeArm", g.ForeArm, [0, .06 * d, 0], k, ww); }
+        const v = lerp([0, -.35 * twist * d, 0], [.12, .55 * twist * d, 0], k); bend(v[0], v[1], v[2], ww);
+        lpw("Hips", [0, -.3 * d, 0], [.04, .3 * d, 0], k, ww);
+        lpw(R + "Shoulder", [0, -.1 * d, 0], [0, .25 * d, -.05 * d], k, ww);
+        lpw(R + "UpLeg", [.1, 0, 0], [.28, 0, 0], k, ww * .6);
+        off[2] += .06 * k * ww; off[1] -= .03 * ww;
+      };
+      const elbowMove = (d, k, ww) => {
+        const R = sideOf(d);
+        guardArm(sideOf(-d), ww);
+        lpw(R + "Arm", G[R].Arm, [-1.25, .9 * d, .25 * d], k, ww); mix(R + "ForeArm", 0, 2.55 * d, 0, ww);
+        const v = lerp([-.05, -.5 * d, .15 * d], [.35, .65 * d, -.12 * d], k); bend(v[0], v[1], v[2], ww);
+        lpw("Hips", [0, -.35 * d, 0], [.05, .35 * d, 0], k, ww); off[2] += .05 * k * ww; off[1] -= .05 * ww;
+      };
+      const kneeMove = (d, k, ww) => {
+        const S = sideOf(d);
+        lpw(S + "UpLeg", [0, 0, 0], [-1.65, 0, 0], k, ww); lpw(S + "Leg", [.3, 0, 0], [1.75, 0, 0], k, ww); lpw(S + "Foot", [0, 0, 0], [.6, 0, 0], k, ww);
+        for (const [side, e] of [["Right", 1], ["Left", -1]]) { lpw(side + "Arm", G[side].Arm, [-1.45, .35 * e, .9 * e], k, ww); lpw(side + "ForeArm", G[side].ForeArm, [0, 1.3 * e, 0], k, ww); }
+        bend(-.18 * k, 0, 0, ww); lpw("Hips", [0, 0, 0], [-.15, 0, 0], k, ww); off[2] += .1 * k * ww; off[1] += .03 * k * ww;
+      };
+      const teepMove = (k, ww) => {
+        const chamber = ease(k / .45), ext = ease((k - .4) / .35);
+        mix("LeftUpLeg", -1.45 * chamber, 0, .05, ww); mix("LeftLeg", 1.7 * chamber * (1 - ext) + .1, 0, 0, ww); mix("LeftFoot", -.5 * ext, 0, 0, ww);
+        bend(-.35 * chamber, 0, 0, ww); mix("RightLeg", .3, 0, 0, ww); guardArm("Left", ww); guardArm("Right", ww * (1 - ext)); mix("RightArm", .35, 0, 1.2, ww * ext);
+        off[2] -= .05 * ext * ww;
+      };
+      const coverMove = ww => {
+        for (const [side, e] of [["Right", 1], ["Left", -1]]) { mix(side + "Arm", -1.6, .55 * e, 1.1 * e, ww); mix(side + "ForeArm", 0, 2.5 * e, 0, ww); }
+        bend(.25, 0, 0, ww); off[1] -= .1 * ww; mix("LeftUpLeg", -.75, 0, .1, ww); mix("LeftLeg", 1.0, 0, 0, ww);
+      };
+      const lungeMove = ww => {
+        mix("Hips", .12, 0, 0, ww); bend(.45, 0, 0, ww); guardArm("Right", ww); guardArm("Left", ww);
+        mix("LeftUpLeg", -.95, 0, .05, ww); mix("LeftLeg", .5, 0, 0, ww); mix("RightUpLeg", .6, 0, -.05, ww); mix("RightLeg", .85, 0, 0, ww); off[1] -= .1 * ww;
+      };
+      const fistArc = (center, d, tilt = 0, width = .12) => {
+        const arc = fx.slashes.punch, k = Math.max(0, 1 - Math.abs(p - center) / width);
+        if (k <= 0) return;
+        arc.setEnabled(true); arc.visibility = k * .8;
+        fx.pivot.rotation.set(0, (p - center) / width * -.4 * d, tilt * d); arc.scaling.set(.75 * d, 1, .75);
+      };
       switch (act.type) {
+        case "m_basic": punchMove(act.side, strike, w); fistArc(.52, act.side); break;
+        case "m_jab": punchMove(-1, ease((p - .2) / .25), w); fistArc(.45, -1); break;
+        case "m_cross": punchMove(1, strike, w); fistArc(.52, 1); if (act.finisher) flare = w * .4; break;
+        case "m_hook": punchMove(1, ease((p - .3) / .3), w, true); fistArc(.58, 1, .9, .16); if (act.finisher) flare = w * .4; break;
+        case "m_elbow": elbowMove(1, ease((p - .25) / .3), w); fistArc(.52, 1, .6); if (act.finisher) flare = w * .4; break;
+        case "m_knee": kneeMove(1, ease((p - .2) / .3), w); break;
+        case "m_teep": teepMove(Math.min(1, p / .7), w); break;
+        case "m_step": { const go = w * (1 - ease((p - .4) / .15)); lungeMove(go); punchMove(1, ease((p - .45) / .2), w - go); fistArc(.62, 1); break; }
+        case "m_side": {
+          // Chak: hop off the line, then strike from the new angle.
+          const d = (act.side || 1) * (act.reverse ? -1 : 1), hop = w * (1 - ease((p - .4) / .15)), k = ease((p - .45) / .2);
+          bend(.1, 0, .25 * d, hop); off[0] += .14 * d * hop; guardArm("Right", hop); guardArm("Left", hop);
+          mix("LeftUpLeg", -.2, 0, .3, hop); mix("RightUpLeg", -.2, 0, -.3, hop); mix("LeftLeg", .5, 0, 0, hop); mix("RightLeg", .5, 0, 0, hop);
+          if (act.move === "elbow") elbowMove(-d, k, w - hop); else punchMove(-d, k, w - hop);
+          fistArc(.62, -d); break;
+        }
+        case "m_flurry": case "m_rush": {
+          const lead = act.type === "m_rush" ? .3 : 0, go = lead ? w * (1 - ease((p - .25) / .08)) : 0;
+          if (lead) lungeMove(go);
+          const q0 = Math.max(0, (p - lead) / (1 - lead)), beats = lead ? 3 : 4, beat = Math.min(beats - 1, Math.floor(q0 * beats)), q = q0 * beats - beat, d = beat % 2 ? 1 : -1;
+          punchMove(d, ease((q - .1) / .45), w - go); fistArc(lead + (beat + .5) / beats * (1 - lead), d, 0, .06); break;
+        }
+        case "m_retreat": {
+          const back = ease((p - .5) / .2) * (1 - ease((p - .85) / .15));
+          punchMove(-1, ease((p - .1) / .25), w * (1 - ease((p - .5) / .15))); fistArc(.3, -1);
+          bend(-.2 * back, 0, 0, w); off[2] -= .15 * back * w; guardArm("Right", back * w); guardArm("Left", back * w); break;
+        }
+        case "m_guard": coverMove(w); break;
+        case "m_parry": {
+          const k = Math.sin(Math.min(1, p / .6) * Math.PI);
+          guardArm("Right", w); lpw("LeftArm", G.Left.Arm, [-1.45, -.7, -.9], k, w); lpw("LeftForeArm", G.Left.ForeArm, [0, -.6, 0], k, w); bend(.05, .3 * k, 0, w); break;
+        }
+        case "m_evade": {
+          const k = Math.sin(Math.min(1, p / .8) * Math.PI);
+          bend(-.55 * k, 0, 0, w); mix("Head", -.2 * k, 0, 0, w); mix("Hips", -.15 * k, 0, 0, w); mix("RightLeg", .6, 0, 0, w);
+          guardArm("Right", w); guardArm("Left", w); off[2] -= .12 * k * w; off[1] -= .04 * k * w; break;
+        }
+        case "m_counter": {
+          const block = w * (1 - ease((p - .3) / .12)), k = ease((p - .35) / .25);
+          coverMove(block);
+          if (act.move === "knee") kneeMove(1, k, w - block); else elbowMove(1, k, w - block);
+          if (act.move !== "knee") fistArc(.6, 1, .6); break;
+        }
+        case "m_clinch": {
+          // Plum: both hands locked behind the opponent's neck, pulling down.
+          for (const [side, e] of [["Right", 1], ["Left", -1]]) { mix(side + "Arm", -1.5, .75 * e, 1.05 * e, w); mix(side + "ForeArm", 0, 1.35 * e, 0, w); mix(side + "Hand", 0, 0, -.3 * e, w); }
+          bend(.3 + Math.sin(t * 9) * .03, 0, 0, w); off[1] -= .08 * w; mix("LeftLeg", .4, 0, 0, w); mix("RightLeg", .5, 0, 0, w); break;
+        }
+        case "m_throw": {
+          const k = ease(p / .6);
+          bend(.35, -1.1 * k, 0, w); mix("Hips", 0, -.8 * k, 0, w);
+          mix("RightArm", -.9, -.4, 1.0, w); mix("RightForeArm", 0, 1.2, 0, w); mix("LeftArm", -1.3, .6, -.6, w); mix("LeftForeArm", 0, -1.0, 0, w);
+          mix("LeftUpLeg", -.4 * k, 0, .2, w); off[1] -= .1 * w; flare = w * .3; break;
+        }
+        case "m_held": {
+          bend(.6, 0, 0, w); mix("Head", .4, 0, 0, w); off[1] -= .1 * w; off[2] += .05 * w;
+          for (const [side, e] of [["Right", 1], ["Left", -1]]) { mix(side + "Arm", -1.2, -.3 * e, 1.0 * e, w); mix(side + "ForeArm", 0, 1.4 * e, 0, w); }
+          break;
+        }
+        case "m_thrown": {
+          const k = Math.sin(Math.min(1, p * 1.3) * Math.PI);
+          bend(-.6 * k, .8 * k, .3 * k, w); mix("LeftArm", -.3, 0, -.5, w * k); mix("RightArm", -.3, 0, .5, w * k);
+          mix("LeftLeg", .5, 0, 0, w * k); mix("RightLeg", .7, 0, 0, w * k); off[1] -= .2 * k * w; spin = .9 * k; break;
+        }
+        case "m_wai": {
+          // Wai khru: kneel and bow over joined hands, rise, then a slow turn with arms spread like wings.
+          const bow = 1 - ease((p - .42) / .12), rise = w * (1 - bow), wing = ease((p - .5) / .2);
+          bend(.4, 0, 0, w * bow); mix("Head", .35, 0, 0, w * bow); off[1] -= .35 * w * bow;
+          mix("LeftUpLeg", -.9, 0, .1, w * bow); mix("LeftLeg", 1.4, 0, 0, w * bow); mix("RightUpLeg", .2, 0, -.1, w * bow); mix("RightLeg", 1.6, 0, 0, w * bow);
+          guardArm("Right", w * bow); guardArm("Left", w * bow); mix("RightHand", 0, 0, -.6, w * bow); mix("LeftHand", 0, 0, .6, w * bow);
+          mix("RightArm", -.3, .1, .15, rise * wing); mix("RightForeArm", 0, .6, 0, rise * wing); mix("LeftArm", -.3, -.1, -.15, rise * wing); mix("LeftForeArm", 0, -.6, 0, rise * wing);
+          mix("LeftUpLeg", -.5, 0, .05, rise * wing); mix("LeftLeg", .9, 0, 0, rise * wing); bend(-.12, 0, 0, rise);
+          spin = ease((p - .55) / .4) * Math.PI * 2;
+          fx.seal.setEnabled(true); fx.seal.material = summonSeal; fx.seal.scaling.setAll(2.2); fx.seal.visibility = w * .7; fx.seal.rotation.y = p * 2; flare = w * .35; break;
+        }
         case "stab": case "punch":
           weight(strike, .9); spine([.05, -.6, .08], [.32, .55, -.05]);
           pose("RightShoulder", [0, -.15, .05], [0, .3, -.05]);
@@ -3760,6 +4035,14 @@
   }
   // Procedural gait: legs and arms counter-swing with speed, the body bobs and
   // leans, breathes at rest, tucks while flying and swings the weapon arm.
+  const STEP_SURFACE = { ritual_village: "wood", forbidden_forest: "soil", bound_temple: "stone", drowned_marsh: "water", lotus_basin: "soil",
+    moon_cemetery: "soil", hex_ridge: "stone", naga_cavern: "stone", fallen_city: "stone", asura_peak: "stone", spirit_rift: "stone",
+    mantra_capital: "brick", moon_pass: "soil", river_watch: "soil", bamboo_frontier: "soil", tri_wiang_castle: "brick" };
+  function stepSound(a) {
+    const strategic = worldDefinitions?.[activeMapId]?.strategic;
+    if (a.y > 2.5 && strategic?.rampart) return strategic.kind === "territory" ? "step_wood" : "step_brick"; // on the wall walk
+    return "step_" + (STEP_SURFACE[activeMapId] || "soil");
+  }
   function animateRig(a, speed, dt, now) {
     const r = a.rig; if (!r) return;
     const target = Math.min(1, speed / 3.2);
@@ -3767,6 +4050,10 @@
     const m = a.moveBlend, flying = a.y > 4.4;
     a.phase = (a.phase + dt * 9.5 * m) % (Math.PI * 2);
     const s = Math.sin(a.phase), c = Math.cos(a.phase), t = now / 1000;
+    // Footstep on each foot plant (the stride sine crossing zero), by surface.
+    if (m > .35 && !flying && !a.serverFlying && a.stepSign && Math.sign(s) && Math.sign(s) !== a.stepSign)
+      SFX(stepSound(a), { x: a.x, z: a.z, intensity: .55 + .45 * Math.min(1, speed / 6) });
+    if (Math.sign(s)) a.stepSign = Math.sign(s);
     const flare = a.skin ? animateSkin(a, m, speed, s, c, t, now, dt) : 0;
     for (let i = 0; i < 2; i++) {
       const dir = i ? -1 : 1;
@@ -3800,7 +4087,7 @@
   function setAvatarWeapon(avatar, weaponId, pathId = avatar?.local ? ownServerCharacter()?.pathId : "") {
     if (!avatar?.weaponModels) return;
     const modelId = pathId === "phutthaisawan" && weaponId === "arcane_sword" ? "thai_dual" : weaponId === "shrine_glaive" ? "arcane_sword" : weaponId;
-    const safeId = modelId === "thai_dual" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
+    const safeId = modelId === "thai_dual" || modelId === "muay_wraps" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
     if (avatar.weaponId === safeId) return;
     avatar.weaponId = safeId;
     for(const [id,model] of Object.entries(avatar.weaponModels)) {
@@ -5755,11 +6042,30 @@
   }
   // Rising soul released when a ghost is destroyed.
   function releaseSoul(x, y, z) {
+    SFX("ghost_die", { x, z });
     const soul = B.MeshBuilder.CreateSphere("released soul", { diameter: .45, segments: 6 }, scene);
     soul.material = gm.soul; soul.isPickable = false; soul.position.set(x, y, z);
     const tail = B.MeshBuilder.CreateCylinder("soul tail", { height: .8, diameterTop: .4, diameterBottom: 0, tessellation: 6 }, scene);
     tail.parent = soul; tail.position.y = -.45; tail.material = gm.soul; tail.isPickable = false;
     soulMeshes.push({ soul, born: performance.now() });
+  }
+  // Ghost voices: a cry on the attack wind-up (an audible warning before the
+  // hit lands) and an occasional murmur when near the hero.
+  let lastGhostMurmur = 0;
+  const ghostVoice = (g, mesh, ev, intensity = 1) => SFX("ghost", { kind: g.design?.kind, ev, x: mesh.position.x, z: mesh.position.z, intensity });
+  function ghostVoices(mesh, g, now) {
+    if (g.deathAt) return;
+    if (g.windup && !g.wasWindup) {
+      ghostVoice(g, mesh, "attack"); g.criedAt = now;
+      const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 15) lastCombatAt = now; // music goes to combat
+    }
+    g.wasWindup = g.windup;
+    if (!g.nextMurmur) g.nextMurmur = now + 2000 + Math.random() * 8000;
+    if (now > g.nextMurmur) {
+      g.nextMurmur = now + 6000 + Math.random() * 9000;
+      const hero = getLocalAvatar();
+      if (hero && now - lastGhostMurmur > 900 && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 26) { lastGhostMurmur = now; ghostVoice(g, mesh, "idle"); }
+    }
   }
   function animateGhosts(dt, now) {
     const t = now / 1000;
@@ -5772,6 +6078,7 @@
         const sp = Math.hypot(mesh.position.x - ox, mesh.position.z - oz) / Math.max(dt, 1e-3);
         g.speed += (sp - g.speed) * (1 - Math.exp(-dt * 6));
       }
+      ghostVoices(mesh, g, now);
       const move = Math.min(1, g.speed / 2.5);
       g.walk += dt * (2 + 6 * move);
       const atkAge = (now - g.attackAt) / 1000, hurtAge = (now - g.hurtAt) / 1000;
@@ -5835,12 +6142,9 @@
   function updateMonsterUI(hp, maxHp, alive, simulated = false) {
     const max = Math.max(1, Number(maxHp) || 100);
     const current = Math.max(0, Math.min(max, Number(hp) || 0));
-    ui.monsterStatus.hidden = false;
     ui.monsterStatus.querySelector(".monster-heading span").textContent=activeMapId !== "ritual_village" ? ("มอนสเตอร์ · "+(worldDefinitions?.[activeMapId]?.name || "ป่าต้องห้าม")) : "ผีเข้าสิง · ตัวทดสอบ";
     ui.monsterBar.style.width = (100 * current / max) + "%";
-    ui.monsterText.textContent = alive
-      ? "HP " + Math.ceil(current) + "/" + Math.ceil(max)
-      : "ตายแล้ว · รอเกิดใหม่";
+    ui.monsterText.textContent = alive ? Math.ceil(current) + "/" + Math.ceil(max) : "ปราบแล้ว"; // same wording as the HUD frame
     ui.monsterHint.textContent = simulated
       ? "ทดลองในเครื่อง · แตะผีเพื่อโจมตี"
       : "ออนไลน์ · แตะผีเพื่อโจมตี";
@@ -5925,12 +6229,7 @@
       : Number(getLocalAvatar()?.targetY || 0);
     const altitude = Number.isFinite(worldY) ? Math.round(worldY * 10) / 10 : 0;
     const mobilePortrait = window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches;
-    ui.onlineCount.textContent = mode === "live"
-      ? (mobilePortrait
-        ? `${onlinePlayers.size} คน · ${summonAvatars.size} ผี · ↑${altitude}ม.`
-        : `ผู้เล่น: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} · สูง ${altitude}ม. (LIVE)`)
-      : (mobilePortrait ? `DEMO · ↑${altitude}ม.`
-        : `ผู้เล่นในฉาก: 1 (จำลอง) · สูง ${altitude}ม.`);
+    renderStatusChip();
     setModeBadge(mode === "live");
   }
   function showDemo() {
@@ -6276,16 +6575,124 @@
   }
 
   const localHpBar = document.querySelector(".bar.hp i");
+  let hudLevel = 0;
   function updateCharacterHud(me) {
     const name = typeof me?.characterName === "string" && me.characterName
       ? me.characterName : "นที";
     $("characterName").textContent = name;
     const slot = me?.persistent ? (Number(me.characterSlot) || activeCharacterSlot || 1) : null;
+    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) SFX("levelup", { important: true }); hudLevel = me.level; }
     $("characterLevel").textContent = (slot ? "S" + slot + " · " : "") + "LV. " + (
       Number.isFinite(me?.level) ? me.level : 1
     );
     $("characterProfile").title = me?.persistent
       ? "แตะดูตัวละครถาวรและเปลี่ยนชื่อ" : "แตะดูข้อมูลตัวละคร";
+  }
+  // ---- HUD (player card, target frame, guide tracker, status chip) ----
+  // Rebuilt from state four times a second; each element is written only
+  // when its text or width actually changes.
+  const PATH_GLYPHS = { phutthaisawan: "⚔", muay_boran: "✊", blade: "🗡", sentinel: "⛨", seer: "✦", mender: "✚" };
+  const hudKills = {};
+  let hudTarget = { id: null, until: 0 }, hudCache = new Map(), hudIn = 0;
+  const hudSet = (el, key, value, prop = "textContent") => { if (!el) return; const k = key + prop; if (hudCache.get(k) === value) return; hudCache.set(k, value); if (prop === "width") el.style.width = value; else if (prop === "hidden") el.hidden = value; else el[prop] = value; };
+  const pctOf = (v, max) => Math.max(0, Math.min(100, 100 * (Number(v) || 0) / Math.max(1, Number(max) || 1))).toFixed(1) + "%";
+  function hudCurrentTarget(now) {
+    const hero = getLocalAvatar();
+    if (mode === "live") {
+      const st = room?.state, id = hudTarget.until > now && hudTarget.id ? hudTarget.id : selectedForestTarget;
+      if (!id) return null;
+      if (id === MONSTER_ID && st?.monster && activeMapId === "ritual_village")
+        return { name: "ผีเข้าสิง", level: Number(st.monster.level) || 1, hp: st.monster.hp, maxHp: st.monster.maxHp, alive: st.monster.alive !== false };
+      const m = st?.monsters?.get?.(id);
+      if (!m || m.mapId !== activeMapId) return null;
+      return { name: monsterName(m, id) || "ผี", level: Number(m.level) || 1, hp: m.hp, maxHp: m.maxHp, alive: m.alive !== false, elite: m.tier === "elite" || m.tier === "boss", x: m.x, z: m.z };
+    }
+    if (!enemy.isEnabled() && now - demoLastHitAt > 2500) return null;
+    const near = hero && Math.hypot(hero.x - enemy.position.x, hero.z - enemy.position.z) < 9;
+    if (!near && now - demoLastHitAt > 8000) return null;
+    return { name: "ผีเข้าสิง · ตัวทดสอบ", level: 1, hp: demoMonsterHp, maxHp: 100, alive: demoMonsterHp > 0 };
+  }
+  // The next useful step for the current map, with a point to head for.
+  function hudGuide() {
+    const map = worldDefinitions?.[activeMapId], hero = getLocalAvatar(), kills = hudKills[activeMapId] || 0;
+    const nearestOf = list => { let best = null, d = Infinity; for (const p of list) { const k = Math.hypot(p.x - hero.x, p.z - hero.z); if (k < d) { d = k; best = p; } } return best; };
+    if (!hero) return null;
+    if (activeMapId === "ritual_village") {
+      if (mode !== "live") {
+        if (enemy.isEnabled() && kills < 1) return { title: "ลองปราบผีทดสอบ", step: "เดินเข้าใกล้ผีที่ลานกลาง แล้วแตะตัวผี", progress: "ปราบ " + kills + "/1", to: { x: enemy.position.x, z: enemy.position.z } };
+        return { title: "พร้อมออกเดินทาง", step: "กดปุ่ม ออนไลน์ ด้านล่าง เพื่อเข้าเล่นจริงและวาร์ปไปป่า", progress: kills ? "ปราบแล้ว " + kills : "" };
+      }
+      const gate = (map?.portals || []).find(p => p.targetMapId === "forbidden_forest") || { x: -4, z: -17 };
+      return { title: "ออกล่าผี", step: "เดินไปประตูวาร์ป ป่าต้องห้าม", progress: "", to: gate };
+    }
+    if (map?.strategic?.kind === "capital") {
+      const gate = nearestOf(map.portals || []);
+      return { title: "นครเวียงมนตรา · เขตปลอดภัย", step: "เลือกประตูเมืองเพื่อไปเขตล่าหรือด่านสงคราม", progress: "", to: gate };
+    }
+    const range = map?.region?.range || null;
+    const alive = []; for (const [id, mesh] of forestMonsters) { const g = mesh.metadata?.ghost; if (mesh.isEnabled() && !g?.deathAt) alive.push({ id, x: mesh.position.x, z: mesh.position.z }); }
+    const prey = nearestOf(alive);
+    const preyName = prey ? monsterName(room?.state?.monsters?.get?.(prey.id), prey.id) : "";
+    return { title: "ล่าผี · " + (map?.name || "") + (range ? " Lv " + range.join("–") : ""),
+      step: prey ? "ผีใกล้สุด: " + (preyName || "ผี") : "ไม่มีผีใกล้ ๆ · รอผีเกิดใหม่หรือสำรวจต่อ", progress: "ปราบแล้ว " + kills, to: prey };
+  }
+  const hudProjA = new B.Vector3(), hudProjB = new B.Vector3();
+  function updateHud(now) {
+    const me = mode === "live" ? ownServerCharacter() : null, hero = getLocalAvatar();
+    // Player card.
+    const hp = me ? Number(me.hp) : demoHp, maxHp = me ? Number(me.maxHp) || 100 : 100;
+    hudSet(localHpBar, "hpw", pctOf(hp, maxHp), "width"); hudSet($("hpText"), "hp", Math.ceil(hp) + "/" + Math.ceil(maxHp));
+    const hasSt = me && Number(me.maxStamina) > 0;
+    hudSet($("staminaText"), "st", hasSt ? Math.round(me.stamina) + "/" + Math.round(me.maxStamina) : "");
+    const xpMax = Number(me?.xpToNext) || 0, xp = Number(me?.experience) || 0;
+    hudSet($("expBar")?.querySelector("i"), "xpw", xpMax ? pctOf(xp, xpMax) : "0%", "width");
+    hudSet($("expText"), "xp", me ? (xpMax ? "EXP " + xp + "/" + xpMax : "EXP สูงสุด") : "EXP · เล่นออนไลน์เพื่อเก็บ");
+    hudSet($("levelBadge"), "lv", String(Number(me?.level) || 1));
+    hudSet($("classGlyph")?.firstChild, "glyph", PATH_GLYPHS[me?.pathId] || "๛", "nodeValue");
+    $("classGlyph")?.classList.toggle("low-hp", hp / maxHp < .3);
+    // Target frame: only while there is a target.
+    const tg = hudCurrentTarget(now);
+    hudSet(ui.monsterStatus, "tgh", !tg, "hidden");
+    if (tg) {
+      hudSet($("targetName"), "tgn", tg.name); hudSet($("targetLevel"), "tgl", "Lv " + tg.level + (tg.elite ? " · ระดับสูง" : ""));
+      hudSet(ui.monsterBar, "tgw", tg.alive ? pctOf(tg.hp, tg.maxHp) : "0%", "width");
+      hudSet(ui.monsterText, "tgt", tg.alive ? Math.ceil(tg.hp) + "/" + Math.ceil(tg.maxHp) : "ปราบแล้ว");
+      ui.monsterStatus.classList.toggle("elite", Boolean(tg.elite));
+    }
+    // Guide tracker (the territory war owns this card while a battle is on).
+    if (!$("quest").classList.contains("war-hud")) {
+      const gd = hudGuide(), q = $("quest");
+      if (gd) {
+        hudSet(q.querySelector(".quest-content strong"), "qt", gd.title); hudSet(q.querySelector(".quest-content > span"), "qs", gd.step);
+        hudSet($("questProgress"), "qp", gd.progress || "");
+      }
+      const pointer = $("questPointer"), to = gd?.to;
+      if (!pointer) { /* older page markup: no pointer box */ }
+      else if (to && hero && Number.isFinite(to.x)) {
+        const dist = Math.hypot(to.x - hero.x, to.z - hero.z);
+        hudSet(pointer, "qph", dist < 3, "hidden");
+        if (dist >= 3) {
+          const vp = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()), tm = scene.getTransformMatrix();
+          B.Vector3.ProjectToRef(new B.Vector3(hero.x, 0, hero.z), B.Matrix.IdentityReadOnly, tm, vp, hudProjA);
+          B.Vector3.ProjectToRef(new B.Vector3(to.x, 0, to.z), B.Matrix.IdentityReadOnly, tm, vp, hudProjB);
+          const deg = Math.round(Math.atan2(hudProjB.y - hudProjA.y, hudProjB.x - hudProjA.x) * 180 / Math.PI);
+          if ($("questArrow")) $("questArrow").style.transform = "rotate(" + deg + "deg)";
+          hudSet($("questDistance"), "qd", Math.round(dist) + " ม.");
+        }
+      } else hudSet(pointer, "qph", true, "hidden");
+    }
+    renderStatusChip();
+  }
+  // Plain words instead of "DEMO · ↑0ม.": mode, players, safe zone, altitude only in the air.
+  function renderStatusChip() {
+    const hero = getLocalAvatar(), y = mode === "live" ? Number(ownServerCharacter()?.y) || 0 : Number(hero?.targetY) || 0;
+    const map = worldDefinitions?.[activeMapId], me = ownServerCharacter();
+    const safe = map?.strategic?.kind === "capital" || (map?.restAreas || []).some(r => hero && Math.hypot(hero.x - r.x, hero.z - r.z) <= r.radius);
+    const parts = [mode === "live" ? "ออนไลน์ · " + onlinePlayers.size + " คน" : "โหมดทดลอง"];
+    if (safe) parts.push("เขตปลอดภัย");
+    if (y > .5) parts.push("สูง " + Math.round(y) + " ม.");
+    hudSet(ui.onlineCount, "chip", parts.join(" · "));
+    ui.onlineCount.classList.toggle("safe", Boolean(safe));
   }
   function shortPkName(id) {
     return "ผู้เล่น-" + String(id || "").slice(0, 4);
@@ -6554,6 +6961,11 @@
         catch(error){console.warn("MONTRA battlefield admission",error);transferFailed=true;}
       }
       if(!joined)joined=await client.joinOrCreate("my_room",opts);
+      // The server sends guild and territory status as soon as we join, before
+      // the slot check below finishes; keep those first messages and replay
+      // them once their handlers exist, or the panels stay empty until a change.
+      const earlyMessages=new Map(), earlyHandlers=new Map();
+      for(const type of ["guild_state","territory_state"])joined.onMessage(type,message=>{if(!earlyHandlers.has(type))earlyMessages.set(type,message);});
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
       clearChatHistory(true);
@@ -6598,11 +7010,12 @@
         updateChatBadge();
         if (drawerActive === "chat") renderChat();
       });
-      joined.onMessage("territory_state",message=>{
+      const onTerritoryState=message=>{
         if(room!==joined)return;
         const oldDrums=territoryState?.local?.supply?.drums || [];
         territoryState=message;syncGateVisual();syncCastleRings();
         const alerts=message.local?.supply?.drums?.filter(id=>!oldDrums.includes(id)) || [];
+        if(alerts.length)SFX("drum",{important:true});
         if(alerts.length)toast("เสียงกลอง · กำลังชิง "+alerts.map(id=>message.local.pilot.points.find(p=>p.id===id)?.name || id).join(" · "));
         if(drawerActive==="war")renderWarPanel();
         if(drawerActive==="strategy")updateAtlasOwner();
@@ -6624,7 +7037,9 @@
             ui.quest.style.setProperty("--war-progress",pct/100);
           }else if(fighting)ui.quest.style.setProperty("--war-progress",Math.abs(local.progress)/local.goal);
         }
-      });
+      };
+      joined.onMessage("territory_state",onTerritoryState);
+      earlyHandlers.set("territory_state",onTerritoryState);
       joined.onMessage("territory_error",message=>{if(room===joined)toast(warErrors[message?.reason] || "เข้าศึกไม่ได้ในขณะนี้");});
       joined.onMessage("territory_transfer",message=>{
         if(room===joined && typeof message?.roomId==="string" && typeof message.ticket==="string")void connectOnline(endpoint,requestedSlot,message);
@@ -6638,7 +7053,7 @@
         } else toast("บันทึกรายงานไม่สำเร็จ · ลองอีกครั้ง");
         finishChatPending(); if(drawerActive==="chat") renderChat();
       });
-      joined.onMessage("guild_state", message => {
+      const onGuildState=message => {
         if(room!==joined)return;
         if(message===null)guildState=null;
         else if(typeof message?.id==="string" && typeof message.name==="string" &&
@@ -6649,7 +7064,11 @@
         else return;
         if(guildState){guildInvitation=null;guildUnread=false;updatePartyBadge();}
         renderGuild();
-      });
+      };
+      joined.onMessage("guild_state",onGuildState);
+      earlyHandlers.set("guild_state",onGuildState);
+      for(const [type,message] of earlyMessages)earlyHandlers.get(type)?.(message);
+      earlyMessages.clear();
       joined.onMessage("guild_invitation", message=>{
         if(room!==joined || typeof message?.inviteId!=="string" || typeof message.guildName!=="string" || typeof message.fromName!=="string")return;
         guildInvitation=message;guildUnread=drawerActive!=="guild";updatePartyBadge();
@@ -6745,6 +7164,8 @@
         if (typeof hit?.attackerId === "string") {
           const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
           playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
+          impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true, struck?.design?.kind);
+          if (hit.attackerId === localId) { hudTarget = { id: hit.targetId, until: performance.now() + 8000 }; if (Number(hit.hp) === 0) hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1; }
         }
         const talisman = hit?.source === "talisman";
         if (forestTarget) {
@@ -6796,6 +7217,7 @@
       });
       joined.onMessage("flight_started", info => {
         if (room !== joined) return;
+        { const flyer=avatars.get(info?.playerId); if(flyer) SFX("fly",{x:flyer.x,z:flyer.z}); }
         if (info?.playerId === localId) {
           pendingClimb = null;
           toast(info.direction === "up"
@@ -6820,6 +7242,7 @@
         if(room!==joined)return;
         if((joined.state?.players?.get?.(data?.attackerId)?.mapId || "ritual_village") !== activeMapId)return;
         renderMagicBolt(data);
+        { const thrower=avatars.get(data?.attackerId); if(thrower) SFX("rice",{x:thrower.x,z:thrower.z}); }
         if(data?.attackerId===localId) {
           toast("ข้าวสารปลุกเสกโดนเป้าหมาย -" + data.damage + " HP");
         }
@@ -6906,6 +7329,7 @@
         } else if(data?.phase==="held" && data.role==="victim") {
           setGrappleResponse("escape",data.durationMs,data.escapeStamina);toast("ถูกจับ · กดแก้จับก่อนถูกทุ่ม");
         } else if(data?.phase==="released") {
+          releaseMuayHold(localId); if(muayGrabTarget)releaseMuayHold(muayGrabTarget);
           if(grappleResponseMode==="escape")setGrappleResponse(null);
           if(data.reason==="escaped" && muayGrabTarget)toast("เป้าหมายแก้จับหลุดแล้ว");
           muayGrabTarget="";muayGrabUntil=0;
@@ -6916,6 +7340,15 @@
         if(data?.active===true){setGrappleResponse("counter",data.durationMs,data.stamina);toast("แก้จับสำเร็จ · กดสวนผู้จับได้");}
         else if(grappleResponseMode==="counter")setGrappleResponse(null);
       }});
+      joined.onMessage("muay_skill_used", result => {
+        if (room!==joined || typeof result?.playerId!=="string") return;
+        const caster=joined.state?.players?.get?.(result.playerId);
+        if (caster && (caster.mapId || "ritual_village")===activeMapId) {
+          const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
+          if (target && !["guard","parry","evade","chaiya_cover"].includes(result.skillId)) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
+          playMuaySkill(result.playerId,result.skillId,result.targetId);
+        }
+      });
       joined.onMessage("muay_skill_used", result => { if (room===joined && result?.playerId===localId && !["teep","grapple","parry","evade"].includes(result.skillId)) toast((muayBookData()?.catalog?.skills?.[result.skillId]?.name || "วิชามวย")+" สำเร็จ"); });
       joined.onMessage("muay_book_changed", () => { if(room===joined){selectedMuaySkill="";if(targetedSkill==="muay")setTargetedSkill(null);muayBookRenderKey="";renderMuayBook();toast("บันทึกตำรามวยแล้ว");} });
       joined.onMessage("sword_combo", data => { if (room===joined) {
@@ -6964,8 +7397,10 @@
         if (room !== joined) return;
         toast(result.skill + " · มีผล " + result.targets + " คน");
         if (ownServerCharacter()?.pathId === "phutthaisawan") playAction(avatars.get(localId), "dance");
+        if (ownServerCharacter()?.pathId === "muay_boran") playAction(avatars.get(localId), "m_wai");
       });
       joined.onMessage("possession_changed", notice => {
+        if(room===joined && notice?.active){ const who=avatars.get(notice.playerId); if(who) SFX("possess",{x:who.x,z:who.z}); }
         if(room!==joined || notice?.playerId!==localId)return;
         toast(notice.active ? "วิญญาณเข้าสิง · เพิ่มโจมตีและป้องกัน 20% นาน 60 วินาที" : "สถานะเข้าสิงสิ้นสุด");
         syncPossessionButton();
@@ -6973,7 +7408,7 @@
       joined.onMessage("summon_hit", hit => {
         if (room !== joined || !hit) return;
         const actor = summonAvatars.get(hit.ownerId);
-        if (actor) actor.hitUntil = performance.now() + 260;
+        if (actor) { actor.hitUntil = performance.now() + 260; SFX("ghost_hit", { x: actor.x, z: actor.z, intensity: .7 }); }
         if (hit.ownerId === localId) {
           toast("วิญญาณโจมตีผี -" + String(hit.damage) + " HP");
         }
@@ -6984,6 +7419,7 @@
         const attacker = avatars.get(hit.attackerId);
         if (victim) { victim.hitFlashUntil = performance.now() + 250; playAction(victim, "hit"); }
         playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
+        if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, false);
         if (attacker && victim) {
           faceAvatarToward(hit.attackerId, victim.x, victim.z);
         }
@@ -7009,7 +7445,9 @@
       joined.onMessage("monster_hit", hit => {
         if (room === joined) {
           playAction(avatars.get(hit?.targetId), "hit");
-          const g = forestMonsters.get(hit?.attackerId)?.metadata?.ghost; if (g) g.attackAt = performance.now();
+          if (hit?.targetId === localId && !(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };
+          const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost; if (g) g.attackAt = performance.now();
+          if (g && !(performance.now() - (g.criedAt || 0) < 1500)) { ghostVoice(g, gm2, "attack"); g.criedAt = performance.now(); }
           if (hit?.attackerId === MONSTER_ID) villageGhost.metadata.ghost.attackAt = performance.now();
         }
         if (room === joined && hit?.targetId === localId) {
@@ -7017,6 +7455,7 @@
         }
       });
       joined.onMessage("player_down", info => {
+        { const fallen=avatars.get(info?.playerId); if (room === joined && fallen) SFX("down",{x:fallen.x,z:fallen.z,important:true}); }
         if (room === joined && info?.playerId === localId) {
           toast("ตัวละครหมดสติ · รอเกิดใหม่");
         }
@@ -7515,9 +7954,11 @@
 
   let drawerActive = null;
   function closeDrawer() {
+    if(!ui.drawer.hidden)SFX("close");
     ui.drawer.hidden=true; ui.shade.hidden=true; drawerActive=null;
   }
   function openDrawer(name,title,html) {
+    if(ui.drawer.hidden)SFX("open");
     ui.drawerTitle.textContent=title;
     ui.drawerBody.innerHTML=html;
     ui.drawer.hidden=false; ui.shade.hidden=false;
@@ -8710,8 +9151,25 @@
       }
     };
   }
+  // Taps on any game button give a soft woodblock click.
+  document.addEventListener("click", event => { if (event.target.closest?.("button") && !event.target.closest("#drawerClose")) SFX("tap"); }, true);
+  // Sound settings, shown at the top of the help sheet.
+  function soundSettingsHtml() {
+    const a = window.MontraAudio?.settings; if (!a) return "";
+    const row = (key, label) => `<label class="field sound-row">${label}<input type="range" min="0" max="100" step="5" data-sound="${key}" value="${Math.round(a[key] * 100)}"></label>`;
+    return `<section class="sound-settings"><h3>เสียง</h3><label class="field sound-row"><input type="checkbox" data-sound="muted" ${a.muted ? "" : "checked"}> เปิดเสียง</label>` +
+      row("master", "ความดังรวม") + row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("music", "ดนตรี") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
+  }
+  function bindSoundSettings(root) {
+    for (const input of root.querySelectorAll("[data-sound]")) input.addEventListener("input", () => {
+      const key = input.dataset.sound;
+      if (key === "muted") window.MontraAudio?.set("muted", !input.checked); else window.MontraAudio?.set(key, Number(input.value) / 100);
+      if (key !== "muted") SFX(key === "ui" ? "tap" : "fist", { intensity: .6 });
+    });
+  }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>วิชาพื้นฐานจอมอาคม</h3><p>เลือกจอมอาคมสายผู้ร่ายเวทหรือผู้เยียวยาที่ลานพักก่อนใช้วิชาต่อไปนี้</p><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจและหมุนกล้องได้ วิชาอาคมต้องใช้ตัวละครจอมอาคมใน LIVE</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
+    openDrawer("help","วิธีเล่นและตั้งค่า",soundSettingsHtml()+`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>วิชาพื้นฐานจอมอาคม</h3><p>เลือกจอมอาคมสายผู้ร่ายเวทหรือผู้เยียวยาที่ลานพักก่อนใช้วิชาต่อไปนี้</p><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจและหมุนกล้องได้ วิชาอาคมต้องใช้ตัวละครจอมอาคมใน LIVE</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
+    bindSoundSettings(ui.drawerBody);
   }
   function currentBagSlots() {
     if (mode === "live") return inventoryState?.slots || null;
@@ -9247,7 +9705,7 @@
       if(!room || room.state?.buffsAvailable!==true){toast("เซิร์ฟเวอร์ยังไม่รองรับเข้าสิง");return;}
       try{room.send("possess",{});}catch(_){toast("ส่งคำสั่งเข้าสิงไม่สำเร็จ");}return;
     }
-    possessed=!possessed;syncPossessionButton();
+    possessed=!possessed;syncPossessionButton();if(possessed)SFX("possess");
     const possessedHero=getLocalAvatar(); if(possessedHero) possessedHero.possessed=possessed;
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
@@ -9302,10 +9760,12 @@
               demoLastHitAt = now;
               playAttack(localId, false, enemy.position.x, enemy.position.z);
               villageGhost.metadata.ghost.hurtAt = now;
+              impactAt(localId, villageGhost.position.x, villageGhost.position.z, "", true, villageGhost.metadata.ghost.design?.kind);
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
               hitFlashRemaining = .22;
               updateMonsterUI(demoMonsterHp, 100, demoMonsterHp > 0, true);
               if (demoMonsterHp <= 0) {
+                hudKills.ritual_village = (hudKills.ritual_village || 0) + 1;
                 releaseSoul(enemy.position.x, enemy.position.y + .4, enemy.position.z);
                 enemy.setEnabled(false);
                 demoAutoAttack = false;
@@ -9489,6 +9949,16 @@
     scene.fogEnd = camera.radius + atmosphere.fogFar;
     driftMist(elapsed, camera.target);
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
+    if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
+    { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);
+      // Music state: combat for 6 s after any fight action, war in a live battle, elite when one is near.
+      if ((musicSyncIn -= dt) <= 0 && hero) {
+        musicSyncIn = .5;
+        let elite = false;
+        for (const mesh of forestMonsters.values()) { const g = mesh.metadata?.ghost; if (g?.design?.elite && mesh.isEnabled() && !g.deathAt && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 30) { elite = true; break; } }
+        const war = Boolean(territoryState?.local?.inField && territoryState.local.phase === "battle");
+        window.MontraAudio?.music({ map: activeMapId, combat: performance.now() - lastCombatAt < 6000, war, elite });
+      } }
     driftClouds(camera.target, elapsed); updateStrikeLight(performance.now());
     keyLight.intensity = atmosphere.keyI * 1.65 * (1 - .22 * cloudCover);
     stormFlash(dt);

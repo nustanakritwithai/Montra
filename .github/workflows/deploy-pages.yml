@@ -29,7 +29,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Validate client JavaScript
-        run: node --check main.js
+        run: node --check main.js && node --check audio.js
 
       - name: Verify combat HUD wiring
         shell: bash
@@ -42,7 +42,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p _site
-          cp index.html main.js styles.css _site/
+          cp index.html main.js audio.js styles.css _site/
           # Game models (shaman body, Crescent Blade) loaded by main.js.
           cp -r assets _site/assets
           test -s _site/assets/characters/thai-male.glb
