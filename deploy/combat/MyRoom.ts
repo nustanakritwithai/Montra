@@ -739,13 +739,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.nextWarSample=0;this.updateTerritory();
         const states=war.castleGate(this.field,gate.id,seat.side,occupied,now,req!.repair===true);
         this.closedCastleGates=new Set(Object.keys(states).filter(key=>states[key].closed));
-      }else{war.gate(this.field,seat.side,occupied,now);this.gateClosed=war.inspect(this.field.site,now).gateClosed;}
+      }else{war.gate(this.field,seat.side,occupied,now,this.fieldCensus().relaySide);this.gateClosed=war.inspect(this.field.site,now).gateClosed;}
       this.nextWarSample=0;
     }catch(e){const reason=e instanceof Error?e.message:"";if(!reason.startsWith("war_"))console.error("MONTRA gate",e);client.send("territory_error",{reason:reason.startsWith("war_")?reason:"war_unavailable"});}
   }
   private fieldCensus(){
     let attack=0,defend=0;
-    const field=this.field;
+    const field=this.field,relay=field && WORLD_MAPS[field.site].strategic?.relay;
+    const relayHolders={attack:0,defend:0};
     const counts=field?.site===CASTLE_ID?castleObjectives.map(()=>({attack:0,defend:0})):undefined;
     const campCounts=counts?forwardCamps.map(()=>({attack:0,defend:0})):undefined;
     if(field){
@@ -761,9 +762,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           const camp=forwardCamps.find(c=>planarDistance(p,c)<=CAPTURE_RADIUS);
           if(camp)campCounts![camp.id-1][seat.side]++;
         }else if(planarDistance(p,warSites[field.site])<=5){if(seat.side==="attack")attack++;else defend++;}
+        else if(relay && planarDistance(p,relay)<=relay.radius)relayHolders[seat.side]++;
       }
     }
-    return {attack,defend,counts,campCounts};
+    const contested=relayHolders.attack>0 && relayHolders.defend>0;
+    const relaySide:WarSide|null=contested?null:relayHolders.attack?"attack":relayHolders.defend?"defend":null;
+    return {attack,defend,counts,campCounts,relaySide,contested};
   }
   private canMarch(id:string){
     const p=this.state.players.get(id),base=this.playerSpawn.get(id);
@@ -813,9 +817,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!WORLD_EXPANSION || (!this.warClients.size && !this.field) || clock<this.nextWarSample)return;
     this.nextWarSample=clock+1000;
     const war=guildStore().war;
-    const {attack,defend,counts,campCounts}=this.fieldCensus();
+    const {attack,defend,counts,campCounts,relaySide,contested}=this.fieldCensus();
     if(this.field){
-      war.advance(this.field,now,attack,defend,counts,this.previousPilotSample);
+      war.advance(this.field,now,attack,defend,counts,this.previousPilotSample,relaySide);
       if(counts)this.previousPilotSample=now;
     }
     const states=Object.fromEntries(Object.keys(warSites).map(site=>[site,war.inspect(site,now)]));
@@ -843,6 +847,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const local=s?{site:p.mapId,phase:ownBattle?s.phase:"finished",owner:s.owner,attackName:s.attackName,defendName:s.defendName,
         progress:Math.trunc(s.progress),goal:WAR_HOLD,seconds:s.seconds,attack,defend,inField,side:this.warSeats.get(c.sessionId)?.side,
         pilot:visiblePilot,supply:supply?{...supply,selected:seat!.camp,atBase:this.canMarch(c.sessionId)}:undefined,
+        relay:inField && ownBattle && this.battleActive && WORLD_MAPS[p.mapId].strategic?.relay?{side:relaySide,contested}:undefined,
         gateHp:s.gateHp,gateClosed:inField && this.gateClosed,
         canStart:!inField && s.phase==="open" && member?.officer===true && member.id!==s.ownerId,
         canJoin:!inField && s.phase==="battle" && !!member && (member.id===s.attacker || member.id===s.defender || (!s.owner && !s.defendName && member.officer))}:null;

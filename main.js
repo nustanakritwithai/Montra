@@ -1601,8 +1601,17 @@
         box(x,1,z,.17,2,.17,darkWood);box(x,2.16,z,.55,.58,.55,lanternPaper);
         cone(x,2.58,z,.37,1,.1,deep,4);box(x,.04,z,1.3,.05,1.3,paint.court);
       };
-      if(!castle)box(0,-1.05,-16,220,.6,228,deep);
-      for(let i=0;!castle && i<18;i++)for(const side of [-1,1]){
+      const relay=map.strategic.relay,bounds=map.bounds;
+      if(relay)box((bounds.minX+bounds.maxX)/2,-1.05,(bounds.minZ+bounds.maxZ)/2,bounds.maxX-bounds.minX+56,.6,bounds.maxZ-bounds.minZ+56,deep);
+      else if(!castle)box(0,-1.05,-16,220,.6,228,deep);
+      if(relay){
+        for(let i=0;i<22;i++)for(const side of [-1,1]){
+          const t=(i+.5)/22,h=3+5*noise(i,51);
+          cone(side<0?bounds.minX-4:bounds.maxX+4,h*.34,bounds.minZ+t*(bounds.maxZ-bounds.minZ),h,7,.3,stone,6);
+          cone(bounds.minX+t*(bounds.maxX-bounds.minX),h*.34,side<0?bounds.minZ-4:bounds.maxZ+4,h,7,.4,floor,6);
+        }
+      }
+      for(let i=0;!castle && !relay && i<18;i++)for(const side of [-1,1]){
         const h=4+(i*7)%6;
         cone(side*(46+i%4),h*.33,-65+i*5.6,h,6+i%4,.25,bamboo||lotus?forestLeaf:stone,6);
         cone(-48+i*5.6,h*.32,side>0?36+i%3:-72-i%4,h,6+i%5,.2,floor,6);
@@ -1620,6 +1629,56 @@
           box(x,.14,z,horizontal?1.55:.23,.035,horizontal?.14:1.55,paint.court);
           if(lotus && k%8===2){cone(x,.19,z,.1,1.15,1.25,civicRoad,7);cone(x,.49,z,.6,.85,.14,light,6);}
         }
+      }
+      if(relay){
+        const mine=relay.effect==="gate";
+        const rails=map.paths[map.strategic.railPath];
+        for(let i=1;rails && i<rails.length;i++){
+          const a=rails[i-1],b=rails[i],dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz);
+          const angle=Math.atan2(dx,dz),mx=(a.x+b.x)/2,mz=(a.z+b.z)/2;
+          for(const k of [-.63,.63]){
+            box(mx+k*dz/len,.27,mz-k*dx/len,.13,.1,len+.08,stone).rotation.y=angle;
+          }
+          for(let d=1;d<len;d+=2.6)box(a.x+dx*d/len,.21,a.z+dz*d/len,1.86,.12,.29,darkWood).rotation.y=angle;
+        }
+        ring(relay.x,.14,relay.z,relay.radius*2,gold);
+        for(const side of [-1,1]){
+          box(relay.x+side*3.8,1.8,relay.z,.22,3.6,.22,darkWood);
+          box(relay.x+side*3.8+.56,3,relay.z,1.12,.68,.1,mine?gold:paint.light);
+        }
+        expansionLabel(relay.name,relay.x,relay.z,13,5);
+        for(const p of map.portals.filter(p=>p.targetMapId===map.id)){
+          const {x,z}=p;
+          if(mine){
+            for(const dx of [-.75,.75])box(x+3+dx,.23,z,.14,.22,8,stone);
+            for(let k=-3;k<=3;k++)box(x+3,.12,z+k,2.3,.16,.25,darkWood);
+            box(x+3,.8,z,2,.9,2.8,crateWood);box(x+3,1.12,z,1.66,.5,2.4,stone);
+            for(const dx of [-1,1])for(const dz of [-.92,.92]){const wheel=cone(x+3+dx,.45,z+dz,.25,.82,.82,darkWood,10);wheel.rotation.z=Math.PI/2;}
+            for(const dx of [-2.1,2.1])box(x+dx,1.8,z-1,.26,3.6,.26,wooden);
+            roof(x,3.9,z-1,5,2.5);
+          }else{
+            box(x-1,.15,z,3,.24,5,wooden);
+            for(const dx of [-1,1])for(const dz of [-2.25,2.25])cone(x-1+dx,.38,z+dz,.75,.25,.25,darkWood);
+            const hull=cone(x-4.7,.38,z,.62,1.15,2.2,darkWood,8);hull.scaling.z=3.1;
+            box(x-4.7,.72,z,1.65,.14,4.4,wooden);
+            pavilion(x-4.7,z,2.2,2.1);
+          }
+          expansionLabel(p.label,x,z,13,5);
+          const hit=B.MeshBuilder.CreateBox("local transport",{width:4.5,height:2.5,depth:4},scene);
+          hit.parent=expansionRoot;hit.position.set(x,1.25,z);hit.visibility=.004;hit.metadata={portalId:p.id};
+        }
+        // Leave the old fort streets clear and distribute low scenery across the two new wings.
+        for(let i=0;i<110;i++){
+          const x=bounds.minX+5+noise(i,119)*(bounds.maxX-bounds.minX-10);
+          const z=bounds.minZ+5+noise(i,203)*(bounds.maxZ-bounds.minZ-10);
+          if((Math.abs(x)<42 && z>-65 && z<32) || !sceneryClear(x,z,5,map) || Math.hypot(x-relay.x,z-relay.z)<8)continue;
+          if(mine){
+            cone(x,.5,z,1.3,2.8,.9,stone,5);cone(x+.9,.65,z+.4,1.5,.7,.06,paint.light,5);
+          }else{
+            for(let j=0;j<3;j++){const reed=cone(x+.32*j,1,z,2+.3*j,.18,.09,forestLeaf,5);reed.rotation.z=(j-1)*.16;}
+          }
+        }
+        finish("outer district");
       }
       const crossings=sites.filter(s=>s.kind==="bridge");
       if(lotus)for(const z of [-4,-27])for(const x of [-22,22])crossings.push({x,z});
@@ -2140,7 +2199,10 @@
     }
     if(inTemple)buildTemple(map);
     if(paint){buildRegion(map,paint);if(!map.strategic)dressRegion(map,paint);}
-    for(const portal of (map.portals||[]).slice(portals[activeMapId]?1:0))makePortal(activeMapId,expansionRoot,portal);
+    for(const portal of (map.portals||[]).slice(portals[activeMapId]?1:0)){
+      if(map.strategic?.relay && portal.targetMapId===map.id)continue;
+      makePortal(activeMapId,expansionRoot,portal);
+    }
   }
   function makeForestMonster(monster,id) {
     if(monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||(ATLAS_GHOSTS[monster.mapId]&&monster.tier!=="boss"))return makeGhostMonster(monster,id);
@@ -6282,7 +6344,11 @@
           toast("คำสั่งวิญญาณไม่ถูกต้อง");
         }
       });
-      joined.onMessage("warp_complete", () => { if(room===joined){ toast("เดินทางสำเร็จ"); playAction(getLocalAvatar(), "arrive"); } });
+      joined.onMessage("warp_complete", () => {
+        if(room!==joined)return;
+        clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
+        toast("เดินทางสำเร็จ");playAction(getLocalAvatar(),"arrive");
+      });
       joined.onMessage("warp_failed", () => {
         if(room!==joined)return;
         clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
@@ -6791,6 +6857,11 @@
       }
       trail(Math.max(3, 5.5 * scale), "rgba(10,8,6,.55)");
       trail(Math.max(2, 4 * scale), theme.road || (activeMapId === "bound_temple" ? "#8a7552" : "#7a6546"));
+      const rail=map?.paths?.[map.strategic?.railPath];
+      if(large && rail){
+        ctx.save();ctx.strokeStyle="#d0c5a9";ctx.lineWidth=1.4;ctx.setLineDash([4,3]);ctx.beginPath();
+        rail.forEach((p,i)=>i?ctx.lineTo(sx(p.x),sy(p.z)):ctx.moveTo(sx(p.x),sy(p.z)));ctx.stroke();ctx.restore();
+      }
       for (const index of map?.strategic?.safeRoads || []) {
         ctx.strokeStyle = "#71d7b4"; ctx.lineWidth = Math.max(1, 1.5 * scale); ctx.beginPath();
         map.paths[index].forEach((p,i)=>i ? ctx.lineTo(sx(p.x),sy(p.z)) : ctx.moveTo(sx(p.x),sy(p.z)));
@@ -6860,17 +6931,26 @@
       mapDot(ctx,sx(obj.x),sy(obj.z),large?8:2.5,color,"#122825");
       if(large)mapText(ctx,String(obj.id),sx(obj.x),sy(obj.z)+3,10,"#ffffff");
     }
+    const relay=map?.strategic?.relay;
+    if(relay){
+      const control=territoryState?.local?.relay;
+      const color=control?.contested?"#ffb984":control?.side==="attack"?"#ff9181":control?.side==="defend"?"#83dfd2":"#ffe2a1";
+      const x=sx(relay.x),y=sy(relay.z);
+      ctx.strokeStyle=color;ctx.lineWidth=large?2:1.3;ctx.beginPath();ctx.arc(x,y,large?7:3,0,Math.PI*2);ctx.stroke();
+      if(large)mapText(ctx,relay.name,x,y+17,11,color);
+    }
     for (const site of map?.strategic?.sites || []) {
       if(map.strategic.objectives)continue;
       const major=site.kind==="fort" || site.kind==="palace";
       if(!large && !major)continue;
       const x=sx(site.x),y=sy(site.z);
       mapDot(ctx,x,y,major?5*u:2.8*u,major?"#ffcf76":"#c3e0b1","#263732");
-      if(large && site.kind!=="bridge")mapText(ctx,site.name,x,y-7,10,major?"#ffe5ab":"#dfebd4");
+      if(large && site.kind!=="bridge" && (!relay || Math.hypot(site.x-relay.x,site.z-relay.z)>12))
+        mapText(ctx,relay && site.kind==="fort"?"ธงหลัก":site.name,x,y-7,relay && major?12:10,major?"#ffe5ab":"#dfebd4");
     }
     for(const [i,s] of (map?.strategic?.rampart?.stairs || []).entries()){
       const x=sx(s.foot.x),y=sy(s.foot.z);mapDot(ctx,x,y,map.strategic.objectives?(large?2.2:1):large?4:2,"#a5ecff");
-      if(large && !map.strategic.objectives)mapText(ctx,"บันได "+(i+1),x,y-6,10,"#c4f5ff");
+      if(large && !map.strategic.objectives && !relay)mapText(ctx,"บันได "+(i+1),x,y-6,10,"#c4f5ff");
     }
     for (const area of map?.restAreas || []) {
       const x = sx(area.x), y = sy(area.z), r = area.radius * scale;
@@ -6888,6 +6968,12 @@
       } else mapDot(ctx, x, y, large ? 3.2 : 1.8, "#f1786c", "rgba(40,6,6,.9)");
     });
     for (const portal of activePortals()) {
+      if(portal.targetMapId===activeMapId && map?.strategic?.relay){
+        const x=sx(portal.x),y=sy(portal.z),r=large?6:3;
+        ctx.fillStyle="#23433e";ctx.strokeStyle="#b1f4df";ctx.lineWidth=1.3;ctx.fillRect(x-r,y-r,2*r,2*r);ctx.strokeRect(x-r,y-r,2*r,2*r);
+        if(large)mapText(ctx,map.strategic.relay.effect==="gate"?"รถราง":"เรือ",x,y+18,10,"#c4f5e9");
+        continue;
+      }
       // Spirit gate glyph: pointed arch over a plinth.
       const x = sx(portal.x), y = sy(portal.z), r = large ? 7.5 : 4.6;
       ctx.beginPath(); ctx.moveTo(x - r * .75, y + r * .8); ctx.lineTo(x - r * .75, y - r * .1);
@@ -7007,6 +7093,14 @@
     const isCastle=s.site==="tri_wiang_castle";
     const gauge=$("warGauge");gauge.hidden=isCastle || s.phase!=="battle";gauge.max=s.goal;gauge.value=Math.abs(s.progress);
     $("warCount").textContent=s.phase==="battle"?((s.progress<0?"ฝ่ายรับ":"ฝ่ายบุก")+" ยึดธง "+Math.abs(s.progress)+"/"+s.goal+(s.inField?" · ในวง บุก "+s.attack+" รับ "+s.defend:"")):"";
+    const relay=worldDefinitions[s.site].strategic?.relay;
+    if(relay){
+      const state=s.relay;
+      const status=state?(state.contested?"กำลังแย่งชิง":state.side==="attack"?"ฝ่ายบุกคุม":state.side==="defend"?"ฝ่ายรับคุม":"วงว่าง"):"";
+      const rule=relay.effect==="gate"?"ฝ่ายบุกคุม แรงทุบประตูเพิ่มเป็น 30 · ฝ่ายรับคุม ลดเหลือ 10 · ปกติ 15":"เมื่อฝ่ายที่คุมมีคนมากกว่าที่ธงหลัก เกจธงเดินเพิ่ม 1 หน่วยต่อวินาที";
+      $("warFlag").textContent+=" · "+relay.name+" ("+relay.x+", "+relay.z+")"+(status?" · "+status:"")+"\n"+rule+" · ทั้งสองฝ่ายอยู่จุดเสริมพร้อมกัน โบนัสหยุด";
+      $("warFlag").style.whiteSpace="pre-line";
+    }
     button.hidden=!(s.inField || s.canStart || s.canJoin);
     button.textContent=s.inField?"กลับห้องโลก":s.canStart?"เปิดศึกที่ธง · 5 นาที":"เข้าร่วมสนามรบ";
     if(isCastle){
@@ -7131,6 +7225,7 @@
       const map=worldDefinitions[activeMapId],range=map.region?.range;
       note.textContent=map.name+(range?" · Lv."+range.join("–"):"")+" · ประตูไป"+map.portals.filter(p=>p.targetMapId!==activeMapId).map(p=>worldDefinitions[p.targetMapId].name).join(" / ");
       if(map.strategic?.objectives)note.textContent+=" · 1–6 จุดทำคะแนน · 7 บัลลังก์ · จุดฟ้าคือบันได · กากบาทแดงคือประตูปิด · ธงเขียวคือค่ายที่ส่งกำลังได้ วงส้มคือสัญญาณกลอง";
+      if(map.strategic?.relay)note.textContent+=" · "+map.strategic.hint+" · วงทองคือจุดสนับสนุน กรอบสี่เหลี่ยมคือสถานี จุดฟ้าข้างธงคือบันไดกำแพง";
       const button=document.createElement("button");button.type="button";button.className="primary";button.id="openStrategicMap";
       button.textContent="เปิดแผนที่ยุทธศาสตร์ · "+Object.keys(worldDefinitions).length+" พื้นที่";button.onclick=openStrategicMap;
       $("bigMap").parentElement.prepend(button);
@@ -8270,7 +8365,7 @@
     const repair=$("castleRepair");
     if(repair)repair.hidden=!(castle && !siege.hidden && localWar.side==="defend" && status.hp<120 && localWar.pilot.points.find(p=>p.id===6)?.owner==="defend");
     const warpButton=$("warpButton");
-    warpButton.hidden=!(mode==="live" && room?.state?.worldMapsAvailable===true &&
+    warpButton.hidden=!(mode==="live" && !localWar?.inField && room?.state?.worldMapsAvailable===true &&
       isNearPortal(authoritative,portal) && !warpPending);
     warpButton.textContent=portal?.label || ("เดินทางไป"+(worldDefinitions?.[portal?.targetMapId]?.name || "ประตูวาร์ป"));
     if(me) {

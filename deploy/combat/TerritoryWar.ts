@@ -109,13 +109,14 @@ export class TerritoryWar {
     const row=this.db.prepare("SELECT camp FROM castle_pilot_musters WHERE battle=? AND character=?").get(field.seq,character);
     return Number(row?.camp??0);
   }
-  gate(field:Battlefield,side:WarSide,occupied:boolean,now:number):void{
+  gate(field:Battlefield,side:WarSide,occupied:boolean,now:number,relaySide:WarSide|null=null):void{
     this.atomic(()=>{
       const b=this.current(field.site,now);
       if(!b || b.seq!==field.seq || b.ended!==null || !b.gate_hp)throw Error("war_gate_inactive");
       if(side==="attack"){
         if(b.gate_open)throw Error("war_gate_open");
-        this.db.prepare("UPDATE territory_battles SET gate_hp=max(0,gate_hp-15) WHERE seq=?").run(b.seq);
+        const damage=PROVINCES[field.site].relay?.effect==="gate" && relaySide?(relaySide==="attack"?30:10):15;
+        this.db.prepare("UPDATE territory_battles SET gate_hp=max(0,gate_hp-?) WHERE seq=?").run(damage,b.seq);
       }else{
         if(b.gate_open && occupied)throw Error("war_gate_occupied");
         this.db.prepare("UPDATE territory_battles SET gate_open=? WHERE seq=?").run(b.gate_open?0:1,b.seq);
@@ -132,7 +133,7 @@ export class TerritoryWar {
       return pilotView(state).gates!;
     });
   }
-  advance(field:Battlefield,now:number,attack:number,defend:number,presence?:PilotPresence,previousSample?:number):void {
+  advance(field:Battlefield,now:number,attack:number,defend:number,presence?:PilotPresence,previousSample?:number,relaySide:WarSide|null=null):void {
     this.atomic(()=>{
       const b=field.site===CASTLE_ID?this.latest(field.site):this.current(field.site,now);
       if(!b || b.seq!==field.seq || b.ended!==null || now<=b.sample)return;
@@ -158,7 +159,9 @@ export class TerritoryWar {
         return;
       }
       const min=b.incumbent?0:-WAR_HOLD;
-      const progress=Math.min(WAR_HOLD,Math.max(min,b.progress+net*elapsed));
+      const supported=PROVINCES[field.site].relay?.effect==="banner" && ((net>0 && relaySide==="attack") || (net<0 && relaySide==="defend"));
+      const rate=supported?net+Math.sign(net):net;
+      const progress=Math.min(WAR_HOLD,Math.max(min,b.progress+rate*elapsed));
       this.db.prepare("UPDATE territory_battles SET progress=?,sample=? WHERE seq=?").run(progress,now,b.seq);
       if(progress>=WAR_HOLD)this.finish(b,b.attacker,now);
       else if(progress<=-WAR_HOLD && b.defender && this.guildName(b.defender))this.finish(b,b.defender,now);

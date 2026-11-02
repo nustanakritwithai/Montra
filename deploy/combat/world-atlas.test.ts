@@ -16,7 +16,7 @@ test("all fifteen maps connect to the village and every gate has a safe return",
     if(seen.has(id))continue;
     seen.add(id);
     for(const gate of WORLD_MAPS[id].portals){
-      const dest=WORLD_MAPS[gate.targetMapId],back=dest.portals.find(p=>p.targetMapId===id);
+      const dest=WORLD_MAPS[gate.targetMapId],back=dest.portals.find(p=>p.targetMapId===id && Math.hypot(gate.targetSpawn.x-p.x,gate.targetSpawn.z-p.z)<=2);
       assert.ok(back,gate.id);assert.ok(isSafeWorldPoint(dest,gate.targetSpawn),gate.id);
       assert.ok(Math.hypot(gate.targetSpawn.x-back.x,gate.targetSpawn.z-back.z)<=2);
       assert.ok(checkWarp({portalId:gate.id},{mapId:id,position:{...gate,y:0},alive:true,flying:false,
@@ -45,7 +45,12 @@ test("every marked trail is walkable and all gates, camps and monsters are reach
       for(const [dx,dz] of [[-1,0],[1,0],[0,-1],[0,1]])queue.push([x+dx,z+dz]);
     }
     const guards=ATLAS_SPAWNS.filter(s=>s.mapId===map.id);
-    for(const p of [...map.camps!,...map.portals,...guards])assert.ok(reached.has(p.x+","+p.z),map.id+" "+p.x+","+p.z);
+    const relay=map.strategic?.relay;
+    for(const p of [...map.camps!,...map.portals,...guards,...(relay?[relay]:[])])assert.ok(reached.has(p.x+","+p.z),map.id+" "+p.x+","+p.z);
+    if(relay){
+      assert.ok(!isRestArea(map.id,relay));assert.equal(map.portals.filter(p=>p.targetMapId===map.id).length,2);
+      assert.ok((map.bounds.maxX-map.bounds.minX)*(map.bounds.maxZ-map.bounds.minZ)>3.5*84*97);
+    }
     if(map.region)assert.deepEqual([Math.min(...guards.map(s=>s.level)),Math.max(...guards.map(s=>s.level))],map.region.range);
     else assert.equal(guards.length,0);
     for(const m of guards){assert.ok(!isRestArea(map.id,m));assert.deepEqual(parseAttackCommand({targetId:m.id}),{targetId:m.id});}
@@ -73,7 +78,11 @@ test("territories protect through traffic and have separate attack crossings and
     }
     const market=province.sites.find(s=>s.kind==="market")!,fort=province.sites.find(s=>s.kind==="fort")!;
     assert.ok(isRestArea(id,market));assert.ok(!isRestArea(id,fort));
-    assert.equal(province.sites.filter(s=>s.kind==="bridge" && !isRestArea(id,s)).length,id==="moon_pass"?2:3);
+    assert.equal(province.sites.filter(s=>s.kind==="bridge" && !isRestArea(id,s)).length,id==="moon_pass"?3:5);
+    if(province.railPath!==undefined){
+      const rail=map.paths![province.railPath],stops=map.portals.filter(p=>p.targetMapId===id);
+      assert.deepEqual([rail[0],rail.at(-1)],stops.map(({x,z})=>({x,z})));
+    }
     assert.ok(!isSafeWorldPoint(map,{...water,y:0}));assert.ok(!isSafeWorldPoint(map,{...fort,y:6}));
     assert.ok(!isWorldSegmentClear(id,shot[0],shot[1]));
     for(const path of [map.paths![2],map.paths![3]])assert.deepEqual(path[path.length-1],{x:fort.x,z:fort.z});

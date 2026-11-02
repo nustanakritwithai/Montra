@@ -6,6 +6,27 @@ import {mkdtempSync,rmSync} from "node:fs";
 import {GuildStore} from "./GuildStore.js";
 import {WAR_PROTECTION,WAR_DURATION,WAR_HOLD} from "./TerritoryWar.js";
 
+test("the mine changes gate damage only at Moon Pass; river supply requires a lead at the main flag",()=>{
+  const dir=mkdtempSync(path.join(tmpdir(),"montra-relay-")),store=new GuildStore(path.join(dir,"guilds.sqlite"));
+  try{
+    store.create("a","A","Moon");store.create("d","D","Tide");
+    const a=store.war.member("a")!,d=store.war.member("d")!,start=100000;
+    const mine=store.war.start("moon_pass",a,start),river=store.war.start("river_watch",a,start);
+    store.war.side(river,d,start,true);store.war.side(mine,d,start,true);
+    store.war.gate(mine,"attack",false,start,"attack");assert.equal(store.war.inspect(mine.site,start).gateHp,90);
+    store.war.gate(mine,"attack",false,start,"defend");assert.equal(store.war.inspect(mine.site,start).gateHp,80);
+    store.war.gate(mine,"attack",false,start,null);assert.equal(store.war.inspect(mine.site,start).gateHp,65);
+    store.war.gate(river,"attack",false,start,"attack");assert.equal(store.war.inspect(river.site,start).gateHp,105);
+    let now=start;
+    for(const [at,df,owner,expected] of [[0,0,"attack",0],[1,1,"attack",0],[1,0,"attack",2],[3,0,"attack",5],
+      [0,1,"attack",4],[0,1,"defend",2],[1,0,null,3]] as const){
+      now+=1000;store.war.advance(river,now,at,df,undefined,undefined,owner);
+      assert.equal(store.war.inspect(river.site,now).progress,expected);
+    }
+    store.war.advance(mine,start+1000,1,0,undefined,undefined,"attack");
+    assert.equal(store.war.inspect(mine.site,start+1000).progress,1);
+  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
+});
 test("capture progress, contested flags, deadline, independent protection and durable ownership",()=>{
   const dir=mkdtempSync(path.join(tmpdir(),"montra-war-")),file=path.join(dir,"guilds.sqlite");
   let store=new GuildStore(file);
