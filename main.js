@@ -2417,9 +2417,12 @@
     onBone("Hips");
     // Loose fisherman trousers to mid-calf, in bone-local space.
     for (const side of ["Left", "Right"]) {
-      loft([[.06, .118, .112], [-.06, .108, .104], [-.22, .088, .088], [-.35, .08, .082], [-.41, .078, .08]], pants, 12);
+      // Loose cloth sits well outside the skin so bent knees never poke through.
+      loft([[.06, .132, .126], [-.06, .124, .12], [-.22, .104, .104], [-.35, .095, .097], [-.42, .092, .094]], pants, 12);
+      ball(0, .02, 0, .25, pants, 8);
       onBone(side + "UpLeg", [0, 0, 0]);
-      loft([[.07, .082, .084], [0, .084, .086], [-.11, .084, .084], [-.2, .088, .086], [-.212, .083, .082]], pants, 12);
+      loft([[.07, .097, .099], [0, .098, .1], [-.11, .094, .095], [-.2, .096, .095], [-.212, .09, .09]], pants, 12);
+      ball(0, -.005, -.005, .21, pants, 8);
       onBone(side + "Leg", [0, 0, 0]);
     }
   }
@@ -2429,9 +2432,11 @@
     const angle = Math.acos(B.Scalar.Clamp(B.Vector3.Dot(up, d), -1, 1));
     return axis.lengthSquared() < 1e-6 ? B.Quaternion.Identity() : B.Quaternion.RotationAxis(axis.normalize(), angle);
   }
-  // Right-hand socket frame equals model space at rest: fingers point -X,
-  // forward is +Z, and +X runs back up the arm once the arm hangs down.
-  const HAND_GRIPS = { ritual_dagger: new B.Vector3(-.3, 0, 1), arcane_sword: new B.Vector3(-.6, 0, .8), spirit_staff: new B.Vector3(1, 0, .12) };
+  // Right-hand socket frame equals model space at rest (T-pose, palm down):
+  // fingers point -X and the thumb +Z. A fist grip holds every weapon along
+  // the thumb axis, so blades point forward-up and the staff stands upright
+  // once the elbow bends.
+  const HAND_GRIPS = { ritual_dagger: new B.Vector3(0, .15, 1), arcane_sword: new B.Vector3(0, .1, 1), spirit_staff: new B.Vector3(0, 0, 1) };
   function attachShamanModel(a) {
     if (shamanBody === null) { shamanWaiting.push(a); return; }
     if (!shamanBody || a.node.isDisposed()) return;
@@ -2451,26 +2456,248 @@
     a.rig.body.setEnabled(false);
     a.skin = { nodes, copy, rest: { hipsY: nodes.Hips.position.y } };
   }
-  function animateSkin(a, m, s, c, t, flying, now) {
-    const n = a.skin.nodes, q = (x, y, z) => B.Quaternion.RotationYawPitchRoll(y, x, z);
-    const lower = flying ? .95 : 1.22, breath = Math.sin(t * 2.1) * (1 - m);
-    n.LeftUpLeg.rotationQuaternion = q(flying ? -.35 : -s * .55 * m, 0, 0);
-    n.RightUpLeg.rotationQuaternion = q(flying ? -.12 : s * .55 * m, 0, 0);
-    n.LeftLeg.rotationQuaternion = q(flying ? .75 : Math.max(0, c) * .8 * m + .04, 0, 0);
-    n.RightLeg.rotationQuaternion = q(flying ? .55 : Math.max(0, -c) * .8 * m + .04, 0, 0);
-    n.LeftArm.rotationQuaternion = q((flying ? -.2 : s * .42 * m), 0, -lower + breath * .02);
-    let rightPitch = flying ? -.2 : -s * .42 * m, rightBend = .25 + .2 * m;
-    if ((a.swingUntil || 0) > now) {
-      const p = 1 - (a.swingUntil - now) / 380;
-      rightPitch = p < .35 ? -2.4 * (p / .35) : -2.4 + 3.0 * ((p - .35) / .65); rightBend = .2;
+  // ---- Action animation set (visual only) ----
+  // Every action maps to something the game already replicates: server
+  // combatState / alive / flying, or broadcast events (combat_hit, pvp_hit,
+  // monster_hit, summon_spawn, dash_started, item_used, warp_complete).
+  // Bones: identity rest pose, model faces +Z. Euler [pitch x, yaw y, roll z]
+  // composed as yaw * pitch * roll, so roll lowers an arm from the T-pose,
+  // negative pitch swings a lowered limb forward, and forearm yaw bends the
+  // elbow (negative on the left, positive on the right).
+  const ACTIONS = {
+    stab: { dur: .34, swing: true }, slash: { dur: .48, swing: true }, smash: { dur: .58, swing: true },
+    punch: { dur: .32, swing: true }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
+    drink: { dur: 1.15 }, dash: { dur: .46 }, rise: { dur: 1.0 }, arrive: { dur: .85 },
+  };
+  const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash" };
+  const POSE_BONES = ["Hips", "Spine", "Chest", "Neck", "Head", "LeftArm", "RightArm", "LeftForeArm", "RightForeArm",
+    "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg"];
+  function playAction(a, type) {
+    if (!a || !ACTIONS[type]) return;
+    const now = performance.now();
+    a.action = { type, start: now, end: now + ACTIONS[type].dur * 1000 };
+    if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
+  }
+  function playAttack(attackerId, ranged, targetX, targetZ) {
+    const a = avatars.get(attackerId);
+    if (!a) return;
+    if (Number.isFinite(targetX) && Number.isFinite(targetZ)) faceAvatarToward(attackerId, targetX, targetZ);
+    playAction(a, ranged ? "cast" : MELEE[a.weaponId] || "punch");
+  }
+  // Server state per avatar; a revival plays the get-up action.
+  function noteAvatarState(a, p) {
+    const alive = p?.alive !== false;
+    if (a.serverAlive === false && alive) playAction(a, "rise");
+    a.serverAlive = alive;
+    a.serverCombat = typeof p?.combatState === "string" ? p.combatState : "idle";
+    a.serverFlying = p?.flying === true;
+  }
+  const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
+  // Additive effect materials shared by every avatar.
+  const fxGradient = paintTexture("slash gradient", 64, (c, s) => {
+    const img = c.createImageData(s, s);
+    for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+      const u = x / (s - 1), v = y / (s - 1), i = (y * s + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(255 * Math.pow(v, 1.6) * (.15 + .85 * u) * Math.min(1, (1 - u) * 6));
     }
-    n.RightArm.rotationQuaternion = q(rightPitch, 0, lower - breath * .02);
-    n.LeftForeArm.rotationQuaternion = q(0, -(.25 + .2 * m), 0);
-    n.RightForeArm.rotationQuaternion = q(0, rightBend, 0);
-    n.Spine.rotationQuaternion = q(.06 * m + ((a.dashUntil || 0) > now ? .3 : 0), s * .06 * m, 0);
-    n.Chest.rotationQuaternion = q(breath * .02, -s * .08 * m, 0);
-    n.Hips.position.y = a.skin.rest.hipsY + Math.abs(c) * .025 * m;
-    n.Hips.rotationQuaternion = q(0, s * .07 * m, 0);
+    c.putImageData(img, 0, 0);
+  });
+  fxGradient.hasAlpha = true;
+  const fxMat = (name, hex) => {
+    const m = new B.StandardMaterial(name, scene);
+    m.diffuseColor = B.Color3.Black(); m.specularColor = B.Color3.Black(); m.emissiveColor = B.Color3.FromHexString(hex);
+    m.opacityTexture = fxGradient; m.disableLighting = true; m.backFaceCulling = false; m.alphaMode = B.Engine.ALPHA_ADD;
+    return m;
+  };
+  const SLASH_MATS = { stab: fxMat("dagger trail", "#cfd8ff"), slash: fxMat("blade trail", "#ff7436"), smash: fxMat("staff trail", "#8ff5df"), punch: fxMat("fist trail", "#ffe2a0") };
+  const castOrbMat = mat("cast orb", "#bff8ff", "#59d8ff"); glowMats.add(castOrbMat);
+  const vialMat = mat("potion vial", "#ff5a5a", "#d01c2c"); glowMats.add(vialMat);
+  const summonSeal = additiveMat("summon seal", squareYantraTexture("summon seal", "rgba(255,190,120,.95)", "#ff9a3a"));
+  const arriveSeal = additiveMat("arrive seal", squareYantraTexture("arrive seal", "rgba(150,255,230,.9)", "#5fffe0"));
+  function slashArc(material) {
+    const positions = [], uvs = [], indices = [], N = 14;
+    for (let i = 0; i <= N; i++) {
+      const u = i / N, ang = -Math.PI / 2 - 1.25 + u * 2.5;
+      for (const [row, r] of [[0, .35], [1, 1.55]]) { positions.push(Math.cos(ang) * r, 0, Math.sin(ang) * r); uvs.push(u, row); }
+      if (i) { const k = i * 2; indices.push(k - 2, k - 1, k, k - 1, k + 1, k); }
+    }
+    const mesh = new B.Mesh("slash arc", scene), data = new B.VertexData();
+    data.positions = positions; data.uvs = uvs; data.indices = indices;
+    data.normals = []; B.VertexData.ComputeNormals(positions, indices, data.normals); data.applyToMesh(mesh);
+    mesh.material = material; mesh.isPickable = false;
+    return mesh;
+  }
+  // Lazily built per-avatar effect meshes, reused for every action.
+  function avatarFx(a) {
+    if (a.fx) return a.fx;
+    const n = a.skin.nodes, fx = { slashes: {} };
+    const pivot = new B.TransformNode("slash pivot", scene); pivot.parent = a.node; pivot.position.y = 1.35;
+    for (const [type, material] of Object.entries(SLASH_MATS)) {
+      const arc = slashArc(material); arc.parent = pivot; arc.setEnabled(false); fx.slashes[type] = arc;
+    }
+    fx.pivot = pivot;
+    fx.orb = B.MeshBuilder.CreateSphere("cast orb", { diameter: .2, segments: 6 }, scene);
+    fx.orb.material = castOrbMat; fx.orb.parent = n.LeftHand; fx.orb.position.set(.09, -.02, .04); fx.orb.isPickable = false; fx.orb.setEnabled(false);
+    fx.vial = B.MeshBuilder.CreateCylinder("potion vial", { height: .12, diameterTop: .03, diameterBottom: .06, tessellation: 6 }, scene);
+    fx.vial.material = vialMat; fx.vial.parent = n.LeftHand; fx.vial.position.set(.07, .03, .03); fx.vial.isPickable = false; fx.vial.setEnabled(false);
+    fx.seal = B.MeshBuilder.CreateGround("action seal", { width: 1, height: 1 }, scene);
+    fx.seal.parent = a.node; fx.seal.position.y = .06; fx.seal.isPickable = false; fx.seal.setEnabled(false);
+    return (a.fx = fx);
+  }
+  function animateSkin(a, m, speed, s, c, t, now, dt) {
+    const n = a.skin.nodes, P = {};
+    for (const b of POSE_BONES) P[b] = [0, 0, 0];
+    let hipsY = 0, damping = 14;
+    const set = (b, x, y, z) => { P[b][0] = x; P[b][1] = y; P[b][2] = z; };
+    const mix = (b, x, y, z, w) => { const v = P[b]; v[0] += (x - v[0]) * w; v[1] += (y - v[1]) * w; v[2] += (z - v[2]) * w; };
+    const live = mode === "live";
+    const dead = live && a.serverAlive === false;
+    const combat = live ? a.serverCombat || "idle" : "idle";
+    const demoLocal = !live && a.local;
+    const rising = combat === "ascending" || (demoLocal && demoFlightTarget && !demoFlightTarget.landing);
+    const landing = combat === "descending" || (demoLocal && demoFlightTarget?.landing);
+    const flying = !dead && (a.y > 4.4 || a.serverFlying || rising || landing || (demoLocal && demoFlying));
+    const climbing = combat === "climbing";
+    const run = Math.min(1, Math.max(0, (speed - 3.6) / 3));
+    const breath = Math.sin(t * 2.1) * (1 - m);
+    // Standing base: arms lowered from the T-pose, weapon-ready forearm.
+    const grip = { spirit_staff: 1.45, arcane_sword: .75, ritual_dagger: .85 }[a.weaponId] ?? .3;
+    set("LeftArm", 0, 0, -1.22 + breath * .02); set("RightArm", a.weaponId === "arcane_sword" ? -.15 : 0, 0, 1.22 - breath * .02);
+    set("LeftForeArm", 0, -.28, 0); set("RightForeArm", 0, grip, 0);
+    set("Chest", breath * .02, 0, 0);
+    // Locomotion: walk blending into a run.
+    const amp = .55 + .25 * run;
+    set("LeftUpLeg", -s * amp * m, 0, 0); set("RightUpLeg", s * amp * m, 0, 0);
+    set("LeftLeg", Math.max(0, c) * (.8 + .6 * run) * m + .04, 0, 0); set("RightLeg", Math.max(0, -c) * (.8 + .6 * run) * m + .04, 0, 0);
+    P.LeftArm[0] += s * (.42 + .45 * run) * m; P.RightArm[0] -= s * (.42 + .45 * run) * m;
+    P.LeftForeArm[1] -= .9 * run * m; P.RightForeArm[1] += .6 * run * m;
+    set("Spine", .06 * m + .16 * run, s * .06 * m, 0); P.Chest[1] = -s * .08 * m;
+    set("Hips", 0, s * .07 * m, 0);
+    hipsY = Math.abs(c) * .025 * m * (1 + run);
+    if (a.possessed) {
+      // Possessed: hunched, head hanging, arms loose and twitching.
+      mix("Spine", .32, 0, Math.sin(t * 23) * .04, .85); mix("Head", .4, Math.sin(t * 3.1) * .25, 0, .85);
+      mix("LeftArm", -.3, 0, -1.38, .8); mix("RightArm", -.3, 0, 1.38, .8);
+      mix("LeftForeArm", 0, -.6, 0, .8); mix("RightForeArm", 0, .6, 0, .8);
+    }
+    if (dead) {
+      // Collapsed on the back, limbs slack.
+      damping = 6;
+      set("Hips", -1.45, .2, 0); hipsY = -.74;
+      set("Spine", -.05, 0, 0); set("Chest", 0, 0, 0); set("Head", -.2, .5, 0);
+      set("LeftArm", -.2, 0, -.45); set("RightArm", -.2, 0, .5); set("LeftForeArm", 0, -.3, 0); set("RightForeArm", 0, .4, 0);
+      set("LeftUpLeg", -.15, 0, .12); set("RightUpLeg", -.3, 0, -.1); set("LeftLeg", .25, 0, 0); set("RightLeg", .5, 0, 0);
+    } else if (climbing) {
+      // Hand over hand up the ladder.
+      const k = Math.sin(t * 6);
+      set("LeftArm", -2.7 + .45 * k, 0, -1.35); set("RightArm", -2.7 - .45 * k, 0, 1.35);
+      set("LeftForeArm", 0, -.5, 0); set("RightForeArm", 0, .5, 0);
+      set("LeftUpLeg", -.9 - .5 * k, 0, 0); set("RightUpLeg", -.9 + .5 * k, 0, 0);
+      set("LeftLeg", 1.3, 0, 0); set("RightLeg", 1.3, 0, 0); set("Spine", .12, 0, 0); set("Hips", 0, 0, 0);
+      hipsY = 0;
+    } else if (flying) {
+      // Levitating in a cross-legged meditation; arms lift while rising
+      // and open to the sides while landing.
+      set("LeftUpLeg", -1.45, -.15, .5); set("RightUpLeg", -1.45, .15, -.5);
+      set("LeftLeg", 2.35, .55, 0); set("RightLeg", 2.35, -.55, 0);
+      set("Hips", -.08, 0, 0); set("Spine", .1 + .25 * m, 0, 0); hipsY = 0;
+      if (rising) { set("LeftArm", -2.75, 0, -1.0); set("RightArm", -2.75, 0, 1.0); set("LeftForeArm", 0, -.3, 0); set("RightForeArm", 0, .3, 0); }
+      else if (landing) { set("LeftArm", 0, 0, -.4); set("RightArm", 0, 0, .4); set("LeftForeArm", 0, -.2, 0); set("RightForeArm", 0, .2, 0); }
+      else { set("LeftArm", -.55, 0, -1.05); set("RightArm", -.55, 0, 1.05); set("LeftForeArm", 0, -.7, 0); set("RightForeArm", 0, .7, 0); }
+      P.Chest[0] = Math.sin(t * 1.7) * .04;
+    }
+    // Transient actions blend over the state pose with an attack envelope.
+    const act = a.action, fx = avatarFx(a);
+    for (const arc of Object.values(fx.slashes)) arc.setEnabled(false);
+    fx.orb.setEnabled(false); fx.vial.setEnabled(false); fx.seal.setEnabled(false);
+    let flare = 0;
+    if (act && now < act.end && !dead) {
+      const p = act.hold ?? (now - act.start) / (act.end - act.start); // hold: frozen frame for previews
+      const w = Math.min(1, p / .12, (1 - p) / .22);
+      const strike = ease((p - .3) / .25);
+      damping = 26;
+      const lerp3 = (A, Bv, k) => [A[0] + (Bv[0] - A[0]) * k, A[1] + (Bv[1] - A[1]) * k, A[2] + (Bv[2] - A[2]) * k];
+      const pose = (bone, A, Bv, k = strike) => { const v = lerp3(A, Bv, k); mix(bone, v[0], v[1], v[2], w); };
+      const lunge = k => { pose("LeftUpLeg", [0, 0, 0], [-.55, 0, 0], k); pose("RightUpLeg", [0, 0, 0], [.35, 0, 0], k); pose("LeftLeg", [.1, 0, 0], [.45, 0, 0], k); pose("RightLeg", [.1, 0, 0], [.3, 0, 0], k); };
+      const trail = () => {
+        const arc = fx.slashes[act.type]; if (!arc) return;
+        const k = Math.max(0, 1 - Math.abs(p - .52) / .2);
+        arc.setEnabled(k > 0); arc.visibility = k * .9;
+        const tilt = { stab: 0, slash: .5, smash: 1.45, punch: 0 }[act.type];
+        fx.pivot.rotation.set(0, (p - .52) * (act.type === "slash" ? -3 : -1.2), tilt);
+        const sc = act.type === "stab" || act.type === "punch" ? .75 : 1.15; arc.scaling.set(sc, 1, sc);
+      };
+      switch (act.type) {
+        case "stab": case "punch":
+          pose("RightArm", [.6, 0, 1.1], [-1.5, .1, 1.18]); pose("RightForeArm", [0, 1.7, 0], [0, .08, 0]);
+          pose("Chest", [0, -.35, 0], [0, .35, 0]); pose("Spine", [0, 0, 0], [.22, 0, 0]); lunge(strike); trail(); break;
+        case "slash":
+          pose("RightArm", [-2.9, -.4, 1.3], [-.45, .95, 1.05]); pose("RightForeArm", [0, .9, 0], [0, .15, 0]);
+          pose("LeftArm", [-.2, 0, -1.0], [.25, 0, -1.25]);
+          pose("Chest", [0, -.6, 0], [0, .65, 0]); pose("Spine", [-.05, 0, 0], [.28, 0, 0]); lunge(strike); trail(); break;
+        case "smash":
+          pose("RightArm", [-2.95, 0, 1.35], [-1.05, 0, .95]); pose("LeftArm", [-2.95, 0, -1.35], [-1.05, 0, -.95]);
+          pose("RightForeArm", [0, .3, 0], [0, .2, 0]); pose("LeftForeArm", [0, -.3, 0], [0, -.2, 0]);
+          pose("Spine", [-.28, 0, 0], [.48, 0, 0]); pose("LeftLeg", [.1, 0, 0], [.55, 0, 0]); pose("RightLeg", [.1, 0, 0], [.55, 0, 0]);
+          pose("LeftUpLeg", [0, 0, 0], [-.4, 0, 0]); pose("RightUpLeg", [0, 0, 0], [-.4, 0, 0]);
+          hipsY -= .09 * strike * w; trail(); break;
+        case "cast": {
+          pose("RightArm", [-2.3, 0, 1.0], [-1.65, 0, 1.12]);
+          pose("LeftArm", [.35, 0, -1.1], [-1.5, -.25, -1.18]); pose("LeftForeArm", [0, -1.5, 0], [0, -.05, 0]);
+          pose("Spine", [-.12, 0, 0], [.16, 0, 0]); pose("Chest", [0, .3, 0], [0, -.2, 0]); lunge(strike * .7);
+          fx.orb.setEnabled(true); const g = p < .55 ? .6 + p * 1.8 : Math.max(0, 1.6 - (p - .55) * 4); fx.orb.scaling.setAll(Math.max(.01, g));
+          break;
+        }
+        case "hit": {
+          const k = Math.sin(Math.min(1, p * 1.6) * Math.PI);
+          mix("Spine", -.42 * k, .25 * k, 0, w); mix("Chest", -.2 * k, -.2 * k, 0, w); mix("Head", -.35 * k, 0, 0, w);
+          mix("LeftArm", -.3, 0, -.75, w * k); mix("RightArm", -.3, 0, .75, w * k);
+          mix("LeftLeg", .35, 0, 0, w * k); mix("RightLeg", .35, 0, 0, w * k); hipsY -= .05 * k * w; break;
+        }
+        case "summon": {
+          const up = ease(p / .35), shake = Math.sin(t * 30) * .06 * (p > .35 ? 1 : 0);
+          mix("LeftArm", -2.85 + shake, 0, -.55 * up - .3, w); mix("RightArm", -2.85 - shake, 0, .55 * up + .3, w);
+          mix("LeftForeArm", 0, -.15, 0, w); mix("RightForeArm", 0, .15, 0, w);
+          mix("Spine", -.22 * up, 0, 0, w); mix("Head", -.4 * up, 0, 0, w);
+          flare = w; fx.seal.setEnabled(true); fx.seal.material = summonSeal;
+          fx.seal.scaling.setAll(1.5 + 3.5 * ease(p / .5)); fx.seal.visibility = w; fx.seal.rotation.y = p * 2; break;
+        }
+        case "drink": {
+          const lift = ease(p / .3) * (1 - ease((p - .8) / .2));
+          mix("LeftArm", -1.25, .2, -.95, lift); mix("LeftForeArm", 0, -2.35, 0, lift); mix("Head", -.4 * ease((p - .3) / .2), 0, 0, lift);
+          fx.vial.setEnabled(p < .9); break;
+        }
+        case "dash":
+          mix("Spine", .5, 0, 0, w); mix("LeftArm", .95, 0, -1.0, w); mix("RightArm", .95, 0, 1.0, w);
+          mix("LeftUpLeg", -1.0, 0, 0, w); mix("RightUpLeg", .7, 0, 0, w); mix("LeftLeg", .35, 0, 0, w); mix("RightLeg", .95, 0, 0, w);
+          hipsY -= .06 * w; break;
+        case "rise": {
+          // From lying down: kneel, then stand.
+          const kneel = 1 - ease((p - .45) / .45);
+          mix("LeftUpLeg", -1.45, 0, 0, kneel); mix("RightUpLeg", .2, 0, 0, kneel);
+          mix("LeftLeg", 1.5, 0, 0, kneel); mix("RightLeg", 2.0, 0, 0, kneel);
+          mix("Spine", .35, 0, 0, kneel); mix("LeftArm", -.6, 0, -1.1, kneel); hipsY -= .38 * kneel; damping = 9; break;
+        }
+        case "arrive": {
+          const k = 1 - ease(p);
+          mix("LeftUpLeg", -.7, 0, .1, k); mix("RightUpLeg", -.7, 0, -.1, k); mix("LeftLeg", 1.1, 0, 0, k); mix("RightLeg", 1.1, 0, 0, k);
+          mix("Spine", .3, 0, 0, k); mix("LeftArm", -.3, 0, -.6, k); mix("RightArm", -.3, 0, .6, k); hipsY -= .2 * k;
+          fx.seal.setEnabled(true); fx.seal.material = arriveSeal; fx.seal.scaling.setAll(2 + 2.5 * p); fx.seal.visibility = 1 - p; break;
+        }
+      }
+    } else if (act && now >= act.end) a.action = null;
+    // Ease the skeleton toward the target pose.
+    const blend = 1 - Math.exp(-dt * damping), cur = a.poseCur || (a.poseCur = {});
+    for (const b of POSE_BONES) {
+      const v = cur[b] || (cur[b] = P[b].slice()), tgt = P[b];
+      v[0] += (tgt[0] - v[0]) * blend; v[1] += (tgt[1] - v[1]) * blend; v[2] += (tgt[2] - v[2]) * blend;
+      const node = n[b]; if (!node) continue;
+      node.rotationQuaternion = B.Quaternion.RotationYawPitchRoll(v[1], v[0], v[2]);
+    }
+    cur.hipsY = (cur.hipsY ?? hipsY) + (hipsY - (cur.hipsY ?? hipsY)) * blend;
+    n.Hips.position.y = a.skin.rest.hipsY + cur.hipsY;
+    return flare;
   }
   // Procedural gait: legs and arms counter-swing with speed, the body bobs and
   // leans, breathes at rest, tucks while flying and swings the weapon arm.
@@ -2481,7 +2708,7 @@
     const m = a.moveBlend, flying = a.y > 4.4;
     a.phase = (a.phase + dt * 9.5 * m) % (Math.PI * 2);
     const s = Math.sin(a.phase), c = Math.cos(a.phase), t = now / 1000;
-    if (a.skin) animateSkin(a, m, s, c, t, flying, now);
+    const flare = a.skin ? animateSkin(a, m, speed, s, c, t, now, dt) : 0;
     for (let i = 0; i < 2; i++) {
       const dir = i ? -1 : 1;
       r.legs[i].rotation.x = flying ? .25 + i * .2 : dir * s * .6 * m;
@@ -2491,9 +2718,12 @@
       r.elbows[i].rotation.x = .22 + m * .25;
     }
     r.body.position.y = Math.abs(c) * .05 * m + Math.sin(t * 2.1) * .012 * (1 - m);
+    // Familiars spin faster, widen and swell while being summoned.
+    a.familiarSpin = (a.familiarSpin || 0) + dt * (1 + flare * 4);
     for (const f of r.familiars) {
-      const angle = t * f.speed + f.offset, sign = Math.sign(f.speed);
-      f.node.position.set(Math.cos(angle) * f.radius, f.height + Math.sin(t * 2.3 + f.offset) * .22, Math.sin(angle) * f.radius);
+      const angle = a.familiarSpin * f.speed + f.offset, sign = Math.sign(f.speed), rad = f.radius * (1 + flare * .5);
+      f.node.position.set(Math.cos(angle) * rad, f.height + flare * .8 + Math.sin(t * 2.3 + f.offset) * .22, Math.sin(angle) * rad);
+      f.node.scaling.setAll(1 + flare * .7);
       f.node.rotation.y = -angle - sign * Math.PI / 2; // tail trails behind the orbit
     }
     r.body.rotation.x = .07 * m + ((a.dashUntil || 0) > now ? .3 : 0);
@@ -3150,6 +3380,7 @@
       setOnlinePlayer(id, Number(p.x), Number(p.z),
         Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
         p.equippedWeaponId);
+      noteAvatarState(avatars.get(id), p);
     });
     if(previousMapId !== activeMapId && mine) {
       const actor=avatars.get(localId);
@@ -3338,6 +3569,10 @@
       joined.onMessage("combat_hit", hit => {
         if (room !== joined) return;
         const forestTarget=joined.state?.monsters?.get?.(hit?.targetId);
+        if (typeof hit?.attackerId === "string") {
+          const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
+          playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
+        }
         if(forestTarget){if(forestTarget.mapId===activeMapId){syncForestMonsters(joined.state);if(hit.attackerId===localId)toast("โจมตี "+forestTarget.displayName+" -"+hit.damage+" HP");}return;}
         if(activeMapId !== "ritual_village" || hit?.targetId !== MONSTER_ID)return;
         // Players also visibly turn toward the monster while attacking,
@@ -3410,6 +3645,7 @@
       });
       joined.onMessage("summon_spawn", notice => {
         if (room !== joined) return;
+        playAction(avatars.get(notice?.ownerId), "summon");
         if (notice?.ownerId === localId) toast("อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
         syncSummons(joined.state);
       });
@@ -3434,7 +3670,8 @@
         if (room !== joined || !hit || typeof hit.targetId !== "string") return;
         const victim = avatars.get(hit.targetId);
         const attacker = avatars.get(hit.attackerId);
-        if (victim) victim.hitFlashUntil = performance.now() + 250;
+        if (victim) { victim.hitFlashUntil = performance.now() + 250; playAction(victim, "hit"); }
+        playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
         if (attacker && victim) {
           faceAvatarToward(hit.attackerId, victim.x, victim.z);
         }
@@ -3458,6 +3695,7 @@
         syncPKHud();
       });
       joined.onMessage("monster_hit", hit => {
+        if (room === joined) playAction(avatars.get(hit?.targetId), "hit");
         if (room === joined && hit?.targetId === localId) {
           toast("ถูกผีโจมตี -" + Number(hit.damage || 0) + " HP");
         }
@@ -3528,6 +3766,7 @@
       });
       joined.onMessage("item_used", event => {
         if (room !== joined) return;
+        playAction(getLocalAvatar(), "drink");
         toast("ใช้ยาเลือดแล้ว · +" + Number(event?.healed || 0) + " HP · บันทึกบน VPS");
         renderBag();
       });
@@ -3540,7 +3779,7 @@
       joined.onMessage("dash_started", info => {
         if (room !== joined || typeof info?.playerId !== "string") return;
         const actor = avatars.get(info.playerId);
-        if (actor) actor.dashUntil = performance.now() + 460;
+        if (actor) { actor.dashUntil = performance.now() + 460; playAction(actor, "dash"); }
         if (info.playerId === localId) toast("พุ่ง!");
       });
       joined.onMessage("dash_finished", info => {
@@ -3626,7 +3865,7 @@
           toast("คำสั่งวิญญาณไม่ถูกต้อง");
         }
       });
-      joined.onMessage("warp_complete", () => { if(room===joined) toast("เดินทางสำเร็จ"); });
+      joined.onMessage("warp_complete", () => { if(room===joined){ toast("เดินทางสำเร็จ"); playAction(getLocalAvatar(), "arrive"); } });
       joined.onMessage("warp_failed", () => {
         if(room!==joined)return;
         clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
@@ -3867,6 +4106,7 @@
     me.targetX = me.x;
     me.targetZ = me.z;
     me.dashUntil = performance.now() + 460;
+    playAction(me, "dash");
     demoDash = { ...direction, remaining: DASH_DEMO_DISTANCE };
     demoDashNextAt = performance.now() + DASH_DEMO_COOLDOWN_MS;
     toast("พุ่ง! · DEMO");
@@ -4581,6 +4821,7 @@
       demoHp+=healed;
       demoPotionCount--;
       if (localHpBar) localHpBar.style.width=demoHp+"%";
+      playAction(getLocalAvatar(), "drink");
       toast("DEMO ใช้ยาเลือด +" + healed + " HP · ไม่บันทึก");
       renderBag();
     };
@@ -4782,6 +5023,7 @@
     if (spiritShown) {
       spirit=B.MeshBuilder.CreateSphere("summoned guardian",{diameter:1.05,segments:12},scene);
       spirit.material=spiritMat;spirit.isPickable=false;
+      playAction(getLocalAvatar(), "summon");
       toast("เรียกวิญญาณผู้พิทักษ์ (จำลอง)");
     } else { spirit?.dispose();spirit=null;toast("เก็บวิญญาณกลับแล้ว"); }
     updateSummonButton(spiritShown);
@@ -4789,6 +5031,7 @@
   $("possess").onclick=()=> {
     if(mode==="live") { toast("เข้าสิงออนไลน์จะเปิดในรุ่นถัดไป");return; }
     possessed=!possessed;
+    const possessedHero=getLocalAvatar(); if(possessedHero) possessedHero.possessed=possessed;
     heroMat.emissiveColor = B.Color3.FromHexString(possessed?"#7c459b":"#3b2916");
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
@@ -4837,6 +5080,7 @@
             demoDest = null;
             if (now - demoLastHitAt >= 1000) {
               demoLastHitAt = now;
+              playAttack(localId, false, enemy.position.x, enemy.position.z);
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
               hitFlashRemaining = .22;
               updateMonsterUI(demoMonsterHp, 100, demoMonsterHp > 0, true);
