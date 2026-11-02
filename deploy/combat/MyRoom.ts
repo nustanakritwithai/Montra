@@ -1501,6 +1501,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(owner.hp===0){
       this.sentinelInterceptions.delete(id);
       if(aggressor){aggressor[1].pkKills++;owner.pkDeaths++;this.knockoutPlayer(link.ownerId,"pk",aggressor[0]);
+        void this.saveCharacter(aggressor[0]);
         this.broadcast("pvp_kill",{winnerId:aggressor[0],loserId:link.ownerId,kills:aggressor[1].pkKills,deaths:owner.pkDeaths},{afterNextPatch:true});}
       else this.knockoutPlayer(link.ownerId,"monster",monster!.id);
     }

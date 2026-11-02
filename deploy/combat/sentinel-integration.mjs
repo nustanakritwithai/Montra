@@ -9,12 +9,12 @@ if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url||"") || new URL(url).port==="4108" ||
   throw Error("Requires an isolated localhost server and disposable montra-sentinel-test-* directory");
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(read,label,timeout=10000){const end=Date.now()+timeout;while(Date.now()<end){const value=read();if(value)return value;await sleep(20);}throw Error("timeout: "+label);}
-const sdk=new Client(url),rooms=new Set(),tokens=Array.from({length:11},()=>"mt1_"+randomBytes(32).toString("hex"));
-async function seed(index,book,z=-9,x=8,level=25,pathId="sentinel"){
+const sdk=new Client(url),rooms=new Set(),tokens=Array.from({length:14},()=>"mt1_"+randomBytes(32).toString("hex"));
+async function seed(index,book,z=-9,x=8,level=25,pathId="sentinel",hp=160){
   const id=createHash("sha256").update(tokens[index]).digest("hex"),slots=Array(12).fill(null);
   slots[0]={itemId:"health_potion",quantity:2};slots[1]={itemId:"ritual_dagger",quantity:1};
   await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"Guardian"+index,level,experience:0,pkKills:0,pkDeaths:0,
-    x,y:0,z,hp:160,mapId:"ritual_village",build:{path:pathId,ancestry:"woodland"},
+    x,y:0,z,hp,mapId:"ritual_village",build:{path:pathId,ancestry:"woodland"},
     inventory:{version:1,slots,equippedWeaponSlot:1},...(pathId==="sentinel"?{sentinelBook:book}:{}),updatedAt:new Date().toISOString()}),{flag:"wx"});
 }
 const all=["guard","step","fortitude","anchor","bash","sweep","slam","counter","taunt","ward","intercept","party_ward"];
@@ -35,7 +35,9 @@ try{
     seed(5,{learned:["bash","taunt"],slots:["bash","taunt",null,null],practice:{guard:0,stun:0,assist:0},cooldowns:{}},8,1,3),
     seed(6,book(["guard","taunt","ward","intercept"])),seed(7,book(["guard","taunt","ward","intercept"]),-10),
     seed(8,null,-11,8,25,"seer"),
-    seed(9,book(["bash","slam","guard","counter"])),seed(10,book(["guard","taunt","ward","intercept"]),-11.5)]);
+    seed(9,book(["bash","slam","guard","counter"])),seed(10,book(["guard","taunt","ward","intercept"]),-11.5),
+    seed(11,book(["guard","taunt","ward","intercept"]),-9,8,25,"sentinel",1),
+    seed(12,book(["guard","taunt","ward","intercept"]),-10),seed(13,book(["guard","taunt","ward","intercept"]),-11)]);
   const fighter=await join(0),victim=await join(1,fighter.room.roomId);
   assert.equal(fighter.room.state.sentinelAvailable,true);
   await send(fighter,"sentinel_skill",{skillId:"bash",targetId:victim.room.sessionId,damage:99999},"command_rejected",e=>e.reason==="invalid_sentinel_skill");
@@ -91,5 +93,16 @@ try{
   runner.room.send("move",{x:8,z:-16});
   await event(charger,"sentinel_windup_result",e=>e.result==="miss");
   assert.equal(runner.me().stunned,false,"escaping the advertised range avoids the delayed stun");
-  console.log("PASS: monster taunt and stun, PvP stun immunity, delayed range, player and summon damage sharing, book persistence");
+  const fragile=await join(11),friend=await join(12,fragile.room.roomId),foe=await join(13,fragile.room.roomId);
+  fragile.room.send("party_invite",{targetId:friend.room.sessionId});
+  const lastInvite=await event(friend,"party_invitation");friend.room.send("party_accept",{inviteId:lastInvite.inviteId});
+  await event(fragile,"party_state",e=>e.members.length===2);
+  await send(fragile,"sentinel_skill",{skillId:"intercept",targetId:friend.room.sessionId},"sentinel_skill_used",e=>e.skillId==="intercept");
+  foe.events.length=0;foe.room.send("attack",{targetId:friend.room.sessionId});
+  await event(foe,"pvp_kill",e=>e.winnerId===foe.room.sessionId && e.loserId===fragile.room.sessionId);
+  await until(()=>foe.me().pkKills===1,"kill credit");
+  await foe.room.leave();rooms.delete(foe.room);await sleep(350);
+  const returningFoe=await join(13,friend.room.roomId);
+  assert.equal(returningFoe.me().pkKills,1,"interception knockout kill credit persists");
+  console.log("PASS: monster control, PvP stun immunity, delayed range, player and summon interception, knockout credit and book persistence");
 }finally{await Promise.allSettled([...rooms].map(room=>room.leave()));}
