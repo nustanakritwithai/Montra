@@ -135,6 +135,7 @@ export const MyRoomState = schema({
   craftRecipe: t.string().default(""),
   ritualSkillsAvailable: t.boolean().default(true),
   swordTreeCatalog: t.string().default(""),
+  territoryWarAvailable: t.boolean().default(false),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

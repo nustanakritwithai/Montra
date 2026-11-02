@@ -45,6 +45,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .mini-north { position:absolute; z-index:1; top:3px; left:50%; transform:translateX(-50%); font-family:Georgia,serif; font-size:11px; font-weight:bold; color:#f3d18f; text-shadow:0 0 4px #000, 1px 1px #000; }
 .place-name { margin-top:8px; font-size:10px; letter-spacing:.3px; color:#f6dca6; text-shadow:0 0 6px #000, 0 0 10px #ff9d3a55; }
 .quest { position:absolute; left:12px; top:112px; z-index:3; width:min(68vw,310px); padding:8px 10px; border-radius:12px; display:flex; gap:8px; align-items:flex-start; }
+.quest.war-hud::before {content:"";position:absolute;bottom:0;left:4%;width:92%;height:3px;background:#f7cc80;transform:scaleX(var(--war-progress,0));transform-origin:left}
+#warGauge {width:100%;height:11px;accent-color:#eac37a}
 .quest-icon { flex-shrink:0; color:#e7b366; font-size:22px; line-height:20px; }
 .quest strong { display:block; font-size:11px; color:#f9d68c; }
 .quest span:not(.quest-icon) { display:block; color:#ddded6; font-size:11px; line-height:1.35; }

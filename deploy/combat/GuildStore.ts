@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { TerritoryWar } from "./TerritoryWar.js";
 import { DatabaseSync } from "node:sqlite";
 import { characterStore } from "./CharacterStore.js";
 
@@ -28,6 +29,7 @@ export function parseGuildName(payload:unknown):string | null {
 
 /** Guild membership is authoritative, shared by all rooms in this Node process. */
 export class GuildStore {
+  readonly war:TerritoryWar;
   private readonly db:DatabaseSync;
   constructor(file:string) {
     this.db=new DatabaseSync(file);
@@ -47,6 +49,7 @@ export class GuildStore {
       if(!columns.some(c=>c.name==="specialty"))this.db.exec("ALTER TABLE guild_members ADD COLUMN specialty TEXT NOT NULL DEFAULT 'none' CHECK(specialty IN ('none','engineer','scout','support'))");
       this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS guild_one_squad_leader ON guild_members(guild_id,squad) WHERE rank='squad_leader' AND squad IS NOT NULL");
     });
+    this.war=new TerritoryWar(this.db);
   }
   close():void { this.db.close(); }
   private transaction<T>(fn:()=>T):T {

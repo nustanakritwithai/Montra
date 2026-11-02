@@ -1,9 +1,9 @@
 /** MONTRA V0.2.8: declarative world geometry. No client coordinates are trusted. */
-import { isFlightAltitude, isOnGround, isOnPlatform, isOnTop, touchesWallBody } from "./HeightRules.js";
+import { isFlightAltitude, isOnGround, isOnPlatform, isOnTop, touchesWallBody, rayHitsBox } from "./HeightRules.js";
 import { TEMPLE_ID, TEMPLE_GATE, TEMPLE_MAP } from "./TempleMap.js";
 import { ATLAS_MAPS, MARSH_GATE, atlasPortals } from "./WorldAtlas.js";
-import { makeHubs, type Province } from "./StrategicProvinces.js";
-export type WorldWall = Readonly<{x:number;z:number;width:number;length:number}>;
+import { makeHubs, onRampart, type Province } from "./StrategicProvinces.js";
+export type WorldWall = Readonly<{x:number;z:number;width:number;length:number;rampart?:boolean}>;
 export function segmentIntersectsExpandedWall(
   a:{x:number;z:number},b:{x:number;z:number},w:WorldWall,radius:number,
 ):boolean {
@@ -154,10 +154,21 @@ export function isWorldSegmentClear(mapId:string, from:{x:number;z:number}, to:{
     return Math.hypot(o.x-from.x-t*dx,o.z-from.z-t*dz)>o.radius;
   });
 }
+export function provinceShotClear(map:WorldMapDefinition,from:WorldPoint,to:WorldPoint,closedGate=false):boolean{
+  const r=map.strategic?.rampart;
+  if(!r)return isWorldSegmentClear(map.id,from,to);
+  const hits=(b:WorldWall,base:number,top:number)=>rayHitsBox(from,to,{x:b.x,z:b.z,y:base},{x:b.x+b.width,z:b.z+b.length,y:top});
+  // The empty passage under each lintel is distinct from the solid deck above it.
+  if(map.walls?.some(b=>hits(b,0,b.rampart?r.height:3.4)))return false;
+  if(r.gates.some((g,i)=>hits(g.box,i===0 && closedGate?0:r.height-.55,r.height)))return false;
+  return true;
+}
 export function isSafeWorldPoint(map: WorldMapDefinition, point: WorldPoint, radius = 0.4): boolean {
   if (![point.x, point.y, point.z, radius].every(Number.isFinite) || radius < 0) return false;
   if (point.x - radius < map.bounds.minX || point.x + radius > map.bounds.maxX ||
       point.z - radius < map.bounds.minZ || point.z + radius > map.bounds.maxZ) return false;
+  const rampart=map.strategic?.rampart;
+  if(rampart && isOnPlatform(point.y))return onRampart(rampart,point.x,point.z);
   // A saved height must be an actual walkable level, not just a finite number.
   // Only the village owns the existing watchwall and its elevated crest.
   if (map.id === DEFAULT_MAP_ID) {
