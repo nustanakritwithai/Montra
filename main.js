@@ -3388,7 +3388,7 @@
       const m = body.material.clone("ghost skin " + key);
       m.albedoColor = B.Color3.FromHexString(albedo); m.emissiveColor = B.Color3.FromHexString(emissive);
       if (!keepTexture) m.albedoTexture = null;
-      m.metallic = 0; m.roughness = 1; m.environmentIntensity = 0; m.directIntensity = 1.5;
+      m.metallic = 0; m.roughness = 1; m.environmentIntensity = 0; m.directIntensity = 1.0;
       skinVariants.set(key, m);
     }
     return skinVariants.get(key);
@@ -3435,7 +3435,7 @@
     // ผีตายซาก: gaunt blue-grey corpse, hunched, long arms, lank parted
     // hair, rotten shirt and a black shroud that frays into smoke.
     corpse(nodes, body, holder, o) {
-      body.material = ghostSkin(body, "corpse", "#8094ad", "#0b121c");
+      body.material = ghostSkin(body, "corpse", "#56677c", "#070b12");
       nodes.Spine.scaling.set(.86, 1.04, .84); nodes.LeftArm.scaling.set(1.18, .9, .9); nodes.RightArm.scaling.set(1.18, .9, .9);
       skinnedCut(body, "rag shirt", (x, y) => y > .93 && y < 1.5 && Math.abs(x) < .4, (x, y) => .012 + (y < 1.05 ? .02 : 0), cloth.rags);
       skinnedCut(body, "shroud legs", (x, y) => y > .3 && y < 1.0, (x, y) => .02 + .03 * (1 - (y - .3) / .7), cloth.shroud);
@@ -3466,10 +3466,12 @@
     // ผีผมยาวลอยฟ้า: pale ghost in a long white dress flying almost flat,
     // one clawed hand reaching ahead, hair spreading in black tendrils.
     longhair(nodes, body, holder, o) {
-      body.material = ghostSkin(body, "pale", "#e6e8e4", "#3a3a40");
+      body.material = ghostSkin(body, "pale", "#c9ccc8", "#1e1e22");
       nodes.Spine.scaling.set(.86, 1, .86);
-      skinnedCut(body, "white dress", (x, y) => y > .1 && y < 1.48 && Math.abs(x) < .38, (x, y) => y < 1.0 ? .03 + .05 * (1 - y) : .014, cloth.white);
-      const tail = lathe("dress tail", [[.2, .4], [.24, .2], [.2, 0], [.12, -.3], [.03, -.6]], gm.smokeWhite, 14); onBone(nodes, "Hips", tail);
+      skinnedCut(body, "white bodice", (x, y) => y > .9 && y < 1.48 && Math.abs(x) < .38, () => .014, cloth.white);
+      // One long skirt from the waist hides the legs and frays into smoke.
+      const skirt = lathe("white skirt", [[.17, .98], [.21, .85], [.25, .6], [.27, .35], [.26, .15]], cloth.white, 16); onBone(nodes, "Hips", skirt);
+      const tail = lathe("dress tail", [[.26, .16], [.24, -.05], [.16, -.35], [.04, -.7]], gm.smokeWhite, 16); onBone(nodes, "Hips", tail);
       ghostEyes(nodes, gm.eyeRed, .032);
       const mouth = B.MeshBuilder.CreateSphere("ghost mouth", { diameter: .05, segments: 5 }, scene); mouth.material = gm.mouth; mouth.position.set(0, 1.575, .1); mouth.scaling.set(1, 1.5, .5); onBone(nodes, "Head", mouth);
       const hair = ghostHair(nodes, [-1.3, -.8, -.3, .3, .8, 1.3].map(a => {
@@ -3494,7 +3496,7 @@
     // เงาผู้จารึก: a possessed scribe arched in a backbend, walking on hands
     // and feet with the head hanging back toward its prey.
     crawler(nodes, body, holder, o) {
-      body.material = ghostSkin(body, "grey", "#9aa0a8", "#0c0e12");
+      body.material = ghostSkin(body, "grey", "#6c7580", "#07090c");
       holder.rotation.y = 0; // the head end leads
       skinnedCut(body, "scribe robe", (x, y) => y > .35 && y < 1.48 && Math.abs(x) < .34, (x, y) => .018 + (y < 1 ? .03 : 0), cloth.saffron);
       ghostEyes(nodes, o.eye, .03);
@@ -3518,7 +3520,7 @@
     // ผู้เฝ้าพันธนาการ: hung upside down by chains from a floating yoke, mouth
     // torn open, arms reaching up along the chains, hair streaming down.
     hanged(nodes, body, holder, o, root) {
-      body.material = ghostSkin(body, "dead grey", "#8a9098", "#0e0f12");
+      body.material = ghostSkin(body, "dead grey", "#68717c", "#07080b");
       skinnedCut(body, "blue shirt", (x, y) => y > .93 && y < 1.48 && Math.abs(x) < .42, () => .016, cloth.blue);
       skinnedCut(body, "dark pants", (x, y) => y > .2 && y < 1.0, () => .02, cloth.shroud);
       holder.rotationQuaternion = Q(0, Math.PI, Math.PI); holder.position.y = 3.05;
@@ -3553,7 +3555,7 @@
     // turned to carved stone, a lacquered waist cloth, crown, fanged mask,
     // glowing cracks and a heavy club.
     statue(nodes, body, holder, o) {
-      body.material = ghostSkin(body, "stone " + (o.elite ? "elite" : "door"), o.elite ? "#86887d" : "#7d7268", "#0d0d0b", false);
+      body.material = ghostSkin(body, "stone " + (o.elite ? "elite" : "door"), o.elite ? "#6c6e66" : "#695e55", "#070706", false);
       nodes.Hips.scaling.set(1.22, 1, 1.18); nodes.Spine1.scaling.set(1.1, 1, 1.08); nodes.Chest.scaling.set(1.08, 1, 1.05);
       skinnedCut(body, "waist cloth", (x, y) => y > .6 && y < 1.02, (x, y) => .03 + .02 * (1 - (y - .6) / .4), o.elite ? cloth.lacquer : templeLacquer);
       const belt = lathe("gold belt", [[.2, .96], [.215, 1.0], [.2, 1.04]], gold, 14); belt.scaling.z = .8; onBone(nodes, "Hips", belt);
