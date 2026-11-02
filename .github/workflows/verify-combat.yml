@@ -32,6 +32,7 @@ jobs:
           cp deploy/combat/dash-rules.test.ts combat-verify/src/rooms/dash-rules.test.ts
           cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
           cp deploy/combat/TempleMap.ts combat-verify/src/rooms/TempleMap.ts
+          cp deploy/combat/StrategicProvinces.ts combat-verify/src/rooms/StrategicProvinces.ts
           cp deploy/combat/WorldAtlas.ts combat-verify/src/rooms/WorldAtlas.ts
           cp deploy/combat/world-atlas.test.ts combat-verify/src/rooms/world-atlas.test.ts
           cp deploy/combat/world-atlas-integration.mjs combat-verify/world-atlas-integration.mjs
