@@ -286,7 +286,7 @@
       const w = width / 2 * (1 + (noise(i * .37 + seed, 201) - .5) * wobble);
       positions.push(p.x + nx * w, y, p.z + nz * w, p.x - nx * w, y, p.z - nz * w);
       uvs.push(0, dist / width, 1, dist / width); normals.push(0, 1, 0, 0, 1, 0);
-      if (i) { const k = i * 2; indices.push(k - 2, k, k - 1, k - 1, k, k + 1); }
+      if (i) { const k = i * 2; indices.push(k - 2, k - 1, k, k - 1, k + 1, k); } // counter-clockwise from above: faces up
     }
     const mesh = new B.Mesh(name, scene), data = new B.VertexData();
     data.positions = positions; data.indices = indices; data.normals = normals; data.uvs = uvs; data.applyToMesh(mesh);
@@ -1449,6 +1449,177 @@
     finish("temple ruins detail");
     expansionLabel("วัดร้างพันธนาการ · Lv 8–20",0,18,18,10.5);
   }
+  // Palette and silhouettes are local art. Traversable geometry always comes from the room.
+  const regionStyles = {
+    drowned_marsh: ["#537861","#aa936d","#819769","#5b5643","#99e9bb","#376f79"],
+    moon_cemetery: ["#696e78","#b3a58e","#858799","#767885","#e7cda0","#4b445d"],
+    hex_ridge: ["#718153","#bca27b","#94a46a","#746d61","#f0cb65","#405747"],
+    naga_cavern: ["#506a73","#9caaa1","#708d89","#495c70","#70e1c4","#433f65"],
+    fallen_city: ["#82796f","#bda783","#9c8a75","#8c5c4c","#e1bd65","#515c66"],
+    asura_peak: ["#775a55","#be9273","#9c7160","#54484a","#ffa164","#632f3d"],
+    spirit_rift: ["#686190","#b0a1cc","#857daf","#64567f","#c4abff","#373458"],
+  };
+  const regionPaints=new Map();
+  function regionPaint(id) {
+    if(!regionStyles[id])return null;
+    if(!regionPaints.has(id)){
+      const [floor,road,court,stone,light,deep]=regionStyles[id].map((color,i)=>mat(id+"-"+i,color,i===4?color:undefined));
+      const terrain=new B.DynamicTexture(id+" terrain grain",256,scene,true);
+      const ink=terrain.getContext();
+      ink.fillStyle="#f0eee5";ink.fillRect(0,0,256,256);
+      for(let i=0;i<210;i++){
+        const x=(i*71+(i*i)%79)%256,y=(i*43+(i*i)%67)%256;
+        ink.fillStyle=i%4===0?"#c4c9c0":"#dadbd0";
+        ink.fillRect(x,y,2+i%7,1+i%3);
+      }
+      if(id==="fallen_city"){
+        ink.strokeStyle="#bcc1b8";ink.lineWidth=2;
+        for(let row=0;row<8;row++)for(let col=-1;col<5;col++)ink.strokeRect(col*64+row%2*32,row*32,64,32);
+      }
+      terrain.update();terrain.uScale=9;terrain.vScale=12;floor.diffuseTexture=terrain;
+      regionPaints.set(id,{floor,road,court,stone,light,deep});
+    }
+    return regionPaints.get(id);
+  }
+  function buildRegion(map,paint) {
+    let parts=[];
+    function put(mesh,x,y,z,material){
+      mesh.position.set(x,y,z);mesh.material=material;mesh.isPickable=false;parts.push(mesh);return mesh;
+    }
+    function box(x,y,z,w,h,d,m){
+      return put(B.MeshBuilder.CreateBox("region block",{width:w,height:h,depth:d},scene),x,y,z,m);
+    }
+    function cone(x,y,z,h,b,t,m,n=6){
+      return put(B.MeshBuilder.CreateCylinder("region carving",{height:h,diameterBottom:b,diameterTop:t,tessellation:n},scene),x,y,z,m);
+    }
+    function ring(x,y,z,d,m){
+      return put(B.MeshBuilder.CreateTorus("region seal",{diameter:d,thickness:.17,tessellation:32},scene),x,y,z,m);
+    }
+    function finish(name,cover=false){
+      for(const material of new Set(parts.map(p=>p.material))){
+        const group=parts.filter(p=>p.material===material);
+        const mesh=group.length===1?group[0]:B.Mesh.MergeMeshes(group,true,true);
+        mesh.name=map.id+" "+name;mesh.parent=expansionRoot;mesh.isPickable=false;
+        if(cover)templeCover.push(mesh);
+      }
+      parts=[];
+    }
+    const {floor,road,stone,light,deep}=paint;
+    const marsh=map.id==="drowned_marsh",rift=map.id==="spirit_rift";
+    // Distant slopes frame the playfield even when the camera follows an outer gate.
+    box(0,-1.2,-16,226,.65,239,deep);
+    for(let i=0;i<18;i++)for(const side of [-1,1]){
+      const tall=3+(i*11)%7;
+      cone(side*(48+i%3),tall*.35,-68+i*6,tall,6+i%5,marsh?1.2:0,stone,5);
+      cone(-52+i*6,tall*.32,side===1?39+i%4:-74-i%4,tall,6+i%4,0,floor,6);
+    }
+    for(const w of map.water||[]){
+      box(w.x+w.width/2,.035,w.z+w.length/2,w.width,.07,w.length,deep);
+      for(let i=1;i<=Math.floor(w.width/6);i++)box(w.x+i*5.5,.079,w.z+.8+(i%2),marsh?1.7:1.1,.025,.10,light);
+    }
+    for(const z of new Set((map.water||[]).map(w=>w.z+2)))for(const x of [-22,22]){
+      for(let i=-3;i<=3;i++)box(x,.11,z+i*.75,6,.16,.63,marsh?road:stone);
+      for(const side of [-1,1]){
+        box(x+side*3,.8,z,.14,.15,5.4,marsh?stone:light);
+        for(const end of [-1,1])cone(x+side*3,.52,z+end*2.7,1.2,.28,.20,stone,5);
+      }
+    }
+    // Low ground dressing leaves the playable lanes, sightlines and server collision intact.
+    const flatMarks=(x,z,n,m)=>{
+      for(let j=0;j<n;j++)box(x+j*.62,.055,z+(j%2)*.34,.62,.08,.36,m).rotation.y=j*.82;
+    };
+    for(let row=0;row<10;row++)for(let col=0;col<6;col++){
+      const x=-38+col*14+((row*13+col*3)%7),z=-59+row*9+((row*3+col*11)%5);
+      if(map.portals.some(p=>Math.hypot(x-p.x,z-p.z)<5)||map.camps.some(c=>Math.hypot(x-c.x,z-c.z)<8))continue;
+      let nearTrail=false;
+      for(const route of map.paths)for(let i=1;i<route.length;i++){
+        const a=route[i-1],b=route[i],dx=b.x-a.x,dz=b.z-a.z;
+        const t=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/(dx*dx+dz*dz)));
+        if(Math.hypot(x-a.x-dx*t,z-a.z-dz*t)<3)nearTrail=true;
+      }
+      if(nearTrail)continue;
+      if(marsh){
+        for(let j=0;j<5;j++)cone(x+j*.26,.48,z+(j%2)*.37,.9+j%3*.3,.28,.025,j%2?stone:paint.court,4).rotation.z=(j-2)*.19;
+        cone(x-.5,.10,z-.4,.12,1.2,1.2,paint.court,8);
+      }else if(map.id==="moon_cemetery"){
+        box(x,.36,z,.82,.72,.25,stone).rotation.z=.1;box(x,.06,z-.6,.9,.08,1.4,deep);
+      }else if(map.id==="naga_cavern" || rift){
+        for(let j=0;j<3;j++)cone(x+j*.32,.32,z+j%2*.35,.65+j*.12,.47,0,j===0?paint.court:stone,5).rotation.z=(j-1)*.36;
+      }else if(map.id==="asura_peak"){
+        flatMarks(x,z,3,deep);box(x,.08,z,.78,.09,.15,paint.road).rotation.y=-.5;
+      }else if(map.id==="hex_ridge"){
+        cone(x,.22,z,.42,1.65,.9,stone,5);cone(x+.55,.26,z+.15,.57,.9,.1,paint.court,5);
+      }else flatMarks(x,z,4,deep);
+    }
+    // Embossed marks follow the same waypoints the player sees on the minimap.
+    for(const route of map.paths||[])for(let i=1;i<route.length;i++){
+      const a=route[i-1],b=route[i],len=Math.hypot(b.x-a.x,b.z-a.z);
+      for(let step=4;step<len-2;step+=6){
+        const t=step/len;
+        const mark=box(a.x+(b.x-a.x)*t,.037,a.z+(b.z-a.z)*t,.55,.025,.23,road);
+        mark.rotation.y=Math.atan2(b.x-a.x,b.z-a.z)+.35;
+        mark.material=stone;
+      }
+    }
+    finish("landscape");
+    for(const w of map.walls||[]){
+      const x=w.x+w.width/2,z=w.z+w.length/2;
+      if(map.id==="fallen_city"){
+        box(x,2,z,w.width,4,w.length,stone);box(x,4.2,z,w.width+.3,.4,w.length+.3,deep);
+        for(let i=1;i<w.width-1;i+=2)box(w.x+i,2.5,w.z-.06,.9,1,.13,paint.court);
+      }else{
+        box(x,1.25,z,w.width,2.5,w.length,stone);
+        for(let i=1;i<w.width;i+=2.8)cone(w.x+i,3,z,2+i%2,2.1,.15,map.id==="naga_cavern"?paint.court:deep,5);
+      }
+      finish("barrier",true);
+    }
+    for(const o of map.obstacles){
+      const {x,z}=o,s=o.id==="landmark"?1.55:.76;
+      const pillar=(dx,y,dz,h,b,t,m,n)=>cone(x+dx*s,y*s,z+dz*s,h*s,b*s,t*s,m,n);
+      const block=(dx,y,dz,w,h,d,m)=>box(x+dx*s,y*s,z+dz*s,w*s,h*s,d*s,m);
+      if(marsh){
+        for(const side of [-1,1]){
+          pillar(side*.86,1.2,0,2.4,.25,.22,stone,5);
+          for(let j=0;j<4;j++)pillar(side*(1.2+j*.18),.95,j*.24-.4,2+j*.18,.26,0,floor,4).rotation.z=side*.15;
+        }
+        block(0,2.43,0,2.8,.25,1.7,stone);pillar(0,3.15,0,1.2,3.1,.24,deep,4);block(0,1.62,0,.65,.75,.65,light);
+      }else if(map.id==="moon_cemetery"){
+        block(0,.22,0,2.6,.44,1.6,deep);block(0,1.32,0,1.72,2,1,stone);
+        pillar(0,2.55,0,.7,1.8,.83,stone,4);block(0,1.48,-.51,.23,.85,.06,light);
+        if(o.id==="landmark"){const moon=ring(x,5*s,z,2.4*s,light);moon.rotation.x=Math.PI/2;}
+      }else if(map.id==="hex_ridge"){
+        pillar(0,.65,0,1.5,3.6,2.65,stone);pillar(0,1.75,0,1.05,2.65,1.7,deep);
+        block(0,3.25,0,1.25,2.4,1,stone).rotation.z=.13;
+        block(0,3.25,-.52,.6,.6,.08,light).rotation.z=.78;
+      }else if(map.id==="naga_cavern"){
+        for(const side of [-1,1]){
+          pillar(side*.83,1.75,0,3.6,1.3,.32,stone,5).rotation.z=-side*.27;
+          pillar(side*.53,3.6,0,1.4,.9,0,light,5).rotation.z=side*.6;
+        }
+        pillar(0,.66,-.5,1.3,1,.1,paint.court,5);
+      }else if(map.id==="fallen_city"){
+        block(0,.24,0,2.65,.5,2.65,deep);block(0,2,0,1.95,3.5,1.8,stone);
+        block(0,3.84,0,2.25,.28,2.24,road);pillar(0,4.66,0,1.5,2.5,.1,deep,4);
+        const dial=pillar(0,2.8,-.94,.17,1,1,light,12);dial.rotation.x=Math.PI/2;
+        block(.1,2.88,-1.06,.13,.46,.1,stone).rotation.z=.4;
+      }else if(map.id==="asura_peak"){
+        pillar(0,.56,0,1.12,2.8,2,stone);pillar(0,1.36,0,.72,1.4,2.6,deep);
+        for(const side of [-1,0,1])pillar(side*.67,2.3,0,2.3-Math.abs(side)*.5,.85,0,light,5).rotation.z=-side*.32;
+      }else if(rift){
+        for(const side of [-1,0,1]){
+          const h=side===0?4.7:2.7;pillar(side,h/2,0,h,1.35,.25,side===0?light:paint.court,5).rotation.z=-side*.3;
+        }
+        ring(x,.18,z,3.1*s,light);
+      }
+      finish("relic",true);
+    }
+    if(map.boss){
+      const {x,z}=map.boss;
+      ring(x,.13,z,14,light);ring(x,.14,z,15.2,stone);
+      for(let i=0;i<8;i++){const a=i*Math.PI/4;cone(x+Math.cos(a)*7.4,.26,z+Math.sin(a)*7.4,.5,.65,.3,light,4);}
+      finish("boss arena");expansionLabel(map.boss.name+" · Boss Lv.100",x,z,12,5);
+    }
+  }
   function fadeTempleWalls(hero) {
     const eye=camera.position,ray=templeSight;
     ray.origin.set(hero.x,hero.y+1.1,hero.z);
@@ -1477,7 +1648,8 @@
     if(buildKey===expandedMapKey)return;
     expandedMapKey=buildKey;selectedForestTarget=null;forestCrowns.length=0;
     const inTemple=activeMapId==="bound_temple";
-    ground.material=inTemple ? templeFloor : activeMapId==="forbidden_forest" ? forestFloor : groundMat;
+    const paint=regionPaint(activeMapId);
+    ground.material=paint ? paint.floor : inTemple ? templeFloor : activeMapId==="forbidden_forest" ? forestFloor : groundMat;
     templeCover.length=0;
     for(const child of expansionRoot.getChildren())child.dispose();
     for(const resource of expansionResources)resource.dispose();expansionResources.length=0;expansionLabels.length=0;
@@ -1485,12 +1657,12 @@
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
     const map=worldDefinitions?.[activeMapId];if(!map)return;
-    (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i));
+    (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i));
     for(const camp of map.camps||[]){
       const clearing=inTemple ? B.MeshBuilder.CreateGround("temple court",{width:21,height:19},scene) : B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
       // Between the soil (-.12) and trail tops (+.015), so their colors never
       // fight for the same depth pixels at the wide camera distance.
-      clearing.parent=expansionRoot;clearing.rotation.x=inTemple?0:Math.PI/2;clearing.position.set(camp.x,-.06,camp.z);clearing.material=inTemple?templeCourt:forestClearing;clearing.isPickable=false;
+      clearing.parent=expansionRoot;clearing.rotation.x=inTemple?0:Math.PI/2;clearing.position.set(camp.x,-.06,camp.z);clearing.material=paint?paint.court:inTemple?templeCourt:forestClearing;clearing.isPickable=false;
       const look=campLooks[camp.id];
       if(look){const soilMat=mat("camp soil",look.soil);soilMat.diffuseColor.scaleInPlace(.72);expansionResources.push(soilMat);clearing.material=soilMat;}
       expansionLabel(camp.name+" · Lv "+Math.min(...camp.levels)+"–"+Math.max(...camp.levels),camp.x,camp.z);
@@ -1510,16 +1682,18 @@
       shrineRuin(0,-88,expansionRoot,1.15);
       expansionLabel("ศาลร้างปลายป่า",0,-88,12,8.6);
       if(!map.portals?.some(p=>p.targetMapId==="bound_temple"))expansionLabel("ทางสู่วัดร้าง · ยังไม่เปิด",-48,-84);
-      expansionLabel("ทางสู่บึงพราย · ยังไม่เปิด",48,-84);
+      if(!map.portals.some(p=>p.targetMapId==="drowned_marsh"))expansionLabel("ทางสู่บึงพราย · ยังไม่เปิด",48,-84);
     }
     if(inTemple)buildTemple(map);
+    if(paint)buildRegion(map,paint);
     for(const portal of (map.portals||[]).slice(portals[activeMapId]?1:0))makePortal(activeMapId,expansionRoot,portal);
   }
   function makeForestMonster(monster,id) {
     const mesh=enemy.clone("monster-"+id);
     mesh.metadata={monsterId:id};
-    if(monster.tier==="elite") {
-      mesh.scaling.set(1.75,2.05,1.75);mesh.material=keeperMat;
+    if(monster.tier==="elite" || monster.tier==="boss") {
+      const boss=monster.tier==="boss",scale=boss?2.3:1.75,height=boss?2.65:2.05;
+      mesh.scaling.set(scale,height,scale);mesh.material=boss?regionPaint(monster.mapId).deep:keeperMat;
       const plate=(name,w,h,d,x,y,z,material)=>{
         const piece=B.MeshBuilder.CreateBox(name,{width:w,height:h,depth:d},scene);
         piece.parent=mesh;piece.position.set(x,y,z);piece.material=material;piece.isPickable=false;
@@ -1541,10 +1715,21 @@
         crest.parent=mesh;crest.position.set(side*.32,.83,0);crest.rotation.z=-side*.27;
         crest.material=gold;crest.isPickable=false;
       }
-      const radius=worldDefinitions?.forbidden_forest?.guardian?.strikeRadius ?? 2.8;
-      const warning=B.MeshBuilder.CreateTorus("keeper strike boundary",{diameter:2*radius/1.75,thickness:.12,tessellation:40},scene);
-      warning.parent=mesh;warning.position.y=(.11-1.74)/2.05;warning.isPickable=false;
+      const radius=boss?worldDefinitions[monster.mapId].boss.strikeRadius:(worldDefinitions?.forbidden_forest?.guardian?.strikeRadius ?? 2.8);
+      const warning=B.MeshBuilder.CreateTorus("keeper strike boundary",{diameter:2*radius/scale,thickness:.12,tessellation:40},scene);
+      warning.parent=mesh;warning.position.y=(.11-(boss?2.25:1.74))/height;warning.isPickable=false;
       warning.material=strikeMat;warning.setEnabled(false);mesh.metadata.warning=warning;
+    }else if(regionStyles[monster.mapId]){
+      const paint=regionPaint(monster.mapId);
+      mesh.material=paint.stone;
+      const horns=["asura_peak","naga_cavern","spirit_rift"].includes(monster.mapId);
+      for(const side of horns?[-1,1]:[0]){
+        const crest=B.MeshBuilder.CreateCylinder("region headdress",{height:horns?1.1:.68,diameterBottom:horns ? .44 : 1.43,diameterTop:0,tessellation:horns?5:7},scene);
+        crest.parent=mesh;crest.position.set(side*.52,.86,0);crest.rotation.z=-side*.38;crest.material=paint.light;crest.isPickable=false;
+      }
+      const mantle=B.MeshBuilder.CreateCylinder("region mantle",{height:.85,diameterTop:1,diameterBottom:1.68,tessellation:6},scene);
+      mantle.parent=mesh;mantle.position.y=-.38;mantle.material=paint.deep;mantle.isPickable=false;
+      if(monster.tier==="strong")mesh.scaling.setAll(1.25);
     }else if(monster.mapId==="bound_temple"){
       const sanctum=id.startsWith("temple_sanctum_"),bell=id.startsWith("temple_belfry_");
       mesh.material=sanctum?keeperMat:bell?templeBronze:templeStone;
@@ -1568,12 +1753,12 @@
       mesh.setEnabled(monster.mapId===activeMapId&&monster.alive);
       if(mesh.metadata.warning){
         const charging=monster.aiState==="windup";
-        if(charging && !mesh.metadata.warning.isEnabled(false) && monster.targetId===room?.sessionId)toast("ผู้พิทักษ์กำลังฟาด · แตะพื้นออกจากวงส้ม");
+        if(charging && !mesh.metadata.warning.isEnabled(false) && monster.targetId===room?.sessionId)toast(monster.displayName+" กำลังฟาด · แตะพื้นออกจากวงส้ม");
         mesh.metadata.warning.setEnabled(charging);
       }
-      mesh.position.set(Number(monster.x),monster.tier==="elite"?1.74:.88,Number(monster.z));mesh.rotation.y=Number(monster.facing)||0;
+      mesh.position.set(Number(monster.x),monster.tier==="boss"?2.25:monster.tier==="elite"?1.74:.88,Number(monster.z));mesh.rotation.y=Number(monster.facing)||0;
       if(id===selectedForestTarget&&monster.mapId===activeMapId){updateMonsterUI(monster.hp,monster.maxHp,monster.alive);
-        ui.monsterHint.textContent=(monster.tier==="elite"?"Elite · ":"")+monster.displayName+" · Lv "+monster.level;}
+        ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monster.displayName+" · Lv "+monster.level;}
     });
     for(const [id,mesh] of forestMonsters)if(!seen.has(id)){mesh.dispose();forestMonsters.delete(id);}
     const me=ownServerCharacter(),area=worldDefinitions?.[activeMapId]?.restAreas?.find(a=>me&&Math.hypot(me.x-a.x,me.z-a.z)<=a.radius);
@@ -1602,7 +1787,7 @@
     const name=worldDefinitions?.[mapId]?.name || (village?"หมู่บ้านอาคม":"ป่าต้องห้าม");
     $("worldMapName").textContent=name;
     $("quest").querySelector(".quest-content strong").textContent=village?"เตรียมตัวออกสำรวจ":"สำรวจ"+name;
-    $("quest").querySelector(".quest-content span").textContent=village?"พัก จัดกระเป๋า แล้วเดินทางไปป่า":mapId==="bound_temple"?"เลือกช่องกำแพง หรืออ้อมตามระเบียงวัด":"เปิดแผนที่เพื่อเลือกค่ายล่าตามเลเวล";
+    $("quest").querySelector(".quest-content span").textContent=village?"พัก จัดกระเป๋า แล้วเดินทางไปป่า":worldDefinitions?.[mapId]?.region?.hint || (mapId==="bound_temple"?"เลือกช่องกำแพง หรืออ้อมตามระเบียงวัด":"เปิดแผนที่เพื่อเลือกค่ายล่าตามเลเวล");
     marker.setEnabled(false);
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
   }
@@ -2117,10 +2302,12 @@
       ? ["ascending", "descending"].includes(data?.combatState)
       : Boolean(demoFlightTarget);
     const label = button.querySelector("span:last-child");
-    if (label) label.textContent = changing ? "กำลังบิน" : active ? "ลง" : "บิน";
+    const forbidden=mode==="live" && worldDefinitions?.[activeMapId]?.region?.noFlight===true;
+    button.disabled=forbidden;
+    if (label) label.textContent = forbidden ? "เขตห้ามบิน" : changing ? "กำลังบิน" : active ? "ลง" : "บิน";
     button.classList.toggle("fly-active", Boolean(active));
     button.setAttribute("aria-pressed", String(Boolean(active)));
-    button.title = active ? "ลดระดับความสูงและลงจอด" : "ขึ้นบินเหนือกำแพง แล้วแตะพื้นเพื่อเคลื่อนที่";
+    button.title = forbidden ? "ใช้การเดินหรือ Dash ภายในถ้ำ" : active ? "ลดระดับความสูงและลงจอด" : "ขึ้นบินเหนือกำแพง แล้วแตะพื้นเพื่อเคลื่อนที่";
   }
 
   function toggleFlight() {
@@ -2482,7 +2669,7 @@
       }
       const client = new window.Colyseus.Client(endpoint);
       const guestToken = getOrCreateGuestToken(endpoint);
-      joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot, worldVersion: 1, templeVersion: 1 });
+      joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot, worldVersion: 1, templeVersion: 1, atlasVersion: 1 });
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
       clearChatHistory(true);
@@ -2728,7 +2915,7 @@
       joined.onMessage("experience_gained", info => {
         if(room !== joined) return;
         const prize=info?.elitePotion==="granted"?" · ได้รับยาฟื้นพลัง 1 ขวด":info?.elitePotion==="bag_full"?" · กระเป๋าเต็ม รับยาไม่ได้":"";
-        toast("ได้รับ EXP +" + Number(info?.amount || 0) + prize);
+        toast((info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + prize);
         renderProgressionProfile();
       });
       joined.onMessage("inventory_state", payload => {
@@ -2856,6 +3043,7 @@
         else if (info?.reason === "flight_in_progress") toast("กำลังขึ้นหรือลง · รอให้ถึงระดับก่อน");
         else if (info?.reason === "flight_rate_limited") toast("กดบินถี่เกินไป");
         else if (info?.reason === "flight_unavailable") toast("ตอนนี้ยังบินขึ้นไม่ได้");
+        else if (info?.reason === "flight_forbidden") toast("ถ้ำนาคใช้การเดินหรือ Dash");
         else if (info?.reason === "landing_blocked") toast("ลงจอดตรงนี้ไม่ได้ · บินไปพ้นขอบกำแพงก่อน");
         else if (info?.reason === "flying") toast("ต้องลงจอดก่อนใช้พุ่งหรือปีน");
         else if (info?.reason === "climbing") toast("ยังโจมตีหรือเดินไม่ได้ขณะปีน");
@@ -3254,6 +3442,18 @@
     forbidden_forest: { inner: "#1b2a22", outer: "#07100c", land: "#22301f", ink: "#cfe0a0", grid: "rgba(207,224,160,.06)" },
     bound_temple: { inner: "#2c1f1d", outer: "#0f0909", land: "#30241f", ink: "#f0c58c", grid: "rgba(240,197,140,.06)" },
   };
+  // Night-map theme derived from an atlas region's palette.
+  function shadeHex(hex, f) {
+    const n = parseInt(hex.slice(1), 16), c = v => Math.round(Math.min(255, v * f)).toString(16).padStart(2, "0");
+    return "#" + c(n >> 16) + c((n >> 8) & 255) + c(n & 255);
+  }
+  function mapTheme(id) {
+    if (MAP_THEMES[id]) return MAP_THEMES[id];
+    const colors = regionStyles[id];
+    if (!colors) return MAP_THEMES.ritual_village;
+    return (MAP_THEMES[id] = { inner: shadeHex(colors[0], .42), outer: shadeHex(colors[0], .14), land: shadeHex(colors[0], .5),
+      ink: colors[4], grid: "rgba(255,240,210,.06)", road: shadeHex(colors[1], .62), court: shadeHex(colors[2], .55), water: shadeHex(colors[5], .7), stone: shadeHex(colors[3], .8) });
+  }
   const mapGrains = {};
   function mapGrain(mapId) {
     if (mapId in mapGrains) return mapGrains[mapId];
@@ -3279,7 +3479,7 @@
     ctx.shadowBlur = 0; ctx.lineWidth = Math.max(1, r * .35); ctx.strokeStyle = stroke; ctx.stroke();
   }
   function drawMap(ctx,width,height,large=false) {
-    const theme = MAP_THEMES[activeMapId] || MAP_THEMES.ritual_village;
+    const theme = mapTheme(activeMapId);
     const map = worldDefinitions?.[activeMapId];
     const bounds = mapBounds(), pad = large ? 14 : 8;
     const scale = Math.min((width - pad * 2) / (bounds.maxX - bounds.minX), (height - pad * 2) / (bounds.maxZ - bounds.minZ));
@@ -3359,10 +3559,15 @@
         for (const path of map?.paths || []) { ctx.beginPath(); smoothPath(path).forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
       };
       if (activeMapId === "forbidden_forest") { ctx.fillStyle = "#4a3f2e"; ctx.fillRect(sx(-2.5), sy(-20), 5 * scale, 40 * scale); }
+      for (const pool of map?.water || []) {
+        ctx.fillStyle = theme.water || "#14384b"; ctx.fillRect(sx(pool.x), sy(pool.z), pool.width * scale, pool.length * scale);
+        ctx.strokeStyle = "rgba(170,210,230,.2)"; ctx.lineWidth = 1;
+        for (let z = pool.z + 1.5; z < pool.z + pool.length; z += 3) { const x = pool.x + pool.width * noise(z, 177); ctx.beginPath(); ctx.moveTo(sx(x), sy(z)); ctx.lineTo(sx(x + 2.5), sy(z)); ctx.stroke(); }
+      }
       trail(Math.max(3, 5.5 * scale), "rgba(10,8,6,.55)");
-      trail(Math.max(2, 4 * scale), activeMapId === "bound_temple" ? "#8a7552" : "#7a6546");
+      trail(Math.max(2, 4 * scale), theme.road || (activeMapId === "bound_temple" ? "#8a7552" : "#7a6546"));
       for (const camp of map?.camps || []) {
-        const soil = campLooks[camp.id]?.soil || "#7d6f63";
+        const soil = campLooks[camp.id]?.soil || theme.court || "#7d6f63";
         if (activeMapId === "bound_temple") {
           ctx.fillStyle = "#6e6152"; ctx.fillRect(sx(camp.x - 10.5), sy(camp.z - 9.5), 21 * scale, 19 * scale);
           ctx.strokeStyle = "rgba(240,197,140,.55)"; ctx.lineWidth = 1.2 * u; ctx.strokeRect(sx(camp.x - 10.5), sy(camp.z - 9.5), 21 * scale, 19 * scale);
@@ -3375,8 +3580,8 @@
       }
       for (const o of map?.obstacles || []) {
         const x = sx(o.x), y = sy(o.z), r = Math.max(1, o.radius * scale);
-        if (activeMapId === "bound_temple") {
-          ctx.fillStyle = "#6f6a5e"; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+        if (activeMapId !== "forbidden_forest") {
+          ctx.fillStyle = theme.stone || "#6f6a5e"; ctx.fillRect(x - r, y - r, r * 2, r * 2);
           ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.lineWidth = 1; ctx.strokeRect(x - r, y - r, r * 2, r * 2);
         } else {
           ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.arc(x + r * .25, y + r * .3, r, 0, Math.PI * 2); ctx.fill();
@@ -3401,8 +3606,8 @@
     room?.state?.monsters?.forEach(m => {
       if (m.mapId !== activeMapId || !m.alive) return;
       const x = sx(m.x), y = sy(m.z);
-      if (m.tier === "elite") {
-        const r = large ? 7 : 4;
+      if (m.tier === "elite" || m.tier === "boss") {
+        const r = (large ? 7 : 4) * (m.tier === "boss" ? 1.4 : 1);
         ctx.shadowColor = "#ffcf5a"; ctx.shadowBlur = r * 2;
         ctx.fillStyle = "#ffe084"; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); ctx.fill();
         ctx.shadowBlur = 0; ctx.strokeStyle = "#3a2508"; ctx.lineWidth = 1.2; ctx.stroke();
@@ -3450,10 +3655,16 @@
         mapText(ctx, lv, sx(camp.x), ty, 12, "#fff0d0");
       }
       if (map?.guardian) mapText(ctx, "◆ ศาล Elite", sx(map.guardian.x), sy(map.guardian.z) - 11, 12, "#ffe095", 700);
+      if (map?.boss) {
+        ctx.setLineDash([4, 3]); ctx.strokeStyle = "rgba(255,140,90,.7)"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(sx(map.boss.x), sy(map.boss.z), 7 * scale, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+        mapText(ctx, "◆ Boss Lv.100", sx(map.boss.x), sy(map.boss.z) - 7 * scale - 4, 12, "#ffe5a8", 700);
+      }
       for (const portal of activePortals()) {
-        if (portal.id !== "forest_to_temple" && portal.id !== "temple_to_forest") continue;
-        mapText(ctx, portal.id === "forest_to_temple" ? "ไปวัดร้าง Lv.8–20" : "กลับป่าต้องห้าม",
-          Math.max(65, Math.min(width - 65, sx(portal.x))), sy(portal.z) - 12, 12, "#c3faed");
+        if (!portal.targetMapId) continue;
+        const dest = worldDefinitions?.[portal.targetMapId];
+        mapText(ctx, "ไป" + (dest?.name || portal.targetMapId), Math.max(60, Math.min(width - 60, sx(portal.x))),
+          sy(portal.z) + (sy(portal.z) < 30 ? 22 : -12), 12, "#c3faed");
       }
       // Compass rose.
       ctx.translate(width - 24, 26); ctx.fillStyle = theme.ink; ctx.globalAlpha = .85;
@@ -3469,6 +3680,17 @@
   }
   function openMap() {
     openDrawer("map","แผนที่"+(worldDefinitions?.[activeMapId]?.name || (activeMapId==="ritual_village"?"หมู่บ้านอาคม":"ป่าต้องห้าม")),`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>วงสีเขียว: เขตพัก</span></div>${worldDefinitions?.[activeMapId]?.guardian ? '<p class="note">◆ ศาลเหนือ · Elite Lv.12 เกิดใหม่ 2 นาที<br>หลบวงฟาดสีส้ม · EXP ×3 แบ่งตามกฎปาร์ตี้ ผู้ได้รับ EXP รับยาคนละ 1 ขวดเมื่อกระเป๋ามีที่</p>' : ''}`);
+    if(worldDefinitions?.spirit_rift){
+      const note=document.createElement("p");note.className="note";
+      const map=worldDefinitions[activeMapId],range=map.region?.range;
+      note.textContent=map.name+(range?" · Lv."+range.join("–"):"")+" · ประตูไป"+map.portals.map(p=>worldDefinitions[p.targetMapId].name).join(" / ");
+      const route=document.createElement("details"),title=document.createElement("summary");
+      title.textContent="เส้นทางทั้งโลก · 10 แผนที่";route.append(title);route.className="note";
+      for(const line of ["หมู่บ้านอาคม → ป่าต้องห้าม (1–12)","เลือก วัดร้างพันธนาการ (8–20) หรือ บึงพราย (10–22)","สองเส้นทางพบกันที่ป่าช้าเงาจันทร์ (18–32)","ดงอาคมบนเขา (28–45) → ถ้ำนาค (40–58)","เมืองอาคมล่ม (55–72) → เขาอสุรา (68–85)","รอยแยกแดนวิญญาณ (80–100) · เลือกล่าเดี่ยวหรือเข้าลานราชัน"]){
+        const row=document.createElement("div");row.textContent=line;route.append(row);
+      }
+      $("bigMap").parentElement.append(note,route);
+    }
     drawMap($("bigMap").getContext("2d"),420,320,true);
   }
 
@@ -4202,7 +4424,7 @@
     }
     // Keep the same clear area around the hero at every pinch/wheel zoom.
     if(me && activeMapId==="forbidden_forest")fadeForestCrowns(me);
-    if(me && activeMapId==="bound_temple")fadeTempleWalls(me);
+    if(me && templeCover.length)fadeTempleWalls(me);
     scene.fogStart = camera.radius + atmosphere.fogNear;
     scene.fogEnd = camera.radius + atmosphere.fogFar;
     driftMist(elapsed, camera.target);
