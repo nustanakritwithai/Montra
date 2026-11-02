@@ -283,7 +283,7 @@
     while (floatLayer.childElementCount >= 28) floatLayer.firstElementChild.remove();
     const el = document.createElement("span"); el.className = "ftxt " + kind + (opts.big ? " big" : "");
     el._world = [x, y, z]; // re-projected every frame so the text stays on its target while the camera moves
-    el._lift = opts.lift || 0;
+    el._lift = opts.lift || 0; el._side = opts.side || 0;
     el.textContent = text;
     const drift = (opts.drift ?? (Math.random() - .5) * 70) | 0;
     el.style.left = sx + "px"; el.style.top = sy + "px"; el.style.setProperty("--dx", drift + "px"); el.style.setProperty("--rise", (opts.rise ?? 46) + "px");
@@ -298,7 +298,7 @@
     for (const el of floatLayer.children) {
       const p = el._world; if (!p) continue;
       B.Vector3.ProjectToRef(new B.Vector3(p[0], p[1], p[2]), B.Matrix.IdentityReadOnly, tm, vp, floatProj);
-      el.style.left = (floatProj.x * rect.width / w).toFixed(1) + "px"; el.style.top = (floatProj.y * rect.height / h - el._lift).toFixed(1) + "px";
+      el.style.left = (floatProj.x * rect.width / w + el._side).toFixed(1) + "px"; el.style.top = (floatProj.y * rect.height / h - el._lift).toFixed(1) + "px";
     }
   }
   // World anchors: above a ghost or a player's head.
@@ -308,13 +308,15 @@
     const now = performance.now(), recent = (floatStack.get(key) || []).filter(t => now - t < 450);
     recent.push(now); floatStack.set(key, recent); return (recent.length - 1) * 22;
   }
+  // From the far camera the hero and the target are close on screen: target
+  // popups lean up-right, the hero's lean up-left, so the two never pile up.
   function floatAtMonster(id, text, kind, opts = {}) {
-    opts = { ...opts, lift: stackLift("m" + id) };
+    opts = { drift: 20 + Math.random() * 50, side: 22, ...opts, lift: stackLift("m" + id) };
     const mesh = forestMonsters.get(id) || (id === MONSTER_ID ? enemy : null); if (!mesh) return;
     const tall = mesh.metadata?.ghost?.tall ?? 1.8; floatText(mesh.position.x, mesh.position.y + tall * .55, mesh.position.z, text, kind, opts);
   }
   function floatAtPlayer(id, text, kind, opts = {}) {
-    opts = { ...opts, lift: stackLift("p" + id) };
+    opts = { drift: -(20 + Math.random() * 50), side: -22, ...opts, lift: stackLift("p" + id) };
     const a = avatars.get(id); if (!a) return; floatText(a.x, (a.y || 0) + 2.5, a.z, text, kind, opts);
   }
   const SKILL_SOURCES = new Set(["sword", "muay", "talisman", "ranged", "occult", "blade"]);
@@ -3440,6 +3442,8 @@
     }
   }
   // Contact sound at the target, chosen by the attacker's weapon and move.
+  const HIT_WORDS = { blade: ["ฉัวะ!", "เฉือน!", "ฟึ่บ!"], fist: ["ปั้ก!", "ผัวะ!", "ตุบ!"], elbow: ["เพี้ยะ!", "ป้าบ!"], kick: ["ตุ้บ!", "อั้ก!"],
+    blunt: ["โป๊ก!", "ตึง!"], rice: ["ซ่า!", "เปาะ!"], talisman: ["แปะ!", "ฉึบ!"], slam: ["ตูม!"] };
   function impactAt(attackerId, x, z, source, ghost, kind) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     const a = avatars.get(attackerId), w = a?.weaponId || "", move = a?.action?.type || "";
@@ -3450,6 +3454,8 @@
     else if (w === "spirit_staff") name = "blunt";
     else if (w === "muay_wraps") name = /elbow|counter/.test(move) ? "elbow" : /knee|teep|throw/.test(move) ? "kick" : "fist";
     SFX(name, { x, z, intensity });
+    // Comic hit word (short Thai onomatopoeia), only for hits that involve us, to keep the far view readable.
+    if (attackerId === localId) { const words = HIT_WORDS[name] || HIT_WORDS.fist; floatText(x, 2.4, z, words[Math.random() * words.length | 0], "onoma", { side: 46, drift: 30, rise: 26, life: 900 }); }
     if (ghost && kind) SFX("ghost", { kind, ev: "hurt", x, z, delay: .03, intensity: .8 });
     else if (ghost) SFX("ghost_hit", { x, z, delay: .02, intensity: .8 });
   }
@@ -6105,11 +6111,18 @@
   // Ghost voices: a cry on the attack wind-up (an audible warning before the
   // hit lands) and an occasional murmur when near the hero.
   let lastGhostMurmur = 0;
+  // What each ghost cries as it winds up an attack (a readable warning from the far camera).
+  const GHOST_CRIES = { krasue: ["กรี๊ด!", "แฮ่!"], longhair: ["กรี๊ด!"], maenak: ["พี่มาก…", "กรี๊ด!"], takhian: ["กรี๊ด!"], nangmai: ["ซู่…", "กรี๊ด!"], dancer: ["กรี๊ด!"],
+    corpse: ["อือ…"], graveborn: ["อือ…", "แฮ่!"], unaware: ["อือ…"], headless: ["หัวข้า!"], drowned: ["โบ๋…"], boatman: ["โบ๋…"], waterspirit: ["โบ๋…"],
+    pyrekeeper: ["ฟู่!"], phiphong: ["ฟู่!"], krahang: ["แฮ่!"], preta: ["หวีด!"], phipop: ["แฮ่!", "หิว!"], kongkoi: ["แฮ่!"], phitakhon: ["กริ๊ง!"],
+    childghost: ["คิกๆ"], moonspirit: ["ลา…"], elephant: ["แปร๋น!"], statue: ["ครืด!"], crawler: ["แฮ่!"], stump: ["เอี๊ยด!"], bell: ["ก๊อง!"], hanged: ["เอี๊ยด!"] };
   const ghostVoice = (g, mesh, ev, intensity = 1) => SFX("ghost", { kind: g.design?.kind, ev, x: mesh.position.x, z: mesh.position.z, intensity });
   function ghostVoices(mesh, g, now) {
     if (g.deathAt) return;
     if (g.windup && !g.wasWindup) {
       ghostVoice(g, mesh, "attack"); g.criedAt = now;
+      { const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 32) {
+        const cries = GHOST_CRIES[g.design?.kind] || ["แฮ่!"]; floatText(mesh.position.x, mesh.position.y + (g.tall || 1.8) * .6, mesh.position.z, cries[Math.random() * cries.length | 0], "cry", { side: -34, drift: -10, rise: 20, life: 1000 }); } }
       const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 15) lastCombatAt = now; // music goes to combat
     }
     g.wasWindup = g.windup;
@@ -7460,6 +7473,7 @@
           const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
           if (target && !["guard","parry","evade","chaiya_cover"].includes(result.skillId)) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
           playMuaySkill(result.playerId,result.skillId,result.targetId);
+          { const name=(muayCatalogSkills[result.skillId] || muayBookData()?.catalog?.skills?.[result.skillId])?.name; if(name) floatAtPlayer(result.playerId,(result.skillId==="grapple"?"จับ!":name+"!"),"shout",{drift:0,side:0,rise:34,life:1400,lift:30}); }
         }
       });
       joined.onMessage("muay_skill_used", result => { if (room===joined && result?.playerId===localId && !["teep","grapple","parry","evade"].includes(result.skillId)) toast((muayBookData()?.catalog?.skills?.[result.skillId]?.name || "วิชามวย")+" สำเร็จ"); });
@@ -7499,6 +7513,7 @@
         const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
         if (target) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
         playAction(avatars.get(result.playerId), swordSkillAction(result.skillId));
+        { const node=swordData()?.catalog?.nodes?.[result.skillId] || JSON.parse(joined.state?.swordTreeCatalog||"null")?.nodes?.[result.skillId]; if(node?.name) floatAtPlayer(result.playerId,node.name+"!","shout",{drift:0,side:0,rise:34,life:1400,lift:30}); }
         const ring=B.MeshBuilder.CreateTorus("sword skill ring",{diameter:1.3,thickness:.045,tessellation:16},scene);
         ring.position.set(caster.x,caster.y+.12,caster.z);ring.rotation.x=Math.PI/2;ring.material=gold;ring.isPickable=false;
         skillEffects.push({mesh:ring,mapId:activeMapId,until:performance.now()+450});
@@ -7513,6 +7528,7 @@
         toast(result.skill + " · มีผล " + result.targets + " คน");
         if (ownServerCharacter()?.pathId === "phutthaisawan") playAction(avatars.get(localId), "dance");
         if (ownServerCharacter()?.pathId === "muay_boran") playAction(avatars.get(localId), "m_wai");
+        if (result?.skill) floatAtPlayer(localId, result.skill + "!", "shout", { drift: 0, side: 0, rise: 34, life: 1600 });
       });
       joined.onMessage("possession_changed", notice => {
         if(room===joined && notice?.active){ const who=avatars.get(notice.playerId); if(who) SFX("possess",{x:who.x,z:who.z}); floatAtPlayer(notice.playerId,"เข้าสิง!","status",{big:true,drift:0}); }

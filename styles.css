@@ -851,3 +851,36 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   80% { transform: translate(-50%, -150%) scale(1); opacity: 1; }
   100% { transform: translate(-50%, -180%) scale(1.05); opacity: 0; }
 }
+/* Comic words: hit onomatopoeia, skill shouts in a bubble, ghost cries. */
+.ftxt.onoma { color: #ffe9b8; font: 900 19px/1 system-ui, "Noto Sans Thai", sans-serif; -webkit-text-stroke: 4px #2a1400; paint-order: stroke fill; transform-origin: center; animation-name: ftOnoma; }
+.ftxt.shout { color: #1d1408; font: 800 13px/1.1 system-ui, "Noto Sans Thai", sans-serif; -webkit-text-stroke: 0; padding: 5px 10px; border-radius: 12px; background: #fff3d8; border: 2px solid #2a1a08; box-shadow: 0 3px 0 #2a1a08, 0 4px 12px #0008; animation-name: ftShout; }
+.ftxt.shout::after { content: ""; position: absolute; left: 50%; bottom: -8px; margin-left: -6px; border: 6px solid transparent; border-top-color: #2a1a08; }
+.ftxt.cry { color: #ff6a6a; font: 900 20px/1 system-ui, "Noto Sans Thai", sans-serif; -webkit-text-stroke: 4px #2a0000; paint-order: stroke fill; animation-name: ftCry; }
+@keyframes ftOnoma {
+  0% { transform: translate(-50%, -50%) scale(.2) rotate(-14deg); opacity: 0; }
+  14% { transform: translate(calc(-50% + var(--dx) * .5), -80%) scale(1.45) rotate(8deg); opacity: 1; }
+  40% { transform: translate(calc(-50% + var(--dx) * .8), calc(-50% - var(--rise))) scale(1) rotate(-4deg); }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% - var(--rise) * 1.2)) scale(.9) rotate(0); opacity: 0; }
+}
+@keyframes ftShout {
+  0% { transform: translate(-50%, -100%) scale(.4); opacity: 0; }
+  12% { transform: translate(-50%, -120%) scale(1.12); opacity: 1; }
+  22% { transform: translate(-50%, -120%) scale(1); }
+  82% { transform: translate(-50%, calc(-120% - var(--rise))) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, calc(-120% - var(--rise))) scale(.96); opacity: 0; }
+}
+@keyframes ftCry {
+  0%, 100% { opacity: 0; }
+  0% { transform: translate(-50%, -50%) scale(.5); }
+  12% { transform: translate(-52%, -70%) scale(1.3); opacity: 1; }
+  18% { transform: translate(-48%, -70%) scale(1.2); }
+  24% { transform: translate(-52%, -70%) scale(1.25); }
+  30% { transform: translate(-50%, -70%) scale(1.15); }
+  80% { transform: translate(-50%, calc(-70% - var(--rise))) scale(1); opacity: 1; }
+}
+/* Far camera is the main way to play: keep popups large and crisp. */
+.ftxt { font-size: 24px; }
+.ftxt.big { font-size: 32px; }
+.ftxt.cry { z-index: 3; }
+.ftxt.shout { z-index: 1; opacity: .96; }
+.ftxt.taken, .ftxt.dealt, .ftxt.skill { z-index: 2; }
