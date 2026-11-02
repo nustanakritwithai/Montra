@@ -1533,7 +1533,7 @@
       }
       terrain.update();terrain.uScale=9;terrain.vScale=12;floor.diffuseTexture=terrain;
       // Night grade: the atlas palette is kept but pulled down toward moonlight.
-      floor.diffuseColor.scaleInPlace(province?.kind ? .88 : .58);court.diffuseColor.scaleInPlace(province?.kind ? .83 : .5);road.diffuseColor.scaleInPlace(province?.kind ? .94 : .66);
+      floor.diffuseColor.scaleInPlace(province?.kind ? .74 : .58);court.diffuseColor.scaleInPlace(province?.kind ? .74 : .5);road.diffuseColor.scaleInPlace(province?.kind ? .86 : .66);
       if(province){floor.emissiveColor=floor.diffuseColor.scale(.22);road.emissiveColor=road.diffuseColor.scale(.17);}
       stone.diffuseColor.scaleInPlace(.8);deep.diffuseColor.scaleInPlace(.7);
       court.diffuseTexture=terrain;glowMats.add(light);
@@ -1559,6 +1559,9 @@
     function ring(x,y,z,d,m){
       return put(B.MeshBuilder.CreateTorus("region seal",{diameter:d,thickness:.17,tessellation:32},scene),x,y,z,m);
     }
+    function ball(x,y,z,d,m){
+      return put(B.MeshBuilder.CreateSphere("region knob",{diameter:d,segments:5},scene),x,y,z,m);
+    }
     function finish(name,cover=false){
       for(const material of new Set(parts.map(p=>p.material))){
         const group=parts.filter(p=>p.material===material);
@@ -1572,11 +1575,16 @@
     if(map.strategic){
       const {kind,sites}=map.strategic;
       const city=kind==="capital",bamboo=map.id==="bamboo_frontier",lotus=map.id==="lotus_basin";
+      // Thai roof: steep upper slopes over a flared lower eave, gilt ridge,
+      // and chofa finials curling up from both gable ends.
       const roof=(x,y,z,width,depth)=>{
         for(const side of [-1,1]){
           const tile=box(x+side*width*.23,y,z,width*.58,.28,depth,roofMat);
           tile.rotation.z=-side*.40;
           box(x+side*width*.49,y-width*.10,z,.16,.20,depth+.25,gold);
+          const eave=box(x+side*width*.6,y-width*.17,z,width*.26,.2,depth*.94,roofMat);eave.rotation.z=-side*.22;
+          box(x+side*width*.73,y-width*.2,z,.1,.14,depth*.94,gold);
+          const chofa=cone(x,y+width*.1+.32,z+side*(depth/2+.18),.8,.16,.03,gold,4);chofa.rotation.x=side*.55;
         }
         box(x,y+width*.10,z,.27,.3,depth+.5,gold);
       };
@@ -1649,14 +1657,38 @@
           }
           expansionLabel("บันได "+(idx+1)+" · ขึ้น / ลง",stair.foot.x,stair.foot.z,9,3);
         }
+        // Gatehouse pavilions stand over every opening and roofed bastions on
+        // every corner; posts sit at the deck edges so the walkway stays open.
+        const H=rampart.height;
         finish("gate frames");
+        // Each gatehouse and bastion is its own cover so it fades when it sits between camera and hero.
+        for(const g of rampart.gates){
+          const b=g.box,gx=b.x+b.width/2,gz=b.z+b.length/2,horizontal=b.width>b.length,span=Math.max(b.width,b.length)+1.6,th=Math.min(b.width,b.length);
+          box(gx,H-.62,gz,horizontal?span-1.6:th+.2,.24,horizontal?th+.2:span-1.6,gold);
+          for(const a of [-1,1])for(const c of [-1,1])cone(gx+(horizontal?a*span/2:c*(th/2-.15)),H+1.0,gz+(horizontal?c*(th/2-.15):a*span/2),2.0,.28,.24,templeLacquer,6);
+          roof(gx,H+2.3,gz,horizontal?span*.8:th+.8,horizontal?th+.8:span*.8);
+          finish("gatehouse",true);
+        }
+        for(const c of rampart.corners){
+          for(const a of [-1,1])for(const d of [-1,1])cone(c.x+a*1.25,H+1.2,c.z+d*1.25,2.4,.26,.22,templeLacquer,6);
+          box(c.x,H+2.45,c.z,3.1,.18,3.1,gold);roof(c.x,H+3.1,c.z,3.4,3.4);cone(c.x,H+4.6,c.z,1.4,.5,0,gold,6);
+          finish("bastion",true);
+        }
       }
       for(const w of map.walls||[]){
         const x=w.x+w.width/2,z=w.z+w.length/2;
         if(w.rampart){
-          box(x,1.77,z,w.width,3.54,w.length,stone);
-          const along=w.width>w.length,n=Math.floor(Math.max(w.width,w.length)/3);
-          for(let i=0;i<n;i++){const t=(i+.5)/n;box(along?w.x+w.width*t:w.x+.26,4.13,along?w.z+.26:w.z+w.length*t,along?.8:.42,.26,along?.42:.8,deep);}
+          // Ayutthaya curtain wall: whitewashed brick in 4 m courses (so the
+          // texture keeps its scale), a dark plinth, a cornice and sema merlons.
+          const along=w.width>w.length,len=Math.max(w.width,w.length),thick=Math.min(w.width,w.length);
+          const courses=Math.max(1,Math.round(len/4));
+          for(let i=0;i<courses;i++){const t=(i+.5)/courses,seg=len/courses+.02;
+            box(along?w.x+w.width*t:x,1.95,along?z:w.z+w.length*t,along?seg:thick,3.1,along?thick:seg,provinceFx.brick);}
+          box(x,.22,z,w.width+(along?0:.5),.44,w.length+(along?.5:0),deep);
+          box(x,3.6,z,w.width+(along?0:.3),.2,w.length+(along?.3:0),paint.court);
+          const n=Math.floor(len/2.2);
+          for(let i=0;i<n;i++){const t=(i+.5)/n,mx=along?w.x+w.width*t:w.x+.3,mz=along?w.z+.3:w.z+w.length*t;
+            box(mx,4.22,mz,along?.85:.36,.45,along?.36:.85,provinceFx.brick);cone(mx,4.6,mz,.34,.62,0,provinceFx.brick,4).rotation.y=Math.PI/4;}
         }else if(city){
           box(x,1.7,z,w.width,3.4,w.length,stone);roof(x,3.7,z,w.width+.75,w.length+.7);
           box(x,1.7,w.z-.04,w.width*.25,2,.12,darkWood);
@@ -1681,7 +1713,11 @@
         }else if(s.kind==="fort"){
           ring(x,.12,z,10.5,gold);ring(x,.13,z,9.8,stone);
           // The flag is in an open court. The entire curtain wall is the firing platform.
-          box(x,3,z, .17,6,.17,gold);box(x+1.1,5.3,z,2.2,1.45,.08,clothRed);
+          // A tall thong takhap (centipede banner) marks it from every corner of the map.
+          cone(x,.25,z,.5,1.6,1.9,stone,8);cone(x,4.6,z,9,.2,.12,gold,6);cone(x,9.3,z,.6,.32,0,gold,6);
+          for(let k=0;k<9;k++){const y=8.4-k*.62;box(x+.5,y,z,.7,.5,.05,k%2?gold:provinceFx.banner);
+            for(const side of [-1,1]){const leg=box(x+.5+side*.5,y-.1,z,.32,.07,.04,provinceFx.banner);leg.rotation.z=side*.5;}}
+          box(x+.5,2.6,z,.4,.6,.05,provinceFx.banner);
         }else if(s.kind==="market"){
           for(let i=0;i<3;i++){
             const mx=x+(i-1)*2.8;pavilion(mx,z,2.6,2.35);box(mx,.65,z,1.8,1.3,.9,crateWood);
@@ -1697,7 +1733,13 @@
           box(x,.22,z,5,.45,3.7,wooden);pavilion(x,z,4.6,3.4);
           for(let i=0;i<3;i++)box(x+3,.5,z+i-1,.9,1,.9,crateWood);
         }else if(s.kind==="shrine"){
-          cone(x,.5,z,1,3.2,2.5,stone,8);cone(x,2,z,2,1.8,.55,templeGold,8);cone(x,3.6,z,1.8,.5,0,gold);
+          // San lak mueang: a stepped plinth, red columns and a gilt prang over the city pillar.
+          box(x,.2,z,5.6,.4,5.6,stone);box(x,.55,z,4.6,.3,4.6,paint.court);
+          for(const dx of [-1,1])for(const dz of [-1,1])cone(x+dx*1.8,2.05,z+dz*1.8,2.7,.3,.26,templeLacquer,6);
+          box(x,3.5,z,4.3,.25,4.3,gold);roof(x,4.05,z,4.6,4.6);
+          for(let k=0;k<4;k++)cone(x,5.0+k*.55,z,.6,1.5-k*.3,1.3-k*.3,k%2?templeGold:gold,8);
+          cone(x,7.6,z,1.4,.35,0,gold,8);
+          cone(x,1.6,z,2.1,.42,.38,templeGold,10);ball(x,2.85,z,.6,gold,6);
         }else if(s.kind==="grove"){
           for(let i=0;i<8;i++){const a=i*2.4;cone(x+Math.cos(a)*1.2,2,z+Math.sin(a)*1.2,4+i%3,.32,.20,forestLeaf);}
         }
@@ -1729,6 +1771,7 @@
           }
         }
       }
+      dressProvince(map,paint,{box,cone,put,roof,lamp,city,bamboo,lotus});
       if(bamboo || lotus)for(let i=0;i<36;i++){
         const x=(i%2?1:-1)*(35+i%4),z=-58+(i*29)%83;
         if(bamboo){for(let j=0;j<4;j++){cone(x+j*.3,2,z+j*.2,4+j*.7,.21,.13,forestLeaf,5).rotation.z=(j-2)*.07;}}
@@ -1886,6 +1929,25 @@
     iron:mat("rusted iron","#4a3a32"),awning:mat("tattered awning","#8a6a2a"),
   };
   for(const m of [decor.ember,decor.willo,decor.crystal,decor.crystalV])glowMats.add(m);
+  // Province materials: whitewashed Ayutthaya brick, war banners, foliage, silver ore, floating lamps.
+  const provinceFx={
+    brick:mat("whitewashed brick","#ffffff","#141210"),banner:mat("war banner","#a8261c","#4a0a06"),
+    canopy:mat("rain tree canopy","#1f3a2a","#050c08"),canopyHi:mat("rain tree crown","#2c4a34","#08120c"),bark:mat("old bark","#3a2c22"),
+    ribbon:mat("sacred ribbon","#d8a83a","#3a2808"),tent:mat("camp canvas","#8a7a5a","#141008"),ore:mat("moon silver","#cfe4ff","#6a8ac8"),
+    floatLamp:mat("floating lamp","#ffd08a","#ff9a3a"),jar:mat("dragon jar","#5a3422","#120804"),naga:mat("naga lacquer","#3a7a6a","#0c2a24"),
+  };
+  glowMats.add(provinceFx.ore);glowMats.add(provinceFx.floatLamp);
+  provinceFx.brick.diffuseTexture=paintTexture("whitewashed brick",256,(c,s)=>{
+    c.fillStyle="#d6cfbf";c.fillRect(0,0,s,s);
+    const rows=10,cols=6,rh=s/rows;
+    for(let r=0;r<rows;r++)for(let k=-1;k<cols;k++){
+      const bx=(k+(r%2)*.5)*s/cols,v=noise(r*13+k,551);
+      c.fillStyle=`rgba(${150+v*40|0},${120+v*30|0},${100+v*20|0},${.10+v*.18})`;c.fillRect(bx+2,r*rh+2,s/cols-4,rh-4);
+    }
+    c.fillStyle="rgba(60,50,40,.35)";for(let r=1;r<rows;r++)c.fillRect(0,r*rh-1,s,2);
+    for(let i=0;i<14;i++){const g=c.createRadialGradient(noise(i,552)*s,s,0,noise(i,552)*s,s,30+noise(i,553)*70);g.addColorStop(0,"rgba(40,46,34,.55)");g.addColorStop(1,"rgba(40,46,34,0)");c.fillStyle=g;c.fillRect(0,0,s,s);}
+    for(let i=0;i<9;i++){c.fillStyle="rgba(150,70,50,.35)";const w=10+noise(i,554)*30;c.fillRect(noise(i,555)*s,noise(i,556)*s*.7,w,w*.5);} // whitewash flaked to brick
+  });
   const lavaMat=additiveMat("lava cracks",crackTexture("lava cracks","255,120,40","255,70,20"));
   const voidMat=additiveMat("void cracks",crackTexture("void cracks","190,140,255","140,80,255"));
   const greenPool=additiveMat("marsh light",radialTexture("marsh light",128,[[0,"rgba(150,255,120,.5)"],[.35,"rgba(110,230,120,.2)"],[1,"rgba(80,200,100,0)"]]));
@@ -1902,6 +1964,66 @@
       !(map.restAreas||[]).some(r=>Math.hypot(x-r.x,z-r.z)<r.radius+1)&&!(map.obstacles||[]).some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+1.4)&&
       !(map.walls||[]).some(w=>x>w.x-1&&x<w.x+w.width+1&&z>w.z-1&&z<w.z+w.length+1)&&
       !(map.water||[]).some(w=>x>w.x-.8&&x<w.x+w.width+.8&&z>w.z-.8&&z<w.z+w.length+.8);
+  }
+  // Scenery for the strategic provinces (capital, forts, frontier hunts). It
+  // keeps clear of roads, sites, gates, stairs and the wall walk, so it never
+  // hides a route the server lets players use.
+  function dressProvince(map,paint,{box,cone,put,roof,lamp,city,bamboo,lotus}){
+    const b=map.bounds,{sites,rampart}=map.strategic,id=map.id,{stone}=paint;
+    const ball=(x,y,z,d,m,seg=5)=>put(B.MeshBuilder.CreateSphere("province dressing",{diameter:d,segments:seg},scene),x,y,z,m);
+    const inBox=(x,z,w,pad)=>x>w.x-pad&&x<w.x+w.width+pad&&z>w.z-pad&&z<w.z+w.length+pad;
+    const clear=(x,z,pad=2.5)=>sceneryClear(x,z,12,map)&&!sites.some(s=>Math.hypot(x-s.x,z-s.z)<(s.kind==="palace"?13:7))&&
+      !(rampart&&(rampart.deck.some(w=>inBox(x,z,w,pad))||rampart.stairs.some(st=>Math.hypot(x-(st.foot.x+st.top.x)/2,z-(st.foot.z+st.top.z)/2)<5)));
+    const scatter=(count,seed,fn,pad)=>{for(let i=0,n=0;i<count*10&&n<count;i++){
+      const x=b.minX+3+noise(i,seed)*(b.maxX-b.minX-6),z=b.minZ+3+noise(i,seed+1)*(b.maxZ-b.minZ-6);
+      if(clear(x,z,pad)){fn(x,z,n);n++;}}};
+    const rainTree=(x,z,k)=>{const h=3.2+noise(k,601)*1.6;
+      cone(x,h/2,z,h,.9,.5,provinceFx.bark,6);cone(x,1.3,z,.35,1.0,1.0,provinceFx.ribbon,8);
+      for(let j=0;j<4;j++){const a=j*1.7+k,r=j?1.6:0;ball(x+Math.cos(a)*r,h+.4+(j?0:.9),z+Math.sin(a)*r,j?3.2:3.8,j%2?provinceFx.canopyHi:provinceFx.canopy);}};
+    const brazier=(x,z)=>{cone(x,.45,z,.9,.18,.3,decor.iron,6);cone(x,.98,z,.24,.42,.7,decor.iron,8);cone(x,1.25,z,.5,.42,0,decor.ember,5);
+      const g=put(B.MeshBuilder.CreateGround("province glow",{width:4.2,height:4.2},scene),x,.05,z,lightPoolMat);};
+    const spiritHouse=(x,z,k)=>{cone(x,.8,z,1.6,.14,.12,darkWood,5);box(x,1.75,z,.9,.6,.7,templeLacquer);roof(x,2.25,z,1.1,.9);box(x,1.5,z+.42,.6,.06,.2,provinceFx.floatLamp);};
+    const flagPole=(x,z,k)=>{cone(x,3,z,6,.14,.1,gold,5);for(let j=0;j<5;j++){const f=box(x+.35,5.6-j*.55,z,.6,.42,.04,j%2?provinceFx.ribbon:provinceFx.banner);f.rotation.z=Math.sin(j+k)*.12;}};
+    if(city){
+      // Avenue trees and dragon jars inside the walls; chedi skyline beyond them.
+      scatter(26,611,rainTree,3);
+      scatter(18,613,(x,z,k)=>{ball(x,.55,z,1.1,provinceFx.jar,6);cone(x,1.08,z,.12,.5,.6,provinceFx.jar,8);if(k%3===0)ball(x+.9,.4,z+.3,.8,provinceFx.jar,6);},2);
+      for(const path of map.paths)for(let i=1;i<path.length;i++){const a=path[i-1],c=path[i],len=Math.hypot(c.x-a.x,c.z-a.z);
+        for(let t=9;t<len-4;t+=18){const nx=-(c.z-a.z)/len,nz=(c.x-a.x)/len,x=a.x+(c.x-a.x)*t/len+nx*3.6,z=a.z+(c.z-a.z)*t/len+nz*3.6;if(clear(x,z,1.5))flagPole(x,z,i+t);}}
+      for(let i=0;i<14;i++){const side=i%2?1:-1,x=side*(48+noise(i,615)*8),z=-60+i*6.5,h=7+noise(i,616)*5;
+        cone(x,1,z,2,4.4,4,stone,8);ball(x,3.2,z,3.6,provinceFx.brick,8);cone(x,3.2+h/2,z,h,1.2,.05,provinceFx.brick,8);cone(x,3.6+h,z,1.2,.2,0,gold,6);}
+      for(let i=0;i<8;i++){const x=-36+i*10,z=-74-noise(i,617)*5,h=6+noise(i,618)*4;cone(x,h/2,z,h,4,.4,provinceFx.brick,8);cone(x,h+.6,z,1.2,.4,0,gold,6);}
+    }else if(map.strategic.kind==="territory"){
+      // War camp: tents, cannons on carriages, stacked supplies, braziers and a palisade rim.
+      scatter(9,621,(x,z,k)=>{cone(x,1.1,z,2.2,3.2,0,provinceFx.tent,4).rotation.y=Math.PI/4;cone(x,2.4,z,.5,.1,.06,darkWood,4);box(x,.6,z+1.3,.8,1.2,.04,provinceFx.banner);},4);
+      scatter(7,623,(x,z,k)=>{box(x,.35,z,1.1,.3,1.8,wooden);for(const d of [-1,1])cone(x+d*.6,.4,z,.12,.8,.8,darkWood,10).rotation.z=Math.PI/2;
+        const barrel=cone(x,.75,z+.3,2.2,.32,.42,decor.iron,8);barrel.rotation.x=Math.PI/2-.18;},3);
+      scatter(14,625,(x,z,k)=>{for(let j=0;j<3;j++)box(x+(j%2)*.9,.45+(j>1?.9:0),z,.85,.85,.85,crateWood);if(k%2)ball(x-.9,.45,z,.9,provinceFx.jar,6);},2);
+      scatter(10,627,brazier,3);
+      scatter(6,629,flagPole,2.5);
+      for(let i=0;i<46;i++){const t=i/46,w=b.maxX-b.minX,x=t<.5?b.minX+1+(t*2)*w*.98:(i%2?b.minX+1:b.maxX-1),z=t<.5?b.minZ+1:b.minZ+((t-.5)*2)*(b.maxZ-b.minZ);
+        const st=cone(x,1.2,z,2.4+noise(i,631)*.8,.32,.08,darkWood,5);st.rotation.z=(noise(i,632)-.5)*.3;}
+      if(id==="moon_pass"){const mine=sites.find(s=>s.kind==="mine");
+        if(mine)for(let k=0;k<10;k++){const a=k*.63,r=4+noise(k,633)*3;cone(mine.x+Math.cos(a)*r,.5,mine.z+Math.sin(a)*r,.8+noise(k,634),1.1,.1,provinceFx.ore,5);}}
+      if(id==="river_watch")for(const w of map.water||[]){const horizontal=w.width>w.length;
+        for(let k=0;k<3;k++){const t=(k+.5)/3,x=w.x+(horizontal?w.width*t:w.width/2),z=w.z+(horizontal?w.length/2:w.length*t);
+          if(sites.some(s=>Math.hypot(x-s.x,z-s.z)<6))continue;
+          const hull=box(x,.2,z,horizontal?3.6:1.1,.35,horizontal?1.1:3.6,wooden);cone(x,.65,z,.8,.9,.7,provinceFx.tent,6);}}
+    }else{
+      // Frontier hunts: roadside spirit houses, braziers at the camps, prayer flags.
+      scatter(10,641,spiritHouse,2);
+      for(const c of map.camps||[])for(let k=0;k<3;k++){const a=k*2.1+.4;brazier(c.x+Math.cos(a)*8.5,c.z+Math.sin(a)*8.5);}
+      scatter(8,643,flagPole,2);
+      if(bamboo)scatter(4,645,(x,z,k)=>{for(const dx of [-1,1])for(const dz of [-1,1])cone(x+dx*1.1,1.8,z+dz*1.1,3.6,.2,.16,decor.bamboo,5);
+        box(x,3.6,z,2.8,.16,2.8,wooden);roof(x,4.6,z,3.2,3.2);},4);
+      if(lotus){for(const w of map.water||[])for(let k=0;k<Math.floor(w.width*w.length/30);k++){
+          const x=w.x+.8+noise(k+w.x,647)*(w.width-1.6),z=w.z+.4+noise(k+w.z,648)*(w.length-.8);
+          cone(x,.13,z,.08,.7,.8,forestLeaf,8);cone(x,.3,z,.3,.45,.1,provinceFx.floatLamp,6);}
+        const pond=sites.find(s=>s.kind==="shrine");
+        if(pond)for(const side of [-1,1]){const x=pond.x+side*3.2,z=pond.z+3.5;
+          cone(x,.5,z,1,1.2,1.2,stone,8);for(let j=0;j<5;j++)ball(x+side*j*.05,1.1+j*.42,z-j*.12,.62-j*.06,provinceFx.naga,6);
+          const hood=cone(x,3.3,z-.7,1.1,1.5,.2,provinceFx.naga,7);hood.rotation.x=-.5;ball(x,3.05,z-.25,.2,decor.crystal,4);}}
+    }
   }
   function dressRegion(map,paint){
     let parts=[];
