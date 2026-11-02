@@ -1,3 +1,4 @@
+import { SHRINE_RECIPE } from "./ItemRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 function keys(value: unknown, expected: string[]): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value) &&
@@ -26,4 +27,16 @@ export function parseTradeOffer(v:unknown): ({tradeId:string}&TradeOffer)|null {
   if (!keys(v,["tradeId","slot","amount","gold"]) || !uuid(v.tradeId) || !(v.slot===null || amount(v.slot,11)) || !amount(v.amount,99) || !amount(v.gold,1_000_000_000)) return null;
   if ((v.slot===null)!==(v.amount===0)) return null;
   return {tradeId:v.tradeId,slot:v.slot as number | null,amount:v.amount,gold:v.gold};
+}
+
+export function parseForge(v: unknown) {
+  if (!keys(v, ["requestId","slot","stamp","action"]) || !requestId(v.requestId) || !amount(v.slot,11) ||
+      typeof v.stamp !== "string" || !/^[a-zA-Z0-9_.-]{1,64}$/.test(v.stamp) ||
+      (v.action !== "enhance" && v.action !== "reroll")) return null;
+  return {requestId:v.requestId, slot:v.slot, stamp:v.stamp, action:v.action as "enhance" | "reroll"};
+}
+
+export function parseCraft(v: unknown): {requestId: string} | null {
+  if (!keys(v, ["recipeId", "requestId"]) || v.recipeId !== SHRINE_RECIPE.id || !requestId(v.requestId)) return null;
+  return {requestId: v.requestId};
 }

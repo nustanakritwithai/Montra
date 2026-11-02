@@ -1,7 +1,8 @@
+import { forgeStamp, quoteForge, rollForge, type ForgeAction } from "./ForgeRules.js";
 /** Single-process transactional economy. This store must own inventories before it is wired to gameplay. */
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
-import { validateInventory, type InventorySnapshot, type InventoryStack } from "./ItemRules.js";
+import { SHRINE_RECIPE, isStackableItem, validateInventory, type InventorySnapshot, type InventoryStack } from "./ItemRules.js";
 
 export const STARTER_GOLD = 1000;
 const MAX_GOLD = 1_000_000_000;
@@ -25,12 +26,12 @@ function take(inventory: InventorySnapshot, slot: number, amount: number): { inv
   if (original.equippedWeaponSlot === slot) throw new Error("item_equipped");
   const slots = original.slots.slice();
   slots[slot] = item.quantity === amount ? null : { ...item, quantity: item.quantity - amount };
-  return { inventory: validateInventory({ ...original, slots }), item: { itemId: item.itemId, quantity: amount } };
+  return { inventory: validateInventory({ ...original, slots }), item: { ...item, quantity: amount } };
 }
 function add(inventory: InventorySnapshot, item: InventoryStack): InventorySnapshot {
   const original = validateInventory(inventory), slots = original.slots.map(x => x ? { ...x } : null);
   let remaining = item.quantity;
-  if (item.itemId === "health_potion") {
+  if (isStackableItem(item.itemId)) {
     for (const stack of slots) {
       if (stack?.itemId !== item.itemId || stack.quantity >= 99) continue;
       const amount = Math.min(remaining, 99 - stack.quantity);
@@ -43,7 +44,7 @@ function add(inventory: InventorySnapshot, item: InventoryStack): InventorySnaps
   if (remaining) {
     const free = slots.findIndex(slot => slot === null);
     if (free < 0) throw new Error("inventory_full");
-    slots[free] = { itemId: item.itemId, quantity: remaining };
+    slots[free] = { ...item, quantity: remaining };
   }
   return validateInventory({ ...original, slots });
 }
@@ -128,6 +129,42 @@ export class EconomyStore {
       id: String(row.id), seller: String(row.seller), item: JSON.parse(String(row.item)) as InventoryStack,
       price: Number(row.price), state: String(row.state),
     }));
+  }
+  craftShrineGlaive(id: string, request: string) {
+    const recipe = SHRINE_RECIPE;
+    return this.once(id, request, "craft", {recipe: recipe.id}, () => {
+      const account = this.account(id);
+      if (account.gold < recipe.gold) throw Error("insufficient_gold");
+      if (account.inventory.slots.some(stack => stack?.itemId === recipe.output)) throw Error("duplicate_weapon");
+      let remaining = recipe.quantity;
+      for (const [index, stack] of account.inventory.slots.entries()) {
+        if (stack?.itemId !== recipe.ingredient) continue;
+        const used = Math.min(remaining, stack.quantity);
+        account.inventory = take(account.inventory, index, used).inventory;
+        remaining -= used;
+        if (remaining === 0) break;
+      }
+      if (remaining > 0) throw Error("craft_missing_shard");
+      account.inventory = add(account.inventory, {itemId: recipe.output, quantity: 1});
+      account.gold -= recipe.gold;
+      this.put(id, account);
+      return {itemId: recipe.output, spentGold: recipe.gold};
+    });
+  }
+
+  forgeWeapon(id: string, request: string, slot: number, stamp: string, action: ForgeAction) {
+    return this.once(id, request, "forge", {slot, stamp, action}, () => {
+      const account = this.account(id);
+      const stack = account.inventory.slots[slot];
+      if (!stack || isStackableItem(stack.itemId) || forgeStamp(stack) !== stamp) throw Error("forge_item_changed");
+      const {cost} = quoteForge(stack.forge, action);
+      if (account.gold < cost) throw Error("insufficient_gold");
+      const result = rollForge(stack.forge, action);
+      account.gold -= cost;
+      account.inventory.slots[slot] = {...stack, forge: result.forge};
+      this.put(id, account);
+      return result;
+    });
   }
   listItem(id: string, request: string, slot: number, amount: number, price: number): { listingId: string } {
     positiveInteger(price, MAX_GOLD);

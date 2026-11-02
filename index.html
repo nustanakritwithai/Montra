@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — ต้นแบบ MMORPG 3D ไสยศาสตร์ไทยสำหรับมือถือ แบบแตะพื้นเพื่อเดิน" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=0.6.1-ghosts3" />
+  <link rel="stylesheet" href="./styles.css?v=0.6.2-ghosts4" />
 </head>
 <body>
   <main id="game" aria-label="MONTRA เกมต้นแบบสามมิติ">
@@ -44,13 +44,17 @@
     <div class="tap-tip">แตะพื้นเดิน · ปัดเหนือสกิลเพื่อพุ่ง · กดบินขึ้นระดับสูงแล้วแตะพื้นเพื่อเคลื่อนที่</div>
 
     <section class="controls" aria-label="ปุ่มควบคุมและพื้นที่ปัดพุ่งเหนือแถบสกิล">
+      <div id="swordStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
+      <div id="swordHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาดาบ" hidden></div>
       <div class="skill-bar">
-        <button id="summon" class="skill" type="button" aria-pressed="false" title="อัญเชิญหรือเก็บวิญญาณของคุณ"><span class="glyph violet">♧</span><span>เรียกผี</span></button>
+        <button id="summon" class="skill" type="button" aria-pressed="false" title="เสกผีจากหม้อ ช่วยโจมตีมอนสเตอร์ใกล้ตัว"><span class="glyph violet" aria-hidden="true">🏺</span><span>เสกผีจากหม้อ</span></button>
         <button id="possess" class="skill" type="button"><span class="glyph amber">✴</span><span>เข้าสิง</span></button>
         <button id="attack" class="skill" type="button"><span class="glyph red">⚔</span><span>โจมตี</span></button>
-        <button id="shoot" class="skill" type="button" aria-pressed="false" title="เลือกเป้าหมายแล้วยิงอาคม"><span class="glyph blue">✹</span><span>ยิงอาคม</span></button>
+        <button id="shoot" class="skill" type="button" aria-pressed="false" aria-label="ข้าวสารปลุกเสก" title="ข้าวสารปลุกเสก · แตะเป้าหมายเพื่อซัดข้าวสาร"><span class="glyph amber" aria-hidden="true">⁙</span><span>ซัดข้าวสาร</span></button>
+        <button id="talisman" class="skill" type="button" aria-pressed="false" aria-label="ยันอาคมของขลัง" title="ยันอาคมของขลัง · แปะยันต์บนมอนสเตอร์ระยะประชิด"><span class="glyph red" aria-hidden="true">◇</span><span>แปะยันต์</span></button>
         <button id="climb" class="skill" type="button" title="ปีนหรือไต่ลงกำแพง"><span class="glyph amber">⇧</span><span>ปีน</span></button>
         <button id="fly" class="skill" type="button" aria-pressed="false" title="บินขึ้นระดับ 6 เมตร หรือกดลงจอด"><span class="glyph sky">✦</span><span>บิน</span></button>
+        <button id="classSkill" class="skill" type="button" hidden><span class="glyph violet">✧</span><span>วิชา</span></button>
         <button id="bag" class="skill" type="button" title="ยาเลือดและชุดอาวุธถาวร"><span class="glyph dark">▣</span><span>ไอเท็ม</span></button>
       </div>
       <nav class="nav-bar" aria-label="เมนูเกม">
@@ -58,6 +62,7 @@
         <button id="chatButton" type="button" aria-label="เปิดแชท"><span>✉</span>แชท <b id="chatUnread" hidden></b></button>
         <button id="partyButton" type="button" aria-label="เปิดปาร์ตี้"><span>♧</span>ปาร์ตี้ <b id="partyUnread" hidden>!</b></button>
         <button id="marketButton" type="button" aria-label="เปิดตลาดและการค้า"><span>♢</span>ตลาด <b id="tradeUnread" hidden>!</b></button>
+        <button id="swordTreeButton" type="button" hidden><span>⚔</span>วิชาดาบ</button>
         <button id="modeButton"><span>◎</span>ออนไลน์</button>
         <button id="helpButton"><span>?</span>วิธีเล่น</button>
       </nav>
@@ -74,6 +79,6 @@
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
-  <script src="./main.js?v=0.6.1-ghosts3" defer></script>
+  <script src="./main.js?v=0.6.2-ghosts4" defer></script>
 </body>
 </html>

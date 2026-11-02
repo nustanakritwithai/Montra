@@ -73,7 +73,14 @@
     monsterBar: $("monsterBar"), monsterHint: $("monsterHint"),
   };
   let toastTimer;
+  function positionSwordToast() {
+    const status=$("swordStatus"), hotbar=$("swordHotbar"), anchor=status && !status.hidden ? status : hotbar && !hotbar.hidden ? hotbar : null;
+    if (!anchor) { ui.toast.style.removeProperty("bottom"); return; }
+    const game=$("game").getBoundingClientRect(), area=anchor.getBoundingClientRect();
+    ui.toast.style.bottom=Math.max(0,game.bottom-area.top+8)+"px";
+  }
   function toast(message) {
+    positionSwordToast();
     ui.toast.textContent = message;
     ui.toast.classList.add("show");
     clearTimeout(toastTimer);
@@ -105,8 +112,9 @@
   }
   resizeGameRenderer();
   let activeMapId = "ritual_village", warpPending = false, warpTimer = null;
-  const chatHistory = { map: [], world: [] }, chatUnread = { map: 0, world: 0 };
-  const chatDraft = { map: "", world: "" };
+  const chatHistory = { map: [], world: [], party: [], private: [], bug: [] }, chatUnread = { map: 0, world: 0, party: 0, private: 0, bug: 0 };
+  const chatDraft = { map: "", world: "", party: "", private: "", bug: "" };
+  let chatTargetId = "";
   let chatChannel = "map", chatPending = null, chatTimer = null;
   const scene = new B.Scene(engine);
   scene.clearColor = B.Color4.FromHexString("#172a2fff");
@@ -800,6 +808,20 @@
     }
     boatNodes.forEach(node => node.dispose());
   }
+  // Village sword mentor; teaching remains server-authoritative at the rest area.
+  const trainerPosition={x:2.4,z:2.4};
+  const trainerBody=B.MeshBuilder.CreateCylinder("sword mentor",{height:1.2,diameterTop:.48,diameterBottom:.7,tessellation:8},scene);
+  trainerBody.position.set(trainerPosition.x,.75,trainerPosition.z); trainerBody.material=woodenAlt; trainerBody.isPickable=false;
+  const trainerHead=B.MeshBuilder.CreateSphere("sword mentor head",{diameter:.4,segments:8},scene);
+  trainerHead.position.set(trainerPosition.x,1.55,trainerPosition.z); trainerHead.material=mat("mentor skin","#c99c6d"); trainerHead.isPickable=false;
+  const trainerLabelMaterial=mat("sword mentor label","#ffffff","#493b1e");
+  trainerLabelMaterial.diffuseTexture=paintTexture("sword mentor name",256,(ctx,size)=>{ctx.clearRect(0,0,size,size);ctx.fillStyle="#fff0bc";ctx.textAlign="center";ctx.font="bold 44px sans-serif";ctx.fillText("ครูดาบ",size/2,size/2);});
+  trainerLabelMaterial.diffuseTexture.hasAlpha=true; trainerLabelMaterial.useAlphaFromDiffuseTexture=true;
+  const trainerLabel=B.MeshBuilder.CreatePlane("sword mentor label",{width:1.8,height:1.8},scene);
+  trainerLabel.position.set(trainerPosition.x,2.65,trainerPosition.z);trainerLabel.material=trainerLabelMaterial;trainerLabel.billboardMode=B.Mesh.BILLBOARDMODE_ALL;trainerLabel.isPickable=false;
+  const trainerHitbox=B.MeshBuilder.CreateBox("sword mentor interaction",{width:1,height:2,depth:1},scene);
+  trainerHitbox.position.set(trainerPosition.x,1,trainerPosition.z);trainerHitbox.visibility=.001;trainerHitbox.metadata={swordMentor:true};
+
   // Both maps share one scene and ground. Their static meshes are created once
   // and toggled; switching maps must not accumulate scenes or WebGL resources.
   const villageMeshes = scene.meshes.filter(mesh => mesh !== ground && mesh !== sky && !mistLayers.includes(mesh));
@@ -2137,7 +2159,7 @@
     const target=room?.state?.monsters?.get?.(id);
     if(!target||!target.alive||target.mapId!==activeMapId){toast("เป้าหมายไม่อยู่ในพื้นที่");return;}
     selectedForestTarget=id;selectedPkTargetId=null;syncPKHud();marker.setEnabled(false);
-    if(rangedMode)shootAtTarget(id);
+    if(targetedSkill) castAtTarget(id);
     else try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }
     updateMonsterUI(target.hp,target.maxHp,target.alive);ui.monsterHint.textContent=target.displayName+" · Lv "+target.level;
   }
@@ -2145,6 +2167,8 @@
   function switchWorld(mapId) {
     if(activeMapId===mapId || !(portals[mapId] || worldDefinitions?.[mapId]))return;
     activeMapId=mapId;
+    spellTargetId=null;
+    setTargetedSkill(null);
     applyAtmosphere(mapId);
     clearChatHistory(false);
     const village=mapId==="ritual_village";
@@ -2437,9 +2461,15 @@
     }
     function createHeldWeapon(kind) {
       const root = new B.TransformNode("held-" + kind + "-" + id, scene);
-      root.parent = elbows[1];
+      root.parent = elbows[kind === "thai_left" ? 0 : 1];
       root.position.set(0, -.34, -.02);
-      if (kind === "ritual_dagger") {
+      if (kind === "thai_left" || kind === "thai_right") {
+        cyl(0, -.12, 0, .24, .055, .055, leatherWrap, 8);
+        for (const y of [-.03, -.11, -.2]) cyl(0, y, 0, .018, .065, .065, copper, 8);
+        ball(0, -.25, 0, .075, bronzeMat, 6);
+        curvedBlade(.95, .105, 7, null);
+        root.rotation.x = -2.1;
+      } else if (kind === "ritual_dagger") {
         // Curved black mo-du knife with copper-bound grip and hanging charms.
         cyl(0, -.12, 0, .24, .07, .075, leatherWrap, 8);
         for (const y of [-.03, -.2]) cyl(0, y, 0, .025, .085, .085, copper, 8);
@@ -2476,6 +2506,8 @@
       ritual_dagger: createHeldWeapon("ritual_dagger"),
       arcane_sword: createHeldWeapon("arcane_sword"),
       spirit_staff: createHeldWeapon("spirit_staff"),
+      thai_left: createHeldWeapon("thai_left"),
+      thai_right: createHeldWeapon("thai_right"),
     };
     attachCrescentBlade(weaponModels.arcane_sword);
     // Three familiar spirits: a glowing head with a tapering wisp tail.
@@ -3018,16 +3050,21 @@
       const p = 1 - (a.swingUntil - now) / 380;
       r.arms[1].rotation.x = p < .35 ? -2.5 * (p / .35) : -2.5 + 3.3 * ((p - .35) / .65);
       r.elbows[1].rotation.x = .35;
+      if (a.weaponId === "thai_dual") {
+        r.arms[0].rotation.x = p < .35 ? -1.4 * (p / .35) : -1.4 + 2 * ((p - .35) / .65);
+        r.elbows[0].rotation.x = .35;
+      }
     }
   }
   const avatars = new Map();
-  function setAvatarWeapon(avatar, weaponId) {
+  function setAvatarWeapon(avatar, weaponId, pathId = avatar?.local ? ownServerCharacter()?.pathId : "") {
     if (!avatar?.weaponModels) return;
-    const safeId = Object.hasOwn(avatar.weaponModels,weaponId) ? weaponId : "";
+    const modelId = pathId === "phutthaisawan" && weaponId === "arcane_sword" ? "thai_dual" : weaponId === "shrine_glaive" ? "arcane_sword" : weaponId;
+    const safeId = modelId === "thai_dual" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
     if (avatar.weaponId === safeId) return;
     avatar.weaponId = safeId;
     for(const [id,model] of Object.entries(avatar.weaponModels)) {
-      model.setEnabled(id === safeId);
+      model.setEnabled(id === safeId || (safeId === "thai_dual" && (id === "thai_left" || id === "thai_right")));
     }
   }
   // Forward of the prototype avatar faces local -Z when rotation.y == 0.
@@ -3094,7 +3131,7 @@
     return {
       node: parent, ownerId, x, y:0, z,
       targetX: x, targetY:0, targetZ: z,
-      facing: 0, desiredFacing: 0, action: "follow", hitUntil: 0
+      facing: 0, desiredFacing: 0, action: "follow", hitUntil: 0, emergingUntil: 0
     };
   }
   function deleteSummonAvatar(ownerId) {
@@ -3114,7 +3151,8 @@
     button.classList.toggle("summon-active", Boolean(summoned));
     button.setAttribute("aria-pressed", String(Boolean(summoned)));
     const title = button.querySelector("span:last-child");
-    if (title) title.textContent = summoned ? "เก็บผี" : "เรียกผี";
+    if (title) title.textContent = summoned ? "เก็บผี" : "เสกผีจากหม้อ";
+    button.title = summoned ? "เก็บวิญญาณกลับหม้อ" : "เสกผีจากหม้อ ช่วยโจมตีมอนสเตอร์ใกล้ตัว";
   }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
   let economyGold = null, economyListings = [], activeTrade = null, economyPending = false;
@@ -3124,7 +3162,10 @@
   // Inventory is never stored in localStorage: LIVE comes from VPS each join.
   const INVENTORY_SLOTS = 12;
   const POTION_ITEM_ID = "health_potion";
+  const SHRINE_SHARD = "shrine_shard";
+  const shardName = "เศษตราผู้พิทักษ์";
   const WEAPON_META = Object.freeze({
+    shrine_glaive: { name: "ง้าวจันทร์ผู้พิทักษ์", symbol: "☾", bonus: "หายาก · iLv 12 · ประชิด +10 เมื่อสู้มอนสเตอร์ / +8 ใน PvP" },
     ritual_dagger: { name: "มีดหมอ", symbol: "🗡️", bonus: "โจมตีประชิด +4" },
     arcane_sword: { name: "กระบี่อาคม", symbol: "⚔️", bonus: "โจมตีประชิด +8" },
     spirit_staff: { name: "คทาวิญญาณ", symbol: "🔱", bonus: "ยิงอาคม +6" },
@@ -3146,10 +3187,10 @@
   const DASH_DEMO_SPEED = 13.5;
   const DASH_DEMO_COOLDOWN_MS = 1800;
   let selectedPkTargetId = null;
-  let rangedMode = false;
-  let rangedTargetId = null;
+  let targetedSkill = null;
+  let spellTargetId = null;
   let pendingClimb = null;
-  const rangedEffects = [];
+  const skillEffects = [];
   let spiritShown = false, possessed = false, spirit = null;
   const enemy = B.MeshBuilder.CreateSphere("possessed enemy", { diameter: 1.7, segments: 12 }, scene);
   enemy.position.copyFromFloats(1.1, .88, 10.4); enemy.scaling.set(.7,1.1,.8);
@@ -4973,6 +5014,7 @@
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
+    possessed=false;syncPossessionButton();syncTalismanButton(null);syncSwordTreeButton(null);syncSwordHotbar();swordCombo=0; swordComboUntil=0; swordCounterUntil=0; syncSwordStatus(null);$("classSkill").hidden=true;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false;
@@ -4997,9 +5039,9 @@
     resetDemoMonster();
     updateFlightButton();
     selectedPkTargetId = null;
-    rangedTargetId = null;
+    spellTargetId = null;
     pendingClimb = null;
-    setRangedMode(false);
+    setTargetedSkill(null);
     ui.pkPanel.hidden = true;
     if (localHpBar) localHpBar.style.width = demoHp + "%";
     updateCharacterHud(null);
@@ -5032,6 +5074,7 @@
     marker.setEnabled(true);
     pendingClimb = null;
     selectedPkTargetId = null;
+    spellTargetId = null;
     syncPKHud();
     demoAutoAttack = false;
     if (!ui.monsterStatus.hidden) ui.monsterHint.textContent = "แตะผีเพื่อโจมตี";
@@ -5047,12 +5090,31 @@
   function hasLiveElevation() {
     return mode === "live" && room && Number.isFinite(Number(room.state?.fortification?.height));
   }
-  function setRangedMode(armed) {
-    rangedMode = Boolean(armed);
-    const button = $("shoot");
-    if (!button) return;
-    button.classList.toggle("shoot-active",rangedMode);
-    button.setAttribute("aria-pressed",String(rangedMode));
+  function setTargetedSkill(skill) {
+    targetedSkill = skill;
+    $("shoot").classList.toggle("shoot-active", skill === "rice");
+    $("shoot").setAttribute("aria-pressed", String(skill === "rice"));
+    $("talisman").setAttribute("aria-pressed", String(skill === "talisman"));
+  }
+  function monsterForSpell(id) {
+    return id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get(id);
+  }
+  function castAtTarget(id) {
+    if (targetedSkill === "sword") {
+      if (!id || !selectedSwordSkill) return;
+      spellTargetId=id;
+      room.send("sword_skill",{skillId:selectedSwordSkill,targetId:id});
+      return;
+    }
+    if (targetedSkill !== "talisman") return shootAtTarget(id);
+    const monster = monsterForSpell(id), me = ownServerCharacter();
+    if (!monster?.alive || monster.mapId !== activeMapId) { toast("แปะยันต์ได้เฉพาะมอนสเตอร์ที่ยังมีชีวิต"); return; }
+    if (!me?.alive || !Number.isFinite(me.talismanReadyAt)) return;
+    spellTargetId = id;
+    selectedPkTargetId = null;
+    syncPKHud();
+    if (me.talismanReadyAt > Date.now()) { toast("ยันต์กำลังฟื้น"); return; }
+    room.send("apply_talisman", {targetId:id});
   }
   function shootAtTarget(targetId) {
     if (!targetId) return;
@@ -5063,24 +5125,33 @@
     const me=ownServerCharacter();
     if (!me || me.alive===false) { toast("ยังยิงไม่ได้ · รอเกิดใหม่"); return; }
     if (me.combatState==="climbing") { toast("ปีนกำแพงให้เสร็จก่อนยิง");return; }
-    rangedTargetId=targetId;
+    spellTargetId=targetId;
     selectedPkTargetId=(targetId===MONSTER_ID || forestMonsters.has(targetId)) ? null : targetId;
     syncPKHud();
-    try {room.send("shoot",{targetId});}
+    try {
+      if (room.state.ritualSkillsAvailable) room.send("blessed_rice", {targetId});
+      else room.send("shoot", {targetId});
+    }
     catch(err){ console.error("MONTRA shot failed",err); toast("ส่งคำสั่งยิงไม่สำเร็จ"); }
   }
-  function toggleRangedMode() {
-    if (!hasLiveElevation()) {
-      toast("การยิงอาคมจากที่สูงใช้ได้ใน LIVE เมื่ออัปเดต VPS แล้ว");
+  function useTargetedSkill(skill) {
+    const talisman = skill === "talisman", me = ownServerCharacter();
+    if (talisman ? !Number.isFinite(me?.talismanReadyAt) : !hasLiveElevation()) {
+      toast(talisman ? "เข้า LIVE ในรุ่นที่รองรับยันอาคมของขลัง" : "เข้า LIVE เพื่อใช้ข้าวสารปลุกเสกโจมตี");
       return;
     }
-    setRangedMode(!rangedMode);
-    if (rangedMode) {
-      if (rangedTargetId) shootAtTarget(rangedTargetId);
-      else toast("โหมดยิงอาคม · แตะผีหรือผู้เล่นเพื่อยิง");
-    } else {
-      toast("กลับสู่โหมดโจมตีระยะประชิด");
-    }
+    setTargetedSkill(skill);
+    const id = spellTargetId || me?.targetId;
+    const target = monsterForSpell(id) || (!talisman && room.state.players?.get(id));
+    if (id && target?.alive && (target.mapId || "ritual_village") === activeMapId) castAtTarget(id);
+    else toast(talisman ? "แปะยันต์ · เดินเข้าใกล้แล้วแตะมอนสเตอร์" : "ข้าวสารปลุกเสก · แตะมอนสเตอร์หรือผู้เล่นเพื่อซัด");
+  }
+  function syncTalismanButton(me) {
+    const button = $("talisman");
+    button.hidden = mode === "live" && !Number.isFinite(me?.talismanReadyAt);
+    const seconds = Math.max(0, Math.ceil(((me?.talismanReadyAt || 0) - Date.now()) / 1000));
+    button.disabled = mode === "live" && (!me?.alive || seconds > 0);
+    button.lastElementChild.textContent = seconds ? seconds + " วิ" : "แปะยันต์";
   }
   function updateFlightButton() {
     const button = $("fly");
@@ -5199,17 +5270,51 @@
     try {room.send("climb",{structureId:activeFort.id,direction});}
     catch(err){console.error(err);toast("ส่งคำสั่งปีนไม่สำเร็จ");}
   }
+  function showTalisman(mesh) {
+    if (!mesh) return;
+    const seal = B.MeshBuilder.CreatePlane("talisman seal", {width:.62, height:.95, sideOrientation:B.Mesh.DOUBLESIDE}, scene);
+    seal.material = talismanPaper;
+    seal.parent = mesh;
+    seal.position.y = 1.1;
+    seal.billboardMode = B.Mesh.BILLBOARDMODE_ALL;
+    seal.isPickable = false;
+    skillEffects.push({mesh:seal, mapId:activeMapId, until:performance.now() + 850});
+  }
+  function showSpiritPot(spirit) {
+    const profile = [[.12, 0], [.35, .07], [.43, .28], [.26, .53], [.29, .59], [.2, .59], [.18, .48]];
+    const pot = B.MeshBuilder.CreateLathe("spirit pot", {
+      shape: profile.map(([radius, y]) => new B.Vector3(radius, y, 0)), tessellation: 16, sideOrientation: B.Mesh.DOUBLESIDE,
+    }, scene);
+    pot.position.set(spirit.x, spirit.y, spirit.z);
+    pot.material = bronzeMat;
+    pot.isPickable = false;
+    skillEffects.push({mesh: pot, mapId: activeMapId, until: performance.now() + 800});
+  }
   function renderMagicBolt(event) {
     const from=event?.from,to=event?.to;
     if(!from || !to)return;
     const xyz=[from.x,from.y,from.z,to.x,to.y,to.z].map(Number);
     if(!xyz.every(Number.isFinite))return;
+    if (event.skill === "blessed_rice") {
+      const start = new B.Vector3(from.x, from.y, from.z), end = new B.Vector3(to.x, to.y, to.z);
+      const tail = end.subtract(start).normalize().scale(.19);
+      const lines = [[0,0,0], [.15,.08,-.07], [-.12,.13,.04], [.06,-.13,.12], [-.14,-.05,-.1]].map(offset => {
+        const tip = new B.Vector3(...offset);
+        return [tip.subtract(tail), tip];
+      });
+      const mesh = B.MeshBuilder.CreateLineSystem("blessed rice", {lines}, scene);
+      mesh.color = B.Color3.FromHexString("#ffe9aa");
+      mesh.position.copyFrom(start);
+      mesh.isPickable = false;
+      skillEffects.push({mesh, mapId: activeMapId, start, end, until: performance.now() + 300});
+      return;
+    }
     const mesh=B.MeshBuilder.CreateLines("elevated magic shot",{
       points:[new B.Vector3(...xyz.slice(0,3)),new B.Vector3(...xyz.slice(3,6))]
     },scene);
     mesh.color=B.Color3.FromHexString("#8ce7ff");
     mesh.isPickable=false;
-    rangedEffects.push({mesh,until:performance.now()+240});
+    skillEffects.push({mesh, mapId: activeMapId, until:performance.now()+240});
   }
 
   const localHpBar = document.querySelector(".bar.hp i");
@@ -5296,14 +5401,14 @@
     }
   }
 
-  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0, weaponId = "") {
+  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0, weaponId = "", pathId = "") {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     onlinePlayers.set(id,{x,z});
     const a = ensureAvatar(id,id === localId,x,z);
     a.targetX = x;
     a.targetY = Number.isFinite(y) ? y : 0;
     a.targetZ = z;
-    setAvatarWeapon(a,weaponId);
+    setAvatarWeapon(a,weaponId,pathId);
 
     // S1 server facing is authoritative. Old servers omit this field;
     // fallback to the V0.1.5 movement-derived direction in that case.
@@ -5369,7 +5474,7 @@
       seen.add(id);
       setOnlinePlayer(id, Number(p.x), Number(p.z),
         Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
-        p.equippedWeaponId);
+        p.equippedWeaponId, p.pathId);
       noteAvatarState(avatars.get(id), p);
     });
     if(previousMapId !== activeMapId && mine) {
@@ -5386,6 +5491,13 @@
     syncForestMonsters(state);
     syncClimbButton();
     updateFlightButton();
+    syncPossessionButton();
+    syncClassSkill(mine);
+    syncTalismanButton(mine);
+    syncSwordTreeButton(mine);
+    syncSwordHotbar();
+    syncSwordStatus(mine);
+    if (drawerActive === "swordTree") renderSwordTree();
     if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
     if (drawerActive === "character") renderProgressionProfile();
     if (drawerActive === "party") renderParty();
@@ -5475,8 +5587,8 @@
       mode = "live"; localId = joined.sessionId; activeCharacterSlot = requestedSlot;
       clearAvatars(); clearSummons(); demoDest = null;
       pendingClimb = null;
-      rangedTargetId = null;
-      setRangedMode(false);
+      spellTargetId = null;
+      setTargetedSkill(null);
       onlinePlayers.clear(); enemy.setEnabled(false);
       selectedPkTargetId = null;
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
@@ -5489,15 +5601,15 @@
       console.info("MONTRA room joined", {roomId:joined.roomId, sessionId:joined.sessionId, initialStateReady:ok});
       joined.onStateChange(state => syncState(state));
       joined.onMessage("chat_message", message => {
-        if (room !== joined || !message || !["map", "world"].includes(message.channel) ||
+        if (room !== joined || !message || !["map", "world", "party", "private"].includes(message.channel) ||
             typeof message.text !== "string" || typeof message.name !== "string" ||
             typeof message.senderId !== "string" ||
             (message.channel === "map" && message.mapId !== activeMapId)) return;
         const channel = message.channel;
         const own = message.senderId === localId;
-        chatHistory[channel].push({ name: message.name.slice(0, 80), text: message.text.slice(0, 400), own });
+        chatHistory[channel].push({ name: (channel === "private" && own ? "ถึง " + String(message.targetName || "ผู้เล่น") : message.name).slice(0, 80), text: message.text.slice(0, 400), own });
         if (chatHistory[channel].length > 100) chatHistory[channel].shift();
-        if (own && chatPending && chatPending.channel === channel && chatPending.text === message.text) {
+        if (own && chatPending && chatPending.channel === channel && chatPending.text === message.text && (channel !== "private" || chatPending.targetId === message.targetId)) {
           if (chatDraft[channel].normalize("NFC").trim() === message.text) chatDraft[channel] = "";
           finishChatPending();
         } else if (!own && (drawerActive !== "chat" || chatChannel !== channel)) {
@@ -5505,6 +5617,15 @@
         }
         updateChatBadge();
         if (drawerActive === "chat") renderChat();
+      });
+      joined.onMessage("chat_report_result", result => {
+        if(room!==joined || chatPending?.channel!=="bug") return;
+        if(result?.ok === true) {
+          chatHistory.bug.push({name:"ระบบ",text:"รับรายงานบัคแล้ว · ขอบคุณที่แจ้ง",own:false});
+          if(chatDraft.bug.normalize("NFC").trim()===chatPending.text) chatDraft.bug="";
+          toast("ส่งรายงานบัคแล้ว");
+        } else toast("บันทึกรายงานไม่สำเร็จ · ลองอีกครั้ง");
+        finishChatPending(); if(drawerActive==="chat") renderChat();
       });
       joined.onMessage("guild_state", message => {
         if(room!==joined)return;
@@ -5563,12 +5684,24 @@
       });
       joined.onMessage("economy_state", message => {
         if (room !== joined || !Number.isSafeInteger(message?.gold) || message.gold < 0) return;
-        economyGold=message.gold; renderEconomy();
+        economyGold=message.gold; renderEconomy(); renderBag();
       });
       joined.onMessage("market_state", message => {
         if (room !== joined || !Array.isArray(message?.listings)) return;
-        economyListings=message.listings.filter(x => x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && typeof x.seller==="string" && /^[a-f0-9]{12}$/.test(x.seller) && x.item && (x.item.itemId===POTION_ITEM_ID || Object.hasOwn(WEAPON_META,x.item.itemId)) && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 && Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000).slice(0,120);
+        economyListings=message.listings.filter(x => x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && typeof x.seller==="string" && /^[a-f0-9]{12}$/.test(x.seller) && x.item && (x.item.itemId===POTION_ITEM_ID || x.item.itemId===SHRINE_SHARD || Object.hasOwn(WEAPON_META,x.item.itemId)) && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 && Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000).slice(0,120);
         renderEconomy();
+      });
+      joined.onMessage("craft_result", result => {
+        if (room !== joined) return;
+        finishEconomyPending();
+        toast("คราฟต์ง้าวจันทร์ผู้พิทักษ์สำเร็จ · ใช้ " + result.spentGold + " ทอง");
+        renderBag();
+      });
+      joined.onMessage("forge_result", result => {
+        if (room !== joined) return;
+        finishEconomyPending();
+        toast(result.action === "reroll" ? "สุ่มออปชันแล้ว" : result.success ? "ตีบวกสำเร็จ +" + result.forge.rank : "ตีบวกพลาด · ระดับเดิมยังอยู่");
+        renderBag();
       });
       joined.onMessage("market_result", message => {
         if (room !== joined) return;
@@ -5578,7 +5711,7 @@
       joined.onMessage("economy_error", message => {
         if (room !== joined) return;
         finishEconomyPending();
-        const reasons={insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
+        const reasons={craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
         toast(reasons[message?.reason] || "ทำรายการไม่สำเร็จ · ลองตรวจข้อมูลอีกครั้ง"); renderEconomy();
       });
       joined.onMessage("trade_update", message => {
@@ -5602,19 +5735,27 @@
           const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
           playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
         }
-        if(forestTarget){if(forestTarget.mapId===activeMapId){syncForestMonsters(joined.state);if(hit.attackerId===localId)toast("โจมตี "+forestTarget.displayName+" -"+hit.damage+" HP");}return;}
+        const talisman = hit?.source === "talisman";
+        if (forestTarget) {
+          if (forestTarget.mapId !== activeMapId) return;
+          syncForestMonsters(joined.state);
+          if (talisman) showTalisman(forestMonsters.get(hit.targetId));
+          if (hit.attackerId === localId) toast((talisman ? "แปะยันต์ใส่" : "โจมตี ") + forestTarget.displayName + " -" + hit.damage + " HP");
+          return;
+        }
         if(activeMapId !== "ritual_village" || hit?.targetId !== MONSTER_ID)return;
         // Players also visibly turn toward the monster while attacking,
         // even when standing still. All clients receive the same event.
         if (typeof hit.attackerId === "string") {
           faceAvatarToward(hit.attackerId, enemy.position.x, enemy.position.z);
         }
+        if (talisman) showTalisman(enemy);
         hitFlashRemaining = .22;
         if (Number.isFinite(Number(hit.hp)) && Number.isFinite(Number(hit.maxHp))) {
           updateMonsterUI(Number(hit.hp), Number(hit.maxHp), Number(hit.hp) > 0);
         }
         toast(hit.attackerId === localId
-          ? "โจมตีผีสำเร็จ -" + String(hit.damage) + " HP"
+          ? (talisman ? "แปะยันต์ใส่ผี -" : "โจมตีผีสำเร็จ -") + String(hit.damage) + " HP"
           : "ผู้เล่นอื่นโจมตีผี -" + String(hit.damage) + " HP");
       });
       joined.onMessage("combat_notice", notice => {
@@ -5669,7 +5810,7 @@
         if((joined.state?.players?.get?.(data?.attackerId)?.mapId || "ritual_village") !== activeMapId)return;
         renderMagicBolt(data);
         if(data?.attackerId===localId) {
-          toast("ยิงอาคมโดนเป้าหมาย -" + data.damage + " HP");
+          toast("ข้าวสารปลุกเสกโดนเป้าหมาย -" + data.damage + " HP");
         }
       });
       joined.onMessage("summon_spawn", notice => {
@@ -5677,15 +5818,72 @@
         playAction(avatars.get(notice?.ownerId), "summon");
         if (notice?.ownerId === localId) toast("อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
         syncSummons(joined.state);
+        const spirit = joined.state.summons?.get(notice?.ownerId);
+        if (notice?.kind === "pot_spirit" && spirit && summonAvatars.has(notice.ownerId)) {
+          showSpiritPot(spirit);
+          summonAvatars.get(notice.ownerId).emergingUntil = performance.now() + 500;
+        }
+        if (notice?.ownerId === localId) toast(notice.kind === "pot_spirit" ? "เสกผีจากหม้อแล้ว · ผีจะช่วยโจมตีมอนสเตอร์ใกล้ตัว" : "อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
       });
       joined.onMessage("summon_despawn", notice => {
         if (room !== joined) return;
-        if (notice?.ownerId === localId) {
+        if (notice?.ownerId === localId && notice.reason !== "possessed") {
           toast(notice.reason === "owner_dead"
             ? "วิญญาณกลับภพเมื่อเจ้าของหมดสติ"
             : "เก็บวิญญาณผู้พิทักษ์แล้ว");
         }
         syncSummons(joined.state);
+      });
+      joined.onMessage("build_selected", () => {
+        if (room === joined) toast("บันทึกสายอาชีพและเผ่าแล้ว");
+      });
+      joined.onMessage("sword_combo", data => { if (room===joined) {
+        const count=Number.isInteger(data?.count) ? Math.max(0,Math.min(3,data.count)) : 0;
+        const firstFull=count===3 && (swordCombo<3 || performance.now()>=swordComboUntil);
+        swordCombo=count;
+        swordComboUntil=performance.now()+3500;
+        syncSwordStatus(ownServerCharacter());
+        if (firstFull) toast("จังหวะเพลงดาบ 3 / 3");
+      } });
+      joined.onMessage("sword_tree_changed", result => { if (room===joined) {
+        if (result?.action==="school" || result?.action==="reset") {
+          selectedSwordSkill=""; swordCombo=0; swordComboUntil=0; swordCounterUntil=0;
+          if (targetedSkill==="sword") setTargetedSkill(null);
+          syncSwordStatus(ownServerCharacter());
+        }
+        swordTreeRenderKey=""; renderSwordTree(); toast("บันทึกตำราวิชาดาบแล้ว");
+      } });
+      joined.onMessage("sword_counter_cleared", () => { if (room===joined) {
+        swordCounterUntil=0;
+        syncSwordStatus(ownServerCharacter());
+      } });
+      joined.onMessage("sword_guarded", () => { if (room===joined) {
+        swordCounterUntil=performance.now()+3000;
+        syncSwordStatus(ownServerCharacter());
+        toast("รับสำเร็จ · ใช้วิชาสวนได้ 3 วินาที");
+      } });
+      joined.onMessage("sword_skill_used", result => {
+        if (room!==joined) return;
+        const caster=joined.state?.players?.get?.(result?.playerId);
+        if (!caster || (caster.mapId || "ritual_village")!==activeMapId) return;
+        const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
+        if (target) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
+        const ring=B.MeshBuilder.CreateTorus("sword skill ring",{diameter:1.3,thickness:.045,tessellation:16},scene);
+        ring.position.set(caster.x,caster.y+.12,caster.z);ring.rotation.x=Math.PI/2;ring.material=gold;ring.isPickable=false;
+        skillEffects.push({mesh:ring,mapId:activeMapId,until:performance.now()+450});
+        if (result.playerId===localId) {
+          const node=swordData()?.catalog?.nodes?.[result.skillId];
+          const name=node?.name || "วิชาดาบ";
+          toast(name+" สำเร็จ");
+        }
+      });
+      joined.onMessage("class_skill_used", result => {
+        if (room === joined) toast(result.skill + " · มีผล " + result.targets + " คน");
+      });
+      joined.onMessage("possession_changed", notice => {
+        if(room!==joined || notice?.playerId!==localId)return;
+        toast(notice.active ? "วิญญาณเข้าสิง · เพิ่มโจมตีและป้องกัน 20% นาน 60 วินาที" : "สถานะเข้าสิงสิ้นสุด");
+        syncPossessionButton();
       });
       joined.onMessage("summon_hit", hit => {
         if (room !== joined || !hit) return;
@@ -5756,7 +5954,8 @@
       joined.onMessage("experience_gained", info => {
         if(room !== joined) return;
         const prize=info?.elitePotion==="granted"?" · ได้รับยาฟื้นพลัง 1 ขวด":info?.elitePotion==="bag_full"?" · กระเป๋าเต็ม รับยาไม่ได้":"";
-        toast((info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + prize);
+        const shard = info?.shrineShard === "granted" ? " · ได้รับ" + shardName + " 1 ชิ้น" : info?.shrineShard === "bag_full" ? " · กระเป๋าเต็ม รับเศษตราไม่ได้" : "";
+        toast((info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":info?.shrineShard && !info.amount?"รางวัลศาลร้าง":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + prize + shard);
         renderProgressionProfile();
       });
       joined.onMessage("inventory_state", payload => {
@@ -5765,14 +5964,14 @@
             payload.slots.length !== INVENTORY_SLOTS) return;
         // Defensive view parsing: only display known items and sane counts.
         const slots = payload.slots.map(stack => {
-          if (stack?.itemId === POTION_ITEM_ID &&
+          if ((stack?.itemId === POTION_ITEM_ID || stack?.itemId === SHRINE_SHARD) &&
               Number.isSafeInteger(stack.quantity) &&
               stack.quantity >= 1 && stack.quantity <= 99) {
-            return { itemId: POTION_ITEM_ID, quantity: stack.quantity };
+            return { itemId: stack.itemId, quantity: stack.quantity };
           }
           if (Object.hasOwn(WEAPON_META,stack?.itemId) &&
               stack?.quantity === 1) {
-            return { itemId: stack.itemId, quantity: 1 };
+            return { itemId: stack.itemId, quantity: 1, forge: stack.forge };
           }
           return null;
         });
@@ -5822,6 +6021,10 @@
       });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        const swordReasons={invalid_sword_tree:"คำสั่งวิชาไม่ถูกต้อง",sword_class_required:"เลือกอาชีพนักดาบก่อน",sword_tree_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อน",sword_tree_level:"เลเวลยังไม่ถึง",sword_tree_no_points:"แต้มวิชาไม่พอ",sword_tree_prerequisite:"ต้องเรียนวิชาก่อนหน้า",sword_tree_wrong_school:"เลือกสำนักนี้ก่อน",sword_tree_already_learned:"เรียนวิชานี้แล้ว",sword_tree_already_selected:"เลือกสำนักนี้อยู่แล้ว",sword_tree_empty:"ยังไม่มีแต้มวิชาที่ต้องคืน",sword_tree_rate_limited:"กดถี่เกินไป รอสักครู่",sword_tree_save_failed:"บันทึกวิชาไม่สำเร็จ",sword_trial_incomplete:"ฝึกตามเงื่อนไขของครูดาบก่อน",invalid_sword_skill:"คำสั่งสกิลไม่ถูกต้อง",sword_weapon_required:"สวมกระบี่อาคมก่อนใช้วิชาดาบ",sword_skill_locked:"วิชายังไม่พร้อมใช้ในสำนักนี้",sword_skill_cooldown:"วิชาดาบกำลังฟื้น",sword_counter_required:"รับการโจมตีให้สำเร็จก่อนสวน",sword_combo_required:"โจมตีต่อเนื่องให้ครบ 3 จังหวะ",invalid_sword_target:"เลือกเป้าหมายที่ใช้วิชานี้ได้",sword_out_of_range:"เข้าใกล้เป้าหมายก่อนใช้วิชา",sword_blocked:"มีสิ่งกีดขวางระหว่างทาง"};
+        if (Object.hasOwn(swordReasons,info?.reason)) { toast(swordReasons[info.reason]); return; }
+        const buildReasons = {build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
+        if (Object.hasOwn(buildReasons, info?.reason)) { toast(buildReasons[info.reason]); return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("guild_")) { const reason={guild_invalid_name:"ชื่อกิลด์ต้องมี 2–24 ตัวอักษร และใช้ตัวอักษรหรือตัวเลข",guild_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",guild_unavailable:"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว"};toast(reason[info.reason] || "ไม่สามารถทำรายการกิลด์ได้");return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
         if (["economy_unavailable","economy_rate_limited","invalid_economy_request","invalid_trade","trade_unavailable","trade_expired","character_busy"].includes(info?.reason) && (drawerActive === "economy" || economyPending)) {
@@ -5830,14 +6033,15 @@
           const reason={economy_unavailable:"ต้องเข้า LIVE ที่เปิดระบบตลาด",economy_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",character_busy:"กำลังบันทึกข้อมูล · ลองใหม่",trade_expired:"ข้อเสนอเทรดหมดอายุ",trade_unavailable:"ไม่พบข้อเสนอเทรด"};
           toast(reason[info.reason] || "คำขอไม่ถูกต้อง"); renderEconomy(); return;
         }
-        if (["invalid_chat", "chat_rate_limited", "chat_unavailable"].includes(info?.reason)) {
+        if (info?.reason === "character_busy") { toast("กำลังบันทึกข้อมูล รอสักครู่"); return; }
+        if (["invalid_chat", "chat_rate_limited", "chat_unavailable", "chat_party_unavailable", "chat_target_unavailable", "chat_bug_rate_limited"].includes(info?.reason)) {
           finishChatPending();
-          toast(info.reason === "chat_rate_limited" ? "ส่งข้อความเร็วเกินไป · รอสักครู่" :
-            info.reason === "chat_unavailable" ? "ยังส่งแชทไม่ได้ขณะเดินทาง" : "ข้อความไม่ถูกต้องหรือยาวเกิน 200 ตัวอักษร");
+          const chatErrors={chat_rate_limited:"ส่งข้อความเร็วเกินไป · รอสักครู่",chat_unavailable:"ยังส่งแชทไม่ได้ขณะเดินทาง",chat_party_unavailable:"เข้าปาร์ตี้ก่อนส่งข้อความ",chat_target_unavailable:"ผู้รับไม่พร้อมใช้งานหรือออกจากห้องแล้ว",chat_bug_rate_limited:"ส่งรายงานได้ทุก 30 วินาที",invalid_chat:"ข้อความไม่ถูกต้องหรือยาวเกิน 200 ตัวอักษร"};
+          toast(chatErrors[info.reason] || "ส่งข้อความไม่สำเร็จ");
           if (drawerActive === "chat") renderChat();
           return;
         }
-        if (info?.reason === "insufficient_stamina") { toast("กำลังไม่พอสำหรับพุ่ง"); return; }
+        if (info?.reason === "insufficient_stamina") { toast("กำลังไม่พอสำหรับใช้สกิล"); return; }
         if(warpPending) {
           clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
           const warpReasons={portal_too_far:"อยู่ไกลจากประตูเกินไป",combat_locked:"รอให้พ้นการต่อสู้ก่อนเดินทาง",warp_cooldown:"รอคูลดาวน์ก่อนเดินทาง",movement_busy:"หยุดบิน ปีน หรือพุ่งก่อนเดินทาง",character_busy:"กำลังบันทึกข้อมูล"};
@@ -5860,12 +6064,21 @@
         else if(info?.reason==="world_client_update_required")toast("รีเฟรชหน้าเกมเพื่อเข้าวัดร้างพันธนาการ");
         else if (info?.reason === "target_unavailable") toast("เป้าหมายไม่อยู่ในห้องหรือไม่พร้อมต่อสู้");
         else if (info?.reason === "invalid_attack") toast("คำสั่งโจมตีไม่ถูกต้อง");
+        else if (info?.reason === "possession_needs_summon") toast("เรียกวิญญาณก่อนเข้าสิง");
+        else if (info?.reason === "possession_cooldown") toast("เข้าสิงยังไม่พร้อม · รอคูลดาวน์ 30 วินาทีหลังสิ้นสุด");
+        else if (info?.reason === "possession_active") toast("ออกจากการเข้าสิงก่อนเรียกวิญญาณ");
+        else if (info?.reason === "possession_rate_limited") toast("กดเข้าสิงถี่เกินไป");
+        else if (info?.reason === "invalid_possession") toast("คำสั่งเข้าสิงไม่ถูกต้อง");
         else if (info?.reason === "summon_limit") toast("เรียกวิญญาณพร้อมกันได้สูงสุด 1 ตัว");
         else if (info?.reason === "summon_cooldown") toast("อัญเชิญเร็วเกินไป · รอคูลดาวน์");
         else if (info?.reason === "summon_rate_limited") toast("กดเรียกวิญญาณถี่เกินไป");
         else if (info?.reason === "shot_out_of_range") toast("เป้าหมายอยู่นอกระยะยิง");
+        else if (info?.reason === "invalid_talisman_target") toast("เลือกมอนสเตอร์เพื่อแปะยันต์");
+        else if (info?.reason === "talisman_out_of_range") toast("เข้าใกล้มอนสเตอร์ในระยะ 2.8 เมตร แล้วแตะมอนสเตอร์อีกครั้ง");
+        else if (info?.reason === "talisman_blocked") toast("มีสิ่งกีดขวางระหว่างคุณกับมอนสเตอร์");
+        else if (info?.reason === "talisman_cooldown") toast("ยันต์กำลังฟื้น");
         else if (info?.reason === "shot_blocked") toast("กำแพงบังแนวกระสุนอาคม");
-        else if (info?.reason === "shot_cooldown") toast("รอพลังยิงอาคมอีกครู่");
+        else if (info?.reason === "shot_cooldown") toast("ข้าวสารปลุกเสกกำลังฟื้น · รอครู่หนึ่ง");
         else if (info?.reason === "inventory_unavailable") toast("เซิร์ฟเวอร์ยังไม่รองรับกระเป๋าถาวร");
         else if (info?.reason === "invalid_item_use" || info?.reason === "invalid_inventory_request") toast("คำสั่งไอเท็มไม่ถูกต้อง");
         else if (info?.reason === "item_busy") toast("กำลังบันทึกการใช้ยา · รอสักครู่");
@@ -5891,10 +6104,10 @@
         else if (info?.reason === "flying") toast("ต้องลงจอดก่อนใช้พุ่งหรือปีน");
         else if (info?.reason === "climbing") toast("ยังโจมตีหรือเดินไม่ได้ขณะปีน");
         else if (info?.reason === "ladder_too_far") toast("เดินเข้าหาบันไดก่อนปีน");
-        else if (info?.reason === "melee_height_blocked") toast("โจมตีประชิดข้ามระดับความสูงไม่ได้ · ใช้ยิงอาคม");
+        else if (info?.reason === "melee_height_blocked") toast("โจมตีประชิดข้ามระดับความสูงไม่ได้ · ใช้ข้าวสารปลุกเสก");
         else if (info?.reason === "must_descend") toast("ต้องลงบันไดก่อนเดินไปพื้นด้านล่าง");
         else if (info?.reason === "invalid_climb") toast("คำสั่งปีนกำแพงไม่ถูกต้อง");
-        else if (info?.reason === "invalid_shoot") toast("คำสั่งยิงอาคมไม่ถูกต้อง");
+        else if (info?.reason === "invalid_shoot") toast("คำสั่งซัดข้าวสารไม่ถูกต้อง");
         else if (info?.reason === "invalid_summon" || info?.reason === "invalid_unsummon") {
           toast("คำสั่งวิญญาณไม่ถูกต้อง");
         }
@@ -5914,7 +6127,7 @@
             const applyServerPlayer = () => {
               if ((p.mapId || "ritual_village") !== activeMapId) { removeOnlinePlayer(id); return; }
               setOnlinePlayer(id, Number(p.x), Number(p.z),
-                Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y), p.equippedWeaponId);
+                Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y), p.equippedWeaponId, p.pathId);
             };
             applyServerPlayer();
             if (typeof cb.listen === "function") {
@@ -5925,6 +6138,7 @@
               cb.listen(p, "y", applyServerPlayer);
               cb.listen(p, "maxHp", applyServerPlayer);
               cb.listen(p, "equippedWeaponId", applyServerPlayer);
+              cb.listen(p, "pathId", applyServerPlayer);
               cb.listen(p, "mapId", () => syncState(joined.state));
             }
           });
@@ -6036,7 +6250,7 @@
     // monster and walkable ground. Fire only where the target is visible.
     const picked = scene.pick(px, py, mesh => mesh.isEnabled() && (
       mesh.metadata?.walkable === true ||
-      mesh.metadata?.portalId ||
+      mesh.metadata?.portalId || mesh.metadata?.swordMentor ||
       (mesh === enemy && enemy.isEnabled()) ||
       (mode === "live" && mesh.isEnabled() && forestMonsters.get(mesh.metadata?.monsterId) === mesh) ||
       (fortRoot.isEnabled() && mesh.metadata?.climbableWall) ||
@@ -6046,7 +6260,12 @@
     if (!picked?.hit) return;
     const hitMesh=picked.pickedMesh;
     const otherId=hitMesh?.metadata?.pkPlayerId;
-    if (hitMesh?.metadata?.portalId) {
+    if (hitMesh?.metadata?.swordMentor) {
+      const me=ownServerCharacter();
+      if (!me) toast("เข้า LIVE เพื่อพูดคุยกับครูดาบ");
+      else if (Math.hypot(me.x-trainerPosition.x,me.z-trainerPosition.z)>3) { pointMove(trainerPosition.x,trainerPosition.z);toast("เดินไปหาครูดาบแล้วแตะอีกครั้ง"); }
+      else openSwordTree();
+    } else if (hitMesh?.metadata?.portalId) {
       const portal=activePortal(hitMesh.metadata.portalId);
       if (!portal)return;
       if (mode !== "live" || !room || room.state?.worldMapsAvailable !== true ||
@@ -6057,12 +6276,12 @@
         toast("กำลังเดินไปประตู · แตะประตูอีกครั้งเมื่อถึง");
       }
     } else if (otherId && mode==="live") {
-      if(rangedMode) shootAtTarget(otherId);
+      if(targetedSkill) castAtTarget(otherId);
       else tapPlayerForPK(otherId);
     } else if (hitMesh?.metadata?.monsterId && hitMesh !== enemy) {
       requestForestAttack(hitMesh.metadata.monsterId);
     } else if (hitMesh === enemy) {
-      if(rangedMode) shootAtTarget(MONSTER_ID);
+      if(targetedSkill) castAtTarget(MONSTER_ID);
       else requestMonsterAttack();
     } else if(hitMesh?.metadata?.climbableWall) {
       const flying = mode === "live" ? ownServerCharacter()?.flying : demoFlying;
@@ -6208,73 +6427,62 @@
     ui.drawer.hidden=false; ui.shade.hidden=false;
     drawerActive=name;
   }
+  const chatTabs={map:"แผนที่",world:"รวมในห้อง",party:"ปาร์ตี้",private:"ส่วนตัว",bug:"รายงานบัค"};
   function updateChatBadge() {
-    const total = Math.min(99, chatUnread.map + chatUnread.world);
-    const badge = $("chatUnread");
-    badge.hidden = total === 0;
-    badge.textContent = total ? String(total) : "";
-    $("chatButton").setAttribute("aria-label", total ? `เปิดแชท มีข้อความใหม่ ${total} ข้อความ` : "เปิดแชท");
+    const total=Math.min(99,Object.values(chatUnread).reduce((sum,n)=>sum+n,0)),badge=$("chatUnread");
+    badge.hidden=total===0;badge.textContent=total?String(total):"";
+    $("chatButton").setAttribute("aria-label",total ? `เปิดแชท มีข้อความใหม่ ${total} ข้อความ` : "เปิดแชท");
   }
-  function finishChatPending() {
-    clearTimeout(chatTimer); chatTimer = null; chatPending = null;
-  }
+  function finishChatPending(){clearTimeout(chatTimer);chatTimer=null;chatPending=null;}
   function clearChatHistory(all) {
-    chatHistory.map.length = 0; chatUnread.map = 0;
-    if (all) {
-      chatHistory.world.length = 0; chatUnread.world = 0;
-      chatDraft.map = ""; chatDraft.world = ""; finishChatPending();
-    }
-    updateChatBadge();
-    if (drawerActive === "chat") renderChat();
+    chatHistory.map.length=0;chatUnread.map=0;
+    if(all){for(const channel of Object.keys(chatHistory)){chatHistory[channel].length=0;chatUnread[channel]=0;chatDraft[channel]="";}chatTargetId="";finishChatPending();}
+    updateChatBadge();if(drawerActive==="chat")renderChat();
   }
   function renderChat() {
-    if (drawerActive !== "chat") return;
-    const log = $("chatLog"), input = $("chatInput"), send = $("chatSend");
-    if (!log || !input || !send) return;
-    const canChat = mode === "live" && room?.state?.chatAvailable === true;
-    $("chatStatus").textContent = mode !== "live" ? "เข้าออนไลน์เพื่อใช้แชท" :
-      canChat ? "ข้อความจะไม่ถูกบันทึกหลังออกเกม" : "เซิร์ฟเวอร์ยังไม่รองรับแชท · ต้องอัปเดต VPS";
-    for (const channel of ["map", "world"]) {
-      const tab = $(channel === "map" ? "chatMapTab" : "chatWorldTab");
-      tab.setAttribute("aria-pressed", String(channel === chatChannel));
-      const label = channel === "map" ? "แผนที่" : "รวมในห้อง";
-      tab.textContent = label + (chatUnread[channel] ? ` (${chatUnread[channel]})` : "");
+    if(drawerActive!=="chat")return;
+    const log=$("chatLog"),input=$("chatInput"),send=$("chatSend"),target=$("chatTarget");
+    if(!log||!input||!send||!target)return;
+    const extended=["party","private","bug"].includes(chatChannel);
+    const canChat=mode==="live" && room?.state?.chatAvailable===true && (!extended || room?.state?.extendedChatAvailable===true);
+    $("chatStatus").textContent=mode!=="live" ? "เข้าออนไลน์เพื่อใช้แชท" : !canChat ? "เซิร์ฟเวอร์ยังไม่รองรับช่องนี้" :
+      chatChannel==="bug" ? "รายงานจะบันทึกให้ผู้ดูแลเซิร์ฟเวอร์" : chatChannel==="private" ? "ส่งถึงผู้เล่นที่เลือกในห้องเดียวกัน" : "ข้อความจะไม่ถูกบันทึกหลังออกเกม";
+    for(const [channel,label] of Object.entries(chatTabs)) {
+      const tab=$("chatTab-"+channel);tab.setAttribute("aria-pressed",String(channel===chatChannel));
+      tab.textContent=label+(chatUnread[channel] ? ` (${chatUnread[channel]})` : "");
     }
-    const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
-    log.replaceChildren();
-    for (const item of chatHistory[chatChannel]) {
-      const row = document.createElement("div"); row.className = "chat-line";
-      const name = document.createElement("strong"); name.textContent = item.name + (item.own ? " (คุณ): " : ": ");
-      const body = document.createElement("span"); body.textContent = item.text;
-      row.append(name, body); log.append(row);
+    $("chatTargetField").hidden=chatChannel!=="private";
+    const choices=[];room?.state?.players?.forEach?.((player,id)=>{if(id!==localId)choices.push({id,name:String(player.characterName||"ผู้เล่น")});});
+    target.replaceChildren();const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="เลือกผู้รับ";target.append(placeholder);
+    for(const choice of choices){const option=document.createElement("option");option.value=choice.id;option.textContent=choice.name;target.append(option);}
+    target.value=chatTargetId;if(target.value!==chatTargetId)chatTargetId="";
+    const nearBottom=log.scrollHeight-log.scrollTop-log.clientHeight<48;log.replaceChildren();
+    for(const item of chatHistory[chatChannel]) {
+      const row=document.createElement("div");row.className="chat-line";
+      const name=document.createElement("strong");name.textContent=item.name+(item.own ? " (คุณ): " : ": ");
+      const body=document.createElement("span");body.textContent=item.text;row.append(name,body);log.append(row);
     }
-    if (!chatHistory[chatChannel].length) {
-      const empty = document.createElement("p"); empty.className = "chat-empty"; empty.textContent = "ยังไม่มีข้อความ"; log.append(empty);
-    }
-    if (nearBottom) log.scrollTop = log.scrollHeight;
-    if (input.value !== chatDraft[chatChannel]) input.value = chatDraft[chatChannel];
-    input.disabled = !canChat; send.disabled = !canChat || Boolean(chatPending);
+    if(!chatHistory[chatChannel].length){const empty=document.createElement("p");empty.className="chat-empty";empty.textContent="ยังไม่มีข้อความ";log.append(empty);}
+    if(nearBottom)log.scrollTop=log.scrollHeight;
+    if(input.value!==chatDraft[chatChannel])input.value=chatDraft[chatChannel];
+    input.disabled=!canChat;target.disabled=!canChat;send.disabled=!canChat||Boolean(chatPending)||(chatChannel==="private"&&!chatTargetId);
   }
-  function openChat() {
-    chatUnread[chatChannel] = 0; updateChatBadge();
-    openDrawer("chat", "แชท", '<div class="chat-tabs" role="group" aria-label="เลือกช่องแชท"><button id="chatMapTab" type="button">แผนที่</button><button id="chatWorldTab" type="button">รวมในห้อง</button></div><p id="chatStatus" class="note" role="status"></p><div id="chatLog" class="chat-log" role="log" aria-live="polite"></div><form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">ข้อความแชท</label><input id="chatInput" maxlength="400" autocomplete="off" placeholder="พิมพ์ข้อความ (ไม่เกิน 200 ตัวอักษร)"><button id="chatSend" type="submit">ส่ง</button></form>');
-    for (const channel of ["map", "world"]) {
-      $(channel === "map" ? "chatMapTab" : "chatWorldTab").onclick = () => {
-        chatChannel = channel; chatUnread[channel] = 0; updateChatBadge(); renderChat();
-      };
-    }
-    $("chatInput").addEventListener("input", event => { chatDraft[chatChannel] = event.target.value; });
-    $("chatForm").addEventListener("submit", event => {
-      event.preventDefault();
-      if (chatPending || mode !== "live" || !room || room.state?.chatAvailable !== true) return;
-      const text = chatDraft[chatChannel].normalize("NFC").trim();
-      if (!text || Array.from(text).length > 200) { toast("พิมพ์ข้อความไม่เกิน 200 ตัวอักษร"); return; }
-      const channel = chatChannel;
-      chatPending = { text, channel };
-      try { room.send("chat", { text, channel }); }
-      catch (_) { finishChatPending(); toast("ส่งข้อความไม่สำเร็จ"); renderChat(); return; }
-      chatTimer = setTimeout(() => { finishChatPending(); toast("ยังไม่ได้รับการยืนยันข้อความ"); renderChat(); }, 5000);
-      renderChat();
+  function openChat(){
+    chatUnread[chatChannel]=0;updateChatBadge();
+    openDrawer("chat","แชท",'<div class="chat-tabs" role="group" aria-label="เลือกช่องแชท">'+Object.entries(chatTabs).map(([id,label])=>'<button id="chatTab-'+id+'" type="button">'+label+'</button>').join('')+'</div><p id="chatStatus" class="note" role="status"></p><label id="chatTargetField" class="field" for="chatTarget" hidden>ผู้รับ<select id="chatTarget"></select></label><div id="chatLog" class="chat-log" role="log" aria-live="polite"></div><form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">ข้อความแชท</label><input id="chatInput" maxlength="400" autocomplete="off" placeholder="พิมพ์ข้อความ (ไม่เกิน 200 ตัวอักษร)"><button id="chatSend" type="submit">ส่ง</button></form>');
+    for(const channel of Object.keys(chatTabs)) $("chatTab-"+channel).onclick=()=>{chatChannel=channel;chatUnread[channel]=0;updateChatBadge();renderChat();};
+    $("chatTarget").onchange=event=>{chatTargetId=event.target.value;renderChat();};
+    $("chatInput").addEventListener("input",event=>{chatDraft[chatChannel]=event.target.value;});
+    $("chatForm").addEventListener("submit",event=>{
+      event.preventDefault();const channel=chatChannel,extended=["party","private","bug"].includes(channel);
+      if(chatPending||mode!=="live"||!room||room.state?.chatAvailable!==true||(extended&&room.state?.extendedChatAvailable!==true))return;
+      const text=chatDraft[channel].normalize("NFC").trim();
+      if(!text||Array.from(text).length>200){toast("พิมพ์ข้อความไม่เกิน 200 ตัวอักษร");return;}
+      if(channel==="private"&&!chatTargetId){toast("เลือกผู้รับก่อนส่ง");return;}
+      const command=channel==="private"?{text,channel,targetId:chatTargetId}:{text,channel};
+      chatPending={...command};
+      try{room.send("chat",command);}catch(_){finishChatPending();toast("ส่งข้อความไม่สำเร็จ");renderChat();return;}
+      chatTimer=setTimeout(()=>{finishChatPending();toast("ยังไม่ได้รับการยืนยันข้อความ");renderChat();},5000);renderChat();
     });
     renderChat();
   }
@@ -6678,10 +6886,253 @@
     ["hp","HP สูงสุด","maxHp"],["atk","โจมตีกายภาพ","atk"],["def","ป้องกันกายภาพ","def"],
     ["magicAtk","โจมตีเวท","magicAtk"],["magicDef","ป้องกันเวท","magicDef"],["stamina","กำลังสูงสุด","maxStamina"]
   ];
+  let catalogKey = "", buildCatalog = null;
+  function getBuildCatalog() {
+    const raw = room?.state?.buildCatalog || "";
+    if (raw !== catalogKey) {
+      catalogKey = raw;
+      try { buildCatalog = raw ? JSON.parse(raw) : null; } catch { buildCatalog = null; }
+    }
+    return buildCatalog;
+  }
+  function syncClassSkill(player) {
+    const skill = getBuildCatalog()?.paths?.[player?.pathId], button = $("classSkill");
+    button.hidden = !skill;
+    if (!skill) return;
+    const seconds = Math.max(0, Math.ceil((player.classSkillReadyAt - Date.now()) / 1000));
+    button.disabled = !player.alive || seconds > 0 || player.stamina < skill.stamina;
+    button.lastElementChild.textContent = seconds ? seconds + " วิ" : skill.skill;
+    button.title = skill.skill + " · " + skill.stamina + " กำลัง";
+    button.setAttribute("aria-label", button.title);
+  }
+  $("classSkill").onclick = () => { if (mode === "live") room?.send("cast_class_skill", {}); };
+
+
+  let selectedSwordSkill = "", swordTreeRenderKey = "", swordTreeViewedSchool = "", swordCombo = 0, swordComboUntil = 0, swordCounterUntil = 0;
+  function swordData() {
+    const me=ownServerCharacter();
+    try {
+      const tree=JSON.parse(me?.swordTreeData || "null"), catalog=JSON.parse(room?.state?.swordTreeCatalog || "null");
+      return tree && catalog ? {me,tree,catalog} : null;
+    } catch { return null; }
+  }
+
+  function syncSwordStatus(me) {
+    const label=$("swordStatus"), active=mode==="live" && me?.alive && me.pathId==="phutthaisawan";
+    const now=performance.now(), parts=[];
+    if (active && swordCombo>0 && now<swordComboUntil) parts.push("จังหวะดาบ "+swordCombo+" / 3");
+    if (active && now<swordCounterUntil) parts.push("สวนกลับพร้อม");
+    const message=parts.join(" · "), wasHidden=label.hidden;
+    label.hidden=parts.length===0;
+    const changed=label.textContent!==message;
+    if (changed) label.textContent=message;
+    if (wasHidden!==label.hidden || changed) positionSwordToast();
+  }
+  function syncSwordTreeButton(me) {
+    const button=$("swordTreeButton");
+    button.hidden=!(mode==="live" && me?.pathId==="phutthaisawan" && room?.state?.swordTreeCatalog);
+    if (button.hidden && targetedSkill==="sword") { selectedSwordSkill=""; setTargetedSkill(null); }
+  }
+
+  let swordHotbarKey="";
+  function useSwordSkill(id) {
+    const data=swordData(), node=data?.catalog?.nodes?.[id];
+    if (!data || !node || !data.tree.learned.includes(id)) return;
+    if (data.me.equippedWeaponId!=="arcane_sword") { toast("สวมกระบี่อาคมก่อนใช้วิชาดาบ"); return; }
+    if ((data.tree.cooldowns[id]||0)>Date.now()) { toast("วิชาดาบกำลังฟื้น"); return; }
+    if (node.effect==="guard" || node.effect==="support") { room.send("sword_skill",{skillId:id}); return; }
+    selectedSwordSkill=id;
+    setTargetedSkill("sword");
+    const targetId=spellTargetId || data.me.targetId;
+    if (targetId) castAtTarget(targetId);
+    else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
+  }
+  function syncSwordHotbar() {
+    const bar=$("swordHotbar"), data=swordData();
+    if (!data || data.me.pathId!=="phutthaisawan") {
+      const wasHidden=bar.hidden; bar.hidden=true; swordHotbarKey="";
+      if (!wasHidden) positionSwordToast();
+      return;
+    }
+    const {me,tree,catalog}=data, slots=tree.loadouts?.[tree.school] || [null,null,null];
+    bar.hidden=false;
+    const timing=slots.map(id=>id ? Math.max(0,Math.ceil(((tree.cooldowns[id]||0)-Date.now())/1000)) : 0);
+    const key=JSON.stringify([slots,timing,me.alive,me.equippedWeaponId]);
+    if(key===swordHotbarKey)return;
+    swordHotbarKey=key;
+    bar.replaceChildren();
+    slots.forEach((id,slot)=>{
+      const button=document.createElement("button"), node=id && catalog.nodes[id];
+      button.type="button";button.className="sword-hotkey";
+      button.textContent=node ? (timing[slot] ? timing[slot]+" วิ" : node.name) : "ช่อง "+(slot+1);
+      button.disabled=!node || !me.alive || Boolean(timing[slot]);
+      button.setAttribute("aria-label",node ? "ช่อง "+(slot+1)+" "+node.name : "ช่องวิชาว่าง "+(slot+1));
+      if(node)button.onclick=()=>useSwordSkill(id);
+      bar.append(button);
+    });
+    positionSwordToast();
+  }
+  function openSwordTree() {
+    const data=swordData();
+    if (!data || data.me.pathId!=="phutthaisawan") { toast("เลือกอาชีพนักดาบก่อนเรียนวิชา"); return; }
+    swordTreeRenderKey="";
+    swordTreeViewedSchool=data.tree.school;
+    openDrawer("swordTree","ตำราวิชาดาบ",'<div id="swordTreeBody"></div>');
+    renderSwordTree();
+  }
+  function renderSwordTree() {
+    const data=swordData(), container=$("swordTreeBody");
+    if (!data || !container) return;
+    const {me,tree,catalog}=data;
+    if (!Object.hasOwn(catalog.schools,swordTreeViewedSchool)) swordTreeViewedSchool=tree.school;
+    // Keep the slot selector stable while the player is choosing an option.
+    if (container.contains(document.activeElement) && document.activeElement.matches("select[data-equip]")) return;
+    const focus=document.activeElement;
+    const focusAttributes=["data-view-school","data-learn","data-cast","data-clear-slot","id"];
+    const focusAttribute=container.contains(focus) ? focusAttributes.find(name=>focus.hasAttribute(name)) : null;
+    const focusValue=focusAttribute ? focus.getAttribute(focusAttribute) : null;
+    const hasCooldown=Object.values(tree.cooldowns).some(readyAt=>readyAt>Date.now());
+    const key=swordTreeViewedSchool+"|"+me.level+"|"+me.alive+"|"+me.equippedWeaponId+"|"+me.swordTreeData+"|"+(hasCooldown?Math.floor(Date.now()/1000):0);
+    if (key===swordTreeRenderKey) return;
+    swordTreeRenderKey=key;
+    const points=1+Math.floor((Math.min(me.level,100)-1)/2)-tree.learned.length;
+    const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+    const schoolButtons=Object.entries(catalog.schools).map(([id,school])=>
+      '<button type="button" class="sword-school'+(swordTreeViewedSchool===id?' selected':'')+'" data-view-school="'+clean(id)+'" aria-pressed="'+String(swordTreeViewedSchool===id)+'">'+clean(school.name)+' · Lv.'+school.level+(tree.school===id?' · ใช้อยู่':'')+'</button>').join("");
+    const groups=[["common","วิชาพื้นฐาน"],[swordTreeViewedSchool,catalog.schools[swordTreeViewedSchool].name]];
+    const sections=groups.map(([group,title])=>{
+      const rows=Object.entries(catalog.nodes).filter(([,node])=>node.school===group).map(([id,node])=>{
+        const learned=tree.learned.includes(id);
+        const availableSchool=node.school==="common" || node.school===tree.school;
+        const requirements=node.requires.filter(required=>!tree.learned.includes(required));
+        const reqText=requirements.map(required=>catalog.nodes[required]?.name || required).join(", ");
+        const remaining=Math.max(0,Math.ceil(((tree.cooldowns[id]||0)-Date.now())/1000));
+        const trainingNames={strikes:"ฟันสำเร็จ",blocks:"รับสำเร็จ",finishes:"คอมโบครบ"};
+        const training=node.training ? tree.training[node.training.id] || 0 : 0;
+        const needsTraining=node.training && training<node.training.count;
+        const locked=me.level<node.level || requirements.length>0 || points<1 || needsTraining || !availableSchool;
+        let effectInfo="";
+        if (["strike","step","counter","flurry","area"].includes(node.effect)) {
+          const hits=node.effect==="flurry" ? (id==="twin_finale" ? 3 : 2) : 1;
+          effectInfo="พลัง "+Math.round(node.power*100)+"% × "+hits+" · ระยะ "+node.range+" หน่วย"+(node.effect==="area" ? " · สูงสุด 5 ตัวด้านหน้า" : "");
+        } else if (node.effect==="guard") effectInfo="รับ"+(id==="circle_guard"?"รอบตัว":"ด้านหน้า")+" ลดดาเมจ "+Math.round((1-node.power)*100)+"% นาน 1.2 วิ · สวนได้ 3 วิเมื่อรับสำเร็จ";
+        const slotIndex=(tree.loadouts?.[tree.school] || []).indexOf(id);
+        const slotSelect=learned && availableSchool && node.effect!=="passive" ? '<label class="sword-slot-label">ช่องลัด <select data-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2].map(slot=>'<option value="'+slot+'" '+(slot===slotIndex?'selected':'')+'>ช่อง '+(slot+1)+'</option>').join("")+'</select></label>' : "";
+        const button=learned ? (!availableSchool ? '<span class="sword-passive">เรียนแล้ว</span>' : node.effect==="passive" ? '<span class="sword-passive">ติดตัวแล้ว</span>' :
+          '<button type="button" data-cast="'+clean(id)+'" '+(remaining || !me.alive?'disabled':'')+'>'+(remaining?remaining+' วิ':'ใช้วิชา')+'</button>') :
+          '<button type="button" data-learn="'+clean(id)+'" '+(locked?'disabled':'')+'>เรียน 1 แต้ม</button>';
+        return '<article class="sword-node'+(learned?' learned':'')+'"><div><strong>'+clean(node.name)+'</strong> <small>Lv.'+node.level+'</small><p>'+clean(node.description)+'</p>'+
+          (requirements.length?'<small>ต้องเรียน '+clean(reqText)+'</small>':'')+
+          (node.training?'<small>'+clean(trainingNames[node.training.id])+': '+training+' / '+node.training.count+'</small>':'')+
+          (effectInfo?'<small>'+clean(effectInfo)+'</small>':'')+
+          (node.effect!=="passive"?'<small>กำลัง '+node.stamina+' · รอ '+(node.cooldownMs/1000)+' วิ</small>':'')+slotSelect+'</div>'+button+'</article>';
+      }).join("");
+      return '<section><h3>'+clean(title)+'</h3>'+rows+'</section>';
+    }).join("");
+    container.innerHTML='<p class="note">แต้มวิชาคงเหลือ '+points+' · เลเวล '+me.level+' · เพิ่มแต้มทุก 2 เลเวล · สวมกระบี่อาคมเพื่อใช้วิชา</p>'+
+      (catalog.schools[swordTreeViewedSchool].note?'<p class="note">'+clean(catalog.schools[swordTreeViewedSchool].note)+'</p>':'')+
+      '<p class="note">ฝึกฟัน '+tree.training.strikes+' · รับ '+tree.training.blocks+' · คอมโบครบ '+tree.training.finishes+' · คอมโบปัจจุบัน '+(performance.now()<swordComboUntil?swordCombo:0)+' / 3</p>'+
+      '<p class="note">เรียนและเปลี่ยนสำนักที่ลานพักหลังออกจากการต่อสู้ ความรู้ของแต่ละสำนักจะเก็บไว้ · คืนแต้มแล้วเก็บผลฝึกและคูลดาวน์ · เปลี่ยนสำนักอื่นต้อง Lv.10 ฟัน 10 และรับสำเร็จ 1 ครั้ง · พลังวิชาคำนวณก่อนหักป้องกัน</p>'+
+      '<div class="sword-schools">'+schoolButtons+'</div>'+
+      '<p class="note">กำลังดูสำนัก '+clean(catalog.schools[swordTreeViewedSchool].name)+(tree.school===swordTreeViewedSchool?' · ใช้งานอยู่':' · เลือกใช้ที่ลานพัก')+'</p>'+
+      '<button type="button" id="chooseSwordSchool" class="secondary" '+(tree.school===swordTreeViewedSchool?'disabled':'')+'>เลือกใช้สำนักนี้</button>'+sections+
+      '<p class="note">ช่องลัดของสำนักนี้จะเก็บแยกกัน</p><div class="sword-schools">'+(tree.loadouts?.[tree.school] || []).map((id,slot)=>'<button type="button" data-clear-slot="'+slot+'" '+(!id?'disabled':'')+'>ล้างช่อง '+(slot+1)+'</button>').join("")+'</div>'+
+      '<button type="button" id="resetSwordTree" class="secondary">คืนแต้มวิชาทุกสำนักที่ลานพัก</button>';
+    $("resetSwordTree").onclick=()=>{
+      if (window.confirm("คืนแต้มวิชาที่เรียนทุกสำนักและล้างช่องลัดทั้งหมดหรือไม่? ผลฝึกและคูลดาวน์จะยังอยู่")) room.send("sword_tree_reset",{});
+    };
+    $("chooseSwordSchool").onclick=()=>room.send("sword_tree_school",{school:swordTreeViewedSchool});
+    container.querySelectorAll("[data-view-school]").forEach(button=>button.onclick=()=>{
+      swordTreeViewedSchool=button.dataset.viewSchool;
+      swordTreeRenderKey="";
+      renderSwordTree();
+    });
+    container.querySelectorAll("[data-learn]").forEach(button=>button.onclick=()=>{
+      room.send("sword_tree_learn",{skillId:button.dataset.learn});
+    });
+    container.querySelectorAll("[data-equip]").forEach(select=>select.onchange=()=>{
+      if (select.value!=="") room.send("sword_tree_equip",{skillId:select.dataset.equip,slot:Number(select.value)});
+      select.blur();
+    });
+    container.querySelectorAll("[data-clear-slot]").forEach(button=>button.onclick=()=>{
+      room.send("sword_tree_equip",{skillId:null,slot:Number(button.dataset.clearSlot)});
+    });
+    container.querySelectorAll("[data-cast]").forEach(button=>button.onclick=()=>{
+      const id=button.dataset.cast; closeDrawer(); useSwordSkill(id);
+    });
+    if (focusAttribute) {
+      const replacement=[...container.querySelectorAll("["+focusAttribute+"]")].find(element=>element.getAttribute(focusAttribute)===focusValue);
+      replacement?.focus({preventScroll:true});
+    }
+  }
+  function ancestryHint(player) {
+    const map = worldDefinitions?.[player.mapId];
+    const camps = player.ancestryId === "woodland";
+    const places = (camps ? map?.camps : map?.restAreas) || [];
+    if (!places.length) return camps ? "บริเวณนี้ไม่มีค่ายล่า" : "บริเวณนี้ไม่มีเขตพัก";
+    const distance = point => Math.hypot(point.x-player.x, point.z-player.z);
+    const place = places.reduce((a,b) => distance(a) <= distance(b) ? a : b);
+    if (distance(place) < 1) return "อยู่ที่ " + place.name;
+    const bearing = Math.round(Math.atan2(place.x-player.x, player.z-place.z) / (Math.PI/4));
+    const direction = ["เหนือ","ตะวันออกเฉียงเหนือ","ตะวันออก","ตะวันออกเฉียงใต้","ใต้","ตะวันตกเฉียงใต้","ตะวันตก","ตะวันตกเฉียงเหนือ"][(bearing+8)%8];
+    return place.name + " · ทิศ" + direction + " ระยะ " + Math.round(distance(place)) + " หน่วย";
+  }
+  function buildTalentGroup(catalog, path) {
+    if (catalog?.talentGroups) return catalog.talentGroups[path];
+    if (path === "sentinel" && catalog?.wardTalents) {
+      return {field:"wardTalent", defaultId:catalog.defaultWardTalent, variants:catalog.wardTalents};
+    }
+  }
+  function openBuildFields(player) {
+    const catalog = getBuildCatalog();
+    if (!catalog || !player?.persistent) return;
+    $("buildFields").hidden = false;
+    for (const [key, path] of Object.entries(catalog.paths)) $("buildPath").add(new Option(path.role + " · " + path.name, key));
+    for (const [key, origin] of Object.entries(catalog.ancestries)) $("buildAncestry").add(new Option(origin.name + " · " + origin.trait, key));
+    if (player.pathId) $("buildPath").value = player.pathId;
+    if (player.ancestryId) $("buildAncestry").value = player.ancestryId;
+    const talentSelect = $("buildTalent");
+    function loadTalents() {
+      const path = $("buildPath").value, group = buildTalentGroup(catalog, path);
+      $("buildTalentField").hidden = !group;
+      talentSelect.replaceChildren();
+      if (!group) return;
+      for (const [key, variant] of Object.entries(group.variants)) {
+        talentSelect.add(new Option(variant.name + " · " + variant.durationMs / 1000 + " วินาที", key));
+      }
+      const active = path === player.pathId ? player.bladeTalentId || player.wardTalentId : "";
+      talentSelect.value = active || group.defaultId;
+      $("buildTalentLabel").textContent = "Talent " + catalog.paths[path].skill;
+    }
+    const preview = () => {
+      const pathId = $("buildPath").value;
+      const path = catalog.paths[pathId], effect = path.effect;
+      const variant = buildTalentGroup(catalog, pathId)?.variants[talentSelect.value];
+      const statLabels = {atk:"โจมตี", def:"ป้องกัน", magicAtk:"โจมตีเวท", magicDef:"ป้องกันเวท"};
+      const bonus = effect.kind === "heal" ? "ฟื้น HP " + Math.round(100*effect.fraction) + "%" :
+        Object.entries(variant?.bonuses ?? effect.bonuses).map(([stat,v]) => statLabels[stat] + " +" + Math.round(v*100) + "%").join(" · ") + " นาน " + (variant?.durationMs ?? effect.durationMs)/1000 + " วินาที";
+      const passive = pathId === "phutthaisawan" ? "ดาบคู่สวมกระบี่อาคม · ฟันทุก 0.75 วินาที ดาเมจ 80% · " : "";
+      $("buildPreview").textContent = passive + path.skill + " · " + bonus + (path.targets === "party" ? " ให้สมาชิกในระยะ " + (variant?.radius ?? catalog.supportRadius) + " หน่วย" : " ให้ตัวเอง") + " · ใช้ " + path.stamina + " กำลัง · รอ " + path.cooldownMs/1000 + " วินาที";
+    };
+    $("buildPath").onchange = () => { loadTalents(); preview(); };
+    talentSelect.onchange = preview;
+    $("buildSave").onclick = () => {
+      const path = $("buildPath").value, ancestry = $("buildAncestry").value;
+      const group = buildTalentGroup(catalog, path);
+      const selection = group ? {path, ancestry, [group.field]: talentSelect.value} : {path, ancestry};
+      room?.send("select_build", selection);
+    };
+    loadTalents();
+    preview();
+  }
   function renderProgressionProfile() {
     if (drawerActive !== "character" || !$('profileStats')) return;
     const p = ownServerCharacter(), supported = mode === "live" && room?.state?.progressionAvailable === true && p;
-    $("profileProgressionStatus").textContent = supported ? "สเตตัสเพิ่มอัตโนมัติเมื่อเลเวลขึ้น" : "เข้า LIVE กับเซิร์ฟเวอร์ที่รองรับระบบสเตตัส";
+    $("profileProgressionStatus").textContent = supported ? (p.possessionActive ? "วิญญาณเข้าสิง · ATK / DEF / เวท +20%" : "สเตตัสเพิ่มอัตโนมัติเมื่อเลเวลขึ้น") : "เข้า LIVE กับเซิร์ฟเวอร์ที่รองรับระบบสเตตัส";
+    const selectedPath = getBuildCatalog()?.paths?.[p?.pathId];
+    const talent = buildTalentGroup(getBuildCatalog(), p?.pathId)?.variants[p?.bladeTalentId || p?.wardTalentId];
+    const swordSchool=p?.pathId==="phutthaisawan" ? swordData()?.catalog?.schools?.[swordData()?.tree?.school]?.name : "";
+    if ($("currentBuild")) $("currentBuild").textContent = selectedPath ? selectedPath.role + " · " + selectedPath.name + (swordSchool ? " · สำนัก" + swordSchool : "") + (talent ? " · " + talent.name : "") + " · " + getBuildCatalog().ancestries[p.ancestryId].name + " · " + ancestryHint(p) : "ยังไม่ได้เลือกสายอาชีพ";
     $("profileLevel").textContent = "LV. " + (p?.level ?? 1) + " · EXP " + (p?.experience ?? 0) + (supported && p.xpToNext ? " / " + p.xpToNext : "");
     for (const [key,,field] of progressionStats) {
       $("statValue-" + key).textContent = supported ? String(Math.round(Number(p[field]) || 0)) : "—";
@@ -6697,6 +7148,7 @@
       '<button class="secondary" id="switchCharacterSlot" type="button">เลือกช่องเซฟ 1–3</button>' +
       '<div class="status-line"><span>ชื่อ</span><strong id="profileName"></strong></div>' +
       '<div class="status-line"><span>ระดับ / ค่าประสบการณ์</span><strong id="profileLevel"></strong></div>' +
+      '<section id="buildFields" hidden><h3>สายอาชีพและเผ่า</h3><p id="currentBuild"></p><label class="field" for="buildPath">สายอาชีพ</label><select id="buildPath"></select><div id="buildTalentField" hidden><label class="field" id="buildTalentLabel" for="buildTalent">Talent</label><select id="buildTalent"></select></div><p class="note" id="buildPreview"></p><label class="field" for="buildAncestry">เผ่าและพรสวรรค์</label><select id="buildAncestry"></select><button type="button" class="secondary" id="buildSave">ยืนยันที่ลานพักกลางหมู่บ้าน</button></section>' +
       '<div id="profileStats"><p class="note" id="profileProgressionStatus"></p>' +
       progressionStats.map(([key,label]) => '<div class="status-line stat-row"><span>' + label + '</span><strong id="statValue-' + key + '">—</strong></div>').join("") +
       '<div class="status-line"><span>กำลังปัจจุบัน</span><strong id="profileStamina">—</strong></div></div>' +
@@ -6711,6 +7163,7 @@
       '<label class="field" for="restoreCharacterKey">มีรหัสกู้คืนจากเครื่องเดิม?</label>' +
       '<input id="restoreCharacterKey" type="password" autocomplete="off" spellcheck="false" placeholder="วางรหัสกู้คืนของคุณ"/>' +
       '<button class="secondary" id="restoreCharacterButton" type="button">ใช้รหัสกู้คืนบนอุปกรณ์นี้</button>');
+    openBuildFields(me);
     $("profileSaveStatus").textContent = durable ? "เก็บบน VPS" : "ยังไม่เปิดใช้ (DEMO/Server เดิม)";
     $("profileSlot").textContent = durable ? "เซฟที่ " + (activeCharacterSlot || 1) + " / 3" : "ยังไม่ได้เข้าออนไลน์";
     $("switchCharacterSlot").onclick = openOnline;
@@ -6767,7 +7220,7 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์ การตีบวก และระบบอาชีพ</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>สกิลพื้นฐานทุกสาย</h3><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
   }
   function currentBagSlots() {
     if (mode === "live") return inventoryState?.slots || null;
@@ -6805,7 +7258,7 @@
     const equippedItem = equipped === null || equipped === undefined
       ? null : slots?.[equipped];
     $("bagEquipped").textContent = equippedItem && Object.hasOwn(WEAPON_META,equippedItem.itemId)
-      ? WEAPON_META[equippedItem.itemId].name + " · " +
+      ? WEAPON_META[equippedItem.itemId].name + forgeLabel(equippedItem) + " · " +
         WEAPON_META[equippedItem.itemId].bonus : "มือเปล่า";
     for (let i = 0; i < INVENTORY_SLOTS; i++) {
       const slot = $("bagSlot" + i);
@@ -6817,7 +7270,7 @@
       slot.classList.toggle("bag-selected", i === selectedBagSlot);
       slot.setAttribute("aria-pressed", String(i === selectedBagSlot));
       slot.querySelector(".bag-symbol").textContent = !item ? "·" :
-        weapon ? WEAPON_META[item.itemId].symbol : "🧪";
+        weapon ? WEAPON_META[item.itemId].symbol : item.itemId === SHRINE_SHARD ? "◈" : "🧪";
       slot.querySelector(".bag-quantity").textContent = !item ? "" :
         weapon && i === equipped ? "✓" : "×" + item.quantity;
     }
@@ -6825,22 +7278,59 @@
     const weapon = chosen && Object.hasOwn(WEAPON_META,chosen.itemId);
     const canAct = mode !== "live" || ownServerCharacter()?.alive === true;
     const ready = Boolean(chosen && canAct && (weapon
-      ? hasWeapons : currentHp > 0 && currentHp < maxHp));
+      ? hasWeapons : chosen.itemId === POTION_ITEM_ID && currentHp > 0 && currentHp < maxHp));
     $("bagItemName").textContent = !chosen ? "ช่องว่าง" : weapon
-      ? WEAPON_META[chosen.itemId].name : "ยาเลือดเล็ก";
+      ? WEAPON_META[chosen.itemId].name + forgeLabel(chosen) : chosen.itemId === SHRINE_SHARD ? shardName : "ยาเลือดเล็ก";
+    renderForge(chosen);
+    renderCraft(slots);
     $("bagItemDescription").textContent = !chosen
       ? "ช่องนี้ยังไม่มีไอเท็ม"
       : weapon
         ? WEAPON_META[chosen.itemId].bonus +
           " · เลือกสวมใส่ได้ทีละ 1 อาวุธ · ไม่ถูกใช้หมด"
-        : "ฟื้น HP สูงสุด 30 · ไม่ใช้เมื่อ HP เต็ม · หักจำนวนและบันทึกบน VPS";
+        : chosen.itemId === SHRINE_SHARD ? "ได้จากผู้พิทักษ์ศาลร้างเหนือป่าต้องห้าม ใช้คราฟต์ง้าว ฝากขายหรือเทรดได้" : "ฟื้น HP สูงสุด 30 · ไม่ใช้เมื่อ HP เต็ม · หักจำนวนและบันทึกบน VPS";
     const use = $("useBagItem");
     use.disabled = !ready || itemUsePending;
     use.textContent = itemUsePending ? "กำลังบันทึกบน VPS..." :
       !chosen ? "ไม่มีไอเท็มในช่องนี้" :
       weapon ? !hasWeapons ? "ต้องติดตั้งชุดอาวุธบน VPS" :
         selectedBagSlot === equipped ? "ถอดอาวุธ" : "สวมใส่อาวุธ" :
-        currentHp >= maxHp ? "HP เต็ม" : "ใช้ยาเลือด";
+        chosen.itemId === SHRINE_SHARD ? "วัตถุดิบคราฟต์" : currentHp >= maxHp ? "HP เต็ม" : "ใช้ยาเลือด";
+  }
+  function renderCraft(slots) {
+    const panel = $("craftPanel");
+    const catalog = room?.state?.craftRecipe;
+    panel.hidden = !economyReady() || !catalog;
+    if (panel.hidden) return;
+    const recipe = JSON.parse(catalog);
+    const supply = (slots || []).reduce((sum, item) => sum + (item?.itemId === recipe.ingredient ? item.quantity : 0), 0);
+    const owned = slots?.some(item => item?.itemId === recipe.output);
+    $("craftInfo").textContent = "ล่าผู้พิทักษ์ศาลร้างเหนือป่าต้องห้ามเพื่อเก็บเศษตรา · มี " + supply + "/" + recipe.quantity + " ชิ้น · ทอง " + (economyGold ?? "…") + "/" + recipe.gold + " · หายาก iLv " + recipe.itemLevel;
+    const button = $("craftGlaive");
+    button.disabled = !slots || economyPending || owned || supply < recipe.quantity || economyGold === null || economyGold < recipe.gold || ownServerCharacter()?.alive !== true;
+    button.textContent = owned ? "มีง้าวจันทร์ผู้พิทักษ์แล้ว" : "คราฟต์ง้าวจันทร์ผู้พิทักษ์ · " + recipe.gold + " ทอง";
+  }
+  function forgeLabel(item) {
+    const f = item?.forge;
+    if (!f) return "";
+    const stat = f.affix?.stat === "melee" ? "ประชิด" : "เวท";
+    return " +" + f.rank + (f.affix ? " · " + stat + " +" + f.affix.tier : "");
+  }
+  function renderForge(item) {
+    const panel = $("forgePanel"), raw = room?.state?.forgeCatalog;
+    if (!panel) return;
+    panel.hidden = !economyReady() || !raw || !Object.hasOwn(WEAPON_META, item?.itemId);
+    if (panel.hidden) return;
+    const config = JSON.parse(raw), f = item.forge, rank = f?.rank ?? 0;
+    const cost = config.goldPerStep * (rank + 1), max = rank >= config.chances.length;
+    const chance = f?.misses === config.maxMisses ? 100 : config.chances[rank];
+    const upgrade = $("forgeEnhance"), reroll = $("forgeReroll");
+    upgrade.textContent = max ? "ตีบวกเต็มแล้ว" : "ตี +" + (rank + 1) + " · " + cost + " ทอง · สำเร็จ " + chance + "%";
+    reroll.textContent = "สุ่มออปชันใหม่ · " + config.rerollCost + " ทอง";
+    upgrade.disabled = max || economyPending || economyGold === null || economyGold < cost;
+    reroll.disabled = economyPending || economyGold === null || economyGold < config.rerollCost;
+    const tierOdds = f?.rerollMisses === config.rareAfter ? "ครั้งนี้รับประกันขั้น 3" : "ขั้น 1/2/3 มีโอกาส " + [config.tier1Weight, config.tier2Weight, 100-config.tier1Weight-config.tier2Weight].join("/") + "%";
+    $("forgeInfo").textContent = "มี " + (economyGold ?? "…") + " ทอง · โบนัสช่างอาคมใช้เมื่อต่อสู้กับมอนสเตอร์ ตีบวกเพิ่มพลังอาวุธขั้นละ 1 พลาด " + config.maxMisses + " ครั้งรับประกันครั้งถัดไป · ออปชันประชิดหรือเวทอย่างละ 50% " + tierOdds + " · สุ่มใหม่แทนออปชันเดิม";
   }
   function openBag() {
     const grid = Array.from({ length: INVENTORY_SLOTS }, (_, i) =>
@@ -6856,6 +7346,8 @@
       '<div class="bag-detail"><strong id="bagItemName"></strong>' +
       '<p class="note" id="bagItemDescription"></p></div>' +
       '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
+      '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
+      '<div id="forgePanel" hidden><h3>ช่างอาคม</h3><p class="note" id="forgeInfo"></p><button class="secondary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeReroll"></button></div>' +
       '<p class="note">ยาเลือดและอาวุธถาวรแยกตาม 3 เซฟ · สวมใส่ทีละหนึ่งชิ้น · ใช้ยาเมื่อ HP ไม่เต็ม · การสวมใส่บันทึกบน VPS</p>');
     for (let i = 0; i < INVENTORY_SLOTS; i++) {
       $("bagSlot" + i).onclick = () => {
@@ -6863,6 +7355,22 @@
         renderBag();
       };
     }
+    function submitForge(action) {
+      const item = currentBagSlots()?.[selectedBagSlot];
+      if (!item || !Object.hasOwn(WEAPON_META, item.itemId)) return;
+      const stamp = item.forge ? item.forge.instanceId + "." + item.forge.revision : item.itemId;
+      economySend("forge_weapon", {slot:selectedBagSlot, stamp, action, requestId:economyRequestId()}, true);
+      renderBag();
+    }
+    $("craftGlaive").onclick = () => {
+      if (!room?.state?.craftRecipe || economyPending) return;
+      const recipe = JSON.parse(room.state.craftRecipe);
+      economySend("craft_weapon", {recipeId: recipe.id, requestId: economyRequestId()}, true);
+      renderBag();
+    };
+    $("forgeEnhance").onclick = () => submitForge("enhance");
+    $("forgeReroll").onclick = () => submitForge("reroll");
+    if (economyReady()) economySend("get_economy", {});
     function sendBagCommand(command,payload) {
       const requestedRoom=room;
       itemUsePending = true;
@@ -6943,8 +7451,8 @@
   function economyReady() { return mode === "live" && room?.state?.economyAvailable === true && ownServerCharacter()?.persistent === true; }
   function economyItemName(item) {
     if (!item) return "ไม่มีไอเท็ม";
-    const name=item.itemId===POTION_ITEM_ID ? "ยาเลือดเล็ก" : WEAPON_META[item.itemId]?.name || "ไอเท็ม";
-    return name + " ×" + Number(item.quantity || 0);
+    const name=item.itemId===POTION_ITEM_ID ? "ยาเลือดเล็ก" : item.itemId === SHRINE_SHARD ? shardName : WEAPON_META[item.itemId]?.name || "ไอเท็ม";
+    return name + forgeLabel(item) + " ×" + Number(item.quantity || 0);
   }
   function economySend(command, payload, durable=false) {
     if (!economyReady() || !room) { toast("เข้า LIVE ที่เปิดระบบตลาดก่อน"); return; }
@@ -7201,6 +7709,7 @@
   $("partyButton").onclick=openParty;
   $("mapShortcut").onclick=openMap;
   $("modeButton").onclick=openOnline;
+  $("swordTreeButton").onclick=openSwordTree;
   $("helpButton").onclick=openHelp;
   $("bag").onclick=openBag;
   $("summon").onclick=()=> {
@@ -7213,7 +7722,9 @@
       if (owner?.alive === false) { toast("ยังอัญเชิญไม่ได้ · รอเกิดใหม่"); return; }
       const active = room.state.summons.has(localId);
       try {
-        room.send(active ? "unsummon" : "summon", {});
+        if (active) room.send("unsummon", {});
+        else if (room.state.ritualSkillsAvailable) room.send("pot_summon", {});
+        else room.send("summon", {});
       } catch (err) {
         console.error("MONTRA summon request failed", err);
         toast("ส่งคำสั่งอัญเชิญไม่สำเร็จ");
@@ -7229,22 +7740,32 @@
     } else { spirit?.dispose();spirit=null;toast("เก็บวิญญาณกลับแล้ว"); }
     updateSummonButton(spiritShown);
   };
+  function syncPossessionButton() {
+    const active=mode==="live" ? ownServerCharacter()?.possessionActive===true : possessed;
+    const button=$("possess");button.setAttribute("aria-pressed",String(active));
+    if(button.lastElementChild)button.lastElementChild.textContent=active ? "ออกจากสิง" : "เข้าสิง";
+    heroMat.emissiveColor=B.Color3.FromHexString(active ? "#7c459b" : "#3b2916");
+  }
   $("possess").onclick=()=> {
-    if(mode==="live") { toast("เข้าสิงออนไลน์จะเปิดในรุ่นถัดไป");return; }
-    possessed=!possessed;
+    if(mode==="live") {
+      if(!room || room.state?.buffsAvailable!==true){toast("เซิร์ฟเวอร์ยังไม่รองรับเข้าสิง");return;}
+      try{room.send("possess",{});}catch(_){toast("ส่งคำสั่งเข้าสิงไม่สำเร็จ");}return;
+    }
+    possessed=!possessed;syncPossessionButton();
     const possessedHero=getLocalAvatar(); if(possessedHero) possessedHero.possessed=possessed;
-    heroMat.emissiveColor = B.Color3.FromHexString(possessed?"#7c459b":"#3b2916");
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
   $("attack").onclick = () => {
-    setRangedMode(false);
+    setTargetedSkill(null);
+    spellTargetId = null;
     if (mode === "live" && room && selectedPkTargetId) {
       tapPlayerForPK(selectedPkTargetId);
     } else {
       requestMonsterAttack();
     }
   };
-  $("shoot").onclick = toggleRangedMode;
+  $("shoot").onclick = () => useTargetedSkill("rice");
+  $("talisman").onclick = () => useTargetedSkill("talisman");
   $("climb").onclick = requestClimb;
   $("fly").onclick = toggleFlight;
 
@@ -7254,11 +7775,13 @@
     elapsed+=dt;
     const now = performance.now();
     checkClimbApproach();
-    for(let i=rangedEffects.length-1;i>=0;i--){
-      const fx=rangedEffects[i];
-      if(now>=fx.until){
+    for(let i=skillEffects.length-1;i>=0;i--){
+      const fx=skillEffects[i];
+      if(now>=fx.until || fx.mapId!==activeMapId || mode!=="live"){
         fx.mesh.dispose();
-        rangedEffects.splice(i,1);
+        skillEffects.splice(i,1);
+      } else if (fx.start) {
+        B.Vector3.LerpToRef(fx.start, fx.end, 1 - (fx.until - now) / 300, fx.mesh.position);
       }
     }
     if (mode === "demo") {
@@ -7402,7 +7925,8 @@
       const bob = Math.sin(elapsed * 2.4 + npc.ownerId.length) * .09;
       npc.node.position.set(npc.x, npc.y+bob, npc.z);
       const striking = npc.action === "attack" || npc.hitUntil > now;
-      const scale = striking ? 1.13 : 1;
+      const emergence = Math.min(1, 1 - (npc.emergingUntil - now) / 500);
+      const scale = (striking ? 1.13 : 1) * Math.max(.12, emergence);
       npc.node.scaling.set(scale, scale, scale);
     }
     const me=getLocalAvatar();
@@ -7456,7 +7980,7 @@
     if (me) warm.position.set(me.x, me.y + 3.4, me.z + .6);
     scene.render();
   });
-  window.addEventListener("resize",()=>{ resizeGameRenderer(); updateStatus(); });
+  window.addEventListener("resize",()=>{ resizeGameRenderer(); updateStatus(); positionSwordToast(); });
   window.addEventListener("pagehide",()=> { clearSyncPoll();if(room)try{room.leave();}catch(_){} });
   resetDemoMonster();
   updateStatus();
