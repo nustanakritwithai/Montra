@@ -1,4 +1,7 @@
-import { schema, t, type SchemaType } from "@colyseus/schema";
+import { Encoder, schema, t, type SchemaType } from "@colyseus/schema";
+
+// The initial state carries all atlas and character skill definitions.
+Encoder.BUFFER_SIZE = Math.max(Encoder.BUFFER_SIZE, 32 * 1024);
 
 /**
  * Keep the original x/y/z field order so the current Web client retains its
@@ -35,6 +38,14 @@ export const Player = schema({
   stamina: t.number().default(100),
   maxStamina: t.number().default(100),
   xpToNext: t.number().default(150),
+  possessionActive: t.boolean().default(false), // append-only: temporary server-owned buff
+  pathId: t.string().default(""),
+  ancestryId: t.string().default(""),
+  classSkillReadyAt: t.number().default(0),
+  wardTalentId: t.string().default(""),
+  bladeTalentId: t.string().default(""),
+  talismanReadyAt: t.number().default(0),
+  swordTreeData: t.string().default(""),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
@@ -117,6 +128,13 @@ export const MyRoomState = schema({
   worldDefinition: t.string().default(""),
   guildAvailable: t.boolean().default(true),
   guildRolesAvailable: t.boolean().default(true),
+  extendedChatAvailable: t.boolean().default(true),
+  buffsAvailable: t.boolean().default(true),
+  forgeCatalog: t.string().default(""),
+  buildCatalog: t.string().default(""),
+  craftRecipe: t.string().default(""),
+  ritualSkillsAvailable: t.boolean().default(true),
+  swordTreeCatalog: t.string().default(""),
   territoryWarAvailable: t.boolean().default(false),
 }, "MyRoomState");
 

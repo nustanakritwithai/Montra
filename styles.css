@@ -441,8 +441,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 #chatUnread { min-width:18px; padding:1px 4px; border-radius:10px; background:#a34a38; font-size:10px; }
-.chat-tabs { display:flex; gap:8px; }
-.chat-tabs button { flex:1; min-height:42px; border:1px solid #997a54; border-radius:10px; background:#25393b; }
+.chat-tabs { display:flex; flex-wrap:wrap; gap:8px; }
+.chat-tabs button { flex:1 1 auto; min-height:42px; border:1px solid #997a54; border-radius:10px; background:#25393b; }
 .chat-tabs button[aria-pressed="true"] { background:#6a4a2c; border-color:#f1c681; }
 .chat-log { height:min(32dvh,240px); min-height:110px; overflow-y:auto; padding:10px; border:1px solid #9b805669; border-radius:10px; background:#091719; overflow-wrap:anywhere; }
 .chat-line { margin:3px 0; white-space:pre-wrap; }
@@ -483,6 +483,34 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .party-member { display:flex; justify-content:space-between; gap:8px; padding:9px 0; border-bottom:1px solid #fff2; }
 .party-member strong { overflow-wrap:anywhere; color:#f7dbab; }
 .party-member span { white-space:nowrap; color:#b9d6ca; }
+
+#chatTargetField[hidden] { display:none; }
+
+.skill[aria-pressed="true"] .glyph { box-shadow:0 0 16px #b677ef; outline:2px solid #e0bcff; }
+
+#classSkill[hidden], #talisman[hidden], #buildFields[hidden] { display:none; }
+#classSkill:disabled, #talisman:disabled { opacity:.6; }
+@media(max-width:400px) { .skill-bar:has(#classSkill:not([hidden])) .glyph { width:min(9.1vw,38px); height:min(9.1vw,38px); } }
+
+#swordTreeButton[hidden] { display:none; }
+.sword-schools { display:flex; flex-wrap:wrap; gap:6px; }
+.sword-school.selected { outline:2px solid #e5c586; }
+.sword-node { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; margin:7px 0; border:1px solid #8e7654; border-radius:9px; background:#25221f; }
+.sword-node.learned { border-color:#d5b46e; }
+.sword-node p { margin:4px 0; }
+.sword-node small { display:block; opacity:.8; }
+.sword-node button { flex:none; min-height:42px; }
+.sword-passive { color:#e8cb8c; white-space:nowrap; }
+
+.sword-hotbar { display:flex; justify-content:center; gap:5px; margin:0 auto 7px; padding:0 8px; }
+.sword-hotbar[hidden] { display:none; }
+.sword-hotkey { min-width:0; max-width:110px; min-height:40px; padding:4px 8px; border:1px solid #c4a265; border-radius:8px; background:#30291fdf; color:#fff0c8; font-size:11px; }
+.sword-hotkey:disabled { opacity:.55; }
+.sword-slot-label { display:block; margin-top:5px; font-size:12px; }
+.sword-slot-label select { max-width:115px; margin-left:6px; }
+
+.sword-status { width:max-content; max-width:90%; margin:0 auto 4px; padding:3px 9px; border-radius:8px; background:#201a14df; color:#ffe3a0; font-size:11px; text-align:center; }
+.sword-status[hidden] { display:none; }
 
 .guild-member { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 0; border-bottom:1px solid #fff2; }
 .guild-member > div:first-child { display:flex; flex-direction:column; min-width:0; overflow-wrap:anywhere; }

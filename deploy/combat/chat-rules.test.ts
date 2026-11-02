@@ -17,3 +17,11 @@ test("chat rejects empty, oversized, control and client-forged fields", () => {
   assert.deepEqual(parseChatMessage({ text: "😀".repeat(200), channel: "world" }), { text: "😀".repeat(200), channel: "world" });
   assert.equal(parseChatMessage({ text: "😀".repeat(201), channel: "world" }), null);
 });
+
+
+test("party, private and bug chat accept only their authorized payload shape",()=>{
+  assert.deepEqual(parseChatMessage({channel:"party",text:"ทีม"}),{channel:"party",text:"ทีม"});
+  assert.deepEqual(parseChatMessage({channel:"private",text:"ส่วนตัว",targetId:"abc-123"}),{channel:"private",text:"ส่วนตัว",targetId:"abc-123"});
+  assert.deepEqual(parseChatMessage({channel:"bug",text:"ติดกำแพง"}),{channel:"bug",text:"ติดกำแพง"});
+  for(const payload of [{channel:"private",text:"x"},{channel:"private",text:"x",targetId:"../x"},{channel:"private",text:"x",targetId:"abc",name:"admin"},{channel:"party",text:"x",targetId:"abc"},{channel:"bug",text:"x",path:"../../x"}])assert.equal(parseChatMessage(payload),null);
+});

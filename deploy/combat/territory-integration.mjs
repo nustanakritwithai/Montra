@@ -51,6 +51,7 @@ try{
     await assert.rejects(join(9,attacker.r.roomId,"forged"),/war_admission/);
     const defender=await transfer(b,"territory_join");assert.equal(attacker.r.roomId,defender.r.roomId);
     assert.equal(attacker.me().z,26);assert.equal(defender.me().z,-58);
+    await send(attacker,"party_invite",{targetId:defender.r.sessionId},"party_error",s=>s.reason==="party_invalid_target");
     const joinStatus=await event(outsider,"territory_state",s=>s.local?.phase==="battle");assert.equal(joinStatus.local.canJoin,false);
     await send(outsider,"territory_join",{},"territory_error",s=>s.reason==="war_guild");
     for(const m of allies.slice(0,4))assert.equal((await transfer(m,"territory_join")).r.roomId,attacker.r.roomId);
