@@ -2,6 +2,7 @@
 import { isFlightAltitude, isOnGround, isOnPlatform, isOnTop, touchesWallBody } from "./HeightRules.js";
 import { TEMPLE_ID, TEMPLE_GATE, TEMPLE_MAP } from "./TempleMap.js";
 import { ATLAS_MAPS, MARSH_GATE, atlasPortals } from "./WorldAtlas.js";
+import { makeHubs, type Province } from "./StrategicProvinces.js";
 export type WorldWall = Readonly<{x:number;z:number;width:number;length:number}>;
 export function segmentIntersectsExpandedWall(
   a:{x:number;z:number},b:{x:number;z:number},w:WorldWall,radius:number,
@@ -55,6 +56,7 @@ export type WorldMapDefinition = Readonly<{
   portals: readonly WorldPortal[];
   restAreas?: readonly RestArea[];
   camps?: readonly HuntCamp[];
+  strategic?: Province;
   guardian?: typeof SHRINE_GUARDIAN;
   boss?: Readonly<{id:string;name:string;x:number;z:number;level:number;strikeRadius:number;respawnMs:number}>;
   paths?: readonly (readonly {x:number; z:number}[])[];
@@ -67,15 +69,15 @@ export const VILLAGE_ARRIVALS = [
 ] as const;
 export const WORLD_ROOM_CAPACITY = VILLAGE_ARRIVALS.length;
 export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.freeze<Record<string, WorldMapDefinition>>({
-  ...(WORLD_EXPANSION ? {[TEMPLE_ID]:TEMPLE_MAP,...ATLAS_MAPS} : {}),
+  ...(WORLD_EXPANSION ? {[TEMPLE_ID]:TEMPLE_MAP,...ATLAS_MAPS,...makeHubs(atlasPortals)} : {}),
   ritual_village: {
     id: "ritual_village", name: "หมู่บ้านอาคม",
     bounds: { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
     spawn: { x: 0, y: 0, z: 0 },
     obstacles: [],
-    restAreas: WORLD_EXPANSION ? [{x:0,z:0,radius:6,name:"ลานพักและตลาดอาคม"},{x:-4,z:-16,radius:3,name:"ประตูป่า"}] : [],
+    restAreas: WORLD_EXPANSION ? [{x:0,z:0,radius:6,name:"ลานพักและตลาดอาคม"},{x:-4,z:-16,radius:3,name:"ประตูป่า"},{x:4,z:-16,radius:3,name:"ประตูนคร"}] : [],
     portals: [{ id: "village_to_forest", x: -4, z: -17,
-      targetMapId: "forbidden_forest", targetSpawn: { x: 0, y: 0, z: 12 } }],
+      targetMapId: "forbidden_forest", targetSpawn: { x: 0, y: 0, z: 12 } },...(WORLD_EXPANSION?atlasPortals(DEFAULT_MAP_ID):[])],
   },
   forbidden_forest: {
     id: "forbidden_forest", name: "ป่าต้องห้าม",
@@ -129,7 +131,18 @@ export function getWorldMap(mapId: string): WorldMapDefinition | undefined {
 }
 /** Rest zones protect actors at every height, including flying attackers. */
 export function isRestArea(mapId: string, point: {x:number; z:number}): boolean {
-  return getWorldMap(mapId)?.restAreas?.some(a => Math.hypot(point.x-a.x,point.z-a.z) <= a.radius) ?? false;
+  const map=getWorldMap(mapId);
+  if(!map)return false;
+  if(map.strategic?.kind==="capital")return true;
+  for(const index of map.strategic?.safeRoads ?? []){
+    const path=map.paths![index];
+    for(let i=1;i<path.length;i++){
+      const a=path[i-1],b=path[i],dx=b.x-a.x,dz=b.z-a.z;
+      const t=Math.max(0,Math.min(1,((point.x-a.x)*dx+(point.z-a.z)*dz)/(dx*dx+dz*dz)));
+      if(Math.hypot(point.x-a.x-t*dx,point.z-a.z-t*dz)<=3)return true;
+    }
+  }
+  return map.restAreas?.some(a=>Math.hypot(point.x-a.x,point.z-a.z)<=a.radius) ?? false;
 }
 export function isWorldSegmentClear(mapId:string, from:{x:number;z:number}, to:{x:number;z:number}):boolean {
   if(!WORLD_EXPANSION || mapId===DEFAULT_MAP_ID)return true;
@@ -154,7 +167,7 @@ export function isSafeWorldPoint(map: WorldMapDefinition, point: WorldPoint, rad
       if (!isOnTop(point.x, point.z)) return false;
     } else if (!isFlightAltitude(point.y)) return false;
   } else if (!isOnGround(point.y) && !isFlightAltitude(point.y)) return false;
-  if(map.region?.noFlight && !isOnGround(point.y))return false;
+  if((map.region?.noFlight || map.strategic?.kind==="territory") && !isOnGround(point.y))return false;
   if(isOnGround(point.y) && map.water?.some(w=>segmentIntersectsExpandedWall(point,point,w,radius)))return false;
   if(map.walls?.some(w=>segmentIntersectsExpandedWall(point,point,w,radius)))return false;
   return map.obstacles.every(o => Math.hypot(point.x - o.x, point.z - o.z) > o.radius + radius);

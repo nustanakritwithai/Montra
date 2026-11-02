@@ -8,8 +8,10 @@ const url=process.env.MONTRA_TEST_URL,dir=process.env.MONTRA_CHARACTER_DIR;
 if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url??"") || !dir || !/^montra-monster-test-/.test(path.basename(dir)))throw Error("Requires isolated local SQLite server");
 const routes=[
   ["forbidden_forest",48,-84,"drowned_marsh"],["bound_temple",32,-65,"moon_cemetery"],
-  ["drowned_marsh",0,-58,"moon_cemetery"],["moon_cemetery",0,-58,"hex_ridge"],
-  ["hex_ridge",0,-58,"naga_cavern"],["naga_cavern",0,-58,"fallen_city"],
+  ["drowned_marsh",0,-58,"moon_cemetery"],["moon_cemetery",0,-58,"moon_pass"],["moon_pass",0,-58,"hex_ridge"],
+  ["hex_ridge",0,-58,"naga_cavern"],["naga_cavern",0,-58,"river_watch"],["river_watch",0,-58,"fallen_city"],
+  ["ritual_village",4,-16,"mantra_capital"],["mantra_capital",-34,-14,"bamboo_frontier"],["bamboo_frontier",0,-58,"moon_cemetery"],
+  ["mantra_capital",0,-58,"moon_pass"],["mantra_capital",34,-14,"lotus_basin"],["lotus_basin",0,-58,"river_watch"],
   ["fallen_city",0,-58,"asura_peak"],["asura_peak",0,-58,"spirit_rift"],
 ];
 const warden="atlas_rift_warden",open=new Set(),sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -26,8 +28,8 @@ async function seed(i,mapId,x,z,level=100){
     inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()};
   await writeFile(path.join(dir,id+".json"),JSON.stringify(save),{flag:"wx"});
 }
-async function join(i,roomId,atlasVersion=1){
-  const sdk=new Client(url),opts={guestToken:token(i),worldVersion:1,templeVersion:1,atlasVersion};
+async function join(i,roomId,atlasVersion=1,provinceVersion=1){
+  const sdk=new Client(url),opts={guestToken:token(i),worldVersion:1,templeVersion:1,atlasVersion,provinceVersion};
   const r=roomId?await sdk.joinById(roomId,opts):await sdk.create("my_room",opts);
   open.add(r);const events=[];r.onMessage("*",(type,data)=>events.push({type,data}));
   const c={r,events,me:()=>r.state.players?.get(r.sessionId)};
@@ -40,7 +42,7 @@ async function warp(c,to){
   const from=c.me().mapId,gate=JSON.parse(c.r.state.worldDefinition).maps[from].portals.find(p=>p.targetMapId===to);
   c.r.send("warp",{portalId:gate.id});await until(()=>c.me().mapId===to,from+" to "+to);
   assert.ok(Math.hypot(c.me().x-gate.targetSpawn.x,c.me().z-gate.targetSpawn.z)<.04);
-  await until(()=>Array.from(c.r.state.monsters.values()).some(m=>m.mapId===to),"destination enemies");
+  if(JSON.parse(c.r.state.worldDefinition).maps[to].camps?.length)await until(()=>Array.from(c.r.state.monsters.values()).some(m=>m.mapId===to),"destination enemies");
 }
 async function walk(c,x,z){c.r.send("move",{x,z});await until(()=>Math.hypot(c.me().x-x,c.me().z-z)<.28,"walk",15000);}
 const read=process.env.MONTRA_ATLAS_STAGE==="read";
@@ -51,9 +53,16 @@ try{
       if(read)await assert.rejects(join(i,undefined,0),/world_client_update_required/);
       else{const old=await join(i,undefined,0);await reject(old,"warp",{portalId:from+"_to_"+to},"world_client_update_required");await leave(old);}
     }
+    if(from==="ritual_village" && to==="mantra_capital"){
+      if(read)await assert.rejects(join(i,undefined,1,0),/world_client_update_required/);
+      else{
+        const old=await join(i,undefined,1,0);
+        await reject(old,"warp",{portalId:from+"_to_"+to},"world_client_update_required");await leave(old);
+      }
+    }
     const c=await join(i);assert.equal(c.me().mapId,read?to:from);
     if(read)assert.equal((await bag(c)).slots[0].quantity,2);
-    if(c.me().mapId==="naga_cavern")await reject(c,"fly",{},"flight_forbidden");
+    if(["naga_cavern","moon_pass","river_watch"].includes(c.me().mapId))await reject(c,"fly",{},"flight_forbidden");
     await warp(c,read?from:to);await leave(c);
   }
   if(!read){
@@ -82,5 +91,5 @@ try{
   }else{
     for(let i=0;i<4;i++){const c=await join(30+i);assert.equal(c.me().mapId,"spirit_rift");assert.equal((await bag(c)).slots[0].quantity,3);await leave(c);}
   }
-  console.log("PASS atlas",read?"eight return gates and boss loot after restart":"eight outward gates, compatibility, bridge, cave and four-player warden");
+  console.log("PASS atlas",read?"return gates and boss loot after restart":"outward gates, compatibility, bridge, cave and four-player warden");
 }finally{await Promise.allSettled([...open].map(r=>r.leave()));}

@@ -89,6 +89,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastAttackMs = new Map<string, number>();
   private lastCombatMs = new Map<string, number>();
   private lastWarpMs = new Map<string, number>();
+  private provinceClients = new Set<string>();
   private atlasClients = new Set<string>();
   private templeClients = new Set<string>();
   private pendingWarps = new Set<string>();
@@ -510,6 +511,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const snapshot = this.captureCharacterSnapshot(id);
       if (!snapshot) return this.reject(client, "character_not_persistent");
       const portal = result.portal;
+      if(getWorldMap(portal.targetMapId)?.strategic && !this.provinceClients.has(id))return this.reject(client,"world_client_update_required");
       if(isAtlasMap(portal.targetMapId) && !this.atlasClients.has(id))return this.reject(client,"world_client_update_required");
       if(portal.targetMapId===TEMPLE_ID && !this.templeClients.has(id))return this.reject(client,"world_client_update_required");
       const destination = { ...snapshot, mapId: portal.targetMapId, ...portal.targetSpawn,
@@ -673,7 +675,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.climbs.has(id)) return this.reject(client, "climbing");
       if (this.activeDashes.has(id)) return this.reject(client, "dashing");
       if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
-      if (!player.flying && getWorldMap(player.mapId)?.region?.noFlight) return this.reject(client, "flight_forbidden");
+      const flightMap=getWorldMap(player.mapId);
+      if (!player.flying && (flightMap?.region?.noFlight || flightMap?.strategic?.kind==="territory")) return this.reject(client, "flight_forbidden");
       if (!this.gates.get(id)?.flight.consume(this.simulatedMs)) {
         return this.reject(client, "flight_rate_limited");
       }
@@ -1751,6 +1754,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const allocations = saved?.statAllocations ?? emptyAllocations();
       const initialStats = calculateStats(saved?.level ?? 1, allocations);
       const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
+      const provinceReady=(options as {provinceVersion?:unknown}|undefined)?.provinceVersion===1;
+      if(getWorldMap(mapId)?.strategic && !provinceReady)throw new Error("world_client_update_required");
       const atlasReady=(options as {atlasVersion?:unknown}|undefined)?.atlasVersion===1;
       if(isAtlasMap(mapId) && !atlasReady)throw new Error("world_client_update_required");
       const templeReady=(options as {templeVersion?:unknown}|undefined)?.templeVersion===1;
@@ -1784,6 +1789,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.statAllocations.set(client.sessionId, allocations);
       this.applyStats(player, allocations);
       this.state.players.set(client.sessionId, player);
+      if(provinceReady)this.provinceClients.add(client.sessionId);
       if(atlasReady)this.atlasClients.add(client.sessionId);
       if(templeReady)this.templeClients.add(client.sessionId);
       if (characterId && accountId && token) {
@@ -1825,6 +1831,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = client.sessionId;
     this.templeClients.delete(id);
     this.atlasClients.delete(id);
+    this.provinceClients.delete(id);
     this.leaveParty(id);
     const guildCharacter=this.persistentCharacters.get(id);
     if(guildCharacter){this.guildSubscriptions.get(id)?.();this.guildSubscriptions.delete(id);notifyGuilds();}
