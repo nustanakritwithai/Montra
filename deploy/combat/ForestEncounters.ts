@@ -36,7 +36,7 @@ export class ForestEncounters {
       monsterProfile(1, tier);
     }
     const forest=this.navigation(getWorldMap("forbidden_forest")!);
-    const temple=this.navigation(TEMPLE_MAP);
+    const temple=this.navigation(getWorldMap(TEMPLE_MAP.id)!);
     const atlasNavigation=new Map(Object.values(ATLAS_MAPS).map(map=>[map.id,this.navigation(map)]));
     const spawns:{spawn:{id:string;x:number;z:number;level:number;name:string;tier?:MonsterTier};zone:Navigation}[]=[...[...normalSpawns,SHRINE_GUARDIAN].map(spawn=>({spawn,zone:forest})),
       ...TEMPLE_SPAWNS.map(spawn=>({spawn,zone:temple})),

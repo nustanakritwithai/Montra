@@ -39,7 +39,7 @@ import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.j
 import type { CharacterSnapshot } from "./CharacterStore.js";
 import { isAtlasMap } from "./WorldAtlas.js";
 import { TEMPLE_ID } from "./TempleMap.js";
-import { SHRINE_GUARDIAN, DEFAULT_MAP_ID, getWorldMap, groundAt, onMapGround, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, VILLAGE_ARRIVALS, WORLD_ROOM_CAPACITY, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
+import { SHRINE_GUARDIAN, DEFAULT_MAP_ID, getWorldMap, groundAt, surfaceLayer, onMapGround, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, VILLAGE_ARRIVALS, WORLD_ROOM_CAPACITY, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
 import { provinceShotClear, segmentIntersectsExpandedWall } from "./WorldMaps.js";
 import { crestCorners, onRampart, wallRing } from "./StrategicProvinces.js";
 import { checkWarp, WARP_COMBAT_LOCK_MS } from "./WarpRules.js";
@@ -131,6 +131,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastWarpMs = new Map<string, number>();
   private provinceClients = new Set<string>();
   private castleClients = new Set<string>();
+  private originalReliefClients=new Set<string>();
   private reliefClients = new Set<string>();
   private terrainClients = new Set<string>();
   private riverClients = new Set<string>();
@@ -228,7 +229,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private selectBuild(client: Client, build: CharacterBuild): void {
     const id = client.sessionId, player = this.buildPlayer(client);
     if (!player) return;
-    const atShrine = player.mapId === DEFAULT_MAP_ID && isOnGround(player.y) && Math.hypot(player.x, player.z) <= 6;
+    const atShrine = player.mapId === DEFAULT_MAP_ID && onMapGround(player) && Math.hypot(player.x, player.z) <= 6;
     if (!atShrine || this.simulatedMs - (this.lastCombatMs.get(id) ?? -Infinity) < PROGRESSION.combatQuietMs)
       return this.reject(client, "build_needs_shrine");
     if (player.classSkillReadyAt > Date.now()) return this.reject(client, "class_skill_cooldown");
@@ -327,7 +328,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=client.sessionId, player=this.buildPlayer(client,"swordTree"), tree=this.swordTrees.get(id);
     if (!player || !tree) return;
     if (player.pathId !== "phutthaisawan") return this.reject(client, "sword_class_required");
-    if (action !== "equip" && (player.mapId !== DEFAULT_MAP_ID || !isOnGround(player.y) || Math.hypot(player.x,player.z)>6 ||
+    if (action !== "equip" && (player.mapId !== DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
         this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)) {
       return this.reject(client,"sword_tree_needs_shrine");
     }
@@ -555,9 +556,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     const dx=target.x-player.x,dz=target.z-player.z,length=Math.hypot(dx,dz), nx=length>0.001 ? dx/length : -Math.sin(player.facing),nz=length>0.001 ? dz/length : -Math.cos(player.facing);
     const next={x:target.x+nx*1.5,y:target.y,z:target.z+nz*1.5},map=getWorldMap(target.mapId);
-    if(!map || !this.canOccupy(next.x,next.z,next.y,false,target.mapId) || isRestArea(target.mapId,next) || !this.bodyPathClear(target.mapId,target,next) ||
+    if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(target),false,target.mapId) || isRestArea(target.mapId,next) || !this.bodyPathClear(target.mapId,target,next) ||
       (monster && (monster.id===RULES.monsterId ? !isMonsterSegmentClear(monster,next) : !this.forest.canDisplace(monster.id,next))))return this.reject(client,"muay_throw_blocked");
-    const sweep=advanceDash(target,{dx:nx,dz:nz},1.5,(x,z)=>this.canOccupy(x,z,target.y,false,target.mapId) && !isRestArea(target.mapId,{x,z}),map.bounds);
+    const sweep=advanceDash(target,{dx:nx,dz:nz},1.5,(x,z)=>this.canOccupy(x,z,surfaceLayer(target),false,target.mapId) && !isRestArea(target.mapId,{x,z}),map.bounds);
     if(sweep.blocked || sweep.moved<1.4999)return this.reject(client,"muay_throw_blocked");
     this.moveOnSurface(target,next.x,next.z);
     this.releaseMuayGrapple(id,"thrown");this.recordCombat(id,hold.targetId);this.recordMuayTraining(id,"strikes");
@@ -587,7 +588,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=client.sessionId, player=this.buildPlayer(client), book=this.muayBooks.get(id);
     if(!player || !book)return;
     if(player.pathId!=="muay_boran")return this.reject(client,"muay_class_required");
-    if(player.mapId!==DEFAULT_MAP_ID || !isOnGround(player.y) || Math.hypot(player.x,player.z)>6 ||
+    if(player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
       this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)return this.reject(client,"muay_book_needs_shrine");
     const next:MuayBook={learned:[...book.learned],training:{...book.training},mastery:{chaiya:{...book.mastery.chaiya},korat:{...book.mastery.korat},lopburi:{...book.mastery.lopburi},thasao:{...book.mastery.thasao}},school:book.school,slots:[...book.slots],
       loadouts:{chaiya:[...book.loadouts.chaiya],korat:[...book.loadouts.korat],lopburi:[...book.loadouts.lopburi],thasao:[...book.loadouts.thasao]}};
@@ -718,8 +719,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(skill.effect==="evade") {
       const dx=Math.sin(player.facing),dz=Math.cos(player.facing),distance=1.2;
       const next={x:player.x+dx*distance,y:player.y,z:player.z+dz*distance},map=getWorldMap(player.mapId);
-      if(!map || !this.canOccupy(next.x,next.z,next.y,false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"muay_blocked");
-      const sweep=advanceDash(player,{dx,dz},distance,(x,z)=>this.canOccupy(x,z,player.y,false,player.mapId) && !isRestArea(player.mapId,{x,z}),map.bounds);
+      if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"muay_blocked");
+      const sweep=advanceDash(player,{dx,dz},distance,(x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !isRestArea(player.mapId,{x,z}),map.bounds);
       if(sweep.blocked || sweep.moved+0.00001<distance)return this.reject(client,"muay_blocked");
       this.destinations.delete(id);this.attackTargets.delete(id);player.targetId="";player.combatState="idle";
       this.moveOnSurface(player,next.x,next.z);
@@ -728,8 +729,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(skill.effect==="retreat_strike" && target) {
       const dx=player.x-target.x,dz=player.z-target.z,length=Math.hypot(dx,dz),vx=length>0.001?dx/length:Math.sin(player.facing),vz=length>0.001?dz/length:Math.cos(player.facing),travel=1.2;
       const next={x:player.x+vx*travel,y:player.y,z:player.z+vz*travel},map=getWorldMap(player.mapId);
-      if(!map || !this.canOccupy(next.x,next.z,next.y,false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"muay_blocked");
-      const sweep=advanceDash(player,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,player.y,false,player.mapId) && !isRestArea(player.mapId,{x,z}),map.bounds);
+      if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"muay_blocked");
+      const sweep=advanceDash(player,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !isRestArea(player.mapId,{x,z}),map.bounds);
       if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"muay_blocked");
       retreatPoint=next;
     }
@@ -737,11 +738,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const dx=target.x-player.x,dz=target.z-player.z,distance=Math.hypot(dx,dz),move=Math.max(0,distance-1.7);
       const side=skill.effect==="sidestep" || skill.effect==="counter_sidestep" ? (skillId==="lopburi_reverse" ? -0.8 : 0.8) : 0, divisor=Math.max(distance,0.001);
       const next={x:player.x+(dx*move-dz*side)/divisor,y:player.y,z:player.z+(dz*move+dx*side)/divisor};
-      if (!this.canOccupy(next.x,next.z,next.y,false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next)) return this.reject(client,"muay_blocked");
+      if (!this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next)) return this.reject(client,"muay_blocked");
       const vx=next.x-player.x,vz=next.z-player.z,travel=Math.hypot(vx,vz);
       if (travel>0.00001) {
         const sweep=advanceDash(player,{dx:vx/travel,dz:vz/travel},travel,
-          (x,z)=>this.canOccupy(x,z,player.y,false,player.mapId) && !isRestArea(player.mapId,{x,z}),getWorldMap(player.mapId)!.bounds);
+          (x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !isRestArea(player.mapId,{x,z}),getWorldMap(player.mapId)!.bounds);
         if (sweep.blocked || sweep.moved+0.00001<travel) return this.reject(client,"muay_blocked");
       }
       muayMoved=travel>0.1;
@@ -840,12 +841,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const move=Math.max(0,distance-1.7);
       const side=skillId==="circle_step" || skillId==="riposte" ? 0.8 : 0;
       const next={x:player.x+(dx*move-dz*side)/Math.max(distance,0.001),y:player.y,z:player.z+(dz*move+dx*side)/Math.max(distance,0.001)};
-      if (!this.canOccupy(next.x,next.z,next.y,false,player.mapId) || isRestArea(player.mapId,next) ||
+      if (!this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || isRestArea(player.mapId,next) ||
           !this.bodyPathClear(player.mapId,player,next)) return this.reject(client,"sword_blocked");
       const travelX=next.x-player.x, travelZ=next.z-player.z, travel=Math.hypot(travelX,travelZ);
       if (travel>0.00001) {
         const sweep=advanceDash(player,{dx:travelX/travel,dz:travelZ/travel},travel,
-          (x,z)=>this.canOccupy(x,z,player.y,false,player.mapId) && !isRestArea(player.mapId,{x,z}),
+          (x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !isRestArea(player.mapId,{x,z}),
           getWorldMap(player.mapId)!.bounds);
         if (sweep.blocked || sweep.moved+0.00001<travel) return this.reject(client,"sword_blocked");
       }
@@ -1144,7 +1145,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const river=this.field.site===RIVER_CITY;
     if((castle || river)?(!req || typeof req.gateId!=="string" || (req.repair!==undefined && (!castle || req.repair!==true))):!parseEmptyCommand(message))return;
     const id=client.sessionId,p=this.state.players.get(id),seat=this.warSeats.get(id),character=this.persistentCharacters.get(id);
-    if(!p?.alive || p.flying || !seat || !character || !isOnGround(p.y) || this.climbs.has(id) || this.pendingCharacterLeaves.has(id))return;
+    if(!p?.alive || p.flying || !seat || !character || !onMapGround(p) || this.climbs.has(id) || this.pendingCharacterLeaves.has(id))return;
     const now=Date.now();
     if(now-(this.gateActions.get(id)??-Infinity)<1000)return;
     const war=guildStore().war,gates=WORLD_MAPS[this.field.site].strategic!.rampart!.gates;
@@ -1154,7 +1155,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const inside=gate.side==="south"?p.z<cz:gate.side==="north"?p.z>cz:gate.side==="east"?p.x<cx:p.x>cx;
     if(!segmentIntersectsExpandedWall(p,p,b,2.5) || (seat.side==="defend" && !inside))
       return client.send("territory_error",{reason:"war_gate_near"});
-    const occupied=[...this.state.players.values()].some(peer=>peer.alive && isOnGround(peer.y) && segmentIntersectsExpandedWall(peer,peer,b,.4));
+    const occupied=[...this.state.players.values()].some(peer=>peer.alive && onMapGround(peer) && segmentIntersectsExpandedWall(peer,peer,b,.4));
     this.gateActions.set(id,now);
     try{
       if(castle){
@@ -1182,7 +1183,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const p=this.state.players.get(id),character=this.persistentCharacters.get(id);
         if(!p || !character || this.pendingCharacterLeaves.has(id))continue;
         if(war.member(character)?.id!==seat.guild){this.clients.find(c=>c.sessionId===id)?.leave(4000,"war_membership_changed");continue;}
-        if(!p.alive || !isOnGround(p.y) || p.flying || p.mapId!==field.site || this.climbs.has(id) || this.pendingWarps.has(id))continue;
+        if(!p.alive || !onMapGround(p) || p.flying || p.mapId!==field.site || this.climbs.has(id) || this.pendingWarps.has(id))continue;
         if(riverPresence){
           const i=riverPosts.findIndex(post=>planarDistance(p,post)<=4);
           if(i>=0)riverPresence[i][seat.side]++;
@@ -1202,7 +1203,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
   private canMarch(id:string){
     const p=this.state.players.get(id),base=this.playerSpawn.get(id);
-    return Boolean(base && p?.alive && isOnGround(p.y) && !p.flying && planarDistance(p,base)<=5 &&
+    return Boolean(base && p?.alive && onMapGround(p) && !p.flying && planarDistance(p,base)<=5 &&
       !this.climbs.has(id) && !this.activeDashes.has(id) && !this.flightTransitions.has(id) && !this.pendingWarps.has(id) &&
       !this.pendingCharacterLeaves.has(id) && !this.attackTargets.has(id) && ![...this.attackTargets.values()].includes(id) &&
       this.simulatedMs-(this.lastCombatMs.get(id)??-Infinity)>=WARP_COMBAT_LOCK_MS);
@@ -1238,7 +1239,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!dest || campId!==seat.camp || !this.canMarch(id))return error("war_camp_base");
       const p=this.state.players.get(id)!;
       this.destinations.delete(id);this.crestTurns.delete(id);this.despawnSummon(id,"warp");
-      p.x=dest.x;p.z=dest.z;p.targetId="";p.combatState="idle";
+      this.moveOnSurface(p,dest.x,dest.z);p.targetId="";p.combatState="idle";
     }
     this.nextWarSample=0;
   }
@@ -1296,7 +1297,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const order=parseGovernmentOrder(message);
       if(!order)return this.reject(client,"invalid_request");
       if(!WORLD_EXPANSION || !this.warClients.has(id) || this.field || !character || !p || !p.alive || p.flying ||
-         !isOnGround(p.y) || this.climbs.has(id) || this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
+         !onMapGround(p) || this.climbs.has(id) || this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
          !Object.hasOwn(warSites,p.mapId) || order.site!==p.mapId)
         return client.send("territory_error",{reason:"war_government_location"});
       try{
@@ -1574,6 +1575,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const snapshot = this.captureCharacterSnapshot(id);
       if (!snapshot) return this.reject(client, "character_not_persistent");
       const portal = result.portal;
+      if(getWorldMap(portal.targetMapId)?.reliefLabels && !isAtlasMap(portal.targetMapId) && !this.originalReliefClients.has(id))return this.reject(client,"world_client_update_required");
       if(isAtlasMap(portal.targetMapId) && getWorldMap(portal.targetMapId)?.terrain && !this.reliefClients.has(id))return this.reject(client,"world_client_update_required");
       if(portal.targetMapId===RIDGE_PASS && !this.terrainClients.has(id))return this.reject(client,"world_client_update_required");
       if(portal.targetMapId===RIVER_CITY && !this.riverClients.has(id))return this.reject(client,"world_client_update_required");
@@ -1766,7 +1768,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           !this.canOccupy(player.x, player.z, landingY, false, player.mapId))) {
         return this.reject(client, "landing_blocked");
       }
-      if (!landing && !onMapGround(player) && !(isOnPlatform(player.y) && (flightMap?.strategic?.rampart || player.mapId===DEFAULT_MAP_ID))) {
+      if (!landing && !onMapGround(player) && !(isOnPlatform(surfaceLayer(player)) && (flightMap?.strategic?.rampart || player.mapId===DEFAULT_MAP_ID))) {
         return this.reject(client, "flight_unavailable");
       }
       const targetY = landing ? landingY! : FLIGHT.altitude;
@@ -1853,7 +1855,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.climbs.has(client.sessionId)) return this.reject(client, "climbing");
       if (this.activeDashes.has(client.sessionId)) return this.reject(client, "dashing");
       if (this.flightTransitions.has(client.sessionId)) return this.reject(client, "flight_in_progress");
-      if (!player.flying && !getWorldMap(player.mapId)?.terrain && isOnPlatform(player.y) && !this.canOccupy(destination.x,destination.z,player.y,false,player.mapId)) {
+      if (!player.flying && isOnPlatform(surfaceLayer(player)) && !this.canOccupy(destination.x,destination.z,surfaceLayer(player),false,player.mapId)) {
         return this.reject(client, "must_descend");
       }
       if (!this.gates.get(client.sessionId)?.move.consume(this.simulatedMs)) {
@@ -1861,12 +1863,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
 
       const rampart=getWorldMap(player.mapId)?.strategic?.rampart;
-      if(rampart && isOnPlatform(player.y) && wallRing(rampart,player.x,player.z)!==wallRing(rampart,destination.x,destination.z))return this.reject(client,"must_descend");
+      if(rampart && isOnPlatform(surfaceLayer(player)) && wallRing(rampart,player.x,player.z)!==wallRing(rampart,destination.x,destination.z))return this.reject(client,"must_descend");
       // A manual tap cancels auto-approach AND auto-attack (even if walking).
       this.attackTargets.delete(client.sessionId);
       player.targetId = "";
       player.combatState = "moving";
-      if(rampart && isOnPlatform(player.y))this.crestTurns.set(client.sessionId,crestCorners(rampart,player,destination));
+      if(rampart && isOnPlatform(surfaceLayer(player)))this.crestTurns.set(client.sessionId,crestCorners(rampart,player,destination));
       else this.crestTurns.delete(client.sessionId);
       this.destinations.set(client.sessionId, destination);
     },
@@ -1978,8 +1980,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
 
       const upward = direction === "up";
-      if (upward && !isOnGround(player.y)) return this.reject(client, "not_on_ground");
-      if (!upward && !isOnPlatform(player.y)) return this.reject(client, "not_on_wall");
+      if (upward && !onMapGround(player)) return this.reject(client, "not_on_ground");
+      if (!upward && !isOnPlatform(surfaceLayer(player))) return this.reject(client, "not_on_wall");
 
       const foot=stair?.foot ?? {x:FORT.ladderFootX,z:FORT.ladderFootZ},top=stair?.top ?? {x:FORT.ladderTopX,z:FORT.ladderTopZ};
       const ladderPosition=upward?foot:top;
@@ -2061,7 +2063,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     const from = { x:shooter.x, y:shooter.y+FORT.shootOriginHeight, z:shooter.z };
     const to = { x:target.x, y:target.y + FORT.targetBodyHeight, z:target.z };
-    const map=getWorldMap(shooter.mapId),downhill=map?.terrain?onMapGround(shooter) && onMapGround(target) && shooter.y-target.y>=2:map?.strategic?.rampart && isOnPlatform(shooter.y) && isOnGround(target.y);
+    const map=getWorldMap(shooter.mapId),downhill=map?.terrain?(onMapGround(shooter) || isOnPlatform(surfaceLayer(shooter))) && onMapGround(target) && shooter.y-target.y>=2:map?.strategic?.rampart && isOnPlatform(shooter.y) && onMapGround(target);
     if (distance3d(from,to) > FORT.rangedRange+(downhill?3:0)) {
       return this.reject(client, "shot_out_of_range");
     }
@@ -2194,7 +2196,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private bodyPathClear(mapId: string, from: WorldPoint, target: WorldPoint) {
     return mapId === DEFAULT_MAP_ID
-      ? !wallBlocksShot({ x: from.x, y: from.y + FORT.targetBodyHeight, z: from.z },
+      ? isWorldSegmentClear(mapId,from,target) && !wallBlocksShot({ x: from.x, y: from.y + FORT.targetBodyHeight, z: from.z },
           { x: target.x, y: target.y + FORT.targetBodyHeight, z: target.z })
       : provinceShotClear(WORLD_MAPS[mapId],{x:from.x,y:from.y+1,z:from.z},{x:target.x,y:target.y+1,z:target.z},(mapId===CASTLE_ID || mapId===RIVER_CITY)?this.closedFieldGates:this.gateClosed);
   }
@@ -2344,6 +2346,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.monster.id = RULES.monsterId;
     this.state.monster.x = RULES.monsterSpawnX;
     this.state.monster.z = RULES.monsterSpawnZ;
+    this.state.monster.y=groundAt(DEFAULT_MAP_ID,RULES.monsterSpawnX,RULES.monsterSpawnZ);
     this.state.monster.hp = RULES.monsterMaxHp;
     this.state.monster.maxHp = RULES.monsterMaxHp;
     this.state.monster.alive = true;
@@ -2462,13 +2465,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private canOccupy(x: number, z: number, feetY: number, flying = false, mapId = DEFAULT_MAP_ID): boolean {
-    if (mapId !== DEFAULT_MAP_ID) {
-      const map = getWorldMap(mapId);
-      if(map?.terrain)return isSafeWorldPoint(map,{x,z,y:groundAt(mapId,x,z)+(flying?FLIGHT.altitude:0)});
+    const map=getWorldMap(mapId);
+    if(mapId!==DEFAULT_MAP_ID || map?.terrain){
       const r=map?.strategic?.rampart;
       if(r && isOnPlatform(feetY))return onRampart(r,x,z);
       if(r && this.closedFieldGates.size && r.gates.some(g=>this.closedFieldGates.has(g.id) && segmentIntersectsExpandedWall({x,z},{x,z},g.box,.4)))return false;
       if(r && this.gateClosed && segmentIntersectsExpandedWall({x,z},{x,z},r.gates[0].box,.4))return false;
+      if(map?.terrain)return isSafeWorldPoint(map,{x,z,y:groundAt(mapId,x,z)+feetY});
       return Boolean(map && (isOnGround(feetY) || (flying && isFlightAltitude(feetY))) &&
         isSafeWorldPoint(map, { x, y: feetY, z }));
     }
@@ -2481,8 +2484,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private moveOnSurface(player:{x:number;y:number;z:number;mapId:string;flying?:boolean},x:number,z:number){
+    if(getWorldMap(player.mapId)?.terrain){
+      const layer=player.flying?FLIGHT.altitude:isOnPlatform(surfaceLayer(player))?FORT.height:0;
+      player.y=groundAt(player.mapId,x,z)+layer;
+    }
     player.x=x;player.z=z;
-    if(getWorldMap(player.mapId)?.terrain)player.y=groundAt(player.mapId,x,z)+(player.flying?FLIGHT.altitude:0);
   }
 
   private updatePlayerMovement(dt: number) {
@@ -2497,7 +2503,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const move = advanceDash(
           player, dash,
           Math.min(dash.remaining, RULES.dashSpeed * dt),
-          (x, z) => this.canOccupy(x, z, player.y, player.flying, player.mapId),
+          (x, z) => this.canOccupy(x,z,surfaceLayer(player), player.flying, player.mapId),
           getWorldMap(player.mapId)!.bounds,
         );
         this.moveOnSurface(player,move.x,move.z);
@@ -2553,7 +2559,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         };
         const next = stepTowards(player, approach,
           (player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed) * dt);
-        if (this.canOccupy(next.x,next.z,player.y,player.flying,player.mapId)) {
+        if (this.canOccupy(next.x,next.z,surfaceLayer(player),player.flying,player.mapId)) {
           this.moveOnSurface(player,next.x,next.z);
           player.combatState = "approaching";
         } else {
@@ -2563,7 +2569,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
 
       const destination=this.destinations.get(sessionId);
-      const turns=destination && isOnPlatform(player.y)?this.crestTurns.get(sessionId):undefined;
+      const turns=destination && isOnPlatform(surfaceLayer(player))?this.crestTurns.get(sessionId):undefined;
       const target=turns?.[0] ?? destination;
       if (!target) {
         player.combatState = "idle";
@@ -2575,13 +2581,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const next = stepTowards(player, target,
         (player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed) * dt);
       if (next.moved) player.facing = facingTo(dx, dz);
-      if (this.canOccupy(next.x,next.z,player.y,player.flying,player.mapId)) {
+      if (this.canOccupy(next.x,next.z,surfaceLayer(player),player.flying,player.mapId)) {
         this.moveOnSurface(player,next.x,next.z);
       } else {
         // Slide on the wall face if a legal axis exists; never tunnel through
         // solid geometry via client destinations or elevated edge tapping.
-        if (this.canOccupy(next.x,player.z,player.y,player.flying,player.mapId)) this.moveOnSurface(player,next.x,player.z);
-        else if (this.canOccupy(player.x,next.z,player.y,player.flying,player.mapId)) this.moveOnSurface(player,player.x,next.z);
+        if (this.canOccupy(next.x,player.z,surfaceLayer(player),player.flying,player.mapId)) this.moveOnSurface(player,next.x,player.z);
+        else if (this.canOccupy(player.x,next.z,surfaceLayer(player),player.flying,player.mapId)) this.moveOnSurface(player,player.x,next.z);
         else {
           this.destinations.delete(sessionId);
           player.combatState = "idle";
@@ -2775,7 +2781,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Keep an existing target if it is alive and remains in the combat area.
     let targetId = monster.targetId;
     let target = targetId ? this.state.players.get(targetId) : undefined;
-    if (!target || !target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID || isRestArea(target.mapId,target) || !isOnGround(target.y) ||
+    if (!target || !target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID || isRestArea(target.mapId,target) || !onMapGround(target) ||
         planarDistance(monster, target) > RULES.monsterGiveUpRadius) {
       target = undefined;
       targetId = "";
@@ -2785,7 +2791,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!target) {
       let nearest: number = RULES.monsterAggroRadius;
       for (const [id, player] of this.state.players) {
-        if (!player.alive || this.pendingWarps.has(id) || player.mapId !== DEFAULT_MAP_ID || isRestArea(player.mapId,player) || !isOnGround(player.y)) continue;
+        if (!player.alive || this.pendingWarps.has(id) || player.mapId !== DEFAULT_MAP_ID || isRestArea(player.mapId,player) || !onMapGround(player)) continue;
         const distance = planarDistance(monster, player);
         if (distance < nearest) {
           nearest = distance;
@@ -2839,6 +2845,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     monster.facing = facingTo(dx,dz);
     monster.x = clampToMap(next.x);
     monster.z = clampToMap(next.z);
+    monster.y=groundAt(DEFAULT_MAP_ID,monster.x,monster.z);
   }
 
   private monsterAttack(targetId: string, target: Player) {
@@ -2874,6 +2881,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.monsterNavigator.clear();
       monster.x = RULES.monsterSpawnX;
       monster.z = RULES.monsterSpawnZ;
+      monster.y=groundAt(DEFAULT_MAP_ID,monster.x,monster.z);
       monster.facing = 0;
       monster.alive = true;
       monster.aiState = "patrol";
@@ -2939,7 +2947,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       stamina: player.stamina,
       x: player.x,
       // Keep stable flight altitude when a transition is mid-flight.
-      y: player.flying ? FLIGHT.altitude : isAtlasMap(player.mapId) ? 0 : player.y,
+      y: player.flying ? FLIGHT.altitude : getWorldMap(player.mapId)?.reliefLabels ? (isOnPlatform(surfaceLayer(player))?FORT.height:0) : player.y,
       z: player.z,
       hp: Math.max(0, Math.round(hpOverride ?? player.hp)),
       inventory, updatedAt: new Date().toISOString(),
@@ -2992,6 +3000,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const riverReady=(options as {riverCityVersion?:unknown}|undefined)?.riverCityVersion===1;
       const terrainReady=(options as {terrainVersion?:unknown}|undefined)?.terrainVersion===1;
       const reliefReady=(options as {atlasReliefVersion?:unknown}|undefined)?.atlasReliefVersion===1;
+      const originalReady=(options as {originalReliefVersion?:unknown}|undefined)?.originalReliefVersion===1;
+      if(getWorldMap(mapId)?.reliefLabels && !isAtlasMap(mapId) && !originalReady)throw new Error("world_client_update_required");
       if(isAtlasMap(mapId) && getWorldMap(mapId)?.terrain && !reliefReady)throw new Error("world_client_update_required");
       if(mapId===RIDGE_PASS && !terrainReady)throw new Error("world_client_update_required");
       if(mapId===RIVER_CITY && !riverReady)throw new Error("world_client_update_required");
@@ -3006,9 +3016,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // A saved location is restored only if the current server geometry allows it.
       // Atlas saves keep the pre-relief ground/flight layer on disk; project onto the current surface at admission.
       const restoreFlight = Boolean(saved && (!map.terrain || !map.region?.noFlight) && isFlightAltitude(saved.y));
-      const savedY=saved ? saved.y+(isAtlasMap(mapId)?groundAt(mapId,saved.x,saved.z):0) : 0;
+      const savedY=saved ? saved.y+(map.reliefLabels?groundAt(mapId,saved.x,saved.z):0) : 0;
       let validPosition = saved && (!map.terrain || isSafeWorldPoint(map,{...saved,y:savedY})) && this.canOccupy(
-        saved.x, saved.z, savedY, restoreFlight, mapId);
+        saved.x, saved.z, savedY-groundAt(mapId,saved.x,saved.z), restoreFlight, mapId);
       let safeSpawn = mapId === DEFAULT_MAP_ID ? { ...spawn, y: 0 } : getSafeMapSpawn(mapId);
       if(this.field){
         const credential=characterId && admissions.get(characterId),war=guildStore().war,member=characterId && war.member(characterId);
@@ -3032,6 +3042,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           const gate=WORLD_MAPS[mapId].portals.find(p=>p.z===(side==="attack"?26:-58))!;
           safeSpawn={x:gate.x,y:0,z:gate.z};
         }
+        safeSpawn={...safeSpawn,y:groundAt(mapId,safeSpawn.x,safeSpawn.z)};
         validPosition=false;
       }
       const player = new Player({
@@ -3067,6 +3078,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.applyStats(client.sessionId,player, allocations);
       this.state.players.set(client.sessionId, player);
       if((options as Record<string,unknown>)?.warVersion===1)this.warClients.add(client.sessionId);
+      if(originalReady)this.originalReliefClients.add(client.sessionId);
       if(reliefReady)this.reliefClients.add(client.sessionId);
       if(terrainReady)this.terrainClients.add(client.sessionId);
       if(riverReady)this.riverClients.add(client.sessionId);
@@ -3126,7 +3138,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.templeClients.delete(id);
     this.atlasClients.delete(id);
     this.crestTurns.delete(id);this.gateActions.delete(id);this.warSeats.delete(id);this.warClients.delete(id);this.warSent.delete(id);
-    this.riverClients.delete(id);this.terrainClients.delete(id);this.reliefClients.delete(id);
+    this.riverClients.delete(id);this.terrainClients.delete(id);this.reliefClients.delete(id);this.originalReliefClients.delete(id);
     this.castleClients.delete(id);
     this.provinceClients.delete(id);
     this.leaveParty(id);

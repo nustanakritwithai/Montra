@@ -8,7 +8,7 @@ import {Client} from "@colyseus/sdk";
 const url=process.env.MONTRA_TEST_URL,dir=process.env.MONTRA_CHARACTER_DIR;
 if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url??"") || !/^montra-monster-test-/.test(path.basename(dir??"")))throw Error("A local isolated monster test server is required");
 const connected=new Set();
-const options={worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1};
+const options={worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,atlasReliefVersion:1,originalReliefVersion:1};
 const token=()=>"mt1_"+randomBytes(32).toString("hex");
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(check,label,ms=8000){
@@ -64,7 +64,7 @@ try{
   await closeAll();
   console.log("PASS ten concurrent arrivals, shared movement/chat, eleventh-player matchmaking and persistent return");
 
-  const maps=[world.ritual_village,...Object.values(world).filter(m=>m.region)];
+  const maps=[world.ritual_village,...Object.values(world).filter(m=>m.region && m.camps.length)];
   assert.equal(maps.length,10);
   const travelers=await fillRoom(await Promise.all(maps.map(m=>seed(m.id,m.spawn.x,m.spawn.z))));
   await until(()=>travelers.every(r=>r.state.monsters.size===124),"all ten regions and their enemies");

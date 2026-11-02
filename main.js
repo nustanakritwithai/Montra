@@ -576,7 +576,7 @@
   // ---- Ritual village: a night canal quarter of teak stilt houses ----
   // Everything here is decorative and non-pickable (taps still land on the
   // walkable ground). Parts are merged by material to keep draw calls low.
-  const villageParts = [];
+  const villageParts = [], villageBatches=[];
   const lanternPaper = mat("red paper lantern", "#b8452f", "#d4572a");
   const candleMat = mat("candle flame", "#ffe2b0", "#ffb24a");
   const waxMat = mat("candle wax", "#e9dcc2");
@@ -809,8 +809,9 @@
       byMaterial.get(part.material).push(part);
     }
     for (const parts of byMaterial.values()) {
+      const anchors=parts.map(p=>{p.computeWorldMatrix(true);const c=p.getBoundingInfo().boundingBox.centerWorld;return {x:c.x,z:c.z,count:p.getTotalVertices()};});
       const merged = parts.length > 1 ? B.Mesh.MergeMeshes(parts, true, true) : parts[0];
-      if (merged) merged.isPickable = false;
+      if (merged){merged.isPickable=false;villageBatches.push({mesh:merged,anchors});}
     }
     boatNodes.forEach(node => node.dispose());
   }
@@ -947,9 +948,9 @@
   }
   // Ruined forest shrine: stone plinth, lacquered sanctum, gilded Thai roof,
   // candles and talisman flags. Decorative only; merged per material.
-  function shrineRuin(x,z,parent,size=1){
+  function shrineRuin(x,z,parent,size=1,base=0){
     const parts=[];
-    const add=(mesh,px,py,pz,material)=>{mesh.position.set(x+px*size,py*size,z+pz*size);mesh.scaling.setAll(size);mesh.material=material;mesh.isPickable=false;parts.push(mesh);return mesh;};
+    const add=(mesh,px,py,pz,material)=>{mesh.position.set(x+px*size,base+py*size,z+pz*size);mesh.scaling.setAll(size);mesh.material=material;mesh.isPickable=false;parts.push(mesh);return mesh;};
     const box=(px,py,pz,w,h,d,material)=>add(B.MeshBuilder.CreateBox("forest shrine",{width:w,height:h,depth:d},scene),px,py,pz,material);
     const cyl=(px,py,pz,h,b,t,material,sides=8)=>add(B.MeshBuilder.CreateCylinder("forest shrine",{height:h,diameterBottom:b,diameterTop:t,tessellation:sides},scene),px,py,pz,material);
     box(0,.3,0,4.6,.6,3.4,forestStone);box(0,.15,2.1,2.6,.3,.9,forestStone);box(0,.72,0,3.6,.24,2.6,templeStone);
@@ -1161,7 +1162,7 @@
   function buildForestDetails(map) {
     const groups=new Map();
     function place(mesh,x,y,z,material,batch=true) {
-      mesh.position.set(x,y,z);mesh.material=material;mesh.isPickable=false;mesh.parent=expansionRoot;
+      mesh.position.set(x,y+(map.terrain?terrainHeight(map.terrain,x,z):0),z);mesh.material=material;mesh.isPickable=false;mesh.parent=expansionRoot;
       if(batch){if(!groups.has(material))groups.set(material,[]);groups.get(material).push(mesh);}
       return mesh;
     }
@@ -1206,7 +1207,7 @@
     // A distant tree line continues the scenery past the walkable boundary.
     // Keep it below the sight line at the shallowest supported camera angle.
     const bounds=map.bounds;
-    slab((bounds.minX+bounds.maxX)/2,-.65,(bounds.minZ+bounds.maxZ)/2,
+    slab((bounds.minX+bounds.maxX)/2,map.terrain?-8:-.65,(bounds.minZ+bounds.maxZ)/2,
       bounds.maxX-bounds.minX+94,.3,bounds.maxZ-bounds.minZ+94,forestFloor);
     for(let side=0;side<4;side++)for(let i=0;i<20;i++){
       const horizontal=side<2, sign=side%2===0?-1:1;
@@ -1325,7 +1326,7 @@
     // Merge each ruin by material. Its visible outline and collision both use the manifest footprint.
     let parts=[];
     function place(mesh,x,y,z,material){
-      mesh.position.set(x,y,z);mesh.material=material;mesh.isPickable=false;
+      mesh.position.set(x,y+(map.terrain?terrainHeight(map.terrain,x,z):0),z);mesh.material=material;mesh.isPickable=false;
       mesh.parent=expansionRoot;parts.push(mesh);return mesh;
     }
     function block(x,y,z,width,height,depth,material){
@@ -1355,7 +1356,7 @@
       }
       block(x,y+width*.092,z,.3,.4,depth+.4,templeGold);
     }
-    block(0,-.82,-20,174,.6,179,forestFloor);
+    block(0,map.terrain?-8:-.82,-20,174,.6,179,forestFloor);
     for(let i=0;i<21;i++)for(const sign of [-1,1]){
       const x=-61+i*6.2,z=sign===1?45+(i*5)%8:-84-(i*5)%8;
       column(x,1.25,z,3.4,5+i%3,.3,forestLeaf,6);
@@ -1521,6 +1522,8 @@
     spirit_rift: ["#686190","#b0a1cc","#857daf","#64567f","#c4abff","#373458"],
   };
   const regionPaints=new Map();
+  const forestReliefRoad=mat("forest ridge trail","#968763","#322f1b");
+  const templeReliefRoad=mat("temple terrace paving","#ae9874","#3a3126");
   const civicRoad=mat('protected jade paving','#8eb6a0','#243e38');
   function regionPaint(id) {
     if(!regionStyles[id])return null;
@@ -1572,11 +1575,34 @@
     for(const [id,door] of castleDoors)door.setEnabled(Boolean(local?.inField && local.phase==="battle" && gates?.[id]?.closed));
     if(provinceDoor && !provinceDoor.isDisposed())provinceDoor.setEnabled(territoryState?.local?.site===activeMapId && territoryState.local.gateClosed===true);
   }
+  let appliedVillageTerrain;
+  function alignVillage(terrain){
+    if(terrain===appliedVillageTerrain)return;
+    appliedVillageTerrain=terrain;
+    for(const item of villageBatches){
+      const {mesh,anchors}=item,kind=B.VertexBuffer.PositionKind;
+      if(!item.base)item.base=mesh.getVerticesData(kind).slice();
+      const points=item.base.slice(),inv=mesh.computeWorldMatrix(true).clone().invert();
+      const up=B.Vector3.TransformNormal(B.Axis.Y,inv);
+      let v=0;
+      for(const a of anchors){
+        const dy=terrain?terrainHeight(terrain,a.x,a.z):0;
+        for(let k=0;k<a.count;k++,v+=3){points[v]+=up.x*dy;points[v+1]+=up.y*dy;points[v+2]+=up.z*dy;}
+      }
+      mesh.setVerticesData(kind,points);mesh.refreshBoundingInfo();
+    }
+  }
+  function playerLayer(p){
+    if(!p)return NaN;
+    const t=worldDefinitions?.[activeMapId]?.terrain;
+    return Number(p.y)-(t?terrainHeight(t,p.x,p.z):0);
+  }
   function terrainCell(cuts,v){
     const i=cuts.findIndex(n=>n>v);
     return i<0?cuts.length-2:Math.max(0,i-1);
   }
   function terrainHeight(t,x,z){
+    x=Math.max(t.xs[0],Math.min(t.xs.at(-1),x));z=Math.max(t.zs[0],Math.min(t.zs.at(-1),z));
     const i=terrainCell(t.xs,x),j=terrainCell(t.zs,z);
     const u=(x-t.xs[i])/(t.xs[i+1]-t.xs[i]),v=(z-t.zs[j])/(t.zs[j+1]-t.zs[j]);
     const a=t.heights[j][i],b=t.heights[j][i+1],c=t.heights[j+1][i],d=t.heights[j+1][i+1];
@@ -1620,8 +1646,9 @@
   }
   const reliefDisk=(x,z,r,n)=>Array.from({length:n},(_,i)=>[x+r*Math.cos(i*2*Math.PI/n),z+r*Math.sin(i*2*Math.PI/n)]);
   function buildReliefRoads(map,paint){
-    const patches=[],r=2;
-    for(const path of map.paths||[]){
+    const roads=[],safe=[],r=2;
+    for(const [index,path] of (map.paths||[]).entries()){
+      const patches=map.strategic?.safeRoads?.includes(index)?safe:roads;
       for(let i=0;i<path.length;i++){
         const a=path[i];patches.push(reliefDisk(a.x,a.z,r,12));
         if(!i)continue;
@@ -1631,7 +1658,8 @@
         patches.push([[a.x+nx,a.z+nz],[a.x-nx,a.z-nz],[b.x-nx,b.z-nz],[b.x+nx,b.z+nz]]);
       }
     }
-    reliefPatches("graded hunt roads",map.terrain,patches,.045,paint.road);
+    reliefPatches("graded hunt roads",map.terrain,roads,.045,paint.road);
+    reliefPatches("protected roads",map.terrain,safe,.055,civicRoad);
   }
   function buildReliefContours(map,paint){
     const t=map.terrain,lines=[];
@@ -1779,7 +1807,7 @@
       const relay=map.strategic.relay,bounds=map.bounds,river=map.strategic.riverCity;
       const huntTrail=map.strategic.huntTrail;
       if(relay || huntTrail || river)box((bounds.minX+bounds.maxX)/2,map.reliefLabels?-12:-1.05,(bounds.minZ+bounds.maxZ)/2,bounds.maxX-bounds.minX+56,.6,bounds.maxZ-bounds.minZ+56,deep);
-      else if(!castle)box(0,-1.05,-16,220,.6,228,deep);
+      else if(!castle)box(0,map.reliefLabels?-12:-1.05,-16,220,.6,228,deep);
       if(relay || huntTrail || river){
         for(let i=0;i<22;i++)for(const side of [-1,1]){
           const t=(i+.5)/22,h=3+5*noise(i,51);
@@ -1811,9 +1839,15 @@
         const rails=map.paths[map.strategic.railPath];
         for(let i=1;rails && i<rails.length;i++){
           const a=rails[i-1],b=rails[i],dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz);
-          const angle=Math.atan2(dx,dz),mx=(a.x+b.x)/2,mz=(a.z+b.z)/2;
+          const angle=Math.atan2(dx,dz);
           for(const k of [-.63,.63]){
-            box(mx+k*dz/len,.27,mz-k*dx/len,.13,.1,len+.08,stone).rotation.y=angle;
+            const steps=map.terrain?Math.ceil(len/3):1;
+            for(let j=0;j<steps;j++){
+              const u=j/steps,v=(j+1)/steps,rx=a.x+dx*u+k*dz/len,rz=a.z+dz*u-k*dx/len;
+              const ex=a.x+dx*v+k*dz/len,ez=a.z+dz*v-k*dx/len,dy=elevation(ex,ez)-elevation(rx,rz);
+              const rail=box((rx+ex)/2,.27,(rz+ez)/2,.13,.1,Math.hypot(len/steps,dy)+.08,stone);
+              rail.rotation.y=angle;rail.rotation.x=-Math.atan2(dy,len/steps);
+            }
           }
           for(let d=1;d<len;d+=2.6)box(a.x+dx*d/len,.21,a.z+dz*d/len,1.86,.12,.29,darkWood).rotation.y=angle;
         }
@@ -2575,11 +2609,13 @@
     const bounds=mapBounds();
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
-    const map=worldDefinitions?.[activeMapId];ground.setEnabled(!map?.terrain);if(!map)return;
-    if(map.terrain)buildTerrainGround(map,paint);
+    const map=worldDefinitions?.[activeMapId];alignVillage(worldDefinitions?.ritual_village?.terrain);
+    ground.setEnabled(!map?.terrain);if(!map)return;
+    const terrainPaint=paint || {floor:ground.material,road:inTemple?templeReliefRoad:activeMapId==="forbidden_forest"?forestReliefRoad:civicRoad,stone:inTemple?templeStone:forestStone,court:inTemple?templeCourt:forestClearing};
+    if(map.terrain)buildTerrainGround(map,terrainPaint);
     else (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic || map.huntTrail)));
     for(const camp of map.camps||[]){
-      if(map.reliefLabels)reliefPatches("terraced hunt clearing",map.terrain,[reliefDisk(camp.x,camp.z,12,32)],.023,paint.court);
+      if(map.reliefLabels)reliefPatches("terraced hunt clearing",map.terrain,[reliefDisk(camp.x,camp.z,inTemple?10:12,32)],.023,terrainPaint.court);
       else {
         const clearing=inTemple ? B.MeshBuilder.CreateGround("temple court",{width:21,height:19},scene) : B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
         // Between the soil (-.12) and trail tops (+.015), so their colors never
@@ -2605,9 +2641,9 @@
       for(const obstacle of map.obstacles.filter(o=>o.id.startsWith("north-")||o.id==="west-stone")){
         const tree=obstacle.id.includes("grove");
         const mesh=tree?B.MeshBuilder.CreateCylinder("forest boundary tree",{height:7,diameter:obstacle.radius*2,tessellation:7},scene):B.MeshBuilder.CreateSphere("forest stone",{diameter:obstacle.radius*2,segments:5},scene);
-        mesh.parent=expansionRoot;mesh.position.set(obstacle.x,tree?3.5:obstacle.radius*.5,obstacle.z);mesh.material=tree?forestLeaf:forestStone;mesh.isPickable=false;
+        mesh.parent=expansionRoot;mesh.position.set(obstacle.x,(tree?3.5:obstacle.radius*.5)+(map.terrain?terrainHeight(map.terrain,obstacle.x,obstacle.z):0),obstacle.z);mesh.material=tree?forestLeaf:forestStone;mesh.isPickable=false;
       }
-      shrineRuin(0,-88,expansionRoot,1.15);
+      shrineRuin(0,-88,expansionRoot,1.15,map.terrain?terrainHeight(map.terrain,0,-88):0);
       expansionLabel("ศาลร้างปลายป่า",0,-88,12,8.6);
       if(!map.portals?.some(p=>p.targetMapId==="bound_temple"))expansionLabel("ทางสู่วัดร้าง · ยังไม่เปิด",-48,-84);
       if(!map.portals.some(p=>p.targetMapId==="drowned_marsh"))expansionLabel("ทางสู่บึงพราย · ยังไม่เปิด",48,-84);
@@ -5673,7 +5709,7 @@
       ? Number(ownServerCharacter()?.y || 0)
       : Number(getLocalAvatar()?.targetY || 0);
     const terrain=worldDefinitions?.[activeMapId]?.terrain;
-    marker.position.y = (terrain?terrainHeight(terrain,target.x,target.z):currentAltitude)+.105;
+    marker.position.y=(terrain?terrainHeight(terrain,target.x,target.z)+(playerLayer(ownServerCharacter())||0):currentAltitude)+.105;
     marker.setEnabled(true);
     pendingClimb = null;
     selectedPkTargetId = null;
@@ -5840,10 +5876,11 @@
     if (!button) return;
     const player=ownServerCharacter();
     const terrain=worldDefinitions?.[activeMapId]?.terrain;
-    button.disabled=Boolean(terrain);
-    const onWall=!terrain && Number(player?.y)>activeFort.height-0.12;
+    const slopeOnly=terrain && activeMapId!=="ritual_village" && !worldDefinitions[activeMapId].strategic?.rampart;
+    button.disabled=Boolean(slopeOnly);
+    const onWall=Math.abs(playerLayer(player)-activeFort.height)<.15;
     const label=button.querySelector("span:last-child");
-    if(label)label.textContent=terrain?"เดินทางลาด":onWall?"ลงกำแพง":worldDefinitions?.[activeMapId]?.strategic?.rampart?"ขึ้นกำแพง":"ปีน";
+    if(label)label.textContent=slopeOnly?"เดินทางลาด":onWall?"ลงกำแพง":worldDefinitions?.[activeMapId]?.strategic?.rampart?"ขึ้นกำแพง":"ปีน";
     button.classList.toggle("climb-active", Boolean(player?.combatState==="climbing"));
   }
   function requestClimb(stairId) {
@@ -5855,7 +5892,7 @@
     if (!me || me.alive===false) {toast("ตัวละครยังไม่พร้อม");return;}
     if (me.combatState==="climbing") {toast("กำลังปีนกำแพง");return;}
     if (me.flying) {toast("ลงจอดก่อนจึงใช้บันไดได้");return;}
-    const onWall=Math.abs(Number(me.y)-activeFort.height)<.15;
+    const onWall=Math.abs(playerLayer(me)-activeFort.height)<.15;
     const direction=onWall?"down":"up";
     const rampart=worldDefinitions?.[activeMapId]?.strategic?.rampart;
     let stairs=rampart?.stairs;
@@ -6211,7 +6248,7 @@
       }
       const client = new window.Colyseus.Client(endpoint);
       const guestToken = getOrCreateGuestToken(endpoint);
-      const opts={guestToken,characterSlot:requestedSlot,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1};
+      const opts={guestToken,characterSlot:requestedSlot,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1};
       let transferFailed=false;
       if(transfer?.roomId){
         try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
@@ -6281,7 +6318,7 @@
             local.phase==="battle"?"⚑ ศึกยึดธง · "+warTime(local.seconds):"⚑ ด่านกิลด์ · "+warPhase(local.phase);
           if(fighting && local.pilot){
             const v=local.pilot,me=ownServerCharacter();
-            const node=me?.alive && Math.abs(me.y)<.1 && worldDefinitions?.[activeMapId]?.strategic?.objectives?.find(p=>Math.hypot(p.x-me.x,p.z-me.z)<=7);
+            const node=me?.alive && Math.abs(playerLayer(me))<.1 && worldDefinitions?.[activeMapId]?.strategic?.objectives?.find(p=>Math.hypot(p.x-me.x,p.z-me.z)<=7);
             const point=node && v.points.find(p=>p.id===node.id);
             const throne=node?.id===7 && v.throne && local.seconds<=900;
             const pct=point?Math.abs(point.progress):throne?Math.floor(v.throne.progress[local.side]/1200):0;
@@ -7036,7 +7073,7 @@
     } else if(hitMesh?.metadata?.elevatedTop && picked.pickedPoint) {
       const me=ownServerCharacter();
       if ((mode === "live" ? me?.flying : demoFlying) ||
-          (me && Math.abs(Number(me.y)-activeFort.height)<.15)) {
+          (me && Math.abs(playerLayer(me)-activeFort.height)<.15)) {
         pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
       } else {
         requestClimb();
@@ -9056,7 +9093,7 @@
     const portal=activePortal(), authoritative=ownServerCharacter();
     const siege=$("siegeGateButton"),localWar=territoryState?.local,castle=activeMapId==="tri_wiang_castle";
     const riverWar=localWar?.river;
-    const canUse=localWar?.site===activeMapId && localWar.inField && localWar.phase==="battle" && authoritative?.alive && Math.abs(authoritative.y)<.1;
+    const canUse=localWar?.site===activeMapId && localWar.inField && localWar.phase==="battle" && authoritative?.alive && Math.abs(playerLayer(authoritative))<.1;
     const gate=canUse && worldDefinitions[activeMapId].strategic?.rampart?.gates.find((g,i)=>{
       const b=g.box;
       return (castle || riverWar || i===0) && authoritative.x>=b.x-2.5 && authoritative.x<=b.x+b.width+2.5 && authoritative.z>=b.z-2.5 && authoritative.z<=b.z+b.length+2.5;
@@ -9082,7 +9119,7 @@
       target.y += (me.y + .65 - target.y) * follow;
       target.z += (me.z + 1.5 - target.z) * follow;
     }
-    enemy.position.y=.9+Math.sin(elapsed*1.8)*.07;
+    enemy.position.y=.9+(Number(room?.state?.monster?.y)||0)+Math.sin(elapsed*1.8)*.07;
     // Monster orientation also comes from the server's AI decision.
     if (mode === "live" && Number.isFinite(serverMonsterFacing)) {
       const turn = Math.atan2(Math.sin(serverMonsterFacing - enemy.rotation.y),

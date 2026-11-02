@@ -3,6 +3,7 @@ import { isFlightAltitude, isOnGround, isOnPlatform, isOnTop, touchesWallBody, r
 import { groundSample, terrainRayClear, RIDGE_ENABLED, RIDGE_PASS, makeRidgePass, type GroundTerrain } from "./GroundTerrain.js";
 import { TEMPLE_ID, TEMPLE_GATE, TEMPLE_MAP } from "./TempleMap.js";
 import { ATLAS_MAPS, MARSH_GATE, atlasPortals } from "./WorldAtlas.js";
+import { originalRelief } from "./AtlasRelief.js";
 import { makeHubs, onRampart, type Province } from "./StrategicProvinces.js";
 export type WorldWall = Readonly<{x:number;z:number;width:number;length:number;rampart?:boolean}>;
 export function segmentIntersectsExpandedWall(
@@ -73,7 +74,7 @@ export const VILLAGE_ARRIVALS = [
   {x:-2,z:0}, {x:-4,z:0}, {x:0,z:2}, {x:2,z:2}, {x:-2,z:2}, {x:0,z:-2},
 ] as const;
 export const WORLD_ROOM_CAPACITY = VILLAGE_ARRIVALS.length;
-export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.freeze<Record<string, WorldMapDefinition>>({
+const maps: Record<string,WorldMapDefinition>={
   ...(WORLD_EXPANSION ? {[TEMPLE_ID]:TEMPLE_MAP,...ATLAS_MAPS,...makeHubs(atlasPortals), ...(RIDGE_ENABLED?{[RIDGE_PASS]:makeRidgePass(atlasPortals(RIDGE_PASS))}:{})} : {}),
   ritual_village: {
     id: "ritual_village", name: "หมู่บ้านอาคม",
@@ -130,7 +131,8 @@ export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.f
       targetMapId: "ritual_village", targetSpawn: { x: -4, y: 0, z: -15 } },
       ...(WORLD_EXPANSION ? [{id:"forest_to_temple",...TEMPLE_GATE,targetMapId:TEMPLE_ID,targetSpawn:TEMPLE_MAP.spawn},...atlasPortals("forbidden_forest")] : [])],
   },
-});
+};
+export const WORLD_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freeze(Object.fromEntries(Object.entries(maps).map(([id,map])=>[id,WORLD_EXPANSION?{...map,...originalRelief(map)}:map])));
 export function getWorldMap(mapId: string): WorldMapDefinition | undefined {
   return Object.prototype.hasOwnProperty.call(WORLD_MAPS, mapId) ? WORLD_MAPS[mapId] : undefined;
 }
@@ -153,14 +155,16 @@ export function groundAt(mapId:string,x:number,z:number){
   const t=getWorldMap(mapId)?.terrain;
   return t?groundSample(t,x,z).height:0;
 }
-export function onMapGround(p:{mapId:string;x:number;y:number;z:number}){return isOnGround(p.y-groundAt(p.mapId,p.x,p.z));}
+export function surfaceLayer(p:{mapId:string;x:number;y:number;z:number}){return p.y-groundAt(p.mapId,p.x,p.z);}
+export function onMapGround(p:{mapId:string;x:number;y:number;z:number}){return isOnGround(surfaceLayer(p));}
 export function isWorldSegmentClear(mapId:string, from:{x:number;z:number;y?:number}, to:{x:number;z:number;y?:number}):boolean {
-  if(!WORLD_EXPANSION || mapId===DEFAULT_MAP_ID)return true;
+  if(!WORLD_EXPANSION)return true;
   const map=getWorldMap(mapId);if(!map)return false;
   if(map.terrain){
-    const body=(p:typeof from)=>({...p,y:(p.y??groundAt(mapId,p.x,p.z))+1});
+    const body=(p:typeof from)=>({x:p.x,z:p.z,y:(p.y??groundAt(mapId,p.x,p.z))+1});
     if(!terrainRayClear(map.terrain,body(from),body(to)))return false;
   }
+  if(mapId===DEFAULT_MAP_ID)return true;
   const dx=to.x-from.x,dz=to.z-from.z,length=dx*dx+dz*dz;
   if(map.walls?.some(w=>segmentIntersectsExpandedWall(from,to,w,0)))return false;
   return map.obstacles.every(o=>{
@@ -172,7 +176,10 @@ export function provinceShotClear(map:WorldMapDefinition,from:WorldPoint,to:Worl
   const r=map.strategic?.rampart;
   if(map.terrain && !terrainRayClear(map.terrain,from,to))return false;
   if(!r)return isWorldSegmentClear(map.id,from,to);
-  const hits=(b:WorldWall,base:number,top:number)=>rayHitsBox(from,to,{x:b.x,z:b.z,y:base},{x:b.x+b.width,z:b.z+b.length,y:top});
+  const hits=(b:WorldWall,base:number,top:number)=>{
+    const y=map.terrain?groundSample(map.terrain,b.x+b.width/2,b.z+b.length/2).height:0;
+    return rayHitsBox(from,to,{x:b.x,z:b.z,y:y+base},{x:b.x+b.width,z:b.z+b.length,y:y+top});
+  };
   // The empty passage under each lintel is distinct from the solid deck above it.
   if(map.walls?.some(b=>hits(b,0,b.rampart?r.height:3.4)))return false;
   if(r.gates.some((g,i)=>hits(g.box,(typeof closedGate==="boolean"?i===0 && closedGate:closedGate.has(g.id))?0:r.height-.55,r.height)))return false;
@@ -187,8 +194,9 @@ export function isSafeWorldPoint(map: WorldMapDefinition, point: WorldPoint, rad
     const offset=point.y-surface.height;
     if(isOnGround(offset)){
       if(surface.grade>map.terrain.maxGrade)return false;
-      point={...point,y:0};
-    }else if(!map.region?.noFlight && isFlightAltitude(offset))point={...point,y:offset};
+      point={x:point.x,z:point.z,y:0};
+    }else if(isOnPlatform(offset) && (map.strategic?.rampart || map.id===DEFAULT_MAP_ID))point={x:point.x,z:point.z,y:offset};
+    else if(!map.region?.noFlight && isFlightAltitude(offset))point={x:point.x,z:point.z,y:offset};
     else return false;
   }
   const rampart=map.strategic?.rampart;

@@ -5,7 +5,7 @@ import {writeFile} from "node:fs/promises";
 import path from "node:path";
 import {Client} from "@colyseus/sdk";
 const url=process.env.MONTRA_TEST_URL,dir=process.env.MONTRA_CHARACTER_DIR;
-if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url??"") || !/^montra-monster-test-/.test(path.basename(dir??"")))throw Error("Requires isolated B01 test server");
+if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url??"") || !/^montra-(?:monster|original)-test-/.test(path.basename(dir??"")))throw Error("Requires isolated B01 test server");
 const compiled=new URL("./build/rooms/GuildStore.js",import.meta.url);
 const {GuildStore}=await import(existsSync(compiled)?compiled.href:new URL("./src/rooms/GuildStore.ts",import.meta.url).href);
 const city="sam_lan_estuary",sdk=new Client(url),rooms=new Set(),nap=ms=>new Promise(r=>setTimeout(r,ms));
@@ -14,7 +14,7 @@ async function until(fn,label,timeout=12000){
   const end=Date.now()+timeout;while(Date.now()<end){const v=fn();if(v)return v;await nap(65);}throw Error("timeout "+label);
 }
 async function join(i,roomId,ticket,ver=1){
-  const opt={guestToken:token(i),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,riverCityVersion:ver,warTicket:ticket};
+  const opt={guestToken:token(i),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,originalReliefVersion:1,riverCityVersion:ver,warTicket:ticket};
   const r=roomId?await sdk.joinById(roomId,opt):await sdk.create("my_room",opt);rooms.add(r);
   const c={i,r,events:[],me:()=>r.state.players?.get(r.sessionId),local:null};
   r.onMessage("*",(type,data)=>{c.events.push({type,data});if(type==="territory_state")c.local=data.local;});

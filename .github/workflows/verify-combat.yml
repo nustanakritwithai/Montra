@@ -33,6 +33,8 @@ jobs:
           cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
           cp deploy/combat/TempleMap.ts combat-verify/src/rooms/TempleMap.ts
           cp deploy/combat/AtlasRelief.ts combat-verify/src/rooms/AtlasRelief.ts
+          cp deploy/combat/original-relief.test.ts combat-verify/src/rooms/original-relief.test.ts
+          cp deploy/combat/original-relief-integration.mjs combat-verify/original-relief-integration.mjs
           cp deploy/combat/atlas-relief.test.ts combat-verify/src/rooms/atlas-relief.test.ts
           cp deploy/combat/atlas-relief-integration.mjs combat-verify/atlas-relief-integration.mjs
           cp deploy/combat/GroundTerrain.ts combat-verify/src/rooms/GroundTerrain.ts
@@ -331,6 +333,20 @@ jobs:
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4110) 2>/dev/null; then break; fi; sleep 0.25; done
           timeout 35s node party-integration.mjs || { cat party-server.log; exit 1; }
 
+      - name: Original worlds, wall layers and settlement saves
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4119 MONTRA_ORIGINAL_RELIEF=1 MONTRA_WORLD_EXPANSION=1 MONTRA_CASTLE_PILOT=1 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_TEST_URL=http://127.0.0.1:4119 MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-original-test-XXXXXX)"
+          npx tsx --test src/rooms/original-relief.test.ts
+          node --import tsx src/index.ts > original-world-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4119) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 140s node original-relief-integration.mjs || { cat original-world-server.log; exit 1; }
+          timeout 780s node --import tsx river-city-integration.mjs || { cat original-world-server.log; exit 1; }
+
       - name: Existing hunt terrain, ground AI and flight saves
         shell: bash
         working-directory: combat-verify
@@ -424,7 +440,6 @@ jobs:
           MONTRA_ATLAS_STAGE=ridge-naga timeout 300s node world-atlas-integration.mjs
           MONTRA_ATLAS_STAGE=endgame timeout 300s node world-atlas-integration.mjs
           npx tsx --test src/rooms/river-city.test.ts
-          timeout 780s node --import tsx river-city-integration.mjs
           timeout 85s node temple-integration.mjs
           timeout 50s node forest-guardian-integration.mjs
           kill "$SERVER_PID"
