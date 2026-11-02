@@ -16,6 +16,7 @@ import { DEFAULT_MAP_ID, getWorldMap } from "./WorldMaps.js";
 import { emptyAllocations, PROGRESSION, validateAllocations, type Allocations } from "./Progression.js";
 import { EconomyStore } from "./EconomyStore.js";
 import { validateSwordTree, type SwordTree } from "./SkillCatalog.js";
+import { validateMuayBook, validateMuayCooldowns, type MuayBook, type MuayCooldowns } from "./MuayRules.js";
 
 import { parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 
@@ -43,6 +44,9 @@ export type CharacterSnapshot = {
   classSkillReadyAt?: number;
   talismanReadyAt?: number;
   swordTree?: SwordTree;
+  muayWrapGranted?: boolean;
+  muayCooldowns?: MuayCooldowns;
+  muayBook?: MuayBook;
   stamina?: number;
   /** Undefined only when loading a legacy S2/three-slot snapshot for migration. */
   inventory?: InventorySnapshot;
@@ -121,6 +125,9 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
     if (readyAt !== undefined && (typeof readyAt !== "number" || !Number.isSafeInteger(readyAt) || readyAt < 0)) throw new Error("invalid_skill_cooldown");
   }
   const swordTree = value.swordTree === undefined ? undefined : validateSwordTree(value.swordTree, value.level as number);
+  if (value.muayWrapGranted !== undefined && typeof value.muayWrapGranted !== "boolean") throw new Error("invalid_muay_grant");
+  const muayCooldowns = value.muayCooldowns === undefined ? undefined : validateMuayCooldowns(value.muayCooldowns);
+  const muayBook = value.muayBook === undefined ? undefined : validateMuayBook(value.muayBook,value.level as number);
   if (value.inventory !== undefined) validateInventory(value.inventory);
   const statAllocations = value.statAllocations === undefined ? emptyAllocations() :
     validateAllocations(value.statAllocations, value.level as number);
@@ -131,7 +138,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
       (typeof value.mapId !== "string" || !getWorldMap(value.mapId))) {
     throw new Error("unknown_character_map");
   }
-  return { ...(value as CharacterSnapshot), mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, swordTree };
+  return { ...(value as CharacterSnapshot), mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, swordTree, muayCooldowns, muayBook };
 }
 
 export class CharacterStore {

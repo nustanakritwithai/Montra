@@ -74,7 +74,7 @@
   };
   let toastTimer;
   function positionSwordToast() {
-    const status=$("swordStatus"), hotbar=$("swordHotbar"), anchor=status && !status.hidden ? status : hotbar && !hotbar.hidden ? hotbar : null;
+    const response=$("grappleResponse"), status=$("swordStatus"), hotbar=$("swordHotbar"), muayStatus=$("muayStatus"), muay=$("muayHotbar"), anchor=response && !response.hidden ? response : status && !status.hidden ? status : hotbar && !hotbar.hidden ? hotbar : muayStatus && !muayStatus.hidden ? muayStatus : muay && !muay.hidden ? muay : null;
     if (!anchor) { ui.toast.style.removeProperty("bottom"); return; }
     const game=$("game").getBoundingClientRect(), area=anchor.getBoundingClientRect();
     ui.toast.style.bottom=Math.max(0,game.bottom-area.top+8)+"px";
@@ -2198,7 +2198,7 @@
   function requestForestAttack(id) {
     const target=room?.state?.monsters?.get?.(id);
     if(!target||!target.alive||target.mapId!==activeMapId){toast("เป้าหมายไม่อยู่ในพื้นที่");return;}
-    selectedForestTarget=id;selectedPkTargetId=null;syncPKHud();marker.setEnabled(false);
+    selectedForestTarget=id;spellTargetId=id;selectedPkTargetId=null;syncPKHud();marker.setEnabled(false);
     if(targetedSkill) castAtTarget(id);
     else try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }
     updateMonsterUI(target.hp,target.maxHp,target.alive);ui.monsterHint.textContent=monsterName(target,id)+" · Lv "+target.level;
@@ -3211,6 +3211,7 @@
   const SHRINE_SHARD = "shrine_shard";
   const shardName = "เศษตราผู้พิทักษ์";
   const WEAPON_META = Object.freeze({
+    muay_wraps: { name: "ผ้าคาดเชือก", symbol: "✊", bonus: "ผ้าพันมือสำหรับวิชามวย · โจมตีประชิด +4" },
     shrine_glaive: { name: "ง้าวจันทร์ผู้พิทักษ์", symbol: "☾", bonus: "หายาก · iLv 12 · ประชิด +10 เมื่อสู้มอนสเตอร์ / +8 ใน PvP" },
     ritual_dagger: { name: "มีดหมอ", symbol: "🗡️", bonus: "โจมตีประชิด +4" },
     arcane_sword: { name: "กระบี่อาคม", symbol: "⚔️", bonus: "โจมตีประชิด +8" },
@@ -5049,6 +5050,7 @@
         return;
       }
       if (!enemy.isEnabled()) { toast("มอนสเตอร์ตายแล้ว · รอเกิดใหม่"); return; }
+      spellTargetId=MONSTER_ID;
       marker.setEnabled(false);
       try {
         room.send("attack", { targetId: MONSTER_ID });
@@ -5083,7 +5085,7 @@
     territoryState=null;$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
-    possessed=false;syncPossessionButton();syncTalismanButton(null);syncSwordTreeButton(null);syncSwordHotbar();swordCombo=0; swordComboUntil=0; swordCounterUntil=0; syncSwordStatus(null);$("classSkill").hidden=true;
+    possessed=false;syncPossessionButton();syncTalismanButton(null);syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);$("classSkill").hidden=true;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false;
@@ -5169,6 +5171,17 @@
     return id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get(id);
   }
   function castAtTarget(id) {
+    if (targetedSkill === "muay") {
+      const monster=monsterForSpell(id), opponent=!monster && room?.state?.players?.get?.(id), target=monster || opponent;
+      if (!id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId) { toast("เลือกมอนสเตอร์หรือผู้เล่นที่ยังต่อสู้ได้"); return; }
+      if(opponent && partyState?.members?.some(member=>member.sessionId===id)) { toast("ใช้วิชามวยกับสมาชิกปาร์ตี้ไม่ได้"); return; }
+      if (!selectedMuaySkill) return;
+      spellTargetId=id;
+      selectedPkTargetId=opponent ? id : null;
+      syncPKHud();
+      room.send("muay_skill",{skillId:selectedMuaySkill,targetId:id});
+      return;
+    }
     if (targetedSkill === "sword") {
       if (!id || !selectedSwordSkill) return;
       spellTargetId=id;
@@ -5464,6 +5477,7 @@
     if (enemyPlayer.alive === false) { toast("เป้าหมายตายแล้ว · รอเกิดใหม่"); return; }
 
     selectedPkTargetId = targetId;
+    spellTargetId = targetId;
     marker.setEnabled(false);
     syncPKHud();
     try {
@@ -5575,8 +5589,12 @@
     syncTalismanButton(mine);
     syncSwordTreeButton(mine);
     syncSwordHotbar();
+    syncMuayHotbar();
+    syncMuayComboStatus(mine);
+    $("muayBookButton").hidden=!(mode==="live" && mine?.pathId==="muay_boran" && state.muayBookCatalog);
     syncSwordStatus(mine);
     if (drawerActive === "swordTree") renderSwordTree();
+    if (drawerActive === "muayBook") renderMuayBook();
     if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
     if (drawerActive === "character") renderProgressionProfile();
     if (drawerActive === "party") renderParty();
@@ -5941,6 +5959,54 @@
       joined.onMessage("build_selected", () => {
         if (room === joined) toast("บันทึกสายอาชีพและเผ่าแล้ว");
       });
+      joined.onMessage("muay_guarded", data => { if (room===joined) { muayCounterUntil=performance.now()+3000; const label=data?.kind==="parry" ? "ปัด" : data?.kind==="evade" ? "เบี่ยงหลบ" : "ป้อง"; toast(label+"สำเร็จ · วิชาสวนพร้อม 3 วินาที"); syncMuayHotbar(); } });
+      joined.onMessage("muay_counter_cleared", () => { if (room===joined) { muayCounterUntil=0; syncMuayHotbar(); } });
+      joined.onMessage("muay_defense", data => { if(room===joined) {
+        const label=data?.kind==="parry" ? "ปัด" : data?.kind==="evade" ? "เบี่ยงหลบ" : "";
+        if(!label)return;
+        const message={start:"ตั้งจังหวะ"+label+"ด้านหน้า",success:label+"สำเร็จ · สวนได้",miss:label+"พลาดจังหวะ",cancelled:""}[data?.phase];
+        if(message===undefined)return;
+        muayDefenseMessage=message;muayDefenseUntil=performance.now()+(data.phase==="start" ? Math.min(600,Math.max(0,Number(data.durationMs)||0)) : message ? 2000 : 0);
+        syncMuayComboStatus(ownServerCharacter());
+      } });
+      joined.onMessage("muay_combo", data => { if(room===joined) {
+        muayComboCount=Number.isInteger(data?.count) ? Math.max(0,Math.min(3,data.count)) : 0;
+        muayComboComplete=data?.completed===true && muayComboCount===3;
+        muayComboNext=typeof data?.next==="string" ? data.next : "";
+        muayComboBonus=Math.max(0,Math.min(100,Number(data?.bonusPercent)||0));
+        muayComboUntil=performance.now()+(muayComboComplete ? 2000 : Math.min(6000,Math.max(0,Number(data?.durationMs)||0)));
+        syncMuayComboStatus(ownServerCharacter());
+      } });
+      joined.onMessage("muay_interrupt", data => { if(room===joined) {
+        const notice={applied:"ถีบหยุดจังหวะสำเร็จ",resisted:"เป้าหมายต้านการหยุดจังหวะชั่วคราว",immune:"Elite หรือบอสไม่ถูกหยุดจังหวะ",pvp_no_interrupt:"ถีบผู้เล่นสร้างดาเมจโดยไม่หยุดจังหวะ"};
+        if(data?.source==="korat_finish" || data?.source==="korat_press")notice.applied="หมัดโคราชหยุดจังหวะสำเร็จ";
+        if(Object.hasOwn(notice,data?.result)){muayInterruptMessage=notice[data.result];muayInterruptUntil=performance.now()+2000;syncMuayComboStatus(ownServerCharacter());}
+      } });
+      joined.onMessage("muay_followup", data => { if(room===joined) {
+        if(data?.active===true && typeof data.skillId==="string" && typeof data.targetId==="string") {
+          muayFollowupSkill=data.skillId;muayFollowupTarget=data.targetId;muayFollowupUntil=performance.now()+Math.min(4000,Math.max(0,Number(data.durationMs)||0));
+        } else {muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;}
+        syncMuayComboStatus(ownServerCharacter());syncMuayHotbar();
+      } });
+      joined.onMessage("muay_grapple", data => { if(room===joined) {
+        if(data?.phase==="held" && data.role==="holder" && typeof data.targetId==="string") {
+          muayGrabTarget=data.targetId;muayGrabUntil=performance.now()+Math.min(1500,Math.max(0,Number(data.durationMs)||0));
+          toast("จับสำเร็จ · กดจับทุ่มอีกครั้งเพื่อทุ่ม");
+        } else if(data?.phase==="held" && data.role==="victim") {
+          setGrappleResponse("escape",data.durationMs,data.escapeStamina);toast("ถูกจับ · กดแก้จับก่อนถูกทุ่ม");
+        } else if(data?.phase==="released") {
+          if(grappleResponseMode==="escape")setGrappleResponse(null);
+          if(data.reason==="escaped" && muayGrabTarget)toast("เป้าหมายแก้จับหลุดแล้ว");
+          muayGrabTarget="";muayGrabUntil=0;
+        }
+        syncMuayHotbar();
+      } });
+      joined.onMessage("muay_grapple_counter",data=>{if(room===joined){
+        if(data?.active===true){setGrappleResponse("counter",data.durationMs,data.stamina);toast("แก้จับสำเร็จ · กดสวนผู้จับได้");}
+        else if(grappleResponseMode==="counter")setGrappleResponse(null);
+      }});
+      joined.onMessage("muay_skill_used", result => { if (room===joined && result?.playerId===localId && !["teep","grapple","parry","evade"].includes(result.skillId)) toast((muayBookData()?.catalog?.skills?.[result.skillId]?.name || "วิชามวย")+" สำเร็จ"); });
+      joined.onMessage("muay_book_changed", () => { if(room===joined){selectedMuaySkill="";if(targetedSkill==="muay")setTargetedSkill(null);muayBookRenderKey="";renderMuayBook();toast("บันทึกตำรามวยแล้ว");} });
       joined.onMessage("sword_combo", data => { if (room===joined) {
         const count=Number.isInteger(data?.count) ? Math.max(0,Math.min(3,data.count)) : 0;
         const firstFull=count===3 && (swordCombo<3 || performance.now()>=swordComboUntil);
@@ -6125,6 +6191,9 @@
       });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        const muayReasons={muay_inventory_full:"ช่องกระเป๋าเต็ม · เว้น 1 ช่องเพื่อรับผ้าคาดเชือก",muay_class_required:"เลือกอาชีพนักมวยก่อน",muay_wrap_required:"สวมผ้าคาดเชือกก่อนใช้วิชามวย",muay_safe_area:"ออกจากเขตพักก่อนใช้วิชามวย",muay_cooldown:"วิชามวยกำลังฟื้น",muay_counter_required:"รับการโจมตีสำเร็จก่อนสวน",muay_out_of_range:"เข้าใกล้มอนสเตอร์ก่อน",muay_blocked:"มีสิ่งกีดขวางระหว่างทาง",invalid_muay_target:"เลือกมอนสเตอร์เพื่อใช้วิชามวย",invalid_muay_skill:"คำสั่งวิชามวยไม่ถูกต้อง",invalid_muay_book:"คำสั่งตำรามวยไม่ถูกต้อง",muay_book_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อนจัดวิชา",muay_book_level:"เลเวลยังไม่ถึง",muay_book_no_points:"แต้มวิชาไม่พอ",muay_book_training:"ฝึกชกและรับให้ครบก่อน",muay_book_prerequisite:"เรียนวิชาก่อนหน้าก่อน",muay_book_already_learned:"เรียนวิชานี้แล้ว",muay_book_empty:"ยังไม่มีแต้มที่ต้องคืน",muay_book_save_failed:"บันทึกตำรามวยไม่สำเร็จ",muay_skill_locked:"ยังไม่ได้เรียนวิชานี้หรือยังไม่ได้เลือกสำนัก",muay_wrong_school:"เลือกใช้สำนักนี้ก่อนเรียนวิชา",muay_school_selected:"เลือกสำนักนี้อยู่แล้ว"};
+        Object.assign(muayReasons,{muay_controlled:"กำลังจับหรือถูกจับ · รอให้หลุดก่อน",muay_grapple_busy:"เป้าหมายกำลังถูกควบคุม",muay_grapple_resisted:"เป้าหมายต้านการจับชั่วคราว",muay_grapple_immune:"Elite และบอสไม่ถูกจับทุ่ม",muay_grapple_ended:"จังหวะจับหมดแล้ว",muay_grapple_counter_ended:"จังหวะสวนผู้จับหมดแล้ว",invalid_grapple_response:"คำสั่งแก้จับไม่ถูกต้อง",muay_throw_blocked:"พื้นที่ทุ่มมีสิ่งกีดขวางหรือเขตพัก",muay_followup_required:"ใช้วิชาเปิดจังหวะกับเป้าหมายเดิมก่อน",muay_book_mastery:"ฝึกวิชาประจำสำนักและชุดต่อเนื่องกับมอนสเตอร์ให้ครบก่อน",muay_out_of_range:"เข้าใกล้เป้าหมายก่อน"});
+        if (Object.hasOwn(muayReasons,info?.reason)) { toast(muayReasons[info.reason]); return; }
         const swordReasons={invalid_sword_tree:"คำสั่งวิชาไม่ถูกต้อง",sword_class_required:"เลือกอาชีพนักดาบก่อน",sword_tree_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อน",sword_tree_level:"เลเวลยังไม่ถึง",sword_tree_no_points:"แต้มวิชาไม่พอ",sword_tree_prerequisite:"ต้องเรียนวิชาก่อนหน้า",sword_tree_wrong_school:"เลือกสำนักนี้ก่อน",sword_tree_already_learned:"เรียนวิชานี้แล้ว",sword_tree_already_selected:"เลือกสำนักนี้อยู่แล้ว",sword_tree_empty:"ยังไม่มีแต้มวิชาที่ต้องคืน",sword_tree_rate_limited:"กดถี่เกินไป รอสักครู่",sword_tree_save_failed:"บันทึกวิชาไม่สำเร็จ",sword_trial_incomplete:"ฝึกตามเงื่อนไขของครูดาบก่อน",invalid_sword_skill:"คำสั่งสกิลไม่ถูกต้อง",sword_weapon_required:"สวมกระบี่อาคมก่อนใช้วิชาดาบ",sword_skill_locked:"วิชายังไม่พร้อมใช้ในสำนักนี้",sword_skill_cooldown:"วิชาดาบกำลังฟื้น",sword_counter_required:"รับการโจมตีให้สำเร็จก่อนสวน",sword_combo_required:"โจมตีต่อเนื่องให้ครบ 3 จังหวะ",invalid_sword_target:"เลือกเป้าหมายที่ใช้วิชานี้ได้",sword_out_of_range:"เข้าใกล้เป้าหมายก่อนใช้วิชา",sword_blocked:"มีสิ่งกีดขวางระหว่างทาง"};
         if (Object.hasOwn(swordReasons,info?.reason)) { toast(swordReasons[info.reason]); return; }
         const buildReasons = {build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
@@ -7062,6 +7131,113 @@
 
 
   let selectedSwordSkill = "", swordTreeRenderKey = "", swordTreeViewedSchool = "", swordCombo = 0, swordComboUntil = 0, swordCounterUntil = 0;
+  let grappleResponseMode=null,grappleResponseTimer=null;
+  function setGrappleResponse(action,durationMs=0,stamina=0) {
+    clearTimeout(grappleResponseTimer);grappleResponseMode=action;
+    const container=$("grappleResponse"),button=$("grappleResponseButton");
+    container.hidden=!action;
+    if(action) {
+      const cost=Math.max(0,Math.min(100,Number(stamina)||0));
+      button.textContent=(action==="escape" ? "แก้จับ" : "สวนผู้จับ")+" · กำลัง "+cost;
+      button.disabled=false;button.onclick=()=>{
+        if(mode!=="live" || !room || grappleResponseMode!==action)return;
+        button.disabled=true;room.send(action==="escape" ? "grapple_escape" : "grapple_counter",{});
+        setTimeout(()=>{if(grappleResponseMode===action)button.disabled=false;},300);
+      };
+      const duration=Math.max(0,Math.min(action==="escape" ? 1500 : 2500,Number(durationMs)||0));
+      grappleResponseTimer=setTimeout(()=>{if(grappleResponseMode===action)setGrappleResponse(null);},duration);
+    }
+    positionSwordToast();
+  }
+  let selectedMuaySkill="", muayCounterUntil=0, muayHotbarKey="", muayBookRenderKey="", muayBookViewedSchool="", muayGrabTarget="",muayGrabUntil=0,muayFollowupSkill="",muayFollowupTarget="",muayFollowupUntil=0;
+  let muayComboCount=0,muayComboUntil=0,muayComboNext="",muayComboComplete=false,muayComboBonus=0,muayInterruptMessage="",muayInterruptUntil=0,muayDefenseMessage="",muayDefenseUntil=0;
+  const muayMoveLabels={punch:"หมัด",kick:"ถีบ",elbow:"ศอก",knee:"เข่า"};
+  function syncMuayComboStatus(me) {
+    const label=$("muayStatus"), active=mode==="live" && me?.alive && me.pathId==="muay_boran", now=performance.now(), parts=[];
+    if(active && muayComboCount>0 && now<muayComboUntil)parts.push(muayComboComplete ? "คอมโบสำเร็จ · วิชาสุดท้าย +"+muayComboBonus+"%" : "คอมโบ "+muayComboCount+" / 3 · ต่อด้วย "+(muayMoveLabels[muayComboNext] || "วิชามวย"));
+    if(active && now<muayInterruptUntil)parts.push(muayInterruptMessage);
+    if(active && now<muayDefenseUntil)parts.push(muayDefenseMessage);
+    if(active && muayFollowupSkill && now<muayFollowupUntil)parts.push("จังหวะต่อเนื่อง · "+(muayBookData()?.catalog?.skills?.[muayFollowupSkill]?.name || "วิชาขั้นสูง")+" พร้อม");
+    const wasHidden=label.hidden;label.hidden=parts.length===0;
+    const message=parts.join(" · ");
+    const changed=label.textContent!==message;if(changed)label.textContent=message;
+    if(wasHidden!==label.hidden || changed)positionSwordToast();
+  }
+  function muayBookData() {
+    const me=ownServerCharacter();
+    try { const book=JSON.parse(me?.muayBookData || "null"), catalog=JSON.parse(room?.state?.muayBookCatalog || "null");return book && catalog ? {me,book,catalog} : null; } catch {return null;}
+  }
+  function syncMuayHotbar() {
+    const bar=$("muayHotbar"), data=muayBookData(), me=data?.me, active=mode==="live" && me?.pathId==="muay_boran" && typeof me.muayData==="string" && me.muayData!=="";
+    if (!active) {
+      const visible=!bar.hidden; bar.hidden=true; muayHotbarKey="";
+      if(targetedSkill==="muay") { selectedMuaySkill=""; setTargetedSkill(null); }
+      if(visible)positionSwordToast(); return;
+    }
+    let cooldowns={}; try { cooldowns=JSON.parse(me.muayData); } catch { return; }
+    const ids=data.book.slots, timing=ids.map(id=>id ? Math.max(0,Math.ceil(((cooldowns[id]||0)-Date.now())/1000)) : 0);
+    const ready=performance.now()<muayCounterUntil, holding=Boolean(muayGrabTarget && performance.now()<muayGrabUntil), followupReady=Boolean(muayFollowupSkill && performance.now()<muayFollowupUntil), key=JSON.stringify([ids,timing,ready,holding,followupReady,muayFollowupSkill,me.alive,me.equippedWeaponId]);
+    bar.hidden=false; if(key===muayHotbarKey)return; muayHotbarKey=key; bar.replaceChildren();
+    ids.forEach((id,index)=>{
+      const button=document.createElement("button"); button.type="button"; button.className="sword-hotkey";
+      const node=id && data.catalog.skills[id], counter=node?.effect==="counter" || node?.effect==="counter_sidestep";
+      const throwing=id==="grapple" && holding;
+      const finisher=Boolean(id && Object.values(data.catalog.followups || {}).some(item=>item.finisher===id)),finisherReady=finisher && followupReady && id===muayFollowupSkill;
+      button.textContent=node ? (throwing ? "ทุ่ม" : timing[index] ? node.name+" "+timing[index]+" วิ" : node.name+((counter && ready) || finisherReady ? " ✓" : "")) : "ช่องว่าง";
+      button.disabled=!node || !me.alive || (Boolean(timing[index]) && !throwing) || (counter && !ready) || (finisher && !finisherReady);
+      button.onclick=()=>{
+        if(me.equippedWeaponId!=="muay_wraps") { toast("สวมผ้าคาดเชือกก่อนใช้วิชามวย"); return; }
+        if(throwing) {room.send("muay_skill",{skillId:"grapple",targetId:muayGrabTarget});return;}
+        if(["guard","parry","evade"].includes(node.effect)) { room.send("muay_skill",{skillId:id}); return; }
+        selectedMuaySkill=id; setTargetedSkill("muay");
+        const targetId=finisherReady ? muayFollowupTarget : spellTargetId || me.targetId;
+        const target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
+        if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId) castAtTarget(targetId);
+        else toast(node.name+" · แตะมอนสเตอร์หรือผู้เล่นเพื่อใช้วิชา");
+      };
+      bar.append(button);
+    });
+    positionSwordToast();
+  }
+  function openMuayBook() {
+    const data=muayBookData();
+    if(!data || data.me.pathId!=="muay_boran") {toast("เลือกอาชีพนักมวยก่อน");return;}
+    muayBookRenderKey="";muayBookViewedSchool=data.book.school;openDrawer("muayBook","ตำรามวยไทย",'<div id="muayBookBody"></div>');renderMuayBook();
+  }
+  function renderMuayBook() {
+    const data=muayBookData(), container=$("muayBookBody");
+    if(!data || !container)return;
+    if(container.contains(document.activeElement) && document.activeElement.matches("select[data-muay-equip]"))return;
+    const {me,book,catalog}=data;
+    if(!Object.hasOwn(catalog.schools,muayBookViewedSchool))muayBookViewedSchool=book.school;
+    const key=muayBookViewedSchool+"|"+me.level+"|"+me.muayBookData;
+    if(key===muayBookRenderKey)return;muayBookRenderKey=key;
+    const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+    const points=1+Math.floor((Math.min(me.level,100)-1)/2)-book.learned.length;
+    const school=catalog.schools[muayBookViewedSchool], selected=book.school===muayBookViewedSchool;
+    const schoolMastery=book.mastery?.[muayBookViewedSchool] || {technique:0,sequences:0},masteryLabel=catalog.masteryLabels?.[muayBookViewedSchool] || "วิชาประจำสำนัก";
+    const canSelect=me.level>=school.level && book.training.strikes>=school.strikes && book.training.blocks>=school.blocks;
+    const schoolButtons=Object.entries(catalog.schools).map(([id,item])=>'<button type="button" class="sword-school'+(muayBookViewedSchool===id?' selected':'')+'" data-muay-school="'+clean(id)+'" aria-pressed="'+String(muayBookViewedSchool===id)+'">'+clean(item.name)+(book.school===id?' · ใช้อยู่':'')+'</button>').join("");
+    const rows=Object.entries(catalog.skills).filter(([id])=>!catalog.lessons[id] || catalog.lessons[id].school===muayBookViewedSchool).map(([id,node])=>{
+      const lesson=catalog.lessons[id], learned=!lesson || book.learned.includes(id);
+      const requirements=lesson?.requires.filter(req=>!book.learned.includes(req)) || [];
+      const mastery=lesson && catalog.masteryRequirements?.[id],progress=lesson && (book.mastery?.[lesson.school] || {technique:0,sequences:0});
+      const locked=lesson && (!selected || me.level<lesson.level || points<1 || requirements.length>0 || book.training.strikes<lesson.training.strikes || book.training.blocks<lesson.training.blocks || (mastery && (progress.technique<mastery.technique || progress.sequences<mastery.sequences)));
+      const slot=book.slots.indexOf(id);
+      const prerequisite=lesson?.requires?.length ? ' · ต้องเรียน '+lesson.requires.map(req=>clean(catalog.skills[req]?.name || req)).join(', ') : '';
+      const masteryInfo=mastery ? ' · '+clean(catalog.masteryLabels?.[lesson.school] || 'ฝึกสำนัก')+' '+progress.technique+'/'+mastery.technique+(mastery.sequences ? ' · ชุดต่อเนื่อง '+progress.sequences+'/'+mastery.sequences : '') : '';
+      const info=lesson ? 'Lv.'+lesson.level+' · '+clean(lesson.description)+' · '+(node.range ? 'ระยะ '+node.range : 'ใช้กับตนเอง')+' · กำลัง '+node.stamina+' · คูลดาวน์ '+node.cooldownMs/1000+' วิ · ฝึกโจมตี '+lesson.training.strikes+' / รับ '+lesson.training.blocks+prerequisite+masteryInfo : id==="teep" ? 'วิชาพื้นฐาน · พลัง 80% · หยุดจังหวะศัตรูทั่วไป 0.7 วิ · Elite/บอสไม่ถูกหยุด' : id==="parry" ? 'วิชาพื้นฐาน · ปัดด้านหน้า 1 ครั้งใน 0.6 วิ รับดาเมจ 35% และเปิดจังหวะสวน · กำลัง 18 · คูลดาวน์ 9 วิ' : id==="evade" ? 'วิชาพื้นฐาน · ถอย 1.2 หน่วย เบี่ยงแรงด้านหน้า 1 ครั้งใน 0.45 วิ รับดาเมจ 20% และเปิดจังหวะสวน · กำลัง 20 · คูลดาวน์ 8 วิ' : 'วิชาพื้นฐาน · พร้อมใช้';
+      const button=learned ? (lesson && !selected ? '<span class="sword-passive">เรียนแล้ว</span>' : '<label class="sword-slot-label">ช่องลัด <select data-muay-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slot===n?'selected':'')+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>') : '<button type="button" data-muay-learn="'+clean(id)+'" '+(locked?'disabled':'')+'>เรียน 1 แต้ม</button>';
+      return '<article class="sword-node'+(learned?' learned':'')+'"><div><strong>'+clean(node.name)+'</strong><small>'+info+'</small></div>'+button+'</article>';
+    }).join("");
+    const combo=(catalog.combos?.[muayBookViewedSchool] || []).map(move=>muayMoveLabels[move] || move).map(clean).join(' → ');
+    container.innerHTML='<p>วิชาพื้นฐานใช้ได้ทันที · แต้มว่าง '+points+'</p><p>ฝึกโจมตี '+book.training.strikes+' ครั้ง · รับสำเร็จ '+book.training.blocks+' ครั้ง</p><p class="note">เรียน เปลี่ยนสำนัก คืนแต้ม และจัดช่องลัดที่ลานพักหลังพ้นการต่อสู้ 5 วินาที</p><div class="sword-schools">'+schoolButtons+'</div><p>กำลังดูสำนัก '+clean(school.name)+' · '+clean(school.description)+'</p><p>ฝึกสำนัก: '+clean(masteryLabel)+' '+schoolMastery.technique+' ครั้ง · ชุดต่อเนื่อง '+schoolMastery.sequences+' ครั้ง</p><p class="note">'+clean(catalog.masteryGuides?.[muayBookViewedSchool] || '')+'</p><p class="note">นับเมื่อใช้วิชากับมอนสเตอร์สำเร็จ ชุดต่อเนื่องนับเมื่อคอมโบครบหรือใช้วิชาต่อเนื่องประจำสำนักสำเร็จ · PvP ไม่นับ</p><p>คอมโบวิชามวย: '+combo+' · วิชาสุดท้าย +25% กับมอนสเตอร์ / +'+Math.round(((catalog.pvpCombo ?? 1)-1)*100)+'% ใน PvP · ต่อภายใน 6 วิ</p><p class="note">นับเฉพาะวิชามวยที่โจมตีสำเร็จบนเป้าหมายเดิม · PvP ใช้พลังวิชา '+Math.round((catalog.pvpDamage ?? 1)*100)+'% ก่อนหักป้องกัน · ถีบผู้เล่นไม่หยุดจังหวะ</p><p class="note">ต้องการ Lv.'+school.level+' · ฝึกโจมตี '+school.strikes+' / รับ '+school.blocks+'</p><button type="button" id="chooseMuaySchool" class="secondary" '+(selected || !canSelect?'disabled':'')+'>เลือกใช้สำนักนี้</button>'+rows+'<button type="button" id="resetMuayBook" class="secondary" '+(!book.learned.length?'disabled':'')+'>คืนแต้มทุกสำนัก</button>';
+    container.querySelectorAll("[data-muay-school]").forEach(button=>button.onclick=()=>{muayBookViewedSchool=button.dataset.muaySchool;muayBookRenderKey="";renderMuayBook();});
+    $("chooseMuaySchool").onclick=()=>room.send("muay_book",{action:"school",school:muayBookViewedSchool});
+    container.querySelectorAll("[data-muay-learn]").forEach(button=>button.onclick=()=>room.send("muay_book",{action:"learn",skillId:button.dataset.muayLearn}));
+    container.querySelectorAll("[data-muay-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("muay_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.muayEquip});select.blur();});
+    $("resetMuayBook").onclick=()=>{if(window.confirm("คืนแต้มวิชามวยทุกสำนัก? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("muay_book",{action:"reset"});};
+  }
   function swordData() {
     const me=ownServerCharacter();
     try {
@@ -7285,7 +7461,8 @@
     const selectedPath = getBuildCatalog()?.paths?.[p?.pathId];
     const talent = buildTalentGroup(getBuildCatalog(), p?.pathId)?.variants[p?.bladeTalentId || p?.wardTalentId];
     const swordSchool=p?.pathId==="phutthaisawan" ? swordData()?.catalog?.schools?.[swordData()?.tree?.school]?.name : "";
-    if ($("currentBuild")) $("currentBuild").textContent = selectedPath ? selectedPath.role + " · " + selectedPath.name + (swordSchool ? " · สำนัก" + swordSchool : "") + (talent ? " · " + talent.name : "") + " · " + getBuildCatalog().ancestries[p.ancestryId].name + " · " + ancestryHint(p) : "ยังไม่ได้เลือกสายอาชีพ";
+    const muaySchool=p?.pathId==="muay_boran" ? muayBookData()?.catalog?.schools?.[muayBookData()?.book?.school]?.name : "";
+    if ($("currentBuild")) $("currentBuild").textContent = selectedPath ? selectedPath.role + " · " + selectedPath.name + (swordSchool || muaySchool ? " · สำนัก" + (swordSchool || muaySchool) : "") + (talent ? " · " + talent.name : "") + " · " + getBuildCatalog().ancestries[p.ancestryId].name + " · " + ancestryHint(p) : "ยังไม่ได้เลือกสายอาชีพ";
     $("profileLevel").textContent = "LV. " + (p?.level ?? 1) + " · EXP " + (p?.experience ?? 0) + (supported && p.xpToNext ? " / " + p.xpToNext : "");
     for (const [key,,field] of progressionStats) {
       $("statValue-" + key).textContent = supported ? String(Math.round(Number(p[field]) || 0)) : "—";
@@ -7864,6 +8041,7 @@
   $("mapShortcut").onclick=openMap;
   $("modeButton").onclick=openOnline;
   $("swordTreeButton").onclick=openSwordTree;
+  $("muayBookButton").onclick=openMuayBook;
   $("helpButton").onclick=openHelp;
   $("bag").onclick=openBag;
   $("summon").onclick=()=> {

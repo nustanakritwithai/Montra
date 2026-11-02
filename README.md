@@ -7,6 +7,8 @@ MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the
 
 See the [Thai character paths and weapon forging guide](deploy/combat/BUILDCRAFT-TH.md) for the current playtest.
 
+The server-authoritative Muay Boran class, its four schools, practice goals and experimental grapple counterplay are described in the [Thai Muay guide](deploy/combat/MUAY-BORAN-TH.md). Deployment requires matching Pages and VPS builds; see the [Windows release and rollback guide](deploy/combat/MUAY-RELEASE-WINDOWS-TH.md).
+
 ## Expanded forest preview
 
 Optional `MONTRA_WORLD_EXPANSION=1`: a 120 × 120 forest with four hunting camps, 16 normal level 1–12 enemies and a level-12 Elite shrine guardian, protected rest areas, map-aware movement and a server-supplied client map. Disabled by default; deploy matching client/server before enabling. See [Thai staging and rollback guide](deploy/combat/WORLD-EXPANSION-TH.md).
