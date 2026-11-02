@@ -9714,19 +9714,37 @@
   function renderParty() {
     if(drawerActive!=="party" || !$("partyStatus")) return;
     const ready=partyReady();
-    $("partyStatus").textContent=ready ? (partyState ? "สมาชิก " + partyState.members.length + " / 4" : "ยังไม่ได้อยู่ในปาร์ตี้") : "เข้า LIVE ที่เปิดระบบปาร์ตี้ก่อน";
+    $("partyStatus").textContent=ready ? (partyState ? "สมาชิก " + partyState.members.length + " / 4 · แบ่ง EXP" : "ชวนเพื่อนในห้องเพื่อเริ่ม") : "เข้า LIVE ที่เปิดระบบปาร์ตี้ก่อน";
     $("partyInvitationBox").hidden=!partyInvitation;
     if(partyInvitation) $("partyInviter").textContent=String(partyInvitation.fromName);
     $("partyAccept").disabled=!ready; $("partyDecline").disabled=!ready;
+    // Banner: leader and four pips for the four seats.
+    const members=partyState?.members||[], leader=members.find(m=>m.sessionId===partyState?.leaderId);
+    $("pxTitle").textContent=partyState ? "ปาร์ตี้ของ "+(leader?.name||"หัวหน้า") : "ยังไม่มีปาร์ตี้";
+    $("pxPips").innerHTML=[0,1,2,3].map(i=>'<i class="'+(i<members.length?"on":"")+'"></i>').join("");
+    // Member cards: class, level, HP / stamina, map and distance (EXP needs the same map, within 20).
     const list=$("partyMembers"); list.replaceChildren();
-    if(partyState) for(const member of partyState.members) {
-      const row=document.createElement("div");row.className="party-member";
-      const name=document.createElement("strong"); name.textContent=member.name + (member.sessionId===partyState.leaderId ? " · หัวหน้า" : "") + (member.sessionId===localId ? " · คุณ" : "");
-      const hp=document.createElement("span"), player=room?.state?.players?.get?.(member.sessionId);
-      hp.textContent=player ? "HP " + Math.max(0,Math.round(Number(player.hp)||0)) + " / " + Math.max(0,Math.round(Number(player.maxHp)||0)) : "กำลังเชื่อมต่อ";
-      row.append(name,hp);list.appendChild(row);
+    const me=room?.state?.players?.get?.(localId);
+    const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
+    const bar=(cls,v,max,label)=>{const w=el("div","px-bar "+cls),track=el("div"),fill=el("i");fill.style.width=pctOf(v,max);track.append(fill);w.append(track,el("small","",label));return w;};
+    for(const member of members) {
+      const player=room?.state?.players?.get?.(member.sessionId), card=el("div","px-card"+(member.sessionId===localId?" me":"")+(player?.alive===false?" down":""));
+      const avatar=el("span","gx-avatar px-avatar",PATH_GLYPHS[player?.pathId]||Array.from(member.name)[0]||"?");
+      if(member.sessionId===partyState.leaderId)avatar.append(el("i","gx-rank-icon","♛"));
+      const body=el("div","px-body"), head=el("div","px-head");
+      head.append(el("strong","",member.name+(member.sessionId===localId?" · คุณ":"")),el("b","px-lv","Lv "+(Number(player?.level)||1)));
+      const path=getBuildCatalog()?.paths?.[player?.pathId];
+      body.append(head,el("small","px-class",path?path.role+" · "+path.name:"ยังไม่เลือกสายอาชีพ"));
+      if(player){
+        body.append(bar("hp",player.hp,player.maxHp,Math.round(player.hp)+" / "+Math.round(player.maxHp)),bar("st",player.stamina,player.maxStamina,Math.round(player.stamina)+" / "+Math.round(player.maxStamina)));
+        const sameMap=(player.mapId||"ritual_village")===(me?.mapId||"ritual_village"), dist=sameMap&&me?Math.round(Math.hypot(player.x-me.x,player.z-me.z)):null;
+        const where=worldDefinitions?.[player.mapId]?.name||(player.mapId==="ritual_village"?"หมู่บ้านอาคม":player.mapId||"");
+        const loc=el("small","px-loc"+(sameMap?"":" far"),player.alive===false?"หมดสติ · รอเกิดใหม่":member.sessionId===localId?where:sameMap?where+" · ห่าง "+dist+" ม.":where+" · อยู่คนละแผนที่ ไม่ได้รับ EXP ร่วม");
+        body.append(loc);
+      } else body.append(el("small","px-loc","กำลังเชื่อมต่อ"));
+      card.append(avatar,body);list.append(card);
     }
-    else {const empty=document.createElement("p");empty.className="note";empty.textContent="ชวนผู้เล่นในห้องเพื่อเริ่มปาร์ตี้";list.appendChild(empty);}
+    for(let i=members.length;i<4;i++){const empty=el("div","px-card empty");empty.append(el("span","gx-avatar px-avatar","+"),el("div","px-body",""));empty.lastChild.append(el("strong","",partyState?"ที่ว่าง":i===0?"เริ่มปาร์ตี้":"ที่ว่าง"),el("small","px-class","ชวนผู้เล่นในห้องด้านล่าง"));list.append(empty);}
     const select=$("partyTarget"), old=select.value, choices=[];
     room?.state?.players?.forEach?.((player,id)=>{if(id!==localId && player.persistent===true && !(partyState?.members || []).some(m=>m.sessionId===id)) choices.push({id,name:String(player.characterName || "ผู้เล่น")});});
     const signature=JSON.stringify(choices);
@@ -9745,7 +9763,9 @@
   function openParty() {
     partyUnread=false;updatePartyBadge();
     openDrawer("party","ปาร์ตี้",
-      '<button class="secondary" id="openGuild" type="button">กิลด์ <span id="guildBadge" hidden> · มีคำเชิญ</span></button><div class="economy-balance" id="partyStatus" role="status"></div><div id="partyInvitationBox" class="party-invitation" hidden><strong><span id="partyInviter"></span> ชวนเข้าปาร์ตี้</strong><div class="party-actions"><button id="partyAccept" type="button">เข้าร่วม</button><button id="partyDecline" type="button">ปฏิเสธ</button></div></div><h3>สมาชิก</h3><div id="partyMembers"></div><p class="note">EXP อิงเลเวลผู้ปราบ แล้วแบ่งเท่ากันให้สมาชิกที่มีชีวิต อยู่แผนที่เดียวกัน และห่างจากมอนสเตอร์ไม่เกิน 20 หน่วย เศษปัดลง · โจมตีเพื่อนร่วมปาร์ตี้ไม่ได้</p><label class="field" for="partyTarget">ชวนผู้เล่นในห้อง</label><select id="partyTarget"></select><p class="note" id="partyLeaderHint"></p><button class="primary" id="partyInvite" type="button">ส่งคำเชิญ</button><button class="secondary" id="partyLeave" type="button" hidden>ออกจากปาร์ตี้</button>');
+      '<button class="secondary" id="openGuild" type="button">กิลด์ <span id="guildBadge" hidden> · มีคำเชิญ</span></button>'+
+      '<div class="gx-banner px-banner"><div class="px-emblem" aria-hidden="true">⚔</div><div class="gx-title"><small>ปาร์ตี้</small><strong id="pxTitle">ยังไม่มีปาร์ตี้</strong><em id="partyStatus" role="status"></em></div><div class="px-pips" id="pxPips"></div></div>'+
+      '<div id="partyInvitationBox" class="party-invitation px-invite" hidden><strong><span id="partyInviter"></span> ชวนเข้าปาร์ตี้</strong><div class="party-actions"><button id="partyAccept" type="button">เข้าร่วม</button><button id="partyDecline" type="button">ปฏิเสธ</button></div></div><div id="partyMembers" class="px-members"></div><p class="note">EXP อิงเลเวลผู้ปราบ แล้วแบ่งเท่ากันให้สมาชิกที่มีชีวิต อยู่แผนที่เดียวกัน และห่างจากมอนสเตอร์ไม่เกิน 20 หน่วย เศษปัดลง · โจมตีเพื่อนร่วมปาร์ตี้ไม่ได้</p><label class="field" for="partyTarget">ชวนผู้เล่นในห้อง</label><select id="partyTarget"></select><p class="note" id="partyLeaderHint"></p><button class="primary" id="partyInvite" type="button">ส่งคำเชิญ</button><button class="secondary" id="partyLeave" type="button" hidden>ออกจากปาร์ตี้</button>');
     $("openGuild").onclick=openGuild;
     $("guildBadge").hidden=!guildUnread;
     $("partyInvite").onclick=()=>{const targetId=$("partyTarget").value;if(partyReady() && targetId)room.send("party_invite",{targetId});};
