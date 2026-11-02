@@ -731,10 +731,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return true;
   }
 
-  private sentinelDamage(id:string,targetId:string,power:number,stun:boolean):boolean {
+  private sentinelDamage(id:string,targetId:string,power:number,stun:boolean,range=3):boolean {
     const actor=this.state.players.get(id),monster=this.getMonster(targetId),target=monster ?? this.state.players.get(targetId);
     if(!actor?.alive || actor.pathId!=="sentinel" || !target?.alive || !this.sameCombatMap(id,targetId) ||
-       distance3d(actor,target)>3.5 || Math.abs(actor.y-target.y)>1.1 || !this.bodyPathClear(actor.mapId,actor,target))return false;
+       this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
+       (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))) ||
+       distance3d(actor,target)>range || Math.abs(actor.y-target.y)>1.1 || !this.bodyPathClear(actor.mapId,actor,target))return false;
     this.recordCombat(id,targetId);
     const attack=(actor.atk+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee)*power*(monster?1:0.75);
     if(monster)this.hitMonsterWithSpell(id,monster,calculateDamage(attack,monster.defense,monster.level),"sword");
@@ -822,7 +824,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       let hit=0;
       for(const monster of [this.state.monster,...this.state.monsters.values()]){
         const dx=monster.x-actor.x,dz=monster.z-actor.z,d=Math.hypot(dx,dz);
-        if(hit<3 && monster.alive && d<=skill.range && (d<0.001 || (-Math.sin(actor.facing)*dx-Math.cos(actor.facing)*dz)/d>=0.5) && this.sentinelDamage(id,monster.id,skill.power,false))hit++;
+        if(hit<3 && monster.alive && d<=skill.range && (d<0.001 || (-Math.sin(actor.facing)*dx-Math.cos(actor.facing)*dz)/d>=0.5) && this.sentinelDamage(id,monster.id,skill.power,false,skill.range))hit++;
       }
     } else if(skill.effect==="taunt"){
       let applied=0;
@@ -1436,7 +1438,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
-  private swordGuardDamage(id:string, attacker:{x:number;z:number}, damage:number,guardPierce=0):number {
+  private swordGuardDamage(id:string, attacker:{x:number;z:number}, damage:number,guardPierce=0, summonOwnerId?:string):number {
     if(this.sentinelWindups.delete(id)) {
       const winding=this.state.players.get(id);if(winding?.alive)winding.combatState="idle";
       this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"sentinel_windup_result",{result:"interrupted"});
@@ -1450,10 +1452,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"blade_windup",{result:"interrupted"});
     }
     const guard=this.swordGuards.get(id), player=this.state.players.get(id);
-    if (!guard || !player || this.simulatedMs>=guard.until) return this.sentinelShareDamage(id,attacker,damage);
+    if (!guard || !player || this.simulatedMs>=guard.until) return this.sentinelShareDamage(id,attacker,damage,summonOwnerId);
     const dx=attacker.x-player.x, dz=attacker.z-player.z, length=Math.hypot(dx,dz);
     const front=length<0.001 || (-Math.sin(player.facing)*dx-Math.cos(player.facing)*dz)/length>=0;
-    if (guard.direction && !front) return this.sentinelShareDamage(id,attacker,damage);
+    if (guard.direction && !front) return this.sentinelShareDamage(id,attacker,damage,summonOwnerId);
     const defense=this.muayDefenseWindows.get(id);
     const kind=defense && defense.until===guard.until && this.simulatedMs<defense.until ? defense.kind : undefined;
     guard.counterUntil=this.simulatedMs+3000;
@@ -1470,10 +1472,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(kind!=="evade")this.recordMuayTraining(id,"blocks");
     if(kind) {guard.until=this.simulatedMs;this.clearMuayDefense(id,"success");}
     this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),player.pathId === "muay_boran" ? "muay_guarded" : "sword_guarded",{until:guard.counterUntil,kind:kind ?? "guard"});
-    return this.sentinelShareDamage(id,attacker,Math.max(1,Math.round(damage*(guard.factor+(1-guard.factor)*guardPierce))));
+    return this.sentinelShareDamage(id,attacker,Math.max(1,Math.round(damage*(guard.factor+(1-guard.factor)*guardPierce))),summonOwnerId);
   }
 
-  private sentinelShareDamage(id:string,attacker:{x:number;z:number},damage:number):number {
+  private sentinelShareDamage(id:string,attacker:{x:number;z:number},damage:number,summonOwnerId?:string):number {
     const link=this.sentinelInterceptions.get(id),victim=this.state.players.get(id);
     if(!link || !victim)return damage;
     const owner=this.state.players.get(link.ownerId),party=this.parties.get(id);
@@ -1484,13 +1486,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sentinelInterceptions.delete(id);return damage;
     }
     const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
-    const aggressor=[...this.state.players.entries()].find(([,p])=>p===attacker);
+    const summonOwner=summonOwnerId && this.state.summons.get(summonOwnerId)===attacker ? this.state.players.get(summonOwnerId) : undefined;
+    const aggressor=summonOwner ? [summonOwnerId!,summonOwner] as const : [...this.state.players.entries()].find(([,p])=>p===attacker);
     if(monster ? !this.sameCombatMap(link.ownerId,monster.id) : !aggressor || !this.sameCombatMap(aggressor[0],link.ownerId))return damage;
     const shared=Math.min(damage-1,Math.floor(damage*link.fraction));
     if(shared<=0)return damage;
+    if(this.sentinelWindups.delete(link.ownerId)){
+      owner.combatState="idle";
+      this.sendSwordNotice(this.clients.find(client=>client.sessionId===link.ownerId),"sentinel_windup_result",{result:"interrupted"});
+    }
     owner.hp=Math.max(0,owner.hp-shared);owner.hitSeq++;this.lastCombatMs.set(link.ownerId,this.simulatedMs);
     if(monster)this.recordSentinelPractice(link.ownerId,"assist");
-    this.broadcast("sentinel_intercept",{playerId:link.ownerId,targetId:id,damage:shared,hp:owner.hp,maxHp:owner.maxHp,hitSeq:owner.hitSeq},{afterNextPatch:true});
+    this.broadcast("sentinel_intercept",{playerId:link.ownerId,targetId:id,damage:shared,hp:owner.hp,maxHp:owner.maxHp,hitSeq:owner.hitSeq,attackerId:aggressor?.[0] ?? monster?.id,source:summonOwner?"summon":monster?"monster":"player"},{afterNextPatch:true});
     if(owner.hp===0){
       this.sentinelInterceptions.delete(id);
       if(aggressor){aggressor[1].pkKills++;owner.pkDeaths++;this.knockoutPlayer(link.ownerId,"pk",aggressor[0]);
@@ -3171,7 +3178,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Summon can help in Free PK only when its owner selected or was attacked
     // by this opponent. Damage/kill attribution belongs to the owner.
     const victim = target as Player;
-    const damage = this.swordGuardDamage(targetId,guardian,calculateDamage(RULES.summonAttackDamage, victim.magicDef, victim.level));
+    const damage = this.swordGuardDamage(targetId,guardian,calculateDamage(RULES.summonAttackDamage, victim.magicDef, victim.level),0,ownerId);
     victim.hp = Math.max(0, victim.hp - damage);
     victim.hitSeq += 1;
     this.broadcast("pvp_hit", {

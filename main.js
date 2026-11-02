@@ -4369,7 +4369,7 @@
   let targetedSkill = null;
   let selectedOccultSkill="", occultBookState=null, occultRequestKey="", occultRequestAt=0, occultHotbarKey="", occultBookRenderKey="", occultCurseUntil=0;
   let selectedBladeSkill="",bladeBookState=null,bladeRequestKey="",bladeRequestAt=0,bladeHotbarKey="",bladeBookRenderKey="",bladeCloakUntil=0,bladeMarkUntil=0,bladeMarkedTarget="",bladeOpeningUntil=0,bladeCounterUntil=0;
-  let selectedSentinelSkill="",sentinelBookState=null,sentinelRequestKey="",sentinelRequestAt=0,sentinelHotbarKey="",sentinelBookRenderKey="",sentinelCounterUntil=0;
+  let selectedSentinelSkill="",sentinelBookState=null,sentinelRequestKey="",sentinelRequestAt=0,sentinelHotbarKey="",sentinelBookRenderKey="",sentinelCounterUntil=0,sentinelInterceptNoticeAt=0;
   let spellTargetId = null;
   let pendingClimb = null;
   const skillEffects = [];
@@ -7304,8 +7304,29 @@
         else toast(data?.result==="immune"?"เป้าหมายต้านสตัน":data?.result==="resisted"?"เป้าหมายกำลังต้านสตัน":"สกัดไม่สำเร็จ");
       }});
       joined.onMessage("sentinel_taunt",data=>{if(room===joined)toast("ยั่วยุสำเร็จ "+(Number(data?.applied)||0)+" ตัว");});
+      joined.onMessage("sentinel_windup",data=>{
+        if(room!==joined)return;
+        const caster=joined.state?.players?.get?.(data?.playerId);
+        if(!caster || (caster.mapId || "ritual_village")!==activeMapId)return;
+        playAction(avatars.get(data.playerId),"cast");
+        if(data.targetId===localId)toast("ผู้พิทักษ์กำลังตั้งท่ากระแทก · หลบออกห่าง");
+        else if(data.playerId===localId)toast("กำลังตั้งท่ากระแทก");
+      });
+      joined.onMessage("sentinel_intercept",data=>{
+        if(room!==joined || (data?.playerId!==localId && data?.targetId!==localId) || performance.now()-sentinelInterceptNoticeAt<1500)return;
+        sentinelInterceptNoticeAt=performance.now();
+        playAction(avatars.get(data.playerId),"guard");
+        toast(data.playerId===localId?"รับดาเมจแทนเพื่อน -"+data.damage+" HP":"ผู้พิทักษ์รับดาเมจแทน "+data.damage+" HP");
+      });
       joined.onMessage("sentinel_windup_result",data=>{if(room===joined)toast(data?.result==="interrupted"?"ถูกขัดจังหวะ":data?.result==="miss"?"เป้าหมายหลบพ้น":"กระแทกสำเร็จ");});
-      joined.onMessage("sentinel_skill_used",data=>{if(room===joined && data?.playerId===localId && data.skillId==="counter")sentinelCounterUntil=0;});
+      joined.onMessage("sentinel_skill_used",data=>{
+        if(room!==joined)return;
+        const caster=joined.state?.players?.get?.(data?.playerId);
+        if(!caster || (caster.mapId || "ritual_village")!==activeMapId)return;
+        const actions={guard:"guard",step:"lunge",anchor:"guard",bash:"counter",sweep:"sweep",counter:"counter",taunt:"rally",ward:"rally",intercept:"lunge",party_ward:"rally"};
+        if(actions[data.skillId])playAction(avatars.get(data.playerId),actions[data.skillId]);
+        if(data.playerId===localId && data.skillId==="counter")sentinelCounterUntil=0;
+      });
       joined.onMessage("blade_book_state", data => {
         if(room!==joined || !data?.book || !data?.lessons)return;
         bladeBookState=data;bladeBookRenderKey="";bladeHotbarKey="";syncBladeUI(ownServerCharacter());
