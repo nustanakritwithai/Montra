@@ -60,6 +60,12 @@ export type WorldMapDefinition = Readonly<{
   paths?: readonly (readonly {x:number; z:number}[])[];
 }>;
 export const DEFAULT_MAP_ID = "ritual_village";
+// One starting position per world-room seat, inside the village rest area.
+export const VILLAGE_ARRIVALS = [
+  {x:0,z:0}, {x:2,z:0}, {x:4,z:0}, {x:6,z:0},
+  {x:-2,z:0}, {x:-4,z:0}, {x:0,z:2}, {x:2,z:2}, {x:-2,z:2}, {x:0,z:-2},
+] as const;
+export const WORLD_ROOM_CAPACITY = VILLAGE_ARRIVALS.length;
 export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.freeze<Record<string, WorldMapDefinition>>({
   ...(WORLD_EXPANSION ? {[TEMPLE_ID]:TEMPLE_MAP,...ATLAS_MAPS} : {}),
   ritual_village: {

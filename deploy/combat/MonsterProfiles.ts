@@ -3,6 +3,8 @@
  * These are trial values, not client-selected stats or calibrated outcomes.
  * The normal level 1–12 baseline targets the proposed forest encounters.
  */
+import { WORLD_ROOM_CAPACITY } from "./WorldMaps.js";
+
 export const MONSTER_TIERS = ["weak","normal","strong","elite","boss"] as const;
 export type MonsterTier = typeof MONSTER_TIERS[number];
 export type MonsterProfile = Readonly<{level:number;tier:MonsterTier;maxHp:number;attack:number;defense:number}>;
@@ -17,7 +19,7 @@ export const MONSTER_CONFIG = Object.freeze({
   respawnMs:25_000,
   minRespawnMs:20_000, respawnReductionPerAdditionalPlayerMs:1_500,
   populationRadius:20,
-  maxSpawnPointsPerRoom:64,
+  maxSpawnPointsPerRoom:84,
 });
 // The monster-design document gives ranges; Elite 3x and Boss 10x are
 // conservative starting points. No Elite/Boss abilities or spawns are implied.
@@ -31,9 +33,9 @@ export const TIER_MULTIPLIERS:Readonly<Record<MonsterTier,Readonly<{stats:number
 function monsterLevel(value:number):void {
   if(!Number.isSafeInteger(value) || value<MONSTER_CONFIG.minLevel || value>MONSTER_CONFIG.maxLevel) throw new Error("invalid_monster_level");
 }
-/** Compute the delay at the moment of a kill; bounded for a four-person room. */
+/** Compute the delay from the number of eligible world players near the kill. */
 export function monsterRespawnDelay(nearbyPlayers:number):number {
-  if(!Number.isSafeInteger(nearbyPlayers) || nearbyPlayers<0 || nearbyPlayers>4) throw new Error("invalid_nearby_population");
+  if(!Number.isSafeInteger(nearbyPlayers) || nearbyPlayers<0 || nearbyPlayers>WORLD_ROOM_CAPACITY) throw new Error("invalid_nearby_population");
   const additional=Math.max(0,nearbyPlayers-1);
   return Math.max(MONSTER_CONFIG.minRespawnMs,MONSTER_CONFIG.respawnMs-additional*MONSTER_CONFIG.respawnReductionPerAdditionalPlayerMs);
 }

@@ -56,17 +56,20 @@ test("every marked trail is walkable and all gates, camps and monsters are reach
   }
 });
 
-test("at most four late zones replicate and the warden's respawn clock survives an empty zone",()=>{
+test("all occupied atlas zones replicate and the warden's respawn clock survives an empty zone",()=>{
   const state=new MyRoomState(),forest=new ForestEncounters(state.monsters);
   forest.initialize();assert.equal(state.monsters.size,33);
   const tick=(now:number)=>forest.update(now,0,state.players,new Set(),()=>{},()=>{});
-  ["drowned_marsh","moon_cemetery","asura_peak","spirit_rift"].forEach((mapId,i)=>state.players.set(String(i),new Player({...ATLAS_MAPS[mapId].spawn,mapId,alive:true})));
+  for(const mapId of ["drowned_marsh","moon_cemetery","asura_peak","spirit_rift"]) state.players.set(mapId,new Player({...ATLAS_MAPS[mapId].spawn,mapId,alive:true}));
   tick(100);assert.equal(state.monsters.size+1,63);
-  const id=RIFT_WARDEN.id;assert.ok(forest.kill(id,100));state.players.delete("3");tick(500);
-  assert.ok(!state.monsters.has(id));state.players.set("3",new Player({...ATLAS_MAPS.spirit_rift.spawn,mapId:"spirit_rift"}));
+  assert.ok(!state.monsters.has("atlas_hex_ridge_1_1"));
+  for (const map of Object.values(ATLAS_MAPS)) state.players.set(map.id,new Player({...map.spawn,mapId:map.id}));
+  tick(100);assert.equal(state.monsters.size+1,84);
+  const id=RIFT_WARDEN.id;assert.ok(forest.kill(id,100));state.players.delete("spirit_rift");tick(500);
+  assert.ok(!state.monsters.has(id));state.players.set("spirit_rift",new Player({...ATLAS_MAPS.spirit_rift.spawn,mapId:"spirit_rift"}));
   tick(1100);assert.equal(state.monsters.get(id)?.alive,false);
   tick(100+RIFT_WARDEN.respawnMs);assert.equal(state.monsters.get(id)?.alive,true);
-  assert.ok(!state.monsters.has("atlas_hex_ridge_1_1"));
+  assert.ok(state.monsters.has("atlas_hex_ridge_1_1"));
 });
 
 test("rift victory keeps capped participants eligible for loot without diluting XP",()=>{
