@@ -2037,7 +2037,7 @@
     for(const portal of (map.portals||[]).slice(portals[activeMapId]?1:0))makePortal(activeMapId,expansionRoot,portal);
   }
   function makeForestMonster(monster,id) {
-    if(monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple")return makeGhostMonster(monster,id);
+    if(monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||ATLAS_GHOSTS[monster.mapId])return makeGhostMonster(monster,id);
     const mesh=enemy.clone("monster-"+id);
     // The legacy tap sphere is hidden in the village; atlas monsters still show it.
     mesh.visibility=1;for(const child of mesh.getChildMeshes())child.setEnabled(true);
@@ -3542,20 +3542,37 @@
   }
   // Skin variants of the body's PBR material (texture kept for face detail).
   const skinVariants = new Map();
-  function ghostSkin(body, key, albedo, emissive, keepTexture = true) {
+  function ghostSkin(body, key, albedo, emissive, mode = "skin", alpha = 1) {
+    if (mode === false) mode = "stone";
     if (!skinVariants.has(key)) {
       const m = body.material.clone("ghost skin " + key);
-      // Painted skin map: tint, veins and rot (or carved stone) from the body's own albedo.
-      m.albedoTexture = deriveSkin(body.material.albedoTexture, key, albedo, !keepTexture);
+      // Painted skin map: tint, veins and rot, carved stone, or charred flesh with embers.
+      m.albedoTexture = deriveSkin(body.material.albedoTexture, key, albedo, mode);
       m.albedoColor = B.Color3.White(); m.emissiveColor = B.Color3.FromHexString(emissive).toLinearSpace();
+      if (mode === "char") { m.emissiveTexture = m.albedoTexture.metadata.embers; m.emissiveColor = B.Color3.White(); glowMats.add(m); }
+      if (alpha < 1) { m.alpha = alpha; m.transparencyMode = B.PBRMaterial.PBRMATERIAL_ALPHABLEND; m.backFaceCulling = true; }
       m.metallic = 0; m.roughness = 1; m.environmentIntensity = 0; m.directIntensity = 1.0;
       skinVariants.set(key, m);
     }
     return skinVariants.get(key);
   }
+  // Materials for the marsh and cemetery ghosts.
+  Object.assign(gm, {
+    weedMat: mat("pond weed", "#3a5a2e", "#061006"), poolMat: mat("black pool", "#05090a", "#020506"),
+    strawMat: mat("woven straw hat", "#8a7448"), dirtMat: mat("grave dirt", "#3a2e22"), charWood: mat("charred wood", "#1e1612", "#3a0e02"),
+    flameMat: mat("ghost fire", "#ffb050", "#ff6a10"), eyeMoon: mat("moon eyes", "#d8ecff", "#9cc8ff"),
+  });
+  gm.waterRing = additiveMat("water ring", radialTexture("water ring", 128, [[0, "rgba(120,200,190,0)"], [.8, "rgba(120,200,190,0)"], [.92, "rgba(150,230,210,.7)"], [1, "rgba(150,230,210,0)"]]));
+  gm.waveMat = additiveMat("water wave", radialTexture("water wave", 128, [[0, "rgba(120,220,210,0)"], [.75, "rgba(120,220,210,0)"], [.88, "rgba(160,240,230,.8)"], [1, "rgba(160,240,230,0)"]]));
+  gm.waterBody = new B.StandardMaterial("water spirit body", scene); gm.waterBody.diffuseColor = B.Color3.FromHexString("#3d8a86"); gm.waterBody.emissiveColor = B.Color3.FromHexString("#1d5a58"); gm.waterBody.alpha = .7; gm.waterBody.specularColor = B.Color3.FromHexString("#c8fff4"); gm.waterBody.specularPower = 64; gm.waterBody.backFaceCulling = false;
+  gm.moonMist = gm.smokeWhite.clone("moon mist"); gm.moonMist.diffuseColor = B.Color3.FromHexString("#9fb4e0"); gm.moonMist.emissiveColor = B.Color3.FromHexString("#3a4e80");
+  gm.moonGlow = mat("crescent halo", "#e8f2ff", "#b8d4ff");
+  gm.moonBeam = additiveMat("moonbeam", paintTexture("moonbeam", 64, (c, s) => { const g = c.createLinearGradient(0, 0, s, 0); g.addColorStop(0, "rgba(180,210,255,0)"); g.addColorStop(.5, "rgba(200,225,255,.7)"); g.addColorStop(1, "rgba(180,210,255,0)"); c.fillStyle = g; c.fillRect(0, 0, s, s); }));
+  for (const m of [gm.flameMat, gm.eyeMoon, gm.moonGlow]) glowMats.add(m);
   const cloth = {
     rags: mat("grave rags", "#6c665c", "#100e0c"), shroud: mat("grave shroud", "#1b1f29", "#06080e"), white: mat("ghost white", "#d9d6cc", "#26262a"),
-    saffron: mat("scribe saffron", "#8a4f22", "#140a03"), blue: mat("dead blue shirt", "#7d8ea6", "#0e1218"), lacquer: mat("statue lacquer cloth", "#7a2622", "#120404"),
+    saffron: mat("scribe saffron", "#8a4f22", "#140a03"), weed: mat("weed rags", "#3e4a36", "#060a05"), burial: mat("burial cloth", "#cfc8b4", "#141210"),
+    ash: mat("ash cloth", "#2a2420", "#060403"), tealSilk: mat("teal silk", "#3f7f78", "#0a1e1c"), moonSilk: mat("moon silk", "#b8c8e8", "#1a2440"), blue: mat("dead blue shirt", "#7d8ea6", "#0e1218"), lacquer: mat("statue lacquer cloth", "#7a2622", "#120404"),
   };
   for (const m of Object.values(cloth)) m.backFaceCulling = false;
   // ---- Procedural surface detail for the ghosts ----
@@ -3611,6 +3628,12 @@
   applySurface(cloth.white, clothSurface("white dress", "#e4e0d4", "rgba(90,85,70,.45)", "rgba(110,90,60,.35)", 0), "#ffffff");
   applySurface(cloth.saffron, clothSurface("scribe robe", "#9a5a26", "rgba(40,20,8,.5)", "rgba(60,30,10,.5)", 3), "#ffffff");
   applySurface(cloth.blue, clothSurface("blue shirt", "#8d9db4", "rgba(30,36,50,.5)", "rgba(60,50,40,.4)", 2), "#ffffff");
+  applySurface(cloth.weed, clothSurface("weed rags", "#4a5a40", "rgba(10,20,8,.6)", "rgba(40,70,30,.5)", 7), "#ffffff");
+  applySurface(cloth.burial, clothSurface("burial cloth", "#ddd6c2", "rgba(70,60,45,.5)", "rgba(90,70,40,.45)", 3), "#ffffff");
+  applySurface(cloth.ash, clothSurface("ash cloth", "#3a322c", "rgba(0,0,0,.6)", "rgba(90,30,10,.4)", 8), "#ffffff");
+  applySurface(cloth.tealSilk, clothSurface("teal silk", "#4a948c", "rgba(10,40,38,.4)", "rgba(200,240,230,.15)", 0), "#ffffff");
+  applySurface(cloth.moonSilk, clothSurface("moon silk", "#c8d6f2", "rgba(40,60,110,.35)", "rgba(255,255,255,.15)", 0), "#ffffff");
+  cloth.moonSilk.alpha = .7; cloth.moonSilk.emissiveColor = B.Color3.FromHexString("#2a3a66");
   for (const [m, base] of [[cloth.lacquer, "#8a2b24"], [templeLacquer, "#953f37"]]) applySurface(m, surface(m.name + " lacquer", 256, (c, s) => {
     c.fillStyle = base; c.fillRect(0, 0, s, s);
     // Gilt kranok border bands on lacquered cloth.
@@ -3658,18 +3681,26 @@
   // Ghost skin derived from the body's own albedo: desaturated and tinted,
   // then mottled with bruising, rot and dark branching veins. Stone variants
   // keep the sculpted shading but turn it into carved, cracked rock.
-  function deriveSkin(source, key, tint, stone) {
+  function deriveSkin(source, key, tint, mode) {
+    const stone = mode === "stone" || mode === true, char = mode === "char";
     const size = 512, tex = new B.DynamicTexture("ghost skin map " + key, size, scene, true, B.Texture.TRILINEAR_SAMPLINGMODE, undefined, false);
+    // Charred flesh glows through its cracks: a separate emissive map.
+    if (char) { const em = new B.DynamicTexture("ember cracks " + key, size, scene, true, B.Texture.TRILINEAR_SAMPLINGMODE, undefined, false), ec = em.getContext();
+      ec.fillStyle = "#000"; ec.fillRect(0, 0, size, size); crackLines(ec, size, 90, 921, "rgba(255,120,30,.95)", 2.4); crackLines(ec, size, 50, 922, "rgba(255,190,80,.8)", 1.2);
+      speckle(ec, size, 300, 923, ["rgba(255,110,20,.8)"], .6, 1.8); em.update(false); tex.metadata = { embers: em }; }
     const c = tex.getContext(); c.fillStyle = tint; c.fillRect(0, 0, size, size); tex.update(false);
     const finish = data => {
       const img = c.createImageData(size, size), [tr, tg, tb] = [1, 3, 5].map(i => parseInt(tint.slice(i, i + 2), 16) / 255);
       for (let i = 0; i < size * size; i++) {
         const sx = i % size, sy = (i / size) | 0, si = (Math.floor(sy * data.h / size) * data.w + Math.floor(sx * data.w / size)) * 4;
-        const L = (data.px[si] * .3 + data.px[si + 1] * .55 + data.px[si + 2] * .15) / 255, k = stone ? .55 + L * .7 : .35 + L * 1.05;
+        const L = (data.px[si] * .3 + data.px[si + 1] * .55 + data.px[si + 2] * .15) / 255, k = stone ? .55 + L * .7 : char ? .4 + L * .6 : .35 + L * 1.05;
         img.data[i * 4] = Math.min(255, tr * k * 255); img.data[i * 4 + 1] = Math.min(255, tg * k * 255); img.data[i * 4 + 2] = Math.min(255, tb * k * 255); img.data[i * 4 + 3] = 255;
       }
       c.putImageData(img, 0, 0);
-      if (stone) {
+      if (char) {
+        speckle(c, size, 2400, 924, ["rgba(0,0,0,.35)", "rgba(80,60,50,.2)"], .5, 2);
+        crackLines(c, size, 90, 921, "rgba(70,20,5,.9)", 3);
+      } else if (stone) {
         speckle(c, size, 2600, 871, ["rgba(0,0,0,.18)", "rgba(255,255,255,.1)"], .4, 1.4);
         for (let i = 0; i < 24; i++) { const g = c.createRadialGradient(R(i, 872) * size, R(i, 873) * size, 0, R(i, 872) * size, R(i, 873) * size, 14 + R(i, 874) * 40); g.addColorStop(0, i % 3 ? "rgba(40,36,30,.35)" : "rgba(100,120,60,.4)"); g.addColorStop(1, "rgba(0,0,0,0)"); c.fillStyle = g; c.fillRect(0, 0, size, size); }
         crackLines(c, size, 40, 875, "rgba(15,12,10,.8)", 2.2);
@@ -3937,6 +3968,207 @@
         poseBones(nodes, p);
       };
     },
+    // ---- บึงพราย (drowned marsh) ----
+    // พรายกอกก: a drowned woman waist-deep among reeds, weed-tangled hair,
+    // reaching up out of a ring of black water.
+    drowned(nodes, body, holder, o, root) {
+      body.material = ghostSkin(body, "drowned", "#4f6b60", "#06100c");
+      nodes.Spine.scaling.set(.86, 1.02, .84);
+      skinnedCut(body, "drowned rags", (x, y) => y > .9 && y < 1.48 && Math.abs(x) < .3, () => .013, cloth.weed);
+      ghostEyes(nodes, gm.eyeGreen, .03);
+      const hair = ghostHair(nodes, [-1.3, -.9, -.5, .5, .9, 1.3, 0].map((a, i) => {
+        const x = Math.sin(a) * .085, z = i === 6 ? -.09 : .01 + Math.cos(a) * .04;
+        return [[x, 1.72, z], [x * 1.3, 1.6, z + .03], [x * 1.4, 1.42, z + .02], [x * 1.3, 1.22, z], [x * 1.1, 1.02, z - .03]];
+      }), hairMat);
+      // Weed strands tangled through the hair.
+      const weeds = [-1, 1].map(s => { const n = new B.TransformNode("weed", scene); n.parent = nodes.Head; n.position.set(s * .07, .12, .02);
+        tube("pond weed", [[0, 0, 0], [s * .04, -.15, .04], [s * .02, -.35, .02], [s * .05, -.55, -.02]], .012, .004, gm.weedMat, 4).parent = n; return n; });
+      const pool = new B.TransformNode("drowning pool", scene); pool.parent = root;
+      const ripple = B.MeshBuilder.CreateDisc("black water", { radius: .95, tessellation: 24 }, scene); ripple.material = gm.poolMat; ripple.rotation.x = Math.PI / 2; ripple.position.y = .03; ripple.parent = pool; ripple.isPickable = false;
+      const ring = B.MeshBuilder.CreateTorus("water ring", { diameter: 1.4, thickness: .04, tessellation: 28 }, scene); ring.material = gm.waterRing; ring.position.y = .05; ring.parent = pool; ring.isPickable = false;
+      for (let i = 0; i < 9; i++) { const a = i / 9 * 6.28 + .3, r = .65 + R(i, 901) * .3;
+        tube("reed", [[Math.cos(a) * r, 0, Math.sin(a) * r], [Math.cos(a) * r * 1.05, .5, Math.sin(a) * r * 1.05], [Math.cos(a) * r * 1.15, 1.0 + R(i, 902) * .4, Math.sin(a) * r * 1.15]], .025, .006, reedMat, 4).parent = pool; }
+      const base = { Spine: [.12, 0, 0], Spine1: [.08, 0, 0], Neck: [.05, 0, 0], Head: [.2, 0, .1],
+        LeftArm: [-1.5, .15, -1.15], RightArm: [-1.3, -.15, 1.15], LeftForeArm: [0, -.5, 0], RightForeArm: [0, .6, 0], LeftHand: [-.3, 0, 0], RightHand: [-.3, 0, 0] };
+      const surge = { Spine: [-.2, 0, 0], Head: [-.3, 0, 0], LeftArm: [-2.8, 0, -.8], RightArm: [-2.8, 0, .8], LeftForeArm: [0, -.4, 0], RightForeArm: [0, .4, 0] };
+      const grab = { Spine: [.6, 0, 0], Spine1: [.3, 0, 0], Head: [-.2, 0, 0], LeftArm: [-1.2, .3, -1.1], RightArm: [-1.2, -.3, 1.1], LeftForeArm: [0, 0, 0], RightForeArm: [0, 0, 0], LeftHand: [.7, 0, 0], RightHand: [.7, 0, 0] };
+      const sink = { Spine: [-.3, 0, 0], Head: [-.6, 0, 0], LeftArm: [-2.9, 0, -.4], RightArm: [-2.9, 0, .4] };
+      return k => {
+        const { t, move, hurt } = k, T = ghostTimeline(k.g, k.now);
+        holder.position.y = -.78 + Math.sin(t * 1.2) * .04 + T.wind * .35 - T.hit * .1 - ease(T.die) * .9 - (1 - ease(T.rise)) * .9 + T.chase * .1;
+        const p = clonePose(base);
+        p.Head[2] += Math.sin(t * 2.7) * Math.sin(t * .5) * .3; p.Spine[2] = Math.sin(t * .8) * .06;
+        p.LeftArm[0] += Math.sin(t * 1.3) * .2; p.RightArm[0] += Math.sin(t * 1.3 + 2) * .2;
+        blendPose(p, surge, T.wind); blendPose(p, grab, T.hit); blendPose(p, { Spine: [-.3, .3, 0] }, Math.max(hurt, T.hurt)); blendPose(p, sink, ease(T.die));
+        poseBones(nodes, p);
+        ring.scaling.setAll(1 + Math.sin(t * 2) * .08 + T.hit * .5); ripple.rotation.z = t * .2;
+        hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 1.2 + i) * .07; h.rotation.z = Math.sin(t * .9 + i * 1.7) * .05; });
+        weeds.forEach((w, i) => { w.rotation.z = Math.sin(t * 1.5 + i) * .15; });
+      };
+    },
+    // เงาคนแจว: a drowned boatman standing in a rotting sampan, conical hat
+    // low over the face, sweeping a long oar as both paddle and club.
+    boatman(nodes, body, holder, o, root) {
+      body.material = ghostSkin(body, "boatman", "#5d6873", "#080a0e");
+      skinnedCut(body, "boatman shirt", (x, y) => y > .93 && y < 1.48 && Math.abs(x) < .44, () => .015, cloth.blue);
+      skinnedCut(body, "boatman pants", (x, y) => y > .3 && y < 1.0, (x, y) => .02 + .015 * (1 - (y - .3) / .7), cloth.shroud);
+      ghostEyes(nodes, gm.eyeAmber, .03);
+      const hat = lathe("ngob hat", [[0, 1.86], [.06, 1.83], [.16, 1.76], [.28, 1.68], [.3, 1.665], [0, 1.665]], gm.strawMat, 18); onBone(nodes, "Head", hat);
+      // Rotting sampan under the feet; it glides with the ghost.
+      const boat = new B.TransformNode("sampan", scene); boat.parent = root;
+      const hull = lathe("sampan hull", [[0, -.25], [.25, -.18], [.36, 0], [.38, .08]], gm.beam, 14); hull.parent = boat; hull.scaling.set(1, 1, 3.4); hull.position.y = .18;
+      const deck = B.MeshBuilder.CreateBox("sampan deck", { width: .62, height: .03, depth: 2.2 }, scene); deck.material = gm.bark; deck.parent = boat; deck.position.y = .2; deck.isPickable = false;
+      for (const z of [-1.2, 1.2]) { const tip = B.MeshBuilder.CreateCylinder("prow", { height: .5, diameterTop: 0, diameterBottom: .18, tessellation: 5 }, scene); tip.material = gm.beam; tip.parent = boat; tip.position.set(0, .3, z); tip.rotation.x = Math.sign(z) * 1.1; tip.isPickable = false; }
+      const wake = B.MeshBuilder.CreateTorus("wake", { diameter: 2.8, thickness: .05, tessellation: 28 }, scene); wake.material = gm.waterRing; wake.parent = boat; wake.position.y = .04; wake.scaling.z = 1.6; wake.isPickable = false;
+      const oar = new B.TransformNode("oar", scene); oar.parent = nodes.Socket_Hand_Weapon_R; oar.rotationQuaternion = quatFromUp(new B.Vector3(0, .3, 1));
+      tube("oar shaft", [[0, -.9, 0], [0, .9, 0]], .022, .02, gm.beam, 6).parent = oar;
+      const blade = B.MeshBuilder.CreateBox("oar blade", { width: .16, height: .5, depth: .03 }, scene); blade.material = gm.beam; blade.parent = oar; blade.position.y = -1.1; blade.isPickable = false;
+      const base = { Spine: [.18, -.25, 0], Spine1: [.1, -.1, 0], Head: [.25, .3, 0], RightArm: [-.9, .2, 1.05], RightForeArm: [0, 1.2, 0], LeftArm: [-1.2, -.3, -1.1], LeftForeArm: [0, -1.1, 0],
+        LeftUpLeg: [-.3, 0, .1], RightUpLeg: [.25, 0, -.1], LeftLeg: [.35, 0, 0], RightLeg: [.2, 0, 0] };
+      const raise = { Spine: [-.2, -.5, 0], RightArm: [-2.8, -.2, .9], RightForeArm: [0, .5, 0], LeftArm: [-2.4, 0, -.9] };
+      const swing = { Spine: [.6, .45, 0], Spine1: [.3, .2, 0], RightArm: [-.6, .3, 1.0], RightForeArm: [0, .1, 0], LeftArm: [-.8, .4, -1.0] };
+      const fall = { Hips: [-1.2, 0, .2], Spine: [-.3, 0, 0], LeftArm: [-.2, 0, -.3], RightArm: [-.2, 0, .3], LeftUpLeg: [-.4, 0, .2], RightUpLeg: [-.2, 0, -.2] };
+      return k => {
+        const { t, move, hurt } = k, T = ghostTimeline(k.g, k.now);
+        const bob = Math.sin(t * 1.4) * .04;
+        boat.position.y = bob - ease(T.die) * .4 - (1 - ease(T.rise)) * .6; boat.rotation.z = Math.sin(t * 1.1) * .05; boat.rotation.x = move * .05;
+        holder.position.y = .2 + bob - ease(T.die) * .5 - (1 - ease(T.rise)) * .6;
+        const p = clonePose(base);
+        // Rowing stroke while gliding.
+        const row = Math.sin(t * 2.4) * move;
+        p.Spine[0] += row * .15; p.RightArm[0] += row * .4; p.LeftArm[0] += row * .3;
+        blendPose(p, raise, T.wind); blendPose(p, swing, T.hit); blendPose(p, { Spine: [-.3, .3, 0], Head: [-.3, 0, 0] }, Math.max(hurt, T.hurt)); blendPose(p, fall, ease(T.die));
+        poseBones(nodes, p);
+        wake.scaling.x = 1 + move * .3; wake.visibility = .3 + move * .5;
+      };
+    },
+    // ผีเฝ้าศาลน้ำ: the shrine's water spirit — a tall pale-teal woman with a
+    // lotus crown whose body below the waist is a spinning column of water.
+    waterspirit(nodes, body, holder, o, root) {
+      body.material = ghostSkin(body, "water spirit", "#8fb8b0", "#0e2a28");
+      nodes.Spine.scaling.set(.86, 1.05, .86);
+      skinnedCut(body, "spirit sabai", (x, y) => y > .95 && y < 1.4 && Math.abs(x) < .2, () => .012, cloth.tealSilk);
+      ghostEyes(nodes, gm.eyeGreen, .03);
+      const crown = new B.TransformNode("lotus crown", scene); crown.parent = nodes.Head; crown.position.set(0, .2, -.01);
+      for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28, petal = B.MeshBuilder.CreateSphere("lotus petal", { diameter: .07, segments: 5 }, scene);
+        petal.material = lotusBloom; petal.parent = crown; petal.position.set(Math.cos(a) * .06, .03, Math.sin(a) * .06); petal.scaling.set(.6, 1.6, .35); petal.rotation.set(Math.sin(a) * .5, 0, -Math.cos(a) * .5); petal.isPickable = false; }
+      const bud = B.MeshBuilder.CreateCylinder("lotus bud", { height: .1, diameterTop: 0, diameterBottom: .05, tessellation: 6 }, scene); bud.material = gold; bud.parent = crown; bud.position.y = .08; bud.isPickable = false;
+      const hair = ghostHair(nodes, [-1.2, -.7, -.2, .2, .7, 1.2].map(a => { const x = Math.sin(a) * .08;
+        return [[x, 1.72, -.03], [x * 1.5, 1.6, -.1], [x * 1.9, 1.4, -.14], [x * 2.1, 1.15, -.12], [x * 2, .9, -.08]]; }), hairMat);
+      // Swirling water column replaces the legs.
+      const column = new B.TransformNode("water column", scene); column.parent = nodes.Hips; column.position.set(0, -.05, 0);
+      const swirl = lathe("water swirl", [[.17, .1], [.2, -.1], [.22, -.35], [.18, -.6], [.1, -.85], [.03, -1.0]], gm.waterBody, 18); swirl.parent = column;
+      const swirl2 = lathe("water swirl inner", [[.12, .05], [.15, -.3], [.1, -.7], [.02, -.95]], gm.waterRing, 12); swirl2.parent = column;
+      for (const n of ["LeftUpLeg", "RightUpLeg"]) nodes[n].scaling.setAll(.001);
+      const base = { Spine: [.05, 0, 0], Head: [.05, 0, 0], LeftArm: [-.3, .2, -.85], RightArm: [-.3, -.2, .85], LeftForeArm: [0, -.4, 0], RightForeArm: [0, .4, 0], LeftHand: [0, 0, -.3], RightHand: [0, 0, .3] };
+      const gather = { Spine: [-.25, 0, 0], Head: [-.2, 0, 0], LeftArm: [-2.7, 0, -1.0], RightArm: [-2.7, 0, 1.0], LeftForeArm: [0, -.8, 0], RightForeArm: [0, .8, 0] };
+      const push = { Spine: [.35, 0, 0], LeftArm: [-1.55, .25, -1.2], RightArm: [-1.55, -.25, 1.2], LeftForeArm: [0, 0, 0], RightForeArm: [0, 0, 0], LeftHand: [-.8, 0, 0], RightHand: [-.8, 0, 0] };
+      const spill = { Spine: [.8, 0, 0], Spine1: [.4, 0, 0], Head: [.5, 0, 0], LeftArm: [-.2, 0, -1.4], RightArm: [-.2, 0, 1.4] };
+      const wave = B.MeshBuilder.CreateGround("water wave", { width: 1, height: 1 }, scene); wave.parent = root; wave.position.y = .06; wave.material = gm.waveMat; wave.isPickable = false; wave.setEnabled(false);
+      return k => {
+        const { t, hurt } = k, T = ghostTimeline(k.g, k.now);
+        holder.position.y = .55 + Math.sin(t * 1.3) * .1 + T.wind * .2 - ease(T.die) * .8 - (1 - ease(T.rise)) * 1.2;
+        column.rotation.y = t * 2.5; swirl2.rotation.y = -t * 4; column.scaling.y = 1 - ease(T.die) * .7;
+        const p = clonePose(base);
+        p.LeftArm[2] += Math.sin(t * 1.1) * .15; p.RightArm[2] -= Math.sin(t * 1.1) * .15; p.Spine[1] = Math.sin(t * .7) * .1;
+        blendPose(p, gather, T.wind); blendPose(p, push, T.hit); blendPose(p, { Spine: [-.4, .2, 0] }, Math.max(hurt, T.hurt)); blendPose(p, spill, ease(T.die));
+        poseBones(nodes, p);
+        wave.setEnabled(T.hit > .05); wave.scaling.setAll(1 + T.hit * 7); wave.visibility = T.hit;
+        hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 1.6 + i) * .12; h.rotation.y = Math.sin(t + i) * .1; });
+      };
+    },
+    // ---- ป่าช้าเงาจันทร์ (moon cemetery) ----
+    // เงาหลุมศพ: a corpse in its burial shroud, still bound by the sacred
+    // thread at neck, wrists and ankles, shambling stiff-legged from the grave.
+    graveborn(nodes, body, holder, o) {
+      body.material = ghostSkin(body, "grave", "#6b6f68", "#08090a");
+      skinnedCut(body, "burial shroud", (x, y) => y > .12 && y < 1.5 && Math.abs(x) < .42, (x, y) => .018 + .01 * Math.sin(y * 20), cloth.burial);
+      ghostEyes(nodes, gm.eyeAmber, .028);
+      // Sai sin bindings (neck, wrists, knees, ankles) ride their bones.
+      for (const [bone, at, d] of [["Neck", [0, 1.5, .005], .14], ["LeftHand", [.62, 1.355, 0], .09], ["RightHand", [-.62, 1.355, 0], .09], ["LeftLeg", [.094, .45, -.002], .13], ["RightLeg", [-.094, .45, -.002], .13], ["LeftFoot", [.096, .16, -.01], .11], ["RightFoot", [-.096, .16, -.01], .11]]) {
+        const tie = B.MeshBuilder.CreateTorus("sacred thread", { diameter: d, thickness: .012, tessellation: 12 }, scene); tie.material = sacredCord; tie.position.set(...at); tie.isPickable = false;
+        if (bone.endsWith("Hand")) tie.rotation.z = Math.PI / 2; onBone(nodes, bone, tie);
+      }
+      const dirt = []; for (let i = 0; i < 6; i++) { const clod = B.MeshBuilder.CreateSphere("grave dirt", { diameter: .07 + R(i, 911) * .06, segments: 4 }, scene); clod.material = gm.dirtMat; clod.position.set((R(i, 912) - .5) * .3, .3 + R(i, 913) * .9, .1 + R(i, 914) * .04); clod.isPickable = false; onBone(nodes, i < 3 ? "Spine" : "Hips", clod); dirt.push(clod); }
+      const base = { Spine: [.15, 0, .05], Spine1: [.1, 0, 0], Neck: [.15, 0, 0], Head: [.3, .2, .25], LeftArm: [-1.45, 0, -1.2], RightArm: [-1.45, 0, 1.2], LeftForeArm: [0, -.05, 0], RightForeArm: [0, .05, 0], LeftHand: [.4, 0, 0], RightHand: [.4, 0, 0] };
+      const lift = { Spine: [-.1, 0, 0], LeftArm: [-2.6, 0, -1.0], RightArm: [-2.6, 0, 1.0], Head: [-.1, 0, 0] };
+      const clutch = { Spine: [.55, 0, 0], LeftArm: [-1.1, .5, -1.1], RightArm: [-1.1, -.5, 1.1], LeftForeArm: [0, -.6, 0], RightForeArm: [0, .6, 0] };
+      const topple = { Hips: [1.35, 0, 0], Spine: [.1, 0, 0], LeftArm: [-2.9, 0, -1.2], RightArm: [-2.9, 0, 1.2], Head: [.3, .6, 0] };
+      return k => {
+        const { t, move, hurt, walk } = k, T = ghostTimeline(k.g, k.now), gait = Math.min(1, move + T.chase * .4);
+        holder.position.y = -.02 - ease(T.die) * .7 - (1 - ease(T.rise)) * 1.6 + Math.abs(Math.sin(walk)) * .03 * gait;
+        const p = clonePose(base);
+        // Stiff-kneed shamble with a lurch of the hips.
+        p.Hips = [0, Math.sin(walk) * .12 * gait, Math.sin(walk) * .1 * gait];
+        p.LeftUpLeg = [-Math.sin(walk) * .45 * gait, 0, .04]; p.RightUpLeg = [Math.sin(walk) * .45 * gait, 0, -.04];
+        p.LeftLeg = [Math.max(0, Math.cos(walk)) * .25 * gait + .05, 0, 0]; p.RightLeg = [Math.max(0, -Math.cos(walk)) * .25 * gait + .05, 0, 0];
+        p.LeftFoot = [-p.LeftUpLeg[0] - p.LeftLeg[0], 0, 0]; p.RightFoot = [-p.RightUpLeg[0] - p.RightLeg[0], 0, 0];
+        p.Head[2] += Math.sin(t * 2.3) * .15;
+        blendPose(p, lift, T.wind); blendPose(p, clutch, T.hit); blendPose(p, { Spine: [-.35, .3, 0] }, Math.max(hurt, T.hurt)); blendPose(p, topple, ease(T.die));
+        poseBones(nodes, p);
+      };
+    },
+    // ผู้เฝ้าเชิงตะกอน: the pyre keeper — a charred corpse cracked with
+    // embers, wielding a burning pyre log that trails sparks.
+    pyrekeeper(nodes, body, holder, o) {
+      body.material = ghostSkin(body, "charred", "#2a201c", "#000000", "char");
+      nodes.Spine.scaling.set(1.05, 1, 1.02);
+      skinnedCut(body, "burnt loincloth", (x, y) => y > .75 && y < 1.0, () => .025, cloth.ash);
+      ghostEyes(nodes, gm.eyeAmber, .036);
+      const flame = B.MeshBuilder.CreateCylinder("head flame", { height: .35, diameterTop: 0, diameterBottom: .16, tessellation: 6 }, scene); flame.material = gm.flameMat; flame.position.set(0, 1.85, -.01); flame.isPickable = false; onBone(nodes, "Head", flame);
+      const log = new B.TransformNode("pyre log", scene); log.parent = nodes.Socket_Hand_Weapon_R; log.rotationQuaternion = quatFromUp(new B.Vector3(0, .25, 1));
+      tube("pyre log", [[0, -.15, 0], [.01, .3, 0], [-.01, .75, 0]], .045, .06, gm.charWood, 7).parent = log;
+      const fire = B.MeshBuilder.CreateCylinder("log fire", { height: .45, diameterTop: 0, diameterBottom: .2, tessellation: 7 }, scene); fire.material = gm.flameMat; fire.parent = log; fire.position.y = .98; fire.isPickable = false;
+      const embers = new B.ParticleSystem("pyre embers", 40, scene);
+      embers.particleTexture = motes.particleTexture; embers.emitter = fire; embers.minEmitBox = new B.Vector3(-.05, 0, -.05); embers.maxEmitBox = new B.Vector3(.05, .1, .05);
+      embers.color1 = new B.Color4(1, .6, .2, 1); embers.color2 = new B.Color4(1, .3, .05, .8); embers.colorDead = new B.Color4(.3, .05, 0, 0);
+      embers.minSize = .04; embers.maxSize = .1; embers.minLifeTime = .5; embers.maxLifeTime = 1.1; embers.emitRate = 20;
+      embers.direction1 = new B.Vector3(-.3, 1, -.3); embers.direction2 = new B.Vector3(.3, 1.5, .3); embers.minEmitPower = .4; embers.maxEmitPower = 1; embers.blendMode = B.ParticleSystem.BLENDMODE_ADD; embers.start();
+      holder.onDisposeObservable.add(() => embers.dispose());
+      const base = { Spine: [.1, -.2, 0], Head: [.05, .2, 0], RightArm: [-.5, .1, 1.1], RightForeArm: [0, 1.1, 0], LeftArm: [-.2, 0, -1.2], LeftForeArm: [0, -.5, 0],
+        LeftUpLeg: [-.25, 0, .15], RightUpLeg: [.15, 0, -.12], LeftLeg: [.3, 0, 0], RightLeg: [.25, 0, 0] };
+      const brand = { Spine: [-.25, -.5, 0], RightArm: [-2.8, -.3, .9], RightForeArm: [0, .4, 0], LeftArm: [-1.2, .3, -1.1] };
+      const sweep = { Spine: [.5, .6, 0], Spine1: [.2, .3, 0], RightArm: [-1.0, .6, 1.0], RightForeArm: [0, .1, 0], LeftArm: [.3, 0, -1.2], LeftUpLeg: [-.6, 0, .2], LeftLeg: [.6, 0, 0] };
+      const crumble = { Hips: [.3, 0, 0], Spine: [.9, 0, .3], Head: [.6, 0, 0], LeftUpLeg: [-1.4, 0, .3], LeftLeg: [1.7, 0, 0], RightUpLeg: [-.2, 0, -.2], RightLeg: [1.9, 0, 0], RightArm: [.2, 0, 1.4] };
+      return k => {
+        const { t, move, hurt, walk } = k, T = ghostTimeline(k.g, k.now), gait = Math.min(1, move + T.chase * .4);
+        holder.position.y = -.02 - ease(T.die) * .3 - (1 - ease(T.rise)) * 1.6 + Math.abs(Math.sin(walk)) * .03 * gait;
+        const p = clonePose(base);
+        p.LeftUpLeg[0] += -Math.sin(walk) * .45 * gait; p.RightUpLeg[0] += Math.sin(walk) * .45 * gait;
+        p.LeftLeg[0] += Math.max(0, Math.cos(walk)) * .5 * gait; p.RightLeg[0] += Math.max(0, -Math.cos(walk)) * .5 * gait;
+        blendPose(p, brand, T.wind); blendPose(p, sweep, T.hit); blendPose(p, { Spine: [-.3, .3, 0] }, Math.max(hurt, T.hurt)); blendPose(p, crumble, ease(T.die));
+        poseBones(nodes, p);
+        const f = 1 + Math.sin(t * 13) * .12; flame.scaling.set(f, 1 + Math.sin(t * 9) * .2, f); fire.scaling.set(f, (1 + Math.sin(t * 11) * .25) * (1 + T.hit), f);
+        embers.emitRate = T.die > 0 ? 0 : 20 + T.hit * 120;
+      };
+    },
+    // วิญญาณเงาจันทร์: a translucent moon spirit in trailing pale robes, a
+    // crescent halo behind her head; she calls down moonlight to strike.
+    moonspirit(nodes, body, holder, o, root) {
+      body.material = ghostSkin(body, "moon", "#b9c9e8", "#2a3a60", "skin", .62);
+      skinnedCut(body, "moon robe", (x, y) => y > .12 && y < 1.48 && Math.abs(x) < .55, (x, y) => .02 + (y < 1 ? .04 * (1 - y) : 0), cloth.moonSilk);
+      const sleeveTrail = lathe("moon robe trail", [[.2, .4], [.24, .15], [.18, -.2], [.05, -.55]], gm.moonMist, 16); onBone(nodes, "Hips", sleeveTrail);
+      ghostEyes(nodes, gm.eyeMoon, .03);
+      const halo = B.MeshBuilder.CreateTorus("crescent halo", { diameter: .5, thickness: .035, tessellation: 32, arc: .72 }, scene); halo.material = gm.moonGlow; halo.position.set(0, 1.66, -.12); halo.rotation.set(Math.PI / 2, 0, 2.3); halo.isPickable = false; onBone(nodes, "Head", halo);
+      const hair = ghostHair(nodes, [-1, -.5, 0, .5, 1].map(a => { const x = Math.sin(a) * .08; return [[x, 1.72, -.03], [x * 1.3, 1.55, -.11], [x * 1.5, 1.3, -.13], [x * 1.4, 1.0, -.1]]; }), hairMat);
+      const beam = B.MeshBuilder.CreateCylinder("moonbeam", { height: 12, diameter: 1.3, tessellation: 16 }, scene); beam.material = gm.moonBeam; beam.parent = root; beam.position.set(0, 6, -2.2); beam.isPickable = false; beam.setEnabled(false);
+      const base = { Spine: [.05, 0, 0], Head: [.12, 0, .1], LeftArm: [-.35, .4, -1.0], RightArm: [-.35, -.4, 1.0], LeftForeArm: [0, -.9, 0], RightForeArm: [0, .9, 0], LeftHand: [0, 0, -.3], RightHand: [0, 0, .3],
+        LeftUpLeg: [.1, 0, .03], RightUpLeg: [.15, 0, -.03], LeftLeg: [.3, 0, 0], RightLeg: [.4, 0, 0], LeftFoot: [.8, 0, 0], RightFoot: [.8, 0, 0] };
+      const invoke = { Spine: [-.35, 0, 0], Head: [-.6, 0, 0], RightArm: [-2.9, 0, .7], RightForeArm: [0, .1, 0], LeftArm: [-.6, 0, -1.0] };
+      const call = { Spine: [.3, 0, 0], RightArm: [-1.6, 0, 1.15], RightForeArm: [0, 0, 0], RightHand: [-.6, 0, 0], LeftArm: [-.2, 0, -1.25] };
+      const fade = { Spine: [-.5, 0, 0], Neck: [-.5, 0, 0], LeftArm: [-.3, 0, -.2], RightArm: [-.3, 0, .2] };
+      return k => {
+        const { t, move, hurt } = k, T = ghostTimeline(k.g, k.now);
+        holder.position.y = .45 + Math.sin(t * 1.2) * .12 + T.wind * .2 + ease(T.die) * 1.2 - (1 - ease(T.rise)) * .8;
+        const p = clonePose(base);
+        p.Hips = [.15 + move * .3, Math.sin(t * .6) * .15, 0]; p.LeftArm[2] += Math.sin(t * 1.4) * .1; p.RightArm[2] -= Math.sin(t * 1.4 + 1) * .1;
+        blendPose(p, invoke, T.wind); blendPose(p, call, T.hit); blendPose(p, { Spine: [-.3, -.3, 0] }, Math.max(hurt, T.hurt)); blendPose(p, fade, ease(T.die));
+        poseBones(nodes, p);
+        halo.rotation.z = 2.3 + Math.sin(t * .8) * .2; halo.scaling.setAll(1 + T.wind * .5);
+        beam.setEnabled(T.hit > .05); beam.visibility = T.hit * .8; beam.scaling.set(1 + T.hit * .3, 1, 1 + T.hit * .3);
+        hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 1.3 + i) * .1; });
+      };
+    },
   };
   const HUMANOID_KINDS = new Set(Object.keys(HUMANOID));
   const ghostWaiting = [];
@@ -3954,8 +4186,18 @@
     return update;
   }
   // Which rig each server monster uses (names come from the server roster).
+  // Atlas regions with ghost designs, per court (atlas_<map>_<court>_<n>).
+  const ATLAS_GHOSTS = {
+    drowned_marsh: [{ kind: "drowned", fallback: "corpse" }, { kind: "boatman", fallback: "corpse" }, { kind: "waterspirit", fallback: "longhair" }],
+    moon_cemetery: [{ kind: "graveborn", fallback: "corpse" }, { kind: "pyrekeeper", fallback: "corpse" }, { kind: "moonspirit", fallback: "longhair" }],
+  };
   function ghostDesign(monster, id) {
     const level = Number(monster.level) || 1;
+    const atlas = ATLAS_GHOSTS[monster.mapId];
+    if (atlas) {
+      const court = Math.max(1, Math.min(3, Number(String(id).split("_").slice(-2, -1)[0]) || 1)) - 1;
+      return { ...atlas[court], scale: 1 + (level - (Number(monster.level) || level)) * 0 + court * .06, eye: gm.eyeRed };
+    }
     if (monster.tier === "elite" && monster.mapId === "forbidden_forest")
       return { kind: "statue", scale: 1.55, eye: gm.eyeAmber, cloth: gm.lacquer, spire: 1, elite: true };
     if (monster.mapId === "bound_temple") {
@@ -3972,14 +4214,15 @@
   // Builds the pickable root plus the visual rig for one monster.
   function makeGhostMonster(monster, id) {
     const design = ghostDesign(monster, id);
-    const tall = { hanged: 3.4, bell: 2.6, longhair: 2.2, statue: 2.4 }[design.kind] || 2;
+    const tall = { hanged: 3.4, bell: 2.6, longhair: 2.2, statue: 2.4, waterspirit: 2.4, moonspirit: 2.4, boatman: 2.2 }[design.kind] || 2;
     const root = B.MeshBuilder.CreateBox("monster-" + id, { width: 1.3, height: tall, depth: 1.3 }, scene);
     root.visibility = .001; root.isPickable = true;
     const rig = new B.TransformNode("ghost rig", scene); rig.parent = root; rig.position.y = -tall / 2; rig.scaling.setAll(design.scale);
     // Humanoid ghosts wait for the shared body; primitive rigs are the fallback.
     let update = () => {};
     const ghostState = { get update() { return update; } };
-    const build = () => { update = shamanBody && HUMANOID_KINDS.has(design.kind) ? buildHumanoidGhost(rig, design) : GHOST_KINDS[design.kind](rig, design); };
+    const fallback = GHOST_KINDS[design.kind] || GHOST_KINDS[design.fallback || "corpse"];
+    const build = () => { update = shamanBody && HUMANOID_KINDS.has(design.kind) ? buildHumanoidGhost(rig, design) : fallback(rig, design); };
     if (shamanBody === null && HUMANOID_KINDS.has(design.kind)) ghostWaiting.push(() => { if (!root.isDisposed()) build(); }); else build();
     root.metadata = { monsterId: id, ghost: { update: k => ghostState.update(k), rig, tall, design, attackAt: -1e9, hurtAt: -1e9, deathAt: 0, spawnAt: performance.now(), walk: 0, speed: 0 } };
     if (design.elite) {
