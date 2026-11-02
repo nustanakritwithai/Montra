@@ -3280,7 +3280,10 @@
         const leg = part(B.MeshBuilder.CreateCylinder("elephant leg", { height: 1.65, diameterTop: .45, diameterBottom: .4, tessellation: 10 }, scene), hip); leg.material = hideMat; leg.position.y = -.82;
         const foot = part(B.MeshBuilder.CreateCylinder("elephant foot", { height: .14, diameter: .48, tessellation: 10 }, scene), hip); foot.material = hideMat; foot.position.y = -1.6; return hip; });
       // Tattered caparison and a broken howdah.
-      const cloak = part(lathe("caparison", [[0, .95], [.75, .9], [1.05, .55], [1.1, .1], [1.05, -.1]], cloth.danceRed, 18)); cloak.rotation.x = Math.PI / 2; cloak.scaling.set(1, 1.25, 1); cloak.position.y = 2.15; cloak.scaling.z = .95;
+      // Caparison: a curved cloth draped over the back, hanging down both flanks.
+      const cloak = part(B.MeshBuilder.CreateCylinder("caparison", { height: 2.1, diameter: 2.05, arc: .55, tessellation: 24, enclose: false, sideOrientation: B.Mesh.DOUBLESIDE }, scene));
+      cloak.material = cloth.danceRed; cloak.rotation.set(Math.PI / 2, 0, Math.PI / 2 + Math.PI * .55 / 2 * 0 - Math.PI * .275 + Math.PI / 2); cloak.position.y = 2.15;
+      const fringe = part(B.MeshBuilder.CreateTorus("caparison fringe", { diameter: 2.2, thickness: .05, tessellation: 24 }, scene)); fringe.material = gold; fringe.position.y = 1.55; fringe.scaling.set(.75, 1, 1.15);
       const howdah = part(B.MeshBuilder.CreateBox("howdah", { width: .9, height: .4, depth: .9 }, scene)); howdah.material = gm.beam; howdah.position.y = 3.05;
       for (const [x, z] of [[-.4, -.4], [.4, -.4], [-.4, .4], [.4, .4]]) part(B.MeshBuilder.CreateCylinder("howdah post", { height: .7, diameter: .05, tessellation: 5 }, scene)).position.set(x, 3.5, z);
       const tail = new B.TransformNode("tail", scene); tail.parent = body; tail.position.set(0, 2.3, 1.3); part(tube("tail", [[0, 0, 0], [0, -.4, .1], [0, -.8, .05]], .04, .015, hideMat, 5), tail);
