@@ -46,7 +46,7 @@ type Siege={gates:Record<string,Gate>;throne:Record<Side,number>;cutMs:Record<Si
 export type PilotState={points:Point[];score:Record<Side,number>;middleTime:Record<Side,number>;siege?:Siege};
 export function newPilot(defended=false):PilotState {
   return {points:scoringNodes.map(():Point=>({owner:null,pressure:0,awarded:{attack:false,defend:false}})),
-    score:sidesAtZero(),middleTime:sidesAtZero(),siege:{gates:Object.fromEntries(gateIds.map(id=>[id,{open:!defended,hp:120,lastHit:null}])),
+    score:sidesAtZero(),middleTime:sidesAtZero(),siege:{gates:Object.fromEntries(gateIds.map((id):[string,Gate]=>[id,{open:!defended,hp:120,lastHit:null}])),
       throne:sidesAtZero(),cutMs:sidesAtZero(),defended,victor:null}};
 }
 function reachable(starts:readonly number[],canEnter:(id:number)=>boolean,passable:(gate:string)=>boolean){
