@@ -6688,7 +6688,36 @@
         }
       } else hudSet(pointer, "qph", true, "hidden");
     }
+    renderPartyFrames();
     renderStatusChip();
+  }
+  // Party frames on the play screen: the other members with HP, and how far
+  // away they are (or that they are on another map and will not share EXP).
+  function renderPartyFrames() {
+    const box = $("partyFrames"); if (!box) return;
+    const members = mode === "live" && partyState ? partyState.members.filter(m => m.sessionId !== localId) : [];
+    hudSet(box, "pfh", members.length === 0, "hidden");
+    if (!members.length) return;
+    const me = room?.state?.players?.get?.(localId);
+    const rows = members.map(m => {
+      const p = room?.state?.players?.get?.(m.sessionId), lead = m.sessionId === partyState.leaderId;
+      const same = p && (p.mapId || "ritual_village") === (me?.mapId || "ritual_village");
+      const where = !p ? "เชื่อมต่อ…" : p.alive === false ? "หมดสติ" : same ? Math.round(Math.hypot(p.x - me.x, p.z - me.z)) + " ม." : "แผนที่อื่น";
+      return { key: [m.name, lead, p?.pathId, Math.round(p?.hp || 0), Math.round(p?.maxHp || 0), where].join("|"), name: m.name, lead, glyph: PATH_GLYPHS[p?.pathId] || Array.from(m.name)[0] || "?",
+        hp: pctOf(p?.hp, p?.maxHp), where, down: p?.alive === false, far: p && !same, low: p && p.hp / Math.max(1, p.maxHp) < .3 };
+    });
+    const key = rows.map(r => r.key).join("~");
+    if (hudCache.get("pf") === key) return; hudCache.set("pf", key);
+    box.replaceChildren();
+    for (const r of rows) {
+      const row = document.createElement("span"); row.className = "pf-row" + (r.down ? " down" : "") + (r.far ? " far" : "") + (r.low ? " low" : "");
+      const av = document.createElement("i"); av.className = "pf-av"; av.textContent = r.glyph; if (r.lead) av.dataset.lead = "♛";
+      const body = document.createElement("span"); body.className = "pf-body";
+      const top = document.createElement("span"); top.className = "pf-top";
+      const nm = document.createElement("b"); nm.textContent = r.name; const wh = document.createElement("small"); wh.textContent = r.where; top.append(nm, wh);
+      const bar = document.createElement("span"); bar.className = "pf-bar"; const fill = document.createElement("i"); fill.style.width = r.hp; bar.append(fill);
+      body.append(top, bar); row.append(av, body); box.append(row);
+    }
   }
   // Plain words instead of "DEMO · ↑0ม.": mode, players, safe zone, altitude only in the air.
   function renderStatusChip() {
@@ -9929,6 +9958,7 @@
   $("chatButton").onclick=openChat;
   $("marketButton").onclick=openEconomy;
   $("partyButton").onclick=openParty;
+  $("partyFrames").onclick=openParty;
   $("mapShortcut").onclick=openMap;
   $("modeButton").onclick=openOnline;
   $("swordTreeButton").onclick=openSwordTree;
