@@ -434,10 +434,10 @@
       key: "#e6c3aa", keyI: .38, mist: "#402c33", mistAlpha: .24, mote: ["#ffa25c", "#ffd18c"], skyLevel: .9 },
     // Atlas regions: each has its own night (marsh-light green, cold moon,
     // dusk ridge, sunless cave, smouldering ruin, volcanic crimson, void violet).
-    drowned_marsh: { clear: "#060d0a", fog: "#13241c", fogNear: 2, fogFar: 85, hemi: .5, carry: .55, sky: "#8fb59a", ground: "#1d2a1f",
-      key: "#a8c9b0", keyI: .32, mist: "#2e4a38", mistAlpha: .36, mote: ["#b6ff7a", "#6dffb0"], skyLevel: .7 },
-    moon_cemetery: { clear: "#070812", fog: "#171a2a", fogNear: 4, fogFar: 92, hemi: .6, carry: .45, sky: "#aab4e0", ground: "#22202c",
-      key: "#c9d2ff", keyI: .5, mist: "#3a3d55", mistAlpha: .36, mote: ["#e6e8ff", "#b7b2ff"], skyLevel: 1.15 },
+    drowned_marsh: { clear: "#101d1c", fog: "#253932", fogNear: 19, fogFar: 125, hemi: .84, carry: .55, sky: "#accac0", ground: "#314239",
+      key: "#c4dac9", keyI: .52, mist: "#2e4a38", mistAlpha: .14, mote: ["#b6ff7a", "#6dffb0"], skyLevel: .7 },
+    moon_cemetery: { clear: "#151b29", fog: "#283545", fogNear: 22, fogFar: 128, hemi: .84, carry: .48, sky: "#c9d6ed", ground: "#343946",
+      key: "#dee5ff", keyI: .58, mist: "#3a3d55", mistAlpha: .14, mote: ["#e6e8ff", "#b7b2ff"], skyLevel: 1.15 },
     hex_ridge: { clear: "#0b0c08", fog: "#1f2116", fogNear: 6, fogFar: 100, hemi: .54, carry: .5, sky: "#c2c09a", ground: "#2a2618",
       key: "#e8d4a4", keyI: .42, mist: "#3c3a2a", mistAlpha: .2, mote: ["#ffd36a", "#ffe9a8"], skyLevel: 1 },
     naga_cavern: { clear: "#030809", fog: "#0a1a1c", fogNear: 0, fogFar: 70, hemi: .44, carry: .75, sky: "#7fb6c0", ground: "#13201f",
@@ -1535,8 +1535,11 @@
       }
       terrain.update();terrain.uScale=id==="tri_wiang_castle"?190:9;terrain.vScale=id==="tri_wiang_castle"?190:12;floor.diffuseTexture=terrain;
       // Night grade: the atlas palette is kept but pulled down toward moonlight.
-      floor.diffuseColor.scaleInPlace(province?.kind ? .88 : .58);court.diffuseColor.scaleInPlace(province?.kind ? .83 : .5);road.diffuseColor.scaleInPlace(province?.kind ? .94 : .66);
-      if(province){floor.emissiveColor=floor.diffuseColor.scale(.22);road.emissiveColor=road.diffuseColor.scale(.17);}
+      const outerHunt=worldDefinitions?.[id]?.huntTrail;
+      const clearTerrain=province || outerHunt;
+      floor.diffuseColor.scaleInPlace(clearTerrain ? .88:.58);court.diffuseColor.scaleInPlace(clearTerrain ? .83:.5);road.diffuseColor.scaleInPlace(clearTerrain ? .94:.66);
+      if(clearTerrain){floor.emissiveColor=floor.diffuseColor.scale(.22);road.emissiveColor=road.diffuseColor.scale(outerHunt ? .28:.17);}
+      if(outerHunt){court.emissiveColor=court.diffuseColor.scale(.17);stone.emissiveColor=stone.diffuseColor.scale(.12);}
       stone.diffuseColor.scaleInPlace(.8);deep.diffuseColor.scaleInPlace(.7);
       court.diffuseTexture=terrain;glowMats.add(light);
       regionPaints.set(id,{floor,road,court,stone,light,deep});
@@ -1878,8 +1881,17 @@
     }
     const marsh=map.id==="drowned_marsh",rift=map.id==="spirit_rift";
     // Distant slopes frame the playfield even when the camera follows an outer gate.
-    box(0,-1.2,-16,226,.65,239,deep);
-    for(let i=0;i<18;i++)for(const side of [-1,1]){
+    const outerHunt=map.huntTrail;
+    if(outerHunt){
+      const b=map.bounds,w=b.maxX-b.minX,d=b.maxZ-b.minZ;
+      box((b.maxX+b.minX)/2,-1.2,(b.maxZ+b.minZ)/2,w+50,.65,d+50,deep);
+      for(let i=0;i<20;i++)for(const side of [-1,1]){
+        const t=(i+.5)/20,h=4+noise(i,113)*6;
+        cone(side<0?b.minX-5:b.maxX+5,h*.35,b.minZ+t*d,h,7,marsh?1:0,stone,5);
+        cone(b.minX+t*w,h*.32,side<0?b.minZ-5:b.maxZ+5,h,6,.2,floor,6);
+      }
+    }else box(0,-1.2,-16,226,.65,239,deep);
+    for(let i=0;!outerHunt && i<18;i++)for(const side of [-1,1]){
       const tall=3+(i*11)%7;
       cone(side*(48+i%3),tall*.35,-68+i*6,tall,6+i%5,marsh?1.2:0,stone,5);
       cone(-52+i*6,tall*.32,side===1?39+i%4:-74-i%4,tall,6+i%4,0,floor,6);
@@ -1888,11 +1900,45 @@
       box(w.x+w.width/2,.035,w.z+w.length/2,w.width,.07,w.length,regionWater(map.id));
       for(let i=1;i<=Math.floor(w.width/6);i++)box(w.x+i*5.5,.079,w.z+.8+(i%2),marsh?1.7:1.1,.025,.10,light);
     }
-    for(const z of new Set((map.water||[]).map(w=>w.z+2)))for(const x of [-22,22]){
+    const crossings=map.bridges ?? [...new Set((map.water||[]).map(w=>w.z+2))].flatMap(z=>[-22,22].map(x=>({x,z})));
+    for(const {x,z} of crossings){
       for(let i=-3;i<=3;i++)box(x,.11,z+i*.75,6,.16,.63,marsh?road:stone);
       for(const side of [-1,1]){
         box(x+side*3,.8,z,.14,.15,5.4,marsh?stone:light);
         for(const end of [-1,1])cone(x+side*3,.52,z+end*2.7,1.2,.28,.20,stone,5);
+      }
+    }
+    if(outerHunt){
+      const trail=map.paths[outerHunt.path];
+      const stop=map.restAreas.find(a=>trail.some(p=>p.x===a.x && p.z===a.z) && map.portals.every(p=>Math.hypot(p.x-a.x,p.z-a.z)>5));
+      if(stop){
+        const {x,z}=stop;
+        if(marsh){
+          for(let i=-3;i<=3;i++)box(x+i*.79,.1,z,.75,.15,5.5,wooden);
+          for(const dx of [-2.9,2.9])for(const dz of [-2.7,2.7])cone(x+dx,1,z+dz,2.2,.3,.26,darkWood);
+          for(const dx of [-2.8,2.8])cone(x+dx,2.3,z-2.7,.65,.58,.38,decor.willo,8);
+        }else{
+          for(const dx of [-2.6,2.6])for(const dz of [-2.3,2.3])box(x+dx,1.65,z+dz,.3,3.3,.3,stone);
+          for(const side of [-1,1])box(x+side*1.53,4,z,3.6,.28,5.8,darkWood).rotation.z=-side*.45;
+          box(x,.7,z-1.7,3.6,.22,.85,wooden);
+        }
+      }
+      const arena=map.camps.find(c=>c.tier==="strong");
+      if(arena){
+        const {x,z}=arena;
+        if(marsh){
+          for(const side of [-1,1]){
+            const hull=box(x+side*7,.85,z-5,.57,1.6,6.7,wooden);hull.rotation.y=side*.22;
+            for(let i=0;i<4;i++)box(x+side*(6.15+i*.2),1.1,z-7.5+i*1.65,1.6,.22,.27,wooden);
+          }
+          box(x,2.6,z-6,.29,5.2,.28,darkWood).rotation.z=.15;
+          box(x-.8,4,z-6,1.5,1.8,.09,clothRed);
+        }else{
+          for(const side of [-1,1])box(x+side*2.5,2.2,z-6,.5,4.4,.55,stone);
+          box(x,4.5,z-6,6.2,.45,.7,darkWood);
+          cone(x,2.95,z-6,2.15,2.2,1.05,gold,12);cone(x,1.88,z-6,.25,2.5,2.25,stone,12);
+          ring(x,.14,z,9,paint.light);
+        }
       }
     }
     // Low ground dressing leaves the playable lanes, sightlines and server collision intact.
@@ -1938,6 +1984,11 @@
       if(map.id==="fallen_city"){
         box(x,2,z,w.width,4,w.length,stone);box(x,4.2,z,w.width+.3,.4,w.length+.3,deep);
         for(let i=1;i<w.width-1;i+=2)box(w.x+i,2.5,w.z-.06,.9,1,.13,paint.court);
+      }else if(map.id==="moon_cemetery"){
+        box(x,1.5,z,w.width,3,w.length,stone);
+        box(x,3.1,z,w.width+.2,.25,w.length+.2,deep);
+        const along=w.width>=w.length,n=Math.ceil(Math.max(w.width,w.length)/4);
+        for(let i=0;i<n;i++){const t=(i+.5)/n;cone(along?w.x+t*w.width:x,3.45,along?z:w.z+t*w.length,.55,.72,.25,stone,6);}
       }else{
         box(x,1.25,z,w.width,2.5,w.length,stone);
         for(let i=1;i<w.width;i+=2.8)cone(w.x+i,3,z,2+i%2,2.1,.15,map.id==="naga_cavern"?paint.court:deep,5);
@@ -1999,7 +2050,8 @@
         m.emissiveTexture=null;m.disableLighting=true;
         m.emissiveColor=B.Color3.FromHexString(id==="lotus_basin"?"#337b71":id==="moon_pass"?"#357782":"#396e8a");
       }
-      const tint={drowned_marsh:["#0b1f17","#05130c"],spirit_rift:["#160c2c","#0d0624"]}[id];
+      if(id==="drowned_marsh"){m.emissiveTexture=null;m.disableLighting=true;m.emissiveColor=B.Color3.FromHexString("#32645f");}
+      const tint={spirit_rift:["#160c2c","#0d0624"]}[id];
       if(tint){m.diffuseColor=B.Color3.FromHexString(tint[0]);m.emissiveColor=B.Color3.FromHexString(tint[1]);}
       regionWaters.set(id,m);
     }
@@ -2206,7 +2258,7 @@
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
     const map=worldDefinitions?.[activeMapId];if(!map)return;
-    (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic)));
+    (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic || map.huntTrail)));
     for(const camp of map.camps||[]){
       const clearing=inTemple ? B.MeshBuilder.CreateGround("temple court",{width:21,height:19},scene) : B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
       // Between the soil (-.12) and trail tops (+.015), so their colors never
@@ -4994,8 +5046,8 @@
   const ATLAS_GHOSTS = {
     bamboo_frontier: [{kind:"kongkoi",fallback:"corpse"},{kind:"phiphong",fallback:"corpse"},{kind:"takhian",fallback:"longhair"},{kind:"phipop",fallback:"corpse"},{kind:"phitakhon",fallback:"corpse",lead:true}],
     lotus_basin: [{kind:"waterspirit",fallback:"longhair"},{kind:"boatman",fallback:"corpse"},{kind:"drowned",fallback:"corpse"},{kind:"moonspirit",fallback:"longhair"},{kind:"waterspirit",fallback:"longhair",lead:true}],
-    drowned_marsh: [{ kind: "drowned", fallback: "corpse" }, { kind: "boatman", fallback: "corpse" }, { kind: "waterspirit", fallback: "longhair" }],
-    moon_cemetery: [{ kind: "graveborn", fallback: "corpse" }, { kind: "pyrekeeper", fallback: "corpse" }, { kind: "moonspirit", fallback: "longhair" }],
+    drowned_marsh: [{ kind: "drowned", fallback: "corpse" }, { kind: "boatman", fallback: "corpse" }, { kind: "waterspirit", fallback: "longhair" },{kind:"drowned",fallback:"corpse"},{kind:"boatman",fallback:"corpse",lead:true}],
+    moon_cemetery: [{ kind: "graveborn", fallback: "corpse" }, { kind: "pyrekeeper", fallback: "corpse" }, { kind: "moonspirit", fallback: "longhair" },{kind:"headless",fallback:"corpse"},{kind:"pyrekeeper",fallback:"corpse",lead:true}],
     hex_ridge: [{ kind: "krasue", fallback: "longhair" }, { kind: "krahang", fallback: "corpse" }, { kind: "preta", fallback: "corpse" }],
     naga_cavern: [{ kind: "phiphong", fallback: "corpse" }, { kind: "kongkoi", fallback: "corpse" }, { kind: "takhian", fallback: "longhair" }],
     spirit_rift: [{ kind: "unaware", fallback: "corpse" }, { kind: "childghost", fallback: "corpse" }, { kind: "elephant" }],
@@ -6877,6 +6929,7 @@
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill();
     ctx.shadowBlur = 0; ctx.lineWidth = Math.max(1, r * .35); ctx.strokeStyle = stroke; ctx.stroke();
   }
+  function huntRoute(map){return map?.huntTrail ?? map?.strategic?.huntTrail;}
   function drawMap(ctx,width,height,large=false) {
     const theme = mapTheme(activeMapId);
     const map = worldDefinitions?.[activeMapId];
@@ -6955,7 +7008,7 @@
       // Trails: dark verge, packed earth, faint centre line.
       const trail = (width_, color) => {
         ctx.strokeStyle = color; ctx.lineWidth = width_; ctx.lineCap = "round"; ctx.lineJoin = "round";
-        for (const path of map?.paths || []) { ctx.beginPath(); (map.strategic ? path : smoothPath(path)).forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
+        for (const path of map?.paths || []) { ctx.beginPath(); (map.strategic || map.huntTrail ? path : smoothPath(path)).forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
       };
       if (activeMapId === "forbidden_forest") { ctx.fillStyle = "#4a3f2e"; ctx.fillRect(sx(-2.5), sy(-20), 5 * scale, 40 * scale); }
       for (const pool of map?.water || []) {
@@ -6965,7 +7018,7 @@
       }
       trail(Math.max(3, 5.5 * scale), "rgba(10,8,6,.55)");
       trail(Math.max(2, 4 * scale), theme.road || (activeMapId === "bound_temple" ? "#8a7552" : "#7a6546"));
-      const hunt=map?.strategic?.huntTrail;
+      const hunt=huntRoute(map);
       if(hunt && trackedHuntMap===activeMapId){
         ctx.save();ctx.strokeStyle="#ffdc83";ctx.lineWidth=large?2.6:1.5;ctx.setLineDash(large?[6,3]:[3,2]);ctx.beginPath();
         map.paths[hunt.path].forEach((p,i)=>i?ctx.lineTo(sx(p.x),sy(p.z)):ctx.moveTo(sx(p.x),sy(p.z)));ctx.stroke();ctx.restore();
@@ -7069,7 +7122,7 @@
       const x = sx(area.x), y = sy(area.z), r = area.radius * scale;
       ctx.fillStyle = "rgba(133,246,221,.1)"; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
       ctx.setLineDash([3 * u, 2.5 * u]); ctx.strokeStyle = "#85f6dd"; ctx.lineWidth = 1.6 * u; ctx.stroke(); ctx.setLineDash([]);
-      if(large && map.strategic?.huntTrail && trackedHuntMap===activeMapId && map.portals.every(p=>Math.hypot(p.x-area.x,p.z-area.z)>5))
+      if(large && huntRoute(map) && trackedHuntMap===activeMapId && map.portals.every(p=>Math.hypot(p.x-area.x,p.z-area.z)>5))
         mapText(ctx,"พัก",x,y+3,11,"#b5ffe5");
     }
     room?.state?.monsters?.forEach(m => {
@@ -7130,7 +7183,8 @@
       for (const camp of map?.camps || []) {
         const lv="Lv "+(camp.levels.length===1?camp.levels[0]:Math.min(...camp.levels)+"–"+Math.max(...camp.levels));
         const ty = activeMapId === "bound_temple" ? sy(camp.z - 9.5) - 4 : sy(camp.z) - 12 * scale - 4;
-        const marked=map.strategic?.huntTrail && trackedHuntMap===activeMapId && map.paths[map.strategic.huntTrail.path].some(p=>p.x===camp.x && p.z===camp.z);
+        const hunt=huntRoute(map);
+        const marked=hunt && trackedHuntMap===activeMapId && map.paths[hunt.path].some(p=>p.x===camp.x && p.z===camp.z);
         mapText(ctx,(camp.tier==="strong"?"◆ ":"")+lv,sx(camp.x),ty,12,"#fff0d0");
         if(marked)mapText(ctx,camp.name,sx(camp.x),sy(camp.z)+12*scale+9,11,"#ffdc83");
       }
@@ -7347,9 +7401,9 @@
       button.textContent="เปิดแผนที่ยุทธศาสตร์ · "+Object.keys(worldDefinitions).length+" พื้นที่";button.onclick=openStrategicMap;
       $("bigMap").parentElement.prepend(button);
       $("bigMap").parentElement.append(note);
-      const hunt=map.strategic?.huntTrail;
+      const hunt=huntRoute(map);
       if(hunt){
-        note.textContent+=" · "+map.strategic.hint+" · ◆ กำกับค่ายที่มีศัตรูชั้น Strong";
+        note.textContent+=" · "+map.region.hint+" · ◆ กำกับค่ายที่มีศัตรูชั้น Strong";
         const track=document.createElement("button");track.type="button";track.id="huntTrailButton";track.className="secondary";
         const sync=()=>{const on=trackedHuntMap===activeMapId;track.setAttribute("aria-pressed",String(on));track.textContent=(on?"ซ่อน":"แสดง")+"เส้นทาง · "+hunt.name;};
         track.onclick=()=>{trackedHuntMap=trackedHuntMap===activeMapId?null:activeMapId;sync();drawMap($("bigMap").getContext("2d"),420,320,true);};

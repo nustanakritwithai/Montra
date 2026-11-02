@@ -52,6 +52,8 @@ export type WorldMapDefinition = Readonly<{
   obstacles: readonly WorldObstacle[];
   walls?: readonly WorldWall[];
   water?: readonly WorldWall[];
+  bridges?: readonly Readonly<{x:number;z:number}>[];
+  huntTrail?: Province["huntTrail"];
   region?: Readonly<{range:readonly [number,number];hint:string;noFlight:boolean}>;
   portals: readonly WorldPortal[];
   restAreas?: readonly RestArea[];

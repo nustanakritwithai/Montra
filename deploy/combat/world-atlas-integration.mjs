@@ -45,10 +45,11 @@ async function warp(c,to){
   if(JSON.parse(c.r.state.worldDefinition).maps[to].camps?.length)await until(()=>Array.from(c.r.state.monsters.values()).some(m=>m.mapId===to),"destination enemies");
 }
 async function walk(c,x,z,timeout=15000){c.r.send("move",{x,z});await until(()=>Math.hypot(c.me().x-x,c.me().z-z)<.28,"walk "+c.me().mapId+" "+x+","+z,timeout);}
-async function verifyHuntTrail(i,id,destination,level){
-  await seed(i,id,0,26,level);
+async function verifyHuntTrail(i,id,destination,level,entry=[0,26]){
+  await seed(i,id,...entry,level);
   let c=await join(i);
-  const map=JSON.parse(c.r.state.worldDefinition).maps[id],trail=map.paths[map.strategic.huntTrail.path];
+  const map=JSON.parse(c.r.state.worldDefinition).maps[id],trail=map.paths[(map.huntTrail??map.strategic.huntTrail).path];
+  assert.deepEqual([trail[0].x,trail[0].z],entry);
   const rest=map.restAreas.find(a=>trail.some(p=>p.x===a.x && p.z===a.z) && !map.portals.some(p=>p.x===a.x && p.z===a.z));
   const guardId="atlas_"+id+"_5_1",warden=map.camps[4];
   assert.ok(rest);let visits=0;
@@ -129,8 +130,11 @@ async function verifyAtlas(){
   console.log("PASS atlas",read?"return gates and boss loot after restart":"outward gates, compatibility, bridge, cave and four-player warden");
 }
 try{
-  if(process.env.MONTRA_ATLAS_STAGE==="hunts"){
-    const results=await Promise.allSettled([verifyHuntTrail(51,"bamboo_frontier","moon_cemetery",35),verifyHuntTrail(52,"lotus_basin","river_watch",52)]);
+  const stage=process.env.MONTRA_ATLAS_STAGE;
+  if(stage==="hunts" || stage==="marsh-moon"){
+    const trials=stage==="hunts"?[verifyHuntTrail(51,"bamboo_frontier","moon_cemetery",35),verifyHuntTrail(52,"lotus_basin","river_watch",52)]:
+      [verifyHuntTrail(71,"drowned_marsh","moon_cemetery",22),verifyHuntTrail(72,"moon_cemetery","moon_pass",32,[18,25])];
+    const results=await Promise.allSettled(trials);
     for(const result of results)if(result.status==="rejected")throw result.reason;
   }else await verifyAtlas();
 }finally{await Promise.allSettled([...open].map(r=>r.leave()));}

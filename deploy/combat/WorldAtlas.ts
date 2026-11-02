@@ -11,6 +11,7 @@ type Region = {
   routes:readonly (readonly XY[])[]; marker:XY; scatter:readonly XY[];
   bounds?:WorldMapDefinition["bounds"]; rest?:RestArea;
   walls?:WorldWall[]; pools?:WorldWall[]; crossings?:number[]; noFlight?:boolean;
+  huntTrail?:WorldMapDefinition["huntTrail"]; extraBridges?:readonly XY[];
 };
 const point=([x,z]:XY):XZ=>({x,z});
 const wall=(x:number,z:number,width:number,length:number):WorldWall=>({x,z,width,length});
@@ -39,13 +40,24 @@ const regions:Region[]=[
      [[22,-17],[31,-13],[42,-13],[58,-21],[72,-16]],[[0,-43],[34,-44],[58,-50],[78,-60],[96,-65]]],
    pools:[wall(48,-99,20,14),wall(108,-68,24,14),wall(85,24,32,11)],
    marker:[-9,-50],scatter:[[-34,7],[32,-18],[-32,-39],[15,-45],[58,13],[88,-45],[39,-83],[119,-85]]},
-  {id:"drowned_marsh",name:"บึงพราย",range:[10,22],hint:"ข้ามสะพานไม้ระหว่างเกาะ ติดตามโคมเขียวไปท่าน้ำเหนือ",crossings:[-6,-29],
-   courts:[["เกาะกกผี",-22,8,[10,12,14],"พรายกอกก"],["ท่าน้ำจมน้ำ",22,-17,[15,17],"เงาคนแจว"],["ศาลพราย",0,-43,[19,22],"ผีเฝ้าศาลน้ำ"]],
-   routes:islandRoutes,marker:[-9,-50],scatter:[[-34,7],[34,-17],[-32,-39],[15,-45]]},
-  {id:"moon_cemetery",name:"ป่าช้าเงาจันทร์",range:[18,32],hint:"ทางจากวัดและบึงพบกันที่ลานจันทร์ ตามทางโคมไปเชิงเขา",
-   courts:[["เนินป้ายวิญญาณ",-22,2,[18,20,22],"เงาหลุมศพ"],["ลานเผาศพ",22,-15,[24,27],"ผู้เฝ้าเชิงตะกอน"],["ลานจันทร์ดับ",0,-41,[29,32],"วิญญาณเงาจันทร์"]],
-   routes:[[[-18,25],[0,21],[18,25]],[[0,21],[-22,11],[-22,2],[-24,-24],[0,-41],[0,-58]],[[0,21],[22,4],[22,-15],[20,-30],[0,-41]],[[-22,2],[0,-7],[22,-15]],[[-22,11],[-34,12]]],
-   marker:[10,-45],scatter:[[-34,-1],[33,-15],[-12,-39],[1,8]]},
+  {id:"drowned_marsh",name:"บึงพราย",range:[10,22],hint:"จากชายป่า เลียบฝั่งตะวันตกข้ามสะพานไปโป๊ะอวนขาด พักที่แพโคมเขียวแล้วตามเสากระโดงไปสุสานเรือพราย",
+   bounds:{minX:-121,maxX:59,minZ:-99,maxZ:51},huntTrail:{name:"สายแพโคมเขียว",path:3},rest:{name:"แพพักโคมเขียว",x:-101,z:-15,radius:5},
+   crossings:[-6,-29],extraBridges:[[-62,-4],[-88,-27]],
+   courts:[["เกาะกกผี",-22,8,[10,12,14],"พรายกอกก"],["ท่าน้ำจมน้ำ",22,-17,[15,17],"เงาคนแจว"],["ศาลพราย",0,-43,[19,22],"ผีเฝ้าศาลน้ำ"],
+     ["โป๊ะอวนขาด",-64,-16,[16,18],"พรายลากอวน"],["สุสานเรือพราย",-80,-63,[22],"นายท้ายเรือพราย","strong"]],
+   routes:[...islandRoutes,[[0,26],[-30,34],[-54,27],[-62,12],[-62,-4],[-64,-16],[-83,-17],[-101,-15],[-88,-20],[-88,-27],[-87,-45],[-80,-63],[-73,-78],[-53,-82],[-36,-70],[-18,-62],[0,-58]],
+     [[-22,-17],[-44,-12],[-64,-16]],[[-80,-63],[-61,-51],[-39,-53],[0,-43]]],
+   pools:[wall(-121,-90,16,45),wall(-66,-98,22,9),wall(-112,9,25,14)],
+   marker:[-9,-50],scatter:[[-34,7],[34,-17],[-32,-39],[15,-45],[-97,30],[-71,20],[-106,-55],[-60,-72]]},
+  {id:"moon_cemetery",name:"ป่าช้าเงาจันทร์",range:[18,32],hint:"จากประตูบึง เลี้ยวตะวันออกผ่านลานโลงจันทร์ ศาลาคนเฝ้าสุสานอยู่ก่อนแนวกำแพง ไปถึงลานระฆังดับแล้ววกกลับประตูด่านจันทรา",
+   bounds:{minX:-56,maxX:130,minZ:-104,maxZ:48},huntTrail:{name:"ทางระฆังเงาจันทร์",path:5},rest:{name:"ศาลาคนเฝ้าสุสาน",x:106,z:-14,radius:5},
+   courts:[["เนินป้ายวิญญาณ",-22,2,[18,20,22],"เงาหลุมศพ"],["ลานเผาศพ",22,-15,[24,27],"ผู้เฝ้าเชิงตะกอน"],["ลานจันทร์ดับ",0,-41,[29,32],"วิญญาณเงาจันทร์"],
+     ["ลานโลงจันทร์",76,4,[24,26],"เงาคนแบกโลง"],["ลานระฆังดับ",93,-61,[32],"ผู้ตีระฆังไร้เงา","strong"]],
+   routes:[[[-18,25],[0,21],[18,25]],[[0,21],[-22,11],[-22,2],[-24,-24],[0,-41],[0,-58]],[[0,21],[22,4],[22,-15],[20,-30],[0,-41]],[[-22,2],[0,-7],[22,-15]],[[-22,11],[-34,12]],
+     [[18,25],[33,32],[55,27],[71,16],[76,4],[88,-9],[106,-14],[112,-29],[101,-44],[93,-61],[78,-75],[55,-82],[34,-70],[17,-60],[0,-58]],
+     [[22,-15],[39,-20],[55,-13],[76,4]],[[0,-41],[13,-38],[30,-46],[56,-54],[73,-62],[93,-61]]],
+   walls:[wall(36,-7,17,2.4),wall(71,-25,16,2.5),wall(64,-52,19,2.8),wall(100,-77,15,2.7),wall(38,-40,3,13)],
+   marker:[10,-45],scatter:[[-34,-1],[33,-15],[-12,-39],[1,8],[63,37],[95,15],[120,-61],[62,-95]]},
   {id:"hex_ridge",name:"ดงอาคมบนเขา",range:[28,45],hint:"เลาะช่องเขาฝั่งตะวันตก แล้วเลือกระหว่างสันเขากับทางวนรอบหุบ",
    courts:[["เชิงผาหินสลัก",-23,6,[28,30,33],"ภูตเชิงผา"],["ช่องเขาอาคม",23,-18,[35,39],"อสูรเถาวัลย์"],["ยอดผาผนึก",-14,-42,[42,45],"ผู้พิทักษ์หน้าผา"]],
    walls:[wall(-14,-6,45,2.4),wall(-22,-26,40,2.4)],
@@ -115,12 +127,14 @@ export const ATLAS_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freez
   const camps:HuntCamp[]=region.courts.map(([name,x,z,levels,,tier],i)=>({id:"court"+(i+1),name,x,z,levels,tier}));
   const bounds=region.bounds??{minX:-42,maxX:42,minZ:-65,maxZ:32};
   const province=PROVINCES[region.id];
-  const water=region.crossings?.flatMap(z=>{
-    const bridges=province?.sites.filter(s=>s.kind==="bridge" && s.z===z+2).map(s=>s.x);
-    return channels(z,bounds.minX,bounds.maxX,bridges?.length?bridges:[-22,22]);
+  const bridges=region.crossings?.flatMap(z=>{
+    const local=province?.sites.filter(s=>s.kind==="bridge" && s.z===z+2);
+    const xs=local?.length?local.map(s=>s.x):[-22,22,...(region.extraBridges??[]).filter(p=>p[1]===z+2).map(p=>p[0])];
+    return xs.map(x=>({x,z:z+2}));
   });
+  const water=region.crossings?.flatMap(z=>channels(z,bounds.minX,bounds.maxX,bridges!.filter(p=>p.z===z+2).map(p=>p.x)));
   const spawn=region.id==="moon_cemetery"?{x:0,y:0,z:21}:{x:0,y:0,z:24.75};
-  const map:WorldMapDefinition={id:region.id,name:region.name,bounds,spawn,portals,camps,
+  const map:WorldMapDefinition={id:region.id,name:region.name,bounds,spawn,portals,camps,bridges,huntTrail:region.huntTrail,
     region:{range:region.range,hint:region.hint,noFlight:region.noFlight===true},
     restAreas:[{...spawn,radius:4.5,name:"ศาลพักทางเข้า"},...portals.filter(p=>Math.hypot(p.x-spawn.x,p.z-spawn.z)>4).map(p=>({x:p.x,z:p.z,radius:3.6,name:"ศาลประตู"})),...(region.rest?[region.rest]:[])],
     strategic:province,
