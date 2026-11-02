@@ -362,6 +362,24 @@
   litter.update();litter.uScale=litter.vScale=24;forestFloor.diffuseTexture=litter;
   const rootSpiritMat=mat("root spirit","#84b894","#21452e");
   const elderSpiritMat=mat("night spirit","#baacd9","#3b2d54");
+  const templeFloor=mat("temple sandstone","#847f71");
+  const templeCourt=mat("weathered courtyard","#a39581");
+  const templePaving=mat("limestone walk","#c1ad83");
+  const templeBrick=mat("exposed laterite","#925d43");
+  const templeStone=mat("carved lintel","#8c9281");
+  const templeLacquer=mat("binding lacquer","#953f37");
+  const templeBronze=mat("oxidised bronze","#578984");
+  const templeGold=mat("aged gilding","#c39850","#221909");
+  const tile=new B.DynamicTexture("worn temple pavers",256,scene,true);
+  const tileInk=tile.getContext();tileInk.fillStyle="#e6e3ce";tileInk.fillRect(0,0,256,256);
+  for(let row=0;row<8;row++)for(let col=-1;col<5;col++){
+    const x=col*64+(row%2)*32, y=row*32;
+    tileInk.fillStyle=["#d1d3bc","#dce0c8","#d6dbc2","#cdd1bc"][Math.abs(row*7+col*3)%4];
+    tileInk.fillRect(x+1,y+1,62,30);
+  }
+  tile.update();tile.uScale=12;tile.vScale=13;templeFloor.diffuseTexture=tile;
+  const templeCover=[];
+  const templeSight=new B.Ray(B.Vector3.Zero(),new B.Vector3(0,0,1));
   const keeperMat=mat("guardian indigo","#605079","#251a34");
   const strikeMat=mat("guardian strike","#ff9850","#de481f");
   const forestPathMesh=cube("forest path",[0,-.035,0],[5,.12,40],forestPath);
@@ -390,8 +408,8 @@
     const labelMat=new B.StandardMaterial("portal-label-mat-"+mapId,scene);
     labelMat.diffuseTexture=labelTexture;labelMat.opacityTexture=labelTexture;
     labelMat.emissiveColor=B.Color3.White();labelMat.disableLighting=true;labelMat.backFaceCulling=false;
-    const label=B.MeshBuilder.CreatePlane("portal-label",{width:3.6,height:.9},scene);
-    label.position.set(info.x,3.9,info.z);label.billboardMode=B.Mesh.BILLBOARDMODE_ALL;
+    const label=B.MeshBuilder.CreatePlane("portal-label",{width:override?7.8:3.6,height:override?1.7:.9},scene);
+    label.position.set(info.x,override?6.4:3.9,info.z);label.billboardMode=B.Mesh.BILLBOARDMODE_ALL;
     label.material=labelMat;label.isPickable=false;if(parent)label.parent=parent;
     if(override)expansionResources.push(labelTexture,labelMat);
     else if(!parent) villageMeshes.push(label);
@@ -416,7 +434,7 @@
     if(id)return choices.find(p=>p.id===id);
     return choices.reduce((best,p)=>!best||(me&&Math.hypot(me.x-p.x,me.z-p.z)<Math.hypot(me.x-best.x,me.z-best.z))?p:best,null);
   }
-  function expansionLabel(text,x,z,width=12) {
+  function expansionLabel(text,x,z,width=12,elevation=4) {
     const texture=new B.DynamicTexture("world-label",{width:768,height:128},scene,false);
     texture.hasAlpha=true;
     const ink=texture.getContext();ink.font="bold 44px sans-serif";ink.textAlign="center";
@@ -425,7 +443,7 @@
     const material=new B.StandardMaterial("world-label",scene);
     material.diffuseTexture=texture;material.opacityTexture=texture;material.emissiveColor=B.Color3.White();material.disableLighting=true;
     const mesh=B.MeshBuilder.CreatePlane("world-label",{width,height:2.2},scene);
-    mesh.parent=expansionRoot;mesh.material=material;mesh.position.set(x,4,z);mesh.billboardMode=B.Mesh.BILLBOARDMODE_ALL;mesh.isPickable=false;
+    mesh.parent=expansionRoot;mesh.material=material;mesh.position.set(x,elevation,z);mesh.billboardMode=B.Mesh.BILLBOARDMODE_ALL;mesh.isPickable=false;
     expansionResources.push(texture,material);expansionLabels.push(mesh);
   }
   function buildForestDetails(map) {
@@ -448,6 +466,13 @@
         const crown=column(x,4.5,z,5.5,5.2,.7,forestLeaf,7,false);
         crown.rotation.y=x*.3;forestCrowns.push(crown);
         for(let i=0;i<3;i++)column(x+Math.cos(i*2)*1.4,.42,z+Math.sin(i*2)*1.4,.85,.7,0,forestLeaf,4);
+        continue;
+      }
+      if(id.startsWith("temple-post-")){
+        column(x,1.8,z,3.6,1.45,1.05,templeBrick);
+        column(x,3.72,z,.35,1.65,1.65,templeGold);
+        column(x,4.35,z,1.05,1.15,.1,templeStone,4);
+        slab(x,2.25,z,.85,.98,1.12,templeLacquer);
         continue;
       }
       if(!id.startsWith("camp-"))continue;
@@ -505,7 +530,124 @@
       crown.visibility=blocks ? .18 : 1;
     }
   }
-  function syncWorldDefinition(state) {
+  function buildTemple(map) {
+    // Merge each ruin by material. Its visible outline and collision both use the manifest footprint.
+    let parts=[];
+    function place(mesh,x,y,z,material){
+      mesh.position.set(x,y,z);mesh.material=material;mesh.isPickable=false;
+      mesh.parent=expansionRoot;parts.push(mesh);return mesh;
+    }
+    function block(x,y,z,width,height,depth,material){
+      return place(B.MeshBuilder.CreateBox("temple masonry",{width,height,depth},scene),x,y,z,material);
+    }
+    function column(x,y,z,height,base,top,material,sides=8){
+      return place(B.MeshBuilder.CreateCylinder("temple carving",{height,diameterBottom:base,diameterTop:top,tessellation:sides},scene),x,y,z,material);
+    }
+    function finish(name,cover=false){
+      const materials=new Set(parts.map(m=>m.material));
+      for(const material of materials){
+        const group=parts.filter(p=>p.material===material);
+        const mesh=group.length===1?group[0]:B.Mesh.MergeMeshes(group,true,true);
+        if(mesh){mesh.name=name;mesh.parent=expansionRoot;mesh.isPickable=false;if(cover)templeCover.push(mesh);}
+      }
+      parts=[];
+    }
+    function spire(x,y,z,size){
+      for(let i=0;i<4;i++)column(x,y+size*(.12+i*.19),z,size*.24,size*(1-i*.17),size*(.92-i*.17),i===2?templeGold:templeStone,8);
+      column(x,y+size*1.04,z,size*.7,size*.34,.03,templeGold,8);
+    }
+    function gable(x,y,z,width,depth){
+      for(const side of [-1,1]){
+        const panel=block(x+side*width*.24,y,z,width*.56,.33,depth,templeLacquer);
+        panel.rotation.z=-side*.42;
+        block(x+side*width*.48,y-width*.101,z,.21,.28,depth+.24,templeGold);
+      }
+      block(x,y+width*.092,z,.3,.4,depth+.4,templeGold);
+    }
+    block(0,-.82,-20,174,.6,179,forestFloor);
+    for(let i=0;i<21;i++)for(const sign of [-1,1]){
+      const x=-61+i*6.2,z=sign===1?45+(i*5)%8:-84-(i*5)%8;
+      column(x,1.25,z,3.4,5+i%3,.3,forestLeaf,6);
+      column(sign*(60+(i*3)%8),1.2,-80+6*i,3.4,5.5,0,forestLeaf,6);
+    }
+    finish("temple distant grove");
+    for(const wall of map.walls||[]){
+      const x=wall.x+wall.width/2,z=wall.z+wall.length/2;
+      block(x,3.95,z,wall.width,7.9,wall.length,templeBrick);
+      block(x,.48,z,wall.width+.16,.96,wall.length+.16,templeStone);
+      block(x,7.98,z,wall.width+.25,.23,wall.length+.25,templeStone);
+      const alongX=wall.width>wall.length,span=Math.max(wall.width,wall.length);
+      for(let i=1;i<span;i+=3.5){
+        const dx=alongX?i-span/2:0,dz=alongX?0:i-span/2;
+        block(x+dx,4.3,z+dz,alongX?.65:wall.width+.14,.15,alongX?wall.length+.14:.65,templeGold);
+      }
+      finish("temple cover wall",true);
+    }
+    for(const o of map.obstacles){
+      const {x,z,radius:r,id}=o;
+      column(x,.27,z,.54,r*2,r*1.9,templeStone,8);
+      if(id.startsWith("gate-")){
+        column(x,3.45,z,6.4,2.1,1.55,templeBrick,8);
+        for(const y of [1.0,4.8,6.55])column(x,y,z,.35,2.2,2.2,templeGold);
+      }else if(id==="bound-prang"){
+        spire(x,.4,z,7.5);
+        for(const side of [-1,1]){
+          block(x+side*1.7,2.6,z,.4,4.3,4.5,templeLacquer).rotation.z=side*.28;
+          column(x+side*2.8,1.1,z+1.8,1.9,.63,.22,templeGold);
+        }
+      }else if(id==="cracked-bell"){
+        for(const side of [-1,1])block(x+side*1.7,2.5,z,.48,5,.58,darkWood);
+        gable(x,5.2,z,5.3,3.9);
+        column(x,2.9,z,2.4,2.55,1.25,templeBronze,12);
+        column(x,1.75,z,.21,2.75,2.6,templeGold,12);
+        column(x,4.35,z,.7,.23,.23,templeGold);
+      }else if(id==="cloister-stele"){
+        block(x,2.6,z,2.5,4.8,1.0,templeStone);
+        for(const side of [-1,1]){block(x+side*.83,2.5,z,.32,3.8,1.1,templeLacquer);}
+        for(let i=0;i<5;i++)block(x,1.4+i*.56,z,1.1-(i%3)*.18,.12,1.13,templeGold);
+        gable(x,5,z,3.6,2.1);
+      }else if(id.includes("lamp")||id.startsWith("votive-")){
+        column(x,1.25,z,2,.68,.51,templeStone);column(x,2.7,z,1.2,1.05,.18,glowMat,6);
+      }else{
+        const height=2.8+(Math.abs(x+z)%4)*.65;
+        column(x,height/2+.45,z,height,1.75,1.3,templeStone);
+        column(x,height*.57,z,.23,1.72,1.72,templeGold);
+      }
+      finish("temple "+id,true);
+    }
+    // Sunken seams and flush stair markings keep movement level along the traversable floor.
+    for(const [cx,cz] of [[0,14],[0,-61]]){
+      for(let step=0;step<4;step++)block(cx,.034,cz+step*.55,5.1-step*.15,.025,.16,templeStone);
+    }
+    // The inscribed west cloister and bell court have their own floor patterns.
+    for(const camp of map.camps){
+      for(const sign of [-1,1]){
+        block(camp.x+sign*9.4,-.039,camp.z,.16,.02,17.6,templeStone);
+        block(camp.x,-.039,camp.z+sign*8.8,19,.02,.16,templeStone);
+      }
+      const seal=B.MeshBuilder.CreateTorus("court seal",{diameter:5,thickness:.11,tessellation:8},scene);
+      place(seal,camp.x,.047,camp.z,templeGold);
+    }
+    finish("courtyard inscriptions");
+    gable(0,7.4,18,14.0,4.6);
+    for(const side of [-1,1]){
+      block(side*4.8,5.25,18,1.0,3.4,.15,templeLacquer);
+      block(side*4.8,3.7,18,1.1,.18,.18,templeGold);
+    }
+    finish("temple gate roof",true);
+    expansionLabel("วัดร้างพันธนาการ · Lv 8–20",0,18,18,10.5);
+  }
+  function fadeTempleWalls(hero) {
+    const eye=camera.position,ray=templeSight;
+    ray.origin.set(hero.x,hero.y+1.1,hero.z);
+    eye.subtractToRef(ray.origin,ray.direction);
+    ray.length=ray.direction.length();if(!ray.length)return;ray.direction.scaleInPlace(1/ray.length);
+    for(const cover of templeCover){
+      const box=cover.getBoundingInfo().boundingBox;
+      cover.visibility=ray.intersectsBoxMinMax(box.minimumWorld,box.maximumWorld) ? .26 : 1;
+    }
+  }
+  function syncWorldDefinition(state, mapId=activeMapId) {
     const key=state?.worldDefinition || "";
     if(key!==worldDefinitionKey){
       let definitions=null;
@@ -518,10 +660,13 @@
       }catch(error){console.error("MONTRA map definition",error);toast("อ่านข้อมูลแผนที่ไม่สำเร็จ");return;}}
       worldDefinitionKey=key;worldDefinitions=definitions;expandedMapKey="";
     }
+    switchWorld(mapId);
     const buildKey=worldDefinitionKey+":"+activeMapId;
     if(buildKey===expandedMapKey)return;
     expandedMapKey=buildKey;selectedForestTarget=null;forestCrowns.length=0;
-    ground.material=activeMapId==="forbidden_forest"?forestFloor:groundMat;
+    const inTemple=activeMapId==="bound_temple";
+    ground.material=inTemple ? templeFloor : activeMapId==="forbidden_forest" ? forestFloor : groundMat;
+    templeCover.length=0;
     for(const child of expansionRoot.getChildren())child.dispose();
     for(const resource of expansionResources)resource.dispose();expansionResources.length=0;expansionLabels.length=0;
     const bounds=mapBounds();
@@ -530,14 +675,14 @@
     const map=worldDefinitions?.[activeMapId];if(!map)return;
     for(const path of map.paths||[])for(let i=1;i<path.length;i++){
       const a=path[i-1],b=path[i],dx=b.x-a.x,dz=b.z-a.z;
-      const road=cube("forest trail",[(a.x+b.x)/2,-.025,(a.z+b.z)/2],[4,.08,Math.hypot(dx,dz)+1],forestPath);
+      const road=cube("forest trail",[(a.x+b.x)/2,-.025,(a.z+b.z)/2],[4,.08,Math.hypot(dx,dz)+1],inTemple ? templePaving : forestPath);
       road.parent=expansionRoot;road.rotation.y=Math.atan2(dx,dz);
     }
     for(const camp of map.camps||[]){
-      const clearing=B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
+      const clearing=inTemple ? B.MeshBuilder.CreateGround("temple court",{width:21,height:19},scene) : B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
       // Between the soil (-.12) and trail tops (+.015), so their colors never
       // fight for the same depth pixels at the wide camera distance.
-      clearing.parent=expansionRoot;clearing.rotation.x=Math.PI/2;clearing.position.set(camp.x,-.06,camp.z);clearing.material=forestClearing;clearing.isPickable=false;
+      clearing.parent=expansionRoot;clearing.rotation.x=inTemple?0:Math.PI/2;clearing.position.set(camp.x,-.06,camp.z);clearing.material=inTemple?templeCourt:forestClearing;clearing.isPickable=false;
       const look=campLooks[camp.id];
       if(look){const soilMat=mat("camp soil",look.soil);expansionResources.push(soilMat);clearing.material=soilMat;}
       expansionLabel(camp.name+" · Lv "+Math.min(...camp.levels)+"–"+Math.max(...camp.levels),camp.x,camp.z);
@@ -545,7 +690,7 @@
     for(const area of map.restAreas||[]){
       const ring=B.MeshBuilder.CreateTorus("rest boundary",{diameter:area.radius*2,thickness:.15,tessellation:48},scene);
       ring.parent=expansionRoot;ring.position.set(area.x,.08,area.z);ring.material=portalMat;ring.isPickable=false;
-      expansionLabel(area.name,area.x,area.z,10);
+      if(!map.portals.some(p=>Math.hypot(p.x-area.x,p.z-area.z)<3))expansionLabel(area.name,area.x,area.z,10);
     }
     if(activeMapId==="forbidden_forest"){
       buildForestDetails(map);
@@ -557,10 +702,11 @@
       const shrine=cube("northern shrine",[0,1,-88],[5,2,3],forestStone);shrine.parent=expansionRoot;
       const roof=cube("northern shrine roof",[0,3,-88],[6,.4,4],darkWood);roof.parent=expansionRoot;
       expansionLabel("ศาลร้างปลายป่า",0,-88);
-      expansionLabel("ทางสู่วัดร้าง · ยังไม่เปิด",-48,-84);
+      if(!map.portals?.some(p=>p.targetMapId==="bound_temple"))expansionLabel("ทางสู่วัดร้าง · ยังไม่เปิด",-48,-84);
       expansionLabel("ทางสู่บึงพราย · ยังไม่เปิด",48,-84);
     }
-    for(const portal of (map.portals||[]).slice(1))makePortal(activeMapId,expansionRoot,portal);
+    if(inTemple)buildTemple(map);
+    for(const portal of (map.portals||[]).slice(portals[activeMapId]?1:0))makePortal(activeMapId,expansionRoot,portal);
   }
   function makeForestMonster(monster,id) {
     const mesh=enemy.clone("monster-"+id);
@@ -592,6 +738,15 @@
       const warning=B.MeshBuilder.CreateTorus("keeper strike boundary",{diameter:2*radius/1.75,thickness:.12,tessellation:40},scene);
       warning.parent=mesh;warning.position.y=(.11-1.74)/2.05;warning.isPickable=false;
       warning.material=strikeMat;warning.setEnabled(false);mesh.metadata.warning=warning;
+    }else if(monster.mapId==="bound_temple"){
+      const sanctum=id.startsWith("temple_sanctum_"),bell=id.startsWith("temple_belfry_");
+      mesh.material=sanctum?keeperMat:bell?templeBronze:templeStone;
+      const robe=B.MeshBuilder.CreateCylinder("temple spirit robe",{height:1.23,diameterBottom:1.75,diameterTop:.92,tessellation:6},scene);
+      robe.parent=mesh;robe.position.y=-.15;robe.material=sanctum?templeLacquer:bell?templeBronze:darkWood;robe.isPickable=false;
+      const mask=B.MeshBuilder.CreateBox("ward mask",{width:.72,height:.69,depth:.23},scene);
+      mask.parent=mesh;mask.position.set(0,.29,-.79);mask.material=templeGold;mask.isPickable=false;
+      const crown=B.MeshBuilder.CreateCylinder("ward crest",{height:sanctum?1.1:.66,diameterBottom:.64,diameterTop:.03,tessellation:5},scene);
+      crown.parent=mesh;crown.position.y=.89;crown.material=sanctum?templeGold:templeLacquer;crown.isPickable=false;
     }else{
       mesh.material=monster.level<5?ghostMat:monster.level<9?rootSpiritMat:elderSpiritMat;
     }
@@ -600,6 +755,7 @@
   function syncForestMonsters(state) {
     const seen=new Set();
     state?.monsters?.forEach((monster,id)=>{
+      if(monster.mapId!==activeMapId)return;
       seen.add(id);let mesh=forestMonsters.get(id);
       if(!mesh){mesh=makeForestMonster(monster,id);forestMonsters.set(id,mesh);}
       mesh.setEnabled(monster.mapId===activeMapId&&monster.alive);
@@ -628,16 +784,17 @@
   }
 
   function switchWorld(mapId) {
-    if(!portals[mapId] || activeMapId===mapId)return;
+    if(activeMapId===mapId || !(portals[mapId] || worldDefinitions?.[mapId]))return;
     activeMapId=mapId;
     clearChatHistory(false);
     const village=mapId==="ritual_village";
     for(const mesh of villageMeshes) mesh.setEnabled(village);
     for(const light of villageLights) light.setEnabled(village);
-    villagePortal.setEnabled(village);forestRoot.setEnabled(!village);
-    $("worldMapName").textContent=village?"หมู่บ้านอาคม":"ป่าต้องห้าม";
-    $("quest").querySelector(".quest-content strong").textContent=village?"เตรียมตัวออกสำรวจ":"สำรวจป่าต้องห้าม";
-    $("quest").querySelector(".quest-content span").textContent=village?"พัก จัดกระเป๋า แล้วเดินทางไปป่า":"เปิดแผนที่เพื่อเลือกค่ายล่าตามเลเวล";
+    villagePortal.setEnabled(village);forestRoot.setEnabled(mapId==="forbidden_forest");
+    const name=worldDefinitions?.[mapId]?.name || (village?"หมู่บ้านอาคม":"ป่าต้องห้าม");
+    $("worldMapName").textContent=name;
+    $("quest").querySelector(".quest-content strong").textContent=village?"เตรียมตัวออกสำรวจ":"สำรวจ"+name;
+    $("quest").querySelector(".quest-content span").textContent=village?"พัก จัดกระเป๋า แล้วเดินทางไปป่า":mapId==="bound_temple"?"เลือกช่องกำแพง หรืออ้อมตามระเบียงวัด":"เปิดแผนที่เพื่อเลือกค่ายล่าตามเลเวล";
     marker.setEnabled(false);
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
   }
@@ -657,7 +814,7 @@
     warpTimer=setTimeout(()=>{warpPending=false;$("warpLoading").hidden=true;toast("ยังไม่ได้รับผลการเดินทาง");},8000);
   }
   function isNearPortal(player, portal) {
-    return Boolean(player && Number.isFinite(Number(player.x)) &&
+    return Boolean(portal && player && Number.isFinite(Number(player.x)) &&
       Number.isFinite(Number(player.y)) && Number.isFinite(Number(player.z)) &&
       Math.hypot(Number(player.x)-portal.x,Number(player.y),Number(player.z)-portal.z)<=1.9);
   }
@@ -935,7 +1092,7 @@
     const max = Math.max(1, Number(maxHp) || 100);
     const current = Math.max(0, Math.min(max, Number(hp) || 0));
     ui.monsterStatus.hidden = false;
-    ui.monsterStatus.querySelector(".monster-heading span").textContent=activeMapId === "forbidden_forest" ? "มอนสเตอร์ป่าต้องห้าม" : "ผีเข้าสิง · ตัวทดสอบ";
+    ui.monsterStatus.querySelector(".monster-heading span").textContent=activeMapId !== "ritual_village" ? ("มอนสเตอร์ · "+(worldDefinitions?.[activeMapId]?.name || "ป่าต้องห้าม")) : "ผีเข้าสิง · ตัวทดสอบ";
     ui.monsterBar.style.width = (100 * current / max) + "%";
     ui.monsterText.textContent = alive
       ? "HP " + Math.ceil(current) + "/" + Math.ceil(max)
@@ -988,9 +1145,9 @@
   }
 
   function requestMonsterAttack() {
-    if(mode === "live" && activeMapId === "forbidden_forest" && room?.state?.worldDefinition){
+    if(mode === "live" && activeMapId !== "ritual_village" && room?.state?.worldDefinition){
       const me=ownServerCharacter();let target=room.state.monsters.get(selectedForestTarget);
-      if(!target?.alive){target=null;room.state.monsters.forEach(m=>{if(m.alive&&m.mapId===activeMapId&&me&&(!target||Math.hypot(me.x-m.x,me.z-m.z)<Math.hypot(me.x-target.x,me.z-target.z)))target=m;});}
+      if(!target?.alive || target.mapId!==activeMapId){target=null;room.state.monsters.forEach(m=>{if(m.alive&&m.mapId===activeMapId&&me&&(!target||Math.hypot(me.x-m.x,me.z-m.z)<Math.hypot(me.x-target.x,me.z-target.z)))target=m;});}
       if(target)requestForestAttack(target.id);else toast("ยังไม่มีเป้าหมายในพื้นที่");return;
     }
     selectedPkTargetId = null;
@@ -1414,8 +1571,7 @@
   function syncState(state) {
     const mine=state?.players?.get?.(localId);
     const previousMapId=activeMapId;
-    switchWorld(mine?.mapId || "ritual_village");
-    syncWorldDefinition(state);
+    syncWorldDefinition(state,mine?.mapId || "ritual_village");
     syncMonsterState(state);
     syncSummons(state);
     syncFortification(state);
@@ -1517,7 +1673,7 @@
       }
       const client = new window.Colyseus.Client(endpoint);
       const guestToken = getOrCreateGuestToken(endpoint);
-      joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot, worldVersion: 1 });
+      joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot, worldVersion: 1, templeVersion: 1 });
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
       clearChatHistory(true);
@@ -1862,6 +2018,7 @@
         else if (info?.reason === "invalid_character_name") toast("ชื่อตัวละครต้องมี 2–20 ตัวอักษร");
         else if (info?.reason === "character_not_persistent") toast("ยังไม่ได้เปิดระบบตัวละครถาวรบนเซิร์ฟเวอร์");
         else if (info?.reason === "rename_cooldown") toast("โปรดเว้น 5 วินาทีก่อนเปลี่ยนชื่อ");
+        else if(info?.reason==="world_client_update_required")toast("รีเฟรชหน้าเกมเพื่อเข้าวัดร้างพันธนาการ");
         else if (info?.reason === "target_unavailable") toast("เป้าหมายไม่อยู่ในห้องหรือไม่พร้อมต่อสู้");
         else if (info?.reason === "invalid_attack") toast("คำสั่งโจมตีไม่ถูกต้อง");
         else if (info?.reason === "summon_limit") toast("เรียกวิญญาณพร้อมกันได้สูงสุด 1 ตัว");
@@ -2037,7 +2194,7 @@
     if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
     // Depth-sorted pick includes the climbable wall, its crest, players,
     // monster and walkable ground. Fire only where the target is visible.
-    const picked = scene.pick(px, py, mesh =>
+    const picked = scene.pick(px, py, mesh => mesh.isEnabled() && (
       mesh.metadata?.walkable === true ||
       mesh.metadata?.portalId ||
       (mesh === enemy && enemy.isEnabled()) ||
@@ -2045,7 +2202,7 @@
       (fortRoot.isEnabled() && mesh.metadata?.climbableWall) ||
       (mode === "live" && mesh.metadata?.pkPlayerId &&
        mesh.metadata.pkPlayerId !== localId)
-    );
+    ));
     if (!picked?.hit) return;
     const hitMesh=picked.pickedMesh;
     const otherId=hitMesh?.metadata?.pkPlayerId;
@@ -2314,15 +2471,18 @@
     }
     ctx.fillStyle="#e15855"; ctx.beginPath();ctx.arc(sx(1.1),sy(10.4),large?6:3,0,Math.PI*2);ctx.fill();
     } else {
-      ctx.fillStyle="#505043";ctx.fillRect(sx(-2.5),sy(-20),5*scale,40*scale);
+      if(activeMapId==="forbidden_forest"){ctx.fillStyle="#505043";ctx.fillRect(sx(-2.5),sy(-20),5*scale,40*scale);}
       for(const obstacle of worldDefinitions?.[activeMapId]?.obstacles||[]){
         ctx.fillStyle="#668060";ctx.beginPath();ctx.arc(sx(obstacle.x),sy(obstacle.z),Math.max(1,obstacle.radius*scale),0,Math.PI*2);ctx.fill();
       }
-      ctx.fillStyle="#b7a677";ctx.fillRect(sx(0)-4,sy(-12)-4,8,8);
+      if(activeMapId==="forbidden_forest"){ctx.fillStyle="#b7a677";ctx.fillRect(sx(0)-4,sy(-12)-4,8,8);}
     }
     const map=worldDefinitions?.[activeMapId];
     for(const path of map?.paths||[]){ctx.strokeStyle="#9f8963";ctx.lineWidth=large?5:2;ctx.beginPath();path.forEach((p,i)=>i?ctx.lineTo(sx(p.x),sy(p.z)):ctx.moveTo(sx(p.x),sy(p.z)));ctx.stroke();}
-    for(const camp of map?.camps||[]){ctx.fillStyle=campLooks[camp.id]?.soil || "#ad826b";ctx.beginPath();ctx.arc(sx(camp.x),sy(camp.z),12*scale,0,Math.PI*2);ctx.fill();if(large){ctx.font="12px system-ui";ctx.fillStyle="#fff2d8";ctx.textAlign="center";ctx.fillText("Lv "+Math.min(...camp.levels)+"–"+Math.max(...camp.levels),sx(camp.x),sy(camp.z)-12*scale-3);}}
+    for(const camp of map?.camps||[]){ctx.fillStyle=campLooks[camp.id]?.soil || "#95867b";if(activeMapId==="bound_temple"){ctx.fillRect(sx(camp.x-10.5),sy(camp.z-9.5),21*scale,19*scale);}else{ctx.beginPath();ctx.arc(sx(camp.x),sy(camp.z),12*scale,0,Math.PI*2);ctx.fill();}if(large){ctx.font="12px system-ui";ctx.fillStyle="#fff2d8";ctx.textAlign="center";ctx.fillText("Lv "+Math.min(...camp.levels)+"–"+Math.max(...camp.levels),sx(camp.x),sy(camp.z)-12*scale-3);}}
+    for(const wall of map?.walls || []){
+      ctx.fillStyle="#e9bf86";ctx.fillRect(sx(wall.x),sy(wall.z),Math.max(1.3,scale*wall.width),Math.max(1.3,scale*wall.length));
+    }
     if(map?.guardian && large){
       ctx.font="bold 12px system-ui";ctx.textAlign="center";ctx.fillStyle="#ffe095";
       ctx.fillText("◆ ศาล Elite",sx(map.guardian.x),sy(map.guardian.z)-9);
@@ -2331,7 +2491,12 @@
     room?.state?.monsters?.forEach(m=>{if(m.mapId===activeMapId&&m.alive){if(m.tier==="elite"){
         const x=sx(m.x),y=sy(m.z),r=large?6:3;ctx.fillStyle="#ffe084";ctx.beginPath();ctx.moveTo(x,y-r);ctx.lineTo(x+r,y);ctx.lineTo(x,y+r);ctx.lineTo(x-r,y);ctx.closePath();ctx.fill();
       }else{ctx.fillStyle="#f1786c";ctx.beginPath();ctx.arc(sx(m.x),sy(m.z),large?3:1.5,0,Math.PI*2);ctx.fill();}}});
-    for(const portal of activePortals()){ctx.fillStyle="#85f6dd";ctx.beginPath();ctx.arc(sx(portal.x),sy(portal.z),large?6:4,0,Math.PI*2);ctx.fill();}
+    for(const portal of activePortals()){ctx.fillStyle="#85f6dd";ctx.beginPath();ctx.arc(sx(portal.x),sy(portal.z),large?6:4,0,Math.PI*2);ctx.fill();
+      if(large && (portal.id==="forest_to_temple" || portal.id==="temple_to_forest")){
+        ctx.fillStyle="#c3faed";ctx.textAlign="center";ctx.font="bold 12px system-ui";
+        ctx.fillText(portal.id==="forest_to_temple"?"ไปวัดร้าง Lv.8–20":"กลับป่าต้องห้าม",Math.max(65,Math.min(width-65,sx(portal.x))),sy(portal.z)-10);
+      }
+    }
     if (marker.isEnabled()) {
       ctx.strokeStyle="#ffe2a1";ctx.lineWidth=1.8;
       ctx.beginPath();ctx.arc(sx(marker.position.x),sy(marker.position.z),large?7:4,0,Math.PI*2);ctx.stroke();
@@ -2353,7 +2518,7 @@
     }
   }
   function openMap() {
-    openDrawer("map",activeMapId === "ritual_village" ? "แผนที่หมู่บ้านอาคม" : "แผนที่ป่าต้องห้าม",`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>วงสีเขียว: เขตพัก</span></div>${worldDefinitions?.[activeMapId]?.guardian ? '<p class="note">◆ ศาลเหนือ · Elite Lv.12 เกิดใหม่ 2 นาที<br>หลบวงฟาดสีส้ม · EXP ×3 แบ่งตามกฎปาร์ตี้ ผู้ได้รับ EXP รับยาคนละ 1 ขวดเมื่อกระเป๋ามีที่</p>' : ''}`);
+    openDrawer("map","แผนที่"+(worldDefinitions?.[activeMapId]?.name || (activeMapId==="ritual_village"?"หมู่บ้านอาคม":"ป่าต้องห้าม")),`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>วงสีเขียว: เขตพัก</span></div>${worldDefinitions?.[activeMapId]?.guardian ? '<p class="note">◆ ศาลเหนือ · Elite Lv.12 เกิดใหม่ 2 นาที<br>หลบวงฟาดสีส้ม · EXP ×3 แบ่งตามกฎปาร์ตี้ ผู้ได้รับ EXP รับยาคนละ 1 ขวดเมื่อกระเป๋ามีที่</p>' : ''}`);
     drawMap($("bigMap").getContext("2d"),420,320,true);
   }
 
@@ -3055,7 +3220,7 @@
     const warpButton=$("warpButton");
     warpButton.hidden=!(mode==="live" && room?.state?.worldMapsAvailable===true &&
       isNearPortal(authoritative,portal) && !warpPending);
-    warpButton.textContent=portal.label;
+    warpButton.textContent=portal?.label || ("เดินทางไป"+(worldDefinitions?.[portal?.targetMapId]?.name || "ประตูวาร์ป"));
     if(me) {
       // Follow the moving player without calling camera.setTarget(): that
       // method recomputes alpha/beta/radius and cancels manual camera rotation.
@@ -3085,6 +3250,7 @@
     }
     // Keep the same clear area around the hero at every pinch/wheel zoom.
     if(me && activeMapId==="forbidden_forest")fadeForestCrowns(me);
+    if(me && activeMapId==="bound_temple")fadeTempleWalls(me);
     scene.fogStart = camera.radius + 24;
     scene.fogEnd = camera.radius + 120;
     scene.render();

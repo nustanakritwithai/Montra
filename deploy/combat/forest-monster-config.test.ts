@@ -7,7 +7,7 @@ import { ForestEncounters } from "./ForestEncounters.js";
 
 test("forest monsters use the server profile and respawn independently with local population",()=>{
   const state=new MyRoomState(), forest=new ForestEncounters(state.monsters);
-  forest.initialize(); assert.equal(state.monsters.size,17);
+  forest.initialize(); assert.equal([...state.monsters.values()].filter(m=>m.mapId==="forbidden_forest").length,17);
   const monster=state.monsters.get("forest_west_1")!;
   assert.equal(monster.hp,200);assert.equal(monster.defense,34);
   assert.equal(forest.profile(monster.id)?.attack,8);
