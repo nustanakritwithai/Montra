@@ -117,6 +117,7 @@ export const MyRoomState = schema({
   worldDefinition: t.string().default(""),
   guildAvailable: t.boolean().default(true),
   guildRolesAvailable: t.boolean().default(true),
+  territoryWarAvailable: t.boolean().default(false),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

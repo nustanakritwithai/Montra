@@ -1,4 +1,5 @@
-import { Room, type Client, type CloseCode } from "colyseus";
+import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
+import { WAR_SIDE_SIZE, WAR_HOLD, warSites, type Battlefield, type WarSide } from "./TerritoryWar.js";
 import { Encoder } from "@colyseus/schema";
 import { randomUUID } from "node:crypto";
 import {
@@ -34,7 +35,7 @@ import type { CharacterSnapshot } from "./CharacterStore.js";
 import { isAtlasMap } from "./WorldAtlas.js";
 import { TEMPLE_ID } from "./TempleMap.js";
 import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, VILLAGE_ARRIVALS, WORLD_ROOM_CAPACITY, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
-import { checkWarp } from "./WarpRules.js";
+import { checkWarp, WARP_COMBAT_LOCK_MS } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
@@ -55,6 +56,18 @@ import { ForestEncounters } from "./ForestEncounters.js";
 // A full world snapshot spans up to 48 KiB with ten occupied maps, before summons.
 Encoder.BUFFER_SIZE = Math.max(Encoder.BUFFER_SIZE, 64 * 1024);
 
+const warRoomKey=randomUUID();
+const battleRooms=new Map<number,Promise<string>>();
+const admissions=new Map<string,{roomId:string;ticket:string;guild:string;side:WarSide;expires:number}>();
+async function battleRoom(field:Battlefield):Promise<string>{
+  let room=battleRooms.get(field.seq);
+  if(!room){
+    room=matchMaker.createRoom("my_room",{warRoomKey,field}).then(r=>r.roomId);
+    battleRooms.set(field.seq,room);
+    try{await room;}catch(e){if(battleRooms.get(field.seq)===room)battleRooms.delete(field.seq);throw e;}
+  }
+  return room;
+}
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
   climb: CommandBucket; dash: CommandBucket; flight: CommandBucket;
@@ -82,6 +95,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private forest = new ForestEncounters(this.state.monsters);
   private getMonster(id:string): Monster | undefined { return id === RULES.monsterId ? this.state.monster : this.state.monsters.get(id); }
   private simulatedMs = 0;
+  private field?:Battlefield;
+  private warSeats=new Map<string,{guild:string;side:WarSide}>();
+  private warClients=new Set<string>();
+  private warSent=new Map<string,string>();
+  private nextWarSample=0;
+  private battleActive=false;
   private destinations = new Map<string, Vec2>();
   private activeDashes = new Map<string, ActiveDash>();
   private lastDashMs = new Map<string, number>();
@@ -136,7 +155,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (isRestArea(owner.mapId, owner)) return false;
     const monster = this.getMonster(targetId);
     if (monster) return owner.mapId === monster.mapId && !isRestArea(monster.mapId, monster);
-    if (this.parties.get(ownerId)?.members.includes(targetId)) return false;
+    if(this.field && (!this.battleActive || this.warSeats.get(ownerId)?.side===this.warSeats.get(targetId)?.side))return false;
+    if (!this.field && this.parties.get(ownerId)?.members.includes(targetId)) return false;
     const target = this.state.players.get(targetId);
     return Boolean(target && target.mapId === owner.mapId && !isRestArea(target.mapId,target));
   }
@@ -305,7 +325,78 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
+  private async enterTerritory(client:Client,start:boolean){
+    const id=client.sessionId,p=this.state.players.get(id),character=this.persistentCharacters.get(id);
+    if(!p || !character || !WORLD_EXPANSION || this.field || !this.warClients.has(id) ||
+       !this.gates.get(id)?.guild.consume(this.simulatedMs))return;
+    const fort=warSites[p.mapId];
+    if(!fort || !p.alive || p.flying || this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
+       this.attackTargets.has(id) || [...this.attackTargets.values()].includes(id) ||
+       this.simulatedMs-(this.lastCombatMs.get(id)??-Infinity)<WARP_COMBAT_LOCK_MS)
+      return client.send("territory_error",{reason:"war_busy"});
+    try{
+      const war=guildStore().war,member=war.member(character);
+      if(!member)throw Error("war_guild");
+      if(start && planarDistance(p,fort)>5)throw Error("war_flag");
+      const now=Date.now(),field=start?war.start(p.mapId,member,now):{site:p.mapId,seq:war.inspect(p.mapId,now).seq};
+      const side=war.side(field,member,now);
+      const roomId=await battleRoom(field);
+      if(!this.clients.includes(client) || !p.alive || p.mapId!==field.site)return;
+      const ticket=randomUUID();
+      for(const [who,entry] of admissions)if(entry.expires<=Date.now())admissions.delete(who);
+      const target=matchMaker.getLocalRoomById(roomId);
+      if(!(target instanceof MyRoom))throw Error("war_unavailable");
+      const occupied=[...target.warSeats.values()].filter(s=>s.side===side).length;
+      const reserved=[...admissions].filter(([who,s])=>who!==character && s.roomId===roomId && s.side===side).length;
+      if(occupied+reserved>=WAR_SIDE_SIZE)throw Error("war_side_full");
+      admissions.set(character,{roomId,ticket,side,guild:member.id,expires:Date.now()+30_000});
+      client.send("territory_transfer",{roomId,ticket});
+    }catch(error){
+      const reason=error instanceof Error?error.message:"";
+      if(!reason.startsWith("war_"))console.error("MONTRA territory entry",error);
+      client.send("territory_error",{reason:reason.startsWith("war_")?reason:"war_unavailable"});
+    }
+  }
+  private updateTerritory(){
+    if(!WORLD_EXPANSION || (!this.warClients.size && !this.field) || this.simulatedMs<this.nextWarSample)return;
+    this.nextWarSample=this.simulatedMs+1000;
+    const now=Date.now(),war=guildStore().war;
+    let attack=0,defend=0;
+    if(this.field){
+      const fort=warSites[this.field.site];
+      for(const [id,seat] of this.warSeats){
+        const p=this.state.players.get(id),character=this.persistentCharacters.get(id);
+        if(!p || !character || this.pendingCharacterLeaves.has(id))continue;
+        if(war.member(character)?.id!==seat.guild){this.clients.find(c=>c.sessionId===id)?.leave(4000,"war_membership_changed");continue;}
+        if(p.alive && isOnGround(p.y) && !p.flying && p.mapId===this.field.site && planarDistance(p,fort)<=5){
+          if(seat.side==="attack")attack++;else defend++;
+        }
+      }
+      war.advance(this.field,now,attack,defend);
+    }
+    const states=Object.fromEntries(Object.keys(warSites).map(site=>[site,war.inspect(site,now)]));
+    if(this.field){const s=states[this.field.site];this.battleActive=s.seq===this.field.seq && s.phase==="battle";}
+    const owners=Object.fromEntries(Object.entries(states).map(([site,s])=>[site,s.owner]));
+    const teams=this.field?Object.fromEntries([...this.warSeats].map(([id,seat])=>[id,seat.side])):undefined;
+    for(const c of this.clients){
+      if(!this.warClients.has(c.sessionId))continue;
+      const p=this.state.players.get(c.sessionId);if(!p)continue;
+      const s=states[p.mapId],character=this.persistentCharacters.get(c.sessionId),member=s&&character?war.member(character):null;
+      const inField=Boolean(this.field),ownBattle=!inField || this.field?.seq===s?.seq;
+      const local=s?{site:p.mapId,phase:ownBattle?s.phase:"finished",owner:s.owner,attackName:s.attackName,defendName:s.defendName,
+        progress:Math.trunc(s.progress),goal:WAR_HOLD,seconds:s.seconds,attack,defend,inField,side:this.warSeats.get(c.sessionId)?.side,
+        canStart:!inField && s.phase==="open" && member?.officer===true && member.id!==s.ownerId,
+        canJoin:!inField && s.phase==="battle" && !!member && (member.id===s.attacker || member.id===s.defender || (!s.owner && !s.defendName && member.officer))}:null;
+      const payload={owners,local,teams},signature=JSON.stringify(payload);
+      if(signature!==this.warSent.get(c.sessionId)){c.send("territory_state",payload);this.warSent.set(c.sessionId,signature);}
+    }
+  }
   messages = {
+    get_territories:(client:Client,message:unknown)=>{
+      if(parseEmptyCommand(message) && this.warClients.has(client.sessionId) && this.gates.get(client.sessionId)?.guild.consume(this.simulatedMs))this.warSent.delete(client.sessionId);
+    },
+    territory_start:(client:Client,message:unknown)=>{if(parseEmptyCommand(message))void this.enterTerritory(client,true);},
+    territory_join:(client:Client,message:unknown)=>{if(parseEmptyCommand(message))void this.enterTerritory(client,false);},
     get_guild: (client:Client,message:unknown) => {
       if(!parseEmptyCommand(message))return this.reject(client,"guild_invalid_request");
       this.guildAction(client,character=>this.sendGuild(client,character));
@@ -494,6 +585,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     allocate_stat: (client: Client, _message: unknown) => this.reject(client, "automatic_stats"),
     warp: (client: Client, message: unknown) => {
+      if(this.field)return client.send("territory_error",{reason:"war_exit"});
       const id = client.sessionId;
       const player = this.state.players.get(id);
       if (!player || !this.persistentCharacters.has(id)) return this.reject(client, "character_not_persistent");
@@ -1157,7 +1249,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
-  onCreate() {
+  async onCreate(options?:{warRoomKey?:string;field?:Battlefield}) {
+    if(options?.warRoomKey===warRoomKey && options.field){
+      this.field=options.field;
+      await this.setPrivate(true);
+    }
+    this.state.territoryWarAvailable=WORLD_EXPANSION;
     this.state.economyAvailable = characterStore.economyEnabled;
     this.forest.initialize();
     this.state.worldDefinition = WORLD_EXPANSION ? JSON.stringify({version:1,maps:WORLD_MAPS}) : "";
@@ -1192,6 +1289,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private tick(dt: number) {
+    this.updateTerritory();
     this.updateRespawns();
     this.updateClimbs(dt);
     this.updateFlights(dt);
@@ -1764,13 +1862,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!map) throw new Error("unknown_character_map");
       // A saved location is restored only if the current server geometry allows it.
       const restoreFlight = Boolean(saved && isFlightAltitude(saved.y));
-      const validPosition = saved && this.canOccupy(
+      let validPosition = saved && this.canOccupy(
         saved.x, saved.z, saved.y, restoreFlight, mapId);
-      const safeSpawn = mapId === DEFAULT_MAP_ID ? { ...spawn, y: 0 } : getSafeMapSpawn(mapId);
+      let safeSpawn = mapId === DEFAULT_MAP_ID ? { ...spawn, y: 0 } : getSafeMapSpawn(mapId);
+      if(this.field){
+        const credential=characterId && admissions.get(characterId),war=guildStore().war,member=characterId && war.member(characterId);
+        if(!credential || credential.roomId!==this.roomId || credential.expires<=Date.now() ||
+           credential.ticket!==(options as Record<string,unknown>)?.warTicket || !member || mapId!==this.field.site)throw Error("war_admission");
+        const side=war.side(this.field,member,Date.now());
+        if(side!==credential.side || member.id!==credential.guild)throw Error("war_admission");
+        if([...this.warSeats.values()].filter(s=>s.side===side).length>=WAR_SIDE_SIZE)throw Error("war_side_full");
+        war.side(this.field,member,Date.now(),true);admissions.delete(characterId!);
+        this.warSeats.set(client.sessionId,{guild:member.id,side});
+        const gate=WORLD_MAPS[mapId].portals.find(p=>p.z===(side==="attack"?26:-58))!;
+        safeSpawn={x:gate.x,y:0,z:gate.z};validPosition=false;
+      }
       const player = new Player({
-        x: validPosition ? saved.x : safeSpawn.x,
-        y: validPosition ? saved.y : safeSpawn.y,
-        z: validPosition ? saved.z : safeSpawn.z,
+        ...(validPosition && saved ? {x:saved.x,y:saved.y,z:saved.z} : safeSpawn),
         facing: 0,
         hp: saved && saved.hp > 0 ? Math.min(saved.hp, initialStats.maxHp) : initialStats.maxHp,
         maxHp: initialStats.maxHp,
@@ -1789,6 +1897,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.statAllocations.set(client.sessionId, allocations);
       this.applyStats(player, allocations);
       this.state.players.set(client.sessionId, player);
+      if((options as Record<string,unknown>)?.warVersion===1)this.warClients.add(client.sessionId);
       if(provinceReady)this.provinceClients.add(client.sessionId);
       if(atlasReady)this.atlasClients.add(client.sessionId);
       if(templeReady)this.templeClients.add(client.sessionId);
@@ -1821,6 +1930,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       console.log("MONTRA 3-slot join:", client.sessionId, "room", this.roomId,
         saved ? "persistent" : "transient", "slot", slot);
     } catch (error) {
+      this.warSeats.delete(client.sessionId);this.warClients.delete(client.sessionId);
       this.playerSpawn.delete(client.sessionId);
       if (accountId) releaseCharacter(accountId, client.sessionId);
       throw error;
@@ -1831,6 +1941,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = client.sessionId;
     this.templeClients.delete(id);
     this.atlasClients.delete(id);
+    this.warSeats.delete(id);this.warClients.delete(id);this.warSent.delete(id);
     this.provinceClients.delete(id);
     this.leaveParty(id);
     const guildCharacter=this.persistentCharacters.get(id);
@@ -1895,6 +2006,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   async onDispose() {
+    if(this.field)battleRooms.delete(this.field.seq);
     this.trades.clear();
     this.parties.clear();
     this.guildInvites.clear();

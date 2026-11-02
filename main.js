@@ -196,6 +196,7 @@
   const eyesMat = mat("eyes", "#ff443a", "#ba1010");
   const heroMat = mat("character", "#efd093", "#3b2916");
   const playerLocatorMat = mat("local player ring", "#ffda89", "#96642a");
+  const warAllyMat=mat("ally ward","#80e8db","#41aa9d"),warEnemyMat=mat("enemy ward","#ff917d","#cf5448");
   const heroSkin=mat("local skin","#ccaa8b");
   const friendSkin=mat("traveller skin","#9dbdb7");
   const friendMat = mat("friend character", "#6bb9c6", "#0b2530");
@@ -2132,6 +2133,7 @@
   function switchWorld(mapId) {
     if(activeMapId===mapId || !(portals[mapId] || worldDefinitions?.[mapId]))return;
     activeMapId=mapId;
+    $("quest").classList.remove("war-hud");
     applyAtmosphere(mapId);
     clearChatHistory(false);
     const village=mapId==="ritual_village";
@@ -3107,6 +3109,7 @@
   let economyTimer = null, economyTab = "market", tradeUnread = false;
   let partyState = null, partyInvitation = null, partyUnread = false;
   let guildState = null, guildInvitation = null, guildUnread = false;
+  let territoryState=null;
   // Inventory is never stored in localStorage: LIVE comes from VPS each join.
   const INVENTORY_SLOTS = 12;
   const POTION_ITEM_ID = "health_potion";
@@ -3257,6 +3260,7 @@
     setModeBadge(mode === "live");
   }
   function showDemo() {
+    territoryState=null;$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
@@ -3560,6 +3564,7 @@
   }
 
   function tapPlayerForPK(targetId) {
+    if(territoryState?.teams?.[targetId] && territoryState.teams[targetId]===territoryState.local?.side){toast("ผู้เล่นคนนี้อยู่ฝ่ายเดียวกัน");return;}
     if (mode !== "live" || !room || !targetId || targetId === localId) return;
     const me = room.state?.players?.get?.(localId);
     const enemyPlayer = room.state?.players?.get?.(targetId);
@@ -3590,6 +3595,12 @@
     a.targetY = Number.isFinite(y) ? y : 0;
     a.targetZ = z;
     setAvatarWeapon(a,weaponId);
+    const side=territoryState?.teams?.[id];
+    if(side && id!==localId && !a.warRing){
+      const ally=side===territoryState.local?.side;
+      const ring=B.MeshBuilder.CreateTorus("battle side",{diameter:2.1,thickness:.12,tessellation:ally?24:3},scene);
+      ring.parent=a.node;ring.position.y=.09;ring.isPickable=false;ring.material=ally?warAllyMat:warEnemyMat;a.warRing=ring;
+    }
 
     // S1 server facing is authoritative. Old servers omit this field;
     // fallback to the V0.1.5 movement-derived direction in that case.
@@ -3711,13 +3722,13 @@
     }
     throw new Error("ไม่ได้รับข้อมูลตัวละครจากเซิร์ฟเวอร์");
   }
-  async function connectOnline(endpoint, requestedSlot = getPreferredSlot(endpoint)) {
+  async function connectOnline(endpoint, requestedSlot = getPreferredSlot(endpoint), transfer=null) {
     if (connectionPending) return;
     if (![1,2,3].includes(requestedSlot)) {
       toast("เลือกช่องเซฟ 1, 2 หรือ 3 เท่านั้น");
       return;
     }
-    if (room && mode === "live" && activeCharacterSlot === requestedSlot &&
+    if (!transfer && room && mode === "live" && activeCharacterSlot === requestedSlot &&
         currentCharacterEndpoint() === endpoint) {
       closeDrawer();
       toast("กำลังเล่นช่องเซฟ " + requestedSlot + " อยู่แล้ว");
@@ -3747,7 +3758,13 @@
       }
       const client = new window.Colyseus.Client(endpoint);
       const guestToken = getOrCreateGuestToken(endpoint);
-      joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot, worldVersion: 1, templeVersion: 1, atlasVersion: 1, provinceVersion: 1 });
+      const opts={guestToken,characterSlot:requestedSlot,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1};
+      let transferFailed=false;
+      if(transfer?.roomId){
+        try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
+        catch(error){console.warn("MONTRA battlefield admission",error);transferFailed=true;}
+      }
+      if(!joined)joined=await client.joinOrCreate("my_room",opts);
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
       clearChatHistory(true);
@@ -3791,6 +3808,25 @@
         }
         updateChatBadge();
         if (drawerActive === "chat") renderChat();
+      });
+      joined.onMessage("territory_state",message=>{
+        if(room!==joined)return;
+        territoryState=message;
+        if(drawerActive==="war")renderWarPanel();
+        if(drawerActive==="strategy")updateAtlasOwner();
+        const local=message.local;
+        if(local?.site===activeMapId){
+          const title=ui.quest.querySelector("strong");
+          const fighting=local.inField && local.phase==="battle";
+          ui.quest.classList.toggle("war-hud",fighting);
+          title.textContent=fighting?"⚑ "+(local.progress<0?"รับ":"บุก")+" "+Math.abs(local.progress)+"/"+local.goal+" · "+Math.floor(local.seconds/60)+":"+String(local.seconds%60).padStart(2,"0"):
+            local.phase==="battle"?"⚑ ศึกยึดธง · "+warTime(local.seconds):"⚑ ด่านกิลด์ · "+warPhase(local.phase);
+          if(fighting)ui.quest.style.setProperty("--war-progress",Math.abs(local.progress)/local.goal);
+        }
+      });
+      joined.onMessage("territory_error",message=>{if(room===joined)toast(warErrors[message?.reason] || "เข้าศึกไม่ได้ในขณะนี้");});
+      joined.onMessage("territory_transfer",message=>{
+        if(room===joined && typeof message?.roomId==="string" && typeof message.ticket==="string")void connectOnline(endpoint,requestedSlot,message);
       });
       joined.onMessage("guild_state", message => {
         if(room!==joined)return;
@@ -4221,11 +4257,13 @@
         localStorage.setItem("montra_endpoint", endpoint);
         localStorage.setItem(preferredSlotKey(endpoint), String(requestedSlot));
       } catch (_) { /* optional */ }
+      if(joined.state?.territoryWarAvailable)joined.send("get_territories",{});
       try { joined.send("get_character_slots", {}); } catch (_) { /* old S2 server */ }
       try { joined.send("get_inventory", {}); } catch (_) { /* older VPS */ }
       closeDrawer();
       const active = joined.state?.players?.get?.(joined.sessionId);
-      toast(active?.persistent
+      if(transferFailed)toast("เข้าห้องศึกไม่สำเร็จ · กลับมายังห้องโลกแล้ว");
+      else toast(active?.persistent
         ? "เชื่อมต่อแล้ว · ตัวละครบันทึกบนเซิร์ฟเวอร์"
         : ok ? "เชื่อมต่อแล้ว · ตัวละครยังไม่บันทึกถาวร"
              : "เชื่อมต่อแล้ว กำลังรอข้อมูลตัวละคร");
@@ -4765,7 +4803,10 @@
       ctx.beginPath(); ctx.arc(sx(marker.position.x), sy(marker.position.z), large ? 7 : 4, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
     }
     for (const [ownerId, npc] of summonAvatars) mapDot(ctx, sx(npc.x), sy(npc.z), large ? 4 : 2.2, ownerId === localId ? "#cb97f1" : "#78d5e2");
-    for (const [id, a] of avatars) if (id !== localId) mapDot(ctx, sx(a.x), sy(a.z), large ? 4.6 : 2.8, "#6de5df", "rgba(4,24,24,.9)");
+    for (const [id, a] of avatars) if (id !== localId) {
+      const foe=territoryState?.teams?.[id] && territoryState.teams[id]!==territoryState.local?.side;
+      mapDot(ctx,sx(a.x),sy(a.z),large?4.6:2.8,foe?"#ff917d":"#6de5df","rgba(4,24,24,.9)");
+    }
     const me = avatars.get(localId);
     if (me) {
       // Heading arrow: avatars face atan2(-dx,-dz), so travel is (-sin, -cos).
@@ -4823,6 +4864,37 @@
     fallen_city:[107,637], asura_peak:[222,710], spirit_rift:[112,780]
   };
   const provinceTitle={capital:"เมืองหลวง",territory:"ด่านสงคราม",hunting:"พื้นที่เก็บเลเวล"};
+  const warErrors={war_guild:"ต้องเป็นสมาชิกกิลด์ก่อนเข้าศึก",war_flag:"เดินเข้าวงธงกลางป้อมก่อนเปิดศึก",war_officer:"ให้ผู้บัญชาการหรือนายทหารเปิดศึก",
+    war_other_guild:"สนามนี้มีฝ่ายบุกและฝ่ายรับแล้ว",war_side_full:"ฝ่ายของคุณครบ 5 คนแล้ว",war_busy:"รอให้พ้นการต่อสู้และยืนบนพื้นในด่าน",
+    war_ended:"ศึกนี้จบแล้ว",war_exit:"กลับห้องโลกผ่านหน้าด่านกิลด์",war_unavailable:"ด่านยังเปิดศึกไม่ได้"};
+  const warPhase=p=>({open:"เปิดให้ท้าชิง",battle:"กำลังรบ",protected:"อยู่ในความคุ้มครอง",finished:"จบศึกแล้ว"})[p] || "กำลังตรวจด่าน";
+  const warTime=s=>Math.floor(s/60)+" นาที "+s%60+" วินาที";
+  function openWarPanel(){
+    openDrawer("war","สงครามยึดด่าน",`<h3 id="warHeading"></h3><p id="warOwner"></p><p id="warStatus" role="status"></p>
+      <progress id="warGauge" max="60" aria-label="ความคืบหน้าการยึดธง"></progress><p id="warCount"></p>
+      <p class="note" id="warFlag"></p><p class="note">ผู้บัญชาการหรือนายทหารเปิดศึกที่วงธง สมาชิกเข้าร่วมได้จากภายในด่าน ฝั่งละ 5 คน ศึกมีเวลา 5 นาที จำนวนคนที่ยืนวงมากกว่าจะดันเกจได้ เมื่อทั้งสองฝ่ายยืนเท่ากัน เกจจะหยุด</p>
+      <p class="note">วงสีเขียวคือพวกเดียวกัน สามเหลี่ยมสีแดงคือฝ่ายตรงข้าม เมื่อศึกจบ ด่านคุ้มครอง 8 ชั่วโมงตามเวลาจริง</p><button id="warAction" class="primary" type="button" hidden></button>`);
+    renderWarPanel();
+  }
+  function renderWarPanel(){
+    const s=territoryState?.local,button=$("warAction");if(!button)return;
+    if(!s || s.site!==activeMapId){$("warStatus").textContent="ออกจากพื้นที่ด่านแล้ว";button.hidden=true;return;}
+    $("warHeading").textContent=worldDefinitions?.[s.site]?.name || "ด่านกิลด์";
+    $("warOwner").textContent="ธงครองด่าน · "+(s.owner || "เป็นกลาง")+(s.inField?" · คุณอยู่ฝ่าย"+(s.side==="attack"?"บุก":"รับ"):"");
+    $("warStatus").textContent=warPhase(s.phase)+(s.phase==="battle"?" · เหลือ "+warTime(s.seconds)+" · "+s.attackName+" บุก / "+(s.defendName || "รอคู่ชิง")+" รับ":"");
+    const fort=worldDefinitions?.[s.site]?.strategic?.sites?.find(site=>site.kind==="fort");
+    $("warFlag").textContent=fort?"วงยึดธง · "+fort.name+" ("+fort.x+", "+fort.z+") · รัศมี 5 เมตร":"";
+    const gauge=$("warGauge");gauge.hidden=s.phase!=="battle";gauge.max=s.goal;gauge.value=Math.abs(s.progress);
+    $("warCount").textContent=s.phase==="battle"?((s.progress<0?"ฝ่ายรับ":"ฝ่ายบุก")+" ยึดธง "+Math.abs(s.progress)+"/"+s.goal+(s.inField?" · ในวง บุก "+s.attack+" รับ "+s.defend:"")):"";
+    button.hidden=!(s.inField || s.canStart || s.canJoin);
+    button.textContent=s.inField?"กลับห้องโลก":s.canStart?"เปิดศึกที่ธง · 5 นาที":"เข้าร่วมสนามรบ";
+    button.onclick=()=>{if(s.inField)void connectOnline(currentCharacterEndpoint(),activeCharacterSlot,{world:true});
+      else if(room)room.send(s.canStart?"territory_start":"territory_join",{});};
+  }
+  function updateAtlasOwner(){
+    const node=$("atlasOwner");
+    if(node)node.textContent="ธงครองด่าน · "+(territoryState?.owners?.[node.dataset.site] || "เป็นกลาง");
+  }
   function openStrategicMap(){
     const maps=worldDefinitions,origin=activeMapId;
     if(!maps?.[origin])return;
@@ -4873,6 +4945,9 @@
       const gate=maps[origin].portals.find(p=>p.targetMapId===path[1]);
       directions.textContent=gate?"ผ่าน "+(path.length-1)+" ประตู · "+path.map(p=>maps[p].name).join(" → ")+" · ประตูแรก ("+gate.x+", "+gate.z+")":id===origin?"● คุณอยู่ที่นี่":"ยังไม่มีเส้นทางจากจุดปัจจุบัน";
       detail.replaceChildren(title,description,directions);
+      if(map.strategic?.kind==="territory" && territoryState){
+        const owner=document.createElement("p");owner.id="atlasOwner";owner.dataset.site=id;detail.append(owner);updateAtlasOwner();
+      }
     }
     select(origin);
     const scroll=board.parentElement;
@@ -4888,6 +4963,10 @@
       button.textContent="เปิดแผนที่ยุทธศาสตร์ · "+Object.keys(worldDefinitions).length+" พื้นที่";button.onclick=openStrategicMap;
       $("bigMap").parentElement.prepend(button);
       $("bigMap").parentElement.append(note);
+    }
+    if(territoryState?.local?.site===activeMapId){
+      const button=document.createElement("button");button.className="secondary";button.textContent="⚑ ดูด่านและสงครามกิลด์";button.onclick=openWarPanel;
+      $("bigMap").parentElement.prepend(button);
     }
     drawMap($("bigMap").getContext("2d"),420,320,true);
   }
@@ -5469,6 +5548,7 @@
   }
   // Compact portrait HUD: a small quest chip opens the existing detail drawer.
   ui.quest.addEventListener("click", () => {
+    if(territoryState?.local?.site===activeMapId){openWarPanel();return;}
     const title = ui.quest.querySelector("strong")?.textContent || "ภารกิจ";
     const description = ui.quest.querySelector(".quest-content > span")?.textContent || "";
     openDrawer("quest", title, '<p class="note"></p>');

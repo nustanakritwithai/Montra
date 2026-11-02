@@ -54,6 +54,9 @@ jobs:
           cp deploy/combat/forest-monster-config.test.ts combat-verify/src/rooms/forest-monster-config.test.ts
           cp deploy/combat/forest-guardian-integration.mjs combat-verify/forest-guardian-integration.mjs
           cp deploy/combat/forest-party-monster-integration.mjs combat-verify/forest-party-monster-integration.mjs
+          cp deploy/combat/TerritoryWar.ts combat-verify/src/rooms/TerritoryWar.ts
+          cp deploy/combat/territory-war.test.ts combat-verify/src/rooms/territory-war.test.ts
+          cp deploy/combat/territory-integration.mjs combat-verify/territory-integration.mjs
           cp deploy/combat/GuildStore.ts combat-verify/src/rooms/GuildStore.ts
           cp deploy/combat/guild-store.test.ts combat-verify/src/rooms/guild-store.test.ts
           cp deploy/combat/guild-integration.mjs combat-verify/guild-integration.mjs
@@ -274,7 +277,7 @@ jobs:
           export MONTRA_WORLD_EXPANSION=1 MONTRA_ECONOMY_ENABLED=0 PORT=4110
           export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-world-test-expansion-XXXXXX)"
           export MONTRA_TEST_URL=http://127.0.0.1:4110
-          npx tsx --test src/rooms/map-expansion.test.ts src/rooms/forest-monster-config.test.ts src/rooms/temple-map.test.ts src/rooms/world-atlas.test.ts
+          npx tsx --test src/rooms/map-expansion.test.ts src/rooms/forest-monster-config.test.ts src/rooms/temple-map.test.ts src/rooms/world-atlas.test.ts src/rooms/territory-war.test.ts
           node --import tsx src/index.ts > expansion-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
@@ -301,6 +304,7 @@ jobs:
           timeout 100s node world-capacity-integration.mjs || { cat monster-server.log; exit 1; }
           timeout 40s node forest-party-monster-integration.mjs || { cat monster-server.log; exit 1; }
           timeout 90s node guild-integration.mjs
+          timeout 140s node territory-integration.mjs
           timeout 120s node world-atlas-integration.mjs
           timeout 85s node temple-integration.mjs
           timeout 50s node forest-guardian-integration.mjs
@@ -310,6 +314,7 @@ jobs:
           SERVER_PID=$!
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4111) 2>/dev/null; then break; fi; sleep 0.25; done
           MONTRA_GUILD_STAGE=read timeout 45s node guild-integration.mjs
+          MONTRA_WAR_STAGE=read timeout 25s node territory-integration.mjs
           MONTRA_ATLAS_STAGE=read timeout 90s node world-atlas-integration.mjs
           MONTRA_TEMPLE_STAGE=read timeout 45s node temple-integration.mjs
           MONTRA_GUARDIAN_STAGE=read timeout 30s node forest-guardian-integration.mjs
