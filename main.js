@@ -6141,12 +6141,9 @@
   function updateMonsterUI(hp, maxHp, alive, simulated = false) {
     const max = Math.max(1, Number(maxHp) || 100);
     const current = Math.max(0, Math.min(max, Number(hp) || 0));
-    ui.monsterStatus.hidden = false;
     ui.monsterStatus.querySelector(".monster-heading span").textContent=activeMapId !== "ritual_village" ? ("มอนสเตอร์ · "+(worldDefinitions?.[activeMapId]?.name || "ป่าต้องห้าม")) : "ผีเข้าสิง · ตัวทดสอบ";
     ui.monsterBar.style.width = (100 * current / max) + "%";
-    ui.monsterText.textContent = alive
-      ? "HP " + Math.ceil(current) + "/" + Math.ceil(max)
-      : "ตายแล้ว · รอเกิดใหม่";
+    ui.monsterText.textContent = alive ? Math.ceil(current) + "/" + Math.ceil(max) : "ปราบแล้ว"; // same wording as the HUD frame
     ui.monsterHint.textContent = simulated
       ? "ทดลองในเครื่อง · แตะผีเพื่อโจมตี"
       : "ออนไลน์ · แตะผีเพื่อโจมตี";
@@ -6231,12 +6228,7 @@
       : Number(getLocalAvatar()?.targetY || 0);
     const altitude = Number.isFinite(worldY) ? Math.round(worldY * 10) / 10 : 0;
     const mobilePortrait = window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches;
-    ui.onlineCount.textContent = mode === "live"
-      ? (mobilePortrait
-        ? `${onlinePlayers.size} คน · ${summonAvatars.size} ผี · ↑${altitude}ม.`
-        : `ผู้เล่น: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} · สูง ${altitude}ม. (LIVE)`)
-      : (mobilePortrait ? `DEMO · ↑${altitude}ม.`
-        : `ผู้เล่นในฉาก: 1 (จำลอง) · สูง ${altitude}ม.`);
+    renderStatusChip();
     setModeBadge(mode === "live");
   }
   function showDemo() {
@@ -6578,6 +6570,112 @@
     );
     $("characterProfile").title = me?.persistent
       ? "แตะดูตัวละครถาวรและเปลี่ยนชื่อ" : "แตะดูข้อมูลตัวละคร";
+  }
+  // ---- HUD (player card, target frame, guide tracker, status chip) ----
+  // Rebuilt from state four times a second; each element is written only
+  // when its text or width actually changes.
+  const PATH_GLYPHS = { phutthaisawan: "⚔", muay_boran: "✊", blade: "🗡", sentinel: "⛨", seer: "✦", mender: "✚" };
+  const hudKills = {};
+  let hudTarget = { id: null, until: 0 }, hudCache = new Map(), hudIn = 0;
+  const hudSet = (el, key, value, prop = "textContent") => { if (!el) return; const k = key + prop; if (hudCache.get(k) === value) return; hudCache.set(k, value); if (prop === "width") el.style.width = value; else if (prop === "hidden") el.hidden = value; else el[prop] = value; };
+  const pctOf = (v, max) => Math.max(0, Math.min(100, 100 * (Number(v) || 0) / Math.max(1, Number(max) || 1))).toFixed(1) + "%";
+  function hudCurrentTarget(now) {
+    const hero = getLocalAvatar();
+    if (mode === "live") {
+      const st = room?.state, id = hudTarget.until > now && hudTarget.id ? hudTarget.id : selectedForestTarget;
+      if (!id) return null;
+      if (id === MONSTER_ID && st?.monster && activeMapId === "ritual_village")
+        return { name: "ผีเข้าสิง", level: Number(st.monster.level) || 1, hp: st.monster.hp, maxHp: st.monster.maxHp, alive: st.monster.alive !== false };
+      const m = st?.monsters?.get?.(id);
+      if (!m || m.mapId !== activeMapId) return null;
+      return { name: monsterName(m, id) || "ผี", level: Number(m.level) || 1, hp: m.hp, maxHp: m.maxHp, alive: m.alive !== false, elite: m.tier === "elite" || m.tier === "boss", x: m.x, z: m.z };
+    }
+    if (!enemy.isEnabled() && now - demoLastHitAt > 2500) return null;
+    const near = hero && Math.hypot(hero.x - enemy.position.x, hero.z - enemy.position.z) < 9;
+    if (!near && now - demoLastHitAt > 8000) return null;
+    return { name: "ผีเข้าสิง · ตัวทดสอบ", level: 1, hp: demoMonsterHp, maxHp: 100, alive: demoMonsterHp > 0 };
+  }
+  // The next useful step for the current map, with a point to head for.
+  function hudGuide() {
+    const map = worldDefinitions?.[activeMapId], hero = getLocalAvatar(), kills = hudKills[activeMapId] || 0;
+    const nearestOf = list => { let best = null, d = Infinity; for (const p of list) { const k = Math.hypot(p.x - hero.x, p.z - hero.z); if (k < d) { d = k; best = p; } } return best; };
+    if (!hero) return null;
+    if (activeMapId === "ritual_village") {
+      if (mode !== "live") {
+        if (enemy.isEnabled() && kills < 1) return { title: "ลองปราบผีทดสอบ", step: "เดินเข้าใกล้ผีที่ลานกลาง แล้วแตะตัวผี", progress: "ปราบ " + kills + "/1", to: { x: enemy.position.x, z: enemy.position.z } };
+        return { title: "พร้อมออกเดินทาง", step: "กดปุ่ม ออนไลน์ ด้านล่าง เพื่อเข้าเล่นจริงและวาร์ปไปป่า", progress: kills ? "ปราบแล้ว " + kills : "" };
+      }
+      const gate = (map?.portals || []).find(p => p.targetMapId === "forbidden_forest") || { x: -4, z: -17 };
+      return { title: "ออกล่าผี", step: "เดินไปประตูวาร์ป ป่าต้องห้าม", progress: "", to: gate };
+    }
+    if (map?.strategic?.kind === "capital") {
+      const gate = nearestOf(map.portals || []);
+      return { title: "นครเวียงมนตรา · เขตปลอดภัย", step: "เลือกประตูเมืองเพื่อไปเขตล่าหรือด่านสงคราม", progress: "", to: gate };
+    }
+    const range = map?.region?.range || null;
+    const alive = []; for (const [id, mesh] of forestMonsters) { const g = mesh.metadata?.ghost; if (mesh.isEnabled() && !g?.deathAt) alive.push({ id, x: mesh.position.x, z: mesh.position.z }); }
+    const prey = nearestOf(alive);
+    const preyName = prey ? monsterName(room?.state?.monsters?.get?.(prey.id), prey.id) : "";
+    return { title: "ล่าผี · " + (map?.name || "") + (range ? " Lv " + range.join("–") : ""),
+      step: prey ? "ผีใกล้สุด: " + (preyName || "ผี") : "ไม่มีผีใกล้ ๆ · รอผีเกิดใหม่หรือสำรวจต่อ", progress: "ปราบแล้ว " + kills, to: prey };
+  }
+  const hudProjA = new B.Vector3(), hudProjB = new B.Vector3();
+  function updateHud(now) {
+    const me = mode === "live" ? ownServerCharacter() : null, hero = getLocalAvatar();
+    // Player card.
+    const hp = me ? Number(me.hp) : demoHp, maxHp = me ? Number(me.maxHp) || 100 : 100;
+    hudSet(localHpBar, "hpw", pctOf(hp, maxHp), "width"); hudSet($("hpText"), "hp", Math.ceil(hp) + "/" + Math.ceil(maxHp));
+    const hasSt = me && Number(me.maxStamina) > 0;
+    hudSet($("staminaText"), "st", hasSt ? Math.round(me.stamina) + "/" + Math.round(me.maxStamina) : "");
+    const xpMax = Number(me?.xpToNext) || 0, xp = Number(me?.experience) || 0;
+    hudSet($("expBar")?.querySelector("i"), "xpw", xpMax ? pctOf(xp, xpMax) : "0%", "width");
+    hudSet($("expText"), "xp", me ? (xpMax ? "EXP " + xp + "/" + xpMax : "EXP สูงสุด") : "EXP · เล่นออนไลน์เพื่อเก็บ");
+    hudSet($("levelBadge"), "lv", String(Number(me?.level) || 1));
+    hudSet($("classGlyph")?.firstChild, "glyph", PATH_GLYPHS[me?.pathId] || "๛", "nodeValue");
+    $("classGlyph")?.classList.toggle("low-hp", hp / maxHp < .3);
+    // Target frame: only while there is a target.
+    const tg = hudCurrentTarget(now);
+    hudSet(ui.monsterStatus, "tgh", !tg, "hidden");
+    if (tg) {
+      hudSet($("targetName"), "tgn", tg.name); hudSet($("targetLevel"), "tgl", "Lv " + tg.level + (tg.elite ? " · ระดับสูง" : ""));
+      hudSet(ui.monsterBar, "tgw", tg.alive ? pctOf(tg.hp, tg.maxHp) : "0%", "width");
+      hudSet(ui.monsterText, "tgt", tg.alive ? Math.ceil(tg.hp) + "/" + Math.ceil(tg.maxHp) : "ปราบแล้ว");
+      ui.monsterStatus.classList.toggle("elite", Boolean(tg.elite));
+    }
+    // Guide tracker (the territory war owns this card while a battle is on).
+    if (!$("quest").classList.contains("war-hud")) {
+      const gd = hudGuide(), q = $("quest");
+      if (gd) {
+        hudSet(q.querySelector(".quest-content strong"), "qt", gd.title); hudSet(q.querySelector(".quest-content > span"), "qs", gd.step);
+        hudSet($("questProgress"), "qp", gd.progress || "");
+      }
+      const pointer = $("questPointer"), to = gd?.to;
+      if (!pointer) { /* older page markup: no pointer box */ }
+      else if (to && hero && Number.isFinite(to.x)) {
+        const dist = Math.hypot(to.x - hero.x, to.z - hero.z);
+        hudSet(pointer, "qph", dist < 3, "hidden");
+        if (dist >= 3) {
+          const vp = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()), tm = scene.getTransformMatrix();
+          B.Vector3.ProjectToRef(new B.Vector3(hero.x, 0, hero.z), B.Matrix.IdentityReadOnly, tm, vp, hudProjA);
+          B.Vector3.ProjectToRef(new B.Vector3(to.x, 0, to.z), B.Matrix.IdentityReadOnly, tm, vp, hudProjB);
+          const deg = Math.round(Math.atan2(hudProjB.y - hudProjA.y, hudProjB.x - hudProjA.x) * 180 / Math.PI);
+          if ($("questArrow")) $("questArrow").style.transform = "rotate(" + deg + "deg)";
+          hudSet($("questDistance"), "qd", Math.round(dist) + " ม.");
+        }
+      } else hudSet(pointer, "qph", true, "hidden");
+    }
+    renderStatusChip();
+  }
+  // Plain words instead of "DEMO · ↑0ม.": mode, players, safe zone, altitude only in the air.
+  function renderStatusChip() {
+    const hero = getLocalAvatar(), y = mode === "live" ? Number(ownServerCharacter()?.y) || 0 : Number(hero?.targetY) || 0;
+    const map = worldDefinitions?.[activeMapId], me = ownServerCharacter();
+    const safe = map?.strategic?.kind === "capital" || (map?.restAreas || []).some(r => hero && Math.hypot(hero.x - r.x, hero.z - r.z) <= r.radius);
+    const parts = [mode === "live" ? "ออนไลน์ · " + onlinePlayers.size + " คน" : "โหมดทดลอง"];
+    if (safe) parts.push("เขตปลอดภัย");
+    if (y > .5) parts.push("สูง " + Math.round(y) + " ม.");
+    hudSet(ui.onlineCount, "chip", parts.join(" · "));
+    ui.onlineCount.classList.toggle("safe", Boolean(safe));
   }
   function shortPkName(id) {
     return "ผู้เล่น-" + String(id || "").slice(0, 4);
@@ -7048,6 +7146,7 @@
           const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
           playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
           impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true, struck?.design?.kind);
+          if (hit.attackerId === localId) { hudTarget = { id: hit.targetId, until: performance.now() + 8000 }; if (Number(hit.hp) === 0) hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1; }
         }
         const talisman = hit?.source === "talisman";
         if (forestTarget) {
@@ -7305,6 +7404,7 @@
       joined.onMessage("monster_hit", hit => {
         if (room === joined) {
           playAction(avatars.get(hit?.targetId), "hit");
+          if (hit?.targetId === localId && !(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };
           const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost; if (g) g.attackAt = performance.now();
           if (g && !(performance.now() - (g.criedAt || 0) < 1500)) { ghostVoice(g, gm2, "attack"); g.criedAt = performance.now(); }
           if (hit?.attackerId === MONSTER_ID) villageGhost.metadata.ghost.attackAt = performance.now();
@@ -9529,6 +9629,7 @@
               hitFlashRemaining = .22;
               updateMonsterUI(demoMonsterHp, 100, demoMonsterHp > 0, true);
               if (demoMonsterHp <= 0) {
+                hudKills.ritual_village = (hudKills.ritual_village || 0) + 1;
                 releaseSoul(enemy.position.x, enemy.position.y + .4, enemy.position.z);
                 enemy.setEnabled(false);
                 demoAutoAttack = false;
@@ -9712,6 +9813,7 @@
     scene.fogEnd = camera.radius + atmosphere.fogFar;
     driftMist(elapsed, camera.target);
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
+    if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
     { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);
       // Music state: combat for 6 s after any fight action, war in a live battle, elite when one is near.
       if ((musicSyncIn -= dt) <= 0 && hero) {
