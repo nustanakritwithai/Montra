@@ -2438,8 +2438,9 @@
             const y = pos[v * 3 + 1];
             // Looser over thigh and knee, snug at waist and hem.
             const t = Math.min(1, Math.max(0, (y - HEM) / (WAIST - HEM)));
-            const knee = Math.exp(-Math.pow((y - .47) / .07, 2)); // extra room where the joint folds
-            const thick = .016 + .03 * Math.sin(Math.PI * Math.min(1, t * 1.25)) * (t < .85 ? 1 : .4) + .022 * knee;
+            // Extra room where joints fold: the knee and the hip crease.
+            const knee = Math.exp(-Math.pow((y - .47) / .07, 2)), crease = Math.exp(-Math.pow((y - .83) / .06, 2));
+            const thick = .016 + .03 * Math.sin(Math.PI * Math.min(1, t * 1.25)) * (t < .85 ? 1 : .4) + .022 * knee + .02 * crease;
             for (let k = 0; k < 3; k++) { out.positions.push(pos[v * 3 + k] + nor[v * 3 + k] * thick); out.normals.push(nor[v * 3 + k]); }
             for (let k = 0; k < 4; k++) { out.mi.push(mi[v * 4 + k]); out.mw.push(mw[v * 4 + k]); }
           }
@@ -2674,7 +2675,7 @@
       for (const b of ["Hips", "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg", "LeftFoot", "RightFoot"]) set(b, 0, 0, 0);
       off[0] = 0; off[1] = 0;
       // Knees fold to ~100 degrees: deeper folds collapse the skinned knee.
-      set("LeftUpLeg", -1.4, -.15, .5); set("RightUpLeg", -1.4, .15, -.5);
+      set("LeftUpLeg", -1.25, -.15, .5); set("RightUpLeg", -1.25, .15, -.5);
       set("LeftLeg", 1.75, .45, 0); set("RightLeg", 1.75, -.45, 0); set("LeftFoot", .35, 0, 0); set("RightFoot", .35, 0, 0);
       set("Hips", -.08, 0, 0); bend(.15 + .3 * m, 0, 0);
       if (rising) { set("LeftArm", -2.75, 0, -1.0); set("RightArm", -2.75, 0, 1.0); set("LeftForeArm", 0, -.3, 0); set("RightForeArm", 0, .3, 0); }
