@@ -466,6 +466,20 @@
         for(const sign of [-1,1]){column(x+sign,1.5,z,3,.3,.24,darkWood);column(x+sign,3.2,z,1.1,1.1,.65,accent,4);slab(x+sign,3.85,z,1.45,.16,1.45,darkWood);}
       }
     }
+    // A distant tree line continues the scenery past the walkable boundary.
+    // Keep it below the sight line at the shallowest supported camera angle.
+    const bounds=map.bounds;
+    slab((bounds.minX+bounds.maxX)/2,-.65,(bounds.minZ+bounds.maxZ)/2,
+      bounds.maxX-bounds.minX+94,.3,bounds.maxZ-bounds.minZ+94,forestFloor);
+    for(let side=0;side<4;side++)for(let i=0;i<20;i++){
+      const horizontal=side<2, sign=side%2===0?-1:1;
+      const low=horizontal?bounds.minX:bounds.minZ,high=horizontal?bounds.maxX:bounds.maxZ;
+      const along=low-13+(high-low+26)*i/19;
+      const edge=horizontal?(sign<0?bounds.minZ:bounds.maxZ):(sign<0?bounds.minX:bounds.maxX);
+      const offset=10+(i*7+side*3)%13, x=horizontal?along:edge+sign*offset, z=horizontal?edge+sign*offset:along;
+      const height=2.5+offset*.10;
+      column(x,height*.48-.45,z,height,5.5+i%4,0,forestLeaf,6);
+    }
     if(map.guardian){
       const {x,z}=map.guardian;
       for(const sign of [-1,1]){
@@ -553,6 +567,22 @@
     mesh.metadata={monsterId:id};
     if(monster.tier==="elite") {
       mesh.scaling.set(1.75,2.05,1.75);mesh.material=keeperMat;
+      const plate=(name,w,h,d,x,y,z,material)=>{
+        const piece=B.MeshBuilder.CreateBox(name,{width:w,height:h,depth:d},scene);
+        piece.parent=mesh;piece.position.set(x,y,z);piece.material=material;piece.isPickable=false;
+        return piece;
+      };
+      const mantle=B.MeshBuilder.CreateCylinder("keeper mantle",{height:.82,diameterTop:.8,diameterBottom:1.72,tessellation:8},scene);
+      mantle.parent=mesh;mantle.position.y=-.42;mantle.material=keeperMat;mantle.isPickable=false;
+      for(const side of [-1,1]){
+        const shoulder=plate("keeper shoulder",.64,.24,.7,side*.72,.30,0,gold);shoulder.rotation.z=side*.22;
+        plate("keeper gauntlet",.29,.58,.38,side*.88,-.06,0,keeperMat);
+      }
+      plate("keeper gilded mask",.54,.58,.23,0,.33,-.79,gold);
+      plate("keeper eyes",.42,.075,.07,0,.4,-.92,eyesMat);
+      plate("keeper staff",.115,2.18,.115,1.08,-.02,-.10,darkWood);
+      const flame=B.MeshBuilder.CreateCylinder("staff finial",{height:.53,diameterTop:0,diameterBottom:.32,tessellation:4},scene);
+      flame.parent=mesh;flame.position.set(1.08,1.18,-.10);flame.material=strikeMat;flame.isPickable=false;
       for(const side of [-1,0,1]){
         const crest=B.MeshBuilder.CreateCylinder("keeper crown",{height:side===0 ? .95 : .65,diameterTop:0,diameterBottom:.28,tessellation:5},scene);
         crest.parent=mesh;crest.position.set(side*.32,.83,0);crest.rotation.z=-side*.27;

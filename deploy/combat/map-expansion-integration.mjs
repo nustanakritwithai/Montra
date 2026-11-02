@@ -46,7 +46,15 @@ try{
    await leave(d);await leave(b);await leave(c);await leave(a);
    await seed(token(5),'ritual_village',-4,-17);const w=await open(token(5));
    w.send('warp',{portalId:'village_to_forest'});await until(()=>own(w).mapId==='forbidden_forest','warp to expanded forest');assert.equal(own(w).z,12);
-   await sleep(3100);w.send('warp',{portalId:'forest_to_village'});await until(()=>own(w).mapId==='ritual_village','return to village');await leave(w);
+   // Cooldown uses simulation time; a busy render/test host may advance it slower than wall time.
+   let warpRejection;w.onMessage('command_rejected',notice=>{warpRejection=notice.reason;});
+   for(let attempt=0;attempt<10 && own(w).mapId!=='ritual_village';attempt++){
+     await sleep(attempt===0?3100:650);warpRejection=undefined;
+     w.send('warp',{portalId:'forest_to_village'});
+     await until(()=>own(w).mapId==='ritual_village'||warpRejection,'return warp response');
+     if(warpRejection)assert.equal(warpRejection,'warp_cooldown');
+   }
+   assert.equal(own(w).mapId,'ritual_village');await leave(w);
    const expected=[];for(const slot of [1,2,3]){const disk=JSON.parse(await readFile(file(token(1),slot),'utf8'));assert.equal(disk.inventory.slots[0].quantity,2);expected.push({token:token(1),slot,mapId:disk.mapId,x:disk.x,z:disk.z,level:disk.level,experience:disk.experience});}
    await writeFile(path.join(dir,'map-restart-expectations.json'),JSON.stringify(expected));
    console.log('PASS: four players, 16 enemies plus the guardian, safe zones, cross-map rejection, extended walk/dash/flight/summon, EXP, bounds and return warp');
