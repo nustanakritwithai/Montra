@@ -161,7 +161,9 @@
   // every frame and snapped to its texel grid so edges do not shimmer. Every
   // lit mesh receives; anything taller than a kerb casts (see syncShadowLists).
   // ?shadows=off|on forces it; otherwise it backs off on slow devices.
-  const SHADOW_HALF = 38, SHADOW_SIZE = 1024, SHADOW_DIST = 90;
+  // Touch devices get a 1024 map, desktops 2048 for crisper edges.
+  const SHADOW_HALF = 38, SHADOW_DIST = 90;
+  const SHADOW_SIZE = matchMedia("(pointer: coarse)").matches || engine.getCaps().maxTextureSize < 4096 ? 1024 : 2048;
   const shadowPref = new URLSearchParams(location.search).get("shadows");
   keyLight.autoUpdateExtends = false; keyLight.autoCalcShadowZBounds = false;
   keyLight.shadowMinZ = 1; keyLight.shadowMaxZ = SHADOW_DIST * 2;
@@ -222,6 +224,10 @@
   function addLightSpot(x, y, z, hex = "#ffae5a", strength = 1) {
     lightSpots.push({ x, y, z, map: activeMapId, color: B.Color3.FromHexString(hex), strength });
   }
+  // A light that rides a moving node (glowing ghosts); dropped when the node goes.
+  function addMovingLight(node, hex, strength = 1, lift = 1.2) {
+    lightSpots.push({ node, lift, x: 0, y: 0, z: 0, map: "*", color: B.Color3.FromHexString(hex), strength, moving: true });
+  }
   const lanternLights = Array.from({ length: LANTERN_POOL }, (_, i) => {
     const l = new B.PointLight("lantern light " + i, new B.Vector3(0, -40, 0), scene);
     l.range = 11; l.intensity = 0; l.specular = new B.Color3(.08, .06, .04); l.metadata = { spot: null, level: 0 };
@@ -234,7 +240,12 @@
   function updateLanternLights(target, dt, t) {
     if ((lanternPick -= dt) <= 0) {
       lanternPick = .35;
-      const near = lightSpots.filter(p => p.map === activeMapId && Math.abs(p.x - target.x) < 34 && Math.abs(p.z - target.z) < 34)
+      for (let i = lightSpots.length - 1; i >= 0; i--) {
+        const p = lightSpots[i]; if (!p.moving) continue;
+        if (p.node.isDisposed()) { lightSpots.splice(i, 1); continue; }
+        const w = p.node.getAbsolutePosition(); p.x = w.x; p.y = w.y + p.lift; p.z = w.z; p.off = !p.node.isEnabled();
+      }
+      const near = lightSpots.filter(p => !p.off && (p.map === activeMapId || p.map === "*") && Math.abs(p.x - target.x) < 34 && Math.abs(p.z - target.z) < 34)
         .sort((a, b) => Math.hypot(a.x - target.x, a.z - target.z) - Math.hypot(b.x - target.x, b.z - target.z)).slice(0, LANTERN_POOL);
       // Keep lights on spots that stay chosen; free ones move to new spots.
       const free = lanternLights.filter(l => !near.includes(l.metadata.spot));
@@ -245,6 +256,7 @@
       const spot = l.metadata.spot;
       l.metadata.level = Math.min(1, Math.max(0, l.metadata.level + (spot ? dt * 2.5 : -dt * 4)));
       if (!spot) { l.intensity = 0; return; }
+      if (spot.moving && !spot.node.isDisposed()) { const w = spot.node.getAbsolutePosition(); spot.x = w.x; spot.y = w.y + spot.lift; spot.z = w.z; }
       l.position.set(spot.x, spot.y, spot.z); l.diffuse.copyFrom(spot.color);
       const flicker = .88 + Math.sin(t * 9.1 + i * 2) * .06 + Math.sin(t * 23.7 + i) * .04;
       l.intensity = .95 * spot.strength * flicker * l.metadata.level;
@@ -294,8 +306,9 @@
   const roofMat = mat("thai roof", "#6b2a22");
   const gold = mat("gold", "#b48640", "#3d2a0c");
   const water = mat("water", "#0a1c27", "#04111a");
-  water.specularColor = B.Color3.FromHexString("#7f93a8");
-  water.specularPower = 48;
+  // Glossy enough that lantern and strike lights glint off canals and pools.
+  water.specularColor = B.Color3.FromHexString("#c8d8ea");
+  water.specularPower = 110;
   function paintTexture(name, size, paint, repeat = 1) {
     const texture = new B.DynamicTexture(name, size, scene, true);
     paint(texture.getContext(), size);
@@ -343,6 +356,21 @@
     const want = .5 + .5 * Math.sin(elapsed * .09) * Math.sin(elapsed * .041 + 1.3);
     cloudCover += (want - cloudCover) * .02;
     cloudLayer.visibility = atmosphere.skyLevel === 0 ? 0 : 1; // no sky in the naga cavern
+  }
+  // ---- Storm lightning (asura peak, spirit rift) ----
+  // Every 10-25 s the sky flashes twice: fill light and sky jump, then decay.
+  const STORM_MAPS = { asura_peak: "#ffd0b0", spirit_rift: "#d8c8ff" };
+  let stormIn = 8, stormT = -1;
+  function stormFlash(dt) {
+    const tint = STORM_MAPS[activeMapId];
+    if (!tint) { stormT = -1; return; }
+    if ((stormIn -= dt) <= 0) { stormIn = 10 + Math.random() * 15; stormT = 0; }
+    if (stormT < 0) return;
+    stormT += dt;
+    const k = Math.max(Math.exp(-stormT * 18), stormT > .16 ? Math.exp(-(stormT - .16) * 9) * .8 : 0);
+    moon.intensity = atmosphere.hemi * .8 * (1 + 2.6 * k);
+    moon.diffuse = B.Color3.FromHexString(atmosphere.sky).scale(1 - k).add(B.Color3.FromHexString(tint).scale(k));
+    if (stormT > 1.2) { stormT = -1; moon.intensity = atmosphere.hemi * .8; moon.diffuse = B.Color3.FromHexString(atmosphere.sky); }
   }
   // ---- Strike light ----
   // One extra point light flashes at a character on every attack, spell and
@@ -637,6 +665,8 @@
     // A stronger moon over a softer sky fill gives the shadows something to take away.
     moon.intensity = a.hemi * .8; moon.diffuse = c3(a.sky); moon.groundColor = c3(a.ground);
     keyLight.diffuse = c3(a.key); keyLight.intensity = a.keyI * 1.65; warm.intensity = a.carry;
+    // Darker maps get a little more exposure so they stay readable on a phone.
+    grade.exposure = { forbidden_forest: 1.55, bound_temple: 1.6, naga_cavern: 1.55, drowned_marsh: 1.5 }[mapId] || 1.4;
     mistMat.emissiveColor = c3(a.mist); mistMat.alpha = a.mistAlpha;
     skyTexture.level = a.skyLevel;
     const [c1, c2] = a.mote.map(h => B.Color4.FromHexString(h + "ff"));
@@ -2992,7 +3022,15 @@
   let shamanBody = null;
   if (B.SceneLoader?.IsPluginForExtensionAvailable?.(".glb")) {
     B.SceneLoader.LoadAssetContainerAsync("./assets/characters/", "thai-male.glb", scene).then(container => {
-      for (const m of container.materials) { if ("metallic" in m) { m.environmentIntensity = 0; m.directIntensity = 1.5; m.metallic = 0; } m.maxSimultaneousLights = MAX_LIGHTS; }
+      for (const m of container.materials) {
+        if ("metallic" in m) {
+          m.environmentIntensity = 0; m.directIntensity = 1.5; m.metallic = 0;
+          // Moonlit sheen on the skin's grazing edges keeps every character
+          // readable against dark ground from the far camera.
+          m.sheen.isEnabled = true; m.sheen.color = B.Color3.FromHexString("#9fc4ff"); m.sheen.intensity = .45; m.sheen.roughness = .35;
+        }
+        m.maxSimultaneousLights = MAX_LIGHTS;
+      }
       shamanBody = container;
       shamanWaiting.splice(0).forEach(attachShamanModel);
       ghostWaiting.splice(0).forEach(build => build());
@@ -5389,6 +5427,9 @@
     root.visibility = .001; root.isPickable = true;
     const rig = new B.TransformNode("ghost rig", scene); rig.parent = root; rig.position.y = -tall / 2; rig.scaling.setAll(design.scale);
     contactShadow(rig, design.kind === "elephant" ? 3.4 : 1.7);
+    // Ghosts that burn or shine light the ground around them.
+    const GHOST_LIGHT = { krasue: ["#ff6a3a", 1.2], phong: ["#9dff7a", 1.1], waterspirit: ["#7ff5e0", .9], moonspirit: ["#c9d2ff", 1], krahang: ["#ff9a4a", .9], bell: ["#ffc070", .7] };
+    if (GHOST_LIGHT[design.kind]) addMovingLight(root, ...GHOST_LIGHT[design.kind], .4);
     // Humanoid ghosts wait for the shared body; primitive rigs are the fallback.
     let update = () => {};
     const ghostState = { get update() { return update; } };
@@ -8641,6 +8682,7 @@
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
     driftClouds(camera.target, elapsed); updateStrikeLight(performance.now());
     keyLight.intensity = atmosphere.keyI * 1.65 * (1 - .22 * cloudCover);
+    stormFlash(dt);
     if ((shadowSyncIn -= dt) <= 0) { shadowSyncIn = .5; syncShadowLists(); }
     rippleTexture.vOffset = (rippleTexture.vOffset + dt * .025) % 1;
     riverRipple.uOffset = (riverRipple.uOffset + dt * .012) % 1;
