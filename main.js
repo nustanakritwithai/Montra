@@ -6026,8 +6026,10 @@
       });
       joined.onMessage("territory_state",message=>{
         if(room!==joined)return;
-        const oldDrums=territoryState?.local?.supply?.drums || [];
+        const oldDrums=territoryState?.local?.supply?.drums || [],previousOwners=territoryState?.owners;
         territoryState=message;syncGateVisual();syncCastleRings();
+        if(drawerActive==="guild" && previousOwners && guildReady() &&
+           Object.keys(message.owners||{}).some(site=>previousOwners[site]!==message.owners[site]))joined.send("get_guild",{});
         const alerts=message.local?.supply?.drums?.filter(id=>!oldDrums.includes(id)) || [];
         if(alerts.length)toast("เสียงกลอง · กำลังชิง "+alerts.map(id=>message.local.pilot.points.find(p=>p.id===id)?.name || id).join(" · "));
         if(drawerActive==="war")renderWarPanel();
@@ -6051,7 +6053,12 @@
           }else if(fighting)ui.quest.style.setProperty("--war-progress",Math.abs(local.progress)/local.goal);
         }
       });
-      joined.onMessage("territory_error",message=>{if(room===joined)toast(warErrors[message?.reason] || "เข้าศึกไม่ได้ในขณะนี้");});
+      joined.onMessage("territory_error",message=>{if(room===joined)toast(warErrors[message?.reason] || "ทำรายการที่ด่านไม่ได้ในขณะนี้");});
+      joined.onMessage("territory_governed",message=>{
+        if(room!==joined || !Number.isFinite(message?.delta))return;
+        toast(message.action==="collect"?"เก็บรายได้เข้าคลังกิลด์ "+message.delta+" หน่วย":
+          (message.action==="repair"?"ซ่อมคลังเสบียงแล้ว":"พัฒนาอาคารแล้ว")+" · ใช้ "+Math.abs(message.delta)+" หน่วย");
+      });
       joined.onMessage("territory_transfer",message=>{
         if(room===joined && typeof message?.roomId==="string" && typeof message.ticket==="string")void connectOnline(endpoint,requestedSlot,message);
       });
@@ -7322,13 +7329,21 @@
     war_guild:"ต้องเป็นสมาชิกกิลด์ก่อนเข้าศึก",war_flag:"เดินเข้าวงธงกลางป้อมก่อนเปิดศึก",war_officer:"ให้ผู้บัญชาการหรือนายทหารเปิดศึก",
     war_other_guild:"สนามนี้มีฝ่ายบุกและฝ่ายรับแล้ว",war_side_full:"ผู้เล่นฝ่ายของคุณเต็มแล้ว",war_busy:"รอให้พ้นการต่อสู้และยืนบนพื้นในด่าน",
     war_gate_repair:"ต้องครองโรงช่างและประตูต้องพ้นการโจมตี 5 วินาที",war_gate_near:"ฝ่ายรับต้องยืนที่ประตูด้านใน",war_gate_occupied:"มีผู้เล่นยืนขวางประตู",war_gate_open:"ประตูเปิดอยู่",war_gate_inactive:"ประตูใช้การไม่ได้แล้ว",
-    war_ended:"ศึกนี้จบแล้ว",war_exit:"กลับห้องโลกผ่านหน้าด่านกิลด์",war_unavailable:"ด่านยังเปิดศึกไม่ได้"};
+    war_ended:"ศึกนี้จบแล้ว",war_exit:"กลับห้องโลกผ่านหน้าด่านกิลด์",war_unavailable:"ด่านยังเปิดศึกไม่ได้",
+    war_not_owner:"เฉพาะกิลด์ผู้ครองด่าน",war_government_role:"ตำแหน่งของคุณทำรายการนี้ไม่ได้",
+    war_government_battle:"รอให้ศึกจบก่อนบริหารด่าน",war_government_stale:"บัญชีด่านเปลี่ยนแล้ว ตรวจยอดล่าสุดก่อนทำรายการ",
+    war_no_income:"ยังไม่มีรายได้เต็มหน่วยให้เก็บ",war_building_max:"อาคารถึงระดับสูงสุดแล้ว",war_funds:"เงินคลังกิลด์ไม่พอ",
+    war_repair_first:"ต้องซ่อมคลังเสบียงก่อนพัฒนาอาคาร",war_no_damage:"คลังเสบียงอยู่ในสภาพพร้อมใช้",war_government_location:"กลับห้องโลกและยืนบนพื้นในด่านที่ครอง"};
   const warPhase=p=>({open:"เปิดให้ท้าชิง",battle:"กำลังรบ",protected:"อยู่ในความคุ้มครอง",finished:"จบศึกแล้ว"})[p] || "กำลังตรวจด่าน";
   const warTime=s=>Math.floor(s/60)+" นาที "+s%60+" วินาที";
   const campStatus={ready:"เปิด",contested:"กำลังถูกชิง",cut:"เส้นทางขาด",unheld:"ยังไม่ได้ครอง"};
   function openWarPanel(){
     openDrawer("war","สงครามยึดด่าน",`<h3 id="warHeading"></h3><p id="warOwner"></p><p id="warStatus" role="status"></p>
       <progress id="warGauge" max="60" aria-label="ความคืบหน้าการยึดธง"></progress><p id="warCount"></p>
+      <section id="estatePanel" hidden><h3>การปกครองด่าน</h3><p id="estateBalance" role="status"></p><p id="estateTerms"></p>
+        <button class="primary" id="estateCollect" type="button">เก็บรายได้เข้าคลังกิลด์</button>
+        <p id="estateRole"></p><div class="party-actions"><button id="estateMarket" type="button"></button><button id="estateWarehouse" type="button"></button><button id="estateWorkshop" type="button"></button></div>
+        <p id="estateDamage" hidden></p><button id="estateRepair" type="button" hidden></button></section>
       <p class="note" id="warFlag"></p><p class="note">ผู้บัญชาการหรือนายทหารเปิดศึกที่วงธง สมาชิกเข้าร่วมได้จากภายในด่าน ฝั่งละ 5 คน ศึกมีเวลา 5 นาที จำนวนคนที่ยืนวงมากกว่าจะดันเกจได้ เมื่อทั้งสองฝ่ายยืนเท่ากัน เกจจะหยุด</p>
       <p class="note">แตะบันไดหรือกดขึ้นกำแพงที่ตีนบันไดด้านใน เดินและซัดข้าวสารปลุกเสกได้ตลอดแนว เมื่อถึงหัวบันไดกดลงกำแพง วงเขียวคือฝ่ายเดียวกัน สามเหลี่ยมแดงคือฝ่ายตรงข้าม หลังจบศึกด่านคุ้มครอง 8 ชั่วโมง</p><button id="warAction" class="primary" type="button" hidden></button>`);
     if(activeMapId==="tri_wiang_castle"){
@@ -7350,8 +7365,28 @@
     }
     renderWarPanel();
   }
+  function renderGovernment(s){
+    const panel=$("estatePanel"),g=s?.site===activeMapId && !s.inField?s.government:null;
+    panel.hidden=!g;if(!g)return;
+    const peace=s.phase!=="battle",send=action=>room?.send("territory_govern",{site:s.site,revision:g.revision,action});
+    $("estateBalance").textContent="คลังกิลด์ "+g.balance+" หน่วย · รายได้รอเก็บ "+g.available+" หน่วย";
+    $("estateTerms").textContent="ตลาดผลิต "+g.rate+" หน่วย/ชั่วโมง · เก็บได้ "+g.hours+" ชั่วโมง ("+g.cap+" หน่วย) · ตลาดเพิ่มรายได้ คลังเสบียงเพิ่มความจุ โรงช่างลดค่าซ่อม";
+    $("estateRole").textContent=!peace?"กำลังรบ · เปิดให้ทำรายการอีกครั้งเมื่อศึกจบ":g.commander?"ผู้บัญชาการ · เก็บรายได้ พัฒนาอาคาร และซ่อมคลังได้":g.officer?"นายทหาร · เก็บรายได้เข้าคลังกิลด์ได้":"สมาชิกกิลด์ · ดูรายได้และระดับอาคารได้";
+    $("estateCollect").disabled=!peace || !g.officer || g.available<1;$("estateCollect").onclick=()=>send("collect");
+    for(const [kind,id,label] of [["market","estateMarket","ตลาด"],["warehouse","estateWarehouse","คลังเสบียง"],["workshop","estateWorkshop","โรงช่าง"]]){
+      const b=$(id),cost=g.prices[kind];
+      b.textContent=label+" Lv."+g[kind]+(cost===null?" · สูงสุด":" → "+(g[kind]+1)+" · "+cost+" หน่วย");
+      b.disabled=!peace || !g.commander || g.damaged || cost===null || cost>g.balance;
+      b.onclick=()=>{if(window.confirm("พัฒนา"+label+"เป็น Lv."+(g[kind]+1)+" ใช้ "+cost+" หน่วยจากคลังกิลด์?"))send(kind);};
+    }
+    $("estateDamage").hidden=!g.damaged;$("estateDamage").textContent="คลังเสียหายหลังประตูถูกตีแตก · ซ่อมเพื่อคืนความจุส่วนขยายและเปิดการพัฒนาอาคาร";
+    const repair=$("estateRepair");repair.hidden=!g.damaged;repair.disabled=!peace || !g.commander || g.balance<g.repairCost;
+    repair.textContent="ซ่อมคลังเสบียง · "+g.repairCost+" หน่วย";
+    repair.onclick=()=>{if(window.confirm("ซ่อมคลังเสบียงโดยใช้ "+g.repairCost+" หน่วยจากคลังกิลด์?"))send("repair");};
+  }
   function renderWarPanel(){
     const s=territoryState?.local,button=$("warAction");if(!button)return;
+    renderGovernment(s);
     if(!s || s.site!==activeMapId){$("warStatus").textContent="ออกจากพื้นที่ด่านแล้ว";button.hidden=true;return;}
     $("warHeading").textContent=worldDefinitions?.[s.site]?.name || "ด่านกิลด์";
     $("warOwner").textContent="ธงครองด่าน · "+(s.owner || "เป็นกลาง")+(s.inField?" · คุณอยู่ฝ่าย"+(s.side==="attack"?"บุก":"รับ"):"");
@@ -8425,6 +8460,7 @@
     if(guildRenderKey===key)return;
     guildRenderKey=key;
     $("guildStatus").textContent=!ready?"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว":guildState?guildState.name+" · สมาชิก "+guildState.members.length+" / 30":"ยังไม่มีกิลด์";
+    if(ready && Number.isFinite(guildState?.treasury))$("guildStatus").textContent+=" · คลังกิลด์ "+guildState.treasury+" หน่วย";
     $("guildCreateArea").hidden=!!guildState || !ready;
     $("guildMemberArea").hidden=!guildState;
     $("guildInvitationBox").hidden=!guildInvitation || !!guildState;

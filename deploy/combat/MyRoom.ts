@@ -1,6 +1,7 @@
 import { FORGE } from "./ForgeRules.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
 import { WAR_SIDE_SIZE, WAR_HOLD, warSites, type Battlefield, type WarSide } from "./TerritoryWar.js";
+import {parseGovernmentOrder} from "./TerritoryGovernment.js";
 import {CASTLE_ID,CASTLE_ENABLED,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
 import { Encoder } from "@colyseus/schema";
 import { randomUUID } from "node:crypto";
@@ -1262,6 +1263,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         progress:Math.trunc(s.progress),goal:WAR_HOLD,seconds:s.seconds,attack,defend,inField,side:this.warSeats.get(c.sessionId)?.side,
         pilot:visiblePilot,supply:supply?{...supply,selected:seat!.camp,atBase:this.canMarch(c.sessionId)}:undefined,
         relay:inField && ownBattle && this.battleActive && WORLD_MAPS[p.mapId].strategic?.relay?{side:relaySide,contested}:undefined,
+        government:!inField && member && member.id===s.ownerId?war.government.view(p.mapId,member,now):undefined,
         gateHp:s.gateHp,gateClosed:inField && this.gateClosed,
         canStart:!inField && s.phase==="open" && member?.officer===true && member.id!==s.ownerId,
         canJoin:!inField && s.phase==="battle" && !!member && (member.id===s.attacker || member.id===s.defender || (!s.owner && !s.defendName && member.officer))}:null;
@@ -1270,6 +1272,26 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
   messages = {
+    territory_govern:(client:Client,message:unknown)=>{
+      const id=client.sessionId,p=this.state.players.get(id),character=this.persistentCharacters.get(id);
+      if(!this.gates.get(id)?.guild.consume(this.simulatedMs))return this.reject(client,"guild_rate_limited");
+      const order=parseGovernmentOrder(message);
+      if(!order)return this.reject(client,"invalid_request");
+      if(!WORLD_EXPANSION || !this.warClients.has(id) || this.field || !character || !p || !p.alive || p.flying ||
+         !isOnGround(p.y) || this.climbs.has(id) || this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
+         !Object.hasOwn(warSites,p.mapId) || order.site!==p.mapId)
+        return client.send("territory_error",{reason:"war_government_location"});
+      try{
+        const delta=guildStore().war.govern(character,order,Date.now());
+        client.send("territory_governed",{action:order.action,delta});
+        notifyGuilds();
+      }catch(error){
+        const reason=error instanceof Error?error.message:"";
+        if(!reason.startsWith("war_"))console.error("MONTRA government",error);
+        client.send("territory_error",{reason:reason.startsWith("war_")?reason:"war_unavailable"});
+      }
+      this.warSent.delete(id);this.nextWarSample=0;
+    },
     territory_gate:(client:Client,message:unknown)=>this.useCityGate(client,message),
     territory_camp:(client:Client,message:unknown)=>this.orderCamp(client,message),
     get_territories:(client:Client,message:unknown)=>{

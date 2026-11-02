@@ -174,6 +174,9 @@ test("durable castle scores, retry, deadline, eight-hour protection and independ
     store.close();store=new GuildStore(file);assert.equal(store.war.inspect(CASTLE_ID,start+91000).pilot!.score.attack,348);
     store.war.advance(f,start+91000,0,0,all);assert.equal(store.war.inspect(CASTLE_ID,start+91000).pilot!.score.attack,348);
     const end=start+CASTLE_DURATION;assert.equal(store.war.inspect(CASTLE_ID,end).owner,"West");
+    const estate=store.war.government.view(CASTLE_ID,m,end+3_600_000)!;
+    assert.equal(estate.available,60);store.war.govern("a",{site:CASTLE_ID,revision:estate.revision,action:"collect"},end+3_600_000);
+    assert.equal(store.war.government.balance(m.id),60);
     assert.equal(store.war.inspect(CASTLE_ID,end+WAR_PROTECTION-1).phase,"protected");
     assert.equal(store.war.inspect(CASTLE_ID,end+WAR_PROTECTION).phase,"open");assert.equal(store.war.inspect("moon_pass",end).owner,null);
   }finally{store.close();rmSync(dir,{recursive:true,force:true});}
