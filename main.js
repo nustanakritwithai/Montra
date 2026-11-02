@@ -3386,9 +3386,9 @@
   function ghostSkin(body, key, albedo, emissive, keepTexture = true) {
     if (!skinVariants.has(key)) {
       const m = body.material.clone("ghost skin " + key);
-      // PBR colours are linear: convert from the sRGB hex values used everywhere else.
-      m.albedoColor = B.Color3.FromHexString(albedo).toLinearSpace(); m.emissiveColor = B.Color3.FromHexString(emissive).toLinearSpace();
-      if (!keepTexture) m.albedoTexture = null;
+      // Painted skin map: tint, veins and rot (or carved stone) from the body's own albedo.
+      m.albedoTexture = deriveSkin(body.material.albedoTexture, key, albedo, !keepTexture);
+      m.albedoColor = B.Color3.White(); m.emissiveColor = B.Color3.FromHexString(emissive).toLinearSpace();
       m.metallic = 0; m.roughness = 1; m.environmentIntensity = 0; m.directIntensity = 1.0;
       skinVariants.set(key, m);
     }
@@ -3399,6 +3399,136 @@
     saffron: mat("scribe saffron", "#8a4f22", "#140a03"), blue: mat("dead blue shirt", "#7d8ea6", "#0e1218"), lacquer: mat("statue lacquer cloth", "#7a2622", "#120404"),
   };
   for (const m of Object.values(cloth)) m.backFaceCulling = false;
+  // ---- Procedural surface detail for the ghosts ----
+  // Every material gets a painted colour map and a matching normal map
+  // derived from a height field, so light picks out weave, grain and cracks.
+  function surface(name, size, paintColor, paintHeight, strength = 2.5, repeat = 1) {
+    const color = paintTexture(name + " colour", size, paintColor, repeat);
+    const hc = document.createElement("canvas"); hc.width = hc.height = size;
+    const h = hc.getContext("2d"); h.fillStyle = "#808080"; h.fillRect(0, 0, size, size); paintHeight(h, size);
+    const src = h.getImageData(0, 0, size, size).data;
+    const normal = new B.DynamicTexture(name + " normal", size, scene, true), nc = normal.getContext(), out = nc.createImageData(size, size);
+    const H = (x, y) => src[(((y + size) % size) * size + ((x + size) % size)) * 4] / 255;
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const dx = (H(x - 1, y) - H(x + 1, y)) * strength, dy = (H(x, y - 1) - H(x, y + 1)) * strength, l = Math.hypot(dx, dy, 1), i = (y * size + x) * 4;
+      out.data[i] = (dx / l * .5 + .5) * 255; out.data[i + 1] = (dy / l * .5 + .5) * 255; out.data[i + 2] = (1 / l * .5 + .5) * 255; out.data[i + 3] = 255;
+    }
+    nc.putImageData(out, 0, 0); normal.update(); normal.uScale = normal.vScale = repeat;
+    return { color, normal };
+  }
+  const R = (i, k) => noise(i, k);
+  function speckle(c, s, n, seed, colors, rMin = .5, rMax = 2) {
+    for (let i = 0; i < n; i++) { c.fillStyle = colors[i % colors.length]; c.beginPath(); c.arc(R(i, seed) * s, R(i, seed + 1) * s, rMin + R(i, seed + 2) * (rMax - rMin), 0, Math.PI * 2); c.fill(); }
+  }
+  function crackLines(c, s, n, seed, color, width = 1.5) {
+    c.strokeStyle = color; c.lineCap = "round";
+    for (let i = 0; i < n; i++) { let x = R(i, seed) * s, y = R(i, seed + 1) * s, a = R(i, seed + 2) * 6.28; c.lineWidth = width; c.beginPath(); c.moveTo(x, y);
+      for (let k = 0; k < 7; k++) { a += (R(i * 7 + k, seed + 3) - .5) * 1.4; x += Math.cos(a) * s * .03; y += Math.sin(a) * s * .03; c.lineTo(x, y); c.lineWidth = Math.max(.5, width * (1 - k / 8)); } c.stroke(); }
+  }
+  // Coarse cloth: warp/weft weave, grime, stains and frayed holes.
+  function clothSurface(name, base, grime, stain, holes = 0) {
+    return surface(name, 256, (c, s) => {
+      c.fillStyle = base; c.fillRect(0, 0, s, s);
+      for (let y = 0; y < s; y += 2) { c.fillStyle = y % 4 ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.08)"; c.fillRect(0, y, s, 1); }
+      for (let x = 0; x < s; x += 2) { c.fillStyle = x % 4 ? "rgba(0,0,0,.06)" : "rgba(255,255,255,.04)"; c.fillRect(x, 0, 1, s); }
+      for (let i = 0; i < 18; i++) { const g = c.createRadialGradient(R(i, 801) * s, R(i, 802) * s, 0, R(i, 801) * s, R(i, 802) * s, 10 + R(i, 803) * 40);
+        g.addColorStop(0, i % 3 ? grime : stain); g.addColorStop(1, "rgba(0,0,0,0)"); c.fillStyle = g; c.fillRect(0, 0, s, s); }
+      const fade = c.createLinearGradient(0, 0, 0, s); fade.addColorStop(0, "rgba(0,0,0,0)"); fade.addColorStop(1, grime); c.fillStyle = fade; c.fillRect(0, 0, s, s);
+      for (let i = 0; i < holes; i++) { c.fillStyle = "#0b0a0a"; c.beginPath(); c.ellipse(R(i, 804) * s, R(i, 805) * s, 3 + R(i, 806) * 8, 2 + R(i, 807) * 5, R(i, 808) * 3, 0, 6.28); c.fill(); }
+    }, (h, s) => {
+      for (let y = 0; y < s; y += 2) { h.fillStyle = y % 4 ? "#909090" : "#707070"; h.fillRect(0, y, s, 1); }
+      for (let x = 0; x < s; x += 4) { h.fillStyle = "rgba(60,60,60,.5)"; h.fillRect(x, 0, 1, s); }
+      for (let i = 0; i < 9; i++) { h.strokeStyle = "rgba(40,40,40,.6)"; h.lineWidth = 3; h.beginPath(); const x = R(i, 809) * s; h.moveTo(x, 0); h.bezierCurveTo(x + 20, s * .3, x - 20, s * .6, x + 10, s); h.stroke(); } // folds
+    }, 3);
+  }
+  function applySurface(material, surf, tint) {
+    material.diffuseTexture = surf.color; material.bumpTexture = surf.normal;
+    if (tint) material.diffuseColor = B.Color3.FromHexString(tint);
+    return material;
+  }
+  // Cloth.
+  applySurface(cloth.rags, clothSurface("rag shirt", "#857c6c", "rgba(40,32,22,.55)", "rgba(90,60,30,.5)", 6), "#ffffff");
+  applySurface(cloth.shroud, clothSurface("shroud", "#2a3140", "rgba(5,6,10,.6)", "rgba(40,50,70,.4)", 4), "#ffffff");
+  applySurface(cloth.white, clothSurface("white dress", "#e4e0d4", "rgba(90,85,70,.45)", "rgba(110,90,60,.35)", 0), "#ffffff");
+  applySurface(cloth.saffron, clothSurface("scribe robe", "#9a5a26", "rgba(40,20,8,.5)", "rgba(60,30,10,.5)", 3), "#ffffff");
+  applySurface(cloth.blue, clothSurface("blue shirt", "#8d9db4", "rgba(30,36,50,.5)", "rgba(60,50,40,.4)", 2), "#ffffff");
+  for (const [m, base] of [[cloth.lacquer, "#8a2b24"], [templeLacquer, "#953f37"]]) applySurface(m, surface(m.name + " lacquer", 256, (c, s) => {
+    c.fillStyle = base; c.fillRect(0, 0, s, s);
+    // Gilt kranok border bands on lacquered cloth.
+    c.strokeStyle = "#d9a54a"; c.lineWidth = 3;
+    for (const y of [s * .12, s * .88]) { c.beginPath(); c.moveTo(0, y); c.lineTo(s, y); c.stroke();
+      for (let x = 0; x < s; x += 32) { c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo(x + 10, y - 14, x + 18, y - 4); c.quadraticCurveTo(x + 24, y + 6, x + 32, y); c.stroke(); } }
+    speckle(c, s, 300, 811, ["rgba(0,0,0,.15)", "rgba(255,200,150,.06)"], .5, 2.5);
+    crackLines(c, s, 10, 812, "rgba(20,5,5,.5)", 1);
+  }, (h, s) => { for (const y of [s * .12, s * .88]) { h.fillStyle = "#c0c0c0"; h.fillRect(0, y - 3, s, 6); } crackLines(h, s, 10, 812, "#404040", 1); }, 2), "#ffffff");
+  // Bark: deep vertical furrows, knots and moss.
+  applySurface(gm.bark, surface("bark", 256, (c, s) => {
+    c.fillStyle = "#4a3828"; c.fillRect(0, 0, s, s);
+    for (let i = 0; i < 70; i++) { const x = R(i, 821) * s; c.strokeStyle = i % 3 ? "rgba(20,12,6,.7)" : "rgba(120,96,70,.35)"; c.lineWidth = 1 + R(i, 822) * 3; c.beginPath(); c.moveTo(x, 0);
+      for (let y = 0; y <= s; y += 16) c.lineTo(x + Math.sin(y * .05 + i) * 6, y); c.stroke(); }
+    for (let i = 0; i < 6; i++) { c.fillStyle = "rgba(15,8,4,.8)"; c.beginPath(); c.ellipse(R(i, 823) * s, R(i, 824) * s, 6, 10, 0, 0, 6.28); c.fill(); }
+    for (let i = 0; i < 14; i++) { const g = c.createRadialGradient(R(i, 825) * s, R(i, 826) * s, 0, R(i, 825) * s, R(i, 826) * s, 30); g.addColorStop(0, "rgba(70,110,50,.6)"); g.addColorStop(1, "rgba(70,110,50,0)"); c.fillStyle = g; c.fillRect(0, 0, s, s); }
+  }, (h, s) => { for (let i = 0; i < 70; i++) { const x = R(i, 821) * s; h.strokeStyle = i % 3 ? "#202020" : "#b0b0b0"; h.lineWidth = 1 + R(i, 822) * 3; h.beginPath(); h.moveTo(x, 0); for (let y = 0; y <= s; y += 16) h.lineTo(x + Math.sin(y * .05 + i) * 6, y); h.stroke(); } }, 4, 2), "#ffffff");
+  // Bronze: verdigris patina, engraved script bands, rubbed highlights.
+  applySurface(templeBronze, surface("bronze", 256, (c, s) => {
+    c.fillStyle = "#6b5a3a"; c.fillRect(0, 0, s, s);
+    for (let i = 0; i < 40; i++) { const g = c.createRadialGradient(R(i, 831) * s, R(i, 832) * s, 0, R(i, 831) * s, R(i, 832) * s, 8 + R(i, 833) * 36); g.addColorStop(0, "rgba(70,150,130,.65)"); g.addColorStop(1, "rgba(70,150,130,0)"); c.fillStyle = g; c.fillRect(0, 0, s, s); }
+    for (const y of [s * .3, s * .5, s * .7]) { c.fillStyle = "rgba(20,15,8,.5)"; c.fillRect(0, y - 9, s, 18); khomRow(c, 4, y + 6, s - 8, 12, "rgba(210,170,90,.75)"); }
+    speckle(c, s, 260, 834, ["rgba(0,0,0,.18)", "rgba(220,190,120,.12)"], .5, 2);
+  }, (h, s) => { for (const y of [s * .3, s * .5, s * .7]) { h.fillStyle = "#606060"; h.fillRect(0, y - 9, s, 18); khomRow(h, 4, y + 6, s - 8, 12, "#c8c8c8"); } speckle(h, s, 200, 835, ["#707070", "#909090"], 1, 3); }, 3), "#ffffff");
+  // Worn gold: dark grime in the recesses, scratched highlights.
+  applySurface(gold, surface("worn gold", 128, (c, s) => {
+    c.fillStyle = "#b8873e"; c.fillRect(0, 0, s, s); speckle(c, s, 160, 841, ["rgba(60,35,10,.35)", "rgba(255,220,150,.25)"], .5, 2.5); crackLines(c, s, 12, 842, "rgba(50,30,10,.4)", 1);
+  }, (h, s) => { speckle(h, s, 140, 843, ["#707070", "#a0a0a0"], .5, 2); }, 2), "#ffffff");
+  // Statue stone: grain, speckle, lichen and dark cracks.
+  gm.stoneSurface = surface("statue stone", 256, (c, s) => {
+    c.fillStyle = "#8d8c84"; c.fillRect(0, 0, s, s); speckle(c, s, 900, 851, ["rgba(0,0,0,.2)", "rgba(255,255,255,.12)", "rgba(80,70,60,.25)"], .4, 1.6);
+    for (let i = 0; i < 16; i++) { const g = c.createRadialGradient(R(i, 852) * s, R(i, 853) * s, 0, R(i, 852) * s, R(i, 853) * s, 10 + R(i, 854) * 30); g.addColorStop(0, i % 2 ? "rgba(110,130,70,.5)" : "rgba(40,36,30,.4)"); g.addColorStop(1, "rgba(0,0,0,0)"); c.fillStyle = g; c.fillRect(0, 0, s, s); }
+    crackLines(c, s, 22, 855, "rgba(20,18,16,.75)", 2);
+  }, (h, s) => { speckle(h, s, 700, 851, ["#6a6a6a", "#9a9a9a"], .4, 1.6); crackLines(h, s, 22, 855, "#202020", 2.5); }, 3, 3);
+  applySurface(gm.stone, gm.stoneSurface, "#ffffff");
+  // Hair: fine dark strands with a faint sheen.
+  applySurface(hairMat, surface("hair strands", 128, (c, s) => {
+    c.fillStyle = "#121010"; c.fillRect(0, 0, s, s);
+    for (let i = 0; i < 160; i++) { c.strokeStyle = i % 4 ? "rgba(255,255,255,.05)" : "rgba(120,110,100,.12)"; c.lineWidth = 1; const x = R(i, 861) * s; c.beginPath(); c.moveTo(x, 0); c.bezierCurveTo(x + 6, s * .3, x - 6, s * .7, x + 3, s); c.stroke(); }
+  }, (h, s) => { for (let i = 0; i < 90; i++) { h.strokeStyle = i % 2 ? "#606060" : "#a0a0a0"; h.lineWidth = 1.5; const x = R(i, 862) * s; h.beginPath(); h.moveTo(x, 0); h.lineTo(x + 4, s); h.stroke(); } }, 2), "#ffffff");
+  // Ghost skin derived from the body's own albedo: desaturated and tinted,
+  // then mottled with bruising, rot and dark branching veins. Stone variants
+  // keep the sculpted shading but turn it into carved, cracked rock.
+  function deriveSkin(source, key, tint, stone) {
+    const size = 512, tex = new B.DynamicTexture("ghost skin map " + key, size, scene, true, B.Texture.TRILINEAR_SAMPLINGMODE, undefined, false);
+    const c = tex.getContext(); c.fillStyle = tint; c.fillRect(0, 0, size, size); tex.update(false);
+    const finish = data => {
+      const img = c.createImageData(size, size), [tr, tg, tb] = [1, 3, 5].map(i => parseInt(tint.slice(i, i + 2), 16) / 255);
+      for (let i = 0; i < size * size; i++) {
+        const sx = i % size, sy = (i / size) | 0, si = (Math.floor(sy * data.h / size) * data.w + Math.floor(sx * data.w / size)) * 4;
+        const L = (data.px[si] * .3 + data.px[si + 1] * .55 + data.px[si + 2] * .15) / 255, k = stone ? .55 + L * .7 : .35 + L * 1.05;
+        img.data[i * 4] = Math.min(255, tr * k * 255); img.data[i * 4 + 1] = Math.min(255, tg * k * 255); img.data[i * 4 + 2] = Math.min(255, tb * k * 255); img.data[i * 4 + 3] = 255;
+      }
+      c.putImageData(img, 0, 0);
+      if (stone) {
+        speckle(c, size, 2600, 871, ["rgba(0,0,0,.18)", "rgba(255,255,255,.1)"], .4, 1.4);
+        for (let i = 0; i < 24; i++) { const g = c.createRadialGradient(R(i, 872) * size, R(i, 873) * size, 0, R(i, 872) * size, R(i, 873) * size, 14 + R(i, 874) * 40); g.addColorStop(0, i % 3 ? "rgba(40,36,30,.35)" : "rgba(100,120,60,.4)"); g.addColorStop(1, "rgba(0,0,0,0)"); c.fillStyle = g; c.fillRect(0, 0, size, size); }
+        crackLines(c, size, 40, 875, "rgba(15,12,10,.8)", 2.2);
+      } else {
+        for (let i = 0; i < 30; i++) { const g = c.createRadialGradient(R(i, 876) * size, R(i, 877) * size, 0, R(i, 876) * size, R(i, 877) * size, 10 + R(i, 878) * 50);
+          g.addColorStop(0, ["rgba(70,40,80,.35)", "rgba(40,60,50,.35)", "rgba(20,20,30,.4)"][i % 3]); g.addColorStop(1, "rgba(0,0,0,0)"); c.fillStyle = g; c.fillRect(0, 0, size, size); }
+        crackLines(c, size, 70, 879, "rgba(45,20,60,.55)", 1.6);
+        crackLines(c, size, 40, 880, "rgba(20,30,50,.45)", 1);
+      }
+      tex.update(false);
+    };
+    const tryRead = () => {
+      const p = source?.readPixels?.();
+      const size0 = source?.getSize?.();
+      if (!p || !size0?.width) return false;
+      Promise.resolve(p).then(px => px && finish({ px, w: size0.width, h: size0.height })).catch(() => {});
+      return true;
+    };
+    if (!tryRead()) source?.onLoadObservable?.addOnce(() => tryRead());
+    return tex;
+  }
+
   function lathe(name, profile, material, tess = 16) {
     const mesh = B.MeshBuilder.CreateLathe(name, { shape: profile.map(([r, y]) => new B.Vector3(r, y, 0)), tessellation: tess, sideOrientation: B.Mesh.DOUBLESIDE }, scene);
     mesh.material = material; mesh.isPickable = false; return mesh;
