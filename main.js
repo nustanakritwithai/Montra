@@ -74,12 +74,15 @@
   };
   let toastTimer;
   function positionSwordToast() {
-    const response=$("grappleResponse"), status=$("swordStatus"), hotbar=$("swordHotbar"), muayStatus=$("muayStatus"), muay=$("muayHotbar"), anchor=response && !response.hidden ? response : status && !status.hidden ? status : hotbar && !hotbar.hidden ? hotbar : muayStatus && !muayStatus.hidden ? muayStatus : muay && !muay.hidden ? muay : null;
+    const response=$("grappleResponse"), status=$("swordStatus"), hotbar=$("swordHotbar"), muayStatus=$("muayStatus"), muay=$("muayHotbar"), bladeStatus=$("bladeStatus"),blade=$("bladeHotbar"),anchor=response && !response.hidden ? response : status && !status.hidden ? status : hotbar && !hotbar.hidden ? hotbar : muayStatus && !muayStatus.hidden ? muayStatus : muay && !muay.hidden ? muay : bladeStatus && !bladeStatus.hidden ? bladeStatus : blade && !blade.hidden ? blade : null;
     if (!anchor) { ui.toast.style.removeProperty("bottom"); return; }
     const game=$("game").getBoundingClientRect(), area=anchor.getBoundingClientRect();
     ui.toast.style.bottom=Math.max(0,game.bottom-area.top+8)+"px";
   }
+  // Sound effects (audio.js). Safe no-op until audio is unlocked by the first tap.
+  const SFX = (name, opts) => window.MontraAudio?.play(name, opts);
   function toast(message) {
+    SFX("toast");
     positionSwordToast();
     ui.toast.textContent = message;
     ui.toast.classList.add("show");
@@ -150,13 +153,146 @@
   moon.intensity = .85;
   moon.diffuse = B.Color3.FromHexString("#c9dacc");
   moon.groundColor = B.Color3.FromHexString("#617362");
-  const keyLight = new B.DirectionalLight("canopy light", new B.Vector3(-.55, -1, .4), scene);
+  const keyLight = new B.DirectionalLight("canopy light", new B.Vector3(-1.0, -1, -.38), scene); // moon to the right, a little low: long shadows that fall left and away, in view of the camera: shadows fall left and away, in view of the camera
   keyLight.diffuse = B.Color3.FromHexString("#f6e3c5");
   keyLight.intensity = .45;
   const warm = new B.PointLight("lantern glow", new B.Vector3(0, 4, 3), scene);
   warm.diffuse = B.Color3.FromHexString("#f6b16d");
   warm.intensity = .75;
   warm.range = 15; // follows the local hero like a carried lantern
+  // ---- Moon shadows ----
+  // One shadow map from the moon (key) light, re-centred on the camera target
+  // every frame and snapped to its texel grid so edges do not shimmer. Every
+  // lit mesh receives; anything taller than a kerb casts (see syncShadowLists).
+  // ?shadows=off|on forces it; otherwise it backs off on slow devices.
+  // Touch devices get a 1024 map, desktops 2048 for crisper edges.
+  const SHADOW_HALF = 38, SHADOW_DIST = 90;
+  const SHADOW_SIZE = matchMedia("(pointer: coarse)").matches || engine.getCaps().maxTextureSize < 4096 ? 1024 : 2048;
+  const shadowPref = new URLSearchParams(location.search).get("shadows");
+  keyLight.autoUpdateExtends = false; keyLight.autoCalcShadowZBounds = false;
+  keyLight.shadowMinZ = 1; keyLight.shadowMaxZ = SHADOW_DIST * 2;
+  keyLight.orthoLeft = keyLight.orthoBottom = -SHADOW_HALF; keyLight.orthoRight = keyLight.orthoTop = SHADOW_HALF;
+  keyLight.position = new B.Vector3(0, SHADOW_DIST, 0);
+  const shadowGen = new B.ShadowGenerator(SHADOW_SIZE, keyLight, true);
+  if (engine.webGLVersion >= 2) { shadowGen.usePercentageCloserFiltering = true; shadowGen.filteringQuality = B.ShadowGenerator.QUALITY_LOW; }
+  else shadowGen.usePoissonSampling = true;
+  shadowGen.bias = .0016; shadowGen.normalBias = .025; shadowGen.darkness = 0;
+  keyLight.shadowEnabled = shadowPref !== "off";
+  // Coverage follows the zoom: tight and crisp up close, wide at the far camera.
+  let shadowHalf = SHADOW_HALF;
+  function followShadow(target) {
+    const want = Math.max(20, Math.min(48, camera.radius * .52));
+    if (Math.abs(want - shadowHalf) > 2) {
+      shadowHalf = want;
+      keyLight.orthoLeft = keyLight.orthoBottom = -shadowHalf; keyLight.orthoRight = keyLight.orthoTop = shadowHalf;
+    }
+    const d = keyLight.direction.normalizeToNew(), snap = shadowHalf * 2 / SHADOW_SIZE;
+    const x = Math.round(target.x / snap) * snap, z = Math.round(target.z / snap) * snap;
+    keyLight.position.set(x - d.x * SHADOW_DIST, target.y - d.y * SHADOW_DIST, z - d.z * SHADOW_DIST);
+  }
+  let shadowListKey = "", shadowSyncIn = 0;
+  function syncShadowLists() {
+    const key = scene.meshes.length + ":" + activeMapId;
+    if (key === shadowListKey) return;
+    shadowListKey = key;
+    const casters = [];
+    for (const m of scene.meshes) {
+      const mt = m.material;
+      if (!mt || m === sky || m.metadata?.noShadow || m.visibility < .5 || mt.disableLighting || mt.alphaMode === B.Engine.ALPHA_ADD || mistLayers.includes(m)) continue;
+      m.receiveShadows = true;
+      const bb = m.getBoundingInfo?.().boundingBox;
+      if (bb && bb.maximumWorld.y - bb.minimumWorld.y > .35 && !/ground|road|trail|pool|decal|water|label|clearing|court/i.test(m.name)) casters.push(m);
+    }
+    shadowGen.getShadowMap().renderList = casters;
+  }
+  // Slow device: render the shadow map every other frame, then switch it off.
+  const frameWatch = { t: 0, n: 0, slow: 0 };
+  function watchFrameRate(dt) {
+    if (shadowPref) return;
+    frameWatch.t += dt; frameWatch.n++;
+    if (frameWatch.t < 4) return;
+    const fps = frameWatch.n / frameWatch.t; frameWatch.t = frameWatch.n = 0;
+    frameWatch.slow = fps < 22 ? frameWatch.slow + 1 : 0;
+    if (frameWatch.slow >= 2 && keyLight.shadowEnabled) {
+      const map = shadowGen.getShadowMap();
+      if (map.refreshRate === 1) map.refreshRate = 2; else keyLight.shadowEnabled = false;
+      frameWatch.slow = 0;
+    }
+  }
+  // ---- Lantern lights ----
+  // Lamps, braziers and gates register a light spot; a small pool of real
+  // point lights jumps to the spots nearest the camera target and flickers,
+  // so lanterns actually light the ground and the characters walking past.
+  const LANTERN_POOL = 3;
+  const lightSpots = [];
+  function addLightSpot(x, y, z, hex = "#ffae5a", strength = 1) {
+    lightSpots.push({ x, y, z, map: activeMapId, color: B.Color3.FromHexString(hex), strength });
+  }
+  // A light that rides a moving node (glowing ghosts); dropped when the node goes.
+  function addMovingLight(node, hex, strength = 1, lift = 1.2) {
+    lightSpots.push({ node, lift, x: 0, y: 0, z: 0, map: "*", color: B.Color3.FromHexString(hex), strength, moving: true });
+  }
+  const lanternLights = Array.from({ length: LANTERN_POOL }, (_, i) => {
+    const l = new B.PointLight("lantern light " + i, new B.Vector3(0, -40, 0), scene);
+    l.range = 11; l.intensity = 0; l.specular = new B.Color3(.08, .06, .04); l.metadata = { spot: null, level: 0 };
+    return l;
+  });
+  // Hemi + key + carried lantern + the pool + the strike flash.
+  const MAX_LIGHTS = 4 + LANTERN_POOL;
+  scene.onNewMaterialAddedObservable.add(m => { if ("maxSimultaneousLights" in m) m.maxSimultaneousLights = MAX_LIGHTS; });
+  let lanternPick = 0;
+  function updateLanternLights(target, dt, t) {
+    if ((lanternPick -= dt) <= 0) {
+      lanternPick = .35;
+      for (let i = lightSpots.length - 1; i >= 0; i--) {
+        const p = lightSpots[i]; if (!p.moving) continue;
+        if (p.node.isDisposed()) { lightSpots.splice(i, 1); continue; }
+        const w = p.node.getAbsolutePosition(); p.x = w.x; p.y = w.y + p.lift; p.z = w.z; p.off = !p.node.isEnabled();
+      }
+      const near = lightSpots.filter(p => !p.off && (p.map === activeMapId || p.map === "*") && Math.abs(p.x - target.x) < 34 && Math.abs(p.z - target.z) < 34)
+        .sort((a, b) => Math.hypot(a.x - target.x, a.z - target.z) - Math.hypot(b.x - target.x, b.z - target.z)).slice(0, LANTERN_POOL);
+      // Keep lights on spots that stay chosen; free ones move to new spots.
+      const free = lanternLights.filter(l => !near.includes(l.metadata.spot));
+      for (const spot of near) if (!lanternLights.some(l => l.metadata.spot === spot)) { const l = free.shift(); if (l) { l.metadata.spot = spot; l.metadata.level = 0; } }
+      for (const l of free) l.metadata.spot = null;
+    }
+    lanternLights.forEach((l, i) => {
+      const spot = l.metadata.spot;
+      l.metadata.level = Math.min(1, Math.max(0, l.metadata.level + (spot ? dt * 2.5 : -dt * 4)));
+      if (!spot) { l.intensity = 0; return; }
+      if (spot.moving && !spot.node.isDisposed()) { const w = spot.node.getAbsolutePosition(); spot.x = w.x; spot.y = w.y + spot.lift; spot.z = w.z; }
+      l.position.set(spot.x, spot.y, spot.z); l.diffuse.copyFrom(spot.color);
+      const flicker = .88 + Math.sin(t * 9.1 + i * 2) * .06 + Math.sin(t * 23.7 + i) * .04;
+      l.intensity = .95 * spot.strength * flicker * l.metadata.level;
+    });
+  }
+  // Soft contact shadow under every character, so feet sit on the ground
+  // even where the moon shadow falls away or is switched off.
+  let contactMat = null;
+  function contactShadow(parent, size = 1.5) {
+    if (!contactMat) {
+      contactMat = new B.StandardMaterial("contact shadow", scene);
+      contactMat.diffuseColor = contactMat.specularColor = B.Color3.Black(); contactMat.disableLighting = true;
+      contactMat.opacityTexture = radialTexture("contact shadow", 64, [[0, "rgba(255,255,255,.62)"], [.55, "rgba(255,255,255,.3)"], [1, "rgba(255,255,255,0)"]]);
+    }
+    const blob = B.MeshBuilder.CreateGround("contact shadow", { width: size, height: size }, scene);
+    blob.parent = parent; blob.position.y = .035; blob.material = contactMat; blob.isPickable = false; blob.metadata = { noShadow: true };
+    return blob;
+  }
+  let aoMat = null;
+  function baseOcclusionMat() {
+    if (!aoMat) {
+      aoMat = new B.StandardMaterial("base occlusion", scene);
+      aoMat.diffuseColor = aoMat.specularColor = B.Color3.Black(); aoMat.disableLighting = true;
+      aoMat.opacityTexture = paintTexture("base occlusion", 64, (c, s) => {
+        const g = c.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+        g.addColorStop(0, "rgba(255,255,255,.5)"); g.addColorStop(.6, "rgba(255,255,255,.32)"); g.addColorStop(1, "rgba(255,255,255,0)");
+        c.clearRect(0, 0, s, s); c.fillStyle = g; c.fillRect(0, 0, s, s);
+      });
+      aoMat.opacityTexture.hasAlpha = true;
+    }
+    return aoMat;
+  }
 
   function mat(name, hex, emissive) {
     const m = new B.StandardMaterial(name, scene);
@@ -174,8 +310,9 @@
   const roofMat = mat("thai roof", "#6b2a22");
   const gold = mat("gold", "#b48640", "#3d2a0c");
   const water = mat("water", "#0a1c27", "#04111a");
-  water.specularColor = B.Color3.FromHexString("#7f93a8");
-  water.specularPower = 48;
+  // Glossy enough that lantern and strike lights glint off canals and pools.
+  water.specularColor = B.Color3.FromHexString("#c8d8ea");
+  water.specularPower = 110;
   function paintTexture(name, size, paint, repeat = 1) {
     const texture = new B.DynamicTexture(name, size, scene, true);
     paint(texture.getContext(), size);
@@ -185,6 +322,79 @@
   }
   // Deterministic noise keeps every client's scenery identical.
   const noise = (i, seed = 0) => { const v = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return v - Math.floor(v); };
+  // ---- Colour grading ----
+  // Filmic (ACES) tone mapping keeps lantern and spell highlights from
+  // clipping; a little contrast and a cool vignette pull the eye to the
+  // middle of the portrait frame. Applied inside the material shaders, so
+  // there is no extra post-process pass.
+  const grade = scene.imageProcessingConfiguration;
+  grade.toneMappingEnabled = true; grade.toneMappingType = B.ImageProcessingConfiguration.TONEMAPPING_ACES;
+  grade.exposure = 1.4; grade.contrast = 1.16;
+  grade.vignetteEnabled = true; grade.vignetteWeight = 1.8; grade.vignetteStretch = .35; grade.vignetteCameraFov = .69;
+  grade.vignetteColor = new B.Color4(.02, .05, .08, 0); grade.vignetteBlendMode = B.ImageProcessingConfiguration.VIGNETTEMODE_MULTIPLY;
+  // ---- Drifting cloud shadows ----
+  // Soft dark patches slide across the ground below the moon, and the moon
+  // light dims a little while one passes over the camera target.
+  const cloudTexture = paintTexture("cloud shadows", 256, (c, s) => {
+    c.clearRect(0, 0, s, s);
+    for (let i = 0; i < 9; i++) for (const ox of [-s, 0, s]) for (const oy of [-s, 0, s]) {
+      const x = noise(i, 701) * s + ox, y = noise(i, 702) * s + oy, r = s * (.12 + noise(i, 703) * .16);
+      const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, "rgba(255,255,255,.55)"); g.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = g; c.fillRect(0, 0, s, s);
+    }
+  });
+  cloudTexture.hasAlpha = true; cloudTexture.uScale = cloudTexture.vScale = 2.2;
+  const cloudMat = new B.StandardMaterial("cloud shadows", scene);
+  cloudMat.diffuseColor = cloudMat.specularColor = B.Color3.Black(); cloudMat.disableLighting = true;
+  cloudMat.opacityTexture = cloudTexture; cloudMat.alpha = .42; cloudMat.backFaceCulling = false;
+  const cloudLayer = B.MeshBuilder.CreateGround("cloud shadows", { width: 220, height: 220 }, scene);
+  cloudLayer.material = cloudMat; cloudLayer.isPickable = false; cloudLayer.metadata = { noShadow: true };
+  let cloudCover = 0;
+  function driftClouds(target, elapsed) {
+    // Snapped to whole texture tiles so the pattern stays put on the ground while the layer follows the camera.
+    const tile = 220 / cloudTexture.uScale, gx = Math.round(target.x / tile) * tile, gz = Math.round(target.z / tile) * tile;
+    cloudLayer.position.set(gx, .07, gz);
+    const u = elapsed * .0045, v = elapsed * .0021;
+    cloudTexture.uOffset = u; cloudTexture.vOffset = v; // tile-snapped, so the pattern stays fixed on the ground
+    // Cover over the target from the same noise blobs (approximate, smooth).
+    const want = .5 + .5 * Math.sin(elapsed * .09) * Math.sin(elapsed * .041 + 1.3);
+    cloudCover += (want - cloudCover) * .02;
+    cloudLayer.visibility = atmosphere.skyLevel === 0 ? 0 : 1; // no sky in the naga cavern
+  }
+  // ---- Storm lightning (asura peak, spirit rift) ----
+  // Every 10-25 s the sky flashes twice: fill light and sky jump, then decay.
+  const STORM_MAPS = { asura_peak: "#ffd0b0", spirit_rift: "#d8c8ff" };
+  let stormIn = 8, stormT = -1;
+  function stormFlash(dt) {
+    const tint = STORM_MAPS[activeMapId];
+    if (!tint) { stormT = -1; return; }
+    if ((stormIn -= dt) <= 0) { stormIn = 10 + Math.random() * 15; stormT = 0; window.MontraAudio?.play("thunder", { delay: .3 + Math.random() * .7, intensity: .8 + Math.random() * .4 }); }
+    if (stormT < 0) return;
+    stormT += dt;
+    const k = Math.max(Math.exp(-stormT * 18), stormT > .16 ? Math.exp(-(stormT - .16) * 9) * .8 : 0);
+    moon.intensity = atmosphere.hemi * .8 * (1 + 2.6 * k);
+    moon.diffuse = B.Color3.FromHexString(atmosphere.sky).scale(1 - k).add(B.Color3.FromHexString(tint).scale(k));
+    if (stormT > 1.2) { stormT = -1; moon.intensity = atmosphere.hemi * .8; moon.diffuse = B.Color3.FromHexString(atmosphere.sky); }
+  }
+  // ---- Strike light ----
+  // One extra point light flashes at a character on every attack, spell and
+  // summon, tinted to the move, so combat lights up the scene around it.
+  const strikeLight = new B.PointLight("strike flash", new B.Vector3(0, -40, 0), scene);
+  strikeLight.range = 9; strikeLight.intensity = 0; strikeLight.specular = new B.Color3(.2, .18, .14);
+  const STRIKE_TINTS = { cast: "#7fe8ff", summon: "#ff8a3a", smash: "#8ff5df", stab: "#cfd8ff", drink: "#ff6a6a", arrive: "#7ff5e0", rally: "#ffd27a", dance: "#ffb05a", guard: "#e8f0ff" };
+  let strike = { until: 0, start: 0, peak: 0 };
+  function flashStrike(a, type) {
+    if (!a?.node || Math.hypot(a.x - camera.target.x, a.z - camera.target.z) > 40) return;
+    strikeLight.diffuse = B.Color3.FromHexString(STRIKE_TINTS[type] || "#ffc070");
+    strikeLight.position.set(a.x, (a.y || 0) + 1.6, a.z);
+    const now = performance.now(), long = type === "summon" || type === "dance" || type === "rally";
+    strike = { start: now + (long ? 150 : 120), until: now + (long ? 900 : 380), peak: type === "cast" || type === "summon" ? 1.9 : 1.4 };
+  }
+  function updateStrikeLight(now) {
+    if (now > strike.until) { strikeLight.intensity = 0; return; }
+    const k = (now - strike.start) / (strike.until - strike.start);
+    strikeLight.intensity = k < 0 ? 0 : strike.peak * Math.pow(1 - k, 1.6);
+  }
   groundMat.diffuseTexture = paintTexture("village earth", 256, (c, s) => {
     c.fillStyle = "#c9c4b4"; c.fillRect(0, 0, s, s);
     for (let i = 0; i < 420; i++) {
@@ -234,6 +444,7 @@
   const lightPoolMat = additiveMat("lantern light pool", radialTexture("light pool", 128, [
     [0, "rgba(255,176,92,.62)"], [.32, "rgba(255,140,60,.26)"], [1, "rgba(255,110,40,0)"]]));
   function lightPool(x, z, radius, y = .04) {
+    if (radius >= 1.2) addLightSpot(x, 2.2, z, "#ffa65a", Math.min(1.2, radius / 2.2));
     const pool = B.MeshBuilder.CreateGround("lantern pool", { width: radius * 2, height: radius * 2 }, scene);
     pool.position.set(x, y, z); pool.material = lightPoolMat; pool.isPickable = false;
     return pool;
@@ -459,14 +670,18 @@
     const a = atmosphere, c3 = hex => B.Color3.FromHexString(hex);
     scene.clearColor = B.Color4.FromHexString(a.clear + "ff");
     scene.fogColor = c3(a.fog);
-    moon.intensity = a.hemi; moon.diffuse = c3(a.sky); moon.groundColor = c3(a.ground);
-    keyLight.diffuse = c3(a.key); keyLight.intensity = a.keyI; warm.intensity = a.carry;
+    // A stronger moon over a softer sky fill gives the shadows something to take away.
+    moon.intensity = a.hemi * .8; moon.diffuse = c3(a.sky); moon.groundColor = c3(a.ground);
+    keyLight.diffuse = c3(a.key); keyLight.intensity = a.keyI * 1.65; warm.intensity = a.carry;
+    // Darker maps get a little more exposure so they stay readable on a phone.
+    grade.exposure = { forbidden_forest: 1.55, bound_temple: 1.6, naga_cavern: 1.55, drowned_marsh: 1.5 }[mapId] || 1.4;
     mistMat.emissiveColor = c3(a.mist); mistMat.alpha = a.mistAlpha;
     skyTexture.level = a.skyLevel;
     const [c1, c2] = a.mote.map(h => B.Color4.FromHexString(h + "ff"));
     motes.color1 = c1; motes.color2 = c2; motes.colorDead = new B.Color4(c2.r, c2.g, c2.b, 0);
   }
   applyAtmosphere("ritual_village");
+  window.MontraAudio?.ambience("ritual_village");
 
   const ground = B.MeshBuilder.CreateGround("walkableGround", { width: 40, height: 40 }, scene);
   ground.position.y = -0.12;
@@ -1774,6 +1989,9 @@
     function ring(x,y,z,d,m){
       return put(B.MeshBuilder.CreateTorus("region seal",{diameter:d,thickness:.17,tessellation:32},scene),x,y,z,m);
     }
+    function ball(x,y,z,d,m){
+      return put(B.MeshBuilder.CreateSphere("region knob",{diameter:d,segments:5},scene),x,y,z,m);
+    }
     function finish(name,cover=false){
       for(const material of new Set(parts.map(p=>p.material))){
         const group=parts.filter(p=>p.material===material);
@@ -1788,11 +2006,16 @@
       const {kind,sites,objectives}=map.strategic;
       const castle=Boolean(objectives);
       const city=kind==="capital",bamboo=map.id==="bamboo_frontier",lotus=map.id==="lotus_basin";
+      // Thai roof: steep upper slopes over a flared lower eave, gilt ridge,
+      // and chofa finials curling up from both gable ends.
       const roof=(x,y,z,width,depth)=>{
         for(const side of [-1,1]){
           const tile=box(x+side*width*.23,y,z,width*.58,.28,depth,roofMat);
           tile.rotation.z=-side*.40;
           box(x+side*width*.49,y-width*.10,z,.16,.20,depth+.25,gold);
+          const eave=box(x+side*width*.6,y-width*.17,z,width*.26,.2,depth*.94,roofMat);eave.rotation.z=-side*.22;
+          box(x+side*width*.73,y-width*.2,z,.1,.14,depth*.94,gold);
+          const chofa=cone(x,y+width*.1+.32,z+side*(depth/2+.18),.8,.16,.03,gold,4);chofa.rotation.x=side*.55;
         }
         box(x,y+width*.10,z,.27,.3,depth+.5,gold);
       };
@@ -1801,7 +2024,7 @@
         roof(x,height,z,width,width*.85);
       };
       const lamp=(x,z)=>{
-        box(x,1,z,.17,2,.17,darkWood);box(x,2.16,z,.55,.58,.55,lanternPaper);
+        box(x,1,z,.17,2,.17,darkWood);box(x,2.16,z,.55,.58,.55,lanternPaper);addLightSpot(x,2.3,z,"#ffa060",.9);
         cone(x,2.58,z,.37,1,.1,deep,4);box(x,.04,z,1.3,.05,1.3,paint.court);
       };
       const relay=map.strategic.relay,bounds=map.bounds,river=map.strategic.riverCity;
@@ -1931,13 +2154,13 @@
         for(const deck of rampart.deck){
           const top=B.MeshBuilder.CreateBox("walkable city wall",{width:deck.width,height:.5,depth:deck.length},scene);
           top.parent=expansionRoot;top.position.set(deck.x+deck.width/2,rampart.height-.25,deck.z+deck.length/2);
-          top.material=paint.road;top.metadata={walkable:true,elevatedTop:true};
+          top.material=provinceFx.deck(kind==="territory",deck.width>deck.length,Math.max(deck.width,deck.length));top.metadata={walkable:true,elevatedTop:true};
         }
         for(const [i,g] of rampart.gates.entries()){
           const b=g.box,x=b.x+b.width/2,z=b.z+b.length/2,horizontal=b.width>b.length;
           const span=Math.max(b.width,b.length);
           for(const side of [-1,1]){
-            box(x+(horizontal?side*(span/2+.2):0),1.75,z+(horizontal?0:side*(span/2+.2)),horizontal?.55:3.1,3.5,horizontal?3.1:.55,deep);
+            box(x+(horizontal?side*(span/2+.2):0),1.75,z+(horizontal?0:side*(span/2+.2)),horizontal?.55:3.1,3.5,horizontal?3.1:.55,kind==="territory"?provinceFx.timber:provinceFx.laterite);
           }
           if(kind==="territory" && (castle || river || i===0)){
             const door=B.MeshBuilder.CreateBox("reinforced city gate",{width:b.width,height:3.45,depth:b.length},scene);
@@ -1954,18 +2177,71 @@
             const t=(j+.5)/steps,h=(j+1)*rampart.height/steps;
             const step=B.MeshBuilder.CreateBox("city stair",{width:dx?Math.abs(dx)/steps+.07:river?3:2.2,depth:dz?Math.abs(dz)/steps+.07:river?3:2.2,height:h},scene);
             step.parent=expansionRoot;step.position.set(stair.foot.x+t*dx,h/2,stair.foot.z+t*dz);
-            step.material=j%2?paint.road:stone;step.metadata={walkable:true,stairId:stair.id};
+            step.material=kind==="territory"?(j%2?provinceFx.plank:provinceFx.timber):(j%2?provinceFx.laterite:provinceFx.brick);step.metadata={walkable:true,stairId:stair.id};
           }
           expansionLabel("บันได "+(idx+1)+" · ขึ้น / ลง",stair.foot.x,stair.foot.z,9,3);
         }
+        // Gatehouse pavilions stand over every opening and roofed bastions on
+        // every corner; posts sit at the deck edges so the walkway stays open.
+        const H=rampart.height;
         finish("gate frames");
+        // Each gatehouse and bastion is its own cover so it fades when it sits between camera and hero.
+        // The Tri Wiang castle is far larger; it keeps its plain gates and corners.
+        for(const g of castle?[]:rampart.gates){
+          const b=g.box,gx=b.x+b.width/2,gz=b.z+b.length/2,horizontal=b.width>b.length,span=Math.max(b.width,b.length)+1.6,th=Math.min(b.width,b.length);
+          const post=kind==="territory"?provinceFx.timber:templeLacquer;
+          box(gx,H-.62,gz,horizontal?span-1.6:th+.2,.24,horizontal?th+.2:span-1.6,kind==="territory"?darkWood:gold);
+          for(const a of [-1,1])for(const c of [-1,1])cone(gx+(horizontal?a*span/2:c*(th/2-.15)),H+1.0,gz+(horizontal?c*(th/2-.15):a*span/2),2.0,.28,.24,post,6);
+          roof(gx,H+2.3,gz,horizontal?span*.8:th+.8,horizontal?th+.8:span*.8);
+          finish("gatehouse",true);
+        }
+        for(const c of castle?[]:rampart.corners||[]){
+          if(kind==="territory"){
+            // Ho rop: a timber lookout tower with a plank floor, railing and roof.
+            for(const a of [-1,1])for(const d of [-1,1])cone(c.x+a*1.3,H+1.9,c.z+d*1.3,3.8,.3,.26,provinceFx.timber,6);
+            box(c.x,H+2.4,c.z,3.2,.2,3.2,provinceFx.plank);
+            for(const a of [-1,1]){box(c.x+a*1.5,H+2.95,c.z,.12,.9,3.1,provinceFx.timber);box(c.x,H+2.95,c.z+a*1.5,3.1,.9,.12,provinceFx.timber);}
+            roof(c.x,H+4.3,c.z,3.6,3.6);
+          }else{
+            for(const a of [-1,1])for(const d of [-1,1])cone(c.x+a*1.25,H+1.2,c.z+d*1.25,2.4,.26,.22,templeLacquer,6);
+            box(c.x,H+2.45,c.z,3.1,.18,3.1,gold);roof(c.x,H+3.1,c.z,3.4,3.4);cone(c.x,H+4.6,c.z,1.4,.5,0,gold,6);
+          }
+          finish("bastion",true);
+        }
       }
       for(const w of map.walls||[]){
         const x=w.x+w.width/2,z=w.z+w.length/2;
         if(w.rampart){
-          box(x,1.77,z,w.width,3.54,w.length,stone);
-          const along=w.width>w.length,n=Math.ceil(Math.max(w.width,w.length)/(castle?18:river?6:3));
-          for(let i=0;i<n;i++){const t=(i+.5)/n;box(along?w.x+w.width*t:w.x+.26,4.13,along?w.z+.26:w.z+w.length*t,along?.8:.42,.26,along?.42:.8,deep);}
+          if(castle || river){
+            box(x,1.77,z,w.width,3.54,w.length,stone);
+            const along=w.width>w.length,n=Math.ceil(Math.max(w.width,w.length)/(castle?18:6));
+            for(let i=0;i<n;i++){const t=(i+.5)/n;box(along?w.x+w.width*t:w.x+.26,4.13,along?w.z+.26:w.z+w.length*t,along?.8:.42,.26,along?.42:.8,deep);}
+          }else{
+            const along=w.width>w.length,len=Math.max(w.width,w.length),thick=Math.min(w.width,w.length);
+            // Outer face points away from the enclosure's centre.
+            const cs=rampart.corners,ox=(cs[0].x+cs[2].x)/2,oz=(cs[0].z+cs[2].z)/2,out=along?Math.sign(z-oz)||1:Math.sign(x-ox)||1;
+            const courses=Math.max(1,Math.round(len/4)),seg=len/courses+.02,at=t=>[along?w.x+w.width*t:x,along?z:w.z+w.length*t];
+            if(kind==="territory"){
+              // Khai mai: a timber stockade on a laterite footing. Sharpened logs
+              // stand on the outer face above the walk; planks line the inside.
+              for(let i=0;i<courses;i++){const [cx,cz]=at((i+.5)/courses);box(cx,.5,cz,along?seg:thick+.3,1,along?thick+.3:seg,provinceFx.laterite);}
+              box(x,2.5,z,along?w.width:thick-.5,3,along?thick-.5:w.length,provinceFx.timber);
+              const n=Math.floor(len/.46),ex=along?0:out*(thick/2),ez=along?out*(thick/2):0;
+              for(let i=0;i<n;i++){const [cx,cz]=at((i+.5)/n),h=4.2+noise(i+w.x,591)*.5;
+                cone(cx+ex,h/2+.6,cz+ez,h,.44,.4,provinceFx.timber,6);cone(cx+ex,h+.6+.3,cz+ez,.6,.4,0,provinceFx.timber,6);}
+              for(const y of [1.6,3.4])box(x+(along?0:ex*1.08),y,z+(along?ez*1.08:0),along?w.width:.14,.18,along?.14:w.length,darkWood);
+            }else{
+              // Krung kamphaeng: laterite footing courses under exposed Mon brick,
+              // a moulded brick cornice and bai sema merlons on the outer edge.
+              for(let i=0;i<courses;i++){const [cx,cz]=at((i+.5)/courses);
+                box(cx,.6,cz,along?seg:thick+.4,1.2,along?thick+.4:seg,provinceFx.laterite);
+                box(cx,2.35,cz,along?seg:thick,2.3,along?thick:seg,provinceFx.brick);}
+              box(x,3.6,z,w.width+(along?0:.3),.22,w.length+(along?.3:0),provinceFx.laterite);
+              const n=Math.floor(len/2.2),edge=thick/2-.3;
+              for(let i=0;i<n;i++){const [cx,cz]=at((i+.5)/n),mx=cx+(along?0:out*edge),mz=cz+(along?out*edge:0);
+                box(mx,4.22,mz,along?.85:.36,.45,along?.36:.85,provinceFx.brick);cone(mx,4.6,mz,.34,.62,0,provinceFx.brick,4).rotation.y=Math.PI/4;}
+            }
+          }
         }else if(river){
           const f=river.facilities.find(p=>p.x===x && p.z===z),h=f?.key==="T"?6:3.4;
           box(x,1.68,z,w.width,3.36,w.length,stone);
@@ -1996,11 +2272,12 @@
             cone(bx,1.7,bz,3.4,.48,.31,decor.bamboo,5);cone(bx,3.05,bz,.75,1.45,.36,forestLeaf,5);
           }
         }else if(city){
-          box(x,1.7,z,w.width,3.4,w.length,stone);roof(x,3.7,z,w.width+.75,w.length+.7);
+          box(x,.5,z,w.width+.3,1,w.length+.3,provinceFx.laterite);box(x,2.2,z,w.width,2.4,w.length,provinceFx.brick);
+          box(x,3.45,z,w.width+.2,.18,w.length+.2,provinceFx.timber);roof(x,3.7,z,w.width+.75,w.length+.7);
           box(x,1.7,w.z-.04,w.width*.25,2,.12,darkWood);
           for(const side of [-1,1])box(x+side*w.width*.32,2.1,w.z-.12,.62,.9,.10,lanternPaper);
         }else{
-          box(x,1.45,z,w.width,2.9,w.length,stone);
+          box(x,.5,z,w.width+.2,1,w.length+.2,provinceFx.laterite);box(x,1.95,z,w.width,1.9,w.length,provinceFx.timber);
           const count=Math.max(1,Math.floor(Math.max(w.width,w.length)/2));
           for(let i=0;i<count;i++){
             const t=(i+.5)/count;
@@ -2057,7 +2334,11 @@
         }else if(s.kind==="fort"){
           ring(x,.12,z,10.5,gold);ring(x,.13,z,9.8,stone);
           // The flag is in an open court. The entire curtain wall is the firing platform.
-          box(x,3,z, .17,6,.17,gold);box(x+1.1,5.3,z,2.2,1.45,.08,clothRed);
+          // A tall thong takhap (centipede banner) marks it from every corner of the map.
+          cone(x,.25,z,.5,1.6,1.9,stone,8);cone(x,4.6,z,9,.2,.12,gold,6);cone(x,9.3,z,.6,.32,0,gold,6);
+          for(let k=0;k<9;k++){const y=8.4-k*.62;box(x+.5,y,z,.7,.5,.05,k%2?gold:provinceFx.banner);
+            for(const side of [-1,1]){const leg=box(x+.5+side*.5,y-.1,z,.32,.07,.04,provinceFx.banner);leg.rotation.z=side*.5;}}
+          box(x+.5,2.6,z,.4,.6,.05,provinceFx.banner);
         }else if(s.kind==="market"){
           for(let i=0;i<3;i++){
             const mx=x+(i-1)*2.8;pavilion(mx,z,2.6,2.35);box(mx,.65,z,1.8,1.3,.9,crateWood);
@@ -2073,7 +2354,13 @@
           box(x,.22,z,5,.45,3.7,wooden);pavilion(x,z,4.6,3.4);
           for(let i=0;i<3;i++)box(x+3,.5,z+i-1,.9,1,.9,crateWood);
         }else if(s.kind==="shrine"){
-          cone(x,.5,z,1,3.2,2.5,stone,8);cone(x,2,z,2,1.8,.55,templeGold,8);cone(x,3.6,z,1.8,.5,0,gold);
+          // San lak mueang: a stepped plinth, red columns and a gilt prang over the city pillar.
+          box(x,.2,z,5.6,.4,5.6,provinceFx.laterite);box(x,.55,z,4.6,.3,4.6,provinceFx.brick);
+          for(const dx of [-1,1])for(const dz of [-1,1])cone(x+dx*1.8,2.05,z+dz*1.8,2.7,.3,.26,templeLacquer,6);
+          box(x,3.5,z,4.3,.25,4.3,gold);roof(x,4.05,z,4.6,4.6);
+          for(let k=0;k<4;k++)cone(x,5.0+k*.55,z,.6,1.5-k*.3,1.3-k*.3,k%2?templeGold:gold,8);
+          cone(x,7.6,z,1.4,.35,0,gold,8);
+          cone(x,1.6,z,2.1,.42,.38,templeGold,10);ball(x,2.85,z,.6,gold,6);
         }else if(s.kind==="grove"){
           for(let i=0;i<8;i++){const a=i*2.4;cone(x+Math.cos(a)*1.2,2,z+Math.sin(a)*1.2,4+i%3,.32,.20,forestLeaf);}
         }
@@ -2130,6 +2417,7 @@
           }
         }
       }
+      dressProvince(map,paint,{box,cone,put,roof,lamp,city,bamboo,lotus});
       if(bamboo || lotus)for(let i=0;i<36;i++){
         const x=huntTrail?(i%2?bounds.maxX-4:bounds.minX+4):(i%2?1:-1)*(35+i%4);
         const z=huntTrail?bounds.minZ+6+(bounds.maxZ-bounds.minZ-12)*noise(i,197):-58+(i*29)%83;
@@ -2429,6 +2717,62 @@
     iron:mat("rusted iron","#4a3a32"),awning:mat("tattered awning","#8a6a2a"),
   };
   for(const m of [decor.ember,decor.willo,decor.crystal,decor.crystalV])glowMats.add(m);
+  // Province materials: whitewashed Ayutthaya brick, war banners, foliage, silver ore, floating lamps.
+  const provinceFx={
+    brick:mat("whitewashed brick","#ffffff","#141210"),banner:mat("war banner","#a8261c","#4a0a06"),
+    canopy:mat("rain tree canopy","#1f3a2a","#050c08"),canopyHi:mat("rain tree crown","#2c4a34","#08120c"),bark:mat("old bark","#3a2c22"),
+    ribbon:mat("sacred ribbon","#d8a83a","#3a2808"),tent:mat("camp canvas","#8a7a5a","#141008"),ore:mat("moon silver","#cfe4ff","#6a8ac8"),
+    floatLamp:mat("floating lamp","#ffd08a","#ff9a3a"),jar:mat("dragon jar","#5a3422","#120804"),naga:mat("naga lacquer","#3a7a6a","#0c2a24"),
+  };
+  glowMats.add(provinceFx.ore);glowMats.add(provinceFx.floatLamp);
+  // Ayutthaya building stock: exposed Mon brick (thin red-orange bricks in
+  // dark mortar), porous laterite blocks for footings, and weathered timber.
+  provinceFx.brick.diffuseTexture=paintTexture("mon brick",256,(c,s)=>{
+    c.fillStyle="#4a2a1e";c.fillRect(0,0,s,s);
+    const rows=16,cols=5,rh=s/rows;
+    for(let r=0;r<rows;r++)for(let k=-1;k<=cols;k++){
+      const bx=(k+(r%2)*.5)*s/cols,v=noise(r*17+k,561),w=noise(r*5+k,562);
+      c.fillStyle=`rgb(${150+v*55|0},${70+v*30+w*10|0},${44+v*18|0})`;c.fillRect(bx+1.5,r*rh+1.5,s/cols-3,rh-3);
+      if(w>.8){c.fillStyle="rgba(30,18,12,.45)";c.fillRect(bx+4,r*rh+3,s/cols*.4,rh-6);} // burnt or chipped brick
+    }
+    for(let i=0;i<10;i++){const g=c.createRadialGradient(noise(i,563)*s,s,0,noise(i,563)*s,s,40+noise(i,564)*80);g.addColorStop(0,"rgba(30,40,24,.6)");g.addColorStop(1,"rgba(30,40,24,0)");c.fillStyle=g;c.fillRect(0,0,s,s);} // moss and damp from the ground up
+  });
+  provinceFx.brick.diffuseColor=B.Color3.FromHexString("#e8d8cc");provinceFx.brick.emissiveColor=B.Color3.FromHexString("#1a0c08");
+  provinceFx.laterite=mat("laterite","#ffffff","#140a06");
+  const paintLaterite=(c,s)=>{
+    c.fillStyle="#3a2418";c.fillRect(0,0,s,s);
+    const rows=4,cols=3,rh=s/rows;
+    for(let r=0;r<rows;r++)for(let k=-1;k<=cols;k++){
+      const bx=(k+(r%2)*.5)*s/cols,v=noise(r*11+k,571);
+      c.fillStyle=`rgb(${120+v*40|0},${62+v*22|0},${38+v*14|0})`;c.fillRect(bx+3,r*rh+3,s/cols-6,rh-6);
+    }
+    for(let i=0;i<520;i++){c.fillStyle=i%3?"rgba(40,20,12,.55)":"rgba(190,120,70,.35)";c.beginPath();c.arc(noise(i,572)*s,noise(i,573)*s,1+noise(i,574)*3.2,0,6.28);c.fill();} // pitted laterite
+  };
+  provinceFx.laterite.diffuseTexture=paintTexture("laterite",256,paintLaterite);
+  // Wall-walk paving tiled to the deck's length (one texture per direction).
+  const deckMats={};
+  provinceFx.deck=(timber,along,len)=>{
+    const key=(timber?"plank":"laterite")+(along?"x":"z")+Math.round(len);
+    if(!deckMats[key]){
+      const m=mat("wall walk "+key,"#ffffff",timber?"#0c0806":"#140a06"),reps=Math.max(1,Math.round(len/(timber?2:3)));
+      m.diffuseTexture=timber?paintTexture("wall walk "+key,128,paintPlank):paintTexture("wall walk "+key,256,paintLaterite);
+      m.diffuseTexture.uScale=along?1:reps;m.diffuseTexture.vScale=along?reps:1;deckMats[key]=m; // box top faces map u along z
+    }
+    return deckMats[key];
+  };
+  provinceFx.timber=mat("stockade timber","#ffffff","#0e0906");
+  provinceFx.timber.diffuseTexture=paintTexture("stockade timber",128,(c,s)=>{
+    c.fillStyle="#5a3e2a";c.fillRect(0,0,s,s);
+    for(let i=0;i<40;i++){c.fillStyle=i%2?"rgba(30,18,10,.45)":"rgba(140,104,70,.25)";c.fillRect(noise(i,581)*s,0,1+noise(i,582)*2.5,s);}
+    for(let i=0;i<6;i++){c.fillStyle="rgba(25,14,8,.6)";c.beginPath();c.ellipse(noise(i,583)*s,noise(i,584)*s,2,5,0,0,6.28);c.fill();} // knots
+  });
+  provinceFx.plank=mat("plank deck","#ffffff","#0c0806");
+  const paintPlank=(c,s)=>{
+    c.fillStyle="#4a3424";c.fillRect(0,0,s,s);
+    for(let y=0;y<s;y+=16){c.fillStyle=`rgb(${80+noise(y,585)*30|0},${56+noise(y,586)*20|0},${38+noise(y,587)*12|0})`;c.fillRect(0,y+1,s,14);}
+  };
+  provinceFx.plank.diffuseTexture=paintTexture("plank deck",128,paintPlank);
+  provinceFx.plank.diffuseTexture.uScale=4;provinceFx.plank.diffuseTexture.vScale=4;
   const lavaMat=additiveMat("lava cracks",crackTexture("lava cracks","255,120,40","255,70,20"));
   const voidMat=additiveMat("void cracks",crackTexture("void cracks","190,140,255","140,80,255"));
   const greenPool=additiveMat("marsh light",radialTexture("marsh light",128,[[0,"rgba(150,255,120,.5)"],[.35,"rgba(110,230,120,.2)"],[1,"rgba(80,200,100,0)"]]));
@@ -2446,13 +2790,78 @@
       !(map.walls||[]).some(w=>x>w.x-1&&x<w.x+w.width+1&&z>w.z-1&&z<w.z+w.length+1)&&
       !(map.water||[]).some(w=>x>w.x-.8&&x<w.x+w.width+.8&&z>w.z-.8&&z<w.z+w.length+.8);
   }
+  // Scenery for the strategic provinces (capital, forts, frontier hunts). It
+  // keeps clear of roads, sites, gates, stairs and the wall walk, so it never
+  // hides a route the server lets players use.
+  function dressProvince(map,paint,{box,cone,put,roof,lamp,city,bamboo,lotus}){
+    const b=map.bounds,{sites,rampart}=map.strategic,id=map.id,{stone}=paint;
+    const ball=(x,y,z,d,m,seg=5)=>put(B.MeshBuilder.CreateSphere("province dressing",{diameter:d,segments:seg},scene),x,y,z,m);
+    const inBox=(x,z,w,pad)=>x>w.x-pad&&x<w.x+w.width+pad&&z>w.z-pad&&z<w.z+w.length+pad;
+    const clear=(x,z,pad=2.5)=>sceneryClear(x,z,12,map)&&!sites.some(s=>Math.hypot(x-s.x,z-s.z)<(s.kind==="palace"?13:7))&&
+      !(rampart&&(rampart.deck.some(w=>inBox(x,z,w,pad))||rampart.stairs.some(st=>Math.hypot(x-(st.foot.x+st.top.x)/2,z-(st.foot.z+st.top.z)/2)<5)));
+    const scatter=(count,seed,fn,pad)=>{for(let i=0,n=0;i<count*10&&n<count;i++){
+      const x=b.minX+3+noise(i,seed)*(b.maxX-b.minX-6),z=b.minZ+3+noise(i,seed+1)*(b.maxZ-b.minZ-6);
+      if(clear(x,z,pad)){fn(x,z,n);n++;}}};
+    const rainTree=(x,z,k)=>{const h=3.2+noise(k,601)*1.6;
+      cone(x,h/2,z,h,.9,.5,provinceFx.bark,6);cone(x,1.3,z,.35,1.0,1.0,provinceFx.ribbon,8);
+      for(let j=0;j<4;j++){const a=j*1.7+k,r=j?1.6:0;ball(x+Math.cos(a)*r,h+.4+(j?0:.9),z+Math.sin(a)*r,j?3.2:3.8,j%2?provinceFx.canopyHi:provinceFx.canopy);}};
+    const brazier=(x,z)=>{addLightSpot(x,1.6,z,"#ff8a3d",1.1);cone(x,.45,z,.9,.18,.3,decor.iron,6);cone(x,.98,z,.24,.42,.7,decor.iron,8);cone(x,1.25,z,.5,.42,0,decor.ember,5);
+      const g=put(B.MeshBuilder.CreateGround("province glow",{width:4.2,height:4.2},scene),x,.05,z,lightPoolMat);};
+    const spiritHouse=(x,z,k)=>{cone(x,.8,z,1.6,.14,.12,darkWood,5);box(x,1.75,z,.9,.6,.7,templeLacquer);roof(x,2.25,z,1.1,.9);box(x,1.5,z+.42,.6,.06,.2,provinceFx.floatLamp);};
+    const flagPole=(x,z,k)=>{cone(x,3,z,6,.14,.1,gold,5);for(let j=0;j<5;j++){const f=box(x+.35,5.6-j*.55,z,.6,.42,.04,j%2?provinceFx.ribbon:provinceFx.banner);f.rotation.z=Math.sin(j+k)*.12;}};
+    if(city){
+      // Avenue trees and dragon jars inside the walls; chedi skyline beyond them.
+      scatter(26,611,rainTree,3);
+      scatter(18,613,(x,z,k)=>{ball(x,.55,z,1.1,provinceFx.jar,6);cone(x,1.08,z,.12,.5,.6,provinceFx.jar,8);if(k%3===0)ball(x+.9,.4,z+.3,.8,provinceFx.jar,6);},2);
+      for(const path of map.paths)for(let i=1;i<path.length;i++){const a=path[i-1],c=path[i],len=Math.hypot(c.x-a.x,c.z-a.z);
+        for(let t=9;t<len-4;t+=18){const nx=-(c.z-a.z)/len,nz=(c.x-a.x)/len,x=a.x+(c.x-a.x)*t/len+nx*3.6,z=a.z+(c.z-a.z)*t/len+nz*3.6;if(clear(x,z,1.5))flagPole(x,z,i+t);}}
+      for(let i=0;i<14;i++){const side=i%2?1:-1,x=side*(48+noise(i,615)*8),z=-60+i*6.5,h=7+noise(i,616)*5;
+        // Ruined Ayutthaya chedi: laterite base, brick bell and a broken spire.
+        box(x,.7,z,5,1.4,5,provinceFx.laterite);cone(x,1.9,z,1,4.2,4.4,provinceFx.brick,8);ball(x,3.6,z,3.6,provinceFx.brick,8);
+        const spire=cone(x,3.6+h/2,z,h*(i%3?1:.6),1.2,i%3?.05:.5,provinceFx.brick,8);spire.rotation.z=(noise(i,619)-.5)*.12;}
+      for(let i=0;i<8;i++){const x=-36+i*10,z=-74-noise(i,617)*5,h=6+noise(i,618)*4;box(x,.6,z,4.6,1.2,4.6,provinceFx.laterite);
+        for(let k=0;k<3;k++)box(x,1.4+k*.7,z,3.8-k*.7,.7,3.8-k*.7,provinceFx.brick);cone(x,3.4+h/2,z,h,1.8,.3,provinceFx.brick,4).rotation.y=Math.PI/4;}
+    }else if(map.strategic.kind==="territory"){
+      // War camp: tents, cannons on carriages, stacked supplies, braziers and a palisade rim.
+      scatter(9,621,(x,z,k)=>{cone(x,1.1,z,2.2,3.2,0,provinceFx.tent,4).rotation.y=Math.PI/4;cone(x,2.4,z,.5,.1,.06,darkWood,4);box(x,.6,z+1.3,.8,1.2,.04,provinceFx.banner);},4);
+      scatter(7,623,(x,z,k)=>{box(x,.35,z,1.1,.3,1.8,wooden);for(const d of [-1,1])cone(x+d*.6,.4,z,.12,.8,.8,darkWood,10).rotation.z=Math.PI/2;
+        const barrel=cone(x,.75,z+.3,2.2,.32,.42,decor.iron,8);barrel.rotation.x=Math.PI/2-.18;},3);
+      scatter(14,625,(x,z,k)=>{for(let j=0;j<3;j++)box(x+(j%2)*.9,.45+(j>1?.9:0),z,.85,.85,.85,crateWood);if(k%2)ball(x-.9,.45,z,.9,provinceFx.jar,6);},2);
+      scatter(10,627,brazier,3);
+      scatter(6,629,flagPole,2.5);
+      for(let i=0;i<46;i++){const t=i/46,w=b.maxX-b.minX,x=t<.5?b.minX+1+(t*2)*w*.98:(i%2?b.minX+1:b.maxX-1),z=t<.5?b.minZ+1:b.minZ+((t-.5)*2)*(b.maxZ-b.minZ);
+        const st=cone(x,1.2,z,2.4+noise(i,631)*.8,.32,.08,darkWood,5);st.rotation.z=(noise(i,632)-.5)*.3;}
+      if(id==="moon_pass"){const mine=sites.find(s=>s.kind==="mine");
+        if(mine)for(let k=0;k<10;k++){const a=k*.63,r=4+noise(k,633)*3;cone(mine.x+Math.cos(a)*r,.5,mine.z+Math.sin(a)*r,.8+noise(k,634),1.1,.1,provinceFx.ore,5);}}
+      if(id==="river_watch")for(const w of map.water||[]){const horizontal=w.width>w.length;
+        for(let k=0;k<3;k++){const t=(k+.5)/3,x=w.x+(horizontal?w.width*t:w.width/2),z=w.z+(horizontal?w.length/2:w.length*t);
+          if(sites.some(s=>Math.hypot(x-s.x,z-s.z)<6))continue;
+          const hull=box(x,.2,z,horizontal?3.6:1.1,.35,horizontal?1.1:3.6,wooden);cone(x,.65,z,.8,.9,.7,provinceFx.tent,6);}}
+    }else{
+      // Frontier hunts: roadside spirit houses, braziers at the camps, prayer flags.
+      scatter(10,641,spiritHouse,2);
+      for(const c of map.camps||[])for(let k=0;k<3;k++){const a=k*2.1+.4;brazier(c.x+Math.cos(a)*8.5,c.z+Math.sin(a)*8.5);}
+      scatter(8,643,flagPole,2);
+      if(bamboo)scatter(4,645,(x,z,k)=>{for(const dx of [-1,1])for(const dz of [-1,1])cone(x+dx*1.1,1.8,z+dz*1.1,3.6,.2,.16,decor.bamboo,5);
+        box(x,3.6,z,2.8,.16,2.8,wooden);roof(x,4.6,z,3.2,3.2);},4);
+      if(lotus){for(const w of map.water||[])for(let k=0;k<Math.floor(w.width*w.length/30);k++){
+          const x=w.x+.8+noise(k+w.x,647)*(w.width-1.6),z=w.z+.4+noise(k+w.z,648)*(w.length-.8);
+          cone(x,.13,z,.08,.7,.8,forestLeaf,8);cone(x,.3,z,.3,.45,.1,provinceFx.floatLamp,6);}
+        const pond=sites.find(s=>s.kind==="shrine");
+        if(pond)for(const side of [-1,1]){const x=pond.x+side*3.2,z=pond.z+3.5;
+          cone(x,.5,z,1,1.2,1.2,stone,8);for(let j=0;j<5;j++)ball(x+side*j*.05,1.1+j*.42,z-j*.12,.62-j*.06,provinceFx.naga,6);
+          const hood=cone(x,3.3,z-.7,1.1,1.5,.2,provinceFx.naga,7);hood.rotation.x=-.5;ball(x,3.05,z-.25,.2,decor.crystal,4);}}
+    }
+  }
   function dressRegion(map,paint){
     let parts=[];
     const put=(mesh,x,y,z,m)=>{mesh.position.set(x,y+(map.reliefLabels?terrainHeight(map.terrain,x,z):0),z);mesh.material=m;mesh.isPickable=false;parts.push(mesh);return mesh;};
     const box=(x,y,z,w,h,d,m)=>put(B.MeshBuilder.CreateBox("region dressing",{width:w,height:h,depth:d},scene),x,y,z,m);
     const cone=(x,y,z,h,b,t,m,n=6)=>put(B.MeshBuilder.CreateCylinder("region dressing",{height:h,diameterBottom:b,diameterTop:t,tessellation:n},scene),x,y,z,m);
     const ball=(x,y,z,d,m,seg=4)=>put(B.MeshBuilder.CreateSphere("region dressing",{diameter:d,segments:seg},scene),x,y,z,m);
-    const decal=(x,z,size,m,rot=0,y=.05)=>{const g=put(B.MeshBuilder.CreateGround("region decal",{width:size,height:size},scene),x,y,z,m);g.rotation.y=rot;return g;};
+    const decal=(x,z,size,m,rot=0,y=.05)=>{
+      if(size>=2.5&&(m===lightPoolMat||m===greenPool||m===violetPool))addLightSpot(x,1.8,z,m===greenPool?"#9dff7a":m===violetPool?"#b48aff":"#ffa65a",Math.min(1.2,size/3.6));
+      const g=put(B.MeshBuilder.CreateGround("region decal",{width:size,height:size},scene),x,y,z,m);g.rotation.y=rot;return g;};
     const b=map.bounds,id=map.id,{stone,deep,light,court,road}=paint;
     const clear=(x,z,courts=12.5)=>sceneryClear(x,z,courts,map);
     const scatter=(count,seed,fn,courts)=>{for(let i=0,n=0;i<count*8&&n<count;i++){
@@ -2606,11 +3015,19 @@
     provinceDoor=null;castleDoors.clear();castleRings.clear();riverPostRings.clear();
     for(const child of expansionRoot.getChildren())child.dispose();
     for(const resource of expansionResources)resource.dispose();expansionResources.length=0;expansionLabels.length=0;
+    for(let i=lightSpots.length-1;i>=0;i--)if(lightSpots[i].map!=="ritual_village")lightSpots.splice(i,1);
     const bounds=mapBounds();
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
     const map=worldDefinitions?.[activeMapId];alignVillage(worldDefinitions?.ritual_village?.terrain);
     ground.setEnabled(!map?.terrain);if(!map)return;
+    for(const p of map.portals||[])addLightSpot(p.x,2.6,p.z,"#7ff5e0",1.25);
+    // Soft occlusion where trees, rocks, buildings and walls meet the ground.
+    {const ao=[];
+      for(const o of map.obstacles||[])ao.push([o.x,o.z,o.radius*2.7,o.radius*2.7]);
+      for(const w of map.walls||[])ao.push([w.x+w.width/2,w.z+w.length/2,w.width+2.2,w.length+2.2]);
+      const parts=ao.map(([x,z,w,l])=>{const g=B.MeshBuilder.CreateGround("base occlusion",{width:w,height:l},scene);g.position.set(x,.03+(map.terrain?terrainHeight(map.terrain,x,z):0),z);return g;});
+      if(parts.length){const mesh=B.Mesh.MergeMeshes(parts,true,true);mesh.parent=expansionRoot;mesh.material=baseOcclusionMat();mesh.isPickable=false;mesh.metadata={noShadow:true};}}
     const terrainPaint=paint || {floor:ground.material,road:inTemple?templeReliefRoad:activeMapId==="forbidden_forest"?forestReliefRoad:civicRoad,stone:inTemple?templeStone:forestStone,court:inTemple?templeCourt:forestClearing};
     if(map.terrain)buildTerrainGround(map,terrainPaint);
     else (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic || map.huntTrail)));
@@ -2724,8 +3141,8 @@
       if(ghost){
         // Ghost rigs play a death (soul released) before hiding, and rise on respawn.
         const alive=monster.alive!==false;
-        if(!alive&&ghost.wasAlive){ghost.deathAt=performance.now();releaseSoul(mesh.position.x,mesh.position.y+.4,mesh.position.z);}
-        if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();}
+        if(!alive&&ghost.wasAlive){ghost.deathAt=performance.now();ghostVoice(ghost,mesh,"die");releaseSoul(mesh.position.x,mesh.position.y+.4,mesh.position.z);}
+        if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();ghostVoice(ghost,mesh,"spawn",.8);}
         ghost.wasAlive=alive;if(alive)mesh.setEnabled(true);else if(!ghost.deathAt)mesh.setEnabled(false);
         ghost.tx=Number(monster.x);ghost.tz=Number(monster.z);ghost.ty=Number(monster.y)||0;ghost.tf=Number(monster.facing)||0;
         ghost.windup=monster.aiState==="windup";ghost.ai=monster.aiState;
@@ -2768,6 +3185,7 @@
     spellTargetId=null;
     setTargetedSkill(null);
     applyAtmosphere(mapId);
+    window.MontraAudio?.ambience(mapId);
     clearChatHistory(false);
     const village=mapId==="ritual_village";
     for(const mesh of villageMeshes) mesh.setEnabled(village);
@@ -2886,6 +3304,9 @@
   const blackSteel = mat("black steel", "#2a2a2f"); blackSteel.specularColor = B.Color3.FromHexString("#8a8f9a"); blackSteel.specularPower = 48;
   const copper = mat("engraved copper", "#8a5a3a", "#24140a"), leatherWrap = mat("wrapped grip", "#1b1615");
   const emberEdge = mat("ember edge", "#ff6a3a", "#e2381a"); glowMats.add(emberEdge);
+  // Thai daab: bright steel with a pale moonlit edge so the pair reads far away.
+  const daabSteel = mat("daab steel", "#a8b0b8", "#161a20"); daabSteel.specularColor = B.Color3.FromHexString("#eef4ff"); daabSteel.specularPower = 64;
+  const daabEdge = mat("daab edge", "#e8f0ff", "#5a6a88");
   // Far-camera identity: a yantra shawl (read from above), glowing amulets
   // and three familiar spirits orbiting the shaman.
   const shawlCloth = (name, base, trim) => {
@@ -2911,6 +3332,7 @@
   }
   function avatarMesh(id, local) {
     const parent = new B.TransformNode("avatar-" + id, scene);
+    contactShadow(parent, 1.5);
     if(local) {
       const locator = B.MeshBuilder.CreateTorus("local player locator", {
         diameter:1.5, thickness:.09, tessellation:24,
@@ -3050,16 +3472,16 @@
     halo.setEnabled(false);
 
     // Weapons ride in the right fist, so they swing with the arm.
-    function curvedBlade(length, base, segs, edge) {
+    function curvedBlade(length, base, segs, edge, steel = blackSteel) {
       let x = 0, y = .05, a = 0;
       for (let i = 0; i < segs; i++) {
         const w = base * (1 - i / (segs + 1) * .55), l = length / segs;
-        const seg = box(x - Math.sin(a) * l / 2, y + Math.cos(a) * l / 2, 0, w, l * 1.04, .025, blackSteel); seg.rotation.z = a;
+        const seg = box(x - Math.sin(a) * l / 2, y + Math.cos(a) * l / 2, 0, w, l * 1.04, .025, steel); seg.rotation.z = a;
         if (edge) { const e = box(x - Math.sin(a) * l / 2 + Math.cos(a) * w / 2, y + Math.cos(a) * l / 2 + Math.sin(a) * w / 2, 0, .022, l * 1.04, .03, edge); e.rotation.z = a; }
         else if (i % 2 === 0) { const c = box(x - Math.sin(a) * l / 2 - Math.cos(a) * w * .2, y + Math.cos(a) * l / 2, -.014, w * .25, l * .7, .005, copper); c.rotation.z = a; }
         x -= Math.sin(a) * l; y += Math.cos(a) * l; a += .16;
       }
-      cyl(x - Math.sin(a) * .06, y + Math.cos(a) * .06, 0, .14, 0, base * .4, blackSteel, 4).rotation.z = a;
+      cyl(x - Math.sin(a) * .06, y + Math.cos(a) * .06, 0, .14, 0, base * .4, steel, 4).rotation.z = a;
     }
     function createHeldWeapon(kind) {
       const root = new B.TransformNode("held-" + kind + "-" + id, scene);
@@ -3069,7 +3491,8 @@
         cyl(0, -.12, 0, .24, .055, .055, leatherWrap, 8);
         for (const y of [-.03, -.11, -.2]) cyl(0, y, 0, .018, .065, .065, copper, 8);
         ball(0, -.25, 0, .075, bronzeMat, 6);
-        curvedBlade(.95, .105, 7, null);
+        box(0, .03, 0, .15, .03, .06, gold); // small cross guard
+        curvedBlade(.95, .105, 7, daabEdge, daabSteel);
         root.rotation.x = -2.1;
       } else if (kind === "ritual_dagger") {
         // Curved black mo-du knife with copper-bound grip and hanging charms.
@@ -3171,11 +3594,20 @@
   let shamanBody = null;
   if (B.SceneLoader?.IsPluginForExtensionAvailable?.(".glb")) {
     B.SceneLoader.LoadAssetContainerAsync("./assets/characters/", "thai-male.glb", scene).then(container => {
-      for (const m of container.materials) if ("metallic" in m) { m.environmentIntensity = 0; m.directIntensity = 1.5; m.metallic = 0; }
+      for (const m of container.materials) {
+        if ("metallic" in m) {
+          m.environmentIntensity = 0; m.directIntensity = 1.5; m.metallic = 0;
+          // Moonlit sheen on the skin's grazing edges keeps every character
+          // readable against dark ground from the far camera.
+          m.sheen.isEnabled = true; m.sheen.color = B.Color3.FromHexString("#9fc4ff"); m.sheen.intensity = .45; m.sheen.roughness = .35;
+        }
+        m.maxSimultaneousLights = MAX_LIGHTS;
+      }
       shamanBody = container;
       shamanWaiting.splice(0).forEach(attachShamanModel);
+      spiritArmWaiting.splice(0).forEach(attachSpiritArms);
       ghostWaiting.splice(0).forEach(build => build());
-    }).catch(error => { console.warn("MONTRA shaman body", error); shamanBody = false; shamanWaiting.length = 0; ghostWaiting.splice(0).forEach(build => build()); });
+    }).catch(error => { console.warn("MONTRA shaman body", error); shamanBody = false; shamanWaiting.length = 0; spiritArmWaiting.length = 0; ghostWaiting.splice(0).forEach(build => build()); });
   } else shamanBody = false;
   function shamanGear(a, nodes) {
     const shawl = a.local ? shawlHero : shawlFriend, pants = a.local ? pantsHero : pantsFriend, sash = a.local ? sashHero : sashFriend;
@@ -3308,7 +3740,7 @@
     }
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;
-    a.skin = { nodes, copy, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
+    a.skin = { nodes, copy, holder, body, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
   }
   // ---- Action animation set (visual only) ----
   // Every action maps to something the game already replicates: server
@@ -3320,18 +3752,141 @@
   // elbow (negative on the left, positive on the right).
   const ACTIONS = {
     stab: { dur: .34, swing: true }, slash: { dur: .48, swing: true }, smash: { dur: .58, swing: true },
-    punch: { dur: .32, swing: true }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
+    punch: { dur: .32, swing: true }, twin: { dur: .42, swing: true },
+    // Thai sword school skills (see swordSkillAction).
+    lunge: { dur: .62, swing: true }, guard: { dur: 1.1 }, counter: { dur: .7, swing: true }, flurry: { dur: .85, swing: true },
+    sweep: { dur: .8, swing: true }, rally: { dur: 1.05 }, finale: { dur: 1.1, swing: true }, dance: { dur: 1.5 },
+    // Muay Boran (see muayAction).
+    m_basic: { dur: .36, swing: true }, m_jab: { dur: .34, swing: true }, m_cross: { dur: .46, swing: true }, m_hook: { dur: .6, swing: true },
+    m_elbow: { dur: .46, swing: true }, m_knee: { dur: .5, swing: true }, m_teep: { dur: .55, swing: true }, m_step: { dur: .6, swing: true },
+    m_side: { dur: .6, swing: true }, m_flurry: { dur: .72, swing: true }, m_rush: { dur: .85, swing: true }, m_retreat: { dur: .62, swing: true },
+    m_guard: { dur: 1.2 }, m_parry: { dur: .55 }, m_evade: { dur: .55 }, m_counter: { dur: .66, swing: true },
+    m_clinch: { dur: 1.5 }, m_throw: { dur: .75, swing: true }, m_held: { dur: 1.5 }, m_thrown: { dur: .85 }, m_wai: { dur: 1.3 }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
     drink: { dur: 1.15 }, dash: { dur: .46 }, rise: { dur: 1.0 }, arrive: { dur: .85 },
   };
-  const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash" };
+  const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash", thai_dual: "twin", muay_wraps: "m_basic" };
   const POSE_BONES = ["Hips", "Spine", "Spine1", "Chest", "Neck", "Head", "LeftShoulder", "RightShoulder",
     "LeftArm", "RightArm", "LeftForeArm", "RightForeArm", "LeftHand", "RightHand",
     "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg", "LeftFoot", "RightFoot"];
-  function playAction(a, type) {
+  // Swing, cast and movement sounds timed to the strike frame of each action.
+  const at = (a, name, delay, opts = {}) => SFX(name, { x: a.x, z: a.z, delay, ...opts });
+  function actionSound(a, type, act) {
+    const d = ACTIONS[type].dur;
+    switch (type) {
+      case "stab": at(a, "whoosh", d * .32, { pitch: 1.35, len: .7, intensity: .8 }); break;
+      case "slash": case "twin": at(a, "whoosh", d * .35, { pitch: 1.1, intensity: .9 }); break;
+      case "smash": at(a, "whoosh", d * .35, { pitch: .7, len: 1.3 }); break;
+      case "punch": case "m_basic": case "m_jab": case "m_cross": case "m_step": case "m_side": case "m_retreat":
+        at(a, "whoosh", d * (type === "m_step" || type === "m_side" ? .55 : .35), { pitch: 1.6, len: .45, intensity: .55 }); break;
+      case "m_hook": case "m_elbow": at(a, "whoosh", d * .4, { pitch: 1.2, len: .6, intensity: .75 }); break;
+      case "m_knee": case "m_teep": at(a, "whoosh", d * .4, { pitch: .8, len: .7, intensity: .7 }); break;
+      case "m_counter": at(a, "block", d * .1, { intensity: .6 }); at(a, "whoosh", d * .45, { pitch: 1.2, len: .6, intensity: .75 }); break;
+      case "m_flurry": case "m_rush": for (let i = 0; i < 4; i++) at(a, "whoosh", d * (.15 + i * .2), { pitch: 1.7, len: .4, intensity: .5 }); break;
+      case "m_guard": case "m_parry": case "guard": at(a, "block", .05, { intensity: .45 }); break;
+      case "m_evade": at(a, "whoosh", .05, { pitch: .9, len: .8, intensity: .4 }); break;
+      case "m_clinch": at(a, "fist", .05, { intensity: .4 }); break;
+      case "m_throw": at(a, "whoosh", .1, { pitch: .6, len: 1.4, intensity: .8 }); at(a, "slam", d * .55); break;
+      case "m_wai": case "dance": case "rally": at(a, "gong", .1, { freq: type === "rally" ? 196 : 147, gain: .6 }); break;
+      case "lunge": at(a, "dash", .05); at(a, "whoosh", d * .55, { pitch: 1.1 }); break;
+      case "counter": at(a, "clash", d * .2, { intensity: .7 }); at(a, "whoosh", d * .5, { pitch: 1.3, len: .7 }); break;
+      case "flurry": for (let i = 0; i < 4; i++) at(a, "whoosh", d * (.12 + i * .24), { pitch: 1.2, len: .6, intensity: .7 }); break;
+      case "finale": at(a, "whoosh", d * .12, { pitch: 1.1 }); at(a, "whoosh", d * .44, { pitch: 1.1 }); at(a, "whoosh", d * .78, { pitch: .8, len: 1.2, intensity: 1.2 }); break;
+      case "sweep": at(a, "whoosh", d * .2, { pitch: .9, len: 2.2, intensity: 1.1 }); break;
+      case "cast": at(a, "cast", .02); break;
+      case "summon": at(a, "summon", .02, { important: true }); break;
+      case "drink": at(a, "drink", .25); break;
+      case "dash": at(a, "dash", 0); break;
+      case "hit": at(a, "hurt", 0, { intensity: .8 }); break;
+      case "rise": at(a, "respawn", .2); break;
+      case "arrive": at(a, "warp", 0); break;
+    }
+  }
+  // Contact sound at the target, chosen by the attacker's weapon and move.
+  function impactAt(attackerId, x, z, source, ghost, kind) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    const a = avatars.get(attackerId), w = a?.weaponId || "", move = a?.action?.type || "";
+    let name = "fist", intensity = 1;
+    if (source === "ranged") name = "rice";
+    else if (source === "talisman") name = "talisman";
+    else if (w === "thai_dual" || w === "arcane_sword" || w === "ritual_dagger") { name = "blade"; intensity = w === "ritual_dagger" ? .7 : 1; }
+    else if (w === "spirit_staff") name = "blunt";
+    else if (w === "muay_wraps") name = /elbow|counter/.test(move) ? "elbow" : /knee|teep|throw/.test(move) ? "kick" : "fist";
+    SFX(name, { x, z, intensity });
+    if (ghost && kind) SFX("ghost", { kind, ev: "hurt", x, z, delay: .03, intensity: .8 });
+    else if (ghost) SFX("ghost_hit", { x, z, delay: .02, intensity: .8 });
+  }
+  let lastCombatAt = -1e9, musicSyncIn = 0;
+  function playAction(a, type, opts) {
     if (!a || !ACTIONS[type]) return;
     const now = performance.now();
     a.action = { type, start: now, end: now + ACTIONS[type].dur * 1000 };
+    if (type === "twin" || type === "m_basic" || type === "m_side") a.action.side = (a.twinFlip = !a.twinFlip) ? 1 : -1; // alternate right / left
+    if (opts) Object.assign(a.action, opts);
+    if (type !== "hit" && type !== "rise") flashStrike(a, type);
+    if (a.local && (ACTIONS[type].swing || type === "hit" || type === "cast")) lastCombatAt = performance.now();
+    actionSound(a, type, a.action);
     if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
+  }
+  // A sword skill's motion follows its effect type in the server catalog,
+  // so new skills of an existing type animate without client changes.
+  const SWORD_EFFECT_ACTIONS = { step: "lunge", guard: "guard", counter: "counter", flurry: "flurry", area: "sweep", support: "rally", strike: "twin" };
+  let swordCatalogRaw = null, swordCatalogNodes = {};
+  function swordSkillAction(skillId) {
+    if (skillId === "twin_finale") return "finale";
+    const raw = room?.state?.swordTreeCatalog || "";
+    if (raw !== swordCatalogRaw) { swordCatalogRaw = raw; try { swordCatalogNodes = JSON.parse(raw || "null")?.nodes || {}; } catch { swordCatalogNodes = {}; } }
+    return SWORD_EFFECT_ACTIONS[swordCatalogNodes[skillId]?.effect] || "twin";
+  }
+  // ---- Muay Boran motion map ----
+  // Skill id -> [motion, strike move]. Mirrors MuayRules (effect + combo move);
+  // an unknown skill falls back to its catalog effect, so new skills still move.
+  const MUAY_MOTIONS = {
+    step: ["m_step", "punch"], punch: ["m_jab", "punch"], guard: ["m_guard"], chaiya_cover: ["m_guard"], parry: ["m_parry"], evade: ["m_evade"],
+    counter: ["m_counter", "elbow"], teep: ["m_teep", "kick"], chaiya_elbow: ["m_elbow", "elbow"], chaiya_knee: ["m_counter", "knee"],
+    chaiya_finish: ["m_elbow", "elbow"], chaiya_return: ["m_counter", "elbow"], korat_heavy: ["m_cross", "punch"], korat_swing: ["m_hook", "punch"],
+    korat_finish: ["m_hook", "punch"], korat_pierce: ["m_cross", "punch"], korat_press: ["m_cross", "punch"], lopburi_angle: ["m_side", "punch"],
+    lopburi_counter: ["m_counter", "elbow"], lopburi_finish: ["m_side", "punch"], lopburi_reverse: ["m_side", "punch"], lopburi_slipcounter: ["m_side", "elbow"],
+    thasao_step: ["m_step", "punch"], thasao_flurry: ["m_flurry", "punch"], thasao_finish: ["m_flurry", "punch"], thasao_rush: ["m_rush", "punch"], thasao_retreat: ["m_retreat", "punch"],
+  };
+  const MUAY_EFFECT_MOTIONS = { step: "m_step", strike: "m_cross", guard: "m_guard", parry: "m_parry", evade: "m_evade", counter: "m_counter", teep: "m_teep",
+    sidestep: "m_side", counter_sidestep: "m_side", flurry: "m_flurry", step_flurry: "m_rush", retreat_strike: "m_retreat", grapple: "m_clinch" };
+  let muayCatalogRaw = null, muayCatalogSkills = {};
+  function muayMotion(skillId) {
+    if (MUAY_MOTIONS[skillId]) return MUAY_MOTIONS[skillId];
+    const raw = room?.state?.muayBookCatalog || "";
+    if (raw !== muayCatalogRaw) { muayCatalogRaw = raw; try { muayCatalogSkills = JSON.parse(raw || "null")?.skills || {}; } catch { muayCatalogSkills = {}; } }
+    return [MUAY_EFFECT_MOTIONS[muayCatalogSkills[skillId]?.effect] || "m_cross", "punch"];
+  }
+  // A player's sword or Muay school, from the replicated book/tree data.
+  const schoolCache = new Map();
+  function muaySchoolOf(a) {
+    const p = a.local ? ownServerCharacter() : room?.state?.players?.get?.(a.id);
+    const raw = p?.muayBookData || "";
+    if (!schoolCache.has(raw)) { let school = "chaiya"; try { school = JSON.parse(raw || "null")?.school || "chaiya"; } catch {} schoolCache.set(raw, school); }
+    return schoolCache.get(raw);
+  }
+  // Grapple: the first "grapple" use is the grab, a second while holding is the throw.
+  function playMuaySkill(playerId, skillId, targetId) {
+    const a = avatars.get(playerId); if (!a) return;
+    const now = performance.now(), victim = targetId ? avatars.get(targetId) : null;
+    if (skillId === "grapple") {
+      if ((a.muayHoldUntil || 0) > now) {
+        a.muayHoldUntil = 0; playAction(a, "m_throw");
+        if (victim) playAction(victim, "m_thrown");
+      } else {
+        a.muayHoldUntil = now + 1500; playAction(a, "m_clinch");
+        if (victim) { playAction(victim, "m_held"); faceAvatarToward(targetId, a.x, a.z); victim.facingLockUntil = now + 1500; }
+        a.facingLockUntil = now + 1500;
+      }
+      return;
+    }
+    const [motion, move] = muayMotion(skillId);
+    playAction(a, motion, { move, reverse: skillId === "lopburi_reverse", finisher: /_finish$/.test(skillId) });
+  }
+  function releaseMuayHold(id) {
+    const a = avatars.get(id); if (!a) return;
+    a.muayHoldUntil = 0;
+    if (a.action && (a.action.type === "m_clinch" || a.action.type === "m_held")) a.action.end = performance.now();
   }
   function playAttack(attackerId, ranged, targetX, targetZ) {
     const a = avatars.get(attackerId);
@@ -3365,7 +3920,7 @@
     m.opacityTexture = fxGradient; m.disableLighting = true; m.backFaceCulling = false; m.alphaMode = B.Engine.ALPHA_ADD;
     return m;
   };
-  const SLASH_MATS = { stab: fxMat("dagger trail", "#cfd8ff"), slash: fxMat("blade trail", "#ff7436"), smash: fxMat("staff trail", "#8ff5df"), punch: fxMat("fist trail", "#ffe2a0") };
+  const SLASH_MATS = { stab: fxMat("dagger trail", "#cfd8ff"), slash: fxMat("blade trail", "#ff7436"), smash: fxMat("staff trail", "#8ff5df"), punch: fxMat("fist trail", "#ffe2a0"), twin: fxMat("twin blade trail", "#ffd27a") };
   const castOrbMat = mat("cast orb", "#bff8ff", "#59d8ff"); glowMats.add(castOrbMat);
   const vialMat = mat("potion vial", "#ff5a5a", "#d01c2c"); glowMats.add(vialMat);
   const summonSeal = additiveMat("summon seal", squareYantraTexture("summon seal", "rgba(255,190,120,.95)", "#ff9a3a"));
@@ -3400,6 +3955,16 @@
     fx.seal.parent = a.node; fx.seal.position.y = .06; fx.seal.isPickable = false; fx.seal.setEnabled(false);
     return (a.fx = fx);
   }
+  let muayWrapMats = null;
+  function muayWraps(body) {
+    if (!muayWrapMats) {
+      muayWrapMats = [mat("muay hand wrap", "#e6dcc4", "#1c1a14"), mat("muay wrist rope", "#c8a060", "#241608")];
+      for (const m of muayWrapMats) m.backFaceCulling = false;
+    }
+    const hands = skinnedCut(body, "muay hand wraps", x => Math.abs(x) > .6, x => .011 + .003 * Math.sin(Math.abs(x) * 160), muayWrapMats[0]);
+    const rope = skinnedCut(body, "muay wrist rope", x => Math.abs(x) > .5 && Math.abs(x) < .61, (x, y, z) => .017 + .007 * Math.sin(Math.atan2(z, y - 1.354) * 2 + Math.abs(x) * 95), muayWrapMats[1]);
+    return [hands, rope];
+  }
   function animateSkin(a, m, speed, s, c, t, now, dt) {
     const n = a.skin.nodes, P = {};
     for (const b of POSE_BONES) P[b] = [0, 0, 0];
@@ -3422,6 +3987,11 @@
     const run = Math.min(1, Math.max(0, (speed - 3.6) / 3));
     const breath = Math.sin(t * 2.1), idle = 1 - m;
     const weapon = a.weaponId || "";
+    // Muay Boran "weapon": white cloth hand wraps with twisted rope at the wrists, cut from the body.
+    if (weapon === "muay_wraps" && !a.skin.wraps && a.skin.body) a.skin.wraps = muayWraps(a.skin.body);
+    if (a.skin.wraps) for (const mesh of a.skin.wraps) mesh.setEnabled(weapon === "muay_wraps");
+    // Wrapped hands are drawn a little smaller so they read as fists.
+    for (const side of ["LeftHand", "RightHand"]) a.skin.nodes[side]?.scaling.setAll(weapon === "muay_wraps" ? .82 : 1);
     // ---- Combat stance at rest: side-on to the opponent, left shoulder
     // leading, weight sunk into the back (right) leg, head turned forward.
     const turn = weapon === "spirit_staff" ? -.55 : -.82;
@@ -3431,7 +4001,31 @@
     set("LeftUpLeg", -.34, .18, .17); set("LeftLeg", .14, 0, 0);
     set("RightUpLeg", .14, -.1, -.11); set("RightLeg", .32, 0, 0);
     set("LeftShoulder", 0, 0, -.04); set("RightShoulder", 0, 0, .04);
-    if (weapon === "arcane_sword") {
+    if (weapon === "muay_wraps") {
+      // Muay guard: squarer than the blade stances, fists up at the chin,
+      // elbows in, weight on the rear leg; each school carries it differently.
+      const school = muaySchoolOf(a);
+      const st = { chaiya: { turn: -.42, low: -.09, lean: .2, arm: -1.0, fore: 2.3, bob: 2.2, bobA: .008, knee: 1 },
+        korat: { turn: -.62, low: -.07, lean: .12, arm: -.75, fore: 1.65, bob: 1.8, bobA: .01, knee: 0, wide: .14 },
+        lopburi: { turn: -.95, low: -.04, lean: .06, arm: -1.2, fore: 1.9, bob: 3.2, bobA: .012, knee: 0, reach: 1 },
+        thasao: { turn: -.5, low: -.05, lean: .1, arm: -1.25, fore: 2.25, bob: 6.5, bobA: .03, knee: 0 } }[school] || {};
+      set("Hips", 0, st.turn, -.03); off[1] = st.low + Math.abs(Math.sin(t * st.bob)) * st.bobA * idle; bend(st.lean, -st.turn * .35, .04);
+      set("LeftUpLeg", -.22 - (st.knee ? .3 : 0), .08, .12 + (st.wide || 0)); set("LeftLeg", .32 + (st.knee ? .45 : 0), 0, 0);
+      set("RightUpLeg", .1, -.06, -.1 - (st.wide || 0)); set("RightLeg", .42, 0, 0);
+      // Fists in front of the face, elbows closed in front of the ribs.
+      set("RightArm", st.arm - .35, .45, 1.2); set("RightForeArm", 0, st.fore + .1, 0); set("RightHand", 0, 0, .15);
+      if (st.reach) { set("LeftArm", -1.5, -.25, -1.15); set("LeftForeArm", 0, -1.3, 0); }
+      else { set("LeftArm", st.arm - .45, -.45, -1.2); set("LeftForeArm", 0, -st.fore - .05, 0); }
+      set("LeftHand", 0, 0, -.15);
+      if (school === "thasao") { add("RightArm", Math.sin(t * 6.5) * .05, 0, 0); add("LeftArm", -Math.sin(t * 6.5) * .05, 0, 0); }
+    } else if (weapon === "thai_dual") {
+      // Dual-blade guard: right blade raised before the face, edge out;
+      // left blade low and back along the forearm, ready to cover.
+      set("RightArm", -.95, .25, .95); set("RightForeArm", 0, 1.35, 0); set("RightHand", .35, 0, .1);
+      set("LeftArm", -.2, .1, -1.15); set("LeftForeArm", 0, -.45, 0); set("LeftHand", 1.9, 0, -.1);
+      add("RightShoulder", 0, .08, -.06); off[1] = -.06;
+      add("LeftLeg", .12, 0, 0); add("RightLeg", .14, 0, 0);
+    } else if (weapon === "arcane_sword") {
       // Low guard: crescent blade trailing forward-down at the right hip,
       // free hand loose and open toward the opponent.
       set("RightArm", -.22, .15, 1.08); set("RightForeArm", 0, .55, 0); set("RightHand", 1.0, 0, 0);
@@ -3457,14 +4051,20 @@
     // the chest counter-twists, the hip drops over the swinging leg.
     if (m > .001) {
       const W = {}; for (const b of POSE_BONES) W[b] = [0, 0, 0];
-      const amp = .55 + .25 * run, armAmp = .42 + .45 * run, grip = { spirit_staff: 1.45, arcane_sword: 1.2, ritual_dagger: .9 }[weapon];
+      const amp = .55 + .25 * run, armAmp = .42 + .45 * run, grip = { spirit_staff: 1.45, arcane_sword: 1.2, ritual_dagger: .9, thai_dual: 1.1 }[weapon];
       W.Hips = [.02 * run, s * .14 * (1 + run), -s * .05];
       W.Spine = [.04 + .12 * run, s * .02, s * .03]; W.Spine1 = [.02 + .06 * run, -s * .06, 0]; W.Chest = [.01, -s * .12 * (1 + run), -s * .03];
       W.LeftUpLeg = [-s * amp, 0, .03]; W.RightUpLeg = [s * amp, 0, -.03];
       W.LeftLeg = [Math.max(0, c) * (.8 + .6 * run) + .06, 0, 0]; W.RightLeg = [Math.max(0, -c) * (.8 + .6 * run) + .06, 0, 0];
-      W.LeftArm = [s * armAmp, 0, -1.24]; W.LeftForeArm = [0, -(.28 + 1.1 * run), 0];
+      W.LeftArm = weapon === "thai_dual" ? [-.25 + s * armAmp * .4, -.1, -1.18] : [s * armAmp, 0, -1.24];
+      W.LeftForeArm = [0, weapon === "thai_dual" ? -1.1 : -(.28 + 1.1 * run), 0];
       W.RightArm = grip ? [-.25 - s * armAmp * .4, .1, 1.18] : [-s * armAmp, 0, 1.24];
       W.RightForeArm = [0, grip ?? (.28 + 1.1 * run), 0];
+      if (weapon === "muay_wraps") { // guard stays up while moving
+        W.RightArm = [-1.35 - s * .1, .45, 1.2]; W.RightForeArm = [0, 2.3, 0];
+        W.LeftArm = [-1.4 + s * .1, -.45, -1.2]; W.LeftForeArm = [0, -2.3, 0];
+        W.Spine[0] += .06; W.Chest[1] *= .6;
+      }
       for (const b of POSE_BONES) mix(b, W[b][0], W[b][1], W[b][2], m);
       off[0] *= idle; off[1] = off[1] * idle + (Math.abs(c) * .03 * (1 + run) - .02 * run) * m;
     }
@@ -3506,7 +4106,7 @@
     const act = a.action, fx = avatarFx(a);
     for (const arc of Object.values(fx.slashes)) arc.setEnabled(false);
     fx.orb.setEnabled(false); fx.vial.setEnabled(false); fx.seal.setEnabled(false);
-    let flare = 0;
+    let flare = 0, spin = 0;
     if (act && now < act.end && !dead) {
       const p = act.hold ?? (now - act.start) / (act.end - act.start); // hold: frozen frame for previews
       const w = Math.min(1, p / .12, (1 - p) / .22);
@@ -3530,7 +4130,152 @@
         fx.pivot.rotation.set(0, (p - .52) * (act.type === "slash" ? -3 : -1.2), tilt);
         const sc = act.type === "stab" || act.type === "punch" ? .75 : 1.15; arc.scaling.set(sc, 1, sc);
       };
+      // One blade cuts across while the other draws back to guard; the torso
+      // winds the opposite way first so the twist carries the cut (d: 1 right, -1 left).
+      const twinCut = (d, k, ww) => {
+        const R = d > 0 ? "Right" : "Left", L = d > 0 ? "Left" : "Right";
+        const lp = (bone, A, Bv) => { const v = lerp(A, Bv, k); mix(bone, v[0], v[1], v[2], ww); };
+        lp("Hips", [0, -.55 * d, -.06], [.06, .25 * d, .06]);
+        lp("LeftUpLeg", [-.2, .1, .12], [-.7, .05, .1]); lp("LeftLeg", [.2, 0, 0], [.5, 0, 0]);
+        lp("RightUpLeg", [.05, 0, -.1], [.4, 0, -.06]); lp("RightLeg", [.5, 0, 0], [.18, 0, 0]);
+        off[0] += (-.05 + .09 * k) * ww; off[1] -= (.04 + .07 * k) * ww; off[2] += .06 * k * ww;
+        const v = lerp([-.02, -.75 * d, .18 * d], [.36, .75 * d, -.15 * d], k); bend(v[0], v[1], v[2], ww);
+        lp(R + "Shoulder", [0, -.2 * d, -.12 * d], [0, .28 * d, .05 * d]);
+        lp(R + "Arm", [-2.6, -.35 * d, 1.25 * d], [-.5, .9 * d, 1.0 * d]); lp(R + "ForeArm", [0, .85 * d, 0], [0, .15 * d, 0]);
+        lp(L + "Arm", [-.5, .2 * d, -1.05 * d], [-1.0, -.2 * d, -.95 * d]); lp(L + "ForeArm", [0, -.6 * d, 0], [0, -1.4 * d, 0]);
+      };
+      const cutArc = (center, d, tilt = .45, width = .2) => {
+        const arc = fx.slashes.twin, k = Math.max(0, 1 - Math.abs(p - center) / width);
+        if (k <= 0) return;
+        arc.setEnabled(true); arc.visibility = k * .9;
+        fx.pivot.rotation.set(0, (p - center) / width * -.6 * d, tilt * d); arc.scaling.set(1.05 * d, 1, 1.05);
+      };
+      // ---- Muay pieces: guard arms, straight/hook punch, elbow, knee, teep.
+      // d = 1 right (rear) hand or leg, -1 left (lead).
+      const G = { Right: { Arm: [-1.35, .45, 1.2], ForeArm: [0, 2.3, 0] }, Left: { Arm: [-1.4, -.45, -1.2], ForeArm: [0, -2.3, 0] } };
+      const guardArm = (side, ww) => { const g = G[side]; mix(side + "Arm", g.Arm[0], g.Arm[1], g.Arm[2], ww); mix(side + "ForeArm", g.ForeArm[0], g.ForeArm[1], g.ForeArm[2], ww); };
+      const lpw = (bone, A, Bv, k, ww) => { const v = lerp(A, Bv, k); mix(bone, v[0], v[1], v[2], ww); };
+      const sideOf = d => d > 0 ? "Right" : "Left";
+      const punchMove = (d, k, ww, hook = false) => {
+        const R = sideOf(d), g = G[R], twist = hook ? 1.0 : .6;
+        guardArm(sideOf(-d), ww);
+        if (hook) { lpw(R + "Arm", g.Arm, [-1.35, .95 * d, .35 * d], k, ww); lpw(R + "ForeArm", g.ForeArm, [0, 1.45 * d, 0], k, ww); }
+        else { lpw(R + "Arm", g.Arm, [-1.52, .08 * d, 1.22 * d], k, ww); lpw(R + "ForeArm", g.ForeArm, [0, .06 * d, 0], k, ww); }
+        const v = lerp([0, -.35 * twist * d, 0], [.12, .55 * twist * d, 0], k); bend(v[0], v[1], v[2], ww);
+        lpw("Hips", [0, -.3 * d, 0], [.04, .3 * d, 0], k, ww);
+        lpw(R + "Shoulder", [0, -.1 * d, 0], [0, .25 * d, -.05 * d], k, ww);
+        lpw(R + "UpLeg", [.1, 0, 0], [.28, 0, 0], k, ww * .6);
+        off[2] += .06 * k * ww; off[1] -= .03 * ww;
+      };
+      const elbowMove = (d, k, ww) => {
+        const R = sideOf(d);
+        guardArm(sideOf(-d), ww);
+        lpw(R + "Arm", G[R].Arm, [-1.25, .9 * d, .25 * d], k, ww); mix(R + "ForeArm", 0, 2.55 * d, 0, ww);
+        const v = lerp([-.05, -.5 * d, .15 * d], [.35, .65 * d, -.12 * d], k); bend(v[0], v[1], v[2], ww);
+        lpw("Hips", [0, -.35 * d, 0], [.05, .35 * d, 0], k, ww); off[2] += .05 * k * ww; off[1] -= .05 * ww;
+      };
+      const kneeMove = (d, k, ww) => {
+        const S = sideOf(d);
+        lpw(S + "UpLeg", [0, 0, 0], [-1.65, 0, 0], k, ww); lpw(S + "Leg", [.3, 0, 0], [1.75, 0, 0], k, ww); lpw(S + "Foot", [0, 0, 0], [.6, 0, 0], k, ww);
+        for (const [side, e] of [["Right", 1], ["Left", -1]]) { lpw(side + "Arm", G[side].Arm, [-1.45, .35 * e, .9 * e], k, ww); lpw(side + "ForeArm", G[side].ForeArm, [0, 1.3 * e, 0], k, ww); }
+        bend(-.18 * k, 0, 0, ww); lpw("Hips", [0, 0, 0], [-.15, 0, 0], k, ww); off[2] += .1 * k * ww; off[1] += .03 * k * ww;
+      };
+      const teepMove = (k, ww) => {
+        const chamber = ease(k / .45), ext = ease((k - .4) / .35);
+        mix("LeftUpLeg", -1.45 * chamber, 0, .05, ww); mix("LeftLeg", 1.7 * chamber * (1 - ext) + .1, 0, 0, ww); mix("LeftFoot", -.5 * ext, 0, 0, ww);
+        bend(-.35 * chamber, 0, 0, ww); mix("RightLeg", .3, 0, 0, ww); guardArm("Left", ww); guardArm("Right", ww * (1 - ext)); mix("RightArm", .35, 0, 1.2, ww * ext);
+        off[2] -= .05 * ext * ww;
+      };
+      const coverMove = ww => {
+        for (const [side, e] of [["Right", 1], ["Left", -1]]) { mix(side + "Arm", -1.6, .55 * e, 1.1 * e, ww); mix(side + "ForeArm", 0, 2.5 * e, 0, ww); }
+        bend(.25, 0, 0, ww); off[1] -= .1 * ww; mix("LeftUpLeg", -.75, 0, .1, ww); mix("LeftLeg", 1.0, 0, 0, ww);
+      };
+      const lungeMove = ww => {
+        mix("Hips", .12, 0, 0, ww); bend(.45, 0, 0, ww); guardArm("Right", ww); guardArm("Left", ww);
+        mix("LeftUpLeg", -.95, 0, .05, ww); mix("LeftLeg", .5, 0, 0, ww); mix("RightUpLeg", .6, 0, -.05, ww); mix("RightLeg", .85, 0, 0, ww); off[1] -= .1 * ww;
+      };
+      const fistArc = (center, d, tilt = 0, width = .12) => {
+        const arc = fx.slashes.punch, k = Math.max(0, 1 - Math.abs(p - center) / width);
+        if (k <= 0) return;
+        arc.setEnabled(true); arc.visibility = k * .8;
+        fx.pivot.rotation.set(0, (p - center) / width * -.4 * d, tilt * d); arc.scaling.set(.75 * d, 1, .75);
+      };
       switch (act.type) {
+        case "m_basic": punchMove(act.side, strike, w); fistArc(.52, act.side); break;
+        case "m_jab": punchMove(-1, ease((p - .2) / .25), w); fistArc(.45, -1); break;
+        case "m_cross": punchMove(1, strike, w); fistArc(.52, 1); if (act.finisher) flare = w * .4; break;
+        case "m_hook": punchMove(1, ease((p - .3) / .3), w, true); fistArc(.58, 1, .9, .16); if (act.finisher) flare = w * .4; break;
+        case "m_elbow": elbowMove(1, ease((p - .25) / .3), w); fistArc(.52, 1, .6); if (act.finisher) flare = w * .4; break;
+        case "m_knee": kneeMove(1, ease((p - .2) / .3), w); break;
+        case "m_teep": teepMove(Math.min(1, p / .7), w); break;
+        case "m_step": { const go = w * (1 - ease((p - .4) / .15)); lungeMove(go); punchMove(1, ease((p - .45) / .2), w - go); fistArc(.62, 1); break; }
+        case "m_side": {
+          // Chak: hop off the line, then strike from the new angle.
+          const d = (act.side || 1) * (act.reverse ? -1 : 1), hop = w * (1 - ease((p - .4) / .15)), k = ease((p - .45) / .2);
+          bend(.1, 0, .25 * d, hop); off[0] += .14 * d * hop; guardArm("Right", hop); guardArm("Left", hop);
+          mix("LeftUpLeg", -.2, 0, .3, hop); mix("RightUpLeg", -.2, 0, -.3, hop); mix("LeftLeg", .5, 0, 0, hop); mix("RightLeg", .5, 0, 0, hop);
+          if (act.move === "elbow") elbowMove(-d, k, w - hop); else punchMove(-d, k, w - hop);
+          fistArc(.62, -d); break;
+        }
+        case "m_flurry": case "m_rush": {
+          const lead = act.type === "m_rush" ? .3 : 0, go = lead ? w * (1 - ease((p - .25) / .08)) : 0;
+          if (lead) lungeMove(go);
+          const q0 = Math.max(0, (p - lead) / (1 - lead)), beats = lead ? 3 : 4, beat = Math.min(beats - 1, Math.floor(q0 * beats)), q = q0 * beats - beat, d = beat % 2 ? 1 : -1;
+          punchMove(d, ease((q - .1) / .45), w - go); fistArc(lead + (beat + .5) / beats * (1 - lead), d, 0, .06); break;
+        }
+        case "m_retreat": {
+          const back = ease((p - .5) / .2) * (1 - ease((p - .85) / .15));
+          punchMove(-1, ease((p - .1) / .25), w * (1 - ease((p - .5) / .15))); fistArc(.3, -1);
+          bend(-.2 * back, 0, 0, w); off[2] -= .15 * back * w; guardArm("Right", back * w); guardArm("Left", back * w); break;
+        }
+        case "m_guard": coverMove(w); break;
+        case "m_parry": {
+          const k = Math.sin(Math.min(1, p / .6) * Math.PI);
+          guardArm("Right", w); lpw("LeftArm", G.Left.Arm, [-1.45, -.7, -.9], k, w); lpw("LeftForeArm", G.Left.ForeArm, [0, -.6, 0], k, w); bend(.05, .3 * k, 0, w); break;
+        }
+        case "m_evade": {
+          const k = Math.sin(Math.min(1, p / .8) * Math.PI);
+          bend(-.55 * k, 0, 0, w); mix("Head", -.2 * k, 0, 0, w); mix("Hips", -.15 * k, 0, 0, w); mix("RightLeg", .6, 0, 0, w);
+          guardArm("Right", w); guardArm("Left", w); off[2] -= .12 * k * w; off[1] -= .04 * k * w; break;
+        }
+        case "m_counter": {
+          const block = w * (1 - ease((p - .3) / .12)), k = ease((p - .35) / .25);
+          coverMove(block);
+          if (act.move === "knee") kneeMove(1, k, w - block); else elbowMove(1, k, w - block);
+          if (act.move !== "knee") fistArc(.6, 1, .6); break;
+        }
+        case "m_clinch": {
+          // Plum: both hands locked behind the opponent's neck, pulling down.
+          for (const [side, e] of [["Right", 1], ["Left", -1]]) { mix(side + "Arm", -1.5, .75 * e, 1.05 * e, w); mix(side + "ForeArm", 0, 1.35 * e, 0, w); mix(side + "Hand", 0, 0, -.3 * e, w); }
+          bend(.3 + Math.sin(t * 9) * .03, 0, 0, w); off[1] -= .08 * w; mix("LeftLeg", .4, 0, 0, w); mix("RightLeg", .5, 0, 0, w); break;
+        }
+        case "m_throw": {
+          const k = ease(p / .6);
+          bend(.35, -1.1 * k, 0, w); mix("Hips", 0, -.8 * k, 0, w);
+          mix("RightArm", -.9, -.4, 1.0, w); mix("RightForeArm", 0, 1.2, 0, w); mix("LeftArm", -1.3, .6, -.6, w); mix("LeftForeArm", 0, -1.0, 0, w);
+          mix("LeftUpLeg", -.4 * k, 0, .2, w); off[1] -= .1 * w; flare = w * .3; break;
+        }
+        case "m_held": {
+          bend(.6, 0, 0, w); mix("Head", .4, 0, 0, w); off[1] -= .1 * w; off[2] += .05 * w;
+          for (const [side, e] of [["Right", 1], ["Left", -1]]) { mix(side + "Arm", -1.2, -.3 * e, 1.0 * e, w); mix(side + "ForeArm", 0, 1.4 * e, 0, w); }
+          break;
+        }
+        case "m_thrown": {
+          const k = Math.sin(Math.min(1, p * 1.3) * Math.PI);
+          bend(-.6 * k, .8 * k, .3 * k, w); mix("LeftArm", -.3, 0, -.5, w * k); mix("RightArm", -.3, 0, .5, w * k);
+          mix("LeftLeg", .5, 0, 0, w * k); mix("RightLeg", .7, 0, 0, w * k); off[1] -= .2 * k * w; spin = .9 * k; break;
+        }
+        case "m_wai": {
+          // Wai khru: kneel and bow over joined hands, rise, then a slow turn with arms spread like wings.
+          const bow = 1 - ease((p - .42) / .12), rise = w * (1 - bow), wing = ease((p - .5) / .2);
+          bend(.4, 0, 0, w * bow); mix("Head", .35, 0, 0, w * bow); off[1] -= .35 * w * bow;
+          mix("LeftUpLeg", -.9, 0, .1, w * bow); mix("LeftLeg", 1.4, 0, 0, w * bow); mix("RightUpLeg", .2, 0, -.1, w * bow); mix("RightLeg", 1.6, 0, 0, w * bow);
+          guardArm("Right", w * bow); guardArm("Left", w * bow); mix("RightHand", 0, 0, -.6, w * bow); mix("LeftHand", 0, 0, .6, w * bow);
+          mix("RightArm", -.3, .1, .15, rise * wing); mix("RightForeArm", 0, .6, 0, rise * wing); mix("LeftArm", -.3, -.1, -.15, rise * wing); mix("LeftForeArm", 0, -.6, 0, rise * wing);
+          mix("LeftUpLeg", -.5, 0, .05, rise * wing); mix("LeftLeg", .9, 0, 0, rise * wing); bend(-.12, 0, 0, rise);
+          spin = ease((p - .55) / .4) * Math.PI * 2;
+          fx.seal.setEnabled(true); fx.seal.material = summonSeal; fx.seal.scaling.setAll(2.2); fx.seal.visibility = w * .7; fx.seal.rotation.y = p * 2; flare = w * .35; break;
+        }
         case "stab": case "punch":
           weight(strike, .9); spine([.05, -.6, .08], [.32, .55, -.05]);
           pose("RightShoulder", [0, -.15, .05], [0, .3, -.05]);
@@ -3543,6 +4288,84 @@
           pose("RightArm", [-2.9, -.4, 1.3], [-.45, .95, 1.05]); pose("RightForeArm", [0, .9, 0], [0, .15, 0]);
           pose("LeftArm", [-.9, .3, -1.0], [.35, 0, -1.3]); pose("LeftForeArm", [0, -1.2, 0], [0, -.3, 0]);
           trail(); break;
+        case "twin":
+          twinCut(act.side, strike, w); cutArc(.52, act.side); break;
+        case "lunge": {
+          // Ya-ang sam khum: a low driving step, blades trailing, then a rising cut.
+          const go = w * (1 - ease((p - .42) / .14)), k = ease((p - .48) / .2);
+          mix("Hips", .15, 0, 0, go); bend(.55, 0, 0, go);
+          mix("LeftUpLeg", -1.0, 0, .05, go); mix("LeftLeg", .5, 0, 0, go); mix("RightUpLeg", .65, 0, -.05, go); mix("RightLeg", .9, 0, 0, go);
+          mix("LeftArm", .9, 0, -1.0, go); mix("RightArm", .9, 0, 1.0, go); off[1] -= .12 * go;
+          twinCut(1, k, w - go); cutArc(.62, 1); break;
+        }
+        case "guard": {
+          // Blades crossed before the face, knees sunk, square to the attack.
+          mix("Hips", 0, -.3, 0, w); bend(.15, -.15, 0, w);
+          mix("RightArm", -1.3, -.5, .7, w); mix("RightForeArm", 0, 1.6, 0, w); mix("RightHand", .3, 0, 0, w);
+          mix("LeftArm", -1.3, .5, -.7, w); mix("LeftForeArm", 0, -1.6, 0, w); mix("LeftHand", .3, 0, 0, w);
+          mix("LeftLeg", .4, 0, 0, w); mix("RightLeg", .5, 0, 0, w); off[1] -= .08 * w;
+          break;
+        }
+        case "counter": {
+          // Lean off the line and parry high with the left, then drive the right blade through.
+          const parry = w * (1 - ease((p - .36) / .14)), k = ease((p - .4) / .16), thrust = w - parry;
+          mix("Hips", 0, .45, .05, parry); bend(-.2, .4, -.3, parry); off[0] += .1 * parry;
+          mix("LeftArm", -2.2, .3, -.9, parry); mix("LeftForeArm", 0, -.8, 0, parry); mix("LeftHand", .4, 0, 0, parry);
+          const lp = (bone, A, Bv) => { const v = lerp(A, Bv, k); mix(bone, v[0], v[1], v[2], thrust); };
+          lp("Hips", [0, -.55, -.06], [.06, .25, .06]); bend(.05 + .27 * k, -.6 + 1.15 * k, 0, thrust);
+          lp("RightArm", [.6, 0, 1.1], [-1.5, .12, 1.18]); lp("RightForeArm", [0, 1.7, 0], [0, .05, 0]);
+          lp("LeftArm", [-1.1, -.1, -1.1], [.35, 0, -1.2]); lp("LeftForeArm", [0, -1.6, 0], [0, -.4, 0]);
+          lp("LeftUpLeg", [-.2, .1, .12], [-.75, .05, .1]); lp("LeftLeg", [.2, 0, 0], [.55, 0, 0]); lp("RightUpLeg", [.05, 0, -.1], [.42, 0, -.06]);
+          off[1] -= (.04 + .07 * k) * thrust; off[2] += .08 * k * thrust;
+          cutArc(.58, 1, 0); break;
+        }
+        case "flurry": {
+          // Four quick alternating cuts.
+          const beat = Math.min(3, Math.floor(p * 4)), q = p * 4 - beat, d = beat % 2 ? -1 : 1;
+          twinCut(d, ease((q - .15) / .45), w); cutArc((beat + .55) / 4, d, .45, .09); break;
+        }
+        case "finale": {
+          // Right cut, left cut, then both blades chopped down together.
+          if (p < .62) { const beat = p < .31 ? 0 : 1, q = (p - beat * .31) / .31, d = beat ? -1 : 1; twinCut(d, ease((q - .15) / .45), w); cutArc(beat * .31 + .17, d, .45, .07); }
+          else {
+            const k = ease((p - .72) / .14), lp = (bone, A, Bv) => { const v = lerp(A, Bv, k); mix(bone, v[0], v[1], v[2], w); };
+            weight(k, 1.25); bend(-.35 + .95 * k, 0, 0, w);
+            lp("RightArm", [-2.95, 0, 1.25], [-.95, 0, .85]); lp("LeftArm", [-2.95, 0, -1.25], [-.95, 0, -.85]);
+            lp("RightForeArm", [0, .3, 0], [0, .1, 0]); lp("LeftForeArm", [0, -.3, 0], [0, -.1, 0]);
+            lp("Head", [-.25, 0, 0], [.3, 0, 0]); off[1] += .04 * (1 - k) * w; cutArc(.84, 1, 1.45, .08);
+          }
+          break;
+        }
+        case "sweep": {
+          // A full turn with both blades held out: everything in front is cut.
+          const k = ease((p - .12) / .62); spin = -k * Math.PI * 2;
+          bend(.25, 0, 0, w); mix("Hips", 0, 0, 0, w); off[1] -= .1 * w;
+          mix("RightArm", -.25, .35, .15, w); mix("RightForeArm", 0, .2, 0, w); mix("LeftArm", -.25, -.35, -.15, w); mix("LeftForeArm", 0, -.2, 0, w);
+          mix("LeftUpLeg", -.35, 0, .25, w); mix("RightUpLeg", -.1, 0, -.25, w); mix("LeftLeg", .45, 0, 0, w); mix("RightLeg", .4, 0, 0, w);
+          if (p > .15 && p < .78) { const arc = fx.slashes.twin; arc.setEnabled(true); arc.visibility = .85; arc.scaling.set(1.3, 1, 1.3); fx.pivot.rotation.set(0, spin, .05); }
+          break;
+        }
+        case "rally": {
+          // Right blade raised high, left blade out low: a call to the party.
+          const up = ease(p / .3) * (1 - ease((p - .8) / .2));
+          bend(-.25, 0, 0, up); mix("Head", -.3, 0, 0, up); mix("Hips", 0, -.2, 0, up);
+          mix("RightArm", -2.9, 0, .5, up); mix("RightForeArm", 0, .2, 0, up);
+          mix("LeftArm", -.25, 0, -.85, up); mix("LeftForeArm", 0, -.2, 0, up);
+          fx.seal.setEnabled(true); fx.seal.material = arriveSeal; fx.seal.scaling.setAll(2 + 3 * p); fx.seal.visibility = 1 - p; flare = up * .4; break;
+        }
+        case "dance": {
+          // Ram daab khu: a bow over crossed blades, then a turning sword dance.
+          const bow = 1 - ease((p - .22) / .12), k = ease((p - .3) / .62), ph = Math.max(0, p - .3) * Math.PI * 6, dw = w * (1 - bow);
+          bend(.55, 0, 0, w * bow); mix("Head", .3, 0, 0, w * bow); off[1] -= .14 * w * bow;
+          mix("LeftUpLeg", -.7, 0, .1, w * bow); mix("LeftLeg", 1.0, 0, 0, w * bow); mix("RightUpLeg", .1, 0, -.1, w * bow); mix("RightLeg", 1.1, 0, 0, w * bow);
+          mix("RightArm", -1.2, -.5, .8, w * bow); mix("RightForeArm", 0, 1.5, 0, w * bow); mix("LeftArm", -1.2, .5, -.8, w * bow); mix("LeftForeArm", 0, -1.5, 0, w * bow);
+          spin = k * Math.PI * 2;
+          mix("RightArm", -1.4 + .7 * Math.sin(ph), .3, .9, dw); mix("RightForeArm", 0, .9 + .4 * Math.cos(ph), 0, dw); mix("RightHand", Math.sin(ph * 2) * 1.1, 0, 0, dw);
+          mix("LeftArm", -1.4 - .7 * Math.sin(ph), -.3, -.9, dw); mix("LeftForeArm", 0, -.9 - .4 * Math.cos(ph), 0, dw); mix("LeftHand", -Math.sin(ph * 2) * 1.1, 0, 0, dw);
+          mix(Math.sin(ph) > 0 ? "LeftUpLeg" : "RightUpLeg", -.55, 0, 0, dw * Math.abs(Math.sin(ph))); bend(.1, Math.sin(ph) * .25, 0, dw);
+          fx.seal.setEnabled(true); fx.seal.material = summonSeal; fx.seal.scaling.setAll(2.4); fx.seal.visibility = dw * .8; fx.seal.rotation.y = p * 3; flare = dw * .3;
+          break;
+        }
         case "smash":
           weight(strike, 1.2); spine([-.38, -.2, 0], [.75, .15, 0]);
           pose("RightArm", [-2.95, 0, 1.35], [-1.05, 0, .95]); pose("LeftArm", [-2.95, 0, -1.35], [-1.05, 0, -.95]);
@@ -3621,10 +4444,19 @@
     const o = cur.off || (cur.off = off.slice());
     for (let i = 0; i < 3; i++) o[i] += (off[i] - o[i]) * blend;
     n.Hips.position.set(a.skin.rest.hipsX + o[0], a.skin.rest.hipsY + o[1], a.skin.rest.hipsZ + o[2]);
+    if (a.skin.holder) a.skin.holder.rotation.y = Math.PI + spin; // whole-body turns (sweep, dance)
     return flare;
   }
   // Procedural gait: legs and arms counter-swing with speed, the body bobs and
   // leans, breathes at rest, tucks while flying and swings the weapon arm.
+  const STEP_SURFACE = { ritual_village: "wood", forbidden_forest: "soil", bound_temple: "stone", drowned_marsh: "water", lotus_basin: "soil",
+    moon_cemetery: "soil", hex_ridge: "stone", naga_cavern: "stone", fallen_city: "stone", asura_peak: "stone", spirit_rift: "stone",
+    mantra_capital: "brick", moon_pass: "soil", river_watch: "soil", bamboo_frontier: "soil", tri_wiang_castle: "brick" };
+  function stepSound(a) {
+    const strategic = worldDefinitions?.[activeMapId]?.strategic;
+    if (a.y > 2.5 && strategic?.rampart) return strategic.kind === "territory" ? "step_wood" : "step_brick"; // on the wall walk
+    return "step_" + (STEP_SURFACE[activeMapId] || "soil");
+  }
   function animateRig(a, speed, dt, now) {
     const r = a.rig; if (!r) return;
     const target = Math.min(1, speed / 3.2);
@@ -3632,6 +4464,10 @@
     const m = a.moveBlend, flying = a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain);
     a.phase = (a.phase + dt * 9.5 * m) % (Math.PI * 2);
     const s = Math.sin(a.phase), c = Math.cos(a.phase), t = now / 1000;
+    // Footstep on each foot plant (the stride sine crossing zero), by surface.
+    if (m > .35 && !flying && !a.serverFlying && a.stepSign && Math.sign(s) && Math.sign(s) !== a.stepSign)
+      SFX(stepSound(a), { x: a.x, z: a.z, intensity: .55 + .45 * Math.min(1, speed / 6) });
+    if (Math.sign(s)) a.stepSign = Math.sign(s);
     const flare = a.skin ? animateSkin(a, m, speed, s, c, t, now, dt) : 0;
     for (let i = 0; i < 2; i++) {
       const dir = i ? -1 : 1;
@@ -3665,7 +4501,7 @@
   function setAvatarWeapon(avatar, weaponId, pathId = avatar?.local ? ownServerCharacter()?.pathId : "") {
     if (!avatar?.weaponModels) return;
     const modelId = pathId === "phutthaisawan" && weaponId === "arcane_sword" ? "thai_dual" : weaponId === "shrine_glaive" ? "arcane_sword" : weaponId;
-    const safeId = modelId === "thai_dual" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
+    const safeId = modelId === "thai_dual" || modelId === "muay_wraps" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
     if (avatar.weaponId === safeId) return;
     avatar.weaponId = safeId;
     for(const [id,model] of Object.entries(avatar.weaponModels)) {
@@ -3733,15 +4569,165 @@
       eye.isPickable = false;
     }
     parent.position.set(x, 0, z);
-    return {
+    const actor = {
       node: parent, ownerId, x, y:0, z,
       targetX: x, targetY:0, targetZ: z,
-      facing: 0, desiredFacing: 0, action: "follow", hitUntil: 0, emergingUntil: 0
+      facing: 0, desiredFacing: 0, action: "follow", hitUntil: 0, emergingUntil: 0,
+      fallback: [body, ...parent.getChildMeshes().filter(m => /guardian-eye/.test(m.name))],
     };
+    addMovingLight(parent, "#ffd27a", 1.05, 1.3);
+    attachSpiritModel(actor);
+    return actor;
+  }
+  // ---- Golden spirit (assets/characters/thai-golden-spirit.glb) ----
+  // The summoned pot spirit: a Thai celestial in a golden costume, 4,104
+  // triangles, 21-bone T-pose rig (identity rest, model faces +Z), 512 px
+  // atlases. Posed in code like the shaman body: it floats in a dance pose,
+  // thrusts both palms when it strikes and rises in a high wai when it
+  // emerges from the pot. The glowing sphere stays as the fallback.
+  const spiritWaiting = [];
+  let spiritBody = null;
+  if (B.SceneLoader?.IsPluginForExtensionAvailable?.(".glb")) {
+    B.SceneLoader.LoadAssetContainerAsync("./assets/characters/", "thai-golden-spirit.glb", scene).then(container => {
+      for (const m of container.materials) {
+        if ("metallic" in m) {
+          m.environmentIntensity = 0; m.directIntensity = 1.6;
+          // Self-lit gold so the spirit glows at night, with a pale sheen at its edges.
+          m.emissiveTexture = m.albedoTexture; m.emissiveColor = B.Color3.FromHexString("#7a5a2a").toLinearSpace();
+          m.sheen.isEnabled = true; m.sheen.color = B.Color3.FromHexString("#ffe2a0"); m.sheen.intensity = .6; m.sheen.roughness = .3;
+        }
+        m.maxSimultaneousLights = MAX_LIGHTS;
+      }
+      spiritBody = container;
+      spiritWaiting.splice(0).forEach(attachSpiritModel);
+    }).catch(error => { console.warn("MONTRA golden spirit", error); spiritBody = false; spiritWaiting.length = 0; });
+  } else spiritBody = false;
+  let spiritHaloMat = null;
+  function attachSpiritModel(actor) {
+    if (spiritBody === null) { spiritWaiting.push(actor); return; }
+    if (!spiritBody || actor.node.isDisposed()) return;
+    const copy = spiritBody.instantiateModelsToScene(name => name, false);
+    const holder = new B.TransformNode("golden spirit", scene);
+    holder.parent = actor.node; holder.rotation.y = Math.PI; holder.scaling.setAll(1.2); holder.position.y = .25;
+    const model = copy.rootNodes[0]; model.parent = holder;
+    const nodes = {};
+    for (const n of model.getDescendants(false)) nodes[n.name] = n;
+    for (const m of model.getChildMeshes()) { m.isPickable = false; m.alwaysSelectAsActiveMesh = true; }
+    // Soft golden halo behind the body.
+    if (!spiritHaloMat) spiritHaloMat = additiveMat("spirit halo", radialTexture("spirit halo", 128, [[0, "rgba(255,214,140,.55)"], [.4, "rgba(255,190,90,.22)"], [1, "rgba(255,170,60,0)"]]));
+    const halo = B.MeshBuilder.CreatePlane("spirit halo", { size: 2.6 }, scene);
+    halo.parent = actor.node; halo.position.y = 1.4; halo.material = spiritHaloMat; halo.billboardMode = B.Mesh.BILLBOARDMODE_ALL; halo.isPickable = false; halo.metadata = { noShadow: true };
+    for (const m of actor.fallback) m.setEnabled(false);
+    actor.spirit = { nodes, copy, holder, pose: {}, seed: actor.ownerId.length * 1.7 };
+    attachSpiritArms(actor);
+  }
+  // The costume's own arms were flat and short, so they are cut from the
+  // file; real arms from the Thai male body take their place. That body's
+  // skeleton rides the spirit: its hips are solved every frame so its chest
+  // sits on the spirit's upper chest, and its arm bones copy the spirit's
+  // arm pose (both rigs share the identity-rest, +Z-forward convention).
+  const spiritArmWaiting = [];
+  let spiritArmMat = null;
+  function attachSpiritArms(actor) {
+    if (shamanBody === null) { spiritArmWaiting.push(actor); return; }
+    const sp = actor.spirit;
+    if (!shamanBody || !sp || actor.node.isDisposed()) return;
+    const copy = shamanBody.instantiateModelsToScene(name => name, false);
+    const model = copy.rootNodes[0]; model.parent = sp.holder;
+    const nodes = {};
+    for (const n of model.getDescendants(false)) nodes[n.name] = n;
+    const body = model.getChildMeshes().find(m => m.skeleton);
+    if (!body) return;
+    for (const m of model.getChildMeshes()) { m.isPickable = false; m.setEnabled(false); }
+    if (!spiritArmMat) {
+      spiritArmMat = body.material.clone("spirit arm skin");
+      spiritArmMat.emissiveTexture = spiritArmMat.albedoTexture; spiritArmMat.emissiveColor = B.Color3.FromHexString("#4a3018").toLinearSpace();
+      spiritArmMat.albedoColor = B.Color3.FromHexString("#c89a78").toLinearSpace(); // matched to the costume's skin tone
+      spiritArmMat.sheen.isEnabled = true; spiritArmMat.sheen.color = B.Color3.FromHexString("#ffe2a0"); spiritArmMat.sheen.intensity = .6;
+    }
+    const arms = skinnedCut(body, "spirit arms", (x, y) => Math.abs(x) > .155 && y > 1.25, () => 0, spiritArmMat);
+    arms.setEnabled(true);
+    // The spirit's shoulder joints sit 2.8 cm closer in than the male body's.
+    nodes.LeftShoulder.position.x -= .028; nodes.RightShoulder.position.x += .028;
+    // Gold armlets (phahurat) on the upper arms and bracelets (thongkon) at the wrists.
+    for (const [side, d] of [["Left", 1], ["Right", -1]]) {
+      for (const [bone, at, size] of [["Arm", .085, .105], ["ForeArm", .19, .085], ["ForeArm", .165, .09]]) {
+        const ring = B.MeshBuilder.CreateTorus("spirit gold band", { diameter: size, thickness: .02, tessellation: 14 }, scene);
+        ring.parent = nodes[side + bone]; ring.position.set(d * at, 0, 0); ring.rotation.z = Math.PI / 2; ring.material = templeGold; ring.isPickable = false;
+      }
+    }
+    const hips = nodes.Hips, rest = SHAMAN_JOINTS;
+    sp.arms = { copy, nodes, hips, chestFromHips: new B.Vector3(rest.Chest[0] - rest.Hips[0], rest.Chest[1] - rest.Hips[1], rest.Chest[2] - rest.Hips[2]) };
+    hips.rotationQuaternion = hips.rotationQuaternion || B.Quaternion.Identity();
+  }
+  const spiritTmp = { a: new B.Matrix(), b: new B.Matrix(), c: new B.Matrix(), s: new B.Vector3(), q: new B.Quaternion(), p: new B.Vector3() };
+  function alignSpiritArms(sp, cur) {
+    const arms = sp.arms; if (!arms) return;
+    const n = arms.nodes, g = sp.nodes.UpperChest;
+    // World matrices top-down, so this frame's spine pose is included.
+    const chain = []; for (let x = g; x; x = x.parent) chain.unshift(x);
+    for (const x of chain) x.computeWorldMatrix(true);
+    // Chest 3.7 cm under the spirit's upper chest lines the shoulders up; hips follow from the rest offset.
+    const T = spiritTmp, c = arms.chestFromHips;
+    B.Matrix.TranslationToRef(-c.x, -c.y - .037, -c.z, T.a);
+    T.a.multiplyToRef(g.getWorldMatrix(), T.b);
+    const parent = arms.hips.parent; parent.computeWorldMatrix(true);
+    parent.getWorldMatrix().invertToRef(T.c);
+    T.b.multiplyToRef(T.c, T.a);
+    T.a.decompose(T.s, T.q, T.p);
+    arms.hips.position.copyFrom(T.p); arms.hips.rotationQuaternion.copyFrom(T.q);
+    for (const b of ["Spine", "Spine1", "Chest"]) if (n[b]) n[b].rotationQuaternion = B.Quaternion.Identity();
+    const map = { LeftShoulder: "LeftShoulder", RightShoulder: "RightShoulder", LeftUpperArm: "LeftArm", RightUpperArm: "RightArm", LeftLowerArm: "LeftForeArm", RightLowerArm: "RightForeArm", LeftHand: "LeftHand", RightHand: "RightHand" };
+    for (const [from, to] of Object.entries(map)) { const v = cur[from]; if (v && n[to]) n[to].rotationQuaternion = B.Quaternion.RotationYawPitchRoll(v[1], v[0], v[2]); }
+  }
+  // Bone poses as [pitch, yaw, roll] (same convention as the shaman body:
+  // roll lowers an arm, negative pitch swings a limb forward, forearm yaw
+  // bends the elbow; right side positive, left side negative).
+  const SPIRIT_BONES = ["Hips", "Spine", "Chest", "UpperChest", "Neck", "Head", "LeftShoulder", "RightShoulder", "LeftUpperArm", "RightUpperArm",
+    "LeftLowerArm", "RightLowerArm", "LeftHand", "RightHand", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot"];
+  function animateSpirit(actor, now, dt) {
+    const sp = actor.spirit; if (!sp) return;
+    const t = now / 1000 + sp.seed, P = {};
+    for (const b of SPIRIT_BONES) P[b] = [0, 0, 0];
+    const mix = (b, x, y, z, w = 1) => { const v = P[b]; v[0] += (x - v[0]) * w; v[1] += (y - v[1]) * w; v[2] += (z - v[2]) * w; };
+    // Floating dance (ram thai): right hand raised in a curved jeeb, left arm
+    // low and flowing back, one knee lifted, toes pointed, body swaying.
+    const sway = Math.sin(t * 1.3), lift = Math.sin(t * .9);
+    mix("Spine", .04, sway * .08, sway * .05); mix("UpperChest", -.04, -sway * .1, -sway * .04); mix("Head", .08, sway * .12, .14 - sway * .05);
+    // Right: upper arm out and a little forward, forearm raised, fingers flared back.
+    mix("RightUpperArm", -.4 + lift * .06, 0, .22 - lift * .05); mix("RightLowerArm", 0, .35, -2.0); mix("RightHand", 0, 0, .9);
+    // Left: arm low and swept back, forearm angled out, fingers flicked up.
+    mix("LeftUpperArm", .35, 0, -1.15 - lift * .06); mix("LeftLowerArm", 0, 0, .5); mix("LeftHand", 0, 0, .9);
+    mix("LeftUpperLeg", -.55, .1, .08); mix("LeftLowerLeg", .9, 0, 0); mix("LeftFoot", .55, 0, 0);
+    mix("RightUpperLeg", -.12, -.05, -.04); mix("RightLowerLeg", .35, 0, 0); mix("RightFoot", .6, 0, 0);
+    // Strike: lean in and thrust both palms at the target.
+    const strike = actor.action === "attack" || actor.hitUntil > now ? 1 : 0;
+    sp.strike = (sp.strike || 0) + (strike - (sp.strike || 0)) * (1 - Math.exp(-dt * 12));
+    const k = sp.strike;
+    if (k > .001) {
+      mix("Spine", .28, 0, 0, k); mix("UpperChest", .1, 0, 0, k); mix("Head", -.15, 0, 0, k);
+      for (const [side, d] of [["Right", 1], ["Left", -1]]) {
+        mix(side + "UpperArm", -1.6, 0, 1.2 * d, k); mix(side + "LowerArm", 0, .1 * d, 0, k); mix(side + "Hand", 0, 0, -1.2 * d, k);
+      }
+      mix("LeftUpperLeg", -.2, 0, .05, k); mix("LeftLowerLeg", .4, 0, 0, k); mix("RightUpperLeg", .35, 0, -.05, k); mix("RightLowerLeg", .5, 0, 0, k);
+    }
+    // Emerging from the pot: a high wai with hands joined above the crown.
+    const rise = Math.max(0, Math.min(1, (actor.emergingUntil - now) / 500 + .35));
+    if (rise > 0) for (const [side, d] of [["Right", 1], ["Left", -1]]) { mix(side + "UpperArm", -2.7, 0, 1.1 * d, rise); mix(side + "LowerArm", 0, 1.3 * d, 0, rise); mix(side + "Hand", 0, 0, 0, rise); }
+    const blend = 1 - Math.exp(-dt * 10);
+    for (const b of SPIRIT_BONES) {
+      const node = sp.nodes[b]; if (!node) continue;
+      const cur = sp.pose[b] || (sp.pose[b] = P[b].slice());
+      for (let i = 0; i < 3; i++) cur[i] += (P[b][i] - cur[i]) * blend;
+      node.rotationQuaternion = B.Quaternion.RotationYawPitchRoll(cur[1], cur[0], cur[2]);
+    }
+    alignSpiritArms(sp, sp.pose);
   }
   function deleteSummonAvatar(ownerId) {
     const actor = summonAvatars.get(ownerId);
     if (!actor) return;
+    actor.spirit?.copy.skeletons.forEach(skeleton => skeleton.dispose());
+    actor.spirit?.arms?.copy.skeletons.forEach(skeleton => skeleton.dispose());
     actor.node.getChildMeshes().forEach(mesh => mesh.dispose());
     actor.node.dispose();
     summonAvatars.delete(ownerId);
@@ -3795,6 +4781,8 @@
   const DASH_DEMO_COOLDOWN_MS = 1800;
   let selectedPkTargetId = null;
   let targetedSkill = null;
+  let selectedOccultSkill="", occultBookState=null, occultRequestKey="", occultRequestAt=0, occultHotbarKey="", occultBookRenderKey="", occultCurseUntil=0;
+  let selectedBladeSkill="",bladeBookState=null,bladeRequestKey="",bladeRequestAt=0,bladeHotbarKey="",bladeBookRenderKey="",bladeCloakUntil=0,bladeMarkUntil=0,bladeMarkedTarget="",bladeOpeningUntil=0,bladeCounterUntil=0;
   let spellTargetId = null;
   let pendingClimb = null;
   const skillEffects = [];
@@ -5453,6 +6441,10 @@
     const root = B.MeshBuilder.CreateBox("monster-" + id, { width: 1.3, height: tall, depth: 1.3 }, scene);
     root.visibility = .001; root.isPickable = true;
     const rig = new B.TransformNode("ghost rig", scene); rig.parent = root; rig.position.y = -tall / 2; rig.scaling.setAll(design.scale);
+    contactShadow(rig, design.kind === "elephant" ? 3.4 : 1.7);
+    // Ghosts that burn or shine light the ground around them.
+    const GHOST_LIGHT = { krasue: ["#ff6a3a", 1.2], phong: ["#9dff7a", 1.1], waterspirit: ["#7ff5e0", .9], moonspirit: ["#c9d2ff", 1], krahang: ["#ff9a4a", .9], bell: ["#ffc070", .7] };
+    if (GHOST_LIGHT[design.kind]) addMovingLight(root, ...GHOST_LIGHT[design.kind], .4);
     // Humanoid ghosts wait for the shared body; primitive rigs are the fallback.
     let update = () => {};
     const ghostState = { get update() { return update; } };
@@ -5470,11 +6462,30 @@
   }
   // Rising soul released when a ghost is destroyed.
   function releaseSoul(x, y, z) {
+    SFX("ghost_die", { x, z });
     const soul = B.MeshBuilder.CreateSphere("released soul", { diameter: .45, segments: 6 }, scene);
     soul.material = gm.soul; soul.isPickable = false; soul.position.set(x, y, z);
     const tail = B.MeshBuilder.CreateCylinder("soul tail", { height: .8, diameterTop: .4, diameterBottom: 0, tessellation: 6 }, scene);
     tail.parent = soul; tail.position.y = -.45; tail.material = gm.soul; tail.isPickable = false;
     soulMeshes.push({ soul, born: performance.now() });
+  }
+  // Ghost voices: a cry on the attack wind-up (an audible warning before the
+  // hit lands) and an occasional murmur when near the hero.
+  let lastGhostMurmur = 0;
+  const ghostVoice = (g, mesh, ev, intensity = 1) => SFX("ghost", { kind: g.design?.kind, ev, x: mesh.position.x, z: mesh.position.z, intensity });
+  function ghostVoices(mesh, g, now) {
+    if (g.deathAt) return;
+    if (g.windup && !g.wasWindup) {
+      ghostVoice(g, mesh, "attack"); g.criedAt = now;
+      const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 15) lastCombatAt = now; // music goes to combat
+    }
+    g.wasWindup = g.windup;
+    if (!g.nextMurmur) g.nextMurmur = now + 2000 + Math.random() * 8000;
+    if (now > g.nextMurmur) {
+      g.nextMurmur = now + 6000 + Math.random() * 9000;
+      const hero = getLocalAvatar();
+      if (hero && now - lastGhostMurmur > 900 && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 26) { lastGhostMurmur = now; ghostVoice(g, mesh, "idle"); }
+    }
   }
   function animateGhosts(dt, now) {
     const t = now / 1000;
@@ -5487,6 +6498,7 @@
         const sp = Math.hypot(mesh.position.x - ox, mesh.position.z - oz) / Math.max(dt, 1e-3);
         g.speed += (sp - g.speed) * (1 - Math.exp(-dt * 6));
       }
+      ghostVoices(mesh, g, now);
       const move = Math.min(1, g.speed / 2.5);
       g.walk += dt * (2 + 6 * move);
       const atkAge = (now - g.attackAt) / 1000, hurtAge = (now - g.hurtAt) / 1000;
@@ -5550,12 +6562,9 @@
   function updateMonsterUI(hp, maxHp, alive, simulated = false) {
     const max = Math.max(1, Number(maxHp) || 100);
     const current = Math.max(0, Math.min(max, Number(hp) || 0));
-    ui.monsterStatus.hidden = false;
     ui.monsterStatus.querySelector(".monster-heading span").textContent=activeMapId !== "ritual_village" ? ("มอนสเตอร์ · "+(worldDefinitions?.[activeMapId]?.name || "ป่าต้องห้าม")) : "ผีเข้าสิง · ตัวทดสอบ";
     ui.monsterBar.style.width = (100 * current / max) + "%";
-    ui.monsterText.textContent = alive
-      ? "HP " + Math.ceil(current) + "/" + Math.ceil(max)
-      : "ตายแล้ว · รอเกิดใหม่";
+    ui.monsterText.textContent = alive ? Math.ceil(current) + "/" + Math.ceil(max) : "ปราบแล้ว"; // same wording as the HUD frame
     ui.monsterHint.textContent = simulated
       ? "ทดลองในเครื่อง · แตะผีเพื่อโจมตี"
       : "ออนไลน์ · แตะผีเพื่อโจมตี";
@@ -5635,25 +6644,14 @@
   }
 
   function updateStatus() {
-    const worldY = mode === "live"
-      ? Number(room?.state?.players?.get?.(localId)?.y)
-      : Number(getLocalAvatar()?.targetY || 0);
-    const altitude = Number.isFinite(worldY) ? Math.round(worldY * 10) / 10 : 0;
-    const heightText=altitude<0?"↓"+Math.abs(altitude)+"ม.":altitude>0?"↑"+altitude+"ม.":"0ม.";
-    const mobilePortrait = window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches;
-    ui.onlineCount.textContent = mode === "live"
-      ? (mobilePortrait
-        ? `${onlinePlayers.size} คน · ${summonAvatars.size} ผี · ${heightText}`
-        : `ผู้เล่น: ${onlinePlayers.size} · วิญญาณ: ${summonAvatars.size} · สูง ${altitude}ม. (LIVE)`)
-      : (mobilePortrait ? `DEMO · ${heightText}`
-        : `ผู้เล่นในฉาก: 1 (จำลอง) · สูง ${altitude}ม.`);
+    renderStatusChip();
     setModeBadge(mode === "live");
   }
   function showDemo() {
     territoryState=null;$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
-    possessed=false;syncPossessionButton();syncTalismanButton(null);syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);$("classSkill").hidden=true;
+    possessed=false;occultBookState=null;occultRequestKey="";selectedOccultSkill="";occultCurseUntil=0;bladeBookState=null;bladeRequestKey="";selectedBladeSkill="";bladeCloakUntil=0;syncBladeUI(null);syncOccultUI(null);syncPossessionButton();syncTalismanButton(null);syncRitualButtons(null);syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);$("classSkill").hidden=true;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false;
@@ -5740,6 +6738,22 @@
     return id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get(id);
   }
   function castAtTarget(id) {
+    if (targetedSkill === "blade") {
+      const node=bladeBookState?.lessons?.[selectedBladeSkill],monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;
+      if(!node || !id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId) {toast("เลือกเป้าหมายที่ใช้วิชานี้ได้");return;}
+      if(opponent && partyState?.members?.some(member=>member.sessionId===id)){toast("โจมตีสมาชิกปาร์ตี้ไม่ได้");return;}
+      spellTargetId=id;room.send("blade_skill",{skillId:selectedBladeSkill,targetId:id});return;
+    }
+    if (targetedSkill === "occult") {
+      const node=occultBookState?.lessons?.[selectedOccultSkill];
+      const monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id);
+      if (!node || !id || id===localId || (!monster && !(["curse","curse_burst"].includes(node.effect) && opponent))) {
+        toast("เลือกเป้าหมายที่ใช้วิชานี้ได้");return;
+      }
+      spellTargetId=id;
+      room.send("occult_skill",{skillId:selectedOccultSkill,targetId:id});
+      return;
+    }
     if (targetedSkill === "muay") {
       const monster=monsterForSpell(id), opponent=!monster && room?.state?.players?.get?.(id), target=monster || opponent;
       if (!id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId) { toast("เลือกมอนสเตอร์หรือผู้เล่นที่ยังต่อสู้ได้"); return; }
@@ -5803,6 +6817,12 @@
     const seconds = Math.max(0, Math.ceil(((me?.talismanReadyAt || 0) - Date.now()) / 1000));
     button.disabled = mode === "live" && (!me?.alive || seconds > 0);
     button.lastElementChild.textContent = seconds ? seconds + " วิ" : "แปะยันต์";
+  }
+  function syncRitualButtons(me) {
+    // During a staged rollout, the older server still permits shared rituals.
+    const occult = mode === "live" && (room?.state?.occultAvailable!==true || me?.pathId === "seer" || me?.pathId === "mender");
+    for (const id of ["shoot", "talisman", "summon", "possess"]) $(id).hidden = !occult;
+    if (!occult && (targetedSkill === "rice" || targetedSkill === "talisman")) setTargetedSkill(null);
   }
   function updateFlightButton() {
     const button = $("fly");
@@ -5980,16 +7000,125 @@
   }
 
   const localHpBar = document.querySelector(".bar.hp i");
+  let hudLevel = 0;
   function updateCharacterHud(me) {
     const name = typeof me?.characterName === "string" && me.characterName
       ? me.characterName : "นที";
     $("characterName").textContent = name;
     const slot = me?.persistent ? (Number(me.characterSlot) || activeCharacterSlot || 1) : null;
+    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) SFX("levelup", { important: true }); hudLevel = me.level; }
     $("characterLevel").textContent = (slot ? "S" + slot + " · " : "") + "LV. " + (
       Number.isFinite(me?.level) ? me.level : 1
     );
     $("characterProfile").title = me?.persistent
       ? "แตะดูตัวละครถาวรและเปลี่ยนชื่อ" : "แตะดูข้อมูลตัวละคร";
+  }
+  // ---- HUD (player card, target frame, guide tracker, status chip) ----
+  // Rebuilt from state four times a second; each element is written only
+  // when its text or width actually changes.
+  const PATH_GLYPHS = { phutthaisawan: "⚔", muay_boran: "✊", blade: "🗡", sentinel: "⛨", seer: "✦", mender: "✚" };
+  const hudKills = {};
+  let hudTarget = { id: null, until: 0 }, hudCache = new Map(), hudIn = 0;
+  const hudSet = (el, key, value, prop = "textContent") => { if (!el) return; const k = key + prop; if (hudCache.get(k) === value) return; hudCache.set(k, value); if (prop === "width") el.style.width = value; else if (prop === "hidden") el.hidden = value; else el[prop] = value; };
+  const pctOf = (v, max) => Math.max(0, Math.min(100, 100 * (Number(v) || 0) / Math.max(1, Number(max) || 1))).toFixed(1) + "%";
+  function hudCurrentTarget(now) {
+    const hero = getLocalAvatar();
+    if (mode === "live") {
+      const st = room?.state, id = hudTarget.until > now && hudTarget.id ? hudTarget.id : selectedForestTarget;
+      if (!id) return null;
+      if (id === MONSTER_ID && st?.monster && activeMapId === "ritual_village")
+        return { name: "ผีเข้าสิง", level: Number(st.monster.level) || 1, hp: st.monster.hp, maxHp: st.monster.maxHp, alive: st.monster.alive !== false };
+      const m = st?.monsters?.get?.(id);
+      if (!m || m.mapId !== activeMapId) return null;
+      return { name: monsterName(m, id) || "ผี", level: Number(m.level) || 1, hp: m.hp, maxHp: m.maxHp, alive: m.alive !== false, elite: m.tier === "elite" || m.tier === "boss", x: m.x, z: m.z };
+    }
+    if (!enemy.isEnabled() && now - demoLastHitAt > 2500) return null;
+    const near = hero && Math.hypot(hero.x - enemy.position.x, hero.z - enemy.position.z) < 9;
+    if (!near && now - demoLastHitAt > 8000) return null;
+    return { name: "ผีเข้าสิง · ตัวทดสอบ", level: 1, hp: demoMonsterHp, maxHp: 100, alive: demoMonsterHp > 0 };
+  }
+  // The next useful step for the current map, with a point to head for.
+  function hudGuide() {
+    const map = worldDefinitions?.[activeMapId], hero = getLocalAvatar(), kills = hudKills[activeMapId] || 0;
+    const nearestOf = list => { let best = null, d = Infinity; for (const p of list) { const k = Math.hypot(p.x - hero.x, p.z - hero.z); if (k < d) { d = k; best = p; } } return best; };
+    if (!hero) return null;
+    if (activeMapId === "ritual_village") {
+      if (mode !== "live") {
+        if (enemy.isEnabled() && kills < 1) return { title: "ลองปราบผีทดสอบ", step: "เดินเข้าใกล้ผีที่ลานกลาง แล้วแตะตัวผี", progress: "ปราบ " + kills + "/1", to: { x: enemy.position.x, z: enemy.position.z } };
+        return { title: "พร้อมออกเดินทาง", step: "กดปุ่ม ออนไลน์ ด้านล่าง เพื่อเข้าเล่นจริงและวาร์ปไปป่า", progress: kills ? "ปราบแล้ว " + kills : "" };
+      }
+      const gate = (map?.portals || []).find(p => p.targetMapId === "forbidden_forest") || { x: -4, z: -17 };
+      return { title: "ออกล่าผี", step: "เดินไปประตูวาร์ป ป่าต้องห้าม", progress: "", to: gate };
+    }
+    if (map?.strategic?.kind === "capital") {
+      const gate = nearestOf(map.portals || []);
+      return { title: "นครเวียงมนตรา · เขตปลอดภัย", step: "เลือกประตูเมืองเพื่อไปเขตล่าหรือด่านสงคราม", progress: "", to: gate };
+    }
+    const range = map?.region?.range || null;
+    const alive = []; for (const [id, mesh] of forestMonsters) { const g = mesh.metadata?.ghost; if (mesh.isEnabled() && !g?.deathAt) alive.push({ id, x: mesh.position.x, z: mesh.position.z }); }
+    const prey = nearestOf(alive);
+    const preyName = prey ? monsterName(room?.state?.monsters?.get?.(prey.id), prey.id) : "";
+    return { title: "ล่าผี · " + (map?.name || "") + (range ? " Lv " + range.join("–") : ""),
+      step: prey ? "ผีใกล้สุด: " + (preyName || "ผี") : "ไม่มีผีใกล้ ๆ · รอผีเกิดใหม่หรือสำรวจต่อ", progress: "ปราบแล้ว " + kills, to: prey };
+  }
+  const hudProjA = new B.Vector3(), hudProjB = new B.Vector3();
+  function updateHud(now) {
+    const me = mode === "live" ? ownServerCharacter() : null, hero = getLocalAvatar();
+    // Player card.
+    const hp = me ? Number(me.hp) : demoHp, maxHp = me ? Number(me.maxHp) || 100 : 100;
+    hudSet(localHpBar, "hpw", pctOf(hp, maxHp), "width"); hudSet($("hpText"), "hp", Math.ceil(hp) + "/" + Math.ceil(maxHp));
+    const hasSt = me && Number(me.maxStamina) > 0;
+    hudSet($("staminaText"), "st", hasSt ? Math.round(me.stamina) + "/" + Math.round(me.maxStamina) : "");
+    const xpMax = Number(me?.xpToNext) || 0, xp = Number(me?.experience) || 0;
+    hudSet($("expBar")?.querySelector("i"), "xpw", xpMax ? pctOf(xp, xpMax) : "0%", "width");
+    hudSet($("expText"), "xp", me ? (xpMax ? "EXP " + xp + "/" + xpMax : "EXP สูงสุด") : "EXP · เล่นออนไลน์เพื่อเก็บ");
+    hudSet($("levelBadge"), "lv", String(Number(me?.level) || 1));
+    hudSet($("classGlyph")?.firstChild, "glyph", PATH_GLYPHS[me?.pathId] || "๛", "nodeValue");
+    $("classGlyph")?.classList.toggle("low-hp", hp / maxHp < .3);
+    // Target frame: only while there is a target.
+    const tg = hudCurrentTarget(now);
+    hudSet(ui.monsterStatus, "tgh", !tg, "hidden");
+    if (tg) {
+      hudSet($("targetName"), "tgn", tg.name); hudSet($("targetLevel"), "tgl", "Lv " + tg.level + (tg.elite ? " · ระดับสูง" : ""));
+      hudSet(ui.monsterBar, "tgw", tg.alive ? pctOf(tg.hp, tg.maxHp) : "0%", "width");
+      hudSet(ui.monsterText, "tgt", tg.alive ? Math.ceil(tg.hp) + "/" + Math.ceil(tg.maxHp) : "ปราบแล้ว");
+      ui.monsterStatus.classList.toggle("elite", Boolean(tg.elite));
+    }
+    // Guide tracker (the territory war owns this card while a battle is on).
+    if (!$("quest").classList.contains("war-hud")) {
+      const gd = hudGuide(), q = $("quest");
+      if (gd) {
+        hudSet(q.querySelector(".quest-content strong"), "qt", gd.title); hudSet(q.querySelector(".quest-content > span"), "qs", gd.step);
+        hudSet($("questProgress"), "qp", gd.progress || "");
+      }
+      const pointer = $("questPointer"), to = gd?.to;
+      if (!pointer) { /* older page markup: no pointer box */ }
+      else if (to && hero && Number.isFinite(to.x)) {
+        const dist = Math.hypot(to.x - hero.x, to.z - hero.z);
+        hudSet(pointer, "qph", dist < 3, "hidden");
+        if (dist >= 3) {
+          const vp = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()), tm = scene.getTransformMatrix();
+          B.Vector3.ProjectToRef(new B.Vector3(hero.x, 0, hero.z), B.Matrix.IdentityReadOnly, tm, vp, hudProjA);
+          B.Vector3.ProjectToRef(new B.Vector3(to.x, 0, to.z), B.Matrix.IdentityReadOnly, tm, vp, hudProjB);
+          const deg = Math.round(Math.atan2(hudProjB.y - hudProjA.y, hudProjB.x - hudProjA.x) * 180 / Math.PI);
+          if ($("questArrow")) $("questArrow").style.transform = "rotate(" + deg + "deg)";
+          hudSet($("questDistance"), "qd", Math.round(dist) + " ม.");
+        }
+      } else hudSet(pointer, "qph", true, "hidden");
+    }
+    renderStatusChip();
+  }
+  // Plain words instead of "DEMO · ↑0ม.": mode, players, safe zone, altitude only in the air.
+  function renderStatusChip() {
+    const hero = getLocalAvatar(), y = mode === "live" ? Number(ownServerCharacter()?.y) || 0 : Number(hero?.targetY) || 0;
+    const map = worldDefinitions?.[activeMapId], me = ownServerCharacter();
+    const safe = map?.strategic?.kind === "capital" || (map?.restAreas || []).some(r => hero && Math.hypot(hero.x - r.x, hero.z - r.z) <= r.radius);
+    const parts = [mode === "live" ? "ออนไลน์ · " + onlinePlayers.size + " คน" : "โหมดทดลอง"];
+    if (safe) parts.push("เขตปลอดภัย");
+    const height=Math.round(y*10)/10;
+    if (height || map?.terrain) parts.push(height<0?"↓"+Math.abs(height)+"ม.":height>0?"↑"+height+"ม.":"0ม.");
+    hudSet(ui.onlineCount, "chip", parts.join(" · "));
+    ui.onlineCount.classList.toggle("safe", Boolean(safe));
   }
   function shortPkName(id) {
     return "ผู้เล่น-" + String(id || "").slice(0, 4);
@@ -6166,6 +7295,9 @@
     syncPossessionButton();
     syncClassSkill(mine);
     syncTalismanButton(mine);
+    syncRitualButtons(mine);
+    syncOccultUI(mine);
+    syncBladeUI(mine);
     syncSwordTreeButton(mine);
     syncSwordHotbar();
     syncMuayHotbar();
@@ -6256,6 +7388,11 @@
         catch(error){console.warn("MONTRA battlefield admission",error);transferFailed=true;}
       }
       if(!joined)joined=await client.joinOrCreate("my_room",opts);
+      // The server sends guild and territory status as soon as we join, before
+      // the slot check below finishes; keep those first messages and replay
+      // them once their handlers exist, or the panels stay empty until a change.
+      const earlyMessages=new Map(), earlyHandlers=new Map();
+      for(const type of ["guild_state","territory_state"])joined.onMessage(type,message=>{if(!earlyHandlers.has(type))earlyMessages.set(type,message);});
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
       clearChatHistory(true);
@@ -6276,7 +7413,7 @@
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
       ui.monsterStatus.hidden = true;
       syncFortification(joined.state);
-      if (spirit) { spirit.dispose(); spirit = null; }
+      if (summonAvatars.get(localId)?.demo) deleteSummonAvatar(localId);
       spiritShown = false; possessed = false;
       updateStatus();
       const ok = syncState(joined.state);
@@ -6300,13 +7437,14 @@
         updateChatBadge();
         if (drawerActive === "chat") renderChat();
       });
-      joined.onMessage("territory_state",message=>{
+      const onTerritoryState=message=>{
         if(room!==joined)return;
         const oldDrums=territoryState?.local?.supply?.drums || [],previousOwners=territoryState?.owners;
         territoryState=message;syncGateVisual();syncCastleRings();
         if(drawerActive==="guild" && previousOwners && guildReady() &&
            Object.keys(message.owners||{}).some(site=>previousOwners[site]!==message.owners[site]))joined.send("get_guild",{});
         const alerts=message.local?.supply?.drums?.filter(id=>!oldDrums.includes(id)) || [];
+        if(alerts.length)SFX("drum",{important:true});
         if(alerts.length)toast("เสียงกลอง · กำลังชิง "+alerts.map(id=>message.local.pilot.points.find(p=>p.id===id)?.name || id).join(" · "));
         if(drawerActive==="war")renderWarPanel();
         if(drawerActive==="strategy")updateAtlasOwner();
@@ -6328,7 +7466,9 @@
             ui.quest.style.setProperty("--war-progress",pct/100);
           }else if(fighting)ui.quest.style.setProperty("--war-progress",Math.abs(local.progress)/local.goal);
         }
-      });
+      };
+      joined.onMessage("territory_state",onTerritoryState);
+      earlyHandlers.set("territory_state",onTerritoryState);
       joined.onMessage("territory_error",message=>{
         if(room!==joined)return;
         toast(activeMapId==="sam_lan_estuary" && message?.reason==="war_flag"?"เดินเข้าค่ายใต้ A เพื่อเปิดศึก":warErrors[message?.reason] || "ทำรายการที่ด่านไม่ได้ในขณะนี้");
@@ -6350,7 +7490,7 @@
         } else toast("บันทึกรายงานไม่สำเร็จ · ลองอีกครั้ง");
         finishChatPending(); if(drawerActive==="chat") renderChat();
       });
-      joined.onMessage("guild_state", message => {
+      const onGuildState=message => {
         if(room!==joined)return;
         if(message===null)guildState=null;
         else if(typeof message?.id==="string" && typeof message.name==="string" &&
@@ -6361,7 +7501,11 @@
         else return;
         if(guildState){guildInvitation=null;guildUnread=false;updatePartyBadge();}
         renderGuild();
-      });
+      };
+      joined.onMessage("guild_state",onGuildState);
+      earlyHandlers.set("guild_state",onGuildState);
+      for(const [type,message] of earlyMessages)earlyHandlers.get(type)?.(message);
+      earlyMessages.clear();
       joined.onMessage("guild_invitation", message=>{
         if(room!==joined || typeof message?.inviteId!=="string" || typeof message.guildName!=="string" || typeof message.fromName!=="string")return;
         guildInvitation=message;guildUnread=drawerActive!=="guild";updatePartyBadge();
@@ -6457,6 +7601,8 @@
         if (typeof hit?.attackerId === "string") {
           const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
           playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
+          impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true, struck?.design?.kind);
+          if (hit.attackerId === localId) { hudTarget = { id: hit.targetId, until: performance.now() + 8000 }; if (Number(hit.hp) === 0) hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1; }
         }
         const talisman = hit?.source === "talisman";
         if (forestTarget) {
@@ -6508,6 +7654,7 @@
       });
       joined.onMessage("flight_started", info => {
         if (room !== joined) return;
+        { const flyer=avatars.get(info?.playerId); if(flyer) SFX("fly",{x:flyer.x,z:flyer.z}); }
         if (info?.playerId === localId) {
           pendingClimb = null;
           toast(info.direction === "up"
@@ -6532,6 +7679,7 @@
         if(room!==joined)return;
         if((joined.state?.players?.get?.(data?.attackerId)?.mapId || "ritual_village") !== activeMapId)return;
         renderMagicBolt(data);
+        { const thrower=avatars.get(data?.attackerId); if(thrower) SFX("rice",{x:thrower.x,z:thrower.z}); }
         if(data?.attackerId===localId) {
           toast("ข้าวสารปลุกเสกโดนเป้าหมาย -" + data.damage + " HP");
         }
@@ -6559,6 +7707,47 @@
       });
       joined.onMessage("build_selected", () => {
         if (room === joined) toast("บันทึกสายอาชีพและเผ่าแล้ว");
+      });
+      joined.onMessage("occult_book_state", data => {
+        if (room!==joined || !data?.book || !data?.lessons) return;
+        occultBookState=data;occultBookRenderKey="";occultHotbarKey="";
+        syncOccultUI(ownServerCharacter());
+        if (drawerActive==="occultBook") renderOccultBook();
+      });
+      joined.onMessage("blade_book_state", data => {
+        if(room!==joined || !data?.book || !data?.lessons)return;
+        bladeBookState=data;bladeBookRenderKey="";bladeHotbarKey="";syncBladeUI(ownServerCharacter());
+        if(drawerActive==="bladeBook")renderBladeBook();
+      });
+      joined.onMessage("blade_book_changed",()=>{
+        if(room!==joined)return;selectedBladeSkill="";if(targetedSkill==="blade")setTargetedSkill(null);toast("บันทึกตำราคมดาบแล้ว");
+      });
+      joined.onMessage("blade_cloak_changed",data=>{
+        if(room!==joined)return;
+        bladeCloakUntil=data?.active ? performance.now()+Math.max(0,Math.min(5000,Number(data.durationMs)||0)) : 0;
+        syncBladeUI(ownServerCharacter());toast(data?.active ? "อำพรางตัวแล้ว" : data?.reason==="interrupted" ? "การร่ายพรางถูกขัดจังหวะ" : "การอำพรางสิ้นสุด");
+      });
+      joined.onMessage("blade_cloak_cast",data=>{if(room===joined){playAction(avatars.get(data?.playerId),"cast");if(data?.playerId===localId)toast("กำลังร่ายพรางกาย");}});
+      joined.onMessage("blade_windup",data=>{if(room===joined)toast(data?.result==="hit"?"คมอาคมทะลวงสำเร็จ":data?.result==="interrupted"?"การตั้งท่าถูกขัดจังหวะ":"เป้าหมายหลบการโจมตี");});
+      joined.onMessage("blade_mark_state",data=>{if(room===joined){bladeMarkUntil=data?.active ? performance.now()+Math.max(0,Math.min(8000,Number(data.durationMs)||0)) : 0;bladeMarkedTarget=data?.active ? String(data.targetId || "") : "";syncBladeUI(ownServerCharacter());}});
+      joined.onMessage("blade_opening",data=>{if(room===joined){bladeOpeningUntil=performance.now()+Math.max(0,Math.min(4000,Number(data?.durationMs)||0));syncBladeUI(ownServerCharacter());}});
+      joined.onMessage("blade_evade",data=>{if(room===joined && data?.success){bladeCounterUntil=performance.now()+3000;toast("หลบสำเร็จ · วิชาสวนพร้อม");syncBladeUI(ownServerCharacter());}});
+      joined.onMessage("blade_skill_used",data=>{if(room===joined && data?.playerId===localId){if(data.skillId==="counter")bladeCounterUntil=0;if(data.skillId==="killer_focus")bladeOpeningUntil=0;const name=bladeBookState?.lessons?.[data.skillId]?.name;if(name)toast(data.skillId==="piercing_edge"?"ตั้งท่าคมอาคมทะลวง":"ใช้ "+name);syncBladeUI(ownServerCharacter());}});
+      joined.onMessage("occult_book_changed", () => {
+        if (room!==joined) return;
+        selectedOccultSkill="";if(targetedSkill==="occult")setTargetedSkill(null);
+        toast("บันทึกตำราอาคมแล้ว");
+      });
+      joined.onMessage("occult_curse_state", data => {
+        if (room!==joined) return;
+        occultCurseUntil=data?.active ? performance.now()+Math.max(0,Math.min(6500,Number(data.durationMs)||0)) : 0;
+        syncOccultUI(ownServerCharacter());
+        toast(data?.active ? "ติดคำสาปอาคม" : data?.reason==="cleansed" ? "ถอนคำสาปแล้ว" : "คำสาปสิ้นสุด");
+      });
+      joined.onMessage("occult_skill_used", data => {
+        if (room!==joined || data?.playerId!==localId) return;
+        const name=occultBookState?.lessons?.[data.skillId]?.name;
+        if (name) toast("ใช้ "+name);
       });
       joined.onMessage("muay_guarded", data => { if (room===joined) { muayCounterUntil=performance.now()+3000; const label=data?.kind==="parry" ? "ปัด" : data?.kind==="evade" ? "เบี่ยงหลบ" : "ป้อง"; toast(label+"สำเร็จ · วิชาสวนพร้อม 3 วินาที"); syncMuayHotbar(); } });
       joined.onMessage("muay_counter_cleared", () => { if (room===joined) { muayCounterUntil=0; syncMuayHotbar(); } });
@@ -6596,6 +7785,7 @@
         } else if(data?.phase==="held" && data.role==="victim") {
           setGrappleResponse("escape",data.durationMs,data.escapeStamina);toast("ถูกจับ · กดแก้จับก่อนถูกทุ่ม");
         } else if(data?.phase==="released") {
+          releaseMuayHold(localId); if(muayGrabTarget)releaseMuayHold(muayGrabTarget);
           if(grappleResponseMode==="escape")setGrappleResponse(null);
           if(data.reason==="escaped" && muayGrabTarget)toast("เป้าหมายแก้จับหลุดแล้ว");
           muayGrabTarget="";muayGrabUntil=0;
@@ -6606,6 +7796,15 @@
         if(data?.active===true){setGrappleResponse("counter",data.durationMs,data.stamina);toast("แก้จับสำเร็จ · กดสวนผู้จับได้");}
         else if(grappleResponseMode==="counter")setGrappleResponse(null);
       }});
+      joined.onMessage("muay_skill_used", result => {
+        if (room!==joined || typeof result?.playerId!=="string") return;
+        const caster=joined.state?.players?.get?.(result.playerId);
+        if (caster && (caster.mapId || "ritual_village")===activeMapId) {
+          const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
+          if (target && !["guard","parry","evade","chaiya_cover"].includes(result.skillId)) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
+          playMuaySkill(result.playerId,result.skillId,result.targetId);
+        }
+      });
       joined.onMessage("muay_skill_used", result => { if (room===joined && result?.playerId===localId && !["teep","grapple","parry","evade"].includes(result.skillId)) toast((muayBookData()?.catalog?.skills?.[result.skillId]?.name || "วิชามวย")+" สำเร็จ"); });
       joined.onMessage("muay_book_changed", () => { if(room===joined){selectedMuaySkill="";if(targetedSkill==="muay")setTargetedSkill(null);muayBookRenderKey="";renderMuayBook();toast("บันทึกตำรามวยแล้ว");} });
       joined.onMessage("sword_combo", data => { if (room===joined) {
@@ -6631,6 +7830,7 @@
       joined.onMessage("sword_guarded", () => { if (room===joined) {
         swordCounterUntil=performance.now()+3000;
         syncSwordStatus(ownServerCharacter());
+        playAction(avatars.get(localId), "guard");
         toast("รับสำเร็จ · ใช้วิชาสวนได้ 3 วินาที");
       } });
       joined.onMessage("sword_skill_used", result => {
@@ -6639,6 +7839,7 @@
         if (!caster || (caster.mapId || "ritual_village")!==activeMapId) return;
         const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
         if (target) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
+        playAction(avatars.get(result.playerId), swordSkillAction(result.skillId));
         const ring=B.MeshBuilder.CreateTorus("sword skill ring",{diameter:1.3,thickness:.045,tessellation:16},scene);
         ring.position.set(caster.x,caster.y+.12,caster.z);ring.rotation.x=Math.PI/2;ring.material=gold;ring.isPickable=false;
         skillEffects.push({mesh:ring,mapId:activeMapId,until:performance.now()+450});
@@ -6649,9 +7850,13 @@
         }
       });
       joined.onMessage("class_skill_used", result => {
-        if (room === joined) toast(result.skill + " · มีผล " + result.targets + " คน");
+        if (room !== joined) return;
+        toast(result.skill + " · มีผล " + result.targets + " คน");
+        if (ownServerCharacter()?.pathId === "phutthaisawan") playAction(avatars.get(localId), "dance");
+        if (ownServerCharacter()?.pathId === "muay_boran") playAction(avatars.get(localId), "m_wai");
       });
       joined.onMessage("possession_changed", notice => {
+        if(room===joined && notice?.active){ const who=avatars.get(notice.playerId); if(who) SFX("possess",{x:who.x,z:who.z}); }
         if(room!==joined || notice?.playerId!==localId)return;
         toast(notice.active ? "วิญญาณเข้าสิง · เพิ่มโจมตีและป้องกัน 20% นาน 60 วินาที" : "สถานะเข้าสิงสิ้นสุด");
         syncPossessionButton();
@@ -6659,7 +7864,7 @@
       joined.onMessage("summon_hit", hit => {
         if (room !== joined || !hit) return;
         const actor = summonAvatars.get(hit.ownerId);
-        if (actor) actor.hitUntil = performance.now() + 260;
+        if (actor) { actor.hitUntil = performance.now() + 260; SFX("ghost_hit", { x: actor.x, z: actor.z, intensity: .7 }); }
         if (hit.ownerId === localId) {
           toast("วิญญาณโจมตีผี -" + String(hit.damage) + " HP");
         }
@@ -6670,6 +7875,7 @@
         const attacker = avatars.get(hit.attackerId);
         if (victim) { victim.hitFlashUntil = performance.now() + 250; playAction(victim, "hit"); }
         playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
+        if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, false);
         if (attacker && victim) {
           faceAvatarToward(hit.attackerId, victim.x, victim.z);
         }
@@ -6695,7 +7901,9 @@
       joined.onMessage("monster_hit", hit => {
         if (room === joined) {
           playAction(avatars.get(hit?.targetId), "hit");
-          const g = forestMonsters.get(hit?.attackerId)?.metadata?.ghost; if (g) g.attackAt = performance.now();
+          if (hit?.targetId === localId && !(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };
+          const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost; if (g) g.attackAt = performance.now();
+          if (g && !(performance.now() - (g.criedAt || 0) < 1500)) { ghostVoice(g, gm2, "attack"); g.criedAt = performance.now(); }
           if (hit?.attackerId === MONSTER_ID) villageGhost.metadata.ghost.attackAt = performance.now();
         }
         if (room === joined && hit?.targetId === localId) {
@@ -6703,6 +7911,7 @@
         }
       });
       joined.onMessage("player_down", info => {
+        { const fallen=avatars.get(info?.playerId); if (room === joined && fallen) SFX("down",{x:fallen.x,z:fallen.z,important:true}); }
         if (room === joined && info?.playerId === localId) {
           toast("ตัวละครหมดสติ · รอเกิดใหม่");
         }
@@ -6797,7 +8006,10 @@
         if (Object.hasOwn(muayReasons,info?.reason)) { toast(muayReasons[info.reason]); return; }
         const swordReasons={invalid_sword_tree:"คำสั่งวิชาไม่ถูกต้อง",sword_class_required:"เลือกอาชีพนักดาบก่อน",sword_tree_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อน",sword_tree_level:"เลเวลยังไม่ถึง",sword_tree_no_points:"แต้มวิชาไม่พอ",sword_tree_prerequisite:"ต้องเรียนวิชาก่อนหน้า",sword_tree_wrong_school:"เลือกสำนักนี้ก่อน",sword_tree_already_learned:"เรียนวิชานี้แล้ว",sword_tree_already_selected:"เลือกสำนักนี้อยู่แล้ว",sword_tree_empty:"ยังไม่มีแต้มวิชาที่ต้องคืน",sword_tree_rate_limited:"กดถี่เกินไป รอสักครู่",sword_tree_save_failed:"บันทึกวิชาไม่สำเร็จ",sword_trial_incomplete:"ฝึกตามเงื่อนไขของครูดาบก่อน",invalid_sword_skill:"คำสั่งสกิลไม่ถูกต้อง",sword_weapon_required:"สวมกระบี่อาคมก่อนใช้วิชาดาบ",sword_skill_locked:"วิชายังไม่พร้อมใช้ในสำนักนี้",sword_skill_cooldown:"วิชาดาบกำลังฟื้น",sword_counter_required:"รับการโจมตีให้สำเร็จก่อนสวน",sword_combo_required:"โจมตีต่อเนื่องให้ครบ 3 จังหวะ",invalid_sword_target:"เลือกเป้าหมายที่ใช้วิชานี้ได้",sword_out_of_range:"เข้าใกล้เป้าหมายก่อนใช้วิชา",sword_blocked:"มีสิ่งกีดขวางระหว่างทาง"};
         if (Object.hasOwn(swordReasons,info?.reason)) { toast(swordReasons[info.reason]); return; }
-        const buildReasons = {build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
+        const bladeReasons={invalid_blade_book:"คำสั่งตำราคมดาบไม่ถูกต้อง",invalid_blade_skill:"คำสั่งวิชาคมดาบไม่ถูกต้อง",blade_class_required:"เลือกสายคมดาบก่อน",blade_book_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อนจัดวิชา",blade_already_learned:"เรียนวิชานี้แล้ว",blade_level:"เลเวลยังไม่ถึง",blade_no_points:"แต้มวิชาไม่พอ",blade_prerequisite:"เรียนวิชาก่อนหน้าก่อน",blade_practice:"ฝึกวิชาตามเงื่อนไขในตำราก่อน",blade_skill_locked:"เรียนและจัดวิชาในช่องลัดก่อน",blade_book_empty:"ไม่มีแต้มที่ต้องคืน",blade_book_save_failed:"บันทึกตำราไม่สำเร็จ",blade_cloak_active:"กำลังพรางตัวอยู่",blade_cloak_location:"ใช้วิชานี้บนพื้นนอกเขตพัก",blade_cloak_combat:"รอหลังการต่อสู้สักครู่ก่อนพราง",blade_cloak_action:"สิ้นสุดการพรางก่อนใช้คำสั่งนี้",blade_cooldown:"วิชากำลังฟื้น",invalid_blade_target:"เลือกเป้าหมายก่อน",blade_out_of_range:"เข้าใกล้เป้าหมายก่อน",blade_blocked:"มีสิ่งกีดขวาง",blade_cloak_required:"พรางตัวก่อนใช้วิชานี้",blade_mark_required:"ติดรอยอาคมของตนก่อน",blade_counter_required:"หลบการโจมตีสำเร็จก่อนสวน",blade_opening_required:"เปิดฉากจากการพรางก่อน",blade_effect_limit:"บัพเต็มแล้ว",blade_windup_active:"กำลังตั้งท่าโจมตี"};
+        if(Object.hasOwn(bladeReasons,info?.reason)){toast(bladeReasons[info.reason]);return;}
+        const buildReasons = {occult_class_required:"เลือกอาชีพจอมอาคมก่อนใช้วิชานี้", build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
+        Object.assign(buildReasons,{invalid_occult_book:"คำสั่งตำราอาคมไม่ถูกต้อง",invalid_occult_skill:"คำสั่งวิชาอาคมไม่ถูกต้อง",occult_rate_limited:"กดตำราถี่เกินไป รอสักครู่",occult_book_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อนจัดวิชา",occult_wrong_path:"เลือกสายนี้ก่อนเรียน",occult_already_learned:"เรียนวิชานี้แล้ว",occult_level:"เลเวลยังไม่ถึง",occult_no_points:"แต้มวิชาไม่พอ",occult_prerequisite:"เรียนวิชาก่อนหน้าก่อน",occult_training:"ฝึกวิชาอาคมให้ครบก่อน",occult_mastery:"ฝึกวิชาตามหมวดในตำราให้ครบก่อน",occult_skill_locked:"เรียนและจัดวิชาในช่องลัดก่อน",occult_book_empty:"ไม่มีแต้มวิชาที่ต้องคืน",occult_book_save_failed:"บันทึกตำราอาคมไม่สำเร็จ",occult_cooldown:"วิชาอาคมกำลังฟื้น",occult_out_of_range:"เข้าใกล้เป้าหมายก่อน",occult_blocked:"มีสิ่งกีดขวางระหว่างเป้าหมาย",occult_mark_required:"ติดยันต์ตีตราที่เป้าหมายก่อน",occult_curse_required:"สาปเป้าหมายก่อนใช้วิชานี้",occult_party_required:"เลือกตนเองหรือสมาชิกปาร์ตี้",occult_trance_required:"เข้าทรงก่อนใช้วิชานี้",occult_no_curse:"เป้าหมายไม่มีคำสาปที่ถอนได้",occult_effect_limit:"เป้าหมายมีบัพเต็มแล้ว"});
         if (Object.hasOwn(buildReasons, info?.reason)) { toast(buildReasons[info.reason]); return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("guild_")) { const reason={guild_invalid_name:"ชื่อกิลด์ต้องมี 2–24 ตัวอักษร และใช้ตัวอักษรหรือตัวเลข",guild_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",guild_unavailable:"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว"};toast(reason[info.reason] || "ไม่สามารถทำรายการกิลด์ได้");return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
@@ -7200,9 +8412,11 @@
 
   let drawerActive = null;
   function closeDrawer() {
+    if(!ui.drawer.hidden)SFX("close");
     ui.drawer.hidden=true; ui.shade.hidden=true; drawerActive=null;
   }
   function openDrawer(name,title,html) {
+    if(ui.drawer.hidden)SFX("open");
     ui.drawerTitle.textContent=title;
     ui.drawerBody.innerHTML=html;
     ui.drawer.hidden=false; ui.shade.hidden=false;
@@ -8015,6 +9229,152 @@
     }
     positionSwordToast();
   }
+  function syncBladeUI(me) {
+    const active=mode==="live" && room?.state?.bladeAvailable===true && me?.pathId==="blade";
+    const button=$("bladeBookButton"),bar=$("bladeHotbar"),status=$("bladeStatus"),now=performance.now(),parts=[];
+    if(active && bladeCloakUntil>now)parts.push("อำพราง "+Math.ceil((bladeCloakUntil-now)/1000)+" วิ");
+    if(active && bladeMarkUntil>now)parts.push((spellTargetId && spellTargetId!==bladeMarkedTarget?"รอยเป้าอื่น ":"รอยอาคม ")+Math.ceil((bladeMarkUntil-now)/1000)+" วิ");
+    if(active && bladeOpeningUntil>now)parts.push("เปิดฉาก "+Math.ceil((bladeOpeningUntil-now)/1000)+" วิ");
+    if(active && bladeCounterUntil>now)parts.push("สวนได้ "+Math.ceil((bladeCounterUntil-now)/1000)+" วิ");
+    button.hidden=!active;status.hidden=parts.length===0;if(!status.hidden)status.textContent=parts.join(" · ");
+    if(!active){bar.hidden=true;bladeBookState=null;bladeRequestKey="";bladeHotbarKey="";bladeCloakUntil=bladeMarkUntil=bladeOpeningUntil=bladeCounterUntil=0;bladeMarkedTarget="";
+      if(targetedSkill==="blade"){selectedBladeSkill="";setTargetedSkill(null);}return;}
+    const requestKey=localId+":"+me.pathId;
+    if(bladeRequestKey!==requestKey && room){bladeRequestKey=requestKey;bladeRequestAt=performance.now();room.send("blade_book_get",{});}
+    const data=bladeBookState;if(!data){bar.hidden=true;return;}
+    const ids=data.book.slots,times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
+    const key=JSON.stringify([ids,times,me.alive]);bar.hidden=false;if(key===bladeHotbarKey)return;bladeHotbarKey=key;bar.replaceChildren();
+    ids.forEach((id,index)=>{const node=id && data.lessons[id],slot=document.createElement("button");slot.type="button";slot.className="sword-hotkey";
+      slot.textContent=node ? node.name+(times[index]?" "+times[index]+" วิ":"") : "ช่องว่าง";slot.disabled=!node || !me.alive || Boolean(times[index]);
+      slot.onclick=()=>{
+        if(["approach","strike","consume","windup","counter"].includes(node.effect)){
+          selectedBladeSkill=id;setTargetedSkill("blade");const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
+          if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId)castAtTarget(targetId);
+          else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
+        }else room.send("blade_skill",{skillId:id});
+      };bar.append(slot);
+    });positionSwordToast();
+  }
+  function openBladeBook() {
+    if(!room || mode!=="live" || ownServerCharacter()?.pathId!=="blade")return toast("เข้า LIVE และเลือกสายคมดาบก่อน");
+    if(!bladeBookState){if(performance.now()-bladeRequestAt>1500){bladeRequestAt=performance.now();room.send("blade_book_get",{});}return toast("กำลังขอตำราคมดาบจากเซิร์ฟเวอร์");}
+    bladeBookRenderKey="";openDrawer("bladeBook","ตำราคมดาบ",'<div id="bladeBookBody"></div>');renderBladeBook();
+  }
+  function renderBladeBook() {
+    const data=bladeBookState,me=ownServerCharacter(),container=$("bladeBookBody");if(!data || !me || !container)return;
+    if(container.contains(document.activeElement) && document.activeElement.matches("select[data-blade-equip]"))return;
+    const key=JSON.stringify([data.book,me.level]);if(key===bladeBookRenderKey)return;bladeBookRenderKey=key;
+    const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+    const learned=data.book.learned,slots=data.book.slots,practice=data.book.practice,points=Math.max(0,data.points-learned.length);
+    const branchNames={veil:"มนตราอำพราง",edge:"คมอาคม",tempo:"ชิงจังหวะและเอาตัวรอด"};let previousBranch="";
+    const rows=Object.entries(data.lessons).map(([id,node])=>{
+      const heading=node.branch!==previousBranch?'<h3>'+clean(branchNames[node.branch] || node.branch)+'</h3>':"";previousBranch=node.branch;
+      const known=learned.includes(id),missing=node.requires.filter(req=>!learned.includes(req));
+      const locked=me.level<node.level || points<1 || missing.length>0 || Object.entries(node.practice).some(([name,count])=>(practice[name]||0)<count);
+      const prereq=node.requires.length ? " · ต้องเรียน "+node.requires.map(req=>clean(data.lessons[req]?.name || req)).join(", ") : "";
+      const training=Object.entries(node.practice).map(([name,count])=>" · "+clean(data.practiceLabels[name] || name)+" "+(practice[name]||0)+"/"+count).join("");
+      const strength=["strike","consume","windup","counter"].includes(node.effect)?" · พลังโจมตี "+Math.round(node.power*100)+"%":"";
+      const detail="Lv."+node.level+" · "+clean(node.description)+strength+(node.effect==="passive"?" · ติดตัว":" · กำลัง "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ")+prereq+training;
+      const control=known ? (node.effect==="passive"?'<span class="sword-passive">เรียนแล้ว · ติดตัว</span>':'<label class="sword-slot-label">ช่องลัด <select data-blade-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>') : '<button type="button" data-blade-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
+      return heading+'<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small></div>'+control+'</article>';
+    }).join("");
+    const summary=Object.entries(data.practiceLabels).map(([name,label])=>clean(label)+" "+(practice[name]||0)).join(" · ");
+    container.innerHTML='<p>แต้มว่าง '+points+' · '+summary+'</p><p class="note">พรางตัวได้หลังพ้นการต่อสู้ 2 วินาที ร่าย 0.6 วินาทีและพราง 5 วินาที · ฝึกจากมอนสเตอร์เท่านั้น</p><p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที การคืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetBladeBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
+    container.querySelectorAll("[data-blade-learn]").forEach(button=>button.onclick=()=>room.send("blade_book",{action:"learn",skillId:button.dataset.bladeLearn}));
+    container.querySelectorAll("[data-blade-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("blade_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.bladeEquip});select.blur();});
+    $("resetBladeBook").onclick=()=>{if(window.confirm("คืนแต้มสายคมดาบ? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("blade_book",{action:"reset"});};
+  }
+  function syncOccultUI(me) {
+    const status=$("occultStatus"), cursed=mode==="live" && performance.now()<occultCurseUntil;
+    status.hidden=!cursed;
+    if(cursed)status.textContent="ติดคำสาป · "+Math.ceil((occultCurseUntil-performance.now())/1000)+" วิ";
+    const active=mode==="live" && room?.state?.occultAvailable===true && (me?.pathId==="seer" || me?.pathId==="mender");
+    const button=$("occultBookButton"),bar=$("occultHotbar");
+    button.hidden=!active;
+    if (!active) {
+      bar.hidden=true;occultBookState=null;occultRequestKey="";occultHotbarKey="";
+      if(targetedSkill==="occult"){selectedOccultSkill="";setTargetedSkill(null);}
+      return;
+    }
+    const requestKey=localId+":"+me.pathId;
+    if(occultRequestKey!==requestKey && room) {
+      occultRequestKey=requestKey;occultRequestAt=performance.now();
+      room.send("occult_book_get",{});
+    }
+    const data=occultBookState;
+    if (!data || data.path!==me.pathId) {bar.hidden=true;return;}
+    const path=me.pathId,ids=data.book.loadouts[path],times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
+    const key=JSON.stringify([path,ids,times,me.alive,me.possessionActive]);
+    bar.hidden=false;if(key===occultHotbarKey)return;occultHotbarKey=key;bar.replaceChildren();
+    ids.forEach((id,index)=>{
+      const node=id && data.lessons[id],slot=document.createElement("button");
+      slot.type="button";slot.className="sword-hotkey";
+      slot.textContent=node ? node.name+(times[index] ? " "+times[index]+" วิ" : "") : "ช่องว่าง";
+      slot.disabled=!node || !me.alive || Boolean(times[index]);
+      slot.onclick=()=>{
+        if (["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind"].includes(node.effect)) {
+          selectedOccultSkill=id;setTargetedSkill("occult");
+          const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId);
+          if (targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId) castAtTarget(targetId);
+          else toast(node.name+" · แตะมอนสเตอร์เพื่อใช้วิชา");
+        } else if (["heal","spirit_heal","ward","cleanse","spirit_ward"].includes(node.effect)) {
+          chooseOccultAlly(id,node.name);
+        } else room.send("occult_skill",{skillId:id});
+      };
+      bar.append(slot);
+    });
+    positionSwordToast();
+  }
+  function chooseOccultAlly(skillId,name) {
+    const members=partyState?.members || [];
+    if (members.length<2) {room.send("occult_skill",{skillId,targetId:localId});return;}
+    openDrawer("occultTarget","เลือกผู้รับ "+name,'<div id="occultTargetList"></div>');
+    const list=$("occultTargetList");
+    for (const member of members) {
+      const player=room?.state?.players?.get?.(member.sessionId);
+      if (!player?.alive || (player.mapId || "ritual_village")!==activeMapId) continue;
+      const button=document.createElement("button");button.type="button";button.className="secondary";
+      button.textContent=(member.name || "ผู้เล่น")+(member.sessionId===localId?" · คุณ":"");
+      button.onclick=()=>{closeDrawer();room.send("occult_skill",{skillId,targetId:member.sessionId});};
+      list.append(button);
+    }
+  }
+  function openOccultBook() {
+    if (!room || mode!=="live") return toast("เข้า LIVE และเลือกจอมอาคมก่อน");
+    if (!occultBookState || occultBookState.path!==ownServerCharacter()?.pathId) {
+      if(performance.now()-occultRequestAt>1500){occultRequestAt=performance.now();room.send("occult_book_get",{});}
+      return toast("กำลังขอตำราอาคมจากเซิร์ฟเวอร์");
+    }
+    occultBookRenderKey="";openDrawer("occultBook","ตำราอาคม",'<div id="occultBookBody"></div>');renderOccultBook();
+  }
+  function renderOccultBook() {
+    const data=occultBookState,me=ownServerCharacter(),container=$("occultBookBody");
+    if (!data || !me || !container || data.path!==me.pathId) return;
+    if(container.contains(document.activeElement) && document.activeElement.matches("select[data-occult-equip]"))return;
+    const path=data.path,learned=data.book.learned[path],slots=data.book.loadouts[path],training=data.book.training[path];
+    const key=JSON.stringify([data.book,me.level]);if(key===occultBookRenderKey)return;occultBookRenderKey=key;
+    const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+    const points=Math.max(0,data.points-learned.length);
+    const progress=data.book.mastery?.[path] || {},labels=data.masteryLabels?.[path] || {};
+    const rows=Object.entries(data.lessons).filter(([,node])=>node.path===path).map(([id,node])=>{
+      const known=learned.includes(id),missing=node.requires.filter(req=>!learned.includes(req));
+      const mastery=data.masteryRequirements?.[id] || {};
+      const locked=me.level<node.level || points<1 || training<node.training || missing.length>0 ||
+        Object.entries(mastery).some(([category,count])=>(progress[category] || 0)<count);
+      const prerequisite=node.requires.length ? " · ต้องเรียน "+node.requires.map(req=>clean(data.lessons[req]?.name || req)).join(", ") : "";
+      const masteryDetail=Object.entries(mastery).map(([category,count])=>" · "+clean(labels[category] || category)+" "+(progress[category] || 0)+"/"+count).join("");
+      const detail="Lv."+node.level+" · "+clean(node.description)+" · ระยะ "+node.range+" · กำลัง "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ · ฝึกรวม "+training+"/"+node.training+prerequisite+masteryDetail;
+      const control=known ? '<label class="sword-slot-label">ช่องลัด <select data-occult-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>' :
+        '<button type="button" data-occult-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
+      return '<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small></div>'+control+'</article>';
+    }).join("");
+    const summary=Object.entries(labels).map(([category,label])=>clean(label)+" "+(progress[category] || 0)).join(" · ");
+    container.innerHTML='<p>สาย'+(path==="seer"?"ผู้ร่ายเวท":"ผู้เยียวยา")+' · แต้มว่าง '+points+' · ผลฝึกรวม '+training+'</p>'+(summary?'<p>ผลฝึกแยกหมวด: '+summary+'</p><p class="note">ผีจากหม้อนับครั้งแรกที่โจมตีมอนสเตอร์ต่อการเรียกหนึ่งครั้ง ส่วนผีที่ได้รับคำสั่งนับเมื่อโจมตีสำเร็จ</p>':'')+'<p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · คืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetOccultBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
+    container.querySelectorAll("[data-occult-learn]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"learn",skillId:button.dataset.occultLearn}));
+    container.querySelectorAll("[data-occult-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("occult_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.occultEquip});select.blur();});
+    $("resetOccultBook").onclick=()=>{if(window.confirm("คืนแต้มสายนี้? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("occult_book",{action:"reset"});};
+  }
+
   let selectedMuaySkill="", muayCounterUntil=0, muayHotbarKey="", muayBookRenderKey="", muayBookViewedSchool="", muayGrabTarget="",muayGrabUntil=0,muayFollowupSkill="",muayFollowupTarget="",muayFollowupUntil=0;
   let muayComboCount=0,muayComboUntil=0,muayComboNext="",muayComboComplete=false,muayComboBonus=0,muayInterruptMessage="",muayInterruptUntil=0,muayDefenseMessage="",muayDefenseUntil=0;
   const muayMoveLabels={punch:"หมัด",kick:"ถีบ",elbow:"ศอก",knee:"เข่า"};
@@ -8415,8 +9775,25 @@
       }
     };
   }
+  // Taps on any game button give a soft woodblock click.
+  document.addEventListener("click", event => { if (event.target.closest?.("button") && !event.target.closest("#drawerClose")) SFX("tap"); }, true);
+  // Sound settings, shown at the top of the help sheet.
+  function soundSettingsHtml() {
+    const a = window.MontraAudio?.settings; if (!a) return "";
+    const row = (key, label) => `<label class="field sound-row">${label}<input type="range" min="0" max="100" step="5" data-sound="${key}" value="${Math.round(a[key] * 100)}"></label>`;
+    return `<section class="sound-settings"><h3>เสียง</h3><label class="field sound-row"><input type="checkbox" data-sound="muted" ${a.muted ? "" : "checked"}> เปิดเสียง</label>` +
+      row("master", "ความดังรวม") + row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("music", "ดนตรี") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
+  }
+  function bindSoundSettings(root) {
+    for (const input of root.querySelectorAll("[data-sound]")) input.addEventListener("input", () => {
+      const key = input.dataset.sound;
+      if (key === "muted") window.MontraAudio?.set("muted", !input.checked); else window.MontraAudio?.set(key, Number(input.value) / 100);
+      if (key !== "muted") SFX(key === "ui" ? "tap" : "fist", { intensity: .6 });
+    });
+  }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>สกิลพื้นฐานทุกสาย</h3><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
+    openDrawer("help","วิธีเล่นและตั้งค่า",soundSettingsHtml()+`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>วิชาพื้นฐานจอมอาคม</h3><p>เลือกจอมอาคมสายผู้ร่ายเวทหรือผู้เยียวยาที่ลานพักก่อนใช้วิชาต่อไปนี้</p><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจและหมุนกล้องได้ วิชาอาคมต้องใช้ตัวละครจอมอาคมใน LIVE</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
+    bindSoundSettings(ui.drawerBody);
   }
   function currentBagSlots() {
     if (mode === "live") return inventoryState?.slots || null;
@@ -8909,6 +10286,10 @@
   $("modeButton").onclick=openOnline;
   $("swordTreeButton").onclick=openSwordTree;
   $("muayBookButton").onclick=openMuayBook;
+  $("occultBookButton").onclick=openOccultBook;
+  $("bladeBookButton").onclick=openBladeBook;
+  // Cooldown labels must advance even in a quiet room with no schema patches.
+  setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());}},1000);
   $("helpButton").onclick=openHelp;
   $("bag").onclick=openBag;
   $("summon").onclick=()=> {
@@ -8932,17 +10313,17 @@
     }
     spiritShown=!spiritShown;
     if (spiritShown) {
-      spirit=B.MeshBuilder.CreateSphere("summoned guardian",{diameter:1.05,segments:12},scene);
-      spirit.material=spiritMat;spirit.isPickable=false;
-      playAction(getLocalAvatar(), "summon");
+      const hero=getLocalAvatar(), actor=createSummonAvatar(localId,hero.x+1.6,hero.z+1);
+      actor.emergingUntil=performance.now()+500;actor.demo=true;summonAvatars.set(localId,actor);
+      playAction(hero, "summon");
       toast("เรียกวิญญาณผู้พิทักษ์ (จำลอง)");
-    } else { spirit?.dispose();spirit=null;toast("เก็บวิญญาณกลับแล้ว"); }
+    } else { deleteSummonAvatar(localId);toast("เก็บวิญญาณกลับแล้ว"); }
     updateSummonButton(spiritShown);
   };
   function syncPossessionButton() {
     const active=mode==="live" ? ownServerCharacter()?.possessionActive===true : possessed;
     const button=$("possess");button.setAttribute("aria-pressed",String(active));
-    if(button.lastElementChild)button.lastElementChild.textContent=active ? "ออกจากสิง" : "เข้าสิง";
+    if(button.lastElementChild)button.lastElementChild.textContent=active ? "ออกจากทรง" : "เข้าทรง";
     heroMat.emissiveColor=B.Color3.FromHexString(active ? "#7c459b" : "#3b2916");
   }
   $("possess").onclick=()=> {
@@ -8950,7 +10331,7 @@
       if(!room || room.state?.buffsAvailable!==true){toast("เซิร์ฟเวอร์ยังไม่รองรับเข้าสิง");return;}
       try{room.send("possess",{});}catch(_){toast("ส่งคำสั่งเข้าสิงไม่สำเร็จ");}return;
     }
-    possessed=!possessed;syncPossessionButton();
+    possessed=!possessed;syncPossessionButton();if(possessed)SFX("possess");
     const possessedHero=getLocalAvatar(); if(possessedHero) possessedHero.possessed=possessed;
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
@@ -9005,10 +10386,12 @@
               demoLastHitAt = now;
               playAttack(localId, false, enemy.position.x, enemy.position.z);
               villageGhost.metadata.ghost.hurtAt = now;
+              impactAt(localId, villageGhost.position.x, villageGhost.position.z, "", true, villageGhost.metadata.ghost.design?.kind);
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
               hitFlashRemaining = .22;
               updateMonsterUI(demoMonsterHp, 100, demoMonsterHp > 0, true);
               if (demoMonsterHp <= 0) {
+                hudKills.ritual_village = (hudKills.ritual_village || 0) + 1;
                 releaseSoul(enemy.position.x, enemy.position.y + .4, enemy.position.z);
                 enemy.setEnabled(false);
                 demoAutoAttack = false;
@@ -9111,6 +10494,12 @@
       a.flightHalo?.setEnabled(a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain));
     }
     for (const npc of summonAvatars.values()) {
+      if (npc.demo) {
+        // DEMO: hover at the hero's right shoulder and face where the hero faces.
+        const hero = getLocalAvatar();
+        if (hero) { const h = hero.heading || 0; npc.targetX = hero.x - Math.cos(h) * 1.6 + Math.sin(h) * .6; npc.targetZ = hero.z + Math.sin(h) * 1.6 + Math.cos(h) * .6; npc.targetY = hero.y; npc.desiredFacing = h; }
+        npc.action = (hero?.action && ACTIONS[hero.action.type]?.swing && now < hero.action.end) ? "attack" : "follow";
+      }
       const blend = 1 - Math.exp(-dt * 12);
       npc.x += (npc.targetX - npc.x) * blend;
       npc.y += (npc.targetY - npc.y) * blend;
@@ -9125,8 +10514,9 @@
       npc.node.position.set(npc.x, npc.y+bob, npc.z);
       const striking = npc.action === "attack" || npc.hitUntil > now;
       const emergence = Math.min(1, 1 - (npc.emergingUntil - now) / 500);
-      const scale = (striking ? 1.13 : 1) * Math.max(.12, emergence);
+      const scale = (striking && !npc.spirit ? 1.13 : 1) * Math.max(.12, emergence);
       npc.node.scaling.set(scale, scale, scale);
+      animateSpirit(npc, now, dt);
     }
     const me=getLocalAvatar();
     const portal=activePortal(), authoritative=ownServerCharacter();
@@ -9185,6 +10575,21 @@
     scene.fogStart = camera.radius + atmosphere.fogNear;
     scene.fogEnd = camera.radius + atmosphere.fogFar;
     driftMist(elapsed, camera.target);
+    followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
+    if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
+    { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);
+      // Music state: combat for 6 s after any fight action, war in a live battle, elite when one is near.
+      if ((musicSyncIn -= dt) <= 0 && hero) {
+        musicSyncIn = .5;
+        let elite = false;
+        for (const mesh of forestMonsters.values()) { const g = mesh.metadata?.ghost; if (g?.design?.elite && mesh.isEnabled() && !g.deathAt && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 30) { elite = true; break; } }
+        const war = Boolean(territoryState?.local?.inField && territoryState.local.phase === "battle");
+        window.MontraAudio?.music({ map: activeMapId, combat: performance.now() - lastCombatAt < 6000, war, elite });
+      } }
+    driftClouds(camera.target, elapsed); updateStrikeLight(performance.now());
+    keyLight.intensity = atmosphere.keyI * 1.65 * (1 - .22 * cloudCover);
+    stormFlash(dt);
+    if ((shadowSyncIn -= dt) <= 0) { shadowSyncIn = .5; syncShadowLists(); }
     rippleTexture.vOffset = (rippleTexture.vOffset + dt * .025) % 1;
     riverRipple.uOffset = (riverRipple.uOffset + dt * .012) % 1;
     // The horizon only enters the portrait frustum at shallow camera tilts.

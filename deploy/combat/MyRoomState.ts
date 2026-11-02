@@ -113,7 +113,8 @@ export const Fortification = schema({
 export type Fortification = SchemaType<typeof Fortification>;
 
 export const MyRoomState = schema({
-  players: t.map(Player),
+  // A per-client view permits server-side concealment without sending hidden positions.
+  players: t.map(Player).view(),
   monster: Monster,
   summons: t.map(SummonedGuardian),
   fortification: Fortification,
@@ -139,6 +140,8 @@ export const MyRoomState = schema({
   swordTreeCatalog: t.string().default(""),
   territoryWarAvailable: t.boolean().default(false),
   muayBookCatalog: t.string().default(""),
+  occultAvailable: t.boolean().default(true), // append-only: protects newer clients connecting to older servers
+  bladeAvailable: t.boolean().default(true), // append-only: codeless fallback when the server is older
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

@@ -28,7 +28,7 @@ async function closeAll(){await Promise.all([...connected].map(leave));}
 // Use unique, offline legacy characters. The SQLite server imports each snapshot on its first join.
 async function seed(mapId,x,z){
   const guestToken=token(),id=createHash("sha256").update(guestToken).digest("hex");
-  const character={version:1,id,name:"นักทดสอบ",level:100,experience:0,pkKills:0,pkDeaths:0,mapId,x,y:0,z,hp:1500,updatedAt:new Date().toISOString()};
+  const character={version:1,id,name:"นักทดสอบ",level:100,experience:0,pkKills:0,pkDeaths:0,mapId,x,y:0,z,hp:1500,build:{path:"seer",ancestry:"woodland"},updatedAt:new Date().toISOString()};
   await writeFile(path.join(dir,id+".json"),JSON.stringify(character),{flag:"wx"});
   return guestToken;
 }

@@ -5,8 +5,12 @@
  */
 import { Client } from "@colyseus/sdk";
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
+import path from "node:path";
 
 const endpoint = process.env.MONTRA_TEST_URL || "http://127.0.0.1:4108";
+if (!/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(endpoint) || new URL(endpoint).port==="4108" && !process.env.MONTRA_CHARACTER_DIR ||
+    !/^montra-world-test-/.test(path.basename(process.env.MONTRA_CHARACTER_DIR || ""))) throw Error("requires isolated summon test data");
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function until(predicate, timeoutMs, name) {
@@ -24,8 +28,9 @@ const rooms = [];
 const alreadyLeft = new Set();
 
 try {
-  rooms.push(await connections[0].create("my_room"));
-  for (let i = 1; i < 4; i++) rooms.push(await connections[i].joinById(rooms[0].roomId));
+  const options=()=>({guestToken:"mt1_"+randomBytes(32).toString("hex")});
+  rooms.push(await connections[0].create("my_room",options()));
+  for (let i = 1; i < 4; i++) rooms.push(await connections[i].joinById(rooms[0].roomId,options()));
 
   const [a, b, c, d] = rooms;
   const [aId, bId, cId, dId] = rooms.map(r => r.sessionId);
@@ -57,6 +62,8 @@ try {
   });
   await until(() => rooms.every(r => r.state?.players?.size === 4 && r.state?.summons),
     6000, "four players with summon schema");
+  for (const room of rooms) room.send("select_build",{path:"seer",ancestry:"woodland"});
+  await until(()=>rooms.every(r=>r.state.players.get(r.sessionId)?.pathId==="seer"),6000,"occult classes selected");
 
   // Forged owner/stats/locations are rejected; no cross-owner spawns.
   a.send("summon", { ownerId: bId, damage: 999, x: 9999 });

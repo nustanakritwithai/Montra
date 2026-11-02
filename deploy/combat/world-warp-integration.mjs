@@ -13,7 +13,7 @@ const token=()=>"mt1_"+randomBytes(32).toString("hex");
 const file=t=>path.join(dir,createHash("sha256").update(t).digest("hex")+".json");
 const open=async(t,roomId)=>{const c=new Client(endpoint);const r=roomId?await c.joinById(roomId,{guestToken:t}):await c.create("my_room",{guestToken:t});await until(()=>r.state?.players?.get(r.sessionId),"join");return r};
 const own=r=>r.state.players.get(r.sessionId);
-async function seed(t,mapId,x,z){const r=await open(t);await r.leave();await sleep(500);const f=file(t),s=JSON.parse(await readFile(f,"utf8"));s.mapId=mapId;s.x=x;s.y=0;s.z=z;s.inventory.slots[0].quantity=2;s.inventory.equippedWeaponSlot=2;await writeFile(f,JSON.stringify(s));}
+async function seed(t,mapId,x,z){const r=await open(t);await r.leave();await sleep(500);const f=file(t),s=JSON.parse(await readFile(f,"utf8"));s.mapId=mapId;s.x=x;s.y=0;s.z=z;s.build={path:"seer",ancestry:"woodland"};s.inventory.slots[0].quantity=2;s.inventory.equippedWeaponSlot=2;await writeFile(f,JSON.stringify(s));}
 const aToken=token(),bToken=token(),cToken=token(); let rooms=[];
 try{
  await seed(aToken,"ritual_village",-4,-17); await seed(bToken,"forbidden_forest",-4,-17); await seed(cToken,"forbidden_forest",1.1,10.4);

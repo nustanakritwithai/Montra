@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — ต้นแบบ MMORPG 3D ไสยศาสตร์ไทยสำหรับมือถือ แบบแตะพื้นเพื่อเดิน" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=0.8.4-terrain-combat" />
+  <link rel="stylesheet" href="./styles.css?v=0.8.7-terrain-combat" />
 </head>
 <body>
   <main id="game" aria-label="MONTRA เกมต้นแบบสามมิติ">
@@ -16,7 +16,7 @@
     <header class="top-hud">
       <section class="identity panel" aria-label="ข้อมูลตัวละคร">
         <div class="brand-row"><div class="brand">MONTRA <small>มนตรา</small></div><span id="modeBadge" class="badge">DEMO</span></div>
-        <div class="character"><div class="portrait">น</div><div class="character-info"><div class="name"><button id="characterProfile" class="profile-trigger" type="button" title="ข้อมูลตัวละคร"><span id="characterName">นที</span><span id="characterLevel">LV. 1</span></button></div><div class="bar hp"><i></i></div><div class="bar mp" id="staminaBar" role="progressbar" aria-label="กำลัง"><i></i></div></div></div>
+        <div class="character"><div class="portrait" id="classGlyph" aria-hidden="true">๛<b id="levelBadge">1</b></div><div class="character-info"><div class="name"><button id="characterProfile" class="profile-trigger" type="button" title="ข้อมูลตัวละคร"><span id="characterName">นที</span><span id="characterLevel">LV. 1</span></button></div><div class="bar hp" role="progressbar" aria-label="พลังชีวิต"><i></i><em id="hpText">100/100</em></div><div class="bar mp" id="staminaBar" role="progressbar" aria-label="กำลัง"><i></i><em id="staminaText"></em></div><div class="bar xp" id="expBar" role="progressbar" aria-label="ค่าประสบการณ์"><i></i></div><small id="expText" class="exp-text">EXP</small></div></div>
       </section>
       <section class="location-area">
         <button id="mapShortcut" class="mini-map" aria-label="เปิดแผนที่" title="เปิดแผนที่"><canvas id="minimap" width="160" height="160"></canvas><span class="mini-north">N</span></button>
@@ -24,11 +24,11 @@
       </section>
     </header>
 
-    <button id="quest" class="quest panel" type="button" aria-label="เปิดรายละเอียดภารกิจ"><span class="quest-icon">◇</span><span class="quest-content"><strong>ภารกิจทดลอง</strong><span>แตะทางเดินไม้เพื่อสำรวจหมู่บ้าน</span></span></button>
+    <button id="quest" class="quest panel" type="button" aria-label="เปิดรายละเอียดภารกิจ"><span class="quest-icon">◇</span><span class="quest-content"><strong>ภารกิจทดลอง</strong><span>แตะทางเดินไม้เพื่อสำรวจหมู่บ้าน</span><small id="questProgress" class="quest-progress"></small></span><span id="questPointer" class="quest-pointer" hidden><i id="questArrow">➤</i><small id="questDistance"></small></span></button>
     <div class="online-count panel" id="onlineCount">ผู้เล่นในฉาก: 1 (จำลอง)</div>
     <section class="monster-status panel" id="monsterStatus" aria-label="สถานะมอนสเตอร์" hidden>
       <div class="monster-heading">
-        <span>ผีเข้าสิง · ตัวทดสอบ</span><strong id="monsterText">HP 100/100</strong>
+        <span id="targetName">ผีเข้าสิง · ตัวทดสอบ</span><b id="targetLevel" class="target-level"></b><strong id="monsterText">HP 100/100</strong>
       </div>
       <div class="monster-hp-track"><div id="monsterBar"></div></div>
       <small id="monsterHint">แตะตัวผีเพื่อโจมตี</small>
@@ -50,12 +50,16 @@
       <div id="swordHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาดาบ" hidden></div>
       <div id="muayStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
       <div id="muayHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชามวย" hidden></div>
+      <div id="occultStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
+      <div id="occultHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาอาคม" hidden></div>
+      <div id="bladeStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
+      <div id="bladeHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาคมดาบ" hidden></div>
       <div class="skill-bar">
-        <button id="summon" class="skill" type="button" aria-pressed="false" title="เสกผีจากหม้อ ช่วยโจมตีมอนสเตอร์ใกล้ตัว"><span class="glyph violet" aria-hidden="true">🏺</span><span>เสกผีจากหม้อ</span></button>
-        <button id="possess" class="skill" type="button"><span class="glyph amber">✴</span><span>เข้าสิง</span></button>
+        <button id="summon" class="skill" type="button" aria-pressed="false" title="เสกผีจากหม้อ ช่วยโจมตีมอนสเตอร์ใกล้ตัว" hidden><span class="glyph violet" aria-hidden="true">🏺</span><span>เสกผีจากหม้อ</span></button>
+        <button id="possess" class="skill" type="button" hidden><span class="glyph amber">✴</span><span>เข้าทรง</span></button>
         <button id="attack" class="skill" type="button"><span class="glyph red">⚔</span><span>โจมตี</span></button>
-        <button id="shoot" class="skill" type="button" aria-pressed="false" aria-label="ข้าวสารปลุกเสก" title="ข้าวสารปลุกเสก · แตะเป้าหมายเพื่อซัดข้าวสาร"><span class="glyph amber" aria-hidden="true">⁙</span><span>ซัดข้าวสาร</span></button>
-        <button id="talisman" class="skill" type="button" aria-pressed="false" aria-label="ยันอาคมของขลัง" title="ยันอาคมของขลัง · แปะยันต์บนมอนสเตอร์ระยะประชิด"><span class="glyph red" aria-hidden="true">◇</span><span>แปะยันต์</span></button>
+        <button id="shoot" class="skill" type="button" aria-pressed="false" aria-label="ข้าวสารปลุกเสก" title="ข้าวสารปลุกเสก · แตะเป้าหมายเพื่อซัดข้าวสาร" hidden><span class="glyph amber" aria-hidden="true">⁙</span><span>ซัดข้าวสาร</span></button>
+        <button id="talisman" class="skill" type="button" aria-pressed="false" aria-label="ยันอาคมของขลัง" title="ยันอาคมของขลัง · แปะยันต์บนมอนสเตอร์ระยะประชิด" hidden><span class="glyph red" aria-hidden="true">◇</span><span>แปะยันต์</span></button>
         <button id="climb" class="skill" type="button" title="ปีนหรือไต่ลงกำแพง"><span class="glyph amber">⇧</span><span>ปีน</span></button>
         <button id="fly" class="skill" type="button" aria-pressed="false" title="บินขึ้นระดับ 6 เมตร หรือกดลงจอด"><span class="glyph sky">✦</span><span>บิน</span></button>
         <button id="classSkill" class="skill" type="button" hidden><span class="glyph violet">✧</span><span>วิชา</span></button>
@@ -68,6 +72,8 @@
         <button id="marketButton" type="button" aria-label="เปิดตลาดและการค้า"><span>♢</span>ตลาด <b id="tradeUnread" hidden>!</b></button>
         <button id="swordTreeButton" type="button" hidden><span>⚔</span>วิชาดาบ</button>
         <button id="muayBookButton" type="button" hidden><span>✊</span>วิชามวย</button>
+        <button id="occultBookButton" type="button" hidden><span>✧</span>ตำราอาคม</button>
+        <button id="bladeBookButton" type="button" aria-label="เปิดตำราความรู้คมดาบ" hidden><span>◈</span>คมดาบ</button>
         <button id="modeButton"><span>◎</span>ออนไลน์</button>
         <button id="helpButton"><span>?</span>วิธีเล่น</button>
       </nav>
@@ -84,6 +90,7 @@
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
-  <script src="./main.js?v=0.8.4-terrain-combat" defer></script>
+  <script src="./audio.js?v=0.8.5-release" defer></script>
+  <script src="./main.js?v=0.8.7-terrain-combat" defer></script>
 </body>
 </html>

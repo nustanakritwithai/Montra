@@ -15,7 +15,7 @@ const own=r=>r.state?.players?.get(r.sessionId);
 const rooms=[];
 async function open(t,roomId,slot=1){const c=new Client(endpoint);const opts={guestToken:t,characterSlot:slot,worldVersion:1};const r=roomId?await c.joinById(roomId,opts):await c.create('my_room',opts);rooms.push(r);r.onMessage('*',()=>{});await until(()=>own(r),'join');return r;}
 async function leave(r){await r.leave();rooms.splice(rooms.indexOf(r),1);await sleep(250);}
-async function seed(t,mapId,x,z,slot=1){const r=await open(t,undefined,slot);await leave(r);const f=file(t,slot),s=JSON.parse(await readFile(f,'utf8'));s.level=1;s.experience=0;s.hp=240;s.stamina=100;s.mapId=mapId;s.x=x;s.y=0;s.z=z;s.inventory.slots[0].quantity=2;await writeFile(f,JSON.stringify(s));}
+async function seed(t,mapId,x,z,slot=1){const r=await open(t,undefined,slot);await leave(r);const f=file(t,slot),s=JSON.parse(await readFile(f,'utf8'));s.level=1;s.experience=0;s.hp=240;s.stamina=100;s.mapId=mapId;s.x=x;s.y=0;s.z=z;s.build={path:'seer',ancestry:'woodland'};s.inventory.slots[0].quantity=2;await writeFile(f,JSON.stringify(s));}
 try{
  if(process.env.MONTRA_MAP_TEST_STAGE==='read'){
    const expected=JSON.parse(await readFile(path.join(dir,'map-restart-expectations.json'),'utf8'));

@@ -12,7 +12,9 @@ async function seed(i){
   const id=createHash("sha256").update(token(i)).digest("hex"),slots=Array(12).fill(null);
   slots[0]={itemId:"health_potion",quantity:2};slots[1]={itemId:"ritual_dagger",quantity:1};
   await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"War"+i,level:12,experience:0,pkKills:0,pkDeaths:0,
-    x:i===2?0:12,y:0,z:i===2?26:-36,hp:416,mapId:"moon_pass",inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
+    x:i===2?0:12,y:0,z:i===2?26:-36,hp:416,mapId:"moon_pass",build:{path:"seer",ancestry:"woodland"},
+    occultBook:{learned:{seer:["seer_mark","seer_curse"],mender:[]},loadouts:{seer:["seer_curse",null,null,null],mender:[null,null,null,null]},training:{seer:0,mender:0},cooldowns:{}},
+    inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
 }
 async function join(i,roomId,ticket){
   const opts={guestToken:token(i),warTicket:ticket,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1};
@@ -58,9 +60,11 @@ try{
     await send(attacker,"party_invite",{targetId:defender.r.sessionId},"party_error",s=>s.reason==="party_invalid_target");
     const joinStatus=await event(outsider,"territory_state",s=>s.local?.phase==="battle");assert.equal(joinStatus.local.canJoin,false);
     await send(outsider,"territory_join",{},"territory_error",s=>s.reason==="war_guild");
-    for(const m of allies.slice(0,4))assert.equal((await transfer(m,"territory_join")).r.roomId,attacker.r.roomId);
+    for(let i=0;i<4;i++){allies[i]=await transfer(allies[i],"territory_join");assert.equal(allies[i].r.roomId,attacker.r.roomId);}
     const denied=await send(allies[4],"territory_join",{},"territory_error");assert.equal(denied.reason,"war_side_full");
     await send(attacker,"warp",{},"territory_error",s=>s.reason==="war_exit");
+    await Promise.all([walk(attacker,5,19),walk(allies[0],6,19)]);
+    await send(attacker,"occult_skill",{skillId:"seer_curse",targetId:allies[0].r.sessionId},"command_rejected",s=>s.reason==="target_unavailable");
     async function travel(c,points){for(const [x,z] of points)await walk(c,x,z);}
     async function stair(c,structureId,direction){
       c.r.send("climb",{structureId,direction});

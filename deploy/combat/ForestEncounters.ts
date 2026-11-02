@@ -86,7 +86,8 @@ export class ForestEncounters {
   clearTarget(id:string):void {for(const m of this.monsters.values())if(m.targetId===id)m.targetId="";}
   engaged(id:string):boolean {return [...this.monsters.values()].some(m=>m.alive&&m.targetId===id);}
   update(now:number,dt:number,players:MyRoomState["players"],blocked:ReadonlySet<string>,
-    hit:(targetId:string,monster:Monster,force?:number)=>void,respawn:(id:string)=>void):void {
+    hit:(targetId:string,monster:Monster,force?:number)=>void,respawn:(id:string)=>void,
+    canDetect?:(id:string,player:Player,monster:Monster)=>boolean):void {
     const occupied=new Set(Array.from(players.values(),p=>p.mapId));
     const regions=new Set([...occupied].filter(isAtlasMap));
     if(regions.size!==this.activeRegions.size || [...regions].some(id=>!this.activeRegions.has(id))){
@@ -109,7 +110,7 @@ export class ForestEncounters {
       if(!occupied.has(m.mapId))continue;
       if(now<life.interruptUntil){m.aiState="stagger";continue;}
       const eligible=(pid:string,p:Player|undefined):p is Player=>Boolean(p&&p.alive&&p.mapId===m.mapId&&
-        !blocked.has(pid)&&onMapGround(p)&&!isRestArea(p.mapId,p));
+        !blocked.has(pid)&&onMapGround(p)&&!isRestArea(p.mapId,p) && (!canDetect || canDetect(pid,p,m)));
       if (life.windupUntil > 0) {
         const target = players.get(m.targetId);
         if (now < life.windupUntil && eligible(m.targetId,target)) continue;

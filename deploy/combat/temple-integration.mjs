@@ -19,7 +19,7 @@ async function seed(i,mapId,x,z){
   const id=createHash("sha256").update(token(i)).digest("hex"),slots=Array(12).fill(null);
   slots[0]={itemId:"health_potion",quantity:2};
   for(const [n,itemId] of ["ritual_dagger","arcane_sword","spirit_staff"].entries())slots[n+1]={itemId,quantity:1};
-  await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"นักเดินทาง",level:8,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp:352,mapId,inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
+  await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"นักเดินทาง",level:8,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp:352,mapId,build:{path:"seer",ancestry:"woodland"},inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
 }
 async function join(i,roomId,capable=true){
   const sdk=new Client(url),options={guestToken:token(i),worldVersion:1,...(capable?{templeVersion:1}:{})};

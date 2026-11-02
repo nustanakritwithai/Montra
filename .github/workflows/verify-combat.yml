@@ -70,6 +70,15 @@ jobs:
           cp deploy/combat/forge.test.ts combat-verify/src/rooms/forge.test.ts
           cp deploy/combat/CharacterBuilds.ts combat-verify/src/rooms/CharacterBuilds.ts
           cp deploy/combat/MuayRules.ts combat-verify/src/rooms/MuayRules.ts
+          cp deploy/combat/OccultRules.ts combat-verify/src/rooms/OccultRules.ts
+          cp deploy/combat/BladeRules.ts combat-verify/src/rooms/BladeRules.ts
+          cp deploy/combat/blade-rules.test.ts combat-verify/src/rooms/blade-rules.test.ts
+          cp deploy/combat/blade-book-integration.mjs combat-verify/blade-book-integration.mjs
+          cp deploy/combat/blade-depth-integration.mjs combat-verify/blade-depth-integration.mjs
+          cp deploy/combat/blade-advanced-integration.mjs combat-verify/blade-advanced-integration.mjs
+          cp deploy/combat/occult-rules.test.ts combat-verify/src/rooms/occult-rules.test.ts
+          cp deploy/combat/occult-integration.mjs combat-verify/occult-integration.mjs
+          cp deploy/combat/occult-depth-integration.mjs combat-verify/occult-depth-integration.mjs
           cp deploy/combat/muay-combo.test.ts combat-verify/src/rooms/muay-combo.test.ts
           cp deploy/combat/muay-mastery.test.ts combat-verify/src/rooms/muay-mastery.test.ts
           cp deploy/combat/muay-integration.mjs combat-verify/muay-integration.mjs
@@ -315,10 +324,45 @@ jobs:
           node --check deploy/combat/free-pk-integration.mjs
           node --check deploy/combat/summon-integration.mjs
           node --check deploy/combat/elevation-integration.mjs
+          node --check deploy/combat/occult-integration.mjs
+          node --check deploy/combat/occult-depth-integration.mjs
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
         run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/sword-tree-concurrency.test.ts src/rooms/sword-gap-geometry.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts src/rooms/guild-store.test.ts
+
+      - name: Occult book rules
+        working-directory: combat-verify
+        run: npx tsx --test src/rooms/occult-rules.test.ts src/rooms/blade-rules.test.ts
+
+      - name: Isolated occult class
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4115 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-occult-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4115
+          node --import tsx src/index.ts > occult-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4115) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 100s node occult-integration.mjs || { cat occult-server.log; exit 1; }
+          timeout 100s node occult-depth-integration.mjs || { cat occult-server.log; exit 1; }
+
+      - name: Isolated blade book
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4115 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-blade-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4115
+          node --import tsx src/index.ts > blade-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4115) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 60s node blade-book-integration.mjs || { cat blade-server.log; exit 1; }
+          timeout 60s node blade-depth-integration.mjs || { cat blade-server.log; exit 1; }
+          timeout 60s node blade-advanced-integration.mjs || { cat blade-server.log; exit 1; }
 
       - name: Isolated party and EXP integration
         shell: bash
