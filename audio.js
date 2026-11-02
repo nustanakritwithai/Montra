@@ -315,6 +315,115 @@
     });
   }, 250);
 
+  // ---- Music -------------------------------------------------------------
+  // Generative Thai ensemble in the 7-tone equal-tempered Thai scale
+  // (each step 2^(1/7)). Phrases are 8 beats, built per region from a
+  // seeded random walk over a pentatonic subset (motif A, variation A2, new
+  // B, then A), ending on the root at the strong beat. Four layers share one
+  // clock so they can fade without drifting: base (khong wong, ranat thum,
+  // ching, drone), combat (ranat ek runs, pi, klong that, taphon), war (big
+  // drum on every beat, gong, high pi) and elite (tritone drone, low gongs).
+  const THEMES = {
+    village: { root: 220, tempo: 68, pent: [0, 1, 2, 4, 5], density: .6, drone: "triangle", droneGain: .05, seed: 11 },
+    forest: { root: 196, tempo: 60, pent: [0, 2, 3, 4, 6], density: .45, drone: "triangle", droneGain: .07, seed: 23 },
+    eerie: { root: 185, tempo: 50, pent: [0, 1, 3, 4, 5], density: .3, drone: "sine", droneGain: .065, seed: 37, sparse: true },
+    fire: { root: 165, tempo: 74, pent: [0, 1, 2, 4, 5], density: .5, drone: "sawtooth", droneGain: .035, seed: 41 },
+    city: { root: 233, tempo: 84, pent: [0, 1, 2, 4, 5], density: .7, drone: "triangle", droneGain: .04, seed: 53 },
+  };
+  const MUSIC_REGION = { ritual_village: "village", forbidden_forest: "forest", bound_temple: "forest", bamboo_frontier: "forest", lotus_basin: "forest",
+    drowned_marsh: "eerie", moon_cemetery: "eerie", naga_cavern: "eerie", hex_ridge: "fire", asura_peak: "fire", fallen_city: "fire", spirit_rift: "fire",
+    mantra_capital: "city", moon_pass: "city", river_watch: "city", tri_wiang_castle: "city" };
+  const thai = (root, k) => root * Math.pow(2, k / 7);
+  function prng(seed) { return () => { seed = (seed + 0x6D2B79F5) | 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function makePhrases(th) {
+    const r = prng(th.seed), walk = (len, start) => { const out = [start]; for (let i = 1; i < len; i++) out.push(Math.max(0, Math.min(9, out[i - 1] + [-2, -1, -1, 1, 1, 2][r() * 6 | 0]))); return out; };
+    const A = walk(8, 5); A[7] = 5; A[6] = Math.max(0, Math.min(9, A[6]));
+    const A2 = A.slice(0, 5).concat(walk(3, A[4])); A2[7] = 0;
+    const Bp = walk(8, 7); Bp[7] = 5;
+    return [A, A2, Bp, A];
+  }
+  // index 0..9 over two octaves of the pentatonic set
+  const noteOf = (th, idx) => thai(th.root, th.pent[idx % 5] + 7 * Math.floor(idx / 5));
+  // Instruments (all on the given destination).
+  const INST = {
+    ranat: (d, t, f, g, oct = true) => { tone(d, t, { freq: f, decay: .32, gain: g }); tone(d, t, { freq: f * 3.93, decay: .06, gain: g * .25 }); noise(d, t, { freq: f * 2, q: 4, decay: .012, gain: g * .5 }); if (oct) tone(d, t, { freq: f * 2, decay: .22, gain: g * .45 }); },
+    khong: (d, t, f, g) => metal(d, t, f, [[1, 1, 1], [2.0, .22, .5], [3.1, .1, .35]], { gain: g, decay: 1.6 }),
+    ching: (d, t, open, g) => { metal(d, t, 3150, [[1, 1, 1], [1.47, .6, .8], [2.1, .3, .6]], { gain: g, decay: open ? 1.1 : .06 }); if (!open) noise(d, t, { freq: 5000, q: 2, decay: .02, gain: g * 1.5 }); },
+    pi: (d, t, f, len, g) => { const o = ctx.createOscillator(), b1 = ctx.createBiquadFilter(), b2 = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter(), gg = ctx.createGain(), v = ctx.createOscillator(), vg = ctx.createGain();
+      o.type = "sawtooth"; o.frequency.setValueAtTime(f * .96, t); o.frequency.exponentialRampToValueAtTime(f, t + .07); // slide up into the note
+      v.frequency.value = 5.5; vg.gain.value = f * .014; v.connect(vg); vg.connect(o.frequency);
+      b1.type = b2.type = "bandpass"; b1.frequency.value = 1150; b2.frequency.value = 2500; b1.Q.value = 3; b2.Q.value = 4; lp.type = "lowpass"; lp.frequency.value = 3400;
+      o.connect(b1); o.connect(b2); b1.connect(lp); b2.connect(lp); lp.connect(gg); gg.connect(d);
+      gg.gain.setValueAtTime(.0001, t); gg.gain.exponentialRampToValueAtTime(g, t + .06); gg.gain.setValueAtTime(g, t + len * .8); gg.gain.exponentialRampToValueAtTime(.0001, t + len);
+      o.start(t); v.start(t); o.stop(t + len + .05); v.stop(t + len + .05); },
+    that: (d, t, g) => { tone(d, t, { freq: 64, to: 44, glide: .18, decay: .45, gain: g }); noise(d, t, { type: "lowpass", freq: 160, decay: .12, gain: g * .5 }); },
+    taphon: (d, t, high, g) => high ? (tone(d, t, { freq: 185, to: 150, glide: .05, decay: .1, gain: g }), noise(d, t, { freq: 1900, q: 2, decay: .025, gain: g * .5 })) : tone(d, t, { freq: 92, to: 70, glide: .08, decay: .22, gain: g }),
+    gonglow: (d, t, g) => metal(d, t, 73, [[1, 1, 1], [1.48, .5, .8], [2.02, .35, .6], [2.76, .2, .4]], { gain: g, decay: 4, attack: .015 }),
+  };
+  let music = null, musicWanted = { map: "ritual_village", combat: false, war: false, elite: false };
+  function musicLayer(name) { const g = ctx.createGain(); g.gain.value = .0001; g.connect(buses.music); const w = ctx.createGain(); w.gain.value = .3; g.connect(w); w.connect(reverb); return g; }
+  function startDrone(th, dest, ratio2 = Math.pow(2, 4 / 7), wave = th.drone, level = th.droneGain) {
+    const out = [], f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 600; f.connect(dest);
+    for (const ratio of [.5, .5 * ratio2]) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = wave; o.frequency.value = th.root * ratio; g.gain.value = level; o.connect(g); g.connect(f); o.start(); out.push(o, lfo(g.gain, .07 + ratio * .03, level * .5)); }
+    out.push(lfo(f.frequency, .05, 250));
+    return out;
+  }
+  function ensureMusic() {
+    if (music || !ctx) return;
+    music = { layers: { base: musicLayer(), combat: musicLayer(), war: musicLayer(), elite: musicLayer() }, region: null, th: null, phrases: null,
+      beat: 0, next: ctx.currentTime + .3, drone: [], eliteDrone: null, want: {} };
+  }
+  function setRegion(region) {
+    const th = THEMES[region] || THEMES.village;
+    music.region = region; music.th = th; music.phrases = makePhrases(th);
+    const old = music.drone; setTimeout(() => old.forEach(o => { try { o.stop(); } catch (_) { /* stopped */ } }), 3000);
+    const dg = ctx.createGain(); dg.gain.value = .0001; dg.connect(music.layers.base); dg.gain.exponentialRampToValueAtTime(1, ctx.currentTime + 3);
+    music.drone = startDrone(th, dg);
+  }
+  function rampLayer(g, target, up = 1.2, down = 4) {
+    const t = ctx.currentTime, now = Math.max(.0001, g.gain.value);
+    if (Math.abs(now - target) < .01) return;
+    g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(now, t); g.gain.exponentialRampToValueAtTime(Math.max(.0001, target), t + (target > now ? up : down));
+  }
+  function scheduleBeat(t, b) {
+    const th = music.th, L = music.layers, pb = b % 8, ph = music.phrases[Math.floor(b / 8) % 4], idx = ph[pb], f = noteOf(th, idx), beat = 60 / th.tempo, r = Math.random();
+    // Base: khong wong on strong beats (or by density), ranat thum below, ching / chap time-keeping.
+    if (pb % 2 === 0 || r < th.density) INST.khong(L.base, t, f, .055);
+    if (pb === 7) INST.khong(L.base, t + beat * .5, noteOf(th, 0), .05);
+    if (pb === 1 || pb === 5) INST.ranat(L.base, t, f / 2, .05, false);
+    if (!th.sparse || pb % 2 === 0) INST.ching(L.base, t, pb % 2 === 0, .022);
+    // Combat: ranat ek eighth-note runs, pi long notes, klong that and taphon.
+    if (music.want.combat || music.want.war) {
+      INST.ranat(L.combat, t, f, .06); INST.ranat(L.combat, t + beat / 2, noteOf(th, Math.max(0, Math.min(9, idx + (r < .5 ? 1 : -1)))), .05);
+      if (pb % 2 === 0) INST.pi(L.combat, t, f * 2, beat * 1.9, .045);
+      if (pb === 0 || pb === 4) INST.that(L.combat, t, .2);
+      INST.taphon(L.combat, t + beat / 2, true, .07); if (pb === 2 || pb === 6) INST.taphon(L.combat, t, false, .12);
+    }
+    // War: drum on every beat, gong at the phrase head, high pi with a trill.
+    if (music.want.war) {
+      INST.that(L.war, t, .22); if (pb === 0) INST.gonglow(L.war, t, .12);
+      if (pb % 4 === 0) { INST.pi(L.war, t, f * 4, beat * .25, .03); INST.pi(L.war, t + beat * .25, noteOf(th, idx + 1) * 4, beat * 3.5, .035); }
+    }
+    // Elite: slow low gongs over a tritone drone.
+    if (music.want.elite && pb % 4 === 0) INST.gonglow(L.elite, t, .14);
+  }
+  setInterval(() => {
+    if (!ctx || ctx.state !== "running" || settings.muted) return;
+    ensureMusic();
+    const w = musicWanted, region = MUSIC_REGION[w.map] || "village";
+    if (music.region !== region) setRegion(region);
+    music.want = w;
+    rampLayer(music.layers.base, w.combat || w.war ? .65 : 1, 3, 2);
+    rampLayer(music.layers.combat, w.combat || w.war ? 1 : .0001, 1, 4);
+    rampLayer(music.layers.war, w.war ? 1 : .0001, 1.5, 4);
+    rampLayer(music.layers.elite, w.elite ? 1 : .0001, 2, 4);
+    if (w.elite && !music.eliteDrone) music.eliteDrone = startDrone(music.th, music.layers.elite, Math.SQRT2, "sawtooth", .03);
+    if (!w.elite && music.eliteDrone) { const d0 = music.eliteDrone; music.eliteDrone = null; setTimeout(() => d0.forEach(o => { try { o.stop(); } catch (_) { /* stopped */ } }), 4500); }
+    const beat = 60 / music.th.tempo;
+    if (music.next < ctx.currentTime) music.next = ctx.currentTime + .05; // after a suspend
+    while (music.next < ctx.currentTime + .6) { scheduleBeat(music.next, music.beat++); music.next += beat; }
+  }, 100);
+
   // ---- Public API -------------------------------------------------------
   function play(name, opts = {}) {
     if (!ctx || ctx.state !== "running" || settings.muted || !R[name]) return false;
@@ -347,5 +456,6 @@
     get voices() { return voices.size; },
     unlock,
     ambience: setAmbience,
+    music(state) { musicWanted = { ...musicWanted, ...state }; },
   };
 })();

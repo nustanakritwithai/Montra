@@ -3401,6 +3401,7 @@
     if (ghost && kind) SFX("ghost", { kind, ev: "hurt", x, z, delay: .03, intensity: .8 });
     else if (ghost) SFX("ghost_hit", { x, z, delay: .02, intensity: .8 });
   }
+  let lastCombatAt = -1e9, musicSyncIn = 0;
   function playAction(a, type, opts) {
     if (!a || !ACTIONS[type]) return;
     const now = performance.now();
@@ -3408,6 +3409,7 @@
     if (type === "twin" || type === "m_basic" || type === "m_side") a.action.side = (a.twinFlip = !a.twinFlip) ? 1 : -1; // alternate right / left
     if (opts) Object.assign(a.action, opts);
     if (type !== "hit" && type !== "rise") flashStrike(a, type);
+    if (a.local && (ACTIONS[type].swing || type === "hit" || type === "cast")) lastCombatAt = performance.now();
     actionSound(a, type, a.action);
     if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
   }
@@ -6052,7 +6054,10 @@
   const ghostVoice = (g, mesh, ev, intensity = 1) => SFX("ghost", { kind: g.design?.kind, ev, x: mesh.position.x, z: mesh.position.z, intensity });
   function ghostVoices(mesh, g, now) {
     if (g.deathAt) return;
-    if (g.windup && !g.wasWindup) { ghostVoice(g, mesh, "attack"); g.criedAt = now; }
+    if (g.windup && !g.wasWindup) {
+      ghostVoice(g, mesh, "attack"); g.criedAt = now;
+      const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 15) lastCombatAt = now; // music goes to combat
+    }
     g.wasWindup = g.windup;
     if (!g.nextMurmur) g.nextMurmur = now + 2000 + Math.random() * 8000;
     if (now > g.nextMurmur) {
@@ -8920,7 +8925,7 @@
     const a = window.MontraAudio?.settings; if (!a) return "";
     const row = (key, label) => `<label class="field sound-row">${label}<input type="range" min="0" max="100" step="5" data-sound="${key}" value="${Math.round(a[key] * 100)}"></label>`;
     return `<section class="sound-settings"><h3>เสียง</h3><label class="field sound-row"><input type="checkbox" data-sound="muted" ${a.muted ? "" : "checked"}> เปิดเสียง</label>` +
-      row("master", "ความดังรวม") + row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
+      row("master", "ความดังรวม") + row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("music", "ดนตรี") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
   }
   function bindSoundSettings(root) {
     for (const input of root.querySelectorAll("[data-sound]")) input.addEventListener("input", () => {
@@ -9707,7 +9712,15 @@
     scene.fogEnd = camera.radius + atmosphere.fogFar;
     driftMist(elapsed, camera.target);
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
-    { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z); }
+    { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);
+      // Music state: combat for 6 s after any fight action, war in a live battle, elite when one is near.
+      if ((musicSyncIn -= dt) <= 0 && hero) {
+        musicSyncIn = .5;
+        let elite = false;
+        for (const mesh of forestMonsters.values()) { const g = mesh.metadata?.ghost; if (g?.design?.elite && mesh.isEnabled() && !g.deathAt && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 30) { elite = true; break; } }
+        const war = Boolean(territoryState?.local?.inField && territoryState.local.phase === "battle");
+        window.MontraAudio?.music({ map: activeMapId, combat: performance.now() - lastCombatAt < 6000, war, elite });
+      } }
     driftClouds(camera.target, elapsed); updateStrikeLight(performance.now());
     keyLight.intensity = atmosphere.keyI * 1.65 * (1 - .22 * cloudCover);
     stormFlash(dt);
