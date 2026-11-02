@@ -42,6 +42,7 @@ export const Player = schema({
   pathId: t.string().default(""),
   ancestryId: t.string().default(""),
   classSkillReadyAt: t.number().default(0),
+  wardTalentId: t.string().default(""),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;

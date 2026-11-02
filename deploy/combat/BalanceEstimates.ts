@@ -1,4 +1,4 @@
-import { PATHS, type PathId } from "./CharacterBuilds.js";
+import { classSkill, type WardTalentId, type PathId } from "./CharacterBuilds.js";
 import { calculateModifiedStats } from "./StatModifiers.js";
 /** Deterministic arithmetic estimate, not a combat simulator or playtest. */
 import { calculateStats, calculateDamage, emptyAllocations } from "./Progression.js";
@@ -26,10 +26,10 @@ export function estimateEncounter(level:number, weapon:WeaponItemId, possession:
 }
 
 /** Equal-level solo fixture at the instant the chosen class skill activates. */
-export function compareBuild(level: number, weapon: WeaponItemId, path: PathId) {
+export function compareBuild(level: number, weapon: WeaponItemId, path: PathId, talent?: WardTalentId) {
   const baseline = estimateEncounter(level, weapon, false);
   const base = calculateStats(level, emptyAllocations());
-  const skill = PATHS[path], monster = monsterProfile(level, "normal");
+  const skill = classSkill(path, talent), monster = monsterProfile(level, "normal");
   const stats = skill.effect.kind === "buff"
     ? calculateModifiedStats(base, [{id: path, sourceId: "self", group: "class_skill", bonuses: skill.effect.bonuses}]) : base;
   const ranged = weapon === "spirit_staff";
@@ -37,7 +37,7 @@ export function compareBuild(level: number, weapon: WeaponItemId, path: PathId) 
   const pveHit = calculateDamage(power, monster.defense, level);
   const pvpPower = weapon === SHRINE_GLAIVE ? stats.atk + SHRINE_RECIPE.pvpMeleeBonus : power;
   const pvpHit = calculateDamage(pvpPower, ranged ? base.magicDef : base.def, level);
-  return {path, weapon, level, pveHitBeforeCast: baseline.damagePerHit, pveHitWhileActive: pveHit,
+  return {path, weapon, level, supportRadius: skill.radius, pveHitBeforeCast: baseline.damagePerHit, pveHitWhileActive: pveHit,
     pvpHitAgainstUnbuffedPeer: pvpHit, hitsToDefeatIfEffectLasted: Math.ceil(monster.maxHp / pveHit),
     incomingPhysicalDamage: calculateDamage(monster.attack, stats.def, level),
     healPerInjuredMember: skill.effect.kind === "heal" ? Math.round(stats.maxHp * skill.effect.fraction) : 0,

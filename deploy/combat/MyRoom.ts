@@ -38,7 +38,7 @@ import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { saveBugReport } from "./BugReports.js";
 import { BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCooldown } from "./Buffs.js";
-import { BUILD_CATALOG, PATHS, SUPPORT_RADIUS, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
+import { BUILD_CATALOG, DEFAULT_WARD_TALENT, classSkill, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 import { BuffLedger } from "./BuffLedger.js";
 import { calculateModifiedStats } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER } from "./SkillCatalog.js";
@@ -155,6 +155,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
+  private playerBuild(player: Player): CharacterBuild | null {
+    const base = {path: player.pathId, ancestry: player.ancestryId};
+    // The default has the same save representation as a legacy sentinel.
+    return parseBuild(player.wardTalentId && player.wardTalentId !== DEFAULT_WARD_TALENT
+      ? {...base, wardTalent: player.wardTalentId} : base);
+  }
+
   private selectBuild(client: Client, build: CharacterBuild): void {
     const id = client.sessionId, player = this.buildPlayer(client);
     if (!player) return;
@@ -162,14 +169,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!atShrine || this.simulatedMs - (this.lastCombatMs.get(id) ?? -Infinity) < PROGRESSION.combatQuietMs)
       return this.reject(client, "build_needs_shrine");
     if (player.classSkillReadyAt > Date.now()) return this.reject(client, "class_skill_cooldown");
-    if (player.pathId === build.path && player.ancestryId === build.ancestry) return;
+    // Older clients selecting a different ancestry omit the talent. Retain their current ward.
+    const talent = build.path === "sentinel"
+      ? build.wardTalent ?? this.playerBuild(player)?.wardTalent ?? DEFAULT_WARD_TALENT : "";
+    if (player.pathId === build.path && player.ancestryId === build.ancestry && player.wardTalentId === talent) return;
+    const selection: CharacterBuild = {path: build.path, ancestry: build.ancestry};
+    if (talent && talent !== DEFAULT_WARD_TALENT) selection.wardTalent = talent;
     const snapshot = this.captureCharacterSnapshot(id);
     if (!snapshot) return;
     this.pendingWarps.add(id);
-    const task = characterStore.save({ ...snapshot, build }).then(() => {
+    const task = characterStore.save({ ...snapshot, build: selection }).then(() => {
       player.pathId = build.path;
       player.ancestryId = build.ancestry;
-      client.send("build_selected", build);
+      player.wardTalentId = talent;
+      client.send("build_selected", selection);
     }, error => {
       console.error("MONTRA build save failed", error);
       this.reject(client, "build_save_failed");
@@ -183,16 +196,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private castClassSkill(client: Client): void {
     const id = client.sessionId, player = this.buildPlayer(client);
     if (!player) return;
-    const build = parseBuild({ path: player.pathId, ancestry: player.ancestryId });
+    const build = this.playerBuild(player);
     if (!build) return this.reject(client, "build_required");
-    const skill = PATHS[build.path], now = Date.now();
+    const skill = classSkill(build.path, build.wardTalent), now = Date.now();
     if (now < player.classSkillReadyAt) return this.reject(client, "class_skill_cooldown");
     if (player.stamina < skill.stamina) return this.reject(client, "insufficient_stamina");
     const members = skill.targets === "party" ? this.parties.get(id)?.members ?? [id] : [id];
     const targets: [string, Player][] = [];
     for (const member of members) {
       const target = this.state.players.get(member);
-      if (!target?.alive || target.mapId !== player.mapId || distance3d(player, target) > SUPPORT_RADIUS ||
+      if (!target?.alive || target.mapId !== player.mapId || distance3d(player, target) > skill.radius ||
           this.pendingWarps.has(member) || this.pendingItemUses.has(member) || this.pendingCharacterLeaves.has(member)) continue;
       if (member !== id && !isWorldSegmentClear(player.mapId, player, target)) continue;
       if (skill.effect.kind !== "heal" || target.hp < target.maxHp) targets.push([member, target]);
@@ -1761,7 +1774,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       pkKills: player.pkKills, pkDeaths: player.pkDeaths,
       mapId: player.mapId,
       statAllocations: this.statAllocations.get(id) ?? emptyAllocations(),
-      build: parseBuild({path: player.pathId, ancestry: player.ancestryId}) ?? undefined,
+      build: this.playerBuild(player) ?? undefined,
       classSkillReadyAt: player.classSkillReadyAt,
       stamina: player.stamina,
       x: player.x,
@@ -1836,6 +1849,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         level: saved?.level ?? 1, experience: saved?.experience ?? 0,
         pathId: saved?.build?.path ?? "", ancestryId: saved?.build?.ancestry ?? "",
         classSkillReadyAt: saved?.classSkillReadyAt ?? 0,
+        wardTalentId: saved?.build?.path === "sentinel" ? saved.build.wardTalent ?? DEFAULT_WARD_TALENT : "",
         persistent: Boolean(saved), characterSlot: slot,
         flying: Boolean(validPosition && restoreFlight),
         equippedWeaponId: equippedWeaponId(saved?.inventory) ?? "",
