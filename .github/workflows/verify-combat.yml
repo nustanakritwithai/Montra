@@ -61,6 +61,9 @@ jobs:
           cp deploy/combat/MuayRules.ts combat-verify/src/rooms/MuayRules.ts
           cp deploy/combat/OccultRules.ts combat-verify/src/rooms/OccultRules.ts
           cp deploy/combat/BladeRules.ts combat-verify/src/rooms/BladeRules.ts
+          cp deploy/combat/SentinelRules.ts combat-verify/src/rooms/SentinelRules.ts
+          cp deploy/combat/sentinel-rules.test.ts combat-verify/src/rooms/sentinel-rules.test.ts
+          cp deploy/combat/sentinel-integration.mjs combat-verify/sentinel-integration.mjs
           cp deploy/combat/blade-rules.test.ts combat-verify/src/rooms/blade-rules.test.ts
           cp deploy/combat/blade-book-integration.mjs combat-verify/blade-book-integration.mjs
           cp deploy/combat/blade-depth-integration.mjs combat-verify/blade-depth-integration.mjs
@@ -320,7 +323,7 @@ jobs:
 
       - name: Occult book rules
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/occult-rules.test.ts src/rooms/blade-rules.test.ts
+        run: npx tsx --test src/rooms/occult-rules.test.ts src/rooms/blade-rules.test.ts src/rooms/sentinel-rules.test.ts
 
       - name: Isolated occult class
         shell: bash
@@ -350,6 +353,19 @@ jobs:
           timeout 60s node blade-book-integration.mjs || { cat blade-server.log; exit 1; }
           timeout 60s node blade-depth-integration.mjs || { cat blade-server.log; exit 1; }
           timeout 60s node blade-advanced-integration.mjs || { cat blade-server.log; exit 1; }
+
+      - name: Isolated sentinel class
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4117 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-sentinel-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4117
+          node --import tsx src/index.ts > sentinel-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4117) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 60s node sentinel-integration.mjs || { cat sentinel-server.log; exit 1; }
 
       - name: Isolated party and EXP integration
         shell: bash

@@ -74,7 +74,7 @@
   };
   let toastTimer;
   function positionSwordToast() {
-    const response=$("grappleResponse"), status=$("swordStatus"), hotbar=$("swordHotbar"), muayStatus=$("muayStatus"), muay=$("muayHotbar"), bladeStatus=$("bladeStatus"),blade=$("bladeHotbar"),anchor=response && !response.hidden ? response : status && !status.hidden ? status : hotbar && !hotbar.hidden ? hotbar : muayStatus && !muayStatus.hidden ? muayStatus : muay && !muay.hidden ? muay : bladeStatus && !bladeStatus.hidden ? bladeStatus : blade && !blade.hidden ? blade : null;
+    const response=$("grappleResponse"), status=$("swordStatus"), hotbar=$("swordHotbar"), muayStatus=$("muayStatus"), muay=$("muayHotbar"), bladeStatus=$("bladeStatus"),blade=$("bladeHotbar"),sentinelStatus=$("sentinelStatus"),sentinel=$("sentinelHotbar"),anchor=response && !response.hidden ? response : status && !status.hidden ? status : hotbar && !hotbar.hidden ? hotbar : muayStatus && !muayStatus.hidden ? muayStatus : muay && !muay.hidden ? muay : bladeStatus && !bladeStatus.hidden ? bladeStatus : blade && !blade.hidden ? blade : sentinelStatus && !sentinelStatus.hidden ? sentinelStatus : sentinel && !sentinel.hidden ? sentinel : null;
     if (!anchor) { ui.toast.style.removeProperty("bottom"); return; }
     const game=$("game").getBoundingClientRect(), area=anchor.getBoundingClientRect();
     ui.toast.style.bottom=Math.max(0,game.bottom-area.top+8)+"px";
@@ -4369,6 +4369,7 @@
   let targetedSkill = null;
   let selectedOccultSkill="", occultBookState=null, occultRequestKey="", occultRequestAt=0, occultHotbarKey="", occultBookRenderKey="", occultCurseUntil=0;
   let selectedBladeSkill="",bladeBookState=null,bladeRequestKey="",bladeRequestAt=0,bladeHotbarKey="",bladeBookRenderKey="",bladeCloakUntil=0,bladeMarkUntil=0,bladeMarkedTarget="",bladeOpeningUntil=0,bladeCounterUntil=0;
+  let selectedSentinelSkill="",sentinelBookState=null,sentinelRequestKey="",sentinelRequestAt=0,sentinelHotbarKey="",sentinelBookRenderKey="",sentinelCounterUntil=0;
   let spellTargetId = null;
   let pendingClimb = null;
   const skillEffects = [];
@@ -6237,7 +6238,7 @@
     territoryState=null;$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
-    possessed=false;occultBookState=null;occultRequestKey="";selectedOccultSkill="";occultCurseUntil=0;bladeBookState=null;bladeRequestKey="";selectedBladeSkill="";bladeCloakUntil=0;syncBladeUI(null);syncOccultUI(null);syncPossessionButton();syncTalismanButton(null);syncRitualButtons(null);syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);$("classSkill").hidden=true;
+    possessed=false;occultBookState=null;occultRequestKey="";selectedOccultSkill="";occultCurseUntil=0;bladeBookState=null;bladeRequestKey="";selectedBladeSkill="";bladeCloakUntil=0;syncBladeUI(null);syncSentinelUI(null);syncOccultUI(null);syncPossessionButton();syncTalismanButton(null);syncRitualButtons(null);syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);$("classSkill").hidden=true;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false;
@@ -6323,6 +6324,12 @@
     return id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get(id);
   }
   function castAtTarget(id) {
+    if(targetedSkill==="sentinel"){
+      const node=sentinelBookState?.lessons?.[selectedSentinelSkill],monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;
+      if(!node || !id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId){toast("เลือกเป้าหมายที่ใช้วิชานี้ได้");return;}
+      if(opponent && partyState?.members?.some(member=>member.sessionId===id)){toast("โจมตีสมาชิกปาร์ตี้ไม่ได้");return;}
+      spellTargetId=id;room.send("sentinel_skill",{skillId:selectedSentinelSkill,targetId:id});return;
+    }
     if (targetedSkill === "blade") {
       const node=bladeBookState?.lessons?.[selectedBladeSkill],monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;
       if(!node || !id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId) {toast("เลือกเป้าหมายที่ใช้วิชานี้ได้");return;}
@@ -6878,7 +6885,7 @@
     syncTalismanButton(mine);
     syncRitualButtons(mine);
     syncOccultUI(mine);
-    syncBladeUI(mine);
+    syncBladeUI(mine);syncSentinelUI(mine);
     syncSwordTreeButton(mine);
     syncSwordHotbar();
     syncMuayHotbar();
@@ -7285,6 +7292,20 @@
         syncOccultUI(ownServerCharacter());
         if (drawerActive==="occultBook") renderOccultBook();
       });
+      joined.onMessage("sentinel_book_state",data=>{
+        if(room!==joined)return;
+        sentinelBookState=data;sentinelBookRenderKey="";sentinelHotbarKey="";syncSentinelUI(ownServerCharacter());
+        if(drawerActive==="sentinelBook")renderSentinelBook();
+      });
+      joined.onMessage("sentinel_book_changed",()=>{if(room===joined && drawerActive==="sentinelBook")renderSentinelBook();});
+      joined.onMessage("sentinel_stun",data=>{if(room===joined && data?.playerId===localId)toast("ถูกสตัน · หยุดชั่วครู่");});
+      joined.onMessage("sentinel_control",data=>{if(room===joined){
+        if(data?.result==="applied"){sentinelCounterUntil=performance.now()+3000;toast("สกัดสำเร็จ · วิชาสวนพร้อม");}
+        else toast(data?.result==="immune"?"เป้าหมายต้านสตัน":data?.result==="resisted"?"เป้าหมายกำลังต้านสตัน":"สกัดไม่สำเร็จ");
+      }});
+      joined.onMessage("sentinel_taunt",data=>{if(room===joined)toast("ยั่วยุสำเร็จ "+(Number(data?.applied)||0)+" ตัว");});
+      joined.onMessage("sentinel_windup_result",data=>{if(room===joined)toast(data?.result==="interrupted"?"ถูกขัดจังหวะ":data?.result==="miss"?"เป้าหมายหลบพ้น":"กระแทกสำเร็จ");});
+      joined.onMessage("sentinel_skill_used",data=>{if(room===joined && data?.playerId===localId && data.skillId==="counter")sentinelCounterUntil=0;});
       joined.onMessage("blade_book_state", data => {
         if(room!==joined || !data?.book || !data?.lessons)return;
         bladeBookState=data;bladeBookRenderKey="";bladeHotbarKey="";syncBladeUI(ownServerCharacter());
@@ -7400,6 +7421,7 @@
       } });
       joined.onMessage("sword_guarded", () => { if (room===joined) {
         swordCounterUntil=performance.now()+3000;
+        if(ownServerCharacter()?.pathId==="sentinel"){sentinelCounterUntil=performance.now()+3000;syncSentinelUI(ownServerCharacter());}
         syncSwordStatus(ownServerCharacter());
         playAction(avatars.get(localId), "guard");
         toast("รับสำเร็จ · ใช้วิชาสวนได้ 3 วินาที");
@@ -7579,6 +7601,8 @@
         if (Object.hasOwn(swordReasons,info?.reason)) { toast(swordReasons[info.reason]); return; }
         const bladeReasons={invalid_blade_book:"คำสั่งตำราคมดาบไม่ถูกต้อง",invalid_blade_skill:"คำสั่งวิชาคมดาบไม่ถูกต้อง",blade_class_required:"เลือกสายคมดาบก่อน",blade_book_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อนจัดวิชา",blade_already_learned:"เรียนวิชานี้แล้ว",blade_level:"เลเวลยังไม่ถึง",blade_no_points:"แต้มวิชาไม่พอ",blade_prerequisite:"เรียนวิชาก่อนหน้าก่อน",blade_practice:"ฝึกวิชาตามเงื่อนไขในตำราก่อน",blade_skill_locked:"เรียนและจัดวิชาในช่องลัดก่อน",blade_book_empty:"ไม่มีแต้มที่ต้องคืน",blade_book_save_failed:"บันทึกตำราไม่สำเร็จ",blade_cloak_active:"กำลังพรางตัวอยู่",blade_cloak_location:"ใช้วิชานี้บนพื้นนอกเขตพัก",blade_cloak_combat:"รอหลังการต่อสู้สักครู่ก่อนพราง",blade_cloak_action:"สิ้นสุดการพรางก่อนใช้คำสั่งนี้",blade_cooldown:"วิชากำลังฟื้น",invalid_blade_target:"เลือกเป้าหมายก่อน",blade_out_of_range:"เข้าใกล้เป้าหมายก่อน",blade_blocked:"มีสิ่งกีดขวาง",blade_cloak_required:"พรางตัวก่อนใช้วิชานี้",blade_mark_required:"ติดรอยอาคมของตนก่อน",blade_counter_required:"หลบการโจมตีสำเร็จก่อนสวน",blade_opening_required:"เปิดฉากจากการพรางก่อน",blade_effect_limit:"บัพเต็มแล้ว",blade_windup_active:"กำลังตั้งท่าโจมตี"};
         if(Object.hasOwn(bladeReasons,info?.reason)){toast(bladeReasons[info.reason]);return;}
+        const sentinelReasons={invalid_sentinel_book:"คำสั่งตำราไม่ถูกต้อง",invalid_sentinel_skill:"คำสั่งวิชาไม่ถูกต้อง",sentinel_class_required:"เลือกผู้พิทักษ์ก่อน",sentinel_book_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อนจัดวิชา",sentinel_already_learned:"เรียนวิชานี้แล้ว",sentinel_level:"เลเวลยังไม่ถึง",sentinel_no_points:"แต้มวิชาไม่พอ",sentinel_prerequisite:"เรียนวิชาก่อนหน้าก่อน",sentinel_practice:"ฝึกตามเงื่อนไขในตำราก่อน",sentinel_skill_locked:"เรียนและจัดวิชาในช่องลัดก่อน",sentinel_book_empty:"ไม่มีแต้มที่ต้องคืน",sentinel_book_save_failed:"บันทึกตำราไม่สำเร็จ",sentinel_location:"ใช้วิชาบนพื้นนอกเขตพัก",sentinel_cooldown:"วิชากำลังฟื้น",sentinel_counter_required:"ตั้งรับหรือสกัดสำเร็จก่อนสวน",sentinel_out_of_range:"เข้าใกล้เป้าหมายก่อน",sentinel_party_required:"เลือกสมาชิกปาร์ตี้",sentinel_blocked:"มีสิ่งกีดขวาง",sentinel_effect_limit:"บัพเต็มแล้ว",sentinel_stunned:"ถูกสตัน · หยุดชั่วครู่",sentinel_windup_active:"กำลังตั้งท่าโจมตี"};
+        if(Object.hasOwn(sentinelReasons,info?.reason)){toast(sentinelReasons[info.reason]);return;}
         const buildReasons = {occult_class_required:"เลือกอาชีพจอมอาคมก่อนใช้วิชานี้", build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
         Object.assign(buildReasons,{invalid_occult_book:"คำสั่งตำราอาคมไม่ถูกต้อง",invalid_occult_skill:"คำสั่งวิชาอาคมไม่ถูกต้อง",occult_rate_limited:"กดตำราถี่เกินไป รอสักครู่",occult_book_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อนจัดวิชา",occult_wrong_path:"เลือกสายนี้ก่อนเรียน",occult_already_learned:"เรียนวิชานี้แล้ว",occult_level:"เลเวลยังไม่ถึง",occult_no_points:"แต้มวิชาไม่พอ",occult_prerequisite:"เรียนวิชาก่อนหน้าก่อน",occult_training:"ฝึกวิชาอาคมให้ครบก่อน",occult_mastery:"ฝึกวิชาตามหมวดในตำราให้ครบก่อน",occult_skill_locked:"เรียนและจัดวิชาในช่องลัดก่อน",occult_book_empty:"ไม่มีแต้มวิชาที่ต้องคืน",occult_book_save_failed:"บันทึกตำราอาคมไม่สำเร็จ",occult_cooldown:"วิชาอาคมกำลังฟื้น",occult_out_of_range:"เข้าใกล้เป้าหมายก่อน",occult_blocked:"มีสิ่งกีดขวางระหว่างเป้าหมาย",occult_mark_required:"ติดยันต์ตีตราที่เป้าหมายก่อน",occult_curse_required:"สาปเป้าหมายก่อนใช้วิชานี้",occult_party_required:"เลือกตนเองหรือสมาชิกปาร์ตี้",occult_trance_required:"เข้าทรงก่อนใช้วิชานี้",occult_no_curse:"เป้าหมายไม่มีคำสาปที่ถอนได้",occult_effect_limit:"เป้าหมายมีบัพเต็มแล้ว"});
         if (Object.hasOwn(buildReasons, info?.reason)) { toast(buildReasons[info.reason]); return; }
@@ -8689,6 +8713,76 @@
     }
     positionSwordToast();
   }
+  function syncSentinelUI(me) {
+    const active=mode==="live" && room?.state?.sentinelAvailable===true && me?.pathId==="sentinel";
+    const button=$("sentinelBookButton"),bar=$("sentinelHotbar"),status=$("sentinelStatus"),parts=[];
+    if(me?.stunned)parts.push("ถูกสตัน · ขยับและใช้วิชาไม่ได้");
+    if(active && sentinelCounterUntil>performance.now())parts.push("สวนได้ "+Math.ceil((sentinelCounterUntil-performance.now())/1000)+" วิ");
+    button.hidden=!active;status.hidden=!parts.length;status.textContent=parts.join(" · ");
+    if(!active){bar.hidden=true;sentinelBookState=null;sentinelRequestKey="";sentinelHotbarKey="";sentinelCounterUntil=0;
+      if(targetedSkill==="sentinel"){selectedSentinelSkill="";setTargetedSkill(null);}return;}
+    const requestKey=localId+":"+me.pathId;
+    if(sentinelRequestKey!==requestKey && room){sentinelRequestKey=requestKey;sentinelRequestAt=performance.now();room.send("sentinel_book_get",{});}
+    const data=sentinelBookState;if(!data?.book || !data.lessons){bar.hidden=true;return;}
+    const ids=data.book.slots,times=ids.map(id=>id?Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)):0);
+    const key=JSON.stringify([ids,times,me.alive,me.stunned]);bar.hidden=false;if(key===sentinelHotbarKey)return;
+    sentinelHotbarKey=key;bar.replaceChildren();
+    ids.forEach((id,index)=>{
+      const node=id && data.lessons[id],slot=document.createElement("button");slot.type="button";slot.className="sword-hotkey";
+      slot.textContent=node?node.name+(times[index]?" "+times[index]+" วิ":""):"ช่องว่าง";
+      slot.disabled=!node || !me.alive || me.stunned || Boolean(times[index]);
+      slot.onclick=()=>{
+        if(["stun","slam","counter","step"].includes(node.effect)){
+          selectedSentinelSkill=id;setTargetedSkill("sentinel");
+          const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
+          if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId)castAtTarget(targetId);
+          else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
+        }else if(node.effect==="ward" || node.effect==="intercept")chooseSentinelAlly(id,node);
+        else room.send("sentinel_skill",{skillId:id});
+      };bar.append(slot);
+    });positionSwordToast();
+  }
+  function chooseSentinelAlly(skillId,node) {
+    const members=partyState?.members || [];
+    if(members.length<2){if(node.effect==="ward")room.send("sentinel_skill",{skillId,targetId:localId});else toast("ต้องมีเพื่อนร่วมปาร์ตี้ในระยะ");return;}
+    openDrawer("sentinelTarget","เลือกผู้รับ "+node.name,'<div id="sentinelTargetList"></div>');
+    const list=$("sentinelTargetList");
+    for(const member of members){
+      const player=room?.state?.players?.get?.(member.sessionId);
+      if(!player?.alive || (player.mapId || "ritual_village")!==activeMapId || (node.effect==="intercept" && member.sessionId===localId))continue;
+      const button=document.createElement("button");button.type="button";button.className="secondary";
+      button.textContent=(member.name || "ผู้เล่น")+(member.sessionId===localId?" · คุณ":"");
+      button.onclick=()=>{closeDrawer();room.send("sentinel_skill",{skillId,targetId:member.sessionId});};list.append(button);
+    }
+  }
+  function openSentinelBook(){
+    if(!room || mode!=="live" || ownServerCharacter()?.pathId!=="sentinel")return toast("เข้า LIVE และเลือกผู้พิทักษ์ก่อน");
+    if(!sentinelBookState){if(performance.now()-sentinelRequestAt>1500){sentinelRequestAt=performance.now();room.send("sentinel_book_get",{});}return toast("กำลังขอตำราผู้พิทักษ์");}
+    sentinelBookRenderKey="";openDrawer("sentinelBook","ตำราผู้พิทักษ์",'<div id="sentinelBookBody"></div>');renderSentinelBook();
+  }
+  function renderSentinelBook(){
+    const data=sentinelBookState,me=ownServerCharacter(),container=$("sentinelBookBody");if(!data?.book || !me || !container)return;
+    if(container.contains(document.activeElement) && document.activeElement.matches("select[data-sentinel-equip]"))return;
+    const key=JSON.stringify([data.book,me.level]);if(key===sentinelBookRenderKey)return;sentinelBookRenderKey=key;
+    const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+    const learned=data.book.learned,slots=data.book.slots,practice=data.book.practice,points=Math.max(0,data.points-learned.length);
+    const branchNames={defense:"ตั้งรับ",control:"ควบคุม",support:"คุ้มกันปาร์ตี้"};let previous="";
+    const rows=Object.entries(data.lessons).map(([id,node])=>{
+      const heading=node.branch!==previous?'<h3>'+clean(branchNames[node.branch] || node.branch)+'</h3>':"";previous=node.branch;
+      const known=learned.includes(id),missing=node.requires.filter(req=>!learned.includes(req));
+      const locked=me.level<node.level || points<1 || missing.length>0 || Object.entries(node.practice).some(([name,count])=>(practice[name]||0)<count);
+      const prereq=node.requires.length?" · ต้องเรียน "+node.requires.map(req=>clean(data.lessons[req]?.name || req)).join(", "):"";
+      const training=Object.entries(node.practice).map(([name,count])=>" · "+clean(data.practiceLabels[name] || name)+" "+(practice[name]||0)+"/"+count).join("");
+      const detail="Lv."+node.level+" · "+clean(node.description)+(node.effect==="passive"?" · ติดตัว":" · กำลัง "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ")+prereq+training;
+      const control=known?(node.effect==="passive"?'<span class="sword-passive">เรียนแล้ว · ติดตัว</span>':'<label class="sword-slot-label">ช่องลัด <select data-sentinel-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>'):'<button type="button" data-sentinel-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
+      return heading+'<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small></div>'+control+'</article>';
+    }).join("");
+    const summary=Object.entries(data.practiceLabels).map(([name,label])=>clean(label)+" "+(practice[name]||0)).join(" · ");
+    container.innerHTML='<p>แต้มว่าง '+points+' · '+summary+'</p><p class="note">สตันผู้เล่นสั้นกว่ามอนสเตอร์และมีช่วงต้าน · บอสและมอนสเตอร์ชั้นสูงต้านการสตันและยั่วยุ</p><p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที ผลฝึกและคูลดาวน์ยังคงอยู่</p>'+rows+'<button id="resetSentinelBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
+    container.querySelectorAll("[data-sentinel-learn]").forEach(button=>button.onclick=()=>room.send("sentinel_book",{action:"learn",skillId:button.dataset.sentinelLearn}));
+    container.querySelectorAll("[data-sentinel-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("sentinel_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.sentinelEquip});select.blur();});
+    $("resetSentinelBook").onclick=()=>{if(window.confirm("คืนแต้มผู้พิทักษ์? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("sentinel_book",{action:"reset"});};
+  }
   function syncBladeUI(me) {
     const active=mode==="live" && room?.state?.bladeAvailable===true && me?.pathId==="blade";
     const button=$("bladeBookButton"),bar=$("bladeHotbar"),status=$("bladeStatus"),now=performance.now(),parts=[];
@@ -9747,8 +9841,9 @@
   $("muayBookButton").onclick=openMuayBook;
   $("occultBookButton").onclick=openOccultBook;
   $("bladeBookButton").onclick=openBladeBook;
+  $("sentinelBookButton").onclick=openSentinelBook;
   // Cooldown labels must advance even in a quiet room with no schema patches.
-  setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());}},1000);
+  setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());syncSentinelUI(ownServerCharacter());}},1000);
   $("helpButton").onclick=openHelp;
   $("bag").onclick=openBag;
   $("summon").onclick=()=> {
