@@ -319,15 +319,26 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     player.swordTreeData=JSON.stringify(tree);
   }
 
+
+  private sendSwordNotice(client:Client|undefined, type:string, payload:Record<string,number>):void {
+    if (!client) return;
+    try {
+      client.send(type,payload);
+    } catch (error) {
+      // Notices are optional. A disconnect must not interrupt combat resolution.
+      console.warn("MONTRA sword notice was not delivered",error);
+    }
+  }
+
   private swordGuardDamage(id:string, attacker:{x:number;z:number}, damage:number):number {
     const guard=this.swordGuards.get(id), player=this.state.players.get(id);
-    if (!guard || !player || this.simulatedMs>guard.until) return damage;
+    if (!guard || !player || this.simulatedMs>=guard.until) return damage;
     const dx=attacker.x-player.x, dz=attacker.z-player.z, length=Math.hypot(dx,dz);
     const front=length<0.001 || (-Math.sin(player.facing)*dx-Math.cos(player.facing)*dz)/length>=0;
     if (guard.direction && !front) return damage;
     guard.counterUntil=this.simulatedMs+3000;
     this.recordSwordTraining(id,"blocks");
-    this.clients.find(client=>client.sessionId===id)?.send("sword_guarded",{until:guard.counterUntil});
+    this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"sword_guarded",{until:guard.counterUntil});
     return Math.max(1,Math.round(damage*guard.factor));
   }
 
@@ -349,9 +360,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (now<(tree.cooldowns[skillId] ?? 0)) return this.reject(client,"sword_skill_cooldown");
     if (player.stamina<skill.stamina) return this.reject(client,"insufficient_stamina");
     const guard=this.swordGuards.get(id);
-    if (skill.effect==="counter" && (!guard || this.simulatedMs>guard.counterUntil)) return this.reject(client,"sword_counter_required");
+    if (skill.effect==="counter" && (!guard || this.simulatedMs>=guard.counterUntil)) return this.reject(client,"sword_counter_required");
     const combo=this.swordCombos.get(id);
-    if (skillId==="twin_finale" && (!combo || combo.count<3 || this.simulatedMs>combo.until)) return this.reject(client,"sword_combo_required");
+    if (skillId==="twin_finale" && (!combo || combo.count<3 || this.simulatedMs>=combo.until)) return this.reject(client,"sword_combo_required");
 
     let targetId="", target:Monster|Player|undefined, monster:Monster|undefined;
     if (skill.effect!=="guard" && skill.effect!=="support") {
@@ -372,6 +383,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const next={x:player.x+(dx*move-dz*side)/Math.max(distance,0.001),y:player.y,z:player.z+(dz*move+dx*side)/Math.max(distance,0.001)};
       if (!this.canOccupy(next.x,next.z,next.y,false,player.mapId) || isRestArea(player.mapId,next) ||
           !this.bodyPathClear(player.mapId,player,next)) return this.reject(client,"sword_blocked");
+      const travelX=next.x-player.x, travelZ=next.z-player.z, travel=Math.hypot(travelX,travelZ);
+      if (travel>0.00001) {
+        const sweep=advanceDash(player,{dx:travelX/travel,dz:travelZ/travel},travel,
+          (x,z)=>this.canOccupy(x,z,player.y,false,player.mapId) && !isRestArea(player.mapId,{x,z}),
+          getWorldMap(player.mapId)!.bounds);
+        if (sweep.blocked || sweep.moved+0.00001<travel) return this.reject(client,"sword_blocked");
+      }
       this.destinations.delete(id);
       player.x=next.x; player.z=next.z;
     }
@@ -380,6 +398,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     player.swordTreeData=JSON.stringify(tree);
     if (skill.effect==="guard") {
       this.swordGuards.set(id,{until:this.simulatedMs+1200,factor:skill.power,direction:skillId!=="circle_guard",counterUntil:0});
+      this.sendSwordNotice(client,"sword_counter_cleared",{});
     } else if (skill.effect==="support") {
       const members=this.parties.get(id)?.members ?? [id];
       for (const memberId of members) {
@@ -408,8 +427,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.state.monsters.forEach(consider);
       }
       const hits=skill.effect==="flurry" ? (skillId==="twin_finale"?3:2) : 1;
-      if (skill.effect==="counter" && guard) guard.counterUntil=0;
-      if (skillId==="twin_finale") { this.swordCombos.delete(id); client.send("sword_combo",{count:0}); }
+      if (skill.effect==="counter" && guard) {
+        guard.counterUntil=0;
+        this.sendSwordNotice(client,"sword_counter_cleared",{});
+      }
+      if (skillId==="twin_finale") { this.swordCombos.delete(id); this.sendSwordNotice(client,"sword_combo",{count:0}); }
       for (const victim of victims.slice(0,5)) {
         for (let count=0;count<hits && victim.target.alive;count++) {
           this.recordCombat(id,victim.id);
@@ -1781,7 +1803,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.swordCombos.set(attackerId,{count,until:this.simulatedMs+3500});
         this.recordSwordTraining(attackerId,"strikes");
         if (previousCount===2) this.recordSwordTraining(attackerId,"finishes");
-        this.clients.find(client=>client.sessionId===attackerId)?.send("sword_combo",{count});
+        this.sendSwordNotice(this.clients.find(client=>client.sessionId===attackerId),"sword_combo",{count});
       }
 
       const meleeBonus = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp").melee;

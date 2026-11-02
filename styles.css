@@ -506,3 +506,6 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .sword-hotkey:disabled { opacity:.55; }
 .sword-slot-label { display:block; margin-top:5px; font-size:12px; }
 .sword-slot-label select { max-width:115px; margin-left:6px; }
+
+.sword-status { width:max-content; max-width:90%; margin:0 auto 4px; padding:3px 9px; border-radius:8px; background:#201a14df; color:#ffe3a0; font-size:11px; text-align:center; }
+.sword-status[hidden] { display:none; }

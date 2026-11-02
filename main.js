@@ -73,7 +73,14 @@
     monsterBar: $("monsterBar"), monsterHint: $("monsterHint"),
   };
   let toastTimer;
+  function positionSwordToast() {
+    const status=$("swordStatus"), hotbar=$("swordHotbar"), anchor=status && !status.hidden ? status : hotbar && !hotbar.hidden ? hotbar : null;
+    if (!anchor) { ui.toast.style.removeProperty("bottom"); return; }
+    const game=$("game").getBoundingClientRect(), area=anchor.getBoundingClientRect();
+    ui.toast.style.bottom=Math.max(0,game.bottom-area.top+8)+"px";
+  }
   function toast(message) {
+    positionSwordToast();
     ui.toast.textContent = message;
     ui.toast.classList.add("show");
     clearTimeout(toastTimer);
@@ -2789,7 +2796,7 @@
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
-    possessed=false;syncPossessionButton();syncTalismanButton(null);syncSwordTreeButton(null);syncSwordHotbar();swordCombo=0; swordComboUntil=0;$("classSkill").hidden=true;
+    possessed=false;syncPossessionButton();syncTalismanButton(null);syncSwordTreeButton(null);syncSwordHotbar();swordCombo=0; swordComboUntil=0; swordCounterUntil=0; syncSwordStatus(null);$("classSkill").hidden=true;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false; updatePartyBadge();
@@ -3268,6 +3275,7 @@
     syncTalismanButton(mine);
     syncSwordTreeButton(mine);
     syncSwordHotbar();
+    syncSwordStatus(mine);
     if (drawerActive === "swordTree") renderSwordTree();
     if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
     if (drawerActive === "character") renderProgressionProfile();
@@ -3564,12 +3572,30 @@
         if (room === joined) toast("บันทึกสายอาชีพและเผ่าแล้ว");
       });
       joined.onMessage("sword_combo", data => { if (room===joined) {
-        const firstFull=data.count===3 && (swordCombo<3 || performance.now()>=swordComboUntil);
-        swordCombo=data.count; swordComboUntil=performance.now()+3500;
+        const count=Number.isInteger(data?.count) ? Math.max(0,Math.min(3,data.count)) : 0;
+        const firstFull=count===3 && (swordCombo<3 || performance.now()>=swordComboUntil);
+        swordCombo=count;
+        swordComboUntil=performance.now()+3500;
+        syncSwordStatus(ownServerCharacter());
         if (firstFull) toast("จังหวะเพลงดาบ 3 / 3");
       } });
-      joined.onMessage("sword_tree_changed", () => { if (room===joined) { swordTreeRenderKey=""; renderSwordTree(); toast("บันทึกตำราวิชาดาบแล้ว"); } });
-      joined.onMessage("sword_guarded", () => { if (room===joined) toast("รับสำเร็จ · ใช้วิชาสวนได้ 3 วินาที"); });
+      joined.onMessage("sword_tree_changed", result => { if (room===joined) {
+        if (result?.action==="school" || result?.action==="reset") {
+          selectedSwordSkill=""; swordCombo=0; swordComboUntil=0; swordCounterUntil=0;
+          if (targetedSkill==="sword") setTargetedSkill(null);
+          syncSwordStatus(ownServerCharacter());
+        }
+        swordTreeRenderKey=""; renderSwordTree(); toast("บันทึกตำราวิชาดาบแล้ว");
+      } });
+      joined.onMessage("sword_counter_cleared", () => { if (room===joined) {
+        swordCounterUntil=0;
+        syncSwordStatus(ownServerCharacter());
+      } });
+      joined.onMessage("sword_guarded", () => { if (room===joined) {
+        swordCounterUntil=performance.now()+3000;
+        syncSwordStatus(ownServerCharacter());
+        toast("รับสำเร็จ · ใช้วิชาสวนได้ 3 วินาที");
+      } });
       joined.onMessage("sword_skill_used", result => {
         if (room!==joined) return;
         const caster=joined.state?.players?.get?.(result?.playerId);
@@ -3580,7 +3606,8 @@
         ring.position.set(caster.x,caster.y+.12,caster.z);ring.rotation.x=Math.PI/2;ring.material=gold;ring.isPickable=false;
         skillEffects.push({mesh:ring,mapId:activeMapId,until:performance.now()+450});
         if (result.playerId===localId) {
-          const name=swordData()?.catalog?.nodes?.[result.skillId]?.name || "วิชาดาบ";
+          const node=swordData()?.catalog?.nodes?.[result.skillId];
+          const name=node?.name || "วิชาดาบ";
           toast(name+" สำเร็จ");
         }
       });
@@ -4532,7 +4559,7 @@
   $("classSkill").onclick = () => { if (mode === "live") room?.send("cast_class_skill", {}); };
 
 
-  let selectedSwordSkill = "", swordTreeRenderKey = "", swordTreeViewedSchool = "", swordCombo = 0, swordComboUntil = 0;
+  let selectedSwordSkill = "", swordTreeRenderKey = "", swordTreeViewedSchool = "", swordCombo = 0, swordComboUntil = 0, swordCounterUntil = 0;
   function swordData() {
     const me=ownServerCharacter();
     try {
@@ -4540,9 +4567,22 @@
       return tree && catalog ? {me,tree,catalog} : null;
     } catch { return null; }
   }
+
+  function syncSwordStatus(me) {
+    const label=$("swordStatus"), active=mode==="live" && me?.alive && me.pathId==="phutthaisawan";
+    const now=performance.now(), parts=[];
+    if (active && swordCombo>0 && now<swordComboUntil) parts.push("จังหวะดาบ "+swordCombo+" / 3");
+    if (active && now<swordCounterUntil) parts.push("สวนกลับพร้อม");
+    const message=parts.join(" · "), wasHidden=label.hidden;
+    label.hidden=parts.length===0;
+    const changed=label.textContent!==message;
+    if (changed) label.textContent=message;
+    if (wasHidden!==label.hidden || changed) positionSwordToast();
+  }
   function syncSwordTreeButton(me) {
     const button=$("swordTreeButton");
     button.hidden=!(mode==="live" && me?.pathId==="phutthaisawan" && room?.state?.swordTreeCatalog);
+    if (button.hidden && targetedSkill==="sword") { selectedSwordSkill=""; setTargetedSkill(null); }
   }
 
   let swordHotbarKey="";
@@ -4560,7 +4600,11 @@
   }
   function syncSwordHotbar() {
     const bar=$("swordHotbar"), data=swordData();
-    if (!data || data.me.pathId!=="phutthaisawan") { bar.hidden=true; swordHotbarKey=""; return; }
+    if (!data || data.me.pathId!=="phutthaisawan") {
+      const wasHidden=bar.hidden; bar.hidden=true; swordHotbarKey="";
+      if (!wasHidden) positionSwordToast();
+      return;
+    }
     const {me,tree,catalog}=data, slots=tree.loadouts?.[tree.school] || [null,null,null];
     bar.hidden=false;
     const timing=slots.map(id=>id ? Math.max(0,Math.ceil(((tree.cooldowns[id]||0)-Date.now())/1000)) : 0);
@@ -4577,6 +4621,7 @@
       if(node)button.onclick=()=>useSwordSkill(id);
       bar.append(button);
     });
+    positionSwordToast();
   }
   function openSwordTree() {
     const data=swordData();
@@ -5486,7 +5531,7 @@
     if (me) warm.position.set(me.x, me.y + 3.4, me.z + .6);
     scene.render();
   });
-  window.addEventListener("resize",()=>{ engine.resize(); updateStatus(); });
+  window.addEventListener("resize",()=>{ engine.resize(); updateStatus(); positionSwordToast(); });
   window.addEventListener("pagehide",()=> { clearSyncPoll();if(room)try{room.leave();}catch(_){} });
   resetDemoMonster();
   updateStatus();
