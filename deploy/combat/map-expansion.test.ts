@@ -40,9 +40,9 @@ test("saved locations beyond the old boundary remain in the same map", () => {
   assert.deepEqual(getSafeMapSpawn("forbidden_forest",point),point);
   assert.deepEqual(getSafeMapSpawn("forbidden_forest",{x:500,y:0,z:0}),{x:0,y:0,z:12});
 });
-test("16 independent enemies have valid spawn points outside rest zones", () => {
+test("17 independent enemies have valid spawn points outside rest zones", () => {
   const state=new MyRoomState(),forest=new ForestEncounters(state.monsters);forest.initialize();
-  assert.equal(state.monsters.size,16);
+  assert.equal(state.monsters.size,17);
   const map=getWorldMap("forbidden_forest")!;
   for(const m of state.monsters.values()){
     assert.ok(isSafeWorldPoint(map,m));assert.equal(isRestArea(m.mapId,m),false);

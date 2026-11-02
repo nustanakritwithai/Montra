@@ -58,6 +58,7 @@ export const Monster = schema({
   level: t.number().default(1),
   displayName: t.string().default("ผีสิง"),
   defense: t.number().default(100),
+  tier: t.string().default("normal"),
 }, "MontraMonster");
 
 export type Monster = SchemaType<typeof Monster>;

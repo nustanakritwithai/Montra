@@ -8,6 +8,10 @@ export type WorldPortal = Readonly<{
 export type HuntCamp = Readonly<{id:string; name:string; x:number; z:number; levels:readonly number[]}>;
 export type RestArea = Readonly<{x:number; z:number; radius:number; name:string}>;
 export const WORLD_EXPANSION = process.env.MONTRA_WORLD_EXPANSION === "1";
+export const SHRINE_GUARDIAN = Object.freeze({
+  id: "forest_shrine_keeper", name: "ผู้พิทักษ์ศาลร้าง", level: 12,
+  x: -14, z: -90, respawnMs: 120_000, strikeRadius: 2.8,
+});
 export const FOREST_CAMPS: readonly HuntCamp[] = [
   {id:"west",name:"ชายป่ากระซิบ",x:-26,z:-10,levels:[1,2,3,4]},
   {id:"east",name:"ดงรากอาคม",x:26,z:-24,levels:[4,5,6,7]},
@@ -22,6 +26,7 @@ export type WorldMapDefinition = Readonly<{
   portals: readonly WorldPortal[];
   restAreas?: readonly RestArea[];
   camps?: readonly HuntCamp[];
+  guardian?: typeof SHRINE_GUARDIAN;
   paths?: readonly (readonly {x:number; z:number}[])[];
 }>;
 export const DEFAULT_MAP_ID = "ritual_village";
@@ -41,11 +46,13 @@ export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.f
     spawn: { x: 0, y: 0, z: 12 },
     restAreas: WORLD_EXPANSION ? [{x:0,z:12,radius:6,name:"ศาลพักชายป่า"}] : [],
     camps: WORLD_EXPANSION ? FOREST_CAMPS : [],
+    guardian: WORLD_EXPANSION ? SHRINE_GUARDIAN : undefined,
     paths: WORLD_EXPANSION ? [
-      [{x:0,z:14},{x:0,z:0},{x:-26,z:-10},{x:-28,z:-55},{x:0,z:-88}],
-      [{x:0,z:0},{x:26,z:-24},{x:26,z:-72},{x:0,z:-88}],
+      [{x:0,z:14},{x:0,z:0},{x:-8,z:1},{x:-12,z:-1},{x:-20,z:-3},{x:-26,z:-10},{x:-28,z:-55},{x:-19,z:-67},{x:-4,z:-73},{x:0,z:-88}],
+      [{x:0,z:0},{x:7,z:-3},{x:13,z:-9},{x:19,z:-10},{x:26,z:-24},{x:26,z:-72},{x:0,z:-88}],
       [{x:-26,z:-10},{x:0,z:-30},{x:26,z:-24}],
       [{x:-28,z:-55},{x:0,z:-46},{x:26,z:-72}],
+      [{x:0,z:-88},{x:SHRINE_GUARDIAN.x,z:SHRINE_GUARDIAN.z}],
     ] : [],
     obstacles: [
       { id: "tree-west-1", x: -6, z: 6, radius: 1.4 },
@@ -61,6 +68,10 @@ export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.f
       { id: "stone-north-1", x: 5, z: -9, radius: 1.8 },
       { id: "stone-west-1", x: -9, z: -3, radius: 1.5 },
       ...(WORLD_EXPANSION ? [
+        {id:"camp-west",x:-37.5,z:-10,radius:1.6}, {id:"camp-east",x:37.5,z:-24,radius:1.8},
+        {id:"camp-deep_west",x:-39.5,z:-55,radius:1.6}, {id:"camp-deep_east",x:37.5,z:-72,radius:1.7},
+        ...[[-44,-9],[-42,-20],[43,-24],[40,-37],[-43,-52],[-44,-65],[41,-71],[42,-84],
+          [8,-43],[-7,-58],[-46,-89],[46,-2]].map(([x,z],index)=>({id:"grove-"+index,x,z,radius:1.15})),
         {id:"north-grove-1",x:-49,z:-35,radius:2},
         {id:"north-grove-2",x:48,z:-51,radius:2},
         {id:"north-stone",x:8,z:-62,radius:2.2},

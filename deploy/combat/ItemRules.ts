@@ -155,6 +155,16 @@ export function equipInventoryWeapon(
   };
 }
 
+/** One potion per eligible Elite recipient; an entirely full bag keeps its contents. */
+export function grantRewardPotion(inventory:InventorySnapshot): InventorySnapshot | null {
+  const slots = inventory.slots.slice();
+  let index = slots.findIndex(stack => stack?.itemId === POTION_ID && stack.quantity < INVENTORY_STACK_LIMIT);
+  if (index < 0) index = slots.indexOf(null);
+  if (index < 0) return null;
+  slots[index] = {itemId:POTION_ID,quantity:(slots[index]?.quantity ?? 0) + 1};
+  return {...inventory,slots};
+}
+
 export function equippedWeaponId(inventory: InventorySnapshot | undefined): WeaponItemId | null {
   if (!inventory || inventory.equippedWeaponSlot === undefined ||
       inventory.equippedWeaponSlot === null) return null;

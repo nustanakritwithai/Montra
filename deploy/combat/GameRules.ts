@@ -4,6 +4,7 @@
  * The browser is allowed to request destinations or target IDs only.
  * It NEVER supplies positions, HP, damage, speed, cooldowns or facing.
  */
+import { SHRINE_GUARDIAN } from "./WorldMaps.js";
 export const RULES = Object.freeze({
   tickRate: 20,               // Colyseus fixed-step simulation: 50 ms
   mapLimit: 20,
@@ -81,7 +82,7 @@ export function parseMoveCommand(message: unknown, bounds: MapBounds = DEFAULT_B
 
 export function parseAttackCommand(message: unknown): AttackCommand | null {
   if (!hasExactKeys(message, ["targetId"])) return null;
-  return message.targetId === RULES.monsterId || (typeof message.targetId === "string" && /^forest_(?:west|east|deep_west|deep_east)_[1-4]$/.test(message.targetId))
+  return message.targetId === RULES.monsterId || message.targetId === SHRINE_GUARDIAN.id || (typeof message.targetId === "string" && /^forest_(?:west|east|deep_west|deep_east)_[1-4]$/.test(message.targetId))
     ? { targetId: message.targetId as string }
     : null;
 }

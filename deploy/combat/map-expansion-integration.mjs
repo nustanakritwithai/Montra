@@ -19,7 +19,7 @@ async function seed(t,mapId,x,z,slot=1){const r=await open(t,undefined,slot);awa
 try{
  if(process.env.MONTRA_MAP_TEST_STAGE==='read'){
    const expected=JSON.parse(await readFile(path.join(dir,'map-restart-expectations.json'),'utf8'));
-   for(const e of expected){const r=await open(e.token,undefined,e.slot);const p=own(r);assert.equal(p.mapId,e.mapId);assert.equal(p.x,e.x);assert.equal(p.z,e.z);assert.equal(p.level,e.level);assert.equal(p.experience,e.experience);await leave(r);const disk=JSON.parse(await readFile(file(e.token,e.slot),'utf8'));assert.equal(disk.inventory.slots[0].quantity,2);}
+   for(const e of expected){const r=await open(e.token,undefined,e.slot);const p=own(r);assert.equal(p.mapId,e.mapId);assert.ok(Math.abs(p.x-e.x)<1e-5,'wire X within float32 precision');assert.ok(Math.abs(p.z-e.z)<1e-5,'wire Z within float32 precision');assert.equal(p.level,e.level);assert.equal(p.experience,e.experience);await leave(r);const disk=JSON.parse(await readFile(file(e.token,e.slot),'utf8'));assert.equal(disk.x,e.x);assert.equal(disk.z,e.z);assert.equal(disk.inventory.slots[0].quantity,2);}
    console.log('PASS: actual process restart preserves all 3 expanded-map slots and inventory');
  }else{
    await assert.rejects(new Client(endpoint).create('my_room',{}),/world_client_update_required/);
@@ -27,7 +27,7 @@ try{
    for(const slot of [1,2,3])await seed(token(1),'forbidden_forest',30+slot,-40,slot);
    await seed(token(2),'ritual_village',0,0);await seed(token(3),'forbidden_forest',-33,-20);await seed(token(4),'ritual_village',2,0);
    const a=await open(token(1)),b=await open(token(2),a.roomId),c=await open(token(3),a.roomId),d=await open(token(4),a.roomId);
-   await until(()=>a.state.monsters?.size===16,'16 enemies');assert.equal(a.state.players.size,4);
+   await until(()=>a.state.monsters?.size===17 && a.state.players.size===4,'all four clients and 17 forest enemies');
    const manifest=JSON.parse(a.state.worldDefinition);assert.equal(manifest.maps.forbidden_forest.bounds.maxX,60);
    const rejects=[];b.onMessage('command_rejected',e=>rejects.push(e.reason));
    b.send('attack',{targetId:d.sessionId});await until(()=>rejects.includes('target_unavailable'),'safe town rejects PK');
@@ -46,9 +46,17 @@ try{
    await leave(d);await leave(b);await leave(c);await leave(a);
    await seed(token(5),'ritual_village',-4,-17);const w=await open(token(5));
    w.send('warp',{portalId:'village_to_forest'});await until(()=>own(w).mapId==='forbidden_forest','warp to expanded forest');assert.equal(own(w).z,12);
-   await sleep(3100);w.send('warp',{portalId:'forest_to_village'});await until(()=>own(w).mapId==='ritual_village','return to village');await leave(w);
+   // Cooldown uses simulation time; a busy render/test host may advance it slower than wall time.
+   let warpRejection;w.onMessage('command_rejected',notice=>{warpRejection=notice.reason;});
+   for(let attempt=0;attempt<10 && own(w).mapId!=='ritual_village';attempt++){
+     await sleep(attempt===0?3100:650);warpRejection=undefined;
+     w.send('warp',{portalId:'forest_to_village'});
+     await until(()=>own(w).mapId==='ritual_village'||warpRejection,'return warp response');
+     if(warpRejection)assert.equal(warpRejection,'warp_cooldown');
+   }
+   assert.equal(own(w).mapId,'ritual_village');await leave(w);
    const expected=[];for(const slot of [1,2,3]){const disk=JSON.parse(await readFile(file(token(1),slot),'utf8'));assert.equal(disk.inventory.slots[0].quantity,2);expected.push({token:token(1),slot,mapId:disk.mapId,x:disk.x,z:disk.z,level:disk.level,experience:disk.experience});}
    await writeFile(path.join(dir,'map-restart-expectations.json'),JSON.stringify(expected));
-   console.log('PASS: four players, 16 enemies, safe zones, cross-map rejection, extended walk/dash/flight/summon, EXP, bounds and return warp');
+   console.log('PASS: four players, 16 enemies plus the guardian, safe zones, cross-map rejection, extended walk/dash/flight/summon, EXP, bounds and return warp');
  }
 }finally{for(const r of [...rooms].reverse())await r.leave().catch(()=>{});}
