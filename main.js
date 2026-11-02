@@ -3462,13 +3462,17 @@
     crackLines(c, s, 10, 812, "rgba(20,5,5,.5)", 1);
   }, (h, s) => { for (const y of [s * .12, s * .88]) { h.fillStyle = "#c0c0c0"; h.fillRect(0, y - 3, s, 6); } crackLines(h, s, 10, 812, "#404040", 1); }, 2), "#ffffff");
   // Bark: deep vertical furrows, knots and moss.
-  applySurface(gm.bark, surface("bark", 256, (c, s) => {
+  // Lathes and tubes run U around and V along their length: turn the bark so
+  // its furrows follow the trunk and branches.
+  gm.barkSurface = surface("bark", 256, (c, s) => {
     c.fillStyle = "#4a3828"; c.fillRect(0, 0, s, s);
     for (let i = 0; i < 70; i++) { const x = R(i, 821) * s; c.strokeStyle = i % 3 ? "rgba(20,12,6,.7)" : "rgba(120,96,70,.35)"; c.lineWidth = 1 + R(i, 822) * 3; c.beginPath(); c.moveTo(x, 0);
       for (let y = 0; y <= s; y += 16) c.lineTo(x + Math.sin(y * .05 + i) * 6, y); c.stroke(); }
     for (let i = 0; i < 6; i++) { c.fillStyle = "rgba(15,8,4,.8)"; c.beginPath(); c.ellipse(R(i, 823) * s, R(i, 824) * s, 6, 10, 0, 0, 6.28); c.fill(); }
     for (let i = 0; i < 14; i++) { const g = c.createRadialGradient(R(i, 825) * s, R(i, 826) * s, 0, R(i, 825) * s, R(i, 826) * s, 30); g.addColorStop(0, "rgba(70,110,50,.6)"); g.addColorStop(1, "rgba(70,110,50,0)"); c.fillStyle = g; c.fillRect(0, 0, s, s); }
-  }, (h, s) => { for (let i = 0; i < 70; i++) { const x = R(i, 821) * s; h.strokeStyle = i % 3 ? "#202020" : "#b0b0b0"; h.lineWidth = 1 + R(i, 822) * 3; h.beginPath(); h.moveTo(x, 0); for (let y = 0; y <= s; y += 16) h.lineTo(x + Math.sin(y * .05 + i) * 6, y); h.stroke(); } }, 4, 2), "#ffffff");
+  }, (h, s) => { for (let i = 0; i < 70; i++) { const x = R(i, 821) * s; h.strokeStyle = i % 3 ? "#202020" : "#b0b0b0"; h.lineWidth = 1 + R(i, 822) * 3; h.beginPath(); h.moveTo(x, 0); for (let y = 0; y <= s; y += 16) h.lineTo(x + Math.sin(y * .05 + i) * 6, y); h.stroke(); } }, 4, 2);
+  for (const t of [gm.barkSurface.color, gm.barkSurface.normal]) t.wAng = Math.PI / 2;
+  applySurface(gm.bark, gm.barkSurface, "#ffffff");
   // Bronze: verdigris patina, engraved script bands, rubbed highlights.
   applySurface(templeBronze, surface("bronze", 256, (c, s) => {
     c.fillStyle = "#6b5a3a"; c.fillRect(0, 0, s, s);
