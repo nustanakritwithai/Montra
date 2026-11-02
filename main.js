@@ -2079,6 +2079,23 @@
   const blackSteel = mat("black steel", "#2a2a2f"); blackSteel.specularColor = B.Color3.FromHexString("#8a8f9a"); blackSteel.specularPower = 48;
   const copper = mat("engraved copper", "#8a5a3a", "#24140a"), leatherWrap = mat("wrapped grip", "#1b1615");
   const emberEdge = mat("ember edge", "#ff6a3a", "#e2381a"); glowMats.add(emberEdge);
+  // Far-camera identity: a yantra shawl (read from above), glowing amulets
+  // and three familiar spirits orbiting the shaman.
+  const shawlCloth = (name, base, trim) => {
+    const m = mat(name, "#ffffff", "#140404");
+    m.diffuseTexture = paintTexture(name, 128, (c, s) => {
+      c.fillStyle = base; c.fillRect(0, 0, s, s);
+      c.strokeStyle = trim; c.lineWidth = 6; c.strokeRect(6, 6, s - 12, s - 12);
+      c.lineWidth = 3; c.strokeRect(34, 34, s - 68, s - 68);
+      c.beginPath(); c.moveTo(34, 34); c.lineTo(s - 34, s - 34); c.moveTo(s - 34, 34); c.lineTo(34, s - 34); c.stroke();
+      c.beginPath(); c.arc(s / 2, s / 2, 16, 0, Math.PI * 2); c.stroke();
+    });
+    return m;
+  };
+  const shawlHero = shawlCloth("hero yantra shawl", "#9c1f18", "#e8b85a"), shawlFriend = shawlCloth("ally yantra shawl", "#1d3f6e", "#9fe3e0");
+  const amuletGlow = mat("glowing amulet", "#f2c66a", "#c8861c"); glowMats.add(amuletGlow);
+  const familiarMats = [["phi phrai", "#8dffbf", "#2fe08a"], ["kuman thong", "#ffd76a", "#e0a11c"], ["phi hong", "#ff7a62", "#e02f1e"]]
+    .map(([name, hex, glowHex]) => { const m = mat(name, hex, glowHex); m.alpha = .88; glowMats.add(m); return m; });
   function mergedSegment(parts, pivot, name) {
     for (const p of parts) p.isPickable = false;
     const mesh = parts.length > 1 ? B.Mesh.MergeMeshes(parts, true, true, undefined, false, true) : parts[0];
@@ -2103,6 +2120,14 @@
     const node = (name, p, x, y, z) => { const n = new B.TransformNode(name, scene); n.parent = p; n.position.set(x, y, z); return n; };
     const flush = (pivot, name) => { const m = mergedSegment(parts, pivot, name); parts = []; return m; };
     const body = node("body", parent, 0, 0, 0);
+    body.scaling.setAll(1.2); // reads at the farthest camera; hitbox is unchanged
+    const shawl = local ? shawlHero : shawlFriend;
+    // Shoulder mantle and back cape: the surfaces the overhead camera sees.
+    cyl(0, 1.74, .02, .1, .8, .74, shawl, 10).scaling.z = .78;
+    const cape = box(0, 1.36, .19, .62, .8, .05, shawl); cape.rotation.x = .12;
+    for (const side of [-1, 1]) box(side * .3, 1.33, .17, .05, .78, .06, shawl).rotation.x = .12;
+    const sashCross = box(0, 1.45, -.18, .1, .78, .03, shawl); sashCross.rotation.z = .62;
+    cyl(0, 2.03, .01, .06, .4, .4, local ? shawlHero : shawlFriend, 10);
     // Torso, head, jewellery and carried relics move together.
     box(0, 1.02, 0, .46, .22, .3, pants);
     cyl(0, 1.13, 0, .14, .52, .5, sash, 10).scaling.z = .72;
@@ -2124,12 +2149,11 @@
     ball(0, 2.18, .1, .15, hairMat, 6);
     // Prayer bead strands, each ending in a gold-framed amulet.
     for (const [drop, width, top] of [[.24, .19, 1.76], [.36, .23, 1.77]]) {
-      for (let i = 0; i <= 16; i++) {
-        const t = i / 8 - 1, y = top - (1 - t * t) * drop;
-        ball(t * width, y, -.17 - (1 - t * t) * .04, .05, beadMat, 4);
+      for (let i = 0; i <= 8; i++) {
+        const t = i / 4 - 1, y = top - (1 - t * t) * drop;
+        ball(t * width, y, -.17 - (1 - t * t) * .04, .07, beadMat, 4);
       }
-      box(0, top - drop - .07, -.215, .075, .1, .025, gold);
-      box(0, top - drop - .07, -.23, .05, .072, .01, bronzeMat);
+      box(0, top - drop - .08, -.22, .11, .14, .03, amuletGlow);
     }
     // Rice pouch on the right hip: tied with red cord, gold seal in front.
     ball(.29, .96, -.06, .24, pouchCloth, 6).scaling.set(1, 1.15, .85);
@@ -2254,13 +2278,22 @@
       spirit_staff: createHeldWeapon("spirit_staff"),
     };
     attachCrescentBlade(weaponModels.arcane_sword);
+    // Three familiar spirits: a glowing head with a tapering wisp tail.
+    const familiars = familiarMats.map((material, k) => {
+      const spirit = new B.TransformNode("familiar", scene); spirit.parent = parent;
+      const head = B.MeshBuilder.CreateSphere("familiar head", { diameter: .5, segments: 6 }, scene);
+      const tail = B.MeshBuilder.CreateCylinder("familiar tail", { height: .95, diameterTop: .44, diameterBottom: 0, tessellation: 6 }, scene);
+      tail.position.set(0, -.42, .24); tail.rotation.x = -.6;
+      for (const m of [head, tail]) { m.parent = spirit; m.material = material; m.isPickable = false; }
+      return { node: spirit, radius: 1.45 + k * .3, height: 1.8 + k * .4, speed: (1.1 + k * .25) * (k % 2 ? -1 : 1), offset: k * 2.1 };
+    });
     return {
       node: parent, local, x: 0, y: 0, z: 0,
       targetX: 0, targetY: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
       serverFacing: null, hitFlashUntil: 0, dashUntil: 0, flightHalo: halo,
       weaponModels, weaponId: "",
-      rig: { body, arms, elbows, legs, knees }, phase: 0, moveBlend: 0, swingUntil: 0,
+      rig: { body, arms, elbows, legs, knees, familiars }, phase: 0, moveBlend: 0, swingUntil: 0,
     };
   }
   // Crescent Blade (assets/weapons/crescent-blade-lod2.glb, 1,530 tris, 256px
@@ -2307,6 +2340,11 @@
       r.elbows[i].rotation.x = .22 + m * .25;
     }
     r.body.position.y = Math.abs(c) * .05 * m + Math.sin(t * 2.1) * .012 * (1 - m);
+    for (const f of r.familiars) {
+      const angle = t * f.speed + f.offset, sign = Math.sign(f.speed);
+      f.node.position.set(Math.cos(angle) * f.radius, f.height + Math.sin(t * 2.3 + f.offset) * .22, Math.sin(angle) * f.radius);
+      f.node.rotation.y = -angle - sign * Math.PI / 2; // tail trails behind the orbit
+    }
     r.body.rotation.x = .07 * m + ((a.dashUntil || 0) > now ? .3 : 0);
     if ((a.swingUntil || 0) > now) {
       const p = 1 - (a.swingUntil - now) / 380;
