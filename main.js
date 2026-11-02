@@ -127,7 +127,8 @@
   camera.lowerBetaLimit = 0.40;
   camera.upperBetaLimit = 1.30;
   camera.fov = 0.69;
-  camera.minZ = 0.2;
+  camera.minZ = 1;
+  camera.maxZ = 320;
   const moon = new B.HemisphericLight("moon", new B.Vector3(0.1, 1, 0.2), scene);
   moon.intensity = .85;
   moon.diffuse = B.Color3.FromHexString("#c9dacc");
@@ -429,7 +430,9 @@
     }
     for(const camp of map.camps||[]){
       const clearing=B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
-      clearing.parent=expansionRoot;clearing.rotation.x=Math.PI/2;clearing.position.set(camp.x,.015,camp.z);clearing.material=forestClearing;clearing.isPickable=false;
+      // Between the soil (-.12) and trail tops (+.015), so their colors never
+      // fight for the same depth pixels at the wide camera distance.
+      clearing.parent=expansionRoot;clearing.rotation.x=Math.PI/2;clearing.position.set(camp.x,-.06,camp.z);clearing.material=forestClearing;clearing.isPickable=false;
       expansionLabel(camp.name+" · Lv "+Math.min(...camp.levels)+"–"+Math.max(...camp.levels),camp.x,camp.z);
     }
     for(const area of map.restAreas||[]){
