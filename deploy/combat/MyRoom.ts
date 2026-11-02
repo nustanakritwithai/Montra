@@ -885,33 +885,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     },
 
-    summon: (client: Client, message: unknown) => {
-      if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
-      const id = client.sessionId;
-      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_summon");
-      const owner = this.state.players.get(id);
-      if (!owner || !owner.alive) return this.reject(client, "not_alive");
-      if (owner.possessionActive) return this.reject(client, "possession_active");
-      if (this.state.summons.has(id)) return this.reject(client, "summon_limit");
-      if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) {
-        return this.reject(client, "summon_rate_limited");
-      }
-      const last = this.lastSummonAt.get(id) ?? -Infinity;
-      if (this.simulatedMs - last < RULES.summonCooldownMs) {
-        return this.reject(client, "summon_cooldown");
-      }
-      this.lastSummonAt.set(id, this.simulatedMs);
-
-      const guardian = new SummonedGuardian({
-        ownerId: id, kind: "guardian",
-        x: clampToMap(owner.x - 1.1, getWorldMap(owner.mapId)!.bounds, "x"), y: owner.y, z: clampToMap(owner.z + 0.9, getWorldMap(owner.mapId)!.bounds, "z"),
-        facing: owner.facing, action: "follow", targetId: "",
-      });
-      this.state.summons.set(id, guardian);
-      this.lastSummonAttackAt.delete(id);
-      this.broadcast("summon_spawn", { ownerId: id, kind: "guardian" },
-        { afterNextPatch: true });
-    },
+    summon: (client: Client, message: unknown) => this.summonSpirit(client, message, "guardian"),
+    pot_summon: (client: Client, message: unknown) => this.summonSpirit(client, message, "pot_spirit"),
 
     possess: (client:Client,message:unknown) => {
       const id=client.sessionId;
@@ -982,85 +957,117 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         { afterNextPatch:true });
     },
 
-    // One targeted magic projectile per valid click; server computes muzzle,
-    // target body position, 3D range, line of sight, damage and cooldown.
-    shoot: (client: Client, message: unknown) => {
-      if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
-      const monsterOrder = parseAttackCommand(message);
-      const pkOrder = monsterOrder ? null : parsePkTargetCommand(message);
-      if (!monsterOrder && !pkOrder) return this.reject(client, "invalid_shoot");
-      const id = client.sessionId;
-      const shooter = this.state.players.get(id);
-      if (!shooter || !shooter.alive) return this.reject(client, "not_alive");
-      if (this.climbs.has(id)) return this.reject(client, "climbing");
-      if (this.activeDashes.has(id)) return this.reject(client, "dashing");
-      if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
-      if (!this.gates.get(id)?.attack.consume(this.simulatedMs)) {
-        return this.reject(client, "attack_rate_limited");
-      }
-
-      const targetId = monsterOrder ? monsterOrder.targetId : pkOrder!.targetId;
-      if (targetId === id) return this.reject(client, "self_attack");
-      if (!this.sameCombatMap(id, targetId)) return this.reject(client, "target_unavailable");
-      const target = monsterOrder
-        ? this.getMonster(targetId)
-        : this.state.players.get(targetId);
-      if (!target || !target.alive) return this.reject(client, "target_unavailable");
-
-      const from = { x:shooter.x, y:shooter.y+FORT.shootOriginHeight, z:shooter.z };
-      const to = { x:target.x, y:target.y + FORT.targetBodyHeight, z:target.z };
-      if (distance3d(from,to) > FORT.rangedRange) {
-        return this.reject(client, "shot_out_of_range");
-      }
-      if ((shooter.mapId === DEFAULT_MAP_ID && wallBlocksShot(from,to)) || !isWorldSegmentClear(shooter.mapId,from,to)) {
-        return this.reject(client, "shot_blocked");
-      }
-
-      const last = this.lastAttackMs.get(id) ?? -Infinity;
-      if (this.simulatedMs-last < FORT.rangedCooldownMs) {
-        return this.reject(client, "shot_cooldown");
-      }
-      this.lastAttackMs.set(id,this.simulatedMs);
-      this.recordCombat(id, targetId);
-      shooter.facing = facingTo(target.x-shooter.x, target.z-shooter.z);
-      const rangedAttack = shooter.magicAtk + weaponBonuses(this.inventories.get(id), monsterOrder ? "pve" : "pvp").ranged;
-      const rangedDamage = monsterOrder ? calculateDamage(rangedAttack, (target as Monster).defense, (target as Monster).level) :
-        calculateDamage(rangedAttack, (target as Player).magicDef, (target as Player).level);
-
-      if (monsterOrder) {
-        const ghost = this.getMonster(targetId)!;
-        ghost.hp = Math.max(0,ghost.hp-rangedDamage);
-        ghost.hitSeq += 1;
-        this.broadcast("combat_hit", {
-          attackerId:id,targetId,damage:rangedDamage,
-          hp:ghost.hp,maxHp:ghost.maxHp,hitSeq:ghost.hitSeq,source:"ranged",
-        }, { afterNextPatch:true });
-        if (ghost.hp===0) this.killMonster(id, targetId);
-      } else {
-        const victim=target as Player;
-        victim.hp=Math.max(0,victim.hp-rangedDamage);
-        victim.hitSeq+=1;
-        this.broadcast("pvp_hit", {
-          attackerId:id,targetId,damage:rangedDamage,
-          hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"ranged",
-        }, { afterNextPatch:true });
-        if (victim.hp===0) {
-          shooter.pkKills+=1;
-          victim.pkDeaths+=1;
-          this.knockoutPlayer(targetId,"pk",id);
-          void this.saveCharacter(id);
-          this.broadcast("pvp_kill", {
-            winnerId:id,loserId:targetId,source:"ranged",
-            kills:shooter.pkKills,deaths:victim.pkDeaths,
-          }, { afterNextPatch:true });
-        }
-      }
-
-      this.broadcast("ranged_hit", {
-        attackerId:id,targetId,damage:rangedDamage,from,to,
-      }, { afterNextPatch:true });
-    },
+    shoot: (client: Client, message: unknown) => this.castBlessedRice(client, message),
+    blessed_rice: (client: Client, message: unknown) => this.castBlessedRice(client, message),
   };
+
+  private castBlessedRice(client: Client, message: unknown) {
+    if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
+    const monsterOrder = parseAttackCommand(message);
+    const pkOrder = monsterOrder ? null : parsePkTargetCommand(message);
+    if (!monsterOrder && !pkOrder) return this.reject(client, "invalid_shoot");
+    const id = client.sessionId;
+    const shooter = this.state.players.get(id);
+    if (!shooter || !shooter.alive) return this.reject(client, "not_alive");
+    if (this.climbs.has(id)) return this.reject(client, "climbing");
+    if (this.activeDashes.has(id)) return this.reject(client, "dashing");
+    if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
+    if (!this.gates.get(id)?.attack.consume(this.simulatedMs)) {
+      return this.reject(client, "attack_rate_limited");
+    }
+
+    const targetId = monsterOrder ? monsterOrder.targetId : pkOrder!.targetId;
+    if (targetId === id) return this.reject(client, "self_attack");
+    if (!this.sameCombatMap(id, targetId)) return this.reject(client, "target_unavailable");
+    const target = monsterOrder
+      ? this.getMonster(targetId)
+      : this.state.players.get(targetId);
+    if (!target || !target.alive) return this.reject(client, "target_unavailable");
+
+    const from = { x:shooter.x, y:shooter.y+FORT.shootOriginHeight, z:shooter.z };
+    const to = { x:target.x, y:target.y + FORT.targetBodyHeight, z:target.z };
+    if (distance3d(from,to) > FORT.rangedRange) {
+      return this.reject(client, "shot_out_of_range");
+    }
+    if ((shooter.mapId === DEFAULT_MAP_ID && wallBlocksShot(from,to)) || !isWorldSegmentClear(shooter.mapId,from,to)) {
+      return this.reject(client, "shot_blocked");
+    }
+
+    const last = this.lastAttackMs.get(id) ?? -Infinity;
+    if (this.simulatedMs-last < FORT.rangedCooldownMs) {
+      return this.reject(client, "shot_cooldown");
+    }
+    this.lastAttackMs.set(id,this.simulatedMs);
+    this.recordCombat(id, targetId);
+    shooter.facing = facingTo(target.x-shooter.x, target.z-shooter.z);
+    const rangedAttack = shooter.magicAtk + weaponBonuses(this.inventories.get(id), monsterOrder ? "pve" : "pvp").ranged;
+    const rangedDamage = monsterOrder ? calculateDamage(rangedAttack, (target as Monster).defense, (target as Monster).level) :
+      calculateDamage(rangedAttack, (target as Player).magicDef, (target as Player).level);
+
+    if (monsterOrder) {
+      const ghost = this.getMonster(targetId)!;
+      ghost.hp = Math.max(0,ghost.hp-rangedDamage);
+      ghost.hitSeq += 1;
+      this.broadcast("combat_hit", {
+        attackerId:id,targetId,damage:rangedDamage,
+        hp:ghost.hp,maxHp:ghost.maxHp,hitSeq:ghost.hitSeq,source:"ranged",
+      }, { afterNextPatch:true });
+      if (ghost.hp===0) this.killMonster(id, targetId);
+    } else {
+      const victim=target as Player;
+      victim.hp=Math.max(0,victim.hp-rangedDamage);
+      victim.hitSeq+=1;
+      this.broadcast("pvp_hit", {
+        attackerId:id,targetId,damage:rangedDamage,
+        hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"ranged",
+      }, { afterNextPatch:true });
+      if (victim.hp===0) {
+        shooter.pkKills+=1;
+        victim.pkDeaths+=1;
+        this.knockoutPlayer(targetId,"pk",id);
+        void this.saveCharacter(id);
+        this.broadcast("pvp_kill", {
+          winnerId:id,loserId:targetId,source:"ranged",
+          kills:shooter.pkKills,deaths:victim.pkDeaths,
+        }, { afterNextPatch:true });
+      }
+    }
+
+    this.broadcast("ranged_hit", {
+      attackerId:id,targetId,damage:rangedDamage,from,to,skill:"blessed_rice",
+    }, { afterNextPatch:true });
+  }
+
+  private summonSpirit(client: Client, message: unknown, kind: "guardian" | "pot_spirit") {
+    if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
+    const id = client.sessionId;
+    if (!parseEmptyCommand(message)) return this.reject(client, "invalid_summon");
+    const owner = this.state.players.get(id);
+    if (!owner || !owner.alive) return this.reject(client, "not_alive");
+    if (owner.possessionActive) return this.reject(client, "possession_active");
+    if (this.state.summons.has(id)) return this.reject(client, "summon_limit");
+    if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) {
+      return this.reject(client, "summon_rate_limited");
+    }
+    const last = this.lastSummonAt.get(id) ?? -Infinity;
+    if (this.simulatedMs - last < RULES.summonCooldownMs) {
+      return this.reject(client, "summon_cooldown");
+    }
+    this.lastSummonAt.set(id, this.simulatedMs);
+
+    const map = getWorldMap(owner.mapId)!;
+    const besideOwner = {x:clampToMap(owner.x - 1.1, map.bounds, "x"), y:owner.y, z:clampToMap(owner.z + 0.9, map.bounds, "z")};
+    const blocked = kind === "pot_spirit" && (!isSafeWorldPoint(map, besideOwner) || !this.spiritPathClear(map.id, owner, besideOwner));
+    const spawn = blocked ? owner : besideOwner;
+    const guardian = new SummonedGuardian({
+      ownerId: id, kind, x:spawn.x, y:spawn.y, z:spawn.z,
+      facing: owner.facing, action: "follow", targetId: "",
+    });
+    this.state.summons.set(id, guardian);
+    this.lastSummonAttackAt.delete(id);
+    this.broadcast("summon_spawn", { ownerId: id, kind },
+      { afterNextPatch: true });
+  }
 
   private despawnSummon(ownerId: string, reason: string) {
     if (!this.state.summons.has(ownerId)) return;
@@ -1070,7 +1077,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       { afterNextPatch: true });
   }
 
-  private findSummonTarget(ownerId: string, owner: Player) {
+  private findSummonTarget(ownerId: string, owner: Player, guardian: SummonedGuardian) {
     const intended = this.attackTargets.get(ownerId);
     const candidates: string[] = [];
     if (intended) candidates.push(intended);
@@ -1083,6 +1090,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (this.state.monster.targetId === ownerId) candidates.push(RULES.monsterId);
     for (const m of this.state.monsters.values()) if (m.targetId === ownerId) candidates.push(m.id);
 
+    const fromPot = guardian.kind === "pot_spirit";
+    const reachable = (target: WorldPoint) => this.spiritPathClear(owner.mapId, owner, target) && this.spiritPathClear(owner.mapId, guardian, target);
     for (const targetId of candidates) {
       if (targetId === ownerId) continue;
       if (!this.sameCombatMap(ownerId, targetId)) continue;
@@ -1092,9 +1101,31 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // client sends a valid but distant target ID.
       if (distance3d(owner, target) > RULES.summonEngageDistance) continue;
       if(getWorldMap(owner.mapId)?.walls?.length && !isWorldSegmentClear(owner.mapId,owner,target))continue;
+      if (fromPot && !reachable(target)) continue;
       return { targetId, target };
     }
-    return null;
+    if (!fromPot || isRestArea(owner.mapId, owner)) return null;
+
+    // With no combat order the pot spirit hunts the nearest reachable monster.
+    let nearest: Monster | undefined;
+    let bestDistance: number = RULES.summonEngageDistance;
+    const consider = (monster: Monster) => {
+      if (!monster.alive || !this.sameCombatMap(ownerId, monster.id)) return;
+      const distance = distance3d(owner, monster);
+      if (distance > bestDistance || !reachable(monster)) return;
+      nearest = monster;
+      bestDistance = distance;
+    };
+    consider(this.state.monster);
+    this.state.monsters.forEach(consider);
+    return nearest ? { targetId: nearest.id, target: nearest } : null;
+  }
+
+  private spiritPathClear(mapId: string, from: WorldPoint, target: WorldPoint) {
+    return mapId === DEFAULT_MAP_ID
+      ? !wallBlocksShot({ x: from.x, y: from.y + FORT.targetBodyHeight, z: from.z },
+          { x: target.x, y: target.y + FORT.targetBodyHeight, z: target.z })
+      : isWorldSegmentClear(mapId, from, target);
   }
 
   private updateSummons(dt: number) {
@@ -1107,7 +1138,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       const distanceToOwner = distance3d(guardian, owner);
       const candidate = distanceToOwner <= RULES.summonLeashDistance
-        ? this.findSummonTarget(ownerId, owner) : null;
+        ? this.findSummonTarget(ownerId, owner, guardian) : null;
 
       if (candidate) {
         const { targetId, target } = candidate;

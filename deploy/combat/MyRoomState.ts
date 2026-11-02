@@ -129,6 +129,7 @@ export const MyRoomState = schema({
   forgeCatalog: t.string().default(""),
   buildCatalog: t.string().default(""),
   craftRecipe: t.string().default(""),
+  ritualSkillsAvailable: t.boolean().default(true),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;
