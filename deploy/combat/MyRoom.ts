@@ -1,4 +1,5 @@
 import { Room, type Client, type CloseCode } from "colyseus";
+import { Encoder } from "@colyseus/schema";
 import { randomUUID } from "node:crypto";
 import {
   CHARACTER_SAVE_INTERVAL_MS, characterStore, characterIdFromToken,
@@ -32,7 +33,7 @@ import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.j
 import type { CharacterSnapshot } from "./CharacterStore.js";
 import { isAtlasMap } from "./WorldAtlas.js";
 import { TEMPLE_ID } from "./TempleMap.js";
-import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
+import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, VILLAGE_ARRIVALS, WORLD_ROOM_CAPACITY, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
 import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
@@ -50,6 +51,9 @@ import {
 } from "./ItemRules.js";
 
 import { ForestEncounters } from "./ForestEncounters.js";
+
+// A full world snapshot spans up to 48 KiB with ten occupied maps, before summons.
+Encoder.BUFFER_SIZE = Math.max(Encoder.BUFFER_SIZE, 64 * 1024);
 
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
@@ -72,7 +76,7 @@ type TradeSession = { id:string; a:string; b:string; expires:number; offers:Reco
  *   state.players, state.monster; "combat_hit"/"combat_notice"/"monster_respawn".
  */
 export class MyRoom extends Room<{ state: MyRoomState }> {
-  maxClients = 4;
+  maxClients = WORLD_ROOM_CAPACITY;
   state = new MyRoomState();
 
   private forest = new ForestEncounters(this.state.monsters);
@@ -1725,8 +1729,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onJoin(client: Client, options?: unknown) {
     if (WORLD_EXPANSION && (!options || typeof options !== "object" || Array.isArray(options) || (options as Record<string,unknown>).worldVersion !== 1)) throw new Error("world_client_update_required");
-    const spawnX = this.state.players.size * 2;
-    const spawn = { x: spawnX, z: 0 };
     // Old smoke tests and clients without browser storage remain transient.
     // A valid guest token is a secret bearer credential, never sent in Schema.
     const token = getGuestToken(options);
@@ -1740,6 +1742,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
 
     try {
+      // Reserve before the asynchronous save lookup so simultaneous arrivals get different starts.
+      const reserved = [...this.playerSpawn.values()];
+      const spawn = VILLAGE_ARRIVALS.find(p => !reserved.some(other => other.x === p.x && other.z === p.z));
+      if (!spawn) throw new Error("world_room_full");
+      this.playerSpawn.set(client.sessionId, spawn);
       const saved = token ? (await characterStore.loadOrCreate(token, spawn, slot)).character : null;
       const allocations = saved?.statAllocations ?? emptyAllocations();
       const initialStats = calculateStats(saved?.level ?? 1, allocations);
@@ -1808,6 +1815,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       console.log("MONTRA 3-slot join:", client.sessionId, "room", this.roomId,
         saved ? "persistent" : "transient", "slot", slot);
     } catch (error) {
+      this.playerSpawn.delete(client.sessionId);
       if (accountId) releaseCharacter(accountId, client.sessionId);
       throw error;
     }

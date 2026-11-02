@@ -10,7 +10,8 @@ test("normal profile provides a consistent baseline across the forest level rang
   assert.equal(monsterRespawnDelay(0),25_000);
   assert.equal(monsterRespawnDelay(2),23_500);
   assert.equal(monsterRespawnDelay(4),20_500);
-  assert.throws(()=>monsterRespawnDelay(5),/invalid_nearby_population/);
+  for (let players=5; players<=10; players++) assert.equal(monsterRespawnDelay(players),20_000);
+  assert.throws(()=>monsterRespawnDelay(11),/invalid_nearby_population/);
 });
 test("tier multipliers and gap rewards stay server owned",()=>{
   assert.equal(monsterProfile(1,"weak").maxHp,100);

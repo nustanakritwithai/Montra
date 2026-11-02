@@ -35,6 +35,7 @@ jobs:
           cp deploy/combat/WorldAtlas.ts combat-verify/src/rooms/WorldAtlas.ts
           cp deploy/combat/world-atlas.test.ts combat-verify/src/rooms/world-atlas.test.ts
           cp deploy/combat/world-atlas-integration.mjs combat-verify/world-atlas-integration.mjs
+          cp deploy/combat/world-capacity-integration.mjs combat-verify/world-capacity-integration.mjs
           cp deploy/combat/WorldMaps.ts combat-verify/src/rooms/WorldMaps.ts
           cp deploy/combat/ForestEncounters.ts combat-verify/src/rooms/ForestEncounters.ts
           cp deploy/combat/temple-map.test.ts combat-verify/src/rooms/temple-map.test.ts
@@ -296,6 +297,7 @@ jobs:
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4111) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 100s node world-capacity-integration.mjs || { cat monster-server.log; exit 1; }
           timeout 40s node forest-party-monster-integration.mjs || { cat monster-server.log; exit 1; }
           timeout 90s node guild-integration.mjs
           timeout 120s node world-atlas-integration.mjs

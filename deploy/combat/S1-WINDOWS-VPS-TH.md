@@ -13,7 +13,7 @@
 - Attack order automatically approaches a moving monster, with server attack-distance and cooldown checks.
 - AI monster: patrol → aggro/chase → attack player → return/leash → death/respawn.
 - Server-owned player HP, knockdown/respawn, monster HP, AI state and facing.
-- Same existing room ID `my_room`, max 4 concurrent players per room.
+- Normal world rooms use `my_room` and support 10 concurrent players per room.
 - Optional frontend adapter reads authoritative facing/HP, falling back when connected to old server versions.
 
 **Limitations:** S1 is **not** a persistent MMO platform. No user accounts, inventory DB, navmesh/collision, anti-DDoS, world sharding, or reconnect identity. The AI uses planar distance, not real line of sight.

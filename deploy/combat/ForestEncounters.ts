@@ -28,9 +28,9 @@ export class ForestEncounters {
       x: camp.x + offsets[i][0], z: camp.z + offsets[i][1],
     })));
     const spawnIds = new Set(normalSpawns.map(spawn => spawn.id));
-    const largestFour=Object.keys(ATLAS_MAPS).map(id=>ATLAS_SPAWNS.filter(s=>s.mapId===id).length)
-      .sort((a,b)=>b-a).slice(0,4).reduce((sum,n)=>sum+n,0);
-    if (normalSpawns.length + TEMPLE_SPAWNS.length + 2 + largestFour > MONSTER_CONFIG.maxSpawnPointsPerRoom) throw new Error("monster_spawn_cap_exceeded");
+    // All seven atlas regions can be occupied concurrently in a ten-seat room.
+    const totalSpawns = normalSpawns.length + TEMPLE_SPAWNS.length + ATLAS_SPAWNS.length + 2;
+    if (totalSpawns > MONSTER_CONFIG.maxSpawnPointsPerRoom) throw new Error("monster_spawn_cap_exceeded");
     for (const [id, tier] of Object.entries(this.tiers)) {
       if (!spawnIds.has(id)) throw new Error("unknown_monster_spawn_tier");
       monsterProfile(1, tier);
