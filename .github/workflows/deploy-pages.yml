@@ -46,6 +46,7 @@ jobs:
           # Game models (shaman body, Crescent Blade) loaded by main.js.
           cp -r assets _site/assets
           test -s _site/assets/characters/thai-male.glb
+          test -s _site/assets/characters/thai-golden-spirit.glb
           test -s _site/assets/weapons/crescent-blade-lod2.glb
           mkdir -p _site/weapon-preview/lod2
           cp weapon-preview/lod2/index.html _site/weapon-preview/lod2/index.html

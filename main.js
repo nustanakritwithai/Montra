@@ -150,13 +150,146 @@
   moon.intensity = .85;
   moon.diffuse = B.Color3.FromHexString("#c9dacc");
   moon.groundColor = B.Color3.FromHexString("#617362");
-  const keyLight = new B.DirectionalLight("canopy light", new B.Vector3(-.55, -1, .4), scene);
+  const keyLight = new B.DirectionalLight("canopy light", new B.Vector3(-1.0, -1, -.38), scene); // moon to the right, a little low: long shadows that fall left and away, in view of the camera: shadows fall left and away, in view of the camera
   keyLight.diffuse = B.Color3.FromHexString("#f6e3c5");
   keyLight.intensity = .45;
   const warm = new B.PointLight("lantern glow", new B.Vector3(0, 4, 3), scene);
   warm.diffuse = B.Color3.FromHexString("#f6b16d");
   warm.intensity = .75;
   warm.range = 15; // follows the local hero like a carried lantern
+  // ---- Moon shadows ----
+  // One shadow map from the moon (key) light, re-centred on the camera target
+  // every frame and snapped to its texel grid so edges do not shimmer. Every
+  // lit mesh receives; anything taller than a kerb casts (see syncShadowLists).
+  // ?shadows=off|on forces it; otherwise it backs off on slow devices.
+  // Touch devices get a 1024 map, desktops 2048 for crisper edges.
+  const SHADOW_HALF = 38, SHADOW_DIST = 90;
+  const SHADOW_SIZE = matchMedia("(pointer: coarse)").matches || engine.getCaps().maxTextureSize < 4096 ? 1024 : 2048;
+  const shadowPref = new URLSearchParams(location.search).get("shadows");
+  keyLight.autoUpdateExtends = false; keyLight.autoCalcShadowZBounds = false;
+  keyLight.shadowMinZ = 1; keyLight.shadowMaxZ = SHADOW_DIST * 2;
+  keyLight.orthoLeft = keyLight.orthoBottom = -SHADOW_HALF; keyLight.orthoRight = keyLight.orthoTop = SHADOW_HALF;
+  keyLight.position = new B.Vector3(0, SHADOW_DIST, 0);
+  const shadowGen = new B.ShadowGenerator(SHADOW_SIZE, keyLight, true);
+  if (engine.webGLVersion >= 2) { shadowGen.usePercentageCloserFiltering = true; shadowGen.filteringQuality = B.ShadowGenerator.QUALITY_LOW; }
+  else shadowGen.usePoissonSampling = true;
+  shadowGen.bias = .0016; shadowGen.normalBias = .025; shadowGen.darkness = 0;
+  keyLight.shadowEnabled = shadowPref !== "off";
+  // Coverage follows the zoom: tight and crisp up close, wide at the far camera.
+  let shadowHalf = SHADOW_HALF;
+  function followShadow(target) {
+    const want = Math.max(20, Math.min(48, camera.radius * .52));
+    if (Math.abs(want - shadowHalf) > 2) {
+      shadowHalf = want;
+      keyLight.orthoLeft = keyLight.orthoBottom = -shadowHalf; keyLight.orthoRight = keyLight.orthoTop = shadowHalf;
+    }
+    const d = keyLight.direction.normalizeToNew(), snap = shadowHalf * 2 / SHADOW_SIZE;
+    const x = Math.round(target.x / snap) * snap, z = Math.round(target.z / snap) * snap;
+    keyLight.position.set(x - d.x * SHADOW_DIST, target.y - d.y * SHADOW_DIST, z - d.z * SHADOW_DIST);
+  }
+  let shadowListKey = "", shadowSyncIn = 0;
+  function syncShadowLists() {
+    const key = scene.meshes.length + ":" + activeMapId;
+    if (key === shadowListKey) return;
+    shadowListKey = key;
+    const casters = [];
+    for (const m of scene.meshes) {
+      const mt = m.material;
+      if (!mt || m === sky || m.metadata?.noShadow || m.visibility < .5 || mt.disableLighting || mt.alphaMode === B.Engine.ALPHA_ADD || mistLayers.includes(m)) continue;
+      m.receiveShadows = true;
+      const bb = m.getBoundingInfo?.().boundingBox;
+      if (bb && bb.maximumWorld.y - bb.minimumWorld.y > .35 && !/ground|road|trail|pool|decal|water|label|clearing|court/i.test(m.name)) casters.push(m);
+    }
+    shadowGen.getShadowMap().renderList = casters;
+  }
+  // Slow device: render the shadow map every other frame, then switch it off.
+  const frameWatch = { t: 0, n: 0, slow: 0 };
+  function watchFrameRate(dt) {
+    if (shadowPref) return;
+    frameWatch.t += dt; frameWatch.n++;
+    if (frameWatch.t < 4) return;
+    const fps = frameWatch.n / frameWatch.t; frameWatch.t = frameWatch.n = 0;
+    frameWatch.slow = fps < 22 ? frameWatch.slow + 1 : 0;
+    if (frameWatch.slow >= 2 && keyLight.shadowEnabled) {
+      const map = shadowGen.getShadowMap();
+      if (map.refreshRate === 1) map.refreshRate = 2; else keyLight.shadowEnabled = false;
+      frameWatch.slow = 0;
+    }
+  }
+  // ---- Lantern lights ----
+  // Lamps, braziers and gates register a light spot; a small pool of real
+  // point lights jumps to the spots nearest the camera target and flickers,
+  // so lanterns actually light the ground and the characters walking past.
+  const LANTERN_POOL = 3;
+  const lightSpots = [];
+  function addLightSpot(x, y, z, hex = "#ffae5a", strength = 1) {
+    lightSpots.push({ x, y, z, map: activeMapId, color: B.Color3.FromHexString(hex), strength });
+  }
+  // A light that rides a moving node (glowing ghosts); dropped when the node goes.
+  function addMovingLight(node, hex, strength = 1, lift = 1.2) {
+    lightSpots.push({ node, lift, x: 0, y: 0, z: 0, map: "*", color: B.Color3.FromHexString(hex), strength, moving: true });
+  }
+  const lanternLights = Array.from({ length: LANTERN_POOL }, (_, i) => {
+    const l = new B.PointLight("lantern light " + i, new B.Vector3(0, -40, 0), scene);
+    l.range = 11; l.intensity = 0; l.specular = new B.Color3(.08, .06, .04); l.metadata = { spot: null, level: 0 };
+    return l;
+  });
+  // Hemi + key + carried lantern + the pool + the strike flash.
+  const MAX_LIGHTS = 4 + LANTERN_POOL;
+  scene.onNewMaterialAddedObservable.add(m => { if ("maxSimultaneousLights" in m) m.maxSimultaneousLights = MAX_LIGHTS; });
+  let lanternPick = 0;
+  function updateLanternLights(target, dt, t) {
+    if ((lanternPick -= dt) <= 0) {
+      lanternPick = .35;
+      for (let i = lightSpots.length - 1; i >= 0; i--) {
+        const p = lightSpots[i]; if (!p.moving) continue;
+        if (p.node.isDisposed()) { lightSpots.splice(i, 1); continue; }
+        const w = p.node.getAbsolutePosition(); p.x = w.x; p.y = w.y + p.lift; p.z = w.z; p.off = !p.node.isEnabled();
+      }
+      const near = lightSpots.filter(p => !p.off && (p.map === activeMapId || p.map === "*") && Math.abs(p.x - target.x) < 34 && Math.abs(p.z - target.z) < 34)
+        .sort((a, b) => Math.hypot(a.x - target.x, a.z - target.z) - Math.hypot(b.x - target.x, b.z - target.z)).slice(0, LANTERN_POOL);
+      // Keep lights on spots that stay chosen; free ones move to new spots.
+      const free = lanternLights.filter(l => !near.includes(l.metadata.spot));
+      for (const spot of near) if (!lanternLights.some(l => l.metadata.spot === spot)) { const l = free.shift(); if (l) { l.metadata.spot = spot; l.metadata.level = 0; } }
+      for (const l of free) l.metadata.spot = null;
+    }
+    lanternLights.forEach((l, i) => {
+      const spot = l.metadata.spot;
+      l.metadata.level = Math.min(1, Math.max(0, l.metadata.level + (spot ? dt * 2.5 : -dt * 4)));
+      if (!spot) { l.intensity = 0; return; }
+      if (spot.moving && !spot.node.isDisposed()) { const w = spot.node.getAbsolutePosition(); spot.x = w.x; spot.y = w.y + spot.lift; spot.z = w.z; }
+      l.position.set(spot.x, spot.y, spot.z); l.diffuse.copyFrom(spot.color);
+      const flicker = .88 + Math.sin(t * 9.1 + i * 2) * .06 + Math.sin(t * 23.7 + i) * .04;
+      l.intensity = .95 * spot.strength * flicker * l.metadata.level;
+    });
+  }
+  // Soft contact shadow under every character, so feet sit on the ground
+  // even where the moon shadow falls away or is switched off.
+  let contactMat = null;
+  function contactShadow(parent, size = 1.5) {
+    if (!contactMat) {
+      contactMat = new B.StandardMaterial("contact shadow", scene);
+      contactMat.diffuseColor = contactMat.specularColor = B.Color3.Black(); contactMat.disableLighting = true;
+      contactMat.opacityTexture = radialTexture("contact shadow", 64, [[0, "rgba(255,255,255,.62)"], [.55, "rgba(255,255,255,.3)"], [1, "rgba(255,255,255,0)"]]);
+    }
+    const blob = B.MeshBuilder.CreateGround("contact shadow", { width: size, height: size }, scene);
+    blob.parent = parent; blob.position.y = .035; blob.material = contactMat; blob.isPickable = false; blob.metadata = { noShadow: true };
+    return blob;
+  }
+  let aoMat = null;
+  function baseOcclusionMat() {
+    if (!aoMat) {
+      aoMat = new B.StandardMaterial("base occlusion", scene);
+      aoMat.diffuseColor = aoMat.specularColor = B.Color3.Black(); aoMat.disableLighting = true;
+      aoMat.opacityTexture = paintTexture("base occlusion", 64, (c, s) => {
+        const g = c.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+        g.addColorStop(0, "rgba(255,255,255,.5)"); g.addColorStop(.6, "rgba(255,255,255,.32)"); g.addColorStop(1, "rgba(255,255,255,0)");
+        c.clearRect(0, 0, s, s); c.fillStyle = g; c.fillRect(0, 0, s, s);
+      });
+      aoMat.opacityTexture.hasAlpha = true;
+    }
+    return aoMat;
+  }
 
   function mat(name, hex, emissive) {
     const m = new B.StandardMaterial(name, scene);
@@ -174,8 +307,9 @@
   const roofMat = mat("thai roof", "#6b2a22");
   const gold = mat("gold", "#b48640", "#3d2a0c");
   const water = mat("water", "#0a1c27", "#04111a");
-  water.specularColor = B.Color3.FromHexString("#7f93a8");
-  water.specularPower = 48;
+  // Glossy enough that lantern and strike lights glint off canals and pools.
+  water.specularColor = B.Color3.FromHexString("#c8d8ea");
+  water.specularPower = 110;
   function paintTexture(name, size, paint, repeat = 1) {
     const texture = new B.DynamicTexture(name, size, scene, true);
     paint(texture.getContext(), size);
@@ -185,6 +319,79 @@
   }
   // Deterministic noise keeps every client's scenery identical.
   const noise = (i, seed = 0) => { const v = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return v - Math.floor(v); };
+  // ---- Colour grading ----
+  // Filmic (ACES) tone mapping keeps lantern and spell highlights from
+  // clipping; a little contrast and a cool vignette pull the eye to the
+  // middle of the portrait frame. Applied inside the material shaders, so
+  // there is no extra post-process pass.
+  const grade = scene.imageProcessingConfiguration;
+  grade.toneMappingEnabled = true; grade.toneMappingType = B.ImageProcessingConfiguration.TONEMAPPING_ACES;
+  grade.exposure = 1.4; grade.contrast = 1.16;
+  grade.vignetteEnabled = true; grade.vignetteWeight = 1.8; grade.vignetteStretch = .35; grade.vignetteCameraFov = .69;
+  grade.vignetteColor = new B.Color4(.02, .05, .08, 0); grade.vignetteBlendMode = B.ImageProcessingConfiguration.VIGNETTEMODE_MULTIPLY;
+  // ---- Drifting cloud shadows ----
+  // Soft dark patches slide across the ground below the moon, and the moon
+  // light dims a little while one passes over the camera target.
+  const cloudTexture = paintTexture("cloud shadows", 256, (c, s) => {
+    c.clearRect(0, 0, s, s);
+    for (let i = 0; i < 9; i++) for (const ox of [-s, 0, s]) for (const oy of [-s, 0, s]) {
+      const x = noise(i, 701) * s + ox, y = noise(i, 702) * s + oy, r = s * (.12 + noise(i, 703) * .16);
+      const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, "rgba(255,255,255,.55)"); g.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = g; c.fillRect(0, 0, s, s);
+    }
+  });
+  cloudTexture.hasAlpha = true; cloudTexture.uScale = cloudTexture.vScale = 2.2;
+  const cloudMat = new B.StandardMaterial("cloud shadows", scene);
+  cloudMat.diffuseColor = cloudMat.specularColor = B.Color3.Black(); cloudMat.disableLighting = true;
+  cloudMat.opacityTexture = cloudTexture; cloudMat.alpha = .42; cloudMat.backFaceCulling = false;
+  const cloudLayer = B.MeshBuilder.CreateGround("cloud shadows", { width: 220, height: 220 }, scene);
+  cloudLayer.material = cloudMat; cloudLayer.isPickable = false; cloudLayer.metadata = { noShadow: true };
+  let cloudCover = 0;
+  function driftClouds(target, elapsed) {
+    // Snapped to whole texture tiles so the pattern stays put on the ground while the layer follows the camera.
+    const tile = 220 / cloudTexture.uScale, gx = Math.round(target.x / tile) * tile, gz = Math.round(target.z / tile) * tile;
+    cloudLayer.position.set(gx, .07, gz);
+    const u = elapsed * .0045, v = elapsed * .0021;
+    cloudTexture.uOffset = u; cloudTexture.vOffset = v; // tile-snapped, so the pattern stays fixed on the ground
+    // Cover over the target from the same noise blobs (approximate, smooth).
+    const want = .5 + .5 * Math.sin(elapsed * .09) * Math.sin(elapsed * .041 + 1.3);
+    cloudCover += (want - cloudCover) * .02;
+    cloudLayer.visibility = atmosphere.skyLevel === 0 ? 0 : 1; // no sky in the naga cavern
+  }
+  // ---- Storm lightning (asura peak, spirit rift) ----
+  // Every 10-25 s the sky flashes twice: fill light and sky jump, then decay.
+  const STORM_MAPS = { asura_peak: "#ffd0b0", spirit_rift: "#d8c8ff" };
+  let stormIn = 8, stormT = -1;
+  function stormFlash(dt) {
+    const tint = STORM_MAPS[activeMapId];
+    if (!tint) { stormT = -1; return; }
+    if ((stormIn -= dt) <= 0) { stormIn = 10 + Math.random() * 15; stormT = 0; }
+    if (stormT < 0) return;
+    stormT += dt;
+    const k = Math.max(Math.exp(-stormT * 18), stormT > .16 ? Math.exp(-(stormT - .16) * 9) * .8 : 0);
+    moon.intensity = atmosphere.hemi * .8 * (1 + 2.6 * k);
+    moon.diffuse = B.Color3.FromHexString(atmosphere.sky).scale(1 - k).add(B.Color3.FromHexString(tint).scale(k));
+    if (stormT > 1.2) { stormT = -1; moon.intensity = atmosphere.hemi * .8; moon.diffuse = B.Color3.FromHexString(atmosphere.sky); }
+  }
+  // ---- Strike light ----
+  // One extra point light flashes at a character on every attack, spell and
+  // summon, tinted to the move, so combat lights up the scene around it.
+  const strikeLight = new B.PointLight("strike flash", new B.Vector3(0, -40, 0), scene);
+  strikeLight.range = 9; strikeLight.intensity = 0; strikeLight.specular = new B.Color3(.2, .18, .14);
+  const STRIKE_TINTS = { cast: "#7fe8ff", summon: "#ff8a3a", smash: "#8ff5df", stab: "#cfd8ff", drink: "#ff6a6a", arrive: "#7ff5e0", rally: "#ffd27a", dance: "#ffb05a", guard: "#e8f0ff" };
+  let strike = { until: 0, start: 0, peak: 0 };
+  function flashStrike(a, type) {
+    if (!a?.node || Math.hypot(a.x - camera.target.x, a.z - camera.target.z) > 40) return;
+    strikeLight.diffuse = B.Color3.FromHexString(STRIKE_TINTS[type] || "#ffc070");
+    strikeLight.position.set(a.x, (a.y || 0) + 1.6, a.z);
+    const now = performance.now(), long = type === "summon" || type === "dance" || type === "rally";
+    strike = { start: now + (long ? 150 : 120), until: now + (long ? 900 : 380), peak: type === "cast" || type === "summon" ? 1.9 : 1.4 };
+  }
+  function updateStrikeLight(now) {
+    if (now > strike.until) { strikeLight.intensity = 0; return; }
+    const k = (now - strike.start) / (strike.until - strike.start);
+    strikeLight.intensity = k < 0 ? 0 : strike.peak * Math.pow(1 - k, 1.6);
+  }
   groundMat.diffuseTexture = paintTexture("village earth", 256, (c, s) => {
     c.fillStyle = "#c9c4b4"; c.fillRect(0, 0, s, s);
     for (let i = 0; i < 420; i++) {
@@ -234,6 +441,7 @@
   const lightPoolMat = additiveMat("lantern light pool", radialTexture("light pool", 128, [
     [0, "rgba(255,176,92,.62)"], [.32, "rgba(255,140,60,.26)"], [1, "rgba(255,110,40,0)"]]));
   function lightPool(x, z, radius, y = .04) {
+    if (radius >= 1.2) addLightSpot(x, 2.2, z, "#ffa65a", Math.min(1.2, radius / 2.2));
     const pool = B.MeshBuilder.CreateGround("lantern pool", { width: radius * 2, height: radius * 2 }, scene);
     pool.position.set(x, y, z); pool.material = lightPoolMat; pool.isPickable = false;
     return pool;
@@ -455,8 +663,11 @@
     const a = atmosphere, c3 = hex => B.Color3.FromHexString(hex);
     scene.clearColor = B.Color4.FromHexString(a.clear + "ff");
     scene.fogColor = c3(a.fog);
-    moon.intensity = a.hemi; moon.diffuse = c3(a.sky); moon.groundColor = c3(a.ground);
-    keyLight.diffuse = c3(a.key); keyLight.intensity = a.keyI; warm.intensity = a.carry;
+    // A stronger moon over a softer sky fill gives the shadows something to take away.
+    moon.intensity = a.hemi * .8; moon.diffuse = c3(a.sky); moon.groundColor = c3(a.ground);
+    keyLight.diffuse = c3(a.key); keyLight.intensity = a.keyI * 1.65; warm.intensity = a.carry;
+    // Darker maps get a little more exposure so they stay readable on a phone.
+    grade.exposure = { forbidden_forest: 1.55, bound_temple: 1.6, naga_cavern: 1.55, drowned_marsh: 1.5 }[mapId] || 1.4;
     mistMat.emissiveColor = c3(a.mist); mistMat.alpha = a.mistAlpha;
     skyTexture.level = a.skyLevel;
     const [c1, c2] = a.mote.map(h => B.Color4.FromHexString(h + "ff"));
@@ -1535,7 +1746,7 @@
       }
       terrain.update();terrain.uScale=id==="tri_wiang_castle"?190:9;terrain.vScale=id==="tri_wiang_castle"?190:12;floor.diffuseTexture=terrain;
       // Night grade: the atlas palette is kept but pulled down toward moonlight.
-      floor.diffuseColor.scaleInPlace(province?.kind ? .88 : .58);court.diffuseColor.scaleInPlace(province?.kind ? .83 : .5);road.diffuseColor.scaleInPlace(province?.kind ? .94 : .66);
+      floor.diffuseColor.scaleInPlace(province?.kind ? .74 : .58);court.diffuseColor.scaleInPlace(province?.kind ? .74 : .5);road.diffuseColor.scaleInPlace(province?.kind ? .86 : .66);
       if(province){floor.emissiveColor=floor.diffuseColor.scale(.22);road.emissiveColor=road.diffuseColor.scale(.17);}
       stone.diffuseColor.scaleInPlace(.8);deep.diffuseColor.scaleInPlace(.7);
       court.diffuseTexture=terrain;glowMats.add(light);
@@ -1572,6 +1783,9 @@
     function ring(x,y,z,d,m){
       return put(B.MeshBuilder.CreateTorus("region seal",{diameter:d,thickness:.17,tessellation:32},scene),x,y,z,m);
     }
+    function ball(x,y,z,d,m){
+      return put(B.MeshBuilder.CreateSphere("region knob",{diameter:d,segments:5},scene),x,y,z,m);
+    }
     function finish(name,cover=false){
       for(const material of new Set(parts.map(p=>p.material))){
         const group=parts.filter(p=>p.material===material);
@@ -1586,11 +1800,16 @@
       const {kind,sites,objectives}=map.strategic;
       const castle=Boolean(objectives);
       const city=kind==="capital",bamboo=map.id==="bamboo_frontier",lotus=map.id==="lotus_basin";
+      // Thai roof: steep upper slopes over a flared lower eave, gilt ridge,
+      // and chofa finials curling up from both gable ends.
       const roof=(x,y,z,width,depth)=>{
         for(const side of [-1,1]){
           const tile=box(x+side*width*.23,y,z,width*.58,.28,depth,roofMat);
           tile.rotation.z=-side*.40;
           box(x+side*width*.49,y-width*.10,z,.16,.20,depth+.25,gold);
+          const eave=box(x+side*width*.6,y-width*.17,z,width*.26,.2,depth*.94,roofMat);eave.rotation.z=-side*.22;
+          box(x+side*width*.73,y-width*.2,z,.1,.14,depth*.94,gold);
+          const chofa=cone(x,y+width*.1+.32,z+side*(depth/2+.18),.8,.16,.03,gold,4);chofa.rotation.x=side*.55;
         }
         box(x,y+width*.10,z,.27,.3,depth+.5,gold);
       };
@@ -1599,7 +1818,7 @@
         roof(x,height,z,width,width*.85);
       };
       const lamp=(x,z)=>{
-        box(x,1,z,.17,2,.17,darkWood);box(x,2.16,z,.55,.58,.55,lanternPaper);
+        box(x,1,z,.17,2,.17,darkWood);box(x,2.16,z,.55,.58,.55,lanternPaper);addLightSpot(x,2.3,z,"#ffa060",.9);
         cone(x,2.58,z,.37,1,.1,deep,4);box(x,.04,z,1.3,.05,1.3,paint.court);
       };
       const relay=map.strategic.relay,bounds=map.bounds;
@@ -1698,13 +1917,13 @@
         for(const deck of rampart.deck){
           const top=B.MeshBuilder.CreateBox("walkable city wall",{width:deck.width,height:.5,depth:deck.length},scene);
           top.parent=expansionRoot;top.position.set(deck.x+deck.width/2,rampart.height-.25,deck.z+deck.length/2);
-          top.material=paint.road;top.metadata={walkable:true,elevatedTop:true};
+          top.material=provinceFx.deck(kind==="territory",deck.width>deck.length,Math.max(deck.width,deck.length));top.metadata={walkable:true,elevatedTop:true};
         }
         for(const [i,g] of rampart.gates.entries()){
           const b=g.box,x=b.x+b.width/2,z=b.z+b.length/2,horizontal=b.width>b.length;
           const span=Math.max(b.width,b.length);
           for(const side of [-1,1]){
-            box(x+(horizontal?side*(span/2+.2):0),1.75,z+(horizontal?0:side*(span/2+.2)),horizontal?.55:3.1,3.5,horizontal?3.1:.55,deep);
+            box(x+(horizontal?side*(span/2+.2):0),1.75,z+(horizontal?0:side*(span/2+.2)),horizontal?.55:3.1,3.5,horizontal?3.1:.55,kind==="territory"?provinceFx.timber:provinceFx.laterite);
           }
           if(kind==="territory" && (castle || i===0)){
             const door=B.MeshBuilder.CreateBox("reinforced city gate",{width:b.width,height:3.45,depth:b.length},scene);
@@ -1720,18 +1939,71 @@
             const t=(j+.5)/10,h=(j+1)*rampart.height/10;
             const step=B.MeshBuilder.CreateBox("city stair",{width:dx?.67:2.2,depth:dz?.67:2.2,height:h},scene);
             step.parent=expansionRoot;step.position.set(stair.foot.x+t*dx,h/2,stair.foot.z+t*dz);
-            step.material=j%2?paint.road:stone;step.metadata={walkable:true,stairId:stair.id};
+            step.material=kind==="territory"?(j%2?provinceFx.plank:provinceFx.timber):(j%2?provinceFx.laterite:provinceFx.brick);step.metadata={walkable:true,stairId:stair.id};
           }
           expansionLabel("บันได "+(idx+1)+" · ขึ้น / ลง",stair.foot.x,stair.foot.z,9,3);
         }
+        // Gatehouse pavilions stand over every opening and roofed bastions on
+        // every corner; posts sit at the deck edges so the walkway stays open.
+        const H=rampart.height;
         finish("gate frames");
+        // Each gatehouse and bastion is its own cover so it fades when it sits between camera and hero.
+        // The Tri Wiang castle is far larger; it keeps its plain gates and corners.
+        for(const g of castle?[]:rampart.gates){
+          const b=g.box,gx=b.x+b.width/2,gz=b.z+b.length/2,horizontal=b.width>b.length,span=Math.max(b.width,b.length)+1.6,th=Math.min(b.width,b.length);
+          const post=kind==="territory"?provinceFx.timber:templeLacquer;
+          box(gx,H-.62,gz,horizontal?span-1.6:th+.2,.24,horizontal?th+.2:span-1.6,kind==="territory"?darkWood:gold);
+          for(const a of [-1,1])for(const c of [-1,1])cone(gx+(horizontal?a*span/2:c*(th/2-.15)),H+1.0,gz+(horizontal?c*(th/2-.15):a*span/2),2.0,.28,.24,post,6);
+          roof(gx,H+2.3,gz,horizontal?span*.8:th+.8,horizontal?th+.8:span*.8);
+          finish("gatehouse",true);
+        }
+        for(const c of castle?[]:rampart.corners||[]){
+          if(kind==="territory"){
+            // Ho rop: a timber lookout tower with a plank floor, railing and roof.
+            for(const a of [-1,1])for(const d of [-1,1])cone(c.x+a*1.3,H+1.9,c.z+d*1.3,3.8,.3,.26,provinceFx.timber,6);
+            box(c.x,H+2.4,c.z,3.2,.2,3.2,provinceFx.plank);
+            for(const a of [-1,1]){box(c.x+a*1.5,H+2.95,c.z,.12,.9,3.1,provinceFx.timber);box(c.x,H+2.95,c.z+a*1.5,3.1,.9,.12,provinceFx.timber);}
+            roof(c.x,H+4.3,c.z,3.6,3.6);
+          }else{
+            for(const a of [-1,1])for(const d of [-1,1])cone(c.x+a*1.25,H+1.2,c.z+d*1.25,2.4,.26,.22,templeLacquer,6);
+            box(c.x,H+2.45,c.z,3.1,.18,3.1,gold);roof(c.x,H+3.1,c.z,3.4,3.4);cone(c.x,H+4.6,c.z,1.4,.5,0,gold,6);
+          }
+          finish("bastion",true);
+        }
       }
       for(const w of map.walls||[]){
         const x=w.x+w.width/2,z=w.z+w.length/2;
         if(w.rampart){
-          box(x,1.77,z,w.width,3.54,w.length,stone);
-          const along=w.width>w.length,n=Math.ceil(Math.max(w.width,w.length)/(castle?18:3));
-          for(let i=0;i<n;i++){const t=(i+.5)/n;box(along?w.x+w.width*t:w.x+.26,4.13,along?w.z+.26:w.z+w.length*t,along?.8:.42,.26,along?.42:.8,deep);}
+          if(castle){
+            box(x,1.77,z,w.width,3.54,w.length,stone);
+            const along=w.width>w.length,n=Math.ceil(Math.max(w.width,w.length)/(castle?18:3));
+            for(let i=0;i<n;i++){const t=(i+.5)/n;box(along?w.x+w.width*t:w.x+.26,4.13,along?w.z+.26:w.z+w.length*t,along?.8:.42,.26,along?.42:.8,deep);}
+          }else{
+            const along=w.width>w.length,len=Math.max(w.width,w.length),thick=Math.min(w.width,w.length);
+            // Outer face points away from the enclosure's centre.
+            const cs=rampart.corners,ox=(cs[0].x+cs[2].x)/2,oz=(cs[0].z+cs[2].z)/2,out=along?Math.sign(z-oz)||1:Math.sign(x-ox)||1;
+            const courses=Math.max(1,Math.round(len/4)),seg=len/courses+.02,at=t=>[along?w.x+w.width*t:x,along?z:w.z+w.length*t];
+            if(kind==="territory"){
+              // Khai mai: a timber stockade on a laterite footing. Sharpened logs
+              // stand on the outer face above the walk; planks line the inside.
+              for(let i=0;i<courses;i++){const [cx,cz]=at((i+.5)/courses);box(cx,.5,cz,along?seg:thick+.3,1,along?thick+.3:seg,provinceFx.laterite);}
+              box(x,2.5,z,along?w.width:thick-.5,3,along?thick-.5:w.length,provinceFx.timber);
+              const n=Math.floor(len/.46),ex=along?0:out*(thick/2),ez=along?out*(thick/2):0;
+              for(let i=0;i<n;i++){const [cx,cz]=at((i+.5)/n),h=4.2+noise(i+w.x,591)*.5;
+                cone(cx+ex,h/2+.6,cz+ez,h,.44,.4,provinceFx.timber,6);cone(cx+ex,h+.6+.3,cz+ez,.6,.4,0,provinceFx.timber,6);}
+              for(const y of [1.6,3.4])box(x+(along?0:ex*1.08),y,z+(along?ez*1.08:0),along?w.width:.14,.18,along?.14:w.length,darkWood);
+            }else{
+              // Krung kamphaeng: laterite footing courses under exposed Mon brick,
+              // a moulded brick cornice and bai sema merlons on the outer edge.
+              for(let i=0;i<courses;i++){const [cx,cz]=at((i+.5)/courses);
+                box(cx,.6,cz,along?seg:thick+.4,1.2,along?thick+.4:seg,provinceFx.laterite);
+                box(cx,2.35,cz,along?seg:thick,2.3,along?thick:seg,provinceFx.brick);}
+              box(x,3.6,z,w.width+(along?0:.3),.22,w.length+(along?.3:0),provinceFx.laterite);
+              const n=Math.floor(len/2.2),edge=thick/2-.3;
+              for(let i=0;i<n;i++){const [cx,cz]=at((i+.5)/n),mx=cx+(along?0:out*edge),mz=cz+(along?out*edge:0);
+                box(mx,4.22,mz,along?.85:.36,.45,along?.36:.85,provinceFx.brick);cone(mx,4.6,mz,.34,.62,0,provinceFx.brick,4).rotation.y=Math.PI/4;}
+            }
+          }
         }else if(bamboo){
           const along=w.width>w.length,n=Math.ceil(Math.max(w.width,w.length)/1.1);
           box(x,1.05,z,w.width,2.1,w.length,deep);
@@ -1740,11 +2012,12 @@
             cone(bx,1.7,bz,3.4,.48,.31,decor.bamboo,5);cone(bx,3.05,bz,.75,1.45,.36,forestLeaf,5);
           }
         }else if(city){
-          box(x,1.7,z,w.width,3.4,w.length,stone);roof(x,3.7,z,w.width+.75,w.length+.7);
+          box(x,.5,z,w.width+.3,1,w.length+.3,provinceFx.laterite);box(x,2.2,z,w.width,2.4,w.length,provinceFx.brick);
+          box(x,3.45,z,w.width+.2,.18,w.length+.2,provinceFx.timber);roof(x,3.7,z,w.width+.75,w.length+.7);
           box(x,1.7,w.z-.04,w.width*.25,2,.12,darkWood);
           for(const side of [-1,1])box(x+side*w.width*.32,2.1,w.z-.12,.62,.9,.10,lanternPaper);
         }else{
-          box(x,1.45,z,w.width,2.9,w.length,stone);
+          box(x,.5,z,w.width+.2,1,w.length+.2,provinceFx.laterite);box(x,1.95,z,w.width,1.9,w.length,provinceFx.timber);
           const count=Math.max(1,Math.floor(Math.max(w.width,w.length)/2));
           for(let i=0;i<count;i++){
             const t=(i+.5)/count;
@@ -1793,7 +2066,11 @@
         }else if(s.kind==="fort"){
           ring(x,.12,z,10.5,gold);ring(x,.13,z,9.8,stone);
           // The flag is in an open court. The entire curtain wall is the firing platform.
-          box(x,3,z, .17,6,.17,gold);box(x+1.1,5.3,z,2.2,1.45,.08,clothRed);
+          // A tall thong takhap (centipede banner) marks it from every corner of the map.
+          cone(x,.25,z,.5,1.6,1.9,stone,8);cone(x,4.6,z,9,.2,.12,gold,6);cone(x,9.3,z,.6,.32,0,gold,6);
+          for(let k=0;k<9;k++){const y=8.4-k*.62;box(x+.5,y,z,.7,.5,.05,k%2?gold:provinceFx.banner);
+            for(const side of [-1,1]){const leg=box(x+.5+side*.5,y-.1,z,.32,.07,.04,provinceFx.banner);leg.rotation.z=side*.5;}}
+          box(x+.5,2.6,z,.4,.6,.05,provinceFx.banner);
         }else if(s.kind==="market"){
           for(let i=0;i<3;i++){
             const mx=x+(i-1)*2.8;pavilion(mx,z,2.6,2.35);box(mx,.65,z,1.8,1.3,.9,crateWood);
@@ -1809,7 +2086,13 @@
           box(x,.22,z,5,.45,3.7,wooden);pavilion(x,z,4.6,3.4);
           for(let i=0;i<3;i++)box(x+3,.5,z+i-1,.9,1,.9,crateWood);
         }else if(s.kind==="shrine"){
-          cone(x,.5,z,1,3.2,2.5,stone,8);cone(x,2,z,2,1.8,.55,templeGold,8);cone(x,3.6,z,1.8,.5,0,gold);
+          // San lak mueang: a stepped plinth, red columns and a gilt prang over the city pillar.
+          box(x,.2,z,5.6,.4,5.6,provinceFx.laterite);box(x,.55,z,4.6,.3,4.6,provinceFx.brick);
+          for(const dx of [-1,1])for(const dz of [-1,1])cone(x+dx*1.8,2.05,z+dz*1.8,2.7,.3,.26,templeLacquer,6);
+          box(x,3.5,z,4.3,.25,4.3,gold);roof(x,4.05,z,4.6,4.6);
+          for(let k=0;k<4;k++)cone(x,5.0+k*.55,z,.6,1.5-k*.3,1.3-k*.3,k%2?templeGold:gold,8);
+          cone(x,7.6,z,1.4,.35,0,gold,8);
+          cone(x,1.6,z,2.1,.42,.38,templeGold,10);ball(x,2.85,z,.6,gold,6);
         }else if(s.kind==="grove"){
           for(let i=0;i<8;i++){const a=i*2.4;cone(x+Math.cos(a)*1.2,2,z+Math.sin(a)*1.2,4+i%3,.32,.20,forestLeaf);}
         }
@@ -1866,6 +2149,7 @@
           }
         }
       }
+      dressProvince(map,paint,{box,cone,put,roof,lamp,city,bamboo,lotus});
       if(bamboo || lotus)for(let i=0;i<36;i++){
         const x=huntTrail?(i%2?bounds.maxX-4:bounds.minX+4):(i%2?1:-1)*(35+i%4);
         const z=huntTrail?bounds.minZ+6+(bounds.maxZ-bounds.minZ-12)*noise(i,197):-58+(i*29)%83;
@@ -2025,6 +2309,62 @@
     iron:mat("rusted iron","#4a3a32"),awning:mat("tattered awning","#8a6a2a"),
   };
   for(const m of [decor.ember,decor.willo,decor.crystal,decor.crystalV])glowMats.add(m);
+  // Province materials: whitewashed Ayutthaya brick, war banners, foliage, silver ore, floating lamps.
+  const provinceFx={
+    brick:mat("whitewashed brick","#ffffff","#141210"),banner:mat("war banner","#a8261c","#4a0a06"),
+    canopy:mat("rain tree canopy","#1f3a2a","#050c08"),canopyHi:mat("rain tree crown","#2c4a34","#08120c"),bark:mat("old bark","#3a2c22"),
+    ribbon:mat("sacred ribbon","#d8a83a","#3a2808"),tent:mat("camp canvas","#8a7a5a","#141008"),ore:mat("moon silver","#cfe4ff","#6a8ac8"),
+    floatLamp:mat("floating lamp","#ffd08a","#ff9a3a"),jar:mat("dragon jar","#5a3422","#120804"),naga:mat("naga lacquer","#3a7a6a","#0c2a24"),
+  };
+  glowMats.add(provinceFx.ore);glowMats.add(provinceFx.floatLamp);
+  // Ayutthaya building stock: exposed Mon brick (thin red-orange bricks in
+  // dark mortar), porous laterite blocks for footings, and weathered timber.
+  provinceFx.brick.diffuseTexture=paintTexture("mon brick",256,(c,s)=>{
+    c.fillStyle="#4a2a1e";c.fillRect(0,0,s,s);
+    const rows=16,cols=5,rh=s/rows;
+    for(let r=0;r<rows;r++)for(let k=-1;k<=cols;k++){
+      const bx=(k+(r%2)*.5)*s/cols,v=noise(r*17+k,561),w=noise(r*5+k,562);
+      c.fillStyle=`rgb(${150+v*55|0},${70+v*30+w*10|0},${44+v*18|0})`;c.fillRect(bx+1.5,r*rh+1.5,s/cols-3,rh-3);
+      if(w>.8){c.fillStyle="rgba(30,18,12,.45)";c.fillRect(bx+4,r*rh+3,s/cols*.4,rh-6);} // burnt or chipped brick
+    }
+    for(let i=0;i<10;i++){const g=c.createRadialGradient(noise(i,563)*s,s,0,noise(i,563)*s,s,40+noise(i,564)*80);g.addColorStop(0,"rgba(30,40,24,.6)");g.addColorStop(1,"rgba(30,40,24,0)");c.fillStyle=g;c.fillRect(0,0,s,s);} // moss and damp from the ground up
+  });
+  provinceFx.brick.diffuseColor=B.Color3.FromHexString("#e8d8cc");provinceFx.brick.emissiveColor=B.Color3.FromHexString("#1a0c08");
+  provinceFx.laterite=mat("laterite","#ffffff","#140a06");
+  const paintLaterite=(c,s)=>{
+    c.fillStyle="#3a2418";c.fillRect(0,0,s,s);
+    const rows=4,cols=3,rh=s/rows;
+    for(let r=0;r<rows;r++)for(let k=-1;k<=cols;k++){
+      const bx=(k+(r%2)*.5)*s/cols,v=noise(r*11+k,571);
+      c.fillStyle=`rgb(${120+v*40|0},${62+v*22|0},${38+v*14|0})`;c.fillRect(bx+3,r*rh+3,s/cols-6,rh-6);
+    }
+    for(let i=0;i<520;i++){c.fillStyle=i%3?"rgba(40,20,12,.55)":"rgba(190,120,70,.35)";c.beginPath();c.arc(noise(i,572)*s,noise(i,573)*s,1+noise(i,574)*3.2,0,6.28);c.fill();} // pitted laterite
+  };
+  provinceFx.laterite.diffuseTexture=paintTexture("laterite",256,paintLaterite);
+  // Wall-walk paving tiled to the deck's length (one texture per direction).
+  const deckMats={};
+  provinceFx.deck=(timber,along,len)=>{
+    const key=(timber?"plank":"laterite")+(along?"x":"z")+Math.round(len);
+    if(!deckMats[key]){
+      const m=mat("wall walk "+key,"#ffffff",timber?"#0c0806":"#140a06"),reps=Math.max(1,Math.round(len/(timber?2:3)));
+      m.diffuseTexture=timber?paintTexture("wall walk "+key,128,paintPlank):paintTexture("wall walk "+key,256,paintLaterite);
+      m.diffuseTexture.uScale=along?1:reps;m.diffuseTexture.vScale=along?reps:1;deckMats[key]=m; // box top faces map u along z
+    }
+    return deckMats[key];
+  };
+  provinceFx.timber=mat("stockade timber","#ffffff","#0e0906");
+  provinceFx.timber.diffuseTexture=paintTexture("stockade timber",128,(c,s)=>{
+    c.fillStyle="#5a3e2a";c.fillRect(0,0,s,s);
+    for(let i=0;i<40;i++){c.fillStyle=i%2?"rgba(30,18,10,.45)":"rgba(140,104,70,.25)";c.fillRect(noise(i,581)*s,0,1+noise(i,582)*2.5,s);}
+    for(let i=0;i<6;i++){c.fillStyle="rgba(25,14,8,.6)";c.beginPath();c.ellipse(noise(i,583)*s,noise(i,584)*s,2,5,0,0,6.28);c.fill();} // knots
+  });
+  provinceFx.plank=mat("plank deck","#ffffff","#0c0806");
+  const paintPlank=(c,s)=>{
+    c.fillStyle="#4a3424";c.fillRect(0,0,s,s);
+    for(let y=0;y<s;y+=16){c.fillStyle=`rgb(${80+noise(y,585)*30|0},${56+noise(y,586)*20|0},${38+noise(y,587)*12|0})`;c.fillRect(0,y+1,s,14);}
+  };
+  provinceFx.plank.diffuseTexture=paintTexture("plank deck",128,paintPlank);
+  provinceFx.plank.diffuseTexture.uScale=4;provinceFx.plank.diffuseTexture.vScale=4;
   const lavaMat=additiveMat("lava cracks",crackTexture("lava cracks","255,120,40","255,70,20"));
   const voidMat=additiveMat("void cracks",crackTexture("void cracks","190,140,255","140,80,255"));
   const greenPool=additiveMat("marsh light",radialTexture("marsh light",128,[[0,"rgba(150,255,120,.5)"],[.35,"rgba(110,230,120,.2)"],[1,"rgba(80,200,100,0)"]]));
@@ -2042,13 +2382,78 @@
       !(map.walls||[]).some(w=>x>w.x-1&&x<w.x+w.width+1&&z>w.z-1&&z<w.z+w.length+1)&&
       !(map.water||[]).some(w=>x>w.x-.8&&x<w.x+w.width+.8&&z>w.z-.8&&z<w.z+w.length+.8);
   }
+  // Scenery for the strategic provinces (capital, forts, frontier hunts). It
+  // keeps clear of roads, sites, gates, stairs and the wall walk, so it never
+  // hides a route the server lets players use.
+  function dressProvince(map,paint,{box,cone,put,roof,lamp,city,bamboo,lotus}){
+    const b=map.bounds,{sites,rampart}=map.strategic,id=map.id,{stone}=paint;
+    const ball=(x,y,z,d,m,seg=5)=>put(B.MeshBuilder.CreateSphere("province dressing",{diameter:d,segments:seg},scene),x,y,z,m);
+    const inBox=(x,z,w,pad)=>x>w.x-pad&&x<w.x+w.width+pad&&z>w.z-pad&&z<w.z+w.length+pad;
+    const clear=(x,z,pad=2.5)=>sceneryClear(x,z,12,map)&&!sites.some(s=>Math.hypot(x-s.x,z-s.z)<(s.kind==="palace"?13:7))&&
+      !(rampart&&(rampart.deck.some(w=>inBox(x,z,w,pad))||rampart.stairs.some(st=>Math.hypot(x-(st.foot.x+st.top.x)/2,z-(st.foot.z+st.top.z)/2)<5)));
+    const scatter=(count,seed,fn,pad)=>{for(let i=0,n=0;i<count*10&&n<count;i++){
+      const x=b.minX+3+noise(i,seed)*(b.maxX-b.minX-6),z=b.minZ+3+noise(i,seed+1)*(b.maxZ-b.minZ-6);
+      if(clear(x,z,pad)){fn(x,z,n);n++;}}};
+    const rainTree=(x,z,k)=>{const h=3.2+noise(k,601)*1.6;
+      cone(x,h/2,z,h,.9,.5,provinceFx.bark,6);cone(x,1.3,z,.35,1.0,1.0,provinceFx.ribbon,8);
+      for(let j=0;j<4;j++){const a=j*1.7+k,r=j?1.6:0;ball(x+Math.cos(a)*r,h+.4+(j?0:.9),z+Math.sin(a)*r,j?3.2:3.8,j%2?provinceFx.canopyHi:provinceFx.canopy);}};
+    const brazier=(x,z)=>{addLightSpot(x,1.6,z,"#ff8a3d",1.1);cone(x,.45,z,.9,.18,.3,decor.iron,6);cone(x,.98,z,.24,.42,.7,decor.iron,8);cone(x,1.25,z,.5,.42,0,decor.ember,5);
+      const g=put(B.MeshBuilder.CreateGround("province glow",{width:4.2,height:4.2},scene),x,.05,z,lightPoolMat);};
+    const spiritHouse=(x,z,k)=>{cone(x,.8,z,1.6,.14,.12,darkWood,5);box(x,1.75,z,.9,.6,.7,templeLacquer);roof(x,2.25,z,1.1,.9);box(x,1.5,z+.42,.6,.06,.2,provinceFx.floatLamp);};
+    const flagPole=(x,z,k)=>{cone(x,3,z,6,.14,.1,gold,5);for(let j=0;j<5;j++){const f=box(x+.35,5.6-j*.55,z,.6,.42,.04,j%2?provinceFx.ribbon:provinceFx.banner);f.rotation.z=Math.sin(j+k)*.12;}};
+    if(city){
+      // Avenue trees and dragon jars inside the walls; chedi skyline beyond them.
+      scatter(26,611,rainTree,3);
+      scatter(18,613,(x,z,k)=>{ball(x,.55,z,1.1,provinceFx.jar,6);cone(x,1.08,z,.12,.5,.6,provinceFx.jar,8);if(k%3===0)ball(x+.9,.4,z+.3,.8,provinceFx.jar,6);},2);
+      for(const path of map.paths)for(let i=1;i<path.length;i++){const a=path[i-1],c=path[i],len=Math.hypot(c.x-a.x,c.z-a.z);
+        for(let t=9;t<len-4;t+=18){const nx=-(c.z-a.z)/len,nz=(c.x-a.x)/len,x=a.x+(c.x-a.x)*t/len+nx*3.6,z=a.z+(c.z-a.z)*t/len+nz*3.6;if(clear(x,z,1.5))flagPole(x,z,i+t);}}
+      for(let i=0;i<14;i++){const side=i%2?1:-1,x=side*(48+noise(i,615)*8),z=-60+i*6.5,h=7+noise(i,616)*5;
+        // Ruined Ayutthaya chedi: laterite base, brick bell and a broken spire.
+        box(x,.7,z,5,1.4,5,provinceFx.laterite);cone(x,1.9,z,1,4.2,4.4,provinceFx.brick,8);ball(x,3.6,z,3.6,provinceFx.brick,8);
+        const spire=cone(x,3.6+h/2,z,h*(i%3?1:.6),1.2,i%3?.05:.5,provinceFx.brick,8);spire.rotation.z=(noise(i,619)-.5)*.12;}
+      for(let i=0;i<8;i++){const x=-36+i*10,z=-74-noise(i,617)*5,h=6+noise(i,618)*4;box(x,.6,z,4.6,1.2,4.6,provinceFx.laterite);
+        for(let k=0;k<3;k++)box(x,1.4+k*.7,z,3.8-k*.7,.7,3.8-k*.7,provinceFx.brick);cone(x,3.4+h/2,z,h,1.8,.3,provinceFx.brick,4).rotation.y=Math.PI/4;}
+    }else if(map.strategic.kind==="territory"){
+      // War camp: tents, cannons on carriages, stacked supplies, braziers and a palisade rim.
+      scatter(9,621,(x,z,k)=>{cone(x,1.1,z,2.2,3.2,0,provinceFx.tent,4).rotation.y=Math.PI/4;cone(x,2.4,z,.5,.1,.06,darkWood,4);box(x,.6,z+1.3,.8,1.2,.04,provinceFx.banner);},4);
+      scatter(7,623,(x,z,k)=>{box(x,.35,z,1.1,.3,1.8,wooden);for(const d of [-1,1])cone(x+d*.6,.4,z,.12,.8,.8,darkWood,10).rotation.z=Math.PI/2;
+        const barrel=cone(x,.75,z+.3,2.2,.32,.42,decor.iron,8);barrel.rotation.x=Math.PI/2-.18;},3);
+      scatter(14,625,(x,z,k)=>{for(let j=0;j<3;j++)box(x+(j%2)*.9,.45+(j>1?.9:0),z,.85,.85,.85,crateWood);if(k%2)ball(x-.9,.45,z,.9,provinceFx.jar,6);},2);
+      scatter(10,627,brazier,3);
+      scatter(6,629,flagPole,2.5);
+      for(let i=0;i<46;i++){const t=i/46,w=b.maxX-b.minX,x=t<.5?b.minX+1+(t*2)*w*.98:(i%2?b.minX+1:b.maxX-1),z=t<.5?b.minZ+1:b.minZ+((t-.5)*2)*(b.maxZ-b.minZ);
+        const st=cone(x,1.2,z,2.4+noise(i,631)*.8,.32,.08,darkWood,5);st.rotation.z=(noise(i,632)-.5)*.3;}
+      if(id==="moon_pass"){const mine=sites.find(s=>s.kind==="mine");
+        if(mine)for(let k=0;k<10;k++){const a=k*.63,r=4+noise(k,633)*3;cone(mine.x+Math.cos(a)*r,.5,mine.z+Math.sin(a)*r,.8+noise(k,634),1.1,.1,provinceFx.ore,5);}}
+      if(id==="river_watch")for(const w of map.water||[]){const horizontal=w.width>w.length;
+        for(let k=0;k<3;k++){const t=(k+.5)/3,x=w.x+(horizontal?w.width*t:w.width/2),z=w.z+(horizontal?w.length/2:w.length*t);
+          if(sites.some(s=>Math.hypot(x-s.x,z-s.z)<6))continue;
+          const hull=box(x,.2,z,horizontal?3.6:1.1,.35,horizontal?1.1:3.6,wooden);cone(x,.65,z,.8,.9,.7,provinceFx.tent,6);}}
+    }else{
+      // Frontier hunts: roadside spirit houses, braziers at the camps, prayer flags.
+      scatter(10,641,spiritHouse,2);
+      for(const c of map.camps||[])for(let k=0;k<3;k++){const a=k*2.1+.4;brazier(c.x+Math.cos(a)*8.5,c.z+Math.sin(a)*8.5);}
+      scatter(8,643,flagPole,2);
+      if(bamboo)scatter(4,645,(x,z,k)=>{for(const dx of [-1,1])for(const dz of [-1,1])cone(x+dx*1.1,1.8,z+dz*1.1,3.6,.2,.16,decor.bamboo,5);
+        box(x,3.6,z,2.8,.16,2.8,wooden);roof(x,4.6,z,3.2,3.2);},4);
+      if(lotus){for(const w of map.water||[])for(let k=0;k<Math.floor(w.width*w.length/30);k++){
+          const x=w.x+.8+noise(k+w.x,647)*(w.width-1.6),z=w.z+.4+noise(k+w.z,648)*(w.length-.8);
+          cone(x,.13,z,.08,.7,.8,forestLeaf,8);cone(x,.3,z,.3,.45,.1,provinceFx.floatLamp,6);}
+        const pond=sites.find(s=>s.kind==="shrine");
+        if(pond)for(const side of [-1,1]){const x=pond.x+side*3.2,z=pond.z+3.5;
+          cone(x,.5,z,1,1.2,1.2,stone,8);for(let j=0;j<5;j++)ball(x+side*j*.05,1.1+j*.42,z-j*.12,.62-j*.06,provinceFx.naga,6);
+          const hood=cone(x,3.3,z-.7,1.1,1.5,.2,provinceFx.naga,7);hood.rotation.x=-.5;ball(x,3.05,z-.25,.2,decor.crystal,4);}}
+    }
+  }
   function dressRegion(map,paint){
     let parts=[];
     const put=(mesh,x,y,z,m)=>{mesh.position.set(x,y,z);mesh.material=m;mesh.isPickable=false;parts.push(mesh);return mesh;};
     const box=(x,y,z,w,h,d,m)=>put(B.MeshBuilder.CreateBox("region dressing",{width:w,height:h,depth:d},scene),x,y,z,m);
     const cone=(x,y,z,h,b,t,m,n=6)=>put(B.MeshBuilder.CreateCylinder("region dressing",{height:h,diameterBottom:b,diameterTop:t,tessellation:n},scene),x,y,z,m);
     const ball=(x,y,z,d,m,seg=4)=>put(B.MeshBuilder.CreateSphere("region dressing",{diameter:d,segments:seg},scene),x,y,z,m);
-    const decal=(x,z,size,m,rot=0,y=.05)=>{const g=put(B.MeshBuilder.CreateGround("region decal",{width:size,height:size},scene),x,y,z,m);g.rotation.y=rot;return g;};
+    const decal=(x,z,size,m,rot=0,y=.05)=>{
+      if(size>=2.5&&(m===lightPoolMat||m===greenPool||m===violetPool))addLightSpot(x,1.8,z,m===greenPool?"#9dff7a":m===violetPool?"#b48aff":"#ffa65a",Math.min(1.2,size/3.6));
+      const g=put(B.MeshBuilder.CreateGround("region decal",{width:size,height:size},scene),x,y,z,m);g.rotation.y=rot;return g;};
     const b=map.bounds,id=map.id,{stone,deep,light,court,road}=paint;
     const clear=(x,z,courts=12.5)=>sceneryClear(x,z,courts,map);
     const scatter=(count,seed,fn,courts)=>{for(let i=0,n=0;i<count*8&&n<count;i++){
@@ -2202,10 +2607,18 @@
     provinceDoor=null;castleDoors.clear();castleRings.clear();
     for(const child of expansionRoot.getChildren())child.dispose();
     for(const resource of expansionResources)resource.dispose();expansionResources.length=0;expansionLabels.length=0;
+    for(let i=lightSpots.length-1;i>=0;i--)if(lightSpots[i].map!=="ritual_village")lightSpots.splice(i,1);
     const bounds=mapBounds();
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
     const map=worldDefinitions?.[activeMapId];if(!map)return;
+    for(const p of map.portals||[])addLightSpot(p.x,2.6,p.z,"#7ff5e0",1.25);
+    // Soft occlusion where trees, rocks, buildings and walls meet the ground.
+    {const ao=[];
+      for(const o of map.obstacles||[])ao.push([o.x,o.z,o.radius*2.7,o.radius*2.7]);
+      for(const w of map.walls||[])ao.push([w.x+w.width/2,w.z+w.length/2,w.width+2.2,w.length+2.2]);
+      const parts=ao.map(([x,z,w,l])=>{const g=B.MeshBuilder.CreateGround("base occlusion",{width:w,height:l},scene);g.position.set(x,.03,z);return g;});
+      if(parts.length){const mesh=B.Mesh.MergeMeshes(parts,true,true);mesh.parent=expansionRoot;mesh.material=baseOcclusionMat();mesh.isPickable=false;mesh.metadata={noShadow:true};}}
     (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic)));
     for(const camp of map.camps||[]){
       const clearing=inTemple ? B.MeshBuilder.CreateGround("temple court",{width:21,height:19},scene) : B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
@@ -2472,6 +2885,9 @@
   const blackSteel = mat("black steel", "#2a2a2f"); blackSteel.specularColor = B.Color3.FromHexString("#8a8f9a"); blackSteel.specularPower = 48;
   const copper = mat("engraved copper", "#8a5a3a", "#24140a"), leatherWrap = mat("wrapped grip", "#1b1615");
   const emberEdge = mat("ember edge", "#ff6a3a", "#e2381a"); glowMats.add(emberEdge);
+  // Thai daab: bright steel with a pale moonlit edge so the pair reads far away.
+  const daabSteel = mat("daab steel", "#a8b0b8", "#161a20"); daabSteel.specularColor = B.Color3.FromHexString("#eef4ff"); daabSteel.specularPower = 64;
+  const daabEdge = mat("daab edge", "#e8f0ff", "#5a6a88");
   // Far-camera identity: a yantra shawl (read from above), glowing amulets
   // and three familiar spirits orbiting the shaman.
   const shawlCloth = (name, base, trim) => {
@@ -2497,6 +2913,7 @@
   }
   function avatarMesh(id, local) {
     const parent = new B.TransformNode("avatar-" + id, scene);
+    contactShadow(parent, 1.5);
     if(local) {
       const locator = B.MeshBuilder.CreateTorus("local player locator", {
         diameter:1.5, thickness:.09, tessellation:24,
@@ -2636,16 +3053,16 @@
     halo.setEnabled(false);
 
     // Weapons ride in the right fist, so they swing with the arm.
-    function curvedBlade(length, base, segs, edge) {
+    function curvedBlade(length, base, segs, edge, steel = blackSteel) {
       let x = 0, y = .05, a = 0;
       for (let i = 0; i < segs; i++) {
         const w = base * (1 - i / (segs + 1) * .55), l = length / segs;
-        const seg = box(x - Math.sin(a) * l / 2, y + Math.cos(a) * l / 2, 0, w, l * 1.04, .025, blackSteel); seg.rotation.z = a;
+        const seg = box(x - Math.sin(a) * l / 2, y + Math.cos(a) * l / 2, 0, w, l * 1.04, .025, steel); seg.rotation.z = a;
         if (edge) { const e = box(x - Math.sin(a) * l / 2 + Math.cos(a) * w / 2, y + Math.cos(a) * l / 2 + Math.sin(a) * w / 2, 0, .022, l * 1.04, .03, edge); e.rotation.z = a; }
         else if (i % 2 === 0) { const c = box(x - Math.sin(a) * l / 2 - Math.cos(a) * w * .2, y + Math.cos(a) * l / 2, -.014, w * .25, l * .7, .005, copper); c.rotation.z = a; }
         x -= Math.sin(a) * l; y += Math.cos(a) * l; a += .16;
       }
-      cyl(x - Math.sin(a) * .06, y + Math.cos(a) * .06, 0, .14, 0, base * .4, blackSteel, 4).rotation.z = a;
+      cyl(x - Math.sin(a) * .06, y + Math.cos(a) * .06, 0, .14, 0, base * .4, steel, 4).rotation.z = a;
     }
     function createHeldWeapon(kind) {
       const root = new B.TransformNode("held-" + kind + "-" + id, scene);
@@ -2655,7 +3072,8 @@
         cyl(0, -.12, 0, .24, .055, .055, leatherWrap, 8);
         for (const y of [-.03, -.11, -.2]) cyl(0, y, 0, .018, .065, .065, copper, 8);
         ball(0, -.25, 0, .075, bronzeMat, 6);
-        curvedBlade(.95, .105, 7, null);
+        box(0, .03, 0, .15, .03, .06, gold); // small cross guard
+        curvedBlade(.95, .105, 7, daabEdge, daabSteel);
         root.rotation.x = -2.1;
       } else if (kind === "ritual_dagger") {
         // Curved black mo-du knife with copper-bound grip and hanging charms.
@@ -2757,11 +3175,20 @@
   let shamanBody = null;
   if (B.SceneLoader?.IsPluginForExtensionAvailable?.(".glb")) {
     B.SceneLoader.LoadAssetContainerAsync("./assets/characters/", "thai-male.glb", scene).then(container => {
-      for (const m of container.materials) if ("metallic" in m) { m.environmentIntensity = 0; m.directIntensity = 1.5; m.metallic = 0; }
+      for (const m of container.materials) {
+        if ("metallic" in m) {
+          m.environmentIntensity = 0; m.directIntensity = 1.5; m.metallic = 0;
+          // Moonlit sheen on the skin's grazing edges keeps every character
+          // readable against dark ground from the far camera.
+          m.sheen.isEnabled = true; m.sheen.color = B.Color3.FromHexString("#9fc4ff"); m.sheen.intensity = .45; m.sheen.roughness = .35;
+        }
+        m.maxSimultaneousLights = MAX_LIGHTS;
+      }
       shamanBody = container;
       shamanWaiting.splice(0).forEach(attachShamanModel);
+      spiritArmWaiting.splice(0).forEach(attachSpiritArms);
       ghostWaiting.splice(0).forEach(build => build());
-    }).catch(error => { console.warn("MONTRA shaman body", error); shamanBody = false; shamanWaiting.length = 0; ghostWaiting.splice(0).forEach(build => build()); });
+    }).catch(error => { console.warn("MONTRA shaman body", error); shamanBody = false; shamanWaiting.length = 0; spiritArmWaiting.length = 0; ghostWaiting.splice(0).forEach(build => build()); });
   } else shamanBody = false;
   function shamanGear(a, nodes) {
     const shawl = a.local ? shawlHero : shawlFriend, pants = a.local ? pantsHero : pantsFriend, sash = a.local ? sashHero : sashFriend;
@@ -2894,7 +3321,7 @@
     }
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;
-    a.skin = { nodes, copy, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
+    a.skin = { nodes, copy, holder, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
   }
   // ---- Action animation set (visual only) ----
   // Every action maps to something the game already replicates: server
@@ -2906,10 +3333,13 @@
   // elbow (negative on the left, positive on the right).
   const ACTIONS = {
     stab: { dur: .34, swing: true }, slash: { dur: .48, swing: true }, smash: { dur: .58, swing: true },
-    punch: { dur: .32, swing: true }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
+    punch: { dur: .32, swing: true }, twin: { dur: .42, swing: true },
+    // Thai sword school skills (see swordSkillAction).
+    lunge: { dur: .62, swing: true }, guard: { dur: 1.1 }, counter: { dur: .7, swing: true }, flurry: { dur: .85, swing: true },
+    sweep: { dur: .8, swing: true }, rally: { dur: 1.05 }, finale: { dur: 1.1, swing: true }, dance: { dur: 1.5 }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
     drink: { dur: 1.15 }, dash: { dur: .46 }, rise: { dur: 1.0 }, arrive: { dur: .85 },
   };
-  const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash" };
+  const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash", thai_dual: "twin" };
   const POSE_BONES = ["Hips", "Spine", "Spine1", "Chest", "Neck", "Head", "LeftShoulder", "RightShoulder",
     "LeftArm", "RightArm", "LeftForeArm", "RightForeArm", "LeftHand", "RightHand",
     "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg", "LeftFoot", "RightFoot"];
@@ -2917,7 +3347,19 @@
     if (!a || !ACTIONS[type]) return;
     const now = performance.now();
     a.action = { type, start: now, end: now + ACTIONS[type].dur * 1000 };
+    if (type === "twin") a.action.side = (a.twinFlip = !a.twinFlip) ? 1 : -1; // alternate right / left blade
+    if (type !== "hit" && type !== "rise") flashStrike(a, type);
     if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
+  }
+  // A sword skill's motion follows its effect type in the server catalog,
+  // so new skills of an existing type animate without client changes.
+  const SWORD_EFFECT_ACTIONS = { step: "lunge", guard: "guard", counter: "counter", flurry: "flurry", area: "sweep", support: "rally", strike: "twin" };
+  let swordCatalogRaw = null, swordCatalogNodes = {};
+  function swordSkillAction(skillId) {
+    if (skillId === "twin_finale") return "finale";
+    const raw = room?.state?.swordTreeCatalog || "";
+    if (raw !== swordCatalogRaw) { swordCatalogRaw = raw; try { swordCatalogNodes = JSON.parse(raw || "null")?.nodes || {}; } catch { swordCatalogNodes = {}; } }
+    return SWORD_EFFECT_ACTIONS[swordCatalogNodes[skillId]?.effect] || "twin";
   }
   function playAttack(attackerId, ranged, targetX, targetZ) {
     const a = avatars.get(attackerId);
@@ -2951,7 +3393,7 @@
     m.opacityTexture = fxGradient; m.disableLighting = true; m.backFaceCulling = false; m.alphaMode = B.Engine.ALPHA_ADD;
     return m;
   };
-  const SLASH_MATS = { stab: fxMat("dagger trail", "#cfd8ff"), slash: fxMat("blade trail", "#ff7436"), smash: fxMat("staff trail", "#8ff5df"), punch: fxMat("fist trail", "#ffe2a0") };
+  const SLASH_MATS = { stab: fxMat("dagger trail", "#cfd8ff"), slash: fxMat("blade trail", "#ff7436"), smash: fxMat("staff trail", "#8ff5df"), punch: fxMat("fist trail", "#ffe2a0"), twin: fxMat("twin blade trail", "#ffd27a") };
   const castOrbMat = mat("cast orb", "#bff8ff", "#59d8ff"); glowMats.add(castOrbMat);
   const vialMat = mat("potion vial", "#ff5a5a", "#d01c2c"); glowMats.add(vialMat);
   const summonSeal = additiveMat("summon seal", squareYantraTexture("summon seal", "rgba(255,190,120,.95)", "#ff9a3a"));
@@ -3017,7 +3459,14 @@
     set("LeftUpLeg", -.34, .18, .17); set("LeftLeg", .14, 0, 0);
     set("RightUpLeg", .14, -.1, -.11); set("RightLeg", .32, 0, 0);
     set("LeftShoulder", 0, 0, -.04); set("RightShoulder", 0, 0, .04);
-    if (weapon === "arcane_sword") {
+    if (weapon === "thai_dual") {
+      // Dual-blade guard: right blade raised before the face, edge out;
+      // left blade low and back along the forearm, ready to cover.
+      set("RightArm", -.95, .25, .95); set("RightForeArm", 0, 1.35, 0); set("RightHand", .35, 0, .1);
+      set("LeftArm", -.2, .1, -1.15); set("LeftForeArm", 0, -.45, 0); set("LeftHand", 1.9, 0, -.1);
+      add("RightShoulder", 0, .08, -.06); off[1] = -.06;
+      add("LeftLeg", .12, 0, 0); add("RightLeg", .14, 0, 0);
+    } else if (weapon === "arcane_sword") {
       // Low guard: crescent blade trailing forward-down at the right hip,
       // free hand loose and open toward the opponent.
       set("RightArm", -.22, .15, 1.08); set("RightForeArm", 0, .55, 0); set("RightHand", 1.0, 0, 0);
@@ -3043,12 +3492,13 @@
     // the chest counter-twists, the hip drops over the swinging leg.
     if (m > .001) {
       const W = {}; for (const b of POSE_BONES) W[b] = [0, 0, 0];
-      const amp = .55 + .25 * run, armAmp = .42 + .45 * run, grip = { spirit_staff: 1.45, arcane_sword: 1.2, ritual_dagger: .9 }[weapon];
+      const amp = .55 + .25 * run, armAmp = .42 + .45 * run, grip = { spirit_staff: 1.45, arcane_sword: 1.2, ritual_dagger: .9, thai_dual: 1.1 }[weapon];
       W.Hips = [.02 * run, s * .14 * (1 + run), -s * .05];
       W.Spine = [.04 + .12 * run, s * .02, s * .03]; W.Spine1 = [.02 + .06 * run, -s * .06, 0]; W.Chest = [.01, -s * .12 * (1 + run), -s * .03];
       W.LeftUpLeg = [-s * amp, 0, .03]; W.RightUpLeg = [s * amp, 0, -.03];
       W.LeftLeg = [Math.max(0, c) * (.8 + .6 * run) + .06, 0, 0]; W.RightLeg = [Math.max(0, -c) * (.8 + .6 * run) + .06, 0, 0];
-      W.LeftArm = [s * armAmp, 0, -1.24]; W.LeftForeArm = [0, -(.28 + 1.1 * run), 0];
+      W.LeftArm = weapon === "thai_dual" ? [-.25 + s * armAmp * .4, -.1, -1.18] : [s * armAmp, 0, -1.24];
+      W.LeftForeArm = [0, weapon === "thai_dual" ? -1.1 : -(.28 + 1.1 * run), 0];
       W.RightArm = grip ? [-.25 - s * armAmp * .4, .1, 1.18] : [-s * armAmp, 0, 1.24];
       W.RightForeArm = [0, grip ?? (.28 + 1.1 * run), 0];
       for (const b of POSE_BONES) mix(b, W[b][0], W[b][1], W[b][2], m);
@@ -3092,7 +3542,7 @@
     const act = a.action, fx = avatarFx(a);
     for (const arc of Object.values(fx.slashes)) arc.setEnabled(false);
     fx.orb.setEnabled(false); fx.vial.setEnabled(false); fx.seal.setEnabled(false);
-    let flare = 0;
+    let flare = 0, spin = 0;
     if (act && now < act.end && !dead) {
       const p = act.hold ?? (now - act.start) / (act.end - act.start); // hold: frozen frame for previews
       const w = Math.min(1, p / .12, (1 - p) / .22);
@@ -3116,6 +3566,26 @@
         fx.pivot.rotation.set(0, (p - .52) * (act.type === "slash" ? -3 : -1.2), tilt);
         const sc = act.type === "stab" || act.type === "punch" ? .75 : 1.15; arc.scaling.set(sc, 1, sc);
       };
+      // One blade cuts across while the other draws back to guard; the torso
+      // winds the opposite way first so the twist carries the cut (d: 1 right, -1 left).
+      const twinCut = (d, k, ww) => {
+        const R = d > 0 ? "Right" : "Left", L = d > 0 ? "Left" : "Right";
+        const lp = (bone, A, Bv) => { const v = lerp(A, Bv, k); mix(bone, v[0], v[1], v[2], ww); };
+        lp("Hips", [0, -.55 * d, -.06], [.06, .25 * d, .06]);
+        lp("LeftUpLeg", [-.2, .1, .12], [-.7, .05, .1]); lp("LeftLeg", [.2, 0, 0], [.5, 0, 0]);
+        lp("RightUpLeg", [.05, 0, -.1], [.4, 0, -.06]); lp("RightLeg", [.5, 0, 0], [.18, 0, 0]);
+        off[0] += (-.05 + .09 * k) * ww; off[1] -= (.04 + .07 * k) * ww; off[2] += .06 * k * ww;
+        const v = lerp([-.02, -.75 * d, .18 * d], [.36, .75 * d, -.15 * d], k); bend(v[0], v[1], v[2], ww);
+        lp(R + "Shoulder", [0, -.2 * d, -.12 * d], [0, .28 * d, .05 * d]);
+        lp(R + "Arm", [-2.6, -.35 * d, 1.25 * d], [-.5, .9 * d, 1.0 * d]); lp(R + "ForeArm", [0, .85 * d, 0], [0, .15 * d, 0]);
+        lp(L + "Arm", [-.5, .2 * d, -1.05 * d], [-1.0, -.2 * d, -.95 * d]); lp(L + "ForeArm", [0, -.6 * d, 0], [0, -1.4 * d, 0]);
+      };
+      const cutArc = (center, d, tilt = .45, width = .2) => {
+        const arc = fx.slashes.twin, k = Math.max(0, 1 - Math.abs(p - center) / width);
+        if (k <= 0) return;
+        arc.setEnabled(true); arc.visibility = k * .9;
+        fx.pivot.rotation.set(0, (p - center) / width * -.6 * d, tilt * d); arc.scaling.set(1.05 * d, 1, 1.05);
+      };
       switch (act.type) {
         case "stab": case "punch":
           weight(strike, .9); spine([.05, -.6, .08], [.32, .55, -.05]);
@@ -3129,6 +3599,84 @@
           pose("RightArm", [-2.9, -.4, 1.3], [-.45, .95, 1.05]); pose("RightForeArm", [0, .9, 0], [0, .15, 0]);
           pose("LeftArm", [-.9, .3, -1.0], [.35, 0, -1.3]); pose("LeftForeArm", [0, -1.2, 0], [0, -.3, 0]);
           trail(); break;
+        case "twin":
+          twinCut(act.side, strike, w); cutArc(.52, act.side); break;
+        case "lunge": {
+          // Ya-ang sam khum: a low driving step, blades trailing, then a rising cut.
+          const go = w * (1 - ease((p - .42) / .14)), k = ease((p - .48) / .2);
+          mix("Hips", .15, 0, 0, go); bend(.55, 0, 0, go);
+          mix("LeftUpLeg", -1.0, 0, .05, go); mix("LeftLeg", .5, 0, 0, go); mix("RightUpLeg", .65, 0, -.05, go); mix("RightLeg", .9, 0, 0, go);
+          mix("LeftArm", .9, 0, -1.0, go); mix("RightArm", .9, 0, 1.0, go); off[1] -= .12 * go;
+          twinCut(1, k, w - go); cutArc(.62, 1); break;
+        }
+        case "guard": {
+          // Blades crossed before the face, knees sunk, square to the attack.
+          mix("Hips", 0, -.3, 0, w); bend(.15, -.15, 0, w);
+          mix("RightArm", -1.3, -.5, .7, w); mix("RightForeArm", 0, 1.6, 0, w); mix("RightHand", .3, 0, 0, w);
+          mix("LeftArm", -1.3, .5, -.7, w); mix("LeftForeArm", 0, -1.6, 0, w); mix("LeftHand", .3, 0, 0, w);
+          mix("LeftLeg", .4, 0, 0, w); mix("RightLeg", .5, 0, 0, w); off[1] -= .08 * w;
+          break;
+        }
+        case "counter": {
+          // Lean off the line and parry high with the left, then drive the right blade through.
+          const parry = w * (1 - ease((p - .36) / .14)), k = ease((p - .4) / .16), thrust = w - parry;
+          mix("Hips", 0, .45, .05, parry); bend(-.2, .4, -.3, parry); off[0] += .1 * parry;
+          mix("LeftArm", -2.2, .3, -.9, parry); mix("LeftForeArm", 0, -.8, 0, parry); mix("LeftHand", .4, 0, 0, parry);
+          const lp = (bone, A, Bv) => { const v = lerp(A, Bv, k); mix(bone, v[0], v[1], v[2], thrust); };
+          lp("Hips", [0, -.55, -.06], [.06, .25, .06]); bend(.05 + .27 * k, -.6 + 1.15 * k, 0, thrust);
+          lp("RightArm", [.6, 0, 1.1], [-1.5, .12, 1.18]); lp("RightForeArm", [0, 1.7, 0], [0, .05, 0]);
+          lp("LeftArm", [-1.1, -.1, -1.1], [.35, 0, -1.2]); lp("LeftForeArm", [0, -1.6, 0], [0, -.4, 0]);
+          lp("LeftUpLeg", [-.2, .1, .12], [-.75, .05, .1]); lp("LeftLeg", [.2, 0, 0], [.55, 0, 0]); lp("RightUpLeg", [.05, 0, -.1], [.42, 0, -.06]);
+          off[1] -= (.04 + .07 * k) * thrust; off[2] += .08 * k * thrust;
+          cutArc(.58, 1, 0); break;
+        }
+        case "flurry": {
+          // Four quick alternating cuts.
+          const beat = Math.min(3, Math.floor(p * 4)), q = p * 4 - beat, d = beat % 2 ? -1 : 1;
+          twinCut(d, ease((q - .15) / .45), w); cutArc((beat + .55) / 4, d, .45, .09); break;
+        }
+        case "finale": {
+          // Right cut, left cut, then both blades chopped down together.
+          if (p < .62) { const beat = p < .31 ? 0 : 1, q = (p - beat * .31) / .31, d = beat ? -1 : 1; twinCut(d, ease((q - .15) / .45), w); cutArc(beat * .31 + .17, d, .45, .07); }
+          else {
+            const k = ease((p - .72) / .14), lp = (bone, A, Bv) => { const v = lerp(A, Bv, k); mix(bone, v[0], v[1], v[2], w); };
+            weight(k, 1.25); bend(-.35 + .95 * k, 0, 0, w);
+            lp("RightArm", [-2.95, 0, 1.25], [-.95, 0, .85]); lp("LeftArm", [-2.95, 0, -1.25], [-.95, 0, -.85]);
+            lp("RightForeArm", [0, .3, 0], [0, .1, 0]); lp("LeftForeArm", [0, -.3, 0], [0, -.1, 0]);
+            lp("Head", [-.25, 0, 0], [.3, 0, 0]); off[1] += .04 * (1 - k) * w; cutArc(.84, 1, 1.45, .08);
+          }
+          break;
+        }
+        case "sweep": {
+          // A full turn with both blades held out: everything in front is cut.
+          const k = ease((p - .12) / .62); spin = -k * Math.PI * 2;
+          bend(.25, 0, 0, w); mix("Hips", 0, 0, 0, w); off[1] -= .1 * w;
+          mix("RightArm", -.25, .35, .15, w); mix("RightForeArm", 0, .2, 0, w); mix("LeftArm", -.25, -.35, -.15, w); mix("LeftForeArm", 0, -.2, 0, w);
+          mix("LeftUpLeg", -.35, 0, .25, w); mix("RightUpLeg", -.1, 0, -.25, w); mix("LeftLeg", .45, 0, 0, w); mix("RightLeg", .4, 0, 0, w);
+          if (p > .15 && p < .78) { const arc = fx.slashes.twin; arc.setEnabled(true); arc.visibility = .85; arc.scaling.set(1.3, 1, 1.3); fx.pivot.rotation.set(0, spin, .05); }
+          break;
+        }
+        case "rally": {
+          // Right blade raised high, left blade out low: a call to the party.
+          const up = ease(p / .3) * (1 - ease((p - .8) / .2));
+          bend(-.25, 0, 0, up); mix("Head", -.3, 0, 0, up); mix("Hips", 0, -.2, 0, up);
+          mix("RightArm", -2.9, 0, .5, up); mix("RightForeArm", 0, .2, 0, up);
+          mix("LeftArm", -.25, 0, -.85, up); mix("LeftForeArm", 0, -.2, 0, up);
+          fx.seal.setEnabled(true); fx.seal.material = arriveSeal; fx.seal.scaling.setAll(2 + 3 * p); fx.seal.visibility = 1 - p; flare = up * .4; break;
+        }
+        case "dance": {
+          // Ram daab khu: a bow over crossed blades, then a turning sword dance.
+          const bow = 1 - ease((p - .22) / .12), k = ease((p - .3) / .62), ph = Math.max(0, p - .3) * Math.PI * 6, dw = w * (1 - bow);
+          bend(.55, 0, 0, w * bow); mix("Head", .3, 0, 0, w * bow); off[1] -= .14 * w * bow;
+          mix("LeftUpLeg", -.7, 0, .1, w * bow); mix("LeftLeg", 1.0, 0, 0, w * bow); mix("RightUpLeg", .1, 0, -.1, w * bow); mix("RightLeg", 1.1, 0, 0, w * bow);
+          mix("RightArm", -1.2, -.5, .8, w * bow); mix("RightForeArm", 0, 1.5, 0, w * bow); mix("LeftArm", -1.2, .5, -.8, w * bow); mix("LeftForeArm", 0, -1.5, 0, w * bow);
+          spin = k * Math.PI * 2;
+          mix("RightArm", -1.4 + .7 * Math.sin(ph), .3, .9, dw); mix("RightForeArm", 0, .9 + .4 * Math.cos(ph), 0, dw); mix("RightHand", Math.sin(ph * 2) * 1.1, 0, 0, dw);
+          mix("LeftArm", -1.4 - .7 * Math.sin(ph), -.3, -.9, dw); mix("LeftForeArm", 0, -.9 - .4 * Math.cos(ph), 0, dw); mix("LeftHand", -Math.sin(ph * 2) * 1.1, 0, 0, dw);
+          mix(Math.sin(ph) > 0 ? "LeftUpLeg" : "RightUpLeg", -.55, 0, 0, dw * Math.abs(Math.sin(ph))); bend(.1, Math.sin(ph) * .25, 0, dw);
+          fx.seal.setEnabled(true); fx.seal.material = summonSeal; fx.seal.scaling.setAll(2.4); fx.seal.visibility = dw * .8; fx.seal.rotation.y = p * 3; flare = dw * .3;
+          break;
+        }
         case "smash":
           weight(strike, 1.2); spine([-.38, -.2, 0], [.75, .15, 0]);
           pose("RightArm", [-2.95, 0, 1.35], [-1.05, 0, .95]); pose("LeftArm", [-2.95, 0, -1.35], [-1.05, 0, -.95]);
@@ -3207,6 +3755,7 @@
     const o = cur.off || (cur.off = off.slice());
     for (let i = 0; i < 3; i++) o[i] += (off[i] - o[i]) * blend;
     n.Hips.position.set(a.skin.rest.hipsX + o[0], a.skin.rest.hipsY + o[1], a.skin.rest.hipsZ + o[2]);
+    if (a.skin.holder) a.skin.holder.rotation.y = Math.PI + spin; // whole-body turns (sweep, dance)
     return flare;
   }
   // Procedural gait: legs and arms counter-swing with speed, the body bobs and
@@ -3319,15 +3868,165 @@
       eye.isPickable = false;
     }
     parent.position.set(x, 0, z);
-    return {
+    const actor = {
       node: parent, ownerId, x, y:0, z,
       targetX: x, targetY:0, targetZ: z,
-      facing: 0, desiredFacing: 0, action: "follow", hitUntil: 0, emergingUntil: 0
+      facing: 0, desiredFacing: 0, action: "follow", hitUntil: 0, emergingUntil: 0,
+      fallback: [body, ...parent.getChildMeshes().filter(m => /guardian-eye/.test(m.name))],
     };
+    addMovingLight(parent, "#ffd27a", 1.05, 1.3);
+    attachSpiritModel(actor);
+    return actor;
+  }
+  // ---- Golden spirit (assets/characters/thai-golden-spirit.glb) ----
+  // The summoned pot spirit: a Thai celestial in a golden costume, 4,104
+  // triangles, 21-bone T-pose rig (identity rest, model faces +Z), 512 px
+  // atlases. Posed in code like the shaman body: it floats in a dance pose,
+  // thrusts both palms when it strikes and rises in a high wai when it
+  // emerges from the pot. The glowing sphere stays as the fallback.
+  const spiritWaiting = [];
+  let spiritBody = null;
+  if (B.SceneLoader?.IsPluginForExtensionAvailable?.(".glb")) {
+    B.SceneLoader.LoadAssetContainerAsync("./assets/characters/", "thai-golden-spirit.glb", scene).then(container => {
+      for (const m of container.materials) {
+        if ("metallic" in m) {
+          m.environmentIntensity = 0; m.directIntensity = 1.6;
+          // Self-lit gold so the spirit glows at night, with a pale sheen at its edges.
+          m.emissiveTexture = m.albedoTexture; m.emissiveColor = B.Color3.FromHexString("#7a5a2a").toLinearSpace();
+          m.sheen.isEnabled = true; m.sheen.color = B.Color3.FromHexString("#ffe2a0"); m.sheen.intensity = .6; m.sheen.roughness = .3;
+        }
+        m.maxSimultaneousLights = MAX_LIGHTS;
+      }
+      spiritBody = container;
+      spiritWaiting.splice(0).forEach(attachSpiritModel);
+    }).catch(error => { console.warn("MONTRA golden spirit", error); spiritBody = false; spiritWaiting.length = 0; });
+  } else spiritBody = false;
+  let spiritHaloMat = null;
+  function attachSpiritModel(actor) {
+    if (spiritBody === null) { spiritWaiting.push(actor); return; }
+    if (!spiritBody || actor.node.isDisposed()) return;
+    const copy = spiritBody.instantiateModelsToScene(name => name, false);
+    const holder = new B.TransformNode("golden spirit", scene);
+    holder.parent = actor.node; holder.rotation.y = Math.PI; holder.scaling.setAll(1.2); holder.position.y = .25;
+    const model = copy.rootNodes[0]; model.parent = holder;
+    const nodes = {};
+    for (const n of model.getDescendants(false)) nodes[n.name] = n;
+    for (const m of model.getChildMeshes()) { m.isPickable = false; m.alwaysSelectAsActiveMesh = true; }
+    // Soft golden halo behind the body.
+    if (!spiritHaloMat) spiritHaloMat = additiveMat("spirit halo", radialTexture("spirit halo", 128, [[0, "rgba(255,214,140,.55)"], [.4, "rgba(255,190,90,.22)"], [1, "rgba(255,170,60,0)"]]));
+    const halo = B.MeshBuilder.CreatePlane("spirit halo", { size: 2.6 }, scene);
+    halo.parent = actor.node; halo.position.y = 1.4; halo.material = spiritHaloMat; halo.billboardMode = B.Mesh.BILLBOARDMODE_ALL; halo.isPickable = false; halo.metadata = { noShadow: true };
+    for (const m of actor.fallback) m.setEnabled(false);
+    actor.spirit = { nodes, copy, holder, pose: {}, seed: actor.ownerId.length * 1.7 };
+    attachSpiritArms(actor);
+  }
+  // The costume's own arms were flat and short, so they are cut from the
+  // file; real arms from the Thai male body take their place. That body's
+  // skeleton rides the spirit: its hips are solved every frame so its chest
+  // sits on the spirit's upper chest, and its arm bones copy the spirit's
+  // arm pose (both rigs share the identity-rest, +Z-forward convention).
+  const spiritArmWaiting = [];
+  let spiritArmMat = null;
+  function attachSpiritArms(actor) {
+    if (shamanBody === null) { spiritArmWaiting.push(actor); return; }
+    const sp = actor.spirit;
+    if (!shamanBody || !sp || actor.node.isDisposed()) return;
+    const copy = shamanBody.instantiateModelsToScene(name => name, false);
+    const model = copy.rootNodes[0]; model.parent = sp.holder;
+    const nodes = {};
+    for (const n of model.getDescendants(false)) nodes[n.name] = n;
+    const body = model.getChildMeshes().find(m => m.skeleton);
+    if (!body) return;
+    for (const m of model.getChildMeshes()) { m.isPickable = false; m.setEnabled(false); }
+    if (!spiritArmMat) {
+      spiritArmMat = body.material.clone("spirit arm skin");
+      spiritArmMat.emissiveTexture = spiritArmMat.albedoTexture; spiritArmMat.emissiveColor = B.Color3.FromHexString("#4a3018").toLinearSpace();
+      spiritArmMat.albedoColor = B.Color3.FromHexString("#c89a78").toLinearSpace(); // matched to the costume's skin tone
+      spiritArmMat.sheen.isEnabled = true; spiritArmMat.sheen.color = B.Color3.FromHexString("#ffe2a0"); spiritArmMat.sheen.intensity = .6;
+    }
+    const arms = skinnedCut(body, "spirit arms", (x, y) => Math.abs(x) > .155 && y > 1.25, () => 0, spiritArmMat);
+    arms.setEnabled(true);
+    // The spirit's shoulder joints sit 2.8 cm closer in than the male body's.
+    nodes.LeftShoulder.position.x -= .028; nodes.RightShoulder.position.x += .028;
+    // Gold armlets (phahurat) on the upper arms and bracelets (thongkon) at the wrists.
+    for (const [side, d] of [["Left", 1], ["Right", -1]]) {
+      for (const [bone, at, size] of [["Arm", .085, .105], ["ForeArm", .19, .085], ["ForeArm", .165, .09]]) {
+        const ring = B.MeshBuilder.CreateTorus("spirit gold band", { diameter: size, thickness: .02, tessellation: 14 }, scene);
+        ring.parent = nodes[side + bone]; ring.position.set(d * at, 0, 0); ring.rotation.z = Math.PI / 2; ring.material = templeGold; ring.isPickable = false;
+      }
+    }
+    const hips = nodes.Hips, rest = SHAMAN_JOINTS;
+    sp.arms = { copy, nodes, hips, chestFromHips: new B.Vector3(rest.Chest[0] - rest.Hips[0], rest.Chest[1] - rest.Hips[1], rest.Chest[2] - rest.Hips[2]) };
+    hips.rotationQuaternion = hips.rotationQuaternion || B.Quaternion.Identity();
+  }
+  const spiritTmp = { a: new B.Matrix(), b: new B.Matrix(), c: new B.Matrix(), s: new B.Vector3(), q: new B.Quaternion(), p: new B.Vector3() };
+  function alignSpiritArms(sp, cur) {
+    const arms = sp.arms; if (!arms) return;
+    const n = arms.nodes, g = sp.nodes.UpperChest;
+    // World matrices top-down, so this frame's spine pose is included.
+    const chain = []; for (let x = g; x; x = x.parent) chain.unshift(x);
+    for (const x of chain) x.computeWorldMatrix(true);
+    // Chest 3.7 cm under the spirit's upper chest lines the shoulders up; hips follow from the rest offset.
+    const T = spiritTmp, c = arms.chestFromHips;
+    B.Matrix.TranslationToRef(-c.x, -c.y - .037, -c.z, T.a);
+    T.a.multiplyToRef(g.getWorldMatrix(), T.b);
+    const parent = arms.hips.parent; parent.computeWorldMatrix(true);
+    parent.getWorldMatrix().invertToRef(T.c);
+    T.b.multiplyToRef(T.c, T.a);
+    T.a.decompose(T.s, T.q, T.p);
+    arms.hips.position.copyFrom(T.p); arms.hips.rotationQuaternion.copyFrom(T.q);
+    for (const b of ["Spine", "Spine1", "Chest"]) if (n[b]) n[b].rotationQuaternion = B.Quaternion.Identity();
+    const map = { LeftShoulder: "LeftShoulder", RightShoulder: "RightShoulder", LeftUpperArm: "LeftArm", RightUpperArm: "RightArm", LeftLowerArm: "LeftForeArm", RightLowerArm: "RightForeArm", LeftHand: "LeftHand", RightHand: "RightHand" };
+    for (const [from, to] of Object.entries(map)) { const v = cur[from]; if (v && n[to]) n[to].rotationQuaternion = B.Quaternion.RotationYawPitchRoll(v[1], v[0], v[2]); }
+  }
+  // Bone poses as [pitch, yaw, roll] (same convention as the shaman body:
+  // roll lowers an arm, negative pitch swings a limb forward, forearm yaw
+  // bends the elbow; right side positive, left side negative).
+  const SPIRIT_BONES = ["Hips", "Spine", "Chest", "UpperChest", "Neck", "Head", "LeftShoulder", "RightShoulder", "LeftUpperArm", "RightUpperArm",
+    "LeftLowerArm", "RightLowerArm", "LeftHand", "RightHand", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot"];
+  function animateSpirit(actor, now, dt) {
+    const sp = actor.spirit; if (!sp) return;
+    const t = now / 1000 + sp.seed, P = {};
+    for (const b of SPIRIT_BONES) P[b] = [0, 0, 0];
+    const mix = (b, x, y, z, w = 1) => { const v = P[b]; v[0] += (x - v[0]) * w; v[1] += (y - v[1]) * w; v[2] += (z - v[2]) * w; };
+    // Floating dance (ram thai): right hand raised in a curved jeeb, left arm
+    // low and flowing back, one knee lifted, toes pointed, body swaying.
+    const sway = Math.sin(t * 1.3), lift = Math.sin(t * .9);
+    mix("Spine", .04, sway * .08, sway * .05); mix("UpperChest", -.04, -sway * .1, -sway * .04); mix("Head", .08, sway * .12, .14 - sway * .05);
+    // Right: upper arm out and a little forward, forearm raised, fingers flared back.
+    mix("RightUpperArm", -.4 + lift * .06, 0, .22 - lift * .05); mix("RightLowerArm", 0, .35, -2.0); mix("RightHand", 0, 0, .9);
+    // Left: arm low and swept back, forearm angled out, fingers flicked up.
+    mix("LeftUpperArm", .35, 0, -1.15 - lift * .06); mix("LeftLowerArm", 0, 0, .5); mix("LeftHand", 0, 0, .9);
+    mix("LeftUpperLeg", -.55, .1, .08); mix("LeftLowerLeg", .9, 0, 0); mix("LeftFoot", .55, 0, 0);
+    mix("RightUpperLeg", -.12, -.05, -.04); mix("RightLowerLeg", .35, 0, 0); mix("RightFoot", .6, 0, 0);
+    // Strike: lean in and thrust both palms at the target.
+    const strike = actor.action === "attack" || actor.hitUntil > now ? 1 : 0;
+    sp.strike = (sp.strike || 0) + (strike - (sp.strike || 0)) * (1 - Math.exp(-dt * 12));
+    const k = sp.strike;
+    if (k > .001) {
+      mix("Spine", .28, 0, 0, k); mix("UpperChest", .1, 0, 0, k); mix("Head", -.15, 0, 0, k);
+      for (const [side, d] of [["Right", 1], ["Left", -1]]) {
+        mix(side + "UpperArm", -1.6, 0, 1.2 * d, k); mix(side + "LowerArm", 0, .1 * d, 0, k); mix(side + "Hand", 0, 0, -1.2 * d, k);
+      }
+      mix("LeftUpperLeg", -.2, 0, .05, k); mix("LeftLowerLeg", .4, 0, 0, k); mix("RightUpperLeg", .35, 0, -.05, k); mix("RightLowerLeg", .5, 0, 0, k);
+    }
+    // Emerging from the pot: a high wai with hands joined above the crown.
+    const rise = Math.max(0, Math.min(1, (actor.emergingUntil - now) / 500 + .35));
+    if (rise > 0) for (const [side, d] of [["Right", 1], ["Left", -1]]) { mix(side + "UpperArm", -2.7, 0, 1.1 * d, rise); mix(side + "LowerArm", 0, 1.3 * d, 0, rise); mix(side + "Hand", 0, 0, 0, rise); }
+    const blend = 1 - Math.exp(-dt * 10);
+    for (const b of SPIRIT_BONES) {
+      const node = sp.nodes[b]; if (!node) continue;
+      const cur = sp.pose[b] || (sp.pose[b] = P[b].slice());
+      for (let i = 0; i < 3; i++) cur[i] += (P[b][i] - cur[i]) * blend;
+      node.rotationQuaternion = B.Quaternion.RotationYawPitchRoll(cur[1], cur[0], cur[2]);
+    }
+    alignSpiritArms(sp, sp.pose);
   }
   function deleteSummonAvatar(ownerId) {
     const actor = summonAvatars.get(ownerId);
     if (!actor) return;
+    actor.spirit?.copy.skeletons.forEach(skeleton => skeleton.dispose());
+    actor.spirit?.arms?.copy.skeletons.forEach(skeleton => skeleton.dispose());
     actor.node.getChildMeshes().forEach(mesh => mesh.dispose());
     actor.node.dispose();
     summonAvatars.delete(ownerId);
@@ -5034,6 +5733,10 @@
     const root = B.MeshBuilder.CreateBox("monster-" + id, { width: 1.3, height: tall, depth: 1.3 }, scene);
     root.visibility = .001; root.isPickable = true;
     const rig = new B.TransformNode("ghost rig", scene); rig.parent = root; rig.position.y = -tall / 2; rig.scaling.setAll(design.scale);
+    contactShadow(rig, design.kind === "elephant" ? 3.4 : 1.7);
+    // Ghosts that burn or shine light the ground around them.
+    const GHOST_LIGHT = { krasue: ["#ff6a3a", 1.2], phong: ["#9dff7a", 1.1], waterspirit: ["#7ff5e0", .9], moonspirit: ["#c9d2ff", 1], krahang: ["#ff9a4a", .9], bell: ["#ffc070", .7] };
+    if (GHOST_LIGHT[design.kind]) addMovingLight(root, ...GHOST_LIGHT[design.kind], .4);
     // Humanoid ghosts wait for the shared body; primitive rigs are the fallback.
     let update = () => {};
     const ghostState = { get update() { return update; } };
@@ -5852,7 +6555,7 @@
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
       ui.monsterStatus.hidden = true;
       syncFortification(joined.state);
-      if (spirit) { spirit.dispose(); spirit = null; }
+      if (summonAvatars.get(localId)?.demo) deleteSummonAvatar(localId);
       spiritShown = false; possessed = false;
       updateStatus();
       const ok = syncState(joined.state);
@@ -6197,6 +6900,7 @@
       joined.onMessage("sword_guarded", () => { if (room===joined) {
         swordCounterUntil=performance.now()+3000;
         syncSwordStatus(ownServerCharacter());
+        playAction(avatars.get(localId), "guard");
         toast("รับสำเร็จ · ใช้วิชาสวนได้ 3 วินาที");
       } });
       joined.onMessage("sword_skill_used", result => {
@@ -6205,6 +6909,7 @@
         if (!caster || (caster.mapId || "ritual_village")!==activeMapId) return;
         const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
         if (target) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
+        playAction(avatars.get(result.playerId), swordSkillAction(result.skillId));
         const ring=B.MeshBuilder.CreateTorus("sword skill ring",{diameter:1.3,thickness:.045,tessellation:16},scene);
         ring.position.set(caster.x,caster.y+.12,caster.z);ring.rotation.x=Math.PI/2;ring.material=gold;ring.isPickable=false;
         skillEffects.push({mesh:ring,mapId:activeMapId,until:performance.now()+450});
@@ -6215,7 +6920,9 @@
         }
       });
       joined.onMessage("class_skill_used", result => {
-        if (room === joined) toast(result.skill + " · มีผล " + result.targets + " คน");
+        if (room !== joined) return;
+        toast(result.skill + " · มีผล " + result.targets + " คน");
+        if (ownServerCharacter()?.pathId === "phutthaisawan") playAction(avatars.get(localId), "dance");
       });
       joined.onMessage("possession_changed", notice => {
         if(room!==joined || notice?.playerId!==localId)return;
@@ -8386,11 +9093,11 @@
     }
     spiritShown=!spiritShown;
     if (spiritShown) {
-      spirit=B.MeshBuilder.CreateSphere("summoned guardian",{diameter:1.05,segments:12},scene);
-      spirit.material=spiritMat;spirit.isPickable=false;
-      playAction(getLocalAvatar(), "summon");
+      const hero=getLocalAvatar(), actor=createSummonAvatar(localId,hero.x+1.6,hero.z+1);
+      actor.emergingUntil=performance.now()+500;actor.demo=true;summonAvatars.set(localId,actor);
+      playAction(hero, "summon");
       toast("เรียกวิญญาณผู้พิทักษ์ (จำลอง)");
-    } else { spirit?.dispose();spirit=null;toast("เก็บวิญญาณกลับแล้ว"); }
+    } else { deleteSummonAvatar(localId);toast("เก็บวิญญาณกลับแล้ว"); }
     updateSummonButton(spiritShown);
   };
   function syncPossessionButton() {
@@ -8565,6 +9272,12 @@
       a.flightHalo?.setEnabled(a.y > 4.4);
     }
     for (const npc of summonAvatars.values()) {
+      if (npc.demo) {
+        // DEMO: hover at the hero's right shoulder and face where the hero faces.
+        const hero = getLocalAvatar();
+        if (hero) { const h = hero.heading || 0; npc.targetX = hero.x - Math.cos(h) * 1.6 + Math.sin(h) * .6; npc.targetZ = hero.z + Math.sin(h) * 1.6 + Math.cos(h) * .6; npc.targetY = hero.y; npc.desiredFacing = h; }
+        npc.action = (hero?.action && ACTIONS[hero.action.type]?.swing && now < hero.action.end) ? "attack" : "follow";
+      }
       const blend = 1 - Math.exp(-dt * 12);
       npc.x += (npc.targetX - npc.x) * blend;
       npc.y += (npc.targetY - npc.y) * blend;
@@ -8579,8 +9292,9 @@
       npc.node.position.set(npc.x, npc.y+bob, npc.z);
       const striking = npc.action === "attack" || npc.hitUntil > now;
       const emergence = Math.min(1, 1 - (npc.emergingUntil - now) / 500);
-      const scale = (striking ? 1.13 : 1) * Math.max(.12, emergence);
+      const scale = (striking && !npc.spirit ? 1.13 : 1) * Math.max(.12, emergence);
       npc.node.scaling.set(scale, scale, scale);
+      animateSpirit(npc, now, dt);
     }
     const me=getLocalAvatar();
     const portal=activePortal(), authoritative=ownServerCharacter();
@@ -8638,6 +9352,11 @@
     scene.fogStart = camera.radius + atmosphere.fogNear;
     scene.fogEnd = camera.radius + atmosphere.fogFar;
     driftMist(elapsed, camera.target);
+    followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
+    driftClouds(camera.target, elapsed); updateStrikeLight(performance.now());
+    keyLight.intensity = atmosphere.keyI * 1.65 * (1 - .22 * cloudCover);
+    stormFlash(dt);
+    if ((shadowSyncIn -= dt) <= 0) { shadowSyncIn = .5; syncShadowLists(); }
     rippleTexture.vOffset = (rippleTexture.vOffset + dt * .025) % 1;
     riverRipple.uOffset = (riverRipple.uOffset + dt * .012) % 1;
     // The horizon only enters the portrait frustum at shallow camera tilts.
