@@ -1,6 +1,7 @@
 import type { HuntCamp, WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
 
 import { PROVINCES } from "./StrategicProvinces.js";
+import {CASTLE_ENABLED, CASTLE_ID} from "./CastlePilot.js";
 
 type XZ = {x:number; z:number};
 type XY = readonly [number,number];
@@ -76,7 +77,7 @@ const edges:readonly (readonly [GateEnd,GateEnd])[]=[
   [["hex_ridge",0,-58],["naga_cavern",0,26]],
   [["naga_cavern",0,-58],["river_watch",0,26]],
   [["river_watch",0,-58],["fallen_city",0,26]],
-  [["fallen_city",0,-58],["asura_peak",0,26]],
+  ...(CASTLE_ENABLED ? [ [["fallen_city",0,-58],[CASTLE_ID,0,900]], [[CASTLE_ID,0,-900],["asura_peak",0,26]] ] as const : [ [["fallen_city",0,-58],["asura_peak",0,26]] ] as const),
   [["asura_peak",0,-58],["spirit_rift",0,26]],
 ];
 export function atlasPortals(mapId:string): WorldPortal[] {

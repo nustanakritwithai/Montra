@@ -13,6 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeStarterInventory, grantStarterWeapons, validateInventory, type InventorySnapshot } from "./ItemRules.js";
 import { DEFAULT_MAP_ID, getWorldMap } from "./WorldMaps.js";
+import {CASTLE_ID} from "./CastlePilot.js";
 import { emptyAllocations, PROGRESSION, validateAllocations, type Allocations } from "./Progression.js";
 import { EconomyStore } from "./EconomyStore.js";
 import { validateSwordTree, type SwordTree } from "./SkillCatalog.js";
@@ -102,8 +103,8 @@ function isCount(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) &&
     value >= 0 && value <= MAX_COUNTER;
 }
-function isCoordinate(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= 100;
+function isCoordinate(value: unknown, limit=100): value is number {
+  return typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= limit;
 }
 
 function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
@@ -111,7 +112,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
       typeof value.name !== "string" || parseCharacterName({ name: value.name }) !== value.name ||
       !isCount(value.level) || value.level < 1 || value.level > 1000 ||
       !isCount(value.experience) || !isCount(value.pkKills) || !isCount(value.pkDeaths) ||
-      !isCoordinate(value.x) || !isCoordinate(value.y) || !isCoordinate(value.z) ||
+      !isCoordinate(value.x,value.mapId===CASTLE_ID?1000:100) || !isCoordinate(value.y) || !isCoordinate(value.z,value.mapId===CASTLE_ID?1000:100) ||
       !isCount(value.hp) || value.hp > 100_000 ||
       typeof value.updatedAt !== "string" || !Number.isFinite(Date.parse(value.updatedAt))) {
     throw new Error("character_record_invalid");
@@ -126,6 +127,10 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
     validateAllocations(value.statAllocations, value.level as number);
   if (value.stamina !== undefined && (typeof value.stamina !== "number" || !Number.isFinite(value.stamina) || value.stamina < 0 || value.stamina > PROGRESSION.maxStamina)) {
     throw new Error("invalid_character_stamina");
+  }
+  if(value.mapId===CASTLE_ID && !getWorldMap(CASTLE_ID)){
+    const exit=getWorldMap("fallen_city") ?? getWorldMap(DEFAULT_MAP_ID)!;
+    return {...(value as CharacterSnapshot),...exit.spawn,mapId:exit.id,statAllocations,swordTree};
   }
   if (value.mapId !== undefined &&
       (typeof value.mapId !== "string" || !getWorldMap(value.mapId))) {

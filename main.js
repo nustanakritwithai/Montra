@@ -1079,7 +1079,7 @@
     const labelTexture=new B.DynamicTexture("portal-label-"+mapId,{width:512,height:128},scene,false);
     labelTexture.hasAlpha=true;
     const ink=labelTexture.getContext();ink.font="bold 46px sans-serif";ink.textAlign="center";ink.lineJoin="round";
-    const text=override ? (worldDefinitions?.[override.targetMapId]?.name || override.targetMapId) : (mapId==="ritual_village" ? "ป่าต้องห้าม" : "หมู่บ้านอาคม");
+    const text=override ? (override.label || worldDefinitions?.[override.targetMapId]?.name || override.targetMapId) : (mapId==="ritual_village" ? "ป่าต้องห้าม" : "หมู่บ้านอาคม");
     ink.lineWidth=9;ink.strokeStyle="rgba(4,14,14,.92)";ink.strokeText(text,256,80,490);
     ink.shadowColor="#5fffe0";ink.shadowBlur=16;ink.fillStyle="#dcfff6";ink.fillText(text,256,80,490);labelTexture.update();
     const labelMat=new B.StandardMaterial("portal-label-mat-"+mapId,scene);
@@ -1499,6 +1499,7 @@
   }
   // Palette and silhouettes are local art. Traversable geometry always comes from the room.
   const regionStyles = {
+    tri_wiang_castle:["#6a7858","#c2aa83","#99a283","#857368","#f3d183","#334f54"],
     mantra_capital:["#8a9276","#d7b582","#adb79a","#8b7d68","#ffdc93","#425955"],
     moon_pass:["#758358","#c4ab7c","#9caa74","#77756d","#f5cf81","#405a63"],
     river_watch:["#758b82","#c4aa78","#8caaa0","#706a60","#97e5dc","#354f63"],
@@ -1531,7 +1532,7 @@
         ink.strokeStyle="#bcc1b8";ink.lineWidth=2;
         for(let row=0;row<8;row++)for(let col=-1;col<5;col++)ink.strokeRect(col*64+row%2*32,row*32,64,32);
       }
-      terrain.update();terrain.uScale=9;terrain.vScale=12;floor.diffuseTexture=terrain;
+      terrain.update();terrain.uScale=id==="tri_wiang_castle"?190:9;terrain.vScale=id==="tri_wiang_castle"?190:12;floor.diffuseTexture=terrain;
       // Night grade: the atlas palette is kept but pulled down toward moonlight.
       floor.diffuseColor.scaleInPlace(province?.kind ? .88 : .58);court.diffuseColor.scaleInPlace(province?.kind ? .83 : .5);road.diffuseColor.scaleInPlace(province?.kind ? .94 : .66);
       if(province){floor.emissiveColor=floor.diffuseColor.scale(.22);road.emissiveColor=road.diffuseColor.scale(.17);}
@@ -1540,6 +1541,13 @@
       regionPaints.set(id,{floor,road,court,stone,light,deep});
     }
     return regionPaints.get(id);
+  }
+  const castleRings=new Map();
+  function syncCastleRings(){
+    for(const [id,ring] of castleRings){
+      const point=territoryState?.local?.pilot?.points.find(p=>p.id===id);
+      ring.material=point?.owner==="attack"?warEnemyMat:point?.owner==="defend"?warAllyMat:gold;
+    }
   }
   let provinceDoor=null;
   function syncGateVisual(){
@@ -1570,7 +1578,8 @@
     }
     const {floor,road,stone,light,deep}=paint;
     if(map.strategic){
-      const {kind,sites}=map.strategic;
+      const {kind,sites,objectives}=map.strategic;
+      const castle=Boolean(objectives);
       const city=kind==="capital",bamboo=map.id==="bamboo_frontier",lotus=map.id==="lotus_basin";
       const roof=(x,y,z,width,depth)=>{
         for(const side of [-1,1]){
@@ -1588,8 +1597,8 @@
         box(x,1,z,.17,2,.17,darkWood);box(x,2.16,z,.55,.58,.55,lanternPaper);
         cone(x,2.58,z,.37,1,.1,deep,4);box(x,.04,z,1.3,.05,1.3,paint.court);
       };
-      box(0,-1.05,-16,220,.6,228,deep);
-      for(let i=0;i<18;i++)for(const side of [-1,1]){
+      if(!castle)box(0,-1.05,-16,220,.6,228,deep);
+      for(let i=0;!castle && i<18;i++)for(const side of [-1,1]){
         const h=4+(i*7)%6;
         cone(side*(46+i%4),h*.33,-65+i*5.6,h,6+i%4,.25,bamboo||lotus?forestLeaf:stone,6);
         cone(-48+i*5.6,h*.32,side>0?36+i%3:-72-i%4,h,6+i%5,.2,floor,6);
@@ -1602,7 +1611,7 @@
           const edgeZ=w.z+w.length/2+(horizontal?side*(w.length/2-.12):0);
           box(edgeX,.12,edgeZ,horizontal?w.width:.24,.13,horizontal?.24:w.length,civicRoad);
         }
-        for(let k=2;k<span-1;k+=4){
+        for(let k=2;k<span-1;k+=castle?28:4){
           const offset=.8+1.9*noise(k,29),x=w.x+(horizontal?k:offset),z=w.z+(horizontal?offset:k);
           box(x,.14,z,horizontal?1.55:.23,.035,horizontal?.14:1.55,paint.court);
           if(lotus && k%8===2){cone(x,.19,z,.1,1.15,1.25,civicRoad,7);cone(x,.49,z,.6,.85,.14,light,6);}
@@ -1632,7 +1641,7 @@
           for(const side of [-1,1]){
             box(x+(horizontal?side*(span/2+.2):0),1.75,z+(horizontal?0:side*(span/2+.2)),horizontal?.55:3.1,3.5,horizontal?3.1:.55,deep);
           }
-          if(kind==="territory" && i===0){
+          if(kind==="territory" && !castle && i===0){
             provinceDoor=B.MeshBuilder.CreateBox("reinforced city gate",{width:b.width,height:3.45,depth:b.length},scene);
             provinceDoor.parent=expansionRoot;provinceDoor.position.set(x,1.725,z);
             provinceDoor.material=wooden;provinceDoor.isPickable=false;syncGateVisual();
@@ -1655,7 +1664,7 @@
         const x=w.x+w.width/2,z=w.z+w.length/2;
         if(w.rampart){
           box(x,1.77,z,w.width,3.54,w.length,stone);
-          const along=w.width>w.length,n=Math.floor(Math.max(w.width,w.length)/3);
+          const along=w.width>w.length,n=Math.ceil(Math.max(w.width,w.length)/(castle?18:3));
           for(let i=0;i<n;i++){const t=(i+.5)/n;box(along?w.x+w.width*t:w.x+.26,4.13,along?w.z+.26:w.z+w.length*t,along?.8:.42,.26,along?.42:.8,deep);}
         }else if(city){
           box(x,1.7,z,w.width,3.4,w.length,stone);roof(x,3.7,z,w.width+.75,w.length+.7);
@@ -1670,6 +1679,30 @@
           }
         }
         finish("buildings",true);
+      }
+      if(castle){
+        for(const obj of objectives){
+          const active=map.strategic.activeObjectives.includes(obj.id);
+          const marker=ring(obj.x,.16,obj.z,14,active?gold:stone);
+          // Keep the three live circles independent so ownership can change in place.
+          if(active){parts.pop();marker.parent=expansionRoot;castleRings.set(obj.id,marker);}
+          box(obj.x-7,2.5,obj.z,.22,5,.22,gold);
+          box(obj.x-5.8,4.3,obj.z,2.4,1.1,.10,active?clothRed:deep);
+          expansionLabel(obj.id+" "+obj.name+(active?" · จุดยึด":" · สำรวจ"),obj.x,obj.z,15,6);
+        }
+        for(const side of [-1,1])for(let i=0;i<3;i++){
+          pavilion(side*(18+i*10),-197,8,5);
+          roof(side*(18+i*10),6.3,-197,6,6);
+        }
+        for(const [x,z,width] of [[0,-221.5,23],[-23.5,-207.5,14],[23.5,-207.5,14]]){
+          const h=width*.35;pavilion(x,z,width,h);
+          roof(x,h+2,z,width*.82,width*.62);roof(x,h+3.7,z,width*.54,width*.44);
+          cone(x,h+6.7,z,5,1.6,0,gold);
+        }
+        box(0,.22,-190,11,.44,8,stone);pavilion(0,-190,9,5);
+        box(0,1,-191,2.3,1.3,1.4,gold);box(0,2,-191.6,2.6,2,.32,templeLacquer);
+        for(const x of [-6,6]){cone(x,2.5,-188,5,.65,.5,gold);cone(x,5.4,-188,.9,1.4,.15,light,6);}
+        finish("royal precinct",true);syncCastleRings();
       }
       for(const s of sites){
         const {x,z}=s;
@@ -1707,7 +1740,7 @@
       }
       for(const [i,route] of map.paths.entries())for(let j=1;j<route.length;j++){
         const a=route[j-1],b=route[j],dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz);
-        for(let d=6;d<len-2;d+=11)lamp(a.x+dx*d/len+dz*3/len,a.z+dz*d/len-dx*3/len);
+        for(let d=6;d<len-2;d+=castle?140:11)lamp(a.x+dx*d/len+dz*3/len,a.z+dz*d/len-dx*3/len);
       }
       // Low field dressing stays out of roads and clearings. The blocked groves use the server footprints.
       for(const o of map.obstacles)if(!sites.some(s=>s.x===o.x&&s.z===o.z)){
@@ -2060,7 +2093,7 @@
     const paint=regionPaint(activeMapId);
     ground.material=paint ? paint.floor : inTemple ? templeFloor : activeMapId==="forbidden_forest" ? forestFloor : groundMat;
     templeCover.length=0;
-    provinceDoor=null;
+    provinceDoor=null;castleRings.clear();
     for(const child of expansionRoot.getChildren())child.dispose();
     for(const resource of expansionResources)resource.dispose();expansionResources.length=0;expansionLabels.length=0;
     const bounds=mapBounds();
@@ -5310,9 +5343,14 @@
     if (me.flying) {toast("ลงจอดก่อนจึงใช้บันไดได้");return;}
     const onWall=Math.abs(Number(me.y)-activeFort.height)<.15;
     const direction=onWall?"down":"up";
-    const stairs=worldDefinitions?.[activeMapId]?.strategic?.rampart?.stairs;
+    const rampart=worldDefinitions?.[activeMapId]?.strategic?.rampart;
+    let stairs=rampart?.stairs;
+    if(onWall && activeMapId==="tri_wiang_castle"){
+      const ring=Math.floor(rampart.deck.findIndex(b=>me.x>=b.x+.16 && me.x<=b.x+b.width-.16 && me.z>=b.z+.16 && me.z<=b.z+b.length-.16)/4);
+      stairs=stairs.filter(s=>s.id.startsWith("castle-"+ring+"-"));
+    }
     const end=s=>onWall?s.top:s.foot;
-    const stair=stairs?.find(s=>s.id===stairId) || stairs?.reduce((a,b)=>Math.hypot(me.x-end(a).x,me.z-end(a).z)<Math.hypot(me.x-end(b).x,me.z-end(b).z)?a:b);
+    const stair=stairs?.find(s=>s.id===stairId) || (stairs?.length?stairs.reduce((a,b)=>Math.hypot(me.x-end(a).x,me.z-end(a).z)<Math.hypot(me.x-end(b).x,me.z-end(b).z)?a:b):null);
     if(activeMapId!=="ritual_village" && !stair){toast("พื้นที่นี้ไม่มีบันไดกำแพง");return;}
     const structureId=stair?.id || activeFort.id;
     const to=stair?end(stair):onWall?{x:activeFort.ladderTopX,z:activeFort.ladderTopZ}:{x:activeFort.ladderFootX,z:activeFort.ladderFootZ};
@@ -5556,7 +5594,9 @@
         p.equippedWeaponId, p.pathId);
       noteAvatarState(avatars.get(id), p);
     });
-    if(previousMapId !== activeMapId && mine) {
+    const localActor=avatars.get(localId);
+    const farArrival=activeMapId==="tri_wiang_castle" && mine && localActor && (Math.hypot(localActor.x-mine.x,localActor.z-mine.z)>90 || Math.hypot(camera.target.x-mine.x,camera.target.z-mine.z)>90);
+    if((previousMapId !== activeMapId || farArrival) && mine) {
       const actor=avatars.get(localId);
       if(actor) {
         actor.x=actor.targetX=Number(mine.x);actor.y=actor.targetY=Number(mine.y);actor.z=actor.targetZ=Number(mine.z);
@@ -5652,7 +5692,7 @@
       }
       const client = new window.Colyseus.Client(endpoint);
       const guestToken = getOrCreateGuestToken(endpoint);
-      const opts={guestToken,characterSlot:requestedSlot,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1};
+      const opts={guestToken,characterSlot:requestedSlot,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:1};
       let transferFailed=false;
       if(transfer?.roomId){
         try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
@@ -5705,7 +5745,7 @@
       });
       joined.onMessage("territory_state",message=>{
         if(room!==joined)return;
-        territoryState=message;syncGateVisual();
+        territoryState=message;syncGateVisual();syncCastleRings();
         if(drawerActive==="war")renderWarPanel();
         if(drawerActive==="strategy")updateAtlasOwner();
         const local=message.local;
@@ -5715,6 +5755,7 @@
           ui.quest.classList.toggle("war-hud",fighting);
           title.textContent=fighting?"⚑ "+(local.progress<0?"รับ":"บุก")+" "+Math.abs(local.progress)+"/"+local.goal+" · "+Math.floor(local.seconds/60)+":"+String(local.seconds%60).padStart(2,"0"):
             local.phase==="battle"?"⚑ ศึกยึดธง · "+warTime(local.seconds):"⚑ ด่านกิลด์ · "+warPhase(local.phase);
+          if(fighting && local.pilot)title.textContent="⚑ บุก "+local.pilot.score.attack+" · รับ "+local.pilot.score.defend+" · "+Math.ceil(local.seconds/60)+" นาที";
           if(fighting)ui.quest.style.setProperty("--war-progress",Math.abs(local.progress)/local.goal);
         }
       });
@@ -6762,7 +6803,14 @@
         ctx.strokeStyle = "#e3b878"; ctx.lineWidth = 1; ctx.strokeRect(sx(wall.x), sy(wall.z), Math.max(1.3, scale * wall.width), Math.max(1.3, scale * wall.length));
       }
     }
+    for(const obj of map?.strategic?.objectives || []){
+      const active=map.strategic.activeObjectives.includes(obj.id),point=territoryState?.local?.pilot?.points.find(p=>p.id===obj.id);
+      const color=point?.owner==="attack"?"#ff917d":point?.owner==="defend"?"#80e8db":active?"#ffcf76":"#a5aaa3";
+      mapDot(ctx,sx(obj.x),sy(obj.z),large?8:2.5,color,"#122825");
+      if(large)mapText(ctx,String(obj.id),sx(obj.x),sy(obj.z)+3,10,"#ffffff");
+    }
     for (const site of map?.strategic?.sites || []) {
+      if(map.strategic.objectives)continue;
       const major=site.kind==="fort" || site.kind==="palace";
       if(!large && !major)continue;
       const x=sx(site.x),y=sy(site.z);
@@ -6770,8 +6818,8 @@
       if(large && site.kind!=="bridge")mapText(ctx,site.name,x,y-7,10,major?"#ffe5ab":"#dfebd4");
     }
     for(const [i,s] of (map?.strategic?.rampart?.stairs || []).entries()){
-      const x=sx(s.foot.x),y=sy(s.foot.z);mapDot(ctx,x,y,large?4:2,"#a5ecff");
-      if(large)mapText(ctx,"บันได "+(i+1),x,y-6,10,"#c4f5ff");
+      const x=sx(s.foot.x),y=sy(s.foot.z);mapDot(ctx,x,y,map.strategic.objectives?(large?2.2:1):large?4:2,"#a5ecff");
+      if(large && !map.strategic.objectives)mapText(ctx,"บันได "+(i+1),x,y-6,10,"#c4f5ff");
     }
     for (const area of map?.restAreas || []) {
       const x = sx(area.x), y = sy(area.z), r = area.radius * scale;
@@ -6839,7 +6887,7 @@
         mapText(ctx, "◆ Boss Lv.100", sx(map.boss.x), sy(map.boss.z) - 7 * scale - 4, 12, "#ffe5a8", 700);
       }
       for (const portal of activePortals()) {
-        if (!portal.targetMapId) continue;
+        if (!portal.targetMapId || portal.targetMapId===activeMapId) continue;
         const dest = worldDefinitions?.[portal.targetMapId];
         mapText(ctx, "ไป" + (dest?.name || portal.targetMapId), Math.max(60, Math.min(width - 60, sx(portal.x))),
           sy(portal.z) + (sy(portal.z) < 30 ? 22 : -12), 12, "#c3faed");
@@ -6862,7 +6910,7 @@
     drowned_marsh:[189,201], moon_cemetery:[105,301], bamboo_frontier:[210,285],
     mantra_capital:[310,116], moon_pass:[245,391], hex_ridge:[70,429],
     naga_cavern:[66,519], river_watch:[193,556], lotus_basin:[318,478],
-    fallen_city:[107,637], asura_peak:[222,710], spirit_rift:[112,780]
+    fallen_city:[107,637], tri_wiang_castle:[321,635], asura_peak:[222,710], spirit_rift:[112,780]
   };
   const provinceTitle={capital:"เมืองหลวง",territory:"ด่านสงคราม",hunting:"พื้นที่เก็บเลเวล"};
   const warErrors={war_guild:"ต้องเป็นสมาชิกกิลด์ก่อนเข้าศึก",war_flag:"เดินเข้าวงธงกลางป้อมก่อนเปิดศึก",war_officer:"ให้ผู้บัญชาการหรือนายทหารเปิดศึก",
@@ -6876,6 +6924,12 @@
       <progress id="warGauge" max="60" aria-label="ความคืบหน้าการยึดธง"></progress><p id="warCount"></p>
       <p class="note" id="warFlag"></p><p class="note">ผู้บัญชาการหรือนายทหารเปิดศึกที่วงธง สมาชิกเข้าร่วมได้จากภายในด่าน ฝั่งละ 5 คน ศึกมีเวลา 5 นาที จำนวนคนที่ยืนวงมากกว่าจะดันเกจได้ เมื่อทั้งสองฝ่ายยืนเท่ากัน เกจจะหยุด</p>
       <p class="note">แตะบันไดหรือกดขึ้นกำแพงที่ตีนบันไดด้านใน เดินและซัดข้าวสารปลุกเสกได้ตลอดแนว เมื่อถึงหัวบันไดกดลงกำแพง วงเขียวคือฝ่ายเดียวกัน สามเหลี่ยมแดงคือฝ่ายตรงข้าม หลังจบศึกด่านคุ้มครอง 8 ชั่วโมง</p><button id="warAction" class="primary" type="button" hidden></button>`);
+    if(activeMapId==="tri_wiang_castle"){
+      const label=document.createElement("label");label.textContent="แนวรวมพลครั้งแรกในศึกนี้ ";
+      const select=document.createElement("select");select.id="castleFront";
+      for(const p of worldDefinitions[activeMapId].strategic.objectives.filter(p=>[2,4,5].includes(p.id)))select.add(new Option(p.id+" "+p.name,String(p.id)));
+      label.append(select);$("warAction").before(label);
+    }
     renderWarPanel();
   }
   function renderWarPanel(){
@@ -6886,12 +6940,22 @@
     $("warStatus").textContent=warPhase(s.phase)+(s.phase==="battle"?" · เหลือ "+warTime(s.seconds)+" · "+s.attackName+" บุก / "+(s.defendName || "รอคู่ชิง")+" รับ":"");
     const fort=worldDefinitions?.[s.site]?.strategic?.sites?.find(site=>site.kind==="fort");
     $("warFlag").textContent=fort?"ธง ("+fort.x+", "+fort.z+") · รัศมี 5 ม. · บันไดขึ้นลง 2 ทาง ดูจุดสีฟ้าบนแผนที่"+(s.inField?" · ประตู "+(s.gateHp<=0?"พังแล้ว":s.gateClosed?"ปิด":"เปิด")+" "+s.gateHp+"/120":""):"";
-    const gauge=$("warGauge");gauge.hidden=s.phase!=="battle";gauge.max=s.goal;gauge.value=Math.abs(s.progress);
+    const isCastle=s.site==="tri_wiang_castle";
+    const gauge=$("warGauge");gauge.hidden=isCastle || s.phase!=="battle";gauge.max=s.goal;gauge.value=Math.abs(s.progress);
     $("warCount").textContent=s.phase==="battle"?((s.progress<0?"ฝ่ายรับ":"ฝ่ายบุก")+" ยึดธง "+Math.abs(s.progress)+"/"+s.goal+(s.inField?" · ในวง บุก "+s.attack+" รับ "+s.defend:"")):"";
     button.hidden=!(s.inField || s.canStart || s.canJoin);
     button.textContent=s.inField?"กลับห้องโลก":s.canStart?"เปิดศึกที่ธง · 5 นาที":"เข้าร่วมสนามรบ";
+    if(isCastle){
+      $("warFlag").textContent="จุดท้าชิง (0, 880) · กำแพง 3 ชั้น บันได 18 แห่ง · ทดสอบเฉพาะจุด 2, 4, 5";
+      const v=s.pilot;
+      $("warCount").textContent=v?"บุก "+v.score.attack+" · รับ "+v.score.defend+" คะแนน"+(v.linked?" · โบนัสเครือข่าย 20%":"")+"\n"+v.points.map(p=>p.id+" "+p.name+" · "+(p.owner==="attack"?"บุก":p.owner==="defend"?"รับ":"กลาง")+(p.progress?" · เกจ "+Math.abs(p.progress)+"% "+(p.progress>0?"บุก":"รับ"):"")).join("\n"):"ครบเวลา 45 นาที ตัดสินด้วยคะแนนพื้นที่";
+      $("warCount").style.whiteSpace="pre-line";
+      for(const note of ui.drawerBody.querySelectorAll("p.note:not(#warFlag)"))note.hidden=true;
+      if($("castleFront"))$("castleFront").parentElement.hidden=s.inField || !(s.canStart || s.canJoin);
+      if(s.canStart)button.textContent="เปิดสนามทดลอง 10 ต่อ 10 · 45 นาที";
+    }
     button.onclick=()=>{if(s.inField)void connectOnline(currentCharacterEndpoint(),activeCharacterSlot,{world:true});
-      else if(room)room.send(s.canStart?"territory_start":"territory_join",{});};
+      else if(room)room.send(s.canStart?"territory_start":"territory_join",isCastle?{objectiveId:Number($("castleFront").value)}:{});};
   }
   function updateAtlasOwner(){
     const node=$("atlasOwner");
@@ -6960,7 +7024,8 @@
     if(worldDefinitions?.spirit_rift){
       const note=document.createElement("p");note.className="note";
       const map=worldDefinitions[activeMapId],range=map.region?.range;
-      note.textContent=map.name+(range?" · Lv."+range.join("–"):"")+" · ประตูไป"+map.portals.map(p=>worldDefinitions[p.targetMapId].name).join(" / ");
+      note.textContent=map.name+(range?" · Lv."+range.join("–"):"")+" · ประตูไป"+map.portals.filter(p=>p.targetMapId!==activeMapId).map(p=>worldDefinitions[p.targetMapId].name).join(" / ");
+      if(map.strategic?.objectives)note.textContent+=" · หมายเลขทอง 2, 4, 5 เป็นจุดยึด จุดฟ้าคือบันไดทั้ง 18 แห่ง เกวียนอยู่ทางตะวันตกของประตูโลกทั้งสองด้าน";
       const button=document.createElement("button");button.type="button";button.className="primary";button.id="openStrategicMap";
       button.textContent="เปิดแผนที่ยุทธศาสตร์ · "+Object.keys(worldDefinitions).length+" พื้นที่";button.onclick=openStrategicMap;
       $("bigMap").parentElement.prepend(button);
@@ -8087,7 +8152,7 @@
     const portal=activePortal(), authoritative=ownServerCharacter();
     const siege=$("siegeGateButton"),localWar=territoryState?.local,door=worldDefinitions?.[activeMapId]?.strategic?.rampart?.gates[0].box;
     const near=door && authoritative && authoritative.alive && Math.abs(authoritative.y)<.1 && authoritative.x>=door.x-2.5 && authoritative.x<=door.x+door.width+2.5 && authoritative.z>=door.z-2.5 && authoritative.z<=door.z+door.length+2.5;
-    siege.hidden=!(near && localWar?.site===activeMapId && localWar.inField && localWar.phase==="battle" && localWar.gateHp>0 &&
+    siege.hidden=!(near && activeMapId!=="tri_wiang_castle" && localWar?.site===activeMapId && localWar.inField && localWar.phase==="battle" && localWar.gateHp>0 &&
       (localWar.side==="attack"?localWar.gateClosed:authoritative.z<door.z+door.length/2));
     if(!siege.hidden)siege.textContent=(localWar.side==="attack"?"พังประตู":localWar.gateClosed?"เปิดประตู":"ปิดประตู")+" · "+localWar.gateHp+"/120";
     const warpButton=$("warpButton");

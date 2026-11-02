@@ -1,4 +1,5 @@
 import type { WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
+import {CASTLE_ENABLED, CASTLE_ID, castleObjectives, pilotNodes} from "./CastlePilot.js";
 
 type Side="north"|"south"|"east"|"west";
 type Opening=readonly [side:Side,at:number,span:number,name:string];
@@ -27,14 +28,29 @@ function enclosure(x1:number,x2:number,z1:number,z2:number,openings:Opening[],st
   return {height,deck,bodies,gates,stairs:steps,corners:[{x:x1,z:z1},{x:x2,z:z1},{x:x2,z:z2},{x:x1,z:z2}]};
 }
 export type Rampart=ReturnType<typeof enclosure>;
+function grandWalls():Rampart {
+  const rings=[
+    enclosure(-570,570,-660,540,[["south",0,16,"ประตูสะพานใต้"],["west",100,16,"ประตูท่าน้ำ"],["east",100,16,"ประตูช่องเขา"],["north",0,16,"ประตูส่งกำลังเหนือ"]],
+      [["west",-410],["west",355],["east",-410],["east",355],["north",-245],["north",245],["south",-245],["south",245]]),
+    enclosure(-360,360,-470,265,[["south",0,14,"ประตูลานกลอง"],["west",-85,14,"ประตูคลังหลวง"],["east",-85,14,"ประตูโรงช่าง"]],
+      [["west",-300],["east",-300],["north",-140],["north",140],["south",-145],["south",145]]),
+    enclosure(-165,165,-330,0,[["west",-175,12,"ประตูพระราชฐานตะวันตก"],["east",-175,12,"ประตูพระราชฐานตะวันออก"]],
+      [["west",-270],["east",-70],["north",-55],["south",55]])
+  ];
+  return {height:4,deck:rings.flatMap(r=>r.deck),corners:rings.flatMap(r=>r.corners),gates:rings.flatMap(r=>r.gates),
+    bodies:rings.flatMap(r=>r.bodies),stairs:rings.flatMap((r,ring)=>r.stairs.map((s,i)=>({...s,id:"castle-"+ring+"-stair-"+i})))};
+}
 const ramparts={
   mantra_capital:enclosure(-34,34,-58,26,[["south",0,10,"ประตูหมู่บ้าน"],["north",0,10,"ประตูด่านจันทร์"],["west",-14,10,"ประตูดงไผ่"],["east",-14,10,"ประตูบัวนาค"]],[["west",-30],["east",-28],["south",15],["north",-14]]),
   moon_pass:enclosure(2,22,-44,-28,[["south",12,6,"ประตูเมืองจันทรา"],["east",-36,6,"ประตูข้างเหมือง"]],[["west",-37],["east",-31]]),
   river_watch:enclosure(-30,-8,-40,-20,[["south",-18,7,"ประตูเมืองปากชล"],["north",-22,8,"ประตูท่าเรือ"]],[["west",-29],["east",-34]]),
 };
-export function onRampart(r:Rampart,x:number,z:number){
+export function wallRing(r:Rampart,x:number,z:number){
   // The deck slabs overlap at corners so the wall can be walked as a complete loop.
-  return r.deck.some(b=>x>=b.x+.16 && x<=b.x+b.width-.16 && z>=b.z+.16 && z<=b.z+b.length-.16);
+  return Math.floor(r.deck.findIndex(b=>x>=b.x+.16 && x<=b.x+b.width-.16 && z>=b.z+.16 && z<=b.z+b.length-.16)/4);
+}
+export function onRampart(r:Rampart,x:number,z:number){
+  return wallRing(r,x,z)>=0;
 }
 
 export function crestCorners(r:Rampart,from:{x:number;z:number},to:{x:number;z:number}){
@@ -61,12 +77,18 @@ export type ProvinceSite = Readonly<{
 export type Province = Readonly<{
   kind:"capital"|"territory"|"hunting"; hint:string; sites:readonly ProvinceSite[];
   safeRoads?:readonly number[];rampart?:Rampart;
+  objectives?:typeof castleObjectives;activeObjectives?:readonly number[];
 }>;
 const site=(kind:ProvinceSite["kind"],name:string,x:number,z:number,direction?:"east"):ProvinceSite=>({kind,name,x,z,direction});
 const wall=(x:number,z:number,width:number,length:number):WorldWall=>({x,z,width,length});
 const trails=(...routes:XY[][])=>routes.map(route=>route.map(([x,z])=>({x,z})));
 
 export const PROVINCES:Readonly<Record<string,Province>>={
+  ...(CASTLE_ENABLED?{[CASTLE_ID]:{kind:"territory" as const,rampart:grandWalls(),safeRoads:[0],objectives:castleObjectives,
+    activeObjectives:pilotNodes.map(p=>p.id),hint:"สนามทดลอง 10 ต่อ 10 · เปิดศึกที่ธงรวมพลประตูใต้ · ชิงท่าน้ำ คลังเสบียง และลานกลอง",
+    sites:[site("fort","ธงรวมพลไตรเวียง",0,880),site("bridge","สะพานขบวนเสบียง",0,630),
+      site("port","ท่าน้ำตะวันตก",-687,100),site("shrine","ช่องเขาตะวันออก",697,100),site("market","คลังเสบียงหลวง",-258,-110),
+      site("tower","หอกลองหลวง",9,155),site("mine","โรงช่างประตู",257,-110),site("palace","มหาปราสาทไตรเวียง",0,-196)]}}:{}),
   mantra_capital:{kind:"capital",rampart:ramparts.mantra_capital,hint:"ลานพระนครเชื่อมหมู่บ้าน สองเขตล่า และด่านจันทรา",sites:[
     site("palace","คุ้มหลวงเวียงมนตรา",0,-35),site("market","ตลาดสี่ประตู",-16,1),
     site("tower","หอกลองประกาศ",17,-14),site("shrine","ศาลหลักเมือง",0,-14)]},
@@ -97,12 +119,32 @@ const hubs:Record<string,Hub>={
     water:[wall(-6,-65,4,16),wall(-6,-43,4,26),wall(-6,-11,4,20),wall(-6,15,4,17)],
     walls:[],obstacles:[]},
 };
+function makeCastle(portalsFor:(id:string)=>WorldPortal[]):WorldMapDefinition {
+  const province=PROVINCES[CASTLE_ID],r=province.rampart!;
+  const portals:WorldPortal[]=[...portalsFor(CASTLE_ID),
+    {id:"castle_cart_north",label:"ขึ้นเกวียนไปประตูเหนือ",x:-18,z:900,targetMapId:CASTLE_ID,targetSpawn:{x:-18,y:0,z:-898}},
+    {id:"castle_cart_south",label:"ขึ้นเกวียนไปประตูใต้",x:-18,z:-900,targetMapId:CASTLE_ID,targetSpawn:{x:-18,y:0,z:898}}];
+  return {id:CASTLE_ID,name:"มหาปราสาทไตรเวียง",bounds:{minX:-1000,maxX:1000,minZ:-1000,maxZ:1000},spawn:{x:0,y:0,z:895},
+    strategic:province,portals,obstacles:[],camps:[],restAreas:portals.map(p=>({x:p.x,z:p.z,radius:6,name:"เขตพักประตู"})),
+    walls:[...r.bodies.map(b=>({...b,rampart:true})),wall(-10,-226,20,9),wall(-29,-211,11,7),wall(18,-211,11,7)],
+    water:[wall(-265,628,260,4),wall(5,628,265,4),wall(-745,-150,14,245),wall(-745,106,14,245)],
+    paths:trails([[0,900],[-540,900],[-875,825],[-875,-815],[-550,-900],[0,-900]],
+      [[0,900],[0,630],[0,540],[0,350],[0,265],[0,155]],[[0,790],[-295,745],[-625,650],[-685,585],[-680,100]],
+      [[0,790],[295,745],[625,650],[685,585],[690,100]],
+      [[-680,100],[-570,100],[-455,90],[-420,-85],[-360,-85],[-250,-110]],
+      [[690,100],[570,100],[455,90],[420,-85],[360,-85],[250,-110]],
+      [[-455,90],[-400,290],[0,350],[400,290],[455,90]],
+      [[-250,-110],[-230,82],[0,155],[230,82],[250,-110]],
+      [[-250,-110],[-215,-175],[-165,-175],[0,-175],[165,-175],[215,-175],[250,-110]],
+      [[0,-900],[0,-660],[0,-525],[-400,-525],[-420,-85]],[[0,-525],[400,-525],[420,-85]])};
+}
 export function makeHubs(portalsFor:(id:string)=>WorldPortal[]):Record<string,WorldMapDefinition>{
-  return Object.fromEntries(Object.entries(hubs).map(([id,data])=>{
+  const small=Object.fromEntries(Object.entries(hubs).map(([id,data])=>{
     const portals=portalsFor(id);
     const province=PROVINCES[id];
     return [id,{...data,id,strategic:province,walls:[...data.walls??[],...province.rampart!.bodies.map(b=>({...b,rampart:true}))],bounds:{minX:-42,maxX:42,minZ:-65,maxZ:32},spawn:{x:0,y:0,z:25},
       portals,restAreas:[...portals.map(p=>({x:p.x,z:p.z,radius:4,name:"เขตพักประตู"})),
         ...PROVINCES[id].sites.filter(s=>s.kind==="market" && PROVINCES[id].kind==="territory").map(s=>({x:s.x,z:s.z,radius:5,name:"เขตพักตลาด"}))],camps:[] as const}];
   }));
+  return CASTLE_ENABLED?{...small,[CASTLE_ID]:makeCastle(portalsFor)}:small;
 }

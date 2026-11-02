@@ -30,7 +30,7 @@ export function segmentIntersectsExpandedWall(
 export type WorldPoint = Readonly<{ x: number; y: number; z: number }>;
 export type WorldObstacle = Readonly<{ id: string; x: number; z: number; radius: number }>;
 export type WorldPortal = Readonly<{
-  id: string; x: number; z: number; targetMapId: string; targetSpawn: WorldPoint;
+  id: string; x: number; z: number; targetMapId: string; targetSpawn: WorldPoint; label?:string;
 }>;
 export type HuntCamp = Readonly<{id:string; name:string; x:number; z:number; levels:readonly number[]}>;
 export type RestArea = Readonly<{x:number; z:number; radius:number; name:string}>;

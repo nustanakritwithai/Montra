@@ -32,6 +32,9 @@ jobs:
           cp deploy/combat/dash-rules.test.ts combat-verify/src/rooms/dash-rules.test.ts
           cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
           cp deploy/combat/TempleMap.ts combat-verify/src/rooms/TempleMap.ts
+          cp deploy/combat/CastlePilot.ts combat-verify/src/rooms/CastlePilot.ts
+          cp deploy/combat/castle-pilot.test.ts combat-verify/src/rooms/castle-pilot.test.ts
+          cp deploy/combat/castle-pilot-integration.mjs combat-verify/castle-pilot-integration.mjs
           cp deploy/combat/StrategicProvinces.ts combat-verify/src/rooms/StrategicProvinces.ts
           cp deploy/combat/WorldAtlas.ts combat-verify/src/rooms/WorldAtlas.ts
           cp deploy/combat/world-atlas.test.ts combat-verify/src/rooms/world-atlas.test.ts
@@ -320,6 +323,19 @@ jobs:
           SERVER_PID=$!
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4110) 2>/dev/null; then break; fi; sleep 0.25; done
           MONTRA_MAP_TEST_STAGE=read timeout 25s node map-expansion-integration.mjs || { cat expansion-server.log; exit 1; }
+
+      - name: Three-ring castle pilot geometry and scoring
+        working-directory: combat-verify
+        run: |
+          export MONTRA_WORLD_EXPANSION=1 MONTRA_CASTLE_PILOT=1 MONTRA_ECONOMY_ENABLED=1 PORT=4115
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-castle-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4115
+          npx tsx --test src/rooms/castle-pilot.test.ts
+          node --import tsx src/index.ts > castle-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4115) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 300s node --import tsx castle-pilot-integration.mjs || { cat castle-server.log; exit 1; }
 
       - name: Isolated forest party monster rewards
         shell: bash
