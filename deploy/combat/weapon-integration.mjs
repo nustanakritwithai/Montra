@@ -39,6 +39,8 @@ try{
     a.state?.inventoryAvailable===true && b.state?.players?.size===2 &&
     attacker()?.equippedWeaponId==="ritual_dagger",4500,
     "players and starter dagger equipped");
+  a.send("select_build",{path:"seer",ancestry:"woodland"});
+  await until(()=>attacker().pathId==="seer",4500,"occult class selected");
   a.send("get_inventory",{});
   await until(()=>inventory.at(-1)?.slots?.[0]?.quantity===3 &&
     inventory.at(-1)?.slots?.[1]?.itemId==="ritual_dagger" &&

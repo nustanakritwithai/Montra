@@ -37,6 +37,10 @@ export const PATHS = {
   mender: { role: "จอมอาคม", name: "ผู้เยียวยา", skill: "พรฟื้นกาย", targets: "party", stamina: 25, cooldownMs: 30_000, effect: {kind: "heal", fraction: 0.10} },
 } as const satisfies Record<string, PathDefinition>;
 export type PathId = keyof typeof PATHS;
+/** Both branches of the occultist share the ritual starter skills. */
+export function isOccultPath(path: string): path is "seer" | "mender" {
+  return path === "seer" || path === "mender";
+}
 export const ANCESTRIES = {
   woodland: { name: "ชาวป่า", trait: "บอกทิศไปค่ายล่าใกล้ที่สุด" },
   shrine: { name: "ชาวศาล", trait: "บอกทิศไปเขตพักใกล้ที่สุด" },

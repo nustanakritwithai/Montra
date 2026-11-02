@@ -4080,6 +4080,7 @@
   const DASH_DEMO_COOLDOWN_MS = 1800;
   let selectedPkTargetId = null;
   let targetedSkill = null;
+  let selectedOccultSkill="", occultBookState=null, occultRequestKey="", occultRequestAt=0, occultHotbarKey="", occultBookRenderKey="", occultCurseUntil=0;
   let spellTargetId = null;
   let pendingClimb = null;
   const skillEffects = [];
@@ -5936,7 +5937,7 @@
     territoryState=null;$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
-    possessed=false;syncPossessionButton();syncTalismanButton(null);syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);$("classSkill").hidden=true;
+    possessed=false;occultBookState=null;occultRequestKey="";selectedOccultSkill="";occultCurseUntil=0;syncOccultUI(null);syncPossessionButton();syncTalismanButton(null);syncRitualButtons(null);syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);$("classSkill").hidden=true;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false;
@@ -6022,6 +6023,16 @@
     return id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get(id);
   }
   function castAtTarget(id) {
+    if (targetedSkill === "occult") {
+      const node=occultBookState?.lessons?.[selectedOccultSkill];
+      const monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id);
+      if (!node || !id || id===localId || (!monster && !(["curse","curse_burst"].includes(node.effect) && opponent))) {
+        toast("เลือกเป้าหมายที่ใช้วิชานี้ได้");return;
+      }
+      spellTargetId=id;
+      room.send("occult_skill",{skillId:selectedOccultSkill,targetId:id});
+      return;
+    }
     if (targetedSkill === "muay") {
       const monster=monsterForSpell(id), opponent=!monster && room?.state?.players?.get?.(id), target=monster || opponent;
       if (!id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId) { toast("เลือกมอนสเตอร์หรือผู้เล่นที่ยังต่อสู้ได้"); return; }
@@ -6085,6 +6096,12 @@
     const seconds = Math.max(0, Math.ceil(((me?.talismanReadyAt || 0) - Date.now()) / 1000));
     button.disabled = mode === "live" && (!me?.alive || seconds > 0);
     button.lastElementChild.textContent = seconds ? seconds + " วิ" : "แปะยันต์";
+  }
+  function syncRitualButtons(me) {
+    // During a staged rollout, the older server still permits shared rituals.
+    const occult = mode === "live" && (room?.state?.occultAvailable!==true || me?.pathId === "seer" || me?.pathId === "mender");
+    for (const id of ["shoot", "talisman", "summon", "possess"]) $(id).hidden = !occult;
+    if (!occult && (targetedSkill === "rice" || targetedSkill === "talisman")) setTargetedSkill(null);
   }
   function updateFlightButton() {
     const button = $("fly");
@@ -6445,6 +6462,8 @@
     syncPossessionButton();
     syncClassSkill(mine);
     syncTalismanButton(mine);
+    syncRitualButtons(mine);
+    syncOccultUI(mine);
     syncSwordTreeButton(mine);
     syncSwordHotbar();
     syncMuayHotbar();
@@ -6829,6 +6848,28 @@
       joined.onMessage("build_selected", () => {
         if (room === joined) toast("บันทึกสายอาชีพและเผ่าแล้ว");
       });
+      joined.onMessage("occult_book_state", data => {
+        if (room!==joined || !data?.book || !data?.lessons) return;
+        occultBookState=data;occultBookRenderKey="";occultHotbarKey="";
+        syncOccultUI(ownServerCharacter());
+        if (drawerActive==="occultBook") renderOccultBook();
+      });
+      joined.onMessage("occult_book_changed", () => {
+        if (room!==joined) return;
+        selectedOccultSkill="";if(targetedSkill==="occult")setTargetedSkill(null);
+        toast("บันทึกตำราอาคมแล้ว");
+      });
+      joined.onMessage("occult_curse_state", data => {
+        if (room!==joined) return;
+        occultCurseUntil=data?.active ? performance.now()+Math.max(0,Math.min(6500,Number(data.durationMs)||0)) : 0;
+        syncOccultUI(ownServerCharacter());
+        toast(data?.active ? "ติดคำสาปอาคม" : data?.reason==="cleansed" ? "ถอนคำสาปแล้ว" : "คำสาปสิ้นสุด");
+      });
+      joined.onMessage("occult_skill_used", data => {
+        if (room!==joined || data?.playerId!==localId) return;
+        const name=occultBookState?.lessons?.[data.skillId]?.name;
+        if (name) toast("ใช้ "+name);
+      });
       joined.onMessage("muay_guarded", data => { if (room===joined) { muayCounterUntil=performance.now()+3000; const label=data?.kind==="parry" ? "ปัด" : data?.kind==="evade" ? "เบี่ยงหลบ" : "ป้อง"; toast(label+"สำเร็จ · วิชาสวนพร้อม 3 วินาที"); syncMuayHotbar(); } });
       joined.onMessage("muay_counter_cleared", () => { if (room===joined) { muayCounterUntil=0; syncMuayHotbar(); } });
       joined.onMessage("muay_defense", data => { if(room===joined) {
@@ -7070,7 +7111,8 @@
         if (Object.hasOwn(muayReasons,info?.reason)) { toast(muayReasons[info.reason]); return; }
         const swordReasons={invalid_sword_tree:"คำสั่งวิชาไม่ถูกต้อง",sword_class_required:"เลือกอาชีพนักดาบก่อน",sword_tree_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อน",sword_tree_level:"เลเวลยังไม่ถึง",sword_tree_no_points:"แต้มวิชาไม่พอ",sword_tree_prerequisite:"ต้องเรียนวิชาก่อนหน้า",sword_tree_wrong_school:"เลือกสำนักนี้ก่อน",sword_tree_already_learned:"เรียนวิชานี้แล้ว",sword_tree_already_selected:"เลือกสำนักนี้อยู่แล้ว",sword_tree_empty:"ยังไม่มีแต้มวิชาที่ต้องคืน",sword_tree_rate_limited:"กดถี่เกินไป รอสักครู่",sword_tree_save_failed:"บันทึกวิชาไม่สำเร็จ",sword_trial_incomplete:"ฝึกตามเงื่อนไขของครูดาบก่อน",invalid_sword_skill:"คำสั่งสกิลไม่ถูกต้อง",sword_weapon_required:"สวมกระบี่อาคมก่อนใช้วิชาดาบ",sword_skill_locked:"วิชายังไม่พร้อมใช้ในสำนักนี้",sword_skill_cooldown:"วิชาดาบกำลังฟื้น",sword_counter_required:"รับการโจมตีให้สำเร็จก่อนสวน",sword_combo_required:"โจมตีต่อเนื่องให้ครบ 3 จังหวะ",invalid_sword_target:"เลือกเป้าหมายที่ใช้วิชานี้ได้",sword_out_of_range:"เข้าใกล้เป้าหมายก่อนใช้วิชา",sword_blocked:"มีสิ่งกีดขวางระหว่างทาง"};
         if (Object.hasOwn(swordReasons,info?.reason)) { toast(swordReasons[info.reason]); return; }
-        const buildReasons = {build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
+        const buildReasons = {occult_class_required:"เลือกอาชีพจอมอาคมก่อนใช้วิชานี้", build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
+        Object.assign(buildReasons,{invalid_occult_book:"คำสั่งตำราอาคมไม่ถูกต้อง",invalid_occult_skill:"คำสั่งวิชาอาคมไม่ถูกต้อง",occult_rate_limited:"กดตำราถี่เกินไป รอสักครู่",occult_book_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อนจัดวิชา",occult_wrong_path:"เลือกสายนี้ก่อนเรียน",occult_already_learned:"เรียนวิชานี้แล้ว",occult_level:"เลเวลยังไม่ถึง",occult_no_points:"แต้มวิชาไม่พอ",occult_prerequisite:"เรียนวิชาก่อนหน้าก่อน",occult_training:"ฝึกวิชาอาคมให้ครบก่อน",occult_skill_locked:"เรียนและจัดวิชาในช่องลัดก่อน",occult_book_empty:"ไม่มีแต้มวิชาที่ต้องคืน",occult_book_save_failed:"บันทึกตำราอาคมไม่สำเร็จ",occult_cooldown:"วิชาอาคมกำลังฟื้น",occult_out_of_range:"เข้าใกล้เป้าหมายก่อน",occult_blocked:"มีสิ่งกีดขวางระหว่างเป้าหมาย",occult_mark_required:"ติดยันต์ตีตราที่เป้าหมายก่อน",occult_curse_required:"สาปเป้าหมายก่อนใช้วิชานี้",occult_party_required:"เลือกตนเองหรือสมาชิกปาร์ตี้",occult_trance_required:"เข้าทรงก่อนใช้วิชานี้",occult_no_curse:"เป้าหมายไม่มีคำสาปที่ถอนได้",occult_effect_limit:"เป้าหมายมีบัพเต็มแล้ว"});
         if (Object.hasOwn(buildReasons, info?.reason)) { toast(buildReasons[info.reason]); return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("guild_")) { const reason={guild_invalid_name:"ชื่อกิลด์ต้องมี 2–24 ตัวอักษร และใช้ตัวอักษรหรือตัวเลข",guild_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",guild_unavailable:"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว"};toast(reason[info.reason] || "ไม่สามารถทำรายการกิลด์ได้");return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
@@ -8177,6 +8219,92 @@
     }
     positionSwordToast();
   }
+  function syncOccultUI(me) {
+    const status=$("occultStatus"), cursed=mode==="live" && performance.now()<occultCurseUntil;
+    status.hidden=!cursed;
+    if(cursed)status.textContent="ติดคำสาป · "+Math.ceil((occultCurseUntil-performance.now())/1000)+" วิ";
+    const active=mode==="live" && room?.state?.occultAvailable===true && (me?.pathId==="seer" || me?.pathId==="mender");
+    const button=$("occultBookButton"),bar=$("occultHotbar");
+    button.hidden=!active;
+    if (!active) {
+      bar.hidden=true;occultBookState=null;occultRequestKey="";occultHotbarKey="";
+      if(targetedSkill==="occult"){selectedOccultSkill="";setTargetedSkill(null);}
+      return;
+    }
+    const requestKey=localId+":"+me.pathId;
+    if(occultRequestKey!==requestKey && room) {
+      occultRequestKey=requestKey;occultRequestAt=performance.now();
+      room.send("occult_book_get",{});
+    }
+    const data=occultBookState;
+    if (!data || data.path!==me.pathId) {bar.hidden=true;return;}
+    const path=me.pathId,ids=data.book.loadouts[path],times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
+    const key=JSON.stringify([path,ids,times,me.alive,me.possessionActive]);
+    bar.hidden=false;if(key===occultHotbarKey)return;occultHotbarKey=key;bar.replaceChildren();
+    ids.forEach((id,index)=>{
+      const node=id && data.lessons[id],slot=document.createElement("button");
+      slot.type="button";slot.className="sword-hotkey";
+      slot.textContent=node ? node.name+(times[index] ? " "+times[index]+" วิ" : "") : "ช่องว่าง";
+      slot.disabled=!node || !me.alive || Boolean(times[index]);
+      slot.onclick=()=>{
+        if (["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind"].includes(node.effect)) {
+          selectedOccultSkill=id;setTargetedSkill("occult");
+          const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId);
+          if (targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId) castAtTarget(targetId);
+          else toast(node.name+" · แตะมอนสเตอร์เพื่อใช้วิชา");
+        } else if (["heal","spirit_heal","ward","cleanse","spirit_ward"].includes(node.effect)) {
+          chooseOccultAlly(id,node.name);
+        } else room.send("occult_skill",{skillId:id});
+      };
+      bar.append(slot);
+    });
+    positionSwordToast();
+  }
+  function chooseOccultAlly(skillId,name) {
+    const members=partyState?.members || [];
+    if (members.length<2) {room.send("occult_skill",{skillId,targetId:localId});return;}
+    openDrawer("occultTarget","เลือกผู้รับ "+name,'<div id="occultTargetList"></div>');
+    const list=$("occultTargetList");
+    for (const member of members) {
+      const player=room?.state?.players?.get?.(member.sessionId);
+      if (!player?.alive || (player.mapId || "ritual_village")!==activeMapId) continue;
+      const button=document.createElement("button");button.type="button";button.className="secondary";
+      button.textContent=(member.name || "ผู้เล่น")+(member.sessionId===localId?" · คุณ":"");
+      button.onclick=()=>{closeDrawer();room.send("occult_skill",{skillId,targetId:member.sessionId});};
+      list.append(button);
+    }
+  }
+  function openOccultBook() {
+    if (!room || mode!=="live") return toast("เข้า LIVE และเลือกจอมอาคมก่อน");
+    if (!occultBookState || occultBookState.path!==ownServerCharacter()?.pathId) {
+      if(performance.now()-occultRequestAt>1500){occultRequestAt=performance.now();room.send("occult_book_get",{});}
+      return toast("กำลังขอตำราอาคมจากเซิร์ฟเวอร์");
+    }
+    occultBookRenderKey="";openDrawer("occultBook","ตำราอาคม",'<div id="occultBookBody"></div>');renderOccultBook();
+  }
+  function renderOccultBook() {
+    const data=occultBookState,me=ownServerCharacter(),container=$("occultBookBody");
+    if (!data || !me || !container || data.path!==me.pathId) return;
+    if(container.contains(document.activeElement) && document.activeElement.matches("select[data-occult-equip]"))return;
+    const path=data.path,learned=data.book.learned[path],slots=data.book.loadouts[path],training=data.book.training[path];
+    const key=JSON.stringify([data.book,me.level]);if(key===occultBookRenderKey)return;occultBookRenderKey=key;
+    const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+    const points=Math.max(0,data.points-learned.length);
+    const rows=Object.entries(data.lessons).filter(([,node])=>node.path===path).map(([id,node])=>{
+      const known=learned.includes(id),missing=node.requires.filter(req=>!learned.includes(req));
+      const locked=me.level<node.level || points<1 || training<node.training || missing.length>0;
+      const prerequisite=node.requires.length ? " · ต้องเรียน "+node.requires.map(req=>clean(data.lessons[req]?.name || req)).join(", ") : "";
+      const detail="Lv."+node.level+" · "+clean(node.description)+" · ระยะ "+node.range+" · กำลัง "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ · ฝึก "+training+"/"+node.training+prerequisite;
+      const control=known ? '<label class="sword-slot-label">ช่องลัด <select data-occult-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>' :
+        '<button type="button" data-occult-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
+      return '<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small></div>'+control+'</article>';
+    }).join("");
+    container.innerHTML='<p>สาย'+(path==="seer"?"ผู้ร่ายเวท":"ผู้เยียวยา")+' · แต้มว่าง '+points+' · ผลฝึก '+training+'</p><p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · คืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetOccultBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
+    container.querySelectorAll("[data-occult-learn]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"learn",skillId:button.dataset.occultLearn}));
+    container.querySelectorAll("[data-occult-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("occult_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.occultEquip});select.blur();});
+    $("resetOccultBook").onclick=()=>{if(window.confirm("คืนแต้มสายนี้? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("occult_book",{action:"reset"});};
+  }
+
   let selectedMuaySkill="", muayCounterUntil=0, muayHotbarKey="", muayBookRenderKey="", muayBookViewedSchool="", muayGrabTarget="",muayGrabUntil=0,muayFollowupSkill="",muayFollowupTarget="",muayFollowupUntil=0;
   let muayComboCount=0,muayComboUntil=0,muayComboNext="",muayComboComplete=false,muayComboBonus=0,muayInterruptMessage="",muayInterruptUntil=0,muayDefenseMessage="",muayDefenseUntil=0;
   const muayMoveLabels={punch:"หมัด",kick:"ถีบ",elbow:"ศอก",knee:"เข่า"};
@@ -8578,7 +8706,7 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>สกิลพื้นฐานทุกสาย</h3><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>วิชาพื้นฐานจอมอาคม</h3><p>เลือกจอมอาคมสายผู้ร่ายเวทหรือผู้เยียวยาที่ลานพักก่อนใช้วิชาต่อไปนี้</p><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจและหมุนกล้องได้ วิชาอาคมต้องใช้ตัวละครจอมอาคมใน LIVE</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
   }
   function currentBagSlots() {
     if (mode === "live") return inventoryState?.slots || null;
@@ -9070,6 +9198,9 @@
   $("modeButton").onclick=openOnline;
   $("swordTreeButton").onclick=openSwordTree;
   $("muayBookButton").onclick=openMuayBook;
+  $("occultBookButton").onclick=openOccultBook;
+  // Cooldown labels must advance even in a quiet room with no schema patches.
+  setInterval(()=>{if(mode==="live")syncOccultUI(ownServerCharacter());},1000);
   $("helpButton").onclick=openHelp;
   $("bag").onclick=openBag;
   $("summon").onclick=()=> {
@@ -9103,7 +9234,7 @@
   function syncPossessionButton() {
     const active=mode==="live" ? ownServerCharacter()?.possessionActive===true : possessed;
     const button=$("possess");button.setAttribute("aria-pressed",String(active));
-    if(button.lastElementChild)button.lastElementChild.textContent=active ? "ออกจากสิง" : "เข้าสิง";
+    if(button.lastElementChild)button.lastElementChild.textContent=active ? "ออกจากทรง" : "เข้าทรง";
     heroMat.emissiveColor=B.Color3.FromHexString(active ? "#7c459b" : "#3b2916");
   }
   $("possess").onclick=()=> {

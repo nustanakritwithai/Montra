@@ -493,6 +493,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill[aria-pressed="true"] .glyph { box-shadow:0 0 16px #b677ef; outline:2px solid #e0bcff; }
 
 #classSkill[hidden], #talisman[hidden], #buildFields[hidden] { display:none; }
+#shoot[hidden], #summon[hidden], #possess[hidden], #occultBookButton[hidden], #muayBookButton[hidden] { display:none; }
 #classSkill:disabled, #talisman:disabled { opacity:.6; }
 @media(max-width:400px) { .skill-bar:has(#classSkill:not([hidden])) .glyph { width:min(9.1vw,38px); height:min(9.1vw,38px); } }
 
