@@ -239,14 +239,87 @@
       c.beginPath(); c.arc(0, 0, 9, 0, Math.PI * 2); c.fill();
     });
   }
-  const portalYantraMat = additiveMat("portal yantra", yantraTexture("portal yantra", "rgba(150,255,230,.9)", "#5fffe0"));
-  const restYantraMat = additiveMat("rest yantra", yantraTexture("rest yantra", "rgba(255,206,120,.42)", "#ffb35a"));
-  const yantraDiscs = [];
+  // Square grid yantra (yan tarang): bordered cells of sacred syllables
+  // around an unalom, the seal used under every spirit gate and rest ward.
+  function squareYantraTexture(name, ink, glowInk) {
+    return paintTexture(name, 256, (c, s) => {
+      c.clearRect(0, 0, s, s); c.strokeStyle = ink; c.fillStyle = ink; c.shadowColor = glowInk; c.shadowBlur = 8;
+      c.lineWidth = 5; c.strokeRect(14, 14, s - 28, s - 28);
+      c.lineWidth = 2; c.strokeRect(28, 28, s - 56, s - 56);
+      const cell = (s - 92) / 3, o = 46;
+      for (let i = 1; i < 3; i++) { c.beginPath(); c.moveTo(o + i * cell, o); c.lineTo(o + i * cell, o + 3 * cell); c.moveTo(o, o + i * cell); c.lineTo(o + 3 * cell, o + i * cell); c.stroke(); }
+      c.strokeRect(o, o, cell * 3, cell * 3);
+      c.font = "bold 26px sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
+      const syllables = ["นะ", "โม", "พุท", "ธา", "", "ยะ", "อะ", "อุ", "มะ"];
+      syllables.forEach((t, i) => { if (t) c.fillText(t, o + (i % 3 + .5) * cell, o + (Math.floor(i / 3) + .5) * cell); });
+      // Unalom in the centre cell.
+      const cx = s / 2, cy = s / 2; c.lineWidth = 3; c.beginPath();
+      for (let t = 0; t < 12; t += .2) { const r = 1 + t * .9; c.lineTo(cx + Math.cos(t) * r, cy + 6 + Math.sin(t) * r); }
+      c.moveTo(cx + 10, cy + 6); c.quadraticCurveTo(cx + 4, cy - 10, cx, cy - 20); c.stroke();
+      for (const [x, y, a] of [[s / 2, 6, 0], [s - 6, s / 2, Math.PI / 2], [s / 2, s - 6, Math.PI], [6, s / 2, -Math.PI / 2]]) {
+        c.save(); c.translate(x, y); c.rotate(a); c.beginPath(); c.moveTo(-14, 10); c.lineTo(0, -4); c.lineTo(14, 10); c.closePath(); c.fill(); c.restore();
+      }
+    });
+  }
+  const portalYantraMat = additiveMat("portal yantra", squareYantraTexture("portal yantra", "rgba(150,255,230,.95)", "#5fffe0"));
+  const restYantraMat = additiveMat("rest yantra", squareYantraTexture("rest yantra", "rgba(255,206,120,.4)", "#ffb35a"));
+  // Roads: Chaikin-smoothed ribbons with a soft dark verge and rounded ends.
+  function smoothPath(points, iterations = 3) {
+    let p = points.map(q => ({ x: q.x, z: q.z }));
+    for (let it = 0; it < iterations; it++) {
+      const out = [p[0]];
+      for (let i = 0; i < p.length - 1; i++) {
+        const a = p[i], b = p[i + 1];
+        out.push({ x: a.x * .75 + b.x * .25, z: a.z * .75 + b.z * .25 }, { x: a.x * .25 + b.x * .75, z: a.z * .25 + b.z * .75 });
+      }
+      out.push(p[p.length - 1]); p = out;
+    }
+    return p;
+  }
+  function ribbonMesh(name, points, width, material, y, seed = 0, wobble = .12) {
+    const positions = [], uvs = [], normals = [], indices = [];
+    let dist = 0;
+    for (let i = 0; i < points.length; i++) {
+      const prev = points[Math.max(0, i - 1)], next = points[Math.min(points.length - 1, i + 1)], p = points[i];
+      const dx = next.x - prev.x, dz = next.z - prev.z, l = Math.hypot(dx, dz) || 1, nx = -dz / l, nz = dx / l;
+      if (i) dist += Math.hypot(p.x - points[i - 1].x, p.z - points[i - 1].z);
+      const w = width / 2 * (1 + (noise(i * .37 + seed, 201) - .5) * wobble);
+      positions.push(p.x + nx * w, y, p.z + nz * w, p.x - nx * w, y, p.z - nz * w);
+      uvs.push(0, dist / width, 1, dist / width); normals.push(0, 1, 0, 0, 1, 0);
+      if (i) { const k = i * 2; indices.push(k - 2, k, k - 1, k - 1, k, k + 1); }
+    }
+    const mesh = new B.Mesh(name, scene), data = new B.VertexData();
+    data.positions = positions; data.indices = indices; data.normals = normals; data.uvs = uvs; data.applyToMesh(mesh);
+    mesh.material = material; mesh.isPickable = false;
+    return mesh;
+  }
+  const vergeTexture = paintTexture("road verge", 64, (c, s) => {
+    const g = c.createLinearGradient(0, 0, s, 0);
+    g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(.3, "rgba(0,0,0,.75)"); g.addColorStop(.7, "rgba(0,0,0,.75)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    c.clearRect(0, 0, s, s); c.fillStyle = g; c.fillRect(0, 0, s, s);
+  });
+  vergeTexture.hasAlpha = true;
+  function vergeMat(name, hex) {
+    const m = mat(name, hex); m.opacityTexture = vergeTexture; m.backFaceCulling = false; m.specularColor = B.Color3.Black();
+    return m;
+  }
+  function buildRoad(points, width, material, verge, parent, seed = 0) {
+    const smooth = smoothPath(points), y = .012 + (seed % 5) * .002, parts = [];
+    parts.push(ribbonMesh("road verge", smooth, width + 1.8, verge, y - .006, seed, .2));
+    parts.push(ribbonMesh("road", smooth, width, material, y, seed));
+    for (const end of [smooth[0], smooth[smooth.length - 1]]) {
+      const cap = B.MeshBuilder.CreateDisc("road end", { radius: width / 2, tessellation: 20 }, scene);
+      cap.rotation.x = Math.PI / 2; cap.position.set(end.x, y - .003, end.z); cap.material = material; cap.isPickable = false; parts.push(cap);
+      const soft = B.MeshBuilder.CreateDisc("road end verge", { radius: width / 2 + .9, tessellation: 20 }, scene);
+      soft.rotation.x = Math.PI / 2; soft.position.set(end.x, y - .008, end.z); soft.material = verge; soft.isPickable = false; parts.push(soft);
+    }
+    for (const part of parts) if (parent) part.parent = parent;
+    return parts;
+  }
   function yantraDisc(x, z, radius, material, parent, y = .05) {
     const disc = B.MeshBuilder.CreateGround("yantra seal", { width: radius * 2, height: radius * 2 }, scene);
     disc.position.set(x, y, z); disc.material = material; disc.isPickable = false;
     if (parent) disc.parent = parent;
-    yantraDiscs.push(disc);
     return disc;
   }
 
@@ -745,7 +818,8 @@
     c.fillStyle="#d8ccb4";c.fillRect(0,0,s,s);
     for(let i=0;i<220;i++){c.fillStyle=["#bfb196","#e6dcc6","#a89a80","#cbbfa6"][i%4];const r=1+noise(i,108)*2.5;c.beginPath();c.arc(noise(i,109)*s,noise(i,110)*s,r,0,Math.PI*2);c.fill();}
   });
-  forestPath.diffuseTexture.vScale=3;
+  forestPath.backFaceCulling=false;
+  const forestVerge=vergeMat("trail verge","#241f16");
   const forestGrass=mat("night grass","#2b4a30"), forestFern=mat("fern","#355a3a");
   const bushDark=mat("undergrowth","#1c3524"), bushMid=mat("moonlit shrub","#2a4a33"), mossMat=mat("moss","#3c5a36");
   const logMat=mat("fallen log","#3a2b21"), forestLeafLight=mat("upper canopy","#2a5039");
@@ -757,6 +831,15 @@
   const templeFloor=mat("temple sandstone","#6a655b");
   const templeCourt=mat("weathered courtyard","#7c7163");
   const templePaving=mat("limestone walk","#7a6a4f");
+  templePaving.backFaceCulling=false;
+  templePaving.diffuseTexture=paintTexture("processional slabs",128,(c,s)=>{
+    c.fillStyle="#5c5446";c.fillRect(0,0,s,s);
+    for(let row=0;row<4;row++)for(let col=0;col<2;col++){
+      const x=col*64-(row%2?32:0),y=row*32;
+      for(const dx of [0,128]){c.fillStyle=["#d7cdb5","#cbbfa5","#e0d6bf","#c4b79c"][(row+col)%4];c.fillRect(x+dx+3,y+3,58,26);}
+    }
+  });
+  const templeVerge=vergeMat("walk verge","#1e1813");
   const templeBrick=mat("exposed laterite","#925d43");
   const templeStone=mat("carved lintel","#8c9281");
   const templeLacquer=mat("binding lacquer","#953f37");
@@ -799,8 +882,7 @@
   const keeperMat=mat("guardian indigo","#605079","#251a34");
   const strikeMat=mat("guardian strike","#ff9850","#de481f");
   glowMats.add(strikeMat);
-  const forestPathMesh=cube("forest path",[0,-.035,0],[5,.12,40],forestPath);
-  forestPathMesh.parent=forestRoot;
+  buildRoad([{x:0,z:19},{x:0,z:-19}],4.6,forestPath,forestVerge,forestRoot,7);
   for(const [x,z] of [[-6,6],[7,7],[-15,-15],[-16,-8],[-14,2],[-15,12],[15,-15],[15,-5],[15,3],[15,14]]) {
     const trunk=B.MeshBuilder.CreateCylinder("forest tree",{diameter:1.2,height:4,tessellation:7},scene);
     trunk.position.set(x,2,z);trunk.material=darkWood;trunk.isPickable=false;trunk.parent=forestRoot;
@@ -837,25 +919,159 @@
     for(const group of byMaterial.values()){const mesh=group.length>1?B.Mesh.MergeMeshes(group,true,true):group[0];if(mesh){mesh.isPickable=false;if(parent)mesh.parent=parent;}}
   }
   shrineRuin(0,-12,forestRoot,.8);
+  // ---- Spirit gates: every warp point is an occult Thai gateway ----
+  const gateLacquer=mat("gate black lacquer","#1d1517"), gateStone=mat("gate plinth","#3b3a3f");
+  gateLacquer.specularColor=B.Color3.FromHexString("#4a3a2a");
+  const ghostFlame=mat("ghost flame","#b6ffe6","#3fe6b6");glowMats.add(ghostFlame);
+  const ghostPoolMat=additiveMat("ghost light",radialTexture("ghost light",128,[[0,"rgba(120,255,220,.5)"],[.35,"rgba(90,220,200,.2)"],[1,"rgba(60,180,170,0)"]]));
+  const talismanPaper=mat("talisman paper","#e6c560","#3a2a06");
+  talismanPaper.diffuseTexture=paintTexture("talisman script",64,(c,s)=>{
+    c.fillStyle="#fff";c.fillRect(0,0,s,s);c.strokeStyle="#a8231c";c.lineWidth=3;c.strokeRect(5,4,s-10,s-8);
+    c.lineWidth=2;c.beginPath();for(let i=0;i<7;i++){c.moveTo(16,12+i*6);c.quadraticCurveTo(32,6+i*6,48,12+i*6);}c.stroke();
+  });
+  const archMask=paintTexture("gate arch mask",128,(c,s)=>{
+    c.clearRect(0,0,s,s);c.fillStyle="#fff";c.beginPath();
+    c.moveTo(s*.05,s);c.lineTo(s*.05,s*.45);c.quadraticCurveTo(s*.05,s*.14,s*.5,0);c.quadraticCurveTo(s*.95,s*.14,s*.95,s*.45);c.lineTo(s*.95,s);c.closePath();
+    c.shadowColor="#fff";c.shadowBlur=10;c.fill();
+  });
+  archMask.hasAlpha=true;
+  // Soft spirit streams spiralling inward; the phantom layer carries faint
+  // wailing faces that drift round with the swirl.
+  function vortexTexture(name,rgb,core,faces){
+    return paintTexture(name,256,(c,s)=>{
+      c.fillStyle="#000";c.fillRect(0,0,s,s);
+      const bg=c.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);bg.addColorStop(0,core);bg.addColorStop(1,"rgba(0,0,0,0)");
+      c.fillStyle=bg;c.fillRect(0,0,s,s);
+      c.lineCap="round";c.shadowColor=`rgb(${rgb})`;c.shadowBlur=12;
+      for(let k=0;k<4;k++){
+        let prev=null;
+        for(let t=.04;t<1;t+=.02){
+          const r=t*s*.5,a=k*Math.PI/2+t*5.2,pt=[s/2+Math.cos(a)*r,s/2+Math.sin(a)*r];
+          if(prev){c.strokeStyle=`rgba(${rgb},${(.42*(1-t)+.06).toFixed(3)})`;c.lineWidth=3+t*16;
+            c.beginPath();c.moveTo(...prev);c.lineTo(...pt);c.stroke();}
+          prev=pt;
+        }
+      }
+      c.shadowBlur=0;
+      for(let i=0;i<faces;i++){
+        const a=i*Math.PI*2/faces+.6,r=s*.27,x=s/2+Math.cos(a)*r,y=s/2+Math.sin(a)*r;
+        c.save();c.translate(x,y);c.rotate(a+Math.PI/2);
+        const g=c.createRadialGradient(0,0,0,0,0,26);g.addColorStop(0,"rgba(215,205,255,.55)");g.addColorStop(1,"rgba(215,205,255,0)");
+        c.fillStyle=g;c.beginPath();c.ellipse(0,4,17,26,0,0,Math.PI*2);c.fill();
+        c.fillStyle="#000";
+        for(const ex of [-6,6]){c.beginPath();c.ellipse(ex,-2,3.6,5.5,0,0,Math.PI*2);c.fill();}
+        c.beginPath();c.ellipse(0,13,4,7,0,0,Math.PI*2);c.fill();
+        c.restore();
+      }
+    });
+  }
+  const spiralA=vortexTexture("spirit vortex","95,235,205","rgba(80,210,185,.4)",0);
+  const spiralB=vortexTexture("phantom vortex","160,125,255","rgba(70,45,130,.35)",3);
+  function vortexMat(name,texture){
+    const m=new B.StandardMaterial(name,scene);
+    m.diffuseColor=B.Color3.Black();m.specularColor=B.Color3.Black();m.emissiveTexture=texture;m.opacityTexture=archMask;
+    m.disableLighting=true;m.backFaceCulling=false;m.alphaMode=B.Engine.ALPHA_ADD;return m;
+  }
+  const vortexA=vortexMat("spirit vortex",spiralA), vortexB=vortexMat("phantom vortex",spiralB);
+  const glyphMats=["นะ","โม","พุท","ธา","ยะ","อุ","มะ"].map((g,i)=>additiveMat("orbit glyph "+i,paintTexture("orbit glyph "+i,64,(c,s)=>{
+    c.clearRect(0,0,s,s);c.font="bold 34px sans-serif";c.textAlign="center";c.textBaseline="middle";
+    c.shadowColor="#ffcf6a";c.shadowBlur=10;c.fillStyle="#ffe7a8";c.fillText(g,s/2,s/2+2);
+  })));
+  const portalFx=[];
   function makePortal(mapId, parent, override) {
     const info=override||portals[mapId];
-    const ring=B.MeshBuilder.CreateTorus("portal-"+mapId,{diameter:3,thickness:.22,tessellation:24},scene);
-    ring.rotation.x=Math.PI/2;ring.position.set(info.x,1.7,info.z);ring.material=portalMat;
-    ring.metadata={portalId:info.id};if(parent)ring.parent=parent;
-    const seal=yantraDisc(info.x,info.z,2.6,portalYantraMat,parent);
-    if(!parent && !override)villageMeshes.push(seal);
+    const root=new B.TransformNode("spirit gate "+info.id,scene);root.position.set(info.x,0,info.z);if(parent)root.parent=parent;
+    const part=(mesh,x,y,z,material)=>{mesh.parent=root;mesh.position.set(x,y,z);mesh.material=material;mesh.isPickable=false;return mesh;};
+    const box=(x,y,z,w,h,d,material)=>part(B.MeshBuilder.CreateBox("spirit gate",{width:w,height:h,depth:d},scene),x,y,z,material);
+    const cone=(x,y,z,h,b,t,material,sides=6)=>part(B.MeshBuilder.CreateCylinder("spirit gate",{height:h,diameterBottom:b,diameterTop:t,tessellation:sides},scene),x,y,z,material);
+    // Stepped plinth with gilded trim and the square seal.
+    box(0,.15,0,5.2,.3,3.0,gateStone);box(0,.4,0,4.4,.2,2.3,gateStone);box(0,.51,1.16,4.4,.04,.04,gold);box(0,.51,-1.16,4.4,.04,.04,gold);
+    const seal=B.MeshBuilder.CreateGround("gate seal",{width:5,height:5},scene);part(seal,0,.52,0,portalYantraMat);
+    // Lacquered posts with gold bands and lotus bases.
+    for(const side of [-1,1]){
+      box(side*1.9,2.75,0,.42,4.5,.42,gateLacquer);
+      for(const y of [1.0,2.6,4.2])box(side*1.9,y,0,.5,.12,.5,gold);
+      cone(side*1.9,.7,0,.36,.75,.5,gold,8);
+      // Ghost-fire candles at the plinth corners.
+      for(const dz of [-.9,.9]){cone(side*2.3,.65,dz,.3,.12,.12,waxMat,6);cone(side*2.3,.9,dz,.24,.12,0,ghostFlame,4);}
+      const pool=B.MeshBuilder.CreateGround("ghost light",{width:4.2,height:4.2},scene);part(pool,side*2.3,.53,0,ghostPoolMat);
+    }
+    // Lintel, pointed inner arch and a flame-crowned pediment.
+    box(0,5.05,0,4.7,.34,.52,gateLacquer);box(0,4.85,0,4.5,.06,.56,gold);
+    for(const side of [-1,1]){
+      const rib=box(side*.85,4.15,0,1.95,.13,.2,gold);rib.rotation.z=-side*.62;
+      const slope=box(side*1.3,5.95,0,3.0,.26,.7,roofMat);slope.rotation.z=-side*.62;
+      const edge=box(side*1.3,6.08,0,3.1,.08,.76,gold);edge.rotation.z=-side*.62;
+      const horn=cone(side*2.55,5.35,0,.9,.18,0,gold,5);horn.rotation.z=side*.85;
+      // Swaying talismans and bronze bells under the lintel.
+      const bell=cone(side*2.05,4.55,0,.36,.34,.14,bronzeMat,10);bell.isPickable=false;
+    }
+    for(let i=0;i<3;i++)cone(0,6.85+i*.32,0,.3,.42-i*.1,.32-i*.1,gold,8);
+    cone(0,7.85,0,1.0,.2,0,gold,6);
+    const strips=[];
+    for(let i=0;i<5;i++){
+      const strip=box(-1.2+i*.6,4.2,.12,.24,1.05,.02,i%2?clothRed:talismanPaper);
+      strip.setPivotPoint(new B.Vector3(0,.5,0));strips.push(strip);
+    }
+    // Swirling spirit vortex filling the arch, two layers turning apart.
+    const veilA=B.MeshBuilder.CreatePlane("spirit vortex",{width:3.36,height:4.0,sideOrientation:B.Mesh.DOUBLESIDE},scene);part(veilA,0,2.55,0,vortexA);
+    const veilB=B.MeshBuilder.CreatePlane("phantom vortex",{width:3.36,height:4.0,sideOrientation:B.Mesh.DOUBLESIDE},scene);part(veilB,0,2.55,-.04,vortexB);
+    // Tap target covering the whole gate.
+    const hit=box(0,2.6,0,4.4,5.2,1.6,gateStone);hit.visibility=.004;hit.isPickable=true;hit.metadata={portalId:info.id};
+    // Incantation syllables orbiting the gate.
+    const glyphs=glyphMats.map(material=>{const g=B.MeshBuilder.CreatePlane("orbit glyph",{size:.62},scene);part(g,0,0,0,material);g.billboardMode=B.Mesh.BILLBOARDMODE_ALL;return g;});
+    // Rising wisps.
+    const wisps=new B.ParticleSystem("gate wisps",60,scene);
+    wisps.particleTexture=motes.particleTexture;wisps.emitter=new B.Vector3(info.x,.6,info.z);
+    wisps.minEmitBox=new B.Vector3(-1.5,0,-.4);wisps.maxEmitBox=new B.Vector3(1.5,.3,.4);
+    wisps.color1=new B.Color4(.55,1,.88,.75);wisps.color2=new B.Color4(.7,.6,1,.6);wisps.colorDead=new B.Color4(.3,.5,.6,0);
+    wisps.minSize=.25;wisps.maxSize=.7;wisps.minLifeTime=1.6;wisps.maxLifeTime=3.2;wisps.emitRate=12;
+    wisps.direction1=new B.Vector3(-.15,1,-.1);wisps.direction2=new B.Vector3(.15,1,.1);wisps.minEmitPower=.5;wisps.maxEmitPower=1.1;
+    wisps.blendMode=B.ParticleSystem.BLENDMODE_ADD;wisps.start();
     const labelTexture=new B.DynamicTexture("portal-label-"+mapId,{width:512,height:128},scene,false);
     labelTexture.hasAlpha=true;
-    labelTexture.drawText(override ? (worldDefinitions?.[override.targetMapId]?.name || override.targetMapId) : (mapId==="ritual_village" ? "ป่าต้องห้าม" : "หมู่บ้านอาคม"),null,78,"bold 50px sans-serif","#effff4","transparent",true);
+    const ink=labelTexture.getContext();ink.font="bold 46px sans-serif";ink.textAlign="center";ink.lineJoin="round";
+    const text=override ? (worldDefinitions?.[override.targetMapId]?.name || override.targetMapId) : (mapId==="ritual_village" ? "ป่าต้องห้าม" : "หมู่บ้านอาคม");
+    ink.lineWidth=9;ink.strokeStyle="rgba(4,14,14,.92)";ink.strokeText(text,256,80,490);
+    ink.shadowColor="#5fffe0";ink.shadowBlur=16;ink.fillStyle="#dcfff6";ink.fillText(text,256,80,490);labelTexture.update();
     const labelMat=new B.StandardMaterial("portal-label-mat-"+mapId,scene);
     labelMat.diffuseTexture=labelTexture;labelMat.opacityTexture=labelTexture;
     labelMat.emissiveColor=B.Color3.White();labelMat.disableLighting=true;labelMat.backFaceCulling=false;
-    const label=B.MeshBuilder.CreatePlane("portal-label",{width:override?7.8:3.6,height:override?1.7:.9},scene);
-    label.position.set(info.x,override?6.4:3.9,info.z);label.billboardMode=B.Mesh.BILLBOARDMODE_ALL;
-    label.material=labelMat;label.isPickable=false;if(parent)label.parent=parent;
-    if(override)expansionResources.push(labelTexture,labelMat);
-    else if(!parent) villageMeshes.push(label);
-    return ring;
+    const label=B.MeshBuilder.CreatePlane("portal-label",{width:override?7.2:5.2,height:override?1.8:1.3},scene);
+    part(label,0,9.1,0,labelMat);label.billboardMode=B.Mesh.BILLBOARDMODE_ALL;
+    if(override)expansionResources.push(labelTexture,labelMat,wisps);
+    portalFx.push({root,strips,glyphs,wisps,seed:info.x*.37+info.z*.11});
+    return root;
+  }
+  function animatePortals(elapsed,dt){
+    spiralA.wAng-=dt*1.1;spiralB.wAng+=dt*.7;
+    portalYantraMat.alpha=.75+Math.sin(elapsed*2.2)*.25;
+    for(let i=portalFx.length-1;i>=0;i--){
+      const fx=portalFx[i];
+      if(fx.root.isDisposed()){portalFx.splice(i,1);continue;}
+      const on=fx.root.isEnabled();fx.wisps.emitRate=on?12:0;if(!on)continue;
+      const t=elapsed+fx.seed;
+      fx.glyphs.forEach((g,k)=>{const a=t*.55+k*Math.PI*2/fx.glyphs.length;g.position.set(Math.cos(a)*2.7,2.7+Math.sin(t*1.3+k)*.45,Math.sin(a)*1.5);});
+      fx.strips.forEach((strip,k)=>{strip.rotation.z=Math.sin(t*1.7+k*.9)*.14;strip.rotation.x=Math.sin(t*1.2+k)*.1;});
+    }
+  }
+  // Rest wards: a white sacred cord (sai sin) strung on stakes, with talismans.
+  const sacredCord=mat("sai sin cord","#efe9d6","#3a372c");
+  function sacredCordWard(cx,cz,radius,parent){
+    const parts=[],posts=Math.max(10,Math.round(radius*2.6));
+    const point=k=>[cx+Math.cos(k/posts*Math.PI*2)*radius,cz+Math.sin(k/posts*Math.PI*2)*radius];
+    for(let k=0;k<posts;k++){
+      const [x,z]=point(k),[nx,nz]=point(k+1);
+      const stake=B.MeshBuilder.CreateCylinder("ward stake",{height:.8,diameter:.1,tessellation:5},scene);
+      stake.position.set(x,.4,z);stake.material=darkWood;parts.push(stake);
+      const cord=B.MeshBuilder.CreateBox("sai sin",{width:Math.hypot(nx-x,nz-z),height:.035,depth:.035},scene);
+      cord.position.set((x+nx)/2,.66,(z+nz)/2);cord.rotation.y=-Math.atan2(nz-z,nx-x);cord.material=sacredCord;parts.push(cord);
+      if(k%3===0){const tag=B.MeshBuilder.CreateBox("ward talisman",{width:.18,height:.3,depth:.02},scene);
+        tag.position.set(x,.48,z);tag.rotation.y=-Math.atan2(nz-z,nx-x);tag.material=talismanPaper;parts.push(tag);}
+    }
+    const byMaterial=new Map();
+    for(const m of parts){m.isPickable=false;if(!byMaterial.has(m.material))byMaterial.set(m.material,[]);byMaterial.get(m.material).push(m);}
+    for(const group of byMaterial.values()){const merged=B.Mesh.MergeMeshes(group,true,true);if(merged){merged.isPickable=false;merged.parent=parent;}}
   }
   const villagePortal=makePortal("ritual_village");
   const forestPortal=makePortal("forbidden_forest",forestRoot);forestRoot.setEnabled(false);
@@ -1269,11 +1485,7 @@
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
     const map=worldDefinitions?.[activeMapId];if(!map)return;
-    for(const path of map.paths||[])for(let i=1;i<path.length;i++){
-      const a=path[i-1],b=path[i],dx=b.x-a.x,dz=b.z-a.z;
-      const road=cube("forest trail",[(a.x+b.x)/2,-.025,(a.z+b.z)/2],[4,.08,Math.hypot(dx,dz)+1],inTemple ? templePaving : forestPath);
-      road.parent=expansionRoot;road.rotation.y=Math.atan2(dx,dz);
-    }
+    (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i));
     for(const camp of map.camps||[]){
       const clearing=inTemple ? B.MeshBuilder.CreateGround("temple court",{width:21,height:19},scene) : B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
       // Between the soil (-.12) and trail tops (+.015), so their colors never
@@ -1284,9 +1496,8 @@
       expansionLabel(camp.name+" · Lv "+Math.min(...camp.levels)+"–"+Math.max(...camp.levels),camp.x,camp.z);
     }
     for(const area of map.restAreas||[]){
-      const ring=B.MeshBuilder.CreateTorus("rest boundary",{diameter:area.radius*2,thickness:.15,tessellation:48},scene);
-      ring.parent=expansionRoot;ring.position.set(area.x,.08,area.z);ring.material=portalMat;ring.isPickable=false;
-      yantraDisc(area.x,area.z,area.radius,restYantraMat,expansionRoot,.045);
+      sacredCordWard(area.x,area.z,area.radius,expansionRoot);
+      if(!map.portals.some(p=>Math.hypot(p.x-area.x,p.z-area.z)<3))yantraDisc(area.x,area.z,area.radius,restYantraMat,expansionRoot,.045);
       if(!map.portals.some(p=>Math.hypot(p.x-area.x,p.z-area.z)<3))expansionLabel(area.name,area.x,area.z,10);
     }
     if(activeMapId==="forbidden_forest"){
@@ -3145,7 +3356,7 @@
       // Trails: dark verge, packed earth, faint centre line.
       const trail = (width_, color) => {
         ctx.strokeStyle = color; ctx.lineWidth = width_; ctx.lineCap = "round"; ctx.lineJoin = "round";
-        for (const path of map?.paths || []) { ctx.beginPath(); path.forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
+        for (const path of map?.paths || []) { ctx.beginPath(); smoothPath(path).forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
       };
       if (activeMapId === "forbidden_forest") { ctx.fillStyle = "#4a3f2e"; ctx.fillRect(sx(-2.5), sy(-20), 5 * scale, 40 * scale); }
       trail(Math.max(3, 5.5 * scale), "rgba(10,8,6,.55)");
@@ -3198,10 +3409,15 @@
       } else mapDot(ctx, x, y, large ? 3.2 : 1.8, "#f1786c", "rgba(40,6,6,.9)");
     });
     for (const portal of activePortals()) {
-      const x = sx(portal.x), y = sy(portal.z), r = large ? 7 : 4.2;
-      ctx.shadowColor = "#5fffe0"; ctx.shadowBlur = r * 2.2;
-      ctx.strokeStyle = "#9ffbe8"; ctx.lineWidth = large ? 2.4 : 1.6; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
-      ctx.shadowBlur = 0; mapDot(ctx, x, y, r * .38, "#d8fff6", "rgba(0,0,0,0)");
+      // Spirit gate glyph: pointed arch over a plinth.
+      const x = sx(portal.x), y = sy(portal.z), r = large ? 7.5 : 4.6;
+      ctx.beginPath(); ctx.moveTo(x - r * .75, y + r * .8); ctx.lineTo(x - r * .75, y - r * .1);
+      ctx.quadraticCurveTo(x - r * .75, y - r * .8, x, y - r * 1.25); ctx.quadraticCurveTo(x + r * .75, y - r * .8, x + r * .75, y - r * .1);
+      ctx.lineTo(x + r * .75, y + r * .8); ctx.closePath();
+      ctx.shadowColor = "#5fffe0"; ctx.shadowBlur = r * 2;
+      ctx.fillStyle = "rgba(95,255,224,.35)"; ctx.fill();
+      ctx.strokeStyle = "#c9fff2"; ctx.lineWidth = large ? 2.2 : 1.4; ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.fillStyle = "#e8c06a"; ctx.fillRect(x - r, y + r * .8, r * 2, Math.max(1.5, r * .22));
     }
     if (marker.isEnabled()) {
       ctx.strokeStyle = "#ffe2a1"; ctx.lineWidth = 1.8; ctx.setLineDash([3, 2]);
@@ -3975,8 +4191,7 @@
     enemy.scaling.y = hitFlashRemaining > 0 ? 1.3 : 1.1;
     if(spirit && me) { spirit.position.set(me.x-1.2,1.5+Math.sin(elapsed*3)*.2,me.z+.8); }
     marker.rotation.z+=dt*.2;
-    const pulse=1+Math.sin(elapsed*2.5)*.04;
-    villagePortal.scaling.setAll(pulse);forestPortal.scaling.setAll(pulse);
+
     // Maps are 2D canvases with soft shadows: ~10 redraws per second is plenty.
     if(now-lastMapDraw>100){
       lastMapDraw=now;
@@ -3996,10 +4211,7 @@
     // The horizon only enters the portrait frustum at shallow camera tilts.
     sky.setEnabled(camera.beta > 1.05);
     motes.emitter.copyFrom(camera.target);
-    for (let i = yantraDiscs.length - 1; i >= 0; i--) {
-      if (yantraDiscs[i].isDisposed()) yantraDiscs.splice(i, 1);
-      else yantraDiscs[i].rotation.y += dt * (yantraDiscs[i].material === portalYantraMat ? .5 : .08);
-    }
+    animatePortals(elapsed, dt);
     if (me) warm.position.set(me.x, me.y + 3.4, me.z + .6);
     scene.render();
   });
