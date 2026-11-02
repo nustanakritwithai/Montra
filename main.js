@@ -149,7 +149,7 @@
   moon.intensity = .85;
   moon.diffuse = B.Color3.FromHexString("#c9dacc");
   moon.groundColor = B.Color3.FromHexString("#617362");
-  const keyLight = new B.DirectionalLight("canopy light", new B.Vector3(-.8, -1, -.3), scene); // moon high to the right: shadows fall left and away, in view of the camera
+  const keyLight = new B.DirectionalLight("canopy light", new B.Vector3(-1.0, -1, -.38), scene); // moon to the right, a little low: long shadows that fall left and away, in view of the camera: shadows fall left and away, in view of the camera
   keyLight.diffuse = B.Color3.FromHexString("#f6e3c5");
   keyLight.intensity = .45;
   const warm = new B.PointLight("lantern glow", new B.Vector3(0, 4, 3), scene);
@@ -172,8 +172,15 @@
   else shadowGen.usePoissonSampling = true;
   shadowGen.bias = .0016; shadowGen.normalBias = .025; shadowGen.darkness = 0;
   keyLight.shadowEnabled = shadowPref !== "off";
+  // Coverage follows the zoom: tight and crisp up close, wide at the far camera.
+  let shadowHalf = SHADOW_HALF;
   function followShadow(target) {
-    const d = keyLight.direction.normalizeToNew(), snap = SHADOW_HALF * 2 / SHADOW_SIZE;
+    const want = Math.max(20, Math.min(48, camera.radius * .52));
+    if (Math.abs(want - shadowHalf) > 2) {
+      shadowHalf = want;
+      keyLight.orthoLeft = keyLight.orthoBottom = -shadowHalf; keyLight.orthoRight = keyLight.orthoTop = shadowHalf;
+    }
+    const d = keyLight.direction.normalizeToNew(), snap = shadowHalf * 2 / SHADOW_SIZE;
     const x = Math.round(target.x / snap) * snap, z = Math.round(target.z / snap) * snap;
     keyLight.position.set(x - d.x * SHADOW_DIST, target.y - d.y * SHADOW_DIST, z - d.z * SHADOW_DIST);
   }
@@ -220,8 +227,9 @@
     l.range = 11; l.intensity = 0; l.specular = new B.Color3(.08, .06, .04); l.metadata = { spot: null, level: 0 };
     return l;
   });
-  // Hemi + key + carried lantern + the pool.
-  scene.onNewMaterialAddedObservable.add(m => { if ("maxSimultaneousLights" in m) m.maxSimultaneousLights = 3 + LANTERN_POOL; });
+  // Hemi + key + carried lantern + the pool + the strike flash.
+  const MAX_LIGHTS = 4 + LANTERN_POOL;
+  scene.onNewMaterialAddedObservable.add(m => { if ("maxSimultaneousLights" in m) m.maxSimultaneousLights = MAX_LIGHTS; });
   let lanternPick = 0;
   function updateLanternLights(target, dt, t) {
     if ((lanternPick -= dt) <= 0) {
@@ -255,6 +263,20 @@
     blob.parent = parent; blob.position.y = .035; blob.material = contactMat; blob.isPickable = false; blob.metadata = { noShadow: true };
     return blob;
   }
+  let aoMat = null;
+  function baseOcclusionMat() {
+    if (!aoMat) {
+      aoMat = new B.StandardMaterial("base occlusion", scene);
+      aoMat.diffuseColor = aoMat.specularColor = B.Color3.Black(); aoMat.disableLighting = true;
+      aoMat.opacityTexture = paintTexture("base occlusion", 64, (c, s) => {
+        const g = c.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+        g.addColorStop(0, "rgba(255,255,255,.5)"); g.addColorStop(.6, "rgba(255,255,255,.32)"); g.addColorStop(1, "rgba(255,255,255,0)");
+        c.clearRect(0, 0, s, s); c.fillStyle = g; c.fillRect(0, 0, s, s);
+      });
+      aoMat.opacityTexture.hasAlpha = true;
+    }
+    return aoMat;
+  }
 
   function mat(name, hex, emissive) {
     const m = new B.StandardMaterial(name, scene);
@@ -283,6 +305,64 @@
   }
   // Deterministic noise keeps every client's scenery identical.
   const noise = (i, seed = 0) => { const v = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return v - Math.floor(v); };
+  // ---- Colour grading ----
+  // Filmic (ACES) tone mapping keeps lantern and spell highlights from
+  // clipping; a little contrast and a cool vignette pull the eye to the
+  // middle of the portrait frame. Applied inside the material shaders, so
+  // there is no extra post-process pass.
+  const grade = scene.imageProcessingConfiguration;
+  grade.toneMappingEnabled = true; grade.toneMappingType = B.ImageProcessingConfiguration.TONEMAPPING_ACES;
+  grade.exposure = 1.4; grade.contrast = 1.16;
+  grade.vignetteEnabled = true; grade.vignetteWeight = 1.8; grade.vignetteStretch = .35; grade.vignetteCameraFov = .69;
+  grade.vignetteColor = new B.Color4(.02, .05, .08, 0); grade.vignetteBlendMode = B.ImageProcessingConfiguration.VIGNETTEMODE_MULTIPLY;
+  // ---- Drifting cloud shadows ----
+  // Soft dark patches slide across the ground below the moon, and the moon
+  // light dims a little while one passes over the camera target.
+  const cloudTexture = paintTexture("cloud shadows", 256, (c, s) => {
+    c.clearRect(0, 0, s, s);
+    for (let i = 0; i < 9; i++) for (const ox of [-s, 0, s]) for (const oy of [-s, 0, s]) {
+      const x = noise(i, 701) * s + ox, y = noise(i, 702) * s + oy, r = s * (.12 + noise(i, 703) * .16);
+      const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, "rgba(255,255,255,.55)"); g.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = g; c.fillRect(0, 0, s, s);
+    }
+  });
+  cloudTexture.hasAlpha = true; cloudTexture.uScale = cloudTexture.vScale = 2.2;
+  const cloudMat = new B.StandardMaterial("cloud shadows", scene);
+  cloudMat.diffuseColor = cloudMat.specularColor = B.Color3.Black(); cloudMat.disableLighting = true;
+  cloudMat.opacityTexture = cloudTexture; cloudMat.alpha = .42; cloudMat.backFaceCulling = false;
+  const cloudLayer = B.MeshBuilder.CreateGround("cloud shadows", { width: 220, height: 220 }, scene);
+  cloudLayer.material = cloudMat; cloudLayer.isPickable = false; cloudLayer.metadata = { noShadow: true };
+  let cloudCover = 0;
+  function driftClouds(target, elapsed) {
+    // Snapped to whole texture tiles so the pattern stays put on the ground while the layer follows the camera.
+    const tile = 220 / cloudTexture.uScale, gx = Math.round(target.x / tile) * tile, gz = Math.round(target.z / tile) * tile;
+    cloudLayer.position.set(gx, .07, gz);
+    const u = elapsed * .0045, v = elapsed * .0021;
+    cloudTexture.uOffset = u; cloudTexture.vOffset = v; // tile-snapped, so the pattern stays fixed on the ground
+    // Cover over the target from the same noise blobs (approximate, smooth).
+    const want = .5 + .5 * Math.sin(elapsed * .09) * Math.sin(elapsed * .041 + 1.3);
+    cloudCover += (want - cloudCover) * .02;
+    cloudLayer.visibility = atmosphere.skyLevel === 0 ? 0 : 1; // no sky in the naga cavern
+  }
+  // ---- Strike light ----
+  // One extra point light flashes at a character on every attack, spell and
+  // summon, tinted to the move, so combat lights up the scene around it.
+  const strikeLight = new B.PointLight("strike flash", new B.Vector3(0, -40, 0), scene);
+  strikeLight.range = 9; strikeLight.intensity = 0; strikeLight.specular = new B.Color3(.2, .18, .14);
+  const STRIKE_TINTS = { cast: "#7fe8ff", summon: "#ff8a3a", smash: "#8ff5df", stab: "#cfd8ff", drink: "#ff6a6a", arrive: "#7ff5e0", rally: "#ffd27a", dance: "#ffb05a", guard: "#e8f0ff" };
+  let strike = { until: 0, start: 0, peak: 0 };
+  function flashStrike(a, type) {
+    if (!a?.node || Math.hypot(a.x - camera.target.x, a.z - camera.target.z) > 40) return;
+    strikeLight.diffuse = B.Color3.FromHexString(STRIKE_TINTS[type] || "#ffc070");
+    strikeLight.position.set(a.x, (a.y || 0) + 1.6, a.z);
+    const now = performance.now(), long = type === "summon" || type === "dance" || type === "rally";
+    strike = { start: now + (long ? 150 : 120), until: now + (long ? 900 : 380), peak: type === "cast" || type === "summon" ? 1.9 : 1.4 };
+  }
+  function updateStrikeLight(now) {
+    if (now > strike.until) { strikeLight.intensity = 0; return; }
+    const k = (now - strike.start) / (strike.until - strike.start);
+    strikeLight.intensity = k < 0 ? 0 : strike.peak * Math.pow(1 - k, 1.6);
+  }
   groundMat.diffuseTexture = paintTexture("village earth", 256, (c, s) => {
     c.fillStyle = "#c9c4b4"; c.fillRect(0, 0, s, s);
     for (let i = 0; i < 420; i++) {
@@ -2357,6 +2437,12 @@
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
     const map=worldDefinitions?.[activeMapId];if(!map)return;
     for(const p of map.portals||[])addLightSpot(p.x,2.6,p.z,"#7ff5e0",1.25);
+    // Soft occlusion where trees, rocks, buildings and walls meet the ground.
+    {const ao=[];
+      for(const o of map.obstacles||[])ao.push([o.x,o.z,o.radius*2.7,o.radius*2.7]);
+      for(const w of map.walls||[])ao.push([w.x+w.width/2,w.z+w.length/2,w.width+2.2,w.length+2.2]);
+      const parts=ao.map(([x,z,w,l])=>{const g=B.MeshBuilder.CreateGround("base occlusion",{width:w,height:l},scene);g.position.set(x,.03,z);return g;});
+      if(parts.length){const mesh=B.Mesh.MergeMeshes(parts,true,true);mesh.parent=expansionRoot;mesh.material=baseOcclusionMat();mesh.isPickable=false;mesh.metadata={noShadow:true};}}
     (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic)));
     for(const camp of map.camps||[]){
       const clearing=inTemple ? B.MeshBuilder.CreateGround("temple court",{width:21,height:19},scene) : B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
@@ -2906,7 +2992,7 @@
   let shamanBody = null;
   if (B.SceneLoader?.IsPluginForExtensionAvailable?.(".glb")) {
     B.SceneLoader.LoadAssetContainerAsync("./assets/characters/", "thai-male.glb", scene).then(container => {
-      for (const m of container.materials) { if ("metallic" in m) { m.environmentIntensity = 0; m.directIntensity = 1.5; m.metallic = 0; } m.maxSimultaneousLights = 3 + LANTERN_POOL; }
+      for (const m of container.materials) { if ("metallic" in m) { m.environmentIntensity = 0; m.directIntensity = 1.5; m.metallic = 0; } m.maxSimultaneousLights = MAX_LIGHTS; }
       shamanBody = container;
       shamanWaiting.splice(0).forEach(attachShamanModel);
       ghostWaiting.splice(0).forEach(build => build());
@@ -3070,6 +3156,7 @@
     const now = performance.now();
     a.action = { type, start: now, end: now + ACTIONS[type].dur * 1000 };
     if (type === "twin") a.action.side = (a.twinFlip = !a.twinFlip) ? 1 : -1; // alternate right / left blade
+    if (type !== "hit" && type !== "rise") flashStrike(a, type);
     if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
   }
   // A sword skill's motion follows its effect type in the server catalog,
@@ -8552,6 +8639,8 @@
     scene.fogEnd = camera.radius + atmosphere.fogFar;
     driftMist(elapsed, camera.target);
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
+    driftClouds(camera.target, elapsed); updateStrikeLight(performance.now());
+    keyLight.intensity = atmosphere.keyI * 1.65 * (1 - .22 * cloudCover);
     if ((shadowSyncIn -= dt) <= 0) { shadowSyncIn = .5; syncShadowLists(); }
     rippleTexture.vOffset = (rippleTexture.vOffset + dt * .025) % 1;
     riverRipple.uOffset = (riverRipple.uOffset + dt * .012) % 1;
