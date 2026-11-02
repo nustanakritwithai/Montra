@@ -14,7 +14,8 @@
 import { FORT } from "./HeightRules.js";
 import { RULES, type Vec2 } from "./GameRules.js";
 
-export type WallRect = { x: number; z: number; width: number; length: number };
+import {segmentIntersectsExpandedWall,type WorldWall} from "./WorldMaps.js";
+export type WallRect = WorldWall;
 export type NavigationBounds = { minX: number; maxX: number; minZ: number; maxZ: number };
 export type RRTPathResult = {
   path: Vec2[];
@@ -43,7 +44,6 @@ export const MONSTER_WALLS: readonly WallRect[] = Object.freeze([Object.freeze({
   width: FORT.width, length: FORT.length,
 })]);
 
-const EPS=1e-8;
 const sqDist=(a:Vec2,b:Vec2) => (a.x-b.x)**2+(a.z-b.z)**2;
 export const distanceXZ=(a:Vec2,b:Vec2) => Math.hypot(a.x-b.x,a.z-b.z);
 
@@ -71,29 +71,6 @@ export function isMonsterFree(
     point.x>=w.x-radius&&point.x<=w.x+w.width+radius&&
     point.z>=w.z-radius&&point.z<=w.z+w.length+radius
   );
-}
-
-function segmentIntersectsExpandedWall(
-  a:Vec2,b:Vec2,w:WallRect,radius:number,
-):boolean {
-  const minX=w.x-radius,maxX=w.x+w.width+radius;
-  const minZ=w.z-radius,maxZ=w.z+w.length+radius;
-  const dx=b.x-a.x,dz=b.z-a.z;
-  let entry=0,exit=1;
-
-  for(const [start,delta,low,high] of [
-    [a.x,dx,minX,maxX],[a.z,dz,minZ,maxZ],
-  ]) {
-    if(Math.abs(delta)<EPS) {
-      if(start<low||start>high)return false;
-      continue;
-    }
-    const t1=(low-start)/delta,t2=(high-start)/delta;
-    entry=Math.max(entry,Math.min(t1,t2));
-    exit=Math.min(exit,Math.max(t1,t2));
-    if(entry>exit)return false;
-  }
-  return entry<=1&&exit>=0;
 }
 
 /** Swept collision: no waypoint smoothing can cut through a wall. */

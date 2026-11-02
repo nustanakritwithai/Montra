@@ -47,6 +47,7 @@ $files = @(
   @{ Name = "DashRules.ts"; Target = "src\rooms\DashRules.ts"; Check = "advanceDash" },
   @{ Name = "HeightRules.ts"; Target = "src\rooms\HeightRules.ts"; Check = "flightLandingHeight" },
   @{ Name = "ForestEncounters.ts"; Target = "src\rooms\ForestEncounters.ts"; Check = "ForestEncounters" },
+  @{ Name = "TempleMap.ts"; Target = "src\rooms\TempleMap.ts"; Check = "TEMPLE_MAP" },
   @{ Name = "WorldMaps.ts"; Target = "src\rooms\WorldMaps.ts"; Check = "DEFAULT_MAP_ID" },
   @{ Name = "WarpRules.ts"; Target = "src\rooms\WarpRules.ts"; Check = "checkWarp" },
   @{ Name = "ChatRules.ts"; Target = "src\rooms\ChatRules.ts"; Check = "parseChatMessage" },

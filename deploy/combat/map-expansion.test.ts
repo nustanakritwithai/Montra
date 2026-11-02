@@ -42,9 +42,10 @@ test("saved locations beyond the old boundary remain in the same map", () => {
 });
 test("17 independent enemies have valid spawn points outside rest zones", () => {
   const state=new MyRoomState(),forest=new ForestEncounters(state.monsters);forest.initialize();
-  assert.equal(state.monsters.size,17);
+  assert.equal([...state.monsters.values()].filter(m=>m.mapId==="forbidden_forest").length,17);
   const map=getWorldMap("forbidden_forest")!;
   for(const m of state.monsters.values()){
+    if(m.mapId!==map.id)continue;
     assert.ok(isSafeWorldPoint(map,m));assert.equal(isRestArea(m.mapId,m),false);
     assert.ok(m.level>=1&&m.level<=12);
   }

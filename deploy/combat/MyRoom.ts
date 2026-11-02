@@ -30,6 +30,7 @@ import {
 } from "./MonsterRRT.js";
 import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.js";
 import type { CharacterSnapshot } from "./CharacterStore.js";
+import { TEMPLE_ID } from "./TempleMap.js";
 import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
 import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
@@ -82,6 +83,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastAttackMs = new Map<string, number>();
   private lastCombatMs = new Map<string, number>();
   private lastWarpMs = new Map<string, number>();
+  private templeClients = new Set<string>();
   private pendingWarps = new Set<string>();
   private statAllocations = new Map<string, Allocations>();
   private pendingRewards = new Map<string, Promise<void>>();
@@ -403,6 +405,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const snapshot = this.captureCharacterSnapshot(id);
       if (!snapshot) return this.reject(client, "character_not_persistent");
       const portal = result.portal;
+      if(portal.targetMapId===TEMPLE_ID && !this.templeClients.has(id))return this.reject(client,"world_client_update_required");
       const destination = { ...snapshot, mapId: portal.targetMapId, ...portal.targetSpawn,
         updatedAt: new Date().toISOString() };
       // Freeze the actor during disk I/O. All other save paths wait for this
@@ -909,6 +912,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // Guard's combat tether prevents hits across the map even if another
       // client sends a valid but distant target ID.
       if (distance3d(owner, target) > RULES.summonEngageDistance) continue;
+      if(owner.mapId===TEMPLE_ID && !isWorldSegmentClear(owner.mapId,owner,target))continue;
       return { targetId, target };
     }
     return null;
@@ -1635,6 +1639,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const allocations = saved?.statAllocations ?? emptyAllocations();
       const initialStats = calculateStats(saved?.level ?? 1, allocations);
       const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
+      const templeReady=(options as {templeVersion?:unknown}|undefined)?.templeVersion===1;
+      if(mapId===TEMPLE_ID && !templeReady)throw new Error("world_client_update_required");
       const map = getWorldMap(mapId);
       if (!map) throw new Error("unknown_character_map");
       // A saved location is restored only if the current server geometry allows it.
@@ -1664,6 +1670,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.statAllocations.set(client.sessionId, allocations);
       this.applyStats(player, allocations);
       this.state.players.set(client.sessionId, player);
+      if(templeReady)this.templeClients.add(client.sessionId);
       if (characterId && accountId && token) {
         if (!saved?.inventory) throw new Error("inventory_migration_missing");
         this.persistentCharacters.set(client.sessionId, characterId);
@@ -1697,6 +1704,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    this.templeClients.delete(id);
     this.leaveParty(id);
     for (const trade of this.trades.values()) if (trade.a===id || trade.b===id) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }
     const accountId = this.activeGuestAccounts.get(id);

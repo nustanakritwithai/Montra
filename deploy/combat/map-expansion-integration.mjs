@@ -27,7 +27,7 @@ try{
    for(const slot of [1,2,3])await seed(token(1),'forbidden_forest',30+slot,-40,slot);
    await seed(token(2),'ritual_village',0,0);await seed(token(3),'forbidden_forest',-33,-20);await seed(token(4),'ritual_village',2,0);
    const a=await open(token(1)),b=await open(token(2),a.roomId),c=await open(token(3),a.roomId),d=await open(token(4),a.roomId);
-   await until(()=>a.state.monsters?.size===17 && a.state.players.size===4,'all four clients and 17 forest enemies');
+   await until(()=>a.state.monsters && [...a.state.monsters.values()].filter(m=>m.mapId==='forbidden_forest').length===17 && a.state.players.size===4,'all four clients and 17 forest enemies');
    const manifest=JSON.parse(a.state.worldDefinition);assert.equal(manifest.maps.forbidden_forest.bounds.maxX,60);
    const rejects=[];b.onMessage('command_rejected',e=>rejects.push(e.reason));
    b.send('attack',{targetId:d.sessionId});await until(()=>rejects.includes('target_unavailable'),'safe town rejects PK');

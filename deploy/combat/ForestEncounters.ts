@@ -1,17 +1,21 @@
 import { Monster, type MyRoomState, type Player } from "./schema/MyRoomState.js";
-import { FOREST_CAMPS, SHRINE_GUARDIAN, WORLD_EXPANSION, getWorldMap, isRestArea } from "./WorldMaps.js";
+import { TEMPLE_MAP, TEMPLE_SPAWNS } from "./TempleMap.js";
+import { type WorldMapDefinition, type WorldWall, FOREST_CAMPS, SHRINE_GUARDIAN, WORLD_EXPANSION, getWorldMap, isRestArea } from "./WorldMaps.js";
 import { facingTo, planarDistance, stepTowards } from "./GameRules.js";
 import { MonsterRRTNavigator, isMonsterSegmentClear, MONSTER_NAV } from "./MonsterRRT.js";
 import { isOnGround } from "./HeightRules.js";
 import { FOREST_MONSTER_TIERS, MONSTER_CONFIG, monsterProfile, monsterRespawnDelay, type MonsterProfile, type MonsterTier } from "./MonsterProfiles.js";
 
 export const FOREST_RESPAWN_MS = MONSTER_CONFIG.respawnMs;
-type Life = {windupUntil:number; nextChargeAt:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; nav:MonsterRRTNavigator};
+type Navigation = {map:WorldMapDefinition; obstacles:WorldWall[]};
+type Life = {zone:Navigation; windupUntil:number; nextChargeAt:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; nav:MonsterRRTNavigator};
 /** Bounded population, independent clocks and server-owned AI; no player-selected stats. */
 export class ForestEncounters {
   private lives = new Map<string,Life>();
-  private map = getWorldMap("forbidden_forest")!;
-  private obstacles = this.map.obstacles.map(o=>({x:o.x-o.radius,z:o.z-o.radius,width:o.radius*2,length:o.radius*2}));
+  private navigation(map:WorldMapDefinition): Navigation {
+    const trees=map.obstacles.map(o=>({x:o.x-o.radius,z:o.z-o.radius,width:o.radius*2,length:o.radius*2}));
+    return {map,obstacles:[...trees,...(map.walls ?? [])]};
+  }
   constructor(private monsters: MyRoomState["monsters"], private tiers:Readonly<Record<string,MonsterTier>> = FOREST_MONSTER_TIERS) {}
   initialize():void {
     if(!WORLD_EXPANSION)return;
@@ -22,19 +26,23 @@ export class ForestEncounters {
       x: camp.x + offsets[i][0], z: camp.z + offsets[i][1],
     })));
     const spawnIds = new Set(normalSpawns.map(spawn => spawn.id));
-    if (normalSpawns.length + 2 > MONSTER_CONFIG.maxSpawnPointsPerRoom) throw new Error("monster_spawn_cap_exceeded");
+    if (normalSpawns.length + TEMPLE_SPAWNS.length + 2 > MONSTER_CONFIG.maxSpawnPointsPerRoom) throw new Error("monster_spawn_cap_exceeded");
     for (const [id, tier] of Object.entries(this.tiers)) {
       if (!spawnIds.has(id)) throw new Error("unknown_monster_spawn_tier");
       monsterProfile(1, tier);
     }
-    for (const spawn of [...normalSpawns, SHRINE_GUARDIAN]) {
+    const forest=this.navigation(getWorldMap("forbidden_forest")!);
+    const temple=this.navigation(TEMPLE_MAP);
+    const spawns=[...[...normalSpawns,SHRINE_GUARDIAN].map(spawn=>({spawn,zone:forest})),
+      ...TEMPLE_SPAWNS.map(spawn=>({spawn,zone:temple}))];
+    for (const {spawn,zone} of spawns) {
       const {id, x, z, level, name} = spawn;
       const tier = id === SHRINE_GUARDIAN.id ? "elite" : (this.tiers[id] ?? "normal");
       const profile = monsterProfile(level, tier);
       this.monsters.set(id,new Monster({id,x,y:0,z,hp:profile.maxHp,maxHp:profile.maxHp,
-        alive:true,mapId:this.map.id,level,tier,displayName:name,defense:profile.defense}));
-      this.lives.set(id,{x,z,profile,respawnAt:0,lastAttack:-Infinity,returning:false,
-        nextChargeAt:0,windupUntil:0,nav:new MonsterRRTNavigator(this.obstacles,this.map.bounds)});
+        alive:true,mapId:zone.map.id,level,tier,displayName:name,defense:profile.defense}));
+      this.lives.set(id,{zone,x,z,profile,respawnAt:0,lastAttack:-Infinity,returning:false,
+        nextChargeAt:0,windupUntil:0,nav:new MonsterRRTNavigator(zone.obstacles,zone.map.bounds)});
     }
   }
   profile(id:string):MonsterProfile | null { return this.lives.get(id)?.profile ?? null; }
@@ -53,13 +61,16 @@ export class ForestEncounters {
   engaged(id:string):boolean {return [...this.monsters.values()].some(m=>m.alive&&m.targetId===id);}
   update(now:number,dt:number,players:MyRoomState["players"],blocked:ReadonlySet<string>,
     hit:(targetId:string,monster:Monster,force?:number)=>void,respawn:(id:string)=>void):void {
+    const occupied=new Set(Array.from(players.values(),p=>p.mapId));
     for(const [id,life] of this.lives){
+      const {map,obstacles}=life.zone;
       const m=this.monsters.get(id)!;
       if(!m.alive){
         if(now>=life.respawnAt){m.x=life.x;m.z=life.z;m.hp=m.maxHp;m.alive=true;m.aiState="patrol";m.targetId="";
           life.lastAttack=-Infinity;life.returning=false;life.nav.clear();respawn(id);}
         continue;
       }
+      if(!occupied.has(m.mapId))continue;
       const eligible=(pid:string,p:Player|undefined):p is Player=>Boolean(p&&p.alive&&p.mapId===m.mapId&&
         !blocked.has(pid)&&isOnGround(p.y)&&!isRestArea(p.mapId,p));
       if (life.windupUntil > 0) {
@@ -68,7 +79,7 @@ export class ForestEncounters {
         life.windupUntil = 0;
         life.lastAttack = now;
         if (eligible(m.targetId,target) && planarDistance(m,target) <= SHRINE_GUARDIAN.strikeRadius &&
-            isMonsterSegmentClear(m,target,this.obstacles,MONSTER_NAV.radius,this.map.bounds)) hit(m.targetId,m,1.6);
+            isMonsterSegmentClear(m,target,obstacles,MONSTER_NAV.radius,map.bounds)) hit(m.targetId,m,1.6);
         m.aiState="patrol";
         continue;
       }
@@ -83,7 +94,7 @@ export class ForestEncounters {
         if(planarDistance(m,life)<.2){life.returning=false;m.hp=m.maxHp;}}
       else if(target){m.facing=facingTo(target.x-m.x,target.z-m.z);
         if(planarDistance(m,target)<=1.65){m.aiState="attack";
-          if(now-life.lastAttack>=1500&&isMonsterSegmentClear(m,target,this.obstacles,MONSTER_NAV.radius,this.map.bounds)){
+          if(now-life.lastAttack>=1500&&isMonsterSegmentClear(m,target,obstacles,MONSTER_NAV.radius,map.bounds)){
             if(id===SHRINE_GUARDIAN.id && now>=life.nextChargeAt) {
               m.aiState="windup";
               life.windupUntil=now+1400;
@@ -98,7 +109,7 @@ export class ForestEncounters {
       const waypoint=life.nav.nextWaypoint(m,destination,now,m.aiState+":"+m.targetId);
       if(!waypoint)continue;
       const next=stepTowards(m,waypoint,speed*dt);
-      if(!isRestArea(m.mapId,next)&&isMonsterSegmentClear(m,next,this.obstacles,MONSTER_NAV.radius,this.map.bounds)){
+      if(!isRestArea(m.mapId,next)&&isMonsterSegmentClear(m,next,obstacles,MONSTER_NAV.radius,map.bounds)){
         m.facing=facingTo(next.x-m.x,next.z-m.z);m.x=next.x;m.z=next.z;
       }
     }
