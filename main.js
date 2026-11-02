@@ -149,13 +149,112 @@
   moon.intensity = .85;
   moon.diffuse = B.Color3.FromHexString("#c9dacc");
   moon.groundColor = B.Color3.FromHexString("#617362");
-  const keyLight = new B.DirectionalLight("canopy light", new B.Vector3(-.55, -1, .4), scene);
+  const keyLight = new B.DirectionalLight("canopy light", new B.Vector3(-.8, -1, -.3), scene); // moon high to the right: shadows fall left and away, in view of the camera
   keyLight.diffuse = B.Color3.FromHexString("#f6e3c5");
   keyLight.intensity = .45;
   const warm = new B.PointLight("lantern glow", new B.Vector3(0, 4, 3), scene);
   warm.diffuse = B.Color3.FromHexString("#f6b16d");
   warm.intensity = .75;
   warm.range = 15; // follows the local hero like a carried lantern
+  // ---- Moon shadows ----
+  // One shadow map from the moon (key) light, re-centred on the camera target
+  // every frame and snapped to its texel grid so edges do not shimmer. Every
+  // lit mesh receives; anything taller than a kerb casts (see syncShadowLists).
+  // ?shadows=off|on forces it; otherwise it backs off on slow devices.
+  const SHADOW_HALF = 38, SHADOW_SIZE = 1024, SHADOW_DIST = 90;
+  const shadowPref = new URLSearchParams(location.search).get("shadows");
+  keyLight.autoUpdateExtends = false; keyLight.autoCalcShadowZBounds = false;
+  keyLight.shadowMinZ = 1; keyLight.shadowMaxZ = SHADOW_DIST * 2;
+  keyLight.orthoLeft = keyLight.orthoBottom = -SHADOW_HALF; keyLight.orthoRight = keyLight.orthoTop = SHADOW_HALF;
+  keyLight.position = new B.Vector3(0, SHADOW_DIST, 0);
+  const shadowGen = new B.ShadowGenerator(SHADOW_SIZE, keyLight, true);
+  if (engine.webGLVersion >= 2) { shadowGen.usePercentageCloserFiltering = true; shadowGen.filteringQuality = B.ShadowGenerator.QUALITY_LOW; }
+  else shadowGen.usePoissonSampling = true;
+  shadowGen.bias = .0016; shadowGen.normalBias = .025; shadowGen.darkness = 0;
+  keyLight.shadowEnabled = shadowPref !== "off";
+  function followShadow(target) {
+    const d = keyLight.direction.normalizeToNew(), snap = SHADOW_HALF * 2 / SHADOW_SIZE;
+    const x = Math.round(target.x / snap) * snap, z = Math.round(target.z / snap) * snap;
+    keyLight.position.set(x - d.x * SHADOW_DIST, target.y - d.y * SHADOW_DIST, z - d.z * SHADOW_DIST);
+  }
+  let shadowListKey = "", shadowSyncIn = 0;
+  function syncShadowLists() {
+    const key = scene.meshes.length + ":" + activeMapId;
+    if (key === shadowListKey) return;
+    shadowListKey = key;
+    const casters = [];
+    for (const m of scene.meshes) {
+      const mt = m.material;
+      if (!mt || m === sky || m.metadata?.noShadow || m.visibility < .5 || mt.disableLighting || mt.alphaMode === B.Engine.ALPHA_ADD || mistLayers.includes(m)) continue;
+      m.receiveShadows = true;
+      const bb = m.getBoundingInfo?.().boundingBox;
+      if (bb && bb.maximumWorld.y - bb.minimumWorld.y > .35 && !/ground|road|trail|pool|decal|water|label|clearing|court/i.test(m.name)) casters.push(m);
+    }
+    shadowGen.getShadowMap().renderList = casters;
+  }
+  // Slow device: render the shadow map every other frame, then switch it off.
+  const frameWatch = { t: 0, n: 0, slow: 0 };
+  function watchFrameRate(dt) {
+    if (shadowPref) return;
+    frameWatch.t += dt; frameWatch.n++;
+    if (frameWatch.t < 4) return;
+    const fps = frameWatch.n / frameWatch.t; frameWatch.t = frameWatch.n = 0;
+    frameWatch.slow = fps < 22 ? frameWatch.slow + 1 : 0;
+    if (frameWatch.slow >= 2 && keyLight.shadowEnabled) {
+      const map = shadowGen.getShadowMap();
+      if (map.refreshRate === 1) map.refreshRate = 2; else keyLight.shadowEnabled = false;
+      frameWatch.slow = 0;
+    }
+  }
+  // ---- Lantern lights ----
+  // Lamps, braziers and gates register a light spot; a small pool of real
+  // point lights jumps to the spots nearest the camera target and flickers,
+  // so lanterns actually light the ground and the characters walking past.
+  const LANTERN_POOL = 3;
+  const lightSpots = [];
+  function addLightSpot(x, y, z, hex = "#ffae5a", strength = 1) {
+    lightSpots.push({ x, y, z, map: activeMapId, color: B.Color3.FromHexString(hex), strength });
+  }
+  const lanternLights = Array.from({ length: LANTERN_POOL }, (_, i) => {
+    const l = new B.PointLight("lantern light " + i, new B.Vector3(0, -40, 0), scene);
+    l.range = 11; l.intensity = 0; l.specular = new B.Color3(.08, .06, .04); l.metadata = { spot: null, level: 0 };
+    return l;
+  });
+  // Hemi + key + carried lantern + the pool.
+  scene.onNewMaterialAddedObservable.add(m => { if ("maxSimultaneousLights" in m) m.maxSimultaneousLights = 3 + LANTERN_POOL; });
+  let lanternPick = 0;
+  function updateLanternLights(target, dt, t) {
+    if ((lanternPick -= dt) <= 0) {
+      lanternPick = .35;
+      const near = lightSpots.filter(p => p.map === activeMapId && Math.abs(p.x - target.x) < 34 && Math.abs(p.z - target.z) < 34)
+        .sort((a, b) => Math.hypot(a.x - target.x, a.z - target.z) - Math.hypot(b.x - target.x, b.z - target.z)).slice(0, LANTERN_POOL);
+      // Keep lights on spots that stay chosen; free ones move to new spots.
+      const free = lanternLights.filter(l => !near.includes(l.metadata.spot));
+      for (const spot of near) if (!lanternLights.some(l => l.metadata.spot === spot)) { const l = free.shift(); if (l) { l.metadata.spot = spot; l.metadata.level = 0; } }
+      for (const l of free) l.metadata.spot = null;
+    }
+    lanternLights.forEach((l, i) => {
+      const spot = l.metadata.spot;
+      l.metadata.level = Math.min(1, Math.max(0, l.metadata.level + (spot ? dt * 2.5 : -dt * 4)));
+      if (!spot) { l.intensity = 0; return; }
+      l.position.set(spot.x, spot.y, spot.z); l.diffuse.copyFrom(spot.color);
+      const flicker = .88 + Math.sin(t * 9.1 + i * 2) * .06 + Math.sin(t * 23.7 + i) * .04;
+      l.intensity = .95 * spot.strength * flicker * l.metadata.level;
+    });
+  }
+  // Soft contact shadow under every character, so feet sit on the ground
+  // even where the moon shadow falls away or is switched off.
+  let contactMat = null;
+  function contactShadow(parent, size = 1.5) {
+    if (!contactMat) {
+      contactMat = new B.StandardMaterial("contact shadow", scene);
+      contactMat.diffuseColor = contactMat.specularColor = B.Color3.Black(); contactMat.disableLighting = true;
+      contactMat.opacityTexture = radialTexture("contact shadow", 64, [[0, "rgba(255,255,255,.62)"], [.55, "rgba(255,255,255,.3)"], [1, "rgba(255,255,255,0)"]]);
+    }
+    const blob = B.MeshBuilder.CreateGround("contact shadow", { width: size, height: size }, scene);
+    blob.parent = parent; blob.position.y = .035; blob.material = contactMat; blob.isPickable = false; blob.metadata = { noShadow: true };
+    return blob;
+  }
 
   function mat(name, hex, emissive) {
     const m = new B.StandardMaterial(name, scene);
@@ -233,6 +332,7 @@
   const lightPoolMat = additiveMat("lantern light pool", radialTexture("light pool", 128, [
     [0, "rgba(255,176,92,.62)"], [.32, "rgba(255,140,60,.26)"], [1, "rgba(255,110,40,0)"]]));
   function lightPool(x, z, radius, y = .04) {
+    if (radius >= 1.2) addLightSpot(x, 2.2, z, "#ffa65a", Math.min(1.2, radius / 2.2));
     const pool = B.MeshBuilder.CreateGround("lantern pool", { width: radius * 2, height: radius * 2 }, scene);
     pool.position.set(x, y, z); pool.material = lightPoolMat; pool.isPickable = false;
     return pool;
@@ -454,8 +554,9 @@
     const a = atmosphere, c3 = hex => B.Color3.FromHexString(hex);
     scene.clearColor = B.Color4.FromHexString(a.clear + "ff");
     scene.fogColor = c3(a.fog);
-    moon.intensity = a.hemi; moon.diffuse = c3(a.sky); moon.groundColor = c3(a.ground);
-    keyLight.diffuse = c3(a.key); keyLight.intensity = a.keyI; warm.intensity = a.carry;
+    // A stronger moon over a softer sky fill gives the shadows something to take away.
+    moon.intensity = a.hemi * .8; moon.diffuse = c3(a.sky); moon.groundColor = c3(a.ground);
+    keyLight.diffuse = c3(a.key); keyLight.intensity = a.keyI * 1.65; warm.intensity = a.carry;
     mistMat.emissiveColor = c3(a.mist); mistMat.alpha = a.mistAlpha;
     skyTexture.level = a.skyLevel;
     const [c1, c2] = a.mote.map(h => B.Color4.FromHexString(h + "ff"));
@@ -1593,7 +1694,7 @@
         roof(x,height,z,width,width*.85);
       };
       const lamp=(x,z)=>{
-        box(x,1,z,.17,2,.17,darkWood);box(x,2.16,z,.55,.58,.55,lanternPaper);
+        box(x,1,z,.17,2,.17,darkWood);box(x,2.16,z,.55,.58,.55,lanternPaper);addLightSpot(x,2.3,z,"#ffa060",.9);
         cone(x,2.58,z,.37,1,.1,deep,4);box(x,.04,z,1.3,.05,1.3,paint.court);
       };
       box(0,-1.05,-16,220,.6,228,deep);
@@ -2040,7 +2141,7 @@
     const rainTree=(x,z,k)=>{const h=3.2+noise(k,601)*1.6;
       cone(x,h/2,z,h,.9,.5,provinceFx.bark,6);cone(x,1.3,z,.35,1.0,1.0,provinceFx.ribbon,8);
       for(let j=0;j<4;j++){const a=j*1.7+k,r=j?1.6:0;ball(x+Math.cos(a)*r,h+.4+(j?0:.9),z+Math.sin(a)*r,j?3.2:3.8,j%2?provinceFx.canopyHi:provinceFx.canopy);}};
-    const brazier=(x,z)=>{cone(x,.45,z,.9,.18,.3,decor.iron,6);cone(x,.98,z,.24,.42,.7,decor.iron,8);cone(x,1.25,z,.5,.42,0,decor.ember,5);
+    const brazier=(x,z)=>{addLightSpot(x,1.6,z,"#ff8a3d",1.1);cone(x,.45,z,.9,.18,.3,decor.iron,6);cone(x,.98,z,.24,.42,.7,decor.iron,8);cone(x,1.25,z,.5,.42,0,decor.ember,5);
       const g=put(B.MeshBuilder.CreateGround("province glow",{width:4.2,height:4.2},scene),x,.05,z,lightPoolMat);};
     const spiritHouse=(x,z,k)=>{cone(x,.8,z,1.6,.14,.12,darkWood,5);box(x,1.75,z,.9,.6,.7,templeLacquer);roof(x,2.25,z,1.1,.9);box(x,1.5,z+.42,.6,.06,.2,provinceFx.floatLamp);};
     const flagPole=(x,z,k)=>{cone(x,3,z,6,.14,.1,gold,5);for(let j=0;j<5;j++){const f=box(x+.35,5.6-j*.55,z,.6,.42,.04,j%2?provinceFx.ribbon:provinceFx.banner);f.rotation.z=Math.sin(j+k)*.12;}};
@@ -2094,7 +2195,9 @@
     const box=(x,y,z,w,h,d,m)=>put(B.MeshBuilder.CreateBox("region dressing",{width:w,height:h,depth:d},scene),x,y,z,m);
     const cone=(x,y,z,h,b,t,m,n=6)=>put(B.MeshBuilder.CreateCylinder("region dressing",{height:h,diameterBottom:b,diameterTop:t,tessellation:n},scene),x,y,z,m);
     const ball=(x,y,z,d,m,seg=4)=>put(B.MeshBuilder.CreateSphere("region dressing",{diameter:d,segments:seg},scene),x,y,z,m);
-    const decal=(x,z,size,m,rot=0,y=.05)=>{const g=put(B.MeshBuilder.CreateGround("region decal",{width:size,height:size},scene),x,y,z,m);g.rotation.y=rot;return g;};
+    const decal=(x,z,size,m,rot=0,y=.05)=>{
+      if(size>=2.5&&(m===lightPoolMat||m===greenPool||m===violetPool))addLightSpot(x,1.8,z,m===greenPool?"#9dff7a":m===violetPool?"#b48aff":"#ffa65a",Math.min(1.2,size/3.6));
+      const g=put(B.MeshBuilder.CreateGround("region decal",{width:size,height:size},scene),x,y,z,m);g.rotation.y=rot;return g;};
     const b=map.bounds,id=map.id,{stone,deep,light,court,road}=paint;
     const clear=(x,z,courts=12.5)=>sceneryClear(x,z,courts,map);
     const scatter=(count,seed,fn,courts)=>{for(let i=0,n=0;i<count*8&&n<count;i++){
@@ -2248,10 +2351,12 @@
     provinceDoor=null;
     for(const child of expansionRoot.getChildren())child.dispose();
     for(const resource of expansionResources)resource.dispose();expansionResources.length=0;expansionLabels.length=0;
+    for(let i=lightSpots.length-1;i>=0;i--)if(lightSpots[i].map!=="ritual_village")lightSpots.splice(i,1);
     const bounds=mapBounds();
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
     const map=worldDefinitions?.[activeMapId];if(!map)return;
+    for(const p of map.portals||[])addLightSpot(p.x,2.6,p.z,"#7ff5e0",1.25);
     (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic)));
     for(const camp of map.camps||[]){
       const clearing=inTemple ? B.MeshBuilder.CreateGround("temple court",{width:21,height:19},scene) : B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
@@ -2539,6 +2644,7 @@
   }
   function avatarMesh(id, local) {
     const parent = new B.TransformNode("avatar-" + id, scene);
+    contactShadow(parent, 1.5);
     if(local) {
       const locator = B.MeshBuilder.CreateTorus("local player locator", {
         diameter:1.5, thickness:.09, tessellation:24,
@@ -2800,7 +2906,7 @@
   let shamanBody = null;
   if (B.SceneLoader?.IsPluginForExtensionAvailable?.(".glb")) {
     B.SceneLoader.LoadAssetContainerAsync("./assets/characters/", "thai-male.glb", scene).then(container => {
-      for (const m of container.materials) if ("metallic" in m) { m.environmentIntensity = 0; m.directIntensity = 1.5; m.metallic = 0; }
+      for (const m of container.materials) { if ("metallic" in m) { m.environmentIntensity = 0; m.directIntensity = 1.5; m.metallic = 0; } m.maxSimultaneousLights = 3 + LANTERN_POOL; }
       shamanBody = container;
       shamanWaiting.splice(0).forEach(attachShamanModel);
       ghostWaiting.splice(0).forEach(build => build());
@@ -5195,6 +5301,7 @@
     const root = B.MeshBuilder.CreateBox("monster-" + id, { width: 1.3, height: tall, depth: 1.3 }, scene);
     root.visibility = .001; root.isPickable = true;
     const rig = new B.TransformNode("ghost rig", scene); rig.parent = root; rig.position.y = -tall / 2; rig.scaling.setAll(design.scale);
+    contactShadow(rig, design.kind === "elephant" ? 3.4 : 1.7);
     // Humanoid ghosts wait for the shared body; primitive rigs are the fallback.
     let update = () => {};
     const ghostState = { get update() { return update; } };
@@ -8444,6 +8551,8 @@
     scene.fogStart = camera.radius + atmosphere.fogNear;
     scene.fogEnd = camera.radius + atmosphere.fogFar;
     driftMist(elapsed, camera.target);
+    followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
+    if ((shadowSyncIn -= dt) <= 0) { shadowSyncIn = .5; syncShadowLists(); }
     rippleTexture.vOffset = (rippleTexture.vOffset + dt * .025) % 1;
     riverRipple.uOffset = (riverRipple.uOffset + dt * .012) % 1;
     // The horizon only enters the portrait frustum at shallow camera tilts.
