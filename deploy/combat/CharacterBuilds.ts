@@ -29,6 +29,7 @@ type PathDefinition = { role: string; name: string; skill: string; targets: "sel
 export const DUAL_SWORD = Object.freeze({weaponId:"arcane_sword", attackIntervalMs:750, damageMultiplier:0.8});
 
 export const PATHS = {
+  muay_boran: { role: "นักมวยอาคม", name: "มวยไทยโบราณ", skill: "จิตนักสู้", targets: "self", stamina: 20, cooldownMs: 25_000, effect: {kind: "buff", durationMs: 8_000, bonuses: {atk:0.15}} },
   phutthaisawan: { role: "นักดาบอยุธยา", name: "นักดาบไทย", skill: "รำดาบคู่", targets: "self", stamina: 20, cooldownMs: 25_000, effect: {kind: "buff", durationMs: 8_000, bonuses: {atk:0.20}} },
   blade: { role: "นักรบอาคม", name: "คมดาบ", skill: "ปลุกคมดาบ", targets: "self", stamina: 20, cooldownMs: 25_000, effect: {kind: "buff", durationMs: BLADE_TALENTS.steady.durationMs, bonuses: BLADE_TALENTS.steady.bonuses} },
   sentinel: { role: "นักรบอาคม", name: "ผู้พิทักษ์", skill: "ยันต์คุ้มกาย", targets: "party", stamina: 25, cooldownMs: 30_000, effect: {kind: "buff", durationMs: WARD_TALENTS.lasting.durationMs, bonuses: {def: 0.20}} },
