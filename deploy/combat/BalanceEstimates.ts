@@ -4,7 +4,7 @@ import { calculateModifiedStats } from "./StatModifiers.js";
 import { calculateStats, calculateDamage, emptyAllocations } from "./Progression.js";
 import { applyBuffs } from "./Buffs.js";
 import { monsterProfile } from "./MonsterProfiles.js";
-import { WEAPON_STATS, type WeaponItemId } from "./ItemRules.js";
+import { SHRINE_GLAIVE, SHRINE_RECIPE, WEAPON_STATS, type WeaponItemId } from "./ItemRules.js";
 import { RULES } from "./GameRules.js";
 import { FORT } from "./HeightRules.js";
 
@@ -35,7 +35,8 @@ export function compareBuild(level: number, weapon: WeaponItemId, path: PathId) 
   const ranged = weapon === "spirit_staff";
   const power = ranged ? stats.magicAtk + WEAPON_STATS[weapon].rangedBonus : stats.atk + WEAPON_STATS[weapon].meleeBonus;
   const pveHit = calculateDamage(power, monster.defense, level);
-  const pvpHit = calculateDamage(power, ranged ? base.magicDef : base.def, level);
+  const pvpPower = weapon === SHRINE_GLAIVE ? stats.atk + SHRINE_RECIPE.pvpMeleeBonus : power;
+  const pvpHit = calculateDamage(pvpPower, ranged ? base.magicDef : base.def, level);
   return {path, weapon, level, pveHitBeforeCast: baseline.damagePerHit, pveHitWhileActive: pveHit,
     pvpHitAgainstUnbuffedPeer: pvpHit, hitsToDefeatIfEffectLasted: Math.ceil(monster.maxHp / pveHit),
     incomingPhysicalDamage: calculateDamage(monster.attack, stats.def, level),

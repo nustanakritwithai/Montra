@@ -12,3 +12,11 @@ test("dead, travelling, capped and transient characters do not dilute EXP",()=>{
   assert.throws(()=>partyMonsterShares(1,m,[actor("same"),actor("same")]),/invalid_party_member/);
   assert.deepEqual(partyMonsterShares(21,m,[actor("near")]),[]);
 });
+
+test("shrine loot at the XP cap preserves the nearby member's full EXP share", () => {
+  const keeper = {...m, level:12, tier:"elite" as const};
+  const members = [actor("earner",{level:12}),actor("capped",{level:100}),actor("far",{x:46}),actor("dead",{alive:false})];
+  assert.deepEqual(partyMonsterShares(12,keeper,members,20,true),[
+    {sessionId:"earner",amount:3600}, {sessionId:"capped",amount:0}
+  ]);
+});

@@ -33,7 +33,7 @@ import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.j
 import type { CharacterSnapshot } from "./CharacterStore.js";
 import { isAtlasMap } from "./WorldAtlas.js";
 import { TEMPLE_ID } from "./TempleMap.js";
-import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
+import { SHRINE_GUARDIAN, DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
 import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { saveBugReport } from "./BugReports.js";
@@ -42,7 +42,7 @@ import { BUILD_CATALOG, PATHS, SUPPORT_RADIUS, parseBuild, type CharacterBuild }
 import { BuffLedger } from "./BuffLedger.js";
 import { calculateModifiedStats } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER } from "./SkillCatalog.js";
-import { parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
+import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
@@ -50,7 +50,7 @@ import type { MonsterTier } from "./MonsterProfiles.js";
 import { PROGRESSION, addExperience, calculateDamage, calculateStats, emptyAllocations,
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
-  POTION_ID, POTION_COOLDOWN_MS, grantRewardPotion, parseUseItemCommand,
+  POTION_ID, POTION_COOLDOWN_MS, grantRewardPotion, grantStackReward, SHRINE_RECIPE, SHRINE_SHARD, parseUseItemCommand,
   useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon,
   equippedWeaponId, weaponBonuses, type InventorySnapshot,
 } from "./ItemRules.js";
@@ -236,7 +236,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.broadcast("possession_changed",{playerId:id,active:false,reason},{afterNextPatch:true});
   }
 
-  private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal"): void {
+  private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal", shrineLoot = false): void {
     const player = this.state.players.get(id);
     const priorReward=this.pendingRewards.get(id);
     if (!player || !this.persistentCharacters.has(id) || (this.pendingWarps.has(id) && !priorReward)) return;
@@ -252,18 +252,22 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const current = this.state.players.get(id), snapshot = this.captureCharacterSnapshot(id);
         if (!current || !snapshot) return;
         const amount = current.level >= PROGRESSION.maxLevel ? 0 : (sharedAmount ?? monsterExperience(current.level, monsterLevel, tier));
-        if (amount <= 0 && tier !== "boss") return;
+        if (amount <= 0 && tier !== "boss" && !shrineLoot) return;
         const next = addExperience(current.level, current.experience, amount);
-        const dropsPotion = tier === "elite" || tier === "boss";
+        const dropsPotion = (tier === "elite" && amount > 0) || tier === "boss";
         const prize = dropsPotion && snapshot.inventory ? grantRewardPotion(snapshot.inventory) : null;
-        await characterStore.save({ ...snapshot, ...next, inventory:prize ?? snapshot.inventory, updatedAt: new Date().toISOString() });
-        if (prize) this.inventories.set(id,prize);
+        const afterPotion = prize ?? snapshot.inventory;
+        const shard = shrineLoot && afterPotion ? grantStackReward(afterPotion, SHRINE_SHARD) : null;
+        const loot = shard ?? prize;
+        await characterStore.save({ ...snapshot, ...next, inventory:loot ?? snapshot.inventory, updatedAt: new Date().toISOString() });
+        if (loot) this.inventories.set(id,loot);
         current.level = next.level; current.experience = next.experience;
         this.applyStats(id,current, this.statAllocations.get(id) ?? emptyAllocations());
         try {
           const recipient = this.clients.find(client => client.sessionId === id);
-          if (prize) recipient?.send("inventory_state",prize);
+          if (loot) recipient?.send("inventory_state",loot);
           recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,
+            ...(shrineLoot ? {shrineShard:shard ? "granted" : "bag_full"} : {}),
             ...(tier === "boss" ? {riftVictory:true} : {}),
             ...(dropsPotion ? {elitePotion:prize ? "granted" : "bag_full"} : {})});
         } catch { /* The committed reward remains available on reconnect. */ }
@@ -279,7 +283,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private awardMonsterExperience(winnerId:string, monster:Monster = this.state.monster, tier:MonsterTier = "normal"): void {
     const winner=this.state.players.get(winnerId), party=this.parties.get(winnerId);
-    if (!winner || !party) { this.grantMonsterExperience(winnerId,undefined,monster.level,tier); return; }
+    const shrineLoot = characterStore.economyEnabled && monster.mapId === "forbidden_forest" && monster.id === SHRINE_GUARDIAN.id && tier === "elite";
+    if (!winner) return;
+    if (!party) {
+      this.grantMonsterExperience(winnerId, undefined, monster.level, tier,
+        shrineLoot && winner.alive && winner.mapId === monster.mapId && distance3d(winner,monster) <= PARTY_XP_RADIUS);
+      return;
+    }
     const members:PartyRewardMember[]=[];
     for(const id of party.members){
       const player=this.state.players.get(id);
@@ -287,8 +297,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         persistent:this.persistentCharacters.has(id),level:player.level,
         inTransit:this.pendingWarps.has(id) && !this.pendingRewards.has(id)});
     }
-    const shares=partyMonsterShares(winner.level,{mapId:monster.mapId,level:monster.level,tier,x:monster.x,y:monster.y,z:monster.z},members,PARTY_XP_RADIUS);
-    for(const share of shares)this.grantMonsterExperience(share.sessionId,share.amount,monster.level,tier);
+    const shares=partyMonsterShares(winner.level,{mapId:monster.mapId,level:monster.level,tier,x:monster.x,y:monster.y,z:monster.z},members,PARTY_XP_RADIUS,shrineLoot);
+    for(const share of shares)this.grantMonsterExperience(share.sessionId,share.amount,monster.level,tier,shrineLoot);
   }
 
   private partyAction(client:Client, action:()=>void): void {
@@ -330,7 +340,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","forge_max_rank","forge_item_changed"];
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","forge_max_rank","forge_item_changed","craft_missing_shard"];
       const reason=error instanceof Error && allowed.includes(error.message) ? error.message : "economy_failed";
       if (reason==="economy_failed") console.error("MONTRA economy failed",error);
       client.send("economy_error",{reason});
@@ -489,6 +499,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           (command.channel==="private" && (peer.sessionId===id || peer.sessionId===target!.sessionId));
         if(deliver) peer.send("chat_message",event);
       }
+    },
+    craft_weapon: (client: Client, message: unknown) => {
+      const order = parseCraft(message);
+      if (!order) return this.reject(client, "invalid_economy_request");
+      this.economyAction(client, id => {
+        const result = characterStore.economy.craftShrineGlaive(id, order.requestId);
+        this.syncEconomy(client, id);
+        client.send("craft_result", {requestId: order.requestId, ...result});
+      });
     },
     forge_weapon: (client: Client, message: unknown) => {
       const order = parseForge(message);
@@ -1189,6 +1208,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   onCreate() {
+    if (characterStore.economyEnabled) this.state.craftRecipe = JSON.stringify(SHRINE_RECIPE);
     this.state.forgeCatalog = JSON.stringify(FORGE);
     this.state.buildCatalog = BUILD_CATALOG;
     this.state.economyAvailable = characterStore.economyEnabled;

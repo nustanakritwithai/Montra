@@ -2507,7 +2507,8 @@
   const avatars = new Map();
   function setAvatarWeapon(avatar, weaponId) {
     if (!avatar?.weaponModels) return;
-    const safeId = Object.hasOwn(avatar.weaponModels,weaponId) ? weaponId : "";
+    const modelId = weaponId === "shrine_glaive" ? "arcane_sword" : weaponId;
+    const safeId = Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
     if (avatar.weaponId === safeId) return;
     avatar.weaponId = safeId;
     for(const [id,model] of Object.entries(avatar.weaponModels)) {
@@ -2607,7 +2608,10 @@
   // Inventory is never stored in localStorage: LIVE comes from VPS each join.
   const INVENTORY_SLOTS = 12;
   const POTION_ITEM_ID = "health_potion";
+  const SHRINE_SHARD = "shrine_shard";
+  const shardName = "เศษตราผู้พิทักษ์";
   const WEAPON_META = Object.freeze({
+    shrine_glaive: { name: "ง้าวจันทร์ผู้พิทักษ์", symbol: "☾", bonus: "หายาก · iLv 12 · ประชิด +10 เมื่อสู้มอนสเตอร์ / +8 ใน PvP" },
     ritual_dagger: { name: "มีดหมอ", symbol: "🗡️", bonus: "โจมตีประชิด +4" },
     arcane_sword: { name: "กระบี่อาคม", symbol: "⚔️", bonus: "โจมตีประชิด +8" },
     spirit_staff: { name: "คทาวิญญาณ", symbol: "🔱", bonus: "ยิงอาคม +6" },
@@ -3322,8 +3326,14 @@
       });
       joined.onMessage("market_state", message => {
         if (room !== joined || !Array.isArray(message?.listings)) return;
-        economyListings=message.listings.filter(x => x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && typeof x.seller==="string" && /^[a-f0-9]{12}$/.test(x.seller) && x.item && (x.item.itemId===POTION_ITEM_ID || Object.hasOwn(WEAPON_META,x.item.itemId)) && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 && Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000).slice(0,120);
+        economyListings=message.listings.filter(x => x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && typeof x.seller==="string" && /^[a-f0-9]{12}$/.test(x.seller) && x.item && (x.item.itemId===POTION_ITEM_ID || x.item.itemId===SHRINE_SHARD || Object.hasOwn(WEAPON_META,x.item.itemId)) && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 && Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000).slice(0,120);
         renderEconomy();
+      });
+      joined.onMessage("craft_result", result => {
+        if (room !== joined) return;
+        finishEconomyPending();
+        toast("คราฟต์ง้าวจันทร์ผู้พิทักษ์สำเร็จ · ใช้ " + result.spentGold + " ทอง");
+        renderBag();
       });
       joined.onMessage("forge_result", result => {
         if (room !== joined) return;
@@ -3339,7 +3349,7 @@
       joined.onMessage("economy_error", message => {
         if (room !== joined) return;
         finishEconomyPending();
-        const reasons={forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
+        const reasons={craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
         toast(reasons[message?.reason] || "ทำรายการไม่สำเร็จ · ลองตรวจข้อมูลอีกครั้ง"); renderEconomy();
       });
       joined.onMessage("trade_update", message => {
@@ -3515,7 +3525,8 @@
       joined.onMessage("experience_gained", info => {
         if(room !== joined) return;
         const prize=info?.elitePotion==="granted"?" · ได้รับยาฟื้นพลัง 1 ขวด":info?.elitePotion==="bag_full"?" · กระเป๋าเต็ม รับยาไม่ได้":"";
-        toast((info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + prize);
+        const shard = info?.shrineShard === "granted" ? " · ได้รับ" + shardName + " 1 ชิ้น" : info?.shrineShard === "bag_full" ? " · กระเป๋าเต็ม รับเศษตราไม่ได้" : "";
+        toast((info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":info?.shrineShard && !info.amount?"รางวัลศาลร้าง":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + prize + shard);
         renderProgressionProfile();
       });
       joined.onMessage("inventory_state", payload => {
@@ -3524,10 +3535,10 @@
             payload.slots.length !== INVENTORY_SLOTS) return;
         // Defensive view parsing: only display known items and sane counts.
         const slots = payload.slots.map(stack => {
-          if (stack?.itemId === POTION_ITEM_ID &&
+          if ((stack?.itemId === POTION_ITEM_ID || stack?.itemId === SHRINE_SHARD) &&
               Number.isSafeInteger(stack.quantity) &&
               stack.quantity >= 1 && stack.quantity <= 99) {
-            return { itemId: POTION_ITEM_ID, quantity: stack.quantity };
+            return { itemId: stack.itemId, quantity: stack.quantity };
           }
           if (Object.hasOwn(WEAPON_META,stack?.itemId) &&
               stack?.quantity === 1) {
@@ -4551,7 +4562,7 @@
       slot.classList.toggle("bag-selected", i === selectedBagSlot);
       slot.setAttribute("aria-pressed", String(i === selectedBagSlot));
       slot.querySelector(".bag-symbol").textContent = !item ? "·" :
-        weapon ? WEAPON_META[item.itemId].symbol : "🧪";
+        weapon ? WEAPON_META[item.itemId].symbol : item.itemId === SHRINE_SHARD ? "◈" : "🧪";
       slot.querySelector(".bag-quantity").textContent = !item ? "" :
         weapon && i === equipped ? "✓" : "×" + item.quantity;
     }
@@ -4559,23 +4570,37 @@
     const weapon = chosen && Object.hasOwn(WEAPON_META,chosen.itemId);
     const canAct = mode !== "live" || ownServerCharacter()?.alive === true;
     const ready = Boolean(chosen && canAct && (weapon
-      ? hasWeapons : currentHp > 0 && currentHp < maxHp));
+      ? hasWeapons : chosen.itemId === POTION_ITEM_ID && currentHp > 0 && currentHp < maxHp));
     $("bagItemName").textContent = !chosen ? "ช่องว่าง" : weapon
-      ? WEAPON_META[chosen.itemId].name + forgeLabel(chosen) : "ยาเลือดเล็ก";
+      ? WEAPON_META[chosen.itemId].name + forgeLabel(chosen) : chosen.itemId === SHRINE_SHARD ? shardName : "ยาเลือดเล็ก";
     renderForge(chosen);
+    renderCraft(slots);
     $("bagItemDescription").textContent = !chosen
       ? "ช่องนี้ยังไม่มีไอเท็ม"
       : weapon
         ? WEAPON_META[chosen.itemId].bonus +
           " · เลือกสวมใส่ได้ทีละ 1 อาวุธ · ไม่ถูกใช้หมด"
-        : "ฟื้น HP สูงสุด 30 · ไม่ใช้เมื่อ HP เต็ม · หักจำนวนและบันทึกบน VPS";
+        : chosen.itemId === SHRINE_SHARD ? "ได้จากผู้พิทักษ์ศาลร้างเหนือป่าต้องห้าม ใช้คราฟต์ง้าว ฝากขายหรือเทรดได้" : "ฟื้น HP สูงสุด 30 · ไม่ใช้เมื่อ HP เต็ม · หักจำนวนและบันทึกบน VPS";
     const use = $("useBagItem");
     use.disabled = !ready || itemUsePending;
     use.textContent = itemUsePending ? "กำลังบันทึกบน VPS..." :
       !chosen ? "ไม่มีไอเท็มในช่องนี้" :
       weapon ? !hasWeapons ? "ต้องติดตั้งชุดอาวุธบน VPS" :
         selectedBagSlot === equipped ? "ถอดอาวุธ" : "สวมใส่อาวุธ" :
-        currentHp >= maxHp ? "HP เต็ม" : "ใช้ยาเลือด";
+        chosen.itemId === SHRINE_SHARD ? "วัตถุดิบคราฟต์" : currentHp >= maxHp ? "HP เต็ม" : "ใช้ยาเลือด";
+  }
+  function renderCraft(slots) {
+    const panel = $("craftPanel");
+    const catalog = room?.state?.craftRecipe;
+    panel.hidden = !economyReady() || !catalog;
+    if (panel.hidden) return;
+    const recipe = JSON.parse(catalog);
+    const supply = (slots || []).reduce((sum, item) => sum + (item?.itemId === recipe.ingredient ? item.quantity : 0), 0);
+    const owned = slots?.some(item => item?.itemId === recipe.output);
+    $("craftInfo").textContent = "ล่าผู้พิทักษ์ศาลร้างเหนือป่าต้องห้ามเพื่อเก็บเศษตรา · มี " + supply + "/" + recipe.quantity + " ชิ้น · ทอง " + (economyGold ?? "…") + "/" + recipe.gold + " · หายาก iLv " + recipe.itemLevel;
+    const button = $("craftGlaive");
+    button.disabled = !slots || economyPending || owned || supply < recipe.quantity || economyGold === null || economyGold < recipe.gold || ownServerCharacter()?.alive !== true;
+    button.textContent = owned ? "มีง้าวจันทร์ผู้พิทักษ์แล้ว" : "คราฟต์ง้าวจันทร์ผู้พิทักษ์ · " + recipe.gold + " ทอง";
   }
   function forgeLabel(item) {
     const f = item?.forge;
@@ -4613,6 +4638,7 @@
       '<div class="bag-detail"><strong id="bagItemName"></strong>' +
       '<p class="note" id="bagItemDescription"></p></div>' +
       '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
+      '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
       '<div id="forgePanel" hidden><h3>ช่างอาคม</h3><p class="note" id="forgeInfo"></p><button class="secondary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeReroll"></button></div>' +
       '<p class="note">ยาเลือดและอาวุธถาวรแยกตาม 3 เซฟ · สวมใส่ทีละหนึ่งชิ้น · ใช้ยาเมื่อ HP ไม่เต็ม · การสวมใส่บันทึกบน VPS</p>');
     for (let i = 0; i < INVENTORY_SLOTS; i++) {
@@ -4628,6 +4654,12 @@
       economySend("forge_weapon", {slot:selectedBagSlot, stamp, action, requestId:economyRequestId()}, true);
       renderBag();
     }
+    $("craftGlaive").onclick = () => {
+      if (!room?.state?.craftRecipe || economyPending) return;
+      const recipe = JSON.parse(room.state.craftRecipe);
+      economySend("craft_weapon", {recipeId: recipe.id, requestId: economyRequestId()}, true);
+      renderBag();
+    };
     $("forgeEnhance").onclick = () => submitForge("enhance");
     $("forgeReroll").onclick = () => submitForge("reroll");
     if (economyReady()) economySend("get_economy", {});
@@ -4710,7 +4742,7 @@
   function economyReady() { return mode === "live" && room?.state?.economyAvailable === true && ownServerCharacter()?.persistent === true; }
   function economyItemName(item) {
     if (!item) return "ไม่มีไอเท็ม";
-    const name=item.itemId===POTION_ITEM_ID ? "ยาเลือดเล็ก" : WEAPON_META[item.itemId]?.name || "ไอเท็ม";
+    const name=item.itemId===POTION_ITEM_ID ? "ยาเลือดเล็ก" : item.itemId === SHRINE_SHARD ? shardName : WEAPON_META[item.itemId]?.name || "ไอเท็ม";
     return name + forgeLabel(item) + " ×" + Number(item.quantity || 0);
   }
   function economySend(command, payload, durable=false) {

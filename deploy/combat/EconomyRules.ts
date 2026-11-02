@@ -1,3 +1,4 @@
+import { SHRINE_RECIPE } from "./ItemRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 function keys(value: unknown, expected: string[]): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value) &&
@@ -33,4 +34,9 @@ export function parseForge(v: unknown) {
       typeof v.stamp !== "string" || !/^[a-zA-Z0-9_.-]{1,64}$/.test(v.stamp) ||
       (v.action !== "enhance" && v.action !== "reroll")) return null;
   return {requestId:v.requestId, slot:v.slot, stamp:v.stamp, action:v.action as "enhance" | "reroll"};
+}
+
+export function parseCraft(v: unknown): {requestId: string} | null {
+  if (!keys(v, ["recipeId", "requestId"]) || v.recipeId !== SHRINE_RECIPE.id || !requestId(v.requestId)) return null;
+  return {requestId: v.requestId};
 }

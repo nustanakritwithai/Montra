@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { EconomyStore, STARTER_GOLD } from "./EconomyStore.js";
-import { makeStarterInventory, weaponBonuses } from "./ItemRules.js";
+import { makeStarterInventory, weaponBonuses, SHRINE_GLAIVE, SHRINE_SHARD } from "./ItemRules.js";
 import { FORGE, forgeStamp, rollForge } from "./ForgeRules.js";
 
 test("pity guarantees the next rank or affix and resets only the matching counter", () => {
@@ -45,4 +45,36 @@ test("forged weapon keeps identity through listing, trade and restart; retries s
     assert.deepEqual(store.getAccount(a).inventory.slots[2]?.forge, affix.forge);
     assert.equal(store.getAccount(a).gold, STARTER_GOLD - first.cost - FORGE.rerollCost + 100);
   } finally {store.close(); rmSync(dir, {recursive:true, force:true});}
+});
+
+test("craft rolls back a full bag or absent shard; traded shards craft once and the weapon can be sold", () => {
+  const store = new EconomyStore(":memory:");
+  const hunter="a".repeat(64), crafter="b".repeat(64);
+  try {
+    const bag = makeStarterInventory();
+    for (let i=4; i<bag.slots.length; i++) bag.slots[i]={itemId:"health_potion",quantity:99};
+    bag.slots[4]={itemId:SHRINE_SHARD,quantity:2};
+    store.register(hunter,bag);
+    store.register(crafter,makeStarterInventory());
+    const unchanged = store.getAccount(hunter);
+    assert.throws(()=>store.craftShrineGlaive(hunter,randomUUID()),/inventory_full/);
+    assert.deepEqual(store.getAccount(hunter),unchanged);
+    assert.throws(()=>store.forgeWeapon(hunter,randomUUID(),4,SHRINE_SHARD,"enhance"),/forge_item_changed/);
+    assert.throws(()=>store.craftShrineGlaive(crafter,randomUUID()),/craft_missing_shard/);
+    store.trade(hunter,crafter,randomUUID(),{slot:4,amount:1,gold:0},{slot:null,amount:0,gold:0});
+    const request = randomUUID();
+    const first = store.craftShrineGlaive(crafter,request);
+    assert.deepEqual(store.craftShrineGlaive(crafter,request),first);
+    const account = store.getAccount(crafter);
+    assert.equal(account.gold,STARTER_GOLD-100);
+    assert.equal(account.inventory.slots[4]?.itemId,SHRINE_GLAIVE);
+    const equipped={...account.inventory,equippedWeaponSlot:4};
+    assert.equal(weaponBonuses(equipped).melee,10);
+    assert.equal(weaponBonuses(equipped,"pvp").melee,8);
+    assert.throws(()=>store.craftShrineGlaive(crafter,randomUUID()),/duplicate_weapon/);
+    const listing=store.listItem(crafter,randomUUID(),4,1,25);
+    store.listItem(hunter,randomUUID(),4,1,1); // Clear a slot for the purchase.
+    store.buy(hunter,randomUUID(),listing.listingId);
+    assert.equal(store.getAccount(hunter).inventory.slots[4]?.itemId,SHRINE_GLAIVE);
+  } finally { store.close(); }
 });
