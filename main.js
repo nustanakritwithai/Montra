@@ -266,6 +266,58 @@
       l.intensity = .95 * spot.strength * flicker * l.metadata.level;
     });
   }
+  // ---- Floating combat text (Ragnarok-style) ----
+  // Numbers and short words pop above the target, overshoot, arc sideways
+  // and fall while fading. Drawn as DOM over the canvas at the projected head
+  // position; a small pool, at most 28 on screen, oldest dropped first.
+  const floatLayer = document.createElement("div"); floatLayer.className = "float-layer"; floatLayer.setAttribute("aria-hidden", "true");
+  document.getElementById("game")?.append(floatLayer);
+  const floatProj = new B.Vector3();
+  function floatText(x, y, z, text, kind = "dealt", opts = {}) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect(), w = engine.getRenderWidth(), h = engine.getRenderHeight();
+    B.Vector3.ProjectToRef(new B.Vector3(x, y, z), B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), camera.viewport.toGlobal(w, h), floatProj);
+    if (floatProj.z < 0 || floatProj.z > 1) return;
+    const sx = floatProj.x * rect.width / w, sy = floatProj.y * rect.height / h;
+    if (sx < -40 || sy < -40 || sx > rect.width + 40 || sy > rect.height + 40) return;
+    while (floatLayer.childElementCount >= 28) floatLayer.firstElementChild.remove();
+    const el = document.createElement("span"); el.className = "ftxt " + kind + (opts.big ? " big" : "");
+    el._world = [x, y, z]; // re-projected every frame so the text stays on its target while the camera moves
+    el._lift = opts.lift || 0;
+    el.textContent = text;
+    const drift = (opts.drift ?? (Math.random() - .5) * 70) | 0;
+    el.style.left = sx + "px"; el.style.top = sy + "px"; el.style.setProperty("--dx", drift + "px"); el.style.setProperty("--rise", (opts.rise ?? 46) + "px");
+    if (opts.delay) el.style.animationDelay = opts.delay + "ms";
+    floatLayer.append(el);
+    setTimeout(() => el.remove(), (opts.life ?? 1250) + (opts.delay || 0));
+  }
+  function updateFloatText() {
+    if (!floatLayer.firstElementChild) return;
+    const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect(), w = engine.getRenderWidth(), h = engine.getRenderHeight();
+    const tm = scene.getTransformMatrix(), vp = camera.viewport.toGlobal(w, h);
+    for (const el of floatLayer.children) {
+      const p = el._world; if (!p) continue;
+      B.Vector3.ProjectToRef(new B.Vector3(p[0], p[1], p[2]), B.Matrix.IdentityReadOnly, tm, vp, floatProj);
+      el.style.left = (floatProj.x * rect.width / w).toFixed(1) + "px"; el.style.top = (floatProj.y * rect.height / h - el._lift).toFixed(1) + "px";
+    }
+  }
+  // World anchors: above a ghost or a player's head.
+  // Popups landing on the same target in quick succession stack upwards.
+  const floatStack = new Map();
+  function stackLift(key) {
+    const now = performance.now(), recent = (floatStack.get(key) || []).filter(t => now - t < 450);
+    recent.push(now); floatStack.set(key, recent); return (recent.length - 1) * 22;
+  }
+  function floatAtMonster(id, text, kind, opts = {}) {
+    opts = { ...opts, lift: stackLift("m" + id) };
+    const mesh = forestMonsters.get(id) || (id === MONSTER_ID ? enemy : null); if (!mesh) return;
+    const tall = mesh.metadata?.ghost?.tall ?? 1.8; floatText(mesh.position.x, mesh.position.y + tall * .55, mesh.position.z, text, kind, opts);
+  }
+  function floatAtPlayer(id, text, kind, opts = {}) {
+    opts = { ...opts, lift: stackLift("p" + id) };
+    const a = avatars.get(id); if (!a) return; floatText(a.x, (a.y || 0) + 2.5, a.z, text, kind, opts);
+  }
+  const SKILL_SOURCES = new Set(["sword", "muay", "talisman", "ranged", "occult", "blade"]);
   // Soft contact shadow under every character, so feet sit on the ground
   // even where the moon shadow falls away or is switched off.
   let contactMat = null;
@@ -6588,7 +6640,7 @@
       ? me.characterName : "นที";
     $("characterName").textContent = name;
     const slot = me?.persistent ? (Number(me.characterSlot) || activeCharacterSlot || 1) : null;
-    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) SFX("levelup", { important: true }); hudLevel = me.level; }
+    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) { SFX("levelup", { important: true }); floatAtPlayer(localId, "LEVEL UP!", "levelup", { drift: 0, rise: 80, life: 2200 }); } hudLevel = me.level; }
     $("characterLevel").textContent = (slot ? "S" + slot + " · " : "") + "LV. " + (
       Number.isFinite(me?.level) ? me.level : 1
     );
@@ -7203,6 +7255,9 @@
           playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
           impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true, struck?.design?.kind);
           if (hit.attackerId === localId) { hudTarget = { id: hit.targetId, until: performance.now() + 8000 }; if (Number(hit.hp) === 0) hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1; }
+          { const mine = hit.attackerId === localId, dmg = Math.round(Number(hit.damage) || 0);
+            if (dmg > 0) floatAtMonster(hit.targetId, String(dmg), mine ? (SKILL_SOURCES.has(hit.source) ? "skill" : "dealt") : "ally", { big: mine && SKILL_SOURCES.has(hit.source) });
+            if (mine && Number(hit.hp) === 0) floatAtMonster(hit.targetId, "ปราบ!", "status", { delay: 180, rise: 70, drift: 0 }); }
         }
         const talisman = hit?.source === "talisman";
         if (forestTarget) {
@@ -7349,7 +7404,7 @@
         const name=occultBookState?.lessons?.[data.skillId]?.name;
         if (name) toast("ใช้ "+name);
       });
-      joined.onMessage("muay_guarded", data => { if (room===joined) { muayCounterUntil=performance.now()+3000; const label=data?.kind==="parry" ? "ปัด" : data?.kind==="evade" ? "เบี่ยงหลบ" : "ป้อง"; toast(label+"สำเร็จ · วิชาสวนพร้อม 3 วินาที"); syncMuayHotbar(); } });
+      joined.onMessage("muay_guarded", data => { if (room===joined) { floatAtPlayer(localId, data?.kind==="parry" ? "ปัด!" : data?.kind==="evade" ? "หลบ!" : "ป้องกัน!", "status", { drift: 0 }); muayCounterUntil=performance.now()+3000; const label=data?.kind==="parry" ? "ปัด" : data?.kind==="evade" ? "เบี่ยงหลบ" : "ป้อง"; toast(label+"สำเร็จ · วิชาสวนพร้อม 3 วินาที"); syncMuayHotbar(); } });
       joined.onMessage("muay_counter_cleared", () => { if (room===joined) { muayCounterUntil=0; syncMuayHotbar(); } });
       joined.onMessage("muay_defense", data => { if(room===joined) {
         const label=data?.kind==="parry" ? "ปัด" : data?.kind==="evade" ? "เบี่ยงหลบ" : "";
@@ -7362,6 +7417,7 @@
       joined.onMessage("muay_combo", data => { if(room===joined) {
         muayComboCount=Number.isInteger(data?.count) ? Math.max(0,Math.min(3,data.count)) : 0;
         muayComboComplete=data?.completed===true && muayComboCount===3;
+        if(muayComboCount>=2)floatAtPlayer(localId,muayComboComplete?"คอมโบ x3!":"คอมโบ x"+muayComboCount,"combo",{drift:0,big:muayComboComplete});
         muayComboNext=typeof data?.next==="string" ? data.next : "";
         muayComboBonus=Math.max(0,Math.min(100,Number(data?.bonusPercent)||0));
         muayComboUntil=performance.now()+(muayComboComplete ? 2000 : Math.min(6000,Math.max(0,Number(data?.durationMs)||0)));
@@ -7370,6 +7426,7 @@
       joined.onMessage("muay_interrupt", data => { if(room===joined) {
         const notice={applied:"ถีบหยุดจังหวะสำเร็จ",resisted:"เป้าหมายต้านการหยุดจังหวะชั่วคราว",immune:"Elite หรือบอสไม่ถูกหยุดจังหวะ",pvp_no_interrupt:"ถีบผู้เล่นสร้างดาเมจโดยไม่หยุดจังหวะ"};
         if(data?.source==="korat_finish" || data?.source==="korat_press")notice.applied="หมัดโคราชหยุดจังหวะสำเร็จ";
+        if(data?.result==="applied" && selectedForestTarget)floatAtMonster(selectedForestTarget,"หยุดจังหวะ!","status",{drift:0});
         if(Object.hasOwn(notice,data?.result)){muayInterruptMessage=notice[data.result];muayInterruptUntil=performance.now()+2000;syncMuayComboStatus(ownServerCharacter());}
       } });
       joined.onMessage("muay_followup", data => { if(room===joined) {
@@ -7409,6 +7466,7 @@
       joined.onMessage("muay_book_changed", () => { if(room===joined){selectedMuaySkill="";if(targetedSkill==="muay")setTargetedSkill(null);muayBookRenderKey="";renderMuayBook();toast("บันทึกตำรามวยแล้ว");} });
       joined.onMessage("sword_combo", data => { if (room===joined) {
         const count=Number.isInteger(data?.count) ? Math.max(0,Math.min(3,data.count)) : 0;
+        if(count>=2)floatAtPlayer(localId,"คอมโบ x"+count,"combo",{drift:0,big:count===3});
         const firstFull=count===3 && (swordCombo<3 || performance.now()>=swordComboUntil);
         swordCombo=count;
         swordComboUntil=performance.now()+3500;
@@ -7428,6 +7486,7 @@
         syncSwordStatus(ownServerCharacter());
       } });
       joined.onMessage("sword_guarded", () => { if (room===joined) {
+        floatAtPlayer(localId, "รับดาบ!", "status", { drift: 0 });
         swordCounterUntil=performance.now()+3000;
         syncSwordStatus(ownServerCharacter());
         playAction(avatars.get(localId), "guard");
@@ -7456,7 +7515,7 @@
         if (ownServerCharacter()?.pathId === "muay_boran") playAction(avatars.get(localId), "m_wai");
       });
       joined.onMessage("possession_changed", notice => {
-        if(room===joined && notice?.active){ const who=avatars.get(notice.playerId); if(who) SFX("possess",{x:who.x,z:who.z}); }
+        if(room===joined && notice?.active){ const who=avatars.get(notice.playerId); if(who) SFX("possess",{x:who.x,z:who.z}); floatAtPlayer(notice.playerId,"เข้าสิง!","status",{big:true,drift:0}); }
         if(room!==joined || notice?.playerId!==localId)return;
         toast(notice.active ? "วิญญาณเข้าสิง · เพิ่มโจมตีและป้องกัน 20% นาน 60 วินาที" : "สถานะเข้าสิงสิ้นสุด");
         syncPossessionButton();
@@ -7465,6 +7524,7 @@
         if (room !== joined || !hit) return;
         const actor = summonAvatars.get(hit.ownerId);
         if (actor) { actor.hitUntil = performance.now() + 260; SFX("ghost_hit", { x: actor.x, z: actor.z, intensity: .7 }); }
+        { const dmg = Math.round(Number(hit?.damage) || 0); if (dmg > 0 && hit.targetId) floatAtMonster(hit.targetId, String(dmg), hit.ownerId === localId ? "spirit" : "ally"); }
         if (hit.ownerId === localId) {
           toast("วิญญาณโจมตีผี -" + String(hit.damage) + " HP");
         }
@@ -7476,6 +7536,7 @@
         if (victim) { victim.hitFlashUntil = performance.now() + 250; playAction(victim, "hit"); }
         playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
         if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, false);
+        { const dmg = Math.round(Number(hit.damage) || 0); if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), hit.targetId === localId ? "taken" : hit.attackerId === localId ? (SKILL_SOURCES.has(hit.source) ? "skill" : "dealt") : "ally"); }
         if (attacker && victim) {
           faceAvatarToward(hit.attackerId, victim.x, victim.z);
         }
@@ -7501,6 +7562,7 @@
       joined.onMessage("monster_hit", hit => {
         if (room === joined) {
           playAction(avatars.get(hit?.targetId), "hit");
+          { const dmg = Math.round(Number(hit?.damage) || 0); if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), hit.targetId === localId ? "taken" : "ally"); }
           if (hit?.targetId === localId && !(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };
           const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost; if (g) g.attackAt = performance.now();
           if (g && !(performance.now() - (g.criedAt || 0) < 1500)) { ghostVoice(g, gm2, "attack"); g.criedAt = performance.now(); }
@@ -7533,6 +7595,7 @@
       });
       joined.onMessage("experience_gained", info => {
         if(room !== joined) return;
+        if (Number(info?.amount) > 0) floatAtPlayer(localId, "+" + Math.round(info.amount) + " EXP", "exp", { delay: 250, drift: 0, rise: 60, life: 1500 });
         const prize=info?.elitePotion==="granted"?" · ได้รับยาฟื้นพลัง 1 ขวด":info?.elitePotion==="bag_full"?" · กระเป๋าเต็ม รับยาไม่ได้":"";
         const shard = info?.shrineShard === "granted" ? " · ได้รับ" + shardName + " 1 ชิ้น" : info?.shrineShard === "bag_full" ? " · กระเป๋าเต็ม รับเศษตราไม่ได้" : "";
         toast((info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":info?.shrineShard && !info.amount?"รางวัลศาลร้าง":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + prize + shard);
@@ -7579,6 +7642,7 @@
       joined.onMessage("item_used", event => {
         if (room !== joined) return;
         playAction(getLocalAvatar(), "drink");
+        if (Number(event?.healed) > 0) floatAtPlayer(localId, "+" + Math.round(event.healed), "heal", { big: true, drift: 0 });
         toast("ใช้ยาเลือดแล้ว · +" + Number(event?.healed || 0) + " HP · บันทึกบน VPS");
         renderBag();
       });
@@ -7627,7 +7691,7 @@
           if (drawerActive === "chat") renderChat();
           return;
         }
-        if (info?.reason === "insufficient_stamina") { toast("กำลังไม่พอสำหรับใช้สกิล"); return; }
+        if (info?.reason === "insufficient_stamina") { floatAtPlayer(localId, "กำลังไม่พอ", "weak", { drift: 0 }); toast("กำลังไม่พอสำหรับใช้สกิล"); return; }
         if(warpPending) {
           clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
           const warpReasons={portal_too_far:"อยู่ไกลจากประตูเกินไป",combat_locked:"รอให้พ้นการต่อสู้ก่อนเดินทาง",warp_cooldown:"รอคูลดาวน์ก่อนเดินทาง",movement_busy:"หยุดบิน ปีน หรือพุ่งก่อนเดินทาง",character_busy:"กำลังบันทึกข้อมูล"};
@@ -10065,6 +10129,7 @@
               villageGhost.metadata.ghost.hurtAt = now;
               impactAt(localId, villageGhost.position.x, villageGhost.position.z, "", true, villageGhost.metadata.ghost.design?.kind);
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
+              floatAtMonster(MONSTER_ID, "20", "dealt");
               hitFlashRemaining = .22;
               updateMonsterUI(demoMonsterHp, 100, demoMonsterHp > 0, true);
               if (demoMonsterHp <= 0) {
@@ -10253,6 +10318,7 @@
     driftMist(elapsed, camera.target);
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
     if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
+    updateFloatText();
     { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);
       // Music state: combat for 6 s after any fight action, war in a live battle, elite when one is near.
       if ((musicSyncIn -= dt) <= 0 && hero) {
