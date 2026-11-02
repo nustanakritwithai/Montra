@@ -3661,9 +3661,11 @@
         const reasons={guild_already_member:"ตัวละครนี้อยู่ในกิลด์แล้ว",guild_name_taken:"ชื่อกิลด์นี้ถูกใช้แล้ว",
           guild_leader_only:"เฉพาะหัวหน้ากิลด์ที่ทำรายการนี้ได้",guild_full:"กิลด์มีสมาชิกครบ 30 คนแล้ว",
           guild_not_member:"ยังไม่ได้อยู่ในกิลด์",guild_transfer_first:"ส่งต่อหัวหน้ากิลด์ก่อนออก",
-          guild_invalid_member:"ไม่พบสมาชิก",guild_invite_expired:"คำเชิญหมดอายุ",guild_invalid_target:"ไม่พบผู้เล่นที่ชวนได้"};
+          guild_officer_required:"ต้องเป็นผู้บัญชาการหรือนายทหารที่มีสิทธิ์",guild_invalid_assignment:"ตำแหน่งหรือข้อมูลไม่ถูกต้อง",
+          guild_squad_required:"ต้องเลือกหน่วยก่อนแต่งตั้งหัวหน้าหน่วย",guild_squad_full:"หน่วยนี้มีสมาชิกครบ 5 คนแล้ว",
+          guild_squad_leader_exists:"หน่วยนี้มีหัวหน้าอยู่แล้ว",guild_invalid_member:"ไม่พบสมาชิก",guild_invite_expired:"คำเชิญหมดอายุ",guild_invalid_target:"ไม่พบผู้เล่นที่ชวนได้"};
         if(message?.reason==="guild_invite_expired"){guildInvitation=null;guildUnread=false;updatePartyBadge();}
-        toast(reasons[message?.reason]||"ทำรายการกิลด์ไม่สำเร็จ");renderGuild();
+        toast(reasons[message?.reason]||"ทำรายการกิลด์ไม่สำเร็จ");guildRenderKey="";renderGuild();
       });
       joined.onMessage("party_state", message => {
         if (room!==joined || !Array.isArray(message?.members) || message.members.length>4) return;
@@ -5140,46 +5142,89 @@
     $("partyLeave").onclick=()=>{if(partyReady())room.send("party_leave",{});};
     renderParty(); if(partyReady())room.send("get_party",{});
   }
+  let guildRenderKey="";
+  const guildRankLabels={commander:"ผู้บัญชาการ",officer:"นายทหาร",squad_leader:"หัวหน้าหน่วย",member:"สมาชิก"};
+  const guildSpecialtyLabels={none:"ทั่วไป",engineer:"ช่าง",scout:"สายข่าว",support:"สนับสนุน"};
   function guildReady(){return mode==="live" && room?.state?.guildAvailable===true && ownServerCharacter()?.persistent===true;}
   function renderGuild(){
     if(drawerActive!=="guild" || !$("guildStatus"))return;
-    const ready=guildReady(),leader=guildState && guildState.ownId===guildState.leaderId;
+    const ready=guildReady(),roles=room?.state?.guildRolesAvailable===true;
+    const commander=guildState && guildState.ownId===guildState.leaderId;
+    const own=guildState?.members.find(m=>m.id===guildState.ownId);
+    const officer=roles && own?.rank==="officer";
+    const candidates=[];
+    room?.state?.players?.forEach?.((player,id)=>{
+      if(id===localId || player.persistent!==true || (guildState?.members||[]).some(m=>m.publicId && m.publicId===player.characterId))return;
+      candidates.push({id,name:String(player.characterName || "ผู้เล่น")});
+    });
+    const key=JSON.stringify({ready,roles,guildState,guildInvitation,candidates});
+    if(guildRenderKey===key)return;
+    guildRenderKey=key;
     $("guildStatus").textContent=!ready?"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว":guildState?guildState.name+" · สมาชิก "+guildState.members.length+" / 30":"ยังไม่มีกิลด์";
     $("guildCreateArea").hidden=!!guildState || !ready;
     $("guildMemberArea").hidden=!guildState;
     $("guildInvitationBox").hidden=!guildInvitation || !!guildState;
     if(guildInvitation){$("guildInviteName").textContent=guildInvitation.guildName;$("guildInviterName").textContent=guildInvitation.fromName;}
     $("guildAccept").disabled=!ready;$("guildDecline").disabled=!ready;
-    const list=$("guildMembers");list.replaceChildren();
+    const list=$("guildMembers");
+    const expanded=new Set([...list.querySelectorAll("details[open]")].map(el=>el.dataset.memberId));
+    list.replaceChildren();
     for(const member of guildState?.members||[]){
+      const rank=member.id===guildState.leaderId?"commander":member.rank || "member";
       const row=document.createElement("div");row.className="guild-member";
       const info=document.createElement("div"),name=document.createElement("strong"),status=document.createElement("small");
-      name.textContent=member.name+(member.id===guildState.leaderId?" · หัวหน้า":"")+(member.id===guildState.ownId?" · คุณ":"");
-      status.textContent=member.online?"ออนไลน์":"ออฟไลน์";info.append(name,status);row.append(info);
-      if(leader && member.id!==guildState.ownId){
-        const actions=document.createElement("div");actions.className="guild-actions";
-        for(const [action,label] of [["transfer","ตั้งหัวหน้า"],["kick","นำออก"]]){
-          const button=document.createElement("button");button.type="button";button.textContent=label;
-          button.onclick=()=>{if(guildReady() && window.confirm(label+" "+member.name+" ใช่หรือไม่"))room.send("guild_manage",{memberId:member.id,action});};
-          actions.append(button);
+      name.textContent=member.name+(member.id===guildState.ownId?" · คุณ":"");
+      const labels=[guildRankLabels[rank] || "สมาชิก",member.squad?"หน่วย "+member.squad:"ยังไม่เข้าหน่วย",guildSpecialtyLabels[member.specialty] || "ทั่วไป",member.online?"ออนไลน์":"ออฟไลน์"];
+      status.textContent=labels.join(" · ");info.append(name,status);row.append(info);
+      const canOrganize=roles && (commander || (officer && rank!=="commander" && rank!=="officer"));
+      const canManage=commander && member.id!==guildState.ownId;
+      if(canOrganize || canManage){
+        const details=document.createElement("details");details.className="guild-management";details.dataset.memberId=member.id;
+        details.open=expanded.has(member.id);
+        const summary=document.createElement("summary");summary.textContent="จัดการ";details.append(summary);
+        const panel=document.createElement("div");panel.className="guild-management-panel";
+        const assign=(kind,title,current,options)=>{
+          const label=document.createElement("label");label.className="field";
+          const text=document.createElement("span");text.textContent=title;
+          const select=document.createElement("select");select.setAttribute("aria-label",title+" "+member.name);
+          for(const [value,caption] of options){const option=document.createElement("option");option.value=String(value);option.textContent=caption;select.append(option);}
+          select.value=String(current);
+          select.onchange=()=>{
+            const value=kind==="squad"?(select.value===""?null:Number(select.value)):select.value;
+            if(guildReady() && room?.state?.guildRolesAvailable===true)room.send("guild_assign",{memberId:member.id,kind,value});
+          };
+          label.append(text,select);panel.append(label);
+        };
+        if(roles && canManage)assign("rank","ตำแหน่ง",rank,[["member","สมาชิก"],["officer","นายทหาร"],["squad_leader","หัวหน้าหน่วย"]]);
+        if(canOrganize){
+          assign("squad","หน่วย",member.squad??"",[["","ไม่อยู่ในหน่วย"],...[1,2,3,4,5,6].map(n=>[n,"หน่วย "+n])]);
+          assign("specialty","หน้าที่",member.specialty||"none",Object.entries(guildSpecialtyLabels));
         }
-        row.append(actions);
+        if(canManage){
+          const actions=document.createElement("div");actions.className="guild-actions";
+          for(const [action,label] of [["transfer","ตั้งผู้บัญชาการ"],["kick","นำออก"]]){
+            const button=document.createElement("button");button.type="button";button.textContent=label;
+            button.onclick=()=>{if(guildReady() && window.confirm(label+" "+member.name+" ใช่หรือไม่"))room.send("guild_manage",{memberId:member.id,action});};
+            actions.append(button);
+          }
+          panel.append(actions);
+        }
+        details.append(panel);row.append(details);
       }
       list.append(row);
     }
     const select=$("guildTarget"),previous=select.value;select.replaceChildren();
-    room?.state?.players?.forEach?.((player,id)=>{
-      if(id===localId || player.persistent!==true || (guildState?.members||[]).some(m=>m.publicId && m.publicId===player.characterId))return;
-      const option=document.createElement("option");option.value=id;option.textContent=String(player.characterName || "ผู้เล่น");select.append(option);
-    });
+    for(const candidate of candidates){const option=document.createElement("option");option.value=candidate.id;option.textContent=candidate.name;select.append(option);}
     if([...select.options].some(o=>o.value===previous))select.value=previous;
-    $("guildInviteArea").hidden=!leader;$("guildInvite").disabled=!ready || !select.value || (guildState?.members.length||0)>=30;
+    $("guildInviteArea").hidden=!(commander||officer);
+    $("guildInvite").disabled=!ready || !select.value || (guildState?.members.length||0)>=30;
     $("guildLeave").disabled=!ready;
+    $("guildRolesNote").hidden=!roles;
   }
   function openGuild(){
-    guildUnread=false;updatePartyBadge();
+    guildRenderKey="";guildUnread=false;updatePartyBadge();
     openDrawer("guild","กิลด์",
-      '<button class="secondary" id="backToParty" type="button">← ปาร์ตี้</button><div class="economy-balance" id="guildStatus" role="status"></div><div id="guildInvitationBox" class="party-invitation" hidden><strong><span id="guildInviterName"></span> ชวนเข้ากิลด์ <span id="guildInviteName"></span></strong><div class="party-actions"><button id="guildAccept" type="button">เข้าร่วม</button><button id="guildDecline" type="button">ปฏิเสธ</button></div><p class="note">คำเชิญมีอายุ 60 วินาที</p></div><div id="guildCreateArea" hidden><label class="field" for="guildName">ชื่อกิลด์ 2–24 ตัวอักษร</label><input id="guildName" maxlength="48" autocomplete="off"><button class="primary" id="guildCreate" type="button">สร้างกิลด์</button></div><div id="guildMemberArea" hidden><h3>สมาชิกกิลด์</h3><div id="guildMembers"></div><div id="guildInviteArea" hidden><label class="field" for="guildTarget">เชิญผู้เล่นในห้อง</label><select id="guildTarget"></select><button class="primary" id="guildInvite" type="button">ส่งคำเชิญ</button></div><button class="secondary" id="guildLeave" type="button">ออกจากกิลด์</button><p class="note">หัวหน้าที่มีสมาชิกต้องส่งต่อตำแหน่งก่อนออก · หากเป็นสมาชิกคนสุดท้าย การออกจะยุบกิลด์</p></div>');
+      '<button class="secondary" id="backToParty" type="button">← ปาร์ตี้</button><div class="economy-balance" id="guildStatus" role="status"></div><div id="guildInvitationBox" class="party-invitation" hidden><strong><span id="guildInviterName"></span> ชวนเข้ากิลด์ <span id="guildInviteName"></span></strong><div class="party-actions"><button id="guildAccept" type="button">เข้าร่วม</button><button id="guildDecline" type="button">ปฏิเสธ</button></div><p class="note">คำเชิญมีอายุ 60 วินาที</p></div><div id="guildCreateArea" hidden><label class="field" for="guildName">ชื่อกิลด์ 2–24 ตัวอักษร</label><input id="guildName" maxlength="48" autocomplete="off"><button class="primary" id="guildCreate" type="button">สร้างกิลด์</button></div><div id="guildMemberArea" hidden><p class="note" id="guildRolesNote" hidden>ผู้บัญชาการแต่งตั้งนายทหารและหัวหน้าหน่วย · นายทหารช่วยจัดหน่วยและเชิญสมาชิก · หน่วยละไม่เกิน 5 คน</p><h3>สมาชิกกิลด์</h3><div id="guildMembers"></div><div id="guildInviteArea" hidden><label class="field" for="guildTarget">เชิญผู้เล่นในห้อง</label><select id="guildTarget"></select><button class="primary" id="guildInvite" type="button">ส่งคำเชิญ</button></div><button class="secondary" id="guildLeave" type="button">ออกจากกิลด์</button><p class="note">หัวหน้าที่มีสมาชิกต้องส่งต่อตำแหน่งก่อนออก · หากเป็นสมาชิกคนสุดท้าย การออกจะยุบกิลด์</p></div>');
     $("backToParty").onclick=openParty;
     $("guildCreate").onclick=()=>{const name=$("guildName").value.normalize("NFC").trim();if(guildReady() && name)room.send("guild_create",{name});};
     $("guildInvite").onclick=()=>{const targetId=$("guildTarget").value;if(guildReady() && targetId)room.send("guild_invite",{targetId});};
