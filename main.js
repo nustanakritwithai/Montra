@@ -95,7 +95,15 @@
     ui.loadingText.textContent = "อุปกรณ์นี้ไม่สามารถเปิด WebGL ได้: " + (err.message || err);
     return;
   }
-  engine.setHardwareScalingLevel(Math.min(1.7, Math.max(1, devicePixelRatio / 1.5)));
+  // Babylon divides the canvas size by this value. A value above 1 blurs
+  // high-density phones, so render up to 1.5 physical pixels per CSS pixel.
+  function resizeGameRenderer() {
+    const density = Math.min(1.5, Math.max(1, window.devicePixelRatio || 1));
+    const scaling = 1 / density;
+    if (engine.getHardwareScalingLevel() !== scaling) engine.setHardwareScalingLevel(scaling);
+    else engine.resize();
+  }
+  resizeGameRenderer();
   let activeMapId = "ritual_village", warpPending = false, warpTimer = null;
   const chatHistory = { map: [], world: [] }, chatUnread = { map: 0, world: 0 };
   const chatDraft = { map: "", world: "" };
@@ -5008,7 +5016,7 @@
     if (me) warm.position.set(me.x, me.y + 3.4, me.z + .6);
     scene.render();
   });
-  window.addEventListener("resize",()=>{ engine.resize(); updateStatus(); });
+  window.addEventListener("resize",()=>{ resizeGameRenderer(); updateStatus(); });
   window.addEventListener("pagehide",()=> { clearSyncPoll();if(room)try{room.leave();}catch(_){} });
   resetDemoMonster();
   updateStatus();
