@@ -1,5 +1,7 @@
 import type { HuntCamp, WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
 
+import { PROVINCES } from "./StrategicProvinces.js";
+
 type XZ = {x:number; z:number};
 type XY = readonly [number,number];
 type Court = readonly [string,number,number,readonly number[],string];
@@ -18,12 +20,19 @@ const islandRoutes:XY[][]=[
   [[0,26],[22,12],[22,-17]], [[-22,-17],[-22,-36],[0,-43]],
 ];
 const regions:Region[]=[
+  {id:"bamboo_frontier",name:"ดงไผ่ชายเวียง",range:[25,35],hint:PROVINCES.bamboo_frontier.hint,
+   courts:[["ลานหน่อไผ่",-20,4,[25,26,27],"ผีตาไผ่"],["ค่ายพรานเก่า",20,-17,[29,31],"พรานพราย"],["ลานรากแดง",0,-41,[33,35],"อสูรรากไผ่"]],
+   routes:[[[0,26],[-20,13],[-20,4],[-23,-22],[0,-41],[0,-58]],[[0,26],[20,7],[20,-17],[18,-30],[0,-41]],[[-20,4],[0,-8],[20,-17]]],
+   marker:[-12,-46],scatter:[[-31,5],[30,-22],[11,-45],[-32,-30]]},
+  {id:"lotus_basin",name:"บึงบัวนาค",range:[40,52],hint:PROVINCES.lotus_basin.hint,crossings:[-6,-29],
+   courts:[["บ่อตะวันตก",-22,8,[40,41,43],"ภูตบัวธูป"],["คุ้งเรือแตก",22,-17,[45,47],"พรายคนพาย"],["ค่ายเกล็ดนาค",0,-43,[50,52],"อสรพิษบึง"]],
+   routes:islandRoutes,marker:[-9,-50],scatter:[[-34,7],[32,-18],[-32,-39],[15,-45]]},
   {id:"drowned_marsh",name:"บึงพราย",range:[10,22],hint:"ข้ามสะพานไม้ระหว่างเกาะ ติดตามโคมเขียวไปท่าน้ำเหนือ",crossings:[-6,-29],
    courts:[["เกาะกกผี",-22,8,[10,12,14],"พรายกอกก"],["ท่าน้ำจมน้ำ",22,-17,[15,17],"เงาคนแจว"],["ศาลพราย",0,-43,[19,22],"ผีเฝ้าศาลน้ำ"]],
    routes:islandRoutes,marker:[-9,-50],scatter:[[-34,7],[34,-17],[-32,-39],[15,-45]]},
   {id:"moon_cemetery",name:"ป่าช้าเงาจันทร์",range:[18,32],hint:"ทางจากวัดและบึงพบกันที่ลานจันทร์ ตามทางโคมไปเชิงเขา",
    courts:[["เนินป้ายวิญญาณ",-22,2,[18,20,22],"เงาหลุมศพ"],["ลานเผาศพ",22,-15,[24,27],"ผู้เฝ้าเชิงตะกอน"],["ลานจันทร์ดับ",0,-41,[29,32],"วิญญาณเงาจันทร์"]],
-   routes:[[[-18,25],[0,21],[18,25]],[[0,21],[-22,11],[-22,2],[-24,-24],[0,-41],[0,-58]],[[0,21],[22,4],[22,-15],[20,-30],[0,-41]],[[-22,2],[0,-7],[22,-15]]],
+   routes:[[[-18,25],[0,21],[18,25]],[[0,21],[-22,11],[-22,2],[-24,-24],[0,-41],[0,-58]],[[0,21],[22,4],[22,-15],[20,-30],[0,-41]],[[-22,2],[0,-7],[22,-15]],[[-22,11],[-34,12]]],
    marker:[10,-45],scatter:[[-34,-1],[33,-15],[-12,-39],[1,8]]},
   {id:"hex_ridge",name:"ดงอาคมบนเขา",range:[28,45],hint:"เลาะช่องเขาฝั่งตะวันตก แล้วเลือกระหว่างสันเขากับทางวนรอบหุบ",
    courts:[["เชิงผาหินสลัก",-23,6,[28,30,33],"ภูตเชิงผา"],["ช่องเขาอาคม",23,-18,[35,39],"อสูรเถาวัลย์"],["ยอดผาผนึก",-14,-42,[42,45],"ผู้พิทักษ์หน้าผา"]],
@@ -56,9 +65,17 @@ const edges:readonly (readonly [GateEnd,GateEnd])[]=[
   [["forbidden_forest",48,-84],["drowned_marsh",0,26]],
   [["bound_temple",32,-65],["moon_cemetery",-18,25]],
   [["drowned_marsh",0,-58],["moon_cemetery",18,25]],
-  [["moon_cemetery",0,-58],["hex_ridge",0,26]],
+  [["ritual_village",4,-16],["mantra_capital",0,26]],
+  [["mantra_capital",-34,-14],["bamboo_frontier",0,26]],
+  [["bamboo_frontier",0,-58],["moon_cemetery",-34,12]],
+  [["moon_cemetery",0,-58],["moon_pass",0,26]],
+  [["moon_pass",0,-58],["hex_ridge",0,26]],
+  [["mantra_capital",0,-58],["moon_pass",-34,6]],
+  [["mantra_capital",34,-14],["lotus_basin",0,26]],
+  [["lotus_basin",0,-58],["river_watch",34,-14]],
   [["hex_ridge",0,-58],["naga_cavern",0,26]],
-  [["naga_cavern",0,-58],["fallen_city",0,26]],
+  [["naga_cavern",0,-58],["river_watch",0,26]],
+  [["river_watch",0,-58],["fallen_city",0,26]],
   [["fallen_city",0,-58],["asura_peak",0,26]],
   [["asura_peak",0,-58],["spirit_rift",0,26]],
 ];
@@ -84,6 +101,7 @@ export const ATLAS_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freez
   const map:WorldMapDefinition={id:region.id,name:region.name,bounds:{minX:-42,maxX:42,minZ:-65,maxZ:32},spawn,portals,camps,
     region:{range:region.range,hint:region.hint,noFlight:region.noFlight===true},
     restAreas:[{...spawn,radius:4.5,name:"ศาลพักทางเข้า"},...portals.filter(p=>Math.hypot(p.x-spawn.x,p.z-spawn.z)>4).map(p=>({x:p.x,z:p.z,radius:3.6,name:"ศาลประตู"}))],
+    strategic:PROVINCES[region.id],
     paths:region.routes.map(route=>route.map(point)),walls:region.walls,
     boss:region.id==="spirit_rift"?RIFT_WARDEN:undefined,
     water:region.crossings?.flatMap(channels),

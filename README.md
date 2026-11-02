@@ -104,7 +104,7 @@ projects, so deployments must not overwrite its shared configuration.
 
 ## Current limits
 
-- Four users **per room**, not four users across the whole MMO.
+- Each normal world room has 10 seats. Matchmaking opens another room when the current rooms are full. A party can have up to four members.
 - One illustrative monster with RRT wall-avoidance, one physically solid fortification, and basic server ray-vs-wall line of sight. Dash/walking uses the **server's real watchwall/platform/map boundaries**, not decorative house/tree meshes. Flight is a fixed 6m high air layer, not unlimited ascent. General-purpose navmesh, universal house collisions, ballistic physics and jumping are not yet available.
 - The server uses fixed 20 Hz ticks. No client prediction/rewind system has been enabled.
 - Alpha 0.2.1 supports **three character saves per recovery token** on a single Windows VPS. Slot 1 keeps the original S2 file. No username/password account, automated lost-token recovery, remote backup or relational database. Clearing browser data without exporting the token loses access to all 3 slots.

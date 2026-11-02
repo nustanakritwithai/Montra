@@ -102,7 +102,15 @@
     ui.loadingText.textContent = "อุปกรณ์นี้ไม่สามารถเปิด WebGL ได้: " + (err.message || err);
     return;
   }
-  engine.setHardwareScalingLevel(Math.min(1.7, Math.max(1, devicePixelRatio / 1.5)));
+  // Babylon divides the canvas size by this value. A value above 1 blurs
+  // high-density phones, so render up to 1.5 physical pixels per CSS pixel.
+  function resizeGameRenderer() {
+    const density = Math.min(1.5, Math.max(1, window.devicePixelRatio || 1));
+    const scaling = 1 / density;
+    if (engine.getHardwareScalingLevel() !== scaling) engine.setHardwareScalingLevel(scaling);
+    else engine.resize();
+  }
+  resizeGameRenderer();
   let activeMapId = "ritual_village", warpPending = false, warpTimer = null;
   const chatHistory = { map: [], world: [], party: [], private: [], bug: [] }, chatUnread = { map: 0, world: 0, party: 0, private: 0, bug: 0 };
   const chatDraft = { map: "", world: "", party: "", private: "", bug: "" };
@@ -311,8 +319,8 @@
     const m = mat(name, hex); m.opacityTexture = vergeTexture; m.backFaceCulling = false; m.specularColor = B.Color3.Black();
     return m;
   }
-  function buildRoad(points, width, material, verge, parent, seed = 0) {
-    const smooth = smoothPath(points), y = .012 + (seed % 5) * .002, parts = [];
+  function buildRoad(points, width, material, verge, parent, seed = 0, straight = false) {
+    const smooth = straight ? points : smoothPath(points), y = .012 + (seed % 5) * .002, parts = [];
     parts.push(ribbonMesh("road verge", smooth, width + 1.8, verge, y - .006, seed, .2));
     parts.push(ribbonMesh("road", smooth, width, material, y, seed));
     for (const end of [smooth[0], smooth[smooth.length - 1]]) {
@@ -1489,6 +1497,11 @@
   }
   // Palette and silhouettes are local art. Traversable geometry always comes from the room.
   const regionStyles = {
+    mantra_capital:["#8a9276","#d7b582","#adb79a","#8b7d68","#ffdc93","#425955"],
+    moon_pass:["#758358","#c4ab7c","#9caa74","#77756d","#f5cf81","#405a63"],
+    river_watch:["#758b82","#c4aa78","#8caaa0","#706a60","#97e5dc","#354f63"],
+    bamboo_frontier:["#62884c","#b89a68","#89ad69","#645b45","#b9e991","#344b3d"],
+    lotus_basin:["#61887b","#bda885","#91ac8a","#616e74","#eca4b4","#344b65"],
     drowned_marsh: ["#537861","#aa936d","#819769","#5b5643","#99e9bb","#376f79"],
     moon_cemetery: ["#696e78","#b3a58e","#858799","#767885","#e7cda0","#4b445d"],
     hex_ridge: ["#718153","#bca27b","#94a46a","#746d61","#f0cb65","#405747"],
@@ -1498,6 +1511,7 @@
     spirit_rift: ["#686190","#b0a1cc","#857daf","#64567f","#c4abff","#373458"],
   };
   const regionPaints=new Map();
+  const civicRoad=mat('protected jade paving','#8eb6a0','#243e38');
   function regionPaint(id) {
     if(!regionStyles[id])return null;
     if(!regionPaints.has(id)){
@@ -1510,13 +1524,15 @@
         ink.fillStyle=i%4===0?"#c4c9c0":"#dadbd0";
         ink.fillRect(x,y,2+i%7,1+i%3);
       }
-      if(id==="fallen_city"){
+      const province=worldDefinitions?.[id]?.strategic;
+      if(id==="fallen_city" || province?.kind==="capital"){
         ink.strokeStyle="#bcc1b8";ink.lineWidth=2;
         for(let row=0;row<8;row++)for(let col=-1;col<5;col++)ink.strokeRect(col*64+row%2*32,row*32,64,32);
       }
       terrain.update();terrain.uScale=9;terrain.vScale=12;floor.diffuseTexture=terrain;
       // Night grade: the atlas palette is kept but pulled down toward moonlight.
-      floor.diffuseColor.scaleInPlace(.58);court.diffuseColor.scaleInPlace(.5);road.diffuseColor.scaleInPlace(.66);
+      floor.diffuseColor.scaleInPlace(province?.kind ? .88 : .58);court.diffuseColor.scaleInPlace(province?.kind ? .83 : .5);road.diffuseColor.scaleInPlace(province?.kind ? .94 : .66);
+      if(province){floor.emissiveColor=floor.diffuseColor.scale(.22);road.emissiveColor=road.diffuseColor.scale(.17);}
       stone.diffuseColor.scaleInPlace(.8);deep.diffuseColor.scaleInPlace(.7);
       court.diffuseTexture=terrain;glowMats.add(light);
       regionPaints.set(id,{floor,road,court,stone,light,deep});
@@ -1547,6 +1563,141 @@
       parts=[];
     }
     const {floor,road,stone,light,deep}=paint;
+    if(map.strategic){
+      const {kind,sites}=map.strategic;
+      const city=kind==="capital",bamboo=map.id==="bamboo_frontier",lotus=map.id==="lotus_basin";
+      const roof=(x,y,z,width,depth)=>{
+        for(const side of [-1,1]){
+          const tile=box(x+side*width*.23,y,z,width*.58,.28,depth,roofMat);
+          tile.rotation.z=-side*.40;
+          box(x+side*width*.49,y-width*.10,z,.16,.20,depth+.25,gold);
+        }
+        box(x,y+width*.10,z,.27,.3,depth+.5,gold);
+      };
+      const pavilion=(x,z,width,height)=>{
+        for(const dx of [-1,1])for(const dz of [-1,1])cone(x+dx*width*.4,height/2,z+dz*width*.3,height,.34,.30,templeLacquer,6);
+        roof(x,height,z,width,width*.85);
+      };
+      const lamp=(x,z)=>{
+        box(x,1,z,.17,2,.17,darkWood);box(x,2.16,z,.55,.58,.55,lanternPaper);
+        cone(x,2.58,z,.37,1,.1,deep,4);box(x,.04,z,1.3,.05,1.3,paint.court);
+      };
+      box(0,-1.05,-16,220,.6,228,deep);
+      for(let i=0;i<18;i++)for(const side of [-1,1]){
+        const h=4+(i*7)%6;
+        cone(side*(46+i%4),h*.33,-65+i*5.6,h,6+i%4,.25,bamboo||lotus?forestLeaf:stone,6);
+        cone(-48+i*5.6,h*.32,side>0?36+i%3:-72-i%4,h,6+i%5,.2,floor,6);
+      }
+      for(const w of map.water||[]){
+        box(w.x+w.width/2,.05,w.z+w.length/2,w.width,.10,w.length,regionWater(map.id));
+        const horizontal=w.width>w.length,span=Math.max(w.width,w.length);
+        for(const side of [-1,1]){
+          const edgeX=w.x+w.width/2+(horizontal?0:side*(w.width/2-.12));
+          const edgeZ=w.z+w.length/2+(horizontal?side*(w.length/2-.12):0);
+          box(edgeX,.12,edgeZ,horizontal?w.width:.24,.13,horizontal?.24:w.length,civicRoad);
+        }
+        for(let k=2;k<span-1;k+=4){
+          const offset=.8+1.9*noise(k,29),x=w.x+(horizontal?k:offset),z=w.z+(horizontal?offset:k);
+          box(x,.14,z,horizontal?1.55:.23,.035,horizontal?.14:1.55,paint.court);
+          if(lotus && k%8===2){cone(x,.19,z,.1,1.15,1.25,civicRoad,7);cone(x,.49,z,.6,.85,.14,light,6);}
+        }
+      }
+      const crossings=sites.filter(s=>s.kind==="bridge");
+      if(lotus)for(const z of [-4,-27])for(const x of [-22,22])crossings.push({x,z});
+      for(const s of crossings){
+        const cross=s.direction==="east";
+        for(let i=-4;i<=4;i++)box(s.x+(cross?i*.72:0),.13,s.z+(cross?0:i*.72),cross?.64:5.7,.18,cross?5.7:.64,wooden);
+        for(const side of [-1,1]){
+          box(s.x+(cross?0:side*2.9),.83,s.z+(cross?side*2.9:0),cross?6.6:.14,.17,cross?.14:6.6,gold);
+          for(const end of [-1,1])box(s.x+(cross?end*3.1:side*2.9),.55,s.z+(cross?side*2.9:end*3.1),.32,1.1,.32,stone);
+        }
+      }
+      finish("landscape");
+      for(const w of map.walls||[]){
+        const x=w.x+w.width/2,z=w.z+w.length/2;
+        if(city){
+          box(x,1.7,z,w.width,3.4,w.length,stone);roof(x,3.7,z,w.width+.75,w.length+.7);
+          box(x,1.7,w.z-.04,w.width*.25,2,.12,darkWood);
+          for(const side of [-1,1])box(x+side*w.width*.32,2.1,w.z-.12,.62,.9,.10,lanternPaper);
+        }else{
+          box(x,1.45,z,w.width,2.9,w.length,stone);
+          const count=Math.max(1,Math.floor(Math.max(w.width,w.length)/2));
+          for(let i=0;i<count;i++){
+            const t=(i+.5)/count;
+            box(w.width>w.length?w.x+t*w.width:x,3.1,w.width>w.length?z:w.z+t*w.length,1,.7,1,deep);
+          }
+        }
+        finish("buildings",true);
+      }
+      for(const s of sites){
+        const {x,z}=s;
+        if(s.kind==="palace"){
+          for(const side of [-1,1]){
+            pavilion(x+side*7,z,5,4);cone(x+side*7,6.2,z,3,1.5,.03,gold);
+          }
+          roof(x,6.3,z,13,4.8);roof(x,7.4,z,8,3.8);cone(x,9.2,z,3,1.3,0,gold);
+        }else if(s.kind==="fort"){
+          ring(x,.12,z,10.5,gold);ring(x,.13,z,9.8,stone);
+          for(const side of [-1,1]){
+            box(x+side*6,1.4,z-3,2.5,2.8,2.5,deep);
+            roof(x+side*6,3.5,z-3,3.6,3.6);
+          }
+          box(x,3,z, .17,6,.17,gold);box(x+1.1,5.3,z,2.2,1.45,.08,clothRed);
+        }else if(s.kind==="market"){
+          for(let i=0;i<3;i++){
+            const mx=x+(i-1)*2.8;pavilion(mx,z,2.6,2.35);box(mx,.65,z,1.8,1.3,.9,crateWood);
+            box(mx,1.42,z,.8,.24,.5,i%2?gold:paint.light);
+          }
+        }else if(s.kind==="tower"){
+          for(let i=0;i<3;i++){box(x,1+i*1.8,z,3.6-i*.6,1.8,3.6-i*.6,stone);roof(x,2+i*1.8,z,4.3-i*.7,4.1-i*.65);}
+          cone(x,7,z,2,.85,0,gold);
+        }else if(s.kind==="mine"){
+          for(const side of [-1,1]){box(x+side*1.3,1.45,z,.55,2.9,.6,darkWood);cone(x+side*2,.8,z+1,1.8,1.5,.2,paint.light,5);}
+          box(x,3,z,3.5,.65,1,wooden);box(x,.9,z+.6,2.1,1.8,.4,deep);
+        }else if(s.kind==="port"){
+          box(x,.22,z,5,.45,3.7,wooden);pavilion(x,z,4.6,3.4);
+          for(let i=0;i<3;i++)box(x+3,.5,z+i-1,.9,1,.9,crateWood);
+        }else if(s.kind==="shrine"){
+          cone(x,.5,z,1,3.2,2.5,stone,8);cone(x,2,z,2,1.8,.55,templeGold,8);cone(x,3.6,z,1.8,.5,0,gold);
+        }else if(s.kind==="grove"){
+          for(let i=0;i<8;i++){const a=i*2.4;cone(x+Math.cos(a)*1.2,2,z+Math.sin(a)*1.2,4+i%3,.32,.20,forestLeaf);}
+        }
+        if(s.kind!=="bridge")lamp(x+2.2,z+1.5);
+        finish(s.kind,true);
+        expansionLabel(s.name,x,z,10,s.kind==="palace"?11:s.kind==="fort"?7:4.5);
+      }
+      for(const [i,route] of map.paths.entries())for(let j=1;j<route.length;j++){
+        const a=route[j-1],b=route[j],dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz);
+        for(let d=6;d<len-2;d+=11)lamp(a.x+dx*d/len+dz*3/len,a.z+dz*d/len-dx*3/len);
+      }
+      // Low field dressing stays out of roads and clearings. The blocked groves use the server footprints.
+      for(const o of map.obstacles)if(!sites.some(s=>s.x===o.x&&s.z===o.z)){
+        cone(o.x,.65,o.z,1.35,o.radius*2,.7,stone);
+      }
+      if(bamboo || lotus){
+        for(let i=0;i<54;i++){
+          const x=-35+70*noise(i,83),z=-57+81*noise(i,26);
+          if(!sceneryClear(x,z,2.8,map))continue;
+          if(bamboo){
+            for(let j=0;j<4;j++){
+              const bx=x+(j-1.5)*.57,bz=z+Math.sin(j)*.7,h=2.6+noise(i+j,16)*2;
+              cone(bx,h/2,bz,h,.27,.19,decor.bamboo,6);
+              for(const dir of [-1,1]){const leaf=cone(bx+dir*.5,h*.78,bz,.36,1.8,.35,paint.court,4);leaf.rotation.z=dir*.43;}
+            }
+          }else{
+            for(let j=0;j<3;j++){const reed=cone(x+j*.46,.86,z,.98+j*.29,.19,.1,decor.bamboo,5);reed.rotation.z=(j-1)*.22;}
+            cone(x,.14,z,.12,1.1,1.28,civicRoad,8);cone(x,.44,z,.53,.8,.15,light,6);
+          }
+        }
+      }
+      if(bamboo || lotus)for(let i=0;i<36;i++){
+        const x=(i%2?1:-1)*(35+i%4),z=-58+(i*29)%83;
+        if(bamboo){for(let j=0;j<4;j++){cone(x+j*.3,2,z+j*.2,4+j*.7,.21,.13,forestLeaf,5).rotation.z=(j-2)*.07;}}
+        else {cone(x,.12,z,.16,1.7,1.8,forestLeaf,8);cone(x,.4,z,.4,.8,.3,paint.light,6);}
+      }
+      finish("lanterns and fields");
+      return;
+    }
     const marsh=map.id==="drowned_marsh",rift=map.id==="spirit_rift";
     // Distant slopes frame the playfield even when the camera follows an outer gate.
     box(0,-1.2,-16,226,.65,239,deep);
@@ -1665,6 +1816,11 @@
   function regionWater(id){
     if(!regionWaters.has(id)){
       const m=water.clone(id+" water"),t=riverRipple.clone();t.uScale=3;t.vScale=1;m.emissiveTexture=t;
+      if(["moon_pass","river_watch","lotus_basin"].includes(id)){
+        // Opaque water keeps the available bridge gaps legible at the tactical camera distance.
+        m.emissiveTexture=null;m.disableLighting=true;
+        m.emissiveColor=B.Color3.FromHexString(id==="lotus_basin"?"#337b71":id==="moon_pass"?"#357782":"#396e8a");
+      }
       const tint={drowned_marsh:["#0b1f17","#05130c"],spirit_rift:["#160c2c","#0d0624"]}[id];
       if(tint){m.diffuseColor=B.Color3.FromHexString(tint[0]);m.emissiveColor=B.Color3.FromHexString(tint[1]);}
       regionWaters.set(id,m);
@@ -1697,6 +1853,17 @@
   const violetPool=additiveMat("rift light",radialTexture("rift light",128,[[0,"rgba(190,150,255,.55)"],[.35,"rgba(150,110,255,.22)"],[1,"rgba(120,80,255,0)"]]));
   const bloodSeal=additiveMat("blood seal",squareYantraTexture("blood seal","rgba(255,80,60,.9)","#ff3020"));
   const riftSeal=additiveMat("rift seal",squareYantraTexture("rift seal","rgba(200,160,255,.85)","#9a60ff"));
+  function nearMapPath(map,x,z,d){
+    return (map.paths||[]).some(path=>path.some((p,i)=>{if(!i)return false;const a=path[i-1],dx=p.x-a.x,dz=p.z-a.z,l=dx*dx+dz*dz||1;
+      const t=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/l));return Math.hypot(x-a.x-t*dx,z-a.z-t*dz)<d;}));
+  }
+  function sceneryClear(x,z,courts,map){
+    return !nearMapPath(map,x,z,3)&&
+      !(map.camps||[]).some(c=>Math.hypot(x-c.x,z-c.z)<courts)&&!(map.portals||[]).some(p=>Math.hypot(x-p.x,z-p.z)<6)&&
+      !(map.restAreas||[]).some(r=>Math.hypot(x-r.x,z-r.z)<r.radius+1)&&!(map.obstacles||[]).some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+1.4)&&
+      !(map.walls||[]).some(w=>x>w.x-1&&x<w.x+w.width+1&&z>w.z-1&&z<w.z+w.length+1)&&
+      !(map.water||[]).some(w=>x>w.x-.8&&x<w.x+w.width+.8&&z>w.z-.8&&z<w.z+w.length+.8);
+  }
   function dressRegion(map,paint){
     let parts=[];
     const put=(mesh,x,y,z,m)=>{mesh.position.set(x,y,z);mesh.material=m;mesh.isPickable=false;parts.push(mesh);return mesh;};
@@ -1705,13 +1872,7 @@
     const ball=(x,y,z,d,m,seg=4)=>put(B.MeshBuilder.CreateSphere("region dressing",{diameter:d,segments:seg},scene),x,y,z,m);
     const decal=(x,z,size,m,rot=0,y=.05)=>{const g=put(B.MeshBuilder.CreateGround("region decal",{width:size,height:size},scene),x,y,z,m);g.rotation.y=rot;return g;};
     const b=map.bounds,id=map.id,{stone,deep,light,court,road}=paint;
-    const nearPath=(x,z,d)=>(map.paths||[]).some(path=>path.some((p,i)=>{if(!i)return false;const a=path[i-1],dx=p.x-a.x,dz=p.z-a.z,l=dx*dx+dz*dz||1;
-      const t=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/l));return Math.hypot(x-a.x-t*dx,z-a.z-t*dz)<d;}));
-    const clear=(x,z,courts=12.5)=>!nearPath(x,z,3)&&
-      !(map.camps||[]).some(c=>Math.hypot(x-c.x,z-c.z)<courts)&&!(map.portals||[]).some(p=>Math.hypot(x-p.x,z-p.z)<6)&&
-      !(map.restAreas||[]).some(r=>Math.hypot(x-r.x,z-r.z)<r.radius+1)&&!(map.obstacles||[]).some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+1.4)&&
-      !(map.walls||[]).some(w=>x>w.x-1&&x<w.x+w.width+1&&z>w.z-1&&z<w.z+w.length+1)&&
-      !(map.water||[]).some(w=>x>w.x-.8&&x<w.x+w.width+.8&&z>w.z-.8&&z<w.z+w.length+.8);
+    const clear=(x,z,courts=12.5)=>sceneryClear(x,z,courts,map);
     const scatter=(count,seed,fn,courts)=>{for(let i=0,n=0;i<count*8&&n<count;i++){
       const x=b.minX+2.5+noise(i,seed)*(b.maxX-b.minX-5),z=b.minZ+2.5+noise(i,seed+1)*(b.maxZ-b.minZ-5);
       if(clear(x,z,courts)){fn(x,z,n);n++;}}};
@@ -1801,7 +1962,7 @@
       scatter(34,425,(x,z,k)=>{const d=.9+noise(k,426)*1.6;ball(x,d*.25,z,d,decor.rock).scaling.y=.6;if(k%3===0)cone(x,d*.55,z,.3,.3,0,decor.ember,4);},12.5);
       alongTrails(12,2.8,(x,z)=>brazier(x,z));
       const spears=map.camps.find(c=>c.id==="court2");
-      if(spears)for(let k=0;k<10;k++){const a=k/10*Math.PI*2,x=spears.x+Math.cos(a)*12.8,z=spears.z+Math.sin(a)*12.8;if(nearPath(x,z,2.6))continue;
+      if(spears)for(let k=0;k<10;k++){const a=k/10*Math.PI*2,x=spears.x+Math.cos(a)*12.8,z=spears.z+Math.sin(a)*12.8;if(nearMapPath(map,x,z,2.6))continue;
         const sp=cone(x,1.5,z,3,.08,.08,decor.iron,5);sp.rotation.z=Math.cos(a)*.25;sp.rotation.x=-Math.sin(a)*.25;cone(x,3.1,z,.5,.16,0,decor.ember,4);}
       scatter(8,429,(x,z,k)=>{const h=6;cone(x,h/2,z,h,.14,.1,decor.iron,5);box(x+.4,h-1.2,z,.8,2,.03,clothRed);});
       rim(28,431,(x,z,k)=>{const h=9+noise(k,432)*10;cone(x,h/2,z,h,7+noise(k,433)*6,.4,decor.rock,5);if(k%4===0)cone(x,h*.85,z,h*.3,2,0,decor.ember,5);});
@@ -1866,7 +2027,7 @@
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
     const map=worldDefinitions?.[activeMapId];if(!map)return;
-    (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i));
+    (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic)));
     for(const camp of map.camps||[]){
       const clearing=inTemple ? B.MeshBuilder.CreateGround("temple court",{width:21,height:19},scene) : B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
       // Between the soil (-.12) and trail tops (+.015), so their colors never
@@ -1894,7 +2055,7 @@
       if(!map.portals.some(p=>p.targetMapId==="drowned_marsh"))expansionLabel("ทางสู่บึงพราย · ยังไม่เปิด",48,-84);
     }
     if(inTemple)buildTemple(map);
-    if(paint){buildRegion(map,paint);dressRegion(map,paint);}
+    if(paint){buildRegion(map,paint);if(!map.strategic)dressRegion(map,paint);}
     for(const portal of (map.portals||[]).slice(portals[activeMapId]?1:0))makePortal(activeMapId,expansionRoot,portal);
   }
   function makeForestMonster(monster,id) {
@@ -1970,7 +2131,13 @@
         ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monster.displayName+" · Lv "+monster.level;}
     });
     for(const [id,mesh] of forestMonsters)if(!seen.has(id)){mesh.dispose();forestMonsters.delete(id);}
-    const me=ownServerCharacter(),area=worldDefinitions?.[activeMapId]?.restAreas?.find(a=>me&&Math.hypot(me.x-a.x,me.z-a.z)<=a.radius);
+    const me=ownServerCharacter(),map=worldDefinitions?.[activeMapId];
+    const area=map?.strategic?.kind==="capital" || map?.restAreas?.some(a=>me&&Math.hypot(me.x-a.x,me.z-a.z)<=a.radius) ||
+      (me && map?.strategic?.safeRoads?.some(index=>map.paths[index].some((b,i,route)=>{
+        if(!i)return false;const a=route[i-1],dx=b.x-a.x,dz=b.z-a.z;
+        const t=Math.max(0,Math.min(1,((me.x-a.x)*dx+(me.z-a.z)*dz)/(dx*dx+dz*dz)));
+        return Math.hypot(me.x-a.x-t*dx,me.z-a.z-t*dz)<=3;
+      })));
     if(area){$("pkTitle").textContent="เขตพักปลอดภัย";$("pkText").textContent="พักและเตรียมตัว";$("pkHint").textContent="ไม่สามารถโจมตีจากในเขตพักหรือโจมตีผู้ที่อยู่ในเขตพักได้";}
     if(worldDefinitions)$("worldMapName").textContent=(worldDefinitions[activeMapId]?.name||activeMapId)+(area?" · เขตพักปลอดภัย":"");
     for(const label of expansionLabels)label.setEnabled(!me||Math.hypot(me.x-label.position.x,me.z-label.position.z)<45);
@@ -1998,7 +2165,7 @@
     const name=worldDefinitions?.[mapId]?.name || (village?"หมู่บ้านอาคม":"ป่าต้องห้าม");
     $("worldMapName").textContent=name;
     $("quest").querySelector(".quest-content strong").textContent=village?"เตรียมตัวออกสำรวจ":"สำรวจ"+name;
-    $("quest").querySelector(".quest-content span").textContent=village?"พัก จัดกระเป๋า แล้วเดินทางไปป่า":worldDefinitions?.[mapId]?.region?.hint || (mapId==="bound_temple"?"เลือกช่องกำแพง หรืออ้อมตามระเบียงวัด":"เปิดแผนที่เพื่อเลือกค่ายล่าตามเลเวล");
+    $("quest").querySelector(".quest-content span").textContent=village?"พัก จัดกระเป๋า แล้วเดินทางไปป่า":worldDefinitions?.[mapId]?.strategic?.hint || worldDefinitions?.[mapId]?.region?.hint || (mapId==="bound_temple"?"เลือกช่องกำแพง หรืออ้อมตามระเบียงวัด":"เปิดแผนที่เพื่อเลือกค่ายล่าตามเลเวล");
     marker.setEnabled(false);
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
   }
@@ -2093,6 +2260,7 @@
   };
   const sashHero = plaid("pha khao ma red", "#8c2a20", "#e6d7b8"), sashFriend = plaid("pha khao ma teal", "#1f5f63", "#d9e6d8");
   const pantsHero = mat("dark cotton trousers", "#1e1819"), pantsFriend = mat("traveller trousers", "#17262a");
+  pantsHero.backFaceCulling = pantsFriend.backFaceCulling = false;
   const pouchCloth = mat("rice pouch", "#3a332b"), ropeRed = mat("red cord", "#8e2a22"), jarClay = mat("spirit jar", "#2b2321"), waxRed = mat("seal wax", "#5c1a12");
   const jarCarved = mat("carved spirit jar", "#ffffff");
   jarCarved.diffuseTexture = paintTexture("spirit jar script", 256, (c, s) => {
@@ -2431,7 +2599,6 @@
     cyl(0, 1.715, -.035, .022, .055, .055, shawl, 8);
     onBone("Head");
     // Hips: trouser seat, cloth sash with a knot, rice pouch, spirit jar.
-    loft([[.7, .2, .15], [.78, .205, .148], [.88, .19, .135], [.97, .158, .112]], pants, 16);
     cyl(0, .965, 0, .055, .305, .3, sash, 12).scaling.z = .72;
     box(-.06, .9, .108, .055, .12, .015, sash).rotation.z = -.15;
     ball(-.178, .85, .035, .12, pouchCloth, 6).scaling.set(1, 1.15, .85);
@@ -2447,13 +2614,49 @@
     for (const side of [-1, 1]) box(jx + side * .05, jy + .015, jz + .03, .03, .13, .006, talismanPaper).rotation.z = side * .25;
     for (const dx of [-.02, 0, .02]) cyl(jx + dx, jy + .095, jz + .035, .01, .024, .024, waxRed, 8).rotation.x = 1.1;
     onBone("Hips");
-    // Loose fisherman trousers to mid-calf, in bone-local space.
-    for (const side of ["Left", "Right"]) {
-      loft([[.06, .118, .112], [-.06, .108, .104], [-.22, .088, .088], [-.35, .08, .082], [-.41, .078, .08]], pants, 12);
-      onBone(side + "UpLeg", [0, 0, 0]);
-      loft([[.07, .082, .084], [0, .084, .086], [-.11, .084, .084], [-.2, .088, .086], [-.212, .083, .082]], pants, 12);
-      onBone(side + "Leg", [0, 0, 0]);
+    // Trousers are skinned (see skinnedTrousers), so no rigid leg pieces here.
+  }
+  // Fisherman trousers cut from the body mesh itself: every triangle between
+  // the waist and mid-calf, pushed out along its normal and kept on the same
+  // bone weights, so the cloth bends exactly with the legs and the skin can
+  // never poke through at the knees or hips. Built once per loaded model.
+  let trouserData = null;
+  function skinnedTrousers(body, material) {
+    if (!trouserData) {
+      const K = B.VertexBuffer, pos = body.getVerticesData(K.PositionKind), nor = body.getVerticesData(K.NormalKind);
+      const mi = body.getVerticesData(K.MatricesIndicesKind), mw = body.getVerticesData(K.MatricesWeightsKind), idx = body.getIndices();
+      if (!pos || !nor || !mi || !mw || !idx) return null;
+      const HEM = .3, WAIST = .985, remap = new Map(), out = { positions: [], normals: [], indices: [], mi: [], mw: [] };
+      const inside = v => { const y = pos[v * 3 + 1]; return y > HEM && y < WAIST && Math.abs(pos[v * 3]) < .3; };
+      for (let i = 0; i < idx.length; i += 3) {
+        const tri = [idx[i], idx[i + 1], idx[i + 2]];
+        if (!tri.every(inside)) continue;
+        for (const v of tri) {
+          if (!remap.has(v)) {
+            remap.set(v, out.positions.length / 3);
+            const y = pos[v * 3 + 1];
+            // Looser over thigh and knee, snug at waist and hem.
+            const t = Math.min(1, Math.max(0, (y - HEM) / (WAIST - HEM)));
+            // Extra room where joints fold: the knee and the hip crease.
+            const knee = Math.exp(-Math.pow((y - .47) / .07, 2)), crease = Math.exp(-Math.pow((y - .83) / .06, 2));
+            const thick = .016 + .03 * Math.sin(Math.PI * Math.min(1, t * 1.25)) * (t < .85 ? 1 : .4) + .022 * knee + .02 * crease;
+            for (let k = 0; k < 3; k++) { out.positions.push(pos[v * 3 + k] + nor[v * 3 + k] * thick); out.normals.push(nor[v * 3 + k]); }
+            for (let k = 0; k < 4; k++) { out.mi.push(mi[v * 4 + k]); out.mw.push(mw[v * 4 + k]); }
+          }
+          out.indices.push(remap.get(v));
+        }
+      }
+      trouserData = out;
     }
+    const mesh = new B.Mesh("skinned trousers", scene), data = new B.VertexData();
+    data.positions = trouserData.positions; data.normals = trouserData.normals; data.indices = trouserData.indices;
+    data.matricesIndices = trouserData.mi; data.matricesWeights = trouserData.mw;
+    data.applyToMesh(mesh);
+    mesh.skeleton = body.skeleton; mesh.numBoneInfluencers = body.numBoneInfluencers;
+    mesh.parent = body.parent; mesh.position.copyFrom(body.position); mesh.scaling.copyFrom(body.scaling);
+    if (body.rotationQuaternion) mesh.rotationQuaternion = body.rotationQuaternion.clone(); else mesh.rotation.copyFrom(body.rotation);
+    mesh.material = material; mesh.isPickable = false; mesh.alwaysSelectAsActiveMesh = true;
+    return mesh;
   }
   // Rotation taking local +Y (a weapon's blade/shaft axis) onto `dir`.
   function quatFromUp(dir) {
@@ -2461,9 +2664,11 @@
     const angle = Math.acos(B.Scalar.Clamp(B.Vector3.Dot(up, d), -1, 1));
     return axis.lengthSquared() < 1e-6 ? B.Quaternion.Identity() : B.Quaternion.RotationAxis(axis.normalize(), angle);
   }
-  // Right-hand socket frame equals model space at rest: fingers point -X,
-  // forward is +Z, and +X runs back up the arm once the arm hangs down.
-  const HAND_GRIPS = { ritual_dagger: new B.Vector3(-.3, 0, 1), arcane_sword: new B.Vector3(-.6, 0, .8), spirit_staff: new B.Vector3(1, 0, .12) };
+  // Right-hand socket frame equals model space at rest (T-pose, palm down):
+  // fingers point -X and the thumb +Z. A fist grip holds every weapon along
+  // the thumb axis, so blades point forward-up and the staff stands upright
+  // once the elbow bends.
+  const HAND_GRIPS = { ritual_dagger: new B.Vector3(0, .15, 1), arcane_sword: new B.Vector3(0, .1, 1), spirit_staff: new B.Vector3(0, 0, 1) };
   function attachShamanModel(a) {
     if (shamanBody === null) { shamanWaiting.push(a); return; }
     if (!shamanBody || a.node.isDisposed()) return;
@@ -2475,34 +2680,329 @@
     for (const n of model.getDescendants(false)) nodes[n.name] = n;
     for (const m of model.getChildMeshes()) { m.isPickable = false; m.alwaysSelectAsActiveMesh = true; }
     shamanGear(a, nodes);
+    const body = model.getChildMeshes().find(m => m.skeleton);
+    if (body) skinnedTrousers(body, a.local ? pantsHero : pantsFriend);
     const socket = nodes.Socket_Hand_Weapon_R;
     for (const [kind, root] of Object.entries(a.weaponModels)) {
       root.parent = socket; root.position.set(0, 0, 0); root.scaling.setAll(.92);
       root.rotationQuaternion = quatFromUp(HAND_GRIPS[kind]);
     }
     a.rig.body.setEnabled(false);
-    a.skin = { nodes, copy, rest: { hipsY: nodes.Hips.position.y } };
+    const hips = nodes.Hips.position;
+    a.skin = { nodes, copy, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
   }
-  function animateSkin(a, m, s, c, t, flying, now) {
-    const n = a.skin.nodes, q = (x, y, z) => B.Quaternion.RotationYawPitchRoll(y, x, z);
-    const lower = flying ? .95 : 1.22, breath = Math.sin(t * 2.1) * (1 - m);
-    n.LeftUpLeg.rotationQuaternion = q(flying ? -.35 : -s * .55 * m, 0, 0);
-    n.RightUpLeg.rotationQuaternion = q(flying ? -.12 : s * .55 * m, 0, 0);
-    n.LeftLeg.rotationQuaternion = q(flying ? .75 : Math.max(0, c) * .8 * m + .04, 0, 0);
-    n.RightLeg.rotationQuaternion = q(flying ? .55 : Math.max(0, -c) * .8 * m + .04, 0, 0);
-    n.LeftArm.rotationQuaternion = q((flying ? -.2 : s * .42 * m), 0, -lower + breath * .02);
-    let rightPitch = flying ? -.2 : -s * .42 * m, rightBend = .25 + .2 * m;
-    if ((a.swingUntil || 0) > now) {
-      const p = 1 - (a.swingUntil - now) / 380;
-      rightPitch = p < .35 ? -2.4 * (p / .35) : -2.4 + 3.0 * ((p - .35) / .65); rightBend = .2;
+  // ---- Action animation set (visual only) ----
+  // Every action maps to something the game already replicates: server
+  // combatState / alive / flying, or broadcast events (combat_hit, pvp_hit,
+  // monster_hit, summon_spawn, dash_started, item_used, warp_complete).
+  // Bones: identity rest pose, model faces +Z. Euler [pitch x, yaw y, roll z]
+  // composed as yaw * pitch * roll, so roll lowers an arm from the T-pose,
+  // negative pitch swings a lowered limb forward, and forearm yaw bends the
+  // elbow (negative on the left, positive on the right).
+  const ACTIONS = {
+    stab: { dur: .34, swing: true }, slash: { dur: .48, swing: true }, smash: { dur: .58, swing: true },
+    punch: { dur: .32, swing: true }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
+    drink: { dur: 1.15 }, dash: { dur: .46 }, rise: { dur: 1.0 }, arrive: { dur: .85 },
+  };
+  const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash" };
+  const POSE_BONES = ["Hips", "Spine", "Spine1", "Chest", "Neck", "Head", "LeftShoulder", "RightShoulder",
+    "LeftArm", "RightArm", "LeftForeArm", "RightForeArm", "LeftHand", "RightHand",
+    "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg", "LeftFoot", "RightFoot"];
+  function playAction(a, type) {
+    if (!a || !ACTIONS[type]) return;
+    const now = performance.now();
+    a.action = { type, start: now, end: now + ACTIONS[type].dur * 1000 };
+    if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
+  }
+  function playAttack(attackerId, ranged, targetX, targetZ) {
+    const a = avatars.get(attackerId);
+    if (!a) return;
+    if (Number.isFinite(targetX) && Number.isFinite(targetZ)) faceAvatarToward(attackerId, targetX, targetZ);
+    playAction(a, ranged ? "cast" : MELEE[a.weaponId] || "punch");
+  }
+  // Server state per avatar; a revival plays the get-up action.
+  function noteAvatarState(a, p) {
+    const alive = p?.alive !== false;
+    if (a.serverAlive === false && alive) playAction(a, "rise");
+    a.serverAlive = alive;
+    a.serverCombat = typeof p?.combatState === "string" ? p.combatState : "idle";
+    a.serverFlying = p?.flying === true;
+  }
+  const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
+  // Additive effect materials shared by every avatar.
+  const fxGradient = paintTexture("slash gradient", 64, (c, s) => {
+    const img = c.createImageData(s, s);
+    for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+      const u = x / (s - 1), v = y / (s - 1), i = (y * s + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(255 * Math.pow(v, 1.6) * (.15 + .85 * u) * Math.min(1, (1 - u) * 6));
     }
-    n.RightArm.rotationQuaternion = q(rightPitch, 0, lower - breath * .02);
-    n.LeftForeArm.rotationQuaternion = q(0, -(.25 + .2 * m), 0);
-    n.RightForeArm.rotationQuaternion = q(0, rightBend, 0);
-    n.Spine.rotationQuaternion = q(.06 * m + ((a.dashUntil || 0) > now ? .3 : 0), s * .06 * m, 0);
-    n.Chest.rotationQuaternion = q(breath * .02, -s * .08 * m, 0);
-    n.Hips.position.y = a.skin.rest.hipsY + Math.abs(c) * .025 * m;
-    n.Hips.rotationQuaternion = q(0, s * .07 * m, 0);
+    c.putImageData(img, 0, 0);
+  });
+  fxGradient.hasAlpha = true;
+  const fxMat = (name, hex) => {
+    const m = new B.StandardMaterial(name, scene);
+    m.diffuseColor = B.Color3.Black(); m.specularColor = B.Color3.Black(); m.emissiveColor = B.Color3.FromHexString(hex);
+    m.opacityTexture = fxGradient; m.disableLighting = true; m.backFaceCulling = false; m.alphaMode = B.Engine.ALPHA_ADD;
+    return m;
+  };
+  const SLASH_MATS = { stab: fxMat("dagger trail", "#cfd8ff"), slash: fxMat("blade trail", "#ff7436"), smash: fxMat("staff trail", "#8ff5df"), punch: fxMat("fist trail", "#ffe2a0") };
+  const castOrbMat = mat("cast orb", "#bff8ff", "#59d8ff"); glowMats.add(castOrbMat);
+  const vialMat = mat("potion vial", "#ff5a5a", "#d01c2c"); glowMats.add(vialMat);
+  const summonSeal = additiveMat("summon seal", squareYantraTexture("summon seal", "rgba(255,190,120,.95)", "#ff9a3a"));
+  const arriveSeal = additiveMat("arrive seal", squareYantraTexture("arrive seal", "rgba(150,255,230,.9)", "#5fffe0"));
+  function slashArc(material) {
+    const positions = [], uvs = [], indices = [], N = 14;
+    for (let i = 0; i <= N; i++) {
+      const u = i / N, ang = -Math.PI / 2 - 1.25 + u * 2.5;
+      for (const [row, r] of [[0, .35], [1, 1.55]]) { positions.push(Math.cos(ang) * r, 0, Math.sin(ang) * r); uvs.push(u, row); }
+      if (i) { const k = i * 2; indices.push(k - 2, k - 1, k, k - 1, k + 1, k); }
+    }
+    const mesh = new B.Mesh("slash arc", scene), data = new B.VertexData();
+    data.positions = positions; data.uvs = uvs; data.indices = indices;
+    data.normals = []; B.VertexData.ComputeNormals(positions, indices, data.normals); data.applyToMesh(mesh);
+    mesh.material = material; mesh.isPickable = false;
+    return mesh;
+  }
+  // Lazily built per-avatar effect meshes, reused for every action.
+  function avatarFx(a) {
+    if (a.fx) return a.fx;
+    const n = a.skin.nodes, fx = { slashes: {} };
+    const pivot = new B.TransformNode("slash pivot", scene); pivot.parent = a.node; pivot.position.y = 1.35;
+    for (const [type, material] of Object.entries(SLASH_MATS)) {
+      const arc = slashArc(material); arc.parent = pivot; arc.setEnabled(false); fx.slashes[type] = arc;
+    }
+    fx.pivot = pivot;
+    fx.orb = B.MeshBuilder.CreateSphere("cast orb", { diameter: .2, segments: 6 }, scene);
+    fx.orb.material = castOrbMat; fx.orb.parent = n.LeftHand; fx.orb.position.set(.09, -.02, .04); fx.orb.isPickable = false; fx.orb.setEnabled(false);
+    fx.vial = B.MeshBuilder.CreateCylinder("potion vial", { height: .12, diameterTop: .03, diameterBottom: .06, tessellation: 6 }, scene);
+    fx.vial.material = vialMat; fx.vial.parent = n.LeftHand; fx.vial.position.set(.07, .03, .03); fx.vial.isPickable = false; fx.vial.setEnabled(false);
+    fx.seal = B.MeshBuilder.CreateGround("action seal", { width: 1, height: 1 }, scene);
+    fx.seal.parent = a.node; fx.seal.position.y = .06; fx.seal.isPickable = false; fx.seal.setEnabled(false);
+    return (a.fx = fx);
+  }
+  function animateSkin(a, m, speed, s, c, t, now, dt) {
+    const n = a.skin.nodes, P = {};
+    for (const b of POSE_BONES) P[b] = [0, 0, 0];
+    const off = [0, 0, 0]; // hips translation (model units): weight shift and crouch
+    let damping = 12;
+    const set = (b, x, y, z) => { P[b][0] = x; P[b][1] = y; P[b][2] = z; };
+    const mix = (b, x, y, z, w) => { const v = P[b]; v[0] += (x - v[0]) * w; v[1] += (y - v[1]) * w; v[2] += (z - v[2]) * w; };
+    const add = (b, x, y, z) => { const v = P[b]; v[0] += x; v[1] += y; v[2] += z; };
+    // Spread a torso bend across both spine joints and the chest.
+    const bend = (x, y, z, w = 1) => { mix("Spine", x * .4, y * .35, z * .4, w); mix("Spine1", x * .3, y * .3, z * .3, w); mix("Chest", x * .3, y * .35, z * .3, w); };
+    const live = mode === "live";
+    const dead = live && a.serverAlive === false;
+    const combat = live ? a.serverCombat || "idle" : "idle";
+    const demoLocal = !live && a.local;
+    const rising = combat === "ascending" || (demoLocal && demoFlightTarget && !demoFlightTarget.landing);
+    const landing = combat === "descending" || (demoLocal && demoFlightTarget?.landing);
+    const flying = !dead && (a.y > 4.4 || a.serverFlying || rising || landing || (demoLocal && demoFlying));
+    const climbing = combat === "climbing";
+    const grounded = !dead && !flying && !climbing;
+    const run = Math.min(1, Math.max(0, (speed - 3.6) / 3));
+    const breath = Math.sin(t * 2.1), idle = 1 - m;
+    const weapon = a.weaponId || "";
+    // ---- Combat stance at rest: side-on to the opponent, left shoulder
+    // leading, weight sunk into the back (right) leg, head turned forward.
+    const turn = weapon === "spirit_staff" ? -.55 : -.82;
+    set("Hips", 0, turn, -.06);
+    off[0] = -.035 + Math.sin(t * .7) * .006; off[1] = -.035;
+    bend(.08, -.12, .1);
+    set("LeftUpLeg", -.34, .18, .17); set("LeftLeg", .14, 0, 0);
+    set("RightUpLeg", .14, -.1, -.11); set("RightLeg", .32, 0, 0);
+    set("LeftShoulder", 0, 0, -.04); set("RightShoulder", 0, 0, .04);
+    if (weapon === "arcane_sword") {
+      // Low guard: crescent blade trailing forward-down at the right hip,
+      // free hand loose and open toward the opponent.
+      set("RightArm", -.22, .15, 1.08); set("RightForeArm", 0, .55, 0); set("RightHand", 1.0, 0, 0);
+      set("LeftArm", -.42, .1, -1.06); set("LeftForeArm", 0, -.55, 0); set("LeftHand", 0, 0, -.2);
+      add("RightShoulder", 0, .1, -.08);
+    } else if (weapon === "ritual_dagger") {
+      // Low knife-fighter crouch: blade forward, guard hand up.
+      off[1] = -.09; bend(.2, -.1, .06);
+      set("LeftLeg", .42, 0, 0); set("RightLeg", .55, 0, 0); add("LeftUpLeg", -.12, 0, 0); add("RightUpLeg", -.05, 0, 0);
+      set("RightArm", -.8, .15, 1.05); set("RightForeArm", 0, 1.0, 0); set("RightHand", 0, 0, .25);
+      set("LeftArm", -1.05, -.15, -1.12); set("LeftForeArm", 0, -1.8, 0); set("LeftHand", 0, 0, -.3);
+    } else if (weapon === "spirit_staff") {
+      // Staff planted at the side, free hand raised in a ritual mudra.
+      set("RightArm", -.12, 0, 1.18); set("RightForeArm", 0, 1.55, 0); set("RightHand", 0, 0, -.25);
+      set("LeftArm", -.95, .25, -1.2); set("LeftForeArm", 0, -2.15, 0); set("LeftHand", .3, 0, 0);
+    } else {
+      // Unarmed: arms folded across the chest.
+      set("RightArm", -.62, -.35, 1.12); set("RightForeArm", 0, 2.0, 0);
+      set("LeftArm", -.58, .35, -1.12); set("LeftForeArm", 0, -2.0, 0);
+    }
+    add("Chest", breath * .03 * idle, 0, 0); add("LeftShoulder", 0, 0, breath * .025 * idle); add("RightShoulder", 0, 0, -breath * .025 * idle);
+    // ---- Locomotion blends over the stance: pelvis turns with the stride,
+    // the chest counter-twists, the hip drops over the swinging leg.
+    if (m > .001) {
+      const W = {}; for (const b of POSE_BONES) W[b] = [0, 0, 0];
+      const amp = .55 + .25 * run, armAmp = .42 + .45 * run, grip = { spirit_staff: 1.45, arcane_sword: 1.2, ritual_dagger: .9 }[weapon];
+      W.Hips = [.02 * run, s * .14 * (1 + run), -s * .05];
+      W.Spine = [.04 + .12 * run, s * .02, s * .03]; W.Spine1 = [.02 + .06 * run, -s * .06, 0]; W.Chest = [.01, -s * .12 * (1 + run), -s * .03];
+      W.LeftUpLeg = [-s * amp, 0, .03]; W.RightUpLeg = [s * amp, 0, -.03];
+      W.LeftLeg = [Math.max(0, c) * (.8 + .6 * run) + .06, 0, 0]; W.RightLeg = [Math.max(0, -c) * (.8 + .6 * run) + .06, 0, 0];
+      W.LeftArm = [s * armAmp, 0, -1.24]; W.LeftForeArm = [0, -(.28 + 1.1 * run), 0];
+      W.RightArm = grip ? [-.25 - s * armAmp * .4, .1, 1.18] : [-s * armAmp, 0, 1.24];
+      W.RightForeArm = [0, grip ?? (.28 + 1.1 * run), 0];
+      for (const b of POSE_BONES) mix(b, W[b][0], W[b][1], W[b][2], m);
+      off[0] *= idle; off[1] = off[1] * idle + (Math.abs(c) * .03 * (1 + run) - .02 * run) * m;
+    }
+    if (a.possessed) {
+      bend(.5, 0, Math.sin(t * 23) * .06, .85); mix("Head", .45, Math.sin(t * 3.1) * .3, 0, .85);
+      mix("LeftArm", -.3, 0, -1.38, .8); mix("RightArm", -.3, 0, 1.38, .8); mix("LeftForeArm", 0, -.6, 0, .8); mix("RightForeArm", 0, .6, 0, .8);
+      mix("LeftLeg", .45, 0, 0, .8); mix("RightLeg", .45, 0, 0, .8); off[1] -= .08;
+    }
+    if (dead) {
+      damping = 6;
+      for (const b of POSE_BONES) set(b, 0, 0, 0);
+      set("Hips", -1.45, .2, 0); off[0] = 0; off[1] = -.74;
+      set("Head", -.2, .5, 0); set("Spine1", -.05, .1, 0);
+      set("LeftArm", -.2, 0, -.45); set("RightArm", -.2, 0, .5); set("LeftForeArm", 0, -.3, 0); set("RightForeArm", 0, .4, 0);
+      set("LeftUpLeg", -.15, 0, .12); set("RightUpLeg", -.3, 0, -.1); set("LeftLeg", .25, 0, 0); set("RightLeg", .5, 0, 0);
+      set("LeftFoot", .6, 0, 0); set("RightFoot", .5, 0, 0);
+    } else if (climbing) {
+      const k = Math.sin(t * 6);
+      for (const b of POSE_BONES) set(b, 0, 0, 0); off[0] = 0; off[1] = 0;
+      set("LeftArm", -2.7 + .45 * k, 0, -1.35); set("RightArm", -2.7 - .45 * k, 0, 1.35);
+      set("LeftForeArm", 0, -.5, 0); set("RightForeArm", 0, .5, 0);
+      set("LeftUpLeg", -.9 - .5 * k, 0, 0); set("RightUpLeg", -.9 + .5 * k, 0, 0);
+      set("LeftLeg", 1.3, 0, 0); set("RightLeg", 1.3, 0, 0); set("Spine", .12, 0, k * .05); set("Hips", 0, 0, -k * .06);
+    } else if (flying) {
+      // Cross-legged levitation; arms lift while rising and open while landing.
+      for (const b of ["Hips", "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg", "LeftFoot", "RightFoot"]) set(b, 0, 0, 0);
+      off[0] = 0; off[1] = 0;
+      // Knees fold to ~100 degrees: deeper folds collapse the skinned knee.
+      set("LeftUpLeg", -1.25, -.15, .5); set("RightUpLeg", -1.25, .15, -.5);
+      set("LeftLeg", 1.75, .45, 0); set("RightLeg", 1.75, -.45, 0); set("LeftFoot", .35, 0, 0); set("RightFoot", .35, 0, 0);
+      set("Hips", -.08, 0, 0); bend(.15 + .3 * m, 0, 0);
+      if (rising) { set("LeftArm", -2.75, 0, -1.0); set("RightArm", -2.75, 0, 1.0); set("LeftForeArm", 0, -.3, 0); set("RightForeArm", 0, .3, 0); }
+      else if (landing) { set("LeftArm", 0, 0, -.4); set("RightArm", 0, 0, .4); set("LeftForeArm", 0, -.2, 0); set("RightForeArm", 0, .2, 0); }
+      else if (!weapon) { set("LeftArm", -.55, 0, -1.05); set("RightArm", -.55, 0, 1.05); set("LeftForeArm", 0, -.7, 0); set("RightForeArm", 0, .7, 0); }
+      add("Chest", Math.sin(t * 1.7) * .04, 0, 0);
+    }
+    // ---- Transient actions: coil, strike and follow-through with the hips
+    // leading the shoulders and the weight moving onto the front foot.
+    const act = a.action, fx = avatarFx(a);
+    for (const arc of Object.values(fx.slashes)) arc.setEnabled(false);
+    fx.orb.setEnabled(false); fx.vial.setEnabled(false); fx.seal.setEnabled(false);
+    let flare = 0;
+    if (act && now < act.end && !dead) {
+      const p = act.hold ?? (now - act.start) / (act.end - act.start); // hold: frozen frame for previews
+      const w = Math.min(1, p / .12, (1 - p) / .22);
+      const strike = ease((p - .3) / .25);
+      damping = 26;
+      const lerp = (A, Bv, k) => A.map((v, i) => v + (Bv[i] - v) * k);
+      const pose = (bone, A, Bv, k = strike) => { const v = lerp(A, Bv, k); mix(bone, v[0], v[1], v[2], w); };
+      const spine = (A, Bv, k = strike) => { const v = lerp(A, Bv, k); bend(v[0], v[1], v[2], w); };
+      // Weight transfer: back-foot load while coiling, front-foot lunge on impact.
+      const weight = (k, depth = 1) => {
+        pose("Hips", [0, -.55, -.06], [.06, .25, .06], k);
+        pose("LeftUpLeg", [-.2, .1, .12], [-.75 * depth, .05, .1], k); pose("LeftLeg", [.2, 0, 0], [.55 * depth, 0, 0], k);
+        pose("RightUpLeg", [.05, 0, -.1], [.42 * depth, 0, -.06], k); pose("RightLeg", [.5, 0, 0], [.18, 0, 0], k);
+        off[0] += (-.05 + .09 * k) * w; off[1] -= (.04 + .07 * k * depth) * w; off[2] += .06 * k * w;
+      };
+      const trail = () => {
+        const arc = fx.slashes[act.type]; if (!arc) return;
+        const k = Math.max(0, 1 - Math.abs(p - .52) / .2);
+        arc.setEnabled(k > 0); arc.visibility = k * .9;
+        const tilt = { stab: 0, slash: .5, smash: 1.45, punch: 0 }[act.type];
+        fx.pivot.rotation.set(0, (p - .52) * (act.type === "slash" ? -3 : -1.2), tilt);
+        const sc = act.type === "stab" || act.type === "punch" ? .75 : 1.15; arc.scaling.set(sc, 1, sc);
+      };
+      switch (act.type) {
+        case "stab": case "punch":
+          weight(strike, .9); spine([.05, -.6, .08], [.32, .55, -.05]);
+          pose("RightShoulder", [0, -.15, .05], [0, .3, -.05]);
+          pose("RightArm", [.65, 0, 1.1], [-1.5, .12, 1.18]); pose("RightForeArm", [0, 1.75, 0], [0, .06, 0]);
+          pose("LeftArm", [-1.1, -.1, -1.1], [.35, 0, -1.2]); pose("LeftForeArm", [0, -1.6, 0], [0, -.4, 0]);
+          trail(); break;
+        case "slash":
+          weight(strike, 1.1); spine([-.05, -.85, .22], [.42, .85, -.18]);
+          pose("RightShoulder", [0, -.2, -.15], [0, .3, .05]);
+          pose("RightArm", [-2.9, -.4, 1.3], [-.45, .95, 1.05]); pose("RightForeArm", [0, .9, 0], [0, .15, 0]);
+          pose("LeftArm", [-.9, .3, -1.0], [.35, 0, -1.3]); pose("LeftForeArm", [0, -1.2, 0], [0, -.3, 0]);
+          trail(); break;
+        case "smash":
+          weight(strike, 1.2); spine([-.38, -.2, 0], [.75, .15, 0]);
+          pose("RightArm", [-2.95, 0, 1.35], [-1.05, 0, .95]); pose("LeftArm", [-2.95, 0, -1.35], [-1.05, 0, -.95]);
+          pose("RightForeArm", [0, .3, 0], [0, .2, 0]); pose("LeftForeArm", [0, -.3, 0], [0, -.2, 0]);
+          pose("Head", [-.2, 0, 0], [.35, 0, 0]);
+          off[1] += (.04 * (1 - strike)) * w; trail(); break;
+        case "cast": {
+          weight(strike * .6, .7); spine([-.15, .45, .12], [.2, -.4, -.05]);
+          pose("RightArm", [-2.3, 0, 1.0], [-1.65, 0, 1.12]);
+          pose("LeftArm", [.35, 0, -1.1], [-1.5, -.25, -1.18]); pose("LeftForeArm", [0, -1.5, 0], [0, -.05, 0]);
+          pose("LeftShoulder", [0, .2, 0], [0, -.3, 0]);
+          fx.orb.setEnabled(true); const g = p < .55 ? .6 + p * 1.8 : Math.max(0, 1.6 - (p - .55) * 4); fx.orb.scaling.setAll(Math.max(.01, g));
+          break;
+        }
+        case "hit": {
+          const k = Math.sin(Math.min(1, p * 1.6) * Math.PI);
+          bend(-.5 * k, .45 * k, .15 * k, w); mix("Head", -.35 * k, -.2 * k, 0, w); mix("Hips", -.1 * k, .2 * k, 0, w);
+          mix("LeftArm", -.3, 0, -.75, w * k); mix("RightArm", -.3, 0, .75, w * k);
+          mix("LeftLeg", .4, 0, 0, w * k); mix("RightLeg", .4, 0, 0, w * k); off[1] -= .06 * k * w; off[2] -= .08 * k * w; break;
+        }
+        case "summon": {
+          const up = ease(p / .35), shake = Math.sin(t * 30) * .06 * (p > .35 ? 1 : 0);
+          mix("Hips", 0, 0, 0, w); bend(-.4 * up, 0, 0, w);
+          mix("LeftArm", -2.85 + shake, 0, -.55 * up - .3, w); mix("RightArm", -2.85 - shake, 0, .55 * up + .3, w);
+          mix("LeftForeArm", 0, -.15, 0, w); mix("RightForeArm", 0, .15, 0, w); mix("Head", -.45 * up, 0, 0, w);
+          mix("LeftUpLeg", -.1, 0, .25, w); mix("RightUpLeg", -.1, 0, -.25, w); mix("LeftLeg", .2, 0, 0, w); mix("RightLeg", .2, 0, 0, w);
+          off[1] -= .05 * w;
+          flare = w; fx.seal.setEnabled(true); fx.seal.material = summonSeal;
+          fx.seal.scaling.setAll(1.5 + 3.5 * ease(p / .5)); fx.seal.visibility = w; fx.seal.rotation.y = p * 2; break;
+        }
+        case "drink": {
+          const lift = ease(p / .3) * (1 - ease((p - .8) / .2));
+          mix("LeftArm", -1.25, .2, -.95, lift); mix("LeftForeArm", 0, -2.35, 0, lift);
+          bend(-.18 * ease((p - .3) / .2), 0, 0, lift); mix("Head", -.45 * ease((p - .3) / .2), 0, 0, lift);
+          fx.vial.setEnabled(p < .9); break;
+        }
+        case "dash":
+          mix("Hips", .15, 0, 0, w); bend(.6, 0, 0, w); mix("LeftArm", .95, 0, -1.0, w); mix("RightArm", .95, 0, 1.0, w);
+          mix("LeftUpLeg", -1.0, 0, 0, w); mix("RightUpLeg", .7, 0, 0, w); mix("LeftLeg", .45, 0, 0, w); mix("RightLeg", .95, 0, 0, w);
+          off[1] -= .1 * w; break;
+        case "rise": {
+          const kneel = 1 - ease((p - .45) / .45);
+          mix("LeftUpLeg", -1.45, 0, 0, kneel); mix("RightUpLeg", .2, 0, 0, kneel);
+          mix("LeftLeg", 1.5, 0, 0, kneel); mix("RightLeg", 2.0, 0, 0, kneel); mix("RightFoot", .9, 0, 0, kneel);
+          bend(.5, 0, 0, kneel); mix("LeftArm", -.6, 0, -1.1, kneel); off[1] -= .38 * kneel; damping = 9; break;
+        }
+        case "arrive": {
+          const k = 1 - ease(p);
+          mix("LeftUpLeg", -.7, 0, .1, k); mix("RightUpLeg", -.7, 0, -.1, k); mix("LeftLeg", 1.1, 0, 0, k); mix("RightLeg", 1.1, 0, 0, k);
+          bend(.4, 0, 0, k); mix("LeftArm", -.3, 0, -.6, k); mix("RightArm", -.3, 0, .6, k); off[1] -= .2 * k;
+          fx.seal.setEnabled(true); fx.seal.material = arriveSeal; fx.seal.scaling.setAll(2 + 2.5 * p); fx.seal.visibility = 1 - p; break;
+        }
+      }
+    } else if (act && now >= act.end) a.action = null;
+    if (!dead) {
+      // Gaze stays on the opponent: neck and head undo most of the torso twist and bend.
+      const yaw = P.Hips[1] + P.Spine[1] + P.Spine1[1] + P.Chest[1], pitch = P.Spine[0] + P.Spine1[0] + P.Chest[0];
+      add("Neck", -pitch * .2, -yaw * .45, -(P.Hips[2] + P.Spine[2] + P.Chest[2]) * .4);
+      add("Head", -pitch * .25, -yaw * .4, 0);
+    }
+    if (grounded) {
+      // Feet stay flat on the ground under the leg chain.
+      for (const side of ["Left", "Right"]) {
+        const upleg = P[side + "UpLeg"], leg = P[side + "Leg"];
+        add(side + "Foot", -(P.Hips[0] + upleg[0] + leg[0]), 0, -(P.Hips[2] + upleg[2]) * .9);
+      }
+    }
+    // Ease the skeleton toward the target pose.
+    const blend = 1 - Math.exp(-dt * damping), cur = a.poseCur || (a.poseCur = {});
+    for (const b of POSE_BONES) {
+      const v = cur[b] || (cur[b] = P[b].slice()), tgt = P[b];
+      v[0] += (tgt[0] - v[0]) * blend; v[1] += (tgt[1] - v[1]) * blend; v[2] += (tgt[2] - v[2]) * blend;
+      const node = n[b]; if (!node) continue;
+      node.rotationQuaternion = B.Quaternion.RotationYawPitchRoll(v[1], v[0], v[2]);
+    }
+    const o = cur.off || (cur.off = off.slice());
+    for (let i = 0; i < 3; i++) o[i] += (off[i] - o[i]) * blend;
+    n.Hips.position.set(a.skin.rest.hipsX + o[0], a.skin.rest.hipsY + o[1], a.skin.rest.hipsZ + o[2]);
+    return flare;
   }
   // Procedural gait: legs and arms counter-swing with speed, the body bobs and
   // leans, breathes at rest, tucks while flying and swings the weapon arm.
@@ -2513,7 +3013,7 @@
     const m = a.moveBlend, flying = a.y > 4.4;
     a.phase = (a.phase + dt * 9.5 * m) % (Math.PI * 2);
     const s = Math.sin(a.phase), c = Math.cos(a.phase), t = now / 1000;
-    if (a.skin) animateSkin(a, m, s, c, t, flying, now);
+    const flare = a.skin ? animateSkin(a, m, speed, s, c, t, now, dt) : 0;
     for (let i = 0; i < 2; i++) {
       const dir = i ? -1 : 1;
       r.legs[i].rotation.x = flying ? .25 + i * .2 : dir * s * .6 * m;
@@ -2523,9 +3023,12 @@
       r.elbows[i].rotation.x = .22 + m * .25;
     }
     r.body.position.y = Math.abs(c) * .05 * m + Math.sin(t * 2.1) * .012 * (1 - m);
+    // Familiars spin faster, widen and swell while being summoned.
+    a.familiarSpin = (a.familiarSpin || 0) + dt * (1 + flare * 4);
     for (const f of r.familiars) {
-      const angle = t * f.speed + f.offset, sign = Math.sign(f.speed);
-      f.node.position.set(Math.cos(angle) * f.radius, f.height + Math.sin(t * 2.3 + f.offset) * .22, Math.sin(angle) * f.radius);
+      const angle = a.familiarSpin * f.speed + f.offset, sign = Math.sign(f.speed), rad = f.radius * (1 + flare * .5);
+      f.node.position.set(Math.cos(angle) * rad, f.height + flare * .8 + Math.sin(t * 2.3 + f.offset) * .22, Math.sin(angle) * rad);
+      f.node.scaling.setAll(1 + flare * .7);
       f.node.rotation.y = -angle - sign * Math.PI / 2; // tail trails behind the orbit
     }
     r.body.rotation.x = .07 * m + ((a.dashUntil || 0) > now ? .3 : 0);
@@ -2641,6 +3144,7 @@
   let economyGold = null, economyListings = [], activeTrade = null, economyPending = false;
   let economyTimer = null, economyTab = "market", tradeUnread = false;
   let partyState = null, partyInvitation = null, partyUnread = false;
+  let guildState = null, guildInvitation = null, guildUnread = false;
   // Inventory is never stored in localStorage: LIVE comes from VPS each join.
   const INVENTORY_SLOTS = 12;
   const POTION_ITEM_ID = "health_potion";
@@ -2799,7 +3303,8 @@
     possessed=false;syncPossessionButton();syncTalismanButton(null);syncSwordTreeButton(null);syncSwordHotbar();swordCombo=0; swordComboUntil=0; swordCounterUntil=0; syncSwordStatus(null);$("classSkill").hidden=true;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
-    partyState=null; partyInvitation=null; partyUnread=false; updatePartyBadge();
+    partyState=null; partyInvitation=null; partyUnread=false;
+    guildState=null; guildInvitation=null; guildUnread=false; updatePartyBadge();
     clearChatHistory(true);
     switchWorld("ritual_village");
     syncWorldDefinition(null);syncForestMonsters(null);
@@ -2943,12 +3448,13 @@
       ? ["ascending", "descending"].includes(data?.combatState)
       : Boolean(demoFlightTarget);
     const label = button.querySelector("span:last-child");
-    const forbidden=mode==="live" && worldDefinitions?.[activeMapId]?.region?.noFlight===true;
+    const definition=worldDefinitions?.[activeMapId];
+    const forbidden=mode==="live" && (definition?.region?.noFlight===true || definition?.strategic?.kind==="territory");
     button.disabled=forbidden;
     if (label) label.textContent = forbidden ? "เขตห้ามบิน" : changing ? "กำลังบิน" : active ? "ลง" : "บิน";
     button.classList.toggle("fly-active", Boolean(active));
     button.setAttribute("aria-pressed", String(Boolean(active)));
-    button.title = forbidden ? "ใช้การเดินหรือ Dash ภายในถ้ำ" : active ? "ลดระดับความสูงและลงจอด" : "ขึ้นบินเหนือกำแพง แล้วแตะพื้นเพื่อเคลื่อนที่";
+    button.title = forbidden ? "เดินหรือพุ่งผ่านเส้นทางภาคพื้นในเขตนี้" : active ? "ลดระดับความสูงและลงจอด" : "ขึ้นบินเหนือกำแพง แล้วแตะพื้นเพื่อเคลื่อนที่";
   }
 
   function toggleFlight() {
@@ -3255,6 +3761,7 @@
       setOnlinePlayer(id, Number(p.x), Number(p.z),
         Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
         p.equippedWeaponId, p.pathId);
+      noteAvatarState(avatars.get(id), p);
     });
     if(previousMapId !== activeMapId && mine) {
       const actor=avatars.get(localId);
@@ -3280,6 +3787,7 @@
     if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
     if (drawerActive === "character") renderProgressionProfile();
     if (drawerActive === "party") renderParty();
+    if (drawerActive === "guild") renderGuild();
     const me=players.get(localId), staminaBar=$("staminaBar");
     if (state?.progressionAvailable === true && me && Number(me.maxStamina)>0) {
       const pct=Math.max(0,Math.min(100,100*Number(me.stamina)/Number(me.maxStamina)));
@@ -3351,12 +3859,13 @@
       }
       const client = new window.Colyseus.Client(endpoint);
       const guestToken = getOrCreateGuestToken(endpoint);
-      joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot, worldVersion: 1, templeVersion: 1, atlasVersion: 1 });
+      joined = await client.joinOrCreate("my_room", { guestToken, characterSlot: requestedSlot, worldVersion: 1, templeVersion: 1, atlasVersion: 1, provinceVersion: 1 });
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
       clearChatHistory(true);
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; tradeUnread=false; updateTradeBadge();
-      partyState=null; partyInvitation=null; partyUnread=false; updatePartyBadge();
+      partyState=null; partyInvitation=null; partyUnread=false;
+    guildState=null; guildInvitation=null; guildUnread=false; updatePartyBadge();
       inventoryState = null;
       itemUsePending = false;
       itemUseSequence += 1;
@@ -3403,6 +3912,41 @@
           toast("ส่งรายงานบัคแล้ว");
         } else toast("บันทึกรายงานไม่สำเร็จ · ลองอีกครั้ง");
         finishChatPending(); if(drawerActive==="chat") renderChat();
+      });
+      joined.onMessage("guild_state", message => {
+        if(room!==joined)return;
+        if(message===null)guildState=null;
+        else if(typeof message?.id==="string" && typeof message.name==="string" &&
+          typeof message.ownId==="string" && typeof message.leaderId==="string" &&
+          Array.isArray(message.members) && message.members.length<=30)
+          guildState={id:message.id,name:message.name,ownId:message.ownId,leaderId:message.leaderId,
+            members:message.members.filter(m=>m && typeof m.id==="string" && typeof m.name==="string")};
+        else return;
+        if(guildState){guildInvitation=null;guildUnread=false;updatePartyBadge();}
+        renderGuild();
+      });
+      joined.onMessage("guild_invitation", message=>{
+        if(room!==joined || typeof message?.inviteId!=="string" || typeof message.guildName!=="string" || typeof message.fromName!=="string")return;
+        guildInvitation=message;guildUnread=drawerActive!=="guild";updatePartyBadge();
+        if(guildUnread)toast("มีคำเชิญเข้ากิลด์ · เปิดเมนูปาร์ตี้");
+        renderGuild();
+      });
+      joined.onMessage("guild_invitation_closed",()=>{
+        if(room!==joined)return;guildInvitation=null;guildUnread=false;updatePartyBadge();renderGuild();
+      });
+      joined.onMessage("guild_notice", message=>{
+        if(room!==joined)return;toast(message?.reason==="invitation_declined"?"ผู้เล่นปฏิเสธคำเชิญกิลด์":"ส่งคำเชิญกิลด์แล้ว");
+      });
+      joined.onMessage("guild_error", message=>{
+        if(room!==joined)return;
+        const reasons={guild_already_member:"ตัวละครนี้อยู่ในกิลด์แล้ว",guild_name_taken:"ชื่อกิลด์นี้ถูกใช้แล้ว",
+          guild_leader_only:"เฉพาะหัวหน้ากิลด์ที่ทำรายการนี้ได้",guild_full:"กิลด์มีสมาชิกครบ 30 คนแล้ว",
+          guild_not_member:"ยังไม่ได้อยู่ในกิลด์",guild_transfer_first:"ส่งต่อหัวหน้ากิลด์ก่อนออก",
+          guild_officer_required:"ต้องเป็นผู้บัญชาการหรือนายทหารที่มีสิทธิ์",guild_invalid_assignment:"ตำแหน่งหรือข้อมูลไม่ถูกต้อง",
+          guild_squad_required:"ต้องเลือกหน่วยก่อนแต่งตั้งหัวหน้าหน่วย",guild_squad_full:"หน่วยนี้มีสมาชิกครบ 5 คนแล้ว",
+          guild_squad_leader_exists:"หน่วยนี้มีหัวหน้าอยู่แล้ว",guild_invalid_member:"ไม่พบสมาชิก",guild_invite_expired:"คำเชิญหมดอายุ",guild_invalid_target:"ไม่พบผู้เล่นที่ชวนได้"};
+        if(message?.reason==="guild_invite_expired"){guildInvitation=null;guildUnread=false;updatePartyBadge();}
+        toast(reasons[message?.reason]||"ทำรายการกิลด์ไม่สำเร็จ");guildRenderKey="";renderGuild();
       });
       joined.onMessage("party_state", message => {
         if (room!==joined || !Array.isArray(message?.members) || message.members.length>4) return;
@@ -3471,6 +4015,10 @@
       joined.onMessage("combat_hit", hit => {
         if (room !== joined) return;
         const forestTarget=joined.state?.monsters?.get?.(hit?.targetId);
+        if (typeof hit?.attackerId === "string") {
+          const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
+          playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
+        }
         const talisman = hit?.source === "talisman";
         if (forestTarget) {
           if (forestTarget.mapId !== activeMapId) return;
@@ -3551,6 +4099,8 @@
       });
       joined.onMessage("summon_spawn", notice => {
         if (room !== joined) return;
+        playAction(avatars.get(notice?.ownerId), "summon");
+        if (notice?.ownerId === localId) toast("อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
         syncSummons(joined.state);
         const spirit = joined.state.summons?.get(notice?.ownerId);
         if (notice?.kind === "pot_spirit" && spirit && summonAvatars.has(notice.ownerId)) {
@@ -3631,7 +4181,8 @@
         if (room !== joined || !hit || typeof hit.targetId !== "string") return;
         const victim = avatars.get(hit.targetId);
         const attacker = avatars.get(hit.attackerId);
-        if (victim) victim.hitFlashUntil = performance.now() + 250;
+        if (victim) { victim.hitFlashUntil = performance.now() + 250; playAction(victim, "hit"); }
+        playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
         if (attacker && victim) {
           faceAvatarToward(hit.attackerId, victim.x, victim.z);
         }
@@ -3655,6 +4206,7 @@
         syncPKHud();
       });
       joined.onMessage("monster_hit", hit => {
+        if (room === joined) playAction(avatars.get(hit?.targetId), "hit");
         if (room === joined && hit?.targetId === localId) {
           toast("ถูกผีโจมตี -" + Number(hit.damage || 0) + " HP");
         }
@@ -3726,6 +4278,7 @@
       });
       joined.onMessage("item_used", event => {
         if (room !== joined) return;
+        playAction(getLocalAvatar(), "drink");
         toast("ใช้ยาเลือดแล้ว · +" + Number(event?.healed || 0) + " HP · บันทึกบน VPS");
         renderBag();
       });
@@ -3738,7 +4291,7 @@
       joined.onMessage("dash_started", info => {
         if (room !== joined || typeof info?.playerId !== "string") return;
         const actor = avatars.get(info.playerId);
-        if (actor) actor.dashUntil = performance.now() + 460;
+        if (actor) { actor.dashUntil = performance.now() + 460; playAction(actor, "dash"); }
         if (info.playerId === localId) toast("พุ่ง!");
       });
       joined.onMessage("dash_finished", info => {
@@ -3752,6 +4305,7 @@
         if (Object.hasOwn(swordReasons,info?.reason)) { toast(swordReasons[info.reason]); return; }
         const buildReasons = {build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
         if (Object.hasOwn(buildReasons, info?.reason)) { toast(buildReasons[info.reason]); return; }
+        if (typeof info?.reason==="string" && info.reason.startsWith("guild_")) { const reason={guild_invalid_name:"ชื่อกิลด์ต้องมี 2–24 ตัวอักษร และใช้ตัวอักษรหรือตัวเลข",guild_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",guild_unavailable:"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว"};toast(reason[info.reason] || "ไม่สามารถทำรายการกิลด์ได้");return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
         if (["economy_unavailable","economy_rate_limited","invalid_economy_request","invalid_trade","trade_unavailable","trade_expired","character_busy"].includes(info?.reason) && (drawerActive === "economy" || economyPending)) {
           finishEconomyPending();
@@ -3825,7 +4379,7 @@
         else if (info?.reason === "flight_in_progress") toast("กำลังขึ้นหรือลง · รอให้ถึงระดับก่อน");
         else if (info?.reason === "flight_rate_limited") toast("กดบินถี่เกินไป");
         else if (info?.reason === "flight_unavailable") toast("ตอนนี้ยังบินขึ้นไม่ได้");
-        else if (info?.reason === "flight_forbidden") toast("ถ้ำนาคใช้การเดินหรือ Dash");
+        else if (info?.reason === "flight_forbidden") toast("เขตนี้ใช้การเดินหรือ Dash");
         else if (info?.reason === "landing_blocked") toast("ลงจอดตรงนี้ไม่ได้ · บินไปพ้นขอบกำแพงก่อน");
         else if (info?.reason === "flying") toast("ต้องลงจอดก่อนใช้พุ่งหรือปีน");
         else if (info?.reason === "climbing") toast("ยังโจมตีหรือเดินไม่ได้ขณะปีน");
@@ -3838,7 +4392,7 @@
           toast("คำสั่งวิญญาณไม่ถูกต้อง");
         }
       });
-      joined.onMessage("warp_complete", () => { if(room===joined) toast("เดินทางสำเร็จ"); });
+      joined.onMessage("warp_complete", () => { if(room===joined){ toast("เดินทางสำเร็จ"); playAction(getLocalAvatar(), "arrive"); } });
       joined.onMessage("warp_failed", () => {
         if(room!==joined)return;
         clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
@@ -4085,6 +4639,7 @@
     me.targetX = me.x;
     me.targetZ = me.z;
     me.dashUntil = performance.now() + 460;
+    playAction(me, "dash");
     demoDash = { ...direction, remaining: DASH_DEMO_DISTANCE };
     demoDashNextAt = performance.now() + DASH_DEMO_COOLDOWN_MS;
     toast("พุ่ง! · DEMO");
@@ -4333,7 +4888,7 @@
       // Trails: dark verge, packed earth, faint centre line.
       const trail = (width_, color) => {
         ctx.strokeStyle = color; ctx.lineWidth = width_; ctx.lineCap = "round"; ctx.lineJoin = "round";
-        for (const path of map?.paths || []) { ctx.beginPath(); smoothPath(path).forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
+        for (const path of map?.paths || []) { ctx.beginPath(); (map.strategic ? path : smoothPath(path)).forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
       };
       if (activeMapId === "forbidden_forest") { ctx.fillStyle = "#4a3f2e"; ctx.fillRect(sx(-2.5), sy(-20), 5 * scale, 40 * scale); }
       for (const pool of map?.water || []) {
@@ -4343,6 +4898,11 @@
       }
       trail(Math.max(3, 5.5 * scale), "rgba(10,8,6,.55)");
       trail(Math.max(2, 4 * scale), theme.road || (activeMapId === "bound_temple" ? "#8a7552" : "#7a6546"));
+      for (const index of map?.strategic?.safeRoads || []) {
+        ctx.strokeStyle = "#71d7b4"; ctx.lineWidth = Math.max(1, 1.5 * scale); ctx.beginPath();
+        map.paths[index].forEach((p,i)=>i ? ctx.lineTo(sx(p.x),sy(p.z)) : ctx.moveTo(sx(p.x),sy(p.z)));
+        ctx.stroke();
+      }
       for (const camp of map?.camps || []) {
         const soil = campLooks[camp.id]?.soil || theme.court || "#7d6f63";
         if (activeMapId === "bound_temple") {
@@ -4374,6 +4934,13 @@
         ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
         ctx.strokeStyle = "#e3b878"; ctx.lineWidth = 1; ctx.strokeRect(sx(wall.x), sy(wall.z), Math.max(1.3, scale * wall.width), Math.max(1.3, scale * wall.length));
       }
+    }
+    for (const site of map?.strategic?.sites || []) {
+      const major=site.kind==="fort" || site.kind==="palace";
+      if(!large && !major)continue;
+      const x=sx(site.x),y=sy(site.z);
+      mapDot(ctx,x,y,major?5*u:2.8*u,major?"#ffcf76":"#c3e0b1","#263732");
+      if(large && site.kind!=="bridge")mapText(ctx,site.name,x,y-7,10,major?"#ffe5ab":"#dfebd4");
     }
     for (const area of map?.restAreas || []) {
       const x = sx(area.x), y = sy(area.z), r = area.radius * scale;
@@ -4455,18 +5022,80 @@
     ctx.fillStyle = v; ctx.fillRect(0, 0, width, height);
     ctx.restore();
   }
+  // Coordinates set the atlas layout. Connectivity and route advice come from live portal pairs.
+  const atlasCells = {
+    ritual_village:[89,41], forbidden_forest:[82,125], bound_temple:[61,212],
+    drowned_marsh:[189,201], moon_cemetery:[105,301], bamboo_frontier:[210,285],
+    mantra_capital:[310,116], moon_pass:[245,391], hex_ridge:[70,429],
+    naga_cavern:[66,519], river_watch:[193,556], lotus_basin:[318,478],
+    fallen_city:[107,637], asura_peak:[222,710], spirit_rift:[112,780]
+  };
+  const provinceTitle={capital:"เมืองหลวง",territory:"ด่านสงคราม",hunting:"พื้นที่เก็บเลเวล"};
+  function openStrategicMap(){
+    const maps=worldDefinitions,origin=activeMapId;
+    if(!maps?.[origin])return;
+    openDrawer("strategy","แผนที่ยุทธศาสตร์",`<button class="atlas-back" id="backLocalMap">‹ แผนที่พื้นที่ปัจจุบัน</button>
+      <div class="atlas-summary" id="atlasDetail" aria-live="polite"></div>
+      <p class="note">แตะพื้นที่เพื่อหาเส้นทาง · เลื่อนเพื่อดูอาณาจักรทั้งหมด</p>
+      <div class="atlas-scroll"><div class="atlas-board" id="atlasBoard"></div></div>
+      <div class="legend"><span>♛ เมืองหลวง</span><span>⚑ ด่านสงคราม</span><span>◆ เขตล่า</span><span>● จุดที่ยืน</span></div>`);
+    $("backLocalMap").onclick=openMap;
+    const board=$("atlasBoard"),detail=$("atlasDetail"),cells=new Map(),lines=[];
+    const ids=Object.keys(maps).filter(id=>atlasCells[id]);
+    const linkLayer=document.createElementNS("http://www.w3.org/2000/svg","svg");
+    linkLayer.setAttribute("viewBox","0 0 400 827");linkLayer.setAttribute("preserveAspectRatio","none");linkLayer.setAttribute("aria-hidden","true");board.append(linkLayer);
+    for(const id of ids){
+      const [x,y]=atlasCells[id],map=maps[id];
+      for(const gate of map.portals){
+        const other=gate.targetMapId;
+        if(!atlasCells[other] || other<=id)continue;
+        const line=document.createElementNS(linkLayer.namespaceURI,"line"),[endX,endY]=atlasCells[other];
+        for(const [key,value] of Object.entries({x1:x,y1:y,x2:endX,y2:endY}))line.setAttribute(key,String(value));
+        linkLayer.append(line);lines.push({id,other,line});
+      }
+      const kind=map.strategic?.kind || (id==="ritual_village"?"village":"hunting");
+      const button=document.createElement("button");button.type="button";button.className="atlas-cell "+kind;
+      button.style.left=(x/4)+"%";button.style.top=(y/827*100)+"%";
+      const icon=document.createElement("b");icon.setAttribute("aria-hidden","true");
+      icon.textContent=kind==="capital"?"♛":kind==="territory"?"⚑":kind==="village"?"⌂":"◆";
+      const label=document.createElement("span");label.textContent=map.name;button.append(icon,label);
+      button.setAttribute("aria-label",map.name+(id===origin?" · คุณอยู่ที่นี่":""));
+      if(id===origin)button.classList.add("here");
+      board.append(button);cells.set(id,button);button.onclick=()=>select(id);
+    }
+    const previous=new Map([[origin,null]]),queue=[origin];
+    for(let i=0;i<queue.length;i++)for(const gate of maps[queue[i]].portals){
+      if(!maps[gate.targetMapId]||previous.has(gate.targetMapId))continue;
+      previous.set(gate.targetMapId,queue[i]);queue.push(gate.targetMapId);
+    }
+    function select(id){
+      const map=maps[id],path=[];
+      if(previous.has(id))for(let at=id;at!==null;at=previous.get(at))path.unshift(at);
+      for(const [key,button] of cells)button.setAttribute("aria-pressed",String(key===id));
+      for(const edge of lines)edge.line.classList.toggle("route",path.some((a,i)=>i>0 &&
+        ((a===edge.id && path[i-1]===edge.other)||(a===edge.other && path[i-1]===edge.id))));
+      const title=document.createElement("strong"),description=document.createElement("p"),directions=document.createElement("p");
+      title.textContent=map.name+" · "+(provinceTitle[map.strategic?.kind] || (id==="ritual_village"?"หมู่บ้าน":"พื้นที่เก็บเลเวล"))+
+        (map.region?.range?" · Lv."+map.region.range.join("–"):"");
+      description.textContent=map.strategic?.hint || map.region?.hint || (id===origin?"คุณอยู่ที่นี่":"ประตูเชื่อม "+map.portals.map(p=>maps[p.targetMapId].name).join(" / "));
+      const gate=maps[origin].portals.find(p=>p.targetMapId===path[1]);
+      directions.textContent=gate?"ผ่าน "+(path.length-1)+" ประตู · "+path.map(p=>maps[p].name).join(" → ")+" · ประตูแรก ("+gate.x+", "+gate.z+")":id===origin?"● คุณอยู่ที่นี่":"ยังไม่มีเส้นทางจากจุดปัจจุบัน";
+      detail.replaceChildren(title,description,directions);
+    }
+    select(origin);
+    const scroll=board.parentElement;
+    scroll.scrollTop=atlasCells[origin][1]-scroll.clientHeight/2;
+  }
   function openMap() {
     openDrawer("map","แผนที่"+(worldDefinitions?.[activeMapId]?.name || (activeMapId==="ritual_village"?"หมู่บ้านอาคม":"ป่าต้องห้าม")),`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>วงสีเขียว: เขตพัก</span></div>${worldDefinitions?.[activeMapId]?.guardian ? '<p class="note">◆ ศาลเหนือ · Elite Lv.12 เกิดใหม่ 2 นาที<br>หลบวงฟาดสีส้ม · EXP ×3 แบ่งตามกฎปาร์ตี้ ผู้ได้รับ EXP รับยาคนละ 1 ขวดเมื่อกระเป๋ามีที่</p>' : ''}`);
     if(worldDefinitions?.spirit_rift){
       const note=document.createElement("p");note.className="note";
       const map=worldDefinitions[activeMapId],range=map.region?.range;
       note.textContent=map.name+(range?" · Lv."+range.join("–"):"")+" · ประตูไป"+map.portals.map(p=>worldDefinitions[p.targetMapId].name).join(" / ");
-      const route=document.createElement("details"),title=document.createElement("summary");
-      title.textContent="เส้นทางทั้งโลก · 10 แผนที่";route.append(title);route.className="note";
-      for(const line of ["หมู่บ้านอาคม → ป่าต้องห้าม (1–12)","เลือก วัดร้างพันธนาการ (8–20) หรือ บึงพราย (10–22)","สองเส้นทางพบกันที่ป่าช้าเงาจันทร์ (18–32)","ดงอาคมบนเขา (28–45) → ถ้ำนาค (40–58)","เมืองอาคมล่ม (55–72) → เขาอสุรา (68–85)","รอยแยกแดนวิญญาณ (80–100) · เลือกล่าเดี่ยวหรือเข้าลานราชัน"]){
-        const row=document.createElement("div");row.textContent=line;route.append(row);
-      }
-      $("bigMap").parentElement.append(note,route);
+      const button=document.createElement("button");button.type="button";button.className="primary";button.id="openStrategicMap";
+      button.textContent="เปิดแผนที่ยุทธศาสตร์ · "+Object.keys(worldDefinitions).length+" พื้นที่";button.onclick=openStrategicMap;
+      $("bigMap").parentElement.prepend(button);
+      $("bigMap").parentElement.append(note);
     }
     drawMap($("bigMap").getContext("2d"),420,320,true);
   }
@@ -5088,6 +5717,7 @@
       demoHp+=healed;
       demoPotionCount--;
       if (localHpBar) localHpBar.style.width=demoHp+"%";
+      playAction(getLocalAvatar(), "drink");
       toast("DEMO ใช้ยาเลือด +" + healed + " HP · ไม่บันทึก");
       renderBag();
     };
@@ -5209,7 +5839,7 @@
     fillTradeTargets(); renderEconomy();
     if (economyReady()) { economySend("get_economy",{}); economySend("market_list",{}); }
   }
-  function updatePartyBadge() { const badge=$("partyUnread"); if(badge)badge.hidden=!partyUnread; }
+  function updatePartyBadge() { const badge=$("partyUnread"); if(badge)badge.hidden=!(partyUnread || guildUnread); const guildBadge=$("guildBadge");if(guildBadge)guildBadge.hidden=!guildUnread; }
   function partyReady() { return mode==="live" && room?.state?.partyAvailable===true && ownServerCharacter()?.persistent===true; }
   function renderParty() {
     if(drawerActive!=="party" || !$("partyStatus")) return;
@@ -5245,12 +5875,105 @@
   function openParty() {
     partyUnread=false;updatePartyBadge();
     openDrawer("party","ปาร์ตี้",
-      '<div class="economy-balance" id="partyStatus" role="status"></div><div id="partyInvitationBox" class="party-invitation" hidden><strong><span id="partyInviter"></span> ชวนเข้าปาร์ตี้</strong><div class="party-actions"><button id="partyAccept" type="button">เข้าร่วม</button><button id="partyDecline" type="button">ปฏิเสธ</button></div></div><h3>สมาชิก</h3><div id="partyMembers"></div><p class="note">EXP อิงเลเวลผู้ปราบ แล้วแบ่งเท่ากันให้สมาชิกที่มีชีวิต อยู่แผนที่เดียวกัน และห่างจากมอนสเตอร์ไม่เกิน 20 หน่วย เศษปัดลง · โจมตีเพื่อนร่วมปาร์ตี้ไม่ได้</p><label class="field" for="partyTarget">ชวนผู้เล่นในห้อง</label><select id="partyTarget"></select><p class="note" id="partyLeaderHint"></p><button class="primary" id="partyInvite" type="button">ส่งคำเชิญ</button><button class="secondary" id="partyLeave" type="button" hidden>ออกจากปาร์ตี้</button>');
+      '<button class="secondary" id="openGuild" type="button">กิลด์ <span id="guildBadge" hidden> · มีคำเชิญ</span></button><div class="economy-balance" id="partyStatus" role="status"></div><div id="partyInvitationBox" class="party-invitation" hidden><strong><span id="partyInviter"></span> ชวนเข้าปาร์ตี้</strong><div class="party-actions"><button id="partyAccept" type="button">เข้าร่วม</button><button id="partyDecline" type="button">ปฏิเสธ</button></div></div><h3>สมาชิก</h3><div id="partyMembers"></div><p class="note">EXP อิงเลเวลผู้ปราบ แล้วแบ่งเท่ากันให้สมาชิกที่มีชีวิต อยู่แผนที่เดียวกัน และห่างจากมอนสเตอร์ไม่เกิน 20 หน่วย เศษปัดลง · โจมตีเพื่อนร่วมปาร์ตี้ไม่ได้</p><label class="field" for="partyTarget">ชวนผู้เล่นในห้อง</label><select id="partyTarget"></select><p class="note" id="partyLeaderHint"></p><button class="primary" id="partyInvite" type="button">ส่งคำเชิญ</button><button class="secondary" id="partyLeave" type="button" hidden>ออกจากปาร์ตี้</button>');
+    $("openGuild").onclick=openGuild;
+    $("guildBadge").hidden=!guildUnread;
     $("partyInvite").onclick=()=>{const targetId=$("partyTarget").value;if(partyReady() && targetId)room.send("party_invite",{targetId});};
     $("partyAccept").onclick=()=>{if(partyReady() && partyInvitation)room.send("party_accept",{inviteId:partyInvitation.inviteId});};
     $("partyDecline").onclick=()=>{if(partyReady() && partyInvitation)room.send("party_decline",{inviteId:partyInvitation.inviteId});};
     $("partyLeave").onclick=()=>{if(partyReady())room.send("party_leave",{});};
     renderParty(); if(partyReady())room.send("get_party",{});
+  }
+  let guildRenderKey="";
+  const guildRankLabels={commander:"ผู้บัญชาการ",officer:"นายทหาร",squad_leader:"หัวหน้าหน่วย",member:"สมาชิก"};
+  const guildSpecialtyLabels={none:"ทั่วไป",engineer:"ช่าง",scout:"สายข่าว",support:"สนับสนุน"};
+  function guildReady(){return mode==="live" && room?.state?.guildAvailable===true && ownServerCharacter()?.persistent===true;}
+  function renderGuild(){
+    if(drawerActive!=="guild" || !$("guildStatus"))return;
+    const ready=guildReady(),roles=room?.state?.guildRolesAvailable===true;
+    const commander=guildState && guildState.ownId===guildState.leaderId;
+    const own=guildState?.members.find(m=>m.id===guildState.ownId);
+    const officer=roles && own?.rank==="officer";
+    const candidates=[];
+    room?.state?.players?.forEach?.((player,id)=>{
+      if(id===localId || player.persistent!==true || (guildState?.members||[]).some(m=>m.publicId && m.publicId===player.characterId))return;
+      candidates.push({id,name:String(player.characterName || "ผู้เล่น")});
+    });
+    const key=JSON.stringify({ready,roles,guildState,guildInvitation,candidates});
+    if(guildRenderKey===key)return;
+    guildRenderKey=key;
+    $("guildStatus").textContent=!ready?"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว":guildState?guildState.name+" · สมาชิก "+guildState.members.length+" / 30":"ยังไม่มีกิลด์";
+    $("guildCreateArea").hidden=!!guildState || !ready;
+    $("guildMemberArea").hidden=!guildState;
+    $("guildInvitationBox").hidden=!guildInvitation || !!guildState;
+    if(guildInvitation){$("guildInviteName").textContent=guildInvitation.guildName;$("guildInviterName").textContent=guildInvitation.fromName;}
+    $("guildAccept").disabled=!ready;$("guildDecline").disabled=!ready;
+    const list=$("guildMembers");
+    const expanded=new Set([...list.querySelectorAll("details[open]")].map(el=>el.dataset.memberId));
+    list.replaceChildren();
+    for(const member of guildState?.members||[]){
+      const rank=member.id===guildState.leaderId?"commander":member.rank || "member";
+      const row=document.createElement("div");row.className="guild-member";
+      const info=document.createElement("div"),name=document.createElement("strong"),status=document.createElement("small");
+      name.textContent=member.name+(member.id===guildState.ownId?" · คุณ":"");
+      const labels=[guildRankLabels[rank] || "สมาชิก",member.squad?"หน่วย "+member.squad:"ยังไม่เข้าหน่วย",guildSpecialtyLabels[member.specialty] || "ทั่วไป",member.online?"ออนไลน์":"ออฟไลน์"];
+      status.textContent=labels.join(" · ");info.append(name,status);row.append(info);
+      const canOrganize=roles && (commander || (officer && rank!=="commander" && rank!=="officer"));
+      const canManage=commander && member.id!==guildState.ownId;
+      if(canOrganize || canManage){
+        const details=document.createElement("details");details.className="guild-management";details.dataset.memberId=member.id;
+        details.open=expanded.has(member.id);
+        const summary=document.createElement("summary");summary.textContent="จัดการ";details.append(summary);
+        const panel=document.createElement("div");panel.className="guild-management-panel";
+        const assign=(kind,title,current,options)=>{
+          const label=document.createElement("label");label.className="field";
+          const text=document.createElement("span");text.textContent=title;
+          const select=document.createElement("select");select.setAttribute("aria-label",title+" "+member.name);
+          for(const [value,caption] of options){const option=document.createElement("option");option.value=String(value);option.textContent=caption;select.append(option);}
+          select.value=String(current);
+          select.onchange=()=>{
+            const value=kind==="squad"?(select.value===""?null:Number(select.value)):select.value;
+            if(guildReady() && room?.state?.guildRolesAvailable===true)room.send("guild_assign",{memberId:member.id,kind,value});
+          };
+          label.append(text,select);panel.append(label);
+        };
+        if(roles && canManage)assign("rank","ตำแหน่ง",rank,[["member","สมาชิก"],["officer","นายทหาร"],["squad_leader","หัวหน้าหน่วย"]]);
+        if(canOrganize){
+          assign("squad","หน่วย",member.squad??"",[["","ไม่อยู่ในหน่วย"],...[1,2,3,4,5,6].map(n=>[n,"หน่วย "+n])]);
+          assign("specialty","หน้าที่",member.specialty||"none",Object.entries(guildSpecialtyLabels));
+        }
+        if(canManage){
+          const actions=document.createElement("div");actions.className="guild-actions";
+          for(const [action,label] of [["transfer","ตั้งผู้บัญชาการ"],["kick","นำออก"]]){
+            const button=document.createElement("button");button.type="button";button.textContent=label;
+            button.onclick=()=>{if(guildReady() && window.confirm(label+" "+member.name+" ใช่หรือไม่"))room.send("guild_manage",{memberId:member.id,action});};
+            actions.append(button);
+          }
+          panel.append(actions);
+        }
+        details.append(panel);row.append(details);
+      }
+      list.append(row);
+    }
+    const select=$("guildTarget"),previous=select.value;select.replaceChildren();
+    for(const candidate of candidates){const option=document.createElement("option");option.value=candidate.id;option.textContent=candidate.name;select.append(option);}
+    if([...select.options].some(o=>o.value===previous))select.value=previous;
+    $("guildInviteArea").hidden=!(commander||officer);
+    $("guildInvite").disabled=!ready || !select.value || (guildState?.members.length||0)>=30;
+    $("guildLeave").disabled=!ready;
+    $("guildRolesNote").hidden=!roles;
+  }
+  function openGuild(){
+    guildRenderKey="";guildUnread=false;updatePartyBadge();
+    openDrawer("guild","กิลด์",
+      '<button class="secondary" id="backToParty" type="button">← ปาร์ตี้</button><div class="economy-balance" id="guildStatus" role="status"></div><div id="guildInvitationBox" class="party-invitation" hidden><strong><span id="guildInviterName"></span> ชวนเข้ากิลด์ <span id="guildInviteName"></span></strong><div class="party-actions"><button id="guildAccept" type="button">เข้าร่วม</button><button id="guildDecline" type="button">ปฏิเสธ</button></div><p class="note">คำเชิญมีอายุ 60 วินาที</p></div><div id="guildCreateArea" hidden><label class="field" for="guildName">ชื่อกิลด์ 2–24 ตัวอักษร</label><input id="guildName" maxlength="48" autocomplete="off"><button class="primary" id="guildCreate" type="button">สร้างกิลด์</button></div><div id="guildMemberArea" hidden><p class="note" id="guildRolesNote" hidden>ผู้บัญชาการแต่งตั้งนายทหารและหัวหน้าหน่วย · นายทหารช่วยจัดหน่วยและเชิญสมาชิก · หน่วยละไม่เกิน 5 คน</p><h3>สมาชิกกิลด์</h3><div id="guildMembers"></div><div id="guildInviteArea" hidden><label class="field" for="guildTarget">เชิญผู้เล่นในห้อง</label><select id="guildTarget"></select><button class="primary" id="guildInvite" type="button">ส่งคำเชิญ</button></div><button class="secondary" id="guildLeave" type="button">ออกจากกิลด์</button><p class="note">หัวหน้าที่มีสมาชิกต้องส่งต่อตำแหน่งก่อนออก · หากเป็นสมาชิกคนสุดท้าย การออกจะยุบกิลด์</p></div>');
+    $("backToParty").onclick=openParty;
+    $("guildCreate").onclick=()=>{const name=$("guildName").value.normalize("NFC").trim();if(guildReady() && name)room.send("guild_create",{name});};
+    $("guildInvite").onclick=()=>{const targetId=$("guildTarget").value;if(guildReady() && targetId)room.send("guild_invite",{targetId});};
+    $("guildAccept").onclick=()=>{if(guildReady() && guildInvitation)room.send("guild_accept",{inviteId:guildInvitation.inviteId});};
+    $("guildDecline").onclick=()=>{if(guildReady() && guildInvitation)room.send("guild_decline",{inviteId:guildInvitation.inviteId});};
+    $("guildLeave").onclick=()=>{if(guildReady() && window.confirm("ออกจากกิลด์ใช่หรือไม่"))room.send("guild_leave",{});};
+    renderGuild();if(guildReady())room.send("get_guild",{});
   }
   // Compact portrait HUD: a small quest chip opens the existing detail drawer.
   ui.quest.addEventListener("click", () => {
@@ -5292,6 +6015,7 @@
     if (spiritShown) {
       spirit=B.MeshBuilder.CreateSphere("summoned guardian",{diameter:1.05,segments:12},scene);
       spirit.material=spiritMat;spirit.isPickable=false;
+      playAction(getLocalAvatar(), "summon");
       toast("เรียกวิญญาณผู้พิทักษ์ (จำลอง)");
     } else { spirit?.dispose();spirit=null;toast("เก็บวิญญาณกลับแล้ว"); }
     updateSummonButton(spiritShown);
@@ -5308,6 +6032,7 @@
       try{room.send("possess",{});}catch(_){toast("ส่งคำสั่งเข้าสิงไม่สำเร็จ");}return;
     }
     possessed=!possessed;syncPossessionButton();
+    const possessedHero=getLocalAvatar(); if(possessedHero) possessedHero.possessed=possessed;
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
   $("attack").onclick = () => {
@@ -5359,6 +6084,7 @@
             demoDest = null;
             if (now - demoLastHitAt >= 1000) {
               demoLastHitAt = now;
+              playAttack(localId, false, enemy.position.x, enemy.position.z);
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
               hitFlashRemaining = .22;
               updateMonsterUI(demoMonsterHp, 100, demoMonsterHp > 0, true);
@@ -5531,7 +6257,7 @@
     if (me) warm.position.set(me.x, me.y + 3.4, me.z + .6);
     scene.render();
   });
-  window.addEventListener("resize",()=>{ engine.resize(); updateStatus(); positionSwordToast(); });
+  window.addEventListener("resize",()=>{ resizeGameRenderer(); updateStatus(); positionSwordToast(); });
   window.addEventListener("pagehide",()=> { clearSyncPoll();if(room)try{room.leave();}catch(_){} });
   resetDemoMonster();
   updateStatus();
