@@ -6535,6 +6535,11 @@
         catch(error){console.warn("MONTRA battlefield admission",error);transferFailed=true;}
       }
       if(!joined)joined=await client.joinOrCreate("my_room",opts);
+      // The server sends guild and territory status as soon as we join, before
+      // the slot check below finishes; keep those first messages and replay
+      // them once their handlers exist, or the panels stay empty until a change.
+      const earlyMessages=new Map(), earlyHandlers=new Map();
+      for(const type of ["guild_state","territory_state"])joined.onMessage(type,message=>{if(!earlyHandlers.has(type))earlyMessages.set(type,message);});
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
       clearChatHistory(true);
@@ -6579,7 +6584,7 @@
         updateChatBadge();
         if (drawerActive === "chat") renderChat();
       });
-      joined.onMessage("territory_state",message=>{
+      const onTerritoryState=message=>{
         if(room!==joined)return;
         const oldDrums=territoryState?.local?.supply?.drums || [];
         territoryState=message;syncGateVisual();syncCastleRings();
@@ -6605,7 +6610,9 @@
             ui.quest.style.setProperty("--war-progress",pct/100);
           }else if(fighting)ui.quest.style.setProperty("--war-progress",Math.abs(local.progress)/local.goal);
         }
-      });
+      };
+      joined.onMessage("territory_state",onTerritoryState);
+      earlyHandlers.set("territory_state",onTerritoryState);
       joined.onMessage("territory_error",message=>{if(room===joined)toast(warErrors[message?.reason] || "เข้าศึกไม่ได้ในขณะนี้");});
       joined.onMessage("territory_transfer",message=>{
         if(room===joined && typeof message?.roomId==="string" && typeof message.ticket==="string")void connectOnline(endpoint,requestedSlot,message);
@@ -6619,7 +6626,7 @@
         } else toast("บันทึกรายงานไม่สำเร็จ · ลองอีกครั้ง");
         finishChatPending(); if(drawerActive==="chat") renderChat();
       });
-      joined.onMessage("guild_state", message => {
+      const onGuildState=message => {
         if(room!==joined)return;
         if(message===null)guildState=null;
         else if(typeof message?.id==="string" && typeof message.name==="string" &&
@@ -6630,7 +6637,11 @@
         else return;
         if(guildState){guildInvitation=null;guildUnread=false;updatePartyBadge();}
         renderGuild();
-      });
+      };
+      joined.onMessage("guild_state",onGuildState);
+      earlyHandlers.set("guild_state",onGuildState);
+      for(const [type,message] of earlyMessages)earlyHandlers.get(type)?.(message);
+      earlyMessages.clear();
       joined.onMessage("guild_invitation", message=>{
         if(room!==joined || typeof message?.inviteId!=="string" || typeof message.guildName!=="string" || typeof message.fromName!=="string")return;
         guildInvitation=message;guildUnread=drawerActive!=="guild";updatePartyBadge();
