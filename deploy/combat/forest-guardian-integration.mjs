@@ -29,6 +29,7 @@ async function member(i,restore=false) {
   await waitFor(()=>room.state?.players?.get(room.sessionId),"join");
   return entry;
 }
+const craft = {recipeId:"shrine_glaive",requestId:"integration_craft_shrine_guardian"};
 try{
   if(process.env.MONTRA_GUARDIAN_STAGE==="read"){
     for(let i=0;i<4;i++){
@@ -37,6 +38,15 @@ try{
       room.send("get_inventory",{});
       const bag=await waitFor(()=>events.find(e=>e.type==="inventory_state")?.data,"durable inventory");
       assert.equal(bag.slots[0].quantity,i===3?99:3);
+      const count = itemId => bag.slots.filter(item => item?.itemId === itemId).reduce((sum,item) => sum + item.quantity,0);
+      assert.equal(count("shrine_shard"),i === 1 || i === 2 ? 1 : 0);
+      assert.equal(count("shrine_glaive"),i === 0 ? 1 : 0);
+      if (i === 0) {
+        assert.equal(room.state.players.get(room.sessionId).equippedWeaponId,"shrine_glaive");
+        room.send("craft_weapon",craft); // Retry even after process restart.
+        await waitFor(()=>events.find(e=>e.type==="craft_result"),"durable craft receipt");
+        assert.equal(events.findLast(e=>e.type==="economy_state").data.gold,900);
+      }
       await room.leave();members.pop();
     }
     console.log("PASS: all four SQLite rewards survive a process restart, including a full bag");
@@ -55,8 +65,17 @@ try{
       const grants=events.filter(e=>e.type==="experience_gained");
       assert.equal(grants.length,1);assert.equal(grants[0].data.amount,900);
       assert.equal(grants[0].data.elitePotion,i===3?"bag_full":"granted");
+      assert.equal(grants[0].data.shrineShard,i===3?"bag_full":"granted");
     }
     await waitFor(()=>!leader.state.monsters.get(guardianId).alive,"death patch");
-    console.log("PASS: four players defeat the guardian, split 3600 EXP and collect eligible potions once");
+    const log = members[0].events;
+    leader.send("craft_weapon",craft);
+    await waitFor(()=>log.some(e=>e.type==="craft_result"),"craft from actual guardian drop");
+    const bag=log.findLast(e=>e.type==="inventory_state").data;
+    const slot=bag.slots.findIndex(item=>item?.itemId==="shrine_glaive");
+    assert.notEqual(slot,-1);assert.equal(log.findLast(e=>e.type==="economy_state").data.gold,900);
+    leader.send("equip_weapon",{slot});
+    await waitFor(()=>leader.state.players.get(leader.sessionId).equippedWeaponId==="shrine_glaive","equip crafted glaive");
+    console.log("PASS: four-player Elite kill, unchanged XP and potion, shard eligibility, craft and equip");
   }
 }finally{for(const {room} of members.reverse())await room.leave().catch(()=>{});}

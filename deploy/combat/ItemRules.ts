@@ -1,3 +1,4 @@
+import { readForged, type Forged } from "./ForgeRules.js";
 /**
  * MONTRA V0.2.7 — authoritative permanent equipment.
  * Existing v0.2.6 inventory JSON (version:1, slots:[...]) stays readable.
@@ -18,9 +19,19 @@ export const STARTER_WEAPON_IDS = [
   RITUAL_DAGGER_ID, ARCANE_SWORD_ID, SPIRIT_STAFF_ID,
 ] as const;
 
-export type WeaponItemId = typeof STARTER_WEAPON_IDS[number];
-export type ItemId = typeof POTION_ID | WeaponItemId;
-export type InventoryStack = { itemId: ItemId; quantity: number };
+export const SHRINE_SHARD = "shrine_shard" as const;
+export const SHRINE_GLAIVE = "shrine_glaive" as const;
+export const SHRINE_RECIPE = Object.freeze({
+  id: "shrine_glaive", ingredient: SHRINE_SHARD, quantity: 1, gold: 100, output: SHRINE_GLAIVE,
+  itemLevel: 12, rarity: "rare", meleeBonus: 10, pvpMeleeBonus: 8,
+});
+export type WeaponItemId = typeof STARTER_WEAPON_IDS[number] | typeof SHRINE_GLAIVE;
+export type StackableId = typeof POTION_ID | typeof SHRINE_SHARD;
+export function isStackableItem(value: unknown): value is StackableId {
+  return value === POTION_ID || value === SHRINE_SHARD;
+}
+export type ItemId = StackableId | WeaponItemId;
+export type InventoryStack = { itemId: ItemId; quantity: number; forge?: Forged };
 export type InventorySnapshot = {
   version: 1;
   slots: Array<InventoryStack | null>;
@@ -40,13 +51,14 @@ export const WEAPON_STATS: Readonly<Record<WeaponItemId, Readonly<{
   [RITUAL_DAGGER_ID]: Object.freeze({ meleeBonus: 4, rangedBonus: 0 }),
   [ARCANE_SWORD_ID]: Object.freeze({ meleeBonus: 8, rangedBonus: 0 }),
   [SPIRIT_STAFF_ID]: Object.freeze({ meleeBonus: 0, rangedBonus: 6 }),
+  [SHRINE_GLAIVE]: Object.freeze({ meleeBonus: SHRINE_RECIPE.meleeBonus, rangedBonus: 0 }),
 });
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isWeaponId(value: unknown): value is WeaponItemId {
-  return STARTER_WEAPON_IDS.some(id => id === value);
+  return value === SHRINE_GLAIVE || STARTER_WEAPON_IDS.some(id => id === value);
 }
 
 export function makeStarterInventory(): InventorySnapshot {
@@ -76,23 +88,23 @@ export function validateInventory(value: unknown): InventorySnapshot {
   const seenWeapons = new Set<WeaponItemId>();
   const slots = value.slots.map((entry: unknown): InventoryStack | null => {
     if (entry === null) return null;
-    if (!record(entry) || Object.keys(entry).length !== 2 ||
+    if (!record(entry) || Object.keys(entry).some(key => !["itemId","quantity","forge"].includes(key)) ||
         !Number.isSafeInteger(entry.quantity)) {
       throw new Error("inventory_record_invalid");
     }
-    if (entry.itemId === POTION_ID) {
-      if ((entry.quantity as number) < 1 ||
+    if (isStackableItem(entry.itemId)) {
+      if (Object.hasOwn(entry,"forge") || (entry.quantity as number) < 1 ||
           (entry.quantity as number) > INVENTORY_STACK_LIMIT) {
         throw new Error("inventory_record_invalid");
       }
-      return { itemId: POTION_ID, quantity: entry.quantity as number };
+      return { itemId: entry.itemId, quantity: entry.quantity as number };
     }
     if (!upgraded || !isWeaponId(entry.itemId) ||
         entry.quantity !== 1 || seenWeapons.has(entry.itemId)) {
       throw new Error("inventory_record_invalid");
     }
     seenWeapons.add(entry.itemId);
-    return { itemId: entry.itemId, quantity: 1 };
+    return {itemId: entry.itemId, quantity: 1, ...(Object.hasOwn(entry,"forge") ? {forge:readForged(entry.forge)} : {})};
   });
   if (!upgraded) return { version: 1, slots };
   const selected = value.equippedWeaponSlot;
@@ -155,14 +167,17 @@ export function equipInventoryWeapon(
   };
 }
 
-/** One potion per eligible Elite recipient; an entirely full bag keeps its contents. */
-export function grantRewardPotion(inventory:InventorySnapshot): InventorySnapshot | null {
+/** Add a single reward, preferring an existing stack. A full bag is left intact. */
+export function grantStackReward(inventory: InventorySnapshot, itemId: StackableId): InventorySnapshot | null {
   const slots = inventory.slots.slice();
-  let index = slots.findIndex(stack => stack?.itemId === POTION_ID && stack.quantity < INVENTORY_STACK_LIMIT);
+  let index = slots.findIndex(stack => stack?.itemId === itemId && stack.quantity < INVENTORY_STACK_LIMIT);
   if (index < 0) index = slots.indexOf(null);
   if (index < 0) return null;
-  slots[index] = {itemId:POTION_ID,quantity:(slots[index]?.quantity ?? 0) + 1};
-  return {...inventory,slots};
+  slots[index] = {itemId, quantity: (slots[index]?.quantity ?? 0) + 1};
+  return {...inventory, slots};
+}
+export function grantRewardPotion(inventory: InventorySnapshot): InventorySnapshot | null {
+  return grantStackReward(inventory, POTION_ID);
 }
 
 export function equippedWeaponId(inventory: InventorySnapshot | undefined): WeaponItemId | null {
@@ -171,11 +186,17 @@ export function equippedWeaponId(inventory: InventorySnapshot | undefined): Weap
   const item = inventory.slots[inventory.equippedWeaponSlot];
   return item && isWeaponId(item.itemId) ? item.itemId : null;
 }
-export function weaponBonuses(inventory: InventorySnapshot | undefined):
+export function weaponBonuses(inventory: InventorySnapshot | undefined, mode: "pve" | "pvp" = "pve"):
   {melee: number; ranged: number} {
   const id = equippedWeaponId(inventory);
   const stats = id ? WEAPON_STATS[id] : null;
-  return { melee: stats?.meleeBonus ?? 0, ranged: stats?.rangedBonus ?? 0 };
+  const forge = mode === "pve" ? inventory?.slots[inventory.equippedWeaponSlot ?? -1]?.forge : undefined;
+  const extra = forge?.rank ?? 0, affix = forge?.affix;
+  const meleeBase = mode === "pvp" && id === SHRINE_GLAIVE ? SHRINE_RECIPE.pvpMeleeBonus : (stats?.meleeBonus ?? 0);
+  return {
+    melee: meleeBase + (id && id !== SPIRIT_STAFF_ID ? extra : 0) + (affix?.stat === "melee" ? affix.tier : 0),
+    ranged: (stats?.rangedBonus ?? 0) + (id === SPIRIT_STAFF_ID ? extra : 0) + (affix?.stat === "ranged" ? affix.tier : 0),
+  };
 }
 
 /** Browser sends {slot: 0}, not item ID, quantity, HP or heal amount. */

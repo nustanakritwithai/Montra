@@ -5,6 +5,8 @@
 
 MONTRA is a **portrait, tap-to-move, third-person 3D** prototype. Players in the same `my_room` see each other walking and attacking a possessed ghost. The server is authoritative for movement/combat; GitHub Pages only renders the world.
 
+See the [Thai character paths and weapon forging guide](deploy/combat/BUILDCRAFT-TH.md) for the current playtest.
+
 ## Expanded forest preview
 
 Optional `MONTRA_WORLD_EXPANSION=1`: a 120 × 120 forest with four hunting camps, 16 normal level 1–12 enemies and a level-12 Elite shrine guardian, protected rest areas, map-aware movement and a server-supplied client map. Disabled by default; deploy matching client/server before enabling. See [Thai staging and rollback guide](deploy/combat/WORLD-EXPANSION-TH.md).
