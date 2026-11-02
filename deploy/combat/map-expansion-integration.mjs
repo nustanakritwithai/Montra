@@ -19,7 +19,7 @@ async function seed(t,mapId,x,z,slot=1){const r=await open(t,undefined,slot);awa
 try{
  if(process.env.MONTRA_MAP_TEST_STAGE==='read'){
    const expected=JSON.parse(await readFile(path.join(dir,'map-restart-expectations.json'),'utf8'));
-   for(const e of expected){const r=await open(e.token,undefined,e.slot);const p=own(r);assert.equal(p.mapId,e.mapId);assert.equal(p.x,e.x);assert.equal(p.z,e.z);assert.equal(p.level,e.level);assert.equal(p.experience,e.experience);await leave(r);const disk=JSON.parse(await readFile(file(e.token,e.slot),'utf8'));assert.equal(disk.inventory.slots[0].quantity,2);}
+   for(const e of expected){const r=await open(e.token,undefined,e.slot);const p=own(r);assert.equal(p.mapId,e.mapId);assert.ok(Math.abs(p.x-e.x)<1e-5,'wire X within float32 precision');assert.ok(Math.abs(p.z-e.z)<1e-5,'wire Z within float32 precision');assert.equal(p.level,e.level);assert.equal(p.experience,e.experience);await leave(r);const disk=JSON.parse(await readFile(file(e.token,e.slot),'utf8'));assert.equal(disk.x,e.x);assert.equal(disk.z,e.z);assert.equal(disk.inventory.slots[0].quantity,2);}
    console.log('PASS: actual process restart preserves all 3 expanded-map slots and inventory');
  }else{
    await assert.rejects(new Client(endpoint).create('my_room',{}),/world_client_update_required/);
