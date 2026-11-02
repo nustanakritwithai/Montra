@@ -3005,7 +3005,7 @@
   // face -Z (the server facing), built from primitives and merged per joint.
   const gm = {
     corpse: mat("corpse skin", "#7f93a6", "#121c26"), pale: mat("pale ghost skin", "#d6d8d0", "#2a2a2a"),
-    shirt: mat("burial shirt", "#5f574d"), shroud: mat("black shroud", "#151418"), dress: mat("white ghost dress", "#cfcbbe", "#1d1d1d"),
+    shirt: mat("burial shirt", "#7d7466", "#14120f"), shroud: mat("black shroud", "#222a36", "#0a0e16"), dress: mat("white ghost dress", "#cfcbbe", "#1d1d1d"),
     robe: mat("scribe robe", "#7a4a26"), bark: mat("possessed bark", "#3a2b20"), sash3: [mat("pha phrae red", "#9b2b22"), mat("pha phrae gold", "#c99a2e"), mat("pha phrae green", "#2f6b3c")],
     stone: mat("possessed statue", "#77786f"), lacquer: mat("statue lacquer", "#7d2a24"), iron: mat("chain iron", "#2d2c2e"), beam: mat("old beam", "#3d2a1d"),
     eyeRed: mat("ghost eyes red", "#ff3b2e", "#ff2010"), eyeGreen: mat("ghost eyes green", "#9dff6a", "#58ff2a"), eyeAmber: mat("ghost eyes amber", "#ffc25a", "#ff9a10"),
@@ -3134,7 +3134,7 @@
       return (k) => {
         const { t, move, atk, hurt } = k;
         body.position.y = 1.25 + Math.sin(t * 1.4) * .15 - atk * .25; body.rotation.x = .45 + move * .2 + atk * .35 - hurt * .4;
-        train.rotation.x = .75 + move * .35 + Math.sin(t * 1.8) * .08;
+        train.rotation.x = -.95 - move * .35 + Math.sin(t * 1.8) * .08; // streams out behind her
         head.rotation.x = -.4 - atk * .25; head.rotation.z = Math.sin(t * 1.1) * .08;
         arms.forEach((a, i) => { a.sh.rotation.x = (i ? -1.5 : -.6) - atk * 1.1 + Math.sin(t * 2 + i) * .12; a.sh.rotation.z = a.s * .15; a.el.rotation.x = -.4 + atk * .35; });
         tentacles.forEach((j, i) => { for (let n = 1; n < j.length; n++) { j[n].rotation.x = -.22 + Math.sin(t * 2.4 + i * .9 + n * .7) * (.25 + atk * .3); j[n].rotation.z = Math.sin(t * 1.7 + i + n * .5) * .15; } });
