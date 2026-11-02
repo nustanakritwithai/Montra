@@ -1,4 +1,4 @@
-import { getWorldMap, isSafeWorldPoint, type WorldPoint, type WorldPortal } from "./WorldMaps.js";
+import { groundAt, getWorldMap, isSafeWorldPoint, type WorldPoint, type WorldPortal } from "./WorldMaps.js";
 export const WARP_RANGE = 2;
 export const WARP_COOLDOWN_MS = 3000;
 export const WARP_COMBAT_LOCK_MS = 5000;
@@ -35,7 +35,7 @@ export function checkWarp(payload: unknown, ctx: WarpContext): WarpResult {
   if (ctx.nowMs - ctx.lastCombatMs < WARP_COMBAT_LOCK_MS) return { ok: false, reason: "combat_locked" };
   // Current portal definitions are on ground level; horizontal proximity alone
   // must not admit someone on a different vertical level.
-  if (Math.hypot(ctx.position.x - portal.x, ctx.position.y, ctx.position.z - portal.z) > WARP_RANGE) {
+  if (Math.hypot(ctx.position.x - portal.x, ctx.position.y-groundAt(ctx.mapId,portal.x,portal.z), ctx.position.z - portal.z) > WARP_RANGE) {
     return { ok: false, reason: "portal_too_far" };
   }
   const target = getWorldMap(portal.targetMapId);
