@@ -190,8 +190,9 @@ jobs:
             exit 1
           fi
           grep -q 'CAMERA_ZOOM_MAX = 85' main.js
-          grep -q 'CAMERA_DEFAULT_RADIUS = 52' main.js
+          grep -q 'CAMERA_DEFAULT_RADIUS = 85' main.js
           grep -q 'CAMERA_DEFAULT_BETA = 0.70' main.js
+          grep -Fq 'CAMERA_DEFAULT_ALPHA = Math.PI / 2' main.js
           grep -Fq -- 'padding-top:var(--dash-swipe-reach)' styles.css
           grep -Fq -- '--dash-swipe-reach: clamp(80px, 12dvh, 108px)' styles.css
           grep -Fq 'pointer.beta + dy * .003' main.js
