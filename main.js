@@ -3587,7 +3587,7 @@
     for (let i = 0; i < s; i += 8) for (let j = 0; j < s; j += 8) { c.fillStyle = (i + j) % 16 ? "rgba(60,40,15,.45)" : "rgba(255,230,170,.15)"; c.fillRect(i, j, 8, 4); } }, 3);
   const cloth = {
     rags: mat("grave rags", "#6c665c", "#100e0c"), shroud: mat("grave shroud", "#1b1f29", "#06080e"), white: mat("ghost white", "#d9d6cc", "#26262a"),
-    saffron: mat("scribe saffron", "#8a4f22", "#140a03"), weed: mat("weed rags", "#3e4a36", "#060a05"), burial: mat("burial cloth", "#cfc8b4", "#141210"),
+    saffron: mat("scribe saffron", "#8a4f22", "#140a03"), weed: mat("weed rags", "#3e4a36", "#060a05"), burial: mat("burial cloth", "#e2dccb", "#1a1814"),
     ash: mat("ash cloth", "#2a2420", "#060403"), sabai: mat("sabai cloth", "#5a2a3a", "#0e0408"), phaSin: mat("pha sin", "#3a2a4a", "#08050c"),
     danceGold: mat("dancer gold brocade", "#b88a3a", "#1e1404"), leafSilk: mat("leaf silk", "#5a8a4a", "#0a1806"), patchwork: mat("patchwork robe", "#ffffff", "#0a0806"), soldier: mat("siamese soldier jacket", "#8a2420", "#140404"), danceRed: mat("dancer red brocade", "#8a1e22", "#140304"), tealSilk: mat("teal silk", "#3f7f78", "#0a1e1c"), moonSilk: mat("moon silk", "#b8c8e8", "#1a2440"), blue: mat("dead blue shirt", "#7d8ea6", "#0e1218"), lacquer: mat("statue lacquer cloth", "#7a2622", "#120404"),
   };
@@ -4126,7 +4126,15 @@
         const tie = B.MeshBuilder.CreateTorus("sacred thread", { diameter: d, thickness: .012, tessellation: 12 }, scene); tie.material = sacredCord; tie.position.set(...at); tie.isPickable = false;
         if (bone.endsWith("Hand")) tie.rotation.z = Math.PI / 2; onBone(nodes, bone, tie);
       }
-      const dirt = []; for (let i = 0; i < 6; i++) { const clod = B.MeshBuilder.CreateSphere("grave dirt", { diameter: .07 + R(i, 911) * .06, segments: 4 }, scene); clod.material = gm.dirtMat; clod.position.set((R(i, 912) - .5) * .3, .3 + R(i, 913) * .9, .1 + R(i, 914) * .04); clod.isPickable = false; onBone(nodes, i < 3 ? "Spine" : "Hips", clod); dirt.push(clod); }
+      // Winding-sheet strips wrapped round the body, and a veil over the head.
+      for (const [bone, y, r, tilt] of [["Chest", 1.38, .17, .25], ["Chest", 1.28, .16, -.2], ["Spine1", 1.18, .15, .3], ["Spine", 1.06, .15, -.25], ["Hips", .95, .18, .2],
+        ["LeftUpLeg", .7, .085, .3], ["RightUpLeg", .7, .085, -.3], ["LeftLeg", .32, .065, .25], ["RightLeg", .32, .065, -.25]]) {
+        const band = B.MeshBuilder.CreateTorus("winding strip", { diameter: r * 2.1, thickness: .035, tessellation: 16 }, scene);
+        band.material = cloth.burial; band.isPickable = false; band.scaling.z = .8; band.rotation.z = tilt;
+        const bx = bone.startsWith("Left") ? .09 : bone.startsWith("Right") ? -.09 : 0; band.position.set(bx, y, 0); onBone(nodes, bone, band);
+      }
+      const veil = lathe("burial veil", [[0, 1.79], [.06, 1.77], [.1, 1.7], [.115, 1.6], [.11, 1.52], [.09, 1.47]], cloth.burial, 14); onBone(nodes, "Head", veil);
+      for (let i = 0; i < 3; i++) { const clod = B.MeshBuilder.CreateSphere("grave dirt", { diameter: .04 + R(i, 911) * .03, segments: 4 }, scene); clod.material = gm.dirtMat; clod.position.set((R(i, 912) - .5) * .2, .9 + R(i, 913) * .4, .14); clod.scaling.y = .5; clod.isPickable = false; onBone(nodes, "Spine", clod); }
       const base = { Spine: [.15, 0, .05], Spine1: [.1, 0, 0], Neck: [.15, 0, 0], Head: [.3, .2, .25], LeftArm: [-1.45, 0, -1.2], RightArm: [-1.45, 0, 1.2], LeftForeArm: [0, -.05, 0], RightForeArm: [0, .05, 0], LeftHand: [.4, 0, 0], RightHand: [.4, 0, 0] };
       const lift = { Spine: [-.1, 0, 0], LeftArm: [-2.6, 0, -1.0], RightArm: [-2.6, 0, 1.0], Head: [-.1, 0, 0] };
       const clutch = { Spine: [.55, 0, 0], LeftArm: [-1.1, .5, -1.1], RightArm: [-1.1, -.5, 1.1], LeftForeArm: [0, -.6, 0], RightForeArm: [0, .6, 0] };
