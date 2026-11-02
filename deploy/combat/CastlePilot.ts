@@ -11,48 +11,145 @@ export const castleObjectives=[
   {id:6,name:"โรงช่างประตู",x:250,z:-110,rate:1},
   {id:7,name:"ท้องพระโรง",x:0,z:-175,rate:0},
 ] as const;
-export const pilotNodes=castleObjectives.filter(p=>p.id===2 || p.id===4 || p.id===5);
-type Side="attack"|"defend";
-export function pilotSpawn(point:number,side:Side,seat:number){
-  const node=pilotNodes.find(p=>p.id===point)!;
+const legacyNodes=castleObjectives.filter(p=>[2,4,5].includes(p.id));
+const scoringNodes=castleObjectives.filter(p=>p.id<7);
+export const musterNodes=[1,2,3];
+export type Side="attack"|"defend";
+const sides=["attack","defend"] as const;
+const sidesAtZero=()=>({attack:0,defend:0});
+const throneOpens=30*60_000, throneGoal=120_000, captureGoal=300_000;
+export function pilotSpawn(point:number,side:Side,seat:number,garrison=false){
+  if(garrison && side==="defend"){
+    const post=point===1?{x:0,z:522}:point===2?{x:-552,z:100}:{x:552,z:100};
+    return {x:post.x+seat%5-2,y:0,z:post.z+Math.floor(seat/5)};
+  }
+  const node=castleObjectives.find(p=>p.id===point)!;
   const offset=side==="attack"?195:-195;
-  return {x:node.x+(point===5?offset:0)+seat%5-2,y:0,z:node.z+(point===5?0:offset)+Math.floor(seat/5)};
+  const x=point===1?(side==="attack"?-180:180):point===5?offset:0;
+  const z=point===1?100:point===5?0:offset;
+  return {x:node.x+x+seat%5-2,y:0,z:node.z+z+Math.floor(seat/5)};
 }
 export type PilotPresence=Record<Side,number>[];
-type Point={owner:Side|null;pressure:number;awarded:{attack:boolean;defend:boolean}};
-// pressure is signed fifths of a millisecond. Score is stored in 1/5000 point units.
-export type PilotState={points:Point[];score:Record<Side,number>;middleTime:Record<Side,number>};
-export function newPilot():PilotState {
-  return {points:pilotNodes.map(():Point=>({owner:null,pressure:0,awarded:{attack:false,defend:false}})),score:{attack:0,defend:0},middleTime:{attack:0,defend:0}};
+type Point={owner:Side|null;pressure:number;awarded:Record<Side,boolean>};
+type Gate={open:boolean;hp:number;lastHit:number|null};
+const links:ReadonlyArray<readonly [number,number,readonly string[]]>=[
+  [1,5,["outer-south","middle-south"]],[2,4,["outer-west","middle-west"]],[3,6,["outer-east","middle-east"]],
+  [4,5,[]],[5,6,[]]
+];
+const gateIds=["outer-south","outer-north","outer-east","outer-west","middle-south","middle-east","middle-west","inner-east","inner-west"];
+type Siege={gates:Record<string,Gate>;throne:Record<Side,number>;cutMs:Record<Side,number>;defended:boolean;victor:Side|null};
+// Older three-front battles remain readable and finish under the rules they started with.
+export type PilotState={points:Point[];score:Record<Side,number>;middleTime:Record<Side,number>;siege?:Siege};
+export function newPilot(defended=false):PilotState {
+  return {points:scoringNodes.map(():Point=>({owner:null,pressure:0,awarded:{attack:false,defend:false}})),
+    score:sidesAtZero(),middleTime:sidesAtZero(),siege:{gates:Object.fromEntries(gateIds.map(id=>[id,{open:!defended,hp:120,lastHit:null}])),
+      throne:sidesAtZero(),cutMs:sidesAtZero(),defended,victor:null}};
 }
-export function tickPilot(state:PilotState,presence:PilotPresence,elapsedMs:number){
-  for(const side of ["attack","defend"] as const){
-    const linked=state.points.every(p=>p.owner===side);
-    state.points.forEach((p,i)=>{
-      if(p.owner!==side)return;
-      state.score[side]+=elapsedMs*pilotNodes[i].rate*(linked?6:5);
-      if(pilotNodes[i].id!==2)state.middleTime[side]+=elapsedMs;
-    });
-  }
-  const threshold=300_000;
-  state.points.forEach((p,i)=>{
-    const net=presence[i].attack-presence[i].defend;
-    if(!net)return;
-    const side=net>0?"attack":"defend",sign=net>0?1:-1;
-    const delta=sign*elapsedMs*Math.min(10,5+Math.abs(net)-1);
-    p.pressure=p.owner===side?sign*Math.min(0,sign*(p.pressure+delta)):p.pressure+delta;
-    if(sign*p.pressure>=threshold){
-      p.owner=side;p.pressure=0;
-      if(!p.awarded[side]){state.score[side]+=20*5000;p.awarded[side]=true;}
+function fronts(s:PilotState,side:Side){
+  const nodes=s.siege?scoringNodes:legacyNodes;
+  const owned=nodes.filter((_,i)=>s.points[i].owner===side).map(p=>Number(p.id));
+  const seen=new Set<number>(),linked=new Set<number>();
+  function connected(start:number,checkDoors:boolean){
+    const found=new Set([start]);
+    for(const id of found)for(const [a,b,doors] of links){
+      const next=a===id?b:b===id?a:0;
+      if(owned.includes(next) && (!checkDoors || doors.every(passable)))found.add(next);
     }
+    return found;
+  }
+  function passable(id:string){const g=s.siege!.gates[id];return g.open || g.hp===0;}
+  for(const id of owned)if(!seen.has(id)){
+    const group=connected(id,false);
+    for(const k of group){seen.add(k);if(group.size>=3)linked.add(k);}
+  }
+  const outer=owned.filter(id=>id<=3),middle=owned.length-outer.length;
+  const route=!!s.siege && outer.some(id=>{
+    const group=connected(id,true);
+    return (group.has(4)&&passable("inner-west")) || (group.has(6)&&passable("inner-east"));
   });
+  return {linked,outer:outer.length,middle,route,eligible:outer.length>=2 && middle>=2 && route};
+}
+export function changeCastleGate(s:PilotState,id:string,side:Side,occupied:boolean,now:number,repair=false){
+  const siege=s.siege,gate=siege && Object.hasOwn(siege.gates,id)?siege.gates[id]:undefined;
+  if(!siege?.defended || !gate || gate.hp===0)throw Error("war_gate_inactive");
+  if(repair){
+    if(side!=="defend" || s.points[5].owner!=="defend" || gate.hp===120 || (gate.lastHit!==null && now-gate.lastHit<5000))throw Error("war_gate_repair");
+    gate.hp=Math.min(120,gate.hp+10);
+  }else if(side==="attack"){
+    if(gate.open)throw Error("war_gate_open");
+    gate.hp=Math.max(0,gate.hp-15);gate.lastHit=now;
+  }else{
+    if(gate.open && occupied)throw Error("war_gate_occupied");
+    gate.open=!gate.open;
+  }
+}
+// Presence is in atlas ID order, including the throne. The room supplies only consecutive live samples.
+export function tickPilot(s:PilotState,presence:PilotPresence,elapsedMs:number,age=0):number {
+  const nodes=s.siege?scoringNodes:legacyNodes;
+  const speed=nodes.map(p=>{
+    const net=presence[p.id-1].attack-presence[p.id-1].defend;
+    return Math.sign(net)*Math.min(10,4+Math.abs(net));
+  });
+  let advanced=0;
+  while(advanced<elapsedMs && !s.siege?.victor){
+    const t=age+advanced;
+    let dt=elapsedMs-advanced;
+    if(t<throneOpens)dt=Math.min(dt,throneOpens-t);
+    s.points.forEach((p,i)=>{
+      const v=speed[i];
+      if(v && p.owner!==(v>0?"attack":"defend"))dt=Math.min(dt,Math.ceil((captureGoal-Math.sign(v)*p.pressure)/Math.abs(v)));
+    });
+    const frontsBySide={attack:fronts(s,"attack"),defend:fronts(s,"defend")};
+    const siege=s.siege;
+    if(siege && t>=throneOpens){
+      const net=presence[6].attack-presence[6].defend;
+      const pushing=net>0?"attack":net<0?"defend":null;
+      if(pushing && (!siege.defended || pushing==="attack") && frontsBySide[pushing].eligible)
+        dt=Math.min(dt,throneGoal-siege.throne[pushing]);
+      for(const side of sides){
+        if(siege.defended && side==="defend")continue;
+        if(frontsBySide[side].eligible){
+          siege.cutMs[side]=0;
+          if(side===pushing)siege.throne[side]+=dt;
+        }else{
+          const grace=Math.max(0,30_000-siege.cutMs[side]);
+          siege.cutMs[side]=Math.min(30_000,siege.cutMs[side]+dt);
+          siege.throne[side]=Math.max(0,siege.throne[side]-Math.max(0,dt-grace));
+        }
+        if(siege.throne[side]>=throneGoal)siege.victor=side;
+      }
+    }
+    for(const [i,p] of s.points.entries()){
+      const id=nodes[i].id;
+      if(p.owner){
+        s.score[p.owner]+=dt*nodes[i].rate*(frontsBySide[p.owner].linked.has(id)?6:5);
+        if(id>=4)s.middleTime[p.owner]+=dt;
+      }
+      const v=speed[i];if(!v)continue;
+      const sign=Math.sign(v),side=v>0?"attack":"defend";
+      p.pressure=p.owner===side?sign*Math.min(0,sign*(p.pressure+v*dt)):p.pressure+v*dt;
+      if(sign*p.pressure>=captureGoal){
+        p.owner=side;p.pressure=0;
+        if(!p.awarded[side]){s.score[side]+=100_000;p.awarded[side]=true;}
+      }
+    }
+    advanced+=dt;
+  }
+  return advanced;
 }
 export function pilotWinner(s:PilotState):Side|null {
+  if(s.siege?.victor)return s.siege.victor;
   const lead=s.score.attack-s.score.defend || s.middleTime.attack-s.middleTime.defend;
   return lead===0?null:lead>0?"attack":"defend";
 }
 export function pilotView(s:PilotState){
+  const nodes=s.siege?scoringNodes:legacyNodes,attack=fronts(s,"attack"),defend=fronts(s,"defend");
+  const siege=s.siege;
   return {score:{attack:Math.floor(s.score.attack/5000),defend:Math.floor(s.score.defend/5000)},
-    points:s.points.map((p,i)=>({id:pilotNodes[i].id,name:pilotNodes[i].name,owner:p.owner,progress:Math.trunc(p.pressure/3000)})),
-    linked:s.points[0].owner && s.points.every(p=>p.owner===s.points[0].owner)?s.points[0].owner:null};
+    points:s.points.map((p,i)=>({id:nodes[i].id,name:nodes[i].name,owner:p.owner,progress:Math.trunc(p.pressure/3000)})),
+    linked:attack.linked.size?"attack":defend.linked.size?"defend":null,
+    networks:{attack:[...attack.linked],defend:[...defend.linked]},
+    gates:siege?Object.fromEntries(Object.entries(siege.gates).map(([id,g])=>[id,{closed:g.hp>0&&!g.open,hp:g.hp}])):undefined,
+    throne:siege?{progress:siege.throne,defended:siege.defended,victor:siege.victor,
+      attack:{outer:attack.outer,middle:attack.middle,route:attack.route},defend:{outer:defend.outer,middle:defend.middle,route:defend.route}}:undefined};
 }

@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { PROVINCES } from "./StrategicProvinces.js";
-import {CASTLE_ID,CASTLE_DURATION,newPilot,tickPilot,pilotView,pilotWinner,type PilotPresence,type PilotState} from "./CastlePilot.js";
+import {CASTLE_ID,CASTLE_DURATION,newPilot,tickPilot,pilotView,pilotWinner,changeCastleGate,type PilotPresence,type PilotState} from "./CastlePilot.js";
 
 export const WAR_DURATION=5*60_000, WAR_PROTECTION=8*60*60_000, WAR_HOLD=60, WAR_SIDE_SIZE=5;
 export const warSites=Object.fromEntries(Object.entries(PROVINCES).filter(([,p])=>p.kind==="territory")
@@ -12,6 +12,7 @@ export type Battlefield={site:string;seq:number};
 export type WarSide="attack"|"defend";
 
 export class TerritoryWar {
+  private castleWriter:{seq:number;sample:number}|undefined;
   constructor(private readonly db:DatabaseSync){
     db.exec(`CREATE TABLE IF NOT EXISTS territory_battles(
       seq INTEGER PRIMARY KEY,site TEXT NOT NULL,incumbent TEXT,attacker TEXT NOT NULL,defender TEXT,
@@ -48,7 +49,12 @@ export class TerritoryWar {
     const b=this.latest(site);
     if(!b || b.ended!==null)return b;
     const end=b.started+(site===CASTLE_ID?CASTLE_DURATION:WAR_DURATION);
-    if(now<end && this.guildName(b.attacker))return b;
+    if(this.guildName(b.attacker)){
+      if(now<end)return b;
+      // Let a live field commit the interval ending at the deadline before a world-room observer settles it.
+      if(b.pilot_json && this.castleWriter?.seq===b.seq && this.castleWriter.sample===b.sample &&
+        end-b.sample<=2000 && now-b.sample<=2000)return b;
+    }
     const at=Math.min(now,end);
     let winner=this.guildName(b.incumbent)?b.incumbent:null;
     if(b.pilot_json && now>=end){
@@ -77,7 +83,7 @@ export class TerritoryWar {
       if(s.phase!=="open" || s.ownerId===member.id)throw Error("war_unavailable");
       const row=this.db.prepare("INSERT INTO territory_battles(site,incumbent,attacker,defender,started,sample) VALUES(?,?,?,?,?,?)")
         .run(site,s.ownerId??null,member.id,s.ownerId??null,now,now);
-      if(site===CASTLE_ID)this.db.prepare("UPDATE territory_battles SET pilot_json=? WHERE seq=?").run(JSON.stringify(newPilot()),row.lastInsertRowid);
+      if(site===CASTLE_ID)this.db.prepare("UPDATE territory_battles SET pilot_json=? WHERE seq=?").run(JSON.stringify(newPilot(!!s.ownerId)),row.lastInsertRowid);
       return {site,seq:Number(row.lastInsertRowid)};
     });
   }
@@ -109,9 +115,19 @@ export class TerritoryWar {
       }
     });
   }
+  castleGate(field:Battlefield,id:string,side:WarSide,occupied:boolean,now:number,repair:boolean){
+    return this.atomic(()=>{
+      const b=this.current(field.site,now);
+      if(!b?.pilot_json || b.seq!==field.seq || b.ended!==null || now>=b.started+CASTLE_DURATION)throw Error("war_gate_inactive");
+      const state:PilotState=JSON.parse(b.pilot_json);
+      changeCastleGate(state,id,side,occupied,now,repair);
+      this.db.prepare("UPDATE territory_battles SET pilot_json=? WHERE seq=?").run(JSON.stringify(state),b.seq);
+      return pilotView(state).gates!;
+    });
+  }
   advance(field:Battlefield,now:number,attack:number,defend:number,presence?:PilotPresence,previousSample?:number):void {
     this.atomic(()=>{
-      const b=this.current(field.site,now);
+      const b=field.site===CASTLE_ID?this.latest(field.site):this.current(field.site,now);
       if(!b || b.seq!==field.seq || b.ended!==null || now<=b.sample)return;
       // Only sampled live seconds count. Never credit a vacant or stopped room for elapsed time.
       const elapsed=Math.min(1,(now-b.sample)/1000),net=Math.max(-2,Math.min(2,attack-defend));
@@ -120,8 +136,18 @@ export class TerritoryWar {
         const pilot:PilotState=JSON.parse(b.pilot_json);
         // A delayed normal sample still measures wall time. A long gap cannot earn offline capture or score.
         const gap=now-b.sample;
-        if(previousSample===b.sample && gap<=2000)tickPilot(pilot,presence,gap);
-        this.db.prepare("UPDATE territory_battles SET pilot_json=?,sample=? WHERE seq=?").run(JSON.stringify(pilot),now,b.seq);
+        const deadline=b.started+CASTLE_DURATION,cutoff=Math.min(now,deadline);
+        let sample=cutoff;
+        if(!this.guildName(b.attacker)){this.current(field.site,now);return;}
+        if(previousSample===b.sample && gap<=2000)
+          sample=b.sample+tickPilot(pilot,presence,cutoff-b.sample,b.sample-b.started);
+        this.db.prepare("UPDATE territory_battles SET pilot_json=?,sample=? WHERE seq=?").run(JSON.stringify(pilot),sample,b.seq);
+        this.castleWriter={seq:b.seq,sample};
+        if(pilot.siege?.victor || now>=deadline){
+          const winner=pilotWinner(pilot),candidate=winner==="attack"?b.attacker:winner==="defend"?b.defender:b.incumbent;
+          this.finish(b,this.guildName(candidate)?candidate:this.guildName(b.incumbent)?b.incumbent:null,sample);
+          this.castleWriter=undefined;
+        }
         return;
       }
       const min=b.incumbent?0:-WAR_HOLD;

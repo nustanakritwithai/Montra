@@ -1,7 +1,7 @@
 import { FORGE } from "./ForgeRules.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
 import { WAR_SIDE_SIZE, WAR_HOLD, warSites, type Battlefield, type WarSide } from "./TerritoryWar.js";
-import {CASTLE_ID,CASTLE_ENABLED,CASTLE_SEATS,CAPTURE_RADIUS,pilotNodes,pilotSpawn} from "./CastlePilot.js";
+import {CASTLE_ID,CASTLE_ENABLED,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn} from "./CastlePilot.js";
 import { Encoder } from "@colyseus/schema";
 import { randomUUID } from "node:crypto";
 import {
@@ -112,6 +112,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private nextWarSample=0;
   private previousPilotSample?:number;
   private gateClosed=false;
+  private closedCastleGates=new Set<string>();
   private gateActions=new Map<string,number>();
   private battleActive=false;
   private destinations = new Map<string, Vec2>();
@@ -682,7 +683,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     let point=2;
     if(!parseEmptyCommand(message)){
       const request=message as {objectiveId?:number};
-      if(p.mapId!==CASTLE_ID || !request || Object.keys(request).length!==1 || !pilotNodes.some(n=>n.id===request.objectiveId))return this.reject(client,"invalid_request");
+      const legacy=!start && p.mapId===CASTLE_ID && guildStore().war.inspect(CASTLE_ID,Date.now()).pilot?.throne===undefined;
+      if(p.mapId!==CASTLE_ID || !request || Object.keys(request).length!==1 || !(legacy?[2,4,5]:musterNodes).includes(request.objectiveId!))return this.reject(client,"invalid_request");
       point=request.objectiveId!;
     }
     const fort=warSites[p.mapId];
@@ -714,18 +716,32 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
   private useCityGate(client:Client,message:unknown){
-    if(!this.field || this.field.site===CASTLE_ID || !parseEmptyCommand(message))return;
+    if(!this.field)return;
+    const castle=this.field.site===CASTLE_ID;
+    const req=message as {gateId?:string;repair?:boolean}|null;
+    if(castle?(!req || typeof req.gateId!=="string" || (req.repair!==undefined && req.repair!==true)):!parseEmptyCommand(message))return;
     const id=client.sessionId,p=this.state.players.get(id),seat=this.warSeats.get(id),character=this.persistentCharacters.get(id);
-    if(!p?.alive || !seat || !character || !isOnGround(p.y) || this.climbs.has(id) || this.pendingCharacterLeaves.has(id))return;
+    if(!p?.alive || p.flying || !seat || !character || !isOnGround(p.y) || this.climbs.has(id) || this.pendingCharacterLeaves.has(id))return;
     const now=Date.now();
     if(now-(this.gateActions.get(id)??-Infinity)<1000)return;
-    const war=guildStore().war,gate=WORLD_MAPS[this.field.site].strategic!.rampart!.gates[0].box;
-    if(war.member(character)?.id!==seat.guild || !segmentIntersectsExpandedWall(p,p,gate,2.5) ||
-      (seat.side==="defend" && p.z>=gate.z+gate.length/2))return client.send("territory_error",{reason:"war_gate_near"});
-    const occupied=[...this.state.players.values()].some(peer=>peer.alive && isOnGround(peer.y) && segmentIntersectsExpandedWall(peer,peer,gate,.4));
+    const war=guildStore().war,gates=WORLD_MAPS[this.field.site].strategic!.rampart!.gates;
+    const gate=castle?gates.find(g=>g.id===req!.gateId):gates[0];
+    if(!gate || war.member(character)?.id!==seat.guild)return;
+    const b=gate.box,cx=b.x+b.width/2,cz=b.z+b.length/2;
+    const inside=gate.side==="south"?p.z<cz:gate.side==="north"?p.z>cz:gate.side==="east"?p.x<cx:p.x>cx;
+    if(!segmentIntersectsExpandedWall(p,p,b,2.5) || (seat.side==="defend" && !inside))
+      return client.send("territory_error",{reason:"war_gate_near"});
+    const occupied=[...this.state.players.values()].some(peer=>peer.alive && isOnGround(peer.y) && segmentIntersectsExpandedWall(peer,peer,b,.4));
     this.gateActions.set(id,now);
-    try{war.gate(this.field,seat.side,occupied,now);this.gateClosed=war.inspect(this.field.site,now).gateClosed;this.nextWarSample=0;}
-    catch(e){const reason=e instanceof Error ? e.message:"";if(!reason.startsWith("war_"))console.error("MONTRA gate",e);client.send("territory_error",{reason:reason.startsWith("war_")?reason:"war_unavailable"});}
+    try{
+      if(castle){
+        // Settle the elapsed interval using the previous door state before changing a supply route.
+        this.nextWarSample=0;this.updateTerritory();
+        const states=war.castleGate(this.field,gate.id,seat.side,occupied,now,req!.repair===true);
+        this.closedCastleGates=new Set(Object.keys(states).filter(key=>states[key].closed));
+      }else{war.gate(this.field,seat.side,occupied,now);this.gateClosed=war.inspect(this.field.site,now).gateClosed;}
+      this.nextWarSample=0;
+    }catch(e){const reason=e instanceof Error?e.message:"";if(!reason.startsWith("war_"))console.error("MONTRA gate",e);client.send("territory_error",{reason:reason.startsWith("war_")?reason:"war_unavailable"});}
   }
   private updateTerritory(){
     const now=Date.now();
@@ -736,14 +752,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     let attack=0,defend=0;
     if(this.field){
       const fort=warSites[this.field.site];
-      const counts=this.field.site===CASTLE_ID?pilotNodes.map(()=>({attack:0,defend:0})):undefined;
+      const counts=this.field.site===CASTLE_ID?castleObjectives.map(()=>({attack:0,defend:0})):undefined;
       for(const [id,seat] of this.warSeats){
         const p=this.state.players.get(id),character=this.persistentCharacters.get(id);
         if(!p || !character || this.pendingCharacterLeaves.has(id))continue;
         if(war.member(character)?.id!==seat.guild){this.clients.find(c=>c.sessionId===id)?.leave(4000,"war_membership_changed");continue;}
         if(!p.alive || !isOnGround(p.y) || p.flying || p.mapId!==this.field.site || this.climbs.has(id) || this.pendingWarps.has(id))continue;
         if(counts){
-          const i=pilotNodes.findIndex(node=>planarDistance(p,node)<=CAPTURE_RADIUS);
+          const i=castleObjectives.findIndex(node=>planarDistance(p,node)<=CAPTURE_RADIUS);
           if(i>=0)counts[i][seat.side]++;
         }else if(planarDistance(p,fort)<=5){if(seat.side==="attack")attack++;else defend++;}
       }
@@ -751,7 +767,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(counts)this.previousPilotSample=now;
     }
     const states=Object.fromEntries(Object.keys(warSites).map(site=>[site,war.inspect(site,now)]));
-    if(this.field){const s=states[this.field.site];this.battleActive=s.seq===this.field.seq && s.phase==="battle";this.gateClosed=this.battleActive && this.field.site!==CASTLE_ID && s.gateClosed;}
+    if(this.field){
+      const s=states[this.field.site];this.battleActive=s.seq===this.field.seq && s.phase==="battle";
+      this.gateClosed=this.battleActive && this.field.site!==CASTLE_ID && s.gateClosed;
+      if(this.field.site===CASTLE_ID)this.closedCastleGates=new Set(Object.entries(this.battleActive?s.pilot?.gates??{}:{}).filter(([,g])=>g.closed).map(([id])=>id));
+    }
     const owners=Object.fromEntries(Object.entries(states).map(([site,s])=>[site,s.owner]));
     const teams=this.field?Object.fromEntries([...this.warSeats].map(([id,seat])=>[id,seat.side])):undefined;
     for(const c of this.clients){
@@ -1499,7 +1519,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (distance3d(from,to) > FORT.rangedRange+(downhill?3:0)) {
       return this.reject(client, "shot_out_of_range");
     }
-    if (!map || (shooter.mapId === DEFAULT_MAP_ID && wallBlocksShot(from,to)) || !provinceShotClear(map,from,to,this.gateClosed)) {
+    if (!map || (shooter.mapId === DEFAULT_MAP_ID && wallBlocksShot(from,to)) || !provinceShotClear(map,from,to,shooter.mapId===CASTLE_ID?this.closedCastleGates:this.gateClosed)) {
       return this.reject(client, "shot_blocked");
     }
 
@@ -1629,7 +1649,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return mapId === DEFAULT_MAP_ID
       ? !wallBlocksShot({ x: from.x, y: from.y + FORT.targetBodyHeight, z: from.z },
           { x: target.x, y: target.y + FORT.targetBodyHeight, z: target.z })
-      : provinceShotClear(WORLD_MAPS[mapId],{x:from.x,y:from.y+1,z:from.z},{x:target.x,y:target.y+1,z:target.z},this.gateClosed);
+      : provinceShotClear(WORLD_MAPS[mapId],{x:from.x,y:from.y+1,z:from.z},{x:target.x,y:target.y+1,z:target.z},mapId===CASTLE_ID?this.closedCastleGates:this.gateClosed);
   }
 
   private updateSummons(dt: number) {
@@ -1895,6 +1915,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const map = getWorldMap(mapId);
       const r=map?.strategic?.rampart;
       if(r && isOnPlatform(feetY))return onRampart(r,x,z);
+      if(r && mapId===CASTLE_ID && this.closedCastleGates.size && r.gates.some(g=>this.closedCastleGates.has(g.id) && segmentIntersectsExpandedWall({x,z},{x,z},g.box,.4)))return false;
       if(r && this.gateClosed && segmentIntersectsExpandedWall({x,z},{x,z},r.gates[0].box,.4))return false;
       return Boolean(map && (isOnGround(feetY) || (flying && isFlightAltitude(feetY))) &&
         isSafeWorldPoint(map, { x, y: feetY, z }));
@@ -2395,7 +2416,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const initialStats = calculateStats(saved?.level ?? 1, allocations);
       const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
       const provinceReady=(options as {provinceVersion?:unknown}|undefined)?.provinceVersion===1;
-      const castleReady=(options as {castleVersion?:unknown}|undefined)?.castleVersion===1;
+      const castleReady=(options as {castleVersion?:unknown}|undefined)?.castleVersion===2;
       if(mapId===CASTLE_ID && !castleReady)throw new Error("world_client_update_required");
       if(getWorldMap(mapId)?.strategic && !provinceReady)throw new Error("world_client_update_required");
       const atlasReady=(options as {atlasVersion?:unknown}|undefined)?.atlasVersion===1;
@@ -2420,7 +2441,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         war.side(this.field,member,Date.now(),true);admissions.delete(characterId!);
         this.warSeats.set(client.sessionId,{guild:member.id,side});
         if(mapId===CASTLE_ID){
-          safeSpawn=pilotSpawn(war.muster(this.field,characterId!,credential.point),side,sideSize);
+          const defended=war.inspect(mapId,Date.now()).pilot?.throne?.defended;
+          safeSpawn=pilotSpawn(war.muster(this.field,characterId!,credential.point),side,sideSize,defended);
         }else{
           const gate=WORLD_MAPS[mapId].portals.find(p=>p.z===(side==="attack"?26:-58))!;
           safeSpawn={x:gate.x,y:0,z:gate.z};

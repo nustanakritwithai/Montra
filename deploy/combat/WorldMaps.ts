@@ -154,13 +154,13 @@ export function isWorldSegmentClear(mapId:string, from:{x:number;z:number}, to:{
     return Math.hypot(o.x-from.x-t*dx,o.z-from.z-t*dz)>o.radius;
   });
 }
-export function provinceShotClear(map:WorldMapDefinition,from:WorldPoint,to:WorldPoint,closedGate=false):boolean{
+export function provinceShotClear(map:WorldMapDefinition,from:WorldPoint,to:WorldPoint,closedGate:boolean|ReadonlySet<string>=false):boolean{
   const r=map.strategic?.rampart;
   if(!r)return isWorldSegmentClear(map.id,from,to);
   const hits=(b:WorldWall,base:number,top:number)=>rayHitsBox(from,to,{x:b.x,z:b.z,y:base},{x:b.x+b.width,z:b.z+b.length,y:top});
   // The empty passage under each lintel is distinct from the solid deck above it.
   if(map.walls?.some(b=>hits(b,0,b.rampart?r.height:3.4)))return false;
-  if(r.gates.some((g,i)=>hits(g.box,i===0 && closedGate?0:r.height-.55,r.height)))return false;
+  if(r.gates.some((g,i)=>hits(g.box,(typeof closedGate==="boolean"?i===0 && closedGate:closedGate.has(g.id))?0:r.height-.55,r.height)))return false;
   return true;
 }
 export function isSafeWorldPoint(map: WorldMapDefinition, point: WorldPoint, radius = 0.4): boolean {

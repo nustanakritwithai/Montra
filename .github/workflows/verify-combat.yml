@@ -335,7 +335,7 @@ jobs:
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4115) 2>/dev/null; then break; fi; sleep 0.25; done
-          timeout 300s node --import tsx castle-pilot-integration.mjs || { cat castle-server.log; exit 1; }
+          timeout 420s node --import tsx castle-pilot-integration.mjs || { cat castle-server.log; exit 1; }
 
       - name: Isolated forest party monster rewards
         shell: bash

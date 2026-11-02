@@ -1545,12 +1545,16 @@
   const castleRings=new Map();
   function syncCastleRings(){
     for(const [id,ring] of castleRings){
-      const point=territoryState?.local?.pilot?.points.find(p=>p.id===id);
-      ring.material=point?.owner==="attack"?warEnemyMat:point?.owner==="defend"?warAllyMat:gold;
+      const local=territoryState?.local,v=local?.pilot;
+      const owner=id===7?v?.throne?.victor:v?.points.find(p=>p.id===id)?.owner;
+      ring.material=owner==="attack"?warEnemyMat:owner==="defend"?warAllyMat:id===7 && local?.phase==="battle" && local.seconds>900?forestStone:gold;
     }
   }
+  const castleDoors=new Map();
   let provinceDoor=null;
   function syncGateVisual(){
+    const local=territoryState?.local;
+    for(const [id,door] of castleDoors)door.setEnabled(Boolean(local?.inField && local.phase==="battle" && local.pilot?.gates?.[id]?.closed));
     if(provinceDoor && !provinceDoor.isDisposed())provinceDoor.setEnabled(territoryState?.local?.site===activeMapId && territoryState.local.gateClosed===true);
   }
   function buildRegion(map,paint) {
@@ -1641,10 +1645,11 @@
           for(const side of [-1,1]){
             box(x+(horizontal?side*(span/2+.2):0),1.75,z+(horizontal?0:side*(span/2+.2)),horizontal?.55:3.1,3.5,horizontal?3.1:.55,deep);
           }
-          if(kind==="territory" && !castle && i===0){
-            provinceDoor=B.MeshBuilder.CreateBox("reinforced city gate",{width:b.width,height:3.45,depth:b.length},scene);
-            provinceDoor.parent=expansionRoot;provinceDoor.position.set(x,1.725,z);
-            provinceDoor.material=wooden;provinceDoor.isPickable=false;syncGateVisual();
+          if(kind==="territory" && (castle || i===0)){
+            const door=B.MeshBuilder.CreateBox("reinforced city gate",{width:b.width,height:3.45,depth:b.length},scene);
+            door.parent=expansionRoot;door.position.set(x,1.725,z);door.material=wooden;door.isPickable=false;
+            if(castle)castleDoors.set(g.id,door);else provinceDoor=door;
+            syncGateVisual();
           }
           if(!city)expansionLabel(g.name,x,z,10,5.2);
         }
@@ -1684,11 +1689,11 @@
         for(const obj of objectives){
           const active=map.strategic.activeObjectives.includes(obj.id);
           const marker=ring(obj.x,.16,obj.z,14,active?gold:stone);
-          // Keep the three live circles independent so ownership can change in place.
+          // Capture rings change material independently when an objective changes hands.
           if(active){parts.pop();marker.parent=expansionRoot;castleRings.set(obj.id,marker);}
           box(obj.x-7,2.5,obj.z,.22,5,.22,gold);
           box(obj.x-5.8,4.3,obj.z,2.4,1.1,.10,active?clothRed:deep);
-          expansionLabel(obj.id+" "+obj.name+(active?" · จุดยึด":" · สำรวจ"),obj.x,obj.z,15,6);
+          expansionLabel(obj.id+" "+obj.name+(obj.id===7?" · บัลลังก์":active?" · จุดยึด":" · สำรวจ"),obj.x,obj.z,15,6);
         }
         for(const side of [-1,1])for(let i=0;i<3;i++){
           pavilion(side*(18+i*10),-197,8,5);
@@ -2093,7 +2098,7 @@
     const paint=regionPaint(activeMapId);
     ground.material=paint ? paint.floor : inTemple ? templeFloor : activeMapId==="forbidden_forest" ? forestFloor : groundMat;
     templeCover.length=0;
-    provinceDoor=null;castleRings.clear();
+    provinceDoor=null;castleDoors.clear();castleRings.clear();
     for(const child of expansionRoot.getChildren())child.dispose();
     for(const resource of expansionResources)resource.dispose();expansionResources.length=0;expansionLabels.length=0;
     const bounds=mapBounds();
@@ -2277,7 +2282,10 @@
       Math.hypot(Number(player.x)-portal.x,Number(player.y),Number(player.z)-portal.z)<=1.9);
   }
   $("warpButton").addEventListener("click",requestPortalWarp);
-  $("siegeGateButton").onclick=()=>{if(mode==="live" && room)room.send("territory_gate",{});};
+  $("siegeGateButton").onclick=e=>{
+    const gateId=e.currentTarget.dataset.gate;
+    if(mode==="live" && room)room.send("territory_gate",gateId?{gateId}:{});
+  };
   const markerMat = mat("waypoint gold", "#ffdb81", "#dd9a37");
   glowMats.add(markerMat);
   const marker = B.MeshBuilder.CreateTorus("destination", { diameter: 1.1, thickness: .08 }, scene);
@@ -5692,7 +5700,7 @@
       }
       const client = new window.Colyseus.Client(endpoint);
       const guestToken = getOrCreateGuestToken(endpoint);
-      const opts={guestToken,characterSlot:requestedSlot,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:1};
+      const opts={guestToken,characterSlot:requestedSlot,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2};
       let transferFailed=false;
       if(transfer?.roomId){
         try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
@@ -5755,8 +5763,16 @@
           ui.quest.classList.toggle("war-hud",fighting);
           title.textContent=fighting?"⚑ "+(local.progress<0?"รับ":"บุก")+" "+Math.abs(local.progress)+"/"+local.goal+" · "+Math.floor(local.seconds/60)+":"+String(local.seconds%60).padStart(2,"0"):
             local.phase==="battle"?"⚑ ศึกยึดธง · "+warTime(local.seconds):"⚑ ด่านกิลด์ · "+warPhase(local.phase);
-          if(fighting && local.pilot)title.textContent="⚑ บุก "+local.pilot.score.attack+" · รับ "+local.pilot.score.defend+" · "+Math.ceil(local.seconds/60)+" นาที";
-          if(fighting)ui.quest.style.setProperty("--war-progress",Math.abs(local.progress)/local.goal);
+          if(fighting && local.pilot){
+            const v=local.pilot,me=ownServerCharacter();
+            const node=me?.alive && Math.abs(me.y)<.1 && worldDefinitions?.[activeMapId]?.strategic?.objectives?.find(p=>Math.hypot(p.x-me.x,p.z-me.z)<=7);
+            const point=node && v.points.find(p=>p.id===node.id);
+            const throne=node?.id===7 && v.throne && local.seconds<=900;
+            const pct=point?Math.abs(point.progress):throne?Math.floor(v.throne.progress[local.side]/1200):0;
+            const at=point || throne?" · ⚑"+node.id+" "+(point?.owner===local.side && !point.progress?"คุม":pct+"%"):"";
+            title.textContent="บุก "+v.score.attack+" · รับ "+v.score.defend+" · "+Math.floor(local.seconds/60)+":"+String(local.seconds%60).padStart(2,"0")+at;
+            ui.quest.style.setProperty("--war-progress",pct/100);
+          }else if(fighting)ui.quest.style.setProperty("--war-progress",Math.abs(local.progress)/local.goal);
         }
       });
       joined.onMessage("territory_error",message=>{if(room===joined)toast(warErrors[message?.reason] || "เข้าศึกไม่ได้ในขณะนี้");});
@@ -6803,9 +6819,20 @@
         ctx.strokeStyle = "#e3b878"; ctx.lineWidth = 1; ctx.strokeRect(sx(wall.x), sy(wall.z), Math.max(1.3, scale * wall.width), Math.max(1.3, scale * wall.length));
       }
     }
+    const castleWar=activeMapId==="tri_wiang_castle" && territoryState?.local?.inField && territoryState.local.phase==="battle"?territoryState.local:null;
+    if(large && castleWar?.pilot?.gates){
+      for(const gate of map.strategic.rampart.gates){
+        const state=castleWar.pilot.gates[gate.id],b=gate.box;
+        const gx=sx(b.x+b.width/2),gz=sy(b.z+b.length/2);
+        ctx.fillStyle=state.closed?"#331c20":"#113831";ctx.fillRect(gx-4,gz-4,8,8);
+        ctx.strokeStyle=state.closed?"#ff9984":"#8ce5bf";ctx.lineWidth=1.5;ctx.strokeRect(gx-4,gz-4,8,8);
+        if(state.closed){ctx.beginPath();ctx.moveTo(gx-2,gz-2);ctx.lineTo(gx+2,gz+2);ctx.moveTo(gx+2,gz-2);ctx.lineTo(gx-2,gz+2);ctx.stroke();}
+      }
+    }
     for(const obj of map?.strategic?.objectives || []){
       const active=map.strategic.activeObjectives.includes(obj.id),point=territoryState?.local?.pilot?.points.find(p=>p.id===obj.id);
-      const color=point?.owner==="attack"?"#ff917d":point?.owner==="defend"?"#80e8db":active?"#ffcf76":"#a5aaa3";
+      const locked=obj.id===7 && castleWar?.seconds>900;
+      const color=point?.owner==="attack"?"#ff917d":point?.owner==="defend"?"#80e8db":locked?"#858b9c":active?"#ffcf76":"#a5aaa3";
       mapDot(ctx,sx(obj.x),sy(obj.z),large?8:2.5,color,"#122825");
       if(large)mapText(ctx,String(obj.id),sx(obj.x),sy(obj.z)+3,10,"#ffffff");
     }
@@ -6914,8 +6941,8 @@
   };
   const provinceTitle={capital:"เมืองหลวง",territory:"ด่านสงคราม",hunting:"พื้นที่เก็บเลเวล"};
   const warErrors={war_guild:"ต้องเป็นสมาชิกกิลด์ก่อนเข้าศึก",war_flag:"เดินเข้าวงธงกลางป้อมก่อนเปิดศึก",war_officer:"ให้ผู้บัญชาการหรือนายทหารเปิดศึก",
-    war_other_guild:"สนามนี้มีฝ่ายบุกและฝ่ายรับแล้ว",war_side_full:"ฝ่ายของคุณครบ 5 คนแล้ว",war_busy:"รอให้พ้นการต่อสู้และยืนบนพื้นในด่าน",
-    war_gate_near:"ฝ่ายรับต้องยืนที่ประตูด้านใน",war_gate_occupied:"มีผู้เล่นยืนขวางประตู",war_gate_open:"ประตูเปิดอยู่",war_gate_inactive:"ประตูใช้การไม่ได้แล้ว",
+    war_other_guild:"สนามนี้มีฝ่ายบุกและฝ่ายรับแล้ว",war_side_full:"ผู้เล่นฝ่ายของคุณเต็มแล้ว",war_busy:"รอให้พ้นการต่อสู้และยืนบนพื้นในด่าน",
+    war_gate_repair:"ต้องครองโรงช่างและประตูต้องพ้นการโจมตี 5 วินาที",war_gate_near:"ฝ่ายรับต้องยืนที่ประตูด้านใน",war_gate_occupied:"มีผู้เล่นยืนขวางประตู",war_gate_open:"ประตูเปิดอยู่",war_gate_inactive:"ประตูใช้การไม่ได้แล้ว",
     war_ended:"ศึกนี้จบแล้ว",war_exit:"กลับห้องโลกผ่านหน้าด่านกิลด์",war_unavailable:"ด่านยังเปิดศึกไม่ได้"};
   const warPhase=p=>({open:"เปิดให้ท้าชิง",battle:"กำลังรบ",protected:"อยู่ในความคุ้มครอง",finished:"จบศึกแล้ว"})[p] || "กำลังตรวจด่าน";
   const warTime=s=>Math.floor(s/60)+" นาที "+s%60+" วินาที";
@@ -6927,8 +6954,13 @@
     if(activeMapId==="tri_wiang_castle"){
       const label=document.createElement("label");label.textContent="แนวรวมพลครั้งแรกในศึกนี้ ";
       const select=document.createElement("select");select.id="castleFront";
-      for(const p of worldDefinitions[activeMapId].strategic.objectives.filter(p=>[2,4,5].includes(p.id)))select.add(new Option(p.id+" "+p.name,String(p.id)));
+      const local=territoryState?.local;
+      const choices=local?.phase==="battle" && local.pilot && !local.pilot.throne?[2,4,5]:[1,2,3];
+      for(const p of worldDefinitions[activeMapId].strategic.objectives.filter(p=>choices.includes(p.id)))select.add(new Option(p.id+" "+p.name,String(p.id)));
       label.append(select);$("warAction").before(label);
+      const repair=document.createElement("button");repair.type="button";repair.id="castleRepair";repair.hidden=true;
+      repair.textContent="ซ่อมประตู +10";repair.onclick=()=>{const gateId=$("siegeGateButton").dataset.gate;if(gateId && room)room.send("territory_gate",{gateId,repair:true});};
+      $("warAction").before(repair);
     }
     renderWarPanel();
   }
@@ -6946,9 +6978,30 @@
     button.hidden=!(s.inField || s.canStart || s.canJoin);
     button.textContent=s.inField?"กลับห้องโลก":s.canStart?"เปิดศึกที่ธง · 5 นาที":"เข้าร่วมสนามรบ";
     if(isCastle){
-      $("warFlag").textContent="จุดท้าชิง (0, 880) · กำแพง 3 ชั้น บันได 18 แห่ง · ทดสอบเฉพาะจุด 2, 4, 5";
+      $("warFlag").textContent="ธงท้าชิงอยู่ที่ประตูใต้ (0, 880) · แตะบันไดด้านในเพื่อขึ้นหรือลงกำแพง";
       const v=s.pilot;
-      $("warCount").textContent=v?"บุก "+v.score.attack+" · รับ "+v.score.defend+" คะแนน"+(v.linked?" · โบนัสเครือข่าย 20%":"")+"\n"+v.points.map(p=>p.id+" "+p.name+" · "+(p.owner==="attack"?"บุก":p.owner==="defend"?"รับ":"กลาง")+(p.progress?" · เกจ "+Math.abs(p.progress)+"% "+(p.progress>0?"บุก":"รับ"):"")).join("\n"):"ครบเวลา 45 นาที ตัดสินด้วยคะแนนพื้นที่";
+      const sideName=side=>side==="attack"?"บุก":side==="defend"?"รับ":"กลาง";
+      const lines=[];
+      if(v && s.phase!=="open"){
+        lines.push("คะแนนรวม   บุก "+v.score.attack+"   ·   รับ "+v.score.defend);
+        if(v.throne){
+          const th=v.throne;
+          if(s.phase==="battle")lines.push(s.seconds>2100?"ช่วงเปิดแนวรบ":s.seconds>900?"ช่วงชิงเส้นส่งกำลัง":"ช่วงชิงบัลลังก์");
+          for(const side of ["attack","defend"])if(v.networks[side].length)lines.push("ฝ่าย"+sideName(side)+" +20% ที่จุด "+v.networks[side].join("–"));
+          if(s.phase==="battle" && s.seconds>900)lines.push("7 ท้องพระโรง · เปิดเมื่อเหลือ 15 นาที");
+          else if(th.victor)lines.push("7 ท้องพระโรง · ฝ่าย"+sideName(th.victor)+" ยึดบัลลังก์สำเร็จ");
+          else if(s.phase==="battle")for(const side of th.defended?["attack"]:["attack","defend"]){
+            const f=th[side];
+            lines.push("7 บัลลังก์ฝ่าย"+sideName(side)+" "+Math.floor(th.progress[side]/1000)+"/120 วิ · นอก "+f.outer+"/2 · กลาง "+f.middle+"/2 · "+(f.route?"เส้นทางเปิด":"เส้นทางขาด"));
+          }
+          if(s.phase==="protected" && !th.victor)lines.push("จบศึก · "+(s.owner?"ผู้ครองปราสาท "+s.owner:"ปราสาทยังเป็นกลาง"));
+        }
+        for(const p of v.points)lines.push(p.id+" "+p.name+" · "+sideName(p.owner)+(p.progress?" · "+sideName(p.progress>0?"attack":"defend")+" "+Math.abs(p.progress)+"%":""));
+      }else{
+        lines.push("ยึดจุด 1–6 เพื่อเก็บคะแนน กลุ่มที่เชื่อมกันตั้งแต่ 3 จุดได้เพิ่ม 20%",
+          "นาทีที่ 30 เปิดท้องพระโรง ยึดจุดนอก 2 จุดและจุดกลาง 2 จุด เปิดทางเข้าพระราชฐาน แล้วยืนบัลลังก์ 120 วินาที");
+      }
+      $("warCount").textContent=lines.join("\n");
       $("warCount").style.whiteSpace="pre-line";
       for(const note of ui.drawerBody.querySelectorAll("p.note:not(#warFlag)"))note.hidden=true;
       if($("castleFront"))$("castleFront").parentElement.hidden=s.inField || !(s.canStart || s.canJoin);
@@ -7025,7 +7078,7 @@
       const note=document.createElement("p");note.className="note";
       const map=worldDefinitions[activeMapId],range=map.region?.range;
       note.textContent=map.name+(range?" · Lv."+range.join("–"):"")+" · ประตูไป"+map.portals.filter(p=>p.targetMapId!==activeMapId).map(p=>worldDefinitions[p.targetMapId].name).join(" / ");
-      if(map.strategic?.objectives)note.textContent+=" · หมายเลขทอง 2, 4, 5 เป็นจุดยึด จุดฟ้าคือบันไดทั้ง 18 แห่ง เกวียนอยู่ทางตะวันตกของประตูโลกทั้งสองด้าน";
+      if(map.strategic?.objectives)note.textContent+=" · 1–6 จุดทำคะแนน · 7 บัลลังก์ · จุดฟ้าคือบันได · ในสนามรบ กากบาทแดงคือประตูปิด กรอบเขียวคือทางผ่าน";
       const button=document.createElement("button");button.type="button";button.className="primary";button.id="openStrategicMap";
       button.textContent="เปิดแผนที่ยุทธศาสตร์ · "+Object.keys(worldDefinitions).length+" พื้นที่";button.onclick=openStrategicMap;
       $("bigMap").parentElement.prepend(button);
@@ -8150,11 +8203,20 @@
     }
     const me=getLocalAvatar();
     const portal=activePortal(), authoritative=ownServerCharacter();
-    const siege=$("siegeGateButton"),localWar=territoryState?.local,door=worldDefinitions?.[activeMapId]?.strategic?.rampart?.gates[0].box;
-    const near=door && authoritative && authoritative.alive && Math.abs(authoritative.y)<.1 && authoritative.x>=door.x-2.5 && authoritative.x<=door.x+door.width+2.5 && authoritative.z>=door.z-2.5 && authoritative.z<=door.z+door.length+2.5;
-    siege.hidden=!(near && activeMapId!=="tri_wiang_castle" && localWar?.site===activeMapId && localWar.inField && localWar.phase==="battle" && localWar.gateHp>0 &&
-      (localWar.side==="attack"?localWar.gateClosed:authoritative.z<door.z+door.length/2));
-    if(!siege.hidden)siege.textContent=(localWar.side==="attack"?"พังประตู":localWar.gateClosed?"เปิดประตู":"ปิดประตู")+" · "+localWar.gateHp+"/120";
+    const siege=$("siegeGateButton"),localWar=territoryState?.local,castle=activeMapId==="tri_wiang_castle";
+    const canUse=localWar?.site===activeMapId && localWar.inField && localWar.phase==="battle" && authoritative?.alive && Math.abs(authoritative.y)<.1;
+    const gate=canUse && worldDefinitions[activeMapId].strategic?.rampart?.gates.find((g,i)=>{
+      const b=g.box;
+      return (castle || i===0) && authoritative.x>=b.x-2.5 && authoritative.x<=b.x+b.width+2.5 && authoritative.z>=b.z-2.5 && authoritative.z<=b.z+b.length+2.5;
+    });
+    const status=gate && (castle?localWar.pilot?.gates?.[gate.id]:{closed:localWar.gateClosed,hp:localWar.gateHp});
+    const inside=gate && (gate.side==="west"?authoritative.x>gate.box.x+gate.box.width/2:gate.side==="east"?authoritative.x<gate.box.x+gate.box.width/2:
+      gate.side==="north"?authoritative.z>gate.box.z+gate.box.length/2:authoritative.z<gate.box.z+gate.box.length/2);
+    siege.hidden=!(status?.hp && (!castle || localWar.pilot.throne?.defended) && (localWar.side==="attack"?status.closed:inside));
+    siege.dataset.gate=castle && gate?gate.id:"";
+    if(!siege.hidden)siege.textContent=(localWar.side==="attack"?"พังประตู":status.closed?"เปิดประตู":"ปิดประตู")+" · "+status.hp+"/120";
+    const repair=$("castleRepair");
+    if(repair)repair.hidden=!(castle && !siege.hidden && localWar.side==="defend" && status.hp<120 && localWar.pilot.points.find(p=>p.id===6)?.owner==="defend");
     const warpButton=$("warpButton");
     warpButton.hidden=!(mode==="live" && room?.state?.worldMapsAvailable===true &&
       isNearPortal(authoritative,portal) && !warpPending);

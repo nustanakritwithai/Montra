@@ -1,5 +1,5 @@
 import type { WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
-import {CASTLE_ENABLED, CASTLE_ID, castleObjectives, pilotNodes} from "./CastlePilot.js";
+import {CASTLE_ENABLED, CASTLE_ID, castleObjectives} from "./CastlePilot.js";
 
 type Side="north"|"south"|"east"|"west";
 type Opening=readonly [side:Side,at:number,span:number,name:string];
@@ -11,12 +11,12 @@ function enclosure(x1:number,x2:number,z1:number,z2:number,openings:Opening[],st
     const fixed=side==="north"?z1:side==="south"?z2:side==="west"?x1:x2;
     return horizontal?{x:a,z:fixed-thickness/2,width:b-a,length:thickness}:{x:fixed-thickness/2,z:a,width:thickness,length:b-a};
   }
-  const deck:WorldWall[]=[],bodies:WorldWall[]=[],gates:{name:string;box:WorldWall}[]=[];
+  const deck:WorldWall[]=[],bodies:WorldWall[]=[],gates:{id:string;side:Side;name:string;box:WorldWall}[]=[];
   for(const side of ["south","north","east","west"] as const){
     const horizontal=side==="south"||side==="north",start=(horizontal?x1:z1)-thickness/2,end=(horizontal?x2:z2)+thickness/2;
     deck.push(strip(side,start,end));let cursor=start;
     for(const [,at,span,name] of openings.filter(g=>g[0]===side).sort((a,b)=>a[1]-b[1])){
-      bodies.push(strip(side,cursor,at-span/2));gates.push({name,box:strip(side,at-span/2,at+span/2)});cursor=at+span/2;
+      bodies.push(strip(side,cursor,at-span/2));gates.push({id:side+"-"+at,side,name,box:strip(side,at-span/2,at+span/2)});cursor=at+span/2;
     }
     bodies.push(strip(side,cursor,end));
   }
@@ -37,7 +37,8 @@ function grandWalls():Rampart {
     enclosure(-165,165,-330,0,[["west",-175,12,"ประตูพระราชฐานตะวันตก"],["east",-175,12,"ประตูพระราชฐานตะวันออก"]],
       [["west",-270],["east",-70],["north",-55],["south",55]])
   ];
-  return {height:4,deck:rings.flatMap(r=>r.deck),corners:rings.flatMap(r=>r.corners),gates:rings.flatMap(r=>r.gates),
+  return {height:4,deck:rings.flatMap(r=>r.deck),corners:rings.flatMap(r=>r.corners),
+    gates:rings.flatMap((r,i)=>r.gates.map(g=>({...g,id:["outer","middle","inner"][i]+"-"+g.side}))),
     bodies:rings.flatMap(r=>r.bodies),stairs:rings.flatMap((r,ring)=>r.stairs.map((s,i)=>({...s,id:"castle-"+ring+"-stair-"+i})))};
 }
 const ramparts={
@@ -85,7 +86,7 @@ const trails=(...routes:XY[][])=>routes.map(route=>route.map(([x,z])=>({x,z})));
 
 export const PROVINCES:Readonly<Record<string,Province>>={
   ...(CASTLE_ENABLED?{[CASTLE_ID]:{kind:"territory" as const,rampart:grandWalls(),safeRoads:[0],objectives:castleObjectives,
-    activeObjectives:pilotNodes.map(p=>p.id),hint:"สนามทดลอง 10 ต่อ 10 · เปิดศึกที่ธงรวมพลประตูใต้ · ชิงท่าน้ำ คลังเสบียง และลานกลอง",
+    activeObjectives:castleObjectives.map(p=>p.id),hint:"เปิดศึกที่ธงใต้ · แบ่งกำลังชิงหกจุด แล้วเปิดทางเข้าท้องพระโรงในนาทีที่ 30",
     sites:[site("fort","ธงรวมพลไตรเวียง",0,880),site("bridge","สะพานขบวนเสบียง",0,630),
       site("port","ท่าน้ำตะวันตก",-687,100),site("shrine","ช่องเขาตะวันออก",697,100),site("market","คลังเสบียงหลวง",-258,-110),
       site("tower","หอกลองหลวง",9,155),site("mine","โรงช่างประตู",257,-110),site("palace","มหาปราสาทไตรเวียง",0,-196)]}}:{}),
