@@ -38,7 +38,7 @@ import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { saveBugReport } from "./BugReports.js";
 import { BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCooldown } from "./Buffs.js";
-import { BUILD_CATALOG, DEFAULT_WARD_TALENT, talentGroup, classSkill, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
+import { BUILD_CATALOG, DEFAULT_WARD_TALENT, DUAL_SWORD, talentGroup, classSkill, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 import { BuffLedger } from "./BuffLedger.js";
 import { calculateModifiedStats } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN } from "./SkillCatalog.js";
@@ -1555,7 +1555,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       // Same cooldown clock for PvP and PvE. Switching targets cannot
       // bypass cooldown or borrow a timestamp supplied by the browser.
-      const cooldown = isMonster ? RULES.playerAttackCooldownMs : RULES.pkCooldownMs;
+      const dualSword = attacker.pathId === "phutthaisawan" && equippedWeaponId(this.inventories.get(attackerId)) === DUAL_SWORD.weaponId;
+      const cooldown = dualSword ? DUAL_SWORD.attackIntervalMs : (isMonster ? RULES.playerAttackCooldownMs : RULES.pkCooldownMs);
       const last = this.lastAttackMs.get(attackerId) ?? -Infinity;
       if (this.simulatedMs - last < cooldown) continue;
       this.lastAttackMs.set(attackerId, this.simulatedMs);
@@ -1563,7 +1564,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       const meleeBonus = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp").melee;
       if (monster) {
-        const meleeDamage = calculateDamage(attacker.atk + meleeBonus, monster.defense, monster.level);
+        const meleeDamage = calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1), monster.defense, monster.level);
         monster.hp = Math.max(0, monster.hp - meleeDamage);
         monster.hitSeq += 1;
         this.broadcast("combat_hit", {
@@ -1578,7 +1579,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // FREE PK: health, range, damage, respawn and kill credit are wholly
       // server-owned. The client only submits another session's targetId.
       const victim = target as Player;
-      const meleeDamage = calculateDamage(attacker.atk + meleeBonus, victim.def, victim.level);
+      const meleeDamage = calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1), victim.def, victim.level);
       victim.hp = Math.max(0, victim.hp - meleeDamage);
       victim.hitSeq += 1;
       this.broadcast("pvp_hit", {

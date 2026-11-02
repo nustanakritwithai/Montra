@@ -2259,9 +2259,15 @@
     }
     function createHeldWeapon(kind) {
       const root = new B.TransformNode("held-" + kind + "-" + id, scene);
-      root.parent = elbows[1];
+      root.parent = elbows[kind === "thai_left" ? 0 : 1];
       root.position.set(0, -.34, -.02);
-      if (kind === "ritual_dagger") {
+      if (kind === "thai_left" || kind === "thai_right") {
+        cyl(0, -.12, 0, .24, .055, .055, leatherWrap, 8);
+        for (const y of [-.03, -.11, -.2]) cyl(0, y, 0, .018, .065, .065, copper, 8);
+        ball(0, -.25, 0, .075, bronzeMat, 6);
+        curvedBlade(.95, .105, 7, null);
+        root.rotation.x = -2.1;
+      } else if (kind === "ritual_dagger") {
         // Curved black mo-du knife with copper-bound grip and hanging charms.
         cyl(0, -.12, 0, .24, .07, .075, leatherWrap, 8);
         for (const y of [-.03, -.2]) cyl(0, y, 0, .025, .085, .085, copper, 8);
@@ -2298,6 +2304,8 @@
       ritual_dagger: createHeldWeapon("ritual_dagger"),
       arcane_sword: createHeldWeapon("arcane_sword"),
       spirit_staff: createHeldWeapon("spirit_staff"),
+      thai_left: createHeldWeapon("thai_left"),
+      thai_right: createHeldWeapon("thai_right"),
     };
     attachCrescentBlade(weaponModels.arcane_sword);
     // Three familiar spirits: a glowing head with a tapering wisp tail.
@@ -2504,17 +2512,21 @@
       const p = 1 - (a.swingUntil - now) / 380;
       r.arms[1].rotation.x = p < .35 ? -2.5 * (p / .35) : -2.5 + 3.3 * ((p - .35) / .65);
       r.elbows[1].rotation.x = .35;
+      if (a.weaponId === "thai_dual") {
+        r.arms[0].rotation.x = p < .35 ? -1.4 * (p / .35) : -1.4 + 2 * ((p - .35) / .65);
+        r.elbows[0].rotation.x = .35;
+      }
     }
   }
   const avatars = new Map();
-  function setAvatarWeapon(avatar, weaponId) {
+  function setAvatarWeapon(avatar, weaponId, pathId = avatar?.local ? ownServerCharacter()?.pathId : "") {
     if (!avatar?.weaponModels) return;
-    const modelId = weaponId === "shrine_glaive" ? "arcane_sword" : weaponId;
-    const safeId = Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
+    const modelId = pathId === "phutthaisawan" && weaponId === "arcane_sword" ? "thai_dual" : weaponId === "shrine_glaive" ? "arcane_sword" : weaponId;
+    const safeId = modelId === "thai_dual" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
     if (avatar.weaponId === safeId) return;
     avatar.weaponId = safeId;
     for(const [id,model] of Object.entries(avatar.weaponModels)) {
-      model.setEnabled(id === safeId);
+      model.setEnabled(id === safeId || (safeId === "thai_dual" && (id === "thai_left" || id === "thai_right")));
     }
   }
   // Forward of the prototype avatar faces local -Z when rotation.y == 0.
@@ -3142,14 +3154,14 @@
     }
   }
 
-  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0, weaponId = "") {
+  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0, weaponId = "", pathId = "") {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     onlinePlayers.set(id,{x,z});
     const a = ensureAvatar(id,id === localId,x,z);
     a.targetX = x;
     a.targetY = Number.isFinite(y) ? y : 0;
     a.targetZ = z;
-    setAvatarWeapon(a,weaponId);
+    setAvatarWeapon(a,weaponId,pathId);
 
     // S1 server facing is authoritative. Old servers omit this field;
     // fallback to the V0.1.5 movement-derived direction in that case.
@@ -3215,7 +3227,7 @@
       seen.add(id);
       setOnlinePlayer(id, Number(p.x), Number(p.z),
         Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
-        p.equippedWeaponId);
+        p.equippedWeaponId, p.pathId);
     });
     if(previousMapId !== activeMapId && mine) {
       const actor=avatars.get(localId);
@@ -3767,7 +3779,7 @@
             const applyServerPlayer = () => {
               if ((p.mapId || "ritual_village") !== activeMapId) { removeOnlinePlayer(id); return; }
               setOnlinePlayer(id, Number(p.x), Number(p.z),
-                Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y), p.equippedWeaponId);
+                Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y), p.equippedWeaponId, p.pathId);
             };
             applyServerPlayer();
             if (typeof cb.listen === "function") {
@@ -3778,6 +3790,7 @@
               cb.listen(p, "y", applyServerPlayer);
               cb.listen(p, "maxHp", applyServerPlayer);
               cb.listen(p, "equippedWeaponId", applyServerPlayer);
+              cb.listen(p, "pathId", applyServerPlayer);
               cb.listen(p, "mapId", () => syncState(joined.state));
             }
           });
@@ -4512,7 +4525,8 @@
       const statLabels = {atk:"โจมตี", def:"ป้องกัน", magicAtk:"โจมตีเวท", magicDef:"ป้องกันเวท"};
       const bonus = effect.kind === "heal" ? "ฟื้น HP " + Math.round(100*effect.fraction) + "%" :
         Object.entries(variant?.bonuses ?? effect.bonuses).map(([stat,v]) => statLabels[stat] + " +" + Math.round(v*100) + "%").join(" · ") + " นาน " + (variant?.durationMs ?? effect.durationMs)/1000 + " วินาที";
-      $("buildPreview").textContent = path.skill + " · " + bonus + (path.targets === "party" ? " ให้สมาชิกในระยะ " + (variant?.radius ?? catalog.supportRadius) + " หน่วย" : " ให้ตัวเอง") + " · ใช้ " + path.stamina + " กำลัง · รอ " + path.cooldownMs/1000 + " วินาที";
+      const passive = pathId === "phutthaisawan" ? "ดาบคู่สวมกระบี่อาคม · ฟันทุก 0.75 วินาที ดาเมจ 80% · " : "";
+      $("buildPreview").textContent = passive + path.skill + " · " + bonus + (path.targets === "party" ? " ให้สมาชิกในระยะ " + (variant?.radius ?? catalog.supportRadius) + " หน่วย" : " ให้ตัวเอง") + " · ใช้ " + path.stamina + " กำลัง · รอ " + path.cooldownMs/1000 + " วินาที";
     };
     $("buildPath").onchange = () => { loadTalents(); preview(); };
     talentSelect.onchange = preview;
