@@ -1956,7 +1956,7 @@
         if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();}
         ghost.wasAlive=alive;if(alive)mesh.setEnabled(true);else if(!ghost.deathAt)mesh.setEnabled(false);
         ghost.tx=Number(monster.x);ghost.tz=Number(monster.z);ghost.ty=Number(monster.y)||0;ghost.tf=Number(monster.facing)||0;
-        ghost.windup=monster.aiState==="windup";
+        ghost.windup=monster.aiState==="windup";ghost.ai=monster.aiState;
         if(ghost.tx0===undefined){ghost.tx0=1;mesh.position.set(ghost.tx,ghost.ty+ghost.tall/2,ghost.tz);mesh.rotation.y=ghost.tf;}
       }else mesh.setEnabled(monster.mapId===activeMapId&&monster.alive);
       if(mesh.metadata.warning){
@@ -3562,6 +3562,24 @@
       return root;
     });
   }
+  // ---- Monster action timeline (shared by every rig) ----
+  // k.wind: anticipation, k.hit: strike, k.rec: recovery, k.hurt: flinch,
+  // k.die / k.rise: death and spawn progress, k.chase: hunting blend.
+  function ghostTimeline(g, now) {
+    const P = g.hold?.atkP ?? (now - g.attackAt) / 900;
+    const active = P >= 0 && P < 1;
+    const wind = active ? ease(P / .35) * (1 - ease((P - .38) / .12)) : 0;
+    const hit = active ? ease((P - .35) / .12) * (1 - ease((P - .62) / .38)) : 0;
+    const hurtP = g.hold?.hurtP ?? (now - g.hurtAt) / 350;
+    const hurt = hurtP >= 0 && hurtP < 1 ? Math.sin(hurtP * Math.PI) : 0;
+    const die = g.hold?.die ?? (g.deathAt ? Math.min(1, (now - g.deathAt) / 1400) : 0);
+    const rise = g.hold?.rise ?? Math.min(1, (now - g.spawnAt) / 900);
+    const hunting = g.ai === "chase" || g.ai === "attack" || g.ai === "windup" ? 1 : 0;
+    g.chase = (g.chase || 0) + (hunting - (g.chase || 0)) * .08;
+    return { wind: Math.max(wind, g.windup ? 1 : 0), hit, hurt, die, rise, chase: g.chase, atk: Math.max(wind * .6, hit) };
+  }
+  const clonePose = base => { const p = {}; for (const [b, v] of Object.entries(base)) p[b] = v.slice(); return p; };
+  const blendPose = (p, target, w) => { if (w <= 0) return; for (const [b, v] of Object.entries(target)) { const c = p[b] || (p[b] = [0, 0, 0]); for (let i = 0; i < 3; i++) c[i] += (v[i] - c[i]) * w; } };
   const HUMANOID = {
     // ผีตายซาก: gaunt blue-grey corpse, hunched, long arms, lank parted
     // hair, rotten shirt and a black shroud that frays into smoke.
@@ -3580,18 +3598,27 @@
       const base = { Hips: [.08, 0, 0], Spine: [.28, 0, 0], Spine1: [.22, 0, 0], Chest: [.18, 0, .05], Neck: [-.15, 0, 0], Head: [.3, 0, .18],
         LeftShoulder: [0, 0, -.18], RightShoulder: [0, 0, .18], LeftArm: [-.3, 0, -1.3], RightArm: [-.3, 0, 1.3], LeftForeArm: [0, -.25, 0], RightForeArm: [0, .25, 0],
         LeftHand: [.35, 0, 0], RightHand: [.35, 0, 0], LeftUpLeg: [-.12, 0, .03], RightUpLeg: [.12, 0, -.03], LeftLeg: [.35, 0, 0], RightLeg: [.22, 0, 0], LeftFoot: [.9, 0, 0], RightFoot: [.9, 0, 0] };
+      // Hunting: arms lift toward the prey like a reaching corpse.
+      const reach = { Spine: [.4, 0, 0], Head: [-.05, 0, 0], LeftArm: [-1.45, .15, -1.25], RightArm: [-1.45, -.15, 1.25], LeftForeArm: [0, -.1, 0], RightForeArm: [0, .1, 0], LeftHand: [-.2, 0, 0], RightHand: [-.2, 0, 0] };
+      // Attack: rear back with both claws raised, then rake down and forward.
+      const coil = { Spine: [-.15, 0, 0], Spine1: [-.1, 0, 0], Head: [-.3, 0, 0], LeftArm: [-2.7, 0, -1.0], RightArm: [-2.7, 0, 1.0], LeftForeArm: [0, -.9, 0], RightForeArm: [0, .9, 0] };
+      const rake = { Spine: [.65, 0, 0], Spine1: [.3, 0, 0], Head: [.1, 0, 0], LeftArm: [-.7, .3, -1.1], RightArm: [-.7, -.3, 1.1], LeftForeArm: [0, -.05, 0], RightForeArm: [0, .05, 0], LeftHand: [.6, 0, 0], RightHand: [.6, 0, 0] };
+      const flinch = { Spine: [-.35, .3, 0], Spine1: [-.2, 0, 0], Head: [-.5, .4, .3], LeftArm: [.3, 0, -.9], RightArm: [.3, 0, .9] };
+      const slump = { Hips: [.9, 0, .3], Spine: [.6, 0, .2], Spine1: [.4, 0, 0], Head: [.7, .4, .5], LeftArm: [.2, 0, -1.5], RightArm: [.2, 0, 1.5], LeftUpLeg: [-.9, 0, .2], RightUpLeg: [-.6, 0, -.2], LeftLeg: [1.4, 0, 0], RightLeg: [1.2, 0, 0] };
       return k => {
-        const { t, move, atk, hurt } = k, jerk = Math.sin(t * 3.7) * Math.sin(t * .6);
-        holder.position.y = .22 + Math.sin(t * 1.6) * .05;
-        const p = JSON.parse(JSON.stringify(base));
-        p.Hips[0] += move * .2 - hurt * .3; p.Spine[0] += atk * .25; p.Chest[1] = Math.sin(t * .7) * .12;
-        p.Head[2] += jerk * .3; p.Head[0] += Math.sin(t * 1.3) * .08 - atk * .45;
+        const { t, move, hurt } = k, T = ghostTimeline(k.g, k.now), jerk = Math.sin(t * 3.7) * Math.sin(t * .6);
+        holder.position.y = .22 + Math.sin(t * 1.6) * .05 * (1 - T.die) - T.die * .2 - (1 - ease(T.rise)) * 1.4;
+        const p = clonePose(base);
+        p.Hips[0] += move * .2; p.Chest[1] = Math.sin(t * .7) * .12;
+        p.Head[2] += jerk * .3; p.Head[0] += Math.sin(t * 1.3) * .08;
         for (const [side, d] of [["Left", 1], ["Right", -1]]) {
-          p[side + "Arm"][0] += Math.sin(t * 1.2 + d) * .1 - atk * 1.5 - move * .2;
+          p[side + "Arm"][0] += Math.sin(t * 1.2 + d) * .1 - move * .2;
           p[side + "UpLeg"][0] += move * .5 + Math.sin(t * 1.1 + d) * .08; p[side + "Leg"][0] += move * .4;
         }
+        blendPose(p, reach, T.chase * (1 - T.die)); blendPose(p, coil, T.wind); blendPose(p, rake, T.hit);
+        blendPose(p, flinch, Math.max(hurt, T.hurt)); blendPose(p, slump, ease(T.die));
         poseBones(nodes, p);
-        hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 1.7 + i) * .08 + move * .3; h.rotation.z = Math.sin(t * 1.3 + i * 2) * .06; });
+        hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 1.7 + i) * .08 + move * .3 + T.hit * .5; h.rotation.z = Math.sin(t * 1.3 + i * 2) * .06; });
       };
     },
     // ผีผมยาวลอยฟ้า: pale ghost in a long white dress flying almost flat,
@@ -3613,15 +3640,22 @@
       const base = { Hips: [1.05, 0, 0], Spine: [.08, 0, 0], Neck: [-.45, 0, 0], Head: [-.45, 0, 0],
         RightArm: [-2.55, .1, 1.35], RightForeArm: [0, .15, 0], RightHand: [-.3, 0, 0], LeftArm: [-.9, 0, -1.25], LeftForeArm: [0, -.5, 0], LeftHand: [.3, 0, 0],
         LeftUpLeg: [.12, 0, .04], RightUpLeg: [.12, 0, -.04], LeftLeg: [.2, 0, 0], RightLeg: [.25, 0, 0], LeftFoot: [.9, 0, 0], RightFoot: [.9, 0, 0] };
+      // Attack: rears up with both claws spread, then dives and slashes.
+      const rear = { Hips: [.35, 0, 0], Spine: [-.25, 0, 0], Neck: [-.2, 0, 0], RightArm: [-2.9, .4, 1.0], LeftArm: [-2.9, -.4, -1.0], RightForeArm: [0, .7, 0], LeftForeArm: [0, -.7, 0] };
+      const dive = { Hips: [1.5, 0, 0], Spine: [.25, 0, 0], Neck: [-.7, 0, 0], Head: [-.6, 0, 0], RightArm: [-2.2, -.3, 1.3], LeftArm: [-2.2, .3, -1.3], RightForeArm: [0, 0, 0], LeftForeArm: [0, 0, 0], RightHand: [.5, 0, 0], LeftHand: [.5, 0, 0] };
+      const recoil = { Hips: [.6, .4, 0], Spine: [-.3, .2, 0], Head: [-.5, -.3, .3] };
+      // Death: arches back in a silent shriek, arms flung wide, and fades.
+      const shriek = { Hips: [.2, 0, 0], Spine: [-.5, 0, 0], Spine1: [-.3, 0, 0], Neck: [-.6, 0, 0], Head: [-.6, 0, 0], RightArm: [-.6, 0, .3], LeftArm: [-.6, 0, -.3], RightForeArm: [0, 0, 0], LeftForeArm: [0, 0, 0] };
       return k => {
-        const { t, move, atk, hurt } = k;
-        holder.position.y = .75 + Math.sin(t * 1.4) * .12 - atk * .2;
-        const p = JSON.parse(JSON.stringify(base));
-        p.Hips[0] += move * .2 + atk * .25 - hurt * .45; p.Spine[1] = Math.sin(t * .9) * .08;
-        p.RightArm[0] += Math.sin(t * 2) * .08 + atk * .4; p.LeftArm[0] += Math.sin(t * 1.6) * .1 - atk * 1.2;
+        const { t, move, hurt } = k, T = ghostTimeline(k.g, k.now);
+        holder.position.y = .75 + Math.sin(t * 1.4) * .12 - T.hit * .3 + T.wind * .25 + T.die * .6 - (1 - ease(T.rise)) * .8;
+        const p = clonePose(base);
+        p.Hips[0] += move * .2 + T.chase * .2; p.Spine[1] = Math.sin(t * .9) * .08;
+        p.RightArm[0] += Math.sin(t * 2) * .08; p.LeftArm[0] += Math.sin(t * 1.6) * .1 - T.chase * .8;
         p.LeftUpLeg[0] += Math.sin(t * 1.8) * .12; p.RightUpLeg[0] += Math.sin(t * 1.8 + 1.5) * .12;
+        blendPose(p, rear, T.wind); blendPose(p, dive, T.hit); blendPose(p, recoil, Math.max(hurt, T.hurt)); blendPose(p, shriek, ease(T.die));
         poseBones(nodes, p);
-        hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 2.2 + i * .9) * (.15 + atk * .2); h.rotation.y = Math.sin(t * 1.5 + i) * .12; });
+        hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 2.4 + i * .9) * (.15 + T.hit * .3) - T.wind * .4 + T.die * .6; h.rotation.y = Math.sin(t * 1.5 + i) * (.12 + T.die * .3); });
       };
     },
     // เงาผู้จารึก: a possessed scribe arched in a backbend, walking on hands
@@ -3636,14 +3670,21 @@
       const base = { Hips: [-1.75, 0, 0], Spine: [-.35, 0, 0], Spine1: [-.3, 0, 0], Chest: [-.25, 0, 0], Neck: [-.55, 0, 0], Head: [-.5, 0, 0],
         LeftArm: [-2.6, 0, -1.25], RightArm: [-2.6, 0, 1.25], LeftForeArm: [0, -.2, 0], RightForeArm: [0, .2, 0], LeftHand: [-1.1, 0, 0], RightHand: [-1.1, 0, 0],
         LeftUpLeg: [1.05, 0, .25], RightUpLeg: [1.05, 0, -.25], LeftLeg: [1.25, 0, 0], RightLeg: [1.25, 0, 0], LeftFoot: [-.5, 0, 0], RightFoot: [-.5, 0, 0] };
+      // Attack: arches higher on its limbs, head snapping round, then lunges
+      // with one clawed hand; death: limbs give way and it collapses flat.
+      const arch = { Hips: [-1.95, 0, 0], Spine: [-.5, 0, 0], Chest: [-.4, 0, 0], Neck: [-.8, 0, 0] };
+      const lunge = { Hips: [-1.45, 0, 0], Chest: [-.05, 0, 0], RightArm: [-1.5, 0, 1.25], RightForeArm: [0, .1, 0], RightHand: [.6, 0, 0], Neck: [-.3, 0, 0] };
+      const collapse = { Hips: [-1.57, 0, .3], Spine: [-.05, 0, 0], Chest: [0, 0, 0], LeftArm: [-2.9, 0, -.6], RightArm: [-2.9, 0, .6], LeftUpLeg: [1.57, 0, .5], RightUpLeg: [1.57, 0, -.5], LeftLeg: [0, 0, 0], RightLeg: [0, 0, 0], Head: [.2, .8, 0] };
       return k => {
-        const { t, move, atk, hurt, walk } = k;
-        holder.position.y = -.3 + Math.abs(Math.sin(walk * 2)) * .03 * move + atk * .15;
-        const p = JSON.parse(JSON.stringify(base));
-        const a = Math.sin(walk) * .35 * move, c = Math.cos(walk) * .3 * move;
+        const { t, move, hurt, walk } = k, T = ghostTimeline(k.g, k.now);
+        const gait = move + T.chase * .5;
+        holder.position.y = -.3 + Math.abs(Math.sin(walk * 2)) * .03 * gait + T.wind * .18 - ease(T.die) * .55 - (1 - ease(T.rise)) * .6;
+        const p = clonePose(base);
+        const a = Math.sin(walk) * .35 * gait, c = Math.cos(walk) * .3 * gait;
         p.LeftArm[0] += a; p.RightArm[0] -= a; p.LeftUpLeg[0] -= a; p.RightUpLeg[0] += a; p.LeftLeg[0] += Math.max(0, c); p.RightLeg[0] += Math.max(0, -c);
-        p.Chest[0] -= atk * .3; p.RightArm[0] += atk * 1.2; p.Hips[0] += hurt * .3;
-        p.Head[1] = Math.sin(t * 4.3) * Math.sin(t * .8) * .45; p.Head[2] = Math.sin(t * 1.9) * .2;
+        p.Head[1] = Math.sin(t * 4.3) * Math.sin(t * .8) * .45 + T.wind * Math.sin(t * 20) * .3; p.Head[2] = Math.sin(t * 1.9) * .2;
+        blendPose(p, arch, T.wind); blendPose(p, lunge, T.hit);
+        p.Hips[0] += Math.max(hurt, T.hurt) * .35; blendPose(p, collapse, ease(T.die));
         poseBones(nodes, p);
         hair.forEach((h, i) => { h.rotation.z = Math.sin(t * 2 + i) * .15; });
       };
@@ -3671,15 +3712,21 @@
       const hair = ghostHair(nodes, [-1, -.5, 0, .5, 1].map(a => [[Math.sin(a) * .07, 1.72, -.02 + Math.cos(a) * .03], [Math.sin(a) * .09, 1.88, -.03], [Math.sin(a) * .1, 2.05, -.02], [Math.sin(a) * .09, 2.2, .0]]), hairMat);
       const base = { Neck: [-.35, 0, 0], Head: [-.35, 0, 0], LeftArm: [.15, 0, -1.4], RightArm: [.15, 0, 1.4], LeftForeArm: [0, -.15, 0], RightForeArm: [0, .15, 0],
         LeftHand: [0, 0, -.4], RightHand: [0, 0, .4], LeftUpLeg: [0, 0, .06], RightUpLeg: [0, 0, -.06], LeftFoot: [.6, 0, 0], RightFoot: [.6, 0, 0], Spine: [-.1, 0, 0] };
+      // Attack: curls up toward the beam, then drops on the chains and swipes;
+      // death: the chains give and the body falls limp.
+      const curl = { Spine: [.5, 0, 0], Neck: [.3, 0, 0], LeftUpLeg: [-.6, 0, .06], RightUpLeg: [-.6, 0, -.06], LeftLeg: [1.2, 0, 0], RightLeg: [1.2, 0, 0], LeftArm: [.3, 0, -1.5], RightArm: [.3, 0, 1.5] };
+      const swipe = { Spine: [-.45, 0, 0], Neck: [-.7, 0, 0], Head: [-.5, 0, 0], LeftArm: [-1.8, -.3, -1.2], RightArm: [-1.8, .3, 1.2], LeftForeArm: [0, 0, 0], RightForeArm: [0, 0, 0] };
+      const limp = { Spine: [.2, 0, .3], Neck: [.6, 0, 0], Head: [.5, .6, 0], LeftArm: [-.2, 0, -.6], RightArm: [-.2, 0, .6], LeftUpLeg: [-.4, 0, .3], RightUpLeg: [-.2, 0, -.2] };
       return k => {
-        const { t, move, atk, hurt } = k;
-        yoke.position.y = 3.15 + Math.sin(t * 1.1) * .08; holder.position.y = yoke.position.y - .1 - atk * .5;
-        holder.rotationQuaternion = Q(Math.sin(t * 1.3) * .12 + move * .2 - atk * .4 + hurt * .3, Math.PI, Math.PI + Math.sin(t * 1.05) * .1);
-        const p = JSON.parse(JSON.stringify(base));
-        p.Spine[0] -= atk * .4; p.Neck[0] -= atk * .2;
-        p.LeftArm[0] += Math.sin(t * 2) * .1 - atk * 1.4; p.RightArm[0] += Math.sin(t * 2 + 1) * .1 - atk * 1.4;
+        const { t, move, hurt } = k, T = ghostTimeline(k.g, k.now);
+        yoke.position.y = 3.15 + Math.sin(t * 1.1) * .08;
+        holder.position.y = yoke.position.y - .1 + T.wind * .35 - T.hit * .7 - ease(T.die) * 1.9;
+        holder.rotationQuaternion = Q(Math.sin(t * 1.3) * .12 + move * .2 + T.chase * .2 - T.hit * .5 + Math.max(hurt, T.hurt) * .3, Math.PI, Math.PI + Math.sin(t * 1.05) * .1 + ease(T.die) * .9);
+        const p = clonePose(base);
+        p.LeftArm[0] += Math.sin(t * 2) * .1; p.RightArm[0] += Math.sin(t * 2 + 1) * .1;
+        blendPose(p, curl, T.wind); blendPose(p, swipe, T.hit); blendPose(p, limp, ease(T.die));
         poseBones(nodes, p);
-        hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 1.4 + i) * .15; h.rotation.z = Math.sin(t * 1.1 + i * 1.3) * .12; });
+        hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 1.4 + i) * .15 + T.hit * .4; h.rotation.z = Math.sin(t * 1.1 + i * 1.3) * .12; });
       };
     },
     // Possessed stone yaksha (shrine keeper elite) and door guardian: the body
@@ -3710,13 +3757,19 @@
       const base = { Hips: [0, 0, 0], Spine: [.05, 0, 0], Head: [-.05, 0, 0],
         LeftUpLeg: [-.25, 0, .3], RightUpLeg: [-.15, 0, -.3], LeftLeg: [.5, 0, 0], RightLeg: [.4, 0, 0], LeftFoot: [-.25, 0, -.3], RightFoot: [-.25, 0, .3],
         LeftArm: [.1, 0, -.95], LeftForeArm: [0, -1.55, 0], LeftHand: [0, 0, -.3], RightArm: [-.55, 0, 1.15], RightForeArm: [0, 1.1, 0] };
+      // Club overhead with the torso twisted back, then a full-body smash
+      // that drops the hips; death: falls to one knee and crumbles forward.
+      const raise = { Spine: [-.25, -.35, 0], Spine1: [-.1, -.2, 0], RightArm: [-2.85, -.2, .9], RightForeArm: [0, .6, 0], LeftArm: [-.5, 0, -1.1], LeftForeArm: [0, -.4, 0], Head: [-.1, .25, 0] };
+      const smash = { Spine: [.55, .3, 0], Spine1: [.25, .15, 0], RightArm: [-.9, .2, 1.0], RightForeArm: [0, .15, 0], LeftArm: [.3, 0, -1.2], LeftUpLeg: [-.7, 0, .35], RightUpLeg: [.2, 0, -.35], LeftLeg: [.9, 0, 0], RightLeg: [.6, 0, 0] };
+      const stagger = { Spine: [-.3, .2, 0], Head: [-.3, -.3, 0] };
+      const kneel = { Hips: [.2, 0, 0], Spine: [.75, 0, .1], Head: [.5, 0, 0], LeftUpLeg: [-1.5, 0, .2], LeftLeg: [1.6, 0, 0], RightUpLeg: [.1, 0, -.2], RightLeg: [2.0, 0, 0], RightArm: [.3, 0, 1.3], LeftArm: [-.4, 0, -.9] };
       return k => {
-        const { t, move, atk, hurt, walk, wind } = k;
-        holder.position.y = -.06 + Math.abs(Math.sin(walk)) * .03 * move;
-        const p = JSON.parse(JSON.stringify(base));
+        const { t, move, hurt, walk } = k, T = ghostTimeline(k.g, k.now);
+        holder.position.y = -.06 + Math.abs(Math.sin(walk)) * .03 * move - T.hit * .12 - ease(T.die) * .35;
+        const p = clonePose(base);
         p.Hips[2] = Math.sin(walk) * .06 * move; p.LeftUpLeg[0] += Math.sin(walk) * .4 * move; p.RightUpLeg[0] -= Math.sin(walk) * .4 * move;
-        p.Spine[0] += atk * .45 - wind * .2 - hurt * .2; p.Spine[1] = -wind * .35 + atk * .3; p.Chest = [Math.sin(t * 1.9) * .015, 0, 0];
-        p.RightArm[0] += -wind * 2.3 - atk * .6; p.RightForeArm[1] += -wind * .5; p.LeftArm[0] += -wind * .4;
+        p.Chest = [Math.sin(t * 1.9) * .015, 0, 0];
+        blendPose(p, raise, T.wind); blendPose(p, smash, T.hit); blendPose(p, stagger, Math.max(hurt, T.hurt)); blendPose(p, kneel, ease(T.die));
         poseBones(nodes, p);
       };
     },
@@ -3797,16 +3850,19 @@
       const atkAge = (now - g.attackAt) / 1000, hurtAge = (now - g.hurtAt) / 1000;
       const atk = g.hold?.atk ?? (atkAge < .7 ? Math.sin(Math.min(1, atkAge / .7) * Math.PI) : 0); // hold: preview frames
       const hurt = g.hold?.hurt ?? (hurtAge < .3 ? Math.sin(hurtAge / .3 * Math.PI) : 0);
-      g.update({ t: t + (mesh.uniqueId % 17), move, atk, hurt, walk: g.walk, wind: g.windup ? 1 : 0 });
-      // Spawn: rises out of the ground; death: sinks, shrinks and lets the soul go.
-      const spawnP = Math.min(1, (now - g.spawnAt) / 700);
-      let s = g.design.scale * (.3 + .7 * ease(spawnP)), sink = (1 - ease(spawnP)) * -.8;
+      g.update({ t: t + (mesh.uniqueId % 17), move, atk, hurt, walk: g.walk, wind: g.windup ? 1 : 0, g, now });
+      // Humanoid rigs play their own spawn and death on the skeleton; the
+      // primitive and object rigs rise out of / sink into the ground.
+      const humanoid = g.rig.metadata?.skeletons, spawnP = Math.min(1, (now - g.spawnAt) / 700);
+      let s = g.design.scale * (humanoid ? 1 : .3 + .7 * ease(spawnP)), sink = humanoid ? 0 : (1 - ease(spawnP)) * -.8;
       if (g.deathAt) {
-        const p = (now - g.deathAt) / 900;
+        const p = (now - g.deathAt) / 1400;
         if (p >= 1) { mesh.setEnabled(false); g.deathAt = 0; return; }
-        s *= 1 - ease(p) * .85; sink = -ease(p) * .9; g.rig.rotation.z = ease(p) * .6;
+        // Hold the death pose, then dissolve downward over the last third.
+        const fade = ease((p - .65) / .35);
+        s *= 1 - (humanoid ? fade * .9 : ease(p) * .85); sink = humanoid ? -fade * .4 : -ease(p) * .9; g.rig.rotation.z = humanoid ? 0 : ease(p) * .6;
       } else g.rig.rotation.z = 0;
-      g.rig.scaling.setAll(s); g.rig.position.y = -g.tall / 2 + sink;
+      g.rig.scaling.setAll(Math.max(.01, s)); g.rig.position.y = -g.tall / 2 + sink;
     };
     for (const mesh of forestMonsters.values()) tick(mesh);
     if (villageGhost) {
