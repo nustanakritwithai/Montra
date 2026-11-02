@@ -1,5 +1,6 @@
 import type { HuntCamp, WorldMapDefinition } from "./WorldMaps.js";
 
+import {atlasPortals,TEMPLE_NORTH_GATE} from "./WorldAtlas.js";
 export const TEMPLE_ID = "bound_temple";
 export const TEMPLE_GATE = { x: -48, z: -84 };
 export const TEMPLE_CAMPS: readonly HuntCamp[] = [
@@ -20,13 +21,14 @@ export const TEMPLE_TARGETS: ReadonlySet<string> = new Set(TEMPLE_SPAWNS.map(m=>
 export const TEMPLE_MAP: WorldMapDefinition = {
   id:TEMPLE_ID, name:"วัดร้างพันธนาการ",
   bounds:{minX:-50,maxX:50,minZ:-75,maxZ:35}, spawn:{x:0,y:0,z:26},
-  restAreas:[{x:0,z:26,radius:6,name:"ซุ้มพักหน้าวัด"}],
-  portals:[{id:"temple_to_forest",x:0,z:28,targetMapId:"forbidden_forest",targetSpawn:{x:TEMPLE_GATE.x,y:0,z:TEMPLE_GATE.z+1.5}}],
+  restAreas:[{x:0,z:26,radius:6,name:"ซุ้มพักหน้าวัด"},{...TEMPLE_NORTH_GATE,radius:3.5,name:"ประตูป่าช้า"}],
+  portals:[{id:"temple_to_forest",x:0,z:28,targetMapId:"forbidden_forest",targetSpawn:{x:TEMPLE_GATE.x,y:0,z:TEMPLE_GATE.z+1.5}},...atlasPortals(TEMPLE_ID)],
   camps:TEMPLE_CAMPS,
   paths:[
     [{x:0,z:28},{x:0,z:5},{x:4.5,z:-5},{x:4.5,z:-22},{x:11,z:-30},{x:11,z:-44},{x:0,z:-55}],
     [{x:0,z:5},{x:-15,z:2},{x:-27,z:-5},{x:-27,z:-18},{x:-27,z:-36},{x:-23,z:-45},{x:0,z:-55}],
     [{x:0,z:5},{x:15,z:2},{x:27,z:-5},{x:27,z:-23},{x:30,z:-38},{x:22,z:-49},{x:0,z:-55}],
+    [{x:0,z:-55},{x:25,z:-55},TEMPLE_NORTH_GATE],
     [{x:-27,z:-18},{x:-22,z:-26},{x:-18,z:-32},{x:-9,z:-32},{x:11,z:-30}],
   ],
   // X and Z identify the minimum X/Z corner of each rectangular footprint.

@@ -1,6 +1,7 @@
 /** MONTRA V0.2.8: declarative world geometry. No client coordinates are trusted. */
 import { isFlightAltitude, isOnGround, isOnPlatform, isOnTop, touchesWallBody } from "./HeightRules.js";
 import { TEMPLE_ID, TEMPLE_GATE, TEMPLE_MAP } from "./TempleMap.js";
+import { ATLAS_MAPS, MARSH_GATE, atlasPortals } from "./WorldAtlas.js";
 export type WorldWall = Readonly<{x:number;z:number;width:number;length:number}>;
 export function segmentIntersectsExpandedWall(
   a:{x:number;z:number},b:{x:number;z:number},w:WorldWall,radius:number,
@@ -49,15 +50,18 @@ export type WorldMapDefinition = Readonly<{
   spawn: WorldPoint;
   obstacles: readonly WorldObstacle[];
   walls?: readonly WorldWall[];
+  water?: readonly WorldWall[];
+  region?: Readonly<{range:readonly [number,number];hint:string;noFlight:boolean}>;
   portals: readonly WorldPortal[];
   restAreas?: readonly RestArea[];
   camps?: readonly HuntCamp[];
   guardian?: typeof SHRINE_GUARDIAN;
+  boss?: Readonly<{id:string;name:string;x:number;z:number;level:number;strikeRadius:number;respawnMs:number}>;
   paths?: readonly (readonly {x:number; z:number}[])[];
 }>;
 export const DEFAULT_MAP_ID = "ritual_village";
 export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.freeze<Record<string, WorldMapDefinition>>({
-  ...(WORLD_EXPANSION ? {[TEMPLE_ID]:TEMPLE_MAP} : {}),
+  ...(WORLD_EXPANSION ? {[TEMPLE_ID]:TEMPLE_MAP,...ATLAS_MAPS} : {}),
   ritual_village: {
     id: "ritual_village", name: "หมู่บ้านอาคม",
     bounds: { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
@@ -71,7 +75,7 @@ export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.f
     id: "forbidden_forest", name: "ป่าต้องห้าม",
     bounds: WORLD_EXPANSION ? {minX:-60,maxX:60,minZ:-100,maxZ:20} : {minX:-20,maxX:20,minZ:-20,maxZ:20},
     spawn: { x: 0, y: 0, z: 12 },
-    restAreas: WORLD_EXPANSION ? [{x:0,z:12,radius:6,name:"ศาลพักชายป่า"}, {x:TEMPLE_GATE.x,z:TEMPLE_GATE.z,radius:3,name:"ซุ้มประตูวัด"}] : [],
+    restAreas: WORLD_EXPANSION ? [{x:0,z:12,radius:6,name:"ศาลพักชายป่า"}, {x:TEMPLE_GATE.x,z:TEMPLE_GATE.z,radius:3,name:"ซุ้มประตูวัด"}, {...MARSH_GATE,radius:3.5,name:"ท่าน้ำบึงพราย"}] : [],
     camps: WORLD_EXPANSION ? FOREST_CAMPS : [],
     guardian: WORLD_EXPANSION ? SHRINE_GUARDIAN : undefined,
     paths: WORLD_EXPANSION ? [
@@ -81,6 +85,7 @@ export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.f
       [{x:-28,z:-55},{x:0,z:-46},{x:26,z:-72}],
       [{x:0,z:-88},{x:SHRINE_GUARDIAN.x,z:SHRINE_GUARDIAN.z}],
       [{x:-28,z:-55},{x:-37,z:-70},TEMPLE_GATE],
+      [{x:26,z:-72},{x:38,z:-80},MARSH_GATE],
     ] : [],
     obstacles: [
       { id: "tree-west-1", x: -6, z: 6, radius: 1.4 },
@@ -110,7 +115,7 @@ export const WORLD_MAPS: Readonly<Record<string, WorldMapDefinition>> = Object.f
     ],
     portals: [{ id: "forest_to_village", x: 0, z: 14,
       targetMapId: "ritual_village", targetSpawn: { x: -4, y: 0, z: -15 } },
-      ...(WORLD_EXPANSION ? [{id:"forest_to_temple",...TEMPLE_GATE,targetMapId:TEMPLE_ID,targetSpawn:TEMPLE_MAP.spawn}] : [])],
+      ...(WORLD_EXPANSION ? [{id:"forest_to_temple",...TEMPLE_GATE,targetMapId:TEMPLE_ID,targetSpawn:TEMPLE_MAP.spawn},...atlasPortals("forbidden_forest")] : [])],
   },
 });
 export function getWorldMap(mapId: string): WorldMapDefinition | undefined {
@@ -143,6 +148,8 @@ export function isSafeWorldPoint(map: WorldMapDefinition, point: WorldPoint, rad
       if (!isOnTop(point.x, point.z)) return false;
     } else if (!isFlightAltitude(point.y)) return false;
   } else if (!isOnGround(point.y) && !isFlightAltitude(point.y)) return false;
+  if(map.region?.noFlight && !isOnGround(point.y))return false;
+  if(isOnGround(point.y) && map.water?.some(w=>segmentIntersectsExpandedWall(point,point,w,radius)))return false;
   if(map.walls?.some(w=>segmentIntersectsExpandedWall(point,point,w,radius)))return false;
   return map.obstacles.every(o => Math.hypot(point.x - o.x, point.z - o.z) > o.radius + radius);
 }
