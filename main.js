@@ -438,10 +438,10 @@
       key: "#c4dac9", keyI: .52, mist: "#2e4a38", mistAlpha: .14, mote: ["#b6ff7a", "#6dffb0"], skyLevel: .7 },
     moon_cemetery: { clear: "#151b29", fog: "#283545", fogNear: 22, fogFar: 128, hemi: .84, carry: .48, sky: "#c9d6ed", ground: "#343946",
       key: "#dee5ff", keyI: .58, mist: "#3a3d55", mistAlpha: .14, mote: ["#e6e8ff", "#b7b2ff"], skyLevel: 1.15 },
-    hex_ridge: { clear: "#0b0c08", fog: "#1f2116", fogNear: 6, fogFar: 100, hemi: .54, carry: .5, sky: "#c2c09a", ground: "#2a2618",
-      key: "#e8d4a4", keyI: .42, mist: "#3c3a2a", mistAlpha: .2, mote: ["#ffd36a", "#ffe9a8"], skyLevel: 1 },
-    naga_cavern: { clear: "#030809", fog: "#0a1a1c", fogNear: 0, fogFar: 70, hemi: .44, carry: .75, sky: "#7fb6c0", ground: "#13201f",
-      key: "#89d0d8", keyI: .22, mist: "#1f3a3c", mistAlpha: .3, mote: ["#7ffff0", "#b49cff"], skyLevel: 0 },
+    hex_ridge: { clear: "#191e15", fog: "#363b2b", fogNear: 23, fogFar: 132, hemi: .84, carry: .5, sky: "#e0dabe", ground: "#434032",
+      key: "#f0d6a2", keyI: .58, mist: "#504932", mistAlpha: .13, mote: ["#ffd36a", "#ffe9a8"], skyLevel: 1 },
+    naga_cavern: { clear: "#0c191d", fog: "#1a3037", fogNear: 19, fogFar: 118, hemi: .80, carry: .7, sky: "#b3d3d9", ground: "#2d3940",
+      key: "#a9dde1", keyI: .50, mist: "#294750", mistAlpha: .14, mote: ["#7ffff0", "#b49cff"], skyLevel: 0 },
     fallen_city: { clear: "#0c0a08", fog: "#211b14", fogNear: 4, fogFar: 92, hemi: .5, carry: .55, sky: "#c4ab88", ground: "#2a2018",
       key: "#f0c890", keyI: .4, mist: "#3d3326", mistAlpha: .26, mote: ["#ffb062", "#ffdca0"], skyLevel: .9 },
     asura_peak: { clear: "#0f0505", fog: "#2a0f0c", fogNear: 2, fogFar: 85, hemi: .46, carry: .45, sky: "#d49a8a", ground: "#3a1610",
@@ -1917,10 +1917,20 @@
           for(let i=-3;i<=3;i++)box(x+i*.79,.1,z,.75,.15,5.5,wooden);
           for(const dx of [-2.9,2.9])for(const dz of [-2.7,2.7])cone(x+dx,1,z+dz,2.2,.3,.26,darkWood);
           for(const dx of [-2.8,2.8])cone(x+dx,2.3,z-2.7,.65,.58,.38,decor.willo,8);
+        }else if(map.id==="naga_cavern"){
+          for(const side of [-1,1]){
+            cone(x+side*2.7,1.1,z-2,2.3,1.2,.68,stone,5);
+            cone(x+side*2.7,2.75,z-2,1.15,.9,.03,light,5);
+          }
+          box(x,.38,z-2,3.6,.68,1,paint.court);
         }else{
           for(const dx of [-2.6,2.6])for(const dz of [-2.3,2.3])box(x+dx,1.65,z+dz,.3,3.3,.3,stone);
           for(const side of [-1,1])box(x+side*1.53,4,z,3.6,.28,5.8,darkWood).rotation.z=-side*.45;
           box(x,.7,z-1.7,3.6,.22,.85,wooden);
+          if(map.id==="hex_ridge")for(const side of [-1,1]){
+            box(x+side*3.5,2,z+2,.16,4,.16,wooden);
+            box(x+side*4.15,3.4,z+2,1.35,.9,.12,gold);
+          }
         }
       }
       const arena=map.camps.find(c=>c.tier==="strong");
@@ -1933,7 +1943,20 @@
           }
           box(x,2.6,z-6,.29,5.2,.28,darkWood).rotation.z=.15;
           box(x-.8,4,z-6,1.5,1.8,.09,clothRed);
-        }else{
+        }else if(map.id==="hex_ridge"){
+          for(const [dx,dz,h] of [[-6,-3,4.2],[0,-7,6.2],[6,-3,4.2]]){
+            cone(x+dx,h/2,z+dz,h,2,1.45,stone,5);
+            cone(x+dx,h+.37,z+dz,.78,1.65,.2,gold,4);
+            box(x+dx,h*.68,z+dz+.74,.7,.7,.16,light).rotation.z=Math.PI/4;
+          }
+        }else if(map.id==="naga_cavern"){
+          for(const side of [-1,1]){
+            cone(x+side*5.4,1.8,z-5,3.8,2.35,1.36,stone,6).rotation.z=-side*.17;
+            cone(x+side*5.1,4.45,z-5,2.45,1.45,.08,light,6).rotation.z=side*.46;
+          }
+          cone(x,1.1,z-7,2.2,3.8,2.8,stone,8);
+          cone(x,2.7,z-7,1.1,.6,1.8,light,6);cone(x,3.8,z-7,1.1,1.8,.2,light,6);
+        }else if(map.id==="moon_cemetery"){
           for(const side of [-1,1])box(x+side*2.5,2.2,z-6,.5,4.4,.55,stone);
           box(x,4.5,z-6,6.2,.45,.7,darkWood);
           cone(x,2.95,z-6,2.15,2.2,1.05,gold,12);cone(x,1.88,z-6,.25,2.5,2.25,stone,12);
@@ -1989,9 +2012,22 @@
         box(x,3.1,z,w.width+.2,.25,w.length+.2,deep);
         const along=w.width>=w.length,n=Math.ceil(Math.max(w.width,w.length)/4);
         for(let i=0;i<n;i++){const t=(i+.5)/n;cone(along?w.x+t*w.width:x,3.45,along?z:w.z+t*w.length,.55,.72,.25,stone,6);}
+      }else if(map.id==="hex_ridge" || map.id==="naga_cavern"){
+        const cave=map.id==="naga_cavern",along=w.width>=w.length;
+        const count=Math.ceil(Math.max(w.width,w.length)/3.8);
+        box(x,.38,z,w.width,.76,w.length,deep);
+        for(let i=0;i<count;i++){
+          const t=(i+.5)/count,px=along?w.x+t*w.width:x,pz=along?z:w.z+t*w.length;
+          const h=1.8+noise(i+w.x,w.z)*1.3,dx=along?w.width/count:w.width,dz=along?w.length:w.length/count;
+          const block=cone(px,h/2,pz,h,1.22,.84,stone,6);
+          block.scaling.set(dx,1,dz);
+          const cap=cone(px,h+.18,pz,.36,.85,.7,cave?paint.court:floor,6);
+          cap.scaling.set(dx,1,dz);
+          if(cave && i%3===1)cone(px,h+.86,pz,1.1,.56,0,decor.crystal,5).rotation.z=.28;
+        }
       }else{
         box(x,1.25,z,w.width,2.5,w.length,stone);
-        for(let i=1;i<w.width;i+=2.8)cone(w.x+i,3,z,2+i%2,2.1,.15,map.id==="naga_cavern"?paint.court:deep,5);
+        for(let i=1;i<w.width;i+=2.8)cone(w.x+i,3,z,2+i%2,2.1,.15,deep,5);
       }
       finish("barrier",true);
     }
@@ -2050,7 +2086,10 @@
         m.emissiveTexture=null;m.disableLighting=true;
         m.emissiveColor=B.Color3.FromHexString(id==="lotus_basin"?"#337b71":id==="moon_pass"?"#357782":"#396e8a");
       }
-      if(id==="drowned_marsh"){m.emissiveTexture=null;m.disableLighting=true;m.emissiveColor=B.Color3.FromHexString("#32645f");}
+      if(id==="drowned_marsh" || id==="naga_cavern"){
+        m.emissiveTexture=null;m.disableLighting=true;
+        m.emissiveColor=B.Color3.FromHexString(id==="naga_cavern"?"#286579":"#32645f");
+      }
       const tint={spirit_rift:["#160c2c","#0d0624"]}[id];
       if(tint){m.diffuseColor=B.Color3.FromHexString(tint[0]);m.emissiveColor=B.Color3.FromHexString(tint[1]);}
       regionWaters.set(id,m);
@@ -5048,8 +5087,10 @@
     lotus_basin: [{kind:"waterspirit",fallback:"longhair"},{kind:"boatman",fallback:"corpse"},{kind:"drowned",fallback:"corpse"},{kind:"moonspirit",fallback:"longhair"},{kind:"waterspirit",fallback:"longhair",lead:true}],
     drowned_marsh: [{ kind: "drowned", fallback: "corpse" }, { kind: "boatman", fallback: "corpse" }, { kind: "waterspirit", fallback: "longhair" },{kind:"drowned",fallback:"corpse"},{kind:"boatman",fallback:"corpse",lead:true}],
     moon_cemetery: [{ kind: "graveborn", fallback: "corpse" }, { kind: "pyrekeeper", fallback: "corpse" }, { kind: "moonspirit", fallback: "longhair" },{kind:"headless",fallback:"corpse"},{kind:"pyrekeeper",fallback:"corpse",lead:true}],
-    hex_ridge: [{ kind: "krasue", fallback: "longhair" }, { kind: "krahang", fallback: "corpse" }, { kind: "preta", fallback: "corpse" }],
-    naga_cavern: [{ kind: "phiphong", fallback: "corpse" }, { kind: "kongkoi", fallback: "corpse" }, { kind: "takhian", fallback: "longhair" }],
+    hex_ridge: [{ kind: "krasue", fallback: "longhair" }, { kind: "krahang", fallback: "corpse" }, { kind: "preta", fallback: "corpse" },
+      { kind: "phiphong", fallback: "corpse" }, { kind: "phitakhon", fallback: "corpse", lead: true }],
+    naga_cavern: [{ kind: "phiphong", fallback: "corpse" }, { kind: "kongkoi", fallback: "corpse" }, { kind: "takhian", fallback: "longhair" },
+      { kind: "waterspirit", fallback: "longhair" }, { kind: "statue", fallback: "corpse", spire: 1, lead: true }],
     spirit_rift: [{ kind: "unaware", fallback: "corpse" }, { kind: "childghost", fallback: "corpse" }, { kind: "elephant" }],
     asura_peak: [{ kind: "phitakhon", fallback: "corpse" }, { kind: "phitakhon", fallback: "corpse" }, { kind: "phitakhon", fallback: "corpse", lead: true }],
     // A court may list variants; spawns cycle through them (atlas_<map>_<court>_<n>).

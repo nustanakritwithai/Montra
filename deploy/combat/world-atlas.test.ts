@@ -29,8 +29,8 @@ test("all fifteen maps connect to the village and every gate has a safe return",
 });
 
 test("every marked trail is walkable and all gates, camps and monsters are reachable on foot",()=>{
-  assert.equal(ATLAS_SPAWNS.length,76);
-  assert.equal(new Set(ATLAS_SPAWNS.map(s=>s.id)).size,76);
+  assert.equal(ATLAS_SPAWNS.length,82);
+  assert.equal(new Set(ATLAS_SPAWNS.map(s=>s.id)).size,82);
   for(const map of Object.values(WORLD_MAPS).filter(m=>m.region || m.strategic)){
     const safe=(x:number,z:number)=>isSafeWorldPoint(map,{x,y:0,z});
     for(const path of map.paths!)for(let i=1;i<path.length;i++){
@@ -64,7 +64,7 @@ test("every marked trail is walkable and all gates, camps and monsters are reach
 });
 
 test("each outer hunt trail connects two original portals through a shelter and two playable courts",()=>{
-  for(const [id,c4,c5] of [["bamboo_frontier",32,35],["lotus_basin",48,52],["drowned_marsh",18,22],["moon_cemetery",26,32]] as const){
+  for(const [id,c4,c5] of [["bamboo_frontier",32,35],["lotus_basin",48,52],["drowned_marsh",18,22],["moon_cemetery",26,32],["hex_ridge",39,45],["naga_cavern",52,58]] as const){
     const map=WORLD_MAPS[id],trail=(map.huntTrail??map.strategic?.huntTrail)!,route=map.paths![trail.path];
     const touches=(p:{x:number;z:number})=>route.some(v=>v.x===p.x && v.z===p.z);
     assert.equal(map.portals.length,id==="moon_cemetery"?4:2);
@@ -87,6 +87,13 @@ test("each outer hunt trail connects two original portals through a shelter and 
     assert.ok(isSafeWorldPoint(marsh,{...bridge,y:0}));assert.ok(!isSafeWorldPoint(marsh,{x:bridge.x+5,z:bridge.z,y:0}));
   }
   assert.ok(!isWorldSegmentClear("moon_cemetery",{x:75,z:-30},{x:75,z:-20}));
+  assert.ok(!isWorldSegmentClear("hex_ridge",{x:70,z:-22},{x:79,z:-22}));
+  const cave=WORLD_MAPS.naga_cavern;
+  assert.equal(cave.region!.noFlight,true);
+  assert.deepEqual(cave.bridges,[{x:-83,z:-11}]);
+  assert.ok(isWorldSegmentClear(cave.id,{x:-83,z:-7},{x:-83,z:-16}));
+  for(const x of [-89,-77])assert.ok(!isSafeWorldPoint(cave,{x,y:0,z:-11}));
+  assert.ok(!isWorldSegmentClear(cave.id,{x:-62,z:-42},{x:-62,z:-33}));
 });
 test("territories protect through traffic and have separate attack crossings and an exposed fort",()=>{
   for(const [id,water,shot] of [
@@ -145,7 +152,7 @@ test("all occupied atlas zones replicate and the warden's respawn clock survives
   tick(100);assert.equal(state.monsters.size+1,69);
   assert.ok(!state.monsters.has("atlas_hex_ridge_1_1"));
   for (const map of Object.values(ATLAS_MAPS)) state.players.set(map.id,new Player({...map.spawn,mapId:map.id}));
-  tick(100);assert.equal(state.monsters.size+1,110);
+  tick(100);assert.equal(state.monsters.size+1,116);
   const id=RIFT_WARDEN.id;assert.ok(forest.kill(id,100));state.players.delete("spirit_rift");tick(500);
   assert.ok(!state.monsters.has(id));state.players.set("spirit_rift",new Player({...ATLAS_MAPS.spirit_rift.spawn,mapId:"spirit_rift"}));
   tick(1100);assert.equal(state.monsters.get(id)?.alive,false);

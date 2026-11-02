@@ -52,9 +52,9 @@ async function verifyHuntTrail(i,id,destination,level,entry=[0,26]){
   assert.deepEqual([trail[0].x,trail[0].z],entry);
   const rest=map.restAreas.find(a=>trail.some(p=>p.x===a.x && p.z===a.z) && !map.portals.some(p=>p.x===a.x && p.z===a.z));
   const guardId="atlas_"+id+"_5_1",warden=map.camps[4];
-  assert.ok(rest);let visits=0;
+  assert.ok(rest);let visits=0,escort;
   for(const p of trail.slice(1)){
-    await walk(c,p.x,p.z,45000);
+    await Promise.all([c,escort].filter(Boolean).map(hunter=>walk(hunter,p.x,p.z,45000)));
     if(p.x===rest.x && p.z===rest.z){
       visits++;await leave(c);c=await join(i);
       assert.equal(c.me().mapId,id);assert.ok(Math.hypot(c.me().x-p.x,c.me().z-p.z)<.3);
@@ -73,12 +73,22 @@ async function verifyHuntTrail(i,id,destination,level,entry=[0,26]){
           const reward=await until(()=>hunter.events.find(e=>e.type==="experience_gained")?.data,"strong hunt XP "+id);
           assert.ok(reward.amount>0 && hunter.me().alive);
         }
-      }finally{await leave(ally);}
+        if(id==="hex_ridge")escort=ally;
+      }finally{if(!escort)await leave(ally);}
     }
   }
   assert.equal(visits,2);
   await until(()=>c.r.state.monsters.get(guardId)?.alive,"strong respawn",35000);
-  await warp(c,destination);await leave(c);
+  await warp(c,destination);
+  if(escort){
+    await warp(escort,destination);
+    const cave=JSON.parse(c.r.state.worldDefinition).maps[destination];
+    const firstLeg=cave.paths[cave.huntTrail.path][1];
+    for(const hunter of [c,escort])await reject(hunter,"fly",{},"flight_forbidden");
+    await Promise.all([c,escort].map(hunter=>walk(hunter,firstLeg.x,firstLeg.z,45000)));
+    await leave(escort);
+  }
+  await leave(c);
   console.log("PASS",id,"walked both new camps, restored shelter save, won Strong XP, saw respawn and reached",destination);
 }
 const read=process.env.MONTRA_ATLAS_STAGE==="read";
@@ -131,9 +141,13 @@ async function verifyAtlas(){
 }
 try{
   const stage=process.env.MONTRA_ATLAS_STAGE;
-  if(stage==="hunts" || stage==="marsh-moon"){
-    const trials=stage==="hunts"?[verifyHuntTrail(51,"bamboo_frontier","moon_cemetery",35),verifyHuntTrail(52,"lotus_basin","river_watch",52)]:
-      [verifyHuntTrail(71,"drowned_marsh","moon_cemetery",22),verifyHuntTrail(72,"moon_cemetery","moon_pass",32,[18,25])];
+  const pairs={
+    hunts:[[51,"bamboo_frontier","moon_cemetery",35],[52,"lotus_basin","river_watch",52]],
+    "marsh-moon":[[71,"drowned_marsh","moon_cemetery",22],[72,"moon_cemetery","moon_pass",32,[18,25]]],
+    "ridge-naga":[[91,"hex_ridge","naga_cavern",45],[92,"naga_cavern","river_watch",58]]
+  };
+  if(Object.hasOwn(pairs,stage)){
+    const trials=pairs[stage].map(args=>verifyHuntTrail(...args));
     const results=await Promise.allSettled(trials);
     for(const result of results)if(result.status==="rejected")throw result.reason;
   }else await verifyAtlas();
