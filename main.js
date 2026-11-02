@@ -1892,6 +1892,7 @@
       mesh.metadata?.walkable === true ||
       mesh.metadata?.portalId ||
       (mesh === enemy && enemy.isEnabled()) ||
+      (mode === "live" && mesh.isEnabled() && forestMonsters.get(mesh.metadata?.monsterId) === mesh) ||
       (fortRoot.isEnabled() && mesh.metadata?.climbableWall) ||
       (mode === "live" && mesh.metadata?.pkPlayerId &&
        mesh.metadata.pkPlayerId !== localId)
@@ -1950,7 +1951,7 @@
   }, {passive:false});
 
   // Direction is relative to the CURRENT camera, not fixed world north.
-  // With alpha=-PI/2 (the default), swipe up = +Z and right = +X.
+  // At the default north-facing heading, swiping up moves toward -Z.
   function dashDirectionFromSwipe(screenDx, screenDy) {
     const distance = Math.hypot(screenDx, screenDy);
     if (!Number.isFinite(distance) || distance < 1) return null;
