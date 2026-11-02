@@ -101,21 +101,21 @@
   const chatDraft = { map: "", world: "" };
   let chatChannel = "map", chatPending = null, chatTimer = null;
   const scene = new B.Scene(engine);
-  scene.clearColor = B.Color4.FromHexString("#111c27ff");
-  scene.fogMode = B.Scene.FOGMODE_EXP2;
-  // Keep the wider bird's-eye view legible: heavy distance fog would wash
-  // out the entire village at the new default camera height.
-  scene.fogDensity = 0.0085;
-  scene.fogColor = B.Color3.FromHexString("#293b40");
+  scene.clearColor = B.Color4.FromHexString("#172a2fff");
+  // Haze belongs beyond the playfield. Exponential fog obscures the player
+  // as the overhead camera pulls back, even when terrain is nearby.
+  scene.fogMode = B.Scene.FOGMODE_LINEAR;
+  scene.fogColor = B.Color3.FromHexString("#405a52");
   // MONTRA is viewed from ABOVE: the player should appear small enough to
   // read nearby terrain and opponents. Retain the old close-up zoom option.
   // Babylon ArcRotateCamera beta is measured downward from the vertical axis:
   // a smaller beta means a higher, more top-down view.
   const CAMERA_ZOOM_MIN = 15;
   const CAMERA_ZOOM_MAX = 85;
-  const CAMERA_DEFAULT_RADIUS = 52;
+  const CAMERA_DEFAULT_RADIUS = 85;
   const CAMERA_DEFAULT_BETA = 0.70;
-  const camera = new B.ArcRotateCamera("portrait", -Math.PI / 2,
+  const CAMERA_DEFAULT_ALPHA = Math.PI / 2; // look into the forest; north stays ahead
+  const camera = new B.ArcRotateCamera("portrait", CAMERA_DEFAULT_ALPHA,
     CAMERA_DEFAULT_BETA, CAMERA_DEFAULT_RADIUS,
     new B.Vector3(0, 0, 0), scene);
   camera.lowerRadiusLimit = CAMERA_ZOOM_MIN;
@@ -129,11 +129,15 @@
   camera.fov = 0.69;
   camera.minZ = 0.2;
   const moon = new B.HemisphericLight("moon", new B.Vector3(0.1, 1, 0.2), scene);
-  moon.intensity = 0.7;
-  moon.diffuse = B.Color3.FromHexString("#c3d9f3");
+  moon.intensity = .85;
+  moon.diffuse = B.Color3.FromHexString("#c9dacc");
+  moon.groundColor = B.Color3.FromHexString("#617362");
+  const keyLight = new B.DirectionalLight("canopy light", new B.Vector3(-.55, -1, .4), scene);
+  keyLight.diffuse = B.Color3.FromHexString("#f6e3c5");
+  keyLight.intensity = .45;
   const warm = new B.PointLight("lantern glow", new B.Vector3(0, 4, 3), scene);
   warm.diffuse = B.Color3.FromHexString("#f6b16d");
-  warm.intensity = 1.6;
+  warm.intensity = .9;
   warm.range = 19;
 
   function mat(name, hex, emissive) {
@@ -143,7 +147,7 @@
     if (emissive) m.emissiveColor = B.Color3.FromHexString(emissive);
     return m;
   }
-  const groundMat = mat("stone and soil", "#30453f");
+  const groundMat = mat("stone and soil", "#486149");
   const wooden = mat("dark teak", "#624330");
   const woodenAlt = mat("wet teak", "#775238");
   const darkWood = mat("wood black", "#2b2c28");
@@ -153,9 +157,10 @@
   water.alpha = 0.96;
   const glowMat = mat("lantern", "#ffbc77", "#ff9e3b");
   const stoneMat = mat("flagstones", "#556057");
-  const ghostMat = mat("spirit", "#7b94a3", "#243b48");
+  const ghostMat = mat("spirit", "#9fcddd", "#294959");
   const eyesMat = mat("eyes", "#ff443a", "#ba1010");
-  const heroMat = mat("character", "#d7b57d", "#2c190b");
+  const heroMat = mat("character", "#efd093", "#3b2916");
+  const playerLocatorMat = mat("local player ring", "#ffda89", "#96642a");
   const friendMat = mat("friend character", "#6bb9c6", "#0b2530");
   const spiritMat = mat("friendly spirit", "#ad99e2", "#46337a");
   spiritMat.alpha = .8;
@@ -323,11 +328,12 @@
   // Both maps share one scene and ground. Their static meshes are created once
   // and toggled; switching maps must not accumulate scenes or WebGL resources.
   const villageMeshes = scene.meshes.filter(mesh => mesh !== ground);
-  const villageLights = scene.lights.filter(light => light !== moon && light !== warm);
+  const villageLights = scene.lights.filter(light => light !== moon && light !== keyLight);
   const forestRoot = new B.TransformNode("forbidden-forest", scene);
-  const forestLeaf = mat("forest leaves", "#203b30");
-  const forestStone = mat("forest stone", "#44504a");
-  const forestPath = mat("forest path", "#575143");
+  const forestLeaf = mat("forest leaves", "#2e5a3e");
+  const forestStone = mat("forest stone", "#879387");
+  const forestPath = mat("forest path", "#9d8967");
+  const forestClearing = mat("forest clearing", "#6c7b50");
   const portalMat = mat("portal glow", "#a0e1d2", "#287e75");
   const portals = {
     ritual_village: { id:"village_to_forest", x:-4, z:-17, label:"เดินทางไปป่าต้องห้าม" },
@@ -423,7 +429,7 @@
     }
     for(const camp of map.camps||[]){
       const clearing=B.MeshBuilder.CreateDisc("hunt clearing",{radius:12,tessellation:24},scene);
-      clearing.parent=expansionRoot;clearing.rotation.x=Math.PI/2;clearing.position.set(camp.x,.015,camp.z);clearing.material=forestPath;clearing.isPickable=false;
+      clearing.parent=expansionRoot;clearing.rotation.x=Math.PI/2;clearing.position.set(camp.x,.015,camp.z);clearing.material=forestClearing;clearing.isPickable=false;
       expansionLabel(camp.name+" · Lv "+Math.min(...camp.levels)+"–"+Math.max(...camp.levels),camp.x,camp.z);
     }
     for(const area of map.restAreas||[]){
@@ -444,7 +450,6 @@
       expansionLabel("ทางสู่บึงพราย · ยังไม่เปิด",48,-84);
     }
     for(const portal of (map.portals||[]).slice(1))makePortal(activeMapId,expansionRoot,portal);
-    scene.fogDensity=activeMapId==="forbidden_forest"?.012:.0085;
   }
   function syncForestMonsters(state) {
     const seen=new Set();
@@ -479,7 +484,6 @@
     for(const mesh of villageMeshes) mesh.setEnabled(village);
     for(const light of villageLights) light.setEnabled(village);
     villagePortal.setEnabled(village);forestRoot.setEnabled(!village);
-    scene.fogDensity=village ? .0085 : .025;
     $("worldMapName").textContent=village?"หมู่บ้านอาคม":"ป่าต้องห้าม";
     $("quest").querySelector(".quest-content strong").textContent=village?"เตรียมตัวออกสำรวจ":"สำรวจป่าต้องห้าม";
     $("quest").querySelector(".quest-content span").textContent=village?"พัก จัดกระเป๋า แล้วเดินทางไปป่า":"เปิดแผนที่เพื่อเลือกค่ายล่าตามเลเวล";
@@ -521,6 +525,13 @@
 
   function avatarMesh(id, local) {
     const parent = new B.TransformNode("avatar-" + id, scene);
+    if(local) {
+      const locator = B.MeshBuilder.CreateTorus("local player locator", {
+        diameter:1.5, thickness:.09, tessellation:24,
+      },scene);
+      locator.parent=parent;locator.position.y=.06;
+      locator.material=playerLocatorMat;locator.isPickable=false;
+    }
     const robe = B.MeshBuilder.CreateCylinder("robe", { height: 1.15, diameterTop: .6, diameterBottom: .92, tessellation: 7 }, scene);
     robe.parent = parent; robe.position.y = .67; robe.material = local ? heroMat : friendMat; robe.isPickable = false;
     const head = B.MeshBuilder.CreateSphere("head", { diameter: .53, segments: 10 }, scene);
@@ -2712,7 +2723,7 @@
   $("possess").onclick=()=> {
     if(mode==="live") { toast("เข้าสิงออนไลน์จะเปิดในรุ่นถัดไป");return; }
     possessed=!possessed;
-    heroMat.emissiveColor = B.Color3.FromHexString(possessed?"#7c459b":"#2c190b");
+    heroMat.emissiveColor = B.Color3.FromHexString(possessed?"#7c459b":"#3b2916");
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
   $("attack").onclick = () => {
@@ -2913,6 +2924,9 @@
     if(drawerActive==="map") {
       const large=$("bigMap");if(large)drawMap(large.getContext("2d"),large.width,large.height,true);
     }
+    // Keep the same clear area around the hero at every pinch/wheel zoom.
+    scene.fogStart = camera.radius + 24;
+    scene.fogEnd = camera.radius + 120;
     scene.render();
   });
   window.addEventListener("resize",()=>{ engine.resize(); updateStatus(); });
