@@ -3595,9 +3595,10 @@
       const skirt = lathe("shroud skirt", [[.17, .98], [.2, .9], [.27, .7], [.33, .48], [.36, .32]], cloth.shroud, 14); skirt.position.y = 0; onBone(nodes, "Hips", skirt);
       const fray = lathe("shroud smoke", [[.36, .34], [.33, .18], [.22, .02], [.06, -.12]], gm.smoke, 14); onBone(nodes, "Hips", fray);
       ghostEyes(nodes, o.eye, .03);
-      const hair = ghostHair(nodes, [-1, -.6, -.25, .25, .6, 1].map(a => {
-        const x = Math.sin(a) * .07, z = .03 + Math.cos(a) * .06;
-        return [[x, 1.72, z], [x * 1.4, 1.65, z + .05], [x * 1.5, 1.52, z + .05], [x * 1.45, 1.38, z + .02], [x * 1.3, 1.26, z - .01]];
+      // Lank hair parted in the middle: curtains either side of the face.
+      const hair = ghostHair(nodes, [-1.2, -.9, -.6, .6, .9, 1.2].map(a => {
+        const x = Math.sin(a) * .085, z = .02 + Math.cos(a) * .05;
+        return [[x, 1.72, z], [x * 1.25, 1.65, z + .03], [x * 1.3, 1.52, z + .03], [x * 1.25, 1.38, z], [x * 1.1, 1.26, z - .02]];
       }), hairMat);
       const base = { Hips: [.08, 0, 0], Spine: [.28, 0, 0], Spine1: [.22, 0, 0], Chest: [.18, 0, .05], Neck: [-.15, 0, 0], Head: [.3, 0, .18],
         LeftShoulder: [0, 0, -.18], RightShoulder: [0, 0, .18], LeftArm: [-.3, 0, -1.3], RightArm: [-.3, 0, 1.3], LeftForeArm: [0, -.25, 0], RightForeArm: [0, .25, 0],
@@ -3632,8 +3633,8 @@
       nodes.Spine.scaling.set(.86, 1, .86);
       skinnedCut(body, "white bodice", (x, y) => y > .9 && y < 1.48 && Math.abs(x) < .38, () => .014, cloth.white);
       // One long skirt from the waist hides the legs and frays into smoke.
-      const skirt = lathe("white skirt", [[.17, .98], [.21, .85], [.25, .6], [.27, .35], [.26, .15]], cloth.white, 16); onBone(nodes, "Hips", skirt);
-      const tail = lathe("dress tail", [[.26, .16], [.24, -.05], [.16, -.35], [.04, -.7]], gm.smokeWhite, 16); onBone(nodes, "Hips", tail);
+      const skirt = lathe("white skirt", [[.16, .98], [.18, .85], [.19, .62], [.16, .4]], cloth.white, 16); onBone(nodes, "Hips", skirt);
+      const tail = lathe("dress tail", [[.16, .42], [.14, .2], [.08, -.05], [.02, -.3]], gm.smokeWhite, 16); onBone(nodes, "Hips", tail);
       ghostEyes(nodes, gm.eyeRed, .032);
       const mouth = B.MeshBuilder.CreateSphere("ghost mouth", { diameter: .05, segments: 5 }, scene); mouth.material = gm.mouth; mouth.position.set(0, 1.575, .1); mouth.scaling.set(1, 1.5, .5); onBone(nodes, "Head", mouth);
       const hair = ghostHair(nodes, [-1.3, -.8, -.3, .3, .8, 1.3].map(a => {
