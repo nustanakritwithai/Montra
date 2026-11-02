@@ -2,7 +2,7 @@ import { FORGE } from "./ForgeRules.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
 import { WAR_SIDE_SIZE, WAR_HOLD, warSites, type Battlefield, type WarSide } from "./TerritoryWar.js";
 import {CASTLE_ID,CASTLE_ENABLED,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
-import { Encoder } from "@colyseus/schema";
+import { Encoder, StateView } from "@colyseus/schema";
 import { randomUUID } from "node:crypto";
 import {
   CHARACTER_SAVE_INTERVAL_MS, characterStore, characterIdFromToken,
@@ -46,6 +46,7 @@ import { BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCoo
 import { BUILD_CATALOG, DEFAULT_WARD_TALENT, DUAL_SWORD, isOccultPath, talentGroup, classSkill, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 import { BuffLedger } from "./BuffLedger.js";
 import { OCCULT_LESSONS, OCCULT_MASTERY_LABELS, OCCULT_MASTERY_REQUIREMENTS, newOccultBook, occultPoints, validateOccultBook, type OccultBook, type OccultLesson, type OccultSkillId, type OccultPath, type OccultMastery } from "./OccultRules.js";
+import { BLADE_LESSONS, BLADE_PRACTICE_LABELS, bladePoints, newBladeBook, validateBladeBook, type BladeBook, type BladeLesson, type BladeSkillId } from "./BladeRules.js";
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, SWORD_SCHOOLS, SWORD_NODES, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
@@ -166,6 +167,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private muayBooks = new Map<string, MuayBook>();
   // Occult books are private; sending them on request avoids inflating world snapshots.
   private occultBooks = new Map<string, OccultBook>();
+  private bladeBooks = new Map<string, BladeBook>();
+  private bladeCloaks = new Map<string, number>();
+  private bladeCasts = new Map<string, number>();
+  private bladeMarks = new Map<string,{targetId:string;until:number}>();
+  private bladeOpenings = new Map<string,number>();
+  private bladeEvades = new Map<string,number>();
+  private bladeWindups = new Map<string,{targetId:string;until:number;power:number;ambush:boolean}>();
   private occultMarks = new Map<string,{targetId:string;until:number}>();
   private occultCurses = new Map<string,{ownerId:string;until:number;nextTick:number;damage:number}>();
   private occultSpiritOrders = new Map<string,{targetId:string;until:number;skillId:"seer_spirit"|"seer_spirit_bind"}>();
@@ -192,7 +200,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private climbs = new Map<string, WorldPoint>();
   private flightTransitions = new Map<string, { targetY: number; landing: boolean }>();
 
-  private sameCombatMap(ownerId: string, targetId: string): boolean {
+  private syncPlayerViews():void {
+    for(const client of this.clients) {
+      if(!client.view) continue;
+      const allies=this.parties.get(client.sessionId)?.members;
+      for(const [id,player] of this.state.players) {
+        const canSee=id===client.sessionId || !this.bladeCloaks.has(id) || Boolean(allies?.includes(id));
+        const visible=client.view.has(player);
+        if(canSee && !visible)client.view.add(player);
+        else if(!canSee && visible)client.view.remove(player);
+      }
+    }
+  }
+
+  private bladeHiddenFrom(viewerId:string,targetId:string):boolean {
+    return this.bladeCloaks.has(targetId) && viewerId!==targetId && !this.parties.get(viewerId)?.members.includes(targetId);
+  }
+
+  private sameCombatMap(ownerId: string, targetId: string, allowConcealed=false): boolean {
     const owner = this.state.players.get(ownerId);
     if (!owner || this.pendingWarps.has(ownerId) || this.pendingWarps.has(targetId)) return false;
     if (isRestArea(owner.mapId, owner)) return false;
@@ -201,6 +226,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(this.field && (!this.battleActive || this.warSeats.get(ownerId)?.side===this.warSeats.get(targetId)?.side))return false;
     if (!this.field && this.parties.get(ownerId)?.members.includes(targetId)) return false;
     const target = this.state.players.get(targetId);
+    if(!allowConcealed && target && this.bladeHiddenFrom(ownerId,targetId)) return false;
     return Boolean(target && target.mapId === owner.mapId && !isRestArea(target.mapId,target));
   }
 
@@ -257,6 +283,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const task = characterStore.save({ ...snapshot, build: selection, ...(grantedInventory ? {inventory:grantedInventory, muayWrapGranted:true} : {}) }).then(() => {
       // Change temporary ritual state only after the new build is safely saved.
       if (player.pathId !== build.path) {
+        this.endBladeCloak(id,"class_changed");
+        this.clearBladeMark(id);this.bladeOpenings.delete(id);this.bladeEvades.delete(id);this.bladeWindups.delete(id);this.bladeCasts.delete(id);
+        this.effects.remove(id,"blade_focus",id);this.effects.remove(id,"blade_veil_guard",id);
+        this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
         this.occultMarks.delete(id);
         this.occultSpiritOrders.delete(id);
         this.occultSpiritPracticed.delete(id);
@@ -281,6 +311,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       player.wardTalentId = build.path === "sentinel" ? talent : "";
       player.bladeTalentId = build.path === "blade" ? talent : "";
+      if(build.path==="blade" && !this.bladeBooks.has(id))this.bladeBooks.set(id,newBladeBook());
       client.send("build_selected", selection);
       if (isOccultPath(build.path)) this.sendOccultBook(client);
     }, error => {
@@ -586,6 +617,238 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.broadcast("muay_skill_used",{playerId:id,skillId:"grapple",targetId:hold.targetId},{afterNextPatch:true});void this.saveCharacter(id);
   }
 
+  private sendBladeBook(client:Client):void {
+    const player=this.state.players.get(client.sessionId),book=this.bladeBooks.get(client.sessionId);
+    if (!player || !book || player.pathId!=="blade") return;
+    try { client.send("blade_book_state",{book,lessons:BLADE_LESSONS,practiceLabels:BLADE_PRACTICE_LABELS,points:bladePoints(player.level)}); }
+    catch(error) { console.warn("MONTRA blade book notice was not delivered",error); }
+  }
+
+  private endBladeCloak(id:string,reason:string):boolean {
+    if(!this.bladeCloaks.delete(id)) return false;
+    const player=this.state.players.get(id),book=this.bladeBooks.get(id);
+    if(reason!=="class_changed" && reason!=="safe_area" && reason!=="dead" && player?.alive && player.pathId==="blade" && book?.learned.includes("veil_guard") && this.effects.modifiers(id).length<STACKING_RULES.maxModifiers) {
+      this.effects.grant(id,{id:"blade_veil_guard",sourceId:id,group:"blade_defense",bonuses:{def:BLADE_LESSONS.veil_guard.power}},this.simulatedMs+2000);
+      this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
+    }
+    this.syncPlayerViews();
+    try {this.clients.find(client=>client.sessionId===id)?.send("blade_cloak_changed",{active:false,reason});}
+    catch(error) {console.warn("MONTRA blade cloak notice was not delivered",error);}
+    return true;
+  }
+
+  private castBladeCloak(client:Client,message:unknown):void {
+    if(!message || typeof message!=="object" || Array.isArray(message) ||
+        Object.keys(message).length!==1 || (message as Record<string,unknown>).skillId!=="cloak")
+      return this.reject(client,"invalid_blade_skill");
+    const id=client.sessionId,player=this.spellCaster(client),book=this.bladeBooks.get(id);
+    if(!player || !book) return;
+    if(player.pathId!=="blade" || !this.persistentCharacters.has(id)) return this.reject(client,"blade_class_required");
+    if(!book.learned.includes("cloak") || !book.slots.includes("cloak")) return this.reject(client,"blade_skill_locked");
+    if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id)) return this.reject(client,"character_busy");
+    if(this.bladeCloaks.has(id)) return this.reject(client,"blade_cloak_active");
+    if(player.flying || !isOnGround(player.y) || isRestArea(player.mapId,player)) return this.reject(client,"blade_cloak_location");
+    if(this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<2000) return this.reject(client,"blade_cloak_combat");
+    const lesson=BLADE_LESSONS.cloak;
+    if(Date.now()<(book.cooldowns.cloak ?? 0)) return this.reject(client,"blade_cooldown");
+    if(player.stamina<lesson.stamina) return this.reject(client,"insufficient_stamina");
+    player.stamina-=lesson.stamina;book.cooldowns.cloak=Date.now()+lesson.cooldownMs;
+    this.attackTargets.delete(id);this.destinations.delete(id);player.targetId="";player.combatState="attacking";
+    this.bladeCasts.set(id,this.simulatedMs+600);
+    this.broadcast("blade_cloak_cast",{playerId:id,durationMs:600},{afterNextPatch:true});
+    this.sendBladeBook(client);void this.saveCharacter(id);
+  }
+
+  private recordBladePractice(id:string,category:keyof BladeBook["practice"]):void {
+    const book=this.bladeBooks.get(id),player=this.state.players.get(id);
+    if(!book || player?.pathId!=="blade") return;
+    book.practice[category]=Math.min(1_000_000,book.practice[category]+1);
+    const client=this.clients.find(c=>c.sessionId===id);if(client)this.sendBladeBook(client);
+  }
+
+  private clearBladeMark(id:string):void {
+    if(this.bladeMarks.delete(id))this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"blade_mark_state",{active:false});
+  }
+
+  private recordBladeOpening(id:string,monster:boolean):void {
+    this.bladeOpenings.set(id,this.simulatedMs+4000);
+    this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"blade_opening",{durationMs:4000});
+    if(monster)this.recordBladePractice(id,"ambush");
+  }
+
+  private bladeDamage(id:string,targetId:string,power:number):boolean {
+    const player=this.state.players.get(id),monster=this.getMonster(targetId),target=monster ?? this.state.players.get(targetId);
+    if(!player?.alive || player.pathId!=="blade" || !target?.alive || !this.sameCombatMap(id,targetId) ||
+       distance3d(player,target)>3 || Math.abs(player.y-target.y)>1.1 || !this.bodyPathClear(player.mapId,player,target))return false;
+    this.recordCombat(id,targetId);
+    const attack=(player.atk+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee)*power*(monster?1:0.75);
+    if(monster) this.hitMonsterWithSpell(id,monster,calculateDamage(attack,monster.defense,monster.level),"sword");
+    else {
+      const victim=target as Player,damage=this.swordGuardDamage(targetId,player,calculateDamage(attack,victim.def,victim.level));
+      victim.hp=Math.max(0,victim.hp-damage);victim.hitSeq++;
+      this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"blade"},{afterNextPatch:true});
+      if(victim.hp===0){player.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:player.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});}
+    }
+    return true;
+  }
+
+  private castBladeSkill(client:Client,message:unknown):void {
+    if(!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_blade_skill");
+    const input=message as Record<string,unknown>,keys=Object.keys(input);
+    if(typeof input.skillId!=="string" || !Object.hasOwn(BLADE_LESSONS,input.skillId) ||
+       keys.some(key=>key!=="skillId" && key!=="targetId") || (input.targetId!==undefined && typeof input.targetId!=="string"))
+      return this.reject(client,"invalid_blade_skill");
+    if(input.skillId==="cloak")return this.castBladeCloak(client,message);
+    const id=client.sessionId,skillId=input.skillId as BladeSkillId,skill:BladeLesson=BLADE_LESSONS[skillId];
+    const player=this.spellCaster(client),book=this.bladeBooks.get(id);
+    if(!player || !book)return;
+    if(player.pathId!=="blade" || !this.persistentCharacters.has(id))return this.reject(client,"blade_class_required");
+    if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
+    if(!book.learned.includes(skillId) || !book.slots.includes(skillId) || skill.effect==="passive")return this.reject(client,"blade_skill_locked");
+    if(player.flying || !isOnGround(player.y) || isRestArea(player.mapId,player))return this.reject(client,"blade_cloak_location");
+    if(this.bladeWindups.has(id))return this.reject(client,"blade_windup_active");
+    const now=Date.now();if(now<(book.cooldowns[skillId] ?? 0))return this.reject(client,"blade_cooldown");
+    if(player.stamina<skill.stamina)return this.reject(client,"insufficient_stamina");
+    const targeted=["approach","strike","consume","windup","counter"].includes(skill.effect);
+    let targetId="",target:Monster|Player|undefined,monster:Monster|undefined;
+    if(targeted){
+      const order=parseAttackCommand({targetId:input.targetId}) ?? parsePkTargetCommand({targetId:input.targetId});
+      if(!order)return this.reject(client,"invalid_blade_target");
+      targetId=order.targetId;monster=this.getMonster(targetId);target=monster ?? this.state.players.get(targetId);
+      if(!target?.alive || targetId===id || !this.sameCombatMap(id,targetId))return this.reject(client,"target_unavailable");
+      if(!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId)))return this.reject(client,"target_unavailable");
+      if(distance3d(player,target)>skill.range || Math.abs(player.y-target.y)>1.1)return this.reject(client,"blade_out_of_range");
+      if(!this.bodyPathClear(player.mapId,player,target))return this.reject(client,"blade_blocked");
+    } else if(input.targetId!==undefined) return this.reject(client,"invalid_blade_skill");
+    const cloaked=this.bladeCloaks.has(id),mark=this.bladeMarks.get(id),guard=this.swordGuards.get(id);
+    if((skill.effect==="approach" || skillId==="hidden_edge") && !cloaked)return this.reject(client,"blade_cloak_required");
+    if(skill.effect==="consume" && (!mark || mark.targetId!==targetId || this.simulatedMs>=mark.until))return this.reject(client,"blade_mark_required");
+    if(skill.effect==="counter" && (!guard || this.simulatedMs>=guard.counterUntil))return this.reject(client,"blade_counter_required");
+    if(skill.effect==="focus" && this.simulatedMs>=(this.bladeOpenings.get(id) ?? 0))return this.reject(client,"blade_opening_required");
+    if(skill.effect==="focus" && this.effects.modifiers(id).length>=STACKING_RULES.maxModifiers)return this.reject(client,"blade_effect_limit");
+    if((skill.effect==="approach" && target) || skill.effect==="evade" || skill.effect==="retreat"){
+      const dx=target && skill.effect==="approach" ? target.x-player.x : Math.sin(player.facing);
+      const dz=target && skill.effect==="approach" ? target.z-player.z : Math.cos(player.facing);
+      const length=Math.hypot(dx,dz),travel=skill.effect==="approach" ? Math.max(0,length-1.7) : 1.2;
+      const vx=length>0.001?dx/length:0,vz=length>0.001?dz/length:0;
+      const next={x:player.x+vx*travel,y:player.y,z:player.z+vz*travel},map=getWorldMap(player.mapId);
+      if(!map || !this.canOccupy(next.x,next.z,next.y,false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"blade_blocked");
+      if(travel>0.00001){const sweep=advanceDash(player,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,player.y,false,player.mapId) && !isRestArea(player.mapId,{x,z}),map.bounds);
+        if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"blade_blocked");}
+      this.destinations.delete(id);this.attackTargets.delete(id);player.targetId="";player.combatState="idle";player.x=next.x;player.z=next.z;
+    }
+    player.stamina-=skill.stamina;book.cooldowns[skillId]=now+skill.cooldownMs;
+    if(skill.effect==="evade") {
+      this.endBladeCloak(id,"evade");this.swordGuards.set(id,{until:this.simulatedMs+500,factor:skill.power,direction:true,counterUntil:0});
+      this.bladeEvades.set(id,this.simulatedMs+500);
+    } else if(skill.effect==="retreat") this.endBladeCloak(id,"retreat");
+    else if(skill.effect==="focus") {
+      this.bladeOpenings.delete(id);this.effects.grant(id,{id:"blade_focus",sourceId:id,group:"blade_attack",bonuses:{atk:skill.power}},this.simulatedMs+8000);
+      this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
+    } else if(skill.effect==="windup") {
+      this.endBladeCloak(id,"attack");this.destinations.delete(id);this.attackTargets.delete(id);
+      player.targetId="";player.combatState="attacking";
+      this.bladeWindups.set(id,{targetId,until:this.simulatedMs+800,power:skill.power*(cloaked?(monster?1.5:1.2):1),ambush:cloaked});
+    } else if(target && skill.effect!=="approach") {
+      const ambush=this.endBladeCloak(id,"attack");
+      const hit=this.bladeDamage(id,targetId,skill.power*(ambush?(monster?1.5:1.2):1));
+      if(hit){
+        if(ambush)this.recordBladeOpening(id,Boolean(monster));
+        if(skillId==="hidden_edge"){this.bladeMarks.set(id,{targetId,until:this.simulatedMs+8000});this.sendSwordNotice(client,"blade_mark_state",{active:true,targetId,durationMs:8000});if(monster)this.recordBladePractice(id,"mark");}
+        if(skill.effect==="consume"){this.clearBladeMark(id);if(monster){this.recordBladePractice(id,"mark");this.recordBladePractice(id,"combo");}}
+        if(skill.effect==="counter" && guard)guard.counterUntil=0;
+      }
+    }
+    this.sendBladeBook(client);
+    if(skill.effect!=="approach" || !cloaked)this.broadcast("blade_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
+    else this.sendSwordNotice(client,"blade_skill_used",{playerId:id,skillId});
+    void this.saveCharacter(id);
+  }
+
+  private updateBladeEffects():void {
+    for(const [id,until] of this.bladeCasts)if(this.simulatedMs>=until){
+      this.bladeCasts.delete(id);
+      const player=this.state.players.get(id),client=this.clients.find(c=>c.sessionId===id);
+      if(!player?.alive || player.pathId!=="blade" || !client || this.pendingWarps.has(id) || isRestArea(player.mapId,player)){
+        if(player?.alive)player.combatState="idle";
+        continue;
+      }
+      player.combatState="idle";
+      for(const [attackerId,targetId] of [...this.attackTargets]) if(targetId===id){const attacker=this.state.players.get(attackerId);if(attacker)this.endAttack(attackerId,attacker);}
+      if(this.state.monster.targetId===id)this.state.monster.targetId="";
+      this.forest.clearTarget(id);this.bladeCloaks.set(id,this.simulatedMs+5000);this.syncPlayerViews();
+      this.sendSwordNotice(client,"blade_cloak_changed",{active:true,durationMs:5000});
+    }
+    for(const [id,mark] of this.bladeMarks)if(this.simulatedMs>=mark.until || !this.state.players.get(id)?.alive ||
+      !(this.getMonster(mark.targetId) ?? this.state.players.get(mark.targetId))?.alive)this.clearBladeMark(id);
+    for(const [id,until] of this.bladeOpenings)if(this.simulatedMs>=until)this.bladeOpenings.delete(id);
+    for(const [id,until] of this.bladeEvades)if(this.simulatedMs>=until)this.bladeEvades.delete(id);
+    for(const [id,windup] of this.bladeWindups)if(this.simulatedMs>=windup.until){
+      this.bladeWindups.delete(id);
+      const player=this.state.players.get(id);if(player?.alive)player.combatState="idle";
+      const hit=this.bladeDamage(id,windup.targetId,windup.power);
+      if(hit && windup.ambush)this.recordBladeOpening(id,Boolean(this.getMonster(windup.targetId)));
+      this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"blade_windup",{result:hit?"hit":"miss"});
+    }
+  }
+
+  private changeBladeBook(client:Client,message:unknown):void {
+    if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_blade_book");
+    const input=message as Record<string,unknown>,keys=Object.keys(input),action=input.action;
+    if (action==="learn") {
+      if(keys.length!==2 || typeof input.skillId!=="string") return this.reject(client,"invalid_blade_book");
+    } else if(action==="equip") {
+      if(keys.length!==3 || !Number.isInteger(input.slot) || (input.slot as number)<0 || (input.slot as number)>3 ||
+          (input.skillId!==null && typeof input.skillId!=="string")) return this.reject(client,"invalid_blade_book");
+    } else if(action==="reset") {
+      if(keys.length!==1) return this.reject(client,"invalid_blade_book");
+    } else return this.reject(client,"invalid_blade_book");
+    const id=client.sessionId,player=this.buildPlayer(client,"occult"),book=this.bladeBooks.get(id);
+    if(!player) return;
+    if(player.pathId!=="blade") return this.reject(client,"blade_class_required");
+    if(!book) return this.reject(client,"build_unavailable");
+    if(this.bladeCloaks.has(id) || this.bladeWindups.has(id) || this.bladeCasts.has(id)) return this.reject(client,"character_busy");
+    if(player.mapId!==DEFAULT_MAP_ID || !isOnGround(player.y) || Math.hypot(player.x,player.z)>6 ||
+        this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)
+      return this.reject(client,"blade_book_needs_shrine");
+    const next=validateBladeBook(book,player.level);
+    if(action==="learn") {
+      const skillId=input.skillId as BladeSkillId;
+      if(!Object.hasOwn(BLADE_LESSONS,skillId)) return this.reject(client,"invalid_blade_book");
+      const lesson:BladeLesson=BLADE_LESSONS[skillId];
+      if(next.learned.includes(skillId)) return this.reject(client,"blade_already_learned");
+      if(player.level<lesson.level) return this.reject(client,"blade_level");
+      if(next.learned.length>=bladePoints(player.level)) return this.reject(client,"blade_no_points");
+      if(lesson.requires.some(req=>!next.learned.includes(req as BladeSkillId))) return this.reject(client,"blade_prerequisite");
+      if(Object.entries(lesson.practice).some(([category,needed])=>next.practice[category as keyof typeof next.practice]<(needed ?? 0)))
+        return this.reject(client,"blade_practice");
+      next.learned.push(skillId);
+    } else if(action==="equip") {
+      const skillId=input.skillId as BladeSkillId|null;
+      if(skillId!==null && (!next.learned.includes(skillId) || BLADE_LESSONS[skillId].effect==="passive")) return this.reject(client,"blade_skill_locked");
+      for(let i=0;i<4;i++) if(skillId!==null && next.slots[i]===skillId) next.slots[i]=null;
+      next.slots[input.slot as number]=skillId;
+    } else {
+      if(!next.learned.length) return this.reject(client,"blade_book_empty");
+      next.learned=[];next.slots=[null,null,null,null];
+    }
+    const snapshot=this.captureCharacterSnapshot(id);
+    if(!snapshot) return this.reject(client,"build_unavailable");
+    this.pendingWarps.add(id);
+    const task=characterStore.save({...snapshot,bladeBook:next}).then(()=>{
+      this.bladeBooks.set(id,next);
+      if(action==="reset"){
+        this.clearBladeMark(id);this.bladeOpenings.delete(id);this.bladeEvades.delete(id);this.bladeWindups.delete(id);this.swordGuards.delete(id);
+        this.effects.remove(id,"blade_focus",id);this.effects.remove(id,"blade_veil_guard",id);
+        this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
+      }
+      this.sendBladeBook(client);
+      try {client.send("blade_book_changed",{action});} catch(error) {console.warn("MONTRA blade book confirmation was not delivered",error);}
+    },error=>{console.error("MONTRA blade book save failed",error);this.reject(client,"blade_book_save_failed");})
+      .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
+    this.pendingItemUses.set(id,task);
+  }
+
   private sendOccultBook(client:Client):void {
     const player=this.state.players.get(client.sessionId),book=this.occultBooks.get(client.sessionId);
     if (!player || !book || !isOccultPath(player.pathId)) return;
@@ -822,7 +1085,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const monster=this.getMonster(targetId);
     if (monster?.alive) {this.hitMonsterWithSpell(ownerId,monster,damage,"talisman");return;}
     const owner=this.state.players.get(ownerId),victim=this.state.players.get(targetId);
-    if (!owner?.alive || !victim?.alive || !this.sameCombatMap(ownerId,targetId)) return;
+    if (!owner?.alive || !victim?.alive || !this.sameCombatMap(ownerId,targetId,true)) return;
+    this.endBladeCloak(targetId,"damaged");
     damage=this.swordGuardDamage(targetId,owner,damage);
     victim.hp=Math.max(0,victim.hp-damage);victim.hitSeq++;
     this.broadcast("pvp_hit",{attackerId:ownerId,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"occult"},{afterNextPatch:true});
@@ -841,7 +1105,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for (const [targetId,curse] of this.occultCurses) {
       const owner=this.state.players.get(curse.ownerId),target=this.getMonster(targetId) ?? this.state.players.get(targetId);
       if (this.simulatedMs>=curse.until || !owner?.alive || owner.pathId!=="seer" || !target?.alive ||
-          !this.sameCombatMap(curse.ownerId,targetId)) {this.clearOccultCurse(targetId,"expired");continue;}
+          !this.sameCombatMap(curse.ownerId,targetId,true)) {this.clearOccultCurse(targetId,"expired");continue;}
       if (this.simulatedMs>=curse.nextTick) {
         curse.nextTick+=2000;
         this.recordCombat(curse.ownerId,targetId);
@@ -961,6 +1225,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private swordGuardDamage(id:string, attacker:{x:number;z:number}, damage:number,guardPierce=0):number {
+    if(this.bladeCasts.delete(id)) {
+      const casting=this.state.players.get(id);if(casting?.alive)casting.combatState="idle";
+      this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"blade_cloak_changed",{active:false,reason:"interrupted"});
+    }
+    if(this.bladeWindups.delete(id)) {
+      const winding=this.state.players.get(id);if(winding?.alive)winding.combatState="idle";
+      this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"blade_windup",{result:"interrupted"});
+    }
     const guard=this.swordGuards.get(id), player=this.state.players.get(id);
     if (!guard || !player || this.simulatedMs>=guard.until) return damage;
     const dx=attacker.x-player.x, dz=attacker.z-player.z, length=Math.hypot(dx,dz);
@@ -969,6 +1241,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const defense=this.muayDefenseWindows.get(id);
     const kind=defense && defense.until===guard.until && this.simulatedMs<defense.until ? defense.kind : undefined;
     guard.counterUntil=this.simulatedMs+3000;
+    if(player.pathId==="blade" && this.simulatedMs<(this.bladeEvades.get(id) ?? 0)) {
+      this.bladeEvades.delete(id);guard.until=this.simulatedMs;
+      if(attacker===this.state.monster || [...this.state.monsters.values()].some(monster=>monster===attacker))this.recordBladePractice(id,"evade");
+      this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"blade_evade",{success:true});
+    }
     this.recordSwordTraining(id,"blocks");
     if(kind!=="evade")this.recordMuayTraining(id,"blocks");
     if(kind) {guard.until=this.simulatedMs;this.clearMuayDefense(id,"success");}
@@ -1345,6 +1622,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
   private leaveParty(id:string):void {
     const result=this.parties.leave(id); if(!result) return;
+    if(this.bladeCloaks.size)this.syncPlayerViews();
     const client=this.clients.find(c=>c.sessionId===id);
     try { client?.send("party_state",{partyId:null,leaderId:null,members:[]}); } catch { /* disconnected */ }
     if (result.current) this.sendPartyState(result.current);
@@ -1684,7 +1962,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.partyAction(client,()=>{
         const invite=this.parties.invitation(client.sessionId,inviteId,this.simulatedMs);
         if(!this.state.players.has(invite.from) || !this.persistentCharacters.has(invite.from) || this.pendingCharacterLeaves.has(invite.from)) throw new Error("party_invite_expired");
-        this.sendPartyState(this.parties.accept(client.sessionId,inviteId,this.simulatedMs));
+        const party=this.parties.accept(client.sessionId,inviteId,this.simulatedMs);
+        if(this.bladeCloaks.size)this.syncPlayerViews();
+        this.sendPartyState(party);
       });
     },
     party_decline: (client:Client,message:unknown) => {
@@ -1720,7 +2000,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.economyAction(client,()=>{
         const id=client.sessionId, target=this.clients.find(c=>c.sessionId===order.targetId), a=this.state.players.get(id), b=this.state.players.get(order.targetId);
         for (const [key,trade] of this.trades) if (this.simulatedMs>=trade.expires) this.trades.delete(key);
-        if (!target || !a || !b || id===order.targetId || !this.economyId(target) || a.mapId!==b.mapId || distance3d(a,b)>5 || [...this.trades.values()].some(t=>[t.a,t.b].includes(id)||[t.a,t.b].includes(order.targetId))) throw new Error("invalid_trade");
+        if (!target || !a || !b || id===order.targetId || !this.economyId(target) || this.bladeHiddenFrom(id,order.targetId) || this.bladeHiddenFrom(order.targetId,id) || a.mapId!==b.mapId || distance3d(a,b)>5 || [...this.trades.values()].some(t=>[t.a,t.b].includes(id)||[t.a,t.b].includes(order.targetId))) throw new Error("invalid_trade");
         const trade:TradeSession={id:randomUUID(),a:id,b:order.targetId,expires:this.simulatedMs+60_000,offers:{},items:{},fingerprints:{},confirmed:new Set()};
         this.trades.set(trade.id,trade); this.notifyTrade(trade,"trade_update");
       });
@@ -1829,12 +2109,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     occult_book: (client: Client, message: unknown) => this.changeOccultBook(client,message),
     occult_skill: (client: Client, message: unknown) => this.castOccultSkill(client,message),
+    blade_book_get: (client: Client, message: unknown) => {
+      if(!parseEmptyCommand(message)) return this.reject(client,"invalid_blade_book");
+      const player=this.buildPlayer(client,"occult");
+      if(!player) return;
+      if(player.pathId!=="blade") return this.reject(client,"blade_class_required");
+      this.sendBladeBook(client);
+    },
+    blade_book: (client: Client, message: unknown) => this.changeBladeBook(client,message),
+    blade_skill: (client: Client, message: unknown) => this.castBladeSkill(client,message),
     cast_class_skill: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_build");
       this.castClassSkill(client);
     },
     allocate_stat: (client: Client, _message: unknown) => this.reject(client, "automatic_stats"),
     warp: (client: Client, message: unknown) => {
+      if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
+      if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
       if(this.field)return client.send("territory_error",{reason:"war_exit"});
       const id = client.sessionId;
       if(this.muayControlled(id))return this.reject(client,"muay_controlled");
@@ -2021,6 +2312,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.pendingItemUses.set(id, task);
     },
     fly: (client: Client, message: unknown) => {
+      if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
+      if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
       if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_flight");
@@ -2060,6 +2353,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }, { afterNextPatch: true });
     },
     dash: (client: Client, message: unknown) => {
+      if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
+      if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
       if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const direction = parseDashCommand(message);
@@ -2121,6 +2416,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       void this.saveCharacter(id);
     },
     move: (client: Client, message: unknown) => {
+      if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
       if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const destination = parseMoveCommand(message, getWorldMap(this.state.players.get(client.sessionId)?.mapId ?? DEFAULT_MAP_ID)?.bounds);
@@ -2149,6 +2445,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
 
     attack: (client: Client, message: unknown) => {
+      if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
       if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const monsterOrder = parseAttackCommand(message);
@@ -2235,6 +2532,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // The client never writes Y. A validated ladder is the only route
     // between ground y=0 and the watchwall top y=4.
     climb: (client: Client, message: unknown) => {
+      if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
+      if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
       if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const villageOrder=parseClimbRequest(message);
@@ -2284,6 +2583,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private spellCaster(client: Client) {
     const id = client.sessionId;
+    if(this.bladeWindups.has(id) || this.bladeCasts.has(id))return this.reject(client,"blade_windup_active");
     if(this.muayControlled(id))return this.reject(client,"muay_controlled");
     const player = this.state.players.get(id);
     if (this.pendingWarps.has(id)) return this.reject(client, "character_busy");
@@ -2667,6 +2967,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private tick(dt: number) {
+    this.updateBladeEffects();
+    for(const [id,until] of this.bladeCloaks) {
+      const player=this.state.players.get(id);
+      if(!player?.alive || player.pathId!=="blade" || isRestArea(player.mapId,player))this.endBladeCloak(id,"safe_area");
+      else if(this.simulatedMs>=until)this.endBladeCloak(id,"expired");
+    }
     this.updateTerritory();
     this.updateOccultEffects();
     this.updateMuayGrapples();
@@ -2683,10 +2989,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!p || !this.sameCombatMap(id,m.id)) return;
       const profile=this.forest.profile(m.id); if(!profile)return;
       const damage=this.swordGuardDamage(id,m,calculateDamage(profile.attack*force,p.def,p.level));
+      this.endBladeCloak(id,"damaged");
       p.hp=Math.max(0,p.hp-damage);p.hitSeq++;this.lastCombatMs.set(id,this.simulatedMs);
       this.broadcast("monster_hit",{targetId:id,attackerId:m.id,damage,hp:p.hp,maxHp:p.maxHp,hitSeq:p.hitSeq},{afterNextPatch:true});
       if(p.hp===0)this.knockoutPlayer(id,"monster",m.id);
-    }, id => this.broadcast("monster_respawn",{targetId:id}));
+    }, id => this.broadcast("monster_respawn",{targetId:id}),
+    (id,p,m)=>!this.bladeCloaks.has(id) || planarDistance(p,m)<=(m.tier==="normal"?(this.bladeBooks.get(id)?.learned.includes("quiet_step")?0.75:1.5):5));
     this.updatePlayerAttacks();
     this.updateSummons(dt);
     this.updateResources(dt);
@@ -2780,6 +3088,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.activeDashes.delete(sessionId);
         continue;
       }
+      const moveSpeed=player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed *
+        (this.bladeCloaks.has(sessionId) && this.bladeBooks.get(sessionId)?.learned.includes("quiet_step") ? 1+BLADE_LESSONS.quiet_step.power : 1);
 
       const dash = this.activeDashes.get(sessionId);
       if (dash) {
@@ -2842,7 +3152,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           z: clampToMap(player.z + dz * ratio, getWorldMap(player.mapId)!.bounds, "z"),
         };
         const next = stepTowards(player, approach,
-          (player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed) * dt);
+          moveSpeed * dt);
         if (this.canOccupy(next.x,next.z,player.y,player.flying,player.mapId)) {
           player.x=next.x; player.z=next.z;
           player.combatState = "approaching";
@@ -2863,7 +3173,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const dx = target.x - player.x;
       const dz = target.z - player.z;
       const next = stepTowards(player, target,
-        (player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed) * dt);
+        moveSpeed * dt);
       if (next.moved) player.facing = facingTo(dx, dz);
       if (this.canOccupy(next.x,next.z,player.y,player.flying,player.mapId)) {
         player.x=next.x;
@@ -2919,6 +3229,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const last = this.lastAttackMs.get(attackerId) ?? -Infinity;
       if (this.simulatedMs - last < cooldown) continue;
       this.lastAttackMs.set(attackerId, this.simulatedMs);
+      const ambush=this.endBladeCloak(attackerId,"attack");
+      if(ambush)this.recordBladeOpening(attackerId,Boolean(monster));
       this.recordCombat(attackerId, targetId);
       if (dualSword) {
         const previous=this.swordCombos.get(attackerId);
@@ -2932,7 +3244,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (attacker.pathId === "muay_boran" && equippedWeaponId(this.inventories.get(attackerId)) === MUAY_WRAP_ID) this.recordMuayTraining(attackerId,"strikes");
 
       const meleeBonus = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp").melee;
-      const swordMastery = dualSword && this.swordTrees.get(attackerId)?.learned.includes("rhythm") ? 1.05 : 1;
+      const swordMastery = (dualSword && this.swordTrees.get(attackerId)?.learned.includes("rhythm") ? 1.05 : 1) * (ambush ? (monster?1.5:1.2) : 1);
       if (monster) {
         const meleeDamage = calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, monster.defense, monster.level);
         monster.hp = Math.max(0, monster.hp - meleeDamage);
@@ -2971,6 +3283,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private knockoutPlayer(id: string, cause: "pk" | "monster", attackerId = "") {
+    this.endBladeCloak(id,"dead");this.bladeCasts.delete(id);this.bladeWindups.delete(id);
     this.releaseMuayFor(id,"knockout");
     this.clearGrappleCountersFor(id,"knockout");
     this.swordCombos.delete(id);
@@ -3066,7 +3379,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Keep an existing target if it is alive and remains in the combat area.
     let targetId = monster.targetId;
     let target = targetId ? this.state.players.get(targetId) : undefined;
-    if (!target || !target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID || isRestArea(target.mapId,target) || !isOnGround(target.y) ||
+    if (!target || !target.alive || this.pendingWarps.has(targetId) || (this.bladeCloaks.has(targetId) && planarDistance(monster,target)>(this.bladeBooks.get(targetId)?.learned.includes("quiet_step")?0.75:1.5)) || target.mapId !== DEFAULT_MAP_ID || isRestArea(target.mapId,target) || !isOnGround(target.y) ||
         planarDistance(monster, target) > RULES.monsterGiveUpRadius) {
       target = undefined;
       targetId = "";
@@ -3076,7 +3389,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!target) {
       let nearest: number = RULES.monsterAggroRadius;
       for (const [id, player] of this.state.players) {
-        if (!player.alive || this.pendingWarps.has(id) || player.mapId !== DEFAULT_MAP_ID || isRestArea(player.mapId,player) || !isOnGround(player.y)) continue;
+        if (!player.alive || this.pendingWarps.has(id) || (this.bladeCloaks.has(id) && planarDistance(monster,player)>(this.bladeBooks.get(id)?.learned.includes("quiet_step")?0.75:1.5)) || player.mapId !== DEFAULT_MAP_ID || isRestArea(player.mapId,player) || !isOnGround(player.y)) continue;
         const distance = planarDistance(monster, player);
         if (distance < nearest) {
           nearest = distance;
@@ -3141,6 +3454,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastCombatMs.set(targetId, this.simulatedMs);
 
     const damage = this.swordGuardDamage(targetId,this.state.monster,calculateDamage(RULES.monsterAttackDamage, target.def, target.level));
+    this.endBladeCloak(targetId,"damaged");
     target.hp = Math.max(0, target.hp - damage);
     target.hitSeq += 1;
     this.broadcast("monster_hit", {
@@ -3227,6 +3541,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       muayCooldowns: this.muayCooldowns.get(id),
       muayBook: this.muayBooks.get(id),
       occultBook: this.occultBooks.get(id),
+      bladeBook: this.bladeBooks.get(id),
       muayWrapGranted: this.muayWrapGranted.has(id),
       stamina: player.stamina,
       x: player.x,
@@ -3344,10 +3659,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.muayCooldowns.set(client.sessionId, saved?.muayCooldowns ?? {});
       this.muayBooks.set(client.sessionId, saved?.muayBook ?? newMuayBook());
       this.occultBooks.set(client.sessionId, saved?.occultBook ?? newOccultBook());
+      if(saved?.bladeBook || player.pathId==="blade")this.bladeBooks.set(client.sessionId, saved?.bladeBook ?? newBladeBook());
       if (saved?.muayWrapGranted) this.muayWrapGranted.add(client.sessionId);
       this.statAllocations.set(client.sessionId, allocations);
       this.applyStats(client.sessionId,player, allocations);
       this.state.players.set(client.sessionId, player);
+      client.view=new StateView();
+      this.syncPlayerViews();
       if((options as Record<string,unknown>)?.warVersion===1)this.warClients.add(client.sessionId);
       if(castleReady)this.castleClients.add(client.sessionId);
       if(provinceReady)this.provinceClients.add(client.sessionId);
@@ -3461,6 +3779,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.muayFollowups.delete(id);
       this.muayBooks.delete(id);
       this.occultBooks.delete(id);
+      this.bladeBooks.delete(id);
+      this.bladeCloaks.delete(id);
+      this.bladeCasts.delete(id);
+      this.bladeMarks.delete(id);this.bladeOpenings.delete(id);this.bladeEvades.delete(id);this.bladeWindups.delete(id);
       this.occultMarks.delete(id);
       this.occultSpiritOrders.delete(id);
       this.occultHealingFields.delete(id);
@@ -3514,6 +3836,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.muayGrappleCounters.clear();
     this.muayBooks.clear();
     this.occultBooks.clear();
+    this.bladeBooks.clear();
+    this.bladeCloaks.clear();
+    this.bladeCasts.clear();
+    this.bladeMarks.clear();this.bladeOpenings.clear();this.bladeEvades.clear();this.bladeWindups.clear();
     this.occultSpiritPracticed.clear();
     this.occultMarks.clear();
     this.occultSpiritOrders.clear();
