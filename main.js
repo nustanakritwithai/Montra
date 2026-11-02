@@ -2069,6 +2069,7 @@
   };
   const sashHero = plaid("pha khao ma red", "#8c2a20", "#e6d7b8"), sashFriend = plaid("pha khao ma teal", "#1f5f63", "#d9e6d8");
   const pantsHero = mat("dark cotton trousers", "#1e1819"), pantsFriend = mat("traveller trousers", "#17262a");
+  pantsHero.backFaceCulling = pantsFriend.backFaceCulling = false;
   const pouchCloth = mat("rice pouch", "#3a332b"), ropeRed = mat("red cord", "#8e2a22"), jarClay = mat("spirit jar", "#2b2321"), waxRed = mat("seal wax", "#5c1a12");
   const jarCarved = mat("carved spirit jar", "#ffffff");
   jarCarved.diffuseTexture = paintTexture("spirit jar script", 256, (c, s) => {
@@ -2399,7 +2400,6 @@
     cyl(0, 1.715, -.035, .022, .055, .055, shawl, 8);
     onBone("Head");
     // Hips: trouser seat, cloth sash with a knot, rice pouch, spirit jar.
-    loft([[.7, .2, .15], [.78, .205, .148], [.88, .19, .135], [.97, .158, .112]], pants, 16);
     cyl(0, .965, 0, .055, .305, .3, sash, 12).scaling.z = .72;
     box(-.06, .9, .108, .055, .12, .015, sash).rotation.z = -.15;
     ball(-.178, .85, .035, .12, pouchCloth, 6).scaling.set(1, 1.15, .85);
@@ -2415,16 +2415,47 @@
     for (const side of [-1, 1]) box(jx + side * .05, jy + .015, jz + .03, .03, .13, .006, talismanPaper).rotation.z = side * .25;
     for (const dx of [-.02, 0, .02]) cyl(jx + dx, jy + .095, jz + .035, .01, .024, .024, waxRed, 8).rotation.x = 1.1;
     onBone("Hips");
-    // Loose fisherman trousers to mid-calf, in bone-local space.
-    for (const side of ["Left", "Right"]) {
-      // Loose cloth sits well outside the skin so bent knees never poke through.
-      loft([[.06, .132, .126], [-.06, .126, .122], [-.22, .112, .112], [-.35, .106, .108], [-.42, .102, .104]], pants, 12);
-      ball(0, .02, 0, .25, pants, 8); ball(0, -.43, .01, .21, pants, 8);
-      onBone(side + "UpLeg", [0, 0, 0]);
-      loft([[.07, .097, .099], [0, .098, .1], [-.11, .094, .095], [-.2, .096, .095], [-.212, .09, .09]], pants, 12);
-      ball(0, -.005, -.005, .23, pants, 8);
-      onBone(side + "Leg", [0, 0, 0]);
+    // Trousers are skinned (see skinnedTrousers), so no rigid leg pieces here.
+  }
+  // Fisherman trousers cut from the body mesh itself: every triangle between
+  // the waist and mid-calf, pushed out along its normal and kept on the same
+  // bone weights, so the cloth bends exactly with the legs and the skin can
+  // never poke through at the knees or hips. Built once per loaded model.
+  let trouserData = null;
+  function skinnedTrousers(body, material) {
+    if (!trouserData) {
+      const K = B.VertexBuffer, pos = body.getVerticesData(K.PositionKind), nor = body.getVerticesData(K.NormalKind);
+      const mi = body.getVerticesData(K.MatricesIndicesKind), mw = body.getVerticesData(K.MatricesWeightsKind), idx = body.getIndices();
+      if (!pos || !nor || !mi || !mw || !idx) return null;
+      const HEM = .3, WAIST = .985, remap = new Map(), out = { positions: [], normals: [], indices: [], mi: [], mw: [] };
+      const inside = v => { const y = pos[v * 3 + 1]; return y > HEM && y < WAIST && Math.abs(pos[v * 3]) < .3; };
+      for (let i = 0; i < idx.length; i += 3) {
+        const tri = [idx[i], idx[i + 1], idx[i + 2]];
+        if (!tri.every(inside)) continue;
+        for (const v of tri) {
+          if (!remap.has(v)) {
+            remap.set(v, out.positions.length / 3);
+            const y = pos[v * 3 + 1];
+            // Looser over thigh and knee, snug at waist and hem.
+            const t = Math.min(1, Math.max(0, (y - HEM) / (WAIST - HEM)));
+            const thick = .016 + .03 * Math.sin(Math.PI * Math.min(1, t * 1.25)) * (t < .85 ? 1 : .4);
+            for (let k = 0; k < 3; k++) { out.positions.push(pos[v * 3 + k] + nor[v * 3 + k] * thick); out.normals.push(nor[v * 3 + k]); }
+            for (let k = 0; k < 4; k++) { out.mi.push(mi[v * 4 + k]); out.mw.push(mw[v * 4 + k]); }
+          }
+          out.indices.push(remap.get(v));
+        }
+      }
+      trouserData = out;
     }
+    const mesh = new B.Mesh("skinned trousers", scene), data = new B.VertexData();
+    data.positions = trouserData.positions; data.normals = trouserData.normals; data.indices = trouserData.indices;
+    data.matricesIndices = trouserData.mi; data.matricesWeights = trouserData.mw;
+    data.applyToMesh(mesh);
+    mesh.skeleton = body.skeleton; mesh.numBoneInfluencers = body.numBoneInfluencers;
+    mesh.parent = body.parent; mesh.position.copyFrom(body.position); mesh.scaling.copyFrom(body.scaling);
+    if (body.rotationQuaternion) mesh.rotationQuaternion = body.rotationQuaternion.clone(); else mesh.rotation.copyFrom(body.rotation);
+    mesh.material = material; mesh.isPickable = false; mesh.alwaysSelectAsActiveMesh = true;
+    return mesh;
   }
   // Rotation taking local +Y (a weapon's blade/shaft axis) onto `dir`.
   function quatFromUp(dir) {
@@ -2448,6 +2479,8 @@
     for (const n of model.getDescendants(false)) nodes[n.name] = n;
     for (const m of model.getChildMeshes()) { m.isPickable = false; m.alwaysSelectAsActiveMesh = true; }
     shamanGear(a, nodes);
+    const body = model.getChildMeshes().find(m => m.skeleton);
+    if (body) skinnedTrousers(body, a.local ? pantsHero : pantsFriend);
     const socket = nodes.Socket_Hand_Weapon_R;
     for (const [kind, root] of Object.entries(a.weaponModels)) {
       root.parent = socket; root.position.set(0, 0, 0); root.scaling.setAll(.92);
