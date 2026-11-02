@@ -1,4 +1,4 @@
-import { classSkill, type WardTalentId, type PathId } from "./CharacterBuilds.js";
+import { classSkill, type WardTalentId, type BladeTalentId, type PathId } from "./CharacterBuilds.js";
 import { calculateModifiedStats } from "./StatModifiers.js";
 /** Deterministic arithmetic estimate, not a combat simulator or playtest. */
 import { calculateStats, calculateDamage, emptyAllocations } from "./Progression.js";
@@ -26,7 +26,7 @@ export function estimateEncounter(level:number, weapon:WeaponItemId, possession:
 }
 
 /** Equal-level solo fixture at the instant the chosen class skill activates. */
-export function compareBuild(level: number, weapon: WeaponItemId, path: PathId, talent?: WardTalentId) {
+export function compareBuild(level: number, weapon: WeaponItemId, path: PathId, talent?: WardTalentId | BladeTalentId) {
   const baseline = estimateEncounter(level, weapon, false);
   const base = calculateStats(level, emptyAllocations());
   const skill = classSkill(path, talent), monster = monsterProfile(level, "normal");

@@ -4400,6 +4400,12 @@
     const direction = ["เหนือ","ตะวันออกเฉียงเหนือ","ตะวันออก","ตะวันออกเฉียงใต้","ใต้","ตะวันตกเฉียงใต้","ตะวันตก","ตะวันตกเฉียงเหนือ"][(bearing+8)%8];
     return place.name + " · ทิศ" + direction + " ระยะ " + Math.round(distance(place)) + " หน่วย";
   }
+  function buildTalentGroup(catalog, path) {
+    if (catalog?.talentGroups) return catalog.talentGroups[path];
+    if (path === "sentinel" && catalog?.wardTalents) {
+      return {field:"wardTalent", defaultId:catalog.defaultWardTalent, variants:catalog.wardTalents};
+    }
+  }
   function openBuildFields(player) {
     const catalog = getBuildCatalog();
     if (!catalog || !player?.persistent) return;
@@ -4408,29 +4414,37 @@
     for (const [key, origin] of Object.entries(catalog.ancestries)) $("buildAncestry").add(new Option(origin.name + " · " + origin.trait, key));
     if (player.pathId) $("buildPath").value = player.pathId;
     if (player.ancestryId) $("buildAncestry").value = player.ancestryId;
-    const talentSelect = $("wardTalent");
-    for (const [key, ward] of Object.entries(catalog.wardTalents || {})) {
-      talentSelect.add(new Option(ward.name + " · " + ward.radius + " หน่วย / " + ward.durationMs / 1000 + " วินาที", key));
+    const talentSelect = $("buildTalent");
+    function loadTalents() {
+      const path = $("buildPath").value, group = buildTalentGroup(catalog, path);
+      $("buildTalentField").hidden = !group;
+      talentSelect.replaceChildren();
+      if (!group) return;
+      for (const [key, variant] of Object.entries(group.variants)) {
+        talentSelect.add(new Option(variant.name + " · " + variant.durationMs / 1000 + " วินาที", key));
+      }
+      const active = path === player.pathId ? player.bladeTalentId || player.wardTalentId : "";
+      talentSelect.value = active || group.defaultId;
+      $("buildTalentLabel").textContent = "Talent " + catalog.paths[path].skill;
     }
-    if (catalog.wardTalents) talentSelect.value = player.wardTalentId || catalog.defaultWardTalent;
     const preview = () => {
       const pathId = $("buildPath").value;
       const path = catalog.paths[pathId], effect = path.effect;
-      const ward = pathId === "sentinel" ? catalog.wardTalents?.[talentSelect.value] : null;
-      $("wardTalentField").hidden = !ward;
+      const variant = buildTalentGroup(catalog, pathId)?.variants[talentSelect.value];
       const statLabels = {atk:"โจมตี", def:"ป้องกัน", magicAtk:"โจมตีเวท", magicDef:"ป้องกันเวท"};
       const bonus = effect.kind === "heal" ? "ฟื้น HP " + Math.round(100*effect.fraction) + "%" :
-        Object.entries(effect.bonuses).map(([stat,v]) => statLabels[stat] + " +" + Math.round(v*100) + "%").join(" · ") + " นาน " + (ward?.durationMs ?? effect.durationMs)/1000 + " วินาที";
-      $("buildPreview").textContent = path.skill + " · " + bonus + (path.targets === "party" ? " ให้สมาชิกในระยะ " + (ward?.radius ?? catalog.supportRadius) + " หน่วย" : " ให้ตัวเอง") + " · ใช้ " + path.stamina + " กำลัง · รอ " + path.cooldownMs/1000 + " วินาที";
+        Object.entries(variant?.bonuses ?? effect.bonuses).map(([stat,v]) => statLabels[stat] + " +" + Math.round(v*100) + "%").join(" · ") + " นาน " + (variant?.durationMs ?? effect.durationMs)/1000 + " วินาที";
+      $("buildPreview").textContent = path.skill + " · " + bonus + (path.targets === "party" ? " ให้สมาชิกในระยะ " + (variant?.radius ?? catalog.supportRadius) + " หน่วย" : " ให้ตัวเอง") + " · ใช้ " + path.stamina + " กำลัง · รอ " + path.cooldownMs/1000 + " วินาที";
     };
-    $("buildPath").onchange = preview;
+    $("buildPath").onchange = () => { loadTalents(); preview(); };
     talentSelect.onchange = preview;
     $("buildSave").onclick = () => {
       const path = $("buildPath").value, ancestry = $("buildAncestry").value;
-      const selection = path === "sentinel" && catalog.wardTalents
-        ? {path, ancestry, wardTalent: talentSelect.value} : {path, ancestry};
+      const group = buildTalentGroup(catalog, path);
+      const selection = group ? {path, ancestry, [group.field]: talentSelect.value} : {path, ancestry};
       room?.send("select_build", selection);
     };
+    loadTalents();
     preview();
   }
   function renderProgressionProfile() {
@@ -4438,8 +4452,8 @@
     const p = ownServerCharacter(), supported = mode === "live" && room?.state?.progressionAvailable === true && p;
     $("profileProgressionStatus").textContent = supported ? (p.possessionActive ? "วิญญาณเข้าสิง · ATK / DEF / เวท +20%" : "สเตตัสเพิ่มอัตโนมัติเมื่อเลเวลขึ้น") : "เข้า LIVE กับเซิร์ฟเวอร์ที่รองรับระบบสเตตัส";
     const selectedPath = getBuildCatalog()?.paths?.[p?.pathId];
-    const ward = getBuildCatalog()?.wardTalents?.[p?.wardTalentId];
-    if ($("currentBuild")) $("currentBuild").textContent = selectedPath ? selectedPath.role + " · " + selectedPath.name + (ward ? " · " + ward.name : "") + " · " + getBuildCatalog().ancestries[p.ancestryId].name + " · " + ancestryHint(p) : "ยังไม่ได้เลือกสายอาชีพ";
+    const talent = buildTalentGroup(getBuildCatalog(), p?.pathId)?.variants[p?.bladeTalentId || p?.wardTalentId];
+    if ($("currentBuild")) $("currentBuild").textContent = selectedPath ? selectedPath.role + " · " + selectedPath.name + (talent ? " · " + talent.name : "") + " · " + getBuildCatalog().ancestries[p.ancestryId].name + " · " + ancestryHint(p) : "ยังไม่ได้เลือกสายอาชีพ";
     $("profileLevel").textContent = "LV. " + (p?.level ?? 1) + " · EXP " + (p?.experience ?? 0) + (supported && p.xpToNext ? " / " + p.xpToNext : "");
     for (const [key,,field] of progressionStats) {
       $("statValue-" + key).textContent = supported ? String(Math.round(Number(p[field]) || 0)) : "—";
@@ -4455,7 +4469,7 @@
       '<button class="secondary" id="switchCharacterSlot" type="button">เลือกช่องเซฟ 1–3</button>' +
       '<div class="status-line"><span>ชื่อ</span><strong id="profileName"></strong></div>' +
       '<div class="status-line"><span>ระดับ / ค่าประสบการณ์</span><strong id="profileLevel"></strong></div>' +
-      '<section id="buildFields" hidden><h3>สายอาชีพและเผ่า</h3><p id="currentBuild"></p><label class="field" for="buildPath">สายอาชีพ</label><select id="buildPath"></select><div id="wardTalentField" hidden><label class="field" for="wardTalent">Talent ยันต์คุ้มกาย</label><select id="wardTalent"></select></div><p class="note" id="buildPreview"></p><label class="field" for="buildAncestry">เผ่าและพรสวรรค์</label><select id="buildAncestry"></select><button type="button" class="secondary" id="buildSave">ยืนยันที่ลานพักกลางหมู่บ้าน</button></section>' +
+      '<section id="buildFields" hidden><h3>สายอาชีพและเผ่า</h3><p id="currentBuild"></p><label class="field" for="buildPath">สายอาชีพ</label><select id="buildPath"></select><div id="buildTalentField" hidden><label class="field" id="buildTalentLabel" for="buildTalent">Talent</label><select id="buildTalent"></select></div><p class="note" id="buildPreview"></p><label class="field" for="buildAncestry">เผ่าและพรสวรรค์</label><select id="buildAncestry"></select><button type="button" class="secondary" id="buildSave">ยืนยันที่ลานพักกลางหมู่บ้าน</button></section>' +
       '<div id="profileStats"><p class="note" id="profileProgressionStatus"></p>' +
       progressionStats.map(([key,label]) => '<div class="status-line stat-row"><span>' + label + '</span><strong id="statValue-' + key + '">—</strong></div>').join("") +
       '<div class="status-line"><span>กำลังปัจจุบัน</span><strong id="profileStamina">—</strong></div></div>' +

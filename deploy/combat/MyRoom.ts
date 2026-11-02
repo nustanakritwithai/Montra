@@ -38,7 +38,7 @@ import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { saveBugReport } from "./BugReports.js";
 import { BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCooldown } from "./Buffs.js";
-import { BUILD_CATALOG, DEFAULT_WARD_TALENT, classSkill, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
+import { BUILD_CATALOG, DEFAULT_WARD_TALENT, talentGroup, classSkill, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 import { BuffLedger } from "./BuffLedger.js";
 import { calculateModifiedStats } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER } from "./SkillCatalog.js";
@@ -157,9 +157,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private playerBuild(player: Player): CharacterBuild | null {
     const base = {path: player.pathId, ancestry: player.ancestryId};
-    // The default has the same save representation as a legacy sentinel.
-    return parseBuild(player.wardTalentId && player.wardTalentId !== DEFAULT_WARD_TALENT
-      ? {...base, wardTalent: player.wardTalentId} : base);
+    // Keep default talents readable by builds predating the selection.
+    const group = player.pathId === "blade" || player.pathId === "sentinel" ? talentGroup(player.pathId) : undefined;
+    const id = player.bladeTalentId || player.wardTalentId;
+    return parseBuild(group && id && id !== group.defaultId ? {...base, [group.field]:id} : base);
   }
 
   private selectBuild(client: Client, build: CharacterBuild): void {
@@ -169,19 +170,22 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!atShrine || this.simulatedMs - (this.lastCombatMs.get(id) ?? -Infinity) < PROGRESSION.combatQuietMs)
       return this.reject(client, "build_needs_shrine");
     if (player.classSkillReadyAt > Date.now()) return this.reject(client, "class_skill_cooldown");
-    // Older clients selecting a different ancestry omit the talent. Retain their current ward.
-    const talent = build.path === "sentinel"
-      ? build.wardTalent ?? this.playerBuild(player)?.wardTalent ?? DEFAULT_WARD_TALENT : "";
-    if (player.pathId === build.path && player.ancestryId === build.ancestry && player.wardTalentId === talent) return;
-    const selection: CharacterBuild = {path: build.path, ancestry: build.ancestry};
-    if (talent && talent !== DEFAULT_WARD_TALENT) selection.wardTalent = talent;
+    // An older client may send only path and ancestry when editing an existing build.
+    const group = talentGroup(build.path);
+    const previous = player.pathId === build.path ? this.playerBuild(player) : null;
+    const talent = group ? build[group.field] ?? previous?.[group.field] ?? group.defaultId : "";
+    const currentTalent = player.bladeTalentId || player.wardTalentId;
+    if (player.pathId === build.path && player.ancestryId === build.ancestry && currentTalent === talent) return;
+    const base = {path:build.path, ancestry:build.ancestry};
+    const selection = group && talent !== group.defaultId ? {...base, [group.field]:talent} : base;
     const snapshot = this.captureCharacterSnapshot(id);
     if (!snapshot) return;
     this.pendingWarps.add(id);
     const task = characterStore.save({ ...snapshot, build: selection }).then(() => {
       player.pathId = build.path;
       player.ancestryId = build.ancestry;
-      player.wardTalentId = talent;
+      player.wardTalentId = build.path === "sentinel" ? talent : "";
+      player.bladeTalentId = build.path === "blade" ? talent : "";
       client.send("build_selected", selection);
     }, error => {
       console.error("MONTRA build save failed", error);
@@ -198,7 +202,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!player) return;
     const build = this.playerBuild(player);
     if (!build) return this.reject(client, "build_required");
-    const skill = classSkill(build.path, build.wardTalent), now = Date.now();
+    const skill = classSkill(build.path, build.bladeTalent ?? build.wardTalent), now = Date.now();
     if (now < player.classSkillReadyAt) return this.reject(client, "class_skill_cooldown");
     if (player.stamina < skill.stamina) return this.reject(client, "insufficient_stamina");
     const members = skill.targets === "party" ? this.parties.get(id)?.members ?? [id] : [id];
@@ -1849,6 +1853,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         level: saved?.level ?? 1, experience: saved?.experience ?? 0,
         pathId: saved?.build?.path ?? "", ancestryId: saved?.build?.ancestry ?? "",
         classSkillReadyAt: saved?.classSkillReadyAt ?? 0,
+        bladeTalentId: saved?.build?.path === "blade" ? saved.build.bladeTalent ?? talentGroup("blade")!.defaultId : "",
         wardTalentId: saved?.build?.path === "sentinel" ? saved.build.wardTalent ?? DEFAULT_WARD_TALENT : "",
         persistent: Boolean(saved), characterSlot: slot,
         flying: Boolean(validPosition && restoreFlight),

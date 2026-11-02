@@ -55,6 +55,7 @@ jobs:
           cp deploy/combat/CharacterBuilds.ts combat-verify/src/rooms/CharacterBuilds.ts
           cp deploy/combat/build-integration.mjs combat-verify/build-integration.mjs
           cp deploy/combat/ward-integration.mjs combat-verify/ward-integration.mjs
+          cp deploy/combat/blade-integration.mjs combat-verify/blade-integration.mjs
           cp deploy/combat/BuffLedger.ts combat-verify/src/rooms/BuffLedger.ts
           cp deploy/combat/stat-modifiers.test.ts combat-verify/src/rooms/stat-modifiers.test.ts
           cp deploy/combat/buff-ledger.test.ts combat-verify/src/rooms/buff-ledger.test.ts
@@ -352,6 +353,7 @@ jobs:
           timeout 30s node buff-integration.mjs || { cat buff-server.log; exit 1; }
           timeout 30s node build-integration.mjs || { cat buff-server.log; exit 1; }
           timeout 45s node ward-integration.mjs || { cat buff-server.log; exit 1; }
+          timeout 40s node blade-integration.mjs || { cat buff-server.log; exit 1; }
 
       - name: Isolated economy transactions and restart
         shell: bash
