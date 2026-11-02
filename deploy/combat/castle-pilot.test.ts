@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {CASTLE_ID,CASTLE_DURATION,pilotNodes,newPilot,tickPilot,pilotView} from "./CastlePilot.js";
-import {WORLD_MAPS,isSafeWorldPoint,isRestArea,getSafeMapSpawn} from "./WorldMaps.js";
+import {WORLD_MAPS,isSafeWorldPoint,isRestArea,getSafeMapSpawn,provinceShotClear} from "./WorldMaps.js";
 import {crestCorners,wallRing} from "./StrategicProvinces.js";
 import {GuildStore} from "./GuildStore.js";
 import {WAR_PROTECTION} from "./TerritoryWar.js";
@@ -22,6 +22,12 @@ test("full castle road, gates, stairs, crest circuits and both previous world ne
       assert.ok(isSafeWorldPoint(m,v),"route "+i+" "+v.x+","+v.z);if(!i)assert.ok(isRestArea(m.id,v));}
   }
   for(const s of r.stairs){assert.ok(isSafeWorldPoint(m,{...s.foot,y:0}));assert.deepEqual(getSafeMapSpawn(m.id,{...s.top,y:4}),{...s.top,y:4});}
+  for(const g of r.gates){
+    const b=g.box,x=b.x+b.width/2,z=b.z+b.length/2,alongX=b.width>b.length;
+    const top={x,y:5,z},outside={x:x+(alongX?0:7),y:1.55,z:z+(alongX?7:0)};
+    assert.ok(isSafeWorldPoint(m,{x,z,y:4}));assert.ok(isSafeWorldPoint(m,{x,z,y:0}));
+    assert.ok(provinceShotClear(m,top,outside));assert.ok(provinceShotClear(m,outside,top));
+  }
   for(let i=0;i<12;i++){
     const from=r.corners[i],to=r.corners[(i-i%4)+(i+2)%4],route=[from,...crestCorners(r,from,to),to];
     assert.equal(wallRing(r,from.x,from.z),Math.floor(i/4));assert.ok(route.length>=3);

@@ -31,7 +31,15 @@ async function leave(c){await c.r.leave();rooms.delete(c.r);await sleep(180);}
 async function walk(c,x,z){c.r.send("move",{x,z});await wait(()=>Math.hypot(c.me().x-x,c.me().z-z)<.4,"walk "+x+","+z,110000);}
 async function warp(c,target){
   const source=c.me().mapId,p=JSON.parse(c.r.state.worldDefinition).maps[source].portals.find(p=>p.id===target || p.targetMapId===target);
-  c.r.send("warp",{portalId:p.id});await wait(()=>c.me().mapId===p.targetMapId&&Math.hypot(c.me().x-p.targetSpawn.x,c.me().z-p.targetSpawn.z)<.3,"warp "+p.id);
+  for(let i=0;i<12;i++){
+    c.events.length=0;c.r.send("warp",{portalId:p.id});
+    const outcome=await wait(()=>c.me().mapId===p.targetMapId&&Math.hypot(c.me().x-p.targetSpawn.x,c.me().z-p.targetSpawn.z)<.3?"arrived":
+      c.events.find(e=>e.type==="command_rejected")?.data.reason,"warp "+p.id);
+    if(outcome==="arrived")return;
+    assert.equal(outcome,"warp_cooldown","rejected "+p.id);
+    await sleep(600);
+  }
+  throw Error("portal cooldown did not expire for "+p.id);
 }
 const id="tri_wiang_castle";
 try{
