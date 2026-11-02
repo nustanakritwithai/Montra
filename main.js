@@ -79,7 +79,10 @@
     const game=$("game").getBoundingClientRect(), area=anchor.getBoundingClientRect();
     ui.toast.style.bottom=Math.max(0,game.bottom-area.top+8)+"px";
   }
+  // Sound effects (audio.js). Safe no-op until audio is unlocked by the first tap.
+  const SFX = (name, opts) => window.MontraAudio?.play(name, opts);
   function toast(message) {
+    SFX("toast");
     positionSwordToast();
     ui.toast.textContent = message;
     ui.toast.classList.add("show");
@@ -365,7 +368,7 @@
   function stormFlash(dt) {
     const tint = STORM_MAPS[activeMapId];
     if (!tint) { stormT = -1; return; }
-    if ((stormIn -= dt) <= 0) { stormIn = 10 + Math.random() * 15; stormT = 0; }
+    if ((stormIn -= dt) <= 0) { stormIn = 10 + Math.random() * 15; stormT = 0; window.MontraAudio?.play("thunder", { delay: .3 + Math.random() * .7, intensity: .8 + Math.random() * .4 }); }
     if (stormT < 0) return;
     stormT += dt;
     const k = Math.max(Math.exp(-stormT * 18), stormT > .16 ? Math.exp(-(stormT - .16) * 9) * .8 : 0);
@@ -3349,6 +3352,52 @@
   const POSE_BONES = ["Hips", "Spine", "Spine1", "Chest", "Neck", "Head", "LeftShoulder", "RightShoulder",
     "LeftArm", "RightArm", "LeftForeArm", "RightForeArm", "LeftHand", "RightHand",
     "LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg", "LeftFoot", "RightFoot"];
+  // Swing, cast and movement sounds timed to the strike frame of each action.
+  const at = (a, name, delay, opts = {}) => SFX(name, { x: a.x, z: a.z, delay, ...opts });
+  function actionSound(a, type, act) {
+    const d = ACTIONS[type].dur;
+    switch (type) {
+      case "stab": at(a, "whoosh", d * .32, { pitch: 1.35, len: .7, intensity: .8 }); break;
+      case "slash": case "twin": at(a, "whoosh", d * .35, { pitch: 1.1, intensity: .9 }); break;
+      case "smash": at(a, "whoosh", d * .35, { pitch: .7, len: 1.3 }); break;
+      case "punch": case "m_basic": case "m_jab": case "m_cross": case "m_step": case "m_side": case "m_retreat":
+        at(a, "whoosh", d * (type === "m_step" || type === "m_side" ? .55 : .35), { pitch: 1.6, len: .45, intensity: .55 }); break;
+      case "m_hook": case "m_elbow": at(a, "whoosh", d * .4, { pitch: 1.2, len: .6, intensity: .75 }); break;
+      case "m_knee": case "m_teep": at(a, "whoosh", d * .4, { pitch: .8, len: .7, intensity: .7 }); break;
+      case "m_counter": at(a, "block", d * .1, { intensity: .6 }); at(a, "whoosh", d * .45, { pitch: 1.2, len: .6, intensity: .75 }); break;
+      case "m_flurry": case "m_rush": for (let i = 0; i < 4; i++) at(a, "whoosh", d * (.15 + i * .2), { pitch: 1.7, len: .4, intensity: .5 }); break;
+      case "m_guard": case "m_parry": case "guard": at(a, "block", .05, { intensity: .45 }); break;
+      case "m_evade": at(a, "whoosh", .05, { pitch: .9, len: .8, intensity: .4 }); break;
+      case "m_clinch": at(a, "fist", .05, { intensity: .4 }); break;
+      case "m_throw": at(a, "whoosh", .1, { pitch: .6, len: 1.4, intensity: .8 }); at(a, "slam", d * .55); break;
+      case "m_wai": case "dance": case "rally": at(a, "gong", .1, { freq: type === "rally" ? 196 : 147, gain: .6 }); break;
+      case "lunge": at(a, "dash", .05); at(a, "whoosh", d * .55, { pitch: 1.1 }); break;
+      case "counter": at(a, "clash", d * .2, { intensity: .7 }); at(a, "whoosh", d * .5, { pitch: 1.3, len: .7 }); break;
+      case "flurry": for (let i = 0; i < 4; i++) at(a, "whoosh", d * (.12 + i * .24), { pitch: 1.2, len: .6, intensity: .7 }); break;
+      case "finale": at(a, "whoosh", d * .12, { pitch: 1.1 }); at(a, "whoosh", d * .44, { pitch: 1.1 }); at(a, "whoosh", d * .78, { pitch: .8, len: 1.2, intensity: 1.2 }); break;
+      case "sweep": at(a, "whoosh", d * .2, { pitch: .9, len: 2.2, intensity: 1.1 }); break;
+      case "cast": at(a, "cast", .02); break;
+      case "summon": at(a, "summon", .02, { important: true }); break;
+      case "drink": at(a, "drink", .25); break;
+      case "dash": at(a, "dash", 0); break;
+      case "hit": at(a, "hurt", 0, { intensity: .8 }); break;
+      case "rise": at(a, "respawn", .2); break;
+      case "arrive": at(a, "warp", 0); break;
+    }
+  }
+  // Contact sound at the target, chosen by the attacker's weapon and move.
+  function impactAt(attackerId, x, z, source, ghost) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    const a = avatars.get(attackerId), w = a?.weaponId || "", move = a?.action?.type || "";
+    let name = "fist", intensity = 1;
+    if (source === "ranged") name = "rice";
+    else if (source === "talisman") name = "talisman";
+    else if (w === "thai_dual" || w === "arcane_sword" || w === "ritual_dagger") { name = "blade"; intensity = w === "ritual_dagger" ? .7 : 1; }
+    else if (w === "spirit_staff") name = "blunt";
+    else if (w === "muay_wraps") name = /elbow|counter/.test(move) ? "elbow" : /knee|teep|throw/.test(move) ? "kick" : "fist";
+    SFX(name, { x, z, intensity });
+    if (ghost) SFX("ghost_hit", { x, z, delay: .02, intensity: .8 });
+  }
   function playAction(a, type, opts) {
     if (!a || !ACTIONS[type]) return;
     const now = performance.now();
@@ -3356,6 +3405,7 @@
     if (type === "twin" || type === "m_basic" || type === "m_side") a.action.side = (a.twinFlip = !a.twinFlip) ? 1 : -1; // alternate right / left
     if (opts) Object.assign(a.action, opts);
     if (type !== "hit" && type !== "rise") flashStrike(a, type);
+    actionSound(a, type, a.action);
     if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
   }
   // A sword skill's motion follows its effect type in the server catalog,
@@ -3980,6 +4030,14 @@
   }
   // Procedural gait: legs and arms counter-swing with speed, the body bobs and
   // leans, breathes at rest, tucks while flying and swings the weapon arm.
+  const STEP_SURFACE = { ritual_village: "wood", forbidden_forest: "soil", bound_temple: "stone", drowned_marsh: "water", lotus_basin: "soil",
+    moon_cemetery: "soil", hex_ridge: "stone", naga_cavern: "stone", fallen_city: "stone", asura_peak: "stone", spirit_rift: "stone",
+    mantra_capital: "brick", moon_pass: "soil", river_watch: "soil", bamboo_frontier: "soil", tri_wiang_castle: "brick" };
+  function stepSound(a) {
+    const strategic = worldDefinitions?.[activeMapId]?.strategic;
+    if (a.y > 2.5 && strategic?.rampart) return strategic.kind === "territory" ? "step_wood" : "step_brick"; // on the wall walk
+    return "step_" + (STEP_SURFACE[activeMapId] || "soil");
+  }
   function animateRig(a, speed, dt, now) {
     const r = a.rig; if (!r) return;
     const target = Math.min(1, speed / 3.2);
@@ -3987,6 +4045,10 @@
     const m = a.moveBlend, flying = a.y > 4.4;
     a.phase = (a.phase + dt * 9.5 * m) % (Math.PI * 2);
     const s = Math.sin(a.phase), c = Math.cos(a.phase), t = now / 1000;
+    // Footstep on each foot plant (the stride sine crossing zero), by surface.
+    if (m > .35 && !flying && !a.serverFlying && a.stepSign && Math.sign(s) && Math.sign(s) !== a.stepSign)
+      SFX(stepSound(a), { x: a.x, z: a.z, intensity: .55 + .45 * Math.min(1, speed / 6) });
+    if (Math.sign(s)) a.stepSign = Math.sign(s);
     const flare = a.skin ? animateSkin(a, m, speed, s, c, t, now, dt) : 0;
     for (let i = 0; i < 2; i++) {
       const dir = i ? -1 : 1;
@@ -5974,6 +6036,7 @@
   }
   // Rising soul released when a ghost is destroyed.
   function releaseSoul(x, y, z) {
+    SFX("ghost_die", { x, z });
     const soul = B.MeshBuilder.CreateSphere("released soul", { diameter: .45, segments: 6 }, scene);
     soul.material = gm.soul; soul.isPickable = false; soul.position.set(x, y, z);
     const tail = B.MeshBuilder.CreateCylinder("soul tail", { height: .8, diameterTop: .4, diameterBottom: 0, tessellation: 6 }, scene);
@@ -6809,6 +6872,7 @@
         const oldDrums=territoryState?.local?.supply?.drums || [];
         territoryState=message;syncGateVisual();syncCastleRings();
         const alerts=message.local?.supply?.drums?.filter(id=>!oldDrums.includes(id)) || [];
+        if(alerts.length)SFX("drum",{important:true});
         if(alerts.length)toast("เสียงกลอง · กำลังชิง "+alerts.map(id=>message.local.pilot.points.find(p=>p.id===id)?.name || id).join(" · "));
         if(drawerActive==="war")renderWarPanel();
         if(drawerActive==="strategy")updateAtlasOwner();
@@ -6957,6 +7021,7 @@
         if (typeof hit?.attackerId === "string") {
           const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
           playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
+          impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true);
         }
         const talisman = hit?.source === "talisman";
         if (forestTarget) {
@@ -7008,6 +7073,7 @@
       });
       joined.onMessage("flight_started", info => {
         if (room !== joined) return;
+        { const flyer=avatars.get(info?.playerId); if(flyer) SFX("fly",{x:flyer.x,z:flyer.z}); }
         if (info?.playerId === localId) {
           pendingClimb = null;
           toast(info.direction === "up"
@@ -7032,6 +7098,7 @@
         if(room!==joined)return;
         if((joined.state?.players?.get?.(data?.attackerId)?.mapId || "ritual_village") !== activeMapId)return;
         renderMagicBolt(data);
+        { const thrower=avatars.get(data?.attackerId); if(thrower) SFX("rice",{x:thrower.x,z:thrower.z}); }
         if(data?.attackerId===localId) {
           toast("ข้าวสารปลุกเสกโดนเป้าหมาย -" + data.damage + " HP");
         }
@@ -7174,7 +7241,7 @@
       joined.onMessage("summon_hit", hit => {
         if (room !== joined || !hit) return;
         const actor = summonAvatars.get(hit.ownerId);
-        if (actor) actor.hitUntil = performance.now() + 260;
+        if (actor) { actor.hitUntil = performance.now() + 260; SFX("ghost_hit", { x: actor.x, z: actor.z, intensity: .7 }); }
         if (hit.ownerId === localId) {
           toast("วิญญาณโจมตีผี -" + String(hit.damage) + " HP");
         }
@@ -7185,6 +7252,7 @@
         const attacker = avatars.get(hit.attackerId);
         if (victim) { victim.hitFlashUntil = performance.now() + 250; playAction(victim, "hit"); }
         playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
+        if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, false);
         if (attacker && victim) {
           faceAvatarToward(hit.attackerId, victim.x, victim.z);
         }
@@ -7218,6 +7286,7 @@
         }
       });
       joined.onMessage("player_down", info => {
+        { const fallen=avatars.get(info?.playerId); if (room === joined && fallen) SFX("down",{x:fallen.x,z:fallen.z,important:true}); }
         if (room === joined && info?.playerId === localId) {
           toast("ตัวละครหมดสติ · รอเกิดใหม่");
         }
@@ -7715,9 +7784,11 @@
 
   let drawerActive = null;
   function closeDrawer() {
+    if(!ui.drawer.hidden)SFX("close");
     ui.drawer.hidden=true; ui.shade.hidden=true; drawerActive=null;
   }
   function openDrawer(name,title,html) {
+    if(ui.drawer.hidden)SFX("open");
     ui.drawerTitle.textContent=title;
     ui.drawerBody.innerHTML=html;
     ui.drawer.hidden=false; ui.shade.hidden=false;
@@ -8819,8 +8890,25 @@
       }
     };
   }
+  // Taps on any game button give a soft woodblock click.
+  document.addEventListener("click", event => { if (event.target.closest?.("button") && !event.target.closest("#drawerClose")) SFX("tap"); }, true);
+  // Sound settings, shown at the top of the help sheet.
+  function soundSettingsHtml() {
+    const a = window.MontraAudio?.settings; if (!a) return "";
+    const row = (key, label) => `<label class="field sound-row">${label}<input type="range" min="0" max="100" step="5" data-sound="${key}" value="${Math.round(a[key] * 100)}"></label>`;
+    return `<section class="sound-settings"><h3>เสียง</h3><label class="field sound-row"><input type="checkbox" data-sound="muted" ${a.muted ? "" : "checked"}> เปิดเสียง</label>` +
+      row("master", "ความดังรวม") + row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
+  }
+  function bindSoundSettings(root) {
+    for (const input of root.querySelectorAll("[data-sound]")) input.addEventListener("input", () => {
+      const key = input.dataset.sound;
+      if (key === "muted") window.MontraAudio?.set("muted", !input.checked); else window.MontraAudio?.set(key, Number(input.value) / 100);
+      if (key !== "muted") SFX(key === "ui" ? "tap" : "fist", { intensity: .6 });
+    });
+  }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>สกิลพื้นฐานทุกสาย</h3><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.7",soundSettingsHtml()+`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>สกิลพื้นฐานทุกสาย</h3><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
+    bindSoundSettings(ui.drawerBody);
   }
   function currentBagSlots() {
     if (mode === "live") return inventoryState?.slots || null;
@@ -9595,6 +9683,7 @@
     scene.fogEnd = camera.radius + atmosphere.fogFar;
     driftMist(elapsed, camera.target);
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
+    { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z); }
     driftClouds(camera.target, elapsed); updateStrikeLight(performance.now());
     keyLight.intensity = atmosphere.keyI * 1.65 * (1 - .22 * cloudCover);
     stormFlash(dt);
