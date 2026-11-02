@@ -44,6 +44,8 @@ try{
     assert.equal(state.members.length,2);
     assert.equal(state.ownId,state.leaderId);
     assert.ok(state.members.some(m=>m.name==="นักเดินทาง 1" && !m.online));
+    assert.ok(state.members.some(m=>m.name==="นักเดินทาง 1" && m.rank==="squad_leader" && m.squad===3 && m.specialty==="scout"));
+
     await leave(member);
     const oldLeader=await join(1);
     const restored=await send(oldLeader,"get_guild",{},"guild_state",x=>x?.name==="นาคพิทักษ์");
@@ -63,10 +65,33 @@ try{
     const accepted=await send(member,"guild_accept",{inviteId:invitation.inviteId},"guild_state",x=>x?.members?.length===2);
     assert.equal(accepted.name,"นาคพิทักษ์");
     assert.notEqual(accepted.ownId,accepted.leaderId);
+    await send(leader,"guild_assign",{memberId:accepted.ownId,kind:"rank",value:"officer"},"guild_state",x=>x?.members?.some(m=>m.id===accepted.ownId && m.rank==="officer"));
+    await send(member,"guild_invite",{targetId:outsider.room.sessionId},"guild_notice");
+    const stale=await event(outsider,"guild_invitation");
+    await send(leader,"guild_assign",{memberId:accepted.ownId,kind:"rank",value:"member"},"guild_state",x=>x?.members?.some(m=>m.id===accepted.ownId && m.rank==="member"));
+    await send(outsider,"guild_accept",{inviteId:stale.inviteId},"guild_error",x=>x?.reason==="guild_invite_expired");
+    await send(member,"guild_invite",{targetId:outsider.room.sessionId},"guild_error",x=>x?.reason==="guild_officer_required");
+    await sleep(1300);
+    await send(leader,"guild_assign",{memberId:accepted.ownId,kind:"rank",value:"officer"},"guild_state",x=>x?.members?.some(m=>m.id===accepted.ownId && m.rank==="officer"));
+    outsider.events.length=0;
+    await send(member,"guild_invite",{targetId:outsider.room.sessionId},"guild_notice");
+    const valid=await event(outsider,"guild_invitation");
+    await send(outsider,"guild_accept",{inviteId:valid.inviteId},"guild_state",x=>x?.members?.length===3);
+    const updated=await send(member,"get_guild",{},"guild_state",x=>x?.members?.length===3);
+    const target=updated.members.find(m=>m.name==="นักเดินทาง 3");
+    await send(member,"guild_assign",{memberId:target.id,kind:"squad",value:2},"guild_state",x=>x?.members?.some(m=>m.id===target.id && m.squad===2));
+    await send(member,"guild_assign",{memberId:target.id,kind:"specialty",value:"engineer"},"guild_state",x=>x?.members?.some(m=>m.id===target.id && m.specialty==="engineer"));
+    await send(member,"guild_assign",{memberId:target.id,kind:"rank",value:"squad_leader"},"guild_error",x=>x?.reason==="guild_leader_only");
+    await send(outsider,"guild_leave",{},"guild_state",x=>x===null);
+    await sleep(1300);
     await send(member,"guild_manage",{memberId:accepted.leaderId,action:"kick"},"guild_error",x=>x?.reason==="guild_leader_only");
     await send(leader,"guild_leave",{},"guild_error",x=>x?.reason==="guild_transfer_first");
     const changed=await send(leader,"guild_manage",{memberId:accepted.ownId,action:"transfer"},"guild_state",x=>x?.leaderId===accepted.ownId);
     assert.equal(changed.members.length,2);
+    await send(member,"guild_assign",{memberId:changed.ownId,kind:"squad",value:3},"guild_state",x=>x?.members?.some(m=>m.id===changed.ownId && m.squad===3));
+    await send(member,"guild_assign",{memberId:changed.ownId,kind:"specialty",value:"scout"},"guild_state",x=>x?.members?.some(m=>m.id===changed.ownId && m.specialty==="scout"));
+    await send(member,"guild_assign",{memberId:changed.ownId,kind:"rank",value:"squad_leader"},"guild_state",x=>x?.members?.some(m=>m.id===changed.ownId && m.rank==="squad_leader"));
+
     await leave(member);
     const remote=await join(2);
     const crossRoom=await send(remote,"get_guild",{},"guild_state",x=>x?.name==="นาคพิทักษ์");

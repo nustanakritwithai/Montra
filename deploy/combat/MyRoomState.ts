@@ -116,6 +116,7 @@ export const MyRoomState = schema({
   monsters: t.map(Monster),
   worldDefinition: t.string().default(""),
   guildAvailable: t.boolean().default(true),
+  guildRolesAvailable: t.boolean().default(true),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

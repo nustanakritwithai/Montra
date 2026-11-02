@@ -489,3 +489,11 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .guild-actions { display:flex; flex-wrap:wrap; gap:5px; justify-content:flex-end; }
 .guild-actions button { min-height:40px; padding:5px 9px; border:1px solid #c8a46d; border-radius:9px; background:#59402a; color:#fff1d3; }
 #guildCreateArea[hidden], #guildMemberArea[hidden], #guildInviteArea[hidden], #guildInvitationBox[hidden] { display:none; }
+
+.guild-member { flex-direction:column; align-items:stretch; }
+.guild-management summary { display:block; min-height:42px; padding:10px 12px; border:1px solid #a88b60; border-radius:9px; color:#f7dbab; cursor:pointer; }
+.guild-management summary::before { content:"▸ "; }
+.guild-management[open] summary::before { content:"▾ "; }
+.guild-management-panel { display:grid; gap:8px; padding:10px 2px; }
+.guild-management-panel .field { margin:0; }
+.guild-management-panel select { margin-top:4px; }

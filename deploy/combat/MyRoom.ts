@@ -214,7 +214,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try { action(character); }
     catch(error){
       const reasons=["guild_already_member","guild_name_taken","guild_leader_only","guild_full",
-        "guild_not_member","guild_transfer_first","guild_invalid_member","guild_invite_expired","guild_invalid_target"];
+        "guild_not_member","guild_transfer_first","guild_invalid_member","guild_invite_expired","guild_invalid_target",
+        "guild_officer_required","guild_invalid_assignment","guild_squad_required","guild_squad_full","guild_squad_leader_exists"];
       const reason=error instanceof Error && reasons.includes(error.message)?error.message:"guild_error";
       if(reason==="guild_error")console.error("MONTRA guild action failed",error);
       client.send("guild_error",{reason});
@@ -316,7 +317,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.guildAction(client,character=>{
         const guild=guildStore().view(character,guildOnline),target=this.clients.find(c=>c.sessionId===request.targetId);
         const targetCharacter=this.persistentCharacters.get(request.targetId);
-        if(!guild || guild.ownId!==guild.leaderId)throw new Error("guild_leader_only");
+        const actor=guild?.members.find(m=>m.id===guild.ownId);
+        if(!guild || !actor || (actor.rank!=="commander" && actor.rank!=="officer"))throw new Error("guild_officer_required");
         if(guild.members.length>=GUILD_MAX_MEMBERS)throw new Error("guild_full");
         if(!target || !targetCharacter || request.targetId===client.sessionId || this.pendingCharacterLeaves.has(request.targetId))throw new Error("guild_invalid_target");
         if(guildStore().view(targetCharacter,guildOnline))throw new Error("guild_already_member");
@@ -336,7 +338,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           throw new Error("guild_invite_expired");
         }
         const player=this.state.players.get(client.sessionId);if(!player)throw new Error("guild_invalid_target");
-        if(guildStore().view(leader,guildOnline)?.id!==invite.guildId)throw new Error("guild_invite_expired");
+        const inviter=guildStore().view(leader,guildOnline);
+        const inviterRank=inviter?.members.find(m=>m.id===inviter.ownId)?.rank;
+        if(inviter?.id!==invite.guildId || (inviterRank!=="commander" && inviterRank!=="officer"))throw new Error("guild_invite_expired");
         guildStore().add(leader,character,player.characterName);
         this.guildInvites.delete(inviteId);client.send("guild_invitation_closed",{});notifyGuilds();
       });
@@ -353,6 +357,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     guild_leave: (client:Client,message:unknown) => {
       if(!parseEmptyCommand(message))return this.reject(client,"guild_invalid_request");
       this.guildAction(client,character=>{guildStore().leave(character);notifyGuilds();});
+    },
+    guild_assign: (client:Client,message:unknown) => {
+      if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"guild_invalid_request");
+      const value=message as Record<string,unknown>;
+      if(Object.keys(value).length!==3 || typeof value.memberId!=="string" ||
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value.memberId) ||
+        (value.kind!=="rank" && value.kind!=="squad" && value.kind!=="specialty"))return this.reject(client,"guild_invalid_request");
+      this.guildAction(client,character=>{
+        guildStore().assign(character,value.memberId as string,value.kind as "rank"|"squad"|"specialty",value.value);
+        notifyGuilds();
+      });
     },
     guild_manage: (client:Client,message:unknown) => {
       if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"guild_invalid_request");
