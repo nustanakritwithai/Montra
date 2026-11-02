@@ -51,6 +51,8 @@ try{
  const beforeSpirit=seer.me().hp;
  await send(mender,"occult_skill",{skillId:"mender_spirit_heal",targetId:seer.room.sessionId},"occult_skill_used",x=>x.skillId==="mender_spirit_heal");
  await until(()=>seer.me().hp>beforeSpirit,"spirit healing");
+ const healingPractice=await event(mender,"occult_book_state",x=>x.book.mastery.mender.healing>0 && x.book.mastery.mender.spirit>0);
+ assert.ok(healingPractice.book.mastery.mender.spirit>0,"real spirit healing trains spirit mastery");
  await send(mender,"occult_book",{action:"equip",slot:3,skillId:"mender_spirit"},"occult_book_state",x=>x.book.loadouts.mender[3]==="mender_spirit");
  const beforeSpiritWard=seer.me().def;
  await send(mender,"occult_skill",{skillId:"mender_spirit",targetId:seer.room.sessionId},"occult_skill_used",x=>x.skillId==="mender_spirit");
@@ -73,6 +75,7 @@ try{
  await event(seer,"occult_curse_state",x=>x.active===true);
  await send(mender,"occult_skill",{skillId:"mender_cleanse_area"},"occult_skill_used",x=>x.skillId==="mender_cleanse_area");
  await event(seer,"occult_curse_state",x=>x.active===false && x.reason==="cleansed");
+ await event(mender,"occult_book_state",x=>x.book.mastery.mender.cleanse>0);
  console.log("PASS: curse consumption and area cleanse of a party member");
  await send(seer,"pot_summon",{},"summon_spawn",x=>x.ownerId===seer.room.sessionId);
  await walk(seer,1,7);
@@ -86,6 +89,7 @@ try{
  await sleep(500);
  await send(seer,"occult_skill",{skillId:"seer_spirit_bind",targetId},"occult_skill_used",x=>x.skillId==="seer_spirit_bind");
  await event(seer,"summon_hit",x=>x.ownerId===seer.room.sessionId && x.targetId===targetId);
+ await event(seer,"occult_book_state",x=>x.book.mastery.seer.spirit>0);
  seer.room.send("possess",{});
  await event(seer,"possession_changed",x=>x.playerId===seer.room.sessionId && x.active===true);
  await until(()=>seer.me().possessionActive,"trance active");

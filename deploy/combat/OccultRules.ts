@@ -30,26 +30,58 @@ export const OCCULT_LESSONS = {
   mender_trance: {name:"ทรงผีฟื้นกำลัง",description:"ขณะเข้าทรงเพิ่มการป้องกันและฟื้นกำลัง 15 ให้ปาร์ตี้ใกล้เคียง",path:"mender",level:15,requires:["mender_area","mender_spirit"],training:25,effect:"trance",stamina:28,cooldownMs:25000,range:8,power:0.12},
 } as const satisfies Record<string, OccultLesson>;
 export type OccultSkillId = keyof typeof OCCULT_LESSONS;
+export const OCCULT_MASTERY_LABELS = {
+  seer:{rice:"ข้าวสารใส่มอนสเตอร์",talisman:"ยันต์ใส่มอนสเตอร์",spirit:"ผีช่วยโจมตี",curse:"คำสาปมอนสเตอร์"},
+  mender:{healing:"รักษาที่เกิดผล",protection:"คุ้มครองขณะต่อสู้",cleanse:"ถอนคำสาป",spirit:"ผีช่วยเหลือ"},
+} as const;
+export type OccultMastery = {
+  seer:Record<keyof typeof OCCULT_MASTERY_LABELS.seer,number>;
+  mender:Record<keyof typeof OCCULT_MASTERY_LABELS.mender,number>;
+};
+export type OccultMasteryCategory = keyof OccultMastery["seer"] | keyof OccultMastery["mender"];
+/** Checked on learning only: characters retain already learned legacy lessons. */
+export const OCCULT_MASTERY_REQUIREMENTS:Readonly<Partial<Record<OccultSkillId,Readonly<Record<string,number>>>>> = {
+  seer_rice:{talisman:2},seer_scatter:{rice:3},seer_burst:{talisman:3},
+  seer_seal:{talisman:4},seer_curse:{talisman:3},seer_spirit:{spirit:3},
+  seer_hexburst:{curse:2},seer_spirit_bind:{spirit:5,talisman:3},seer_trance:{spirit:5,talisman:3},
+  mender_area:{healing:3},mender_ward:{healing:3},mender_cleanse:{protection:3},
+  mender_spirit:{protection:3},mender_ward_area:{healing:5,protection:3},
+  mender_cleanse_area:{healing:5,protection:3},mender_spirit_heal:{healing:5,spirit:3},
+  mender_trance:{healing:5,spirit:5},
+};
 export type OccultBook = {
   learned:Record<OccultPath,OccultSkillId[]>;
   loadouts:Record<OccultPath,Array<OccultSkillId|null>>;
   training:Record<OccultPath,number>;
   cooldowns:Partial<Record<OccultSkillId,number>>;
+  mastery:OccultMastery;
 };
 export const occultPoints = (level:number):number => 1 + Math.floor((Math.min(level,100)-1)/2);
 export function newOccultBook():OccultBook {
-  return {learned:{seer:[],mender:[]},loadouts:{seer:[null,null,null,null],mender:[null,null,null,null]},training:{seer:0,mender:0},cooldowns:{}};
+  return {learned:{seer:[],mender:[]},loadouts:{seer:[null,null,null,null],mender:[null,null,null,null]},training:{seer:0,mender:0},cooldowns:{},
+    mastery:{seer:{rice:0,talisman:0,spirit:0,curse:0},mender:{healing:0,protection:0,cleanse:0,spirit:0}}};
 }
 function record(value:unknown):value is Record<string,unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 export function validateOccultBook(value:unknown,level:number):OccultBook {
-  if (!record(value) || Object.keys(value).sort().join(",")!=="cooldowns,learned,loadouts,training" ||
+  if (!record(value) || Object.keys(value).some(key=>!["cooldowns","learned","loadouts","training","mastery"].includes(key)) ||
       !record(value.learned) || !record(value.loadouts) || !record(value.training) || !record(value.cooldowns))
     throw Error("invalid_occult_book");
   for (const group of [value.learned,value.loadouts,value.training])
     if (Object.keys(group).sort().join(",")!=="mender,seer") throw Error("invalid_occult_book");
   const result=newOccultBook();
+  if (value.mastery!==undefined) {
+    if (!record(value.mastery) || Object.keys(value.mastery).sort().join(",")!=="mender,seer") throw Error("invalid_occult_book");
+    for (const path of OCCULT_PATHS) {
+      const raw=value.mastery[path], labels=OCCULT_MASTERY_LABELS[path];
+      if (!record(raw) || Object.keys(raw).sort().join(",")!==Object.keys(labels).sort().join(",")) throw Error("invalid_occult_book");
+      for (const [key,count] of Object.entries(raw)) {
+        if (typeof count!=="number" || !Number.isSafeInteger(count) || count<0 || count>1_000_000) throw Error("invalid_occult_book");
+        (result.mastery[path] as Record<string,number>)[key]=count;
+      }
+    }
+  }
   for (const path of OCCULT_PATHS) {
     const learned=value.learned[path], slots=value.loadouts[path], training=value.training[path];
     if (!Array.isArray(learned) || learned.length>occultPoints(level) || new Set(learned).size!==learned.length ||

@@ -15,7 +15,8 @@ async function until(read,label,timeout=12000) {
   throw Error("timeout: "+label);
 }
 const sdk=new Client(url),rooms=new Set(),tokens=[0,1,2].map(()=>"mt1_"+randomBytes(32).toString("hex"));
-const empty=()=>({learned:{seer:[],mender:[]},loadouts:{seer:[null,null,null,null],mender:[null,null,null,null]},training:{seer:30,mender:30},cooldowns:{}});
+const empty=()=>({learned:{seer:[],mender:[]},loadouts:{seer:[null,null,null,null],mender:[null,null,null,null]},training:{seer:30,mender:30},cooldowns:{},
+  mastery:{seer:{rice:3,talisman:2,spirit:3,curse:0},mender:{healing:0,protection:0,cleanse:0,spirit:0}}});
 async function seed(index,pathId) {
   const id=createHash("sha256").update(tokens[index]).digest("hex"),slots=Array(12).fill(null),book=empty();
   slots[0]={itemId:"health_potion",quantity:2};slots[1]={itemId:"ritual_dagger",quantity:1};
@@ -63,6 +64,8 @@ try {
   assert.equal(fighter.room.state.summons.has(fighter.room.sessionId),false);
   let book=await send(seer,"occult_book_get",{},"occult_book_state",x=>x.path==="seer");
   assert.equal(book.book.learned.seer.includes("seer_spirit"),false);
+  await send(seer,"occult_book",{action:"learn",skillId:"seer_seal"},"command_rejected",x=>x.reason==="occult_mastery");
+  await sleep(650);
   book=await send(seer,"occult_book",{action:"learn",skillId:"seer_spirit"},"occult_book_state",x=>x.book.learned.seer.includes("seer_spirit"));
   assert.equal(book.book.training.seer,30);
   await send(seer,"occult_book",{action:"equip",slot:3,skillId:"seer_spirit"},"occult_book_state",x=>x.book.loadouts.seer[3]==="seer_spirit");
@@ -104,8 +107,13 @@ try {
   book=await send(seer,"occult_book_get",{},"occult_book_state",x=>x.path==="seer");
   assert.ok(book.book.learned.seer.includes("seer_spirit"));
   assert.ok(book.book.training.seer>30);
+  assert.ok(book.book.mastery.seer.talisman>=4,"marks and detonation train talismans");
+  assert.ok(book.book.mastery.seer.rice>=4,"rice hit trains rice");
+  assert.equal(book.book.mastery.seer.curse,0,"PvP curses do not grant mastery");
   assert.ok(book.book.cooldowns.seer_burst>0);
   await walk(seer,0,0);await sleep(5500);
+  book=await send(seer,"occult_book",{action:"learn",skillId:"seer_seal"},"occult_book_state",x=>x.book.learned.seer.includes("seer_seal"));
+  assert.ok(book.book.mastery.seer.talisman>=4,"mastery gate opens after genuine practice");
   await send(seer,"pot_summon",{},"summon_spawn",x=>x.ownerId===seer.room.sessionId);
   await send(seer,"possess",{},"possession_changed",x=>x.active===true && x.playerId===seer.room.sessionId);
   await send(seer,"select_build",{path:"blade",ancestry:"woodland"},"build_selected",x=>x.path==="blade");
@@ -118,11 +126,13 @@ try {
   book=await send(seer,"occult_book_get",{},"occult_book_state",x=>x.path==="seer");
   assert.ok(book.book.learned.seer.includes("seer_spirit"));
   const savedReadyAt=book.book.cooldowns.seer_burst,trained=book.book.training.seer;
+  const savedMastery=structuredClone(book.book.mastery);
   await sleep(1100);
   book=await send(seer,"occult_book",{action:"reset"},"occult_book_state",x=>x.book.learned.seer.length===0);
   assert.deepEqual(book.book.learned.mender,["mender_heal"]);
   assert.equal(book.book.cooldowns.seer_burst,savedReadyAt);
   assert.equal(book.book.training.seer,trained);
+  assert.deepEqual(book.book.mastery,savedMastery);
   console.log("PASS: changing class ends trance, rejects rituals and preserves occult book");
   console.log("PASS: resetting one branch preserves the other branch, cooldowns and training");
   console.log("PASS: ritual class restrictions, book learning/loadouts, mark combo, party healing, outsider rejection and reconnect persistence");
