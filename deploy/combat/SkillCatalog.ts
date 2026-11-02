@@ -10,3 +10,5 @@ export const POSSESSION_MODIFIER:StatModifier = Object.freeze({
   id:"possession",sourceId:"self",group:"possession",
   bonuses:Object.freeze({atk:POSSESSION_BONUS,def:POSSESSION_BONUS,magicAtk:POSSESSION_BONUS,magicDef:POSSESSION_BONUS}),
 });
+
+export const TALISMAN = Object.freeze({ range:2.8, magicMultiplier:1.5, cooldownMs:4_000 });

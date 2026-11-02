@@ -44,6 +44,7 @@ export const Player = schema({
   classSkillReadyAt: t.number().default(0),
   wardTalentId: t.string().default(""),
   bladeTalentId: t.string().default(""),
+  talismanReadyAt: t.number().default(0),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;

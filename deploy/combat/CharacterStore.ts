@@ -40,6 +40,7 @@ export type CharacterSnapshot = {
   statAllocations?: Allocations;
   build?: CharacterBuild;
   classSkillReadyAt?: number;
+  talismanReadyAt?: number;
   stamina?: number;
   /** Undefined only when loading a legacy S2/three-slot snapshot for migration. */
   inventory?: InventorySnapshot;
@@ -114,7 +115,9 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
     throw new Error("character_record_invalid");
   }
   if (value.build !== undefined && !parseBuild(value.build)) throw new Error("invalid_character_build");
-  if (value.classSkillReadyAt !== undefined && (typeof value.classSkillReadyAt !== "number" || !Number.isSafeInteger(value.classSkillReadyAt) || value.classSkillReadyAt < 0)) throw new Error("invalid_skill_cooldown");
+  for (const readyAt of [value.classSkillReadyAt, value.talismanReadyAt]) {
+    if (readyAt !== undefined && (typeof readyAt !== "number" || !Number.isSafeInteger(readyAt) || readyAt < 0)) throw new Error("invalid_skill_cooldown");
+  }
   if (value.inventory !== undefined) validateInventory(value.inventory);
   const statAllocations = value.statAllocations === undefined ? emptyAllocations() :
     validateAllocations(value.statAllocations, value.level as number);

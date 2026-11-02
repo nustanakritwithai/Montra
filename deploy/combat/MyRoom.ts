@@ -41,7 +41,7 @@ import { BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCoo
 import { BUILD_CATALOG, DEFAULT_WARD_TALENT, talentGroup, classSkill, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 import { BuffLedger } from "./BuffLedger.js";
 import { calculateModifiedStats } from "./StatModifiers.js";
-import { POSSESSION_MODIFIER } from "./SkillCatalog.js";
+import { POSSESSION_MODIFIER, TALISMAN } from "./SkillCatalog.js";
 import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
@@ -959,23 +959,55 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     shoot: (client: Client, message: unknown) => this.castBlessedRice(client, message),
     blessed_rice: (client: Client, message: unknown) => this.castBlessedRice(client, message),
+    apply_talisman: (client: Client, message: unknown) => this.applyTalisman(client, message),
   };
 
-  private castBlessedRice(client: Client, message: unknown) {
-    if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
-    const monsterOrder = parseAttackCommand(message);
-    const pkOrder = monsterOrder ? null : parsePkTargetCommand(message);
-    if (!monsterOrder && !pkOrder) return this.reject(client, "invalid_shoot");
+  private spellCaster(client: Client) {
     const id = client.sessionId;
-    const shooter = this.state.players.get(id);
-    if (!shooter || !shooter.alive) return this.reject(client, "not_alive");
+    const player = this.state.players.get(id);
+    if (this.pendingWarps.has(id)) return this.reject(client, "character_busy");
+    if (!player?.alive) return this.reject(client, "not_alive");
     if (this.climbs.has(id)) return this.reject(client, "climbing");
     if (this.activeDashes.has(id)) return this.reject(client, "dashing");
     if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
-    if (!this.gates.get(id)?.attack.consume(this.simulatedMs)) {
-      return this.reject(client, "attack_rate_limited");
-    }
+    if (!this.gates.get(id)?.attack.consume(this.simulatedMs)) return this.reject(client, "attack_rate_limited");
+    return player;
+  }
 
+  private hitMonsterWithSpell(id: string, target: Monster, damage: number, source: "ranged" | "talisman") {
+    target.hp = Math.max(0, target.hp - damage);
+    target.hitSeq++;
+    this.broadcast("combat_hit", {attackerId:id, targetId:target.id, damage, hp:target.hp,
+      maxHp:target.maxHp, hitSeq:target.hitSeq, source}, {afterNextPatch:true});
+    if (target.hp === 0) this.killMonster(id, target.id);
+  }
+
+  private applyTalisman(client: Client, message: unknown) {
+    const order = parseAttackCommand(message);
+    if (!order) return this.reject(client, "invalid_talisman_target");
+    const id = client.sessionId, caster = this.spellCaster(client);
+    if (!caster) return;
+    const target = this.getMonster(order.targetId);
+    if (!target?.alive || !this.sameCombatMap(id, target.id)) return this.reject(client, "target_unavailable");
+    if (distance3d(caster, target) > TALISMAN.range) return this.reject(client, "talisman_out_of_range");
+    if (!this.bodyPathClear(caster.mapId, caster, target)) return this.reject(client, "talisman_blocked");
+    const now = Date.now();
+    if (now < caster.talismanReadyAt) return this.reject(client, "talisman_cooldown");
+
+    caster.talismanReadyAt = now + TALISMAN.cooldownMs;
+    caster.facing = facingTo(target.x - caster.x, target.z - caster.z);
+    this.recordCombat(id, target.id);
+    const magic = caster.magicAtk + weaponBonuses(this.inventories.get(id), "pve").ranged;
+    const damage = calculateDamage(magic * TALISMAN.magicMultiplier, target.defense, target.level);
+    this.hitMonsterWithSpell(id, target, damage, "talisman");
+  }
+
+  private castBlessedRice(client: Client, message: unknown) {
+    const monsterOrder = parseAttackCommand(message);
+    const pkOrder = monsterOrder ? null : parsePkTargetCommand(message);
+    if (!monsterOrder && !pkOrder) return this.reject(client, "invalid_shoot");
+    const id = client.sessionId, shooter = this.spellCaster(client);
+    if (!shooter) return;
     const targetId = monsterOrder ? monsterOrder.targetId : pkOrder!.targetId;
     if (targetId === id) return this.reject(client, "self_attack");
     if (!this.sameCombatMap(id, targetId)) return this.reject(client, "target_unavailable");
@@ -1005,14 +1037,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       calculateDamage(rangedAttack, (target as Player).magicDef, (target as Player).level);
 
     if (monsterOrder) {
-      const ghost = this.getMonster(targetId)!;
-      ghost.hp = Math.max(0,ghost.hp-rangedDamage);
-      ghost.hitSeq += 1;
-      this.broadcast("combat_hit", {
-        attackerId:id,targetId,damage:rangedDamage,
-        hp:ghost.hp,maxHp:ghost.maxHp,hitSeq:ghost.hitSeq,source:"ranged",
-      }, { afterNextPatch:true });
-      if (ghost.hp===0) this.killMonster(id, targetId);
+      this.hitMonsterWithSpell(id, target as Monster, rangedDamage, "ranged");
     } else {
       const victim=target as Player;
       victim.hp=Math.max(0,victim.hp-rangedDamage);
@@ -1057,7 +1082,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     const map = getWorldMap(owner.mapId)!;
     const besideOwner = {x:clampToMap(owner.x - 1.1, map.bounds, "x"), y:owner.y, z:clampToMap(owner.z + 0.9, map.bounds, "z")};
-    const blocked = kind === "pot_spirit" && (!isSafeWorldPoint(map, besideOwner) || !this.spiritPathClear(map.id, owner, besideOwner));
+    const blocked = kind === "pot_spirit" && (!isSafeWorldPoint(map, besideOwner) || !this.bodyPathClear(map.id, owner, besideOwner));
     const spawn = blocked ? owner : besideOwner;
     const guardian = new SummonedGuardian({
       ownerId: id, kind, x:spawn.x, y:spawn.y, z:spawn.z,
@@ -1091,7 +1116,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for (const m of this.state.monsters.values()) if (m.targetId === ownerId) candidates.push(m.id);
 
     const fromPot = guardian.kind === "pot_spirit";
-    const reachable = (target: WorldPoint) => this.spiritPathClear(owner.mapId, owner, target) && this.spiritPathClear(owner.mapId, guardian, target);
+    const reachable = (target: WorldPoint) => this.bodyPathClear(owner.mapId, owner, target) && this.bodyPathClear(owner.mapId, guardian, target);
     for (const targetId of candidates) {
       if (targetId === ownerId) continue;
       if (!this.sameCombatMap(ownerId, targetId)) continue;
@@ -1121,7 +1146,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return nearest ? { targetId: nearest.id, target: nearest } : null;
   }
 
-  private spiritPathClear(mapId: string, from: WorldPoint, target: WorldPoint) {
+  private bodyPathClear(mapId: string, from: WorldPoint, target: WorldPoint) {
     return mapId === DEFAULT_MAP_ID
       ? !wallBlocksShot({ x: from.x, y: from.y + FORT.targetBodyHeight, z: from.z },
           { x: target.x, y: target.y + FORT.targetBodyHeight, z: target.z })
@@ -1811,6 +1836,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       statAllocations: this.statAllocations.get(id) ?? emptyAllocations(),
       build: this.playerBuild(player) ?? undefined,
       classSkillReadyAt: player.classSkillReadyAt,
+      talismanReadyAt: player.talismanReadyAt,
       stamina: player.stamina,
       x: player.x,
       // Keep stable flight altitude when a transition is mid-flight.
@@ -1884,6 +1910,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         level: saved?.level ?? 1, experience: saved?.experience ?? 0,
         pathId: saved?.build?.path ?? "", ancestryId: saved?.build?.ancestry ?? "",
         classSkillReadyAt: saved?.classSkillReadyAt ?? 0,
+        talismanReadyAt: saved?.talismanReadyAt ?? 0,
         bladeTalentId: saved?.build?.path === "blade" ? saved.build.bladeTalent ?? talentGroup("blade")!.defaultId : "",
         wardTalentId: saved?.build?.path === "sentinel" ? saved.build.wardTalent ?? DEFAULT_WARD_TALENT : "",
         persistent: Boolean(saved), characterSlot: slot,

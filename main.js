@@ -1958,7 +1958,7 @@
     const target=room?.state?.monsters?.get?.(id);
     if(!target||!target.alive||target.mapId!==activeMapId){toast("เป้าหมายไม่อยู่ในพื้นที่");return;}
     selectedForestTarget=id;selectedPkTargetId=null;syncPKHud();marker.setEnabled(false);
-    if(rangedMode)shootAtTarget(id);
+    if(targetedSkill) castAtTarget(id);
     else try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }
     updateMonsterUI(target.hp,target.maxHp,target.alive);ui.monsterHint.textContent=target.displayName+" · Lv "+target.level;
   }
@@ -1966,7 +1966,8 @@
   function switchWorld(mapId) {
     if(activeMapId===mapId || !(portals[mapId] || worldDefinitions?.[mapId]))return;
     activeMapId=mapId;
-    rangedTargetId=null;
+    spellTargetId=null;
+    setTargetedSkill(null);
     applyAtmosphere(mapId);
     clearChatHistory(false);
     const village=mapId==="ritual_village";
@@ -2635,8 +2636,8 @@
   const DASH_DEMO_SPEED = 13.5;
   const DASH_DEMO_COOLDOWN_MS = 1800;
   let selectedPkTargetId = null;
-  let rangedMode = false;
-  let rangedTargetId = null;
+  let targetedSkill = null;
+  let spellTargetId = null;
   let pendingClimb = null;
   const skillEffects = [];
   let spiritShown = false, possessed = false, spirit = null;
@@ -2762,7 +2763,7 @@
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
-    possessed=false;syncPossessionButton();$("classSkill").hidden=true;
+    possessed=false;syncPossessionButton();syncTalismanButton(null);$("classSkill").hidden=true;
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false; updatePartyBadge();
@@ -2786,9 +2787,9 @@
     resetDemoMonster();
     updateFlightButton();
     selectedPkTargetId = null;
-    rangedTargetId = null;
+    spellTargetId = null;
     pendingClimb = null;
-    setRangedMode(false);
+    setTargetedSkill(null);
     ui.pkPanel.hidden = true;
     if (localHpBar) localHpBar.style.width = demoHp + "%";
     updateCharacterHud(null);
@@ -2821,7 +2822,7 @@
     marker.setEnabled(true);
     pendingClimb = null;
     selectedPkTargetId = null;
-    rangedTargetId = null;
+    spellTargetId = null;
     syncPKHud();
     demoAutoAttack = false;
     if (!ui.monsterStatus.hidden) ui.monsterHint.textContent = "แตะผีเพื่อโจมตี";
@@ -2837,12 +2838,25 @@
   function hasLiveElevation() {
     return mode === "live" && room && Number.isFinite(Number(room.state?.fortification?.height));
   }
-  function setRangedMode(armed) {
-    rangedMode = Boolean(armed);
-    const button = $("shoot");
-    if (!button) return;
-    button.classList.toggle("shoot-active",rangedMode);
-    button.setAttribute("aria-pressed",String(rangedMode));
+  function setTargetedSkill(skill) {
+    targetedSkill = skill;
+    $("shoot").classList.toggle("shoot-active", skill === "rice");
+    $("shoot").setAttribute("aria-pressed", String(skill === "rice"));
+    $("talisman").setAttribute("aria-pressed", String(skill === "talisman"));
+  }
+  function monsterForSpell(id) {
+    return id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get(id);
+  }
+  function castAtTarget(id) {
+    if (targetedSkill !== "talisman") return shootAtTarget(id);
+    const monster = monsterForSpell(id), me = ownServerCharacter();
+    if (!monster?.alive || monster.mapId !== activeMapId) { toast("แปะยันต์ได้เฉพาะมอนสเตอร์ที่ยังมีชีวิต"); return; }
+    if (!me?.alive || !Number.isFinite(me.talismanReadyAt)) return;
+    spellTargetId = id;
+    selectedPkTargetId = null;
+    syncPKHud();
+    if (me.talismanReadyAt > Date.now()) { toast("ยันต์กำลังฟื้น"); return; }
+    room.send("apply_talisman", {targetId:id});
   }
   function shootAtTarget(targetId) {
     if (!targetId) return;
@@ -2853,7 +2867,7 @@
     const me=ownServerCharacter();
     if (!me || me.alive===false) { toast("ยังยิงไม่ได้ · รอเกิดใหม่"); return; }
     if (me.combatState==="climbing") { toast("ปีนกำแพงให้เสร็จก่อนยิง");return; }
-    rangedTargetId=targetId;
+    spellTargetId=targetId;
     selectedPkTargetId=(targetId===MONSTER_ID || forestMonsters.has(targetId)) ? null : targetId;
     syncPKHud();
     try {
@@ -2862,16 +2876,24 @@
     }
     catch(err){ console.error("MONTRA shot failed",err); toast("ส่งคำสั่งยิงไม่สำเร็จ"); }
   }
-  function useBlessedRice() {
-    if (!hasLiveElevation()) {
-      toast("เข้า LIVE เพื่อใช้ข้าวสารปลุกเสกโจมตี");
+  function useTargetedSkill(skill) {
+    const talisman = skill === "talisman", me = ownServerCharacter();
+    if (talisman ? !Number.isFinite(me?.talismanReadyAt) : !hasLiveElevation()) {
+      toast(talisman ? "เข้า LIVE ในรุ่นที่รองรับยันอาคมของขลัง" : "เข้า LIVE เพื่อใช้ข้าวสารปลุกเสกโจมตี");
       return;
     }
-    setRangedMode(true);
-    const id = rangedTargetId || ownServerCharacter()?.targetId;
-    const target = id === MONSTER_ID ? room.state.monster : room.state.monsters?.get(id) || room.state.players?.get(id);
-    if (id && target?.alive && (target.mapId || "ritual_village") === activeMapId) shootAtTarget(id);
-    else toast("ข้าวสารปลุกเสก · แตะมอนสเตอร์หรือผู้เล่นเพื่อซัด");
+    setTargetedSkill(skill);
+    const id = spellTargetId || me?.targetId;
+    const target = monsterForSpell(id) || (!talisman && room.state.players?.get(id));
+    if (id && target?.alive && (target.mapId || "ritual_village") === activeMapId) castAtTarget(id);
+    else toast(talisman ? "แปะยันต์ · เดินเข้าใกล้แล้วแตะมอนสเตอร์" : "ข้าวสารปลุกเสก · แตะมอนสเตอร์หรือผู้เล่นเพื่อซัด");
+  }
+  function syncTalismanButton(me) {
+    const button = $("talisman");
+    button.hidden = mode === "live" && !Number.isFinite(me?.talismanReadyAt);
+    const seconds = Math.max(0, Math.ceil(((me?.talismanReadyAt || 0) - Date.now()) / 1000));
+    button.disabled = mode === "live" && (!me?.alive || seconds > 0);
+    button.lastElementChild.textContent = seconds ? seconds + " วิ" : "แปะยันต์";
   }
   function updateFlightButton() {
     const button = $("fly");
@@ -2988,6 +3010,16 @@
     pendingClimb=null;
     try {room.send("climb",{structureId:activeFort.id,direction});}
     catch(err){console.error(err);toast("ส่งคำสั่งปีนไม่สำเร็จ");}
+  }
+  function showTalisman(mesh) {
+    if (!mesh) return;
+    const seal = B.MeshBuilder.CreatePlane("talisman seal", {width:.62, height:.95, sideOrientation:B.Mesh.DOUBLESIDE}, scene);
+    seal.material = talismanPaper;
+    seal.parent = mesh;
+    seal.position.y = 1.1;
+    seal.billboardMode = B.Mesh.BILLBOARDMODE_ALL;
+    seal.isPickable = false;
+    skillEffects.push({mesh:seal, mapId:activeMapId, until:performance.now() + 850});
   }
   function showSpiritPot(spirit) {
     const profile = [[.12, 0], [.35, .07], [.43, .28], [.26, .53], [.29, .59], [.2, .59], [.18, .48]];
@@ -3201,6 +3233,7 @@
     updateFlightButton();
     syncPossessionButton();
     syncClassSkill(mine);
+    syncTalismanButton(mine);
     if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
     if (drawerActive === "character") renderProgressionProfile();
     if (drawerActive === "party") renderParty();
@@ -3288,8 +3321,8 @@
       mode = "live"; localId = joined.sessionId; activeCharacterSlot = requestedSlot;
       clearAvatars(); clearSummons(); demoDest = null;
       pendingClimb = null;
-      rangedTargetId = null;
-      setRangedMode(false);
+      spellTargetId = null;
+      setTargetedSkill(null);
       onlinePlayers.clear(); enemy.setEnabled(false);
       selectedPkTargetId = null;
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
@@ -3395,19 +3428,27 @@
       joined.onMessage("combat_hit", hit => {
         if (room !== joined) return;
         const forestTarget=joined.state?.monsters?.get?.(hit?.targetId);
-        if(forestTarget){if(forestTarget.mapId===activeMapId){syncForestMonsters(joined.state);if(hit.attackerId===localId)toast("โจมตี "+forestTarget.displayName+" -"+hit.damage+" HP");}return;}
+        const talisman = hit?.source === "talisman";
+        if (forestTarget) {
+          if (forestTarget.mapId !== activeMapId) return;
+          syncForestMonsters(joined.state);
+          if (talisman) showTalisman(forestMonsters.get(hit.targetId));
+          if (hit.attackerId === localId) toast((talisman ? "แปะยันต์ใส่" : "โจมตี ") + forestTarget.displayName + " -" + hit.damage + " HP");
+          return;
+        }
         if(activeMapId !== "ritual_village" || hit?.targetId !== MONSTER_ID)return;
         // Players also visibly turn toward the monster while attacking,
         // even when standing still. All clients receive the same event.
         if (typeof hit.attackerId === "string") {
           faceAvatarToward(hit.attackerId, enemy.position.x, enemy.position.z);
         }
+        if (talisman) showTalisman(enemy);
         hitFlashRemaining = .22;
         if (Number.isFinite(Number(hit.hp)) && Number.isFinite(Number(hit.maxHp))) {
           updateMonsterUI(Number(hit.hp), Number(hit.maxHp), Number(hit.hp) > 0);
         }
         toast(hit.attackerId === localId
-          ? "โจมตีผีสำเร็จ -" + String(hit.damage) + " HP"
+          ? (talisman ? "แปะยันต์ใส่ผี -" : "โจมตีผีสำเร็จ -") + String(hit.damage) + " HP"
           : "ผู้เล่นอื่นโจมตีผี -" + String(hit.damage) + " HP");
       });
       joined.onMessage("combat_notice", notice => {
@@ -3672,6 +3713,10 @@
         else if (info?.reason === "summon_cooldown") toast("อัญเชิญเร็วเกินไป · รอคูลดาวน์");
         else if (info?.reason === "summon_rate_limited") toast("กดเรียกวิญญาณถี่เกินไป");
         else if (info?.reason === "shot_out_of_range") toast("เป้าหมายอยู่นอกระยะยิง");
+        else if (info?.reason === "invalid_talisman_target") toast("เลือกมอนสเตอร์เพื่อแปะยันต์");
+        else if (info?.reason === "talisman_out_of_range") toast("เข้าใกล้มอนสเตอร์ในระยะ 2.8 เมตร แล้วแตะมอนสเตอร์อีกครั้ง");
+        else if (info?.reason === "talisman_blocked") toast("มีสิ่งกีดขวางระหว่างคุณกับมอนสเตอร์");
+        else if (info?.reason === "talisman_cooldown") toast("ยันต์กำลังฟื้น");
         else if (info?.reason === "shot_blocked") toast("กำแพงบังแนวกระสุนอาคม");
         else if (info?.reason === "shot_cooldown") toast("ข้าวสารปลุกเสกกำลังฟื้น · รอครู่หนึ่ง");
         else if (info?.reason === "inventory_unavailable") toast("เซิร์ฟเวอร์ยังไม่รองรับกระเป๋าถาวร");
@@ -3865,12 +3910,12 @@
         toast("กำลังเดินไปประตู · แตะประตูอีกครั้งเมื่อถึง");
       }
     } else if (otherId && mode==="live") {
-      if(rangedMode) shootAtTarget(otherId);
+      if(targetedSkill) castAtTarget(otherId);
       else tapPlayerForPK(otherId);
     } else if (hitMesh?.metadata?.monsterId && hitMesh !== enemy) {
       requestForestAttack(hitMesh.metadata.monsterId);
     } else if (hitMesh === enemy) {
-      if(rangedMode) shootAtTarget(MONSTER_ID);
+      if(targetedSkill) castAtTarget(MONSTER_ID);
       else requestMonsterAttack();
     } else if(hitMesh?.metadata?.climbableWall) {
       const flying = mode === "live" ? ownServerCharacter()?.flying : demoFlying;
@@ -4574,7 +4619,7 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>สกิลพื้นฐานทุกสาย</h3><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>สกิลพื้นฐานทุกสาย</h3><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
   }
   function currentBagSlots() {
     if (mode === "live") return inventoryState?.slots || null;
@@ -5013,15 +5058,16 @@
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
   $("attack").onclick = () => {
-    setRangedMode(false);
-    rangedTargetId = null;
+    setTargetedSkill(null);
+    spellTargetId = null;
     if (mode === "live" && room && selectedPkTargetId) {
       tapPlayerForPK(selectedPkTargetId);
     } else {
       requestMonsterAttack();
     }
   };
-  $("shoot").onclick = useBlessedRice;
+  $("shoot").onclick = () => useTargetedSkill("rice");
+  $("talisman").onclick = () => useTargetedSkill("talisman");
   $("climb").onclick = requestClimb;
   $("fly").onclick = toggleFlight;
 

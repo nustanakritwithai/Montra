@@ -25,6 +25,7 @@ await writeFile(path.join(directory, id + ".json"), JSON.stringify({
   mapId:"ritual_village", x:1.1, y:0, z:17.7, hp:240, updatedAt:new Date().toISOString()
 }), {flag:"wx"});
 const room = await new Client(url).create("my_room", {guestToken:token, worldVersion:1, templeVersion:1, atlasVersion:1});
+let lastTalismanReadyAt;
 try {
   const events = [];
   room.onMessage("*", (type, data) => events.push({type,data}));
@@ -54,6 +55,41 @@ try {
   room.send("pot_summon", {});
   await until(() => event("command_rejected", e => e.reason === "possession_active"), "one spirit per owner");
   console.log("PASS: classless rice and independent pot damage, shared legacy shot cooldown and possession");
+
+  // No melee order is active. Invalid or distant targets must leave the seal ready.
+  await sleep(600);
+  room.send("apply_talisman", {targetId});
+  await until(() => event("command_rejected", e => e.reason === "talisman_out_of_range"), "range");
+  await sleep(600);
+  room.send("apply_talisman", {targetId:room.sessionId});
+  await until(() => event("command_rejected", e => e.reason === "invalid_talisman_target"), "monster targets only");
+  assert.equal(me().talismanReadyAt, 0);
+  room.send("move", {x:room.state.monster.x, z:room.state.monster.z});
+  await until(() => Math.hypot(me().x-room.state.monster.x, me().z-room.state.monster.z) < 2.5, "within reach");
+  const beforeSeal = room.state.monster.hp;
+  const start = events.length;
+  room.send("blessed_rice", {targetId});
+  room.send("apply_talisman", {targetId});
+  const seal = await until(() => event("combat_hit", e => e.source === "talisman" && e.targetId === targetId), "seal hit");
+  const otherSpell = events.slice(start).find(e => e.type === "combat_hit" && e.data.source === "ranged")?.data;
+  assert.ok(otherSpell?.damage > 0 && seal.damage > otherSpell.damage);
+  assert.equal(seal.hp, beforeSeal - otherSpell.damage - seal.damage);
+  lastTalismanReadyAt = me().talismanReadyAt;
+  assert.ok(lastTalismanReadyAt > Date.now() && lastTalismanReadyAt <= Date.now() + 4000);
+  room.send("apply_talisman", {targetId});
+  await until(() => event("command_rejected", e => e.reason === "talisman_cooldown"), "seal cooldown");
+  assert.equal(room.state.monster.hp, seal.hp);
+  console.log("PASS: monster-only talisman, range, rice and seal together, authoritative HP and independent cooldown");
 } finally {
   await room.leave();
+}
+
+await sleep(450);
+const back = await new Client(url).create("my_room", {guestToken:token, worldVersion:1, templeVersion:1, atlasVersion:1});
+try {
+  await until(() => back.state?.players?.get(back.sessionId)?.persistent, "rejoin");
+  assert.equal(back.state.players.get(back.sessionId).talismanReadyAt, lastTalismanReadyAt);
+  console.log("PASS: talisman cooldown restored from character save");
+} finally {
+  await back.leave();
 }
