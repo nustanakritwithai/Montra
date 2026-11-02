@@ -4817,8 +4817,8 @@
   // Coordinates set the atlas layout. Connectivity and route advice come from live portal pairs.
   const atlasCells = {
     ritual_village:[89,41], forbidden_forest:[82,125], bound_temple:[61,212],
-    drowned_marsh:[189,201], moon_cemetery:[105,301], bamboo_frontier:[222,293],
-    mantra_capital:[310,116], moon_pass:[210,391], hex_ridge:[70,429],
+    drowned_marsh:[189,201], moon_cemetery:[105,301], bamboo_frontier:[210,285],
+    mantra_capital:[310,116], moon_pass:[245,391], hex_ridge:[70,429],
     naga_cavern:[66,519], river_watch:[193,556], lotus_basin:[318,478],
     fallen_city:[107,637], asura_peak:[222,710], spirit_rift:[112,780]
   };
