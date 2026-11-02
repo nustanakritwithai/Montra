@@ -266,6 +266,62 @@
       l.intensity = .95 * spot.strength * flicker * l.metadata.level;
     });
   }
+  // ---- Floating combat text (Ragnarok-style) ----
+  // Numbers and short words pop above the target, overshoot, arc sideways
+  // and fall while fading. Drawn as DOM over the canvas at the projected head
+  // position; a small pool, at most 28 on screen, oldest dropped first.
+  const floatLayer = document.createElement("div"); floatLayer.className = "float-layer"; floatLayer.setAttribute("aria-hidden", "true");
+  document.getElementById("game")?.append(floatLayer);
+  const floatProj = new B.Vector3();
+  const METAL_KINDS = new Set(["dealt", "skill", "taken", "heal", "spirit", "onoma", "cry", "levelup"]);
+  function floatText(x, y, z, text, kind = "dealt", opts = {}) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect(), w = engine.getRenderWidth(), h = engine.getRenderHeight();
+    B.Vector3.ProjectToRef(new B.Vector3(x, y, z), B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), camera.viewport.toGlobal(w, h), floatProj);
+    if (floatProj.z < 0 || floatProj.z > 1) return;
+    const sx = floatProj.x * rect.width / w, sy = floatProj.y * rect.height / h;
+    if (sx < -40 || sy < -40 || sx > rect.width + 40 || sy > rect.height + 40) return;
+    while (floatLayer.childElementCount >= 28) floatLayer.firstElementChild.remove();
+    const el = document.createElement("span"); el.className = "ftxt " + kind + (opts.big ? " big" : "");
+    el._world = [x, y, z]; // re-projected every frame so the text stays on its target while the camera moves
+    el._lift = opts.lift || 0; el._side = opts.side || 0;
+    el.textContent = text;
+    if (METAL_KINDS.has(kind)) { el.classList.add("metal"); el.dataset.t = text; } // gradient face drawn by ::after over the stroked base
+    const drift = (opts.drift ?? (Math.random() - .5) * 70) | 0;
+    el.style.left = sx + "px"; el.style.top = sy + "px"; el.style.setProperty("--dx", drift + "px"); el.style.setProperty("--rise", (opts.rise ?? 46) + "px");
+    if (opts.delay) el.style.animationDelay = opts.delay + "ms";
+    floatLayer.append(el);
+    setTimeout(() => el.remove(), (opts.life ?? 1250) + (opts.delay || 0));
+  }
+  function updateFloatText() {
+    if (!floatLayer.firstElementChild) return;
+    const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect(), w = engine.getRenderWidth(), h = engine.getRenderHeight();
+    const tm = scene.getTransformMatrix(), vp = camera.viewport.toGlobal(w, h);
+    for (const el of floatLayer.children) {
+      const p = el._world; if (!p) continue;
+      B.Vector3.ProjectToRef(new B.Vector3(p[0], p[1], p[2]), B.Matrix.IdentityReadOnly, tm, vp, floatProj);
+      el.style.left = (floatProj.x * rect.width / w + el._side).toFixed(1) + "px"; el.style.top = (floatProj.y * rect.height / h - el._lift).toFixed(1) + "px";
+    }
+  }
+  // World anchors: above a ghost or a player's head.
+  // Popups landing on the same target in quick succession stack upwards.
+  const floatStack = new Map();
+  function stackLift(key) {
+    const now = performance.now(), recent = (floatStack.get(key) || []).filter(t => now - t < 450);
+    recent.push(now); floatStack.set(key, recent); return (recent.length - 1) * 22;
+  }
+  // From the far camera the hero and the target are close on screen: target
+  // popups lean up-right, the hero's lean up-left, so the two never pile up.
+  function floatAtMonster(id, text, kind, opts = {}) {
+    opts = { drift: 20 + Math.random() * 50, side: 22, ...opts, lift: stackLift("m" + id) };
+    const mesh = forestMonsters.get(id) || (id === MONSTER_ID ? enemy : null); if (!mesh) return;
+    const tall = mesh.metadata?.ghost?.tall ?? 1.8; floatText(mesh.position.x, mesh.position.y + tall * .55, mesh.position.z, text, kind, opts);
+  }
+  function floatAtPlayer(id, text, kind, opts = {}) {
+    opts = { drift: -(20 + Math.random() * 50), side: -22, ...opts, lift: stackLift("p" + id) };
+    const a = avatars.get(id); if (!a) return; floatText(a.x, (a.y || 0) + 2.5, a.z, text, kind, opts);
+  }
+  const SKILL_SOURCES = new Set(["sword", "muay", "talisman", "ranged", "occult", "blade"]);
   // Soft contact shadow under every character, so feet sit on the ground
   // even where the moon shadow falls away or is switched off.
   let contactMat = null;
@@ -438,6 +494,243 @@
     m.emissiveTexture = texture; m.opacityTexture = texture; texture.hasAlpha = true;
     m.disableLighting = true; m.backFaceCulling = false; m.alphaMode = B.Engine.ALPHA_ADD;
     return m;
+  }
+  // ---- World-space VFX for the far camera: hits, telegraphs, target ring and every skill in the game ----
+  // Sized in world units so they read at the default radius-85 view. Pooled additive planes; textures are
+  // painted once per (shape, colour) and shared.
+  const FX_COL = {
+    gold: [255, 206, 90], red: [255, 70, 50], cyan: [100, 225, 255], violet: [190, 120, 255], green: [110, 255, 140],
+    white: [235, 242, 255], orange: [255, 140, 50], pink: [255, 150, 200], blood: [220, 30, 60], jade: [90, 255, 210],
+  };
+  const fxMatCache = new Map();
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+  const FX_SHAPES = {
+    star(c, s, col) { const h = s / 2;
+      const g = c.createRadialGradient(h, h, 0, h, h, h * .55);
+      g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(.35, rgba(col, .95)); g.addColorStop(1, rgba(col, 0));
+      c.fillStyle = g; c.fillRect(0, 0, s, s); c.translate(h, h); c.fillStyle = `rgba(${col.map(v => Math.min(255, v + 70)).join(",")},.95)`;
+      for (let i = 0; i < 8; i++) { const L = i % 2 ? h * .62 : h * .98, W = i % 2 ? s / 32 : s / 21;
+        c.beginPath(); c.moveTo(0, -W); c.lineTo(L, 0); c.lineTo(0, W); c.closePath(); c.fill(); c.rotate(Math.PI / 4); } },
+    ring(c, s, col) { const h = s / 2; c.strokeStyle = rgba(col, 1); c.lineWidth = s / 26; c.shadowColor = rgba(col, 1); c.shadowBlur = s / 18;
+      c.beginPath(); c.arc(h, h, h - s / 12, 0, Math.PI * 2); c.stroke(); c.lineWidth = s / 80; c.strokeStyle = "rgba(255,255,255,.9)"; c.stroke(); },
+    dash(c, s, col) { const h = s / 2, n = 12; c.strokeStyle = rgba(col, 1); c.lineWidth = s / 28; c.shadowColor = rgba(col, 1); c.shadowBlur = s / 18;
+      for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; c.beginPath(); c.arc(h, h, h - s / 12, a, a + Math.PI * 2 / n * .6); c.stroke(); } },
+    seg6(c, s, col) { const h = s / 2, n = 6; c.strokeStyle = rgba(col, 1); c.lineWidth = s / 28; c.shadowColor = rgba(col, 1); c.shadowBlur = s / 18;
+      for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; c.beginPath(); c.arc(h, h, h - s / 12, a, a + Math.PI * 2 / n * .6); c.stroke(); } },
+    disc(c, s, col) { const h = s / 2, g = c.createRadialGradient(h, h, 0, h, h, h);
+      g.addColorStop(0, rgba(col, 0)); g.addColorStop(.55, rgba(col, 0)); g.addColorStop(.8, rgba(col, .85)); g.addColorStop(.96, rgba(col, .85)); g.addColorStop(1, rgba(col, 0));
+      c.fillStyle = g; c.fillRect(0, 0, s, s); },
+    glow(c, s, col) { const h = s / 2, g = c.createRadialGradient(h, h, 0, h, h, h);
+      g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(.25, rgba(col, .9)); g.addColorStop(1, rgba(col, 0)); c.fillStyle = g; c.fillRect(0, 0, s, s); },
+    // Crescent slash: bright edge along the top arc, tapering to points at both ends.
+    arc(c, s, col) { const h = s / 2;
+      c.translate(h, s * .9);
+      for (let k = 0; k < 3; k++) { const R = s * .78 - k * s * .05, w = [s * .1, s * .05, s * .02][k];
+        c.beginPath(); c.arc(0, 0, R, -Math.PI * .86, -Math.PI * .14); c.arc(0, -w * .4, R - w, -Math.PI * .2, -Math.PI * .8, true); c.closePath();
+        c.fillStyle = k === 2 ? "rgba(255,255,255,1)" : rgba(col, k ? .95 : .55); c.shadowColor = rgba(col, 1); c.shadowBlur = s / 14; c.fill(); } },
+    // Forward thrust streak.
+    streak(c, s, col) { const g = c.createLinearGradient(0, s, 0, 0);
+      g.addColorStop(0, rgba(col, 0)); g.addColorStop(.7, rgba(col, .9)); g.addColorStop(1, "rgba(255,255,255,1)");
+      c.fillStyle = g; c.beginPath(); c.moveTo(s * .5, 0); c.lineTo(s * .62, s * .5); c.lineTo(s * .5, s); c.lineTo(s * .38, s * .5); c.closePath();
+      c.shadowColor = rgba(col, 1); c.shadowBlur = s / 16; c.fill(); },
+    // Vertical light column (cylindrical billboard).
+    beam(c, s, col) { const g = c.createLinearGradient(0, 0, s, 0);
+      g.addColorStop(0, rgba(col, 0)); g.addColorStop(.35, rgba(col, .55)); g.addColorStop(.5, "rgba(255,255,255,.95)"); g.addColorStop(.65, rgba(col, .55)); g.addColorStop(1, rgba(col, 0));
+      c.fillStyle = g; c.fillRect(0, 0, s, s); c.globalCompositeOperation = "destination-in";
+      const v = c.createLinearGradient(0, 0, 0, s); v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(.25, "rgba(0,0,0,1)"); v.addColorStop(.85, "rgba(0,0,0,1)"); v.addColorStop(1, "rgba(0,0,0,0)");
+      c.fillStyle = v; c.fillRect(0, 0, s, s); c.globalCompositeOperation = "source-over"; },
+    // Yantra seal (ยันต์): double ring, Thai syllables, square and triangle, used for casts, wai and rallies.
+    yantra(c, s, col) { const h = s / 2; c.strokeStyle = rgba(col, 1); c.fillStyle = rgba(col, 1); c.shadowColor = rgba(col, 1); c.shadowBlur = s / 30;
+      c.lineWidth = s / 64; for (const r of [.47, .37, .2]) { c.beginPath(); c.arc(h, h, s * r, 0, Math.PI * 2); c.stroke(); }
+      c.lineWidth = s / 90; c.beginPath(); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; c.lineTo(h + Math.cos(a) * s * .36, h + Math.sin(a) * s * .36); } c.closePath(); c.stroke();
+      c.beginPath(); for (let i = 0; i < 3; i++) { const a = -Math.PI / 2 + i * Math.PI * 2 / 3; c.lineTo(h + Math.cos(a) * s * .3, h + Math.sin(a) * s * .3); } c.closePath(); c.stroke();
+      c.font = `900 ${s * .06 | 0}px "Noto Sans Thai", system-ui, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle";
+      const syl = ["นะ", "โม", "พุท", "ธา", "ยะ", "มะ", "อะ", "อุ"];
+      syl.forEach((t, i) => { const a = i / syl.length * Math.PI * 2; c.save(); c.translate(h + Math.cos(a) * s * .42, h + Math.sin(a) * s * .42); c.rotate(a + Math.PI / 2); c.fillText(t, 0, 0); c.restore(); });
+      for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; c.beginPath(); c.arc(h + Math.cos(a) * s * .285, h + Math.sin(a) * s * .285, s / 110, 0, Math.PI * 2); c.fill(); }
+      c.beginPath(); c.arc(h, h, s / 34, 0, Math.PI * 2); c.fill(); },
+  };
+  function vfxMat(shape, color) {
+    const key = shape + ":" + color; let m = fxMatCache.get(key); if (m) return m;
+    const col = FX_COL[color] || FX_COL.gold, size = shape === "yantra" ? 256 : shape === "glow" ? 64 : 128;
+    const tex = paintTexture("fx " + key, size, (c, s) => { c.clearRect(0, 0, s, s); FX_SHAPES[shape](c, s, col); c.setTransform(1, 0, 0, 1, 0, 0); });
+    m = additiveMat("fx " + key, tex); m.fogEnabled = false;
+    if (shape === "star" || shape === "glow") { m.disableDepthWrite = true; m.depthFunction = B.Engine.ALWAYS; } // flashes punch through scenery
+    else { m.disableDepthWrite = true; m.zOffset = -2; }
+    fxMatCache.set(key, m); return m;
+  }
+  const worldFx = [], worldFxPool = [], FX_MAX = 140;
+  const fxNear = (x, z, r = 48) => Math.hypot(x - camera.target.x, z - camera.target.z) < r;
+  // orient: "bill" (faces camera), "ground" (flat, spins with yaw), "flat" (flat at height, aimed by yaw), "pillar" (Y-billboard column)
+  function spawnFx(shape, color, x, y, z, o = {}) {
+    if (worldFx.length >= FX_MAX) return null;
+    let m = worldFxPool.pop();
+    if (!m) { m = B.MeshBuilder.CreatePlane("worldFx", { size: 1 }, scene); m.isPickable = false; }
+    const orient = o.orient || "bill";
+    m.material = vfxMat(shape, color); m.setEnabled(true); m.position.set(x, y, z);
+    m.billboardMode = orient === "bill" ? B.Mesh.BILLBOARDMODE_ALL : orient === "pillar" ? B.Mesh.BILLBOARDMODE_Y : B.Mesh.BILLBOARDMODE_NONE;
+    m.rotation.set(orient === "ground" || orient === "flat" ? Math.PI / 2 : 0, o.yaw || 0, orient === "bill" ? (o.roll ?? Math.random() * Math.PI) : 0);
+    const f = { m, orient, born: performance.now() + (o.delay || 0), life: o.life || 380, s0: o.s0 ?? .4, s1: o.s1 ?? 4, a0: o.a0 ?? 1, a1: o.a1 ?? 0,
+      spin: o.spin || 0, follow: o.follow || null, fx: 0, fz: 0, pulse: o.pulse || 0, h: o.h || 0, vel: o.vel || null, grav: o.grav || 0, last: 0, fade: o.fade || 0 };
+    if (f.follow) { const p = f.follow.position || f.follow; f.fx = x - p.x; f.fz = z - p.z; }
+    m.scaling.setAll(.001); m.visibility = 0; worldFx.push(f);
+    return f;
+  }
+  function updateWorldFx(now) {
+    for (let i = worldFx.length - 1; i >= 0; i--) {
+      const f = worldFx[i], k = (now - f.born) / f.life;
+      if (k < 0) continue;
+      const gone = f.follow && (f.follow.isEnabled ? !f.follow.isEnabled() : f.follow.node && !f.follow.node.isEnabled?.());
+      if (k >= 1 || gone) { f.m.setEnabled(false); worldFxPool.push(f.m); worldFx.splice(i, 1); continue; }
+      const e = 1 - Math.pow(1 - k, 3), s = (f.s0 + (f.s1 - f.s0) * e) * (1 + f.pulse * Math.sin(now / 60));
+      if (f.h) f.m.scaling.set(s, f.h * (k < .2 ? k / .2 : 1), 1); else f.m.scaling.setAll(s);
+      // a0 → a1 linearly, optionally holding then fading in the last `fade` fraction
+      f.m.visibility = f.fade ? (k < 1 - f.fade ? f.a0 : f.a0 * (1 - k) / f.fade) : f.a0 + (f.a1 - f.a0) * k;
+      const dt = f.last ? Math.min(.05, (now - f.last) / 1000) : 0; f.last = now;
+      if (f.spin) { if (f.orient === "bill") f.m.rotation.z += f.spin * dt; else f.m.rotation.y += f.spin * dt; }
+      if (f.vel) { f.vel[1] -= f.grav * dt; f.fx += f.vel[0] * dt; f.m.position.y += f.vel[1] * dt; f.fz += f.vel[2] * dt; if (!f.follow) { f.m.position.x += f.vel[0] * dt; f.m.position.z += f.vel[2] * dt; } }
+      if (f.follow) { const p = f.follow.position || f.follow; f.m.position.x = p.x + f.fx; f.m.position.z = p.z + f.fz; }
+    }
+  }
+  // Burst of glowing motes: `n` sparks flung from (x,y,z); up>0 makes them rise like embers instead of falling.
+  function sparks(color, x, y, z, n = 8, o = {}) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, sp = (o.speed ?? 6) * (.5 + Math.random() * .7);
+      spawnFx("glow", color, x, y, z, { life: (o.life ?? 520) * (.7 + Math.random() * .6), s0: o.size ?? .9, s1: (o.size ?? .9) * .3, a0: 1, a1: 0, delay: (o.delay || 0) + Math.random() * (o.spread || 60),
+        vel: [Math.cos(a) * sp, (o.up ?? 4) * (.6 + Math.random() * .8), Math.sin(a) * sp], grav: o.grav ?? 9, follow: o.follow });
+    }
+  }
+  // Hit flash: starburst plus a ground shock ring; ours are gold, hits on us red, others cyan.
+  function hitBurst(x, z, tone = "gold", heavy = false, y = 0) {
+    const sc = heavy ? 1.45 : 1;
+    spawnFx("star", tone, x, y + 1.6, z, { life: 280, s0: 1.6 * sc, s1: 6 * sc, a0: 1, a1: 0 });
+    spawnFx("star", tone, x, y + 1.6, z, { life: 180, s0: 3 * sc, s1: 1.4 * sc, a0: .9, a1: 0, delay: 30 });
+    spawnFx("ring", tone === "red" ? "red" : "gold", x, y + .15, z, { orient: "ground", life: 420, s0: 1, s1: 6.5 * sc, a0: .95, a1: 0 });
+    if (heavy || tone !== "cyan") sparks(tone, x, y + 1.4, z, heavy ? 10 : 6, { speed: 8, up: 5, size: .8, life: 420 });
+  }
+  // Wind-up telegraph: a red danger disc that tightens onto the ghost until it strikes.
+  function windupTelegraph(mesh, g) {
+    const r = Math.max(3, (g.tall || 1.8) * 1.8), y = (g.ty ?? 0) + .1;
+    spawnFx("disc", "red", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 650, s0: r * 2.4, s1: r * 1.6, a0: .25, a1: .85, follow: mesh });
+    spawnFx("dash", "red", mesh.position.x, y + .02, mesh.position.z, { orient: "ground", life: 650, s0: r * 3, s1: r * 1.7, a0: .5, a1: 1, spin: 2.2, follow: mesh });
+  }
+  // Persistent rotating gold ring under the selected target.
+  let targetRingMesh = null;
+  function updateTargetRing(now) {
+    const id = selectedForestTarget, mesh = id ? (forestMonsters.get(id) || (id === MONSTER_ID ? enemy : null)) : null;
+    if (!mesh || !mesh.isEnabled()) { if (targetRingMesh) targetRingMesh.setEnabled(false); return; }
+    if (!targetRingMesh) { targetRingMesh = B.MeshBuilder.CreatePlane("targetRing", { size: 1 }, scene); targetRingMesh.isPickable = false; targetRingMesh.rotation.x = Math.PI / 2; targetRingMesh.material = vfxMat("seg6", "gold"); }
+    const g = mesh.metadata?.ghost, r = Math.max(2.6, (g?.tall || 1.8) * 1.5);
+    targetRingMesh.setEnabled(true);
+    targetRingMesh.position.set(mesh.position.x, (g?.ty ?? 0) + .14, mesh.position.z);
+    targetRingMesh.rotation.y = now / 900;
+    targetRingMesh.scaling.setAll(r * 2 * (1 + .06 * Math.sin(now / 220)));
+    targetRingMesh.visibility = .8 + .2 * Math.sin(now / 220);
+  }
+  // ---- Skill VFX: every action an avatar plays gets a readable effect, timed to its strike frame ----
+  const SCHOOL_COL = { ritual_dagger: "violet", arcane_sword: "cyan", spirit_staff: "jade", thai_dual: "gold", muay_wraps: "orange" };
+  function actionFx(a, type) {
+    if (!a || !fxNear(a.x, a.z)) return;
+    const d = ACTIONS[type].dur * 1000, y = a.y || 0, h = a.heading || 0, fwd = [-Math.sin(h), -Math.cos(h)];
+    const col = SCHOOL_COL[a.weaponId] || "gold", side = a.action?.side || 1;
+    const P = (dist, up = 1.2) => [a.x + fwd[0] * dist, y + up, a.z + fwd[1] * dist];
+    // Horizontal crescent in front of the avatar; roll tilts it for alternating left/right swings.
+    const slash = (at, size = 4.4, c = col, dist = 1.2, yawOff = 0, life = 260) => { const [x, yy, z] = P(dist, 1.25);
+      spawnFx("arc", c, x, yy, z, { orient: "flat", yaw: h + Math.PI + yawOff, delay: d * at, life, s0: size * .55, s1: size, a0: 1, a1: 0, follow: a }); };
+    const thrust = (at, len = 5, c = col) => { const [x, yy, z] = P(1.6, 1.25);
+      spawnFx("streak", c, x, yy, z, { orient: "flat", yaw: h + Math.PI, delay: d * at, life: 200, s0: len * .5, s1: len, a0: 1, a1: 0, follow: a }); };
+    const pop = (at, c = col, size = 2.4, dist = 1.3) => { const [x, yy, z] = P(dist, 1.3); spawnFx("star", c, x, yy, z, { delay: d * at, life: 200, s0: size * .4, s1: size, a0: 1, a1: 0 }); };
+    const shock = (at, c = col, size = 6, dist = 0) => { const [x, , z] = P(dist); spawnFx("ring", c, x, y + .15, z, { orient: "ground", delay: d * at, life: 480, s0: 1, s1: size, a0: .95, a1: 0 }); };
+    const seal = (c, size = 5, life = d, spin = 1.4) => spawnFx("yantra", c, a.x, y + .12, a.z, { orient: "ground", life: Math.max(700, life), s0: size * .6, s1: size, a0: .95, a1: .95, fade: .35, spin, follow: a });
+    const beam = (c, at = 0, life = 800, tall = 9, wide = 2.2) => spawnFx("beam", c, a.x, y + tall / 2, a.z, { orient: "pillar", delay: d * at, life, s0: wide, s1: wide * .7, h: tall, a0: .9, a1: .9, fade: .5, follow: a });
+    const embers = (c, n = 10, at = 0, o = {}) => sparks(c, a.x, y + .6, a.z, n, { speed: 1.6, up: 5, grav: -1, life: 900, size: .7, spread: 400, delay: d * at, follow: a, ...o });
+    const shield = (c, life = d) => { spawnFx("dash", c, a.x, y + 1.2, a.z, { life, s0: 2.6, s1: 3.1, a0: .9, a1: .9, fade: .3, spin: 2, pulse: .04, follow: a });
+      spawnFx("glow", c, a.x, y + 1.2, a.z, { life, s0: 3.2, s1: 3.4, a0: .35, a1: .35, fade: .3, follow: a }); };
+    switch (type) {
+      case "stab": thrust(.32); pop(.38, col, 2.2, 2.6); break;
+      case "slash": slash(.35); pop(.42, col, 2, 1.8); break;
+      case "twin": slash(.33, 4.2, col, 1.2, side * .35); pop(.4, col, 2, 1.6); break;
+      case "smash": slash(.4, 3, col, 1.2, 0, 200); shock(.5, col, 6.5, 1.4); pop(.5, col, 2.6, 1.4); break;
+      case "punch": case "m_basic": case "m_jab": pop(.42, col, 1.8); break;
+      case "m_cross": pop(.45, col, 2.4); break;
+      case "m_hook": slash(.42, 2.6, col, .9, side * .5, 200); pop(.5, col, 2.2); break;
+      case "m_elbow": slash(.42, 2.4, "red", .8, 0, 200); pop(.48, "red", 2.8, 1); break;
+      case "m_knee": pop(.45, "red", 2.8, 1); shock(.48, "orange", 4, 1); break;
+      case "m_teep": thrust(.4, 3, "orange"); pop(.48, "orange", 2.4, 1.6); break;
+      case "m_step": case "m_side": case "m_retreat": shock(.1, "white", 3.5); sparks("white", a.x, y + .3, a.z, 5, { speed: 4, up: 1.5, life: 380 }); break;
+      case "m_flurry": case "m_rush": for (let i = 0; i < 4; i++) pop(.15 + i * .2, i % 2 ? "red" : "orange", 2.2, 1.1 + (type === "m_rush" ? i * .4 : 0)); break;
+      case "m_guard": case "guard": shield(type === "guard" ? "white" : "orange"); break;
+      case "m_parry": spawnFx("ring", "white", a.x, y + 1.2, a.z, { life: 260, s0: 1.4, s1: 4.4, a0: 1, a1: 0 }); pop(.1, "white", 2.8, .9); break;
+      case "m_evade": for (let i = 0; i < 4; i++) spawnFx("glow", "cyan", a.x - fwd[0] * i * .5, y + 1.1, a.z - fwd[1] * i * .5, { delay: i * 40, life: 320, s0: 2.6 - i * .4, s1: 1, a0: .6, a1: 0 }); break;
+      case "m_counter": case "counter": spawnFx("ring", "white", a.x, y + 1.2, a.z, { life: 220, s0: 1.4, s1: 3.6, a0: 1, a1: 0 }); slash(.45, 3.4, type === "counter" ? col : "red", 1.1, 0, 220); pop(.5, "white", 3); break;
+      case "m_clinch": spawnFx("ring", "orange", a.x + fwd[0] * .8, y + 1.2, a.z + fwd[1] * .8, { life: d, s0: 2.4, s1: 2, a0: .7, a1: .7, fade: .3, spin: 3 }); break;
+      case "m_throw": shock(.55, "orange", 8, 1.4); pop(.55, "orange", 3.4, 1.4); sparks("orange", ...P(1.4, .3), 10, { speed: 7, up: 3, delay: d * .55 }); break;
+      case "m_wai": seal("gold", 6); beam("gold", .25, 1000, 8); embers("gold", 12, .2); break;
+      case "lunge": for (let i = 0; i < 5; i++) spawnFx("glow", col, a.x - fwd[0] * i * .6, y + 1, a.z - fwd[1] * i * .6, { delay: d * .1 + i * 35, life: 360, s0: 2 - i * .25, s1: .6, a0: .7, a1: 0 }); thrust(.55, 4.2); pop(.6, col, 3, 2); break;
+      case "flurry": for (let i = 0; i < 4; i++) slash(.12 + i * .24, 3, col, 1.1, (i % 2 ? 1 : -1) * .4, 180); break;
+      case "sweep": spawnFx("ring", col, a.x, y + 1.1, a.z, { orient: "flat", delay: d * .4, life: 360, s0: 2, s1: 8, a0: 1, a1: 0 });
+        for (let i = 0; i < 4; i++) slash(.35 + i * .04, 3.6, col, 1.3, i * Math.PI / 2, 220); shock(.45, col, 9); break;
+      case "rally": seal("gold", 7, d, .9); beam("gold", .2, 1000, 10); embers("gold", 14, .15); shock(.25, "gold", 10); break;
+      case "finale": slash(.3, 4.2, col, 1.2, -.5, 260); slash(.55, 4.6, col, 1.2, .5, 260); shock(.7, col, 11, 1); beam(col, .65, 600, 9, 2.8); pop(.7, "white", 4.4, 1.2); break;
+      case "dance": seal("pink", 6.5, d, 2); embers("pink", 16, .1, { speed: 3 }); embers("gold", 10, .4); break;
+      case "cast": seal(a.weaponId === "ritual_dagger" ? "violet" : "cyan", 4.6, 900, 2.4); pop(.55, a.weaponId === "ritual_dagger" ? "violet" : "cyan", 2.6, .9); embers("cyan", 8, .1, { speed: 1 }); break;
+      case "summon": seal("orange", 6.5, d, 1.6); beam("orange", .35, 900, 9, 2.6); embers("orange", 16, .3, { speed: 2.4 }); shock(.5, "orange", 8); break;
+      case "drink": spawnFx("ring", "green", a.x, y + .15, a.z, { orient: "ground", delay: d * .5, life: 700, s0: 1, s1: 5, a0: .9, a1: 0 }); embers("green", 10, .5, { speed: 1 }); break;
+      case "dash": shock(0, "white", 4.4); for (let i = 0; i < 5; i++) spawnFx("glow", "white", a.x, y + .9, a.z, { delay: i * 60, life: 320, s0: 2, s1: .6, a0: .55, a1: 0, follow: a }); break;
+      case "rise": beam("white", 0, 1100, 10, 2.4); seal("white", 5, 1100, .8); embers("white", 10); break;
+      case "arrive": beam("cyan", 0, 900, 10, 2.6); shock(.05, "cyan", 7); embers("cyan", 10, 0, { speed: 2 }); break;
+    }
+  }
+  // Standalone effects for events that are not avatar actions.
+  function auraFx(a, kind) {
+    if (!a || !fxNear(a.x, a.z)) return;
+    const y = a.y || 0;
+    if (kind === "levelup") {
+      spawnFx("beam", "gold", a.x, y + 6, a.z, { orient: "pillar", life: 1800, s0: 3.4, s1: 2.4, h: 12, a0: 1, a1: 1, fade: .45, follow: a });
+      spawnFx("yantra", "gold", a.x, y + .12, a.z, { orient: "ground", life: 1800, s0: 3, s1: 8, a0: 1, a1: 1, fade: .4, spin: 1.2, follow: a });
+      sparks("gold", a.x, y + .6, a.z, 22, { speed: 2.5, up: 7, grav: -1, life: 1300, size: .8, spread: 900, follow: a });
+    } else if (kind === "possess") {
+      spawnFx("beam", "blood", a.x, y + 5, a.z, { orient: "pillar", life: 1400, s0: 3, s1: 2, h: 10, a0: .95, a1: .95, fade: .5, follow: a });
+      spawnFx("yantra", "blood", a.x, y + .12, a.z, { orient: "ground", life: 1400, s0: 8, s1: 4.5, a0: 1, a1: 1, fade: .4, spin: -2, follow: a });
+      sparks("violet", a.x, y + .6, a.z, 16, { speed: 2, up: 6, grav: -1, life: 1100, spread: 700, follow: a });
+    } else if (kind === "heal") {
+      spawnFx("ring", "green", a.x, y + .15, a.z, { orient: "ground", life: 700, s0: 5, s1: 1.4, a0: .4, a1: 1, follow: a });
+      sparks("green", a.x, y + .4, a.z, 12, { speed: 1.2, up: 5, grav: -1, life: 1000, spread: 500, follow: a });
+    } else if (kind === "kill") {
+      spawnFx("ring", "gold", a.x, y + .15, a.z, { orient: "ground", life: 700, s0: 1, s1: 10, a0: 1, a1: 0 });
+      spawnFx("beam", "white", a.x, y + 4, a.z, { orient: "pillar", life: 650, s0: 2.6, s1: .6, h: 8, a0: .9, a1: .9, fade: .6 });
+      sparks("gold", a.x, y + 1.2, a.z, 16, { speed: 7, up: 6, life: 700 });
+    }
+  }
+  // Ghost death / spawn, downed players, curses and cloaks.
+  function eventFx(kind, t, o = {}) {
+    const pos = t?.position || t; if (!pos || !fxNear(pos.x, pos.z)) return;
+    const x = pos.x, z = pos.z, y = o.y ?? (t.y || 0), follow = o.follow || null;
+    switch (kind) {
+      case "ghost_die":
+        spawnFx("yantra", "violet", x, y + .12, z, { orient: "ground", life: 1400, s0: 7, s1: 3, a0: 1, a1: 1, fade: .5, spin: -2.4 });
+        spawnFx("beam", "violet", x, y + 4.5, z, { orient: "pillar", life: 1300, s0: 1.8, s1: .5, h: 9, a0: .85, a1: .85, fade: .6 });
+        spawnFx("star", "white", x, y + 1.5, z, { life: 260, s0: 2, s1: 6.5, a0: 1, a1: 0 });
+        sparks("violet", x, y + .8, z, 18, { speed: 1.8, up: 6, grav: -1, life: 1300, size: .8, spread: 700 }); break;
+      case "ghost_spawn":
+        spawnFx("disc", "blood", x, y + .1, z, { orient: "ground", life: 900, s0: 1, s1: 5.5, a0: .9, a1: 0 });
+        spawnFx("dash", "red", x, y + .12, z, { orient: "ground", life: 900, s0: 6, s1: 3, a0: .2, a1: 1, fade: .3, spin: 3 });
+        sparks("blood", x, y + .2, z, 12, { speed: 2.2, up: 4, grav: -1, life: 900, spread: 400 }); break;
+      case "down":
+        spawnFx("ring", "red", x, y + .15, z, { orient: "ground", life: 800, s0: 1, s1: 7, a0: .9, a1: 0 });
+        spawnFx("glow", "blood", x, y + .6, z, { life: 900, s0: 4, s1: 2, a0: .6, a1: 0 });
+        sparks("white", x, y + 1.4, z, 10, { speed: 1, up: 3, grav: -1.5, life: 1200, spread: 500 }); break;
+      case "curse":
+        spawnFx("dash", "violet", x, y + .14, z, { orient: "ground", life: o.life || 3000, s0: 3.4, s1: 3.4, a0: .85, a1: .85, fade: .15, spin: -1.6, pulse: .05, follow });
+        spawnFx("yantra", "blood", x, y + 1.2, z, { life: 900, s0: 1, s1: 3.2, a0: 1, a1: 0, follow });
+        sparks("violet", x, y + .4, z, 10, { speed: .8, up: 3, grav: -1, life: 1400, spread: 1200, follow }); break;
+      case "cloak":
+        for (let i = 0; i < 6; i++) spawnFx("glow", "violet", x + (Math.random() - .5) * 2, y + .8 + Math.random(), z + (Math.random() - .5) * 2, { delay: i * 50, life: 800, s0: 1.6, s1: 4, a0: .6, a1: 0, vel: [0, 1.2, 0] });
+        spawnFx("ring", "violet", x, y + .15, z, { orient: "ground", life: 600, s0: 4.5, s1: 1, a0: .3, a1: 1 }); break;
+      case "unsummon": sparks("orange", x, y + .5, z, 12, { speed: 1.4, up: 5, grav: -1, life: 1000, spread: 300 });
+        spawnFx("ring", "orange", x, y + .15, z, { orient: "ground", life: 600, s0: 1, s1: 4.5, a0: .8, a1: 0 }); break;
+      case "bolt": spawnFx("star", o.color || "cyan", x, y, z, { life: 220, s0: 1, s1: 3.6, a0: 1, a1: 0 }); sparks(o.color || "cyan", x, y, z, 6, { speed: 5, up: 3, life: 360, size: .6 }); break;
+    }
   }
   // Lantern light is faked with additive pools: dozens of real point lights
   // exceed the 4-light material limit and cost too much on phones.
@@ -3141,8 +3434,8 @@
       if(ghost){
         // Ghost rigs play a death (soul released) before hiding, and rise on respawn.
         const alive=monster.alive!==false;
-        if(!alive&&ghost.wasAlive){ghost.deathAt=performance.now();ghostVoice(ghost,mesh,"die");releaseSoul(mesh.position.x,mesh.position.y+.4,mesh.position.z);}
-        if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();ghostVoice(ghost,mesh,"spawn",.8);}
+        if(!alive&&ghost.wasAlive){ghost.deathAt=performance.now();ghostVoice(ghost,mesh,"die");eventFx("ghost_die",mesh,{y:ghost.ty??0});releaseSoul(mesh.position.x,mesh.position.y+.4,mesh.position.z);}
+        if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();ghostVoice(ghost,mesh,"spawn",.8);eventFx("ghost_spawn",mesh,{y:ghost.ty??0});}
         ghost.wasAlive=alive;if(alive)mesh.setEnabled(true);else if(!ghost.deathAt)mesh.setEnabled(false);
         ghost.tx=Number(monster.x);ghost.tz=Number(monster.z);ghost.ty=Number(monster.y)||0;ghost.tf=Number(monster.facing)||0;
         ghost.windup=monster.aiState==="windup";ghost.ai=monster.aiState;
@@ -3802,7 +4095,9 @@
     }
   }
   // Contact sound at the target, chosen by the attacker's weapon and move.
-  function impactAt(attackerId, x, z, source, ghost, kind) {
+  const HIT_WORDS = { blade: ["ฉัวะ!", "เฉือน!", "ฟึ่บ!"], fist: ["ปั้ก!", "ผัวะ!", "ตุบ!"], elbow: ["เพี้ยะ!", "ป้าบ!"], kick: ["ตุ้บ!", "อั้ก!"],
+    blunt: ["โป๊ก!", "ตึง!"], rice: ["ซ่า!", "เปาะ!"], talisman: ["แปะ!", "ฉึบ!"], slam: ["ตูม!"] };
+  function impactAt(attackerId, x, z, source, ghost, kind, victimId) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     const a = avatars.get(attackerId), w = a?.weaponId || "", move = a?.action?.type || "";
     let name = "fist", intensity = 1;
@@ -3812,6 +4107,9 @@
     else if (w === "spirit_staff") name = "blunt";
     else if (w === "muay_wraps") name = /elbow|counter/.test(move) ? "elbow" : /knee|teep|throw/.test(move) ? "kick" : "fist";
     SFX(name, { x, z, intensity });
+    { const mine = attackerId === localId; hitBurst(x, z, mine ? "gold" : victimId === localId ? "red" : "cyan", mine && (SKILL_SOURCES.has(source) || name === "slam" || name === "blunt"), a?.y ?? getLocalAvatar()?.y ?? 0); }
+    // Comic hit word (short Thai onomatopoeia), only for hits that involve us, to keep the far view readable.
+    if (attackerId === localId) { const words = HIT_WORDS[name] || HIT_WORDS.fist; floatText(x, 2.4, z, words[Math.random() * words.length | 0], "onoma", { side: 46, drift: 30, rise: 26, life: 900 }); }
     if (ghost && kind) SFX("ghost", { kind, ev: "hurt", x, z, delay: .03, intensity: .8 });
     else if (ghost) SFX("ghost_hit", { x, z, delay: .02, intensity: .8 });
   }
@@ -3825,6 +4123,7 @@
     if (type !== "hit" && type !== "rise") flashStrike(a, type);
     if (a.local && (ACTIONS[type].swing || type === "hit" || type === "cast")) lastCombatAt = performance.now();
     actionSound(a, type, a.action);
+    actionFx(a, type);
     if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
   }
   // A sword skill's motion follows its effect type in the server catalog,
@@ -6473,11 +6772,21 @@
   // Ghost voices: a cry on the attack wind-up (an audible warning before the
   // hit lands) and an occasional murmur when near the hero.
   let lastGhostMurmur = 0;
+  // What each ghost cries as it winds up an attack (a readable warning from the far camera).
+  const GHOST_CRIES = { krasue: ["กรี๊ด!", "แฮ่!"], longhair: ["กรี๊ด!"], maenak: ["พี่มาก…", "กรี๊ด!"], takhian: ["กรี๊ด!"], nangmai: ["ซู่…", "กรี๊ด!"], dancer: ["กรี๊ด!"],
+    corpse: ["อือ…"], graveborn: ["อือ…", "แฮ่!"], unaware: ["อือ…"], headless: ["หัวข้า!"], drowned: ["โบ๋…"], boatman: ["โบ๋…"], waterspirit: ["โบ๋…"],
+    pyrekeeper: ["ฟู่!"], phiphong: ["ฟู่!"], krahang: ["แฮ่!"], preta: ["หวีด!"], phipop: ["แฮ่!", "หิว!"], kongkoi: ["แฮ่!"], phitakhon: ["กริ๊ง!"],
+    childghost: ["คิกๆ"], moonspirit: ["ลา…"], elephant: ["แปร๋น!"], statue: ["ครืด!"], crawler: ["แฮ่!"], stump: ["เอี๊ยด!"], bell: ["ก๊อง!"], hanged: ["เอี๊ยด!"] };
   const ghostVoice = (g, mesh, ev, intensity = 1) => SFX("ghost", { kind: g.design?.kind, ev, x: mesh.position.x, z: mesh.position.z, intensity });
   function ghostVoices(mesh, g, now) {
     if (g.deathAt) return;
     if (g.windup && !g.wasWindup) {
       ghostVoice(g, mesh, "attack"); g.criedAt = now;
+      { const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 45) windupTelegraph(mesh, g); }
+      { const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 32) {
+        const cries = GHOST_CRIES[g.design?.kind] || ["แฮ่!"]; // Push the cry to the ghost's outer side on screen so it never sits on the hero's shout bubble.
+        const r = camera.getDirection(B.Axis.X), away = (mesh.position.x - hero.x) * r.x + (mesh.position.z - hero.z) * r.z >= 0 ? 1 : -1;
+        floatText(mesh.position.x, mesh.position.y + (g.tall || 1.8) * .6, mesh.position.z, cries[Math.random() * cries.length | 0], "cry", { side: 52 * away, drift: 12 * away, rise: 20, life: 1000, lift: 14 }); } }
       const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 15) lastCombatAt = now; // music goes to combat
     }
     g.wasWindup = g.windup;
@@ -6996,6 +7305,7 @@
       mesh.position.copyFrom(start);
       mesh.isPickable = false;
       skillEffects.push({mesh, mapId: activeMapId, start, end, until: performance.now() + 300});
+      eventFx("bolt",{x:end.x,z:end.z,y:end.y},{color:"gold",y:end.y});
       return;
     }
     const mesh=B.MeshBuilder.CreateLines("elevated magic shot",{
@@ -7003,6 +7313,7 @@
     },scene);
     mesh.color=B.Color3.FromHexString("#8ce7ff");
     mesh.isPickable=false;
+    eventFx("bolt",{x:xyz[3],z:xyz[5]},{y:xyz[4]});
     skillEffects.push({mesh, mapId: activeMapId, until:performance.now()+240});
   }
 
@@ -7013,7 +7324,7 @@
       ? me.characterName : "นที";
     $("characterName").textContent = name;
     const slot = me?.persistent ? (Number(me.characterSlot) || activeCharacterSlot || 1) : null;
-    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) SFX("levelup", { important: true }); hudLevel = me.level; }
+    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) { SFX("levelup", { important: true }); floatAtPlayer(localId, "LEVEL UP!", "levelup", { drift: 0, rise: 80, life: 2200 }); auraFx(getLocalAvatar(), "levelup"); } hudLevel = me.level; }
     $("characterLevel").textContent = (slot ? "S" + slot + " · " : "") + "LV. " + (
       Number.isFinite(me?.level) ? me.level : 1
     );
@@ -7113,7 +7424,36 @@
         }
       } else hudSet(pointer, "qph", true, "hidden");
     }
+    renderPartyFrames();
     renderStatusChip();
+  }
+  // Party frames on the play screen: the other members with HP, and how far
+  // away they are (or that they are on another map and will not share EXP).
+  function renderPartyFrames() {
+    const box = $("partyFrames"); if (!box) return;
+    const members = mode === "live" && partyState ? partyState.members.filter(m => m.sessionId !== localId) : [];
+    hudSet(box, "pfh", members.length === 0, "hidden");
+    if (!members.length) return;
+    const me = room?.state?.players?.get?.(localId);
+    const rows = members.map(m => {
+      const p = room?.state?.players?.get?.(m.sessionId), lead = m.sessionId === partyState.leaderId;
+      const same = p && (p.mapId || "ritual_village") === (me?.mapId || "ritual_village");
+      const where = !p ? "เชื่อมต่อ…" : p.alive === false ? "หมดสติ" : same ? Math.round(Math.hypot(p.x - me.x, p.z - me.z)) + " ม." : "แผนที่อื่น";
+      return { key: [m.name, lead, p?.pathId, Math.round(p?.hp || 0), Math.round(p?.maxHp || 0), where].join("|"), name: m.name, lead, glyph: PATH_GLYPHS[p?.pathId] || Array.from(m.name)[0] || "?",
+        hp: pctOf(p?.hp, p?.maxHp), where, down: p?.alive === false, far: p && !same, low: p && p.hp / Math.max(1, p.maxHp) < .3 };
+    });
+    const key = rows.map(r => r.key).join("~");
+    if (hudCache.get("pf") === key) return; hudCache.set("pf", key);
+    box.replaceChildren();
+    for (const r of rows) {
+      const row = document.createElement("span"); row.className = "pf-row" + (r.down ? " down" : "") + (r.far ? " far" : "") + (r.low ? " low" : "");
+      const av = document.createElement("i"); av.className = "pf-av"; av.textContent = r.glyph; if (r.lead) av.dataset.lead = "♛";
+      const body = document.createElement("span"); body.className = "pf-body";
+      const top = document.createElement("span"); top.className = "pf-top";
+      const nm = document.createElement("b"); nm.textContent = r.name; const wh = document.createElement("small"); wh.textContent = r.where; top.append(nm, wh);
+      const bar = document.createElement("span"); bar.className = "pf-bar"; const fill = document.createElement("i"); fill.style.width = r.hp; bar.append(fill);
+      body.append(top, bar); row.append(av, body); box.append(row);
+    }
   }
   // Plain words instead of "DEMO · ↑0ม.": mode, players, safe zone, altitude only in the air.
   function renderStatusChip() {
@@ -7610,6 +7950,9 @@
           playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
           impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true, struck?.design?.kind);
           if (hit.attackerId === localId) { hudTarget = { id: hit.targetId, until: performance.now() + 8000 }; if (Number(hit.hp) === 0) hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1; }
+          { const mine = hit.attackerId === localId, dmg = Math.round(Number(hit.damage) || 0);
+            if (dmg > 0) floatAtMonster(hit.targetId, String(dmg), mine ? (SKILL_SOURCES.has(hit.source) ? "skill" : "dealt") : "ally", { big: mine && SKILL_SOURCES.has(hit.source) });
+            if (mine && Number(hit.hp) === 0) { floatAtMonster(hit.targetId, "ปราบ!", "status", { delay: 180, rise: 70, drift: 0 }); if (Number.isFinite(Number(at?.x))) auraFx({ x: Number(at.x), z: Number(at.z), y: Number(at.y) || 0 }, "kill"); } }
         }
         const talisman = hit?.source === "talisman";
         if (forestTarget) {
@@ -7705,6 +8048,7 @@
       });
       joined.onMessage("summon_despawn", notice => {
         if (room !== joined) return;
+        { const s=summonAvatars.get(notice?.ownerId); if (s) eventFx("unsummon",{x:s.x??s.node?.position.x,z:s.z??s.node?.position.z,y:s.y||0}); }
         if (notice?.ownerId === localId && notice.reason !== "possessed") {
           toast(notice.reason === "owner_dead"
             ? "วิญญาณกลับภพเมื่อเจ้าของหมดสติ"
@@ -7767,6 +8111,7 @@
       joined.onMessage("blade_cloak_changed",data=>{
         if(room!==joined)return;
         bladeCloakUntil=data?.active ? performance.now()+Math.max(0,Math.min(5000,Number(data.durationMs)||0)) : 0;
+        if (data?.active) eventFx("cloak",getLocalAvatar());
         syncBladeUI(ownServerCharacter());toast(data?.active ? "อำพรางตัวแล้ว" : data?.reason==="interrupted" ? "การร่ายพรางถูกขัดจังหวะ" : "การอำพรางสิ้นสุด");
       });
       joined.onMessage("blade_cloak_cast",data=>{if(room===joined){playAction(avatars.get(data?.playerId),"cast");if(data?.playerId===localId)toast("กำลังร่ายพรางกาย");}});
@@ -7783,6 +8128,7 @@
       joined.onMessage("occult_curse_state", data => {
         if (room!==joined) return;
         occultCurseUntil=data?.active ? performance.now()+Math.max(0,Math.min(6500,Number(data.durationMs)||0)) : 0;
+        if (data?.active) { const me=getLocalAvatar(); eventFx("curse",me,{follow:me,life:Math.max(800,occultCurseUntil-performance.now())}); }
         syncOccultUI(ownServerCharacter());
         toast(data?.active ? "ติดคำสาปอาคม" : data?.reason==="cleansed" ? "ถอนคำสาปแล้ว" : "คำสาปสิ้นสุด");
       });
@@ -7791,7 +8137,7 @@
         const name=occultBookState?.lessons?.[data.skillId]?.name;
         if (name) toast("ใช้ "+name);
       });
-      joined.onMessage("muay_guarded", data => { if (room===joined) { muayCounterUntil=performance.now()+3000; const label=data?.kind==="parry" ? "ปัด" : data?.kind==="evade" ? "เบี่ยงหลบ" : "ป้อง"; toast(label+"สำเร็จ · วิชาสวนพร้อม 3 วินาที"); syncMuayHotbar(); } });
+      joined.onMessage("muay_guarded", data => { if (room===joined) { floatAtPlayer(localId, data?.kind==="parry" ? "ปัด!" : data?.kind==="evade" ? "หลบ!" : "ป้องกัน!", "status", { drift: 0 }); muayCounterUntil=performance.now()+3000; const label=data?.kind==="parry" ? "ปัด" : data?.kind==="evade" ? "เบี่ยงหลบ" : "ป้อง"; toast(label+"สำเร็จ · วิชาสวนพร้อม 3 วินาที"); syncMuayHotbar(); } });
       joined.onMessage("muay_counter_cleared", () => { if (room===joined) { muayCounterUntil=0; syncMuayHotbar(); } });
       joined.onMessage("muay_defense", data => { if(room===joined) {
         const label=data?.kind==="parry" ? "ปัด" : data?.kind==="evade" ? "เบี่ยงหลบ" : "";
@@ -7804,6 +8150,7 @@
       joined.onMessage("muay_combo", data => { if(room===joined) {
         muayComboCount=Number.isInteger(data?.count) ? Math.max(0,Math.min(3,data.count)) : 0;
         muayComboComplete=data?.completed===true && muayComboCount===3;
+        if(muayComboCount>=2)floatAtPlayer(localId,muayComboComplete?"คอมโบ x3!":"คอมโบ x"+muayComboCount,"combo",{drift:0,big:muayComboComplete});
         muayComboNext=typeof data?.next==="string" ? data.next : "";
         muayComboBonus=Math.max(0,Math.min(100,Number(data?.bonusPercent)||0));
         muayComboUntil=performance.now()+(muayComboComplete ? 2000 : Math.min(6000,Math.max(0,Number(data?.durationMs)||0)));
@@ -7812,6 +8159,7 @@
       joined.onMessage("muay_interrupt", data => { if(room===joined) {
         const notice={applied:"ถีบหยุดจังหวะสำเร็จ",resisted:"เป้าหมายต้านการหยุดจังหวะชั่วคราว",immune:"Elite หรือบอสไม่ถูกหยุดจังหวะ",pvp_no_interrupt:"ถีบผู้เล่นสร้างดาเมจโดยไม่หยุดจังหวะ"};
         if(data?.source==="korat_finish" || data?.source==="korat_press")notice.applied="หมัดโคราชหยุดจังหวะสำเร็จ";
+        if(data?.result==="applied" && selectedForestTarget)floatAtMonster(selectedForestTarget,"หยุดจังหวะ!","status",{drift:0});
         if(Object.hasOwn(notice,data?.result)){muayInterruptMessage=notice[data.result];muayInterruptUntil=performance.now()+2000;syncMuayComboStatus(ownServerCharacter());}
       } });
       joined.onMessage("muay_followup", data => { if(room===joined) {
@@ -7845,12 +8193,14 @@
           const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
           if (target && !["guard","parry","evade","chaiya_cover"].includes(result.skillId)) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
           playMuaySkill(result.playerId,result.skillId,result.targetId);
+          { const name=(muayCatalogSkills[result.skillId] || muayBookData()?.catalog?.skills?.[result.skillId])?.name; if(name) floatAtPlayer(result.playerId,(result.skillId==="grapple"?"จับ!":name+"!"),"shout",{drift:0,side:0,rise:34,life:1400,lift:30}); }
         }
       });
       joined.onMessage("muay_skill_used", result => { if (room===joined && result?.playerId===localId && !["teep","grapple","parry","evade"].includes(result.skillId)) toast((muayBookData()?.catalog?.skills?.[result.skillId]?.name || "วิชามวย")+" สำเร็จ"); });
       joined.onMessage("muay_book_changed", () => { if(room===joined){selectedMuaySkill="";if(targetedSkill==="muay")setTargetedSkill(null);muayBookRenderKey="";renderMuayBook();toast("บันทึกตำรามวยแล้ว");} });
       joined.onMessage("sword_combo", data => { if (room===joined) {
         const count=Number.isInteger(data?.count) ? Math.max(0,Math.min(3,data.count)) : 0;
+        if(count>=2)floatAtPlayer(localId,"คอมโบ x"+count,"combo",{drift:0,big:count===3});
         const firstFull=count===3 && (swordCombo<3 || performance.now()>=swordComboUntil);
         swordCombo=count;
         swordComboUntil=performance.now()+3500;
@@ -7870,6 +8220,7 @@
         syncSwordStatus(ownServerCharacter());
       } });
       joined.onMessage("sword_guarded", () => { if (room===joined) {
+        floatAtPlayer(localId, "รับดาบ!", "status", { drift: 0 });
         swordCounterUntil=performance.now()+3000;
         if(ownServerCharacter()?.pathId==="sentinel"){sentinelCounterUntil=performance.now()+3000;syncSentinelUI(ownServerCharacter());}
         syncSwordStatus(ownServerCharacter());
@@ -7883,6 +8234,7 @@
         const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
         if (target) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
         playAction(avatars.get(result.playerId), swordSkillAction(result.skillId));
+        { const node=swordData()?.catalog?.nodes?.[result.skillId] || JSON.parse(joined.state?.swordTreeCatalog||"null")?.nodes?.[result.skillId]; if(node?.name) floatAtPlayer(result.playerId,node.name+"!","shout",{drift:0,side:0,rise:34,life:1400,lift:30}); }
         const ring=B.MeshBuilder.CreateTorus("sword skill ring",{diameter:1.3,thickness:.045,tessellation:16},scene);
         ring.position.set(caster.x,caster.y+.12,caster.z);ring.rotation.x=Math.PI/2;ring.material=gold;ring.isPickable=false;
         skillEffects.push({mesh:ring,mapId:activeMapId,until:performance.now()+450});
@@ -7897,9 +8249,10 @@
         toast(result.skill + " · มีผล " + result.targets + " คน");
         if (ownServerCharacter()?.pathId === "phutthaisawan") playAction(avatars.get(localId), "dance");
         if (ownServerCharacter()?.pathId === "muay_boran") playAction(avatars.get(localId), "m_wai");
+        if (result?.skill) floatAtPlayer(localId, result.skill + "!", "shout", { drift: 0, side: 0, rise: 34, life: 1600 });
       });
       joined.onMessage("possession_changed", notice => {
-        if(room===joined && notice?.active){ const who=avatars.get(notice.playerId); if(who) SFX("possess",{x:who.x,z:who.z}); }
+        if(room===joined && notice?.active){ const who=avatars.get(notice.playerId); if(who) { SFX("possess",{x:who.x,z:who.z}); auraFx(who,"possess"); } floatAtPlayer(notice.playerId,"เข้าสิง!","status",{big:true,drift:0}); }
         if(room!==joined || notice?.playerId!==localId)return;
         toast(notice.active ? "วิญญาณเข้าสิง · เพิ่มโจมตีและป้องกัน 20% นาน 60 วินาที" : "สถานะเข้าสิงสิ้นสุด");
         syncPossessionButton();
@@ -7908,6 +8261,7 @@
         if (room !== joined || !hit) return;
         const actor = summonAvatars.get(hit.ownerId);
         if (actor) { actor.hitUntil = performance.now() + 260; SFX("ghost_hit", { x: actor.x, z: actor.z, intensity: .7 }); }
+        { const dmg = Math.round(Number(hit?.damage) || 0); if (dmg > 0 && hit.targetId) floatAtMonster(hit.targetId, String(dmg), hit.ownerId === localId ? "spirit" : "ally"); }
         if (hit.ownerId === localId) {
           toast("วิญญาณโจมตีผี -" + String(hit.damage) + " HP");
         }
@@ -7918,7 +8272,8 @@
         const attacker = avatars.get(hit.attackerId);
         if (victim) { victim.hitFlashUntil = performance.now() + 250; playAction(victim, "hit"); }
         playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
-        if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, false);
+        if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, false, undefined, hit.targetId);
+        { const dmg = Math.round(Number(hit.damage) || 0); if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), hit.targetId === localId ? "taken" : hit.attackerId === localId ? (SKILL_SOURCES.has(hit.source) ? "skill" : "dealt") : "ally"); }
         if (attacker && victim) {
           faceAvatarToward(hit.attackerId, victim.x, victim.z);
         }
@@ -7944,6 +8299,8 @@
       joined.onMessage("monster_hit", hit => {
         if (room === joined) {
           playAction(avatars.get(hit?.targetId), "hit");
+          { const v = avatars.get(hit?.targetId); if (v) hitBurst(v.x, v.z, hit.targetId === localId ? "red" : "cyan", false, v.y || 0); }
+          { const dmg = Math.round(Number(hit?.damage) || 0); if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), hit.targetId === localId ? "taken" : "ally"); }
           if (hit?.targetId === localId && !(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };
           const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost; if (g) g.attackAt = performance.now();
           if (g && !(performance.now() - (g.criedAt || 0) < 1500)) { ghostVoice(g, gm2, "attack"); g.criedAt = performance.now(); }
@@ -7954,7 +8311,7 @@
         }
       });
       joined.onMessage("player_down", info => {
-        { const fallen=avatars.get(info?.playerId); if (room === joined && fallen) SFX("down",{x:fallen.x,z:fallen.z,important:true}); }
+        { const fallen=avatars.get(info?.playerId); if (room === joined && fallen) { SFX("down",{x:fallen.x,z:fallen.z,important:true}); eventFx("down",fallen); } }
         if (room === joined && info?.playerId === localId) {
           toast("ตัวละครหมดสติ · รอเกิดใหม่");
         }
@@ -7976,6 +8333,7 @@
       });
       joined.onMessage("experience_gained", info => {
         if(room !== joined) return;
+        if (Number(info?.amount) > 0) floatAtPlayer(localId, "+" + Math.round(info.amount) + " EXP", "exp", { delay: 250, drift: 0, rise: 60, life: 1500 });
         const prize=info?.elitePotion==="granted"?" · ได้รับยาฟื้นพลัง 1 ขวด":info?.elitePotion==="bag_full"?" · กระเป๋าเต็ม รับยาไม่ได้":"";
         const shard = info?.shrineShard === "granted" ? " · ได้รับ" + shardName + " 1 ชิ้น" : info?.shrineShard === "bag_full" ? " · กระเป๋าเต็ม รับเศษตราไม่ได้" : "";
         toast((info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":info?.shrineShard && !info.amount?"รางวัลศาลร้าง":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + prize + shard);
@@ -8022,6 +8380,7 @@
       joined.onMessage("item_used", event => {
         if (room !== joined) return;
         playAction(getLocalAvatar(), "drink");
+        if (Number(event?.healed) > 0) { floatAtPlayer(localId, "+" + Math.round(event.healed), "heal", { big: true, drift: 0 }); auraFx(getLocalAvatar(), "heal"); }
         toast("ใช้ยาเลือดแล้ว · +" + Number(event?.healed || 0) + " HP · บันทึกบน VPS");
         renderBag();
       });
@@ -8072,7 +8431,7 @@
           if (drawerActive === "chat") renderChat();
           return;
         }
-        if (info?.reason === "insufficient_stamina") { toast("กำลังไม่พอสำหรับใช้สกิล"); return; }
+        if (info?.reason === "insufficient_stamina") { floatAtPlayer(localId, "กำลังไม่พอ", "weak", { drift: 0 }); toast("กำลังไม่พอสำหรับใช้สกิล"); return; }
         if(warpPending) {
           clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
           const warpReasons={portal_too_far:"อยู่ไกลจากประตูเกินไป",combat_locked:"รอให้พ้นการต่อสู้ก่อนเดินทาง",warp_cooldown:"รอคูลดาวน์ก่อนเดินทาง",movement_busy:"หยุดบิน ปีน หรือพุ่งก่อนเดินทาง",character_busy:"กำลังบันทึกข้อมูล"};
@@ -9248,7 +9607,8 @@
     if (!skill) return;
     const seconds = Math.max(0, Math.ceil((player.classSkillReadyAt - Date.now()) / 1000));
     button.disabled = !player.alive || seconds > 0 || player.stamina < skill.stamina;
-    button.lastElementChild.textContent = seconds ? seconds + " วิ" : skill.skill;
+    button.lastElementChild.textContent = seconds ? seconds + " วิ" : skill.skill + " ⚡" + skill.stamina;
+    button.classList.toggle("no-stamina", player.stamina < skill.stamina);
     button.title = skill.skill + " · " + skill.stamina + " กำลัง";
     button.setAttribute("aria-label", button.title);
   }
@@ -9358,7 +9718,7 @@
     if(bladeRequestKey!==requestKey && room){bladeRequestKey=requestKey;bladeRequestAt=performance.now();room.send("blade_book_get",{});}
     const data=bladeBookState;if(!data){bar.hidden=true;return;}
     const ids=data.book.slots,times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
-    const key=JSON.stringify([ids,times,me.alive]);bar.hidden=false;if(key===bladeHotbarKey)return;bladeHotbarKey=key;bar.replaceChildren();
+    const key=JSON.stringify([ids,times,me.alive,affordKey(ids,data.lessons,me)]);bar.hidden=false;if(key===bladeHotbarKey)return;bladeHotbarKey=key;bar.replaceChildren();
     ids.forEach((id,index)=>{const node=id && data.lessons[id],slot=document.createElement("button");slot.type="button";slot.className="sword-hotkey";
       slot.textContent=node ? node.name+(times[index]?" "+times[index]+" วิ":"") : "ช่องว่าง";slot.disabled=!node || !me.alive || Boolean(times[index]);
       slot.onclick=()=>{
@@ -9367,7 +9727,7 @@
           if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId)castAtTarget(targetId);
           else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
         }else room.send("blade_skill",{skillId:id});
-      };bar.append(slot);
+      };if(node && !times[index])staminaCost(slot,node.stamina,me);bar.append(slot);
     });positionSwordToast();
   }
   function openBladeBook() {
@@ -9419,7 +9779,7 @@
     const data=occultBookState;
     if (!data || data.path!==me.pathId) {bar.hidden=true;return;}
     const path=me.pathId,ids=data.book.loadouts[path],times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
-    const key=JSON.stringify([path,ids,times,me.alive,me.possessionActive]);
+    const key=JSON.stringify([path,ids,times,me.alive,me.possessionActive,affordKey(ids,data.lessons,me)]);
     bar.hidden=false;if(key===occultHotbarKey)return;occultHotbarKey=key;bar.replaceChildren();
     ids.forEach((id,index)=>{
       const node=id && data.lessons[id],slot=document.createElement("button");
@@ -9436,6 +9796,7 @@
           chooseOccultAlly(id,node.name);
         } else room.send("occult_skill",{skillId:id});
       };
+      if(node && !times[index])staminaCost(slot,node.stamina,me);
       bar.append(slot);
     });
     positionSwordToast();
@@ -9520,7 +9881,8 @@
     let cooldowns={}; try { cooldowns=JSON.parse(me.muayData); } catch { return; }
     const ids=data.book.slots, timing=ids.map(id=>id ? Math.max(0,Math.ceil(((cooldowns[id]||0)-Date.now())/1000)) : 0);
     const ready=performance.now()<muayCounterUntil, holding=Boolean(muayGrabTarget && performance.now()<muayGrabUntil), followupReady=Boolean(muayFollowupSkill && performance.now()<muayFollowupUntil), key=JSON.stringify([ids,timing,ready,holding,followupReady,muayFollowupSkill,me.alive,me.equippedWeaponId]);
-    bar.hidden=false; if(key===muayHotbarKey)return; muayHotbarKey=key; bar.replaceChildren();
+    const muayKey=key+affordKey(ids,data.catalog.skills,me);
+    bar.hidden=false; if(muayKey===muayHotbarKey)return; muayHotbarKey=muayKey; bar.replaceChildren();
     ids.forEach((id,index)=>{
       const button=document.createElement("button"); button.type="button"; button.className="sword-hotkey";
       const node=id && data.catalog.skills[id], counter=node?.effect==="counter" || node?.effect==="counter_sidestep";
@@ -9538,6 +9900,7 @@
         if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId) castAtTarget(targetId);
         else toast(node.name+" · แตะมอนสเตอร์หรือผู้เล่นเพื่อใช้วิชา");
       };
+      if(node && !throwing && !timing[index])staminaCost(button,node.stamina,me);
       bar.append(button);
     });
     positionSwordToast();
@@ -9619,6 +9982,16 @@
     if (targetId) castAtTarget(targetId);
     else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
   }
+  // Stamina cost on a skill button; greyed out (and disabled) while there is not enough.
+  function staminaCost(button, cost, me) {
+    if (!button || !(cost > 0)) return;
+    const short = (Number(me?.stamina) || 0) < cost;
+    const tag = document.createElement("small"); tag.className = "stamina-cost"; tag.textContent = "⚡" + cost;
+    button.append(tag);
+    button.classList.toggle("no-stamina", short);
+    if (short) { button.disabled = true; button.title = "กำลังไม่พอ · ต้องใช้ " + cost; }
+  }
+  const affordKey = (ids, table, me) => ids.map(id => id && table[id]?.stamina > (Number(me?.stamina) || 0) ? 1 : 0).join("");
   function syncSwordHotbar() {
     const bar=$("swordHotbar"), data=swordData();
     if (!data || data.me.pathId!=="phutthaisawan") {
@@ -9629,7 +10002,7 @@
     const {me,tree,catalog}=data, slots=tree.loadouts?.[tree.school] || [null,null,null];
     bar.hidden=false;
     const timing=slots.map(id=>id ? Math.max(0,Math.ceil(((tree.cooldowns[id]||0)-Date.now())/1000)) : 0);
-    const key=JSON.stringify([slots,timing,me.alive,me.equippedWeaponId]);
+    const key=JSON.stringify([slots,timing,me.alive,me.equippedWeaponId,affordKey(slots,catalog.nodes,me)]);
     if(key===swordHotbarKey)return;
     swordHotbarKey=key;
     bar.replaceChildren();
@@ -9640,6 +10013,7 @@
       button.disabled=!node || !me.alive || Boolean(timing[slot]);
       button.setAttribute("aria-label",node ? "ช่อง "+(slot+1)+" "+node.name : "ช่องวิชาว่าง "+(slot+1));
       if(node)button.onclick=()=>useSwordSkill(id);
+      if(node && !timing[slot])staminaCost(button,node.stamina,me);
       bar.append(button);
     });
     positionSwordToast();
@@ -9812,31 +10186,133 @@
       $("statValue-" + key).textContent = supported ? String(Math.round(Number(p[field]) || 0)) : "—";
     }
     $("profileStamina").textContent = supported ? Math.round(Number(p.stamina)) + " / " + Math.round(Number(p.maxStamina)) : "—";
+    renderCharacterSheet(p, supported);
+  }
+  // ---- Character sheet (status / class / account tabs) ----
+  function weaponMeleeBonus(id) { const m = /([+-]\d+)/.exec(WEAPON_META[id]?.bonus || ""); return m ? Number(m[1]) : 0; }
+  function renderCharacterSheet(p, supported) {
+    if (!$("cpRing")) return;
+    const live = Boolean(supported), c = p, now = Date.now();
+    const num = v => Math.round(Number(v) || 0);
+    // Offline: the sheet is an online feature; show only a notice and the account tab.
+    $("cpOffline").hidden = live;
+    const tabs = ui.drawerBody.querySelector(".cp-tabs");
+    if (tabs) tabs.hidden = !live;
+    if (!live) { for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = true; return; }
+    if (tabs.dataset.shown !== "1") { tabs.dataset.shown = "1"; for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = pg.dataset.page !== (tabs.querySelector(".on")?.dataset.cp || "status"); }
+    // Hero: glyph, level ring (EXP share), role and school.
+    const xpMax = Number(c.xpToNext) || 0, xpShare = xpMax ? Math.min(1, (Number(c.experience) || 0) / xpMax) : 1;
+    $("cpRing").style.setProperty("--p", (xpShare * 100).toFixed(1));
+    $("cpLevel").textContent = String(num(c.level) || 1);
+    $("cpGlyph").textContent = PATH_GLYPHS[p?.pathId] || "๛";
+    const path = getBuildCatalog()?.paths?.[p?.pathId];
+    $("cpRole").textContent = path ? path.role + " · " + path.name : "ยังไม่เลือกสายอาชีพ";
+    const sword = p?.pathId === "phutthaisawan" ? swordData() : null, muay = p?.pathId === "muay_boran" ? muayBookData() : null;
+    const schoolName = sword?.catalog?.schools?.[sword?.tree?.school]?.name || muay?.catalog?.schools?.[muay?.book?.school]?.name || "";
+    const ancestry = getBuildCatalog()?.ancestries?.[p?.ancestryId]?.name || "";
+    $("cpSchool").textContent = [schoolName && "สำนัก" + schoolName, ancestry && "เผ่า" + ancestry].filter(Boolean).join(" · ");
+    // Bars.
+    $("cpHpBar").style.width = pctOf(c.hp, c.maxHp); $("cpHp").textContent = num(c.hp) + " / " + num(c.maxHp);
+    $("cpStBar").style.width = pctOf(c.stamina, c.maxStamina);
+    $("cpXpBar").style.width = (xpShare * 100).toFixed(1) + "%";
+    $("profileLevel").textContent = xpMax ? num(c.experience) + " / " + xpMax + " · อีก " + Math.max(0, Math.round((1 - xpShare) * 100)) + "%" : "เลเวลสูงสุด";
+    // Stat tiles with bonuses we can account for: weapon melee and possession.
+    const poss = p.possessionActive, wpn = p.equippedWeaponId || "", melee = weaponMeleeBonus(wpn);
+    const values = { hp: c.maxHp, stamina: c.maxStamina, atk: c.atk, def: c.def, magicAtk: c.magicAtk, magicDef: c.magicDef };
+    for (const [key, v] of Object.entries(values)) {
+      $("statValue-" + key).textContent = String(num(v));
+      const bits = [];
+      if (key === "atk" && melee) bits.push("+" + melee + " อาวุธประชิด");
+      if (key === "stamina") bits.push("ใช้กับแดชและวิชา · ฟื้น 4/วิ (สู้อยู่ 2/วิ)");
+      if (poss && ["atk", "def", "magicAtk", "magicDef"].includes(key)) bits.push("+20% เข้าสิง");
+      $("statBonus-" + key).textContent = bits.join(" · ");
+    }
+    // Active effects and unspent points.
+    const fx = [];
+    if (poss) fx.push('<span class="cp-fx good">วิญญาณเข้าสิง · โจมตี ป้องกัน เวท +20%</span>');
+    if (Number(p.classSkillReadyAt) > now) fx.push('<span class="cp-fx">สกิลอาชีพพร้อมใน ' + Math.ceil((p.classSkillReadyAt - now) / 1000) + ' วิ</span>');
+    $("cpEffects").innerHTML = fx.join("");
+    const pts = num(p.statPoints);
+    $("cpPoints").hidden = pts <= 0; $("cpPoints").textContent = "มีแต้มสเตตัสเหลือ " + pts + " แต้ม";
+    // Hexagon: relative strengths (HP and stamina scaled to the attack/defence range).
+    const axes = [["HP", num(c.maxHp) / 10], ["โจมตี", num(c.atk)], ["ป้องกัน", num(c.def)], ["กำลัง", num(c.maxStamina) / 5], ["ป้องกันเวท", num(c.magicDef)], ["เวท", num(c.magicAtk)]];
+    const top = Math.max(1, ...axes.map(a => a[1])), cx = 110, cy = 100, R = 72;
+    const pt = (i, r) => [cx + r * Math.sin(i * Math.PI / 3), cy - r * Math.cos(i * Math.PI / 3)];
+    let svg = "";
+    for (const k of [1, .66, .33]) svg += '<polygon class="cp-web" points="' + axes.map((_, i) => pt(i, R * k).join(",")).join(" ") + '"/>';
+    svg += axes.map((_, i) => '<line class="cp-web" x1="' + cx + '" y1="' + cy + '" x2="' + pt(i, R)[0] + '" y2="' + pt(i, R)[1] + '"/>').join("");
+    svg += '<polygon class="cp-shape" points="' + axes.map((a, i) => pt(i, R * Math.max(.12, a[1] / top)).join(",")).join(" ") + '"/>';
+    svg += axes.map((a, i) => { const [x, y] = pt(i, R + 16); return '<text x="' + x + '" y="' + (y + 4) + '" text-anchor="middle">' + a[0] + '</text>'; }).join("");
+    $("cpRadar").innerHTML = svg;
+    // Class tab.
+    const talent = buildTalentGroup(getBuildCatalog(), p?.pathId)?.variants[p?.bladeTalentId || p?.wardTalentId];
+    $("cpClassText").textContent = path ? path.role + " · " + path.name + " · สกิลอาชีพ " + path.skill + (talent ? " · พรสวรรค์ " + talent.name : "") : "เลือกสายอาชีพได้ที่ลานพักกลางหมู่บ้าน (ด้านล่าง)";
+    const schoolCard = $("cpSchoolCard"), body = $("cpSchoolBody");
+    if (muay) {
+      const m = muay.book.mastery?.[muay.book.school] || { technique: 0, sequences: 0 }, slots = (muay.book.slots || []).map(id => muay.catalog.skills?.[id]?.name || "ว่าง");
+      schoolCard.hidden = false; $("cpSchoolTitle").textContent = "สำนักมวย" + schoolName;
+      body.innerHTML = '<div class="status-line"><span>ความชำนาญ</span><strong>เทคนิค ' + m.technique + ' · คอมโบ ' + m.sequences + '</strong></div><div class="cp-slots">' + slots.map(n => '<span>' + n + '</span>').join("") + '</div>';
+    } else if (sword) {
+      const tr = sword.tree.training || {}, slots = (sword.tree.loadouts?.[sword.tree.school] || []).map(id => sword.catalog.nodes?.[id]?.name || "ว่าง");
+      schoolCard.hidden = false; $("cpSchoolTitle").textContent = "สำนักดาบ" + schoolName;
+      body.innerHTML = '<div class="status-line"><span>การฝึก</span><strong>ฟัน ' + (tr.strikes || 0) + ' · รับ ' + (tr.blocks || 0) + ' · ปิดเพลง ' + (tr.finishes || 0) + '</strong></div><div class="cp-slots">' + slots.map(n => '<span>' + n + '</span>').join("") + '</div>';
+    } else schoolCard.hidden = true;
+    const meta = WEAPON_META[wpn];
+    $("cpWeapon").innerHTML = meta ? '<i>' + meta.symbol + '</i><div><strong>' + meta.name + '</strong><small>' + meta.bonus + '</small></div>' : '<small>ยังไม่ได้ถืออาวุธ</small>';
+    const kills = Object.entries(hudKills).filter(([, n]) => n > 0).map(([id, n]) => '<div class="status-line"><span>ปราบผี · ' + (worldDefinitions?.[id]?.name || (id === "ritual_village" ? "หมู่บ้านอาคม" : id)) + '</span><strong>' + n + '</strong></div>');
+    $("cpKills").innerHTML = kills.join("") || '<p class="note">ยังไม่ได้ปราบผีในรอบนี้</p>';
   }
   function openCharacterProfile() {
     const me = ownServerCharacter();
     const durable = me?.persistent === true;
-    openDrawer("character","ตัวละคร MONTRA",
-      '<div class="status-line"><span>สถานะบันทึก</span><strong id="profileSaveStatus"></strong></div>' +
-      '<div class="status-line"><span>ช่องตัวละคร</span><strong id="profileSlot"></strong></div>' +
-      '<button class="secondary" id="switchCharacterSlot" type="button">เลือกช่องเซฟ 1–3</button>' +
-      '<div class="status-line"><span>ชื่อ</span><strong id="profileName"></strong></div>' +
-      '<div class="status-line"><span>ระดับ / ค่าประสบการณ์</span><strong id="profileLevel"></strong></div>' +
-      '<section id="buildFields" hidden><h3>สายอาชีพและเผ่า</h3><p id="currentBuild"></p><label class="field" for="buildPath">สายอาชีพ</label><select id="buildPath"></select><div id="buildTalentField" hidden><label class="field" id="buildTalentLabel" for="buildTalent">Talent</label><select id="buildTalent"></select></div><p class="note" id="buildPreview"></p><label class="field" for="buildAncestry">เผ่าและพรสวรรค์</label><select id="buildAncestry"></select><button type="button" class="secondary" id="buildSave">ยืนยันที่ลานพักกลางหมู่บ้าน</button></section>' +
-      '<div id="profileStats"><p class="note" id="profileProgressionStatus"></p>' +
-      progressionStats.map(([key,label]) => '<div class="status-line stat-row"><span>' + label + '</span><strong id="statValue-' + key + '">—</strong></div>').join("") +
-      '<div class="status-line"><span>กำลังปัจจุบัน</span><strong id="profileStamina">—</strong></div></div>' +
-      '<div class="status-line"><span>สถิติ PK</span><strong id="profilePk"></strong></div>' +
-      '<div class="status-line"><span>รหัสตัวละคร</span><strong id="profileId"></strong></div>' +
-      '<label class="field" for="renameCharacter">ชื่อใหม่ (ภาษาไทย/อังกฤษ 2–20 ตัวอักษร)</label>' +
-      '<input id="renameCharacter" maxlength="40" autocomplete="off" spellcheck="false"/>' +
-      '<button class="primary" id="renameCharacterButton" type="button">บันทึกชื่อบนเซิร์ฟเวอร์</button>' +
-      '<p class="note">บันทึกอัตโนมัติประมาณทุก 15 วินาทีและตอนออกเกม ปลอดภัยสุดเมื่อออกเกมตามปกติ</p>' +
+    // Three tabs: status (hero card, bars, stat tiles, hexagon), class and
+    // school, and account/save. Every id the rest of the game reads is kept.
+    const tile = (key, label, icon) => '<div class="cp-tile"><i>' + icon + '</i><span>' + label + '</span><strong id="statValue-' + key + '">—</strong><small id="statBonus-' + key + '"></small></div>';
+    openDrawer("character","ตัวละคร",
+      '<div class="cp-tabs" role="tablist"><button type="button" data-cp="status" class="on">สถานะ</button><button type="button" data-cp="class">อาชีพและวิชา</button><button type="button" data-cp="account">บัญชีและเซฟ</button></div>' +
+      '<div id="cpOffline" class="cp-offline" hidden><p>แผงสถานะตัวละครใช้ได้เมื่อเล่นออนไลน์</p><button class="primary" id="cpGoOnline" type="button">เข้าเล่นออนไลน์</button></div>' +
+      '<section class="cp-page" data-page="status">' +
+        '<div class="cp-hero"><div class="cp-ring" id="cpRing"><div class="cp-glyph" id="cpGlyph">๛</div><b id="cpLevel">1</b></div>' +
+        '<div class="cp-hero-info"><strong id="profileName"></strong><span id="cpRole"></span><span id="cpSchool"></span></div></div>' +
+        '<div class="cp-bars">' +
+          '<div class="cp-bar hp"><span>พลังชีวิต</span><div><i id="cpHpBar"></i></div><strong id="cpHp"></strong></div>' +
+          '<div class="cp-bar st"><span>กำลัง</span><div><i id="cpStBar"></i></div><strong id="profileStamina">—</strong></div>' +
+          '<div class="cp-bar xp"><span>EXP</span><div><i id="cpXpBar"></i></div><strong id="profileLevel"></strong></div>' +
+        '</div>' +
+        '<div id="cpEffects" class="cp-effects"></div>' +
+        '<div id="cpPoints" class="cp-points" hidden></div>' +
+        '<div id="profileStats"><p class="note" id="profileProgressionStatus"></p><div class="cp-grid">' +
+          tile("hp","HP สูงสุด","❤") + tile("stamina","กำลังสูงสุด","✦") + tile("atk","โจมตีกาย","⚔") + tile("def","ป้องกันกาย","⛨") + tile("magicAtk","โจมตีเวท","☸") + tile("magicDef","ป้องกันเวท","◈") +
+        '</div></div>' +
+        '<h3 class="cp-h">จุดเด่นของตัวละคร</h3><svg id="cpRadar" class="cp-radar" viewBox="0 0 220 200" role="img" aria-label="กราฟจุดเด่นสเตตัส"></svg>' +
+      '</section>' +
+      '<section class="cp-page" data-page="class" hidden>' +
+        '<div class="cp-card" id="cpClassCard"><h4>สายอาชีพ</h4><p id="cpClassText" class="note"></p></div>' +
+        '<div class="cp-card" id="cpSchoolCard" hidden><h4 id="cpSchoolTitle">สำนัก</h4><div id="cpSchoolBody"></div></div>' +
+        '<div class="cp-card"><h4>อาวุธที่ถือ</h4><div id="cpWeapon" class="cp-weapon"></div></div>' +
+        '<div class="cp-card"><h4>สถิติการต่อสู้</h4><div class="status-line"><span>Free PK</span><strong id="profilePk"></strong></div><div id="cpKills"></div></div>' +
+        '<section id="buildFields" hidden><h3>สายอาชีพและเผ่า</h3><p id="currentBuild"></p><label class="field" for="buildPath">สายอาชีพ</label><select id="buildPath"></select><div id="buildTalentField" hidden><label class="field" id="buildTalentLabel" for="buildTalent">Talent</label><select id="buildTalent"></select></div><p class="note" id="buildPreview"></p><label class="field" for="buildAncestry">เผ่าและพรสวรรค์</label><select id="buildAncestry"></select><button type="button" class="secondary" id="buildSave">ยืนยันที่ลานพักกลางหมู่บ้าน</button></section>' +
+      '</section>' +
+      '<section class="cp-page" data-page="account" hidden>' +
+        '<div class="status-line"><span>สถานะบันทึก</span><strong id="profileSaveStatus"></strong></div>' +
+        '<div class="status-line"><span>ช่องตัวละคร</span><strong id="profileSlot"></strong></div>' +
+        '<button class="secondary" id="switchCharacterSlot" type="button">เลือกช่องเซฟ 1–3</button>' +
+        '<div class="status-line"><span>รหัสตัวละคร</span><strong id="profileId"></strong></div>' +
+        '<label class="field" for="renameCharacter">ชื่อใหม่ (ภาษาไทย/อังกฤษ 2–20 ตัวอักษร)</label>' +
+        '<input id="renameCharacter" maxlength="40" autocomplete="off" spellcheck="false"/>' +
+        '<button class="primary" id="renameCharacterButton" type="button">บันทึกชื่อบนเซิร์ฟเวอร์</button>' +
+        '<p class="note">บันทึกอัตโนมัติประมาณทุก 15 วินาทีและตอนออกเกม ปลอดภัยสุดเมื่อออกเกมตามปกติ</p>' +
       '<button class="secondary" id="copyCharacterKey" type="button">คัดลอกรหัสกู้คืนตัวละคร</button>' +
       '<p class="note">รหัสกู้คืนเทียบเท่ารหัสผ่าน ห้ามแชร์ให้ผู้อื่น หากล้างข้อมูลเบราว์เซอร์โดยไม่เก็บรหัสไว้จะกู้ตัวละครไม่ได้</p>' +
       '<label class="field" for="restoreCharacterKey">มีรหัสกู้คืนจากเครื่องเดิม?</label>' +
       '<input id="restoreCharacterKey" type="password" autocomplete="off" spellcheck="false" placeholder="วางรหัสกู้คืนของคุณ"/>' +
-      '<button class="secondary" id="restoreCharacterButton" type="button">ใช้รหัสกู้คืนบนอุปกรณ์นี้</button>');
+      '<button class="secondary" id="restoreCharacterButton" type="button">ใช้รหัสกู้คืนบนอุปกรณ์นี้</button>' +
+      '</section>');
+    for (const tab of ui.drawerBody.querySelectorAll("[data-cp]")) tab.onclick = () => {
+      for (const t of ui.drawerBody.querySelectorAll("[data-cp]")) t.classList.toggle("on", t === tab);
+      for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = pg.dataset.page !== tab.dataset.cp;
+    };
+    $("cpGoOnline").onclick = openOnline;
     openBuildFields(me);
     $("profileSaveStatus").textContent = durable ? "เก็บบน VPS" : "ยังไม่เปิดใช้ (DEMO/Server เดิม)";
     $("profileSlot").textContent = durable ? "เซฟที่ " + (activeCharacterSlot || 1) + " / 3" : "ยังไม่ได้เข้าออนไลน์";
@@ -10255,19 +10731,37 @@
   function renderParty() {
     if(drawerActive!=="party" || !$("partyStatus")) return;
     const ready=partyReady();
-    $("partyStatus").textContent=ready ? (partyState ? "สมาชิก " + partyState.members.length + " / 4" : "ยังไม่ได้อยู่ในปาร์ตี้") : "เข้า LIVE ที่เปิดระบบปาร์ตี้ก่อน";
+    $("partyStatus").textContent=ready ? (partyState ? "สมาชิก " + partyState.members.length + " / 4 · แบ่ง EXP" : "ชวนเพื่อนในห้องเพื่อเริ่ม") : "เข้า LIVE ที่เปิดระบบปาร์ตี้ก่อน";
     $("partyInvitationBox").hidden=!partyInvitation;
     if(partyInvitation) $("partyInviter").textContent=String(partyInvitation.fromName);
     $("partyAccept").disabled=!ready; $("partyDecline").disabled=!ready;
+    // Banner: leader and four pips for the four seats.
+    const members=partyState?.members||[], leader=members.find(m=>m.sessionId===partyState?.leaderId);
+    $("pxTitle").textContent=partyState ? "ปาร์ตี้ของ "+(leader?.name||"หัวหน้า") : "ยังไม่มีปาร์ตี้";
+    $("pxPips").innerHTML=[0,1,2,3].map(i=>'<i class="'+(i<members.length?"on":"")+'"></i>').join("");
+    // Member cards: class, level, HP / stamina, map and distance (EXP needs the same map, within 20).
     const list=$("partyMembers"); list.replaceChildren();
-    if(partyState) for(const member of partyState.members) {
-      const row=document.createElement("div");row.className="party-member";
-      const name=document.createElement("strong"); name.textContent=member.name + (member.sessionId===partyState.leaderId ? " · หัวหน้า" : "") + (member.sessionId===localId ? " · คุณ" : "");
-      const hp=document.createElement("span"), player=room?.state?.players?.get?.(member.sessionId);
-      hp.textContent=player ? "HP " + Math.max(0,Math.round(Number(player.hp)||0)) + " / " + Math.max(0,Math.round(Number(player.maxHp)||0)) : "กำลังเชื่อมต่อ";
-      row.append(name,hp);list.appendChild(row);
+    const me=room?.state?.players?.get?.(localId);
+    const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
+    const bar=(cls,v,max,label)=>{const w=el("div","px-bar "+cls),track=el("div"),fill=el("i");fill.style.width=pctOf(v,max);track.append(fill);w.append(track,el("small","",label));return w;};
+    for(const member of members) {
+      const player=room?.state?.players?.get?.(member.sessionId), card=el("div","px-card"+(member.sessionId===localId?" me":"")+(player?.alive===false?" down":""));
+      const avatar=el("span","gx-avatar px-avatar",PATH_GLYPHS[player?.pathId]||Array.from(member.name)[0]||"?");
+      if(member.sessionId===partyState.leaderId)avatar.append(el("i","gx-rank-icon","♛"));
+      const body=el("div","px-body"), head=el("div","px-head");
+      head.append(el("strong","",member.name+(member.sessionId===localId?" · คุณ":"")),el("b","px-lv","Lv "+(Number(player?.level)||1)));
+      const path=getBuildCatalog()?.paths?.[player?.pathId];
+      body.append(head,el("small","px-class",path?path.role+" · "+path.name:"ยังไม่เลือกสายอาชีพ"));
+      if(player){
+        body.append(bar("hp",player.hp,player.maxHp,Math.round(player.hp)+" / "+Math.round(player.maxHp)),bar("st",player.stamina,player.maxStamina,Math.round(player.stamina)+" / "+Math.round(player.maxStamina)));
+        const sameMap=(player.mapId||"ritual_village")===(me?.mapId||"ritual_village"), dist=sameMap&&me?Math.round(Math.hypot(player.x-me.x,player.z-me.z)):null;
+        const where=worldDefinitions?.[player.mapId]?.name||(player.mapId==="ritual_village"?"หมู่บ้านอาคม":player.mapId||"");
+        const loc=el("small","px-loc"+(sameMap?"":" far"),player.alive===false?"หมดสติ · รอเกิดใหม่":member.sessionId===localId?where:sameMap?where+" · ห่าง "+dist+" ม.":where+" · อยู่คนละแผนที่ ไม่ได้รับ EXP ร่วม");
+        body.append(loc);
+      } else body.append(el("small","px-loc","กำลังเชื่อมต่อ"));
+      card.append(avatar,body);list.append(card);
     }
-    else {const empty=document.createElement("p");empty.className="note";empty.textContent="ชวนผู้เล่นในห้องเพื่อเริ่มปาร์ตี้";list.appendChild(empty);}
+    for(let i=members.length;i<4;i++){const empty=el("div","px-card empty");empty.append(el("span","gx-avatar px-avatar","+"),el("div","px-body",""));empty.lastChild.append(el("strong","",partyState?"ที่ว่าง":i===0?"เริ่มปาร์ตี้":"ที่ว่าง"),el("small","px-class","ชวนผู้เล่นในห้องด้านล่าง"));list.append(empty);}
     const select=$("partyTarget"), old=select.value, choices=[];
     room?.state?.players?.forEach?.((player,id)=>{if(id!==localId && player.persistent===true && !(partyState?.members || []).some(m=>m.sessionId===id)) choices.push({id,name:String(player.characterName || "ผู้เล่น")});});
     const signature=JSON.stringify(choices);
@@ -10286,7 +10780,9 @@
   function openParty() {
     partyUnread=false;updatePartyBadge();
     openDrawer("party","ปาร์ตี้",
-      '<button class="secondary" id="openGuild" type="button">กิลด์ <span id="guildBadge" hidden> · มีคำเชิญ</span></button><div class="economy-balance" id="partyStatus" role="status"></div><div id="partyInvitationBox" class="party-invitation" hidden><strong><span id="partyInviter"></span> ชวนเข้าปาร์ตี้</strong><div class="party-actions"><button id="partyAccept" type="button">เข้าร่วม</button><button id="partyDecline" type="button">ปฏิเสธ</button></div></div><h3>สมาชิก</h3><div id="partyMembers"></div><p class="note">EXP อิงเลเวลผู้ปราบ แล้วแบ่งเท่ากันให้สมาชิกที่มีชีวิต อยู่แผนที่เดียวกัน และห่างจากมอนสเตอร์ไม่เกิน 20 หน่วย เศษปัดลง · โจมตีเพื่อนร่วมปาร์ตี้ไม่ได้</p><label class="field" for="partyTarget">ชวนผู้เล่นในห้อง</label><select id="partyTarget"></select><p class="note" id="partyLeaderHint"></p><button class="primary" id="partyInvite" type="button">ส่งคำเชิญ</button><button class="secondary" id="partyLeave" type="button" hidden>ออกจากปาร์ตี้</button>');
+      '<button class="secondary" id="openGuild" type="button">กิลด์ <span id="guildBadge" hidden> · มีคำเชิญ</span></button>'+
+      '<div class="gx-banner px-banner"><div class="px-emblem" aria-hidden="true">⚔</div><div class="gx-title"><small>ปาร์ตี้</small><strong id="pxTitle">ยังไม่มีปาร์ตี้</strong><em id="partyStatus" role="status"></em></div><div class="px-pips" id="pxPips"></div></div>'+
+      '<div id="partyInvitationBox" class="party-invitation px-invite" hidden><strong><span id="partyInviter"></span> ชวนเข้าปาร์ตี้</strong><div class="party-actions"><button id="partyAccept" type="button">เข้าร่วม</button><button id="partyDecline" type="button">ปฏิเสธ</button></div></div><div id="partyMembers" class="px-members"></div><p class="note">EXP อิงเลเวลผู้ปราบ แล้วแบ่งเท่ากันให้สมาชิกที่มีชีวิต อยู่แผนที่เดียวกัน และห่างจากมอนสเตอร์ไม่เกิน 20 หน่วย เศษปัดลง · โจมตีเพื่อนร่วมปาร์ตี้ไม่ได้</p><label class="field" for="partyTarget">ชวนผู้เล่นในห้อง</label><select id="partyTarget"></select><p class="note" id="partyLeaderHint"></p><button class="primary" id="partyInvite" type="button">ส่งคำเชิญ</button><button class="secondary" id="partyLeave" type="button" hidden>ออกจากปาร์ตี้</button>');
     $("openGuild").onclick=openGuild;
     $("guildBadge").hidden=!guildUnread;
     $("partyInvite").onclick=()=>{const targetId=$("partyTarget").value;if(partyReady() && targetId)room.send("party_invite",{targetId});};
@@ -10299,6 +10795,19 @@
   const guildRankLabels={commander:"ผู้บัญชาการ",officer:"นายทหาร",squad_leader:"หัวหน้าหน่วย",member:"สมาชิก"};
   const guildSpecialtyLabels={none:"ทั่วไป",engineer:"ช่าง",scout:"สายข่าว",support:"สนับสนุน"};
   function guildReady(){return mode==="live" && room?.state?.guildAvailable===true && ownServerCharacter()?.persistent===true;}
+  // Guild crest: a Thai-style shield in a colour drawn from the guild name,
+  // with a flame finial, kanok scrolls and the first letter of the name.
+  function guildCrestSvg(name){
+    let h=0;for(const ch of String(name))h=(h*31+ch.codePointAt(0))>>>0;
+    const hue=h%360,esc=String(Array.from(String(name))[0]||"ก").replace(/[&<>"]/g,"");
+    return '<defs><linearGradient id="gxg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="hsl('+hue+',45%,34%)"/><stop offset="1" stop-color="hsl('+hue+',55%,14%)"/></linearGradient>'+
+      '<linearGradient id="gxgold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe7a8"/><stop offset=".5" stop-color="#d9a64e"/><stop offset="1" stop-color="#8e5f22"/></linearGradient></defs>'+
+      '<path d="M50 1 C55 8 62 9 64 4 C66 12 60 16 50 17 C40 16 34 12 36 4 C38 9 45 8 50 1 Z" fill="url(#gxgold)"/>'+
+      '<path d="M50 14 L92 26 V62 C92 88 72 104 50 114 C28 104 8 88 8 62 V26 Z" fill="url(#gxgold)"/>'+
+      '<path d="M50 20 L86 30 V62 C86 84 69 98 50 107 C31 98 14 84 14 62 V30 Z" fill="url(#gxg)"/>'+
+      '<path d="M22 40 C28 34 34 36 34 42 C34 47 28 48 27 44 M78 40 C72 34 66 36 66 42 C66 47 72 48 73 44 M30 88 C36 94 44 96 50 96 C56 96 64 94 70 88" fill="none" stroke="#e8c47a" stroke-width="2" stroke-linecap="round" opacity=".85"/>'+
+      '<text x="50" y="74" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="34" fill="#ffe7a8">'+esc+'</text>';
+  }
   function renderGuild(){
     if(drawerActive!=="guild" || !$("guildStatus"))return;
     const ready=guildReady(),roles=room?.state?.guildRolesAvailable===true;
@@ -10310,26 +10819,61 @@
       if(id===localId || player.persistent!==true || (guildState?.members||[]).some(m=>m.publicId && m.publicId===player.characterId))return;
       candidates.push({id,name:String(player.characterName || "ผู้เล่น")});
     });
-    const key=JSON.stringify({ready,roles,guildState,guildInvitation,candidates});
+    const key=JSON.stringify({ready,roles,guildState,guildInvitation,candidates,owners:territoryState?.owners});
     if(guildRenderKey===key)return;
     guildRenderKey=key;
     $("guildStatus").textContent=!ready?"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว":guildState?guildState.name+" · สมาชิก "+guildState.members.length+" / 30":"ยังไม่มีกิลด์";
     if(ready && Number.isFinite(guildState?.treasury))$("guildStatus").textContent+=" · คลังกิลด์ "+guildState.treasury+" หน่วย";
     $("guildCreateArea").hidden=!!guildState || !ready;
+    $("guildStatus").hidden=!!guildState; // the banner already names the guild
     $("guildMemberArea").hidden=!guildState;
     $("guildInvitationBox").hidden=!guildInvitation || !!guildState;
     if(guildInvitation){$("guildInviteName").textContent=guildInvitation.guildName;$("guildInviterName").textContent=guildInvitation.fromName;}
     $("guildAccept").disabled=!ready;$("guildDecline").disabled=!ready;
+    if(guildState){
+      // Seal, counts, own rank.
+      const members=guildState.members,online=members.filter(m=>m.online).length,ownRank=own?.id===guildState.leaderId?"commander":own?.rank||"member";
+      $("gdName").textContent=guildState.name;
+      $("gxMembers").textContent=String(members.length);$("gxOnline").textContent=String(online);
+      $("gxCrest").innerHTML=guildCrestSvg(guildState.name);
+      $("gdRank").textContent="ตำแหน่งของคุณ · "+(guildRankLabels[ownRank] || "สมาชิก");$("gdRank").dataset.rank=ownRank;
+      // Forts: which strategic sites this guild holds, and who holds the rest.
+      const owners=territoryState?.owners||{},sites=Object.keys(owners);
+      $("gdForts").innerHTML=sites.length?sites.map(site=>{const mine=owners[site]===guildState.name,name=worldDefinitions?.[site]?.name||site;
+        return '<div class="gd-fort'+(mine?' mine':'')+'"><i>'+(mine?'⚑':'⚐')+'</i><div><strong></strong><small></small></div></div>';}).join(""):'<p class="note">ยังไม่มีข้อมูลด่าน · เข้าใกล้ด่านสงครามเพื่ออัปเดต</p>';
+      $("gxForts").textContent=String(sites.filter(site=>owners[site]===guildState.name).length);
+      [...$("gdForts").querySelectorAll(".gd-fort")].forEach((el,i)=>{const site=sites[i],mine=owners[site]===guildState.name;
+        el.querySelector("strong").textContent=worldDefinitions?.[site]?.name||site;el.querySelector("small").textContent=mine?"กิลด์เราครองอยู่":owners[site]?"ครองโดย "+owners[site]:"เป็นกลาง";});
+      // Squads: six squads of up to five, plus the unassigned.
+      // Squads as five seats each: member initials, gold ring for the squad leader, dim when offline.
+      const box=$("gdSquads");box.replaceChildren();
+      const squadCard=(title,list,seats)=>{const card=document.createElement("div");card.className="gx-squad"+(list.length?" used":"");
+        const head=document.createElement("div");head.className="gx-squad-head";head.textContent=title;const count=document.createElement("b");count.textContent=seats?list.length+"/"+seats:String(list.length);head.append(count);card.append(head);
+        const row=document.createElement("div");row.className="gx-seats";
+        for(let k=0;k<(seats||Math.max(1,list.length));k++){const m=list[k],seat=document.createElement("span");seat.className="gx-seat"+(m?" filled":"")+(m?.online?" on":"")+(m?.rank==="squad_leader"?" lead":"");
+          seat.textContent=m?Array.from(m.name)[0]:"";if(m)seat.title=m.name;row.append(seat);}
+        card.append(row);box.append(card);};
+      [1,2,3,4,5,6].forEach(n=>squadCard("หน่วย "+n,members.filter(m=>m.squad===n),5));
+      const free=members.filter(m=>!m.squad);if(free.length)squadCard("ยังไม่เข้าหน่วย",free,0);
+    }
     const list=$("guildMembers");
     const expanded=new Set([...list.querySelectorAll("details[open]")].map(el=>el.dataset.memberId));
     list.replaceChildren();
-    for(const member of guildState?.members||[]){
+    const rankOrder={commander:0,officer:1,squad_leader:2,member:3};
+    const sorted=[...(guildState?.members||[])].sort((a,b)=>{const ra=a.id===guildState.leaderId?"commander":a.rank||"member",rb=b.id===guildState.leaderId?"commander":b.rank||"member";
+      return (rankOrder[ra]-rankOrder[rb]) || (Number(b.online)-Number(a.online)) || String(a.name).localeCompare(String(b.name),"th");});
+    for(const member of sorted){
       const rank=member.id===guildState.leaderId?"commander":member.rank || "member";
-      const row=document.createElement("div");row.className="guild-member";
+      const row=document.createElement("div");row.className="guild-member gd-member"+(member.online?" online":"");row.dataset.rank=rank;
       const info=document.createElement("div"),name=document.createElement("strong"),status=document.createElement("small");
       name.textContent=member.name+(member.id===guildState.ownId?" · คุณ":"");
       const labels=[guildRankLabels[rank] || "สมาชิก",member.squad?"หน่วย "+member.squad:"ยังไม่เข้าหน่วย",guildSpecialtyLabels[member.specialty] || "ทั่วไป",member.online?"ออนไลน์":"ออฟไลน์"];
-      status.textContent=labels.join(" · ");info.append(name,status);row.append(info);
+      // Chips instead of one long line: rank, squad, role (online shown by the dot).
+      status.className="gd-chips";
+      for(const [text,cls] of [[labels[0],"rank"],[labels[1],"squad"],[labels[2],"role"]]){const chip=document.createElement("span");chip.className="gd-chip "+cls;chip.textContent=text;status.append(chip);}
+      const avatar=document.createElement("span");avatar.className="gx-avatar";avatar.textContent=Array.from(member.name)[0]||"?";avatar.title=labels[3];
+      const icon=document.createElement("i");icon.className="gx-rank-icon";icon.textContent={commander:"♛",officer:"✦",squad_leader:"⛨"}[rank]||"";avatar.append(icon);
+      row.append(avatar);info.append(name,status);row.append(info);
       const canOrganize=roles && (commander || (officer && rank!=="commander" && rank!=="officer"));
       const canManage=commander && member.id!==guildState.ownId;
       if(canOrganize || canManage){
@@ -10378,8 +10922,11 @@
   function openGuild(){
     guildRenderKey="";guildUnread=false;updatePartyBadge();
     openDrawer("guild","กิลด์",
-      '<button class="secondary" id="backToParty" type="button">← ปาร์ตี้</button><div class="economy-balance" id="guildStatus" role="status"></div><div id="guildInvitationBox" class="party-invitation" hidden><strong><span id="guildInviterName"></span> ชวนเข้ากิลด์ <span id="guildInviteName"></span></strong><div class="party-actions"><button id="guildAccept" type="button">เข้าร่วม</button><button id="guildDecline" type="button">ปฏิเสธ</button></div><p class="note">คำเชิญมีอายุ 60 วินาที</p></div><div id="guildCreateArea" hidden><label class="field" for="guildName">ชื่อกิลด์ 2–24 ตัวอักษร</label><input id="guildName" maxlength="48" autocomplete="off"><button class="primary" id="guildCreate" type="button">สร้างกิลด์</button></div><div id="guildMemberArea" hidden><p class="note" id="guildRolesNote" hidden>ผู้บัญชาการแต่งตั้งนายทหารและหัวหน้าหน่วย · นายทหารช่วยจัดหน่วยและเชิญสมาชิก · หน่วยละไม่เกิน 5 คน</p><h3>สมาชิกกิลด์</h3><div id="guildMembers"></div><div id="guildInviteArea" hidden><label class="field" for="guildTarget">เชิญผู้เล่นในห้อง</label><select id="guildTarget"></select><button class="primary" id="guildInvite" type="button">ส่งคำเชิญ</button></div><button class="secondary" id="guildLeave" type="button">ออกจากกิลด์</button><p class="note">หัวหน้าที่มีสมาชิกต้องส่งต่อตำแหน่งก่อนออก · หากเป็นสมาชิกคนสุดท้าย การออกจะยุบกิลด์</p></div>');
+      '<button class="secondary" id="backToParty" type="button">← ปาร์ตี้</button><div class="economy-balance" id="guildStatus" role="status"></div><div id="guildInvitationBox" class="party-invitation" hidden><strong><span id="guildInviterName"></span> ชวนเข้ากิลด์ <span id="guildInviteName"></span></strong><div class="party-actions"><button id="guildAccept" type="button">เข้าร่วม</button><button id="guildDecline" type="button">ปฏิเสธ</button></div><p class="note">คำเชิญมีอายุ 60 วินาที</p></div><div id="guildCreateArea" hidden><div class="gx-empty"><svg class="gx-crest ghost" viewBox="0 0 100 116" aria-hidden="true"><path d="M50 4 L92 18 V58 C92 84 72 102 50 112 C28 102 8 84 8 58 V18 Z"/></svg><strong>ยังไม่มีกิลด์</strong><span>ตั้งกิลด์ของคุณ รวมพลยึดด่าน หรือรอคำเชิญจากผู้บัญชาการกิลด์อื่น</span></div><label class="field" for="guildName">ชื่อกิลด์ 2–24 ตัวอักษร</label><input id="guildName" maxlength="48" autocomplete="off"><button class="primary" id="guildCreate" type="button">สร้างกิลด์</button></div><div id="guildMemberArea" hidden><div class="gx-banner"><svg id="gxCrest" class="gx-crest" viewBox="0 0 100 116" aria-hidden="true"></svg><div class="gx-title"><small>กิลด์</small><strong id="gdName"></strong><em id="gdRank"></em></div></div><div class="gx-stats"><div><b id="gxMembers">0</b><span>สมาชิก / 30</span></div><div><b id="gxOnline">0</b><span>ออนไลน์</span></div><div><b id="gxForts">0</b><span>ด่านที่ครอง</span></div></div><div class="cp-tabs gx-tabs" role="tablist"><button type="button" data-gx="overview" class="on">ภาพรวม</button><button type="button" data-gx="members">สมาชิก</button><button type="button" data-gx="manage">เชิญและตั้งค่า</button></div><section class="gx-page" data-gpage="overview"><h3 class="cp-h">ด่านยุทธศาสตร์</h3><div id="gdForts" class="gd-forts"></div><h3 class="cp-h">หน่วยรบ</h3><div id="gdSquads" class="gx-squads"></div></section><section class="gx-page" data-gpage="members" hidden><div id="guildMembers"></div></section><section class="gx-page" data-gpage="manage" hidden><p class="note" id="guildRolesNote" hidden>ผู้บัญชาการแต่งตั้งนายทหารและหัวหน้าหน่วย · นายทหารช่วยจัดหน่วยและเชิญสมาชิก · หน่วยละไม่เกิน 5 คน</p><div id="guildInviteArea" hidden><label class="field" for="guildTarget">เชิญผู้เล่นในห้อง</label><select id="guildTarget"></select><button class="primary" id="guildInvite" type="button">ส่งคำเชิญ</button></div><button class="secondary" id="guildLeave" type="button">ออกจากกิลด์</button><p class="note">หัวหน้าที่มีสมาชิกต้องส่งต่อตำแหน่งก่อนออก · หากเป็นสมาชิกคนสุดท้าย การออกจะยุบกิลด์</p></section></div></div>');
     $("backToParty").onclick=openParty;
+    for(const tab of ui.drawerBody.querySelectorAll("[data-gx]"))tab.onclick=()=>{
+      for(const t of ui.drawerBody.querySelectorAll("[data-gx]"))t.classList.toggle("on",t===tab);
+      for(const pg of ui.drawerBody.querySelectorAll(".gx-page"))pg.hidden=pg.dataset.gpage!==tab.dataset.gx;};
     $("guildCreate").onclick=()=>{const name=$("guildName").value.normalize("NFC").trim();if(guildReady() && name)room.send("guild_create",{name});};
     $("guildInvite").onclick=()=>{const targetId=$("guildTarget").value;if(guildReady() && targetId)room.send("guild_invite",{targetId});};
     $("guildAccept").onclick=()=>{if(guildReady() && guildInvitation)room.send("guild_accept",{inviteId:guildInvitation.inviteId});};
@@ -10400,6 +10947,7 @@
   $("chatButton").onclick=openChat;
   $("marketButton").onclick=openEconomy;
   $("partyButton").onclick=openParty;
+  $("partyFrames").onclick=openParty;
   $("mapShortcut").onclick=openMap;
   $("modeButton").onclick=openOnline;
   $("swordTreeButton").onclick=openSwordTree;
@@ -10507,6 +11055,7 @@
               villageGhost.metadata.ghost.hurtAt = now;
               impactAt(localId, villageGhost.position.x, villageGhost.position.z, "", true, villageGhost.metadata.ghost.design?.kind);
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
+              floatAtMonster(MONSTER_ID, "20", "dealt");
               hitFlashRemaining = .22;
               updateMonsterUI(demoMonsterHp, 100, demoMonsterHp > 0, true);
               if (demoMonsterHp <= 0) {
@@ -10696,6 +11245,8 @@
     driftMist(elapsed, camera.target);
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
     if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
+    updateFloatText();
+    updateWorldFx(now); updateTargetRing(now);
     { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);
       // Music state: combat for 6 s after any fight action, war in a live battle, elite when one is near.
       if ((musicSyncIn -= dt) <= 0 && hero) {
