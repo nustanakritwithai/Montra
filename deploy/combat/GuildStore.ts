@@ -13,7 +13,7 @@ export type GuildSpecialty = "none" | "engineer" | "scout" | "support";
 type GuildRow = {id:string;name:string;leader:string};
 type MemberRow = {member_id:string;character_id:string;name:string;rank:Exclude<GuildRank,"commander">;squad:number|null;specialty:GuildSpecialty};
 export type GuildView = {
-  id:string; name:string; leaderId:string; ownId:string;
+  id:string; name:string; leaderId:string; ownId:string; treasury:number;
   members:{id:string;name:string;publicId:string;online:boolean;rank:GuildRank;squad:number|null;specialty:GuildSpecialty}[];
 };
 
@@ -65,7 +65,7 @@ export class GuildStore {
     const members=this.db.prepare("SELECT member_id,character_id,name,rank,squad,specialty FROM guild_members WHERE guild_id=? ORDER BY rowid").all(guild.id) as MemberRow[];
     const own=members.find(m=>m.character_id===character),leader=members.find(m=>m.character_id===guild.leader);
     if(!own || !leader)throw new Error("guild_data_invalid");
-    return {id:guild.id,name:guild.name,ownId:own.member_id,leaderId:leader.member_id,
+    return {id:guild.id,name:guild.name,ownId:own.member_id,leaderId:leader.member_id,treasury:this.war.government.balance(guild.id),
       members:members.map(m=>({id:m.member_id,name:m.name,publicId:m.character_id.slice(0,12),online:online(m.character_id),rank:m.character_id===guild.leader?"commander":m.rank,squad:m.squad,specialty:m.specialty}))};
   }
   rename(character:string,name:string):boolean {

@@ -12,7 +12,7 @@ import {WAR_PROTECTION} from "./TerritoryWar.js";
 const roster=(ids:number[],side:Side="attack",count=1)=>castleObjectives.map(p=>({attack:side==="attack" && ids.includes(p.id)?count:0,defend:side==="defend" && ids.includes(p.id)?count:0}));
 test("full castle road, gates, stairs, crest circuits and both previous world neighbours",()=>{
   const m=WORLD_MAPS[CASTLE_ID],r=m.strategic!.rampart!;
-  assert.equal(Object.keys(WORLD_MAPS).length,16);assert.deepEqual(m.bounds,{minX:-1000,maxX:1000,minZ:-1000,maxZ:1000});
+  assert.equal(Object.keys(WORLD_MAPS).length,17);assert.deepEqual(m.bounds,{minX:-1000,maxX:1000,minZ:-1000,maxZ:1000});
   assert.equal(r.deck.length,12);assert.equal(r.gates.length,9);assert.equal(new Set(r.stairs.map(s=>s.id)).size,18);
   assert.equal(m.strategic!.objectives!.length,7);assert.deepEqual(m.strategic!.activeObjectives,[1,2,3,4,5,6,7]);
   assert.deepEqual(r.gates.map(g=>g.id).sort(),Object.keys(newPilot().siege!.gates).sort());
@@ -174,6 +174,9 @@ test("durable castle scores, retry, deadline, eight-hour protection and independ
     store.close();store=new GuildStore(file);assert.equal(store.war.inspect(CASTLE_ID,start+91000).pilot!.score.attack,348);
     store.war.advance(f,start+91000,0,0,all);assert.equal(store.war.inspect(CASTLE_ID,start+91000).pilot!.score.attack,348);
     const end=start+CASTLE_DURATION;assert.equal(store.war.inspect(CASTLE_ID,end).owner,"West");
+    const estate=store.war.government.view(CASTLE_ID,m,end+3_600_000)!;
+    assert.equal(estate.available,60);store.war.govern("a",{site:CASTLE_ID,revision:estate.revision,action:"collect"},end+3_600_000);
+    assert.equal(store.war.government.balance(m.id),60);
     assert.equal(store.war.inspect(CASTLE_ID,end+WAR_PROTECTION-1).phase,"protected");
     assert.equal(store.war.inspect(CASTLE_ID,end+WAR_PROTECTION).phase,"open");assert.equal(store.war.inspect("moon_pass",end).owner,null);
   }finally{store.close();rmSync(dir,{recursive:true,force:true});}
