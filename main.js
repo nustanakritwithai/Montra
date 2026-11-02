@@ -3615,7 +3615,7 @@
   gm.phongPool = additiveMat("phong pool", radialTexture("phong pool", 128, [[0, "rgba(140,255,90,.35)"], [1, "rgba(140,255,90,0)"]]));
   gm.elephantHide = new B.StandardMaterial("ghost elephant hide", scene); gm.elephantHide.diffuseColor = B.Color3.FromHexString("#7f8fa8"); gm.elephantHide.emissiveColor = B.Color3.FromHexString("#2a3a58"); gm.elephantHide.alpha = .72; gm.elephantHide.specularColor = B.Color3.Black();
   gm.elephantHide.diffuseTexture = paintTexture("elephant wrinkles", 128, (c, s) => { c.fillStyle = "#d8dde6"; c.fillRect(0, 0, s, s); c.strokeStyle = "rgba(40,50,70,.5)"; c.lineWidth = 1.2;
-    for (let i = 0; i < 40; i++) { const y = R(i, 961) * s; c.beginPath(); c.moveTo(0, y); for (let x = 0; x <= s; x += 16) c.lineTo(x, y + Math.sin(x * .1 + i) * 4); c.stroke(); } }, 3);
+    for (let i = 0; i < 40; i++) { const y = noise(i, 961) * s; c.beginPath(); c.moveTo(0, y); for (let x = 0; x <= s; x += 16) c.lineTo(x, y + Math.sin(x * .1 + i) * 4); c.stroke(); } }, 3);
   gm.elephantMist = additiveMat("elephant mist", radialTexture("elephant mist", 128, [[0, "rgba(140,170,230,.35)"], [1, "rgba(140,170,230,0)"]]));
   gm.steelBlade.specularColor = B.Color3.FromHexString("#e0e8f0"); gm.steelBlade.specularPower = 64;
   // Phi Ta Khon mask paint: bold festival bands, dots and flame curls.
@@ -3623,8 +3623,8 @@
   gm.maskPaint.diffuseTexture = paintTexture("ta khon paint", 256, (c, s) => {
     const cols = ["#c8302a", "#e8b030", "#2a6ab0", "#e8e4d8", "#1e8a4a", "#1a1414"];
     for (let y = 0; y < s; y += 22) { c.fillStyle = cols[(y / 22) % cols.length]; c.fillRect(0, y, s, 22); }
-    for (let i = 0; i < 120; i++) { c.fillStyle = cols[i % cols.length]; c.beginPath(); c.arc(R(i, 951) * s, R(i, 952) * s, 3 + R(i, 953) * 6, 0, 6.28); c.fill(); }
-    c.strokeStyle = "#1a1414"; c.lineWidth = 3; for (let i = 0; i < 18; i++) { const x = R(i, 954) * s, y = R(i, 955) * s; c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo(x + 14, y - 18, x + 26, y - 4); c.quadraticCurveTo(x + 30, y + 8, x + 18, y + 6); c.stroke(); }
+    for (let i = 0; i < 120; i++) { c.fillStyle = cols[i % cols.length]; c.beginPath(); c.arc(noise(i, 951) * s, noise(i, 952) * s, 3 + noise(i, 953) * 6, 0, 6.28); c.fill(); }
+    c.strokeStyle = "#1a1414"; c.lineWidth = 3; for (let i = 0; i < 18; i++) { const x = noise(i, 954) * s, y = noise(i, 955) * s; c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo(x + 14, y - 18, x + 26, y - 4); c.quadraticCurveTo(x + 30, y + 8, x + 18, y + 6); c.stroke(); }
   });
   for (const m of [gm.gutGlow, gm.heartGlow]) glowMats.add(m);
   gm.krasueAura = additiveMat("krasue aura", radialTexture("krasue aura", 128, [[0, "rgba(140,255,120,.0)"], [.45, "rgba(140,255,120,.25)"], [.7, "rgba(100,230,90,.12)"], [1, "rgba(80,200,70,0)"]]));
