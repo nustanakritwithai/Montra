@@ -35,6 +35,7 @@ export const Player = schema({
   stamina: t.number().default(100),
   maxStamina: t.number().default(100),
   xpToNext: t.number().default(150),
+  possessionActive: t.boolean().default(false), // append-only: temporary server-owned buff
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
@@ -115,6 +116,8 @@ export const MyRoomState = schema({
   partyAvailable: t.boolean().default(true),
   monsters: t.map(Monster),
   worldDefinition: t.string().default(""),
+  extendedChatAvailable: t.boolean().default(true),
+  buffsAvailable: t.boolean().default(true),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

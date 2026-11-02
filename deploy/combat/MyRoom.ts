@@ -35,6 +35,8 @@ import { TEMPLE_ID } from "./TempleMap.js";
 import { DEFAULT_MAP_ID, getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
 import { checkWarp } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
+import { saveBugReport } from "./BugReports.js";
+import { applyBuffs, BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCooldown } from "./Buffs.js";
 import { parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
@@ -53,7 +55,7 @@ import { ForestEncounters } from "./ForestEncounters.js";
 type Gates = {
   move: CommandBucket; attack: CommandBucket; summon: CommandBucket;
   climb: CommandBucket; dash: CommandBucket; flight: CommandBucket;
-  chat: CommandBucket; economy: CommandBucket; party: CommandBucket;
+  chat: CommandBucket; bugReport: CommandBucket; possession: CommandBucket; economy: CommandBucket; party: CommandBucket;
 };
 
 type ActiveDash = DashDirection & { remaining: number };
@@ -109,6 +111,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastWeaponEquipMs = new Map<string, number>();
   private trades = new Map<string, TradeSession>();
   private parties = new PartyManager();
+  private buffs = new BuffBook();
 
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
@@ -139,7 +142,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private applyStats(player: Player, allocations: Allocations): void {
-    const stats = calculateStats(player.level, allocations);
+    const stats = applyBuffs(calculateStats(player.level, allocations),player.possessionActive ? ["possession"] : []);
     player.maxHp = stats.maxHp; player.atk = stats.atk; player.def = stats.def;
     player.magicAtk = stats.magicAtk; player.magicDef = stats.magicDef;
     player.maxStamina = stats.maxStamina;
@@ -147,6 +150,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     player.stamina = Math.min(player.stamina, stats.maxStamina);
     player.statPoints = pointsAvailable(player.level, allocations);
     player.xpToNext = player.level >= PROGRESSION.maxLevel ? 0 : xpForNextLevel(player.level);
+  }
+
+  private endPossession(id:string, reason:string):void {
+    if(!this.buffs.end(id,this.simulatedMs))return;
+    rememberPossessionCooldown(this.persistentCharacters.get(id));
+    const player=this.state.players.get(id);
+    if(player){player.possessionActive=false;this.applyStats(player,this.statAllocations.get(id) ?? emptyAllocations());}
+    this.broadcast("possession_changed",{playerId:id,active:false,reason},{afterNextPatch:true});
   }
 
   private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal"): void {
@@ -373,21 +384,34 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.economyAction(client,()=>{const trade=this.tradeFor(client,order.tradeId); if (trade) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }});
     },
     chat: (client: Client, message: unknown) => {
-      const command = parseChatMessage(message);
-      if (command === null) return this.reject(client, "invalid_chat");
-      const id = client.sessionId;
-      const player = this.state.players.get(id);
-      if (!player || this.pendingWarps.has(id)) return this.reject(client, "chat_unavailable");
-      if (!this.gates.get(id)?.chat.consume(this.simulatedMs)) return this.reject(client, "chat_rate_limited");
-      // Only server-assigned identity and map are sent; payload cannot choose recipients.
-      const event = { senderId: id, name: player.characterName, mapId: player.mapId,
-        channel: command.channel, text: command.text };
-      for (const peer of this.clients) {
-        const recipient = this.state.players.get(peer.sessionId);
-        if (recipient && (command.channel === "world" || recipient.mapId === player.mapId) &&
-            !this.pendingWarps.has(peer.sessionId)) {
-          peer.send("chat_message", event);
-        }
+      const command=parseChatMessage(message);
+      if(!command) return this.reject(client,"invalid_chat");
+      const id=client.sessionId, player=this.state.players.get(id);
+      if(!player || this.pendingWarps.has(id)) return this.reject(client,"chat_unavailable");
+      if(!this.gates.get(id)?.chat.consume(this.simulatedMs)) return this.reject(client,"chat_rate_limited");
+      if(command.channel==="bug") {
+        if(!this.gates.get(id)?.bugReport.consume(this.simulatedMs)) return this.reject(client,"chat_bug_rate_limited");
+        const entry={name:player.characterName,mapId:player.mapId,x:player.x,y:player.y,z:player.z,text:command.text};
+        void saveBugReport(characterStore.directory,entry).then(reportId=>client.send("chat_report_result",{ok:true,reportId}))
+          .catch(error=>{console.error("MONTRA bug report save failed",error);try {client.send("chat_report_result",{ok:false});} catch { /* disconnected */ }});
+        return;
+      }
+      const party=command.channel==="party" ? this.parties.get(id) : null;
+      if(command.channel==="party" && !party) return this.reject(client,"chat_party_unavailable");
+      let target:Client | undefined;
+      if(command.channel==="private") {
+        target=this.clients.find(peer=>peer.sessionId===command.targetId);
+        if(!target || target.sessionId===id || !this.state.players.has(target.sessionId) || this.pendingWarps.has(target.sessionId)) return this.reject(client,"chat_target_unavailable");
+      }
+      const event={senderId:id,name:player.characterName,mapId:player.mapId,channel:command.channel,text:command.text,
+        ...(target ? {targetId:target.sessionId,targetName:this.state.players.get(target.sessionId)!.characterName} : {})};
+      for(const peer of this.clients) {
+        const recipient=this.state.players.get(peer.sessionId);
+        if(!recipient || this.pendingWarps.has(peer.sessionId)) continue;
+        const deliver=command.channel==="world" || (command.channel==="map" && recipient.mapId===player.mapId) ||
+          (command.channel==="party" && party!.members.includes(peer.sessionId)) ||
+          (command.channel==="private" && (peer.sessionId===id || peer.sessionId===target!.sessionId));
+        if(deliver) peer.send("chat_message",event);
       }
     },
     allocate_stat: (client: Client, _message: unknown) => this.reject(client, "automatic_stats"),
@@ -737,6 +761,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_summon");
       const owner = this.state.players.get(id);
       if (!owner || !owner.alive) return this.reject(client, "not_alive");
+      if (owner.possessionActive) return this.reject(client, "possession_active");
       if (this.state.summons.has(id)) return this.reject(client, "summon_limit");
       if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) {
         return this.reject(client, "summon_rate_limited");
@@ -756,6 +781,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.lastSummonAttackAt.delete(id);
       this.broadcast("summon_spawn", { ownerId: id, kind: "guardian" },
         { afterNextPatch: true });
+    },
+
+    possess: (client:Client,message:unknown) => {
+      const id=client.sessionId;
+      if(!parseEmptyCommand(message))return this.reject(client,"invalid_possession");
+      if(this.pendingWarps.has(id))return this.reject(client,"character_busy");
+      const player=this.state.players.get(id);
+      if(!player || !player.alive)return this.reject(client,"not_alive");
+      if(!this.gates.get(id)?.possession.consume(this.simulatedMs))return this.reject(client,"possession_rate_limited");
+      if(player.possessionActive){this.endPossession(id,"cancelled");return;}
+      if(!this.state.summons.has(id))return this.reject(client,"possession_needs_summon");
+      if(possessionCoolingDown(this.persistentCharacters.get(id)))return this.reject(client,"possession_cooldown");
+      const result=this.buffs.activate(id,this.simulatedMs);
+      if(result!=="ok")return this.reject(client,result==="cooldown" ? "possession_cooldown" : "possession_active");
+      this.despawnSummon(id,"possessed");
+      player.possessionActive=true;this.applyStats(player,this.statAllocations.get(id) ?? emptyAllocations());
+      this.broadcast("possession_changed",{playerId:id,active:true,durationMs:POSSESSION_BUFF.durationMs},{afterNextPatch:true});
     },
 
     unsummon: (client: Client, message: unknown) => {
@@ -1086,6 +1128,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private tick(dt: number) {
+    for(const id of this.buffs.expired(this.simulatedMs))this.endPossession(id,"expired");
     this.updateRespawns();
     this.updateClimbs(dt);
     this.updateFlights(dt);
@@ -1368,6 +1411,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private knockoutPlayer(id: string, cause: "pk" | "monster", attackerId = "") {
     const victim = this.state.players.get(id);
     if (!victim || !victim.alive) return;
+    this.endPossession(id,"owner_dead");
     victim.hp = 0;
     this.hpRegenRemainder.delete(id);
     victim.alive = false;
@@ -1700,6 +1744,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           RULES.dashCommandRatePerSecond, this.simulatedMs),
         flight: new CommandBucket(3, 2, this.simulatedMs),
         chat: new CommandBucket(3, 0.5, this.simulatedMs),
+        bugReport: new CommandBucket(1, 1 / 30, this.simulatedMs),
+        possession: new CommandBucket(2, 0.5, this.simulatedMs),
         economy: new CommandBucket(8, 3, this.simulatedMs),
         party: new CommandBucket(6, 2, this.simulatedMs),
       });
@@ -1713,6 +1759,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    this.endPossession(id,"owner_left");
+    this.buffs.forget(id);
     this.templeClients.delete(id);
     this.atlasClients.delete(id);
     this.leaveParty(id);
@@ -1772,6 +1820,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   async onDispose() {
+    this.buffs.clear();
     this.trades.clear();
     this.parties.clear();
     const pending = [...this.persistentCharacters.keys()].map(async id => {

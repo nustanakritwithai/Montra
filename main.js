@@ -97,8 +97,9 @@
   }
   engine.setHardwareScalingLevel(Math.min(1.7, Math.max(1, devicePixelRatio / 1.5)));
   let activeMapId = "ritual_village", warpPending = false, warpTimer = null;
-  const chatHistory = { map: [], world: [] }, chatUnread = { map: 0, world: 0 };
-  const chatDraft = { map: "", world: "" };
+  const chatHistory = { map: [], world: [], party: [], private: [], bug: [] }, chatUnread = { map: 0, world: 0, party: 0, private: 0, bug: 0 };
+  const chatDraft = { map: "", world: "", party: "", private: "", bug: "" };
+  let chatTargetId = "";
   let chatChannel = "map", chatPending = null, chatTimer = null;
   const scene = new B.Scene(engine);
   scene.clearColor = B.Color4.FromHexString("#172a2fff");
@@ -1376,6 +1377,7 @@
   function showDemo() {
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
+    possessed=false;syncPossessionButton();
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false; updatePartyBadge();
@@ -1786,6 +1788,7 @@
     syncForestMonsters(state);
     syncClimbButton();
     updateFlightButton();
+    syncPossessionButton();
     if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
     if (drawerActive === "character") renderProgressionProfile();
     if (drawerActive === "party") renderParty();
@@ -1887,15 +1890,15 @@
       console.info("MONTRA room joined", {roomId:joined.roomId, sessionId:joined.sessionId, initialStateReady:ok});
       joined.onStateChange(state => syncState(state));
       joined.onMessage("chat_message", message => {
-        if (room !== joined || !message || !["map", "world"].includes(message.channel) ||
+        if (room !== joined || !message || !["map", "world", "party", "private"].includes(message.channel) ||
             typeof message.text !== "string" || typeof message.name !== "string" ||
             typeof message.senderId !== "string" ||
             (message.channel === "map" && message.mapId !== activeMapId)) return;
         const channel = message.channel;
         const own = message.senderId === localId;
-        chatHistory[channel].push({ name: message.name.slice(0, 80), text: message.text.slice(0, 400), own });
+        chatHistory[channel].push({ name: (channel === "private" && own ? "ถึง " + String(message.targetName || "ผู้เล่น") : message.name).slice(0, 80), text: message.text.slice(0, 400), own });
         if (chatHistory[channel].length > 100) chatHistory[channel].shift();
-        if (own && chatPending && chatPending.channel === channel && chatPending.text === message.text) {
+        if (own && chatPending && chatPending.channel === channel && chatPending.text === message.text && (channel !== "private" || chatPending.targetId === message.targetId)) {
           if (chatDraft[channel].normalize("NFC").trim() === message.text) chatDraft[channel] = "";
           finishChatPending();
         } else if (!own && (drawerActive !== "chat" || chatChannel !== channel)) {
@@ -1903,6 +1906,15 @@
         }
         updateChatBadge();
         if (drawerActive === "chat") renderChat();
+      });
+      joined.onMessage("chat_report_result", result => {
+        if(room!==joined || chatPending?.channel!=="bug") return;
+        if(result?.ok === true) {
+          chatHistory.bug.push({name:"ระบบ",text:"รับรายงานบัคแล้ว · ขอบคุณที่แจ้ง",own:false});
+          if(chatDraft.bug.normalize("NFC").trim()===chatPending.text) chatDraft.bug="";
+          toast("ส่งรายงานบัคแล้ว");
+        } else toast("บันทึกรายงานไม่สำเร็จ · ลองอีกครั้ง");
+        finishChatPending(); if(drawerActive==="chat") renderChat();
       });
       joined.onMessage("party_state", message => {
         if (room!==joined || !Array.isArray(message?.members) || message.members.length>4) return;
@@ -2036,12 +2048,17 @@
       });
       joined.onMessage("summon_despawn", notice => {
         if (room !== joined) return;
-        if (notice?.ownerId === localId) {
+        if (notice?.ownerId === localId && notice.reason !== "possessed") {
           toast(notice.reason === "owner_dead"
             ? "วิญญาณกลับภพเมื่อเจ้าของหมดสติ"
             : "เก็บวิญญาณผู้พิทักษ์แล้ว");
         }
         syncSummons(joined.state);
+      });
+      joined.onMessage("possession_changed", notice => {
+        if(room!==joined || notice?.playerId!==localId)return;
+        toast(notice.active ? "วิญญาณเข้าสิง · เพิ่มโจมตีและป้องกัน 20% นาน 60 วินาที" : "สถานะเข้าสิงสิ้นสุด");
+        syncPossessionButton();
       });
       joined.onMessage("summon_hit", hit => {
         if (room !== joined || !hit) return;
@@ -2178,10 +2195,10 @@
           const reason={economy_unavailable:"ต้องเข้า LIVE ที่เปิดระบบตลาด",economy_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",character_busy:"กำลังบันทึกข้อมูล · ลองใหม่",trade_expired:"ข้อเสนอเทรดหมดอายุ",trade_unavailable:"ไม่พบข้อเสนอเทรด"};
           toast(reason[info.reason] || "คำขอไม่ถูกต้อง"); renderEconomy(); return;
         }
-        if (["invalid_chat", "chat_rate_limited", "chat_unavailable"].includes(info?.reason)) {
+        if (["invalid_chat", "chat_rate_limited", "chat_unavailable", "chat_party_unavailable", "chat_target_unavailable", "chat_bug_rate_limited"].includes(info?.reason)) {
           finishChatPending();
-          toast(info.reason === "chat_rate_limited" ? "ส่งข้อความเร็วเกินไป · รอสักครู่" :
-            info.reason === "chat_unavailable" ? "ยังส่งแชทไม่ได้ขณะเดินทาง" : "ข้อความไม่ถูกต้องหรือยาวเกิน 200 ตัวอักษร");
+          const chatErrors={chat_rate_limited:"ส่งข้อความเร็วเกินไป · รอสักครู่",chat_unavailable:"ยังส่งแชทไม่ได้ขณะเดินทาง",chat_party_unavailable:"เข้าปาร์ตี้ก่อนส่งข้อความ",chat_target_unavailable:"ผู้รับไม่พร้อมใช้งานหรือออกจากห้องแล้ว",chat_bug_rate_limited:"ส่งรายงานได้ทุก 30 วินาที",invalid_chat:"ข้อความไม่ถูกต้องหรือยาวเกิน 200 ตัวอักษร"};
+          toast(chatErrors[info.reason] || "ส่งข้อความไม่สำเร็จ");
           if (drawerActive === "chat") renderChat();
           return;
         }
@@ -2208,6 +2225,11 @@
         else if(info?.reason==="world_client_update_required")toast("รีเฟรชหน้าเกมเพื่อเข้าวัดร้างพันธนาการ");
         else if (info?.reason === "target_unavailable") toast("เป้าหมายไม่อยู่ในห้องหรือไม่พร้อมต่อสู้");
         else if (info?.reason === "invalid_attack") toast("คำสั่งโจมตีไม่ถูกต้อง");
+        else if (info?.reason === "possession_needs_summon") toast("เรียกวิญญาณก่อนเข้าสิง");
+        else if (info?.reason === "possession_cooldown") toast("เข้าสิงยังไม่พร้อม · รอคูลดาวน์ 30 วินาทีหลังสิ้นสุด");
+        else if (info?.reason === "possession_active") toast("ออกจากการเข้าสิงก่อนเรียกวิญญาณ");
+        else if (info?.reason === "possession_rate_limited") toast("กดเข้าสิงถี่เกินไป");
+        else if (info?.reason === "invalid_possession") toast("คำสั่งเข้าสิงไม่ถูกต้อง");
         else if (info?.reason === "summon_limit") toast("เรียกวิญญาณพร้อมกันได้สูงสุด 1 ตัว");
         else if (info?.reason === "summon_cooldown") toast("อัญเชิญเร็วเกินไป · รอคูลดาวน์");
         else if (info?.reason === "summon_rate_limited") toast("กดเรียกวิญญาณถี่เกินไป");
@@ -2555,73 +2577,62 @@
     ui.drawer.hidden=false; ui.shade.hidden=false;
     drawerActive=name;
   }
+  const chatTabs={map:"แผนที่",world:"รวมในห้อง",party:"ปาร์ตี้",private:"ส่วนตัว",bug:"รายงานบัค"};
   function updateChatBadge() {
-    const total = Math.min(99, chatUnread.map + chatUnread.world);
-    const badge = $("chatUnread");
-    badge.hidden = total === 0;
-    badge.textContent = total ? String(total) : "";
-    $("chatButton").setAttribute("aria-label", total ? `เปิดแชท มีข้อความใหม่ ${total} ข้อความ` : "เปิดแชท");
+    const total=Math.min(99,Object.values(chatUnread).reduce((sum,n)=>sum+n,0)),badge=$("chatUnread");
+    badge.hidden=total===0;badge.textContent=total?String(total):"";
+    $("chatButton").setAttribute("aria-label",total ? `เปิดแชท มีข้อความใหม่ ${total} ข้อความ` : "เปิดแชท");
   }
-  function finishChatPending() {
-    clearTimeout(chatTimer); chatTimer = null; chatPending = null;
-  }
+  function finishChatPending(){clearTimeout(chatTimer);chatTimer=null;chatPending=null;}
   function clearChatHistory(all) {
-    chatHistory.map.length = 0; chatUnread.map = 0;
-    if (all) {
-      chatHistory.world.length = 0; chatUnread.world = 0;
-      chatDraft.map = ""; chatDraft.world = ""; finishChatPending();
-    }
-    updateChatBadge();
-    if (drawerActive === "chat") renderChat();
+    chatHistory.map.length=0;chatUnread.map=0;
+    if(all){for(const channel of Object.keys(chatHistory)){chatHistory[channel].length=0;chatUnread[channel]=0;chatDraft[channel]="";}chatTargetId="";finishChatPending();}
+    updateChatBadge();if(drawerActive==="chat")renderChat();
   }
   function renderChat() {
-    if (drawerActive !== "chat") return;
-    const log = $("chatLog"), input = $("chatInput"), send = $("chatSend");
-    if (!log || !input || !send) return;
-    const canChat = mode === "live" && room?.state?.chatAvailable === true;
-    $("chatStatus").textContent = mode !== "live" ? "เข้าออนไลน์เพื่อใช้แชท" :
-      canChat ? "ข้อความจะไม่ถูกบันทึกหลังออกเกม" : "เซิร์ฟเวอร์ยังไม่รองรับแชท · ต้องอัปเดต VPS";
-    for (const channel of ["map", "world"]) {
-      const tab = $(channel === "map" ? "chatMapTab" : "chatWorldTab");
-      tab.setAttribute("aria-pressed", String(channel === chatChannel));
-      const label = channel === "map" ? "แผนที่" : "รวมในห้อง";
-      tab.textContent = label + (chatUnread[channel] ? ` (${chatUnread[channel]})` : "");
+    if(drawerActive!=="chat")return;
+    const log=$("chatLog"),input=$("chatInput"),send=$("chatSend"),target=$("chatTarget");
+    if(!log||!input||!send||!target)return;
+    const extended=["party","private","bug"].includes(chatChannel);
+    const canChat=mode==="live" && room?.state?.chatAvailable===true && (!extended || room?.state?.extendedChatAvailable===true);
+    $("chatStatus").textContent=mode!=="live" ? "เข้าออนไลน์เพื่อใช้แชท" : !canChat ? "เซิร์ฟเวอร์ยังไม่รองรับช่องนี้" :
+      chatChannel==="bug" ? "รายงานจะบันทึกให้ผู้ดูแลเซิร์ฟเวอร์" : chatChannel==="private" ? "ส่งถึงผู้เล่นที่เลือกในห้องเดียวกัน" : "ข้อความจะไม่ถูกบันทึกหลังออกเกม";
+    for(const [channel,label] of Object.entries(chatTabs)) {
+      const tab=$("chatTab-"+channel);tab.setAttribute("aria-pressed",String(channel===chatChannel));
+      tab.textContent=label+(chatUnread[channel] ? ` (${chatUnread[channel]})` : "");
     }
-    const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
-    log.replaceChildren();
-    for (const item of chatHistory[chatChannel]) {
-      const row = document.createElement("div"); row.className = "chat-line";
-      const name = document.createElement("strong"); name.textContent = item.name + (item.own ? " (คุณ): " : ": ");
-      const body = document.createElement("span"); body.textContent = item.text;
-      row.append(name, body); log.append(row);
+    $("chatTargetField").hidden=chatChannel!=="private";
+    const choices=[];room?.state?.players?.forEach?.((player,id)=>{if(id!==localId)choices.push({id,name:String(player.characterName||"ผู้เล่น")});});
+    target.replaceChildren();const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="เลือกผู้รับ";target.append(placeholder);
+    for(const choice of choices){const option=document.createElement("option");option.value=choice.id;option.textContent=choice.name;target.append(option);}
+    target.value=chatTargetId;if(target.value!==chatTargetId)chatTargetId="";
+    const nearBottom=log.scrollHeight-log.scrollTop-log.clientHeight<48;log.replaceChildren();
+    for(const item of chatHistory[chatChannel]) {
+      const row=document.createElement("div");row.className="chat-line";
+      const name=document.createElement("strong");name.textContent=item.name+(item.own ? " (คุณ): " : ": ");
+      const body=document.createElement("span");body.textContent=item.text;row.append(name,body);log.append(row);
     }
-    if (!chatHistory[chatChannel].length) {
-      const empty = document.createElement("p"); empty.className = "chat-empty"; empty.textContent = "ยังไม่มีข้อความ"; log.append(empty);
-    }
-    if (nearBottom) log.scrollTop = log.scrollHeight;
-    if (input.value !== chatDraft[chatChannel]) input.value = chatDraft[chatChannel];
-    input.disabled = !canChat; send.disabled = !canChat || Boolean(chatPending);
+    if(!chatHistory[chatChannel].length){const empty=document.createElement("p");empty.className="chat-empty";empty.textContent="ยังไม่มีข้อความ";log.append(empty);}
+    if(nearBottom)log.scrollTop=log.scrollHeight;
+    if(input.value!==chatDraft[chatChannel])input.value=chatDraft[chatChannel];
+    input.disabled=!canChat;target.disabled=!canChat;send.disabled=!canChat||Boolean(chatPending)||(chatChannel==="private"&&!chatTargetId);
   }
-  function openChat() {
-    chatUnread[chatChannel] = 0; updateChatBadge();
-    openDrawer("chat", "แชท", '<div class="chat-tabs" role="group" aria-label="เลือกช่องแชท"><button id="chatMapTab" type="button">แผนที่</button><button id="chatWorldTab" type="button">รวมในห้อง</button></div><p id="chatStatus" class="note" role="status"></p><div id="chatLog" class="chat-log" role="log" aria-live="polite"></div><form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">ข้อความแชท</label><input id="chatInput" maxlength="400" autocomplete="off" placeholder="พิมพ์ข้อความ (ไม่เกิน 200 ตัวอักษร)"><button id="chatSend" type="submit">ส่ง</button></form>');
-    for (const channel of ["map", "world"]) {
-      $(channel === "map" ? "chatMapTab" : "chatWorldTab").onclick = () => {
-        chatChannel = channel; chatUnread[channel] = 0; updateChatBadge(); renderChat();
-      };
-    }
-    $("chatInput").addEventListener("input", event => { chatDraft[chatChannel] = event.target.value; });
-    $("chatForm").addEventListener("submit", event => {
-      event.preventDefault();
-      if (chatPending || mode !== "live" || !room || room.state?.chatAvailable !== true) return;
-      const text = chatDraft[chatChannel].normalize("NFC").trim();
-      if (!text || Array.from(text).length > 200) { toast("พิมพ์ข้อความไม่เกิน 200 ตัวอักษร"); return; }
-      const channel = chatChannel;
-      chatPending = { text, channel };
-      try { room.send("chat", { text, channel }); }
-      catch (_) { finishChatPending(); toast("ส่งข้อความไม่สำเร็จ"); renderChat(); return; }
-      chatTimer = setTimeout(() => { finishChatPending(); toast("ยังไม่ได้รับการยืนยันข้อความ"); renderChat(); }, 5000);
-      renderChat();
+  function openChat(){
+    chatUnread[chatChannel]=0;updateChatBadge();
+    openDrawer("chat","แชท",'<div class="chat-tabs" role="group" aria-label="เลือกช่องแชท">'+Object.entries(chatTabs).map(([id,label])=>'<button id="chatTab-'+id+'" type="button">'+label+'</button>').join('')+'</div><p id="chatStatus" class="note" role="status"></p><label id="chatTargetField" class="field" for="chatTarget" hidden>ผู้รับ<select id="chatTarget"></select></label><div id="chatLog" class="chat-log" role="log" aria-live="polite"></div><form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">ข้อความแชท</label><input id="chatInput" maxlength="400" autocomplete="off" placeholder="พิมพ์ข้อความ (ไม่เกิน 200 ตัวอักษร)"><button id="chatSend" type="submit">ส่ง</button></form>');
+    for(const channel of Object.keys(chatTabs)) $("chatTab-"+channel).onclick=()=>{chatChannel=channel;chatUnread[channel]=0;updateChatBadge();renderChat();};
+    $("chatTarget").onchange=event=>{chatTargetId=event.target.value;renderChat();};
+    $("chatInput").addEventListener("input",event=>{chatDraft[chatChannel]=event.target.value;});
+    $("chatForm").addEventListener("submit",event=>{
+      event.preventDefault();const channel=chatChannel,extended=["party","private","bug"].includes(channel);
+      if(chatPending||mode!=="live"||!room||room.state?.chatAvailable!==true||(extended&&room.state?.extendedChatAvailable!==true))return;
+      const text=chatDraft[channel].normalize("NFC").trim();
+      if(!text||Array.from(text).length>200){toast("พิมพ์ข้อความไม่เกิน 200 ตัวอักษร");return;}
+      if(channel==="private"&&!chatTargetId){toast("เลือกผู้รับก่อนส่ง");return;}
+      const command=channel==="private"?{text,channel,targetId:chatTargetId}:{text,channel};
+      chatPending={...command};
+      try{room.send("chat",command);}catch(_){finishChatPending();toast("ส่งข้อความไม่สำเร็จ");renderChat();return;}
+      chatTimer=setTimeout(()=>{finishChatPending();toast("ยังไม่ได้รับการยืนยันข้อความ");renderChat();},5000);renderChat();
     });
     renderChat();
   }
@@ -2794,7 +2805,7 @@
   function renderProgressionProfile() {
     if (drawerActive !== "character" || !$('profileStats')) return;
     const p = ownServerCharacter(), supported = mode === "live" && room?.state?.progressionAvailable === true && p;
-    $("profileProgressionStatus").textContent = supported ? "สเตตัสเพิ่มอัตโนมัติเมื่อเลเวลขึ้น" : "เข้า LIVE กับเซิร์ฟเวอร์ที่รองรับระบบสเตตัส";
+    $("profileProgressionStatus").textContent = supported ? (p.possessionActive ? "วิญญาณเข้าสิง · ATK / DEF / เวท +20%" : "สเตตัสเพิ่มอัตโนมัติเมื่อเลเวลขึ้น") : "เข้า LIVE กับเซิร์ฟเวอร์ที่รองรับระบบสเตตัส";
     $("profileLevel").textContent = "LV. " + (p?.level ?? 1) + " · EXP " + (p?.experience ?? 0) + (supported && p.xpToNext ? " / " + p.xpToNext : "");
     for (const [key,,field] of progressionStats) {
       $("statValue-" + key).textContent = supported ? String(Math.round(Number(p[field]) || 0)) : "—";
@@ -2880,7 +2891,7 @@
     };
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์ การตีบวก และระบบอาชีพ</p>`);
+    openDrawer("help","วิธีเล่น MONTRA V0.2.7",`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจ หมุนกล้อง และทดลองเอฟเฟกต์เรียกผีหรือเข้าสิงได้ ข้อมูลไม่ได้บันทึกขึ้นเซิร์ฟเวอร์</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์ การตีบวก และระบบอาชีพ</p>`);
   }
   function currentBagSlots() {
     if (mode === "live") return inventoryState?.slots || null;
@@ -3247,10 +3258,18 @@
     } else { spirit?.dispose();spirit=null;toast("เก็บวิญญาณกลับแล้ว"); }
     updateSummonButton(spiritShown);
   };
+  function syncPossessionButton() {
+    const active=mode==="live" ? ownServerCharacter()?.possessionActive===true : possessed;
+    const button=$("possess");button.setAttribute("aria-pressed",String(active));
+    if(button.lastElementChild)button.lastElementChild.textContent=active ? "ออกจากสิง" : "เข้าสิง";
+    heroMat.emissiveColor=B.Color3.FromHexString(active ? "#7c459b" : "#3b2916");
+  }
   $("possess").onclick=()=> {
-    if(mode==="live") { toast("เข้าสิงออนไลน์จะเปิดในรุ่นถัดไป");return; }
-    possessed=!possessed;
-    heroMat.emissiveColor = B.Color3.FromHexString(possessed?"#7c459b":"#3b2916");
+    if(mode==="live") {
+      if(!room || room.state?.buffsAvailable!==true){toast("เซิร์ฟเวอร์ยังไม่รองรับเข้าสิง");return;}
+      try{room.send("possess",{});}catch(_){toast("ส่งคำสั่งเข้าสิงไม่สำเร็จ");}return;
+    }
+    possessed=!possessed;syncPossessionButton();
     toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
   };
   $("attack").onclick = () => {
