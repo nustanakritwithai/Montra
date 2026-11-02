@@ -335,7 +335,7 @@ jobs:
           timeout 100s node world-capacity-integration.mjs || { cat monster-server.log; exit 1; }
           timeout 40s node forest-party-monster-integration.mjs || { cat monster-server.log; exit 1; }
           timeout 90s node guild-integration.mjs
-          timeout 140s node territory-integration.mjs
+          timeout 230s node territory-integration.mjs
           timeout 120s node world-atlas-integration.mjs
           timeout 85s node temple-integration.mjs
           timeout 50s node forest-guardian-integration.mjs

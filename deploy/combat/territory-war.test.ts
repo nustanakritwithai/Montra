@@ -17,11 +17,17 @@ test("capture progress, contested flags, deadline, independent protection and du
     const f=store.war.start("moon_pass",a,start),other=store.war.start("river_watch",b,start);
     assert.throws(()=>store.war.start("moon_pass",b,start),/war_unavailable/);
     assert.equal(store.war.side(f,b,start,true),"defend");
+    store.war.gate(f,"defend",false,start);assert.equal(store.war.inspect(f.site,start).gateClosed,false);
+    assert.throws(()=>store.war.gate(f,"defend",true,start),/occupied/);
+    store.war.gate(f,"defend",false,start);store.war.gate(f,"attack",false,start);
     for(let i=1;i<=4;i++)store.war.advance(f,start+i*1000,2,2);
     assert.equal(store.war.inspect(f.site,start+4000).progress,0);
     store.war.advance(f,start+40_000,5,0);store.war.advance(f,start+40_000,5,0);
     assert.equal(store.war.inspect(f.site,start+40_000).progress,2);
     store.close();store=new GuildStore(file);
+    assert.equal(store.war.inspect(f.site,start+40_000).gateHp,105);
+    for(let i=0;i<7;i++)store.war.gate(f,"attack",false,start+40_000);
+    assert.equal(store.war.inspect(f.site,start+40_000).gateClosed,false);
     for(let i=1;i<=29;i++)store.war.advance(f,start+40_000+i*1000,5,0);
     const won=start+69_000,reopen=won+WAR_PROTECTION;
     assert.equal(store.war.inspect(f.site,won).owner,"Moon");
@@ -30,7 +36,7 @@ test("capture progress, contested flags, deadline, independent protection and du
     assert.equal(store.war.inspect(other.site,reopen).phase,"protected");
     assert.throws(()=>store.war.start(f.site,a,reopen),/war_unavailable/);
     const next=store.war.start(f.site,b,reopen);
-    assert.equal(store.war.side(next,a,reopen),"defend");
+    assert.equal(store.war.side(next,a,reopen),"defend");assert.equal(store.war.inspect(next.site,reopen).gateHp,120);
     store.war.advance(f,reopen+1000,WAR_HOLD,0);
     assert.equal(store.war.inspect(f.site,reopen+1000).progress,0);
     store.close();store=new GuildStore(file);

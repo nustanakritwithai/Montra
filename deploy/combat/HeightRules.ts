@@ -132,6 +132,9 @@ export function progressClimb(
 export function wallBlocksShot(start: WorldPoint, end: WorldPoint): boolean {
   const min = { x: FORT.x - FORT.width/2, y: -0.1, z: FORT.z - FORT.length/2 };
   const max = { x: FORT.x + FORT.width/2, y: FORT.height, z: FORT.z + FORT.length/2 };
+  return rayHitsBox(start,end,min,max);
+}
+export function rayHitsBox(start:WorldPoint,end:WorldPoint,min:WorldPoint,max:WorldPoint):boolean {
   let enter=0, exit=1;
   for (const dim of ["x","y","z"] as const) {
     const d = end[dim] - start[dim];

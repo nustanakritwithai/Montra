@@ -29,7 +29,11 @@ async function leave(c){await c.r.leave();open.delete(c.r);await sleep(200);}
 async function transfer(c,verb){
   const t=await send(c,verb,{},"territory_transfer");await leave(c);return join(c.i,t.roomId,t.ticket);
 }
-async function walk(c,x,z){c.r.send("move",{x,z});await until(()=>Math.hypot(c.me().x-x,c.me().z-z)<.35,"walk "+x+","+z,18000);}
+async function walk(c,x,z){
+  c.r.send("move",{x,z});
+  try{await until(()=>Math.hypot(c.me().x-x,c.me().z-z)<.35,"walk "+x+","+z,24000);}
+  catch(error){const p=c.me();throw Error(String(error)+" at "+JSON.stringify({x:p.x,y:p.y,z:p.z,action:p.combatState,rejections:c.events.filter(e=>e.type==="command_rejected").slice(-3)}));}
+}
 try{
   if(process.env.MONTRA_WAR_STAGE==="read"){
     const c=await join(1);const s=await event(c,"territory_state");
@@ -57,11 +61,40 @@ try{
     for(const m of allies.slice(0,4))assert.equal((await transfer(m,"territory_join")).r.roomId,attacker.r.roomId);
     const denied=await send(allies[4],"territory_join",{},"territory_error");assert.equal(denied.reason,"war_side_full");
     await send(attacker,"warp",{},"territory_error",s=>s.reason==="war_exit");
-    for(const [x,z] of [[0,10],[0,-24],[6,-35],[12,-36]])await walk(attacker,x,z);
+    async function travel(c,points){for(const [x,z] of points)await walk(c,x,z);}
+    async function stair(c,structureId,direction){
+      c.r.send("climb",{structureId,direction});
+      await until(()=>c.me().y===(direction==="up"?4:0) && c.me().combatState!=="climbing","stair "+direction);
+    }
+    await Promise.all([travel(attacker,[[0,10],[0,-4],[0,-18],[12,-21]]),
+      travel(defender,[[27,-56],[27,-36],[16,-36],[12,-31]])]);
+    const shot=(c,victim)=>send(c,"blessed_rice",{targetId:victim.r.sessionId},"pvp_hit",e=>e.attackerId===c.r.sessionId&&e.source==="ranged");
+    await send(attacker,"blessed_rice",{targetId:defender.r.sessionId},"command_rejected",e=>e.reason==="shot_blocked");
+    await send(defender,"territory_gate",{},"territory_state",s=>s.local.gateClosed===false);
+    await sleep(1100);
+    await send(defender,"territory_gate",{},"territory_state",s=>s.local.gateClosed===true);
+    await walk(defender,17,-31);await stair(defender,"wall-stair-1","up");
+    await walk(defender,12,-28);assert.equal(defender.me().y,4);
+    await shot(defender,attacker);await shot(attacker,defender);
+    await walk(attacker,12,-11.5);await shot(defender,attacker);
+    await send(attacker,"blessed_rice",{targetId:defender.r.sessionId},"command_rejected",e=>e.reason==="shot_out_of_range");
+    await travel(defender,[[2,-28],[2,-44],[22,-44],[22,-28],[2,-28],[2,-37]]);
+    await stair(defender,"wall-stair-0","down");assert.ok(Math.abs(defender.me().x-8)<.1);
+    await walk(defender,7,-32);
+    await walk(attacker,12,-24.5);
+    attacker.r.send("move",{x:12,z:-34});await sleep(2000);
+    assert.ok(attacker.me().z>-26.7,"closed gate blocks ground runner");
+    for(let hp=105;hp>=0;hp-=15){
+      attacker.events.length=0;attacker.r.send("territory_gate",{});
+      try{await event(attacker,"territory_state",s=>s.local.gateHp===hp);}
+      catch(error){throw Error("gate "+hp+" at "+JSON.stringify({x:attacker.me().x,z:attacker.me().z,events:attacker.events.filter(e=>e.type.startsWith("territory")).slice(-3)})+" "+error);}
+      await sleep(1100);
+    }
+    await walk(attacker,12,-36);
     await event(attacker,"territory_state",s=>s.local?.progress>0);
     const win=await event(attacker,"territory_state",s=>s.owners.moon_pass==="Moon Banner",75000);
     assert.equal(win.local.phase,"protected");assert.equal(win.owners.river_watch,null);
     await event(outsider,"territory_state",s=>s.owners.moon_pass==="Moon Banner");
-    console.log("PASS separate world rooms converge in one battlefield, side seats, movement, capture and global owner");
+    console.log("PASS common battlefield, side limits, gate defense and breach, shots uphill and downhill, full wall lap, second staircase and capture");
   }
 }finally{await Promise.allSettled([...open].map(r=>r.leave()));}

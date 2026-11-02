@@ -1028,6 +1028,7 @@
   function makePortal(mapId, parent, override) {
     const info=override||portals[mapId];
     const root=new B.TransformNode("spirit gate "+info.id,scene);root.position.set(info.x,0,info.z);if(parent)root.parent=parent;
+    if(mapId==="mantra_capital"){root.scaling.y=.48;if(Math.abs(info.x)>30)root.rotation.y=Math.PI/2;}
     const part=(mesh,x,y,z,material)=>{mesh.parent=root;mesh.position.set(x,y,z);mesh.material=material;mesh.isPickable=false;return mesh;};
     const box=(x,y,z,w,h,d,material)=>part(B.MeshBuilder.CreateBox("spirit gate",{width:w,height:h,depth:d},scene),x,y,z,material);
     const cone=(x,y,z,h,b,t,material,sides=6)=>part(B.MeshBuilder.CreateCylinder("spirit gate",{height:h,diameterBottom:b,diameterTop:t,tessellation:sides},scene),x,y,z,material);
@@ -1540,6 +1541,10 @@
     }
     return regionPaints.get(id);
   }
+  let provinceDoor=null;
+  function syncGateVisual(){
+    if(provinceDoor && !provinceDoor.isDisposed())provinceDoor.setEnabled(territoryState?.local?.site===activeMapId && territoryState.local.gateClosed===true);
+  }
   function buildRegion(map,paint) {
     let parts=[];
     function put(mesh,x,y,z,material){
@@ -1614,9 +1619,45 @@
         }
       }
       finish("landscape");
+      const rampart=map.strategic.rampart;
+      if(rampart){
+        for(const deck of rampart.deck){
+          const top=B.MeshBuilder.CreateBox("walkable city wall",{width:deck.width,height:.5,depth:deck.length},scene);
+          top.parent=expansionRoot;top.position.set(deck.x+deck.width/2,rampart.height-.25,deck.z+deck.length/2);
+          top.material=paint.road;top.metadata={walkable:true,elevatedTop:true};
+        }
+        for(const [i,g] of rampart.gates.entries()){
+          const b=g.box,x=b.x+b.width/2,z=b.z+b.length/2,horizontal=b.width>b.length;
+          const span=Math.max(b.width,b.length);
+          for(const side of [-1,1]){
+            box(x+(horizontal?side*(span/2+.2):0),1.75,z+(horizontal?0:side*(span/2+.2)),horizontal?.55:3.1,3.5,horizontal?3.1:.55,deep);
+          }
+          if(kind==="territory" && i===0){
+            provinceDoor=B.MeshBuilder.CreateBox("reinforced city gate",{width:b.width,height:3.45,depth:b.length},scene);
+            provinceDoor.parent=expansionRoot;provinceDoor.position.set(x,1.725,z);
+            provinceDoor.material=wooden;provinceDoor.isPickable=false;syncGateVisual();
+          }
+          if(!city)expansionLabel(g.name,x,z,10,5.2);
+        }
+        for(const [idx,stair] of rampart.stairs.entries()){
+          const dx=stair.top.x-stair.foot.x,dz=stair.top.z-stair.foot.z;
+          for(let j=0;j<10;j++){
+            const t=(j+.5)/10,h=(j+1)*rampart.height/10;
+            const step=B.MeshBuilder.CreateBox("city stair",{width:dx?.67:2.2,depth:dz?.67:2.2,height:h},scene);
+            step.parent=expansionRoot;step.position.set(stair.foot.x+t*dx,h/2,stair.foot.z+t*dz);
+            step.material=j%2?paint.road:stone;step.metadata={walkable:true,stairId:stair.id};
+          }
+          expansionLabel("บันได "+(idx+1)+" · ขึ้น / ลง",stair.foot.x,stair.foot.z,9,3);
+        }
+        finish("gate frames");
+      }
       for(const w of map.walls||[]){
         const x=w.x+w.width/2,z=w.z+w.length/2;
-        if(city){
+        if(w.rampart){
+          box(x,1.77,z,w.width,3.54,w.length,stone);
+          const along=w.width>w.length,n=Math.floor(Math.max(w.width,w.length)/3);
+          for(let i=0;i<n;i++){const t=(i+.5)/n;box(along?w.x+w.width*t:w.x+.26,4.13,along?w.z+.26:w.z+w.length*t,along?.8:.42,.26,along?.42:.8,deep);}
+        }else if(city){
           box(x,1.7,z,w.width,3.4,w.length,stone);roof(x,3.7,z,w.width+.75,w.length+.7);
           box(x,1.7,w.z-.04,w.width*.25,2,.12,darkWood);
           for(const side of [-1,1])box(x+side*w.width*.32,2.1,w.z-.12,.62,.9,.10,lanternPaper);
@@ -1639,10 +1680,7 @@
           roof(x,6.3,z,13,4.8);roof(x,7.4,z,8,3.8);cone(x,9.2,z,3,1.3,0,gold);
         }else if(s.kind==="fort"){
           ring(x,.12,z,10.5,gold);ring(x,.13,z,9.8,stone);
-          for(const side of [-1,1]){
-            box(x+side*6,1.4,z-3,2.5,2.8,2.5,deep);
-            roof(x+side*6,3.5,z-3,3.6,3.6);
-          }
+          // The flag is in an open court. The entire curtain wall is the firing platform.
           box(x,3,z, .17,6,.17,gold);box(x+1.1,5.3,z,2.2,1.45,.08,clothRed);
         }else if(s.kind==="market"){
           for(let i=0;i<3;i++){
@@ -2022,6 +2060,7 @@
     const paint=regionPaint(activeMapId);
     ground.material=paint ? paint.floor : inTemple ? templeFloor : activeMapId==="forbidden_forest" ? forestFloor : groundMat;
     templeCover.length=0;
+    provinceDoor=null;
     for(const child of expansionRoot.getChildren())child.dispose();
     for(const resource of expansionResources)resource.dispose();expansionResources.length=0;expansionLabels.length=0;
     const bounds=mapBounds();
@@ -2192,6 +2231,7 @@
       Math.hypot(Number(player.x)-portal.x,Number(player.y),Number(player.z)-portal.z)<=1.9);
   }
   $("warpButton").addEventListener("click",requestPortalWarp);
+  $("siegeGateButton").onclick=()=>{if(mode==="live" && room)room.send("territory_gate",{});};
   const markerMat = mat("waypoint gold", "#ffdb81", "#dd9a37");
   glowMats.add(markerMat);
   const marker = B.MeshBuilder.CreateTorus("destination", { diameter: 1.1, thickness: .08 }, scene);
@@ -3517,10 +3557,10 @@
     const player=ownServerCharacter();
     const onWall=Number(player?.y)>activeFort.height-0.12;
     const label=button.querySelector("span:last-child");
-    if(label)label.textContent=onWall?"ลงกำแพง":"ปีน";
+    if(label)label.textContent=onWall?"ลงกำแพง":worldDefinitions?.[activeMapId]?.strategic?.rampart?"ขึ้นกำแพง":"ปีน";
     button.classList.toggle("climb-active", Boolean(player?.combatState==="climbing"));
   }
-  function requestClimb() {
+  function requestClimb(stairId) {
     if (!hasLiveElevation()) {
       toast("ระบบปีนกำแพงต้องติดตั้งบน VPS ก่อน");
       return;
@@ -3531,17 +3571,20 @@
     if (me.flying) {toast("ลงจอดก่อนจึงใช้บันไดได้");return;}
     const onWall=Math.abs(Number(me.y)-activeFort.height)<.15;
     const direction=onWall?"down":"up";
-    const to=onWall
-      ? {x:activeFort.ladderTopX,z:activeFort.ladderTopZ}
-      : {x:activeFort.ladderFootX,z:activeFort.ladderFootZ};
+    const stairs=worldDefinitions?.[activeMapId]?.strategic?.rampart?.stairs;
+    const end=s=>onWall?s.top:s.foot;
+    const stair=stairs?.find(s=>s.id===stairId) || stairs?.reduce((a,b)=>Math.hypot(me.x-end(a).x,me.z-end(a).z)<Math.hypot(me.x-end(b).x,me.z-end(b).z)?a:b);
+    if(activeMapId!=="ritual_village" && !stair){toast("พื้นที่นี้ไม่มีบันไดกำแพง");return;}
+    const structureId=stair?.id || activeFort.id;
+    const to=stair?end(stair):onWall?{x:activeFort.ladderTopX,z:activeFort.ladderTopZ}:{x:activeFort.ladderFootX,z:activeFort.ladderFootZ};
     const distance=Math.hypot(Number(me.x)-to.x,Number(me.z)-to.z);
     if (distance > (onWall?1.2:1.55)) {
       pointMove(to.x,to.z);
-      pendingClimb={direction,to};
+      pendingClimb={direction,to,structureId};
       toast(onWall?"กำลังเดินไปจุดลงกำแพง":"กำลังเดินไปที่บันไดปีนกำแพง");
     } else {
       pendingClimb=null;
-      try{room.send("climb",{structureId:activeFort.id,direction});}
+      try{room.send("climb",{structureId,direction});}
       catch(err){console.error(err);toast("ส่งคำสั่งปีนไม่สำเร็จ");}
     }
   }
@@ -3555,9 +3598,9 @@
     const dist=Math.hypot(Number(player.x)-pendingClimb.to.x,
                            Number(player.z)-pendingClimb.to.z);
     if(dist>1.1)return;
-    const {direction}=pendingClimb;
+    const {direction,structureId}=pendingClimb;
     pendingClimb=null;
-    try {room.send("climb",{structureId:activeFort.id,direction});}
+    try {room.send("climb",{structureId,direction});}
     catch(err){console.error(err);toast("ส่งคำสั่งปีนไม่สำเร็จ");}
   }
   function showTalisman(mesh) {
@@ -3923,7 +3966,7 @@
       });
       joined.onMessage("territory_state",message=>{
         if(room!==joined)return;
-        territoryState=message;
+        territoryState=message;syncGateVisual();
         if(drawerActive==="war")renderWarPanel();
         if(drawerActive==="strategy")updateAtlasOwner();
         const local=message.local;
@@ -4577,6 +4620,7 @@
     ));
     if (!picked?.hit) return;
     const hitMesh=picked.pickedMesh;
+    if(hitMesh?.metadata?.stairId){requestClimb(hitMesh.metadata.stairId);return;}
     const otherId=hitMesh?.metadata?.pkPlayerId;
     if (hitMesh?.metadata?.swordMentor) {
       const me=ownServerCharacter();
@@ -4980,6 +5024,10 @@
       mapDot(ctx,x,y,major?5*u:2.8*u,major?"#ffcf76":"#c3e0b1","#263732");
       if(large && site.kind!=="bridge")mapText(ctx,site.name,x,y-7,10,major?"#ffe5ab":"#dfebd4");
     }
+    for(const [i,s] of (map?.strategic?.rampart?.stairs || []).entries()){
+      const x=sx(s.foot.x),y=sy(s.foot.z);mapDot(ctx,x,y,large?4:2,"#a5ecff");
+      if(large)mapText(ctx,"บันได "+(i+1),x,y-6,10,"#c4f5ff");
+    }
     for (const area of map?.restAreas || []) {
       const x = sx(area.x), y = sy(area.z), r = area.radius * scale;
       ctx.fillStyle = "rgba(133,246,221,.1)"; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
@@ -5074,6 +5122,7 @@
   const provinceTitle={capital:"เมืองหลวง",territory:"ด่านสงคราม",hunting:"พื้นที่เก็บเลเวล"};
   const warErrors={war_guild:"ต้องเป็นสมาชิกกิลด์ก่อนเข้าศึก",war_flag:"เดินเข้าวงธงกลางป้อมก่อนเปิดศึก",war_officer:"ให้ผู้บัญชาการหรือนายทหารเปิดศึก",
     war_other_guild:"สนามนี้มีฝ่ายบุกและฝ่ายรับแล้ว",war_side_full:"ฝ่ายของคุณครบ 5 คนแล้ว",war_busy:"รอให้พ้นการต่อสู้และยืนบนพื้นในด่าน",
+    war_gate_near:"ฝ่ายรับต้องยืนที่ประตูด้านใน",war_gate_occupied:"มีผู้เล่นยืนขวางประตู",war_gate_open:"ประตูเปิดอยู่",war_gate_inactive:"ประตูใช้การไม่ได้แล้ว",
     war_ended:"ศึกนี้จบแล้ว",war_exit:"กลับห้องโลกผ่านหน้าด่านกิลด์",war_unavailable:"ด่านยังเปิดศึกไม่ได้"};
   const warPhase=p=>({open:"เปิดให้ท้าชิง",battle:"กำลังรบ",protected:"อยู่ในความคุ้มครอง",finished:"จบศึกแล้ว"})[p] || "กำลังตรวจด่าน";
   const warTime=s=>Math.floor(s/60)+" นาที "+s%60+" วินาที";
@@ -5081,7 +5130,7 @@
     openDrawer("war","สงครามยึดด่าน",`<h3 id="warHeading"></h3><p id="warOwner"></p><p id="warStatus" role="status"></p>
       <progress id="warGauge" max="60" aria-label="ความคืบหน้าการยึดธง"></progress><p id="warCount"></p>
       <p class="note" id="warFlag"></p><p class="note">ผู้บัญชาการหรือนายทหารเปิดศึกที่วงธง สมาชิกเข้าร่วมได้จากภายในด่าน ฝั่งละ 5 คน ศึกมีเวลา 5 นาที จำนวนคนที่ยืนวงมากกว่าจะดันเกจได้ เมื่อทั้งสองฝ่ายยืนเท่ากัน เกจจะหยุด</p>
-      <p class="note">วงสีเขียวคือพวกเดียวกัน สามเหลี่ยมสีแดงคือฝ่ายตรงข้าม เมื่อศึกจบ ด่านคุ้มครอง 8 ชั่วโมงตามเวลาจริง</p><button id="warAction" class="primary" type="button" hidden></button>`);
+      <p class="note">แตะบันไดหรือกดขึ้นกำแพงที่ตีนบันไดด้านใน เดินและซัดข้าวสารปลุกเสกได้ตลอดแนว เมื่อถึงหัวบันไดกดลงกำแพง วงเขียวคือฝ่ายเดียวกัน สามเหลี่ยมแดงคือฝ่ายตรงข้าม หลังจบศึกด่านคุ้มครอง 8 ชั่วโมง</p><button id="warAction" class="primary" type="button" hidden></button>`);
     renderWarPanel();
   }
   function renderWarPanel(){
@@ -5091,7 +5140,7 @@
     $("warOwner").textContent="ธงครองด่าน · "+(s.owner || "เป็นกลาง")+(s.inField?" · คุณอยู่ฝ่าย"+(s.side==="attack"?"บุก":"รับ"):"");
     $("warStatus").textContent=warPhase(s.phase)+(s.phase==="battle"?" · เหลือ "+warTime(s.seconds)+" · "+s.attackName+" บุก / "+(s.defendName || "รอคู่ชิง")+" รับ":"");
     const fort=worldDefinitions?.[s.site]?.strategic?.sites?.find(site=>site.kind==="fort");
-    $("warFlag").textContent=fort?"วงยึดธง · "+fort.name+" ("+fort.x+", "+fort.z+") · รัศมี 5 เมตร":"";
+    $("warFlag").textContent=fort?"ธง ("+fort.x+", "+fort.z+") · รัศมี 5 ม. · บันไดขึ้นลง 2 ทาง ดูจุดสีฟ้าบนแผนที่"+(s.inField?" · ประตู "+(s.gateHp<=0?"พังแล้ว":s.gateClosed?"ปิด":"เปิด")+" "+s.gateHp+"/120":""):"";
     const gauge=$("warGauge");gauge.hidden=s.phase!=="battle";gauge.max=s.goal;gauge.value=Math.abs(s.progress);
     $("warCount").textContent=s.phase==="battle"?((s.progress<0?"ฝ่ายรับ":"ฝ่ายบุก")+" ยึดธง "+Math.abs(s.progress)+"/"+s.goal+(s.inField?" · ในวง บุก "+s.attack+" รับ "+s.defend:"")):"";
     button.hidden=!(s.inField || s.canStart || s.canJoin);
@@ -6289,6 +6338,11 @@
     }
     const me=getLocalAvatar();
     const portal=activePortal(), authoritative=ownServerCharacter();
+    const siege=$("siegeGateButton"),localWar=territoryState?.local,door=worldDefinitions?.[activeMapId]?.strategic?.rampart?.gates[0].box;
+    const near=door && authoritative && authoritative.alive && Math.abs(authoritative.y)<.1 && authoritative.x>=door.x-2.5 && authoritative.x<=door.x+door.width+2.5 && authoritative.z>=door.z-2.5 && authoritative.z<=door.z+door.length+2.5;
+    siege.hidden=!(near && localWar?.site===activeMapId && localWar.inField && localWar.phase==="battle" && localWar.gateHp>0 &&
+      (localWar.side==="attack"?localWar.gateClosed:authoritative.z<door.z+door.length/2));
+    if(!siege.hidden)siege.textContent=(localWar.side==="attack"?"พังประตู":localWar.gateClosed?"เปิดประตู":"ปิดประตู")+" · "+localWar.gateHp+"/120";
     const warpButton=$("warpButton");
     warpButton.hidden=!(mode==="live" && room?.state?.worldMapsAvailable===true &&
       isNearPortal(authoritative,portal) && !warpPending);

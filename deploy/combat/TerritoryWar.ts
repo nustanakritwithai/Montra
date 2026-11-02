@@ -6,7 +6,7 @@ export const warSites=Object.fromEntries(Object.entries(PROVINCES).filter(([,p])
   .map(([id,p])=>[id,p.sites.find(s=>s.kind==="fort")!]));
 export type WarMember={id:string;officer:boolean};
 type Battle={seq:number;site:string;incumbent:string|null;attacker:string;defender:string|null;started:number;
-  progress:number;sample:number;ended:number|null;winner:string|null};
+  progress:number;sample:number;ended:number|null;winner:string|null;gate_hp:number;gate_open:number};
 export type Battlefield={site:string;seq:number};
 export type WarSide="attack"|"defend";
 
@@ -17,6 +17,9 @@ export class TerritoryWar {
       started INTEGER NOT NULL,progress REAL NOT NULL DEFAULT 0,sample INTEGER NOT NULL,ended INTEGER,winner TEXT);
       CREATE INDEX IF NOT EXISTS territory_recent ON territory_battles(site,seq DESC);
       CREATE UNIQUE INDEX IF NOT EXISTS territory_one_battle ON territory_battles(site) WHERE ended IS NULL;`);
+    const cols=db.prepare("PRAGMA table_info(territory_battles)").all();
+    if(!cols.some(c=>c.name==="gate_hp"))db.exec("ALTER TABLE territory_battles ADD COLUMN gate_hp INTEGER NOT NULL DEFAULT 120");
+    if(!cols.some(c=>c.name==="gate_open"))db.exec("ALTER TABLE territory_battles ADD COLUMN gate_open INTEGER NOT NULL DEFAULT 0");
   }
   private atomic<T>(work:()=>T):T {
     this.db.exec("BEGIN IMMEDIATE");
@@ -54,6 +57,7 @@ export class TerritoryWar {
     const phase=active?"battle":b?.ended!=null && now<b.ended+WAR_PROTECTION?"protected":"open";
     return {seq:b?.seq??0,phase,owner,ownerId:owner?ownerId:null,attacker:active?b.attacker:null,defender:active?b.defender:null,
       attackName:active?this.guildName(b.attacker):null,defendName:active?this.guildName(b.defender):null,
+      gateHp:active?b.gate_hp:120,gateClosed:!!(active && b.gate_hp>0 && !b.gate_open),
       progress:active?b.progress:0,seconds:active?Math.max(0,Math.ceil((b.started+WAR_DURATION-now)/1000)):0};
   }
   start(site:string,member:WarMember,now:number):Battlefield {
@@ -76,6 +80,19 @@ export class TerritoryWar {
       return "defend";
     }
     throw Error("war_other_guild");
+  }
+  gate(field:Battlefield,side:WarSide,occupied:boolean,now:number):void{
+    this.atomic(()=>{
+      const b=this.current(field.site,now);
+      if(!b || b.seq!==field.seq || b.ended!==null || !b.gate_hp)throw Error("war_gate_inactive");
+      if(side==="attack"){
+        if(b.gate_open)throw Error("war_gate_open");
+        this.db.prepare("UPDATE territory_battles SET gate_hp=max(0,gate_hp-15) WHERE seq=?").run(b.seq);
+      }else{
+        if(b.gate_open && occupied)throw Error("war_gate_occupied");
+        this.db.prepare("UPDATE territory_battles SET gate_open=? WHERE seq=?").run(b.gate_open?0:1,b.seq);
+      }
+    });
   }
   advance(field:Battlefield,now:number,attack:number,defend:number):void {
     this.atomic(()=>{
