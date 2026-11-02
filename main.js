@@ -537,7 +537,9 @@
     vbox("house door", front - sign * .04, 1.85, z - size * .16, .06, 1.35, .75, darkWood);
     vbox("lit window", front - sign * .05, 2.15, z + size * .22, .05, .55, .62, glowMat);
     vbox("window shutter", front - sign * .06, 2.15, z + size * .22 + .45, .04, .6, .26, wooden);
-    thaiRoof(x, 2.9, z, size + 1.1, size + .7);
+    const lowerRidge = thaiRoof(x, 2.9, z, size + 1.1, size + .7);
+    // Second, steeper tier gives the layered silhouette of a Thai roof.
+    thaiRoof(x, 2.9 + (lowerRidge - 2.9) * .5, z, (size + 1.1) * .6, (size + .7) * .78, .98);
     const lanternX = front - sign * (veranda ? 1.2 : .25);
     vcyl("hanging lantern", lanternX, 2.3, z + size / 2 - .1, .36, .26, .3, lanternPaper, 8);
     vpool(lanternX, z + size / 2 - .1, 2.2, .07);
@@ -641,6 +643,54 @@
     const x = -40 + i * 3.2, z = -27 - noise(i, 61) * 6, h = 3 + noise(i, 62) * 2;
     vcyl("forest edge", x, h * .55, z, h * 1.1, 4 + noise(i, 63) * 2, .2, i % 2 ? leafDark : leafMid, 6);
   }
+  // Living water: scrolling ripples, lotus, reeds and floating krathong.
+  const rippleTexture = paintTexture("canal ripples", 256, (c, s) => {
+    c.fillStyle = "#000"; c.fillRect(0, 0, s, s);
+    for (let i = 0; i < 80; i++) {
+      const x = noise(i, 81) * s, y = noise(i, 82) * s, w = 10 + noise(i, 83) * 34;
+      c.strokeStyle = `rgba(80,125,165,${.22 + noise(i, 84) * .34})`; c.lineWidth = 1 + noise(i, 85) * 1.5;
+      for (const dx of [-s, 0, s]) { c.beginPath(); c.moveTo(x + dx - w / 2, y); c.quadraticCurveTo(x + dx, y - 3, x + dx + w / 2, y); c.stroke(); }
+    }
+  });
+  rippleTexture.uScale = 1.2; rippleTexture.vScale = 10;
+  water.emissiveTexture = rippleTexture;
+  const riverWater = water.clone("river water");
+  const riverRipple = rippleTexture.clone(); riverRipple.uScale = 16; riverRipple.vScale = 5;
+  riverWater.emissiveTexture = riverRipple;
+  scene.getMeshByName("river").material = riverWater;
+  const lotusPad = mat("lotus pad", "#2b4f35"), lotusBloom = mat("lotus bloom", "#e7a2b3", "#5a2a34"), reedMat = mat("reeds", "#4a5631");
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 22; i++) {
+      const x = side * (15.4 + noise(i, side + 90) * 3.8), z = -19 + noise(i, side + 91) * 38, d = .7 + noise(i, 92) * .6;
+      vcyl("lotus pad", x, -.035, z, .02, d, d, lotusPad, 10);
+      if (i % 3 === 0) vcyl("lotus bloom", x + .1, .07, z, .22, .3, 0, lotusBloom, 6);
+    }
+    for (let i = 0; i < 34; i++) {
+      const h = .7 + noise(i, side + 93) * .8;
+      vcyl("reed", side * (19.3 + noise(i, side + 94) * .8), h / 2 - .05, -19.5 + i * 1.18 + noise(i, 95) * .6, h, .1, 0, reedMat, 3);
+    }
+  }
+  for (const [x, z] of [[-16.5, -7], [17.2, -1], [-17.8, 6.5], [16.4, 9], [-15.8, 17], [3, 27], [-9, 30], [14, 33]]) {
+    vcyl("krathong", x, 0, z, .14, .55, .7, lotusPad, 8);
+    vcyl("krathong petals", x, .1, z, .16, .5, .2, lotusBloom, 8);
+    vcyl("krathong flame", x, .26, z, .14, .08, 0, candleMat, 4);
+    vpool(x, z, 1.3, .03);
+  }
+  // Dark banks beyond the canals so the quarter never floats in a void.
+  const bankMat = mat("river bank", "#2a3326"); bankMat.diffuseTexture = groundMat.diffuseTexture;
+  for (const side of [-1, 1]) vbox("river bank", side * 45, -.16, -5, 50.6, .06, 90, bankMat);
+  vbox("north bank", 0, -.16, -45, 39.4, .06, 50, bankMat);
+  // Strings of paper lanterns sag across the boardwalk between the posts.
+  for (const z of [-13.8, -5.4, 3.0, 11.4]) {
+    for (let k = 0; k < 4; k++) {
+      const x0 = -6.1 + k * 3.05, y0 = 2.25 - Math.sin(k / 4 * Math.PI) * .45, y1 = 2.25 - Math.sin((k + 1) / 4 * Math.PI) * .45;
+      vbox("lantern rope", x0 + 1.525, (y0 + y1) / 2, z, Math.hypot(3.05, y1 - y0), .035, .035, darkWood).rotation.z = Math.atan2(y1 - y0, 3.05);
+    }
+    for (let k = 1; k < 6; k++) {
+      const x = -6.1 + k * 12.2 / 6, y = 2.25 - Math.sin(k / 6 * Math.PI) * .45 - .2;
+      vcyl("string lantern", x, y, z, .26, .2, .24, k % 2 ? lanternPaper : glowMat, 6);
+    }
+  }
   {
     const byMaterial = new Map();
     for (const part of villageParts) {
@@ -677,16 +727,29 @@
   };
   for (const look of Object.values(campLooks)) look.material=mat(look.glyph,look.color);
   const forestFloor=mat("moss understory","#3d5340");
-  const litter=new B.DynamicTexture("forest leaf litter",128,scene,true);
-  const soil=litter.getContext();
-  soil.fillStyle="#dce2cc";soil.fillRect(0,0,128,128);
-  for(let i=0;i<92;i++){
-    const x=(i*47+((i*i)%19))%128,z=(i*31+((i*i)%23))%128;
-    soil.fillStyle=i%4===0?"#b0bda3":"#c7d3b8";
-    soil.fillRect(x,z,2+i%4,1+i%2);
+  // Macro moss patches plus leaf litter; a larger tile hides repetition.
+  function wrappedBlob(c,s,x,y,r,rgb,alpha){
+    for(const dx of [-s,0,s])for(const dy of [-s,0,s]){
+      const g=c.createRadialGradient(x+dx,y+dy,0,x+dx,y+dy,r);
+      g.addColorStop(0,`rgba(${rgb},${alpha})`);g.addColorStop(1,`rgba(${rgb},0)`);
+      c.fillStyle=g;c.fillRect(x+dx-r,y+dy-r,r*2,r*2);
+    }
   }
-  litter.update();litter.uScale=litter.vScale=24;forestFloor.diffuseTexture=litter;
+  const litter=paintTexture("forest floor",512,(c,s)=>{
+    c.fillStyle="#cfd6c0";c.fillRect(0,0,s,s);
+    for(let i=0;i<46;i++)wrappedBlob(c,s,noise(i,101)*s,noise(i,102)*s,24+noise(i,103)*70,["150,168,120","214,222,190","118,138,102"][i%3],.55);
+    for(let i=0;i<1500;i++){c.fillStyle=["#b0bda3","#c7d3b8","#a39a7c","#8f9f80"][i%4];c.fillRect(noise(i,104)*s,noise(i,105)*s,2+noise(i,106)*4,1+noise(i,107)*2);}
+  },5);
+  forestFloor.diffuseTexture=litter;
+  forestPath.diffuseTexture=paintTexture("packed trail",128,(c,s)=>{
+    c.fillStyle="#d8ccb4";c.fillRect(0,0,s,s);
+    for(let i=0;i<220;i++){c.fillStyle=["#bfb196","#e6dcc6","#a89a80","#cbbfa6"][i%4];const r=1+noise(i,108)*2.5;c.beginPath();c.arc(noise(i,109)*s,noise(i,110)*s,r,0,Math.PI*2);c.fill();}
+  });
+  forestPath.diffuseTexture.vScale=3;
   const forestGrass=mat("night grass","#2b4a30"), forestFern=mat("fern","#355a3a");
+  const bushDark=mat("undergrowth","#1c3524"), bushMid=mat("moonlit shrub","#2a4a33"), mossMat=mat("moss","#3c5a36");
+  const logMat=mat("fallen log","#3a2b21"), forestLeafLight=mat("upper canopy","#2a5039");
+  const wildflower=mat("night jasmine","#e9e4cf","#4a4636"), wildflowerGold=mat("marigold","#e2a540","#4a2c08");
   const mushStem=mat("mushroom stem","#a9a48f"), mushCap=mat("spirit mushroom","#69d8c8","#2fb7a3");
   glowMats.add(mushCap);
   const rootSpiritMat=mat("root spirit","#84b894","#21452e");
@@ -707,14 +770,30 @@
     c.beginPath();for(let i=0;i<=5;i++){const a=i*Math.PI*4/5-Math.PI/2;c.lineTo(s/2+Math.cos(a)*s*.2,s*.42+Math.sin(a)*s*.2);}c.stroke();
     c.fillStyle="#d6a64e";c.font="bold 18px sans-serif";c.textAlign="center";c.fillText("นะ มะ พะ ธะ",s/2,s*.86);
   });
-  const tile=new B.DynamicTexture("worn temple pavers",256,scene,true);
-  const tileInk=tile.getContext();tileInk.fillStyle="#e6e3ce";tileInk.fillRect(0,0,256,256);
-  for(let row=0;row<8;row++)for(let col=-1;col<5;col++){
-    const x=col*64+(row%2)*32, y=row*32;
-    tileInk.fillStyle=["#d1d3bc","#dce0c8","#d6dbc2","#cdd1bc"][Math.abs(row*7+col*3)%4];
-    tileInk.fillRect(x+1,y+1,62,30);
-  }
-  tile.update();tile.uScale=12;tile.vScale=13;templeFloor.diffuseTexture=tile;
+  // Weathered pavers: stains, moss and hairline cracks over offset courses.
+  const tile=paintTexture("worn temple pavers",512,(c,s)=>{
+    c.fillStyle="#b7b29e";c.fillRect(0,0,s,s);
+    for(let row=0;row<16;row++)for(let col=-1;col<9;col++){
+      const x=col*64+(row%2)*32,y=row*32;
+      c.fillStyle=["#d1d3bc","#dce0c8","#d6dbc2","#cdd1bc","#c3c5ad"][Math.abs(row*7+col*3)%5];c.fillRect(x+2,y+2,60,28);
+    }
+    for(let i=0;i<42;i++)wrappedBlob(c,s,noise(i,131)*s,noise(i,132)*s,18+noise(i,133)*60,i%3?"60,56,44":"78,112,62",.48);
+    c.strokeStyle="rgba(48,42,34,.55)";c.lineWidth=1.3;
+    for(let i=0;i<26;i++){let x=noise(i,134)*s,y=noise(i,135)*s;c.beginPath();c.moveTo(x,y);
+      for(let k=0;k<5;k++){x+=(noise(i*5+k,136)-.5)*42;y+=(noise(i*5+k,137)-.5)*42;c.lineTo(x,y);}c.stroke();}
+  });
+  tile.uScale=6;tile.vScale=6.5;templeFloor.diffuseTexture=tile;
+  templeBrick.diffuseTexture=paintTexture("laterite courses",256,(c,s)=>{
+    c.fillStyle="#6b4a3a";c.fillRect(0,0,s,s);
+    for(let row=0;row<8;row++)for(let col=-1;col<5;col++){
+      const x=col*64+(row%2)*32,y=row*32,k=row*40+col*6;
+      c.fillStyle=["#e2b9a0","#d6a98e","#caa088","#e8c4aa","#c79a80"][Math.abs(row*5+col*7)%5];c.fillRect(x+2,y+2,60,28);
+      for(let j=0;j<7;j++){c.fillStyle="rgba(90,50,30,.38)";c.fillRect(x+4+noise(k+j,141)*54,y+4+noise(k+j,142)*22,3,2);}
+    }
+    const moss=c.createLinearGradient(0,s,0,s*.55);moss.addColorStop(0,"rgba(70,100,60,.55)");moss.addColorStop(1,"rgba(70,100,60,0)");
+    c.fillStyle=moss;c.fillRect(0,0,s,s);
+  });
+  templeBrick.diffuseTexture.uScale=3;templeBrick.diffuseTexture.vScale=2;
   const templeCover=[];
   const templeSight=new B.Ray(B.Vector3.Zero(),new B.Vector3(0,0,1));
   const keeperMat=mat("guardian indigo","#605079","#251a34");
@@ -732,9 +811,32 @@
     const rock=B.MeshBuilder.CreateSphere("forest rock",{diameter:r*2,segments:5},scene);
     rock.position.set(x,r*.45,z);rock.scaling.y=.6;rock.material=forestStone;rock.isPickable=false;rock.parent=forestRoot;
   }
-  const altar=cube("abandoned shrine",[0,.65,-12],[3,1.3,2],forestStone);altar.parent=forestRoot;
-  const roof=cube("shrine roof",[0,2.25,-12],[3.5,.25,2.4],darkWood);roof.parent=forestRoot;
-  for(const x of [-1.35,1.35]) { const post=cube("shrine post",[x,1.5,-12],[.2,2,.2],darkWood);post.parent=forestRoot; }
+  // Ruined forest shrine: stone plinth, lacquered sanctum, gilded Thai roof,
+  // candles and talisman flags. Decorative only; merged per material.
+  function shrineRuin(x,z,parent,size=1){
+    const parts=[];
+    const add=(mesh,px,py,pz,material)=>{mesh.position.set(x+px*size,py*size,z+pz*size);mesh.scaling.setAll(size);mesh.material=material;mesh.isPickable=false;parts.push(mesh);return mesh;};
+    const box=(px,py,pz,w,h,d,material)=>add(B.MeshBuilder.CreateBox("forest shrine",{width:w,height:h,depth:d},scene),px,py,pz,material);
+    const cyl=(px,py,pz,h,b,t,material,sides=8)=>add(B.MeshBuilder.CreateCylinder("forest shrine",{height:h,diameterBottom:b,diameterTop:t,tessellation:sides},scene),px,py,pz,material);
+    box(0,.3,0,4.6,.6,3.4,forestStone);box(0,.15,2.1,2.6,.3,.9,forestStone);box(0,.72,0,3.6,.24,2.6,templeStone);
+    box(0,1.65,-.2,2.2,1.6,1.6,templeLacquer);box(0,1.6,.62,.7,1.1,.06,glowMat);
+    for(const px of [-1.5,1.5])for(const pz of [-1.1,.9])cyl(px,1.8,pz,2.2,.24,.2,darkWood,6);
+    const pitch=.85,half=1.85,rise=half*Math.tan(pitch);
+    for(const side of [-1,1]){
+      box(side*half/2,2.95+rise/2,-.1,half/Math.cos(pitch),.14,3.0,roofMat).rotation.z=-side*pitch;
+      box(side*(half-.05),2.93,-.1,.12,.1,3.1,gold);
+    }
+    box(0,2.95+rise+.05,-.1,.16,.14,3.3,gold);
+    for(const end of [-1,1])cyl(0,3.3+rise,-.1+end*1.65,.8,.12,0,gold,5).rotation.x=end*.55;
+    cyl(0,3.4+rise,-.1,1.1,.24,0,gold,8);
+    for(let i=0;i<7;i++){const h=.18+noise(i,x)*.22,cx=-1.1+i*.37;cyl(cx,.84+h/2,1.15,h,.09,.09,waxMat,6);cyl(cx,.9+h,1.15,.12,.07,0,candleMat,4);}
+    for(const side of [-1,1]){cyl(side*2.6,1.5,1.6,3,.08,.08,darkWood,5);box(side*2.6+side*.22,2.4,1.6,.4,1.0,.03,clothRed);}
+    const pool=lightPool(x,z+1.6*size,3.2*size,.05);pool.isPickable=false;parts.push(pool);
+    const byMaterial=new Map();
+    for(const part of parts){if(!byMaterial.has(part.material))byMaterial.set(part.material,[]);byMaterial.get(part.material).push(part);}
+    for(const group of byMaterial.values()){const mesh=group.length>1?B.Mesh.MergeMeshes(group,true,true):group[0];if(mesh){mesh.isPickable=false;if(parent)mesh.parent=parent;}}
+  }
+  shrineRuin(0,-12,forestRoot,.8);
   function makePortal(mapId, parent, override) {
     const info=override||portals[mapId];
     const ring=B.MeshBuilder.CreateTorus("portal-"+mapId,{diameter:3,thickness:.22,tessellation:24},scene);
@@ -845,6 +947,7 @@
       const offset=10+(i*7+side*3)%13, x=horizontal?along:edge+sign*offset, z=horizontal?edge+sign*offset:along;
       const height=2.5+offset*.10;
       column(x,height*.48-.45,z,height,5.5+i%4,0,forestLeaf,6);
+      column(x,height*.95,z,height*.65,(5.5+i%4)*.55,0,forestLeafLight,6);
     }
     if(map.guardian){
       const {x,z}=map.guardian;
@@ -875,6 +978,62 @@
       const a=k*Math.PI/2+Math.PI/4,x=camp.x+Math.cos(a)*10.8,z=camp.z+Math.sin(a)*10.8;
       column(x,1,z,2,.16,.12,darkWood,5);column(x,2.1,z,.4,.34,.28,glowMat,6);
       place(lightPool(x,z,2.8,.05),x,.05,z,lightPoolMat);
+    }
+    // Bushes hug every tree, so trunks read as rooted clumps rather than pins.
+    for(const o of map.obstacles){
+      if(!/^(grove-|tree-|north-grove)/.test(o.id))continue;
+      for(let k=0;k<5;k++){
+        const a=k*1.26+o.x,r=o.radius+.6+noise(k,o.z)*1.2,size=.8+noise(k,o.x)*.9;
+        const bush=place(B.MeshBuilder.CreateSphere("bush",{diameter:size*1.6,segments:4},scene),o.x+Math.cos(a)*r,size*.3,o.z+Math.sin(a)*r,k%2?bushDark:bushMid);
+        bush.scaling.y=.55;
+      }
+    }
+    // Stones line the trail verges.
+    for(const path of paths)for(let i=1;i<path.length;i++){
+      const a=path[i-1],b=path[i],len=Math.hypot(b.x-a.x,b.z-a.z),nx=-(b.z-a.z)/len,nz=(b.x-a.x)/len;
+      for(let t=1.2;t<len;t+=2.2)for(const side of [-1,1]){
+        const k=Math.round(t*10)+i*97+side;if(noise(k,115)<.35)continue;
+        const off=2.35+noise(k,116)*.5,d=.32+noise(k,117)*.34;
+        const stone=place(B.MeshBuilder.CreateSphere("verge stone",{diameter:d,segments:3},scene),a.x+(b.x-a.x)*t/len+nx*off*side,d*.18,a.z+(b.z-a.z)*t/len+nz*off*side,forestStone);
+        stone.scaling.y=.5;
+      }
+    }
+    // Fallen logs and moss-capped boulders in open ground.
+    for(let i=0,logs=0,rocks=0;i<160&&(logs<12||rocks<18);i++){
+      const x=bounds.minX+4+noise(i,121)*(spanX-8),z=bounds.minZ+4+noise(i,122)*(spanZ-8);
+      if(!clearOfProps(x,z))continue;
+      if(logs<12&&i%2){
+        const log=column(x,.3,z,2.4+noise(i,123)*1.4,.55,.48,logMat,8);log.rotation.z=Math.PI/2;log.rotation.y=noise(i,124)*Math.PI;logs++;
+      }else if(rocks<18){
+        const d=1+noise(i,125)*.9;
+        place(B.MeshBuilder.CreateSphere("boulder",{diameter:d,segments:4},scene),x,d*.22,z,forestStone).scaling.y=.55;
+        place(B.MeshBuilder.CreateSphere("moss cap",{diameter:d*.82,segments:4},scene),x+.05,d*.36,z-.05,mossMat).scaling.y=.32;
+        rocks++;
+      }
+    }
+    // Low shrubs and pale wildflowers break up open ground (never taller than knee height).
+    for(let i=0;i<260;i++){
+      const x=bounds.minX+2+noise(i,181)*(spanX-4),z=bounds.minZ+2+noise(i,182)*(spanZ-4);
+      if(!clearOfProps(x,z))continue;
+      if(i%3===0){const size=.7+noise(i,183)*.7;place(B.MeshBuilder.CreateSphere("shrub",{diameter:size*1.5,segments:4},scene),x,size*.22,z,i%2?bushDark:bushMid).scaling.y=.45;}
+      else for(let k=0;k<4;k++)column(x+(noise(i*4+k,184)-.5)*1.4,.06,z+(noise(i*4+k,185)-.5)*1.4,.05,.24,.18,i%2?wildflower:wildflowerGold,6);
+    }
+    // Roadside spirit houses (san ta yai) with candles at trail junctions.
+    function spiritHouse(x,z){
+      column(x,.55,z,1.1,.22,.18,darkWood,6);
+      slab(x,1.15,z,.95,.08,.8,gold);
+      slab(x,1.45,z,.66,.52,.56,woodenAlt);
+      slab(x,1.47,z+.29,.22,.3,.02,glowMat);
+      for(const side of [-1,1])slab(x+side*.24,1.86,z,.58,.07,.78,roofMat).rotation.z=-side*.75;
+      column(x,2.15,z,.42,.1,0,gold,5);
+      for(let k=0;k<3;k++)column(x-.3+k*.3,.12,z+.75,.24,.07,.07,candleMat,5);
+      place(lightPool(x,z+.6,1.9,.05),x,.05,z+.6,lightPoolMat);
+    }
+    for(const [jx,jz] of [[0,12],[0,-30],[0,-46],[13,-9],[-12,-1],[-4,-73]]){
+      seek: for(const r of [jz===12?7.6:4.5,6.5])for(let k=0;k<8;k++){
+        const x=jx+Math.cos(k*Math.PI/4+.4)*r,z=jz+Math.sin(k*Math.PI/4+.4)*r;
+        if(clearOfProps(x,z)&&!(map.restAreas||[]).some(ar=>Math.hypot(x-ar.x,z-ar.z)<ar.radius+1)){spiritHouse(x,z);break seek;}
+      }
     }
     // Batch static decorations by material; crowns remain individually fadeable.
     for(const parts of groups.values()){
@@ -1021,6 +1180,57 @@
       }
     }
     finish("temple banners");
+    // Rubble and toppled columns around the ruins.
+    for(const o of map.obstacles.filter(o=>o.id.startsWith("ruin-")||o.id==="cloister-stele"||o.id==="cracked-bell")){
+      for(let k=0;k<7;k++){
+        const a=k*1.05+o.z,r=o.radius+.5+noise(k,o.x)*2,size=.25+noise(k,o.z)*.45;
+        block(o.x+Math.cos(a)*r,size/2,o.z+Math.sin(a)*r,size*1.3,size,size,k%2?templeBrick:templeStone).rotation.y=a;
+      }
+    }
+    for(const [x,z,a] of [[-33,-4,.4],[36,-47,-.7],[-18,-63,1.2]]){
+      const fallen=column(x,.45,z,3.2,.9,.9,templeStone,8);fallen.rotation.z=Math.PI/2;fallen.rotation.y=a;
+      column(x+Math.cos(a)*2.2,.25,z-Math.sin(a)*2.2,.5,1,1,templeGold,8).rotation.z=.2;
+    }
+    // Moss and weeds at every wall foot.
+    for(const wall of map.walls||[]){
+      const alongX=wall.width>wall.length,span=Math.max(wall.width,wall.length),thick=Math.min(wall.width,wall.length);
+      for(let i=.5;i<span;i+=1.1)for(const side of [-1,1]){
+        const k=Math.round(i*10)+side*7+wall.x;if(noise(k,151)<.3)continue;
+        const off=thick/2+.25+noise(k,152)*.3,h=.25+noise(k,153)*.35;
+        column(wall.x+(alongX?i:wall.width/2+side*off),h/2,wall.z+(alongX?wall.length/2+side*off:i),h,.35,0,mossMat,3);
+      }
+    }
+    // Weeds and lifted, cracked slabs across the open courts.
+    const templeClear=(x,z)=>!(map.walls||[]).some(w=>x>w.x-.6&&x<w.x+w.width+.6&&z>w.z-.6&&z<w.z+w.length+.6)&&
+      !map.obstacles.some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+.9)&&
+      !(map.paths||[]).some(path=>path.some((p,i)=>{if(!i)return false;const a=path[i-1],dx=p.x-a.x,dz=p.z-a.z,l=dx*dx+dz*dz||1;
+        const t=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/l));return Math.hypot(x-a.x-t*dx,z-a.z-t*dz)<2.6;}));
+    const tb=map.bounds;
+    for(let i=0;i<340;i++){
+      const x=tb.minX+2+noise(i,191)*(tb.maxX-tb.minX-4),z=tb.minZ+2+noise(i,192)*(tb.maxZ-tb.minZ-4);
+      if(!templeClear(x,z))continue;
+      if(i%4===0){const slabPiece=block(x,.06,z,1.6+noise(i,193),.12,.8+noise(i,194)*.5,templeStone);slabPiece.rotation.y=noise(i,195)*3;slabPiece.rotation.z=(noise(i,196)-.5)*.16;}
+      else for(let k=0;k<3;k++){const h=.22+noise(i*3+k,197)*.3;column(x+(noise(i*3+k,198)-.5),h/2,z+(noise(i*3+k,199)-.5),h,.3,0,mossMat,3);}
+    }
+    // Naga balustrades flank both stairways.
+    for(const cz of [14,-61])for(const side of [-1,1]){
+      block(side*2.85,.38,cz+.9,.42,.76,4.4,templeBronze);
+      block(side*2.85,.8,cz+.9,.5,.1,4.5,templeGold);
+      const head=column(side*2.85,1.3,cz-1.55,1.4,.6,.16,templeBronze,6);head.rotation.x=-.45;
+      for(const fan of [-1,0,1])column(side*2.85+fan*.28,2.05,cz-1.75,.6,.18,0,templeGold,4).rotation.z=-fan*.5;
+    }
+    // Ruined chedi on the skyline beyond the courts.
+    function chedi(x,z,size,lean){
+      const parts=[
+        block(x,size*.12,z,size,size*.24,size,templeBrick),
+        block(x,size*.3,z,size*.78,size*.14,size*.78,templeStone),
+        column(x,size*.62,z,size*.5,size*.7,size*.42,templeBrick,10),
+        column(x,size*.9,z,size*.1,size*.46,size*.46,templeStone,10),
+        column(x,size*1.25,z,size*.62,size*.3,.04,templeBrick,10)];
+      for(const part of parts.slice(2))part.rotation.z=lean;
+    }
+    for(const [x,z,size,lean] of [[-60,-12,6,.03],[60,-30,7,-.05],[-58,-52,5,.08],[57,8,5.5,0],[-30,-88,6.5,.04],[30,-90,5,-.09],[0,-95,8,0]])chedi(x,z,size,lean);
+    finish("temple ruins detail");
     expansionLabel("วัดร้างพันธนาการ · Lv 8–20",0,18,18,10.5);
   }
   function fadeTempleWalls(hero) {
@@ -1086,9 +1296,8 @@
         const mesh=tree?B.MeshBuilder.CreateCylinder("forest boundary tree",{height:7,diameter:obstacle.radius*2,tessellation:7},scene):B.MeshBuilder.CreateSphere("forest stone",{diameter:obstacle.radius*2,segments:5},scene);
         mesh.parent=expansionRoot;mesh.position.set(obstacle.x,tree?3.5:obstacle.radius*.5,obstacle.z);mesh.material=tree?forestLeaf:forestStone;mesh.isPickable=false;
       }
-      const shrine=cube("northern shrine",[0,1,-88],[5,2,3],forestStone);shrine.parent=expansionRoot;
-      const roof=cube("northern shrine roof",[0,3,-88],[6,.4,4],darkWood);roof.parent=expansionRoot;
-      expansionLabel("ศาลร้างปลายป่า",0,-88);
+      shrineRuin(0,-88,expansionRoot,1.15);
+      expansionLabel("ศาลร้างปลายป่า",0,-88,12,8.6);
       if(!map.portals?.some(p=>p.targetMapId==="bound_temple"))expansionLabel("ทางสู่วัดร้าง · ยังไม่เปิด",-48,-84);
       expansionLabel("ทางสู่บึงพราย · ยังไม่เปิด",48,-84);
     }
@@ -2834,6 +3043,19 @@
     forbidden_forest: { inner: "#1b2a22", outer: "#07100c", land: "#22301f", ink: "#cfe0a0", grid: "rgba(207,224,160,.06)" },
     bound_temple: { inner: "#2c1f1d", outer: "#0f0909", land: "#30241f", ink: "#f0c58c", grid: "rgba(240,197,140,.06)" },
   };
+  const mapGrains = {};
+  function mapGrain(mapId) {
+    if (mapId in mapGrains) return mapGrains[mapId];
+    if (mapId === "ritual_village") return (mapGrains[mapId] = null);
+    const canvas = document.createElement("canvas"); canvas.width = canvas.height = 48;
+    const c = canvas.getContext("2d");
+    for (let i = 0; i < 70; i++) {
+      c.fillStyle = mapId === "bound_temple" ? (i % 2 ? "rgba(255,230,200,.08)" : "rgba(0,0,0,.18)") : (i % 2 ? "rgba(140,190,120,.12)" : "rgba(0,0,0,.2)");
+      c.beginPath(); c.arc(noise(i, 171) * 48, noise(i, 172) * 48, .6 + noise(i, 173) * 1.6, 0, Math.PI * 2); c.fill();
+    }
+    if (mapId === "bound_temple") { c.strokeStyle = "rgba(0,0,0,.18)"; c.strokeRect(0, 0, 24, 12); c.strokeRect(12, 12, 24, 12); c.strokeRect(24, 24, 24, 12); }
+    return (mapGrains[mapId] = canvas);
+  }
   function mapText(ctx, text, x, y, size, color, weight = 600) {
     ctx.font = `${weight} ${size}px system-ui, "Noto Sans Thai", sans-serif`;
     ctx.textAlign = "center"; ctx.lineJoin = "round";
@@ -2862,6 +3084,16 @@
     const left = sx(bounds.minX), top = sy(bounds.minZ), w = (bounds.maxX - bounds.minX) * scale, h = (bounds.maxZ - bounds.minZ) * scale;
     ctx.fillStyle = theme.land; ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 12;
     ctx.fillRect(left, top, w, h); ctx.shadowBlur = 0;
+    const grain = mapGrain(activeMapId);
+    if (grain) { ctx.globalAlpha = .55; ctx.fillStyle = ctx.createPattern(grain, "repeat"); ctx.fillRect(left, top, w, h); ctx.globalAlpha = 1; }
+    if (activeMapId === "forbidden_forest") {
+      // Canopy crowding the map rim.
+      for (let i = 0; i < 64; i++) {
+        const t = i / 64, r = (5 + noise(i, 161) * 6) * scale, e = noise(i, 162) * 3 * scale;
+        const [x, y] = t < .25 ? [left + w * t * 4, top - e] : t < .5 ? [left + w + e, top + h * (t - .25) * 4] : t < .75 ? [left + w * (1 - (t - .5) * 4), top + h + e] : [left - e, top + h * (1 - (t - .75) * 4)];
+        ctx.fillStyle = i % 2 ? "#14261a" : "#1b3322"; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      }
+    }
     if (large) {
       ctx.strokeStyle = theme.grid; ctx.lineWidth = 1; ctx.beginPath();
       const step = (bounds.maxX - bounds.minX) > 60 ? 20 : 5;
@@ -3759,6 +3991,8 @@
     scene.fogStart = camera.radius + atmosphere.fogNear;
     scene.fogEnd = camera.radius + atmosphere.fogFar;
     driftMist(elapsed, camera.target);
+    rippleTexture.vOffset = (rippleTexture.vOffset + dt * .025) % 1;
+    riverRipple.uOffset = (riverRipple.uOffset + dt * .012) % 1;
     // The horizon only enters the portrait frustum at shallow camera tilts.
     sky.setEnabled(camera.beta > 1.05);
     motes.emitter.copyFrom(camera.target);
