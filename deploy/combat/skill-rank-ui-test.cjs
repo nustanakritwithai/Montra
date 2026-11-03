@@ -1,9 +1,16 @@
 const fs=require("node:fs"),vm=require("node:vm"),assert=require("node:assert/strict");
 const source=fs.readFileSync("main.js","utf8");
+const learning=source.slice(source.indexOf("  function skillLearningLevel("),source.indexOf("  function skillGraphModel("));
+function bookSource(start,end){return "const gearGuides=null;"+learning+source.slice(start,end);}
+{
+  const level=vm.runInNewContext(learning+"\nskillLearningLevel",{gearGuides:{path:"sentinel",level:35,learningLevel:80}});
+  assert.equal(level({pathId:"sentinel",level:35}),80);
+  assert.equal(level({pathId:"mender",level:35}),35);
+}
 {
   const start=source.indexOf("  function sgRankText("),end=source.indexOf("  const SG_GLYPH",start);
   assert.ok(start>=0 && end>start,"graph rank labels must exist");
-  const labels=vm.runInNewContext(source.slice(start,end)+"\nsgRankText");
+  const labels=vm.runInNewContext(bookSource(start,end)+"\nsgRankText");
   assert.match(labels("occult",{effect:"heal",rank:2,nextLv:65}),/PvE และ PvP.*\+4%.*\+6%/);
   assert.match(labels("sentinel",{effect:"ward",rank:5}),/PvE และ PvP.*\+10%/);
   assert.match(labels("sentinel",{effect:"stun",rank:2}),/ดาเมจมอนสเตอร์ \+8%/);
@@ -18,7 +25,7 @@ for(const spec of [
   const data={book,lessons:{[spec.id]:{name:"ทดสอบ",description:"ทดสอบ",branch:spec.branch,effect:"strike",level:1,requires:[],practice:{},power:1,stamina:10,cooldownMs:1000}},practiceLabels:{},points:13,rankLevels:[25,45,65,85,95],rankable:[spec.id]};
   const context={document:{activeElement:null},ownServerCharacter:()=>({level:25}),$:id=>id.endsWith("BookBody")?container:reset,room:{send(){}},window:{confirm:()=>false}};
   context[spec.name.toLowerCase()+"BookState"]=data;context[spec.name.toLowerCase()+"BookRenderKey"]="";
-  vm.runInNewContext(source.slice(start,end)+"\nrender"+spec.name+"Book();",context);
+  vm.runInNewContext(bookSource(start,end)+"\nrender"+spec.name+"Book();",context);
   assert.match(container.innerHTML,/แต้มว่าง 11/);
   assert.match(container.innerHTML,/ขั้น 2\/6/);
   assert.match(container.innerHTML,/ขั้นถัดไป Lv\.45/);
@@ -30,7 +37,7 @@ for(const spec of [
   const lesson={name:"ทดสอบ",description:"ทดสอบ",path:"mender",effect:"pve_rice",level:25,requires:[],training:0,range:12,stamina:18,cooldownMs:6000};
   const data={path:"mender",points:13,book:{learned:{seer:[],mender:["mender_pve_rice"]},loadouts:{mender:["mender_pve_rice",null,null,null]},training:{mender:8},ranks:{mender_pve_rice:1},mastery:{mender:{}}},lessons:{mender_pve_rice:lesson},masteryLabels:{mender:{}},rankLevels:[25,45,65,85,95],rankable:["mender_pve_rice"]};
   const context={document:{activeElement:null},ownServerCharacter:()=>({level:25,pathId:"mender"}),$:id=>id==="occultBookBody"?container:dummy,occultBookState:data,occultBookRenderKey:"",window:{confirm:()=>false},room:{send(){}},closeDrawer(){},toggleFlight(){}};
-  vm.runInNewContext(source.slice(start,end)+"\nrenderOccultBook();",context);
+  vm.runInNewContext(bookSource(start,end)+"\nrenderOccultBook();",context);
   assert.match(container.innerHTML,/แต้มว่าง 11/);assert.match(container.innerHTML,/data-occult-upgrade/);
 }
 {
@@ -40,7 +47,7 @@ for(const spec of [
   const progress=Array.from({length:9},()=>({shock:{range:3.5,monsterStunMs:700},bulwark:{defense:.25,durationMs:6000},riposte:{durationMs:2000,damageFactor:.75,counterPower:1,counterIntervalMs:450},protect:{durationMs:6000,tauntRange:8,tauntMs:3000}}));
   const data={book:{coreRanks:{riposte:1}},core,coreLevels:[5,15,25,35,45,60,80,100],corePointLevels:[5,15,25,35,45,55,65,75,80,85,95,100],coreProgress:progress};
   const context={sentinelBookState:data,ownServerCharacter:()=>({level:25}),$:id=>id==="sentinelBookBody"?container:dummy,sentinelBookRenderKey:"",window:{confirm:()=>false},room:{send(){}}};
-  vm.runInNewContext(source.slice(start,end)+"\nrenderSentinelBook();",context);
+  vm.runInNewContext(bookSource(start,end)+"\nrenderSentinelBook();",context);
   assert.ok(container.innerHTML.includes("แต้มวิชา 2 / 3"));assert.ok(container.innerHTML.includes('data-sentinel-core-upgrade="riposte"'));
   assert.ok(container.innerHTML.includes("รับแทน 30%"));assert.equal((container.innerHTML.match(/data-sentinel-core-upgrade=/g)||[]).length,4);
 }
@@ -51,7 +58,7 @@ for(const spec of [
   const coreProgress=Array.from({length:9},()=>({seer_pot:{pvePower:1},seer_binding:{range:10,poisonBonus:0,pvpDurationMs:25000,pvpImmunityMs:40000},seer_poison:{range:12,pveFraction:.02,pvpFraction:.04,intervalMs:2500},seer_buffalo:{range:15,power:2,castMs:900}}));
   const data={book:{coreRanks:{seer_binding:1}},core,coreLevels:[5,15,25,35,45,60,80,100],corePointLevels:[5,15,25,35,45,55,65,75,80,85,95,100],coreProgress};
   const context={occultBookRenderKey:"",$:()=>dummy,window:{confirm:()=>false},room:{send(){}}};
-  vm.runInNewContext(source.slice(start,end)+"\nrenderSeerCoreBook",context)(data,{level:25},container);
+  vm.runInNewContext(bookSource(start,end)+"\nrenderSeerCoreBook",context)(data,{level:25},container);
   assert.ok(container.innerHTML.includes("แต้มวิชา 2 / 3"));
   assert.ok(container.innerHTML.includes('data-seer-core-upgrade="seer_binding"'));
   assert.ok(container.innerHTML.includes("จนเหลือ 1 HP"));
@@ -66,7 +73,7 @@ for(const spec of [
   const coreProgress=Array.from({length:9},()=>({mender_core_heal:{range:12,tickFraction:.02,durationMs:10000,intervalMs:2000},mender_core_circle:{range:8,fraction:.30},mender_core_ward:{range:7,durationMs:4000},mender_core_cleanse:{range:8,bonus:.10,durationMs:10000}}));
   const data={book:{menderCoreRanks:{mender_core_heal:1}},core,coreLevels:[5,15,25,35,45,60,80,100],corePointLevels:[5,15,25,35,45,55,65,75,80,85,95,100],coreProgress};
   const context={occultBookRenderKey:"",$:()=>dummy,window:{confirm:()=>false},room:{send(){}}};
-  vm.runInNewContext(source.slice(start,end)+"\nrenderMenderCoreBook",context)(data,{level:25},container);
+  vm.runInNewContext(bookSource(start,end)+"\nrenderMenderCoreBook",context)(data,{level:25},container);
   assert.ok(container.innerHTML.includes("แต้มวิชา 2 / 3"));
   assert.ok(container.innerHTML.includes('data-mender-core-upgrade="mender_core_heal"'));
   assert.ok(container.innerHTML.includes("ล้างพิษ คำสาป และสถานะหยุด"));
@@ -91,7 +98,7 @@ for(const spec of [
   }));
   const data={me:{level:25,muayBookData:"v"},book:{coreRanks:{chaiya:1}},catalog:{core,coreLevels:levels,corePointLevels:points,coreManaPerRank:1,coreProgress:progress}};
   const context={muayBookData:()=>data,$:id=>id==="muayBookBody"?container:dummy,muayBookRenderKey:"",window:{confirm:()=>false},room:{send(){}}};
-  vm.runInNewContext(source.slice(start,end)+"\nrenderMuayBook();",context);
+  vm.runInNewContext(bookSource(start,end)+"\nrenderMuayBook();",context);
   assert.match(container.innerHTML,/แต้มวิชา 2 \/ 3/);
   assert.match(container.innerHTML,/ขั้น 1\/8/);
   assert.match(container.innerHTML,/ขั้นต่อไป Lv\.15/);
@@ -106,7 +113,7 @@ for(const spec of [
   const progress=Array.from({length:9},()=>({phuttha_core:{scale:1,finalPower:.65},sritra_core:{durationMs:2000,damageFactor:.7,counterPower:1,counterIntervalMs:400},atamat_core:{range:3.5,power:.85},chumphon_core:{range:8,defense:.1,durationMs:8000}}));
   const data={me:{level:25,swordTreeData:"v"},tree:{coreRanks:{sritra_core:1}},catalog:{core,coreLevels:[5,15,25,35,45,60,80,100],corePointLevels:[5,15,25,35,45,55,65,75,80,85,95,100],coreProgress:progress}};
   const context={swordData:()=>data,$:id=>id==="swordTreeBody"?container:dummy,swordTreeRenderKey:"",window:{confirm:()=>false},room:{send(){}}};
-  vm.runInNewContext(source.slice(start,end)+"\nrenderSwordTree();",context);
+  vm.runInNewContext(bookSource(start,end)+"\nrenderSwordTree();",context);
   assert.ok(container.innerHTML.includes("แต้มวิชา 2 / 3"));assert.ok(container.innerHTML.includes("ขั้น 1/8"));
   assert.ok(container.innerHTML.includes('data-sword-core-upgrade="sritra_core"'));assert.ok(container.innerHTML.includes("สวนซ้ำทุก"));
   assert.equal((container.innerHTML.match(/data-sword-core-upgrade=/g)||[]).length,4);
@@ -118,7 +125,7 @@ for(const spec of [
   const coreProgress=Array.from({length:9},()=>({blade_vanish:{durationMs:5000},blade_heavy:{range:3,power:1.9,pvpPower:1.9},blade_withdraw:{power:1,pvpPower:1,distance:2.5},blade_fury:{bonus:.2,durationMs:8000}}));
   const data={book:{coreRanks:{blade_vanish:1}},core,coreLevels:[5,15,25,35,45,60,80,100],corePointLevels:[5,15,25,35,45,55,65,75,80,85,95,100],coreProgress};
   const context={bladeBookRenderKey:"",$:()=>dummy,window:{confirm:()=>false},room:{send(){}}};
-  vm.runInNewContext(source.slice(start,end)+"\nrenderBladeCoreBook",context)(data,{level:25},container);
+  vm.runInNewContext(bookSource(start,end)+"\nrenderBladeCoreBook",context)(data,{level:25},container);
   assert.match(container.innerHTML,/แต้มวิชา 2 \/ 3/);assert.match(container.innerHTML,/หายตัวทันที/);
   assert.equal((container.innerHTML.match(/data-blade-core-upgrade=/g)||[]).length,4);
 }

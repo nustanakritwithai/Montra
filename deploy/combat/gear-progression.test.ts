@@ -8,7 +8,7 @@ import {parseSalvage,type SalvageOrder} from "./EconomyRules.js";
 import {plainForge,birthForge,rollForge,forgeStamp,rerollIngredient} from "./ForgeRules.js";
 import {changeCardSocket} from "./CardSockets.js";
 import {ATLAS_SPAWNS} from "./WorldAtlas.js";
-import {FOREST_CAMPS} from "./WorldMaps.js";
+import {FOREST_CAMPS,WORLD_EXPANSION} from "./WorldMaps.js";
 import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {personalGearGuides,cardHunt} from "./GearGuides.js";
 import {gearMana} from "./ItemRules.js";
@@ -140,6 +140,34 @@ test("level five offers a named core skill and available points for every class"
     assert.equal(room.coreTrainingAtLevel("hunter",path,3,4),undefined);
     const offer=room.coreTrainingAtLevel("hunter",path,4,5);
     assert.equal(offer?.points,1);assert(offer?.choices.length && offer.choices.every(s=>s.name && s.rank===1));
+  }
+});
+
+test("level 26–50 training routes use normal camps, distinct class lessons and only level-eligible regional bosses",()=>{
+  const room=new MyRoom() as unknown as {coreTrainingAtLevel(id:string,path:string,oldLevel:number,level:number):
+    {points:number;choices:{name:string;rank:number}[]}|undefined};
+  for(const path of paths){
+    const names=new Set<string>();
+    for(const lv of [26,32,34,35,39,40,45,50]){
+      const journey=personalGearGuides(path,lv)!.journey!;
+      assert(journey.lesson?.name);names.add(journey.lesson.name);
+      assert.equal(journey.lesson.level,lv<45?35:45);
+      assert.deepEqual(journey.bosses.map(b=>b.level).sort((a,b)=>a-b),[32,34,35,45].filter(n=>n<=lv));
+      if(WORLD_EXPANSION){
+        assert(journey.practice?.open && journey.practice.level<=lv && journey.practice.level>=lv-4);
+        assert.equal(hunts.find(m=>m.id===journey.practice!.id)?.tier??"normal","normal");
+        for(const boss of journey.bosses)assert(boss.camp?.open && boss.respawnMinutes===20);
+      }else assert.equal(journey.practice,null);
+      if(lv===35 || lv===45){
+        const offer=room.coreTrainingAtLevel("hunter",path,lv-1,lv)!;
+        assert(offer.choices.some(s=>s.name===journey.lesson!.name),path+" missing suggested skill");
+        assert.equal(offer.points,lv===35?4:5);
+      }
+    }
+    assert.equal(names.size,2);
+    const bosses=personalGearGuides(path,50)!.journey!.bosses;
+    assert.equal(bosses[0].level,path==="sentinel"?34:path==="seer"||path==="mender"?45:35);
+    assert.equal(personalGearGuides(path,51)!.journey,undefined);
   }
 });
 

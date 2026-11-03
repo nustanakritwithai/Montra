@@ -7763,6 +7763,7 @@
       journeyOwner=owner;journeyNotes={};
       if(owner)try{const saved=JSON.parse(localStorage.getItem(owner));if(saved && typeof saved==="object" && !Array.isArray(saved))journeyNotes=saved;}catch{}
     }
+    if(journeyNotes.trial?.path && journeyNotes.trial.path!==ownServerCharacter()?.pathId)journeyNotes.trial=null;
     return journeyNotes;
   }
   function saveJourney(changes){
@@ -7773,12 +7774,16 @@
     if(drawerActive==="quest" && $("fieldGoalProgress"))renderFieldGoalDrawer(fieldGearGoal());
   }
   function startJourneyPractice(data){
-    if(data.reset){saveJourney({trial:null});refreshFieldPractice();return;}
+    if(data.reset){
+      if(!!journeyNotesForPlayer().trial?.deep===!!data.deep)saveJourney({trial:null});
+      refreshFieldPractice();return;
+    }
     const notes=journeyNotesForPlayer(),me=ownServerCharacter();
-    if(!me || me.level<13 || me.level>25)return;
-    const old=notes.prey,site=old?.open && Math.abs(old.level-me.level)<=4?old:gearGuides?.journey?.practice;
+    if(!me || me.level<13 || me.level>50 || !data.skillId)return;
+    const old=notes.prey,fallback=gearGuides?.journey?.practice;
+    const site=old?.open && Math.abs(old.level-me.level)<=4?old:fallback;
     if(!site?.open)return;
-    saveJourney({trial:{id:data.skillId,name:data.name,site,used:false}});
+    saveJourney({trial:{id:data.skillId,name:data.name,path:me.pathId,site,used:false,deep:!!data.deep,effect:data.effect}});
     toast("ฝึก "+data.name+" แล้ว · กลับไปลองที่ "+site.monster+" ใน"+site.map);refreshFieldPractice();
   }
   function recordPracticeCast(data){
@@ -7789,7 +7794,7 @@
     if(Array.isArray(data.targetIds)){
       if(!data.targetIds.includes(trial.site.id))return;
     }else if(data.targetId!==trial.site.id){
-      const supportsAlly=me.pathId==="mender" || data.skillId==="protect";
+      const supportsAlly=data.targetId===localId || data.skillId==="protect" || me.pathId==="mender" || (trial.deep && ["intercept","ward","party_ward","support"].includes(trial.effect));
       if((data.targetId && !supportsAlly) || !mob || Math.hypot(me.x-mob.x,me.z-mob.z)>12)return;
     }
     // A lethal cast can be broadcast just after its kill receipt.
@@ -7855,9 +7860,37 @@
     const book={muay_boran:openMuayBook,phutthaisawan:openSwordTree,blade:openBladeBook,sentinel:openSentinelBook,seer:openOccultBook,mender:openOccultBook}[ownServerCharacter()?.pathId];
     if(book)book();
   }
+  function fieldSkillKind(){
+    const path=ownServerCharacter()?.pathId;
+    return {muay_boran:"muay",phutthaisawan:"sword",seer:"occult",mender:"occult",sentinel:"sentinel",blade:"blade"}[path];
+  }
+  function openFieldDeepTraining(){
+    const kind=fieldSkillKind();if(!kind)return;
+    const trial=journeyNotesForPlayer().trial;
+    if(trial?.deep)skillGraphSel[kind]=trial.id;
+    openDrawer("fieldSkills","วิชาเสริม · แต้มสายและผลฝึก",'<p class="note">เรียนวิชาก่อนอัปขั้น · ขั้น 1 ใช้ Lv.25 และผลฝึก 3 ครั้ง · ขั้น 2 ใช้ Lv.45 และผลฝึก 8 ครั้ง · ใช้แต้มสาย 1 แต้มต่อขั้น</p><div id="fieldSkillGraph"></div>');
+    if(["blade","sentinel","occult"].includes(kind))room.send(kind+"_book_get",{});
+    $("fieldSkillGraph").textContent="กำลังอ่านตำราของตัวละคร…";skillGraphKey="";renderSkillGraph(kind,$("fieldSkillGraph"));
+  }
+  function tryFieldTechnique(trial){
+    const kind=fieldSkillKind(),node=skillGraphModel(kind)?.nodes.find(n=>n.id===trial.id);
+    if(!node?.learned || !(node.slot>=0)){openFieldDeepTraining();toast("จัดวิชานี้ลงช่องในตำราก่อน");return;}
+    const selfEffects={sword:["guard","support"],muay:["guard","parry","evade"],sentinel:["anchor","ward","intercept","party_ward"]};
+    const command=kind+"_skill";
+    if(kind==="sentinel" && node.effect==="intercept"){chooseOccultAlly(trial.id,node.name,command);return;}
+    const offensive=kind==="occult"?["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind","pve_rice"].includes(node.effect):
+      kind==="blade"?["approach","strike","consume","windup","counter"].includes(node.effect):!selfEffects[kind]?.includes(node.effect);
+    const me=ownServerCharacter(),mob=monsterForSpell(trial.site.id);
+    if(me?.mapId!==trial.site.mapId || !mob?.alive)return toast("กลับไปที่ "+trial.site.monster+" ก่อนลองวิชา");
+    closeDrawer();room.send(command,{skillId:trial.id,...(offensive?{targetId:trial.site.id}:{})});
+  }
+  function fieldBossOptions(journey){
+    return (journey?.bosses?.length?journey.bosses:journey?.boss?[journey.boss]:[]).filter(b=>b.camp?.open);
+  }
   function fieldGearGoal(){
     const player=ownServerCharacter();
-    if(mode!=="live" || !player || !inventoryState || !economyReady() || territoryState?.local?.inField)return null;
+    if(mode!=="live" || !player || !inventoryState || territoryState?.local?.inField)return null;
+    if(!economyReady() && (player.level<26 || player.level>50))return null;
     const guide=gearGuides?.path===player.pathId?gearGuides:null;
     const camp=guide?.starterHunt,journey=guide?.level===player.level?guide.journey:null,notes=journey?journeyNotesForPlayer():{};
     if(camp && player.level<=camp.maxLevel && (player.level<10 || !journey || notes.skipped?.includes(journey.weapon)) &&
@@ -7888,41 +7921,49 @@
         return {...guide,step:rank?"สวมอาวุธฝึกหัดล่าผีหลงป่าเพื่อหาสำเนา":"ล่าผีหลงป่าหรือสะสมวัตถุดิบ · แตะดูสูตร",to:to??camp};
       }
     }
-    if(journey && notes.trial && player.level>=13 && player.level<=25){
+    const bosses=fieldBossOptions(journey);
+    const selected=bosses.find(b=>notes.boss===b.gear || (notes.boss===true && player.level<=25 && !itemHuntCount(b.gear)));
+    const boss=selected??bosses.find(b=>!notes.deferredBosses?.includes(b.gear) && !itemHuntCount(b.gear));
+    if(!selected && journey && notes.trial && player.level>=13 && player.level<=50){
       const trial=notes.trial,nav=journeyDirection(trial.site);
       return {title:"ลอง "+trial.name,step:nav.step,progress:trial.used?"ใช้วิชาแล้ว · ปราบ "+trial.site.monster:"ใช้วิชาที่เพิ่งอัปแล้วปราบ "+trial.site.monster,
-        practiceOnly:true,to:nav.to};
+        practiceOnly:true,trial,to:nav.to};
     }
-    if(((player.level>=13 && player.level<=17) || (player.level>=23 && player.level<=25)) && currentFieldTraining()){
+    const trainingBand=player.level>=45 && player.level<=49?45:player.level>=35 && player.level<=39?35:0;
+    if(!selected && ((player.level>=13 && player.level<=17) || (player.level>=23 && player.level<=25) || (trainingBand && notes.savedTraining!==trainingBand)) && currentFieldTraining()){
       const village="ritual_village",route=activeMapId!==village && worldDefinitions?.[village]?travelRoute(worldDefinitions,activeMapId,village):[];
       const gate=worldDefinitions?.[activeMapId]?.portals.find(p=>p.targetMapId===route[1]);
       return {title:"ฝึกวิชาประจำอาชีพ",step:(gate?"ไปประตู "+worldDefinitions[route[1]].name+" · ":"")+"ใช้แต้มที่ศาลหมู่บ้านหลังพ้นการต่อสู้",
-        progress:currentFieldTraining().points+" แต้มวิชา",trainingOnly:true,to:activeMapId===village?{x:0,z:0}:gate};
+        progress:currentFieldTraining().points+" แต้มวิชาแกน",trainingOnly:true,trainingBand,to:activeMapId===village?{x:0,z:0}:gate};
     }
-    const boss=journey?.boss;
-    if(boss?.camp?.open && notes.boss && !itemHuntCount(boss.gear)){
+    if(selected){
       const inputs=fieldRecipeProgress(boss.gear),f=inputs.find(i=>i.id===boss.fragment),nav=journeyDirection(boss.camp);
       const supply=inputs.find(i=>i.id!==boss.fragment && i.have<i.need);
       const awake=activeMapId===boss.camp.mapId && room?.state?.monsters?.get(boss.camp.id);
       const step=f.have>=f.need?(supply?"หา"+supply.name+"อีก "+(supply.need-supply.have)+" ชิ้น":"เศษครบ · เปิดสูตรที่โต๊ะช่าง"):
         awake && !awake.alive?"บอสยังไม่เกิด · ตามหาวัตถุดิบอื่นระหว่างรอ":nav.step;
-      return {title:"ล่าบอส · "+boss.camp.monster,step,progress:f.name+" "+f.have+"/"+f.need,recipe:boss.gear,inputs,to:f.have<f.need?nav.to:null,bossChoice:true,
-        milestone:"อุปกรณ์ Lv."+boss.level+" · "+personalItems[boss.gear].name+" · บอสเกิดทุก 20 นาที"};
+      return {title:"ล่าบอส · "+boss.camp.monster,step,progress:f.name+" "+f.have+"/"+f.need,recipe:boss.gear,inputs,to:f.have<f.need?nav.to:null,bossChoice:true,bossGear:boss.gear,
+        milestone:"อุปกรณ์ Lv."+boss.level+" · "+personalItems[boss.gear].name+" · บอสเกิดทุก "+(boss.respawnMinutes??20)+" นาที"};
     }
-    const equipment=journey && journeyEquipmentGoal(player,journey,notes);
+    if(journey && player.level>=26){
+      const site=journey.practice,nav=journeyDirection(site);
+      return {title:"ฝึกวิชาที่ค่ายล่า Lv."+player.level,step:nav.step,to:nav.to,
+        progress:journey.lesson?journey.lesson.name+" · แนะนำที่ Lv."+journey.lesson.level:(site?.monster??"เปิดตำราเพื่อเลือกวิชาต่อไป")};
+    }
+    const equipment=journey?.weapon && journeyEquipmentGoal(player,journey,notes);
     if(equipment && (player.level<=12 || player.level>=23))return equipment;
     // A boss fragment carries its own recipe, including any second ingredient.
     const fragments=inventoryState.slots.filter(s=>{
       const fragment=personalItems[s?.itemId];
-      return fragment?.bossGear && !(notes.bossSkipped && fragment.bossGear===boss?.gear) && !itemHuntCount(fragment.bossGear);
+      return fragment?.bossGear && !(player.level<=25 && notes.bossSkipped && fragment.bossGear===boss?.gear) && !notes.deferredBosses?.includes(fragment.bossGear) && !itemHuntCount(fragment.bossGear);
     });
     const inHub=activeMapId==="ritual_village" || worldDefinitions?.[activeMapId]?.strategic?.kind==="capital";
     const fragment=fragments.find(s=>personalItems[s.itemId].huntTarget?.mapId===activeMapId)??(inHub?fragments[0]:null);
     const recipe=personalItems[fragment?.itemId]?.bossGear,meta=personalItems[recipe];
     if(!meta?.recipe){
       if(equipment)return equipment;
-      if(boss?.camp?.open && !notes.boss && !itemHuntCount(boss.gear) && !notes.bossSkipped)
-        return {title:"ทางเลือก · "+boss.camp.monster,step:"ดูเป้าบอสหรือกลับไปล่ามอนทั่วไป",progress:personalItems[boss.gear].name,bossInvite:true};
+      if(boss && !(player.level<=25 && notes.bossSkipped))
+        return {title:"ทางเลือก · "+boss.camp.monster,step:"ดูเป้าบอสหรือกลับไปล่ามอนทั่วไป",progress:personalItems[boss.gear].name,bossInvite:true,bossGear:boss.gear};
       const training=currentFieldTraining();
       return training?{title:"ฝึกวิชาประจำอาชีพ",step:"กลับศาลหมู่บ้านหลังพ้นการต่อสู้ · แตะดูวิชาที่ฝึกได้",progress:training.points+" แต้มวิชา",trainingOnly:true}:null;
     }
@@ -8230,6 +8271,7 @@
       hudSet(ui.monsterText, "tgt", tg.alive ? Math.ceil(tg.hp) + "/" + Math.ceil(tg.maxHp) : "ปราบแล้ว");
       ui.monsterStatus.classList.toggle("elite", Boolean(tg.elite));
     }
+    if(drawerActive==="fieldSkills" && $("fieldSkillGraph"))renderSkillGraph(fieldSkillKind(),$("fieldSkillGraph"));
     // Guide tracker (the territory war owns this card while a battle is on).
     if (!$("quest").classList.contains("war-hud")) {
       const gd = hudGuide(), q = $("quest");
@@ -9012,6 +9054,7 @@
       });
       joined.onMessage("sentinel_windup_result",data=>{if(room===joined)toast(data?.result==="interrupted"?"ถูกขัดจังหวะ":data?.result==="miss"?"เป้าหมายหลบพ้น":"กระแทกสำเร็จ");});
       joined.onMessage("sentinel_skill_used",data=>{
+        if(room===joined)recordPracticeCast(data);
         if(room!==joined)return;
         const caster=joined.state?.players?.get?.(data?.playerId);
         if(!caster || (caster.mapId || "ritual_village")!==activeMapId)return;
@@ -9060,6 +9103,7 @@
         toast(data?.active ? "ติดคำสาปอาคม" : data?.reason==="cleansed" ? "ถอนคำสาปแล้ว" : "คำสาปสิ้นสุด");
       });
       joined.onMessage("occult_skill_used", data => {
+        if(room===joined)recordPracticeCast(data);
         if (room!==joined || data?.playerId!==localId) return;
         const name=occultBookState?.lessons?.[data.skillId]?.name;
         if (name) toast("ใช้ "+name);
@@ -9156,7 +9200,8 @@
         else if(grappleResponseMode==="counter")setGrappleResponse(null);
       }});
       joined.onMessage("muay_skill_used", result => {
-        if (room!==joined || typeof result?.playerId!=="string") return;
+
+        if(room===joined)recordPracticeCast(result);        if (room!==joined || typeof result?.playerId!=="string") return;
         const caster=joined.state?.players?.get?.(result.playerId);
         if (caster && (caster.mapId || "ritual_village")===activeMapId) {
           const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
@@ -9372,7 +9417,7 @@
       joined.onMessage("gear_guides",payload=>{
         if(room!==joined)return;
         gearGuides=Array.isArray(payload?.builds)?payload:null;
-        if(gearGuides?.training?.choices?.length)fieldTrainingTip={...gearGuides.training,session:joined.sessionId,path:gearGuides.path};
+        if(gearGuides && "training" in gearGuides)fieldTrainingTip=gearGuides.training?.choices?.length?{...gearGuides.training,session:joined.sessionId,path:gearGuides.path}:null;
         renderBag();
       });
       joined.onMessage("material_sold",result=>{
@@ -9919,7 +9964,7 @@
     drawerOpener=null;
   }
   function openDrawer(name,title,html) {
-    if(fieldTrainingTip && !(ownServerCharacter()?.level>=13 && ownServerCharacter()?.level<=25) && ["muayBook","swordTree","bladeBook","sentinelBook","occultBook"].includes(name))fieldTrainingTip=null;
+    if(fieldTrainingTip && !(ownServerCharacter()?.level>=13 && ownServerCharacter()?.level<=50) && ["muayBook","swordTree","bladeBook","sentinelBook","occultBook"].includes(name))fieldTrainingTip=null;
     if(ui.drawer.hidden) {
       SFX("open");
       drawerOpener=document.activeElement;
@@ -10837,7 +10882,7 @@
   function renderSentinelBook(){
     const data=sentinelBookState,me=ownServerCharacter(),container=$("sentinelBookBody");if(!data?.book || !data.core || !me || !container)return;
     const key=JSON.stringify([data.book,me.level]);if(key===sentinelBookRenderKey)return;sentinelBookRenderKey=key;
-    const ranks=data.book.coreRanks || {},points=data.corePointLevels.filter(level=>me.level>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
+    const ranks=data.book.coreRanks || {},points=data.corePointLevels.filter(level=>skillLearningLevel(me)>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
     const fmt=n=>String(Math.round(n*100)/100);
     const describe=(id,rank)=>{
       const p=data.coreProgress?.[rank]?.[id];if(!p)return "";
@@ -10848,7 +10893,7 @@
     };
     container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม เลือกพัฒนาสกิลที่ถนัด</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปได้ถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
       Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-sentinel-core-upgrade="'+id+'" '+(me.level<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-sentinel-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
       }).join("")+'<p class="note">PvP สตัน 0.45 วิ และต้านซ้ำ 4 วิ · Elite และบอสต้านสตันและยั่วยุ · เพิ่มขั้นพลังสวนเฉพาะมอน · ท้าทายไม่บังคับเป้าผู้เล่น · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetSentinelCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-sentinel-core-upgrade]").forEach(button=>button.onclick=()=>room.send("sentinel_book",{action:"core_upgrade",skillId:button.dataset.sentinelCoreUpgrade}));
     $("resetSentinelCore").onclick=()=>{if(window.confirm("คืนแต้มวิชาผู้พิทักษ์ทั้งหมด?"))room.send("sentinel_book",{action:"core_reset"});};
@@ -10934,7 +10979,7 @@
   }
   function renderBladeCoreBook(data,me,container){
     const key=JSON.stringify([data.book,me.level]);if(key===bladeBookRenderKey)return;bladeBookRenderKey=key;
-    const ranks=data.book.coreRanks || {},points=data.corePointLevels.filter(level=>me.level>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
+    const ranks=data.book.coreRanks || {},points=data.corePointLevels.filter(level=>skillLearningLevel(me)>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
     const fmt=n=>String(Math.round(n*100)/100),describe=(id,rank)=>{const p=data.coreProgress?.[rank]?.[id];if(!p)return "";
       if(id==="blade_vanish")return "หายตัวทันที นาน "+fmt(p.durationMs/1000)+" วิ";
       if(id==="blade_heavy")return "พลังโจมตีมอนสเตอร์ "+fmt(p.power*100)+"% · PvP "+fmt(p.pvpPower*100)+"% ก่อนปรับสมดุล · ระยะ "+fmt(p.range);
@@ -10943,7 +10988,7 @@
     };
     container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
       Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-blade-core-upgrade="'+id+'" '+(me.level<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-blade-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
       }).join("")+'<p class="note">หายตัวระหว่างต่อสู้ได้ · โจมตีหรือถูกโจมตีจะเปิดเผยตัว มอนสเตอร์ตรวจพบได้เมื่อเข้าใกล้ · ฟันถอยเว้นจังหวะ 0.5 วิแล้วตีอัตโนมัติต่อ สั่งเดินหรือโจมตีใหม่ได้ทันที · พุ่งถอยหยุดเมื่อพบสิ่งกีดขวาง · พลังโจมตี PvP ถูกปรับสมดุล 75% และเมื่อเปิดฉากจากการล่องหนเพิ่มอีก 20% · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetBladeCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-blade-core-upgrade]").forEach(button=>button.onclick=()=>room.send("blade_book",{action:"core_upgrade",skillId:button.dataset.bladeCoreUpgrade}));
     $("resetBladeCore").onclick=()=>{if(window.confirm("คืนแต้มวิชาคมดาบทั้งหมด?"))room.send("blade_book",{action:"core_reset"});};
@@ -11110,7 +11155,7 @@
 
   function renderSeerCoreBook(data,me,container){
     const key=JSON.stringify([data.book,me.level]);if(key===occultBookRenderKey)return;occultBookRenderKey=key;
-    const ranks=data.book.coreRanks || {},points=data.corePointLevels.filter(level=>me.level>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
+    const ranks=data.book.coreRanks || {},points=data.corePointLevels.filter(level=>skillLearningLevel(me)>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
     const fmt=n=>String(Math.round(n*100)/100),describe=(id,rank)=>{
       const p=data.coreProgress?.[rank]?.[id];if(!p)return "";
       if(id==="seer_pot")return "ผีโจมตีมอน "+Math.round(p.pvePower*100)+"% · ผี 1 ตัวต่อผู้เล่น";
@@ -11120,7 +11165,7 @@
     };
     container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
       Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-seer-core-upgrade="'+id+'" '+(me.level<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-seer-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
       }).join("")+'<p class="note">สะกดมอนทั่วไป 1 ตัวค้างไว้ กดซ้ำเพื่อคลาย · ผีไม่ตีมอนที่เจ้าของสะกด · Elite และบอสต้านสะกด · PvP สะกด '+fmt(data.coreProgress[0].seer_binding.pvpDurationMs/1000)+' วิ ต้านซ้ำ '+fmt((data.coreProgress[0].seer_binding.pvpImmunityMs-data.coreProgress[0].seer_binding.pvpDurationMs)/1000)+' วิหลังคลาย · พิษ PvP '+fmt(data.coreProgress[0].seer_poison.pvpFraction*100)+'% ทุก '+fmt(data.coreProgress[0].seer_poison.intervalMs/1000)+' วิ · พิษไม่สังหาร · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetSeerCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-seer-core-upgrade]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"core_upgrade",skillId:button.dataset.seerCoreUpgrade}));
     $("resetSeerCore").onclick=()=>{if(window.confirm("คืนแต้มวิชานักเวททั้งหมด?"))room.send("occult_book",{action:"core_reset"});};
@@ -11128,7 +11173,7 @@
 
   function renderMenderCoreBook(data,me,container){
     const key=JSON.stringify([data.book,me.level]);if(key===occultBookRenderKey)return;occultBookRenderKey=key;
-    const ranks=data.book.menderCoreRanks || {},points=data.corePointLevels.filter(level=>me.level>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
+    const ranks=data.book.menderCoreRanks || {},points=data.corePointLevels.filter(level=>skillLearningLevel(me)>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
     const fmt=n=>String(Math.round(n*100)/100),describe=(id,rank)=>{
       const p=data.coreProgress?.[rank]?.[id];if(!p)return "";
       if(id==="mender_core_heal")return "ล้างพิษ คำสาป และสถานะหยุด · ฟื้น "+fmt(p.tickFraction*100)+"% HP สูงสุดทุก "+fmt(p.intervalMs/1000)+" วิ นาน "+fmt(p.durationMs/1000)+" วิ · ระยะ "+fmt(p.range);
@@ -11138,7 +11183,7 @@
     };
     container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
       Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-mender-core-upgrade="'+id+'" '+(me.level<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-mender-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
       }).join("")+'<p class="note">สกิลหมู่มีผลกับปาร์ตี้ หรือฝ่ายเดียวกันในสงครามที่อยู่ในระยะ · เขตคุ้มภัยอยู่ ณ จุดที่ร่าย · รีเจนที่อ่อนกว่าไม่ทับผลที่แรงกว่า · สถานะสูงสุดอยู่ภายใต้เพดานของเกม · ล้างสถานะหยุดรวมถึงยันต์สะกด · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetMenderCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-mender-core-upgrade]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"core_upgrade",skillId:button.dataset.menderCoreUpgrade}));
     $("resetMenderCore").onclick=()=>{if(window.confirm("คืนแต้มวิชาพระทั้งหมด?"))room.send("occult_book",{action:"core_reset"});};
@@ -11215,7 +11260,7 @@
     const {me,book,catalog}=data,ranks=book.coreRanks || {};
     const key=me.level+"|"+me.muayBookData;
     if(key===muayBookRenderKey)return;muayBookRenderKey=key;
-    const points=(catalog.corePointLevels || []).filter(level=>me.level>=level).length;
+    const points=(catalog.corePointLevels || []).filter(level=>skillLearningLevel(me)>=level).length;
     const spent=Object.values(ranks).reduce((sum,value)=>sum+Number(value||0),0);
     const levels=catalog.coreLevels;
     const details={
@@ -11238,7 +11283,7 @@
         const rank=Number(ranks[id]||0),next=levels[rank];
         const cost=node.stamina+rank*Number(catalog.coreManaPerRank||0);
         return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+levels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>'+details[id]+'</small><small>ใช้มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+Number(catalog.coreManaPerRank||0))+'</small>':'')+'</div>'+
-          (next?'<button type="button" data-core-upgrade="'+id+'" '+(me.level<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+          (next?'<button type="button" data-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
       }).join("")+'<p class="note">การหยุดจังหวะมีช่วงต้านต่อเนื่อง Elite และบอสต้านการหยุด · โบนัสพลังจากขั้นใช้กับมอน ส่วน PvP ใช้พลังพื้นฐาน</p><button type="button" id="resetMuayCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-core-upgrade]").forEach(button=>button.onclick=()=>room.send("muay_book",{action:"core_upgrade",skillId:button.dataset.coreUpgrade}));
     $("resetMuayCore").onclick=()=>{if(window.confirm("คืนแต้มวิชานักมวยทั้งหมด?"))room.send("muay_book",{action:"core_reset"});};
@@ -11387,9 +11432,12 @@
     phutthaisawan: { name: "นักดาบไทย", role: "นักดาบอยุธยา", glyph: "⚔", tone: "gold" }, muay_boran: { name: "มวยไทยโบราณ", role: "นักมวยอาคม", glyph: "✊", tone: "ember" },
     blade: { name: "คมดาบ", role: "นักรบอาคม", glyph: "◈", tone: "violet" }, sentinel: { name: "ผู้พิทักษ์", role: "นักรบอาคม", glyph: "⛨", tone: "steel" },
     seer: { name: "ผู้ร่ายเวท", role: "จอมอาคม", glyph: "✦", tone: "cyan" }, mender: { name: "พระ", role: "จอมอาคม", glyph: "✚", tone: "jade" } };
+  function skillLearningLevel(me){
+    return me && gearGuides?.path===me.pathId && gearGuides?.level===me.level?(gearGuides.learningLevel??me.level):(me?.level??1);
+  }
   function skillGraphModel(kind) {
     const me = ownServerCharacter(); if (!me) return null;
-    const lv = me.level || 1;
+    const lv = skillLearningLevel(me);
     if (kind === "sword") {
       const data = swordData(); if (!data) return null; const { tree, catalog } = data;
       const points = 1 + Math.floor((Math.min(lv, 100) - 1) / 2) - tree.learned.length - sgSpent(tree.ranks), slots = tree.loadouts?.[tree.school] || [null, null, null];
@@ -11515,7 +11563,7 @@
     const key = JSON.stringify([kind, model.key, sel, skillView]);
     if (key === skillGraphKey && container.querySelector(".sg-wrap")) return; skillGraphKey = key;
     const view = container.querySelector(".sg-view"); if (view) skillGraphScroll[kind] = [view.scrollLeft, view.scrollTop];
-    const L = layoutSkillGraph(model, (container.clientWidth || 360) - 4), pts = Math.max(0, model.points), lvNow = ownServerCharacter()?.level || 1;
+    const L = layoutSkillGraph(model, (container.clientWidth || 360) - 4), pts = Math.max(0, model.points), lvNow = skillLearningLevel(ownServerCharacter());
     for (const n of model.nodes) n._state = nodeState(n, pts);
     const edges = [];
     for (const n of model.nodes) for (const r of n.requires) { const p = L.byId.get(r); if (!p || p._x == null || n._x == null) continue;
@@ -11588,7 +11636,7 @@
     const {me,tree,catalog}=data,ranks=tree.coreRanks || {};
     const key=me.level+"|"+me.swordTreeData;
     if(key===swordTreeRenderKey)return;swordTreeRenderKey=key;
-    const points=(catalog.corePointLevels || []).filter(level=>me.level>=level).length;
+    const points=(catalog.corePointLevels || []).filter(level=>skillLearningLevel(me)>=level).length;
     const spent=Object.values(ranks).reduce((sum,value)=>sum+Number(value||0),0),levels=catalog.coreLevels;
     const fmt=n=>String(Math.round(n*100)/100);
     const describe=(id,rank)=>{
@@ -11601,7 +11649,7 @@
     container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+catalog.corePointLevels.length+' แต้ม เลือกพัฒนาสกิลที่ถนัด</p><p class="note">ทั้ง 4 ท่าใช้ได้พร้อมกัน · อัปได้ถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก · สวมกระบี่อาคมเพื่อใช้วิชา</p>'+
       Object.entries(catalog.core).map(([id,node])=>{
         const rank=Number(ranks[id]||0),next=levels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+levels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>ใช้มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-sword-core-upgrade="'+id+'" '+(me.level<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+levels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>ใช้มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-sword-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
       }).join("")+'<p class="note">โบนัสพลังโจมตีจากขั้นใช้กับมอน · PvP ใช้พลังพื้นฐาน ส่วนการตั้งรับและคุ้มกันเพิ่มตามขั้น · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetSwordCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-sword-core-upgrade]").forEach(button=>button.onclick=()=>room.send("sword_core_book",{action:"upgrade",skillId:button.dataset.swordCoreUpgrade}));
     $("resetSwordCore").onclick=()=>{if(window.confirm("คืนแต้มวิชานักดาบทั้งหมด?"))room.send("sword_core_book",{action:"reset"});};
@@ -12488,8 +12536,8 @@
     };
     $("socketCardChoice").onchange=renderBag;
     const resume=$("resumeFieldJourney"),notes=journeyNotesForPlayer();
-    resume.hidden=!notes.skipped?.length && !notes.bossSkipped;
-    resume.onclick=()=>{saveJourney({skipped:[],bossSkipped:false});resume.hidden=true;closeDrawer();openCurrentQuest();};
+    resume.hidden=!notes.skipped?.length && !notes.bossSkipped && !notes.deferredBosses?.length && !notes.savedTraining;
+    resume.onclick=()=>{saveJourney({skipped:[],bossSkipped:false,deferredBosses:[],savedTraining:0});resume.hidden=true;closeDrawer();openCurrentQuest();};
     $("benchCraft").onclick=()=>{ economySend("craft_weapon",{recipeId:$("benchRecipe").value,requestId:economyRequestId()},true);renderBag(); };
     function submitForge(action) {
       const position=inspectingGear==="mainHand"?currentEquippedWeaponSlot():(inspectingGear||selectedBagSlot);
@@ -13038,7 +13086,7 @@
     if(preferJourney!==true && forestObjectiveState?.active && room?.state?.forestObjectivesAvailable){openForestRanger();return;}
     const gearGoal=fieldGearGoal();
     if(gearGoal && !ui.quest.classList.contains("war-hud")){
-      openDrawer("quest",gearGoal.title,'<p id="fieldGoalProgress" class="note"></p><p id="fieldGoalInputs"></p><p class="note" id="fieldGearCompare" hidden></p><button type="button" class="secondary" id="fieldGearHunt" hidden></button><button type="button" class="secondary" id="fieldGearView" hidden>ดูชิ้นที่มีในกระเป๋า</button><button type="button" class="secondary" id="fieldGearSkip" hidden></button><button type="button" class="secondary" id="fieldBossChoice" hidden></button><button type="button" class="secondary" id="fieldGoalSupply" hidden></button><button type="button" class="secondary" id="fieldGoalRecipe">เปิดสูตรที่โต๊ะช่าง</button><button type="button" class="secondary" id="fieldGoalForge" hidden>เปิดช่างตี +1</button><p class="note" id="fieldTrainingNames" hidden></p><button type="button" class="secondary" id="fieldTrainingBook" hidden>เปิดตำราอาชีพ</button>');
+      openDrawer("quest",gearGoal.title,'<p id="fieldGoalProgress" class="note"></p><p id="fieldGoalInputs"></p><p class="note" id="fieldGearCompare" hidden></p><button type="button" class="secondary" id="fieldGearHunt" hidden></button><button type="button" class="secondary" id="fieldGearView" hidden>ดูชิ้นที่มีในกระเป๋า</button><button type="button" class="secondary" id="fieldGearSkip" hidden></button><button type="button" class="secondary" id="fieldBossChoice" hidden></button><select id="fieldBossList" aria-label="เลือกบอสที่ต้องการล่า" hidden></select><button type="button" class="secondary" id="fieldGoalSupply" hidden></button><button type="button" class="secondary" id="fieldGoalRecipe">เปิดสูตรที่โต๊ะช่าง</button><button type="button" class="secondary" id="fieldGoalForge" hidden>เปิดช่างตี +1</button><p class="note" id="fieldTrainingNames" hidden></p><button type="button" class="secondary" id="fieldTrainingBook" hidden>เปิดตำราวิชาแกน</button><button type="button" class="secondary" id="fieldDeepBook" hidden>เปิดวิชาเสริม · ดูแต้มและเงื่อนไขฝึก</button><button type="button" class="secondary" id="fieldPracticeCast" hidden></button>');
       renderFieldGoalDrawer(gearGoal);return;
     }
     if(mode==="live" && room?.state?.forestObjectivesAvailable && ownServerCharacter()?.persistent){
@@ -13053,11 +13101,18 @@
     const progress=$("fieldGoalProgress");if(!progress)return;
     const recipe=$("fieldGoalRecipe"),forge=$("fieldGoalForge");
     const training=currentFieldTraining(),names=$("fieldTrainingNames"),book=$("fieldTrainingBook");
-    names.hidden=book.hidden=!training;
+    const midgame=ownServerCharacter()?.level>=26 && ownServerCharacter()?.level<=50;
+    const lesson=midgame && gearGuides?.journey?.lesson;
+    names.hidden=!training && !lesson;book.hidden=!training && !midgame;book.onclick=openFieldTraining;
+    const deep=$("fieldDeepBook");deep.hidden=!midgame;deep.onclick=openFieldDeepTraining;
+    const cast=$("fieldPracticeCast");cast.hidden=!goal?.trial?.deep || goal.trial.used;
+    if(!cast.hidden){cast.textContent="ลอง "+goal.trial.name;cast.onclick=()=>tryFieldTechnique(goal.trial);}
+
     if(training){
-      names.textContent="มี "+training.points+" แต้ม · ใช้ 1 แต้มที่ศาลหมู่บ้านหลังพ้นการต่อสู้ · "+training.choices.map(s=>s.name+" ขั้น "+s.rank).join(" / ");
+      names.textContent="มี "+training.points+" แต้มวิชาแกน · ใช้ 1 แต้มที่ศาลหมู่บ้านหลังพ้นการต่อสู้ · "+training.choices.map(s=>s.name+" ขั้น "+s.rank).join(" / ");
       book.onclick=openFieldTraining;
-    }
+    }else if(lesson)names.textContent="เปิดตำราเพื่อดูขั้นปัจจุบันและแต้มคงเหลือ";
+    if(lesson)names.textContent+=" · แนะนำที่ Lv."+lesson.level+" "+lesson.name;
     const compare=$("fieldGearCompare"),track=$("fieldGearHunt"),view=$("fieldGearView"),skip=$("fieldGearSkip"),bossBtn=$("fieldBossChoice");
     compare.hidden=!goal?.comparison;
     if(goal?.comparison){
@@ -13069,17 +13124,33 @@
     track.hidden=!goal?.track;if(!track.hidden)bindItemHuntButton(track,goal.recipe,1,true);
     view.hidden=!(goal?.itemSlot>=0);
     view.onclick=()=>{openBag();$("bagSlot"+goal.itemSlot)?.click();$("bagItemName")?.scrollIntoView({block:"center"});};
-    skip.hidden=!(goal?.canSkip || goal?.practiceOnly || goal?.bossInvite);
-    skip.textContent=goal?.practiceOnly?"จบการฝึกครั้งนี้":goal?.bossInvite?"ไว้ล่าบอสภายหลัง":"ใช้ของเดิม · ข้ามเป้าชิ้นนี้";
+    skip.hidden=!(goal?.canSkip || goal?.practiceOnly || goal?.bossInvite || goal?.trainingBand);
+    skip.textContent=goal?.trainingBand?"เก็บแต้มไว้ก่อน":goal?.practiceOnly?"จบการฝึกครั้งนี้":goal?.bossInvite?"ไว้ล่าบอสภายหลัง":"ใช้ของเดิม · ข้ามเป้าชิ้นนี้";
     skip.onclick=()=>{
-      if(goal.practiceOnly)saveJourney({trial:null});else if(goal.bossInvite)saveJourney({bossSkipped:true});
+      if(goal.practiceOnly)saveJourney({trial:null});
+      else if(goal.trainingBand)saveJourney({savedTraining:goal.trainingBand});
+      else if(goal.bossInvite)saveJourney({bossSkipped:true,deferredBosses:[...new Set([...(journeyNotesForPlayer().deferredBosses??[]),goal.bossGear])]});
       else saveJourney({skipped:[...new Set([...(journeyNotesForPlayer().skipped??[]),goal.recipe])]});
       renderFieldGoalDrawer(fieldGearGoal());
     };
-    const option=gearGuides?.journey?.boss;
-    bossBtn.hidden=!goal || !option?.camp?.open || itemHuntCount(option.gear)>0;
-    if(!bossBtn.hidden){bossBtn.textContent=goal.bossChoice?"กลับไปเป้าอุปกรณ์":"ดูบอสตัวเลือก · "+option.camp.monster;
-      bossBtn.onclick=()=>{saveJourney({boss:!goal.bossChoice,bossSkipped:!!goal.bossChoice});renderFieldGoalDrawer(fieldGearGoal());};}
+    const options=fieldBossOptions(gearGuides?.journey);
+    const option=options.find(b=>b.gear===goal?.bossGear)??options[0],select=$("fieldBossList");
+    select.hidden=!goal || options.length<2;
+    if(!select.hidden){
+      select.replaceChildren(new Option("เลือกบอสอื่น…",""),...options.map(b=>new Option(b.camp.monster+" Lv."+b.level,b.gear)));
+      select.value=goal?.bossGear??"";
+      select.onchange=()=>{if(select.value){saveJourney({boss:select.value});renderFieldGoalDrawer(fieldGearGoal());}};
+    }
+    bossBtn.hidden=!goal || !option || (!midgame && itemHuntCount(option.gear)>0);
+    if(!bossBtn.hidden){
+      bossBtn.textContent=goal.bossChoice?"กลับไปเป้าล่าอื่น":"ดูบอสตัวเลือก · "+option.camp.monster;
+      bossBtn.onclick=()=>{
+        const deferred=new Set(journeyNotesForPlayer().deferredBosses??[]);
+        if(goal.bossChoice)deferred.add(option.gear);else deferred.delete(option.gear);
+        saveJourney({boss:goal.bossChoice?null:option.gear,bossSkipped:!!goal.bossChoice,deferredBosses:[...deferred]});
+        renderFieldGoalDrawer(fieldGearGoal());
+      };
+    }
     if(!goal){progress.textContent="เป้าหมายนี้เสร็จแล้ว";$("fieldGoalInputs").textContent="";recipe.hidden=forge.hidden=$("fieldGoalSupply").hidden=true;return;}
     ui.drawerTitle.textContent=goal.title;
     progress.textContent=goal.step+" · "+goal.progress+(goal.milestone?" · "+goal.milestone:"");

@@ -570,6 +570,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.swordTreeData=JSON.stringify(committed);
       try {
         client.send("sword_tree_changed",{action,id:value});
+        if(player.level>=26 && (action==="learn" || action==="upgrade" || action==="reset"))
+          this.sendFieldPractice(client,player,action,value,{},SWORD_NODES);
       } catch (error) {
         // A disconnected client must not make a committed save look like a disk failure.
         console.warn("MONTRA sword tree confirmation was not delivered",error);
@@ -863,7 +865,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         for(const [member,link] of this.sentinelInterceptions)if(link.ownerId===id)this.sentinelInterceptions.delete(member);
       }
       this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
-      try{client.send("sentinel_book_changed",{action});if(action==="core_upgrade" || action==="core_reset")this.sendFieldPractice(client,player,action,input.skillId,SENTINEL_CORE);}catch(error){console.warn("MONTRA sentinel book confirmation was not delivered",error);}
+      try {
+        client.send("sentinel_book_changed",{action});
+        this.sendFieldPractice(client,player,action,input.skillId,SENTINEL_CORE,SENTINEL_LESSONS);
+      } catch(error){console.warn("MONTRA sentinel book confirmation was not delivered",error);}
     },error=>{console.error("MONTRA sentinel book save failed",error);this.reject(client,"sentinel_book_save_failed");})
       .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
     this.pendingItemUses.set(id,task);
@@ -1349,7 +1354,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
       }
       this.sendBladeBook(client);
-      try {client.send("blade_book_changed",{action});if(action==="core_upgrade" || action==="core_reset")this.sendFieldPractice(client,player,action,input.skillId,BLADE_CORE);} catch(error) {console.warn("MONTRA blade book confirmation was not delivered",error);}
+      try {
+        client.send("blade_book_changed",{action});
+        this.sendFieldPractice(client,player,action,input.skillId,BLADE_CORE,BLADE_LESSONS);
+      } catch(error) {console.warn("MONTRA blade book confirmation was not delivered",error);}
     },error=>{console.error("MONTRA blade book save failed",error);this.reject(client,"blade_book_save_failed");})
       .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
     this.pendingItemUses.set(id,task);
@@ -1475,7 +1483,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (this.state.summons.has(id) && !this.canPrepareSpirit(id,path,false)) this.despawnSummon(id,"loadout_changed");
       }
       this.sendOccultBook(client);
-      try {client.send("occult_book_changed",{action});if(action==="core_upgrade" || action==="core_reset")this.sendFieldPractice(client,player,action,input.skillId,path==="seer"?SEER_CORE:MENDER_CORE);} catch(error) {console.warn("MONTRA occult book confirmation was not delivered",error);}
+      try {
+        client.send("occult_book_changed",{action});
+        this.sendFieldPractice(client,player,action,input.skillId,path==="seer"?SEER_CORE:MENDER_CORE,OCCULT_LESSONS);
+      } catch(error) {console.warn("MONTRA occult book confirmation was not delivered",error);}
     },error=>{console.error("MONTRA occult book save failed",error);this.reject(client,"occult_book_save_failed");})
       .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
     this.pendingItemUses.set(id,task);
@@ -1922,7 +1933,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const task=characterStore.save({...snapshot,muayBook:next}).then(()=>{
       this.muayBooks.set(id,next);player.muayBookData=JSON.stringify(next);
       if(action==="school" || action==="reset") {this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");this.clearMuayCombo(id);this.sendSwordNotice(client,"muay_counter_cleared",{});}
-      try {client.send("muay_book_changed",{action});if(action==="core_upgrade" || action==="core_reset")this.sendFieldPractice(client,player,action,input.skillId,MUAY_CORE);} catch(error) {console.warn("MONTRA Muay book confirmation was not delivered",error);}
+      try {
+        client.send("muay_book_changed",{action});
+        this.sendFieldPractice(client,player,action,input.skillId,MUAY_CORE,MUAY_SKILLS);
+      } catch(error) {console.warn("MONTRA Muay book confirmation was not delivered",error);}
     },error=>{console.error("MONTRA Muay book save failed",error);this.reject(client,"muay_book_save_failed");}).finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
     this.pendingItemUses.set(id,task);
   }
@@ -2653,21 +2667,32 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     };
     if(!Object.hasOwn(schools,path))return;
     const [skills,ranks]=schools[path];
-    const points=muayCorePoints(level)-Object.values(ranks??{}).reduce<number>((sum,n)=>sum+(n??0),0);
+    const player=this.state?.players?.get(id);
+    const learning=player?this.learningLevel(id,player):level;
+    const points=muayCorePoints(learning)-Object.values(ranks??{}).reduce<number>((sum,n)=>sum+(n??0),0);
     if(points<1)return;
     const choices=Object.entries(skills).flatMap(([key,skill])=>{
       const rank=ranks?.[key]??0;
-      return rank<MUAY_CORE_LEVELS.length && MUAY_CORE_LEVELS[rank]<=level?[{name:skill.name,rank:rank+1}]:[];
+      return rank<MUAY_CORE_LEVELS.length && MUAY_CORE_LEVELS[rank]<=learning?[{name:skill.name,rank:rank+1}]:[];
     });
     return choices.length?{points,choices}:undefined;
   }
 
-  private sendFieldPractice(client:Client,player:Player,action:unknown,skillId:unknown,core:Readonly<Record<string,{name:string}>>){
-    if(player.level<13 || player.level>25)return;
+  private sendFieldPractice(client:Client,player:Player,action:unknown,skillId:unknown,
+    core:Readonly<Record<string,{name:string;effect?:string}>>,
+    lessons?:Readonly<Record<string,{name:string;effect?:string}>>){
+    if(player.level<13 || player.level>50)return;
+    const deep=!!lessons && (action==="learn" || action==="upgrade" || action==="reset");
+    if(deep && player.level<26)return;
     const training=this.coreTrainingAtLevel(client.sessionId,player.pathId,1,player.level);
-    if(action==="reset" || action==="core_reset"){client.send("field_practice",{reset:true,training});return;}
-    if((action==="upgrade" || action==="core_upgrade") && typeof skillId==="string" && Object.hasOwn(core,skillId))
-      client.send("field_practice",{skillId,name:core[skillId].name,training});
+    if(action==="reset" || action==="core_reset"){
+      client.send("field_practice",{reset:true,deep,training});return;
+    }
+    const catalog=deep?lessons!:core;
+    if((action==="learn" || action==="upgrade" || action==="core_upgrade") && typeof skillId==="string" && Object.hasOwn(catalog,skillId)){
+      const skill=catalog[skillId];
+      if(skill.effect!=="passive")client.send("field_practice",{skillId,name:skill.name,training,deep,effect:skill.effect});
+    }
   }
 
   private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal", bossLoot = false, monsterId=""): void {
@@ -2718,11 +2743,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.applyStats(id,current, this.statAllocations.get(id) ?? emptyAllocations());
         try {
           const recipient = this.clients.find(client => client.sessionId === id);
-          if(leveled && this.sentItemCatalog.has(id))recipient?.send("gear_guides",personalGearGuides(current.pathId,current.level));
+          if(leveled && this.sentItemCatalog.has(id)){
+            const guides=personalGearGuides(current.pathId,current.level);
+            recipient?.send("gear_guides",guides && {...guides,learningLevel:this.learningLevel(id,current)});
+          }
           if (loot) recipient?.send("inventory_state",loot);
           recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,
             ...(objective.completed ? {forestObjectiveCompleted:objective.completed,forestObjectiveBonus:bonus} : {}),
-            ...(current.level>=13 && current.level<=25?{fieldPrey:practiceSite(monsterId)}:{}),
+            ...(current.level>=13 && current.level<=50 && (current.level<=25 || tier==="normal")?{fieldPrey:practiceSite(monsterId)}:{}),
             ...(leveled?{training:this.coreTrainingAtLevel(id,current.pathId,snapshot.level,next.level)}:{}),
             ...(fieldDrop?.starterCopy?{starterCopy:fieldDrop.starterCopy}:{}),
             ...(fragment===SHRINE_SHARD ? {shrineShard:fragmentBag?"granted":"bag_full"} : {}),
@@ -3624,8 +3652,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const player=this.state.players.get(id);
         if(player){
           const guide=personalGearGuides(player.pathId,player.level);
-          const training=player.level>=13 && player.level<=25?this.coreTrainingAtLevel(id,player.pathId,1,player.level):undefined;
-          client.send("gear_guides",guide && {...guide,training});
+          const training=player.level>=13 && player.level<=50?this.coreTrainingAtLevel(id,player.pathId,1,player.level):undefined;
+          client.send("gear_guides",guide && {...guide,learningLevel:this.learningLevel(id,player),training:training??null});
         }
         this.sentItemCatalog.add(id);
       }
