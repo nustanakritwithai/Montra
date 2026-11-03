@@ -429,6 +429,18 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 .bag-slot.bag-equipped .bag-quantity { color:#8fffe9; font-size:14px; }
 .bag-slot.bag-weapon .bag-symbol { font-size:clamp(21px,6vw,30px); }
+.wear-title { margin:12px 0 6px; font-size:.95rem; }
+.wear-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-areas:"leftEar head rightEar" "shoulders neck arms" "leftHand chest rightHand" "mainHand legs offHand" "leftRing feet rightRing"; gap:5px; }
+.wear-sides:not([hidden]) { display:flex; gap:6px; margin:6px 0; }
+.wear-sides button { flex:1; min-height:44px; }
+.wear-sides button[aria-pressed="true"] { outline:2px solid #f2ca83; }
+.wear-tile { min-height:64px; min-width:0; display:grid; justify-items:center; align-content:center; gap:2px; padding:4px 2px; border:1px solid #677063; border-radius:8px; color:#e2dbc4; background:#162522; cursor:pointer; }
+.wear-tile b { color:#c3ac7c; font-size:1.2rem; line-height:1; }
+.wear-tile span { font-size:.76rem; }
+.wear-tile small { width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#a0b1a6; font-size:.66rem; }
+.wear-tile.filled { border-color:#ba9f67; background:#30382c; }
+.wear-tile[aria-pressed="true"], .wear-tile:focus-visible { outline:2px solid #f2ca83; outline-offset:0; }
+@media(max-width:420px) { .wear-tile { min-height:48px; } }
 #bagEquipped { max-width:61%; text-align:right; overflow-wrap:anywhere; }
 .stat-row { gap:8px; }
 .stat-row span { flex:1; }

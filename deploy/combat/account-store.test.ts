@@ -72,7 +72,7 @@ test("character setup persists class before admission and preserves existing pro
     assert.equal((await characters.listSlots([id, characterIdFromToken(key,2), characterIdFromToken(key,3)]))[0].occupied, false);
     const initial = await characters.loadOrCreateById(id, spawn, {name:"นักมวย", build:{path:"muay_boran",ancestry:"shrine"}}, true);
     assert.equal(initial.character.build?.path, "muay_boran");
-    assert.equal(initial.character.inventory?.slots[initial.character.inventory.equippedWeaponSlot!]?.itemId, "muay_wraps");
+    assert.equal(initial.character.inventory?.slots[initial.character.inventory.equippedWeaponSlot!]?.itemId, "wp_wrap_1");
     await characters.save({...initial.character, level:2, experience:12});
     const existing = await characters.loadOrCreateById(id, spawn, {name:"Other",build:{path:"blade",ancestry:"woodland"}}, true);
     assert.equal(existing.character.build?.path, "muay_boran");
@@ -91,7 +91,7 @@ test("character setup persists class before admission and preserves existing pro
 test("all six paths create a persistent character with a usable starter weapon", async () => {
   const dir=await mkdtemp(path.join(tmpdir(),"montra-account-classes-")), characters=new CharacterStore(dir);
   try {
-    const cases=[["muay_boran","muay_wraps"],["phutthaisawan","arcane_sword"],["blade","arcane_sword"],["sentinel","arcane_sword"],["seer","spirit_staff"],["mender","spirit_staff"]] as const;
+    const cases=[["muay_boran","wp_wrap_1"],["phutthaisawan","wp_twins_1"],["blade","wp_shadow_1"],["sentinel","wp_pike_1"],["seer","wp_wand_1"],["mender","wp_crook_1"]] as const;
     for(const [i,[job,weapon]] of cases.entries()) {
       const token="mt1_"+i.toString(16).padStart(64,"0"), id=characterIdFromToken(token);
       const first=(await characters.loadOrCreateById(id,{x:0,z:0},{name:"ทดสอบ",build:{path:job,ancestry:"shrine"}},true)).character;

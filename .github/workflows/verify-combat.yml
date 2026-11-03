@@ -31,7 +31,7 @@ jobs:
           cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
           cp deploy/combat/AccountStore.ts deploy/combat/AccountService.ts deploy/combat/AccountRoutes.ts deploy/combat/account-store.test.ts combat-verify/src/rooms/
           cp deploy/combat/account-integration.mjs combat-verify/account-integration.mjs
-          cp deploy/combat/learned-hotbar-integration.mjs combat-verify/
+          cp deploy/combat/learned-hotbar-integration.mjs deploy/combat/personal-equipment-integration.mjs combat-verify/
           cp deploy/combat/guest-delete-integration.mjs combat-verify/guest-delete-integration.mjs
           cp deploy/combat/mount-integration.mjs combat-verify/mount-integration.mjs
           cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
@@ -158,6 +158,13 @@ jobs:
           cp deploy/combat/world-warp-rules.test.ts combat-verify/src/rooms/world-warp-rules.test.ts
           cp deploy/combat/MonsterRRT.ts combat-verify/src/rooms/MonsterRRT.ts
           cp deploy/combat/CharacterStore.ts combat-verify/src/rooms/CharacterStore.ts
+          cp deploy/combat/PersonalItems.ts combat-verify/src/rooms/PersonalItems.ts
+          cp deploy/combat/gear-progression.test.ts combat-verify/src/rooms/gear-progression.test.ts
+          cp deploy/combat/CardSockets.ts combat-verify/src/rooms/CardSockets.ts
+          cp deploy/combat/GearGuides.ts combat-verify/src/rooms/GearGuides.ts
+          cp deploy/combat/WorldResources.ts combat-verify/src/rooms/WorldResources.ts
+          cp deploy/combat/SceneryNodes.ts combat-verify/src/rooms/SceneryNodes.ts
+          cp deploy/combat/resource-gathering.test.ts combat-verify/src/rooms/resource-gathering.test.ts
           cp deploy/combat/ItemRules.ts combat-verify/src/rooms/ItemRules.ts
           cp deploy/combat/item-rules.test.ts combat-verify/src/rooms/item-rules.test.ts
           cp deploy/combat/height-rules.test.ts combat-verify/src/rooms/height-rules.test.ts
@@ -274,7 +281,9 @@ jobs:
           grep -q 'characterSlot' main.js
           grep -q 'account-slot' account-entry.js
           grep -q '0.3.2' index.html
-          grep -q 'bagEquipped' main.js
+          grep -Fq 'function currentEquippedWeaponSlot()' main.js
+          grep -Fq 'id="personalBench"' main.js
+          grep -Fq 'id="bagKiln"' main.js
           grep -q 'equip_weapon' main.js
           grep -q 'weaponsAvailable' deploy/combat/MyRoomState.ts
           grep -q 'grantStarterWeapons' deploy/combat/CharacterStore.ts
@@ -347,9 +356,15 @@ jobs:
           node --check deploy/combat/occult-integration.mjs
           node --check deploy/combat/occult-depth-integration.mjs
 
+      - name: Test harvest sites and shared world regeneration
+        working-directory: combat-verify
+        env:
+          MONTRA_WORLD_EXPANSION: '1'
+        run: npx tsx --test src/rooms/resource-gathering.test.ts
+
       - name: Test strict message validation and movement math
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/sword-tree-concurrency.test.ts src/rooms/sword-gap-geometry.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts src/rooms/guild-store.test.ts
+        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/sword-tree-concurrency.test.ts src/rooms/sword-gap-geometry.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/gear-progression.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts src/rooms/guild-store.test.ts
 
       - name: Occult book rules
         working-directory: combat-verify
@@ -403,6 +418,7 @@ jobs:
           for n in {1..60}; do if curl -s -o /dev/null "$MONTRA_TEST_URL/montra/account/slots"; then break; fi; sleep 1; done
           node account-integration.mjs
           node learned-hotbar-integration.mjs
+          node personal-equipment-integration.mjs
           node guest-delete-integration.mjs
           node mount-integration.mjs
 

@@ -38,8 +38,11 @@ try{
    a.send('fly',{});await until(()=>own(a).flying&&Math.abs(own(a).y-6)<.1,'flight outside old boundary');
    a.send('move',{x:45,z:-40});await until(()=>own(a).x>44.8,'flying movement');
    a.send('fly',{});await until(()=>!own(a).flying&&own(a).y===0,'landing');
-   const hits=[];c.onMessage('experience_gained',e=>hits.push(e));c.send('attack',{targetId:'forest_west_1'});
-   await until(()=>hits.length===1,'forest kill awards EXP',18000);assert.equal(hits[0].amount,100);
+   const hits=[];c.onMessage('experience_gained',e=>hits.push(e));
+   const target=c.state.monsters.get('forest_west_1'),startingHp=target.hp;
+   c.send('attack',{targetId:target.id});
+   await until(()=>target.hp<startingHp,'first forest hit');
+   await until(()=>hits.length===1,'forest kill awards EXP',35000);assert.equal(hits[0].amount,100);
    await until(()=>c.state.monsters.get('forest_west_1').alive===false,'dead enemy state patch');assert.equal(c.state.monsters.get('forest_west_2').alive,true);
    const cHp=own(c).hp;c.send('move',{x:-40,z:-30});await sleep(500);assert.ok(cHp>0);
    const bad=[];a.onMessage('command_rejected',e=>bad.push(e.reason));a.send('move',{x:999,z:-40});await until(()=>bad.includes('invalid_move'),'bounds forgery rejected');
