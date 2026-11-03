@@ -56,3 +56,22 @@ test("invalid prerequisites, cross-path slots, excess points and forged cooldown
   book.cooldowns.seer_mark=10;book.learned.seer=["seer_mark","seer_rice"];
   assert.throws(()=>validateOccultBook(book,1));
 });
+test("seer core ranks and cooldowns preserve legacy books and respect the level 100 point limit",()=>{
+  const book=newOccultBook();assert.deepEqual(validateOccultBook(book,1),book);
+  book.coreRanks={seer_binding:8,seer_poison:4};book.cooldowns.seer_poison=123;
+  assert.deepEqual(validateOccultBook(book,100).coreRanks,book.coreRanks);
+  assert.equal(validateOccultBook(book,100).cooldowns.seer_poison,123);
+  assert.throws(()=>validateOccultBook(book,99));
+  book.coreRanks={seer_binding:8,seer_poison:5};assert.throws(()=>validateOccultBook(book,100));
+  book.coreRanks={seer_binding:2};assert.throws(()=>validateOccultBook(book,5));
+});
+test("mender core progress is saved separately from seer and respects its own point limit",()=>{
+  const book=newOccultBook();book.coreRanks={seer_pot:4};book.menderCoreRanks={mender_core_heal:8,mender_core_ward:4};
+  book.cooldowns.mender_core_heal=234;
+  const restored=validateOccultBook(book,100);
+  assert.deepEqual(restored.menderCoreRanks,book.menderCoreRanks);assert.deepEqual(restored.coreRanks,book.coreRanks);
+  assert.equal(restored.cooldowns.mender_core_heal,234);
+  assert.throws(()=>validateOccultBook(book,99));
+  book.menderCoreRanks={mender_core_heal:8,mender_core_ward:5};assert.throws(()=>validateOccultBook(book,100));
+  book.menderCoreRanks={mender_core_heal:2};assert.throws(()=>validateOccultBook(book,5));
+});

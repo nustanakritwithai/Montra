@@ -5238,7 +5238,7 @@
   }
   const rarityNames={common:"พื้นฐาน",uncommon:"พิเศษ",rare:"หายาก",epic:"ชั้นยอด",legendary:"ตำนาน"};
   const forgeNames={melee:"โจมตีประชิด",ranged:"โจมตีเวท",guard:"ป้องกันมอนสเตอร์",healing:"พลังรักษา"};
-  const gearJobs={muay_boran:"มวยไทยโบราณ",phutthaisawan:"นักดาบอยุธยา",blade:"คมดาบ",sentinel:"ผู้พิทักษ์",seer:"ผู้ร่ายเวท",mender:"ผู้เยียวยา"};
+  const gearJobs={muay_boran:"มวยไทยโบราณ",phutthaisawan:"นักดาบอยุธยา",blade:"คมดาบ",sentinel:"ผู้พิทักษ์",seer:"ผู้ร่ายเวท",mender:"พระ"};
   const statNames = {hp:"HP",stamina:"Stamina",mana:"มานา",atk:"โจมตี",def:"ป้องกัน",magicAtk:"เวท",magicDef:"ต้านเวท"};
   const practiceModels = {wp_wrap_1:"muay_wraps",wp_twins_1:"thai_dual",wp_shadow_1:"ritual_dagger",wp_pike_1:"arcane_sword",wp_wand_1:"spirit_staff",wp_crook_1:"spirit_staff"};
   function statLine(stats) {
@@ -5300,12 +5300,14 @@
   const DASH_DEMO_COOLDOWN_MS = 1800;
   let selectedPkTargetId = null;
   let targetedSkill = null;
-  let selectedOccultSkill="", occultBookState=null, occultRequestKey="", occultRequestAt=0, occultHotbarKey="", occultBookRenderKey="", occultCurseUntil=0;
+  let selectedOccultSkill="", occultBookState=null, occultRequestKey="", occultRequestAt=0, occultHotbarKey="", occultBookRenderKey="", occultCurseUntil=0, seerBoundTarget="", seerPoisoned=false;
   let selectedBladeSkill="",bladeBookState=null,bladeRequestKey="",bladeRequestAt=0,bladeHotbarKey="",bladeBookRenderKey="",bladeCloakUntil=0,bladeMarkUntil=0,bladeMarkedTarget="",bladeOpeningUntil=0,bladeCounterUntil=0;
   let selectedSentinelSkill="",sentinelBookState=null,sentinelRequestKey="",sentinelRequestAt=0,sentinelHotbarKey="",sentinelBookRenderKey="",sentinelCounterUntil=0,sentinelInterceptNoticeAt=0,sentinelCoreStanceUntil=0,sentinelChallengeUntil=0;
   let spellTargetId = null;
   let pendingClimb = null;
   const skillEffects = [];
+  const seerBindingEffects = new Map();
+  const priestAreaEffects = new Map();
   let possessed = false, spirit = null;
   const enemy = B.MeshBuilder.CreateSphere("possessed enemy", { diameter: 1.7, segments: 12 }, scene);
   enemy.position.copyFromFloats(1.1, .88, 10.4); enemy.scaling.set(.7,1.1,.8);
@@ -7187,7 +7189,7 @@
     $("mountButton").hidden=true;
     territoryState=null;$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
-    room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null; sentinelChallengeUntil=0; sentinelCoreStanceUntil=0;
+    room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null; sentinelChallengeUntil=0; sentinelCoreStanceUntil=0;seerBoundTarget="";seerPoisoned=false;
     possessed=false;occultBookState=null;occultRequestKey="";selectedOccultSkill="";occultCurseUntil=0;bladeBookState=null;bladeRequestKey="";selectedBladeSkill="";bladeCloakUntil=0;syncBladeUI(null);syncSentinelUI(null);syncOccultUI(null);syncPossessionButton();syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; swordStanceUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
@@ -7292,6 +7294,13 @@
       spellTargetId=id;room.send("blade_skill",{skillId:selectedBladeSkill,targetId:id});return;
     }
     if (picked === "occult") {
+      if(occultBookState?.path==="seer" && occultBookState?.core?.[selectedOccultSkill]){
+        const monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;
+        if(!id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId){toast("เลือกเป้าหมายที่ต่อสู้ได้");return;}
+        if(opponent && partyState?.members?.some(member=>member.sessionId===id)){toast("ใช้วิชากับสมาชิกปาร์ตี้ไม่ได้");return;}
+        spellTargetId=id;selectedPkTargetId=opponent?id:null;syncPKHud();
+        room.send("seer_core_skill",{skillId:selectedOccultSkill,targetId:id});return;
+      }
       const node=occultBookState?.lessons?.[selectedOccultSkill];
       const monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id);
       if (!node || !id || id===localId || (!monster && !(["curse","curse_burst"].includes(node.effect) && opponent))) {
@@ -7489,6 +7498,19 @@
     pot.material = bronzeMat;
     pot.isPickable = false;
     skillEffects.push({mesh: pot, mapId: activeMapId, until: performance.now() + 800});
+  }
+  function renderBuffaloBolt(event){
+    const from=event?.from,to=event?.to;if(!from || !to || ![from.x,from.y,from.z,to.x,to.y,to.z].every(Number.isFinite))return;
+    const root=new B.TransformNode("ควายธนู",scene),body=B.MeshBuilder.CreateSphere("buffalo body",{diameter:1,segments:8},scene);
+    body.parent=root;body.scaling.set(.7,.65,1.2);body.material=gold;body.isPickable=false;
+    const head=B.MeshBuilder.CreateSphere("buffalo head",{diameter:.62,segments:8},scene);head.parent=root;head.position.set(0,.2,.65);head.material=gold;head.isPickable=false;
+    const horns=B.MeshBuilder.CreateLineSystem("buffalo horns",{lines:[
+      [new B.Vector3(-.22,.28,.68),new B.Vector3(-.55,.38,.68),new B.Vector3(-.65,.58,.68)],
+      [new B.Vector3(.22,.28,.68),new B.Vector3(.55,.38,.68),new B.Vector3(.65,.58,.68)]
+    ]},scene);horns.parent=root;horns.color=B.Color3.FromHexString("#ffe3a0");horns.isPickable=false;
+    root.rotation.y=Math.atan2(to.x-from.x,to.z-from.z);
+    const start=new B.Vector3(from.x,from.y,from.z),end=new B.Vector3(to.x,to.y,to.z);root.position.copyFrom(start);
+    skillEffects.push({mesh:root,mapId:activeMapId,start,end,until:performance.now()+300});
   }
   function renderMagicBolt(event) {
     const from=event?.from,to=event?.to;
@@ -8201,7 +8223,7 @@
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; tradeUnread=false; updateTradeBadge();
       partyState=null; partyInvitation=null; partyUnread=false;
     guildState=null; guildInvitation=null; guildUnread=false; updatePartyBadge();
-      inventoryState = null; personalItems=Object.create(null);cardDrill=null;gearGuides=null;resources=null;clearResourceView();
+      inventoryState = null; personalItems=Object.create(null);cardDrill=null;gearGuides=null;resources=null;seerBoundTarget="";seerPoisoned=false;clearResourceView();
       characterStatus = null; lastCharacterStatusRequest = 0;
       itemUsePending = false;
       itemUseSequence += 1;
@@ -8656,6 +8678,46 @@
         const name=occultBookState?.lessons?.[data.skillId]?.name;
         if (name) toast("ใช้ "+name);
       });
+      joined.onMessage("seer_binding_state",data=>{
+        if(room!==joined)return;
+        seerBoundTarget=data?.active?String(data.targetId || ""):"";occultHotbarKey="";syncOccultUI(ownServerCharacter());
+        toast(data?.active?"สะกดมอนแล้ว · กดซ้ำเพื่อคลาย":"คลายยันต์สะกดแล้ว");
+      });
+      joined.onMessage("seer_core_used",data=>{
+        if(room!==joined)return;
+        const caster=joined.state?.players?.get?.(data?.playerId),target=monsterForSpell(data?.targetId) || joined.state?.players?.get?.(data?.targetId);
+        if(!caster || (caster.mapId || "ritual_village")!==activeMapId)return;
+        playAction(avatars.get(data.playerId),"cast");
+        if(target && data.skillId!=="seer_buffalo")renderMagicBolt({skill:"blessed_rice",from:{x:caster.x,y:caster.y+1,z:caster.z},to:{x:target.x,y:target.y+1,z:target.z}});
+        if(data.playerId===localId && data.skillId==="seer_buffalo")toast("กำลังร่ายควายธนู");
+      });
+      joined.onMessage("seer_buffalo_hit",data=>{if(room===joined)renderBuffaloBolt(data);});
+      joined.onMessage("seer_buffalo_result",data=>{if(room===joined && data?.result==="miss")toast("ควายธนูไม่โดนเป้าหมาย");});
+      joined.onMessage("seer_binding_visual",data=>{
+        if(room!==joined || typeof data?.targetId!=="string")return;
+        const previous=seerBindingEffects.get(data.targetId);if(previous){previous.mesh.dispose();seerBindingEffects.delete(data.targetId);}
+        if(data.active){
+          const mesh=B.MeshBuilder.CreateTorus("วงยันต์สะกด",{diameter:1.65,thickness:.07,tessellation:28},scene);
+          mesh.rotation.x=Math.PI/2;mesh.material=gold;mesh.isPickable=false;
+          seerBindingEffects.set(data.targetId,{mesh,until:data.durationMs?performance.now()+Number(data.durationMs):Infinity});
+        }
+      });
+      joined.onMessage("seer_poison_visual",data=>{if(room===joined && data?.targetId===localId){seerPoisoned=Boolean(data.active);syncOccultUI(ownServerCharacter());if(data.active)toast("ติดข้าวสารพิษ · พิษไม่สังหาร");}});
+      joined.onMessage("mender_core_used",data=>{
+        if(room!==joined)return;
+        const caster=joined.state?.players?.get?.(data?.playerId),target=joined.state?.players?.get?.(data?.targetId);
+        if(!caster || (caster.mapId || "ritual_village")!==activeMapId)return;
+        playAction(avatars.get(data.playerId),"cast");
+        if(target)eventFx("bolt",{x:target.x,y:target.y+1,z:target.z},{color:"jade"});
+        if(data.skillId==="mender_core_ward" && data.area && [data.area.x,data.area.y,data.area.z,data.area.radius,data.area.durationMs].every(Number.isFinite)){
+          const previous=priestAreaEffects.get(data.playerId);if(previous)previous.mesh.dispose();
+          const mesh=B.MeshBuilder.CreateTorus("อาณาเขตคุ้มภัย",{diameter:data.area.radius*2,thickness:.1,tessellation:48},scene);
+          mesh.rotation.x=Math.PI/2;mesh.position.set(data.area.x,data.area.y+.1,data.area.z);mesh.material=gold;mesh.isPickable=false;
+          priestAreaEffects.set(data.playerId,{mesh,mapId:activeMapId,until:performance.now()+data.area.durationMs});
+        }
+        if(data.playerId===localId){const name=occultBookState?.core?.[data.skillId]?.name;if(name)toast("ใช้ "+name);}
+      });
+      joined.onMessage("mender_sanctuary_end",data=>{if(room===joined){const effect=priestAreaEffects.get(data?.playerId);if(effect){effect.mesh.dispose();priestAreaEffects.delete(data.playerId);}}});
       joined.onMessage("muay_guarded", data => { if (room===joined) { floatAtPlayer(localId, data?.kind==="parry" ? "ปัด!" : data?.kind==="evade" ? "หลบ!" : "ป้องกัน!", "status", { drift: 0 }); muayCounterUntil=performance.now()+3000; const label=data?.kind==="parry" ? "ปัด" : data?.kind==="evade" ? "เบี่ยงหลบ" : "ป้อง"; toast(label+"สำเร็จ · วิชาสวนพร้อม 3 วินาที"); syncMuayHotbar(); } });
       joined.onMessage("muay_counter_cleared", () => { if (room===joined) { muayCounterUntil=0; syncMuayHotbar(); } });
       joined.onMessage("muay_defense", data => { if(room===joined) {
@@ -8994,6 +9056,7 @@
         if(Object.hasOwn(sentinelReasons,info?.reason)){toast(sentinelReasons[info.reason]);return;}
         const buildReasons = {occult_class_required:"เลือกอาชีพจอมอาคมก่อนใช้วิชานี้", build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
         Object.assign(buildReasons,{use_learned_skill:"เรียนและจัดวิชาในช่องลัดก่อน",invalid_occult_book:"คำสั่งตำราอาคมไม่ถูกต้อง",invalid_occult_skill:"คำสั่งวิชาอาคมไม่ถูกต้อง",occult_rate_limited:"กดตำราถี่เกินไป รอสักครู่",occult_book_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อนจัดวิชา",occult_wrong_path:"เลือกสายนี้ก่อนเรียน",occult_already_learned:"เรียนวิชานี้แล้ว",occult_level:"เลเวลยังไม่ถึง",occult_no_points:"แต้มวิชาไม่พอ",occult_prerequisite:"เรียนวิชาก่อนหน้าก่อน",occult_training:"ฝึกวิชาอาคมให้ครบก่อน",occult_mastery:"ฝึกวิชาตามหมวดในตำราให้ครบก่อน",occult_skill_locked:"เรียนและจัดวิชาในช่องลัดก่อน",occult_book_empty:"ไม่มีแต้มวิชาที่ต้องคืน",occult_book_save_failed:"บันทึกตำราอาคมไม่สำเร็จ",occult_cooldown:"วิชาอาคมกำลังฟื้น",occult_out_of_range:"เข้าใกล้เป้าหมายก่อน",occult_blocked:"มีสิ่งกีดขวางระหว่างเป้าหมาย",occult_mark_required:"ติดยันต์ตีตราที่เป้าหมายก่อน",occult_curse_required:"สาปเป้าหมายก่อนใช้วิชานี้",occult_party_required:"เลือกตนเองหรือสมาชิกปาร์ตี้",occult_trance_required:"เข้าทรงก่อนใช้วิชานี้",occult_no_curse:"เป้าหมายไม่มีคำสาปที่ถอนได้",occult_effect_limit:"เป้าหมายมีบัพเต็มแล้ว"});
+        Object.assign(buildReasons,{seer_binding_immune:"เป้าหมายต้านยันต์สะกด หรือถูกสะกดอยู่แล้ว",seer_poison_busy:"เป้าหมายติดพิษของนักเวทคนอื่นอยู่",seer_casting:"กำลังร่ายควายธนู"});
         if (Object.hasOwn(buildReasons, info?.reason)) { toast(buildReasons[info.reason]); return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("guild_")) { const reason={guild_invalid_name:"ชื่อกิลด์ต้องมี 2–24 ตัวอักษร และใช้ตัวอักษรหรือตัวเลข",guild_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",guild_unavailable:"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว"};toast(reason[info.reason] || "ไม่สามารถทำรายการกิลด์ได้");return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
@@ -10376,9 +10439,11 @@
     $("resetBladeBook").onclick=()=>{if(window.confirm("คืนแต้มสายคมดาบ? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("blade_book",{action:"reset"});};
   }
   function syncOccultUI(me) {
-    const status=$("occultStatus"), cursed=mode==="live" && performance.now()<occultCurseUntil;
-    status.hidden=!cursed;
-    if(cursed)status.textContent="ติดคำสาป · "+Math.ceil((occultCurseUntil-performance.now())/1000)+" วิ";
+    const status=$("occultStatus"), cursed=mode==="live" && performance.now()<occultCurseUntil,parts=[];
+    if(cursed)parts.push("ติดคำสาป · "+Math.ceil((occultCurseUntil-performance.now())/1000)+" วิ");
+    if(mode==="live" && seerPoisoned)parts.push("ติดพิษ · เหลืออย่างน้อย 1 HP");
+    if(mode==="live" && me?.pathId==="seer" && seerBoundTarget)parts.push("สะกดมอนอยู่ · กดคลายยันต์เพื่อปล่อย");
+    status.hidden=!parts.length;status.textContent=parts.join(" · ");
     const active=mode==="live" && room?.state?.occultAvailable===true && (me?.pathId==="seer" || me?.pathId==="mender");
     const button=$("occultBookButton"),bar=$("occultHotbar");
     button.hidden=!active;
@@ -10394,6 +10459,8 @@
     }
     const data=occultBookState;
     if (!data || data.path!==me.pathId) {bar.hidden=true;return;}
+    if(me.pathId==="seer" && data.core){syncSeerCoreUI(me,data,bar);return;}
+    if(me.pathId==="mender" && data.core){syncMenderCoreUI(me,data,bar);return;}
     const path=me.pathId,ids=learnedSlots(data.book.loadouts[path],data.book.learned[path],data.lessons),times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
     const key=JSON.stringify([path,ids,times,me.alive,me.possessionActive,affordKey(ids,data.lessons,me)]);
     bar.hidden=false;if(key===occultHotbarKey)return;occultHotbarKey=key;bar.replaceChildren();
@@ -10427,9 +10494,47 @@
     arrangeFieldSlots(bar,ids,data.lessons,openOccultBook);
     positionSwordToast();
   }
-  function chooseOccultAlly(skillId,name) {
+  function syncSeerCoreUI(me,data,bar){
+    const ids=["seer_pot","seer_binding","seer_poison","seer_buffalo"],ranks=data.book.coreRanks || {},summoned=Boolean(room?.state?.summons?.has(localId));
+    const skills=Object.fromEntries(ids.map(id=>[id,{...data.core[id],stamina:data.core[id].stamina+Number(ranks[id]||0)}]));
+    if(summoned){skills.seer_pot.name="คืนผี";skills.seer_pot.stamina=0;}
+    if(seerBoundTarget){skills.seer_binding.name="คลายยันต์";skills.seer_binding.stamina=0;}
+    const times=ids.map(id=>Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)));
+    const key=JSON.stringify([ids,times,ranks,summoned,seerBoundTarget,me.alive,me.stunned,affordKey(ids,skills,me)]);
+    bar.hidden=false;if(key===occultHotbarKey)return;occultHotbarKey=key;bar.replaceChildren();
+    ids.forEach((id,index)=>{
+      const node=skills[id],button=document.createElement("button"),special=id==="seer_pot" && summoned || id==="seer_binding" && seerBoundTarget;
+      button.type="button";button.className="sword-hotkey";button.textContent=node.name+(times[index] && !special?" "+times[index]+" วิ":"");
+      button.disabled=!me.alive || me.stunned || Boolean(times[index] && !special);
+      button.onclick=()=>{
+        if(id==="seer_pot"){room.send(summoned?"unsummon":"seer_core_skill",summoned?{}:{skillId:id});return;}
+        if(id==="seer_binding" && seerBoundTarget){room.send("seer_core_skill",{skillId:id,targetId:seerBoundTarget});return;}
+        selectedOccultSkill=id;setTargetedSkill("occult");
+        const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
+        if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId)castAtTarget(targetId);
+        else toast(node.name+" · แตะเป้าหมาย");
+      };
+      if(!times[index] && !special)staminaCost(button,node.stamina,me);bar.append(button);
+    });
+    arrangeFieldSlots(bar,ids,skills,openOccultBook);positionSwordToast();
+  }
+  function syncMenderCoreUI(me,data,bar){
+    const ids=["mender_core_heal","mender_core_circle","mender_core_ward","mender_core_cleanse"],ranks=data.book.menderCoreRanks || {};
+    const skills=Object.fromEntries(ids.map(id=>[id,{...data.core[id],stamina:data.core[id].stamina+Number(ranks[id]||0)}]));
+    const times=ids.map(id=>Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)));
+    const key=JSON.stringify([ids,times,ranks,me.alive,me.stunned,affordKey(ids,skills,me)]);
+    bar.hidden=false;if(key===occultHotbarKey)return;occultHotbarKey=key;bar.replaceChildren();
+    ids.forEach((id,index)=>{
+      const node=skills[id],button=document.createElement("button");button.type="button";button.className="sword-hotkey";
+      button.textContent=node.name+(times[index]?" "+times[index]+" วิ":"");button.disabled=!me.alive || me.stunned || Boolean(times[index]);
+      button.onclick=()=>{if(id==="mender_core_heal")chooseOccultAlly(id,node.name,"mender_core_skill");else room.send("mender_core_skill",{skillId:id});};
+      if(!times[index])staminaCost(button,node.stamina,me);bar.append(button);
+    });
+    arrangeFieldSlots(bar,ids,skills,openOccultBook);positionSwordToast();
+  }
+  function chooseOccultAlly(skillId,name,command="occult_skill") {
     const members=partyState?.members || [];
-    if (members.length<2) {room.send("occult_skill",{skillId,targetId:localId});return;}
+    if (members.length<2) {room.send(command,{skillId,targetId:localId});return;}
     openDrawer("occultTarget","เลือกผู้รับ "+name,'<div id="occultTargetList"></div>');
     const list=$("occultTargetList");
     for (const member of members) {
@@ -10437,7 +10542,7 @@
       if (!player?.alive || (player.mapId || "ritual_village")!==activeMapId) continue;
       const button=document.createElement("button");button.type="button";button.className="secondary";
       button.textContent=(member.name || "ผู้เล่น")+(member.sessionId===localId?" · คุณ":"");
-      button.onclick=()=>{closeDrawer();room.send("occult_skill",{skillId,targetId:member.sessionId});};
+      button.onclick=()=>{closeDrawer();room.send(command,{skillId,targetId:member.sessionId});};
       list.append(button);
     }
   }
@@ -10447,11 +10552,16 @@
       if(performance.now()-occultRequestAt>1500){occultRequestAt=performance.now();room.send("occult_book_get",{});}
       return toast("กำลังขอตำราอาคมจากเซิร์ฟเวอร์");
     }
-    occultBookRenderKey="";skillGraphKey="";openDrawer("occultBook","สกิล",skillBookShell("occult"));wireSkillBook("occult");renderOccultBook();
+    occultBookRenderKey="";
+    if(occultBookState.core)openDrawer("occultBook",occultBookState.path==="seer"?"วิชานักเวท":"วิชาพระ",'<div id="occultBookBody"></div>');
+    else {skillGraphKey="";openDrawer("occultBook","สกิล",skillBookShell("occult"));wireSkillBook("occult");}
+    renderOccultBook();
   }
   function renderOccultBook() {
     const data=occultBookState,me=ownServerCharacter(),container=$("occultBookBody");
     if (!data || !me || !container || data.path!==me.pathId) return;
+    if(data.path==="seer" && data.core)return renderSeerCoreBook(data,me,container);
+    if(data.path==="mender" && data.core)return renderMenderCoreBook(data,me,container);
     if(typeof skillView!=="undefined" && skillView==="graph")return renderSkillGraph("occult",container);
     if(container.contains(document.activeElement) && document.activeElement.matches("select[data-occult-equip]"))return;
     const path=data.path,learned=data.book.learned[path],slots=data.book.loadouts[path],training=data.book.training[path];
@@ -10477,7 +10587,7 @@
       return '<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small>'+upgrade+'</div>'+control+'</article>';
     }).join("");
     const summary=Object.entries(labels).map(([category,label])=>clean(label)+" "+(progress[category] || 0)).join(" · ");
-    container.innerHTML='<p>สาย'+(path==="seer"?"ผู้ร่ายเวท":"ผู้เยียวยา")+' · แต้มว่าง '+points+' · ใช้ไป '+(data.points-points)+' / '+data.points+' แต้ม · ผลฝึกรวม '+training+'</p>'+(summary?'<p>ผลฝึกแยกหมวด: '+summary+'</p><p class="note">ผีจากหม้อนับครั้งแรกที่โจมตีมอนสเตอร์ต่อการเรียกหนึ่งครั้ง ส่วนผีที่ได้รับคำสั่งนับเมื่อโจมตีสำเร็จ</p>':'')+
+    container.innerHTML='<p>สาย'+(path==="seer"?"ผู้ร่ายเวท":"พระ")+' · แต้มว่าง '+points+' · ใช้ไป '+(data.points-points)+' / '+data.points+' แต้ม · ผลฝึกรวม '+training+'</p>'+(summary?'<p>ผลฝึกแยกหมวด: '+summary+'</p><p class="note">ผีจากหม้อนับครั้งแรกที่โจมตีมอนสเตอร์ต่อการเรียกหนึ่งครั้ง ส่วนผีที่ได้รับคำสั่งนับเมื่อโจมตีสำเร็จ</p>':'')+
       (path==="mender" && Number.isFinite(data.menderRicePve)?'<p class="note">ข้าวสารพื้นฐานโจมตีมอนสเตอร์ '+Math.round(data.menderRicePve*100)+'% · PvP ใช้ค่าเดิม</p>':'')+
       '<article class="sword-node learned"><div><strong>เหินเวหา</strong><small>วิชาพื้นฐานจอมอาคม · ขึ้นบินและลงจอดในพื้นที่ที่อนุญาต</small></div><button type="button" id="occultFlight">ใช้วิชา</button></article>'+
       '<p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · คืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetOccultBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
@@ -10486,6 +10596,42 @@
     container.querySelectorAll("[data-occult-upgrade]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"upgrade",skillId:button.dataset.occultUpgrade}));
     container.querySelectorAll("[data-occult-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("occult_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.occultEquip});select.blur();});
     $("resetOccultBook").onclick=()=>{if(window.confirm("คืนแต้มสายนี้? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("occult_book",{action:"reset"});};
+  }
+
+  function renderSeerCoreBook(data,me,container){
+    const key=JSON.stringify([data.book,me.level]);if(key===occultBookRenderKey)return;occultBookRenderKey=key;
+    const ranks=data.book.coreRanks || {},points=data.corePointLevels.filter(level=>me.level>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
+    const fmt=n=>String(Math.round(n*100)/100),describe=(id,rank)=>{
+      const p=data.coreProgress?.[rank]?.[id];if(!p)return "";
+      if(id==="seer_pot")return "ผีโจมตีมอน "+Math.round(p.pvePower*100)+"% · ผี 1 ตัวต่อผู้เล่น";
+      if(id==="seer_binding")return "ระยะ "+fmt(p.range)+" · สะกดมอนทั่วไปจนคลาย · พิษขณะสะกดเพิ่ม "+fmt(p.poisonBonus*100)+"% ต่อครั้ง";
+      if(id==="seer_poison")return "ระยะ "+fmt(p.range)+" · มอนเสียเลือด "+fmt(p.pveFraction*100)+"% ทุก "+fmt(p.intervalMs/1000)+" วิ จนเหลือ 1 HP";
+      return "ระยะมอน "+fmt(p.range)+" · พลัง "+Math.round(p.power*100)+"% · ร่าย "+fmt(p.castMs/1000)+" วิ";
+    };
+    container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
+      Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
+        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-seer-core-upgrade="'+id+'" '+(me.level<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+      }).join("")+'<p class="note">สะกดมอนทั่วไป 1 ตัวค้างไว้ กดซ้ำเพื่อคลาย · ผีไม่ตีมอนที่เจ้าของสะกด · Elite และบอสต้านสะกด · PvP สะกด '+fmt(data.coreProgress[0].seer_binding.pvpDurationMs/1000)+' วิ ต้านซ้ำ '+fmt((data.coreProgress[0].seer_binding.pvpImmunityMs-data.coreProgress[0].seer_binding.pvpDurationMs)/1000)+' วิหลังคลาย · พิษ PvP '+fmt(data.coreProgress[0].seer_poison.pvpFraction*100)+'% ทุก '+fmt(data.coreProgress[0].seer_poison.intervalMs/1000)+' วิ · พิษไม่สังหาร · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetSeerCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
+    container.querySelectorAll("[data-seer-core-upgrade]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"core_upgrade",skillId:button.dataset.seerCoreUpgrade}));
+    $("resetSeerCore").onclick=()=>{if(window.confirm("คืนแต้มวิชานักเวททั้งหมด?"))room.send("occult_book",{action:"core_reset"});};
+  }
+
+  function renderMenderCoreBook(data,me,container){
+    const key=JSON.stringify([data.book,me.level]);if(key===occultBookRenderKey)return;occultBookRenderKey=key;
+    const ranks=data.book.menderCoreRanks || {},points=data.corePointLevels.filter(level=>me.level>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
+    const fmt=n=>String(Math.round(n*100)/100),describe=(id,rank)=>{
+      const p=data.coreProgress?.[rank]?.[id];if(!p)return "";
+      if(id==="mender_core_heal")return "ล้างพิษ คำสาป และสถานะหยุด · ฟื้น "+fmt(p.tickFraction*100)+"% HP สูงสุดทุก "+fmt(p.intervalMs/1000)+" วิ นาน "+fmt(p.durationMs/1000)+" วิ · ระยะ "+fmt(p.range);
+      if(id==="mender_core_circle")return "ฟื้น "+fmt(p.fraction*100)+"% HP สูงสุดทันทีครั้งเดียว · ระยะ "+fmt(p.range);
+      if(id==="mender_core_ward")return "ป้องกันการโจมตี 100% · นาน "+fmt(p.durationMs/1000)+" วิ · รัศมี "+fmt(p.range);
+      return "เพิ่ม HP มานา กำลังสูงสุดและค่าต่อสู้ "+fmt(p.bonus*100)+"% · นาน "+fmt(p.durationMs/1000)+" วิ · ระยะ "+fmt(p.range);
+    };
+    container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
+      Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
+        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-mender-core-upgrade="'+id+'" '+(me.level<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+      }).join("")+'<p class="note">สกิลหมู่มีผลกับปาร์ตี้ หรือฝ่ายเดียวกันในสงครามที่อยู่ในระยะ · เขตคุ้มภัยอยู่ ณ จุดที่ร่าย · รีเจนที่อ่อนกว่าไม่ทับผลที่แรงกว่า · สถานะสูงสุดอยู่ภายใต้เพดานของเกม · ล้างสถานะหยุดรวมถึงยันต์สะกด · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetMenderCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
+    container.querySelectorAll("[data-mender-core-upgrade]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"core_upgrade",skillId:button.dataset.menderCoreUpgrade}));
+    $("resetMenderCore").onclick=()=>{if(window.confirm("คืนแต้มวิชาพระทั้งหมด?"))room.send("occult_book",{action:"core_reset"});};
   }
 
   let selectedMuaySkill="", muayCounterUntil=0, muayHotbarKey="", muayBookRenderKey="", muayBookViewedSchool="", muayGrabTarget="",muayGrabUntil=0,muayFollowupSkill="",muayFollowupTarget="",muayFollowupUntil=0,muayCoreStanceUntil=0;
@@ -10730,7 +10876,7 @@
   const SG_CLASS = {
     phutthaisawan: { name: "นักดาบไทย", role: "นักดาบอยุธยา", glyph: "⚔", tone: "gold" }, muay_boran: { name: "มวยไทยโบราณ", role: "นักมวยอาคม", glyph: "✊", tone: "ember" },
     blade: { name: "คมดาบ", role: "นักรบอาคม", glyph: "◈", tone: "violet" }, sentinel: { name: "ผู้พิทักษ์", role: "นักรบอาคม", glyph: "⛨", tone: "steel" },
-    seer: { name: "ผู้ร่ายเวท", role: "จอมอาคม", glyph: "✦", tone: "cyan" }, mender: { name: "ผู้เยียวยา", role: "จอมอาคม", glyph: "✚", tone: "jade" } };
+    seer: { name: "ผู้ร่ายเวท", role: "จอมอาคม", glyph: "✦", tone: "cyan" }, mender: { name: "พระ", role: "จอมอาคม", glyph: "✚", tone: "jade" } };
   function skillGraphModel(kind) {
     const me = ownServerCharacter(); if (!me) return null;
     const lv = me.level || 1;
@@ -10815,7 +10961,7 @@
         return { id, name: n.name, group: path, level: n.level, requires: n.requires, learned, effect: n.effect, power: n.power, range: n.range, stamina: n.stamina, cooldownMs: n.cooldownMs,
           description: n.description, checks, canEquip: learned, slot: data.book.loadouts[path].indexOf(id), ...sgRank(id, learned, data.book.ranks, data, training) };
       });
-      return { kind, title: path === "seer" ? "ตำราผู้ร่ายเวท" : "ตำราผู้เยียวยา", upgrade: id => room.send("occult_book", { action: "upgrade", skillId: id }), points, slotCount: 4, groups: [{ id: path, name: path === "seer" ? "สายผู้ร่ายเวท" : "สายผู้เยียวยา" }], nodes,
+      return { kind, title: path === "seer" ? "ตำราผู้ร่ายเวท" : "ตำราพระ", upgrade: id => room.send("occult_book", { action: "upgrade", skillId: id }), points, slotCount: 4, groups: [{ id: path, name: path === "seer" ? "สายผู้ร่ายเวท" : "สายพระ" }], nodes,
         summary: ["ผลฝึกรวม " + training, ...Object.entries(labels).map(([c, l]) => l + " " + (progress[c] || 0))],
         learn: id => room.send("occult_book", { action: "learn", skillId: id }), equip: (id, s) => room.send("occult_book", { action: "equip", slot: s, skillId: id }),
         reset: () => { if (window.confirm("คืนแต้มสายนี้? ผลฝึกและคูลดาวน์ยังคงอยู่")) room.send("occult_book", { action: "reset" }); },
@@ -11079,7 +11225,7 @@
     }
     // Active effects and unspent points.
     const fx = [];
-    const effectSeals={possession:["spirit","วิญญาณเข้าสิง"],sentinel_step:["stamina","ย่างพิทักษ์"],sentinel_anchor:["def","ตั้งหลักพิทักษ์"],blade_focus:["atk","รวมคม"],blade_veil_guard:["magicDef","ม่านคุ้มกาย"],muay_boran:["fist","วิชามวย"],blade:["atk","วิชาคมดาบ"],sentinel:["def","วิชาผู้พิทักษ์"],seer:["magicAtk","วิชาจอมอาคม"],mender:["heal","วิชาผู้เยียวยา"]};
+    const effectSeals={possession:["spirit","วิญญาณเข้าสิง"],sentinel_step:["stamina","ย่างพิทักษ์"],sentinel_anchor:["def","ตั้งหลักพิทักษ์"],blade_focus:["atk","รวมคม"],blade_veil_guard:["magicDef","ม่านคุ้มกาย"],muay_boran:["fist","วิชามวย"],blade:["atk","วิชาคมดาบ"],sentinel:["def","วิชาผู้พิทักษ์"],seer:["magicAtk","วิชาจอมอาคม"],mender:["heal","วิชาพระ"]};
     for (const effect of status?.effects || []) {
       if (typeof effect?.id !== "string" || !Number.isFinite(effect.remainingMs)) continue;
       const remaining=Math.max(0,Math.ceil((effect.remainingMs-(performance.now()-status.receivedAt))/1000));
@@ -12202,6 +12348,15 @@
     elapsed+=dt;
     const now = performance.now();
     checkClimbApproach();
+    for(const [id,fx] of seerBindingEffects){
+      const target=monsterForSpell(id) || room?.state?.players?.get?.(id);
+      if(mode!=="live" || now>=fx.until || !target?.alive || (target.mapId || "ritual_village")!==activeMapId){fx.mesh.dispose();seerBindingEffects.delete(id);continue;}
+      fx.mesh.position.set(Number(target.x),Number(target.y)+.1,Number(target.z));
+      fx.mesh.rotation.z+=dt;
+    }
+    for(const [id,fx] of priestAreaEffects){
+      if(mode!=="live" || now>=fx.until || fx.mapId!==activeMapId){fx.mesh.dispose();priestAreaEffects.delete(id);}
+    }
     for(let i=skillEffects.length-1;i>=0;i--){
       const fx=skillEffects[i];
       if(now>=fx.until || fx.mapId!==activeMapId || mode!=="live"){

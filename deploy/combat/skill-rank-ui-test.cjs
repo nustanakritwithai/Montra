@@ -45,6 +45,35 @@ for(const spec of [
   assert.ok(container.innerHTML.includes("รับแทน 30%"));assert.equal((container.innerHTML.match(/data-sentinel-core-upgrade=/g)||[]).length,4);
 }
 {
+  const start=source.indexOf("  function renderSeerCoreBook("),end=source.indexOf("  let selectedMuaySkill",start);
+  const container={innerHTML:"",querySelectorAll:()=>[]},dummy={};
+  const ids=["seer_pot","seer_binding","seer_poison","seer_buffalo"],core=Object.fromEntries(ids.map(id=>[id,{name:id,description:id,stamina:20,cooldownMs:10000}]));
+  const coreProgress=Array.from({length:9},()=>({seer_pot:{pvePower:1},seer_binding:{range:10,poisonBonus:0,pvpDurationMs:25000,pvpImmunityMs:40000},seer_poison:{range:12,pveFraction:.02,pvpFraction:.04,intervalMs:2500},seer_buffalo:{range:15,power:2,castMs:900}}));
+  const data={book:{coreRanks:{seer_binding:1}},core,coreLevels:[5,15,25,35,45,60,80,100],corePointLevels:[5,15,25,35,45,55,65,75,80,85,95,100],coreProgress};
+  const context={occultBookRenderKey:"",$:()=>dummy,window:{confirm:()=>false},room:{send(){}}};
+  vm.runInNewContext(source.slice(start,end)+"\nrenderSeerCoreBook",context)(data,{level:25},container);
+  assert.ok(container.innerHTML.includes("แต้มวิชา 2 / 3"));
+  assert.ok(container.innerHTML.includes('data-seer-core-upgrade="seer_binding"'));
+  assert.ok(container.innerHTML.includes("จนเหลือ 1 HP"));
+  assert.ok(container.innerHTML.includes("PvP สะกด 25 วิ"));
+  assert.ok(container.innerHTML.includes("พิษ PvP 4%"));
+  assert.equal((container.innerHTML.match(/data-seer-core-upgrade=/g)||[]).length,4);
+}
+{
+  const start=source.indexOf("  function renderMenderCoreBook("),end=source.indexOf("  let selectedMuaySkill",start);
+  const container={innerHTML:"",querySelectorAll:()=>[]},dummy={};
+  const ids=["mender_core_heal","mender_core_circle","mender_core_ward","mender_core_cleanse"],core=Object.fromEntries(ids.map(id=>[id,{name:id,description:id,stamina:20,cooldownMs:10000}]));
+  const coreProgress=Array.from({length:9},()=>({mender_core_heal:{range:12,tickFraction:.02,durationMs:10000,intervalMs:2000},mender_core_circle:{range:8,fraction:.30},mender_core_ward:{range:7,durationMs:4000},mender_core_cleanse:{range:8,bonus:.10,durationMs:10000}}));
+  const data={book:{menderCoreRanks:{mender_core_heal:1}},core,coreLevels:[5,15,25,35,45,60,80,100],corePointLevels:[5,15,25,35,45,55,65,75,80,85,95,100],coreProgress};
+  const context={occultBookRenderKey:"",$:()=>dummy,window:{confirm:()=>false},room:{send(){}}};
+  vm.runInNewContext(source.slice(start,end)+"\nrenderMenderCoreBook",context)(data,{level:25},container);
+  assert.ok(container.innerHTML.includes("แต้มวิชา 2 / 3"));
+  assert.ok(container.innerHTML.includes('data-mender-core-upgrade="mender_core_heal"'));
+  assert.ok(container.innerHTML.includes("ล้างพิษ คำสาป และสถานะหยุด"));
+  assert.ok(container.innerHTML.includes("ป้องกันการโจมตี 100%"));
+  assert.equal((container.innerHTML.match(/data-mender-core-upgrade=/g)||[]).length,4);
+}
+{
   const start=source.indexOf("  function renderMuayBook("),end=source.indexOf("  function swordData(",start);
   const container={innerHTML:"",querySelectorAll:()=>[]},dummy={};
   const levels=[5,15,25,35,45,60,80,100],points=[5,15,25,35,45,55,65,75,80,85,95,100];

@@ -103,7 +103,7 @@ export class ForestEncounters {
   engaged(id:string):boolean {return [...this.monsters.values()].some(m=>m.alive&&m.targetId===id);}
   update(now:number,dt:number,players:MyRoomState["players"],blocked:ReadonlySet<string>,
     hit:(targetId:string,monster:Monster,force?:number)=>void,respawn:(id:string)=>void,
-    canDetect?:(id:string,player:Player,monster:Monster)=>boolean):void {
+    canDetect?:(id:string,player:Player,monster:Monster)=>boolean,isBound?:(id:string)=>boolean):void {
     const occupied=new Set(Array.from(players.values(),p=>p.mapId));
     const regions=new Set([...occupied].filter(id=>this.regionalMaps.has(id)));
     if(regions.size!==this.activeRegions.size || [...regions].some(id=>!this.activeRegions.has(id))){
@@ -124,6 +124,7 @@ export class ForestEncounters {
         continue;
       }
       if(!occupied.has(m.mapId))continue;
+      if(isBound?.(id)){m.aiState="stagger";continue;}
       if(now<life.interruptUntil){m.aiState="stagger";continue;}
       const eligible=(pid:string,p:Player|undefined):p is Player=>Boolean(p&&p.alive&&p.mapId===m.mapId&&
         !blocked.has(pid)&&onMapGround(p)&&!isRestArea(p.mapId,p) && (!canDetect || canDetect(pid,p,m)));

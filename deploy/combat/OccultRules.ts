@@ -1,5 +1,32 @@
 /** Game-design values are provisional and all combat decisions remain server-owned. */
 import {skillRankCost,validateSkillRanks,type SkillRanks} from "./Progression.js";
+import {MUAY_CORE_LEVELS,muayCorePoints} from "./MuayRules.js";
+export const SEER_CORE={
+  seer_pot:{name:"ผีจากหม้อ",description:"เรียกผีช่วยติดตามและต่อสู้",effect:"spirit",stamina:15,cooldownMs:12000},
+  seer_binding:{name:"ยันต์สะกด",description:"สะกดมอนทั่วไปหนึ่งตัวไว้จนกว่าจะคลายหรือออกจากพื้นที่",effect:"interrupt",stamina:22,cooldownMs:12000},
+  seer_poison:{name:"ข้าวสารพิษ",description:"พิษค่อย ๆ ลดเลือดเป้าหมายจนเหลือ 1 แต่ไม่สังหาร",effect:"curse",stamina:20,cooldownMs:8000},
+  seer_buffalo:{name:"ควายธนู",description:"ร่ายเสกควายธนูโจมตีเป้าหมายระยะไกล",effect:"rice",stamina:30,cooldownMs:14000},
+} as const;
+export type SeerCoreId=keyof typeof SEER_CORE;
+export function seerCoreProgress(rank:number){return {
+  seer_pot:{pvePower:1+rank*.08},
+  seer_binding:{range:10+rank*.25,poisonBonus:rank*.0005,pvpDurationMs:25000,pvpImmunityMs:40000},
+  seer_poison:{range:12+rank*.25,pveFraction:.02+rank*.00125,pvpFraction:.04,intervalMs:2500},
+  seer_buffalo:{range:15+rank*.25,power:2+rank*.12,castMs:900},
+};}
+export const MENDER_CORE={
+  mender_core_heal:{name:"พรฟื้นกาย",description:"เพิ่มฟื้นฟูต่อเนื่องและล้างสถานะให้ตนหรือเพื่อนหนึ่งคน",effect:"heal",stamina:16,cooldownMs:12000},
+  mender_core_circle:{name:"มหายันต์ฟื้นชีพ",description:"ฟื้น HP ปาร์ตี้ในวงอย่างแรงทันทีครั้งเดียว",effect:"heal_area",stamina:32,cooldownMs:24000},
+  mender_core_ward:{name:"อาณาเขตคุ้มภัย",description:"กางเขตป้องกันให้ตนและปาร์ตี้ไม่รับความเสียหาย",effect:"ward_area",stamina:40,cooldownMs:45000},
+  mender_core_cleanse:{name:"พรอำนวยหมู่",description:"เพิ่มค่าสถานะทั้งหมดให้ตนและปาร์ตี้ชั่วคราว",effect:"ward_area",stamina:30,cooldownMs:30000},
+} as const;
+export type MenderCoreId=keyof typeof MENDER_CORE;
+export function menderCoreProgress(rank:number){return {
+  mender_core_heal:{range:12+rank*.25,tickFraction:.02+rank*.003,durationMs:10000,intervalMs:2000},
+  mender_core_circle:{range:8+rank*.125,fraction:.30+rank*.02},
+  mender_core_ward:{range:7+rank*.125,durationMs:4000+rank*250},
+  mender_core_cleanse:{range:8+rank*.125,bonus:.10+rank*.01,durationMs:10000+rank*500},
+};}
 export const OCCULT_PATHS = ["seer", "mender"] as const;
 export type OccultPath = typeof OCCULT_PATHS[number];
 export type OccultEffect = "mark" | "rice" | "rice_area" | "detonate" | "interrupt" | "curse" | "curse_burst" |
@@ -29,7 +56,7 @@ export const OCCULT_LESSONS = {
   mender_cleanse_area: {name:"ข้าวสารปัดเคราะห์",description:"ถอนคำสาปอาคมจากตนและสมาชิกปาร์ตี้ใกล้เคียง",path:"mender",level:12,requires:["mender_cleanse","mender_area"],training:20,effect:"cleanse_area",stamina:28,cooldownMs:20000,range:8,power:0},
   mender_spirit_heal: {name:"ผีประคอง",description:"ให้ผีจากหม้อช่วยฟื้น HP ตนเองหรือสมาชิกปาร์ตี้",path:"mender",level:12,requires:["mender_spirit","mender_heal"],training:20,effect:"spirit_heal",stamina:25,cooldownMs:16000,range:12,power:0.2},
   mender_trance: {name:"ทรงผีฟื้นมานา",description:"ขณะเข้าทรงเพิ่มการป้องกันและฟื้นมานา 15 ให้ปาร์ตี้ใกล้เคียง",path:"mender",level:15,requires:["mender_area","mender_spirit"],training:25,effect:"trance",stamina:28,cooldownMs:25000,range:8,power:0.12},
-  mender_pve_rice: {name:"ข้าวสารคุ้มชีพ",description:"ซัดข้าวสารอาคมใส่มอนสเตอร์ ช่วยผู้เยียวยาเก็บเลเวลด้วยตนเอง",path:"mender",level:25,requires:["mender_heal"],training:8,effect:"pve_rice",stamina:16,cooldownMs:6000,range:12,power:1.3},
+  mender_pve_rice: {name:"ข้าวสารคุ้มชีพ",description:"ซัดข้าวสารอาคมใส่มอนสเตอร์ ช่วยพระเก็บเลเวลด้วยตนเอง",path:"mender",level:25,requires:["mender_heal"],training:8,effect:"pve_rice",stamina:16,cooldownMs:6000,range:12,power:1.3},
   seer_ash_rice: {name:"ข้าวสารเพลิงอาคม",description:"ซัดข้าวสารใส่มอนสเตอร์ และแรงขึ้นเมื่อเป้าหมายมีตราของตน",path:"seer",level:35,requires:["seer_rice"],training:35,effect:"rice",stamina:18,cooldownMs:9000,range:15,power:1.55},
   seer_deep_curse: {name:"คุณไสยกัดวิญญาณ",description:"สาปเป้าหมายให้ได้รับดาเมจต่อเนื่องในช่วงสั้น",path:"seer",level:55,requires:["seer_curse","seer_ash_rice"],training:60,effect:"curse",stamina:26,cooldownMs:16000,range:12,power:0.95},
   seer_ward_break: {name:"ระเบิดตราผนึก",description:"ใช้ตรายันต์ของตนเพื่อโจมตีเป้าหมายหนัก",path:"seer",level:75,requires:["seer_burst","seer_deep_curse"],training:90,effect:"detonate",stamina:30,cooldownMs:16000,range:12,power:2.3},
@@ -67,9 +94,11 @@ export type OccultBook = {
   learned:Record<OccultPath,OccultSkillId[]>;
   loadouts:Record<OccultPath,Array<OccultSkillId|null>>;
   training:Record<OccultPath,number>;
-  cooldowns:Partial<Record<OccultSkillId,number>>;
+  cooldowns:Partial<Record<OccultSkillId|SeerCoreId|MenderCoreId,number>>;
   mastery:OccultMastery;
   ranks?:SkillRanks;
+  coreRanks?:Partial<Record<SeerCoreId,number>>;
+  menderCoreRanks?:Partial<Record<MenderCoreId,number>>;
 };
 export const occultPoints = (level:number):number => 1 + Math.floor((Math.min(level,100)-1)/2);
 export function occultRankCost(ranks:SkillRanks | undefined,path:OccultPath):number {
@@ -83,7 +112,7 @@ function record(value:unknown):value is Record<string,unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 export function validateOccultBook(value:unknown,level:number):OccultBook {
-  if (!record(value) || Object.keys(value).some(key=>!["cooldowns","learned","loadouts","training","mastery","ranks"].includes(key)) ||
+  if (!record(value) || Object.keys(value).some(key=>!["cooldowns","learned","loadouts","training","mastery","ranks","coreRanks","menderCoreRanks"].includes(key)) ||
       !record(value.learned) || !record(value.loadouts) || !record(value.training) || !record(value.cooldowns))
     throw Error("invalid_occult_book");
   for (const group of [value.learned,value.loadouts,value.training])
@@ -116,8 +145,20 @@ export function validateOccultBook(value:unknown,level:number):OccultBook {
     result.training[path]=training;
   }
   for (const [id,ready] of Object.entries(value.cooldowns)) {
-    if (!Object.hasOwn(OCCULT_LESSONS,id) || typeof ready!=="number" || !Number.isSafeInteger(ready) || ready<0) throw Error("invalid_occult_book");
-    result.cooldowns[id as OccultSkillId]=ready;
+    if ((!Object.hasOwn(OCCULT_LESSONS,id) && !Object.hasOwn(SEER_CORE,id) && !Object.hasOwn(MENDER_CORE,id)) || typeof ready!=="number" || !Number.isSafeInteger(ready) || ready<0) throw Error("invalid_occult_book");
+    result.cooldowns[id as OccultSkillId|SeerCoreId|MenderCoreId]=ready;
+  }
+  if(value.coreRanks!==undefined){
+    if(!record(value.coreRanks))throw Error("invalid_occult_book");
+    for(const [id,rank] of Object.entries(value.coreRanks))if(!Object.hasOwn(SEER_CORE,id) || typeof rank!=="number" || !Number.isInteger(rank) || rank<1 || rank>MUAY_CORE_LEVELS.length || level<MUAY_CORE_LEVELS[rank-1])throw Error("invalid_occult_book");
+    if(Object.values(value.coreRanks).reduce<number>((sum,n)=>sum+(n as number),0)>muayCorePoints(level))throw Error("invalid_occult_book");
+    if(Object.keys(value.coreRanks).length)result.coreRanks={...value.coreRanks} as OccultBook["coreRanks"];
+  }
+  if(value.menderCoreRanks!==undefined){
+    if(!record(value.menderCoreRanks))throw Error("invalid_occult_book");
+    for(const [id,rank] of Object.entries(value.menderCoreRanks))if(!Object.hasOwn(MENDER_CORE,id) || typeof rank!=="number" || !Number.isInteger(rank) || rank<1 || rank>MUAY_CORE_LEVELS.length || level<MUAY_CORE_LEVELS[rank-1])throw Error("invalid_occult_book");
+    if(Object.values(value.menderCoreRanks).reduce<number>((sum,n)=>sum+(n as number),0)>muayCorePoints(level))throw Error("invalid_occult_book");
+    if(Object.keys(value.menderCoreRanks).length)result.menderCoreRanks={...value.menderCoreRanks} as OccultBook["menderCoreRanks"];
   }
   if(value.ranks!==undefined){
     if(!record(value.ranks))throw Error("invalid_occult_book");

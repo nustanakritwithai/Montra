@@ -232,7 +232,7 @@ export function planMonsterRRT(
  * replanMs window per monster and never in a per-render-frame loop.
  */
 export class MonsterRRTNavigator {
-  constructor(private obstacles:readonly WallRect[]=MONSTER_WALLS, private bounds:NavigationBounds=MONSTER_NAV.bounds) {}
+  constructor(private obstacles:readonly WallRect[]=MONSTER_WALLS, private bounds:NavigationBounds=MONSTER_NAV.bounds, private iterations:number=MONSTER_NAV.iterations) {}
   private route:{
     intent:string;
     goal:Vec2;
@@ -275,7 +275,7 @@ export class MonsterRRTNavigator {
       // Convert at the planner boundary to ordinary numeric waypoints.
       const from={x:position.x,z:position.z};
       const destination={x:goal.x,z:goal.z};
-      const result=planMonsterRRT(from,destination,{seed,obstacles:this.obstacles,bounds:this.bounds});
+      const result=planMonsterRRT(from,destination,{seed,obstacles:this.obstacles,bounds:this.bounds,iterations:this.iterations});
       this.route={
         intent,
         goal:{x:goal.x,z:goal.z},
