@@ -14,6 +14,7 @@
     ["mender", "จอมอาคม · ผู้เยียวยา", "ฟื้นฟู คุ้มกัน และใช้อาคมสนับสนุน"],
   ];
   let startGame = null, leaveGame = null, selectedSlot = 1, summaries = [], isGuest = false;
+  let pendingEntry = null, startupIssue = "";
   const root = document.getElementById("accountEntry");
   const card = document.getElementById("accountCard");
   const key = () => sessionStorage.getItem(sessionKey) || "";
@@ -29,6 +30,7 @@
     field.type=type; field.autocomplete=autocomplete; field.required=true; wrap.append(field); form.append(wrap); return field;
   }
   function view(title, note) {
+    pendingEntry=null;
     root.hidden=false; document.getElementById("game").inert=true; card.replaceChildren();
     card.append(el("div","๛  MONTRA","account-brand"),el("h1",title));
     if(note)card.append(el("p",note,"account-note"));
@@ -153,12 +155,37 @@
     const submit=el("button","ยืนยันอาชีพและเข้าเล่น","primary");submit.type="submit";form.append(submit);card.append(form,button("กลับไปเลือกตัวละคร",slots));
     form.onsubmit=async e=>{e.preventDefault();const characterName=name?.value.normalize("NFC").trim();if(name && (!/^[\p{L}\p{N}][\p{L}\p{M}\p{N} ._-]*$/u.test(characterName) || Array.from(characterName).length<2 || Array.from(characterName).length>20)){error.textContent="ชื่อตัวละครต้องมี 2–20 ตัวอักษร";return;}submit.disabled=true;error.textContent="กำลังเข้าโลก…";await play({name:characterName,build:{path:form.elements.namedItem("path").value,ancestry:ancestry.value}});submit.disabled=false;};
   }
-  async function play(setup) { if(startGame)await startGame(server,selectedSlot,setup); }
+  function showStartupIssue(message) {
+    const error=view("ยังเข้าโลกไม่ได้","ตัวละครของคุณยังอยู่ในช่องเดิม");
+    error.textContent=message;
+    card.append(button("โหลดเกมอีกครั้ง",()=>location.reload(),"primary"),button("กลับไปเลือกตัวละคร",slots));
+  }
+  async function play(setup) {
+    if(startupIssue){showStartupIssue(startupIssue);return;}
+    if(startGame){await startGame(server,selectedSlot,setup);return;}
+    const slot=selectedSlot;
+    const error=view("กำลังเตรียมโลก","เมื่อฉากพร้อม เกมจะพาคุณเข้าช่อง "+slot+" โดยอัตโนมัติ");
+    const cancel=button("กลับไปเลือกตัวละคร",slots);
+    card.append(cancel);
+    pendingEntry=async()=>{
+      cancel.disabled=true;
+      error.textContent="กำลังเชื่อมต่อเซิร์ฟเวอร์…";
+      try { await startGame(server,slot,setup); }
+      catch {error.textContent="เข้าโลกไม่สำเร็จ กลับไปเลือกตัวละครแล้วลองอีกครั้ง";}
+      finally {cancel.disabled=false;}
+    };
+  }
   window.MontraEntry={
-    start(callback, leave){startGame=callback;leaveGame=leave; if(key())void slots();else login();},
+    start(callback, leave){
+      startGame=callback;leaveGame=leave;
+      const enter=pendingEntry;pendingEntry=null;
+      if(enter)void enter();
+    },
+    worldUnavailable(message){startupIssue=message;if(pendingEntry)showStartupIssue(message);},
     open(){if(key())void slots();else login();},
     success(){root.hidden=true;document.getElementById("game").inert=false;},
     failure(message){root.hidden=false;document.getElementById("game").inert=true;const error=card.querySelector(".account-error");if(error)error.textContent=message || "เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่";},
     session:key,
   };
+  if(key())void slots();else login();
 })();

@@ -1116,3 +1116,23 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .class-choices input { flex:none; width:16px; margin:4px 0 0; accent-color:#e3bf78; }
 .class-choices small { display:block; margin-top:3px; color:#c1cec2; line-height:1.45; }
 @media (max-width:380px) { .class-choices { grid-template-columns:1fr; } }
+
+#game:not(:has(.book-entry:not([hidden]))) #quickSkills { display:none; }
+.field-layout-picker { display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin-bottom:14px; }
+.field-layout-picker > span { color:var(--field-gold); font-size:12px; margin-right:auto; }
+.field-layout-picker button { min-height:44px; border:1px solid var(--field-line); border-radius:8px; background:var(--field-ink); color:var(--field-paper); padding:5px 12px; }
+.field-layout-picker button[aria-pressed=true] { color:#211a0c; background:var(--field-gold); }
+#game[data-field-layout=combat] .hud-journal .quest:not(.war-hud),
+#game[data-field-layout=combat] .location-area .online-count:not(.safe) { display:none; }
+#game[data-field-layout=combat] .location-area .mini-map { width:54px; height:54px; }
+.help-topic { border-bottom:1px solid var(--field-line); }
+.help-topic summary { min-height:44px; padding:11px 0; font-weight:700; cursor:pointer; }
+@media (hover:hover) and (pointer:fine) {
+  .sword-hotbar:not(#grappleResponse) { counter-reset:hotkey; }
+  .sword-hotbar:not(#grappleResponse) .sword-hotkey { counter-increment:hotkey; }
+  .sword-hotbar:not(#grappleResponse) .sword-hotkey::before { content:counter(hotkey); margin-right:5px; font-size:10px; color:var(--field-gold); }
+}
+@media (max-width:600px) and (orientation:landscape) {
+  .field-shortcuts { gap:0; }
+  .field-shortcuts button { min-width:44px; }
+}

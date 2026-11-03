@@ -75,6 +75,7 @@
   }
   if (!window.BABYLON) {
     ui.loadingText.textContent = "โหลด Babylon.js ไม่สำเร็จ ตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วโหลดใหม่";
+    window.MontraEntry?.worldUnavailable("ดาวน์โหลดฉากเกมไม่สำเร็จ ตรวจการเชื่อมต่อแล้วลองอีกครั้ง");
     return;
   }
 
@@ -83,6 +84,7 @@
   try { engine = new B.Engine(ui.world, true, { antialias: true, stencil: false, preserveDrawingBuffer: false }); }
   catch (err) {
     ui.loadingText.textContent = "อุปกรณ์นี้ไม่สามารถเปิด WebGL ได้: " + (err.message || err);
+    window.MontraEntry?.worldUnavailable("เบราว์เซอร์เปิดฉาก 3D ไม่สำเร็จ ลองเปิดการเร่งกราฟิกหรือใช้เบราว์เซอร์อื่น");
     return;
   }
   // Babylon divides the canvas size by this value. A value above 1 blurs
@@ -8955,6 +8957,27 @@
   }
   function openFieldMenu() { openDrawer("fieldMenu","เมนูผจญภัย",""); }
   document.addEventListener("keydown",event=>{
+    if(mode!=="live" || drawerActive || !$("accountEntry").hidden || event.defaultPrevented ||
+       event.repeat || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
+       !/^[1-4]$/.test(event.key) || event.target.closest?.("input,select,textarea,[contenteditable=true]")) return;
+    const bar=document.querySelector(".controls .sword-hotbar:not(#grappleResponse):not([hidden])");
+    const skill=bar?.querySelectorAll("button")[Number(event.key)-1];
+    if(skill && !skill.disabled){event.preventDefault();skill.click();}
+  });
+  function setFieldLayout(layout) {
+    const active=layout==="combat" ? "combat" : "adventure";
+    $("game").dataset.fieldLayout=active;
+    for(const choice of $("fieldMenu").querySelectorAll("[data-field-layout]"))
+      choice.setAttribute("aria-pressed",String(choice.dataset.fieldLayout===active));
+  }
+  try {setFieldLayout(localStorage.getItem("montra_field_layout"));} catch {setFieldLayout("adventure");}
+  for(const choice of $("fieldMenu").querySelectorAll("[data-field-layout]")) {
+    choice.onclick=()=>{
+      setFieldLayout(choice.dataset.fieldLayout);
+      try {localStorage.setItem("montra_field_layout",choice.dataset.fieldLayout);} catch {}
+    };
+  }
+  document.addEventListener("keydown",event=>{
     if (ui.drawer.hidden || !$("accountEntry").hidden) return;
     if (event.key==="Escape") { event.preventDefault();closeDrawer(); }
     if (event.key!=="Tab") return;
@@ -10699,7 +10722,23 @@
     });
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่นและตั้งค่า",lightSettingsHtml()+soundSettingsHtml()+`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>เดินเข้าจุดบันไดเพื่อแสดงปุ่มปีนและขึ้นกำแพง · จอมอาคมใช้วิชาเหินเวหาในตำราอาคมเพื่อขึ้นบิน แล้วใช้ปุ่มลงจอดที่ปรากฏขณะบิน · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>วิชาพื้นฐานจอมอาคม</h3><p>ตัวละครสายผู้ร่ายเวทหรือผู้เยียวยาใช้วิชาต่อไปนี้ได้</p><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เข้าสู่ระบบแล้วเลือกเซฟ 1–3 และเปลี่ยนเซฟได้ในโปรไฟล์ · บัญชีหนึ่งใช้ได้ทีละตัวละคร ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>ชุดเกราะและอาวุธดรอปจากมอนสเตอร์</p>`);
+    openDrawer("help","วิธีเล่นและตั้งค่า",`
+      <h3>ออกเดินทาง</h3>
+      <p>แตะพื้นเพื่อเดิน ลากเพื่อหมุนกล้อง และหนีบสองนิ้วเพื่อซูม แตะภารกิจที่ติดตามเพื่อดูเป้าหมาย หรือเปิดแผนที่จากมุมขวาบน</p>
+      <details class="help-topic"><summary>ต่อสู้และจัดสกิล</summary>
+        <p>แตะมอนสเตอร์เพื่อเลือกเป้าหมาย แล้วใช้โจมตีหรือวิชาจากแถบต่อสู้ ปัดเร็ว ๆ เหนือแถบสกิลเพื่อพุ่งหลบ</p>
+        <p>เปิด «สกิล» เพื่อเรียนวิชาและจัดช่องลัดที่ลานพัก บนคอมพิวเตอร์กด 1–4 เพื่อใช้วิชาตามช่องที่มี</p></details>
+      <details class="help-topic"><summary>ปีน บิน และขี่ม้า</summary>
+        <p>เข้าใกล้บันไดหรือกำแพงที่ปีนได้แล้วแตะ «ปีน» จอมอาคมเริ่มบินได้จากตำราสกิล และลงจอดด้วยปุ่มที่ปรากฏตอนบิน</p>
+        <p>แตะ «เรียกม้า» เพื่อเดินทาง ทุกอาชีพลงม้าก่อนต่อสู้</p></details>
+      <details class="help-topic"><summary>จอมอาคมและวิญญาณ</summary>
+        <p>ซัดข้าวสารจากระยะไกลหรือแปะยันต์ระยะประชิด เรียกผีจากหม้อเพื่อช่วยโจมตี แล้วใช้ «เข้าทรง» เมื่อต้องการรับพลังของวิญญาณ</p></details>
+      <details class="help-topic"><summary>ปาร์ตี้ กิลด์ และการค้า</summary>
+        <p>เปิดเมนูผจญภัยเพื่อชวนคนเข้าปาร์ตี้ ดูกิลด์ หรือไปตลาด สมาชิกปาร์ตี้ที่อยู่ใกล้และอยู่แผนที่เดียวกันได้ส่วนแบ่ง EXP ตามกติกาปาร์ตี้</p>
+        <p>ตลาดใช้ฝากขายและซื้อไอเท็ม ส่วนการเทรดโดยตรงต้องอยู่ใกล้ผู้เล่นอีกฝ่ายและยืนยันข้อเสนอทั้งคู่</p></details>
+      <details class="help-topic"><summary>หน้าจอ ภาพ และเสียง</summary>
+        <p>ในเมนูผจญภัย เลือก «เน้นต่อสู้» เพื่อย่อแผนที่และซ่อนภารกิจทั่วไป เปิดภารกิจได้จากเมนูเสมอ</p>
+        ${lightSettingsHtml()}${soundSettingsHtml()}</details>`);
     bindSoundSettings(ui.drawerBody); bindLightSettings(ui.drawerBody);
   }
   function currentBagSlots() {
@@ -11263,6 +11302,10 @@
   $("menuCharacter").onclick=openCharacterProfile;
   $("menuQuest").onclick=openCurrentQuest;
   $("menuGuild").onclick=openGuild;
+  $("quickSkills").onclick=()=>{
+    const entry=$("fieldMenu").querySelector(".book-entry:not([hidden])");
+    if(entry)entry.click();
+  };
   $("mapButton").onclick=openMap;
   $("chatButton").onclick=openChat;
   $("marketButton").onclick=openEconomy;
