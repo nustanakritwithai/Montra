@@ -858,6 +858,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"sentinel_blocked");}
     }
     actor.mana-=skill.stamina;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
+    if(allies.length)this.markSupportManaCombat(id,allies);
     if(offensive && target)actor.facing=facingTo(target.x-actor.x,target.z-actor.z);
     if(next){this.startSkillAction(id,actor,"idle");this.moveOnSurface(actor,next.x,next.z);}
     if(skill.effect==="guard")this.swordGuards.set(id,{until:this.simulatedMs+2500,factor:skill.power,direction:true,counterUntil:0});
@@ -1779,6 +1780,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendSwordNotice(client,"sword_counter_cleared",{});
     } else if (skill.effect==="support") {
       const members=this.parties.get(id)?.members ?? [id];
+      const supported:Array<[string,Player]>=[];
       for (const memberId of members) {
         const member=this.state.players.get(memberId);
         if (!member?.alive || member.mapId!==player.mapId || this.pendingWarps.has(memberId) ||
@@ -1787,7 +1789,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (active.length>=STACKING_RULES.maxModifiers && !active.some(effect=>effect.id===skillId && effect.sourceId===id)) continue;
         this.effects.grant(memberId,{id:skillId,sourceId:id,group:"sword_support",bonuses:{def:skill.power}},this.simulatedMs+8000);
         this.applyStats(memberId,member,this.statAllocations.get(memberId) ?? emptyAllocations());
+        supported.push([memberId,member]);
       }
+      this.markSupportManaCombat(id,supported);
     } else if (target) {
       player.facing=facingTo(target.x-player.x,target.z-player.z);
       const base=(player.atk+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee) *
