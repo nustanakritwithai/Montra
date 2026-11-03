@@ -11,6 +11,8 @@ import {FOREST_CAMPS} from "./WorldMaps.js";
 import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {personalGearGuides,cardHunt} from "./GearGuides.js";
 import {gearMana} from "./ItemRules.js";
+import {bossAccessoryReward,grantStackReward} from "./ItemRules.js";
+import {BOSS_TREASURES,type MaterialId} from "./PersonalItems.js";
 import {MyRoom} from "./MyRoom.js";
 import {Player} from "./schema/MyRoomState.js";
 
@@ -26,6 +28,7 @@ test("a listed monster really drops the item, and crafted and harvested products
   }
   for(const [id,item] of entries){
     const hint=findItemHunt(id as PersonalId,item.level!);
+    if(item.sourceBoss){assert.equal(hint?.monster,hunts.find(m=>m.id===item.sourceBoss)?.name,id);continue;}
     if(!item.dropMax || !item.forge && item.kind!=="material"){assert.equal(hint,null,id);continue;}
     assert(hint,id);
     const mob=hunts.find(m=>m.name===hint.monster && m.mapId===hint.mapId && m.level===hint.level)!;
@@ -47,6 +50,46 @@ test("a listed monster really drops the item, and crafted and harvested products
     const hint=findItemHunt((family+"_"+(WEAPON_LEVELS.indexOf(level)+1)) as PersonalId,level);
     assert(hint && hint.level<=level+2,family+" has no nearby hunt at level "+level);
   }
+});
+
+test("each named encounter owns its fragment and accessory; three fragments craft the same wearable reward",()=>{
+  const store=new EconomyStore(":memory:");
+  try{
+    for(const [boss,t] of Object.entries(BOSS_TREASURES)){
+      const id=(t.level===12?"a":"b").repeat(64),bag=makeClassInventory("muay_boran");
+      const gear=PERSONAL_ITEMS[t.gear],mob=hunts.find(m=>m.id===boss)!;
+      assert.equal(findItemHunt(t.fragment,t.level)?.monster,mob.name);
+      assert.equal(findItemHunt(t.gear,t.level)?.mapId,mob.mapId);
+      assert.equal(gear.recipe![0].item,t.fragment);assert.equal(gear.recipe![0].qty,3);
+      assert.equal(rollMonsterLoot("forest_west_1","muay_boran",new Set(),100,0,"normal",()=>0)?.id===t.gear,false);
+      const preview=CATALOG_PAGES.find(page=>page[t.gear])![t.gear];
+      assert("dropHint" in preview);assert.match(preview.dropHint,/20%/);
+      assert.equal(bossAccessoryReward(bag,boss,t.level-1,()=>0),null);
+      assert.equal(bossAccessoryReward(bag,boss,t.level,()=>20),null);
+      assert.equal(bossAccessoryReward(bag,"forest_west_1",100,()=>0),null);
+      const direct=bossAccessoryReward(bag,boss,t.level,()=>19)!;
+      assert(direct.granted);assert.equal(direct.id,t.gear);
+      assert.equal(bossAccessoryReward(direct.bag,boss,t.level,()=>0),null);
+      const at=direct.bag.slots.findIndex(s=>s?.itemId===t.gear),position=t.level===12?"neck":"leftRing";
+      const equip=equipBody(direct.bag,position,at,t.gear,"muay_boran",t.level);
+      assert(equip.ok);assert.equal(bossAccessoryReward(equip.inventory,boss,t.level,()=>0),null);
+      const full={...bag,slots:bag.slots.map(s=>s??{itemId:"health_potion" as const,quantity:99})};
+      assert.equal(bossAccessoryReward(full,boss,t.level,()=>0)?.granted,false);
+      assert.equal(grantStackReward(full,t.fragment),null);
+      bag.slots[2]={itemId:gear.recipe![1].item as MaterialId,quantity:2};
+      const two=grantStackReward(grantStackReward(bag,t.fragment)!,t.fragment)!;
+      store.register(id,two);
+      assert.throws(()=>store.craftPersonal(id,"test_boss_recipe_1",t.gear,t.level));
+      const three=grantStackReward(store.getAccount(id).inventory,t.fragment)!;
+      store.saveCharacter(id,{},three);
+      const request="test_boss_recipe_"+boss;
+      store.craftPersonal(id,request,t.gear,t.level);
+      store.craftPersonal(id,request,t.gear,t.level);
+      const crafted=store.getAccount(id).inventory;
+      assert(!crafted.slots.some(s=>s?.itemId===t.fragment));
+      assert.equal(crafted.slots.filter(s=>s?.itemId===t.gear).length,1);
+    }
+  }finally{store.close();}
 });
 
 test("three misses survive reload and a full bag preserves the guaranteed upgrade",()=>{

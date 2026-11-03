@@ -1,6 +1,7 @@
 import { readForged, birthForge, applyForgeRatings, type Forged } from "./ForgeRules.js";
-import { personalItem, startingWeapon, firstChest, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
+import { BOSS_GEAR_CHANCE, bossTreasure, personalItem, startingWeapon, firstChest, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
 import {MAX_LOOT_MISSES,rollMonsterLoot} from "./MonsterLoot.js";
+import {randomInt} from "node:crypto";
 import { PROGRESSION, type CombatStats } from "./Progression.js";
 import { MUAY_WRAP_ID } from "./MuayRules.js";
 import { usesStaff, type CatalystId, type SalveId, type ForgeRating,type BrewId,type FieldToolId } from "./PersonalItems.js";
@@ -332,6 +333,17 @@ export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,ti
   const forge=birthForge(id);
   slots[index]={itemId:id,quantity:1,...(forge?{forge}:{})};
   return {bag:{...bag,slots},id};
+}
+
+export function bossAccessoryReward(bag:InventorySnapshot,monsterId:string,playerLevel:number,draw=()=>randomInt(100)){
+  const treasure=bossTreasure(monsterId);
+  if(!treasure || playerLevel<treasure.level || bag.slots.some(s=>s?.itemId===treasure.gear) ||
+     Object.values(bag.equipment??{}).includes(treasure.gear) || draw()>=BOSS_GEAR_CHANCE)return null;
+  const slot=bag.slots.indexOf(null);
+  if(slot<0)return {id:treasure.gear,bag,granted:false};
+  const slots=bag.slots.slice(),forge=birthForge(treasure.gear);
+  slots[slot]={itemId:treasure.gear,quantity:1,...(forge?{forge}:{})};
+  return {id:treasure.gear,bag:{...bag,slots},granted:true};
 }
 
 /** Add a single reward, preferring an existing stack. A full bag is left intact. */

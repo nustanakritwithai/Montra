@@ -8878,7 +8878,10 @@
         const cardNotice=cardName?(info.cardReceived?" · ได้รับ"+cardName:" · กระเป๋าเต็ม รับ"+cardName+"ไม่ได้"):"";
         const loot=info?.personalDrop==="bag_full"?" · กระเป๋าเต็ม":personalItems[info?.personalDrop]?" · ได้รับ"+personalItems[info.personalDrop].name+(info.dropQuantity>1?" ×"+info.dropQuantity:""):"";
         const guarantee=info?.lootMisses===3?" · ล่าตัวที่มีอุปกรณ์อัปเกรดอีกครั้งเพื่อรับของ":"";
-        toast((info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":info?.shrineShard && !info.amount?"รางวัลศาลร้าง":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + prize + shard + loot + cardNotice + guarantee);
+        const bossRewards=[[info?.bossFragment,info?.fragmentGranted],[info?.bossAccessory,info?.accessoryGranted]].map(([id,granted])=>{
+          const item=personalItems[id];return item?(granted?" · ได้รับ":" · กระเป๋าเต็ม รับไม่ได้ ")+item.name:"";
+        }).join("");
+        toast((info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":info?.shrineShard && !info.amount?"รางวัลศาลร้าง":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + prize + shard + bossRewards + loot + cardNotice + guarantee);
         renderProgressionProfile();
       });
       joined.onMessage("character_status", payload => {
@@ -10672,7 +10675,7 @@
       button.disabled=!node || !me.alive || Boolean(timing[slot]);
       button.setAttribute("aria-label",node ? "ช่อง "+(slot+1)+" "+node.name : "ช่องวิชาว่าง "+(slot+1));
       if(node)button.onclick=()=>{
-        if(me.equippedWeaponId!=="arcane_sword" && personalItems[me.equippedWeaponId]?.family!=="wp_twins"){toast("สวมดาบคู่ก่อนใช้วิชาดาบ");return;}
+        if(weaponModelFor(me.equippedWeaponId,me.pathId)!=="thai_dual"){toast("สวมดาบคู่ก่อนใช้วิชาดาบ");return;}
         if(id==="sritra_core" || id==="chumphon_core"){room.send("sword_core_skill",{skillId:id});return;}
         const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
         selectedSwordSkill=id;setTargetedSkill("sword");
@@ -11333,6 +11336,11 @@
       const difference=gearComparison(chosen.itemId,armor?equipment[destination]:equippedItem?.itemId,chosen.socket,armor?inventoryState?.equipmentSockets?.[destination]:equippedItem?.socket);
       detail=[armor?bodyLabels[destination]:"อาวุธ",meta.bonus,worn?"กำลังสวม":difference?"เมื่อเปลี่ยน "+difference:"",wrongClass?"อาวุธของสายอื่น":"",chosen.bound?"ผูกกับตัวละคร":personalItems[chosen.itemId]?"ผูกตัวละครเมื่อสวมครั้งแรก":""].filter(Boolean).join(" · ");
     } else if(meta?.kind==="card")detail=meta.bonus+" เมื่อใส่ในรูของอุปกรณ์ที่สวม · ดรอปจาก"+meta.monster+" ("+meta.chancePct+"%)";
+    else if(meta?.kind==="material" && meta.sourceBoss){
+      const recipe=Object.values(personalItems).find(i=>i.sourceBoss===meta.sourceBoss && i.forge);
+      detail=recipe?"สะสม "+recipe.recipe.find(r=>r.item===chosen.itemId).qty+" ชิ้นเพื่อคราฟต์"+recipe.name+" ที่โต๊ะช่าง":"วัตถุดิบจากบอส";
+      if(chosen.itemId===SHRINE_SHARD)detail+=" · ใช้ 1 ชิ้นคราฟต์ง้าวจันทร์ผู้พิทักษ์ได้ด้วย";
+    }
     else if(meta?.refinesTo)detail="วัตถุดิบจากแผนที่ · แปรรูป "+refineInput+" ชิ้นเป็น "+(personalItems[meta.refinesTo]?.name||meta.refinesTo)+" 1 ชิ้น";
     else if(meta?.station==="kiln")detail=meta.family==="mat_charcoal"?"เชื้อเพลิงสำหรับหลอมแร่เหล็กชั้นเดียวกันที่เตาเผา":"ใช้สร้างอาวุธ เครื่องมือ และอุปกรณ์ที่ระบุแท่งเหล็กชั้นนี้ในสูตร";
     else if(meta?.kind==="material"){
@@ -11432,11 +11440,12 @@
     panel.hidden=!economyReady() || !cardDrill;
     if(panel.hidden)return;
     const player=ownServerCharacter(),level=player?.level||1,path=player?.pathId;
-    const position=group.value==="materials"||group.value==="kiln"?"":inspectingGear||"";
-    const version=catalogRevision+"/"+level;
+    const bossRecipes=group.value==="boss";
+    const position=group.value==="materials"||group.value==="kiln"||bossRecipes?"":inspectingGear||"";
+    const version=catalogRevision+"/"+level+"/"+bossRecipes;
     if(lv.dataset.version!==version){
       const previous=lv.value;lv.dataset.version=version;
-      lv.replaceChildren(new Option("ระดับที่ใช้ได้ล่าสุด","auto"),new Option("เพิ่งปลดล็อก · Lv."+level,"current"));
+      lv.replaceChildren(new Option(bossRecipes?"บอสทุกระดับ":"ระดับที่ใช้ได้ล่าสุด","auto"),new Option("เพิ่งปลดล็อก · Lv."+level,"current"));
       const levels=[...new Set(Object.values(personalItems).filter(i=>i.recipe).map(i=>i.level||1))].sort((a,b)=>a-b);
       for(const n of levels)lv.appendChild(new Option("Lv."+n+(n>level?" · ยังไม่ถึง":""),String(n)));
       if([...lv.options].some(o=>o.value===previous))lv.value=previous;
@@ -11448,11 +11457,12 @@
       for(const [id,def] of Object.entries(personalItems)){
         if(!def.recipe || (position && def.kind!==position && !wearPositions(def.kind).includes(position)))continue;
         if(group.value==="kiln" && def.station!=="kiln")continue;
+        if(group.value==="boss" && !def.sourceBoss)continue;
         const supply=["material","catalyst","consumable","tool"].includes(def.kind);
         if(group.value==="materials" && !supply)continue;
         if(group.value==="role" && (def.path!=="all" && def.path!==path || !position && !supply && def.recommended && !def.recommended.includes(path)))continue;
         const n=def.level||1;
-        if(lv.value==="auto"?n>level:n!==(lv.value==="current"?level:Number(lv.value)))continue;
+        if(lv.value==="auto"?!bossRecipes && n>level:n!==(lv.value==="current"?level:Number(lv.value)))continue;
         const family=(def.family||id)+(group.value==="all"?"/"+def.path:""),old=recipes.get(family);
         if(!old || (old[1].level||1)<n)recipes.set(family,[id,def]);
       }
@@ -11595,7 +11605,7 @@
       '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
       '<section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>' +
       '<button id="refineResource" type="button" class="secondary" hidden></button><button id="bagKiln" type="button" class="secondary" hidden></button><button id="sellBagMaterial" type="button" class="secondary" hidden></button>' +
-      '<section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button id="benchCraft" type="button" class="secondary">คราฟต์</button><button id="benchIngredient" type="button" class="secondary" hidden></button><button id="benchBack" type="button" class="secondary" hidden></button></section>' +
+      '<section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="boss">ของจากบอส</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button id="benchCraft" type="button" class="secondary">คราฟต์</button><button id="benchIngredient" type="button" class="secondary" hidden></button><button id="benchBack" type="button" class="secondary" hidden></button></section>' +
       '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
       '<div id="forgePanel" hidden><h3>ช่างอาคม</h3><p class="note" id="forgeInfo"></p><button class="secondary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeReroll"></button></div>' +
       '<p class="note">แตะช่องสวมเพื่อดูหรือถอดอุปกรณ์ ล่ามอนสเตอร์เพื่อรับเกราะชิ้นแรก จากนั้นหาอุปกรณ์หรือเก็บวัตถุดิบคราฟต์ที่โต๊ะช่าง</p>');

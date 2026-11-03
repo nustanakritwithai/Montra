@@ -23,6 +23,7 @@ export type PersonalDefinition = {
   recipe?:readonly {item:string; qty:number}[];
   monster?:string;
   chancePct?:number;
+  sourceBoss?:string;
   level?:number; rarity?:string; family?:string; recommended?:readonly string[]; dropMax?:number;
   forge?:ForgeProfile; craftGold?:number; sellGold?:number; healHp?:number; sourceCamp?:string;
   refinesTo?:MaterialId;
@@ -120,7 +121,16 @@ export type RawMaterialId=`mat_raw_${"wood"|"stone"}_${number}`;
 type KilnMaterialId=`mat_${"charcoal"|"ingot"}_${number}`;
 export type FieldToolId=`tool_${"axe"|"pick"}_${number}`;
 export type BrewId=`use_${"herbal"|"mana"}_${number}`;
-export type PersonalId = BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}` | FieldGearId | RawMaterialId | KilnMaterialId | FieldToolId | BrewId;
+export const BOSS_TREASURES={
+  forest_shrine_keeper:{fragment:"shrine_shard",gear:"acc_shrine_ward",level:12},
+  atlas_rift_warden:{fragment:"mat_rift_star",gear:"acc_rift_star",level:100},
+} as const;
+type BossTreasure=typeof BOSS_TREASURES[keyof typeof BOSS_TREASURES];
+export const BOSS_GEAR_CHANCE=20;
+export function bossTreasure(id:string):BossTreasure|undefined{
+  return Object.hasOwn(BOSS_TREASURES,id)?BOSS_TREASURES[id as keyof typeof BOSS_TREASURES]:undefined;
+}
+export type PersonalId = BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}` | FieldGearId | RawMaterialId | KilnMaterialId | FieldToolId | BrewId | BossTreasure["fragment"|"gear"];
 export type PracticeWeapon = Extract<PersonalId,`wp_${string}`>;
 export type ChestId = Extract<BaseId,`arm_${string}_chest_1`>;
 export type BodyItemId = Extract<PersonalId,`arm_${string}`|`off_${string}`|`acc_${string}`>;
@@ -266,6 +276,19 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
       const ingot={item:input.item.replace("mat_metal_","mat_ingot_"),qty:1};
       return input.qty===1?[ingot]:[{...input,qty:input.qty-1},ingot];
     });
+  }
+  for(const [sourceBoss,{fragment,gear,level}] of Object.entries(BOSS_TREASURES)){
+    const shrine=fragment==="shrine_shard";
+    put(fragment,{name:shrine?"เศษตราผู้พิทักษ์":"เศษดาวราชัน",kind:"material",path:"all",level,stats:{},sourceBoss});
+    const item:PersonalDefinition={
+      name:shrine?"สร้อยตราศาลร้าง":"แหวนดาวราชัน",kind:shrine?"neck":"ring",family:gear,path:"all",level,dropMax:level,sourceBoss,
+      stats:shrine?{hp:12,def:2,magicDef:1}:{atk:6,magicAtk:6,mana:8},rarity:shrine?"rare":"legendary",
+      recommended:Object.keys(fieldKits),craftGold:level*2,
+      recipe:[{item:fragment,qty:3},{item:shrine?"mat_fiber_2":"mat_ingot_7",qty:2}],
+    };
+    const profile=forgeProfile(item);
+    item.forge={...profile,primary:shrine?"guard":"melee",pool:shrine?["guard","healing"]:["melee","ranged"]};
+    put(gear,item);
   }
   return Object.freeze(result) as Readonly<Record<PersonalId,PersonalDefinition>>;
 }

@@ -1,5 +1,5 @@
 import {randomInt} from "node:crypto";
-import {PERSONAL_ITEMS,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
+import {PERSONAL_ITEMS,BOSS_GEAR_CHANCE,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
 import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
 import {TEMPLE_ID,TEMPLE_MAP,TEMPLE_SPAWNS} from "./TempleMap.js";
 import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS,RIFT_WARDEN} from "./WorldAtlas.js";
@@ -36,10 +36,17 @@ const materials:Record<Theme,readonly string[]>={
 };
 const nearbyTheme:Readonly<Record<string,Theme>>={hide:"grove",fiber:"grove",metal:"hunter",wood:"hunter",ink:"guard",resin:"spirit",herb:"grove"};
 type GearId=BodyItemId|PracticeWeapon;
-const tables=new Map(hunts.map(m=>[m.id,{gear:[] as GearId[],materials:[] as MaterialId[]}]));
+type DropTable={gear:GearId[];materials:MaterialId[]};
+const tables=new Map<string,DropTable>(hunts.map(m=>[m.id,{gear:[],materials:[]}]));
 const sources=new Map<PersonalId,Hunt[]>();
 for(const id of Object.keys(PERSONAL_ITEMS) as PersonalId[]){
   const item=PERSONAL_ITEMS[id];
+  if(item.sourceBoss){
+    const boss=hunts.find(m=>m.id===item.sourceBoss);
+    if(!boss || boss.level!==item.level)throw Error("invalid_boss_treasure:"+id);
+    sources.set(id,[boss]);
+    continue;
+  }
   if(!item.dropMax || (!item.forge && item.kind!=="material"))continue;
   const ingredient=item.kind==="material"?id:item.recipe![0].item;
   const raw=ingredient.split("_")[1],material=raw==="ingot"?"metal":raw;
@@ -73,7 +80,8 @@ export function findItemHunt(id:PersonalId,playerLevel:number){
 }
 const catalog=Object.entries(PERSONAL_ITEMS).map(([id,item])=>{
   const hunt=findItemHunt(id as PersonalId,item.level??1);
-  return [id,hunt?{...item,dropHint:hunt.monster+" Lv."+hunt.level+" · "+hunt.map}:item] as const;
+  const rate=item.sourceBoss?(item.forge?" · โอกาส "+BOSS_GEAR_CHANCE+"% เมื่อเลเวลถึงและยังไม่มีชิ้นนี้":" · ได้ 1 ชิ้นเมื่อชนะ"):"";
+  return [id,hunt?{...item,dropHint:hunt.monster+" Lv."+hunt.level+" · "+hunt.map+rate}:item] as const;
 });
 export const CATALOG_PAGES=Array.from({length:Math.ceil(catalog.length/16)},(_,i)=>Object.fromEntries(catalog.slice(i*16,i*16+16)));
 
