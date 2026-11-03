@@ -5125,6 +5125,7 @@
   });
   let demoWeaponSlot = 1;
   let inventoryState = null;
+  let characterStatus = null, lastCharacterStatusRequest = 0;
   let itemUsePending = false;
   let itemUseSequence = 0;
   let selectedBagSlot = 0;
@@ -7033,6 +7034,7 @@
     syncWorldDefinition(null);syncForestMonsters(null);
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
     inventoryState = null;
+    characterStatus = null; lastCharacterStatusRequest = 0;
     demoWeaponSlot = 1;
     itemUsePending = false;
     itemUseSequence += 1;
@@ -7827,6 +7829,7 @@
       partyState=null; partyInvitation=null; partyUnread=false;
     guildState=null; guildInvitation=null; guildUnread=false; updatePartyBadge();
       inventoryState = null;
+      characterStatus = null; lastCharacterStatusRequest = 0;
       itemUsePending = false;
       itemUseSequence += 1;
       selectedBagSlot = 0;
@@ -8422,6 +8425,14 @@
         const prize=info?.elitePotion==="granted"?" · ได้รับยาฟื้นพลัง 1 ขวด":info?.elitePotion==="bag_full"?" · กระเป๋าเต็ม รับยาไม่ได้":"";
         const shard = info?.shrineShard === "granted" ? " · ได้รับ" + shardName + " 1 ชิ้น" : info?.shrineShard === "bag_full" ? " · กระเป๋าเต็ม รับเศษตราไม่ได้" : "";
         toast((info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":info?.shrineShard && !info.amount?"รางวัลศาลร้าง":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + prize + shard);
+        renderProgressionProfile();
+      });
+      joined.onMessage("character_status", payload => {
+        if (room !== joined || !Number.isSafeInteger(payload?.level) || typeof payload?.weaponId !== "string" ||
+            !payload.base || !payload.weapon?.pve || !payload.weapon?.pvp || !Array.isArray(payload.effects) ||
+            !["maxHp","maxStamina","atk","def","magicAtk","magicDef"].every(k => Number.isFinite(payload.base[k])) ||
+            ![payload.weapon.pve,payload.weapon.pvp].every(b => Number.isFinite(b.melee) && Number.isFinite(b.ranged))) return;
+        characterStatus = { ...payload, receivedAt: performance.now() };
         renderProgressionProfile();
       });
       joined.onMessage("inventory_state", payload => {
@@ -9728,11 +9739,13 @@
       const detail="Lv."+node.level+" · "+clean(node.description)+(node.effect==="passive"?" · ติดตัว":" · กำลัง "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ")+prereq+training;
       const control=known?(node.effect==="passive"?'<span class="sword-passive">เรียนแล้ว · ติดตัว</span>':'<label class="sword-slot-label">ช่องลัด <select data-sentinel-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>'):'<button type="button" data-sentinel-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
       const rank=Number(ranks[id] || 0),rankLevels=data.rankLevels || [],rankable=known && (data.rankable || []).includes(id),next=rankLevels[rank],needed=(data.rankPractice || [])[rank] || 0,done=Object.values(practice).reduce((sum,n)=>sum+n,0);
-      const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · ดาเมจมอนสเตอร์ +'+(rank*4)+'%'+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+done+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-sentinel-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || done<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
+      const support=["step","anchor","ward","party_ward"].includes(node.effect);
+      const rankEffect=support?'ผลคุ้มกัน +'+(rank*2)+'% (PvE และ PvP)':'ดาเมจมอนสเตอร์ +'+(rank*4)+'%';
+      const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · '+rankEffect+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+done+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-sentinel-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || done<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
       return heading+'<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small>'+upgrade+'</div>'+control+'</article>';
     }).join("");
     const summary=Object.entries(data.practiceLabels).map(([name,label])=>clean(label)+" "+(practice[name]||0)).join(" · ");
-    container.innerHTML='<p>แต้มว่าง '+points+' · '+summary+'</p><p class="note">สตันผู้เล่นสั้นกว่ามอนสเตอร์และมีช่วงต้าน · บอสและมอนสเตอร์ชั้นสูงต้านการสตันและยั่วยุ</p><p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที ผลฝึกและคูลดาวน์ยังคงอยู่</p>'+rows+'<button id="resetSentinelBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
+    container.innerHTML='<p>แต้มว่าง '+points+' · ใช้ไป '+(data.points-points)+' / '+data.points+' แต้ม · '+summary+'</p><p class="note">สตันผู้เล่นสั้นกว่ามอนสเตอร์และมีช่วงต้าน · บอสและมอนสเตอร์ชั้นสูงต้านการสตันและยั่วยุ</p><p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที ผลฝึกและคูลดาวน์ยังคงอยู่</p>'+rows+'<button id="resetSentinelBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
     container.querySelectorAll("[data-sentinel-learn]").forEach(button=>button.onclick=()=>room.send("sentinel_book",{action:"learn",skillId:button.dataset.sentinelLearn}));
     container.querySelectorAll("[data-sentinel-upgrade]").forEach(button=>button.onclick=()=>room.send("sentinel_book",{action:"upgrade",skillId:button.dataset.sentinelUpgrade}));
     container.querySelectorAll("[data-sentinel-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("sentinel_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.sentinelEquip});select.blur();});
@@ -9790,7 +9803,7 @@
       return heading+'<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small>'+upgrade+'</div>'+control+'</article>';
     }).join("");
     const summary=Object.entries(data.practiceLabels).map(([name,label])=>clean(label)+" "+(practice[name]||0)).join(" · ");
-    container.innerHTML='<p>แต้มว่าง '+points+' · '+summary+'</p><p class="note">พรางตัวได้หลังพ้นการต่อสู้ 2 วินาที ร่าย 0.6 วินาทีและพราง 5 วินาที · ฝึกจากมอนสเตอร์เท่านั้น</p><p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที การคืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetBladeBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
+    container.innerHTML='<p>แต้มว่าง '+points+' · ใช้ไป '+(data.points-points)+' / '+data.points+' แต้ม · '+summary+'</p><p class="note">พรางตัวได้หลังพ้นการต่อสู้ 2 วินาที ร่าย 0.6 วินาทีและพราง 5 วินาที · ฝึกจากมอนสเตอร์เท่านั้น</p><p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที การคืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetBladeBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
     container.querySelectorAll("[data-blade-learn]").forEach(button=>button.onclick=()=>room.send("blade_book",{action:"learn",skillId:button.dataset.bladeLearn}));
     container.querySelectorAll("[data-blade-upgrade]").forEach(button=>button.onclick=()=>room.send("blade_book",{action:"upgrade",skillId:button.dataset.bladeUpgrade}));
     container.querySelectorAll("[data-blade-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("blade_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.bladeEquip});select.blur();});
@@ -9881,11 +9894,13 @@
       const control=known ? '<label class="sword-slot-label">ช่องลัด <select data-occult-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>' :
         '<button type="button" data-occult-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
       const rank=Number(ranks[id] || 0),rankLevels=data.rankLevels || [],rankable=known && (data.rankable || []).includes(id),next=rankLevels[rank],needed=(data.rankPractice || [])[rank] || 0;
-      const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · ดาเมจมอนสเตอร์ +'+(rank*4)+'%'+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+training+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-occult-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || training<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
+      const support=["heal","heal_area","spirit_heal","ward","ward_area","spirit_ward","trance"].includes(node.effect);
+      const rankEffect=support ? 'ผลรักษา/คุ้มกัน +'+(rank*2)+'% (PvE และ PvP)' : 'ดาเมจมอนสเตอร์ +'+(rank*4)+'%';
+      const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · '+rankEffect+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+training+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-occult-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || training<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
       return '<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small>'+upgrade+'</div>'+control+'</article>';
     }).join("");
     const summary=Object.entries(labels).map(([category,label])=>clean(label)+" "+(progress[category] || 0)).join(" · ");
-    container.innerHTML='<p>สาย'+(path==="seer"?"ผู้ร่ายเวท":"ผู้เยียวยา")+' · แต้มว่าง '+points+' · ผลฝึกรวม '+training+'</p>'+(summary?'<p>ผลฝึกแยกหมวด: '+summary+'</p><p class="note">ผีจากหม้อนับครั้งแรกที่โจมตีมอนสเตอร์ต่อการเรียกหนึ่งครั้ง ส่วนผีที่ได้รับคำสั่งนับเมื่อโจมตีสำเร็จ</p>':'')+
+    container.innerHTML='<p>สาย'+(path==="seer"?"ผู้ร่ายเวท":"ผู้เยียวยา")+' · แต้มว่าง '+points+' · ใช้ไป '+(data.points-points)+' / '+data.points+' แต้ม · ผลฝึกรวม '+training+'</p>'+(summary?'<p>ผลฝึกแยกหมวด: '+summary+'</p><p class="note">ผีจากหม้อนับครั้งแรกที่โจมตีมอนสเตอร์ต่อการเรียกหนึ่งครั้ง ส่วนผีที่ได้รับคำสั่งนับเมื่อโจมตีสำเร็จ</p>':'')+
       (path==="mender" && Number.isFinite(data.menderRicePve)?'<p class="note">ข้าวสารพื้นฐานโจมตีมอนสเตอร์ '+Math.round(data.menderRicePve*100)+'% · PvP ใช้ค่าเดิม</p>':'')+
       '<article class="sword-node learned"><div><strong>เหินเวหา</strong><small>วิชาพื้นฐานจอมอาคม · ขึ้นบินและลงจอดในพื้นที่ที่อนุญาต</small></div><button type="button" id="occultFlight">ใช้วิชา</button></article>'+
       '<p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · คืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetOccultBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
@@ -9982,7 +9997,7 @@
       return '<article class="sword-node'+(learned?' learned':'')+'"><div><strong>'+clean(node.name)+'</strong><small>'+info+'</small>'+upgrade+'</div>'+button+'</article>';
     }).join("");
     const combo=(catalog.combos?.[muayBookViewedSchool] || []).map(move=>muayMoveLabels[move] || move).map(clean).join(' → ');
-    container.innerHTML='<p>วิชาพื้นฐานใช้ได้ทันที · แต้มว่าง '+points+'</p><p>ฝึกโจมตี '+book.training.strikes+' ครั้ง · รับสำเร็จ '+book.training.blocks+' ครั้ง</p><p class="note">เรียน เปลี่ยนสำนัก คืนแต้ม และจัดช่องลัดที่ลานพักหลังพ้นการต่อสู้ 5 วินาที</p><div class="sword-schools">'+schoolButtons+'</div><p>กำลังดูสำนัก '+clean(school.name)+' · '+clean(school.description)+'</p><p>ฝึกสำนัก: '+clean(masteryLabel)+' '+schoolMastery.technique+' ครั้ง · ชุดต่อเนื่อง '+schoolMastery.sequences+' ครั้ง</p><p class="note">'+clean(catalog.masteryGuides?.[muayBookViewedSchool] || '')+'</p><p class="note">นับเมื่อใช้วิชากับมอนสเตอร์สำเร็จ ชุดต่อเนื่องนับเมื่อคอมโบครบหรือใช้วิชาต่อเนื่องประจำสำนักสำเร็จ · PvP ไม่นับ</p><p>คอมโบวิชามวย: '+combo+' · วิชาสุดท้าย +25% กับมอนสเตอร์ / +'+Math.round(((catalog.pvpCombo ?? 1)-1)*100)+'% ใน PvP · ต่อภายใน 6 วิ</p><p class="note">นับเฉพาะวิชามวยที่โจมตีสำเร็จบนเป้าหมายเดิม · PvP ใช้พลังวิชา '+Math.round((catalog.pvpDamage ?? 1)*100)+'% ก่อนหักป้องกัน · ถีบผู้เล่นไม่หยุดจังหวะ</p><p class="note">ต้องการ Lv.'+school.level+' · ฝึกโจมตี '+school.strikes+' / รับ '+school.blocks+'</p><button type="button" id="chooseMuaySchool" class="secondary" '+(selected || !canSelect?'disabled':'')+'>เลือกใช้สำนักนี้</button>'+rows+'<button type="button" id="resetMuayBook" class="secondary" '+(!book.learned.length?'disabled':'')+'>คืนแต้มทุกสำนัก</button>';
+    container.innerHTML='<p>วิชาพื้นฐานใช้ได้ทันที · แต้มว่าง '+points+' · ใช้ไป '+(1+Math.floor((Math.min(me.level,100)-1)/2)-points)+' / '+(1+Math.floor((Math.min(me.level,100)-1)/2))+' แต้ม</p><p>ฝึกโจมตี '+book.training.strikes+' ครั้ง · รับสำเร็จ '+book.training.blocks+' ครั้ง</p><p class="note">เรียน เปลี่ยนสำนัก คืนแต้ม และจัดช่องลัดที่ลานพักหลังพ้นการต่อสู้ 5 วินาที</p><div class="sword-schools">'+schoolButtons+'</div><p>กำลังดูสำนัก '+clean(school.name)+' · '+clean(school.description)+'</p><p>ฝึกสำนัก: '+clean(masteryLabel)+' '+schoolMastery.technique+' ครั้ง · ชุดต่อเนื่อง '+schoolMastery.sequences+' ครั้ง</p><p class="note">'+clean(catalog.masteryGuides?.[muayBookViewedSchool] || '')+'</p><p class="note">นับเมื่อใช้วิชากับมอนสเตอร์สำเร็จ ชุดต่อเนื่องนับเมื่อคอมโบครบหรือใช้วิชาต่อเนื่องประจำสำนักสำเร็จ · PvP ไม่นับ</p><p>คอมโบวิชามวย: '+combo+' · วิชาสุดท้าย +25% กับมอนสเตอร์ / +'+Math.round(((catalog.pvpCombo ?? 1)-1)*100)+'% ใน PvP · ต่อภายใน 6 วิ</p><p class="note">นับเฉพาะวิชามวยที่โจมตีสำเร็จบนเป้าหมายเดิม · PvP ใช้พลังวิชา '+Math.round((catalog.pvpDamage ?? 1)*100)+'% ก่อนหักป้องกัน · ถีบผู้เล่นไม่หยุดจังหวะ</p><p class="note">ต้องการ Lv.'+school.level+' · ฝึกโจมตี '+school.strikes+' / รับ '+school.blocks+'</p><button type="button" id="chooseMuaySchool" class="secondary" '+(selected || !canSelect?'disabled':'')+'>เลือกใช้สำนักนี้</button>'+rows+'<button type="button" id="resetMuayBook" class="secondary" '+(!book.learned.length?'disabled':'')+'>คืนแต้มทุกสำนัก</button>';
     container.querySelectorAll("[data-muay-school]").forEach(button=>button.onclick=()=>{muayBookViewedSchool=button.dataset.muaySchool;muayBookRenderKey="";renderMuayBook();});
     $("chooseMuaySchool").onclick=()=>room.send("muay_book",{action:"school",school:muayBookViewedSchool});
     container.querySelectorAll("[data-muay-learn]").forEach(button=>button.onclick=()=>room.send("muay_book",{action:"learn",skillId:button.dataset.muayLearn}));
@@ -10123,7 +10138,7 @@
       }).join("");
       return '<section><h3>'+clean(title)+'</h3>'+rows+'</section>';
     }).join("");
-    container.innerHTML='<p class="note">แต้มวิชาคงเหลือ '+points+' · เลเวล '+me.level+' · เพิ่มแต้มทุก 2 เลเวล · สวมกระบี่อาคมเพื่อใช้วิชา</p>'+
+    container.innerHTML='<p class="note">แต้มวิชาคงเหลือ '+points+' · ใช้ไป '+(1+Math.floor((Math.min(me.level,100)-1)/2)-points)+' / '+(1+Math.floor((Math.min(me.level,100)-1)/2))+' แต้ม · เลเวล '+me.level+' · เพิ่มแต้มทุก 2 เลเวล · สวมกระบี่อาคมเพื่อใช้วิชา</p>'+
       (catalog.schools[swordTreeViewedSchool].note?'<p class="note">'+clean(catalog.schools[swordTreeViewedSchool].note)+'</p>':'')+
       '<p class="note">ฝึกฟัน '+tree.training.strikes+' · รับ '+tree.training.blocks+' · คอมโบครบ '+tree.training.finishes+' · คอมโบปัจจุบัน '+(performance.now()<swordComboUntil?swordCombo:0)+' / 3</p>'+
       '<p class="note">เรียนและเปลี่ยนสำนักที่ลานพักหลังออกจากการต่อสู้ ความรู้ของแต่ละสำนักจะเก็บไว้ · คืนแต้มแล้วเก็บผลฝึกและคูลดาวน์ · เปลี่ยนสำนักอื่นต้อง Lv.10 ฟัน 10 และรับสำเร็จ 1 ครั้ง · พลังวิชาคำนวณก่อนหักป้องกัน</p>'+
@@ -10225,7 +10240,11 @@
   function renderProgressionProfile() {
     if (drawerActive !== "character" || !$('profileStats')) return;
     const p = ownServerCharacter(), supported = mode === "live" && room?.state?.progressionAvailable === true && p;
-    $("profileProgressionStatus").textContent = supported ? (p.possessionActive ? "วิญญาณเข้าสิง · ATK / DEF / เวท +20%" : "สเตตัสเพิ่มอัตโนมัติเมื่อเลเวลขึ้น") : "เข้า LIVE กับเซิร์ฟเวอร์ที่รองรับระบบสเตตัส";
+    if (supported && performance.now() - lastCharacterStatusRequest >= 1200) {
+      lastCharacterStatusRequest = performance.now();
+      room.send("get_character_status", {});
+    }
+    $("profileProgressionStatus").textContent = supported ? "สเตตัสเพิ่มอัตโนมัติเมื่อเลเวลขึ้น · ค่าที่แสดงรวมผลบัฟแล้ว" : "เข้า LIVE กับเซิร์ฟเวอร์ที่รองรับระบบสเตตัส";
     const selectedPath = getBuildCatalog()?.paths?.[p?.pathId];
     const talent = buildTalentGroup(getBuildCatalog(), p?.pathId)?.variants[p?.bladeTalentId || p?.wardTalentId];
     const swordSchool=p?.pathId==="phutthaisawan" ? swordData()?.catalog?.schools?.[swordData()?.tree?.school]?.name : "";
@@ -10239,7 +10258,6 @@
     renderCharacterSheet(p, supported);
   }
   // ---- Character sheet (status / class / account tabs) ----
-  function weaponMeleeBonus(id) { const m = /([+-]\d+)/.exec(WEAPON_META[id]?.bonus || ""); return m ? Number(m[1]) : 0; }
   function renderCharacterSheet(p, supported) {
     if (!$("cpRing")) return;
     const live = Boolean(supported), c = p, now = Date.now();
@@ -10266,20 +10284,35 @@
     $("cpStBar").style.width = pctOf(c.stamina, c.maxStamina);
     $("cpXpBar").style.width = (xpShare * 100).toFixed(1) + "%";
     $("profileLevel").textContent = xpMax ? num(c.experience) + " / " + xpMax + " · อีก " + Math.max(0, Math.round((1 - xpShare) * 100)) + "%" : "เลเวลสูงสุด";
-    // Stat tiles with bonuses we can account for: weapon melee and possession.
-    const poss = p.possessionActive, wpn = p.equippedWeaponId || "", melee = weaponMeleeBonus(wpn);
+    // The schema already includes buffs; weapon bonuses are applied separately by the server.
+    const wpn = p.equippedWeaponId || "";
+    const status = characterStatus && characterStatus.level === p.level && characterStatus.weaponId === wpn && performance.now() - characterStatus.receivedAt < 5000 ? characterStatus : null;
     const values = { hp: c.maxHp, stamina: c.maxStamina, atk: c.atk, def: c.def, magicAtk: c.magicAtk, magicDef: c.magicDef };
+    const fields = {hp:"maxHp",stamina:"maxStamina",atk:"atk",def:"def",magicAtk:"magicAtk",magicDef:"magicDef"};
     for (const [key, v] of Object.entries(values)) {
       $("statValue-" + key).textContent = String(num(v));
       const bits = [];
-      if (key === "atk" && melee) bits.push("+" + melee + " อาวุธประชิด");
+      if (status) {
+        const base=num(status.base[fields[key]]), delta=num(v)-base;
+        bits.push("พื้นฐาน " + base + (delta ? " · ผลสกิล " + (delta > 0 ? "+" : "") + delta : ""));
+        const type=key === "atk" ? "melee" : key === "magicAtk" ? "ranged" : "";
+        if(type) {
+          const pve=num(status.weapon.pve[type]), pvp=num(status.weapon.pvp[type]);
+          if(pve || pvp) bits.push("อาวุธเพิ่มตอนโจมตีมอนสเตอร์ " + (pve >= 0 ? "+" : "") + pve + (pvp !== pve ? " · PvP " + (pvp >= 0 ? "+" : "") + pvp : ""));
+        }
+      } else if (key === "atk" || key === "magicAtk") bits.push("กำลังโหลดข้อมูลอาวุธจากเซิร์ฟเวอร์");
       if (key === "stamina") bits.push("ใช้กับแดชและวิชา · ฟื้น 4/วิ (สู้อยู่ 2/วิ)");
-      if (poss && ["atk", "def", "magicAtk", "magicDef"].includes(key)) bits.push("+20% เข้าสิง");
       $("statBonus-" + key).textContent = bits.join(" · ");
     }
     // Active effects and unspent points.
     const fx = [];
-    if (poss) fx.push('<span class="cp-fx good">วิญญาณเข้าสิง · โจมตี ป้องกัน เวท +20%</span>');
+    const effectLabels={possession:"วิญญาณเข้าสิง",sentinel_step:"ย่างพิทักษ์",sentinel_anchor:"ตั้งหลักพิทักษ์",blade_focus:"รวมคม",blade_veil_guard:"ม่านคุ้มกาย",muay_boran:"วิชามวย",blade:"วิชาคมดาบ",sentinel:"วิชาผู้พิทักษ์",seer:"วิชาจอมอาคม",mender:"วิชาผู้เยียวยา"};
+    for (const effect of status?.effects || []) {
+      if (typeof effect?.id !== "string" || !Number.isFinite(effect.remainingMs)) continue;
+      const remaining=Math.max(0,Math.ceil((effect.remainingMs-(performance.now()-status.receivedAt))/1000));
+      if (remaining) fx.push('<span class="cp-fx good">' + (effectLabels[effect.id] || "ผลวิชา") + ' · อีก ' + remaining + ' วิ</span>');
+    }
+    if (!status && p.possessionActive) fx.push('<span class="cp-fx good">วิญญาณเข้าสิง</span>');
     if (Number(p.classSkillReadyAt) > now) fx.push('<span class="cp-fx">สกิลอาชีพพร้อมใน ' + Math.ceil((p.classSkillReadyAt - now) / 1000) + ' วิ</span>');
     $("cpEffects").innerHTML = fx.join("");
     const pts = num(p.statPoints);

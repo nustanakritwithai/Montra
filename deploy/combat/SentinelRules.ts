@@ -27,7 +27,7 @@ export const SENTINEL_LESSONS={
 } as const satisfies Record<string,SentinelLesson>;
 export const SENTINEL_CONTROL=Object.freeze({monsterStunMs:700,playerStunMs:450,immunityMs:4000,tauntMs:3000,tauntImmunityMs:8000});
 import { skillRankCost, validateSkillRanks, type SkillRanks } from "./Progression.js";
-export const SENTINEL_RANKABLE_SKILLS=["bash","sweep","slam","counter","line_sweep","steadfast_counter"] as const;
+export const SENTINEL_RANKABLE_SKILLS=["bash","sweep","slam","counter","line_sweep","steadfast_counter","step","anchor","ward","party_ward","enduring_ward"] as const;
 export type SentinelSkillId=keyof typeof SENTINEL_LESSONS;
 export type SentinelBook={learned:SentinelSkillId[];slots:Array<SentinelSkillId|null>;practice:Record<SentinelPractice,number>;cooldowns:Partial<Record<SentinelSkillId,number>>;ranks?:SkillRanks};
 export function sentinelPoints(level:number):number{return 1+Math.floor((Math.min(level,100)-1)/2);}

@@ -23,3 +23,12 @@ test("refreshing the same source replaces its effect, and config cannot be mutat
   assert.deepEqual(ledger.expire(1000),[]);assert.deepEqual(ledger.expire(2000),["one"]);
   assert.throws(()=>ledger.grant("",effect,2000),/invalid_buff_instance/);
 });
+test("private status snapshots contain only the owner's active effects and remaining time",()=>{
+  const ledger=new BuffLedger(),effect={id:"power",sourceId:"private-session",group:"skill",bonuses:{atk:.2}};
+  ledger.grant("one",effect,1000);ledger.grant("two",{...effect,id:"other"},2000);
+  assert.deepEqual(ledger.active("one",400),[{id:"power",remainingMs:600}]);
+  const snapshot=ledger.active("one",400);snapshot[0].remainingMs=1;
+  assert.equal(ledger.active("one",400)[0].remainingMs,600);
+  assert.deepEqual(ledger.active("one",1000),[]);
+  assert.throws(()=>ledger.active("one",NaN),/invalid_buff_time/);
+});

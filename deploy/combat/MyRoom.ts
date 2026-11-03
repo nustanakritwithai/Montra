@@ -61,7 +61,7 @@ import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, 
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
 import type { MonsterTier } from "./MonsterProfiles.js";
-import { PROGRESSION, SKILL_RANK_LEVELS, SKILL_RANK_PRACTICE, skillRankCost, skillRankMultiplier, addExperience, calculateDamage, calculateStats, emptyAllocations,
+import { PROGRESSION, SKILL_RANK_LEVELS, SKILL_RANK_PRACTICE, skillRankCost, skillRankMultiplier, supportRankMultiplier, addExperience, calculateDamage, calculateStats, emptyAllocations,
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
   POTION_ID, POTION_COOLDOWN_MS, grantRewardPotion, grantStackReward, SHRINE_RECIPE, SHRINE_SHARD, SHRINE_GLAIVE, parseUseItemCommand,
@@ -167,6 +167,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private pendingItemUses = new Map<string, Promise<void>>();
   private lastItemUseMs = new Map<string, number>();
   private lastInventoryReadMs = new Map<string, number>();
+  private lastStatusReadMs = new Map<string, number>();
   private lastWeaponEquipMs = new Map<string, number>();
   private trades = new Map<string, TradeSession>();
   private parties = new PartyManager();
@@ -858,7 +859,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(next){this.destinations.delete(id);this.attackTargets.delete(id);actor.targetId="";actor.combatState="idle";this.moveOnSurface(actor,next.x,next.z);}
     if(skill.effect==="guard")this.swordGuards.set(id,{until:this.simulatedMs+2500,factor:skill.power,direction:true,counterUntil:0});
     else if(skill.effect==="step" || skill.effect==="anchor"){
-      this.effects.grant(id,{id:"sentinel_"+skillId,sourceId:id,group:"sentinel_self",bonuses:{def:skill.power}},this.simulatedMs+6000);
+      this.effects.grant(id,{id:"sentinel_"+skillId,sourceId:id,group:"sentinel_self",bonuses:{def:skill.power*supportRankMultiplier(book.ranks,skillId)}},this.simulatedMs+6000);
       this.applyStats(id,actor,this.statAllocations.get(id) ?? emptyAllocations());
       if(skill.effect==="anchor")this.sentinelAnchors.set(id,this.simulatedMs+6000);
     } else if(skill.effect==="slam"){
@@ -888,7 +889,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     } else if(skill.effect==="ward" || skill.effect==="party_ward"){
       let assisted=false;
       for(const [member,ally] of allies){
-        this.effects.grant(member,{id:skillId,sourceId:id,group:"sentinel_support",bonuses:{def:skill.power}},this.simulatedMs+8000);
+        this.effects.grant(member,{id:skillId,sourceId:id,group:"sentinel_support",bonuses:{def:skill.power*supportRankMultiplier(book.ranks,skillId)}},this.simulatedMs+8000);
         this.applyStats(member,ally,this.statAllocations.get(member) ?? emptyAllocations());
         if(member!==id && (this.forest.engaged(member) || this.state.monster.targetId===member || Boolean(this.getMonster(this.attackTargets.get(member) ?? ""))))assisted=true;
       }
@@ -1327,14 +1328,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     } else {
       let trained=false;
+      const supportPower=lesson.power*supportRankMultiplier(book.ranks,skillId);
       for (const [member,target] of targets) {
         if (lesson.effect==="heal" || lesson.effect==="heal_area" || lesson.effect==="spirit_heal") {
-          const amount=Math.max(1,Math.round(target.maxHp*lesson.power));
+          const amount=Math.max(1,Math.round(target.maxHp*supportPower));
           if (target.hp<target.maxHp) {target.hp=Math.min(target.maxHp,target.hp+amount);trained=true;void this.saveCharacter(member);}
         } else if (lesson.effect==="cleanse" || lesson.effect==="cleanse_area") {
           trained=this.clearOccultCurse(member,"cleansed") || trained;
         } else {
-          const bonuses=path==="seer" ? {magicAtk:lesson.power} : {def:lesson.power,magicDef:lesson.power};
+          const bonuses=path==="seer" ? {magicAtk:supportPower} : {def:supportPower,magicDef:supportPower};
           this.effects.grant(member,{id:skillId,sourceId:id,group:"occult_ward",bonuses},this.simulatedMs+8000);
           this.applyStats(member,target,this.statAllocations.get(member) ?? emptyAllocations());
           if (skillId==="mender_trance") {
@@ -1345,7 +1347,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         }
       }
       if (lesson.effect==="heal_area") this.occultHealingFields.set(id,{mapId:caster.mapId,x:caster.x,y:caster.y,z:caster.z,
-        until:this.simulatedMs+6500,nextTick:this.simulatedMs+2000,power:0.03,range:lesson.range});
+        until:this.simulatedMs+6500,nextTick:this.simulatedMs+2000,power:0.03*supportRankMultiplier(book.ranks,skillId),range:lesson.range});
       if (trained && path==="mender") {
         const categories:(keyof OccultMastery["mender"])[] =
           lesson.effect==="heal" || lesson.effect==="heal_area" ? ["healing"] :
@@ -2630,6 +2632,21 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         }
       })();
       this.pendingItemUses.set(id, task);
+    },
+    get_character_status: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_status_request");
+      const id=client.sessionId, player=this.state.players.get(id);
+      if (!player) return;
+      const last=this.lastStatusReadMs.get(id) ?? -Infinity;
+      if (this.simulatedMs-last<1_000) return;
+      this.lastStatusReadMs.set(id,this.simulatedMs);
+      const inventory=this.inventories.get(id);
+      client.send("character_status",{
+        level:player.level, weaponId:equippedWeaponId(inventory) ?? "",
+        base:calculateStats(player.level,this.statAllocations.get(id) ?? emptyAllocations()),
+        weapon:{pve:weaponBonuses(inventory,"pve"),pvp:weaponBonuses(inventory,"pvp")},
+        effects:this.effects.active(id,this.simulatedMs)
+      });
     },
     get_inventory: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_inventory_request");
@@ -4312,6 +4329,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.inventories.delete(id);
       this.lastItemUseMs.delete(id);
       this.lastInventoryReadMs.delete(id);
+      this.lastStatusReadMs.delete(id);
       this.lastWeaponEquipMs.delete(id);
       this.playerSpawn.delete(id);
       this.pendingCharacterLeaves.delete(id);
@@ -4370,6 +4388,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.hpRegenRemainder.clear();
     this.lastItemUseMs.clear();
     this.lastInventoryReadMs.clear();
+    this.lastStatusReadMs.clear();
     this.lastWeaponEquipMs.clear();
     this.activeGuestAccounts.clear();
     this.pendingCharacterLeaves.clear();
