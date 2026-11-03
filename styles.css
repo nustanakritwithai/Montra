@@ -1031,3 +1031,35 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .sg-wrap .sg-lane.active { background: linear-gradient(180deg, color-mix(in srgb, var(--sg-a) 16%, transparent), transparent 70%); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sg-a) 35%, transparent); }
 .sg-wrap .sg-lane em { background: var(--sg-a); }
 .sg-wrap .sg-node.learned .sg-lv { color: var(--sg-a); }
+/* ---- Action dock (skills): horizontal hotbar on wide screens, thumb arc on phones ---- */
+.action-dock .sword-hotbar:not([hidden]), .action-dock .skill-bar { display: contents; }
+.action-dock .sword-hotkey, .action-dock .skill { position: relative; flex: none; display: grid; place-items: center; padding: 0; margin: 0; max-width: none; min-width: 0; min-height: 0;
+  color: #fff0c8; font: 700 9px/1.1 "Noto Sans Thai", system-ui, sans-serif; text-shadow: 0 1px 2px #000; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.action-dock .sword-hotkey { width: 56px; height: 56px; border-radius: 14px; border: 2px solid #8a6a32;
+  background: radial-gradient(circle at 50% 30%, #4a3a24, #1a140c 75%); box-shadow: 0 3px 0 #0008, inset 0 0 0 1px #ffd98a22; overflow: visible; }
+.action-dock .dk-ico { font-size: 22px; line-height: 1; color: #ffe29a; margin-top: -8px; filter: drop-shadow(0 0 4px #ffb84a88); }
+.action-dock .dk-name { position: absolute; left: 2px; right: 2px; bottom: 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: center; font-size: 8.5px; color: #f1dfb4; }
+.action-dock .dk-cd { position: absolute; inset: 0; display: grid; place-items: center; border-radius: inherit; background: #000a; color: #fff; font: 900 18px/1 system-ui; }
+.action-dock .sword-hotkey.dk-cooling .dk-ico { opacity: .35; }
+.action-dock .sword-hotkey.dk-ready { border-color: #7fe8ff; box-shadow: 0 0 12px #7fe8ffaa, 0 3px 0 #0008; animation: sgPulse 1.4s ease-out infinite; }
+.action-dock .sword-hotkey.dk-empty { border-style: dashed; border-color: #5c4f3a; background: #15110ccc; } .action-dock .dk-empty .dk-ico { color: #6a5a40; filter: none; }
+.action-dock .sword-hotkey:disabled:not(.dk-cooling):not(.dk-empty) { filter: grayscale(.5); opacity: .7; }
+.action-dock .sword-hotkey .stamina-cost { position: absolute; right: -3px; top: -6px; margin: 0; padding: 1px 4px; border-radius: 7px; background: #0d1a26; border: 1px solid #3a6a8a; font-size: 8.5px; line-height: 1.2; }
+.action-dock .skill { width: 48px; height: 48px; gap: 0; }
+.action-dock .skill .glyph { width: 100% !important; height: 100% !important; border-radius: 50%; font-size: 21px; margin: 0; }
+.action-dock .skill > span:not(.glyph) { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; white-space: nowrap; font-size: 9px; }
+.action-dock #attack { width: 74px; height: 74px; }
+.action-dock #attack .glyph { font-size: 32px; background: radial-gradient(circle at 50% 30%, #ff9a7a, #c0392b 55%, #5a1208); border: 3px solid #ffcf8a; box-shadow: 0 0 18px #ff5a3a88, 0 4px 0 #0009; }
+.action-dock #attack > span:not(.glyph) { display: none; }
+.action-dock .dk-press, .action-dock button:active { transform: scale(.93); }
+/* Phone portrait: thumb arc anchored bottom-right, above the menu bar. */
+.action-dock[data-mode="arc"] { position: absolute; right: 0; bottom: var(--dock-bottom, 58px); width: 280px; height: 270px; pointer-events: none; z-index: 2; }
+.action-dock[data-mode="arc"] .sword-hotkey, .action-dock[data-mode="arc"] .skill { position: absolute; pointer-events: auto; }
+.action-dock[data-mode="arc"] [data-key]::after { content: none; }
+/* Wide screen: one horizontal bar, slots | attack | utilities, with key badges. */
+.action-dock[data-mode="bar"] { display: flex; align-items: center; justify-content: center; gap: 6px; width: max-content; max-width: calc(100% - 24px); margin: 0 auto 10px; padding: 8px 12px;
+  border-radius: 18px; background: linear-gradient(180deg, #1d1710ee, #0f0c08ee); border: 1px solid #5a4a32; box-shadow: 0 8px 24px #0008; }
+.action-dock[data-mode="bar"] .sword-hotkey { order: 0; } .action-dock[data-mode="bar"] #attack { order: 1; margin: 0 8px; } .action-dock[data-mode="bar"] .skill:not(#attack) { order: 2; width: 52px; height: 52px; }
+.action-dock[data-mode="bar"] .skill > span:not(.glyph) { display: none; }
+.action-dock[data-mode="bar"] [data-key]::after { content: attr(data-key); position: absolute; left: -4px; top: -6px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 5px;
+  background: #f3c768; color: #2a1606; font: 900 10px/15px system-ui; text-shadow: none; text-align: center; box-shadow: 0 1px 0 #0008; pointer-events: none; }

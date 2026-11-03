@@ -10280,6 +10280,82 @@
       skillGraphKey = ""; const body = $(SKILL_BOOKS[kind][0]); if (body) body.innerHTML = ""; SKILL_BOOKS[kind][1]();
     });
   }
+  // ---- Action dock: one skill layout for phone and computer ----
+  // Wide screens get a horizontal hotbar with 1–9 keys (Space attacks); phones in portrait
+  // get a thumb cluster in the bottom-right corner: attack in the corner, the class hotbar
+  // on an inner arc and the utility buttons on an outer arc. Buttons keep their own logic.
+  const dockControls = document.querySelector(".controls"), dockSkillBar = document.querySelector(".skill-bar");
+  const DOCK_BARS = ["swordHotbar", "muayHotbar", "occultHotbar", "bladeHotbar", "sentinelHotbar"].map(id => $(id)).filter(Boolean);
+  const actionDock = document.createElement("div"); actionDock.id = "actionDock"; actionDock.className = "action-dock";
+  if (dockControls && dockSkillBar) { dockSkillBar.before(actionDock); for (const bar of DOCK_BARS) actionDock.append(bar); actionDock.append(dockSkillBar); }
+  const dockWide = matchMedia("(min-width: 820px) and (min-height: 520px), (pointer: fine) and (min-width: 700px) and (orientation: landscape)");
+  let dockLayoutPending = false;
+  function dockSkillNames() {
+    const map = new Map(), add = table => { for (const n of Object.values(table || {})) if (n?.name) map.set(n.name, n.effect); };
+    add(swordData()?.catalog?.nodes); add(muayBookData()?.catalog?.skills); add(bladeBookState?.lessons); add(occultBookState?.lessons); add(sentinelBookState?.lessons);
+    return map;
+  }
+  // Rebuilt hotkeys come in as plain text ("ชื่อ 5 วิ"); give them an icon, a short name and a cooldown face.
+  function decorateHotkeys() {
+    let names = null;
+    for (const bar of DOCK_BARS) for (const b of bar.querySelectorAll(".sword-hotkey")) {
+      if (b.dataset.dk) continue;
+      const cost = b.querySelector(".stamina-cost"); cost?.remove();
+      const raw = b.textContent.trim(), m = raw.match(/^(.*?)\s*(\d+)\s*วิ$/), ready = /✓$/.test(raw);
+      const name = (m ? m[1] : raw).replace(/\s*✓$/, ""), cd = m ? m[2] : "";
+      names ??= dockSkillNames();
+      const empty = name === "ช่องว่าง" || /^ช่อง \d/.test(name), glyph = empty ? "＋" : SG_GLYPH[names.get(name)] || (name === "ทุ่ม" ? "✊" : "✦");
+      b.textContent = "";
+      b.insertAdjacentHTML("beforeend", `<span class="dk-ico">${glyph}</span><span class="dk-name">${sgEsc(empty ? "ว่าง" : name)}</span>${cd ? `<b class="dk-cd">${cd}</b>` : ""}`);
+      if (cost) b.append(cost);
+      b.classList.toggle("dk-empty", empty); b.classList.toggle("dk-ready", ready); b.classList.toggle("dk-cooling", Boolean(cd));
+      b.title = name + (cd ? " · " + cd + " วิ" : ""); b.dataset.dk = "1";
+    }
+  }
+  const dockVisible = el => !el.hidden && !el.closest("[hidden]");
+  function dockButtons() {
+    const bar = DOCK_BARS.find(dockVisible), slots = bar ? [...bar.querySelectorAll(".sword-hotkey")] : [];
+    const attack = $("attack"), utils = [...dockSkillBar.querySelectorAll(".skill")].filter(b => b !== attack && !b.hidden);
+    return { slots, attack, utils };
+  }
+  function layoutDock() {
+    dockLayoutPending = false; if (!dockSkillBar) return;
+    decorateHotkeys();
+    const wide = dockWide.matches; actionDock.dataset.mode = wide ? "bar" : "arc";
+    const { slots, attack, utils } = dockButtons(), keyed = [...slots, ...utils];
+    keyed.forEach((b, i) => { if (i < 9) b.dataset.key = String(i + 1); else delete b.dataset.key; });
+    if (attack) attack.dataset.key = "␣";
+    for (const b of [...keyed, attack]) if (b) { b.style.removeProperty("right"); b.style.removeProperty("bottom"); }
+    if (wide || !attack) return;
+    // Polar layout around the attack button (angles in degrees: 180 = left, 270 = straight up).
+    const A = 74, cx = 14 + A / 2, cy = 10 + A / 2;
+    const place = (list, r, from, to, size) => list.forEach((b, i) => {
+      const t = list.length === 1 ? (from + to) / 2 : from + (to - from) * i / (list.length - 1), rad = t * Math.PI / 180;
+      b.style.right = Math.round(cx - Math.cos(rad) * r - size / 2) + "px"; b.style.bottom = Math.round(cy - Math.sin(rad) * r - size / 2) + "px";
+    });
+    attack.style.right = "14px"; attack.style.bottom = "10px";
+    if (slots.length) { place(slots, 96, 180, 272, 56); place(utils, 166, 186, 266, 48); }
+    else place(utils, 100, 180, 272, 52);
+  }
+  const queueDockLayout = () => { if (!dockLayoutPending) { dockLayoutPending = true; requestAnimationFrame(layoutDock); } };
+  if (dockSkillBar) {
+    const mo = new MutationObserver(queueDockLayout);
+    for (const bar of DOCK_BARS) mo.observe(bar, { childList: true, attributes: true, attributeFilter: ["hidden"] });
+    mo.observe(dockSkillBar, { subtree: true, attributes: true, attributeFilter: ["hidden"] });
+    dockWide.addEventListener?.("change", queueDockLayout); addEventListener("resize", queueDockLayout);
+    queueDockLayout();
+  }
+  // Keyboard: 1–9 press the numbered dock buttons, Space attacks. Ignored while typing.
+  addEventListener("keydown", e => {
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (!ui.drawer.hidden) return;
+    let b = null;
+    if (/^[1-9]$/.test(e.key)) b = actionDock.querySelector(`[data-key="${e.key}"]`);
+    else if (e.code === "Space") b = $("attack");
+    if (!b || !dockVisible(b) || b.disabled) return;
+    e.preventDefault(); b.classList.add("dk-press"); setTimeout(() => b.classList.remove("dk-press"), 140); b.click();
+  });
   function openSwordTree() {
     const data=swordData();
     if (!data || data.me.pathId!=="phutthaisawan") { toast("เลือกอาชีพนักดาบก่อนเรียนวิชา"); return; }
