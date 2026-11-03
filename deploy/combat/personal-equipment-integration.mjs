@@ -202,5 +202,12 @@ try{
   const start=active.events.length;
   active.room.send("harvest_resource",{node:"forbidden_forest/tree-east-1",requestId:"test_existing_tree_001"});
   await until(()=>active.events.slice(start).some(e=>e.type==="resource_result"&&e.data.item==="mat_raw_wood_1"),"cut original forest scenery");
+  for(const [characterSlot,path,name,weapon] of [[2,"blade","เงาฝึกหัด","wp_shadow_1"],[3,"sentinel","ทวนฝึกหัด","wp_pike_1"]]){
+    await active.room.leave();active=null;await delay(400);
+    active=await join({characterSlot,characterSetup:{name,build:{path,ancestry:"shrine"}}});
+    await until(()=>active.me().equippedWeaponId===weapon && active.me().maxMana===120+active.catalog[weapon].stats.mana,"starting gear for "+path);
+    const builds=active.event("gear_guides",g=>g.path===path).builds;
+    assert(builds.every(build=>build.slots.find(s=>s.position==="mainHand")?.id===weapon && build.maxMana>active.me().maxMana));
+  }
   console.log("PERSONAL GEAR PASS: crafting, sockets, salvage with card return and durable retry, world refining and harvesting.");
 }finally{if(active)await active.room.leave();}

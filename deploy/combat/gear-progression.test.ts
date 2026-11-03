@@ -12,7 +12,8 @@ import {FOREST_CAMPS} from "./WorldMaps.js";
 import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {personalGearGuides,cardHunt} from "./GearGuides.js";
 import {gearMana} from "./ItemRules.js";
-import {emptyAllocations,PROGRESSION} from "./Progression.js";
+import {calculateDamage,calculateStats,emptyAllocations,PROGRESSION} from "./Progression.js";
+import {monsterProfile} from "./MonsterProfiles.js";
 import {bossAccessoryReward,grantStackReward} from "./ItemRules.js";
 import {BOSS_TREASURES,type CardId,type MaterialId} from "./PersonalItems.js";
 import {MyRoom} from "./MyRoom.js";
@@ -186,8 +187,8 @@ test("twelve suggested builds resolve to legal gear, cards and hunting grounds a
   assert.equal(personalGearGuides("unknown",50),null);
 });
 
-test("four core classes gain casting capacity from equipping both hands without refilling mana",()=>{
-  for(const [path,offHand] of [["muay_boran","off_brace_1"],["phutthaisawan","off_guard_1"],["seer","off_jar_1"],["mender","off_bell_1"]] as const){
+test("all six classes gain casting capacity from both hands and have a suggested unlock at every level",()=>{
+  for(const [path,offHand] of [["muay_boran","off_brace_1"],["phutthaisawan","off_guard_1"],["blade","off_veil_1"],["sentinel","off_shield_1"],["seer","off_jar_1"],["mender","off_bell_1"]] as const){
     const room=new MyRoom(),bag=makeClassInventory(path),p=new Player({pathId:path,level:1,mana:30});
     const server=room as unknown as {inventories:Map<string,typeof bag>;applyStats(id:string,p:Player,a:ReturnType<typeof emptyAllocations>):void};
     server.inventories.set("wearer",bag);
@@ -204,7 +205,7 @@ test("four core classes gain casting capacity from equipping both hands without 
       const builds=[attack,defend];
       assert(builds.some(b=>b.slots.some(s=>PERSONAL_ITEMS[s.id].level===level)),path+" has no suggested unlock at "+level);
       assert((attack.totals.mana??0)>0 && (defend.totals.mana??0)>0,path);
-      assert((defend.totals.def??0)>(attack.totals.def??0),path);
+      const monster=monsterProfile(level),survival:number[]=[];
       for(const [i,build] of builds.entries()){
         const outfit=makeClassInventory(path);
         for(const piece of build.slots){
@@ -214,19 +215,23 @@ test("four core classes gain casting capacity from equipping both hands without 
         }
         assert.equal(build.maxMana,gearMana(level,outfit).max);
         assert(build.maxMana>=previousMana[i],path+" maximum MP regressed at "+level);
+        const stats=equippedStats(calculateStats(level,emptyAllocations()),outfit);
+        survival.push(stats.maxHp/calculateDamage(monster.attack,stats.def,level));
       }
+      assert(survival[1]>survival[0],path+" defensive set at "+level);
       previousMana=builds.map(b=>b.maxMana);
     }
     assert.deepEqual(previousMana,[PROGRESSION.maxMana,PROGRESSION.maxMana]);
   }
 });
 
-test("upgraded class weapons improve a Muay strike, sword strike, buffalo hit and priest healing tick in PvE",()=>{
-  for(const [path,upgrade] of [["muay_boran","wp_wrap_10"],["phutthaisawan","wp_twins_10"],["seer","wp_wand_10"],["mender","wp_crook_10"]] as const){
+test("endgame weapons improve a blow or healing tick from each playable class in PvE",()=>{
+  for(const [path,upgrade] of [["muay_boran","wp_wrap_10"],["phutthaisawan","wp_twins_10"],["blade","wp_shadow_10"],["sentinel","wp_pike_10"],["seer","wp_wand_10"],["mender","wp_crook_10"]] as const){
     const room=new MyRoom(),bag=makeClassInventory(path),target=room.state.monster;
     const server=room as unknown as {
       inventories:Map<string,typeof bag>;applyStats(id:string,p:Player,a:ReturnType<typeof emptyAllocations>):void;
       muayCoreHit(id:string,target:string,power:number):boolean;swordCoreHit(id:string,target:string,power:number):boolean;
+      bladeDamage(id:string,target:string,power:number):boolean;sentinelDamage(id:string,target:string,power:number,stun:boolean):boolean;
       seerBuffaloCasts:Map<string,{targetId:string;until:number;rank:number;x:number;z:number}>;
       priestRegens:Map<string,{ownerId:string;mapId:string;until:number;nextTick:number;fraction:number}>;
       updateOccultEffects():void;broadcast:()=>void;
@@ -239,6 +244,8 @@ test("upgraded class weapons improve a Muay strike, sword strike, buffalo hit an
       const before=target.hp;
       if(path==="muay_boran")assert(server.muayCoreHit(id,target.id,1));
       if(path==="phutthaisawan")assert(server.swordCoreHit(id,target.id,1));
+      if(path==="blade")assert(server.bladeDamage(id,target.id,1));
+      if(path==="sentinel")assert(server.sentinelDamage(id,target.id,1,false));
       if(path==="seer"){
         server.seerBuffaloCasts.set(id,{targetId:target.id,rank:0,until:0,x:target.x,z:target.z});
         server.updateOccultEffects();

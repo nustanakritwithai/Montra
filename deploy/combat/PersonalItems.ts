@@ -162,13 +162,15 @@ const names=["ฝึกหัด","ชายป่า","ศาลเก่า","
 const outfitNames=["ฝึกหัด","ชายป่า","สำนักครู","ค่ายหน้า","เวียงเหล็ก","ทัพหลวง","ราชสำนัก","พิชัยยุทธ์"];
 const weights:Required<ItemStats>={atk:1,magicAtk:1,def:1,magicDef:1,hp:.125,stamina:.5,mana:.5};
 // Move a share of an existing stat to MP after scaling, at the same forge budget.
-type ManaAllocation=readonly [stat:"atk"|"stamina"|"magicDef",share:number,fromLevel:number,lateStat?:"atk"|"magicAtk"|"def"];
+type ManaAllocation=readonly [stat:"atk"|"def"|"stamina"|"magicDef",share:number,fromLevel:number,lateStat?:"atk"|"magicAtk"|"def"];
 const manaAllocation:Readonly<Partial<Record<string,ManaAllocation>>>={
   wp_wrap:["stamina",1/2,1,"atk"], off_brace:["stamina",1/2,1,"def"],
   wp_twins:["stamina",1/2,1,"atk"], off_guard:["atk",1/3,1,"def"],
   wp_wand:["magicDef",1/2,1,"magicAtk"], off_jar:["stamina",1/2,1,"magicAtk"],
   wp_crook:["stamina",.6,1,"magicAtk"], off_bell:["magicDef",1/3,1,"def"],
-  wp_shadow:["magicDef",.4,25], acc_ring_heal:["magicDef",.4,25], acc_torc:["stamina",.4,25],
+  wp_shadow:["magicDef",1/2,1,"atk"], off_veil:["stamina",1/2,1,"def"],
+  wp_pike:["def",1/3,1,"def"], off_shield:["def",1/3,1,"def"],
+  acc_ring_heal:["magicDef",.4,25], acc_torc:["stamina",.4,25],
 };
 const catalysts=[["flux","ผงประสาน","metal"],["powder","ผงอาคม","ink"],["oil","น้ำมันชุบ","resin"],["seal","ตราค้ำขวัญ","fiber"],["core","แกนหลอม","wood"]] as const;
 export function materialTier(level:number){return MATERIAL_LEVELS.filter(min=>min<=level).length || 1;}

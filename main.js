@@ -8683,6 +8683,7 @@
         if(room!==joined)return;
         sentinelBookState=data;sentinelBookRenderKey="";sentinelHotbarKey="";syncSentinelUI(ownServerCharacter());
         if(drawerActive==="sentinelBook")renderSentinelBook();
+        if(drawerActive==="bag")renderGearGuide(currentBagSlots());
       });
       joined.onMessage("sentinel_book_changed",()=>{if(room===joined && drawerActive==="sentinelBook")renderSentinelBook();});
       joined.onMessage("sentinel_core_used",data=>{
@@ -8730,6 +8731,7 @@
         if(room!==joined || !data?.book || !data?.lessons)return;
         bladeBookState=data;bladeBookRenderKey="";bladeHotbarKey="";syncBladeUI(ownServerCharacter());
         if(drawerActive==="bladeBook")renderBladeBook();
+        if(drawerActive==="bag")renderGearGuide(currentBagSlots());
       });
       joined.onMessage("blade_book_changed",()=>{
         if(room!==joined)return;selectedBladeSkill="";if(targetedSkill==="blade")setTargetedSkill(null);toast("บันทึกตำราคมดาบแล้ว");
@@ -11672,13 +11674,22 @@
   const gearCoreSkills={
     muay_boran:{pressure:["korat","thasao"],endurance:["chaiya","lopburi"]},
     phutthaisawan:{pressure:["phuttha_core","atamat_core"],endurance:["sritra_core","chumphon_core"]},
+    blade:{pressure:["blade_heavy","blade_fury"],endurance:["blade_vanish","blade_withdraw"]},
+    sentinel:{pressure:["shock","riposte"],endurance:["bulwark","protect"]},
     seer:{pressure:["seer_pot","seer_buffalo"],endurance:["seer_binding","seer_poison"]},
     mender:{pressure:["mender_core_heal","mender_core_circle"],endurance:["mender_core_ward","mender_core_cleanse"]},
   };
   function gearTrainingLine(path,style,level){
     const ids=gearCoreSkills[path]?.[style];
     if(!ids)return "";
-    const data=path==="muay_boran"?muayBookData():path==="phutthaisawan"?swordData():occultBookState;
+    let data;
+    switch(path){
+      case "muay_boran":data=muayBookData();break;
+      case "phutthaisawan":data=swordData();break;
+      case "blade":data=bladeBookState;break;
+      case "sentinel":data=sentinelBookState;break;
+      default:data=occultBookState;
+    }
     if(!data || (data.path && data.path!==path))return "";
     const catalog=data.catalog??data,book=data.tree??data.book;
     if(!book || !Array.isArray(catalog.coreLevels) || !ids.every(id=>catalog.core?.[id]))return "";
