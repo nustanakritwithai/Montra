@@ -46,7 +46,7 @@ export const MUAY_SKILLS = {
 export type MuaySkillId = keyof typeof MUAY_SKILLS;
 export type MuayCooldowns = Partial<Record<MuaySkillId, number>>;
 export const MUAY_BASE_SKILLS = ["step","punch","guard","counter","teep","grapple","parry","evade"] as const;
-export const MUAY_DEFAULT_SLOTS = [null,null,null,null] as const;
+export const MUAY_DEFAULT_SLOTS: readonly [null, null, null, null] = [null,null,null,null];
 export const isMuayFoundation = (id:string):boolean => MUAY_BASE_SKILLS.some(base=>base===id);
 // Shared across schools; students learn and equip each technique explicitly.
 const foundation = (level:number,description:string,requires:readonly string[]=[]) =>
