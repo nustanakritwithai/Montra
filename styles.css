@@ -1394,3 +1394,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 /* Player card retired: the orb, EXP base line and resource strip carry its information. */
 .hud-journal .identity { display: none !important; }
 .vital-orb { cursor: pointer; }
+.location-area .field-shortcuts.map-shortcuts { grid-template-columns: repeat(4, 30px); }
+.map-shortcuts .map-proxy > span { font-size: 15px; line-height: 30px; }
+.map-shortcuts .map-proxy b[hidden] { display: none; }
+.vital-orb.orb-strike { transform: scale(.92); filter: drop-shadow(0 0 10px #ff5a3a); }
+.vital-orb { transition: transform .12s; }

@@ -11596,7 +11596,20 @@
   $("fieldMenuButton").onclick=openFieldMenu;
   $("drawerMenuBack").onclick=openFieldMenu;
   $("menuCharacter").onclick=openCharacterProfile;
-  document.querySelector(".vital-orb")?.addEventListener("click", openCharacterProfile); // the orb now stands in for the player card
+  // Tapping the vital orb is the auto-attack command: current target, otherwise the nearest monster.
+  { const orb = document.querySelector(".vital-orb"); if (orb) { orb.setAttribute("role", "button"); orb.tabIndex = 0; orb.title = "โจมตีอัตโนมัติ · แตะเพื่อตีเป้าหมายหรือมอนสเตอร์ที่ใกล้ที่สุด";
+    orb.addEventListener("click", () => { orb.classList.add("orb-strike"); setTimeout(() => orb.classList.remove("orb-strike"), 220); requestMonsterAttack(); }); } }
+  // Every menu function also gets a small icon under the minimap (they press the original menu buttons).
+  { const nav = document.querySelector(".map-shortcuts");
+    if (nav) for (const [id, glyph, label] of [["menuCharacter", "๛", "ตัวละคร"], ["partyButton", "♧", "ปาร์ตี้"], ["menuGuild", "⚑", "กิลด์"], ["marketButton", "♢", "ตลาด"],
+      ["menuQuest", "◇", "ภารกิจ"], ["modeButton", "◎", "ออนไลน์"], ["helpButton", "?", "ตั้งค่า"]]) {
+      const src = $(id); if (!src) continue;
+      const b = document.createElement("button"); b.type = "button"; b.className = "map-proxy"; b.title = label; b.setAttribute("aria-label", label);
+      b.innerHTML = `<span aria-hidden="true">${glyph}</span>${label}<b hidden></b>`; b.onclick = () => src.click(); nav.append(b);
+      // Mirror unread badges (party invites, trades) from the original buttons.
+      const badge = src.querySelector("b"); if (badge) { const sync = () => { const mine = b.querySelector("b"); mine.hidden = badge.hidden; mine.textContent = badge.textContent; };
+        new MutationObserver(sync).observe(badge, { attributes: true, childList: true, characterData: true, subtree: true }); sync(); }
+    } }
   $("menuBag").onclick=openBag;
   $("menuChat").onclick=openChat;
   $("noticeParty").onclick=openParty;
