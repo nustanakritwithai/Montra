@@ -98,6 +98,7 @@
   resizeGameRenderer();
   let activeMapId = "ritual_village", warpPending = false, warpTimer = null;
   let trackedHuntMap=null;
+  let itemHuntOwner="",itemHunt=null,travelRoutes=null;
   const chatHistory = { map: [], world: [], party: [], private: [], bug: [] }, chatUnread = { map: 0, world: 0, party: 0, private: 0, bug: 0 };
   const chatDraft = { map: "", world: "", party: "", private: "", bug: "" };
   let chatTargetId = "";
@@ -7586,11 +7587,93 @@
     if (!near && now - demoLastHitAt > 8000) return null;
     return { name: "ผีเข้าสิง · ตัวทดสอบ", level: 1, hp: demoMonsterHp, maxHp: 100, alive: demoMonsterHp > 0 };
   }
+  function travelRoute(maps,origin,target){
+    if(!maps?.[origin] || !maps[target])return [];
+    if(travelRoutes?.maps!==maps || travelRoutes.origin!==origin){
+      const routes=new Map([[origin,[origin]]]),queue=[origin];
+      for(let i=0;i<queue.length;i++)for(const gate of maps[queue[i]].portals){
+        const next=gate.targetMapId;
+        if(maps[next] && !routes.has(next)){routes.set(next,[...routes.get(queue[i]),next]);queue.push(next);}
+      }
+      travelRoutes={maps,origin,routes};
+    }
+    return travelRoutes.routes.get(target)||[];
+  }
+  function currentItemHunt(){
+    const who=mode==="live" && ownServerCharacter()?.characterId;
+    const key=who?"montra_item_hunt_v1_"+who:"";
+    if(itemHuntOwner!==key){
+      itemHuntOwner=key;itemHunt=null;
+      if(key)try{
+        const saved=JSON.parse(localStorage.getItem(key));
+        if(typeof saved?.id==="string" && Number.isInteger(saved.need) && saved.need>0 && saved.need<=INVENTORY_SLOTS*99)itemHunt=saved;
+      }catch{}
+    }
+    return itemHunt;
+  }
+  function saveItemHunt(goal){
+    currentItemHunt();
+    if(!itemHuntOwner)return;
+    itemHunt=goal;
+    try{if(goal)localStorage.setItem(itemHuntOwner,JSON.stringify(goal));else localStorage.removeItem(itemHuntOwner);}catch{}
+  }
+  function itemHuntCount(id){
+    const bag=inventoryState;
+    if(!bag || !id)return 0;
+    return bag.slots.reduce((n,s)=>n+(s?.itemId===id?s.quantity:0),0)+Object.values(bag.equipment??{}).filter(v=>v===id).length;
+  }
+  function itemHuntSource(id,guide){
+    if(guide)for(const build of gearGuides?.builds??[]){
+      const hunt=build.slots.find(s=>s.id===id)?.hunt;
+      if(hunt?.id)return hunt;
+    }
+    return personalItems[id]?.huntTarget;
+  }
+  function bindItemHuntButton(button,id,need,guide=false){
+    const source=itemHuntSource(id,guide),meta=personalItems[id];
+    button.hidden=!meta || !source;
+    if(button.hidden){button.onclick=null;return;}
+    const pinned=currentItemHunt(),same=pinned?.id===id && pinned.need===need;
+    const owned=itemHuntCount(id);
+    const low=meta.sourceBoss && meta.forge && ownServerCharacter()?.level<meta.level;
+    button.textContent=same?"เลิกติดตาม "+meta.name:"ตามหา "+meta.name+(need>1?" · "+owned+"/"+need:"");
+    button.disabled=!same && (!itemHuntOwner || !source.open || low || !inventoryState || owned>=need || need>INVENTORY_SLOTS*99);
+    if(!same)button.textContent+=!source.open?" · พื้นที่ยังไม่เปิด":low?" · ต้อง Lv."+meta.level:owned>=need?" · มีครบแล้ว":"";
+    button.onclick=()=>{
+      saveItemHunt(same?null:{id,need,guide});
+      toast(same?"เลิกติดตามแล้ว":"ติดตาม "+meta.name+" · ดูลูกศรที่ภารกิจ");
+      if(same)renderBag();else closeDrawer();
+    };
+  }
+  function itemHuntGuide(){
+    const goal=currentItemHunt();
+    if(!goal || !inventoryState || territoryState?.local?.inField)return null;
+    const item=personalItems[goal.id],source=itemHuntSource(goal.id,goal.guide);
+    if(!item || !source)return null;
+    const count=itemHuntCount(goal.id);
+    if(count>=goal.need){
+      saveItemHunt(null);
+      const done="ได้ครบแล้ว · "+item.name+" ×"+goal.need;toast(done);
+      if(drawerActive==="quest" && $("endItemHunt")){ui.drawerTitle.textContent=item.name;ui.drawerBody.textContent=done;}
+      return null;
+    }
+    const guide={title:"ตามหา "+item.name,progress:count+"/"+goal.need};
+    if(!source.open)return {...guide,step:"พื้นที่ล่านี้ยังไม่เปิด"};
+    if(activeMapId!==source.mapId){
+      const route=travelRoute(worldDefinitions,activeMapId,source.mapId);
+      const gate=worldDefinitions?.[activeMapId]?.portals.find(p=>p.targetMapId===route[1]);
+      return {...guide,step:gate?"ไปประตู "+worldDefinitions[route[1]].name+" · เหลือ "+(route.length-1)+" ประตู":"ไม่มีเส้นทางจากแผนที่นี้",to:gate};
+    }
+    const mob=source.id===MONSTER_ID?room?.state?.monster:room?.state?.monsters?.get(source.id);
+    const map=worldDefinitions?.[activeMapId],home=[map?.boss,map?.guardian].find(b=>b?.id===source.id);
+    return {...guide,step:(mob?.alive?"ล่า ":mob?"รอเกิด · ":"ค้นหา ")+source.monster,to:mob?.alive?mob:home??mob};
+  }
   // The next useful step for the current map, with a point to head for.
   function hudGuide() {
     const map = worldDefinitions?.[activeMapId], hero = getLocalAvatar(), kills = hudKills[activeMapId] || 0;
     const nearestOf = list => { let best = null, d = Infinity; for (const p of list) { const k = Math.hypot(p.x - hero.x, p.z - hero.z); if (k < d) { d = k; best = p; } } return best; };
     if (!hero) return null;
+    const hunt=itemHuntGuide();if(hunt)return hunt;
     if (activeMapId === "ritual_village") {
       if (mode !== "live") {
         if (enemy.isEnabled() && kills < 1) return { title: "ลองปราบผีทดสอบ", step: "เดินเข้าใกล้ผีที่ลานกลาง แล้วแตะตัวผี", progress: "ปราบ " + kills + "/1", to: { x: enemy.position.x, z: enemy.position.z } };
@@ -7887,6 +7970,7 @@
       if (gd) {
         hudSet(q.querySelector(".quest-content strong"), "qt", gd.title); hudSet(q.querySelector(".quest-content > span"), "qs", gd.step);
         hudSet($("questProgress"), "qp", gd.progress || "");
+        if(drawerActive==="quest" && $("huntStep"))$("huntStep").textContent=gd.step+" · "+gd.progress;
       }
       const pointer = $("questPointer"), to = gd?.to;
       if (!pointer) { /* older page markup: no pointer box */ }
@@ -10020,6 +10104,13 @@
       ctx.globalAlpha = 1; ctx.setTransform(1, 0, 0, 1, 0, 0);
       mapText(ctx, "N", width - 24, 9, 10, theme.ink, 700);
     }
+    const huntPoint=itemHuntGuide()?.to;
+    if(huntPoint && Number.isFinite(huntPoint.x) && Number.isFinite(huntPoint.z)){
+      const x=sx(huntPoint.x),y=sy(huntPoint.z),radius=large?8:4;
+      ctx.strokeStyle="#ffe49a";ctx.lineWidth=2;ctx.beginPath();
+      ctx.moveTo(x,y-radius);ctx.lineTo(x+radius,y);ctx.lineTo(x,y+radius);ctx.lineTo(x-radius,y);ctx.closePath();ctx.stroke();
+      if(large)mapText(ctx,"เป้าหมายล่า",x,y+18,11,"#ffe49a",700);
+    }
     // Vignette pulls the eye to the centre and softens the edges.
     const v = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * .35, width / 2, height / 2, Math.max(width, height) * .72);
     v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,.55)");
@@ -10214,14 +10305,8 @@
       if(id===origin)button.classList.add("here");
       board.append(button);cells.set(id,button);button.onclick=()=>select(id);
     }
-    const previous=new Map([[origin,null]]),queue=[origin];
-    for(let i=0;i<queue.length;i++)for(const gate of maps[queue[i]].portals){
-      if(!maps[gate.targetMapId]||previous.has(gate.targetMapId))continue;
-      previous.set(gate.targetMapId,queue[i]);queue.push(gate.targetMapId);
-    }
     function select(id){
-      const map=maps[id],path=[];
-      if(previous.has(id))for(let at=id;at!==null;at=previous.get(at))path.unshift(at);
+      const map=maps[id],path=travelRoute(maps,origin,id);
       for(const [key,button] of cells)button.setAttribute("aria-pressed",String(key===id));
       for(const edge of lines)edge.line.classList.toggle("route",path.some((a,i)=>i>0 &&
         ((a===edge.id && path[i-1]===edge.other)||(a===edge.other && path[i-1]===edge.id))));
@@ -11519,6 +11604,8 @@
       if(change)detail+=" · ผลต่างช่าง PvE "+change;
     }
     $("bagItemDescription").textContent=detail;
+    const bagGoal=meta?.forge?1:itemHuntCount(chosen?.itemId)+1;
+    bindItemHuntButton($("bagTrack"),chosen?.itemId,bagGoal);
     const salvage=$("salvageGear");
     salvage.hidden=!meta?.salvage || !!inspectingGear || worn || !economyReady();
     if(!salvage.hidden){
@@ -11566,6 +11653,8 @@
     if(!entry)return;
     const item=personalItems[entry.id],card=personalItems[entry.card],next=personalItems[entry.next];
     if(!item)return;
+    bindItemHuntButton($("guideTrack"),entry.id,1,true);
+    bindItemHuntButton($("guideTrackCard"),entry.card,1);
     $("guideFocus").textContent=build.focus+" · พื้นฐานทั้งชุด "+statLine(build.totals);
     const owned=slots?.findIndex(s=>s?.itemId===entry.id)??-1,matched=build.slots.filter(isWorn).length;
     $("guideName").textContent=item.name+" · Lv."+item.level+" · "+matched+"/"+build.slots.length+" ชิ้นตามแบบ";
@@ -11634,6 +11723,17 @@
       if([...select.options].some(o=>o.value===previous))select.value=previous;
     }
     const def=personalItems[select.value],button=$("benchCraft");
+    bindItemHuntButton($("benchTrack"),select.value,1);
+    const missing=def?.recipe.filter(r=>itemHuntCount(r.item)<r.qty && personalItems[r.item]?.huntTarget?.open)??[];
+    const supply=$("benchHuntChoice"),choices=missing.map(r=>r.item).join("|");
+    if(supply.dataset.choices!==choices){
+      const previous=supply.value;
+      supply.dataset.choices=choices;supply.replaceChildren(...missing.map(r=>new Option(personalItems[r.item].name,r.item)));
+      if(missing.some(r=>r.item===previous))supply.value=previous;
+    }
+    supply.hidden=missing.length<2;
+    const needed=missing.find(r=>r.item===supply.value);
+    bindItemHuntButton($("benchTrackSupply"),needed?.item,needed?.qty);
     const ingredient=def?.recipe.find(r=>personalItems[r.item]?.station==="kiln"),source=$("benchIngredient");
     source.hidden=!ingredient;
     if(ingredient){
@@ -11772,7 +11872,7 @@
     openDrawer("bag", "อุปกรณ์และกระเป๋า",
       '<div class="status-line"><span>สถานะกระเป๋า</span><strong id="bagSaveStatus"></strong></div>' +
       '<div class="status-line"><span>พลังชีวิต HP</span><strong id="bagHp"></strong></div>' +
-      '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><p><strong id="guideName"></strong></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideOpen" type="button"></button></details>' +
+      '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><p><strong id="guideName"></strong></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button></details>' +
       '<h3 class="wear-title">อุปกรณ์ที่สวม</h3><div class="wear-grid" aria-label="ช่องอุปกรณ์ตัวละคร">'+wearGrid+'</div><h3 class="wear-title">กระเป๋า · 12 ช่อง</h3>' +
       '<div class="bag-grid" role="group" aria-label="ช่องไอเท็ม 12 ช่อง">' + grid + '</div>' +
       '<div class="bag-detail"><strong id="bagItemName"></strong>' +
@@ -11780,8 +11880,8 @@
       '<div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden><button type="button" class="secondary"></button><button type="button" class="secondary"></button></div>' +
       '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
       '<section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>' +
-      '<button id="refineResource" type="button" class="secondary" hidden></button><button id="bagKiln" type="button" class="secondary" hidden></button><button id="sellBagMaterial" type="button" class="secondary" hidden></button><button id="salvageGear" type="button" class="secondary" hidden></button>' +
-      '<section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="boss">ของจากบอส</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button id="benchCraft" type="button" class="secondary">คราฟต์</button><button id="benchIngredient" type="button" class="secondary" hidden></button><button id="benchBack" type="button" class="secondary" hidden></button></section>' +
+      '<button class="secondary" id="bagTrack" type="button" hidden></button><button id="refineResource" type="button" class="secondary" hidden></button><button id="bagKiln" type="button" class="secondary" hidden></button><button id="sellBagMaterial" type="button" class="secondary" hidden></button><button id="salvageGear" type="button" class="secondary" hidden></button>' +
+      '<section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="boss">ของจากบอส</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button class="secondary" id="benchTrack" type="button" hidden></button><select id="benchHuntChoice" aria-label="เลือกวัตถุดิบที่ต้องการตามหา" hidden></select><button class="secondary" id="benchTrackSupply" type="button" hidden></button><button id="benchCraft" type="button" class="secondary">คราฟต์</button><button id="benchIngredient" type="button" class="secondary" hidden></button><button id="benchBack" type="button" class="secondary" hidden></button></section>' +
       '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
       '<div id="forgePanel" hidden><h3>ช่างอาคม</h3><p class="note" id="forgeInfo"></p><button class="secondary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeReroll"></button></div>' +
       '<p class="note">แตะช่องสวมเพื่อดูหรือถอดอุปกรณ์ ล่ามอนสเตอร์เพื่อรับเกราะชิ้นแรก จากนั้นหาอุปกรณ์หรือเก็บวัตถุดิบคราฟต์ที่โต๊ะช่าง</p>');
@@ -11810,6 +11910,7 @@
       const item=currentBagSlots()?.[selectedBagSlot];if(inspectingGear||!personalItems[item?.itemId]?.sellGold)return;
       economySend("sell_material",{slot:selectedBagSlot,expected:item.itemId,quantity:1,requestId:economyRequestId()},true);renderBag();
     };
+    $("benchHuntChoice").onchange=()=>renderWorkbench(currentBagSlots());
     $("benchGroup").onchange=$("benchLevel").onchange=$("benchRecipe").onchange=()=>{benchTrail.length=0;renderWorkbench(currentBagSlots());};
     $("benchBack").onclick=()=>{
       const prior=benchTrail.pop();if(!prior)return;
@@ -12258,6 +12359,14 @@
   }
   // Compact portrait HUD: a small quest chip opens the existing detail drawer.
   function openCurrentQuest() {
+    const hunt=itemHuntGuide();
+    if(hunt && !ui.quest.classList.contains("war-hud")){
+      openDrawer("quest",hunt.title,'<p id="huntStep" class="note"></p><button id="huntMap" type="button" class="secondary">ดูตำแหน่งบนแผนที่</button><button id="endItemHunt" type="button" class="secondary">เลิกติดตาม</button>');
+      $("huntStep").textContent=hunt.step+" · "+hunt.progress;
+      $("huntMap").onclick=openMap;
+      $("endItemHunt").onclick=()=>{saveItemHunt(null);closeDrawer();};
+      return;
+    }
     if(territoryState?.local?.site===activeMapId){openWarPanel();return;}
     const title = ui.quest.querySelector("strong")?.textContent || "ภารกิจ";
     const description = ui.quest.querySelector(".quest-content > span")?.textContent || "";

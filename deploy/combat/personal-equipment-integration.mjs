@@ -76,6 +76,10 @@ try{
   const {room,bag,me,event}=active;
   assert(Object.keys(active.catalog).length>400);
   const endgame=active.catalog.wp_twins_10;assert.equal(endgame.level,100);
+  assert.equal(active.catalog.wp_twins_2.huntTarget.id,"temple_forecourt_3");
+  assert.equal(active.catalog.card_possessed.huntTarget.id,room.state.monster.id);
+  assert.equal(active.catalog.mat_rift_star.huntTarget.mapId,"spirit_rift");
+  assert.equal(active.catalog.mat_ingot_1.huntTarget,undefined);
   assert.match(active.catalog.wp_twins_2.dropHint,/ภูตทวารบาล/);
   assert.match(active.catalog.wp_wrap_2.dropHint,/พรายกอกก/);
   assert.equal(active.catalog.mat_ingot_1.dropHint,undefined);

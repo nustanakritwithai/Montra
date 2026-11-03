@@ -1,5 +1,6 @@
-import {PERSONAL_ITEMS,monsterCardFor,type CardId,type PersonalId,type BodySlot,type ForgeRating,type ItemStats} from "./PersonalItems.js";
-import {hunts,huntDetails,findItemHunt} from "./MonsterLoot.js";
+import {PERSONAL_ITEMS,type CardId,type PersonalId,type BodySlot,type ForgeRating,type ItemStats} from "./PersonalItems.js";
+import {cardHunt,cardHunts,findItemHunt} from "./MonsterLoot.js";
+export {cardHunt} from "./MonsterLoot.js";
 
 const schools={
   muay_boran:["wrap","brace","คาดเชือกรุกต่อเนื่อง","ตั้งรับแล้วสวน"],
@@ -36,12 +37,6 @@ function itemFamily(path:School,slot:Position,style:Style){
   const armor=tank?(guarded||core?"heavy":"medium"):caster?(guarded&&core?"heavy":"cloth"):(guarded?(core?"medium":"hide"):"hide");
   return "arm_"+armor+"_"+slot;
 }
-const cardHunts=new Map<CardId,ReturnType<typeof huntDetails>>();
-for(const mob of hunts){
-  const card=monsterCardFor(mob.id,mob.level);
-  if(card && mob.level<(cardHunts.get(card)?.level??Infinity))cardHunts.set(card,huntDetails(mob));
-}
-export function cardHunt(card:CardId){return cardHunts.get(card)??null;}
 const cardWeights:Record<ForgeRating,ItemStats>={
   guard:{def:1,magicDef:.75,hp:.10},melee:{atk:1,stamina:.12,hp:.02},
   ranged:{magicAtk:1,mana:.25,magicDef:.1,hp:.02},healing:{magicAtk:.8,mana:.4,magicDef:.25,hp:.03},
