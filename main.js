@@ -6744,12 +6744,17 @@
   const GHOST_NAMES = { nangmai: "นางไม้", krasue: "ผีกระสือ", krahang: "ผีกระหัง", preta: "ผีเปรต", phiphong: "ผีโพง", kongkoi: "ผีกองกอย", takhian: "ผีนางตะเคียน",
     maenak: "ผีแม่นาค", phipop: "ผีปอบ", dancer: "ผีนางรำ", headless: "ผีหัวขาด", phitakhon: "ผีตาโขน", unaware: "ผีตายโหง", childghost: "ผีเด็ก", elephant: "ผีช้าง" };
   function monsterName(monster, id) {
-    if (!monster || monster.tier === "boss") return monster?.displayName || "";
+    if (!monster || monster.tier === "boss" || String(id || monster.id).startsWith("frontier_")) return monster?.displayName || "";
     const kind = forestMonsters.get(id)?.metadata?.ghost?.design?.kind || ghostDesign(monster, String(id || monster.id || "")).kind;
     return GHOST_NAMES[kind] || monster.displayName;
   }
   // Atlas regions with ghost designs, per court (atlas_<map>_<court>_<n>).
   const ATLAS_GHOSTS = {
+    moon_pass: [{kind:"phiphong",fallback:"corpse"},{kind:"unaware",fallback:"corpse"}],
+    river_watch: [{kind:"phipop",fallback:"corpse"},{kind:"boatman",fallback:"corpse"}],
+    twin_neck_pass: [{kind:"kongkoi",fallback:"corpse"},{kind:"krahang",fallback:"corpse"}],
+    sam_lan_estuary: [{kind:"drowned",fallback:"corpse"},{kind:"waterspirit",fallback:"longhair"}],
+    tri_wiang_castle: [{kind:"headless",fallback:"corpse"},{kind:"phitakhon",fallback:"corpse"}],
     bamboo_frontier: [{kind:"kongkoi",fallback:"corpse"},{kind:"phiphong",fallback:"corpse"},{kind:"takhian",fallback:"longhair"},{kind:"phipop",fallback:"corpse"},{kind:"phitakhon",fallback:"corpse",lead:true}],
     lotus_basin: [{kind:"waterspirit",fallback:"longhair"},{kind:"boatman",fallback:"corpse"},{kind:"drowned",fallback:"corpse"},{kind:"moonspirit",fallback:"longhair"},{kind:"waterspirit",fallback:"longhair",lead:true}],
     drowned_marsh: [{ kind: "drowned", fallback: "corpse" }, { kind: "boatman", fallback: "corpse" }, { kind: "waterspirit", fallback: "longhair" },{kind:"drowned",fallback:"corpse"},{kind:"boatman",fallback:"corpse",lead:true}],
