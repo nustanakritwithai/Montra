@@ -1,8 +1,10 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {BODY_SLOTS, PERSONAL_ITEMS, WEAPON_LEVELS, OUTFIT_LEVELS, MATERIAL_LEVELS, CATALOG_PAGES, equipPositions, fieldItem, monsterCardDrop, wearsTwinSwords, wearsWraps, usesStaff, type BodyItemId, type PersonalId} from "./PersonalItems.js";
-import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses,practiceLoot} from "./ItemRules.js";
+import {BODY_SLOTS, PERSONAL_ITEMS, WEAPON_LEVELS, OUTFIT_LEVELS, MATERIAL_LEVELS, equipPositions, monsterCardDrop, wearsTwinSwords, wearsWraps, usesStaff, type BodyItemId, type PersonalId} from "./PersonalItems.js";
+import {CATALOG_PAGES,hunts,findItemHunt,rollMonsterLoot} from "./MonsterLoot.js";
+import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses,practiceLoot,validateInventory} from "./ItemRules.js";
 import {EconomyStore} from "./EconomyStore.js";
+import {parseSalvage,type SalvageOrder} from "./EconomyRules.js";
 import {rollForge,forgeStamp,forgeIngredient} from "./ForgeRules.js";
 import {changeCardSocket} from "./CardSockets.js";
 import {ATLAS_SPAWNS} from "./WorldAtlas.js";
@@ -10,10 +12,127 @@ import {FOREST_CAMPS} from "./WorldMaps.js";
 import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {personalGearGuides,cardHunt} from "./GearGuides.js";
 import {gearMana} from "./ItemRules.js";
+import {bossAccessoryReward,grantStackReward} from "./ItemRules.js";
+import {BOSS_TREASURES,type MaterialId} from "./PersonalItems.js";
+import {MyRoom} from "./MyRoom.js";
+import {Player} from "./schema/MyRoomState.js";
 
 const paths=["muay_boran","phutthaisawan","blade","sentinel","seer","mender"];
 const entries=Object.entries(PERSONAL_ITEMS);
 const base={maxHp:1000,atk:100,def:110,magicAtk:90,magicDef:65,maxStamina:298};
+
+test("a listed monster really drops the item, and crafted and harvested products stay off its table",()=>{
+  const allOwned=new Set(entries.map(([id])=>id));
+  for(const mob of hunts){
+    const roll=rollMonsterLoot(mob.id,"muay_boran",allOwned,mob.level,0,mob.tier??"normal",max=>max-1);
+    assert(roll && PERSONAL_ITEMS[roll.id]?.kind==="material",mob.id+" has no material reward");
+  }
+  for(const [id,item] of entries){
+    const hint=findItemHunt(id as PersonalId,item.level!);
+    if(item.sourceBoss){assert.equal(hint?.monster,hunts.find(m=>m.id===item.sourceBoss)?.name,id);continue;}
+    if(!item.dropMax || !item.forge && item.kind!=="material"){assert.equal(hint,null,id);continue;}
+    assert(hint,id);
+    const mob=hunts.find(m=>m.name===hint.monster && m.mapId===hint.mapId && m.level===hint.level)!;
+    const path=item.path==="all"?"muay_boran":item.path;
+    allOwned.delete(id);
+    if(item.forge)assert.equal(rollMonsterLoot(mob.id,path,allOwned,100,0,mob.tier??"normal",()=>0)?.id,id,id);
+    else assert(Array.from({length:7},(_,i)=>rollMonsterLoot(mob.id,path,allOwned,100,0,"normal",max=>max===100?99:i%max)?.id).some(candidate=>candidate===id),id);
+    allOwned.add(id);
+  }
+  const sword="wp_twins_2",wrap="wp_wrap_2";
+  const roll=(mob:string,path:string,id:string)=>rollMonsterLoot(mob,path,new Set([...allOwned].filter(i=>i!==id)),15,0,"normal",()=>0)?.id;
+  assert.equal(roll("temple_forecourt_3","phutthaisawan",sword),sword);
+  assert.notEqual(roll("atlas_drowned_marsh_2_1","phutthaisawan",sword),sword);
+  assert.equal(roll("atlas_drowned_marsh_2_1","muay_boran",wrap),wrap);
+  assert.notEqual(roll("temple_forecourt_3","muay_boran",wrap),wrap);
+  assert.notEqual(roll("atlas_drowned_marsh_2_1","phutthaisawan",wrap),wrap);
+  assert.equal(roll("atlas_drowned_marsh_1_1","muay_boran",wrap),wrap);
+  for(const level of WEAPON_LEVELS)for(const family of ["wp_wrap","wp_twins"]){
+    const hint=findItemHunt((family+"_"+(WEAPON_LEVELS.indexOf(level)+1)) as PersonalId,level);
+    assert(hint && hint.level<=level+2,family+" has no nearby hunt at level "+level);
+  }
+});
+
+test("each named encounter owns its fragment and accessory; three fragments craft the same wearable reward",()=>{
+  const store=new EconomyStore(":memory:");
+  try{
+    for(const [i,[boss,t]] of Object.entries(BOSS_TREASURES).entries()){
+      const id=i.toString(16).padStart(64,"0"),bag=makeClassInventory("muay_boran");
+      const gear=PERSONAL_ITEMS[t.gear],mob=hunts.find(m=>m.id===boss)!;
+      assert.equal(findItemHunt(t.fragment,t.level)?.monster,mob.name);
+      assert.equal(findItemHunt(t.gear,t.level)?.mapId,mob.mapId);
+      assert.equal(gear.recipe![0].item,t.fragment);assert.equal(gear.recipe![0].qty,3);
+      assert.equal(rollMonsterLoot("forest_west_1","muay_boran",new Set(),100,0,"normal",()=>0)?.id===t.gear,false);
+      const preview=CATALOG_PAGES.find(page=>page[t.gear])![t.gear];
+      assert("dropHint" in preview);assert.match(preview.dropHint,/20%/);
+      assert.equal(bossAccessoryReward(bag,boss,t.level-1,()=>0),null);
+      assert.equal(bossAccessoryReward(bag,boss,t.level,()=>20),null);
+      assert.equal(bossAccessoryReward(bag,"forest_west_1",100,()=>0),null);
+      const direct=bossAccessoryReward(bag,boss,t.level,()=>19)!;
+      assert(direct.granted);assert.equal(direct.id,t.gear);
+      assert.equal(bossAccessoryReward(direct.bag,boss,t.level,()=>0),null);
+      const at=direct.bag.slots.findIndex(s=>s?.itemId===t.gear),position=equipPositions(gear.kind)[0];
+      const equip=equipBody(direct.bag,position,at,t.gear,"muay_boran",t.level);
+      assert(equip.ok);assert.equal(bossAccessoryReward(equip.inventory,boss,t.level,()=>0),null);
+      const full={...bag,slots:bag.slots.map(s=>s??{itemId:"health_potion" as const,quantity:99})};
+      assert.equal(bossAccessoryReward(full,boss,t.level,()=>0)?.granted,false);
+      assert.equal(grantStackReward(full,t.fragment),null);
+      bag.slots[2]={itemId:gear.recipe![1].item as MaterialId,quantity:2};
+      const two=grantStackReward(grantStackReward(bag,t.fragment)!,t.fragment)!;
+      store.register(id,two);
+      assert.throws(()=>store.craftPersonal(id,"test_boss_recipe_1",t.gear,t.level));
+      const three=grantStackReward(store.getAccount(id).inventory,t.fragment)!;
+      store.saveCharacter(id,{},three);
+      const request="test_boss_recipe_"+boss;
+      store.craftPersonal(id,request,t.gear,t.level);
+      store.craftPersonal(id,request,t.gear,t.level);
+      const crafted=store.getAccount(id).inventory;
+      assert(!crafted.slots.some(s=>s?.itemId===t.fragment));
+      assert.equal(crafted.slots.filter(s=>s?.itemId===t.gear).length,1);
+    }
+  }finally{store.close();}
+});
+
+test("three misses survive reload and a full bag preserves the guaranteed upgrade",()=>{
+  const miss=(max:number)=>max-1;
+  for(const [path,mob] of [["muay_boran","atlas_drowned_marsh_2_1"],["phutthaisawan","temple_forecourt_3"]]){
+    let bag=makeClassInventory(path);
+    const first=practiceLoot(bag,path,10,"normal",15,mob,miss);
+    assert(first.bag.firstChestClaimed);bag=first.bag;
+    for(let count=1;count<=3;count++){
+      const reward=practiceLoot(bag,path,10,"normal",15,mob,miss);
+      assert.equal(PERSONAL_ITEMS[reward.id!].kind,"material");
+      bag=validateInventory(JSON.parse(JSON.stringify(reward.bag)));
+      assert.equal(bag.lootMisses,count);
+    }
+    const full={...bag,slots:bag.slots.map(s=>s??{itemId:"health_potion" as const,quantity:99})};
+    const blocked=practiceLoot(full,path,10,"normal",15,mob,miss);
+    assert.equal(blocked.id,null);assert.equal(blocked.bag.lootMisses,3);
+    const material=path==="phutthaisawan"?"mat_metal_2":"mat_hide_2";
+    const tight={...full,lootMisses:0,slots:full.slots.map(s=>s.itemId.startsWith("mat_")?{...s,quantity:99}:s)};
+    tight.slots[11]={itemId:material,quantity:98};
+    const stacked=practiceLoot(tight,path,10,"normal",15,mob,miss);
+    assert.equal(stacked.id,material);assert.equal(stacked.quantity,1);assert.equal(stacked.bag.slots[11]?.quantity,99);
+    const reward=practiceLoot(bag,path,10,"normal",15,mob,miss);
+    assert(reward.id && PERSONAL_ITEMS[reward.id].recommended?.includes(path));assert.equal(reward.bag.lootMisses??0,0);
+  }
+});
+
+test("a dropped pair of wraps can be equipped and its Muay strike damages a monster",()=>{
+  const room=new MyRoom(),bag=makeClassInventory("muay_boran");
+  const roll=rollMonsterLoot("atlas_drowned_marsh_2_1","muay_boran",new Set(entries.map(([id])=>id).filter(id=>id!=="wp_wrap_2")),15,3,"normal",()=>0);
+  assert(roll?.id==="wp_wrap_2");
+  bag.slots[2]={itemId:roll.id,quantity:1};
+  const equipped=equipInventoryWeapon(bag,2,"muay_boran",15);assert(equipped.ok);
+  const actorId="looter",m=room.state.monster;
+  Object.assign(m,{x:-10,z:9,y:0,hp:500,maxHp:500});
+  room.state.players.set(actorId,new Player({pathId:"muay_boran",level:15,x:-10,z:8,y:0,alive:true,atk:40}));
+  const combat=room as unknown as {inventories:Map<string,typeof bag>;muayCoreHit(id:string,target:string,power:number):boolean;broadcast:()=>void};
+  combat.broadcast=()=>{};combat.inventories.set(actorId,equipped.inventory);
+  assert(combat.muayCoreHit(actorId,m.id,1));assert(m.hp<500);
+  const before=m.hp;combat.inventories.set(actorId,{...bag,equippedWeaponSlot:null});
+  assert.equal(combat.muayCoreHit(actorId,m.id,1),false);assert.equal(m.hp,before);
+});
 
 test("twelve suggested builds resolve to legal gear, cards and hunting grounds at all levels",()=>{
   for(const path of paths)for(let level=1;level<=100;level++){
@@ -84,7 +203,8 @@ test("every class has a legal, craftable outfit from 1 to 100, including two dis
   assert.equal(new Set(sent).size,entries.length);
   assert(CATALOG_PAGES.every(page=>Buffer.byteLength(JSON.stringify(page))<16_384));
   for(const level of MATERIAL_LEVELS){
-    const ids=new Set(Array.from({length:7},(_,i)=>fieldItem("seer",new Set(),level,max=>max===4?1:i)));
+    const ids=new Set(hunts.filter(m=>m.level>=level && m.level<(MATERIAL_LEVELS.find(n=>n>level)??101)).flatMap(m=>
+      Array.from({length:7},(_,i)=>rollMonsterLoot(m.id,"seer",new Set(),level,0,"normal",max=>max===100?99:i%max)!.id)));
     assert.equal(ids.size,7);
     for(const id of ids)assert.equal(PERSONAL_ITEMS[id].level,level);
   }
@@ -146,9 +266,9 @@ test("every class unlocks wearable equipment at every level, with field gear bou
 test("level 99 class gear can drop or be crafted, enhanced, rerolled, drilled and fitted before the cap",()=>{
   const item="arm_field_mender_99",def=PERSONAL_ITEMS[item],position=equipPositions(def.kind)[0];
   const owned=new Set(entries.map(([id])=>id).filter(id=>id!==item));
-  assert.equal(fieldItem("mender",owned,100,()=>0),item);
-  assert.notEqual(fieldItem("seer",owned,100,()=>0),item);
-  assert.notEqual(fieldItem("mender",owned,98,()=>0),item);
+  assert.equal(rollMonsterLoot("atlas_rift_warden","mender",owned,100,0,"boss",()=>0)?.id,item);
+  assert.notEqual(rollMonsterLoot("atlas_rift_warden","seer",owned,100,0,"boss",()=>0)?.id,item);
+  assert.notEqual(rollMonsterLoot("atlas_spirit_rift_5_1","mender",owned,98,0,"strong",()=>0)?.id,item);
   const store=new EconomyStore(":memory:"), account="f".repeat(64),bag=makeClassInventory("mender");
   try{
     let slot=2;
@@ -216,6 +336,75 @@ test("capstone crafting, forge materials, role options, card and sale survive in
     const sale=store.sellMaterial(id,req(6),saleSlot,"mat_ink_7",2);
     assert.deepEqual(store.sellMaterial(id,req(6),saleSlot,"mat_ink_7",2),sale);
     assert.equal(sale.receivedGold,2*PERSONAL_ITEMS.mat_ink_7.sellGold!);
+  }finally{store.close();}
+});
+
+test("salvage quotes only ordinary ingredients from the recipe and protects starting weapons",()=>{
+  for(const [id,gear] of entries){
+    if(!gear.forge || (gear.kind==="mainHand" && gear.level===1)){assert.equal(gear.salvage,undefined,id);continue;}
+    const output=gear.salvage!;
+    const input=gear.recipe!.find(r=>r.item===output.item);
+    assert(input && !PERSONAL_ITEMS[output.item].sourceBoss,id);
+    assert.equal(output.quantity,Math.max(1,Math.floor(input.qty/2)),id);
+  }
+  const base={requestId:"salvage_unit_0010",slot:2,gear:"wp_wrap_2",stamp:"wp_wrap_2",bound:false,socket:"sealed"};
+  assert.deepEqual(parseSalvage(base),base);
+  for(const bad of [{slot:12},{slot:"neck"},{bound:"true"},{socket:"mat_metal_1"},{gear:"wp_wrap_1"},{quantity:99},{stamp:""}])
+    assert.equal(parseSalvage({...base,...bad}),null);
+});
+
+test("salvaging a bound weapon returns its actual card and materials once, or leaves the whole bag intact",()=>{
+  const store=new EconomyStore(":memory:"),id="e".repeat(64),gear="wp_twins_10";
+  const bag=makeClassInventory("phutthaisawan"),item=PERSONAL_ITEMS[gear];
+  const yieldItem=item.salvage!,card="card_rift_warden";
+  const forge=rollForge(undefined,"enhance",()=>0,item).forge;
+  for(let i=2;i<bag.slots.length;i++)bag.slots[i]={itemId:"health_potion",quantity:99};
+  bag.slots[2]={itemId:gear,quantity:1,bound:true,forge,socket:card};
+  const order:SalvageOrder={requestId:"salvage_bound_unit_01",slot:2,gear,stamp:forgeStamp(bag.slots[2]!),bound:true,socket:card};
+  try{
+    const snapshot={...bag,equippedWeaponSlot:2};
+    store.saveCharacter(id,{inventory:snapshot},snapshot);
+    assert.throws(()=>store.salvageGear(id,order),/item_equipped/);
+    store.saveCharacter(id,{inventory:bag},bag);
+    const original=store.getAccount(id);
+    assert.throws(()=>store.salvageGear(id,{...order,socket:"empty"}),/salvage_changed/);
+    assert.throws(()=>store.salvageGear(id,{...order,stamp:gear}),/salvage_changed/);
+    assert.throws(()=>store.salvageGear(id,{...order,bound:false}),/salvage_changed/);
+    assert.throws(()=>store.salvageGear(id,order),/inventory_full/);
+    assert.deepEqual(store.getAccount(id),original);
+    bag.slots[3]={itemId:card,quantity:98};
+    store.saveCharacter(id,{inventory:bag},bag);
+    const result=store.salvageGear(id,order);
+    assert.deepEqual(result,{gear,material:yieldItem.item,quantity:yieldItem.quantity,card});
+    const after=store.getAccount(id);assert.equal(after.gold,original.gold);
+    assert.deepEqual(after.inventory.slots[2],{itemId:yieldItem.item,quantity:yieldItem.quantity});
+    assert.equal(after.inventory.slots[3]?.quantity,99);
+    assert.equal(after.inventory.slots.some(s=>s?.itemId===gear),false);
+    assert.deepEqual(store.salvageGear(id,order),result);
+    assert.throws(()=>store.salvageGear(id,{...order,slot:3}),/request_id_conflict/);
+    assert.throws(()=>store.salvageGear(id,{...order,requestId:"salvage_bound_unit_02"}),/salvage_changed/);
+    assert.deepEqual(store.getAccount(id),after);
+    assert.deepEqual((store.getCharacter(id) as {inventory:unknown}).inventory,after.inventory);
+  }finally{store.close();}
+});
+
+test("a boxer can put the material recovered from old wraps directly into the next armor recipe",()=>{
+  const store=new EconomyStore(":memory:"),id="f".repeat(64),bag=makeClassInventory("muay_boran");
+  const wraps="wp_wrap_2",next="arm_hide_legs_2",output=PERSONAL_ITEMS[wraps].salvage!;
+  try{
+    bag.slots[2]={itemId:wraps,quantity:1,bound:true};
+    assert.equal(output.item,"mat_hide_2");
+    let slot=3;
+    for(const r of PERSONAL_ITEMS[next].recipe!){
+      const quantity=r.qty-(r.item===output.item?output.quantity:0);
+      if(quantity>0)bag.slots[slot++]={itemId:r.item as MaterialId,quantity};
+    }
+    store.register(id,bag);
+    assert.throws(()=>store.craftPersonal(id,"reuse_salvage_craft_01",next,10),/craft_missing_material/);
+    const result=store.salvageGear(id,{requestId:"reuse_salvage_wraps_01",gear:wraps,stamp:wraps,slot:2,bound:true,socket:"sealed"});
+    assert.equal(result.card,null);
+    store.craftPersonal(id,"reuse_salvage_craft_01",next,10);
+    assert(store.getAccount(id).inventory.slots.some(s=>s?.itemId===next));
   }finally{store.close();}
 });
 

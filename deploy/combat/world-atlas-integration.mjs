@@ -91,7 +91,46 @@ async function verifyHuntTrail(i,id,destination,level,entry=[0,26]){
   await leave(c);
   console.log("PASS",id,"walked both new camps, restored shelter save, won Strong XP, saw respawn and reached",destination);
 }
+async function verifyWardenLoot(){
+  const group=[];
+  for(let i=0;i<4;i++){
+    await seed(30+i,"spirit_rift",28+i*.15,-49,i===1?99:100);
+    group.push(await join(30+i,group[0]?.r.roomId));
+  }
+  const leader=group[0];
+  for(const ally of group.slice(1)){
+    leader.r.send("party_invite",{targetId:ally.r.sessionId});
+    const invitation=await until(()=>ally.events.find(e=>e.type==="party_invitation")?.data,"party invite");
+    ally.r.send("party_accept",{inviteId:invitation.inviteId});
+    await until(()=>ally.events.some(e=>e.type==="party_state"&&e.data.members?.length>1),"party accept");
+  }
+  for(const ally of group)ally.r.send("attack",{targetId:warden});
+  for(const [i,ally] of group.entries()){
+    const win=await until(()=>ally.events.find(e=>e.type==="experience_gained"&&e.data.riftVictory)?.data,"warden reward",60000);
+    assert.equal(win.elitePotion,"granted");assert.equal(win.amount>0,i===1);
+    assert.equal(win.bossFragment,"mat_rift_star");assert.equal(win.fragmentGranted,true);
+    const inventory=await bag(ally);
+    assert.equal(inventory.slots[0].quantity,3);
+    assert.equal(inventory.slots.find(s=>s?.itemId===win.bossFragment)?.quantity,1);
+  }
+  for(const ally of group)await leave(ally);
+}
 const read=process.env.MONTRA_ATLAS_STAGE==="read";
+async function verifyMarshBoss(){
+  const home="drowned_marsh",hunter=120;
+  await seed(119,"ritual_village",0,0);
+  const scout=await join(119),boss=JSON.parse(scout.r.state.worldDefinition).maps[home].boss;
+  assert.equal(boss.respawnMs,1_200_000);await leave(scout);
+  await seed(hunter,home,boss.x+1,boss.z);
+  let c=await join(hunter);
+  await until(()=>c.r.state.monsters.get(boss.id)?.alive,"marsh boss spawn");
+  c.r.send("attack",{targetId:boss.id});
+  const reward=await until(()=>c.events.find(e=>e.type==="experience_gained" && e.data.bossFragment)?.data,"marsh boss reward",60000);
+  assert.equal(reward.bossFragment,"mat_boss_drowned_marsh");assert.equal(reward.fragmentGranted,true);
+  assert(!reward.riftVictory);await leave(c);
+  c=await join(hunter);assert.equal((await bag(c)).slots.find(s=>s?.itemId===reward.bossFragment)?.quantity,1);
+  await leave(c);console.log("PASS regional boss kill, personal marsh fragment and reconnect");
+}
 async function verifyAtlas(){
   for(const [i,[from,x,z,to]] of routes.entries()){
     if(!read)await seed(i,from,x,z);
@@ -115,25 +154,7 @@ async function verifyAtlas(){
     await seed(20,"drowned_marsh",0,-1);const m=await join(20);
     m.r.send("dash",{dx:0,dz:-1});await sleep(750);assert.ok(m.me().z>=-1.61&&m.me().z<0);
     await walk(m,-22,-1);await walk(m,-22,-9);await leave(m);
-    const group=[];
-    for(let i=0;i<4;i++){
-      await seed(30+i,"spirit_rift",28+i*.15,-49,i===1?99:100);
-      group.push(await join(30+i,group[0]?.r.roomId));
-    }
-    const leader=group[0];
-    for(const ally of group.slice(1)){
-      leader.r.send("party_invite",{targetId:ally.r.sessionId});
-      const invitation=await until(()=>ally.events.find(e=>e.type==="party_invitation")?.data,"party invite");
-      ally.r.send("party_accept",{inviteId:invitation.inviteId});
-      await until(()=>ally.events.some(e=>e.type==="party_state"&&e.data.members?.length>1),"party accept");
-    }
-    for(const ally of group)ally.r.send("attack",{targetId:warden});
-    for(const [i,ally] of group.entries()){
-      const win=await until(()=>ally.events.find(e=>e.type==="experience_gained"&&e.data.riftVictory)?.data,"warden reward",60000);
-      assert.equal(win.elitePotion,"granted");assert.equal(win.amount>0,i===1);
-      assert.equal((await bag(ally)).slots[0].quantity,3);
-    }
-    for(const ally of group)await leave(ally);
+    await verifyWardenLoot();
   }else{
     for(let i=0;i<4;i++){const c=await join(30+i);assert.equal(c.me().mapId,"spirit_rift");assert.equal((await bag(c)).slots[0].quantity,3);await leave(c);}
   }
@@ -147,7 +168,17 @@ try{
     "ridge-naga":[[91,"hex_ridge","naga_cavern",45],[92,"naga_cavern","river_watch",58]],
     endgame:[[111,"fallen_city","asura_peak",72],[112,"asura_peak","spirit_rift",85],[113,"spirit_rift","asura_peak",98]]
   };
-  if(Object.hasOwn(pairs,stage)){
+  if(stage==="regional-boss"){
+    await verifyMarshBoss();
+  }else if(stage==="boss-loot"){
+    await verifyWardenLoot();
+    for(let i=0;i<4;i++){
+      const c=await join(30+i);
+      assert.equal((await bag(c)).slots.find(s=>s?.itemId==="mat_rift_star")?.quantity,1);
+      await leave(c);
+    }
+    console.log("PASS four personal Warden fragments survive reconnect");
+  }else if(Object.hasOwn(pairs,stage)){
     const trials=pairs[stage].map(args=>verifyHuntTrail(...args));
     const results=await Promise.allSettled(trials);
     for(const result of results)if(result.status==="rejected")throw result.reason;

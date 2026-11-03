@@ -76,6 +76,9 @@ try{
   const {room,bag,me,event}=active;
   assert(Object.keys(active.catalog).length>400);
   const endgame=active.catalog.wp_twins_10;assert.equal(endgame.level,100);
+  assert.match(active.catalog.wp_twins_2.dropHint,/ภูตทวารบาล/);
+  assert.match(active.catalog.wp_wrap_2.dropHint,/พรายกอกก/);
+  assert.equal(active.catalog.mat_ingot_1.dropHint,undefined);
   const guides=active.event("gear_guides",p=>p.path==="phutthaisawan");
   assert.equal(guides?.builds.length,2);
   assert.equal(guides.builds[0].slots.find(s=>s.position==="offHand").next,"arm_field_phutthaisawan_2");
@@ -105,7 +108,16 @@ try{
   assert.equal(active.me().atk,before.atk+2);
   assert.equal(active.me().def,before.def+4);
   assert.equal(active.bag.slots.filter(s=>s?.itemId==="wp_twins_1").length,1);
+  active.room.send("attack",{targetId:"possessed-1"});
+  const prize=await until(()=>active.event("experience_gained",p=>p.personalDrop && p.personalDrop!=="bag_full"),"monster-specific personal loot",30000);
+  assert.match(active.catalog[prize.personalDrop].dropHint,/ผีสิง/);
+  assert(Number.isInteger(prize.dropQuantity) && prize.dropQuantity>0);
+  const earned=await until(()=>active.event("inventory_state",p=>p.slots.some(s=>s?.itemId===prize.personalDrop)),"reward in bag");
   const prefix=active.me().characterId;
+  await active.room.leave();active=null;await delay(400);
+  active=await join({});
+  assert(active.bag.slots.some(s=>s?.itemId===prize.personalDrop));
+  assert.equal(active.bag.lootMisses??0,earned.lootMisses??0);
   await active.room.leave();active=null;await delay(400);
   prepareCapstone(prefix,endgame.recipe);active=await join({});
   assert.equal(active.me().level,100);
@@ -136,6 +148,27 @@ try{
   assert.equal(active.bag.slots[at].forge.rank,1);assert.equal(active.bag.slots[at].socket,"card_rift_warden");
   assert.equal(active.bag.slots.some(s=>s?.itemId==="use_mana_7"),false);
   assert.equal(active.me().equippedWeaponId,"wp_twins_10");
+  const output=active.catalog.wp_twins_10.salvage,old=active.bag.slots[at],card=old.socket;
+  assert(output && old.bound && card==="card_rift_warden");
+  const count=(bag,id)=>bag.slots.reduce((sum,s)=>sum+(s?.itemId===id?s.quantity:0),0);
+  const beforeMaterial=count(active.bag,output.item),beforeCards=count(active.bag,card);
+  const order={slot:at,gear:old.itemId,stamp:old.forge.instanceId+"."+old.forge.revision,bound:true,socket:card,requestId:"capstone_salvage_0001"};
+  active.room.send("salvage_gear",order);
+  await until(()=>active.event("economy_error",v=>v.reason==="item_equipped"),"equipped weapon cannot be salvaged");
+  active.room.send("equip_weapon",{slot:null});await until(()=>!active.me().equippedWeaponId,"unequip for salvage");
+  active.room.send("salvage_gear",order);
+  const receipt=await until(()=>active.event("gear_salvaged"),"confirmed salvage receipt");
+  assert.deepEqual(receipt,{gear:old.itemId,material:output.item,quantity:output.quantity,card});
+  await active.room.leave();active=null;await delay(400);active=await join({});
+  const retryStart=active.events.length;
+  active.room.send("salvage_gear",order);
+  assert.deepEqual(await until(()=>active.event("gear_salvaged"),"durable salvage retry"),receipt);
+  const afterRetry=await until(()=>active.events.slice(retryStart).find(e=>e.type==="inventory_state")?.data,"bag after retry");
+  for(const inventory of [active.bag,afterRetry]){
+    assert.equal(count(inventory,old.itemId),0);
+    assert.equal(count(inventory,output.item),beforeMaterial+output.quantity);
+    assert.equal(count(inventory,card),beforeCards+1);
+  }
   const tree=active.event("world_resources",v=>v.mapId==="ritual_village").nodes.find(n=>n.kind==="wood");
   active.room.send("move",{x:tree.x-1.5,z:tree.z});
   await until(()=>Math.hypot(active.me().x-tree.x,active.me().z-tree.z)<2.8,"walk to a village tree",15000);
@@ -161,5 +194,5 @@ try{
   const start=active.events.length;
   active.room.send("harvest_resource",{node:"forbidden_forest/tree-east-1",requestId:"test_existing_tree_001"});
   await until(()=>active.events.slice(start).some(e=>e.type==="resource_result"&&e.data.item==="mat_raw_wood_1"),"cut original forest scenery");
-  console.log("PERSONAL GEAR PASS: crafting, mana medicine, sockets, reconnect, world refining and harvesting the original forest tree.");
+  console.log("PERSONAL GEAR PASS: crafting, sockets, salvage with card return and durable retry, world refining and harvesting.");
 }finally{if(active)await active.room.leave();}

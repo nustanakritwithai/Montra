@@ -2,7 +2,8 @@
 import { isFlightAltitude, isOnGround, isOnPlatform, isOnTop, touchesWallBody, wallBlocksShot, rayHitsBox } from "./HeightRules.js";
 import { groundSample, terrainRayClear, RIDGE_ENABLED, RIDGE_PASS, makeRidgePass, type GroundTerrain } from "./GroundTerrain.js";
 import { TEMPLE_ID, TEMPLE_GATE, TEMPLE_MAP } from "./TempleMap.js";
-import { ATLAS_MAPS, MARSH_GATE, atlasPortals } from "./WorldAtlas.js";
+import { ATLAS_MAPS, BOSS_RESPAWN_MS, MARSH_GATE, atlasPortals } from "./WorldAtlas.js";
+import {regionalBossOn} from "./RegionalBosses.js";
 import { originalRelief } from "./AtlasRelief.js";
 import { makeHubs, onRampart, type Province } from "./StrategicProvinces.js";
 export type WorldWall = Readonly<{x:number;z:number;width:number;length:number;rampart?:boolean}>;
@@ -39,7 +40,7 @@ export type RestArea = Readonly<{x:number; z:number; radius:number; name:string}
 export const WORLD_EXPANSION = process.env.MONTRA_WORLD_EXPANSION === "1";
 export const SHRINE_GUARDIAN = Object.freeze({
   id: "forest_shrine_keeper", name: "ผู้พิทักษ์ศาลร้าง", level: 12,
-  x: -14, z: -90, respawnMs: 120_000, strikeRadius: 2.8,
+  x: -14, z: -90, respawnMs: BOSS_RESPAWN_MS, strikeRadius: 2.8,
 });
 export const FOREST_CAMPS: readonly HuntCamp[] = [
   {id:"west",name:"ชายป่ากระซิบ",x:-26,z:-10,levels:[1,2,3,4]},
@@ -132,7 +133,15 @@ const maps: Record<string,WorldMapDefinition>={
       ...(WORLD_EXPANSION ? [{id:"forest_to_temple",...TEMPLE_GATE,targetMapId:TEMPLE_ID,targetSpawn:TEMPLE_MAP.spawn},...atlasPortals("forbidden_forest")] : [])],
   },
 };
-export const WORLD_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freeze(Object.fromEntries(Object.entries(maps).map(([id,map])=>[id,WORLD_EXPANSION?{...map,...originalRelief(map)}:map])));
+export const WORLD_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freeze(Object.fromEntries(Object.entries(maps).map(([id,map])=>{
+  if(!WORLD_EXPANSION)return [id,map];
+  const world={...map,...originalRelief(map)},boss=regionalBossOn(id);
+  if(boss){
+    const {id:bossId,name,level,x,z,strikeRadius,respawnMs}=boss;
+    world.boss={id:bossId,name,level,x,z,strikeRadius,respawnMs};
+  }
+  return [id,world];
+})));
 export function getWorldMap(mapId: string): WorldMapDefinition | undefined {
   return Object.prototype.hasOwnProperty.call(WORLD_MAPS, mapId) ? WORLD_MAPS[mapId] : undefined;
 }

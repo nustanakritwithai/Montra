@@ -8,6 +8,8 @@ import {checkWarp} from "./WarpRules.js";
 import {ForestEncounters} from "./ForestEncounters.js";
 import {MyRoomState,Player} from "./schema/MyRoomState.js";
 import {partyMonsterShares} from "./PartyMonsterRewards.js";
+import {REGIONAL_BOSSES} from "./RegionalBosses.js";
+import {groundAt} from "./WorldMaps.js";
 
 test("all sixteen maps connect to the village and every gate has a safe return",()=>{
   const seen=new Set<string>(),queue=["ritual_village"];
@@ -46,7 +48,7 @@ test("every marked trail is walkable and all gates, camps and monsters are reach
     }
     const guards=ATLAS_SPAWNS.filter(s=>s.mapId===map.id);
     const relay=map.strategic?.relay;
-    for(const p of [...map.camps!,...map.portals,...guards,...(relay?[relay]:[])])assert.ok(reached.has(p.x+","+p.z),map.id+" "+p.x+","+p.z);
+    for(const p of [...map.camps!,...map.portals,...guards,...(map.boss?[map.boss]:[]),...(relay?[relay]:[])])assert.ok(reached.has(p.x+","+p.z),map.id+" "+p.x+","+p.z);
     if(relay){
       assert.ok(!isRestArea(map.id,relay));assert.equal(map.portals.filter(p=>p.targetMapId===map.id).length,2);
       assert.ok((map.bounds.maxX-map.bounds.minX)*(map.bounds.maxZ-map.bounds.minZ)>3.5*84*97);
@@ -156,18 +158,50 @@ test("the city and both forts have continuous crests, usable stair endpoints and
 });
 test("all occupied atlas zones replicate and the warden's respawn clock survives an empty zone",()=>{
   const state=new MyRoomState(),forest=new ForestEncounters(state.monsters);
-  forest.initialize();assert.equal(state.monsters.size,33);
+  forest.initialize();assert.equal(state.monsters.size,34);
   const tick=(now:number)=>forest.update(now,0,state.players,new Set(),()=>{},()=>{});
   for(const mapId of ["drowned_marsh","moon_cemetery","asura_peak","spirit_rift"]) state.players.set(mapId,new Player({...ATLAS_MAPS[mapId].spawn,mapId,alive:true}));
-  tick(100);assert.equal(state.monsters.size+1,75);
+  tick(100);assert.equal(state.monsters.size+1,79);
   assert.ok(!state.monsters.has("atlas_hex_ridge_1_1"));
   for (const map of Object.values(ATLAS_MAPS)) state.players.set(map.id,new Player({...map.spawn,mapId:map.id}));
-  tick(100);assert.equal(state.monsters.size+1,125);
+  tick(100);assert.equal(state.monsters.size+1,134);
   const id=RIFT_WARDEN.id;assert.ok(forest.kill(id,100));state.players.delete("spirit_rift");tick(500);
   assert.ok(!state.monsters.has(id));state.players.set("spirit_rift",new Player({...ATLAS_MAPS.spirit_rift.spawn,mapId:"spirit_rift"}));
   tick(1100);assert.equal(state.monsters.get(id)?.alive,false);
-  tick(100+RIFT_WARDEN.respawnMs);assert.equal(state.monsters.get(id)?.alive,true);
+  assert.equal(RIFT_WARDEN.respawnMs,1_200_000);
+  tick(100+1_199_999);assert.equal(state.monsters.get(id)?.alive,false);
+  tick(100+1_200_000);assert.equal(state.monsters.get(id)?.alive,true);
   assert.ok(state.monsters.has("atlas_hex_ridge_1_1"));
+});
+
+test("each enabled hunt has its own reachable boss, drops and twenty-minute clock",()=>{
+  const state=new MyRoomState(),forest=new ForestEncounters(state.monsters);forest.initialize();
+  const battlefield=new ForestEncounters(new MyRoomState().monsters);battlefield.initialize(false);
+  const occupied=Object.values(WORLD_MAPS).filter(map=>map.camps?.length || REGIONAL_BOSSES.some(b=>b.mapId===map.id));
+  for(const map of occupied)assert(map.guardian || map.boss,map.id);
+  const tick=(now:number)=>forest.update(now,0,state.players,new Set(),()=>{},()=>{});
+  for(const [i,boss] of REGIONAL_BOSSES.entries()){
+    const map=WORLD_MAPS[boss.mapId];
+    assert.equal(battlefield.profile(boss.id),null);
+    if(!map){assert.equal(forest.profile(boss.id),null);assert.equal(parseAttackCommand({targetId:boss.id}),null);continue;}
+    assert.equal(map.boss?.id,boss.id);
+    assert.equal(map.boss.respawnMs,1_200_000);
+    assert.deepEqual(parseAttackCommand({targetId:boss.id}),{targetId:boss.id});
+    const home={x:boss.x,z:boss.z,y:groundAt(map.id,boss.x,boss.z)};
+    assert(isSafeWorldPoint(map,home,.7) && !isRestArea(map.id,home),map.id);
+    assert([...map.portals,map.spawn,...map.restAreas??[]].every(p=>Math.hypot(boss.x-p.x,boss.z-p.z)>18),map.id);
+    assert(map.paths?.some(path=>path.some(p=>p.x===boss.x && p.z===boss.z)),map.id);
+    state.players.set(map.id,new Player({...map.spawn,mapId:map.id}));
+    tick(100+i);
+    const actor=state.monsters.get(boss.id)!;
+    assert.equal(actor.displayName,boss.name);assert.equal(actor.tier,"boss");assert.equal(actor.level,boss.level);
+    assert(forest.kill(boss.id,100+i,state.players));assert(!forest.kill(boss.id,101+i,state.players));
+  }
+  for(const [i,boss] of REGIONAL_BOSSES.entries()){
+    if(!WORLD_MAPS[boss.mapId])continue;
+    tick(100+i+1_199_999);assert.equal(state.monsters.get(boss.id)?.alive,false,boss.id);
+    tick(100+i+1_200_000);assert.equal(state.monsters.get(boss.id)?.alive,true,boss.id);
+  }
 });
 
 test("rift victory keeps capped participants eligible for loot without diluting XP",()=>{

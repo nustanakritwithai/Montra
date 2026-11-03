@@ -51,7 +51,7 @@ try{
     await seed(1,forest,-48,-84);await seed(2,temple,-3,-9);await seed(3,temple,-3,-16);await seed(4,forest,-28,-55);
     const old=await join(1,null,false);await rejected(old,"warp",{portalId:"forest_to_temple"},"world_client_update_required");assert.equal(old.me().mapId,forest);await leave(old);
     const a=await join(1),b=await join(2,a.r.roomId),c=await join(3,a.r.roomId),other=await join(4,a.r.roomId);
-    await until(()=>a.r.state.players.size===4 && a.r.state.monsters.size===33,"room ready");
+    await until(()=>a.r.state.players.size===4 && a.r.state.monsters.size===34,"room ready");
     const def=JSON.parse(a.r.state.worldDefinition).maps[temple];assert.equal(def.camps.length,4);
     a.r.send("warp",{portalId:"forest_to_temple"});await until(()=>a.me().mapId===temple,"enter temple");
     await rejected(a,"attack",{targetId:"temple_forecourt_1"},"target_unavailable");

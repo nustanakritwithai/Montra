@@ -36,8 +36,9 @@ test("the shrine strike is avoidable, server-timed and the guardian has its own 
   player.x=keeper.x;update(10000);update(11399);assert.deepEqual(hits,[]);
   update(11400);assert.deepEqual(hits,[1.6]);
   assert.ok(forest.kill(id,12000));assert.equal(forest.kill(id,12000),false);
-  update(131999);assert.equal(keeper.alive,false);
-  update(132000);assert.equal(keeper.alive,true);assert.equal(keeper.hp,keeper.maxHp);
+  assert.equal(SHRINE_GUARDIAN.respawnMs,1_200_000);
+  update(12_000+1_199_999);assert.equal(keeper.alive,false);
+  update(12_000+1_200_000);assert.equal(keeper.alive,true);assert.equal(keeper.hp,keeper.maxHp);
 });
 test("entry routes are walkable and the Elite prize respects the real bag",()=>{
   const map=getWorldMap("forbidden_forest")!;

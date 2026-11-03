@@ -56,6 +56,7 @@ jobs:
           cp deploy/combat/castle-pilot-integration.mjs combat-verify/castle-pilot-integration.mjs
           cp deploy/combat/StrategicProvinces.ts combat-verify/src/rooms/StrategicProvinces.ts
           cp deploy/combat/WorldAtlas.ts combat-verify/src/rooms/WorldAtlas.ts
+          cp deploy/combat/RegionalBosses.ts combat-verify/src/rooms/RegionalBosses.ts
           cp deploy/combat/world-atlas.test.ts combat-verify/src/rooms/world-atlas.test.ts
           cp deploy/combat/world-atlas-integration.mjs combat-verify/world-atlas-integration.mjs
           cp deploy/combat/world-capacity-integration.mjs combat-verify/world-capacity-integration.mjs
@@ -159,6 +160,7 @@ jobs:
           cp deploy/combat/MonsterRRT.ts combat-verify/src/rooms/MonsterRRT.ts
           cp deploy/combat/CharacterStore.ts combat-verify/src/rooms/CharacterStore.ts
           cp deploy/combat/PersonalItems.ts combat-verify/src/rooms/PersonalItems.ts
+          cp deploy/combat/MonsterLoot.ts combat-verify/src/rooms/MonsterLoot.ts
           cp deploy/combat/gear-progression.test.ts combat-verify/src/rooms/gear-progression.test.ts
           cp deploy/combat/CardSockets.ts combat-verify/src/rooms/CardSockets.ts
           cp deploy/combat/GearGuides.ts combat-verify/src/rooms/GearGuides.ts
@@ -263,6 +265,7 @@ jobs:
         shell: bash
         run: |
           node --check main.js
+          node deploy/combat/salvage-ui-test.cjs
           grep -q "serverFacing" main.js
           grep -Eq 'main\.js\?v=[0-9]+\.[0-9]+\.[0-9]+' index.html
           grep -q 'id="climb"' index.html

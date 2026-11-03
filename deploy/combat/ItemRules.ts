@@ -1,5 +1,7 @@
 import { readForged, birthForge, applyForgeRatings, type Forged } from "./ForgeRules.js";
-import { personalItem, startingWeapon, firstChest, fieldItem, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
+import { BOSS_GEAR_CHANCE, bossTreasure, personalItem, startingWeapon, firstChest, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
+import {MAX_LOOT_MISSES,rollMonsterLoot} from "./MonsterLoot.js";
+import {randomInt} from "node:crypto";
 import { PROGRESSION, type CombatStats } from "./Progression.js";
 import { MUAY_WRAP_ID } from "./MuayRules.js";
 import { usesStaff, type CatalystId, type SalveId, type ForgeRating,type BrewId,type FieldToolId } from "./PersonalItems.js";
@@ -48,6 +50,7 @@ export type InventorySnapshot = {
   equipmentSockets?: Partial<Record<BodySlot,CardId|null>>;
   equipmentForges?: Partial<Record<BodySlot,Forged>>;
   firstChestClaimed?:true;
+  lootMisses?:number;
 };
 export type ItemUseResult =
   | { ok: true; inventory: InventorySnapshot; healed: number; restoredMana:number; hp: number; itemId: typeof POTION_ID | SalveId | BrewId }
@@ -107,7 +110,8 @@ export function validateInventory(value: unknown): InventorySnapshot {
   }
   const keys = Object.keys(value);
   const upgraded = Object.prototype.hasOwnProperty.call(value, "equippedWeaponSlot");
-  if (keys.some(key=>!["version","slots","equippedWeaponSlot","equippedChestSlot","equipment","equipmentSockets","equipmentForges","firstChestClaimed"].includes(key)) ||
+  if (keys.some(key=>!["version","slots","equippedWeaponSlot","equippedChestSlot","equipment","equipmentSockets","equipmentForges","firstChestClaimed","lootMisses"].includes(key)) ||
+      (Object.hasOwn(value,"lootMisses") && (!upgraded || !Number.isInteger(value.lootMisses) || (value.lootMisses as number)<0 || (value.lootMisses as number)>MAX_LOOT_MISSES)) ||
       (!upgraded && (Object.hasOwn(value,"equippedChestSlot") || Object.hasOwn(value,"equipment") || Object.hasOwn(value,"equipmentSockets") || Object.hasOwn(value,"equipmentForges") || Object.hasOwn(value,"firstChestClaimed"))) ||
       (Object.hasOwn(value,"firstChestClaimed") && value.firstChestClaimed!==true)) {
     throw new Error("inventory_record_invalid");
@@ -146,6 +150,7 @@ export function validateInventory(value: unknown): InventorySnapshot {
     throw new Error("inventory_record_invalid");
   }
   const result:InventorySnapshot={version:1,slots,equippedWeaponSlot:selected as number|null};
+  if(value.lootMisses)result.lootMisses=value.lootMisses as number;
   if (Object.hasOwn(value,"equipment")) {
     if (!record(value.equipment))throw Error("inventory_record_invalid");
     result.equipment={};
@@ -293,7 +298,7 @@ export function equippedStats(base:CombatStats,bag:InventorySnapshot|undefined):
   return result;
 }
 
-export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,tier="normal",playerLevel=monsterLevel):{bag:InventorySnapshot;id:PersonalId|null} {
+export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,tier="normal",playerLevel=monsterLevel,monsterId="possessed-1",draw?:(max:number)=>number):{bag:InventorySnapshot;id?:PersonalId|null;quantity?:number} {
   if(!bag.firstChestClaimed){
     const id=firstChest(path,Math.min(monsterLevel,playerLevel));
     if(bag.equipment?.chest!==id && !bag.slots.some(s=>s?.itemId===id)){
@@ -307,19 +312,38 @@ export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,ti
     bag={...bag,firstChestClaimed:true};
   }
   const owned=new Set<string>([...Object.values(bag.equipment??{}),...bag.slots.flatMap(stack=>stack?[stack.itemId]:[])]);
-  const id=fieldItem(path,owned,monsterLevel);
+  const partialStacks=bag.slots.includes(null)?undefined:new Set(bag.slots.flatMap(s=>s && s.quantity<INVENTORY_STACK_LIMIT?[s.itemId]:[]));
+  const roll=rollMonsterLoot(monsterId,path,owned,playerLevel,bag.lootMisses??0,tier,draw,partialStacks);
+  if(!roll)return {bag};
+  const {id}=roll;
+  bag={...bag,lootMisses:roll.misses};
   if(isStackableItem(id)){
-    let next=grantStackReward(bag,id);
-    const quantity=tier==="boss"?6:tier==="elite"?4:tier==="strong"?3:2;
-    for(let i=1;next && i<quantity;i++){const added=grantStackReward(next,id);if(!added)break;next=added;}
-    return {bag:next??bag,id:next?id:null};
+    let quantity=0;
+    const limit=tier==="boss"?6:tier==="elite"?4:tier==="strong"?3:2;
+    while(quantity<limit){
+      const added=grantStackReward(bag,id);
+      if(!added)break;
+      bag=added;quantity++;
+    }
+    return {bag,id:quantity?id:null,quantity};
   }
   const index=bag.slots.indexOf(null);
-  if(index<0)return {bag,id:null};
+  if(index<0)return {bag:roll.useful?{...bag,lootMisses:MAX_LOOT_MISSES}:bag,id:null};
   const slots=bag.slots.slice();
   const forge=birthForge(id);
   slots[index]={itemId:id,quantity:1,...(forge?{forge}:{})};
   return {bag:{...bag,slots},id};
+}
+
+export function bossAccessoryReward(bag:InventorySnapshot,monsterId:string,playerLevel:number,draw=()=>randomInt(100)){
+  const treasure=bossTreasure(monsterId);
+  if(!treasure || playerLevel<treasure.level || bag.slots.some(s=>s?.itemId===treasure.gear) ||
+     Object.values(bag.equipment??{}).includes(treasure.gear) || draw()>=BOSS_GEAR_CHANCE)return null;
+  const slot=bag.slots.indexOf(null);
+  if(slot<0)return {id:treasure.gear,bag,granted:false};
+  const slots=bag.slots.slice(),forge=birthForge(treasure.gear);
+  slots[slot]={itemId:treasure.gear,quantity:1,...(forge?{forge}:{})};
+  return {id:treasure.gear,bag:{...bag,slots},granted:true};
 }
 
 /** Add a single reward, preferring an existing stack. A full bag is left intact. */

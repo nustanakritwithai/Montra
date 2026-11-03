@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import {REGIONAL_BOSSES} from "./RegionalBosses.js";
 import type { CombatStats } from "./Progression.js";
 
 export type ItemStats = Partial<Record<"hp" | "stamina" | "mana" | "atk" | "def" | "magicAtk" | "magicDef",number>>;
@@ -21,8 +22,10 @@ export function equipPositions(kind:unknown):readonly BodySlot[] {
 export type PersonalDefinition = {
   name:string; kind:"mainHand"|BodySlot|"earring"|"ring"|"material"|"catalyst"|"consumable"|"card"|"tool"; path:string; stats:ItemStats;
   recipe?:readonly {item:string; qty:number}[];
+  salvage?:{item:MaterialId;quantity:number};
   monster?:string;
   chancePct?:number;
+  sourceBoss?:string;
   level?:number; rarity?:string; family?:string; recommended?:readonly string[]; dropMax?:number;
   forge?:ForgeProfile; craftGold?:number; sellGold?:number; healHp?:number; sourceCamp?:string;
   refinesTo?:MaterialId;
@@ -120,7 +123,23 @@ export type RawMaterialId=`mat_raw_${"wood"|"stone"}_${number}`;
 type KilnMaterialId=`mat_${"charcoal"|"ingot"}_${number}`;
 export type FieldToolId=`tool_${"axe"|"pick"}_${number}`;
 export type BrewId=`use_${"herbal"|"mana"}_${number}`;
-export type PersonalId = BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}` | FieldGearId | RawMaterialId | KilnMaterialId | FieldToolId | BrewId;
+const originalTreasures={
+  forest_shrine_keeper:{fragment:"shrine_shard",gear:"acc_shrine_ward",level:12},
+  atlas_rift_warden:{fragment:"mat_rift_star",gear:"acc_rift_star",level:100},
+} as const;
+const regionalAccessory={
+  guard:{family:"acc_gorget",material:"mat_ingot"},spirit:{family:"acc_earrings_focus",material:"mat_ink"},
+  hunter:{family:"acc_ring_atk",material:"mat_hide"},grove:{family:"acc_fang",material:"mat_fiber"},
+} as const;
+type BossTreasure=typeof originalTreasures[keyof typeof originalTreasures] | typeof REGIONAL_BOSSES[number];
+export const BOSS_TREASURES:Readonly<Record<string,BossTreasure>>={
+  ...originalTreasures,...Object.fromEntries(REGIONAL_BOSSES.map(b=>[b.id,b])),
+};
+export const BOSS_GEAR_CHANCE=20;
+export function bossTreasure(id:string):BossTreasure|undefined{
+  return Object.hasOwn(BOSS_TREASURES,id)?BOSS_TREASURES[id as keyof typeof BOSS_TREASURES]:undefined;
+}
+export type PersonalId = BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}` | FieldGearId | RawMaterialId | KilnMaterialId | FieldToolId | BrewId | BossTreasure["fragment"|"gear"];
 export type PracticeWeapon = Extract<PersonalId,`wp_${string}`>;
 export type ChestId = Extract<BaseId,`arm_${string}_chest_1`>;
 export type BodyItemId = Extract<PersonalId,`arm_${string}`|`off_${string}`|`acc_${string}`>;
@@ -138,7 +157,6 @@ const fieldKits={
   seer:{title:"ครูอาคม",armor:"cloth",offHand:"off_jar",neck:"acc_spell",earring:"acc_earrings_focus",ring:"acc_ring_spell"},
   mender:{title:"เรียกขวัญ",armor:"cloth",offHand:"off_bell",neck:"acc_torc",earring:"acc_earrings_focus",ring:"acc_ring_heal"},
 } as const;
-const schools=Object.keys(fieldKits);
 const fieldSlots=["offHand","arms","head","feet","neck","shoulders","ring","legs","leftHand","earring","rightHand","chest"] as const;
 const names=["ฝึกหัด","ชายป่า","ศาลเก่า","ด่านคลอง","ป่าลึก","ค่ายหน้า","เวียงเหล็ก","ภูผา","ทัพหลวง","พิชัยยุทธ์"];
 const outfitNames=["ฝึกหัด","ชายป่า","สำนักครู","ค่ายหน้า","เวียงเหล็ก","ทัพหลวง","ราชสำนัก","พิชัยยุทธ์"];
@@ -268,11 +286,36 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
       return input.qty===1?[ingot]:[{...input,qty:input.qty-1},ingot];
     });
   }
+  for(const [sourceBoss,treasure] of Object.entries(BOSS_TREASURES)){
+    const {fragment,gear,level}=treasure;
+    const shrine=fragment==="shrine_shard";
+    const region="theme" in treasure?treasure:undefined;
+    const style=region && regionalAccessory[region.theme];
+    const model=style && result[(style.family+"_"+OUTFIT_LEVELS.filter(l=>l<=level).length) as PersonalId];
+    const ingredient=style?style.material+"_"+materialTier(level):shrine?"mat_fiber_2":"mat_ingot_7";
+    put(fragment,{name:region?.fragmentName??(shrine?"เศษตราผู้พิทักษ์":"เศษดาวราชัน"),kind:"material",path:"all",level,stats:{},sourceBoss});
+    const item:PersonalDefinition={
+      name:region?.gearName??(shrine?"สร้อยตราศาลร้าง":"แหวนดาวราชัน"),kind:model?.kind??(shrine?"neck":"ring"),family:gear,path:"all",level,dropMax:level,sourceBoss,
+      stats:model?{...model.stats}:shrine?{hp:12,def:2,magicDef:1}:{atk:6,magicAtk:6,mana:8},rarity:region?"epic":shrine?"rare":"legendary",
+      recommended:Object.keys(fieldKits),craftGold:level*2,
+      recipe:[{item:fragment,qty:3},{item:ingredient,qty:2}],
+    };
+    item.forge=model?.forge??{...forgeProfile(item),primary:shrine?"guard":"melee",pool:shrine?["guard","healing"]:["melee","ranged"]};
+    put(gear,item);
+  }
+  for(const gear of Object.values(result)){
+    if(!gear?.forge || (gear.kind==="mainHand" && gear.level===1))continue;
+    // Recover one ordinary ingredient. Boss fragments are earned by hunting.
+    let input:{item:string;qty:number}|undefined;
+    for(const ingredient of gear.recipe??[]){
+      const mat=result[ingredient.item as PersonalId];
+      if(mat?.kind==="material" && !mat.sourceBoss && (!input || ingredient.qty>input.qty))input=ingredient;
+    }
+    if(input)gear.salvage={item:input.item as MaterialId,quantity:Math.max(1,Math.floor(input.qty/2))};
+  }
   return Object.freeze(result) as Readonly<Record<PersonalId,PersonalDefinition>>;
 }
 export const PERSONAL_ITEMS=buildPersonalCatalog();
-const catalogEntries=Object.entries(PERSONAL_ITEMS);
-export const CATALOG_PAGES=Array.from({length:Math.ceil(catalogEntries.length/16)},(_,i)=>Object.fromEntries(catalogEntries.slice(i*16,i*16+16)));
 export function personalItem(id:unknown): PersonalDefinition | undefined {
   return typeof id === "string" && Object.hasOwn(PERSONAL_ITEMS,id) ? PERSONAL_ITEMS[id as PersonalId] : undefined;
 }
@@ -300,25 +343,6 @@ export function startingWeapon(path:string):PracticeWeapon {
 export function firstChest(path:string,level=1):BodyItemId {
   const family=path==="mender"||path==="seer"?"cloth":path==="muay_boran"||path==="blade"?"hide":path==="sentinel"?"heavy":"medium";
   return `arm_${family}_chest_${OUTFIT_LEVELS.filter(min=>level>=min).length||1}` as BodyItemId;
-}
-const catalogIds=Object.keys(PERSONAL_ITEMS) as PersonalId[];
-const materialsByTier=MATERIAL_LEVELS.map(level=>catalogIds.filter(id=>PERSONAL_ITEMS[id].kind==="material" && PERSONAL_ITEMS[id].dropMax && PERSONAL_ITEMS[id].level===level) as MaterialId[]);
-const dropsByLevel=new Map<string,PersonalId[]>();
-for(const path of schools)for(let level=1;level<=100;level++){
-  dropsByLevel.set(path+level,catalogIds.filter(id=>{
-    const def=PERSONAL_ITEMS[id];
-    return (def.path==="all" || def.path===path) &&
-      !!def.forge && def.level!<=level && level<=def.dropMax!;
-  }));
-}
-export function fieldItem(path:string,owned:ReadonlySet<string>,monsterLevel=1,draw:(max:number)=>number=randomInt):BodyItemId|PracticeWeapon|MaterialId {
-  const level=Math.min(100,Math.max(1,Math.floor(monsterLevel)));
-  if(draw(4)===0){
-    const candidates=(dropsByLevel.get(path+level)??[]).filter(id=>!owned.has(id));
-    if(candidates.length)return candidates[draw(candidates.length)] as BodyItemId|PracticeWeapon;
-  }
-  const mats=materialsByTier[materialTier(level)-1];
-  return mats[draw(mats.length)];
 }
 export function wearsWraps(id:unknown):boolean { return id==="muay_wraps" || personalItem(id)?.family==="wp_wrap"; }
 export function wearsTwinSwords(id:unknown):boolean { return id==="arcane_sword" || personalItem(id)?.family==="wp_twins"; }

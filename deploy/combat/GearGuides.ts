@@ -1,7 +1,5 @@
 import {PERSONAL_ITEMS,monsterCardFor,type CardId,type PersonalId,type BodySlot,type ForgeRating,type ItemStats} from "./PersonalItems.js";
-import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
-import {TEMPLE_ID,TEMPLE_MAP,TEMPLE_SPAWNS} from "./TempleMap.js";
-import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS} from "./WorldAtlas.js";
+import {hunts,huntDetails,findItemHunt} from "./MonsterLoot.js";
 
 const schools={
   muay_boran:["wrap","brace","คาดเชือกรุกต่อเนื่อง","ตั้งรับแล้วสวน"],
@@ -23,28 +21,6 @@ type School=keyof typeof schools;
 type Style="pressure"|"endurance";
 type Position="mainHand"|BodySlot;
 const order:readonly Position[]=["mainHand","chest","offHand","head","legs","arms","feet","shoulders","leftHand","rightHand","neck","leftEar","rightEar","leftRing","rightRing"];
-type Hunt={id:string;name:string;level:number;mapId:string;tier?:string};
-const hunts:Hunt[]=[
-  {id:"possessed-1",name:"ผีสิง",mapId:"ritual_village",level:1},
-  ...FOREST_CAMPS.flatMap(c=>c.levels.map((level,index)=>({id:"forest_"+c.id+"_"+(index+1),name:level<5?"ผีหลงป่า":level<9?"เงารากไม้":"วิญญาณอาคม",level,mapId:"forbidden_forest",tier:c.tier}))),
-  {...SHRINE_GUARDIAN,mapId:"forbidden_forest",tier:"elite"},
-  ...TEMPLE_SPAWNS.map(monster=>({...monster,mapId:TEMPLE_ID})),...ATLAS_SPAWNS,...FRONTIER_SPAWNS,
-];
-function findHunt(low:number,high:number,playerLevel:number){
-  let best:Hunt|undefined,score=Infinity;
-  for(const mob of hunts){
-    if(mob.level<low || mob.level>high)continue;
-    const inaccessible=mob.mapId!=="ritual_village" && (!WORLD_EXPANSION || !getWorldMap(mob.mapId));
-    const cost=(inaccessible?1000:0)+(mob.tier==="boss"?100:mob.tier==="elite"?25:0)+Math.abs(mob.level-playerLevel);
-    if(cost<score){best=mob;score=cost;}
-  }
-  return best?huntDetails(best):null;
-}
-function huntDetails(mob:Hunt){
-  const map=getWorldMap(mob.mapId)??ATLAS_MAPS[mob.mapId]??(mob.mapId===TEMPLE_ID?TEMPLE_MAP:undefined);
-  return {monster:mob.name,level:mob.level,mapId:mob.mapId,map:map?.name??mob.mapId,
-    open:mob.mapId==="ritual_village"||Boolean(WORLD_EXPANSION&&getWorldMap(mob.mapId))};
-}
 function itemFamily(path:School,slot:Position,style:Style){
   const caster=path==="mender"||path==="seer", guarded=style==="endurance", tank=path==="sentinel";
   switch(slot){
@@ -103,7 +79,7 @@ export function personalGearGuides(path:string,level:number){
       const rating=style==="endurance" && profile.pool.includes("guard")?"guard":
         profile.pool.includes(offense)?offense:profile.primary;
       const card=bestCard(rating,item.level!,level);
-      return {position,id,affix:rating,card,cardHunt:card?cardHunt(card):null,hunt:findHunt(item.level!,item.dropMax!,level),
+      return {position,id,affix:rating,card,cardHunt:card?cardHunt(card):null,hunt:findItemHunt(id,level),
         next:nextIndex===-1?null:family[nextIndex]};
     });
     const totals:ItemStats={};

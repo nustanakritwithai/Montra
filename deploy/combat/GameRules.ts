@@ -6,7 +6,7 @@
  */
 import { ATLAS_TARGETS } from "./WorldAtlas.js";
 import { TEMPLE_TARGETS } from "./TempleMap.js";
-import { SHRINE_GUARDIAN } from "./WorldMaps.js";
+import { SHRINE_GUARDIAN,getWorldMap } from "./WorldMaps.js";
 export const RULES = Object.freeze({
   tickRate: 20,               // Colyseus fixed-step simulation: 50 ms
   mapLimit: 20,
@@ -84,10 +84,11 @@ export function parseMoveCommand(message: unknown, bounds: MapBounds = DEFAULT_B
 }
 
 export function parseAttackCommand(message: unknown): AttackCommand | null {
-  if (!hasExactKeys(message, ["targetId"])) return null;
-  return message.targetId === RULES.monsterId || message.targetId === SHRINE_GUARDIAN.id || (typeof message.targetId === "string" && (TEMPLE_TARGETS.has(message.targetId)||ATLAS_TARGETS.has(message.targetId))) || (typeof message.targetId === "string" && /^forest_(?:west|east|deep_west|deep_east)_[1-4]$/.test(message.targetId))
-    ? { targetId: message.targetId as string }
-    : null;
+  if (!hasExactKeys(message, ["targetId"]) || typeof message.targetId!=="string")return null;
+  const {targetId}=message;
+  if(targetId.startsWith("boss_"))return getWorldMap(targetId.slice(5))?.boss?.id===targetId?{targetId}:null;
+  return targetId===RULES.monsterId || targetId===SHRINE_GUARDIAN.id || TEMPLE_TARGETS.has(targetId) || ATLAS_TARGETS.has(targetId) ||
+    /^forest_(?:west|east|deep_west|deep_east)_[1-4]$/.test(targetId)?{targetId}:null;
 }
 
 /**
