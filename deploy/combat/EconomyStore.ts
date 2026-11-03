@@ -1,4 +1,5 @@
 import { forgeStamp, quoteForge, rollForge, type ForgeAction } from "./ForgeRules.js";
+import { changeCardSocket, DRILL_COST, type SocketOrder } from "./CardSockets.js";
 /** Single-process transactional economy. This store must own inventories before it is wired to gameplay. */
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
@@ -190,6 +191,20 @@ export class EconomyStore {
       account.gold-=WORKBENCH_GOLD;
       this.put(id,account);
       return {itemId:output,spentGold:WORKBENCH_GOLD};
+    });
+  }
+
+  socketItem(id:string,order:SocketOrder) {
+    const {requestId,...intent}=order;
+    return this.once(id,requestId,"card_socket",intent,()=>{
+      const account=this.account(id);
+      const cost=order.action==="drill"?DRILL_COST.gold:0;
+      if(account.gold<cost)throw Error("insufficient_gold");
+      const result=changeCardSocket(account.inventory,order);
+      account.gold-=cost;
+      account.inventory=result.bag;
+      this.put(id,account);
+      return {action:order.action,gear:order.gear,socket:result.socket,spentGold:cost};
     });
   }
 

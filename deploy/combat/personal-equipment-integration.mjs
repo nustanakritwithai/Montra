@@ -34,10 +34,13 @@ let active;
 try{
   active=await join({characterSetup:{name:"นักดาบฝึกหัด",build:{path:"phutthaisawan",ancestry:"shrine"}}});
   const {room,bag,me,event}=active;
-  assert.equal(Object.keys(bag.personalItems).length,60);
+  assert.equal(Object.keys(bag.personalItems).length,66);
+  assert.deepEqual(bag.cardDrill,{gold:20,itemId:"mat_metal_1",quantity:1});
   assert.deepEqual(bag.slots.filter(Boolean).map(s=>s.itemId),["health_potion","wp_twins_1"]);
   assert.equal(bag.slots[bag.equippedWeaponSlot].bound,true);
   assert.equal(me().equippedWeaponId,"wp_twins_1");
+  room.send("card_socket",{requestId:"test_drill_no_material",target:bag.equippedWeaponSlot,gear:"wp_twins_1",expected:"sealed",action:"drill",card:null});
+  await until(()=>event("economy_error",e=>e.reason==="drill_missing_metal"),"new character needs ore before drilling");
   room.send("attack",{targetId:room.state.monster.id});
   const rewarded=await until(()=>event("inventory_state",b=>b.firstChestClaimed),"first monster drops chest",35000);
   const slot=rewarded.slots.findIndex(s=>s?.itemId==="arm_medium_chest_1");assert(slot>=0);

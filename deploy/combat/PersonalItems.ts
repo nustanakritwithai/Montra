@@ -13,10 +13,18 @@ export function equipPositions(kind:unknown):readonly BodySlot[] {
   return isBodySlot(kind)?[kind]:[];
 }
 export type PersonalDefinition = {
-  name:string; kind:"mainHand"|BodySlot|"earring"|"ring"|"material"|"consumable"; path:string; stats:ItemStats;
+  name:string; kind:"mainHand"|BodySlot|"earring"|"ring"|"material"|"consumable"|"card"; path:string; stats:ItemStats;
   recipe?:readonly {item:string; qty:number}[];
+  monster?:string;
+  chancePct?:number;
 };
 export const PERSONAL_ITEMS = {
+  card_possessed: {"name":"การ์ดผีสิง","kind":"card","path":"all","stats":{"atk":1},"monster":"ผีสิง","chancePct":12},
+  card_lost_ghost: {"name":"การ์ดผีหลงป่า","kind":"card","path":"all","stats":{"hp":8},"monster":"ผีหลงป่า","chancePct":12},
+  card_root_shadow: {"name":"การ์ดเงารากไม้","kind":"card","path":"all","stats":{"def":1},"monster":"เงารากไม้","chancePct":12},
+  card_arcane_spirit: {"name":"การ์ดวิญญาณอาคม","kind":"card","path":"all","stats":{"magicAtk":1},"monster":"วิญญาณอาคม","chancePct":12},
+  card_shrine_keeper: {"name":"การ์ดผู้พิทักษ์ศาลร้าง","kind":"card","path":"all","stats":{"def":2,"hp":8},"monster":"ผู้พิทักษ์ศาลร้าง","chancePct":20},
+  card_rift_warden: {"name":"การ์ดราชันรอยแยก","kind":"card","path":"all","stats":{"atk":2,"magicAtk":2},"monster":"ราชันรอยแยก","chancePct":25},
   mat_metal_1: {"name":"แร่เหล็กชั้น1","kind":"material","path":"all","stats":{}},
   mat_wood_1: {"name":"แก่นไม้ชั้น1","kind":"material","path":"all","stats":{}},
   mat_fiber_1: {"name":"เส้นใยป่านชั้น1","kind":"material","path":"all","stats":{}},
@@ -84,10 +92,22 @@ export type PracticeWeapon = Extract<PersonalId,`wp_${string}`>;
 export type ChestId = Extract<PersonalId,`arm_${string}_chest_1`>;
 export type BodyItemId = Extract<PersonalId,`arm_${string}`|`off_${string}`|`acc_${string}`>;
 export type MaterialId = Extract<PersonalId,`mat_${string}`>;
+export type CardId = Extract<PersonalId,`card_${string}`>;
 export const SALVE_ID = "use_salve_1";
 export const WORKBENCH_GOLD = 4;
 export function personalItem(id:unknown): PersonalDefinition | undefined {
   return typeof id === "string" && Object.hasOwn(PERSONAL_ITEMS,id) ? PERSONAL_ITEMS[id as PersonalId] : undefined;
+}
+export function isCardId(id:unknown):id is CardId {return personalItem(id)?.kind==="card";}
+export function monsterCardDrop(id:string,level:number,draw=()=>randomInt(100)):CardId|null {
+  let card:CardId;
+  if(id==="possessed-1")card="card_possessed";
+  else if(id==="forest_shrine_keeper")card="card_shrine_keeper";
+  else if(id==="atlas_rift_warden")card="card_rift_warden";
+  else if(/^forest_(west|east|deep_west|deep_east)_[1-4]$/.test(id))
+    card=level<5?"card_lost_ghost":level<9?"card_root_shadow":"card_arcane_spirit";
+  else return null;
+  return draw()<PERSONAL_ITEMS[card].chancePct?card:null;
 }
 export function startingWeapon(path:string):PracticeWeapon {
   const id = (Object.keys(PERSONAL_ITEMS) as PersonalId[]).find(key => personalItem(key)?.kind==="mainHand" && personalItem(key)?.path===path);

@@ -1,5 +1,5 @@
 import { readForged, type Forged } from "./ForgeRules.js";
-import { personalItem, startingWeapon, firstChest, fieldItem, isBodySlot, equipPositions, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
+import { personalItem, startingWeapon, firstChest, fieldItem, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
 import { PROGRESSION, type CombatStats } from "./Progression.js";
 import { MUAY_WRAP_ID } from "./MuayRules.js";
 /**
@@ -30,18 +30,20 @@ export const SHRINE_RECIPE = Object.freeze({
 });
 type LegacyWeapon = typeof STARTER_WEAPON_IDS[number] | typeof SHRINE_GLAIVE | typeof MUAY_WRAP_ID;
 export type WeaponItemId = LegacyWeapon | PracticeWeapon;
-export type StackableId = typeof POTION_ID | typeof SHRINE_SHARD | typeof SALVE_ID | MaterialId;
+export type StackableId = typeof POTION_ID | typeof SHRINE_SHARD | typeof SALVE_ID | MaterialId | CardId;
 export function isStackableItem(value: unknown): value is StackableId {
-  return value === POTION_ID || value === SHRINE_SHARD || value===SALVE_ID || personalItem(value)?.kind==="material";
+  return value === POTION_ID || value === SHRINE_SHARD || value===SALVE_ID || personalItem(value)?.kind==="material" || isCardId(value);
 }
 export type ItemId = StackableId | WeaponItemId | BodyItemId;
-export type InventoryStack = { itemId: ItemId; quantity: number; forge?: Forged; bound?:true };
+/** Missing socket = undrilled, null = drilled, ID = installed card. */
+export type InventoryStack = { itemId: ItemId; quantity: number; forge?: Forged; bound?:true; socket?: CardId|null };
 export type InventorySnapshot = {
   version: 1;
   slots: Array<InventoryStack | null>;
   /** Missing only for a legacy V0.2.6 potion-only save; null = deliberately unequipped. */
   equippedWeaponSlot?: number | null;
   equipment?: Partial<Record<BodySlot,BodyItemId>>;
+  equipmentSockets?: Partial<Record<BodySlot,CardId|null>>;
   firstChestClaimed?:true;
 };
 export type ItemUseResult =
@@ -71,6 +73,9 @@ function record(value: unknown): value is Record<string, unknown> {
 function isWeaponId(value: unknown): value is WeaponItemId {
   return value === SHRINE_GLAIVE || value === MUAY_WRAP_ID || STARTER_WEAPON_IDS.some(id => id === value) || personalItem(value)?.kind==="mainHand";
 }
+export function isSocketGear(id:unknown):id is WeaponItemId|BodyItemId {
+  return isWeaponId(id) || equipPositions(personalItem(id)?.kind).length>0;
+}
 
 export function makeClassInventory(path:string):InventorySnapshot {
   const slots = new Array<InventoryStack|null>(INVENTORY_SLOT_COUNT).fill(null);
@@ -99,20 +104,20 @@ export function validateInventory(value: unknown): InventorySnapshot {
   }
   const keys = Object.keys(value);
   const upgraded = Object.prototype.hasOwnProperty.call(value, "equippedWeaponSlot");
-  if (keys.some(key=>!["version","slots","equippedWeaponSlot","equippedChestSlot","equipment","firstChestClaimed"].includes(key)) ||
-      (!upgraded && (Object.hasOwn(value,"equippedChestSlot") || Object.hasOwn(value,"equipment") || Object.hasOwn(value,"firstChestClaimed"))) ||
+  if (keys.some(key=>!["version","slots","equippedWeaponSlot","equippedChestSlot","equipment","equipmentSockets","firstChestClaimed"].includes(key)) ||
+      (!upgraded && (Object.hasOwn(value,"equippedChestSlot") || Object.hasOwn(value,"equipment") || Object.hasOwn(value,"equipmentSockets") || Object.hasOwn(value,"firstChestClaimed"))) ||
       (Object.hasOwn(value,"firstChestClaimed") && value.firstChestClaimed!==true)) {
     throw new Error("inventory_record_invalid");
   }
   const seenWeapons = new Set<ItemId>();
   const slots = value.slots.map((entry: unknown): InventoryStack | null => {
     if (entry === null) return null;
-    if (!record(entry) || Object.keys(entry).some(key => !["itemId","quantity","forge","bound"].includes(key)) ||
+    if (!record(entry) || Object.keys(entry).some(key => !["itemId","quantity","forge","bound","socket"].includes(key)) ||
         !Number.isSafeInteger(entry.quantity)) {
       throw new Error("inventory_record_invalid");
     }
     if (isStackableItem(entry.itemId)) {
-      if (Object.hasOwn(entry,"bound") || Object.hasOwn(entry,"forge") || (entry.quantity as number) < 1 ||
+      if (Object.hasOwn(entry,"socket") || Object.hasOwn(entry,"bound") || Object.hasOwn(entry,"forge") || (entry.quantity as number) < 1 ||
           (entry.quantity as number) > INVENTORY_STACK_LIMIT) {
         throw new Error("inventory_record_invalid");
       }
@@ -124,7 +129,10 @@ export function validateInventory(value: unknown): InventorySnapshot {
         (Object.hasOwn(entry,"bound") && (!personalItem(itemId) || entry.bound!==true)) ||
         entry.quantity!==1 || seenWeapons.has(itemId)) throw Error("inventory_record_invalid");
     seenWeapons.add(itemId);
-    return {itemId,quantity:1,...(entry.bound===true ? {bound:true as const} : {}), ...(Object.hasOwn(entry,"forge") ? {forge:readForged(entry.forge)} : {})};
+    const socket=Object.hasOwn(entry,"socket")?entry.socket:undefined;
+    if(socket!==undefined && socket!==null && !isCardId(socket))throw Error("inventory_record_invalid");
+    return {itemId,quantity:1,...(entry.bound===true ? {bound:true as const} : {}), ...(Object.hasOwn(entry,"forge") ? {forge:readForged(entry.forge)} : {}),
+      ...(socket!==undefined ? {socket:socket as CardId|null} : {})};
   });
   if (!upgraded) return { version: 1, slots };
   const selected = value.equippedWeaponSlot;
@@ -155,6 +163,14 @@ export function validateInventory(value: unknown): InventorySnapshot {
     }
   }
   if(value.firstChestClaimed===true)result.firstChestClaimed=true;
+  if(Object.hasOwn(value,"equipmentSockets")){
+    if(!record(value.equipmentSockets))throw Error("inventory_record_invalid");
+    result.equipmentSockets={};
+    for(const [position,card] of Object.entries(value.equipmentSockets)){
+      if(!isBodySlot(position) || !result.equipment?.[position] || (card!==null && !isCardId(card)))throw Error("inventory_record_invalid");
+      result.equipmentSockets[position]=card as CardId|null;
+    }
+  }
   return result;
 }
 
@@ -219,19 +235,26 @@ export function equipBody(inventory:InventorySnapshot,position:BodySlot,slot:num
   const def=personalItem(expected);
   if (!def || !equipPositions(def.kind).includes(position))return {ok:false,reason:"equipment_changed"};
   const equipment={...next.equipment};
+  const sockets={...next.equipmentSockets};
+  const wornStack:InventoryStack|null=worn?{itemId:worn,quantity:1,bound:true,
+    ...(Object.hasOwn(sockets,position)?{socket:sockets[position]}:{})}:null;
   if (slot===null) {
     if (worn!==expected)return {ok:false,reason:"equipment_changed"};
     const empty=next.slots.indexOf(null);
     if(empty<0)return {ok:false,reason:"inventory_full"};
-    next.slots[empty]={itemId:worn,quantity:1,bound:true};
+    next.slots[empty]=wornStack;
     delete equipment[position];
+    delete sockets[position];
   } else {
     if(next.slots[slot]?.itemId!==expected)return {ok:false,reason:"equipment_changed"};
     if(def.path!=="all" && def.path!==path)return {ok:false,reason:"wrong_item_class"};
-    next.slots[slot]=worn ? {itemId:worn,quantity:1,bound:true} : null;
+    const incomingSocket=next.slots[slot]!.socket;
+    if(incomingSocket===undefined)delete sockets[position];else sockets[position]=incomingSocket;
+    next.slots[slot]=wornStack;
     equipment[position]=expected;
   }
   next.equipment=equipment;
+  if(Object.keys(sockets).length)next.equipmentSockets=sockets;else delete next.equipmentSockets;
   return {ok:true,inventory:next,weaponId:equippedWeaponId(next)};
 }
 
@@ -244,7 +267,8 @@ export function parseBodyCommand(message:unknown) {
 
 export function equippedStats(base:CombatStats,bag:InventorySnapshot|undefined):CombatStats {
   if(!bag)return base;
-  const result=withEquipmentStats(base,[equippedWeaponId(bag),...Object.values(bag.equipment??{})]);
+  const weapon=bag.slots[bag.equippedWeaponSlot??-1];
+  const result=withEquipmentStats(base,[weapon?.itemId,weapon?.socket,...Object.values(bag.equipment??{}),...Object.values(bag.equipmentSockets??{})]);
   result.maxHp=Math.min(PROGRESSION.maxHp,result.maxHp);
   result.maxStamina=Math.min(PROGRESSION.maxStamina,result.maxStamina);
   return result;

@@ -4,7 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { EconomyStore, STARTER_GOLD } from "./EconomyStore.js";
-import { BODY_SLOTS, PERSONAL_ITEMS, personalItem, equipPositions, type BodyItemId } from "./PersonalItems.js";
+import { BODY_SLOTS, PERSONAL_ITEMS, personalItem, equipPositions, monsterCardDrop, type BodyItemId } from "./PersonalItems.js";
+import { parseSocketOrder, type SocketOrder } from "./CardSockets.js";
 import { makeClassInventory, makeStarterInventory, equipBody, equippedStats, parseBodyCommand, validateInventory, equipInventoryWeapon, practiceLoot } from "./ItemRules.js";
 
 const a = "a".repeat(64), b = "b".repeat(64), c = "c".repeat(64);
@@ -129,6 +130,71 @@ function setup(): { store: EconomyStore; dir: string; file: string } {
   for (const id of [a,b,c]) store.register(id,makeStarterInventory());
   return { store,dir,file };
 }
+
+test("a drilled ring keeps its card through sale, wear, side swap and retrieval", () => {
+  const store=new EconomyStore(":memory:");
+  try{
+    const initial=makeClassInventory("blade"), gear="acc_ring_atk_1", card="card_possessed";
+    initial.slots[2]={itemId:gear,quantity:1};
+    initial.slots[3]={itemId:"mat_metal_1",quantity:2};
+    initial.slots[4]={itemId:card,quantity:1};
+    store.register(a,initial);store.register(b,makeClassInventory("blade"));
+    const drill:SocketOrder={requestId:request(60),target:2,gear,expected:"sealed",action:"drill",card:null};
+    const insert:SocketOrder={...drill,requestId:request(61),action:"insert",expected:"empty",card};
+    assert.throws(()=>store.socketItem(a,insert),/socket_changed/);
+    assert.deepEqual(store.socketItem(a,drill),store.socketItem(a,drill));
+    assert.equal(store.getAccount(a).gold,STARTER_GOLD-20);
+    assert.equal(store.getAccount(a).inventory.slots[3]?.quantity,1);
+    assert.throws(()=>store.socketItem(a,{...drill,requestId:request(62)}),/socket_changed/);
+    assert.deepEqual(store.socketItem(a,insert),store.socketItem(a,insert));
+    assert.equal(store.getAccount(a).inventory.slots[4],null);
+    assert.throws(()=>store.socketItem(a,{...drill,requestId:insert.requestId}),/request_id_conflict/);
+    const listing=store.listItem(a,request(63),2,1,15);
+    assert.equal(store.list()[0].item.socket,card);
+    store.buy(b,request(64),listing.listingId);
+    const buyer=store.getAccount(b).inventory, bagIndex=buyer.slots.findIndex(s=>s?.itemId===gear);
+    const worn=equipBody(buyer,"leftRing",bagIndex,gear,"blade");assert(worn.ok);
+    const base={atk:20,def:30,maxHp:240,maxStamina:100,magicAtk:15,magicDef:20};
+    assert.equal(equippedStats(base,worn.inventory).atk-equippedStats(base,buyer).atk,3);
+    const substitute="acc_ring_guard_1";
+    worn.inventory.slots[bagIndex]={itemId:substitute,quantity:1};
+    const swap=equipBody(worn.inventory,"leftRing",bagIndex,substitute,"blade");assert(swap.ok);
+    assert.equal(swap.inventory.slots[bagIndex]?.socket,card);
+    assert.equal(swap.inventory.equipmentSockets?.leftRing,undefined);
+    const right=equipBody(swap.inventory,"rightRing",bagIndex,gear,"blade");assert(right.ok);
+    right.inventory.slots=right.inventory.slots.map(s=>s??{itemId:"mat_ink_1",quantity:99});
+    store.saveCharacter(b,{inventory:right.inventory},right.inventory);
+    const remove:SocketOrder={requestId:request(65),gear,target:"rightRing",action:"remove",expected:card,card:null};
+    assert.throws(()=>store.socketItem(b,remove),/inventory_full/);
+    assert.equal(store.getAccount(b).inventory.equipmentSockets?.rightRing,card);
+    right.inventory.slots[bagIndex]=null;
+    store.saveCharacter(b,{inventory:right.inventory},right.inventory);
+    assert.deepEqual(store.socketItem(b,remove),store.socketItem(b,remove));
+    const saved=store.getAccount(b).inventory;
+    assert.deepEqual(saved.slots[bagIndex],{itemId:card,quantity:1});
+    assert.equal(saved.equipmentSockets?.rightRing,null);
+    assert.equal(equippedStats(base,saved).atk,equippedStats(base,right.inventory).atk-1);
+    // Old gear, including its forge state, may be drilled while worn in its bag slot.
+    const weaponDrill:SocketOrder={...drill,target:1,gear:"wp_shadow_1",requestId:request(66)};
+    assert.throws(()=>store.socketItem(b,weaponDrill),/drill_missing_metal/);
+    assert(!Object.hasOwn(store.getAccount(b).inventory.slots[1]!,"socket"));
+    assert.equal(parseSocketOrder({...insert,gear:"mat_ink_1"}),null);
+    assert.equal(parseSocketOrder({...insert,card:"fake_card"}),null);
+  }finally{store.close();}
+});
+
+test("a monster rolls only its own card at its published rate", () => {
+  const monsters=[
+    ["possessed-1",1,"card_possessed",12],["forest_west_1",2,"card_lost_ghost",12],
+    ["forest_east_3",6,"card_root_shadow",12],["forest_deep_east_4",12,"card_arcane_spirit",12],
+    ["forest_shrine_keeper",12,"card_shrine_keeper",20],["atlas_rift_warden",100,"card_rift_warden",25]
+  ] as const;
+  for(const [id,level,expected,chance] of monsters){
+    assert.equal(monsterCardDrop(id,level,()=>chance-1),expected);
+    assert.equal(monsterCardDrop(id,level,()=>chance),null);
+  }
+  assert.equal(monsterCardDrop("unrelated",1,()=>0),null);
+});
 test("starter balance once, escrow purchase, idempotency, and restart", () => {
   const {store,dir,file}=setup();
   try {

@@ -55,7 +55,8 @@ import { SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_RANKABLE_SKILLS, S
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { isMuayFoundation, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
-import { PERSONAL_ITEMS, WORKBENCH_GOLD, SALVE_ID, wearsWraps, wearsTwinSwords } from "./PersonalItems.js";
+import { PERSONAL_ITEMS, WORKBENCH_GOLD, SALVE_ID, wearsWraps, wearsTwinSwords, monsterCardDrop } from "./PersonalItems.js";
+import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
 import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
@@ -1916,7 +1917,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.broadcast("possession_changed",{playerId:id,active:false,reason},{afterNextPatch:true});
   }
 
-  private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal", shrineLoot = false): void {
+  private grantMonsterExperience(id: string, monsterId:string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal", shrineLoot = false): void {
     const player = this.state.players.get(id);
     const priorReward=this.pendingRewards.get(id);
     if (!player || !this.persistentCharacters.has(id) || (this.pendingWarps.has(id) && !priorReward)) return;
@@ -1943,7 +1944,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const bag=previousLoot ?? snapshot.inventory;
         const fieldDrop=bag && personalEligible
           ? practiceLoot(bag,current.pathId) : undefined;
-        const loot=fieldDrop?.bag ?? previousLoot;
+        const afterField=fieldDrop?.bag ?? bag;
+        const card=personalEligible && afterField ? monsterCardDrop(monsterId,monsterLevel) : null;
+        const cardBag=card && afterField ? grantStackReward(afterField,card) : null;
+        const loot=cardBag ?? fieldDrop?.bag ?? previousLoot;
         await characterStore.save({ ...snapshot, ...next, inventory:loot ?? snapshot.inventory, updatedAt: new Date().toISOString() });
         if (loot) this.inventories.set(id,loot);
         current.level = next.level; current.experience = next.experience;
@@ -1955,6 +1959,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
             ...(shrineLoot ? {shrineShard:shard ? "granted" : "bag_full"} : {}),
             ...(tier === "boss" ? {riftVictory:true} : {}),
             ...(fieldDrop ? {personalDrop:fieldDrop.id ?? "bag_full"} : {}),
+            ...(card ? {cardDrop:card,cardReceived:Boolean(cardBag)} : {}),
             ...(dropsPotion ? {elitePotion:prize ? "granted" : "bag_full"} : {})});
         } catch { /* The committed reward remains available on reconnect. */ }
       } catch (error) {
@@ -1972,7 +1977,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const shrineLoot = characterStore.economyEnabled && monster.mapId === "forbidden_forest" && monster.id === SHRINE_GUARDIAN.id && tier === "elite";
     if (!winner) return;
     if (!party) {
-      this.grantMonsterExperience(winnerId, undefined, monster.level, tier,
+      this.grantMonsterExperience(winnerId, monster.id, undefined, monster.level, tier,
         shrineLoot && winner.alive && winner.mapId === monster.mapId && distance3d(winner,monster) <= PARTY_XP_RADIUS);
       return;
     }
@@ -1984,7 +1989,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         inTransit:this.pendingWarps.has(id) && !this.pendingRewards.has(id)});
     }
     const shares=partyMonsterShares(winner.level,{mapId:monster.mapId,level:monster.level,tier,x:monster.x,y:monster.y,z:monster.z},members,PARTY_XP_RADIUS,shrineLoot || this.accountSessions.has(winnerId));
-    for(const share of shares)this.grantMonsterExperience(share.sessionId,share.amount,monster.level,tier,shrineLoot);
+    for(const share of shares)this.grantMonsterExperience(share.sessionId,monster.id,share.amount,monster.level,tier,shrineLoot);
   }
 
   private guildAction(client:Client, action:(character:string)=>void):void {
@@ -2045,7 +2050,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","forge_max_rank","forge_item_changed","craft_missing_shard","craft_missing_material","item_bound"];
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","forge_max_rank","forge_item_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal"];
       const reason=error instanceof Error && allowed.includes(error.message) ? error.message : "economy_failed";
       if (reason==="economy_failed") console.error("MONTRA economy failed",error);
       client.send("economy_error",{reason});
@@ -2512,6 +2517,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         client.send("craft_result", {requestId: order.requestId, ...result});
       });
     },
+    card_socket: (client:Client,message:unknown) => {
+      const order=parseSocketOrder(message);
+      if(!order)return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{
+        const result=characterStore.economy.socketItem(id,order);
+        this.syncEconomy(client,id);
+        client.send("card_socket_result",{requestId:order.requestId,...result});
+      });
+    },
     forge_weapon: (client: Client, message: unknown) => {
       const order = parseForge(message);
       if (!order) return this.reject(client, "invalid_economy_request");
@@ -2674,7 +2688,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const last = this.lastInventoryReadMs.get(id) ?? -Infinity;
       if (this.simulatedMs - last < 1_000) return;
       this.lastInventoryReadMs.set(id, this.simulatedMs);
-      client.send("inventory_state", {...inventory,personalItems:PERSONAL_ITEMS,workbenchGold:WORKBENCH_GOLD});
+      client.send("inventory_state", {...inventory,personalItems:PERSONAL_ITEMS,workbenchGold:WORKBENCH_GOLD,cardDrill:DRILL_COST});
     },
     use_item: (client: Client, message: unknown) => {
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
