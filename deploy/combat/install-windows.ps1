@@ -234,6 +234,7 @@ try {
   Write-Host "MONTRA BLADE BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA SENTINEL BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA ACCOUNT BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA MOUNT BUILD PASSED." -ForegroundColor Green
   Write-Host "Source revision: $Revision"
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."

@@ -130,6 +130,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private activeDashes = new Map<string, ActiveDash>();
   private lastDashMs = new Map<string, number>();
   private attackTargets = new Map<string, string>();
+  private mountHitSequence = new Map<string, number>();
+  private lastMountMs = new Map<string, number>();
   private lastAttackMs = new Map<string, number>();
   private lastCombatMs = new Map<string, number>();
   private lastWarpMs = new Map<string, number>();
@@ -250,6 +252,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return Boolean(target && target.mapId === owner.mapId && !isRestArea(target.mapId,target));
   }
 
+  private blockMounted(client:Client):boolean {
+    if (!this.state.players.get(client.sessionId)?.mounted) return false;
+    this.reject(client,"dismount_required");
+    return true;
+  }
+  private dismount(id:string, reason:string):void {
+    const player=this.state.players.get(id);
+    this.mountHitSequence.delete(id);
+    if(!player?.mounted)return;
+    player.mounted=false;
+    this.broadcast("mount_changed",{playerId:id,mounted:false,reason},{afterNextPatch:true});
+  }
   private buildPlayer(client: Client, gate: "build" | "swordTree" | "occult" = "build"): Player | undefined {
     const id = client.sessionId, player = this.state.players.get(id);
     if(this.sentinelStuns.has(id)) { this.reject(client,"sentinel_stunned"); return; }
@@ -2398,10 +2412,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     sword_tree_school: (client: Client, message: unknown) => this.changeSwordTree(client, message, "school"),
     sword_tree_reset: (client: Client, message: unknown) => this.changeSwordTree(client, message, "reset"),
     sword_tree_equip: (client: Client, message: unknown) => this.changeSwordTree(client, message, "equip"),
-    sword_skill: (client: Client, message: unknown) => this.castSwordSkill(client, message),
-    muay_skill: (client: Client, message: unknown) => this.castMuaySkill(client, message),
-    grapple_escape: (client: Client, message: unknown) => this.escapeMuayGrapple(client, message),
-    grapple_counter: (client: Client, message: unknown) => this.counterMuayGrapple(client, message),
+    sword_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castSwordSkill(client, message);},
+    muay_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castMuaySkill(client, message);},
+    grapple_escape: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.escapeMuayGrapple(client, message);},
+    grapple_counter: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.counterMuayGrapple(client, message);},
     muay_book: (client: Client, message: unknown) => this.changeMuayBook(client, message),
     occult_book_get: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client,"invalid_occult_book");
@@ -2411,7 +2425,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendOccultBook(client);
     },
     occult_book: (client: Client, message: unknown) => this.changeOccultBook(client,message),
-    occult_skill: (client: Client, message: unknown) => this.castOccultSkill(client,message),
+    occult_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castOccultSkill(client,message);},
     blade_book_get: (client: Client, message: unknown) => {
       if(!parseEmptyCommand(message)) return this.reject(client,"invalid_blade_book");
       const player=this.buildPlayer(client,"occult");
@@ -2420,7 +2434,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendBladeBook(client);
     },
     blade_book: (client: Client, message: unknown) => this.changeBladeBook(client,message),
-    blade_skill: (client: Client, message: unknown) => this.castBladeSkill(client,message),
+    blade_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castBladeSkill(client,message);},
     sentinel_book_get: (client:Client,message:unknown) => {
       if(!parseEmptyCommand(message))return this.reject(client,"invalid_sentinel_book");
       const player=this.buildPlayer(client,"occult");if(!player)return;
@@ -2428,8 +2442,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendSentinelBook(client);
     },
     sentinel_book: (client:Client,message:unknown) => this.changeSentinelBook(client,message),
-    sentinel_skill: (client:Client,message:unknown) => this.castSentinelSkill(client,message),
+    sentinel_skill: (client:Client,message:unknown) => {if(!this.blockMounted(client))this.castSentinelSkill(client,message);},
     cast_class_skill: (client: Client, message: unknown) => {
+      if(this.blockMounted(client))return;
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_build");
       this.castClassSkill(client);
     },
@@ -2482,6 +2497,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           }
           const current = this.state.players.get(id);
           if (!current) return;
+          this.dismount(id,"warp");
           // Once the durable write succeeds, commit the destination before
           // any optional notifications so a disconnected client cannot turn
           // a committed warp into a misleading disk-failure result.
@@ -2633,7 +2649,25 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       })();
       this.pendingItemUses.set(id, task);
     },
+    toggle_mount: (client:Client,message:unknown) => {
+      if(!parseEmptyCommand(message))return this.reject(client,"invalid_mount");
+      const id=client.sessionId, player=this.state.players.get(id);
+      if(!player?.alive || !this.persistentCharacters.has(id))return this.reject(client,"mount_unavailable");
+      if(player.mounted){this.dismount(id,"manual");return;}
+      if(this.simulatedMs-(this.lastMountMs.get(id) ?? -Infinity)<1000)return this.reject(client,"mount_cooldown");
+      if(this.pendingWarps.has(id) || this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
+        this.climbs.has(id) || this.flightTransitions.has(id) || player.flying || !onMapGround(player) || this.activeDashes.has(id) ||
+        this.sentinelStuns.has(id) || this.sentinelWindups.has(id) || this.sentinelAnchors.has(id) || this.muayControlled(id) ||
+        this.bladeCloaks.has(id) || this.bladeWindups.has(id) || this.bladeCasts.has(id))return this.reject(client,"mount_unavailable");
+      const engaged=this.attackTargets.has(id) || [...this.attackTargets.values()].includes(id) || this.state.monster.targetId===id || this.forest.engaged(id);
+      if(engaged || this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)return this.reject(client,"mount_in_combat");
+      this.despawnSummon(id,"mounted");
+      this.destinations.delete(id);this.crestTurns.delete(id);player.targetId="";player.combatState="idle";
+      player.mounted=true;this.mountHitSequence.set(id,player.hitSeq);this.lastMountMs.set(id,this.simulatedMs);
+      this.broadcast("mount_changed",{playerId:id,mounted:true},{afterNextPatch:true});
+    },
     fly: (client: Client, message: unknown) => {
+      if(this.blockMounted(client))return;
       if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
       if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
@@ -2680,6 +2714,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }, { afterNextPatch: true });
     },
     dash: (client: Client, message: unknown) => {
+      if(this.blockMounted(client))return;
       if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
       if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
@@ -2776,6 +2811,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
 
     attack: (client: Client, message: unknown) => {
+      if(this.blockMounted(client))return;
       if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
       if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
@@ -2829,10 +2865,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     },
 
-    summon: (client: Client, message: unknown) => this.summonSpirit(client, message, "guardian"),
-    pot_summon: (client: Client, message: unknown) => this.summonSpirit(client, message, "pot_spirit"),
+    summon: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.summonSpirit(client, message, "guardian");},
+    pot_summon: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.summonSpirit(client, message, "pot_spirit");},
 
     possess: (client:Client,message:unknown) => {
+      if(this.blockMounted(client))return;
       const id=client.sessionId;
       if(this.sentinelStuns.has(id))return this.reject(client,"sentinel_stunned");
       if(this.sentinelWindups.has(id))return this.reject(client,"sentinel_windup_active");
@@ -2867,6 +2904,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // The client never writes Y. A validated ladder is the only route
     // between ground y=0 and the watchwall top y=4.
     climb: (client: Client, message: unknown) => {
+      if(this.blockMounted(client))return;
       if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
       if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
@@ -2913,9 +2951,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         { afterNextPatch:true });
     },
 
-    shoot: (client: Client, message: unknown) => this.castBlessedRice(client, message),
-    blessed_rice: (client: Client, message: unknown) => this.castBlessedRice(client, message),
-    apply_talisman: (client: Client, message: unknown) => this.applyTalisman(client, message),
+    shoot: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castBlessedRice(client, message);},
+    blessed_rice: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castBlessedRice(client, message);},
+    apply_talisman: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.applyTalisman(client, message);},
   };
 
   private spellCaster(client: Client) {
@@ -3362,6 +3400,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     (id,p,m)=>!this.bladeCloaks.has(id) || planarDistance(p,m)<=(m.tier==="normal"?(this.bladeBooks.get(id)?.learned.includes("quiet_step")?0.75:1.5):5));
     this.updatePlayerAttacks();
     this.updateSummons(dt);
+    for(const [id,hitSequence] of this.mountHitSequence) {
+      const player=this.state.players.get(id);
+      if(!player || !player.alive || player.hitSeq!==hitSequence || this.sentinelStuns.has(id) || this.muayControlled(id))this.dismount(id,"hit");
+    }
     this.updateResources(dt);
     if (this.simulatedMs >= this.nextCharacterSaveMs) {
       this.nextCharacterSaveMs = this.simulatedMs + CHARACTER_SAVE_INTERVAL_MS;
@@ -3463,7 +3505,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.activeDashes.delete(sessionId);
         continue;
       }
-      const moveSpeed=player.flying ? FLIGHT.horizontalSpeed : RULES.playerSpeed * (this.sentinelAnchors.has(sessionId)?0.6:1) *
+      const moveSpeed=player.flying ? FLIGHT.horizontalSpeed : player.mounted ? RULES.mountedSpeed : RULES.playerSpeed * (this.sentinelAnchors.has(sessionId)?0.6:1) *
         (this.bladeCloaks.has(sessionId) && this.bladeBooks.get(sessionId)?.learned.includes("quiet_step") ? 1+BLADE_LESSONS.quiet_step.power : 1);
 
       const dash = this.activeDashes.get(sessionId);
@@ -3546,6 +3588,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       const dx = target.x - player.x;
       const dz = target.z - player.z;
+      if(player.mounted){
+        const distance=Math.hypot(dx,dz);
+        if(distance<.035){player.combatState="idle";this.destinations.delete(sessionId);continue;}
+        const move=advanceDash(player,{dx:dx/distance,dz:dz/distance},Math.min(distance,moveSpeed*dt),
+          (x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId),getWorldMap(player.mapId)!.bounds);
+        if(move.moved)player.facing=facingTo(dx,dz);
+        this.moveOnSurface(player,move.x,move.z);
+        if(move.blocked || Math.hypot(target.x-player.x,target.z-player.z)<.035){this.destinations.delete(sessionId);player.combatState="idle";}
+        else player.combatState="moving";
+        continue;
+      }
       const next = stepTowards(player, target,
         moveSpeed * dt);
       if (next.moved) player.facing = facingTo(dx, dz);
@@ -3664,6 +3717,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.clearMuayCombosForTarget(id);
     const victim = this.state.players.get(id);
     if (!victim || !victim.alive) return;
+    this.dismount(id,"dead");
     victim.stunned=false;
     this.endPossession(id,"owner_dead");
     this.effects.forget(id);
@@ -4124,6 +4178,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    this.mountHitSequence.delete(id);this.lastMountMs.delete(id);
     this.accountSessions.delete(id);
     this.clearGrappleCountersFor(id,"disconnect");
     this.clearMuayDefense(id,"cancelled");
@@ -4240,6 +4295,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     });
     await Promise.allSettled(pending);
     this.persistentCharacters.clear();
+    this.mountHitSequence.clear();this.lastMountMs.clear();
     this.accountSessions.clear();
     this.inventories.clear();
     this.pendingItemUses.clear();

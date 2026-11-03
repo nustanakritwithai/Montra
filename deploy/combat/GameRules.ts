@@ -11,6 +11,7 @@ export const RULES = Object.freeze({
   tickRate: 20,               // Colyseus fixed-step simulation: 50 ms
   mapLimit: 20,
   playerSpeed: 3,
+  mountedSpeed: 5.4,          // server-owned horse travel speed, provisional
   // Fixed-tick dash: fast but finite, with server-owned range and cooldown.
   dashSpeed: 13.5,
   dashDistance: 4.5,
