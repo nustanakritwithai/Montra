@@ -34,8 +34,8 @@ export type SwordNode = Readonly<{
   power:number; range:number; training?:Readonly<{id:"strikes"|"blocks"|"finishes";count:number}>;
 }>;
 export const SWORD_NODES: Readonly<Record<string,SwordNode>> = Object.freeze({
-  footwork:{name:"ย่างสามขุม",description:"ก้าวเข้าหาเป้าหมายและฟัน",school:"common",level:1,requires:[],effect:"step",stamina:15,cooldownMs:6000,power:0.9,range:6},
-  guard:{name:"ตั้งดาบรับ",description:"ลดความเสียหายและเปิดโอกาสสวน",school:"common",level:3,requires:["footwork"],training:{id:"strikes",count:5},effect:"guard",stamina:15,cooldownMs:8000,power:0.5,range:0},
+  footwork:{name:"ย่างสามขุม",description:"ก้าวเข้าหาเป้าหมายและฟัน",school:"common",level:1,requires:[],effect:"step",stamina:13,cooldownMs:6000,power:0.9,range:6},
+  guard:{name:"ตั้งดาบรับ",description:"ลดความเสียหายและเปิดโอกาสสวน",school:"common",level:3,requires:["footwork"],training:{id:"strikes",count:5},effect:"guard",stamina:13,cooldownMs:8000,power:0.5,range:0},
   sweep:{name:"ฟันเปิดทาง",description:"ฟันศัตรูด้านหน้าหลายตัว",school:"common",level:5,requires:["footwork"],training:{id:"strikes",count:10},effect:"area",stamina:20,cooldownMs:8000,power:0.85,range:3},
   rhythm:{name:"จังหวะเพลงดาบ",description:"เพิ่มพลังโจมตีประชิด 5%",school:"common",level:7,requires:["guard","sweep"],training:{id:"blocks",count:3},effect:"passive",stamina:0,cooldownMs:0,power:0.05,range:0},
   twin_cut:{name:"ฟันสลับซ้ายขวา",description:"ฟันเป้าหมายสองครั้งต่อเนื่อง",school:"phutthaisawan",level:10,requires:["footwork"],effect:"flurry",stamina:18,cooldownMs:6000,power:0.7,range:2.8},

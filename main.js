@@ -10107,7 +10107,7 @@
             room.send("pot_summon",{});toast("เรียกผีใช้ 15 มานา · กดวิชาอีกครั้งเมื่อผีปรากฏ");return;
           }
           if (node.effect==="trance" && !me.possessionActive) {
-            room.send("possess",{});toast("เข้าทรงใช้ 20 มานา · กดวิชาอีกครั้งเมื่อเข้าทรงแล้ว");return;
+            room.send("possess",{});toast("เข้าทรงใช้ 15 มานา · กดวิชาอีกครั้งเมื่อเข้าทรงแล้ว");return;
           }
         }
         if (["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind","pve_rice"].includes(node.effect)) {
