@@ -2678,10 +2678,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return choices.length?{points,choices}:undefined;
   }
 
+  private sendHuntGuide(client:Client,player:Player){
+    const id=client.sessionId, learningLevel=this.learningLevel(id,player);
+    const guide=personalGearGuides(player.pathId,player.level,learningLevel);
+    const training=player.level>=13?this.coreTrainingAtLevel(id,player.pathId,1,player.level):undefined;
+    client.send("gear_guides",guide && {...guide,learningLevel,cycle:this.rebirthStates.get(id)?.count??0,training:training??null});
+  }
+
   private sendFieldPractice(client:Client,player:Player,action:unknown,skillId:unknown,
     core:Readonly<Record<string,{name:string;effect?:string}>>,
     lessons?:Readonly<Record<string,{name:string;effect?:string}>>){
-    if(player.level<13 || player.level>50)return;
+    if(player.level<13)return;
     const deep=!!lessons && (action==="learn" || action==="upgrade" || action==="reset");
     if(deep && player.level<26)return;
     const training=this.coreTrainingAtLevel(client.sessionId,player.pathId,1,player.level);
@@ -2743,14 +2750,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.applyStats(id,current, this.statAllocations.get(id) ?? emptyAllocations());
         try {
           const recipient = this.clients.find(client => client.sessionId === id);
-          if(leveled && this.sentItemCatalog.has(id)){
-            const guides=personalGearGuides(current.pathId,current.level);
-            recipient?.send("gear_guides",guides && {...guides,learningLevel:this.learningLevel(id,current)});
-          }
+          if(leveled && recipient && this.sentItemCatalog.has(id))this.sendHuntGuide(recipient,current);
           if (loot) recipient?.send("inventory_state",loot);
           recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,
             ...(objective.completed ? {forestObjectiveCompleted:objective.completed,forestObjectiveBonus:bonus} : {}),
-            ...(current.level>=13 && current.level<=50 && (current.level<=25 || tier==="normal")?{fieldPrey:practiceSite(monsterId)}:{}),
+            ...(current.level>=13 && (current.level<=25 || tier==="normal")?{fieldPrey:practiceSite(monsterId)}:{}),
             ...(leveled?{training:this.coreTrainingAtLevel(id,current.pathId,snapshot.level,next.level)}:{}),
             ...(fieldDrop?.starterCopy?{starterCopy:fieldDrop.starterCopy}:{}),
             ...(fragment===SHRINE_SHARD ? {shrineShard:fragmentBag?"granted":"bag_full"} : {}),
@@ -3013,7 +3017,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.applyStats(id,current,this.statAllocations.get(id) ?? emptyAllocations());
         const client=this.clients.find(c=>c.sessionId===id);
         try{
-          if(leveled && this.sentItemCatalog.has(id))client?.send("gear_guides",personalGearGuides(current.pathId,current.level));
+          if(leveled && client && this.sentItemCatalog.has(id))this.sendHuntGuide(client,current);
           if(bag)client?.send("inventory_state",bag);
           client?.send("experience_gained",{amount,level:next.level,experience:next.experience,source:"war",...(material?{personalDrop:bag?material:"bag_full"}: {})});
         }catch(error){console.warn("MONTRA war EXP notice was not delivered",error);}
@@ -3650,11 +3654,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!this.sentItemCatalog.has(id)){
         for(const items of CATALOG_PAGES)client.send("item_catalog_page",{items});
         const player=this.state.players.get(id);
-        if(player){
-          const guide=personalGearGuides(player.pathId,player.level);
-          const training=player.level>=13 && player.level<=50?this.coreTrainingAtLevel(id,player.pathId,1,player.level):undefined;
-          client.send("gear_guides",guide && {...guide,learningLevel:this.learningLevel(id,player),training:training??null});
-        }
+        if(player)this.sendHuntGuide(client,player);
         this.sentItemCatalog.add(id);
       }
       if(characterStore.economyEnabled && !this.field && this.state.players.has(id))this.sendResourceMap(client,characterStore.economy.resourceMap(this.state.players.get(id)!.mapId));

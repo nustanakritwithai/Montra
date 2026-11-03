@@ -131,3 +131,27 @@ assert.deepEqual(context.lastCommand,{type:"muay_skill",skillId:"deep",targetId:
 assert(!journeyApi.notes().trial.used);journeyApi.cast({playerId:"hunter",skillId:"deep",targetId:journeyWorld.id});
 journeyApi.kill(journeyWorld);assert.equal(journeyApi.notes().trial,null);
 console.log("PASS level 35/45 saved skill points, regional boss selection and confirmed advanced practice");
+
+me.level=context.gearGuides.level=100; me.x=me.y=me.z=0;me.alive=true;
+context.fieldTrainingTip=null;context.gearGuides.cycle=0;
+const finalCamp={...journeyWorld,mapId:"rift",id:"rift100",level:100,monster:"วิญญาณปลายกาล"},
+  otherCamp={...finalCamp,id:"rift96",level:96};
+Object.assign(journey,{practice:finalCamp,camps:[finalCamp,otherCamp],challenges:[],
+  course:{band:100,coreCap:8,techniques:[{id:"deep",name:"วิชาปลายสาย",level:95}],ranks:[]},
+  rebirthLimit:15,shrine:{name:"ศาลเกิดใหม่",mapId:"ritual_village",x:0,z:0,radius:4}});
+context.worldDefinitions={rift:{portals:[{targetMapId:"ritual_village",x:5,z:3}]},ritual_village:{name:"หมู่บ้านอาคม",portals:[]}};
+context.travelRoute=(_,from,to)=>[from,to];context.activeMapId=me.mapId="rift";
+get("fieldCampList").replaceChildren=function(...opts){this.options=opts;};
+get("fieldCapInfo").querySelector=()=>get("capNote");
+journeyApi.draw(journeyApi.goal());get("fieldCampList").value="rift96";get("fieldCampList").onchange();
+assert.match(journeyApi.goal().title,/96/);
+journeyApi.save({prey:null});journeyApi.start({skillId:"deep",name:"วิชาทดลอง",deep:true,effect:"strike"});
+assert.equal(journeyApi.goal().trial.site.id,"rift96");
+journeyApi.cast({playerId:"hunter",skillId:"deep",targetId:"rift100"});assert.equal(journeyApi.notes().trial.used,false);
+journeyApi.kill(otherCamp);journeyApi.cast({playerId:"hunter",skillId:"deep",targetId:"rift96"});assert.equal(journeyApi.notes().trial,null);
+journeyApi.draw(journeyApi.goal());get("fieldShrine").onclick();assert.equal(journeyApi.goal().to.x,5);
+context.activeMapId=me.mapId="ritual_village";assert(journeyApi.goal().arrived);
+journeyApi.draw(journeyApi.goal());get("fieldStopShrine").onclick();assert.match(journeyApi.goal().title,/96/);
+context.gearGuides.cycle=1;me.level=context.gearGuides.level=1;
+assert.equal(journeyApi.notes().campId,undefined);assert.equal(journeyApi.notes().shrine,undefined);
+console.log("PASS capped practice, selected camp, shrine route, cancel and new-life scope");

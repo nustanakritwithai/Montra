@@ -1,7 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {BODY_SLOTS, personalItem, PERSONAL_ITEMS, WEAPON_LEVELS, OUTFIT_LEVELS, MATERIAL_LEVELS, equipPositions, monsterCardDrop, startingWeapon, wearsTwinSwords, wearsWraps, usesStaff, type BodyItemId, type PersonalId} from "./PersonalItems.js";
-import {CATALOG_PAGES,STARTER_HUNT,hunts,itemCamp,journeyWeapon,findItemHunt,rollMonsterLoot} from "./MonsterLoot.js";
+import {CATALOG_PAGES,STARTER_HUNT,hunts,itemCamp,practiceSite,journeyWeapon,findItemHunt,rollMonsterLoot} from "./MonsterLoot.js";
 import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses,practiceLoot,validateInventory} from "./ItemRules.js";
 import {EconomyStore} from "./EconomyStore.js";
 import {parseSalvage,type SalvageOrder} from "./EconomyRules.js";
@@ -167,8 +167,39 @@ test("level 26–50 training routes use normal camps, distinct class lessons and
     assert.equal(names.size,2);
     const bosses=personalGearGuides(path,50)!.journey!.bosses;
     assert.equal(bosses[0].level,path==="sentinel"?34:path==="seer"||path==="mender"?45:35);
-    assert.equal(personalGearGuides(path,51)!.journey,undefined);
   }
+});
+
+test("upper hunting courses cover six professions and every level through 100 with optional bosses",()=>{
+  const expected=[
+    ["muay_boran","chaiya_advanced_counter","chaiya_master_counter","chaiya_final_counter"],
+    ["phutthaisawan","open_circle","steady_guard","final_counter"],
+    ["blade","rune_break","shadow_counter","sealed_finale"],
+    ["sentinel","line_sweep","steadfast_counter","enduring_ward"],
+    ["seer","seer_deep_curse","seer_ward_break","seer_spirit_rain"],
+    ["mender","mender_shelter","mender_deep_circle","mender_spirit_rice"],
+  ];
+  for(const [path,early,later,final] of expected){
+    for(let level=51;level<=100;level++){
+      const guide=personalGearGuides(path,level)!.journey!;
+      const course=guide.course!;
+      const options=course.techniques.map(t=>t.id);
+      assert(options.includes(level>=90?final:level>=(path==="muay_boran"?75:70)?later:early));
+      if(path==="muay_boran")assert.equal(new Set(course.techniques.map(t=>t.school)).size,4);
+      assert.equal(course.coreCap,level===100?8:level>=80?7:level>=60?6:5);
+      assert.deepEqual(course.ranks.slice(2).map(r=>[r.level,r.practice]),[[65,16],[85,28],[95,45]]);
+      if(WORLD_EXPANSION){
+        assert(guide.camps.length>0);
+        assert(guide.camps.every(c=>c.open && level-c.level>=0 && level-c.level<=4 && hunts.find(m=>m.id===c.id)?.tier==="normal"));
+        assert(guide.bosses.every(b=>b.camp?.open && b.level<=level && b.respawnMinutes===20));
+        const start=level<=75?51:76;
+        const expectedBosses=hunts.filter(m=>m.tier==="boss" && m.level>=start && m.level<=level && practiceSite(m.id)?.open);
+        assert.deepEqual(guide.bosses.map(b=>b.camp!.id).sort(),expectedBosses.map(b=>b.id).sort());
+        if(level===100){assert.equal(guide.bosses[0].camp!.id,"atlas_rift_warden");assert(guide.rebirthLimit);assert.equal(guide.practice?.level,100);}
+      }else {assert.equal(guide.practice,null);assert.equal(guide.camps.length+guide.bosses.length,0);}
+    }
+  }
+  assert.equal(personalGearGuides("sentinel",60,100)!.journey!.course!.coreCap,8);
 });
 
 test("a listed monster really drops the item, and crafted and harvested products stay off its table",()=>{

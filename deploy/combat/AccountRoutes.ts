@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { accounts } from "./AccountService.js";
 import { characterStore, claimCharacter, releaseCharacter } from "./CharacterStore.js";
 import { guildStore } from "./GuildStore.js";
+import {PATHS,type PathId} from "./CharacterBuilds.js";
 
 /** Mounted explicitly by app.config. Sessions use bearer headers, never cookies. */
 export function installAccountRoutes(app: Application): void {
@@ -98,6 +99,25 @@ export function installAccountRoutes(app: Application): void {
       const known=new Set(["slot_changed","confirm_name_mismatch","character_in_guild","character_has_listings"]);
       res.status(known.has(code)?409:503).json({error:known.has(code)?code:"delete_failed"});
     } finally { releaseCharacter(identity.accountId,lease); }
+  });
+  router.post("/rebirth",async (req,res)=>{
+    const identity=accounts().resolve(bearer(req));
+    if(!identity){res.status(401).json({error:"login_required"});return;}
+    const {slot,revision,path,fromPath,cycle,confirmed}=req.body??{};
+    if(confirmed!==true || !Number.isInteger(slot) || slot<1 || slot>3 || revision!==identity.characterIds[slot-1] ||
+        typeof path!=="string" || !Object.hasOwn(PATHS,path) || typeof fromPath!=="string" || !Object.hasOwn(PATHS,fromPath) || !Number.isInteger(cycle) || cycle<0){
+      res.status(400).json({error:"invalid_rebirth_request"});return;
+    }
+    const lease="rebirth:"+randomUUID();
+    if(!claimCharacter(identity.accountId,lease)){res.status(409).json({error:"character_online"});return;}
+    try{
+      const result=await characterStore.rebirthAtShrine(revision,path as PathId,fromPath as PathId,cycle);
+      res.json(result);
+    }catch(error){
+      const code=error instanceof Error?error.message:"rebirth_failed";
+      const known=["slot_changed","rebirth_changed","rebirth_shrine_required","rebirth_level_required","rebirth_maximum","rebirth_inventory_full"];
+      res.status(known.includes(code)?409:503).json({error:known.includes(code)?code:"rebirth_failed"});
+    }finally{releaseCharacter(identity.accountId,lease);}
   });
   // A crash between slot retirement and erasure is retried on server startup.
   void finishRetirements().catch(()=>console.error("MONTRA pending character deletion needs retry"));

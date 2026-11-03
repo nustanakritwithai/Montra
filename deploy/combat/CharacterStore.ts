@@ -23,8 +23,9 @@ import { validateOccultBook, type OccultBook } from "./OccultRules.js";
 import { validateBladeBook, type BladeBook } from "./BladeRules.js";
 import { validateSentinelBook, type SentinelBook } from "./SentinelRules.js";
 
-import { parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
-import { classLearningLevel, validateRebirthState, type RebirthState } from "./Rebirth.js";
+import { parseBuild, type CharacterBuild,type PathId } from "./CharacterBuilds.js";
+import {prepareRebirth} from "./RebirthTransition.js";
+import { classLearningLevel, validateRebirthState, REBIRTH_SHRINE, type RebirthState } from "./Rebirth.js";
 import { validateForestObjective, type ForestObjective } from "./ForestObjectives.js";
 
 export const CHARACTER_SAVE_INTERVAL_MS = 15_000;
@@ -307,6 +308,22 @@ export class CharacterStore {
     const prepared = {...character, name, build, inventory, ...(muayWrapGranted ? {muayWrapGranted:true} : {}), updatedAt:new Date().toISOString()};
     if (!fresh) await this.save(prepared);
     return prepared;
+  }
+
+  /** Called after the online room finishes its final save and the account lease is claimed. */
+  async rebirthAtShrine(id:string,path:PathId,fromPath:PathId,cycle:number){
+    this.guardLegacyMode();
+    const record=this.economyEnabled?this.economy.getCharacter(id):JSON.parse(await readFile(this.location(id),"utf8"));
+    if(!record)throw Error("slot_changed");
+    const saved=validateSnapshot(record,id);
+    if(saved.build?.path!==fromPath || (saved.rebirth?.count??0)!==cycle)throw Error("rebirth_changed");
+    const shrine=REBIRTH_SHRINE;
+    if(saved.hp<=0 || saved.mapId!==shrine.mapId || Math.hypot(saved.x-shrine.x,saved.z-shrine.z)>shrine.radius || Math.abs(saved.y)>0.5){
+      throw Error("rebirth_shrine_required");
+    }
+    const next=prepareRebirth(saved,path);
+    await this.save({...next,x:shrine.x,y:0,z:shrine.z,mapId:shrine.mapId});
+    return {level:next.level,path,cycle:next.rebirth!.count};
   }
 
   /** Read-only slot previews. Never create/delete saves while listing. */

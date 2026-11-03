@@ -13,17 +13,18 @@ export function prepareRebirth(snapshot: CharacterSnapshot, path: PathId): Chara
   if (!build) throw Error("invalid_rebirth_class");
   const rebirth=startNextLife(snapshot.rebirth ?? newRebirthState(),snapshot.build.path,snapshot.level);
   let inventory=validateInventory(snapshot.inventory);
-  if (path!==snapshot.build.path) {
-    // Weapons already occupy a bag cell, so deselecting cannot lose one.
+  const weaponSlot=inventory.equippedWeaponSlot;
+  const weapon=weaponSlot!=null?personalItem(inventory.slots[weaponSlot]?.itemId):undefined;
+  if(path!==snapshot.build.path || (weapon?.level??1)>1){
     inventory={...inventory,equippedWeaponSlot:null};
-    for (const [position,item] of Object.entries(inventory.equipment ?? {})) {
-      const definition=personalItem(item);
-      if (!definition || definition.path==="all" || definition.path===path) continue;
-      if (!isBodySlot(position)) throw Error("rebirth_inventory_invalid");
-      const result=equipBody(inventory,position,null,item,path,snapshot.level);
-      if (result.ok === false) throw Error(result.reason==="inventory_full" ? "rebirth_inventory_full" : "rebirth_inventory_invalid");
-      inventory=result.inventory;
-    }
+  }
+  for(const [position,item] of Object.entries(inventory.equipment??{})){
+    const definition=personalItem(item);
+    if(!isBodySlot(position) || !definition)throw Error("rebirth_inventory_invalid");
+    if((definition.level??1)<=1 && (definition.path==="all" || definition.path===path))continue;
+    const result=equipBody(inventory,position,null,item,path,snapshot.level);
+    if(result.ok===false)throw Error(result.reason==="inventory_full"?"rebirth_inventory_full":"rebirth_inventory_invalid");
+    inventory=result.inventory;
   }
   return {...snapshot,level:1,experience:0,build,rebirth,inventory,statAllocations:emptyAllocations(),
     hp:PROGRESSION.baseHp,stamina:PROGRESSION.baseStamina,mana:PROGRESSION.baseMana,updatedAt:new Date().toISOString()};

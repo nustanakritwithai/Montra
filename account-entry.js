@@ -155,8 +155,54 @@
       } catch(err){error.textContent=err.message;submit.disabled=false;cancel.disabled=false;name.disabled=false;}
     };
   }
+  function rebirthAtShrine(character,cycle){
+    const slot=summaries.find(s=>s.slot===selectedSlot), session=key();
+    if(!slot || !session || !character?.characterId || !slot.revision?.startsWith(character.characterId)){
+      view("เปิดพิธีเกิดใหม่ไม่ได้","ข้อมูลบัญชีกับช่องตัวละครไม่ตรงกัน กรุณากลับไปตรวจช่องตัวละคร");
+      card.append(button("ดูช่องตัวละคร",slots),button("กลับไปเล่น",()=>window.MontraEntry.success()));return;
+    }
+    const oldClass=paths.find(p=>p[0]===character.pathId)?.[1]??"";
+    const error=view("เลือกอาชีพสำหรับชีวิตใหม่",character.characterName+" · "+oldClass+" Lv.100 → Lv.1 · ทอง ของ และตำราที่เรียนจะเก็บไว้ แต้มสเตตัสเริ่มจัดใหม่ อุปกรณ์ต่างอาชีพหรือที่ต้องใช้เลเวลสูงกว่า 1 จะถอดเก็บในกระเป๋า");
+    const form=el("form"),choices=el("fieldset","","class-choices"), cancel=button("กลับไปเล่น",()=>window.MontraEntry.success());
+    choices.append(el("legend","เลือกได้ทั้งอาชีพเดิมและอาชีพใหม่"));
+    for(const [id,title,note] of paths){
+      const label=el("label"),radio=el("input"),copy=el("span");
+      radio.type="radio";radio.name="nextClass";radio.value=id;radio.required=true;
+      copy.append(el("strong",title),el("small",note));label.append(radio,copy);choices.append(label);
+    }
+    const review=el("button","ดูผลก่อนยืนยัน","primary");review.type="submit";form.append(choices,review);card.append(form,cancel);
+    form.onsubmit=e=>{
+      e.preventDefault();
+      const choice=paths.find(p=>p[0]===form.elements.nextClass.value);
+      if(!choice)return;
+      const notice=view("ยืนยันเกิดใหม่ครั้งที่ "+(cycle+1),character.characterName+" จะเปลี่ยนจาก "+oldClass+" Lv.100 เป็น "+choice[1]+" Lv.1 เมื่อยืนยัน เซิร์ฟเวอร์จะบันทึกตัวละครและออกจากห้องก่อนเริ่มชีวิตใหม่");
+      const back=button("กลับไปเลือกอาชีพ",()=>rebirthAtShrine(character,cycle));
+      const confirm=button("ยืนยันเกิดใหม่เป็น"+choice[1],async()=>{
+        if(confirm.disabled)return;
+        confirm.disabled=back.disabled=true;
+        try{
+          if(key()!==session)throw Error(errors.login_required);
+          notice.textContent="กำลังบันทึกและเริ่มชีวิตใหม่…";
+          await leaveGame();
+          const payload={slot:slot.slot,revision:slot.revision,fromPath:character.pathId,path:choice[0],cycle,confirmed:true};
+          for(let attempt=0;;attempt++){
+            try{await api("rebirth",payload,session);break;}
+            catch(err){
+              if(err.code!=="character_online" || attempt>=20)throw err;
+              await new Promise(resolve=>setTimeout(resolve,250));
+            }
+          }
+          view("เกิดใหม่สำเร็จ",character.characterName+" · "+choice[1]+" Lv.1 · ชีวิตใหม่ครั้งที่ "+(cycle+1));
+          card.append(button("เข้าเล่นชีวิตใหม่",()=>play(),"primary"),button("ดูช่องตัวละคร",slots));
+        }catch(err){
+          const reasons={rebirth_changed:"ชีวิตหรืออาชีพเปลี่ยนแล้ว ตรวจช่องตัวละครอีกครั้ง",rebirth_shrine_required:"ต้องอยู่บนพื้นในศาลเกิดใหม่ หมู่บ้านอาคม",rebirth_level_required:"ต้องถึง Lv.100",rebirth_inventory_full:"กระเป๋าไม่พอสำหรับถอดอุปกรณ์เดิม กรุณาเว้นช่องก่อน",rebirth_maximum:"เกิดใหม่ครบจำนวนแล้ว",rebirth_failed:"ตรวจผลจากช่องตัวละครก่อนลองอีกครั้ง"};
+          notice.textContent=reasons[err.code]??err.message;card.append(button("ตรวจช่องตัวละคร",slots));
+        }
+      },"primary");card.append(confirm,back);
+    };
+  }
   function setup(slot) {
-    const error=view("เลือกอาชีพ", "อาชีพจะผูกกับตัวละครนี้ถาวร กรุณาเลือกก่อนเข้าเล่น");
+    const error=view("เลือกอาชีพ", "เลือกอาชีพสำหรับชีวิตนี้ เปลี่ยนได้เมื่อทำพิธีเกิดใหม่ที่ Lv.100");
     const form=el("form"); let name;
     if(!slot.occupied)name=input(form,"ชื่อตัวละคร","text","off");
     const choices=el("fieldset","","class-choices");
@@ -203,7 +249,7 @@
     open(){if(key())void slots();else login();},
     success(){root.hidden=true;document.getElementById("game").inert=false;},
     failure(message){root.hidden=false;document.getElementById("game").inert=true;const error=card.querySelector(".account-error");if(error)error.textContent=message || "เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่";},
-    session:key,
+    session:key,rebirthAtShrine,
   };
   if(key())void slots();else login();
 })();

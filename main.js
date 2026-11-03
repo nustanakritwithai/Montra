@@ -7758,7 +7758,9 @@
     return fieldTrainingTip?.session===room?.sessionId && fieldTrainingTip?.path===ownServerCharacter()?.pathId?fieldTrainingTip:null;
   }
   function journeyNotesForPlayer(){
-    const id=ownServerCharacter()?.characterId,owner=id?"montra_field_journey_"+id:"";
+    const me=ownServerCharacter(),id=me?.characterId;
+    const cycle=gearGuides?.path===me?.pathId?gearGuides?.cycle:0;
+    const owner=id?"montra_field_journey_"+id+(cycle?("_life_"+cycle):""):"";
     if(owner!==journeyOwner){
       journeyOwner=owner;journeyNotes={};
       if(owner)try{const saved=JSON.parse(localStorage.getItem(owner));if(saved && typeof saved==="object" && !Array.isArray(saved))journeyNotes=saved;}catch{}
@@ -7779,9 +7781,10 @@
       refreshFieldPractice();return;
     }
     const notes=journeyNotesForPlayer(),me=ownServerCharacter();
-    if(!me || me.level<13 || me.level>50 || !data.skillId)return;
-    const old=notes.prey,fallback=gearGuides?.journey?.practice;
-    const site=old?.open && Math.abs(old.level-me.level)<=4?old:fallback;
+    if(!me || me.level<13 || !data.skillId)return;
+    const old=notes.prey,journey=gearGuides?.journey;
+    const fallback=fieldCamp(journey,notes,false);
+    const site=old?.open && old.level<=me.level && me.level-old.level<=4 && (!journey?.course || journey.camps.some(c=>c.mapId===old.mapId))?old:fallback;
     if(!site?.open)return;
     saveJourney({trial:{id:data.skillId,name:data.name,path:me.pathId,site,used:false,deep:!!data.deep,effect:data.effect}});
     toast("ฝึก "+data.name+" แล้ว · กลับไปลองที่ "+site.monster+" ใน"+site.map);refreshFieldPractice();
@@ -7791,11 +7794,11 @@
     const me=ownServerCharacter(),trial=journeyNotesForPlayer().trial;
     if(!trial || trial.id!==data.skillId || trial.used || me?.mapId!==trial.site.mapId)return;
     const mob=room.state.monsters?.get(trial.site.id)??(trial.site.id===MONSTER_ID?room.state.monster:null);
-    if(Array.isArray(data.targetIds)){
-      if(!data.targetIds.includes(trial.site.id))return;
-    }else if(data.targetId!==trial.site.id){
-      const supportsAlly=data.targetId===localId || data.skillId==="protect" || me.pathId==="mender" || (trial.deep && ["intercept","ward","party_ward","support"].includes(trial.effect));
-      if((data.targetId && !supportsAlly) || !mob || Math.hypot(me.x-mob.x,me.z-mob.z)>12)return;
+    const targets=Array.isArray(data.targetIds)?data.targetIds:(data.targetId?[data.targetId]:[]);
+    if(!targets.includes(trial.site.id)){
+      const support=["intercept","ward","party_ward","support","heal","heal_area","spirit_heal","ward_area","cleanse","cleanse_area","spirit_ward","trance"].includes(trial.effect) || data.skillId==="protect";
+      if(targets.length && !targets.some(id=>id===localId || (support && room.state.players?.has(id))))return;
+      if(!mob || Math.hypot(me.x-mob.x,me.z-mob.z)>12)return;
     }
     // A lethal cast can be broadcast just after its kill receipt.
     if(Date.now()-(trial.killAt??0)<2000){finishJourneyPractice(trial);return;}
@@ -7864,11 +7867,26 @@
     const path=ownServerCharacter()?.pathId;
     return {muay_boran:"muay",phutthaisawan:"sword",seer:"occult",mender:"occult",sentinel:"sentinel",blade:"blade"}[path];
   }
+  function fieldCamp(journey,notes,allowChallenge=true){
+    const camps=journey?.camps;
+    const challenge=allowChallenge && journey?.challenges?.find(c=>c.id===notes.campId);
+    if(challenge)return challenge;
+    return camps?.find(c=>c.id===notes.campId) ?? camps?.find(c=>c.mapId===activeMapId) ?? journey?.practice;
+  }
+  function fieldTechnique(course){
+    const candidates=course?.techniques;
+    if(!candidates?.length)return null;
+    if(candidates.length===1)return candidates[0];
+    return candidates.find(t=>t.school===muaySchoolOf({local:true})) ?? candidates[0];
+  }
   function openFieldDeepTraining(){
     const kind=fieldSkillKind();if(!kind)return;
     const trial=journeyNotesForPlayer().trial;
-    if(trial?.deep)skillGraphSel[kind]=trial.id;
-    openDrawer("fieldSkills","วิชาเสริม · แต้มสายและผลฝึก",'<p class="note">เรียนวิชาก่อนอัปขั้น · ขั้น 1 ใช้ Lv.25 และผลฝึก 3 ครั้ง · ขั้น 2 ใช้ Lv.45 และผลฝึก 8 ครั้ง · ใช้แต้มสาย 1 แต้มต่อขั้น</p><div id="fieldSkillGraph"></div>');
+    const course=gearGuides?.journey?.course, suggested=fieldTechnique(course);
+    if(trial?.deep || suggested)skillGraphSel[kind]=trial?.deep?trial.id:suggested.id;
+    openDrawer("fieldSkills","วิชาเสริม · แต้มสายและผลฝึก",'<p id="fieldRankHelp" class="note"></p><div id="fieldSkillGraph"></div>');
+    $("fieldRankHelp").textContent=(course?.ranks?.map(r=>"ขั้น "+r.rank+" · Lv."+r.level+" · ฝึก "+r.practice).join(" / ") ||
+      "ขั้น 1 · Lv.25 · ฝึก 3 / ขั้น 2 · Lv.45 · ฝึก 8")+" · เรียนหรืออัปขั้นใช้แต้มสายครั้งละ 1 แต้ม";
     if(["blade","sentinel","occult"].includes(kind))room.send(kind+"_book_get",{});
     $("fieldSkillGraph").textContent="กำลังอ่านตำราของตัวละคร…";skillGraphKey="";renderSkillGraph(kind,$("fieldSkillGraph"));
   }
@@ -7887,12 +7905,27 @@
   function fieldBossOptions(journey){
     return (journey?.bosses?.length?journey.bosses:journey?.boss?[journey.boss]:[]).filter(b=>b.camp?.open);
   }
+  function shrineDirection(journey,player){
+    const shrine=journey?.shrine;
+    if(!shrine || player?.level!==100 || (gearGuides?.cycle??0)>=journey.rebirthLimit)return null;
+    const local=activeMapId===shrine.mapId;
+    const arrived=local && player.alive && Math.abs(player.y)<=0.5 && Math.hypot(player.x-shrine.x,player.z-shrine.z)<=shrine.radius;
+    const route=!local?travelRoute(worldDefinitions,activeMapId,shrine.mapId):[];
+    const gate=worldDefinitions?.[activeMapId]?.portals.find(p=>p.targetMapId===route[1]);
+    return {title:"ไปศาลเกิดใหม่",step:arrived?"ถึงศาลแล้ว · แตะเพื่อเลือกอาชีพ":local?"เดินไปกลางลานศาลและลงถึงพื้น":
+      gate?"ไปประตู "+worldDefinitions[route[1]].name:"ยังไม่มีเส้นทางจากที่นี่",
+      progress:shrine.name,to:local?shrine:gate,rebirthRoute:true,arrived};
+  }
   function fieldGearGoal(){
     const player=ownServerCharacter();
     if(mode!=="live" || !player || !inventoryState || territoryState?.local?.inField)return null;
-    if(!economyReady() && (player.level<26 || player.level>50))return null;
+    if(!economyReady() && player.level<26)return null;
     const guide=gearGuides?.path===player.pathId?gearGuides:null;
     const camp=guide?.starterHunt,journey=guide?.level===player.level?guide.journey:null,notes=journey?journeyNotesForPlayer():{};
+    if(notes.shrine){
+      const destination=shrineDirection(journey,player);
+      if(destination)return destination;
+    }
     if(camp && player.level<=camp.maxLevel && (player.level<10 || !journey || notes.skipped?.includes(journey.weapon)) &&
        (activeMapId===camp.mapId || activeMapId==="ritual_village")){
       const meta=personalItems[camp.weapon],slot=inventoryState.slots.findIndex(s=>s?.itemId===camp.weapon);
@@ -7924,29 +7957,36 @@
     const bosses=fieldBossOptions(journey);
     const selected=bosses.find(b=>notes.boss===b.gear || (notes.boss===true && player.level<=25 && !itemHuntCount(b.gear)));
     const boss=selected??bosses.find(b=>!notes.deferredBosses?.includes(b.gear) && !itemHuntCount(b.gear));
-    if(!selected && journey && notes.trial && player.level>=13 && player.level<=50){
+    if(!selected && journey && notes.trial && player.level>=13 && (!journey.course || journey.camps.length)){
       const trial=notes.trial,nav=journeyDirection(trial.site);
       return {title:"ลอง "+trial.name,step:nav.step,progress:trial.used?"ใช้วิชาแล้ว · ปราบ "+trial.site.monster:"ใช้วิชาที่เพิ่งอัปแล้วปราบ "+trial.site.monster,
         practiceOnly:true,trial,to:nav.to};
     }
-    const trainingBand=player.level>=45 && player.level<=49?45:player.level>=35 && player.level<=39?35:0;
+    const trainingBand=journey?.course?.band ?? (player.level>=45 && player.level<=49?45:player.level>=35 && player.level<=39?35:0);
     if(!selected && ((player.level>=13 && player.level<=17) || (player.level>=23 && player.level<=25) || (trainingBand && notes.savedTraining!==trainingBand)) && currentFieldTraining()){
       const village="ritual_village",route=activeMapId!==village && worldDefinitions?.[village]?travelRoute(worldDefinitions,activeMapId,village):[];
       const gate=worldDefinitions?.[activeMapId]?.portals.find(p=>p.targetMapId===route[1]);
       return {title:"ฝึกวิชาประจำอาชีพ",step:(gate?"ไปประตู "+worldDefinitions[route[1]].name+" · ":"")+"ใช้แต้มที่ศาลหมู่บ้านหลังพ้นการต่อสู้",
         progress:currentFieldTraining().points+" แต้มวิชาแกน",trainingOnly:true,trainingBand,to:activeMapId===village?{x:0,z:0}:gate};
     }
-    if(selected){
+    if(selected && personalItems[boss.gear]?.recipe?.some(i=>i.item===boss.fragment)){
       const inputs=fieldRecipeProgress(boss.gear),f=inputs.find(i=>i.id===boss.fragment),nav=journeyDirection(boss.camp);
       const supply=inputs.find(i=>i.id!==boss.fragment && i.have<i.need);
       const awake=activeMapId===boss.camp.mapId && room?.state?.monsters?.get(boss.camp.id);
-      const step=f.have>=f.need?(supply?"หา"+supply.name+"อีก "+(supply.need-supply.have)+" ชิ้น":"เศษครบ · เปิดสูตรที่โต๊ะช่าง"):
+      const step=journey.course && awake && !awake.alive?"บอสยังไม่เกิด · กลับค่ายได้":
+        f.have>=f.need?(supply?"หา"+supply.name+"อีก "+(supply.need-supply.have)+" ชิ้น":"เศษครบ · เปิดสูตรที่โต๊ะช่าง"):
         awake && !awake.alive?"บอสยังไม่เกิด · ตามหาวัตถุดิบอื่นระหว่างรอ":nav.step;
-      return {title:"ล่าบอส · "+boss.camp.monster,step,progress:f.name+" "+f.have+"/"+f.need,recipe:boss.gear,inputs,to:f.have<f.need?nav.to:null,bossChoice:true,bossGear:boss.gear,
+      return {title:"ล่าบอส · "+boss.camp.monster,step,progress:f.name+" "+f.have+"/"+f.need,recipe:boss.gear,inputs,to:journey.course || f.have<f.need?nav.to:null,bossChoice:true,bossGear:boss.gear,
         milestone:"อุปกรณ์ Lv."+boss.level+" · "+personalItems[boss.gear].name+" · บอสเกิดทุก "+(boss.respawnMinutes??20)+" นาที"};
     }
     if(journey && player.level>=26){
-      const site=journey.practice,nav=journeyDirection(site);
+      const site=fieldCamp(journey,notes),nav=journeyDirection(site);
+      if(journey.course){
+        const technique=fieldTechnique(journey.course);
+        return {title:site?"ล่า "+site.monster+" Lv."+site.level:"เส้นทางล่า Lv."+player.level,step:site?nav.step:"พื้นที่ล่าช่วงนี้ยังไม่เปิด · เปิดตำราเพื่อฝึกวิชาได้",to:nav.to,
+          progress:technique?"ฝึก "+technique.name+" · วิชา Lv."+technique.level:"เปิดตำราอาชีพ",
+          milestone:player.level===100?"ถึง Lv.100 แล้ว · ทดลองชุดสกิลหรือเลือกท้าราชันรอยแยก":null};
+      }
       return {title:"ฝึกวิชาที่ค่ายล่า Lv."+player.level,step:nav.step,to:nav.to,
         progress:journey.lesson?journey.lesson.name+" · แนะนำที่ Lv."+journey.lesson.level:(site?.monster??"เปิดตำราเพื่อเลือกวิชาต่อไป")};
     }
@@ -7977,6 +8017,9 @@
     const map = worldDefinitions?.[activeMapId], hero = getLocalAvatar(), kills = hudKills[activeMapId] || 0;
     const nearestOf = list => { let best = null, d = Infinity; for (const p of list) { const k = Math.hypot(p.x - hero.x, p.z - hero.z); if (k < d) { d = k; best = p; } } return best; };
     if (!hero) return null;
+    if(gearGuides?.journey?.shrine && journeyNotesForPlayer().shrine && !territoryState?.local?.inField){
+      const shrine=shrineDirection(gearGuides.journey,ownServerCharacter());if(shrine)return shrine;
+    }
     const hunt=itemHuntGuide();if(hunt)return hunt;
     const objective=forestObjectiveHudGuide();if(objective && forestObjectiveState.active)return objective;
     const field=fieldGearGoal();if(field)return field;
@@ -9393,7 +9436,7 @@
         }
         const lesson=training?.choices?.length?" · Lv."+info.level+" ฝึก "+training.choices[0].name+" ขั้น "+training.choices[0].rank+" หรือเลือกวิชาอื่นในตำรา · มี "+training.points+" แต้ม ไปศาลหมู่บ้านหลังพ้นการต่อสู้":"";
         const firstCopy=info?.starterCopy?" · ครบเป้าล่า! "+(personalItems[info.starterCopy]?.name||"อาวุธรุ่นเดียวกัน")+" เข้าคลังช่าง 1 ชิ้น":"";
-        toast((info?.source==="war"?(info?.amount?"EXP จากการร่วมยึดจุด":"รางวัลร่วมยึดจุด"):info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":info?.shrineShard && !info.amount?"รางวัลศาลร้าง":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + objectiveNotice + firstCopy + lesson + prize + shard + bossRewards + loot + cardNotice + guarantee);
+        toast((info?.source==="war"?(info?.amount?"EXP จากการร่วมยึดจุด":"รางวัลร่วมยึดจุด"):info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":info?.shrineShard && !info.amount?"รางวัลศาลร้าง":!info?.amount && info?.level===100?"ผลการล่า Lv.100":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + objectiveNotice + firstCopy + lesson + prize + shard + bossRewards + loot + cardNotice + guarantee);
         recordPracticePrey(info?.fieldPrey);
         renderProgressionProfile();
       });
@@ -9964,7 +10007,7 @@
     drawerOpener=null;
   }
   function openDrawer(name,title,html) {
-    if(fieldTrainingTip && !(ownServerCharacter()?.level>=13 && ownServerCharacter()?.level<=50) && ["muayBook","swordTree","bladeBook","sentinelBook","occultBook"].includes(name))fieldTrainingTip=null;
+    if(fieldTrainingTip && !(ownServerCharacter()?.level>=13) && ["muayBook","swordTree","bladeBook","sentinelBook","occultBook"].includes(name))fieldTrainingTip=null;
     if(ui.drawer.hidden) {
       SFX("open");
       drawerOpener=document.activeElement;
@@ -11572,7 +11615,7 @@
       edges.push(`<path class="sg-edge ${cls}${sel && (sel === n.id || sel === p.id) ? " hl" : ""}" d="M${p._x} ${y1} C${p._x} ${my} ${n._x} ${my} ${n._x} ${y2}"/>`); }
     const lanesHtml = L.lanes.map(l => `<div class="sg-lane${l.active ? " active" : ""}" style="left:${l.x}px;width:${l.w}px"><b>${sgEsc(l.name)}</b>${l.note ? `<small>${sgEsc(l.note)}</small>` : ""}${l.active ? `<em>ใช้อยู่</em>` : l.choose ? `<button type="button" data-sg-school="${sgEsc(l.id)}">เลือกใช้</button>` : ""}</div>`).join("");
     const nodesHtml = model.nodes.filter(n => n._x != null).map(n => `<button type="button" class="sg-node ${n._state}${n.id === sel ? " sel" : ""}${n.basic ? " basic" : ""}" data-sg-node="${sgEsc(n.id)}" style="left:${n._x}px;top:${n._y}px" aria-label="${sgEsc(n.name)}">
-      <span class="sg-orb">${SG_GLYPH[n.effect] || "✦"}${n.slot >= 0 ? `<i class="sg-slot">${n.slot + 1}</i>` : ""}</span><span class="sg-name">${sgEsc(n.name)}</span><span class="sg-lv">${n.basic ? "พื้นฐาน" : n.rankable ? "ขั้น " + (n.rank + 1) + "/" + (n.rankMax + 1) : n.learned ? "เรียนแล้ว" : "Lv." + n.level}</span>${n.rankable ? `<span class="sg-pips">${Array.from({ length: n.rankMax + 1 }, (_, i) => `<i class="${i <= n.rank ? "on" : ""}"></i>`).join("")}</span>` : ""}</button>`).join("");
+      <span class="sg-orb">${SG_GLYPH[n.effect] || "✦"}${n.slot >= 0 ? `<i class="sg-slot">${n.slot + 1}</i>` : ""}</span><span class="sg-name">${sgEsc(n.name)}</span><span class="sg-lv">${n.basic ? "พื้นฐาน" : n.rankable ? "ขั้นเสริม " + n.rank + "/" + n.rankMax : n.learned ? "เรียนแล้ว" : "Lv." + n.level}</span>${n.rankable ? `<span class="sg-pips">${Array.from({ length: n.rankMax }, (_, i) => `<i class="${i < n.rank ? "on" : ""}"></i>`).join("")}</span>` : ""}</button>`).join("");
     const n = sel && L.byId.get(sel);
     let detail = `<div class="sg-detail empty">แตะโหนดเพื่อดูวิชา · <span class="sg-key"><i class="k ready"></i>เรียนได้</span><span class="sg-key"><i class="k learned"></i>เรียนแล้ว</span><span class="sg-key"><i class="k locked"></i>ยังล็อก</span></div>`;
     if (n) {
@@ -11580,8 +11623,8 @@
       let rankHtml = "";
       if (n.rankable) {
         const can = n.nextLv && lvNow >= n.nextLv && n.rankDone >= n.rankNeed && pts > 0 && !n.rankBlocked;
-        rankHtml = `<div class="sg-rank"><div class="sg-rank-top"><b>ขั้นวิชา ${n.rank + 1}/${n.rankMax + 1}</b><span>${sgRankText(kind,n)}</span></div>
-          <div class="sg-pips big">${Array.from({ length: n.rankMax + 1 }, (_, i) => `<i class="${i <= n.rank ? "on" : ""}"></i>`).join("")}</div>
+        rankHtml = `<div class="sg-rank"><div class="sg-rank-top"><b>ขั้นเสริม ${n.rank}/${n.rankMax}</b><span>${sgRankText(kind,n)}</span></div>
+          <div class="sg-pips big">${Array.from({ length: n.rankMax }, (_, i) => `<i class="${i < n.rank ? "on" : ""}"></i>`).join("")}</div>
           ${n.nextLv ? `<ul class="sg-checks"><li class="${lvNow >= n.nextLv ? "ok" : "no"}">${lvNow >= n.nextLv ? "✓" : "✗"} เลเวล ${n.nextLv}</li><li class="${n.rankDone >= n.rankNeed ? "ok" : "no"}">${n.rankDone >= n.rankNeed ? "✓" : "✗"} ฝึกรวม ${n.rankDone}/${n.rankNeed}</li>${n.rankBlocked ? `<li class="no">✗ ใช้สำนักนี้</li>` : ""}</ul>
           <button type="button" class="sg-up" data-sg-upgrade="${sgEsc(n.id)}" ${can ? "" : "disabled"}>${pts < 1 ? "แต้มไม่พอ" : "อัปขั้น · 1 แต้ม"}</button>` : `<p class="sg-passive">ขั้นสูงสุดแล้ว</p>`}</div>`;
       }
@@ -13074,7 +13117,8 @@
   }
   // Compact portrait HUD: a small quest chip opens the existing detail drawer.
   function openCurrentQuest(preferJourney=false) {
-    const hunt=itemHuntGuide();
+    const followingShrine=gearGuides?.journey?.shrine && journeyNotesForPlayer().shrine && !territoryState?.local?.inField;
+    const hunt=followingShrine?null:itemHuntGuide();
     if(hunt && !ui.quest.classList.contains("war-hud")){
       openDrawer("quest",hunt.title,'<p id="huntStep" class="note"></p><button id="huntMap" type="button" class="secondary">ดูตำแหน่งบนแผนที่</button><button id="endItemHunt" type="button" class="secondary">เลิกติดตาม</button>');
       $("huntStep").textContent=hunt.step+" · "+hunt.progress;
@@ -13082,11 +13126,11 @@
       $("endItemHunt").onclick=()=>{saveItemHunt(null);closeDrawer();};
       return;
     }
-    if(territoryState?.local?.site===activeMapId){openWarPanel();return;}
-    if(preferJourney!==true && forestObjectiveState?.active && room?.state?.forestObjectivesAvailable){openForestRanger();return;}
+    if(!followingShrine && territoryState?.local?.site===activeMapId){openWarPanel();return;}
+    if(!followingShrine && preferJourney!==true && forestObjectiveState?.active && room?.state?.forestObjectivesAvailable){openForestRanger();return;}
     const gearGoal=fieldGearGoal();
     if(gearGoal && !ui.quest.classList.contains("war-hud")){
-      openDrawer("quest",gearGoal.title,'<p id="fieldGoalProgress" class="note"></p><p id="fieldGoalInputs"></p><p class="note" id="fieldGearCompare" hidden></p><button type="button" class="secondary" id="fieldGearHunt" hidden></button><button type="button" class="secondary" id="fieldGearView" hidden>ดูชิ้นที่มีในกระเป๋า</button><button type="button" class="secondary" id="fieldGearSkip" hidden></button><button type="button" class="secondary" id="fieldBossChoice" hidden></button><select id="fieldBossList" aria-label="เลือกบอสที่ต้องการล่า" hidden></select><button type="button" class="secondary" id="fieldGoalSupply" hidden></button><button type="button" class="secondary" id="fieldGoalRecipe">เปิดสูตรที่โต๊ะช่าง</button><button type="button" class="secondary" id="fieldGoalForge" hidden>เปิดช่างตี +1</button><p class="note" id="fieldTrainingNames" hidden></p><button type="button" class="secondary" id="fieldTrainingBook" hidden>เปิดตำราวิชาแกน</button><button type="button" class="secondary" id="fieldDeepBook" hidden>เปิดวิชาเสริม · ดูแต้มและเงื่อนไขฝึก</button><button type="button" class="secondary" id="fieldPracticeCast" hidden></button>');
+      openDrawer("quest",gearGoal.title,'<p id="fieldGoalProgress" class="note"></p><p id="fieldGoalInputs"></p><p class="note" id="fieldGearCompare" hidden></p><button type="button" class="secondary" id="fieldGearHunt" hidden></button><button type="button" class="secondary" id="fieldGearView" hidden>ดูชิ้นที่มีในกระเป๋า</button><button type="button" class="secondary" id="fieldGearSkip" hidden></button><select id="fieldCampList" aria-label="เลือกค่ายฝึก" hidden></select><button type="button" class="secondary" id="fieldBossChoice" hidden></button><select id="fieldBossList" aria-label="เลือกบอสที่ต้องการล่า" hidden></select><button type="button" class="secondary" id="fieldGoalSupply" hidden></button><button type="button" class="secondary" id="fieldGoalRecipe">เปิดสูตรที่โต๊ะช่าง</button><button type="button" class="secondary" id="fieldGoalForge" hidden>เปิดช่างตี +1</button><button id="fieldShrine" type="button" class="primary" hidden></button><button id="fieldStopShrine" type="button" class="secondary" hidden>กลับไปค่ายล่า</button><details id="fieldCapInfo" hidden><summary>ถึง Lv.100 · ทางเลือกของตัวละคร</summary><p class="note"></p></details><p class="note" id="fieldTrainingNames" hidden></p><button type="button" class="secondary" id="fieldTrainingBook" hidden>เปิดตำราวิชาแกน</button><button type="button" class="secondary" id="fieldDeepBook" hidden>เปิดวิชาเสริม · ดูแต้มและเงื่อนไขฝึก</button><button type="button" class="secondary" id="fieldPracticeCast" hidden></button>');
       renderFieldGoalDrawer(gearGoal);return;
     }
     if(mode==="live" && room?.state?.forestObjectivesAvailable && ownServerCharacter()?.persistent){
@@ -13101,9 +13145,10 @@
     const progress=$("fieldGoalProgress");if(!progress)return;
     const recipe=$("fieldGoalRecipe"),forge=$("fieldGoalForge");
     const training=currentFieldTraining(),names=$("fieldTrainingNames"),book=$("fieldTrainingBook");
-    const midgame=ownServerCharacter()?.level>=26 && ownServerCharacter()?.level<=50;
+    const midgame=ownServerCharacter()?.level>=26;
+    const journey=gearGuides?.journey, course=journey?.course;
     const lesson=midgame && gearGuides?.journey?.lesson;
-    names.hidden=!training && !lesson;book.hidden=!training && !midgame;book.onclick=openFieldTraining;
+    names.hidden=!training && !lesson && !course;book.hidden=!training && !midgame;book.onclick=openFieldTraining;
     const deep=$("fieldDeepBook");deep.hidden=!midgame;deep.onclick=openFieldDeepTraining;
     const cast=$("fieldPracticeCast");cast.hidden=!goal?.trial?.deep || goal.trial.used;
     if(!cast.hidden){cast.textContent="ลอง "+goal.trial.name;cast.onclick=()=>tryFieldTechnique(goal.trial);}
@@ -13113,6 +13158,52 @@
       book.onclick=openFieldTraining;
     }else if(lesson)names.textContent="เปิดตำราเพื่อดูขั้นปัจจุบันและแต้มคงเหลือ";
     if(lesson)names.textContent+=" · แนะนำที่ Lv."+lesson.level+" "+lesson.name;
+    if(course){
+      const technique=fieldTechnique(course), model=skillGraphModel(fieldSkillKind());
+      const node=model?.nodes.find(n=>n.id===technique?.id);
+      const missing=node && !node.learned?node.checks.filter(c=>!c.ok):[];
+      const need=(missing.find(c=>!c.label.startsWith("เลเวล "))??missing[0])?.label;
+      const rankHint=node?.rankable && node.nextLv?" · ขั้นเสริมถัดไป "+(node.rank+1)+" ใช้ Lv."+node.nextLv+" · ผลฝึก "+node.rankDone+"/"+node.rankNeed:"";
+      const focus=technique?" · "+technique.name+" Lv."+technique.level:"";
+      if(!training)names.textContent="ดูแต้มที่ใช้ได้ในตำรา";
+      names.textContent+=" · วิชาแกนได้ถึงขั้น "+course.coreCap+focus+(need?" · ต้องฝึก "+need:"")+rankHint;
+      if(model)names.textContent+=" · เหลือ "+model.points+" แต้มสาย";
+    }
+    const capInfo=$("fieldCapInfo");
+    capInfo.hidden=!journey?.rebirthLimit;
+    if(!capInfo.hidden){
+      const count=gearGuides.cycle??0;
+      capInfo.querySelector("p").textContent="ล่าต่อและฝึกวิชาที่ Lv.100 ได้ · การเกิดใหม่เริ่มที่ Lv.1 และล้างการจัดแต้มสเตตัส · จำนวนเกิดใหม่ "+count+"/"+journey.rebirthLimit+(count>=journey.rebirthLimit?" · ครบจำนวนแล้ว":" · เป็นทางเลือกของผู้เล่น");
+    }
+    const shrineButton=$("fieldShrine"),stopShrine=$("fieldStopShrine"), me=ownServerCharacter();
+    const shrine=journey?.shrine && shrineDirection(journey,me);
+    shrineButton.hidden=!shrine;
+    stopShrine.hidden=!goal?.rebirthRoute;
+    if(shrine){
+      shrineButton.textContent=shrine.arrived?"เลือกอาชีพสำหรับชีวิตใหม่":goal?.rebirthRoute?"ตามเส้นทางไปศาล":"นำทางไปศาลเกิดใหม่";
+      shrineButton.onclick=()=>{
+        const now=shrineDirection(journey,ownServerCharacter());
+        if(!now)return;
+        saveJourney({shrine:true});closeDrawer();
+        if(now.arrived)window.MontraEntry?.rebirthAtShrine(ownServerCharacter(),gearGuides.cycle??0);
+        else toast(now.step);
+      };
+    }
+    stopShrine.onclick=()=>{saveJourney({shrine:false});renderFieldGoalDrawer(fieldGearGoal());};
+    const camps=[...(journey?.camps??[]),...(journey?.challenges??[])], campList=$("fieldCampList");
+    campList.hidden=!course || camps.length<2;
+    if(!campList.hidden){
+      campList.replaceChildren(...camps.map(c=>new Option(c.map+" · "+c.monster+" Lv."+c.level+(journey.challenges?.includes(c)?" · ท้าทาย":""),c.id)));
+      campList.value=fieldCamp(journey,journeyNotesForPlayer())?.id??"";
+      campList.onchange=()=>{
+        const selected=camps.find(c=>c.id===campList.value);
+        if(selected){
+          const trial=journeyNotesForPlayer().trial;
+          saveJourney({campId:selected.id,boss:null,trial:trial && !journey.challenges?.includes(selected)?{...trial,site:selected,used:false,killAt:null}:null});
+          renderFieldGoalDrawer(fieldGearGoal());
+        }
+      };
+    }
     const compare=$("fieldGearCompare"),track=$("fieldGearHunt"),view=$("fieldGearView"),skip=$("fieldGearSkip"),bossBtn=$("fieldBossChoice");
     compare.hidden=!goal?.comparison;
     if(goal?.comparison){
@@ -13139,7 +13230,7 @@
     if(!select.hidden){
       select.replaceChildren(new Option("เลือกบอสอื่น…",""),...options.map(b=>new Option(b.camp.monster+" Lv."+b.level,b.gear)));
       select.value=goal?.bossGear??"";
-      select.onchange=()=>{if(select.value){saveJourney({boss:select.value});renderFieldGoalDrawer(fieldGearGoal());}};
+      select.onchange=()=>{if(select.value){saveJourney({boss:select.value,campId:fieldCamp(journey,journeyNotesForPlayer())?.id});renderFieldGoalDrawer(fieldGearGoal());}};
     }
     bossBtn.hidden=!goal || !option || (!midgame && itemHuntCount(option.gear)>0);
     if(!bossBtn.hidden){
@@ -13147,7 +13238,7 @@
       bossBtn.onclick=()=>{
         const deferred=new Set(journeyNotesForPlayer().deferredBosses??[]);
         if(goal.bossChoice)deferred.add(option.gear);else deferred.delete(option.gear);
-        saveJourney({boss:goal.bossChoice?null:option.gear,bossSkipped:!!goal.bossChoice,deferredBosses:[...deferred]});
+        saveJourney({boss:goal.bossChoice?null:option.gear,bossSkipped:!!goal.bossChoice,deferredBosses:[...deferred],campId:fieldCamp(journey,journeyNotesForPlayer())?.id});
         renderFieldGoalDrawer(fieldGearGoal());
       };
     }

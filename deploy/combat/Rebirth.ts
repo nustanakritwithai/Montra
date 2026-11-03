@@ -2,6 +2,7 @@
 import { PATHS, type PathId } from "./CharacterBuilds.js";
 
 export const MAX_REBIRTHS = 15;
+export const REBIRTH_SHRINE = {mapId:"ritual_village",name:"ศาลเกิดใหม่ · หมู่บ้านอาคม",x:0,z:0,radius:4} as const;
 export const MAX_CLASS_MASTERY = 2;
 export type RebirthState = {
   count: number;
