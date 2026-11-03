@@ -4,7 +4,7 @@ import {baseManaAtLevel,PROGRESSION,type CombatStats} from "./Progression.js";
 
 export type ItemStats = Partial<Record<"hp" | "stamina" | "mana" | "atk" | "def" | "magicAtk" | "magicDef",number>>;
 export type ForgeRating="melee"|"ranged"|"guard"|"healing";
-export type ForgeProfile={primary:ForgeRating; pool:readonly ForgeRating[]; enhanceMax:number; affixMax:number; materialTier:number};
+export type ForgeProfile={primary:ForgeRating; pool:readonly ForgeRating[]; enhanceMax:number; affixMax:number; affixTierCap:number; materialTier:number};
 export const WEAPON_LEVELS=[1,10,20,30,40,50,60,70,85,100] as const;
 export const OUTFIT_LEVELS=[1,10,25,45,65,85,95,100] as const;
 // End equipment can be made from materials found before the last boss.
@@ -149,6 +149,31 @@ export type SalveId = Extract<PersonalId,`use_salve_${number}`>;
 export type CardId = Extract<PersonalId,`card_${string}`>;
 export const SALVE_ID = "use_salve_1";
 export const WORKBENCH_GOLD = 4;
+export const gearSchools={
+  muay_boran:["wrap","brace","หมัดชุดโคราช–ท่าเสา","ไชยาตั้งรับสวน"],
+  phutthaisawan:["twins","guard","เพลงดาบคู่และฟันกวาด","ตั้งดาบสวนและคุ้มกัน"],
+  blade:["shadow","veil","ปลุกจิตและคมสังหาร","ล่องหนและฟันถอนเงา"],
+  sentinel:["pike","shield","หยุดทัพและตั้งง้าวสวน","ปักหลักคุ้มกันสหาย"],
+  seer:["wand","jar","ผีจากหม้อและควายธนู","ยันต์สะกดและข้าวสารพิษ"],
+  mender:["crook","bell","พรฟื้นกายและฮีลหมู่","อาณาเขตคุ้มภัยและพรหมู่"],
+} as const;
+export function guideFamily(path:keyof typeof gearSchools,slot:"mainHand"|BodySlot,style:"pressure"|"endurance"){
+  const caster=path==="mender"||path==="seer", guarded=style==="endurance", tank=path==="sentinel";
+  switch(slot){
+    case "mainHand":return "wp_"+gearSchools[path][0];
+    case "offHand":return "off_"+gearSchools[path][1];
+    case "neck":return guarded?"acc_gorget":path==="mender"?"acc_torc":caster?"acc_spell":"acc_fang";
+    case "leftEar":return caster?"acc_earrings_lotus":"acc_earrings_hunter";
+    case "rightEar":return guarded?"acc_earrings_ward":caster?"acc_earrings_focus":"acc_earrings_duelist";
+    case "leftRing":return path==="mender"?"acc_ring_heal":caster?"acc_ring_spell":"acc_ring_atk";
+    case "rightRing":return "acc_ring_guard";
+  }
+  const core=slot==="chest"||slot==="legs"||slot==="head";
+  if(guarded && slot==="chest")return "arm_heavy_chest";
+  if(path==="phutthaisawan" && (guarded || slot==="chest"))return "arm_medium_"+slot;
+  const armor=tank?(guarded||core?"heavy":"medium"):caster?(guarded&&core?"heavy":"cloth"):(guarded?(core?"medium":"hide"):"hide");
+  return "arm_"+armor+"_"+slot;
+}
 const fieldKits={
   muay_boran:{title:"คาดเชือก",armor:"hide",offHand:"off_brace",neck:"acc_fang",earring:"acc_earrings_duelist",ring:"acc_ring_atk"},
   phutthaisawan:{title:"ดาบคู่",armor:"medium",offHand:"off_guard",neck:"acc_fang",earring:"acc_earrings_hunter",ring:"acc_ring_atk"},
@@ -192,10 +217,19 @@ function forgeProfile(item:PersonalDefinition):ForgeProfile {
   else if(preferred.includes("sentinel") && !preferred.includes("blade")){primary="guard";other="melee";}
   const spent=Object.entries(item.stats).reduce((sum,[key,value])=>sum+value*weights[key as keyof ItemStats],0);
   const budget=spent/.78;
-  return {primary,pool:[primary,other],enhanceMax:Math.max(1,Math.round(budget*.10)),affixMax:Math.max(1,Math.round(budget*.08)),materialTier:materialTier(item.level??1)};
+  const level=item.level??1;
+  return {primary,pool:[primary,other],enhanceMax:Math.max(1,Math.round(budget*.10)),affixMax:Math.max(1,Math.round(budget*.08)),
+    affixTierCap:level<25?1:level<65?2:3,materialTier:materialTier(level)};
 }
 function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> {
   const result:Partial<Record<PersonalId,PersonalDefinition>>={};
+  const guidePaths=new Map<string,Set<string>>();
+  for(const path of Object.keys(gearSchools) as (keyof typeof gearSchools)[]){
+    for(const style of ["pressure","endurance"] as const)for(const slot of BODY_SLOTS){
+      const family=guideFamily(path,slot,style),paths=guidePaths.get(family)??new Set<string>();
+      paths.add(path);guidePaths.set(family,paths);
+    }
+  }
   function put(id:PersonalId,item:PersonalDefinition){if(result[id])throw Error("duplicate_item:"+id);result[id]=item;}
   for(const [baseKey,raw] of Object.entries(STARTING_ITEMS)){
     const base:PersonalDefinition=raw, family=baseKey.replace(/_1$/,"");
@@ -242,7 +276,13 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
         item.recipe=base.recipe?.map(input=>({item:input.item.replace(/_1$/,"_"+material),qty:input.qty+Math.floor(index/2)}));
         item.craftGold=level===1?WORKBENCH_GOLD:8+2*level;
         if(base.kind==="consumable")item.healHp=22+Math.round((level-1)*1.8);
-        else {item.recommended=recommend(family,item);item.forge=forgeProfile(item);}
+        else {
+          item.recommended=recommend(family,item);
+          // A shared piece keeps its forge specialization even when another class uses it in a build.
+          item.forge=forgeProfile(item);
+          const guideFits=guidePaths.get(family);
+          if(item.path==="all" && guideFits)item.recommended=[...new Set([...item.recommended,...guideFits])];
+        }
       }
       put(id,item);
     }

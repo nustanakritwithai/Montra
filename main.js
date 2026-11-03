@@ -5137,11 +5137,11 @@
   const SHRINE_SHARD = "shrine_shard";
   const shardName = "เศษตราผู้พิทักษ์";
   const WEAPON_META = Object.freeze({
-    muay_wraps: { name: "ผ้าคาดเชือก", symbol: "✊", bonus: "ผ้าพันมือสำหรับวิชามวย · โจมตีประชิด +4" },
-    shrine_glaive: { name: "ง้าวจันทร์ผู้พิทักษ์", symbol: "☾", bonus: "หายาก · iLv 12 · ประชิด +10 เมื่อสู้มอนสเตอร์ / +8 ใน PvP" },
-    ritual_dagger: { name: "มีดหมอ", symbol: "🗡️", bonus: "โจมตีประชิด +4" },
-    arcane_sword: { name: "กระบี่อาคม", symbol: "⚔️", bonus: "โจมตีประชิด +8" },
-    spirit_staff: { name: "คทาวิญญาณ", symbol: "🔱", bonus: "ยิงอาคม +6" },
+    muay_wraps: { name: "ผ้าคาดเชือก", symbol: "✊", melee:4, bonus: "ผ้าพันมือสำหรับวิชามวย · โจมตีประชิด +4" },
+    shrine_glaive: { name: "ง้าวจันทร์ผู้พิทักษ์", symbol: "☾", melee:10, bonus: "หายาก · iLv 12 · ประชิด +10 เมื่อสู้มอนสเตอร์ / +8 ใน PvP" },
+    ritual_dagger: { name: "มีดหมอ", symbol: "🗡️", melee:4, bonus: "โจมตีประชิด +4" },
+    arcane_sword: { name: "กระบี่อาคม", symbol: "⚔️", melee:8, bonus: "โจมตีประชิด +8" },
+    spirit_staff: { name: "คทาวิญญาณ", symbol: "🔱", ranged:6, bonus: "ยิงอาคม +6" },
   });
   let personalItems = Object.create(null), workbenchGold = 0, cardDrill=null, catalogRevision=0, gearGuides=null;
   let resources=null,resourceViewMap="",refineInput=2,resourceReadyAt=0,resourceChoice="",harvestFocus=null;
@@ -5264,23 +5264,41 @@
     const symbol=item.kind==="mainHand"?({muay_boran:"✊",phutthaisawan:"⚔",blade:"🗡",sentinel:"♜",seer:"✴",mender:"✧"}[item.path]):(gearSymbols[item.kind] || {material:"◆",catalyst:"✧",consumable:"✚",card:"▣"}[item.kind]);
     return {...item,symbol,bonus:statLine(item.stats)};
   }
-  function gearComparison(id,previousId,card,previousCard) {
-    const statsFor=key=>personalItems[key]?.stats || ({ritual_dagger:{atk:4},muay_wraps:{atk:4},arcane_sword:{atk:8},spirit_staff:{magicAtk:6},shrine_glaive:{atk:10}}[key]) || {};
-    const next=statsFor(id), previous=statsFor(previousId);
-    return statLine(Object.fromEntries(Object.keys(statNames).map(k=>[k,(next[k]||0)+(personalItems[card]?.stats?.[k]||0)-(previous[k]||0)-(personalItems[previousCard]?.stats?.[k]||0)])));
+  function wornGearAt(position,slots){
+    if(position==="mainHand")return slots?.[currentEquippedWeaponSlot()]??null;
+    const itemId=inventoryState?.equipment?.[position];
+    return itemId?{itemId,bound:true,forge:inventoryState.equipmentForges?.[position],socket:inventoryState.equipmentSockets?.[position]}:null;
+  }
+  function pieceStat(piece,stat){
+    return (personalItems[piece?.itemId]?.stats?.[stat]??0)+(personalItems[piece?.socket]?.stats?.[stat]??0);
+  }
+  function gearComparison(next,previous,slots) {
+    const diff=Object.fromEntries(Object.keys(statNames).map(k=>[k,pieceStat(next,k)-pieceStat(previous,k)]));
+    const lines=[];
+    if(diff.mana && Number.isFinite(gearGuides?.baseMana) && Number.isFinite(gearGuides.manaCap) && gearGuides.level===ownServerCharacter()?.level){
+      const total=["mainHand",...Object.keys(bodyLabels)].reduce((n,pos)=>n+pieceStat(wornGearAt(pos,slots),"mana"),gearGuides.baseMana);
+      const cap=gearGuides.manaCap;
+      lines.push("MP สูงสุดก่อนบัฟ "+Math.min(cap,total)+" → "+Math.min(cap,total+diff.mana));
+      delete diff.mana;
+    }
+    const stats=statLine(diff),bonus=forgeComparison(next,previous);
+    if(stats)lines.unshift(stats);
+    if(bonus)lines.push("โบนัส PvE "+bonus);
+    return lines.join(" · ") || "สเตตัสและโบนัส PvE เท่ากัน";
   }
   function forgeComparison(item,previous){
     function values(stack){
-      const result={melee:0,ranged:0,guard:0,healing:0}, f=stack?.forge;
+      const legacy=WEAPON_META[stack?.itemId];
+      const result={melee:legacy?.melee??0,ranged:legacy?.ranged??0,guard:0,healing:0}, f=stack?.forge;
       if(!f)return result;
       const profile=personalItems[stack.itemId]?.forge;
       if(profile)result[profile.primary]=profile.enhanceMax*f.rank/10;
-      else result[stack.itemId==="spirit_staff"?"ranged":"melee"]=f.rank;
+      else result[stack.itemId==="spirit_staff"?"ranged":"melee"]+=f.rank;
       if(f.affix)result[f.affix.stat]+=profile?profile.affixMax*f.affix.tier/3:f.affix.tier;
       return result;
     }
     const a=values(item),b=values(previous);
-    return Object.keys(a).filter(k=>Math.abs(a[k]-b[k])>=.05).map(k=>forgeNames[k]+" "+(a[k]>b[k]?"+":"")+(a[k]-b[k]).toFixed(1)).join(" / ");
+    return Object.keys(a).filter(k=>Math.abs(a[k]-b[k])>=.005).map(k=>forgeNames[k]+" "+(a[k]>b[k]?"+":"")+Number((a[k]-b[k]).toFixed(2))).join(" / ");
   }
   let demoWeaponSlot = 1;
   let inventoryState = null;
@@ -11595,8 +11613,7 @@
       slot.querySelector(".bag-symbol").textContent=meta?.symbol || (!item?"·":item.itemId===SHRINE_SHARD?"◈":"🧪");
       slot.querySelector(".bag-quantity").textContent=!item?"":worn?"✓":item.quantity>1?"×"+item.quantity:"";
     }
-    const inspectedId=inspectingGear==="mainHand"?equippedItem?.itemId:equipment[inspectingGear];
-    const chosen=inspectingGear==="mainHand"?equippedItem:inspectingGear?(inspectedId?{itemId:inspectedId,bound:true,forge:inventoryState?.equipmentForges?.[inspectingGear],socket:inventoryState?.equipmentSockets?.[inspectingGear]}:null):slots?.[selectedBagSlot];
+    const chosen=inspectingGear?wornGearAt(inspectingGear,slots):slots?.[selectedBagSlot];
     const meta=bagMeta(chosen?.itemId);
     const positions=wearPositions(meta?.kind);
     const destination=inspectingGear || gearDestination(positions,equipment);
@@ -11618,8 +11635,8 @@
     $("bagItemName").textContent=meta?.name || (chosen?.itemId===SHRINE_SHARD?shardName:chosen?"ยาเลือดเล็ก":inspectingGear?(bodyLabels[inspectingGear]||"อาวุธหลัก")+" · ช่องว่าง":"ช่องว่าง");
     let detail=chosen?"ใช้ฟื้น 30 HP":"ล่ามอนสเตอร์เพื่อหาอุปกรณ์และวัตถุดิบ";
     if(gear){
-      const difference=gearComparison(chosen.itemId,armor?equipment[destination]:equippedItem?.itemId,chosen.socket,armor?inventoryState?.equipmentSockets?.[destination]:equippedItem?.socket);
-      detail=[armor?bodyLabels[destination]:"อาวุธ",meta.bonus,worn?"กำลังสวม":difference?"เมื่อเปลี่ยน "+difference:"",wrongClass?"อาวุธของสายอื่น":"",chosen.bound?"ผูกกับตัวละคร":personalItems[chosen.itemId]?"ผูกตัวละครเมื่อสวมครั้งแรก":""].filter(Boolean).join(" · ");
+      const difference=worn?"กำลังสวม":"เมื่อเปลี่ยน "+gearComparison(chosen,wornGearAt(armor?destination:"mainHand",slots),slots);
+      detail=[armor?bodyLabels[destination]:"อาวุธ",meta.bonus,difference,wrongClass?"อาวุธของสายอื่น":"",chosen.bound?"ผูกกับตัวละคร":personalItems[chosen.itemId]?"ผูกตัวละครเมื่อสวมครั้งแรก":""].filter(Boolean).join(" · ");
     } else if(meta?.kind==="card")detail=meta.bonus+" เมื่อใส่ในรูของอุปกรณ์ที่สวม · ดรอปจาก"+meta.monster+" ("+meta.chancePct+"%)";
     else if(meta?.kind==="material" && meta.sourceBoss){
       const recipe=Object.values(personalItems).find(i=>i.sourceBoss===meta.sourceBoss && i.forge);
@@ -11640,11 +11657,6 @@
     if(meta?.level)detail="Lv."+meta.level+" · "+(rarityNames[meta.rarity]||"พื้นฐาน")+" · "+detail+(lowLevel?" · เลเวลยังไม่ถึง":"");
     if(meta?.recommended?.length)detail+=" · เหมาะกับ"+meta.recommended.map(p=>gearJobs[p]).join("/");
     if(meta?.dropHint)detail+=" · ล่าได้ที่ "+meta.dropHint;
-    if(gear && !worn){
-      const previous=armor?{itemId:equipment[destination],forge:inventoryState?.equipmentForges?.[destination]}:equippedItem;
-      const change=forgeComparison(chosen,previous);
-      if(change)detail+=" · ผลต่างช่าง PvE "+change;
-    }
     $("bagItemDescription").textContent=detail;
     const bagGoal=meta?.forge?1:itemHuntCount(chosen?.itemId)+1;
     bindItemHuntButton($("bagTrack"),chosen?.itemId,bagGoal);
@@ -11701,6 +11713,51 @@
     const limit=catalog.coreLevels.filter(unlock=>unlock<=level).length,next=catalog.coreLevels[limit];
     return skills.join(" · ")+" · ฝึกได้ถึงขั้น "+limit+(next?" · ขั้นถัดไป Lv."+next:"");
   }
+  function guideDestination(entry,entries,slots){
+    const pair=wearPositions(personalItems[entry.id]?.kind);
+    if(pair.length!==2)return entry.position;
+    const other=pair.find(pos=>pos!==entry.position);
+    const own=wornGearAt(entry.position,slots)?.itemId,opposite=wornGearAt(other,slots)?.itemId;
+    if(own===entry.id)return entry.position;
+    if(opposite===entry.id)return other;
+    const partner=entries.find(e=>e.position===other)?.id;
+    if(own===partner)return other;
+    return own && !opposite?other:entry.position;
+  }
+  function pieceDetails(stack){
+    const card=stack.socket===undefined?"ยังไม่เจาะรู":stack.socket===null?"รูว่าง":personalItems[stack.socket]?.name||stack.socket;
+    const affix=stack.forge?.affix;
+    return ["+"+(stack.forge?.rank??0),affix?forgeNames[affix.stat]+" ขั้น "+affix.tier:"",card].filter(Boolean).join(" · ");
+  }
+  function guideUpgradeStep(entry,piece,rankCap){
+    if(!piece || !economyReady())return "";
+    const card=personalItems[entry.card];
+    if(card && piece.socket!==entry.card){
+      if(piece.socket===undefined)return "เจาะรูเพื่อใส่"+card.name;
+      if(piece.socket===null)return "ใส่"+card.name+" ในรูว่าง";
+      return "การ์ดตามแนวนี้คือ"+card.name;
+    }
+    if(!rankCap)return "";
+    const rank=piece.forge?.rank??0;
+    if(rank<rankCap)return "เป้าตีบวกถัดไป +"+(rank+1);
+    if(piece.forge?.affix?.stat!==entry.affix)return "ออปชันตามแนวนี้คือ"+forgeNames[entry.affix];
+    const cap=personalItems[entry.id]?.forge?.affixTierCap;
+    if(piece.forge.affix.tier<cap)return "ออปชัน"+forgeNames[entry.affix]+" สุ่มได้ถึงขั้น "+cap;
+    return "";
+  }
+  function selectGuideCopy(id,worn,slots){
+    const copies=[];
+    if(worn?.itemId===id)copies.push({key:"worn",piece:worn,label:"ที่สวมอยู่"});
+    (slots??[]).forEach((piece,slot)=>{
+      if(piece?.itemId===id && slot!==currentEquippedWeaponSlot())copies.push({key:piece.forge?.instanceId??"bag-"+slot,piece,slot,label:"กระเป๋าช่อง "+(slot+1)});
+    });
+    const select=$("guideCopy"),previous=select.dataset.item===id?select.value:"";
+    select.dataset.item=id;select.hidden=copies.length<2;
+    select.replaceChildren(...copies.map(copy=>new Option(copy.label+" · "+pieceDetails(copy.piece),copy.key)));
+    const chosen=copies.find(copy=>copy.key===previous)??copies[0];
+    if(chosen)select.value=chosen.key;
+    return chosen;
+  }
   function renderGearGuide(slots){
     const panel=$("gearGuide"),player=ownServerCharacter();
     panel.hidden=!gearGuides || gearGuides.path!==player?.pathId || gearGuides.level!==player?.level;
@@ -11717,22 +11774,32 @@
       position.appendChild(new Option("ชิ้นถัดไปที่ควรหา","auto"));
       for(const entry of build.slots)position.appendChild(new Option(bodyLabels[entry.position]||"อาวุธหลัก",entry.position));
     }
-    const wornId=entry=>entry.position==="mainHand"?slots?.[currentEquippedWeaponSlot()]?.itemId:inventoryState?.equipment?.[entry.position];
-    const wornPosition=entry=>wornId(entry)===entry.id?entry.position:
-      wearPositions(personalItems[entry.id]?.kind).find(key=>inventoryState?.equipment?.[key]===entry.id);
-    const isWorn=entry=>Boolean(wornPosition(entry));
+    const wornFor=entry=>wornGearAt(guideDestination(entry,build.slots,slots),slots);
+    const isWorn=entry=>wornFor(entry)?.itemId===entry.id;
     const missing=build.slots.filter(e=>!isWorn(e));
-    const entry=position.value==="auto"?(missing.find(e=>personalItems[e.id]?.level===gearGuides.level)??missing[0]??build.slots[0]):build.slots.find(e=>e.position===position.value);
+    const rankCap=room?.state?.forgeCatalog?JSON.parse(room.state.forgeCatalog).chances?.length:0;
+    const entry=position.value==="auto"?(missing.find(e=>personalItems[e.id]?.level===gearGuides.level)??missing[0]??
+      build.slots.find(e=>guideUpgradeStep(e,wornFor(e),rankCap))??build.slots[0]):build.slots.find(e=>e.position===position.value);
     if(!entry)return;
     const item=personalItems[entry.id],card=personalItems[entry.card],next=personalItems[entry.next];
     if(!item)return;
+    const dest=guideDestination(entry,build.slots,slots),worn=wornGearAt(dest,slots);
+    const copy=selectGuideCopy(entry.id,worn,slots);
+    let comparison;
+    if(copy?.key==="worn")comparison=["สวมอยู่",pieceDetails(worn),guideUpgradeStep(entry,worn,rankCap)].filter(Boolean).join(" · ");
+    else {
+      const candidate=copy?copy.label+" · "+pieceDetails(copy.piece):"เทียบชิ้นพื้นฐาน +0 ก่อนสุ่มออปชันและใส่การ์ด";
+      const current=worn?bagMeta(worn.itemId)?.name+" · "+pieceDetails(worn):"ช่องว่าง";
+      comparison=candidate+" กับ"+(bodyLabels[dest]||"อาวุธหลัก")+" ("+current+") · "+gearComparison(copy?.piece??{itemId:entry.id},worn,slots);
+    }
+    $("guideCompare").textContent=comparison;
     bindItemHuntButton($("guideTrack"),entry.id,1,true);
-    bindItemHuntButton($("guideTrackCard"),entry.card,1);
+    bindItemHuntButton($("guideTrackCard"),copy?.piece.socket===entry.card?null:entry.card,1);
     $("guideFocus").textContent=build.focus+" · พื้นฐานทั้งชุด "+statLine(build.totals)+(Number.isFinite(build.maxMana)?" · มานาสูงสุดก่อนใส่การ์ด "+build.maxMana:"");
     const training=$("guideTraining");
     training.textContent=gearTrainingLine(gearGuides.path,build.style,gearGuides.level);
     training.hidden=!training.textContent;
-    const owned=slots?.findIndex(s=>s?.itemId===entry.id)??-1,matched=build.slots.filter(isWorn).length;
+    const matched=build.slots.filter(isWorn).length;
     $("guideName").textContent=item.name+" · Lv."+item.level+" · "+matched+"/"+build.slots.length+" ชิ้นตามแบบ";
     const source=entry.cardHunt;
     const cardLocation=source?source.monster+" Lv."+source.level+" ที่"+source.map+(source.open?"":" (เมื่อเปิดแผนที่ขยาย)"):card?.monster;
@@ -11740,10 +11807,10 @@
       card?"การ์ดที่เหมาะ "+card.name+" · "+statLine(card.stats)+" · "+cardLocation+" "+card.chancePct+"%":""].filter(Boolean).join(" · ");
     const h=entry.hunt;
     $("guideSource").textContent=(h?(h.open?"ล่า":"เมื่อเปิดแผนที่ขยาย ล่า")+h.monster+" Lv."+h.level+" ที่"+h.map+" หรือคราฟต์":"คราฟต์ที่โต๊ะช่าง")+(next?" · เป้าถัดไป Lv."+next.level+" "+next.name:" · ขั้นสุดท้าย Lv.100");
-    const button=$("guideOpen");button.textContent=isWorn(entry)?"ดูชิ้นที่สวม":owned>=0?"ดูชิ้นในกระเป๋า":"เปิดสูตรชิ้นนี้";
+    const button=$("guideOpen");button.textContent=copy?.key==="worn"?"ดูชิ้นที่สวม":copy?"ดูชิ้นในกระเป๋า":"เปิดสูตรชิ้นนี้";
     button.onclick=()=>{
-      if(isWorn(entry)){ $("wear-"+wornPosition(entry)).click();$("bagItemName").scrollIntoView({block:"center"});return; }
-      if(owned>=0){ $("bagSlot"+owned).click();$("bagItemName").scrollIntoView({block:"center"});return; }
+      if(copy?.key==="worn"){ $("wear-"+dest).click();$("bagItemName").scrollIntoView({block:"center"});return; }
+      if(copy){ inspectingGear=dest;$("bagSlot"+copy.slot).click();$("bagItemName").scrollIntoView({block:"center"});return; }
       if(!economyReady()){toast("โต๊ะช่างต้องใช้เซิร์ฟเวอร์ที่เปิดระบบเศรษฐกิจ");return;}
       inspectingGear=entry.position;confirmBindSlot=null;benchTrail.length=0;$("benchGroup").value="all";renderBag();
       $("benchLevel").value=String(item.level);renderWorkbench(slots);
@@ -11932,7 +11999,7 @@
     const busy=economyPending || !ownServerCharacter()?.alive || (ownServerCharacter()?.level||1)<level || economyGold===null;
     upgrade.disabled=max||busy||economyGold<cost||!!a&&a.have<a.qty;
     rerollButton.disabled=busy||economyGold<reroll||!!b&&b.have<b.qty;
-    const cap=profile?(level<25?1:level<65?2:3):3;
+    const cap=profile?(profile.affixTierCap??(level<25?1:level<65?2:3)):3;
     const affix=f?.affix,actual=affix?(forgeNames[affix.stat]+" +"+(profile?(profile.affixMax*affix.tier/3).toFixed(1):affix.tier)):"ยังไม่มีออปชัน";
     const boost=profile?forgeNames[profile.primary]+" +"+(profile.enhanceMax*rank/10).toFixed(1)+" (สูงสุด "+profile.enhanceMax+")":"พลังอาวุธ +"+rank;
     $("forgeInfo").textContent=["+"+rank,boost,actual,"สุ่มได้ "+(profile?.pool||["melee","ranged"]).map(k=>forgeNames[k]).join(" / ")+" ถึงขั้น "+cap,"การันตีตีบวกหลังพลาด 3 ครั้ง · สุ่มขั้นสูงสุดหลังพลาด 4 ครั้ง","โบนัสช่างสำหรับ PvE"].join(" · ");
@@ -11948,7 +12015,7 @@
     openDrawer("bag", "อุปกรณ์และกระเป๋า",
       '<div class="status-line"><span>สถานะกระเป๋า</span><strong id="bagSaveStatus"></strong></div>' +
       '<div class="status-line"><span>พลังชีวิต HP</span><strong id="bagHp"></strong></div>' +
-      '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><p><strong id="guideName"></strong></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button></details>' +
+      '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><p><strong id="guideName"></strong></p><select id="guideCopy" aria-label="เลือกชิ้นที่จะเทียบ" hidden></select><p class="note" id="guideCompare"></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button></details>' +
       '<h3 class="wear-title">อุปกรณ์ที่สวม</h3><div class="wear-grid" aria-label="ช่องอุปกรณ์ตัวละคร">'+wearGrid+'</div><h3 class="wear-title">กระเป๋า · 12 ช่อง</h3>' +
       '<div class="bag-grid" role="group" aria-label="ช่องไอเท็ม 12 ช่อง">' + grid + '</div>' +
       '<div class="bag-detail"><strong id="bagItemName"></strong>' +
@@ -11976,7 +12043,7 @@
       if(key==="mainHand" && Number.isInteger(currentEquippedWeaponSlot()))selectedBagSlot=currentEquippedWeaponSlot();
       renderBag();
     };
-    $("gearGuide").ontoggle=$("guideStyle").onchange=$("guideSlot").onchange=()=>renderGearGuide(currentBagSlots());
+    $("gearGuide").ontoggle=$("guideStyle").onchange=$("guideSlot").onchange=$("guideCopy").onchange=()=>renderGearGuide(currentBagSlots());
     $("refineResource").onclick=()=>{
       const id=currentBagSlots()?.[selectedBagSlot]?.itemId;
       if(!inspectingGear && personalItems[id]?.refinesTo)economySend("refine_resource",{expected:id,requestId:economyRequestId()},true);

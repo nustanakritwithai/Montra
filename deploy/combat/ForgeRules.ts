@@ -50,7 +50,7 @@ export function rollForge(current: Forged | undefined, action: ForgeAction, draw
   const success = roll < chance;
   let affixRoll: number | null = null;
   if (action === "reroll") {
-    const cap=def?.forge ? ((def.level??1)<25?1:(def.level??1)<65?2:3) : 3;
+    const cap=def?.forge?.affixTierCap??3;
     const tier=result.rerollMisses===FORGE.rareAfter?cap:Math.min(cap,roll<FORGE.tier1Weight?1:roll<FORGE.tier1Weight+FORGE.tier2Weight?2:3);
     affixRoll = draw();
     const pool=def?.forge?.pool??(["melee","ranged"] as const);

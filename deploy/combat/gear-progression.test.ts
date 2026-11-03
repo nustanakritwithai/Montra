@@ -158,6 +158,7 @@ test("twelve suggested builds resolve to legal gear, cards and hunting grounds a
       for(const piece of build.slots){
         const def=PERSONAL_ITEMS[piece.id];
         assert(def.level!<=level&&(def.path==="all"||def.path===path));
+        assert(def.recommended?.includes(path),path+" workbench filters out "+piece.id);
         assert(def.forge!.pool.includes(piece.affix));
         assert(piece.hunt && piece.hunt.level>=def.level! && piece.hunt.level<=def.dropMax!,piece.id);
         if(piece.card){
@@ -185,6 +186,20 @@ test("twelve suggested builds resolve to legal gear, cards and hunting grounds a
   assert.equal(gearMana(100,bag).max,320);
   assert(gearMana(100,bag).restRegen>0&&gearMana(100,bag).restRegen<=1);
   assert.equal(personalGearGuides("unknown",50),null);
+});
+
+test("shared defensive recipes retain their forge roles and enter the useful drop pool for the classes that wear them",()=>{
+  const chest=PERSONAL_ITEMS.arm_heavy_chest_8;
+  assert.equal(chest.forge!.primary,"guard");
+  assert.deepEqual(chest.forge!.pool,["guard","melee"]);
+  assert.equal(PERSONAL_ITEMS.acc_earrings_ward_8.forge!.primary,"guard");
+  const mob=findItemHunt("arm_heavy_chest_8",100)!;
+  // Leave all chest candidates available so only the useful pool is exercised.
+  const owned=new Set(entries.filter(([,def])=>def.kind!=="chest").map(([id])=>id));
+  let candidates=0;
+  rollMonsterLoot(mob.id,"mender",owned,100,3,"normal",max=>{candidates=max;return 0;});
+  const results=Array.from({length:candidates},(_,i)=>rollMonsterLoot(mob.id,"mender",owned,100,3,"normal",()=>i));
+  assert(results.some(result=>result?.useful && result.id==="arm_heavy_chest_8"));
 });
 
 test("all six classes gain casting capacity from both hands and have a suggested unlock at every level",()=>{

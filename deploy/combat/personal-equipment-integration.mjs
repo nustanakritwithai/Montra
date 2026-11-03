@@ -76,6 +76,8 @@ try{
   const {room,bag,me,event}=active;
   assert(Object.keys(active.catalog).length>400);
   const endgame=active.catalog.wp_twins_10;assert.equal(endgame.level,100);
+  assert.equal(endgame.forge.affixTierCap,3);
+  assert(active.catalog.arm_heavy_chest_8.recommended.includes("mender"));
   assert.equal(active.catalog.wp_twins_2.huntTarget.id,"temple_forecourt_3");
   assert.equal(active.catalog.card_possessed.huntTarget.id,room.state.monster.id);
   assert.equal(active.catalog.mat_rift_star.huntTarget.mapId,"spirit_rift");
@@ -85,6 +87,7 @@ try{
   assert.equal(active.catalog.mat_ingot_1.dropHint,undefined);
   const guides=active.event("gear_guides",p=>p.path==="phutthaisawan");
   assert.equal(guides?.builds.length,2);
+  assert.equal(guides.baseMana,120);assert.equal(guides.manaCap,320);
   assert.equal(guides.builds[0].slots.find(s=>s.position==="offHand").next,"arm_field_phutthaisawan_2");
   assert.equal(active.catalog.arm_field_phutthaisawan_2.path,"phutthaisawan");
   assert.deepEqual(bag.cardDrill,{gold:20,itemId:"mat_metal_1",quantity:1});
