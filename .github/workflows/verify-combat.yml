@@ -87,6 +87,8 @@ jobs:
           cp deploy/combat/blade-depth-integration.mjs combat-verify/blade-depth-integration.mjs
           cp deploy/combat/class-rank-integration.mjs combat-verify/class-rank-integration.mjs
           cp deploy/combat/skill-ranks.test.ts combat-verify/src/rooms/skill-ranks.test.ts
+          cp deploy/combat/advanced-class-integration.mjs combat-verify/advanced-class-integration.mjs
+          cp deploy/combat/advanced-lessons.test.ts combat-verify/src/rooms/advanced-lessons.test.ts
           cp deploy/combat/blade-advanced-integration.mjs combat-verify/blade-advanced-integration.mjs
           cp deploy/combat/occult-rules.test.ts combat-verify/src/rooms/occult-rules.test.ts
           cp deploy/combat/occult-integration.mjs combat-verify/occult-integration.mjs
@@ -349,7 +351,19 @@ jobs:
 
       - name: Occult book rules
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/occult-rules.test.ts src/rooms/blade-rules.test.ts src/rooms/sentinel-rules.test.ts src/rooms/skill-ranks.test.ts src/rooms/account-store.test.ts
+        run: npx tsx --test src/rooms/occult-rules.test.ts src/rooms/blade-rules.test.ts src/rooms/sentinel-rules.test.ts src/rooms/skill-ranks.test.ts src/rooms/advanced-lessons.test.ts src/rooms/account-store.test.ts
+
+      - name: Isolated advanced class lessons
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export PORT=14215 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1 MONTRA_TEST_URL=http://127.0.0.1:14215
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-advanced-test-XXXXXX)"
+          node --import tsx src/index.ts > advanced-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14215) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 60s node advanced-class-integration.mjs || { cat advanced-server.log; exit 1; }
 
       - name: Isolated class skill ranks and save compatibility
         working-directory: combat-verify

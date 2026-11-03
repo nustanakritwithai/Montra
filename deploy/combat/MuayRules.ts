@@ -30,6 +30,18 @@ export const MUAY_SKILLS = {
   thasao_finish: {name:"หมัดต่อเนื่องท่าเสา", effect:"flurry", stamina:20, cooldownMs:11000, power:0.65, range:2.5},
   thasao_rush: {name:"ก้าวชุดท่าเสา", effect:"step_flurry", stamina:24, cooldownMs:11000, power:0.6, range:6},
   thasao_retreat: {name:"หมัดถอยท่าเสา", effect:"retreat_strike", stamina:18, cooldownMs:9000, power:0.95, range:2.5},
+  chaiya_advanced_counter: {name:"ศอกสวนคุมวง",effect:"counter",stamina:24,cooldownMs:12000,power:1.75,range:2},
+  chaiya_master_counter: {name:"เข่าสวนมั่นคง",effect:"counter",stamina:30,cooldownMs:17000,power:2.05,range:2},
+  korat_advanced_strike: {name:"หมัดอัดแนวโคราช",effect:"strike",stamina:25,cooldownMs:11000,power:1.8,range:2.5},
+  korat_master_strike: {name:"หมัดสะท้านโคราช",effect:"strike",stamina:34,cooldownMs:18000,power:2.25,range:2.5},
+  lopburi_advanced_angle: {name:"ฉากอ้อมลพบุรี",effect:"sidestep",stamina:22,cooldownMs:10000,power:1.15,range:5},
+  lopburi_master_counter: {name:"ฉากสวนชั้นครู",effect:"counter_sidestep",stamina:30,cooldownMs:16000,power:1.95,range:3.5},
+  thasao_advanced_flurry: {name:"ชุดหมัดต่อเนื่องท่าเสา",effect:"flurry",stamina:26,cooldownMs:11000,power:0.75,range:2.5},
+  thasao_master_rush: {name:"ก้าวชุดชั้นครู",effect:"step_flurry",stamina:32,cooldownMs:17000,power:0.8,range:6},
+  chaiya_final_counter: {name:"สวนคุมวงชั้นครู",effect:"counter",stamina:34,cooldownMs:20000,power:2.15,range:2},
+  korat_final_strike: {name:"หมัดพิชิตแนว",effect:"strike",stamina:38,cooldownMs:21000,power:2.35,range:2.5},
+  lopburi_final_counter: {name:"ฉากสวนพิชิตจังหวะ",effect:"counter_sidestep",stamina:34,cooldownMs:19000,power:2.1,range:3.5},
+  thasao_final_rush: {name:"ก้าวชุดพิชิตจังหวะ",effect:"step_flurry",stamina:36,cooldownMs:21000,power:0.9,range:6},
 } as const;
 export type MuaySkillId = keyof typeof MUAY_SKILLS;
 export type MuayCooldowns = Partial<Record<MuaySkillId, number>>;
@@ -64,6 +76,9 @@ export const MUAY_COMBO_MOVES:Readonly<Record<Exclude<MuaySkillId,"guard"|"parry
   korat_heavy:"punch",korat_swing:"punch",lopburi_angle:"punch",lopburi_counter:"elbow",thasao_step:"punch",thasao_flurry:"punch",
   chaiya_finish:"elbow",korat_finish:"punch",lopburi_finish:"punch",thasao_finish:"punch",
   chaiya_return:"elbow",korat_pierce:"punch",korat_press:"punch",lopburi_reverse:"punch",lopburi_slipcounter:"elbow",thasao_rush:"punch",thasao_retreat:"punch",
+  chaiya_advanced_counter:"elbow",chaiya_master_counter:"knee",korat_advanced_strike:"punch",korat_master_strike:"punch",
+  lopburi_advanced_angle:"punch",lopburi_master_counter:"elbow",thasao_advanced_flurry:"punch",thasao_master_rush:"punch",
+  chaiya_final_counter:"elbow",korat_final_strike:"punch",lopburi_final_counter:"elbow",thasao_final_rush:"punch",
 };
 /** Finisher windows are transient server state; clients never supply the window or target. */
 export const MUAY_FOLLOWUP_WINDOW_MS=4000;
@@ -105,6 +120,18 @@ export const MUAY_LESSONS = {
   thasao_finish:{school:"thasao",level:15,requires:["thasao_flurry"],training:{strikes:30,blocks:4},description:"หลังชุดหมัดภายใน 4 วิ ชกต่อสองครั้ง ครั้งละ 65%"},
   thasao_rush:{school:"thasao",level:20,requires:["thasao_step"],training:{strikes:50,blocks:6},description:"ก้าวเข้าทำแล้วชกสองครั้ง ครั้งละ 60%"},
   thasao_retreat:{school:"thasao",level:25,requires:["thasao_flurry"],training:{strikes:70,blocks:8},description:"หมัด 95% แล้วถอยจากเป้าหมาย 1.2 หน่วย"},
+  chaiya_advanced_counter:{school:"chaiya",level:40,requires:["chaiya_knee"],training:{strikes:90,blocks:12},description:"ศอกสวนหลังรับสำเร็จ พลัง 175%"},
+  chaiya_master_counter:{school:"chaiya",level:80,requires:["chaiya_advanced_counter"],training:{strikes:150,blocks:20},description:"เข่าสวนหลังรับสำเร็จ พลัง 205%"},
+  korat_advanced_strike:{school:"korat",level:40,requires:["korat_heavy"],training:{strikes:90,blocks:12},description:"หมัดหนักเดี่ยว พลัง 180%"},
+  korat_master_strike:{school:"korat",level:80,requires:["korat_advanced_strike"],training:{strikes:150,blocks:20},description:"หมัดหนักเดี่ยว พลัง 225%"},
+  lopburi_advanced_angle:{school:"lopburi",level:40,requires:["lopburi_angle"],training:{strikes:90,blocks:12},description:"ฉากเข้าทำ พลัง 115%"},
+  lopburi_master_counter:{school:"lopburi",level:80,requires:["lopburi_advanced_angle","lopburi_counter"],training:{strikes:150,blocks:20},description:"ฉากสวนหลังรับสำเร็จ พลัง 195%"},
+  thasao_advanced_flurry:{school:"thasao",level:40,requires:["thasao_flurry"],training:{strikes:90,blocks:12},description:"ชกสองครั้ง ครั้งละ 75%"},
+  thasao_master_rush:{school:"thasao",level:80,requires:["thasao_advanced_flurry","thasao_step"],training:{strikes:150,blocks:20},description:"ก้าวเข้าทำแล้วชกสองครั้ง ครั้งละ 80%"},
+  chaiya_final_counter:{school:"chaiya",level:95,requires:["chaiya_master_counter"],training:{strikes:200,blocks:25},description:"ศอกสวนหลังรับสำเร็จ พลัง 215%"},
+  korat_final_strike:{school:"korat",level:95,requires:["korat_master_strike"],training:{strikes:200,blocks:25},description:"หมัดหนักเดี่ยว พลัง 235%"},
+  lopburi_final_counter:{school:"lopburi",level:95,requires:["lopburi_master_counter"],training:{strikes:200,blocks:25},description:"ฉากสวนหลังรับสำเร็จ พลัง 210%"},
+  thasao_final_rush:{school:"thasao",level:95,requires:["thasao_master_rush"],training:{strikes:200,blocks:25},description:"ก้าวเข้าทำแล้วชกสองครั้ง ครั้งละ 90%"},
 } as const;
 export type MuayLessonId = keyof typeof MUAY_LESSONS;
 export const MUAY_RANKABLE_SKILLS:readonly string[]=Object.keys(MUAY_LESSONS).filter(id=>MUAY_SKILLS[id as MuayLessonId].effect!=="guard");
@@ -125,12 +152,18 @@ export const MUAY_MASTERY_REQUIREMENTS:Readonly<Partial<Record<MuayLessonId,{tec
   korat_pierce:{technique:5,sequences:0},korat_press:{technique:10,sequences:3},
   lopburi_reverse:{technique:5,sequences:0},lopburi_slipcounter:{technique:10,sequences:3},
   thasao_rush:{technique:5,sequences:0},thasao_retreat:{technique:10,sequences:3},
+  chaiya_advanced_counter:{technique:15,sequences:4},chaiya_master_counter:{technique:30,sequences:8},
+  korat_advanced_strike:{technique:15,sequences:4},korat_master_strike:{technique:30,sequences:8},
+  lopburi_advanced_angle:{technique:15,sequences:4},lopburi_master_counter:{technique:30,sequences:8},
+  thasao_advanced_flurry:{technique:15,sequences:4},thasao_master_rush:{technique:30,sequences:8},
+  chaiya_final_counter:{technique:45,sequences:12},korat_final_strike:{technique:45,sequences:12},
+  lopburi_final_counter:{technique:45,sequences:12},thasao_final_rush:{technique:45,sequences:12},
 };
 const MUAY_TECHNIQUES:Readonly<Record<MuaySchool,readonly MuaySkillId[]>> = {
-  chaiya:["counter","chaiya_knee","chaiya_return"],
-  korat:["korat_heavy","korat_swing","korat_finish","korat_pierce","korat_press"],
-  lopburi:["lopburi_angle","lopburi_finish","lopburi_reverse","lopburi_slipcounter"],
-  thasao:["thasao_step","thasao_rush","thasao_retreat"],
+  chaiya:["counter","chaiya_knee","chaiya_return","chaiya_advanced_counter","chaiya_master_counter","chaiya_final_counter"],
+  korat:["korat_heavy","korat_swing","korat_finish","korat_pierce","korat_press","korat_advanced_strike","korat_master_strike","korat_final_strike"],
+  lopburi:["lopburi_angle","lopburi_finish","lopburi_reverse","lopburi_slipcounter","lopburi_advanced_angle","lopburi_master_counter","lopburi_final_counter"],
+  thasao:["thasao_step","thasao_rush","thasao_retreat","thasao_master_rush","thasao_final_rush"],
 };
 export function countsMuayTechnique(school:MuaySchool,skill:MuaySkillId,moved:boolean):boolean {
   return MUAY_TECHNIQUES[school].includes(skill) && (school!=="lopburi" && school!=="thasao" || moved);

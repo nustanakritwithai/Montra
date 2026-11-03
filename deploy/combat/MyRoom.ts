@@ -72,9 +72,12 @@ import {
 import { ForestEncounters } from "./ForestEncounters.js";
 
 const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:WORLD_MAPS}):"";
-// Leave room for replicated players, occupied hunts and summons in addition to the UTF-8 static atlas.
+const swordTreeCatalog=JSON.stringify({schools:SWORD_SCHOOLS,nodes:SWORD_NODES,pvpDamage:SWORD_PVP_DAMAGE_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SWORD_RANKABLE_SKILLS});
+const muayBookCatalog=JSON.stringify({skills:MUAY_SKILLS,lessons:MUAY_LESSONS,base:MUAY_BASE_SKILLS,schools:MUAY_SCHOOLS,combos:MUAY_COMBOS,followups:MUAY_FOLLOWUPS,masteryGuides:MUAY_MASTERY_GUIDES,masteryLabels:MUAY_MASTERY_LABELS,masteryRequirements:MUAY_MASTERY_REQUIREMENTS,pvpDamage:MUAY_PVP_DAMAGE_MULTIPLIER,pvpCombo:MUAY_PVP_COMBO_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:MUAY_RANKABLE_SKILLS});
+// Reserve static UTF-8 catalogs separately from player/monster replication.
 const encoderBlock=64*1024;
-Encoder.BUFFER_SIZE=Math.max(Encoder.BUFFER_SIZE,Math.ceil((Buffer.byteLength(worldDefinition)+32*1024)/encoderBlock)*encoderBlock);
+const staticBytes=Buffer.byteLength(worldDefinition)+Buffer.byteLength(swordTreeCatalog)+Buffer.byteLength(muayBookCatalog);
+Encoder.BUFFER_SIZE=Math.max(Encoder.BUFFER_SIZE,Math.ceil((staticBytes+32*1024)/encoderBlock)*encoderBlock);
 
 const warRoomKey=randomUUID();
 const battleRooms=new Map<number,Promise<string>>();
@@ -3361,8 +3364,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.economyAvailable = characterStore.economyEnabled;
     this.forest.initialize();
     this.state.worldDefinition=worldDefinition;
-    this.state.swordTreeCatalog = JSON.stringify({schools:SWORD_SCHOOLS,nodes:SWORD_NODES,pvpDamage:SWORD_PVP_DAMAGE_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SWORD_RANKABLE_SKILLS});
-    this.state.muayBookCatalog = JSON.stringify({skills:MUAY_SKILLS,lessons:MUAY_LESSONS,base:MUAY_BASE_SKILLS,schools:MUAY_SCHOOLS,combos:MUAY_COMBOS,followups:MUAY_FOLLOWUPS,masteryGuides:MUAY_MASTERY_GUIDES,masteryLabels:MUAY_MASTERY_LABELS,masteryRequirements:MUAY_MASTERY_REQUIREMENTS,pvpDamage:MUAY_PVP_DAMAGE_MULTIPLIER,pvpCombo:MUAY_PVP_COMBO_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:MUAY_RANKABLE_SKILLS});
+    this.state.swordTreeCatalog = swordTreeCatalog;
+    this.state.muayBookCatalog = muayBookCatalog;
     this.state.monster.id = RULES.monsterId;
     this.state.monster.x = RULES.monsterSpawnX;
     this.state.monster.z = RULES.monsterSpawnZ;

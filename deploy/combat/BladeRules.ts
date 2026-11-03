@@ -23,10 +23,14 @@ export const BLADE_LESSONS = {
   counter:{name:"ฟันชิงจังหวะ",description:"สวนหลังหลบการโจมตีสำเร็จ",branch:"tempo",level:7,requires:["evade"],practice:{evade:3},effect:"counter",stamina:18,cooldownMs:8000,range:3,power:1.4},
   retreat:{name:"ถอนกาย",description:"ถอยออกจากเป้าหมายเพื่อจัดตำแหน่งใหม่",branch:"tempo",level:10,requires:["evade"],practice:{evade:5},effect:"retreat",stamina:18,cooldownMs:10000,range:0,power:0},
   killer_focus:{name:"จิตสังหาร",description:"เพิ่มพลังช่วงสั้นหลังเปิดฉากจากการพราง",branch:"tempo",level:15,requires:["counter","hidden_edge"],practice:{ambush:8,combo:4},effect:"focus",stamina:24,cooldownMs:25000,range:0,power:0.15},
+  shadow_cut:{name:"คมเงาสะท้อน",description:"ฟันเป้าหมายเดี่ยวเพื่อรักษาจังหวะระหว่างรอพราง",branch:"edge",level:35,requires:["hidden_edge"],practice:{ambush:15,mark:4},effect:"strike",stamina:22,cooldownMs:11000,range:3,power:1.65},
+  rune_break:{name:"ผ่ารอยผนึก",description:"ใช้รอยอาคมบนเป้าหมายเพื่อโจมตี",branch:"edge",level:55,requires:["marked_cut","shadow_cut"],practice:{mark:18,combo:8},effect:"consume",stamina:26,cooldownMs:12000,range:3,power:1.9},
+  shadow_counter:{name:"เงาสวนคม",description:"สวนเป้าหมายหลังหลบการโจมตีสำเร็จ",branch:"tempo",level:75,requires:["counter","rune_break"],practice:{evade:15,combo:10},effect:"counter",stamina:24,cooldownMs:12000,range:3,power:1.8},
+  sealed_finale:{name:"สะบั้นผนึกเงา",description:"ใช้รอยอาคมของตนปิดจังหวะโจมตี",branch:"edge",level:95,requires:["sever_mark","shadow_counter"],practice:{mark:40,combo:20},effect:"consume",stamina:34,cooldownMs:22000,range:3,power:2.35},
 } as const satisfies Record<string,BladeLesson>;
 export type BladeSkillId = keyof typeof BLADE_LESSONS;
 import { skillRankCost, validateSkillRanks, type SkillRanks } from "./Progression.js";
-export const BLADE_RANKABLE_SKILLS = ["hidden_edge","marked_cut","piercing_edge","sever_mark"] as const;
+export const BLADE_RANKABLE_SKILLS = ["hidden_edge","marked_cut","piercing_edge","sever_mark","shadow_cut","rune_break","shadow_counter","sealed_finale"] as const;
 export type BladeBook = {
   learned:BladeSkillId[]; slots:Array<BladeSkillId|null>;
   practice:Record<BladePractice,number>; cooldowns:Partial<Record<BladeSkillId,number>>;
