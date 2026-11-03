@@ -129,7 +129,7 @@ const edges:readonly (readonly [GateEnd,GateEnd])[]=[
   [["naga_cavern",0,-58],["river_watch",0,26]],
   [["river_watch",0,-58],["fallen_city",0,26]],
   [["river_watch",-35,25],[RIVER_CITY,riverNodes.A.x,riverNodes.A.z]],
-  ...(CASTLE_ENABLED ? [ [["fallen_city",0,-58],[CASTLE_ID,0,900]], [[CASTLE_ID,0,-900],["asura_peak",0,26]] ] as const : [ [["fallen_city",0,-58],["asura_peak",0,26]] ] as const),
+  ...(CASTLE_ENABLED ? [ [["fallen_city",0,-58],[CASTLE_ID,0,315]], [[CASTLE_ID,0,-315],["asura_peak",0,26]] ] as const : [ [["fallen_city",0,-58],["asura_peak",0,26]] ] as const),
   [["asura_peak",0,-58],["spirit_rift",0,26]],
 ];
 export function atlasPortals(mapId:string): WorldPortal[] {

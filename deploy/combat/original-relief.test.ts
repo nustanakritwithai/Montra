@@ -71,7 +71,7 @@ test("elevated victory and supply objectives, reinforcements and village roles r
     }
   }
   assert.equal(groundAt(RIVER_CITY,riverNodes.T.x,riverNodes.T.z),4.5);
-  assert.equal(groundAt(CASTLE_ID,690,100),18);
+  assert.equal(groundAt(CASTLE_ID,castleObjectives[2].x,castleObjectives[2].z),18);
   assert.ok(!isSafeWorldPoint(WORLD_MAPS[RIVER_CITY],{...riverNodes.T,y:10.5}));
   assert.equal(groundAt("ritual_village",2.4,2.4),0);
 });

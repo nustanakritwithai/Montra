@@ -2054,7 +2054,9 @@
         ink.strokeStyle="#bcc1b8";ink.lineWidth=2;
         for(let row=0;row<8;row++)for(let col=-1;col<5;col++)ink.strokeRect(col*64+row%2*32,row*32,64,32);
       }
-      terrain.update();terrain.uScale=id==="tri_wiang_castle"?190:9;terrain.vScale=id==="tri_wiang_castle"?190:12;floor.diffuseTexture=terrain;
+      const castleBounds=id==="tri_wiang_castle" && worldDefinitions?.[id]?.bounds;
+      terrain.update();terrain.uScale=castleBounds?(castleBounds.maxX-castleBounds.minX)*.095:9;
+      terrain.vScale=castleBounds?(castleBounds.maxZ-castleBounds.minZ)*.095:12;floor.diffuseTexture=terrain;
       // Night grade: the atlas palette is kept but pulled down toward moonlight.
       const outerHunt=worldDefinitions?.[id]?.huntTrail;
       const clearTerrain=province || outerHunt;
@@ -9480,7 +9482,7 @@
       for(const note of ui.drawerBody.querySelectorAll("p.note:not(#warFlag)"))note.hidden=true;
     }
     if(isCastle){
-      $("warFlag").textContent="ธงท้าชิงอยู่ที่ประตูใต้ (0, 880) · แตะบันไดด้านในเพื่อขึ้นหรือลงกำแพง";
+      $("warFlag").textContent="ธงท้าชิงอยู่ที่ประตูใต้"+(fort?" ("+fort.x+", "+fort.z+")":"")+" · แตะบันไดด้านในเพื่อขึ้นหรือลงกำแพง";
       const v=s.pilot;
       const sideName=side=>side==="attack"?"บุก":side==="defend"?"รับ":"กลาง";
       const lines=[];

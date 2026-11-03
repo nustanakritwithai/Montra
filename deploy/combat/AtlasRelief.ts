@@ -24,7 +24,7 @@ const originalForms:Record<string,readonly Landform[]>={
   moon_pass:[["เนินโรงคัดแร่",82,-58,4.6,10,17],["เนินศาลช่องขนเงิน",49,-89,2.9,8,16],["ร่องทางเกวียน",48,35,-1.8,7,13]],
   river_watch:[["คันดินลานเสบียง",-67,-56,3.4,10,19],["เนินต้นน้ำ",25,-85,2.8,11,17],["ร่องทางท่าตะวันออก",47,-22,-1.8,7,14]],
   sam_lan_estuary:[["ลานบัญชาการ",32,-48,4.5,17,23],["เนินตลาดท่าเรือ",112,48,3.4,19,30],["ลานคลังตะวันตก",-112,0,2.5,17,25],["ที่ลุ่มริมสะพาน",67,119,-1.8,10,16]],
-  tri_wiang_castle:[["ลานกลองกลาง",0,155,12,46,92],["เชิงผาตะวันออก",690,100,18,55,100],["เนินคลังหลวง",-250,-110,9,32,55],["ลุ่มฝั่งท่าตะวันตก",-680,100,-6,35,75],["ลานพระราชฐาน",0,-175,8,40,55]]
+  tri_wiang_castle:[["ลานกลองกลาง",0,54,8,10,40],["เชิงผาตะวันออก",270,35,18,14,58],["เนินคลังหลวง",-88,-39,5,10,24],["ลุ่มฝั่งท่าตะวันตก",-238,35,-5,9,24],["ลานพระราชฐาน",0,-61,6,12,28]]
 };
 const unit=(v:number)=>Math.max(0,Math.min(1,v));
 function axis(lo:number,hi:number,step:number){
@@ -39,7 +39,7 @@ export function atlasRelief(map:WorldMapDefinition){
 export function originalRelief(map:WorldMapDefinition){
   const shapes=originalForms[map.id];
   if(process.env.MONTRA_ORIGINAL_RELIEF!=="1" || !shapes)return {};
-  const step=map.id==="tri_wiang_castle"?25:map.id==="sam_lan_estuary"?7:map.id==="ritual_village"?1:3;
+  const step=map.id==="tri_wiang_castle"?7:map.id==="sam_lan_estuary"?7:map.id==="ritual_village"?1:3;
   return buildRelief(map,shapes,step,true);
 }
 function buildRelief(map:WorldMapDefinition,shapes:readonly Landform[],step:number,original=false){
@@ -64,7 +64,11 @@ function buildRelief(map:WorldMapDefinition,shapes:readonly Landform[],step:numb
       const dx=Math.max(w.x-x,0,x-w.x-w.width),dz=Math.max(w.z-z,0,z-w.z-w.length);
       clearance=Math.min(clearance,Math.hypot(dx,dz)-guard);
     }
-    return Math.round(100*height*unit(clearance/blend))/100;
+    // Leave enough run between the compact castle walls and the high ground in either triangle direction.
+    const level=map.id==="tri_wiang_castle"
+      ? Math.sign(height)*Math.min(Math.abs(height),Math.max(0,clearance)*.35)
+      : height*unit(clearance/blend);
+    return Math.round(100*level)/100;
   }));
   const terrain:GroundTerrain={xs,zs,heights,maxGrade:.52};
   return {terrain,reliefLabels:shapes.map(([name,x,z])=>({name,x,z}))};
