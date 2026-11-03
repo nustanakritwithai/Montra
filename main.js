@@ -9710,7 +9710,7 @@
   function openSentinelBook(){
     if(!room || mode!=="live" || ownServerCharacter()?.pathId!=="sentinel")return toast("เข้า LIVE และเลือกผู้พิทักษ์ก่อน");
     if(!sentinelBookState){if(performance.now()-sentinelRequestAt>1500){sentinelRequestAt=performance.now();room.send("sentinel_book_get",{});}return toast("กำลังขอตำราผู้พิทักษ์");}
-    sentinelBookRenderKey="";skillGraphKey="";openDrawer("sentinelBook","ตำราผู้พิทักษ์",skillBookShell("sentinel"));wireSkillBook("sentinel");renderSentinelBook();
+    sentinelBookRenderKey="";skillGraphKey="";openDrawer("sentinelBook","สกิล",skillBookShell("sentinel"));wireSkillBook("sentinel");renderSentinelBook();
   }
   function renderSentinelBook(){
     const data=sentinelBookState,me=ownServerCharacter(),container=$("sentinelBookBody");if(!data?.book || !me || !container)return;
@@ -9768,7 +9768,7 @@
   function openBladeBook() {
     if(!room || mode!=="live" || ownServerCharacter()?.pathId!=="blade")return toast("เข้า LIVE และเลือกสายคมดาบก่อน");
     if(!bladeBookState){if(performance.now()-bladeRequestAt>1500){bladeRequestAt=performance.now();room.send("blade_book_get",{});}return toast("กำลังขอตำราคมดาบจากเซิร์ฟเวอร์");}
-    bladeBookRenderKey="";skillGraphKey="";openDrawer("bladeBook","ตำราคมดาบ",skillBookShell("blade"));wireSkillBook("blade");renderBladeBook();
+    bladeBookRenderKey="";skillGraphKey="";openDrawer("bladeBook","สกิล",skillBookShell("blade"));wireSkillBook("blade");renderBladeBook();
   }
   function renderBladeBook() {
     const data=bladeBookState,me=ownServerCharacter(),container=$("bladeBookBody");if(!data || !me || !container)return;
@@ -9860,7 +9860,7 @@
       if(performance.now()-occultRequestAt>1500){occultRequestAt=performance.now();room.send("occult_book_get",{});}
       return toast("กำลังขอตำราอาคมจากเซิร์ฟเวอร์");
     }
-    occultBookRenderKey="";skillGraphKey="";openDrawer("occultBook","ตำราอาคม",skillBookShell("occult"));wireSkillBook("occult");renderOccultBook();
+    occultBookRenderKey="";skillGraphKey="";openDrawer("occultBook","สกิล",skillBookShell("occult"));wireSkillBook("occult");renderOccultBook();
   }
   function renderOccultBook() {
     const data=occultBookState,me=ownServerCharacter(),container=$("occultBookBody");
@@ -9954,7 +9954,7 @@
   function openMuayBook() {
     const data=muayBookData();
     if(!data || data.me.pathId!=="muay_boran") {toast("เลือกอาชีพนักมวยก่อน");return;}
-    muayBookRenderKey="";skillGraphKey="";muayBookViewedSchool=data.book.school;openDrawer("muayBook","ตำรามวยไทย",skillBookShell("muay"));wireSkillBook("muay");renderMuayBook();
+    muayBookRenderKey="";skillGraphKey="";muayBookViewedSchool=data.book.school;openDrawer("muayBook","สกิล",skillBookShell("muay"));wireSkillBook("muay");renderMuayBook();
   }
   function renderMuayBook() {
     const data=muayBookData(), container=$("muayBookBody");
@@ -10088,6 +10088,11 @@
     return { rankable, rank, rankMax: levels.length, nextLv: levels[rank], rankNeed: (info.rankPractice || [])[rank] || 0, rankDone: done };
   };
   const sgSpent = (ranks, filter = () => true) => Object.entries(ranks || {}).reduce((s, [id, n]) => s + (filter(id) ? Number(n) || 0 : 0), 0);
+  // Per-class identity for the graph header and accent colour.
+  const SG_CLASS = {
+    phutthaisawan: { name: "นักดาบไทย", role: "นักดาบอยุธยา", glyph: "⚔", tone: "gold" }, muay_boran: { name: "มวยไทยโบราณ", role: "นักมวยอาคม", glyph: "✊", tone: "ember" },
+    blade: { name: "คมดาบ", role: "นักรบอาคม", glyph: "◈", tone: "violet" }, sentinel: { name: "ผู้พิทักษ์", role: "นักรบอาคม", glyph: "⛨", tone: "steel" },
+    seer: { name: "ผู้ร่ายเวท", role: "จอมอาคม", glyph: "✦", tone: "cyan" }, mender: { name: "ผู้เยียวยา", role: "จอมอาคม", glyph: "✚", tone: "jade" } };
   function skillGraphModel(kind) {
     const me = ownServerCharacter(); if (!me) return null;
     const lv = me.level || 1;
@@ -10244,7 +10249,10 @@
         <p>${sgEsc(n.description || "")}</p>${n.checks.length ? `<ul class="sg-checks">${n.checks.map(c => `<li class="${c.ok ? "ok" : "no"}">${c.ok ? "✓" : "✗"} ${sgEsc(c.label)}</li>`).join("")}</ul>` : ""}
         ${!n.learned && missing.some(c => /^ใช้สำนัก/.test(c.label)) ? `<p class="note">เลือกใช้สำนักนี้ที่หัวคอลัมน์ก่อน (ทำได้ที่ลานพัก)</p>` : ""}${learnBtn}${rankHtml}${slotBtns}</div>`;
     }
-    container.innerHTML = `<div class="sg-wrap"><div class="sg-head"><div class="sg-points"><b>${pts}</b><span>แต้มวิชา</span></div><div class="sg-sum">${model.summary.map(sgEsc).join(" · ")}</div></div>
+    const me = ownServerCharacter(), cls = SG_CLASS[me?.pathId] || { name: model.title, role: "", glyph: "✦", tone: "gold" };
+    const activeLane = L.lanes.find(l => l.active), learnedN = model.nodes.filter(x => x.learned && !x.basic).length, totalN = model.nodes.filter(x => !x.basic).length;
+    container.innerHTML = `<div class="sg-wrap" data-tone="${cls.tone}"><div class="sg-banner"><span class="sg-crest">${cls.glyph}</span><div class="sg-title"><small>${sgEsc(cls.role)} · Lv.${lvNow}</small><strong>${sgEsc(cls.name)}</strong><em>${activeLane ? "สำนัก" + sgEsc(activeLane.name) + " · " : ""}เรียนแล้ว ${learnedN}/${totalN} วิชา</em></div><div class="sg-points"><b>${pts}</b><span>แต้มวิชา</span></div></div>
+      <div class="sg-sum">${model.summary.map(sgEsc).join(" · ")}</div>
       <div class="sg-view"><div class="sg-sizer"><div class="sg-canvas" style="width:${L.width}px;height:${L.height}px;--sgw:${L.W - 4}px">${lanesHtml}<svg class="sg-edges" width="${L.width}" height="${L.height}">${edges.join("")}</svg>${nodesHtml}</div></div></div>
       ${detail}<p class="note">เรียน จัดช่อง และเปลี่ยนสำนักที่ลานพักหลังพ้นการต่อสู้ 5 วินาที</p><button type="button" class="secondary" data-sg-reset>คืนแต้ม</button></div>`;
     const v = container.querySelector(".sg-view"), s = skillGraphScroll[kind];
@@ -10277,7 +10285,7 @@
     if (!data || data.me.pathId!=="phutthaisawan") { toast("เลือกอาชีพนักดาบก่อนเรียนวิชา"); return; }
     swordTreeRenderKey="";
     swordTreeViewedSchool=data.tree.school;
-    skillGraphKey="";openDrawer("swordTree","ตำราวิชาดาบ",skillBookShell("sword"));wireSkillBook("sword");
+    skillGraphKey="";openDrawer("swordTree","สกิล",skillBookShell("sword"));wireSkillBook("sword");
     renderSwordTree();
   }
   function renderSwordTree() {
