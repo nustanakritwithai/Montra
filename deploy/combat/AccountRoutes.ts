@@ -1,10 +1,10 @@
-import express, { type Express, type Request, type Response } from "express";
+import express, { type Application, type Request, type Response } from "express";
 import { createHash } from "node:crypto";
 import { accounts } from "./AccountService.js";
 import { characterStore } from "./CharacterStore.js";
 
 /** Mounted explicitly by app.config. Sessions use bearer headers, never cookies. */
-export function installAccountRoutes(app: Express): void {
+export function installAccountRoutes(app: Application): void {
   const router = express.Router();
   const permitted = new Set(["https://nustanakritwithai.github.io", ...(process.env.MONTRA_ACCOUNT_ORIGINS || "").split(",").map(x => x.trim()).filter(Boolean)]);
   const buckets = new Map<string, {count: number; until: number}>();
