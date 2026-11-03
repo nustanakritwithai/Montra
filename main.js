@@ -4177,6 +4177,36 @@
     if (Number.isFinite(targetX) && Number.isFinite(targetZ)) faceAvatarToward(attackerId, targetX, targetZ);
     playAction(a, ranged ? "cast" : MELEE[a.weaponId] || "punch");
   }
+  // Lightweight in-engine horse: no additional model download or dependency.
+  const horseCoat = mat("horse coat", "#795039", "#130b08");
+  const horseDark = mat("horse mane and hooves", "#30211d", "#080505");
+  const horseLeather = mat("horse saddle leather", "#5b2f24", "#160b06");
+  function createHorse(a) {
+    const root=new B.TransformNode("horse-"+a.id,scene);root.parent=a.node;
+    const part=(name,shape,position,scale,material,parent=root)=>{
+      const mesh=shape==="box"?B.MeshBuilder.CreateBox(name,{size:1},scene):B.MeshBuilder.CreateSphere(name,{diameter:1,segments:8},scene);
+      mesh.parent=parent;mesh.position.set(...position);mesh.scaling.set(...scale);mesh.material=material;mesh.isPickable=false;return mesh;
+    };
+    part("horse body","sphere",[0,1.12,0],[.92,.78,1.8],horseCoat);
+    const neck=part("horse neck","box",[0,1.42,-.78],[.38,.83,.45],horseCoat);neck.rotation.x=-.4;
+    const head=part("horse head","sphere",[0,1.72,-1.08],[.43,.46,.68],horseCoat);head.rotation.x=-.18;
+    for(const side of [-1,1])part("horse eye","sphere",[side*.213,1.78,-1.18],[.065,.065,.065],horseDark);
+    part("horse muzzle","sphere",[0,1.56,-1.43],[.34,.3,.38],horseDark);
+    for(const side of [-1,1])part("horse ear","box",[side*.14,2.02,-1.08],[.09,.26,.1],horseDark);
+    part("horse mane","box",[0,1.76,-.62],[.16,.33,.56],horseDark).rotation.x=-.4;
+    part("horse saddle","box",[0,1.53,.05],[.64,.13,.67],horseLeather);
+    part("horse saddle front","box",[0,1.64,-.24],[.58,.12,.15],horseDark);
+    const tail=part("horse tail","box",[0,1.13,1.02],[.18,.65,.18],horseDark);tail.rotation.x=.35;
+    const legs=[];
+    for(const x of [-.3,.3])for(const z of [-.58,.58]){
+      const pivot=new B.TransformNode("horse leg pivot",scene);pivot.parent=root;pivot.position.set(x,.95,z);
+      part("horse leg","box",[0,-.39,0],[.18,.78,.2],horseCoat,pivot);
+      part("horse hoof","box",[0,-.82,-.04],[.22,.14,.27],horseDark,pivot);
+      legs.push(pivot);
+    }
+    root.setEnabled(false);
+    return {root,legs,tail};
+  }
   // Server state per avatar; a revival plays the get-up action.
   function noteAvatarState(a, p) {
     const alive = p?.alive !== false;
@@ -4184,6 +4214,9 @@
     a.serverAlive = alive;
     a.serverCombat = typeof p?.combatState === "string" ? p.combatState : "idle";
     a.serverFlying = p?.flying === true;
+    a.mounted = p?.mounted === true && alive;
+    if(a.mounted && !a.horse)a.horse=createHorse(a);
+    a.horse?.root.setEnabled(a.mounted);
   }
   const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
   // Additive effect materials shared by every avatar.
@@ -4703,13 +4736,22 @@
         }
       }
     } else if (act && now >= act.end) a.action = null;
+    if (a.mounted && !dead) {
+      // Seated pose is visual only; collision and position remain on the server.
+      set("Hips",0,0,0);off[0]=0;off[1]=-.03;off[2]=0;
+      set("Spine",.05,0,0);set("Spine1",.05,0,0);set("Chest",.03,0,0);
+      set("LeftUpLeg",-1.0,0,.34);set("RightUpLeg",-1.0,0,-.34);
+      set("LeftLeg",1.05,0,0);set("RightLeg",1.05,0,0);
+      set("LeftArm",-.55,0,-.65);set("RightArm",-.55,0,.65);
+      set("LeftForeArm",0,-.45,0);set("RightForeArm",0,.45,0);
+    }
     if (!dead) {
       // Gaze stays on the opponent: neck and head undo most of the torso twist and bend.
       const yaw = P.Hips[1] + P.Spine[1] + P.Spine1[1] + P.Chest[1], pitch = P.Spine[0] + P.Spine1[0] + P.Chest[0];
       add("Neck", -pitch * .2, -yaw * .45, -(P.Hips[2] + P.Spine[2] + P.Chest[2]) * .4);
       add("Head", -pitch * .25, -yaw * .4, 0);
     }
-    if (grounded) {
+    if (grounded && !a.mounted) {
       // Feet stay flat on the ground under the leg chain.
       for (const side of ["Left", "Right"]) {
         const upleg = P[side + "UpLeg"], leg = P[side + "Leg"];
@@ -4727,7 +4769,7 @@
     const o = cur.off || (cur.off = off.slice());
     for (let i = 0; i < 3; i++) o[i] += (off[i] - o[i]) * blend;
     n.Hips.position.set(a.skin.rest.hipsX + o[0], a.skin.rest.hipsY + o[1], a.skin.rest.hipsZ + o[2]);
-    if (a.skin.holder) a.skin.holder.rotation.y = Math.PI + spin; // whole-body turns (sweep, dance)
+    if (a.skin.holder) a.skin.holder.rotation.y = Math.PI + (a.mounted ? 0 : spin); // whole-body turns (sweep, dance)
     return flare;
   }
   // Procedural gait: legs and arms counter-swing with speed, the body bobs and
@@ -4747,6 +4789,11 @@
     const m = a.moveBlend, flying = a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain);
     a.phase = (a.phase + dt * 9.5 * m) % (Math.PI * 2);
     const s = Math.sin(a.phase), c = Math.cos(a.phase), t = now / 1000;
+    if(a.skin?.holder)a.skin.holder.position.y=a.mounted ? .35 + Math.abs(c)*.025*m : 0;
+    if(a.horse && a.mounted){
+      a.horse.legs.forEach((leg,i)=>{leg.rotation.x=Math.sin(a.phase+(i===0||i===3?0:Math.PI))*.48*m;});
+      a.horse.tail.rotation.x=.35+Math.sin(t*2)*.12;
+    }
     // Footstep on each foot plant (the stride sine crossing zero), by surface.
     if (m > .35 && !flying && !a.serverFlying && a.stepSign && Math.sign(s) && Math.sign(s) !== a.stepSign)
       SFX(stepSound(a), { x: a.x, z: a.z, intensity: .55 + .45 * Math.min(1, speed / 6) });
@@ -4760,7 +4807,7 @@
       r.arms[i].rotation.z = (i ? 1 : -1) * (flying ? .55 : .1 + Math.sin(t * 1.6) * .015 * (1 - m));
       r.elbows[i].rotation.x = .22 + m * .25;
     }
-    r.body.position.y = Math.abs(c) * .05 * m + Math.sin(t * 2.1) * .012 * (1 - m);
+    r.body.position.y = (a.mounted ? .35 : 0) + Math.abs(c) * .05 * m + Math.sin(t * 2.1) * .012 * (1 - m);
     // Familiars spin faster, widen and swell while being summoned.
     a.familiarSpin = (a.familiarSpin || 0) + dt * (1 + flare * 4);
     for (const f of r.familiars) {
@@ -6948,6 +6995,7 @@
     setModeBadge(mode === "live");
   }
   function showDemo() {
+    $("mountButton").hidden=true;
     territoryState=null;$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
@@ -7204,7 +7252,7 @@
     const button=$("climb");
     if (!button) return;
     const player=ownServerCharacter();
-    if(mode!=="live" || !player?.alive || player.flying || player.combatState==="climbing") {button.hidden=true;return;}
+    if(mode!=="live" || !player?.alive || player.flying || player.mounted || player.combatState==="climbing") {button.hidden=true;return;}
     const onWall=Math.abs(playerLayer(player)-activeFort.height)<.15;
     const rampart=worldDefinitions?.[activeMapId]?.strategic?.rampart;
     const points=rampart?.stairs?.map(s=>onWall?s.top:s.foot) || (activeMapId==="ritual_village" ? [onWall?{x:activeFort.ladderTopX,z:activeFort.ladderTopZ}:{x:activeFort.ladderFootX,z:activeFort.ladderFootZ}] : []);
@@ -7214,6 +7262,15 @@
     const label=button.querySelector("span:last-child");
     if(label)label.textContent=onWall?"ลงกำแพง":rampart?"ขึ้นกำแพง":"ปีน";
     button.classList.toggle("climb-active", Boolean(player?.combatState==="climbing"));
+  }
+  function syncMountButton() {
+    const button=$("mountButton"),me=ownServerCharacter();
+    if(!button)return;
+    button.hidden=!(mode==="live" && room?.state?.mountAvailable===true && me?.persistent);
+    button.disabled=!me?.alive;
+    button.setAttribute("aria-pressed",String(Boolean(me?.mounted)));
+    button.querySelector("i").textContent=me?.mounted ? "ลงม้า" : "เรียกม้า";
+    button.title=me?.mounted ? "ลงจากม้าเพื่อใช้วิชาต่อสู้" : "เรียกม้าสำหรับเดินทาง";
   }
   function requestClimb(stairId) {
     if (!hasLiveElevation()) {
@@ -7634,6 +7691,7 @@
     syncForestMonsters(state);
     syncClimbButton();
     updateFlightButton();
+    syncMountButton();
     syncPossessionButton();
     syncClassSkill(mine);
     syncTalismanButton(mine);
@@ -7991,6 +8049,11 @@
           pendingClimb=null;
         }
         syncClimbButton();
+      });
+      joined.onMessage("mount_changed", info => {
+        if(room!==joined || info?.playerId!==localId)return;
+        toast(info.mounted ? "ขึ้นม้าแล้ว · ลงจากม้าก่อนต่อสู้" : info.reason==="hit" ? "ถูกโจมตี · ลงจากม้าแล้ว" : info.reason==="warp" ? "ลงจากม้าก่อนเดินทาง" : "ลงจากม้าแล้ว");
+        syncMountButton();
       });
       joined.onMessage("climb_finished", notice => {
         if(room!==joined)return;
@@ -8483,6 +8546,10 @@
         else if (info?.reason === "dash_in_progress" || info?.reason === "dashing") toast("กำลังพุ่งอยู่");
         else if (info?.reason === "dash_rate_limited") toast("สั่งพุ่งถี่เกินไป");
         else if (info?.reason === "invalid_dash") toast("ทิศทางการพุ่งไม่ถูกต้อง");
+        else if (info?.reason === "dismount_required") toast("ลงจากม้าก่อนใช้วิชาหรือต่อสู้");
+        else if (info?.reason === "mount_in_combat") toast("รอให้พ้นการต่อสู้ก่อนเรียกม้า");
+        else if (info?.reason === "mount_unavailable") toast("เรียกม้าได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");
+        else if (info?.reason === "mount_cooldown") toast("รอสักครู่ก่อนเรียกม้าอีกครั้ง");
         else if (info?.reason === "invalid_flight") toast("คำสั่งบินไม่ถูกต้อง");
         else if (info?.reason === "flight_class_required") toast("วิชาเหินเวหาเป็นของจอมอาคม");
         else if (info?.reason === "flight_in_progress") toast("กำลังขึ้นหรือลง · รอให้ถึงระดับก่อน");
@@ -10861,6 +10928,7 @@
   $("occultBookButton").onclick=openOccultBook;
   $("bladeBookButton").onclick=openBladeBook;
   $("sentinelBookButton").onclick=openSentinelBook;
+  $("mountButton").onclick=()=>{if(mode==="live" && room?.state?.mountAvailable===true)room.send("toggle_mount",{});};
   // Cooldown labels must advance even in a quiet room with no schema patches.
   setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());syncSentinelUI(ownServerCharacter());}},1000);
   $("helpButton").onclick=openHelp;

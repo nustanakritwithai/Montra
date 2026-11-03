@@ -49,6 +49,7 @@ export const Player = schema({
   muayData: t.string().default(""),
   muayBookData: t.string().default(""),
   stunned: t.boolean().default(false), // server-owned, temporary PvP control
+  mounted: t.boolean().default(false), // temporary horse mount; never stored in character saves
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
@@ -144,6 +145,7 @@ export const MyRoomState = schema({
   occultAvailable: t.boolean().default(true), // append-only: protects newer clients connecting to older servers
   bladeAvailable: t.boolean().default(true), // append-only: codeless fallback when the server is older
   sentinelAvailable: t.boolean().default(true), // append-only for staged client/server rollout
+  mountAvailable: t.boolean().default(true), // append-only; older servers do not expose horse mounts
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;
