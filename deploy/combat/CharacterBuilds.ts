@@ -34,7 +34,7 @@ export const PATHS = {
   blade: { role: "นักรบอาคม", name: "คมดาบ", skill: "ปลุกคมดาบ", targets: "self", stamina: 20, cooldownMs: 25_000, effect: {kind: "buff", durationMs: BLADE_TALENTS.steady.durationMs, bonuses: BLADE_TALENTS.steady.bonuses} },
   sentinel: { role: "นักรบอาคม", name: "ผู้พิทักษ์", skill: "ยันต์คุ้มกาย", targets: "party", stamina: 25, cooldownMs: 30_000, effect: {kind: "buff", durationMs: WARD_TALENTS.lasting.durationMs, bonuses: {def: 0.20}} },
   seer: { role: "จอมอาคม", name: "ผู้ร่ายเวท", skill: "เพ่งจิต", targets: "self", stamina: 20, cooldownMs: 25_000, effect: {kind: "buff", durationMs: 10_000, bonuses: {magicAtk: 0.25}} },
-  mender: { role: "จอมอาคม", name: "ผู้เยียวยา", skill: "พรฟื้นกาย", targets: "party", stamina: 25, cooldownMs: 30_000, effect: {kind: "heal", fraction: 0.10} },
+  mender: { role: "จอมอาคม", name: "พระ", skill: "พรฟื้นกาย", targets: "party", stamina: 25, cooldownMs: 30_000, effect: {kind: "heal", fraction: 0.10} },
 } as const satisfies Record<string, PathDefinition>;
 export type PathId = keyof typeof PATHS;
 /** Both branches of the occultist share the ritual starter skills. */
