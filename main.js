@@ -3454,7 +3454,7 @@
       }
       if(!ghost){mesh.position.set(Number(monster.x),Number(monster.y)+(monster.tier==="boss"?2.25:monster.tier==="elite"?1.74:.88),Number(monster.z));mesh.rotation.y=Number(monster.facing)||0;}
       if(id===selectedForestTarget&&monster.mapId===activeMapId){updateMonsterUI(monster.hp,monster.maxHp,monster.alive);
-        ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monsterName(monster,id)+" · Lv "+monster.level;}
+        ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monsterName(monster,id)+" · Lv "+monster.level+(ownServerCharacter()?.targetId===id?" · ตีอัตโนมัติ":"");}
     });
     for(const [id,mesh] of forestMonsters)if(!seen.has(id)){mesh.metadata?.ghost?.rig?.metadata?.skeletons?.forEach(s=>s.dispose());mesh.dispose();forestMonsters.delete(id);}
     const me=ownServerCharacter(),map=worldDefinitions?.[activeMapId];
@@ -3472,8 +3472,8 @@
     const target=room?.state?.monsters?.get?.(id);
     if(!target||!target.alive||target.mapId!==activeMapId){toast("เป้าหมายไม่อยู่ในพื้นที่");return;}
     selectedForestTarget=id;spellTargetId=id;selectedPkTargetId=null;syncPKHud();marker.setEnabled(false);
-    if(targetedSkill) castAtTarget(id);
-    else try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }
+    setTargetedSkill(null);
+    try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }
     updateMonsterUI(target.hp,target.maxHp,target.alive);ui.monsterHint.textContent=monsterName(target,id)+" · Lv "+target.level;
   }
 
@@ -6941,7 +6941,7 @@
     ui.monsterText.textContent = alive ? Math.ceil(current) + "/" + Math.ceil(max) : "ปราบแล้ว"; // same wording as the HUD frame
     ui.monsterHint.textContent = simulated
       ? "ทดลองในเครื่อง · แตะผีเพื่อโจมตี"
-      : "ออนไลน์ · แตะผีเพื่อโจมตี";
+      : ownServerCharacter()?.targetId===MONSTER_ID ? "ออนไลน์ · ตีอัตโนมัติ" : "ออนไลน์ · แตะผีเพื่อเริ่มตี";
   }
 
   function resetDemoMonster() {
@@ -6987,6 +6987,7 @@
   }
 
   function requestMonsterAttack() {
+    setTargetedSkill(null);
     if(mode === "live" && activeMapId !== "ritual_village" && room?.state?.worldDefinition){
       const me=ownServerCharacter();let target=room.state.monsters.get(selectedForestTarget);
       if(!target?.alive || target.mapId!==activeMapId){target=null;room.state.monsters.forEach(m=>{if(m.alive&&m.mapId===activeMapId&&me&&(!target||Math.hypot(me.x-m.x,me.z-m.z)<Math.hypot(me.x-target.x,me.z-target.z)))target=m;});}
@@ -7089,6 +7090,7 @@
     pendingClimb = null;
     selectedPkTargetId = null;
     spellTargetId = null;
+    setTargetedSkill(null);
     syncPKHud();
     demoAutoAttack = false;
     if (!ui.monsterStatus.hidden) ui.monsterHint.textContent = "แตะผีเพื่อโจมตี";
@@ -7114,19 +7116,22 @@
     return id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get(id);
   }
   function castAtTarget(id) {
-    if(targetedSkill==="sentinel"){
+    const skill=targetedSkill;
+    if(!skill)return;
+    setTargetedSkill(null);
+    if(skill==="sentinel"){
       const node=sentinelBookState?.lessons?.[selectedSentinelSkill],monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;
       if(!node || !id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId){toast("เลือกเป้าหมายที่ใช้วิชานี้ได้");return;}
       if(opponent && partyState?.members?.some(member=>member.sessionId===id)){toast("โจมตีสมาชิกปาร์ตี้ไม่ได้");return;}
       spellTargetId=id;room.send("sentinel_skill",{skillId:selectedSentinelSkill,targetId:id});return;
     }
-    if (targetedSkill === "blade") {
+    if (skill === "blade") {
       const node=bladeBookState?.lessons?.[selectedBladeSkill],monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;
       if(!node || !id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId) {toast("เลือกเป้าหมายที่ใช้วิชานี้ได้");return;}
       if(opponent && partyState?.members?.some(member=>member.sessionId===id)){toast("โจมตีสมาชิกปาร์ตี้ไม่ได้");return;}
       spellTargetId=id;room.send("blade_skill",{skillId:selectedBladeSkill,targetId:id});return;
     }
-    if (targetedSkill === "occult") {
+    if (skill === "occult") {
       const node=occultBookState?.lessons?.[selectedOccultSkill];
       const monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id);
       if (!node || !id || id===localId || (!monster && !(["curse","curse_burst"].includes(node.effect) && opponent))) {
@@ -7136,7 +7141,7 @@
       room.send("occult_skill",{skillId:selectedOccultSkill,targetId:id});
       return;
     }
-    if (targetedSkill === "muay") {
+    if (skill === "muay") {
       const monster=monsterForSpell(id), opponent=!monster && room?.state?.players?.get?.(id), target=monster || opponent;
       if (!id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId) { toast("เลือกมอนสเตอร์หรือผู้เล่นที่ยังต่อสู้ได้"); return; }
       if(opponent && partyState?.members?.some(member=>member.sessionId===id)) { toast("ใช้วิชามวยกับสมาชิกปาร์ตี้ไม่ได้"); return; }
@@ -7147,13 +7152,13 @@
       room.send("muay_skill",{skillId:selectedMuaySkill,targetId:id});
       return;
     }
-    if (targetedSkill === "sword") {
+    if (skill === "sword") {
       if (!id || !selectedSwordSkill) return;
       spellTargetId=id;
       room.send("sword_skill",{skillId:selectedSwordSkill,targetId:id});
       return;
     }
-    if (targetedSkill !== "talisman") return shootAtTarget(id);
+    if (skill !== "talisman") return shootAtTarget(id);
     const monster = monsterForSpell(id), me = ownServerCharacter();
     if (!monster?.alive || monster.mapId !== activeMapId) { toast("แปะยันต์ได้เฉพาะมอนสเตอร์ที่ยังมีชีวิต"); return; }
     if (!me?.alive || !Number.isFinite(me.talismanReadyAt)) return;
@@ -7191,7 +7196,7 @@
     const id = spellTargetId || me?.targetId;
     const target = monsterForSpell(id) || (!talisman && room.state.players?.get(id));
     if (id && target?.alive && (target.mapId || "ritual_village") === activeMapId) castAtTarget(id);
-    else toast(talisman ? "แปะยันต์ · เดินเข้าใกล้แล้วแตะมอนสเตอร์" : "ข้าวสารปลุกเสก · แตะมอนสเตอร์หรือผู้เล่นเพื่อซัด");
+    else toast(talisman ? "แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดแปะยันต์เมื่ออยู่ใกล้" : "แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดซัดข้าวสาร");
   }
   function syncTalismanButton(me) {
     const button = $("talisman");
@@ -7689,6 +7694,8 @@
     const mine=state?.players?.get?.(localId);
     const previousMapId=activeMapId;
     syncWorldDefinition(state,mine?.mapId || "ritual_village");
+    const spellMonster=monsterForSpell(spellTargetId);
+    if(spellMonster && (!spellMonster.alive || spellMonster.hp<=0 || (spellMonster.mapId || "ritual_village")!==activeMapId || !ownServerCharacter()?.alive))spellTargetId=null;
     syncMonsterState(state);
     syncSummons(state);
     syncFortification(state);
@@ -8783,8 +8790,7 @@
     } else if (hitMesh?.metadata?.monsterId && hitMesh !== enemy) {
       requestForestAttack(hitMesh.metadata.monsterId);
     } else if (hitMesh === enemy) {
-      if(targetedSkill) castAtTarget(MONSTER_ID);
-      else requestMonsterAttack();
+      requestMonsterAttack();
     } else if(hitMesh?.metadata?.climbableWall) {
       const flying = mode === "live" ? ownServerCharacter()?.flying : demoFlying;
       if (flying && picked.pickedPoint) {
@@ -9701,7 +9707,7 @@
           selectedSentinelSkill=id;setTargetedSkill("sentinel");
           const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
           if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId)castAtTarget(targetId);
-          else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
+          else toast(node.name+" · แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดวิชานี้");
         }else if(node.effect==="ward" || node.effect==="intercept")chooseSentinelAlly(id,node);
         else room.send("sentinel_skill",{skillId:id});
       };bar.append(slot);
@@ -9775,7 +9781,7 @@
         if(["approach","strike","consume","windup","counter"].includes(node.effect)){
           selectedBladeSkill=id;setTargetedSkill("blade");const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
           if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId)castAtTarget(targetId);
-          else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
+          else toast(node.name+" · แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดวิชานี้");
         }else room.send("blade_skill",{skillId:id});
       };if(node && !times[index])staminaCost(slot,node.stamina,me);bar.append(slot);
     });positionSwordToast();
@@ -9845,7 +9851,7 @@
           selectedOccultSkill=id;setTargetedSkill("occult");
           const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId);
           if (targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId) castAtTarget(targetId);
-          else toast(node.name+" · แตะมอนสเตอร์เพื่อใช้วิชา");
+          else toast(node.name+" · แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดวิชานี้");
         } else if (["heal","spirit_heal","ward","cleanse","spirit_ward"].includes(node.effect)) {
           chooseOccultAlly(id,node.name);
         } else room.send("occult_skill",{skillId:id});
@@ -9961,7 +9967,7 @@
         const targetId=finisherReady ? muayFollowupTarget : spellTargetId || me.targetId;
         const target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
         if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId) castAtTarget(targetId);
-        else toast(node.name+" · แตะมอนสเตอร์หรือผู้เล่นเพื่อใช้วิชา");
+        else toast(node.name+" · แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดวิชานี้");
       };
       if(node && !throwing && !timing[index])staminaCost(button,node.stamina,me);
       bar.append(button);
@@ -10047,7 +10053,7 @@
     setTargetedSkill("sword");
     const targetId=spellTargetId || data.me.targetId;
     if (targetId) castAtTarget(targetId);
-    else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
+    else toast(node.name+" · แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดวิชานี้");
   }
   // Stamina cost on a skill button; greyed out (and disabled) while there is not enough.
   function staminaCost(button, cost, me) {
@@ -10667,7 +10673,7 @@
     });
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่นและตั้งค่า",lightSettingsHtml()+soundSettingsHtml()+`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>เดินเข้าจุดบันไดเพื่อแสดงปุ่มปีนและขึ้นกำแพง · จอมอาคมใช้วิชาเหินเวหาในตำราอาคมเพื่อขึ้นบิน แล้วใช้ปุ่มลงจอดที่ปรากฏขณะบิน · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>วิชาพื้นฐานจอมอาคม</h3><p>ตัวละครสายผู้ร่ายเวทหรือผู้เยียวยาใช้วิชาต่อไปนี้ได้</p><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เข้าสู่ระบบแล้วเลือกเซฟ 1–3 และเปลี่ยนเซฟได้ในโปรไฟล์ · บัญชีหนึ่งใช้ได้ทีละตัวละคร ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>ชุดเกราะและอาวุธดรอปจากมอนสเตอร์</p>`);
+    openDrawer("help","วิธีเล่นและตั้งค่า",lightSettingsHtml()+soundSettingsHtml()+`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>เดินเข้าจุดบันไดเพื่อแสดงปุ่มปีนและขึ้นกำแพง · จอมอาคมใช้วิชาเหินเวหาในตำราอาคมเพื่อขึ้นบิน แล้วใช้ปุ่มลงจอดที่ปรากฏขณะบิน · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>ตีมอนสเตอร์และใช้สกิล</h3><p>แตะมอนสเตอร์หนึ่งครั้งเพื่อเดินเข้าระยะและตีอัตโนมัติ กดสกิลเพื่อใช้กับเป้านั้น เมื่อจบร่ายจะตีต่อเอง แตะมอนตัวอื่นเพื่อเปลี่ยนเป้า หรือแตะพื้นเพื่อหยุดตีแล้วเดิน</p><h3>วิชาพื้นฐานจอมอาคม</h3><p>ตัวละครสายผู้ร่ายเวทหรือผู้เยียวยาใช้วิชาต่อไปนี้ได้</p><p>แตะมอนสเตอร์ก่อน แล้วกดซัดข้าวสารเพื่อโจมตีเป้าเดิม กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เข้าสู่ระบบแล้วเลือกเซฟ 1–3 และเปลี่ยนเซฟได้ในโปรไฟล์ · บัญชีหนึ่งใช้ได้ทีละตัวละคร ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>ชุดเกราะและอาวุธดรอปจากมอนสเตอร์</p>`);
     bindSoundSettings(ui.drawerBody); bindLightSettings(ui.drawerBody);
   }
   function currentBagSlots() {
