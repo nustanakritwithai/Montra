@@ -459,6 +459,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .chat-form button { min-width:58px; min-height:46px; border:1px solid #d7ab6c; border-radius:10px; background:#7a4d27; }
 
 .warp-button { position:absolute; z-index:12; left:50%; bottom:calc(170px + env(safe-area-inset-bottom)); transform:translateX(-50%); min-height:48px; padding:10px 18px; border:1px solid #a8f4dc; border-radius:14px; color:#e9fff7; background:#164d45; box-shadow:0 0 18px #78eac677; font:inherit; font-weight:700; white-space:nowrap; }
+.climb-context { bottom:calc(230px + env(safe-area-inset-bottom)); }
+.flight-context { bottom:calc(230px + env(safe-area-inset-bottom)); }
 .warp-loading { position:absolute; inset:0; z-index:30; display:grid; place-items:center; color:#effff9; background:#0a1a1be8; font-size:1.2rem; }
 .warp-button[hidden], .warp-loading[hidden] { display:none; }
 

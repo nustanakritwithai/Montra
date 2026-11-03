@@ -2644,6 +2644,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const id = client.sessionId;
       const player = this.state.players.get(id);
       if (!player || !player.alive) return this.reject(client, "not_alive");
+      // Saved characters from earlier releases can always land safely.
+      const legacyFlightTest=process.env.MONTRA_ACCOUNTS_REQUIRED==="0" && process.env.NODE_ENV!=="production";
+      if (!legacyFlightTest && !player.flying && !isOccultPath(player.pathId)) return this.reject(client, "flight_class_required");
       if (this.climbs.has(id)) return this.reject(client, "climbing");
       if (this.activeDashes.has(id)) return this.reject(client, "dashing");
       if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
@@ -3961,8 +3964,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const slot = parseCharacterSlot(options);
     if (!required && !token && slot !== 1) throw new Error("guest_token_required");
     const slotIds = identity?.characterIds ?? (token ? CHARACTER_SLOTS.map(candidate => characterIdFromToken(token, candidate)) : null);
-    // The first character ID remains the lease key across guest-to-account migration.
-    const accountId = slotIds?.[0] ?? null;
+    // Account UUID remains stable when a deleted slot receives a new ID.
+    const accountId = identity?.accountId ?? slotIds?.[0] ?? null;
     const characterId = slotIds?.[slot - 1] ?? null;
     // A single Guest ID may own three saves but can play only ONE at a time.
     if (accountId && !claimCharacter(accountId, client.sessionId)) {

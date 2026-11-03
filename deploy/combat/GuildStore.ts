@@ -60,6 +60,7 @@ export class GuildStore {
   private guild(character:string):GuildRow | undefined {
     return this.db.prepare("SELECT g.id,g.name,g.leader FROM guilds g JOIN guild_members m ON m.guild_id=g.id WHERE m.character_id=?").get(character) as GuildRow | undefined;
   }
+  hasMember(character:string):boolean { return Boolean(this.guild(character)); }
   view(character:string,online:(id:string)=>boolean):GuildView | null {
     const guild=this.guild(character);if(!guild)return null;
     const members=this.db.prepare("SELECT member_id,character_id,name,rank,squad,specialty FROM guild_members WHERE guild_id=? ORDER BY rowid").all(guild.id) as MemberRow[];

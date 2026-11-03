@@ -8,6 +8,7 @@ const USERNAME = /^[a-z0-9_]{3,24}$/;
 const GUEST = /^mt1_[0-9a-f]{64}$/;
 const SESSION = /^ms1_[0-9a-f]{64}$/;
 const RECOVERY = /^mr1_[0-9a-f]{64}$/;
+const GUEST_ACCESS = /^mg1_[0-9a-f]{64}$/;
 const hash = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
 const secret = (prefix: string) => prefix + randomBytes(32).toString("hex");
 
@@ -27,7 +28,7 @@ async function passwordHash(password: string, salt: string): Promise<Buffer> {
     {N:32768, r:8, p:3, maxmem:64*1024*1024}, (error, value) => error ? reject(error) : resolve(value as Buffer)));
 }
 
-export type AccountIdentity = { accountId: string; characterIds: string[] };
+export type AccountIdentity = { accountId: string; characterIds: string[]; guest: boolean };
 
 /** SQLite store for a single MONTRA server; keep its database in the backed-up character directory. */
 export class AccountStore {
@@ -42,6 +43,9 @@ export class AccountStore {
         PRIMARY KEY(user_id, slot));
       CREATE TABLE IF NOT EXISTS sessions(session_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
         expires_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS guest_keys(key_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE REFERENCES users(id));
+      CREATE TABLE IF NOT EXISTS retired_characters(character_id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
+        complete INTEGER NOT NULL DEFAULT 0);
       CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);`);
   }
   close(): void { this.db.close(); }
@@ -63,7 +67,7 @@ export class AccountStore {
     this.transaction(() => {
       if (this.db.prepare("SELECT id FROM users WHERE username=?").get(username)) throw new Error("account_unavailable");
       for (const id of characterIds) {
-        if (this.db.prepare("SELECT user_id FROM user_characters WHERE character_id=?").get(id))
+        if (this.db.prepare("SELECT user_id FROM user_characters WHERE character_id=? UNION ALL SELECT user_id FROM retired_characters WHERE character_id=?").get(id,id))
           throw new Error("legacy_already_linked");
       }
       this.db.prepare("INSERT INTO users(id,username,salt,password_hash,recovery_hash) VALUES(?,?,?,?,?)")
@@ -73,6 +77,59 @@ export class AccountStore {
     });
     return { recoveryCode };
   }
+
+  private createSession(userId: string): {session:string;expiresAt:number} {
+    const session=secret("ms1_"),expiresAt=Date.now()+SESSION_LIFETIME;
+    this.db.prepare("DELETE FROM sessions WHERE expires_at<=?").run(Date.now());
+    this.db.prepare("INSERT INTO sessions(session_hash,user_id,expires_at) VALUES(?,?,?)").run(hash(session),userId,expiresAt);
+    return {session,expiresAt};
+  }
+
+  createGuest(): {guestKey:string;session:string;expiresAt:number} {
+    const guestKey=secret("mg1_"), userId=randomUUID();
+    return this.transaction(()=>{
+      this.db.prepare("INSERT INTO users(id,username,salt,password_hash,recovery_hash) VALUES(?,?,?,?,?)")
+        .run(userId,"guest:"+randomUUID(),randomBytes(16).toString("hex"),randomBytes(64).toString("hex"),hash(secret("mr1_")));
+      this.db.prepare("INSERT INTO guest_keys(key_hash,user_id) VALUES(?,?)").run(hash(guestKey),userId);
+      const insert=this.db.prepare("INSERT INTO user_characters(user_id,slot,character_id) VALUES(?,?,?)");
+      for(const slot of CHARACTER_SLOTS)insert.run(userId,slot,randomBytes(32).toString("hex"));
+      return {guestKey,...this.createSession(userId)};
+    });
+  }
+  guestLogin(value:unknown): {session:string;expiresAt:number} {
+    if(typeof value!=="string" || !GUEST_ACCESS.test(value))throw new Error("invalid_guest_key");
+    return this.transaction(()=>{
+      const row=this.db.prepare("SELECT user_id FROM guest_keys WHERE key_hash=?").get(hash(value));
+      if(typeof row?.user_id!=="string")throw new Error("invalid_guest_key");
+      return this.createSession(row.user_id);
+    });
+  }
+  async upgradeGuest(session:unknown,user:unknown,pass:unknown):Promise<{recoveryCode:string}> {
+    const identity=this.resolve(session),username=usernameOf(user),password=passwordOf(pass);
+    if(!identity?.guest)throw new Error("guest_required");
+    const salt=randomBytes(16).toString("hex"),digest=(await passwordHash(password,salt)).toString("hex"),recoveryCode=secret("mr1_");
+    this.transaction(()=>{
+      const current=this.resolve(session);
+      if(!current?.guest || current.accountId!==identity.accountId)throw new Error("guest_required");
+      if(this.db.prepare("SELECT id FROM users WHERE username=?").get(username))throw new Error("account_unavailable");
+      this.db.prepare("UPDATE users SET username=?,salt=?,password_hash=?,recovery_hash=? WHERE id=?").run(username,salt,digest,hash(recoveryCode),identity.accountId);
+      this.db.prepare("DELETE FROM guest_keys WHERE user_id=?").run(identity.accountId);
+      this.db.prepare("DELETE FROM sessions WHERE user_id=? AND session_hash<>?").run(identity.accountId,hash(session as string));
+    });
+    return {recoveryCode};
+  }
+
+  retireCharacter(userId:string,slot:number,expectedId:string):void {
+    if(!CHARACTER_SLOTS.includes(slot as 1|2|3) || !/^[a-f0-9]{64}$/.test(expectedId))throw new Error("invalid_slot_request");
+    this.transaction(()=>{
+      const current=this.db.prepare("SELECT character_id FROM user_characters WHERE user_id=? AND slot=?").get(userId,slot);
+      if(current?.character_id!==expectedId)throw new Error("slot_changed");
+      this.db.prepare("INSERT INTO retired_characters(character_id,user_id,complete) VALUES(?,?,0)").run(expectedId,userId);
+      this.db.prepare("UPDATE user_characters SET character_id=? WHERE user_id=? AND slot=?").run(randomBytes(32).toString("hex"),userId,slot);
+    });
+  }
+  pendingRetirements():string[] { return this.db.prepare("SELECT character_id FROM retired_characters WHERE complete=0").all().map(row=>String(row.character_id)); }
+  completeRetirement(id:string):void { this.db.prepare("UPDATE retired_characters SET complete=1 WHERE character_id=?").run(id); }
 
   async login(user: unknown, pass: unknown): Promise<{session: string; expiresAt: number}> {
     const username = usernameOf(user), password = passwordOf(pass);
@@ -101,7 +158,8 @@ export class AccountStore {
     const ids = this.db.prepare("SELECT slot,character_id FROM user_characters WHERE user_id=? ORDER BY slot").all(row.user_id);
     if (ids.length !== 3 || ids.some((entry, index) => entry.slot !== index + 1 || typeof entry.character_id !== "string" || !/^[a-f0-9]{64}$/.test(entry.character_id)))
       throw new Error("account_record_invalid");
-    return {accountId: row.user_id, characterIds: ids.map(entry => entry.character_id as string)};
+    return {accountId: row.user_id, characterIds: ids.map(entry => entry.character_id as string),
+      guest:Boolean(this.db.prepare("SELECT 1 FROM guest_keys WHERE user_id=?").get(row.user_id))};
   }
   logout(session: unknown): void {
     if (typeof session === "string" && SESSION.test(session)) this.db.prepare("DELETE FROM sessions WHERE session_hash=?").run(hash(session));
