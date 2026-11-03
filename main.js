@@ -5098,16 +5098,6 @@
   }
   function clearSummons() {
     for (const id of [...summonAvatars.keys()]) deleteSummonAvatar(id);
-    updateSummonButton(false);
-  }
-  function updateSummonButton(summoned) {
-    const button = $("summon");
-    if (!button) return;
-    button.classList.toggle("summon-active", Boolean(summoned));
-    button.setAttribute("aria-pressed", String(Boolean(summoned)));
-    const title = button.querySelector("span:last-child");
-    if (title) title.textContent = summoned ? "เก็บผี" : "เสกผีจากหม้อ";
-    button.title = summoned ? "เก็บวิญญาณกลับหม้อ" : "เสกผีจากหม้อ ช่วยโจมตีมอนสเตอร์ใกล้ตัว";
   }
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
   let economyGold = null, economyListings = [], activeTrade = null, economyPending = false;
@@ -5152,7 +5142,7 @@
   let spellTargetId = null;
   let pendingClimb = null;
   const skillEffects = [];
-  let spiritShown = false, possessed = false, spirit = null;
+  let possessed = false, spirit = null;
   const enemy = B.MeshBuilder.CreateSphere("possessed enemy", { diameter: 1.7, segments: 12 }, scene);
   enemy.position.copyFromFloats(1.1, .88, 10.4); enemy.scaling.set(.7,1.1,.8);
   enemy.material = ghostMat; enemy.isPickable = true;
@@ -7028,7 +7018,7 @@
     territoryState=null;$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
-    possessed=false;occultBookState=null;occultRequestKey="";selectedOccultSkill="";occultCurseUntil=0;bladeBookState=null;bladeRequestKey="";selectedBladeSkill="";bladeCloakUntil=0;syncBladeUI(null);syncSentinelUI(null);syncOccultUI(null);syncPossessionButton();syncTalismanButton(null);syncRitualButtons(null);syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);$("classSkill").hidden=true;
+    possessed=false;occultBookState=null;occultRequestKey="";selectedOccultSkill="";occultCurseUntil=0;bladeBookState=null;bladeRequestKey="";selectedBladeSkill="";bladeCloakUntil=0;syncBladeUI(null);syncSentinelUI(null);syncOccultUI(null);syncPossessionButton();syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false;
@@ -7108,27 +7098,29 @@
   }
   function setTargetedSkill(skill) {
     targetedSkill = skill;
-    $("shoot").classList.toggle("shoot-active", skill === "rice");
-    $("shoot").setAttribute("aria-pressed", String(skill === "rice"));
-    $("talisman").setAttribute("aria-pressed", String(skill === "talisman"));
   }
   function monsterForSpell(id) {
     return id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get(id);
   }
   function castAtTarget(id) {
-    if(targetedSkill==="sentinel"){
+    const picked = targetedSkill; setTargetedSkill(null);
+    const selected = {sword:selectedSwordSkill, muay:selectedMuaySkill, occult:selectedOccultSkill,
+      blade:selectedBladeSkill, sentinel:selectedSentinelSkill}[picked];
+    const source=document.querySelector(".learned-bar .sword-hotbar:not([hidden])");
+    if(!selected || !Array.from(source?.querySelectorAll("button[data-skill-id]") || []).some(b=>b.dataset.skillId===selected && !b.disabled))return;
+    if(picked==="sentinel"){
       const node=sentinelBookState?.lessons?.[selectedSentinelSkill],monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;
       if(!node || !id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId){toast("เลือกเป้าหมายที่ใช้วิชานี้ได้");return;}
       if(opponent && partyState?.members?.some(member=>member.sessionId===id)){toast("โจมตีสมาชิกปาร์ตี้ไม่ได้");return;}
       spellTargetId=id;room.send("sentinel_skill",{skillId:selectedSentinelSkill,targetId:id});return;
     }
-    if (targetedSkill === "blade") {
+    if (picked === "blade") {
       const node=bladeBookState?.lessons?.[selectedBladeSkill],monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;
       if(!node || !id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId) {toast("เลือกเป้าหมายที่ใช้วิชานี้ได้");return;}
       if(opponent && partyState?.members?.some(member=>member.sessionId===id)){toast("โจมตีสมาชิกปาร์ตี้ไม่ได้");return;}
       spellTargetId=id;room.send("blade_skill",{skillId:selectedBladeSkill,targetId:id});return;
     }
-    if (targetedSkill === "occult") {
+    if (picked === "occult") {
       const node=occultBookState?.lessons?.[selectedOccultSkill];
       const monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id);
       if (!node || !id || id===localId || (!monster && !(["curse","curse_burst"].includes(node.effect) && opponent))) {
@@ -7138,7 +7130,7 @@
       room.send("occult_skill",{skillId:selectedOccultSkill,targetId:id});
       return;
     }
-    if (targetedSkill === "muay") {
+    if (picked === "muay") {
       const monster=monsterForSpell(id), opponent=!monster && room?.state?.players?.get?.(id), target=monster || opponent;
       if (!id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId) { toast("เลือกมอนสเตอร์หรือผู้เล่นที่ยังต่อสู้ได้"); return; }
       if(opponent && partyState?.members?.some(member=>member.sessionId===id)) { toast("ใช้วิชามวยกับสมาชิกปาร์ตี้ไม่ได้"); return; }
@@ -7149,64 +7141,12 @@
       room.send("muay_skill",{skillId:selectedMuaySkill,targetId:id});
       return;
     }
-    if (targetedSkill === "sword") {
+    if (picked === "sword") {
       if (!id || !selectedSwordSkill) return;
       spellTargetId=id;
       room.send("sword_skill",{skillId:selectedSwordSkill,targetId:id});
       return;
     }
-    if (targetedSkill !== "talisman") return shootAtTarget(id);
-    const monster = monsterForSpell(id), me = ownServerCharacter();
-    if (!monster?.alive || monster.mapId !== activeMapId) { toast("แปะยันต์ได้เฉพาะมอนสเตอร์ที่ยังมีชีวิต"); return; }
-    if (!me?.alive || !Number.isFinite(me.talismanReadyAt)) return;
-    spellTargetId = id;
-    selectedPkTargetId = null;
-    syncPKHud();
-    if (me.talismanReadyAt > Date.now()) { toast("ยันต์กำลังฟื้น"); return; }
-    room.send("apply_talisman", {targetId:id});
-  }
-  function shootAtTarget(targetId) {
-    if (!targetId) return;
-    if (!hasLiveElevation()) {
-      toast("ต้องติดตั้ง Server ความสูงและการยิงบน VPS ก่อน");
-      return;
-    }
-    const me=ownServerCharacter();
-    if (!me || me.alive===false) { toast("ยังยิงไม่ได้ · รอเกิดใหม่"); return; }
-    if (me.combatState==="climbing") { toast("ปีนกำแพงให้เสร็จก่อนยิง");return; }
-    spellTargetId=targetId;
-    selectedPkTargetId=(targetId===MONSTER_ID || forestMonsters.has(targetId)) ? null : targetId;
-    syncPKHud();
-    try {
-      if (room.state.ritualSkillsAvailable) room.send("blessed_rice", {targetId});
-      else room.send("shoot", {targetId});
-    }
-    catch(err){ console.error("MONTRA shot failed",err); toast("ส่งคำสั่งยิงไม่สำเร็จ"); }
-  }
-  function useTargetedSkill(skill) {
-    const talisman = skill === "talisman", me = ownServerCharacter();
-    if (talisman ? !Number.isFinite(me?.talismanReadyAt) : !hasLiveElevation()) {
-      toast(talisman ? "เข้า LIVE ในรุ่นที่รองรับยันอาคมของขลัง" : "เข้า LIVE เพื่อใช้ข้าวสารปลุกเสกโจมตี");
-      return;
-    }
-    setTargetedSkill(skill);
-    const id = spellTargetId || me?.targetId;
-    const target = monsterForSpell(id) || (!talisman && room.state.players?.get(id));
-    if (id && target?.alive && (target.mapId || "ritual_village") === activeMapId) castAtTarget(id);
-    else toast(talisman ? "แปะยันต์ · เดินเข้าใกล้แล้วแตะมอนสเตอร์" : "ข้าวสารปลุกเสก · แตะมอนสเตอร์หรือผู้เล่นเพื่อซัด");
-  }
-  function syncTalismanButton(me) {
-    const button = $("talisman");
-    button.hidden = mode === "live" && !Number.isFinite(me?.talismanReadyAt);
-    const seconds = Math.max(0, Math.ceil(((me?.talismanReadyAt || 0) - Date.now()) / 1000));
-    button.disabled = mode === "live" && (!me?.alive || seconds > 0);
-    button.lastElementChild.textContent = seconds ? seconds + " วิ" : "แปะยันต์";
-  }
-  function syncRitualButtons(me) {
-    // During a staged rollout, the older server still permits shared rituals.
-    const occult = mode === "live" && (room?.state?.occultAvailable!==true || me?.pathId === "seer" || me?.pathId === "mender");
-    for (const id of ["shoot", "talisman", "summon", "possess"]) $(id).hidden = !occult;
-    if (!occult && (targetedSkill === "rice" || targetedSkill === "talisman")) setTargetedSkill(null);
   }
   function updateFlightButton() {
     const button = $("fly");
@@ -7709,7 +7649,6 @@
     for (const id of [...summonAvatars.keys()]) {
       if (!present.has(id)) deleteSummonAvatar(id);
     }
-    updateSummonButton(summonAvatars.has(localId));
     updateStatus();
   }
 
@@ -7749,11 +7688,7 @@
     updateFlightButton();
     syncMountButton();
     syncPossessionButton();
-    syncClassSkill(mine);
-    syncTalismanButton(mine);
-    syncRitualButtons(mine);
-    syncOccultUI(mine);
-    syncBladeUI(mine);syncSentinelUI(mine);
+    syncOccultUI(mine); syncBladeUI(mine); syncSentinelUI(mine);
     syncSwordTreeButton(mine);
     syncSwordHotbar();
     syncMuayHotbar();
@@ -7866,7 +7801,7 @@
       ui.monsterStatus.hidden = true;
       syncFortification(joined.state);
       if (summonAvatars.get(localId)?.demo) deleteSummonAvatar(localId);
-      spiritShown = false; possessed = false;
+      possessed = false;
       updateStatus();
       const ok = syncState(joined.state);
       console.info("MONTRA room joined", {roomId:joined.roomId, sessionId:joined.sessionId, initialStateReady:ok});
@@ -8531,7 +8466,7 @@
         const sentinelReasons={invalid_sentinel_book:"คำสั่งตำราไม่ถูกต้อง",invalid_sentinel_skill:"คำสั่งวิชาไม่ถูกต้อง",sentinel_class_required:"เลือกผู้พิทักษ์ก่อน",sentinel_book_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อนจัดวิชา",sentinel_already_learned:"เรียนวิชานี้แล้ว",sentinel_level:"เลเวลยังไม่ถึง",sentinel_no_points:"แต้มวิชาไม่พอ",sentinel_prerequisite:"เรียนวิชาก่อนหน้าก่อน",sentinel_practice:"ฝึกตามเงื่อนไขในตำราก่อน",sentinel_skill_locked:"เรียนและจัดวิชาในช่องลัดก่อน",sentinel_book_empty:"ไม่มีแต้มที่ต้องคืน",sentinel_book_save_failed:"บันทึกตำราไม่สำเร็จ",sentinel_location:"ใช้วิชาบนพื้นนอกเขตพัก",sentinel_cooldown:"วิชากำลังฟื้น",sentinel_counter_required:"ตั้งรับหรือสกัดสำเร็จก่อนสวน",sentinel_out_of_range:"เข้าใกล้เป้าหมายก่อน",sentinel_party_required:"เลือกสมาชิกปาร์ตี้",sentinel_blocked:"มีสิ่งกีดขวาง",sentinel_effect_limit:"บัพเต็มแล้ว",sentinel_stunned:"ถูกสตัน · หยุดชั่วครู่",sentinel_windup_active:"กำลังตั้งท่าโจมตี"};
         if(Object.hasOwn(sentinelReasons,info?.reason)){toast(sentinelReasons[info.reason]);return;}
         const buildReasons = {occult_class_required:"เลือกอาชีพจอมอาคมก่อนใช้วิชานี้", build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
-        Object.assign(buildReasons,{invalid_occult_book:"คำสั่งตำราอาคมไม่ถูกต้อง",invalid_occult_skill:"คำสั่งวิชาอาคมไม่ถูกต้อง",occult_rate_limited:"กดตำราถี่เกินไป รอสักครู่",occult_book_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อนจัดวิชา",occult_wrong_path:"เลือกสายนี้ก่อนเรียน",occult_already_learned:"เรียนวิชานี้แล้ว",occult_level:"เลเวลยังไม่ถึง",occult_no_points:"แต้มวิชาไม่พอ",occult_prerequisite:"เรียนวิชาก่อนหน้าก่อน",occult_training:"ฝึกวิชาอาคมให้ครบก่อน",occult_mastery:"ฝึกวิชาตามหมวดในตำราให้ครบก่อน",occult_skill_locked:"เรียนและจัดวิชาในช่องลัดก่อน",occult_book_empty:"ไม่มีแต้มวิชาที่ต้องคืน",occult_book_save_failed:"บันทึกตำราอาคมไม่สำเร็จ",occult_cooldown:"วิชาอาคมกำลังฟื้น",occult_out_of_range:"เข้าใกล้เป้าหมายก่อน",occult_blocked:"มีสิ่งกีดขวางระหว่างเป้าหมาย",occult_mark_required:"ติดยันต์ตีตราที่เป้าหมายก่อน",occult_curse_required:"สาปเป้าหมายก่อนใช้วิชานี้",occult_party_required:"เลือกตนเองหรือสมาชิกปาร์ตี้",occult_trance_required:"เข้าทรงก่อนใช้วิชานี้",occult_no_curse:"เป้าหมายไม่มีคำสาปที่ถอนได้",occult_effect_limit:"เป้าหมายมีบัพเต็มแล้ว"});
+        Object.assign(buildReasons,{use_learned_skill:"เรียนและจัดวิชาในช่องลัดก่อน",invalid_occult_book:"คำสั่งตำราอาคมไม่ถูกต้อง",invalid_occult_skill:"คำสั่งวิชาอาคมไม่ถูกต้อง",occult_rate_limited:"กดตำราถี่เกินไป รอสักครู่",occult_book_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อนจัดวิชา",occult_wrong_path:"เลือกสายนี้ก่อนเรียน",occult_already_learned:"เรียนวิชานี้แล้ว",occult_level:"เลเวลยังไม่ถึง",occult_no_points:"แต้มวิชาไม่พอ",occult_prerequisite:"เรียนวิชาก่อนหน้าก่อน",occult_training:"ฝึกวิชาอาคมให้ครบก่อน",occult_mastery:"ฝึกวิชาตามหมวดในตำราให้ครบก่อน",occult_skill_locked:"เรียนและจัดวิชาในช่องลัดก่อน",occult_book_empty:"ไม่มีแต้มวิชาที่ต้องคืน",occult_book_save_failed:"บันทึกตำราอาคมไม่สำเร็จ",occult_cooldown:"วิชาอาคมกำลังฟื้น",occult_out_of_range:"เข้าใกล้เป้าหมายก่อน",occult_blocked:"มีสิ่งกีดขวางระหว่างเป้าหมาย",occult_mark_required:"ติดยันต์ตีตราที่เป้าหมายก่อน",occult_curse_required:"สาปเป้าหมายก่อนใช้วิชานี้",occult_party_required:"เลือกตนเองหรือสมาชิกปาร์ตี้",occult_trance_required:"เข้าทรงก่อนใช้วิชานี้",occult_no_curse:"เป้าหมายไม่มีคำสาปที่ถอนได้",occult_effect_limit:"เป้าหมายมีบัพเต็มแล้ว"});
         if (Object.hasOwn(buildReasons, info?.reason)) { toast(buildReasons[info.reason]); return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("guild_")) { const reason={guild_invalid_name:"ชื่อกิลด์ต้องมี 2–24 ตัวอักษร และใช้ตัวอักษรหรือตัวเลข",guild_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",guild_unavailable:"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว"};toast(reason[info.reason] || "ไม่สามารถทำรายการกิลด์ได้");return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
@@ -9009,7 +8944,7 @@
     if(mode!=="live" || drawerActive || !$("accountEntry").hidden || event.defaultPrevented ||
        event.repeat || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
        !/^[1-4]$/.test(event.key) || event.target.closest?.("input,select,textarea,[contenteditable=true]")) return;
-    const bar=document.querySelector(".controls .sword-hotbar:not(#grappleResponse):not([hidden])");
+    const bar=document.querySelector(".learned-bar .sword-hotbar:not([hidden])");
     const skill=bar?.querySelector('[data-slot-number="'+event.key+'"]');
     if(skill && !skill.disabled){event.preventDefault();skill.click();}
   });
@@ -9517,7 +9452,7 @@
         <p id="estateRole"></p><div class="party-actions"><button id="estateMarket" type="button"></button><button id="estateWarehouse" type="button"></button><button id="estateWorkshop" type="button"></button></div>
         <p id="estateDamage" hidden></p><button id="estateRepair" type="button" hidden></button></section>
       <p class="note" id="warFlag"></p><p class="note">ผู้บัญชาการหรือนายทหารเปิดศึกที่วงธง สมาชิกเข้าร่วมได้จากภายในด่าน ฝั่งละ 5 คน ศึกมีเวลา 5 นาที จำนวนคนที่ยืนวงมากกว่าจะดันเกจได้ เมื่อทั้งสองฝ่ายยืนเท่ากัน เกจจะหยุด</p>
-      <p class="note">แตะบันไดหรือกดขึ้นกำแพงที่ตีนบันไดด้านใน เดินและซัดข้าวสารปลุกเสกได้ตลอดแนว เมื่อถึงหัวบันไดกดลงกำแพง วงเขียวคือฝ่ายเดียวกัน สามเหลี่ยมแดงคือฝ่ายตรงข้าม หลังจบศึกด่านคุ้มครอง 8 ชั่วโมง</p><button id="warAction" class="primary" type="button" hidden></button>`);
+      <p class="note">แตะบันไดหรือกดขึ้นกำแพงที่ตีนบันไดด้านใน เมื่อถึงหัวบันไดกดลงกำแพง วงเขียวคือฝ่ายเดียวกัน สามเหลี่ยมแดงคือฝ่ายตรงข้าม หลังจบศึกด่านคุ้มครอง 8 ชั่วโมง</p><button id="warAction" class="primary" type="button" hidden></button>`);
     if(activeMapId==="tri_wiang_castle"){
       const supplyPanel=document.createElement("details");supplyPanel.id="castleSupply";supplyPanel.hidden=true;
       supplyPanel.innerHTML='<summary id="supplyTitle">ค่ายหน้า</summary><p id="campHelp"></p><label for="respawnCamp">เกิดครั้งถัดไปที่</label><select id="respawnCamp"><option value="0">ฐานรวมพลเดิม</option></select><button class="secondary" type="button" id="campMarch">ส่งกำลังจากฐานไปค่าย</button>';
@@ -9747,20 +9682,6 @@
     }
     return buildCatalog;
   }
-  function syncClassSkill(player) {
-    const skill = getBuildCatalog()?.paths?.[player?.pathId], button = $("classSkill");
-    button.hidden = !skill;
-    if (!skill) return;
-    const seconds = Math.max(0, Math.ceil((player.classSkillReadyAt - Date.now()) / 1000));
-    button.disabled = !player.alive || seconds > 0 || player.stamina < skill.stamina;
-    button.lastElementChild.textContent = seconds ? seconds + " วิ" : skill.skill + " ⚡" + skill.stamina;
-    button.classList.toggle("no-stamina", player.stamina < skill.stamina);
-    button.title = skill.skill + " · " + skill.stamina + " กำลัง";
-    button.setAttribute("aria-label", button.title);
-  }
-  $("classSkill").onclick = () => { if (mode === "live") room?.send("cast_class_skill", {}); };
-
-
   let selectedSwordSkill = "", swordTreeRenderKey = "", swordTreeViewedSchool = "", swordCombo = 0, swordComboUntil = 0, swordCounterUntil = 0;
   let grappleResponseMode=null,grappleResponseTimer=null;
   function setGrappleResponse(action,durationMs=0,stamina=0) {
@@ -9791,8 +9712,8 @@
     const requestKey=localId+":"+me.pathId;
     if(sentinelRequestKey!==requestKey && room){sentinelRequestKey=requestKey;sentinelRequestAt=performance.now();room.send("sentinel_book_get",{});}
     const data=sentinelBookState;if(!data?.book || !data.lessons){bar.hidden=true;return;}
-    const ids=data.book.slots,times=ids.map(id=>id?Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)):0);
-    const key=JSON.stringify([ids,times,me.alive,me.stunned]);bar.hidden=false;if(key===sentinelHotbarKey)return;
+    const ids=learnedSlots(data.book.slots,data.book.learned,data.lessons),times=ids.map(id=>id?Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)):0);
+    const key=JSON.stringify([ids,times,me.alive,me.stunned,affordKey(ids,data.lessons,me)]);bar.hidden=false;if(key===sentinelHotbarKey)return;
     sentinelHotbarKey=key;bar.replaceChildren();
     ids.forEach((id,index)=>{
       const node=id && data.lessons[id],slot=document.createElement("button");slot.type="button";slot.className="sword-hotkey";
@@ -9806,9 +9727,9 @@
           else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
         }else if(node.effect==="ward" || node.effect==="intercept")chooseSentinelAlly(id,node);
         else room.send("sentinel_skill",{skillId:id});
-      };bar.append(slot);
+      };if(node && !times[index])staminaCost(slot,node.stamina,me);bar.append(slot);
     });
-    arrangeFieldSlots(bar,ids,openSentinelBook);
+    arrangeFieldSlots(bar,ids,data.lessons,openSentinelBook);
     positionSwordToast();
   }
   function chooseSentinelAlly(skillId,node) {
@@ -9871,7 +9792,7 @@
     const requestKey=localId+":"+me.pathId;
     if(bladeRequestKey!==requestKey && room){bladeRequestKey=requestKey;bladeRequestAt=performance.now();room.send("blade_book_get",{});}
     const data=bladeBookState;if(!data){bar.hidden=true;return;}
-    const ids=data.book.slots,times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
+    const ids=learnedSlots(data.book.slots,data.book.learned,data.lessons),times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
     const key=JSON.stringify([ids,times,me.alive,affordKey(ids,data.lessons,me)]);bar.hidden=false;if(key===bladeHotbarKey)return;bladeHotbarKey=key;bar.replaceChildren();
     ids.forEach((id,index)=>{const node=id && data.lessons[id],slot=document.createElement("button");slot.type="button";slot.className="sword-hotkey";
       slot.textContent=node ? node.name+(times[index]?" "+times[index]+" วิ":"") : "ช่องว่าง";slot.disabled=!node || !me.alive || Boolean(times[index]);
@@ -9883,7 +9804,7 @@
         }else room.send("blade_skill",{skillId:id});
       };if(node && !times[index])staminaCost(slot,node.stamina,me);bar.append(slot);
     });
-    arrangeFieldSlots(bar,ids,openBladeBook);
+    arrangeFieldSlots(bar,ids,data.lessons,openBladeBook);
     positionSwordToast();
   }
   function openBladeBook() {
@@ -9938,7 +9859,7 @@
     }
     const data=occultBookState;
     if (!data || data.path!==me.pathId) {bar.hidden=true;return;}
-    const path=me.pathId,ids=data.book.loadouts[path],times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
+    const path=me.pathId,ids=learnedSlots(data.book.loadouts[path],data.book.learned[path],data.lessons),times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
     const key=JSON.stringify([path,ids,times,me.alive,me.possessionActive,affordKey(ids,data.lessons,me)]);
     bar.hidden=false;if(key===occultHotbarKey)return;occultHotbarKey=key;bar.replaceChildren();
     ids.forEach((id,index)=>{
@@ -9947,6 +9868,15 @@
       slot.textContent=node ? node.name+(times[index] ? " "+times[index]+" วิ" : "") : "ช่องว่าง";
       slot.disabled=!node || !me.alive || Boolean(times[index]);
       slot.onclick=()=>{
+        // Spirit techniques prepare their own prerequisite; a basic character has no summon/trance button.
+        if (["spirit","spirit_bind","spirit_heal","spirit_ward","trance"].includes(node.effect)) {
+          if (!me.possessionActive && !room.state.summons?.has(localId)) {
+            room.send("pot_summon",{});toast("เรียกผีจากหม้อ · กดวิชาอีกครั้งเมื่อผีปรากฏ");return;
+          }
+          if (node.effect==="trance" && !me.possessionActive) {
+            room.send("possess",{});toast("กำลังเข้าทรง · กดวิชาอีกครั้งเมื่อเข้าทรงแล้ว");return;
+          }
+        }
         if (["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind","pve_rice"].includes(node.effect)) {
           selectedOccultSkill=id;setTargetedSkill("occult");
           const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId);
@@ -9959,7 +9889,7 @@
       if(node && !times[index])staminaCost(slot,node.stamina,me);
       bar.append(slot);
     });
-    arrangeFieldSlots(bar,ids,openOccultBook);
+    arrangeFieldSlots(bar,ids,data.lessons,openOccultBook);
     positionSwordToast();
   }
   function chooseOccultAlly(skillId,name) {
@@ -10049,7 +9979,7 @@
       if(visible)positionSwordToast(); return;
     }
     let cooldowns={}; try { cooldowns=JSON.parse(me.muayData); } catch { return; }
-    const ids=data.book.slots, timing=ids.map(id=>id ? Math.max(0,Math.ceil(((cooldowns[id]||0)-Date.now())/1000)) : 0);
+    const ids=learnedSlots(data.book.slots,data.book.learned,data.catalog.skills), timing=ids.map(id=>id ? Math.max(0,Math.ceil(((cooldowns[id]||0)-Date.now())/1000)) : 0);
     const ready=performance.now()<muayCounterUntil, holding=Boolean(muayGrabTarget && performance.now()<muayGrabUntil), followupReady=Boolean(muayFollowupSkill && performance.now()<muayFollowupUntil), key=JSON.stringify([ids,timing,ready,holding,followupReady,muayFollowupSkill,me.alive,me.equippedWeaponId]);
     const muayKey=key+affordKey(ids,data.catalog.skills,me);
     bar.hidden=false; if(muayKey===muayHotbarKey)return; muayHotbarKey=muayKey; bar.replaceChildren();
@@ -10073,7 +10003,7 @@
       if(node && !throwing && !timing[index])staminaCost(button,node.stamina,me);
       bar.append(button);
     });
-    arrangeFieldSlots(bar,ids,openMuayBook);
+    arrangeFieldSlots(bar,ids,data.catalog.skills,openMuayBook);
     positionSwordToast();
   }
   function openMuayBook() {
@@ -10096,22 +10026,22 @@
     const schoolMastery=book.mastery?.[muayBookViewedSchool] || {technique:0,sequences:0},masteryLabel=catalog.masteryLabels?.[muayBookViewedSchool] || "วิชาประจำสำนัก";
     const canSelect=me.level>=school.level && book.training.strikes>=school.strikes && book.training.blocks>=school.blocks;
     const schoolButtons=Object.entries(catalog.schools).map(([id,item])=>'<button type="button" class="sword-school'+(muayBookViewedSchool===id?' selected':'')+'" data-muay-school="'+clean(id)+'" aria-pressed="'+String(muayBookViewedSchool===id)+'">'+clean(item.name)+(book.school===id?' · ใช้อยู่':'')+'</button>').join("");
-    const rows=Object.entries(catalog.skills).filter(([id])=>!catalog.lessons[id] || catalog.lessons[id].school===muayBookViewedSchool).map(([id,node])=>{
-      const lesson=catalog.lessons[id], learned=!lesson || book.learned.includes(id);
+    const rows=Object.entries(catalog.skills).filter(([id])=>catalog.lessons[id] && (catalog.base?.includes(id) || catalog.lessons[id].school===muayBookViewedSchool)).map(([id,node])=>{
+      const lesson=catalog.lessons[id], learned=book.learned.includes(id), available=catalog.base?.includes(id) || selected;
       const requirements=lesson?.requires.filter(req=>!book.learned.includes(req)) || [];
       const mastery=lesson && catalog.masteryRequirements?.[id],progress=lesson && (book.mastery?.[lesson.school] || {technique:0,sequences:0});
-      const locked=lesson && (!selected || me.level<lesson.level || points<1 || requirements.length>0 || book.training.strikes<lesson.training.strikes || book.training.blocks<lesson.training.blocks || (mastery && (progress.technique<mastery.technique || progress.sequences<mastery.sequences)));
+      const locked=lesson && (!available || me.level<lesson.level || points<1 || requirements.length>0 || book.training.strikes<lesson.training.strikes || book.training.blocks<lesson.training.blocks || (mastery && (progress.technique<mastery.technique || progress.sequences<mastery.sequences)));
       const slot=book.slots.indexOf(id);
       const prerequisite=lesson?.requires?.length ? ' · ต้องเรียน '+lesson.requires.map(req=>clean(catalog.skills[req]?.name || req)).join(', ') : '';
       const masteryInfo=mastery ? ' · '+clean(catalog.masteryLabels?.[lesson.school] || 'ฝึกสำนัก')+' '+progress.technique+'/'+mastery.technique+(mastery.sequences ? ' · ชุดต่อเนื่อง '+progress.sequences+'/'+mastery.sequences : '') : '';
       const info=lesson ? 'Lv.'+lesson.level+' · '+clean(lesson.description)+' · '+(node.range ? 'ระยะ '+node.range : 'ใช้กับตนเอง')+' · กำลัง '+node.stamina+' · คูลดาวน์ '+node.cooldownMs/1000+' วิ · ฝึกโจมตี '+lesson.training.strikes+' / รับ '+lesson.training.blocks+prerequisite+masteryInfo : id==="teep" ? 'วิชาพื้นฐาน · พลัง 80% · หยุดจังหวะศัตรูทั่วไป 0.7 วิ · Elite/บอสไม่ถูกหยุด' : id==="parry" ? 'วิชาพื้นฐาน · ปัดด้านหน้า 1 ครั้งใน 0.6 วิ รับดาเมจ 35% และเปิดจังหวะสวน · กำลัง 18 · คูลดาวน์ 9 วิ' : id==="evade" ? 'วิชาพื้นฐาน · ถอย 1.2 หน่วย เบี่ยงแรงด้านหน้า 1 ครั้งใน 0.45 วิ รับดาเมจ 20% และเปิดจังหวะสวน · กำลัง 20 · คูลดาวน์ 8 วิ' : 'วิชาพื้นฐาน · พร้อมใช้';
-      const button=learned ? (lesson && !selected ? '<span class="sword-passive">เรียนแล้ว</span>' : '<label class="sword-slot-label">ช่องลัด <select data-muay-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slot===n?'selected':'')+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>') : '<button type="button" data-muay-learn="'+clean(id)+'" '+(locked?'disabled':'')+'>เรียน 1 แต้ม</button>';
+      const button=learned ? (lesson && !available ? '<span class="sword-passive">เรียนแล้ว</span>' : '<label class="sword-slot-label">ช่องลัด <select data-muay-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slot===n?'selected':'')+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>') : '<button type="button" data-muay-learn="'+clean(id)+'" '+(locked?'disabled':'')+'>เรียน 1 แต้ม</button>';
       const rank=Number(ranks[id] || 0),rankLevels=catalog.rankLevels || [],rankable=learned && (catalog.rankable || []).includes(id),next=rankLevels[rank],needed=(catalog.rankPractice || [])[rank] || 0,done=book.training.strikes+book.training.blocks;
       const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · ดาเมจมอนสเตอร์ +'+(rank*4)+'%'+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+done+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-muay-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || !selected || done<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
       return '<article class="sword-node'+(learned?' learned':'')+'"><div><strong>'+clean(node.name)+'</strong><small>'+info+'</small>'+upgrade+'</div>'+button+'</article>';
     }).join("");
     const combo=(catalog.combos?.[muayBookViewedSchool] || []).map(move=>muayMoveLabels[move] || move).map(clean).join(' → ');
-    container.innerHTML='<p>วิชาพื้นฐานใช้ได้ทันที · แต้มว่าง '+points+' · ใช้ไป '+(1+Math.floor((Math.min(me.level,100)-1)/2)-points)+' / '+(1+Math.floor((Math.min(me.level,100)-1)/2))+' แต้ม</p><p>ฝึกโจมตี '+book.training.strikes+' ครั้ง · รับสำเร็จ '+book.training.blocks+' ครั้ง</p><p class="note">เรียน เปลี่ยนสำนัก คืนแต้ม และจัดช่องลัดที่ลานพักหลังพ้นการต่อสู้ 5 วินาที</p><div class="sword-schools">'+schoolButtons+'</div><p>กำลังดูสำนัก '+clean(school.name)+' · '+clean(school.description)+'</p><p>ฝึกสำนัก: '+clean(masteryLabel)+' '+schoolMastery.technique+' ครั้ง · ชุดต่อเนื่อง '+schoolMastery.sequences+' ครั้ง</p><p class="note">'+clean(catalog.masteryGuides?.[muayBookViewedSchool] || '')+'</p><p class="note">นับเมื่อใช้วิชากับมอนสเตอร์สำเร็จ ชุดต่อเนื่องนับเมื่อคอมโบครบหรือใช้วิชาต่อเนื่องประจำสำนักสำเร็จ · PvP ไม่นับ</p><p>คอมโบวิชามวย: '+combo+' · วิชาสุดท้าย +25% กับมอนสเตอร์ / +'+Math.round(((catalog.pvpCombo ?? 1)-1)*100)+'% ใน PvP · ต่อภายใน 6 วิ</p><p class="note">นับเฉพาะวิชามวยที่โจมตีสำเร็จบนเป้าหมายเดิม · PvP ใช้พลังวิชา '+Math.round((catalog.pvpDamage ?? 1)*100)+'% ก่อนหักป้องกัน · ถีบผู้เล่นไม่หยุดจังหวะ</p><p class="note">ต้องการ Lv.'+school.level+' · ฝึกโจมตี '+school.strikes+' / รับ '+school.blocks+'</p><button type="button" id="chooseMuaySchool" class="secondary" '+(selected || !canSelect?'disabled':'')+'>เลือกใช้สำนักนี้</button>'+rows+'<button type="button" id="resetMuayBook" class="secondary" '+(!book.learned.length?'disabled':'')+'>คืนแต้มทุกสำนัก</button>';
+    container.innerHTML='<p>แต้มว่าง '+points+' · ใช้ไป '+(1+Math.floor((Math.min(me.level,100)-1)/2)-points)+' / '+(1+Math.floor((Math.min(me.level,100)-1)/2))+' แต้ม</p><p>ฝึกโจมตี '+book.training.strikes+' ครั้ง · รับสำเร็จ '+book.training.blocks+' ครั้ง</p><p class="note">เรียน เปลี่ยนสำนัก คืนแต้ม และจัดช่องลัดที่ลานพักหลังพ้นการต่อสู้ 5 วินาที</p><div class="sword-schools">'+schoolButtons+'</div><p>กำลังดูสำนัก '+clean(school.name)+' · '+clean(school.description)+'</p><p>ฝึกสำนัก: '+clean(masteryLabel)+' '+schoolMastery.technique+' ครั้ง · ชุดต่อเนื่อง '+schoolMastery.sequences+' ครั้ง</p><p class="note">'+clean(catalog.masteryGuides?.[muayBookViewedSchool] || '')+'</p><p class="note">นับเมื่อใช้วิชากับมอนสเตอร์สำเร็จ ชุดต่อเนื่องนับเมื่อคอมโบครบหรือใช้วิชาต่อเนื่องประจำสำนักสำเร็จ · PvP ไม่นับ</p><p>คอมโบวิชามวย: '+combo+' · วิชาสุดท้าย +25% กับมอนสเตอร์ / +'+Math.round(((catalog.pvpCombo ?? 1)-1)*100)+'% ใน PvP · ต่อภายใน 6 วิ</p><p class="note">นับเฉพาะวิชามวยที่โจมตีสำเร็จบนเป้าหมายเดิม · PvP ใช้พลังวิชา '+Math.round((catalog.pvpDamage ?? 1)*100)+'% ก่อนหักป้องกัน · ถีบผู้เล่นไม่หยุดจังหวะ</p><p class="note">ต้องการ Lv.'+school.level+' · ฝึกโจมตี '+school.strikes+' / รับ '+school.blocks+'</p><button type="button" id="chooseMuaySchool" class="secondary" '+(selected || !canSelect?'disabled':'')+'>เลือกใช้สำนักนี้</button>'+rows+'<button type="button" id="resetMuayBook" class="secondary" '+(!book.learned.length?'disabled':'')+'>คืนแต้มทุกสำนัก</button>';
     container.querySelectorAll("[data-muay-school]").forEach(button=>button.onclick=()=>{muayBookViewedSchool=button.dataset.muaySchool;muayBookRenderKey="";renderMuayBook();});
     $("chooseMuaySchool").onclick=()=>room.send("muay_book",{action:"school",school:muayBookViewedSchool});
     container.querySelectorAll("[data-muay-learn]").forEach(button=>button.onclick=()=>room.send("muay_book",{action:"learn",skillId:button.dataset.muayLearn}));
@@ -10157,20 +10087,34 @@
     if (targetId) castAtTarget(targetId);
     else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
   }
-  function arrangeFieldSlots(bar,ids,openBook) {
-    const buttons=bar.querySelectorAll("button");
-    buttons.forEach((button,index)=>{
-      button.hidden=!ids[index];
-      if(ids[index])button.dataset.slotNumber=String(index+1);
+  function learnedSlots(slots, learned, lessons) {
+    return slots.map(id => id && learned?.includes(id) && lessons?.[id] ? id : null);
+  }
+  function arrangeFieldSlots(bar, ids, lessons, openBook) {
+    bar.querySelectorAll("button").forEach((button,index)=>{
+      const id=ids[index], node=id && lessons[id], n=index+1;
+      const glyph=document.createElement("span"), name=document.createElement("span");
+      glyph.className="glyph"; glyph.setAttribute("aria-hidden","true"); name.className="field-skill-name";
+      const cost=button.querySelector(".stamina-cost"), state=button.firstChild?.textContent || "";
+      const cooldown=state.match(/(\d+) วิ/);
+      button.classList.add("skill","field-slot");
+      button.dataset.position=String(n);
+      if(node){
+        glyph.textContent=SG_GLYPH[node.effect] || "✦";
+        name.textContent=state==="ทุ่ม" ? state : node.name;
+        button.dataset.slotNumber=String(n); button.dataset.skillId=id;
+        const label="ช่อง "+n+" · "+name.textContent+(cooldown?" · รอ "+cooldown[1]+" วินาที":"")+(cost?" · "+cost.textContent:"");
+        button.setAttribute("aria-label",label); if(!button.title)button.title=label;
+        if(cooldown || state.endsWith("✓")){
+          const badge=document.createElement("small");badge.className="slot-timer";badge.textContent=cooldown?cooldown[1]:"✓";glyph.append(badge);
+        }
+      } else {
+        glyph.textContent="+"; name.textContent="ช่อง "+n; button.classList.add("empty-slot");
+        button.disabled=false; button.onclick=openBook;
+        button.title="เปิดตำราเพื่อเรียนหรือจัดวิชาในช่อง "+n; button.setAttribute("aria-label",button.title);
+      }
+      button.replaceChildren(glyph,name); if(cost)button.append(cost);
     });
-    if(!ids.some(Boolean) && buttons.length){
-      const setup=buttons[0];
-      setup.hidden=false;
-      setup.disabled=false;
-      setup.textContent="จัดช่องสกิล";
-      setup.setAttribute("aria-label","เปิดตำราเพื่อจัดช่องสกิล");
-      setup.onclick=openBook;
-    }
   }
   // Stamina cost on a skill button; greyed out (and disabled) while there is not enough.
   function staminaCost(button, cost, me) {
@@ -10189,7 +10133,7 @@
       if (!wasHidden) positionSwordToast();
       return;
     }
-    const {me,tree,catalog}=data, slots=tree.loadouts?.[tree.school] || [null,null,null];
+    const {me,tree,catalog}=data, slots=learnedSlots(tree.loadouts?.[tree.school] || [null,null,null],tree.learned,catalog.nodes);
     bar.hidden=false;
     const timing=slots.map(id=>id ? Math.max(0,Math.ceil(((tree.cooldowns[id]||0)-Date.now())/1000)) : 0);
     const key=JSON.stringify([slots,timing,me.alive,me.equippedWeaponId,affordKey(slots,catalog.nodes,me)]);
@@ -10206,7 +10150,7 @@
       if(node && !timing[slot])staminaCost(button,node.stamina,me);
       bar.append(button);
     });
-    arrangeFieldSlots(bar,slots,openSwordTree);
+    arrangeFieldSlots(bar,slots,catalog.nodes,openSwordTree);
     positionSwordToast();
   }
   // ---- Skill knowledge graph: one view for every class book ----
@@ -10271,8 +10215,8 @@
         return { id, name: s.name, active: book.school === id, choose: book.school === id ? null : () => { if (!can) toast("ต้อง Lv." + s.level + " · ฝึกโจมตี " + s.strikes + " · รับ " + s.blocks); else room.send("muay_book", { action: "school", school: id }); }, note: "Lv." + s.level };
       })];
       let basicRow = 0;
-      const nodes = Object.entries(catalog.skills).map(([id, n]) => {
-        const lesson = catalog.lessons[id], learned = !lesson || book.learned.includes(id), sel = !lesson || book.school === lesson.school;
+      const nodes = Object.entries(catalog.skills).filter(([id])=>catalog.lessons[id]).map(([id, n]) => {
+        const lesson = catalog.lessons[id], learned = book.learned.includes(id), foundation = catalog.base?.includes(id), sel = foundation || book.school === lesson.school;
         const checks = [];
         if (lesson) {
           const mastery = catalog.masteryRequirements?.[id], prog = book.mastery?.[lesson.school] || { technique: 0, sequences: 0 };
@@ -10281,9 +10225,9 @@
           if (lesson.training.blocks) checks.push({ ok: book.training.blocks >= lesson.training.blocks, label: "รับสำเร็จ " + book.training.blocks + "/" + lesson.training.blocks });
           if (mastery) { checks.push({ ok: prog.technique >= mastery.technique, label: (catalog.masteryLabels?.[lesson.school] || "ฝึกสำนัก") + " " + prog.technique + "/" + mastery.technique });
             if (mastery.sequences) checks.push({ ok: prog.sequences >= mastery.sequences, label: "ชุดต่อเนื่อง " + prog.sequences + "/" + mastery.sequences }); }
-          checks.push({ ok: sel, label: "ใช้สำนัก" + (catalog.schools[lesson.school]?.name || "") });
+          if(!foundation) checks.push({ ok: sel, label: "ใช้สำนัก" + (catalog.schools[lesson.school]?.name || "") });
         }
-        return { id, name: n.name, group: lesson ? lesson.school : "basic", level: lesson?.level || 1, requires: lesson?.requires || [], learned, basic: !lesson, row: lesson ? undefined : basicRow++ >> 1, effect: n.effect, power: n.power, range: n.range, stamina: n.stamina, cooldownMs: n.cooldownMs,
+        return { id, name: n.name, group: foundation ? "basic" : lesson.school, level: lesson?.level || 1, requires: lesson?.requires || [], learned, row: foundation ? basicRow++ >> 1 : undefined, effect: n.effect, power: n.power, range: n.range, stamina: n.stamina, cooldownMs: n.cooldownMs,
           description: lesson?.description || "วิชาพื้นฐาน ใช้ได้ทันที", checks, canEquip: learned && sel, slot: book.slots.indexOf(id), rankBlocked: !sel, ...sgRank(id, learned, book.ranks, catalog, muayDone) };
       });
       const combo = (catalog.combos?.[book.school] || []).map(m => muayMoveLabels[m] || m).join(" → ");
@@ -10825,13 +10769,13 @@
       <h3>ออกเดินทาง</h3>
       <p>แตะพื้นเพื่อเดิน ลากเพื่อหมุนกล้อง และหนีบสองนิ้วเพื่อซูม แตะภารกิจที่ติดตามเพื่อดูเป้าหมาย หรือเปิดแผนที่จากมุมขวาบน</p>
       <details class="help-topic"><summary>ต่อสู้และจัดสกิล</summary>
-        <p>แตะมอนสเตอร์เพื่อเลือกเป้าหมาย แล้วใช้โจมตีหรือวิชาจากแถบต่อสู้ ปัดเร็ว ๆ เหนือแถบสกิลเพื่อพุ่งหลบ</p>
+        <p>แตะมอนสเตอร์เพื่อโจมตีปกติ ช่องล่างใช้เฉพาะวิชาที่เรียนและติดตั้งแล้ว แตะช่องว่างเพื่อเปิดตำรา ปัดเร็ว ๆ เหนือแถบสกิลเพื่อพุ่งหลบ</p>
         <p>เปิด «สกิล» เพื่อเรียนวิชาและจัดช่องลัดที่ลานพัก บนคอมพิวเตอร์กด 1–4 เพื่อใช้วิชาตามช่องที่มี</p></details>
       <details class="help-topic"><summary>ปีน บิน และขี่ม้า</summary>
         <p>เข้าใกล้บันไดหรือกำแพงที่ปีนได้แล้วแตะ «ปีน» จอมอาคมเริ่มบินได้จากตำราสกิล และลงจอดด้วยปุ่มที่ปรากฏตอนบิน</p>
         <p>แตะ «เรียกม้า» เพื่อเดินทาง ทุกอาชีพลงม้าก่อนต่อสู้</p></details>
       <details class="help-topic"><summary>จอมอาคมและวิญญาณ</summary>
-        <p>ซัดข้าวสารจากระยะไกลหรือแปะยันต์ระยะประชิด เรียกผีจากหม้อเพื่อช่วยโจมตี แล้วใช้ «เข้าทรง» เมื่อต้องการรับพลังของวิญญาณ</p></details>
+        <p>เรียนและจัดวิชายันต์ ข้าวสาร หรือวิญญาณในตำราก่อนใช้ วิชาที่ต้องใช้ผีจะเรียกผีจากช่องนั้น กดอีกครั้งเมื่อผีปรากฏ วิชาเข้าทรงใช้ช่องเดิมต่อเมื่อเข้าสิงแล้ว</p></details>
       <details class="help-topic"><summary>ปาร์ตี้ กิลด์ และการค้า</summary>
         <p>เปิดเมนู แล้วเลือก «ชุมชน» เพื่อชวนคนเข้าปาร์ตี้ ดูกิลด์ หรือไปตลาด สมาชิกปาร์ตี้ที่อยู่ใกล้และอยู่แผนที่เดียวกันได้ส่วนแบ่ง EXP ตามกติกาปาร์ตี้</p>
         <p>ตลาดใช้ฝากขายและซื้อไอเท็ม ส่วนการเทรดโดยตรงต้องอยู่ใกล้ผู้เล่นอีกฝ่ายและยืนยันข้อเสนอทั้งคู่</p></details>
@@ -11437,60 +11381,10 @@
   setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());syncSentinelUI(ownServerCharacter());}},1000);
   $("helpButton").onclick=openHelp;
   $("bag").onclick=openBag;
-  $("summon").onclick=()=> {
-    if (mode === "live") {
-      if (!room?.state?.summons?.has) {
-        toast("เซิร์ฟเวอร์ยังไม่รองรับวิญญาณออนไลน์ · ติดตั้ง Summon บน VPS ก่อน");
-        return;
-      }
-      const owner = room.state?.players?.get?.(localId);
-      if (owner?.alive === false) { toast("ยังอัญเชิญไม่ได้ · รอเกิดใหม่"); return; }
-      const active = room.state.summons.has(localId);
-      try {
-        if (active) room.send("unsummon", {});
-        else if (room.state.ritualSkillsAvailable) room.send("pot_summon", {});
-        else room.send("summon", {});
-      } catch (err) {
-        console.error("MONTRA summon request failed", err);
-        toast("ส่งคำสั่งอัญเชิญไม่สำเร็จ");
-      }
-      return;
-    }
-    spiritShown=!spiritShown;
-    if (spiritShown) {
-      const hero=getLocalAvatar(), actor=createSummonAvatar(localId,hero.x+1.6,hero.z+1);
-      actor.emergingUntil=performance.now()+500;actor.demo=true;summonAvatars.set(localId,actor);
-      playAction(hero, "summon");
-      toast("เรียกวิญญาณผู้พิทักษ์ (จำลอง)");
-    } else { deleteSummonAvatar(localId);toast("เก็บวิญญาณกลับแล้ว"); }
-    updateSummonButton(spiritShown);
-  };
   function syncPossessionButton() {
     const active=mode==="live" ? ownServerCharacter()?.possessionActive===true : possessed;
-    const button=$("possess");button.setAttribute("aria-pressed",String(active));
-    if(button.lastElementChild)button.lastElementChild.textContent=active ? "ออกจากทรง" : "เข้าทรง";
     heroMat.emissiveColor=B.Color3.FromHexString(active ? "#7c459b" : "#3b2916");
   }
-  $("possess").onclick=()=> {
-    if(mode==="live") {
-      if(!room || room.state?.buffsAvailable!==true){toast("เซิร์ฟเวอร์ยังไม่รองรับเข้าสิง");return;}
-      try{room.send("possess",{});}catch(_){toast("ส่งคำสั่งเข้าสิงไม่สำเร็จ");}return;
-    }
-    possessed=!possessed;syncPossessionButton();if(possessed)SFX("possess");
-    const possessedHero=getLocalAvatar(); if(possessedHero) possessedHero.possessed=possessed;
-    toast(possessed?"วิญญาณเข้าสิง · ความเร็วจำลองเพิ่มขึ้น":"ออกจากสถานะเข้าสิง");
-  };
-  $("attack").onclick = () => {
-    setTargetedSkill(null);
-    spellTargetId = null;
-    if (mode === "live" && room && selectedPkTargetId) {
-      tapPlayerForPK(selectedPkTargetId);
-    } else {
-      requestMonsterAttack();
-    }
-  };
-  $("shoot").onclick = () => useTargetedSkill("rice");
-  $("talisman").onclick = () => useTargetedSkill("talisman");
   $("climb").onclick = requestClimb;
   $("fly").onclick = toggleFlight;
 

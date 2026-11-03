@@ -9,10 +9,10 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn,label,timeout=9000){const end=Date.now()+timeout;while(Date.now()<end){const r=fn();if(r)return r;await sleep(20);}throw Error("timeout: "+label);}
 const token=()=>"mt1_"+randomBytes(32).toString("hex"),tokens=Array.from({length:7},token);
 async function seed(t,name,x,z){
- const id=createHash("sha256").update(t).digest("hex"),slots=Array(12).fill(null),base=["parry","evade","guard","counter"];
+ const id=createHash("sha256").update(t).digest("hex"),slots=Array(12).fill(null),base=[tokens[1],tokens[2],tokens[6]].includes(t)?["punch","teep",null,null]:["parry","evade","guard","counter"];
  slots[0]={itemId:"health_potion",quantity:3};slots[1]={itemId:"muay_wraps",quantity:1};
  const loadouts={chaiya:[...base],korat:[...base],lopburi:[...base],thasao:[...base]};
- await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level:15,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp:9999,mapId:"ritual_village",build:{path:"muay_boran",ancestry:"woodland"},muayWrapGranted:true,muayBook:{school:"chaiya",learned:[],training:{strikes:10,blocks:1},slots:[...base],loadouts},inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
+ await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level:15,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp:9999,mapId:"ritual_village",build:{path:"muay_boran",ancestry:"woodland"},muayWrapGranted:true,muayBook:{school:"chaiya",learned:base.filter(Boolean),training:{strikes:10,blocks:1},slots:[...base],loadouts},inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
 }
 await seed(tokens[0],"ผู้ป้องกัน",-10,8);await seed(tokens[1],"ผู้โจมตีด้านหน้า",-10,6.5);await seed(tokens[2],"ผู้โจมตีด้านหลัง",-10,9.5);await seed(tokens[3],"ผู้พลาดจังหวะ",-14,8);await seed(tokens[4],"ผู้ชิดเขตพัก",0,-6.5);await seed(tokens[5],"ผู้พัก",0,0);
 await seed(tokens[6],"ผู้โจมตีสอง",-11,6.6);

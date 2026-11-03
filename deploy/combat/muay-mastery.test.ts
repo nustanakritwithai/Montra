@@ -5,14 +5,14 @@ import {countsMuayTechnique,MUAY_MASTERY_REQUIREMENTS,newMuayBook,newMuayLoadout
 test("old one-school and four-school books keep learned skills and gain independent zero mastery",()=>{
   const old={learned:["chaiya_elbow"],training:{strikes:73,blocks:9},slots:["step","chaiya_elbow","guard","counter"]};
   const migrated=validateMuayBook(old,25);
-  assert.deepEqual(migrated.training,old.training);assert.deepEqual(migrated.slots,old.slots);assert.deepEqual(migrated.learned,old.learned);
+  assert.deepEqual(migrated.training,old.training);assert.deepEqual(migrated.slots,[null,"chaiya_elbow",null,null]);assert.deepEqual(migrated.learned,old.learned);
   assert.deepEqual(migrated.mastery.chaiya,{technique:0,sequences:0});
   migrated.mastery.chaiya.technique=4;assert.equal(migrated.mastery.korat.technique,0);
   const loadouts=newMuayLoadouts();loadouts.korat=["korat_press","punch","guard","counter"];
   const prior={school:"korat",learned:["korat_heavy","korat_swing","korat_press"],training:{strikes:70,blocks:8},slots:[...loadouts.korat],loadouts};
   const current=validateMuayBook(prior,25);
   assert.ok(current.learned.includes("korat_press"),"already-learned advanced skill remains usable despite zero new mastery");
-  assert.deepEqual(current.slots,prior.slots);assert.deepEqual(current.mastery.korat,{technique:0,sequences:0});
+  assert.deepEqual(current.slots,["korat_press",null,null,null]);assert.deepEqual(current.mastery.korat,{technique:0,sequences:0});
   assert.deepEqual(validateMuayBook(current,25),current);
 });
 

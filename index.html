@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=0.3.2-status-icons-4" />
+  <link rel="stylesheet" href="./styles.css?v=0.3.2-learned-slots-5" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -80,22 +80,16 @@
     <section class="controls" aria-label="ปุ่มควบคุมและพื้นที่ปัดพุ่งเหนือแถบสกิล">
       <div id="grappleResponse" class="sword-hotbar" aria-live="polite" hidden><button id="grappleResponseButton" class="sword-hotkey" type="button"></button></div>
       <div id="swordStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
-      <div id="swordHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาดาบ" hidden></div>
       <div id="muayStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
-      <div id="muayHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชามวย" hidden></div>
       <div id="occultStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
-      <div id="occultHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาอาคม" hidden></div>
       <div id="bladeStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
-      <div id="bladeHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาคมดาบ" hidden></div>
       <div id="sentinelStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
+      <div class="skill-bar learned-bar" aria-label="วิชาที่เรียนและจัดไว้">
+      <div id="swordHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาดาบ" hidden></div>
+      <div id="muayHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชามวย" hidden></div>
+      <div id="occultHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาอาคม" hidden></div>
+      <div id="bladeHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาคมดาบ" hidden></div>
       <div id="sentinelHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาผู้พิทักษ์" hidden></div>
-      <div class="skill-bar">
-        <button id="summon" class="skill" type="button" aria-pressed="false" title="เสกผีจากหม้อ ช่วยโจมตีมอนสเตอร์ใกล้ตัว" hidden><span class="glyph violet" aria-hidden="true">🏺</span><span>เสกผีจากหม้อ</span></button>
-        <button id="possess" class="skill" type="button" hidden><span class="glyph amber">✴</span><span>เข้าทรง</span></button>
-        <button id="attack" class="skill" type="button"><span class="glyph red">⚔</span><span>โจมตี</span></button>
-        <button id="shoot" class="skill" type="button" aria-pressed="false" aria-label="ข้าวสารปลุกเสก" title="ข้าวสารปลุกเสก · แตะเป้าหมายเพื่อซัดข้าวสาร" hidden><span class="glyph amber" aria-hidden="true">⁙</span><span>ซัดข้าวสาร</span></button>
-        <button id="talisman" class="skill" type="button" aria-pressed="false" aria-label="ยันอาคมของขลัง" title="ยันอาคมของขลัง · แปะยันต์บนมอนสเตอร์ระยะประชิด" hidden><span class="glyph red" aria-hidden="true">◇</span><span>แปะยันต์</span></button>
-        <button id="classSkill" class="skill" type="button" hidden><span class="glyph violet">✧</span><span>วิชา</span></button>
       </div>
     </section>
 
@@ -166,6 +160,6 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
   <script src="./audio.js?v=0.9.10-horse-bright" defer></script>
-  <script src="./main.js?v=0.3.2-status-icons-4" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
+  <script src="./main.js?v=0.3.2-learned-slots-5" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>

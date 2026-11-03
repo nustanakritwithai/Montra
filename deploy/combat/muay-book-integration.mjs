@@ -32,10 +32,16 @@ try {
  assert.deepEqual(book(),saved);
  room.send("muay_book",{action:"reset"});
  await until(()=>book().learned.length===0,"reset");
- assert.deepEqual(book().slots,["step","punch","guard","counter"]);
+ assert.deepEqual(book().slots,[null,null,null,null]);
  assert.deepEqual(book().training,{strikes:5,blocks:1});
  await sleep(550);room.send("muay_book",{action:"learn",skillId:"chaiya_elbow"});
  await until(()=>book().learned.includes("chaiya_elbow"),"relearn");
+ await sleep(1200);room.send("muay_book",{action:"learn",skillId:"step"});
+ await until(()=>book().learned.includes("step"),"learn approach");
+ for(const [slot,skillId] of ["step","chaiya_elbow"].entries()){
+   await sleep(1200);room.send("muay_book",{action:"equip",slot,skillId});
+   await until(()=>book().slots[slot]===skillId,"equip after reset "+skillId);
+ }
  room.send("move",{x:1,z:7.5});await until(()=>Math.hypot(me().x,me().z)>6.4,"leave shrine");
  await sleep(500);room.send("muay_skill",{skillId:"step",targetId:"possessed-1"});
  await until(()=>seen("muay_skill_used",e=>e.skillId==="step"),"approach");
