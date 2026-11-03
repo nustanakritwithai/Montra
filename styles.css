@@ -1380,3 +1380,9 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   border: 1.5px solid #8fd0ff; background: radial-gradient(circle at 50% 30%, #2a5a7a, #0c1a26); color: #dff4ff; font-size: 0; pointer-events: auto; box-shadow: 0 3px 6px #0009; transform: none; }
 .learned-bar #fly.orb-fly[hidden] { display: none; }
 .learned-bar[data-wide] #fly.orb-fly { position: relative; width: 40px; height: 40px; }
+/* The vital orb carries HP, mana, stamina and effects, so the player card drops its old bars and status row. */
+.hud-journal .identity .hud-meter.hp, .hud-journal .identity .hud-meter.st, .hud-journal .identity .hud-meter.mana { display: none !important; }
+.hud-journal .self-fx { display: none !important; }
+.hud-journal .identity { padding-bottom: 6px; }
+.learned-bar[data-arc] .orb-fx { flex-wrap: nowrap; gap: 1px; } .learned-bar[data-arc] .orb-fx .fx-box { width: 15px; height: 15px; font-size: 9.5px; flex: none; }
+.learned-bar[data-arc] .orb-fx .fx-box.more { width: auto; padding: 0 2px; font-size: 8px; line-height: 15px; }

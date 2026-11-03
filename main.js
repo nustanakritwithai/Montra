@@ -7625,8 +7625,9 @@
     if (!selfStatusBox) return;
     const list = selfEffects(me), key = JSON.stringify(list); if (selfStatusBox.dataset.key === key) return;
     selfStatusBox.dataset.key = key; selfStatusBox.hidden = !list.length; selfStatusBox.innerHTML = fxBoxesHtml(list, 8);
-    const orbFx = document.querySelector(".orb-fx"), bad = list.filter(([id]) => fxInfo(id)[2] === "bad");
-    if (orbFx) { orbFx.hidden = !bad.length; orbFx.innerHTML = fxBoxesHtml(bad, 5); }
+    // Every effect now lives under the orb (harmful first); the old row under the player card is retired.
+    const orbFx = document.querySelector(".orb-fx"), sorted = [...list].sort((a, b) => (fxInfo(a[0])[2] === "bad" ? 0 : 1) - (fxInfo(b[0])[2] === "bad" ? 0 : 1));
+    if (orbFx) { orbFx.hidden = !sorted.length; orbFx.innerHTML = fxBoxesHtml(sorted, sorted.length > 5 ? 4 : 5); }
   }
   function updateHud(now) {
     const me = mode === "live" ? ownServerCharacter() : null, hero = getLocalAvatar();
