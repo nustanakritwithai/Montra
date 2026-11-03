@@ -140,6 +140,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastWarpMs = new Map<string, number>();
   private provinceClients = new Set<string>();
   private castleClients = new Set<string>();
+  private restApproachClients = new Set<string>();
   private originalReliefClients=new Set<string>();
   private reliefClients = new Set<string>();
   private terrainClients = new Set<string>();
@@ -4026,8 +4027,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private canPursueBasic(id:string, player:Player, targetId:string, monster:Monster|undefined):boolean {
     // A PvE order can walk out of a rest area. Only the damage check requires both sides outside.
-    return monster ? !this.pendingWarps.has(id) && player.mapId===monster.mapId && !isRestArea(monster.mapId,monster)
-      : this.sameCombatMap(id,targetId);
+    if (!monster || !this.restApproachClients.has(id))return this.sameCombatMap(id,targetId);
+    return !this.pendingWarps.has(id) && player.mapId===monster.mapId && !isRestArea(monster.mapId,monster);
   }
 
   private startSkillAction(id:string, player:Player, state:"idle"|"attacking") {
@@ -4226,6 +4227,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(terrainReady)this.terrainClients.add(client.sessionId);
       if(riverReady)this.riverClients.add(client.sessionId);
       if(castleReady)this.castleClients.add(client.sessionId);
+      if((options as {monsterAutoAttackVersion?:unknown}|undefined)?.monsterAutoAttackVersion===1)this.restApproachClients.add(client.sessionId);
       if(provinceReady)this.provinceClients.add(client.sessionId);
       if(atlasReady)this.atlasClients.add(client.sessionId);
       if(templeReady)this.templeClients.add(client.sessionId);
@@ -4286,6 +4288,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.crestTurns.delete(id);this.gateActions.delete(id);this.warSeats.delete(id);this.warClients.delete(id);this.warSent.delete(id);
     this.riverClients.delete(id);this.terrainClients.delete(id);this.reliefClients.delete(id);this.originalReliefClients.delete(id);
     this.castleClients.delete(id);
+    this.restApproachClients.delete(id);
     this.provinceClients.delete(id);
     this.leaveParty(id);
     const guildCharacter=this.persistentCharacters.get(id);

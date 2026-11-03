@@ -68,6 +68,8 @@ test("a tap can pursue an exposed monster from safety, but cannot hit across the
   Object.assign(mob,{id:RULES.monsterId,mapId:actor.mapId,x:0,z:6.8,hp:100,maxHp:100,alive:true});
   room.state.players.set(client.sessionId,actor);room.gates.set(client.sessionId,{attack:new CommandBucket(4,4)});
   room.broadcast=()=>{};
+  room.messages.attack(client,{targetId:mob.id});assert.equal(actor.targetId,"","legacy attack from a rest area stays rejected");
+  room.restApproachClients.add(client.sessionId);
   room.messages.attack(client,{targetId:mob.id});room.updatePlayerAttacks();
   assert.equal(actor.combatState,"approaching");assert.equal(mob.hp,100);
   room.updatePlayerMovement(.05);assert.ok(actor.z>6);room.updatePlayerAttacks();assert.ok(mob.hp<100);
