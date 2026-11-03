@@ -11596,6 +11596,7 @@
   $("fieldMenuButton").onclick=openFieldMenu;
   $("drawerMenuBack").onclick=openFieldMenu;
   $("menuCharacter").onclick=openCharacterProfile;
+  document.querySelector(".vital-orb")?.addEventListener("click", openCharacterProfile); // the orb now stands in for the player card
   $("menuBag").onclick=openBag;
   $("menuChat").onclick=openChat;
   $("noticeParty").onclick=openParty;

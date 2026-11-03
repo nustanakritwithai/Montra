@@ -1391,3 +1391,6 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .exp-base i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #b8860b, #ffd23f 70%, #fff0a0); box-shadow: 0 0 6px #ffc83a; transition: width .6s ease; }
 .exp-ticks { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), #0008 calc(10% - 1px) 10%); pointer-events: none; }
 .hud-journal .identity .hud-meter.xp { display: none !important; }
+/* Player card retired: the orb, EXP base line and resource strip carry its information. */
+.hud-journal .identity { display: none !important; }
+.vital-orb { cursor: pointer; }
