@@ -7454,8 +7454,27 @@
     vitalOrb.el.title = "เลือด " + Math.ceil(hp) + "/" + Math.ceil(maxHp) + " · มานา " + (hasMp ? Math.round(mp) + "/" + Math.round(maxMp) : "ยังไม่เปิดใช้") + " · กำลัง " + (Number.isFinite(st) && maxSt > 0 ? Math.round(st) + "/" + Math.round(maxSt) : "เต็ม");
   }
   const orbWide = matchMedia("(min-width: 820px) and (min-height: 520px), (pointer: fine) and (min-width: 700px) and (orientation: landscape)");
-  const syncOrbLayout = () => document.querySelector(".learned-bar")?.toggleAttribute("data-wide", orbWide.matches);
-  orbWide.addEventListener?.("change", syncOrbLayout); syncOrbLayout();
+  // Phones: skills wrap the orb on a quarter-circle arc (MOBA style); wide screens keep one horizontal bar.
+  const ORB = 84, ORB_R = 14, ORB_B = 12, SLOT = 54, ARC_R = 122;
+  function layoutOrbArc() {
+    const bar = document.querySelector(".learned-bar"); if (!bar) return;
+    const wide = orbWide.matches; bar.toggleAttribute("data-wide", wide); bar.toggleAttribute("data-arc", !wide);
+    const hot = [...bar.querySelectorAll(".sword-hotbar")].find(h => !h.hidden), slots = hot ? [...hot.querySelectorAll("button")] : [];
+    const mount = $("mountButton"), all = [...bar.querySelectorAll(".sword-hotbar button"), mount, vitalOrb?.el].filter(Boolean);
+    for (const b of all) { b.style.removeProperty("right"); b.style.removeProperty("bottom"); }
+    if (wide) return;
+    const cx = ORB_R + ORB / 2, cy = ORB_B + ORB / 2;
+    if (vitalOrb) { vitalOrb.el.style.right = ORB_R + "px"; vitalOrb.el.style.bottom = ORB_B + "px"; }
+    // Angles: 180° = straight left, 270° = straight up; slot 1 sits low-left like a MOBA's first skill.
+    const n = slots.length, from = 182, to = n > 3 ? 272 : 262;
+    slots.forEach((b, i) => { const t = (n === 1 ? (from + to) / 2 : from + (to - from) * i / (n - 1)) * Math.PI / 180;
+      b.style.right = Math.round(cx - Math.cos(t) * ARC_R - SLOT / 2) + "px"; b.style.bottom = Math.round(cy - Math.sin(t) * ARC_R - SLOT / 2) + "px"; });
+    if (mount) { const t = 305 * Math.PI / 180, r = 62; mount.style.right = Math.round(cx - Math.cos(t) * r - 20) + "px"; mount.style.bottom = Math.round(cy - Math.sin(t) * r - 20) + "px"; }
+  }
+  const syncOrbLayout = () => requestAnimationFrame(layoutOrbArc);
+  orbWide.addEventListener?.("change", syncOrbLayout); addEventListener("resize", syncOrbLayout);
+  { const bar = document.querySelector(".learned-bar"); if (bar) new MutationObserver(syncOrbLayout).observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] }); }
+  syncOrbLayout();
   // ---- Resource strip (top-left): clock · gold · potions · party · players · FPS ----
   const resourceStrip = (() => {
     const game = $("game"); if (!game) return null;
