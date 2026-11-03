@@ -70,6 +70,10 @@ export function validateSkillRanks(value:unknown, learned:readonly string[], lev
 export function skillRankMultiplier(ranks:SkillRanks | undefined,id:string):number {
   return 1+(ranks?.[id] ?? 0)*0.04;
 }
+/** Support affects player targets in both PvE and PvP, at half the damage-rank rate. */
+export function supportRankMultiplier(ranks:SkillRanks | undefined,id:string):number {
+  return 1+(ranks?.[id] ?? 0)*0.02;
+}
 export function monsterExperience(playerLevel: number, monsterLevel: number, tier: MonsterTier = "normal"): number {
   return monsterReward(playerLevel,monsterLevel,tier,PROGRESSION.monsterBaseExperience);
 }

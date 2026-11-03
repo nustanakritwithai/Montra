@@ -1,7 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {newSwordTree,validateSwordTree} from "./SkillCatalog.js";
-import {skillRankCost,skillRankMultiplier,validateSkillRanks} from "./Progression.js";
+import {skillRankCost,skillRankMultiplier,supportRankMultiplier,validateSkillRanks} from "./Progression.js";
 import {newMuayBook,validateMuayBook} from "./MuayRules.js";
 import {newOccultBook,occultRankCost,validateOccultBook} from "./OccultRules.js";
 
@@ -29,6 +29,8 @@ test("generic rank validation refuses forged upgrades and excess spending",()=>{
   assert.throws(()=>validateSkillRanks({unknown:1},["a"],99,50,["a"]),/invalid_skill_ranks/);
   assert.equal(skillRankCost({a:2,b:3}),5);
   assert.equal(skillRankMultiplier({a:5},"a"),1.2);
+  assert.equal(supportRankMultiplier(undefined,"a"),1);
+  assert.equal(supportRankMultiplier({a:5},"a"),1.1);
 });
 test("occult branches preserve separate budgets and reject cross-path or early ranks",()=>{
   const book=newOccultBook();book.learned.seer=["seer_mark"];
@@ -39,6 +41,7 @@ test("occult branches preserve separate budgets and reject cross-path or early r
   assert.equal(occultRankCost(book.ranks,"seer"),1);
   assert.equal(occultRankCost(book.ranks,"mender"),1);
   assert.throws(()=>validateOccultBook(book,24));
-  book.ranks={seer_mark:1,mender_heal:1};assert.throws(()=>validateOccultBook(book,99));
+  book.ranks={seer_mark:1,mender_heal:1};assert.deepEqual(validateOccultBook(book,99).ranks,book.ranks);
+  book.ranks={mender_ward:1};assert.throws(()=>validateOccultBook(book,99));
   book.ranks={forged:1};assert.throws(()=>validateOccultBook(book,99));
 });

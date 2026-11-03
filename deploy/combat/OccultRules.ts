@@ -40,7 +40,8 @@ export const OCCULT_LESSONS = {
   mender_spirit_rice: {name:"ข้าวสารประคองวิญญาณ",description:"ซัดข้าวสารอาคมใส่มอนสเตอร์เป้าหมายเดียว",path:"mender",level:95,requires:["mender_pve_rice","mender_deep_heal"],training:130,effect:"pve_rice",stamina:26,cooldownMs:11000,range:12,power:1.75},
 } as const satisfies Record<string, OccultLesson>;
 export type OccultSkillId = keyof typeof OCCULT_LESSONS;
-export const OCCULT_RANKABLE_SKILLS:readonly OccultSkillId[]=["seer_mark","seer_rice","seer_scatter","seer_burst","seer_seal","seer_curse","seer_hexburst","mender_pve_rice","seer_ash_rice","seer_deep_curse","seer_ward_break","seer_spirit_rain","mender_spirit_rice"];
+export const OCCULT_RANKABLE_SKILLS:readonly OccultSkillId[]=["seer_mark","seer_rice","seer_scatter","seer_burst","seer_seal","seer_curse","seer_hexburst","mender_pve_rice","seer_ash_rice","seer_deep_curse","seer_ward_break","seer_spirit_rain","mender_spirit_rice",
+  "mender_heal","mender_area","mender_ward","mender_spirit","mender_ward_area","mender_spirit_heal","mender_trance","mender_deep_heal","mender_shelter","mender_deep_circle"];
 export const OCCULT_MASTERY_LABELS = {
   seer:{rice:"ข้าวสารใส่มอนสเตอร์",talisman:"ยันต์ใส่มอนสเตอร์",spirit:"ผีช่วยโจมตี",curse:"คำสาปมอนสเตอร์"},
   mender:{healing:"รักษาที่เกิดผล",protection:"คุ้มครองขณะต่อสู้",cleanse:"ถอนคำสาป",spirit:"ผีช่วยเหลือ"},

@@ -86,6 +86,7 @@ jobs:
           cp deploy/combat/blade-book-integration.mjs combat-verify/blade-book-integration.mjs
           cp deploy/combat/blade-depth-integration.mjs combat-verify/blade-depth-integration.mjs
           cp deploy/combat/class-rank-integration.mjs combat-verify/class-rank-integration.mjs
+          cp deploy/combat/status-support-integration.mjs combat-verify/status-support-integration.mjs
           cp deploy/combat/skill-ranks.test.ts combat-verify/src/rooms/skill-ranks.test.ts
           cp deploy/combat/advanced-class-integration.mjs combat-verify/advanced-class-integration.mjs
           cp deploy/combat/advanced-lessons.test.ts combat-verify/src/rooms/advanced-lessons.test.ts
@@ -376,6 +377,18 @@ jobs:
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14213) 2>/dev/null; then break; fi; sleep 0.25; done
           timeout 60s node class-rank-integration.mjs || { cat class-rank-server.log; exit 1; }
+
+      - name: Isolated character status and support ranks
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export PORT=14217 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1 MONTRA_TEST_URL=http://127.0.0.1:14217
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-status-test-XXXXXX)"
+          node --import tsx src/index.ts > status-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14217) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 60s node status-support-integration.mjs || { cat status-server.log; exit 1; }
 
       - name: Isolated account and permanent class
         working-directory: combat-verify
