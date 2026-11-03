@@ -39,7 +39,7 @@ const materials:Record<Theme,readonly string[]>={
 const nearbyTheme:Readonly<Record<string,Theme>>={hide:"grove",fiber:"grove",metal:"hunter",wood:"hunter",ink:"guard",resin:"spirit",herb:"grove"};
 type GearId=BodyItemId|PracticeWeapon;
 type DropTable={gear:GearId[];materials:MaterialId[]};
-const tables=new Map<string,DropTable>(hunts.map(m=>[m.id,{gear:[],materials:[]}]));
+const tables=new Map(hunts.map((m):[string,DropTable]=>[m.id,{gear:[],materials:[]}]));
 const sources=new Map<PersonalId,Hunt[]>();
 for(const id of Object.keys(PERSONAL_ITEMS) as PersonalId[]){
   const item=PERSONAL_ITEMS[id];
