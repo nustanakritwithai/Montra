@@ -4,8 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { EconomyStore, STARTER_GOLD } from "./EconomyStore.js";
-import { BODY_SLOTS, PERSONAL_ITEMS, personalItem, type BodyItemId } from "./PersonalItems.js";
-import { makeClassInventory, makeStarterInventory, equipBody, equippedStats, validateInventory, equipInventoryWeapon, practiceLoot } from "./ItemRules.js";
+import { BODY_SLOTS, PERSONAL_ITEMS, personalItem, equipPositions, type BodyItemId } from "./PersonalItems.js";
+import { makeClassInventory, makeStarterInventory, equipBody, equippedStats, parseBodyCommand, validateInventory, equipInventoryWeapon, practiceLoot } from "./ItemRules.js";
 
 const a = "a".repeat(64), b = "b".repeat(64), c = "c".repeat(64);
 const request = (n: number) => "request_" + String(n).padStart(16, "0");
@@ -17,7 +17,7 @@ test("a full outfit frees bag space, keeps hands independent and survives reload
   for(const position of BODY_SLOTS){
     const id=Object.keys(PERSONAL_ITEMS).find(id=>{
       const def=personalItem(id)!;
-      return def.kind===position && (def.path==="all" || def.path==="seer");
+      return equipPositions(def.kind).includes(position) && !Object.values(bag.equipment??{}).some(worn=>worn===id) && (def.path==="all" || def.path==="seer");
     }) as BodyItemId;
     assert(id);
     bag.slots[2]={itemId:id,quantity:1};
@@ -86,16 +86,18 @@ test("practice equipment preserves ownership, recipe costs and receipts", () => 
   } finally {store.close();}
 });
 
-test("necklace, earring pair and wings can be crafted, worn together and restored independently", () => {
+test("a necklace, two earrings and two rings may be crafted, worn together and removed by side", () => {
   const store=new EconomyStore(":memory:");
   try {
     const bag=makeClassInventory("blade");
-    bag.slots[2]={itemId:"mat_wood_1",quantity:3};
-    bag.slots[3]={itemId:"mat_fiber_1",quantity:5};
-    bag.slots[4]={itemId:"mat_metal_1",quantity:4};
-    bag.slots[5]={itemId:"mat_ink_1",quantity:2};
+    bag.slots[2]={itemId:"mat_wood_1",quantity:8};
+    bag.slots[3]={itemId:"mat_fiber_1",quantity:4};
+    bag.slots[4]={itemId:"mat_metal_1",quantity:5};
+    bag.slots[5]={itemId:"mat_ink_1",quantity:4};
+    bag.slots[6]={itemId:"mat_hide_1",quantity:2};
     store.register(a,bag);
-    const pieces=[["neck","acc_torc_1"],["earrings","acc_earrings_lotus_1"],["wings","acc_wings_kinnari_1"]] as const;
+    const pieces=[["neck","acc_torc_1"],["rightEar","acc_earrings_lotus_1"],["leftEar","acc_earrings_hunter_1"],
+      ["rightRing","acc_ring_atk_1"],["leftRing","acc_ring_heal_1"]] as const;
     for (const [index,[,id]] of pieces.entries())store.craftPersonal(a,request(50+index),id);
     let outfit=store.getAccount(a).inventory;
     for (const [position,id] of pieces) {
@@ -107,12 +109,17 @@ test("necklace, earring pair and wings can be crafted, worn together and restore
     assert.deepEqual(saved.equipment,Object.fromEntries(pieces));
     const base={maxHp:240,maxStamina:100,atk:20,def:30,magicAtk:15,magicDef:20};
     const before=equippedStats(base,bag);
-    assert.deepEqual(equippedStats(base,saved),{...before,magicDef:before.magicDef+2,maxStamina:before.maxStamina+6,magicAtk:before.magicAtk+2});
-    assert.equal(equipBody(saved,"neck",null,"acc_wings_kinnari_1","blade").ok,false);
-    const removed=equipBody(saved,"wings",null,"acc_wings_kinnari_1","blade");
+    assert.deepEqual(equippedStats(base,saved),{...before,atk:before.atk+3,magicDef:before.magicDef+3,maxStamina:before.maxStamina+6,magicAtk:before.magicAtk+4});
+    assert.equal(parseBodyCommand({position:"rightEar",slot:2,expected:"acc_ring_atk_1"}),null);
+    assert.equal(parseBodyCommand({position:"wings",slot:2,expected:"acc_wings_kinnari_1"}),null);
+    assert.equal(equipBody(saved,"leftEar",null,"acc_earrings_lotus_1","blade").ok,false);
+    const removed=equipBody(saved,"leftEar",null,"acc_earrings_hunter_1","blade");
     assert(removed.ok);
-    assert.deepEqual(removed.inventory.equipment,{neck:"acc_torc_1",earrings:"acc_earrings_lotus_1"});
-    assert.equal(equippedStats(base,removed.inventory).maxStamina,before.maxStamina+2);
+    assert.deepEqual(removed.inventory.equipment,{neck:"acc_torc_1",rightEar:"acc_earrings_lotus_1",rightRing:"acc_ring_atk_1",leftRing:"acc_ring_heal_1"});
+    const swapped=equipBody(removed.inventory,"rightEar",removed.inventory.slots.findIndex(s=>s?.itemId==="acc_earrings_hunter_1"),"acc_earrings_hunter_1","blade");
+    assert(swapped.ok);
+    assert.equal(swapped.inventory.equipment?.rightEar,"acc_earrings_hunter_1");
+    assert.equal(swapped.inventory.slots.filter(s=>s?.itemId==="acc_earrings_lotus_1").length,1);
   } finally {store.close();}
 });
 function setup(): { store: EconomyStore; dir: string; file: string } {

@@ -50,7 +50,6 @@ export const Player = schema({
   muayBookData: t.string().default(""),
   stunned: t.boolean().default(false), // server-owned, temporary PvP control
   mounted: t.boolean().default(false), // temporary horse mount; never stored in character saves
-  equippedWingsId: t.string().default(""),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;

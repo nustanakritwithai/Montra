@@ -2,7 +2,7 @@ import { forgeStamp, quoteForge, rollForge, type ForgeAction } from "./ForgeRule
 /** Single-process transactional economy. This store must own inventories before it is wired to gameplay. */
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
-import { personalItem, isBodySlot, WORKBENCH_GOLD, type PersonalId } from "./PersonalItems.js";
+import { personalItem, equipPositions, WORKBENCH_GOLD, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE, isStackableItem, validateInventory, type InventorySnapshot, type InventoryStack } from "./ItemRules.js";
 
 export const STARTER_GOLD = 1000;
@@ -197,7 +197,7 @@ export class EconomyStore {
     return this.once(id, request, "forge", {slot, stamp, action}, () => {
       const account = this.account(id);
       const stack = account.inventory.slots[slot];
-      if (!stack || isStackableItem(stack.itemId) || isBodySlot(personalItem(stack.itemId)?.kind) || forgeStamp(stack) !== stamp) throw Error("forge_item_changed");
+      if (!stack || isStackableItem(stack.itemId) || equipPositions(personalItem(stack.itemId)?.kind).length || forgeStamp(stack) !== stamp) throw Error("forge_item_changed");
       const {cost} = quoteForge(stack.forge, action);
       if (account.gold < cost) throw Error("insufficient_gold");
       const result = rollForge(stack.forge, action);

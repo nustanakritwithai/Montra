@@ -4046,7 +4046,6 @@
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;
     a.skin = { nodes, copy, holder, body, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
-    if (a.wingMesh) attachWings(a);
   }
   // ---- Action animation set (visual only) ----
   // Every action maps to something the game already replicates: server
@@ -4862,46 +4861,6 @@
     const visible = pathId === "seer" || pathId === "mender";
     for (const part of avatar.ritualGear || []) part?.setEnabled(visible);
   }
-  function attachWings(avatar) {
-    const chest=avatar.skin?.nodes.Chest;
-    const mesh=avatar.wingMesh;
-    mesh.parent=chest || avatar.rig.body;
-    // The GLB faces +Z; the fallback rig faces -Z.
-    mesh.rotation.y=chest?Math.PI:0;
-    mesh.position.set(0,chest ? .12 : 1.51,chest ? -.15 : .15);
-  }
-  function setAvatarWings(avatar,id) {
-    const golden=id==="acc_wings_kinnari_1";
-    const visibleId=golden || id==="acc_wings_owl_1" ? id : "";
-    if ((avatar.wingsId||"")===visibleId)return;
-    avatar.wingMesh?.dispose();
-    avatar.wingMesh=null;
-    avatar.wingsId=visibleId;
-    if (!visibleId)return;
-    // A single low-poly mesh for both wings. Each overlapping feather is a closed kite.
-    const positions=[], indices=[];
-    for(const side of [-1,1]){
-      for(let feather=0;feather<5;feather++){
-        const fraction=feather/4;
-        const reach=(golden ? .91 : 1.02)-fraction*.26;
-        const height=(golden ? .74 : .48)-fraction*.92;
-        const rootY=-fraction*.07, midY=(rootY+height)*.5, midX=reach*.57;
-        const start=positions.length/3;
-        positions.push(side*.06,rootY,0, side*midX,midY+.105,.12, side*reach,height,.26,
-          side*midX,midY-.10,.12, side*midX,midY,.18, side*midX,midY,.055);
-        for(let edge=0;edge<4;edge++){
-          const a=start+edge,b=start+(edge+1)%4;
-          if(side>0) indices.push(start+4,b,a,start+5,a,b);
-          else indices.push(start+4,a,b,start+5,b,a);
-        }
-      }
-    }
-    const mesh=new B.Mesh("equipped wings",scene), data=new B.VertexData(), normals=[];
-    B.VertexData.ComputeNormals(positions,indices,normals);
-    data.positions=positions;data.indices=indices;data.normals=normals;data.applyToMesh(mesh);
-    mesh.material=golden?gold:weaponCrystal;mesh.isPickable=false;
-    avatar.wingMesh=mesh;attachWings(avatar);
-  }
   function setAvatarWeapon(avatar, weaponId, pathId = avatar?.local ? ownServerCharacter()?.pathId : "") {
     if (!avatar?.weaponModels) return;
     setAvatarRitualGear(avatar, pathId);
@@ -5165,9 +5124,17 @@
     return Object.entries(stats||{}).filter(([k,v])=>Object.hasOwn(statNames,k)&&Number.isFinite(v)&&v!==0)
       .map(([k,v])=>statNames[k]+" "+(v>0?"+":"")+v).join(" · ");
   }
-  const bodyLabels={head:"ศีรษะ",shoulders:"ไหล่",chest:"อก",arms:"แขน",leftHand:"มือซ้าย",rightHand:"มือขวา",legs:"กางเกง",feet:"รองเท้า",offHand:"อุปกรณ์มือรอง",neck:"สร้อย",earrings:"ตุ้มหู",wings:"ปีก"};
-  const gearSymbols={mainHand:"⚔",head:"♛",shoulders:"⛨",chest:"♜",arms:"⟐",leftHand:"☚",rightHand:"☛",legs:"Ⅱ",feet:"♞",offHand:"◈",neck:"♧",earrings:"♢",wings:"🪽"};
-  let inspectingGear=null;
+  const bodyLabels={head:"ศีรษะ",shoulders:"ไหล่",chest:"อก",arms:"แขน",leftHand:"มือซ้าย",rightHand:"มือขวา",legs:"กางเกง",feet:"รองเท้า",offHand:"อุปกรณ์มือรอง",neck:"สร้อย",leftEar:"ตุ้มหูซ้าย",rightEar:"ตุ้มหูขวา",leftRing:"แหวนซ้าย",rightRing:"แหวนขวา"};
+  const gearSymbols={mainHand:"⚔",head:"♛",shoulders:"⛨",chest:"♜",arms:"⟐",leftHand:"☚",rightHand:"☛",legs:"Ⅱ",feet:"♞",offHand:"◈",neck:"♧",earring:"♢",leftEar:"♢",rightEar:"♢",ring:"◎",leftRing:"◎",rightRing:"◎"};
+  let inspectingGear=null, preferredGearSlot=null;
+  function wearPositions(kind){
+    if(kind==="earring")return ["leftEar","rightEar"];
+    if(kind==="ring")return ["leftRing","rightRing"];
+    return Object.hasOwn(bodyLabels,kind)?[kind]:[];
+  }
+  function gearDestination(positions,equipment){
+    return positions.includes(preferredGearSlot)?preferredGearSlot:positions.find(key=>!equipment[key]) || positions[0];
+  }
   function bagMeta(id) {
     if(Object.hasOwn(WEAPON_META,id))return {...WEAPON_META[id],kind:"mainHand"};
     const item=personalItems[id];
@@ -7659,7 +7626,7 @@
     }
   }
 
-  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0, weaponId = "", pathId = "", wingsId = "") {
+  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0, weaponId = "", pathId = "") {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     onlinePlayers.set(id,{x,z});
     const a = ensureAvatar(id,id === localId,x,z);
@@ -7667,7 +7634,6 @@
     a.targetY = Number.isFinite(y) ? y : 0;
     a.targetZ = z;
     setAvatarWeapon(a,weaponId,pathId);
-    setAvatarWings(a,wingsId);
     const side=territoryState?.teams?.[id];
     if(side && id!==localId && !a.warRing){
       const ally=side===territoryState.local?.side;
@@ -7740,7 +7706,7 @@
       seen.add(id);
       setOnlinePlayer(id, Number(p.x), Number(p.z),
         Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
-        p.equippedWeaponId, p.pathId, p.equippedWingsId);
+        p.equippedWeaponId, p.pathId);
       noteAvatarState(avatars.get(id), p);
     });
     const localActor=avatars.get(localId);
@@ -8480,7 +8446,7 @@
               stack.quantity >= 1 && stack.quantity <= 99) {
             return { itemId: stack.itemId, quantity: stack.quantity };
           }
-          if ((bagMeta(stack?.itemId)?.kind==="mainHand" || Object.hasOwn(bodyLabels,bagMeta(stack?.itemId)?.kind)) &&
+          if ((bagMeta(stack?.itemId)?.kind==="mainHand" || wearPositions(bagMeta(stack?.itemId)?.kind).length) &&
               stack?.quantity === 1) {
             return { itemId: stack.itemId, quantity: 1, forge: stack.forge, bound:stack.bound===true };
           }
@@ -8491,7 +8457,7 @@
           Number.isSafeInteger(selected) && selected >= 0 &&
             selected < INVENTORY_SLOTS && bagMeta(slots[selected]?.itemId)?.kind==="mainHand"
             ? selected : undefined;
-        const equipment=Object.fromEntries(Object.entries(payload.equipment||{}).filter(([position,id])=>Object.hasOwn(bodyLabels,position) && personalItems[id]?.kind===position));
+        const equipment=Object.fromEntries(Object.entries(payload.equipment||{}).filter(([position,id])=>wearPositions(personalItems[id]?.kind).includes(position)));
         inventoryState={version:1,slots,equippedWeaponSlot,equipment};
         itemUsePending = false;
         renderBag();
@@ -8659,7 +8625,7 @@
             const applyServerPlayer = () => {
               if ((p.mapId || "ritual_village") !== activeMapId) { removeOnlinePlayer(id); return; }
               setOnlinePlayer(id, Number(p.x), Number(p.z),
-                Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y), p.equippedWeaponId, p.pathId, p.equippedWingsId);
+                Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y), p.equippedWeaponId, p.pathId);
             };
             applyServerPlayer();
             if (typeof cb.listen === "function") {
@@ -8670,7 +8636,6 @@
               cb.listen(p, "y", applyServerPlayer);
               cb.listen(p, "maxHp", applyServerPlayer);
               cb.listen(p, "equippedWeaponId", applyServerPlayer);
-              cb.listen(p, "equippedWingsId", applyServerPlayer);
               cb.listen(p, "pathId", applyServerPlayer);
               cb.listen(p, "mapId", () => syncState(joined.state));
             }
@@ -10921,7 +10886,17 @@
     const inspectedId=inspectingGear==="mainHand"?equippedItem?.itemId:equipment[inspectingGear];
     const chosen=inspectingGear==="mainHand"?equippedItem:inspectingGear?(inspectedId?{itemId:inspectedId,bound:true}:null):slots?.[selectedBagSlot];
     const meta=bagMeta(chosen?.itemId);
-    const armor=Object.hasOwn(bodyLabels,meta?.kind), gear=armor||meta?.kind==="mainHand";
+    const positions=wearPositions(meta?.kind);
+    const destination=inspectingGear || gearDestination(positions,equipment);
+    const armor=positions.length>0, gear=armor||meta?.kind==="mainHand";
+    const sidePicker=$("wearSidePicker");
+    sidePicker.hidden=!!inspectingGear || positions.length!==2;
+    if(!sidePicker.hidden)for(const [i,button] of [...sidePicker.children].entries()){
+      button.dataset.position=positions[i];
+      button.textContent=bodyLabels[positions[i]]+(equipment[positions[i]]?"":" · ว่าง");
+      button.setAttribute("aria-pressed",String(positions[i]===destination));
+      button.disabled=itemUsePending;
+    }
     const worn=gear && (!!inspectingGear || (!armor && selectedBagSlot===equipped));
     const job=ownServerCharacter()?.pathId, wrongClass=meta?.path && meta.path!=="all" && meta.path!==job;
     const heal=chosen?.itemId===POTION_ITEM_ID||meta?.kind==="consumable";
@@ -10929,17 +10904,15 @@
     $("bagItemName").textContent=meta?.name || (chosen?.itemId===SHRINE_SHARD?shardName:chosen?"ยาเลือดเล็ก":inspectingGear?(bodyLabels[inspectingGear]||"อาวุธหลัก")+" · ช่องว่าง":"ช่องว่าง");
     let detail=chosen?"ใช้ฟื้น 30 HP":"ล่ามอนสเตอร์เพื่อหาอุปกรณ์และวัตถุดิบ";
     if(gear){
-      const difference=gearComparison(chosen.itemId,armor?equipment[meta.kind]:equippedItem?.itemId);
-      detail=[armor?bodyLabels[meta.kind]:"อาวุธ",meta.bonus,worn?"กำลังสวม":difference?"เมื่อเปลี่ยน "+difference:"",wrongClass?"อาวุธของสายอื่น":"",chosen.bound?"ผูกกับตัวละคร":personalItems[chosen.itemId]?"ผูกตัวละครเมื่อสวมครั้งแรก":""].filter(Boolean).join(" · ");
-      if(meta.kind==="earrings")detail+=" · สวมเป็นคู่";
-      if(meta.kind==="wings")detail+=" · ประดับหลัง";
+      const difference=gearComparison(chosen.itemId,armor?equipment[destination]:equippedItem?.itemId);
+      detail=[armor?bodyLabels[destination]:"อาวุธ",meta.bonus,worn?"กำลังสวม":difference?"เมื่อเปลี่ยน "+difference:"",wrongClass?"อาวุธของสายอื่น":"",chosen.bound?"ผูกกับตัวละคร":personalItems[chosen.itemId]?"ผูกตัวละครเมื่อสวมครั้งแรก":""].filter(Boolean).join(" · ");
     } else if(meta?.kind==="material")detail="วัตถุดิบจากมอนสเตอร์ · ดูสูตรที่โต๊ะช่างด้านล่าง";
     else if(meta?.kind==="consumable")detail="ฟื้น 22 HP · รอ 14 วินาทีก่อนใช้ยาครั้งถัดไป";
     else if(chosen?.itemId===SHRINE_SHARD)detail="ได้จากผู้พิทักษ์ศาลร้าง ใช้คราฟต์ง้าวจันทร์ผู้พิทักษ์";
     $("bagItemDescription").textContent=detail;
     renderForge(chosen);renderCraft(slots);renderWorkbench(slots);
     const use=$("useBagItem");use.disabled=!ready||itemUsePending;
-    use.textContent=itemUsePending?"กำลังบันทึก…":!inspectingGear&&confirmBindSlot===selectedBagSlot&&gear&&!worn&&!chosen.bound?"ยืนยันผูกและสวม":gear?(worn?"ถอด":"สวม")+(armor?bodyLabels[meta.kind]:"อาวุธ"):heal?(currentHp>=maxHp?"HP เต็ม":"ใช้ยา"):chosen?"วัตถุดิบ":"ช่องว่าง";
+    use.textContent=itemUsePending?"กำลังบันทึก…":!inspectingGear&&confirmBindSlot===selectedBagSlot&&gear&&!worn&&!chosen.bound?"ยืนยันผูกและสวม":gear?(worn?"ถอด":"สวม")+(armor?bodyLabels[destination]:"อาวุธ"):heal?(currentHp>=maxHp?"HP เต็ม":"ใช้ยา"):chosen?"วัตถุดิบ":"ช่องว่าง";
   }
   function renderWorkbench(slots) {
     const panel=$("personalBench"), select=$("benchRecipe");
@@ -10949,7 +10922,7 @@
     if(select.dataset.position!==filter){
       select.dataset.position=filter;select.replaceChildren();
       for(const [id,def] of Object.entries(personalItems)){
-        if(!def.recipe || (filter!=="all" && def.kind!==filter))continue;
+        if(!def.recipe || (filter!=="all" && def.kind!==filter && !wearPositions(def.kind).includes(filter)))continue;
         const option=document.createElement("option");option.value=id;option.textContent=def.name;select.appendChild(option);
       }
     }
@@ -10995,7 +10968,7 @@
     $("forgeInfo").textContent = "มี " + (economyGold ?? "…") + " ทอง · โบนัสช่างอาคมใช้เมื่อต่อสู้กับมอนสเตอร์ ตีบวกเพิ่มพลังอาวุธขั้นละ 1 พลาด " + config.maxMisses + " ครั้งรับประกันครั้งถัดไป · ออปชันประชิดหรือเวทอย่างละ 50% " + tierOdds + " · สุ่มใหม่แทนออปชันเดิม";
   }
   function openBag() {
-    confirmBindSlot=null; inspectingGear=null;
+    confirmBindSlot=null; inspectingGear=null; preferredGearSlot=null;
     const wearGrid=Object.entries({mainHand:"อาวุธหลัก",...bodyLabels}).map(([key,name])=>'<button type="button" id="wear-'+key+'" class="wear-tile" style="grid-area:'+key+'" aria-pressed="false"><b aria-hidden="true">'+gearSymbols[key]+'</b><span>'+name+'</span><small>ว่าง</small></button>').join("");
     const grid = Array.from({ length: INVENTORY_SLOTS }, (_, i) =>
       '<button type="button" class="bag-slot" id="bagSlot' + i +
@@ -11009,6 +10982,7 @@
       '<div class="bag-grid" role="group" aria-label="ช่องไอเท็ม 12 ช่อง">' + grid + '</div>' +
       '<div class="bag-detail"><strong id="bagItemName"></strong>' +
       '<p class="note" id="bagItemDescription"></p></div>' +
+      '<div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden><button type="button" class="secondary"></button><button type="button" class="secondary"></button></div>' +
       '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
       '<section id="personalBench" hidden><h3>โต๊ะช่างฝึกหัด</h3><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button id="benchCraft" type="button" class="secondary">คราฟต์</button></section>' +
       '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
@@ -11016,11 +10990,14 @@
       '<p class="note">แตะช่องสวมเพื่อดูหรือถอดอุปกรณ์ ล่ามอนสเตอร์เพื่อรับเกราะชิ้นแรก จากนั้นหาอุปกรณ์หรือเก็บวัตถุดิบคราฟต์ที่โต๊ะช่าง</p>');
     for (let i = 0; i < INVENTORY_SLOTS; i++) {
       $("bagSlot" + i).onclick = () => {
-        confirmBindSlot=null; inspectingGear=null;
+        preferredGearSlot=inspectingGear; confirmBindSlot=null; inspectingGear=null;
         selectedBagSlot = i;
         renderBag();
       };
     }
+    for(const button of $("wearSidePicker").children)button.onclick=()=>{
+      preferredGearSlot=button.dataset.position; confirmBindSlot=null; renderBag();
+    };
     for(const key of ["mainHand",...Object.keys(bodyLabels)])$("wear-"+key).onclick=()=>{
       inspectingGear=key; confirmBindSlot=null;
       if(key==="mainHand" && Number.isInteger(currentEquippedWeaponSlot()))selectedBagSlot=currentEquippedWeaponSlot();
@@ -11079,7 +11056,7 @@
       }
       const item=currentBagSlots()?.[selectedBagSlot];
       if (!item) return;
-      const armor=Object.hasOwn(bodyLabels,bagMeta(item.itemId)?.kind);
+      const positions=wearPositions(bagMeta(item.itemId)?.kind), armor=positions.length>0;
       const weapon=bagMeta(item.itemId)?.kind==="mainHand";
       if (weapon || armor) {
         if (mode==="live") {
@@ -11092,11 +11069,13 @@
           }
           const nextSlot=!armor && currentEquippedWeaponSlot()===selectedBagSlot
             ? null : selectedBagSlot;
+          const position=gearDestination(positions,inventoryState.equipment||{});
           if(nextSlot!==null && personalItems[item.itemId] && !item.bound && confirmBindSlot!==nextSlot){
+            preferredGearSlot=position;
             confirmBindSlot=nextSlot;renderBag();return;
           }
           confirmBindSlot=null;
-          if(armor)sendBagCommand("equip_gear",{slot:nextSlot,position:bagMeta(item.itemId).kind,expected:item.itemId});
+          if(armor)sendBagCommand("equip_gear",{slot:nextSlot,position,expected:item.itemId});
           else sendBagCommand("equip_weapon",{slot:nextSlot});
         } else {
           demoWeaponSlot=demoWeaponSlot===selectedBagSlot ? null : selectedBagSlot;

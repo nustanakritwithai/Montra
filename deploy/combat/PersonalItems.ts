@@ -2,13 +2,18 @@ import { randomInt } from "node:crypto";
 import type { CombatStats } from "./Progression.js";
 
 export type ItemStats = Partial<Record<"hp" | "stamina" | "atk" | "def" | "magicAtk" | "magicDef",number>>;
-export const BODY_SLOTS=["head","shoulders","chest","arms","leftHand","rightHand","legs","feet","offHand","neck","earrings","wings"] as const;
+export const BODY_SLOTS=["head","shoulders","chest","arms","leftHand","rightHand","legs","feet","offHand","neck","leftEar","rightEar","leftRing","rightRing"] as const;
 export type BodySlot=typeof BODY_SLOTS[number];
 export function isBodySlot(value:unknown):value is BodySlot {
   return BODY_SLOTS.some(slot=>slot===value);
 }
+export function equipPositions(kind:unknown):readonly BodySlot[] {
+  if(kind==="earring")return ["leftEar","rightEar"];
+  if(kind==="ring")return ["leftRing","rightRing"];
+  return isBodySlot(kind)?[kind]:[];
+}
 export type PersonalDefinition = {
-  name:string; kind:"mainHand"|BodySlot|"material"|"consumable"; path:string; stats:ItemStats;
+  name:string; kind:"mainHand"|BodySlot|"earring"|"ring"|"material"|"consumable"; path:string; stats:ItemStats;
   recipe?:readonly {item:string; qty:number}[];
 };
 export const PERSONAL_ITEMS = {
@@ -21,10 +26,12 @@ export const PERSONAL_ITEMS = {
   mat_resin_1: {"name":"ยางไม้ชั้น1","kind":"material","path":"all","stats":{}},
   acc_torc_1: {"name":"สร้อยลูกประคำฝึกหัด","kind":"neck","path":"all","stats":{"magicDef":2,"stamina":2},"recipe":[{"item":"mat_wood_1","qty":3},{"item":"mat_fiber_1","qty":2}]},
   acc_gorget_1: {"name":"สร้อยเกราะห่วงฝึกหัด","kind":"neck","path":"all","stats":{"def":2,"hp":8},"recipe":[{"item":"mat_metal_1","qty":3},{"item":"mat_fiber_1","qty":2}]},
-  acc_earrings_lotus_1: {"name":"ตุ้มหูบัวลงอาคม","kind":"earrings","path":"all","stats":{"magicAtk":2},"recipe":[{"item":"mat_metal_1","qty":2},{"item":"mat_ink_1","qty":2}]},
-  acc_earrings_hunter_1: {"name":"ตุ้มหูพรานป่า","kind":"earrings","path":"all","stats":{"atk":1,"stamina":2},"recipe":[{"item":"mat_wood_1","qty":2},{"item":"mat_hide_1","qty":2}]},
-  acc_wings_kinnari_1: {"name":"ปีกกินรีถักทอง","kind":"wings","path":"all","stats":{"stamina":4},"recipe":[{"item":"mat_fiber_1","qty":3},{"item":"mat_metal_1","qty":2}]},
-  acc_wings_owl_1: {"name":"ปีกนกแสกลงอาคม","kind":"wings","path":"all","stats":{"magicDef":2},"recipe":[{"item":"mat_fiber_1","qty":3},{"item":"mat_ink_1","qty":2}]},
+  acc_earrings_lotus_1: {"name":"ตุ้มหูบัวลงอาคม","kind":"earring","path":"all","stats":{"magicAtk":2},"recipe":[{"item":"mat_metal_1","qty":2},{"item":"mat_ink_1","qty":2}]},
+  acc_earrings_hunter_1: {"name":"ตุ้มหูพรานป่า","kind":"earring","path":"all","stats":{"atk":1,"stamina":2},"recipe":[{"item":"mat_wood_1","qty":2},{"item":"mat_hide_1","qty":2}]},
+  acc_earrings_ward_1: {"name":"ตุ้มหูยันต์คุ้มกาย","kind":"earring","path":"all","stats":{"magicDef":2},"recipe":[{"item":"mat_fiber_1","qty":2},{"item":"mat_ink_1","qty":2}]},
+  acc_ring_atk_1: {"name":"แหวนคมศึกฝึกหัด","kind":"ring","path":"all","stats":{"atk":2,"stamina":2},"recipe":[{"item":"mat_metal_1","qty":3},{"item":"mat_fiber_1","qty":2}]},
+  acc_ring_heal_1: {"name":"แหวนขวัญฝึกหัด","kind":"ring","path":"all","stats":{"magicAtk":2,"magicDef":1},"recipe":[{"item":"mat_wood_1","qty":3},{"item":"mat_ink_1","qty":2}]},
+  acc_ring_guard_1: {"name":"แหวนพิทักษ์ศาล","kind":"ring","path":"all","stats":{"def":2,"hp":8},"recipe":[{"item":"mat_metal_1","qty":2},{"item":"mat_resin_1","qty":2}]},
   arm_cloth_chest_1: {"name":"เสื้อผ้าจารอักขระฝึกหัด","kind":"chest","path":"all","stats":{"magicAtk":4,"magicDef":2},"recipe":[{"item":"mat_fiber_1","qty":3},{"item":"mat_resin_1","qty":2}]},
   arm_hide_chest_1: {"name":"เสื้อหนังพรานเงาฝึกหัด","kind":"chest","path":"all","stats":{"atk":4,"stamina":4},"recipe":[{"item":"mat_hide_1","qty":3},{"item":"mat_resin_1","qty":2}]},
   arm_medium_chest_1: {"name":"เสื้อเกราะเกล็ดทัพฝึกหัด","kind":"chest","path":"all","stats":{"def":4,"atk":2},"recipe":[{"item":"mat_metal_1","qty":3},{"item":"mat_resin_1","qty":2}]},
@@ -100,7 +107,7 @@ export function fieldItem(path:string,owned:ReadonlySet<string>):BodyItemId|Mate
   if(randomInt(4)!==0) return materials[randomInt(materials.length)];
   const candidates=(Object.keys(PERSONAL_ITEMS) as PersonalId[]).filter(id=>{
     const def=personalItem(id)!;
-    return !owned.has(id) && isBodySlot(def.kind) && (def.path==="all" || def.path===path);
+    return !owned.has(id) && equipPositions(def.kind).length>0 && (def.path==="all" || def.path===path);
   });
   return candidates.length ? candidates[randomInt(candidates.length)] as BodyItemId : materials[randomInt(materials.length)];
 }

@@ -1,5 +1,5 @@
 import { readForged, type Forged } from "./ForgeRules.js";
-import { personalItem, startingWeapon, firstChest, fieldItem, isBodySlot, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
+import { personalItem, startingWeapon, firstChest, fieldItem, isBodySlot, equipPositions, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
 import { PROGRESSION, type CombatStats } from "./Progression.js";
 import { MUAY_WRAP_ID } from "./MuayRules.js";
 /**
@@ -119,7 +119,7 @@ export function validateInventory(value: unknown): InventorySnapshot {
       return { itemId: entry.itemId, quantity: entry.quantity as number };
     }
     const itemId=entry.itemId as ItemId;
-    const body=isBodySlot(personalItem(itemId)?.kind);
+    const body=equipPositions(personalItem(itemId)?.kind).length>0;
     if (!upgraded || (!isWeaponId(itemId) && !body) || (body && Object.hasOwn(entry,"forge")) ||
         (Object.hasOwn(entry,"bound") && (!personalItem(itemId) || entry.bound!==true)) ||
         entry.quantity!==1 || seenWeapons.has(itemId)) throw Error("inventory_record_invalid");
@@ -139,7 +139,8 @@ export function validateInventory(value: unknown): InventorySnapshot {
     if (!record(value.equipment))throw Error("inventory_record_invalid");
     result.equipment={};
     for (const [slot,id] of Object.entries(value.equipment)) {
-      if (!isBodySlot(slot) || personalItem(id)?.kind!==slot || seenWeapons.has(id as ItemId))throw Error("inventory_record_invalid");
+      if (!isBodySlot(slot) || !equipPositions(personalItem(id)?.kind).includes(slot) ||
+          seenWeapons.has(id as ItemId))throw Error("inventory_record_invalid");
       result.equipment[slot]=id as BodyItemId;
       seenWeapons.add(id as ItemId);
     }
@@ -216,7 +217,7 @@ export function equipBody(inventory:InventorySnapshot,position:BodySlot,slot:num
   const next=validateInventory(inventory);
   const worn=next.equipment?.[position];
   const def=personalItem(expected);
-  if (!def || def.kind!==position)return {ok:false,reason:"equipment_changed"};
+  if (!def || !equipPositions(def.kind).includes(position))return {ok:false,reason:"equipment_changed"};
   const equipment={...next.equipment};
   if (slot===null) {
     if (worn!==expected)return {ok:false,reason:"equipment_changed"};
@@ -236,7 +237,7 @@ export function equipBody(inventory:InventorySnapshot,position:BodySlot,slot:num
 
 export function parseBodyCommand(message:unknown) {
   if(!record(message) || Object.keys(message).length!==3 || !isBodySlot(message.position) ||
-      personalItem(message.expected)?.kind!==message.position ||
+      !equipPositions(personalItem(message.expected)?.kind).includes(message.position) ||
       (message.slot!==null && (!Number.isInteger(message.slot) || (message.slot as number)<0 || (message.slot as number)>=INVENTORY_SLOT_COUNT)))return null;
   return {slot:message.slot as number|null,position:message.position,expected:message.expected as BodyItemId};
 }
