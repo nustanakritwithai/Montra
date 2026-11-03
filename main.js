@@ -7492,6 +7492,18 @@
     const q = s => el.querySelector(s + " b");
     return { el, clock: q(".rs-clock"), gold: q(".rs-gold"), potion: q(".rs-potion"), party: q(".rs-party"), online: q(".rs-online"), fps: q(".rs-fps"), partyItem: el.querySelector(".rs-party") };
   })();
+  // ---- EXP base line: a thin full-width bar along the bottom edge of the screen ----
+  const expBase = (() => { const game = $("game"); if (!game) return null;
+    const el = document.createElement("div"); el.className = "exp-base"; el.setAttribute("role", "progressbar"); el.setAttribute("aria-label", "ค่าประสบการณ์");
+    el.innerHTML = '<i></i><span class="exp-ticks" aria-hidden="true"></span>'; game.append(el); return { el, fill: el.firstElementChild }; })();
+  function updateExpBase(me) {
+    if (!expBase) return;
+    const max = Number(me?.xpToNext) || 0, xp = Number(me?.experience) || 0, live = mode === "live" && me && max > 0;
+    const pct = live ? Math.max(0, Math.min(100, xp / max * 100)) : 0;
+    hudSet(expBase.fill, "expBase", pct.toFixed(2) + "%", "width");
+    const text = live ? "EXP " + Math.floor(xp).toLocaleString("th-TH") + " / " + Math.floor(max).toLocaleString("th-TH") + " · " + pct.toFixed(1) + "%" : "EXP · เล่นออนไลน์เพื่อเก็บ";
+    if (expBase.el.title !== text) { expBase.el.title = text; expBase.el.setAttribute("aria-valuetext", text); }
+  }
   function updateResourceStrip() {
     if (!resourceStrip) return;
     const d = new Date(), s = resourceStrip;
@@ -7651,7 +7663,7 @@
       hudSet(bar.querySelector("i"),"manaw",pctOf(me.mana,me.maxMana),"width");
       updateMeterValue(bar,value,max,value+" จาก "+max);
     }
-    updateResourceStrip(); updateSelfStatus(me);
+    updateResourceStrip(); updateSelfStatus(me); updateExpBase(me);
     updateVitalOrb(hp, maxHp, hasSt ? Number(me.stamina) : NaN, hasSt ? Number(me.maxStamina) : 0, Number(me?.mana), Number(me?.maxMana) || 0);
     const xpMax = Number(me?.xpToNext) || 0, xp = Number(me?.experience) || 0;
     const hasXp = me && room?.state?.progressionAvailable === true;
