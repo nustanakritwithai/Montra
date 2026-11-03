@@ -1,4 +1,4 @@
-import { forgeStamp, quoteForge, rollForge, birthForge, plainForge, forgeIngredient, type ForgeAction } from "./ForgeRules.js";
+import { FORGE_CATALOG, forgeStamp, quoteForge, rollForge, birthForge, plainForge, rerollIngredient, type ForgeAction } from "./ForgeRules.js";
 import { changeCardSocket, DRILL_COST, type SocketOrder } from "./CardSockets.js";
 import {resourceNodes,resourceStock,rawResource,GATHER_DELAY,REFINE_INPUT,type ResourceNode,type ResourceStock} from "./WorldResources.js";
 import {WORLD_MAPS} from "./WorldMaps.js";
@@ -6,7 +6,7 @@ import {WORLD_MAPS} from "./WorldMaps.js";
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 import { personalItem, type BodySlot, type PersonalId } from "./PersonalItems.js";
-import { SHRINE_RECIPE, gearCounts, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack } from "./ItemRules.js";
+import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack } from "./ItemRules.js";
 import type {SalvageOrder} from "./EconomyRules.js";
 
 export const STARTER_GOLD = 1000;
@@ -68,9 +68,19 @@ function consume(account:Account,item:string,qty:number){
   throw Error("craft_missing_material");
 }
 
+function receiveCraft(bag:InventorySnapshot,item:InventoryStack){
+  const id=item.itemId;
+  if(isSocketGear(id) && (gearCounts(bag).get(id)??0)>=(personalItem(id)?.copyLimit??1)){
+    const inventory=bankForgeCopy(bag,id);
+    if(!inventory)throw Error("forge_stock_full");
+    return {inventory,banked:true};
+  }
+  return {inventory:add(bag,item),banked:false};
+}
+
 export class EconomyStore {
   private readonly db: DatabaseSync;
-  constructor(file: string) {
+  constructor(file:string,private readonly forgeDraw?:()=>number) {
     this.db = new DatabaseSync(file);
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;
       CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY, gold INTEGER NOT NULL, inventory TEXT NOT NULL);
@@ -130,9 +140,10 @@ export class EconomyStore {
       if(!raw?.refinesTo)throw Error("item_unavailable");
       if(level<raw.level!)throw Error("item_level_required");
       const account=this.account(actor);
-      consume(account,expected,REFINE_INPUT);
-      account.inventory=add(account.inventory,{itemId:raw.refinesTo,quantity:1});this.put(actor,account);
-      return {item:raw.refinesTo,quantity:1};
+      const oldCatalyst=raw.kind==="catalyst",quantity=oldCatalyst?2:1;
+      consume(account,expected,oldCatalyst?1:REFINE_INPUT);
+      account.inventory=add(account.inventory,{itemId:raw.refinesTo,quantity});this.put(actor,account);
+      return {item:raw.refinesTo,quantity};
     });
   }
   private transaction<T>(fn: () => T): T {
@@ -224,7 +235,6 @@ export class EconomyStore {
     return this.once(id, request, "craft", {recipe: recipe.id}, () => {
       const account = this.account(id);
       if (account.gold < recipe.gold) throw Error("insufficient_gold");
-      if (account.inventory.slots.some(stack => stack?.itemId === recipe.output)) throw Error("duplicate_weapon");
       let remaining = recipe.quantity;
       for (const [index, stack] of account.inventory.slots.entries()) {
         if (stack?.itemId !== recipe.ingredient) continue;
@@ -234,10 +244,11 @@ export class EconomyStore {
         if (remaining === 0) break;
       }
       if (remaining > 0) throw Error("craft_missing_shard");
-      account.inventory = add(account.inventory, {itemId: recipe.output, quantity: 1});
+      const received=receiveCraft(account.inventory,{itemId:recipe.output,quantity:1});
+      account.inventory=received.inventory;
       account.gold -= recipe.gold;
       this.put(id, account);
-      return {itemId: recipe.output, spentGold: recipe.gold};
+      return {itemId: recipe.output, spentGold: recipe.gold,banked:received.banked};
     });
   }
 
@@ -250,10 +261,11 @@ export class EconomyStore {
       if(account.gold<cost)throw Error("insufficient_gold");
       for(const ingredient of def.recipe!)consume(account,ingredient.item,ingredient.qty);
       const forge=birthForge(output);
-      account.inventory=add(account.inventory,{itemId:output,quantity:1,...(forge?{forge}:{})});
+      const received=receiveCraft(account.inventory,{itemId:output,quantity:1,...(forge?{forge}:{})});
+      account.inventory=received.inventory;
       account.gold-=cost;
       this.put(id,account);
-      return {itemId:output,spentGold:cost};
+      return {itemId:output,spentGold:cost,banked:received.banked};
     });
   }
 
@@ -299,8 +311,8 @@ export class EconomyStore {
     });
   }
 
-  forgeWeapon(id:string,request:string,slot:number|BodySlot,stamp:string,action:ForgeAction,level=1) {
-    return this.once(id,request,"forge",{slot,stamp,action},()=>{
+  forgeWeapon(id:string,request:string,slot:number|BodySlot,stamp:string,action:ForgeAction,level=1,donor?:{slot:number;stamp:string},expectedCopies?:number,acceptBreak=false) {
+    return this.once(id,request,"forge",{slot,stamp,action,...(donor?{donor}:{}),...(expectedCopies!==undefined?{copies:expectedCopies}:{}),...(acceptBreak?{acceptBreak}:{})},()=>{
       const account=this.account(id), bag=account.inventory;
       const worn=typeof slot==="string"?bag.equipment?.[slot]:undefined;
       const stack=typeof slot==="number"?bag.slots[slot]:worn?{itemId:worn,forge:bag.equipmentForges?.[slot]}:undefined;
@@ -309,14 +321,45 @@ export class EconomyStore {
       if(level<(def?.level??1))throw Error("item_level_required");
       const {cost}=quoteForge(stack.forge,action,def?.level);
       if(account.gold<cost)throw Error("insufficient_gold");
-      const ingredient=forgeIngredient(def,stack.forge?.rank??0,action);
-      if(ingredient)consume(account,ingredient.item,ingredient.qty);
-      const result=rollForge(stack.forge,action,undefined,def);
+      if(action==="enhance"){
+        const {copies,breakOnFailure}=FORGE_CATALOG.enhanceSteps[stack.forge?.rank??0];
+        if(breakOnFailure && !acceptBreak)throw Error("forge_risk_unconfirmed");
+        const card=typeof slot==="number"?bag.slots[slot]?.socket:bag.equipmentSockets?.[slot];
+        if(breakOnFailure && card)throw Error("forge_remove_card");
+        if(expectedCopies!==undefined && expectedCopies!==copies)throw Error("forge_item_changed");
+        const bank=bag.forgeCopies?.[stack.itemId]??0;
+        if(donor){
+          const spare=bag.slots[donor.slot];
+          if(!copies || donor.slot===slot || donor.slot===bag.equippedWeaponSlot || spare?.itemId!==stack.itemId ||
+             forgeStamp(spare)!==donor.stamp || spare.socket!==undefined || spare.forge?.rank || spare.forge?.misses)throw Error("forge_donor_changed");
+        }
+        const fromBank=copies-Number(Boolean(donor));
+        if(bank<fromBank)throw Error("forge_missing_copy");
+        if(donor)bag.slots[donor.slot]=null;
+        if(fromBank){
+          bag.forgeCopies={...bag.forgeCopies,[stack.itemId]:bank-fromBank};
+          if(!bag.forgeCopies[stack.itemId])delete bag.forgeCopies[stack.itemId];
+        }
+      }else{
+        if(donor)throw Error("forge_donor_changed");
+        const ingredient=rerollIngredient(def);
+        if(ingredient)consume(account,ingredient.item,ingredient.qty);
+      }
+      const result=rollForge(stack.forge,action,this.forgeDraw,def);
       account.gold-=cost;
-      if(typeof slot==="number")account.inventory.slots[slot]={...account.inventory.slots[slot]!,forge:result.forge};
+      if(result.broken){
+        if(typeof slot==="number"){
+          bag.slots[slot]=null;
+          if(bag.equippedWeaponSlot===slot)bag.equippedWeaponSlot=null;
+        }else{
+          delete bag.equipment![slot];
+          if(bag.equipmentForges)delete bag.equipmentForges[slot];
+          if(bag.equipmentSockets)delete bag.equipmentSockets[slot];
+        }
+      }else if(typeof slot==="number")account.inventory.slots[slot]={...account.inventory.slots[slot]!,forge:result.forge};
       else account.inventory.equipmentForges={...account.inventory.equipmentForges,[slot]:result.forge};
       this.put(id,account);
-      return result;
+      return {...result,itemId:stack.itemId};
     });
   }
   listItem(id: string, request: string, slot: number, amount: number, price: number, stamp?:string): { listingId: string } {

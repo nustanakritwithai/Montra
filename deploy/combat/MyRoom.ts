@@ -1,4 +1,4 @@
-import { FORGE } from "./ForgeRules.js";
+import { FORGE_CATALOG } from "./ForgeRules.js";
 import { accounts } from "./AccountService.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
 import { WAR_SIDE_SIZE, WAR_HOLD, warSites, type Battlefield, type WarSide } from "./TerritoryWar.js";
@@ -2638,9 +2638,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,
             ...(fragment===SHRINE_SHARD ? {shrineShard:fragmentBag?"granted":"bag_full"} : {}),
             ...(fragment && fragment!==SHRINE_SHARD ? {bossFragment:fragment,fragmentGranted:Boolean(fragmentBag)} : {}),
-            ...(accessory ? {bossAccessory:accessory.id,accessoryGranted:accessory.granted} : {}),
+            ...(accessory ? {bossAccessory:accessory.id,accessoryGranted:accessory.granted,bossCopy:!!accessory.banked} : {}),
             ...(monsterId==="atlas_rift_warden" ? {riftVictory:true} : {}),
-            ...(fieldDrop?.id!==undefined ? {personalDrop:fieldDrop.id ?? "bag_full",dropQuantity:fieldDrop.quantity??1,lootMisses:fieldDrop.bag.lootMisses??0} : {}),
+            ...(fieldDrop?.id!==undefined ? {personalDrop:fieldDrop.id ?? "bag_full",dropQuantity:fieldDrop.quantity??1,lootMisses:fieldDrop.bag.lootMisses??0,forgeCopy:!!fieldDrop.banked} : {}),
             ...(fieldDrop?.blockedId ? {blockedItem:fieldDrop.blockedId,missedQuantity:fieldDrop.missedQuantity} : {}),
             ...(card ? {cardDrop:card,cardReceived:Boolean(cardBag)} : {}),
             ...(dropsPotion ? {elitePotion:prize ? "granted" : "bag_full"} : {})});
@@ -2733,7 +2733,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level"];
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level"];
       const reason=error instanceof Error && (allowed.includes(error.message)||["resource_ground","resource_range","resource_cooldown","resource_empty"].includes(error.message)) ? error.message : "economy_failed";
       if (reason==="economy_failed") console.error("MONTRA economy failed",error);
       client.send("economy_error",{reason});
@@ -3277,7 +3277,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const order = parseForge(message);
       if (!order) return this.reject(client, "invalid_economy_request");
       this.economyAction(client, id => {
-        const result = characterStore.economy.forgeWeapon(id,order.requestId,order.slot,order.stamp,order.action,this.state.players.get(client.sessionId)!.level);
+        const result = characterStore.economy.forgeWeapon(id,order.requestId,order.slot,order.stamp,order.action,this.state.players.get(client.sessionId)!.level,order.donor,order.copies,order.acceptBreak);
         this.syncEconomy(client, id);
         client.send("forge_result", { requestId: order.requestId, action: order.action, ...result });
       });
@@ -4246,7 +4246,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     this.state.territoryWarAvailable=WORLD_EXPANSION;
     if (characterStore.economyEnabled) this.state.craftRecipe = JSON.stringify(SHRINE_RECIPE);
-    this.state.forgeCatalog = JSON.stringify(FORGE);
+    this.state.forgeCatalog = JSON.stringify(FORGE_CATALOG);
     this.state.buildCatalog = BUILD_CATALOG;
     this.state.economyAvailable = characterStore.economyEnabled;
     if(characterStore.economyEnabled && !this.field)this.clock.setInterval(()=>this.sendResources(),5000);

@@ -1,11 +1,11 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {BODY_SLOTS, PERSONAL_ITEMS, WEAPON_LEVELS, OUTFIT_LEVELS, MATERIAL_LEVELS, equipPositions, monsterCardDrop, wearsTwinSwords, wearsWraps, usesStaff, type BodyItemId, type PersonalId} from "./PersonalItems.js";
+import {BODY_SLOTS, personalItem, PERSONAL_ITEMS, WEAPON_LEVELS, OUTFIT_LEVELS, MATERIAL_LEVELS, equipPositions, monsterCardDrop, wearsTwinSwords, wearsWraps, usesStaff, type BodyItemId, type PersonalId} from "./PersonalItems.js";
 import {CATALOG_PAGES,hunts,findItemHunt,rollMonsterLoot} from "./MonsterLoot.js";
 import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses,practiceLoot,validateInventory} from "./ItemRules.js";
 import {EconomyStore} from "./EconomyStore.js";
 import {parseSalvage,type SalvageOrder} from "./EconomyRules.js";
-import {birthForge,rollForge,forgeStamp,forgeIngredient} from "./ForgeRules.js";
+import {birthForge,rollForge,forgeStamp,rerollIngredient} from "./ForgeRules.js";
 import {changeCardSocket} from "./CardSockets.js";
 import {ATLAS_SPAWNS} from "./WorldAtlas.js";
 import {FOREST_CAMPS} from "./WorldMaps.js";
@@ -83,10 +83,10 @@ test("each named encounter owns its fragment and accessory; three fragments craf
       assert.equal(bossAccessoryReward(bag,"forest_west_1",100,()=>0),null);
       const direct=bossAccessoryReward(bag,boss,t.level,()=>19)!;
       assert(direct.granted);assert.equal(direct.id,t.gear);
-      assert.equal(bossAccessoryReward(direct.bag,boss,t.level,()=>0),null);
+      assert.equal(bossAccessoryReward(direct.bag,boss,t.level,()=>0)?.bag.forgeCopies?.[t.gear],1);
       const at=direct.bag.slots.findIndex(s=>s?.itemId===t.gear),position=equipPositions(gear.kind)[0];
       const equip=equipBody(direct.bag,position,at,t.gear,"muay_boran",t.level);
-      assert(equip.ok);assert.equal(bossAccessoryReward(equip.inventory,boss,t.level,()=>0),null);
+      assert(equip.ok);assert.equal(bossAccessoryReward(equip.inventory,boss,t.level,()=>0)?.bag.forgeCopies?.[t.gear],1);
       const full={...bag,slots:bag.slots.map(s=>s??{itemId:"health_potion" as const,quantity:99})};
       assert.equal(bossAccessoryReward(full,boss,t.level,()=>0)?.granted,false);
       assert.equal(grantStackReward(full,t.fragment),null);
@@ -114,14 +114,14 @@ test("three misses survive reload and a full bag preserves the guaranteed upgrad
     assert(first.bag.firstChestClaimed);bag=first.bag;
     for(let count=1;count<=3;count++){
       const reward=practiceLoot(bag,path,10,"normal",15,mob,miss);
-      assert.equal(PERSONAL_ITEMS[reward.id!].kind,"material");
+      assert.equal(personalItem(reward.id)?.kind,"material");
       bag=validateInventory(JSON.parse(JSON.stringify(reward.bag)));
       assert.equal(bag.lootMisses,count);
     }
     const full={...bag,slots:bag.slots.map(s=>s??{itemId:"health_potion" as const,quantity:99})};
     const blocked=practiceLoot(full,path,10,"normal",15,mob,miss);
     assert.equal(blocked.id,null);assert.equal(blocked.bag.lootMisses,3);
-    assert(blocked.blockedId && PERSONAL_ITEMS[blocked.blockedId]?.forge);assert.equal(blocked.quantity,0);assert.equal(blocked.missedQuantity,1);
+    assert(blocked.blockedId && personalItem(blocked.blockedId)?.forge);assert.equal(blocked.quantity,0);assert.equal(blocked.missedQuantity,1);
     const material=path==="phutthaisawan"?"mat_metal_2":"mat_hide_2";
     const tight={...full,lootMisses:0,slots:full.slots.map(s=>s.itemId.startsWith("mat_")?{...s,quantity:99}:s)};
     tight.slots[11]={itemId:material,quantity:98};
@@ -129,7 +129,7 @@ test("three misses survive reload and a full bag preserves the guaranteed upgrad
     assert.equal(stacked.id,material);assert.equal(stacked.quantity,1);assert.equal(stacked.bag.slots[11]?.quantity,99);
     assert.equal(stacked.blockedId,material);assert.equal(stacked.missedQuantity,1);
     const reward=practiceLoot(bag,path,10,"normal",15,mob,miss);
-    assert(reward.id && PERSONAL_ITEMS[reward.id].recommended?.includes(path));assert.equal(reward.bag.lootMisses??0,0);
+    assert(reward.id && personalItem(reward.id)?.recommended?.includes(path));assert.equal(reward.bag.lootMisses??0,0);
   }
 });
 
@@ -162,7 +162,7 @@ test("duplicate rings keep cards and forge identities during socketing, market p
     bag.slots[2]=first;bag.slots[3]=second;bag.slots[4]={itemId:"mat_metal_1",quantity:2};
     bag.slots[5]={itemId:"card_possessed",quantity:1};buyer.slots[2]=ring();
     store.register(a,bag);store.register(b,buyer);
-    const drill={requestId:"test_pair_socket_drill",target:2,gear:id,expected:"sealed",action:"drill",card:null} as const;
+    const drill={requestId:"test_pair_socket_drill",target:2,gear:id,expected:"sealed",action:"drill",card:null as null} as const;
     assert.throws(()=>store.socketItem(a,drill),/socket_changed/);
     assert.throws(()=>store.socketItem(a,{...drill,stamp:forgeStamp(second)}),/socket_changed/);
     assert.deepEqual(store.getAccount(a).inventory,bag);
@@ -434,7 +434,8 @@ test("level 99 class gear can drop or be crafted, enhanced, rerolled, drilled an
   try{
     let slot=2;
     for(const r of def.recipe!)bag.slots[slot++]={itemId:r.item as PersonalId,quantity:r.qty};
-    for(const id of ["ref_flux_7","ref_seal_7","mat_metal_1","card_star_warden"] as const)bag.slots[slot++]={itemId:id,quantity:1};
+    bag.forgeCopies={[item]:1};
+    for(const id of ["ref_seal_7","mat_metal_1","card_star_warden"] as const)bag.slots[slot++]={itemId:id,quantity:1};
     store.register(account,bag);
     store.craftPersonal(account,"field_crafting_0001",item,99);
     const crafted=store.getAccount(account).inventory,index=crafted.slots.findIndex(s=>s?.itemId===item);
@@ -460,7 +461,7 @@ test("capstone crafting, forge materials, role options, card and sale survive in
     const robe="arm_cloth_chest_8", def=PERSONAL_ITEMS[robe];
     let slot=2;
     for(const i of def.recipe!){bag.slots[slot++]={itemId:i.item as PersonalId,quantity:i.qty};}
-    bag.slots[slot++]={itemId:"ref_flux_7",quantity:2};
+    bag.forgeCopies={[robe]:1};
     bag.slots[slot++]={itemId:"ref_seal_7",quantity:1};
     bag.slots[slot++]={itemId:"card_rift_warden",quantity:1};
     bag.slots[slot++]={itemId:"mat_metal_1",quantity:1};
@@ -478,7 +479,7 @@ test("capstone crafting, forge materials, role options, card and sale survive in
     const stamp=forgeStamp({itemId:robe,forge:worn.inventory.equipmentForges!.chest});
     const enhanced=store.forgeWeapon(id,req(2),"chest",stamp,"enhance",100);
     assert.deepEqual(store.forgeWeapon(id,req(2),"chest",stamp,"enhance",100),enhanced);
-    assert.equal(enhanced.forge.rank,1);assert.equal(store.getAccount(id).inventory.slots.find(s=>s?.itemId==="ref_flux_7")?.quantity,1);
+    assert.equal(enhanced.forge.rank,1);assert.equal(store.getAccount(id).inventory.forgeCopies?.[robe],undefined);
     assert.throws(()=>store.forgeWeapon(id,req(3),"chest",stamp,"reroll",100),/forge_item_changed/);
     const rolled=store.forgeWeapon(id,req(3),"chest",forgeStamp({itemId:robe,forge:enhanced.forge}),"reroll",100);
     assert(def.forge!.pool.includes(rolled.forge.affix!.stat));
@@ -581,7 +582,7 @@ test("class restrictions, capped forge ratings and card level survive the entire
     assert.throws(()=>rollForge(improved,"enhance",()=>0,item),/forge_max_rank/);
     assert(def.pool.includes(top.affix!.stat));
     assert.equal(top.affix!.tier,item.level!<25?1:item.level!<65?2:3);
-    assert(forgeIngredient(item,9,"enhance")!.item in PERSONAL_ITEMS);
+    assert(rerollIngredient(item)!.item in PERSONAL_ITEMS);
     if(item.kind==="mainHand"){
       const bag=makeClassInventory(item.path);bag.slots[1]={itemId:id as PersonalId,quantity:1,forge:{...top,rank:10}};bag.equippedWeaponSlot=null;
       assert.equal(equipInventoryWeapon(bag,1,"wrong_path",100).ok,false);

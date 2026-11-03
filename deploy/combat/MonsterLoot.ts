@@ -1,6 +1,6 @@
 import {randomInt} from "node:crypto";
 import {REGIONAL_BOSSES} from "./RegionalBosses.js";
-import {PERSONAL_ITEMS,BOSS_GEAR_CHANCE,monsterCardFor,type CardId,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
+import {PERSONAL_ITEMS,MAX_FORGE_COPIES,BOSS_GEAR_CHANCE,monsterCardFor,type CardId,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
 import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
 import {TEMPLE_ID,TEMPLE_MAP,TEMPLE_SPAWNS} from "./TempleMap.js";
 import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS,RIFT_WARDEN} from "./WorldAtlas.js";
@@ -91,14 +91,14 @@ export function cardHunt(card:CardId){return cardHunts.get(card)??null;}
 const catalog=Object.entries(PERSONAL_ITEMS).map(([id,item])=>{
   const hunt=findItemHunt(id as PersonalId,item.level??1);
   const source=hunt??(item.kind==="card"?cardHunt(id as CardId):null);
-  const rate=item.sourceBoss?(item.forge?" · โอกาส "+BOSS_GEAR_CHANCE+"% เมื่อเลเวลถึงและยังไม่มีชิ้นนี้":" · ได้ 1 ชิ้นเมื่อชนะ"):"";
+  const rate=item.sourceBoss?(item.forge?" · โอกาส "+BOSS_GEAR_CHANCE+"% เมื่อเลเวลถึง · ชิ้นซ้ำเข้าคลังช่าง":" · ได้ 1 ชิ้นเมื่อชนะ"):"";
   const dropHint=hunt?hunt.monster+" Lv."+hunt.level+" · "+hunt.map+rate+(hunt.open?"":" · พื้นที่ยังไม่เปิด"):undefined;
   return [id,source?{...item,dropHint,huntTarget:{id:source.id,monster:source.monster,mapId:source.mapId,open:source.open}}:item] as const;
 });
 export const CATALOG_PAGES=Array.from({length:Math.ceil(catalog.length/16)},(_,i)=>Object.fromEntries(catalog.slice(i*16,i*16+16)));
 
 export const MAX_LOOT_MISSES=3;
-export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<string>|ReadonlyMap<string,number>,playerLevel:number,misses:number,tier:string,draw:(max:number)=>number=randomInt,partialStacks?:ReadonlySet<string>){
+export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<string>|ReadonlyMap<string,number>,playerLevel:number,misses:number,tier:string,draw:(max:number)=>number=randomInt,partialStacks?:ReadonlySet<string>,forgeCopies?:Readonly<Record<string,number>>,worn?:ReadonlySet<string>){
   const table=tables.get(monsterId);
   if(!table)return null;
   const candidates=table.gear.filter(id=>{
@@ -116,8 +116,16 @@ export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<s
   });
   const chance=tier==="boss"?100:tier==="elite"?60:tier==="strong"?40:25;
   const guaranteed=useful.length>0 && misses===MAX_LOOT_MISSES;
-  if(candidates.length && (guaranteed || draw(100)<chance)){
-    const pool=guaranteed?useful:[...candidates,...useful,...useful];
+  const repeats=forgeCopies?table.gear.filter(id=>owned.has(id) && !candidates.includes(id) && (forgeCopies[id]??0)<MAX_FORGE_COPIES &&
+    (PERSONAL_ITEMS[id].path==="all" || PERSONAL_ITEMS[id].path===path)):[];
+  const focus=repeats.filter(id=>worn?.has(id));
+  const bankOnly=Boolean(partialStacks && repeats.length);
+  if((candidates.length || repeats.length) && (guaranteed || draw(100)<chance)){
+    // Full bags can still collect workshop copies. Keep a pending wearable guarantee for the next free slot.
+    let pool=[...candidates,...useful,...useful,...repeats];
+    if(bankOnly && (!guaranteed || draw(100)<chance))pool=focus.length?focus:repeats;
+    else if(guaranteed)pool=useful;
+    else if(focus.length && draw(100)<40)pool=focus;
     const id=pool[draw(pool.length)];
     const upgrade=useful.includes(id);
     return {id,misses:upgrade?0:Math.min(MAX_LOOT_MISSES,misses+Number(useful.length>0)),useful:upgrade};

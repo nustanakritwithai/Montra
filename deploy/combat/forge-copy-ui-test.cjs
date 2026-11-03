@@ -1,0 +1,41 @@
+const assert=require("node:assert/strict");
+const fs=require("node:fs"),vm=require("node:vm"),path=require("node:path");
+const source=fs.readFileSync(path.join(__dirname,"../../main.js"),"utf8");
+const render=source.slice(source.indexOf("  function renderForge("),source.indexOf("  function openBag()",source.indexOf("  function renderForge(")));
+const id="acc_ring_atk_1",piece={itemId:id,forge:{rank:9,misses:0}};
+const slots=[piece,{itemId:id},{itemId:id,socket:"card_possessed"},{itemId:"acc_ring_atk_2"}];
+const stock={[id]:2},meta={name:"แหวน",level:1,recipe:[{}],forge:{primary:"melee",pool:["melee"],enhanceMax:4}};
+const controls=new Map(),goals=[];
+function $(key){
+  if(!controls.has(key))controls.set(key,{value:"",replaceChildren(...options){this.options=options;this.value=options[0].value;}});
+  return controls.get(key);
+}
+const config={chances:Array(10),maxMisses:3,rerollCost:60,enhanceSteps:Array(10)};
+config.enhanceSteps[9]={copies:4,gold:120,chance:40,breakOnFailure:true};
+const ctx={$,room:{state:{forgeCatalog:JSON.stringify(config)}},bagMeta:()=>meta,economyReady:()=>true,
+  inventoryState:{forgeCopies:stock},currentBagSlots:()=>slots,inspectingGear:null,selectedBagSlot:0,currentEquippedWeaponSlot:()=>0,
+  gearStamp:()=>id,forgeLabel:()=>"",Option:class {constructor(text,value){Object.assign(this,{text,value});}},
+  bindItemHuntButton:(...args)=>goals.push(args),itemHuntCount:(_id,include)=>include?2+stock[id]:0,
+  personalItems:{},WEAPON_META:{},forgeNames:{melee:"โจมตี"},ownServerCharacter:()=>({alive:true,level:1}),
+  economyGold:1000,economyPending:false,itemUsePending:false};
+const draw=vm.runInNewContext(render+"\nrenderForge",ctx);
+draw(piece);
+assert.equal($("forgeEnhance").disabled,true);assert.match($("forgeEnhance").textContent,/40%/);
+assert.deepEqual($("forgeDonor").options.map(o=>o.value),["","1|"+id]); // Skip target, drilled and other model.
+assert.deepEqual(goals.at(-1).slice(1),[id,6,false,true]);
+stock[id]=3;$("forgeDonor").value="1|"+id;$("forgeDonor").onchange();
+assert.equal($("forgeEnhance").disabled,false);
+assert.match($("forgeSupply").textContent,/60%.*แตก/);
+piece.socket="card_possessed";draw(piece);
+assert.equal($("forgeEnhance").disabled,true);assert.match($("forgeSupply").textContent,/ถอดการ์ดก่อน/);
+piece.forge.rank=10;draw(piece);
+assert.equal($("forgeEnhance").disabled,true);assert.match($("forgeSupply").textContent,/\+10/);
+const submitSource=source.slice(source.indexOf("    function submitForge("),source.indexOf('    $("craftGlaive").onclick',source.indexOf("    function submitForge(")));
+let confirm=false,prompt="",sent=null;
+Object.assign(ctx,{economyRequestId:()=>"forge_ui_confirmation",renderBag(){},economySend:(_name,data)=>{sent=data;},
+  window:{confirm(message){prompt=message;return confirm;}}});
+const submit=vm.runInNewContext(submitSource+"\nsubmitForge",ctx);
+delete piece.socket;piece.forge.rank=9;stock[id]=4;draw(piece);
+submit("enhance");assert.equal(sent,null);assert.match(prompt,/40%/);assert.match(prompt,/แหวน \+9 จะแตก/);
+confirm=true;submit("enhance");assert.equal(sent.acceptBreak,true);assert.equal(sent.copies,4);
+console.log("PASS forge preview: exact-copy selection, hunt goal, shatter risk, card protection and +10 cap");

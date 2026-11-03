@@ -47,7 +47,7 @@ async function setTestGear(client,slot,position="chest",expected="arm_medium_che
   throw Error("equipment cooldown did not clear");
 }
 // Seed only the offline test character created by this file, in its disposable account database.
-function seedMaterials(prefix,name,pathId,inputs,level){
+function seedMaterials(prefix,name,pathId,inputs,level,copies={},rightRingRank){
   assert.match(prefix,/^[a-f0-9]{12}$/);
   const db=new DatabaseSync(path.join(folder,"economy.sqlite"));
   try{
@@ -61,6 +61,8 @@ function seedMaterials(prefix,name,pathId,inputs,level){
       const index=bag.slots.findIndex(s=>s?.itemId===itemId),free=index>=0?index:bag.slots.indexOf(null);
       assert(free>=0);bag.slots[free]={itemId,quantity:quantity+(bag.slots[free]?.quantity||0)};
     }
+    bag.forgeCopies={...bag.forgeCopies,...copies};
+    if(rightRingRank!==undefined)bag.equipmentForges.rightRing.rank=rightRingRank;
     saved.inventory=bag;saved.level=level;saved.experience=0;saved.mana=20;
     db.prepare("UPDATE accounts SET inventory=? WHERE id=?").run(JSON.stringify(bag),id);
     db.prepare("UPDATE characters SET snapshot=? WHERE id=?").run(JSON.stringify(saved),id);
@@ -70,7 +72,7 @@ function seedMaterials(prefix,name,pathId,inputs,level){
 function prepareCapstone(prefix,recipe){
   assert(recipe.some(r=>r.item==="mat_ingot_7"&&r.qty===1));
   const inputs=recipe.filter(r=>r.item!=="mat_ingot_7").map(r=>[r.item,r.qty]);
-  seedMaterials(prefix,"นักดาบฝึกหัด","phutthaisawan",[...inputs,["mat_raw_wood_7",2],["mat_raw_stone_7",2],["ref_flux_7",1],["mat_metal_1",1],["card_rift_warden",1],["use_mana_7",1]],100);
+  seedMaterials(prefix,"นักดาบฝึกหัด","phutthaisawan",[...inputs,["mat_raw_wood_7",2],["mat_raw_stone_7",2],["mat_metal_1",1],["card_rift_warden",1],["use_mana_7",1]],100,{wp_twins_10:1});
 }
 let active;
 try{
@@ -151,7 +153,7 @@ try{
   const potionSlot=craftBag.slots.findIndex(s=>s?.itemId==="use_mana_7");
   r.send("use_item",{slot:potionSlot});
   await until(()=>active.event("item_used",e=>e.itemId==="use_mana_7"&&e.restoredMana>0&&e.healed===0),"drink mana brew");
-  await delay(400);r.send("forge_weapon",{requestId:"capstone_forge_001",slot:at,stamp:crafted.forge.instanceId+"."+crafted.forge.revision,action:"enhance"});
+  await delay(400);r.send("forge_weapon",{requestId:"capstone_forge_001",slot:at,stamp:crafted.forge.instanceId+"."+crafted.forge.revision,action:"enhance",copies:1});
   await until(()=>active.event("forge_result",v=>v.forge?.rank===1),"upgrade capstone");
   await delay(400);r.send("card_socket",{requestId:"capstone_drill_001",target:at,gear:"wp_twins_10",expected:"sealed",action:"drill",card:null});
   await until(()=>active.event("card_socket_result",v=>v.action==="drill"),"drill capstone");
@@ -217,7 +219,7 @@ try{
   const ring="acc_ring_atk_1",ringDef=active.catalog[ring],prefix3=active.me().characterId;
   assert.equal(ringDef.copyLimit,2);
   await active.room.leave();active=null;await delay(400);
-  seedMaterials(prefix3,"ทวนฝึกหัด","sentinel",[...ringDef.recipe.map(r=>[r.item,r.qty*3]),["mat_metal_1",1],["card_possessed",1],["ref_flux_1",1]],1);
+  seedMaterials(prefix3,"ทวนฝึกหัด","sentinel",[...ringDef.recipe.map(r=>[r.item,r.qty*3]),["mat_metal_1",1],["card_possessed",1]],1);
   active=await join({characterSlot:3});
   let pairBag;
   for(let n=1;n<=2;n++){
@@ -227,13 +229,13 @@ try{
   const pair=pairBag.slots.filter(s=>s?.itemId===ring),stamps=pair.map(s=>s.forge.instanceId+"."+s.forge.revision);
   assert.notEqual(stamps[0],stamps[1]);
   active.room.send("craft_weapon",{recipeId:ring,requestId:"paired_ring_limit_03"});
-  await until(()=>active.event("economy_error",e=>e.reason==="accessory_limit"),"third ring rejected");
+  await until(()=>active.event("inventory_state",s=>s.forgeCopies?.[ring]===1),"third ring stored for enhancement");
   const firstSlot=pairBag.slots.indexOf(pair[0]);
   active.room.send("card_socket",{requestId:"paired_ring_drill_01",target:firstSlot,gear:ring,stamp:stamps[0],expected:"sealed",action:"drill",card:null});
   await until(()=>active.event("inventory_state",v=>v.slots[firstSlot]?.socket===null),"drill only the first ring");
   active.room.send("card_socket",{requestId:"paired_ring_insert_01",target:firstSlot,gear:ring,stamp:stamps[0],expected:"empty",action:"insert",card:"card_possessed"});
   await until(()=>active.event("inventory_state",v=>v.slots[firstSlot]?.socket==="card_possessed"),"install card in first ring");
-  active.room.send("forge_weapon",{requestId:"paired_ring_forge_01",slot:firstSlot,stamp:stamps[0],action:"enhance"});
+  active.room.send("forge_weapon",{requestId:"paired_ring_forge_01",slot:firstSlot,stamp:stamps[0],action:"enhance",copies:1});
   const forged=await until(()=>active.event("inventory_state",v=>v.slots[firstSlot]?.forge?.rank===1),"enhance only the first ring");
   stamps[0]=forged.slots[firstSlot].forge.instanceId+"."+forged.slots[firstSlot].forge.revision;
   await setTestGear(active,firstSlot,"leftRing",ring,stamps[0]);
@@ -246,5 +248,24 @@ try{
   assert.equal(active.bag.equipmentForges.leftRing.instanceId,pair[1].forge.instanceId);
   assert.equal(active.bag.equipmentForges.rightRing.rank,1);assert.equal(active.bag.equipmentForges.leftRing.rank,0);
   assert.equal(active.bag.equipmentSockets.rightRing,"card_possessed");assert.equal(active.bag.equipmentSockets.leftRing,undefined);
-  console.log("PERSONAL GEAR PASS: crafting, sockets, salvage, harvesting and two separately equipped rings after reconnect.");
+  await active.room.leave();active=null;await delay(400);
+  seedMaterials(prefix3,"ทวนฝึกหัด","sentinel",[],1,{[ring]:4},9);
+  active=await join({characterSlot:3});
+  const item=active.bag.equipmentForges.rightRing,stamp=item.instanceId+"."+item.revision;
+  const riskOrder={requestId:"paired_ring_risky_10",slot:"rightRing",stamp,action:"enhance",copies:4};
+  active.room.send("forge_weapon",riskOrder);
+  await until(()=>active.event("economy_error",e=>e.reason==="forge_risk_unconfirmed"),"risk confirmation required");
+  await delay(400);active.room.send("forge_weapon",{...riskOrder,acceptBreak:true});
+  await until(()=>active.event("economy_error",e=>e.reason==="forge_remove_card"),"card protected");
+  await delay(400);active.room.send("card_socket",{requestId:"paired_remove_card_10",target:"rightRing",gear:ring,stamp,action:"remove",expected:"card_possessed",card:null});
+  await until(()=>active.event("card_socket_result",e=>e.action==="remove"),"recover card before risky forge");
+  await delay(400);active.room.send("forge_weapon",{...riskOrder,acceptBreak:true});
+  const result=await until(()=>active.event("forge_result",e=>e.requestId===riskOrder.requestId),"resolve risky +10");
+  assert.equal(result.chance,40);assert.equal(result.broken,!result.success);
+  await active.room.leave();active=null;await delay(400);active=await join({characterSlot:3});
+  assert.equal(active.bag.forgeCopies?.[ring]??0,0);assert.equal(active.bag.equipmentForges.leftRing.rank,0);
+  assert.equal(active.bag.equipmentForges.rightRing?.rank,result.broken?undefined:10);
+  assert.equal(active.bag.equipment.rightRing,result.broken?undefined:ring);
+  assert(active.bag.slots.some(s=>s?.itemId==="card_possessed"));
+  console.log("PERSONAL GEAR PASS: copy crafting, risky +10, protected card and independent rings after reconnect.");
 }finally{if(active)await active.room.leave();}
