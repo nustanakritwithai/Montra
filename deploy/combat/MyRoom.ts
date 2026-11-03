@@ -56,7 +56,7 @@ import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_CORE, swordCoreProgress, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordCoreId, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { isMuayFoundation, MUAY_CORE, MUAY_CORE_LEVELS, MUAY_CORE_POINT_LEVELS, MUAY_CORE_MANA_PER_RANK, muayCorePoints, muayCoreManaCost, muayCoreProgress, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayCoreId, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
 import { WORKBENCH_GOLD, personalItem, wearsWraps, wearsTwinSwords, monsterCardDrop, bossTreasure } from "./PersonalItems.js";
-import { CATALOG_PAGES } from "./MonsterLoot.js";
+import { CATALOG_PAGES, practiceSite } from "./MonsterLoot.js";
 import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
 import {personalGearGuides} from "./GearGuides.js";
 import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js";
@@ -820,7 +820,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         for(const [member,link] of this.sentinelInterceptions)if(link.ownerId===id)this.sentinelInterceptions.delete(member);
       }
       this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
-      try{client.send("sentinel_book_changed",{action});}catch(error){console.warn("MONTRA sentinel book confirmation was not delivered",error);}
+      try{client.send("sentinel_book_changed",{action});if(action==="core_upgrade" || action==="core_reset")this.sendFieldPractice(client,player,action,input.skillId,SENTINEL_CORE);}catch(error){console.warn("MONTRA sentinel book confirmation was not delivered",error);}
     },error=>{console.error("MONTRA sentinel book save failed",error);this.reject(client,"sentinel_book_save_failed");})
       .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
     this.pendingItemUses.set(id,task);
@@ -889,12 +889,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     actor.mana-=cost;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
     this.startSkillAction(id,actor,"idle");
+    let shockTargets:string[]|undefined;
     if(skillId==="shock"){
       const candidates:Array<{target:Monster|Player;id:string}>=[...[this.state.monster,...this.state.monsters.values()].map(target=>({target,id:target.id})),...[...this.state.players.entries()].map(([id,target])=>({target,id}))];
       const targets=candidates
         .filter(entry=>entry.id && entry.id!==id && entry.target.alive && distance3d(actor,entry.target)<=p.shock.range && Math.abs(actor.y-entry.target.y)<=1.1 && this.sameCombatMap(id,entry.id) && !this.pendingItemUses.has(entry.id) && !this.pendingRewards.has(entry.id) && !this.pendingCharacterLeaves.has(entry.id) && this.bodyPathClear(actor.mapId,actor,entry.target))
         .sort((a,b)=>distance3d(actor,a.target)-distance3d(actor,b.target) || a.id.localeCompare(b.id));
-      for(const entry of targets.slice(0,5))if(this.sentinelInterrupt(id,entry.id,p.shock.monsterStunMs)==="applied")this.recordCombat(id,entry.id);
+      shockTargets=targets.slice(0,5).map(entry=>entry.id);
+      for(const target of shockTargets)if(this.sentinelInterrupt(id,target,p.shock.monsterStunMs)==="applied")this.recordCombat(id,target);
     } else if(skillId==="bulwark"){
       this.effects.grant(id,{id:"sentinel_core_bulwark",sourceId:id,group:"sentinel_self",bonuses:{def:p.bulwark.defense}},this.simulatedMs+p.bulwark.durationMs);
       this.applyStats(id,actor,this.statAllocations.get(id) ?? emptyAllocations());
@@ -919,7 +921,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     }
     this.sendSentinelBook(client);
-    this.broadcast("sentinel_core_used",{playerId:id,skillId,targetId,durationMs:skillId==="riposte"?p.riposte.durationMs:skillId==="protect"?p.protect.durationMs:0},{afterNextPatch:true});
+    this.broadcast("sentinel_core_used",{playerId:id,skillId,targetId,...(shockTargets?{targetIds:shockTargets}:{}),durationMs:skillId==="riposte"?p.riposte.durationMs:skillId==="protect"?p.protect.durationMs:0},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
@@ -1111,7 +1113,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       for(const [attackerId,victimId] of [...this.attackTargets])if(victimId===id){const attacker=this.state.players.get(attackerId);if(attacker)this.endAttack(attackerId,attacker);}
       if(this.state.monster.targetId===id)this.state.monster.targetId="";
       this.forest.clearTarget(id);this.bladeCloaks.set(id,this.simulatedMs+p.blade_vanish.durationMs);this.syncPlayerViews();
-      this.sendSwordNotice(client,"blade_cloak_changed",{active:true,durationMs:p.blade_vanish.durationMs});
+      this.sendSwordNotice(client,"blade_cloak_changed",{active:true,skillId,durationMs:p.blade_vanish.durationMs});
     }else if(skillId==="blade_fury"){
       this.startSkillAction(id,player,"idle");
       this.effects.grant(id,{id:"blade_core_fury",sourceId:id,group:"blade_attack",bonuses:{atk:p.blade_fury.bonus}},this.simulatedMs+p.blade_fury.durationMs);
@@ -1304,7 +1306,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
       }
       this.sendBladeBook(client);
-      try {client.send("blade_book_changed",{action});} catch(error) {console.warn("MONTRA blade book confirmation was not delivered",error);}
+      try {client.send("blade_book_changed",{action});if(action==="core_upgrade" || action==="core_reset")this.sendFieldPractice(client,player,action,input.skillId,BLADE_CORE);} catch(error) {console.warn("MONTRA blade book confirmation was not delivered",error);}
     },error=>{console.error("MONTRA blade book save failed",error);this.reject(client,"blade_book_save_failed");})
       .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
     this.pendingItemUses.set(id,task);
@@ -1430,7 +1432,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (this.state.summons.has(id) && !this.canPrepareSpirit(id,path,false)) this.despawnSummon(id,"loadout_changed");
       }
       this.sendOccultBook(client);
-      try {client.send("occult_book_changed",{action});} catch(error) {console.warn("MONTRA occult book confirmation was not delivered",error);}
+      try {client.send("occult_book_changed",{action});if(action==="core_upgrade" || action==="core_reset")this.sendFieldPractice(client,player,action,input.skillId,path==="seer"?SEER_CORE:MENDER_CORE);} catch(error) {console.warn("MONTRA occult book confirmation was not delivered",error);}
     },error=>{console.error("MONTRA occult book save failed",error);this.reject(client,"occult_book_save_failed");})
       .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
     this.pendingItemUses.set(id,task);
@@ -1877,7 +1879,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const task=characterStore.save({...snapshot,muayBook:next}).then(()=>{
       this.muayBooks.set(id,next);player.muayBookData=JSON.stringify(next);
       if(action==="school" || action==="reset") {this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");this.clearMuayCombo(id);this.sendSwordNotice(client,"muay_counter_cleared",{});}
-      try {client.send("muay_book_changed",{action});} catch(error) {console.warn("MONTRA Muay book confirmation was not delivered",error);}
+      try {client.send("muay_book_changed",{action});if(action==="core_upgrade" || action==="core_reset")this.sendFieldPractice(client,player,action,input.skillId,MUAY_CORE);} catch(error) {console.warn("MONTRA Muay book confirmation was not delivered",error);}
     },error=>{console.error("MONTRA Muay book save failed",error);this.reject(client,"muay_book_save_failed");}).finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
     this.pendingItemUses.set(id,task);
   }
@@ -2109,7 +2111,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if(result==="applied" && !monster)this.sentinelStuns.set(targetId,this.simulatedMs+Math.min(1000,hits*interval));
       }
     }
-    this.broadcast("muay_core_used",{playerId:id,skillId,durationMs:skillId==="chaiya"?progress.chaiya.durationMs:0},{afterNextPatch:true});
+    this.broadcast("muay_core_used",{playerId:id,skillId,...(skill.kind==="target"?{targetId}:{}),durationMs:skillId==="chaiya"?progress.chaiya.durationMs:0},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
@@ -2279,7 +2281,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.pendingWarps.add(id);
     const task=characterStore.save({...snapshot,swordTree:next}).then(()=>{
       this.swordTrees.set(id,next);player.swordTreeData=JSON.stringify(next);
-      try {client.send("sword_tree_changed",{action});}catch(error){console.warn("MONTRA sword confirmation was not delivered",error);}
+      try {client.send("sword_tree_changed",{action});this.sendFieldPractice(client,player,action,input.skillId,SWORD_CORE);}catch(error){console.warn("MONTRA sword confirmation was not delivered",error);}
     }).catch(error=>{console.error("MONTRA sword core save failed",error);this.reject(client,"sword_tree_save_failed");})
       .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
     this.pendingItemUses.set(id,task);
@@ -2610,6 +2612,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return choices.length?{points,choices}:undefined;
   }
 
+  private sendFieldPractice(client:Client,player:Player,action:unknown,skillId:unknown,core:Readonly<Record<string,{name:string}>>){
+    if(player.level<13 || player.level>25)return;
+    const training=this.coreTrainingAtLevel(client.sessionId,player.pathId,1,player.level);
+    if(action==="reset" || action==="core_reset"){client.send("field_practice",{reset:true,training});return;}
+    if((action==="upgrade" || action==="core_upgrade") && typeof skillId==="string" && Object.hasOwn(core,skillId))
+      client.send("field_practice",{skillId,name:core[skillId].name,training});
+  }
+
   private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal", bossLoot = false, monsterId=""): void {
     const player = this.state.players.get(id);
     const priorReward=this.pendingRewards.get(id);
@@ -2655,6 +2665,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           if(leveled && this.sentItemCatalog.has(id))recipient?.send("gear_guides",personalGearGuides(current.pathId,current.level));
           if (loot) recipient?.send("inventory_state",loot);
           recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,
+            ...(current.level>=13 && current.level<=25?{fieldPrey:practiceSite(monsterId)}:{}),
             ...(leveled?{training:this.coreTrainingAtLevel(id,current.pathId,snapshot.level,next.level)}:{}),
             ...(fieldDrop?.starterCopy?{starterCopy:fieldDrop.starterCopy}:{}),
             ...(fragment===SHRINE_SHARD ? {shrineShard:fragmentBag?"granted":"bag_full"} : {}),
@@ -3481,7 +3492,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!this.sentItemCatalog.has(id)){
         for(const items of CATALOG_PAGES)client.send("item_catalog_page",{items});
         const player=this.state.players.get(id);
-        if(player)client.send("gear_guides",personalGearGuides(player.pathId,player.level));
+        if(player){
+          const guide=personalGearGuides(player.pathId,player.level);
+          const training=player.level>=13 && player.level<=25?this.coreTrainingAtLevel(id,player.pathId,1,player.level):undefined;
+          client.send("gear_guides",guide && {...guide,training});
+        }
         this.sentItemCatalog.add(id);
       }
       if(characterStore.economyEnabled && !this.field && this.state.players.has(id))this.sendResourceMap(client,characterStore.economy.resourceMap(this.state.players.get(id)!.mapId));

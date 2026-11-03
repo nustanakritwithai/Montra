@@ -288,4 +288,19 @@ try{
   assert.equal(copies.length,1);assert.equal(copies[0].itemId,replacement);assert(copies[0].bound);
   assert.equal(copies[0].forge.rank,0);assert.equal(copies[0].forge.affix,null);assert.equal(active.bag.forgeCopies?.[replacement]??0,0);
   console.log("PERSONAL GEAR PASS: risky +10, protected card, independently worn rings and one bound spare after reconnect.");
+  await active.room.leave();active=null;await delay(400);
+  seedMaterials(prefix3,"ทวนฝึกหัด","sentinel",[],15);
+  active=await join({characterSlot:3});
+  const levelGuides=active.event("gear_guides");
+  assert.equal(levelGuides.journey.weapon,"wp_pike_2");
+  assert(levelGuides.journey.camp.mobs.includes(levelGuides.journey.camp.id));
+  assert(levelGuides.training?.choices.some(s=>s.name==="กระแทกหยุดทัพ"));
+  active.room.send("sentinel_book",{action:"core_upgrade",skillId:"shock"});
+  const practice=await until(()=>active.event("field_practice")??active.event("command_rejected"),"field practice after shrine save");
+  assert.equal(practice.skillId,"shock",JSON.stringify(practice));
+  assert.equal(practice.name,"กระแทกหยุดทัพ");
+  await active.room.leave();active=null;await delay(400);active=await join({characterSlot:3});
+  const again=active.event("gear_guides");
+  assert.equal(again.training.points,levelGuides.training.points-1);
+  console.log("PERSONAL GEAR PASS: level 15 class camp and shrine training survive reconnect.");
 }finally{if(active)await active.room.leave();}

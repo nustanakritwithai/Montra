@@ -67,3 +67,42 @@ context.room.sessionId="hunter";context.fieldTrainingTip={session:"hunter",path:
 bag.slots=[];g=field.goal();assert(g.trainingOnly);field.draw(g);assert.match(get("fieldTrainingNames").textContent,/ศาลหมู่บ้าน.*หมัด ขั้น 1/);
 assert.equal(get("fieldTrainingBook").hidden,false);context.room.sessionId="other";assert.equal(field.goal(),null);
 console.log("PASS starter camp HUD, recipe links, first forge, boss supplies and character-scoped training");
+
+const journeyWorld={id:"belfry2",mobs:["belfry1","belfry2"],mapId:camp.mapId,map:"วัดร้าง",camp:"หอระฆัง",monster:"เงา",level:15,x:12,z:8,open:true};
+const bossSite={...journeyWorld,id:"bell",mobs:["bell"],monster:"ระฆังผนึก",level:20};
+const journey={weapon:"newWrap",camp:journeyWorld,practice:journeyWorld};
+Object.assign(docs,{newWrap:{...gear,level:10,name:"หมัดเหล็ก",stats:{atk:6}},plate:{...gear,kind:"chest",level:20,stats:{def:7}},guard:{...gear,kind:"offHand",level:20,stats:{def:7}},socket:{stats:{atk:4}}});
+Object.assign(docs.wrap,{stats:{atk:3},forge:{primary:"melee",enhanceRatings:[0,1,2,3]}});
+Object.assign(me,{mapId:camp.mapId,characterId:"journeyA",x:11,z:8,level:10});Object.assign(bag,{slots:[{itemId:"wrap",quantity:1,forge:{rank:3},socket:"socket"}],equippedWeaponSlot:0,equipment:{}});
+Object.assign(context,{drawerActive:null,localId:"hunter",localStorage:ui.localStorage,MONSTER_ID:"possessed-1",toast:s=>notices.push(s),WEAPON_META:{},
+  statNames:{atk:"โจมตี",def:"ป้องกัน"},forgeNames:{melee:"ประชิด"},statLine:diff=>Object.entries(diff).filter(([,n])=>n).map(([k,n])=>k+" "+n).join(" · "),
+  currentEquippedWeaponSlot:()=>bag.equippedWeaponSlot,bagMeta:id=>docs[id],fieldTrainingTip:null});
+context.room.sessionId="hunter";context.room.state.monsters=new Map([["belfry2",{alive:true,x:12,z:8}],["wrong",{alive:true,x:11,z:7}],["bell",{alive:false,x:5,z:5}]]);
+context.gearGuides={path:me.pathId,level:10,starterHunt:camp,journey,builds:[{style:"pressure",slots:[{id:"plate",position:"chest"},{id:"guard",position:"offHand"}]}]};
+const comparisons=source.slice(source.indexOf("  function wornGearAt("),source.indexOf("  let demoWeaponSlot"));
+const journeyApi=vm.runInNewContext("let journeyOwner='',journeyNotes={};\n"+fieldSource+drawerSource+comparisons+
+  "\n({goal:fieldGearGoal,draw:renderFieldGoalDrawer,start:startJourneyPractice,cast:recordPracticeCast,kill:recordPracticePrey,notes:journeyNotesForPlayer,save:saveJourney})",context);
+let step=journeyApi.goal();assert.equal(step.recipe,"newWrap");assert.equal(step.to,context.room.state.monsters.get("belfry2"));
+journeyApi.draw(step);assert.match(get("fieldGearCompare").textContent,/เก็บ ผ้าพันหมัด \+3 ไว้ได้/);
+get("fieldGearSkip").onclick();assert.equal(journeyApi.goal(),null);me.characterId="journeyB";assert.equal(journeyApi.goal().recipe,"newWrap");me.characterId="journeyA";assert.equal(journeyApi.goal(),null);
+journeyApi.save({skipped:[]});bag.slots.push({itemId:"newWrap",quantity:1});step=journeyApi.goal();assert.equal(step.itemSlot,1);
+journeyApi.draw(step);assert.equal(get("fieldGearView").hidden,false);
+me.level=context.gearGuides.level=15;journeyApi.kill(journeyWorld);journeyApi.start({skillId:"punch",name:"หมัด"});
+assert(journeyApi.goal().practiceOnly);journeyApi.cast({skillId:"punch",playerId:"other",targetId:"belfry2"});
+journeyApi.cast({skillId:"wrongSkill",playerId:"hunter",targetId:"belfry2"});journeyApi.cast({skillId:"punch",playerId:"hunter",targetId:"wrong"});
+assert.equal(journeyApi.notes().trial.used,false);journeyApi.cast({skillId:"punch",playerId:"hunter",targetId:"belfry2"});
+assert(journeyApi.notes().trial.used);journeyApi.kill({...journeyWorld,id:"wrong"});assert(journeyApi.notes().trial);
+journeyApi.kill(journeyWorld);assert.equal(journeyApi.notes().trial,null);
+me.pathId="mender";journeyApi.start({skillId:"heal",name:"รักษา"});journeyApi.kill(journeyWorld);
+journeyApi.cast({skillId:"heal",playerId:"hunter",targetId:"hunter"});assert.equal(journeyApi.notes().trial,null);
+me.pathId="sentinel";journeyApi.start({skillId:"shock",name:"กระแทก"});
+journeyApi.cast({skillId:"shock",playerId:"hunter",targetIds:["wrong"]});assert.equal(journeyApi.notes().trial.used,false);
+journeyApi.cast({skillId:"shock",playerId:"hunter",targetIds:["belfry2"]});assert(journeyApi.notes().trial.used);
+journeyApi.kill(journeyWorld);me.pathId=context.gearGuides.path;
+me.level=context.gearGuides.level=20;journey.boss={camp:bossSite,gear:"amulet",fragment:"fragment",level:20};
+bag.slots=[bag.slots[0],{itemId:"fragment",quantity:1}];journeyApi.draw(journeyApi.goal());get("fieldBossChoice").onclick();
+step=journeyApi.goal();assert(step.bossChoice);assert.match(step.step,/ยังไม่เกิด/);assert.match(step.progress,/1\/3/);
+journeyApi.draw(step);get("fieldGoalRecipe").onclick();assert.deepEqual(context.opened,["boss","12","amulet"]);get("fieldBossChoice").onclick();assert.equal(journeyApi.goal().recipe,"newWrap");
+me.level=context.gearGuides.level=25;delete journey.boss;step=journeyApi.goal();assert.equal(step.recipe,"plate");
+context.fieldTrainingTip={session:"hunter",path:me.pathId,points:1,choices:[{name:"หมัด",rank:2}]};assert(journeyApi.goal().trainingOnly);
+console.log("PASS Lv10–25 equipment comparison and skip, actual skill and prey, optional boss and level 25 priority");

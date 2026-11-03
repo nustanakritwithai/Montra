@@ -1,5 +1,6 @@
-import {PERSONAL_ITEMS,gearSchools,guideFamily,startingWeapon,type CardId,type PersonalId,type BodySlot,type ForgeRating,type ItemStats} from "./PersonalItems.js";
-import {STARTER_HUNT,cardHunt,cardHunts,findItemHunt} from "./MonsterLoot.js";
+import {PERSONAL_ITEMS,bossTreasure,gearSchools,guideFamily,startingWeapon,type CardId,type PersonalId,type BodySlot,type ForgeRating,type ItemStats} from "./PersonalItems.js";
+import {STARTER_HUNT,cardHunt,cardHunts,findItemHunt,itemCamp,journeyWeapon,practiceSite} from "./MonsterLoot.js";
+import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {PROGRESSION,baseManaAtLevel} from "./Progression.js";
 export {cardHunt} from "./MonsterLoot.js";
 
@@ -69,5 +70,9 @@ export function personalGearGuides(path:string,level:number){
     return {style,name:gearSchools[school][style==="pressure"?2:3],focus:playNotes[school][style==="pressure"?0:1],totals,maxMana,slots};
   });
   const starterHunt=level<=STARTER_HUNT.maxLevel?{...STARTER_HUNT,weapon:startingWeapon(school)}:undefined;
-  return {path,level,baseMana:baseManaAtLevel(level),manaCap:PROGRESSION.maxMana,builds,starterHunt};
+  const weapon=journeyWeapon(school,Math.max(10,level)),boss=bossTreasure("boss_bound_temple")!;
+  const journey=weapon?{weapon,camp:itemCamp(weapon,PERSONAL_ITEMS[weapon].level!),
+    practice:practiceSite(TEMPLE_SPAWNS.find(m=>m.level===15)!.id),
+    boss:level>=18 && level<=22?{fragment:boss.fragment,gear:boss.gear,level:boss.level,camp:itemCamp(boss.fragment,boss.level)}:undefined}:undefined;
+  return {path,level,baseMana:baseManaAtLevel(level),manaCap:PROGRESSION.maxMana,builds,starterHunt,journey};
 }
