@@ -4,7 +4,7 @@ import {baseManaAtLevel,PROGRESSION,type CombatStats} from "./Progression.js";
 
 export type ItemStats = Partial<Record<"hp" | "stamina" | "mana" | "atk" | "def" | "magicAtk" | "magicDef",number>>;
 export type ForgeRating="melee"|"ranged"|"guard"|"healing";
-export type ForgeProfile={primary:ForgeRating; pool:readonly ForgeRating[]; enhanceMax:number; affixMax:number; affixTierCap:number; materialTier:number};
+export type ForgeProfile={primary:ForgeRating; pool:readonly ForgeRating[]; enhanceMax:number; enhanceRatings?:readonly number[]; affixMax:number; affixTierCap:number; materialTier:number};
 export const WEAPON_LEVELS=[1,10,20,30,40,50,60,70,85,100] as const;
 export const OUTFIT_LEVELS=[1,10,25,45,65,85,95,100] as const;
 // End equipment can be made from materials found before the last boss.
@@ -28,6 +28,7 @@ export type PersonalDefinition = {
   monster?:string;
   chancePct?:number;
   sourceBoss?:string;
+  bossGear?:BodyItemId;
   level?:number; rarity?:string; family?:string; recommended?:readonly string[]; dropMax?:number;
   forge?:ForgeProfile; craftGold?:number; sellGold?:number; healHp?:number; sourceCamp?:string;
   refinesTo?:MaterialId;
@@ -220,7 +221,12 @@ function forgeProfile(item:PersonalDefinition):ForgeProfile {
   const spent=Object.entries(item.stats).reduce((sum,[key,value])=>sum+value*weights[key as keyof ItemStats],0);
   const budget=spent/.78;
   const level=item.level??1;
-  return {primary,pool:[primary,other],enhanceMax:Math.max(1,Math.round(budget*.10)),affixMax:Math.max(1,Math.round(budget*.08)),
+  const weapon=item.kind==="mainHand",guard=primary==="guard";
+  const enhanceMax=Math.max(weapon?(guard?15:6):1,Math.round(budget*.10));
+  // Defense is applied before damage rounding: +12 guard at +3 reduces an early normal monster hit.
+  const atThree=Math.max(guard?12:3,enhanceMax*.3);
+  const enhanceRatings=weapon?Array.from({length:11},(_,r)=>Number((r<=3?r*atThree/3:atThree+(enhanceMax-atThree)*(r-3)/7).toFixed(2))):undefined;
+  return {primary,pool:[primary,other],enhanceMax,...(enhanceRatings?{enhanceRatings}:{}),affixMax:Math.max(1,Math.round(budget*.08)),
     affixTierCap:level<25?1:level<65?2:3,materialTier:materialTier(level)};
 }
 function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> {
@@ -353,7 +359,7 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
     const style=region && regionalAccessory[region.theme];
     const model=style && result[(style.family+"_"+OUTFIT_LEVELS.filter(l=>l<=level).length) as PersonalId];
     const ingredient=style?style.material+"_"+materialTier(level):shrine?"mat_fiber_2":"mat_ingot_7";
-    put(fragment,{name:region?.fragmentName??(shrine?"เศษตราผู้พิทักษ์":"เศษดาวราชัน"),kind:"material",path:"all",level,stats:{},sourceBoss});
+    put(fragment,{name:region?.fragmentName??(shrine?"เศษตราผู้พิทักษ์":"เศษดาวราชัน"),kind:"material",path:"all",level,stats:{},sourceBoss,bossGear:gear});
     const item:PersonalDefinition={
       name:region?.gearName??(shrine?"สร้อยตราศาลร้าง":"แหวนดาวราชัน"),kind:model?.kind??(shrine?"neck":"ring"),family:gear,path:"all",level,dropMax:level,sourceBoss,
       stats:model?{...model.stats}:shrine?{hp:12,def:2,magicDef:1}:{atk:6,magicAtk:6,mana:8},rarity:region?"epic":shrine?"rare":"legendary",

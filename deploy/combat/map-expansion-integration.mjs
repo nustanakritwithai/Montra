@@ -42,7 +42,7 @@ try{
    const target=c.state.monsters.get('forest_west_1'),startingHp=target.hp;
    c.send('attack',{targetId:target.id});
    await until(()=>target.hp<startingHp,'first forest hit');
-   await until(()=>hits.length===1,'forest kill awards EXP',35000);assert.equal(hits[0].amount,100);
+   await until(()=>hits.length===1,'forest kill awards EXP',35000);assert.equal(hits[0].amount,125);
    await until(()=>c.state.monsters.get('forest_west_1').alive===false,'dead enemy state patch');assert.equal(c.state.monsters.get('forest_west_2').alive,true);
    const cHp=own(c).hp;c.send('move',{x:-40,z:-30});await sleep(500);assert.ok(cHp>0);
    const bad=[];a.onMessage('command_rejected',e=>bad.push(e.reason));a.send('move',{x:999,z:-40});await until(()=>bad.includes('invalid_move'),'bounds forgery rejected');

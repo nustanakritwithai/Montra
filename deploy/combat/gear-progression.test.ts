@@ -1,19 +1,20 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {BODY_SLOTS, personalItem, PERSONAL_ITEMS, WEAPON_LEVELS, OUTFIT_LEVELS, MATERIAL_LEVELS, equipPositions, monsterCardDrop, wearsTwinSwords, wearsWraps, usesStaff, type BodyItemId, type PersonalId} from "./PersonalItems.js";
-import {CATALOG_PAGES,hunts,findItemHunt,rollMonsterLoot} from "./MonsterLoot.js";
+import {BODY_SLOTS, personalItem, PERSONAL_ITEMS, WEAPON_LEVELS, OUTFIT_LEVELS, MATERIAL_LEVELS, equipPositions, monsterCardDrop, startingWeapon, wearsTwinSwords, wearsWraps, usesStaff, type BodyItemId, type PersonalId} from "./PersonalItems.js";
+import {CATALOG_PAGES,STARTER_HUNT,hunts,itemCamp,journeyWeapon,findItemHunt,rollMonsterLoot} from "./MonsterLoot.js";
 import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses,practiceLoot,validateInventory} from "./ItemRules.js";
 import {EconomyStore} from "./EconomyStore.js";
 import {parseSalvage,type SalvageOrder} from "./EconomyRules.js";
-import {birthForge,rollForge,forgeStamp,rerollIngredient} from "./ForgeRules.js";
+import {plainForge,birthForge,rollForge,forgeStamp,rerollIngredient} from "./ForgeRules.js";
 import {changeCardSocket} from "./CardSockets.js";
 import {ATLAS_SPAWNS} from "./WorldAtlas.js";
 import {FOREST_CAMPS} from "./WorldMaps.js";
 import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {personalGearGuides,cardHunt} from "./GearGuides.js";
 import {gearMana} from "./ItemRules.js";
-import {calculateDamage,calculateStats,emptyAllocations,PROGRESSION} from "./Progression.js";
+import {monsterExperience,addExperience,calculateDamage,calculateStats,emptyAllocations,PROGRESSION} from "./Progression.js";
 import {monsterProfile} from "./MonsterProfiles.js";
+import {DUAL_SWORD} from "./CharacterBuilds.js";
 import {bossAccessoryReward,grantStackReward} from "./ItemRules.js";
 import {BOSS_TREASURES,type CardId,type MaterialId} from "./PersonalItems.js";
 import {MyRoom} from "./MyRoom.js";
@@ -22,6 +23,125 @@ import {Player} from "./schema/MyRoomState.js";
 const paths=["muay_boran","phutthaisawan","blade","sentinel","seer","mender"];
 const entries=Object.entries(PERSONAL_ITEMS);
 const base={maxHp:1000,atk:100,def:110,magicAtk:90,magicDef:65,maxStamina:298};
+
+test("all four camp spawns carry every starter; ten qualifying kills guarantee only the missing first copy",()=>{
+  const miss=(n:number)=>n-1;
+  for(const path of paths){
+    const id=startingWeapon(path),owned=new Set(entries.map(([key])=>key));owned.delete(id);
+    for(const mob of STARTER_HUNT.mobs)assert.equal(rollMonsterLoot(mob,path,owned,1,0,"normal",()=>0)?.id,id);
+    let bag=makeClassInventory(path);
+    bag.slots=bag.slots.map(s=>s??{itemId:"health_potion",quantity:99});
+    assert.equal(practiceLoot(bag,path,1,"normal",1,"forest_east_1",miss).bag.starterHuntKills,undefined);
+    assert.equal(practiceLoot(bag,path,1,"normal",11,STARTER_HUNT.mobs[0],miss).bag.starterHuntKills,undefined);
+    for(let kill=1;kill<=STARTER_HUNT.goal+2;kill++){
+      const result=practiceLoot(bag,path,1,"normal",10,STARTER_HUNT.mobs[(kill-1)%4],miss);
+      assert.equal(result.starterCopy,kill===STARTER_HUNT.goal?id:undefined);
+      bag=validateInventory(JSON.parse(JSON.stringify(result.bag)));
+      assert.equal(bag.starterHuntKills,Math.min(kill,STARTER_HUNT.goal));
+      assert.equal(bag.forgeCopies?.[id]??0,Number(kill>=STARTER_HUNT.goal));
+    }
+    assert.throws(()=>validateInventory({...bag,starterHuntKills:11}),/inventory_record_invalid/);
+    const early=makeClassInventory(path);early.forgeCopies={[id]:1};
+    const result=practiceLoot(early,path,1,"normal",1,STARTER_HUNT.mobs[0],miss);
+    assert.equal(result.bag.starterHuntKills,STARTER_HUNT.goal);assert.equal(result.starterCopy,undefined);
+    assert.equal(result.bag.forgeCopies?.[id],1);
+  }
+});
+
+test("class camps unlock the correct weapon, and at least 80% of hunters find it or its ingredients in twenty kills",()=>{
+  for(const level of [10,20])for(const [job,path] of paths.entries()){
+    const weapon=journeyWeapon(path,level)!;
+    const guide=personalGearGuides(path,level)!.journey!;
+    assert.equal(guide.weapon,weapon);assert.equal(PERSONAL_ITEMS[weapon].level,level);
+    assert.equal(guide.practice?.level,15);
+    const camp=itemCamp(weapon,level)!;
+    assert(camp.mobs.includes(camp.id));
+    for(const id of camp.mobs){
+      const owned=new Set(entries.map(([key])=>key));owned.delete(weapon);
+      assert.equal(rollMonsterLoot(id,path,owned,level,3,"normal",()=>0)?.id,weapon,id);
+    }
+    const monster=hunts.find(m=>m.id===camp.id)!;
+    const tier=(monster.tier??"normal") as Parameters<typeof monsterExperience>[2];
+    const recipe=PERSONAL_ITEMS[weapon].recipe!;
+    let successes=0;
+    for(let attempt=0;attempt<200;attempt++){
+      let seed=91000+1000*job+attempt;
+      const roll=(max:number)=>{
+        seed=(seed+0x6D2B79F5)>>>0;
+        let v=Math.imul(seed^(seed>>>15),1|seed);
+        v^=v+Math.imul(v^(v>>>7),61|v);
+        return Math.floor(((v^(v>>>14))>>>0)/4294967296*max);
+      };
+      let bag=makeClassInventory(path),xp={level,experience:0};
+      const oldWeapon=bag.slots[1]!;
+      oldWeapon.itemId=level===10?startingWeapon(path):journeyWeapon(path,10)!;
+      oldWeapon.forge={...plainForge(),rank:3};bag.firstChestClaimed=true;
+      for(let kill=1;kill<=20;kill++){
+        const card=monsterCardDrop(monster.id,monster.level,()=>roll(100));
+        if(card)bag=grantStackReward(bag,card)??bag;
+        bag=practiceLoot(bag,path,monster.level,tier,xp.level,monster.id,roll).bag;
+        xp=addExperience(xp.level,xp.experience,monsterExperience(xp.level,monster.level,tier));
+        for(const [slot,piece] of bag.slots.entries()){
+          if(!piece)continue;
+          const item=personalItem(piece.itemId);
+          const position=item && equipPositions(item.kind).find(pos=>!bag.equipment?.[pos]);
+          if(position){
+            const change=equipBody(bag,position,slot,piece.itemId as BodyItemId,path,xp.level,forgeStamp(piece));
+            if(change.ok)bag=change.inventory;
+          }
+        }
+        const enough=recipe.every(input=>bag.slots.reduce((n,s)=>n+(s?.itemId===input.item?s.quantity:0),0)>=input.qty);
+        if(bag.slots.some(s=>s?.itemId===weapon) || enough){successes++;break;}
+      }
+    }
+    assert(successes>=160,path+" Lv."+level+" reached the target in "+successes+"/200 hunts");
+  }
+});
+
+test("training a worn +1 or +2 weapon prioritizes its next spare without consuming the useful gear guarantee",()=>{
+  const path="muay_boran",id=startingWeapon(path),miss=(max:number)=>max-1;
+  const regularGearRoll=()=>{let first=true;return (max:number)=>{if(max!==100)return 0;if(first){first=false;return 0;}return 99;};};
+  const bag=makeClassInventory(path);bag.firstChestClaimed=true;bag.starterHuntKills=10;
+  const piece=bag.slots[1]!;
+  for(let rank=1;rank<=2;rank++){
+    piece.forge=rollForge(piece.forge,"enhance",()=>0,personalItem(id)).forge;
+    const drop=practiceLoot(bag,path,1,"normal",rank,"forest_west_3",regularGearRoll());
+    assert.equal(drop.banked,true);assert.equal(drop.id,id);assert.equal(drop.bag.forgeCopies?.[id],1);
+    assert.notEqual(practiceLoot({...bag,lootMisses:3},path,1,"normal",rank,"forest_west_3",regularGearRoll()).id,id);
+    assert.notEqual(practiceLoot(drop.bag,path,1,"normal",rank,"forest_west_3",regularGearRoll()).id,id);
+    assert.equal(personalItem(practiceLoot(bag,path,1,"normal",rank,"forest_west_3",miss).id)?.kind,"material");
+  }
+  piece.forge=rollForge(piece.forge,"enhance",()=>0,personalItem(id)).forge;
+  assert.notEqual(practiceLoot(bag,path,1,"normal",3,"forest_west_3",regularGearRoll()).id,id);
+});
+
+test("+3 practice weapons change a real PvE combat result for all six roles",()=>{
+  const monster=monsterProfile(1);
+  for(const path of paths){
+    const bag=makeClassInventory(path),gear=bag.slots[1]!,stats=equippedStats(calculateStats(1,emptyAllocations()),bag);
+    const result=()=>{
+      const bonuses=weaponBonuses(bag);
+      if(path==="mender")return gearHealing(bag,60);
+      if(path==="sentinel")return -calculateDamage(monster.attack,stats.def+equipmentRatings(bag).guard,1);
+      if(path==="seer")return calculateDamage(stats.magicAtk+bonuses.ranged,monster.defense,1);
+      return calculateDamage((stats.atk+bonuses.melee)*(path==="phutthaisawan"?DUAL_SWORD.damageMultiplier:1),monster.defense,1);
+    };
+    const before=result(),pvp=weaponBonuses(bag,"pvp"),def=personalItem(gear.itemId)!;
+    for(let i=1;i<=3;i++)gear.forge=rollForge(gear.forge,"enhance",()=>0,def).forge;
+    assert(result()>before,path);assert.deepEqual(weaponBonuses(bag,"pvp"),pvp);
+    assert.equal(equipmentRatings(bag)[def.forge!.primary],def.forge!.enhanceRatings![3]);
+  }
+});
+
+test("level five offers a named core skill and available points for every class",()=>{
+  const room=new MyRoom() as unknown as {coreTrainingAtLevel(id:string,path:string,oldLevel:number,level:number):
+    {points:number;choices:{name:string;rank:number}[]}|undefined};
+  for(const path of paths){
+    assert.equal(room.coreTrainingAtLevel("hunter",path,3,4),undefined);
+    const offer=room.coreTrainingAtLevel("hunter",path,4,5);
+    assert.equal(offer?.points,1);assert(offer?.choices.length && offer.choices.every(s=>s.name && s.rank===1));
+  }
+});
 
 test("a listed monster really drops the item, and crafted and harvested products stay off its table",()=>{
   const allOwned=new Set(entries.map(([id])=>id));
