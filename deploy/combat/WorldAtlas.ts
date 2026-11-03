@@ -183,4 +183,24 @@ export const ATLAS_SPAWNS:readonly AtlasSpawn[]=[
       x:x+[-4,4,0][i],z:z+[-3,3,5][i],tier:tier??"normal"})))),
   {...RIFT_WARDEN,mapId:"spirit_rift",tier:"boss"},
 ];
-export const ATLAS_TARGETS:ReadonlySet<string>=new Set(ATLAS_SPAWNS.map(s=>s.id));
+// Separate from the hunting courts: these homes sit on the flanks of existing strategic maps.
+function frontierGroup(mapId:string,group:number,name:string,homes:readonly (readonly [x:number,z:number,level:number])[]):AtlasSpawn[] {
+  return homes.map(([x,z,level],i)=>({id:`frontier_${mapId}_${group}_${i+1}`,name,mapId,x,z,level,tier:"normal"}));
+}
+export const FRONTIER_SPAWNS:readonly AtlasSpawn[]=[
+  ...frontierGroup("moon_pass",1,"พรายกองแร่",[[31,38,28],[65,35,30],[54,-25,32]]),
+  ...frontierGroup("moon_pass",2,"เงาคนร่อนเงิน",[[87,-28,33],[53,-82,35]]),
+  ...frontierGroup("river_watch",1,"พรายโกดังข้าว",[[52,21,46],[58,-9,48]]),
+  ...frontierGroup("river_watch",2,"ผีเรือชายเลน",[[-64,29,49],[-87,-9,51],[-62,-99,54]]),
+  ...(RIDGE_ENABLED ? [
+    ...frontierGroup(RIDGE_PASS,1,"ผีพรานเชิงเขา",[[-33,78,29],[-93,84,32],[-54,32,36]]),
+    ...frontierGroup(RIDGE_PASS,2,"พรายสันผา",[[41,-1,41],[105,-45,48],[47,-55,53]]),
+  ] : []),
+  ...frontierGroup(RIVER_CITY,1,"ผีลากเรือฝั่งคลัง",[[-38,180,49],[-198,116,52],[-201,22,55]]),
+  ...frontierGroup(RIVER_CITY,2,"พรายท่าน้ำตะวันออก",[[47,180,50],[199,110,53],[201,23,56]]),
+  ...(CASTLE_ENABLED ? [
+    ...frontierGroup(CASTLE_ID,1,"เงาพลเสบียง",[[-29,295,59],[31,292,60],[-122,254,63],[123,253,64]]),
+    ...frontierGroup(CASTLE_ID,2,"วิญญาณไพร่แนวล้อม",[[-235,151,67],[252,150,68],[-22,-271,72],[23,-269,73]]),
+  ] : []),
+];
+export const ATLAS_TARGETS:ReadonlySet<string>=new Set([...ATLAS_SPAWNS,...FRONTIER_SPAWNS].map(s=>s.id));
