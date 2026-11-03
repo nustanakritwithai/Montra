@@ -54,7 +54,7 @@
   };
   let toastTimer;
   function positionSwordToast() {
-    const response=$("grappleResponse"), status=$("swordStatus"), hotbar=$("swordHotbar"), muayStatus=$("muayStatus"), muay=$("muayHotbar"), bladeStatus=$("bladeStatus"),blade=$("bladeHotbar"),sentinelStatus=$("sentinelStatus"),sentinel=$("sentinelHotbar"),anchor=response && !response.hidden ? response : status && !status.hidden ? status : hotbar && !hotbar.hidden ? hotbar : muayStatus && !muayStatus.hidden ? muayStatus : muay && !muay.hidden ? muay : bladeStatus && !bladeStatus.hidden ? bladeStatus : blade && !blade.hidden ? blade : sentinelStatus && !sentinelStatus.hidden ? sentinelStatus : sentinel && !sentinel.hidden ? sentinel : null;
+    const anchor=document.querySelector(".field-prompts .warp-button:not([hidden]), .controls .sword-status:not([hidden]), .controls .sword-hotbar:not([hidden])");
     if (!anchor) { ui.toast.style.removeProperty("bottom"); return; }
     const game=$("game").getBoundingClientRect(), area=anchor.getBoundingClientRect();
     ui.toast.style.bottom=Math.max(0,game.bottom-area.top+8)+"px";
@@ -7565,7 +7565,7 @@
       return;
     }
 
-    ui.pkPanel.hidden = false;
+    ui.pkPanel.hidden = !selectedPkTargetId;
     if (!Number.isFinite(me.pkKills)) {
       ui.pkTitle.textContent = "⚔ FREE PK";
       ui.pkText.textContent = "รอ Server";
@@ -7578,6 +7578,7 @@
       ? players.get(selectedPkTargetId) : null;
     if (!opponent) {
       selectedPkTargetId = null;
+      ui.pkPanel.hidden = true;
       ui.pkTitle.textContent = "⚔ FREE PK";
       ui.pkText.textContent = "K " + me.pkKills + " · D " + me.pkDeaths;
       ui.pkHpTrack.hidden = true;
@@ -8920,17 +8921,48 @@
   }
 
   let drawerActive = null;
+  let drawerOpener = null;
+  function gateFieldInput(open) {
+    for (const child of $("game").children) {
+      if (child !== ui.drawer && child !== ui.shade) child.inert=open;
+    }
+  }
   function closeDrawer() {
-    if(!ui.drawer.hidden)SFX("close");
+    if(ui.drawer.hidden)return;
+    SFX("close");
     ui.drawer.hidden=true; ui.shade.hidden=true; drawerActive=null;
+    gateFieldInput(false);
+    const target=drawerOpener?.isConnected && drawerOpener.getClientRects().length ? drawerOpener : $("fieldMenuButton");
+    target.focus({preventScroll:true});
+    drawerOpener=null;
   }
   function openDrawer(name,title,html) {
-    if(ui.drawer.hidden)SFX("open");
+    if(ui.drawer.hidden) {
+      SFX("open");
+      drawerOpener=document.activeElement;
+      gateFieldInput(true);
+    }
+    const menu=name==="fieldMenu";
+    $("fieldMenu").hidden=!menu;
+    $("drawerMenuBack").hidden=menu;
+    ui.drawerBody.hidden=menu;
     ui.drawerTitle.textContent=title;
     ui.drawerBody.innerHTML=html;
     ui.drawer.hidden=false; ui.shade.hidden=false;
     drawerActive=name;
+    ui.drawer.scrollTop=0;
+    (menu ? $("menuCharacter") : $("drawerMenuBack")).focus({preventScroll:true});
   }
+  function openFieldMenu() { openDrawer("fieldMenu","เมนูผจญภัย",""); }
+  document.addEventListener("keydown",event=>{
+    if (ui.drawer.hidden || !$("accountEntry").hidden) return;
+    if (event.key==="Escape") { event.preventDefault();closeDrawer(); }
+    if (event.key!=="Tab") return;
+    const available=[...ui.drawer.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],summary,[tabindex="0"]')].filter(el=>el.getClientRects().length);
+    const first=available[0],last=available.at(-1);
+    if (event.shiftKey && document.activeElement===first) {event.preventDefault();last?.focus();}
+    if (!event.shiftKey && document.activeElement===last) {event.preventDefault();first?.focus();}
+  });
   const chatTabs={map:"แผนที่",world:"รวมในห้อง",party:"ปาร์ตี้",private:"ส่วนตัว",bug:"รายงานบัค"};
   function updateChatBadge() {
     const total=Math.min(99,Object.values(chatUnread).reduce((sum,n)=>sum+n,0)),badge=$("chatUnread");
@@ -9631,7 +9663,7 @@
     drawMap($("bigMap").getContext("2d"),420,320,true);
   }
 
-  function openOnline() { window.MontraEntry?.open(); }
+  function openOnline() { closeDrawer(); window.MontraEntry?.open(); }
   const progressionStats = [
     ["hp","HP สูงสุด","maxHp"],["atk","โจมตีกายภาพ","atk"],["def","ป้องกันกายภาพ","def"],
     ["magicAtk","โจมตีเวท","magicAtk"],["magicDef","ป้องกันเวท","magicDef"],["stamina","กำลังสูงสุด","maxStamina"]
@@ -10894,7 +10926,8 @@
     }
     renderBag();
   }
-  function updateTradeBadge() { const badge=$("tradeUnread"); if (badge) badge.hidden=!tradeUnread; }
+  function updateFieldAlerts() { $("fieldAlerts").hidden=!(tradeUnread || partyUnread || guildUnread); }
+  function updateTradeBadge() { const badge=$("tradeUnread"); if (badge) badge.hidden=!tradeUnread; updateFieldAlerts(); }
   function finishEconomyPending() { economyPending=false; clearTimeout(economyTimer); }
   function economyReady() { return mode === "live" && room?.state?.economyAvailable === true && ownServerCharacter()?.persistent === true; }
   function economyItemName(item) {
@@ -11007,7 +11040,7 @@
     fillTradeTargets(); renderEconomy();
     if (economyReady()) { economySend("get_economy",{}); economySend("market_list",{}); }
   }
-  function updatePartyBadge() { const badge=$("partyUnread"); if(badge)badge.hidden=!(partyUnread || guildUnread); const guildBadge=$("guildBadge");if(guildBadge)guildBadge.hidden=!guildUnread; }
+  function updatePartyBadge() { const badge=$("partyUnread"); if(badge)badge.hidden=!(partyUnread || guildUnread); const guildBadge=$("guildBadge");if(guildBadge)guildBadge.hidden=!guildUnread; updateFieldAlerts(); }
   function partyReady() { return mode==="live" && room?.state?.partyAvailable===true && ownServerCharacter()?.persistent===true; }
   function renderParty() {
     if(drawerActive!=="party" || !$("partyStatus")) return;
@@ -11216,14 +11249,20 @@
     renderGuild();if(guildReady())room.send("get_guild",{});
   }
   // Compact portrait HUD: a small quest chip opens the existing detail drawer.
-  ui.quest.addEventListener("click", () => {
+  function openCurrentQuest() {
     if(territoryState?.local?.site===activeMapId){openWarPanel();return;}
     const title = ui.quest.querySelector("strong")?.textContent || "ภารกิจ";
     const description = ui.quest.querySelector(".quest-content > span")?.textContent || "";
     openDrawer("quest", title, '<p class="note"></p>');
     ui.drawerBody.querySelector("p").textContent = description;
-  });
+  }
+  ui.quest.addEventListener("click",openCurrentQuest);
   $("characterProfile").onclick=openCharacterProfile;
+  $("fieldMenuButton").onclick=openFieldMenu;
+  $("drawerMenuBack").onclick=openFieldMenu;
+  $("menuCharacter").onclick=openCharacterProfile;
+  $("menuQuest").onclick=openCurrentQuest;
+  $("menuGuild").onclick=openGuild;
   $("mapButton").onclick=openMap;
   $("chatButton").onclick=openChat;
   $("marketButton").onclick=openEconomy;
