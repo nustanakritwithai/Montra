@@ -2514,7 +2514,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.simulatedMs - (this.lastWeaponEquipMs.get(id) ?? -Infinity) < 700) {
         return this.reject(client, "equipment_cooldown");
       }
-      const change = gearOrder ? equipBody(inventory,gearOrder.position,gearOrder.slot,gearOrder.expected,player.pathId,player.level) : equipInventoryWeapon(inventory,order.slot,player.pathId,player.level);
+      const change = gearOrder ? equipBody(inventory,gearOrder.position,gearOrder.slot,gearOrder.expected,player.pathId,player.level,gearOrder.stamp) : equipInventoryWeapon(inventory,order.slot,player.pathId,player.level);
       // Explicit guard works under both strict and non-strict Windows TS.
       if ("reason" in change) return this.reject(client, change.reason);
       const snapshot = this.captureCharacterSnapshot(id, change.inventory);
@@ -2641,6 +2641,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
             ...(accessory ? {bossAccessory:accessory.id,accessoryGranted:accessory.granted} : {}),
             ...(monsterId==="atlas_rift_warden" ? {riftVictory:true} : {}),
             ...(fieldDrop?.id!==undefined ? {personalDrop:fieldDrop.id ?? "bag_full",dropQuantity:fieldDrop.quantity??1,lootMisses:fieldDrop.bag.lootMisses??0} : {}),
+            ...(fieldDrop?.blockedId ? {blockedItem:fieldDrop.blockedId,missedQuantity:fieldDrop.missedQuantity} : {}),
             ...(card ? {cardDrop:card,cardReceived:Boolean(cardBag)} : {}),
             ...(dropsPotion ? {elitePotion:prize ? "granted" : "bag_full"} : {})});
         } catch { /* The committed reward remains available on reconnect. */ }
@@ -2732,7 +2733,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level"];
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level"];
       const reason=error instanceof Error && (allowed.includes(error.message)||["resource_ground","resource_range","resource_cooldown","resource_empty"].includes(error.message)) ? error.message : "economy_failed";
       if (reason==="economy_failed") console.error("MONTRA economy failed",error);
       client.send("economy_error",{reason});
@@ -3130,7 +3131,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     market_create: (client:Client, message:unknown) => {
       const order=parseMarketCreate(message); if (!order) return this.reject(client,"invalid_economy_request");
-      this.economyAction(client,id=>{const result=characterStore.economy.listItem(id,order.requestId,order.slot,order.amount,order.price); this.syncEconomy(client,id); client.send("market_result",{action:"create",...result,requestId:order.requestId});});
+      this.economyAction(client,id=>{const result=characterStore.economy.listItem(id,order.requestId,order.slot,order.amount,order.price,order.stamp); this.syncEconomy(client,id); client.send("market_result",{action:"create",...result,requestId:order.requestId});});
     },
     market_buy: (client:Client, message:unknown) => {
       const order=parseMarketAction(message); if (!order) return this.reject(client,"invalid_economy_request");

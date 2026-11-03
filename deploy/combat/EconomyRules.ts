@@ -8,9 +8,11 @@ function keys(value: unknown, expected: string[]): value is Record<string, unkno
 const requestId=(v:unknown):v is string => typeof v === "string" && /^[a-zA-Z0-9_-]{16,64}$/.test(v);
 const uuid=(v:unknown):v is string => typeof v === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(v);
 const amount=(v:unknown, max:number):v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0 && v <= max;
-export function parseMarketCreate(v:unknown): {requestId:string;slot:number;amount:number;price:number}|null {
-  if (!keys(v,["requestId","slot","amount","price"]) || !requestId(v.requestId) || !amount(v.slot,11) || !amount(v.amount,99) || v.amount===0 || !amount(v.price,1_000_000_000) || v.price===0) return null;
-  return {requestId:v.requestId,slot:v.slot,amount:v.amount,price:v.price};
+export function parseMarketCreate(v:unknown): {requestId:string;slot:number;amount:number;price:number;stamp?:string}|null {
+  const fields=["requestId","slot","amount","price"];
+  if ((!keys(v,fields) && !keys(v,[...fields,"stamp"])) || (Object.hasOwn(v,"stamp") && (typeof v.stamp!=="string" || v.stamp.length>100)) ||
+      !requestId(v.requestId) || !amount(v.slot,11) || !amount(v.amount,99) || v.amount===0 || !amount(v.price,1_000_000_000) || v.price===0) return null;
+  return {requestId:v.requestId,slot:v.slot,amount:v.amount,price:v.price,...(typeof v.stamp==="string"?{stamp:v.stamp}:{})};
 }
 export function parseMarketAction(v:unknown): {requestId:string;listingId:string}|null {
   if (!keys(v,["requestId","listingId"]) || !requestId(v.requestId) || !uuid(v.listingId)) return null;

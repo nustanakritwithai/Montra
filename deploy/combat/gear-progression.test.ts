@@ -5,7 +5,7 @@ import {CATALOG_PAGES,hunts,findItemHunt,rollMonsterLoot} from "./MonsterLoot.js
 import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses,practiceLoot,validateInventory} from "./ItemRules.js";
 import {EconomyStore} from "./EconomyStore.js";
 import {parseSalvage,type SalvageOrder} from "./EconomyRules.js";
-import {rollForge,forgeStamp,forgeIngredient} from "./ForgeRules.js";
+import {birthForge,rollForge,forgeStamp,forgeIngredient} from "./ForgeRules.js";
 import {changeCardSocket} from "./CardSockets.js";
 import {ATLAS_SPAWNS} from "./WorldAtlas.js";
 import {FOREST_CAMPS} from "./WorldMaps.js";
@@ -121,14 +121,69 @@ test("three misses survive reload and a full bag preserves the guaranteed upgrad
     const full={...bag,slots:bag.slots.map(s=>s??{itemId:"health_potion" as const,quantity:99})};
     const blocked=practiceLoot(full,path,10,"normal",15,mob,miss);
     assert.equal(blocked.id,null);assert.equal(blocked.bag.lootMisses,3);
+    assert(blocked.blockedId && PERSONAL_ITEMS[blocked.blockedId]?.forge);assert.equal(blocked.quantity,0);assert.equal(blocked.missedQuantity,1);
     const material=path==="phutthaisawan"?"mat_metal_2":"mat_hide_2";
     const tight={...full,lootMisses:0,slots:full.slots.map(s=>s.itemId.startsWith("mat_")?{...s,quantity:99}:s)};
     tight.slots[11]={itemId:material,quantity:98};
     const stacked=practiceLoot(tight,path,10,"normal",15,mob,miss);
     assert.equal(stacked.id,material);assert.equal(stacked.quantity,1);assert.equal(stacked.bag.slots[11]?.quantity,99);
+    assert.equal(stacked.blockedId,material);assert.equal(stacked.missedQuantity,1);
     const reward=practiceLoot(bag,path,10,"normal",15,mob,miss);
     assert(reward.id && PERSONAL_ITEMS[reward.id].recommended?.includes(path));assert.equal(reward.bag.lootMisses??0,0);
   }
+});
+
+test("ordinary rings and earrings accept a second distinct copy but never a third or a cloned instance",()=>{
+  for(const id of ["acc_ring_atk_1","acc_earrings_hunter_1"] as const){
+    const mob=findItemHunt(id,1)!,owned=new Map(entries.map(([key])=>[key,2]));
+    owned.set(id,1);
+    assert.equal(rollMonsterLoot(mob.id,"muay_boran",owned,1,0,"normal",()=>0)?.id,id);
+    owned.set(id,2);
+    assert.notEqual(rollMonsterLoot(mob.id,"muay_boran",owned,1,0,"normal",()=>0)?.id,id);
+    const bag=makeClassInventory("muay_boran"),newCopy=birthForge(id)!;
+    assert.equal(newCopy.affix,null);
+    bag.slots[2]={itemId:id,quantity:1}; // One pre-update copy with no instance ID.
+    bag.slots[3]={itemId:id,quantity:1,forge:newCopy};
+    assert.deepEqual(validateInventory(JSON.parse(JSON.stringify(bag))),bag);
+    bag.slots[4]={itemId:id,quantity:1,forge:birthForge(id)};
+    assert.throws(()=>validateInventory(bag),/inventory_record_invalid/);
+    bag.slots[4]=null;bag.slots[2]!.forge=newCopy;
+    assert.throws(()=>validateInventory(bag),/inventory_record_invalid/);
+  }
+  assert.equal(PERSONAL_ITEMS.acc_rift_star.copyLimit,undefined);
+});
+
+test("duplicate rings keep cards and forge identities during socketing, market purchase, retries and trade",()=>{
+  const store=new EconomyStore(":memory:"),a="a".repeat(64),b="b".repeat(64),id="acc_ring_atk_1";
+  try{
+    const bag=makeClassInventory("blade"),buyer=makeClassInventory("blade");
+    const ring=()=>({itemId:id as typeof id,quantity:1,forge:birthForge(id)!});
+    const first=ring(),second=ring();
+    bag.slots[2]=first;bag.slots[3]=second;bag.slots[4]={itemId:"mat_metal_1",quantity:2};
+    bag.slots[5]={itemId:"card_possessed",quantity:1};buyer.slots[2]=ring();
+    store.register(a,bag);store.register(b,buyer);
+    const drill={requestId:"test_pair_socket_drill",target:2,gear:id,expected:"sealed",action:"drill",card:null} as const;
+    assert.throws(()=>store.socketItem(a,drill),/socket_changed/);
+    assert.throws(()=>store.socketItem(a,{...drill,stamp:forgeStamp(second)}),/socket_changed/);
+    assert.deepEqual(store.getAccount(a).inventory,bag);
+    store.socketItem(a,{...drill,stamp:forgeStamp(first)});
+    store.socketItem(a,{...drill,requestId:"test_pair_socket_insert",action:"insert",expected:"empty",card:"card_possessed",stamp:forgeStamp(first)});
+    const current=store.getAccount(a).inventory;
+    assert.equal(current.slots[2]?.socket,"card_possessed");assert.equal(current.slots[3]?.socket,undefined);
+    assert.equal(equipBody(current,"leftRing",2,id,"blade",1,forgeStamp(second)).ok,false);
+    assert.throws(()=>store.listItem(a,"test_pair_stale_listing",2,1,10,forgeStamp(second)),/item_unavailable/);
+    const listing=store.listItem(a,"test_pair_first_listing",2,1,10,forgeStamp(first));
+    store.buy(b,"test_pair_buyer_request",listing.listingId);
+    store.buy(b,"test_pair_buyer_request",listing.listingId);
+    const purchase=store.getAccount(b).inventory,slot=purchase.slots.findIndex(s=>s?.forge?.instanceId===first.forge.instanceId);
+    assert.equal(purchase.slots[slot]?.socket,"card_possessed");
+    const third=store.listItem(a,"test_pair_next_listing",3,1,10,forgeStamp(second)),before=store.getAccount(b);
+    assert.throws(()=>store.buy(b,"test_pair_limit_request",third.listingId),/accessory_limit/);
+    assert.deepEqual(store.getAccount(b),before);
+    store.cancel(a,"test_pair_cancel_listing",third.listingId);
+    store.trade(b,a,"test_pair_trade_request",{slot,amount:1,gold:0},{slot:null,amount:0,gold:0});
+    assert.equal(store.getAccount(a).inventory.slots.find(s=>s?.forge?.instanceId===first.forge.instanceId)?.socket,"card_possessed");
+  }finally{store.close();}
 });
 
 test("a dropped pair of wraps can be equipped and its Muay strike damages a monster",()=>{

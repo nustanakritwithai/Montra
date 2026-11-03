@@ -20,6 +20,7 @@ export function equipPositions(kind:unknown):readonly BodySlot[] {
   return isBodySlot(kind)?[kind]:[];
 }
 export type PersonalDefinition = {
+  copyLimit?:2;
   name:string; kind:"mainHand"|BodySlot|"earring"|"ring"|"material"|"catalyst"|"consumable"|"card"|"tool"; path:string; stats:ItemStats;
   recipe?:readonly {item:string; qty:number}[];
   salvage?:{item:MaterialId;quantity:number};
@@ -363,6 +364,7 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
   }
   for(const gear of Object.values(result)){
     if(!gear?.forge || (gear.kind==="mainHand" && gear.level===1))continue;
+    if(!gear.sourceBoss && (gear.kind==="earring" || gear.kind==="ring"))gear.copyLimit=2;
     // Recover one ordinary ingredient. Boss fragments are earned by hunting.
     let input:{item:string;qty:number}|undefined;
     for(const ingredient of gear.recipe??[]){

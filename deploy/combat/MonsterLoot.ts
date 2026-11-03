@@ -98,18 +98,21 @@ const catalog=Object.entries(PERSONAL_ITEMS).map(([id,item])=>{
 export const CATALOG_PAGES=Array.from({length:Math.ceil(catalog.length/16)},(_,i)=>Object.fromEntries(catalog.slice(i*16,i*16+16)));
 
 export const MAX_LOOT_MISSES=3;
-export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<string>,playerLevel:number,misses:number,tier:string,draw:(max:number)=>number=randomInt,partialStacks?:ReadonlySet<string>){
+export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<string>|ReadonlyMap<string,number>,playerLevel:number,misses:number,tier:string,draw:(max:number)=>number=randomInt,partialStacks?:ReadonlySet<string>){
   const table=tables.get(monsterId);
   if(!table)return null;
   const candidates=table.gear.filter(id=>{
-    const def=PERSONAL_ITEMS[id];return (def.path==="all" || def.path===path) && !owned.has(id);
+    const def=PERSONAL_ITEMS[id];
+    const available="get" in owned?(owned.get(id)??0)<(def.copyLimit??1):!owned.has(id);
+    return (def.path==="all" || def.path===path) && available;
   });
-  const ownedGear=[...owned].map(id=>PERSONAL_ITEMS[id as PersonalId]).filter(def=>def?.forge && def.level!<=playerLevel && (def.path==="all"||def.path===path));
+  const ownedGear=[...owned.keys()].map(id=>({def:PERSONAL_ITEMS[id as PersonalId],count:"get" in owned?owned.get(id)!:1}))
+    .filter(({def})=>def?.forge && def.level!<=playerLevel && (def.path==="all"||def.path===path));
   const useful=candidates.filter(id=>{
     const def=PERSONAL_ITEMS[id];
     if(def.level!>playerLevel || !def.recommended?.includes(path))return false;
     const slots=def.kind==="earring"||def.kind==="ring"?2:1;
-    return ownedGear.filter(other=>other.kind===def.kind && other.level!>=def.level!).length<slots;
+    return ownedGear.reduce((n,{def:other,count})=>n+(other.kind===def.kind && other.level!>=def.level!?count:0),0)<slots;
   });
   const chance=tier==="boss"?100:tier==="elite"?60:tier==="strong"?40:25;
   const guaranteed=useful.length>0 && misses===MAX_LOOT_MISSES;

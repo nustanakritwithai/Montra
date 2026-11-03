@@ -42,10 +42,12 @@ export function forgeIngredient(def:PersonalDefinition|undefined,rank:number,act
   const kind=action==="reroll"?"seal":["flux","powder","oil","seal","core"][Math.min(4,Math.floor(rank/2))];
   return {item:`ref_${kind}_${def.forge.materialTier}` as CatalystId,qty:action==="reroll"?1:1+Math.floor(rank/3)};
 }
+export function plainForge():Forged {
+  return {instanceId:randomUUID(),revision:1,rank:0,misses:0,affix:null,rerollMisses:0};
+}
 export function rollForge(current: Forged | undefined, action: ForgeAction, draw = () => randomInt(100), def?:PersonalDefinition) {
   const {cost, chance} = quoteForge(current,action,def?.level);
-  const result: Forged = current ? {...current} : {instanceId:randomUUID(), revision:0, rank:0, misses:0, affix:null, rerollMisses:0};
-  result.revision++;
+  const result: Forged = current ? {...current,revision:current.revision+1} : plainForge();
   const roll = draw();
   const success = roll < chance;
   let affixRoll: number | null = null;
@@ -65,7 +67,8 @@ export function rollForge(current: Forged | undefined, action: ForgeAction, draw
 }
 export function birthForge(id:string):Forged|undefined {
   const def=personalItem(id);
-  return def?.forge && (def.level??1)>=25 ? rollForge(undefined,"reroll",undefined,def).forge : undefined;
+  if(def?.forge && (def.level??1)>=25)return rollForge(undefined,"reroll",undefined,def).forge;
+  return def?.copyLimit===2?plainForge():undefined;
 }
 export function applyForgeRatings(total:Record<ForgeRating,number>,id:string,f:Forged|undefined):void {
   const profile=personalItem(id)?.forge;
