@@ -31,7 +31,7 @@ jobs:
           cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
           cp deploy/combat/AccountStore.ts deploy/combat/AccountService.ts deploy/combat/AccountRoutes.ts deploy/combat/account-store.test.ts combat-verify/src/rooms/
           cp deploy/combat/account-integration.mjs combat-verify/account-integration.mjs
-          cp deploy/combat/learned-hotbar-integration.mjs combat-verify/
+          cp deploy/combat/learned-hotbar-integration.mjs deploy/combat/personal-equipment-integration.mjs combat-verify/
           cp deploy/combat/guest-delete-integration.mjs combat-verify/guest-delete-integration.mjs
           cp deploy/combat/mount-integration.mjs combat-verify/mount-integration.mjs
           cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
@@ -158,6 +158,7 @@ jobs:
           cp deploy/combat/world-warp-rules.test.ts combat-verify/src/rooms/world-warp-rules.test.ts
           cp deploy/combat/MonsterRRT.ts combat-verify/src/rooms/MonsterRRT.ts
           cp deploy/combat/CharacterStore.ts combat-verify/src/rooms/CharacterStore.ts
+          cp deploy/combat/PersonalItems.ts combat-verify/src/rooms/PersonalItems.ts
           cp deploy/combat/ItemRules.ts combat-verify/src/rooms/ItemRules.ts
           cp deploy/combat/item-rules.test.ts combat-verify/src/rooms/item-rules.test.ts
           cp deploy/combat/height-rules.test.ts combat-verify/src/rooms/height-rules.test.ts
@@ -403,6 +404,7 @@ jobs:
           for n in {1..60}; do if curl -s -o /dev/null "$MONTRA_TEST_URL/montra/account/slots"; then break; fi; sleep 1; done
           node account-integration.mjs
           node learned-hotbar-integration.mjs
+          node personal-equipment-integration.mjs
           node guest-delete-integration.mjs
           node mount-integration.mjs
 

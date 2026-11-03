@@ -108,6 +108,7 @@ $files = @(
   @{ Name = "EconomyRules.ts"; Target = "src\rooms\EconomyRules.ts"; Check = "parseMarketCreate" },
   @{ Name = "MonsterRRT.ts"; Target = "src\rooms\MonsterRRT.ts"; Check = "class MonsterRRTNavigator" },
   @{ Name = "CharacterStore.ts"; Target = "src\rooms\CharacterStore.ts"; Check = "inventory_record_missing" },
+  @{ Name = "PersonalItems.ts"; Target = "src\rooms\PersonalItems.ts"; Check = "PERSONAL_ITEMS" },
   @{ Name = "ItemRules.ts"; Target = "src\rooms\ItemRules.ts"; Check = "grantStarterWeapons" },
   @{ Name = "smoke-test.mjs"; Target = "montra-combat-smoke-test.mjs"; Check = "combat_hit" },
   @{ Name = "s1-integration.mjs"; Target = "montra-s1-integration.mjs"; Check = "MONTRA S1" },

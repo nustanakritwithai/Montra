@@ -2,6 +2,7 @@ import { forgeStamp, quoteForge, rollForge, type ForgeAction } from "./ForgeRule
 /** Single-process transactional economy. This store must own inventories before it is wired to gameplay. */
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
+import { personalItem, isBodySlot, WORKBENCH_GOLD, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE, isStackableItem, validateInventory, type InventorySnapshot, type InventoryStack } from "./ItemRules.js";
 
 export const STARTER_GOLD = 1000;
@@ -24,6 +25,7 @@ function take(inventory: InventorySnapshot, slot: number, amount: number): { inv
   const item = original.slots[slot];
   if (!item || item.quantity < amount) throw new Error("item_unavailable");
   if (original.equippedWeaponSlot === slot) throw new Error("item_equipped");
+  if (item.bound)throw Error("item_bound");
   const slots = original.slots.slice();
   slots[slot] = item.quantity === amount ? null : { ...item, quantity: item.quantity - amount };
   return { inventory: validateInventory({ ...original, slots }), item: { ...item, quantity: amount } };
@@ -38,7 +40,7 @@ function add(inventory: InventorySnapshot, item: InventoryStack): InventorySnaps
       stack.quantity += amount; remaining -= amount;
       if (!remaining) break;
     }
-  } else if (slots.some(stack => stack?.itemId === item.itemId)) {
+  } else if (slots.some(stack => stack?.itemId === item.itemId) || Object.values(original.equipment??{}).some(id=>id===item.itemId)) {
     throw new Error("duplicate_weapon");
   }
   if (remaining) {
@@ -167,11 +169,35 @@ export class EconomyStore {
     });
   }
 
+  craftPersonal(id:string,request:string,output:PersonalId) {
+    const recipe=personalItem(output)?.recipe;
+    if(!recipe)throw Error("invalid_recipe");
+    return this.once(id,request,"craft",{recipe:output},()=>{
+      const account=this.account(id);
+      if(account.gold<WORKBENCH_GOLD)throw Error("insufficient_gold");
+      for(const ingredient of recipe){
+        let needed=ingredient.qty;
+        for(const [slot,stack] of account.inventory.slots.entries()){
+          if(stack?.itemId!==ingredient.item)continue;
+          const used=Math.min(stack.quantity,needed);
+          account.inventory=take(account.inventory,slot,used).inventory;
+          needed-=used;
+          if(!needed)break;
+        }
+        if(needed)throw Error("craft_missing_material");
+      }
+      account.inventory=add(account.inventory,{itemId:output,quantity:1});
+      account.gold-=WORKBENCH_GOLD;
+      this.put(id,account);
+      return {itemId:output,spentGold:WORKBENCH_GOLD};
+    });
+  }
+
   forgeWeapon(id: string, request: string, slot: number, stamp: string, action: ForgeAction) {
     return this.once(id, request, "forge", {slot, stamp, action}, () => {
       const account = this.account(id);
       const stack = account.inventory.slots[slot];
-      if (!stack || isStackableItem(stack.itemId) || forgeStamp(stack) !== stamp) throw Error("forge_item_changed");
+      if (!stack || isStackableItem(stack.itemId) || isBodySlot(personalItem(stack.itemId)?.kind) || forgeStamp(stack) !== stamp) throw Error("forge_item_changed");
       const {cost} = quoteForge(stack.forge, action);
       if (account.gold < cost) throw Error("insufficient_gold");
       const result = rollForge(stack.forge, action);

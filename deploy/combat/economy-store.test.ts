@@ -4,10 +4,87 @@ import { mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { EconomyStore, STARTER_GOLD } from "./EconomyStore.js";
-import { makeStarterInventory } from "./ItemRules.js";
+import { BODY_SLOTS, PERSONAL_ITEMS, personalItem, type BodyItemId } from "./PersonalItems.js";
+import { makeClassInventory, makeStarterInventory, equipBody, equippedStats, validateInventory, equipInventoryWeapon, practiceLoot } from "./ItemRules.js";
 
 const a = "a".repeat(64), b = "b".repeat(64), c = "c".repeat(64);
 const request = (n: number) => "request_" + String(n).padStart(16, "0");
+
+test("a full outfit frees bag space, keeps hands independent and survives reload", () => {
+  let bag=makeClassInventory("seer");
+  const base={atk:20,def:30,maxHp:240,maxStamina:100,magicAtk:15,magicDef:20};
+  const initial=equippedStats(base,bag);
+  for(const position of BODY_SLOTS){
+    const id=Object.keys(PERSONAL_ITEMS).find(id=>{
+      const def=personalItem(id)!;
+      return def.kind===position && (def.path==="all" || def.path==="seer");
+    }) as BodyItemId;
+    assert(id);
+    bag.slots[2]={itemId:id,quantity:1};
+    const equipped=equipBody(bag,position,2,id,"seer");
+    assert(equipped.ok);bag=equipped.inventory;
+    assert.equal(bag.slots[2],null);
+  }
+  bag=validateInventory(JSON.parse(JSON.stringify(bag)));
+  assert.equal(Object.keys(bag.equipment!).length,BODY_SLOTS.length);
+  assert.equal(bag.slots.filter(Boolean).length,2);
+  assert(equippedStats(base,bag).magicAtk>initial.magicAtk);
+  const left=bag.equipment!.leftHand!,right=bag.equipment!.rightHand!;
+  assert.notEqual(left,right);
+  assert.equal(equipBody(bag,"rightHand",null,left,"seer").ok,false);
+  bag.slots=bag.slots.map(s=>s??{itemId:"mat_fiber_1",quantity:99});
+  assert.deepEqual(equipBody(bag,"leftHand",null,left,"seer"),{ok:false,reason:"inventory_full"});
+  const replacement="arm_heavy_leftHand_1";
+  bag.slots[5]={itemId:replacement,quantity:1};
+  const swap=equipBody(bag,"leftHand",5,replacement,"seer");
+  assert(swap.ok);
+  assert.deepEqual(swap.inventory.slots[5],{itemId:left,quantity:1,bound:true});
+  assert.equal(swap.inventory.equipment!.rightHand,right);
+  assert.equal(equipBody(swap.inventory,"leftHand",5,replacement,"seer").ok,false);
+  assert.throws(()=>validateInventory({...bag,equipment:{...bag.equipment,leftHand:right}}),/inventory_record_invalid/);
+  const old=makeClassInventory("seer");
+  old.slots[2]={itemId:"arm_cloth_chest_1",quantity:1};
+  const migrated=validateInventory({...old,equippedChestSlot:2});
+  assert.deepEqual(migrated.equipment,{chest:"arm_cloth_chest_1"});
+  assert.equal(migrated.slots[2],null);
+  assert.deepEqual(validateInventory(migrated),migrated);
+});
+
+test("practice equipment preserves ownership, recipe costs and receipts", () => {
+  const store=new EconomyStore(":memory:");
+  try {
+    const bag=makeClassInventory("seer");
+    const pathWeapons=["muay_boran","phutthaisawan","blade","sentinel","seer","mender"]
+      .map(pathId=>makeClassInventory(pathId).slots[1]?.itemId);
+    assert.equal(new Set(pathWeapons).size,6);
+    assert.deepEqual(equipInventoryWeapon({...bag,equippedWeaponSlot:null},1,"blade"),{ok:false,reason:"wrong_item_class"});
+    bag.slots[2]={itemId:"mat_fiber_1",quantity:3};
+    bag.slots[3]={itemId:"mat_resin_1",quantity:2};
+    store.register(a,bag);
+    assert.throws(()=>store.craftPersonal(a,request(20),"arm_heavy_chest_1"),/craft_missing_material/);
+    assert.deepEqual(store.getAccount(a).inventory,bag);
+    const receipt=store.craftPersonal(a,request(21),"arm_cloth_chest_1");
+    assert.deepEqual(store.craftPersonal(a,request(21),"arm_cloth_chest_1"),receipt);
+    const crafted=store.getAccount(a);
+    assert.equal(crafted.gold,STARTER_GOLD-4);
+    assert.equal(crafted.inventory.slots.filter(s=>s?.itemId==="arm_cloth_chest_1").length,1);
+    const worn=equipBody(crafted.inventory,"chest",2,"arm_cloth_chest_1","seer");
+    assert(worn.ok);
+    assert.equal(worn.inventory.slots[2],null);
+    const removed=equipBody(worn.inventory,"chest",null,"arm_cloth_chest_1","seer");
+    assert(removed.ok);
+    store.register(b,removed.inventory);
+    assert.throws(()=>store.listItem(b,request(22),2,1,1),/item_bound/);
+    assert.throws(()=>store.listItem(b,request(23),1,1,1),/item_equipped/);
+    const full=makeClassInventory("blade");
+    full.slots=full.slots.map(s=>s??{itemId:"mat_ink_1",quantity:99});
+    assert.equal(practiceLoot(full,"blade").bag.firstChestClaimed,undefined);
+    full.slots[8]=null;
+    const retry=practiceLoot(full,"blade");
+    assert.equal(retry.id,"arm_hide_chest_1");
+    assert.equal(practiceLoot(retry.bag,"blade").bag.slots.filter(s=>s?.itemId==="arm_hide_chest_1").length,1);
+  } finally {store.close();}
+});
 function setup(): { store: EconomyStore; dir: string; file: string } {
   const dir = mkdtempSync(path.join(os.tmpdir(), "montra-economy-"));
   const file = path.join(dir,"economy.sqlite");

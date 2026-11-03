@@ -55,6 +55,7 @@ import { SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_RANKABLE_SKILLS, S
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { isMuayFoundation, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
+import { PERSONAL_ITEMS, WORKBENCH_GOLD, SALVE_ID, wearsWraps, wearsTwinSwords } from "./PersonalItems.js";
 import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
@@ -64,8 +65,8 @@ import type { MonsterTier } from "./MonsterProfiles.js";
 import { PROGRESSION, SKILL_RANK_LEVELS, SKILL_RANK_PRACTICE, skillRankCost, skillRankMultiplier, supportRankMultiplier, addExperience, calculateDamage, calculateStats, emptyAllocations,
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
-  POTION_ID, POTION_COOLDOWN_MS, grantRewardPotion, grantStackReward, SHRINE_RECIPE, SHRINE_SHARD, SHRINE_GLAIVE, parseUseItemCommand,
-  useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon,
+  POTION_COOLDOWN_MS, grantRewardPotion, grantStackReward, SHRINE_RECIPE, SHRINE_SHARD, SHRINE_GLAIVE, parseUseItemCommand,
+  useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon, equipBody, parseBodyCommand, equippedStats, practiceLoot,
   equippedWeaponId, weaponBonuses, type InventorySnapshot,
 } from "./ItemRules.js";
 
@@ -166,7 +167,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   // Inventory remains private per character, never broadcasts via Room Schema.
   private inventories = new Map<string, InventorySnapshot>();
   private pendingItemUses = new Map<string, Promise<void>>();
-  private lastItemUseMs = new Map<string, number>();
+  private itemUseReadyAt = new Map<string, number>();
   private lastInventoryReadMs = new Map<string, number>();
   private lastStatusReadMs = new Map<string, number>();
   private lastWeaponEquipMs = new Map<string, number>();
@@ -589,7 +590,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for(const [id,hold] of this.muayGrapples) {
       const actor=this.state.players.get(id), target=this.getMonster(hold.targetId) ?? this.state.players.get(hold.targetId);
       if(this.simulatedMs>=hold.until || !actor?.alive || !target?.alive || !this.sameCombatMap(id,hold.targetId) ||
-        distance3d(actor,target)>2.1 || equippedWeaponId(this.inventories.get(id))!==MUAY_WRAP_ID || actor.pathId!=="muay_boran")
+        distance3d(actor,target)>2.1 || !wearsWraps(equippedWeaponId(this.inventories.get(id))) || actor.pathId!=="muay_boran")
         this.releaseMuayGrapple(id,"ended");
     }
     for(const [id,until] of this.muayGrappleImmunity)if(this.simulatedMs>=until)this.muayGrappleImmunity.delete(id);
@@ -631,7 +632,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!holderId || !hold || hold.targetId!==id || this.simulatedMs>=hold.until || !player?.alive || !holder?.alive) {
       if(holderId)this.releaseMuayGrapple(holderId,"ended");return this.reject(client,"muay_grapple_ended");
     }
-    if(!this.sameCombatMap(holderId,id) || distance3d(holder,player)>2.1 || holder.pathId!=="muay_boran" || equippedWeaponId(this.inventories.get(holderId))!==MUAY_WRAP_ID) {
+    if(!this.sameCombatMap(holderId,id) || distance3d(holder,player)>2.1 || holder.pathId!=="muay_boran" || !wearsWraps(equippedWeaponId(this.inventories.get(holderId)))) {
       this.releaseMuayGrapple(holderId,"ended");return this.reject(client,"muay_grapple_ended");
     }
     if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
@@ -670,7 +671,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=client.sessionId,hold=this.muayGrapples.get(id),player=this.state.players.get(id);
     if(!hold || targetId!==hold.targetId || this.simulatedMs>=hold.until || !player?.alive) {this.releaseMuayGrapple(id,"ended");return this.reject(client,"muay_grapple_ended");}
     const monster=this.getMonster(hold.targetId),target=monster ?? this.state.players.get(hold.targetId);
-    if(!target?.alive || !this.sameCombatMap(id,hold.targetId) || distance3d(player,target)>2.1 || equippedWeaponId(this.inventories.get(id))!==MUAY_WRAP_ID ||
+    if(!target?.alive || !this.sameCombatMap(id,hold.targetId) || distance3d(player,target)>2.1 || !wearsWraps(equippedWeaponId(this.inventories.get(id))) ||
       this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
       (!monster && (this.pendingItemUses.has(hold.targetId) || this.pendingRewards.has(hold.targetId) || this.pendingCharacterLeaves.has(hold.targetId)))) {
       this.releaseMuayGrapple(id,"ended");return this.reject(client,"muay_grapple_ended");
@@ -1605,7 +1606,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const player=this.spellCaster(client), cooldowns=this.muayCooldowns.get(id);
     if (!player || !cooldowns) return;
     if (player.pathId!=="muay_boran") return this.reject(client,"muay_class_required");
-    if (equippedWeaponId(this.inventories.get(id))!==MUAY_WRAP_ID) return this.reject(client,"muay_wrap_required");
+    if (!wearsWraps(equippedWeaponId(this.inventories.get(id)))) return this.reject(client,"muay_wrap_required");
     const book=this.muayBooks.get(id);
     if (!book) return this.reject(client,"muay_class_required");
     if (!book.slots.includes(skillId) || !book.learned.includes(skillId as MuayLessonId) || (!isMuayFoundation(skillId) && MUAY_LESSONS[skillId as MuayLessonId].school!==book.school)) return this.reject(client,"muay_skill_locked");
@@ -1726,7 +1727,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=client.sessionId, skillId=input.skillId, skill=SWORD_NODES[skillId];
     const player=this.spellCaster(client), tree=this.swordTrees.get(id);
     if (!player || !tree) return;
-    if (player.pathId!=="phutthaisawan" || equippedWeaponId(this.inventories.get(id))!==DUAL_SWORD.weaponId)
+    if (player.pathId!=="phutthaisawan" || !wearsTwinSwords(equippedWeaponId(this.inventories.get(id))))
       return this.reject(client,"sword_weapon_required");
     if (!tree.learned.includes(skillId) || (skill.school!=="common" && skill.school!==tree.school) || skill.effect==="passive")
       return this.reject(client,"sword_skill_locked");
@@ -1831,13 +1832,70 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     void this.saveCharacter(id);
   }
 
+  private equipItem(client:Client,message:unknown,body:boolean):void {
+      if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
+      if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
+      const gearOrder=body ? parseBodyCommand(message) : null;
+      const order=body ? gearOrder : parseEquipWeaponCommand(message);
+      if (!order) return this.reject(client, "invalid_weapon_equip");
+      const id = client.sessionId;
+      const player = this.state.players.get(id);
+      if (!player || !player.alive) return this.reject(client, "not_alive");
+      if (this.pendingWarps.has(id)) return this.reject(client, "character_busy");
+      if (this.climbs.has(id) || this.flightTransitions.has(id) ||
+          this.activeDashes.has(id)) return this.reject(client, "equipment_busy");
+      const inventory = this.inventories.get(id);
+      if (!inventory || !this.persistentCharacters.has(id)) {
+        return this.reject(client, "inventory_unavailable");
+      }
+      if (this.pendingItemUses.has(id)) return this.reject(client, "item_busy");
+      if (this.simulatedMs - (this.lastWeaponEquipMs.get(id) ?? -Infinity) < 700) {
+        return this.reject(client, "equipment_cooldown");
+      }
+      const change = gearOrder ? equipBody(inventory,gearOrder.position,gearOrder.slot,gearOrder.expected,player.pathId) : equipInventoryWeapon(inventory,order.slot,player.pathId);
+      // Explicit guard works under both strict and non-strict Windows TS.
+      if ("reason" in change) return this.reject(client, change.reason);
+      const snapshot = this.captureCharacterSnapshot(id, change.inventory);
+      if (!snapshot) return this.reject(client, "inventory_unavailable");
+
+      // Save before activating the combat bonus or acknowledging equipment.
+      // Weapon equip and potion use share one private mutation lock.
+      const task = (async () => {
+        try {
+          await characterStore.save(snapshot);
+          const current = this.state.players.get(id);
+          if (!current || this.inventories.get(id) !== inventory) return;
+          this.inventories.set(id, change.inventory);
+          current.equippedWeaponId = change.weaponId ?? "";
+          this.applyStats(id,current,this.statAllocations.get(id) ?? emptyAllocations());
+          if (!body && current.pathId === "muay_boran" && !wearsWraps(change.weaponId)) {
+            this.swordGuards.delete(id);
+            this.clearMuayDefense(id,"cancelled");
+            this.clearMuayCombo(id);
+            this.sendSwordNotice(client,"muay_counter_cleared",{});
+          }
+          this.lastWeaponEquipMs.set(id, this.simulatedMs);
+          client.send("inventory_state", change.inventory);
+          if (!body) client.send("weapon_equipped", {
+            slot: order.slot, weaponId: change.weaponId,
+          });
+        } catch (error) {
+          console.error("MONTRA weapon equip write failed:", id, error);
+          client.send("item_use_failed", { reason: "disk_write_failed" });
+        } finally {
+          this.pendingItemUses.delete(id);
+        }
+      })();
+      this.pendingItemUses.set(id, task);
+  }
+
   private recordCombat(ownerId: string, targetId: string): void {
     this.lastCombatMs.set(ownerId, this.simulatedMs);
     if (!this.getMonster(targetId)) this.lastCombatMs.set(targetId, this.simulatedMs);
   }
 
   private applyStats(id:string, player: Player, allocations: Allocations): void {
-    const stats = calculateModifiedStats(calculateStats(player.level, allocations),this.effects.modifiers(id));
+    const stats = calculateModifiedStats(equippedStats(calculateStats(player.level, allocations),this.inventories.get(id)),this.effects.modifiers(id));
     player.maxHp = stats.maxHp; player.atk = stats.atk;
     player.def = player.pathId==="sentinel" && this.sentinelBooks.get(id)?.learned.includes("fortitude") && equippedWeaponId(this.inventories.get(id))===SHRINE_GLAIVE
       ? Math.round(stats.def*(1+SENTINEL_LESSONS.fortitude.power)) : stats.def;
@@ -1874,13 +1932,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const current = this.state.players.get(id), snapshot = this.captureCharacterSnapshot(id);
         if (!current || !snapshot) return;
         const amount = current.level >= PROGRESSION.maxLevel ? 0 : (sharedAmount ?? monsterExperience(current.level, monsterLevel, tier));
-        if (amount <= 0 && tier !== "boss" && !shrineLoot) return;
+        const personalEligible=this.accountSessions.has(id) && current.alive && Boolean(current.pathId);
+        if (amount <= 0 && tier !== "boss" && !shrineLoot && !personalEligible) return;
         const next = addExperience(current.level, current.experience, amount);
         const dropsPotion = (tier === "elite" && amount > 0) || tier === "boss";
         const prize = dropsPotion && snapshot.inventory ? grantRewardPotion(snapshot.inventory) : null;
         const afterPotion = prize ?? snapshot.inventory;
         const shard = shrineLoot && afterPotion ? grantStackReward(afterPotion, SHRINE_SHARD) : null;
-        const loot = shard ?? prize;
+        const previousLoot=shard ?? prize;
+        const bag=previousLoot ?? snapshot.inventory;
+        const fieldDrop=bag && personalEligible
+          ? practiceLoot(bag,current.pathId) : undefined;
+        const loot=fieldDrop?.bag ?? previousLoot;
         await characterStore.save({ ...snapshot, ...next, inventory:loot ?? snapshot.inventory, updatedAt: new Date().toISOString() });
         if (loot) this.inventories.set(id,loot);
         current.level = next.level; current.experience = next.experience;
@@ -1891,6 +1954,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,
             ...(shrineLoot ? {shrineShard:shard ? "granted" : "bag_full"} : {}),
             ...(tier === "boss" ? {riftVictory:true} : {}),
+            ...(fieldDrop ? {personalDrop:fieldDrop.id ?? "bag_full"} : {}),
             ...(dropsPotion ? {elitePotion:prize ? "granted" : "bag_full"} : {})});
         } catch { /* The committed reward remains available on reconnect. */ }
       } catch (error) {
@@ -1919,7 +1983,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         persistent:this.persistentCharacters.has(id),level:player.level,
         inTransit:this.pendingWarps.has(id) && !this.pendingRewards.has(id)});
     }
-    const shares=partyMonsterShares(winner.level,{mapId:monster.mapId,level:monster.level,tier,x:monster.x,y:monster.y,z:monster.z},members,PARTY_XP_RADIUS,shrineLoot);
+    const shares=partyMonsterShares(winner.level,{mapId:monster.mapId,level:monster.level,tier,x:monster.x,y:monster.y,z:monster.z},members,PARTY_XP_RADIUS,shrineLoot || this.accountSessions.has(winnerId));
     for(const share of shares)this.grantMonsterExperience(share.sessionId,share.amount,monster.level,tier,shrineLoot);
   }
 
@@ -1981,7 +2045,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","forge_max_rank","forge_item_changed","craft_missing_shard"];
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","forge_max_rank","forge_item_changed","craft_missing_shard","craft_missing_material","item_bound"];
       const reason=error instanceof Error && allowed.includes(error.message) ? error.message : "economy_failed";
       if (reason==="economy_failed") console.error("MONTRA economy failed",error);
       client.send("economy_error",{reason});
@@ -1992,6 +2056,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!player) return;
     this.inventories.set(client.sessionId,account.inventory);
     player.equippedWeaponId=equippedWeaponId(account.inventory) ?? "";
+    this.applyStats(client.sessionId,player,this.statAllocations.get(client.sessionId) ?? emptyAllocations());
     try { client.send("inventory_state",account.inventory); client.send("economy_state",{gold:account.gold}); } catch { /* disconnect does not roll back committed assets */ }
   }
   private tradeFor(client: Client, tradeId:string): TradeSession | null {
@@ -2442,7 +2507,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const order = parseCraft(message);
       if (!order) return this.reject(client, "invalid_economy_request");
       this.economyAction(client, id => {
-        const result = characterStore.economy.craftShrineGlaive(id, order.requestId);
+        const result = order.recipeId===SHRINE_GLAIVE ? characterStore.economy.craftShrineGlaive(id,order.requestId) : characterStore.economy.craftPersonal(id,order.requestId,order.recipeId);
         this.syncEconomy(client, id);
         client.send("craft_result", {requestId: order.requestId, ...result});
       });
@@ -2584,61 +2649,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       })();
       this.pendingItemUses.set(id, task);
     },
-    equip_weapon: (client: Client, message: unknown) => {
-      if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
-      if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
-      const order = parseEquipWeaponCommand(message);
-      if (!order) return this.reject(client, "invalid_weapon_equip");
-      const id = client.sessionId;
-      const player = this.state.players.get(id);
-      if (!player || !player.alive) return this.reject(client, "not_alive");
-      if (this.pendingWarps.has(id)) return this.reject(client, "character_busy");
-      if (this.climbs.has(id) || this.flightTransitions.has(id) ||
-          this.activeDashes.has(id)) return this.reject(client, "equipment_busy");
-      const inventory = this.inventories.get(id);
-      if (!inventory || !this.persistentCharacters.has(id)) {
-        return this.reject(client, "inventory_unavailable");
-      }
-      if (this.pendingItemUses.has(id)) return this.reject(client, "item_busy");
-      if (this.simulatedMs - (this.lastWeaponEquipMs.get(id) ?? -Infinity) < 700) {
-        return this.reject(client, "equipment_cooldown");
-      }
-      const change = equipInventoryWeapon(inventory, order.slot);
-      // Explicit guard works under both strict and non-strict Windows TS.
-      if ("reason" in change) return this.reject(client, change.reason);
-      const snapshot = this.captureCharacterSnapshot(id, change.inventory);
-      if (!snapshot) return this.reject(client, "inventory_unavailable");
-
-      // Save before activating the combat bonus or acknowledging equipment.
-      // Weapon equip and potion use share one private mutation lock.
-      const task = (async () => {
-        try {
-          await characterStore.save(snapshot);
-          const current = this.state.players.get(id);
-          if (!current || this.inventories.get(id) !== inventory) return;
-          this.inventories.set(id, change.inventory);
-          current.equippedWeaponId = change.weaponId ?? "";
-          this.applyStats(id,current,this.statAllocations.get(id) ?? emptyAllocations());
-          if (current.pathId === "muay_boran" && change.weaponId !== MUAY_WRAP_ID) {
-            this.swordGuards.delete(id);
-            this.clearMuayDefense(id,"cancelled");
-            this.clearMuayCombo(id);
-            this.sendSwordNotice(client,"muay_counter_cleared",{});
-          }
-          this.lastWeaponEquipMs.set(id, this.simulatedMs);
-          client.send("inventory_state", change.inventory);
-          client.send("weapon_equipped", {
-            slot: order.slot, weaponId: change.weaponId,
-          });
-        } catch (error) {
-          console.error("MONTRA weapon equip write failed:", id, error);
-          client.send("item_use_failed", { reason: "disk_write_failed" });
-        } finally {
-          this.pendingItemUses.delete(id);
-        }
-      })();
-      this.pendingItemUses.set(id, task);
-    },
+    equip_weapon: (client:Client,message:unknown)=>this.equipItem(client,message,false),
+    equip_gear: (client:Client,message:unknown)=>this.equipItem(client,message,true),
     get_character_status: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_status_request");
       const id=client.sessionId, player=this.state.players.get(id);
@@ -2662,7 +2674,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const last = this.lastInventoryReadMs.get(id) ?? -Infinity;
       if (this.simulatedMs - last < 1_000) return;
       this.lastInventoryReadMs.set(id, this.simulatedMs);
-      client.send("inventory_state", inventory);
+      client.send("inventory_state", {...inventory,personalItems:PERSONAL_ITEMS,workbenchGold:WORKBENCH_GOLD});
     },
     use_item: (client: Client, message: unknown) => {
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
@@ -2678,8 +2690,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return this.reject(client, "inventory_unavailable");
       }
       if (this.pendingItemUses.has(id)) return this.reject(client, "item_busy");
-      if (this.simulatedMs - (this.lastItemUseMs.get(id) ?? -Infinity) <
-          POTION_COOLDOWN_MS) return this.reject(client, "item_cooldown");
+      if (this.simulatedMs < (this.itemUseReadyAt.get(id) ?? -Infinity)) return this.reject(client, "item_cooldown");
       const result = useInventoryItem(
         inventory, slot, player.hp, player.maxHp, player.alive);
       // The Windows VPS build uses different TS strictness from CI.
@@ -2703,10 +2714,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
             // Never resurrect a player killed while a save was pending.
             current.hp = Math.min(current.maxHp, current.hp + result.healed);
           }
-          this.lastItemUseMs.set(id, this.simulatedMs);
+          this.itemUseReadyAt.set(id,this.simulatedMs+(result.itemId===SALVE_ID?14_000:POTION_COOLDOWN_MS));
           client.send("inventory_state", result.inventory);
           client.send("item_used", {
-            slot, itemId: POTION_ID,
+            slot, itemId: result.itemId,
             healed: Math.max(0, current.hp - beforeHp),
             hp: current.hp,
           });
@@ -3740,7 +3751,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       // Same cooldown clock for PvP and PvE. Switching targets cannot
       // bypass cooldown or borrow a timestamp supplied by the browser.
-      const dualSword = attacker.pathId === "phutthaisawan" && equippedWeaponId(this.inventories.get(attackerId)) === DUAL_SWORD.weaponId;
+      const dualSword = attacker.pathId === "phutthaisawan" && wearsTwinSwords(equippedWeaponId(this.inventories.get(attackerId)));
       const cooldown = dualSword ? DUAL_SWORD.attackIntervalMs : (isMonster ? RULES.playerAttackCooldownMs : RULES.pkCooldownMs);
       const last = this.lastAttackMs.get(attackerId) ?? -Infinity;
       if (this.simulatedMs - last < cooldown) continue;
@@ -3757,7 +3768,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (previousCount===2) this.recordSwordTraining(attackerId,"finishes");
         this.sendSwordNotice(this.clients.find(client=>client.sessionId===attackerId),"sword_combo",{count});
       }
-      if (attacker.pathId === "muay_boran" && equippedWeaponId(this.inventories.get(attackerId)) === MUAY_WRAP_ID) this.recordMuayTraining(attackerId,"strikes");
+      if (attacker.pathId === "muay_boran" && wearsWraps(equippedWeaponId(this.inventories.get(attackerId)))) this.recordMuayTraining(attackerId,"strikes");
 
       const meleeBonus = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp").melee;
       const swordMastery = (dualSword && this.swordTrees.get(attackerId)?.learned.includes("rhythm") ? 1.05 : 1) * (ambush ? (monster?1.5:1.2) : 1);
@@ -4151,7 +4162,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const saved = characterId ? (await characterStore.loadOrCreateById(characterId, spawn, setup, required)).character : null;
       if (required && !accounts().resolve(fields.accountSession)) throw new Error("login_required");
       const allocations = saved?.statAllocations ?? emptyAllocations();
-      const initialStats = calculateStats(saved?.level ?? 1, allocations);
+      const initialStats = equippedStats(calculateStats(saved?.level ?? 1, allocations),saved?.inventory);
       const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
       const provinceReady=(options as {provinceVersion?:unknown}|undefined)?.provinceVersion===1;
       const castleReady=(options as {castleVersion?:unknown}|undefined)?.castleVersion===2;
@@ -4236,6 +4247,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(saved?.sentinelBook || player.pathId==="sentinel")this.sentinelBooks.set(client.sessionId, saved?.sentinelBook ?? newSentinelBook());
       if (saved?.muayWrapGranted) this.muayWrapGranted.add(client.sessionId);
       this.statAllocations.set(client.sessionId, allocations);
+      if (saved?.inventory)this.inventories.set(client.sessionId,saved.inventory);
       this.applyStats(client.sessionId,player, allocations);
       this.state.players.set(client.sessionId, player);
       client.view=new StateView();
@@ -4379,7 +4391,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.swordGuards.delete(id);
       this.hpRegenRemainder.delete(id);
       this.inventories.delete(id);
-      this.lastItemUseMs.delete(id);
+      this.itemUseReadyAt.delete(id);
       this.lastInventoryReadMs.delete(id);
       this.lastStatusReadMs.delete(id);
       this.lastWeaponEquipMs.delete(id);
@@ -4438,7 +4450,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.occultCurses.clear();
     this.muayWrapGranted.clear();
     this.hpRegenRemainder.clear();
-    this.lastItemUseMs.clear();
+    this.itemUseReadyAt.clear();
     this.lastInventoryReadMs.clear();
     this.lastStatusReadMs.clear();
     this.lastWeaponEquipMs.clear();

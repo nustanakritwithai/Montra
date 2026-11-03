@@ -1,3 +1,4 @@
+import { personalItem, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE } from "./ItemRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 function keys(value: unknown, expected: string[]): value is Record<string, unknown> {
@@ -36,7 +37,8 @@ export function parseForge(v: unknown) {
   return {requestId:v.requestId, slot:v.slot, stamp:v.stamp, action:v.action as "enhance" | "reroll"};
 }
 
-export function parseCraft(v: unknown): {requestId: string} | null {
-  if (!keys(v, ["recipeId", "requestId"]) || v.recipeId !== SHRINE_RECIPE.id || !requestId(v.requestId)) return null;
-  return {requestId: v.requestId};
+export function parseCraft(v: unknown): {requestId:string; recipeId:PersonalId|typeof SHRINE_RECIPE.id} | null {
+  if (!keys(v,["recipeId","requestId"]) || !requestId(v.requestId) ||
+      (v.recipeId!==SHRINE_RECIPE.id && !personalItem(v.recipeId)?.recipe))return null;
+  return {requestId:v.requestId, recipeId:v.recipeId as PersonalId|typeof SHRINE_RECIPE.id};
 }
