@@ -22,18 +22,22 @@ export const SENTINEL_LESSONS={
   party_ward:{name:"แนวพิทักษ์",description:"เพิ่มป้องกันให้สมาชิกปาร์ตี้ใกล้เคียง",branch:"support",level:13,requires:["intercept","guard"],practice:{assist:8,guard:4},effect:"party_ward",stamina:32,cooldownMs:25000,range:8,power:0.12},
 } as const satisfies Record<string,SentinelLesson>;
 export const SENTINEL_CONTROL=Object.freeze({monsterStunMs:700,playerStunMs:450,immunityMs:4000,tauntMs:3000,tauntImmunityMs:8000});
+import { skillRankCost, validateSkillRanks, type SkillRanks } from "./Progression.js";
+export const SENTINEL_RANKABLE_SKILLS=["bash","sweep","slam","counter"] as const;
 export type SentinelSkillId=keyof typeof SENTINEL_LESSONS;
-export type SentinelBook={learned:SentinelSkillId[];slots:Array<SentinelSkillId|null>;practice:Record<SentinelPractice,number>;cooldowns:Partial<Record<SentinelSkillId,number>>};
+export type SentinelBook={learned:SentinelSkillId[];slots:Array<SentinelSkillId|null>;practice:Record<SentinelPractice,number>;cooldowns:Partial<Record<SentinelSkillId,number>>;ranks?:SkillRanks};
 export function sentinelPoints(level:number):number{return 1+Math.floor((Math.min(level,100)-1)/2);}
 export function newSentinelBook():SentinelBook{return {learned:[],slots:[null,null,null,null],practice:{guard:0,stun:0,assist:0},cooldowns:{}};}
 function record(value:unknown):value is Record<string,unknown>{return value!==null && typeof value==="object" && !Array.isArray(value);}
 export function validateSentinelBook(value:unknown,level:number):SentinelBook {
-  if(!record(value) || Object.keys(value).sort().join(",")!=="cooldowns,learned,practice,slots" || !Array.isArray(value.learned) || !Array.isArray(value.slots) || !record(value.practice) || !record(value.cooldowns))throw Error("invalid_sentinel_book");
+  if(!record(value) || Object.keys(value).some(key=>!["cooldowns","learned","practice","slots","ranks"].includes(key)) || !Array.isArray(value.learned) || !Array.isArray(value.slots) || !record(value.practice) || !record(value.cooldowns))throw Error("invalid_sentinel_book");
   const learned=value.learned,slots=value.slots;
   if(learned.length>sentinelPoints(level) || new Set(learned).size!==learned.length || learned.some(id=>typeof id!=="string" || !Object.hasOwn(SENTINEL_LESSONS,id)))throw Error("invalid_sentinel_book");
   for(const id of learned as SentinelSkillId[]){const lesson:SentinelLesson=SENTINEL_LESSONS[id];if(lesson.level>level || lesson.requires.some(req=>!learned.includes(req)))throw Error("invalid_sentinel_book");}
   if(slots.length!==4 || new Set(slots.filter(id=>id!==null)).size!==slots.filter(id=>id!==null).length || slots.some(id=>id!==null && (typeof id!=="string" || !learned.includes(id) || SENTINEL_LESSONS[id as SentinelSkillId].effect==="passive")))throw Error("invalid_sentinel_book");
   if(Object.keys(value.practice).sort().join(",")!=="assist,guard,stun" || Object.values(value.practice).some(n=>typeof n!=="number" || !Number.isSafeInteger(n) || n<0 || n>1_000_000))throw Error("invalid_sentinel_book");
   for(const [id,ready] of Object.entries(value.cooldowns))if(!Object.hasOwn(SENTINEL_LESSONS,id) || typeof ready!=="number" || !Number.isSafeInteger(ready) || ready<0)throw Error("invalid_sentinel_book");
-  return {learned:[...learned] as SentinelSkillId[],slots:[...slots] as Array<SentinelSkillId|null>,practice:{...value.practice} as SentinelBook["practice"],cooldowns:{...value.cooldowns} as SentinelBook["cooldowns"]};
+  let ranks:SkillRanks;
+  try{ranks=validateSkillRanks(value.ranks,learned as string[],level,sentinelPoints(level),SENTINEL_RANKABLE_SKILLS);}catch{throw Error("invalid_sentinel_book");}
+  return {learned:[...learned] as SentinelSkillId[],slots:[...slots] as Array<SentinelSkillId|null>,practice:{...value.practice} as SentinelBook["practice"],cooldowns:{...value.cooldowns} as SentinelBook["cooldowns"],...(skillRankCost(ranks)?{ranks}:{})};
 }

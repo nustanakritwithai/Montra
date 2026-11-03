@@ -29,7 +29,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Validate client JavaScript
-        run: node --check main.js && node --check audio.js && node --check account-entry.js && node deploy/combat/account-delete-ui-test.cjs
+        run: node --check main.js && node --check audio.js && node --check account-entry.js && node deploy/combat/account-delete-ui-test.cjs && node deploy/combat/skill-rank-ui-test.cjs
 
       - name: Verify combat HUD wiring
         shell: bash
@@ -43,6 +43,9 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html main.js audio.js account-entry.js styles.css _site/
+          # A release of the map and its client must load together even if the label in index.html was reused.
+          sed -i '/src="\.\/main\.js?/s/" defer/\&amp;rev='"$GITHUB_SHA"'" defer/' _site/index.html
+          grep -Fq "&amp;rev=${GITHUB_SHA}\" defer" _site/index.html
           # Game models (shaman body, Crescent Blade) loaded by main.js.
           cp -r assets _site/assets
           test -s _site/assets/characters/thai-male.glb

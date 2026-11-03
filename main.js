@@ -9719,7 +9719,7 @@
     if(container.contains(document.activeElement) && document.activeElement.matches("select[data-sentinel-equip]"))return;
     const key=JSON.stringify([data.book,me.level]);if(key===sentinelBookRenderKey)return;sentinelBookRenderKey=key;
     const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
-    const learned=data.book.learned,slots=data.book.slots,practice=data.book.practice,points=Math.max(0,data.points-learned.length);
+    const learned=data.book.learned,slots=data.book.slots,practice=data.book.practice,ranks=data.book.ranks || {},points=Math.max(0,data.points-learned.length-Object.values(ranks).reduce((sum,n)=>sum+n,0));
     const branchNames={defense:"ตั้งรับ",control:"ควบคุม",support:"คุ้มกันปาร์ตี้"};let previous="";
     const rows=Object.entries(data.lessons).map(([id,node])=>{
       const heading=node.branch!==previous?'<h3>'+clean(branchNames[node.branch] || node.branch)+'</h3>':"";previous=node.branch;
@@ -9729,11 +9729,14 @@
       const training=Object.entries(node.practice).map(([name,count])=>" · "+clean(data.practiceLabels[name] || name)+" "+(practice[name]||0)+"/"+count).join("");
       const detail="Lv."+node.level+" · "+clean(node.description)+(node.effect==="passive"?" · ติดตัว":" · กำลัง "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ")+prereq+training;
       const control=known?(node.effect==="passive"?'<span class="sword-passive">เรียนแล้ว · ติดตัว</span>':'<label class="sword-slot-label">ช่องลัด <select data-sentinel-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>'):'<button type="button" data-sentinel-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
-      return heading+'<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small></div>'+control+'</article>';
+      const rank=Number(ranks[id] || 0),rankLevels=data.rankLevels || [],rankable=known && (data.rankable || []).includes(id),next=rankLevels[rank],needed=(data.rankPractice || [])[rank] || 0,done=Object.values(practice).reduce((sum,n)=>sum+n,0);
+      const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · ดาเมจมอนสเตอร์ +'+(rank*4)+'%'+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+done+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-sentinel-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || done<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
+      return heading+'<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small>'+upgrade+'</div>'+control+'</article>';
     }).join("");
     const summary=Object.entries(data.practiceLabels).map(([name,label])=>clean(label)+" "+(practice[name]||0)).join(" · ");
     container.innerHTML='<p>แต้มว่าง '+points+' · '+summary+'</p><p class="note">สตันผู้เล่นสั้นกว่ามอนสเตอร์และมีช่วงต้าน · บอสและมอนสเตอร์ชั้นสูงต้านการสตันและยั่วยุ</p><p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที ผลฝึกและคูลดาวน์ยังคงอยู่</p>'+rows+'<button id="resetSentinelBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
     container.querySelectorAll("[data-sentinel-learn]").forEach(button=>button.onclick=()=>room.send("sentinel_book",{action:"learn",skillId:button.dataset.sentinelLearn}));
+    container.querySelectorAll("[data-sentinel-upgrade]").forEach(button=>button.onclick=()=>room.send("sentinel_book",{action:"upgrade",skillId:button.dataset.sentinelUpgrade}));
     container.querySelectorAll("[data-sentinel-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("sentinel_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.sentinelEquip});select.blur();});
     $("resetSentinelBook").onclick=()=>{if(window.confirm("คืนแต้มผู้พิทักษ์? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("sentinel_book",{action:"reset"});};
   }
@@ -9773,7 +9776,7 @@
     if(container.contains(document.activeElement) && document.activeElement.matches("select[data-blade-equip]"))return;
     const key=JSON.stringify([data.book,me.level]);if(key===bladeBookRenderKey)return;bladeBookRenderKey=key;
     const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
-    const learned=data.book.learned,slots=data.book.slots,practice=data.book.practice,points=Math.max(0,data.points-learned.length);
+    const learned=data.book.learned,slots=data.book.slots,practice=data.book.practice,ranks=data.book.ranks || {},points=Math.max(0,data.points-learned.length-Object.values(ranks).reduce((sum,n)=>sum+n,0));
     const branchNames={veil:"มนตราอำพราง",edge:"คมอาคม",tempo:"ชิงจังหวะและเอาตัวรอด"};let previousBranch="";
     const rows=Object.entries(data.lessons).map(([id,node])=>{
       const heading=node.branch!==previousBranch?'<h3>'+clean(branchNames[node.branch] || node.branch)+'</h3>':"";previousBranch=node.branch;
@@ -9784,11 +9787,14 @@
       const strength=["strike","consume","windup","counter"].includes(node.effect)?" · พลังโจมตี "+Math.round(node.power*100)+"%":"";
       const detail="Lv."+node.level+" · "+clean(node.description)+strength+(node.effect==="passive"?" · ติดตัว":" · กำลัง "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ")+prereq+training;
       const control=known ? (node.effect==="passive"?'<span class="sword-passive">เรียนแล้ว · ติดตัว</span>':'<label class="sword-slot-label">ช่องลัด <select data-blade-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>') : '<button type="button" data-blade-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
-      return heading+'<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small></div>'+control+'</article>';
+      const rank=Number(ranks[id] || 0),rankLevels=data.rankLevels || [],rankable=known && (data.rankable || []).includes(id),next=rankLevels[rank],needed=(data.rankPractice || [])[rank] || 0,done=Object.values(practice).reduce((sum,n)=>sum+n,0);
+      const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · ดาเมจมอนสเตอร์ +'+(rank*4)+'%'+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+done+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-blade-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || done<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
+      return heading+'<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small>'+upgrade+'</div>'+control+'</article>';
     }).join("");
     const summary=Object.entries(data.practiceLabels).map(([name,label])=>clean(label)+" "+(practice[name]||0)).join(" · ");
     container.innerHTML='<p>แต้มว่าง '+points+' · '+summary+'</p><p class="note">พรางตัวได้หลังพ้นการต่อสู้ 2 วินาที ร่าย 0.6 วินาทีและพราง 5 วินาที · ฝึกจากมอนสเตอร์เท่านั้น</p><p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที การคืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetBladeBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
     container.querySelectorAll("[data-blade-learn]").forEach(button=>button.onclick=()=>room.send("blade_book",{action:"learn",skillId:button.dataset.bladeLearn}));
+    container.querySelectorAll("[data-blade-upgrade]").forEach(button=>button.onclick=()=>room.send("blade_book",{action:"upgrade",skillId:button.dataset.bladeUpgrade}));
     container.querySelectorAll("[data-blade-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("blade_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.bladeEquip});select.blur();});
     $("resetBladeBook").onclick=()=>{if(window.confirm("คืนแต้มสายคมดาบ? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("blade_book",{action:"reset"});};
   }
@@ -9820,7 +9826,7 @@
       slot.textContent=node ? node.name+(times[index] ? " "+times[index]+" วิ" : "") : "ช่องว่าง";
       slot.disabled=!node || !me.alive || Boolean(times[index]);
       slot.onclick=()=>{
-        if (["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind"].includes(node.effect)) {
+        if (["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind","pve_rice"].includes(node.effect)) {
           selectedOccultSkill=id;setTargetedSkill("occult");
           const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId);
           if (targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId) castAtTarget(targetId);
@@ -9863,7 +9869,8 @@
     const path=data.path,learned=data.book.learned[path],slots=data.book.loadouts[path],training=data.book.training[path];
     const key=JSON.stringify([data.book,me.level]);if(key===occultBookRenderKey)return;occultBookRenderKey=key;
     const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
-    const points=Math.max(0,data.points-learned.length);
+    const ranks=data.book.ranks || {},spent=Object.entries(ranks).reduce((sum,[id,n])=>sum+(data.lessons[id]?.path===path?n:0),0);
+    const points=Math.max(0,data.points-learned.length-spent);
     const progress=data.book.mastery?.[path] || {},labels=data.masteryLabels?.[path] || {};
     const rows=Object.entries(data.lessons).filter(([,node])=>node.path===path).map(([id,node])=>{
       const known=learned.includes(id),missing=node.requires.filter(req=>!learned.includes(req));
@@ -9875,7 +9882,9 @@
       const detail="Lv."+node.level+" · "+clean(node.description)+" · ระยะ "+node.range+" · กำลัง "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ · ฝึกรวม "+training+"/"+node.training+prerequisite+masteryDetail;
       const control=known ? '<label class="sword-slot-label">ช่องลัด <select data-occult-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>' :
         '<button type="button" data-occult-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
-      return '<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small></div>'+control+'</article>';
+      const rank=Number(ranks[id] || 0),rankLevels=data.rankLevels || [],rankable=known && (data.rankable || []).includes(id),next=rankLevels[rank],needed=(data.rankPractice || [])[rank] || 0;
+      const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · ดาเมจมอนสเตอร์ +'+(rank*4)+'%'+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+training+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-occult-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || training<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
+      return '<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small>'+upgrade+'</div>'+control+'</article>';
     }).join("");
     const summary=Object.entries(labels).map(([category,label])=>clean(label)+" "+(progress[category] || 0)).join(" · ");
     container.innerHTML='<p>สาย'+(path==="seer"?"ผู้ร่ายเวท":"ผู้เยียวยา")+' · แต้มว่าง '+points+' · ผลฝึกรวม '+training+'</p>'+(summary?'<p>ผลฝึกแยกหมวด: '+summary+'</p><p class="note">ผีจากหม้อนับครั้งแรกที่โจมตีมอนสเตอร์ต่อการเรียกหนึ่งครั้ง ส่วนผีที่ได้รับคำสั่งนับเมื่อโจมตีสำเร็จ</p>':'')+
@@ -9884,6 +9893,7 @@
       '<p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · คืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetOccultBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
     $("occultFlight").onclick=()=>{closeDrawer();toggleFlight();};
     container.querySelectorAll("[data-occult-learn]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"learn",skillId:button.dataset.occultLearn}));
+    container.querySelectorAll("[data-occult-upgrade]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"upgrade",skillId:button.dataset.occultUpgrade}));
     container.querySelectorAll("[data-occult-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("occult_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.occultEquip});select.blur();});
     $("resetOccultBook").onclick=()=>{if(window.confirm("คืนแต้มสายนี้? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("occult_book",{action:"reset"});};
   }
@@ -9954,7 +9964,7 @@
     const key=muayBookViewedSchool+"|"+me.level+"|"+me.muayBookData;
     if(key===muayBookRenderKey)return;muayBookRenderKey=key;
     const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
-    const points=1+Math.floor((Math.min(me.level,100)-1)/2)-book.learned.length;
+    const ranks=book.ranks || {},points=1+Math.floor((Math.min(me.level,100)-1)/2)-book.learned.length-Object.values(ranks).reduce((sum,n)=>sum+n,0);
     const school=catalog.schools[muayBookViewedSchool], selected=book.school===muayBookViewedSchool;
     const schoolMastery=book.mastery?.[muayBookViewedSchool] || {technique:0,sequences:0},masteryLabel=catalog.masteryLabels?.[muayBookViewedSchool] || "วิชาประจำสำนัก";
     const canSelect=me.level>=school.level && book.training.strikes>=school.strikes && book.training.blocks>=school.blocks;
@@ -9969,13 +9979,16 @@
       const masteryInfo=mastery ? ' · '+clean(catalog.masteryLabels?.[lesson.school] || 'ฝึกสำนัก')+' '+progress.technique+'/'+mastery.technique+(mastery.sequences ? ' · ชุดต่อเนื่อง '+progress.sequences+'/'+mastery.sequences : '') : '';
       const info=lesson ? 'Lv.'+lesson.level+' · '+clean(lesson.description)+' · '+(node.range ? 'ระยะ '+node.range : 'ใช้กับตนเอง')+' · กำลัง '+node.stamina+' · คูลดาวน์ '+node.cooldownMs/1000+' วิ · ฝึกโจมตี '+lesson.training.strikes+' / รับ '+lesson.training.blocks+prerequisite+masteryInfo : id==="teep" ? 'วิชาพื้นฐาน · พลัง 80% · หยุดจังหวะศัตรูทั่วไป 0.7 วิ · Elite/บอสไม่ถูกหยุด' : id==="parry" ? 'วิชาพื้นฐาน · ปัดด้านหน้า 1 ครั้งใน 0.6 วิ รับดาเมจ 35% และเปิดจังหวะสวน · กำลัง 18 · คูลดาวน์ 9 วิ' : id==="evade" ? 'วิชาพื้นฐาน · ถอย 1.2 หน่วย เบี่ยงแรงด้านหน้า 1 ครั้งใน 0.45 วิ รับดาเมจ 20% และเปิดจังหวะสวน · กำลัง 20 · คูลดาวน์ 8 วิ' : 'วิชาพื้นฐาน · พร้อมใช้';
       const button=learned ? (lesson && !selected ? '<span class="sword-passive">เรียนแล้ว</span>' : '<label class="sword-slot-label">ช่องลัด <select data-muay-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slot===n?'selected':'')+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>') : '<button type="button" data-muay-learn="'+clean(id)+'" '+(locked?'disabled':'')+'>เรียน 1 แต้ม</button>';
-      return '<article class="sword-node'+(learned?' learned':'')+'"><div><strong>'+clean(node.name)+'</strong><small>'+info+'</small></div>'+button+'</article>';
+      const rank=Number(ranks[id] || 0),rankLevels=catalog.rankLevels || [],rankable=learned && (catalog.rankable || []).includes(id),next=rankLevels[rank],needed=(catalog.rankPractice || [])[rank] || 0,done=book.training.strikes+book.training.blocks;
+      const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · ดาเมจมอนสเตอร์ +'+(rank*4)+'%'+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+done+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-muay-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || !selected || done<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
+      return '<article class="sword-node'+(learned?' learned':'')+'"><div><strong>'+clean(node.name)+'</strong><small>'+info+'</small>'+upgrade+'</div>'+button+'</article>';
     }).join("");
     const combo=(catalog.combos?.[muayBookViewedSchool] || []).map(move=>muayMoveLabels[move] || move).map(clean).join(' → ');
     container.innerHTML='<p>วิชาพื้นฐานใช้ได้ทันที · แต้มว่าง '+points+'</p><p>ฝึกโจมตี '+book.training.strikes+' ครั้ง · รับสำเร็จ '+book.training.blocks+' ครั้ง</p><p class="note">เรียน เปลี่ยนสำนัก คืนแต้ม และจัดช่องลัดที่ลานพักหลังพ้นการต่อสู้ 5 วินาที</p><div class="sword-schools">'+schoolButtons+'</div><p>กำลังดูสำนัก '+clean(school.name)+' · '+clean(school.description)+'</p><p>ฝึกสำนัก: '+clean(masteryLabel)+' '+schoolMastery.technique+' ครั้ง · ชุดต่อเนื่อง '+schoolMastery.sequences+' ครั้ง</p><p class="note">'+clean(catalog.masteryGuides?.[muayBookViewedSchool] || '')+'</p><p class="note">นับเมื่อใช้วิชากับมอนสเตอร์สำเร็จ ชุดต่อเนื่องนับเมื่อคอมโบครบหรือใช้วิชาต่อเนื่องประจำสำนักสำเร็จ · PvP ไม่นับ</p><p>คอมโบวิชามวย: '+combo+' · วิชาสุดท้าย +25% กับมอนสเตอร์ / +'+Math.round(((catalog.pvpCombo ?? 1)-1)*100)+'% ใน PvP · ต่อภายใน 6 วิ</p><p class="note">นับเฉพาะวิชามวยที่โจมตีสำเร็จบนเป้าหมายเดิม · PvP ใช้พลังวิชา '+Math.round((catalog.pvpDamage ?? 1)*100)+'% ก่อนหักป้องกัน · ถีบผู้เล่นไม่หยุดจังหวะ</p><p class="note">ต้องการ Lv.'+school.level+' · ฝึกโจมตี '+school.strikes+' / รับ '+school.blocks+'</p><button type="button" id="chooseMuaySchool" class="secondary" '+(selected || !canSelect?'disabled':'')+'>เลือกใช้สำนักนี้</button>'+rows+'<button type="button" id="resetMuayBook" class="secondary" '+(!book.learned.length?'disabled':'')+'>คืนแต้มทุกสำนัก</button>';
     container.querySelectorAll("[data-muay-school]").forEach(button=>button.onclick=()=>{muayBookViewedSchool=button.dataset.muaySchool;muayBookRenderKey="";renderMuayBook();});
     $("chooseMuaySchool").onclick=()=>room.send("muay_book",{action:"school",school:muayBookViewedSchool});
     container.querySelectorAll("[data-muay-learn]").forEach(button=>button.onclick=()=>room.send("muay_book",{action:"learn",skillId:button.dataset.muayLearn}));
+    container.querySelectorAll("[data-muay-upgrade]").forEach(button=>button.onclick=()=>room.send("muay_book",{action:"upgrade",skillId:button.dataset.muayUpgrade}));
     container.querySelectorAll("[data-muay-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("muay_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.muayEquip});select.blur();});
     $("resetMuayBook").onclick=()=>{if(window.confirm("คืนแต้มวิชามวยทุกสำนัก? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("muay_book",{action:"reset"});};
   }
@@ -10069,14 +10082,14 @@
     // Keep the slot selector stable while the player is choosing an option.
     if (container.contains(document.activeElement) && document.activeElement.matches("select[data-equip]")) return;
     const focus=document.activeElement;
-    const focusAttributes=["data-view-school","data-learn","data-cast","data-clear-slot","id"];
+    const focusAttributes=["data-view-school","data-learn","data-sword-upgrade","data-cast","data-clear-slot","id"];
     const focusAttribute=container.contains(focus) ? focusAttributes.find(name=>focus.hasAttribute(name)) : null;
     const focusValue=focusAttribute ? focus.getAttribute(focusAttribute) : null;
     const hasCooldown=Object.values(tree.cooldowns).some(readyAt=>readyAt>Date.now());
     const key=swordTreeViewedSchool+"|"+me.level+"|"+me.alive+"|"+me.equippedWeaponId+"|"+me.swordTreeData+"|"+(hasCooldown?Math.floor(Date.now()/1000):0);
     if (key===swordTreeRenderKey) return;
     swordTreeRenderKey=key;
-    const points=1+Math.floor((Math.min(me.level,100)-1)/2)-tree.learned.length;
+    const ranks=tree.ranks || {},points=1+Math.floor((Math.min(me.level,100)-1)/2)-tree.learned.length-Object.values(ranks).reduce((sum,n)=>sum+n,0);
     const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
     const schoolButtons=Object.entries(catalog.schools).map(([id,school])=>
       '<button type="button" class="sword-school'+(swordTreeViewedSchool===id?' selected':'')+'" data-view-school="'+clean(id)+'" aria-pressed="'+String(swordTreeViewedSchool===id)+'">'+clean(school.name)+' · Lv.'+school.level+(tree.school===id?' · ใช้อยู่':'')+'</button>').join("");
@@ -10102,11 +10115,13 @@
         const button=learned ? (!availableSchool ? '<span class="sword-passive">เรียนแล้ว</span>' : node.effect==="passive" ? '<span class="sword-passive">ติดตัวแล้ว</span>' :
           '<button type="button" data-cast="'+clean(id)+'" '+(remaining || !me.alive?'disabled':'')+'>'+(remaining?remaining+' วิ':'ใช้วิชา')+'</button>') :
           '<button type="button" data-learn="'+clean(id)+'" '+(locked?'disabled':'')+'>เรียน 1 แต้ม</button>';
+        const rank=Number(ranks[id] || 0),rankLevels=catalog.rankLevels || [],rankable=learned && (catalog.rankable || []).includes(id),next=rankLevels[rank],needed=(catalog.rankPractice || [])[rank] || 0,done=Object.values(tree.training).reduce((sum,n)=>sum+n,0);
+        const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · ดาเมจมอนสเตอร์ +'+(rank*4)+'%'+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+done+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-sword-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || !availableSchool || done<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
         return '<article class="sword-node'+(learned?' learned':'')+'"><div><strong>'+clean(node.name)+'</strong> <small>Lv.'+node.level+'</small><p>'+clean(node.description)+'</p>'+
           (requirements.length?'<small>ต้องเรียน '+clean(reqText)+'</small>':'')+
           (node.training?'<small>'+clean(trainingNames[node.training.id])+': '+training+' / '+node.training.count+'</small>':'')+
           (effectInfo?'<small>'+clean(effectInfo)+'</small>':'')+
-          (node.effect!=="passive"?'<small>กำลัง '+node.stamina+' · รอ '+(node.cooldownMs/1000)+' วิ</small>':'')+slotSelect+'</div>'+button+'</article>';
+          (node.effect!=="passive"?'<small>กำลัง '+node.stamina+' · รอ '+(node.cooldownMs/1000)+' วิ</small>':'')+upgrade+slotSelect+'</div>'+button+'</article>';
       }).join("");
       return '<section><h3>'+clean(title)+'</h3>'+rows+'</section>';
     }).join("");
@@ -10132,6 +10147,7 @@
     container.querySelectorAll("[data-learn]").forEach(button=>button.onclick=()=>{
       room.send("sword_tree_learn",{skillId:button.dataset.learn});
     });
+    container.querySelectorAll("[data-sword-upgrade]").forEach(button=>button.onclick=()=>room.send("sword_tree_upgrade",{skillId:button.dataset.swordUpgrade}));
     container.querySelectorAll("[data-equip]").forEach(select=>select.onchange=()=>{
       if (select.value!=="") room.send("sword_tree_equip",{skillId:select.dataset.equip,slot:Number(select.value)});
       select.blur();

@@ -1,4 +1,5 @@
 import type { StatModifier } from "./StatModifiers.js";
+import { skillRankCost, validateSkillRanks, type SkillRanks } from "./Progression.js";
 
 /** Server-owned starter skill configuration; values are provisional. */
 const POSSESSION_BONUS=0.2;
@@ -55,13 +56,14 @@ export type SwordLoadouts = Record<SwordSchool,Array<string|null>>;
 export function emptySwordLoadouts():SwordLoadouts {
   return {phutthaisawan:[null,null,null],sritrairat:[null,null,null],atamat:[null,null,null],chumphon:[null,null,null]};
 }
-export type SwordTree = {school:SwordSchool; learned:string[]; cooldowns:Record<string,number>; training:SwordTraining; loadouts:SwordLoadouts};
+export const SWORD_RANKABLE_SKILLS=["footwork","sweep","twin_cut","circle_step","twin_finale","riposte","seize","opening_cut","turning_counter","guardian_sweep"] as const;
+export type SwordTree = {school:SwordSchool; learned:string[]; cooldowns:Record<string,number>; training:SwordTraining; loadouts:SwordLoadouts;ranks?:SkillRanks};
 export function newSwordTree():SwordTree { return {school:"phutthaisawan",learned:[],cooldowns:{},training:{strikes:0,blocks:0,finishes:0},loadouts:emptySwordLoadouts()}; }
 export function swordPoints(level:number):number { return 1 + Math.floor((Math.min(level,100)-1)/2); }
 export function validateSwordTree(value:unknown, level:number):SwordTree {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("invalid_sword_tree");
   const tree=value as Record<string,unknown>;
-  if (Object.keys(tree).some(key=>!["cooldowns","learned","school","training","loadouts"].includes(key)) ||
+  if (Object.keys(tree).some(key=>!["cooldowns","learned","school","training","loadouts","ranks"].includes(key)) ||
       typeof tree.school !== "string" || !Object.hasOwn(SWORD_SCHOOLS,tree.school) ||
       !Array.isArray(tree.learned) || !tree.cooldowns || typeof tree.cooldowns !== "object" || Array.isArray(tree.cooldowns)) throw Error("invalid_sword_tree");
   if (SWORD_SCHOOLS[tree.school as SwordSchool].level>level) throw Error("invalid_sword_tree");
@@ -89,5 +91,7 @@ export function validateSwordTree(value:unknown, level:number):SwordTree {
     if (new Set(occupied).size!==occupied.length || occupied.some(id=>typeof id!=="string" || !learned.includes(id) || !Object.hasOwn(SWORD_NODES,id) || SWORD_NODES[id].effect==="passive" || (SWORD_NODES[id].school!=="common" && SWORD_NODES[id].school!==school))) throw Error("invalid_sword_tree");
     checked[school]=[...slots] as Array<string|null>;
   }
-  return {school:tree.school as SwordSchool, learned:[...learned] as string[], cooldowns:{...cooldowns} as Record<string,number>,training:{...counts} as SwordTraining,loadouts:checked};
+  let ranks:SkillRanks;
+  try{ranks=validateSkillRanks(tree.ranks,learned as string[],level,swordPoints(level),SWORD_RANKABLE_SKILLS);}catch{throw Error("invalid_sword_tree");}
+  return {school:tree.school as SwordSchool, learned:[...learned] as string[], cooldowns:{...cooldowns} as Record<string,number>,training:{...counts} as SwordTraining,loadouts:checked,...(skillRankCost(ranks)?{ranks}:{})};
 }

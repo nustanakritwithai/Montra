@@ -20,3 +20,8 @@ test("shrine loot at the XP cap preserves the nearby member's full EXP share", (
     {sessionId:"earner",amount:3600}, {sessionId:"capped",amount:0}
   ]);
 });
+test("higher-level monsters have a bounded pool that remains equal for eligible party members",()=>{
+  const monster={...m,level:100};
+  const shares=partyMonsterShares(1,monster,[actor("a"),actor("b"),actor("far",{x:80})]);
+  assert.deepEqual(shares,[{sessionId:"a",amount:6250},{sessionId:"b",amount:6250}]);
+});

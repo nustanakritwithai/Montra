@@ -25,9 +25,12 @@ export const BLADE_LESSONS = {
   killer_focus:{name:"จิตสังหาร",description:"เพิ่มพลังช่วงสั้นหลังเปิดฉากจากการพราง",branch:"tempo",level:15,requires:["counter","hidden_edge"],practice:{ambush:8,combo:4},effect:"focus",stamina:24,cooldownMs:25000,range:0,power:0.15},
 } as const satisfies Record<string,BladeLesson>;
 export type BladeSkillId = keyof typeof BLADE_LESSONS;
+import { skillRankCost, validateSkillRanks, type SkillRanks } from "./Progression.js";
+export const BLADE_RANKABLE_SKILLS = ["hidden_edge","marked_cut","piercing_edge","sever_mark"] as const;
 export type BladeBook = {
   learned:BladeSkillId[]; slots:Array<BladeSkillId|null>;
   practice:Record<BladePractice,number>; cooldowns:Partial<Record<BladeSkillId,number>>;
+  ranks?:SkillRanks;
 };
 export function bladePoints(level:number):number { return 1+Math.floor((Math.min(level,100)-1)/2); }
 export function newBladeBook():BladeBook {
@@ -36,7 +39,7 @@ export function newBladeBook():BladeBook {
 function record(value:unknown):value is Record<string,unknown> { return value!==null && typeof value==="object" && !Array.isArray(value); }
 function count(value:unknown):value is number { return typeof value==="number" && Number.isSafeInteger(value) && value>=0 && value<=1_000_000; }
 export function validateBladeBook(value:unknown,level:number):BladeBook {
-  if(!record(value) || Object.keys(value).sort().join(",")!=="cooldowns,learned,practice,slots" ||
+  if(!record(value) || Object.keys(value).some(key=>!["cooldowns","learned","practice","slots","ranks"].includes(key)) ||
       !Array.isArray(value.learned) || !Array.isArray(value.slots) || !record(value.practice) || !record(value.cooldowns)) throw Error("invalid_blade_book");
   const learned=value.learned,slots=value.slots;
   if(learned.length>bladePoints(level) || new Set(learned).size!==learned.length ||
@@ -50,5 +53,7 @@ export function validateBladeBook(value:unknown,level:number):BladeBook {
   if(Object.keys(value.practice).sort().join(",")!=="ambush,combo,evade,mark" || Object.values(value.practice).some(n=>!count(n))) throw Error("invalid_blade_book");
   for(const [id,ready] of Object.entries(value.cooldowns))
     if(!Object.hasOwn(BLADE_LESSONS,id) || typeof ready!=="number" || !Number.isSafeInteger(ready) || ready<0) throw Error("invalid_blade_book");
-  return {learned:[...learned] as BladeSkillId[],slots:[...slots] as Array<BladeSkillId|null>,practice:{...value.practice} as BladeBook["practice"],cooldowns:{...value.cooldowns} as BladeBook["cooldowns"]};
+  let ranks:SkillRanks;
+  try {ranks=validateSkillRanks(value.ranks,learned as string[],level,bladePoints(level),BLADE_RANKABLE_SKILLS);}catch {throw Error("invalid_blade_book");}
+  return {learned:[...learned] as BladeSkillId[],slots:[...slots] as Array<BladeSkillId|null>,practice:{...value.practice} as BladeBook["practice"],cooldowns:{...value.cooldowns} as BladeBook["cooldowns"],...(skillRankCost(ranks)?{ranks}:{})};
 }

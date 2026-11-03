@@ -1,9 +1,10 @@
 /** Game-design values are provisional and all combat decisions remain server-owned. */
+import {skillRankCost,validateSkillRanks,type SkillRanks} from "./Progression.js";
 export const OCCULT_PATHS = ["seer", "mender"] as const;
 export type OccultPath = typeof OCCULT_PATHS[number];
 export type OccultEffect = "mark" | "rice" | "rice_area" | "detonate" | "interrupt" | "curse" | "curse_burst" |
   "spirit" | "spirit_bind" | "trance" | "heal" | "heal_area" | "spirit_heal" | "ward" | "ward_area" |
-  "cleanse" | "cleanse_area" | "spirit_ward";
+  "cleanse" | "cleanse_area" | "spirit_ward" | "pve_rice";
 export type OccultLesson = Readonly<{
   name:string; description:string; path:OccultPath; level:number; requires:readonly string[];
   training:number; effect:OccultEffect; stamina:number; cooldownMs:number; range:number; power:number;
@@ -28,8 +29,10 @@ export const OCCULT_LESSONS = {
   mender_cleanse_area: {name:"ข้าวสารปัดเคราะห์",description:"ถอนคำสาปอาคมจากตนและสมาชิกปาร์ตี้ใกล้เคียง",path:"mender",level:12,requires:["mender_cleanse","mender_area"],training:20,effect:"cleanse_area",stamina:28,cooldownMs:20000,range:8,power:0},
   mender_spirit_heal: {name:"ผีประคอง",description:"ให้ผีจากหม้อช่วยฟื้น HP ตนเองหรือสมาชิกปาร์ตี้",path:"mender",level:12,requires:["mender_spirit","mender_heal"],training:20,effect:"spirit_heal",stamina:25,cooldownMs:16000,range:12,power:0.2},
   mender_trance: {name:"ทรงผีฟื้นกำลัง",description:"ขณะเข้าทรงเพิ่มการป้องกันและฟื้นกำลัง 15 ให้ปาร์ตี้ใกล้เคียง",path:"mender",level:15,requires:["mender_area","mender_spirit"],training:25,effect:"trance",stamina:28,cooldownMs:25000,range:8,power:0.12},
+  mender_pve_rice: {name:"ข้าวสารคุ้มชีพ",description:"ซัดข้าวสารอาคมใส่มอนสเตอร์ ช่วยผู้เยียวยาเก็บเลเวลด้วยตนเอง",path:"mender",level:25,requires:["mender_heal"],training:8,effect:"pve_rice",stamina:18,cooldownMs:6000,range:12,power:1.3},
 } as const satisfies Record<string, OccultLesson>;
 export type OccultSkillId = keyof typeof OCCULT_LESSONS;
+export const OCCULT_RANKABLE_SKILLS:readonly OccultSkillId[]=["seer_mark","seer_rice","seer_scatter","seer_burst","seer_seal","seer_curse","seer_hexburst","mender_pve_rice"];
 export const OCCULT_MASTERY_LABELS = {
   seer:{rice:"ข้าวสารใส่มอนสเตอร์",talisman:"ยันต์ใส่มอนสเตอร์",spirit:"ผีช่วยโจมตี",curse:"คำสาปมอนสเตอร์"},
   mender:{healing:"รักษาที่เกิดผล",protection:"คุ้มครองขณะต่อสู้",cleanse:"ถอนคำสาป",spirit:"ผีช่วยเหลือ"},
@@ -55,8 +58,12 @@ export type OccultBook = {
   training:Record<OccultPath,number>;
   cooldowns:Partial<Record<OccultSkillId,number>>;
   mastery:OccultMastery;
+  ranks?:SkillRanks;
 };
 export const occultPoints = (level:number):number => 1 + Math.floor((Math.min(level,100)-1)/2);
+export function occultRankCost(ranks:SkillRanks | undefined,path:OccultPath):number {
+  return Object.entries(ranks ?? {}).reduce((sum,[id,rank])=>sum+(Object.hasOwn(OCCULT_LESSONS,id) && OCCULT_LESSONS[id as OccultSkillId].path===path?rank:0),0);
+}
 export function newOccultBook():OccultBook {
   return {learned:{seer:[],mender:[]},loadouts:{seer:[null,null,null,null],mender:[null,null,null,null]},training:{seer:0,mender:0},cooldowns:{},
     mastery:{seer:{rice:0,talisman:0,spirit:0,curse:0},mender:{healing:0,protection:0,cleanse:0,spirit:0}}};
@@ -65,7 +72,7 @@ function record(value:unknown):value is Record<string,unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 export function validateOccultBook(value:unknown,level:number):OccultBook {
-  if (!record(value) || Object.keys(value).some(key=>!["cooldowns","learned","loadouts","training","mastery"].includes(key)) ||
+  if (!record(value) || Object.keys(value).some(key=>!["cooldowns","learned","loadouts","training","mastery","ranks"].includes(key)) ||
       !record(value.learned) || !record(value.loadouts) || !record(value.training) || !record(value.cooldowns))
     throw Error("invalid_occult_book");
   for (const group of [value.learned,value.loadouts,value.training])
@@ -100,6 +107,17 @@ export function validateOccultBook(value:unknown,level:number):OccultBook {
   for (const [id,ready] of Object.entries(value.cooldowns)) {
     if (!Object.hasOwn(OCCULT_LESSONS,id) || typeof ready!=="number" || !Number.isSafeInteger(ready) || ready<0) throw Error("invalid_occult_book");
     result.cooldowns[id as OccultSkillId]=ready;
+  }
+  if(value.ranks!==undefined){
+    if(!record(value.ranks))throw Error("invalid_occult_book");
+    const ranks:SkillRanks={};
+    for(const path of OCCULT_PATHS){
+      const allowed=OCCULT_RANKABLE_SKILLS.filter(id=>OCCULT_LESSONS[id].path===path);
+      const raw=Object.fromEntries(Object.entries(value.ranks).filter(([id])=>allowed.includes(id as OccultSkillId)));
+      try{Object.assign(ranks,validateSkillRanks(raw,result.learned[path],level,occultPoints(level),allowed));}catch{throw Error("invalid_occult_book");}
+    }
+    if(Object.keys(ranks).length!==Object.keys(value.ranks).length)throw Error("invalid_occult_book");
+    if(skillRankCost(ranks))result.ranks=ranks;
   }
   return result;
 }
