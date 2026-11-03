@@ -1,7 +1,8 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {BODY_SLOTS, PERSONAL_ITEMS, WEAPON_LEVELS, OUTFIT_LEVELS, MATERIAL_LEVELS, CATALOG_PAGES, equipPositions, fieldItem, monsterCardDrop, wearsTwinSwords, wearsWraps, usesStaff, type BodyItemId, type PersonalId} from "./PersonalItems.js";
-import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses,practiceLoot} from "./ItemRules.js";
+import {BODY_SLOTS, PERSONAL_ITEMS, WEAPON_LEVELS, OUTFIT_LEVELS, MATERIAL_LEVELS, equipPositions, monsterCardDrop, wearsTwinSwords, wearsWraps, usesStaff, type BodyItemId, type PersonalId} from "./PersonalItems.js";
+import {CATALOG_PAGES,hunts,findItemHunt,rollMonsterLoot} from "./MonsterLoot.js";
+import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses,practiceLoot,validateInventory} from "./ItemRules.js";
 import {EconomyStore} from "./EconomyStore.js";
 import {rollForge,forgeStamp,forgeIngredient} from "./ForgeRules.js";
 import {changeCardSocket} from "./CardSockets.js";
@@ -10,10 +11,84 @@ import {FOREST_CAMPS} from "./WorldMaps.js";
 import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {personalGearGuides,cardHunt} from "./GearGuides.js";
 import {gearMana} from "./ItemRules.js";
+import {MyRoom} from "./MyRoom.js";
+import {Player} from "./schema/MyRoomState.js";
 
 const paths=["muay_boran","phutthaisawan","blade","sentinel","seer","mender"];
 const entries=Object.entries(PERSONAL_ITEMS);
 const base={maxHp:1000,atk:100,def:110,magicAtk:90,magicDef:65,maxStamina:298};
+
+test("a listed monster really drops the item, and crafted and harvested products stay off its table",()=>{
+  const allOwned=new Set(entries.map(([id])=>id));
+  for(const mob of hunts){
+    const roll=rollMonsterLoot(mob.id,"muay_boran",allOwned,mob.level,0,mob.tier??"normal",max=>max-1);
+    assert(roll && PERSONAL_ITEMS[roll.id]?.kind==="material",mob.id+" has no material reward");
+  }
+  for(const [id,item] of entries){
+    const hint=findItemHunt(id as PersonalId,item.level!);
+    if(!item.dropMax || !item.forge && item.kind!=="material"){assert.equal(hint,null,id);continue;}
+    assert(hint,id);
+    const mob=hunts.find(m=>m.name===hint.monster && m.mapId===hint.mapId && m.level===hint.level)!;
+    const path=item.path==="all"?"muay_boran":item.path;
+    allOwned.delete(id);
+    if(item.forge)assert.equal(rollMonsterLoot(mob.id,path,allOwned,100,0,mob.tier??"normal",()=>0)?.id,id,id);
+    else assert(Array.from({length:7},(_,i)=>rollMonsterLoot(mob.id,path,allOwned,100,0,"normal",max=>max===100?99:i%max)?.id).some(candidate=>candidate===id),id);
+    allOwned.add(id);
+  }
+  const sword="wp_twins_2",wrap="wp_wrap_2";
+  const roll=(mob:string,path:string,id:string)=>rollMonsterLoot(mob,path,new Set([...allOwned].filter(i=>i!==id)),15,0,"normal",()=>0)?.id;
+  assert.equal(roll("temple_forecourt_3","phutthaisawan",sword),sword);
+  assert.notEqual(roll("atlas_drowned_marsh_2_1","phutthaisawan",sword),sword);
+  assert.equal(roll("atlas_drowned_marsh_2_1","muay_boran",wrap),wrap);
+  assert.notEqual(roll("temple_forecourt_3","muay_boran",wrap),wrap);
+  assert.notEqual(roll("atlas_drowned_marsh_2_1","phutthaisawan",wrap),wrap);
+  assert.equal(roll("atlas_drowned_marsh_1_1","muay_boran",wrap),wrap);
+  for(const level of WEAPON_LEVELS)for(const family of ["wp_wrap","wp_twins"]){
+    const hint=findItemHunt((family+"_"+(WEAPON_LEVELS.indexOf(level)+1)) as PersonalId,level);
+    assert(hint && hint.level<=level+2,family+" has no nearby hunt at level "+level);
+  }
+});
+
+test("three misses survive reload and a full bag preserves the guaranteed upgrade",()=>{
+  const miss=(max:number)=>max-1;
+  for(const [path,mob] of [["muay_boran","atlas_drowned_marsh_2_1"],["phutthaisawan","temple_forecourt_3"]]){
+    let bag=makeClassInventory(path);
+    const first=practiceLoot(bag,path,10,"normal",15,mob,miss);
+    assert(first.bag.firstChestClaimed);bag=first.bag;
+    for(let count=1;count<=3;count++){
+      const reward=practiceLoot(bag,path,10,"normal",15,mob,miss);
+      assert.equal(PERSONAL_ITEMS[reward.id!].kind,"material");
+      bag=validateInventory(JSON.parse(JSON.stringify(reward.bag)));
+      assert.equal(bag.lootMisses,count);
+    }
+    const full={...bag,slots:bag.slots.map(s=>s??{itemId:"health_potion" as const,quantity:99})};
+    const blocked=practiceLoot(full,path,10,"normal",15,mob,miss);
+    assert.equal(blocked.id,null);assert.equal(blocked.bag.lootMisses,3);
+    const material=path==="phutthaisawan"?"mat_metal_2":"mat_hide_2";
+    const tight={...full,lootMisses:0,slots:full.slots.map(s=>s.itemId.startsWith("mat_")?{...s,quantity:99}:s)};
+    tight.slots[11]={itemId:material,quantity:98};
+    const stacked=practiceLoot(tight,path,10,"normal",15,mob,miss);
+    assert.equal(stacked.id,material);assert.equal(stacked.quantity,1);assert.equal(stacked.bag.slots[11]?.quantity,99);
+    const reward=practiceLoot(bag,path,10,"normal",15,mob,miss);
+    assert(reward.id && PERSONAL_ITEMS[reward.id].recommended?.includes(path));assert.equal(reward.bag.lootMisses??0,0);
+  }
+});
+
+test("a dropped pair of wraps can be equipped and its Muay strike damages a monster",()=>{
+  const room=new MyRoom(),bag=makeClassInventory("muay_boran");
+  const roll=rollMonsterLoot("atlas_drowned_marsh_2_1","muay_boran",new Set(entries.map(([id])=>id).filter(id=>id!=="wp_wrap_2")),15,3,"normal",()=>0);
+  assert(roll?.id==="wp_wrap_2");
+  bag.slots[2]={itemId:roll.id,quantity:1};
+  const equipped=equipInventoryWeapon(bag,2,"muay_boran",15);assert(equipped.ok);
+  const actorId="looter",m=room.state.monster;
+  Object.assign(m,{x:-10,z:9,y:0,hp:500,maxHp:500});
+  room.state.players.set(actorId,new Player({pathId:"muay_boran",level:15,x:-10,z:8,y:0,alive:true,atk:40}));
+  const combat=room as unknown as {inventories:Map<string,typeof bag>;muayCoreHit(id:string,target:string,power:number):boolean;broadcast:()=>void};
+  combat.broadcast=()=>{};combat.inventories.set(actorId,equipped.inventory);
+  assert(combat.muayCoreHit(actorId,m.id,1));assert(m.hp<500);
+  const before=m.hp;combat.inventories.set(actorId,{...bag,equippedWeaponSlot:null});
+  assert.equal(combat.muayCoreHit(actorId,m.id,1),false);assert.equal(m.hp,before);
+});
 
 test("twelve suggested builds resolve to legal gear, cards and hunting grounds at all levels",()=>{
   for(const path of paths)for(let level=1;level<=100;level++){
@@ -84,7 +159,8 @@ test("every class has a legal, craftable outfit from 1 to 100, including two dis
   assert.equal(new Set(sent).size,entries.length);
   assert(CATALOG_PAGES.every(page=>Buffer.byteLength(JSON.stringify(page))<16_384));
   for(const level of MATERIAL_LEVELS){
-    const ids=new Set(Array.from({length:7},(_,i)=>fieldItem("seer",new Set(),level,max=>max===4?1:i)));
+    const ids=new Set(hunts.filter(m=>m.level>=level && m.level<(MATERIAL_LEVELS.find(n=>n>level)??101)).flatMap(m=>
+      Array.from({length:7},(_,i)=>rollMonsterLoot(m.id,"seer",new Set(),level,0,"normal",max=>max===100?99:i%max)!.id)));
     assert.equal(ids.size,7);
     for(const id of ids)assert.equal(PERSONAL_ITEMS[id].level,level);
   }
@@ -146,9 +222,9 @@ test("every class unlocks wearable equipment at every level, with field gear bou
 test("level 99 class gear can drop or be crafted, enhanced, rerolled, drilled and fitted before the cap",()=>{
   const item="arm_field_mender_99",def=PERSONAL_ITEMS[item],position=equipPositions(def.kind)[0];
   const owned=new Set(entries.map(([id])=>id).filter(id=>id!==item));
-  assert.equal(fieldItem("mender",owned,100,()=>0),item);
-  assert.notEqual(fieldItem("seer",owned,100,()=>0),item);
-  assert.notEqual(fieldItem("mender",owned,98,()=>0),item);
+  assert.equal(rollMonsterLoot("atlas_rift_warden","mender",owned,100,0,"boss",()=>0)?.id,item);
+  assert.notEqual(rollMonsterLoot("atlas_rift_warden","seer",owned,100,0,"boss",()=>0)?.id,item);
+  assert.notEqual(rollMonsterLoot("atlas_spirit_rift_5_1","mender",owned,98,0,"strong",()=>0)?.id,item);
   const store=new EconomyStore(":memory:"), account="f".repeat(64),bag=makeClassInventory("mender");
   try{
     let slot=2;

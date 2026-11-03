@@ -110,6 +110,7 @@ $files = @(
   @{ Name = "MonsterRRT.ts"; Target = "src\rooms\MonsterRRT.ts"; Check = "class MonsterRRTNavigator" },
   @{ Name = "CharacterStore.ts"; Target = "src\rooms\CharacterStore.ts"; Check = "inventory_record_missing" },
   @{ Name = "PersonalItems.ts"; Target = "src\rooms\PersonalItems.ts"; Check = "PERSONAL_ITEMS" },
+  @{ Name = "MonsterLoot.ts"; Target = "src\rooms\MonsterLoot.ts"; Check = "rollMonsterLoot" },
   @{ Name = "CardSockets.ts"; Target = "src\rooms\CardSockets.ts"; Check = "changeCardSocket" },
   @{ Name = "GearGuides.ts"; Target = "src\rooms\GearGuides.ts"; Check = "personalGearGuides" },
   @{ Name = "WorldResources.ts"; Target = "src\rooms\WorldResources.ts"; Check = "harvestableFrom" },

@@ -159,6 +159,7 @@ jobs:
           cp deploy/combat/MonsterRRT.ts combat-verify/src/rooms/MonsterRRT.ts
           cp deploy/combat/CharacterStore.ts combat-verify/src/rooms/CharacterStore.ts
           cp deploy/combat/PersonalItems.ts combat-verify/src/rooms/PersonalItems.ts
+          cp deploy/combat/MonsterLoot.ts combat-verify/src/rooms/MonsterLoot.ts
           cp deploy/combat/gear-progression.test.ts combat-verify/src/rooms/gear-progression.test.ts
           cp deploy/combat/CardSockets.ts combat-verify/src/rooms/CardSockets.ts
           cp deploy/combat/GearGuides.ts combat-verify/src/rooms/GearGuides.ts

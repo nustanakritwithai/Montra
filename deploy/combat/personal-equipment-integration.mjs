@@ -76,6 +76,9 @@ try{
   const {room,bag,me,event}=active;
   assert(Object.keys(active.catalog).length>400);
   const endgame=active.catalog.wp_twins_10;assert.equal(endgame.level,100);
+  assert.match(active.catalog.wp_twins_2.dropHint,/ภูตทวารบาล/);
+  assert.match(active.catalog.wp_wrap_2.dropHint,/พรายกอกก/);
+  assert.equal(active.catalog.mat_ingot_1.dropHint,undefined);
   const guides=active.event("gear_guides",p=>p.path==="phutthaisawan");
   assert.equal(guides?.builds.length,2);
   assert.equal(guides.builds[0].slots.find(s=>s.position==="offHand").next,"arm_field_phutthaisawan_2");
@@ -105,7 +108,16 @@ try{
   assert.equal(active.me().atk,before.atk+2);
   assert.equal(active.me().def,before.def+4);
   assert.equal(active.bag.slots.filter(s=>s?.itemId==="wp_twins_1").length,1);
+  active.room.send("attack",{targetId:"possessed-1"});
+  const prize=await until(()=>active.event("experience_gained",p=>p.personalDrop && p.personalDrop!=="bag_full"),"monster-specific personal loot",30000);
+  assert.match(active.catalog[prize.personalDrop].dropHint,/ผีสิง/);
+  assert(Number.isInteger(prize.dropQuantity) && prize.dropQuantity>0);
+  const earned=await until(()=>active.event("inventory_state",p=>p.slots.some(s=>s?.itemId===prize.personalDrop)),"reward in bag");
   const prefix=active.me().characterId;
+  await active.room.leave();active=null;await delay(400);
+  active=await join({});
+  assert(active.bag.slots.some(s=>s?.itemId===prize.personalDrop));
+  assert.equal(active.bag.lootMisses??0,earned.lootMisses??0);
   await active.room.leave();active=null;await delay(400);
   prepareCapstone(prefix,endgame.recipe);active=await join({});
   assert.equal(active.me().level,100);

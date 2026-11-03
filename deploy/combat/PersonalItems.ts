@@ -138,7 +138,6 @@ const fieldKits={
   seer:{title:"ครูอาคม",armor:"cloth",offHand:"off_jar",neck:"acc_spell",earring:"acc_earrings_focus",ring:"acc_ring_spell"},
   mender:{title:"เรียกขวัญ",armor:"cloth",offHand:"off_bell",neck:"acc_torc",earring:"acc_earrings_focus",ring:"acc_ring_heal"},
 } as const;
-const schools=Object.keys(fieldKits);
 const fieldSlots=["offHand","arms","head","feet","neck","shoulders","ring","legs","leftHand","earring","rightHand","chest"] as const;
 const names=["ฝึกหัด","ชายป่า","ศาลเก่า","ด่านคลอง","ป่าลึก","ค่ายหน้า","เวียงเหล็ก","ภูผา","ทัพหลวง","พิชัยยุทธ์"];
 const outfitNames=["ฝึกหัด","ชายป่า","สำนักครู","ค่ายหน้า","เวียงเหล็ก","ทัพหลวง","ราชสำนัก","พิชัยยุทธ์"];
@@ -271,8 +270,6 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
   return Object.freeze(result) as Readonly<Record<PersonalId,PersonalDefinition>>;
 }
 export const PERSONAL_ITEMS=buildPersonalCatalog();
-const catalogEntries=Object.entries(PERSONAL_ITEMS);
-export const CATALOG_PAGES=Array.from({length:Math.ceil(catalogEntries.length/16)},(_,i)=>Object.fromEntries(catalogEntries.slice(i*16,i*16+16)));
 export function personalItem(id:unknown): PersonalDefinition | undefined {
   return typeof id === "string" && Object.hasOwn(PERSONAL_ITEMS,id) ? PERSONAL_ITEMS[id as PersonalId] : undefined;
 }
@@ -300,25 +297,6 @@ export function startingWeapon(path:string):PracticeWeapon {
 export function firstChest(path:string,level=1):BodyItemId {
   const family=path==="mender"||path==="seer"?"cloth":path==="muay_boran"||path==="blade"?"hide":path==="sentinel"?"heavy":"medium";
   return `arm_${family}_chest_${OUTFIT_LEVELS.filter(min=>level>=min).length||1}` as BodyItemId;
-}
-const catalogIds=Object.keys(PERSONAL_ITEMS) as PersonalId[];
-const materialsByTier=MATERIAL_LEVELS.map(level=>catalogIds.filter(id=>PERSONAL_ITEMS[id].kind==="material" && PERSONAL_ITEMS[id].dropMax && PERSONAL_ITEMS[id].level===level) as MaterialId[]);
-const dropsByLevel=new Map<string,PersonalId[]>();
-for(const path of schools)for(let level=1;level<=100;level++){
-  dropsByLevel.set(path+level,catalogIds.filter(id=>{
-    const def=PERSONAL_ITEMS[id];
-    return (def.path==="all" || def.path===path) &&
-      !!def.forge && def.level!<=level && level<=def.dropMax!;
-  }));
-}
-export function fieldItem(path:string,owned:ReadonlySet<string>,monsterLevel=1,draw:(max:number)=>number=randomInt):BodyItemId|PracticeWeapon|MaterialId {
-  const level=Math.min(100,Math.max(1,Math.floor(monsterLevel)));
-  if(draw(4)===0){
-    const candidates=(dropsByLevel.get(path+level)??[]).filter(id=>!owned.has(id));
-    if(candidates.length)return candidates[draw(candidates.length)] as BodyItemId|PracticeWeapon;
-  }
-  const mats=materialsByTier[materialTier(level)-1];
-  return mats[draw(mats.length)];
 }
 export function wearsWraps(id:unknown):boolean { return id==="muay_wraps" || personalItem(id)?.family==="wp_wrap"; }
 export function wearsTwinSwords(id:unknown):boolean { return id==="arcane_sword" || personalItem(id)?.family==="wp_twins"; }

@@ -5,7 +5,8 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {EconomyStore} from "./EconomyStore.js";
 import {makeClassInventory,useInventoryItem} from "./ItemRules.js";
-import {MATERIAL_LEVELS,PERSONAL_ITEMS,fieldItem} from "./PersonalItems.js";
+import {MATERIAL_LEVELS,PERSONAL_ITEMS} from "./PersonalItems.js";
+import {rollMonsterLoot} from "./MonsterLoot.js";
 import {WORLD_EXPANSION,WORLD_MAPS} from "./WorldMaps.js";
 import {getResourceNode,harvestableFrom,resourceNodes,resourceStock,resourceApproach,rawResource} from "./WorldResources.js";
 import {SCENERY_NODES} from "./SceneryNodes.js";
@@ -33,7 +34,7 @@ test("gatherable objects have reachable ground, correct tier, map and range",()=
   }
   assert(resourceNodes("ritual_village").length>=3);
   assert.equal(resourceNodes("forbidden_forest").filter(n=>/\/(tree|stone)-/.test(n.id)).length,12);
-  assert(!fieldItem("blade",new Set(),1,()=>1).startsWith("mat_raw_"));
+  assert(!rollMonsterLoot("possessed-1","blade",new Set(),1,0,"normal",max=>max-1)!.id.startsWith("mat_raw_"));
 });
 
 test("two characters share one stock and clock across database handles, retries, logout and reopen",()=>{

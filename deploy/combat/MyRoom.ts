@@ -55,7 +55,8 @@ import { SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_RANKABLE_SKILLS, S
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { isMuayFoundation, MUAY_CORE, MUAY_CORE_LEVELS, MUAY_CORE_POINT_LEVELS, MUAY_CORE_MANA_PER_RANK, muayCorePoints, muayCoreManaCost, muayCoreProgress, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayCoreId, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
-import { CATALOG_PAGES, WORKBENCH_GOLD, personalItem, wearsWraps, wearsTwinSwords, monsterCardDrop } from "./PersonalItems.js";
+import { WORKBENCH_GOLD, personalItem, wearsWraps, wearsTwinSwords, monsterCardDrop } from "./PersonalItems.js";
+import { CATALOG_PAGES } from "./MonsterLoot.js";
 import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
 import {personalGearGuides} from "./GearGuides.js";
 import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js";
@@ -1631,7 +1632,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private muayCoreHit(id:string,targetId:string,power:number,pvpPower=power):boolean {
     const actor=this.state.players.get(id),monster=this.getMonster(targetId);
     const target=monster ?? this.state.players.get(targetId);
-    if(!actor?.alive || actor.pathId!=="muay_boran" || equippedWeaponId(this.inventories.get(id))!==MUAY_WRAP_ID ||
+    if(!actor?.alive || actor.pathId!=="muay_boran" || !wearsWraps(equippedWeaponId(this.inventories.get(id))) ||
       actor.flying || !onMapGround(actor) || this.sentinelStuns.has(id) || this.muayControlled(id) ||
       !target?.alive || !this.sameCombatMap(id,targetId) ||
       distance3d(actor,target)>3 || !this.bodyPathClear(actor.mapId,actor,target))return false;
@@ -2105,12 +2106,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const shard = shrineLoot && afterPotion ? grantStackReward(afterPotion, SHRINE_SHARD) : null;
         const previousLoot=shard ?? prize;
         const bag=previousLoot ?? snapshot.inventory;
-        const fieldDrop=bag && personalEligible
-          ? practiceLoot(bag,current.pathId,monsterLevel,tier,current.level) : undefined;
-        const afterField=fieldDrop?.bag ?? bag;
-        const card=personalEligible && afterField ? monsterCardDrop(monsterId,monsterLevel) : null;
-        const cardBag=card && afterField ? grantStackReward(afterField,card) : null;
-        const loot=cardBag ?? fieldDrop?.bag ?? previousLoot;
+        const card=personalEligible && bag ? monsterCardDrop(monsterId,monsterLevel) : null;
+        const cardBag=card && bag ? grantStackReward(bag,card) : null;
+        const beforeField=cardBag ?? bag;
+        const fieldDrop=beforeField && personalEligible
+          ? practiceLoot(beforeField,current.pathId,monsterLevel,tier,current.level,monsterId) : undefined;
+        const loot=fieldDrop?.bag ?? cardBag ?? previousLoot;
         await characterStore.save({ ...snapshot, ...next, inventory:loot ?? snapshot.inventory, updatedAt: new Date().toISOString() });
         if (loot) this.inventories.set(id,loot);
         const leveled=next.level!==current.level;
@@ -2123,7 +2124,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,
             ...(shrineLoot ? {shrineShard:shard ? "granted" : "bag_full"} : {}),
             ...(tier === "boss" ? {riftVictory:true} : {}),
-            ...(fieldDrop ? {personalDrop:fieldDrop.id ?? "bag_full"} : {}),
+            ...(fieldDrop?.id!==undefined ? {personalDrop:fieldDrop.id ?? "bag_full",dropQuantity:fieldDrop.quantity??1,lootMisses:fieldDrop.bag.lootMisses??0} : {}),
             ...(card ? {cardDrop:card,cardReceived:Boolean(cardBag)} : {}),
             ...(dropsPotion ? {elitePotion:prize ? "granted" : "bag_full"} : {})});
         } catch { /* The committed reward remains available on reconnect. */ }
