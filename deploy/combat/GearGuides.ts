@@ -35,7 +35,7 @@ function itemFamily(path:School,slot:Position,style:Style){
     case "rightRing":return "acc_ring_guard";
   }
   const core=slot==="chest"||slot==="legs"||slot==="head";
-  if(path==="phutthaisawan" && slot==="chest")return "arm_medium_chest";
+  if(path==="phutthaisawan" && (guarded || slot==="chest"))return "arm_medium_"+slot;
   const armor=tank?(guarded||core?"heavy":"medium"):caster?(guarded&&core?"heavy":"cloth"):(guarded?(core?"medium":"hide"):"hide");
   return "arm_"+armor+"_"+slot;
 }
@@ -82,7 +82,8 @@ export function personalGearGuides(path:string,level:number){
     for(const {id} of pieces)for(const [key,n] of Object.entries(PERSONAL_ITEMS[id].stats)){
       const stat=key as keyof ItemStats;totals[stat]=(totals[stat]??0)+n;
     }
-    let manaRoom=Math.max(0,PROGRESSION.maxMana-baseManaAtLevel(level)-(totals.mana??0));
+    const maxMana=Math.min(PROGRESSION.maxMana,baseManaAtLevel(level)+(totals.mana??0));
+    let manaRoom=PROGRESSION.maxMana-maxMana;
     const supportive=style==="endurance" && (school==="seer" || school==="mender");
     const slots=pieces.map(piece=>{
       const weights=supportive?sustainCardWeights:cardWeights[piece.affix];
@@ -90,7 +91,7 @@ export function personalGearGuides(path:string,level:number){
       if(card)manaRoom=Math.max(0,manaRoom-(PERSONAL_ITEMS[card].stats.mana??0));
       return {...piece,card,cardHunt:card?cardHunt(card):null};
     });
-    return {style,name:schools[school][style==="pressure"?2:3],focus:playNotes[school][style==="pressure"?0:1],totals,slots};
+    return {style,name:schools[school][style==="pressure"?2:3],focus:playNotes[school][style==="pressure"?0:1],totals,maxMana,slots};
   });
   return {path,level,builds};
 }

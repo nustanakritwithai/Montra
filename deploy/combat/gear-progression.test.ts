@@ -198,12 +198,26 @@ test("four core classes gain casting capacity from equipping both hands without 
     const worn=equipBody(bag,"offHand",2,offHand,path,1);assert(worn.ok);
     server.inventories.set("wearer",worn.inventory);server.applyStats("wearer",p,emptyAllocations());
     assert(p.maxMana>mainCapacity && p.mana===30,path);
-    for(const level of [1,25,60,100]){
+    let previousMana=[0,0];
+    for(let level=1;level<=100;level++){
       const [attack,defend]=personalGearGuides(path,level)!.builds;
+      const builds=[attack,defend];
+      assert(builds.some(b=>b.slots.some(s=>PERSONAL_ITEMS[s.id].level===level)),path+" has no suggested unlock at "+level);
       assert((attack.totals.mana??0)>0 && (defend.totals.mana??0)>0,path);
       assert((defend.totals.def??0)>(attack.totals.def??0),path);
-      for(const piece of [...attack.slots,...defend.slots])if(piece.card)assert(piece.cardHunt?.open,path);
+      for(const [i,build] of builds.entries()){
+        const outfit=makeClassInventory(path);
+        for(const piece of build.slots){
+          if(piece.position==="mainHand")outfit.slots[1]={itemId:piece.id,quantity:1};
+          else outfit.equipment![piece.position]=piece.id as BodyItemId;
+          if(piece.card)assert(piece.cardHunt?.open,path);
+        }
+        assert.equal(build.maxMana,gearMana(level,outfit).max);
+        assert(build.maxMana>=previousMana[i],path+" maximum MP regressed at "+level);
+      }
+      previousMana=builds.map(b=>b.maxMana);
     }
+    assert.deepEqual(previousMana,[PROGRESSION.maxMana,PROGRESSION.maxMana]);
   }
 });
 

@@ -126,7 +126,10 @@ try{
   await active.room.leave();active=null;await delay(400);
   prepareCapstone(prefix,endgame.recipe);active=await join({});
   assert.equal(active.me().level,100);
-  assert.equal(active.event("gear_guides",p=>p.level===100)?.builds[0].slots.find(s=>s.position==="mainHand").id,"wp_twins_10");
+  const finalBuild=active.event("gear_guides",p=>p.level===100)?.builds[0];
+  assert.equal(finalBuild?.slots.find(s=>s.position==="mainHand").id,"wp_twins_10");
+  assert.equal(finalBuild.maxMana,320);
+  assert(active.catalog.wp_twins_10.stats.atk>active.catalog.wp_twins_9.stats.atk);
   const r=active.room;
   r.send("refine_resource",{requestId:"capstone_refine_07",expected:"mat_raw_stone_7"});
   await until(()=>active.event("resource_result",v=>v.item==="mat_metal_7"),"refine ore for the kiln");
@@ -193,7 +196,7 @@ try{
   active.room.send("move",{x:-4,z:-17});
   await until(()=>Math.hypot(active.me().x+4,active.me().z+17)<1.8,"walk to the forest gate",18000);
   active.room.send("warp",{portalId:"village_to_forest"});
-  await until(()=>active.me().mapId==="forbidden_forest","enter original forest",10000);
+  await until(()=>active.me().mapId==="forbidden_forest" && active.event("warp_complete",v=>v.mapId==="forbidden_forest"),"enter original forest",10000);
   active.room.send("move",{x:7,z:9.3});
   await until(()=>Math.hypot(active.me().x-7,active.me().z-7)<3.4,"walk beside the original east tree",15000);
   const start=active.events.length;

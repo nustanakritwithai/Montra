@@ -8677,6 +8677,7 @@
         occultBookState=data;occultBookRenderKey="";occultHotbarKey="";
         syncOccultUI(ownServerCharacter());
         if (drawerActive==="occultBook") renderOccultBook();
+        if (drawerActive==="bag") renderGearGuide(currentBagSlots());
       });
       joined.onMessage("sentinel_book_state",data=>{
         if(room!==joined)return;
@@ -11629,6 +11630,27 @@
     use.textContent=itemUsePending?"กำลังบันทึก…":!inspectingGear&&confirmBindSlot===selectedBagSlot&&gear&&!worn&&!chosen.bound?"ยืนยันผูกและสวม":gear?(worn?"ถอด":"สวม")+(armor?bodyLabels[destination]:"อาวุธ"):heal?(full?(meta?.healMana?"MP เต็ม":"HP เต็ม"):"ใช้ยา"):meta?.kind==="tool"?"ใช้จากกระเป๋าอัตโนมัติ":chosen?"วัตถุดิบ":"ช่องว่าง";
     if(meta?.kind==="card")use.textContent="เลือกอุปกรณ์เพื่อใส่การ์ด";
   }
+  const gearCoreSkills={
+    muay_boran:{pressure:["korat","thasao"],endurance:["chaiya","lopburi"]},
+    phutthaisawan:{pressure:["phuttha_core","atamat_core"],endurance:["sritra_core","chumphon_core"]},
+    seer:{pressure:["seer_pot","seer_buffalo"],endurance:["seer_binding","seer_poison"]},
+    mender:{pressure:["mender_core_heal","mender_core_circle"],endurance:["mender_core_ward","mender_core_cleanse"]},
+  };
+  function gearTrainingLine(path,style,level){
+    const ids=gearCoreSkills[path]?.[style];
+    if(!ids)return "";
+    const data=path==="muay_boran"?muayBookData():path==="phutthaisawan"?swordData():occultBookState;
+    if(!data || (data.path && data.path!==path))return "";
+    const catalog=data.catalog??data,book=data.tree??data.book;
+    if(!book || !Array.isArray(catalog.coreLevels) || !ids.every(id=>catalog.core?.[id]))return "";
+    const ranks=(path==="mender"?book.menderCoreRanks:book.coreRanks)??{};
+    const skills=ids.map(id=>{
+      const skill=catalog.core[id],rank=ranks[id]??0;
+      return skill.name+" ขั้น "+rank+" ("+(skill.stamina+rank*(catalog.coreManaPerRank??1))+" MP)";
+    });
+    const limit=catalog.coreLevels.filter(unlock=>unlock<=level).length,next=catalog.coreLevels[limit];
+    return skills.join(" · ")+" · ฝึกได้ถึงขั้น "+limit+(next?" · ขั้นถัดไป Lv."+next:"");
+  }
   function renderGearGuide(slots){
     const panel=$("gearGuide"),player=ownServerCharacter();
     panel.hidden=!gearGuides || gearGuides.path!==player?.pathId || gearGuides.level!==player?.level;
@@ -11649,13 +11671,17 @@
     const wornPosition=entry=>wornId(entry)===entry.id?entry.position:
       wearPositions(personalItems[entry.id]?.kind).find(key=>inventoryState?.equipment?.[key]===entry.id);
     const isWorn=entry=>Boolean(wornPosition(entry));
-    const entry=position.value==="auto"?build.slots.find(e=>!isWorn(e))||build.slots[0]:build.slots.find(e=>e.position===position.value);
+    const missing=build.slots.filter(e=>!isWorn(e));
+    const entry=position.value==="auto"?(missing.find(e=>personalItems[e.id]?.level===gearGuides.level)??missing[0]??build.slots[0]):build.slots.find(e=>e.position===position.value);
     if(!entry)return;
     const item=personalItems[entry.id],card=personalItems[entry.card],next=personalItems[entry.next];
     if(!item)return;
     bindItemHuntButton($("guideTrack"),entry.id,1,true);
     bindItemHuntButton($("guideTrackCard"),entry.card,1);
-    $("guideFocus").textContent=build.focus+" · พื้นฐานทั้งชุด "+statLine(build.totals);
+    $("guideFocus").textContent=build.focus+" · พื้นฐานทั้งชุด "+statLine(build.totals)+(Number.isFinite(build.maxMana)?" · มานาสูงสุดก่อนใส่การ์ด "+build.maxMana:"");
+    const training=$("guideTraining");
+    training.textContent=gearTrainingLine(gearGuides.path,build.style,gearGuides.level);
+    training.hidden=!training.textContent;
     const owned=slots?.findIndex(s=>s?.itemId===entry.id)??-1,matched=build.slots.filter(isWorn).length;
     $("guideName").textContent=item.name+" · Lv."+item.level+" · "+matched+"/"+build.slots.length+" ชิ้นตามแบบ";
     const source=entry.cardHunt;
@@ -11872,7 +11898,7 @@
     openDrawer("bag", "อุปกรณ์และกระเป๋า",
       '<div class="status-line"><span>สถานะกระเป๋า</span><strong id="bagSaveStatus"></strong></div>' +
       '<div class="status-line"><span>พลังชีวิต HP</span><strong id="bagHp"></strong></div>' +
-      '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><p><strong id="guideName"></strong></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button></details>' +
+      '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><p><strong id="guideName"></strong></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button></details>' +
       '<h3 class="wear-title">อุปกรณ์ที่สวม</h3><div class="wear-grid" aria-label="ช่องอุปกรณ์ตัวละคร">'+wearGrid+'</div><h3 class="wear-title">กระเป๋า · 12 ช่อง</h3>' +
       '<div class="bag-grid" role="group" aria-label="ช่องไอเท็ม 12 ช่อง">' + grid + '</div>' +
       '<div class="bag-detail"><strong id="bagItemName"></strong>' +

@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import {REGIONAL_BOSSES} from "./RegionalBosses.js";
-import type { CombatStats } from "./Progression.js";
+import {baseManaAtLevel,PROGRESSION,type CombatStats} from "./Progression.js";
 
 export type ItemStats = Partial<Record<"hp" | "stamina" | "mana" | "atk" | "def" | "magicAtk" | "magicDef",number>>;
 export type ForgeRating="melee"|"ranged"|"guard"|"healing";
@@ -162,12 +162,12 @@ const names=["ฝึกหัด","ชายป่า","ศาลเก่า","
 const outfitNames=["ฝึกหัด","ชายป่า","สำนักครู","ค่ายหน้า","เวียงเหล็ก","ทัพหลวง","ราชสำนัก","พิชัยยุทธ์"];
 const weights:Required<ItemStats>={atk:1,magicAtk:1,def:1,magicDef:1,hp:.125,stamina:.5,mana:.5};
 // Move a share of an existing stat to MP after scaling, at the same forge budget.
-type ManaAllocation=readonly [stat:"atk"|"stamina"|"magicDef",share:number,fromLevel:number];
+type ManaAllocation=readonly [stat:"atk"|"stamina"|"magicDef",share:number,fromLevel:number,lateStat?:"atk"|"magicAtk"|"def"];
 const manaAllocation:Readonly<Partial<Record<string,ManaAllocation>>>={
-  wp_wrap:["stamina",1/2,1], off_brace:["stamina",1/2,1],
-  wp_twins:["stamina",1/2,1], off_guard:["atk",1/3,1],
-  wp_wand:["magicDef",1/2,1], off_jar:["stamina",1/2,1],
-  wp_crook:["stamina",.6,1], off_bell:["magicDef",1/3,1],
+  wp_wrap:["stamina",1/2,1,"atk"], off_brace:["stamina",1/2,1,"def"],
+  wp_twins:["stamina",1/2,1,"atk"], off_guard:["atk",1/3,1,"def"],
+  wp_wand:["magicDef",1/2,1,"magicAtk"], off_jar:["stamina",1/2,1,"magicAtk"],
+  wp_crook:["stamina",.6,1,"magicAtk"], off_bell:["magicDef",1/3,1,"def"],
   wp_shadow:["magicDef",.4,25], acc_ring_heal:["magicDef",.4,25], acc_torc:["stamina",.4,25],
 };
 const catalysts=[["flux","ผงประสาน","metal"],["powder","ผงอาคม","ink"],["oil","น้ำมันชุบ","resin"],["seal","ตราค้ำขวัญ","fiber"],["core","แกนหลอม","wood"]] as const;
@@ -221,6 +221,16 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
         const [stat,share]=allocation,available=item.stats[stat]??0;
         const moved=Math.floor(available*share);
         item.stats[stat]=available-moved;item.stats.mana=(item.stats.mana??0)+moved*weights[stat]/weights.mana;
+        const lateStat=allocation[3];
+        if(lateStat){
+          // Two hands share the remaining MP capacity. Keep a small reserve for rest regeneration.
+          const handAllowance=Math.max(4,Math.ceil((PROGRESSION.maxMana-baseManaAtLevel(level))/2));
+          const points=Math.max(0,Math.floor((item.stats.mana-handAllowance)/2));
+          if(points){
+            item.stats.mana-=points*2;
+            item.stats[lateStat]=(item.stats[lateStat]??0)+points;
+          }
+        }
       }
       if(index && base.kind!=="material")item.name=base.name.replace(/(?:ลานฝึก|ฝึกหัด)$/,"")+(base.kind==="mainHand"?names:outfitNames)[index];
       if(base.kind==="material"){
