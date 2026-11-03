@@ -3,8 +3,8 @@ import { personalItem, type CatalystId, type ForgeRating, type PersonalDefinitio
 
 // Each row is [success %, lose one rank %] for the next upgrade. The remainder shatters.
 const odds=[
-  [100,0],[100,0],[100,0],[98,2],[96,4],
-  [95,3],[90,6],[70,18],[55,25],[40,30],
+  [100,0],[100,0],[100,0],[95,5],[93,7],
+  [90,8],[85,12],[70,22],[55,30],[40,40],
 ] as const;
 export const FORGE = {
   chances: odds.map(([chance])=>chance),

@@ -11,8 +11,8 @@ function $(key){
   return controls.get(key);
 }
 const config={chances:Array(10),maxMisses:3,rerollCost:60,enhanceSteps:Array(10)};
-config.enhanceSteps[3]={copies:2,gold:48,chance:98,downgradeChance:2,breakChance:0,breakOnFailure:false};
-config.enhanceSteps[9]={copies:4,gold:120,chance:40,downgradeChance:30,breakChance:30,breakOnFailure:true};
+config.enhanceSteps[3]={copies:2,gold:48,chance:95,downgradeChance:5,breakChance:0,breakOnFailure:false};
+config.enhanceSteps[9]={copies:4,gold:120,chance:40,downgradeChance:40,breakChance:20,breakOnFailure:true};
 const ctx={$,room:{state:{forgeCatalog:JSON.stringify(config)}},bagMeta:()=>meta,economyReady:()=>true,
   inventoryState:{forgeCopies:stock},currentBagSlots:()=>slots,inspectingGear:null,selectedBagSlot:0,currentEquippedWeaponSlot:()=>0,
   gearStamp:()=>id,forgeLabel:()=>"",Option:class {constructor(text,value){Object.assign(this,{text,value});}},
@@ -26,7 +26,7 @@ assert.deepEqual($("forgeDonor").options.map(o=>o.value),["","1|"+id]); // Skip 
 assert.deepEqual(goals.at(-1).slice(1),[id,6,false,true]);
 stock[id]=3;$("forgeDonor").value="1|"+id;$("forgeDonor").onchange();
 assert.equal($("forgeEnhance").disabled,false);
-assert.match($("forgeSupply").textContent,/ลดจาก \+9 เหลือ \+8 30% · แตกถาวร 30%/);
+assert.match($("forgeSupply").textContent,/ลดจาก \+9 เหลือ \+8 40% · แตกถาวร 20%/);
 piece.socket="card_possessed";draw(piece);
 assert.equal($("forgeEnhance").disabled,true);assert.match($("forgeSupply").textContent,/ถอดการ์ดก่อน/);
 piece.forge.rank=10;draw(piece);
@@ -37,11 +37,11 @@ Object.assign(ctx,{economyRequestId:()=>"forge_ui_confirmation",renderBag(){},ec
   window:{confirm(message){prompt=message;return confirm;}}});
 const submit=vm.runInNewContext(submitSource+"\nsubmitForge",ctx);
 delete piece.socket;piece.forge.rank=9;stock[id]=4;draw(piece);
-submit("enhance");assert.equal(sent,null);assert.match(prompt,/40%/);assert.match(prompt,/ลดจาก \+9 เหลือ \+8 30% · แตกถาวร 30%/);
+submit("enhance");assert.equal(sent,null);assert.match(prompt,/สำเร็จ 40%/);assert.match(prompt,/ลดจาก \+9 เหลือ \+8 40% · แตกถาวร 20%/);
 confirm=true;submit("enhance");assert.equal(sent.acceptBreak,true);assert.equal(sent.acceptDowngrade,true);assert.equal(sent.copies,4);
 piece.forge.rank=3;piece.socket="card_possessed";draw(piece);
-assert.equal($("forgeEnhance").disabled,false);assert.match($("forgeSupply").textContent,/ลดจาก \+3 เหลือ \+2 2% · แตกถาวร 0%/);
-submit("enhance");assert.equal(sent.acceptDowngrade,true);assert.equal(sent.acceptBreak,undefined);assert.match(prompt,/สำเร็จ 98%/);
+assert.equal($("forgeEnhance").disabled,false);assert.match($("forgeSupply").textContent,/ลดจาก \+3 เหลือ \+2 5% · แตกถาวร 0%/);
+submit("enhance");assert.equal(sent.acceptDowngrade,true);assert.equal(sent.acceptBreak,undefined);assert.match(prompt,/สำเร็จ 95%/);
 const shelfSource=source.slice(source.indexOf("  function renderForgeStock("),source.indexOf("  function renderForge(item)"));
 const shelf=vm.runInNewContext(shelfSource+"\nrenderForgeStock",ctx);
 ctx.room.state.forgeCatalog=JSON.stringify({...config,claimCopies:true});ctx.inventoryState.slots=[null];
