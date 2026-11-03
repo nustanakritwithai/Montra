@@ -2905,10 +2905,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // same room is eligible for PK. No duel agreement is required.
       const targetId = monsterOrder ? monsterOrder.targetId : pkOrder!.targetId;
       if (targetId === attackerId) return this.reject(client, "self_attack");
-      if (!this.sameCombatMap(attackerId, targetId)) return this.reject(client, "target_unavailable");
-      const target = monsterOrder
-        ? this.getMonster(targetId)
-        : this.state.players.get(targetId);
+      const monster=monsterOrder ? this.getMonster(targetId) : undefined;
+      const target=monsterOrder ? monster : this.state.players.get(targetId);
+      if (!this.canPursueBasic(attackerId,attacker,targetId,monster)) return this.reject(client,"target_unavailable");
 
       if (!target || !target.alive) {
         return this.reject(client, monsterOrder ? "monster_down" : "target_unavailable");
@@ -2929,7 +2928,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       // During a wind-up only change the next basic target, never the skill already in flight.
       if (this.basicAttackPaused(attackerId)) return;
-      if (distance3d(attacker, target) > attackRange) {
+      if (isRestArea(attacker.mapId,attacker) || distance3d(attacker, target) > attackRange) {
         attacker.combatState = "approaching";
         client.send("combat_notice", { reason: "approaching" });
       } else {
@@ -3611,7 +3610,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           ? (monster?.alive ? monster : undefined)
           : this.state.players.get(targetId);
 
-        if (!target || !target.alive || targetId === sessionId || !this.sameCombatMap(sessionId, targetId)) {
+        if (!target || !target.alive || targetId === sessionId || !this.canPursueBasic(sessionId,player,targetId,monster)) {
           this.endAttack(sessionId, player);
           continue;
         }
@@ -3626,14 +3625,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           this.endAttack(sessionId, player);
           continue;
         }
-        if (distance <= attackRange) {
+        const inRestArea=isMonster && isRestArea(player.mapId,player);
+        if (!inRestArea && distance <= attackRange) {
           player.combatState = "attacking";
           continue;
         }
 
         // Recalculate every fixed tick so moving players can be chased.
         // Never teleport, regardless of where the client taps.
-        const stopDistance = attackRange - 0.4;
+        const stopDistance = inRestArea ? 0 : attackRange - 0.4;
         const ratio = Math.max(0, (distance - stopDistance) / distance);
         const approach = {
           x: clampToMap(player.x + dx * ratio, getWorldMap(player.mapId)!.bounds, "x"),
@@ -3707,11 +3707,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const target = isMonster
         ? (monster?.alive ? monster : undefined)
         : this.state.players.get(targetId);
-      if (!target || !target.alive || targetId === attackerId || !this.sameCombatMap(attackerId, targetId)) {
+      if (!target || !target.alive || targetId === attackerId || !this.canPursueBasic(attackerId,attacker,targetId,monster)) {
         this.endAttack(attackerId, attacker);
         continue;
       }
 
+      if (isMonster && isRestArea(attacker.mapId,attacker)) continue;
       const range = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
       if (distance3d(attacker,target)>range+.00001 || !this.combatSegmentClear(attacker.mapId,attacker,target))continue;
       attacker.facing = facingTo(target.x - attacker.x, target.z - attacker.z);
@@ -4021,6 +4022,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.broadcast("player_respawn", { playerId: id });
       void this.saveCharacter(id);
     }
+  }
+
+  private canPursueBasic(id:string, player:Player, targetId:string, monster:Monster|undefined):boolean {
+    // A PvE order can walk out of a rest area. Only the damage check requires both sides outside.
+    return monster ? !this.pendingWarps.has(id) && player.mapId===monster.mapId && !isRestArea(monster.mapId,monster)
+      : this.sameCombatMap(id,targetId);
   }
 
   private startSkillAction(id:string, player:Player, state:"idle"|"attacking") {

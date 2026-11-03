@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {existsSync} from "node:fs";
+process.env.MONTRA_WORLD_EXPANSION="1";
 const compiled=existsSync("build/rooms/MyRoom.js");
 const load=name=>import(compiled?"./build/rooms/"+name+".js":"./src/rooms/"+name+".ts");
 const {MyRoom}=await load("MyRoom"),{Player,Monster}=await load("schema/MyRoomState");
@@ -11,9 +12,9 @@ for(const [path,skill] of [["blade","piercing_edge"],["sentinel","slam"]]){
   test(path+" pauses a selected monster attack until the cast resolves, then keeps swinging",()=>{
     const room=new MyRoom(),notices=[];
     const client={sessionId:"fighter",send:(type,data)=>notices.push({type,data})};
-    const player=new Player({pathId:path,x:0,y:0,z:0,alive:true,level:25,atk:12,stamina:200,maxStamina:200});
+    const player=new Player({pathId:path,x:0,y:0,z:8,alive:true,level:25,atk:12,stamina:200,maxStamina:200});
     const monster=room.state.monster;
-    Object.assign(monster,{id:RULES.monsterId,x:0,y:0,z:1,mapId:player.mapId,maxHp:10000,hp:10000,alive:true});
+    Object.assign(monster,{id:RULES.monsterId,x:0,y:0,z:9,mapId:player.mapId,maxHp:10000,hp:10000,alive:true});
     room.state.players.set(client.sessionId,player);
     room.persistentCharacters.set(client.sessionId,"fixture");
     room.gates.set(client.sessionId,{attack:new CommandBucket(4,4),move:new CommandBucket(4,4)});
@@ -30,18 +31,18 @@ for(const [path,skill] of [["blade","piercing_edge"],["sentinel","slam"]]){
     assert.ok(windups.has(client.sessionId),JSON.stringify(notices));
     assert.equal(player.targetId,monster.id);
     // An ordinary hit is now due. Neither pursuit nor damage may run during the cast.
-    room.simulatedMs=1200;monster.z=3.5;room.updatePlayerMovement(.05);room.updatePlayerAttacks();
-    assert.equal(player.z,0);monster.z=1;room.updatePlayerAttacks();assert.equal(monster.hp,firstHp);
+    room.simulatedMs=1200;monster.z=11.5;room.updatePlayerMovement(.05);room.updatePlayerAttacks();
+    assert.equal(player.z,8);monster.z=9;room.updatePlayerAttacks();assert.equal(monster.hp,firstHp);
     room.simulatedMs=1500;room.tick(.05);
     assert.equal(windups.has(client.sessionId),false);assert.ok(monster.hp<firstHp);
     assert.equal(room.lastAttackMs.get(client.sessionId),1500);
     const resumed=monster.hp;
     room.updatePlayerAttacks();assert.equal(monster.hp,resumed,"no extra hit within the cooldown");
     room.simulatedMs=2500;room.updatePlayerAttacks();assert.ok(monster.hp<resumed);
-    room.messages.move(client,{x:-1,z:0});assert.equal(player.targetId,"");
+    room.messages.move(client,{x:-1,z:8});assert.equal(player.targetId,"");
     const stopped=monster.hp;room.simulatedMs=3500;room.updatePlayerAttacks();assert.equal(monster.hp,stopped);
     // Selecting a second monster during a cast changes only the following basic hit.
-    const other=new Monster({id:"forest_shrine_keeper",mapId:player.mapId,x:1,z:0,hp:10000,maxHp:10000,alive:true});
+    const other=new Monster({id:"forest_shrine_keeper",mapId:player.mapId,x:1,z:8,hp:10000,maxHp:10000,alive:true});
     room.state.monsters.set(other.id,other);
     const order=()=>room.messages.attack(client,{targetId:monster.id});
     const cast=()=>{book.cooldowns[skill]=0;room.messages[path+"_skill"](client,{skillId:skill,targetId:monster.id});};
@@ -55,8 +56,21 @@ for(const [path,skill] of [["blade","piercing_edge"],["sentinel","slam"]]){
     const after=other.hp;other.alive=true;room.simulatedMs+=1000;room.updatePlayerAttacks();assert.equal(other.hp,after);
     // Clearing the target while casting must not cancel the skill or re-arm the previous lock.
     order();cast();assert.ok(windups.has(client.sessionId));
-    room.messages.move(client,{x:-1,z:0});assert.equal(player.targetId,"");assert.ok(windups.has(client.sessionId));
+    room.messages.move(client,{x:-1,z:8});assert.equal(player.targetId,"");assert.ok(windups.has(client.sessionId));
     room.simulatedMs+=800;room.tick(.05);const afterCast=monster.hp;
     room.simulatedMs+=1000;room.updatePlayerAttacks();assert.equal(monster.hp,afterCast);
   });
 }
+
+test("a tap can pursue an exposed monster from safety, but cannot hit across the safe boundary",()=>{
+  const room=new MyRoom(),client={sessionId:"runner",send(){}};
+  const actor=new Player({x:0,z:5.9,alive:true,atk:10}),mob=room.state.monster;
+  Object.assign(mob,{id:RULES.monsterId,mapId:actor.mapId,x:0,z:6.8,hp:100,maxHp:100,alive:true});
+  room.state.players.set(client.sessionId,actor);room.gates.set(client.sessionId,{attack:new CommandBucket(4,4)});
+  room.broadcast=()=>{};
+  room.messages.attack(client,{targetId:mob.id});room.updatePlayerAttacks();
+  assert.equal(actor.combatState,"approaching");assert.equal(mob.hp,100);
+  room.updatePlayerMovement(.05);assert.ok(actor.z>6);room.updatePlayerAttacks();assert.ok(mob.hp<100);
+  mob.z=5.8;const hp=mob.hp;room.simulatedMs+=1000;room.updatePlayerAttacks();
+  assert.equal(actor.targetId,"");assert.equal(mob.hp,hp);
+});
