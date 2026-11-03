@@ -83,7 +83,9 @@ export function findItemHunt(id:PersonalId,playerLevel:number){
 export const cardHunts=new Map<CardId,ReturnType<typeof huntDetails>>();
 for(const mob of hunts){
   const card=monsterCardFor(mob.id,mob.level);
-  if(card && mob.level<(cardHunts.get(card)?.level??Infinity))cardHunts.set(card,huntDetails(mob));
+  if(!card)continue;
+  const candidate=huntDetails(mob),previous=cardHunts.get(card);
+  if(!previous || (candidate.open!==previous.open?candidate.open:candidate.level<previous.level))cardHunts.set(card,candidate);
 }
 export function cardHunt(card:CardId){return cardHunts.get(card)??null;}
 const catalog=Object.entries(PERSONAL_ITEMS).map(([id,item])=>{

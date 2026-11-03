@@ -12,6 +12,7 @@ import {FOREST_CAMPS} from "./WorldMaps.js";
 import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {personalGearGuides,cardHunt} from "./GearGuides.js";
 import {gearMana} from "./ItemRules.js";
+import {emptyAllocations,PROGRESSION} from "./Progression.js";
 import {bossAccessoryReward,grantStackReward} from "./ItemRules.js";
 import {BOSS_TREASURES,type CardId,type MaterialId} from "./PersonalItems.js";
 import {MyRoom} from "./MyRoom.js";
@@ -185,6 +186,62 @@ test("twelve suggested builds resolve to legal gear, cards and hunting grounds a
   assert.equal(personalGearGuides("unknown",50),null);
 });
 
+test("four core classes gain casting capacity from equipping both hands without refilling mana",()=>{
+  for(const [path,offHand] of [["muay_boran","off_brace_1"],["phutthaisawan","off_guard_1"],["seer","off_jar_1"],["mender","off_bell_1"]] as const){
+    const room=new MyRoom(),bag=makeClassInventory(path),p=new Player({pathId:path,level:1,mana:30});
+    const server=room as unknown as {inventories:Map<string,typeof bag>;applyStats(id:string,p:Player,a:ReturnType<typeof emptyAllocations>):void};
+    server.inventories.set("wearer",bag);
+    server.applyStats("wearer",p,emptyAllocations());
+    assert(p.maxMana>PROGRESSION.baseMana && p.mana===30,path);
+    const mainCapacity=p.maxMana;
+    bag.slots[2]={itemId:offHand,quantity:1};
+    const worn=equipBody(bag,"offHand",2,offHand,path,1);assert(worn.ok);
+    server.inventories.set("wearer",worn.inventory);server.applyStats("wearer",p,emptyAllocations());
+    assert(p.maxMana>mainCapacity && p.mana===30,path);
+    for(const level of [1,25,60,100]){
+      const [attack,defend]=personalGearGuides(path,level)!.builds;
+      assert((attack.totals.mana??0)>0 && (defend.totals.mana??0)>0,path);
+      assert((defend.totals.def??0)>(attack.totals.def??0),path);
+      for(const piece of [...attack.slots,...defend.slots])if(piece.card)assert(piece.cardHunt?.open,path);
+    }
+  }
+});
+
+test("upgraded class weapons improve a Muay strike, sword strike, buffalo hit and priest healing tick in PvE",()=>{
+  for(const [path,upgrade] of [["muay_boran","wp_wrap_10"],["phutthaisawan","wp_twins_10"],["seer","wp_wand_10"],["mender","wp_crook_10"]] as const){
+    const room=new MyRoom(),bag=makeClassInventory(path),target=room.state.monster;
+    const server=room as unknown as {
+      inventories:Map<string,typeof bag>;applyStats(id:string,p:Player,a:ReturnType<typeof emptyAllocations>):void;
+      muayCoreHit(id:string,target:string,power:number):boolean;swordCoreHit(id:string,target:string,power:number):boolean;
+      seerBuffaloCasts:Map<string,{targetId:string;until:number;rank:number;x:number;z:number}>;
+      priestRegens:Map<string,{ownerId:string;mapId:string;until:number;nextTick:number;fraction:number}>;
+      updateOccultEffects():void;broadcast:()=>void;
+    };
+    const id="wearer",actor=new Player({pathId:path,level:100,x:-10,y:0,z:8,alive:true});
+    room.state.players.set(id,actor);server.broadcast=()=>{};
+    Object.assign(target,{x:-10,y:0,z:9,hp:5000,maxHp:5000});
+    function effect(){
+      server.inventories.set(id,bag);server.applyStats(id,actor,emptyAllocations());
+      const before=target.hp;
+      if(path==="muay_boran")assert(server.muayCoreHit(id,target.id,1));
+      if(path==="phutthaisawan")assert(server.swordCoreHit(id,target.id,1));
+      if(path==="seer"){
+        server.seerBuffaloCasts.set(id,{targetId:target.id,rank:0,until:0,x:target.x,z:target.z});
+        server.updateOccultEffects();
+      }
+      if(path==="mender"){
+        actor.hp=1;
+        server.priestRegens.set(id,{ownerId:id,mapId:actor.mapId,until:10000,nextTick:0,fraction:.02});
+        server.updateOccultEffects();return actor.hp-1;
+      }
+      return before-target.hp;
+    }
+    const starter=effect();
+    bag.slots[1]={itemId:upgrade,quantity:1};
+    assert(starter>0 && effect()>starter,path);
+  }
+});
+
 test("every class has a legal, craftable outfit from 1 to 100, including two distinct rings and earrings",()=>{
   for(const [id,item] of entries){
     assert(item.level!>=1&&item.level!<=100,id);
@@ -229,7 +286,9 @@ test("every class has a legal, craftable outfit from 1 to 100, including two dis
 test("late monster cards unlock through real hunts and the first high-level chest rolls an affix",()=>{
   const leftEar=(level:number)=>personalGearGuides("mender",level)!.builds[0].slots.find(s=>s.position==="leftEar")!;
   assert.notEqual(leftEar(85).card,"card_light_eater");
-  assert.equal(leftEar(88).card,"card_light_eater");
+  // In the full healer outfit MP is already capped by this socket. Prefer HP alongside magic attack.
+  if(cardHunt("card_dream")?.open)assert.equal(leftEar(88).card,"card_dream");
+  else assert(!leftEar(88).card || leftEar(88).cardHunt?.open);
   assert.equal(cardHunt("card_last_spirit")?.level,96);
   assert.equal(cardHunt("card_star_warden")?.level,98);
   const source=ATLAS_SPAWNS.find(s=>s.id==="atlas_spirit_rift_2_1")!;

@@ -2,7 +2,7 @@ import { readForged, birthForge, applyForgeRatings, type Forged } from "./ForgeR
 import { BOSS_GEAR_CHANCE, bossTreasure, personalItem, startingWeapon, firstChest, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
 import {MAX_LOOT_MISSES,rollMonsterLoot} from "./MonsterLoot.js";
 import {randomInt} from "node:crypto";
-import { PROGRESSION, type CombatStats } from "./Progression.js";
+import { PROGRESSION, baseManaAtLevel, type CombatStats } from "./Progression.js";
 import { MUAY_WRAP_ID } from "./MuayRules.js";
 import { usesStaff, type CatalystId, type SalveId, type ForgeRating,type BrewId,type FieldToolId } from "./PersonalItems.js";
 /**
@@ -380,7 +380,7 @@ export function overflowStaminaRegen(base:CombatStats,bag:InventorySnapshot|unde
   return Math.min(2,Math.max(0,raw.maxStamina-PROGRESSION.maxStamina)/25);
 }
 export function gearMana(level:number,bag:InventorySnapshot|undefined){
-  let raw=PROGRESSION.baseMana+(level-1)*2;
+  let raw=baseManaAtLevel(level);
   if(bag){
     const main=bag.slots[bag.equippedWeaponSlot??-1];
     for(const id of [main?.itemId,main?.socket,...Object.values(bag.equipment??{}),...Object.values(bag.equipmentSockets??{})])

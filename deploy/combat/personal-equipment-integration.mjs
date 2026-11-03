@@ -91,6 +91,7 @@ try{
   assert.deepEqual(bag.slots.filter(Boolean).map(s=>s.itemId),["health_potion","wp_twins_1"]);
   assert.equal(bag.slots[bag.equippedWeaponSlot].bound,true);
   assert.equal(me().equippedWeaponId,"wp_twins_1");
+  await until(()=>me().maxMana===120+active.catalog.wp_twins_1.stats.mana && me().maxMana>120,"starter swords expand the live skill mana pool");
   room.send("card_socket",{requestId:"test_drill_no_material",target:bag.equippedWeaponSlot,gear:"wp_twins_1",expected:"sealed",action:"drill",card:null});
   await until(()=>event("economy_error",e=>e.reason==="drill_missing_metal"),"new character needs ore before drilling");
   room.send("attack",{targetId:room.state.monster.id});

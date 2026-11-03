@@ -161,6 +161,15 @@ const fieldSlots=["offHand","arms","head","feet","neck","shoulders","ring","legs
 const names=["ฝึกหัด","ชายป่า","ศาลเก่า","ด่านคลอง","ป่าลึก","ค่ายหน้า","เวียงเหล็ก","ภูผา","ทัพหลวง","พิชัยยุทธ์"];
 const outfitNames=["ฝึกหัด","ชายป่า","สำนักครู","ค่ายหน้า","เวียงเหล็ก","ทัพหลวง","ราชสำนัก","พิชัยยุทธ์"];
 const weights:Required<ItemStats>={atk:1,magicAtk:1,def:1,magicDef:1,hp:.125,stamina:.5,mana:.5};
+// Move a share of an existing stat to MP after scaling, at the same forge budget.
+type ManaAllocation=readonly [stat:"atk"|"stamina"|"magicDef",share:number,fromLevel:number];
+const manaAllocation:Readonly<Partial<Record<string,ManaAllocation>>>={
+  wp_wrap:["stamina",1/2,1], off_brace:["stamina",1/2,1],
+  wp_twins:["stamina",1/2,1], off_guard:["atk",1/3,1],
+  wp_wand:["magicDef",1/2,1], off_jar:["stamina",1/2,1],
+  wp_crook:["stamina",.6,1], off_bell:["magicDef",1/3,1],
+  wp_shadow:["magicDef",.4,25], acc_ring_heal:["magicDef",.4,25], acc_torc:["stamina",.4,25],
+};
 const catalysts=[["flux","ผงประสาน","metal"],["powder","ผงอาคม","ink"],["oil","น้ำมันชุบ","resin"],["seal","ตราค้ำขวัญ","fiber"],["core","แกนหลอม","wood"]] as const;
 export function materialTier(level:number){return MATERIAL_LEVELS.filter(min=>min<=level).length || 1;}
 function recommend(family:string,item:PersonalDefinition):readonly string[]{
@@ -207,14 +216,11 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
         const offense=Math.max(1,Math.round(item.stats.def!*.2));
         item.stats.def!-=offense;item.stats.atk=offense;
       }
-      if(level>=25){
-        // Allocate part of the secondary stat budget to skill resources, at equal cost.
-        const donor=["wp_crook","wp_wrap","wp_twins","off_jar","acc_torc"].includes(family)?"stamina":
-          ["wp_wand","wp_shadow","off_bell","acc_ring_heal"].includes(family)?"magicDef":null;
-        if(donor && item.stats[donor]){
-          const moved=Math.floor(item.stats[donor]!*0.4);
-          item.stats[donor]!-=moved;item.stats.mana=moved*weights[donor]/weights.mana;
-        }
+      const allocation=manaAllocation[family];
+      if(allocation && level>=allocation[2]){
+        const [stat,share]=allocation,available=item.stats[stat]??0;
+        const moved=Math.floor(available*share);
+        item.stats[stat]=available-moved;item.stats.mana=(item.stats.mana??0)+moved*weights[stat]/weights.mana;
       }
       if(index && base.kind!=="material")item.name=base.name.replace(/(?:ลานฝึก|ฝึกหัด)$/,"")+(base.kind==="mainHand"?names:outfitNames)[index];
       if(base.kind==="material"){
