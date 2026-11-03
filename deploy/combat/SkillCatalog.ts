@@ -53,7 +53,7 @@ export const SWORD_NODES: Readonly<Record<string,SwordNode>> = Object.freeze({
   flowing_blades:{name:"เพลงดาบสืบจังหวะ",description:"ฟันเป้าหมายสองครั้งต่อเนื่อง",school:"common",level:35,requires:["rhythm"],training:{id:"strikes",count:50},effect:"flurry",stamina:24,cooldownMs:10000,power:0.72,range:2.8},
   open_circle:{name:"วงดาบเปิดแนว",description:"กวาดมอนสเตอร์ด้านหน้า",school:"common",level:55,requires:["flowing_blades","sweep"],training:{id:"finishes",count:8},effect:"area",stamina:30,cooldownMs:14000,power:1.1,range:3.5},
   steady_guard:{name:"รับดาบมั่นคง",description:"ตั้งดาบรับด้านหน้าและเปิดจังหวะสวน",school:"common",level:75,requires:["guard","open_circle"],training:{id:"blocks",count:20},effect:"guard",stamina:23,cooldownMs:12000,power:0.35,range:0},
-  final_counter:{name:"เพลงดาบสวนสุดท้าย",description:"สวนเป้าหมายหลังรับสำเร็จ",school:"common",level:95,requires:["steady_guard","flowing_blades"],training:{id:"finishes",count:20},effect:"counter",stamina:34,cooldownMs:20000,power:2.15,range:3},
+  final_counter:{name:"เพลงดาบสวนสุดท้าย",description:"สวนเป้าหมายหลังรับสำเร็จ",school:"common",level:95,requires:["steady_guard","flowing_blades"],training:{id:"finishes",count:20},effect:"counter",stamina:32,cooldownMs:20000,power:2.15,range:3},
 });
 export type SwordTraining = {strikes:number; blocks:number; finishes:number};
 export type SwordLoadouts = Record<SwordSchool,Array<string|null>>;
