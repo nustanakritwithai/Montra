@@ -10236,7 +10236,9 @@
       bar.hidden=true;muayHotbarKey="";return;
     }
     let cooldowns={};try{cooldowns=JSON.parse(me.muayData || "{}");}catch{return;}
-    const skills=data.catalog.core,ids=["chaiya","korat","lopburi","thasao"];
+    const ids=["chaiya","korat","lopburi","thasao"],ranks=data.book.coreRanks || {};
+    const skills=Object.fromEntries(ids.map(id=>[id,{...data.catalog.core[id],stamina:data.catalog.core[id].stamina+
+      Number(ranks[id]||0)*Number(data.catalog.coreManaPerRank||0)}]));
     const follow=performance.now()<muayCoreFollowupUntil;
     const timing=ids.map(id=>Math.max(0,Math.ceil(((cooldowns[id]||0)-Date.now())/1000)));
     const key=JSON.stringify([ids,timing,follow,me.alive,me.equippedWeaponId,affordKey(ids,skills,me)]);
@@ -10279,19 +10281,20 @@
     const {me,book,catalog}=data,ranks=book.coreRanks || {};
     const key=me.level+"|"+me.muayBookData;
     if(key===muayBookRenderKey)return;muayBookRenderKey=key;
-    const points=Math.min(8,Math.floor((Math.min(me.level,100)+5)/10));
+    const points=(catalog.corePointLevels || []).filter(level=>me.level>=level).length;
     const spent=Object.values(ranks).reduce((sum,value)=>sum+Number(value||0),0);
     const levels=catalog.coreLevels;
     const details={
-      chaiya:"แต่ละขั้นเพิ่มเวลาตั้งรับ 0.4 วิ ลดดาเมจเพิ่ม 5% และเพิ่มพลังสวน 12%",
-      korat:"แต่ละขั้นเพิ่มพลังโจมตีแต่ละหมัด 8% ของพลังโจมตี",
-      lopburi:"แต่ละขั้นเพิ่มระยะพุ่ง 0.4 หน่วย เพิ่มเวลาต่อท่า 0.25 วิ และเพิ่มพลังท่าซ้ำ 12%",
-      thasao:"แต่ละขั้นเพิ่มการโจมตี 1 ครั้ง เพิ่มระยะพุ่ง 0.4 หน่วย และเพิ่มพลังแต่ละหมัด"
+      chaiya:"แต่ละขั้นเพิ่มเวลาตั้งรับ 0.4 วิ ลดดาเมจได้สูงสุด 60% และเพิ่มพลังสวนมอน 12%",
+      korat:"ต่อยสามจังหวะโดยหมัดสุดท้ายหนักที่สุด แต่ละขั้นเพิ่มพลังต่อมอน 8%",
+      lopburi:"แต่ละขั้นเพิ่มระยะพุ่ง 0.4 หน่วย เพิ่มเวลาต่อท่า 0.25 วิ และเพิ่มพลังท่าซ้ำใส่มอน 12%",
+      thasao:"สี่ขั้นแรกเพิ่มจำนวนหมัดใส่มอนสูงสุด 7 ครั้ง ขั้นต่อไปเพิ่มพลัง ทุกขั้นเพิ่มระยะพุ่ง · PvP ใช้ 3 หมัด"
     };
-    container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · มีสูงสุด 8 แต้ม เลือกพัฒนาสกิลที่ถนัด</p><p class="note">พื้นฐานทั้ง 4 ใช้ได้พร้อมกัน · อัปขั้นที่ Lv.5, 15, 35 และ 60 · จัดแต้มที่ลานพัก</p>'+
+    container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · มีสูงสุด '+(catalog.corePointLevels || []).length+' แต้ม เลือกพัฒนาสกิลที่ถนัด</p><p class="note">พื้นฐานทั้ง 4 ใช้ได้พร้อมกัน · อัปได้ถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
       Object.entries(catalog.core).map(([id,node])=>{
         const rank=Number(ranks[id]||0),next=levels[rank];
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/4</strong><small>'+node.description+'</small><small>'+details[id]+'</small><small>ใช้มานา '+node.stamina+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small></div>'+
+        const cost=node.stamina+rank*Number(catalog.coreManaPerRank||0);
+        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+levels.length+'</strong><small>'+node.description+'</small><small>'+details[id]+'</small><small>ใช้มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small></div>'+
           (next?'<button type="button" data-core-upgrade="'+id+'" '+(me.level<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
       }).join("")+'<button type="button" id="resetMuayCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-core-upgrade]").forEach(button=>button.onclick=()=>room.send("muay_book",{action:"core_upgrade",skillId:button.dataset.coreUpgrade}));

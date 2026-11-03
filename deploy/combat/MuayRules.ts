@@ -4,7 +4,7 @@ export const MUAY_WRAP_ID = "muay_wraps" as const;
 export const MUAY_CORE = {
   chaiya: {name:"ไชยา · ตั้งรับสวน",stamina:18,cooldownMs:12000,kind:"stance",effect:"guard",
     description:"ตั้งรับชั่วคราวและสวนผู้โจมตีระยะประชิด อัปขั้นเพิ่มระยะเวลาตั้งรับและแรงสวน"},
-  korat: {name:"โคราช · หมัดหนัก",stamina:24,cooldownMs:9000,kind:"target",effect:"strike",
+  korat: {name:"โคราช · หมัดหนัก",stamina:24,cooldownMs:12000,kind:"target",effect:"strike",
     description:"ต่อยหนักเป็นชุดสามจังหวะ อัปขั้นเพิ่มพลังแต่ละหมัด"},
   lopburi: {name:"ลพบุรี · ฉากพุ่ง",stamina:18,cooldownMs:10000,kind:"direction",effect:"step",
     description:"พุ่งตามทิศเดินล่าสุด กดซ้ำภายในเวลาที่กำหนดเพื่อโจมตี อัปขั้นเพิ่มระยะและพลัง"},
@@ -13,9 +13,14 @@ export const MUAY_CORE = {
 } as const;
 export type MuayCoreId = keyof typeof MUAY_CORE;
 export type MuayCoreRanks = Partial<Record<MuayCoreId,number>>;
-export const MUAY_CORE_LEVELS = [5,15,35,60] as const;
+export const MUAY_CORE_MANA_PER_RANK = 1;
+export function muayCoreManaCost(id:MuayCoreId,rank:number):number {
+  return MUAY_CORE[id].stamina + rank*MUAY_CORE_MANA_PER_RANK;
+}
+export const MUAY_CORE_LEVELS = [5,15,25,35,45,60,80,100] as const;
+export const MUAY_CORE_POINT_LEVELS = [5,15,25,35,45,55,65,75,80,85,95,100] as const;
 export function muayCorePoints(level:number):number {
-  return Math.min(8,Math.floor((Math.min(level,100)+5)/10));
+  return MUAY_CORE_POINT_LEVELS.filter(required=>level>=required).length;
 }
 export const MUAY_SKILLS = {
   step: {name:"ย่างสามขุม", effect:"step", stamina:15, cooldownMs:6000, power:0.9, range:6},
