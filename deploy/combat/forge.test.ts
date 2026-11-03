@@ -10,7 +10,7 @@ import { FORGE, FORGE_CATALOG, forgeStamp, rollForge, plainForge } from "./Forge
 import { parseClaimForgeCopy, parseForge } from "./EconomyRules.js";
 
 test("each possible roll matches the quoted outcome; the first downgrade is +3 to +2",()=>{
-  const rates=[[100,0,0],[100,0,0],[100,0,0],[95,5,0],[93,7,0],[90,8,2],[85,12,3],[70,22,8],[55,30,15],[40,40,20]];
+  const rates=[[100,0,0],[100,0,0],[100,0,0],[80,20,0],[80,20,0],[78,20,2],[75,22,3],[70,22,8],[55,30,15],[40,40,20]];
   let item=plainForge(),copies=0;
   for(const [rank,rate] of rates.entries()){
     const step=FORGE_CATALOG.enhanceSteps[rank];
