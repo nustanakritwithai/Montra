@@ -3520,7 +3520,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.hp = Math.min(player.maxHp, player.hp + healed);
       this.hpRegenRemainder.set(id, player.hp >= player.maxHp ? 0 : pending - healed);
       player.stamina = Math.min(player.maxStamina, player.stamina + (fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut) * dt);
-      player.mana = Math.min(player.maxMana, player.mana + (fighting ? PROGRESSION.manaRegenIn : PROGRESSION.manaRegenOut) * dt);
+      const manaRegen = fighting ? PROGRESSION.manaRegenIn : Math.max(PROGRESSION.manaRegenOut, player.maxMana / 20);
+      player.mana = Math.min(player.maxMana, player.mana + manaRegen * dt);
     }
   }
 

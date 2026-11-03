@@ -11,11 +11,11 @@ export const BLADE_PRACTICE_LABELS:Readonly<Record<BladePractice,string>> = {
   ambush:"เปิดฉากจากการพราง",mark:"ใช้รอยอาคม",evade:"หลบการโจมตี",combo:"โจมตีต่อเนื่อง",
 };
 export const BLADE_LESSONS = {
-  cloak:{name:"ม่านพรางกาย",description:"พรางตัวชั่วคราว การโจมตีหรือรับความเสียหายจะเปิดเผยตัว",branch:"veil",level:1,requires:[],practice:{},effect:"cloak",stamina:20,cooldownMs:24000,range:0,power:0},
+  cloak:{name:"ม่านพรางกาย",description:"พรางตัวชั่วคราว การโจมตีหรือรับความเสียหายจะเปิดเผยตัว",branch:"veil",level:1,requires:[],practice:{},effect:"cloak",stamina:18,cooldownMs:24000,range:0,power:0},
   quiet_step:{name:"ย่างไร้รอย",description:"เคลื่อนที่คล่องขึ้นและลดระยะตรวจจับของมอนสเตอร์ทั่วไปขณะพราง",branch:"veil",level:5,requires:["cloak"],practice:{ambush:3},effect:"passive",stamina:0,cooldownMs:0,range:0,power:0.1},
   shadow_step:{name:"ก้าวเงาประชิด",description:"ก้าวเข้าหาเป้าหมายขณะพรางโดยตรวจสิ่งกีดขวาง",branch:"veil",level:9,requires:["cloak"],practice:{ambush:5},effect:"approach",stamina:16,cooldownMs:9000,range:6,power:0},
   veil_guard:{name:"ม่านลวง",description:"ลดความเสียหายชั่วครู่เมื่อการพรางสิ้นสุด",branch:"veil",level:15,requires:["quiet_step","shadow_step"],practice:{ambush:12,evade:3},effect:"passive",stamina:0,cooldownMs:0,range:0,power:0.15},
-  hidden_edge:{name:"คมซ่อนมนต์",description:"โจมตีเปิดฉากจากการพรางและทิ้งรอยอาคม",branch:"edge",level:3,requires:["cloak"],practice:{ambush:2},effect:"strike",stamina:18,cooldownMs:7000,range:3,power:1.4},
+  hidden_edge:{name:"คมซ่อนมนต์",description:"โจมตีเปิดฉากจากการพรางและทิ้งรอยอาคม",branch:"edge",level:3,requires:["cloak"],practice:{ambush:2},effect:"strike",stamina:16,cooldownMs:7000,range:3,power:1.4},
   marked_cut:{name:"ฟันรอยอาคม",description:"โจมตีและใช้รอยอาคมของตน",branch:"edge",level:7,requires:["hidden_edge"],practice:{ambush:4,mark:2},effect:"consume",stamina:20,cooldownMs:8000,range:3,power:1.6},
   piercing_edge:{name:"คมอาคมทะลวง",description:"ตั้งท่าก่อนโจมตีเป้าหมายเดี่ยวอย่างหนัก",branch:"edge",level:11,requires:["marked_cut"],practice:{mark:5},effect:"windup",stamina:26,cooldownMs:12000,range:3,power:1.9},
   sever_mark:{name:"สะบั้นรอยแผล",description:"ใช้รอยอาคมของตนเพื่อปิดจังหวะอย่างรุนแรง",branch:"edge",level:17,requires:["marked_cut","piercing_edge"],practice:{mark:10,combo:5},effect:"consume",stamina:32,cooldownMs:18000,range:3,power:2.2},

@@ -8,11 +8,11 @@ export type SentinelLesson = Readonly<{
 }>;
 export const SENTINEL_PRACTICE_LABELS:Readonly<Record<SentinelPractice,string>>={guard:"รับการโจมตี",stun:"สกัดมอนสเตอร์",assist:"คุ้มกันขณะต่อสู้"};
 export const SENTINEL_LESSONS={
-  guard:{name:"ตั้งง้าวรับศึก",description:"ตั้งรับด้านหน้าชั่วครู่เพื่อลดความเสียหาย",branch:"defense",level:1,requires:[],practice:{},effect:"guard",stamina:15,cooldownMs:8000,range:0,power:0.45},
+  guard:{name:"ตั้งง้าวรับศึก",description:"ตั้งรับด้านหน้าชั่วครู่เพื่อลดความเสียหาย",branch:"defense",level:1,requires:[],practice:{},effect:"guard",stamina:13,cooldownMs:8000,range:0,power:0.45},
   step:{name:"ย่างคุมแนว",description:"ก้าวเข้าคุมระยะและเพิ่มป้องกันชั่วคราว",branch:"defense",level:3,requires:["guard"],practice:{guard:2},effect:"step",stamina:18,cooldownMs:10000,range:5,power:0.12},
   fortitude:{name:"หลักมั่นคง",description:"เพิ่มพลังป้องกันขณะสวมง้าวผู้พิทักษ์",branch:"defense",level:7,requires:["guard"],practice:{guard:5},effect:"passive",stamina:0,cooldownMs:0,range:0,power:0.08},
   anchor:{name:"ปักหลักไม่ถอย",description:"เพิ่มป้องกันชั่วคราวแลกกับการเคลื่อนที่ช้าลง",branch:"defense",level:13,requires:["step","fortitude"],practice:{guard:12},effect:"anchor",stamina:28,cooldownMs:25000,range:0,power:0.25},
-  bash:{name:"ฟาดง้าวสกัด",description:"ฟาดเป้าหมายและสตันช่วงสั้น",branch:"control",level:1,requires:[],practice:{},effect:"stun",stamina:18,cooldownMs:9000,range:3,power:0.9},
+  bash:{name:"ฟาดง้าวสกัด",description:"ฟาดเป้าหมายและสตันช่วงสั้น",branch:"control",level:1,requires:[],practice:{},effect:"stun",stamina:16,cooldownMs:9000,range:3,power:0.9},
   sweep:{name:"กวาดเปิดแนว",description:"กวาดโจมตีมอนสเตอร์ด้านหน้าสูงสุดสามตัว",branch:"control",level:3,requires:["bash"],practice:{stun:2},effect:"sweep",stamina:24,cooldownMs:10000,range:3.5,power:0.85},
   slam:{name:"กระแทกหยุดศึก",description:"ตั้งท่าก่อนกระแทกและสตันเป้าหมาย",branch:"control",level:7,requires:["bash"],practice:{stun:5},effect:"slam",stamina:26,cooldownMs:14000,range:3,power:1.25},
   counter:{name:"ง้าวพิทักษ์พิฆาต",description:"โจมตีหนักหลังตั้งรับหรือสกัดสำเร็จ",branch:"control",level:13,requires:["guard","bash"],practice:{guard:5,stun:7},effect:"counter",stamina:30,cooldownMs:16000,range:3,power:1.8},

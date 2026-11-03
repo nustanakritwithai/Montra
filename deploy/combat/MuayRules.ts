@@ -3,12 +3,12 @@ import {skillRankCost,validateSkillRanks,type SkillRanks} from "./Progression.js
 export const MUAY_WRAP_ID = "muay_wraps" as const;
 export const MUAY_SKILLS = {
   step: {name:"ย่างสามขุม", effect:"step", stamina:15, cooldownMs:6000, power:0.9, range:6},
-  punch: {name:"หมัดนำ", effect:"strike", stamina:10, cooldownMs:3000, power:1.1, range:2.5},
-  guard: {name:"ป้อง ปัด ปิด", effect:"guard", stamina:15, cooldownMs:8000, power:0.5, range:0},
+  punch: {name:"หมัดนำ", effect:"strike", stamina:8, cooldownMs:3000, power:1.1, range:2.5},
+  guard: {name:"ป้อง ปัด ปิด", effect:"guard", stamina:12, cooldownMs:8000, power:0.5, range:0},
   parry: {name:"ปัดเปิดจังหวะ", effect:"parry", stamina:18, cooldownMs:9000, power:0.35, range:0},
   evade: {name:"เบี่ยงหลบ", effect:"evade", stamina:20, cooldownMs:8000, power:0.2, range:0},
   counter: {name:"ศอกสวนไชยา", effect:"counter", stamina:20, cooldownMs:9000, power:1.6, range:2.5},
-  teep: {name:"ถีบหยุดจังหวะ", effect:"teep", stamina:18, cooldownMs:6000, power:0.8, range:3},
+  teep: {name:"ถีบหยุดจังหวะ", effect:"teep", stamina:16, cooldownMs:6000, power:0.8, range:3},
   grapple: {name:"จับทุ่ม", effect:"grapple", stamina:24, cooldownMs:12000, power:1.2, range:1.8},
   chaiya_elbow: {name:"ศอกวงในไชยา", effect:"strike", stamina:16, cooldownMs:5500, power:1.3, range:2},
   chaiya_knee: {name:"เข่าสวนไชยา", effect:"counter", stamina:22, cooldownMs:10000, power:1.85, range:2},
