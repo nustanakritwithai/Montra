@@ -50,13 +50,17 @@ export const SWORD_NODES: Readonly<Record<string,SwordNode>> = Object.freeze({
   naval_guard:{name:"ตั้งรับคุ้มกัน",description:"ตั้งรับด้านหน้าและเปิดจังหวะสวน",school:"chumphon",level:10,requires:["guard"],effect:"guard",stamina:18,cooldownMs:9000,power:0.4,range:0},
   protect_ally:{name:"ขวัญผู้ร่วมรบ",description:"เพิ่มป้องกันให้ตนและสมาชิกปาร์ตี้ในระยะ 8 หน่วย 10% นาน 8 วินาที",school:"chumphon",level:15,requires:["naval_guard"],effect:"support",stamina:25,cooldownMs:25000,power:0.1,range:8},
   guardian_sweep:{name:"กวาดดาบคุ้มแนว",description:"ฟันศัตรูที่อยู่ด้านหน้า",school:"chumphon",level:20,requires:["protect_ally","rhythm"],effect:"area",stamina:25,cooldownMs:9000,power:1,range:3.5},
+  flowing_blades:{name:"เพลงดาบสืบจังหวะ",description:"ฟันเป้าหมายสองครั้งต่อเนื่อง",school:"common",level:35,requires:["rhythm"],training:{id:"strikes",count:50},effect:"flurry",stamina:24,cooldownMs:10000,power:0.72,range:2.8},
+  open_circle:{name:"วงดาบเปิดแนว",description:"กวาดมอนสเตอร์ด้านหน้า",school:"common",level:55,requires:["flowing_blades","sweep"],training:{id:"finishes",count:8},effect:"area",stamina:30,cooldownMs:14000,power:1.1,range:3.5},
+  steady_guard:{name:"รับดาบมั่นคง",description:"ตั้งดาบรับด้านหน้าและเปิดจังหวะสวน",school:"common",level:75,requires:["guard","open_circle"],training:{id:"blocks",count:20},effect:"guard",stamina:23,cooldownMs:12000,power:0.35,range:0},
+  final_counter:{name:"เพลงดาบสวนสุดท้าย",description:"สวนเป้าหมายหลังรับสำเร็จ",school:"common",level:95,requires:["steady_guard","flowing_blades"],training:{id:"finishes",count:20},effect:"counter",stamina:34,cooldownMs:20000,power:2.15,range:3},
 });
 export type SwordTraining = {strikes:number; blocks:number; finishes:number};
 export type SwordLoadouts = Record<SwordSchool,Array<string|null>>;
 export function emptySwordLoadouts():SwordLoadouts {
   return {phutthaisawan:[null,null,null],sritrairat:[null,null,null],atamat:[null,null,null],chumphon:[null,null,null]};
 }
-export const SWORD_RANKABLE_SKILLS=["footwork","sweep","twin_cut","circle_step","twin_finale","riposte","seize","opening_cut","turning_counter","guardian_sweep"] as const;
+export const SWORD_RANKABLE_SKILLS=["footwork","sweep","twin_cut","circle_step","twin_finale","riposte","seize","opening_cut","turning_counter","guardian_sweep","flowing_blades","open_circle","final_counter"] as const;
 export type SwordTree = {school:SwordSchool; learned:string[]; cooldowns:Record<string,number>; training:SwordTraining; loadouts:SwordLoadouts;ranks?:SkillRanks};
 export function newSwordTree():SwordTree { return {school:"phutthaisawan",learned:[],cooldowns:{},training:{strikes:0,blocks:0,finishes:0},loadouts:emptySwordLoadouts()}; }
 export function swordPoints(level:number):number { return 1 + Math.floor((Math.min(level,100)-1)/2); }
