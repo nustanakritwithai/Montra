@@ -7,26 +7,6 @@
   const $ = (id) => document.getElementById(id);
   // Separate HTTPS origin for the Windows VPS. Caddy must proxy it to 127.0.0.1:4108.
   const MONTRA_VPS_URL = "https://montra.157-85-96-139.sslip.io";
-  // One high-entropy guest credential per HTTPS server. The secret stays in
-  // this browser's localStorage and is never broadcast to other players.
-  const TOKEN_PATTERN = /^mt1_[0-9a-f]{64}$/;
-  function tokenStorageKey(endpoint) {
-    return "montra_s2_guest_token:" + new URL(endpoint).host;
-  }
-  function getOrCreateGuestToken(endpoint) {
-    const key = tokenStorageKey(endpoint);
-    const existing = localStorage.getItem(key);
-    if (existing) {
-      if (!TOKEN_PATTERN.test(existing)) throw new Error("รหัสตัวละครในเครื่องไม่ถูกต้อง");
-      return existing;
-    }
-    if (!window.crypto?.getRandomValues) throw new Error("อุปกรณ์ไม่รองรับรหัสตัวละครปลอดภัย");
-    const bytes = new Uint8Array(32);
-    window.crypto.getRandomValues(bytes);
-    const token = "mt1_" + Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
-    localStorage.setItem(key, token);
-    return token;
-  }
   function currentCharacterEndpoint() {
     try { return localStorage.getItem("montra_endpoint") || MONTRA_VPS_URL; }
     catch (_) { return MONTRA_VPS_URL; }
@@ -3904,6 +3884,7 @@
   } else shamanBody = false;
   function shamanGear(a, nodes) {
     const shawl = a.local ? shawlHero : shawlFriend, pants = a.local ? pantsHero : pantsFriend, sash = a.local ? sashHero : sashFriend;
+    a.ritualGear = [];
     let parts = [];
     const at = (mesh, x, y, z, m) => { mesh.position.set(x, y, z); mesh.material = m; mesh.isPickable = false; parts.push(mesh); return mesh; };
     const box = (x, y, z, w, h, d, m) => at(B.MeshBuilder.CreateBox("gear", { width: w, height: h, depth: d }, scene), x, y, z, m);
@@ -3924,6 +3905,7 @@
       const mesh = mergedSegment(parts, nodes[bone], "gear " + bone);
       if (joint) mesh.position.set(-joint[0], -joint[1], -joint[2]);
       parts = [];
+      return mesh;
     };
     // Chest: yantra shawl over the shoulders, back cape, cross band, beads.
     loft([[1.35, .245, .145, -.012], [1.405, .21, .125, -.01], [1.445, .115, .085, -.006]], shawl, 14);
@@ -3933,7 +3915,7 @@
       for (let i = 0; i <= 8; i++) { const t = i / 4 - 1, y = 1.44 - (1 - t * t) * drop; ball(t * width, y, .075 + (1 - t * t) * .05, .03, beadMat, 4); }
       box(0, 1.44 - drop - .028, .128, .028, .04, .012, amuletGlow);
     }
-    onBone("Chest");
+    a.ritualGear.push(onBone("Chest"));
     // Head: red yantra headband, topknot and a tail of hair down the nape.
     cyl(0, 1.655, -.004, .028, .19, .19, shawl, 12).scaling.z = 1.12;
     ball(0, 1.74, -.04, .075, hairMat, 6);
@@ -3942,6 +3924,7 @@
     // Hips: trouser seat, cloth sash with a knot, rice pouch, spirit jar.
     cyl(0, .965, 0, .055, .305, .3, sash, 12).scaling.z = .72;
     box(-.06, .9, .108, .055, .12, .015, sash).rotation.z = -.15;
+    onBone("Hips");
     ball(-.178, .85, .035, .12, pouchCloth, 6).scaling.set(1, 1.15, .85);
     cyl(-.178, .925, .035, .035, .035, .055, pouchCloth, 6);
     cyl(-.178, .91, .035, .018, .07, .07, ropeRed, 8);
@@ -3954,7 +3937,8 @@
     box(jx, jy, jz, .31 * j, .01, .31 * j, ropeRed);
     for (const side of [-1, 1]) box(jx + side * .05, jy + .015, jz + .03, .03, .13, .006, talismanPaper).rotation.z = side * .25;
     for (const dx of [-.02, 0, .02]) cyl(jx + dx, jy + .095, jz + .035, .01, .024, .024, waxRed, 8).rotation.x = 1.1;
-    onBone("Hips");
+    a.ritualGear.push(onBone("Hips"));
+    setAvatarRitualGear(a, a.pathId);
     // Trousers are skinned (see skinnedTrousers), so no rigid leg pieces here.
   }
   // Fisherman trousers cut from the body mesh itself: every triangle between
@@ -4797,8 +4781,14 @@
     }
   }
   const avatars = new Map();
+  function setAvatarRitualGear(avatar, pathId) {
+    avatar.pathId = pathId || "";
+    const visible = pathId === "seer" || pathId === "mender";
+    for (const part of avatar.ritualGear || []) part?.setEnabled(visible);
+  }
   function setAvatarWeapon(avatar, weaponId, pathId = avatar?.local ? ownServerCharacter()?.pathId : "") {
     if (!avatar?.weaponModels) return;
+    setAvatarRitualGear(avatar, pathId);
     const modelId = pathId === "phutthaisawan" && weaponId === "arcane_sword" ? "thai_dual" : weaponId === "shrine_glaive" ? "arcane_sword" : weaponId;
     const safeId = modelId === "thai_dual" || modelId === "muay_wraps" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
     if (avatar.weaponId === safeId) return;
@@ -7671,7 +7661,7 @@
   function clearSyncPoll() { if (syncPoll) clearInterval(syncPoll); syncPoll = null; }
   function stopOnline(reason) {
     clearSyncPoll();
-    if (mode === "live") { showDemo(); toast(reason || "การเชื่อมต่อสิ้นสุด กลับสู่โหมดทดลอง"); }
+    if (mode === "live") { showDemo(); window.MontraEntry?.open(); window.MontraEntry?.failure(reason || "การเชื่อมต่อสิ้นสุด กรุณาเข้าเกมอีกครั้ง"); }
   }
   let connectionPending = false;
   let refreshCharacterSlotCards = null;
@@ -7679,6 +7669,7 @@
     for (let attempt = 0; attempt < 75; attempt++) {
       const me = joined.state?.players?.get?.(joined.sessionId);
       if (me) {
+        if (!me.persistent || !me.pathId) throw new Error("เซิร์ฟเวอร์ยังไม่รองรับบัญชีและอาชีพถาวร กรุณาติดต่อผู้ดูแล");
         if (desiredSlot !== 1 &&
             (!me.persistent || Number(me.characterSlot) !== desiredSlot)) {
           throw new Error("VPS ยังไม่รองรับ 3 ช่องเซฟ · ต้องติดตั้งระบบใหม่ก่อนเข้าเซฟ " + desiredSlot);
@@ -7692,7 +7683,7 @@
     }
     throw new Error("ไม่ได้รับข้อมูลตัวละครจากเซิร์ฟเวอร์");
   }
-  async function connectOnline(endpoint, requestedSlot = getPreferredSlot(endpoint), transfer=null) {
+  async function connectOnline(endpoint, requestedSlot = getPreferredSlot(endpoint), transfer=null, characterSetup=null) {
     if (connectionPending) return;
     if (![1,2,3].includes(requestedSlot)) {
       toast("เลือกช่องเซฟ 1, 2 หรือ 3 เท่านั้น");
@@ -7701,6 +7692,7 @@
     if (!transfer && room && mode === "live" && activeCharacterSlot === requestedSlot &&
         currentCharacterEndpoint() === endpoint) {
       closeDrawer();
+      window.MontraEntry?.success();
       toast("กำลังเล่นช่องเซฟ " + requestedSlot + " อยู่แล้ว");
       return;
     }
@@ -7727,8 +7719,9 @@
         await new Promise(resolve => setTimeout(resolve, 350));
       }
       const client = new window.Colyseus.Client(endpoint);
-      const guestToken = getOrCreateGuestToken(endpoint);
-      const opts={guestToken,characterSlot:requestedSlot,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1};
+      const accountSession = window.MontraEntry?.session();
+      if (!accountSession) throw new Error("กรุณาเข้าสู่ระบบก่อน");
+      const opts={accountSession,characterSlot:requestedSlot,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1};
       let transferFailed=false;
       if(transfer?.roomId){
         try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
@@ -8542,7 +8535,7 @@
       // Some SDK/room combinations expose the collection only after the first full state sync.
       clearSyncPoll(); syncPoll = setInterval(() => { if (room === joined) syncState(joined.state); },350);
       joined.onLeave(() => {
-        if (room === joined) stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กลับสู่โหมดทดลอง");
+        if (room === joined) stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กรุณาเข้าเกมอีกครั้ง");
       });
       joined.onError((code,message) => { console.error("MONTRA room error",code,message); toast("เซิร์ฟเวอร์แจ้งข้อผิดพลาด " + code); });
       try {
@@ -8553,6 +8546,7 @@
       try { joined.send("get_character_slots", {}); } catch (_) { /* old S2 server */ }
       try { joined.send("get_inventory", {}); } catch (_) { /* older VPS */ }
       closeDrawer();
+      window.MontraEntry?.success();
       const active = joined.state?.players?.get?.(joined.sessionId);
       if(transferFailed)toast("เข้าห้องศึกไม่สำเร็จ · กลับมายังห้องโลกแล้ว");
       else toast(active?.persistent
@@ -8564,7 +8558,8 @@
         try { await joined.leave(); } catch (_) { /* release rejected slot */ }
       }
       console.error("MONTRA connection failed",err);
-      ui.onlineCount.textContent = "การเชื่อมต่อไม่สำเร็จ · ยังเป็นโหมดทดลอง";
+      ui.onlineCount.textContent = "การเชื่อมต่อไม่สำเร็จ";
+      window.MontraEntry?.failure("เชื่อมต่อไม่สำเร็จ: " + (err.message || String(err)).slice(0,105));
       toast("เชื่อมต่อไม่สำเร็จ: " + (err.message || String(err)).slice(0,105));
       if (connectButton) connectButton.disabled = false;
     } finally {
@@ -9526,68 +9521,7 @@
     drawMap($("bigMap").getContext("2d"),420,320,true);
   }
 
-  function openOnline() {
-    let endpoint = currentCharacterEndpoint();
-    let pendingSlot = activeCharacterSlot || getPreferredSlot(endpoint);
-    const slotButtons = [1,2,3].map(slot =>
-      '<button type="button" class="slot-choice" id="slotChoice' + slot +
-      '" aria-pressed="false"><strong>ช่องเซฟ ' + slot +
-      '</strong><span id="slotPreview' + slot + '">ยังไม่มีข้อมูล</span></button>'
-    ).join("");
-    openDrawer("online", "เลือกตัวละคร MONTRA", 
-      '<p class="note">1 Guest ID มี 3 เซฟอิสระ · เซฟ 1 เดิมไม่ถูกลบ · เลือกเซฟก่อนเข้าเล่น</p>' +
-      '<div class="slot-choices" role="group" aria-label="เลือกช่องบันทึกตัวละคร">' +
-      slotButtons + '</div>' +
-      '<p id="slotStatusHint" class="note">รายชื่อเซฟมาจาก VPS หลังเข้าเล่น; รายชื่อในเครื่องอาจยังไม่อัปเดต</p>' +
-      '<label class="field" for="serverUrl">MONTRA Server HTTPS</label>' +
-      '<input id="serverUrl" type="url" spellcheck="false" autocomplete="url"/>' +
-      '<button class="primary" id="connectOnline" type="button">เข้าเล่นช่องเซฟที่เลือก</button>' +
-      '<button class="secondary" id="returnDemo" type="button">กลับสู่โหมดทดลอง</button>' +
-      '<p class="note">ใช้รหัสกู้คืน Guest เดิมเพื่อเข้าถึงทั้ง 3 ช่องจากอุปกรณ์อื่น; สามารถเปลี่ยนช่องได้จากหน้าโปรไฟล์</p>');
-    $("serverUrl").value = endpoint;
-    const drawSlots = () => {
-      const summaries = readSlotPreviews(endpoint);
-      for (const slot of [1,2,3]) {
-        const preview = summaries.find(item => item?.slot === slot);
-        const label = !preview ? "ยังไม่มีข้อมูลจาก VPS" :
-          preview.unavailable ? "เซฟอ่านไม่ได้ · ตรวจสอบ VPS" :
-          !preview.occupied ? "ช่องใหม่ (ยังไม่มีตัวละคร)" :
-          preview.name + " · LV. " + preview.level;
-        const button = $("slotChoice" + slot);
-        const summary = $("slotPreview" + slot);
-        if (!button || !summary) continue;
-        button.classList.toggle("selected", slot === pendingSlot);
-        button.classList.toggle("playing", mode === "live" && slot === activeCharacterSlot);
-        button.setAttribute("aria-pressed", String(slot === pendingSlot));
-        summary.textContent = label + (mode === "live" && slot === activeCharacterSlot ? " · กำลังเล่น" : "");
-      }
-    };
-    refreshCharacterSlotCards = drawSlots;
-    for (const slot of [1,2,3]) {
-      $("slotChoice" + slot).onclick = () => {
-        pendingSlot = slot;
-        drawSlots();
-      };
-    }
-    $("serverUrl").addEventListener("change", () => {
-      const typed = $("serverUrl").value.trim().replace(/\/$/, "");
-      if (typed && typed !== endpoint) {
-        endpoint = typed;
-        pendingSlot = getPreferredSlot(endpoint);
-        drawSlots();
-      }
-    });
-    $("connectOnline").onclick = () => {
-      endpoint = $("serverUrl").value.trim().replace(/\/$/, "");
-      void connectOnline(endpoint, pendingSlot);
-    };
-    $("returnDemo").onclick = () => {
-      showDemo();
-      closeDrawer();
-      toast("กลับสู่โหมดทดลองแล้ว");
-    };
-    drawSlots();
-  }
+  function openOnline() { window.MontraEntry?.open(); }
   const progressionStats = [
     ["hp","HP สูงสุด","maxHp"],["atk","โจมตีกายภาพ","atk"],["def","ป้องกันกายภาพ","def"],
     ["magicAtk","โจมตีเวท","magicAtk"],["magicDef","ป้องกันเวท","magicDef"],["stamina","กำลังสูงสุด","maxStamina"]
@@ -10137,6 +10071,7 @@
     for (const [key, path] of Object.entries(catalog.paths)) $("buildPath").add(new Option(path.role + " · " + path.name, key));
     for (const [key, origin] of Object.entries(catalog.ancestries)) $("buildAncestry").add(new Option(origin.name + " · " + origin.trait, key));
     if (player.pathId) $("buildPath").value = player.pathId;
+    $("buildPath").disabled = Boolean(player.pathId); // each character keeps its chosen class
     if (player.ancestryId) $("buildAncestry").value = player.ancestryId;
     const talentSelect = $("buildTalent");
     function loadTalents() {
@@ -10302,11 +10237,7 @@
         '<input id="renameCharacter" maxlength="40" autocomplete="off" spellcheck="false"/>' +
         '<button class="primary" id="renameCharacterButton" type="button">บันทึกชื่อบนเซิร์ฟเวอร์</button>' +
         '<p class="note">บันทึกอัตโนมัติประมาณทุก 15 วินาทีและตอนออกเกม ปลอดภัยสุดเมื่อออกเกมตามปกติ</p>' +
-      '<button class="secondary" id="copyCharacterKey" type="button">คัดลอกรหัสกู้คืนตัวละคร</button>' +
-      '<p class="note">รหัสกู้คืนเทียบเท่ารหัสผ่าน ห้ามแชร์ให้ผู้อื่น หากล้างข้อมูลเบราว์เซอร์โดยไม่เก็บรหัสไว้จะกู้ตัวละครไม่ได้</p>' +
-      '<label class="field" for="restoreCharacterKey">มีรหัสกู้คืนจากเครื่องเดิม?</label>' +
-      '<input id="restoreCharacterKey" type="password" autocomplete="off" spellcheck="false" placeholder="วางรหัสกู้คืนของคุณ"/>' +
-      '<button class="secondary" id="restoreCharacterButton" type="button">ใช้รหัสกู้คืนบนอุปกรณ์นี้</button>' +
+      '<p class="note">ใช้บัญชี MONTRA เพื่อเข้าเล่น และเก็บรหัสกู้บัญชีในที่ปลอดภัย</p>' +
       '</section>');
     for (const tab of ui.drawerBody.querySelectorAll("[data-cp]")) tab.onclick = () => {
       for (const t of ui.drawerBody.querySelectorAll("[data-cp]")) t.classList.toggle("on", t === tab);
@@ -10325,7 +10256,6 @@
     $("renameCharacter").value = durable ? String(me.characterName) : "";
     $("renameCharacter").disabled = !durable;
     $("renameCharacterButton").disabled = !durable;
-    $("copyCharacterKey").disabled = !durable;
     $("renameCharacterButton").onclick = () => {
       const name = $("renameCharacter").value.normalize("NFC").trim();
       if (!/^[\p{L}\p{N}][\p{L}\p{M}\p{N} ._-]*$/u.test(name) ||
@@ -10335,38 +10265,6 @@
       }
       room?.send("rename_character", { name });
       toast("ส่งคำขอเปลี่ยนชื่อแล้ว");
-    };
-    $("copyCharacterKey").onclick = async () => {
-      try {
-        const key = localStorage.getItem(tokenStorageKey(currentCharacterEndpoint()));
-        if (!key || !TOKEN_PATTERN.test(key)) throw new Error("ไม่พบรหัสในเครื่อง");
-        if (!navigator.clipboard?.writeText) throw new Error("เบราว์เซอร์ไม่รองรับการคัดลอก");
-        await navigator.clipboard.writeText(key);
-        toast("คัดลอกรหัสกู้คืนแล้ว · โปรดเก็บเป็นความลับ");
-      } catch (error) { toast("คัดลอกรหัสไม่ได้: " + (error.message || error)); }
-    };
-    $("restoreCharacterButton").onclick = () => {
-      const incoming = $("restoreCharacterKey").value.trim();
-      if (!TOKEN_PATTERN.test(incoming)) {
-        toast("รหัสกู้คืนไม่ถูกต้อง โปรดตรวจสอบอีกครั้ง");
-        return;
-      }
-      try {
-        const endpoint = currentCharacterEndpoint();
-        const key = tokenStorageKey(endpoint);
-        if (localStorage.getItem(key) === incoming) {
-          toast("กำลังใช้งานตัวละครนี้อยู่แล้ว");
-          return;
-        }
-        localStorage.setItem(key, incoming);
-        localStorage.removeItem(slotPreviewKey(endpoint));
-        localStorage.setItem(preferredSlotKey(endpoint), "1");
-        // The next join must use the recovered identity; never attach
-        // a different account to an already-running Colyseus session.
-        window.location.reload();
-      } catch (error) {
-        toast("บันทึกรหัสกู้คืนไม่สำเร็จ: " + (error.message || error));
-      }
     };
   }
   // Taps on any game button give a soft woodblock click.
@@ -10386,7 +10284,7 @@
     });
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่นและตั้งค่า",soundSettingsHtml()+`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>วิชาพื้นฐานจอมอาคม</h3><p>เลือกจอมอาคมสายผู้ร่ายเวทหรือผู้เยียวยาที่ลานพักก่อนใช้วิชาต่อไปนี้</p><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจและหมุนกล้องได้ วิชาอาคมต้องใช้ตัวละครจอมอาคมใน LIVE</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
+    openDrawer("help","วิธีเล่นและตั้งค่า",soundSettingsHtml()+`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>วิชาพื้นฐานจอมอาคม</h3><p>ตัวละครสายผู้ร่ายเวทหรือผู้เยียวยาใช้วิชาต่อไปนี้ได้</p><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เข้าสู่ระบบแล้วเลือกเซฟ 1–3 และเปลี่ยนเซฟได้ในโปรไฟล์ · บัญชีหนึ่งใช้ได้ทีละตัวละคร ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>ชุดเกราะและอาวุธดรอปจากมอนสเตอร์</p>`);
     bindSoundSettings(ui.drawerBody);
   }
   function currentBagSlots() {
@@ -11275,13 +11173,10 @@
   updateStatus();
   updateFlightButton();
   ui.loading.hidden=true;
-  toast("เริ่มต้นในโหมด DEMO · แตะพื้นเพื่อเดิน");
-  // Choose one of three character saves BEFORE joining an online room.
-  // Offline DEMO remains usable if the player closes the selector.
-  if (location.protocol === "https:" && location.hostname === "nustanakritwithai.github.io") {
-    setTimeout(() => {
-      if (mode === "demo" && !room && !drawerActive) openOnline();
-    }, 900);
-  }
+  window.MontraEntry?.start((endpoint,slot,setup) => connectOnline(endpoint,slot,null,setup), async () => {
+    const old = room; room = null; clearSyncPoll();
+    if (old) { try { await old.leave(); } catch (_) {} }
+    showDemo();
+  });
 })();
 

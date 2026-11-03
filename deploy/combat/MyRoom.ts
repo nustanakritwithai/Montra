@@ -1,4 +1,5 @@
 import { FORGE } from "./ForgeRules.js";
+import { accounts } from "./AccountService.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
 import { WAR_SIDE_SIZE, WAR_HOLD, warSites, type Battlefield, type WarSide } from "./TerritoryWar.js";
 import {parseGovernmentOrder} from "./TerritoryGovernment.js";
@@ -149,6 +150,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private gates = new Map<string, Gates>();
   private lastRejectNoticeMs = new Map<string, number>();
   private persistentCharacters = new Map<string, string>(); // session -> selected slot digest
+  private accountSessions = new Map<string, string>(); // private credentials, never replicated or logged
   private activeGuestAccounts = new Map<string, string>(); // session -> legacy account digest
   private pendingCharacterLeaves = new Map<string, Promise<void>>(); // do not release before disk save
   private guestSlotIds = new Map<string, readonly string[]>(); // 3 derived IDs, never raw token
@@ -275,6 +277,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private selectBuild(client: Client, build: CharacterBuild): void {
     const id = client.sessionId, player = this.buildPlayer(client);
     if (!player) return;
+    if (process.env.MONTRA_ACCOUNTS_REQUIRED !== "0" && player.pathId && player.pathId !== build.path)
+      return this.reject(client, "class_permanent");
     const atShrine = player.mapId === DEFAULT_MAP_ID && onMapGround(player) && Math.hypot(player.x, player.z) <= 6;
     if (!atShrine || this.simulatedMs - (this.lastCombatMs.get(id) ?? -Infinity) < PROGRESSION.combatQuietMs)
       return this.reject(client, "build_needs_shrine");
@@ -3289,6 +3293,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.simulatedMs += ctx.dtMs;
       this.tick(ctx.dt);
     }, RULES.tickRate);
+    this.clock.setInterval(() => {
+      for (const [clientId, session] of this.accountSessions) {
+        let valid = false;
+        try { valid = Boolean(accounts().resolve(session)); } catch { /* fail closed */ }
+        if (!valid) this.clients.find(client => client.sessionId === clientId)?.leave();
+      }
+    }, 3000);
 
     const fort = this.state.fortification;
     fort.id = FORT.id;
@@ -3942,11 +3953,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (WORLD_EXPANSION && (!options || typeof options !== "object" || Array.isArray(options) || (options as Record<string,unknown>).worldVersion !== 1)) throw new Error("world_client_update_required");
     // Old smoke tests and clients without browser storage remain transient.
     // A valid guest token is a secret bearer credential, never sent in Schema.
-    const token = getGuestToken(options);
+    const required = process.env.MONTRA_ACCOUNTS_REQUIRED !== "0";
+    const fields = options && typeof options === "object" && !Array.isArray(options) ? options as Record<string,unknown> : {};
+    const identity = required ? accounts().resolve(fields.accountSession) : null;
+    if (required && !identity) throw new Error("login_required");
+    const token = required ? null : getGuestToken(options);
     const slot = parseCharacterSlot(options);
-    if (!token && slot !== 1) throw new Error("guest_token_required");
-    const accountId = token ? characterIdFromToken(token, 1) : null;
-    const characterId = token ? characterIdFromToken(token, slot) : null;
+    if (!required && !token && slot !== 1) throw new Error("guest_token_required");
+    const slotIds = identity?.characterIds ?? (token ? CHARACTER_SLOTS.map(candidate => characterIdFromToken(token, candidate)) : null);
+    // The first character ID remains the lease key across guest-to-account migration.
+    const accountId = slotIds?.[0] ?? null;
+    const characterId = slotIds?.[slot - 1] ?? null;
     // A single Guest ID may own three saves but can play only ONE at a time.
     if (accountId && !claimCharacter(accountId, client.sessionId)) {
       throw new Error("character_already_online");
@@ -3958,7 +3975,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const spawn = this.field?.site===CASTLE_ID ? VILLAGE_ARRIVALS[0] : VILLAGE_ARRIVALS.find(p => !reserved.some(other => other.x === p.x && other.z === p.z));
       if (!spawn) throw new Error("world_room_full");
       this.playerSpawn.set(client.sessionId, spawn);
-      const saved = token ? (await characterStore.loadOrCreate(token, spawn, slot)).character : null;
+      const setup = fields.characterSetup && typeof fields.characterSetup === "object" && !Array.isArray(fields.characterSetup)
+        ? fields.characterSetup as {name?:unknown; build?:unknown} : undefined;
+      const saved = characterId ? (await characterStore.loadOrCreateById(characterId, spawn, setup, required)).character : null;
+      if (required && !accounts().resolve(fields.accountSession)) throw new Error("login_required");
       const allocations = saved?.statAllocations ?? emptyAllocations();
       const initialStats = calculateStats(saved?.level ?? 1, allocations);
       const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
@@ -4058,14 +4078,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(provinceReady)this.provinceClients.add(client.sessionId);
       if(atlasReady)this.atlasClients.add(client.sessionId);
       if(templeReady)this.templeClients.add(client.sessionId);
-      if (characterId && accountId && token) {
+      if (characterId && accountId && slotIds) {
         if (!saved?.inventory) throw new Error("inventory_migration_missing");
         this.persistentCharacters.set(client.sessionId, characterId);
         this.guildSubscriptions.set(client.sessionId,subscribeGuild(characterId,()=>this.sendGuild(client,characterId)));
         this.inventories.set(client.sessionId, saved.inventory);
         this.activeGuestAccounts.set(client.sessionId, accountId);
-        this.guestSlotIds.set(client.sessionId,
-          CHARACTER_SLOTS.map(candidate => characterIdFromToken(token, candidate)));
+        this.guestSlotIds.set(client.sessionId, slotIds);
+        if (required && typeof fields.accountSession === "string") this.accountSessions.set(client.sessionId, fields.accountSession);
       }
       this.playerSpawn.set(client.sessionId, safeSpawn);
       this.gates.set(client.sessionId, {
@@ -4101,6 +4121,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    this.accountSessions.delete(id);
     this.clearGrappleCountersFor(id,"disconnect");
     this.clearMuayDefense(id,"cancelled");
     this.releaseMuayFor(id,"disconnect");this.muayGrappleImmunity.delete(id);
@@ -4216,6 +4237,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     });
     await Promise.allSettled(pending);
     this.persistentCharacters.clear();
+    this.accountSessions.clear();
     this.inventories.clear();
     this.pendingItemUses.clear();
     this.pendingRewards.clear();
