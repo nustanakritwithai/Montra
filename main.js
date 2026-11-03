@@ -3456,7 +3456,7 @@
       }
       if(!ghost){mesh.position.set(Number(monster.x),Number(monster.y)+(monster.tier==="boss"?2.25:monster.tier==="elite"?1.74:.88),Number(monster.z));mesh.rotation.y=Number(monster.facing)||0;}
       if(id===selectedForestTarget&&monster.mapId===activeMapId){updateMonsterUI(monster.hp,monster.maxHp,monster.alive);
-        ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monsterName(monster,id)+" · Lv "+monster.level;}
+        ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monsterName(monster,id)+" · Lv "+monster.level+(ownServerCharacter()?.targetId===id?" · ตีอัตโนมัติ":"");}
     });
     for(const [id,mesh] of forestMonsters)if(!seen.has(id)){mesh.metadata?.ghost?.rig?.metadata?.skeletons?.forEach(s=>s.dispose());mesh.dispose();forestMonsters.delete(id);}
     const me=ownServerCharacter(),map=worldDefinitions?.[activeMapId];
@@ -3474,8 +3474,8 @@
     const target=room?.state?.monsters?.get?.(id);
     if(!target||!target.alive||target.mapId!==activeMapId){toast("เป้าหมายไม่อยู่ในพื้นที่");return;}
     selectedForestTarget=id;spellTargetId=id;selectedPkTargetId=null;syncPKHud();marker.setEnabled(false);
-    if(targetedSkill) castAtTarget(id);
-    else try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }
+    setTargetedSkill(null);
+    try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }
     updateMonsterUI(target.hp,target.maxHp,target.alive);ui.monsterHint.textContent=monsterName(target,id)+" · Lv "+target.level;
   }
 
@@ -6933,7 +6933,7 @@
     ui.monsterText.textContent = alive ? Math.ceil(current) + "/" + Math.ceil(max) : "ปราบแล้ว"; // same wording as the HUD frame
     ui.monsterHint.textContent = simulated
       ? "ทดลองในเครื่อง · แตะผีเพื่อโจมตี"
-      : "ออนไลน์ · แตะผีเพื่อโจมตี";
+      : ownServerCharacter()?.targetId===MONSTER_ID ? "ออนไลน์ · ตีอัตโนมัติ" : "ออนไลน์ · แตะผีเพื่อเริ่มตี";
   }
 
   function resetDemoMonster() {
@@ -6979,6 +6979,7 @@
   }
 
   function requestMonsterAttack() {
+    setTargetedSkill(null);
     if(mode === "live" && activeMapId !== "ritual_village" && room?.state?.worldDefinition){
       const me=ownServerCharacter();let target=room.state.monsters.get(selectedForestTarget);
       if(!target?.alive || target.mapId!==activeMapId){target=null;room.state.monsters.forEach(m=>{if(m.alive&&m.mapId===activeMapId&&me&&(!target||Math.hypot(me.x-m.x,me.z-m.z)<Math.hypot(me.x-target.x,me.z-target.z)))target=m;});}
@@ -7081,6 +7082,7 @@
     pendingClimb = null;
     selectedPkTargetId = null;
     spellTargetId = null;
+    setTargetedSkill(null);
     syncPKHud();
     demoAutoAttack = false;
     if (!ui.monsterStatus.hidden) ui.monsterHint.textContent = "แตะผีเพื่อโจมตี";
@@ -7656,6 +7658,8 @@
     const mine=state?.players?.get?.(localId);
     const previousMapId=activeMapId;
     syncWorldDefinition(state,mine?.mapId || "ritual_village");
+    const spellMonster=monsterForSpell(spellTargetId);
+    if(spellMonster && (!spellMonster.alive || spellMonster.hp<=0 || (spellMonster.mapId || "ritual_village")!==activeMapId || !ownServerCharacter()?.alive))spellTargetId=null;
     syncMonsterState(state);
     syncSummons(state);
     syncFortification(state);
@@ -7767,7 +7771,7 @@
       const client = new window.Colyseus.Client(endpoint);
       const accountSession = window.MontraEntry?.session();
       if (!accountSession) throw new Error("กรุณาเข้าสู่ระบบก่อน");
-      const opts={accountSession,characterSlot:requestedSlot,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1};
+      const opts={accountSession,characterSlot:requestedSlot,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1};
       let transferFailed=false;
       if(transfer?.roomId){
         try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
@@ -8738,8 +8742,7 @@
     } else if (hitMesh?.metadata?.monsterId && hitMesh !== enemy) {
       requestForestAttack(hitMesh.metadata.monsterId);
     } else if (hitMesh === enemy) {
-      if(targetedSkill) castAtTarget(MONSTER_ID);
-      else requestMonsterAttack();
+      requestMonsterAttack();
     } else if(hitMesh?.metadata?.climbableWall) {
       const flying = mode === "live" ? ownServerCharacter()?.flying : demoFlying;
       if (flying && picked.pickedPoint) {
@@ -9724,7 +9727,7 @@
           selectedSentinelSkill=id;setTargetedSkill("sentinel");
           const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
           if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId)castAtTarget(targetId);
-          else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
+          else toast(node.name+" · แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดวิชานี้");
         }else if(node.effect==="ward" || node.effect==="intercept")chooseSentinelAlly(id,node);
         else room.send("sentinel_skill",{skillId:id});
       };if(node && !times[index])staminaCost(slot,node.stamina,me);bar.append(slot);
@@ -9800,7 +9803,7 @@
         if(["approach","strike","consume","windup","counter"].includes(node.effect)){
           selectedBladeSkill=id;setTargetedSkill("blade");const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
           if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId)castAtTarget(targetId);
-          else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
+          else toast(node.name+" · แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดวิชานี้");
         }else room.send("blade_skill",{skillId:id});
       };if(node && !times[index])staminaCost(slot,node.stamina,me);bar.append(slot);
     });
@@ -9881,7 +9884,7 @@
           selectedOccultSkill=id;setTargetedSkill("occult");
           const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId);
           if (targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId) castAtTarget(targetId);
-          else toast(node.name+" · แตะมอนสเตอร์เพื่อใช้วิชา");
+          else toast(node.name+" · แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดวิชานี้");
         } else if (["heal","spirit_heal","ward","cleanse","spirit_ward"].includes(node.effect)) {
           chooseOccultAlly(id,node.name);
         } else room.send("occult_skill",{skillId:id});
@@ -9998,7 +10001,7 @@
         const targetId=finisherReady ? muayFollowupTarget : spellTargetId || me.targetId;
         const target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
         if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId) castAtTarget(targetId);
-        else toast(node.name+" · แตะมอนสเตอร์หรือผู้เล่นเพื่อใช้วิชา");
+        else toast(node.name+" · แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดวิชานี้");
       };
       if(node && !throwing && !timing[index])staminaCost(button,node.stamina,me);
       bar.append(button);
@@ -10085,7 +10088,7 @@
     setTargetedSkill("sword");
     const targetId=spellTargetId || data.me.targetId;
     if (targetId) castAtTarget(targetId);
-    else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
+    else toast(node.name+" · แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดวิชานี้");
   }
   function learnedSlots(slots, learned, lessons) {
     return slots.map(id => id && learned?.includes(id) && lessons?.[id] ? id : null);
@@ -10769,6 +10772,7 @@
       <h3>ออกเดินทาง</h3>
       <p>แตะพื้นเพื่อเดิน ลากเพื่อหมุนกล้อง และหนีบสองนิ้วเพื่อซูม แตะภารกิจที่ติดตามเพื่อดูเป้าหมาย หรือเปิดแผนที่จากมุมขวาบน</p>
       <details class="help-topic"><summary>ต่อสู้และจัดสกิล</summary>
+        <p>แตะมอนสเตอร์หนึ่งครั้งเพื่อเดินเข้าระยะและตีอัตโนมัติ กดสกิลเพื่อร่ายกับเป้านั้น เมื่อร่ายจบจะตีต่อเอง แตะมอนตัวอื่นเพื่อเปลี่ยนเป้า หรือแตะพื้นเพื่อหยุดตี</p>
         <p>แตะมอนสเตอร์เพื่อโจมตีปกติ ช่องล่างใช้เฉพาะวิชาที่เรียนและติดตั้งแล้ว แตะช่องว่างเพื่อเปิดตำรา ปัดเร็ว ๆ เหนือแถบสกิลเพื่อพุ่งหลบ</p>
         <p>เปิด «สกิล» เพื่อเรียนวิชาและจัดช่องลัดที่ลานพัก บนคอมพิวเตอร์กด 1–4 เพื่อใช้วิชาตามช่องที่มี</p></details>
       <details class="help-topic"><summary>ปีน บิน และขี่ม้า</summary>
