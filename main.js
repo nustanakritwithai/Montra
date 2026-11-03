@@ -7937,7 +7937,9 @@
     const nearestOf = list => { let best = null, d = Infinity; for (const p of list) { const k = Math.hypot(p.x - hero.x, p.z - hero.z); if (k < d) { d = k; best = p; } } return best; };
     if (!hero) return null;
     const hunt=itemHuntGuide();if(hunt)return hunt;
+    const objective=forestObjectiveHudGuide();if(objective && forestObjectiveState.active)return objective;
     const field=fieldGearGoal();if(field)return field;
+    if(objective)return objective;
     if (activeMapId === "ritual_village") {
       if (mode !== "live") {
         if (enemy.isEnabled() && kills < 1) return { title: "ลองปราบผีทดสอบ", step: "เดินเข้าใกล้ผีที่ลานกลาง แล้วแตะตัวผี", progress: "ปราบ " + kills + "/1", to: { x: enemy.position.x, z: enemy.position.z } };
@@ -12975,12 +12977,19 @@
     const keeper=forestObjectiveState?.keeper,me=ownServerCharacter();
     return Boolean(keeper && me && keeper.mapId===activeMapId && !me.flying && Math.hypot(me.x-keeper.x,me.z-keeper.z)<=keeper.radius);
   }
+  function forestObjectiveHudGuide(){
+    if(mode!=="live" || !room?.state?.forestObjectivesAvailable || !forestObjectiveState)return null;
+    const {active,keeper,options}=forestObjectiveState,definition=active && options?.[active.id];
+    if(definition)return {title:definition.name,step:(definition.stages?.[active.progress]?.camp || definition.camp)+" · แตะเพื่อดูภารกิจ",progress:active.progress+"/"+definition.goal};
+    if(keeper?.mapId===activeMapId)return {title:"พบผู้มอบงาน",step:"คุยกับ "+keeper.name+" เพื่อรับภารกิจ",progress:"",to:keeper};
+    return null;
+  }
   function renderForestObjectiveHud(){
-    if(mode!=="live" || !room?.state?.forestObjectivesAvailable || territoryState?.local?.site===activeMapId || itemHuntGuide())return;
-    const title=ui.quest.querySelector("strong"),detail=ui.quest.querySelector(".quest-content > span");
-    const active=forestObjectiveState?.active,definition=active && forestObjectiveState?.options?.[active.id];
-    if(definition){title.textContent=active.progress+"/"+definition.goal+" · "+definition.name;detail.textContent=(definition.stages?.[active.progress]?.camp || definition.camp)+" · แตะเพื่อดูภารกิจ";}
-    else if(!fieldGearGoal() && forestObjectiveState?.keeper?.mapId===activeMapId){title.textContent="พบผู้มอบงาน";detail.textContent="คุยกับ "+forestObjectiveState.keeper.name+" เพื่อรับภารกิจ";}
+    if(mode!=="live" || !room?.state?.forestObjectivesAvailable || territoryState?.local?.site===activeMapId || ui.quest.classList.contains("war-hud"))return;
+    const guide=hudGuide();if(!guide)return;
+    hudSet(ui.quest.querySelector("strong"),"qt",guide.title);
+    hudSet(ui.quest.querySelector(".quest-content > span"),"qs",guide.step);
+    hudSet($("questProgress"),"qp",guide.progress || "");
   }
   function renderForestObjective(){
     const body=$("forestObjectiveBody");if(!body)return;body.replaceChildren();
@@ -13011,11 +13020,12 @@
     }
   }
   function openForestRanger(){
-    openDrawer("quest",forestObjectiveState?.keeper?.name || "ผู้มอบงาน",'<div id="forestObjectiveBody" role="region" aria-label="ภารกิจพื้นที่"></div>');
+    openDrawer("quest",forestObjectiveState?.keeper?.name || "ผู้มอบงาน",'<div id="forestObjectiveBody" role="region" aria-label="ภารกิจพื้นที่"></div><button type="button" class="secondary" id="rangerFieldGoal" hidden>ดูเส้นทางล่าและอุปกรณ์</button>');
+    const journey=$("rangerFieldGoal");journey.hidden=!fieldGearGoal();journey.onclick=()=>openCurrentQuest(true);
     renderForestObjective();room?.send("get_forest_objective",{});
   }
   // Compact portrait HUD: a small quest chip opens the existing detail drawer.
-  function openCurrentQuest() {
+  function openCurrentQuest(preferJourney=false) {
     const hunt=itemHuntGuide();
     if(hunt && !ui.quest.classList.contains("war-hud")){
       openDrawer("quest",hunt.title,'<p id="huntStep" class="note"></p><button id="huntMap" type="button" class="secondary">ดูตำแหน่งบนแผนที่</button><button id="endItemHunt" type="button" class="secondary">เลิกติดตาม</button>');
@@ -13025,7 +13035,7 @@
       return;
     }
     if(territoryState?.local?.site===activeMapId){openWarPanel();return;}
-    if(forestObjectiveState?.active && room?.state?.forestObjectivesAvailable){openForestRanger();return;}
+    if(preferJourney!==true && forestObjectiveState?.active && room?.state?.forestObjectivesAvailable){openForestRanger();return;}
     const gearGoal=fieldGearGoal();
     if(gearGoal && !ui.quest.classList.contains("war-hud")){
       openDrawer("quest",gearGoal.title,'<p id="fieldGoalProgress" class="note"></p><p id="fieldGoalInputs"></p><p class="note" id="fieldGearCompare" hidden></p><button type="button" class="secondary" id="fieldGearHunt" hidden></button><button type="button" class="secondary" id="fieldGearView" hidden>ดูชิ้นที่มีในกระเป๋า</button><button type="button" class="secondary" id="fieldGearSkip" hidden></button><button type="button" class="secondary" id="fieldBossChoice" hidden></button><button type="button" class="secondary" id="fieldGoalSupply" hidden></button><button type="button" class="secondary" id="fieldGoalRecipe">เปิดสูตรที่โต๊ะช่าง</button><button type="button" class="secondary" id="fieldGoalForge" hidden>เปิดช่างตี +1</button><p class="note" id="fieldTrainingNames" hidden></p><button type="button" class="secondary" id="fieldTrainingBook" hidden>เปิดตำราอาชีพ</button>');
