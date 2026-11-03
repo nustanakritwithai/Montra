@@ -55,9 +55,9 @@ import { SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_RANKABLE_SKILLS, S
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { isMuayFoundation, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
-import { PERSONAL_ITEMS, WORKBENCH_GOLD, SALVE_ID, wearsWraps, wearsTwinSwords, monsterCardDrop } from "./PersonalItems.js";
+import { CATALOG_PAGES, WORKBENCH_GOLD, personalItem, wearsWraps, wearsTwinSwords, monsterCardDrop } from "./PersonalItems.js";
 import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
-import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
+import { parseSellMaterial, parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
@@ -67,7 +67,7 @@ import { PROGRESSION, SKILL_RANK_LEVELS, SKILL_RANK_PRACTICE, skillRankCost, ski
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
   POTION_COOLDOWN_MS, grantRewardPotion, grantStackReward, SHRINE_RECIPE, SHRINE_SHARD, SHRINE_GLAIVE, parseUseItemCommand,
-  useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon, equipBody, parseBodyCommand, equippedStats, practiceLoot,
+  useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon, equipBody, parseBodyCommand, equippedStats, equipmentRatings, gearHealing, spiritGearPower, overflowStaminaRegen, practiceLoot,
   equippedWeaponId, weaponBonuses, type InventorySnapshot,
 } from "./ItemRules.js";
 
@@ -139,6 +139,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastMountMs = new Map<string, number>();
   private lastAttackMs = new Map<string, number>();
   private lastCombatMs = new Map<string, number>();
+  private lastPvpMs=new Map<string,number>();
+  private sentItemCatalog=new Set<string>();
   private lastWarpMs = new Map<string, number>();
   private provinceClients = new Set<string>();
   private castleClients = new Set<string>();
@@ -152,6 +154,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private pendingWarps = new Set<string>();
   private statAllocations = new Map<string, Allocations>();
   private pendingRewards = new Map<string, Promise<void>>();
+  private extraStaminaRegen=new WeakMap<Player,number>();
   private hpRegenRemainder = new Map<string, number>();
   private playerRespawnAt = new Map<string, number>();
   private playerSpawn = new Map<string, Vec2>();
@@ -396,7 +399,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     player.classSkillReadyAt = now + skill.cooldownMs;
     for (const [member, target] of targets) {
       if (skill.effect.kind === "heal") {
-        target.hp = Math.min(target.maxHp, target.hp + Math.round(target.maxHp * skill.effect.fraction));
+        target.hp = Math.min(target.maxHp, target.hp + this.healAmount(id,member,target.maxHp * skill.effect.fraction));
       } else {
         this.effects.grant(member, {id: build.path, sourceId: id, group: "class_skill", bonuses: skill.effect.bonuses}, this.simulatedMs + skill.effect.durationMs);
         this.applyStats(member, target, this.statAllocations.get(member) ?? emptyAllocations());
@@ -1338,7 +1341,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const supportPower=lesson.power*supportRankMultiplier(book.ranks,skillId);
       for (const [member,target] of targets) {
         if (lesson.effect==="heal" || lesson.effect==="heal_area" || lesson.effect==="spirit_heal") {
-          const amount=Math.max(1,Math.round(target.maxHp*supportPower));
+          const amount=this.healAmount(id,member,target.maxHp*supportPower);
           if (target.hp<target.maxHp) {target.hp=Math.min(target.maxHp,target.hp+amount);trained=true;void this.saveCharacter(member);}
         } else if (lesson.effect==="cleanse" || lesson.effect==="cleanse_area") {
           trained=this.clearOccultCurse(member,"cleansed") || trained;
@@ -1419,7 +1422,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
             (this.field && member!==ownerId && this.warSeats.get(member)?.side!==this.warSeats.get(ownerId)?.side) ||
             distance3d(target,field)>field.range || !isWorldSegmentClear(field.mapId,field,target) ||
             !this.bodyPathClear(field.mapId,field,target)) continue;
-        target.hp=Math.min(target.maxHp,target.hp+Math.max(1,Math.round(target.maxHp*field.power)));
+        target.hp=Math.min(target.maxHp,target.hp+this.healAmount(ownerId,member,target.maxHp*field.power));
         healed=true;
         void this.saveCharacter(member);
       }
@@ -1853,7 +1856,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.simulatedMs - (this.lastWeaponEquipMs.get(id) ?? -Infinity) < 700) {
         return this.reject(client, "equipment_cooldown");
       }
-      const change = gearOrder ? equipBody(inventory,gearOrder.position,gearOrder.slot,gearOrder.expected,player.pathId) : equipInventoryWeapon(inventory,order.slot,player.pathId);
+      const change = gearOrder ? equipBody(inventory,gearOrder.position,gearOrder.slot,gearOrder.expected,player.pathId,player.level) : equipInventoryWeapon(inventory,order.slot,player.pathId,player.level);
       // Explicit guard works under both strict and non-strict Windows TS.
       if ("reason" in change) return this.reject(client, change.reason);
       const snapshot = this.captureCharacterSnapshot(id, change.inventory);
@@ -1892,13 +1895,22 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private recordCombat(ownerId: string, targetId: string): void {
     this.lastCombatMs.set(ownerId, this.simulatedMs);
-    if (!this.getMonster(targetId)) this.lastCombatMs.set(targetId, this.simulatedMs);
+    if (!this.getMonster(targetId)) {this.lastCombatMs.set(targetId,this.simulatedMs);this.lastPvpMs.set(ownerId,this.simulatedMs);this.lastPvpMs.set(targetId,this.simulatedMs);}
+  }
+
+  private healAmount(owner:string,target:string,base:number):number {
+    const amount=Math.max(1,Math.round(base));
+    const recent=Math.max(this.lastPvpMs.get(owner)??-Infinity,this.lastPvpMs.get(target)??-Infinity);
+    if(this.field || this.simulatedMs-recent<PROGRESSION.combatQuietMs)return amount;
+    return amount+gearHealing(this.inventories.get(owner),amount);
   }
 
   private applyStats(id:string, player: Player, allocations: Allocations): void {
-    const stats = calculateModifiedStats(equippedStats(calculateStats(player.level, allocations),this.inventories.get(id)),this.effects.modifiers(id));
+    const base=calculateStats(player.level,allocations),bag=this.inventories.get(id);
+    this.extraStaminaRegen.set(player,overflowStaminaRegen(base,bag));
+    const stats=calculateModifiedStats(equippedStats(base,bag),this.effects.modifiers(id));
     player.maxHp = stats.maxHp; player.atk = stats.atk;
-    player.def = player.pathId==="sentinel" && this.sentinelBooks.get(id)?.learned.includes("fortitude") && equippedWeaponId(this.inventories.get(id))===SHRINE_GLAIVE
+    player.def = player.pathId==="sentinel" && this.sentinelBooks.get(id)?.learned.includes("fortitude") && (equippedWeaponId(this.inventories.get(id))===SHRINE_GLAIVE || personalItem(equippedWeaponId(this.inventories.get(id)))?.family==="wp_pike")
       ? Math.round(stats.def*(1+SENTINEL_LESSONS.fortitude.power)) : stats.def;
     player.magicAtk = stats.magicAtk; player.magicDef = stats.magicDef;
     player.maxStamina = stats.maxStamina;
@@ -1943,7 +1955,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const previousLoot=shard ?? prize;
         const bag=previousLoot ?? snapshot.inventory;
         const fieldDrop=bag && personalEligible
-          ? practiceLoot(bag,current.pathId) : undefined;
+          ? practiceLoot(bag,current.pathId,monsterLevel,tier,current.level) : undefined;
         const afterField=fieldDrop?.bag ?? bag;
         const card=personalEligible && afterField ? monsterCardDrop(monsterId,monsterLevel) : null;
         const cardBag=card && afterField ? grantStackReward(afterField,card) : null;
@@ -2050,7 +2062,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","forge_max_rank","forge_item_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal"];
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","forge_max_rank","forge_item_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level"];
       const reason=error instanceof Error && allowed.includes(error.message) ? error.message : "economy_failed";
       if (reason==="economy_failed") console.error("MONTRA economy failed",error);
       client.send("economy_error",{reason});
@@ -2512,9 +2524,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const order = parseCraft(message);
       if (!order) return this.reject(client, "invalid_economy_request");
       this.economyAction(client, id => {
-        const result = order.recipeId===SHRINE_GLAIVE ? characterStore.economy.craftShrineGlaive(id,order.requestId) : characterStore.economy.craftPersonal(id,order.requestId,order.recipeId);
+        const result = order.recipeId===SHRINE_GLAIVE ? characterStore.economy.craftShrineGlaive(id,order.requestId) : characterStore.economy.craftPersonal(id,order.requestId,order.recipeId,this.state.players.get(client.sessionId)!.level);
         this.syncEconomy(client, id);
         client.send("craft_result", {requestId: order.requestId, ...result});
+      });
+    },
+    sell_material: (client:Client,message:unknown)=>{
+      const order=parseSellMaterial(message);
+      if(!order)return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{
+        const result=characterStore.economy.sellMaterial(id,order.requestId,order.slot,order.expected,order.quantity);
+        this.syncEconomy(client,id);client.send("material_sold",result);
       });
     },
     card_socket: (client:Client,message:unknown) => {
@@ -2530,7 +2550,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const order = parseForge(message);
       if (!order) return this.reject(client, "invalid_economy_request");
       this.economyAction(client, id => {
-        const result = characterStore.economy.forgeWeapon(id, order.requestId, order.slot, order.stamp, order.action);
+        const result = characterStore.economy.forgeWeapon(id,order.requestId,order.slot,order.stamp,order.action,this.state.players.get(client.sessionId)!.level);
         this.syncEconomy(client, id);
         client.send("forge_result", { requestId: order.requestId, action: order.action, ...result });
       });
@@ -2676,7 +2696,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("character_status",{
         level:player.level, weaponId:equippedWeaponId(inventory) ?? "",
         base:calculateStats(player.level,this.statAllocations.get(id) ?? emptyAllocations()),
-        weapon:{pve:weaponBonuses(inventory,"pve"),pvp:weaponBonuses(inventory,"pvp")},
+        weapon:{pve:weaponBonuses(inventory,"pve"),pvp:weaponBonuses(inventory,"pvp")},forgeRatings:equipmentRatings(inventory),overflowRegen:this.extraStaminaRegen.get(player)??0,
         effects:this.effects.active(id,this.simulatedMs)
       });
     },
@@ -2688,7 +2708,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const last = this.lastInventoryReadMs.get(id) ?? -Infinity;
       if (this.simulatedMs - last < 1_000) return;
       this.lastInventoryReadMs.set(id, this.simulatedMs);
-      client.send("inventory_state", {...inventory,personalItems:PERSONAL_ITEMS,workbenchGold:WORKBENCH_GOLD,cardDrill:DRILL_COST});
+      if(!this.sentItemCatalog.has(id)){
+        for(const items of CATALOG_PAGES)client.send("item_catalog_page",{items});
+        this.sentItemCatalog.add(id);
+      }
+      client.send("inventory_state",{...inventory,catalogReady:true,workbenchGold:WORKBENCH_GOLD,cardDrill:DRILL_COST});
     },
     use_item: (client: Client, message: unknown) => {
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
@@ -2706,7 +2730,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.pendingItemUses.has(id)) return this.reject(client, "item_busy");
       if (this.simulatedMs < (this.itemUseReadyAt.get(id) ?? -Infinity)) return this.reject(client, "item_cooldown");
       const result = useInventoryItem(
-        inventory, slot, player.hp, player.maxHp, player.alive);
+        inventory, slot, player.hp, player.maxHp, player.alive,player.level);
       // The Windows VPS build uses different TS strictness from CI.
       // An explicit property guard narrows ItemUseResult in both modes.
       if ("reason" in result) return this.reject(client, result.reason);
@@ -2728,7 +2752,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
             // Never resurrect a player killed while a save was pending.
             current.hp = Math.min(current.maxHp, current.hp + result.healed);
           }
-          this.itemUseReadyAt.set(id,this.simulatedMs+(result.itemId===SALVE_ID?14_000:POTION_COOLDOWN_MS));
+          this.itemUseReadyAt.set(id,this.simulatedMs+(personalItem(result.itemId)?.kind==="consumable"?14_000:POTION_COOLDOWN_MS));
           client.send("inventory_state", result.inventory);
           client.send("item_used", {
             slot, itemId: result.itemId,
@@ -3368,7 +3392,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (monster) {
       const order=this.occultSpiritOrders.get(ownerId);
       const empowered=order?.targetId===targetId && order.until>this.simulatedMs;
-      const damage = calculateDamage(RULES.summonAttackDamage*(empowered?OCCULT_LESSONS[order.skillId].power:1), monster.defense, monster.level);
+      const gearPower=guardian.kind==="pot_spirit" && owner.pathId==="seer" ? spiritGearPower(this.inventories.get(ownerId)) : 0;
+      const damage = calculateDamage((RULES.summonAttackDamage+gearPower)*(empowered?OCCULT_LESSONS[order.skillId].power:1), monster.defense, monster.level);
       if (empowered) this.occultSpiritOrders.delete(ownerId);
       if (guardian.kind==="pot_spirit" && (empowered || !this.occultSpiritPracticed.has(ownerId))) {
         this.occultSpiritPracticed.add(ownerId);
@@ -3507,7 +3532,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const p=this.state.players.get(id);
       if (!p || !this.sameCombatMap(id,m.id)) return;
       const profile=this.forest.profile(m.id); if(!profile)return;
-      const damage=this.swordGuardDamage(id,m,calculateDamage(profile.attack*force,p.def,p.level));
+      const damage=this.swordGuardDamage(id,m,calculateDamage(profile.attack*force,p.def+equipmentRatings(this.inventories.get(id)).guard,p.level));
       this.endBladeCloak(id,"damaged");
       p.hp=Math.max(0,p.hp-damage);p.hitSeq++;this.lastCombatMs.set(id,this.simulatedMs);
       this.broadcast("monster_hit",{targetId:id,attackerId:m.id,damage,hp:p.hp,maxHp:p.maxHp,hitSeq:p.hitSeq},{afterNextPatch:true});
@@ -3538,7 +3563,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const healed = Math.floor(pending + 1e-9);
       player.hp = Math.min(player.maxHp, player.hp + healed);
       this.hpRegenRemainder.set(id, player.hp >= player.maxHp ? 0 : pending - healed);
-      player.stamina = Math.min(player.maxStamina, player.stamina + (fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut) * dt);
+      player.stamina = Math.min(player.maxStamina, player.stamina + ((fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut)+(this.extraStaminaRegen.get(player)??0)) * dt);
     }
   }
 
@@ -4006,7 +4031,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastMonsterAttackMs = this.simulatedMs;
     this.lastCombatMs.set(targetId, this.simulatedMs);
 
-    const damage = this.swordGuardDamage(targetId,this.state.monster,calculateDamage(RULES.monsterAttackDamage, target.def, target.level));
+    const damage = this.swordGuardDamage(targetId,this.state.monster,calculateDamage(RULES.monsterAttackDamage, target.def+equipmentRatings(this.inventories.get(targetId)).guard, target.level));
     this.endBladeCloak(targetId,"damaged");
     target.hp = Math.max(0, target.hp - damage);
     target.hitSeq += 1;
@@ -4356,7 +4381,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.destinations.delete(id);
     this.attackTargets.delete(id);
     this.lastAttackMs.delete(id);
-    this.lastCombatMs.delete(id);
+    this.lastCombatMs.delete(id);this.lastPvpMs.delete(id);this.sentItemCatalog.delete(id);
     this.lastWarpMs.delete(id);
     this.playerRespawnAt.delete(id);
     this.playerSpawn.delete(id);
@@ -4476,7 +4501,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.destinations.clear();
     this.attackTargets.clear();
     this.lastAttackMs.clear();
-    this.lastCombatMs.clear();
+    this.lastCombatMs.clear();this.lastPvpMs.clear();this.sentItemCatalog.clear();
     this.lastWarpMs.clear();
     this.pendingWarps.clear();
     this.playerRespawnAt.clear();

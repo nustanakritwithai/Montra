@@ -4864,7 +4864,7 @@
   function setAvatarWeapon(avatar, weaponId, pathId = avatar?.local ? ownServerCharacter()?.pathId : "") {
     if (!avatar?.weaponModels) return;
     setAvatarRitualGear(avatar, pathId);
-    const modelId = practiceModels[weaponId] || (pathId === "phutthaisawan" && weaponId === "arcane_sword" ? "thai_dual" : weaponId === "shrine_glaive" ? "arcane_sword" : weaponId);
+    const modelId = practiceModels[String(weaponId).replace(/_\d+$/,"_1")] || (pathId === "phutthaisawan" && weaponId === "arcane_sword" ? "thai_dual" : weaponId === "shrine_glaive" ? "arcane_sword" : weaponId);
     const safeId = modelId === "thai_dual" || modelId === "muay_wraps" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
     if (avatar.weaponId === safeId) return;
     avatar.weaponId = safeId;
@@ -5117,7 +5117,10 @@
     arcane_sword: { name: "กระบี่อาคม", symbol: "⚔️", bonus: "โจมตีประชิด +8" },
     spirit_staff: { name: "คทาวิญญาณ", symbol: "🔱", bonus: "ยิงอาคม +6" },
   });
-  let personalItems = Object.create(null), workbenchGold = 0, cardDrill=null;
+  let personalItems = Object.create(null), workbenchGold = 0, cardDrill=null, catalogRevision=0;
+  const rarityNames={common:"พื้นฐาน",uncommon:"พิเศษ",rare:"หายาก",epic:"ชั้นยอด",legendary:"ตำนาน"};
+  const forgeNames={melee:"โจมตีประชิด",ranged:"โจมตีเวท",guard:"ป้องกันมอนสเตอร์",healing:"พลังรักษา"};
+  const gearJobs={muay_boran:"มวยไทยโบราณ",phutthaisawan:"นักดาบอยุธยา",blade:"คมดาบ",sentinel:"ผู้พิทักษ์",seer:"ผู้ร่ายเวท",mender:"ผู้เยียวยา"};
   const statNames = {hp:"HP",stamina:"พลัง",atk:"โจมตี",def:"ป้องกัน",magicAtk:"เวท",magicDef:"ต้านเวท"};
   const practiceModels = {wp_wrap_1:"muay_wraps",wp_twins_1:"thai_dual",wp_shadow_1:"ritual_dagger",wp_pike_1:"arcane_sword",wp_wand_1:"spirit_staff",wp_crook_1:"spirit_staff"};
   function statLine(stats) {
@@ -5139,13 +5142,26 @@
     if(Object.hasOwn(WEAPON_META,id))return {...WEAPON_META[id],kind:"mainHand"};
     const item=personalItems[id];
     if(!item)return null;
-    const symbol=item.kind==="mainHand"?({muay_boran:"✊",phutthaisawan:"⚔",blade:"🗡",sentinel:"♜",seer:"✴",mender:"✧"}[item.path]):(gearSymbols[item.kind] || {material:"◆",consumable:"✚",card:"▣"}[item.kind]);
+    const symbol=item.kind==="mainHand"?({muay_boran:"✊",phutthaisawan:"⚔",blade:"🗡",sentinel:"♜",seer:"✴",mender:"✧"}[item.path]):(gearSymbols[item.kind] || {material:"◆",catalyst:"✧",consumable:"✚",card:"▣"}[item.kind]);
     return {...item,symbol,bonus:statLine(item.stats)};
   }
   function gearComparison(id,previousId,card,previousCard) {
     const statsFor=key=>personalItems[key]?.stats || ({ritual_dagger:{atk:4},muay_wraps:{atk:4},arcane_sword:{atk:8},spirit_staff:{magicAtk:6},shrine_glaive:{atk:10}}[key]) || {};
     const next=statsFor(id), previous=statsFor(previousId);
     return statLine(Object.fromEntries(Object.keys(statNames).map(k=>[k,(next[k]||0)+(personalItems[card]?.stats?.[k]||0)-(previous[k]||0)-(personalItems[previousCard]?.stats?.[k]||0)])));
+  }
+  function forgeComparison(item,previous){
+    function values(stack){
+      const result={melee:0,ranged:0,guard:0,healing:0}, f=stack?.forge;
+      if(!f)return result;
+      const profile=personalItems[stack.itemId]?.forge;
+      if(profile)result[profile.primary]=profile.enhanceMax*f.rank/10;
+      else result[stack.itemId==="spirit_staff"?"ranged":"melee"]=f.rank;
+      if(f.affix)result[f.affix.stat]+=profile?profile.affixMax*f.affix.tier/3:f.affix.tier;
+      return result;
+    }
+    const a=values(item),b=values(previous);
+    return Object.keys(a).filter(k=>Math.abs(a[k]-b[k])>=.05).map(k=>forgeNames[k]+" "+(a[k]>b[k]?"+":"")+(a[k]-b[k]).toFixed(1)).join(" / ");
   }
   let demoWeaponSlot = 1;
   let inventoryState = null;
@@ -8011,7 +8027,7 @@
         if (room !== joined) return;
         finishEconomyPending();
         const reasons={item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
-        const socketErrors={socket_changed:"อุปกรณ์หรือรูการ์ดเปลี่ยนไปแล้ว",card_unavailable:"ไม่มีการ์ดที่เลือกในกระเป๋า",drill_missing_metal:"แร่เหล็กไม่พอสำหรับเจาะรู"};
+        const socketErrors={item_level_required:"เลเวลยังไม่ถึงที่อุปกรณ์กำหนด",card_gear_level:"การ์ดนี้ต้องใช้อุปกรณ์เลเวลสูงกว่านี้",socket_changed:"อุปกรณ์หรือรูการ์ดเปลี่ยนไปแล้ว",card_unavailable:"ไม่มีการ์ดที่เลือกในกระเป๋า",drill_missing_metal:"แร่เหล็กไม่พอสำหรับเจาะรู"};
         toast(socketErrors[message?.reason] || reasons[message?.reason] || "ทำรายการไม่สำเร็จ · ลองตรวจข้อมูลอีกครั้ง"); renderEconomy();renderBag();
       });
       joined.onMessage("trade_update", message => {
@@ -8440,18 +8456,28 @@
         characterStatus = { ...payload, receivedAt: performance.now() };
         renderProgressionProfile();
       });
+      joined.onMessage("item_catalog_page",payload=>{
+        if(room!==joined || !payload?.items)return;
+        Object.assign(personalItems,payload.items);catalogRevision++;
+      });
+      joined.onMessage("material_sold",result=>{
+        if(room!==joined)return;
+        finishEconomyPending();toast("ขายวัสดุ ได้ "+result.receivedGold+" ทอง");renderBag();
+      });
       joined.onMessage("inventory_state", payload => {
         if (room !== joined || payload?.version !== 1 ||
             !Array.isArray(payload.slots) ||
             payload.slots.length !== INVENTORY_SLOTS) return;
         if(payload.personalItems && typeof payload.personalItems==="object") {
-          personalItems=Object.assign(Object.create(null),payload.personalItems);
+          Object.assign(personalItems,payload.personalItems);catalogRevision++;
+        }
+        if(payload.catalogReady || payload.personalItems){
           workbenchGold=Number(payload.workbenchGold)||0;
           cardDrill=payload.cardDrill||null;
         }
         // Only display recognized items and sane stack counts.
         const slots = payload.slots.map(stack => {
-          if ((stack?.itemId === POTION_ITEM_ID || stack?.itemId === SHRINE_SHARD || ["material","consumable","card"].includes(bagMeta(stack?.itemId)?.kind)) &&
+          if ((stack?.itemId === POTION_ITEM_ID || stack?.itemId === SHRINE_SHARD || ["material","catalyst","consumable","card"].includes(bagMeta(stack?.itemId)?.kind)) &&
               Number.isSafeInteger(stack.quantity) &&
               stack.quantity >= 1 && stack.quantity <= 99) {
             return { itemId: stack.itemId, quantity: stack.quantity };
@@ -8469,7 +8495,7 @@
             ? selected : undefined;
         const equipment=Object.fromEntries(Object.entries(payload.equipment||{}).filter(([position,id])=>wearPositions(personalItems[id]?.kind).includes(position)));
         const equipmentSockets=Object.fromEntries(Object.entries(payload.equipmentSockets||{}).filter(([key,card])=>equipment[key] && (card===null || personalItems[card]?.kind==="card")));
-        inventoryState={version:1,slots,equippedWeaponSlot,equipment,equipmentSockets};
+        inventoryState={version:1,slots,equippedWeaponSlot,equipment,equipmentSockets,equipmentForges:payload.equipmentForges||{}};
         itemUsePending = false;
         renderBag();
         renderEconomy();
@@ -8546,7 +8572,7 @@
         }
         if (["item_busy", "item_cooldown", "item_unavailable",
              "hp_full", "invalid_item_use", "not_alive", "inventory_unavailable",
-             "invalid_weapon_equip","wrong_item_class","inventory_full","equipment_changed", "equipment_busy", "equipment_cooldown",
+             "invalid_weapon_equip","item_level_required","wrong_item_class","inventory_full","equipment_changed", "equipment_busy", "equipment_cooldown",
              "not_weapon", "already_equipped", "not_consumable"]
               .includes(info?.reason)) {
           itemUsePending = false;
@@ -8582,6 +8608,7 @@
         else if (info?.reason === "item_cooldown") toast("รอคูลดาวน์ยาเลือด 1 วินาที");
         else if (info?.reason === "item_unavailable") toast("ไม่มีไอเท็มในช่องนี้แล้ว");
         else if (info?.reason === "invalid_weapon_equip") toast("คำสั่งสวมอุปกรณ์ไม่ถูกต้อง");
+        else if(info?.reason==="item_level_required")toast("เลเวลยังไม่ถึงที่อุปกรณ์กำหนด");
         else if(info?.reason==="wrong_item_class")toast("อุปกรณ์ชิ้นนี้ใช้กับอาชีพอื่น");
         else if(info?.reason==="inventory_full")toast("กระเป๋าเต็ม · เปิดช่องว่างก่อนถอด หรือสวมชิ้นใหม่เพื่อสลับ");
         else if(info?.reason==="equipment_changed")toast("อุปกรณ์เปลี่ยนแล้ว กรุณาเลือกชิ้นอีกครั้ง");
@@ -10047,7 +10074,7 @@
       button.textContent=node ? (throwing ? "ทุ่ม" : timing[index] ? node.name+" "+timing[index]+" วิ" : node.name+((counter && ready) || finisherReady ? " ✓" : "")) : "ช่องว่าง";
       button.disabled=!node || !me.alive || (Boolean(timing[index]) && !throwing) || (counter && !ready) || (finisher && !finisherReady);
       button.onclick=()=>{
-        if(!["muay_wraps","wp_wrap_1"].includes(me.equippedWeaponId)) { toast("สวมผ้าคาดเชือกก่อนใช้วิชามวย"); return; }
+        if(me.equippedWeaponId!=="muay_wraps" && personalItems[me.equippedWeaponId]?.family!=="wp_wrap") { toast("สวมผ้าคาดเชือกก่อนใช้วิชามวย"); return; }
         if(throwing) {room.send("muay_skill",{skillId:"grapple",targetId:muayGrabTarget});return;}
         if(["guard","parry","evade"].includes(node.effect)) { room.send("muay_skill",{skillId:id}); return; }
         selectedMuaySkill=id; setTargetedSkill("muay");
@@ -10134,7 +10161,7 @@
   function useSwordSkill(id) {
     const data=swordData(), node=data?.catalog?.nodes?.[id];
     if (!data || !node || !data.tree.learned.includes(id)) return;
-    if (!["arcane_sword","wp_twins_1"].includes(data.me.equippedWeaponId)) { toast("สวมกระบี่อาคมก่อนใช้วิชาดาบ"); return; }
+    if (data.me.equippedWeaponId!=="arcane_sword" && personalItems[data.me.equippedWeaponId]?.family!=="wp_twins") { toast("สวมกระบี่อาคมก่อนใช้วิชาดาบ"); return; }
     if ((data.tree.cooldowns[id]||0)>Date.now()) { toast("วิชาดาบกำลังฟื้น"); return; }
     if (node.effect==="guard" || node.effect==="support") { room.send("sword_skill",{skillId:id}); return; }
     selectedSwordSkill=id;
@@ -10646,6 +10673,9 @@
           if(pve || pvp) bits.push("อาวุธเพิ่มตอนโจมตีมอนสเตอร์ " + (pve >= 0 ? "+" : "") + pve + (pvp !== pve ? " · PvP " + (pvp >= 0 ? "+" : "") + pvp : ""));
         }
       } else if (key === "atk" || key === "magicAtk") bits.push("กำลังโหลดข้อมูลอาวุธจากเซิร์ฟเวอร์");
+      if(key==="def" && status?.forgeRatings?.guard)bits.push("ป้องกันมอนสเตอร์จากช่าง +"+num(status.forgeRatings.guard));
+      if(key==="magicAtk" && status?.forgeRatings?.healing)bits.push("พลังรักษา PvE จากช่าง +"+num(status.forgeRatings.healing));
+      if(key==="stamina" && status?.overflowRegen)bits.push("พลังเกินเพดานช่วยฟื้นเพิ่ม "+num(status.overflowRegen)+"/วิ");
       if (key === "stamina") bits.push("ใช้กับแดชและวิชา · ฟื้น 4/วิ (สู้อยู่ 2/วิ)");
       $("statBonus-" + key).textContent = bits.join(" · ");
     }
@@ -10895,7 +10925,7 @@
       slot.querySelector(".bag-quantity").textContent=!item?"":worn?"✓":item.quantity>1?"×"+item.quantity:"";
     }
     const inspectedId=inspectingGear==="mainHand"?equippedItem?.itemId:equipment[inspectingGear];
-    const chosen=inspectingGear==="mainHand"?equippedItem:inspectingGear?(inspectedId?{itemId:inspectedId,bound:true,socket:inventoryState?.equipmentSockets?.[inspectingGear]}:null):slots?.[selectedBagSlot];
+    const chosen=inspectingGear==="mainHand"?equippedItem:inspectingGear?(inspectedId?{itemId:inspectedId,bound:true,forge:inventoryState?.equipmentForges?.[inspectingGear],socket:inventoryState?.equipmentSockets?.[inspectingGear]}:null):slots?.[selectedBagSlot];
     const meta=bagMeta(chosen?.itemId);
     const positions=wearPositions(meta?.kind);
     const destination=inspectingGear || gearDestination(positions,equipment);
@@ -10911,17 +10941,29 @@
     const worn=gear && (!!inspectingGear || (!armor && selectedBagSlot===equipped));
     const job=ownServerCharacter()?.pathId, wrongClass=meta?.path && meta.path!=="all" && meta.path!==job;
     const heal=chosen?.itemId===POTION_ITEM_ID||meta?.kind==="consumable";
-    const ready=chosen && !wrongClass && (gear?hasWeapons:heal&&currentHp>0&&currentHp<maxHp) && (mode!=="live" || ownServerCharacter()?.alive);
+    const lowLevel=(meta?.level||1)>(ownServerCharacter()?.level||1);
+    const ready=chosen && !wrongClass && !lowLevel && (gear?hasWeapons:heal&&currentHp>0&&currentHp<maxHp) && (mode!=="live" || ownServerCharacter()?.alive);
     $("bagItemName").textContent=meta?.name || (chosen?.itemId===SHRINE_SHARD?shardName:chosen?"ยาเลือดเล็ก":inspectingGear?(bodyLabels[inspectingGear]||"อาวุธหลัก")+" · ช่องว่าง":"ช่องว่าง");
     let detail=chosen?"ใช้ฟื้น 30 HP":"ล่ามอนสเตอร์เพื่อหาอุปกรณ์และวัตถุดิบ";
     if(gear){
       const difference=gearComparison(chosen.itemId,armor?equipment[destination]:equippedItem?.itemId,chosen.socket,armor?inventoryState?.equipmentSockets?.[destination]:equippedItem?.socket);
       detail=[armor?bodyLabels[destination]:"อาวุธ",meta.bonus,worn?"กำลังสวม":difference?"เมื่อเปลี่ยน "+difference:"",wrongClass?"อาวุธของสายอื่น":"",chosen.bound?"ผูกกับตัวละคร":personalItems[chosen.itemId]?"ผูกตัวละครเมื่อสวมครั้งแรก":""].filter(Boolean).join(" · ");
     } else if(meta?.kind==="card")detail=meta.bonus+" เมื่อใส่ในรูของอุปกรณ์ที่สวม · ดรอปจาก"+meta.monster+" ("+meta.chancePct+"%)";
-    else if(meta?.kind==="material")detail="วัตถุดิบจากมอนสเตอร์ · ดูสูตรที่โต๊ะช่างด้านล่าง";
-    else if(meta?.kind==="consumable")detail="ฟื้น 22 HP · รอ 14 วินาทีก่อนใช้ยาครั้งถัดไป";
+    else if(meta?.kind==="material")detail="วัสดุจากมอนสเตอร์ช่วง Lv."+(meta.level||1)+" · ช่างรับซื้อ "+(meta.sellGold||0)+" ทองต่อชิ้น";
+    else if(meta?.kind==="catalyst")detail="วัสดุสำหรับตีบวกหรือสุ่มออปชัน · คราฟต์ที่โต๊ะช่าง";
+    else if(meta?.kind==="consumable")detail="ฟื้น "+(meta.healHp||22)+" HP · รอ 14 วินาทีก่อนใช้ยาครั้งถัดไป";
     else if(chosen?.itemId===SHRINE_SHARD)detail="ได้จากผู้พิทักษ์ศาลร้าง ใช้คราฟต์ง้าวจันทร์ผู้พิทักษ์";
+    if(meta?.level)detail="Lv."+meta.level+" · "+(rarityNames[meta.rarity]||"พื้นฐาน")+" · "+detail+(lowLevel?" · เลเวลยังไม่ถึง":"");
+    if(meta?.recommended?.length)detail+=" · เหมาะกับ"+meta.recommended.map(p=>gearJobs[p]).join("/");
+    if(meta?.dropMax)detail+=" · ล่ามอนสเตอร์ Lv."+meta.level+(meta.level===meta.dropMax?"":"–"+meta.dropMax);
+    if(gear && !worn){
+      const previous=armor?{itemId:equipment[destination],forge:inventoryState?.equipmentForges?.[destination]}:equippedItem;
+      const change=forgeComparison(chosen,previous);
+      if(change)detail+=" · ผลต่างช่าง PvE "+change;
+    }
     $("bagItemDescription").textContent=detail;
+    const sell=$("sellBagMaterial");sell.hidden=!meta?.sellGold || !economyReady();
+    if(!sell.hidden){sell.disabled=economyPending;sell.textContent="ขายวัสดุ 1 ชิ้น · "+meta.sellGold+" ทอง";}
     renderCardSocket(gear?chosen:null,slots);
     renderForge(chosen);renderCraft(slots);renderWorkbench(slots);
     const use=$("useBagItem");use.disabled=!ready||itemUsePending;
@@ -10929,22 +10971,44 @@
     if(meta?.kind==="card")use.textContent="เลือกอุปกรณ์เพื่อใส่การ์ด";
   }
   function renderWorkbench(slots) {
-    const panel=$("personalBench"), select=$("benchRecipe");
-    panel.hidden=!economyReady() || !Object.keys(personalItems).length;
+    const panel=$("personalBench"), select=$("benchRecipe"), lv=$("benchLevel"), group=$("benchGroup");
+    panel.hidden=!economyReady() || !cardDrill;
     if(panel.hidden)return;
-    const filter=inspectingGear || "all";
-    if(select.dataset.position!==filter){
-      select.dataset.position=filter;select.replaceChildren();
-      for(const [id,def] of Object.entries(personalItems)){
-        if(!def.recipe || (filter!=="all" && def.kind!==filter && !wearPositions(def.kind).includes(filter)))continue;
-        const option=document.createElement("option");option.value=id;option.textContent=def.name;select.appendChild(option);
-      }
+    const player=ownServerCharacter(), level=player?.level||1, path=player?.pathId, position=group.value==="materials"?"":inspectingGear||"";
+    const version=catalogRevision+"/"+level;
+    if(lv.dataset.version!==version){
+      const previous=lv.value;lv.dataset.version=version;
+      lv.replaceChildren(new Option("ระดับที่ใช้ได้ล่าสุด","auto"));
+      const levels=[...new Set(Object.values(personalItems).filter(i=>i.recipe).map(i=>i.level||1))].sort((a,b)=>a-b);
+      for(const n of levels)lv.appendChild(new Option("Lv."+n+(n>level?" · ยังไม่ถึง":""),String(n)));
+      if([...lv.options].some(o=>o.value===previous))lv.value=previous;
     }
-    const def=personalItems[select.value];if(!def)return;
+    const key=[version,group.value,lv.value,level,path,position].join("/");
+    if(select.dataset.filter!==key){
+      const previous=select.value;select.dataset.filter=key;select.replaceChildren();
+      const recipes=new Map();
+      for(const [id,def] of Object.entries(personalItems)){
+        if(!def.recipe || (position && def.kind!==position && !wearPositions(def.kind).includes(position)))continue;
+        const supply=["material","catalyst","consumable"].includes(def.kind);
+        if(group.value==="materials" && !supply)continue;
+        if(group.value==="role" && (def.path!=="all" && def.path!==path || !position && !supply && def.recommended && !def.recommended.includes(path)))continue;
+        const n=def.level||1;
+        if(lv.value==="auto"?n>level:n!==Number(lv.value))continue;
+        const family=def.family||id,old=recipes.get(family);
+        if(!old || (old[1].level||1)<n)recipes.set(family,[id,def]);
+      }
+      for(const [id,def] of recipes.values())select.appendChild(new Option("Lv."+(def.level||1)+" · "+def.name,id));
+      if([...select.options].some(o=>o.value===previous))select.value=previous;
+    }
+    const def=personalItems[select.value],button=$("benchCraft");
+    if(!def){$("benchInfo").textContent="ไม่มีสูตรในช่วงนี้ · เปลี่ยนเลเวลหรือประเภทสูตร";button.disabled=true;return;}
     const counts=def.recipe.map(r=>(slots||[]).reduce((n,s)=>n+(s?.itemId===r.item?s.quantity:0),0));
-    $("benchInfo").textContent=def.recipe.map((r,i)=>personalItems[r.item].name+" "+counts[i]+"/"+r.qty).join(" · ")+" · "+workbenchGold+" ทอง";
-    const owned=def.kind!=="consumable" && (slots?.some(item=>item?.itemId===select.value) || Object.values(inventoryState?.equipment??{}).includes(select.value));
-    $("benchCraft").disabled=economyPending || !slots || owned || ownServerCharacter()?.alive!==true || economyGold===null || economyGold<workbenchGold || def.recipe.some((r,i)=>counts[i]<r.qty);
+    const cost=def.craftGold??workbenchGold;
+    const low=(def.level||1)>level;
+    $("benchInfo").textContent=[low?"ต้องการ Lv."+def.level:"",statLine(def.stats),...def.recipe.map((r,i)=>(personalItems[r.item]?.name||r.item)+" "+counts[i]+"/"+r.qty),cost+" ทอง",def.dropMax?"ดรอปจาก Lv."+def.level+(def.level===def.dropMax?"":"–"+def.dropMax):"",def.forge&&def.level>=25?"มีออปชันสุ่มเมื่อสร้าง":""].filter(Boolean).join(" · ");
+    const gear=def.kind==="mainHand" || wearPositions(def.kind).length;
+    const owned=gear && (slots?.some(item=>item?.itemId===select.value) || Object.values(inventoryState?.equipment??{}).includes(select.value));
+    button.disabled=low||economyPending||!slots||owned||!player?.alive||economyGold===null||economyGold<cost||def.recipe.some((r,i)=>counts[i]<r.qty);
   }
   function renderCraft(slots) {
     const panel = $("craftPanel");
@@ -10962,7 +11026,7 @@
   function forgeLabel(item) {
     const f = item?.forge;
     if (!f) return "";
-    const stat = f.affix?.stat === "melee" ? "ประชิด" : "เวท";
+    const stat=forgeNames[f.affix?.stat]||"";
     return " +" + f.rank + (f.affix ? " · " + stat + " +" + f.affix.tier : "");
   }
   function renderCardSocket(gear,slots) {
@@ -10995,8 +11059,8 @@
       }
       card=select.value;
       const def=personalItems[card];
-      allowed=!!def && count(card)>0;
-      info.textContent=def?"รูว่าง · "+statLine(def.stats)+" เมื่อสวม · ดรอปจาก"+def.monster+" "+def.chancePct+"% · มี "+count(card)+" ใบ":"รูว่าง";
+      allowed=!!def && count(card)>0 && (def.level||1)<=(personalItems[gear.itemId]?.level||(gear.itemId==="shrine_glaive"?12:1));
+      info.textContent=def?"รูว่าง · "+statLine(def.stats)+" เมื่อสวม · อุปกรณ์ Lv."+(def.level||1)+" ขึ้นไป · ดรอปจาก"+def.monster+" "+def.chancePct+"% · มี "+count(card)+" ใบ":"รูว่าง";
       button.textContent="ใส่การ์ดที่เลือก";
     }else{
       const def=personalItems[gear.socket];
@@ -11012,20 +11076,31 @@
     };
   }
   function renderForge(item) {
-    const panel = $("forgePanel"), raw = room?.state?.forgeCatalog;
-    if (!panel) return;
-    panel.hidden = !economyReady() || !raw || bagMeta(item?.itemId)?.kind!=="mainHand";
-    if (panel.hidden) return;
-    const config = JSON.parse(raw), f = item.forge, rank = f?.rank ?? 0;
-    const cost = config.goldPerStep * (rank + 1), max = rank >= config.chances.length;
-    const chance = f?.misses === config.maxMisses ? 100 : config.chances[rank];
-    const upgrade = $("forgeEnhance"), reroll = $("forgeReroll");
-    upgrade.textContent = max ? "ตีบวกเต็มแล้ว" : "ตี +" + (rank + 1) + " · " + cost + " ทอง · สำเร็จ " + chance + "%";
-    reroll.textContent = "สุ่มออปชันใหม่ · " + config.rerollCost + " ทอง";
-    upgrade.disabled = max || economyPending || economyGold === null || economyGold < cost;
-    reroll.disabled = economyPending || economyGold === null || economyGold < config.rerollCost;
-    const tierOdds = f?.rerollMisses === config.rareAfter ? "ครั้งนี้รับประกันขั้น 3" : "ขั้น 1/2/3 มีโอกาส " + [config.tier1Weight, config.tier2Weight, 100-config.tier1Weight-config.tier2Weight].join("/") + "%";
-    $("forgeInfo").textContent = "มี " + (economyGold ?? "…") + " ทอง · โบนัสช่างอาคมใช้เมื่อต่อสู้กับมอนสเตอร์ ตีบวกเพิ่มพลังอาวุธขั้นละ 1 พลาด " + config.maxMisses + " ครั้งรับประกันครั้งถัดไป · ออปชันประชิดหรือเวทอย่างละ 50% " + tierOdds + " · สุ่มใหม่แทนออปชันเดิม";
+    const panel=$("forgePanel"), raw=room?.state?.forgeCatalog,meta=bagMeta(item?.itemId);
+    if(!panel)return;
+    panel.hidden=!economyReady()||!raw||!(meta?.kind==="mainHand" || meta?.forge);
+    if(panel.hidden)return;
+    const config=JSON.parse(raw), f=item.forge, rank=f?.rank||0, profile=meta.forge, level=meta.level||1;
+    const factor=1+(level-1)/100, cost=Math.round(config.goldPerStep*(rank+1)*factor),reroll=Math.round(config.rerollCost*factor);
+    const max=rank>=config.chances.length, chance=f?.misses===config.maxMisses?100:config.chances[rank];
+    function materialFor(action){
+      if(!profile)return null;
+      const key=action==="reroll"?"seal":["flux","powder","oil","seal","core"][Math.min(4,Math.floor(rank/2))];
+      const id="ref_"+key+"_"+profile.materialTier, qty=action==="reroll"?1:1+Math.floor(rank/3);
+      const have=(inventoryState?.slots||[]).reduce((n,s)=>n+(s?.itemId===id?s.quantity:0),0);
+      return {name:personalItems[id]?.name||id,qty,have};
+    }
+    const a=materialFor("enhance"),b=materialFor("reroll"),upgrade=$("forgeEnhance"),rerollButton=$("forgeReroll");
+    const display=m=>m?" · "+m.name+" "+m.have+"/"+m.qty:"";
+    upgrade.textContent=max?"ตีบวกเต็มแล้ว":"ตี +"+(rank+1)+" · "+cost+" ทอง · "+chance+"%"+display(a);
+    rerollButton.textContent="สุ่มออปชัน · "+reroll+" ทอง"+display(b);
+    const busy=economyPending || !ownServerCharacter()?.alive || (ownServerCharacter()?.level||1)<level || economyGold===null;
+    upgrade.disabled=max||busy||economyGold<cost||!!a&&a.have<a.qty;
+    rerollButton.disabled=busy||economyGold<reroll||!!b&&b.have<b.qty;
+    const cap=profile?(level<25?1:level<65?2:3):3;
+    const affix=f?.affix,actual=affix?(forgeNames[affix.stat]+" +"+(profile?(profile.affixMax*affix.tier/3).toFixed(1):affix.tier)):"ยังไม่มีออปชัน";
+    const boost=profile?forgeNames[profile.primary]+" +"+(profile.enhanceMax*rank/10).toFixed(1)+" (สูงสุด "+profile.enhanceMax+")":"พลังอาวุธ +"+rank;
+    $("forgeInfo").textContent=["+"+rank,boost,actual,"สุ่มได้ "+(profile?.pool||["melee","ranged"]).map(k=>forgeNames[k]).join(" / ")+" ถึงขั้น "+cap,"การันตีตีบวกหลังพลาด 3 ครั้ง · สุ่มขั้นสูงสุดหลังพลาด 4 ครั้ง","โบนัสช่างสำหรับ PvE"].join(" · ");
   }
   function openBag() {
     confirmBindSlot=null; inspectingGear=null; preferredGearSlot=null;
@@ -11045,7 +11120,7 @@
       '<div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden><button type="button" class="secondary"></button><button type="button" class="secondary"></button></div>' +
       '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
       '<section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>' +
-      '<section id="personalBench" hidden><h3>โต๊ะช่างฝึกหัด</h3><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button id="benchCraft" type="button" class="secondary">คราฟต์</button></section>' +
+      '<button id="sellBagMaterial" type="button" class="secondary" hidden></button><section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button id="benchCraft" type="button" class="secondary">คราฟต์</button></section>' +
       '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
       '<div id="forgePanel" hidden><h3>ช่างอาคม</h3><p class="note" id="forgeInfo"></p><button class="secondary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeReroll"></button></div>' +
       '<p class="note">แตะช่องสวมเพื่อดูหรือถอดอุปกรณ์ ล่ามอนสเตอร์เพื่อรับเกราะชิ้นแรก จากนั้นหาอุปกรณ์หรือเก็บวัตถุดิบคราฟต์ที่โต๊ะช่าง</p>');
@@ -11064,15 +11139,20 @@
       if(key==="mainHand" && Number.isInteger(currentEquippedWeaponSlot()))selectedBagSlot=currentEquippedWeaponSlot();
       renderBag();
     };
+    $("sellBagMaterial").onclick=()=>{
+      const item=currentBagSlots()?.[selectedBagSlot];if(inspectingGear||!personalItems[item?.itemId]?.sellGold)return;
+      economySend("sell_material",{slot:selectedBagSlot,expected:item.itemId,quantity:1,requestId:economyRequestId()},true);renderBag();
+    };
+    $("benchGroup").onchange=$("benchLevel").onchange=$("benchRecipe").onchange=()=>renderWorkbench(currentBagSlots());
     $("socketCardChoice").onchange=renderBag;
-    $("benchRecipe").onchange=()=>renderWorkbench(currentBagSlots());
     $("benchCraft").onclick=()=>{ economySend("craft_weapon",{recipeId:$("benchRecipe").value,requestId:economyRequestId()},true);renderBag(); };
     function submitForge(action) {
-      const item = currentBagSlots()?.[selectedBagSlot];
-      if (!item || bagMeta(item.itemId)?.kind!=="mainHand") return;
-      const stamp = item.forge ? item.forge.instanceId + "." + item.forge.revision : item.itemId;
-      economySend("forge_weapon", {slot:selectedBagSlot, stamp, action, requestId:economyRequestId()}, true);
-      renderBag();
+      const position=inspectingGear==="mainHand"?currentEquippedWeaponSlot():(inspectingGear||selectedBagSlot);
+      const item=typeof position==="string"?{itemId:inventoryState?.equipment?.[position],forge:inventoryState?.equipmentForges?.[position]}:currentBagSlots()?.[position];
+      const meta=bagMeta(item?.itemId);
+      if(!item || !(meta?.kind==="mainHand" || meta?.forge))return;
+      const stamp=item.forge?item.forge.instanceId+"."+item.forge.revision:item.itemId;
+      economySend("forge_weapon",{slot:position,stamp,action,requestId:economyRequestId()},true);renderBag();
     }
     $("craftGlaive").onclick = () => {
       if (!room?.state?.craftRecipe || economyPending) return;
@@ -11150,7 +11230,7 @@
         }
         return;
       }
-      if (item.itemId !== POTION_ITEM_ID && item.itemId!=="use_salve_1") return;
+      if (item.itemId !== POTION_ITEM_ID && personalItems[item.itemId]?.kind!=="consumable") return;
       if (mode==="live") {
         if (!room || room.state?.inventoryAvailable !== true || !inventoryState) {
           toast("ยังไม่เชื่อมต่อกระเป๋าถาวรบน VPS"); return;

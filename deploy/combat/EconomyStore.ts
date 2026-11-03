@@ -1,9 +1,9 @@
-import { forgeStamp, quoteForge, rollForge, type ForgeAction } from "./ForgeRules.js";
+import { forgeStamp, quoteForge, rollForge, birthForge, forgeIngredient, type ForgeAction } from "./ForgeRules.js";
 import { changeCardSocket, DRILL_COST, type SocketOrder } from "./CardSockets.js";
 /** Single-process transactional economy. This store must own inventories before it is wired to gameplay. */
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
-import { personalItem, equipPositions, WORKBENCH_GOLD, type PersonalId } from "./PersonalItems.js";
+import { personalItem, type BodySlot, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE, isStackableItem, validateInventory, type InventorySnapshot, type InventoryStack } from "./ItemRules.js";
 
 export const STARTER_GOLD = 1000;
@@ -50,6 +50,17 @@ function add(inventory: InventorySnapshot, item: InventoryStack): InventorySnaps
     slots[free] = { ...item, quantity: remaining };
   }
   return validateInventory({ ...original, slots });
+}
+
+function consume(account:Account,item:string,qty:number){
+  for(const [slot,stack] of account.inventory.slots.entries()){
+    if(stack?.itemId!==item)continue;
+    const used=Math.min(qty,stack.quantity);
+    account.inventory=take(account.inventory,slot,used).inventory;
+    qty-=used;
+    if(!qty)return;
+  }
+  throw Error("craft_missing_material");
 }
 
 export class EconomyStore {
@@ -170,27 +181,30 @@ export class EconomyStore {
     });
   }
 
-  craftPersonal(id:string,request:string,output:PersonalId) {
-    const recipe=personalItem(output)?.recipe;
-    if(!recipe)throw Error("invalid_recipe");
+  craftPersonal(id:string,request:string,output:PersonalId,level=1) {
+    const def=personalItem(output);
+    if(!def?.recipe)throw Error("invalid_recipe");
     return this.once(id,request,"craft",{recipe:output},()=>{
-      const account=this.account(id);
-      if(account.gold<WORKBENCH_GOLD)throw Error("insufficient_gold");
-      for(const ingredient of recipe){
-        let needed=ingredient.qty;
-        for(const [slot,stack] of account.inventory.slots.entries()){
-          if(stack?.itemId!==ingredient.item)continue;
-          const used=Math.min(stack.quantity,needed);
-          account.inventory=take(account.inventory,slot,used).inventory;
-          needed-=used;
-          if(!needed)break;
-        }
-        if(needed)throw Error("craft_missing_material");
-      }
-      account.inventory=add(account.inventory,{itemId:output,quantity:1});
-      account.gold-=WORKBENCH_GOLD;
+      if(level<(def.level??1))throw Error("item_level_required");
+      const account=this.account(id),cost=def.craftGold!;
+      if(account.gold<cost)throw Error("insufficient_gold");
+      for(const ingredient of def.recipe!)consume(account,ingredient.item,ingredient.qty);
+      const forge=birthForge(output);
+      account.inventory=add(account.inventory,{itemId:output,quantity:1,...(forge?{forge}:{})});
+      account.gold-=cost;
       this.put(id,account);
-      return {itemId:output,spentGold:WORKBENCH_GOLD};
+      return {itemId:output,spentGold:cost};
+    });
+  }
+
+  sellMaterial(id:string,request:string,slot:number,expected:string,quantity:number){
+    return this.once(id,request,"sell_material",{slot,expected,quantity},()=>{
+      const account=this.account(id),stack=account.inventory.slots[slot],unit=personalItem(expected)?.sellGold;
+      if(!unit || stack?.itemId!==expected || !Number.isInteger(quantity) || quantity<1 || quantity>99)throw Error("item_unavailable");
+      account.inventory=take(account.inventory,slot,quantity).inventory;
+      account.gold+=unit*quantity;
+      this.put(id,account);
+      return {itemId:expected,quantity,receivedGold:unit*quantity};
     });
   }
 
@@ -208,17 +222,23 @@ export class EconomyStore {
     });
   }
 
-  forgeWeapon(id: string, request: string, slot: number, stamp: string, action: ForgeAction) {
-    return this.once(id, request, "forge", {slot, stamp, action}, () => {
-      const account = this.account(id);
-      const stack = account.inventory.slots[slot];
-      if (!stack || isStackableItem(stack.itemId) || equipPositions(personalItem(stack.itemId)?.kind).length || forgeStamp(stack) !== stamp) throw Error("forge_item_changed");
-      const {cost} = quoteForge(stack.forge, action);
-      if (account.gold < cost) throw Error("insufficient_gold");
-      const result = rollForge(stack.forge, action);
-      account.gold -= cost;
-      account.inventory.slots[slot] = {...stack, forge: result.forge};
-      this.put(id, account);
+  forgeWeapon(id:string,request:string,slot:number|BodySlot,stamp:string,action:ForgeAction,level=1) {
+    return this.once(id,request,"forge",{slot,stamp,action},()=>{
+      const account=this.account(id), bag=account.inventory;
+      const worn=typeof slot==="string"?bag.equipment?.[slot]:undefined;
+      const stack=typeof slot==="number"?bag.slots[slot]:worn?{itemId:worn,forge:bag.equipmentForges?.[slot]}:undefined;
+      if(!stack || isStackableItem(stack.itemId) || forgeStamp(stack)!==stamp)throw Error("forge_item_changed");
+      const def=personalItem(stack.itemId);
+      if(level<(def?.level??1))throw Error("item_level_required");
+      const {cost}=quoteForge(stack.forge,action,def?.level);
+      if(account.gold<cost)throw Error("insufficient_gold");
+      const ingredient=forgeIngredient(def,stack.forge?.rank??0,action);
+      if(ingredient)consume(account,ingredient.item,ingredient.qty);
+      const result=rollForge(stack.forge,action,undefined,def);
+      account.gold-=cost;
+      if(typeof slot==="number")account.inventory.slots[slot]={...account.inventory.slots[slot]!,forge:result.forge};
+      else account.inventory.equipmentForges={...account.inventory.equipmentForges,[slot]:result.forge};
+      this.put(id,account);
       return result;
     });
   }

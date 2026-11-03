@@ -2,6 +2,12 @@ import { randomInt } from "node:crypto";
 import type { CombatStats } from "./Progression.js";
 
 export type ItemStats = Partial<Record<"hp" | "stamina" | "atk" | "def" | "magicAtk" | "magicDef",number>>;
+export type ForgeRating="melee"|"ranged"|"guard"|"healing";
+export type ForgeProfile={primary:ForgeRating; pool:readonly ForgeRating[]; enhanceMax:number; affixMax:number; materialTier:number};
+export const WEAPON_LEVELS=[1,10,20,30,40,50,60,70,85,100] as const;
+export const OUTFIT_LEVELS=[1,10,25,45,65,85,95,100] as const;
+// End equipment can be made from materials found before the last boss.
+export const MATERIAL_LEVELS=[1,10,25,45,65,85,95] as const;
 export const BODY_SLOTS=["head","shoulders","chest","arms","leftHand","rightHand","legs","feet","offHand","neck","leftEar","rightEar","leftRing","rightRing"] as const;
 export type BodySlot=typeof BODY_SLOTS[number];
 export function isBodySlot(value:unknown):value is BodySlot {
@@ -13,18 +19,26 @@ export function equipPositions(kind:unknown):readonly BodySlot[] {
   return isBodySlot(kind)?[kind]:[];
 }
 export type PersonalDefinition = {
-  name:string; kind:"mainHand"|BodySlot|"earring"|"ring"|"material"|"consumable"|"card"; path:string; stats:ItemStats;
+  name:string; kind:"mainHand"|BodySlot|"earring"|"ring"|"material"|"catalyst"|"consumable"|"card"; path:string; stats:ItemStats;
   recipe?:readonly {item:string; qty:number}[];
   monster?:string;
   chancePct?:number;
+  level?:number; rarity?:string; family?:string; recommended?:readonly string[]; dropMax?:number;
+  forge?:ForgeProfile; craftGold?:number; sellGold?:number; healHp?:number; sourceCamp?:string;
 };
-export const PERSONAL_ITEMS = {
+const STARTING_ITEMS = {
   card_possessed: {"name":"การ์ดผีสิง","kind":"card","path":"all","stats":{"atk":1},"monster":"ผีสิง","chancePct":12},
   card_lost_ghost: {"name":"การ์ดผีหลงป่า","kind":"card","path":"all","stats":{"hp":8},"monster":"ผีหลงป่า","chancePct":12},
   card_root_shadow: {"name":"การ์ดเงารากไม้","kind":"card","path":"all","stats":{"def":1},"monster":"เงารากไม้","chancePct":12},
   card_arcane_spirit: {"name":"การ์ดวิญญาณอาคม","kind":"card","path":"all","stats":{"magicAtk":1},"monster":"วิญญาณอาคม","chancePct":12},
   card_shrine_keeper: {"name":"การ์ดผู้พิทักษ์ศาลร้าง","kind":"card","path":"all","stats":{"def":2,"hp":8},"monster":"ผู้พิทักษ์ศาลร้าง","chancePct":20},
-  card_rift_warden: {"name":"การ์ดราชันรอยแยก","kind":"card","path":"all","stats":{"atk":2,"magicAtk":2},"monster":"ราชันรอยแยก","chancePct":25},
+  card_rift_warden: {"name":"การ์ดราชันรอยแยก","kind":"card","path":"all","stats":{"atk":2,"magicAtk":2},"monster":"ราชันรอยแยก","chancePct":25,"level":100},
+  card_reed: {name:"การ์ดพรายกอกก",kind:"card",path:"all",stats:{stamina:4},monster:"พรายกอกก",chancePct:10,level:10,sourceCamp:"atlas_drowned_marsh_1"},
+  card_bamboo: {name:"การ์ดผีตาไผ่",kind:"card",path:"all",stats:{atk:2},monster:"ผีตาไผ่",chancePct:10,level:25,sourceCamp:"atlas_bamboo_frontier_1"},
+  card_lotus: {name:"การ์ดภูตบัวธูป",kind:"card",path:"all",stats:{magicAtk:2,stamina:2},monster:"ภูตบัวธูป",chancePct:10,level:40,sourceCamp:"atlas_lotus_basin_1"},
+  card_merchant: {name:"การ์ดเงาพ่อค้า",kind:"card",path:"all",stats:{hp:16,magicDef:1},monster:"เงาพ่อค้า",chancePct:10,level:55,sourceCamp:"atlas_fallen_city_1"},
+  card_asura: {name:"การ์ดอสุราลาดตระเวน",kind:"card",path:"all",stats:{def:3},monster:"อสุราลาดตระเวน",chancePct:10,level:68,sourceCamp:"atlas_asura_peak_1"},
+  card_dream: {name:"การ์ดเงาเศษฝัน",kind:"card",path:"all",stats:{magicAtk:2,hp:16},monster:"เงาเศษฝัน",chancePct:10,level:80,sourceCamp:"atlas_spirit_rift_1"},
   mat_metal_1: {"name":"แร่เหล็กชั้น1","kind":"material","path":"all","stats":{}},
   mat_wood_1: {"name":"แก่นไม้ชั้น1","kind":"material","path":"all","stats":{}},
   mat_fiber_1: {"name":"เส้นใยป่านชั้น1","kind":"material","path":"all","stats":{}},
@@ -87,18 +101,90 @@ export const PERSONAL_ITEMS = {
   wp_crook_1: {"name":"ไม้เท้าขวัญลานฝึก","kind":"mainHand","path":"mender","stats":{"magicAtk":7,"stamina":6},"recipe":[{"item":"mat_wood_1","qty":3},{"item":"mat_herb_1","qty":2}]},
 } as const satisfies Record<string,PersonalDefinition>;
 
-export type PersonalId = keyof typeof PERSONAL_ITEMS;
+type BaseId=keyof typeof STARTING_ITEMS;
+type Stem<K extends string>=K extends `${infer Family}_1`?Family:never;
+export type PersonalId = BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}`;
 export type PracticeWeapon = Extract<PersonalId,`wp_${string}`>;
-export type ChestId = Extract<PersonalId,`arm_${string}_chest_1`>;
+export type ChestId = Extract<BaseId,`arm_${string}_chest_1`>;
 export type BodyItemId = Extract<PersonalId,`arm_${string}`|`off_${string}`|`acc_${string}`>;
 export type MaterialId = Extract<PersonalId,`mat_${string}`>;
+export type CatalystId = Extract<PersonalId,`ref_${string}`>;
+export type SalveId = Extract<PersonalId,`use_salve_${number}`>;
 export type CardId = Extract<PersonalId,`card_${string}`>;
 export const SALVE_ID = "use_salve_1";
 export const WORKBENCH_GOLD = 4;
+const schools=["muay_boran","phutthaisawan","blade","sentinel","seer","mender"];
+const names=["ฝึกหัด","ชายป่า","ศาลเก่า","ด่านคลอง","ป่าลึก","ค่ายหน้า","เวียงเหล็ก","ภูผา","ทัพหลวง","พิชัยยุทธ์"];
+const outfitNames=["ฝึกหัด","ชายป่า","สำนักครู","ค่ายหน้า","เวียงเหล็ก","ทัพหลวง","ราชสำนัก","พิชัยยุทธ์"];
+const weights:Required<ItemStats>={atk:1,magicAtk:1,def:1,magicDef:1,hp:.125,stamina:.5};
+const catalysts=[["flux","ผงประสาน","metal"],["powder","ผงอาคม","ink"],["oil","น้ำมันชุบ","resin"],["seal","ตราค้ำขวัญ","fiber"],["core","แกนหลอม","wood"]] as const;
+export function materialTier(level:number){return MATERIAL_LEVELS.filter(min=>min<=level).length || 1;}
+function recommend(family:string,item:PersonalDefinition):readonly string[]{
+  if(item.path!=="all")return [item.path];
+  if(family.includes("_heavy_") || item.stats.hp && item.stats.def)return ["sentinel"];
+  if(family.includes("_medium_"))return ["sentinel","phutthaisawan"];
+  if(family.includes("_cloth_") || item.stats.magicAtk || item.stats.magicDef)return ["seer","mender"];
+  return ["muay_boran","phutthaisawan","blade"];
+}
+function forgeProfile(item:PersonalDefinition):ForgeProfile {
+  const preferred=item.recommended??[];
+  let primary:ForgeRating="melee", other:ForgeRating="guard";
+  if(item.path==="mender" || item.family==="acc_ring_heal"){primary="healing";other="ranged";}
+  else if(preferred.includes("seer")){primary="ranged";other="healing";}
+  else if(preferred.includes("sentinel")){primary="guard";other="melee";}
+  const spent=Object.entries(item.stats).reduce((sum,[key,value])=>sum+value*weights[key as keyof ItemStats],0);
+  const budget=spent/.78;
+  return {primary,pool:[primary,other],enhanceMax:Math.max(1,Math.round(budget*.10)),affixMax:Math.max(1,Math.round(budget*.08)),materialTier:materialTier(item.level??1)};
+}
+function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> {
+  const result:Partial<Record<PersonalId,PersonalDefinition>>={};
+  function put(id:PersonalId,item:PersonalDefinition){if(result[id])throw Error("duplicate_item:"+id);result[id]=item;}
+  for(const [baseKey,raw] of Object.entries(STARTING_ITEMS)){
+    const base:PersonalDefinition=raw, family=baseKey.replace(/_1$/,"");
+    if(base.kind==="card"){
+      put(baseKey as PersonalId,{...base,family,level:base.level??1,rarity:"rare"});
+      continue;
+    }
+    const levels=base.kind==="mainHand"?WEAPON_LEVELS:base.kind==="material"?MATERIAL_LEVELS:OUTFIT_LEVELS;
+    for(const [index,level] of levels.entries()){
+      const rarity=level>=95?"legendary":level>=65?"epic":level>=25?"rare":level>=10?"uncommon":"common";
+      const factor=(14+.52*level)/14.52*({common:1,uncommon:1.04,rare:1.08,epic:1.12,legendary:1.16}[rarity])*(level===100?1.08:1);
+      const id=(family+"_"+(index+1)) as PersonalId, material=materialTier(level);
+      const item:PersonalDefinition={...base,level,rarity,family,stats:{}};
+      if(base.kind!=="consumable")item.dropMax=(levels[index+1]??101)-1;
+      for(const [stat,value] of Object.entries(base.stats))item.stats[stat as keyof ItemStats]=Math.round(value*factor);
+      if(level>=25 && family==="wp_wrap"){
+        item.stats.atk=Math.max(1,item.stats.atk!-1);item.stats.stamina=(item.stats.stamina??0)+2;
+      }
+      if(level>=25 && family==="wp_pike"){
+        const offense=Math.max(1,Math.round(item.stats.def!*.2));
+        item.stats.def!-=offense;item.stats.atk=offense;
+      }
+      if(index && base.kind!=="material")item.name=base.name.replace(/(?:ลานฝึก|ฝึกหัด)$/,"")+(base.kind==="mainHand"?names:outfitNames)[index];
+      if(base.kind==="material"){
+        item.name=base.name.replace(/ชั้น1$/,"ชั้น"+(index+1));item.sellGold=4+Math.floor(level/2);
+        if(index>0){item.recipe=[{item:family+"_"+index,qty:3}];item.craftGold=4+Math.floor(level/4);}
+      } else {
+        item.recipe=base.recipe?.map(input=>({item:input.item.replace(/_1$/,"_"+material),qty:input.qty+Math.floor(index/2)}));
+        item.craftGold=level===1?WORKBENCH_GOLD:8+2*level;
+        if(base.kind==="consumable")item.healHp=22+Math.round((level-1)*1.8);
+        else {item.recommended=recommend(family,item);item.forge=forgeProfile(item);}
+      }
+      put(id,item);
+    }
+  }
+  for(const [i,level] of MATERIAL_LEVELS.entries())for(const [key,name,source] of catalysts)
+    put(`ref_${key}_${i+1}`,{name:name+"ชั้น"+(i+1),kind:"catalyst",path:"all",level,stats:{},rarity:"common",craftGold:4+Math.floor(level/4),recipe:[{item:`mat_${source}_${i+1}`,qty:2}]});
+  return Object.freeze(result) as Readonly<Record<PersonalId,PersonalDefinition>>;
+}
+export const PERSONAL_ITEMS=buildPersonalCatalog();
+const catalogEntries=Object.entries(PERSONAL_ITEMS);
+export const CATALOG_PAGES=Array.from({length:Math.ceil(catalogEntries.length/16)},(_,i)=>Object.fromEntries(catalogEntries.slice(i*16,i*16+16)));
 export function personalItem(id:unknown): PersonalDefinition | undefined {
   return typeof id === "string" && Object.hasOwn(PERSONAL_ITEMS,id) ? PERSONAL_ITEMS[id as PersonalId] : undefined;
 }
 export function isCardId(id:unknown):id is CardId {return personalItem(id)?.kind==="card";}
+const campCards=new Map(Object.entries(PERSONAL_ITEMS).filter(([,def])=>def.sourceCamp).map(([id,def])=>[def.sourceCamp!,id as CardId]));
 export function monsterCardDrop(id:string,level:number,draw=()=>randomInt(100)):CardId|null {
   let card:CardId;
   if(id==="possessed-1")card="card_possessed";
@@ -106,33 +192,41 @@ export function monsterCardDrop(id:string,level:number,draw=()=>randomInt(100)):
   else if(id==="atlas_rift_warden")card="card_rift_warden";
   else if(/^forest_(west|east|deep_west|deep_east)_[1-4]$/.test(id))
     card=level<5?"card_lost_ghost":level<9?"card_root_shadow":"card_arcane_spirit";
-  else return null;
-  return draw()<PERSONAL_ITEMS[card].chancePct?card:null;
+  else {const found=campCards.get(id.replace(/_\d+$/,""));if(!found)return null;card=found;}
+  return draw()<(PERSONAL_ITEMS[card].chancePct??0)?card:null;
 }
 export function startingWeapon(path:string):PracticeWeapon {
-  const id = (Object.keys(PERSONAL_ITEMS) as PersonalId[]).find(key => personalItem(key)?.kind==="mainHand" && personalItem(key)?.path===path);
+  const id = (Object.keys(STARTING_ITEMS) as BaseId[]).find(key => personalItem(key)?.kind==="mainHand" && personalItem(key)?.path===path);
   if (!id) throw Error("invalid_character_path");
   return id as PracticeWeapon;
 }
-export function firstChest(path:string):ChestId {
-  switch(path) {
-    case "mender": case "seer": return "arm_cloth_chest_1";
-    case "muay_boran": case "blade": return "arm_hide_chest_1";
-    case "sentinel": return "arm_heavy_chest_1";
-    default: return "arm_medium_chest_1";
+export function firstChest(path:string,level=1):BodyItemId {
+  const family=path==="mender"||path==="seer"?"cloth":path==="muay_boran"||path==="blade"?"hide":path==="sentinel"?"heavy":"medium";
+  return `arm_${family}_chest_${OUTFIT_LEVELS.filter(min=>level>=min).length||1}` as BodyItemId;
+}
+const catalogIds=Object.keys(PERSONAL_ITEMS) as PersonalId[];
+const materialsByTier=MATERIAL_LEVELS.map(level=>catalogIds.filter(id=>PERSONAL_ITEMS[id].kind==="material" && PERSONAL_ITEMS[id].level===level) as MaterialId[]);
+const dropsByLevel=new Map<string,PersonalId[]>();
+for(const path of schools)for(let level=1;level<=100;level++){
+  const weaponLevel=WEAPON_LEVELS.filter(n=>n<=level).pop(),outfitLevel=OUTFIT_LEVELS.filter(n=>n<=level).pop();
+  dropsByLevel.set(path+level,catalogIds.filter(id=>{
+    const def=PERSONAL_ITEMS[id];
+    return (def.path==="all" || def.path===path) &&
+      (def.kind==="mainHand" ? def.level===weaponLevel : equipPositions(def.kind).length>0 && def.level===outfitLevel);
+  }));
+}
+export function fieldItem(path:string,owned:ReadonlySet<string>,monsterLevel=1,draw:(max:number)=>number=randomInt):BodyItemId|PracticeWeapon|MaterialId {
+  const level=Math.min(100,Math.max(1,Math.floor(monsterLevel)));
+  if(draw(4)===0){
+    const candidates=(dropsByLevel.get(path+level)??[]).filter(id=>!owned.has(id));
+    if(candidates.length)return candidates[draw(candidates.length)] as BodyItemId|PracticeWeapon;
   }
+  const mats=materialsByTier[materialTier(level)-1];
+  return mats[draw(mats.length)];
 }
-const materials = Object.keys(PERSONAL_ITEMS).filter(id=>personalItem(id)?.kind==="material") as MaterialId[];
-export function fieldItem(path:string,owned:ReadonlySet<string>):BodyItemId|MaterialId {
-  if(randomInt(4)!==0) return materials[randomInt(materials.length)];
-  const candidates=(Object.keys(PERSONAL_ITEMS) as PersonalId[]).filter(id=>{
-    const def=personalItem(id)!;
-    return !owned.has(id) && equipPositions(def.kind).length>0 && (def.path==="all" || def.path===path);
-  });
-  return candidates.length ? candidates[randomInt(candidates.length)] as BodyItemId : materials[randomInt(materials.length)];
-}
-export function wearsWraps(id:unknown):boolean { return id==="muay_wraps" || id==="wp_wrap_1"; }
-export function wearsTwinSwords(id:unknown):boolean { return id==="arcane_sword" || id==="wp_twins_1"; }
+export function wearsWraps(id:unknown):boolean { return id==="muay_wraps" || personalItem(id)?.family==="wp_wrap"; }
+export function wearsTwinSwords(id:unknown):boolean { return id==="arcane_sword" || personalItem(id)?.family==="wp_twins"; }
+export function usesStaff(id:unknown):boolean {const family=personalItem(id)?.family;return id==="spirit_staff" || family==="wp_wand" || family==="wp_crook";}
 export function withEquipmentStats(base: CombatStats, ids:readonly unknown[]):CombatStats {
   const stats = {...base};
   for (const id of ids) {

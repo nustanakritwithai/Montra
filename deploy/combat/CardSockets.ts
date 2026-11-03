@@ -1,5 +1,5 @@
 import { INVENTORY_SLOT_COUNT, grantStackReward, isSocketGear, validateInventory, type InventorySnapshot, type WeaponItemId } from "./ItemRules.js";
-import { isBodySlot, isCardId, type BodyItemId, type BodySlot, type CardId } from "./PersonalItems.js";
+import { isBodySlot, isCardId, personalItem, type BodyItemId, type BodySlot, type CardId } from "./PersonalItems.js";
 
 export const DRILL_COST={gold:20,itemId:"mat_metal_1",quantity:1} as const;
 export type SocketOrder={
@@ -45,6 +45,7 @@ export function changeCardSocket(inventory:InventorySnapshot,order:SocketOrder) 
   }else if(order.action==="insert"){
     if(current!==null)throw Error("socket_changed");
     if(!isCardId(order.card))throw Error("card_unavailable");
+    if((personalItem(order.card)?.level??1)>(personalItem(gear)?.level??(gear==="shrine_glaive"?12:1)))throw Error("card_gear_level");
     spend(bag,order.card,1,"card_unavailable");
     next=order.card;
   }else{

@@ -4,7 +4,7 @@ import { calculateModifiedStats } from "./StatModifiers.js";
 import { calculateStats, calculateDamage, emptyAllocations } from "./Progression.js";
 import { applyBuffs } from "./Buffs.js";
 import { monsterProfile } from "./MonsterProfiles.js";
-import { personalItem, withEquipmentStats } from "./PersonalItems.js";
+import { personalItem, usesStaff, withEquipmentStats } from "./PersonalItems.js";
 import { SHRINE_GLAIVE, SHRINE_RECIPE, WEAPON_STATS, legacyWeaponStats, type WeaponItemId } from "./ItemRules.js";
 import { RULES } from "./GameRules.js";
 import { FORT } from "./HeightRules.js";
@@ -16,7 +16,7 @@ export function estimateEncounter(level:number, weapon:WeaponItemId, possession:
   const player=applyBuffs(withEquipmentStats(calculateStats(level,emptyAllocations()),[weapon]),possession?["possession"]:[]);
   const mob=monsterProfile(level,"normal"), bonuses=legacyWeaponStats(weapon);
   // Staff fixture uses the existing ranged action; other starter weapons use melee.
-  const ranged=["spirit_staff","wp_wand_1","wp_crook_1"].includes(weapon),attack=ranged?player.magicAtk+bonuses.rangedBonus:player.atk+bonuses.meleeBonus;
+  const ranged=usesStaff(weapon),attack=ranged?player.magicAtk+bonuses.rangedBonus:player.atk+bonuses.meleeBonus;
   const cooldownMs=ranged?FORT.rangedCooldownMs:RULES.playerAttackCooldownMs;
   const damagePerHit=calculateDamage(attack,mob.defense,mob.level), hits=Math.ceil(mob.maxHp/damagePerHit);
   const incoming=calculateDamage(mob.attack,player.def,level);
@@ -33,7 +33,7 @@ export function compareBuild(level: number, weapon: WeaponItemId, path: PathId, 
   const skill = classSkill(path, talent), monster = monsterProfile(level, "normal");
   const stats = skill.effect.kind === "buff"
     ? calculateModifiedStats(base, [{id: path, sourceId: "self", group: "class_skill", bonuses: skill.effect.bonuses}]) : base;
-  const ranged = ["spirit_staff","wp_wand_1","wp_crook_1"].includes(weapon);
+  const ranged = usesStaff(weapon);
   const power = ranged ? stats.magicAtk + legacyWeaponStats(weapon).rangedBonus : stats.atk + legacyWeaponStats(weapon).meleeBonus;
   const pveHit = calculateDamage(power, monster.defense, level);
   const pvpPower = weapon === SHRINE_GLAIVE ? stats.atk + SHRINE_RECIPE.pvpMeleeBonus : power;

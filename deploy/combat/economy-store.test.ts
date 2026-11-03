@@ -18,7 +18,7 @@ test("a full outfit frees bag space, keeps hands independent and survives reload
   for(const position of BODY_SLOTS){
     const id=Object.keys(PERSONAL_ITEMS).find(id=>{
       const def=personalItem(id)!;
-      return equipPositions(def.kind).includes(position) && !Object.values(bag.equipment??{}).some(worn=>worn===id) && (def.path==="all" || def.path==="seer");
+      return def.level===1 && equipPositions(def.kind).includes(position) && !Object.values(bag.equipment??{}).some(worn=>worn===id) && (def.path==="all" || def.path==="seer");
     }) as BodyItemId;
     assert(id);
     bag.slots[2]={itemId:id,quantity:1};

@@ -1,7 +1,8 @@
-import { readForged, type Forged } from "./ForgeRules.js";
+import { readForged, birthForge, applyForgeRatings, type Forged } from "./ForgeRules.js";
 import { personalItem, startingWeapon, firstChest, fieldItem, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
 import { PROGRESSION, type CombatStats } from "./Progression.js";
 import { MUAY_WRAP_ID } from "./MuayRules.js";
+import { usesStaff, type CatalystId, type SalveId, type ForgeRating } from "./PersonalItems.js";
 /**
  * MONTRA V0.2.7 — authoritative permanent equipment.
  * Existing v0.2.6 inventory JSON (version:1, slots:[...]) stays readable.
@@ -30,9 +31,10 @@ export const SHRINE_RECIPE = Object.freeze({
 });
 type LegacyWeapon = typeof STARTER_WEAPON_IDS[number] | typeof SHRINE_GLAIVE | typeof MUAY_WRAP_ID;
 export type WeaponItemId = LegacyWeapon | PracticeWeapon;
-export type StackableId = typeof POTION_ID | typeof SHRINE_SHARD | typeof SALVE_ID | MaterialId | CardId;
+export type StackableId = typeof POTION_ID | typeof SHRINE_SHARD | SalveId | MaterialId | CatalystId | CardId;
 export function isStackableItem(value: unknown): value is StackableId {
-  return value === POTION_ID || value === SHRINE_SHARD || value===SALVE_ID || personalItem(value)?.kind==="material" || isCardId(value);
+  const kind=personalItem(value)?.kind;
+  return value===POTION_ID || value===SHRINE_SHARD || kind==="consumable" || kind==="material" || kind==="catalyst" || kind==="card";
 }
 export type ItemId = StackableId | WeaponItemId | BodyItemId;
 /** Missing socket = undrilled, null = drilled, ID = installed card. */
@@ -44,14 +46,15 @@ export type InventorySnapshot = {
   equippedWeaponSlot?: number | null;
   equipment?: Partial<Record<BodySlot,BodyItemId>>;
   equipmentSockets?: Partial<Record<BodySlot,CardId|null>>;
+  equipmentForges?: Partial<Record<BodySlot,Forged>>;
   firstChestClaimed?:true;
 };
 export type ItemUseResult =
-  | { ok: true; inventory: InventorySnapshot; healed: number; hp: number; itemId: typeof POTION_ID | typeof SALVE_ID }
-  | { ok: false; reason: "item_unavailable" | "hp_full" | "not_alive" | "not_consumable" };
+  | { ok: true; inventory: InventorySnapshot; healed: number; hp: number; itemId: typeof POTION_ID | SalveId }
+  | { ok: false; reason: "item_unavailable" | "hp_full" | "not_alive" | "not_consumable" | "item_level_required" };
 export type EquipWeaponResult =
   | { ok: true; inventory: InventorySnapshot; weaponId: WeaponItemId | null }
-  | { ok: false; reason: "item_unavailable" | "not_weapon" | "already_equipped" | "wrong_item_class" };
+  | { ok: false; reason: "item_unavailable" | "not_weapon" | "already_equipped" | "wrong_item_class" | "item_level_required" };
 
 export const WEAPON_STATS: Readonly<Record<LegacyWeapon, Readonly<{
   meleeBonus: number; rangedBonus: number;
@@ -104,8 +107,8 @@ export function validateInventory(value: unknown): InventorySnapshot {
   }
   const keys = Object.keys(value);
   const upgraded = Object.prototype.hasOwnProperty.call(value, "equippedWeaponSlot");
-  if (keys.some(key=>!["version","slots","equippedWeaponSlot","equippedChestSlot","equipment","equipmentSockets","firstChestClaimed"].includes(key)) ||
-      (!upgraded && (Object.hasOwn(value,"equippedChestSlot") || Object.hasOwn(value,"equipment") || Object.hasOwn(value,"equipmentSockets") || Object.hasOwn(value,"firstChestClaimed"))) ||
+  if (keys.some(key=>!["version","slots","equippedWeaponSlot","equippedChestSlot","equipment","equipmentSockets","equipmentForges","firstChestClaimed"].includes(key)) ||
+      (!upgraded && (Object.hasOwn(value,"equippedChestSlot") || Object.hasOwn(value,"equipment") || Object.hasOwn(value,"equipmentSockets") || Object.hasOwn(value,"equipmentForges") || Object.hasOwn(value,"firstChestClaimed"))) ||
       (Object.hasOwn(value,"firstChestClaimed") && value.firstChestClaimed!==true)) {
     throw new Error("inventory_record_invalid");
   }
@@ -125,7 +128,7 @@ export function validateInventory(value: unknown): InventorySnapshot {
     }
     const itemId=entry.itemId as ItemId;
     const body=equipPositions(personalItem(itemId)?.kind).length>0;
-    if (!upgraded || (!isWeaponId(itemId) && !body) || (body && Object.hasOwn(entry,"forge")) ||
+    if (!upgraded || (!isWeaponId(itemId) && !body) ||
         (Object.hasOwn(entry,"bound") && (!personalItem(itemId) || entry.bound!==true)) ||
         entry.quantity!==1 || seenWeapons.has(itemId)) throw Error("inventory_record_invalid");
     seenWeapons.add(itemId);
@@ -163,6 +166,14 @@ export function validateInventory(value: unknown): InventorySnapshot {
     }
   }
   if(value.firstChestClaimed===true)result.firstChestClaimed=true;
+  if(Object.hasOwn(value,"equipmentForges")){
+    if(!record(value.equipmentForges))throw Error("inventory_record_invalid");
+    result.equipmentForges={};
+    for(const [position,forge] of Object.entries(value.equipmentForges)){
+      if(!isBodySlot(position) || !result.equipment?.[position])throw Error("inventory_record_invalid");
+      result.equipmentForges[position]=readForged(forge);
+    }
+  }
   if(Object.hasOwn(value,"equipmentSockets")){
     if(!record(value.equipmentSockets))throw Error("inventory_record_invalid");
     result.equipmentSockets={};
@@ -200,7 +211,7 @@ export function parseEquipWeaponCommand(payload: unknown): {slot:number|null} | 
   return slot >= 0 && slot < INVENTORY_SLOT_COUNT ? {slot} : null;
 }
 export function equipInventoryWeapon(
-  inventory: InventorySnapshot, slot: number | null, path?:string,
+  inventory: InventorySnapshot, slot: number | null, path?:string, level=1,
 ): EquipWeaponResult {
   const previous = validateInventory(inventory);
   if (previous.equippedWeaponSlot === undefined) throw new Error("inventory_upgrade_required");
@@ -219,6 +230,7 @@ export function equipInventoryWeapon(
   if (!isWeaponId(selected.itemId)) return { ok: false, reason: "not_weapon" };
   const definition=personalItem(selected.itemId);
   if (definition && definition.path!==path) return {ok:false,reason:"wrong_item_class"};
+  if ((definition?.level??1)>level)return {ok:false,reason:"item_level_required"};
   if (definition) previous.slots[slot]={...selected,bound:true};
   return {
     ok: true,
@@ -228,7 +240,7 @@ export function equipInventoryWeapon(
 }
 
 /** A worn body piece owns its equipment slot; it no longer consumes a bag cell. */
-export function equipBody(inventory:InventorySnapshot,position:BodySlot,slot:number|null,expected:BodyItemId,path:string):
+export function equipBody(inventory:InventorySnapshot,position:BodySlot,slot:number|null,expected:BodyItemId,path:string,level=1):
   EquipWeaponResult | {ok:false;reason:"inventory_full"|"equipment_changed"} {
   const next=validateInventory(inventory);
   const worn=next.equipment?.[position];
@@ -236,7 +248,9 @@ export function equipBody(inventory:InventorySnapshot,position:BodySlot,slot:num
   if (!def || !equipPositions(def.kind).includes(position))return {ok:false,reason:"equipment_changed"};
   const equipment={...next.equipment};
   const sockets={...next.equipmentSockets};
+  const forges={...next.equipmentForges};
   const wornStack:InventoryStack|null=worn?{itemId:worn,quantity:1,bound:true,
+    ...(forges[position]?{forge:forges[position]}:{}),
     ...(Object.hasOwn(sockets,position)?{socket:sockets[position]}:{})}:null;
   if (slot===null) {
     if (worn!==expected)return {ok:false,reason:"equipment_changed"};
@@ -245,15 +259,20 @@ export function equipBody(inventory:InventorySnapshot,position:BodySlot,slot:num
     next.slots[empty]=wornStack;
     delete equipment[position];
     delete sockets[position];
+    delete forges[position];
   } else {
     if(next.slots[slot]?.itemId!==expected)return {ok:false,reason:"equipment_changed"};
     if(def.path!=="all" && def.path!==path)return {ok:false,reason:"wrong_item_class"};
+    if((def.level??1)>level)return {ok:false,reason:"item_level_required"};
+    const incomingForge=next.slots[slot]!.forge;
+    if(incomingForge)forges[position]=incomingForge;else delete forges[position];
     const incomingSocket=next.slots[slot]!.socket;
     if(incomingSocket===undefined)delete sockets[position];else sockets[position]=incomingSocket;
     next.slots[slot]=wornStack;
     equipment[position]=expected;
   }
   next.equipment=equipment;
+  if(Object.keys(forges).length)next.equipmentForges=forges;else delete next.equipmentForges;
   if(Object.keys(sockets).length)next.equipmentSockets=sockets;else delete next.equipmentSockets;
   return {ok:true,inventory:next,weaponId:equippedWeaponId(next)};
 }
@@ -274,9 +293,9 @@ export function equippedStats(base:CombatStats,bag:InventorySnapshot|undefined):
   return result;
 }
 
-export function practiceLoot(bag:InventorySnapshot,path:string):{bag:InventorySnapshot;id:PersonalId|null} {
+export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,tier="normal",playerLevel=monsterLevel):{bag:InventorySnapshot;id:PersonalId|null} {
   if(!bag.firstChestClaimed){
-    const id=firstChest(path);
+    const id=firstChest(path,Math.min(monsterLevel,playerLevel));
     if(bag.equipment?.chest!==id && !bag.slots.some(s=>s?.itemId===id)){
       const index=bag.slots.indexOf(null);
       if(index<0)return {bag,id:null};
@@ -287,15 +306,18 @@ export function practiceLoot(bag:InventorySnapshot,path:string):{bag:InventorySn
     bag={...bag,firstChestClaimed:true};
   }
   const owned=new Set<string>([...Object.values(bag.equipment??{}),...bag.slots.flatMap(stack=>stack?[stack.itemId]:[])]);
-  const id=fieldItem(path,owned);
+  const id=fieldItem(path,owned,monsterLevel);
   if(isStackableItem(id)){
-    const next=grantStackReward(bag,id);
+    let next=grantStackReward(bag,id);
+    const quantity=tier==="boss"?6:tier==="elite"?4:tier==="strong"?3:2;
+    for(let i=1;next && i<quantity;i++){const added=grantStackReward(next,id);if(!added)break;next=added;}
     return {bag:next??bag,id:next?id:null};
   }
   const index=bag.slots.indexOf(null);
   if(index<0)return {bag,id:null};
   const slots=bag.slots.slice();
-  slots[index]={itemId:id,quantity:1};
+  const forge=birthForge(id);
+  slots[index]={itemId:id,quantity:1,...(forge?{forge}:{})};
   return {bag:{...bag,slots},id};
 }
 
@@ -318,17 +340,43 @@ export function equippedWeaponId(inventory: InventorySnapshot | undefined): Weap
   const item = inventory.slots[inventory.equippedWeaponSlot];
   return item && isWeaponId(item.itemId) ? item.itemId : null;
 }
+export function equipmentRatings(bag:InventorySnapshot|undefined):Record<ForgeRating,number> {
+  const total={melee:0,ranged:0,guard:0,healing:0};
+  if(!bag)return total;
+  const main=bag.slots[bag.equippedWeaponSlot??-1];
+  if(main)applyForgeRatings(total,main.itemId,main.forge);
+  for(const [slot,id] of Object.entries(bag.equipment??{}))applyForgeRatings(total,id,bag.equipmentForges?.[slot as BodySlot]);
+  return total;
+}
+export function overflowStaminaRegen(base:CombatStats,bag:InventorySnapshot|undefined):number {
+  if(!bag)return 0;
+  const main=bag.slots[bag.equippedWeaponSlot??-1];
+  const raw=withEquipmentStats(base,[main?.itemId,main?.socket,...Object.values(bag.equipment??{}),...Object.values(bag.equipmentSockets??{})]);
+  return Math.min(2,Math.max(0,raw.maxStamina-PROGRESSION.maxStamina)/25);
+}
+export function gearHealing(bag:InventorySnapshot|undefined,baseHeal:number):number {
+  if(!bag)return 0;
+  const stats=equippedStats({atk:0,magicAtk:0,def:0,magicDef:0,maxHp:0,maxStamina:0},bag);
+  return Math.min(Math.round(baseHeal*.20),Math.round(stats.magicAtk*.15+equipmentRatings(bag).healing));
+}
+export function spiritGearPower(bag:InventorySnapshot|undefined):number {
+  if(!bag)return 0;
+  const main=bag.slots[bag.equippedWeaponSlot??-1];
+  const gear=withEquipmentStats({atk:0,magicAtk:0,def:0,magicDef:0,maxHp:0,maxStamina:0},[main?.itemId,main?.socket,...Object.values(bag.equipment??{}),...Object.values(bag.equipmentSockets??{})]);
+  return gear.magicAtk*.20+equipmentRatings(bag).ranged*.35;
+}
 export function weaponBonuses(inventory: InventorySnapshot | undefined, mode: "pve" | "pvp" = "pve"):
   {melee: number; ranged: number} {
   const id = equippedWeaponId(inventory);
   const stats = id ? legacyWeaponStats(id) : null;
-  const staff=id===SPIRIT_STAFF_ID || id==="wp_wand_1" || id==="wp_crook_1";
-  const forge = mode === "pve" ? inventory?.slots[inventory.equippedWeaponSlot ?? -1]?.forge : undefined;
+  const staff=usesStaff(id);
+  const ratings=mode==="pve"?equipmentRatings(inventory):{melee:0,ranged:0};
+  const forge = mode === "pve" && !personalItem(id) ? inventory?.slots[inventory.equippedWeaponSlot ?? -1]?.forge : undefined;
   const extra = forge?.rank ?? 0, affix = forge?.affix;
   const meleeBase = mode === "pvp" && id === SHRINE_GLAIVE ? SHRINE_RECIPE.pvpMeleeBonus : (stats?.meleeBonus ?? 0);
   return {
-    melee: meleeBase + (id && !staff ? extra : 0) + (affix?.stat === "melee" ? affix.tier : 0),
-    ranged: (stats?.rangedBonus ?? 0) + (staff ? extra : 0) + (affix?.stat === "ranged" ? affix.tier : 0),
+    melee: meleeBase + ratings.melee + (id && !staff ? extra : 0) + (affix?.stat === "melee" ? affix.tier : 0),
+    ranged: (stats?.rangedBonus ?? 0) + ratings.ranged + (staff ? extra : 0) + (affix?.stat === "ranged" ? affix.tier : 0),
   };
 }
 
@@ -341,7 +389,7 @@ export function parseUseItemCommand(payload: unknown): number | null {
 }
 export function useInventoryItem(
   inventory: InventorySnapshot, slot: number, hp: number,
-  maxHp: number, alive: boolean,
+  maxHp: number, alive: boolean,level=1,
 ): ItemUseResult {
   const original = validateInventory(inventory);
   if (!alive || hp <= 0 || !Number.isFinite(hp)) {
@@ -355,14 +403,16 @@ export function useInventoryItem(
     return { ok: false, reason: "item_unavailable" };
   }
   const item = original.slots[slot]!;
-  if (item.itemId !== POTION_ID && item.itemId!==SALVE_ID) return { ok: false, reason: "not_consumable" };
+  const def=personalItem(item.itemId);
+  if(item.itemId!==POTION_ID && def?.kind!=="consumable")return {ok:false,reason:"not_consumable"};
+  if((def?.level??1)>level)return {ok:false,reason:"item_level_required"};
   if (hp >= maxHp) return { ok: false, reason: "hp_full" };
-  const healed = Math.min(item.itemId===SALVE_ID ? 22 : POTION_HEAL, maxHp - hp);
+  const healed = Math.min(def?.healHp??POTION_HEAL, maxHp - hp);
   const slots = original.slots.slice();
   slots[slot] = item.quantity === 1
     ? null : { itemId: item.itemId, quantity: item.quantity - 1 };
   return {
-    ok: true, healed, hp: hp + healed, itemId: item.itemId,
+    ok: true, healed, hp: hp + healed, itemId: item.itemId as SalveId|typeof POTION_ID,
     inventory: { ...original, slots },
   };
 }

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {randomBytes} from "node:crypto";
+import {DatabaseSync} from "node:sqlite";
 import path from "node:path";
 import {Client} from "@colyseus/sdk";
 
@@ -27,14 +28,37 @@ async function join(extra){
   await until(()=>me()?.persistent,"admit");
   const event=(type,check=()=>true)=>events.find(e=>e.type===type && check(e.data))?.data;
   room.send("get_inventory",{});
-  const bag=await until(()=>event("inventory_state",p=>p.personalItems),"catalog and bag");
-  return {room,me,bag,event};
+  const bag=await until(()=>event("inventory_state",p=>p.catalogReady),"catalog and bag");
+  const catalog=Object.assign({},...events.filter(e=>e.type==="item_catalog_page").map(e=>e.data.items));
+  return {room,me,bag,event,catalog};
+}
+// Seed only the offline test character created by this file, in its disposable account database.
+function prepareCapstone(prefix,recipe){
+  assert.match(prefix,/^[a-f0-9]{12}$/);
+  const db=new DatabaseSync(path.join(folder,"economy.sqlite"));
+  try{
+    db.exec("BEGIN IMMEDIATE");
+    const found=db.prepare("SELECT id,snapshot FROM characters WHERE id LIKE ?").all(prefix+"%");
+    assert.equal(found.length,1);
+    const {id,snapshot}=found[0], saved=JSON.parse(snapshot);
+    assert.equal(saved.name,"นักดาบฝึกหัด");assert.equal(saved.build.path,"phutthaisawan");
+    const bag=JSON.parse(db.prepare("SELECT inventory FROM accounts WHERE id=?").get(id).inventory);
+    for(const [itemId,quantity] of [...recipe.map(r=>[r.item,r.qty]),["ref_flux_7",1],["mat_metal_1",1],["card_rift_warden",1]]){
+      const index=bag.slots.findIndex(s=>s?.itemId===itemId),free=index>=0?index:bag.slots.indexOf(null);
+      assert(free>=0);bag.slots[free]={itemId,quantity:quantity+(bag.slots[free]?.quantity||0)};
+    }
+    saved.inventory=bag;saved.level=100;saved.experience=0;
+    db.prepare("UPDATE accounts SET inventory=? WHERE id=?").run(JSON.stringify(bag),id);
+    db.prepare("UPDATE characters SET snapshot=? WHERE id=?").run(JSON.stringify(saved),id);
+    db.exec("COMMIT");
+  }finally{db.close();}
 }
 let active;
 try{
   active=await join({characterSetup:{name:"นักดาบฝึกหัด",build:{path:"phutthaisawan",ancestry:"shrine"}}});
   const {room,bag,me,event}=active;
-  assert.equal(Object.keys(bag.personalItems).length,66);
+  assert(Object.keys(active.catalog).length>400);
+  const endgame=active.catalog.wp_twins_10;assert.equal(endgame.level,100);
   assert.deepEqual(bag.cardDrill,{gold:20,itemId:"mat_metal_1",quantity:1});
   assert.deepEqual(bag.slots.filter(Boolean).map(s=>s.itemId),["health_potion","wp_twins_1"]);
   assert.equal(bag.slots[bag.equippedWeaponSlot].bound,true);
@@ -60,5 +84,23 @@ try{
   assert.equal(active.me().atk,before.atk+2);
   assert.equal(active.me().def,before.def+4);
   assert.equal(active.bag.slots.filter(s=>s?.itemId==="wp_twins_1").length,1);
-  console.log("PERSONAL GEAR PASS: fresh account, ordinary monster drop, equip/unequip, real stats, reconnect.");
+  const prefix=active.me().characterId;
+  await active.room.leave();active=null;await delay(400);
+  prepareCapstone(prefix,endgame.recipe);active=await join({});
+  assert.equal(active.me().level,100);
+  const r=active.room;
+  r.send("craft_weapon",{requestId:"capstone_craft_001",recipeId:"wp_twins_10"});
+  const craftBag=await until(()=>active.event("inventory_state",v=>v.slots.some(s=>s?.itemId==="wp_twins_10")),"craft capstone");
+  const at=craftBag.slots.findIndex(s=>s?.itemId==="wp_twins_10"), crafted=craftBag.slots[at];assert(crafted.forge.affix);
+  r.send("equip_weapon",{slot:at});await until(()=>active.me().equippedWeaponId==="wp_twins_10","equip capstone");
+  await delay(400);r.send("forge_weapon",{requestId:"capstone_forge_001",slot:at,stamp:crafted.forge.instanceId+"."+crafted.forge.revision,action:"enhance"});
+  await until(()=>active.event("forge_result",v=>v.forge?.rank===1),"upgrade capstone");
+  await delay(400);r.send("card_socket",{requestId:"capstone_drill_001",target:at,gear:"wp_twins_10",expected:"sealed",action:"drill",card:null});
+  await until(()=>active.event("card_socket_result",v=>v.action==="drill"),"drill capstone");
+  await delay(400);r.send("card_socket",{requestId:"capstone_card_0001",target:at,gear:"wp_twins_10",expected:"empty",action:"insert",card:"card_rift_warden"});
+  await until(()=>active.event("card_socket_result",v=>v.socket==="card_rift_warden"),"boss card");
+  await r.leave();active=null;await delay(400);active=await join({});
+  assert.equal(active.bag.slots[at].forge.rank,1);assert.equal(active.bag.slots[at].socket,"card_rift_warden");
+  assert.equal(active.me().equippedWeaponId,"wp_twins_10");
+  console.log("PERSONAL GEAR PASS: fresh starter, hunt, Lv.100 crafting, rolled affix, enhancement, boss card, reconnect.");
 }finally{if(active)await active.room.leave();}
