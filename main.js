@@ -5143,7 +5143,7 @@
     spirit_staff: { name: "คทาวิญญาณ", symbol: "🔱", bonus: "ยิงอาคม +6" },
   });
   let personalItems = Object.create(null), workbenchGold = 0, cardDrill=null, catalogRevision=0, gearGuides=null;
-  let resources=null,resourceViewMap="",refineInput=2,resourceReadyAt=0,resourceChoice="";
+  let resources=null,resourceViewMap="",refineInput=2,resourceReadyAt=0,resourceChoice="",harvestFocus=null;
   const resourceShapes=new Map();
   function clearResourceView(){
     for(const s of resourceShapes.values()){
@@ -5153,6 +5153,7 @@
       else for(const [mesh,y,scale] of s.parts){mesh.position.y=y;mesh.scaling.y=scale;}
     }
     resourceShapes.clear();resourceViewMap="";resourceChoice="";
+    if(harvestFocus){harvestFocus.dispose();harvestFocus=null;}
   }
   function renderResourceNodes(){
     if(resourceViewMap!==activeMapId){clearResourceView();resourceViewMap=activeMapId;}
@@ -5196,7 +5197,7 @@
     }
   }
   function nearbyResources(me){
-    if(!me?.alive || me.mounted || me.flying || resources?.mapId!==me.mapId || activeMapId!==me.mapId)return [];
+    if(!me?.alive || me.mounted || me.flying || resources?.mapId!==me.mapId || activeMapId!==me.mapId || Math.abs(playerLayer(me))>=.1)return [];
     const distance=n=>Math.hypot(me.x-n.x,me.z-n.z)-n.radius;
     return resources.nodes.filter(n=>distance(n)<=2.3).sort((a,b)=>
       Number(!a.stock)-Number(!b.stock)||distance(a)-distance(b)||a.id.localeCompare(b.id));
@@ -5214,7 +5215,15 @@
       cycle.onclick=()=>{resourceChoice=near[(index+1)%near.length].id;updateResourceHud(ownServerCharacter());};
     }
     button.hidden=!n;
+    if(harvestFocus)harvestFocus.setEnabled(Boolean(n));
     if(n){
+      if(!harvestFocus){
+        harvestFocus=B.MeshBuilder.CreateTorus("เป้าหมายเก็บวัตถุดิบ",{diameter:1,thickness:.065,tessellation:24},scene);
+        harvestFocus.material=glowMat;harvestFocus.isPickable=false;
+      }
+      const terrain=worldDefinitions?.[activeMapId]?.terrain,diameter=Math.max(.8,n.radius*2+.16);
+      harvestFocus.position.set(n.x,(terrain?terrainHeight(terrain,n.x,n.z):0)+.16,n.z);
+      harvestFocus.scaling.set(diameter,1,diameter);
       const waiting=Math.max(0,Math.ceil(((n.readyAt??(resources.received+n.nextIn))-performance.now())/1000));
       const item=n.kind==="herb"?"mat_herb_"+n.tier:"mat_raw_"+n.kind+"_"+n.tier;
       const level=personalItems[item]?.level||1;
