@@ -10173,7 +10173,14 @@
     scroll.scrollTop=atlasCells[origin][1]-scroll.clientHeight/2;
   }
   function openMap() {
-    openDrawer("map","แผนที่"+(worldDefinitions?.[activeMapId]?.name || (activeMapId==="ritual_village"?"หมู่บ้านอาคม":"ป่าต้องห้าม")),`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>วงสีเขียว: เขตพัก</span></div>${worldDefinitions?.[activeMapId]?.guardian ? '<p class="note">◆ ศาลเหนือ · Elite Lv.12 เกิดใหม่ 2 นาที<br>หลบวงฟาดสีส้ม · EXP ×3 แบ่งตามกฎปาร์ตี้ ผู้ได้รับ EXP รับยาคนละ 1 ขวดเมื่อกระเป๋ามีที่</p>' : ''}`);
+    openDrawer("map","แผนที่"+(worldDefinitions?.[activeMapId]?.name || (activeMapId==="ritual_village"?"หมู่บ้านอาคม":"ป่าต้องห้าม")),`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>วงสีเขียว: เขตพัก</span></div>`);
+    const activeMap=worldDefinitions?.[activeMapId],boss=activeMap?.guardian ?? activeMap?.boss;
+    if(boss){
+      const note=document.createElement("p");note.className="note";
+      note.textContent="◆ "+boss.name+" · "+(activeMap.guardian?"Elite":"Boss")+" Lv."+boss.level+" · เกิดใหม่หลังถูกปราบ "+boss.respawnMs/60_000+" นาที";
+      if(activeMap.guardian)note.textContent+=" · หลบวงฟาดสีส้ม · EXP ×3 แบ่งตามกฎปาร์ตี้ ผู้ได้รับ EXP รับยาคนละ 1 ขวดเมื่อกระเป๋ามีที่";
+      $("bigMap").parentElement.append(note);
+    }
     if(worldDefinitions?.spirit_rift){
       const note=document.createElement("p");note.className="note";
       const map=worldDefinitions[activeMapId],range=map.region?.range;

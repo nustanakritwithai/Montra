@@ -166,7 +166,9 @@ test("all occupied atlas zones replicate and the warden's respawn clock survives
   const id=RIFT_WARDEN.id;assert.ok(forest.kill(id,100));state.players.delete("spirit_rift");tick(500);
   assert.ok(!state.monsters.has(id));state.players.set("spirit_rift",new Player({...ATLAS_MAPS.spirit_rift.spawn,mapId:"spirit_rift"}));
   tick(1100);assert.equal(state.monsters.get(id)?.alive,false);
-  tick(100+RIFT_WARDEN.respawnMs);assert.equal(state.monsters.get(id)?.alive,true);
+  assert.equal(RIFT_WARDEN.respawnMs,1_200_000);
+  tick(100+1_199_999);assert.equal(state.monsters.get(id)?.alive,false);
+  tick(100+1_200_000);assert.equal(state.monsters.get(id)?.alive,true);
   assert.ok(state.monsters.has("atlas_hex_ridge_1_1"));
 });
 

@@ -20,7 +20,8 @@ const point=([x,z]:XY):XZ=>({x,z});
 const wall=(x:number,z:number,width:number,length:number):WorldWall=>({x,z,width,length});
 export const MARSH_GATE=point([48,-84]);
 export const TEMPLE_NORTH_GATE=point([32,-65]);
-export const RIFT_WARDEN={id:"atlas_rift_warden",name:"ราชันรอยแยก",level:100,x:29,z:-50,strikeRadius:3.8,respawnMs:180000} as const;
+export const BOSS_RESPAWN_MS=20*60_000;
+export const RIFT_WARDEN={id:"atlas_rift_warden",name:"ราชันรอยแยก",level:100,x:29,z:-50,strikeRadius:3.8,respawnMs:BOSS_RESPAWN_MS} as const;
 const islandRoutes:XY[][]=[
   [[0,26],[-22,16],[-22,8],[-22,-17],[22,-17],[22,-36],[0,-43],[0,-58]],
   [[0,26],[22,12],[22,-17]], [[-22,-17],[-22,-36],[0,-43]],
