@@ -8,6 +8,7 @@ export type ForgeProfile={primary:ForgeRating; pool:readonly ForgeRating[]; enha
 export const WEAPON_LEVELS=[1,10,20,30,40,50,60,70,85,100] as const;
 export const OUTFIT_LEVELS=[1,10,25,45,65,85,95,100] as const;
 // End equipment can be made from materials found before the last boss.
+export const MAX_FORGE_COPIES=99;
 export const MATERIAL_LEVELS=[1,10,25,45,65,85,95] as const;
 export const BODY_SLOTS=["head","shoulders","chest","arms","leftHand","rightHand","legs","feet","offHand","neck","leftEar","rightEar","leftRing","rightRing"] as const;
 export type BodySlot=typeof BODY_SLOTS[number];
@@ -315,7 +316,7 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
     }
   }
   for(const [i,level] of MATERIAL_LEVELS.entries())for(const [key,name,source] of catalysts)
-    put(`ref_${key}_${i+1}`,{name:name+"ชั้น"+(i+1),kind:"catalyst",path:"all",level,stats:{},rarity:"common",craftGold:4+Math.floor(level/4),recipe:[{item:`mat_${source}_${i+1}`,qty:2}]});
+    put(`ref_${key}_${i+1}`,{name:name+"ชั้น"+(i+1),kind:"catalyst",path:"all",level,stats:{},rarity:"common",...(key==="seal"?{craftGold:4+Math.floor(level/4),recipe:[{item:`mat_${source}_${i+1}`,qty:2}]}:{refinesTo:`mat_${source}_${i+1}` as MaterialId})});
   for(const [i,level] of MATERIAL_LEVELS.entries())for(const kind of ["wood","stone"] as const){
     put(`mat_raw_${kind}_${i+1}`,{name:(kind==="wood"?"ท่อนไม้ดิบ":"ก้อนหินปนแร่")+"ชั้น"+(i+1),kind:"material",path:"all",level,stats:{},
       refinesTo:`mat_${kind==="wood"?"wood":"metal"}_${i+1}`});
