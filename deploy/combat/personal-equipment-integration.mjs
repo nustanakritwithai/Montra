@@ -34,7 +34,7 @@ let active;
 try{
   active=await join({characterSetup:{name:"นักดาบฝึกหัด",build:{path:"phutthaisawan",ancestry:"shrine"}}});
   const {room,bag,me,event}=active;
-  assert.equal(Object.keys(bag.personalItems).length,52);
+  assert.equal(Object.keys(bag.personalItems).length,58);
   assert.deepEqual(bag.slots.filter(Boolean).map(s=>s.itemId),["health_potion","wp_twins_1"]);
   assert.equal(bag.slots[bag.equippedWeaponSlot].bound,true);
   assert.equal(me().equippedWeaponId,"wp_twins_1");

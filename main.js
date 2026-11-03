@@ -4046,6 +4046,7 @@
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;
     a.skin = { nodes, copy, holder, body, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
+    if (a.wingMesh) attachWings(a);
   }
   // ---- Action animation set (visual only) ----
   // Every action maps to something the game already replicates: server
@@ -4861,6 +4862,46 @@
     const visible = pathId === "seer" || pathId === "mender";
     for (const part of avatar.ritualGear || []) part?.setEnabled(visible);
   }
+  function attachWings(avatar) {
+    const chest=avatar.skin?.nodes.Chest;
+    const mesh=avatar.wingMesh;
+    mesh.parent=chest || avatar.rig.body;
+    // The GLB faces +Z; the fallback rig faces -Z.
+    mesh.rotation.y=chest?Math.PI:0;
+    mesh.position.set(0,chest ? .12 : 1.51,chest ? -.15 : .15);
+  }
+  function setAvatarWings(avatar,id) {
+    const golden=id==="acc_wings_kinnari_1";
+    const visibleId=golden || id==="acc_wings_owl_1" ? id : "";
+    if ((avatar.wingsId||"")===visibleId)return;
+    avatar.wingMesh?.dispose();
+    avatar.wingMesh=null;
+    avatar.wingsId=visibleId;
+    if (!visibleId)return;
+    // A single low-poly mesh for both wings. Each overlapping feather is a closed kite.
+    const positions=[], indices=[];
+    for(const side of [-1,1]){
+      for(let feather=0;feather<5;feather++){
+        const fraction=feather/4;
+        const reach=(golden ? .91 : 1.02)-fraction*.26;
+        const height=(golden ? .74 : .48)-fraction*.92;
+        const rootY=-fraction*.07, midY=(rootY+height)*.5, midX=reach*.57;
+        const start=positions.length/3;
+        positions.push(side*.06,rootY,0, side*midX,midY+.105,.12, side*reach,height,.26,
+          side*midX,midY-.10,.12, side*midX,midY,.18, side*midX,midY,.055);
+        for(let edge=0;edge<4;edge++){
+          const a=start+edge,b=start+(edge+1)%4;
+          if(side>0) indices.push(start+4,b,a,start+5,a,b);
+          else indices.push(start+4,a,b,start+5,b,a);
+        }
+      }
+    }
+    const mesh=new B.Mesh("equipped wings",scene), data=new B.VertexData(), normals=[];
+    B.VertexData.ComputeNormals(positions,indices,normals);
+    data.positions=positions;data.indices=indices;data.normals=normals;data.applyToMesh(mesh);
+    mesh.material=golden?gold:weaponCrystal;mesh.isPickable=false;
+    avatar.wingMesh=mesh;attachWings(avatar);
+  }
   function setAvatarWeapon(avatar, weaponId, pathId = avatar?.local ? ownServerCharacter()?.pathId : "") {
     if (!avatar?.weaponModels) return;
     setAvatarRitualGear(avatar, pathId);
@@ -5124,8 +5165,8 @@
     return Object.entries(stats||{}).filter(([k,v])=>Object.hasOwn(statNames,k)&&Number.isFinite(v)&&v!==0)
       .map(([k,v])=>statNames[k]+" "+(v>0?"+":"")+v).join(" · ");
   }
-  const bodyLabels={head:"ศีรษะ",shoulders:"ไหล่",chest:"อก",arms:"แขน",leftHand:"มือซ้าย",rightHand:"มือขวา",legs:"กางเกง",feet:"รองเท้า",offHand:"อุปกรณ์มือรอง"};
-  const gearSymbols={mainHand:"⚔",head:"♛",shoulders:"⛨",chest:"♜",arms:"⟐",leftHand:"☚",rightHand:"☛",legs:"Ⅱ",feet:"♞",offHand:"◈"};
+  const bodyLabels={head:"ศีรษะ",shoulders:"ไหล่",chest:"อก",arms:"แขน",leftHand:"มือซ้าย",rightHand:"มือขวา",legs:"กางเกง",feet:"รองเท้า",offHand:"อุปกรณ์มือรอง",neck:"สร้อย",earrings:"ตุ้มหู",wings:"ปีก"};
+  const gearSymbols={mainHand:"⚔",head:"♛",shoulders:"⛨",chest:"♜",arms:"⟐",leftHand:"☚",rightHand:"☛",legs:"Ⅱ",feet:"♞",offHand:"◈",neck:"♧",earrings:"♢",wings:"🪽"};
   let inspectingGear=null;
   function bagMeta(id) {
     if(Object.hasOwn(WEAPON_META,id))return {...WEAPON_META[id],kind:"mainHand"};
@@ -7618,7 +7659,7 @@
     }
   }
 
-  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0, weaponId = "", pathId = "") {
+  function setOnlinePlayer(id, x, z, facing, hp, maxHp, y = 0, weaponId = "", pathId = "", wingsId = "") {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     onlinePlayers.set(id,{x,z});
     const a = ensureAvatar(id,id === localId,x,z);
@@ -7626,6 +7667,7 @@
     a.targetY = Number.isFinite(y) ? y : 0;
     a.targetZ = z;
     setAvatarWeapon(a,weaponId,pathId);
+    setAvatarWings(a,wingsId);
     const side=territoryState?.teams?.[id];
     if(side && id!==localId && !a.warRing){
       const ally=side===territoryState.local?.side;
@@ -7698,7 +7740,7 @@
       seen.add(id);
       setOnlinePlayer(id, Number(p.x), Number(p.z),
         Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
-        p.equippedWeaponId, p.pathId);
+        p.equippedWeaponId, p.pathId, p.equippedWingsId);
       noteAvatarState(avatars.get(id), p);
     });
     const localActor=avatars.get(localId);
@@ -8617,7 +8659,7 @@
             const applyServerPlayer = () => {
               if ((p.mapId || "ritual_village") !== activeMapId) { removeOnlinePlayer(id); return; }
               setOnlinePlayer(id, Number(p.x), Number(p.z),
-                Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y), p.equippedWeaponId, p.pathId);
+                Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y), p.equippedWeaponId, p.pathId, p.equippedWingsId);
             };
             applyServerPlayer();
             if (typeof cb.listen === "function") {
@@ -8628,6 +8670,7 @@
               cb.listen(p, "y", applyServerPlayer);
               cb.listen(p, "maxHp", applyServerPlayer);
               cb.listen(p, "equippedWeaponId", applyServerPlayer);
+              cb.listen(p, "equippedWingsId", applyServerPlayer);
               cb.listen(p, "pathId", applyServerPlayer);
               cb.listen(p, "mapId", () => syncState(joined.state));
             }
@@ -10888,6 +10931,8 @@
     if(gear){
       const difference=gearComparison(chosen.itemId,armor?equipment[meta.kind]:equippedItem?.itemId);
       detail=[armor?bodyLabels[meta.kind]:"อาวุธ",meta.bonus,worn?"กำลังสวม":difference?"เมื่อเปลี่ยน "+difference:"",wrongClass?"อาวุธของสายอื่น":"",chosen.bound?"ผูกกับตัวละคร":personalItems[chosen.itemId]?"ผูกตัวละครเมื่อสวมครั้งแรก":""].filter(Boolean).join(" · ");
+      if(meta.kind==="earrings")detail+=" · สวมเป็นคู่";
+      if(meta.kind==="wings")detail+=" · ประดับหลัง";
     } else if(meta?.kind==="material")detail="วัตถุดิบจากมอนสเตอร์ · ดูสูตรที่โต๊ะช่างด้านล่าง";
     else if(meta?.kind==="consumable")detail="ฟื้น 22 HP · รอ 14 วินาทีก่อนใช้ยาครั้งถัดไป";
     else if(chosen?.itemId===SHRINE_SHARD)detail="ได้จากผู้พิทักษ์ศาลร้าง ใช้คราฟต์ง้าวจันทร์ผู้พิทักษ์";

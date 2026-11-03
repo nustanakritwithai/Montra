@@ -1867,6 +1867,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           if (!current || this.inventories.get(id) !== inventory) return;
           this.inventories.set(id, change.inventory);
           current.equippedWeaponId = change.weaponId ?? "";
+          current.equippedWingsId = change.inventory.equipment?.wings ?? "";
           this.applyStats(id,current,this.statAllocations.get(id) ?? emptyAllocations());
           if (!body && current.pathId === "muay_boran" && !wearsWraps(change.weaponId)) {
             this.swordGuards.delete(id);
@@ -2056,6 +2057,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!player) return;
     this.inventories.set(client.sessionId,account.inventory);
     player.equippedWeaponId=equippedWeaponId(account.inventory) ?? "";
+    player.equippedWingsId=account.inventory.equipment?.wings ?? "";
     this.applyStats(client.sessionId,player,this.statAllocations.get(client.sessionId) ?? emptyAllocations());
     try { client.send("inventory_state",account.inventory); client.send("economy_state",{gold:account.gold}); } catch { /* disconnect does not roll back committed assets */ }
   }
@@ -4235,6 +4237,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         persistent: Boolean(saved), characterSlot: slot,
         flying: Boolean(validPosition && restoreFlight),
         equippedWeaponId: equippedWeaponId(saved?.inventory) ?? "",
+        equippedWingsId: saved?.inventory?.equipment?.wings ?? "",
         mapId,
         stamina: Math.min(saved?.stamina ?? initialStats.maxStamina, initialStats.maxStamina),
       });

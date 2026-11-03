@@ -85,6 +85,36 @@ test("practice equipment preserves ownership, recipe costs and receipts", () => 
     assert.equal(practiceLoot(retry.bag,"blade").bag.slots.filter(s=>s?.itemId==="arm_hide_chest_1").length,1);
   } finally {store.close();}
 });
+
+test("necklace, earring pair and wings can be crafted, worn together and restored independently", () => {
+  const store=new EconomyStore(":memory:");
+  try {
+    const bag=makeClassInventory("blade");
+    bag.slots[2]={itemId:"mat_wood_1",quantity:3};
+    bag.slots[3]={itemId:"mat_fiber_1",quantity:5};
+    bag.slots[4]={itemId:"mat_metal_1",quantity:4};
+    bag.slots[5]={itemId:"mat_ink_1",quantity:2};
+    store.register(a,bag);
+    const pieces=[["neck","acc_torc_1"],["earrings","acc_earrings_lotus_1"],["wings","acc_wings_kinnari_1"]] as const;
+    for (const [index,[,id]] of pieces.entries())store.craftPersonal(a,request(50+index),id);
+    let outfit=store.getAccount(a).inventory;
+    for (const [position,id] of pieces) {
+      const worn=equipBody(outfit,position,outfit.slots.findIndex(s=>s?.itemId===id),id,"blade");
+      assert(worn.ok);outfit=worn.inventory;
+    }
+    store.saveCharacter(a,{inventory:outfit},outfit);
+    const saved=store.getAccount(a).inventory;
+    assert.deepEqual(saved.equipment,Object.fromEntries(pieces));
+    const base={maxHp:240,maxStamina:100,atk:20,def:30,magicAtk:15,magicDef:20};
+    const before=equippedStats(base,bag);
+    assert.deepEqual(equippedStats(base,saved),{...before,magicDef:before.magicDef+2,maxStamina:before.maxStamina+6,magicAtk:before.magicAtk+2});
+    assert.equal(equipBody(saved,"neck",null,"acc_wings_kinnari_1","blade").ok,false);
+    const removed=equipBody(saved,"wings",null,"acc_wings_kinnari_1","blade");
+    assert(removed.ok);
+    assert.deepEqual(removed.inventory.equipment,{neck:"acc_torc_1",earrings:"acc_earrings_lotus_1"});
+    assert.equal(equippedStats(base,removed.inventory).maxStamina,before.maxStamina+2);
+  } finally {store.close();}
+});
 function setup(): { store: EconomyStore; dir: string; file: string } {
   const dir = mkdtempSync(path.join(os.tmpdir(), "montra-economy-"));
   const file = path.join(dir,"economy.sqlite");

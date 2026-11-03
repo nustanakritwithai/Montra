@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import type { CombatStats } from "./Progression.js";
 
 export type ItemStats = Partial<Record<"hp" | "stamina" | "atk" | "def" | "magicAtk" | "magicDef",number>>;
-export const BODY_SLOTS=["head","shoulders","chest","arms","leftHand","rightHand","legs","feet","offHand"] as const;
+export const BODY_SLOTS=["head","shoulders","chest","arms","leftHand","rightHand","legs","feet","offHand","neck","earrings","wings"] as const;
 export type BodySlot=typeof BODY_SLOTS[number];
 export function isBodySlot(value:unknown):value is BodySlot {
   return BODY_SLOTS.some(slot=>slot===value);
@@ -19,6 +19,12 @@ export const PERSONAL_ITEMS = {
   mat_ink_1: {"name":"เขม่าหมึกชั้น1","kind":"material","path":"all","stats":{}},
   mat_herb_1: {"name":"รากสมุนไพรชั้น1","kind":"material","path":"all","stats":{}},
   mat_resin_1: {"name":"ยางไม้ชั้น1","kind":"material","path":"all","stats":{}},
+  acc_torc_1: {"name":"สร้อยลูกประคำฝึกหัด","kind":"neck","path":"all","stats":{"magicDef":2,"stamina":2},"recipe":[{"item":"mat_wood_1","qty":3},{"item":"mat_fiber_1","qty":2}]},
+  acc_gorget_1: {"name":"สร้อยเกราะห่วงฝึกหัด","kind":"neck","path":"all","stats":{"def":2,"hp":8},"recipe":[{"item":"mat_metal_1","qty":3},{"item":"mat_fiber_1","qty":2}]},
+  acc_earrings_lotus_1: {"name":"ตุ้มหูบัวลงอาคม","kind":"earrings","path":"all","stats":{"magicAtk":2},"recipe":[{"item":"mat_metal_1","qty":2},{"item":"mat_ink_1","qty":2}]},
+  acc_earrings_hunter_1: {"name":"ตุ้มหูพรานป่า","kind":"earrings","path":"all","stats":{"atk":1,"stamina":2},"recipe":[{"item":"mat_wood_1","qty":2},{"item":"mat_hide_1","qty":2}]},
+  acc_wings_kinnari_1: {"name":"ปีกกินรีถักทอง","kind":"wings","path":"all","stats":{"stamina":4},"recipe":[{"item":"mat_fiber_1","qty":3},{"item":"mat_metal_1","qty":2}]},
+  acc_wings_owl_1: {"name":"ปีกนกแสกลงอาคม","kind":"wings","path":"all","stats":{"magicDef":2},"recipe":[{"item":"mat_fiber_1","qty":3},{"item":"mat_ink_1","qty":2}]},
   arm_cloth_chest_1: {"name":"เสื้อผ้าจารอักขระฝึกหัด","kind":"chest","path":"all","stats":{"magicAtk":4,"magicDef":2},"recipe":[{"item":"mat_fiber_1","qty":3},{"item":"mat_resin_1","qty":2}]},
   arm_hide_chest_1: {"name":"เสื้อหนังพรานเงาฝึกหัด","kind":"chest","path":"all","stats":{"atk":4,"stamina":4},"recipe":[{"item":"mat_hide_1","qty":3},{"item":"mat_resin_1","qty":2}]},
   arm_medium_chest_1: {"name":"เสื้อเกราะเกล็ดทัพฝึกหัด","kind":"chest","path":"all","stats":{"def":4,"atk":2},"recipe":[{"item":"mat_metal_1","qty":3},{"item":"mat_resin_1","qty":2}]},
@@ -69,7 +75,7 @@ export const PERSONAL_ITEMS = {
 export type PersonalId = keyof typeof PERSONAL_ITEMS;
 export type PracticeWeapon = Extract<PersonalId,`wp_${string}`>;
 export type ChestId = Extract<PersonalId,`arm_${string}_chest_1`>;
-export type BodyItemId = Extract<PersonalId,`arm_${string}`|`off_${string}`>;
+export type BodyItemId = Extract<PersonalId,`arm_${string}`|`off_${string}`|`acc_${string}`>;
 export type MaterialId = Extract<PersonalId,`mat_${string}`>;
 export const SALVE_ID = "use_salve_1";
 export const WORKBENCH_GOLD = 4;
