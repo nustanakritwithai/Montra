@@ -57,6 +57,7 @@ import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_SCHOOL
 import { isMuayFoundation, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
 import { CATALOG_PAGES, WORKBENCH_GOLD, personalItem, wearsWraps, wearsTwinSwords, monsterCardDrop } from "./PersonalItems.js";
 import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
+import {personalGearGuides} from "./GearGuides.js";
 import { parseSellMaterial, parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
@@ -67,7 +68,7 @@ import { PROGRESSION, SKILL_RANK_LEVELS, SKILL_RANK_PRACTICE, skillRankCost, ski
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
   POTION_COOLDOWN_MS, grantRewardPotion, grantStackReward, SHRINE_RECIPE, SHRINE_SHARD, SHRINE_GLAIVE, parseUseItemCommand,
-  useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon, equipBody, parseBodyCommand, equippedStats, equipmentRatings, gearHealing, spiritGearPower, overflowStaminaRegen, practiceLoot,
+  useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon, equipBody, parseBodyCommand, equippedStats, equipmentRatings, gearHealing, spiritGearPower, gearMana, overflowStaminaRegen, practiceLoot,
   equippedWeaponId, weaponBonuses, type InventorySnapshot,
 } from "./ItemRules.js";
 
@@ -156,6 +157,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private statAllocations = new Map<string, Allocations>();
   private pendingRewards = new Map<string, Promise<void>>();
   private extraStaminaRegen=new WeakMap<Player,number>();
+  private extraRestManaRegen=new WeakMap<Player,number>();
   private hpRegenRemainder = new Map<string, number>();
   private playerRespawnAt = new Map<string, number>();
   private playerSpawn = new Map<string, Vec2>();
@@ -1917,7 +1919,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       ? Math.round(stats.def*(1+SENTINEL_LESSONS.fortitude.power)) : stats.def;
     player.magicAtk = stats.magicAtk; player.magicDef = stats.magicDef;
     player.maxStamina = stats.maxStamina;
-    player.maxMana = Math.min(PROGRESSION.maxMana, PROGRESSION.baseMana + (player.level - 1) * 2);
+    const mana=gearMana(player.level,bag);
+    player.maxMana=mana.max;this.extraRestManaRegen.set(player,mana.restRegen);
     player.mana = Math.min(player.mana, player.maxMana);
     player.hp = Math.min(player.hp, stats.maxHp);
     player.stamina = Math.min(player.stamina, stats.maxStamina);
@@ -1967,10 +1970,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const loot=cardBag ?? fieldDrop?.bag ?? previousLoot;
         await characterStore.save({ ...snapshot, ...next, inventory:loot ?? snapshot.inventory, updatedAt: new Date().toISOString() });
         if (loot) this.inventories.set(id,loot);
+        const leveled=next.level!==current.level;
         current.level = next.level; current.experience = next.experience;
         this.applyStats(id,current, this.statAllocations.get(id) ?? emptyAllocations());
         try {
           const recipient = this.clients.find(client => client.sessionId === id);
+          if(leveled && this.sentItemCatalog.has(id))recipient?.send("gear_guides",personalGearGuides(current.pathId,current.level));
           if (loot) recipient?.send("inventory_state",loot);
           recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,
             ...(shrineLoot ? {shrineShard:shard ? "granted" : "bag_full"} : {}),
@@ -2715,6 +2720,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.lastInventoryReadMs.set(id, this.simulatedMs);
       if(!this.sentItemCatalog.has(id)){
         for(const items of CATALOG_PAGES)client.send("item_catalog_page",{items});
+        const player=this.state.players.get(id);
+        if(player)client.send("gear_guides",personalGearGuides(player.pathId,player.level));
         this.sentItemCatalog.add(id);
       }
       client.send("inventory_state",{...inventory,catalogReady:true,workbenchGold:WORKBENCH_GOLD,cardDrill:DRILL_COST});
@@ -3584,7 +3591,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.hpRegenRemainder.set(id, player.hp >= player.maxHp ? 0 : pending - healed);
       player.stamina = Math.min(player.maxStamina, player.stamina + ((fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut)+(this.extraStaminaRegen.get(player)??0)) * dt);
       const manaFighting = fighting || this.simulatedMs < (this.supportManaCombatUntil.get(id) ?? 0);
-      const manaRegen = manaFighting ? PROGRESSION.manaRegenIn : Math.max(PROGRESSION.manaRegenOut, player.maxMana / 20);
+      const manaRegen = manaFighting ? PROGRESSION.manaRegenIn : Math.max(PROGRESSION.manaRegenOut, player.maxMana / 20)+(this.extraRestManaRegen.get(player)??0);
       player.mana = Math.min(player.maxMana, player.mana + manaRegen * dt);
     }
   }
@@ -4237,6 +4244,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (required && !accounts().resolve(fields.accountSession)) throw new Error("login_required");
       const allocations = saved?.statAllocations ?? emptyAllocations();
       const initialStats = equippedStats(calculateStats(saved?.level ?? 1, allocations),saved?.inventory);
+      const initialMaxMana=gearMana(saved?.level??1,saved?.inventory).max;
       const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
       const provinceReady=(options as {provinceVersion?:unknown}|undefined)?.provinceVersion===1;
       const castleReady=(options as {castleVersion?:unknown}|undefined)?.castleVersion===2;
@@ -4311,7 +4319,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         equippedWeaponId: equippedWeaponId(saved?.inventory) ?? "",
         mapId,
         stamina: Math.min(saved?.stamina ?? initialStats.maxStamina, initialStats.maxStamina),
-        mana: Math.min(saved?.mana ?? Math.min(PROGRESSION.maxMana, PROGRESSION.baseMana + ((saved?.level ?? 1) - 1) * 2), PROGRESSION.maxMana),
+        mana: Math.min(saved?.mana ?? initialMaxMana,initialMaxMana),
       });
 
       this.swordTrees.set(client.sessionId, saved?.swordTree ?? newSwordTree());

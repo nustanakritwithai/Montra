@@ -6,10 +6,45 @@ import {EconomyStore} from "./EconomyStore.js";
 import {rollForge,forgeStamp,forgeIngredient} from "./ForgeRules.js";
 import {changeCardSocket} from "./CardSockets.js";
 import {ATLAS_SPAWNS} from "./WorldAtlas.js";
+import {personalGearGuides} from "./GearGuides.js";
+import {gearMana} from "./ItemRules.js";
 
 const paths=["muay_boran","phutthaisawan","blade","sentinel","seer","mender"];
 const entries=Object.entries(PERSONAL_ITEMS);
 const base={maxHp:1000,atk:100,def:110,magicAtk:90,magicDef:65,maxStamina:298};
+
+test("twelve suggested builds resolve to legal gear, cards and hunting grounds at their breakpoints",()=>{
+  for(const path of paths)for(const level of [...new Set([...WEAPON_LEVELS,...OUTFIT_LEVELS])]){
+    const guides=personalGearGuides(path,level)!;
+    assert.equal(guides.builds.length,2);
+    assert.notDeepEqual(guides.builds[0].slots.map(s=>s.id),guides.builds[1].slots.map(s=>s.id));
+    for(const build of guides.builds){
+      assert.equal(new Set(build.slots.map(s=>s.id)).size,15);
+      assert.equal(new Set(build.slots.map(s=>s.position)).size,15);
+      for(const piece of build.slots){
+        const def=PERSONAL_ITEMS[piece.id];
+        assert(def.level!<=level&&(def.path==="all"||def.path===path));
+        assert(def.forge!.pool.includes(piece.affix));
+        assert(piece.hunt && piece.hunt.level>=def.level! && piece.hunt.level<=def.dropMax!,piece.id);
+        if(piece.card)assert(PERSONAL_ITEMS[piece.card as PersonalId].level!<=def.level!);
+        if(piece.next)assert(PERSONAL_ITEMS[piece.next].level!>level);
+        else assert.equal(level,100);
+      }
+    }
+  }
+  const bag=makeClassInventory("mender");
+  const mender=personalGearGuides("mender",100)!;
+  assert.equal(mender.builds[1].slots.find(s=>s.position==="leftEar")?.affix,"healing");
+  const sentinel=personalGearGuides("sentinel",100)!;
+  assert.equal(sentinel.builds[0].slots.find(s=>s.position==="mainHand")?.affix,"melee");
+  assert.equal(sentinel.builds[1].slots.find(s=>s.position==="mainHand")?.affix,"guard");
+  bag.slots[1]={itemId:"wp_crook_6",quantity:1};
+  assert(gearMana(50,bag).max>gearMana(50,undefined).max);
+  bag.slots[1]={itemId:"wp_crook_10",quantity:1};
+  assert.equal(gearMana(100,bag).max,320);
+  assert(gearMana(100,bag).restRegen>0&&gearMana(100,bag).restRegen<=1);
+  assert.equal(personalGearGuides("unknown",50),null);
+});
 
 test("every class has a legal, craftable outfit from 1 to 100, including two distinct rings and earrings",()=>{
   for(const [id,item] of entries){

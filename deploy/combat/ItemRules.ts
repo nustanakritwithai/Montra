@@ -354,6 +354,15 @@ export function overflowStaminaRegen(base:CombatStats,bag:InventorySnapshot|unde
   const raw=withEquipmentStats(base,[main?.itemId,main?.socket,...Object.values(bag.equipment??{}),...Object.values(bag.equipmentSockets??{})]);
   return Math.min(2,Math.max(0,raw.maxStamina-PROGRESSION.maxStamina)/25);
 }
+export function gearMana(level:number,bag:InventorySnapshot|undefined){
+  let raw=PROGRESSION.baseMana+(level-1)*2;
+  if(bag){
+    const main=bag.slots[bag.equippedWeaponSlot??-1];
+    for(const id of [main?.itemId,main?.socket,...Object.values(bag.equipment??{}),...Object.values(bag.equipmentSockets??{})])
+      raw+=personalItem(id)?.stats.mana??0;
+  }
+  return {max:Math.min(PROGRESSION.maxMana,raw),restRegen:Math.min(1,Math.max(0,raw-PROGRESSION.maxMana)/30)};
+}
 export function gearHealing(bag:InventorySnapshot|undefined,baseHeal:number):number {
   if(!bag)return 0;
   const stats=equippedStats({atk:0,magicAtk:0,def:0,magicDef:0,maxHp:0,maxStamina:0},bag);

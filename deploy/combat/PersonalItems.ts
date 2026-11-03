@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import type { CombatStats } from "./Progression.js";
 
-export type ItemStats = Partial<Record<"hp" | "stamina" | "atk" | "def" | "magicAtk" | "magicDef",number>>;
+export type ItemStats = Partial<Record<"hp" | "stamina" | "mana" | "atk" | "def" | "magicAtk" | "magicDef",number>>;
 export type ForgeRating="melee"|"ranged"|"guard"|"healing";
 export type ForgeProfile={primary:ForgeRating; pool:readonly ForgeRating[]; enhanceMax:number; affixMax:number; materialTier:number};
 export const WEAPON_LEVELS=[1,10,20,30,40,50,60,70,85,100] as const;
@@ -116,11 +116,12 @@ export const WORKBENCH_GOLD = 4;
 const schools=["muay_boran","phutthaisawan","blade","sentinel","seer","mender"];
 const names=["ฝึกหัด","ชายป่า","ศาลเก่า","ด่านคลอง","ป่าลึก","ค่ายหน้า","เวียงเหล็ก","ภูผา","ทัพหลวง","พิชัยยุทธ์"];
 const outfitNames=["ฝึกหัด","ชายป่า","สำนักครู","ค่ายหน้า","เวียงเหล็ก","ทัพหลวง","ราชสำนัก","พิชัยยุทธ์"];
-const weights:Required<ItemStats>={atk:1,magicAtk:1,def:1,magicDef:1,hp:.125,stamina:.5};
+const weights:Required<ItemStats>={atk:1,magicAtk:1,def:1,magicDef:1,hp:.125,stamina:.5,mana:.5};
 const catalysts=[["flux","ผงประสาน","metal"],["powder","ผงอาคม","ink"],["oil","น้ำมันชุบ","resin"],["seal","ตราค้ำขวัญ","fiber"],["core","แกนหลอม","wood"]] as const;
 export function materialTier(level:number){return MATERIAL_LEVELS.filter(min=>min<=level).length || 1;}
 function recommend(family:string,item:PersonalDefinition):readonly string[]{
   if(item.path!=="all")return [item.path];
+  if(family==="acc_earrings_ward")return ["sentinel","seer","mender"];
   if(family.includes("_heavy_") || item.stats.hp && item.stats.def)return ["sentinel"];
   if(family.includes("_medium_"))return ["sentinel","phutthaisawan"];
   if(family.includes("_cloth_") || item.stats.magicAtk || item.stats.magicDef)return ["seer","mender"];
@@ -129,7 +130,8 @@ function recommend(family:string,item:PersonalDefinition):readonly string[]{
 function forgeProfile(item:PersonalDefinition):ForgeProfile {
   const preferred=item.recommended??[];
   let primary:ForgeRating="melee", other:ForgeRating="guard";
-  if(item.path==="mender" || item.family==="acc_ring_heal"){primary="healing";other="ranged";}
+  if(item.family==="acc_earrings_ward"){primary="guard";other="healing";}
+  else if(item.path==="mender" || item.family==="acc_ring_heal" || item.family==="acc_torc"){primary="healing";other="ranged";}
   else if(preferred.includes("seer")){primary="ranged";other="healing";}
   else if(preferred.includes("sentinel")){primary="guard";other="melee";}
   const spent=Object.entries(item.stats).reduce((sum,[key,value])=>sum+value*weights[key as keyof ItemStats],0);
@@ -159,6 +161,15 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
       if(level>=25 && family==="wp_pike"){
         const offense=Math.max(1,Math.round(item.stats.def!*.2));
         item.stats.def!-=offense;item.stats.atk=offense;
+      }
+      if(level>=25){
+        // Allocate part of the secondary stat budget to skill resources, at equal cost.
+        const donor=["wp_crook","wp_wrap","wp_twins","off_jar","acc_torc"].includes(family)?"stamina":
+          ["wp_wand","wp_shadow","off_bell","acc_ring_heal"].includes(family)?"magicDef":null;
+        if(donor && item.stats[donor]){
+          const moved=Math.floor(item.stats[donor]!*0.4);
+          item.stats[donor]!-=moved;item.stats.mana=moved*weights[donor]/weights.mana;
+        }
       }
       if(index && base.kind!=="material")item.name=base.name.replace(/(?:ลานฝึก|ฝึกหัด)$/,"")+(base.kind==="mainHand"?names:outfitNames)[index];
       if(base.kind==="material"){

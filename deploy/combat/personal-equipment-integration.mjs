@@ -30,7 +30,22 @@ async function join(extra){
   room.send("get_inventory",{});
   const bag=await until(()=>event("inventory_state",p=>p.catalogReady),"catalog and bag");
   const catalog=Object.assign({},...events.filter(e=>e.type==="item_catalog_page").map(e=>e.data.items));
-  return {room,me,bag,event,catalog};
+  return {room,me,bag,event,events,catalog};
+}
+async function setTestChest(client,slot) {
+  const expected="arm_medium_chest_1";
+  for(let attempt=0;attempt<4;attempt++){
+    await delay(850);
+    const start=client.events.length;
+    client.room.send("equip_gear",{position:"chest",slot,expected});
+    const reply=await until(()=>client.events.slice(start).find(e=>
+      e.type==="command_rejected" || e.type==="item_use_failed" ||
+      e.type==="inventory_state" && (e.data.equipment?.chest??null)===(slot===null?null:expected)
+    ),"server acknowledges chest change");
+    if(reply.type==="inventory_state")return;
+    assert.equal(reply.data.reason,"equipment_cooldown");
+  }
+  throw Error("chest equip cooldown did not clear");
 }
 // Seed only the offline test character created by this file, in its disposable account database.
 function prepareCapstone(prefix,recipe){
@@ -47,7 +62,7 @@ function prepareCapstone(prefix,recipe){
       const index=bag.slots.findIndex(s=>s?.itemId===itemId),free=index>=0?index:bag.slots.indexOf(null);
       assert(free>=0);bag.slots[free]={itemId,quantity:quantity+(bag.slots[free]?.quantity||0)};
     }
-    saved.inventory=bag;saved.level=100;saved.experience=0;
+    saved.inventory=bag;saved.level=100;saved.experience=0;saved.mana=20;
     db.prepare("UPDATE accounts SET inventory=? WHERE id=?").run(JSON.stringify(bag),id);
     db.prepare("UPDATE characters SET snapshot=? WHERE id=?").run(JSON.stringify(saved),id);
     db.exec("COMMIT");
@@ -59,6 +74,7 @@ try{
   const {room,bag,me,event}=active;
   assert(Object.keys(active.catalog).length>400);
   const endgame=active.catalog.wp_twins_10;assert.equal(endgame.level,100);
+  assert.equal(active.event("gear_guides",p=>p.path==="phutthaisawan")?.builds.length,2);
   assert.deepEqual(bag.cardDrill,{gold:20,itemId:"mat_metal_1",quantity:1});
   assert.deepEqual(bag.slots.filter(Boolean).map(s=>s.itemId),["health_potion","wp_twins_1"]);
   assert.equal(bag.slots[bag.equippedWeaponSlot].bound,true);
@@ -71,11 +87,11 @@ try{
   await until(()=>me().level>1 || event("experience_gained"),"reward committed");
   await delay(250);
   const before={def:me().def,atk:me().atk};
-  room.send("equip_gear",{position:"chest",slot,expected:"arm_medium_chest_1"});
+  await setTestChest(active,slot);
   await until(()=>me().def===before.def+4&&me().atk===before.atk+2,"armor changes real stats");
-  await delay(800);room.send("equip_gear",{position:"chest",slot:null,expected:"arm_medium_chest_1"});
+  await setTestChest(active,null);
   await until(()=>me().def===before.def&&me().atk===before.atk,"unequip restores both stats");
-  await delay(800);room.send("equip_gear",{position:"chest",slot,expected:"arm_medium_chest_1"});
+  await setTestChest(active,slot);
   await until(()=>me().def===before.def+4,"re-equip");
   await room.leave(); active=null;await delay(400);
   active=await join({});
@@ -88,11 +104,13 @@ try{
   await active.room.leave();active=null;await delay(400);
   prepareCapstone(prefix,endgame.recipe);active=await join({});
   assert.equal(active.me().level,100);
+  assert.equal(active.event("gear_guides",p=>p.level===100)?.builds[0].slots.find(s=>s.position==="mainHand").id,"wp_twins_10");
   const r=active.room;
   r.send("craft_weapon",{requestId:"capstone_craft_001",recipeId:"wp_twins_10"});
   const craftBag=await until(()=>active.event("inventory_state",v=>v.slots.some(s=>s?.itemId==="wp_twins_10")),"craft capstone");
   const at=craftBag.slots.findIndex(s=>s?.itemId==="wp_twins_10"), crafted=craftBag.slots[at];assert(crafted.forge.affix);
   r.send("equip_weapon",{slot:at});await until(()=>active.me().equippedWeaponId==="wp_twins_10","equip capstone");
+  assert.equal(active.me().maxMana,320);assert(active.me().mana<active.me().maxMana-50,"equipment cannot refill missing mana");
   await delay(400);r.send("forge_weapon",{requestId:"capstone_forge_001",slot:at,stamp:crafted.forge.instanceId+"."+crafted.forge.revision,action:"enhance"});
   await until(()=>active.event("forge_result",v=>v.forge?.rank===1),"upgrade capstone");
   await delay(400);r.send("card_socket",{requestId:"capstone_drill_001",target:at,gear:"wp_twins_10",expected:"sealed",action:"drill",card:null});
