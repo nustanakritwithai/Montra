@@ -18,6 +18,7 @@ import { emptyAllocations, PROGRESSION, validateAllocations, type Allocations } 
 import { EconomyStore } from "./EconomyStore.js";
 import { validateSwordTree, type SwordTree } from "./SkillCatalog.js";
 import { validateMuayBook, validateMuayCooldowns, type MuayBook, type MuayCooldowns } from "./MuayRules.js";
+import { MUAY_WRAP_ID } from "./MuayRules.js";
 import { validateOccultBook, type OccultBook } from "./OccultRules.js";
 import { validateBladeBook, type BladeBook } from "./BladeRules.js";
 import { validateSentinelBook, type SentinelBook } from "./SentinelRules.js";
@@ -27,7 +28,8 @@ import { parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 export const CHARACTER_SAVE_INTERVAL_MS = 15_000;
 export const CHARACTER_SLOTS = [1, 2, 3] as const;
 export type CharacterSlot = typeof CHARACTER_SLOTS[number];
-export type SlotSummary = { slot: CharacterSlot; occupied: boolean; name: string; level: number; unavailable?: boolean };
+export type SlotSummary = { slot: CharacterSlot; occupied: boolean; name: string; level: number; path?: string; unavailable?: boolean };
+export type CharacterSetup = { name?: unknown; build?: unknown };
 export type SpawnPoint = { x: number; z: number };
 export type CharacterSnapshot = {
   version: 1;
@@ -202,10 +204,16 @@ export class CharacterStore {
 
   async loadOrCreate(token: string, spawn: SpawnPoint, slot: CharacterSlot = 1): Promise<{ character: CharacterSnapshot; created: boolean }> {
     const id = characterIdFromToken(token, slot);
+    return this.loadOrCreateById(id, spawn);
+  }
+
+  /** IDs belong to an authenticated account; never accept an arbitrary client-supplied ID. */
+  async loadOrCreateById(id: string, spawn: SpawnPoint, setup?: CharacterSetup, requireBuild = false): Promise<{ character: CharacterSnapshot; created: boolean }> {
+    if (!/^[0-9a-f]{64}$/.test(id)) throw new Error("invalid_character_id");
     this.guardLegacyMode();
     if (this.economyEnabled) {
       const saved = this.economy.getCharacter(id);
-      if (saved !== null) return { character: validateSnapshot(saved, id), created: false };
+      if (saved !== null) return { character: await this.prepareAdmission(validateSnapshot(saved, id), false, setup, requireBuild), created: false };
     }
     let contents: string | undefined;
     try {
@@ -219,7 +227,7 @@ export class CharacterStore {
       const previous = validateSnapshot(JSON.parse(contents) as unknown, id);
       if (previous.inventory?.equippedWeaponSlot !== undefined) {
         if (this.economyEnabled) await this.save(previous);
-        return { character: previous, created: false };
+        return { character: await this.prepareAdmission(previous, false, setup, requireBuild), created: false };
       }
       // Legacy S2/0.2.5 without inventory gets 3 potions + 3 weapons once.
       // Existing V0.2.6 inventories get ONLY the three weapons: preserve
@@ -233,7 +241,7 @@ export class CharacterStore {
       };
       // Persist BEFORE admitting the character: on disk error, fail closed.
       await this.save(migrated);
-      return { character: migrated, created: false };
+      return { character: await this.prepareAdmission(migrated, false, setup, requireBuild), created: false };
     }
     const fresh: CharacterSnapshot = {
       version: 1, id, name: "นักเดินทาง", level: 1, experience: 0,
@@ -244,8 +252,46 @@ export class CharacterStore {
     };
     // A new character must already exist on disk before joining the world.
     // Never silently turn a read/corruption/disk error into a reset character.
-    if (this.economyEnabled) await this.save(fresh); else await this.atomicWrite(fresh);
-    return { character: fresh, created: true };
+    const prepared = await this.prepareAdmission(fresh, true, setup, requireBuild);
+    if (this.economyEnabled) await this.save(prepared); else await this.atomicWrite(prepared);
+    return { character: prepared, created: true };
+  }
+
+  private async prepareAdmission(character: CharacterSnapshot, fresh: boolean, setup: CharacterSetup | undefined, required: boolean): Promise<CharacterSnapshot> {
+    if (!required) return character;
+    // A legacy character may have chosen Muay while its bag was full. Retry
+    // the one-time starter grant on a later login without replacing any item.
+    if (character.build) {
+      if (character.build.path !== "muay_boran" || character.muayWrapGranted || !character.inventory) return character;
+      const slots = character.inventory.slots.slice(), existing = slots.findIndex(item => item?.itemId === MUAY_WRAP_ID);
+      const index = existing >= 0 ? existing : slots.findIndex(item => item === null);
+      if (index < 0) return character;
+      if (existing < 0) slots[index] = {itemId:MUAY_WRAP_ID, quantity:1};
+      const granted = {...character,inventory:{...character.inventory,slots},muayWrapGranted:true,updatedAt:new Date().toISOString()};
+      await this.save(granted);
+      return granted;
+    }
+    const build = parseBuild(setup?.build);
+    const name = fresh ? parseCharacterName({name:setup?.name}) : character.name;
+    if (!build || !name) throw new Error("character_setup_required");
+    let inventory = character.inventory!;
+    let muayWrapGranted = character.muayWrapGranted;
+    if (build.path === "muay_boran") {
+      const slots = inventory.slots.slice(), existing = slots.findIndex(item => item?.itemId === MUAY_WRAP_ID);
+      const index = existing >= 0 ? existing : slots.findIndex(item => item === null);
+      if (index >= 0) {
+        if (existing < 0) slots[index] = {itemId:MUAY_WRAP_ID, quantity:1};
+        inventory = {...inventory, slots, equippedWeaponSlot:fresh ? index : inventory.equippedWeaponSlot};
+        muayWrapGranted = true;
+      }
+    } else if (fresh) {
+      const target = build.path === "seer" || build.path === "mender" ? "spirit_staff" : "arcane_sword";
+      const index = inventory.slots.findIndex(item => item?.itemId === target);
+      if (index >= 0) inventory = {...inventory, equippedWeaponSlot:index};
+    }
+    const prepared = {...character, name, build, inventory, ...(muayWrapGranted ? {muayWrapGranted:true} : {}), updatedAt:new Date().toISOString()};
+    if (!fresh) await this.save(prepared);
+    return prepared;
   }
 
   /** Read-only slot previews. Never create/delete saves while listing. */
@@ -257,7 +303,7 @@ export class CharacterStore {
         const id = ids[index];
         const current = this.economyEnabled ? this.economy.getCharacter(id) : null;
         const record = validateSnapshot(current ?? JSON.parse(await readFile(this.location(id), "utf8")) as unknown, id);
-        return { slot, occupied: true, name: record.name, level: record.level };
+        return { slot, occupied: true, name: record.name, level: record.level, path: record.build?.path };
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
           return { slot, occupied: false, name: "", level: 0 };
@@ -266,6 +312,14 @@ export class CharacterStore {
         return { slot, occupied: true, name: "", level: 0, unavailable: true };
       }
     }));
+  }
+
+  /** Called only after the account mapping was retired while the account lease is held. */
+  async eraseCharacter(id:string):Promise<void> {
+    this.guardLegacyMode();
+    if(this.economyEnabled)this.economy.eraseCharacter(id);
+    try { await unlink(this.location(id)); }
+    catch(error) { if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error; }
   }
 
   async save(character: CharacterSnapshot): Promise<void> {

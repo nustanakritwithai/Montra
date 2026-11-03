@@ -459,6 +459,10 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .chat-form button { min-width:58px; min-height:46px; border:1px solid #d7ab6c; border-radius:10px; background:#7a4d27; }
 
 .warp-button { position:absolute; z-index:12; left:50%; bottom:calc(170px + env(safe-area-inset-bottom)); transform:translateX(-50%); min-height:48px; padding:10px 18px; border:1px solid #a8f4dc; border-radius:14px; color:#e9fff7; background:#164d45; box-shadow:0 0 18px #78eac677; font:inherit; font-weight:700; white-space:nowrap; }
+.climb-context { bottom:calc(230px + env(safe-area-inset-bottom)); }
+.flight-context { bottom:calc(230px + env(safe-area-inset-bottom)); }
+#mountButton i { font-style:normal; }
+#mountButton[hidden] { display:none; }
 .warp-loading { position:absolute; inset:0; z-index:30; display:grid; place-items:center; color:#effff9; background:#0a1a1be8; font-size:1.2rem; }
 .warp-button[hidden], .warp-loading[hidden] { display:none; }
 
@@ -919,6 +923,17 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   background: linear-gradient(180deg, #fffaf0 0%, #fbe9c4 100%); border: 2px solid #c8962e; border-radius: 14px;
   box-shadow: 0 0 0 2px #2a1606, 0 3px 0 2px #2a1606, 0 0 14px #ffc85a88; -webkit-font-smoothing: antialiased; }
 .ftxt.shout::after { bottom: -9px; margin-left: -7px; border-width: 7px; border-top-color: #c8962e; filter: drop-shadow(0 2px 0 #2a1606); }
+.account-entry { position:fixed; inset:0; z-index:10000; overflow-y:auto; display:grid; place-items:center; padding:24px 16px; background:radial-gradient(ellipse at top,#294b40,#0c191a 70%); color:#f4e9cc; }
+.account-entry[hidden] { display:none; }
+.account-card { width:min(100%,480px); padding:24px; border:1px solid #9d8a5d; border-radius:18px; background:#142522; box-shadow:0 16px 48px #0008; }
+.account-brand { color:#e9cc89; font-weight:800; letter-spacing:.16em; }
+.account-card h1 { font-size:1.5rem; margin:12px 0; }
+.account-note { color:#cfdbcb; line-height:1.5; }
+.account-error { color:#ffd1b9; min-height:1.3em; }
+.account-field { display:grid; gap:6px; margin:12px 0; }
+.account-card input,.account-card select,.account-card textarea { width:100%; box-sizing:border-box; padding:11px; border:1px solid #6b8976; border-radius:8px; background:#0c1918; color:#fff; font:inherit; }
+.account-card button { width:100%; margin:6px 0; min-height:44px; cursor:pointer; }
+.account-slot { display:block; padding:12px; text-align:left; border:1px solid #7a927c; border-radius:9px; background:#243d34; color:#fff; font:inherit; }
 /* Brightness picker in the help & settings drawer. */
 .light-choice { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 12px; }
 .light-choice button { padding: 9px 4px; border-radius: 10px; border: 1px solid #5a4a32; background: #1c1610; color: #e9dcc2; font: 700 13px/1.2 "Noto Sans Thai", system-ui, sans-serif; }

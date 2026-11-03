@@ -33,6 +33,7 @@ function Get-MontraFileHash([string]$Path) {
 $packageFile = Join-Path $base "package.json"
 $roomFile = Join-Path $base "src\rooms\MyRoom.ts"
 $schemaFile = Join-Path $base "src\rooms\schema\MyRoomState.ts"
+$appConfig = Join-Path $base "src\app.config.ts"
 
 # SQLite backups must be taken while MONTRA is stopped. This installer stages
 # code only; it never starts or stops an existing process on the user's behalf.
@@ -54,8 +55,18 @@ if (!((Get-Content $packageFile -Raw) -match '"colyseus"')) {
 if (!((Get-Content $roomFile -Raw).Contains("export class MyRoom"))) {
   throw "Cannot locate the existing MONTRA Room class."
 }
+if (!(Test-Path -LiteralPath $appConfig -PathType Leaf)) { throw "Cannot locate app.config.ts. No files were modified." }
+$appConfigText = Get-Content -LiteralPath $appConfig -Raw
+$hasAccountHook = $appConfigText.Contains('installAccountRoutes(app);')
+if (($hasAccountHook -and !$appConfigText.Contains('from "./rooms/AccountRoutes.js"')) -or
+    (!$hasAccountHook -and ([regex]::Matches($appConfigText, 'express\s*:\s*\(app\)\s*=>\s*\{').Count -ne 1))) {
+  throw "Cannot safely insert MONTRA account routes into app.config.ts. No files were modified."
+}
 
 $files = @(
+  @{ Name = "AccountStore.ts"; Target = "src\rooms\AccountStore.ts"; Check = "class AccountStore" },
+  @{ Name = "AccountService.ts"; Target = "src\rooms\AccountService.ts"; Check = "function accounts" },
+  @{ Name = "AccountRoutes.ts"; Target = "src\rooms\AccountRoutes.ts"; Check = "installAccountRoutes" },
   @{ Name = "MyRoom.ts"; Target = "src\rooms\MyRoom.ts"; Check = "equip_weapon" },
   @{ Name = "MyRoomState.ts"; Target = "src\rooms\schema\MyRoomState.ts"; Check = "weaponsAvailable" },
   @{ Name = "GameRules.ts"; Target = "src\rooms\GameRules.ts"; Check = "dashCooldownMs" },
@@ -128,6 +139,8 @@ foreach ($entry in $files) {
 }
 
 New-Item -ItemType Directory -Path $backup -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $backup "src") -Force | Out-Null
+Copy-Item -LiteralPath $appConfig -Destination (Join-Path $backup "src\app.config.ts") -Force
 foreach ($entry in $files) {
   $target = Join-Path $base $entry.Target
   if (Test-Path -LiteralPath $target) {
@@ -187,6 +200,11 @@ try {
     if (!(Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
     Copy-Item -LiteralPath (Join-Path $download $entry.Name) -Destination $dest -Force
   }
+  if (!$hasAccountHook) {
+    $updatedConfig = 'import { installAccountRoutes } from "./rooms/AccountRoutes.js";' + "`r`n" +
+      ([regex]::new('(express\s*:\s*\(app\)\s*=>\s*\{)').Replace($appConfigText, '$1' + "`r`n    installAccountRoutes(app);", 1))
+    Set-Content -LiteralPath $appConfig -Value $updatedConfig -Encoding UTF8
+  }
 
   Push-Location $base
   try {
@@ -215,12 +233,15 @@ try {
   Write-Host "MONTRA OCCULT BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA BLADE BUILD PASSED." -ForegroundColor Green
   Write-Host "MONTRA SENTINEL BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA ACCOUNT BUILD PASSED." -ForegroundColor Green
+  Write-Host "MONTRA MOUNT BUILD PASSED." -ForegroundColor Green
   Write-Host "Source revision: $Revision"
   Write-Host "Backup: $backup"
   Write-Host "Active Node server was NOT restarted. Restart MONTRA only when ready."
   Write-Host "All integration tests require an ISOLATED Node instance and TEMP character folder; never run them against LIVE."
 } catch {
   Write-Warning "MONTRA occult installation failed. Restoring MONTRA source files and build (character data untouched)."
+  Copy-Item -LiteralPath (Join-Path $backup "src\app.config.ts") -Destination $appConfig -Force
   foreach ($entry in $files) {
     $target = Join-Path $base $entry.Target
     $saved = Join-Path $backup $entry.Target

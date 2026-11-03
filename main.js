@@ -7,26 +7,6 @@
   const $ = (id) => document.getElementById(id);
   // Separate HTTPS origin for the Windows VPS. Caddy must proxy it to 127.0.0.1:4108.
   const MONTRA_VPS_URL = "https://montra.157-85-96-139.sslip.io";
-  // One high-entropy guest credential per HTTPS server. The secret stays in
-  // this browser's localStorage and is never broadcast to other players.
-  const TOKEN_PATTERN = /^mt1_[0-9a-f]{64}$/;
-  function tokenStorageKey(endpoint) {
-    return "montra_s2_guest_token:" + new URL(endpoint).host;
-  }
-  function getOrCreateGuestToken(endpoint) {
-    const key = tokenStorageKey(endpoint);
-    const existing = localStorage.getItem(key);
-    if (existing) {
-      if (!TOKEN_PATTERN.test(existing)) throw new Error("รหัสตัวละครในเครื่องไม่ถูกต้อง");
-      return existing;
-    }
-    if (!window.crypto?.getRandomValues) throw new Error("อุปกรณ์ไม่รองรับรหัสตัวละครปลอดภัย");
-    const bytes = new Uint8Array(32);
-    window.crypto.getRandomValues(bytes);
-    const token = "mt1_" + Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
-    localStorage.setItem(key, token);
-    return token;
-  }
   function currentCharacterEndpoint() {
     try { return localStorage.getItem("montra_endpoint") || MONTRA_VPS_URL; }
     catch (_) { return MONTRA_VPS_URL; }
@@ -3928,6 +3908,7 @@
   } else shamanBody = false;
   function shamanGear(a, nodes) {
     const shawl = a.local ? shawlHero : shawlFriend, pants = a.local ? pantsHero : pantsFriend, sash = a.local ? sashHero : sashFriend;
+    a.ritualGear = [];
     let parts = [];
     const at = (mesh, x, y, z, m) => { mesh.position.set(x, y, z); mesh.material = m; mesh.isPickable = false; parts.push(mesh); return mesh; };
     const box = (x, y, z, w, h, d, m) => at(B.MeshBuilder.CreateBox("gear", { width: w, height: h, depth: d }, scene), x, y, z, m);
@@ -3948,6 +3929,7 @@
       const mesh = mergedSegment(parts, nodes[bone], "gear " + bone);
       if (joint) mesh.position.set(-joint[0], -joint[1], -joint[2]);
       parts = [];
+      return mesh;
     };
     // Chest: yantra shawl over the shoulders, back cape, cross band, beads.
     loft([[1.35, .245, .145, -.012], [1.405, .21, .125, -.01], [1.445, .115, .085, -.006]], shawl, 14);
@@ -3957,7 +3939,7 @@
       for (let i = 0; i <= 8; i++) { const t = i / 4 - 1, y = 1.44 - (1 - t * t) * drop; ball(t * width, y, .075 + (1 - t * t) * .05, .03, beadMat, 4); }
       box(0, 1.44 - drop - .028, .128, .028, .04, .012, amuletGlow);
     }
-    onBone("Chest");
+    a.ritualGear.push(onBone("Chest"));
     // Head: red yantra headband, topknot and a tail of hair down the nape.
     cyl(0, 1.655, -.004, .028, .19, .19, shawl, 12).scaling.z = 1.12;
     ball(0, 1.74, -.04, .075, hairMat, 6);
@@ -3966,6 +3948,7 @@
     // Hips: trouser seat, cloth sash with a knot, rice pouch, spirit jar.
     cyl(0, .965, 0, .055, .305, .3, sash, 12).scaling.z = .72;
     box(-.06, .9, .108, .055, .12, .015, sash).rotation.z = -.15;
+    onBone("Hips");
     ball(-.178, .85, .035, .12, pouchCloth, 6).scaling.set(1, 1.15, .85);
     cyl(-.178, .925, .035, .035, .035, .055, pouchCloth, 6);
     cyl(-.178, .91, .035, .018, .07, .07, ropeRed, 8);
@@ -3978,7 +3961,8 @@
     box(jx, jy, jz, .31 * j, .01, .31 * j, ropeRed);
     for (const side of [-1, 1]) box(jx + side * .05, jy + .015, jz + .03, .03, .13, .006, talismanPaper).rotation.z = side * .25;
     for (const dx of [-.02, 0, .02]) cyl(jx + dx, jy + .095, jz + .035, .01, .024, .024, waxRed, 8).rotation.x = 1.1;
-    onBone("Hips");
+    a.ritualGear.push(onBone("Hips"));
+    setAvatarRitualGear(a, a.pathId);
     // Trousers are skinned (see skinnedTrousers), so no rigid leg pieces here.
   }
   // Fisherman trousers cut from the body mesh itself: every triangle between
@@ -4217,6 +4201,36 @@
     if (Number.isFinite(targetX) && Number.isFinite(targetZ)) faceAvatarToward(attackerId, targetX, targetZ);
     playAction(a, ranged ? "cast" : MELEE[a.weaponId] || "punch");
   }
+  // Lightweight in-engine horse: no additional model download or dependency.
+  const horseCoat = mat("horse coat", "#795039", "#130b08");
+  const horseDark = mat("horse mane and hooves", "#30211d", "#080505");
+  const horseLeather = mat("horse saddle leather", "#5b2f24", "#160b06");
+  function createHorse(a) {
+    const root=new B.TransformNode("horse-"+a.id,scene);root.parent=a.node;
+    const part=(name,shape,position,scale,material,parent=root)=>{
+      const mesh=shape==="box"?B.MeshBuilder.CreateBox(name,{size:1},scene):B.MeshBuilder.CreateSphere(name,{diameter:1,segments:8},scene);
+      mesh.parent=parent;mesh.position.set(...position);mesh.scaling.set(...scale);mesh.material=material;mesh.isPickable=false;return mesh;
+    };
+    part("horse body","sphere",[0,1.12,0],[.92,.78,1.8],horseCoat);
+    const neck=part("horse neck","box",[0,1.42,-.78],[.38,.83,.45],horseCoat);neck.rotation.x=-.4;
+    const head=part("horse head","sphere",[0,1.72,-1.08],[.43,.46,.68],horseCoat);head.rotation.x=-.18;
+    for(const side of [-1,1])part("horse eye","sphere",[side*.213,1.78,-1.18],[.065,.065,.065],horseDark);
+    part("horse muzzle","sphere",[0,1.56,-1.43],[.34,.3,.38],horseDark);
+    for(const side of [-1,1])part("horse ear","box",[side*.14,2.02,-1.08],[.09,.26,.1],horseDark);
+    part("horse mane","box",[0,1.76,-.62],[.16,.33,.56],horseDark).rotation.x=-.4;
+    part("horse saddle","box",[0,1.53,.05],[.64,.13,.67],horseLeather);
+    part("horse saddle front","box",[0,1.64,-.24],[.58,.12,.15],horseDark);
+    const tail=part("horse tail","box",[0,1.13,1.02],[.18,.65,.18],horseDark);tail.rotation.x=.35;
+    const legs=[];
+    for(const x of [-.3,.3])for(const z of [-.58,.58]){
+      const pivot=new B.TransformNode("horse leg pivot",scene);pivot.parent=root;pivot.position.set(x,.95,z);
+      part("horse leg","box",[0,-.39,0],[.18,.78,.2],horseCoat,pivot);
+      part("horse hoof","box",[0,-.82,-.04],[.22,.14,.27],horseDark,pivot);
+      legs.push(pivot);
+    }
+    root.setEnabled(false);
+    return {root,legs,tail};
+  }
   // Server state per avatar; a revival plays the get-up action.
   function noteAvatarState(a, p) {
     const alive = p?.alive !== false;
@@ -4224,6 +4238,9 @@
     a.serverAlive = alive;
     a.serverCombat = typeof p?.combatState === "string" ? p.combatState : "idle";
     a.serverFlying = p?.flying === true;
+    a.mounted = p?.mounted === true && alive;
+    if(a.mounted && !a.horse)a.horse=createHorse(a);
+    a.horse?.root.setEnabled(a.mounted);
   }
   const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
   // Additive effect materials shared by every avatar.
@@ -4743,13 +4760,22 @@
         }
       }
     } else if (act && now >= act.end) a.action = null;
+    if (a.mounted && !dead) {
+      // Seated pose is visual only; collision and position remain on the server.
+      set("Hips",0,0,0);off[0]=0;off[1]=-.03;off[2]=0;
+      set("Spine",.05,0,0);set("Spine1",.05,0,0);set("Chest",.03,0,0);
+      set("LeftUpLeg",-1.0,0,.34);set("RightUpLeg",-1.0,0,-.34);
+      set("LeftLeg",1.05,0,0);set("RightLeg",1.05,0,0);
+      set("LeftArm",-.55,0,-.65);set("RightArm",-.55,0,.65);
+      set("LeftForeArm",0,-.45,0);set("RightForeArm",0,.45,0);
+    }
     if (!dead) {
       // Gaze stays on the opponent: neck and head undo most of the torso twist and bend.
       const yaw = P.Hips[1] + P.Spine[1] + P.Spine1[1] + P.Chest[1], pitch = P.Spine[0] + P.Spine1[0] + P.Chest[0];
       add("Neck", -pitch * .2, -yaw * .45, -(P.Hips[2] + P.Spine[2] + P.Chest[2]) * .4);
       add("Head", -pitch * .25, -yaw * .4, 0);
     }
-    if (grounded) {
+    if (grounded && !a.mounted) {
       // Feet stay flat on the ground under the leg chain.
       for (const side of ["Left", "Right"]) {
         const upleg = P[side + "UpLeg"], leg = P[side + "Leg"];
@@ -4767,7 +4793,7 @@
     const o = cur.off || (cur.off = off.slice());
     for (let i = 0; i < 3; i++) o[i] += (off[i] - o[i]) * blend;
     n.Hips.position.set(a.skin.rest.hipsX + o[0], a.skin.rest.hipsY + o[1], a.skin.rest.hipsZ + o[2]);
-    if (a.skin.holder) a.skin.holder.rotation.y = Math.PI + spin; // whole-body turns (sweep, dance)
+    if (a.skin.holder) a.skin.holder.rotation.y = Math.PI + (a.mounted ? 0 : spin); // whole-body turns (sweep, dance)
     return flare;
   }
   // Procedural gait: legs and arms counter-swing with speed, the body bobs and
@@ -4787,6 +4813,11 @@
     const m = a.moveBlend, flying = a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain);
     a.phase = (a.phase + dt * 9.5 * m) % (Math.PI * 2);
     const s = Math.sin(a.phase), c = Math.cos(a.phase), t = now / 1000;
+    if(a.skin?.holder)a.skin.holder.position.y=a.mounted ? .35 + Math.abs(c)*.025*m : 0;
+    if(a.horse && a.mounted){
+      a.horse.legs.forEach((leg,i)=>{leg.rotation.x=Math.sin(a.phase+(i===0||i===3?0:Math.PI))*.48*m;});
+      a.horse.tail.rotation.x=.35+Math.sin(t*2)*.12;
+    }
     // Footstep on each foot plant (the stride sine crossing zero), by surface.
     if (m > .35 && !flying && !a.serverFlying && a.stepSign && Math.sign(s) && Math.sign(s) !== a.stepSign)
       SFX(stepSound(a), { x: a.x, z: a.z, intensity: .55 + .45 * Math.min(1, speed / 6) });
@@ -4800,7 +4831,7 @@
       r.arms[i].rotation.z = (i ? 1 : -1) * (flying ? .55 : .1 + Math.sin(t * 1.6) * .015 * (1 - m));
       r.elbows[i].rotation.x = .22 + m * .25;
     }
-    r.body.position.y = Math.abs(c) * .05 * m + Math.sin(t * 2.1) * .012 * (1 - m);
+    r.body.position.y = (a.mounted ? .35 : 0) + Math.abs(c) * .05 * m + Math.sin(t * 2.1) * .012 * (1 - m);
     // Familiars spin faster, widen and swell while being summoned.
     a.familiarSpin = (a.familiarSpin || 0) + dt * (1 + flare * 4);
     for (const f of r.familiars) {
@@ -4821,8 +4852,14 @@
     }
   }
   const avatars = new Map();
+  function setAvatarRitualGear(avatar, pathId) {
+    avatar.pathId = pathId || "";
+    const visible = pathId === "seer" || pathId === "mender";
+    for (const part of avatar.ritualGear || []) part?.setEnabled(visible);
+  }
   function setAvatarWeapon(avatar, weaponId, pathId = avatar?.local ? ownServerCharacter()?.pathId : "") {
     if (!avatar?.weaponModels) return;
+    setAvatarRitualGear(avatar, pathId);
     const modelId = pathId === "phutthaisawan" && weaponId === "arcane_sword" ? "thai_dual" : weaponId === "shrine_glaive" ? "arcane_sword" : weaponId;
     const safeId = modelId === "thai_dual" || modelId === "muay_wraps" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
     if (avatar.weaponId === safeId) return;
@@ -6982,6 +7019,7 @@
     setModeBadge(mode === "live");
   }
   function showDemo() {
+    $("mountButton").hidden=true;
     territoryState=null;$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null;
@@ -7174,7 +7212,8 @@
       : Boolean(demoFlightTarget);
     const label = button.querySelector("span:last-child");
     const definition=worldDefinitions?.[activeMapId];
-    const forbidden=mode==="live" && (definition?.region?.noFlight===true || definition?.strategic?.kind==="territory");
+    const forbidden=!active && mode==="live" && (definition?.region?.noFlight===true || definition?.strategic?.kind==="territory");
+    button.hidden=mode!=="live" || !active;
     button.disabled=forbidden;
     if (label) label.textContent = forbidden ? "เขตห้ามบิน" : changing ? "กำลังบิน" : active ? "ลง" : "บิน";
     button.classList.toggle("fly-active", Boolean(active));
@@ -7193,6 +7232,7 @@
         toast("ตัวละครยังไม่พร้อมบิน");
         return;
       }
+      if (!me.flying && me.pathId!=="seer" && me.pathId!=="mender") {toast("วิชาเหินเวหาเป็นของจอมอาคม");return;}
       if (["ascending", "descending"].includes(me.combatState)) {
         toast("กำลังเปลี่ยนระดับความสูง");
         return;
@@ -7236,13 +7276,25 @@
     const button=$("climb");
     if (!button) return;
     const player=ownServerCharacter();
-    const terrain=worldDefinitions?.[activeMapId]?.terrain;
-    const slopeOnly=terrain && activeMapId!=="ritual_village" && !worldDefinitions[activeMapId].strategic?.rampart;
-    button.disabled=Boolean(slopeOnly);
+    if(mode!=="live" || !player?.alive || player.flying || player.mounted || player.combatState==="climbing") {button.hidden=true;return;}
     const onWall=Math.abs(playerLayer(player)-activeFort.height)<.15;
+    const rampart=worldDefinitions?.[activeMapId]?.strategic?.rampart;
+    const points=rampart?.stairs?.map(s=>onWall?s.top:s.foot) || (activeMapId==="ritual_village" ? [onWall?{x:activeFort.ladderTopX,z:activeFort.ladderTopZ}:{x:activeFort.ladderFootX,z:activeFort.ladderFootZ}] : []);
+    const near=points.some(p=>Math.hypot(Number(player.x)-p.x,Number(player.z)-p.z)<=(onWall?1.2:1.55));
+    button.hidden=!near;
+    button.disabled=false;
     const label=button.querySelector("span:last-child");
-    if(label)label.textContent=slopeOnly?"เดินทางลาด":onWall?"ลงกำแพง":worldDefinitions?.[activeMapId]?.strategic?.rampart?"ขึ้นกำแพง":"ปีน";
+    if(label)label.textContent=onWall?"ลงกำแพง":rampart?"ขึ้นกำแพง":"ปีน";
     button.classList.toggle("climb-active", Boolean(player?.combatState==="climbing"));
+  }
+  function syncMountButton() {
+    const button=$("mountButton"),me=ownServerCharacter();
+    if(!button)return;
+    button.hidden=!(mode==="live" && room?.state?.mountAvailable===true && me?.persistent);
+    button.disabled=!me?.alive;
+    button.setAttribute("aria-pressed",String(Boolean(me?.mounted)));
+    button.querySelector("i").textContent=me?.mounted ? "ลงม้า" : "เรียกม้า";
+    button.title=me?.mounted ? "ลงจากม้าเพื่อใช้วิชาต่อสู้" : "เรียกม้าสำหรับเดินทาง";
   }
   function requestClimb(stairId) {
     if (!hasLiveElevation()) {
@@ -7663,6 +7715,7 @@
     syncForestMonsters(state);
     syncClimbButton();
     updateFlightButton();
+    syncMountButton();
     syncPossessionButton();
     syncClassSkill(mine);
     syncTalismanButton(mine);
@@ -7695,7 +7748,7 @@
   function clearSyncPoll() { if (syncPoll) clearInterval(syncPoll); syncPoll = null; }
   function stopOnline(reason) {
     clearSyncPoll();
-    if (mode === "live") { showDemo(); toast(reason || "การเชื่อมต่อสิ้นสุด กลับสู่โหมดทดลอง"); }
+    if (mode === "live") { showDemo(); window.MontraEntry?.open(); window.MontraEntry?.failure(reason || "การเชื่อมต่อสิ้นสุด กรุณาเข้าเกมอีกครั้ง"); }
   }
   let connectionPending = false;
   let refreshCharacterSlotCards = null;
@@ -7703,6 +7756,7 @@
     for (let attempt = 0; attempt < 75; attempt++) {
       const me = joined.state?.players?.get?.(joined.sessionId);
       if (me) {
+        if (!me.persistent || !me.pathId) throw new Error("เซิร์ฟเวอร์ยังไม่รองรับบัญชีและอาชีพถาวร กรุณาติดต่อผู้ดูแล");
         if (desiredSlot !== 1 &&
             (!me.persistent || Number(me.characterSlot) !== desiredSlot)) {
           throw new Error("VPS ยังไม่รองรับ 3 ช่องเซฟ · ต้องติดตั้งระบบใหม่ก่อนเข้าเซฟ " + desiredSlot);
@@ -7716,7 +7770,7 @@
     }
     throw new Error("ไม่ได้รับข้อมูลตัวละครจากเซิร์ฟเวอร์");
   }
-  async function connectOnline(endpoint, requestedSlot = getPreferredSlot(endpoint), transfer=null) {
+  async function connectOnline(endpoint, requestedSlot = getPreferredSlot(endpoint), transfer=null, characterSetup=null) {
     if (connectionPending) return;
     if (![1,2,3].includes(requestedSlot)) {
       toast("เลือกช่องเซฟ 1, 2 หรือ 3 เท่านั้น");
@@ -7725,6 +7779,7 @@
     if (!transfer && room && mode === "live" && activeCharacterSlot === requestedSlot &&
         currentCharacterEndpoint() === endpoint) {
       closeDrawer();
+      window.MontraEntry?.success();
       toast("กำลังเล่นช่องเซฟ " + requestedSlot + " อยู่แล้ว");
       return;
     }
@@ -7751,8 +7806,9 @@
         await new Promise(resolve => setTimeout(resolve, 350));
       }
       const client = new window.Colyseus.Client(endpoint);
-      const guestToken = getOrCreateGuestToken(endpoint);
-      const opts={guestToken,characterSlot:requestedSlot,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1};
+      const accountSession = window.MontraEntry?.session();
+      if (!accountSession) throw new Error("กรุณาเข้าสู่ระบบก่อน");
+      const opts={accountSession,characterSlot:requestedSlot,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1};
       let transferFailed=false;
       if(transfer?.roomId){
         try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
@@ -8017,6 +8073,11 @@
           pendingClimb=null;
         }
         syncClimbButton();
+      });
+      joined.onMessage("mount_changed", info => {
+        if(room!==joined || info?.playerId!==localId)return;
+        toast(info.mounted ? "ขึ้นม้าแล้ว · ลงจากม้าก่อนต่อสู้" : info.reason==="hit" ? "ถูกโจมตี · ลงจากม้าแล้ว" : info.reason==="warp" ? "ลงจากม้าก่อนเดินทาง" : "ลงจากม้าแล้ว");
+        syncMountButton();
       });
       joined.onMessage("climb_finished", notice => {
         if(room!==joined)return;
@@ -8509,7 +8570,12 @@
         else if (info?.reason === "dash_in_progress" || info?.reason === "dashing") toast("กำลังพุ่งอยู่");
         else if (info?.reason === "dash_rate_limited") toast("สั่งพุ่งถี่เกินไป");
         else if (info?.reason === "invalid_dash") toast("ทิศทางการพุ่งไม่ถูกต้อง");
+        else if (info?.reason === "dismount_required") toast("ลงจากม้าก่อนใช้วิชาหรือต่อสู้");
+        else if (info?.reason === "mount_in_combat") toast("รอให้พ้นการต่อสู้ก่อนเรียกม้า");
+        else if (info?.reason === "mount_unavailable") toast("เรียกม้าได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");
+        else if (info?.reason === "mount_cooldown") toast("รอสักครู่ก่อนเรียกม้าอีกครั้ง");
         else if (info?.reason === "invalid_flight") toast("คำสั่งบินไม่ถูกต้อง");
+        else if (info?.reason === "flight_class_required") toast("วิชาเหินเวหาเป็นของจอมอาคม");
         else if (info?.reason === "flight_in_progress") toast("กำลังขึ้นหรือลง · รอให้ถึงระดับก่อน");
         else if (info?.reason === "flight_rate_limited") toast("กดบินถี่เกินไป");
         else if (info?.reason === "flight_unavailable") toast("ตอนนี้ยังบินขึ้นไม่ได้");
@@ -8566,7 +8632,7 @@
       // Some SDK/room combinations expose the collection only after the first full state sync.
       clearSyncPoll(); syncPoll = setInterval(() => { if (room === joined) syncState(joined.state); },350);
       joined.onLeave(() => {
-        if (room === joined) stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กลับสู่โหมดทดลอง");
+        if (room === joined) stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กรุณาเข้าเกมอีกครั้ง");
       });
       joined.onError((code,message) => { console.error("MONTRA room error",code,message); toast("เซิร์ฟเวอร์แจ้งข้อผิดพลาด " + code); });
       try {
@@ -8577,6 +8643,7 @@
       try { joined.send("get_character_slots", {}); } catch (_) { /* old S2 server */ }
       try { joined.send("get_inventory", {}); } catch (_) { /* older VPS */ }
       closeDrawer();
+      window.MontraEntry?.success();
       const active = joined.state?.players?.get?.(joined.sessionId);
       if(transferFailed)toast("เข้าห้องศึกไม่สำเร็จ · กลับมายังห้องโลกแล้ว");
       else toast(active?.persistent
@@ -8588,7 +8655,8 @@
         try { await joined.leave(); } catch (_) { /* release rejected slot */ }
       }
       console.error("MONTRA connection failed",err);
-      ui.onlineCount.textContent = "การเชื่อมต่อไม่สำเร็จ · ยังเป็นโหมดทดลอง";
+      ui.onlineCount.textContent = "การเชื่อมต่อไม่สำเร็จ";
+      window.MontraEntry?.failure("เชื่อมต่อไม่สำเร็จ: " + (err.message || String(err)).slice(0,105));
       toast("เชื่อมต่อไม่สำเร็จ: " + (err.message || String(err)).slice(0,105));
       if (connectButton) connectButton.disabled = false;
     } finally {
@@ -9550,68 +9618,7 @@
     drawMap($("bigMap").getContext("2d"),420,320,true);
   }
 
-  function openOnline() {
-    let endpoint = currentCharacterEndpoint();
-    let pendingSlot = activeCharacterSlot || getPreferredSlot(endpoint);
-    const slotButtons = [1,2,3].map(slot =>
-      '<button type="button" class="slot-choice" id="slotChoice' + slot +
-      '" aria-pressed="false"><strong>ช่องเซฟ ' + slot +
-      '</strong><span id="slotPreview' + slot + '">ยังไม่มีข้อมูล</span></button>'
-    ).join("");
-    openDrawer("online", "เลือกตัวละคร MONTRA", 
-      '<p class="note">1 Guest ID มี 3 เซฟอิสระ · เซฟ 1 เดิมไม่ถูกลบ · เลือกเซฟก่อนเข้าเล่น</p>' +
-      '<div class="slot-choices" role="group" aria-label="เลือกช่องบันทึกตัวละคร">' +
-      slotButtons + '</div>' +
-      '<p id="slotStatusHint" class="note">รายชื่อเซฟมาจาก VPS หลังเข้าเล่น; รายชื่อในเครื่องอาจยังไม่อัปเดต</p>' +
-      '<label class="field" for="serverUrl">MONTRA Server HTTPS</label>' +
-      '<input id="serverUrl" type="url" spellcheck="false" autocomplete="url"/>' +
-      '<button class="primary" id="connectOnline" type="button">เข้าเล่นช่องเซฟที่เลือก</button>' +
-      '<button class="secondary" id="returnDemo" type="button">กลับสู่โหมดทดลอง</button>' +
-      '<p class="note">ใช้รหัสกู้คืน Guest เดิมเพื่อเข้าถึงทั้ง 3 ช่องจากอุปกรณ์อื่น; สามารถเปลี่ยนช่องได้จากหน้าโปรไฟล์</p>');
-    $("serverUrl").value = endpoint;
-    const drawSlots = () => {
-      const summaries = readSlotPreviews(endpoint);
-      for (const slot of [1,2,3]) {
-        const preview = summaries.find(item => item?.slot === slot);
-        const label = !preview ? "ยังไม่มีข้อมูลจาก VPS" :
-          preview.unavailable ? "เซฟอ่านไม่ได้ · ตรวจสอบ VPS" :
-          !preview.occupied ? "ช่องใหม่ (ยังไม่มีตัวละคร)" :
-          preview.name + " · LV. " + preview.level;
-        const button = $("slotChoice" + slot);
-        const summary = $("slotPreview" + slot);
-        if (!button || !summary) continue;
-        button.classList.toggle("selected", slot === pendingSlot);
-        button.classList.toggle("playing", mode === "live" && slot === activeCharacterSlot);
-        button.setAttribute("aria-pressed", String(slot === pendingSlot));
-        summary.textContent = label + (mode === "live" && slot === activeCharacterSlot ? " · กำลังเล่น" : "");
-      }
-    };
-    refreshCharacterSlotCards = drawSlots;
-    for (const slot of [1,2,3]) {
-      $("slotChoice" + slot).onclick = () => {
-        pendingSlot = slot;
-        drawSlots();
-      };
-    }
-    $("serverUrl").addEventListener("change", () => {
-      const typed = $("serverUrl").value.trim().replace(/\/$/, "");
-      if (typed && typed !== endpoint) {
-        endpoint = typed;
-        pendingSlot = getPreferredSlot(endpoint);
-        drawSlots();
-      }
-    });
-    $("connectOnline").onclick = () => {
-      endpoint = $("serverUrl").value.trim().replace(/\/$/, "");
-      void connectOnline(endpoint, pendingSlot);
-    };
-    $("returnDemo").onclick = () => {
-      showDemo();
-      closeDrawer();
-      toast("กลับสู่โหมดทดลองแล้ว");
-    };
-    drawSlots();
-  }
+  function openOnline() { window.MontraEntry?.open(); }
   const progressionStats = [
     ["hp","HP สูงสุด","maxHp"],["atk","โจมตีกายภาพ","atk"],["def","ป้องกันกายภาพ","def"],
     ["magicAtk","โจมตีเวท","magicAtk"],["magicDef","ป้องกันเวท","magicDef"],["stamina","กำลังสูงสุด","maxStamina"]
@@ -9871,7 +9878,9 @@
     const summary=Object.entries(labels).map(([category,label])=>clean(label)+" "+(progress[category] || 0)).join(" · ");
     container.innerHTML='<p>สาย'+(path==="seer"?"ผู้ร่ายเวท":"ผู้เยียวยา")+' · แต้มว่าง '+points+' · ผลฝึกรวม '+training+'</p>'+(summary?'<p>ผลฝึกแยกหมวด: '+summary+'</p><p class="note">ผีจากหม้อนับครั้งแรกที่โจมตีมอนสเตอร์ต่อการเรียกหนึ่งครั้ง ส่วนผีที่ได้รับคำสั่งนับเมื่อโจมตีสำเร็จ</p>':'')+
       (path==="mender" && Number.isFinite(data.menderRicePve)?'<p class="note">ข้าวสารพื้นฐานโจมตีมอนสเตอร์ '+Math.round(data.menderRicePve*100)+'% · PvP ใช้ค่าเดิม</p>':'')+
+      '<article class="sword-node learned"><div><strong>เหินเวหา</strong><small>วิชาพื้นฐานจอมอาคม · ขึ้นบินและลงจอดในพื้นที่ที่อนุญาต</small></div><button type="button" id="occultFlight">ใช้วิชา</button></article>'+
       '<p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · คืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetOccultBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
+    $("occultFlight").onclick=()=>{closeDrawer();toggleFlight();};
     container.querySelectorAll("[data-occult-learn]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"learn",skillId:button.dataset.occultLearn}));
     container.querySelectorAll("[data-occult-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("occult_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.occultEquip});select.blur();});
     $("resetOccultBook").onclick=()=>{if(window.confirm("คืนแต้มสายนี้? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("occult_book",{action:"reset"});};
@@ -10161,6 +10170,7 @@
     for (const [key, path] of Object.entries(catalog.paths)) $("buildPath").add(new Option(path.role + " · " + path.name, key));
     for (const [key, origin] of Object.entries(catalog.ancestries)) $("buildAncestry").add(new Option(origin.name + " · " + origin.trait, key));
     if (player.pathId) $("buildPath").value = player.pathId;
+    $("buildPath").disabled = Boolean(player.pathId); // each character keeps its chosen class
     if (player.ancestryId) $("buildAncestry").value = player.ancestryId;
     const talentSelect = $("buildTalent");
     function loadTalents() {
@@ -10326,11 +10336,7 @@
         '<input id="renameCharacter" maxlength="40" autocomplete="off" spellcheck="false"/>' +
         '<button class="primary" id="renameCharacterButton" type="button">บันทึกชื่อบนเซิร์ฟเวอร์</button>' +
         '<p class="note">บันทึกอัตโนมัติประมาณทุก 15 วินาทีและตอนออกเกม ปลอดภัยสุดเมื่อออกเกมตามปกติ</p>' +
-      '<button class="secondary" id="copyCharacterKey" type="button">คัดลอกรหัสกู้คืนตัวละคร</button>' +
-      '<p class="note">รหัสกู้คืนเทียบเท่ารหัสผ่าน ห้ามแชร์ให้ผู้อื่น หากล้างข้อมูลเบราว์เซอร์โดยไม่เก็บรหัสไว้จะกู้ตัวละครไม่ได้</p>' +
-      '<label class="field" for="restoreCharacterKey">มีรหัสกู้คืนจากเครื่องเดิม?</label>' +
-      '<input id="restoreCharacterKey" type="password" autocomplete="off" spellcheck="false" placeholder="วางรหัสกู้คืนของคุณ"/>' +
-      '<button class="secondary" id="restoreCharacterButton" type="button">ใช้รหัสกู้คืนบนอุปกรณ์นี้</button>' +
+      '<p class="note">ใช้บัญชี MONTRA เพื่อเข้าเล่น และเก็บรหัสกู้บัญชีในที่ปลอดภัย</p>' +
       '</section>');
     for (const tab of ui.drawerBody.querySelectorAll("[data-cp]")) tab.onclick = () => {
       for (const t of ui.drawerBody.querySelectorAll("[data-cp]")) t.classList.toggle("on", t === tab);
@@ -10349,7 +10355,6 @@
     $("renameCharacter").value = durable ? String(me.characterName) : "";
     $("renameCharacter").disabled = !durable;
     $("renameCharacterButton").disabled = !durable;
-    $("copyCharacterKey").disabled = !durable;
     $("renameCharacterButton").onclick = () => {
       const name = $("renameCharacter").value.normalize("NFC").trim();
       if (!/^[\p{L}\p{N}][\p{L}\p{M}\p{N} ._-]*$/u.test(name) ||
@@ -10359,38 +10364,6 @@
       }
       room?.send("rename_character", { name });
       toast("ส่งคำขอเปลี่ยนชื่อแล้ว");
-    };
-    $("copyCharacterKey").onclick = async () => {
-      try {
-        const key = localStorage.getItem(tokenStorageKey(currentCharacterEndpoint()));
-        if (!key || !TOKEN_PATTERN.test(key)) throw new Error("ไม่พบรหัสในเครื่อง");
-        if (!navigator.clipboard?.writeText) throw new Error("เบราว์เซอร์ไม่รองรับการคัดลอก");
-        await navigator.clipboard.writeText(key);
-        toast("คัดลอกรหัสกู้คืนแล้ว · โปรดเก็บเป็นความลับ");
-      } catch (error) { toast("คัดลอกรหัสไม่ได้: " + (error.message || error)); }
-    };
-    $("restoreCharacterButton").onclick = () => {
-      const incoming = $("restoreCharacterKey").value.trim();
-      if (!TOKEN_PATTERN.test(incoming)) {
-        toast("รหัสกู้คืนไม่ถูกต้อง โปรดตรวจสอบอีกครั้ง");
-        return;
-      }
-      try {
-        const endpoint = currentCharacterEndpoint();
-        const key = tokenStorageKey(endpoint);
-        if (localStorage.getItem(key) === incoming) {
-          toast("กำลังใช้งานตัวละครนี้อยู่แล้ว");
-          return;
-        }
-        localStorage.setItem(key, incoming);
-        localStorage.removeItem(slotPreviewKey(endpoint));
-        localStorage.setItem(preferredSlotKey(endpoint), "1");
-        // The next join must use the recovered identity; never attach
-        // a different account to an already-running Colyseus session.
-        window.location.reload();
-      } catch (error) {
-        toast("บันทึกรหัสกู้คืนไม่สำเร็จ: " + (error.message || error));
-      }
     };
   }
   // Taps on any game button give a soft woodblock click.
@@ -10420,7 +10393,7 @@
     });
   }
   function openHelp() {
-    openDrawer("help","วิธีเล่นและตั้งค่า",lightSettingsHtml()+soundSettingsHtml()+`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>กด ปีน ที่บันไดเพื่อขึ้นเดินบนยอดกำแพงระดับ 4 เมตร หรือกด บิน เพื่อขึ้นอากาศระดับ 6 เมตร แล้วแตะจุดหมายเพื่อเคลื่อนที่ได้ · กด ลง เพื่อกลับสู่พื้นหรือยอดกำแพงตามตำแหน่ง · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>วิชาพื้นฐานจอมอาคม</h3><p>เลือกจอมอาคมสายผู้ร่ายเวทหรือผู้เยียวยาที่ลานพักก่อนใช้วิชาต่อไปนี้</p><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดทดลอง</h3><p>ตัวละครสามารถเดินสำรวจและหมุนกล้องได้ วิชาอาคมต้องใช้ตัวละครจอมอาคมใน LIVE</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เลือกเซฟ 1–3 ก่อนเข้า LIVE และเปลี่ยนเซฟได้ในโปรไฟล์ · 1 Guest ID ใช้ได้ทีละตัวละคร · เซฟ 1 คือเซฟเดิม ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>บัญชีที่มีรหัสผ่าน ชุดเกราะ อาวุธดรอปจากมอนสเตอร์</p>`);
+    openDrawer("help","วิธีเล่นและตั้งค่า",lightSettingsHtml()+soundSettingsHtml()+`<h3>การเคลื่อนที่</h3><p>แตะพื้นเพื่อเดิน · ลากหนึ่งนิ้วหมุนกล้อง · หนีบสองนิ้วเพื่อซูม · ปัดเร็ว ๆ บริเวณเหนือแถบสกิลเพื่อพุ่งตามทิศ (ไม่มีปุ่มพุ่ง)</p><h3>เดินบนกำแพงและบิน</h3><p>เดินเข้าจุดบันไดเพื่อแสดงปุ่มปีนและขึ้นกำแพง · จอมอาคมใช้วิชาเหินเวหาในตำราอาคมเพื่อขึ้นบิน แล้วใช้ปุ่มลงจอดที่ปรากฏขณะบิน · หากตำแหน่งอยู่ในเนื้อกำแพงต้องบินออกก่อนลง · ระบบบิน LIVE ต้องติดตั้ง VPS รุ่น 0.2.5</p><h3>วิชาพื้นฐานจอมอาคม</h3><p>ตัวละครสายผู้ร่ายเวทหรือผู้เยียวยาใช้วิชาต่อไปนี้ได้</p><p>กด ซัดข้าวสาร แล้วแตะเป้าหมายเพื่อโจมตีด้วยข้าวสารปลุกเสก กดซ้ำเพื่อซัดเป้าเดิม หรือกด โจมตี เพื่อกลับไปประชิด · กด เสกผีจากหม้อ เพื่อให้วิญญาณช่วยสู้ ผีจะหามอนสเตอร์ในระยะ 8 เมตรรอบผู้เสกเอง กด เก็บผี เพื่อเรียกกลับ · กด แปะยันต์ แล้วแตะมอนสเตอร์ในระยะ 2.8 เมตรเพื่อทำดาเมจเวททันที ยันต์มีคูลดาวน์แยก 4 วินาที</p><h3>เข้าสิงออนไลน์</h3><p>เรียกวิญญาณก่อน จากนั้นกด เข้าสิง เพื่อเพิ่มโจมตีและป้องกันทั้งกายภาพและเวท 20% นาน 60 วินาที กดซ้ำเพื่อยกเลิก หลังบัพหมดรอ 30 วินาทีก่อนเข้าสิงอีกครั้ง</p><h3>โหมดออนไลน์</h3><p>เซิร์ฟเวอร์เริ่มต้นคือ <code>${MONTRA_VPS_URL}</code> เข้าสู่ระบบแล้วเลือกเซฟ 1–3 และเปลี่ยนเซฟได้ในโปรไฟล์ · บัญชีหนึ่งใช้ได้ทีละตัวละคร ผู้เล่นในห้อง <code>my_room</code> จะเห็นตำแหน่งกัน การเดินคำนวณโดยเซิร์ฟเวอร์ กระเป๋าไอเท็มถาวรมี 12 ช่อง พร้อมยาเลือดและชุดอาวุธ 3 ชิ้น ได้แก่ มีดหมอ กระบี่อาคม และคทาวิญญาณ · เลือกสวมใส่ได้ทีละ 1 ชิ้น โบนัสโจมตีคำนวณบน VPS</p><h3>ปาร์ตี้</h3><p>กด ปาร์ตี้ เพื่อชวนผู้เล่นในห้องเดียวกันได้สูงสุด 4 คน สมาชิกที่มีชีวิตและอยู่ใกล้มอนสเตอร์ในแผนที่เดียวกันจะแบ่ง EXP เท่ากัน · เพื่อนร่วมปาร์ตี้โจมตีกันไม่ได้</p><h3>ตลาดและการค้า</h3><p>กด ตลาด เพื่อดูเงิน ฝากขาย ซื้อ หรือยกเลิกรายการ · เทรดกับผู้เล่นในห้องเดียวกันที่อยู่ใกล้ตัว และตรวจข้อเสนอให้ครบก่อนทั้งสองฝ่ายยืนยัน</p><h3>ยังไม่รองรับ</h3><p>ชุดเกราะและอาวุธดรอปจากมอนสเตอร์</p>`);
     bindSoundSettings(ui.drawerBody); bindLightSettings(ui.drawerBody);
   }
   function currentBagSlots() {
@@ -10989,6 +10962,7 @@
   $("occultBookButton").onclick=openOccultBook;
   $("bladeBookButton").onclick=openBladeBook;
   $("sentinelBookButton").onclick=openSentinelBook;
+  $("mountButton").onclick=()=>{if(mode==="live" && room?.state?.mountAvailable===true)room.send("toggle_mount",{});};
   // Cooldown labels must advance even in a quiet room with no schema patches.
   setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());syncSentinelUI(ownServerCharacter());}},1000);
   $("helpButton").onclick=openHelp;
@@ -11309,13 +11283,10 @@
   updateStatus();
   updateFlightButton();
   ui.loading.hidden=true;
-  toast("เริ่มต้นในโหมด DEMO · แตะพื้นเพื่อเดิน");
-  // Choose one of three character saves BEFORE joining an online room.
-  // Offline DEMO remains usable if the player closes the selector.
-  if (location.protocol === "https:" && location.hostname === "nustanakritwithai.github.io") {
-    setTimeout(() => {
-      if (mode === "demo" && !room && !drawerActive) openOnline();
-    }, 900);
-  }
+  window.MontraEntry?.start((endpoint,slot,setup) => connectOnline(endpoint,slot,null,setup), async () => {
+    const old = room; room = null; clearSyncPoll();
+    if (old) { try { await old.leave(); } catch (_) {} }
+    showDemo();
+  });
 })();
 

@@ -5,6 +5,7 @@ on:
     paths:
       - 'deploy/combat/**'
       - 'main.js'
+      - 'account-entry.js'
       - 'index.html'
       - '.github/workflows/verify-combat.yml'
   workflow_dispatch:
@@ -15,6 +16,8 @@ permissions:
 jobs:
   typecheck:
     runs-on: ubuntu-latest
+    env:
+      MONTRA_ACCOUNTS_REQUIRED: '0'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,6 +29,10 @@ jobs:
         run: |
           mkdir -p combat-verify/src/rooms/schema
           cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
+          cp deploy/combat/AccountStore.ts deploy/combat/AccountService.ts deploy/combat/AccountRoutes.ts deploy/combat/account-store.test.ts combat-verify/src/rooms/
+          cp deploy/combat/account-integration.mjs combat-verify/account-integration.mjs
+          cp deploy/combat/guest-delete-integration.mjs combat-verify/guest-delete-integration.mjs
+          cp deploy/combat/mount-integration.mjs combat-verify/mount-integration.mjs
           cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
           cp deploy/combat/GameRules.ts combat-verify/src/rooms/GameRules.ts
           cp deploy/combat/DashRules.ts combat-verify/src/rooms/DashRules.ts
@@ -169,7 +176,8 @@ jobs:
           cat > combat-verify/src/index.ts <<'EOF'
           import { defineServer, defineRoom } from "colyseus";
           import { MyRoom } from "./rooms/MyRoom.js";
-          const server = defineServer({ rooms: { my_room: defineRoom(MyRoom) } });
+          import { installAccountRoutes } from "./rooms/AccountRoutes.js";
+          const server = defineServer({ rooms: { my_room: defineRoom(MyRoom) }, express: app => installAccountRoutes(app) });
           server.listen(Number(process.env.PORT || 4108));
           EOF
           cat > combat-verify/package.json <<'EOF'
@@ -179,7 +187,8 @@ jobs:
             "dependencies": {
               "colyseus": "0.18.2",
               "@colyseus/schema": "5.0.14",
-              "@colyseus/sdk": "0.18.1"
+              "@colyseus/sdk": "0.18.1",
+              "express": "^5.2.1"
             },
             "overrides": {
               "@colyseus/core": "0.18.23"
@@ -187,6 +196,7 @@ jobs:
             "devDependencies": {
               "typescript": "5.9.3",
               "@types/node": "^22.0.0",
+              "@types/express": "^5.0.6",
               "tsx": "4.21.0"
             }
           }
@@ -254,9 +264,9 @@ jobs:
           grep -q 'pvp_hit' main.js
           grep -q 'id="pkPanel"' index.html
           grep -q 'id="characterProfile"' index.html
-          grep -q 'guestToken' main.js
+          grep -q 'accountSession' main.js
           grep -q 'characterSlot' main.js
-          grep -q 'slotChoice' main.js
+          grep -q 'account-slot' account-entry.js
           grep -q '0.3.2' index.html
           grep -q 'bagEquipped' main.js
           grep -q 'equip_weapon' main.js
@@ -337,7 +347,21 @@ jobs:
 
       - name: Occult book rules
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/occult-rules.test.ts src/rooms/blade-rules.test.ts src/rooms/sentinel-rules.test.ts
+        run: npx tsx --test src/rooms/occult-rules.test.ts src/rooms/blade-rules.test.ts src/rooms/sentinel-rules.test.ts src/rooms/account-store.test.ts
+
+      - name: Isolated account and permanent class
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export MONTRA_ACCOUNTS_REQUIRED=1 MONTRA_ECONOMY_ENABLED=1 PORT=14199 MONTRA_TEST_URL=http://127.0.0.1:14199
+          export MONTRA_CHARACTER_DIR="$(mktemp -d "${RUNNER_TEMP}/montra-account-test-XXXXXX")"
+          npx tsx src/index.ts > "$RUNNER_TEMP/montra-account-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for n in {1..60}; do if curl -s -o /dev/null "$MONTRA_TEST_URL/montra/account/slots"; then break; fi; sleep 1; done
+          node account-integration.mjs
+          node guest-delete-integration.mjs
+          node mount-integration.mjs
 
       - name: Check class balance fixtures
         shell: bash
