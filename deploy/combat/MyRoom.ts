@@ -51,9 +51,9 @@ import { BUILD_CATALOG, DEFAULT_WARD_TALENT, DUAL_SWORD, isOccultPath, talentGro
 import { BuffLedger } from "./BuffLedger.js";
 import { OCCULT_LESSONS, OCCULT_MASTERY_LABELS, OCCULT_MASTERY_REQUIREMENTS, OCCULT_RANKABLE_SKILLS, newOccultBook, occultPoints, occultRankCost, validateOccultBook, type OccultBook, type OccultLesson, type OccultSkillId, type OccultPath, type OccultMastery } from "./OccultRules.js";
 import { BLADE_LESSONS, BLADE_PRACTICE_LABELS, BLADE_RANKABLE_SKILLS, bladePoints, newBladeBook, validateBladeBook, type BladeBook, type BladeLesson, type BladeSkillId } from "./BladeRules.js";
-import { SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_RANKABLE_SKILLS, SENTINEL_CONTROL, sentinelPoints, newSentinelBook, validateSentinelBook, type SentinelBook, type SentinelLesson, type SentinelSkillId } from "./SentinelRules.js";
+import { SENTINEL_CORE, sentinelCoreProgress, SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_RANKABLE_SKILLS, SENTINEL_CONTROL, sentinelPoints, newSentinelBook, validateSentinelBook, type SentinelCoreId, type SentinelBook, type SentinelLesson, type SentinelSkillId } from "./SentinelRules.js";
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
-import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
+import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_CORE, swordCoreProgress, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordCoreId, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { isMuayFoundation, MUAY_CORE, MUAY_CORE_LEVELS, MUAY_CORE_POINT_LEVELS, MUAY_CORE_MANA_PER_RANK, muayCorePoints, muayCoreManaCost, muayCoreProgress, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayCoreId, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
 import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
@@ -72,7 +72,7 @@ import {
 import { ForestEncounters } from "./ForestEncounters.js";
 
 const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:WORLD_MAPS}):"";
-const swordTreeCatalog=JSON.stringify({schools:SWORD_SCHOOLS,nodes:SWORD_NODES,pvpDamage:SWORD_PVP_DAMAGE_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SWORD_RANKABLE_SKILLS});
+const swordTreeCatalog=JSON.stringify({core:SWORD_CORE,coreLevels:MUAY_CORE_LEVELS,corePointLevels:MUAY_CORE_POINT_LEVELS,coreManaPerRank:1,coreProgress:Array.from({length:9},(_,rank)=>swordCoreProgress(rank)),schools:SWORD_SCHOOLS,nodes:SWORD_NODES,pvpDamage:SWORD_PVP_DAMAGE_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SWORD_RANKABLE_SKILLS});
 const muayBookCatalog=JSON.stringify({core:MUAY_CORE,coreLevels:MUAY_CORE_LEVELS,corePointLevels:MUAY_CORE_POINT_LEVELS,coreManaPerRank:MUAY_CORE_MANA_PER_RANK,coreProgress:Array.from({length:MUAY_CORE_LEVELS.length+1},(_,rank)=>muayCoreProgress(rank)),skills:MUAY_SKILLS,lessons:MUAY_LESSONS,base:MUAY_BASE_SKILLS,schools:MUAY_SCHOOLS,combos:MUAY_COMBOS,followups:MUAY_FOLLOWUPS,masteryGuides:MUAY_MASTERY_GUIDES,masteryLabels:MUAY_MASTERY_LABELS,masteryRequirements:MUAY_MASTERY_REQUIREMENTS,pvpDamage:MUAY_PVP_DAMAGE_MULTIPLIER,pvpCombo:MUAY_PVP_COMBO_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:MUAY_RANKABLE_SKILLS});
 // Reserve static UTF-8 catalogs separately from player/monster replication.
 const encoderBlock=64*1024;
@@ -179,6 +179,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private muayCooldowns = new Map<string, MuayCooldowns>();
   private muayMoveIntent = new Map<string,{x:number;z:number}>();
   private muayCoreStances = new Map<string,{until:number;rank:number;nextCounter:number}>();
+  private swordCoreStances = new Map<string,{until:number;rank:number;nextCounter:number}>();
+  private swordCoreSequences = new Map<string,{targetId:string;next:number;remaining:number;rank:number}>();
   private muayCoreFollowups = new Map<string,{until:number;rank:number}>();
   private muayCoreSequences = new Map<string,{targetId:string;next:number;remaining:number;interval:number;power:number;skillId:"korat"|"thasao";rank:number}>();
   private muayCombos = new Map<string,MuayComboState>();
@@ -194,6 +196,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private bladeBooks = new Map<string, BladeBook>();
   private sentinelBooks = new Map<string, SentinelBook>();
   private sentinelStuns = new Map<string, number>();
+  private sentinelCoreStances = new Map<string,{until:number;rank:number;nextCounter:number}>();
   private sentinelStunResists = new Map<string, number>();
   private sentinelWindups = new Map<string, {targetId:string;until:number;power:number}>();
   private sentinelCounters = new Map<string, number>();
@@ -332,7 +335,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // Change temporary ritual state only after the new build is safely saved.
       if (player.pathId !== build.path) {
         this.sentinelAnchors.delete(id);this.sentinelCounters.delete(id);this.sentinelWindups.delete(id);
-        this.effects.remove(id,"sentinel_step",id);this.effects.remove(id,"sentinel_anchor",id);
+        this.effects.remove(id,"sentinel_step",id);this.effects.remove(id,"sentinel_anchor",id);this.effects.remove(id,"sentinel_core_bulwark",id);this.sentinelCoreStances.delete(id);
         for(const [member,link] of this.sentinelInterceptions)if(link.ownerId===id)this.sentinelInterceptions.delete(member);
         this.endBladeCloak(id,"class_changed");
         this.clearBladeMark(id);this.bladeOpenings.delete(id);this.bladeEvades.delete(id);this.bladeWindups.delete(id);this.bladeCasts.delete(id);
@@ -351,6 +354,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.pathId = build.path;
       player.ancestryId = build.ancestry;
       this.swordGuards.delete(id);
+      if(this.swordCoreStances.delete(id))this.sendSwordNotice(client,"sword_stance_end",{});
+      this.swordCoreSequences.delete(id);
       this.clearMuayDefense(id,"cancelled");
       this.swordCombos.delete(id);
       this.clearMuayCombo(id);
@@ -431,7 +436,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       return this.reject(client,"sword_tree_needs_shrine");
     }
     const next: SwordTree={school:tree.school,learned:[...tree.learned],cooldowns:{...tree.cooldowns},training:{...tree.training},
-      loadouts:{phutthaisawan:[...tree.loadouts.phutthaisawan],sritrairat:[...tree.loadouts.sritrairat],atamat:[...tree.loadouts.atamat],chumphon:[...tree.loadouts.chumphon]},...(tree.ranks?{ranks:{...tree.ranks}}:{})};
+      loadouts:{phutthaisawan:[...tree.loadouts.phutthaisawan],sritrairat:[...tree.loadouts.sritrairat],atamat:[...tree.loadouts.atamat],chumphon:[...tree.loadouts.chumphon]},...(tree.ranks?{ranks:{...tree.ranks}}:{}),...(tree.coreRanks?{coreRanks:{...tree.coreRanks}}:{})};
     const value=action === "equip" ? input.skillId as string|null : action === "reset" ? "" : input[field] as string;
     if (action === "equip") {
       const skillId=input.skillId as string|null, slots=next.loadouts[next.school];
@@ -710,7 +715,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private sendSentinelBook(client:Client):void {
     const player=this.state.players.get(client.sessionId),book=this.sentinelBooks.get(client.sessionId);
     if(!player || player.pathId!=="sentinel" || !book)return;
-    try{client.send("sentinel_book_state",{book,lessons:SENTINEL_LESSONS,practiceLabels:SENTINEL_PRACTICE_LABELS,points:sentinelPoints(player.level),rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SENTINEL_RANKABLE_SKILLS});}
+    try{client.send("sentinel_book_state",{book,core:SENTINEL_CORE,coreLevels:MUAY_CORE_LEVELS,corePointLevels:MUAY_CORE_POINT_LEVELS,coreProgress:Array.from({length:MUAY_CORE_LEVELS.length+1},(_,rank)=>sentinelCoreProgress(rank)),lessons:SENTINEL_LESSONS,practiceLabels:SENTINEL_PRACTICE_LABELS,points:sentinelPoints(player.level),rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SENTINEL_RANKABLE_SKILLS});}
     catch(error){console.warn("MONTRA sentinel book notice was not delivered",error);}
   }
 
@@ -724,9 +729,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private changeSentinelBook(client:Client,message:unknown):void {
     if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_sentinel_book");
     const input=message as Record<string,unknown>,keys=Object.keys(input),action=input.action;
-    if(action==="learn" || action==="upgrade") {if(keys.length!==2 || typeof input.skillId!=="string")return this.reject(client,"invalid_sentinel_book");}
+    if(action==="learn" || action==="upgrade" || action==="core_upgrade") {if(keys.length!==2 || typeof input.skillId!=="string")return this.reject(client,"invalid_sentinel_book");}
     else if(action==="equip") {if(keys.length!==3 || !Number.isInteger(input.slot) || (input.slot as number)<0 || (input.slot as number)>3 || (input.skillId!==null && typeof input.skillId!=="string"))return this.reject(client,"invalid_sentinel_book");}
-    else if(action==="reset") {if(keys.length!==1)return this.reject(client,"invalid_sentinel_book");}
+    else if(action==="reset" || action==="core_reset") {if(keys.length!==1)return this.reject(client,"invalid_sentinel_book");}
     else return this.reject(client,"invalid_sentinel_book");
     const id=client.sessionId,player=this.buildPlayer(client,"occult"),book=this.sentinelBooks.get(id);
     if(!player)return;
@@ -734,7 +739,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!book)return this.reject(client,"build_unavailable");
     if(player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 || this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)return this.reject(client,"sentinel_book_needs_shrine");
     const next=validateSentinelBook(book,player.level);
-    if(action==="learn"){
+    if(action==="core_upgrade"){
+      const skillId=input.skillId as SentinelCoreId;
+      if(!Object.hasOwn(SENTINEL_CORE,skillId))return this.reject(client,"invalid_sentinel_book");
+      const rank=next.coreRanks?.[skillId] ?? 0;
+      if(rank>=MUAY_CORE_LEVELS.length || player.level<MUAY_CORE_LEVELS[rank])return this.reject(client,"sentinel_level");
+      if(Object.values(next.coreRanks ?? {}).reduce((sum,n)=>sum+n,0)>=muayCorePoints(player.level))return this.reject(client,"sentinel_no_points");
+      next.coreRanks={...next.coreRanks,[skillId]:rank+1};
+    }else if(action==="core_reset"){
+      if(!Object.keys(next.coreRanks ?? {}).length)return this.reject(client,"sentinel_book_empty");
+      delete next.coreRanks;
+    }else if(action==="learn"){
       const id=input.skillId as SentinelSkillId;if(!Object.hasOwn(SENTINEL_LESSONS,id))return this.reject(client,"invalid_sentinel_book");
       const lesson:SentinelLesson=SENTINEL_LESSONS[id];
       if(next.learned.includes(id))return this.reject(client,"sentinel_already_learned");
@@ -797,6 +812,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(monster)this.hitMonsterWithSpell(id,monster,calculateDamage(attack,monster.defense,monster.level),"sword");
     else {
       const victim=target as Player,damage=this.swordGuardDamage(targetId,actor,calculateDamage(attack,victim.def,victim.level));
+      if(!actor.alive || !victim.alive)return false;
       victim.hp=Math.max(0,victim.hp-damage);victim.hitSeq++;
       this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"sentinel"},{afterNextPatch:true});
       if(victim.hp===0){actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});}
@@ -806,6 +822,67 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendSwordNotice(this.clients.find(c=>c.sessionId===id),"sentinel_control",{targetId,result});
     }
     return true;
+  }
+
+  private castSentinelCore(client:Client,message:unknown):void {
+    if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_sentinel_skill");
+    const input=message as Record<string,unknown>;
+    if(typeof input.skillId!=="string" || !Object.hasOwn(SENTINEL_CORE,input.skillId) || Object.keys(input).some(k=>k!=="skillId" && k!=="targetId") || (input.targetId!==undefined && typeof input.targetId!=="string"))return this.reject(client,"invalid_sentinel_skill");
+    const id=client.sessionId,skillId=input.skillId as SentinelCoreId,skill=SENTINEL_CORE[skillId];
+    if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
+    const actor=this.spellCaster(client),book=this.sentinelBooks.get(id);
+    if(!actor || !book)return;
+    if(actor.pathId!=="sentinel" || !this.persistentCharacters.has(id))return this.reject(client,"sentinel_class_required");
+    if(actor.flying || !onMapGround(actor) || isRestArea(actor.mapId,actor))return this.reject(client,"sentinel_location");
+    if(Date.now()<(book.cooldowns[skillId] ?? 0))return this.reject(client,"sentinel_cooldown");
+    const rank=book.coreRanks?.[skillId] ?? 0,p=sentinelCoreProgress(rank),cost=skill.stamina+rank;
+    if(actor.mana<cost)return this.reject(client,"insufficient_mana");
+    let ally:Player|undefined,targetId="";
+    if(skillId==="protect"){
+      targetId=typeof input.targetId==="string"?input.targetId:"";ally=this.state.players.get(targetId);
+      if(!targetId || targetId===id || !this.parties.get(id)?.members.includes(targetId) || !ally?.alive || ally.mapId!==actor.mapId ||
+        this.pendingWarps.has(targetId) || this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId) ||
+        (this.field && this.warSeats.get(targetId)?.side!==this.warSeats.get(id)?.side) || distance3d(actor,ally)>p.protect.range ||
+        !this.combatSegmentClear(actor.mapId,actor,ally) || !this.bodyPathClear(actor.mapId,actor,ally))return this.reject(client,"sentinel_party_required");
+    }
+    if(skillId==="bulwark"){
+      const active=this.effects.modifiers(id);
+      if(active.length>=STACKING_RULES.maxModifiers && !active.some(effect=>effect.id==="sentinel_core_bulwark" && effect.sourceId===id))return this.reject(client,"sentinel_effect_limit");
+    }
+    actor.mana-=cost;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
+    this.startSkillAction(id,actor,"idle");
+    if(skillId==="shock"){
+      const candidates:Array<{target:Monster|Player;id:string}>=[...[this.state.monster,...this.state.monsters.values()].map(target=>({target,id:target.id})),...[...this.state.players.entries()].map(([id,target])=>({target,id}))];
+      const targets=candidates
+        .filter(entry=>entry.id && entry.id!==id && entry.target.alive && distance3d(actor,entry.target)<=p.shock.range && Math.abs(actor.y-entry.target.y)<=1.1 && this.sameCombatMap(id,entry.id) && !this.pendingItemUses.has(entry.id) && !this.pendingRewards.has(entry.id) && !this.pendingCharacterLeaves.has(entry.id) && this.bodyPathClear(actor.mapId,actor,entry.target))
+        .sort((a,b)=>distance3d(actor,a.target)-distance3d(actor,b.target) || a.id.localeCompare(b.id));
+      for(const entry of targets.slice(0,5))if(this.sentinelInterrupt(id,entry.id,p.shock.monsterStunMs)==="applied")this.recordCombat(id,entry.id);
+    } else if(skillId==="bulwark"){
+      this.effects.grant(id,{id:"sentinel_core_bulwark",sourceId:id,group:"sentinel_self",bonuses:{def:p.bulwark.defense}},this.simulatedMs+p.bulwark.durationMs);
+      this.applyStats(id,actor,this.statAllocations.get(id) ?? emptyAllocations());
+    } else if(skillId==="riposte")this.sentinelCoreStances.set(id,{until:this.simulatedMs+p.riposte.durationMs,rank,nextCounter:0});
+    else if(ally){
+      this.sentinelInterceptions.set(targetId,{ownerId:id,until:this.simulatedMs+p.protect.durationMs,fraction:.3});
+      this.markSupportManaCombat(id,[[targetId,ally]]);
+      let applied=0;
+      const monsters=[this.state.monster,...this.state.monsters.values()].sort((a,b)=>distance3d(actor,a)-distance3d(actor,b) || a.id.localeCompare(b.id));
+      for(const monster of monsters){
+        if(applied>=3 || !monster.alive || distance3d(actor,monster)>p.protect.tauntRange || !this.sameCombatMap(id,monster.id) || !this.bodyPathClear(actor.mapId,actor,monster))continue;
+        if(monster.id===RULES.monsterId){
+          if(monster.tier==="normal" && !this.monsterReturning && this.simulatedMs>=this.sentinelLegacyTaunt.resistUntil){this.sentinelLegacyTaunt={ownerId:id,until:this.simulatedMs+p.protect.tauntMs,resistUntil:this.simulatedMs+SENTINEL_CONTROL.tauntImmunityMs};monster.targetId=id;this.monsterNavigator.clear();applied++;}
+        }else if(this.forest.taunt(monster.id,id,this.simulatedMs,p.protect.tauntMs,SENTINEL_CONTROL.tauntImmunityMs)==="applied")applied++;
+      }
+      this.sendSwordNotice(client,"sentinel_taunt",{applied});
+      // PvP challenge is an indicator only; it never changes another player's target.
+      for(const [otherId,other] of this.state.players){
+        if(otherId===id || !other.alive || distance3d(actor,other)>p.protect.tauntRange || !this.sameCombatMap(id,otherId) ||
+          this.pendingItemUses.has(otherId) || this.pendingRewards.has(otherId) || this.pendingCharacterLeaves.has(otherId) || !this.bodyPathClear(actor.mapId,actor,other))continue;
+        this.sendSwordNotice(this.clients.find(peer=>peer.sessionId===otherId),"sentinel_challenged",{playerId:id,durationMs:p.protect.tauntMs});
+      }
+    }
+    this.sendSentinelBook(client);
+    this.broadcast("sentinel_core_used",{playerId:id,skillId,targetId,durationMs:skillId==="riposte"?p.riposte.durationMs:skillId==="protect"?p.protect.durationMs:0},{afterNextPatch:true});
+    void this.saveCharacter(id);
   }
 
   private castSentinelSkill(client:Client,message:unknown):void {
@@ -1551,6 +1628,32 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"blade_windup",{result:"interrupted"});
     }
     const stance=this.muayCoreStances.get(id),player=this.state.players.get(id);
+    const swordStance=this.swordCoreStances.get(id);
+    if(swordStance && player?.alive && player.pathId==="phutthaisawan" && equippedWeaponId(this.inventories.get(id))===DUAL_SWORD.weaponId && this.simulatedMs<swordStance.until) {
+      const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
+      const opponentId=monster?.id ?? [...this.state.players.entries()].find(([,p])=>p===attacker)?.[0];
+      const progress=swordCoreProgress(swordStance.rank).sritra_core;
+      if(opponentId && this.simulatedMs>=swordStance.nextCounter) {
+        // Reserve before striking to prevent two counter stances recursing.
+        swordStance.nextCounter=this.simulatedMs+progress.counterIntervalMs;
+        if(this.swordCoreHit(id,opponentId,progress.counterPower,1))
+          this.broadcast("sword_core_counter",{playerId:id,targetId:opponentId},{afterNextPatch:true});
+        else swordStance.nextCounter=this.simulatedMs;
+      }
+      return this.sentinelShareDamage(id,attacker,Math.max(1,Math.round(damage*progress.damageFactor)),summonOwnerId);
+    }
+    const sentinelStance=this.sentinelCoreStances.get(id);
+    if(sentinelStance && player?.alive && player.pathId==="sentinel" && this.simulatedMs<sentinelStance.until){
+      const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
+      const opponentId=monster?.id ?? [...this.state.players.entries()].find(([,p])=>p===attacker)?.[0];
+      const progress=sentinelCoreProgress(sentinelStance.rank).riposte;
+      if(opponentId && this.simulatedMs>=sentinelStance.nextCounter){
+        sentinelStance.nextCounter=this.simulatedMs+progress.counterIntervalMs;
+        if(this.sentinelDamage(id,opponentId,monster?progress.counterPower:1,false))this.broadcast("sentinel_core_counter",{playerId:id,targetId:opponentId},{afterNextPatch:true});
+        else sentinelStance.nextCounter=this.simulatedMs;
+      }
+      return this.sentinelShareDamage(id,attacker,Math.max(1,Math.round(damage*progress.damageFactor)),summonOwnerId);
+    }
     if(stance && player?.alive && this.simulatedMs<stance.until) {
       const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
       const opponentId=monster?.id ?? [...this.state.players.entries()].find(([,p])=>p===attacker)?.[0];
@@ -1858,6 +1961,129 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     void this.saveCharacter(id);
   }
 
+  private changeSwordCore(client:Client,message:unknown):void {
+    if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_sword_tree");
+    const input=message as Record<string,unknown>,keys=Object.keys(input),action=input.action;
+    if(action==="upgrade" ? keys.length!==2 || typeof input.skillId!=="string" : action!=="reset" || keys.length!==1)return this.reject(client,"invalid_sword_tree");
+    const id=client.sessionId,player=this.buildPlayer(client,"swordTree"),tree=this.swordTrees.get(id);
+    if(!player || !tree)return;
+    if(player.pathId!=="phutthaisawan")return this.reject(client,"sword_class_required");
+    if(player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 || this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)return this.reject(client,"sword_tree_needs_shrine");
+    const next:SwordTree={...tree,cooldowns:{...tree.cooldowns},coreRanks:{...tree.coreRanks}};
+    if(action==="upgrade") {
+      const skillId=input.skillId as SwordCoreId;
+      if(!Object.hasOwn(SWORD_CORE,skillId))return this.reject(client,"invalid_sword_tree");
+      const rank=next.coreRanks?.[skillId] ?? 0;
+      if(rank>=MUAY_CORE_LEVELS.length || player.level<MUAY_CORE_LEVELS[rank])return this.reject(client,"sword_tree_level");
+      if(Object.values(next.coreRanks ?? {}).reduce((sum,n)=>sum+n,0)>=muayCorePoints(player.level))return this.reject(client,"sword_tree_no_points");
+      next.coreRanks={...next.coreRanks,[skillId]:rank+1};
+    } else {
+      if(!Object.keys(next.coreRanks ?? {}).length)return this.reject(client,"sword_tree_empty");
+      delete next.coreRanks;
+    }
+    const snapshot=this.captureCharacterSnapshot(id);
+    if(!snapshot)return this.reject(client,"build_unavailable");
+    this.pendingWarps.add(id);
+    const task=characterStore.save({...snapshot,swordTree:next}).then(()=>{
+      this.swordTrees.set(id,next);player.swordTreeData=JSON.stringify(next);
+      try {client.send("sword_tree_changed",{action});}catch(error){console.warn("MONTRA sword confirmation was not delivered",error);}
+    }).catch(error=>{console.error("MONTRA sword core save failed",error);this.reject(client,"sword_tree_save_failed");})
+      .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
+    this.pendingItemUses.set(id,task);
+  }
+
+  private swordCoreHit(id:string,targetId:string,power:number,pvpPower=power,range=3):boolean {
+    const actor=this.state.players.get(id),monster=this.getMonster(targetId),target=monster ?? this.state.players.get(targetId);
+    if(!actor?.alive || actor.pathId!=="phutthaisawan" || equippedWeaponId(this.inventories.get(id))!==DUAL_SWORD.weaponId ||
+      actor.flying || !onMapGround(actor) || this.sentinelStuns.has(id) || this.muayControlled(id) || targetId===id ||
+      !target?.alive || (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))) ||
+      !this.sameCombatMap(id,targetId) || distance3d(actor,target)>range || Math.abs(actor.y-target.y)>1.1 || !this.bodyPathClear(actor.mapId,actor,target))return false;
+    const damage=calculateDamage((actor.atk+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee)*(monster?power:pvpPower*SWORD_PVP_DAMAGE_MULTIPLIER),monster?.defense ?? (target as Player).def,target.level);
+    actor.facing=facingTo(target.x-actor.x,target.z-actor.z);this.recordCombat(id,targetId);
+    if(monster)this.hitMonsterWithSpell(id,monster,damage,"sword");
+    else {
+      const victim=target as Player,actual=this.swordGuardDamage(targetId,actor,damage);
+      // A counter may defeat either participant before the original hit lands.
+      if(!actor.alive || !victim.alive)return false;
+      victim.hp=Math.max(0,victim.hp-actual);victim.hitSeq++;
+      this.broadcast("pvp_hit",{attackerId:id,targetId,damage:actual,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"sword"},{afterNextPatch:true});
+      if(victim.hp===0){actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);void this.saveCharacter(id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});}
+    }
+    return true;
+  }
+
+  private castSwordCore(client:Client,message:unknown):void {
+    if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_sword_skill");
+    const input=message as Record<string,unknown>;
+    if(typeof input.skillId!=="string" || !Object.hasOwn(SWORD_CORE,input.skillId) || Object.keys(input).some(k=>k!=="skillId" && k!=="targetId") || (input.targetId!==undefined && typeof input.targetId!=="string"))return this.reject(client,"invalid_sword_skill");
+    const id=client.sessionId,skillId=input.skillId as SwordCoreId,skill=SWORD_CORE[skillId];
+    if(this.muayControlled(id) || this.sentinelStuns.has(id) || this.swordCoreSequences.has(id))return this.reject(client,"muay_controlled");
+    if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
+    const actor=this.spellCaster(client),tree=this.swordTrees.get(id);
+    if(!actor || !tree)return;
+    if(actor.pathId!=="phutthaisawan" || equippedWeaponId(this.inventories.get(id))!==DUAL_SWORD.weaponId)return this.reject(client,"sword_weapon_required");
+    if(actor.flying || !onMapGround(actor) || isRestArea(actor.mapId,actor))return this.reject(client,"sword_blocked");
+    if(Date.now()<(tree.cooldowns[skillId] ?? 0))return this.reject(client,"sword_skill_cooldown");
+    const rank=tree.coreRanks?.[skillId] ?? 0,progress=swordCoreProgress(rank),mana=skill.stamina+rank;
+    if(actor.mana<mana)return this.reject(client,"insufficient_mana");
+    const targetId=typeof input.targetId==="string"?input.targetId:"",monster=this.getMonster(targetId),target=monster ?? this.state.players.get(targetId);
+    if(skill.kind==="target" && (!target?.alive || targetId===id || (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))) || !this.sameCombatMap(id,targetId) || Math.abs(actor.y-target.y)>1.1 || distance3d(actor,target)>(skillId==="phuttha_core"?6:(monster?progress.atamat_core.range:3.5)) || !this.bodyPathClear(actor.mapId,actor,target)))return this.reject(client,"sword_out_of_range");
+    const supportTargets:Array<[string,Player]>=[];
+    if(skillId==="chumphon_core") {
+      for(const memberId of this.parties.get(id)?.members ?? [id]) {
+        const member=this.state.players.get(memberId),p=progress.chumphon_core;
+        if(!member?.alive || member.mapId!==actor.mapId || this.pendingWarps.has(memberId) || this.pendingItemUses.has(memberId) || this.pendingRewards.has(memberId) || this.pendingCharacterLeaves.has(memberId) || (this.field && memberId!==id && this.warSeats.get(memberId)?.side!==this.warSeats.get(id)?.side) || distance3d(actor,member)>p.range || (memberId!==id && (!this.combatSegmentClear(actor.mapId,actor,member) || !this.bodyPathClear(actor.mapId,actor,member))))continue;
+        const active=this.effects.modifiers(memberId);
+        if(active.length>=STACKING_RULES.maxModifiers && !active.some(effect=>effect.id===skillId && effect.sourceId===id))continue;
+        supportTargets.push([memberId,member]);
+      }
+      if(!supportTargets.length)return this.reject(client,"sword_effect_limit");
+    }
+    if(skillId==="phuttha_core" && target) {
+      const dx=target.x-actor.x,dz=target.z-actor.z,length=Math.hypot(dx,dz),travel=Math.max(0,length-1.8);
+      if(travel>.001) {
+        const direction={dx:dx/length,dz:dz/length},map=getWorldMap(actor.mapId)!;
+        let position={x:actor.x,z:actor.z},total=0;
+        while(total+.00001<travel){const step=advanceDash(position,direction,travel-total,(x,z)=>this.canOccupy(x,z,surfaceLayer(actor),false,actor.mapId) && !isRestArea(actor.mapId,{x,z}),map.bounds);position={x:step.x,z:step.z};total+=step.moved;if(step.blocked || step.moved<.00001)break;}
+        if(total+.05<travel)return this.reject(client,"sword_blocked");
+        this.moveOnSurface(actor,position.x,position.z);
+      }
+    }
+    actor.mana-=mana;tree.cooldowns[skillId]=Date.now()+skill.cooldownMs;actor.swordTreeData=JSON.stringify(tree);
+    this.startSkillAction(id,actor,"idle");
+    if(skillId==="sritra_core")this.swordCoreStances.set(id,{until:this.simulatedMs+progress.sritra_core.durationMs,rank,nextCounter:0});
+    else if(skillId==="phuttha_core" && target)this.swordCoreSequences.set(id,{targetId,next:this.simulatedMs,remaining:3,rank:monster?rank:0});
+    else if(skillId==="atamat_core" && target) {
+      const dx=target.x-actor.x,dz=target.z-actor.z,length=Math.max(.001,Math.hypot(dx,dz));
+      const candidates:Monster[]=[];
+      if(monster) {
+        const consider=(m:Monster)=>{const vx=m.x-actor.x,vz=m.z-actor.z,d=Math.hypot(vx,vz);if(m.id!==targetId && m.alive && d<=progress.atamat_core.range && (d<.001 || (dx*vx+dz*vz)/(length*d)>=.5))candidates.push(m);};
+        consider(this.state.monster);this.state.monsters.forEach(consider);
+      }
+      this.swordCoreHit(id,targetId,progress.atamat_core.power,.85,monster?progress.atamat_core.range:3.5);
+      candidates.sort((a,b)=>distance3d(actor,a)-distance3d(actor,b) || a.id.localeCompare(b.id));
+      let count=1;for(const candidate of candidates){if(count>=3)break;if(this.swordCoreHit(id,candidate.id,progress.atamat_core.power,.85,progress.atamat_core.range))count++;}
+    } else if(skillId==="chumphon_core") {
+      for(const [memberId,member] of supportTargets) {
+        const p=progress.chumphon_core;
+        this.effects.grant(memberId,{id:skillId,sourceId:id,group:"sword_support",bonuses:{def:p.defense}},this.simulatedMs+p.durationMs);
+        this.applyStats(memberId,member,this.statAllocations.get(memberId) ?? emptyAllocations());
+      }
+      this.markSupportManaCombat(id,supportTargets);
+    }
+    this.broadcast("sword_skill_used",{playerId:id,skillId,targetId,durationMs:skillId==="sritra_core"?progress.sritra_core.durationMs:0},{afterNextPatch:true});void this.saveCharacter(id);
+  }
+
+  private updateSwordCore():void {
+    for(const [id,sequence] of this.swordCoreSequences) {
+      if(this.simulatedMs<sequence.next)continue;
+      const p=swordCoreProgress(sequence.rank).phuttha_core,hit=3-sequence.remaining;
+      if(!this.swordCoreHit(id,sequence.targetId,[.36,.46,p.finalPower][hit]*p.scale,[.36,.46,.65][hit])){this.swordCoreSequences.delete(id);continue;}
+      sequence.remaining--;sequence.next+=280;if(!sequence.remaining)this.swordCoreSequences.delete(id);
+    }
+    for(const [id,stance] of this.swordCoreStances)if(this.simulatedMs>=stance.until || !this.state.players.get(id)?.alive)this.swordCoreStances.delete(id);
+  }
+
   private castSwordSkill(client:Client, message:unknown):void {
     if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_sword_skill");
     const input=message as Record<string,unknown>, keys=Object.keys(input);
@@ -1983,8 +2209,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private applyStats(id:string, player: Player, allocations: Allocations): void {
     const stats = calculateModifiedStats(calculateStats(player.level, allocations),this.effects.modifiers(id));
     player.maxHp = stats.maxHp; player.atk = stats.atk;
-    player.def = player.pathId==="sentinel" && this.sentinelBooks.get(id)?.learned.includes("fortitude") && equippedWeaponId(this.inventories.get(id))===SHRINE_GLAIVE
-      ? Math.round(stats.def*(1+SENTINEL_LESSONS.fortitude.power)) : stats.def;
+    player.def = stats.def;
     player.magicAtk = stats.magicAtk; player.magicDef = stats.magicDef;
     player.maxStamina = stats.maxStamina;
     player.maxMana = Math.min(PROGRESSION.maxMana, PROGRESSION.baseMana + (player.level - 1) * 2);
@@ -2612,7 +2837,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     sword_tree_school: (client: Client, message: unknown) => this.changeSwordTree(client, message, "school"),
     sword_tree_reset: (client: Client, message: unknown) => this.changeSwordTree(client, message, "reset"),
     sword_tree_equip: (client: Client, message: unknown) => this.changeSwordTree(client, message, "equip"),
-    sword_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castSwordSkill(client, message);},
+    sword_core_book: (client: Client, message: unknown) => this.changeSwordCore(client, message),
+    sword_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castSwordCore(client, message);},
+    sword_skill: (client: Client) => this.reject(client,"sword_skill_locked"),
     muay_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castMuaySkill(client, message);},
     muay_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castMuayCore(client, message);},
     grapple_escape: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.escapeMuayGrapple(client, message);},
@@ -2643,7 +2870,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendSentinelBook(client);
     },
     sentinel_book: (client:Client,message:unknown) => this.changeSentinelBook(client,message),
-    sentinel_skill: (client:Client,message:unknown) => {if(!this.blockMounted(client))this.castSentinelSkill(client,message);},
+    sentinel_skill: (client:Client) => this.reject(client,"sentinel_skill_locked"),
+    sentinel_core_skill: (client:Client,message:unknown) => {if(!this.blockMounted(client))this.castSentinelCore(client,message);},
     cast_class_skill: (client: Client, message: unknown) => {
       if(this.blockMounted(client))return;
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_build");
@@ -2706,6 +2934,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           current.mapId = portal.targetMapId;
           current.x = portal.targetSpawn.x; current.y = portal.targetSpawn.y; current.z = portal.targetSpawn.z;
           current.targetId = ""; current.combatState = "idle"; current.flying = false;
+          if(this.swordCoreStances.delete(id))this.sendSwordNotice(client,"sword_stance_end",{});
+          if(this.sentinelCoreStances.delete(id))this.sendSwordNotice(client,"sentinel_core_end",{});
+          this.swordCoreSequences.delete(id);
           if(current.pathId==="muay_boran"){this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");this.sendSwordNotice(client,"muay_counter_cleared",{});}
           this.clearMuayCombo(id);
           this.clearMuayCombosForTarget(id);
@@ -2766,6 +2997,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           this.inventories.set(id, change.inventory);
           current.equippedWeaponId = change.weaponId ?? "";
           this.applyStats(id,current,this.statAllocations.get(id) ?? emptyAllocations());
+          if(current.pathId==="phutthaisawan" && change.weaponId!==DUAL_SWORD.weaponId) {
+            if(this.swordCoreStances.delete(id))this.sendSwordNotice(client,"sword_stance_end",{});
+            this.swordCoreSequences.delete(id);
+          }
           if (current.pathId === "muay_boran" && change.weaponId !== MUAY_WRAP_ID) {
             this.swordGuards.delete(id);
             this.clearMuayDefense(id,"cancelled");
@@ -3609,6 +3844,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for(const [id,until] of this.sentinelAnchors)if(this.simulatedMs>=until)this.sentinelAnchors.delete(id);
     for(const [id,until] of this.sentinelCounters)if(this.simulatedMs>=until)this.sentinelCounters.delete(id);
     for(const [id,link] of this.sentinelInterceptions)if(this.simulatedMs>=link.until)this.sentinelInterceptions.delete(id);
+    for(const [id,stance] of this.sentinelCoreStances)if(this.simulatedMs>=stance.until || !this.state.players.get(id)?.alive)this.sentinelCoreStances.delete(id);
     for(const [id,windup] of this.sentinelWindups)if(this.simulatedMs>=windup.until){
       this.sentinelWindups.delete(id);const actor=this.state.players.get(id);if(actor?.alive)actor.combatState="idle";
       const hit=this.sentinelDamage(id,windup.targetId,windup.power,true);
@@ -3625,6 +3861,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updateMuayGrapples();
     this.updateMuayDefense();
     this.updateMuayCore();
+    this.updateSwordCore();
     for(const id of this.buffs.expired(this.simulatedMs))this.endPossession(id,"expired");
     for(const id of this.effects.expire(this.simulatedMs)) {const p=this.state.players.get(id);if(p)this.applyStats(id,p,this.statAllocations.get(id) ?? emptyAllocations());}
     this.updateRespawns();
@@ -3931,7 +4168,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       const bonuses = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp");
       const meleeBonus = bonuses.melee;
-      const swordMastery = (dualSword && this.swordTrees.get(attackerId)?.learned.includes("rhythm") ? 1.05 : 1) * (ambush ? (monster?1.5:1.2) : 1);
+      const swordMastery = ambush ? (monster?1.5:1.2) : 1;
       if (ranged) this.broadcast("ranged_hit", {
         attackerId,targetId,skill:"basic_magic",
         from:{x:attacker.x,y:attacker.y+FORT.shootOriginHeight,z:attacker.z},
@@ -3978,8 +4215,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private knockoutPlayer(id: string, cause: "pk" | "monster", attackerId = "") {
-    this.muayCoreStances.delete(id);this.muayCoreFollowups.delete(id);this.muayCoreSequences.delete(id);
-    this.sentinelStuns.delete(id);this.sentinelWindups.delete(id);this.sentinelCounters.delete(id);this.sentinelAnchors.delete(id);this.sentinelInterceptions.delete(id);
+    this.muayCoreStances.delete(id);this.muayCoreFollowups.delete(id);this.muayCoreSequences.delete(id);this.swordCoreStances.delete(id);this.swordCoreSequences.delete(id);
+    this.sentinelCoreStances.delete(id);this.sentinelStuns.delete(id);this.sentinelWindups.delete(id);this.sentinelCounters.delete(id);this.sentinelAnchors.delete(id);this.sentinelInterceptions.delete(id);
     for(const [member,link] of this.sentinelInterceptions)if(link.ownerId===id)this.sentinelInterceptions.delete(member);
     this.endBladeCloak(id,"dead");this.bladeCasts.delete(id);this.bladeWindups.delete(id);
     this.releaseMuayFor(id,"knockout");
@@ -4241,7 +4478,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private basicAttackPaused(id:string):boolean {
     return this.sentinelStuns.has(id) || this.sentinelWindups.has(id) ||
-      this.bladeWindups.has(id) || this.bladeCasts.has(id) || this.muayCoreSequences.has(id) || this.muayControlled(id);
+      this.bladeWindups.has(id) || this.bladeCasts.has(id) || this.muayCoreSequences.has(id) || this.swordCoreSequences.has(id) || this.muayControlled(id);
   }
 
   private endAttack(id: string, player: Player) {
@@ -4514,7 +4751,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastAttackMs.delete(id);
     this.lastCombatMs.delete(id);
     this.supportManaCombatUntil.delete(id);
-    this.muayMoveIntent.delete(id);this.muayCoreStances.delete(id);this.muayCoreFollowups.delete(id);this.muayCoreSequences.delete(id);
+    this.muayMoveIntent.delete(id);this.muayCoreStances.delete(id);this.muayCoreFollowups.delete(id);this.muayCoreSequences.delete(id);this.swordCoreStances.delete(id);this.swordCoreSequences.delete(id);
     this.lastWarpMs.delete(id);
     this.playerRespawnAt.delete(id);
     this.playerSpawn.delete(id);
@@ -4548,7 +4785,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.occultBooks.delete(id);
       this.bladeBooks.delete(id);
       this.sentinelBooks.delete(id);
-      this.sentinelStuns.delete(id);this.sentinelStunResists.delete(id);this.sentinelWindups.delete(id);this.sentinelCounters.delete(id);this.sentinelAnchors.delete(id);this.sentinelInterceptions.delete(id);
+      this.sentinelCoreStances.delete(id);this.sentinelStuns.delete(id);this.sentinelStunResists.delete(id);this.sentinelWindups.delete(id);this.sentinelCounters.delete(id);this.sentinelAnchors.delete(id);this.sentinelInterceptions.delete(id);
       for(const [member,link] of this.sentinelInterceptions)if(link.ownerId===id)this.sentinelInterceptions.delete(member);
       this.bladeCloaks.delete(id);
       this.bladeCasts.delete(id);
@@ -4611,7 +4848,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.occultBooks.clear();
     this.bladeBooks.clear();
     this.sentinelBooks.clear();
-    this.sentinelStuns.clear();this.sentinelStunResists.clear();this.sentinelWindups.clear();this.sentinelCounters.clear();this.sentinelAnchors.clear();this.sentinelInterceptions.clear();
+    this.sentinelCoreStances.clear();this.sentinelStuns.clear();this.sentinelStunResists.clear();this.sentinelWindups.clear();this.sentinelCounters.clear();this.sentinelAnchors.clear();this.sentinelInterceptions.clear();
     this.bladeCloaks.clear();
     this.bladeCasts.clear();
     this.bladeMarks.clear();this.bladeOpenings.clear();this.bladeEvades.clear();this.bladeWindups.clear();
@@ -4636,7 +4873,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastAttackMs.clear();
     this.lastCombatMs.clear();
     this.supportManaCombatUntil.clear();
-    this.muayMoveIntent.clear();this.muayCoreStances.clear();this.muayCoreFollowups.clear();this.muayCoreSequences.clear();
+    this.muayMoveIntent.clear();this.muayCoreStances.clear();this.muayCoreFollowups.clear();this.muayCoreSequences.clear();this.swordCoreStances.clear();this.swordCoreSequences.clear();
     this.lastWarpMs.clear();
     this.pendingWarps.clear();
     this.playerRespawnAt.clear();

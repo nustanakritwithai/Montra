@@ -29,3 +29,13 @@ test("guardian ranks require the learned skill, milestone level and shared point
   book.ranks={bash:6};assert.throws(()=>validateSentinelBook(book,100));
   book.ranks={taunt:1};assert.throws(()=>validateSentinelBook(book,100));
 });
+test("guardian core ranks preserve old books and obey the level 100 point cap",()=>{
+  const book=newSentinelBook();
+  assert.deepEqual(validateSentinelBook(book,1),book);
+  book.coreRanks={shock:8,protect:4};book.cooldowns.shock=123456;
+  assert.deepEqual(validateSentinelBook(book,100).coreRanks,{shock:8,protect:4});
+  assert.equal(validateSentinelBook(book,100).cooldowns.shock,123456);
+  assert.throws(()=>validateSentinelBook(book,99));
+  book.coreRanks={shock:8,protect:5};assert.throws(()=>validateSentinelBook(book,100));
+  book.coreRanks={shock:2};assert.throws(()=>validateSentinelBook(book,5));
+});
