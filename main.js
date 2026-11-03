@@ -7469,7 +7469,8 @@
     const n = slots.length, from = 182, to = n > 3 ? 272 : 262;
     slots.forEach((b, i) => { const t = (n === 1 ? (from + to) / 2 : from + (to - from) * i / (n - 1)) * Math.PI / 180;
       b.style.right = Math.round(cx - Math.cos(t) * ARC_R - SLOT / 2) + "px"; b.style.bottom = Math.round(cy - Math.sin(t) * ARC_R - SLOT / 2) + "px"; });
-    if (mount) { const t = 305 * Math.PI / 180, r = 62; mount.style.right = Math.round(cx - Math.cos(t) * r - 20) + "px"; mount.style.bottom = Math.round(cy - Math.sin(t) * r - 20) + "px"; }
+    // Small horse button tucked into the bottom-right corner, just left of the orb, inside the swipe-to-dash area.
+    if (mount) { mount.style.right = ORB_R + ORB + 4 + "px"; mount.style.bottom = "4px"; }
   }
   const syncOrbLayout = () => requestAnimationFrame(layoutOrbArc);
   orbWide.addEventListener?.("change", syncOrbLayout); addEventListener("resize", syncOrbLayout);

@@ -1346,3 +1346,5 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .field-dock .learned-bar[data-arc] { width: 250px; height: 250px; }
 .learned-bar[data-arc] .field-skill-name { display: none; }
 .chat-box:not(.wide) { width: min(42vw, 162px); bottom: max(8px, env(safe-area-inset-bottom)); }
+.learned-bar[data-arc] #mountButton.orb-mount { width: 32px; height: 32px; border-width: 1.5px; }
+.learned-bar[data-arc] #mountButton.orb-mount > span { font-size: 16px; }
