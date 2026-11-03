@@ -9710,10 +9710,11 @@
   function openSentinelBook(){
     if(!room || mode!=="live" || ownServerCharacter()?.pathId!=="sentinel")return toast("เข้า LIVE และเลือกผู้พิทักษ์ก่อน");
     if(!sentinelBookState){if(performance.now()-sentinelRequestAt>1500){sentinelRequestAt=performance.now();room.send("sentinel_book_get",{});}return toast("กำลังขอตำราผู้พิทักษ์");}
-    sentinelBookRenderKey="";openDrawer("sentinelBook","ตำราผู้พิทักษ์",'<div id="sentinelBookBody"></div>');renderSentinelBook();
+    sentinelBookRenderKey="";skillGraphKey="";openDrawer("sentinelBook","ตำราผู้พิทักษ์",skillBookShell("sentinel"));wireSkillBook("sentinel");renderSentinelBook();
   }
   function renderSentinelBook(){
     const data=sentinelBookState,me=ownServerCharacter(),container=$("sentinelBookBody");if(!data?.book || !me || !container)return;
+    if(typeof skillView!=="undefined" && skillView==="graph")return renderSkillGraph("sentinel",container);
     if(container.contains(document.activeElement) && document.activeElement.matches("select[data-sentinel-equip]"))return;
     const key=JSON.stringify([data.book,me.level]);if(key===sentinelBookRenderKey)return;sentinelBookRenderKey=key;
     const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
@@ -9767,10 +9768,11 @@
   function openBladeBook() {
     if(!room || mode!=="live" || ownServerCharacter()?.pathId!=="blade")return toast("เข้า LIVE และเลือกสายคมดาบก่อน");
     if(!bladeBookState){if(performance.now()-bladeRequestAt>1500){bladeRequestAt=performance.now();room.send("blade_book_get",{});}return toast("กำลังขอตำราคมดาบจากเซิร์ฟเวอร์");}
-    bladeBookRenderKey="";openDrawer("bladeBook","ตำราคมดาบ",'<div id="bladeBookBody"></div>');renderBladeBook();
+    bladeBookRenderKey="";skillGraphKey="";openDrawer("bladeBook","ตำราคมดาบ",skillBookShell("blade"));wireSkillBook("blade");renderBladeBook();
   }
   function renderBladeBook() {
     const data=bladeBookState,me=ownServerCharacter(),container=$("bladeBookBody");if(!data || !me || !container)return;
+    if(typeof skillView!=="undefined" && skillView==="graph")return renderSkillGraph("blade",container);
     if(container.contains(document.activeElement) && document.activeElement.matches("select[data-blade-equip]"))return;
     const key=JSON.stringify([data.book,me.level]);if(key===bladeBookRenderKey)return;bladeBookRenderKey=key;
     const clean=value=>String(value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
@@ -9858,11 +9860,12 @@
       if(performance.now()-occultRequestAt>1500){occultRequestAt=performance.now();room.send("occult_book_get",{});}
       return toast("กำลังขอตำราอาคมจากเซิร์ฟเวอร์");
     }
-    occultBookRenderKey="";openDrawer("occultBook","ตำราอาคม",'<div id="occultBookBody"></div>');renderOccultBook();
+    occultBookRenderKey="";skillGraphKey="";openDrawer("occultBook","ตำราอาคม",skillBookShell("occult"));wireSkillBook("occult");renderOccultBook();
   }
   function renderOccultBook() {
     const data=occultBookState,me=ownServerCharacter(),container=$("occultBookBody");
     if (!data || !me || !container || data.path!==me.pathId) return;
+    if(typeof skillView!=="undefined" && skillView==="graph")return renderSkillGraph("occult",container);
     if(container.contains(document.activeElement) && document.activeElement.matches("select[data-occult-equip]"))return;
     const path=data.path,learned=data.book.learned[path],slots=data.book.loadouts[path],training=data.book.training[path];
     const key=JSON.stringify([data.book,me.level]);if(key===occultBookRenderKey)return;occultBookRenderKey=key;
@@ -9951,11 +9954,12 @@
   function openMuayBook() {
     const data=muayBookData();
     if(!data || data.me.pathId!=="muay_boran") {toast("เลือกอาชีพนักมวยก่อน");return;}
-    muayBookRenderKey="";muayBookViewedSchool=data.book.school;openDrawer("muayBook","ตำรามวยไทย",'<div id="muayBookBody"></div>');renderMuayBook();
+    muayBookRenderKey="";skillGraphKey="";muayBookViewedSchool=data.book.school;openDrawer("muayBook","ตำรามวยไทย",skillBookShell("muay"));wireSkillBook("muay");renderMuayBook();
   }
   function renderMuayBook() {
     const data=muayBookData(), container=$("muayBookBody");
     if(!data || !container)return;
+    if(typeof skillView!=="undefined" && skillView==="graph")return renderSkillGraph("muay",container);
     if(container.contains(document.activeElement) && document.activeElement.matches("select[data-muay-equip]"))return;
     const {me,book,catalog}=data;
     if(!Object.hasOwn(catalog.schools,muayBookViewedSchool))muayBookViewedSchool=book.school;
@@ -10064,17 +10068,222 @@
     });
     positionSwordToast();
   }
+  // ---- Skill knowledge graph: one view for every class book ----
+  // Each class adapter turns its server book into a common model; the renderer lays the
+  // prerequisite DAG out in lanes (branch / school) and rows (prerequisite depth).
+  let skillView = (() => { try { return localStorage.getItem("montra_skill_view") === "list" ? "list" : "graph"; } catch { return "graph"; } })();
+  const skillGraphSel = {}, skillGraphScroll = {};
+  let skillGraphKey = "";
+  const SG_GLYPH = { strike: "⚔", step: "➶", guard: "⛨", parry: "⛨", evade: "↯", counter: "↺", counter_sidestep: "↺", flurry: "≋", step_flurry: "≋", area: "◎", sweep: "◎",
+    passive: "◈", support: "♡", teep: "➹", grapple: "✊", sidestep: "↔", retreat_strike: "↩", retreat: "↩", cloak: "◐", approach: "➶", consume: "✂", windup: "➽", focus: "◉",
+    stun: "✸", slam: "✸", anchor: "⚓", taunt: "‼", ward: "⛨", intercept: "⛨", party_ward: "⛨", mark: "✶", rice: "∴", rice_area: "⁂", detonate: "✹", interrupt: "⊘",
+    curse: "☽", curse_burst: "☾", spirit: "☄", spirit_bind: "⛓", trance: "☯", heal: "✚", heal_area: "✚", cleanse: "❂", cleanse_area: "❂", spirit_ward: "⛨", ward_area: "⛨", spirit_heal: "✚" };
+  const sgEsc = v => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  const sgCombatLine = n => n.passive ? "ติดตัว" : [n.power && /strike|step|counter|flurry|area|sweep|slam|stun|consume|windup|mark|rice|detonate|curse|spirit|interrupt|teep|grapple|sidestep|retreat_strike/.test(n.effect) ? "พลัง " + Math.round(n.power * 100) + "%" : "",
+    n.range ? "ระยะ " + n.range : "", n.stamina ? "⚡" + n.stamina : "", n.cooldownMs ? "รอ " + n.cooldownMs / 1000 + " วิ" : ""].filter(Boolean).join(" · ");
+  // Skill ranks (ขั้นวิชา): same point pool, unlocked by level and total practice.
+  const sgRank = (id, learned, ranks, info, done) => {
+    const rankable = learned && (info?.rankable || []).includes(id); if (!rankable) return {};
+    const rank = Number(ranks?.[id] || 0), levels = info.rankLevels || [];
+    return { rankable, rank, rankMax: levels.length, nextLv: levels[rank], rankNeed: (info.rankPractice || [])[rank] || 0, rankDone: done };
+  };
+  const sgSpent = (ranks, filter = () => true) => Object.entries(ranks || {}).reduce((s, [id, n]) => s + (filter(id) ? Number(n) || 0 : 0), 0);
+  function skillGraphModel(kind) {
+    const me = ownServerCharacter(); if (!me) return null;
+    const lv = me.level || 1;
+    if (kind === "sword") {
+      const data = swordData(); if (!data) return null; const { tree, catalog } = data;
+      const points = 1 + Math.floor((Math.min(lv, 100) - 1) / 2) - tree.learned.length - sgSpent(tree.ranks), slots = tree.loadouts?.[tree.school] || [null, null, null];
+      const swordDone = Object.values(tree.training).reduce((s, n) => s + n, 0);
+      const trainingNames = { strikes: "ฟันสำเร็จ", blocks: "รับสำเร็จ", finishes: "คอมโบครบ" };
+      const groups = [{ id: "common", name: "วิชาพื้นฐาน" }, ...Object.entries(catalog.schools).map(([id, s]) => ({ id, name: s.name, active: tree.school === id, choose: tree.school === id ? null : () => room.send("sword_tree_school", { school: id }), note: "Lv." + s.level }))];
+      const nodes = Object.entries(catalog.nodes).map(([id, n]) => {
+        const learned = tree.learned.includes(id), schoolOk = n.school === "common" || n.school === tree.school, tr = n.training ? tree.training[n.training.id] || 0 : 0;
+        const checks = [{ ok: lv >= n.level, label: "เลเวล " + n.level }, ...n.requires.map(r => ({ ok: tree.learned.includes(r), label: "เรียน " + (catalog.nodes[r]?.name || r) }))];
+        if (n.training) checks.push({ ok: tr >= n.training.count, label: (trainingNames[n.training.id] || n.training.id) + " " + tr + "/" + n.training.count });
+        if (n.school !== "common") checks.push({ ok: schoolOk, label: "ใช้สำนัก" + (catalog.schools[n.school]?.name || "") });
+        return { id, name: n.name, group: n.school, level: n.level, requires: n.requires, learned, passive: n.effect === "passive", effect: n.effect, power: n.power, range: n.range, stamina: n.stamina, cooldownMs: n.cooldownMs,
+          description: n.description, checks, canEquip: learned && schoolOk && n.effect !== "passive", slot: slots.indexOf(id), rankBlocked: !schoolOk, ...sgRank(id, learned, tree.ranks, catalog, swordDone) };
+      });
+      return { kind, title: "วิชาดาบ", upgrade: id => room.send("sword_tree_upgrade", { skillId: id }), points, slotCount: 3, groups, nodes,
+        summary: ["ฝึกฟัน " + tree.training.strikes, "รับ " + tree.training.blocks, "คอมโบครบ " + tree.training.finishes],
+        learn: id => room.send("sword_tree_learn", { skillId: id }), equip: (id, s) => room.send("sword_tree_equip", { skillId: id, slot: s }),
+        reset: () => { if (window.confirm("คืนแต้มวิชาที่เรียนทุกสำนักและล้างช่องลัดทั้งหมดหรือไม่? ผลฝึกและคูลดาวน์จะยังอยู่")) room.send("sword_tree_reset", {}); },
+        key: [me.swordTreeData, lv] };
+    }
+    if (kind === "muay") {
+      const data = muayBookData(); if (!data) return null; const { book, catalog } = data;
+      const points = 1 + Math.floor((Math.min(lv, 100) - 1) / 2) - book.learned.length - sgSpent(book.ranks), muayDone = book.training.strikes + book.training.blocks;
+      const groups = [{ id: "basic", name: "วิชาพื้นฐาน" }, ...Object.entries(catalog.schools).map(([id, s]) => {
+        const can = lv >= s.level && book.training.strikes >= s.strikes && book.training.blocks >= s.blocks;
+        return { id, name: s.name, active: book.school === id, choose: book.school === id ? null : () => { if (!can) toast("ต้อง Lv." + s.level + " · ฝึกโจมตี " + s.strikes + " · รับ " + s.blocks); else room.send("muay_book", { action: "school", school: id }); }, note: "Lv." + s.level };
+      })];
+      let basicRow = 0;
+      const nodes = Object.entries(catalog.skills).map(([id, n]) => {
+        const lesson = catalog.lessons[id], learned = !lesson || book.learned.includes(id), sel = !lesson || book.school === lesson.school;
+        const checks = [];
+        if (lesson) {
+          const mastery = catalog.masteryRequirements?.[id], prog = book.mastery?.[lesson.school] || { technique: 0, sequences: 0 };
+          checks.push({ ok: lv >= lesson.level, label: "เลเวล " + lesson.level }, ...lesson.requires.map(r => ({ ok: book.learned.includes(r), label: "เรียน " + (catalog.skills[r]?.name || r) })),
+            { ok: book.training.strikes >= lesson.training.strikes, label: "ฝึกโจมตี " + book.training.strikes + "/" + lesson.training.strikes });
+          if (lesson.training.blocks) checks.push({ ok: book.training.blocks >= lesson.training.blocks, label: "รับสำเร็จ " + book.training.blocks + "/" + lesson.training.blocks });
+          if (mastery) { checks.push({ ok: prog.technique >= mastery.technique, label: (catalog.masteryLabels?.[lesson.school] || "ฝึกสำนัก") + " " + prog.technique + "/" + mastery.technique });
+            if (mastery.sequences) checks.push({ ok: prog.sequences >= mastery.sequences, label: "ชุดต่อเนื่อง " + prog.sequences + "/" + mastery.sequences }); }
+          checks.push({ ok: sel, label: "ใช้สำนัก" + (catalog.schools[lesson.school]?.name || "") });
+        }
+        return { id, name: n.name, group: lesson ? lesson.school : "basic", level: lesson?.level || 1, requires: lesson?.requires || [], learned, basic: !lesson, row: lesson ? undefined : basicRow++ >> 1, effect: n.effect, power: n.power, range: n.range, stamina: n.stamina, cooldownMs: n.cooldownMs,
+          description: lesson?.description || "วิชาพื้นฐาน ใช้ได้ทันที", checks, canEquip: learned && sel, slot: book.slots.indexOf(id), rankBlocked: !sel, ...sgRank(id, learned, book.ranks, catalog, muayDone) };
+      });
+      const combo = (catalog.combos?.[book.school] || []).map(m => muayMoveLabels[m] || m).join(" → ");
+      return { kind, title: "ตำรามวยไทย", upgrade: id => room.send("muay_book", { action: "upgrade", skillId: id }), points, slotCount: 4, groups, nodes,
+        summary: ["ฝึกโจมตี " + book.training.strikes, "รับสำเร็จ " + book.training.blocks].concat(combo ? ["คอมโบ " + combo] : []),
+        learn: id => room.send("muay_book", { action: "learn", skillId: id }), equip: (id, s) => room.send("muay_book", { action: "equip", slot: s, skillId: id }),
+        reset: () => { if (window.confirm("คืนแต้มวิชามวยทุกสำนัก? ผลฝึกและคูลดาวน์ยังคงอยู่")) room.send("muay_book", { action: "reset" }); },
+        key: [me.muayBookData, lv] };
+    }
+    if (kind === "blade" || kind === "sentinel") {
+      const data = kind === "blade" ? bladeBookState : sentinelBookState; if (!data?.book) return null;
+      const learnedIds = data.book.learned, practice = data.book.practice, points = Math.max(0, data.points - learnedIds.length - sgSpent(data.book.ranks)), practiceDone = Object.values(practice).reduce((s, n) => s + n, 0);
+      const branchNames = kind === "blade" ? { veil: "มนตราอำพราง", edge: "คมอาคม", tempo: "ชิงจังหวะ" } : { defense: "ตั้งรับ", control: "ควบคุม", support: "คุ้มกันปาร์ตี้" };
+      const seen = []; for (const n of Object.values(data.lessons)) if (!seen.includes(n.branch)) seen.push(n.branch);
+      const nodes = Object.entries(data.lessons).map(([id, n]) => {
+        const learned = learnedIds.includes(id);
+        const checks = [{ ok: lv >= n.level, label: "เลเวล " + n.level }, ...n.requires.map(r => ({ ok: learnedIds.includes(r), label: "เรียน " + (data.lessons[r]?.name || r) })),
+          ...Object.entries(n.practice || {}).map(([p, c]) => ({ ok: (practice[p] || 0) >= c, label: (data.practiceLabels?.[p] || p) + " " + (practice[p] || 0) + "/" + c }))];
+        return { id, name: n.name, group: n.branch, level: n.level, requires: n.requires, learned, passive: n.effect === "passive", effect: n.effect, power: n.power, range: n.range, stamina: n.stamina, cooldownMs: n.cooldownMs,
+          description: n.description, checks, canEquip: learned && n.effect !== "passive", slot: data.book.slots.indexOf(id), ...sgRank(id, learned, data.book.ranks, data, practiceDone) };
+      });
+      const msg = kind === "blade" ? "blade_book" : "sentinel_book";
+      return { kind, title: kind === "blade" ? "ตำราคมดาบ" : "ตำราผู้พิทักษ์", upgrade: id => room.send(msg, { action: "upgrade", skillId: id }), points, slotCount: 4, groups: seen.map(b => ({ id: b, name: branchNames[b] || b })), nodes,
+        summary: Object.entries(data.practiceLabels || {}).map(([p, l]) => l + " " + (practice[p] || 0)),
+        learn: id => room.send(msg, { action: "learn", skillId: id }), equip: (id, s) => room.send(msg, { action: "equip", slot: s, skillId: id }),
+        reset: () => { if (window.confirm("คืนแต้มทั้งหมด? ผลฝึกและคูลดาวน์ยังคงอยู่")) room.send(msg, { action: "reset" }); },
+        key: [data.book, lv] };
+    }
+    if (kind === "occult") {
+      const data = occultBookState; if (!data || data.path !== me.pathId) return null;
+      const path = data.path, learnedIds = data.book.learned[path], training = data.book.training[path], progress = data.book.mastery?.[path] || {}, labels = data.masteryLabels?.[path] || {};
+      const points = Math.max(0, data.points - learnedIds.length - sgSpent(data.book.ranks, id => data.lessons[id]?.path === path));
+      const nodes = Object.entries(data.lessons).filter(([, n]) => n.path === path).map(([id, n]) => {
+        const learned = learnedIds.includes(id), mastery = data.masteryRequirements?.[id] || {};
+        const checks = [{ ok: lv >= n.level, label: "เลเวล " + n.level }, ...n.requires.map(r => ({ ok: learnedIds.includes(r), label: "เรียน " + (data.lessons[r]?.name || r) }))];
+        if (n.training) checks.push({ ok: training >= n.training, label: "ฝึกรวม " + training + "/" + n.training });
+        for (const [c, cnt] of Object.entries(mastery)) checks.push({ ok: (progress[c] || 0) >= cnt, label: (labels[c] || c) + " " + (progress[c] || 0) + "/" + cnt });
+        return { id, name: n.name, group: path, level: n.level, requires: n.requires, learned, effect: n.effect, power: n.power, range: n.range, stamina: n.stamina, cooldownMs: n.cooldownMs,
+          description: n.description, checks, canEquip: learned, slot: data.book.loadouts[path].indexOf(id), ...sgRank(id, learned, data.book.ranks, data, training) };
+      });
+      return { kind, title: path === "seer" ? "ตำราผู้ร่ายเวท" : "ตำราผู้เยียวยา", upgrade: id => room.send("occult_book", { action: "upgrade", skillId: id }), points, slotCount: 4, groups: [{ id: path, name: path === "seer" ? "สายผู้ร่ายเวท" : "สายผู้เยียวยา" }], nodes,
+        summary: ["ผลฝึกรวม " + training, ...Object.entries(labels).map(([c, l]) => l + " " + (progress[c] || 0))],
+        learn: id => room.send("occult_book", { action: "learn", skillId: id }), equip: (id, s) => room.send("occult_book", { action: "equip", slot: s, skillId: id }),
+        reset: () => { if (window.confirm("คืนแต้มสายนี้? ผลฝึกและคูลดาวน์ยังคงอยู่")) room.send("occult_book", { action: "reset" }); },
+        key: [data.book, lv, path] };
+    }
+    return null;
+  }
+  // Layered layout: row = longest prerequisite chain, lane = group; nodes in a lane are ordered by their parents' x.
+  function layoutSkillGraph(model, avail = 360) {
+    const H = 104, PAD = 8, TOP = 44, GAP = 6, byId = new Map(model.nodes.map(n => [n.id, n]));
+    const depth = new Map(), visit = (n, stack = new Set()) => { if (depth.has(n.id)) return depth.get(n.id); if (stack.has(n.id)) return 0; stack.add(n.id);
+      const d = n.row ?? n.requires.reduce((m, r) => byId.has(r) ? Math.max(m, visit(byId.get(r), stack) + 1) : m, 0); depth.set(n.id, d); return d; };
+    model.nodes.forEach(n => visit(n));
+    // Cell width shrinks so the whole graph fits the drawer when it can (64–96 px per column).
+    const cells = model.groups.reduce((s, g) => { const mem = model.nodes.filter(n => n.group === g.id); if (!mem.length) return s;
+      const c = new Map(); for (const n of mem) c.set(depth.get(n.id), (c.get(depth.get(n.id)) || 0) + 1); return s + Math.max(...c.values()); }, 0);
+    const lanesUsed = model.groups.filter(g => model.nodes.some(n => n.group === g.id)).length;
+    const W = Math.max(64, Math.min(96, Math.floor((avail - PAD * 2 - GAP * (lanesUsed - 1)) / Math.max(1, cells))));
+    let x0 = PAD; const lanes = [];
+    for (const g of model.groups) {
+      const members = model.nodes.filter(n => n.group === g.id); if (!members.length) continue;
+      const rows = new Map(); for (const n of members) { const d = depth.get(n.id); if (!rows.has(d)) rows.set(d, []); rows.get(d).push(n); }
+      const width = Math.max(...[...rows.values()].map(r => r.length)) * W;
+      for (const [d, row] of [...rows.entries()].sort((a, b) => a[0] - b[0])) {
+        row.sort((a, b) => { const bx = n => { const ps = n.requires.map(r => byId.get(r)).filter(p => p?._x != null); return ps.length ? ps.reduce((s, p) => s + p._x, 0) / ps.length : 0; }; return bx(a) - bx(b) || a.level - b.level; });
+        const off = x0 + (width - row.length * W) / 2;
+        row.forEach((n, i) => { n._x = off + i * W + W / 2; n._y = TOP + d * H + 34; });
+      }
+      lanes.push({ ...g, x: x0, w: width }); x0 += width + GAP;
+    }
+    const rowsMax = Math.max(0, ...depth.values()) + 1;
+    return { lanes, width: x0 - GAP + PAD, height: TOP + rowsMax * H + 10, byId, W };
+  }
+  function nodeState(n, points) {
+    if (n.learned) return "learned";
+    return n.checks.every(c => c.ok) && points > 0 ? "ready" : n.checks.filter(c => !c.ok).every(c => /^ใช้สำนัก/.test(c.label)) && points > 0 ? "school" : "locked";
+  }
+  function renderSkillGraph(kind, container) {
+    const model = skillGraphModel(kind); if (!model || !container) return;
+    const sel = skillGraphSel[kind] && model.nodes.some(n => n.id === skillGraphSel[kind]) ? skillGraphSel[kind] : null;
+    const key = JSON.stringify([kind, model.key, sel, skillView]);
+    if (key === skillGraphKey && container.querySelector(".sg-wrap")) return; skillGraphKey = key;
+    const view = container.querySelector(".sg-view"); if (view) skillGraphScroll[kind] = [view.scrollLeft, view.scrollTop];
+    const L = layoutSkillGraph(model, (container.clientWidth || 360) - 4), pts = Math.max(0, model.points), lvNow = ownServerCharacter()?.level || 1;
+    for (const n of model.nodes) n._state = nodeState(n, pts);
+    const edges = [];
+    for (const n of model.nodes) for (const r of n.requires) { const p = L.byId.get(r); if (!p || p._x == null || n._x == null) continue;
+      const cls = p.learned && n.learned ? "on" : p.learned && n._state === "ready" ? "next" : p.learned ? "half" : "off";
+      const y1 = p._y + 48, y2 = n._y - 24, my = y1 + (y2 - y1) * .55;
+      edges.push(`<path class="sg-edge ${cls}${sel && (sel === n.id || sel === p.id) ? " hl" : ""}" d="M${p._x} ${y1} C${p._x} ${my} ${n._x} ${my} ${n._x} ${y2}"/>`); }
+    const lanesHtml = L.lanes.map(l => `<div class="sg-lane${l.active ? " active" : ""}" style="left:${l.x}px;width:${l.w}px"><b>${sgEsc(l.name)}</b>${l.note ? `<small>${sgEsc(l.note)}</small>` : ""}${l.active ? `<em>ใช้อยู่</em>` : l.choose ? `<button type="button" data-sg-school="${sgEsc(l.id)}">เลือกใช้</button>` : ""}</div>`).join("");
+    const nodesHtml = model.nodes.filter(n => n._x != null).map(n => `<button type="button" class="sg-node ${n._state}${n.id === sel ? " sel" : ""}${n.basic ? " basic" : ""}" data-sg-node="${sgEsc(n.id)}" style="left:${n._x}px;top:${n._y}px" aria-label="${sgEsc(n.name)}">
+      <span class="sg-orb">${SG_GLYPH[n.effect] || "✦"}${n.slot >= 0 ? `<i class="sg-slot">${n.slot + 1}</i>` : ""}</span><span class="sg-name">${sgEsc(n.name)}</span><span class="sg-lv">${n.basic ? "พื้นฐาน" : n.rankable ? "ขั้น " + (n.rank + 1) + "/" + (n.rankMax + 1) : n.learned ? "เรียนแล้ว" : "Lv." + n.level}</span>${n.rankable ? `<span class="sg-pips">${Array.from({ length: n.rankMax + 1 }, (_, i) => `<i class="${i <= n.rank ? "on" : ""}"></i>`).join("")}</span>` : ""}</button>`).join("");
+    const n = sel && L.byId.get(sel);
+    let detail = `<div class="sg-detail empty">แตะโหนดเพื่อดูวิชา · <span class="sg-key"><i class="k ready"></i>เรียนได้</span><span class="sg-key"><i class="k learned"></i>เรียนแล้ว</span><span class="sg-key"><i class="k locked"></i>ยังล็อก</span></div>`;
+    if (n) {
+      const missing = n.checks.filter(c => !c.ok);
+      let rankHtml = "";
+      if (n.rankable) {
+        const can = n.nextLv && lvNow >= n.nextLv && n.rankDone >= n.rankNeed && pts > 0 && !n.rankBlocked;
+        rankHtml = `<div class="sg-rank"><div class="sg-rank-top"><b>ขั้นวิชา ${n.rank + 1}/${n.rankMax + 1}</b><span>ดาเมจมอนสเตอร์ +${n.rank * 4}%${n.nextLv ? " → +" + (n.rank + 1) * 4 + "%" : ""}</span></div>
+          <div class="sg-pips big">${Array.from({ length: n.rankMax + 1 }, (_, i) => `<i class="${i <= n.rank ? "on" : ""}"></i>`).join("")}</div>
+          ${n.nextLv ? `<ul class="sg-checks"><li class="${lvNow >= n.nextLv ? "ok" : "no"}">${lvNow >= n.nextLv ? "✓" : "✗"} เลเวล ${n.nextLv}</li><li class="${n.rankDone >= n.rankNeed ? "ok" : "no"}">${n.rankDone >= n.rankNeed ? "✓" : "✗"} ฝึกรวม ${n.rankDone}/${n.rankNeed}</li>${n.rankBlocked ? `<li class="no">✗ ใช้สำนักนี้</li>` : ""}</ul>
+          <button type="button" class="sg-up" data-sg-upgrade="${sgEsc(n.id)}" ${can ? "" : "disabled"}>${pts < 1 ? "แต้มไม่พอ" : "อัปขั้น · 1 แต้ม"}</button>` : `<p class="sg-passive">ขั้นสูงสุดแล้ว</p>`}</div>`;
+      }
+      const learnBtn = n.learned ? "" : `<button type="button" class="primary" data-sg-learn="${sgEsc(n.id)}" ${n._state === "ready" ? "" : "disabled"}>${pts < 1 ? "แต้มไม่พอ" : n._state === "ready" ? "เรียน · 1 แต้ม" : "ยังเรียนไม่ได้"}</button>`;
+      const slotBtns = n.canEquip && !n.passive ? `<div class="sg-slots"><span>ช่องลัด</span>${Array.from({ length: model.slotCount }, (_, i) => `<button type="button" data-sg-equip="${i}" class="${n.slot === i ? "on" : ""}">${i + 1}</button>`).join("")}</div>` : n.learned && n.passive ? `<p class="sg-passive">ติดตัวแล้ว · ทำงานเองตลอด</p>` : "";
+      detail = `<div class="sg-detail"><div class="sg-dh"><span class="sg-orb sm ${n._state}">${SG_GLYPH[n.effect] || "✦"}</span><div><strong>${sgEsc(n.name)}</strong><small>${sgEsc(sgCombatLine(n))}</small></div></div>
+        <p>${sgEsc(n.description || "")}</p>${n.checks.length ? `<ul class="sg-checks">${n.checks.map(c => `<li class="${c.ok ? "ok" : "no"}">${c.ok ? "✓" : "✗"} ${sgEsc(c.label)}</li>`).join("")}</ul>` : ""}
+        ${!n.learned && missing.some(c => /^ใช้สำนัก/.test(c.label)) ? `<p class="note">เลือกใช้สำนักนี้ที่หัวคอลัมน์ก่อน (ทำได้ที่ลานพัก)</p>` : ""}${learnBtn}${rankHtml}${slotBtns}</div>`;
+    }
+    container.innerHTML = `<div class="sg-wrap"><div class="sg-head"><div class="sg-points"><b>${pts}</b><span>แต้มวิชา</span></div><div class="sg-sum">${model.summary.map(sgEsc).join(" · ")}</div></div>
+      <div class="sg-view"><div class="sg-sizer"><div class="sg-canvas" style="width:${L.width}px;height:${L.height}px;--sgw:${L.W - 4}px">${lanesHtml}<svg class="sg-edges" width="${L.width}" height="${L.height}">${edges.join("")}</svg>${nodesHtml}</div></div></div>
+      ${detail}<p class="note">เรียน จัดช่อง และเปลี่ยนสำนักที่ลานพักหลังพ้นการต่อสู้ 5 วินาที</p><button type="button" class="secondary" data-sg-reset>คืนแต้ม</button></div>`;
+    const v = container.querySelector(".sg-view"), s = skillGraphScroll[kind];
+    // Fit the whole graph to the drawer width when it is a little wider (down to 72%), scroll beyond that.
+    const fit = Math.max(.8, Math.min(1, (v.clientWidth - 2) / L.width)), sizer = v.querySelector(".sg-sizer"), canvas = v.querySelector(".sg-canvas");
+    canvas.style.transform = "scale(" + fit + ")"; sizer.style.width = L.width * fit + "px"; sizer.style.height = L.height * fit + "px";
+    if (s) { v.scrollLeft = s[0]; v.scrollTop = s[1]; }
+    else { const act = L.lanes.find(l => l.active); if (act) v.scrollLeft = Math.max(0, act.x - 40); }
+    container.querySelectorAll("[data-sg-node]").forEach(b => b.onclick = () => { skillGraphSel[kind] = b.dataset.sgNode === sel ? null : b.dataset.sgNode; SFX("tap"); renderSkillGraph(kind, container); });
+    container.querySelectorAll("[data-sg-school]").forEach(b => b.onclick = () => model.groups.find(g => g.id === b.dataset.sgSchool)?.choose?.());
+    container.querySelector("[data-sg-learn]")?.addEventListener("click", e => model.learn(e.currentTarget.dataset.sgLearn));
+    container.querySelector("[data-sg-upgrade]")?.addEventListener("click", e => model.upgrade?.(e.currentTarget.dataset.sgUpgrade));
+    container.querySelectorAll("[data-sg-equip]").forEach(b => b.onclick = () => model.equip(sel, Number(b.dataset.sgEquip)));
+    container.querySelector("[data-sg-reset]").onclick = () => model.reset();
+  }
+  // Graph / list switch shown above every class book.
+  const SKILL_BOOKS = { sword: ["swordTreeBody", () => { swordTreeRenderKey = ""; renderSwordTree(); }], muay: ["muayBookBody", () => { muayBookRenderKey = ""; renderMuayBook(); }],
+    blade: ["bladeBookBody", () => { bladeBookRenderKey = ""; renderBladeBook(); }], sentinel: ["sentinelBookBody", () => { sentinelBookRenderKey = ""; renderSentinelBook(); }],
+    occult: ["occultBookBody", () => { occultBookRenderKey = ""; renderOccultBook(); }] };
+  const skillBookShell = (kind) => `<div class="sg-toggle" role="tablist"><button type="button" data-sg-view="graph" class="${skillView === "graph" ? "on" : ""}">กราฟวิชา</button><button type="button" data-sg-view="list" class="${skillView === "list" ? "on" : ""}">รายการ</button></div><div id="${SKILL_BOOKS[kind][0]}"></div>`;
+  function wireSkillBook(kind) {
+    ui.drawerBody.querySelectorAll("[data-sg-view]").forEach(b => b.onclick = () => {
+      skillView = b.dataset.sgView; try { localStorage.setItem("montra_skill_view", skillView); } catch {}
+      ui.drawerBody.querySelectorAll("[data-sg-view]").forEach(o => o.classList.toggle("on", o === b));
+      skillGraphKey = ""; const body = $(SKILL_BOOKS[kind][0]); if (body) body.innerHTML = ""; SKILL_BOOKS[kind][1]();
+    });
+  }
   function openSwordTree() {
     const data=swordData();
     if (!data || data.me.pathId!=="phutthaisawan") { toast("เลือกอาชีพนักดาบก่อนเรียนวิชา"); return; }
     swordTreeRenderKey="";
     swordTreeViewedSchool=data.tree.school;
-    openDrawer("swordTree","ตำราวิชาดาบ",'<div id="swordTreeBody"></div>');
+    skillGraphKey="";openDrawer("swordTree","ตำราวิชาดาบ",skillBookShell("sword"));wireSkillBook("sword");
     renderSwordTree();
   }
   function renderSwordTree() {
     const data=swordData(), container=$("swordTreeBody");
     if (!data || !container) return;
+    if (typeof skillView!=="undefined" && skillView==="graph") return renderSkillGraph("sword",container);
     const {me,tree,catalog}=data;
     if (!Object.hasOwn(catalog.schools,swordTreeViewedSchool)) swordTreeViewedSchool=tree.school;
     // Keep the slot selector stable while the player is choosing an option.
