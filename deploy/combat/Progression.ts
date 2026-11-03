@@ -46,6 +46,30 @@ export function parseAllocateStat(payload: unknown): StatKey | null {
 export function xpForNextLevel(level: number): number {
   return PROGRESSION.xpBase + PROGRESSION.xpQuadratic * level * level;
 }
+/** Optional skill upgrades consume the same points as learning a skill. */
+export const SKILL_RANK_LEVELS = Object.freeze([25,45,65,85,95] as const);
+/** Number of actual class practice events required for each upgrade. */
+export const SKILL_RANK_PRACTICE = Object.freeze([3,8,16,28,45] as const);
+export type SkillRanks = Record<string,number>;
+export function skillRankCost(ranks:SkillRanks | undefined):number {
+  return Object.values(ranks ?? {}).reduce((total,rank)=>total+rank,0);
+}
+export function validateSkillRanks(value:unknown, learned:readonly string[], level:number, points:number, allowed:readonly string[]):SkillRanks {
+  if(value===undefined)return {};
+  if(!value || typeof value!=="object" || Array.isArray(value))throw Error("invalid_skill_ranks");
+  const result:SkillRanks={};
+  for(const [id,rank] of Object.entries(value)) {
+    if(!allowed.includes(id) || !learned.includes(id) || typeof rank!=="number" || !Number.isInteger(rank) ||
+        rank<1 || rank>SKILL_RANK_LEVELS.length || level<SKILL_RANK_LEVELS[rank-1])throw Error("invalid_skill_ranks");
+    result[id]=rank;
+  }
+  if(learned.length+skillRankCost(result)>points)throw Error("invalid_skill_ranks");
+  return result;
+}
+/** PvE skill power only; PvP must keep its own independent balance. */
+export function skillRankMultiplier(ranks:SkillRanks | undefined,id:string):number {
+  return 1+(ranks?.[id] ?? 0)*0.04;
+}
 export function monsterExperience(playerLevel: number, monsterLevel: number, tier: MonsterTier = "normal"): number {
   return monsterReward(playerLevel,monsterLevel,tier,PROGRESSION.monsterBaseExperience);
 }

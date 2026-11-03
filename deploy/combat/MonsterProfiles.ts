@@ -16,6 +16,7 @@ export const MONSTER_CONFIG = Object.freeze({
   normalAttack:8, attackPerLevel:0.8,
   normalDefense:34, defensePerLevel:4,
   gapPenaltyPerLevel:0.05,
+  maxGapBonus:1.25, // cap EXP from monsters above the recipient's level
   respawnMs:25_000,
   minRespawnMs:20_000, respawnReductionPerAdditionalPlayerMs:1_500,
   populationRadius:20,
@@ -56,7 +57,7 @@ export function monsterReward(playerLevel:number,level:number,tier:MonsterTier="
   if(!Number.isSafeInteger(playerLevel) || playerLevel<1 || playerLevel>1000) throw new Error("invalid_player_level");
   monsterLevel(level);
   if(!Number.isSafeInteger(baseExperience) || baseExperience<0 || baseExperience>1_000_000) throw new Error("invalid_base_experience");
-  const factor=Math.max(0,1-MONSTER_CONFIG.gapPenaltyPerLevel*(playerLevel-level));
+  const factor=Math.min(MONSTER_CONFIG.maxGapBonus,Math.max(0,1-MONSTER_CONFIG.gapPenaltyPerLevel*(playerLevel-level)));
   return Math.floor(baseExperience*level*factor*tierValue(tier).experience);
 }
 

@@ -1,6 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {BLADE_LESSONS, BLADE_PRACTICE_LABELS, bladePoints, newBladeBook, validateBladeBook} from "./BladeRules.js";
+import {skillRankMultiplier} from "./Progression.js";
 
 test("blade skill tree has valid prerequisites, practice categories and active values",()=>{
   for(const [id,node] of Object.entries(BLADE_LESSONS)) {
@@ -14,6 +15,19 @@ test("blade skill tree has valid prerequisites, practice categories and active v
     }
     if(node.effect!=="passive") assert.ok(node.stamina>0 && node.cooldownMs>0);
   }
+});
+
+test("blade upgrades preserve legacy books and validate points, level and learned skills",()=>{
+  const book=newBladeBook();book.learned=["cloak","hidden_edge"];book.slots=["cloak","hidden_edge",null,null];
+  assert.deepEqual(validateBladeBook(book,25),book);
+  book.ranks={hidden_edge:1};
+  assert.deepEqual(validateBladeBook(book,25).ranks,{hidden_edge:1});
+  assert.equal(skillRankMultiplier(book.ranks,"hidden_edge"),1.04);
+  assert.throws(()=>validateBladeBook(book,24));
+  book.ranks={hidden_edge:2};assert.throws(()=>validateBladeBook(book,44));
+  book.ranks={piercing_edge:1};assert.throws(()=>validateBladeBook(book,100));
+  book.ranks={hidden_edge:6};assert.throws(()=>validateBladeBook(book,100));
+  book.ranks={cloak:1};assert.throws(()=>validateBladeBook(book,100));
 });
 
 test("blade book preserves learned abilities, practice, loadout and cooldowns",()=>{
