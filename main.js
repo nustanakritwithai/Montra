@@ -8499,12 +8499,26 @@
         toast(result.action==="drill"?"เจาะรูสำเร็จ":result.action==="insert"?"ใส่"+(personalItems[result.socket]?.name||"การ์ด")+"แล้ว":"คืนการ์ดเข้ากระเป๋าแล้ว");
         renderBag();
       });
+      joined.onMessage("forge_copy_claimed", result => {
+        if(room!==joined)return;
+        finishEconomyPending();
+        const slot=inventoryState?.slots.findIndex(s=>s?.forge?.instanceId===result.instanceId)??-1;
+        if(drawerActive==="bag" && slot>=0){inspectingGear=null;selectedBagSlot=slot;confirmBindKey=null;}
+        toast("เบิก "+(bagMeta(result.gear)?.name||"อุปกรณ์")+" +0 แล้ว · เหลือในคลังช่าง "+result.remaining+" ชิ้น");
+        renderBag();
+      });
       joined.onMessage("forge_result", result => {
         if (room !== joined) return;
         finishEconomyPending();
-        const gearName=bagMeta(result.itemId)?.name||"อุปกรณ์";
-        toast(result.broken?gearName+" +"+result.forge.rank+" แตกแล้ว":result.action==="reroll"?"สุ่มออปชันแล้ว":"ตีบวกสำเร็จ +"+result.forge.rank);
+        const meta=bagMeta(result.itemId),gearName=meta?.name||"อุปกรณ์";
+        const spare=inventoryState?.forgeCopies?.[result.itemId]??0;
+        const source=spare?" · คลังช่างมี "+spare+" ชิ้น เบิกชิ้นใหม่ +0 ได้":meta?.dropHint?" · หาใหม่ที่ "+meta.dropHint:meta?.recipe?" · สร้างชิ้นใหม่ได้ที่โต๊ะช่าง":"";
+        toast(result.broken?gearName+" +"+result.forge.rank+" แตกแล้ว"+source:result.action==="reroll"?"สุ่มออปชันแล้ว":"ตีบวกสำเร็จ +"+result.forge.rank);
         renderBag();
+        if(result.broken && drawerActive==="bag" && spare){
+          renderForgeStock(result.itemId);
+          if(!$("forgeStock").hidden)$("forgeStock").scrollIntoView({block:"nearest"});
+        }
       });
       joined.onMessage("market_result", message => {
         if (room !== joined) return;
@@ -8549,7 +8563,7 @@
       joined.onMessage("economy_error", message => {
         if (room !== joined) return;
         finishEconomyPending();
-        const reasons={forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
+        const reasons={forge_stock_changed:"ยอดของสำรองเปลี่ยนแล้ว · ตรวจคลังช่างอีกครั้ง",forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
         const socketErrors={item_level_required:"เลเวลยังไม่ถึงที่อุปกรณ์กำหนด",card_gear_level:"การ์ดนี้ต้องใช้อุปกรณ์เลเวลสูงกว่านี้",socket_changed:"อุปกรณ์หรือรูการ์ดเปลี่ยนไปแล้ว",card_unavailable:"ไม่มีการ์ดที่เลือกในกระเป๋า",drill_missing_metal:"แร่เหล็กไม่พอสำหรับเจาะรู"};
         reasons.salvage_changed="อุปกรณ์เปลี่ยนไปแล้ว โปรดเลือกชิ้นที่จะแยกอีกครั้ง";
         const gatherErrors={resource_range:"ขยับเข้าใกล้ต้นไม้หรือหินบนแผนที่นี้",resource_ground:"ลงจากม้าหรือลงสู่พื้นก่อนเก็บวัตถุดิบ",resource_empty:"จุดนี้กำลังฟื้นตัว",resource_cooldown:"รอสักครู่ก่อนเก็บครั้งถัดไป"};
@@ -11682,7 +11696,7 @@
     }
     if(!sell.hidden){sell.disabled=economyPending;sell.textContent="ขายวัสดุ 1 ชิ้น · "+meta.sellGold+" ทอง";}
     renderCardSocket(gear?chosen:null,slots);
-    renderForge(chosen);renderCraft(slots);renderWorkbench(slots);renderGearGuide(slots);
+    renderForge(chosen);renderForgeStock();renderCraft(slots);renderWorkbench(slots);renderGearGuide(slots);
     const use=$("useBagItem");use.disabled=!ready||itemUsePending;
     use.textContent=itemUsePending?"กำลังบันทึก…":!inspectingGear&&chosen && confirmBindKey===selectedBagSlot+":"+gearStamp(chosen)&&gear&&!worn&&!chosen.bound?"ยืนยันผูกและสวม":gear?(worn?"ถอด":"สวม")+(armor?bodyLabels[destination]:"อาวุธ"):heal?(full?(meta?.healMana?"MP เต็ม":"HP เต็ม"):"ใช้ยา"):meta?.kind==="tool"?"ใช้จากกระเป๋าอัตโนมัติ":chosen?"วัตถุดิบ":"ช่องว่าง";
     if(meta?.kind==="card")use.textContent="เลือกอุปกรณ์เพื่อใส่การ์ด";
@@ -11993,6 +12007,33 @@
       renderBag();
     };
   }
+  function renderForgeStock(preferred){
+    const panel=$("forgeStock"),select=$("forgeStockGear"),button=$("forgeStockClaim");
+    const stocks=inventoryState?.forgeCopies??{};
+    const ids=Object.keys(stocks).filter(id=>stocks[id]>0 && bagMeta(id));
+    const catalog=room?.state?.forgeCatalog;
+    panel.hidden=!ids.length || !economyReady() || !catalog || !JSON.parse(catalog).claimCopies;
+    if(panel.hidden)return;
+    const previous=preferred??select.value;
+    const choices=ids.map(id=>id+"/"+stocks[id]).join("|");
+    if(select.dataset.stock!==choices){
+      select.dataset.stock=choices;
+      select.replaceChildren(...ids.map(id=>new Option(bagMeta(id).name+" ×"+stocks[id],id)));
+    }
+    if(ids.includes(previous))select.value=previous;
+    const id=select.value,stock=stocks[id],meta=bagMeta(id);
+    const owned=itemHuntCount(id),limit=meta.copyLimit??1,full=!inventoryState.slots.includes(null);
+    $("forgeStockInfo").textContent=owned>=limit?"มี "+meta.name+" ครบ "+limit+" ชิ้นแล้ว · ของในคลังใช้ตีบวกได้":
+      full?"ต้องมีช่องว่างในกระเป๋า 1 ช่องจึงจะเบิกได้":
+      "เบิก 1 ชิ้นเป็น "+meta.name+" +0 ผูกตัวละคร · ไม่มีออปชันหรือการ์ด · จะเหลือ "+(stock-1)+" ชิ้นในคลัง";
+    button.disabled=owned>=limit || full || economyPending || itemUsePending || !ownServerCharacter()?.alive;
+    select.onchange=()=>renderForgeStock();
+    button.onclick=()=>{
+      if(button.disabled || !window.confirm("เบิก "+meta.name+" +0 ผูกตัวละคร 1 ชิ้น? คลังช่างจะเหลือ "+(stock-1)+" ชิ้น"))return;
+      economySend("claim_forge_copy",{gear:id,expectedStock:stock,requestId:economyRequestId()},true);
+      renderBag();
+    };
+  }
   function renderForge(item) {
     const panel=$("forgePanel"), raw=room?.state?.forgeCatalog,meta=bagMeta(item?.itemId);
     if(!panel)return;
@@ -12017,6 +12058,7 @@
     $("forgeSupply").textContent=max?"ตีบวกครบ +10":!terms?"รอเซิร์ฟเวอร์อัปเดตสูตร":
       "ใช้ "+meta.name+" รุ่นเดียวกัน "+need+" ชิ้น · คลังช่างมี "+bank+" ชิ้น"+(selector.value?" · รวมชิ้นจากกระเป๋า 1 ชิ้น":"")+
       (risk?" · มีโอกาส "+(100-terms.chance)+"% ที่ "+meta.name+" +"+rank+" จะแตก"+(item.socket?" · ถอดการ์ดก่อน":""):" · ขั้นปลอดภัย");
+    if(risk && ready)$("forgeSupply").textContent+=" · หลังตีเหลือในคลัง "+(have-need)+" ชิ้น";
     const missing=Math.max(0,need-have);
     bindItemHuntButton($("forgeTrack"),missing?item.itemId:null,itemHuntCount(item.itemId,true)+missing,false,true);
     const recipe=$("forgeCopyRecipe");
@@ -12056,6 +12098,7 @@
       '<button class="secondary" id="bagTrack" type="button" hidden></button><button id="refineResource" type="button" class="secondary" hidden></button><button id="bagKiln" type="button" class="secondary" hidden></button><button id="sellBagMaterial" type="button" class="secondary" hidden></button><button id="salvageGear" type="button" class="secondary" hidden></button>' +
       '<section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="boss">ของจากบอส</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button class="secondary" id="benchTrack" type="button" hidden></button><select id="benchHuntChoice" aria-label="เลือกวัตถุดิบที่ต้องการตามหา" hidden></select><button class="secondary" id="benchTrackSupply" type="button" hidden></button><button id="benchCraft" type="button" class="secondary">คราฟต์</button><button id="benchIngredient" type="button" class="secondary" hidden></button><button id="benchBack" type="button" class="secondary" hidden></button></section>' +
       '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
+      '<section id="forgeStock" hidden><h3>คลังช่าง · ของรุ่นเดียวกัน</h3><select id="forgeStockGear" aria-label="อุปกรณ์ในคลังช่าง"></select><p class="note" id="forgeStockInfo"></p><button type="button" class="secondary" id="forgeStockClaim">เบิกชิ้นตั้งต้น +0</button></section>' +
       '<div id="forgePanel" hidden><h3>ช่างอาคม</h3><progress id="forgeProgress" max="10" value="0" aria-label="ความคืบหน้าตีบวกถึงสิบ"></progress><p class="note" id="forgeSupply"></p><select id="forgeDonor" aria-label="เลือกของรุ่นเดียวกันจากกระเป๋า" hidden></select><button class="secondary" type="button" id="forgeTrack" hidden></button><button class="secondary" type="button" id="forgeCopyRecipe" hidden>เปิดสูตรสร้างของรุ่นนี้</button><p class="note" id="forgeInfo"></p><button class="secondary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeReroll"></button></div>' +
       '<p class="note">แตะช่องสวมเพื่อดูหรือถอดอุปกรณ์ ล่ามอนสเตอร์เพื่อรับเกราะชิ้นแรก จากนั้นหาอุปกรณ์หรือเก็บวัตถุดิบคราฟต์ที่โต๊ะช่าง</p>');
     for (let i = 0; i < INVENTORY_SLOTS; i++) {

@@ -7,7 +7,7 @@ import os from "node:os";
 import { EconomyStore, STARTER_GOLD } from "./EconomyStore.js";
 import { makeClassInventory, makeStarterInventory, practiceLoot, validateInventory, weaponBonuses, SHRINE_GLAIVE, SHRINE_SHARD } from "./ItemRules.js";
 import { FORGE, FORGE_CATALOG, forgeStamp, rollForge, plainForge } from "./ForgeRules.js";
-import { parseForge } from "./EconomyRules.js";
+import { parseClaimForgeCopy, parseForge } from "./EconomyRules.js";
 
 test("the first five ranks are safe; the upper five break exactly at their advertised thresholds",()=>{
   const chances=[100,100,100,100,100,95,90,70,55,40];
@@ -127,6 +127,60 @@ test("a confirmed break removes only the target and its paid copies, including w
       assert.deepEqual(attempt(true),receipt);assert.deepEqual(store.getAccount(id),after);
     }
   }finally{store.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test("a banked spare starts again at +0 after a break and can only be claimed once across restart",()=>{
+  const dir=mkdtempSync(path.join(os.tmpdir(),"montra-forge-claim-")),file=path.join(dir,"economy.sqlite");
+  let store=new EconomyStore(file,()=>99);
+  try{
+    const actor="d".repeat(64),gear="wp_shadow_1",bag=makeClassInventory("blade");
+    const old={...plainForge(),rank:9,affix:{stat:"melee" as const,tier:3}};
+    bag.slots[1]={itemId:gear,quantity:1,bound:true,forge:old,socket:null};
+    bag.forgeCopies={[gear]:6};store.register(actor,bag);
+    assert(store.forgeWeapon(actor,randomUUID(),1,forgeStamp(bag.slots[1]),"enhance",1,undefined,4,true).broken);
+    const before=store.getAccount(actor);
+    assert.equal(before.inventory.forgeCopies?.[gear],2);
+    assert.throws(()=>store.claimForgeCopy(actor,randomUUID(),gear,6),/forge_stock_changed/);
+    assert.deepEqual(store.getAccount(actor),before);
+    const request=randomUUID(),receipt=store.claimForgeCopy(actor,request,gear,2);
+    assert.notEqual(receipt.instanceId,old.instanceId);assert.equal(receipt.remaining,1);
+    store.close();store=new EconomyStore(file,()=>0);
+    assert.deepEqual(store.claimForgeCopy(actor,request,gear,2),receipt);
+    const after=store.getAccount(actor),piece=after.inventory.slots[1]!;
+    assert.equal(after.gold,before.gold);assert.equal(after.inventory.equippedWeaponSlot,null);
+    assert.equal(after.inventory.forgeCopies?.[gear],1);assert.equal(piece.forge!.instanceId,receipt.instanceId);
+    assert.equal(piece.forge!.rank,0);assert.equal(piece.forge!.affix,null);assert.equal(piece.socket,undefined);assert(piece.bound);
+    assert.throws(()=>store.listItem(actor,randomUUID(),1,1,1),/item_bound/);
+    assert.throws(()=>store.claimForgeCopy(actor,randomUUID(),gear,1),/duplicate_weapon/);
+    assert.equal(store.forgeWeapon(actor,randomUUID(),1,forgeStamp(piece),"enhance").forge.rank,1);
+    assert.equal(store.getAccount(actor).inventory.forgeCopies?.[gear],undefined);
+  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test("claim validates stock, bag capacity and paired slots, including bound legacy weapons",()=>{
+  const actor="e".repeat(64),gear="acc_ring_atk_1",req=randomUUID();
+  assert(parseClaimForgeCopy({requestId:req,gear,expectedStock:2}));
+  for(const payload of [{gear:"mat_ink_1",expectedStock:1},{gear,expectedStock:0},{gear,expectedStock:100},{gear,expectedStock:1,rank:10}]){
+    assert.equal(parseClaimForgeCopy({requestId:req,...payload}),null);
+  }
+  const store=new EconomyStore(":memory:");
+  try{
+    const bag=makeClassInventory("blade");bag.equipment={leftRing:gear};
+    bag.forgeCopies={[gear]:2,ritual_dagger:1};
+    store.register(actor,bag);
+    const first=store.claimForgeCopy(actor,req,gear,2);
+    assert.equal(first.remaining,1);
+    assert.throws(()=>store.claimForgeCopy(actor,randomUUID(),gear,1),/accessory_limit/);
+    const legacy=store.claimForgeCopy(actor,randomUUID(),"ritual_dagger",1);
+    const inventory=store.getAccount(actor).inventory;
+    const dagger=inventory.slots.find(s=>s?.forge?.instanceId===legacy.instanceId);
+    assert(dagger?.bound && dagger.forge?.rank===0);
+    assert.equal(inventory.equipment?.leftRing,gear);
+    const full=makeClassInventory("blade");full.slots=full.slots.map(s=>s??{itemId:"health_potion",quantity:99});full.forgeCopies={[gear]:1};
+    const other="f".repeat(64);store.register(other,full);
+    assert.throws(()=>store.claimForgeCopy(other,randomUUID(),gear,1),/inventory_full/);
+    assert.deepEqual(store.getAccount(other).inventory,full);
+  }finally{store.close();}
 });
 
 test("a safe enhancement preserves reroll pity and clears the retired enhancement miss counter", () => {

@@ -11,7 +11,7 @@ const enhanceSteps=FORGE.chances.map((chance,rank)=>({
   chance,gold:(rank+1)*FORGE.goldPerStep,copies:1+Math.floor(rank/3),
   breakOnFailure:chance<100,
 }));
-export const FORGE_CATALOG = {...FORGE,enhanceSteps};
+export const FORGE_CATALOG = {...FORGE,enhanceSteps,claimCopies:true};
 type Affix = { stat: ForgeRating; tier: number };
 export type Forged = { instanceId: string; revision: number; rank: number; misses: number; affix: Affix | null; rerollMisses: number };
 export type ForgeAction = "enhance" | "reroll";

@@ -1,5 +1,5 @@
-import { personalItem, isBodySlot, isCardId, type CardId, type PersonalId } from "./PersonalItems.js";
-import { SHRINE_RECIPE } from "./ItemRules.js";
+import { MAX_FORGE_COPIES, personalItem, isBodySlot, isCardId, type CardId, type PersonalId } from "./PersonalItems.js";
+import { SHRINE_RECIPE, isSocketGear } from "./ItemRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 function keys(value: unknown, expected: string[]): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value) &&
@@ -30,6 +30,12 @@ export function parseTradeOffer(v:unknown): ({tradeId:string}&TradeOffer)|null {
   if (!keys(v,["tradeId","slot","amount","gold"]) || !uuid(v.tradeId) || !(v.slot===null || amount(v.slot,11)) || !amount(v.amount,99) || !amount(v.gold,1_000_000_000)) return null;
   if ((v.slot===null)!==(v.amount===0)) return null;
   return {tradeId:v.tradeId,slot:v.slot as number | null,amount:v.amount,gold:v.gold};
+}
+
+export function parseClaimForgeCopy(v:unknown) {
+  if(!keys(v,["requestId","gear","expectedStock"]) || !requestId(v.requestId) ||
+     !isSocketGear(v.gear) || !amount(v.expectedStock,MAX_FORGE_COPIES) || v.expectedStock<1)return null;
+  return {requestId:v.requestId,gear:v.gear,expectedStock:v.expectedStock};
 }
 
 export function parseForge(v: unknown) {

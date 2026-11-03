@@ -249,7 +249,7 @@ try{
   assert.equal(active.bag.equipmentForges.rightRing.rank,1);assert.equal(active.bag.equipmentForges.leftRing.rank,0);
   assert.equal(active.bag.equipmentSockets.rightRing,"card_possessed");assert.equal(active.bag.equipmentSockets.leftRing,undefined);
   await active.room.leave();active=null;await delay(400);
-  seedMaterials(prefix3,"ทวนฝึกหัด","sentinel",[],1,{[ring]:4},9);
+  seedMaterials(prefix3,"ทวนฝึกหัด","sentinel",[],1,{[ring]:5,wp_pike_2:1},9);
   active=await join({characterSlot:3});
   const item=active.bag.equipmentForges.rightRing,stamp=item.instanceId+"."+item.revision;
   const riskOrder={requestId:"paired_ring_risky_10",slot:"rightRing",stamp,action:"enhance",copies:4};
@@ -263,9 +263,21 @@ try{
   const result=await until(()=>active.event("forge_result",e=>e.requestId===riskOrder.requestId),"resolve risky +10");
   assert.equal(result.chance,40);assert.equal(result.broken,!result.success);
   await active.room.leave();active=null;await delay(400);active=await join({characterSlot:3});
-  assert.equal(active.bag.forgeCopies?.[ring]??0,0);assert.equal(active.bag.equipmentForges.leftRing.rank,0);
+  assert.equal(active.bag.forgeCopies?.[ring],1);assert.equal(active.bag.equipmentForges.leftRing.rank,0);
   assert.equal(active.bag.equipmentForges.rightRing?.rank,result.broken?undefined:10);
   assert.equal(active.bag.equipment.rightRing,result.broken?undefined:ring);
   assert(active.bag.slots.some(s=>s?.itemId==="card_possessed"));
-  console.log("PERSONAL GEAR PASS: copy crafting, risky +10, protected card and independent rings after reconnect.");
+  const replacement=result.broken?ring:"wp_pike_2";
+  const claim={requestId:"claim_spare_after_risk",gear:replacement,expectedStock:1};
+  active.room.send("claim_forge_copy",{...claim,expectedStock:2});
+  await until(()=>active.event("economy_error",e=>e.reason==="forge_stock_changed"),"stale stock rejected");
+  await delay(400);active.room.send("claim_forge_copy",claim);
+  const claimed=await until(()=>active.event("forge_copy_claimed",e=>e.requestId===claim.requestId),"claim a spare +0 item");
+  await active.room.leave();active=null;await delay(400);active=await join({characterSlot:3});
+  active.room.send("claim_forge_copy",claim);
+  assert.deepEqual(await until(()=>active.event("forge_copy_claimed"),"retry claim after reconnect"),claimed);
+  const copies=active.bag.slots.filter(s=>s?.forge?.instanceId===claimed.instanceId);
+  assert.equal(copies.length,1);assert.equal(copies[0].itemId,replacement);assert(copies[0].bound);
+  assert.equal(copies[0].forge.rank,0);assert.equal(copies[0].forge.affix,null);assert.equal(active.bag.forgeCopies?.[replacement]??0,0);
+  console.log("PERSONAL GEAR PASS: risky +10, protected card, independently worn rings and one bound spare after reconnect.");
 }finally{if(active)await active.room.leave();}

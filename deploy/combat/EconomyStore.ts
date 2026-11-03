@@ -5,8 +5,8 @@ import {WORLD_MAPS} from "./WorldMaps.js";
 /** Single-process transactional economy. This store must own inventories before it is wired to gameplay. */
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
-import { personalItem, type BodySlot, type PersonalId } from "./PersonalItems.js";
-import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack } from "./ItemRules.js";
+import { personalItem, type BodySlot, type BodyItemId, type PersonalId } from "./PersonalItems.js";
+import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack, type WeaponItemId } from "./ItemRules.js";
 import type {SalvageOrder} from "./EconomyRules.js";
 
 export const STARTER_GOLD = 1000;
@@ -76,6 +76,14 @@ function receiveCraft(bag:InventorySnapshot,item:InventoryStack){
     return {inventory,banked:true};
   }
   return {inventory:add(bag,item),banked:false};
+}
+
+function spendForgeCopies(bag:InventorySnapshot,gear:string,qty:number){
+  const stock=bag.forgeCopies?.[gear]??0;
+  if(stock<qty)throw Error("forge_missing_copy");
+  if(!qty)return;
+  if(stock===qty)delete bag.forgeCopies![gear];
+  else bag.forgeCopies![gear]=stock-qty;
 }
 
 export class EconomyStore {
@@ -311,6 +319,19 @@ export class EconomyStore {
     });
   }
 
+  claimForgeCopy(id:string,request:string,gear:WeaponItemId|BodyItemId,expectedStock:number){
+    return this.once(id,request,"claim_forge_copy",{gear,expectedStock},()=>{
+      const account=this.account(id),stock=account.inventory.forgeCopies?.[gear]??0;
+      if(!isSocketGear(gear) || !stock || stock!==expectedStock)throw Error("forge_stock_changed");
+      // Stock stores only a model and count. Claim a fresh bound base without the old piece's upgrades.
+      const forge=plainForge();
+      account.inventory=add(account.inventory,{itemId:gear,quantity:1,bound:true,forge});
+      spendForgeCopies(account.inventory,gear,1);
+      this.put(id,account);
+      return {gear,instanceId:forge.instanceId,remaining:stock-1};
+    });
+  }
+
   forgeWeapon(id:string,request:string,slot:number|BodySlot,stamp:string,action:ForgeAction,level=1,donor?:{slot:number;stamp:string},expectedCopies?:number,acceptBreak=false) {
     return this.once(id,request,"forge",{slot,stamp,action,...(donor?{donor}:{}),...(expectedCopies!==undefined?{copies:expectedCopies}:{}),...(acceptBreak?{acceptBreak}:{})},()=>{
       const account=this.account(id), bag=account.inventory;
@@ -327,19 +348,13 @@ export class EconomyStore {
         const card=typeof slot==="number"?bag.slots[slot]?.socket:bag.equipmentSockets?.[slot];
         if(breakOnFailure && card)throw Error("forge_remove_card");
         if(expectedCopies!==undefined && expectedCopies!==copies)throw Error("forge_item_changed");
-        const bank=bag.forgeCopies?.[stack.itemId]??0;
         if(donor){
           const spare=bag.slots[donor.slot];
           if(!copies || donor.slot===slot || donor.slot===bag.equippedWeaponSlot || spare?.itemId!==stack.itemId ||
              forgeStamp(spare)!==donor.stamp || spare.socket!==undefined || spare.forge?.rank || spare.forge?.misses)throw Error("forge_donor_changed");
         }
-        const fromBank=copies-Number(Boolean(donor));
-        if(bank<fromBank)throw Error("forge_missing_copy");
+        spendForgeCopies(bag,stack.itemId,copies-Number(Boolean(donor)));
         if(donor)bag.slots[donor.slot]=null;
-        if(fromBank){
-          bag.forgeCopies={...bag.forgeCopies,[stack.itemId]:bank-fromBank};
-          if(!bag.forgeCopies[stack.itemId])delete bag.forgeCopies[stack.itemId];
-        }
       }else{
         if(donor)throw Error("forge_donor_changed");
         const ingredient=rerollIngredient(def);

@@ -7,7 +7,7 @@ const slots=[piece,{itemId:id},{itemId:id,socket:"card_possessed"},{itemId:"acc_
 const stock={[id]:2},meta={name:"แหวน",level:1,recipe:[{}],forge:{primary:"melee",pool:["melee"],enhanceMax:4}};
 const controls=new Map(),goals=[];
 function $(key){
-  if(!controls.has(key))controls.set(key,{value:"",replaceChildren(...options){this.options=options;this.value=options[0].value;}});
+  if(!controls.has(key))controls.set(key,{value:"",dataset:{},replaceChildren(...options){this.options=options;this.value=options[0].value;}});
   return controls.get(key);
 }
 const config={chances:Array(10),maxMisses:3,rerollCost:60,enhanceSteps:Array(10)};
@@ -38,4 +38,16 @@ const submit=vm.runInNewContext(submitSource+"\nsubmitForge",ctx);
 delete piece.socket;piece.forge.rank=9;stock[id]=4;draw(piece);
 submit("enhance");assert.equal(sent,null);assert.match(prompt,/40%/);assert.match(prompt,/แหวน \+9 จะแตก/);
 confirm=true;submit("enhance");assert.equal(sent.acceptBreak,true);assert.equal(sent.copies,4);
-console.log("PASS forge preview: exact-copy selection, hunt goal, shatter risk, card protection and +10 cap");
+const shelfSource=source.slice(source.indexOf("  function renderForgeStock("),source.indexOf("  function renderForge(item)"));
+const shelf=vm.runInNewContext(shelfSource+"\nrenderForgeStock",ctx);
+ctx.room.state.forgeCatalog=JSON.stringify({...config,claimCopies:true});ctx.inventoryState.slots=[null];
+let owned=0;ctx.itemHuntCount=()=>owned;
+shelf(id);assert.equal($("forgeStock").hidden,false);assert.equal($("forgeStockClaim").disabled,false);
+assert.match($("forgeStockInfo").textContent,/จะเหลือ 3/);
+sent=null;confirm=false;$("forgeStockClaim").onclick();assert.equal(sent,null);
+confirm=true;$("forgeStockClaim").onclick();assert.equal(sent.gear,id);assert.equal(sent.expectedStock,4);
+assert.match(prompt,/\+0 ผูกตัวละคร/);
+ctx.inventoryState.slots=[piece];shelf();assert.equal($("forgeStockClaim").disabled,true);assert.match($("forgeStockInfo").textContent,/ช่องว่าง/);
+ctx.inventoryState.slots=[null];owned=1;shelf();assert.equal($("forgeStockClaim").disabled,true);
+delete stock[id];shelf();assert.equal($("forgeStock").hidden,true);
+console.log("PASS forge preview, risk confirmation, spare stock, claim costs and capacity checks");

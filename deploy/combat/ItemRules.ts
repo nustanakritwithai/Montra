@@ -134,7 +134,7 @@ export function validateInventory(value: unknown): InventorySnapshot {
     const itemId=entry.itemId as ItemId;
     const body=equipPositions(personalItem(itemId)?.kind).length>0;
     if (!upgraded || (!isWeaponId(itemId) && !body) ||
-        (Object.hasOwn(entry,"bound") && (!personalItem(itemId) || entry.bound!==true)) ||
+        (Object.hasOwn(entry,"bound") && (entry.bound!==true || (!personalItem(itemId) && !Object.hasOwn(entry,"forge")))) ||
         entry.quantity!==1) throw Error("inventory_record_invalid");
     const socket=Object.hasOwn(entry,"socket")?entry.socket:undefined;
     if(socket!==undefined && socket!==null && !isCardId(socket))throw Error("inventory_record_invalid");

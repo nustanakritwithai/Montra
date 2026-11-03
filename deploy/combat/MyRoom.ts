@@ -60,7 +60,7 @@ import { CATALOG_PAGES } from "./MonsterLoot.js";
 import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
 import {personalGearGuides} from "./GearGuides.js";
 import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js";
-import { parseSellMaterial, parseSalvage, parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
+import { parseSellMaterial, parseSalvage, parseCraft, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
@@ -2733,8 +2733,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level"];
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","forge_stock_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level"];
       const reason=error instanceof Error && (allowed.includes(error.message)||["resource_ground","resource_range","resource_cooldown","resource_empty"].includes(error.message)) ? error.message : "economy_failed";
+      if(reason==="forge_stock_changed")this.syncEconomy(client,id);
       if (reason==="economy_failed") console.error("MONTRA economy failed",error);
       client.send("economy_error",{reason});
     }
@@ -3271,6 +3272,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const result=characterStore.economy.socketItem(id,order);
         this.syncEconomy(client,id);
         client.send("card_socket_result",{requestId:order.requestId,...result});
+      });
+    },
+    claim_forge_copy: (client: Client, message: unknown) => {
+      const order=parseClaimForgeCopy(message);
+      if(!order)return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{
+        const result=characterStore.economy.claimForgeCopy(id,order.requestId,order.gear,order.expectedStock);
+        this.syncEconomy(client,id);
+        client.send("forge_copy_claimed",{requestId:order.requestId,...result});
       });
     },
     forge_weapon: (client: Client, message: unknown) => {
