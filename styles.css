@@ -1413,3 +1413,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .map-sub:active { background: #1f3a2f; }
 @keyframes subIn { from { opacity: 0; transform: translateY(-6px) scale(.9); } to { opacity: 1; transform: none; } }
 #fieldMenuButton.open { background: #2c5a48; box-shadow: inset 0 0 0 1px #f3c768; }
+.learned-bar #mountButton.orb-mount.mount-off { filter: grayscale(1) brightness(.75); border-style: dashed; }
+/* The old "field shortcut: chat or horse" choice no longer applies: the horse has its own corner button
+   and chat has its own box, so the horse is never hidden by that setting. */
+#game[data-field-utility] .learned-bar #mountButton.orb-mount:not([hidden]) { display: grid; }
+.field-utility-label { display: none !important; }
