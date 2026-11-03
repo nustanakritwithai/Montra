@@ -36,12 +36,29 @@ for(const spec of [
 }
 {
   const start=source.indexOf("  function renderMuayBook("),end=source.indexOf("  function swordData(",start);
-  const container={innerHTML:"",contains:()=>false,querySelectorAll:()=>[]},dummy={};
-  const school={name:"ไชยา",level:1,strikes:0,blocks:0,description:""};
-  const data={me:{level:25,muayBookData:"v"},book:{school:"chaiya",learned:["chaiya_elbow"],slots:["chaiya_elbow",null,null,null],training:{strikes:5,blocks:0},ranks:{chaiya_elbow:1},mastery:{chaiya:{technique:0,sequences:0}}},catalog:{schools:{chaiya:school},skills:{chaiya_elbow:{name:"ศอก",range:2,stamina:16,cooldownMs:5500}},lessons:{chaiya_elbow:{school:"chaiya",level:1,requires:[],training:{strikes:5,blocks:0},description:"ศอก"}},rankLevels:[25,45,65,85,95],rankable:["chaiya_elbow"]}};
-  const context={document:{activeElement:null},muayBookData:()=>data,$:id=>id==="muayBookBody"?container:dummy,muayBookRenderKey:"",muayBookViewedSchool:"chaiya",muayMoveLabels:{},window:{confirm:()=>false},room:{send(){}}};
+  const container={innerHTML:"",querySelectorAll:()=>[]},dummy={};
+  const levels=[5,15,25,35,45,60,80,100],points=[5,15,25,35,45,55,65,75,80,85,95,100];
+  const core={
+    chaiya:{name:"ไชยา",description:"ตั้งรับ",stamina:18,cooldownMs:12000},
+    korat:{name:"โคราช",description:"หมัดหนัก",stamina:24,cooldownMs:12000},
+    lopburi:{name:"ลพบุรี",description:"ฉากพุ่ง",stamina:18,cooldownMs:10000},
+    thasao:{name:"ท่าเสา",description:"พุ่งรัว",stamina:24,cooldownMs:12000}
+  };
+  const progress=Array.from({length:9},(_,rank)=>({
+    chaiya:{durationMs:2000+400*rank,damageFactor:0.65,counterPower:1,counterIntervalMs:400},
+    korat:{scale:1,finalPower:0.75},
+    lopburi:{distance:3,followMs:3000,followPower:1.05,staggerMs:0},
+    thasao:{range:7,hits:3,hitPower:0.26,staggerMs:600}
+  }));
+  const data={me:{level:25,muayBookData:"v"},book:{coreRanks:{chaiya:1}},catalog:{core,coreLevels:levels,corePointLevels:points,coreManaPerRank:1,coreProgress:progress}};
+  const context={muayBookData:()=>data,$:id=>id==="muayBookBody"?container:dummy,muayBookRenderKey:"",window:{confirm:()=>false},room:{send(){}}};
   vm.runInNewContext(source.slice(start,end)+"\nrenderMuayBook();",context);
-  assert.match(container.innerHTML,/แต้มว่าง 11/);assert.match(container.innerHTML,/data-muay-upgrade/);
+  assert.match(container.innerHTML,/แต้มวิชา 2 \/ 3/);
+  assert.match(container.innerHTML,/ขั้น 1\/8/);
+  assert.match(container.innerHTML,/ขั้นต่อไป Lv\.15/);
+  assert.match(container.innerHTML,/data-core-upgrade="chaiya"/);
+  assert.match(container.innerHTML,/ปัจจุบัน/);
+  assert.match(container.innerHTML,/ขั้นถัดไป/);
 }
 {
   const start=source.indexOf("  function renderSwordTree("),end=source.indexOf("  function ancestryHint(",start);
