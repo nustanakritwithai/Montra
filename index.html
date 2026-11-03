@@ -4,12 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#121d20" />
-  <meta name="description" content="MONTRA — ต้นแบบ MMORPG 3D ไสยศาสตร์ไทยสำหรับมือถือ แบบแตะพื้นเพื่อเดิน" />
+  <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=0.9.6-skill-fx-terrain" />
+  <link rel="stylesheet" href="./styles.css?v=0.9.7-account-entry" />
 </head>
 <body>
-  <main id="game" aria-label="MONTRA เกมต้นแบบสามมิติ">
+  <section id="accountEntry" class="account-entry" aria-label="เข้าสู่ระบบ MONTRA"><div id="accountCard" class="account-card" role="dialog" aria-modal="true"><strong>MONTRA</strong><p>กำลังเตรียมหน้าเข้าสู่ระบบ…</p></div></section>
+  <main id="game" aria-label="MONTRA เกมสามมิติ">
     <canvas id="world" tabindex="0" aria-label="พื้นที่เกมสามมิติ แตะพื้นเพื่อเดิน"></canvas>
     <div id="loading" class="loading"><div class="loader-mark">๛</div><strong>MONTRA</strong><span id="loadingText">กำลังเตรียมหมู่บ้านอาคม...</span></div>
 
@@ -95,6 +96,7 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
   <script src="./audio.js?v=0.9.6-skill-fx-terrain" defer></script>
-  <script src="./main.js?v=0.9.6-skill-fx-terrain" defer></script>
+  <script src="./account-entry.js?v=1" defer></script>
+  <script src="./main.js?v=0.9.7-account-entry" defer></script>
 </body>
 </html>
