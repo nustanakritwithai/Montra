@@ -11599,16 +11599,27 @@
   // Tapping the vital orb is the auto-attack command: current target, otherwise the nearest monster.
   { const orb = document.querySelector(".vital-orb"); if (orb) { orb.setAttribute("role", "button"); orb.tabIndex = 0; orb.title = "โจมตีอัตโนมัติ · แตะเพื่อตีเป้าหมายหรือมอนสเตอร์ที่ใกล้ที่สุด";
     orb.addEventListener("click", () => { orb.classList.add("orb-strike"); setTimeout(() => orb.classList.remove("orb-strike"), 220); requestMonsterAttack(); }); } }
-  // Every menu function also gets a small icon under the minimap (they press the original menu buttons).
-  { const nav = document.querySelector(".map-shortcuts");
-    if (nav) for (const [id, glyph, label] of [["menuCharacter", "๛", "ตัวละคร"], ["partyButton", "♧", "ปาร์ตี้"], ["menuGuild", "⚑", "กิลด์"], ["marketButton", "♢", "ตลาด"],
-      ["menuQuest", "◇", "ภารกิจ"], ["modeButton", "◎", "ออนไลน์"], ["helpButton", "?", "ตั้งค่า"]]) {
-      const src = $(id); if (!src) continue;
-      const b = document.createElement("button"); b.type = "button"; b.className = "map-proxy"; b.title = label; b.setAttribute("aria-label", label);
-      b.innerHTML = `<span aria-hidden="true">${glyph}</span>${label}<b hidden></b>`; b.onclick = () => src.click(); nav.append(b);
-      // Mirror unread badges (party invites, trades) from the original buttons.
-      const badge = src.querySelector("b"); if (badge) { const sync = () => { const mine = b.querySelector("b"); mine.hidden = badge.hidden; mine.textContent = badge.textContent; };
-        new MutationObserver(sync).observe(badge, { attributes: true, childList: true, characterData: true, subtree: true }); sync(); }
+  // Under the minimap only Menu, Bag and Skills stay. Menu fans out into a column of sub-buttons
+  // (character, party, guild, market, quest, chat, online, settings, full menu) instead of opening a drawer.
+  { const nav = document.querySelector(".map-shortcuts"), menuBtn = $("fieldMenuButton");
+    if (nav && menuBtn) {
+      const fly = document.createElement("div"); fly.className = "map-flyout"; fly.hidden = true; fly.setAttribute("role", "menu"); nav.after(fly);
+      const items = [["menuCharacter", "๛", "ตัวละคร"], ["menuGuild", "⚑", "กิลด์"], ["marketButton", "♢", "ตลาด"], ["menuQuest", "◇", "ภารกิจ"],
+        ["chatButton", "✉", "แชท"], ["modeButton", "◎", "ออนไลน์"], ["helpButton", "?", "ตั้งค่า"], [null, "☰", "เมนูทั้งหมด"]];
+      const close = () => { fly.hidden = true; menuBtn.setAttribute("aria-expanded", "false"); menuBtn.classList.remove("open"); };
+      items.forEach(([id, glyph, label], i) => {
+        const src = id && $(id); if (id && !src) return;
+        const b = document.createElement("button"); b.type = "button"; b.className = "map-sub"; b.setAttribute("role", "menuitem"); b.style.setProperty("--i", i);
+        b.innerHTML = `<span aria-hidden="true">${glyph}</span><em>${label}</em><b hidden></b>`;
+        b.onclick = () => { close(); if (src) src.click(); else openFieldMenu(); };
+        fly.append(b);
+        const badge = src?.querySelector("b"); if (badge) { const sync = () => { const mine = b.querySelector("b"); mine.hidden = badge.hidden; mine.textContent = badge.textContent; };
+          new MutationObserver(sync).observe(badge, { attributes: true, childList: true, characterData: true, subtree: true }); sync(); }
+      });
+      menuBtn.setAttribute("aria-expanded", "false");
+      menuBtn.onclick = e => { e.stopPropagation(); const open = fly.hidden; fly.hidden = !open; menuBtn.setAttribute("aria-expanded", String(open)); menuBtn.classList.toggle("open", open); if (open) SFX("open"); };
+      document.addEventListener("pointerdown", e => { if (!fly.hidden && !fly.contains(e.target) && e.target !== menuBtn && !menuBtn.contains(e.target)) close(); }, true);
+      addEventListener("keydown", e => { if (e.key === "Escape" && !fly.hidden) close(); });
     } }
   $("menuBag").onclick=openBag;
   $("menuChat").onclick=openChat;
