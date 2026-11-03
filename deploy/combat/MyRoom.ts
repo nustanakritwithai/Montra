@@ -379,7 +379,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!build) return this.reject(client, "build_required");
     const skill = classSkill(build.path, build.bladeTalent ?? build.wardTalent), now = Date.now();
     if (now < player.classSkillReadyAt) return this.reject(client, "class_skill_cooldown");
-    if (player.stamina < skill.stamina) return this.reject(client, "insufficient_stamina");
+    if (player.mana < skill.stamina) return this.reject(client, "insufficient_mana");
     const members = skill.targets === "party" ? this.parties.get(id)?.members ?? [id] : [id];
     const targets: [string, Player][] = [];
     for (const member of members) {
@@ -390,7 +390,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (skill.effect.kind !== "heal" || target.hp < target.maxHp) targets.push([member, target]);
     }
     if (!targets.length) return this.reject(client, "class_skill_no_target");
-    player.stamina -= skill.stamina;
+    player.mana -= skill.stamina;
     player.classSkillReadyAt = now + skill.cooldownMs;
     for (const [member, target] of targets) {
       if (skill.effect.kind === "heal") {
@@ -637,8 +637,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
       this.pendingItemUses.has(holderId) || this.pendingRewards.has(holderId) || this.pendingCharacterLeaves.has(holderId))return this.reject(client,"character_busy");
     if(!this.gates.get(id)?.attack.consume(this.simulatedMs))return this.reject(client,"attack_rate_limited");
-    if(player.stamina<MUAY_GRAPPLE_ESCAPE_STAMINA)return this.reject(client,"insufficient_stamina");
-    player.stamina-=MUAY_GRAPPLE_ESCAPE_STAMINA;
+    if(player.mana<MUAY_GRAPPLE_ESCAPE_STAMINA)return this.reject(client,"insufficient_mana");
+    player.mana-=MUAY_GRAPPLE_ESCAPE_STAMINA;
     this.releaseMuayGrapple(holderId,"escaped");
     this.clearGrappleCounter(id,"replaced");
     this.muayGrappleCounters.set(id,{targetId:holderId,until:this.simulatedMs+MUAY_GRAPPLE_COUNTER_WINDOW_MS});
@@ -656,8 +656,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.pendingRewards.has(window.targetId) || this.pendingCharacterLeaves.has(window.targetId))return this.reject(client,"target_unavailable");
     if(player.flying || !onMapGround(player) || distance3d(player,opponent)>MUAY_GRAPPLE_COUNTER_RANGE || Math.abs(player.y-opponent.y)>1.1)return this.reject(client,"muay_out_of_range");
     if(!this.bodyPathClear(player.mapId,player,opponent))return this.reject(client,"muay_blocked");
-    if(player.stamina<MUAY_GRAPPLE_COUNTER_STAMINA)return this.reject(client,"insufficient_stamina");
-    player.stamina-=MUAY_GRAPPLE_COUNTER_STAMINA;this.clearGrappleCounter(id,"used");
+    if(player.mana<MUAY_GRAPPLE_COUNTER_STAMINA)return this.reject(client,"insufficient_mana");
+    player.mana-=MUAY_GRAPPLE_COUNTER_STAMINA;this.clearGrappleCounter(id,"used");
     player.facing=facingTo(opponent.x-player.x,opponent.z-player.z);this.recordCombat(id,window.targetId);
     const attack=(player.atk+weaponBonuses(this.inventories.get(id),"pvp").melee)*MUAY_PVP_DAMAGE_MULTIPLIER;
     const damage=this.swordGuardDamage(window.targetId,player,calculateDamage(attack,opponent.def,opponent.level));
@@ -816,7 +816,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
     if(actor.flying || !onMapGround(actor) || isRestArea(actor.mapId,actor))return this.reject(client,"sentinel_location");
     if(Date.now()<(book.cooldowns[skillId] ?? 0))return this.reject(client,"sentinel_cooldown");
-    if(actor.stamina<skill.stamina)return this.reject(client,"insufficient_stamina");
+    if(actor.mana<skill.stamina)return this.reject(client,"insufficient_mana");
     if(skill.effect==="counter" && this.simulatedMs>=(this.sentinelCounters.get(id) ?? 0))return this.reject(client,"sentinel_counter_required");
     if((skill.effect==="step" || skill.effect==="anchor") && this.effects.modifiers(id).length>=STACKING_RULES.maxModifiers &&
       !this.effects.modifiers(id).some(effect=>effect.id==="sentinel_"+skillId && effect.sourceId===id))return this.reject(client,"sentinel_effect_limit");
@@ -855,7 +855,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(travel>0.00001){const sweep=advanceDash(actor,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,surfaceLayer(actor),false,actor.mapId) && !isRestArea(actor.mapId,{x,z}),map.bounds);
         if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"sentinel_blocked");}
     }
-    actor.stamina-=skill.stamina;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
+    actor.mana-=skill.stamina;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
     if(offensive && target)actor.facing=facingTo(target.x-actor.x,target.z-actor.z);
     if(next){this.startSkillAction(id,actor,"idle");this.moveOnSurface(actor,next.x,next.z);}
     if(skill.effect==="guard")this.swordGuards.set(id,{until:this.simulatedMs+2500,factor:skill.power,direction:true,counterUntil:0});
@@ -915,8 +915,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<2000) return this.reject(client,"blade_cloak_combat");
     const lesson=BLADE_LESSONS.cloak;
     if(Date.now()<(book.cooldowns.cloak ?? 0)) return this.reject(client,"blade_cooldown");
-    if(player.stamina<lesson.stamina) return this.reject(client,"insufficient_stamina");
-    player.stamina-=lesson.stamina;book.cooldowns.cloak=Date.now()+lesson.cooldownMs;
+    if(player.mana<lesson.stamina) return this.reject(client,"insufficient_mana");
+    player.mana-=lesson.stamina;book.cooldowns.cloak=Date.now()+lesson.cooldownMs;
     this.startSkillAction(id,player,"attacking");
     this.bladeCasts.set(id,this.simulatedMs+600);
     this.broadcast("blade_cloak_cast",{playerId:id,durationMs:600},{afterNextPatch:true});
@@ -972,7 +972,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(player.flying || !onMapGround(player) || isRestArea(player.mapId,player))return this.reject(client,"blade_cloak_location");
     if(this.bladeWindups.has(id))return this.reject(client,"blade_windup_active");
     const now=Date.now();if(now<(book.cooldowns[skillId] ?? 0))return this.reject(client,"blade_cooldown");
-    if(player.stamina<skill.stamina)return this.reject(client,"insufficient_stamina");
+    if(player.mana<skill.stamina)return this.reject(client,"insufficient_mana");
     const targeted=["approach","strike","consume","windup","counter"].includes(skill.effect);
     let targetId="",target:Monster|Player|undefined,monster:Monster|undefined;
     if(targeted){
@@ -1001,7 +1001,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"blade_blocked");}
       this.startSkillAction(id,player,"idle");this.moveOnSurface(player,next.x,next.z);
     }
-    player.stamina-=skill.stamina;book.cooldowns[skillId]=now+skill.cooldownMs;
+    player.mana-=skill.stamina;book.cooldowns[skillId]=now+skill.cooldownMs;
     if(skill.effect==="evade") {
       this.endBladeCloak(id,"evade");this.swordGuards.set(id,{until:this.simulatedMs+500,factor:skill.power,direction:true,counterUntil:0});
       this.bladeEvades.set(id,this.simulatedMs+500);
@@ -1231,7 +1231,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (lesson.path!==path || !book.learned[path].includes(skillId) || !book.loadouts[path].includes(skillId))
       return this.reject(client,"occult_skill_locked");
     if (Date.now()<(book.cooldowns[skillId] ?? 0)) return this.reject(client,"occult_cooldown");
-    if (caster.stamina<lesson.stamina) return this.reject(client,"insufficient_stamina");
+    if (caster.mana<lesson.stamina) return this.reject(client,"insufficient_mana");
     const offensive=["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind","pve_rice"].includes(lesson.effect);
     const targetId=typeof input.targetId==="string" ? input.targetId : id;
     let monster:Monster|undefined, opponent:Player|undefined;
@@ -1291,7 +1291,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     }
 
-    caster.stamina-=lesson.stamina;
+    caster.mana-=lesson.stamina;
     book.cooldowns[skillId]=Date.now()+lesson.cooldownMs;
     if (offensive) {
       const target=monster ?? opponent!;
@@ -1613,7 +1613,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (isRestArea(player.mapId,player)) return this.reject(client,"muay_safe_area");
     const now=Date.now();
     if (now<(cooldowns[skillId] ?? 0)) return this.reject(client,"muay_cooldown");
-    if (player.stamina<skill.stamina) return this.reject(client,"insufficient_stamina");
+    if (player.mana<skill.stamina) return this.reject(client,"insufficient_mana");
     const guard=this.swordGuards.get(id);
     const isCounter=skill.effect==="counter" || skill.effect==="counter_sidestep";
     if (isCounter && (!guard || this.simulatedMs>=guard.counterUntil)) return this.reject(client,"muay_counter_required");
@@ -1665,7 +1665,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     if(skill.effect==="grapple" && target && !this.startMuayGrapple(client,player,target,monster,targetId))return;
     if(opening && (skillId===followup.finisher || (targetId && opening.targetId!==targetId)))this.clearMuayFollowup(id);
-    player.stamina-=skill.stamina;
+    player.mana-=skill.stamina;
     cooldowns[skillId]=now+skill.cooldownMs;
     player.muayData=JSON.stringify(cooldowns);
     if (skill.effect==="guard" || skill.effect==="parry" || skill.effect==="evade") {
@@ -1733,7 +1733,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (player.flying) return this.reject(client,"flying");
     const now=Date.now();
     if (now<(tree.cooldowns[skillId] ?? 0)) return this.reject(client,"sword_skill_cooldown");
-    if (player.stamina<skill.stamina) return this.reject(client,"insufficient_stamina");
+    if (player.mana<skill.stamina) return this.reject(client,"insufficient_mana");
     const guard=this.swordGuards.get(id);
     if (skill.effect==="counter" && (!guard || this.simulatedMs>=guard.counterUntil)) return this.reject(client,"sword_counter_required");
     const combo=this.swordCombos.get(id);
@@ -1768,7 +1768,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.destinations.delete(id);
       this.moveOnSurface(player,next.x,next.z);
     }
-    player.stamina-=skill.stamina;
+    player.mana-=skill.stamina;
     tree.cooldowns[skillId]=now+skill.cooldownMs;
     player.swordTreeData=JSON.stringify(tree);
     if (skill.effect==="guard") {
@@ -1843,6 +1843,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       ? Math.round(stats.def*(1+SENTINEL_LESSONS.fortitude.power)) : stats.def;
     player.magicAtk = stats.magicAtk; player.magicDef = stats.magicDef;
     player.maxStamina = stats.maxStamina;
+    player.maxMana = Math.min(PROGRESSION.maxMana, PROGRESSION.baseMana + (player.level - 1) * 2);
+    player.mana = Math.min(player.mana, player.maxMana);
     player.hp = Math.min(player.hp, stats.maxHp);
     player.stamina = Math.min(player.stamina, stats.maxStamina);
     player.statPoints = pointsAvailable(player.level, allocations);
@@ -2961,8 +2963,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!this.legacyCombatRoom() && !this.canPrepareSpirit(id,player.pathId,true))return this.reject(client,"occult_skill_locked");
       if(POSSESSION_BUFF.requiresSummon && !this.state.summons.has(id))return this.reject(client,"possession_needs_summon");
       if(possessionCoolingDown(this.persistentCharacters.get(id)))return this.reject(client,"possession_cooldown");
+      if(player.mana<20)return this.reject(client,"insufficient_mana");
       const result=this.buffs.activate(id,this.simulatedMs);
       if(result!=="ok")return this.reject(client,result==="cooldown" ? "possession_cooldown" : "possession_active");
+      player.mana-=20;
       this.effects.grant(id,POSSESSION_MODIFIER,this.simulatedMs+POSSESSION_BUFF.durationMs);
       this.despawnSummon(id,"possessed");
       player.possessionActive=true;this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
@@ -3176,6 +3180,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (this.simulatedMs - last < RULES.summonCooldownMs) {
       return this.reject(client, "summon_cooldown");
     }
+    if (owner.mana < 15) return this.reject(client, "insufficient_mana");
+    owner.mana -= 15;
     this.lastSummonAt.set(id, this.simulatedMs);
 
     const map = getWorldMap(owner.mapId)!;
@@ -3514,6 +3520,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.hp = Math.min(player.maxHp, player.hp + healed);
       this.hpRegenRemainder.set(id, player.hp >= player.maxHp ? 0 : pending - healed);
       player.stamina = Math.min(player.maxStamina, player.stamina + (fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut) * dt);
+      player.mana = Math.min(player.maxMana, player.mana + (fighting ? PROGRESSION.manaRegenIn : PROGRESSION.manaRegenOut) * dt);
     }
   }
 
@@ -4106,6 +4113,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       sentinelBook: this.sentinelBooks.get(id),
       muayWrapGranted: this.muayWrapGranted.has(id),
       stamina: player.stamina,
+      mana: player.mana,
       x: player.x,
       // Keep stable flight altitude when a transition is mid-flight.
       y: player.flying ? FLIGHT.altitude : getWorldMap(player.mapId)?.reliefLabels ? (isOnPlatform(surfaceLayer(player))?FORT.height:0) : player.y,
@@ -4238,6 +4246,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         equippedWeaponId: equippedWeaponId(saved?.inventory) ?? "",
         mapId,
         stamina: Math.min(saved?.stamina ?? initialStats.maxStamina, initialStats.maxStamina),
+        mana: Math.min(saved?.mana ?? Math.min(PROGRESSION.maxMana, PROGRESSION.baseMana + ((saved?.level ?? 1) - 1) * 2), PROGRESSION.maxMana),
       });
 
       this.swordTrees.set(client.sessionId, saved?.swordTree ?? newSwordTree());

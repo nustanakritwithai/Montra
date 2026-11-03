@@ -11,6 +11,7 @@ export const PROGRESSION = Object.freeze({
   xpBase: 100, xpQuadratic: 50,
   baseHp: 240, baseAtk: 20, baseDef: 30, baseMagicAtk: 15, baseMagicDef: 20,
   baseStamina: 100, maxHp: 10_000, maxStamina: 300,
+  baseMana: 100, maxMana: 300, manaRegenIn: 2, manaRegenOut: 4,
   combatQuietMs: 5_000, hpRegenOut: 4, hpRegenIn: 0.8,
   staminaRegenOut: 4, staminaRegenIn: 2, dashCost: 50,
 });
