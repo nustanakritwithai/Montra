@@ -34,7 +34,7 @@ try{
   if(process.env.MONTRA_GUARDIAN_STAGE==="read"){
     for(let i=0;i<4;i++){
       const {room,events}=await member(i,true);
-      assert.equal(room.state.players.get(room.sessionId).experience,900);
+      assert.equal(room.state.players.get(room.sessionId).experience,1462);
       room.send("get_inventory",{});
       const bag=await waitFor(()=>events.find(e=>e.type==="inventory_state")?.data,"durable inventory");
       assert.equal(bag.slots[0].quantity,i===3?99:3);
@@ -63,7 +63,7 @@ try{
     await waitFor(()=>members.every(m=>m.events.some(e=>e.type==="experience_gained")),"four Elite rewards",35000);
     for(const [i,{events}] of members.entries()){
       const grants=events.filter(e=>e.type==="experience_gained");
-      assert.equal(grants.length,1);assert.equal(grants[0].data.amount,900);
+      assert.equal(grants.length,1);assert.equal(grants[0].data.amount,1462);
       assert.equal(grants[0].data.elitePotion,i===3?"bag_full":"granted");
       assert.equal(grants[0].data.shrineShard,i===3?"bag_full":"granted");
     }
@@ -76,6 +76,6 @@ try{
     assert.notEqual(slot,-1);assert.equal(log.findLast(e=>e.type==="economy_state").data.gold,900);
     leader.send("equip_weapon",{slot});
     await waitFor(()=>leader.state.players.get(leader.sessionId).equippedWeaponId==="shrine_glaive","equip crafted glaive");
-    console.log("PASS: four-player Elite kill, unchanged XP and potion, shard eligibility, craft and equip");
+    console.log("PASS: four-player Elite kill, party XP and potion, shard eligibility, craft and equip");
   }
 }finally{for(const {room} of members.reverse())await room.leave().catch(()=>{});}

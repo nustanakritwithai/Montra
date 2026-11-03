@@ -64,7 +64,7 @@ try{
     b.r.send("shoot",{targetId:c.r.sessionId});await until(()=>c.me().hp<hp,"shot after flanking");
     await move(a,0,5);a.r.send("attack",{targetId:"temple_forecourt_1"});
     const reward=await until(()=>a.events.find(e=>e.type==="experience_gained")?.data,"temple EXP",30000);
-    assert.equal(reward.amount,800);await until(()=>a.me().experience===800,"XP patch");assert.equal(other.me().experience,0);
+    assert.equal(reward.amount,1000);await until(()=>a.me().experience===1000,"XP patch");assert.equal(other.me().experience,0);
     await writeFile(savedPosition,JSON.stringify({x:a.me().x,z:a.me().z,experience:a.me().experience}));
     console.log("PASS: four clients, real gate, protected entrance, physical wall/dash/line of sight, flank, kill and map-local EXP");
   }

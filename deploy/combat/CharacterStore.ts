@@ -24,6 +24,8 @@ import { validateBladeBook, type BladeBook } from "./BladeRules.js";
 import { validateSentinelBook, type SentinelBook } from "./SentinelRules.js";
 
 import { parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
+import { classLearningLevel, validateRebirthState, type RebirthState } from "./Rebirth.js";
+import { validateForestObjective, type ForestObjective } from "./ForestObjectives.js";
 
 export const CHARACTER_SAVE_INTERVAL_MS = 15_000;
 export const CHARACTER_SLOTS = [1, 2, 3] as const;
@@ -48,6 +50,9 @@ export type CharacterSnapshot = {
   castleLayout?: 2;
   statAllocations?: Allocations;
   build?: CharacterBuild;
+  /** Absent in existing characters until the rebirth system is used. */
+  rebirth?: RebirthState;
+  forestObjective?: ForestObjective | null;
   classSkillReadyAt?: number;
   talismanReadyAt?: number;
   swordTree?: SwordTree;
@@ -140,13 +145,16 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
   for (const readyAt of [value.classSkillReadyAt, value.talismanReadyAt]) {
     if (readyAt !== undefined && (typeof readyAt !== "number" || !Number.isSafeInteger(readyAt) || readyAt < 0)) throw new Error("invalid_skill_cooldown");
   }
-  const swordTree = value.swordTree === undefined ? undefined : validateSwordTree(value.swordTree, value.level as number);
+  const rebirth=value.rebirth === undefined ? undefined : validateRebirthState(value.rebirth);
+  if(value.forestObjective!==undefined && value.forestObjective!==null)validateForestObjective(value.forestObjective);
+  const learning=(path:CharacterBuild["path"])=>classLearningLevel(rebirth,path,value.level as number);
+  const swordTree = value.swordTree === undefined ? undefined : validateSwordTree(value.swordTree, learning("phutthaisawan"));
   if (value.muayWrapGranted !== undefined && typeof value.muayWrapGranted !== "boolean") throw new Error("invalid_muay_grant");
   const muayCooldowns = value.muayCooldowns === undefined ? undefined : validateMuayCooldowns(value.muayCooldowns);
-  const muayBook = value.muayBook === undefined ? undefined : validateMuayBook(value.muayBook,value.level as number);
-  const occultBook = value.occultBook === undefined ? undefined : validateOccultBook(value.occultBook,value.level as number);
-  const bladeBook = value.bladeBook === undefined ? undefined : validateBladeBook(value.bladeBook,value.level as number);
-  const sentinelBook = value.sentinelBook === undefined ? undefined : validateSentinelBook(value.sentinelBook,value.level as number);
+  const muayBook = value.muayBook === undefined ? undefined : validateMuayBook(value.muayBook,learning("muay_boran"));
+  const occultBook = value.occultBook === undefined ? undefined : validateOccultBook(value.occultBook,Math.max(learning("seer"),learning("mender")));
+  const bladeBook = value.bladeBook === undefined ? undefined : validateBladeBook(value.bladeBook,learning("blade"));
+  const sentinelBook = value.sentinelBook === undefined ? undefined : validateSentinelBook(value.sentinelBook,learning("sentinel"));
   if (value.inventory !== undefined) validateInventory(value.inventory);
   const statAllocations = value.statAllocations === undefined ? emptyAllocations() :
     validateAllocations(value.statAllocations, value.level as number);

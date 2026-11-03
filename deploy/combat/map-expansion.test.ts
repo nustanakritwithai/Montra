@@ -96,7 +96,7 @@ test("forest party EXP uses the defeated enemy's level, map and position",()=>{
   const awarded:Array<[string,number|undefined]>=[];
   internal.grantMonsterExperience=(id,amount)=>{awarded.push([id,amount]);};
   internal.awardMonsterExperience("a",monster);
-  const amount=Math.floor(monsterExperience(1,monster.level)/2);
+  const amount=Math.floor(monsterExperience(1,monster.level)*1.1/2);
   assert.deepEqual(awarded,[["a",amount],["b",amount]]);
 });
 

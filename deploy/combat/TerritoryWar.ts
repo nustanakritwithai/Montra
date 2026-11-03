@@ -5,6 +5,22 @@ import {RIVER_CITY,RIVER_WAR_DURATION,newRiverBattle,changeRiverGate,sampleRiver
 import {CASTLE_ID,CASTLE_DURATION,newPilot,tickPilot,pilotView,pilotWinner,changeCastleGate,type PilotPresence,type PilotState} from "./CastlePilot.js";
 
 export const WAR_DURATION=5*60_000, WAR_PROTECTION=8*60*60_000, WAR_HOLD=60, WAR_SIDE_SIZE=5;
+// Only direct player-versus-player damage inside an active war uses this floor.
+// HP, actual levels, equipment and saved character stats remain unchanged.
+export const WAR_ENTRY_FLOOR_LEVEL=40;
+export const WAR_PARTICIPATION_INTERVAL_MS=30_000;
+export const WAR_SUPPLY_INTERVAL_MS=120_000;
+/** A modest repeatable EXP award, tied to active objective participation. */
+export function warParticipationExperience(xpToNext:number):number {
+  if(!Number.isSafeInteger(xpToNext) || xpToNext<0)throw Error("war_invalid_experience");
+  return xpToNext===0?0:Math.max(1,Math.floor(xpToNext*0.025));
+}
+export function warEntryDamageFactor(attackerLevel:number,defenderLevel:number):number {
+  if(!Number.isInteger(attackerLevel) || !Number.isInteger(defenderLevel) || attackerLevel<1 || defenderLevel<1)throw Error("war_invalid_level");
+  const scale=(level:number)=>1+(Math.min(level,100)-1)/15;
+  return (scale(Math.max(WAR_ENTRY_FLOOR_LEVEL,attackerLevel))/scale(attackerLevel)) *
+    (scale(defenderLevel)/scale(Math.max(WAR_ENTRY_FLOOR_LEVEL,defenderLevel)));
+}
 const warDuration=(site:string)=>site===CASTLE_ID?CASTLE_DURATION:site===RIVER_CITY?RIVER_WAR_DURATION:WAR_DURATION;
 export const warSites=Object.fromEntries(Object.entries(PROVINCES).filter(([,p])=>p.kind==="territory")
   .map(([id,p])=>[id,p.sites.find(s=>s.kind==="fort")!]));
@@ -94,7 +110,8 @@ export class TerritoryWar {
       gateHp:active?b.gate_hp:120,gateClosed:!!(active && b.gate_hp>0 && !b.gate_open),
       pilot:b?.pilot_json?pilotView(JSON.parse(b.pilot_json)):undefined,
       river:b?.city_json?JSON.parse(b.city_json) as RiverBattle:undefined,
-      progress:active?b.progress:0,seconds:active?Math.max(0,Math.ceil((b.started+warDuration(site)-now)/1000)):0};
+      progress:active?b.progress:0,seconds:active?Math.max(0,Math.ceil((b.started+warDuration(site)-now)/1000)):0,
+      phaseEndsAt:active?b.started+warDuration(site):phase==="protected" && b?.ended!=null?b.ended+WAR_PROTECTION:null};
   }
   govern(character:string,order:GovernmentOrder,now:number){
     return this.atomic(()=>{

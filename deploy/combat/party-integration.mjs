@@ -21,7 +21,7 @@ try {
   b.send("party_accept",{inviteId:invite.inviteId});
   await until(()=>last(ae,"party_state",m=>m.members?.length===2)&&last(be,"party_state",m=>m.members?.length===2),"party formed");
   a.send("attack",{targetId:"possessed-1"});
-  await until(()=>a.state.players.get(a.sessionId)?.experience===50 && b.state.players.get(b.sessionId)?.experience===50,"equal EXP",20000);
+  await until(()=>a.state.players.get(a.sessionId)?.experience===68 && b.state.players.get(b.sessionId)?.experience===68,"equal EXP",20000);
   assert.equal(outsider.state.players.get(outsider.sessionId).experience,0);
   a.send("party_leave",{});
   await until(()=>last(be,"party_state",m=>m.leaderId===b.sessionId && m.members?.length===1),"leader transferred");

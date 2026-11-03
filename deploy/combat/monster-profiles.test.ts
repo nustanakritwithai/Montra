@@ -22,10 +22,12 @@ test("tier multipliers and gap rewards stay server owned",()=>{
   assert.equal(monsterReward(21,1),0);
   assert.equal(monsterReward(1,100),12_500);
   assert.equal(monsterReward(50,55),6_875);
-  assert.equal(monsterReward(1,12),monsterExperience(1,12));
-  assert.equal(monsterExperience(1,1),100);
+  assert.equal(monsterExperience(1,12),Math.floor(monsterReward(1,6)*1.25));
+  assert.equal(monsterExperience(1,100),monsterExperience(1,6));
+  assert.equal(monsterExperience(1,1),125);
   for(const player of [1,2,12,21,50,100]) for(const level of [1,2,12,50,100]) {
-    assert.equal(monsterExperience(player,level),Math.floor(100*level*Math.min(1.25,Math.max(0,1-0.05*(player-level)))));
+    const base=monsterReward(player,Math.min(level,player+5));
+    assert.equal(monsterExperience(player,level),base ? Math.max(1,Math.floor(base*1.25)) : 0);
   }
 });
 test("simple equal-level forest encounters stay near the proposed 10–18 second target",()=>{

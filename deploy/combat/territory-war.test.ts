@@ -4,7 +4,18 @@ import path from "node:path";
 import {tmpdir} from "node:os";
 import {mkdtempSync,rmSync} from "node:fs";
 import {GuildStore} from "./GuildStore.js";
-import {WAR_PROTECTION,WAR_DURATION,WAR_HOLD} from "./TerritoryWar.js";
+import {WAR_PROTECTION,WAR_DURATION,WAR_HOLD,warEntryDamageFactor,warParticipationExperience} from "./TerritoryWar.js";
+
+test("early level damage scaling and war participation EXP stay bounded",()=>{
+  assert.equal(warEntryDamageFactor(1,1),1);
+  assert.equal(warEntryDamageFactor(40,100),1);
+  assert.equal(warEntryDamageFactor(1,100),3.6);
+  assert.ok(Math.abs(warEntryDamageFactor(100,1)-1/3.6)<1e-12);
+  assert.throws(()=>warEntryDamageFactor(0,1));
+  assert.equal(warParticipationExperience(150),3);
+  assert.equal(warParticipationExperience(125100),3127);
+  assert.equal(warParticipationExperience(0),0);
+});
 
 test("the mine changes gate damage only at Moon Pass; river supply requires a lead at the main flag",()=>{
   const dir=mkdtempSync(path.join(tmpdir(),"montra-relay-")),store=new GuildStore(path.join(dir,"guilds.sqlite"));
@@ -36,6 +47,7 @@ test("capture progress, contested flags, deadline, independent protection and du
     const start=1_000_000;
     assert.throws(()=>store.war.start("moon_pass",c,start),/war_officer/);
     const f=store.war.start("moon_pass",a,start),other=store.war.start("river_watch",b,start);
+    assert.equal(store.war.inspect(f.site,start).phaseEndsAt,start+WAR_DURATION);
     assert.throws(()=>store.war.start("moon_pass",b,start),/war_unavailable/);
     assert.equal(store.war.side(f,b,start,true),"defend");
     store.war.gate(f,"defend",false,start);assert.equal(store.war.inspect(f.site,start).gateClosed,false);
@@ -52,6 +64,7 @@ test("capture progress, contested flags, deadline, independent protection and du
     for(let i=1;i<=29;i++)store.war.advance(f,start+40_000+i*1000,5,0);
     const won=start+69_000,reopen=won+WAR_PROTECTION;
     assert.equal(store.war.inspect(f.site,won).owner,"Moon");
+    assert.equal(store.war.inspect(f.site,won).phaseEndsAt,reopen);
     assert.equal(store.war.inspect(other.site,start+WAR_DURATION).owner,null);
     assert.equal(store.war.inspect(f.site,reopen-1).phase,"protected");
     assert.equal(store.war.inspect(other.site,reopen).phase,"protected");
@@ -62,6 +75,7 @@ test("capture progress, contested flags, deadline, independent protection and du
     assert.equal(store.war.inspect(f.site,reopen+1000).progress,0);
     store.close();store=new GuildStore(file);
     assert.equal(store.war.inspect(f.site,reopen+WAR_DURATION+WAR_PROTECTION).phase,"open");
+    assert.equal(store.war.inspect(f.site,reopen+WAR_DURATION+WAR_PROTECTION).phaseEndsAt,null);
     assert.equal(store.war.inspect(f.site,reopen+WAR_DURATION+WAR_PROTECTION).owner,"Moon");
     store.leave("c");store.leave("a");
     assert.equal(store.war.inspect(f.site,reopen+WAR_DURATION+WAR_PROTECTION).owner,null);

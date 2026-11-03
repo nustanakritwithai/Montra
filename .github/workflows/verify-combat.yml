@@ -140,6 +140,9 @@ jobs:
           cp deploy/combat/TerritoryGovernment.ts combat-verify/src/rooms/TerritoryGovernment.ts
           cp deploy/combat/TerritoryWar.ts combat-verify/src/rooms/TerritoryWar.ts
           cp deploy/combat/territory-war.test.ts combat-verify/src/rooms/territory-war.test.ts
+          cp deploy/combat/war-entry-check.mjs combat-verify/war-entry-check.mjs
+          cp deploy/combat/forest-objective-check.mjs combat-verify/forest-objective-check.mjs
+          cp deploy/combat/service-npcs-check.mjs combat-verify/service-npcs-check.mjs
           cp deploy/combat/territory-government.test.ts combat-verify/src/rooms/territory-government.test.ts
           cp deploy/combat/territory-integration.mjs combat-verify/territory-integration.mjs
           cp deploy/combat/province-fronts-integration.mjs combat-verify/province-fronts-integration.mjs
@@ -160,6 +163,12 @@ jobs:
           cp deploy/combat/world-warp-rules.test.ts combat-verify/src/rooms/world-warp-rules.test.ts
           cp deploy/combat/MonsterRRT.ts combat-verify/src/rooms/MonsterRRT.ts
           cp deploy/combat/CharacterStore.ts combat-verify/src/rooms/CharacterStore.ts
+          cp deploy/combat/Rebirth.ts combat-verify/src/rooms/Rebirth.ts
+          cp deploy/combat/RebirthTransition.ts combat-verify/src/rooms/RebirthTransition.ts
+          cp deploy/combat/ForestObjectives.ts combat-verify/src/rooms/ForestObjectives.ts
+          cp deploy/combat/ServiceNpcs.ts combat-verify/src/rooms/ServiceNpcs.ts
+          cp deploy/combat/forest-objectives.test.ts combat-verify/src/rooms/forest-objectives.test.ts
+          cp deploy/combat/rebirth.test.ts combat-verify/src/rooms/rebirth.test.ts
           cp deploy/combat/PersonalItems.ts combat-verify/src/rooms/PersonalItems.ts
           cp deploy/combat/MonsterLoot.ts combat-verify/src/rooms/MonsterLoot.ts
           cp deploy/combat/gear-progression.test.ts combat-verify/src/rooms/gear-progression.test.ts
@@ -266,6 +275,7 @@ jobs:
         shell: bash
         run: |
           node --check main.js
+          node deploy/combat/war-map-time-test.cjs
           node deploy/combat/salvage-ui-test.cjs
           node deploy/combat/item-hunt-ui-test.cjs
           node deploy/combat/forge-copy-ui-test.cjs
@@ -371,7 +381,7 @@ jobs:
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/sword-tree-concurrency.test.ts src/rooms/sword-gap-geometry.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/gear-progression.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts src/rooms/guild-store.test.ts
+        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/rebirth.test.ts src/rooms/forest-objectives.test.ts src/rooms/sword-tree-concurrency.test.ts src/rooms/sword-gap-geometry.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/gear-progression.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts src/rooms/guild-store.test.ts
 
       - name: Occult book rules
         working-directory: combat-verify
@@ -380,6 +390,21 @@ jobs:
       - name: Blade core skills
         working-directory: combat-verify
         run: npx tsx blade-core-check.mjs
+
+      - name: Early war participation
+        working-directory: combat-verify
+        run: npx tsx war-entry-check.mjs
+
+      - name: Forest objectives and durable rewards
+        working-directory: combat-verify
+        run: npx tsx forest-objective-check.mjs
+
+      - name: Service NPC placement
+        working-directory: combat-verify
+        run: npx tsx service-npcs-check.mjs
+
+      - name: Service NPC dialogue actions
+        run: node deploy/combat/service-npcs-ui-check.cjs
 
       - name: Isolated advanced class lessons
         working-directory: combat-verify

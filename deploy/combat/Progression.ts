@@ -79,7 +79,18 @@ export function supportRankMultiplier(ranks:SkillRanks | undefined,id:string):nu
   return 1+(ranks?.[id] ?? 0)*0.02;
 }
 export function monsterExperience(playerLevel: number, monsterLevel: number, tier: MonsterTier = "normal"): number {
-  return monsterReward(playerLevel,monsterLevel,tier,PROGRESSION.monsterBaseExperience);
+  // Validate the actual target before limiting reward from extreme level gaps.
+  const raw=monsterReward(playerLevel,monsterLevel,tier,PROGRESSION.monsterBaseExperience);
+  const rewardedLevel=Math.min(monsterLevel,playerLevel+5);
+  const base=rewardedLevel===monsterLevel ? raw : monsterReward(playerLevel,rewardedLevel,tier,PROGRESSION.monsterBaseExperience);
+  if(base<=0)return 0;
+  // Trial baseline; saved levels, thresholds and accumulated EXP do not change.
+  return Math.max(1,Math.floor(base*1.25));
+}
+/** Later lives advance at two-thirds of the first life's reward rate. */
+export function cycleExperience(amount:number,rebirthCount:number):number {
+  if(!Number.isSafeInteger(amount) || amount<0 || !Number.isInteger(rebirthCount) || rebirthCount<0 || rebirthCount>15)throw Error("invalid_cycle_experience");
+  return amount===0 ? 0 : rebirthCount===0 ? amount : Math.max(1,Math.floor(amount*2/3));
 }
 export function addExperience(level: number, experience: number, amount: number): { level: number; experience: number } {
   if (!Number.isSafeInteger(level) || level < 1 || level > PROGRESSION.legacyMaxLevel ||

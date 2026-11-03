@@ -21,7 +21,7 @@ try {
   a.send("party_invite",{targetId:b.sessionId});const invite=await until(()=>last(be,"party_invitation"),"invite");
   b.send("party_accept",{inviteId:invite.inviteId});await until(()=>last(ae,"party_state",x=>x.members.length===2),"party formed");
   a.send("attack",{targetId:"forest_west_1"});
-  await until(()=>a.state.players.get(a.sessionId)?.experience===50 && b.state.players.get(b.sessionId)?.experience===50,"forest party EXP",25000);
+  await until(()=>a.state.players.get(a.sessionId)?.experience===68 && b.state.players.get(b.sessionId)?.experience===68,"forest party EXP",25000);
   assert.equal(a.state.monsters.get("forest_west_1").alive,false);
   assert.equal(a.state.monsters.get("forest_west_2").alive,true);
   console.log("PASS: forest profile, server combat, independent kill and equal party EXP in SQLite mode");

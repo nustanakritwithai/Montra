@@ -148,6 +148,7 @@ export const MyRoomState = schema({
   bladeAvailable: t.boolean().default(true), // append-only: codeless fallback when the server is older
   sentinelAvailable: t.boolean().default(true), // append-only for staged client/server rollout
   mountAvailable: t.boolean().default(true), // append-only; older servers do not expose horse mounts
+  forestObjectivesAvailable: t.boolean().default(false),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

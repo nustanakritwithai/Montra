@@ -4,8 +4,8 @@ import { PATHS, DUAL_SWORD, type PathId } from "../deploy/combat/CharacterBuilds
 import { WEAPON_STATS, SHRINE_RECIPE } from "../deploy/combat/ItemRules.js";
 import { FORT } from "../deploy/combat/HeightRules.js";
 import { MENDER_PVE_RICE_MULTIPLIER } from "../deploy/combat/SkillCatalog.js";
-import { calculateDamage, calculateStats, emptyAllocations, xpForNextLevel } from "../deploy/combat/Progression.js";
-import { monsterProfile, monsterReward } from "../deploy/combat/MonsterProfiles.js";
+import { calculateDamage, calculateStats, emptyAllocations, monsterExperience, xpForNextLevel } from "../deploy/combat/Progression.js";
+import { monsterProfile } from "../deploy/combat/MonsterProfiles.js";
 
 if (!WORLD_EXPANSION) throw Error("Set MONTRA_WORLD_EXPANSION=1 to audit the expanded world");
 const seen=new Set<string>(["ritual_village"]), queue=["ritual_village"];
@@ -26,13 +26,13 @@ function scenario(path:PathId,level:number,party:number){
   const interval=magic?FORT.rangedCooldownMs:dual?DUAL_SWORD.attackIntervalMs:1000;
   const hits=Math.ceil(monster.maxHp/(hit*party));
   const seconds=hits*interval/1000+6; // fixed travel/recovery, not measured
-  const xp=Math.floor(monsterReward(level,level)/party);
+  const xp=Math.max(1,Math.floor(monsterExperience(level,level)*(1+Math.min(3,party-1)*.1)/party));
   const hourly=Math.floor(3600*xp/seconds);
   return {path,level,party,hits,estimatedXpPerHour:hourly,estimatedHoursToNext:xpForNextLevel(level)/hourly};
 }
 const scenarios=paths.flatMap(path=>checkpoints.flatMap(level=>[1,2,4].map(party=>scenario(path,level,party))));
 const roughHoursTo100=paths.map(path=>({path,hours:Number(Array.from({length:99},(_,i)=>scenario(path,i+1,1).estimatedHoursToNext).reduce((a,b)=>a+b,0).toFixed(1))}));
 console.log(JSON.stringify({
-  assumptions:["basic attacks only, equal-level normal monster, starter weapons", "party members have identical builds, move together and share EXP equally", "fixed six seconds for travel and recovery per kill", "no skills, target switching, incoming damage, death, spawn congestion or latency", "map graph and spawn definitions only: walking paths and LIVE flags are not checked"],
+  assumptions:["basic attacks only, equal-level normal monster, starter weapons", "party members have identical builds, move together, and share EXP with the current party bonus", "fixed six seconds for travel and recovery per kill", "no skills, target switching, incoming damage, death, spawn congestion or latency", "map graph and spawn definitions only: walking paths and LIVE flags are not checked"],
   reachableMaps:[...seen],unreachableMaps:Object.keys(WORLD_MAPS).filter(id=>!seen.has(id)),levelsWithoutNearbyDefinedCamp:gaps,roughHoursTo100,scenarios
 },null,2));

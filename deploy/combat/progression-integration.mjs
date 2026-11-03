@@ -22,7 +22,7 @@ try {
     await until(()=>room.state?.players?.get(room.sessionId),"create");
     await room.leave();room=null;await sleep(400);
     const old=JSON.parse(await readFile(file,"utf8"));
-    old.hp=100;old.experience=50;old.level=1;old.x=1.1;old.y=0;old.z=7;
+    old.hp=100;old.experience=25;old.level=1;old.x=1.1;old.y=0;old.z=7;
     old.inventory.slots[0].quantity=2;old.inventory.equippedWeaponSlot=2;
     delete old.statAllocations;delete old.stamina;
     await writeFile(file,JSON.stringify(old));
@@ -35,7 +35,7 @@ try {
   await until(()=>own() && room.state?.progressionAvailable===true,"progression state");
   if(stage==="write") {
     assert.equal(own().maxHp,240);assert.ok(own().hp<150,"legacy HP must not be reset to full");
-    assert.equal(own().experience,50);assert.equal(own().equippedWeaponId,"arcane_sword");
+    assert.equal(own().experience,25);assert.equal(own().equippedWeaponId,"arcane_sword");
     room.send("attack",{targetId:"possessed-1"});
     await until(()=>own()?.level===2 && own()?.statPoints===0,"real monster EXP and level",20000);
     assert.equal(own().experience,0);
