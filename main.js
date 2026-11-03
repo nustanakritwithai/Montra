@@ -11605,7 +11605,7 @@
     if (nav && menuBtn) {
       const fly = document.createElement("div"); fly.className = "map-flyout"; fly.hidden = true; fly.setAttribute("role", "menu"); nav.after(fly);
       const items = [["menuCharacter", "๛", "ตัวละคร"], ["menuGuild", "⚑", "กิลด์"], ["marketButton", "♢", "ตลาด"], ["menuQuest", "◇", "ภารกิจ"],
-        ["chatButton", "✉", "แชท"], ["modeButton", "◎", "ออนไลน์"], ["helpButton", "?", "ตั้งค่า"], [null, "☰", "เมนูทั้งหมด"]];
+        ["modeButton", "◎", "ออนไลน์"], ["helpButton", "?", "ตั้งค่า"], [null, "☰", "เมนูทั้งหมด"]];
       const close = () => { fly.hidden = true; menuBtn.setAttribute("aria-expanded", "false"); menuBtn.classList.remove("open"); };
       items.forEach(([id, glyph, label], i) => {
         const src = id && $(id); if (id && !src) return;
