@@ -7288,10 +7288,10 @@
       spellTargetId=id;room.send("sentinel_skill",{skillId:selectedSentinelSkill,targetId:id});return;
     }
     if (picked === "blade") {
-      const node=bladeBookState?.lessons?.[selectedBladeSkill],monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;
+      const core=bladeBookState?.core?.[selectedBladeSkill],node=core || bladeBookState?.lessons?.[selectedBladeSkill],monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;
       if(!node || !id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId) {toast("เลือกเป้าหมายที่ใช้วิชานี้ได้");return;}
       if(opponent && partyState?.members?.some(member=>member.sessionId===id)){toast("โจมตีสมาชิกปาร์ตี้ไม่ได้");return;}
-      spellTargetId=id;room.send("blade_skill",{skillId:selectedBladeSkill,targetId:id});return;
+      spellTargetId=id;room.send(core?"blade_core_skill":"blade_skill",{skillId:selectedBladeSkill,targetId:id});return;
     }
     if (picked === "occult") {
       if(occultBookState?.path==="seer" && occultBookState?.core?.[selectedOccultSkill]){
@@ -7790,7 +7790,7 @@
   // ---- Status boxes: small squares for effects on the player (under the player card) and party members ----
   const STATUS_FX = {
     possession: ["☯", "วิญญาณเข้าสิง", "good"], sentinel_step: ["➶", "ย่างพิทักษ์", "good"], sentinel_anchor: ["⚓", "ตั้งหลักพิทักษ์", "good"],
-    blade_focus: ["◉", "รวมคม", "good"], blade_veil_guard: ["◐", "ม่านคุ้มกาย", "good"], muay_boran: ["✊", "จิตนักสู้", "good"], phutthaisawan: ["⚔", "รำดาบคู่", "good"],
+    blade_focus: ["◉", "รวมคม", "good"], blade_core_fury: ["◉", "ปลุกจิตสังหาร", "good"], blade_veil_guard: ["◐", "ม่านคุ้มกาย", "good"], muay_boran: ["✊", "จิตนักสู้", "good"], phutthaisawan: ["⚔", "รำดาบคู่", "good"],
     blade: ["◈", "ปลุกคมดาบ", "good"], sentinel: ["⛨", "ยันต์คุ้มกาย", "good"], seer: ["✦", "เพ่งจิต", "good"], mender: ["✚", "พรฟื้นกาย", "good"],
     mender_ward: ["⛨", "ยันต์คุ้มชีพ", "good"], ward: ["⛨", "คุ้มกัน", "good"], party_ward: ["⛨", "แนวพิทักษ์", "good"],
     curse: ["☠", "ติดคำสาป", "bad"], poison: ["☣", "ติดพิษ", "bad"], bleed: ["🩸", "เลือดไหล", "bad"], stun: ["✸", "มึนงง", "bad"], slow: ["❄", "ช้าลง", "bad"],
@@ -8651,7 +8651,7 @@
       });
       joined.onMessage("blade_cloak_changed",data=>{
         if(room!==joined)return;
-        bladeCloakUntil=data?.active ? performance.now()+Math.max(0,Math.min(5000,Number(data.durationMs)||0)) : 0;
+        bladeCloakUntil=data?.active ? performance.now()+Math.max(0,Math.min(9000,Number(data.durationMs)||0)) : 0;
         if (data?.active) eventFx("cloak",getLocalAvatar());
         syncBladeUI(ownServerCharacter());toast(data?.active ? "อำพรางตัวแล้ว" : data?.reason==="interrupted" ? "การร่ายพรางถูกขัดจังหวะ" : "การอำพรางสิ้นสุด");
       });
@@ -8660,7 +8660,12 @@
       joined.onMessage("blade_mark_state",data=>{if(room===joined){bladeMarkUntil=data?.active ? performance.now()+Math.max(0,Math.min(8000,Number(data.durationMs)||0)) : 0;bladeMarkedTarget=data?.active ? String(data.targetId || "") : "";syncBladeUI(ownServerCharacter());}});
       joined.onMessage("blade_opening",data=>{if(room===joined){bladeOpeningUntil=performance.now()+Math.max(0,Math.min(4000,Number(data?.durationMs)||0));syncBladeUI(ownServerCharacter());}});
       joined.onMessage("blade_evade",data=>{if(room===joined && data?.success){bladeCounterUntil=performance.now()+3000;toast("หลบสำเร็จ · วิชาสวนพร้อม");syncBladeUI(ownServerCharacter());}});
-      joined.onMessage("blade_skill_used",data=>{if(room===joined && data?.playerId===localId){if(data.skillId==="counter")bladeCounterUntil=0;if(data.skillId==="killer_focus")bladeOpeningUntil=0;const name=bladeBookState?.lessons?.[data.skillId]?.name;if(name)toast(data.skillId==="piercing_edge"?"ตั้งท่าคมอาคมทะลวง":"ใช้ "+name);syncBladeUI(ownServerCharacter());}});
+      joined.onMessage("blade_skill_used",data=>{
+        if(room!==joined)return;
+        const caster=joined.state?.players?.get?.(data?.playerId);
+        if(data?.skillId==="blade_fury" && caster && (caster.mapId || "ritual_village")===activeMapId)playAction(avatars.get(data.playerId),"rally");
+        if(data?.playerId===localId){if(data.skillId==="counter")bladeCounterUntil=0;if(data.skillId==="killer_focus")bladeOpeningUntil=0;const name=bladeBookState?.core?.[data.skillId]?.name || bladeBookState?.lessons?.[data.skillId]?.name;if(name)toast(data.skillId==="piercing_edge"?"ตั้งท่าคมอาคมทะลวง":"ใช้ "+name);syncBladeUI(ownServerCharacter());}
+      });
       joined.onMessage("occult_book_changed", () => {
         if (room!==joined) return;
         selectedOccultSkill="";if(targetedSkill==="occult")setTargetedSkill(null);
@@ -10390,6 +10395,7 @@
     const requestKey=localId+":"+me.pathId;
     if(bladeRequestKey!==requestKey && room){bladeRequestKey=requestKey;bladeRequestAt=performance.now();room.send("blade_book_get",{});}
     const data=bladeBookState;if(!data){bar.hidden=true;return;}
+    if(data.core){syncBladeCoreUI(me,data,bar);return;}
     const ids=learnedSlots(data.book.slots,data.book.learned,data.lessons),times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
     const key=JSON.stringify([ids,times,me.alive,affordKey(ids,data.lessons,me)]);bar.hidden=false;if(key===bladeHotbarKey)return;bladeHotbarKey=key;bar.replaceChildren();
     ids.forEach((id,index)=>{const node=id && data.lessons[id],slot=document.createElement("button");slot.type="button";slot.className="sword-hotkey";
@@ -10405,13 +10411,30 @@
     arrangeFieldSlots(bar,ids,data.lessons,openBladeBook);
     positionSwordToast();
   }
+  function syncBladeCoreUI(me,data,bar){
+    const ids=["blade_vanish","blade_heavy","blade_withdraw","blade_fury"],ranks=data.book.coreRanks || {};
+    const skills=Object.fromEntries(ids.map(id=>[id,{...data.core[id],stamina:data.core[id].stamina+Number(ranks[id]||0)}]));
+    const times=ids.map(id=>Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)));
+    const key=JSON.stringify([ids,times,ranks,me.alive,me.stunned,affordKey(ids,skills,me)]);bar.hidden=false;if(key===bladeHotbarKey)return;bladeHotbarKey=key;bar.replaceChildren();
+    ids.forEach((id,index)=>{const node=skills[id],button=document.createElement("button");button.type="button";button.className="sword-hotkey";
+      button.textContent=node.name+(times[index]?" "+times[index]+" วิ":"");button.disabled=!me.alive || me.stunned || Boolean(times[index]);
+      button.onclick=()=>{if(id==="blade_heavy" || id==="blade_withdraw"){
+        selectedBladeSkill=id;setTargetedSkill("blade");const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
+        if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId)castAtTarget(targetId);else toast(node.name+" · แตะเป้าหมายแล้วกดวิชา");
+      }else room.send("blade_core_skill",{skillId:id});};
+      if(!times[index])staminaCost(button,node.stamina,me);bar.append(button);
+    });
+    arrangeFieldSlots(bar,ids,skills,openBladeBook);positionSwordToast();
+  }
   function openBladeBook() {
     if(!room || mode!=="live" || ownServerCharacter()?.pathId!=="blade")return toast("เข้า LIVE และเลือกสายคมดาบก่อน");
     if(!bladeBookState){if(performance.now()-bladeRequestAt>1500){bladeRequestAt=performance.now();room.send("blade_book_get",{});}return toast("กำลังขอตำราคมดาบจากเซิร์ฟเวอร์");}
-    bladeBookRenderKey="";skillGraphKey="";openDrawer("bladeBook","สกิล",skillBookShell("blade"));wireSkillBook("blade");renderBladeBook();
+    bladeBookRenderKey="";skillGraphKey="";if(bladeBookState.core)openDrawer("bladeBook","วิชาคมดาบ",'<div id="bladeBookBody"></div>');
+    else {openDrawer("bladeBook","สกิล",skillBookShell("blade"));wireSkillBook("blade");}renderBladeBook();
   }
   function renderBladeBook() {
     const data=bladeBookState,me=ownServerCharacter(),container=$("bladeBookBody");if(!data || !me || !container)return;
+    if(data.core)return renderBladeCoreBook(data,me,container);
     if(typeof skillView!=="undefined" && skillView==="graph")return renderSkillGraph("blade",container);
     if(container.contains(document.activeElement) && document.activeElement.matches("select[data-blade-equip]"))return;
     const key=JSON.stringify([data.book,me.level]);if(key===bladeBookRenderKey)return;bladeBookRenderKey=key;
@@ -10437,6 +10460,22 @@
     container.querySelectorAll("[data-blade-upgrade]").forEach(button=>button.onclick=()=>room.send("blade_book",{action:"upgrade",skillId:button.dataset.bladeUpgrade}));
     container.querySelectorAll("[data-blade-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("blade_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.bladeEquip});select.blur();});
     $("resetBladeBook").onclick=()=>{if(window.confirm("คืนแต้มสายคมดาบ? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("blade_book",{action:"reset"});};
+  }
+  function renderBladeCoreBook(data,me,container){
+    const key=JSON.stringify([data.book,me.level]);if(key===bladeBookRenderKey)return;bladeBookRenderKey=key;
+    const ranks=data.book.coreRanks || {},points=data.corePointLevels.filter(level=>me.level>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
+    const fmt=n=>String(Math.round(n*100)/100),describe=(id,rank)=>{const p=data.coreProgress?.[rank]?.[id];if(!p)return "";
+      if(id==="blade_vanish")return "หายตัวทันที นาน "+fmt(p.durationMs/1000)+" วิ";
+      if(id==="blade_heavy")return "พลังโจมตีมอนสเตอร์ "+fmt(p.power*100)+"% · PvP "+fmt(p.pvpPower*100)+"% ก่อนปรับสมดุล · ระยะ "+fmt(p.range);
+      if(id==="blade_withdraw")return "พลังโจมตีมอนสเตอร์ "+fmt(p.power*100)+"% · PvP "+fmt(p.pvpPower*100)+"% ก่อนปรับสมดุล · ถอย "+fmt(p.distance)+" หน่วย";
+      return "โจมตี +"+fmt(p.bonus*100)+"% นาน "+fmt(p.durationMs/1000)+" วิ";
+    };
+    container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
+      Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
+        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-blade-core-upgrade="'+id+'" '+(me.level<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+      }).join("")+'<p class="note">หายตัวระหว่างต่อสู้ได้ · โจมตีหรือถูกโจมตีจะเปิดเผยตัว มอนสเตอร์ตรวจพบได้เมื่อเข้าใกล้ · ฟันถอยเว้นจังหวะ 0.5 วิแล้วตีอัตโนมัติต่อ สั่งเดินหรือโจมตีใหม่ได้ทันที · พุ่งถอยหยุดเมื่อพบสิ่งกีดขวาง · พลังโจมตี PvP ถูกปรับสมดุล 75% และเมื่อเปิดฉากจากการล่องหนเพิ่มอีก 20% · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetBladeCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
+    container.querySelectorAll("[data-blade-core-upgrade]").forEach(button=>button.onclick=()=>room.send("blade_book",{action:"core_upgrade",skillId:button.dataset.bladeCoreUpgrade}));
+    $("resetBladeCore").onclick=()=>{if(window.confirm("คืนแต้มวิชาคมดาบทั้งหมด?"))room.send("blade_book",{action:"core_reset"});};
   }
   function syncOccultUI(me) {
     const status=$("occultStatus"), cursed=mode==="live" && performance.now()<occultCurseUntil,parts=[];
@@ -11225,7 +11264,7 @@
     }
     // Active effects and unspent points.
     const fx = [];
-    const effectSeals={possession:["spirit","วิญญาณเข้าสิง"],sentinel_step:["stamina","ย่างพิทักษ์"],sentinel_anchor:["def","ตั้งหลักพิทักษ์"],blade_focus:["atk","รวมคม"],blade_veil_guard:["magicDef","ม่านคุ้มกาย"],muay_boran:["fist","วิชามวย"],blade:["atk","วิชาคมดาบ"],sentinel:["def","วิชาผู้พิทักษ์"],seer:["magicAtk","วิชาจอมอาคม"],mender:["heal","วิชาพระ"]};
+    const effectSeals={possession:["spirit","วิญญาณเข้าสิง"],sentinel_step:["stamina","ย่างพิทักษ์"],sentinel_anchor:["def","ตั้งหลักพิทักษ์"],blade_focus:["atk","รวมคม"],blade_core_fury:["atk","ปลุกจิตสังหาร"],blade_veil_guard:["magicDef","ม่านคุ้มกาย"],muay_boran:["fist","วิชามวย"],blade:["atk","วิชาคมดาบ"],sentinel:["def","วิชาผู้พิทักษ์"],seer:["magicAtk","วิชาจอมอาคม"],mender:["heal","วิชาพระ"]};
     for (const effect of status?.effects || []) {
       if (typeof effect?.id !== "string" || !Number.isFinite(effect.remainingMs)) continue;
       const remaining=Math.max(0,Math.ceil((effect.remainingMs-(performance.now()-status.receivedAt))/1000));
