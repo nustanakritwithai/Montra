@@ -23,7 +23,7 @@ try {
   const initialX=Number(me().x),started=Date.now();a.send("move",{x:-8,z:0});
   await until(()=>Math.abs(Number(me().x)-initialX)>3.6,"horse movement");
   const elapsed=(Date.now()-started)/1000,dist=Math.abs(Number(me().x)-initialX);
-  assert.ok(dist/elapsed>3.4 && dist/elapsed<6.1,"speed is bounded and faster than walking");
+  assert.ok(dist/elapsed>5.6 && dist/elapsed<9.5,"horse uses the increased server-owned speed");
   await until(()=>Math.abs(Number(me().x)+8)<.15,"reached destination");
   a.send("toggle_mount",{});await until(()=>!me().mounted && !peerView().mounted,"manual dismount");
   a.send("toggle_mount",{});await until(()=>me().mounted,"mount again");
