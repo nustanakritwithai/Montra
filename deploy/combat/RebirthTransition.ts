@@ -21,7 +21,7 @@ export function prepareRebirth(snapshot: CharacterSnapshot, path: PathId): Chara
       if (!definition || definition.path==="all" || definition.path===path) continue;
       if (!isBodySlot(position)) throw Error("rebirth_inventory_invalid");
       const result=equipBody(inventory,position,null,item,path,snapshot.level);
-      if (!result.ok) throw Error(result.reason==="inventory_full" ? "rebirth_inventory_full" : "rebirth_inventory_invalid");
+      if (result.ok === false) throw Error(result.reason==="inventory_full" ? "rebirth_inventory_full" : "rebirth_inventory_invalid");
       inventory=result.inventory;
     }
   }
