@@ -7522,6 +7522,56 @@
     const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
     e.preventDefault(); chatBox.input.focus();
   });
+  // ---- Layout moves: menu buttons under the minimap, horse button beside the vital orb ----
+  {
+    const loc = document.querySelector(".location-area"), nav = document.querySelector(".field-shortcuts"), name = $("worldMapName");
+    if (loc && nav) { (name || loc.lastElementChild).after(nav); nav.classList.add("map-shortcuts"); }
+    const mount = $("mountButton"), orbEl = document.querySelector(".vital-orb");
+    if (mount && orbEl) { orbEl.before(mount); mount.classList.add("orb-mount"); }
+  }
+  // ---- Status boxes: small squares for effects on the player (under the player card) and party members ----
+  const STATUS_FX = {
+    possession: ["☯", "วิญญาณเข้าสิง", "good"], sentinel_step: ["➶", "ย่างพิทักษ์", "good"], sentinel_anchor: ["⚓", "ตั้งหลักพิทักษ์", "good"],
+    blade_focus: ["◉", "รวมคม", "good"], blade_veil_guard: ["◐", "ม่านคุ้มกาย", "good"], muay_boran: ["✊", "จิตนักสู้", "good"], phutthaisawan: ["⚔", "รำดาบคู่", "good"],
+    blade: ["◈", "ปลุกคมดาบ", "good"], sentinel: ["⛨", "ยันต์คุ้มกาย", "good"], seer: ["✦", "เพ่งจิต", "good"], mender: ["✚", "พรฟื้นกาย", "good"],
+    mender_ward: ["⛨", "ยันต์คุ้มชีพ", "good"], ward: ["⛨", "คุ้มกัน", "good"], party_ward: ["⛨", "แนวพิทักษ์", "good"],
+    curse: ["☠", "ติดคำสาป", "bad"], poison: ["☣", "ติดพิษ", "bad"], bleed: ["🩸", "เลือดไหล", "bad"], stun: ["✸", "มึนงง", "bad"], slow: ["❄", "ช้าลง", "bad"],
+    held: ["⛓", "ถูกจับล็อก", "bad"], down: ["✝", "หมดสติ", "bad"], cloak: ["◐", "อำพราง", "good"], opening: ["➽", "เปิดฉาก", "good"], counter: ["↺", "สวนกลับได้", "good"], mark: ["✶", "รอยอาคม", "good"],
+  };
+  const fxInfo = id => STATUS_FX[id] || [id && /curse|poison|bleed|stun|slow|weak|break/i.test(id) ? "☠" : "✧", "ผลวิชา", id && /curse|poison|bleed|stun|slow|weak|break/i.test(id) ? "bad" : "good"];
+  // Effects on the local player: server status (polled while live) plus states the client already tracks.
+  function selfEffects(me) {
+    const now = performance.now(), out = [];
+    if (mode === "live" && me && room?.state?.progressionAvailable === true && now - lastCharacterStatusRequest >= 3000) { lastCharacterStatusRequest = now; try { room.send("get_character_status", {}); } catch {} }
+    for (const e of characterStatus?.effects || []) {
+      if (typeof e?.id !== "string" || !Number.isFinite(e.remainingMs)) continue;
+      const left = Math.ceil((e.remainingMs - (now - characterStatus.receivedAt)) / 1000); if (left > 0) out.push([e.id, left]);
+    }
+    if (me?.possessionActive && !out.some(([id]) => id === "possession")) out.push(["possession", null]);
+    if (occultCurseUntil > now) out.push(["curse", Math.ceil((occultCurseUntil - now) / 1000)]);
+    if (grappleResponseMode === "escape") out.push(["held", null]);
+    if (bladeCloakUntil > now) out.push(["cloak", Math.ceil((bladeCloakUntil - now) / 1000)]);
+    if (bladeOpeningUntil > now) out.push(["opening", Math.ceil((bladeOpeningUntil - now) / 1000)]);
+    if (me && me.alive === false) out.push(["down", null]);
+    return out;
+  }
+  // Party members: whatever the shared state carries (down, possession, and a statusData JSON list when the server adds one).
+  function memberEffects(p) {
+    const out = []; if (!p) return out;
+    if (p.alive === false) out.push(["down", null]);
+    if (p.possessionActive) out.push(["possession", null]);
+    try { for (const e of JSON.parse(p.statusData || "[]")) if (typeof e?.id === "string") out.push([e.id, Number.isFinite(e.seconds) ? e.seconds : null]); } catch {}
+    return out;
+  }
+  const fxBoxesHtml = (list, max) => list.slice(0, max).map(([id, sec]) => { const [g, n, k] = fxInfo(id);
+    return `<span class="fx-box ${k}" title="${sgEsc(n)}${sec ? " · " + sec + " วินาที" : ""}"><i>${g}</i>${sec ? `<b>${sec > 99 ? "99+" : sec}</b>` : ""}</span>`; }).join("") + (list.length > max ? `<span class="fx-box more">+${list.length - max}</span>` : "");
+  const selfStatusBox = (() => { const card = document.querySelector(".hud-journal .identity"); if (!card) return null;
+    const el = document.createElement("div"); el.className = "fx-row self-fx"; el.setAttribute("aria-label", "สถานะที่ติดอยู่"); card.after(el); return el; })();
+  function updateSelfStatus(me) {
+    if (!selfStatusBox) return;
+    const list = selfEffects(me), key = JSON.stringify(list); if (selfStatusBox.dataset.key === key) return;
+    selfStatusBox.dataset.key = key; selfStatusBox.hidden = !list.length; selfStatusBox.innerHTML = fxBoxesHtml(list, 8);
+  }
   function updateHud(now) {
     const me = mode === "live" ? ownServerCharacter() : null, hero = getLocalAvatar();
     // Player card.
@@ -7536,7 +7586,7 @@
       hudSet(bar.querySelector("i"), "stw", pctOf(me.stamina,me.maxStamina), "width");
       updateMeterValue(bar,value,max,value+" จาก "+max);
     }
-    updateResourceStrip();
+    updateResourceStrip(); updateSelfStatus(me);
     updateVitalOrb(hp, maxHp, hasSt ? Number(me.stamina) : NaN, hasSt ? Number(me.maxStamina) : 0, Number(me?.mana), Number(me?.maxMana) || 0);
     const xpMax = Number(me?.xpToNext) || 0, xp = Number(me?.experience) || 0;
     const hasXp = me && room?.state?.progressionAvailable === true;
@@ -7599,7 +7649,8 @@
       const p = room?.state?.players?.get?.(m.sessionId), lead = m.sessionId === partyState.leaderId;
       const same = p && (p.mapId || "ritual_village") === (me?.mapId || "ritual_village");
       const where = !p ? "เชื่อมต่อ…" : p.alive === false ? "หมดสติ" : same ? Math.round(Math.hypot(p.x - me.x, p.z - me.z)) + " ม." : "แผนที่อื่น";
-      return { key: [m.name, lead, p?.pathId, p?.level, Math.round(p?.hp || 0), Math.round(p?.maxHp || 0), where].join("|"), name: m.name, lead, glyph: PATH_GLYPHS[p?.pathId] || Array.from(m.name)[0] || "?", path: p?.pathId || "", lv: p?.level,
+      const fx = memberEffects(p);
+      return { fx, key: [m.name, lead, p?.pathId, p?.level, JSON.stringify(fx), Math.round(p?.hp || 0), Math.round(p?.maxHp || 0), where].join("|"), name: m.name, lead, glyph: PATH_GLYPHS[p?.pathId] || Array.from(m.name)[0] || "?", path: p?.pathId || "", lv: p?.level,
         hp: pctOf(p?.hp, p?.maxHp), where, down: p?.alive === false, far: p && !same, low: p && p.hp / Math.max(1, p.maxHp) < .3 };
     });
     const key = rows.map(r => r.key).join("~");
@@ -7612,7 +7663,9 @@
       const top = document.createElement("span"); top.className = "pf-top";
       const nm = document.createElement("b"); nm.textContent = r.name; const wh = document.createElement("small"); wh.textContent = r.where; top.append(nm, wh);
       const bar = document.createElement("span"); bar.className = "pf-bar"; const fill = document.createElement("i"); fill.style.width = r.hp; bar.append(fill);
-      body.append(top, bar); row.append(av, body); box.append(row);
+      body.append(top, bar);
+      if (r.fx.length) { const fxRow = document.createElement("span"); fxRow.className = "fx-row member-fx"; fxRow.innerHTML = fxBoxesHtml(r.fx, 3); body.append(fxRow); }
+      row.append(av, body); box.append(row);
     }
   }
   // Plain words instead of "DEMO · ↑0ม.": mode, players, safe zone, altitude only in the air.
