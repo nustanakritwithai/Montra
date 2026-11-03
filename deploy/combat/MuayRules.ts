@@ -1,6 +1,48 @@
 /** Prototype game mechanics inspired by historical Muay, not historical instruction. */
 import {skillRankCost,validateSkillRanks,type SkillRanks} from "./Progression.js";
 export const MUAY_WRAP_ID = "muay_wraps" as const;
+export const MUAY_CORE = {
+  chaiya: {name:"ไชยา · ตั้งรับสวน",stamina:18,cooldownMs:12000,kind:"stance",effect:"guard",
+    description:"ตั้งรับชั่วคราวและสวนผู้โจมตีระยะประชิด อัปขั้นเพิ่มระยะเวลาตั้งรับและแรงสวน"},
+  korat: {name:"โคราช · หมัดหนัก",stamina:24,cooldownMs:12000,kind:"target",effect:"strike",
+    description:"ต่อยหนักเป็นชุดสามจังหวะ อัปขั้นเพิ่มพลังแต่ละหมัด"},
+  lopburi: {name:"ลพบุรี · ฉากพุ่ง",stamina:18,cooldownMs:10000,kind:"direction",effect:"step",
+    description:"พุ่งตามทิศเดินล่าสุด กดซ้ำภายในเวลาที่กำหนดเพื่อโจมตี อัปขั้นเพิ่มระยะและพลัง"},
+  thasao: {name:"ท่าเสา · พุ่งรัว",stamina:24,cooldownMs:12000,kind:"target",effect:"flurry",
+    description:"พุ่งเข้าหาเป้าหมายและโจมตีรัว ทำให้มอนสเตอร์ทั่วไปหยุดชั่วขณะ อัปขั้นเพิ่มจำนวนครั้ง"},
+} as const;
+export type MuayCoreId = keyof typeof MUAY_CORE;
+export type MuayCoreRanks = Partial<Record<MuayCoreId,number>>;
+export const MUAY_CORE_MANA_PER_RANK = 1;
+export function muayCoreManaCost(id:MuayCoreId,rank:number):number {
+  return MUAY_CORE[id].stamina + rank*MUAY_CORE_MANA_PER_RANK;
+}
+/** Shared values for the server and the skill-book preview. */
+export function muayCoreProgress(rank:number) {
+  const hits=3+Math.min(rank,4);
+  return {
+    chaiya:{
+      durationMs:2000+rank*400,damageFactor:Math.max(.4,.65-rank*.05),
+      counterPower:1+rank*.12,counterIntervalMs:rank>=8?300:rank>=4?350:400,
+    },
+    korat:{
+      scale:1+rank*.08,finalPower:.75+(rank>=4?.04:0)+(rank>=8?.04:0),
+    },
+    lopburi:{
+      distance:3+rank*.4,followMs:3000+rank*250,followPower:1.05+rank*.12,
+      staggerMs:rank>=8?350:rank>=4?200:0,
+    },
+    thasao:{
+      range:7+rank*.4,hits,hitPower:.26+Math.min(rank,4)*.015+Math.max(0,rank-4)*.01,
+      staggerMs:(hits-1)*220+160+(rank>=8?120:0),
+    },
+  };
+}
+export const MUAY_CORE_LEVELS = [5,15,25,35,45,60,80,100] as const;
+export const MUAY_CORE_POINT_LEVELS = [5,15,25,35,45,55,65,75,80,85,95,100] as const;
+export function muayCorePoints(level:number):number {
+  return MUAY_CORE_POINT_LEVELS.filter(required=>level>=required).length;
+}
 export const MUAY_SKILLS = {
   step: {name:"ย่างสามขุม", effect:"step", stamina:15, cooldownMs:6000, power:0.9, range:6},
   punch: {name:"หมัดนำ", effect:"strike", stamina:8, cooldownMs:3000, power:1.1, range:2.5},
@@ -44,7 +86,7 @@ export const MUAY_SKILLS = {
   thasao_final_rush: {name:"ก้าวชุดพิชิตจังหวะ",effect:"step_flurry",stamina:36,cooldownMs:21000,power:0.9,range:6},
 } as const;
 export type MuaySkillId = keyof typeof MUAY_SKILLS;
-export type MuayCooldowns = Partial<Record<MuaySkillId, number>>;
+export type MuayCooldowns = Partial<Record<MuaySkillId | MuayCoreId, number>>;
 export const MUAY_BASE_SKILLS = ["step","punch","guard","counter","teep","grapple","parry","evade"] as const;
 export const MUAY_DEFAULT_SLOTS: readonly [null, null, null, null] = [null,null,null,null];
 export const isMuayFoundation = (id:string):boolean => MUAY_BASE_SKILLS.some(base=>base===id);
@@ -180,7 +222,7 @@ const MUAY_TECHNIQUES:Readonly<Record<MuaySchool,readonly MuaySkillId[]>> = {
 export function countsMuayTechnique(school:MuaySchool,skill:MuaySkillId,moved:boolean):boolean {
   return MUAY_TECHNIQUES[school].includes(skill) && (school!=="lopburi" && school!=="thasao" || moved);
 }
-export type MuayBook = {learned:MuayLessonId[]; training:{strikes:number;blocks:number}; mastery:MuayMastery; school:MuaySchool; slots:Array<MuaySkillId|null>; loadouts:MuayLoadouts;ranks?:SkillRanks};
+export type MuayBook = {learned:MuayLessonId[]; training:{strikes:number;blocks:number}; mastery:MuayMastery; school:MuaySchool; slots:Array<MuaySkillId|null>; loadouts:MuayLoadouts;ranks?:SkillRanks;coreRanks?:MuayCoreRanks};
 export function muayPoints(level:number):number { return 1+Math.floor((Math.min(level,100)-1)/2); }
 export function newMuayLoadouts():MuayLoadouts {return {chaiya:[...MUAY_DEFAULT_SLOTS],korat:[...MUAY_DEFAULT_SLOTS],lopburi:[...MUAY_DEFAULT_SLOTS],thasao:[...MUAY_DEFAULT_SLOTS]};}
 export function newMuayMastery():MuayMastery {return {chaiya:{technique:0,sequences:0},korat:{technique:0,sequences:0},lopburi:{technique:0,sequences:0},thasao:{technique:0,sequences:0}};}
@@ -188,7 +230,7 @@ export function newMuayBook():MuayBook { return {learned:[],training:{strikes:0,
 export function validateMuayBook(value:unknown,level:number):MuayBook {
   if(!value || typeof value!=="object" || Array.isArray(value))throw new Error("invalid_muay_book");
   const v=value as Record<string,unknown>;
-  const keys=Object.keys(v).filter(key=>key!=="ranks").sort().join(","), legacy=keys==="learned,slots,training", prior=keys==="learned,loadouts,school,slots,training", current=keys==="learned,loadouts,mastery,school,slots,training";
+  const keys=Object.keys(v).filter(key=>key!=="ranks" && key!=="coreRanks").sort().join(","), legacy=keys==="learned,slots,training", prior=keys==="learned,loadouts,school,slots,training", current=keys==="learned,loadouts,mastery,school,slots,training";
   if((!legacy && !prior && !current) || !Array.isArray(v.learned) || !Array.isArray(v.slots) || v.slots.length!==4 ||
     !v.training || typeof v.training!=="object" || Array.isArray(v.training))throw new Error("invalid_muay_book");
   const training=v.training as Record<string,unknown>;
@@ -222,11 +264,21 @@ export function validateMuayBook(value:unknown,level:number):MuayBook {
   }
   let ranks:SkillRanks;
   try{ranks=validateSkillRanks(v.ranks,learned,level,muayPoints(level),MUAY_RANKABLE_SKILLS);}catch{throw Error("invalid_muay_book");}
-  return {learned:[...learned],training:{strikes:training.strikes as number,blocks:training.blocks as number},mastery,school:school as MuaySchool,slots:[...loadouts[school as MuaySchool]],loadouts,...(skillRankCost(ranks)?{ranks}:{})};
+  const coreRanks:MuayCoreRanks={};
+  if(v.coreRanks!==undefined) {
+    if(!v.coreRanks || typeof v.coreRanks!=="object" || Array.isArray(v.coreRanks))throw Error("invalid_muay_book");
+    for(const [id,rank] of Object.entries(v.coreRanks)) {
+      if(!Object.hasOwn(MUAY_CORE,id) || !Number.isSafeInteger(rank) || (rank as number)<1 ||
+        (rank as number)>MUAY_CORE_LEVELS.length || level<MUAY_CORE_LEVELS[(rank as number)-1])throw Error("invalid_muay_book");
+      coreRanks[id as MuayCoreId]=rank as number;
+    }
+    if(Object.values(coreRanks).reduce((sum,n)=>sum+n,0)>muayCorePoints(level))throw Error("invalid_muay_book");
+  }
+  return {learned:[...learned],training:{strikes:training.strikes as number,blocks:training.blocks as number},mastery,school:school as MuaySchool,slots:[...loadouts[school as MuaySchool]],loadouts,...(skillRankCost(ranks)?{ranks}:{}),...(Object.keys(coreRanks).length?{coreRanks}:{})};
 }
 export function validateMuayCooldowns(value: unknown): MuayCooldowns {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_muay_cooldowns");
   const entries = Object.entries(value);
-  if (entries.some(([key, time]) => !Object.hasOwn(MUAY_SKILLS,key) || !Number.isSafeInteger(time) || (time as number) < 0)) throw new Error("invalid_muay_cooldowns");
+  if (entries.some(([key, time]) => (!Object.hasOwn(MUAY_SKILLS,key) && !Object.hasOwn(MUAY_CORE,key)) || !Number.isSafeInteger(time) || (time as number) < 0)) throw new Error("invalid_muay_cooldowns");
   return Object.fromEntries(entries) as MuayCooldowns;
 }
