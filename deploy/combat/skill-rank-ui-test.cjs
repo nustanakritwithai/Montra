@@ -111,4 +111,15 @@ for(const spec of [
   assert.ok(container.innerHTML.includes('data-sword-core-upgrade="sritra_core"'));assert.ok(container.innerHTML.includes("สวนซ้ำทุก"));
   assert.equal((container.innerHTML.match(/data-sword-core-upgrade=/g)||[]).length,4);
 }
+{
+  const start=source.indexOf("  function renderBladeCoreBook("),end=source.indexOf("  function syncOccultUI(",start);
+  const container={innerHTML:"",querySelectorAll:()=>[]},dummy={};
+  const ids=["blade_vanish","blade_heavy","blade_withdraw","blade_fury"],core=Object.fromEntries(ids.map(id=>[id,{name:id,description:id,stamina:20,cooldownMs:10000}]));
+  const coreProgress=Array.from({length:9},()=>({blade_vanish:{durationMs:5000},blade_heavy:{range:3,power:1.9,pvpPower:1.9},blade_withdraw:{power:1,pvpPower:1,distance:2.5},blade_fury:{bonus:.2,durationMs:8000}}));
+  const data={book:{coreRanks:{blade_vanish:1}},core,coreLevels:[5,15,25,35,45,60,80,100],corePointLevels:[5,15,25,35,45,55,65,75,80,85,95,100],coreProgress};
+  const context={bladeBookRenderKey:"",$:()=>dummy,window:{confirm:()=>false},room:{send(){}}};
+  vm.runInNewContext(source.slice(start,end)+"\nrenderBladeCoreBook",context)(data,{level:25},container);
+  assert.match(container.innerHTML,/แต้มวิชา 2 \/ 3/);assert.match(container.innerHTML,/หายตัวทันที/);
+  assert.equal((container.innerHTML.match(/data-blade-core-upgrade=/g)||[]).length,4);
+}
 console.log("MONTRA skill rank book render passed");
