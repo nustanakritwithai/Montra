@@ -137,6 +137,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastMountMs = new Map<string, number>();
   private lastAttackMs = new Map<string, number>();
   private lastCombatMs = new Map<string, number>();
+  private supportManaCombatUntil = new Map<string, number>();
   private lastWarpMs = new Map<string, number>();
   private provinceClients = new Set<string>();
   private castleClients = new Set<string>();
@@ -392,6 +393,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!targets.length) return this.reject(client, "class_skill_no_target");
     player.mana -= skill.stamina;
     player.classSkillReadyAt = now + skill.cooldownMs;
+    this.markSupportManaCombat(id, targets);
     for (const [member, target] of targets) {
       if (skill.effect.kind === "heal") {
         target.hp = Math.min(target.maxHp, target.hp + Math.round(target.maxHp * skill.effect.fraction));
@@ -1293,6 +1295,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     caster.mana-=lesson.stamina;
     book.cooldowns[skillId]=Date.now()+lesson.cooldownMs;
+    if (!offensive) this.markSupportManaCombat(id, targets);
     if (offensive) {
       const target=monster ?? opponent!;
       caster.facing=facingTo(target.x-caster.x,target.z-caster.z);
@@ -3508,11 +3511,21 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
+  private isFighting(id:string):boolean {
+    return this.attackTargets.has(id) || this.state.monster.targetId === id || this.forest.engaged(id) ||
+      this.simulatedMs - (this.lastCombatMs.get(id) ?? -Infinity) < PROGRESSION.combatQuietMs;
+  }
+
+  private markSupportManaCombat(id:string, targets:readonly [string, Player][]):void {
+    if (targets.some(([member]) => this.isFighting(member) ||
+      (member!==id && this.simulatedMs < (this.supportManaCombatUntil.get(member) ?? 0))))
+      this.supportManaCombatUntil.set(id,this.simulatedMs + PROGRESSION.combatQuietMs);
+  }
+
   private updateResources(dt: number): void {
     for (const [id, player] of this.state.players) {
       if (!player.alive || this.pendingWarps.has(id)) continue;
-      const fighting = this.attackTargets.has(id) || this.state.monster.targetId === id || this.forest.engaged(id) ||
-        this.simulatedMs - (this.lastCombatMs.get(id) ?? -Infinity) < PROGRESSION.combatQuietMs;
+      const fighting = this.isFighting(id);
       // HP saves are integer-valued in legacy snapshots. Keep fractional regen
       // in a transient accumulator instead of rounding up on each save/rejoin.
       const pending = (this.hpRegenRemainder.get(id) ?? 0) + (fighting ? PROGRESSION.hpRegenIn : PROGRESSION.hpRegenOut) * dt;
@@ -3520,7 +3533,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.hp = Math.min(player.maxHp, player.hp + healed);
       this.hpRegenRemainder.set(id, player.hp >= player.maxHp ? 0 : pending - healed);
       player.stamina = Math.min(player.maxStamina, player.stamina + (fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut) * dt);
-      const manaRegen = fighting ? PROGRESSION.manaRegenIn : Math.max(PROGRESSION.manaRegenOut, player.maxMana / 20);
+      const manaFighting = fighting || this.simulatedMs < (this.supportManaCombatUntil.get(id) ?? 0);
+      const manaRegen = manaFighting ? PROGRESSION.manaRegenIn : Math.max(PROGRESSION.manaRegenOut, player.maxMana / 20);
       player.mana = Math.min(player.maxMana, player.mana + manaRegen * dt);
     }
   }
@@ -4353,6 +4367,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.attackTargets.delete(id);
     this.lastAttackMs.delete(id);
     this.lastCombatMs.delete(id);
+    this.supportManaCombatUntil.delete(id);
     this.lastWarpMs.delete(id);
     this.playerRespawnAt.delete(id);
     this.playerSpawn.delete(id);
@@ -4473,6 +4488,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.attackTargets.clear();
     this.lastAttackMs.clear();
     this.lastCombatMs.clear();
+    this.supportManaCombatUntil.clear();
     this.lastWarpMs.clear();
     this.pendingWarps.clear();
     this.playerRespawnAt.clear();
