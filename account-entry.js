@@ -30,11 +30,11 @@
     const error=el("p","","account-error"); error.setAttribute("role","alert"); card.append(error);
     return error;
   }
-  const errors = {invalid_account_details:"ชื่อผู้ใช้ต้องเป็น a-z, 0-9 หรือ _ ยาว 3–24 ตัว และรหัสผ่านยาว 15–128 ตัว",invalid_credentials:"ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",account_unavailable:"ชื่อผู้ใช้ไม่ว่าง หรือระบบยังไม่พร้อม",legacy_already_linked:"รหัสตัวละครเดิมนี้ผูกกับบัญชีแล้ว",invalid_legacy_key:"รหัสกู้คืนตัวละครเดิมไม่ถูกต้อง",invalid_recovery:"รหัสกู้บัญชีไม่ถูกต้อง",invalid_guest_key:"รหัสแขกไม่ถูกต้องหรือผูกบัญชีแล้ว",guest_required:"กรุณาเข้าสู่ระบบแขกอีกครั้ง",character_online:"ตัวละครในบัญชียังออนไลน์อยู่ กรุณาออกจากเกมแล้วลองใหม่",character_in_guild:"กรุณาออกจากกิลด์หรือโอนตำแหน่งหัวหน้าก่อนลบตัวละคร",character_has_listings:"กรุณายกเลิกรายการฝากขายทั้งหมดก่อนลบตัวละคร",confirm_name_mismatch:"ชื่อตัวละครไม่ตรง กรุณาลองใหม่",slot_changed:"ช่องตัวละครเปลี่ยนไปแล้ว กรุณาโหลดใหม่",delete_failed:"ลบยังไม่เสร็จ กรุณาลองโหลดรายการอีกครั้ง",try_later:"ลองหลายครั้งเกินไป กรุณารอสักครู่",login_required:"กรุณาเข้าสู่ระบบอีกครั้ง"};
+  const errors = {invalid_account_details:"ชื่อผู้ใช้ต้องเป็น a-z, 0-9 หรือ _ ยาว 3–24 ตัว และรหัสผ่านยาว 15–128 ตัว",invalid_credentials:"ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",account_unavailable:"ชื่อผู้ใช้ไม่ว่าง หรือระบบยังไม่พร้อม",legacy_already_linked:"รหัสตัวละครเดิมนี้ผูกกับบัญชีแล้ว",invalid_legacy_key:"รหัสกู้คืนตัวละครเดิมไม่ถูกต้อง",invalid_recovery:"รหัสกู้บัญชีไม่ถูกต้อง",invalid_guest_key:"รหัสแขกไม่ถูกต้องหรือผูกบัญชีแล้ว",guest_required:"กรุณาเข้าสู่ระบบแขกอีกครั้ง",character_online:"บัญชียังออนไลน์อยู่ กรุณาปิดเกมในแท็บหรืออุปกรณ์อื่น แล้วลองใหม่",character_in_guild:"กรุณาออกจากกิลด์หรือโอนตำแหน่งหัวหน้าก่อนลบตัวละคร",character_has_listings:"กรุณายกเลิกรายการฝากขายทั้งหมดก่อนลบตัวละคร",confirm_name_mismatch:"ชื่อตัวละครไม่ตรง กรุณาลองใหม่",slot_changed:"ช่องตัวละครเปลี่ยนไปแล้ว กรุณาโหลดใหม่",delete_failed:"ลบยังไม่เสร็จ กรุณาลองโหลดรายการอีกครั้ง",try_later:"ลองหลายครั้งเกินไป กรุณารอสักครู่",login_required:"กรุณาเข้าสู่ระบบอีกครั้ง"};
   async function api(route, body, session="") {
     const response=await fetch(server+"/montra/account/"+route,{method:body ? "POST":"GET",cache:"no-store",headers:{...(body?{"Content-Type":"application/json"}:{}),...(session?{Authorization:"Bearer "+session}:{})},...(body?{body:JSON.stringify(body)}:{})});
     const data=await response.json().catch(()=>({}));
-    if(!response.ok)throw Error(errors[data.error] || "เชื่อมต่อระบบบัญชีไม่สำเร็จ กรุณาลองใหม่");
+    if(!response.ok){const error=Error(errors[data.error] || "เชื่อมต่อระบบบัญชีไม่สำเร็จ กรุณาลองใหม่");error.code=data.error;error.status=response.status;throw error;}
     return data;
   }
   function recoveryNotice(code, next, guest=false) {
@@ -102,8 +102,27 @@
   }
   function confirmDelete(slot) {
     const error=view("ยืนยันลบตัวละคร", "ลบ "+slot.name+" ถาวร รวมเลเวล สกิล เงิน และไอเท็มของตัวละครนี้ พิมพ์ชื่อตัวละครเพื่อยืนยัน");
-    const form=el("form"),name=input(form,"ชื่อตัวละคร","text","off"),submit=el("button","ลบตัวละครถาวร","primary");submit.type="submit";form.append(submit);card.append(form,button("ยกเลิก",slots));
-    form.onsubmit=async e=>{e.preventDefault();if(name.value!==slot.name){error.textContent="ชื่อตัวละครไม่ตรง";return;}submit.disabled=true;error.textContent="กำลังลบตัวละคร…";try{if(leaveGame)await leaveGame();await api("delete-character",{slot:slot.slot,revision:slot.revision,name:name.value},key());await slots();}catch(err){error.textContent=err.message;submit.disabled=false;}};
+    const form=el("form"),name=input(form,"ชื่อตัวละคร","text","off"),submit=el("button","ลบตัวละครถาวร","primary"),cancel=button("ยกเลิก",slots);submit.type="submit";form.append(submit);card.append(form,cancel);
+    form.onsubmit=async e=>{
+      e.preventDefault();if(submit.disabled)return;
+      if(name.value!==slot.name){error.textContent="ชื่อตัวละครไม่ตรง";return;}
+      submit.disabled=true;cancel.disabled=true;name.disabled=true;error.textContent="กำลังออกจากเกมและลบตัวละคร…";
+      const session=key(),payload={slot:slot.slot,revision:slot.revision,name:name.value};
+      try {
+        if(leaveGame)await leaveGame();
+        for(let attempt=0;;attempt++){
+          if(!session || key()!==session)throw Error(errors.login_required);
+          try {await api("delete-character",payload,session);break;}
+          catch(err){
+            // A definite 409 did not delete anything. Wait for the server's
+            // final save and account lease release; never retry network errors.
+            if(err.status!==409 || err.code!=="character_online" || attempt>=20)throw err;
+            await new Promise(resolve=>setTimeout(resolve,250));
+          }
+        }
+        await slots();
+      } catch(err){error.textContent=err.message;submit.disabled=false;cancel.disabled=false;name.disabled=false;}
+    };
   }
   function setup(slot) {
     const error=view("เลือกอาชีพ", "อาชีพจะผูกกับตัวละครนี้ถาวร กรุณาเลือกก่อนเข้าเล่น");
