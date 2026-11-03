@@ -1,3 +1,4 @@
+import { MUAY_CORE_LEVELS, muayCorePoints } from "./MuayRules.js";
 import type { StatModifier } from "./StatModifiers.js";
 import { skillRankCost, validateSkillRanks, type SkillRanks } from "./Progression.js";
 
@@ -55,19 +56,35 @@ export const SWORD_NODES: Readonly<Record<string,SwordNode>> = Object.freeze({
   steady_guard:{name:"รับดาบมั่นคง",description:"ตั้งดาบรับด้านหน้าและเปิดจังหวะสวน",school:"common",level:75,requires:["guard","open_circle"],training:{id:"blocks",count:20},effect:"guard",stamina:23,cooldownMs:12000,power:0.35,range:0},
   final_counter:{name:"เพลงดาบสวนสุดท้าย",description:"สวนเป้าหมายหลังรับสำเร็จ",school:"common",level:95,requires:["steady_guard","flowing_blades"],training:{id:"finishes",count:20},effect:"counter",stamina:32,cooldownMs:20000,power:2.15,range:3},
 });
+// The old book is retained in saves; these four techniques are always available.
+export const SWORD_CORE = {
+  phuttha_core:{name:"พุทไธสวรรค์ · เพลงดาบคู่",description:"ก้าวเข้าหาเป้าหมายแล้วฟันสามจังหวะ",stamina:24,cooldownMs:12000,kind:"target",effect:"flurry"},
+  sritra_core:{name:"ศรีไตรรัตน์ · ตั้งดาบสวน",description:"ตั้งรับ ลดความเสียหายและสวนศัตรูในระยะดาบโดยอัตโนมัติ",stamina:18,cooldownMs:12000,kind:"stance",effect:"guard"},
+  atamat_core:{name:"อาทมาฏ · ฟันเปิดแนว",description:"กวาดมอนสเตอร์ด้านหน้าสูงสุดสามตัว หรือโจมตีผู้เล่นที่เลือก",stamina:22,cooldownMs:10000,kind:"target",effect:"area"},
+  chumphon_core:{name:"ชุมพร · คุ้มกันสหาย",description:"เพิ่มพลังป้องกันให้ตนเองและสมาชิกปาร์ตี้ในระยะ",stamina:25,cooldownMs:25000,kind:"support",effect:"support"},
+} as const;
+export type SwordCoreId=keyof typeof SWORD_CORE;
+export function swordCoreProgress(rank:number) {
+  return {
+    phuttha_core:{scale:1+rank*.07,finalPower:.65+(rank>=4?.04:0)+(rank>=8?.04:0)},
+    sritra_core:{durationMs:2000+rank*350,damageFactor:Math.max(.42,.7-rank*.035),counterPower:1+rank*.1,counterIntervalMs:rank>=8?300:rank>=4?350:400},
+    atamat_core:{range:3.5+rank*.1,power:.85+rank*.06},
+    chumphon_core:{range:8+rank*.25,defense:.1+rank*.01,durationMs:8000+rank*250},
+  };
+}
 export type SwordTraining = {strikes:number; blocks:number; finishes:number};
 export type SwordLoadouts = Record<SwordSchool,Array<string|null>>;
 export function emptySwordLoadouts():SwordLoadouts {
   return {phutthaisawan:[null,null,null],sritrairat:[null,null,null],atamat:[null,null,null],chumphon:[null,null,null]};
 }
 export const SWORD_RANKABLE_SKILLS=["footwork","sweep","twin_cut","circle_step","twin_finale","riposte","seize","opening_cut","turning_counter","guardian_sweep","flowing_blades","open_circle","final_counter"] as const;
-export type SwordTree = {school:SwordSchool; learned:string[]; cooldowns:Record<string,number>; training:SwordTraining; loadouts:SwordLoadouts;ranks?:SkillRanks};
+export type SwordTree = {school:SwordSchool; learned:string[]; cooldowns:Record<string,number>; training:SwordTraining; loadouts:SwordLoadouts;ranks?:SkillRanks;coreRanks?:Partial<Record<SwordCoreId,number>>};
 export function newSwordTree():SwordTree { return {school:"phutthaisawan",learned:[],cooldowns:{},training:{strikes:0,blocks:0,finishes:0},loadouts:emptySwordLoadouts()}; }
 export function swordPoints(level:number):number { return 1 + Math.floor((Math.min(level,100)-1)/2); }
 export function validateSwordTree(value:unknown, level:number):SwordTree {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("invalid_sword_tree");
   const tree=value as Record<string,unknown>;
-  if (Object.keys(tree).some(key=>!["cooldowns","learned","school","training","loadouts","ranks"].includes(key)) ||
+  if (Object.keys(tree).some(key=>!["cooldowns","learned","school","training","loadouts","ranks","coreRanks"].includes(key)) ||
       typeof tree.school !== "string" || !Object.hasOwn(SWORD_SCHOOLS,tree.school) ||
       !Array.isArray(tree.learned) || !tree.cooldowns || typeof tree.cooldowns !== "object" || Array.isArray(tree.cooldowns)) throw Error("invalid_sword_tree");
   if (SWORD_SCHOOLS[tree.school as SwordSchool].level>level) throw Error("invalid_sword_tree");
@@ -79,7 +96,7 @@ export function validateSwordTree(value:unknown, level:number):SwordTree {
     if (node.level>level || node.requires.some(required=>!learned.includes(required))) throw Error("invalid_sword_tree");
   }
   const cooldowns=tree.cooldowns as Record<string,unknown>;
-  if (Object.keys(cooldowns).some(id=>!Object.hasOwn(SWORD_NODES,id) || typeof cooldowns[id]!=="number" ||
+  if (Object.keys(cooldowns).some(id=>(!Object.hasOwn(SWORD_NODES,id) && !Object.hasOwn(SWORD_CORE,id)) || typeof cooldowns[id]!=="number" ||
       !Number.isSafeInteger(cooldowns[id]) || (cooldowns[id] as number)<0)) throw Error("invalid_sword_tree");
   const training=tree.training === undefined ? {strikes:0,blocks:0,finishes:0} : tree.training;
   if (!training || typeof training!=="object" || Array.isArray(training) || Object.keys(training).sort().join(",")!=="blocks,finishes,strikes") throw Error("invalid_sword_tree");
@@ -97,5 +114,11 @@ export function validateSwordTree(value:unknown, level:number):SwordTree {
   }
   let ranks:SkillRanks;
   try{ranks=validateSkillRanks(tree.ranks,learned as string[],level,swordPoints(level),SWORD_RANKABLE_SKILLS);}catch{throw Error("invalid_sword_tree");}
-  return {school:tree.school as SwordSchool, learned:[...learned] as string[], cooldowns:{...cooldowns} as Record<string,number>,training:{...counts} as SwordTraining,loadouts:checked,...(skillRankCost(ranks)?{ranks}:{})};
+  const coreRanks=tree.coreRanks ?? {};
+  if(!coreRanks || typeof coreRanks!=="object" || Array.isArray(coreRanks))throw Error("invalid_sword_tree");
+  for(const [id,rank] of Object.entries(coreRanks)) {
+    if(!Object.hasOwn(SWORD_CORE,id) || typeof rank!=="number" || !Number.isInteger(rank) || rank<1 || rank>MUAY_CORE_LEVELS.length || level<MUAY_CORE_LEVELS[rank-1])throw Error("invalid_sword_tree");
+  }
+  if(Object.values(coreRanks).reduce<number>((sum,n)=>sum+(n as number),0)>muayCorePoints(level))throw Error("invalid_sword_tree");
+  return {school:tree.school as SwordSchool, learned:[...learned] as string[], cooldowns:{...cooldowns} as Record<string,number>,training:{...counts} as SwordTraining,loadouts:checked,...(skillRankCost(ranks)?{ranks}:{}),...(Object.keys(coreRanks).length?{coreRanks:coreRanks as Partial<Record<SwordCoreId,number>>}:{})};
 }
