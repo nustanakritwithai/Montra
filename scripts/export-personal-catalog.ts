@@ -5,7 +5,7 @@ import {POTION_ID,SHRINE_SHARD,WEAPON_STATS} from "../deploy/combat/ItemRules.js
 import {personalGearGuides,cardHunt} from "../deploy/combat/GearGuides.js";
 
 const pathNames:Record<string,string>={all:"ทุกสาย",muay_boran:"มวยไทยโบราณ",phutthaisawan:"นักดาบอยุธยา",blade:"คมดาบ",sentinel:"ผู้พิทักษ์",seer:"ผู้ร่ายเวท",mender:"ผู้เยียวยา"};
-const slots:Record<string,string>={mainHand:"อาวุธหลัก",offHand:"มือรอง",head:"หัว",shoulders:"ไหล่",chest:"อก",arms:"แขน",leftHand:"มือซ้าย",rightHand:"มือขวา",legs:"กางเกง",feet:"เท้า",neck:"สร้อย",ring:"แหวนซ้ายหรือขวา",earring:"ตุ้มหูซ้ายหรือขวา",material:"วัตถุดิบ",catalyst:"วัสดุช่าง",card:"การ์ดมอนสเตอร์",consumable:"ของใช้"};
+const slots:Record<string,string>={mainHand:"อาวุธหลัก",offHand:"มือรอง",head:"หัว",shoulders:"ไหล่",chest:"อก",arms:"แขน",leftHand:"มือซ้าย",rightHand:"มือขวา",legs:"กางเกง",feet:"เท้า",neck:"สร้อย",ring:"แหวนซ้ายหรือขวา",earring:"ตุ้มหูซ้ายหรือขวา",material:"วัตถุดิบ",catalyst:"วัสดุช่าง",card:"การ์ดมอนสเตอร์",consumable:"ของใช้",tool:"เครื่องมือเก็บวัตถุดิบ"};
 const ratings:Record<string,string>={melee:"ประชิด",ranged:"เวท",guard:"ป้องกันมอนสเตอร์",healing:"รักษา"};
 const statNames:Record<string,string>={hp:"HP",stamina:"Stamina",mana:"MP",atk:"ATK",def:"DEF",magicAtk:"เวท",magicDef:"ต้านเวท"};
 const rows:(string|number)[][]=[
@@ -15,8 +15,9 @@ for(const [id,item] of Object.entries(PERSONAL_ITEMS)){
   const f=item.forge,level=item.level??1, cap=level<25?1:level<65?2:3;
   const stats=Object.entries(item.stats).map(([key,v])=>statNames[key]+" +"+v).join(" / ");
   const mob=isCardId(id)?cardHunt(id):null;
-  const source=mob?mob.monster+" Lv."+mob.level+" · "+mob.map+" · "+item.chancePct+"%":item.dropMax?(item.recipe?"คราฟต์ / ":"")+"ล่ามอนสเตอร์ Lv."+level+(item.dropMax===level?"":"–"+item.dropMax):"คราฟต์";
-  rows.push([id,item.name,level,slots[item.kind],pathNames[item.path],(item.recommended??[]).map(p=>pathNames[p]).join(" / "),item.rarity??"",stats|| (item.healHp?"ฟื้น "+item.healHp+" HP":""),
+  const field=id.startsWith("mat_herb_")?"เก็บสมุนไพร / ":/^mat_(wood|metal)_/.test(id)?"แปรรูปของดิบ / ":"";
+  const source=item.refinesTo?"เก็บจากแผนที่ · แปรรูป 2 ชิ้นเป็น "+item.refinesTo:mob?mob.monster+" Lv."+mob.level+" · "+mob.map+" · "+item.chancePct+"%":item.dropMax?field+(item.recipe?"คราฟต์ / ":"")+"ล่ามอนสเตอร์ Lv."+level+(item.dropMax===level?"":"–"+item.dropMax):"คราฟต์";
+  rows.push([id,item.name,level,slots[item.kind],pathNames[item.path],(item.recommended??[]).map(p=>pathNames[p]).join(" / "),item.rarity??"",stats|| (item.healHp?"ฟื้น "+item.healHp+" HP":item.healMana?"ฟื้น "+item.healMana+" MP":item.harvestKind?"เก็บได้สูงสุด 2 ชิ้น":""),
     f?ratings[f.primary]+" +"+f.enhanceMax:"",f?f.pool.map(k=>ratings[k]).join(" / "):"",f?Number((f.affixMax*cap/3).toFixed(2)):"",f?1:"",
     (item.recipe??[]).map(i=>i.item+" × "+i.qty).join(" + "),item.craftGold??"",source]);
 }

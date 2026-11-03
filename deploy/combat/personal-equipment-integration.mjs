@@ -58,7 +58,7 @@ function prepareCapstone(prefix,recipe){
     const {id,snapshot}=found[0], saved=JSON.parse(snapshot);
     assert.equal(saved.name,"นักดาบฝึกหัด");assert.equal(saved.build.path,"phutthaisawan");
     const bag=JSON.parse(db.prepare("SELECT inventory FROM accounts WHERE id=?").get(id).inventory);
-    for(const [itemId,quantity] of [...recipe.map(r=>[r.item,r.qty]),["ref_flux_7",1],["mat_metal_1",1],["card_rift_warden",1]]){
+    for(const [itemId,quantity] of [...recipe.map(r=>[r.item,r.qty]),["ref_flux_7",1],["mat_metal_1",1],["card_rift_warden",1],["use_mana_7",1]]){
       const index=bag.slots.findIndex(s=>s?.itemId===itemId),free=index>=0?index:bag.slots.indexOf(null);
       assert(free>=0);bag.slots[free]={itemId,quantity:quantity+(bag.slots[free]?.quantity||0)};
     }
@@ -114,6 +114,9 @@ try{
   const at=craftBag.slots.findIndex(s=>s?.itemId==="wp_twins_10"), crafted=craftBag.slots[at];assert(crafted.forge.affix);
   r.send("equip_weapon",{slot:at});await until(()=>active.me().equippedWeaponId==="wp_twins_10","equip capstone");
   assert.equal(active.me().maxMana,320);assert(active.me().mana<active.me().maxMana-50,"equipment cannot refill missing mana");
+  const potionSlot=craftBag.slots.findIndex(s=>s?.itemId==="use_mana_7");
+  r.send("use_item",{slot:potionSlot});
+  await until(()=>active.event("item_used",e=>e.itemId==="use_mana_7"&&e.restoredMana>0&&e.healed===0),"drink mana brew");
   await delay(400);r.send("forge_weapon",{requestId:"capstone_forge_001",slot:at,stamp:crafted.forge.instanceId+"."+crafted.forge.revision,action:"enhance"});
   await until(()=>active.event("forge_result",v=>v.forge?.rank===1),"upgrade capstone");
   await delay(400);r.send("card_socket",{requestId:"capstone_drill_001",target:at,gear:"wp_twins_10",expected:"sealed",action:"drill",card:null});
@@ -122,6 +125,32 @@ try{
   await until(()=>active.event("card_socket_result",v=>v.socket==="card_rift_warden"),"boss card");
   await r.leave();active=null;await delay(400);active=await join({});
   assert.equal(active.bag.slots[at].forge.rank,1);assert.equal(active.bag.slots[at].socket,"card_rift_warden");
+  assert.equal(active.bag.slots.some(s=>s?.itemId==="use_mana_7"),false);
   assert.equal(active.me().equippedWeaponId,"wp_twins_10");
-  console.log("PERSONAL GEAR PASS: fresh starter, hunt, Lv.100 crafting, rolled affix, enhancement, boss card, reconnect.");
+  const tree=active.event("world_resources",v=>v.mapId==="ritual_village").nodes.find(n=>n.kind==="wood");
+  active.room.send("move",{x:tree.x-1.5,z:tree.z});
+  await until(()=>Math.hypot(active.me().x-tree.x,active.me().z-tree.z)<2.8,"walk to a village tree",15000);
+  for(let i=0;i<2;i++){
+    const start=active.events.length;
+    active.room.send("harvest_resource",{node:tree.id,requestId:"test_resource_harvest_"+i});
+    await until(()=>active.events.slice(start).some(e=>e.type==="resource_result"&&e.data.item==="mat_raw_wood_1"),"cut wood");
+    if(i===0)await delay(1650);
+  }
+  active.room.send("refine_resource",{expected:"mat_raw_wood_1",requestId:"test_resource_refine_01"});
+  await until(()=>active.event("resource_result",v=>v.action==="refine"&&v.item==="mat_wood_1"),"process wood");
+  active.room.send("get_resource_atlas",{});
+  await until(()=>active.event("resource_atlas",v=>v.some(z=>z.mapId==="ritual_village"&&z.wood===2)),"world harvest accounting");
+  await active.room.leave();active=null;await delay(400);active=await join({});
+  assert(active.bag.slots.some(s=>s?.itemId==="mat_wood_1"));
+  assert.equal(active.event("world_resources",v=>v.mapId==="ritual_village").nodes.find(n=>n.id===tree.id).stock,2);
+  active.room.send("move",{x:-4,z:-17});
+  await until(()=>Math.hypot(active.me().x+4,active.me().z+17)<1.8,"walk to the forest gate",18000);
+  active.room.send("warp",{portalId:"village_to_forest"});
+  await until(()=>active.me().mapId==="forbidden_forest","enter original forest",10000);
+  active.room.send("move",{x:7,z:9.3});
+  await until(()=>Math.hypot(active.me().x-7,active.me().z-7)<3.4,"walk beside the original east tree",15000);
+  const start=active.events.length;
+  active.room.send("harvest_resource",{node:"forbidden_forest/tree-east-1",requestId:"test_existing_tree_001"});
+  await until(()=>active.events.slice(start).some(e=>e.type==="resource_result"&&e.data.item==="mat_raw_wood_1"),"cut original forest scenery");
+  console.log("PERSONAL GEAR PASS: crafting, mana medicine, sockets, reconnect, world refining and harvesting the original forest tree.");
 }finally{if(active)await active.room.leave();}

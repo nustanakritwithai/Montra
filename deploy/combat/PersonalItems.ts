@@ -19,12 +19,14 @@ export function equipPositions(kind:unknown):readonly BodySlot[] {
   return isBodySlot(kind)?[kind]:[];
 }
 export type PersonalDefinition = {
-  name:string; kind:"mainHand"|BodySlot|"earring"|"ring"|"material"|"catalyst"|"consumable"|"card"; path:string; stats:ItemStats;
+  name:string; kind:"mainHand"|BodySlot|"earring"|"ring"|"material"|"catalyst"|"consumable"|"card"|"tool"; path:string; stats:ItemStats;
   recipe?:readonly {item:string; qty:number}[];
   monster?:string;
   chancePct?:number;
   level?:number; rarity?:string; family?:string; recommended?:readonly string[]; dropMax?:number;
   forge?:ForgeProfile; craftGold?:number; sellGold?:number; healHp?:number; sourceCamp?:string;
+  refinesTo?:MaterialId;
+  harvestKind?:"wood"|"stone";toolTier?:number;healMana?:number;
 };
 const STARTING_ITEMS = {
   card_possessed: {"name":"การ์ดผีสิง","kind":"card","path":"all","stats":{"atk":1},"monster":"ผีสิง","chancePct":12},
@@ -113,7 +115,10 @@ const STARTING_ITEMS = {
 type BaseId=keyof typeof STARTING_ITEMS;
 type Stem<K extends string>=K extends `${infer Family}_1`?Family:never;
 type FieldGearId = `arm_field_${string}_${number}`;
-export type PersonalId = BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}` | FieldGearId;
+export type RawMaterialId=`mat_raw_${"wood"|"stone"}_${number}`;
+export type FieldToolId=`tool_${"axe"|"pick"}_${number}`;
+export type BrewId=`use_${"herbal"|"mana"}_${number}`;
+export type PersonalId = BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}` | FieldGearId | RawMaterialId | FieldToolId | BrewId;
 export type PracticeWeapon = Extract<PersonalId,`wp_${string}`>;
 export type ChestId = Extract<BaseId,`arm_${string}_chest_1`>;
 export type BodyItemId = Extract<PersonalId,`arm_${string}`|`off_${string}`|`acc_${string}`>;
@@ -232,6 +237,21 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
   }
   for(const [i,level] of MATERIAL_LEVELS.entries())for(const [key,name,source] of catalysts)
     put(`ref_${key}_${i+1}`,{name:name+"ชั้น"+(i+1),kind:"catalyst",path:"all",level,stats:{},rarity:"common",craftGold:4+Math.floor(level/4),recipe:[{item:`mat_${source}_${i+1}`,qty:2}]});
+  for(const [i,level] of MATERIAL_LEVELS.entries())for(const kind of ["wood","stone"] as const){
+    put(`mat_raw_${kind}_${i+1}`,{name:(kind==="wood"?"ท่อนไม้ดิบ":"ก้อนหินปนแร่")+"ชั้น"+(i+1),kind:"material",path:"all",level,stats:{},
+      refinesTo:`mat_${kind==="wood"?"wood":"metal"}_${i+1}`});
+  }
+  for(const [i,level] of MATERIAL_LEVELS.entries()){
+    const tier=i+1;
+    for(const tool of ["axe","pick"] as const)put(`tool_${tool}_${tier}`,{
+      name:(tool==="axe"?"ขวานตัดไม้":"เสียมขุดแร่")+"ชั้น"+tier,kind:"tool",path:"all",level,family:"tool_"+tool,stats:{},
+      harvestKind:tool==="axe"?"wood":"stone",toolTier:tier,craftGold:8+level,
+      recipe:[{item:`mat_wood_${tier}`,qty:tool==="axe"?2:1},{item:`mat_metal_${tier}`,qty:tool==="axe"?1:2}]});
+    for(const brew of ["herbal","mana"] as const)put(`use_${brew}_${tier}`,{
+      name:(brew==="herbal"?"ยาต้มสมานแผล":"ยาต้มฟื้นมานา")+"ชั้น"+tier,kind:"consumable",path:"all",level,family:"use_"+brew,stats:{},
+      ...(brew==="herbal"?{healHp:18+level}:{healMana:12+Math.floor(level*.6)}),craftGold:3+Math.floor(level/8),
+      recipe:[{item:`mat_herb_${tier}`,qty:brew==="herbal"?2:3},{item:`mat_wood_${tier}`,qty:1}]});
+  }
   return Object.freeze(result) as Readonly<Record<PersonalId,PersonalDefinition>>;
 }
 export const PERSONAL_ITEMS=buildPersonalCatalog();
@@ -266,7 +286,7 @@ export function firstChest(path:string,level=1):BodyItemId {
   return `arm_${family}_chest_${OUTFIT_LEVELS.filter(min=>level>=min).length||1}` as BodyItemId;
 }
 const catalogIds=Object.keys(PERSONAL_ITEMS) as PersonalId[];
-const materialsByTier=MATERIAL_LEVELS.map(level=>catalogIds.filter(id=>PERSONAL_ITEMS[id].kind==="material" && PERSONAL_ITEMS[id].level===level) as MaterialId[]);
+const materialsByTier=MATERIAL_LEVELS.map(level=>catalogIds.filter(id=>PERSONAL_ITEMS[id].kind==="material" && !PERSONAL_ITEMS[id].refinesTo && PERSONAL_ITEMS[id].level===level) as MaterialId[]);
 const dropsByLevel=new Map<string,PersonalId[]>();
 for(const path of schools)for(let level=1;level<=100;level++){
   dropsByLevel.set(path+level,catalogIds.filter(id=>{

@@ -2,7 +2,7 @@ import { readForged, birthForge, applyForgeRatings, type Forged } from "./ForgeR
 import { personalItem, startingWeapon, firstChest, fieldItem, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
 import { PROGRESSION, type CombatStats } from "./Progression.js";
 import { MUAY_WRAP_ID } from "./MuayRules.js";
-import { usesStaff, type CatalystId, type SalveId, type ForgeRating } from "./PersonalItems.js";
+import { usesStaff, type CatalystId, type SalveId, type ForgeRating,type BrewId,type FieldToolId } from "./PersonalItems.js";
 /**
  * MONTRA V0.2.7 — authoritative permanent equipment.
  * Existing v0.2.6 inventory JSON (version:1, slots:[...]) stays readable.
@@ -31,10 +31,10 @@ export const SHRINE_RECIPE = Object.freeze({
 });
 type LegacyWeapon = typeof STARTER_WEAPON_IDS[number] | typeof SHRINE_GLAIVE | typeof MUAY_WRAP_ID;
 export type WeaponItemId = LegacyWeapon | PracticeWeapon;
-export type StackableId = typeof POTION_ID | typeof SHRINE_SHARD | SalveId | MaterialId | CatalystId | CardId;
+export type StackableId = typeof POTION_ID | typeof SHRINE_SHARD | SalveId | BrewId | FieldToolId | MaterialId | CatalystId | CardId;
 export function isStackableItem(value: unknown): value is StackableId {
   const kind=personalItem(value)?.kind;
-  return value===POTION_ID || value===SHRINE_SHARD || kind==="consumable" || kind==="material" || kind==="catalyst" || kind==="card";
+  return value===POTION_ID || value===SHRINE_SHARD || kind==="consumable" || kind==="material" || kind==="catalyst" || kind==="card" || kind==="tool";
 }
 export type ItemId = StackableId | WeaponItemId | BodyItemId;
 /** Missing socket = undrilled, null = drilled, ID = installed card. */
@@ -50,8 +50,8 @@ export type InventorySnapshot = {
   firstChestClaimed?:true;
 };
 export type ItemUseResult =
-  | { ok: true; inventory: InventorySnapshot; healed: number; hp: number; itemId: typeof POTION_ID | SalveId }
-  | { ok: false; reason: "item_unavailable" | "hp_full" | "not_alive" | "not_consumable" | "item_level_required" };
+  | { ok: true; inventory: InventorySnapshot; healed: number; restoredMana:number; hp: number; itemId: typeof POTION_ID | SalveId | BrewId }
+  | { ok: false; reason: "item_unavailable" | "hp_full" | "mana_full" | "not_alive" | "not_consumable" | "item_level_required" };
 export type EquipWeaponResult =
   | { ok: true; inventory: InventorySnapshot; weaponId: WeaponItemId | null }
   | { ok: false; reason: "item_unavailable" | "not_weapon" | "already_equipped" | "wrong_item_class" | "item_level_required" };
@@ -399,7 +399,7 @@ export function parseUseItemCommand(payload: unknown): number | null {
 }
 export function useInventoryItem(
   inventory: InventorySnapshot, slot: number, hp: number,
-  maxHp: number, alive: boolean,level=1,
+  maxHp: number, alive: boolean,level=1,mana=0,maxMana=0,
 ): ItemUseResult {
   const original = validateInventory(inventory);
   if (!alive || hp <= 0 || !Number.isFinite(hp)) {
@@ -416,13 +416,15 @@ export function useInventoryItem(
   const def=personalItem(item.itemId);
   if(item.itemId!==POTION_ID && def?.kind!=="consumable")return {ok:false,reason:"not_consumable"};
   if((def?.level??1)>level)return {ok:false,reason:"item_level_required"};
-  if (hp >= maxHp) return { ok: false, reason: "hp_full" };
-  const healed = Math.min(def?.healHp??POTION_HEAL, maxHp - hp);
+  if(def?.healMana && mana>=maxMana)return {ok:false,reason:"mana_full"};
+  if(!def?.healMana && hp>=maxHp)return {ok:false,reason:"hp_full"};
+  const healed=def?.healMana?0:Math.min(def?.healHp??POTION_HEAL,maxHp-hp);
+  const restoredMana=def?.healMana?Math.min(def.healMana,maxMana-mana):0;
   const slots = original.slots.slice();
   slots[slot] = item.quantity === 1
     ? null : { itemId: item.itemId, quantity: item.quantity - 1 };
   return {
-    ok: true, healed, hp: hp + healed, itemId: item.itemId as SalveId|typeof POTION_ID,
+    ok: true, healed,restoredMana,hp: hp + healed, itemId: item.itemId as SalveId|BrewId|typeof POTION_ID,
     inventory: { ...original, slots },
   };
 }

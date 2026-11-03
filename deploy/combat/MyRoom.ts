@@ -58,6 +58,7 @@ import { isMuayFoundation, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY
 import { CATALOG_PAGES, WORKBENCH_GOLD, personalItem, wearsWraps, wearsTwinSwords, monsterCardDrop } from "./PersonalItems.js";
 import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
 import {personalGearGuides} from "./GearGuides.js";
+import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js";
 import { parseSellMaterial, parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
@@ -142,6 +143,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastCombatMs = new Map<string, number>();
   private lastPvpMs=new Map<string,number>();
   private sentItemCatalog=new Set<string>();
+  private resourceView=new WeakMap<Client,{mapId:string;stock:number[]}>();
   private supportManaCombatUntil = new Map<string, number>();
   private lastWarpMs = new Map<string, number>();
   private provinceClients = new Set<string>();
@@ -2073,9 +2075,32 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
       const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","forge_max_rank","forge_item_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level"];
-      const reason=error instanceof Error && allowed.includes(error.message) ? error.message : "economy_failed";
+      const reason=error instanceof Error && (allowed.includes(error.message)||["resource_ground","resource_range","resource_cooldown","resource_empty"].includes(error.message)) ? error.message : "economy_failed";
       if (reason==="economy_failed") console.error("MONTRA economy failed",error);
       client.send("economy_error",{reason});
+    }
+  }
+  private sendResourceMap(client:Client,view:ReturnType<typeof characterStore.economy.resourceMap>){
+    this.resourceView.set(client,{mapId:view.mapId,stock:view.nodes.map(n=>n.stock)});
+    if(view.nodes.length<=40){client.send("world_resources",view);return;}
+    const {nodes,...region}=view;
+    for(let i=0;i<nodes.length;i+=40)client.send("world_resource_page",{mapId:view.mapId,start:i,nodes:nodes.slice(i,i+40)});
+    client.send("world_resources",{...region,nodeCount:nodes.length});
+  }
+  private sendResources(onlyMap?:string){
+    if(!characterStore.economyEnabled || this.field)return;
+    const maps=new Map<string,ReturnType<typeof characterStore.economy.resourceMap>>();
+    for(const client of this.clients){
+      const map=this.state.players.get(client.sessionId)?.mapId;
+      if(!map || (onlyMap&&map!==onlyMap) || !this.sentItemCatalog.has(client.sessionId))continue;
+      if(!maps.has(map))maps.set(map,characterStore.economy.resourceMap(map));
+      const view=maps.get(map)!,previous=this.resourceView.get(client);
+      if(previous?.mapId!==map || previous.stock.length!==view.nodes.length){this.sendResourceMap(client,view);continue;}
+      const changed=view.nodes.filter((n,i)=>n.stock!==previous.stock[i]);
+      if(!changed.length)continue;
+      if(changed.length>40){this.sendResourceMap(client,view);continue;}
+      client.send("world_resource_delta",{mapId:map,available:view.available,nodes:changed.map(({id,stock,nextIn})=>({id,stock,nextIn}))});
+      this.resourceView.set(client,{mapId:map,stock:view.nodes.map(n=>n.stock)});
     }
   }
   private syncEconomy(client: Client, id: string): void {
@@ -2539,6 +2564,31 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         client.send("craft_result", {requestId: order.requestId, ...result});
       });
     },
+    get_resource_atlas: (client:Client,message:unknown)=>{
+      if(!parseEmptyCommand(message) || this.field)return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,()=>client.send("resource_atlas",characterStore.economy.resourceAtlas()));
+    },
+    harvest_resource: (client:Client,message:unknown)=>{
+      const m=message as {node?:unknown;requestId?:unknown};
+      if(!m || Object.keys(m).length!==2 || typeof m.node!=="string" || typeof m.requestId!=="string" || this.field)return this.reject(client,"invalid_economy_request");
+      const node=getResourceNode(m.node),request=m.requestId;
+      if(!node)return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{
+        const player=this.state.players.get(client.sessionId)!;
+        harvestableFrom(player,node);
+        const result=characterStore.economy.harvest(id,request,node,Date.now(),player.level);
+        this.syncEconomy(client,id);client.send("resource_result",{...result,action:"harvest"});this.sendResources(node.mapId);
+      });
+    },
+    refine_resource: (client:Client,message:unknown)=>{
+      const m=message as {expected?:unknown;requestId?:unknown};
+      if(!m || Object.keys(m).length!==2 || typeof m.expected!=="string" || typeof m.requestId!=="string")return this.reject(client,"invalid_economy_request");
+      const raw=m.expected,request=m.requestId;
+      this.economyAction(client,id=>{
+        const result=characterStore.economy.refine(id,request,raw,this.state.players.get(client.sessionId)!.level);
+        this.syncEconomy(client,id);client.send("resource_result",{...result,action:"refine"});
+      });
+    },
     sell_material: (client:Client,message:unknown)=>{
       const order=parseSellMaterial(message);
       if(!order)return this.reject(client,"invalid_economy_request");
@@ -2724,7 +2774,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if(player)client.send("gear_guides",personalGearGuides(player.pathId,player.level));
         this.sentItemCatalog.add(id);
       }
-      client.send("inventory_state",{...inventory,catalogReady:true,workbenchGold:WORKBENCH_GOLD,cardDrill:DRILL_COST});
+      if(characterStore.economyEnabled && !this.field && this.state.players.has(id))this.sendResourceMap(client,characterStore.economy.resourceMap(this.state.players.get(id)!.mapId));
+      client.send("inventory_state",{...inventory,catalogReady:true,workbenchGold:WORKBENCH_GOLD,cardDrill:DRILL_COST,refineInput:REFINE_INPUT});
     },
     use_item: (client: Client, message: unknown) => {
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
@@ -2742,7 +2793,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.pendingItemUses.has(id)) return this.reject(client, "item_busy");
       if (this.simulatedMs < (this.itemUseReadyAt.get(id) ?? -Infinity)) return this.reject(client, "item_cooldown");
       const result = useInventoryItem(
-        inventory, slot, player.hp, player.maxHp, player.alive,player.level);
+        inventory, slot, player.hp, player.maxHp, player.alive,player.level,player.mana,player.maxMana);
       // The Windows VPS build uses different TS strictness from CI.
       // An explicit property guard narrows ItemUseResult in both modes.
       if ("reason" in result) return this.reject(client, result.reason);
@@ -2752,6 +2803,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // Durability-first transaction: the server writes the decremented stack
       // atomically BEFORE updating HP or acknowledging the potion. If disk is
       // full, neither HP nor potion count changes for the player.
+      if(result.restoredMana)snapshot.mana=player.mana+result.restoredMana;
       const task = (async () => {
         try {
           await characterStore.save(snapshot);
@@ -2759,16 +2811,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           if (!current || this.inventories.get(id) !== inventory) return;
           this.inventories.set(id, result.inventory);
           const beforeHp = current.hp;
+          const beforeMana=current.mana;
           if (current.alive) {
             // Apply the heal on top of any damage that occurred DURING I/O.
             // Never resurrect a player killed while a save was pending.
             current.hp = Math.min(current.maxHp, current.hp + result.healed);
+            current.mana=Math.min(current.maxMana,current.mana+result.restoredMana);
           }
           this.itemUseReadyAt.set(id,this.simulatedMs+(personalItem(result.itemId)?.kind==="consumable"?14_000:POTION_COOLDOWN_MS));
           client.send("inventory_state", result.inventory);
           client.send("item_used", {
             slot, itemId: result.itemId,
             healed: Math.max(0, current.hp - beforeHp),
+            restoredMana:Math.max(0,current.mana-beforeMana),
             hp: current.hp,
           });
         } catch (error) {
@@ -3472,6 +3527,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.forgeCatalog = JSON.stringify(FORGE);
     this.state.buildCatalog = BUILD_CATALOG;
     this.state.economyAvailable = characterStore.economyEnabled;
+    if(characterStore.economyEnabled && !this.field)this.clock.setInterval(()=>this.sendResources(),5000);
     this.forest.initialize();
     this.state.worldDefinition=worldDefinition;
     this.state.swordTreeCatalog = swordTreeCatalog;
