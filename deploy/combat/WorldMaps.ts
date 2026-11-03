@@ -3,6 +3,7 @@ import { isFlightAltitude, isOnGround, isOnPlatform, isOnTop, touchesWallBody, w
 import { groundSample, terrainRayClear, RIDGE_ENABLED, RIDGE_PASS, makeRidgePass, type GroundTerrain } from "./GroundTerrain.js";
 import { TEMPLE_ID, TEMPLE_GATE, TEMPLE_MAP } from "./TempleMap.js";
 import { ATLAS_MAPS, BOSS_RESPAWN_MS, MARSH_GATE, atlasPortals } from "./WorldAtlas.js";
+import {regionalBossOn} from "./RegionalBosses.js";
 import { originalRelief } from "./AtlasRelief.js";
 import { makeHubs, onRampart, type Province } from "./StrategicProvinces.js";
 export type WorldWall = Readonly<{x:number;z:number;width:number;length:number;rampart?:boolean}>;
@@ -132,7 +133,15 @@ const maps: Record<string,WorldMapDefinition>={
       ...(WORLD_EXPANSION ? [{id:"forest_to_temple",...TEMPLE_GATE,targetMapId:TEMPLE_ID,targetSpawn:TEMPLE_MAP.spawn},...atlasPortals("forbidden_forest")] : [])],
   },
 };
-export const WORLD_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freeze(Object.fromEntries(Object.entries(maps).map(([id,map])=>[id,WORLD_EXPANSION?{...map,...originalRelief(map)}:map])));
+export const WORLD_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freeze(Object.fromEntries(Object.entries(maps).map(([id,map])=>{
+  if(!WORLD_EXPANSION)return [id,map];
+  const world={...map,...originalRelief(map)},boss=regionalBossOn(id);
+  if(boss){
+    const {id:bossId,name,level,x,z,strikeRadius,respawnMs}=boss;
+    world.boss={id:bossId,name,level,x,z,strikeRadius,respawnMs};
+  }
+  return [id,world];
+})));
 export function getWorldMap(mapId: string): WorldMapDefinition | undefined {
   return Object.prototype.hasOwnProperty.call(WORLD_MAPS, mapId) ? WORLD_MAPS[mapId] : undefined;
 }

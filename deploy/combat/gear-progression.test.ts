@@ -55,8 +55,8 @@ test("a listed monster really drops the item, and crafted and harvested products
 test("each named encounter owns its fragment and accessory; three fragments craft the same wearable reward",()=>{
   const store=new EconomyStore(":memory:");
   try{
-    for(const [boss,t] of Object.entries(BOSS_TREASURES)){
-      const id=(t.level===12?"a":"b").repeat(64),bag=makeClassInventory("muay_boran");
+    for(const [i,[boss,t]] of Object.entries(BOSS_TREASURES).entries()){
+      const id=i.toString(16).padStart(64,"0"),bag=makeClassInventory("muay_boran");
       const gear=PERSONAL_ITEMS[t.gear],mob=hunts.find(m=>m.id===boss)!;
       assert.equal(findItemHunt(t.fragment,t.level)?.monster,mob.name);
       assert.equal(findItemHunt(t.gear,t.level)?.mapId,mob.mapId);
@@ -70,7 +70,7 @@ test("each named encounter owns its fragment and accessory; three fragments craf
       const direct=bossAccessoryReward(bag,boss,t.level,()=>19)!;
       assert(direct.granted);assert.equal(direct.id,t.gear);
       assert.equal(bossAccessoryReward(direct.bag,boss,t.level,()=>0),null);
-      const at=direct.bag.slots.findIndex(s=>s?.itemId===t.gear),position=t.level===12?"neck":"leftRing";
+      const at=direct.bag.slots.findIndex(s=>s?.itemId===t.gear),position=equipPositions(gear.kind)[0];
       const equip=equipBody(direct.bag,position,at,t.gear,"muay_boran",t.level);
       assert(equip.ok);assert.equal(bossAccessoryReward(equip.inventory,boss,t.level,()=>0),null);
       const full={...bag,slots:bag.slots.map(s=>s??{itemId:"health_potion" as const,quantity:99})};

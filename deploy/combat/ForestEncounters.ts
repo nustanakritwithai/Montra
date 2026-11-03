@@ -1,5 +1,6 @@
 import { Monster, type MyRoomState, type Player } from "./schema/MyRoomState.js";
-import { ATLAS_SPAWNS, FRONTIER_SPAWNS, RIFT_WARDEN } from "./WorldAtlas.js";
+import { ATLAS_SPAWNS, FRONTIER_SPAWNS } from "./WorldAtlas.js";
+import {REGIONAL_BOSSES} from "./RegionalBosses.js";
 import { TEMPLE_MAP, TEMPLE_SPAWNS } from "./TempleMap.js";
 import { type WorldMapDefinition, type WorldWall, FOREST_CAMPS, SHRINE_GUARDIAN, WORLD_EXPANSION, WORLD_ROOM_CAPACITY, getWorldMap, groundAt, onMapGround, isRestArea, isWorldSegmentClear } from "./WorldMaps.js";
 import { facingTo, planarDistance, stepTowards } from "./GameRules.js";
@@ -20,7 +21,7 @@ export class ForestEncounters {
     return {map,obstacles:[...trees,...(map.walls ?? []),...(map.water ?? [])]};
   }
   constructor(private monsters: MyRoomState["monsters"], private tiers:Readonly<Record<string,MonsterTier>> = FOREST_MONSTER_TIERS) {}
-  initialize():void {
+  initialize(includeRegionalBosses=true):void {
     if(!WORLD_EXPANSION)return;
     const offsets = [[-7,-7],[7,-7],[-7,7],[7,7]];
     const normalSpawns = FOREST_CAMPS.flatMap(camp => camp.levels.map((level, i) => ({
@@ -30,8 +31,10 @@ export class ForestEncounters {
     })));
     const spawnIds = new Set(normalSpawns.map(spawn => spawn.id));
     // A full world room can populate every atlas hunting region at once.
-    const regionalSpawns = [...ATLAS_SPAWNS, ...FRONTIER_SPAWNS];
-    const totalSpawns = normalSpawns.length + TEMPLE_SPAWNS.length + regionalSpawns.length + 2;
+    const bosses=includeRegionalBosses?REGIONAL_BOSSES.filter(b=>getWorldMap(b.mapId)?.boss?.id===b.id):[];
+    const templeSpawns=[...TEMPLE_SPAWNS,...bosses.filter(b=>b.mapId===TEMPLE_MAP.id)];
+    const regionalSpawns=[...ATLAS_SPAWNS,...FRONTIER_SPAWNS,...bosses.filter(b=>b.mapId!==TEMPLE_MAP.id)];
+    const totalSpawns=normalSpawns.length+templeSpawns.length+regionalSpawns.length+2;
     if (totalSpawns > MONSTER_CONFIG.maxSpawnPointsPerRoom) throw new Error("monster_spawn_cap_exceeded");
     for (const [id, tier] of Object.entries(this.tiers)) {
       if (!spawnIds.has(id)) throw new Error("unknown_monster_spawn_tier");
@@ -42,13 +45,13 @@ export class ForestEncounters {
     this.regionalMaps=new Set(regionalSpawns.map(s=>s.mapId));
     const regionalNavigation=new Map([...this.regionalMaps].map(id=>[id,this.navigation(getWorldMap(id)!)]));
     const spawns:{spawn:{id:string;x:number;z:number;level:number;name:string;tier?:MonsterTier};zone:Navigation}[]=[...[...normalSpawns,SHRINE_GUARDIAN].map(spawn=>({spawn,zone:forest})),
-      ...TEMPLE_SPAWNS.map(spawn=>({spawn,zone:temple})),
+      ...templeSpawns.map(spawn=>({spawn,zone:temple})),
       ...regionalSpawns.map(spawn=>({spawn,zone:regionalNavigation.get(spawn.mapId)!}))];
     for (const {spawn,zone} of spawns) {
       const {id, x, z, level, name} = spawn;
       const tier:MonsterTier = spawn.tier ?? (id === SHRINE_GUARDIAN.id ? "elite" : (this.tiers[id] ?? "normal"));
-      const base=monsterProfile(level,id===RIFT_WARDEN.id?"normal":tier);
-      const profile:MonsterProfile=id===RIFT_WARDEN.id ? {...base,tier,maxHp:Math.round(base.maxHp*3.5),
+      const base=monsterProfile(level,tier==="boss"?"normal":tier);
+      const profile:MonsterProfile=tier==="boss" ? {...base,tier,maxHp:Math.round(base.maxHp*3.5),
         attack:Math.round(base.attack*1.55),defense:Math.round(base.defense*1.3)} : base;
       const actor=new Monster({id,x,y:groundAt(zone.map.id,x,z),z,hp:profile.maxHp,maxHp:profile.maxHp,
         alive:true,mapId:zone.map.id,level,tier,displayName:name,defense:profile.defense});
@@ -93,7 +96,8 @@ export class ForestEncounters {
     m.alive=false;m.hp=0;m.targetId="";m.aiState="dead";
     life.windupUntil=0;life.nextChargeAt=0;life.interruptUntil=0;life.interruptResistUntil=0;life.tauntOwner="";life.tauntUntil=0;life.tauntResistUntil=0;
     // A siege can have more hunters than a world room; use the same minimum delay.
-    life.respawnAt=now+(id===RIFT_WARDEN.id ? RIFT_WARDEN.respawnMs : id===SHRINE_GUARDIAN.id ? SHRINE_GUARDIAN.respawnMs : monsterRespawnDelay(Math.min(nearby,WORLD_ROOM_CAPACITY)));life.returning=false;life.nav.clear();return true;
+    const boss=life.zone.map.boss??life.zone.map.guardian;
+    life.respawnAt=now+(boss?.id===id?boss.respawnMs:monsterRespawnDelay(Math.min(nearby,WORLD_ROOM_CAPACITY)));life.returning=false;life.nav.clear();return true;
   }
   clearTarget(id:string):void {for(const m of this.monsters.values())if(m.targetId===id)m.targetId="";for(const life of this.lives.values())if(life.tauntOwner===id){life.tauntOwner="";life.tauntUntil=0;}}
   engaged(id:string):boolean {return [...this.monsters.values()].some(m=>m.alive&&m.targetId===id);}
@@ -123,12 +127,13 @@ export class ForestEncounters {
       if(now<life.interruptUntil){m.aiState="stagger";continue;}
       const eligible=(pid:string,p:Player|undefined):p is Player=>Boolean(p&&p.alive&&p.mapId===m.mapId&&
         !blocked.has(pid)&&onMapGround(p)&&!isRestArea(p.mapId,p) && (!canDetect || canDetect(pid,p,m)));
+      const boss=map.boss??map.guardian;
       if (life.windupUntil > 0) {
         const target = players.get(m.targetId);
         if (now < life.windupUntil && eligible(m.targetId,target)) continue;
         life.windupUntil = 0;
         life.lastAttack = now;
-        if (eligible(m.targetId,target) && distance3d(m,target) <= (id===RIFT_WARDEN.id?RIFT_WARDEN:SHRINE_GUARDIAN).strikeRadius &&
+        if (boss?.id===id && eligible(m.targetId,target) && distance3d(m,target) <= boss.strikeRadius &&
             isMonsterSegmentClear(m,target,obstacles,MONSTER_NAV.radius,map.bounds) && (!map.terrain || isWorldSegmentClear(map.id,m,target))) hit(m.targetId,m,1.6);
         m.aiState="patrol";
         continue;
@@ -148,7 +153,7 @@ export class ForestEncounters {
       else if(target){m.facing=facingTo(target.x-m.x,target.z-m.z);
         if(distance3d(m,target)<=1.65){m.aiState="attack";
           if(now-life.lastAttack>=1500&&isMonsterSegmentClear(m,target,obstacles,MONSTER_NAV.radius,map.bounds) && (!map.terrain || isWorldSegmentClear(map.id,m,target))){
-            if((id===SHRINE_GUARDIAN.id || id===RIFT_WARDEN.id) && now>=life.nextChargeAt) {
+            if(boss?.id===id && now>=life.nextChargeAt) {
               m.aiState="windup";
               life.windupUntil=now+1400;
               life.nextChargeAt=now+8000;

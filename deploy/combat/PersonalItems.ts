@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import {REGIONAL_BOSSES} from "./RegionalBosses.js";
 import type { CombatStats } from "./Progression.js";
 
 export type ItemStats = Partial<Record<"hp" | "stamina" | "mana" | "atk" | "def" | "magicAtk" | "magicDef",number>>;
@@ -121,11 +122,18 @@ export type RawMaterialId=`mat_raw_${"wood"|"stone"}_${number}`;
 type KilnMaterialId=`mat_${"charcoal"|"ingot"}_${number}`;
 export type FieldToolId=`tool_${"axe"|"pick"}_${number}`;
 export type BrewId=`use_${"herbal"|"mana"}_${number}`;
-export const BOSS_TREASURES={
+const originalTreasures={
   forest_shrine_keeper:{fragment:"shrine_shard",gear:"acc_shrine_ward",level:12},
   atlas_rift_warden:{fragment:"mat_rift_star",gear:"acc_rift_star",level:100},
 } as const;
-type BossTreasure=typeof BOSS_TREASURES[keyof typeof BOSS_TREASURES];
+const regionalAccessory={
+  guard:{family:"acc_gorget",material:"mat_ingot"},spirit:{family:"acc_earrings_focus",material:"mat_ink"},
+  hunter:{family:"acc_ring_atk",material:"mat_hide"},grove:{family:"acc_fang",material:"mat_fiber"},
+} as const;
+type BossTreasure=typeof originalTreasures[keyof typeof originalTreasures] | typeof REGIONAL_BOSSES[number];
+export const BOSS_TREASURES:Readonly<Record<string,BossTreasure>>={
+  ...originalTreasures,...Object.fromEntries(REGIONAL_BOSSES.map(b=>[b.id,b])),
+};
 export const BOSS_GEAR_CHANCE=20;
 export function bossTreasure(id:string):BossTreasure|undefined{
   return Object.hasOwn(BOSS_TREASURES,id)?BOSS_TREASURES[id as keyof typeof BOSS_TREASURES]:undefined;
@@ -277,17 +285,21 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
       return input.qty===1?[ingot]:[{...input,qty:input.qty-1},ingot];
     });
   }
-  for(const [sourceBoss,{fragment,gear,level}] of Object.entries(BOSS_TREASURES)){
+  for(const [sourceBoss,treasure] of Object.entries(BOSS_TREASURES)){
+    const {fragment,gear,level}=treasure;
     const shrine=fragment==="shrine_shard";
-    put(fragment,{name:shrine?"เศษตราผู้พิทักษ์":"เศษดาวราชัน",kind:"material",path:"all",level,stats:{},sourceBoss});
+    const region="theme" in treasure?treasure:undefined;
+    const style=region && regionalAccessory[region.theme];
+    const model=style && result[(style.family+"_"+OUTFIT_LEVELS.filter(l=>l<=level).length) as PersonalId];
+    const ingredient=style?style.material+"_"+materialTier(level):shrine?"mat_fiber_2":"mat_ingot_7";
+    put(fragment,{name:region?.fragmentName??(shrine?"เศษตราผู้พิทักษ์":"เศษดาวราชัน"),kind:"material",path:"all",level,stats:{},sourceBoss});
     const item:PersonalDefinition={
-      name:shrine?"สร้อยตราศาลร้าง":"แหวนดาวราชัน",kind:shrine?"neck":"ring",family:gear,path:"all",level,dropMax:level,sourceBoss,
-      stats:shrine?{hp:12,def:2,magicDef:1}:{atk:6,magicAtk:6,mana:8},rarity:shrine?"rare":"legendary",
+      name:region?.gearName??(shrine?"สร้อยตราศาลร้าง":"แหวนดาวราชัน"),kind:model?.kind??(shrine?"neck":"ring"),family:gear,path:"all",level,dropMax:level,sourceBoss,
+      stats:model?{...model.stats}:shrine?{hp:12,def:2,magicDef:1}:{atk:6,magicAtk:6,mana:8},rarity:region?"epic":shrine?"rare":"legendary",
       recommended:Object.keys(fieldKits),craftGold:level*2,
-      recipe:[{item:fragment,qty:3},{item:shrine?"mat_fiber_2":"mat_ingot_7",qty:2}],
+      recipe:[{item:fragment,qty:3},{item:ingredient,qty:2}],
     };
-    const profile=forgeProfile(item);
-    item.forge={...profile,primary:shrine?"guard":"melee",pool:shrine?["guard","healing"]:["melee","ranged"]};
+    item.forge=model?.forge??{...forgeProfile(item),primary:shrine?"guard":"melee",pool:shrine?["guard","healing"]:["melee","ranged"]};
     put(gear,item);
   }
   return Object.freeze(result) as Readonly<Record<PersonalId,PersonalDefinition>>;

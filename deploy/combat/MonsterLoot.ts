@@ -1,4 +1,5 @@
 import {randomInt} from "node:crypto";
+import {REGIONAL_BOSSES} from "./RegionalBosses.js";
 import {PERSONAL_ITEMS,BOSS_GEAR_CHANCE,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
 import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
 import {TEMPLE_ID,TEMPLE_MAP,TEMPLE_SPAWNS} from "./TempleMap.js";
@@ -30,6 +31,7 @@ export const hunts:Hunt[]=[
   {...SHRINE_GUARDIAN,mapId:"forbidden_forest",tier:"elite",theme:"guard"},
   ...TEMPLE_SPAWNS.map(s=>({...s,mapId:TEMPLE_ID,theme:templeThemes[s.id.split("_")[1]]})),
   ...[...ATLAS_SPAWNS,...FRONTIER_SPAWNS].map(s=>({...s,theme:regionalTheme(s.id,s.mapId)})),
+  ...REGIONAL_BOSSES,
 ];
 const materials:Record<Theme,readonly string[]>={
   grove:["wood","resin","herb"], hunter:["hide","fiber","herb"], guard:["metal","fiber"], spirit:["ink","resin"],
@@ -81,7 +83,7 @@ export function findItemHunt(id:PersonalId,playerLevel:number){
 const catalog=Object.entries(PERSONAL_ITEMS).map(([id,item])=>{
   const hunt=findItemHunt(id as PersonalId,item.level??1);
   const rate=item.sourceBoss?(item.forge?" · โอกาส "+BOSS_GEAR_CHANCE+"% เมื่อเลเวลถึงและยังไม่มีชิ้นนี้":" · ได้ 1 ชิ้นเมื่อชนะ"):"";
-  return [id,hunt?{...item,dropHint:hunt.monster+" Lv."+hunt.level+" · "+hunt.map+rate}:item] as const;
+  return [id,hunt?{...item,dropHint:hunt.monster+" Lv."+hunt.level+" · "+hunt.map+rate+(hunt.open?"":" · พื้นที่ยังไม่เปิด")}:item] as const;
 });
 export const CATALOG_PAGES=Array.from({length:Math.ceil(catalog.length/16)},(_,i)=>Object.fromEntries(catalog.slice(i*16,i*16+16)));
 

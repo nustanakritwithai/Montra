@@ -2992,10 +2992,6 @@
       }
       finish("relic",true);
     }
-    if(map.boss){
-      const {x,z}=map.boss;
-      finish("boss arena");expansionLabel(map.boss.name+" · Boss Lv.100",x,z,12,5);
-    }
   }
   // ---- Atlas region dressing: decorative only, kept clear of every trail,
   // court, gate, rest ward, wall, pool and obstacle the server defines. ----
@@ -3393,20 +3389,21 @@
     }
     if(inTemple)buildTemple(map);
     if(paint && (!map.terrain || map.reliefLabels)){buildRegion(map,paint);if(!map.strategic)dressRegion(map,paint);}
+    if(map.boss)expansionLabel(map.boss.name+" · Boss Lv."+map.boss.level,map.boss.x,map.boss.z,12,5);
     for(const portal of (map.portals||[]).slice(portals[activeMapId]?1:0)){
       if(map.strategic?.relay && portal.targetMapId===map.id)continue;
       makePortal(activeMapId,expansionRoot,portal);
     }
   }
   function makeForestMonster(monster,id) {
-    if(monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||(ATLAS_GHOSTS[monster.mapId]&&monster.tier!=="boss"))return makeGhostMonster(monster,id);
+    if(monster.tier!=="boss" && (monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||ATLAS_GHOSTS[monster.mapId]))return makeGhostMonster(monster,id);
     const mesh=enemy.clone("monster-"+id);
     // The legacy tap sphere is hidden in the village; atlas monsters still show it.
     mesh.visibility=1;for(const child of mesh.getChildMeshes())child.setEnabled(true);
     mesh.metadata={monsterId:id};
     if(monster.tier==="elite" || monster.tier==="boss") {
       const boss=monster.tier==="boss",scale=boss?2.3:1.75,height=boss?2.65:2.05;
-      mesh.scaling.set(scale,height,scale);mesh.material=boss?regionPaint(monster.mapId).deep:keeperMat;
+      mesh.scaling.set(scale,height,scale);mesh.material=boss?(regionPaint(monster.mapId)?.deep??keeperMat):keeperMat;
       const plate=(name,w,h,d,x,y,z,material)=>{
         const piece=B.MeshBuilder.CreateBox(name,{width:w,height:h,depth:d},scene);
         piece.parent=mesh;piece.position.set(x,y,z);piece.material=material;piece.isPickable=false;
@@ -3428,7 +3425,7 @@
         crest.parent=mesh;crest.position.set(side*.32,.83,0);crest.rotation.z=-side*.27;
         crest.material=gold;crest.isPickable=false;
       }
-      const radius=boss?worldDefinitions[monster.mapId].boss.strikeRadius:(worldDefinitions?.forbidden_forest?.guardian?.strikeRadius ?? 2.8);
+      const radius=boss?(worldDefinitions?.[monster.mapId]?.boss?.strikeRadius ?? 3.2):(worldDefinitions?.forbidden_forest?.guardian?.strikeRadius ?? 2.8);
       const warning=B.MeshBuilder.CreateTorus("keeper strike boundary",{diameter:2*radius/scale,thickness:.12,tessellation:40},scene);
       warning.parent=mesh;warning.position.y=(.11-(boss?2.25:1.74))/height;warning.isPickable=false;
       warning.material=strikeMat;warning.setEnabled(false);mesh.metadata.warning=warning;
@@ -9937,7 +9934,7 @@
       if (map?.boss) {
         ctx.setLineDash([4, 3]); ctx.strokeStyle = "rgba(255,140,90,.7)"; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(sx(map.boss.x), sy(map.boss.z), 7 * scale, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-        mapText(ctx, "◆ Boss Lv.100", sx(map.boss.x), sy(map.boss.z) - 7 * scale - 20, 12, "#ffe5a8", 700);
+        mapText(ctx, "◆ "+map.boss.name+" Lv."+map.boss.level, sx(map.boss.x), sy(map.boss.z) - 7 * scale - 20, 12, "#ffe5a8", 700);
       }
       for (const portal of activePortals()) {
         if (!portal.targetMapId || portal.targetMapId===activeMapId) continue;

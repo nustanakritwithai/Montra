@@ -56,6 +56,7 @@ jobs:
           cp deploy/combat/castle-pilot-integration.mjs combat-verify/castle-pilot-integration.mjs
           cp deploy/combat/StrategicProvinces.ts combat-verify/src/rooms/StrategicProvinces.ts
           cp deploy/combat/WorldAtlas.ts combat-verify/src/rooms/WorldAtlas.ts
+          cp deploy/combat/RegionalBosses.ts combat-verify/src/rooms/RegionalBosses.ts
           cp deploy/combat/world-atlas.test.ts combat-verify/src/rooms/world-atlas.test.ts
           cp deploy/combat/world-atlas-integration.mjs combat-verify/world-atlas-integration.mjs
           cp deploy/combat/world-capacity-integration.mjs combat-verify/world-capacity-integration.mjs

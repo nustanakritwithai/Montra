@@ -21,7 +21,7 @@ test("all signed paths, camp spawns and courtyard detours are walkable",()=>{
   }
   const s=new MyRoomState();new ForestEncounters(s.monsters).initialize();
   const guards=[...s.monsters.values()].filter(m=>m.mapId===TEMPLE_ID);
-  assert.equal(guards.length,16);assert.equal(s.monsters.size,33);
+  assert.equal(guards.length,17);assert.equal(s.monsters.size,34);
   assert.deepEqual([Math.min(...guards.map(m=>m.level)),Math.max(...guards.map(m=>m.level))],[8,20]);
   for(const m of guards){
     assert.ok(isSafeWorldPoint(TEMPLE_MAP,m));assert.ok(!isRestArea(TEMPLE_ID,m));

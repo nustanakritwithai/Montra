@@ -80,6 +80,7 @@ $files = @(
   @{ Name = "CastlePilot.ts"; Target = "src\rooms\CastlePilot.ts"; Check = "CASTLE_ENABLED" },
   @{ Name = "StrategicProvinces.ts"; Target = "src\rooms\StrategicProvinces.ts"; Check = "PROVINCES" },
   @{ Name = "WorldAtlas.ts"; Target = "src\rooms\WorldAtlas.ts"; Check = "ATLAS_MAPS" },
+  @{ Name = "RegionalBosses.ts"; Target = "src\rooms\RegionalBosses.ts"; Check = "REGIONAL_BOSSES" },
   @{ Name = "WorldMaps.ts"; Target = "src\rooms\WorldMaps.ts"; Check = "DEFAULT_MAP_ID" },
   @{ Name = "WarpRules.ts"; Target = "src\rooms\WarpRules.ts"; Check = "checkWarp" },
   @{ Name = "ChatRules.ts"; Target = "src\rooms\ChatRules.ts"; Check = "parseChatMessage" },

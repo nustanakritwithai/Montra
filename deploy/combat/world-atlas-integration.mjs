@@ -116,6 +116,21 @@ async function verifyWardenLoot(){
   for(const ally of group)await leave(ally);
 }
 const read=process.env.MONTRA_ATLAS_STAGE==="read";
+async function verifyMarshBoss(){
+  const home="drowned_marsh",hunter=120;
+  await seed(119,"ritual_village",0,0);
+  const scout=await join(119),boss=JSON.parse(scout.r.state.worldDefinition).maps[home].boss;
+  assert.equal(boss.respawnMs,1_200_000);await leave(scout);
+  await seed(hunter,home,boss.x+1,boss.z);
+  let c=await join(hunter);
+  await until(()=>c.r.state.monsters.get(boss.id)?.alive,"marsh boss spawn");
+  c.r.send("attack",{targetId:boss.id});
+  const reward=await until(()=>c.events.find(e=>e.type==="experience_gained" && e.data.bossFragment)?.data,"marsh boss reward",60000);
+  assert.equal(reward.bossFragment,"mat_boss_drowned_marsh");assert.equal(reward.fragmentGranted,true);
+  assert(!reward.riftVictory);await leave(c);
+  c=await join(hunter);assert.equal((await bag(c)).slots.find(s=>s?.itemId===reward.bossFragment)?.quantity,1);
+  await leave(c);console.log("PASS regional boss kill, personal marsh fragment and reconnect");
+}
 async function verifyAtlas(){
   for(const [i,[from,x,z,to]] of routes.entries()){
     if(!read)await seed(i,from,x,z);
@@ -153,7 +168,9 @@ try{
     "ridge-naga":[[91,"hex_ridge","naga_cavern",45],[92,"naga_cavern","river_watch",58]],
     endgame:[[111,"fallen_city","asura_peak",72],[112,"asura_peak","spirit_rift",85],[113,"spirit_rift","asura_peak",98]]
   };
-  if(stage==="boss-loot"){
+  if(stage==="regional-boss"){
+    await verifyMarshBoss();
+  }else if(stage==="boss-loot"){
     await verifyWardenLoot();
     for(let i=0;i<4;i++){
       const c=await join(30+i);
