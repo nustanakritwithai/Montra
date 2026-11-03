@@ -11034,7 +11034,7 @@
     const version=catalogRevision+"/"+level;
     if(lv.dataset.version!==version){
       const previous=lv.value;lv.dataset.version=version;
-      lv.replaceChildren(new Option("ระดับที่ใช้ได้ล่าสุด","auto"));
+      lv.replaceChildren(new Option("ระดับที่ใช้ได้ล่าสุด","auto"),new Option("เพิ่งปลดล็อก · Lv."+level,"current"));
       const levels=[...new Set(Object.values(personalItems).filter(i=>i.recipe).map(i=>i.level||1))].sort((a,b)=>a-b);
       for(const n of levels)lv.appendChild(new Option("Lv."+n+(n>level?" · ยังไม่ถึง":""),String(n)));
       if([...lv.options].some(o=>o.value===previous))lv.value=previous;
@@ -11049,8 +11049,8 @@
         if(group.value==="materials" && !supply)continue;
         if(group.value==="role" && (def.path!=="all" && def.path!==path || !position && !supply && def.recommended && !def.recommended.includes(path)))continue;
         const n=def.level||1;
-        if(lv.value==="auto"?n>level:n!==Number(lv.value))continue;
-        const family=def.family||id,old=recipes.get(family);
+        if(lv.value==="auto"?n>level:n!==(lv.value==="current"?level:Number(lv.value)))continue;
+        const family=(def.family||id)+(group.value==="all"?"/"+def.path:""),old=recipes.get(family);
         if(!old || (old[1].level||1)<n)recipes.set(family,[id,def]);
       }
       for(const [id,def] of recipes.values())select.appendChild(new Option("Lv."+(def.level||1)+" · "+def.name,id));

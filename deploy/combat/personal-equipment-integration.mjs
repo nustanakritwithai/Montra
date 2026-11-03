@@ -74,7 +74,10 @@ try{
   const {room,bag,me,event}=active;
   assert(Object.keys(active.catalog).length>400);
   const endgame=active.catalog.wp_twins_10;assert.equal(endgame.level,100);
-  assert.equal(active.event("gear_guides",p=>p.path==="phutthaisawan")?.builds.length,2);
+  const guides=active.event("gear_guides",p=>p.path==="phutthaisawan");
+  assert.equal(guides?.builds.length,2);
+  assert.equal(guides.builds[0].slots.find(s=>s.position==="offHand").next,"arm_field_phutthaisawan_2");
+  assert.equal(active.catalog.arm_field_phutthaisawan_2.path,"phutthaisawan");
   assert.deepEqual(bag.cardDrill,{gold:20,itemId:"mat_metal_1",quantity:1});
   assert.deepEqual(bag.slots.filter(Boolean).map(s=>s.itemId),["health_potion","wp_twins_1"]);
   assert.equal(bag.slots[bag.equippedWeaponSlot].bound,true);

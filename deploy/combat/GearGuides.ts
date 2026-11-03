@@ -1,4 +1,4 @@
-import {PERSONAL_ITEMS,OUTFIT_LEVELS,WEAPON_LEVELS,monsterCardFor,type CardId,type PersonalId,type BodySlot,type ForgeRating,type ItemStats} from "./PersonalItems.js";
+import {PERSONAL_ITEMS,monsterCardFor,type CardId,type PersonalId,type BodySlot,type ForgeRating,type ItemStats} from "./PersonalItems.js";
 import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
 import {TEMPLE_ID,TEMPLE_MAP,TEMPLE_SPAWNS} from "./TempleMap.js";
 import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS} from "./WorldAtlas.js";
@@ -81,18 +81,30 @@ function bestCard(rating:ForgeRating,gearLevel:number,playerLevel:number){
   }
   return best;
 }
+const upgrades=new Map<string,PersonalId[]>();
+for(const id of Object.keys(PERSONAL_ITEMS) as PersonalId[]){
+  const item=PERSONAL_ITEMS[id];
+  if(!item.forge)continue;
+  for(const path of item.path==="all"?Object.keys(schools):[item.path]){
+    const key=path+"/"+item.family;
+    const family=upgrades.get(key)??[];
+    family.push(id);upgrades.set(key,family);
+  }
+}
+for(const family of upgrades.values())family.sort((a,b)=>PERSONAL_ITEMS[a].level!-PERSONAL_ITEMS[b].level!);
 export function personalGearGuides(path:string,level:number){
   if(!Object.hasOwn(schools,path) || !Number.isInteger(level) || level<1 || level>100)return null;
   const school=path as School, builds=(["pressure","endurance"] as const).map(style=>{
     const slots=order.map(position=>{
-      const levels=position==="mainHand"?WEAPON_LEVELS:OUTFIT_LEVELS, tier=levels.filter(n=>n<=level).length;
-      const family=itemFamily(school,position,style),id=(family+"_"+tier) as PersonalId, item=PERSONAL_ITEMS[id];
+      const family=upgrades.get(school+"/"+itemFamily(school,position,style))!;
+      const nextIndex=family.findIndex(id=>PERSONAL_ITEMS[id].level!>level);
+      const id=family[nextIndex===-1?family.length-1:nextIndex-1],item=PERSONAL_ITEMS[id];
       const profile=item.forge!, offense:ForgeRating=school==="mender"?"healing":school==="seer"?"ranged":"melee";
       const rating=style==="endurance" && profile.pool.includes("guard")?"guard":
         profile.pool.includes(offense)?offense:profile.primary;
       const card=bestCard(rating,item.level!,level);
       return {position,id,affix:rating,card,cardHunt:card?cardHunt(card):null,hunt:findHunt(item.level!,item.dropMax!,level),
-        next:tier<levels.length?(family+"_"+(tier+1)) as PersonalId:null};
+        next:nextIndex===-1?null:family[nextIndex]};
     });
     const totals:ItemStats={};
     for(const {id} of slots)for(const [key,n] of Object.entries(PERSONAL_ITEMS[id].stats)){

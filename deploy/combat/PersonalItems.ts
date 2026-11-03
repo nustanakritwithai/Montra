@@ -112,7 +112,8 @@ const STARTING_ITEMS = {
 
 type BaseId=keyof typeof STARTING_ITEMS;
 type Stem<K extends string>=K extends `${infer Family}_1`?Family:never;
-export type PersonalId = BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}`;
+type FieldGearId = `arm_field_${string}_${number}`;
+export type PersonalId = BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}` | FieldGearId;
 export type PracticeWeapon = Extract<PersonalId,`wp_${string}`>;
 export type ChestId = Extract<BaseId,`arm_${string}_chest_1`>;
 export type BodyItemId = Extract<PersonalId,`arm_${string}`|`off_${string}`|`acc_${string}`>;
@@ -122,7 +123,16 @@ export type SalveId = Extract<PersonalId,`use_salve_${number}`>;
 export type CardId = Extract<PersonalId,`card_${string}`>;
 export const SALVE_ID = "use_salve_1";
 export const WORKBENCH_GOLD = 4;
-const schools=["muay_boran","phutthaisawan","blade","sentinel","seer","mender"];
+const fieldKits={
+  muay_boran:{title:"คาดเชือก",armor:"hide",offHand:"off_brace",neck:"acc_fang",earring:"acc_earrings_duelist",ring:"acc_ring_atk"},
+  phutthaisawan:{title:"ดาบคู่",armor:"medium",offHand:"off_guard",neck:"acc_fang",earring:"acc_earrings_hunter",ring:"acc_ring_atk"},
+  blade:{title:"พรางเงา",armor:"hide",offHand:"off_veil",neck:"acc_fang",earring:"acc_earrings_duelist",ring:"acc_ring_atk"},
+  sentinel:{title:"รักษาด่าน",armor:"heavy",offHand:"off_shield",neck:"acc_gorget",earring:"acc_earrings_ward",ring:"acc_ring_guard"},
+  seer:{title:"ครูอาคม",armor:"cloth",offHand:"off_jar",neck:"acc_spell",earring:"acc_earrings_focus",ring:"acc_ring_spell"},
+  mender:{title:"เรียกขวัญ",armor:"cloth",offHand:"off_bell",neck:"acc_torc",earring:"acc_earrings_focus",ring:"acc_ring_heal"},
+} as const;
+const schools=Object.keys(fieldKits);
+const fieldSlots=["offHand","arms","head","feet","neck","shoulders","ring","legs","leftHand","earring","rightHand","chest"] as const;
 const names=["ฝึกหัด","ชายป่า","ศาลเก่า","ด่านคลอง","ป่าลึก","ค่ายหน้า","เวียงเหล็ก","ภูผา","ทัพหลวง","พิชัยยุทธ์"];
 const outfitNames=["ฝึกหัด","ชายป่า","สำนักครู","ค่ายหน้า","เวียงเหล็ก","ทัพหลวง","ราชสำนัก","พิชัยยุทธ์"];
 const weights:Required<ItemStats>={atk:1,magicAtk:1,def:1,magicDef:1,hp:.125,stamina:.5,mana:.5};
@@ -194,6 +204,32 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
       put(id,item);
     }
   }
+  // Each level between major unlocks adds one class-specific recipe. Its base stats
+  // stay between the regular pieces of the same family on either side of the level.
+  const milestones=new Set<number>([...WEAPON_LEVELS,...OUTFIT_LEVELS]);
+  let step=0;
+  for(let level=2;level<100;level++){
+    if(milestones.has(level))continue;
+    const slot=fieldSlots[step++%fieldSlots.length];
+    const tier=OUTFIT_LEVELS.filter(n=>n<=level).length;
+    for(const [path,kit] of Object.entries(fieldKits)){
+      const family=slot==="offHand"||slot==="neck"||slot==="ring"||slot==="earring"?kit[slot]:"arm_"+kit.armor+"_"+slot;
+      const lower=result[(family+"_"+tier) as PersonalId]!, upper=result[(family+"_"+(tier+1)) as PersonalId]!;
+      const progress=(level-lower.level!)/(upper.level!-lower.level!);
+      const stats:ItemStats={};
+      for(const key of Object.keys({...lower.stats,...upper.stats}) as (keyof ItemStats)[]){
+        const from=lower.stats[key]??0, to=upper.stats[key]??0;
+        const value=Math.round(from+(to-from)*progress);
+        if(value)stats[key]=value;
+      }
+      const base=result[(family+"_1") as PersonalId]!;
+      const item:PersonalDefinition={name:base.name.replace(/ฝึกหัด$/,"")+"สาย"+kit.title+" รุ่น "+level,
+        kind:base.kind,family,path,level,stats,rarity:lower.rarity,recommended:[path],dropMax:Math.min(100,level+4),
+        recipe:lower.recipe!.map(r=>({item:r.item.replace(/_\d+$/,"_"+materialTier(level)),qty:r.qty})),craftGold:8+level*2};
+      item.forge=forgeProfile(item);
+      put(`arm_field_${path}_${level}`,item);
+    }
+  }
   for(const [i,level] of MATERIAL_LEVELS.entries())for(const [key,name,source] of catalysts)
     put(`ref_${key}_${i+1}`,{name:name+"ชั้น"+(i+1),kind:"catalyst",path:"all",level,stats:{},rarity:"common",craftGold:4+Math.floor(level/4),recipe:[{item:`mat_${source}_${i+1}`,qty:2}]});
   return Object.freeze(result) as Readonly<Record<PersonalId,PersonalDefinition>>;
@@ -233,11 +269,10 @@ const catalogIds=Object.keys(PERSONAL_ITEMS) as PersonalId[];
 const materialsByTier=MATERIAL_LEVELS.map(level=>catalogIds.filter(id=>PERSONAL_ITEMS[id].kind==="material" && PERSONAL_ITEMS[id].level===level) as MaterialId[]);
 const dropsByLevel=new Map<string,PersonalId[]>();
 for(const path of schools)for(let level=1;level<=100;level++){
-  const weaponLevel=WEAPON_LEVELS.filter(n=>n<=level).pop(),outfitLevel=OUTFIT_LEVELS.filter(n=>n<=level).pop();
   dropsByLevel.set(path+level,catalogIds.filter(id=>{
     const def=PERSONAL_ITEMS[id];
     return (def.path==="all" || def.path===path) &&
-      (def.kind==="mainHand" ? def.level===weaponLevel : equipPositions(def.kind).length>0 && def.level===outfitLevel);
+      !!def.forge && def.level!<=level && level<=def.dropMax!;
   }));
 }
 export function fieldItem(path:string,owned:ReadonlySet<string>,monsterLevel=1,draw:(max:number)=>number=randomInt):BodyItemId|PracticeWeapon|MaterialId {

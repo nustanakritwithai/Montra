@@ -6,6 +6,8 @@ import {EconomyStore} from "./EconomyStore.js";
 import {rollForge,forgeStamp,forgeIngredient} from "./ForgeRules.js";
 import {changeCardSocket} from "./CardSockets.js";
 import {ATLAS_SPAWNS} from "./WorldAtlas.js";
+import {FOREST_CAMPS} from "./WorldMaps.js";
+import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {personalGearGuides,cardHunt} from "./GearGuides.js";
 import {gearMana} from "./ItemRules.js";
 
@@ -116,6 +118,58 @@ test("late monster cards unlock through real hunts and the first high-level ches
   const bare=equipBody(bag,"neck",2,"acc_spell_6","seer",88);
   assert(bare.ok);
   assert.equal(gearMana(88,worn.inventory).max-gearMana(88,bare.inventory).max,4);
+});
+
+test("every class unlocks wearable equipment at every level, with field gear bounded by its adjacent tiers",()=>{
+  const huntLevels=[1,...FOREST_CAMPS.flatMap(c=>c.levels),...TEMPLE_SPAWNS.map(s=>s.level),...ATLAS_SPAWNS.map(s=>s.level)];
+  for(const path of paths)for(let level=1;level<=100;level++){
+    const unlocked=entries.filter(([,item])=>item.forge && item.level===level && item.path===path);
+    assert(unlocked.length,path+" Lv."+level);
+    for(const [id,def] of unlocked.filter(([id])=>id.startsWith("arm_field_"))){
+      const tier=OUTFIT_LEVELS.filter(n=>n<level).length;
+      const lo=PERSONAL_ITEMS[(def.family+"_"+tier) as PersonalId];
+      const hi=PERSONAL_ITEMS[(def.family+"_"+(tier+1)) as PersonalId];
+      for(const stat of Object.keys({...lo.stats,...hi.stats}) as (keyof typeof lo.stats)[]){
+        const value=def.stats[stat]??0, from=lo.stats[stat]??0, to=hi.stats[stat]??0;
+        assert(value>=Math.min(from,to) && value<=Math.max(from,to),id+" "+stat);
+      }
+      assert(huntLevels.some(n=>n>=level && n<=def.dropMax!),id+" has no monster in its drop range");
+      const bag=makeClassInventory(path),slot=equipPositions(def.kind)[0];
+      bag.slots[2]={itemId:id as BodyItemId,quantity:1};
+      assert(equipBody(bag,slot,2,id as BodyItemId,path,level).ok);
+      assert(!equipBody(bag,slot,2,id as BodyItemId,path,level-1).ok);
+      assert(!equipBody(bag,slot,2,id as BodyItemId,paths.find(p=>p!==path)!,level).ok);
+    }
+  }
+});
+
+test("level 99 class gear can drop or be crafted, enhanced, rerolled, drilled and fitted before the cap",()=>{
+  const item="arm_field_mender_99",def=PERSONAL_ITEMS[item],position=equipPositions(def.kind)[0];
+  const owned=new Set(entries.map(([id])=>id).filter(id=>id!==item));
+  assert.equal(fieldItem("mender",owned,100,()=>0),item);
+  assert.notEqual(fieldItem("seer",owned,100,()=>0),item);
+  assert.notEqual(fieldItem("mender",owned,98,()=>0),item);
+  const store=new EconomyStore(":memory:"), account="f".repeat(64),bag=makeClassInventory("mender");
+  try{
+    let slot=2;
+    for(const r of def.recipe!)bag.slots[slot++]={itemId:r.item as PersonalId,quantity:r.qty};
+    for(const id of ["ref_flux_7","ref_seal_7","mat_metal_1","card_star_warden"] as const)bag.slots[slot++]={itemId:id,quantity:1};
+    store.register(account,bag);
+    store.craftPersonal(account,"field_crafting_0001",item,99);
+    const crafted=store.getAccount(account).inventory,index=crafted.slots.findIndex(s=>s?.itemId===item);
+    assert(crafted.slots[index]?.forge?.affix);
+    const worn=equipBody(crafted,position,index,item,"mender",99);
+    assert(worn.ok);store.saveCharacter(account,{inventory:worn.inventory},worn.inventory);
+    const stamp=forgeStamp({itemId:item,forge:worn.inventory.equipmentForges![position]});
+    const plus=store.forgeWeapon(account,"field_enhance_0001",position,stamp,"enhance",99);
+    const reroll=store.forgeWeapon(account,"field_reroll_00001",position,forgeStamp({itemId:item,forge:plus.forge}),"reroll",99);
+    store.socketItem(account,{requestId:"field_drilling_001",target:position,gear:item,action:"drill",expected:"sealed",card:null});
+    store.socketItem(account,{requestId:"field_inserting_01",target:position,gear:item,action:"insert",expected:"empty",card:"card_star_warden"});
+    const restored=store.getAccount(account).inventory;
+    assert.equal(restored.equipmentForges![position]?.rank,1);
+    assert.deepEqual(restored.equipmentForges![position]?.affix,reroll.forge.affix);
+    assert.equal(restored.equipmentSockets![position],"card_star_warden");
+  }finally{store.close();}
 });
 
 test("capstone crafting, forge materials, role options, card and sale survive inventory transactions",()=>{
