@@ -9888,10 +9888,10 @@
         // Spirit techniques prepare their own prerequisite; a basic character has no summon/trance button.
         if (["spirit","spirit_bind","spirit_heal","spirit_ward","trance"].includes(node.effect)) {
           if (!me.possessionActive && !room.state.summons?.has(localId)) {
-            room.send("pot_summon",{});toast("เรียกผีจากหม้อ · กดวิชาอีกครั้งเมื่อผีปรากฏ");return;
+            room.send("pot_summon",{});toast("เรียกผีใช้ 15 มานา · กดวิชาอีกครั้งเมื่อผีปรากฏ");return;
           }
           if (node.effect==="trance" && !me.possessionActive) {
-            room.send("possess",{});toast("กำลังเข้าทรง · กดวิชาอีกครั้งเมื่อเข้าทรงแล้ว");return;
+            room.send("possess",{});toast("เข้าทรงใช้ 20 มานา · กดวิชาอีกครั้งเมื่อเข้าทรงแล้ว");return;
           }
         }
         if (["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind","pve_rice"].includes(node.effect)) {
@@ -10188,7 +10188,7 @@
     curse: "☽", curse_burst: "☾", spirit: "☄", spirit_bind: "⛓", trance: "☯", heal: "✚", heal_area: "✚", cleanse: "❂", cleanse_area: "❂", spirit_ward: "⛨", ward_area: "⛨", spirit_heal: "✚" };
   const sgEsc = v => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   const sgCombatLine = n => n.passive ? "ติดตัว" : [n.power && /strike|step|counter|flurry|area|sweep|slam|stun|consume|windup|mark|rice|detonate|curse|spirit|interrupt|teep|grapple|sidestep|retreat_strike/.test(n.effect) ? "พลัง " + Math.round(n.power * 100) + "%" : "",
-    n.range ? "ระยะ " + n.range : "", n.stamina ? "⚡" + n.stamina : "", n.cooldownMs ? "รอ " + n.cooldownMs / 1000 + " วิ" : ""].filter(Boolean).join(" · ");
+    n.range ? "ระยะ " + n.range : "", n.stamina ? "มานา " + n.stamina : "", n.cooldownMs ? "รอ " + n.cooldownMs / 1000 + " วิ" : ""].filter(Boolean).join(" · ");
   // Skill ranks (ขั้นวิชา): same point pool, unlocked by level and total practice.
   const sgRank = (id, learned, ranks, info, done) => {
     const rankable = learned && (info?.rankable || []).includes(id); if (!rankable) return {};
@@ -10607,7 +10607,7 @@
           if(pve || pvp) bits.push("อาวุธเพิ่มตอนโจมตีมอนสเตอร์ " + (pve >= 0 ? "+" : "") + pve + (pvp !== pve ? " · PvP " + (pvp >= 0 ? "+" : "") + pvp : ""));
         }
       } else if (key === "atk" || key === "magicAtk") bits.push("กำลังโหลดข้อมูลอาวุธจากเซิร์ฟเวอร์");
-      if (key === "stamina") bits.push("ใช้กับแดชและวิชา · ฟื้น 4/วิ (สู้อยู่ 2/วิ)");
+      if (key === "stamina") bits.push("ใช้กับแดช · ฟื้น 4/วิ (สู้อยู่ 2/วิ)");
       $("statBonus-" + key).textContent = bits.join(" · ");
     }
     // Active effects and unspent points.

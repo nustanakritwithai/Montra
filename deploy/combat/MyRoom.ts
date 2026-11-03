@@ -1345,7 +1345,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           this.effects.grant(member,{id:skillId,sourceId:id,group:"occult_ward",bonuses},this.simulatedMs+8000);
           this.applyStats(member,target,this.statAllocations.get(member) ?? emptyAllocations());
           if (skillId==="mender_trance") {
-            target.stamina=Math.min(target.maxStamina,target.stamina+15);
+            target.mana=Math.min(target.maxMana,target.mana+15);
             void this.saveCharacter(member);
           }
           if (this.simulatedMs-(this.lastCombatMs.get(member) ?? -Infinity)<PROGRESSION.combatQuietMs) trained=true;
@@ -1702,8 +1702,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         }
       }
       if(skill.effect==="teep" && target.alive)this.sendSwordNotice(client,"muay_interrupt",{result:monster ? this.interruptMuayTarget(monster) : "pvp_no_interrupt"});
-      if(skillId==="chaiya_finish")player.stamina=Math.min(player.maxStamina,player.stamina+10);
-      if(skillId==="chaiya_return")player.stamina=Math.min(player.maxStamina,player.stamina+8);
+      if(skillId==="chaiya_finish")player.mana=Math.min(player.maxMana,player.mana+10);
+      if(skillId==="chaiya_return")player.mana=Math.min(player.maxMana,player.mana+8);
       if(skillId==="korat_finish" && monster && target.alive)this.sendSwordNotice(client,"muay_interrupt",{result:this.interruptMuayTarget(monster,500),source:"korat_finish"});
       if(skillId==="korat_press" && monster && target.alive)this.sendSwordNotice(client,"muay_interrupt",{result:this.interruptMuayTarget(monster,600),source:"korat_press"});
       if(retreatPoint){this.startSkillAction(id,player,"idle");this.moveOnSurface(player,retreatPoint.x,retreatPoint.z);muayMoved=true;}
