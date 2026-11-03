@@ -934,3 +934,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .account-card input,.account-card select,.account-card textarea { width:100%; box-sizing:border-box; padding:11px; border:1px solid #6b8976; border-radius:8px; background:#0c1918; color:#fff; font:inherit; }
 .account-card button { width:100%; margin:6px 0; min-height:44px; cursor:pointer; }
 .account-slot { display:block; padding:12px; text-align:left; border:1px solid #7a927c; border-radius:9px; background:#243d34; color:#fff; font:inherit; }
+/* Brightness picker in the help & settings drawer. */
+.light-choice { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 12px; }
+.light-choice button { padding: 9px 4px; border-radius: 10px; border: 1px solid #5a4a32; background: #1c1610; color: #e9dcc2; font: 700 13px/1.2 "Noto Sans Thai", system-ui, sans-serif; }
+.light-choice button[aria-checked="true"] { background: linear-gradient(180deg, #f3c768, #c8902e); color: #2a1606; border-color: #f3d58c; }
