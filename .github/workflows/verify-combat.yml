@@ -87,6 +87,7 @@ jobs:
           cp deploy/combat/blade-rules.test.ts combat-verify/src/rooms/blade-rules.test.ts
           cp deploy/combat/blade-book-integration.mjs combat-verify/blade-book-integration.mjs
           cp deploy/combat/blade-depth-integration.mjs combat-verify/blade-depth-integration.mjs
+          cp deploy/combat/blade-core-check.mjs combat-verify/blade-core-check.mjs
           cp deploy/combat/class-rank-integration.mjs combat-verify/class-rank-integration.mjs
           cp deploy/combat/status-support-integration.mjs combat-verify/status-support-integration.mjs
           cp deploy/combat/skill-ranks.test.ts combat-verify/src/rooms/skill-ranks.test.ts
@@ -373,6 +374,10 @@ jobs:
       - name: Occult book rules
         working-directory: combat-verify
         run: npx tsx --test src/rooms/occult-rules.test.ts src/rooms/blade-rules.test.ts src/rooms/sentinel-rules.test.ts src/rooms/skill-ranks.test.ts src/rooms/advanced-lessons.test.ts src/rooms/account-store.test.ts
+
+      - name: Blade core skills
+        working-directory: combat-verify
+        run: npx tsx blade-core-check.mjs
 
       - name: Isolated advanced class lessons
         working-directory: combat-verify
