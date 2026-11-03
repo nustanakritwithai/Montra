@@ -1,20 +1,20 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {BODY_SLOTS, PERSONAL_ITEMS, WEAPON_LEVELS, OUTFIT_LEVELS, MATERIAL_LEVELS, CATALOG_PAGES, equipPositions, fieldItem, monsterCardDrop, wearsTwinSwords, wearsWraps, usesStaff, type BodyItemId, type PersonalId} from "./PersonalItems.js";
-import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses} from "./ItemRules.js";
+import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses,practiceLoot} from "./ItemRules.js";
 import {EconomyStore} from "./EconomyStore.js";
 import {rollForge,forgeStamp,forgeIngredient} from "./ForgeRules.js";
 import {changeCardSocket} from "./CardSockets.js";
 import {ATLAS_SPAWNS} from "./WorldAtlas.js";
-import {personalGearGuides} from "./GearGuides.js";
+import {personalGearGuides,cardHunt} from "./GearGuides.js";
 import {gearMana} from "./ItemRules.js";
 
 const paths=["muay_boran","phutthaisawan","blade","sentinel","seer","mender"];
 const entries=Object.entries(PERSONAL_ITEMS);
 const base={maxHp:1000,atk:100,def:110,magicAtk:90,magicDef:65,maxStamina:298};
 
-test("twelve suggested builds resolve to legal gear, cards and hunting grounds at their breakpoints",()=>{
-  for(const path of paths)for(const level of [...new Set([...WEAPON_LEVELS,...OUTFIT_LEVELS])]){
+test("twelve suggested builds resolve to legal gear, cards and hunting grounds at all levels",()=>{
+  for(const path of paths)for(let level=1;level<=100;level++){
     const guides=personalGearGuides(path,level)!;
     assert.equal(guides.builds.length,2);
     assert.notDeepEqual(guides.builds[0].slots.map(s=>s.id),guides.builds[1].slots.map(s=>s.id));
@@ -26,7 +26,10 @@ test("twelve suggested builds resolve to legal gear, cards and hunting grounds a
         assert(def.level!<=level&&(def.path==="all"||def.path===path));
         assert(def.forge!.pool.includes(piece.affix));
         assert(piece.hunt && piece.hunt.level>=def.level! && piece.hunt.level<=def.dropMax!,piece.id);
-        if(piece.card)assert(PERSONAL_ITEMS[piece.card as PersonalId].level!<=def.level!);
+        if(piece.card){
+          assert(PERSONAL_ITEMS[piece.card].level!<=def.level!);
+          assert(piece.cardHunt && piece.cardHunt.level<=level && piece.cardHunt.monster===PERSONAL_ITEMS[piece.card].monster);
+        }
         if(piece.next)assert(PERSONAL_ITEMS[piece.next].level!>level);
         else assert.equal(level,100);
       }
@@ -38,6 +41,10 @@ test("twelve suggested builds resolve to legal gear, cards and hunting grounds a
   const sentinel=personalGearGuides("sentinel",100)!;
   assert.equal(sentinel.builds[0].slots.find(s=>s.position==="mainHand")?.affix,"melee");
   assert.equal(sentinel.builds[1].slots.find(s=>s.position==="mainHand")?.affix,"guard");
+  for(const path of paths){
+    const amulet=personalGearGuides(path,100)!.builds[0].slots.find(s=>s.position==="neck")!;
+    assert.equal(PERSONAL_ITEMS[amulet.id].forge!.primary,path==="mender"?"healing":path==="seer"?"ranged":"melee");
+  }
   bag.slots[1]={itemId:"wp_crook_6",quantity:1};
   assert(gearMana(50,bag).max>gearMana(50,undefined).max);
   bag.slots[1]={itemId:"wp_crook_10",quantity:1};
@@ -81,9 +88,34 @@ test("every class has a legal, craftable outfit from 1 to 100, including two dis
   }
   for(const [,card] of entries.filter(([,v])=>v.sourceCamp)){
     const spawn=ATLAS_SPAWNS.find(s=>s.id===card.sourceCamp+"_1");
-    assert(spawn&&spawn.name===card.monster&&spawn.level===card.level,card.name);
+    assert(spawn&&spawn.name===card.monster&&spawn.level>=card.level!,card.name);
     assert.equal(PERSONAL_ITEMS[monsterCardDrop(spawn.id,spawn.level,()=>0)!].name,card.name);
   }
+});
+
+test("late monster cards unlock through real hunts and the first high-level chest rolls an affix",()=>{
+  const leftEar=(level:number)=>personalGearGuides("mender",level)!.builds[0].slots.find(s=>s.position==="leftEar")!;
+  assert.notEqual(leftEar(85).card,"card_light_eater");
+  assert.equal(leftEar(88).card,"card_light_eater");
+  assert.equal(cardHunt("card_last_spirit")?.level,96);
+  assert.equal(cardHunt("card_star_warden")?.level,98);
+  const source=ATLAS_SPAWNS.find(s=>s.id==="atlas_spirit_rift_2_1")!;
+  assert.equal(monsterCardDrop(source.id,source.level,()=>9),"card_light_eater");
+  assert.equal(monsterCardDrop(source.id,source.level,()=>10),null);
+  const bag=makeClassInventory("seer");
+  const low=practiceLoot(bag,"seer",100,"boss",1);
+  assert.equal(low.bag.slots.find(s=>s?.itemId===low.id)?.forge,undefined);
+  const high=practiceLoot(bag,"seer",100,"boss",100);
+  const armor=high.bag.slots.find(s=>s?.itemId===high.id);
+  assert(armor?.bound && armor.forge?.affix && armor.forge.rank===0);
+  bag.slots[2]={itemId:"acc_spell_6",quantity:1,socket:null};
+  bag.slots[3]={itemId:"card_light_eater",quantity:1};
+  const socket=changeCardSocket(bag,{target:2,gear:"acc_spell_6",action:"insert",expected:"empty",card:"card_light_eater",requestId:"light_card_85"});
+  const worn=equipBody(socket.bag,"neck",2,"acc_spell_6","seer",88);
+  assert(worn.ok);
+  const bare=equipBody(bag,"neck",2,"acc_spell_6","seer",88);
+  assert(bare.ok);
+  assert.equal(gearMana(88,worn.inventory).max-gearMana(88,bare.inventory).max,4);
 });
 
 test("capstone crafting, forge materials, role options, card and sale survive inventory transactions",()=>{
@@ -136,6 +168,13 @@ test("capstone crafting, forge materials, role options, card and sale survive in
 test("class restrictions, capped forge ratings and card level survive the entire upgrade curve",()=>{
   for(const [id,item] of entries.filter(([,v])=>v.forge)){
     const def=item.forge!,top=rollForge(undefined,"reroll",()=>99,item).forge;
+    let improved=top;
+    for(let rank=1;rank<=10;rank++){
+      improved=rollForge(improved,"enhance",()=>0,item).forge;
+      assert.equal(improved.rank,rank);
+      assert.deepEqual(improved.affix,top.affix);
+    }
+    assert.throws(()=>rollForge(improved,"enhance",()=>0,item),/forge_max_rank/);
     assert(def.pool.includes(top.affix!.stat));
     assert.equal(top.affix!.tier,item.level!<25?1:item.level!<65?2:3);
     assert(forgeIngredient(item,9,"enhance")!.item in PERSONAL_ITEMS);

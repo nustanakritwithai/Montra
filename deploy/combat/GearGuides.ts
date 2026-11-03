@@ -1,4 +1,4 @@
-import {PERSONAL_ITEMS,OUTFIT_LEVELS,WEAPON_LEVELS,type PersonalId,type BodySlot,type ForgeRating,type ItemStats} from "./PersonalItems.js";
+import {PERSONAL_ITEMS,OUTFIT_LEVELS,WEAPON_LEVELS,monsterCardFor,type CardId,type PersonalId,type BodySlot,type ForgeRating,type ItemStats} from "./PersonalItems.js";
 import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
 import {TEMPLE_ID,TEMPLE_MAP,TEMPLE_SPAWNS} from "./TempleMap.js";
 import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS} from "./WorldAtlas.js";
@@ -23,10 +23,10 @@ type School=keyof typeof schools;
 type Style="pressure"|"endurance";
 type Position="mainHand"|BodySlot;
 const order:readonly Position[]=["mainHand","chest","offHand","head","legs","arms","feet","shoulders","leftHand","rightHand","neck","leftEar","rightEar","leftRing","rightRing"];
-type Hunt={name:string;level:number;mapId:string;tier?:string};
+type Hunt={id:string;name:string;level:number;mapId:string;tier?:string};
 const hunts:Hunt[]=[
-  {name:"ผีสิง",mapId:"ritual_village",level:1},
-  ...FOREST_CAMPS.flatMap(c=>c.levels.map(level=>({name:level<5?"ผีหลงป่า":level<9?"เงารากไม้":"วิญญาณอาคม",level,mapId:"forbidden_forest",tier:c.tier}))),
+  {id:"possessed-1",name:"ผีสิง",mapId:"ritual_village",level:1},
+  ...FOREST_CAMPS.flatMap(c=>c.levels.map((level,index)=>({id:"forest_"+c.id+"_"+(index+1),name:level<5?"ผีหลงป่า":level<9?"เงารากไม้":"วิญญาณอาคม",level,mapId:"forbidden_forest",tier:c.tier}))),
   {...SHRINE_GUARDIAN,mapId:"forbidden_forest",tier:"elite"},
   ...TEMPLE_SPAWNS.map(monster=>({...monster,mapId:TEMPLE_ID})),...ATLAS_SPAWNS,...FRONTIER_SPAWNS,
 ];
@@ -38,33 +38,44 @@ function findHunt(low:number,high:number,playerLevel:number){
     const cost=(inaccessible?1000:0)+(mob.tier==="boss"?100:mob.tier==="elite"?25:0)+Math.abs(mob.level-playerLevel);
     if(cost<score){best=mob;score=cost;}
   }
-  if(!best)return null;
-  const map=getWorldMap(best.mapId)??ATLAS_MAPS[best.mapId]??(best.mapId===TEMPLE_ID?TEMPLE_MAP:undefined);
-  return {monster:best.name,level:best.level,mapId:best.mapId,map:map?.name??best.mapId,
-    open:best.mapId==="ritual_village"||Boolean(WORLD_EXPANSION&&getWorldMap(best.mapId))};
+  return best?huntDetails(best):null;
+}
+function huntDetails(mob:Hunt){
+  const map=getWorldMap(mob.mapId)??ATLAS_MAPS[mob.mapId]??(mob.mapId===TEMPLE_ID?TEMPLE_MAP:undefined);
+  return {monster:mob.name,level:mob.level,mapId:mob.mapId,map:map?.name??mob.mapId,
+    open:mob.mapId==="ritual_village"||Boolean(WORLD_EXPANSION&&getWorldMap(mob.mapId))};
 }
 function itemFamily(path:School,slot:Position,style:Style){
   const caster=path==="mender"||path==="seer", guarded=style==="endurance", tank=path==="sentinel";
   switch(slot){
     case "mainHand":return "wp_"+schools[path][0];
     case "offHand":return "off_"+schools[path][1];
-    case "neck":return guarded||tank?"acc_gorget":"acc_torc";
+    case "neck":return guarded?"acc_gorget":path==="mender"?"acc_torc":caster?"acc_spell":"acc_fang";
     case "leftEar":return caster?"acc_earrings_lotus":"acc_earrings_hunter";
-    case "rightEar":return "acc_earrings_ward";
-    case "leftRing":return caster?"acc_ring_heal":"acc_ring_atk";
+    case "rightEar":return guarded?"acc_earrings_ward":caster?"acc_earrings_focus":"acc_earrings_duelist";
+    case "leftRing":return path==="mender"?"acc_ring_heal":caster?"acc_ring_spell":"acc_ring_atk";
     case "rightRing":return "acc_ring_guard";
   }
   const core=slot==="chest"||slot==="legs"||slot==="head";
   const armor=tank?(guarded||core?"heavy":"medium"):caster?(guarded&&core?"heavy":"cloth"):(guarded?(core?"medium":"hide"):"hide");
   return "arm_"+armor+"_"+slot;
 }
-const cards=Object.entries(PERSONAL_ITEMS).filter(([,item])=>item.kind==="card");
-const sourceFloor:Record<string,number>={card_root_shadow:5,card_arcane_spirit:9,card_shrine_keeper:12};
-function bestCard(rating:ForgeRating,level:number){
-  const weights:ItemStats=rating==="guard"?{def:1,magicDef:.75,hp:.10}:rating==="melee"?{atk:1,stamina:.12,hp:.02}:{magicAtk:1,magicDef:.25,stamina:.1,hp:.03};
-  let best:string|null=null,value=0;
-  for(const [id,item] of cards){
-    if((sourceFloor[id]??item.level??1)>level)continue;
+const cardHunts=new Map<CardId,ReturnType<typeof huntDetails>>();
+for(const mob of hunts){
+  const card=monsterCardFor(mob.id,mob.level);
+  if(card && mob.level<(cardHunts.get(card)?.level??Infinity))cardHunts.set(card,huntDetails(mob));
+}
+export function cardHunt(card:CardId){return cardHunts.get(card)??null;}
+const cardWeights:Record<ForgeRating,ItemStats>={
+  guard:{def:1,magicDef:.75,hp:.10},melee:{atk:1,stamina:.12,hp:.02},
+  ranged:{magicAtk:1,mana:.25,magicDef:.1,hp:.02},healing:{magicAtk:.8,mana:.4,magicDef:.25,hp:.03},
+};
+function bestCard(rating:ForgeRating,gearLevel:number,playerLevel:number){
+  let best:CardId|null=null,value=0;
+  const weights=cardWeights[rating];
+  for(const [id,source] of cardHunts){
+    const item=PERSONAL_ITEMS[id];
+    if((item.level??1)>gearLevel || source.level>playerLevel)continue;
     const score=Object.entries(item.stats).reduce((sum,[stat,n])=>sum+n*(weights[stat as keyof ItemStats]??0),0);
     if(score>value){best=id;value=score;}
   }
@@ -79,7 +90,8 @@ export function personalGearGuides(path:string,level:number){
       const profile=item.forge!, offense:ForgeRating=school==="mender"?"healing":school==="seer"?"ranged":"melee";
       const rating=style==="endurance" && profile.pool.includes("guard")?"guard":
         profile.pool.includes(offense)?offense:profile.primary;
-      return {position,id,affix:rating,card:bestCard(rating,item.level!),hunt:findHunt(item.level!,item.dropMax!,level),
+      const card=bestCard(rating,item.level!,level);
+      return {position,id,affix:rating,card,cardHunt:card?cardHunt(card):null,hunt:findHunt(item.level!,item.dropMax!,level),
         next:tier<levels.length?(family+"_"+(tier+1)) as PersonalId:null};
     });
     const totals:ItemStats={};

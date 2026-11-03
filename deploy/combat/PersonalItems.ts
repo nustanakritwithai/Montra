@@ -39,6 +39,10 @@ const STARTING_ITEMS = {
   card_merchant: {name:"การ์ดเงาพ่อค้า",kind:"card",path:"all",stats:{hp:16,magicDef:1},monster:"เงาพ่อค้า",chancePct:10,level:55,sourceCamp:"atlas_fallen_city_1"},
   card_asura: {name:"การ์ดอสุราลาดตระเวน",kind:"card",path:"all",stats:{def:3},monster:"อสุราลาดตระเวน",chancePct:10,level:68,sourceCamp:"atlas_asura_peak_1"},
   card_dream: {name:"การ์ดเงาเศษฝัน",kind:"card",path:"all",stats:{magicAtk:2,hp:16},monster:"เงาเศษฝัน",chancePct:10,level:80,sourceCamp:"atlas_spirit_rift_1"},
+  card_forge_master: {name:"การ์ดนายเตาหลอมอสุรา",kind:"card",path:"all",stats:{atk:3,stamina:2},monster:"นายเตาหลอมอสุรา",chancePct:10,level:85,sourceCamp:"atlas_asura_peak_5"},
+  card_light_eater: {name:"การ์ดผู้กลืนแสง",kind:"card",path:"all",stats:{magicAtk:2,mana:4},monster:"ผู้กลืนแสง",chancePct:10,level:85,sourceCamp:"atlas_spirit_rift_2"},
+  card_last_spirit: {name:"การ์ดวิญญาณปลายกาล",kind:"card",path:"all",stats:{magicAtk:3,mana:2},monster:"วิญญาณปลายกาล",chancePct:10,level:95,sourceCamp:"atlas_spirit_rift_3"},
+  card_star_warden: {name:"การ์ดผู้เฝ้าดาวดับ",kind:"card",path:"all",stats:{def:3,hp:8},monster:"ผู้เฝ้าดาวดับ",chancePct:10,level:95,sourceCamp:"atlas_spirit_rift_5"},
   mat_metal_1: {"name":"แร่เหล็กชั้น1","kind":"material","path":"all","stats":{}},
   mat_wood_1: {"name":"แก่นไม้ชั้น1","kind":"material","path":"all","stats":{}},
   mat_fiber_1: {"name":"เส้นใยป่านชั้น1","kind":"material","path":"all","stats":{}},
@@ -48,6 +52,11 @@ const STARTING_ITEMS = {
   mat_resin_1: {"name":"ยางไม้ชั้น1","kind":"material","path":"all","stats":{}},
   acc_torc_1: {"name":"สร้อยลูกประคำฝึกหัด","kind":"neck","path":"all","stats":{"magicDef":2,"stamina":2},"recipe":[{"item":"mat_wood_1","qty":3},{"item":"mat_fiber_1","qty":2}]},
   acc_gorget_1: {"name":"สร้อยเกราะห่วงฝึกหัด","kind":"neck","path":"all","stats":{"def":2,"hp":8},"recipe":[{"item":"mat_metal_1","qty":3},{"item":"mat_fiber_1","qty":2}]},
+  acc_fang_1: {name:"สร้อยเขี้ยวเสือฝึกหัด",kind:"neck",path:"all",stats:{atk:2,stamina:2},recipe:[{item:"mat_hide_1",qty:3},{item:"mat_fiber_1",qty:2}]},
+  acc_spell_1: {name:"สร้อยตราอักขระฝึกหัด",kind:"neck",path:"all",stats:{magicAtk:2,mana:2},recipe:[{item:"mat_ink_1",qty:3},{item:"mat_fiber_1",qty:2}]},
+  acc_earrings_duelist_1: {name:"ตุ้มหูคมศึกฝึกหัด",kind:"earring",path:"all",stats:{atk:1,hp:8},recipe:[{item:"mat_metal_1",qty:2},{item:"mat_hide_1",qty:2}]},
+  acc_earrings_focus_1: {name:"ตุ้มหูจารคาถาฝึกหัด",kind:"earring",path:"all",stats:{magicAtk:1,mana:2},recipe:[{item:"mat_ink_1",qty:2},{item:"mat_resin_1",qty:2}]},
+  acc_ring_spell_1: {name:"แหวนตราผีฝึกหัด",kind:"ring",path:"all",stats:{magicAtk:2,mana:2},recipe:[{item:"mat_metal_1",qty:3},{item:"mat_ink_1",qty:2}]},
   acc_earrings_lotus_1: {"name":"ตุ้มหูบัวลงอาคม","kind":"earring","path":"all","stats":{"magicAtk":2},"recipe":[{"item":"mat_metal_1","qty":2},{"item":"mat_ink_1","qty":2}]},
   acc_earrings_hunter_1: {"name":"ตุ้มหูพรานป่า","kind":"earring","path":"all","stats":{"atk":1,"stamina":2},"recipe":[{"item":"mat_wood_1","qty":2},{"item":"mat_hide_1","qty":2}]},
   acc_earrings_ward_1: {"name":"ตุ้มหูยันต์คุ้มกาย","kind":"earring","path":"all","stats":{"magicDef":2},"recipe":[{"item":"mat_fiber_1","qty":2},{"item":"mat_ink_1","qty":2}]},
@@ -121,6 +130,7 @@ const catalysts=[["flux","ผงประสาน","metal"],["powder","ผง�
 export function materialTier(level:number){return MATERIAL_LEVELS.filter(min=>min<=level).length || 1;}
 function recommend(family:string,item:PersonalDefinition):readonly string[]{
   if(item.path!=="all")return [item.path];
+  if(family==="acc_fang" || family==="acc_earrings_duelist")return ["muay_boran","phutthaisawan","blade","sentinel"];
   if(family==="acc_earrings_ward")return ["sentinel","seer","mender"];
   if(family.includes("_heavy_") || item.stats.hp && item.stats.def)return ["sentinel"];
   if(family.includes("_medium_"))return ["sentinel","phutthaisawan"];
@@ -133,7 +143,7 @@ function forgeProfile(item:PersonalDefinition):ForgeProfile {
   if(item.family==="acc_earrings_ward"){primary="guard";other="healing";}
   else if(item.path==="mender" || item.family==="acc_ring_heal" || item.family==="acc_torc"){primary="healing";other="ranged";}
   else if(preferred.includes("seer")){primary="ranged";other="healing";}
-  else if(preferred.includes("sentinel")){primary="guard";other="melee";}
+  else if(preferred.includes("sentinel") && !preferred.includes("blade")){primary="guard";other="melee";}
   const spent=Object.entries(item.stats).reduce((sum,[key,value])=>sum+value*weights[key as keyof ItemStats],0);
   const budget=spent/.78;
   return {primary,pool:[primary,other],enhanceMax:Math.max(1,Math.round(budget*.10)),affixMax:Math.max(1,Math.round(budget*.08)),materialTier:materialTier(item.level??1)};
@@ -196,7 +206,7 @@ export function personalItem(id:unknown): PersonalDefinition | undefined {
 }
 export function isCardId(id:unknown):id is CardId {return personalItem(id)?.kind==="card";}
 const campCards=new Map(Object.entries(PERSONAL_ITEMS).filter(([,def])=>def.sourceCamp).map(([id,def])=>[def.sourceCamp!,id as CardId]));
-export function monsterCardDrop(id:string,level:number,draw=()=>randomInt(100)):CardId|null {
+export function monsterCardFor(id:string,level:number):CardId|null {
   let card:CardId;
   if(id==="possessed-1")card="card_possessed";
   else if(id==="forest_shrine_keeper")card="card_shrine_keeper";
@@ -204,7 +214,11 @@ export function monsterCardDrop(id:string,level:number,draw=()=>randomInt(100)):
   else if(/^forest_(west|east|deep_west|deep_east)_[1-4]$/.test(id))
     card=level<5?"card_lost_ghost":level<9?"card_root_shadow":"card_arcane_spirit";
   else {const found=campCards.get(id.replace(/_\d+$/,""));if(!found)return null;card=found;}
-  return draw()<(PERSONAL_ITEMS[card].chancePct??0)?card:null;
+  return card;
+}
+export function monsterCardDrop(id:string,level:number,draw=()=>randomInt(100)):CardId|null {
+  const card=monsterCardFor(id,level);
+  return card && draw()<(PERSONAL_ITEMS[card].chancePct??0)?card:null;
 }
 export function startingWeapon(path:string):PracticeWeapon {
   const id = (Object.keys(STARTING_ITEMS) as BaseId[]).find(key => personalItem(key)?.kind==="mainHand" && personalItem(key)?.path===path);

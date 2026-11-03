@@ -300,7 +300,8 @@ export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,ti
       const index=bag.slots.indexOf(null);
       if(index<0)return {bag,id:null};
       const slots=bag.slots.slice();
-      slots[index]={itemId:id,quantity:1,bound:true};
+      const forge=birthForge(id);
+      slots[index]={itemId:id,quantity:1,bound:true,...(forge?{forge}:{})};
       return {bag:{...bag,slots,firstChestClaimed:true},id};
     }
     bag={...bag,firstChestClaimed:true};

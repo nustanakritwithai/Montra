@@ -11010,7 +11010,10 @@
     $("guideFocus").textContent=build.focus+" · พื้นฐานทั้งชุด "+statLine(build.totals);
     const owned=slots?.findIndex(s=>s?.itemId===entry.id)??-1,matched=build.slots.filter(isWorn).length;
     $("guideName").textContent=item.name+" · Lv."+item.level+" · "+matched+"/"+build.slots.length+" ชิ้นตามแบบ";
-    $("guideStats").textContent=[statLine(item.stats),"ออปชันแนะนำ "+forgeNames[entry.affix],card?"การ์ดที่เหมาะ "+card.name+" ("+card.monster+" "+card.chancePct+"%)":""].filter(Boolean).join(" · ");
+    const source=entry.cardHunt;
+    const cardLocation=source?source.monster+" Lv."+source.level+" ที่"+source.map+(source.open?"":" (เมื่อเปิดแผนที่ขยาย)"):card?.monster;
+    $("guideStats").textContent=[statLine(item.stats),"ออปชันแนะนำ "+forgeNames[entry.affix],
+      card?"การ์ดที่เหมาะ "+card.name+" · "+statLine(card.stats)+" · "+cardLocation+" "+card.chancePct+"%":""].filter(Boolean).join(" · ");
     const h=entry.hunt;
     $("guideSource").textContent=(h?(h.open?"ล่า":"เมื่อเปิดแผนที่ขยาย ล่า")+h.monster+" Lv."+h.level+" ที่"+h.map+" หรือคราฟต์":"คราฟต์ที่โต๊ะช่าง")+(next?" · เป้าถัดไป Lv."+next.level+" "+next.name:" · ขั้นสุดท้าย Lv.100");
     const button=$("guideOpen");button.textContent=isWorn(entry)?"ดูชิ้นที่สวม":owned>=0?"ดูชิ้นในกระเป๋า":"เปิดสูตรชิ้นนี้";
@@ -11099,20 +11102,22 @@
       allowed=economyGold!==null && economyGold>=cardDrill.gold && count(cardDrill.itemId)>=cardDrill.quantity;
     }else if(action==="insert"){
       const cards=Object.entries(personalItems).filter(([,def])=>def.kind==="card");
+      const gearLevel=personalItems[gear.itemId]?.level||(gear.itemId==="shrine_glaive"?12:1);
       if(select.options.length!==cards.length){
         select.replaceChildren();
         for(const [id,def] of cards){
-          const opt=document.createElement("option");opt.value=id;opt.textContent=def.name;select.appendChild(opt);
+          const opt=document.createElement("option");opt.value=id;opt.textContent=def.name+" · ของ Lv."+(def.level||1)+"+";select.appendChild(opt);
         }
       }
       if(select.dataset.gear!==gear.itemId){
         select.dataset.gear=gear.itemId;
-        const owned=cards.find(([id])=>count(id)>0);
-        if(owned)select.value=owned[0];
+        const compatible=cards.filter(([,def])=>(def.level||1)<=gearLevel);
+        const choice=compatible.find(([id])=>count(id)>0)??compatible[0];
+        if(choice)select.value=choice[0];
       }
       card=select.value;
       const def=personalItems[card];
-      allowed=!!def && count(card)>0 && (def.level||1)<=(personalItems[gear.itemId]?.level||(gear.itemId==="shrine_glaive"?12:1));
+      allowed=!!def && count(card)>0 && (def.level||1)<=gearLevel;
       info.textContent=def?"รูว่าง · "+statLine(def.stats)+" เมื่อสวม · อุปกรณ์ Lv."+(def.level||1)+" ขึ้นไป · ดรอปจาก"+def.monster+" "+def.chancePct+"% · มี "+count(card)+" ใบ":"รูว่าง";
       button.textContent="ใส่การ์ดที่เลือก";
     }else{
