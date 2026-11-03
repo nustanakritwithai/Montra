@@ -10285,18 +10285,27 @@
     const spent=Object.values(ranks).reduce((sum,value)=>sum+Number(value||0),0);
     const levels=catalog.coreLevels;
     const details={
-      chaiya:"แต่ละขั้นเพิ่มเวลาตั้งรับ 0.4 วิ ลดดาเมจได้สูงสุด 60% และเพิ่มพลังสวนมอน 12%",
-      korat:"ต่อยสามจังหวะโดยหมัดสุดท้ายหนักที่สุด แต่ละขั้นเพิ่มพลังต่อมอน 8%",
-      lopburi:"แต่ละขั้นเพิ่มระยะพุ่ง 0.4 หน่วย เพิ่มเวลาต่อท่า 0.25 วิ และเพิ่มพลังท่าซ้ำใส่มอน 12%",
-      thasao:"สี่ขั้นแรกเพิ่มจำนวนหมัดใส่มอนสูงสุด 7 ครั้ง ขั้นต่อไปเพิ่มพลัง ทุกขั้นเพิ่มระยะพุ่ง · PvP ใช้ 3 หมัด"
+      chaiya:"ขั้น 4 และ 8 สวนซ้ำได้เร็วขึ้น · พลังสวนเพิ่มเฉพาะมอน",
+      korat:"หมัดสุดท้ายหนักขึ้นที่ขั้น 4 และ 8 · พลังเพิ่มเฉพาะมอน",
+      lopburi:"ขั้น 4 และ 8 ท่าซ้ำหยุดมอนทั่วไปชั่วครู่",
+      thasao:"ขั้น 8 ยืดเวลาหยุดมอนท้ายชุด · PvP ใช้ 3 หมัด"
+    };
+    const fmt=n=>String(Math.round(n*100)/100);
+    const describe=(id,rank)=>{
+      const p=catalog.coreProgress?.[rank]?.[id];
+      if(!p)return "";
+      if(id==="chaiya")return "ตั้งรับ "+fmt(p.durationMs/1000)+" วิ · ลดดาเมจ "+Math.round((1-p.damageFactor)*100)+"% · สวนมอน "+Math.round(p.counterPower*100)+"% · สวนซ้ำทุก "+fmt(p.counterIntervalMs/1000)+" วิ";
+      if(id==="korat")return "หมัดมอน "+[.42,.53,p.finalPower].map(n=>Math.round(n*p.scale*100)+"%").join(" + ");
+      if(id==="lopburi")return "พุ่ง "+fmt(p.distance)+" · กดซ้ำภายใน "+fmt(p.followMs/1000)+" วิ · โจมตีมอน "+Math.round(p.followPower*100)+"%"+(p.staggerMs?" · หยุดมอน "+fmt(p.staggerMs/1000)+" วิ":"");
+      return "พุ่งถึง "+fmt(p.range)+" · ตีมอน "+p.hits+" ครั้ง ครั้งละ "+Math.round(p.hitPower*100)+"% · หยุดมอน "+fmt(p.staggerMs/1000)+" วิ";
     };
     container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · มีสูงสุด '+(catalog.corePointLevels || []).length+' แต้ม เลือกพัฒนาสกิลที่ถนัด</p><p class="note">พื้นฐานทั้ง 4 ใช้ได้พร้อมกัน · อัปได้ถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
       Object.entries(catalog.core).map(([id,node])=>{
         const rank=Number(ranks[id]||0),next=levels[rank];
         const cost=node.stamina+rank*Number(catalog.coreManaPerRank||0);
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+levels.length+'</strong><small>'+node.description+'</small><small>'+details[id]+'</small><small>ใช้มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small></div>'+
+        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+levels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>'+details[id]+'</small><small>ใช้มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+Number(catalog.coreManaPerRank||0))+'</small>':'')+'</div>'+
           (next?'<button type="button" data-core-upgrade="'+id+'" '+(me.level<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
-      }).join("")+'<button type="button" id="resetMuayCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
+      }).join("")+'<p class="note">การหยุดจังหวะมีช่วงต้านต่อเนื่อง Elite และบอสต้านการหยุด · โบนัสพลังจากขั้นใช้กับมอน ส่วน PvP ใช้พลังพื้นฐาน</p><button type="button" id="resetMuayCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-core-upgrade]").forEach(button=>button.onclick=()=>room.send("muay_book",{action:"core_upgrade",skillId:button.dataset.coreUpgrade}));
     $("resetMuayCore").onclick=()=>{if(window.confirm("คืนแต้มวิชานักมวยทั้งหมด?"))room.send("muay_book",{action:"core_reset"});};
   }

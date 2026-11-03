@@ -54,7 +54,7 @@ import { BLADE_LESSONS, BLADE_PRACTICE_LABELS, BLADE_RANKABLE_SKILLS, bladePoint
 import { SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_RANKABLE_SKILLS, SENTINEL_CONTROL, sentinelPoints, newSentinelBook, validateSentinelBook, type SentinelBook, type SentinelLesson, type SentinelSkillId } from "./SentinelRules.js";
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
-import { isMuayFoundation, MUAY_CORE, MUAY_CORE_LEVELS, MUAY_CORE_POINT_LEVELS, MUAY_CORE_MANA_PER_RANK, muayCorePoints, muayCoreManaCost, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayCoreId, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
+import { isMuayFoundation, MUAY_CORE, MUAY_CORE_LEVELS, MUAY_CORE_POINT_LEVELS, MUAY_CORE_MANA_PER_RANK, muayCorePoints, muayCoreManaCost, muayCoreProgress, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayCoreId, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
 import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
@@ -73,7 +73,7 @@ import { ForestEncounters } from "./ForestEncounters.js";
 
 const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:WORLD_MAPS}):"";
 const swordTreeCatalog=JSON.stringify({schools:SWORD_SCHOOLS,nodes:SWORD_NODES,pvpDamage:SWORD_PVP_DAMAGE_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SWORD_RANKABLE_SKILLS});
-const muayBookCatalog=JSON.stringify({core:MUAY_CORE,coreLevels:MUAY_CORE_LEVELS,corePointLevels:MUAY_CORE_POINT_LEVELS,coreManaPerRank:MUAY_CORE_MANA_PER_RANK,skills:MUAY_SKILLS,lessons:MUAY_LESSONS,base:MUAY_BASE_SKILLS,schools:MUAY_SCHOOLS,combos:MUAY_COMBOS,followups:MUAY_FOLLOWUPS,masteryGuides:MUAY_MASTERY_GUIDES,masteryLabels:MUAY_MASTERY_LABELS,masteryRequirements:MUAY_MASTERY_REQUIREMENTS,pvpDamage:MUAY_PVP_DAMAGE_MULTIPLIER,pvpCombo:MUAY_PVP_COMBO_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:MUAY_RANKABLE_SKILLS});
+const muayBookCatalog=JSON.stringify({core:MUAY_CORE,coreLevels:MUAY_CORE_LEVELS,corePointLevels:MUAY_CORE_POINT_LEVELS,coreManaPerRank:MUAY_CORE_MANA_PER_RANK,coreProgress:Array.from({length:MUAY_CORE_LEVELS.length+1},(_,rank)=>muayCoreProgress(rank)),skills:MUAY_SKILLS,lessons:MUAY_LESSONS,base:MUAY_BASE_SKILLS,schools:MUAY_SCHOOLS,combos:MUAY_COMBOS,followups:MUAY_FOLLOWUPS,masteryGuides:MUAY_MASTERY_GUIDES,masteryLabels:MUAY_MASTERY_LABELS,masteryRequirements:MUAY_MASTERY_REQUIREMENTS,pvpDamage:MUAY_PVP_DAMAGE_MULTIPLIER,pvpCombo:MUAY_PVP_COMBO_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:MUAY_RANKABLE_SKILLS});
 // Reserve static UTF-8 catalogs separately from player/monster replication.
 const encoderBlock=64*1024;
 const staticBytes=Buffer.byteLength(worldDefinition)+Buffer.byteLength(swordTreeCatalog)+Buffer.byteLength(muayBookCatalog);
@@ -1556,10 +1556,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const opponentId=monster?.id ?? [...this.state.players.entries()].find(([,p])=>p===attacker)?.[0];
       if(opponentId && this.simulatedMs>=stance.nextCounter) {
         // Set the limit before the counter so two simultaneous stances cannot recurse.
-        stance.nextCounter=this.simulatedMs+400;
-        this.muayCoreHit(id,opponentId,1+stance.rank*.12,1);
+        const progress=muayCoreProgress(stance.rank).chaiya;
+        stance.nextCounter=this.simulatedMs+progress.counterIntervalMs;
+        this.muayCoreHit(id,opponentId,progress.counterPower,1);
       }
-      return this.sentinelShareDamage(id,attacker,Math.max(1,Math.round(damage*Math.max(.4,.65-stance.rank*.05))),summonOwnerId);
+      return this.sentinelShareDamage(id,attacker,Math.max(1,Math.round(damage*muayCoreProgress(stance.rank).chaiya.damageFactor)),summonOwnerId);
     }
     const guard=this.swordGuards.get(id);
     if (!guard || !player || this.simulatedMs>=guard.until) return this.sentinelShareDamage(id,attacker,damage,summonOwnerId);
@@ -1654,12 +1655,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(actor.pathId!=="muay_boran" || equippedWeaponId(this.inventories.get(id))!==MUAY_WRAP_ID)return this.reject(client,"muay_wrap_required");
     if(actor.flying || !onMapGround(actor) || isRestArea(actor.mapId,actor))return this.reject(client,"muay_safe_area");
     if(this.muayCoreSequences.has(id))return this.reject(client,"muay_controlled");
-    const rank=book.coreRanks?.[skillId] ?? 0,follow=this.muayCoreFollowups.get(id);
+    const rank=book.coreRanks?.[skillId] ?? 0,progress=muayCoreProgress(rank),follow=this.muayCoreFollowups.get(id);
     if(skillId==="lopburi" && follow && this.simulatedMs<follow.until) {
       const requested=typeof input.targetId==="string"?input.targetId:"";
       const candidate=requested || [this.state.monster,...this.state.monsters.values()].filter(m=>m.alive && m.mapId===actor.mapId && distance3d(actor,m)<=3)
         .sort((a,b)=>distance3d(actor,a)-distance3d(actor,b))[0]?.id || "";
-      if(!candidate || !this.muayCoreHit(id,candidate,1.05+follow.rank*.12,1.05))return this.reject(client,"muay_out_of_range");
+      const followProgress=muayCoreProgress(follow.rank).lopburi;
+      if(!candidate || !this.muayCoreHit(id,candidate,followProgress.followPower,1.05))return this.reject(client,"muay_out_of_range");
+      const monster=this.getMonster(candidate);
+      if(monster?.alive && followProgress.staggerMs)this.interruptMuayTarget(monster,followProgress.staggerMs);
       this.muayCoreFollowups.delete(id);
       this.broadcast("muay_core_followup",{playerId:id,active:false},{afterNextPatch:true});
       return;
@@ -1670,14 +1674,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const targetId=typeof input.targetId==="string"?input.targetId:"";
     const target=targetId ? this.getMonster(targetId) ?? this.state.players.get(targetId) : undefined;
     if(skill.kind==="target" && (!target?.alive || !this.sameCombatMap(id,targetId) ||
-      distance3d(actor,target)>(skillId==="thasao"?7+rank*.4:3) ||
+      distance3d(actor,target)>(skillId==="thasao"?progress.thasao.range:3) ||
       !this.bodyPathClear(actor.mapId,actor,target)))return this.reject(client,"muay_out_of_range");
     if(skillId==="lopburi" || skillId==="thasao") {
       const intent=skillId==="lopburi" ? this.muayMoveIntent.get(id) ?? {x:-Math.sin(actor.facing),z:-Math.cos(actor.facing)}
         : {x:target!.x-actor.x,z:target!.z-actor.z};
       const length=Math.hypot(intent.x,intent.z);
       if(length<.001)return this.reject(client,"muay_blocked");
-      const travel=skillId==="lopburi"?3+rank*.4:Math.max(0,length-1.8);
+      const travel=skillId==="lopburi"?progress.lopburi.distance:Math.max(0,length-1.8);
       const dir={dx:intent.x/length,dz:intent.z/length},map=getWorldMap(actor.mapId)!;
       let position={x:actor.x,z:actor.z},total=0;
       while(total+.00001<travel) {
@@ -1691,31 +1695,33 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     actor.mana-=manaCost;cooldowns[skillId]=Date.now()+skill.cooldownMs;actor.muayData=JSON.stringify(cooldowns);
     this.startSkillAction(id,actor,"idle");
     if(skillId==="chaiya") {
-      const duration=2000+rank*400;
+      const duration=progress.chaiya.durationMs;
       this.muayCoreStances.set(id,{until:this.simulatedMs+duration,rank,nextCounter:0});
     } else if(skillId==="lopburi") {
-      this.muayCoreFollowups.set(id,{until:this.simulatedMs+3000+rank*250,rank});
-      this.broadcast("muay_core_followup",{playerId:id,active:true,durationMs:3000+rank*250},{afterNextPatch:true});
+      this.muayCoreFollowups.set(id,{until:this.simulatedMs+progress.lopburi.followMs,rank});
+      this.broadcast("muay_core_followup",{playerId:id,active:true,durationMs:progress.lopburi.followMs},{afterNextPatch:true});
     } else if(target) {
       const damageRank=this.getMonster(targetId) ? rank : 0;
-      const hits=skillId==="korat"?3:3+Math.min(damageRank,4);
+      const damageProgress=muayCoreProgress(damageRank);
+      const hits=skillId==="korat"?3:damageProgress.thasao.hits;
       const interval=skillId==="korat"?350:220;
-      const power=.26+Math.min(damageRank,4)*.015+Math.max(0,damageRank-4)*.01;
+      const power=damageProgress.thasao.hitPower;
       this.muayCoreSequences.set(id,{targetId,next:this.simulatedMs,remaining:hits,interval,power,skillId:skillId as "korat"|"thasao",rank:damageRank});
       if(skillId==="thasao") {
         const monster=this.getMonster(targetId);
-        const result=monster ? this.interruptMuayTarget(monster,(hits-1)*interval+160) : this.sentinelInterrupt(id,targetId);
+        const result=monster ? this.interruptMuayTarget(monster,damageProgress.thasao.staggerMs) : this.sentinelInterrupt(id,targetId);
         if(result==="applied" && !monster)this.sentinelStuns.set(targetId,this.simulatedMs+Math.min(1000,hits*interval));
       }
     }
-    this.broadcast("muay_core_used",{playerId:id,skillId,durationMs:skillId==="chaiya"?2000+rank*400:0},{afterNextPatch:true});
+    this.broadcast("muay_core_used",{playerId:id,skillId,durationMs:skillId==="chaiya"?progress.chaiya.durationMs:0},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
   private updateMuayCore():void {
     for(const [id,sequence] of this.muayCoreSequences) {
       if(this.simulatedMs<sequence.next)continue;
-      const power=sequence.skillId==="korat" ? [.42,.53,.75][3-sequence.remaining]*(1+sequence.rank*.08) : sequence.power;
+      const heavy=muayCoreProgress(sequence.rank).korat;
+      const power=sequence.skillId==="korat" ? [.42,.53,heavy.finalPower][3-sequence.remaining]*heavy.scale : sequence.power;
       if(!this.muayCoreHit(id,sequence.targetId,power)){this.muayCoreSequences.delete(id);continue;}
       sequence.remaining--;sequence.next+=sequence.interval;
       if(!sequence.remaining)this.muayCoreSequences.delete(id);

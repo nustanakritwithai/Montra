@@ -17,6 +17,27 @@ export const MUAY_CORE_MANA_PER_RANK = 1;
 export function muayCoreManaCost(id:MuayCoreId,rank:number):number {
   return MUAY_CORE[id].stamina + rank*MUAY_CORE_MANA_PER_RANK;
 }
+/** Shared values for the server and the skill-book preview. */
+export function muayCoreProgress(rank:number) {
+  const hits=3+Math.min(rank,4);
+  return {
+    chaiya:{
+      durationMs:2000+rank*400,damageFactor:Math.max(.4,.65-rank*.05),
+      counterPower:1+rank*.12,counterIntervalMs:rank>=8?300:rank>=4?350:400,
+    },
+    korat:{
+      scale:1+rank*.08,finalPower:.75+(rank>=4?.04:0)+(rank>=8?.04:0),
+    },
+    lopburi:{
+      distance:3+rank*.4,followMs:3000+rank*250,followPower:1.05+rank*.12,
+      staggerMs:rank>=8?350:rank>=4?200:0,
+    },
+    thasao:{
+      range:7+rank*.4,hits,hitPower:.26+Math.min(rank,4)*.015+Math.max(0,rank-4)*.01,
+      staggerMs:(hits-1)*220+160+(rank>=8?120:0),
+    },
+  };
+}
 export const MUAY_CORE_LEVELS = [5,15,25,35,45,60,80,100] as const;
 export const MUAY_CORE_POINT_LEVELS = [5,15,25,35,45,55,65,75,80,85,95,100] as const;
 export function muayCorePoints(level:number):number {
