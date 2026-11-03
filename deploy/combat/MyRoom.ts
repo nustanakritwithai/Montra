@@ -2080,7 +2080,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.broadcast("possession_changed",{playerId:id,active:false,reason},{afterNextPatch:true});
   }
 
-  private grantMonsterExperience(id: string, monsterId:string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal", shrineLoot = false): void {
+  private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal", shrineLoot = false, monsterId=""): void {
     const player = this.state.players.get(id);
     const priorReward=this.pendingRewards.get(id);
     if (!player || !this.persistentCharacters.has(id) || (this.pendingWarps.has(id) && !priorReward)) return;
@@ -2142,8 +2142,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const shrineLoot = characterStore.economyEnabled && monster.mapId === "forbidden_forest" && monster.id === SHRINE_GUARDIAN.id && tier === "elite";
     if (!winner) return;
     if (!party) {
-      this.grantMonsterExperience(winnerId, monster.id, undefined, monster.level, tier,
-        shrineLoot && winner.alive && winner.mapId === monster.mapId && distance3d(winner,monster) <= PARTY_XP_RADIUS);
+      this.grantMonsterExperience(winnerId, undefined, monster.level, tier,
+        shrineLoot && winner.alive && winner.mapId === monster.mapId && distance3d(winner,monster) <= PARTY_XP_RADIUS, monster.id);
       return;
     }
     const members:PartyRewardMember[]=[];
@@ -2154,7 +2154,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         inTransit:this.pendingWarps.has(id) && !this.pendingRewards.has(id)});
     }
     const shares=partyMonsterShares(winner.level,{mapId:monster.mapId,level:monster.level,tier,x:monster.x,y:monster.y,z:monster.z},members,PARTY_XP_RADIUS,shrineLoot || this.accountSessions.has(winnerId));
-    for(const share of shares)this.grantMonsterExperience(share.sessionId,monster.id,share.amount,monster.level,tier,shrineLoot);
+    for(const share of shares)this.grantMonsterExperience(share.sessionId,share.amount,monster.level,tier,shrineLoot,monster.id);
   }
 
   private guildAction(client:Client, action:(character:string)=>void):void {
