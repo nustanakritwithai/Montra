@@ -1,5 +1,11 @@
 import {PERSONAL_ITEMS,bossTreasure,gearSchools,guideFamily,startingWeapon,type CardId,type PersonalId,type BodySlot,type ForgeRating,type ItemStats} from "./PersonalItems.js";
-import {STARTER_HUNT,cardHunt,cardHunts,findItemHunt,itemCamp,journeyWeapon,practiceSite} from "./MonsterLoot.js";
+import {STARTER_HUNT,cardHunt,cardHunts,findItemHunt,hunts,itemCamp,journeyWeapon,practiceSite} from "./MonsterLoot.js";
+import {MUAY_CORE} from "./MuayRules.js";
+import {SWORD_CORE} from "./SkillCatalog.js";
+import {BLADE_CORE} from "./BladeRules.js";
+import {SENTINEL_CORE} from "./SentinelRules.js";
+import {SEER_CORE,MENDER_CORE} from "./OccultRules.js";
+import {REGIONAL_BOSSES,BOSS_RESPAWN_MS} from "./RegionalBosses.js";
 import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {PROGRESSION,baseManaAtLevel} from "./Progression.js";
 export {cardHunt} from "./MonsterLoot.js";
@@ -41,6 +47,31 @@ for(const id of Object.keys(PERSONAL_ITEMS) as PersonalId[]){
   }
 }
 for(const family of upgrades.values())family.sort((a,b)=>PERSONAL_ITEMS[a].level!-PERSONAL_ITEMS[b].level!);
+const fieldLessons={
+  muay_boran:[MUAY_CORE.korat,MUAY_CORE.thasao],
+  phutthaisawan:[SWORD_CORE.phuttha_core,SWORD_CORE.atamat_core],
+  blade:[BLADE_CORE.blade_vanish,BLADE_CORE.blade_heavy],
+  sentinel:[SENTINEL_CORE.shock,SENTINEL_CORE.bulwark],
+  seer:[SEER_CORE.seer_pot,SEER_CORE.seer_buffalo],
+  mender:[MENDER_CORE.mender_core_heal,MENDER_CORE.mender_core_ward],
+} as const;
+function journeyBoss(monsterId:string){
+  const {fragment,gear,level}=bossTreasure(monsterId)!;
+  return {fragment,gear,level,camp:itemCamp(fragment,level),respawnMinutes:BOSS_RESPAWN_MS/60_000};
+}
+function midgameBosses(school:School,level:number){
+  const preferred=school==="sentinel"?"guard":school==="seer"||school==="mender"?"spirit":"grove";
+  return REGIONAL_BOSSES.filter(b=>b.level>=26 && b.level<=level)
+    .sort((a,b)=>Number(b.theme===preferred)-Number(a.theme===preferred) || b.level-a.level)
+    .map(b=>journeyBoss(b.id));
+}
+function fieldPracticeSite(level:number,preferredMap?:string){
+  if(level<=25)return practiceSite(TEMPLE_SPAWNS.find(m=>m.level===15)!.id);
+  const candidates=hunts.filter(m=>(!m.tier || m.tier==="normal") && m.level<=level && level-m.level<=4)
+    .map(m=>practiceSite(m.id)!).filter(site=>site.open);
+  candidates.sort((a,b)=>b.level-a.level || Number(b.mapId===preferredMap)-Number(a.mapId===preferredMap));
+  return candidates[0]??null;
+}
 export function personalGearGuides(path:string,level:number){
   if(!Object.hasOwn(gearSchools,path) || !Number.isInteger(level) || level<1 || level>100)return null;
   const school=path as School, builds=(["pressure","endurance"] as const).map(style=>{
@@ -70,9 +101,15 @@ export function personalGearGuides(path:string,level:number){
     return {style,name:gearSchools[school][style==="pressure"?2:3],focus:playNotes[school][style==="pressure"?0:1],totals,maxMana,slots};
   });
   const starterHunt=level<=STARTER_HUNT.maxLevel?{...STARTER_HUNT,weapon:startingWeapon(school)}:undefined;
-  const weapon=journeyWeapon(school,Math.max(10,level)),boss=bossTreasure("boss_bound_temple")!;
-  const journey=weapon?{weapon,camp:itemCamp(weapon,PERSONAL_ITEMS[weapon].level!),
-    practice:practiceSite(TEMPLE_SPAWNS.find(m=>m.level===15)!.id),
-    boss:level>=18 && level<=22?{fragment:boss.fragment,gear:boss.gear,level:boss.level,camp:itemCamp(boss.fragment,boss.level)}:undefined}:undefined;
+  const weapon=journeyWeapon(school,Math.max(10,level));
+  const camp=weapon?itemCamp(weapon,PERSONAL_ITEMS[weapon].level!):null;
+  const bosses=level>=26 && level<=50?midgameBosses(school,level):[];
+  const midgame=level>=26 && level<=50;
+  const targetMap=level<40?(school==="muay_boran" || school==="seer" || school==="mender"?"bamboo_frontier":"hex_ridge"):
+    (school==="phutthaisawan" || school==="sentinel" || school==="blade"?"naga_cavern":"lotus_basin");
+  const lesson=midgame?fieldLessons[school][level<45?0:1]:undefined;
+  const journey=weapon || midgame?{weapon,camp,practice:fieldPracticeSite(level,midgame?targetMap:camp?.mapId),
+    lesson:lesson?{name:lesson.name,level:level<45?35:45}:undefined,
+    boss:level>=18 && level<=22?journeyBoss("boss_bound_temple"):bosses[0],bosses}:undefined;
   return {path,level,baseMana:baseManaAtLevel(level),manaCap:PROGRESSION.maxMana,builds,starterHunt,journey};
 }

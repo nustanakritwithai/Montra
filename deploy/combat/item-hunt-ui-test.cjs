@@ -106,3 +106,28 @@ journeyApi.draw(step);get("fieldGoalRecipe").onclick();assert.deepEqual(context.
 me.level=context.gearGuides.level=25;delete journey.boss;step=journeyApi.goal();assert.equal(step.recipe,"plate");
 context.fieldTrainingTip={session:"hunter",path:me.pathId,points:1,choices:[{name:"หมัด",rank:2}]};assert(journeyApi.goal().trainingOnly);
 console.log("PASS Lv10–25 equipment comparison and skip, actual skill and prey, optional boss and level 25 priority");
+
+Object.assign(context,{Option:class{constructor(text,value){this.text=text;this.value=value;}},monsterForSpell:id=>context.room.state.monsters.get(id),closeDrawer(){},
+  skillGraphModel:()=>({nodes:[{id:"deep",effect:"strike",learned:true,slot:0}]})});
+context.room.send=(type,payload)=>{context.lastCommand={type,...payload};};
+get("fieldBossList").replaceChildren=function(...options){this.options=options;};
+me.level=context.gearGuides.level=35;delete journey.weapon;journey.practice=journeyWorld;
+const bell={camp:bossSite,gear:"amulet",fragment:"fragment",level:32};
+docs.neck={...docs.amulet,name:"สร้อยไผ่",level:35,recipe:[{item:"bamboo",qty:3},{item:"fiber",qty:2}]};
+docs.bamboo={name:"ข้อไผ่",bossGear:"neck",sourceBoss:"bambooBoss"};
+const bamboo={camp:{...bossSite,id:"bambooBoss",monster:"ไผ่แดง"},gear:"neck",fragment:"bamboo",level:35};
+journey.bosses=[bamboo,bell];journey.boss=bamboo;
+journeyApi.save({boss:null,deferredBosses:[],bossSkipped:false,trial:null});
+step=journeyApi.goal();assert.equal(step.trainingBand,35);journeyApi.draw(step);
+get("fieldGearSkip").onclick();assert.equal(journeyApi.notes().savedTraining,35);assert(!journeyApi.goal().trainingOnly);
+get("fieldBossList").value="neck";get("fieldBossList").onchange();assert.equal(journeyApi.goal().bossGear,"neck");
+get("fieldBossList").value="amulet";get("fieldBossList").onchange();assert.equal(journeyApi.goal().bossGear,"amulet");
+assert.match(journeyApi.goal().progress,/1\/3/);
+get("fieldBossChoice").onclick();assert.notEqual(journeyApi.goal()?.bossChoice,true);
+me.level=context.gearGuides.level=45;assert.equal(journeyApi.goal().trainingBand,45);
+journeyApi.start({skillId:"deep",name:"วิชาเสริม",deep:true,effect:"strike"});
+step=journeyApi.goal();assert(step.practiceOnly);journeyApi.draw(step);get("fieldPracticeCast").onclick();
+assert.deepEqual(context.lastCommand,{type:"muay_skill",skillId:"deep",targetId:journeyWorld.id});
+assert(!journeyApi.notes().trial.used);journeyApi.cast({playerId:"hunter",skillId:"deep",targetId:journeyWorld.id});
+journeyApi.kill(journeyWorld);assert.equal(journeyApi.notes().trial,null);
+console.log("PASS level 35/45 saved skill points, regional boss selection and confirmed advanced practice");
