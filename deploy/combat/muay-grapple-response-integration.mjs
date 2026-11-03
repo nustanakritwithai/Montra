@@ -12,7 +12,7 @@ async function seed(t,name,x,z,job="muay_boran",stamina=100,hp=9999){
  const id=createHash("sha256").update(t).digest("hex"),slots=Array(12).fill(null),base=["grapple","punch","guard","counter"];
  slots[0]={itemId:"health_potion",quantity:3};if(job==="muay_boran")slots[1]={itemId:"muay_wraps",quantity:1};
  const loadouts={chaiya:[...base],korat:[...base],lopburi:[...base],thasao:[...base]};
- await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level:10,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp,stamina,mapId:"ritual_village",build:{path:job,ancestry:"woodland"},muayWrapGranted:job==="muay_boran",muayBook:{school:"chaiya",learned:[],training:{strikes:10,blocks:1},slots:[...base],loadouts},inventory:{version:1,slots,equippedWeaponSlot:job==="muay_boran"?1:null},updatedAt:new Date().toISOString()}),{flag:"wx"});
+ await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level:10,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp,stamina,mapId:"ritual_village",build:{path:job,ancestry:"woodland"},muayWrapGranted:job==="muay_boran",muayBook:{school:"chaiya",learned:[...base],training:{strikes:10,blocks:1},slots:[...base],loadouts},inventory:{version:1,slots,equippedWeaponSlot:job==="muay_boran"?1:null},updatedAt:new Date().toISOString()}),{flag:"wx"});
 }
 await seed(tokens[0],"ผู้จับ",-10,8);await seed(tokens[1],"ผู้แก้จับ",-10,9.4,"seer");
 await seed(tokens[2],"ผู้จับสอง",-14,8);await seed(tokens[3],"แรงไม่พอ",-14,9.4,"seer",0);

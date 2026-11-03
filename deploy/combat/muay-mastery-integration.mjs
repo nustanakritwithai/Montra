@@ -19,7 +19,7 @@ async function seed(t,name,x,z,school,learned,skillSlots,extra={}){
 await seed(learnerToken,"ผู้ฝึกโคราช",-10,8,"korat",["korat_heavy","korat_swing"],["korat_heavy","korat_swing","guard","counter"],{mastery:mastery({technique:4,sequences:2})});
 await seed(opponentToken,"ผู้เล่นทดสอบ",-10,9.4,"chaiya",[],["step","punch","guard","counter"]);
 await seed(oldToken,"เซฟเก่า",0,0,"korat",["korat_heavy","korat_swing","korat_press"],["korat_press","punch","guard","counter"]);
-await seed(seriesToken,"ผู้ฝึกท่าเสา",-19,-8,"thasao",["thasao_step","thasao_flurry","thasao_finish"],["thasao_step","thasao_flurry","thasao_finish","teep"],{level:15,mapId:"forbidden_forest"});
+await seed(seriesToken,"ผู้ฝึกท่าเสา",-19,-8,"thasao",["teep","thasao_step","thasao_flurry","thasao_finish"],["thasao_step","thasao_flurry","thasao_finish","teep"],{level:15,mapId:"forbidden_forest"});
 const client=new Client(url),options=guestToken=>({guestToken,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1}),rooms=[];
 const events=new Map(),watch=r=>{const list=[];events.set(r.sessionId,list);r.onMessage("*",(type,data)=>list.push({type,data}));return r;};
 const seen=(r,type,predicate=()=>true)=>events.get(r.sessionId).find(e=>e.type===type && predicate(e.data));

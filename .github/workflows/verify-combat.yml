@@ -31,6 +31,7 @@ jobs:
           cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
           cp deploy/combat/AccountStore.ts deploy/combat/AccountService.ts deploy/combat/AccountRoutes.ts deploy/combat/account-store.test.ts combat-verify/src/rooms/
           cp deploy/combat/account-integration.mjs combat-verify/account-integration.mjs
+          cp deploy/combat/learned-hotbar-integration.mjs combat-verify/
           cp deploy/combat/guest-delete-integration.mjs combat-verify/guest-delete-integration.mjs
           cp deploy/combat/mount-integration.mjs combat-verify/mount-integration.mjs
           cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
@@ -258,14 +259,13 @@ jobs:
           grep -q "serverFacing" main.js
           grep -Eq 'main\.js\?v=[0-9]+\.[0-9]+\.[0-9]+' index.html
           grep -q 'id="climb"' index.html
-          grep -q 'id="shoot"' index.html
+          grep -q 'class="skill-bar learned-bar"' index.html
+          if grep -Eq 'id="(shoot|summon|possess|talisman|classSkill|attack)"' index.html; then exit 1; fi
           grep -q 'function syncFortification' main.js
           grep -q 'room.send("climb"' main.js
-          grep -q 'room.send("shoot"' main.js
           grep -q "function syncSummons" main.js
-          grep -q 'room.send("unsummon"' main.js
           grep -q 'room.send("pot_summon"' main.js
-          grep -q 'room.send("blessed_rice"' main.js
+          grep -q 'room.send("occult_skill"' main.js
           grep -q 'tapPlayerForPK' main.js
           grep -q 'pvp_hit' main.js
           grep -q 'id="pkPanel"' index.html
@@ -402,6 +402,7 @@ jobs:
           trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for n in {1..60}; do if curl -s -o /dev/null "$MONTRA_TEST_URL/montra/account/slots"; then break; fi; sleep 1; done
           node account-integration.mjs
+          node learned-hotbar-integration.mjs
           node guest-delete-integration.mjs
           node mount-integration.mjs
 

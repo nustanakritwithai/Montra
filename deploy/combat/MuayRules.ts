@@ -46,7 +46,11 @@ export const MUAY_SKILLS = {
 export type MuaySkillId = keyof typeof MUAY_SKILLS;
 export type MuayCooldowns = Partial<Record<MuaySkillId, number>>;
 export const MUAY_BASE_SKILLS = ["step","punch","guard","counter","teep","grapple","parry","evade"] as const;
-export const MUAY_DEFAULT_SLOTS = ["step","punch","guard","counter"] as const;
+export const MUAY_DEFAULT_SLOTS: readonly [null, null, null, null] = [null,null,null,null];
+export const isMuayFoundation = (id:string):boolean => MUAY_BASE_SKILLS.some(base=>base===id);
+// Shared across schools; students learn and equip each technique explicitly.
+const foundation = (level:number,description:string,requires:readonly string[]=[]) =>
+  ({school:"chaiya" as const,level,description,requires,training:{strikes:0,blocks:0}});
 export const MUAY_SCHOOLS = {
   chaiya:{name:"ไชยา",level:1,strikes:0,blocks:0,description:"ป้องกันแล้วสวนในระยะใกล้"},
   korat:{name:"โคราช",level:5,strikes:10,blocks:1,description:"หมัดหนักและแรงปะทะ"},
@@ -100,6 +104,14 @@ export function advanceMuayCombo(previous:MuayComboState|undefined,school:MuaySc
   return {state:{school,targetId,count:progress,until:now+MUAY_COMBO_WINDOW_MS},count:progress,completed:false,next:sequence[progress]};
 }
 export const MUAY_LESSONS = {
+  punch:foundation(1,"หมัดตรงระยะประชิด"),
+  guard:foundation(1,"ตั้งรับและเปิดจังหวะสวน"),
+  step:foundation(3,"ย่างเข้าหาเป้าหมาย"),
+  teep:foundation(3,"ถีบหยุดจังหวะมอนสเตอร์ทั่วไป"),
+  counter:foundation(5,"สวนกลับหลังรับสำเร็จ",["guard"]),
+  parry:foundation(5,"ปัดเปิดจังหวะสวน",["guard"]),
+  evade:foundation(5,"เบี่ยงหลบแล้วสวนกลับ"),
+  grapple:foundation(7,"จับคู่ต่อสู้แล้วกดซ้ำเพื่อทุ่ม"),
   chaiya_elbow:{school:"chaiya",level:1,requires:[],training:{strikes:5,blocks:0},description:"ศอกระยะประชิด พลัง 130%"},
   chaiya_knee:{school:"chaiya",level:5,requires:["chaiya_elbow"],training:{strikes:5,blocks:1},description:"เข่าสวนหลังรับสำเร็จ พลัง 185%"},
   chaiya_finish:{school:"chaiya",level:15,requires:["chaiya_knee"],training:{strikes:30,blocks:4},description:"หลังเข่าสวนภายใน 4 วิ ศอก 150% และฟื้นกำลัง 10"},
@@ -134,7 +146,7 @@ export const MUAY_LESSONS = {
   thasao_final_rush:{school:"thasao",level:95,requires:["thasao_master_rush"],training:{strikes:200,blocks:25},description:"ก้าวเข้าทำแล้วชกสองครั้ง ครั้งละ 90%"},
 } as const;
 export type MuayLessonId = keyof typeof MUAY_LESSONS;
-export const MUAY_RANKABLE_SKILLS:readonly string[]=Object.keys(MUAY_LESSONS).filter(id=>MUAY_SKILLS[id as MuayLessonId].effect!=="guard");
+export const MUAY_RANKABLE_SKILLS:readonly string[]=Object.keys(MUAY_LESSONS).filter(id=>!isMuayFoundation(id) && MUAY_SKILLS[id as MuayLessonId].effect!=="guard");
 export type MuayLoadouts = Record<MuaySchool,Array<MuaySkillId|null>>;
 export type MuayMastery = Record<MuaySchool,{technique:number;sequences:number}>;
 export const MUAY_MASTERY_LABELS:Readonly<Record<MuaySchool,string>> = {
@@ -204,9 +216,10 @@ export function validateMuayBook(value:unknown,level:number):MuayBook {
     const occupied=slots.filter(id=>id!==null);
     if(new Set(occupied).size!==occupied.length || occupied.some(id=>typeof id!=="string" || !Object.hasOwn(MUAY_SKILLS,id) ||
       (!MUAY_BASE_SKILLS.includes(id as typeof MUAY_BASE_SKILLS[number]) && (!learned.includes(id as MuayLessonId) || MUAY_LESSONS[id as MuayLessonId].school!==schoolId))))throw new Error("invalid_muay_book");
-    loadouts[schoolId]=[...slots] as Array<MuaySkillId|null>;
+    // Old saves pre-filled four foundation techniques. Only clear unlearned ones, in place.
+    if(!legacy && schoolId===school && JSON.stringify(v.slots)!==JSON.stringify(slots))throw new Error("invalid_muay_book");
+    loadouts[schoolId]=slots.map(id=>id!==null && isMuayFoundation(id) && !learned.includes(id) ? null : id);
   }
-  if(!legacy && JSON.stringify(v.slots)!==JSON.stringify(loadouts[school as MuaySchool]))throw new Error("invalid_muay_book");
   let ranks:SkillRanks;
   try{ranks=validateSkillRanks(v.ranks,learned,level,muayPoints(level),MUAY_RANKABLE_SKILLS);}catch{throw Error("invalid_muay_book");}
   return {learned:[...learned],training:{strikes:training.strikes as number,blocks:training.blocks as number},mastery,school:school as MuaySchool,slots:[...loadouts[school as MuaySchool]],loadouts,...(skillRankCost(ranks)?{ranks}:{})};

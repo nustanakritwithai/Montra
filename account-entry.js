@@ -14,17 +14,24 @@
     ["mender", "จอมอาคม · ผู้เยียวยา", "ฟื้นฟู คุ้มกัน และใช้อาคมสนับสนุน"],
   ];
   let startGame = null, leaveGame = null, selectedSlot = 1, summaries = [], isGuest = false;
+  let pendingEntry = null, startupIssue = "";
   const root = document.getElementById("accountEntry");
   const card = document.getElementById("accountCard");
   const key = () => sessionStorage.getItem(sessionKey) || "";
   function el(tag, text, cls) { const node=document.createElement(tag); if(text)node.textContent=text; if(cls)node.className=cls; return node; }
   function button(label, action, cls="secondary") { const b=el("button",label,cls); b.type="button"; b.addEventListener("click",action); return b; }
+  function optionsGroup(title) {
+    const details=el("details", "", "account-options");
+    details.append(el("summary",title));
+    return details;
+  }
   function input(form, label, type, autocomplete) {
     const wrap=el("label",label,"account-field"), field=el("input");
     field.type=type; field.autocomplete=autocomplete; field.required=true; wrap.append(field); form.append(wrap); return field;
   }
   function view(title, note) {
-    root.hidden=false; card.replaceChildren();
+    pendingEntry=null;
+    root.hidden=false; document.getElementById("game").inert=true; card.replaceChildren();
     card.append(el("div","๛  MONTRA","account-brand"),el("h1",title));
     if(note)card.append(el("p",note,"account-note"));
     const error=el("p","","account-error"); error.setAttribute("role","alert"); card.append(error);
@@ -47,7 +54,11 @@
     const form=el("form"), username=input(form,"ชื่อผู้ใช้","text","username"), password=input(form,"รหัสผ่าน","password","current-password");
     const submit=el("button","เข้าสู่ระบบ","primary"); submit.type="submit"; form.append(submit); card.append(form);
     form.onsubmit=async e=>{e.preventDefault();submit.disabled=true;error.textContent="กำลังเข้าสู่ระบบ…";try{const result=await api("login",{username:username.value,password:password.value});sessionStorage.setItem(sessionKey,result.session);password.value="";await slots();}catch(err){error.textContent=err.message;}finally{submit.disabled=false;}};
-    card.append(button("เล่นแบบแขก",guestEntry),button("ใช้รหัสกู้บัญชีแขก",guestRecover),button("สร้างบัญชี",register),button("ลืมรหัสผ่าน",reset));
+    const alternatives=el("div","","account-alternatives");
+    alternatives.append(button("เล่นแบบแขก",guestEntry),button("สร้างบัญชี",register));
+    const recovery=optionsGroup("กู้บัญชีหรือรหัสผ่าน");
+    recovery.append(button("ใช้รหัสกู้บัญชีแขก",guestRecover),button("ลืมรหัสผ่าน",reset));
+    card.append(alternatives,recovery);
   }
   async function guestEntry() {
     const old=localStorage.getItem(guestStorageKey);
@@ -87,17 +98,37 @@
     form.onsubmit=async e=>{e.preventDefault();submit.disabled=true;try{const result=await api("reset",{username:username.value,recoveryCode:recovery.value.trim(),password:password.value});recovery.value="";password.value="";recoveryNotice(result.recoveryCode,login);}catch(err){error.textContent=err.message;}finally{submit.disabled=false;}};
   }
   async function slots() {
-    const error=view("เลือกตัวละคร", "เลือกตัวละครเดิมหรือสร้างตัวละครใหม่ได้ 3 ช่อง");
+    const error=view("เลือกตัวละคร", "เลือกตัวละครเพื่อกลับเข้าโลก");
     if(!key()){login();return;}
     try {
       const result=await api("slots",null,key()); summaries=result.slots;isGuest=result.guest===true;
-      for(const s of summaries){
-        const path=paths.find(p=>p[0]===s.path), label=s.unavailable?"ข้อมูลอ่านไม่ได้":s.occupied?(s.name+" · Lv. "+s.level+" · "+(path?.[1] || "ยังไม่เลือกอาชีพ")):"สร้างตัวละครใหม่";
-        const b=button("ช่อง "+s.slot+" · "+label,()=>{selectedSlot=s.slot;if(s.occupied && s.path)play();else setup(s);},"account-slot");b.disabled=!!s.unavailable;card.append(b);
-        if(s.occupied && !s.unavailable)card.append(button("ลบตัวละครช่อง "+s.slot,()=>confirmDelete(s)));
+      const manage=optionsGroup("จัดการตัวละครและบัญชี");
+      const characters=summaries.filter(s=>s.occupied || s.unavailable);
+      const empty=summaries.filter(s=>!s.occupied && !s.unavailable);
+      const list=el("div","","account-slot-list");
+      for(const s of characters){
+        const path=paths.find(p=>p[0]===s.path);
+        const b=button("",()=>{selectedSlot=s.slot;if(s.path)play();else setup(s);},"account-slot");
+        b.disabled=!!s.unavailable;
+        b.append(el("strong",s.unavailable?"ข้อมูลอ่านไม่ได้":s.name),
+          el("span",s.unavailable?"":s.path?"เข้าเล่น ›":"เลือกอาชีพ ›","slot-play"),
+          el("small","ช่อง "+s.slot+(s.unavailable?"":" · Lv. "+s.level+" · "+(path?.[1] || "ยังไม่เลือกอาชีพ"))));
+        list.append(b);
+        if(s.occupied && !s.unavailable)manage.append(button("ลบตัวละครช่อง "+s.slot,()=>confirmDelete(s)));
       }
-      if(isGuest){card.append(button("สร้างบัญชีใหม่จากบัญชีแขก",upgradeGuest),button("ดูรหัสกู้บัญชีแขก",()=>{const code=localStorage.getItem(guestStorageKey);if(code)recoveryNotice(code,slots,true);else guestRecover();}));}
-      card.append(button("ออกจากระบบ",async()=>{const session=key();sessionStorage.removeItem(sessionKey);if(leaveGame)await leaveGame();try{await api("logout",{},session);}catch{}login();}));
+      const createButton=(s,first)=>button("ช่อง "+s.slot+" · "+(first?"สร้างตัวละครแรก":"สร้างตัวละครใหม่"),()=>{
+        selectedSlot=s.slot;setup(s);
+      },first?"primary":"secondary");
+      if(!characters.length && empty.length)list.append(createButton(empty.shift(),true));
+      card.append(list);
+      if(empty.length){
+        const more=optionsGroup("สร้างตัวละครในช่องว่าง ("+empty.length+")");
+        for(const s of empty)more.append(createButton(s,false));
+        card.append(more);
+      }
+      if(isGuest){manage.append(button("สร้างบัญชีใหม่จากบัญชีแขก",upgradeGuest),button("ดูรหัสกู้บัญชีแขก",()=>{const code=localStorage.getItem(guestStorageKey);if(code)recoveryNotice(code,slots,true);else guestRecover();}));}
+      manage.append(button("ออกจากระบบ",async()=>{const session=key();sessionStorage.removeItem(sessionKey);if(leaveGame)await leaveGame();try{await api("logout",{},session);}catch{}login();}));
+      card.append(manage);
     } catch(err) {error.textContent=err.message;card.append(button("ลองใหม่",slots),button("เข้าสู่ระบบอีกครั้ง",()=>{sessionStorage.removeItem(sessionKey);login();}));}
   }
   function confirmDelete(slot) {
@@ -128,20 +159,51 @@
     const error=view("เลือกอาชีพ", "อาชีพจะผูกกับตัวละครนี้ถาวร กรุณาเลือกก่อนเข้าเล่น");
     const form=el("form"); let name;
     if(!slot.occupied)name=input(form,"ชื่อตัวละคร","text","off");
-    const select=el("select"), label=el("label","อาชีพ","account-field");
-    for(const [id,title] of paths){const option=el("option",title);option.value=id;select.append(option);}label.append(select);form.append(label);
-    const desc=el("p","","account-note");const update=()=>{desc.textContent=paths.find(p=>p[0]===select.value)?.[2] || "";};select.onchange=update;update();form.append(desc);
+    const choices=el("fieldset","","class-choices");
+    choices.append(el("legend","เลือกวิชาประจำตัว"));
+    for(const [id,title,description] of paths) {
+      const choice=el("label"), radio=el("input"), copy=el("span");
+      radio.type="radio"; radio.name="path"; radio.value=id; radio.required=true;
+      copy.append(el("strong",title),el("small",description));
+      choice.append(radio,copy);choices.append(choice);
+    }
+    form.append(choices);
     const ancestry=el("select"), ancestryLabel=el("label","พื้นเพ","account-field");
     for(const [id,title] of [["woodland","ชาวป่า"],["shrine","ชาวศาล"]]){const option=el("option",title);option.value=id;ancestry.append(option);}ancestryLabel.append(ancestry);form.append(ancestryLabel);
     const submit=el("button","ยืนยันอาชีพและเข้าเล่น","primary");submit.type="submit";form.append(submit);card.append(form,button("กลับไปเลือกตัวละคร",slots));
-    form.onsubmit=async e=>{e.preventDefault();const characterName=name?.value.normalize("NFC").trim();if(name && (!/^[\p{L}\p{N}][\p{L}\p{M}\p{N} ._-]*$/u.test(characterName) || Array.from(characterName).length<2 || Array.from(characterName).length>20)){error.textContent="ชื่อตัวละครต้องมี 2–20 ตัวอักษร";return;}submit.disabled=true;error.textContent="กำลังเข้าโลก…";await play({name:characterName,build:{path:select.value,ancestry:ancestry.value}});submit.disabled=false;};
+    form.onsubmit=async e=>{e.preventDefault();const characterName=name?.value.normalize("NFC").trim();if(name && (!/^[\p{L}\p{N}][\p{L}\p{M}\p{N} ._-]*$/u.test(characterName) || Array.from(characterName).length<2 || Array.from(characterName).length>20)){error.textContent="ชื่อตัวละครต้องมี 2–20 ตัวอักษร";return;}submit.disabled=true;error.textContent="กำลังเข้าโลก…";await play({name:characterName,build:{path:form.elements.namedItem("path").value,ancestry:ancestry.value}});submit.disabled=false;};
   }
-  async function play(setup) { if(startGame)await startGame(server,selectedSlot,setup); }
+  function showStartupIssue(message) {
+    const error=view("ยังเข้าโลกไม่ได้","ตัวละครของคุณยังอยู่ในช่องเดิม");
+    error.textContent=message;
+    card.append(button("โหลดเกมอีกครั้ง",()=>location.reload(),"primary"),button("กลับไปเลือกตัวละคร",slots));
+  }
+  async function play(setup) {
+    if(startupIssue){showStartupIssue(startupIssue);return;}
+    if(startGame){await startGame(server,selectedSlot,setup);return;}
+    const slot=selectedSlot;
+    const error=view("กำลังเตรียมโลก","เมื่อฉากพร้อม เกมจะพาคุณเข้าช่อง "+slot+" โดยอัตโนมัติ");
+    const cancel=button("กลับไปเลือกตัวละคร",slots);
+    card.append(cancel);
+    pendingEntry=async()=>{
+      cancel.disabled=true;
+      error.textContent="กำลังเชื่อมต่อเซิร์ฟเวอร์…";
+      try { await startGame(server,slot,setup); }
+      catch {error.textContent="เข้าโลกไม่สำเร็จ กลับไปเลือกตัวละครแล้วลองอีกครั้ง";}
+      finally {cancel.disabled=false;}
+    };
+  }
   window.MontraEntry={
-    start(callback, leave){startGame=callback;leaveGame=leave; if(key())void slots();else login();},
+    start(callback, leave){
+      startGame=callback;leaveGame=leave;
+      const enter=pendingEntry;pendingEntry=null;
+      if(enter)void enter();
+    },
+    worldUnavailable(message){startupIssue=message;if(pendingEntry)showStartupIssue(message);},
     open(){if(key())void slots();else login();},
-    success(){root.hidden=true;},
-    failure(message){root.hidden=false;const error=card.querySelector(".account-error");if(error)error.textContent=message || "เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่";},
+    success(){root.hidden=true;document.getElementById("game").inert=false;},
+    failure(message){root.hidden=false;document.getElementById("game").inert=true;const error=card.querySelector(".account-error");if(error)error.textContent=message || "เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่";},
     session:key,
   };
+  if(key())void slots();else login();
 })();
