@@ -39,7 +39,7 @@ export const MUAY_SKILLS = {
   thasao_advanced_flurry: {name:"ชุดหมัดต่อเนื่องท่าเสา",effect:"flurry",stamina:26,cooldownMs:11000,power:0.75,range:2.5},
   thasao_master_rush: {name:"ก้าวชุดชั้นครู",effect:"step_flurry",stamina:32,cooldownMs:17000,power:0.8,range:6},
   chaiya_final_counter: {name:"สวนคุมวงชั้นครู",effect:"counter",stamina:34,cooldownMs:20000,power:2.15,range:2},
-  korat_final_strike: {name:"หมัดพิชิตแนว",effect:"strike",stamina:38,cooldownMs:21000,power:2.35,range:2.5},
+  korat_final_strike: {name:"หมัดพิชิตแนว",effect:"strike",stamina:34,cooldownMs:21000,power:2.35,range:2.5},
   lopburi_final_counter: {name:"ฉากสวนพิชิตจังหวะ",effect:"counter_sidestep",stamina:34,cooldownMs:19000,power:2.1,range:3.5},
   thasao_final_rush: {name:"ก้าวชุดพิชิตจังหวะ",effect:"step_flurry",stamina:36,cooldownMs:21000,power:0.9,range:6},
 } as const;
