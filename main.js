@@ -8359,7 +8359,8 @@
       joined.onMessage("craft_result", result => {
         if (room !== joined) return;
         finishEconomyPending();
-        toast("คราฟต์"+(bagMeta(result.itemId)?.name || "ไอเทม")+"สำเร็จ · ใช้ " + result.spentGold + " ทอง");
+        const item=bagMeta(result.itemId);
+        toast(item?.station==="kiln"?benchAction(item)+"สำเร็จ · ได้ "+item.name+" × 1":"คราฟต์"+(item?.name || "ไอเทม")+"สำเร็จ · ใช้ "+result.spentGold+" ทอง");
         renderBag();
       });
       joined.onMessage("card_socket_result", result => {
@@ -11365,6 +11366,7 @@
       detail=[armor?bodyLabels[destination]:"อาวุธ",meta.bonus,worn?"กำลังสวม":difference?"เมื่อเปลี่ยน "+difference:"",wrongClass?"อาวุธของสายอื่น":"",chosen.bound?"ผูกกับตัวละคร":personalItems[chosen.itemId]?"ผูกตัวละครเมื่อสวมครั้งแรก":""].filter(Boolean).join(" · ");
     } else if(meta?.kind==="card")detail=meta.bonus+" เมื่อใส่ในรูของอุปกรณ์ที่สวม · ดรอปจาก"+meta.monster+" ("+meta.chancePct+"%)";
     else if(meta?.refinesTo)detail="วัตถุดิบจากแผนที่ · แปรรูป "+refineInput+" ชิ้นเป็น "+(personalItems[meta.refinesTo]?.name||meta.refinesTo)+" 1 ชิ้น";
+    else if(meta?.station==="kiln")detail=meta.family==="mat_charcoal"?"เชื้อเพลิงสำหรับหลอมแร่เหล็กชั้นเดียวกันที่เตาเผา":"ใช้สร้างอาวุธ เครื่องมือ และอุปกรณ์ที่ระบุแท่งเหล็กชั้นนี้ในสูตร";
     else if(meta?.kind==="material"){
       const source=chosen.itemId.startsWith("mat_herb_")?"เก็บสมุนไพรบนแผนที่หรือล่ามอนสเตอร์":
         /^mat_(wood|metal)_/.test(chosen.itemId)?"แปรรูปของดิบจากแผนที่หรือล่ามอนสเตอร์":"ล่ามอนสเตอร์";
@@ -11385,6 +11387,9 @@
     $("bagItemDescription").textContent=detail;
     const sell=$("sellBagMaterial");sell.hidden=!meta?.sellGold || !economyReady();
     const refine=$("refineResource");refine.hidden=!meta?.refinesTo || !economyReady();
+    const kiln=$("bagKiln"),target=bagKilnRecipe(chosen?.itemId);
+    kiln.hidden=!target || !economyReady();
+    if(!kiln.hidden){kiln.textContent="เปิดสูตร"+personalItems[target].name;kiln.onclick=()=>{benchTrail.length=0;selectBenchRecipe("kiln",String(personalItems[target].level),target);};}
     if(!refine.hidden){
       const count=slots.reduce((n,s)=>n+(s?.itemId===chosen.itemId?s.quantity:0),0);
       refine.textContent="แปรรูป "+refineInput+" ชิ้น → "+(personalItems[meta.refinesTo]?.name||meta.refinesTo)+" × 1";
@@ -11435,16 +11440,31 @@
       if(isWorn(entry)){ $("wear-"+wornPosition(entry)).click();$("bagItemName").scrollIntoView({block:"center"});return; }
       if(owned>=0){ $("bagSlot"+owned).click();$("bagItemName").scrollIntoView({block:"center"});return; }
       if(!economyReady()){toast("โต๊ะช่างต้องใช้เซิร์ฟเวอร์ที่เปิดระบบเศรษฐกิจ");return;}
-      inspectingGear=entry.position;confirmBindSlot=null;$("benchGroup").value="all";renderBag();
+      inspectingGear=entry.position;confirmBindSlot=null;benchTrail.length=0;$("benchGroup").value="all";renderBag();
       $("benchLevel").value=String(item.level);renderWorkbench(slots);
       $("benchRecipe").value=entry.id;renderWorkbench(slots);$("personalBench").scrollIntoView({block:"center"});
     };
+  }
+  const benchTrail=[];
+  function benchAction(def){return def?.station!=="kiln"?"คราฟต์":def.family==="mat_charcoal"?"เผาถ่าน":"หลอมเหล็ก";}
+  function bagKilnRecipe(id){
+    const raw=/^mat_(raw_wood|metal|charcoal)_([1-7])$/.exec(id||"");
+    if(!raw)return null;
+    const target="mat_"+(raw[1]==="raw_wood"?"charcoal":"ingot")+"_"+raw[2];
+    return personalItems[target]?.station==="kiln"?target:null;
+  }
+  function selectBenchRecipe(group,level,id){
+    const slots=currentBagSlots();
+    $("benchGroup").value=group;$("benchLevel").value=level;renderWorkbench(slots);
+    $("benchRecipe").value=id;renderWorkbench(slots);
+    $("personalBench").scrollIntoView({block:"center"});
   }
   function renderWorkbench(slots) {
     const panel=$("personalBench"), select=$("benchRecipe"), lv=$("benchLevel"), group=$("benchGroup");
     panel.hidden=!economyReady() || !cardDrill;
     if(panel.hidden)return;
-    const player=ownServerCharacter(), level=player?.level||1, path=player?.pathId, position=group.value==="materials"?"":inspectingGear||"";
+    const player=ownServerCharacter(),level=player?.level||1,path=player?.pathId;
+    const position=group.value==="materials"||group.value==="kiln"?"":inspectingGear||"";
     const version=catalogRevision+"/"+level;
     if(lv.dataset.version!==version){
       const previous=lv.value;lv.dataset.version=version;
@@ -11459,6 +11479,7 @@
       const recipes=new Map();
       for(const [id,def] of Object.entries(personalItems)){
         if(!def.recipe || (position && def.kind!==position && !wearPositions(def.kind).includes(position)))continue;
+        if(group.value==="kiln" && def.station!=="kiln")continue;
         const supply=["material","catalyst","consumable","tool"].includes(def.kind);
         if(group.value==="materials" && !supply)continue;
         if(group.value==="role" && (def.path!=="all" && def.path!==path || !position && !supply && def.recommended && !def.recommended.includes(path)))continue;
@@ -11471,6 +11492,18 @@
       if([...select.options].some(o=>o.value===previous))select.value=previous;
     }
     const def=personalItems[select.value],button=$("benchCraft");
+    const ingredient=def?.recipe.find(r=>personalItems[r.item]?.station==="kiln"),source=$("benchIngredient");
+    source.hidden=!ingredient;
+    if(ingredient){
+      source.textContent="ดูสูตร "+personalItems[ingredient.item].name;
+      source.onclick=()=>{
+        benchTrail.push({group:group.value,level:lv.value,id:select.value,position:inspectingGear});
+        selectBenchRecipe("kiln",String(personalItems[ingredient.item].level),ingredient.item);
+      };
+    }
+    const previous=benchTrail[benchTrail.length-1],back=$("benchBack");back.hidden=!previous;
+    if(previous)back.textContent="กลับไปสูตร "+personalItems[previous.id].name;
+    button.textContent=benchAction(def);
     if(!def){$("benchInfo").textContent="ไม่มีสูตรในช่วงนี้ · เปลี่ยนเลเวลหรือประเภทสูตร";button.disabled=true;return;}
     const counts=def.recipe.map(r=>(slots||[]).reduce((n,s)=>n+(s?.itemId===r.item?s.quantity:0),0));
     const cost=def.craftGold??workbenchGold;
@@ -11575,7 +11608,7 @@
     $("forgeInfo").textContent=["+"+rank,boost,actual,"สุ่มได้ "+(profile?.pool||["melee","ranged"]).map(k=>forgeNames[k]).join(" / ")+" ถึงขั้น "+cap,"การันตีตีบวกหลังพลาด 3 ครั้ง · สุ่มขั้นสูงสุดหลังพลาด 4 ครั้ง","โบนัสช่างสำหรับ PvE"].join(" · ");
   }
   function openBag() {
-    confirmBindSlot=null; inspectingGear=null; preferredGearSlot=null;
+    confirmBindSlot=null; inspectingGear=null; preferredGearSlot=null;benchTrail.length=0;
     const wearGrid=Object.entries({mainHand:"อาวุธหลัก",...bodyLabels}).map(([key,name])=>'<button type="button" id="wear-'+key+'" class="wear-tile" style="grid-area:'+key+'" aria-pressed="false"><b aria-hidden="true">'+gearSymbols[key]+'</b><span>'+name+'</span><small>ว่าง</small></button>').join("");
     const grid = Array.from({ length: INVENTORY_SLOTS }, (_, i) =>
       '<button type="button" class="bag-slot" id="bagSlot' + i +
@@ -11593,7 +11626,8 @@
       '<div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden><button type="button" class="secondary"></button><button type="button" class="secondary"></button></div>' +
       '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
       '<section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>' +
-      '<button id="refineResource" type="button" class="secondary" hidden></button><button id="sellBagMaterial" type="button" class="secondary" hidden></button><section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button id="benchCraft" type="button" class="secondary">คราฟต์</button></section>' +
+      '<button id="refineResource" type="button" class="secondary" hidden></button><button id="bagKiln" type="button" class="secondary" hidden></button><button id="sellBagMaterial" type="button" class="secondary" hidden></button>' +
+      '<section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button id="benchCraft" type="button" class="secondary">คราฟต์</button><button id="benchIngredient" type="button" class="secondary" hidden></button><button id="benchBack" type="button" class="secondary" hidden></button></section>' +
       '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
       '<div id="forgePanel" hidden><h3>ช่างอาคม</h3><p class="note" id="forgeInfo"></p><button class="secondary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeReroll"></button></div>' +
       '<p class="note">แตะช่องสวมเพื่อดูหรือถอดอุปกรณ์ ล่ามอนสเตอร์เพื่อรับเกราะชิ้นแรก จากนั้นหาอุปกรณ์หรือเก็บวัตถุดิบคราฟต์ที่โต๊ะช่าง</p>');
@@ -11621,7 +11655,11 @@
       const item=currentBagSlots()?.[selectedBagSlot];if(inspectingGear||!personalItems[item?.itemId]?.sellGold)return;
       economySend("sell_material",{slot:selectedBagSlot,expected:item.itemId,quantity:1,requestId:economyRequestId()},true);renderBag();
     };
-    $("benchGroup").onchange=$("benchLevel").onchange=$("benchRecipe").onchange=()=>renderWorkbench(currentBagSlots());
+    $("benchGroup").onchange=$("benchLevel").onchange=$("benchRecipe").onchange=()=>{benchTrail.length=0;renderWorkbench(currentBagSlots());};
+    $("benchBack").onclick=()=>{
+      const prior=benchTrail.pop();if(!prior)return;
+      inspectingGear=prior.position;renderBag();selectBenchRecipe(prior.group,prior.level,prior.id);
+    };
     $("socketCardChoice").onchange=renderBag;
     $("benchCraft").onclick=()=>{ economySend("craft_weapon",{recipeId:$("benchRecipe").value,requestId:economyRequestId()},true);renderBag(); };
     function submitForge(action) {

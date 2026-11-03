@@ -26,6 +26,7 @@ export type PersonalDefinition = {
   level?:number; rarity?:string; family?:string; recommended?:readonly string[]; dropMax?:number;
   forge?:ForgeProfile; craftGold?:number; sellGold?:number; healHp?:number; sourceCamp?:string;
   refinesTo?:MaterialId;
+  station?:"kiln";
   harvestKind?:"wood"|"stone";toolTier?:number;healMana?:number;
 };
 const STARTING_ITEMS = {
@@ -116,9 +117,10 @@ type BaseId=keyof typeof STARTING_ITEMS;
 type Stem<K extends string>=K extends `${infer Family}_1`?Family:never;
 type FieldGearId = `arm_field_${string}_${number}`;
 export type RawMaterialId=`mat_raw_${"wood"|"stone"}_${number}`;
+type KilnMaterialId=`mat_${"charcoal"|"ingot"}_${number}`;
 export type FieldToolId=`tool_${"axe"|"pick"}_${number}`;
 export type BrewId=`use_${"herbal"|"mana"}_${number}`;
-export type PersonalId = BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}` | FieldGearId | RawMaterialId | FieldToolId | BrewId;
+export type PersonalId = BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}` | FieldGearId | RawMaterialId | KilnMaterialId | FieldToolId | BrewId;
 export type PracticeWeapon = Extract<PersonalId,`wp_${string}`>;
 export type ChestId = Extract<BaseId,`arm_${string}_chest_1`>;
 export type BodyItemId = Extract<PersonalId,`arm_${string}`|`off_${string}`|`acc_${string}`>;
@@ -243,6 +245,10 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
   }
   for(const [i,level] of MATERIAL_LEVELS.entries()){
     const tier=i+1;
+    const kiln={kind:"material",station:"kiln",path:"all",stats:{},level,craftGold:0} as const;
+    put(`mat_charcoal_${tier}`,{...kiln,name:"ถ่านไม้ชั้น"+tier,family:"mat_charcoal",recipe:[{item:`mat_raw_wood_${tier}`,qty:2}]});
+    put(`mat_ingot_${tier}`,{...kiln,name:"แท่งเหล็กชั้น"+tier,family:"mat_ingot",
+      recipe:[{item:`mat_metal_${tier}`,qty:1},{item:`mat_charcoal_${tier}`,qty:1}]});
     for(const tool of ["axe","pick"] as const)put(`tool_${tool}_${tier}`,{
       name:(tool==="axe"?"ขวานตัดไม้":"เสียมขุดแร่")+"ชั้น"+tier,kind:"tool",path:"all",level,family:"tool_"+tool,stats:{},
       harvestKind:tool==="axe"?"wood":"stone",toolTier:tier,craftGold:8+level,
@@ -251,6 +257,16 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
       name:(brew==="herbal"?"ยาต้มสมานแผล":"ยาต้มฟื้นมานา")+"ชั้น"+tier,kind:"consumable",path:"all",level,family:"use_"+brew,stats:{},
       ...(brew==="herbal"?{healHp:18+level}:{healMana:12+Math.floor(level*.6)}),craftGold:3+Math.floor(level/8),
       recipe:[{item:`mat_herb_${tier}`,qty:brew==="herbal"?2:3},{item:`mat_wood_${tier}`,qty:1}]});
+  }
+  // Replace one ore with a smelted ingot in metal weapons and in higher-level metal gear/tools.
+  // Apply after field recipes have been derived so the same ingot is never charged twice.
+  for(const item of Object.values(result)){
+    if(!item?.recipe || (!item.forge && item.kind!=="tool") || (item.kind!=="mainHand" && item.level!<10))continue;
+    item.recipe=item.recipe.flatMap(input=>{
+      if(!input.item.startsWith("mat_metal_"))return [input];
+      const ingot={item:input.item.replace("mat_metal_","mat_ingot_"),qty:1};
+      return input.qty===1?[ingot]:[{...input,qty:input.qty-1},ingot];
+    });
   }
   return Object.freeze(result) as Readonly<Record<PersonalId,PersonalDefinition>>;
 }
@@ -286,7 +302,7 @@ export function firstChest(path:string,level=1):BodyItemId {
   return `arm_${family}_chest_${OUTFIT_LEVELS.filter(min=>level>=min).length||1}` as BodyItemId;
 }
 const catalogIds=Object.keys(PERSONAL_ITEMS) as PersonalId[];
-const materialsByTier=MATERIAL_LEVELS.map(level=>catalogIds.filter(id=>PERSONAL_ITEMS[id].kind==="material" && !PERSONAL_ITEMS[id].refinesTo && PERSONAL_ITEMS[id].level===level) as MaterialId[]);
+const materialsByTier=MATERIAL_LEVELS.map(level=>catalogIds.filter(id=>PERSONAL_ITEMS[id].kind==="material" && PERSONAL_ITEMS[id].dropMax && PERSONAL_ITEMS[id].level===level) as MaterialId[]);
 const dropsByLevel=new Map<string,PersonalId[]>();
 for(const path of schools)for(let level=1;level<=100;level++){
   dropsByLevel.set(path+level,catalogIds.filter(id=>{

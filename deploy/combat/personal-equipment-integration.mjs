@@ -58,7 +58,9 @@ function prepareCapstone(prefix,recipe){
     const {id,snapshot}=found[0], saved=JSON.parse(snapshot);
     assert.equal(saved.name,"นักดาบฝึกหัด");assert.equal(saved.build.path,"phutthaisawan");
     const bag=JSON.parse(db.prepare("SELECT inventory FROM accounts WHERE id=?").get(id).inventory);
-    for(const [itemId,quantity] of [...recipe.map(r=>[r.item,r.qty]),["ref_flux_7",1],["mat_metal_1",1],["card_rift_warden",1],["use_mana_7",1]]){
+    assert(recipe.some(r=>r.item==="mat_ingot_7"&&r.qty===1));
+    const ingredients=recipe.filter(r=>r.item!=="mat_ingot_7").map(r=>[r.item,r.qty]);
+    for(const [itemId,quantity] of [...ingredients,["mat_raw_wood_7",2],["mat_raw_stone_7",2],["ref_flux_7",1],["mat_metal_1",1],["card_rift_warden",1],["use_mana_7",1]]){
       const index=bag.slots.findIndex(s=>s?.itemId===itemId),free=index>=0?index:bag.slots.indexOf(null);
       assert(free>=0);bag.slots[free]={itemId,quantity:quantity+(bag.slots[free]?.quantity||0)};
     }
@@ -109,6 +111,13 @@ try{
   assert.equal(active.me().level,100);
   assert.equal(active.event("gear_guides",p=>p.level===100)?.builds[0].slots.find(s=>s.position==="mainHand").id,"wp_twins_10");
   const r=active.room;
+  r.send("refine_resource",{requestId:"capstone_refine_07",expected:"mat_raw_stone_7"});
+  await until(()=>active.event("resource_result",v=>v.item==="mat_metal_7"),"refine ore for the kiln");
+  for(const recipeId of ["mat_charcoal_7","mat_ingot_7"]){
+    assert.equal(active.catalog[recipeId].station,"kiln");
+    r.send("craft_weapon",{requestId:"capstone_kiln_"+recipeId,recipeId});
+    await until(()=>active.event("craft_result",v=>v.itemId===recipeId&&v.spentGold===0),"fire "+recipeId);
+  }
   r.send("craft_weapon",{requestId:"capstone_craft_001",recipeId:"wp_twins_10"});
   const craftBag=await until(()=>active.event("inventory_state",v=>v.slots.some(s=>s?.itemId==="wp_twins_10")),"craft capstone");
   const at=craftBag.slots.findIndex(s=>s?.itemId==="wp_twins_10"), crafted=craftBag.slots[at];assert(crafted.forge.affix);

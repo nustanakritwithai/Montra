@@ -103,3 +103,42 @@ test("craft field tools and herbal medicines; tools conserve stock and medicine 
     assert(mana.ok && mana.restoredMana===5 && mana.healed===0 && !mana.inventory.slots[mp]);
   }finally{store.close();}
 });
+
+test("kiln receipts conserve fuel, reject invalid attempts and supply metal recipes in all seven tiers",()=>{
+  for(const [i,level] of MATERIAL_LEVELS.entries()){
+    const tier=i+1;
+    for(const kind of ["charcoal","ingot"] as const){
+      const product=PERSONAL_ITEMS[`mat_${kind}_${tier}`];
+      assert.equal(product.station,"kiln");assert.equal(product.level,level);assert.equal(product.dropMax,undefined);
+    }
+    const consumers=Object.values(PERSONAL_ITEMS).filter(item=>item.recipe?.some(r=>r.item==="mat_ingot_"+tier));
+    assert(consumers.some(item=>item.kind==="mainHand"));
+    if(tier>1)assert(consumers.some(item=>item.kind==="tool"));
+  }
+  const store=new EconomyStore(":memory:"),actor="7".repeat(64),bag=makeClassInventory("seer");
+  bag.slots[2]={itemId:"mat_raw_wood_2",quantity:2};bag.slots[3]={itemId:"mat_metal_2",quantity:2};
+  bag.slots[4]={itemId:"mat_wood_2",quantity:1};
+  try{
+    store.register(actor,bag);
+    const before=store.getAccount(actor);
+    assert.throws(()=>store.craftPersonal(actor,"kiln_too_young_0001","mat_charcoal_2",9),/item_level_required/);
+    assert.throws(()=>store.craftPersonal(actor,"kiln_missing_fuel01","mat_ingot_2",10),/craft_missing_material/);
+    assert.deepEqual(store.getAccount(actor),before);
+    const fire=store.craftPersonal(actor,"kiln_fire_once_001","mat_charcoal_2",10);
+    assert.equal(fire.spentGold,0);
+    assert.deepEqual(store.craftPersonal(actor,"kiln_fire_once_001","mat_charcoal_2",10),fire);
+    assert.throws(()=>store.craftPersonal(actor,"kiln_fire_once_001","mat_ingot_2",10),/request_id_conflict/);
+    const metal=store.craftPersonal(actor,"kiln_smelt_once_01","mat_ingot_2",10);
+    assert.deepEqual(store.craftPersonal(actor,"kiln_smelt_once_01","mat_ingot_2",10),metal);
+    const tool=store.craftPersonal(actor,"kiln_make_a_pick01","tool_pick_2",10);
+    const done=store.getAccount(actor);
+    assert.equal(done.gold,before.gold-tool.spentGold);
+    assert(done.inventory.slots.some(s=>s?.itemId==="tool_pick_2"));
+    assert(!done.inventory.slots.some(s=>s?.itemId==="mat_charcoal_2"||s?.itemId==="mat_ingot_2"));
+    const full=makeClassInventory("seer"),other="8".repeat(64);
+    full.slots=full.slots.map(s=>s??{itemId:"health_potion",quantity:99});
+    full.slots[2]={itemId:"mat_raw_wood_1",quantity:3};store.register(other,full);
+    assert.throws(()=>store.craftPersonal(other,"kiln_full_bag_0001","mat_charcoal_1",1),/inventory_full/);
+    assert.deepEqual(store.getAccount(other).inventory,full);
+  }finally{store.close();}
+});

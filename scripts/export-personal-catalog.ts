@@ -16,7 +16,7 @@ for(const [id,item] of Object.entries(PERSONAL_ITEMS)){
   const stats=Object.entries(item.stats).map(([key,v])=>statNames[key]+" +"+v).join(" / ");
   const mob=isCardId(id)?cardHunt(id):null;
   const field=id.startsWith("mat_herb_")?"เก็บสมุนไพร / ":/^mat_(wood|metal)_/.test(id)?"แปรรูปของดิบ / ":"";
-  const source=item.refinesTo?"เก็บจากแผนที่ · แปรรูป 2 ชิ้นเป็น "+item.refinesTo:mob?mob.monster+" Lv."+mob.level+" · "+mob.map+" · "+item.chancePct+"%":item.dropMax?field+(item.recipe?"คราฟต์ / ":"")+"ล่ามอนสเตอร์ Lv."+level+(item.dropMax===level?"":"–"+item.dropMax):"คราฟต์";
+  const source=item.station==="kiln"?"เตาเผา":item.refinesTo?"เก็บจากแผนที่ · แปรรูป 2 ชิ้นเป็น "+item.refinesTo:mob?mob.monster+" Lv."+mob.level+" · "+mob.map+" · "+item.chancePct+"%":item.dropMax?field+(item.recipe?"คราฟต์ / ":"")+"ล่ามอนสเตอร์ Lv."+level+(item.dropMax===level?"":"–"+item.dropMax):"คราฟต์";
   rows.push([id,item.name,level,slots[item.kind],pathNames[item.path],(item.recommended??[]).map(p=>pathNames[p]).join(" / "),item.rarity??"",stats|| (item.healHp?"ฟื้น "+item.healHp+" HP":item.healMana?"ฟื้น "+item.healMana+" MP":item.harvestKind?"เก็บได้สูงสุด 2 ชิ้น":""),
     f?ratings[f.primary]+" +"+f.enhanceMax:"",f?f.pool.map(k=>ratings[k]).join(" / "):"",f?Number((f.affixMax*cap/3).toFixed(2)):"",f?1:"",
     (item.recipe??[]).map(i=>i.item+" × "+i.qty).join(" + "),item.craftGold??"",source]);
