@@ -49,19 +49,19 @@ import { saveBugReport } from "./BugReports.js";
 import { BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCooldown } from "./Buffs.js";
 import { BUILD_CATALOG, DEFAULT_WARD_TALENT, DUAL_SWORD, isOccultPath, talentGroup, classSkill, parseBuild, type CharacterBuild } from "./CharacterBuilds.js";
 import { BuffLedger } from "./BuffLedger.js";
-import { OCCULT_LESSONS, OCCULT_MASTERY_LABELS, OCCULT_MASTERY_REQUIREMENTS, newOccultBook, occultPoints, validateOccultBook, type OccultBook, type OccultLesson, type OccultSkillId, type OccultPath, type OccultMastery } from "./OccultRules.js";
-import { BLADE_LESSONS, BLADE_PRACTICE_LABELS, bladePoints, newBladeBook, validateBladeBook, type BladeBook, type BladeLesson, type BladeSkillId } from "./BladeRules.js";
-import { SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_CONTROL, sentinelPoints, newSentinelBook, validateSentinelBook, type SentinelBook, type SentinelLesson, type SentinelSkillId } from "./SentinelRules.js";
+import { OCCULT_LESSONS, OCCULT_MASTERY_LABELS, OCCULT_MASTERY_REQUIREMENTS, OCCULT_RANKABLE_SKILLS, newOccultBook, occultPoints, occultRankCost, validateOccultBook, type OccultBook, type OccultLesson, type OccultSkillId, type OccultPath, type OccultMastery } from "./OccultRules.js";
+import { BLADE_LESSONS, BLADE_PRACTICE_LABELS, BLADE_RANKABLE_SKILLS, bladePoints, newBladeBook, validateBladeBook, type BladeBook, type BladeLesson, type BladeSkillId } from "./BladeRules.js";
+import { SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_RANKABLE_SKILLS, SENTINEL_CONTROL, sentinelPoints, newSentinelBook, validateSentinelBook, type SentinelBook, type SentinelLesson, type SentinelSkillId } from "./SentinelRules.js";
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
-import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_SCHOOLS, SWORD_NODES, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
-import { MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
+import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
+import { MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
 import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
 import type { MonsterTier } from "./MonsterProfiles.js";
-import { PROGRESSION, addExperience, calculateDamage, calculateStats, emptyAllocations,
+import { PROGRESSION, SKILL_RANK_LEVELS, SKILL_RANK_PRACTICE, skillRankCost, skillRankMultiplier, addExperience, calculateDamage, calculateStats, emptyAllocations,
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
   POTION_ID, POTION_COOLDOWN_MS, grantRewardPotion, grantStackReward, SHRINE_RECIPE, SHRINE_SHARD, SHRINE_GLAIVE, parseUseItemCommand,
@@ -399,9 +399,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
 
-  private changeSwordTree(client: Client, message: unknown, action: "learn" | "school" | "reset" | "equip"): void {
+  private changeSwordTree(client: Client, message: unknown, action: "learn" | "upgrade" | "school" | "reset" | "equip"): void {
     if (!message || typeof message !== "object" || Array.isArray(message)) return this.reject(client, "invalid_sword_tree");
-    const field = action === "learn" ? "skillId" : "school";
+    const field = action === "learn" || action === "upgrade" ? "skillId" : "school";
     const input = message as Record<string, unknown>;
     const keys=Object.keys(input);
     if (action === "equip") {
@@ -420,7 +420,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       return this.reject(client,"sword_tree_needs_shrine");
     }
     const next: SwordTree={school:tree.school,learned:[...tree.learned],cooldowns:{...tree.cooldowns},training:{...tree.training},
-      loadouts:{phutthaisawan:[...tree.loadouts.phutthaisawan],sritrairat:[...tree.loadouts.sritrairat],atamat:[...tree.loadouts.atamat],chumphon:[...tree.loadouts.chumphon]}};
+      loadouts:{phutthaisawan:[...tree.loadouts.phutthaisawan],sritrairat:[...tree.loadouts.sritrairat],atamat:[...tree.loadouts.atamat],chumphon:[...tree.loadouts.chumphon]},...(tree.ranks?{ranks:{...tree.ranks}}:{})};
     const value=action === "equip" ? input.skillId as string|null : action === "reset" ? "" : input[field] as string;
     if (action === "equip") {
       const skillId=input.skillId as string|null, slots=next.loadouts[next.school];
@@ -431,6 +431,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!next.learned.length) return this.reject(client,"sword_tree_empty");
       next.learned=[];
       next.loadouts=emptySwordLoadouts();
+      delete next.ranks;
     } else if (action === "school") {
       if (typeof value!=="string" || !Object.hasOwn(SWORD_SCHOOLS,value)) return this.reject(client,"invalid_sword_tree");
       const school=value as SwordSchool;
@@ -438,6 +439,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (school!=="phutthaisawan" && (tree.training.strikes<10 || tree.training.blocks<1)) return this.reject(client,"sword_trial_incomplete");
       if (next.school === school) return this.reject(client,"sword_tree_already_selected");
       next.school=school;
+    } else if(action==="upgrade") {
+      if(typeof value!=="string" || !SWORD_RANKABLE_SKILLS.some(id=>id===value) || !next.learned.includes(value))return this.reject(client,"sword_skill_locked");
+      const node=SWORD_NODES[value],rank=next.ranks?.[value] ?? 0;
+      if(node.school!=="common" && node.school!==next.school)return this.reject(client,"sword_tree_wrong_school");
+      if(rank>=SKILL_RANK_LEVELS.length || player.level<SKILL_RANK_LEVELS[rank])return this.reject(client,"sword_tree_level");
+      if(Object.values(next.training).reduce((sum,count)=>sum+count,0)<SKILL_RANK_PRACTICE[rank])return this.reject(client,"sword_trial_incomplete");
+      if(next.learned.length+skillRankCost(next.ranks)>=swordPoints(player.level))return this.reject(client,"sword_tree_no_points");
+      next.ranks={...next.ranks,[value]:rank+1};
     } else {
       if (typeof value!=="string" || !Object.hasOwn(SWORD_NODES,value)) return this.reject(client,"invalid_sword_tree");
       const skill=SWORD_NODES[value];
@@ -446,7 +455,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (skill.school !== "common" && skill.school !== next.school) return this.reject(client,"sword_tree_wrong_school");
       if (skill.requires.some(required=>!next.learned.includes(required))) return this.reject(client,"sword_tree_prerequisite");
       if (skill.training && tree.training[skill.training.id]<skill.training.count) return this.reject(client,"sword_trial_incomplete");
-      if (next.learned.length >= swordPoints(player.level)) return this.reject(client,"sword_tree_no_points");
+      if (next.learned.length+skillRankCost(next.ranks) >= swordPoints(player.level)) return this.reject(client,"sword_tree_no_points");
       next.learned.push(value);
     }
     const snapshot=this.captureCharacterSnapshot(id);
@@ -683,14 +692,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private sendBladeBook(client:Client):void {
     const player=this.state.players.get(client.sessionId),book=this.bladeBooks.get(client.sessionId);
     if (!player || !book || player.pathId!=="blade") return;
-    try { client.send("blade_book_state",{book,lessons:BLADE_LESSONS,practiceLabels:BLADE_PRACTICE_LABELS,points:bladePoints(player.level)}); }
+    try { client.send("blade_book_state",{book,lessons:BLADE_LESSONS,practiceLabels:BLADE_PRACTICE_LABELS,points:bladePoints(player.level),rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:BLADE_RANKABLE_SKILLS}); }
     catch(error) { console.warn("MONTRA blade book notice was not delivered",error); }
   }
 
   private sendSentinelBook(client:Client):void {
     const player=this.state.players.get(client.sessionId),book=this.sentinelBooks.get(client.sessionId);
     if(!player || player.pathId!=="sentinel" || !book)return;
-    try{client.send("sentinel_book_state",{book,lessons:SENTINEL_LESSONS,practiceLabels:SENTINEL_PRACTICE_LABELS,points:sentinelPoints(player.level)});}
+    try{client.send("sentinel_book_state",{book,lessons:SENTINEL_LESSONS,practiceLabels:SENTINEL_PRACTICE_LABELS,points:sentinelPoints(player.level),rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SENTINEL_RANKABLE_SKILLS});}
     catch(error){console.warn("MONTRA sentinel book notice was not delivered",error);}
   }
 
@@ -704,7 +713,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private changeSentinelBook(client:Client,message:unknown):void {
     if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_sentinel_book");
     const input=message as Record<string,unknown>,keys=Object.keys(input),action=input.action;
-    if(action==="learn") {if(keys.length!==2 || typeof input.skillId!=="string")return this.reject(client,"invalid_sentinel_book");}
+    if(action==="learn" || action==="upgrade") {if(keys.length!==2 || typeof input.skillId!=="string")return this.reject(client,"invalid_sentinel_book");}
     else if(action==="equip") {if(keys.length!==3 || !Number.isInteger(input.slot) || (input.slot as number)<0 || (input.slot as number)>3 || (input.skillId!==null && typeof input.skillId!=="string"))return this.reject(client,"invalid_sentinel_book");}
     else if(action==="reset") {if(keys.length!==1)return this.reject(client,"invalid_sentinel_book");}
     else return this.reject(client,"invalid_sentinel_book");
@@ -719,16 +728,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const lesson:SentinelLesson=SENTINEL_LESSONS[id];
       if(next.learned.includes(id))return this.reject(client,"sentinel_already_learned");
       if(player.level<lesson.level)return this.reject(client,"sentinel_level");
-      if(next.learned.length>=sentinelPoints(player.level))return this.reject(client,"sentinel_no_points");
+      if(next.learned.length+skillRankCost(next.ranks)>=sentinelPoints(player.level))return this.reject(client,"sentinel_no_points");
       if(lesson.requires.some(req=>!next.learned.includes(req as SentinelSkillId)))return this.reject(client,"sentinel_prerequisite");
       if(Object.entries(lesson.practice).some(([category,needed])=>next.practice[category as keyof typeof next.practice]<(needed ?? 0)))return this.reject(client,"sentinel_practice");
       next.learned.push(id);
+    }else if(action==="upgrade"){
+      const id=input.skillId as SentinelSkillId;
+      if(!SENTINEL_RANKABLE_SKILLS.some(skill=>skill===id) || !next.learned.includes(id))return this.reject(client,"sentinel_skill_locked");
+      const rank=next.ranks?.[id] ?? 0;
+      if(rank>=SKILL_RANK_LEVELS.length || player.level<SKILL_RANK_LEVELS[rank])return this.reject(client,"sentinel_level");
+      if(Object.values(next.practice).reduce((sum,count)=>sum+count,0)<SKILL_RANK_PRACTICE[rank])return this.reject(client,"sentinel_practice");
+      if(next.learned.length+skillRankCost(next.ranks)>=sentinelPoints(player.level))return this.reject(client,"sentinel_no_points");
+      next.ranks={...next.ranks,[id]:rank+1};
     }else if(action==="equip"){
       const skillId=input.skillId as SentinelSkillId|null;
       if(skillId!==null && (!next.learned.includes(skillId) || SENTINEL_LESSONS[skillId].effect==="passive"))return this.reject(client,"sentinel_skill_locked");
       for(let i=0;i<4;i++)if(skillId!==null && next.slots[i]===skillId)next.slots[i]=null;
       next.slots[input.slot as number]=skillId;
-    }else{if(!next.learned.length)return this.reject(client,"sentinel_book_empty");next.learned=[];next.slots=[null,null,null,null];}
+    }else{if(!next.learned.length)return this.reject(client,"sentinel_book_empty");next.learned=[];next.slots=[null,null,null,null];delete next.ranks;}
     const snapshot=this.captureCharacterSnapshot(id);if(!snapshot)return this.reject(client,"build_unavailable");
     this.pendingWarps.add(id);
     const task=characterStore.save({...snapshot,sentinelBook:next}).then(()=>{
@@ -843,16 +860,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(skill.effect==="anchor")this.sentinelAnchors.set(id,this.simulatedMs+6000);
     } else if(skill.effect==="slam"){
       this.destinations.delete(id);this.attackTargets.delete(id);actor.targetId="";actor.combatState="attacking";
-      this.sentinelWindups.set(id,{targetId,until:this.simulatedMs+800,power:skill.power});
+      this.sentinelWindups.set(id,{targetId,until:this.simulatedMs+800,power:skill.power*(this.getMonster(targetId)?skillRankMultiplier(book.ranks,skillId):1)});
       this.broadcast("sentinel_windup",{playerId:id,targetId,durationMs:800},{afterNextPatch:true});
     } else if(skill.effect==="stun" || skill.effect==="counter"){
       if(skill.effect==="counter")this.sentinelCounters.delete(id);
-      this.sentinelDamage(id,targetId,skill.power,skill.effect==="stun");
+      this.sentinelDamage(id,targetId,skill.power*(this.getMonster(targetId)?skillRankMultiplier(book.ranks,skillId):1),skill.effect==="stun");
     } else if(skill.effect==="sweep"){
       let hit=0;
       for(const monster of [this.state.monster,...this.state.monsters.values()]){
         const dx=monster.x-actor.x,dz=monster.z-actor.z,d=Math.hypot(dx,dz);
-        if(hit<3 && monster.alive && d<=skill.range && (d<0.001 || (-Math.sin(actor.facing)*dx-Math.cos(actor.facing)*dz)/d>=0.5) && this.sentinelDamage(id,monster.id,skill.power,false,skill.range))hit++;
+        if(hit<3 && monster.alive && d<=skill.range && (d<0.001 || (-Math.sin(actor.facing)*dx-Math.cos(actor.facing)*dz)/d>=0.5) && this.sentinelDamage(id,monster.id,skill.power*skillRankMultiplier(book.ranks,skillId),false,skill.range))hit++;
       }
     } else if(skill.effect==="taunt"){
       let applied=0;
@@ -990,10 +1007,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     } else if(skill.effect==="windup") {
       this.endBladeCloak(id,"attack");this.destinations.delete(id);this.attackTargets.delete(id);
       player.targetId="";player.combatState="attacking";
-      this.bladeWindups.set(id,{targetId,until:this.simulatedMs+800,power:skill.power*(cloaked?(monster?1.5:1.2):1),ambush:cloaked});
+      this.bladeWindups.set(id,{targetId,until:this.simulatedMs+800,power:skill.power*(monster?skillRankMultiplier(book.ranks,skillId):1)*(cloaked?(monster?1.5:1.2):1),ambush:cloaked});
     } else if(target && skill.effect!=="approach") {
       const ambush=this.endBladeCloak(id,"attack");
-      const hit=this.bladeDamage(id,targetId,skill.power*(ambush?(monster?1.5:1.2):1));
+      const hit=this.bladeDamage(id,targetId,skill.power*(monster?skillRankMultiplier(book.ranks,skillId):1)*(ambush?(monster?1.5:1.2):1));
       if(hit){
         if(ambush)this.recordBladeOpening(id,Boolean(monster));
         if(skillId==="hidden_edge"){this.bladeMarks.set(id,{targetId,until:this.simulatedMs+8000});this.sendSwordNotice(client,"blade_mark_state",{active:true,targetId,durationMs:8000});if(monster)this.recordBladePractice(id,"mark");}
@@ -1037,7 +1054,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private changeBladeBook(client:Client,message:unknown):void {
     if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_blade_book");
     const input=message as Record<string,unknown>,keys=Object.keys(input),action=input.action;
-    if (action==="learn") {
+    if (action==="learn" || action==="upgrade") {
       if(keys.length!==2 || typeof input.skillId!=="string") return this.reject(client,"invalid_blade_book");
     } else if(action==="equip") {
       if(keys.length!==3 || !Number.isInteger(input.slot) || (input.slot as number)<0 || (input.slot as number)>3 ||
@@ -1060,11 +1077,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const lesson:BladeLesson=BLADE_LESSONS[skillId];
       if(next.learned.includes(skillId)) return this.reject(client,"blade_already_learned");
       if(player.level<lesson.level) return this.reject(client,"blade_level");
-      if(next.learned.length>=bladePoints(player.level)) return this.reject(client,"blade_no_points");
+      if(next.learned.length+skillRankCost(next.ranks)>=bladePoints(player.level)) return this.reject(client,"blade_no_points");
       if(lesson.requires.some(req=>!next.learned.includes(req as BladeSkillId))) return this.reject(client,"blade_prerequisite");
       if(Object.entries(lesson.practice).some(([category,needed])=>next.practice[category as keyof typeof next.practice]<(needed ?? 0)))
         return this.reject(client,"blade_practice");
       next.learned.push(skillId);
+    } else if(action==="upgrade") {
+      const skillId=input.skillId as BladeSkillId;
+      if(!BLADE_RANKABLE_SKILLS.some(id=>id===skillId) || !next.learned.includes(skillId))return this.reject(client,"blade_skill_locked");
+      const rank=next.ranks?.[skillId] ?? 0;
+      if(rank>=SKILL_RANK_LEVELS.length || player.level<SKILL_RANK_LEVELS[rank])return this.reject(client,"blade_level");
+      if(Object.values(next.practice).reduce((sum,count)=>sum+count,0)<SKILL_RANK_PRACTICE[rank])return this.reject(client,"blade_practice");
+      if(next.learned.length+skillRankCost(next.ranks)>=bladePoints(player.level))return this.reject(client,"blade_no_points");
+      next.ranks={...next.ranks,[skillId]:rank+1};
     } else if(action==="equip") {
       const skillId=input.skillId as BladeSkillId|null;
       if(skillId!==null && (!next.learned.includes(skillId) || BLADE_LESSONS[skillId].effect==="passive")) return this.reject(client,"blade_skill_locked");
@@ -1072,7 +1097,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       next.slots[input.slot as number]=skillId;
     } else {
       if(!next.learned.length) return this.reject(client,"blade_book_empty");
-      next.learned=[];next.slots=[null,null,null,null];
+      next.learned=[];next.slots=[null,null,null,null];delete next.ranks;
     }
     const snapshot=this.captureCharacterSnapshot(id);
     if(!snapshot) return this.reject(client,"build_unavailable");
@@ -1096,7 +1121,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!player || !book || !isOccultPath(player.pathId)) return;
     try {
       client.send("occult_book_state",{path:player.pathId,book,lessons:OCCULT_LESSONS,points:occultPoints(player.level),
-        masteryLabels:OCCULT_MASTERY_LABELS,masteryRequirements:OCCULT_MASTERY_REQUIREMENTS,menderRicePve:MENDER_PVE_RICE_MULTIPLIER});
+        masteryLabels:OCCULT_MASTERY_LABELS,masteryRequirements:OCCULT_MASTERY_REQUIREMENTS,menderRicePve:MENDER_PVE_RICE_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:OCCULT_RANKABLE_SKILLS});
     } catch(error) { console.warn("MONTRA occult book notice was not delivered",error); }
   }
 
@@ -1124,7 +1149,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private changeOccultBook(client:Client,message:unknown):void {
     if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_occult_book");
     const input=message as Record<string,unknown>,keys=Object.keys(input),action=input.action;
-    if (action==="learn") {
+    if (action==="learn" || action==="upgrade") {
       if (keys.length!==2 || typeof input.skillId!=="string") return this.reject(client,"invalid_occult_book");
     } else if (action==="equip") {
       if (keys.length!==3 || !Number.isInteger(input.slot) || (input.slot as number)<0 || (input.slot as number)>3 ||
@@ -1146,7 +1171,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (lesson.path!==path) return this.reject(client,"occult_wrong_path");
       if (next.learned[path].includes(skillId as OccultSkillId)) return this.reject(client,"occult_already_learned");
       if (player.level<lesson.level) return this.reject(client,"occult_level");
-      if (next.learned[path].length>=occultPoints(player.level)) return this.reject(client,"occult_no_points");
+      if (next.learned[path].length+occultRankCost(next.ranks,path)>=occultPoints(player.level)) return this.reject(client,"occult_no_points");
       if (lesson.requires.some(required=>!next.learned[path].includes(required as OccultSkillId))) return this.reject(client,"occult_prerequisite");
       if (next.training[path]<lesson.training) return this.reject(client,"occult_training");
       const mastery=OCCULT_MASTERY_REQUIREMENTS[skillId as OccultSkillId];
@@ -1154,6 +1179,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (mastery && Object.entries(mastery).some(([category,count])=>(counters[category] ?? 0)<count))
         return this.reject(client,"occult_mastery");
       next.learned[path].push(skillId as OccultSkillId);
+    } else if(action==="upgrade") {
+      const skillId=input.skillId as OccultSkillId;
+      if(!OCCULT_RANKABLE_SKILLS.includes(skillId) || !next.learned[path].includes(skillId) || OCCULT_LESSONS[skillId].path!==path)return this.reject(client,"occult_skill_locked");
+      const rank=next.ranks?.[skillId] ?? 0;
+      if(rank>=SKILL_RANK_LEVELS.length || player.level<SKILL_RANK_LEVELS[rank])return this.reject(client,"occult_level");
+      if(next.training[path]<SKILL_RANK_PRACTICE[rank])return this.reject(client,"occult_training");
+      if(next.learned[path].length+occultRankCost(next.ranks,path)>=occultPoints(player.level))return this.reject(client,"occult_no_points");
+      next.ranks={...next.ranks,[skillId]:rank+1};
     } else if (action==="equip") {
       const skillId=input.skillId as OccultSkillId|null;
       if (skillId!==null && !next.learned[path].includes(skillId)) return this.reject(client,"occult_skill_locked");
@@ -1162,6 +1195,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     } else {
       if (!next.learned[path].length) return this.reject(client,"occult_book_empty");
       next.learned[path]=[];next.loadouts[path]=[null,null,null,null];
+      if(next.ranks){for(const key of Object.keys(next.ranks))if(OCCULT_LESSONS[key as OccultSkillId].path===path)delete next.ranks[key];if(!Object.keys(next.ranks).length)delete next.ranks;}
     }
     const snapshot=this.captureCharacterSnapshot(id);
     if (!snapshot) return this.reject(client,"build_unavailable");
@@ -1189,7 +1223,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       return this.reject(client,"occult_skill_locked");
     if (Date.now()<(book.cooldowns[skillId] ?? 0)) return this.reject(client,"occult_cooldown");
     if (caster.stamina<lesson.stamina) return this.reject(client,"insufficient_stamina");
-    const offensive=["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind"].includes(lesson.effect);
+    const offensive=["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind","pve_rice"].includes(lesson.effect);
     const targetId=typeof input.targetId==="string" ? input.targetId : id;
     let monster:Monster|undefined, opponent:Player|undefined;
     let targets:Array<[string,Player]>=[];
@@ -1259,7 +1293,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.occultSpiritOrders.set(id,{targetId,until:this.simulatedMs+6000,skillId:skillId as "seer_spirit"|"seer_spirit_bind"});
         this.lastSummonAttackAt.delete(id);
       } else {
-        let power=lesson.power;
+        let power=lesson.power*(monster?skillRankMultiplier(book.ranks,skillId):1);
         if (lesson.effect==="rice" && hasMark) power*=1.3;
         if (lesson.effect==="detonate") this.occultMarks.delete(id);
         if (lesson.effect==="curse_burst") this.clearOccultCurse(targetId,"detonated");
@@ -1283,7 +1317,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           catch(error) {console.warn("MONTRA curse notice was not delivered",error);}
         }
       }
-      if (monster && lesson.effect!=="spirit" && lesson.effect!=="spirit_bind") {
+      if (path==="seer" && monster && lesson.effect!=="spirit" && lesson.effect!=="spirit_bind") {
         const category=lesson.effect==="rice" || lesson.effect==="rice_area" ? "rice" :
           lesson.effect==="curse" || lesson.effect==="curse_burst" ? "curse" : "talisman";
         this.recordOccultTraining(id,"seer",[category]);
@@ -1384,7 +1418,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private changeMuayBook(client:Client,message:unknown):void {
     if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_muay_book");
     const input=message as Record<string,unknown>, keys=Object.keys(input), action=input.action;
-    if(action==="learn") {
+    if(action==="learn" || action==="upgrade") {
       if(keys.length!==2 || typeof input.skillId!=="string")return this.reject(client,"invalid_muay_book");
     } else if(action==="school") {
       if(keys.length!==2 || typeof input.school!=="string")return this.reject(client,"invalid_muay_book");
@@ -1399,7 +1433,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
       this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)return this.reject(client,"muay_book_needs_shrine");
     const next:MuayBook={learned:[...book.learned],training:{...book.training},mastery:{chaiya:{...book.mastery.chaiya},korat:{...book.mastery.korat},lopburi:{...book.mastery.lopburi},thasao:{...book.mastery.thasao}},school:book.school,slots:[...book.slots],
-      loadouts:{chaiya:[...book.loadouts.chaiya],korat:[...book.loadouts.korat],lopburi:[...book.loadouts.lopburi],thasao:[...book.loadouts.thasao]}};
+      loadouts:{chaiya:[...book.loadouts.chaiya],korat:[...book.loadouts.korat],lopburi:[...book.loadouts.lopburi],thasao:[...book.loadouts.thasao]},...(book.ranks?{ranks:{...book.ranks}}:{})};
     if(action==="learn") {
       const skillId=input.skillId as string;
       if(!Object.hasOwn(MUAY_LESSONS,skillId))return this.reject(client,"invalid_muay_book");
@@ -1407,12 +1441,21 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(lesson.school!==next.school)return this.reject(client,"muay_wrong_school");
       if(next.learned.includes(skillId as MuayLessonId))return this.reject(client,"muay_book_already_learned");
       if(player.level<lesson.level)return this.reject(client,"muay_book_level");
-      if(next.learned.length>=muayPoints(player.level))return this.reject(client,"muay_book_no_points");
+      if(next.learned.length+skillRankCost(next.ranks)>=muayPoints(player.level))return this.reject(client,"muay_book_no_points");
       if((lesson.requires as readonly string[]).some(req=>!next.learned.includes(req as MuayLessonId)))return this.reject(client,"muay_book_prerequisite");
       if(next.training.strikes<lesson.training.strikes || next.training.blocks<lesson.training.blocks)return this.reject(client,"muay_book_training");
       const mastery=MUAY_MASTERY_REQUIREMENTS[skillId as MuayLessonId],progress=next.mastery[lesson.school];
       if(mastery && (progress.technique<mastery.technique || progress.sequences<mastery.sequences))return this.reject(client,"muay_book_mastery");
       next.learned.push(skillId as MuayLessonId);
+    } else if(action==="upgrade") {
+      const skillId=input.skillId as MuayLessonId;
+      if(!MUAY_RANKABLE_SKILLS.includes(skillId) || !next.learned.includes(skillId))return this.reject(client,"muay_skill_locked");
+      if(MUAY_LESSONS[skillId].school!==next.school)return this.reject(client,"muay_wrong_school");
+      const rank=next.ranks?.[skillId] ?? 0;
+      if(rank>=SKILL_RANK_LEVELS.length || player.level<SKILL_RANK_LEVELS[rank])return this.reject(client,"muay_book_level");
+      if(next.training.strikes+next.training.blocks<SKILL_RANK_PRACTICE[rank])return this.reject(client,"muay_book_training");
+      if(next.learned.length+skillRankCost(next.ranks)>=muayPoints(player.level))return this.reject(client,"muay_book_no_points");
+      next.ranks={...next.ranks,[skillId]:rank+1};
     } else if(action==="school") {
       const school=input.school as string;
       if(!Object.hasOwn(MUAY_SCHOOLS,school))return this.reject(client,"invalid_muay_book");
@@ -1430,7 +1473,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       next.loadouts[next.school]=[...next.slots];
     } else {
       if(!next.learned.length)return this.reject(client,"muay_book_empty");
-      next.learned=[];next.loadouts=newMuayLoadouts();next.slots=[...next.loadouts[next.school]];
+      next.learned=[];next.loadouts=newMuayLoadouts();next.slots=[...next.loadouts[next.school]];delete next.ranks;
     }
     const snapshot=this.captureCharacterSnapshot(id);
     if(!snapshot)return this.reject(client,"build_unavailable");
@@ -1631,7 +1674,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.recordCombat(id,targetId);
       this.recordMuayTraining(id,"strikes");
       const pvp=!monster,comboMultiplier=this.advanceMuaySkillCombo(id,book.school,targetId,skillId as Exclude<MuaySkillId,"guard"|"parry"|"evade"|"grapple"|"chaiya_cover">,pvp);
-      const attack=(player.atk+weaponBonuses(this.inventories.get(id),pvp?"pvp":"pve").melee)*skill.power*comboMultiplier*(pvp?MUAY_PVP_DAMAGE_MULTIPLIER:1);
+      const attack=(player.atk+weaponBonuses(this.inventories.get(id),pvp?"pvp":"pve").melee)*skill.power*comboMultiplier*(pvp?MUAY_PVP_DAMAGE_MULTIPLIER:skillRankMultiplier(book.ranks,skillId));
       const hits=skill.effect==="flurry" || skill.effect==="step_flurry" ? 2 : 1;
       for(let hit=0;hit<hits && target.alive;hit++) {
         if(monster) {
@@ -1758,7 +1801,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         for (let count=0;count<hits && victim.target.alive;count++) {
           this.recordCombat(id,victim.id);
           const defense=victim.monster ? (victim.target as Monster).defense : (victim.target as Player).def;
-          let damage=calculateDamage(base*skill.power*(victim.monster?1:SWORD_PVP_DAMAGE_MULTIPLIER),defense,victim.target.level);
+          let damage=calculateDamage(base*skill.power*(victim.monster?skillRankMultiplier(tree.ranks,skillId):SWORD_PVP_DAMAGE_MULTIPLIER),defense,victim.target.level);
           if (victim.monster) this.hitMonsterWithSpell(id,victim.target as Monster,damage,"sword");
           else {
             const opponent=victim.target as Player;
@@ -2409,6 +2452,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.selectBuild(client, build);
     },
     sword_tree_learn: (client: Client, message: unknown) => this.changeSwordTree(client, message, "learn"),
+    sword_tree_upgrade: (client: Client, message: unknown) => this.changeSwordTree(client, message, "upgrade"),
     sword_tree_school: (client: Client, message: unknown) => this.changeSwordTree(client, message, "school"),
     sword_tree_reset: (client: Client, message: unknown) => this.changeSwordTree(client, message, "reset"),
     sword_tree_equip: (client: Client, message: unknown) => this.changeSwordTree(client, message, "equip"),
@@ -3317,8 +3361,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.economyAvailable = characterStore.economyEnabled;
     this.forest.initialize();
     this.state.worldDefinition=worldDefinition;
-    this.state.swordTreeCatalog = JSON.stringify({schools:SWORD_SCHOOLS,nodes:SWORD_NODES,pvpDamage:SWORD_PVP_DAMAGE_MULTIPLIER});
-    this.state.muayBookCatalog = JSON.stringify({skills:MUAY_SKILLS,lessons:MUAY_LESSONS,base:MUAY_BASE_SKILLS,schools:MUAY_SCHOOLS,combos:MUAY_COMBOS,followups:MUAY_FOLLOWUPS,masteryGuides:MUAY_MASTERY_GUIDES,masteryLabels:MUAY_MASTERY_LABELS,masteryRequirements:MUAY_MASTERY_REQUIREMENTS,pvpDamage:MUAY_PVP_DAMAGE_MULTIPLIER,pvpCombo:MUAY_PVP_COMBO_MULTIPLIER});
+    this.state.swordTreeCatalog = JSON.stringify({schools:SWORD_SCHOOLS,nodes:SWORD_NODES,pvpDamage:SWORD_PVP_DAMAGE_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SWORD_RANKABLE_SKILLS});
+    this.state.muayBookCatalog = JSON.stringify({skills:MUAY_SKILLS,lessons:MUAY_LESSONS,base:MUAY_BASE_SKILLS,schools:MUAY_SCHOOLS,combos:MUAY_COMBOS,followups:MUAY_FOLLOWUPS,masteryGuides:MUAY_MASTERY_GUIDES,masteryLabels:MUAY_MASTERY_LABELS,masteryRequirements:MUAY_MASTERY_REQUIREMENTS,pvpDamage:MUAY_PVP_DAMAGE_MULTIPLIER,pvpCombo:MUAY_PVP_COMBO_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:MUAY_RANKABLE_SKILLS});
     this.state.monster.id = RULES.monsterId;
     this.state.monster.x = RULES.monsterSpawnX;
     this.state.monster.z = RULES.monsterSpawnZ;

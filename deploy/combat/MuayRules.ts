@@ -1,4 +1,5 @@
 /** Prototype game mechanics inspired by historical Muay, not historical instruction. */
+import {skillRankCost,validateSkillRanks,type SkillRanks} from "./Progression.js";
 export const MUAY_WRAP_ID = "muay_wraps" as const;
 export const MUAY_SKILLS = {
   step: {name:"ย่างสามขุม", effect:"step", stamina:15, cooldownMs:6000, power:0.9, range:6},
@@ -106,6 +107,7 @@ export const MUAY_LESSONS = {
   thasao_retreat:{school:"thasao",level:25,requires:["thasao_flurry"],training:{strikes:70,blocks:8},description:"หมัด 95% แล้วถอยจากเป้าหมาย 1.2 หน่วย"},
 } as const;
 export type MuayLessonId = keyof typeof MUAY_LESSONS;
+export const MUAY_RANKABLE_SKILLS:readonly string[]=Object.keys(MUAY_LESSONS).filter(id=>MUAY_SKILLS[id as MuayLessonId].effect!=="guard");
 export type MuayLoadouts = Record<MuaySchool,Array<MuaySkillId|null>>;
 export type MuayMastery = Record<MuaySchool,{technique:number;sequences:number}>;
 export const MUAY_MASTERY_LABELS:Readonly<Record<MuaySchool,string>> = {
@@ -133,7 +135,7 @@ const MUAY_TECHNIQUES:Readonly<Record<MuaySchool,readonly MuaySkillId[]>> = {
 export function countsMuayTechnique(school:MuaySchool,skill:MuaySkillId,moved:boolean):boolean {
   return MUAY_TECHNIQUES[school].includes(skill) && (school!=="lopburi" && school!=="thasao" || moved);
 }
-export type MuayBook = {learned:MuayLessonId[]; training:{strikes:number;blocks:number}; mastery:MuayMastery; school:MuaySchool; slots:Array<MuaySkillId|null>; loadouts:MuayLoadouts};
+export type MuayBook = {learned:MuayLessonId[]; training:{strikes:number;blocks:number}; mastery:MuayMastery; school:MuaySchool; slots:Array<MuaySkillId|null>; loadouts:MuayLoadouts;ranks?:SkillRanks};
 export function muayPoints(level:number):number { return 1+Math.floor((Math.min(level,100)-1)/2); }
 export function newMuayLoadouts():MuayLoadouts {return {chaiya:[...MUAY_DEFAULT_SLOTS],korat:[...MUAY_DEFAULT_SLOTS],lopburi:[...MUAY_DEFAULT_SLOTS],thasao:[...MUAY_DEFAULT_SLOTS]};}
 export function newMuayMastery():MuayMastery {return {chaiya:{technique:0,sequences:0},korat:{technique:0,sequences:0},lopburi:{technique:0,sequences:0},thasao:{technique:0,sequences:0}};}
@@ -141,7 +143,7 @@ export function newMuayBook():MuayBook { return {learned:[],training:{strikes:0,
 export function validateMuayBook(value:unknown,level:number):MuayBook {
   if(!value || typeof value!=="object" || Array.isArray(value))throw new Error("invalid_muay_book");
   const v=value as Record<string,unknown>;
-  const keys=Object.keys(v).sort().join(","), legacy=keys==="learned,slots,training", prior=keys==="learned,loadouts,school,slots,training", current=keys==="learned,loadouts,mastery,school,slots,training";
+  const keys=Object.keys(v).filter(key=>key!=="ranks").sort().join(","), legacy=keys==="learned,slots,training", prior=keys==="learned,loadouts,school,slots,training", current=keys==="learned,loadouts,mastery,school,slots,training";
   if((!legacy && !prior && !current) || !Array.isArray(v.learned) || !Array.isArray(v.slots) || v.slots.length!==4 ||
     !v.training || typeof v.training!=="object" || Array.isArray(v.training))throw new Error("invalid_muay_book");
   const training=v.training as Record<string,unknown>;
@@ -172,7 +174,9 @@ export function validateMuayBook(value:unknown,level:number):MuayBook {
     loadouts[schoolId]=[...slots] as Array<MuaySkillId|null>;
   }
   if(!legacy && JSON.stringify(v.slots)!==JSON.stringify(loadouts[school as MuaySchool]))throw new Error("invalid_muay_book");
-  return {learned:[...learned],training:{strikes:training.strikes as number,blocks:training.blocks as number},mastery,school:school as MuaySchool,slots:[...loadouts[school as MuaySchool]],loadouts};
+  let ranks:SkillRanks;
+  try{ranks=validateSkillRanks(v.ranks,learned,level,muayPoints(level),MUAY_RANKABLE_SKILLS);}catch{throw Error("invalid_muay_book");}
+  return {learned:[...learned],training:{strikes:training.strikes as number,blocks:training.blocks as number},mastery,school:school as MuaySchool,slots:[...loadouts[school as MuaySchool]],loadouts,...(skillRankCost(ranks)?{ranks}:{})};
 }
 export function validateMuayCooldowns(value: unknown): MuayCooldowns {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_muay_cooldowns");

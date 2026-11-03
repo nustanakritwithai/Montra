@@ -19,3 +19,13 @@ test("guardian book rejects invalid prerequisites, duplicate slots and forged pr
   book.slots=["guard",null,null,null];book.practice.stun=-1;assert.throws(()=>validateSentinelBook(book,15));
   book.practice.stun=0;(book.cooldowns as Record<string,number>).forged=1;assert.throws(()=>validateSentinelBook(book,15));
 });
+test("guardian ranks require the learned skill, milestone level and shared points",()=>{
+  const book=newSentinelBook();book.learned=["bash"];book.slots=["bash",null,null,null];
+  assert.deepEqual(validateSentinelBook(book,25),book);
+  book.ranks={bash:1};assert.deepEqual(validateSentinelBook(book,25).ranks,{bash:1});
+  assert.throws(()=>validateSentinelBook(book,24));
+  book.ranks={bash:2};assert.throws(()=>validateSentinelBook(book,44));
+  book.ranks={sweep:1};assert.throws(()=>validateSentinelBook(book,100));
+  book.ranks={bash:6};assert.throws(()=>validateSentinelBook(book,100));
+  book.ranks={taunt:1};assert.throws(()=>validateSentinelBook(book,100));
+});
