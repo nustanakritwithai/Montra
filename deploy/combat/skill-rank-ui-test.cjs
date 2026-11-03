@@ -9,7 +9,6 @@ const source=fs.readFileSync("main.js","utf8");
   assert.match(labels("sentinel",{effect:"stun",rank:2}),/ดาเมจมอนสเตอร์ \+8%/);
 }
 for(const spec of [
-  {name:"Sentinel",next:"syncBladeUI",branch:"control",id:"bash"},
   {name:"Blade",next:"syncOccultUI",branch:"edge",id:"hidden_edge"},
 ]){
   const start=source.indexOf("  function render"+spec.name+"Book("),end=source.indexOf("  function "+spec.next+"(",start);
@@ -33,6 +32,17 @@ for(const spec of [
   const context={document:{activeElement:null},ownServerCharacter:()=>({level:25,pathId:"mender"}),$:id=>id==="occultBookBody"?container:dummy,occultBookState:data,occultBookRenderKey:"",window:{confirm:()=>false},room:{send(){}},closeDrawer(){},toggleFlight(){}};
   vm.runInNewContext(source.slice(start,end)+"\nrenderOccultBook();",context);
   assert.match(container.innerHTML,/แต้มว่าง 11/);assert.match(container.innerHTML,/data-occult-upgrade/);
+}
+{
+  const start=source.indexOf("  function renderSentinelBook("),end=source.indexOf("  function syncBladeUI(",start);
+  const container={innerHTML:"",querySelectorAll:()=>[]},dummy={};
+  const ids=["shock","bulwark","riposte","protect"],core=Object.fromEntries(ids.map(id=>[id,{name:id,description:id,stamina:20,cooldownMs:10000}]));
+  const progress=Array.from({length:9},()=>({shock:{range:3.5,monsterStunMs:700},bulwark:{defense:.25,durationMs:6000},riposte:{durationMs:2000,damageFactor:.75,counterPower:1,counterIntervalMs:450},protect:{durationMs:6000,tauntRange:8,tauntMs:3000}}));
+  const data={book:{coreRanks:{riposte:1}},core,coreLevels:[5,15,25,35,45,60,80,100],corePointLevels:[5,15,25,35,45,55,65,75,80,85,95,100],coreProgress:progress};
+  const context={sentinelBookState:data,ownServerCharacter:()=>({level:25}),$:id=>id==="sentinelBookBody"?container:dummy,sentinelBookRenderKey:"",window:{confirm:()=>false},room:{send(){}}};
+  vm.runInNewContext(source.slice(start,end)+"\nrenderSentinelBook();",context);
+  assert.ok(container.innerHTML.includes("แต้มวิชา 2 / 3"));assert.ok(container.innerHTML.includes('data-sentinel-core-upgrade="riposte"'));
+  assert.ok(container.innerHTML.includes("รับแทน 30%"));assert.equal((container.innerHTML.match(/data-sentinel-core-upgrade=/g)||[]).length,4);
 }
 {
   const start=source.indexOf("  function renderMuayBook("),end=source.indexOf("  function swordData(",start);
@@ -62,10 +72,14 @@ for(const spec of [
 }
 {
   const start=source.indexOf("  function renderSwordTree("),end=source.indexOf("  function ancestryHint(",start);
-  const container={innerHTML:"",contains:()=>false,querySelectorAll:()=>[]},dummy={};
-  const data={me:{level:25,alive:true,swordTreeData:"v"},tree:{school:"phutthaisawan",learned:["footwork"],ranks:{footwork:1},cooldowns:{},training:{strikes:0,blocks:0,finishes:0},loadouts:{phutthaisawan:["footwork",null,null]}},catalog:{schools:{phutthaisawan:{name:"ดาบ"}},nodes:{footwork:{name:"ก้าว",description:"ก้าว",school:"common",level:1,requires:[],effect:"step",power:1,range:2,stamina:15,cooldownMs:6000}},rankLevels:[25,45,65,85,95],rankable:["footwork"]}};
-  const context={document:{activeElement:null},swordData:()=>data,$:id=>id==="swordTreeBody"?container:dummy,swordTreeViewedSchool:"phutthaisawan",swordTreeRenderKey:"",performance:{now:()=>0},swordComboUntil:0,swordCombo:0,window:{confirm:()=>false},room:{send(){}}};
+  const container={innerHTML:"",querySelectorAll:()=>[]},dummy={};
+  const ids=["phuttha_core","sritra_core","atamat_core","chumphon_core"],core=Object.fromEntries(ids.map(id=>[id,{name:id,description:id,stamina:20,cooldownMs:10000}]));
+  const progress=Array.from({length:9},()=>({phuttha_core:{scale:1,finalPower:.65},sritra_core:{durationMs:2000,damageFactor:.7,counterPower:1,counterIntervalMs:400},atamat_core:{range:3.5,power:.85},chumphon_core:{range:8,defense:.1,durationMs:8000}}));
+  const data={me:{level:25,swordTreeData:"v"},tree:{coreRanks:{sritra_core:1}},catalog:{core,coreLevels:[5,15,25,35,45,60,80,100],corePointLevels:[5,15,25,35,45,55,65,75,80,85,95,100],coreProgress:progress}};
+  const context={swordData:()=>data,$:id=>id==="swordTreeBody"?container:dummy,swordTreeRenderKey:"",window:{confirm:()=>false},room:{send(){}}};
   vm.runInNewContext(source.slice(start,end)+"\nrenderSwordTree();",context);
-  assert.match(container.innerHTML,/แต้มวิชาคงเหลือ 11/);assert.match(container.innerHTML,/data-sword-upgrade/);
+  assert.ok(container.innerHTML.includes("แต้มวิชา 2 / 3"));assert.ok(container.innerHTML.includes("ขั้น 1/8"));
+  assert.ok(container.innerHTML.includes('data-sword-core-upgrade="sritra_core"'));assert.ok(container.innerHTML.includes("สวนซ้ำทุก"));
+  assert.equal((container.innerHTML.match(/data-sword-core-upgrade=/g)||[]).length,4);
 }
 console.log("MONTRA skill rank book render passed");

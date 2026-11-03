@@ -27,21 +27,39 @@ export const SENTINEL_LESSONS={
 } as const satisfies Record<string,SentinelLesson>;
 export const SENTINEL_CONTROL=Object.freeze({monsterStunMs:700,playerStunMs:450,immunityMs:4000,tauntMs:3000,tauntImmunityMs:8000});
 import { skillRankCost, validateSkillRanks, type SkillRanks } from "./Progression.js";
+import { MUAY_CORE_LEVELS, muayCorePoints } from "./MuayRules.js";
+export const SENTINEL_CORE={
+  shock:{name:"กระแทกหยุดทัพ",description:"สตันศัตรูรอบตัวชั่วครู่",effect:"stun",stamina:24,cooldownMs:15000},
+  bulwark:{name:"ปักหลักพิทักษ์",description:"เพิ่มพลังป้องกันตนเองชั่วคราว",effect:"guard",stamina:24,cooldownMs:25000},
+  riposte:{name:"ตั้งง้าวสวน",description:"ตั้งรับและสวนผู้โจมตีในระยะโดยอัตโนมัติ",effect:"counter",stamina:20,cooldownMs:12000},
+  protect:{name:"ยืนเคียงท้าทาย",description:"รับความเสียหายแทนเพื่อน 30% พร้อมท้าทายมอนสเตอร์",effect:"intercept",stamina:28,cooldownMs:22000},
+} as const;
+export type SentinelCoreId=keyof typeof SENTINEL_CORE;
+export function sentinelCoreProgress(rank:number){return {
+  shock:{range:3.5+rank*.125,monsterStunMs:700+rank*50},
+  bulwark:{defense:.25+rank*.015,durationMs:6000+rank*300},
+  riposte:{durationMs:2000+rank*350,damageFactor:Math.max(.5,.75-rank*.025),counterPower:1+rank*.08,counterIntervalMs:rank>=8?350:rank>=4?400:450},
+  protect:{durationMs:6000+rank*300,range:6,tauntRange:8+rank*.25,tauntMs:3000+rank*125},
+};}
 export const SENTINEL_RANKABLE_SKILLS=["bash","sweep","slam","counter","line_sweep","steadfast_counter","step","anchor","ward","party_ward","enduring_ward"] as const;
 export type SentinelSkillId=keyof typeof SENTINEL_LESSONS;
-export type SentinelBook={learned:SentinelSkillId[];slots:Array<SentinelSkillId|null>;practice:Record<SentinelPractice,number>;cooldowns:Partial<Record<SentinelSkillId,number>>;ranks?:SkillRanks};
+export type SentinelBook={learned:SentinelSkillId[];slots:Array<SentinelSkillId|null>;practice:Record<SentinelPractice,number>;cooldowns:Partial<Record<SentinelSkillId|SentinelCoreId,number>>;ranks?:SkillRanks;coreRanks?:Partial<Record<SentinelCoreId,number>>};
 export function sentinelPoints(level:number):number{return 1+Math.floor((Math.min(level,100)-1)/2);}
 export function newSentinelBook():SentinelBook{return {learned:[],slots:[null,null,null,null],practice:{guard:0,stun:0,assist:0},cooldowns:{}};}
 function record(value:unknown):value is Record<string,unknown>{return value!==null && typeof value==="object" && !Array.isArray(value);}
 export function validateSentinelBook(value:unknown,level:number):SentinelBook {
-  if(!record(value) || Object.keys(value).some(key=>!["cooldowns","learned","practice","slots","ranks"].includes(key)) || !Array.isArray(value.learned) || !Array.isArray(value.slots) || !record(value.practice) || !record(value.cooldowns))throw Error("invalid_sentinel_book");
+  if(!record(value) || Object.keys(value).some(key=>!["cooldowns","learned","practice","slots","ranks","coreRanks"].includes(key)) || !Array.isArray(value.learned) || !Array.isArray(value.slots) || !record(value.practice) || !record(value.cooldowns))throw Error("invalid_sentinel_book");
   const learned=value.learned,slots=value.slots;
   if(learned.length>sentinelPoints(level) || new Set(learned).size!==learned.length || learned.some(id=>typeof id!=="string" || !Object.hasOwn(SENTINEL_LESSONS,id)))throw Error("invalid_sentinel_book");
   for(const id of learned as SentinelSkillId[]){const lesson:SentinelLesson=SENTINEL_LESSONS[id];if(lesson.level>level || lesson.requires.some(req=>!learned.includes(req)))throw Error("invalid_sentinel_book");}
   if(slots.length!==4 || new Set(slots.filter(id=>id!==null)).size!==slots.filter(id=>id!==null).length || slots.some(id=>id!==null && (typeof id!=="string" || !learned.includes(id) || SENTINEL_LESSONS[id as SentinelSkillId].effect==="passive")))throw Error("invalid_sentinel_book");
   if(Object.keys(value.practice).sort().join(",")!=="assist,guard,stun" || Object.values(value.practice).some(n=>typeof n!=="number" || !Number.isSafeInteger(n) || n<0 || n>1_000_000))throw Error("invalid_sentinel_book");
-  for(const [id,ready] of Object.entries(value.cooldowns))if(!Object.hasOwn(SENTINEL_LESSONS,id) || typeof ready!=="number" || !Number.isSafeInteger(ready) || ready<0)throw Error("invalid_sentinel_book");
+  for(const [id,ready] of Object.entries(value.cooldowns))if((!Object.hasOwn(SENTINEL_LESSONS,id) && !Object.hasOwn(SENTINEL_CORE,id)) || typeof ready!=="number" || !Number.isSafeInteger(ready) || ready<0)throw Error("invalid_sentinel_book");
   let ranks:SkillRanks;
   try{ranks=validateSkillRanks(value.ranks,learned as string[],level,sentinelPoints(level),SENTINEL_RANKABLE_SKILLS);}catch{throw Error("invalid_sentinel_book");}
-  return {learned:[...learned] as SentinelSkillId[],slots:[...slots] as Array<SentinelSkillId|null>,practice:{...value.practice} as SentinelBook["practice"],cooldowns:{...value.cooldowns} as SentinelBook["cooldowns"],...(skillRankCost(ranks)?{ranks}:{})};
+  const coreRanks=value.coreRanks ?? {};
+  if(!record(coreRanks))throw Error("invalid_sentinel_book");
+  for(const [id,rank] of Object.entries(coreRanks))if(!Object.hasOwn(SENTINEL_CORE,id) || typeof rank!=="number" || !Number.isInteger(rank) || rank<1 || rank>MUAY_CORE_LEVELS.length || level<MUAY_CORE_LEVELS[rank-1])throw Error("invalid_sentinel_book");
+  if(Object.values(coreRanks).reduce<number>((sum,n)=>sum+(n as number),0)>muayCorePoints(level))throw Error("invalid_sentinel_book");
+  return {learned:[...learned] as SentinelSkillId[],slots:[...slots] as Array<SentinelSkillId|null>,practice:{...value.practice} as SentinelBook["practice"],cooldowns:{...value.cooldowns} as SentinelBook["cooldowns"],...(skillRankCost(ranks)?{ranks}:{}),...(Object.keys(coreRanks).length?{coreRanks:coreRanks as SentinelBook["coreRanks"]}:{})};
 }
