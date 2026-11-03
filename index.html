@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=field-flow-2" />
+  <link rel="stylesheet" href="./styles.css?v=field-journal-3" />
 </head>
 <body>
   <section id="accountEntry" class="account-entry" aria-label="เข้าสู่ระบบ MONTRA"><div id="accountCard" class="account-card" role="dialog" aria-modal="true"><strong>MONTRA</strong><p>กำลังเตรียมหน้าเข้าสู่ระบบ…</p></div></section>
@@ -76,7 +76,7 @@
 
     </div>
     <nav class="field-shortcuts" aria-label="ทางลัดขณะเล่น">
-      <button id="fieldMenuButton" type="button" aria-haspopup="dialog" aria-controls="drawer"><span aria-hidden="true">☰</span>เมนู<b id="fieldAlerts" aria-label="มีคำเชิญใหม่" hidden>!</b></button>
+      <button id="fieldMenuButton" type="button" aria-haspopup="dialog" aria-controls="drawer"><span aria-hidden="true">☰</span>เมนู<b id="fieldAlerts" aria-label="มีข้อความหรือคำเชิญใหม่" hidden>!</b></button>
       <button id="bag" type="button"><span aria-hidden="true">▣</span>กระเป๋า</button>
       <button id="quickSkills" type="button" aria-label="เปิดตำราสกิลอาชีพ"><span aria-hidden="true">✧</span>สกิล</button>
       <button id="chatButton" type="button" aria-label="เปิดแชท"><span>✉</span>แชท <b id="chatUnread" hidden></b></button>
@@ -86,34 +86,61 @@
     <section id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
       <div class="drawer-grip"></div>
       <div class="drawer-header"><button id="drawerMenuBack" type="button" class="drawer-back" aria-label="กลับเมนูเกม" hidden>‹ เมนู</button><h2 id="drawerTitle">แผนที่</h2><button id="drawerClose" class="close" aria-label="ปิด">✕</button></div>
-      <nav id="fieldMenu" aria-label="ระบบเกม" hidden>
-        <div class="field-layout-picker" role="group" aria-label="รูปแบบหน้าจอ">
-          <span>รูปแบบหน้าจอ</span>
-          <button type="button" data-field-layout="adventure" aria-pressed="true">ผจญภัย</button>
-          <button type="button" data-field-layout="combat" aria-pressed="false">เน้นต่อสู้</button>
+      <nav id="fieldMenu" aria-label="บันทึกผจญภัย" hidden>
+        <button id="menuQuest" class="journal-objective" type="button">
+          <span aria-hidden="true">◇</span><span><small>เป้าหมายตอนนี้</small><strong id="menuGoalTitle"></strong><span id="menuGoalStep"></span></span><i aria-hidden="true">›</i>
+        </button>
+        <div id="menuNotices" class="menu-notices" aria-label="คำเชิญที่รอตอบ" hidden>
+          <button id="noticeParty" type="button" hidden>เปิดคำเชิญปาร์ตี้ ›</button>
+          <button id="noticeGuild" type="button" hidden>เปิดคำเชิญกิลด์ ›</button>
+          <button id="noticeTrade" type="button" hidden>เปิดคำขอเทรด ›</button>
         </div>
-<section><h3>ตัวละครและวิชา</h3><div class="menu-tiles"><button id="menuCharacter" type="button"><span>๛</span>ตัวละคร</button>
-<button id="swordTreeButton" class="book-entry" type="button" hidden><span>⚔</span>ตำราอาชีพ</button>
-<button id="muayBookButton" class="book-entry" type="button" hidden><span>✊</span>ตำราอาชีพ</button>
-<button id="occultBookButton" class="book-entry" type="button" hidden><span>✧</span>ตำราอาชีพ</button>
-<button id="bladeBookButton" class="book-entry" type="button" aria-label="เปิดสกิลคมดาบ" hidden><span>◈</span>ตำราอาชีพ</button>
-<button id="sentinelBookButton" class="book-entry" type="button" aria-label="เปิดสกิลผู้พิทักษ์" hidden><span>⬟</span>ตำราอาชีพ</button></div></section>
-<section><h3>การเดินทาง</h3><div class="menu-tiles"><button id="mapButton"><span>⌖</span>แผนที่</button>
-<button id="menuQuest" type="button"><span>◇</span>ภารกิจที่ติดตาม</button></div></section>
-<section><h3>ชุมชนและการค้า</h3><div class="menu-tiles"><button id="partyButton" type="button" aria-label="เปิดปาร์ตี้"><span>♧</span>ปาร์ตี้ <b id="partyUnread" hidden>!</b></button>
-<button id="menuGuild" type="button"><span>⚑</span>กิลด์</button>
-<button id="marketButton" type="button" aria-label="เปิดตลาดและการค้า"><span>♢</span>ตลาดและเทรด <b id="tradeUnread" hidden>!</b></button></div></section>
-<section><h3>ระบบ</h3><div class="menu-tiles"><button id="helpButton"><span>?</span>วิธีเล่นและตั้งค่า</button>
-<button id="modeButton"><span>◎</span>บัญชีและตัวละคร</button></div></section>
+        <div class="journal-tabs" role="group" aria-label="หมวดเมนู">
+          <button type="button" data-journal-tab="character" aria-controls="menu-character" aria-pressed="true">ตัวละคร</button>
+          <button type="button" data-journal-tab="travel" aria-controls="menu-travel" aria-pressed="false">เดินทาง</button>
+          <button type="button" data-journal-tab="social" aria-controls="menu-social" aria-pressed="false">ชุมชน</button>
+          <button type="button" data-journal-tab="system" aria-controls="menu-system" aria-pressed="false">ตั้งค่า</button>
+        </div>
+        <section id="menu-character" data-journal-panel="character" aria-label="ตัวละครและวิชา"><div class="menu-tiles">
+          <button id="menuCharacter" type="button"><span aria-hidden="true">๛</span><strong>สถานะตัวละคร<small>สเตตัส บัฟ และอาชีพ</small></strong></button>
+          <button id="menuBag" type="button"><span aria-hidden="true">▣</span><strong>กระเป๋า<small>ใช้ยาและสวมอาวุธ</small></strong></button>
+          <button id="swordTreeButton" class="book-entry" type="button" hidden><span>⚔</span>ตำราอาชีพ</button>
+          <button id="muayBookButton" class="book-entry" type="button" hidden><span>✊</span>ตำราอาชีพ</button>
+          <button id="occultBookButton" class="book-entry" type="button" hidden><span>✧</span>ตำราอาชีพ</button>
+          <button id="bladeBookButton" class="book-entry" type="button" aria-label="เปิดสกิลคมดาบ" hidden><span>◈</span>ตำราอาชีพ</button>
+          <button id="sentinelBookButton" class="book-entry" type="button" aria-label="เปิดสกิลผู้พิทักษ์" hidden><span>⬟</span>ตำราอาชีพ</button>
+        </div></section>
+        <section id="menu-travel" data-journal-panel="travel" aria-label="เดินทาง" hidden><div class="menu-tiles">
+          <button id="mapButton" type="button"><span aria-hidden="true">⌖</span><strong>แผนที่<small>ตำแหน่งและจุดเดินทาง</small></strong></button>
+          <button id="menuMount" type="button"><span aria-hidden="true">♞</span><strong id="menuMountLabel">เรียกม้า</strong></button>
+        </div></section>
+        <section id="menu-social" data-journal-panel="social" aria-label="ชุมชนและการค้า" hidden><div class="menu-tiles">
+          <button id="menuChat" type="button"><span aria-hidden="true">✉</span><strong>แชท<small>แผนที่ รวม ปาร์ตี้ และส่วนตัว</small></strong><b id="menuChatUnread" hidden></b></button>
+          <button id="partyButton" type="button"><span aria-hidden="true">♧</span><strong>ปาร์ตี้<small>ชวนเพื่อนออกล่า</small></strong><b id="partyUnread" hidden>!</b></button>
+          <button id="menuGuild" type="button"><span aria-hidden="true">⚑</span><strong>กิลด์</strong></button>
+          <button id="marketButton" type="button"><span aria-hidden="true">♢</span><strong>ตลาดและเทรด<small>ฝากขายหรือแลกกับผู้เล่น</small></strong><b id="tradeUnread" hidden>!</b></button>
+        </div></section>
+        <section id="menu-system" data-journal-panel="system" aria-label="ตั้งค่าและบัญชี" hidden>
+          <div class="field-layout-picker" role="group" aria-label="รูปแบบหน้าจอ">
+            <span>รูปแบบหน้าจอ</span><button type="button" data-field-layout="adventure" aria-pressed="true">ผจญภัย</button><button type="button" data-field-layout="combat" aria-pressed="false">เน้นต่อสู้</button>
+          </div>
+          <label class="field-utility-label" for="fieldUtility">ทางลัดประจำสนาม
+            <select id="fieldUtility"><option value="chat">แชท</option><option value="mount">ขี่ม้า (เมื่อเรียกได้)</option></select>
+          </label>
+          <div class="menu-tiles">
+            <button id="helpButton" type="button"><span aria-hidden="true">?</span><strong>คู่มือ ภาพ และเสียง</strong></button>
+            <button id="modeButton" type="button"><span aria-hidden="true">◎</span><strong>บัญชีและตัวละคร</strong></button>
+          </div>
+        </section>
       </nav>
       <div id="drawerBody" class="drawer-body"></div>
     </section>
   </main>
-  <script src="./account-entry.js?v=field-flow-2"></script>
+  <script src="./account-entry.js?v=field-journal-3"></script>
   <script src="https://cdn.babylonjs.com/babylon.js" defer></script>
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
   <script src="./audio.js?v=0.9.10-horse-bright" defer></script>
-  <script src="./main.js?v=field-flow-2" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
+  <script src="./main.js?v=field-journal-3" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>

@@ -98,15 +98,33 @@
     form.onsubmit=async e=>{e.preventDefault();submit.disabled=true;try{const result=await api("reset",{username:username.value,recoveryCode:recovery.value.trim(),password:password.value});recovery.value="";password.value="";recoveryNotice(result.recoveryCode,login);}catch(err){error.textContent=err.message;}finally{submit.disabled=false;}};
   }
   async function slots() {
-    const error=view("เลือกตัวละคร", "เลือกตัวละครเดิมหรือสร้างตัวละครใหม่ได้ 3 ช่อง");
+    const error=view("เลือกตัวละคร", "เลือกตัวละครเพื่อกลับเข้าโลก");
     if(!key()){login();return;}
     try {
       const result=await api("slots",null,key()); summaries=result.slots;isGuest=result.guest===true;
       const manage=optionsGroup("จัดการตัวละครและบัญชี");
-      for(const s of summaries){
-        const path=paths.find(p=>p[0]===s.path), label=s.unavailable?"ข้อมูลอ่านไม่ได้":s.occupied?(s.name+" · Lv. "+s.level+" · "+(path?.[1] || "ยังไม่เลือกอาชีพ")):"สร้างตัวละครใหม่";
-        const b=button("ช่อง "+s.slot+" · "+label,()=>{selectedSlot=s.slot;if(s.occupied && s.path)play();else setup(s);},"account-slot");b.disabled=!!s.unavailable;card.append(b);
+      const characters=summaries.filter(s=>s.occupied || s.unavailable);
+      const empty=summaries.filter(s=>!s.occupied && !s.unavailable);
+      const list=el("div","","account-slot-list");
+      for(const s of characters){
+        const path=paths.find(p=>p[0]===s.path);
+        const b=button("",()=>{selectedSlot=s.slot;if(s.path)play();else setup(s);},"account-slot");
+        b.disabled=!!s.unavailable;
+        b.append(el("strong",s.unavailable?"ข้อมูลอ่านไม่ได้":s.name),
+          el("span",s.unavailable?"":s.path?"เข้าเล่น ›":"เลือกอาชีพ ›","slot-play"),
+          el("small","ช่อง "+s.slot+(s.unavailable?"":" · Lv. "+s.level+" · "+(path?.[1] || "ยังไม่เลือกอาชีพ"))));
+        list.append(b);
         if(s.occupied && !s.unavailable)manage.append(button("ลบตัวละครช่อง "+s.slot,()=>confirmDelete(s)));
+      }
+      const createButton=(s,first)=>button("ช่อง "+s.slot+" · "+(first?"สร้างตัวละครแรก":"สร้างตัวละครใหม่"),()=>{
+        selectedSlot=s.slot;setup(s);
+      },first?"primary":"secondary");
+      if(!characters.length && empty.length)list.append(createButton(empty.shift(),true));
+      card.append(list);
+      if(empty.length){
+        const more=optionsGroup("สร้างตัวละครในช่องว่าง ("+empty.length+")");
+        for(const s of empty)more.append(createButton(s,false));
+        card.append(more);
       }
       if(isGuest){manage.append(button("สร้างบัญชีใหม่จากบัญชีแขก",upgradeGuest),button("ดูรหัสกู้บัญชีแขก",()=>{const code=localStorage.getItem(guestStorageKey);if(code)recoveryNotice(code,slots,true);else guestRecover();}));}
       manage.append(button("ออกจากระบบ",async()=>{const session=key();sessionStorage.removeItem(sessionKey);if(leaveGame)await leaveGame();try{await api("logout",{},session);}catch{}login();}));

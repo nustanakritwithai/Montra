@@ -7300,6 +7300,8 @@
     button.disabled=!me?.alive;
     button.setAttribute("aria-pressed",String(Boolean(me?.mounted)));
     button.querySelector("i").textContent=me?.mounted ? "ลงม้า" : "เรียกม้า";
+    $("menuMountLabel").textContent=button.querySelector("i").textContent;
+    $("menuMount").disabled=button.disabled;
     button.title=me?.mounted ? "ลงจากม้าเพื่อใช้วิชาต่อสู้" : "เรียกม้าสำหรับเดินทาง";
   }
   function requestClimb(stairId) {
@@ -7506,6 +7508,7 @@
         }
       } else hudSet(pointer, "qph", true, "hidden");
     }
+    if (!$("fieldMenu").hidden) renderJournalObjective();
     renderPartyFrames();
     renderStatusChip();
   }
@@ -8953,15 +8956,47 @@
     ui.drawer.hidden=false; ui.shade.hidden=false;
     drawerActive=name;
     ui.drawer.scrollTop=0;
-    (menu ? $("menuCharacter") : $("drawerMenuBack")).focus({preventScroll:true});
+    (menu ? $("fieldMenu").querySelector("[data-journal-tab][aria-pressed=true]") : $("drawerMenuBack")).focus({preventScroll:true});
   }
-  function openFieldMenu() { openDrawer("fieldMenu","เมนูผจญภัย",""); }
+  const journalOrigins={
+    bag:"character",character:"character",swordTree:"character",muayBook:"character",bladeBook:"character",sentinelBook:"character",occultBook:"character",
+    map:"travel",quest:"travel",war:"travel",strategy:"travel",chat:"social",party:"social",guild:"social",economy:"social",help:"system"
+  };
+  function showJournalSection(section) {
+    const menu=$("fieldMenu");
+    for(const tab of menu.querySelectorAll("[data-journal-tab]"))
+      tab.setAttribute("aria-pressed",String(tab.dataset.journalTab===section));
+    for(const panel of menu.querySelectorAll("[data-journal-panel]"))
+      panel.hidden=panel.dataset.journalPanel!==section;
+  }
+  for(const tab of $("fieldMenu").querySelectorAll("[data-journal-tab]"))
+    tab.onclick=()=>showJournalSection(tab.dataset.journalTab);
+  function renderJournalObjective() {
+    hudSet($("menuGoalTitle"),"journalTitle",ui.quest.querySelector("strong").textContent);
+    hudSet($("menuGoalStep"),"journalStep",ui.quest.querySelector(".quest-content > span").textContent);
+  }
+  function openFieldMenu() {
+    if(journalOrigins[drawerActive])showJournalSection(journalOrigins[drawerActive]);
+    renderJournalObjective();
+    updateFieldAlerts();
+    openDrawer("fieldMenu","บันทึกผจญภัย","");
+  }
+  function setFieldUtility(value) {
+    const choice=value==="mount" ? "mount" : "chat";
+    $("game").dataset.fieldUtility=choice;
+    $("fieldUtility").value=choice;
+  }
+  try {setFieldUtility(localStorage.getItem("montra_field_utility"));} catch {setFieldUtility("chat");}
+  $("fieldUtility").onchange=event=>{
+    setFieldUtility(event.target.value);
+    try {localStorage.setItem("montra_field_utility",event.target.value);} catch {}
+  };
   document.addEventListener("keydown",event=>{
     if(mode!=="live" || drawerActive || !$("accountEntry").hidden || event.defaultPrevented ||
        event.repeat || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
        !/^[1-4]$/.test(event.key) || event.target.closest?.("input,select,textarea,[contenteditable=true]")) return;
     const bar=document.querySelector(".controls .sword-hotbar:not(#grappleResponse):not([hidden])");
-    const skill=bar?.querySelectorAll("button")[Number(event.key)-1];
+    const skill=bar?.querySelector('[data-slot-number="'+event.key+'"]');
     if(skill && !skill.disabled){event.preventDefault();skill.click();}
   });
   function setFieldLayout(layout) {
@@ -8990,6 +9025,8 @@
   function updateChatBadge() {
     const total=Math.min(99,Object.values(chatUnread).reduce((sum,n)=>sum+n,0)),badge=$("chatUnread");
     badge.hidden=total===0;badge.textContent=total?String(total):"";
+    $("menuChatUnread").hidden=!total;$("menuChatUnread").textContent=badge.textContent;
+    updateFieldAlerts();
     $("chatButton").setAttribute("aria-label",total ? `เปิดแชท มีข้อความใหม่ ${total} ข้อความ` : "เปิดแชท");
   }
   function finishChatPending(){clearTimeout(chatTimer);chatTimer=null;chatPending=null;}
@@ -9760,7 +9797,9 @@
         }else if(node.effect==="ward" || node.effect==="intercept")chooseSentinelAlly(id,node);
         else room.send("sentinel_skill",{skillId:id});
       };bar.append(slot);
-    });positionSwordToast();
+    });
+    arrangeFieldSlots(bar,ids,openSentinelBook);
+    positionSwordToast();
   }
   function chooseSentinelAlly(skillId,node) {
     const members=partyState?.members || [];
@@ -9833,7 +9872,9 @@
           else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
         }else room.send("blade_skill",{skillId:id});
       };if(node && !times[index])staminaCost(slot,node.stamina,me);bar.append(slot);
-    });positionSwordToast();
+    });
+    arrangeFieldSlots(bar,ids,openBladeBook);
+    positionSwordToast();
   }
   function openBladeBook() {
     if(!room || mode!=="live" || ownServerCharacter()?.pathId!=="blade")return toast("เข้า LIVE และเลือกสายคมดาบก่อน");
@@ -9908,6 +9949,7 @@
       if(node && !times[index])staminaCost(slot,node.stamina,me);
       bar.append(slot);
     });
+    arrangeFieldSlots(bar,ids,openOccultBook);
     positionSwordToast();
   }
   function chooseOccultAlly(skillId,name) {
@@ -10021,6 +10063,7 @@
       if(node && !throwing && !timing[index])staminaCost(button,node.stamina,me);
       bar.append(button);
     });
+    arrangeFieldSlots(bar,ids,openMuayBook);
     positionSwordToast();
   }
   function openMuayBook() {
@@ -10104,6 +10147,21 @@
     if (targetId) castAtTarget(targetId);
     else toast(node.name+" · แตะเป้าหมายเพื่อใช้วิชา");
   }
+  function arrangeFieldSlots(bar,ids,openBook) {
+    const buttons=bar.querySelectorAll("button");
+    buttons.forEach((button,index)=>{
+      button.hidden=!ids[index];
+      if(ids[index])button.dataset.slotNumber=String(index+1);
+    });
+    if(!ids.some(Boolean) && buttons.length){
+      const setup=buttons[0];
+      setup.hidden=false;
+      setup.disabled=false;
+      setup.textContent="จัดช่องสกิล";
+      setup.setAttribute("aria-label","เปิดตำราเพื่อจัดช่องสกิล");
+      setup.onclick=openBook;
+    }
+  }
   // Stamina cost on a skill button; greyed out (and disabled) while there is not enough.
   function staminaCost(button, cost, me) {
     if (!button || !(cost > 0)) return;
@@ -10138,6 +10196,7 @@
       if(node && !timing[slot])staminaCost(button,node.stamina,me);
       bar.append(button);
     });
+    arrangeFieldSlots(bar,slots,openSwordTree);
     positionSwordToast();
   }
   // ---- Skill knowledge graph: one view for every class book ----
@@ -10734,10 +10793,10 @@
       <details class="help-topic"><summary>จอมอาคมและวิญญาณ</summary>
         <p>ซัดข้าวสารจากระยะไกลหรือแปะยันต์ระยะประชิด เรียกผีจากหม้อเพื่อช่วยโจมตี แล้วใช้ «เข้าทรง» เมื่อต้องการรับพลังของวิญญาณ</p></details>
       <details class="help-topic"><summary>ปาร์ตี้ กิลด์ และการค้า</summary>
-        <p>เปิดเมนูผจญภัยเพื่อชวนคนเข้าปาร์ตี้ ดูกิลด์ หรือไปตลาด สมาชิกปาร์ตี้ที่อยู่ใกล้และอยู่แผนที่เดียวกันได้ส่วนแบ่ง EXP ตามกติกาปาร์ตี้</p>
+        <p>เปิดเมนู แล้วเลือก «ชุมชน» เพื่อชวนคนเข้าปาร์ตี้ ดูกิลด์ หรือไปตลาด สมาชิกปาร์ตี้ที่อยู่ใกล้และอยู่แผนที่เดียวกันได้ส่วนแบ่ง EXP ตามกติกาปาร์ตี้</p>
         <p>ตลาดใช้ฝากขายและซื้อไอเท็ม ส่วนการเทรดโดยตรงต้องอยู่ใกล้ผู้เล่นอีกฝ่ายและยืนยันข้อเสนอทั้งคู่</p></details>
       <details class="help-topic"><summary>หน้าจอ ภาพ และเสียง</summary>
-        <p>ในเมนูผจญภัย เลือก «เน้นต่อสู้» เพื่อย่อแผนที่และซ่อนภารกิจทั่วไป เปิดภารกิจได้จากเมนูเสมอ</p>
+        <p>เปิดเมนู แล้วเลือก «ตั้งค่า» เพื่อสลับรูปแบบหน้าจอหรือเลือกทางลัดแชทและม้า โหมด «เน้นต่อสู้» ย่อแผนที่และซ่อนภารกิจทั่วไปบนสนาม แตะเป้าหมายที่หัวบันทึกเพื่ออ่านภารกิจได้เสมอ</p>
         ${lightSettingsHtml()}${soundSettingsHtml()}</details>`);
     bindSoundSettings(ui.drawerBody); bindLightSettings(ui.drawerBody);
   }
@@ -10965,7 +11024,13 @@
     }
     renderBag();
   }
-  function updateFieldAlerts() { $("fieldAlerts").hidden=!(tradeUnread || partyUnread || guildUnread); }
+  function updateFieldAlerts() {
+    $("fieldAlerts").hidden=!(tradeUnread || partyUnread || guildUnread || !$("menuChatUnread").hidden);
+    $("noticeParty").hidden=!partyInvitation;
+    $("noticeGuild").hidden=!guildInvitation;
+    $("noticeTrade").hidden=!activeTrade;
+    $("menuNotices").hidden=!partyInvitation && !guildInvitation && !activeTrade;
+  }
   function updateTradeBadge() { const badge=$("tradeUnread"); if (badge) badge.hidden=!tradeUnread; updateFieldAlerts(); }
   function finishEconomyPending() { economyPending=false; clearTimeout(economyTimer); }
   function economyReady() { return mode === "live" && room?.state?.economyAvailable === true && ownServerCharacter()?.persistent === true; }
@@ -11300,6 +11365,11 @@
   $("fieldMenuButton").onclick=openFieldMenu;
   $("drawerMenuBack").onclick=openFieldMenu;
   $("menuCharacter").onclick=openCharacterProfile;
+  $("menuBag").onclick=openBag;
+  $("menuChat").onclick=openChat;
+  $("noticeParty").onclick=openParty;
+  $("noticeGuild").onclick=openGuild;
+  $("noticeTrade").onclick=()=>{economyTab="trade";openEconomy();};
   $("menuQuest").onclick=openCurrentQuest;
   $("menuGuild").onclick=openGuild;
   $("quickSkills").onclick=()=>{
@@ -11318,7 +11388,11 @@
   $("occultBookButton").onclick=openOccultBook;
   $("bladeBookButton").onclick=openBladeBook;
   $("sentinelBookButton").onclick=openSentinelBook;
-  $("mountButton").onclick=()=>{if(mode==="live" && room?.state?.mountAvailable===true)room.send("toggle_mount",{});};
+  function toggleFieldMount() {
+    if(mode==="live" && room?.state?.mountAvailable===true && !$("mountButton").disabled)room.send("toggle_mount",{});
+  }
+  $("mountButton").onclick=toggleFieldMount;
+  $("menuMount").onclick=()=>{closeDrawer();toggleFieldMount();};
   // Cooldown labels must advance even in a quiet room with no schema patches.
   setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());syncSentinelUI(ownServerCharacter());}},1000);
   $("helpButton").onclick=openHelp;
