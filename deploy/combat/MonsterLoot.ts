@@ -1,12 +1,17 @@
 import {randomInt} from "node:crypto";
 import {REGIONAL_BOSSES} from "./RegionalBosses.js";
-import {PERSONAL_ITEMS,MAX_FORGE_COPIES,BOSS_GEAR_CHANCE,monsterCardFor,type CardId,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
+import {PERSONAL_ITEMS,MAX_FORGE_COPIES,BOSS_GEAR_CHANCE,gearSchools,startingWeapon,monsterCardFor,type CardId,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
 import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
 import {TEMPLE_ID,TEMPLE_MAP,TEMPLE_SPAWNS} from "./TempleMap.js";
 import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS,RIFT_WARDEN} from "./WorldAtlas.js";
 
 type Theme="grove"|"hunter"|"guard"|"spirit";
-type Hunt={id:string;name:string;level:number;mapId:string;tier?:string;theme:Theme};
+type Hunt={id:string;name:string;level:number;mapId:string;tier?:string;theme:Theme;x?:number;z?:number};
+const firstCamp=FOREST_CAMPS.find(c=>c.id==="west")!;
+const firstCampSpawns=new Set(firstCamp.levels.map((_,i)=>`forest_${firstCamp.id}_${i+1}`));
+export const STARTER_HUNT={mapId:"forbidden_forest",name:firstCamp.name,x:firstCamp.x,z:firstCamp.z,mobs:[...firstCampSpawns],goal:10,maxLevel:10} as const;
+export function isStarterHuntMob(id:string){return firstCampSpawns.has(id);}
+const starterWeapons=new Set<string>(Object.keys(gearSchools).map(startingWeapon));
 // Court order follows the named camps in the world definitions. All individuals in a court share its theme.
 const courtThemes:Readonly<Record<string,readonly Theme[]>>={
   bamboo_frontier:["grove","hunter","grove","grove","hunter"], lotus_basin:["grove","hunter","hunter","grove","guard"],
@@ -26,7 +31,7 @@ function regionalTheme(id:string,mapId:string):Theme{
 }
 export const hunts:Hunt[]=[
   {id:"possessed-1",name:"ผีสิง",mapId:"ritual_village",level:1,theme:"spirit"},
-  ...FOREST_CAMPS.flatMap(c=>c.levels.map((level,i):Hunt=>({id:"forest_"+c.id+"_"+(i+1),mapId:"forbidden_forest",level,
+  ...FOREST_CAMPS.flatMap(c=>c.levels.map((level,i):Hunt=>({id:"forest_"+c.id+"_"+(i+1),mapId:"forbidden_forest",level,x:c.x,z:c.z,
     name:level<5?"ผีหลงป่า":level<9?"เงารากไม้":"วิญญาณอาคม",theme:level<5?"hunter":level<9?"grove":"spirit"}))),
   {...SHRINE_GUARDIAN,mapId:"forbidden_forest",tier:"elite",theme:"guard"},
   ...TEMPLE_SPAWNS.map(s=>({...s,mapId:TEMPLE_ID,theme:templeThemes[s.id.split("_")[1]]})),
@@ -41,8 +46,18 @@ type GearId=BodyItemId|PracticeWeapon;
 type DropTable={gear:GearId[];materials:MaterialId[]};
 const tables=new Map(hunts.map((m):[string,DropTable]=>[m.id,{gear:[],materials:[]}]));
 const sources=new Map<PersonalId,Hunt[]>();
+const huntsById=new Map(hunts.map(m=>[m.id,m]));
+const journeyWeapons=new Map<string,PracticeWeapon>();
+function campKey(m:Hunt){return m.id.slice(0,m.id.lastIndexOf("_"));}
+export function journeyWeapon(path:string,level:number){
+  if(level<10 || level>25)return;
+  return journeyWeapons.get(path+"/"+(level<20?10:20));
+}
 for(const id of Object.keys(PERSONAL_ITEMS) as PersonalId[]){
   const item=PERSONAL_ITEMS[id];
+  const journey=item.kind==="mainHand" && (item.level===10 || item.level===20) && Object.hasOwn(gearSchools,item.path) &&
+    item.family===PERSONAL_ITEMS[startingWeapon(item.path)].family;
+  if(journey)journeyWeapons.set(item.path+"/"+item.level,id as PracticeWeapon);
   if(item.sourceBoss){
     const boss=hunts.find(m=>m.id===item.sourceBoss);
     if(!boss || boss.level!==item.level)throw Error("invalid_boss_treasure:"+id);
@@ -60,7 +75,9 @@ for(const id of Object.keys(PERSONAL_ITEMS) as PersonalId[]){
   // Offer one accessible hunt near the unlock if the specialist camp starts much later.
   const early=eligible.filter(m=>m.level<=item.level!+2 && m.tier!=="elite" && m.tier!=="boss");
   const alternate=early.some(m=>primary.includes(m))?undefined:early.find(m=>m.theme===nearbyTheme[material])??early[0];
-  const sites=eligible.filter(m=>primary.includes(m)||m===alternate||m.tier==="elite"||m.tier==="boss");
+  const sites=eligible.filter(m=>primary.includes(m)||m===alternate||m.tier==="elite"||m.tier==="boss"||
+    (journey && alternate && m.mapId===alternate.mapId && m.name===alternate.name && campKey(m)===campKey(alternate))||
+    (starterWeapons.has(id) && isStarterHuntMob(m.id)));
   sources.set(id,sites);
   for(const m of sites){
     const table=tables.get(m.id)!;
@@ -80,6 +97,19 @@ export function findItemHunt(id:PersonalId,playerLevel:number){
   }
   return best? huntDetails(best):null;
 }
+export function itemCamp(id:PersonalId,level:number){
+  const site=findItemHunt(id,level);if(!site)return null;
+  const home=huntsById.get(site.id)!;
+  const mobs=(sources.get(id)??[]).filter(m=>m.mapId===home.mapId && m.name===home.name && campKey(m)===campKey(home));
+  const map=getWorldMap(site.mapId);
+  const camp=map?.camps?.find(c=>home.id.startsWith("temple_"+c.id+"_") || home.id.startsWith("forest_"+c.id+"_") ||
+    campKey(home)==="atlas_"+site.mapId+"_"+c.id.replace(/^court/,""));
+  return {...site,mobs:mobs.map(m=>m.id),camp:camp?.name??site.monster,x:camp?.x??home.x,z:camp?.z??home.z};
+}
+export function practiceSite(id:string){
+  const mob=huntsById.get(id);
+  return mob?{...huntDetails(mob),x:mob.x,z:mob.z}:null;
+}
 export const cardHunts=new Map<CardId,ReturnType<typeof huntDetails>>();
 for(const mob of hunts){
   const card=monsterCardFor(mob.id,mob.level);
@@ -98,7 +128,7 @@ const catalog=Object.entries(PERSONAL_ITEMS).map(([id,item])=>{
 export const CATALOG_PAGES=Array.from({length:Math.ceil(catalog.length/16)},(_,i)=>Object.fromEntries(catalog.slice(i*16,i*16+16)));
 
 export const MAX_LOOT_MISSES=3;
-export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<string>|ReadonlyMap<string,number>,playerLevel:number,misses:number,tier:string,draw:(max:number)=>number=randomInt,partialStacks?:ReadonlySet<string>,forgeCopies?:Readonly<Record<string,number>>,worn?:ReadonlySet<string>){
+export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<string>|ReadonlyMap<string,number>,playerLevel:number,misses:number,tier:string,draw:(max:number)=>number=randomInt,partialStacks?:ReadonlySet<string>,forgeCopies?:Readonly<Record<string,number>>,worn?:ReadonlySet<string>,trainingWeapon?:PracticeWeapon){
   const table=tables.get(monsterId);
   if(!table)return null;
   const candidates=table.gear.filter(id=>{
@@ -116,15 +146,20 @@ export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<s
   });
   const chance=tier==="boss"?100:tier==="elite"?60:tier==="strong"?40:25;
   const guaranteed=useful.length>0 && misses===MAX_LOOT_MISSES;
+  const next=journeyWeapon(path,playerLevel);
+  const firstWeapon=next && useful.includes(next);
   const repeats=forgeCopies?table.gear.filter(id=>owned.has(id) && !candidates.includes(id) && (forgeCopies[id]??0)<MAX_FORGE_COPIES &&
     (PERSONAL_ITEMS[id].path==="all" || PERSONAL_ITEMS[id].path===path)):[];
   const focus=repeats.filter(id=>worn?.has(id));
+  const training=trainingWeapon && repeats.includes(trainingWeapon)?[trainingWeapon]:null;
   const bankOnly=Boolean(partialStacks && repeats.length);
   if((candidates.length || repeats.length) && (guaranteed || draw(100)<chance)){
     // Full bags can still collect workshop copies. Keep a pending wearable guarantee for the next free slot.
     let pool=[...candidates,...useful,...useful,...repeats];
-    if(bankOnly && (!guaranteed || draw(100)<chance))pool=focus.length?focus:repeats;
+    if(bankOnly && (!guaranteed || draw(100)<chance))pool=training??(focus.length?focus:repeats);
+    else if(firstWeapon && draw(100)<24)pool=[next];
     else if(guaranteed)pool=useful;
+    else if(training)pool=training;
     else if(focus.length && draw(100)<40)pool=focus;
     const id=pool[draw(pool.length)];
     const upgrade=useful.includes(id);
