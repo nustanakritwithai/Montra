@@ -42,19 +42,21 @@ export function parseForge(v: unknown) {
   const fields=["requestId","slot","stamp","action"];
   if(v && typeof v==="object" && Object.hasOwn(v,"donor"))fields.push("donor");
   if(v && typeof v==="object" && Object.hasOwn(v,"acceptBreak"))fields.push("acceptBreak");
+  if(v && typeof v==="object" && Object.hasOwn(v,"acceptDowngrade"))fields.push("acceptDowngrade");
   if (!keys(v,fields) && !keys(v,[...fields,"copies"]))return null;
   if(!requestId(v.requestId) || !(amount(v.slot,11)||isBodySlot(v.slot)) ||
       typeof v.stamp!=="string" || !/^[a-zA-Z0-9_.-]{1,64}$/.test(v.stamp) ||
       (v.action!=="enhance" && v.action!=="reroll") ||
       (v.action==="enhance" ? !amount(v.copies,4) : Object.hasOwn(v,"copies")))return null;
   if(Object.hasOwn(v,"acceptBreak") && (v.action!=="enhance" || v.acceptBreak!==true))return null;
+  if(Object.hasOwn(v,"acceptDowngrade") && (v.action!=="enhance" || v.acceptDowngrade!==true))return null;
   let donor:{slot:number;stamp:string}|undefined;
   if(Object.hasOwn(v,"donor")){
     const d=v.donor;
     if(v.action!=="enhance" || !keys(d,["slot","stamp"]) || !amount(d.slot,11) || typeof d.stamp!=="string" || !/^[a-zA-Z0-9_.-]{1,64}$/.test(d.stamp))return null;
     donor={slot:d.slot,stamp:d.stamp};
   }
-  return {requestId:v.requestId, slot:v.slot, stamp:v.stamp, action:v.action as "enhance" | "reroll",donor,copies:v.copies as number|undefined,acceptBreak:v.acceptBreak===true};
+  return {requestId:v.requestId, slot:v.slot, stamp:v.stamp, action:v.action as "enhance" | "reroll",donor,copies:v.copies as number|undefined,acceptBreak:v.acceptBreak===true,acceptDowngrade:v.acceptDowngrade===true};
 }
 
 export function parseSellMaterial(v:unknown){

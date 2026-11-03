@@ -8513,7 +8513,10 @@
         const meta=bagMeta(result.itemId),gearName=meta?.name||"อุปกรณ์";
         const spare=inventoryState?.forgeCopies?.[result.itemId]??0;
         const source=spare?" · คลังช่างมี "+spare+" ชิ้น เบิกชิ้นใหม่ +0 ได้":meta?.dropHint?" · หาใหม่ที่ "+meta.dropHint:meta?.recipe?" · สร้างชิ้นใหม่ได้ที่โต๊ะช่าง":"";
-        toast(result.broken?gearName+" +"+result.forge.rank+" แตกแล้ว"+source:result.action==="reroll"?"สุ่มออปชันแล้ว":"ตีบวกสำเร็จ +"+result.forge.rank);
+        const rank=result.forge.rank;
+        if(result.broken)toast(gearName+" +"+rank+" แตกแล้ว"+source);
+        else if(result.downgraded)toast(gearName+" ลดจาก +"+(rank+1)+" เหลือ +"+rank);
+        else toast(result.action==="reroll"?"สุ่มออปชันแล้ว":"ตีบวกสำเร็จ +"+rank);
         renderBag();
         if(result.broken && drawerActive==="bag" && spare){
           renderForgeStock(result.itemId);
@@ -8563,7 +8566,7 @@
       joined.onMessage("economy_error", message => {
         if (room !== joined) return;
         finishEconomyPending();
-        const reasons={forge_stock_changed:"ยอดของสำรองเปลี่ยนแล้ว · ตรวจคลังช่างอีกครั้ง",forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
+        const reasons={forge_downgrade_unconfirmed:"กรุณารีเฟรชแล้วตรวจโอกาสลดขั้นก่อนยืนยัน",forge_stock_changed:"ยอดของสำรองเปลี่ยนแล้ว · ตรวจคลังช่างอีกครั้ง",forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
         const socketErrors={item_level_required:"เลเวลยังไม่ถึงที่อุปกรณ์กำหนด",card_gear_level:"การ์ดนี้ต้องใช้อุปกรณ์เลเวลสูงกว่านี้",socket_changed:"อุปกรณ์หรือรูการ์ดเปลี่ยนไปแล้ว",card_unavailable:"ไม่มีการ์ดที่เลือกในกระเป๋า",drill_missing_metal:"แร่เหล็กไม่พอสำหรับเจาะรู"};
         reasons.salvage_changed="อุปกรณ์เปลี่ยนไปแล้ว โปรดเลือกชิ้นที่จะแยกอีกครั้ง";
         const gatherErrors={resource_range:"ขยับเข้าใกล้ต้นไม้หรือหินบนแผนที่นี้",resource_ground:"ลงจากม้าหรือลงสู่พื้นก่อนเก็บวัตถุดิบ",resource_empty:"จุดนี้กำลังฟื้นตัว",resource_cooldown:"รอสักครู่ก่อนเก็บครั้งถัดไป"};
@@ -12034,6 +12037,11 @@
       renderBag();
     };
   }
+  function forgeRiskText(terms,rank){
+    const down=terms.downgradeChance??0,shatter=terms.breakChance??(terms.breakOnFailure?100-terms.chance:0);
+    if(!down && !shatter)return "ขั้นปลอดภัย";
+    return "ลดจาก +"+rank+" เหลือ +"+(rank-1)+" "+down+"% · แตกถาวร "+shatter+"%";
+  }
   function renderForge(item) {
     const panel=$("forgePanel"), raw=room?.state?.forgeCatalog,meta=bagMeta(item?.itemId);
     if(!panel)return;
@@ -12057,8 +12065,8 @@
     $("forgeProgress").value=rank;
     $("forgeSupply").textContent=max?"ตีบวกครบ +10":!terms?"รอเซิร์ฟเวอร์อัปเดตสูตร":
       "ใช้ "+meta.name+" รุ่นเดียวกัน "+need+" ชิ้น · คลังช่างมี "+bank+" ชิ้น"+(selector.value?" · รวมชิ้นจากกระเป๋า 1 ชิ้น":"")+
-      (risk?" · มีโอกาส "+(100-terms.chance)+"% ที่ "+meta.name+" +"+rank+" จะแตก"+(item.socket?" · ถอดการ์ดก่อน":""):" · ขั้นปลอดภัย");
-    if(risk && ready)$("forgeSupply").textContent+=" · หลังตีเหลือในคลัง "+(have-need)+" ชิ้น";
+      " · "+forgeRiskText(terms,rank)+(risk && item.socket?" · ถอดการ์ดก่อน":"");
+    if((risk || terms?.downgradeChance) && ready)$("forgeSupply").textContent+=" · หลังตีเหลือในคลัง "+(have-need)+" ชิ้น";
     const missing=Math.max(0,need-have);
     bindItemHuntButton($("forgeTrack"),missing?item.itemId:null,itemHuntCount(item.itemId,true)+missing,false,true);
     const recipe=$("forgeCopyRecipe");
@@ -12148,9 +12156,9 @@
         const value=$("forgeDonor").value;
         if(value){const [slot,stamp]=value.split("|");payload.donor={slot:Number(slot),stamp};}
         const source=value?" (รวมชิ้นจากกระเป๋าช่อง "+(payload.donor.slot+1)+")":" จากคลังช่าง";
-        const risk=terms.breakOnFailure?" ถ้าพลาด "+meta.name+" +"+rank+" จะแตกและหายไปถาวร":"";
-        if(!window.confirm("ตี "+meta.name+" เป็น +"+(rank+1)+" · สำเร็จ "+terms.chance+"% · ใช้ของรุ่นเดียวกัน "+terms.copies+" ชิ้น"+source+" และ "+Math.round(terms.gold*(1+((meta.level||1)-1)/100))+" ทอง."+risk))return;
+        if(!window.confirm("ตี "+meta.name+" +"+rank+" เป็น +"+(rank+1)+" · สำเร็จ "+terms.chance+"% · "+forgeRiskText(terms,rank)+"\nใช้ของรุ่นเดียวกัน "+terms.copies+" ชิ้น"+source+" และ "+Math.round(terms.gold*(1+((meta.level||1)-1)/100))+" ทอง"))return;
         if(terms.breakOnFailure)payload.acceptBreak=true;
+        if(terms.downgradeChance)payload.acceptDowngrade=true;
       }
       economySend("forge_weapon",payload,true);renderBag();
     }

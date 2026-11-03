@@ -332,8 +332,9 @@ export class EconomyStore {
     });
   }
 
-  forgeWeapon(id:string,request:string,slot:number|BodySlot,stamp:string,action:ForgeAction,level=1,donor?:{slot:number;stamp:string},expectedCopies?:number,acceptBreak=false) {
-    return this.once(id,request,"forge",{slot,stamp,action,...(donor?{donor}:{}),...(expectedCopies!==undefined?{copies:expectedCopies}:{}),...(acceptBreak?{acceptBreak}:{})},()=>{
+  forgeWeapon(id:string,request:string,slot:number|BodySlot,stamp:string,action:ForgeAction,level=1,donor?:{slot:number;stamp:string},expectedCopies?:number,risks:{acceptBreak?:boolean;acceptDowngrade?:boolean}={}) {
+    const {acceptBreak,acceptDowngrade}=risks;
+    return this.once(id,request,"forge",{slot,stamp,action,...(donor?{donor}:{}),...(expectedCopies!==undefined?{copies:expectedCopies}:{}),...(acceptBreak?{acceptBreak}:{}),...(acceptDowngrade?{acceptDowngrade}:{})},()=>{
       const account=this.account(id), bag=account.inventory;
       const worn=typeof slot==="string"?bag.equipment?.[slot]:undefined;
       const stack=typeof slot==="number"?bag.slots[slot]:worn?{itemId:worn,forge:bag.equipmentForges?.[slot]}:undefined;
@@ -343,8 +344,9 @@ export class EconomyStore {
       const {cost}=quoteForge(stack.forge,action,def?.level);
       if(account.gold<cost)throw Error("insufficient_gold");
       if(action==="enhance"){
-        const {copies,breakOnFailure}=FORGE_CATALOG.enhanceSteps[stack.forge?.rank??0];
+        const {copies,breakOnFailure,downgradeChance}=FORGE_CATALOG.enhanceSteps[stack.forge?.rank??0];
         if(breakOnFailure && !acceptBreak)throw Error("forge_risk_unconfirmed");
+        if(downgradeChance && !acceptDowngrade)throw Error("forge_downgrade_unconfirmed");
         const card=typeof slot==="number"?bag.slots[slot]?.socket:bag.equipmentSockets?.[slot];
         if(breakOnFailure && card)throw Error("forge_remove_card");
         if(expectedCopies!==undefined && expectedCopies!==copies)throw Error("forge_item_changed");

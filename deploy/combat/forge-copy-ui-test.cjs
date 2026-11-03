@@ -1,7 +1,7 @@
 const assert=require("node:assert/strict");
 const fs=require("node:fs"),vm=require("node:vm"),path=require("node:path");
 const source=fs.readFileSync(path.join(__dirname,"../../main.js"),"utf8");
-const render=source.slice(source.indexOf("  function renderForge("),source.indexOf("  function openBag()",source.indexOf("  function renderForge(")));
+const render=source.slice(source.indexOf("  function forgeRiskText("),source.indexOf("  function openBag()",source.indexOf("  function renderForge(")));
 const id="acc_ring_atk_1",piece={itemId:id,forge:{rank:9,misses:0}};
 const slots=[piece,{itemId:id},{itemId:id,socket:"card_possessed"},{itemId:"acc_ring_atk_2"}];
 const stock={[id]:2},meta={name:"แหวน",level:1,recipe:[{}],forge:{primary:"melee",pool:["melee"],enhanceMax:4}};
@@ -11,7 +11,8 @@ function $(key){
   return controls.get(key);
 }
 const config={chances:Array(10),maxMisses:3,rerollCost:60,enhanceSteps:Array(10)};
-config.enhanceSteps[9]={copies:4,gold:120,chance:40,breakOnFailure:true};
+config.enhanceSteps[3]={copies:2,gold:48,chance:98,downgradeChance:2,breakChance:0,breakOnFailure:false};
+config.enhanceSteps[9]={copies:4,gold:120,chance:40,downgradeChance:30,breakChance:30,breakOnFailure:true};
 const ctx={$,room:{state:{forgeCatalog:JSON.stringify(config)}},bagMeta:()=>meta,economyReady:()=>true,
   inventoryState:{forgeCopies:stock},currentBagSlots:()=>slots,inspectingGear:null,selectedBagSlot:0,currentEquippedWeaponSlot:()=>0,
   gearStamp:()=>id,forgeLabel:()=>"",Option:class {constructor(text,value){Object.assign(this,{text,value});}},
@@ -25,7 +26,7 @@ assert.deepEqual($("forgeDonor").options.map(o=>o.value),["","1|"+id]); // Skip 
 assert.deepEqual(goals.at(-1).slice(1),[id,6,false,true]);
 stock[id]=3;$("forgeDonor").value="1|"+id;$("forgeDonor").onchange();
 assert.equal($("forgeEnhance").disabled,false);
-assert.match($("forgeSupply").textContent,/60%.*แตก/);
+assert.match($("forgeSupply").textContent,/ลดจาก \+9 เหลือ \+8 30% · แตกถาวร 30%/);
 piece.socket="card_possessed";draw(piece);
 assert.equal($("forgeEnhance").disabled,true);assert.match($("forgeSupply").textContent,/ถอดการ์ดก่อน/);
 piece.forge.rank=10;draw(piece);
@@ -36,8 +37,11 @@ Object.assign(ctx,{economyRequestId:()=>"forge_ui_confirmation",renderBag(){},ec
   window:{confirm(message){prompt=message;return confirm;}}});
 const submit=vm.runInNewContext(submitSource+"\nsubmitForge",ctx);
 delete piece.socket;piece.forge.rank=9;stock[id]=4;draw(piece);
-submit("enhance");assert.equal(sent,null);assert.match(prompt,/40%/);assert.match(prompt,/แหวน \+9 จะแตก/);
-confirm=true;submit("enhance");assert.equal(sent.acceptBreak,true);assert.equal(sent.copies,4);
+submit("enhance");assert.equal(sent,null);assert.match(prompt,/40%/);assert.match(prompt,/ลดจาก \+9 เหลือ \+8 30% · แตกถาวร 30%/);
+confirm=true;submit("enhance");assert.equal(sent.acceptBreak,true);assert.equal(sent.acceptDowngrade,true);assert.equal(sent.copies,4);
+piece.forge.rank=3;piece.socket="card_possessed";draw(piece);
+assert.equal($("forgeEnhance").disabled,false);assert.match($("forgeSupply").textContent,/ลดจาก \+3 เหลือ \+2 2% · แตกถาวร 0%/);
+submit("enhance");assert.equal(sent.acceptDowngrade,true);assert.equal(sent.acceptBreak,undefined);assert.match(prompt,/สำเร็จ 98%/);
 const shelfSource=source.slice(source.indexOf("  function renderForgeStock("),source.indexOf("  function renderForge(item)"));
 const shelf=vm.runInNewContext(shelfSource+"\nrenderForgeStock",ctx);
 ctx.room.state.forgeCatalog=JSON.stringify({...config,claimCopies:true});ctx.inventoryState.slots=[null];

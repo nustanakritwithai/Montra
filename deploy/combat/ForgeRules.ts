@@ -1,16 +1,22 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { personalItem, type CatalystId, type ForgeRating, type PersonalDefinition } from "./PersonalItems.js";
 
+// Each row is [success %, lose one rank %] for the next upgrade. The remainder shatters.
+const odds=[
+  [100,0],[100,0],[100,0],[98,2],[96,4],
+  [95,3],[90,6],[70,18],[55,25],[40,30],
+] as const;
 export const FORGE = {
-  chances: [100, 100, 100, 100, 100, 95, 90, 70, 55, 40],
+  chances: odds.map(([chance])=>chance),
   goldPerStep: 12, maxMisses: 3, rerollCost: 60, rareAfter: 4,
   tier1Weight: 65, tier2Weight: 30,
 } as const;
 // The server uses the same per-rank quote that the workshop displays.
-const enhanceSteps=FORGE.chances.map((chance,rank)=>({
-  chance,gold:(rank+1)*FORGE.goldPerStep,copies:1+Math.floor(rank/3),
-  breakOnFailure:chance<100,
-}));
+const enhanceSteps=odds.map(([chance,downgradeChance],rank)=>{
+  const breakChance=100-chance-downgradeChance;
+  return {chance,downgradeChance,breakChance,breakOnFailure:breakChance>0,
+    gold:(rank+1)*FORGE.goldPerStep,copies:1+Math.floor(rank/3)};
+});
 export const FORGE_CATALOG = {...FORGE,enhanceSteps,claimCopies:true};
 type Affix = { stat: ForgeRating; tier: number };
 export type Forged = { instanceId: string; revision: number; rank: number; misses: number; affix: Affix | null; rerollMisses: number };
@@ -37,11 +43,11 @@ export function forgeStamp(item: {itemId: string; forge?: Forged}): string {
 }
 export function quoteForge(current: Forged | undefined, action: ForgeAction, level=1) {
   const factor=1+(level-1)/100;
-  if (action === "reroll") return {cost: Math.round(FORGE.rerollCost*factor), chance: 100};
+  if (action === "reroll") return {cost: Math.round(FORGE.rerollCost*factor), chance:100,downgradeChance:0};
   const rank = current?.rank ?? 0;
   const step=enhanceSteps[rank];
   if (!step) throw Error("forge_max_rank");
-  return {cost:Math.round(step.gold*factor),chance:step.chance};
+  return {cost:Math.round(step.gold*factor),chance:step.chance,downgradeChance:step.downgradeChance};
 }
 export function rerollIngredient(def:PersonalDefinition|undefined) {
   return def?.forge?{item:`ref_seal_${def.forge.materialTier}` as CatalystId,qty:1}:null;
@@ -50,10 +56,11 @@ export function plainForge():Forged {
   return {instanceId:randomUUID(),revision:1,rank:0,misses:0,affix:null,rerollMisses:0};
 }
 export function rollForge(current: Forged | undefined, action: ForgeAction, draw = () => randomInt(100), def?:PersonalDefinition) {
-  const {cost, chance} = quoteForge(current,action,def?.level);
+  const {cost,chance,downgradeChance}=quoteForge(current,action,def?.level);
   const result: Forged = current ? {...current,revision:current.revision+1} : plainForge();
   const roll = draw();
   const success = roll < chance;
+  const downgraded=!success && roll<chance+downgradeChance;
   let affixRoll: number | null = null;
   if (action === "reroll") {
     const cap=def?.forge?.affixTierCap??3;
@@ -64,8 +71,10 @@ export function rollForge(current: Forged | undefined, action: ForgeAction, draw
     result.rerollMisses = tier === cap ? 0 : result.rerollMisses + 1;
   } else if (success) {
     result.rank++; result.misses = 0;
+  } else if (downgraded) {
+    result.rank--; result.misses = 0;
   }
-  return {cost, chance, roll, affixRoll, success, broken:action==="enhance" && !success, forge:result};
+  return {cost,chance,roll,affixRoll,success,downgraded,broken:!success && !downgraded,forge:result};
 }
 export function birthForge(id:string):Forged|undefined {
   const def=personalItem(id);

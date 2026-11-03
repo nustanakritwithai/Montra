@@ -9,18 +9,52 @@ import { makeClassInventory, makeStarterInventory, practiceLoot, validateInvento
 import { FORGE, FORGE_CATALOG, forgeStamp, rollForge, plainForge } from "./ForgeRules.js";
 import { parseClaimForgeCopy, parseForge } from "./EconomyRules.js";
 
-test("the first five ranks are safe; the upper five break exactly at their advertised thresholds",()=>{
-  const chances=[100,100,100,100,100,95,90,70,55,40];
+test("each possible roll matches the quoted outcome; the first downgrade is +3 to +2",()=>{
+  const rates=[[100,0,0],[100,0,0],[100,0,0],[98,2,0],[96,4,0],[95,3,2],[90,6,4],[70,18,12],[55,25,20],[40,30,30]];
   let item=plainForge(),copies=0;
-  for(const [rank,chance] of chances.entries()){
+  for(const [rank,rate] of rates.entries()){
     const step=FORGE_CATALOG.enhanceSteps[rank];
-    assert.equal(step.chance,chance);assert.equal(step.breakOnFailure,chance<100);
-    const success=rollForge(item,"enhance",()=>chance-1);
-    assert.equal(success.success,true);assert.equal(success.forge.rank,rank+1);
-    if(chance<100)assert.equal(rollForge(item,"enhance",()=>chance).broken,true);
-    copies+=step.copies;item=success.forge;
+    assert.deepEqual([step.chance,step.downgradeChance,step.breakChance],rate);
+    assert.equal(step.breakOnFailure,rate[2]>0);
+    const counts=[0,0,0];
+    for(let n=0;n<100;n++){
+      const roll=rollForge(item,"enhance",()=>n);
+      const outcomes=[roll.success,roll.downgraded,roll.broken];
+      assert.equal(outcomes.filter(Boolean).length,1);counts[outcomes.indexOf(true)]++;
+      assert.equal(roll.forge.rank,rank+Number(roll.success)-Number(roll.downgraded));
+    }
+    assert.deepEqual(counts,rate);
+    copies+=step.copies;item=rollForge(item,"enhance",()=>0).forge;
   }
   assert.equal(copies,22);assert.throws(()=>rollForge(item,"enhance"),/forge_max_rank/);
+});
+
+test("a confirmed downgrade charges once and keeps the worn item's identity, affix and allowed socket across restart",()=>{
+  const dir=mkdtempSync(path.join(os.tmpdir(),"montra-forge-down-")),file=path.join(dir,"economy.sqlite");
+  let store=new EconomyStore(file,()=>98);
+  try{
+    const actor="c".repeat(64),gear="acc_ring_atk_1",bag=makeClassInventory("blade");
+    const forge={...plainForge(),rank:3,affix:{stat:"melee" as const,tier:1}};
+    bag.equipment={rightRing:gear};bag.equipmentForges={rightRing:forge};
+    bag.equipmentSockets={rightRing:"card_possessed"};bag.forgeCopies={[gear]:2};
+    store.register(actor,bag);
+    const stamp=forgeStamp({itemId:gear,forge}),request=randomUUID(),before=store.getAccount(actor);
+    const order={requestId:request,slot:"rightRing",stamp,action:"enhance",copies:2,acceptDowngrade:true};
+    assert(parseForge(order)?.acceptDowngrade);
+    assert.equal(parseForge({...order,acceptDowngrade:"yes"}),null);
+    const attempt=(confirmed:boolean)=>store.forgeWeapon(actor,request,"rightRing",stamp,"enhance",1,undefined,2,{acceptDowngrade:confirmed});
+    assert.throws(()=>attempt(false),/forge_downgrade_unconfirmed/);
+    assert.deepEqual(store.getAccount(actor),before);
+    const result=attempt(true);
+    assert(result.downgraded && !result.broken && !result.success);
+    const after=store.getAccount(actor);
+    assert.equal(after.gold,before.gold-48);assert.equal(after.inventory.forgeCopies?.[gear],undefined);
+    assert.equal(after.inventory.equipment?.rightRing,gear);assert.equal(after.inventory.equipmentSockets?.rightRing,"card_possessed");
+    assert.deepEqual(after.inventory.equipmentForges?.rightRing,{...forge,rank:2,revision:forge.revision+1});
+    store.close();store=new EconomyStore(file,()=>0);
+    assert.deepEqual(attempt(true),result);assert.deepEqual(store.getAccount(actor),after);
+    assert.throws(()=>store.forgeWeapon(actor,randomUUID(),"rightRing",stamp,"enhance"),/forge_item_changed/);
+  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
 
 test("the worn forest weapon drops matching copies into a full bag and pays the forge through +7",()=>{
@@ -43,8 +77,9 @@ test("the worn forest weapon drops matching copies into a full bag and pays the 
       const old=store.getAccount(actor),piece=old.inventory.slots[1]!,rank=piece.forge?.rank??0;
       if(rank===7)break;
       const terms=FORGE_CATALOG.enhanceSteps[rank],request=randomUUID(),stamp=forgeStamp(piece);
-      const hit=store.forgeWeapon(actor,request,1,stamp,"enhance",1,undefined,terms.copies,terms.breakOnFailure);
-      assert.deepEqual(store.forgeWeapon(actor,request,1,stamp,"enhance",1,undefined,terms.copies,terms.breakOnFailure),hit);
+      const risks={acceptBreak:terms.breakOnFailure,acceptDowngrade:terms.downgradeChance>0};
+      const hit=store.forgeWeapon(actor,request,1,stamp,"enhance",1,undefined,terms.copies,risks);
+      assert.deepEqual(store.forgeWeapon(actor,request,1,stamp,"enhance",1,undefined,terms.copies,risks),hit);
       const after=store.getAccount(actor);
       assert.equal((old.inventory.forgeCopies?.[id]??0)-(after.inventory.forgeCopies?.[id]??0),terms.copies);
       assert.equal(after.gold,old.gold-hit.cost);
@@ -108,7 +143,7 @@ test("a confirmed break removes only the target and its paid copies, including w
       if(gear==="acc_ring_atk_1")bag.slots[3]={itemId:gear,quantity:1,forge:plainForge()};
       bag.forgeCopies={[gear]:4};store.register(id,bag);
       const before=store.getAccount(id),request=randomUUID();
-      const attempt=(confirmed:boolean)=>store.forgeWeapon(id,request,target,stamp,"enhance",1,undefined,4,confirmed);
+      const attempt=(confirmed:boolean)=>store.forgeWeapon(id,request,target,stamp,"enhance",1,undefined,4,{acceptBreak:confirmed,acceptDowngrade:true});
       assert.throws(()=>attempt(false),/forge_risk_unconfirmed/);
       assert.throws(()=>attempt(true),/forge_remove_card/);assert.deepEqual(store.getAccount(id),before);
       store.socketItem(id,{requestId:randomUUID(),target,gear,stamp,action:"remove",expected:"card_possessed",card:null});
@@ -137,7 +172,7 @@ test("a banked spare starts again at +0 after a break and can only be claimed on
     const old={...plainForge(),rank:9,affix:{stat:"melee" as const,tier:3}};
     bag.slots[1]={itemId:gear,quantity:1,bound:true,forge:old,socket:null};
     bag.forgeCopies={[gear]:6};store.register(actor,bag);
-    assert(store.forgeWeapon(actor,randomUUID(),1,forgeStamp(bag.slots[1]),"enhance",1,undefined,4,true).broken);
+    assert(store.forgeWeapon(actor,randomUUID(),1,forgeStamp(bag.slots[1]),"enhance",1,undefined,4,{acceptBreak:true,acceptDowngrade:true}).broken);
     const before=store.getAccount(actor);
     assert.equal(before.inventory.forgeCopies?.[gear],2);
     assert.throws(()=>store.claimForgeCopy(actor,randomUUID(),gear,6),/forge_stock_changed/);
@@ -184,11 +219,11 @@ test("claim validates stock, bag capacity and paired slots, including bound lega
 });
 
 test("a safe enhancement preserves reroll pity and clears the retired enhancement miss counter", () => {
-  let f = {...plainForge(),rank:3,misses:3};
+  let f = {...plainForge(),rank:2,misses:3};
   for (let i = 0; i < FORGE.rareAfter; i++) f = rollForge(f, "reroll", () => 5).forge;
   assert.equal(f.affix?.tier, 1); assert.equal(f.rerollMisses, 4);
   f = rollForge(f, "enhance", () => 99).forge;
-  assert.equal(f.rank, 4); assert.equal(f.misses, 0); assert.equal(f.rerollMisses, 4);
+  assert.equal(f.rank, 3); assert.equal(f.misses, 0); assert.equal(f.rerollMisses, 4);
   f = rollForge(f, "reroll", () => 5).forge;
   assert.deepEqual(f.affix, {tier:3, stat:"melee"}); assert.equal(f.rerollMisses, 0);
 });
