@@ -58,6 +58,7 @@ export type CharacterSnapshot = {
   bladeBook?: BladeBook;
   sentinelBook?: SentinelBook;
   stamina?: number;
+  mana?: number;
   /** Undefined only when loading a legacy S2/three-slot snapshot for migration. */
   inventory?: InventorySnapshot;
   updatedAt: string;
@@ -151,6 +152,9 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
     validateAllocations(value.statAllocations, value.level as number);
   if (value.stamina !== undefined && (typeof value.stamina !== "number" || !Number.isFinite(value.stamina) || value.stamina < 0 || value.stamina > PROGRESSION.maxStamina)) {
     throw new Error("invalid_character_stamina");
+  }
+  if (value.mana !== undefined && (typeof value.mana !== "number" || !Number.isFinite(value.mana) || value.mana < 0 || value.mana > PROGRESSION.maxMana)) {
+    throw new Error("invalid_character_mana");
   }
   if(value.mapId===CASTLE_ID && !getWorldMap(CASTLE_ID)){
     const exit=getWorldMap("fallen_city") ?? getWorldMap(DEFAULT_MAP_ID)!;

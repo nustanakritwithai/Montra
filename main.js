@@ -7478,6 +7478,14 @@
       hudSet(bar.querySelector("i"), "stw", pctOf(me.stamina,me.maxStamina), "width");
       updateMeterValue(bar,value,max,value+" จาก "+max);
     }
+    const hasMana = me && Number(me.maxMana) > 0;
+    hudSet($("hudManaRow"), "manaRow", !hasMana, "hidden");
+    if (hasMana) {
+      const bar=$("manaBar"), value=Math.round(me.mana), max=Math.round(me.maxMana);
+      hudSet($("manaText"),"mana",value+"/"+max);
+      hudSet(bar.querySelector("i"),"manaw",pctOf(me.mana,me.maxMana),"width");
+      updateMeterValue(bar,value,max,value+" จาก "+max);
+    }
     const xpMax = Number(me?.xpToNext) || 0, xp = Number(me?.experience) || 0;
     const hasXp = me && room?.state?.progressionAvailable === true;
     hudSet($("hudXpRow"), "xpRow", !hasXp, "hidden");
@@ -8137,7 +8145,7 @@
         if((joined.state?.players?.get?.(data?.attackerId)?.mapId || "ritual_village") !== activeMapId)return;
         renderMagicBolt(data);
         { const thrower=avatars.get(data?.attackerId); if(thrower) SFX("rice",{x:thrower.x,z:thrower.z}); }
-        if(data?.attackerId===localId) {
+        if(data?.attackerId===localId && data.skill!=="basic_magic") {
           toast("ข้าวสารปลุกเสกโดนเป้าหมาย -" + data.damage + " HP");
         }
       });
@@ -8564,6 +8572,7 @@
           if (drawerActive === "chat") renderChat();
           return;
         }
+        if (info?.reason === "insufficient_mana") { floatAtPlayer(localId, "มานาไม่พอ", "weak", { drift: 0 }); toast("มานาไม่พอสำหรับใช้สกิล"); return; }
         if (info?.reason === "insufficient_stamina") { floatAtPlayer(localId, "กำลังไม่พอ", "weak", { drift: 0 }); toast("กำลังไม่พอสำหรับใช้สกิล"); return; }
         if(warpPending) {
           clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
@@ -9773,7 +9782,7 @@
     container.hidden=!action;
     if(action) {
       const cost=Math.max(0,Math.min(100,Number(stamina)||0));
-      button.textContent=(action==="escape" ? "แก้จับ" : "สวนผู้จับ")+" · กำลัง "+cost;
+      button.textContent=(action==="escape" ? "แก้จับ" : "สวนผู้จับ")+" · มานา "+cost;
       button.disabled=false;button.onclick=()=>{
         if(mode!=="live" || !room || grappleResponseMode!==action)return;
         button.disabled=true;room.send(action==="escape" ? "grapple_escape" : "grapple_counter",{});
@@ -9847,7 +9856,7 @@
       const locked=me.level<node.level || points<1 || missing.length>0 || Object.entries(node.practice).some(([name,count])=>(practice[name]||0)<count);
       const prereq=node.requires.length?" · ต้องเรียน "+node.requires.map(req=>clean(data.lessons[req]?.name || req)).join(", "):"";
       const training=Object.entries(node.practice).map(([name,count])=>" · "+clean(data.practiceLabels[name] || name)+" "+(practice[name]||0)+"/"+count).join("");
-      const detail="Lv."+node.level+" · "+clean(node.description)+(node.effect==="passive"?" · ติดตัว":" · กำลัง "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ")+prereq+training;
+      const detail="Lv."+node.level+" · "+clean(node.description)+(node.effect==="passive"?" · ติดตัว":" · มานา "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ")+prereq+training;
       const control=known?(node.effect==="passive"?'<span class="sword-passive">เรียนแล้ว · ติดตัว</span>':'<label class="sword-slot-label">ช่องลัด <select data-sentinel-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>'):'<button type="button" data-sentinel-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
       const rank=Number(ranks[id] || 0),rankLevels=data.rankLevels || [],rankable=known && (data.rankable || []).includes(id),next=rankLevels[rank],needed=(data.rankPractice || [])[rank] || 0,done=Object.values(practice).reduce((sum,n)=>sum+n,0);
       const support=["step","anchor","ward","party_ward"].includes(node.effect);
@@ -9910,7 +9919,7 @@
       const prereq=node.requires.length ? " · ต้องเรียน "+node.requires.map(req=>clean(data.lessons[req]?.name || req)).join(", ") : "";
       const training=Object.entries(node.practice).map(([name,count])=>" · "+clean(data.practiceLabels[name] || name)+" "+(practice[name]||0)+"/"+count).join("");
       const strength=["strike","consume","windup","counter"].includes(node.effect)?" · พลังโจมตี "+Math.round(node.power*100)+"%":"";
-      const detail="Lv."+node.level+" · "+clean(node.description)+strength+(node.effect==="passive"?" · ติดตัว":" · กำลัง "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ")+prereq+training;
+      const detail="Lv."+node.level+" · "+clean(node.description)+strength+(node.effect==="passive"?" · ติดตัว":" · มานา "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ")+prereq+training;
       const control=known ? (node.effect==="passive"?'<span class="sword-passive">เรียนแล้ว · ติดตัว</span>':'<label class="sword-slot-label">ช่องลัด <select data-blade-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>') : '<button type="button" data-blade-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
       const rank=Number(ranks[id] || 0),rankLevels=data.rankLevels || [],rankable=known && (data.rankable || []).includes(id),next=rankLevels[rank],needed=(data.rankPractice || [])[rank] || 0,done=Object.values(practice).reduce((sum,n)=>sum+n,0);
       const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · ดาเมจมอนสเตอร์ +'+(rank*4)+'%'+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+done+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-blade-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || done<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
@@ -9954,10 +9963,10 @@
         // Spirit techniques prepare their own prerequisite; a basic character has no summon/trance button.
         if (["spirit","spirit_bind","spirit_heal","spirit_ward","trance"].includes(node.effect)) {
           if (!me.possessionActive && !room.state.summons?.has(localId)) {
-            room.send("pot_summon",{});toast("เรียกผีจากหม้อ · กดวิชาอีกครั้งเมื่อผีปรากฏ");return;
+            room.send("pot_summon",{});toast("เรียกผีใช้ 15 มานา · กดวิชาอีกครั้งเมื่อผีปรากฏ");return;
           }
           if (node.effect==="trance" && !me.possessionActive) {
-            room.send("possess",{});toast("กำลังเข้าทรง · กดวิชาอีกครั้งเมื่อเข้าทรงแล้ว");return;
+            room.send("possess",{});toast("เข้าทรงใช้ 15 มานา · กดวิชาอีกครั้งเมื่อเข้าทรงแล้ว");return;
           }
         }
         if (["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind","pve_rice"].includes(node.effect)) {
@@ -10015,7 +10024,7 @@
         Object.entries(mastery).some(([category,count])=>(progress[category] || 0)<count);
       const prerequisite=node.requires.length ? " · ต้องเรียน "+node.requires.map(req=>clean(data.lessons[req]?.name || req)).join(", ") : "";
       const masteryDetail=Object.entries(mastery).map(([category,count])=>" · "+clean(labels[category] || category)+" "+(progress[category] || 0)+"/"+count).join("");
-      const detail="Lv."+node.level+" · "+clean(node.description)+" · ระยะ "+node.range+" · กำลัง "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ · ฝึกรวม "+training+"/"+node.training+prerequisite+masteryDetail;
+      const detail="Lv."+node.level+" · "+clean(node.description)+" · ระยะ "+node.range+" · มานา "+node.stamina+" · รอ "+node.cooldownMs/1000+" วิ · ฝึกรวม "+training+"/"+node.training+prerequisite+masteryDetail;
       const control=known ? '<label class="sword-slot-label">ช่องลัด <select data-occult-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>' :
         '<button type="button" data-occult-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
       const rank=Number(ranks[id] || 0),rankLevels=data.rankLevels || [],rankable=known && (data.rankable || []).includes(id),next=rankLevels[rank],needed=(data.rankPractice || [])[rank] || 0;
@@ -10117,7 +10126,7 @@
       const slot=book.slots.indexOf(id);
       const prerequisite=lesson?.requires?.length ? ' · ต้องเรียน '+lesson.requires.map(req=>clean(catalog.skills[req]?.name || req)).join(', ') : '';
       const masteryInfo=mastery ? ' · '+clean(catalog.masteryLabels?.[lesson.school] || 'ฝึกสำนัก')+' '+progress.technique+'/'+mastery.technique+(mastery.sequences ? ' · ชุดต่อเนื่อง '+progress.sequences+'/'+mastery.sequences : '') : '';
-      const info=lesson ? 'Lv.'+lesson.level+' · '+clean(lesson.description)+' · '+(node.range ? 'ระยะ '+node.range : 'ใช้กับตนเอง')+' · กำลัง '+node.stamina+' · คูลดาวน์ '+node.cooldownMs/1000+' วิ · ฝึกโจมตี '+lesson.training.strikes+' / รับ '+lesson.training.blocks+prerequisite+masteryInfo : id==="teep" ? 'วิชาพื้นฐาน · พลัง 80% · หยุดจังหวะศัตรูทั่วไป 0.7 วิ · Elite/บอสไม่ถูกหยุด' : id==="parry" ? 'วิชาพื้นฐาน · ปัดด้านหน้า 1 ครั้งใน 0.6 วิ รับดาเมจ 35% และเปิดจังหวะสวน · กำลัง 18 · คูลดาวน์ 9 วิ' : id==="evade" ? 'วิชาพื้นฐาน · ถอย 1.2 หน่วย เบี่ยงแรงด้านหน้า 1 ครั้งใน 0.45 วิ รับดาเมจ 20% และเปิดจังหวะสวน · กำลัง 20 · คูลดาวน์ 8 วิ' : 'วิชาพื้นฐาน · พร้อมใช้';
+      const info=lesson ? 'Lv.'+lesson.level+' · '+clean(lesson.description)+' · '+(node.range ? 'ระยะ '+node.range : 'ใช้กับตนเอง')+' · มานา '+node.stamina+' · คูลดาวน์ '+node.cooldownMs/1000+' วิ · ฝึกโจมตี '+lesson.training.strikes+' / รับ '+lesson.training.blocks+prerequisite+masteryInfo : id==="teep" ? 'วิชาพื้นฐาน · พลัง 80% · หยุดจังหวะศัตรูทั่วไป 0.7 วิ · Elite/บอสไม่ถูกหยุด' : id==="parry" ? 'วิชาพื้นฐาน · ปัดด้านหน้า 1 ครั้งใน 0.6 วิ รับดาเมจ 35% และเปิดจังหวะสวน · มานา 18 · คูลดาวน์ 9 วิ' : id==="evade" ? 'วิชาพื้นฐาน · ถอย 1.2 หน่วย เบี่ยงแรงด้านหน้า 1 ครั้งใน 0.45 วิ รับดาเมจ 20% และเปิดจังหวะสวน · มานา 20 · คูลดาวน์ 8 วิ' : 'วิชาพื้นฐาน · พร้อมใช้';
       const button=learned ? (lesson && !available ? '<span class="sword-passive">เรียนแล้ว</span>' : '<label class="sword-slot-label">ช่องลัด <select data-muay-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slot===n?'selected':'')+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>') : '<button type="button" data-muay-learn="'+clean(id)+'" '+(locked?'disabled':'')+'>เรียน 1 แต้ม</button>';
       const rank=Number(ranks[id] || 0),rankLevels=catalog.rankLevels || [],rankable=learned && (catalog.rankable || []).includes(id),next=rankLevels[rank],needed=(catalog.rankPractice || [])[rank] || 0,done=book.training.strikes+book.training.blocks;
       const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · ดาเมจมอนสเตอร์ +'+(rank*4)+'%'+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+done+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-muay-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || !selected || done<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
@@ -10202,13 +10211,13 @@
   // Stamina cost on a skill button; greyed out (and disabled) while there is not enough.
   function staminaCost(button, cost, me) {
     if (!button || !(cost > 0)) return;
-    const short = (Number(me?.stamina) || 0) < cost;
-    const tag = document.createElement("small"); tag.className = "stamina-cost"; tag.textContent = "⚡" + cost;
+    const short = (Number(me?.mana) || 0) < cost;
+    const tag = document.createElement("small"); tag.className = "stamina-cost"; tag.textContent = "✦" + cost;
     button.append(tag);
     button.classList.toggle("no-stamina", short);
-    if (short) { button.disabled = true; button.title = "กำลังไม่พอ · ต้องใช้ " + cost; }
+    if (short) { button.disabled = true; button.title = "มานาไม่พอ · ต้องใช้ " + cost; }
   }
-  const affordKey = (ids, table, me) => ids.map(id => id && table[id]?.stamina > (Number(me?.stamina) || 0) ? 1 : 0).join("");
+  const affordKey = (ids, table, me) => ids.map(id => id && table[id]?.stamina > (Number(me?.mana) || 0) ? 1 : 0).join("");
   function syncSwordHotbar() {
     const bar=$("swordHotbar"), data=swordData();
     if (!data || data.me.pathId!=="phutthaisawan") {
@@ -10254,7 +10263,7 @@
     curse: "☽", curse_burst: "☾", spirit: "☄", spirit_bind: "⛓", trance: "☯", heal: "✚", heal_area: "✚", cleanse: "❂", cleanse_area: "❂", spirit_ward: "⛨", ward_area: "⛨", spirit_heal: "✚" };
   const sgEsc = v => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   const sgCombatLine = n => n.passive ? "ติดตัว" : [n.power && /strike|step|counter|flurry|area|sweep|slam|stun|consume|windup|mark|rice|detonate|curse|spirit|interrupt|teep|grapple|sidestep|retreat_strike/.test(n.effect) ? "พลัง " + Math.round(n.power * 100) + "%" : "",
-    n.range ? "ระยะ " + n.range : "", n.stamina ? "⚡" + n.stamina : "", n.cooldownMs ? "รอ " + n.cooldownMs / 1000 + " วิ" : ""].filter(Boolean).join(" · ");
+    n.range ? "ระยะ " + n.range : "", n.stamina ? "มานา " + n.stamina : "", n.cooldownMs ? "รอ " + n.cooldownMs / 1000 + " วิ" : ""].filter(Boolean).join(" · ");
   // Skill ranks (ขั้นวิชา): same point pool, unlocked by level and total practice.
   const sgRank = (id, learned, ranks, info, done) => {
     const rankable = learned && (info?.rankable || []).includes(id); if (!rankable) return {};
@@ -10510,7 +10519,7 @@
           (requirements.length?'<small>ต้องเรียน '+clean(reqText)+'</small>':'')+
           (node.training?'<small>'+clean(trainingNames[node.training.id])+': '+training+' / '+node.training.count+'</small>':'')+
           (effectInfo?'<small>'+clean(effectInfo)+'</small>':'')+
-          (node.effect!=="passive"?'<small>กำลัง '+node.stamina+' · รอ '+(node.cooldownMs/1000)+' วิ</small>':'')+upgrade+slotSelect+'</div>'+button+'</article>';
+          (node.effect!=="passive"?'<small>มานา '+node.stamina+' · รอ '+(node.cooldownMs/1000)+' วิ</small>':'')+upgrade+slotSelect+'</div>'+button+'</article>';
       }).join("");
       return '<section><h3>'+clean(title)+'</h3>'+rows+'</section>';
     }).join("");
@@ -10600,7 +10609,7 @@
       const bonus = effect.kind === "heal" ? "ฟื้น HP " + Math.round(100*effect.fraction) + "%" :
         Object.entries(variant?.bonuses ?? effect.bonuses).map(([stat,v]) => statLabels[stat] + " +" + Math.round(v*100) + "%").join(" · ") + " นาน " + (variant?.durationMs ?? effect.durationMs)/1000 + " วินาที";
       const passive = pathId === "phutthaisawan" ? "ดาบคู่สวมกระบี่อาคม · ฟันทุก 0.75 วินาที ดาเมจ 80% · " : "";
-      $("buildPreview").textContent = passive + path.skill + " · " + bonus + (path.targets === "party" ? " ให้สมาชิกในระยะ " + (variant?.radius ?? catalog.supportRadius) + " หน่วย" : " ให้ตัวเอง") + " · ใช้ " + path.stamina + " กำลัง · รอ " + path.cooldownMs/1000 + " วินาที";
+      $("buildPreview").textContent = passive + path.skill + " · " + bonus + (path.targets === "party" ? " ให้สมาชิกในระยะ " + (variant?.radius ?? catalog.supportRadius) + " หน่วย" : " ให้ตัวเอง") + " · ใช้ " + path.stamina +  " มานา · รอ " + path.cooldownMs/1000 + " วินาที";
     };
     $("buildPath").onchange = () => { loadTalents(); preview(); };
     talentSelect.onchange = preview;
@@ -10675,8 +10684,8 @@
       } else if (key === "atk" || key === "magicAtk") bits.push("กำลังโหลดข้อมูลอาวุธจากเซิร์ฟเวอร์");
       if(key==="def" && status?.forgeRatings?.guard)bits.push("ป้องกันมอนสเตอร์จากช่าง +"+num(status.forgeRatings.guard));
       if(key==="magicAtk" && status?.forgeRatings?.healing)bits.push("พลังรักษา PvE จากช่าง +"+num(status.forgeRatings.healing));
-      if(key==="stamina" && status?.overflowRegen)bits.push("พลังเกินเพดานช่วยฟื้นเพิ่ม "+num(status.overflowRegen)+"/วิ");
-      if (key === "stamina") bits.push("ใช้กับแดชและวิชา · ฟื้น 4/วิ (สู้อยู่ 2/วิ)");
+      if(key==="stamina" && status?.overflowRegen)bits.push("พลังเกินเพดานช่วยฟื้นเพิ่ม "+Number(status.overflowRegen).toFixed(1)+"/วิ");
+      if (key === "stamina") bits.push("ใช้กับแดช · ฟื้น 4/วิ (สู้อยู่ 2/วิ)");
       $("statBonus-" + key).textContent = bits.join(" · ");
     }
     // Active effects and unspent points.
@@ -10738,7 +10747,7 @@
     const durable = me?.persistent === true;
     const stats = [
       ["hp","พลังชีวิตสูงสุด","ความเสียหายที่รับได้ก่อนหมดสติ"],
-      ["stamina","กำลังสูงสุด","กำลังสำรองสำหรับพุ่งหลบและใช้วิชา"],
+      ["stamina","กำลังสูงสุด","กำลังสำรองสำหรับพุ่งหลบ"],
       ["atk","โจมตีกายภาพ","พลังโจมตีทางกายก่อนหักการป้องกัน"],
       ["def","ป้องกันกายภาพ","ลดความเสียหายจากการโจมตีทางกาย"],
       ["magicAtk","โจมตีเวท","พลังโจมตีของวิชาที่ใช้ค่าเวท"],

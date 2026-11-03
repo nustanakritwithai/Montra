@@ -1172,6 +1172,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .hud-meter[hidden],.cp-buffs[hidden] { display:none; }
 .hud-meter.hp,.cp-bar.hp { color:#ff9c99; }
 .hud-meter.st,.cp-bar.st { color:#8ad5ff; }
+.hud-meter.mana { color:#d7a2ff; }
+.bar.mana-bar i { background:linear-gradient(90deg,#7443b2,#d5a2ff); }
 .hud-meter.xp,.cp-bar.xp { color:#f3d494; }
 .portrait .info-seal { width:65%; height:65%; }
 .cp-tabs button { display:flex; align-items:center; justify-content:center; gap:6px; min-height:44px; }
