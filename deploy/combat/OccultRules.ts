@@ -10,8 +10,8 @@ export type OccultLesson = Readonly<{
   training:number; effect:OccultEffect; stamina:number; cooldownMs:number; range:number; power:number;
 }>;
 export const OCCULT_LESSONS = {
-  seer_mark: {name:"ยันต์ตีตรา",description:"โจมตีและติดตราให้วิชาข้าวสารหรือระเบิดยันต์",path:"seer",level:1,requires:[],training:0,effect:"mark",stamina:12,cooldownMs:4000,range:8,power:0.9},
-  seer_rice: {name:"ข้าวสารฝังอาคม",description:"โจมตีเป้าเดียว แรงขึ้นเมื่อเป้าติดตราของตน",path:"seer",level:3,requires:["seer_mark"],training:3,effect:"rice",stamina:16,cooldownMs:5000,range:15,power:1.4},
+  seer_mark: {name:"ยันต์ตีตรา",description:"โจมตีและติดตราให้วิชาข้าวสารหรือระเบิดยันต์",path:"seer",level:1,requires:[],training:0,effect:"mark",stamina:10,cooldownMs:4000,range:8,power:0.9},
+  seer_rice: {name:"ข้าวสารฝังอาคม",description:"โจมตีเป้าเดียว แรงขึ้นเมื่อเป้าติดตราของตน",path:"seer",level:3,requires:["seer_mark"],training:3,effect:"rice",stamina:14,cooldownMs:5000,range:15,power:1.4},
   seer_scatter: {name:"ข้าวสารแตกกระจาย",description:"ซัดข้าวสารใส่มอนสเตอร์ใกล้เป้าหมายสูงสุด 3 ตัว",path:"seer",level:5,requires:["seer_rice"],training:6,effect:"rice_area",stamina:24,cooldownMs:10000,range:12,power:0.75},
   seer_burst: {name:"ระเบิดยันต์",description:"ใช้ตราของตนเพื่อโจมตีเป้าหมายอย่างรุนแรง",path:"seer",level:5,requires:["seer_rice"],training:6,effect:"detonate",stamina:24,cooldownMs:10000,range:12,power:2.15},
   seer_seal: {name:"ยันต์สะกด",description:"โจมตีและหยุดจังหวะมอนสเตอร์ทั่วไปชั่วคราว Elite และบอสไม่ถูกหยุด",path:"seer",level:8,requires:["seer_mark"],training:10,effect:"interrupt",stamina:20,cooldownMs:12000,range:8,power:0.9},
@@ -20,8 +20,8 @@ export const OCCULT_LESSONS = {
   seer_hexburst: {name:"ถอนเคราะห์กลับ",description:"ใช้คำสาปของตนที่อยู่บนเป้าหมายระเบิดเป็นดาเมจ",path:"seer",level:12,requires:["seer_curse","seer_burst"],training:20,effect:"curse_burst",stamina:25,cooldownMs:14000,range:12,power:1.8},
   seer_spirit_bind: {name:"ผีรังควาน",description:"สั่งผีโจมตีและหยุดจังหวะมอนสเตอร์ทั่วไปชั่วคราว",path:"seer",level:15,requires:["seer_spirit","seer_seal"],training:25,effect:"spirit_bind",stamina:24,cooldownMs:14000,range:8,power:1.1},
   seer_trance: {name:"อาคมยืมฤทธิ์",description:"ขณะเข้าทรงเพิ่มพลังเวทชั่วคราว",path:"seer",level:15,requires:["seer_burst","seer_spirit"],training:25,effect:"trance",stamina:25,cooldownMs:25000,range:0,power:0.2},
-  mender_heal: {name:"ยันต์ฟื้นกาย",description:"รักษาตนเองหรือสมาชิกปาร์ตี้ที่เลือก",path:"mender",level:1,requires:[],training:0,effect:"heal",stamina:18,cooldownMs:6000,range:12,power:0.14},
-  mender_area: {name:"วงยันต์ฟื้นฟู",description:"ฟื้น HP ทันทีและอีก 3 ครั้งในวงอาคมนาน 6 วินาที",path:"mender",level:3,requires:["mender_heal"],training:3,effect:"heal_area",stamina:24,cooldownMs:12000,range:8,power:0.09},
+  mender_heal: {name:"ยันต์ฟื้นกาย",description:"รักษาตนเองหรือสมาชิกปาร์ตี้ที่เลือก",path:"mender",level:1,requires:[],training:0,effect:"heal",stamina:14,cooldownMs:6000,range:12,power:0.14},
+  mender_area: {name:"วงยันต์ฟื้นฟู",description:"ฟื้น HP ทันทีและอีก 3 ครั้งในวงอาคมนาน 6 วินาที",path:"mender",level:3,requires:["mender_heal"],training:3,effect:"heal_area",stamina:22,cooldownMs:12000,range:8,power:0.09},
   mender_ward: {name:"ยันต์คุ้มชีพ",description:"เพิ่มป้องกันให้ตนเองหรือสมาชิกปาร์ตี้ชั่วคราว",path:"mender",level:5,requires:["mender_heal"],training:6,effect:"ward",stamina:20,cooldownMs:15000,range:12,power:0.15},
   mender_cleanse: {name:"ถอนคุณไสย",description:"ถอนคำสาปอาคมที่วิชานี้รองรับจากตนเองหรือปาร์ตี้",path:"mender",level:8,requires:["mender_ward"],training:10,effect:"cleanse",stamina:18,cooldownMs:12000,range:12,power:0},
   mender_spirit: {name:"ผีคุ้มครอง",description:"ให้ผีที่เรียกมาช่วยคุ้มครองสมาชิกปาร์ตี้",path:"mender",level:10,requires:["mender_ward"],training:15,effect:"spirit_ward",stamina:22,cooldownMs:18000,range:12,power:0.2},

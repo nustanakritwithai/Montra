@@ -16,7 +16,7 @@ export const SENTINEL_LESSONS={
   sweep:{name:"กวาดเปิดแนว",description:"กวาดโจมตีมอนสเตอร์ด้านหน้าสูงสุดสามตัว",branch:"control",level:3,requires:["bash"],practice:{stun:2},effect:"sweep",stamina:24,cooldownMs:10000,range:3.5,power:0.85},
   slam:{name:"กระแทกหยุดศึก",description:"ตั้งท่าก่อนกระแทกและสตันเป้าหมาย",branch:"control",level:7,requires:["bash"],practice:{stun:5},effect:"slam",stamina:26,cooldownMs:14000,range:3,power:1.25},
   counter:{name:"ง้าวพิทักษ์พิฆาต",description:"โจมตีหนักหลังตั้งรับหรือสกัดสำเร็จ",branch:"control",level:13,requires:["guard","bash"],practice:{guard:5,stun:7},effect:"counter",stamina:30,cooldownMs:16000,range:3,power:1.8},
-  taunt:{name:"เสียงท้าทาย",description:"ยั่วยุมอนสเตอร์ทั่วไปใกล้ตัวให้หันมาหาตน",branch:"support",level:1,requires:[],practice:{},effect:"taunt",stamina:20,cooldownMs:15000,range:8,power:0},
+  taunt:{name:"เสียงท้าทาย",description:"ยั่วยุมอนสเตอร์ทั่วไปใกล้ตัวให้หันมาหาตน",branch:"support",level:1,requires:[],practice:{},effect:"taunt",stamina:16,cooldownMs:15000,range:8,power:0},
   ward:{name:"คุ้มกันสหาย",description:"เพิ่มป้องกันให้ตนหรือสมาชิกปาร์ตี้ในระยะ",branch:"support",level:3,requires:["taunt"],practice:{},effect:"ward",stamina:20,cooldownMs:14000,range:10,power:0.15},
   intercept:{name:"ยืนเคียงป้องกัน",description:"เข้าหาเพื่อนและรับความเสียหายบางส่วนแทนชั่วคราว",branch:"support",level:7,requires:["ward"],practice:{assist:3},effect:"intercept",stamina:25,cooldownMs:20000,range:6,power:0.3},
   party_ward:{name:"แนวพิทักษ์",description:"เพิ่มป้องกันให้สมาชิกปาร์ตี้ใกล้เคียง",branch:"support",level:13,requires:["intercept","guard"],practice:{assist:8,guard:4},effect:"party_ward",stamina:32,cooldownMs:25000,range:8,power:0.12},
