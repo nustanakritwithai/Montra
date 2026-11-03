@@ -11,7 +11,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeStarterInventory, grantStarterWeapons, validateInventory, type InventorySnapshot } from "./ItemRules.js";
+import { makeClassInventory, makeStarterInventory, grantStarterWeapons, validateInventory, type InventorySnapshot } from "./ItemRules.js";
 import { DEFAULT_MAP_ID, getWorldMap } from "./WorldMaps.js";
 import {CASTLE_ID} from "./CastlePilot.js";
 import { emptyAllocations, PROGRESSION, validateAllocations, type Allocations } from "./Progression.js";
@@ -284,18 +284,17 @@ export class CharacterStore {
     if (!build || !name) throw new Error("character_setup_required");
     let inventory = character.inventory!;
     let muayWrapGranted = character.muayWrapGranted;
-    if (build.path === "muay_boran") {
+    if (fresh) {
+      inventory=makeClassInventory(build.path);
+      if (build.path==="muay_boran")muayWrapGranted=true;
+    } else if (build.path === "muay_boran") {
       const slots = inventory.slots.slice(), existing = slots.findIndex(item => item?.itemId === MUAY_WRAP_ID);
       const index = existing >= 0 ? existing : slots.findIndex(item => item === null);
       if (index >= 0) {
         if (existing < 0) slots[index] = {itemId:MUAY_WRAP_ID, quantity:1};
-        inventory = {...inventory, slots, equippedWeaponSlot:fresh ? index : inventory.equippedWeaponSlot};
+        inventory = {...inventory, slots};
         muayWrapGranted = true;
       }
-    } else if (fresh) {
-      const target = build.path === "seer" || build.path === "mender" ? "spirit_staff" : "arcane_sword";
-      const index = inventory.slots.findIndex(item => item?.itemId === target);
-      if (index >= 0) inventory = {...inventory, equippedWeaponSlot:index};
     }
     const prepared = {...character, name, build, inventory, ...(muayWrapGranted ? {muayWrapGranted:true} : {}), updatedAt:new Date().toISOString()};
     if (!fresh) await this.save(prepared);

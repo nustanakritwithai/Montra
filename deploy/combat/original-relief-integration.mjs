@@ -7,9 +7,9 @@ const dir=process.env.MONTRA_CHARACTER_DIR,url=process.env.MONTRA_TEST_URL;
 if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url??"") || !path.basename(dir??"").startsWith("montra-original-test-"))throw Error("Requires an isolated original-world test server");
 const sdk=new Client(url),clients=new Set(),nap=ms=>new Promise(ok=>setTimeout(ok,ms));
 async function until(fn,label,timeout=14000){const end=Date.now()+timeout;while(Date.now()<end){const v=fn();if(v)return v;await nap(70);}throw Error("timeout "+label);}
-async function fixture(mapId,x,z,y=0){
+async function fixture(mapId,x,z,y=0,characterPath="seer"){
   const token="mt1_"+randomBytes(32).toString("hex"),id=createHash("sha256").update(token).digest("hex");
-  await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"Scout",build:{path:"seer",ancestry:"woodland"},level:85,experience:0,pkKills:0,pkDeaths:0,x,y,z,hp:900,mapId,inventory:{version:1,slots:Array(12).fill(null),equippedWeaponSlot:null},updatedAt:new Date().toISOString()}),{flag:"wx"});return token;
+  await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"Scout",build:{path:characterPath,ancestry:"woodland"},level:85,experience:0,pkKills:0,pkDeaths:0,x,y,z,hp:900,mapId,inventory:{version:1,slots:Array(12).fill(null),equippedWeaponSlot:null},updatedAt:new Date().toISOString()}),{flag:"wx"});return token;
 }
 async function join(token,ver=1,roomId){
   const opts={guestToken:token,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,castleVersion:2,riverCityVersion:1,atlasReliefVersion:1,originalReliefVersion:ver};
@@ -46,7 +46,7 @@ try{
     ["fight on the same wall", [50,96,4],[51.5,96,4]],
     ["wall separates ground and crest",[50,100.5,0],[50,96,4]]
   ]){
-    const a=await join(await fixture(city,...start)),b=await join(await fixture(city,...end),1,a.r.roomId);
+    const a=await join(await fixture(city,...start,"blade")),b=await join(await fixture(city,...end),1,a.r.roomId);
     await until(()=>a.r.state.players.size===2 && b.r.state.players.size===2,"both fighters present");
     const hp=b.me().hp,fromY=a.me().y;
     a.r.send("attack",{targetId:b.r.sessionId});
