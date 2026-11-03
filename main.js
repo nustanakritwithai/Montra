@@ -7419,6 +7419,13 @@
   // Rebuilt from state four times a second; each element is written only
   // when its text or width actually changes.
   const PATH_GLYPHS = { phutthaisawan: "⚔", muay_boran: "✊", blade: "🗡", sentinel: "⛨", seer: "✦", mender: "✚" };
+  const pathSeal = path => ({phutthaisawan:"twin", muay_boran:"fist", blade:"atk", sentinel:"def", seer:"spirit", mender:"heal"})[path] || "status";
+  // Only internal seal ids are passed here; server-provided names are written as text.
+  const seal = id => '<svg class="info-seal" aria-hidden="true" focusable="false"><use href="#seal-' + id + '"></use></svg>';
+  function updateMeterValue(el, value, max, description) {
+    const attrs = {"aria-valuemin":"0","aria-valuemax":String(max),"aria-valuenow":String(Math.max(0,Math.min(max,value))),"aria-valuetext":description};
+    for (const [name,v] of Object.entries(attrs)) if (el.getAttribute(name) !== v) el.setAttribute(name,v);
+  }
   const hudKills = {};
   let hudTarget = { id: null, until: 0 }, hudCache = new Map(), hudIn = 0;
   const hudSet = (el, key, value, prop = "textContent") => { if (!el) return; const k = key + prop; if (hudCache.get(k) === value) return; hudCache.set(k, value); if (prop === "width") el.style.width = value; else if (prop === "hidden") el.hidden = value; else el[prop] = value; };
@@ -7469,13 +7476,28 @@
     // Player card.
     const hp = me ? Number(me.hp) : demoHp, maxHp = me ? Number(me.maxHp) || 100 : 100;
     hudSet(localHpBar, "hpw", pctOf(hp, maxHp), "width"); hudSet($("hpText"), "hp", Math.ceil(hp) + "/" + Math.ceil(maxHp));
-    const hasSt = me && Number(me.maxStamina) > 0;
+    updateMeterValue(localHpBar.parentElement, Math.ceil(hp), Math.ceil(maxHp), Math.ceil(hp) + " จาก " + Math.ceil(maxHp));
+    const hasSt = room?.state?.progressionAvailable === true && me && Number(me.maxStamina) > 0;
+    hudSet($("hudStRow"), "stRow", !hasSt, "hidden");
     hudSet($("staminaText"), "st", hasSt ? Math.round(me.stamina) + "/" + Math.round(me.maxStamina) : "");
+    if (hasSt) {
+      const bar = $("staminaBar"), value = Math.round(me.stamina), max = Math.round(me.maxStamina);
+      hudSet(bar.querySelector("i"), "stw", pctOf(me.stamina,me.maxStamina), "width");
+      updateMeterValue(bar,value,max,value+" จาก "+max);
+    }
     const xpMax = Number(me?.xpToNext) || 0, xp = Number(me?.experience) || 0;
-    hudSet($("expBar")?.querySelector("i"), "xpw", xpMax ? pctOf(xp, xpMax) : "0%", "width");
-    hudSet($("expText"), "xp", me ? (xpMax ? "EXP " + xp + "/" + xpMax : "EXP สูงสุด") : "EXP · เล่นออนไลน์เพื่อเก็บ");
+    const hasXp = me && room?.state?.progressionAvailable === true;
+    hudSet($("hudXpRow"), "xpRow", !hasXp, "hidden");
+    if (hasXp) {
+      const xpPct = xpMax ? pctOf(xp,xpMax) : "100%", xpDesc = xpMax ? xp + " จาก " + xpMax : "เลเวลสูงสุด";
+      hudSet($("expBar").querySelector("i"), "xpw", xpPct, "width");
+      hudSet($("expText"), "xp", xpMax ? Math.min(100, Math.floor(100*xp/xpMax)) + "%" : "สูงสุด");
+      hudSet($("hudXpRow"), "xpTitle", xpDesc, "title");
+      updateMeterValue($("expBar"), xpMax ? xp : 1, xpMax || 1, xpDesc);
+    }
     hudSet($("levelBadge"), "lv", String(Number(me?.level) || 1));
-    hudSet($("classGlyph")?.firstChild, "glyph", PATH_GLYPHS[me?.pathId] || "๛", "nodeValue");
+    const glyphHref = "#seal-" + pathSeal(me?.pathId);
+    if ($("hudClassSeal").getAttribute("href") !== glyphHref) $("hudClassSeal").setAttribute("href",glyphHref);
     $("classGlyph")?.classList.toggle("low-hp", hp / maxHp < .3);
     // Target frame: only while there is a target.
     const tg = hudCurrentTarget(now);
@@ -7744,14 +7766,6 @@
     if (drawerActive === "character") renderProgressionProfile();
     if (drawerActive === "party") renderParty();
     if (drawerActive === "guild") renderGuild();
-    const me=players.get(localId), staminaBar=$("staminaBar");
-    if (state?.progressionAvailable === true && me && Number(me.maxStamina)>0) {
-      const pct=Math.max(0,Math.min(100,100*Number(me.stamina)/Number(me.maxStamina)));
-      staminaBar.querySelector("i").style.width=pct+"%";
-      staminaBar.setAttribute("aria-valuemin","0");staminaBar.setAttribute("aria-valuemax",String(me.maxStamina));
-      staminaBar.setAttribute("aria-valuenow",String(Math.round(me.stamina)));
-      staminaBar.title="กำลัง " + Math.round(me.stamina) + "/" + Math.round(me.maxStamina);
-    }
     return true;
   }
   let syncPoll = null;
@@ -9724,10 +9738,6 @@
   }
 
   function openOnline() { closeDrawer(); window.MontraEntry?.open(); }
-  const progressionStats = [
-    ["hp","HP สูงสุด","maxHp"],["atk","โจมตีกายภาพ","atk"],["def","ป้องกันกายภาพ","def"],
-    ["magicAtk","โจมตีเวท","magicAtk"],["magicDef","ป้องกันเวท","magicDef"],["stamina","กำลังสูงสุด","maxStamina"]
-  ];
   let catalogKey = "", buildCatalog = null;
   function getBuildCatalog() {
     const raw = room?.state?.buildCatalog || "";
@@ -10588,12 +10598,7 @@
     const talent = buildTalentGroup(getBuildCatalog(), p?.pathId)?.variants[p?.bladeTalentId || p?.wardTalentId];
     const swordSchool=p?.pathId==="phutthaisawan" ? swordData()?.catalog?.schools?.[swordData()?.tree?.school]?.name : "";
     const muaySchool=p?.pathId==="muay_boran" ? muayBookData()?.catalog?.schools?.[muayBookData()?.book?.school]?.name : "";
-    if ($("currentBuild")) $("currentBuild").textContent = selectedPath ? selectedPath.role + " · " + selectedPath.name + (swordSchool || muaySchool ? " · สำนัก" + (swordSchool || muaySchool) : "") + (talent ? " · " + talent.name : "") + " · " + getBuildCatalog().ancestries[p.ancestryId].name + " · " + ancestryHint(p) : "ยังไม่ได้เลือกสายอาชีพ";
-    $("profileLevel").textContent = "LV. " + (p?.level ?? 1) + " · EXP " + (p?.experience ?? 0) + (supported && p.xpToNext ? " / " + p.xpToNext : "");
-    for (const [key,,field] of progressionStats) {
-      $("statValue-" + key).textContent = supported ? String(Math.round(Number(p[field]) || 0)) : "—";
-    }
-    $("profileStamina").textContent = supported ? Math.round(Number(p.stamina)) + " / " + Math.round(Number(p.maxStamina)) : "—";
+    if ($("currentBuild")) $("currentBuild").textContent = selectedPath ? [selectedPath.name, swordSchool || muaySchool, talent?.name, getBuildCatalog()?.ancestries?.[p.ancestryId]?.name, ancestryHint(p)].filter(Boolean).join(" · ") : "ยังไม่ได้เลือกสายอาชีพ";
     renderCharacterSheet(p, supported);
   }
   // ---- Character sheet (status / class / account tabs) ----
@@ -10604,14 +10609,14 @@
     // Offline: the sheet is an online feature; show only a notice and the account tab.
     $("cpOffline").hidden = live;
     const tabs = ui.drawerBody.querySelector(".cp-tabs");
-    if (tabs) tabs.hidden = !live;
+    if (tabs) { tabs.hidden = !live; if (!live) delete tabs.dataset.shown; }
     if (!live) { for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = true; return; }
     if (tabs.dataset.shown !== "1") { tabs.dataset.shown = "1"; for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = pg.dataset.page !== (tabs.querySelector(".on")?.dataset.cp || "status"); }
     // Hero: glyph, level ring (EXP share), role and school.
     const xpMax = Number(c.xpToNext) || 0, xpShare = xpMax ? Math.min(1, (Number(c.experience) || 0) / xpMax) : 1;
     $("cpRing").style.setProperty("--p", (xpShare * 100).toFixed(1));
     $("cpLevel").textContent = String(num(c.level) || 1);
-    $("cpGlyph").textContent = PATH_GLYPHS[p?.pathId] || "๛";
+    $("cpPortraitSeal").setAttribute("href", "#seal-" + pathSeal(p.pathId));
     const path = getBuildCatalog()?.paths?.[p?.pathId];
     $("cpRole").textContent = path ? path.role + " · " + path.name : "ยังไม่เลือกสายอาชีพ";
     const sword = p?.pathId === "phutthaisawan" ? swordData() : null, muay = p?.pathId === "muay_boran" ? muayBookData() : null;
@@ -10621,8 +10626,9 @@
     // Bars.
     $("cpHpBar").style.width = pctOf(c.hp, c.maxHp); $("cpHp").textContent = num(c.hp) + " / " + num(c.maxHp);
     $("cpStBar").style.width = pctOf(c.stamina, c.maxStamina);
+    $("profileStamina").textContent = num(c.stamina) + " / " + num(c.maxStamina);
     $("cpXpBar").style.width = (xpShare * 100).toFixed(1) + "%";
-    $("profileLevel").textContent = xpMax ? num(c.experience) + " / " + xpMax + " · อีก " + Math.max(0, Math.round((1 - xpShare) * 100)) + "%" : "เลเวลสูงสุด";
+    $("profileLevel").textContent = xpMax ? num(c.experience) + " / " + xpMax : "เลเวลสูงสุด";
     // The schema already includes buffs; weapon bonuses are applied separately by the server.
     const wpn = p.equippedWeaponId || "";
     const status = characterStatus && characterStatus.level === p.level && characterStatus.weaponId === wpn && performance.now() - characterStatus.receivedAt < 5000 ? characterStatus : null;
@@ -10645,30 +10651,43 @@
     }
     // Active effects and unspent points.
     const fx = [];
-    const effectLabels={possession:"วิญญาณเข้าสิง",sentinel_step:"ย่างพิทักษ์",sentinel_anchor:"ตั้งหลักพิทักษ์",blade_focus:"รวมคม",blade_veil_guard:"ม่านคุ้มกาย",muay_boran:"วิชามวย",blade:"วิชาคมดาบ",sentinel:"วิชาผู้พิทักษ์",seer:"วิชาจอมอาคม",mender:"วิชาผู้เยียวยา"};
+    const effectSeals={possession:["spirit","วิญญาณเข้าสิง"],sentinel_step:["stamina","ย่างพิทักษ์"],sentinel_anchor:["def","ตั้งหลักพิทักษ์"],blade_focus:["atk","รวมคม"],blade_veil_guard:["magicDef","ม่านคุ้มกาย"],muay_boran:["fist","วิชามวย"],blade:["atk","วิชาคมดาบ"],sentinel:["def","วิชาผู้พิทักษ์"],seer:["magicAtk","วิชาจอมอาคม"],mender:["heal","วิชาผู้เยียวยา"]};
     for (const effect of status?.effects || []) {
       if (typeof effect?.id !== "string" || !Number.isFinite(effect.remainingMs)) continue;
       const remaining=Math.max(0,Math.ceil((effect.remainingMs-(performance.now()-status.receivedAt))/1000));
-      if (remaining) fx.push('<span class="cp-fx good">' + (effectLabels[effect.id] || "ผลวิชา") + ' · อีก ' + remaining + ' วิ</span>');
+      if (remaining) fx.push([...(Object.hasOwn(effectSeals,effect.id) ? effectSeals[effect.id] : ["magicAtk","ผลวิชา"]),remaining]);
     }
-    if (!status && p.possessionActive) fx.push('<span class="cp-fx good">วิญญาณเข้าสิง</span>');
-    if (Number(p.classSkillReadyAt) > now) fx.push('<span class="cp-fx">สกิลอาชีพพร้อมใน ' + Math.ceil((p.classSkillReadyAt - now) / 1000) + ' วิ</span>');
-    $("cpEffects").innerHTML = fx.join("");
+    if (!status && p.possessionActive) fx.push(["spirit","วิญญาณเข้าสิง",null]);
+    if (Number(p.classSkillReadyAt) > now) fx.push(["timer","รอใช้สกิลอาชีพ",Math.ceil((p.classSkillReadyAt-now)/1000)]);
+    const fxBox = $("cpEffects"), fxKey = JSON.stringify(fx);
+    if (fxBox.dataset.key !== fxKey) {
+      fxBox.dataset.key = fxKey; fxBox.hidden = !fx.length;
+      if (!fx.length) fxBox.open = false;
+      $("cpFxIcons").innerHTML = fx.map(([id,,sec]) => '<span class="cp-fx '+(id === "timer" ? "cooldown" : "good")+'">'+seal(id)+(sec === null ? "" : sec+" วิ")+'</span>').join("");
+      $("cpFxNames").textContent = fx.map(([,name,sec]) => name+(sec === null ? "" : " · "+sec+" วินาที")).join(" / ");
+      $("cpFxSummary").setAttribute("aria-label", "ผลวิชาและคูลดาวน์ "+fx.length+" รายการ");
+    }
     const pts = num(p.statPoints);
-    $("cpPoints").hidden = pts <= 0; $("cpPoints").textContent = "มีแต้มสเตตัสเหลือ " + pts + " แต้ม";
+    $("cpPoints").hidden = pts <= 0; $("cpPointsValue").textContent = "แต้มสเตตัส " + pts;
     // Hexagon: relative strengths (HP and stamina scaled to the attack/defence range).
-    const axes = [["HP", num(c.maxHp) / 10], ["โจมตี", num(c.atk)], ["ป้องกัน", num(c.def)], ["กำลัง", num(c.maxStamina) / 5], ["ป้องกันเวท", num(c.magicDef)], ["เวท", num(c.magicAtk)]];
-    const top = Math.max(1, ...axes.map(a => a[1])), cx = 110, cy = 100, R = 72;
-    const pt = (i, r) => [cx + r * Math.sin(i * Math.PI / 3), cy - r * Math.cos(i * Math.PI / 3)];
-    let svg = "";
-    for (const k of [1, .66, .33]) svg += '<polygon class="cp-web" points="' + axes.map((_, i) => pt(i, R * k).join(",")).join(" ") + '"/>';
-    svg += axes.map((_, i) => '<line class="cp-web" x1="' + cx + '" y1="' + cy + '" x2="' + pt(i, R)[0] + '" y2="' + pt(i, R)[1] + '"/>').join("");
-    svg += '<polygon class="cp-shape" points="' + axes.map((a, i) => pt(i, R * Math.max(.12, a[1] / top)).join(",")).join(" ") + '"/>';
-    svg += axes.map((a, i) => { const [x, y] = pt(i, R + 16); return '<text x="' + x + '" y="' + (y + 4) + '" text-anchor="middle">' + a[0] + '</text>'; }).join("");
-    $("cpRadar").innerHTML = svg;
+    if ($("cpChart").open) {
+      const axes = [["HP", num(c.maxHp) / 10], ["โจมตี", num(c.atk)], ["ป้องกัน", num(c.def)], ["กำลัง", num(c.maxStamina) / 5], ["ป้องกันเวท", num(c.magicDef)], ["เวท", num(c.magicAtk)]];
+      const radar = $("cpRadar"), key = axes.map(a=>a[1]).join(",");
+      if (radar.dataset.values !== key) {
+        radar.dataset.values = key;
+        const top = Math.max(1, ...axes.map(a => a[1])), cx = 110, cy = 100, R = 72;
+        const pt = (i, r) => [cx + r * Math.sin(i * Math.PI / 3), cy - r * Math.cos(i * Math.PI / 3)];
+        let svg = "";
+        for (const k of [1, .66, .33]) svg += '<polygon class="cp-web" points="' + axes.map((_, i) => pt(i, R * k).join(",")).join(" ") + '"/>';
+        svg += axes.map((_, i) => '<line class="cp-web" x1="' + cx + '" y1="' + cy + '" x2="' + pt(i, R)[0] + '" y2="' + pt(i, R)[1] + '"/>').join("");
+        svg += '<polygon class="cp-shape" points="' + axes.map((a, i) => pt(i, R * Math.max(.12, a[1] / top)).join(",")).join(" ") + '"/>';
+        svg += axes.map((a, i) => { const [x, y] = pt(i, R + 16); return '<text x="' + x + '" y="' + (y + 4) + '" text-anchor="middle">' + a[0] + '</text>'; }).join("");
+        radar.innerHTML = svg;
+      }
+    }
     // Class tab.
     const talent = buildTalentGroup(getBuildCatalog(), p?.pathId)?.variants[p?.bladeTalentId || p?.wardTalentId];
-    $("cpClassText").textContent = path ? path.role + " · " + path.name + " · สกิลอาชีพ " + path.skill + (talent ? " · พรสวรรค์ " + talent.name : "") : "เลือกสายอาชีพได้ที่ลานพักกลางหมู่บ้าน (ด้านล่าง)";
+    $("cpClassText").textContent = path ? [path.name,path.skill,talent?.name].filter(Boolean).join(" · ") : "ยังไม่มีข้อมูลอาชีพ";
     const schoolCard = $("cpSchoolCard"), body = $("cpSchoolBody");
     if (muay) {
       const m = muay.book.mastery?.[muay.book.school] || { technique: 0, sequences: 0 }, slots = (muay.book.slots || []).map(id => muay.catalog.skills?.[id]?.name || "ว่าง");
@@ -10687,33 +10706,37 @@
   function openCharacterProfile() {
     const me = ownServerCharacter();
     const durable = me?.persistent === true;
-    // Three tabs: status (hero card, bars, stat tiles, hexagon), class and
-    // school, and account/save. Every id the rest of the game reads is kept.
-    const tile = (key, label, icon) => '<div class="cp-tile"><i>' + icon + '</i><span>' + label + '</span><strong id="statValue-' + key + '">—</strong><small id="statBonus-' + key + '"></small></div>';
+    const stats = [
+      ["hp","พลังชีวิตสูงสุด","ความเสียหายที่รับได้ก่อนหมดสติ"],
+      ["stamina","กำลังสูงสุด","กำลังสำรองสำหรับพุ่งหลบและใช้วิชา"],
+      ["atk","โจมตีกายภาพ","พลังโจมตีทางกายก่อนหักการป้องกัน"],
+      ["def","ป้องกันกายภาพ","ลดความเสียหายจากการโจมตีทางกาย"],
+      ["magicAtk","โจมตีเวท","พลังโจมตีของวิชาที่ใช้ค่าเวท"],
+      ["magicDef","ป้องกันเวท","ลดความเสียหายจากการโจมตีทางเวท"]
+    ];
+    const tile = ([key,label]) => '<button class="cp-sigil" type="button" data-stat="'+key+'" title="'+label+'" aria-labelledby="statName-'+key+' statValue-'+key+'" aria-controls="statDetail-'+key+'" aria-expanded="false">'+seal(key)+'<strong id="statValue-'+key+'">—</strong><span class="cp-icon-name" id="statName-'+key+'">'+label+'</span></button>';
+    const note = ([key,label,hint]) => '<div id="statDetail-'+key+'" class="cp-inspect" hidden><strong>'+label+'</strong><span>'+hint+'</span><small id="statBonus-'+key+'"></small></div>';
+    const meter = (cls,id,label,bar,value) => '<div class="cp-bar '+cls+'" title="'+label+'">'+seal(id)+'<span class="cp-meter-name">'+label+'</span><div aria-hidden="true"><i id="'+bar+'"></i></div><strong id="'+value+'">—</strong></div>';
     openDrawer("character","ตัวละคร",
-      '<div class="cp-tabs" role="tablist"><button type="button" data-cp="status" class="on">สถานะ</button><button type="button" data-cp="class">อาชีพและวิชา</button><button type="button" data-cp="account">บัญชีและเซฟ</button></div>' +
+      '<div class="cp-tabs" role="group" aria-label="หมวดข้อมูลตัวละคร"><button type="button" data-cp="status" class="on" aria-pressed="true">'+seal("status")+'สถานะ</button><button type="button" data-cp="class" aria-pressed="false">'+seal("book")+'วิชา</button><button type="button" data-cp="account" aria-pressed="false">'+seal("account")+'บัญชี</button></div>' +
       '<div id="cpOffline" class="cp-offline" hidden><p>แผงสถานะตัวละครใช้ได้เมื่อเล่นออนไลน์</p><button class="primary" id="cpGoOnline" type="button">เข้าเล่นออนไลน์</button></div>' +
       '<section class="cp-page" data-page="status">' +
-        '<div class="cp-hero"><div class="cp-ring" id="cpRing"><div class="cp-glyph" id="cpGlyph">๛</div><b id="cpLevel">1</b></div>' +
+        '<div class="cp-hero"><div class="cp-ring" id="cpRing"><div class="cp-glyph" id="cpGlyph"><svg class="info-seal" aria-hidden="true"><use id="cpPortraitSeal" href="#seal-status"></use></svg></div><b><span class="sr-only">เลเวล </span><span id="cpLevel">1</span></b></div>' +
         '<div class="cp-hero-info"><strong id="profileName"></strong><span id="cpRole"></span><span id="cpSchool"></span></div></div>' +
         '<div class="cp-bars">' +
-          '<div class="cp-bar hp"><span>พลังชีวิต</span><div><i id="cpHpBar"></i></div><strong id="cpHp"></strong></div>' +
-          '<div class="cp-bar st"><span>กำลัง</span><div><i id="cpStBar"></i></div><strong id="profileStamina">—</strong></div>' +
-          '<div class="cp-bar xp"><span>EXP</span><div><i id="cpXpBar"></i></div><strong id="profileLevel"></strong></div>' +
+          meter("hp","hp","พลังชีวิต","cpHpBar","cpHp") + meter("st","stamina","กำลัง","cpStBar","profileStamina") + meter("xp","xp","ประสบการณ์","cpXpBar","profileLevel") +
         '</div>' +
-        '<div id="cpEffects" class="cp-effects"></div>' +
-        '<div id="cpPoints" class="cp-points" hidden></div>' +
-        '<div id="profileStats"><p class="note" id="profileProgressionStatus"></p><div class="cp-grid">' +
-          tile("hp","HP สูงสุด","❤") + tile("stamina","กำลังสูงสุด","✦") + tile("atk","โจมตีกาย","⚔") + tile("def","ป้องกันกาย","⛨") + tile("magicAtk","โจมตีเวท","☸") + tile("magicDef","ป้องกันเวท","◈") +
-        '</div></div>' +
-        '<h3 class="cp-h">จุดเด่นของตัวละคร</h3><svg id="cpRadar" class="cp-radar" viewBox="0 0 220 200" role="img" aria-label="กราฟจุดเด่นสเตตัส"></svg>' +
+        '<details id="cpEffects" class="cp-buffs" hidden><summary id="cpFxSummary"><span class="cp-fx-icons" id="cpFxIcons" aria-hidden="true"></span></summary><p id="cpFxNames"></p></details>' +
+        '<div id="cpPoints" class="cp-points" hidden>'+seal("points")+'<span id="cpPointsValue"></span></div>' +
+        '<div id="profileStats"><div class="cp-section-head"><h3>คุณสมบัติ</h3><button id="cpShowNames" type="button" aria-pressed="false">ชื่อไอคอน</button></div><div class="cp-sigils">'+stats.map(tile).join("")+'</div>'+stats.map(note).join("")+'</div>' +
+        '<details id="cpChart" class="cp-chart"><summary>'+seal("radar")+'จุดเด่นตัวละคร</summary><p class="note" id="profileProgressionStatus"></p><svg id="cpRadar" class="cp-radar" viewBox="0 0 220 200" role="img" aria-label="กราฟจุดเด่นสเตตัส"></svg></details>' +
       '</section>' +
       '<section class="cp-page" data-page="class" hidden>' +
         '<div class="cp-card" id="cpClassCard"><h4>สายอาชีพ</h4><p id="cpClassText" class="note"></p></div>' +
         '<div class="cp-card" id="cpSchoolCard" hidden><h4 id="cpSchoolTitle">สำนัก</h4><div id="cpSchoolBody"></div></div>' +
         '<div class="cp-card"><h4>อาวุธที่ถือ</h4><div id="cpWeapon" class="cp-weapon"></div></div>' +
         '<div class="cp-card"><h4>สถิติการต่อสู้</h4><div class="status-line"><span>Free PK</span><strong id="profilePk"></strong></div><div id="cpKills"></div></div>' +
-        '<section id="buildFields" hidden><h3>สายอาชีพและเผ่า</h3><p id="currentBuild"></p><label class="field" for="buildPath">สายอาชีพ</label><select id="buildPath"></select><div id="buildTalentField" hidden><label class="field" id="buildTalentLabel" for="buildTalent">Talent</label><select id="buildTalent"></select></div><p class="note" id="buildPreview"></p><label class="field" for="buildAncestry">เผ่าและพรสวรรค์</label><select id="buildAncestry"></select><button type="button" class="secondary" id="buildSave">ยืนยันที่ลานพักกลางหมู่บ้าน</button></section>' +
+        '<details id="buildFields" class="cp-chart" hidden><summary>'+seal("book")+'อาชีพและพรสวรรค์</summary><p id="currentBuild"></p><label class="field" for="buildPath">สายอาชีพ</label><select id="buildPath"></select><div id="buildTalentField" hidden><label class="field" id="buildTalentLabel" for="buildTalent">Talent</label><select id="buildTalent"></select></div><p class="note" id="buildPreview"></p><label class="field" for="buildAncestry">เผ่าและพรสวรรค์</label><select id="buildAncestry"></select><button type="button" class="secondary" id="buildSave">ยืนยันที่ลานพักกลางหมู่บ้าน</button></details>' +
       '</section>' +
       '<section class="cp-page" data-page="account" hidden>' +
         '<div class="status-line"><span>สถานะบันทึก</span><strong id="profileSaveStatus"></strong></div>' +
@@ -10727,16 +10750,33 @@
       '<p class="note">ใช้บัญชี MONTRA เพื่อเข้าเล่น และเก็บรหัสกู้บัญชีในที่ปลอดภัย</p>' +
       '</section>');
     for (const tab of ui.drawerBody.querySelectorAll("[data-cp]")) tab.onclick = () => {
-      for (const t of ui.drawerBody.querySelectorAll("[data-cp]")) t.classList.toggle("on", t === tab);
+      for (const t of ui.drawerBody.querySelectorAll("[data-cp]")) { t.classList.toggle("on", t === tab); t.setAttribute("aria-pressed", String(t === tab)); }
       for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = pg.dataset.page !== tab.dataset.cp;
     };
+    const statusPage = ui.drawerBody.querySelector('[data-page="status"]');
+    const showNames = on => { statusPage.classList.toggle("cp-named",on); $("cpShowNames").setAttribute("aria-pressed", String(on)); };
+    let names = false;
+    try { names = localStorage.getItem("montra_stat_labels") === "1"; } catch {}
+    showNames(names);
+    $("cpShowNames").onclick = () => {
+      names = !names; showNames(names);
+      try { localStorage.setItem("montra_stat_labels", names ? "1" : "0"); } catch {}
+    };
+    const sigils = statusPage.querySelectorAll("[data-stat]");
+    for (const button of sigils) button.onclick = () => {
+      const expand = button.getAttribute("aria-expanded") === "false";
+      for (const other of sigils) {
+        const on = other === button && expand;
+        other.setAttribute("aria-expanded", String(on)); $("statDetail-"+other.dataset.stat).hidden = !on;
+      }
+    };
+    $("cpChart").ontoggle = () => { if ($("cpChart")?.open) renderProgressionProfile(); };
     $("cpGoOnline").onclick = openOnline;
     openBuildFields(me);
     $("profileSaveStatus").textContent = durable ? "เก็บบน VPS" : "ยังไม่เปิดใช้ (DEMO/Server เดิม)";
     $("profileSlot").textContent = durable ? "เซฟที่ " + (activeCharacterSlot || 1) + " / 3" : "ยังไม่ได้เข้าออนไลน์";
     $("switchCharacterSlot").onclick = openOnline;
     $("profileName").textContent = String(me?.characterName || "นที");
-    $("profileLevel").textContent = "LV. " + (me?.level ?? 1) + " · XP " + (me?.experience ?? 0);
     renderProgressionProfile();
     $("profilePk").textContent = "K " + (me?.pkKills ?? 0) + " / D " + (me?.pkDeaths ?? 0);
     $("profileId").textContent = me?.characterId || "—";
