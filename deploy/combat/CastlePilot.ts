@@ -3,20 +3,20 @@ export const CASTLE_ID="tri_wiang_castle";
 export const CASTLE_ENABLED=process.env.MONTRA_WORLD_EXPANSION==="1" && process.env.MONTRA_CASTLE_PILOT==="1";
 export const CASTLE_SEATS=10, CASTLE_DURATION=45*60_000, CAPTURE_RADIUS=7;
 export const castleObjectives=[
-  {id:1,name:"สะพานขบวนเสบียง",x:0,z:630,rate:2},
-  {id:2,name:"ท่าน้ำตะวันตก",x:-680,z:100,rate:1},
-  {id:3,name:"ช่องเขาตะวันออก",x:690,z:100,rate:1},
-  {id:4,name:"คลังเสบียงหลวง",x:-250,z:-110,rate:1},
-  {id:5,name:"ลานกลองศึก",x:0,z:155,rate:2},
-  {id:6,name:"โรงช่างประตู",x:250,z:-110,rate:1},
-  {id:7,name:"ท้องพระโรง",x:0,z:-175,rate:0},
+  {id:1,name:"สะพานขบวนเสบียง",x:0,z:221,rate:2},
+  {id:2,name:"ท่าน้ำตะวันตก",x:-238,z:35,rate:1},
+  {id:3,name:"ช่องเขาตะวันออก",x:270,z:35,rate:1},
+  {id:4,name:"คลังเสบียงหลวง",x:-88,z:-39,rate:1},
+  {id:5,name:"ลานกลองศึก",x:0,z:54,rate:2},
+  {id:6,name:"โรงช่างประตู",x:88,z:-39,rate:1},
+  {id:7,name:"ท้องพระโรง",x:0,z:-61,rate:0},
 ] as const;
 const legacyNodes=castleObjectives.filter(p=>[2,4,5].includes(p.id));
 const scoringNodes=castleObjectives.filter(p=>p.id<7);
 export const musterNodes=[1,2,3];
 export const forwardCamps=[
-  {id:1,name:"ค่ายสะพานใต้",x:14,z:654},{id:2,name:"ค่ายท่าน้ำ",x:-700,z:122},
-  {id:3,name:"ค่ายช่องเขา",x:710,z:122},{id:4,name:"ค่ายคลังหลวง",x:-270,z:-90}
+  {id:1,name:"ค่ายสะพานใต้",x:14,z:245},{id:2,name:"ค่ายท่าน้ำ",x:-225,z:55},
+  {id:3,name:"ค่ายช่องเขา",x:286,z:55},{id:4,name:"ค่ายคลังหลวง",x:-107,z:-20}
 ] as const;
 export type Side="attack"|"defend";
 const sides=["attack","defend"] as const;
@@ -24,13 +24,13 @@ const sidesAtZero=()=>({attack:0,defend:0});
 const throneOpens=30*60_000, throneGoal=120_000, captureGoal=300_000;
 export function pilotSpawn(point:number,side:Side,seat:number,garrison=false){
   if(garrison && side==="defend"){
-    const post=point===1?{x:0,z:522}:point===2?{x:-552,z:100}:{x:552,z:100};
+    const post=point===1?{x:0,z:181}:point===2?{x:-192,z:35}:{x:192,z:35};
     return {x:post.x+seat%5-2,y:0,z:post.z+Math.floor(seat/5)};
   }
   const node=castleObjectives.find(p=>p.id===point)!;
-  const offset=side==="attack"?195:-195;
-  const x=point===1?(side==="attack"?-180:180):point===5?offset:0;
-  const z=point===1?100:point===5?0:offset;
+  const offset=side==="attack"?68:-68;
+  const x=point===1?(side==="attack"?-63:63):point===5?offset:0;
+  const z=point===1?35:point===5?0:offset;
   return {x:node.x+x+seat%5-2,y:0,z:node.z+z+Math.floor(seat/5)};
 }
 export type PilotPresence=Record<Side,number>[];

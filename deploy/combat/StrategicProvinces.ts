@@ -31,12 +31,12 @@ function enclosure(x1:number,x2:number,z1:number,z2:number,openings:Opening[],st
 export type Rampart=ReturnType<typeof enclosure>;
 function grandWalls():Rampart {
   const rings=[
-    enclosure(-570,570,-660,540,[["south",0,16,"ประตูสะพานใต้"],["west",100,16,"ประตูท่าน้ำ"],["east",100,16,"ประตูช่องเขา"],["north",0,16,"ประตูส่งกำลังเหนือ"]],
-      [["west",-410],["west",355],["east",-410],["east",355],["north",-245],["north",245],["south",-245],["south",245]]),
-    enclosure(-360,360,-470,265,[["south",0,14,"ประตูลานกลอง"],["west",-85,14,"ประตูคลังหลวง"],["east",-85,14,"ประตูโรงช่าง"]],
-      [["west",-300],["east",-300],["north",-140],["north",140],["south",-145],["south",145]]),
-    enclosure(-165,165,-330,0,[["west",-175,12,"ประตูพระราชฐานตะวันตก"],["east",-175,12,"ประตูพระราชฐานตะวันออก"]],
-      [["west",-270],["east",-70],["north",-55],["south",55]])
+    enclosure(-200,200,-231,189,[["south",0,16,"ประตูสะพานใต้"],["west",35,16,"ประตูท่าน้ำ"],["east",35,16,"ประตูช่องเขา"],["north",0,16,"ประตูส่งกำลังเหนือ"]],
+      [["west",-144],["west",124],["east",-144],["east",124],["north",-86],["north",86],["south",-86],["south",86]]),
+    enclosure(-126,126,-165,93,[["south",0,14,"ประตูลานกลอง"],["west",-30,14,"ประตูคลังหลวง"],["east",-30,14,"ประตูโรงช่าง"]],
+      [["west",-105],["east",-105],["north",-49],["north",49],["south",-51],["south",51]]),
+    enclosure(-58,58,-115,0,[["west",-61,12,"ประตูพระราชฐานตะวันตก"],["east",-61,12,"ประตูพระราชฐานตะวันออก"]],
+      [["west",-95],["east",-25],["north",-19],["south",19]])
   ];
   return {height:4,deck:rings.flatMap(r=>r.deck),corners:rings.flatMap(r=>r.corners),
     gates:rings.flatMap((r,i)=>r.gates.map(g=>({...g,id:["outer","middle","inner"][i]+"-"+g.side}))),
@@ -110,9 +110,9 @@ export const PROVINCES:Readonly<Record<string,Province>>={
       {kind:"bridge",name:"สะพานตลาดตะวันออก",...gridPoint(22,21)}]},
   ...(CASTLE_ENABLED?{[CASTLE_ID]:{kind:"territory" as const,rampart:grandWalls(),safeRoads:[0],objectives:castleObjectives,forwardCamps,
     activeObjectives:castleObjectives.map(p=>p.id),hint:"เปิดศึกที่ธงใต้ · แบ่งกำลังชิงหกจุด แล้วเปิดทางเข้าท้องพระโรงในนาทีที่ 30",
-    sites:[site("fort","ธงรวมพลไตรเวียง",0,880),site("bridge","สะพานขบวนเสบียง",0,630),
-      site("port","ท่าน้ำตะวันตก",-687,100),site("shrine","ช่องเขาตะวันออก",697,100),site("market","คลังเสบียงหลวง",-258,-110),
-      site("tower","หอกลองหลวง",9,155),site("mine","โรงช่างประตู",257,-110),site("palace","มหาปราสาทไตรเวียง",0,-196)]}}:{}),
+    sites:[site("fort","ธงรวมพลไตรเวียง",0,308),site("bridge","สะพานขบวนเสบียง",0,221),
+      site("port","ท่าน้ำตะวันตก",-245,35),site("shrine","ช่องเขาตะวันออก",277,35),site("market","คลังเสบียงหลวง",-96,-39),
+      site("tower","หอกลองหลวง",9,54),site("mine","โรงช่างประตู",95,-39),site("palace","มหาปราสาทไตรเวียง",0,-76)]}}:{}),
   mantra_capital:{kind:"capital",rampart:ramparts.mantra_capital,hint:"ลานพระนครเชื่อมหมู่บ้าน สองเขตล่า และด่านจันทรา",sites:[
     site("palace","คุ้มหลวงเวียงมนตรา",0,-35),site("market","ตลาดสี่ประตู",-16,1),
     site("tower","หอกลองประกาศ",17,-14),site("shrine","ศาลหลักเมือง",0,-14)]},
@@ -171,22 +171,22 @@ const hubs:Record<string,Hub>={
 function makeCastle(portalsFor:(id:string)=>WorldPortal[]):WorldMapDefinition {
   const province=PROVINCES[CASTLE_ID],r=province.rampart!;
   const portals:WorldPortal[]=[...portalsFor(CASTLE_ID),
-    {id:"castle_cart_north",label:"ขึ้นเกวียนไปประตูเหนือ",x:-18,z:900,targetMapId:CASTLE_ID,targetSpawn:{x:-18,y:0,z:-898}},
-    {id:"castle_cart_south",label:"ขึ้นเกวียนไปประตูใต้",x:-18,z:-900,targetMapId:CASTLE_ID,targetSpawn:{x:-18,y:0,z:898}}];
-  return {id:CASTLE_ID,name:"มหาปราสาทไตรเวียง",bounds:{minX:-1000,maxX:1000,minZ:-1000,maxZ:1000},spawn:{x:0,y:0,z:895},
+    {id:"castle_cart_north",label:"ขึ้นเกวียนไปประตูเหนือ",x:-18,z:315,targetMapId:CASTLE_ID,targetSpawn:{x:-18,y:0,z:-313}},
+    {id:"castle_cart_south",label:"ขึ้นเกวียนไปประตูใต้",x:-18,z:-315,targetMapId:CASTLE_ID,targetSpawn:{x:-18,y:0,z:313}}];
+  return {id:CASTLE_ID,name:"มหาปราสาทไตรเวียง",bounds:{minX:-350,maxX:350,minZ:-350,maxZ:350},spawn:{x:0,y:0,z:313},
     strategic:province,portals,obstacles:[],camps:[],restAreas:portals.map(p=>({x:p.x,z:p.z,radius:6,name:"เขตพักประตู"})),
-    walls:[...r.bodies.map(b=>({...b,rampart:true})),wall(-10,-226,20,9),wall(-29,-211,11,7),wall(18,-211,11,7),
+    walls:[...r.bodies.map(b=>({...b,rampart:true})),wall(-10,-87,20,9),wall(-22,-77,8,5),wall(14,-77,8,5),
       ...forwardCamps.map(c=>wall(c.x-4,c.z-6,8,1.5))],
-    water:[wall(-265,628,260,4),wall(5,628,265,4),wall(-745,-150,14,245),wall(-745,106,14,245)],
-    paths:trails([[0,900],[-540,900],[-875,825],[-875,-815],[-550,-900],[0,-900]],
-      [[0,900],[0,630],[0,540],[0,350],[0,265],[0,155]],[[0,790],[-295,745],[-625,650],[-685,585],[-680,100]],
-      [[0,790],[295,745],[625,650],[685,585],[690,100]],
-      [[-680,100],[-570,100],[-455,90],[-420,-85],[-360,-85],[-250,-110]],
-      [[690,100],[570,100],[455,90],[420,-85],[360,-85],[250,-110]],
-      [[-455,90],[-400,290],[0,350],[400,290],[455,90]],
-      [[-250,-110],[-230,82],[0,155],[230,82],[250,-110]],
-      [[-250,-110],[-215,-175],[-165,-175],[0,-175],[165,-175],[215,-175],[250,-110]],
-      [[0,-900],[0,-660],[0,-525],[-400,-525],[-420,-85]],[[0,-525],[400,-525],[420,-85]])};
+    water:[wall(-93,219,88,4),wall(5,219,90,4),wall(-261,-53,6,83),wall(-261,40,6,83)],
+    paths:trails([[0,315],[-189,315],[-306,289],[-306,-285],[-193,-315],[0,-315]],
+      [[0,315],[0,221],[0,189],[0,122],[0,93],[0,54]],[[0,277],[-103,261],[-219,227],[-240,205],[-238,35]],
+      [[0,277],[103,261],[219,227],[240,205],[270,35]],
+      [[-238,35],[-200,35],[-159,31],[-147,-30],[-126,-30],[-88,-39]],
+      [[270,35],[200,35],[159,31],[147,-30],[126,-30],[88,-39]],
+      [[-159,31],[-140,102],[0,122],[140,102],[159,31]],
+      [[-88,-39],[-81,29],[0,54],[81,29],[88,-39]],
+      [[-88,-39],[-75,-61],[-58,-61],[0,-61],[58,-61],[75,-61],[88,-39]],
+      [[0,-315],[0,-231],[0,-184],[-140,-184],[-147,-30]],[[0,-184],[140,-184],[147,-30]])};
 }
 export function makeHubs(portalsFor:(id:string)=>WorldPortal[]):Record<string,WorldMapDefinition>{
   const small=Object.fromEntries(Object.entries(hubs).map(([id,{stations,bounds,...data}])=>{

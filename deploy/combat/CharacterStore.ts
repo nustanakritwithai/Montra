@@ -45,6 +45,7 @@ export type CharacterSnapshot = {
   hp: number;
   /** Missing only in pre-world-map saves; they belong to the village. */
   mapId?: string;
+  castleLayout?: 2;
   statAllocations?: Allocations;
   build?: CharacterBuild;
   classSkillReadyAt?: number;
@@ -123,8 +124,8 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
   if (!isRecord(value))throw new Error("character_record_invalid");
   const bounds=typeof value.mapId==="string"?getWorldMap(value.mapId)?.bounds:undefined;
   // Existing snapshots used a symmetric envelope, including when the castle pilot is disabled.
-  const legacy=value.mapId===CASTLE_ID?1000:100;
-  if (value.version !== 1 || value.id !== id ||
+  const legacy=value.mapId===CASTLE_ID ? (value.castleLayout===2?350:1000) : 100;
+  if (value.version !== 1 || value.id !== id || (value.castleLayout!==undefined && value.castleLayout!==2) ||
       typeof value.name !== "string" || parseCharacterName({ name: value.name }) !== value.name ||
       !isCount(value.level) || value.level < 1 || value.level > 1000 ||
       !isCount(value.experience) || !isCount(value.pkKills) || !isCount(value.pkDeaths) ||
@@ -159,7 +160,10 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
       (typeof value.mapId !== "string" || !getWorldMap(value.mapId))) {
     throw new Error("unknown_character_map");
   }
-  return { ...(value as CharacterSnapshot), mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, swordTree, muayCooldowns, muayBook, occultBook, bladeBook, sentinelBook };
+  // Only unmarked castle saves use the previous 2 km coordinate system.
+  const location=value.mapId===CASTLE_ID && value.castleLayout===undefined
+    ? {x:value.x*35/100,z:value.z*35/100,castleLayout:2 as const} : {};
+  return { ...(value as CharacterSnapshot), ...location, mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, swordTree, muayCooldowns, muayBook, occultBook, bladeBook, sentinelBook };
 }
 
 export class CharacterStore {
@@ -323,7 +327,7 @@ export class CharacterStore {
   }
 
   async save(character: CharacterSnapshot): Promise<void> {
-    const snapshot = validateSnapshot(character, character.id);
+    const snapshot = validateSnapshot(character.mapId===CASTLE_ID ? {...character,castleLayout:2} : character, character.id);
     this.guardLegacyMode();
     // Upgraded servers must never overwrite a real inventory with a legacy
     // HP-only snapshot, which would re-grant starter potions on next login.

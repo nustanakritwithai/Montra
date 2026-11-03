@@ -38,6 +38,23 @@ test("closing the pilot returns a castle save to a safe public exit without losi
     assert.equal(restored.mapId,exit.id);assert.deepEqual([restored.x,restored.y,restored.z],[exit.spawn.x,exit.spawn.y,exit.spawn.z]);
     assert.deepEqual(restored.inventory,old.inventory);assert.equal(restored.experience,old.experience);
     assert.deepEqual(restored.occultBook,occultBook);
+    await writeFile(path.join(dir,old.id+".json"),JSON.stringify({...old,castleLayout:2,x:310,z:-320}));
+    assert.equal((await store.loadOrCreate(tokenA,spawn)).character.mapId,exit.id);
+  });
+});
+test("old castle locations scale once across reloads and new positions keep their coordinates",{skip:!CASTLE_ENABLED},async()=>{
+  await withTempStore(async(store,dir)=>{
+    const {character}=await store.loadOrCreate(tokenA,spawn);
+    const old={...character,mapId:CASTLE_ID,x:-680,y:4,z:100};
+    await writeFile(path.join(dir,old.id+".json"),JSON.stringify(old));
+    const restored=(await store.loadOrCreate(tokenA,spawn)).character;
+    assert.deepEqual([restored.x,restored.y,restored.z],[-238,4,35]);
+    assert.deepEqual(restored.inventory,old.inventory);
+    await store.save(restored);
+    assert.deepEqual((await store.loadOrCreate(tokenA,spawn)).character,restored);
+    await store.save({...character,mapId:CASTLE_ID,x:120,z:-90});
+    const moved=(await store.loadOrCreate(tokenA,spawn)).character;
+    assert.deepEqual([moved.x,moved.z],[120,-90]);
   });
 });
 test("expanded hunting coordinates survive save/reload and still reject out-of-envelope coordinates",{skip:!getWorldMap("lotus_basin")},async()=>{

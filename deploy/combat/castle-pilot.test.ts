@@ -1,10 +1,11 @@
 import test from "node:test";
+import {RULES} from "./GameRules.js";
 import {DatabaseSync} from "node:sqlite";
 import assert from "node:assert/strict";
 import {mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
-import {CASTLE_ID,CASTLE_DURATION,CAPTURE_RADIUS,castleObjectives,forwardCamps,castleLogistics,newPilot,tickPilot,pilotView,pilotWinner,changeCastleGate,pilotSpawn,type Side} from "./CastlePilot.js";
+import {CASTLE_ID,CASTLE_DURATION,CAPTURE_RADIUS,castleObjectives,musterNodes,forwardCamps,castleLogistics,newPilot,tickPilot,pilotView,pilotWinner,changeCastleGate,pilotSpawn,type Side} from "./CastlePilot.js";
 import {WORLD_MAPS,isSafeWorldPoint,isRestArea,getSafeMapSpawn,provinceShotClear} from "./WorldMaps.js";
 import {crestCorners,wallRing} from "./StrategicProvinces.js";
 import {GuildStore} from "./GuildStore.js";
@@ -12,12 +13,18 @@ import {WAR_PROTECTION} from "./TerritoryWar.js";
 const roster=(ids:number[],side:Side="attack",count=1)=>castleObjectives.map(p=>({attack:side==="attack" && ids.includes(p.id)?count:0,defend:side==="defend" && ids.includes(p.id)?count:0}));
 test("full castle road, gates, stairs, crest circuits and both previous world neighbours",()=>{
   const m=WORLD_MAPS[CASTLE_ID],r=m.strategic!.rampart!;
-  assert.equal(Object.keys(WORLD_MAPS).length,17);assert.deepEqual(m.bounds,{minX:-1000,maxX:1000,minZ:-1000,maxZ:1000});
+  assert.equal(Object.keys(WORLD_MAPS).length,17);assert.deepEqual(m.bounds,{minX:-350,maxX:350,minZ:-350,maxZ:350});
   assert.equal(r.deck.length,12);assert.equal(r.gates.length,9);assert.equal(new Set(r.stairs.map(s=>s.id)).size,18);
   assert.equal(m.strategic!.objectives!.length,7);assert.deepEqual(m.strategic!.activeObjectives,[1,2,3,4,5,6,7]);
   assert.deepEqual(r.gates.map(g=>g.id).sort(),Object.keys(newPilot().siege!.gates).sort());
   for(const point of [1,2,3])for(const side of ["attack","defend"] as const)for(let seat=0;seat<10;seat++)
     assert.ok(isSafeWorldPoint(m,pilotSpawn(point,side,seat)));
+  // At the ordinary walking speed (3 m/s), each attacking seat can reach its first flag in 25 seconds.
+  for(const id of musterNodes)for(let seat=0;seat<10;seat++){
+    const spawn=pilotSpawn(id,"attack",seat),goal=castleObjectives[id-1];
+    const distance=Math.hypot(spawn.x-goal.x,spawn.z-goal.z);assert.ok(distance/RULES.playerSpeed<=25);
+    for(let t=0;t<=100;t++)assert.ok(isSafeWorldPoint(m,{x:spawn.x+(goal.x-spawn.x)*t/100,y:0,z:spawn.z+(goal.z-spawn.z)*t/100}));
+  }
   for(const p of m.portals){assert.ok(isSafeWorldPoint(WORLD_MAPS[p.targetMapId],p.targetSpawn));}
   for(const id of ["fallen_city","asura_peak"]){assert.ok(WORLD_MAPS[id].portals.some(p=>p.targetMapId===CASTLE_ID));assert.ok(m.portals.some(p=>p.targetMapId===id));}
   assert.ok(!WORLD_MAPS.fallen_city.portals.some(p=>p.targetMapId==="asura_peak"));
