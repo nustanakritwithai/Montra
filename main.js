@@ -7244,7 +7244,10 @@
   function syncMountButton() {
     const button=$("mountButton"),me=ownServerCharacter();
     if(!button)return;
-    button.hidden=!(mode==="live" && room?.state?.mountAvailable===true && me?.persistent);
+    // Always shown while online; greyed out with a reason when the server or character cannot ride.
+    const reason=room?.state?.mountAvailable!==true ? "server" : !me?.persistent ? "guest" : "";
+    button.hidden=mode!=="live";
+    button.dataset.unavailable=reason; button.classList.toggle("mount-off",Boolean(reason));
     button.disabled=!me?.alive;
     button.setAttribute("aria-pressed",String(Boolean(me?.mounted)));
     button.querySelector("i").textContent=me?.mounted ? "ลงม้า" : "เรียกม้า";
@@ -11660,6 +11663,9 @@
   $("bladeBookButton").onclick=openBladeBook;
   $("sentinelBookButton").onclick=openSentinelBook;
   function toggleFieldMount() {
+    const why=$("mountButton").dataset.unavailable;
+    if(mode==="live" && why==="server"){toast("เซิร์ฟเวอร์ยังไม่เปิดระบบม้า · ต้องอัปเดต VPS");return;}
+    if(mode==="live" && why==="guest"){toast("เรียกม้าได้เฉพาะตัวละครที่บันทึกในบัญชี");return;}
     if(mode==="live" && room?.state?.mountAvailable===true && !$("mountButton").disabled)room.send("toggle_mount",{});
   }
   $("mountButton").onclick=toggleFieldMount;
