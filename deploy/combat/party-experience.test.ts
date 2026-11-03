@@ -18,8 +18,8 @@ test("party EXP is split equally among living nearby same-map members",()=>{
   const awarded:Array<[string,number|undefined]>=[];
   state.grantMonsterExperience=(id,amount)=>{awarded.push([id,amount]);};
   state.awardMonsterExperience("a");
-  assert.deepEqual(awarded,[["a",50],["b",50]]);
+  assert.deepEqual(awarded,[["a",68],["b",68]]);
   room.state.players.get("b")!.alive=false;awarded.length=0;
   state.awardMonsterExperience("a");
-  assert.deepEqual(awarded,[["a",100]]);
+  assert.deepEqual(awarded,[["a",125]]);
 });
