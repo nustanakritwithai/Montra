@@ -1,4 +1,4 @@
-import { personalItem, isBodySlot, type PersonalId } from "./PersonalItems.js";
+import { personalItem, isBodySlot, isCardId, type CardId, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE } from "./ItemRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 function keys(value: unknown, expected: string[]): value is Record<string, unknown> {
@@ -41,6 +41,13 @@ export function parseSellMaterial(v:unknown){
   if(!keys(v,["requestId","slot","expected","quantity"]) || !requestId(v.requestId) || !amount(v.slot,11) ||
       typeof v.expected!=="string" || !personalItem(v.expected)?.sellGold || !amount(v.quantity,99) || v.quantity<1)return null;
   return {requestId:v.requestId,slot:v.slot,expected:v.expected,quantity:v.quantity};
+}
+export type SalvageOrder={requestId:string;slot:number;gear:PersonalId;stamp:string;bound:boolean;socket:"sealed"|"empty"|CardId};
+export function parseSalvage(v:unknown):SalvageOrder|null{
+  if(!keys(v,["requestId","slot","gear","stamp","bound","socket"]) || !requestId(v.requestId) || !amount(v.slot,11) || typeof v.bound!=="boolean" ||
+     !personalItem(v.gear)?.salvage || typeof v.stamp!=="string" || !/^[a-zA-Z0-9_.-]{1,64}$/.test(v.stamp) ||
+     (v.socket!=="sealed" && v.socket!=="empty" && !isCardId(v.socket)))return null;
+  return {requestId:v.requestId,slot:v.slot,gear:v.gear as PersonalId,stamp:v.stamp,bound:v.bound,socket:v.socket};
 }
 export function parseCraft(v: unknown): {requestId:string; recipeId:PersonalId|typeof SHRINE_RECIPE.id} | null {
   if (!keys(v,["recipeId","requestId"]) || !requestId(v.requestId) ||

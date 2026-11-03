@@ -4,6 +4,7 @@ import {BODY_SLOTS, PERSONAL_ITEMS, WEAPON_LEVELS, OUTFIT_LEVELS, MATERIAL_LEVEL
 import {CATALOG_PAGES,hunts,findItemHunt,rollMonsterLoot} from "./MonsterLoot.js";
 import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses,practiceLoot,validateInventory} from "./ItemRules.js";
 import {EconomyStore} from "./EconomyStore.js";
+import {parseSalvage,type SalvageOrder} from "./EconomyRules.js";
 import {rollForge,forgeStamp,forgeIngredient} from "./ForgeRules.js";
 import {changeCardSocket} from "./CardSockets.js";
 import {ATLAS_SPAWNS} from "./WorldAtlas.js";
@@ -335,6 +336,75 @@ test("capstone crafting, forge materials, role options, card and sale survive in
     const sale=store.sellMaterial(id,req(6),saleSlot,"mat_ink_7",2);
     assert.deepEqual(store.sellMaterial(id,req(6),saleSlot,"mat_ink_7",2),sale);
     assert.equal(sale.receivedGold,2*PERSONAL_ITEMS.mat_ink_7.sellGold!);
+  }finally{store.close();}
+});
+
+test("salvage quotes only ordinary ingredients from the recipe and protects starting weapons",()=>{
+  for(const [id,gear] of entries){
+    if(!gear.forge || (gear.kind==="mainHand" && gear.level===1)){assert.equal(gear.salvage,undefined,id);continue;}
+    const output=gear.salvage!;
+    const input=gear.recipe!.find(r=>r.item===output.item);
+    assert(input && !PERSONAL_ITEMS[output.item].sourceBoss,id);
+    assert.equal(output.quantity,Math.max(1,Math.floor(input.qty/2)),id);
+  }
+  const base={requestId:"salvage_unit_0010",slot:2,gear:"wp_wrap_2",stamp:"wp_wrap_2",bound:false,socket:"sealed"};
+  assert.deepEqual(parseSalvage(base),base);
+  for(const bad of [{slot:12},{slot:"neck"},{bound:"true"},{socket:"mat_metal_1"},{gear:"wp_wrap_1"},{quantity:99},{stamp:""}])
+    assert.equal(parseSalvage({...base,...bad}),null);
+});
+
+test("salvaging a bound weapon returns its actual card and materials once, or leaves the whole bag intact",()=>{
+  const store=new EconomyStore(":memory:"),id="e".repeat(64),gear="wp_twins_10";
+  const bag=makeClassInventory("phutthaisawan"),item=PERSONAL_ITEMS[gear];
+  const yieldItem=item.salvage!,card="card_rift_warden";
+  const forge=rollForge(undefined,"enhance",()=>0,item).forge;
+  for(let i=2;i<bag.slots.length;i++)bag.slots[i]={itemId:"health_potion",quantity:99};
+  bag.slots[2]={itemId:gear,quantity:1,bound:true,forge,socket:card};
+  const order:SalvageOrder={requestId:"salvage_bound_unit_01",slot:2,gear,stamp:forgeStamp(bag.slots[2]!),bound:true,socket:card};
+  try{
+    const snapshot={...bag,equippedWeaponSlot:2};
+    store.saveCharacter(id,{inventory:snapshot},snapshot);
+    assert.throws(()=>store.salvageGear(id,order),/item_equipped/);
+    store.saveCharacter(id,{inventory:bag},bag);
+    const original=store.getAccount(id);
+    assert.throws(()=>store.salvageGear(id,{...order,socket:"empty"}),/salvage_changed/);
+    assert.throws(()=>store.salvageGear(id,{...order,stamp:gear}),/salvage_changed/);
+    assert.throws(()=>store.salvageGear(id,{...order,bound:false}),/salvage_changed/);
+    assert.throws(()=>store.salvageGear(id,order),/inventory_full/);
+    assert.deepEqual(store.getAccount(id),original);
+    bag.slots[3]={itemId:card,quantity:98};
+    store.saveCharacter(id,{inventory:bag},bag);
+    const result=store.salvageGear(id,order);
+    assert.deepEqual(result,{gear,material:yieldItem.item,quantity:yieldItem.quantity,card});
+    const after=store.getAccount(id);assert.equal(after.gold,original.gold);
+    assert.deepEqual(after.inventory.slots[2],{itemId:yieldItem.item,quantity:yieldItem.quantity});
+    assert.equal(after.inventory.slots[3]?.quantity,99);
+    assert.equal(after.inventory.slots.some(s=>s?.itemId===gear),false);
+    assert.deepEqual(store.salvageGear(id,order),result);
+    assert.throws(()=>store.salvageGear(id,{...order,slot:3}),/request_id_conflict/);
+    assert.throws(()=>store.salvageGear(id,{...order,requestId:"salvage_bound_unit_02"}),/salvage_changed/);
+    assert.deepEqual(store.getAccount(id),after);
+    assert.deepEqual((store.getCharacter(id) as {inventory:unknown}).inventory,after.inventory);
+  }finally{store.close();}
+});
+
+test("a boxer can put the material recovered from old wraps directly into the next armor recipe",()=>{
+  const store=new EconomyStore(":memory:"),id="f".repeat(64),bag=makeClassInventory("muay_boran");
+  const wraps="wp_wrap_2",next="arm_hide_legs_2",output=PERSONAL_ITEMS[wraps].salvage!;
+  try{
+    bag.slots[2]={itemId:wraps,quantity:1,bound:true};
+    assert.equal(output.item,"mat_hide_2");
+    let slot=3;
+    for(const r of PERSONAL_ITEMS[next].recipe!){
+      const quantity=r.qty-(r.item===output.item?output.quantity:0);
+      if(quantity>0)bag.slots[slot++]={itemId:r.item as MaterialId,quantity};
+    }
+    store.register(id,bag);
+    assert.throws(()=>store.craftPersonal(id,"reuse_salvage_craft_01",next,10),/craft_missing_material/);
+    const result=store.salvageGear(id,{requestId:"reuse_salvage_wraps_01",gear:wraps,stamp:wraps,slot:2,bound:true,socket:"sealed"});
+    assert.equal(result.card,null);
+    store.craftPersonal(id,"reuse_salvage_craft_01",next,10);
+    assert(store.getAccount(id).inventory.slots.some(s=>s?.itemId===next));
   }finally{store.close();}
 });
 

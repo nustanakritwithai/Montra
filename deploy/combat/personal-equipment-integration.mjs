@@ -148,6 +148,27 @@ try{
   assert.equal(active.bag.slots[at].forge.rank,1);assert.equal(active.bag.slots[at].socket,"card_rift_warden");
   assert.equal(active.bag.slots.some(s=>s?.itemId==="use_mana_7"),false);
   assert.equal(active.me().equippedWeaponId,"wp_twins_10");
+  const output=active.catalog.wp_twins_10.salvage,old=active.bag.slots[at],card=old.socket;
+  assert(output && old.bound && card==="card_rift_warden");
+  const count=(bag,id)=>bag.slots.reduce((sum,s)=>sum+(s?.itemId===id?s.quantity:0),0);
+  const beforeMaterial=count(active.bag,output.item),beforeCards=count(active.bag,card);
+  const order={slot:at,gear:old.itemId,stamp:old.forge.instanceId+"."+old.forge.revision,bound:true,socket:card,requestId:"capstone_salvage_0001"};
+  active.room.send("salvage_gear",order);
+  await until(()=>active.event("economy_error",v=>v.reason==="item_equipped"),"equipped weapon cannot be salvaged");
+  active.room.send("equip_weapon",{slot:null});await until(()=>!active.me().equippedWeaponId,"unequip for salvage");
+  active.room.send("salvage_gear",order);
+  const receipt=await until(()=>active.event("gear_salvaged"),"confirmed salvage receipt");
+  assert.deepEqual(receipt,{gear:old.itemId,material:output.item,quantity:output.quantity,card});
+  await active.room.leave();active=null;await delay(400);active=await join({});
+  const retryStart=active.events.length;
+  active.room.send("salvage_gear",order);
+  assert.deepEqual(await until(()=>active.event("gear_salvaged"),"durable salvage retry"),receipt);
+  const afterRetry=await until(()=>active.events.slice(retryStart).find(e=>e.type==="inventory_state")?.data,"bag after retry");
+  for(const inventory of [active.bag,afterRetry]){
+    assert.equal(count(inventory,old.itemId),0);
+    assert.equal(count(inventory,output.item),beforeMaterial+output.quantity);
+    assert.equal(count(inventory,card),beforeCards+1);
+  }
   const tree=active.event("world_resources",v=>v.mapId==="ritual_village").nodes.find(n=>n.kind==="wood");
   active.room.send("move",{x:tree.x-1.5,z:tree.z});
   await until(()=>Math.hypot(active.me().x-tree.x,active.me().z-tree.z)<2.8,"walk to a village tree",15000);
@@ -173,5 +194,5 @@ try{
   const start=active.events.length;
   active.room.send("harvest_resource",{node:"forbidden_forest/tree-east-1",requestId:"test_existing_tree_001"});
   await until(()=>active.events.slice(start).some(e=>e.type==="resource_result"&&e.data.item==="mat_raw_wood_1"),"cut original forest scenery");
-  console.log("PERSONAL GEAR PASS: crafting, mana medicine, sockets, reconnect, world refining and harvesting the original forest tree.");
+  console.log("PERSONAL GEAR PASS: crafting, sockets, salvage with card return and durable retry, world refining and harvesting.");
 }finally{if(active)await active.room.leave();}

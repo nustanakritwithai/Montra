@@ -22,6 +22,7 @@ export function equipPositions(kind:unknown):readonly BodySlot[] {
 export type PersonalDefinition = {
   name:string; kind:"mainHand"|BodySlot|"earring"|"ring"|"material"|"catalyst"|"consumable"|"card"|"tool"; path:string; stats:ItemStats;
   recipe?:readonly {item:string; qty:number}[];
+  salvage?:{item:MaterialId;quantity:number};
   monster?:string;
   chancePct?:number;
   sourceBoss?:string;
@@ -301,6 +302,16 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
     };
     item.forge=model?.forge??{...forgeProfile(item),primary:shrine?"guard":"melee",pool:shrine?["guard","healing"]:["melee","ranged"]};
     put(gear,item);
+  }
+  for(const gear of Object.values(result)){
+    if(!gear?.forge || (gear.kind==="mainHand" && gear.level===1))continue;
+    // Recover one ordinary ingredient. Boss fragments are earned by hunting.
+    let input:{item:string;qty:number}|undefined;
+    for(const ingredient of gear.recipe??[]){
+      const mat=result[ingredient.item as PersonalId];
+      if(mat?.kind==="material" && !mat.sourceBoss && (!input || ingredient.qty>input.qty))input=ingredient;
+    }
+    if(input)gear.salvage={item:input.item as MaterialId,quantity:Math.max(1,Math.floor(input.qty/2))};
   }
   return Object.freeze(result) as Readonly<Record<PersonalId,PersonalDefinition>>;
 }

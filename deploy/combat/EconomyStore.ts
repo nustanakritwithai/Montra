@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 import { personalItem, type BodySlot, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE, isStackableItem, validateInventory, type InventorySnapshot, type InventoryStack } from "./ItemRules.js";
+import type {SalvageOrder} from "./EconomyRules.js";
 
 export const STARTER_GOLD = 1000;
 const MAX_GOLD = 1_000_000_000;
@@ -262,6 +263,23 @@ export class EconomyStore {
       account.gold+=unit*quantity;
       this.put(id,account);
       return {itemId:expected,quantity,receivedGold:unit*quantity};
+    });
+  }
+
+  salvageGear(id:string,order:SalvageOrder){
+    const {requestId,...intent}=order;
+    return this.once(id,requestId,"salvage_gear",intent,()=>{
+      const account=this.account(id),bag=account.inventory,stack=bag.slots[order.slot];
+      const yieldItem=personalItem(order.gear)?.salvage;
+      if(!stack || stack.itemId!==order.gear || !yieldItem || forgeStamp(stack)!==order.stamp || Boolean(stack.bound)!==order.bound ||
+         (stack.socket===undefined?"sealed":stack.socket??"empty")!==order.socket)throw Error("salvage_changed");
+      if(bag.equippedWeaponSlot===order.slot)throw Error("item_equipped");
+      // Bound gear may be recycled by its owner. Trading still requires an unbound item.
+      const slots=bag.slots.slice();slots[order.slot]=null;
+      let next=add({...bag,slots},{itemId:yieldItem.item,quantity:yieldItem.quantity});
+      if(stack.socket)next=add(next,{itemId:stack.socket,quantity:1});
+      account.inventory=next;this.put(id,account);
+      return {gear:order.gear,material:yieldItem.item,quantity:yieldItem.quantity,card:stack.socket??null};
     });
   }
 
