@@ -10089,6 +10089,12 @@
   let skillView = (() => { try { return localStorage.getItem("montra_skill_view") === "list" ? "list" : "graph"; } catch { return "graph"; } })();
   const skillGraphSel = {}, skillGraphScroll = {};
   let skillGraphKey = "";
+  function sgRankText(kind, n) {
+    const support = (kind === "sentinel" && ["step","anchor","ward","party_ward"].includes(n.effect)) ||
+      (kind === "occult" && ["heal","heal_area","spirit_heal","ward","ward_area","spirit_ward","trance"].includes(n.effect));
+    const rate=support ? 2 : 4, label=support ? "ผลรักษา/คุ้มกัน (PvE และ PvP)" : "ดาเมจมอนสเตอร์";
+    return label + " +" + n.rank * rate + "%" + (n.nextLv ? " → +" + (n.rank + 1) * rate + "%" : "");
+  }
   const SG_GLYPH = { strike: "⚔", step: "➶", guard: "⛨", parry: "⛨", evade: "↯", counter: "↺", counter_sidestep: "↺", flurry: "≋", step_flurry: "≋", area: "◎", sweep: "◎",
     passive: "◈", support: "♡", teep: "➹", grapple: "✊", sidestep: "↔", retreat_strike: "↩", retreat: "↩", cloak: "◐", approach: "➶", consume: "✂", windup: "➽", focus: "◉",
     stun: "✸", slam: "✸", anchor: "⚓", taunt: "‼", ward: "⛨", intercept: "⛨", party_ward: "⛨", mark: "✶", rice: "∴", rice_area: "⁂", detonate: "✹", interrupt: "⊘",
@@ -10253,10 +10259,7 @@
       let rankHtml = "";
       if (n.rankable) {
         const can = n.nextLv && lvNow >= n.nextLv && n.rankDone >= n.rankNeed && pts > 0 && !n.rankBlocked;
-        const support = (kind === "sentinel" && ["step","anchor","ward","party_ward"].includes(n.effect)) ||
-          (kind === "occult" && ["heal","heal_area","spirit_heal","ward","ward_area","spirit_ward","trance"].includes(n.effect));
-        const rate=support ? 2 : 4, rankLabel=support ? "ผลรักษา/คุ้มกัน (PvE และ PvP)" : "ดาเมจมอนสเตอร์";
-        rankHtml = `<div class="sg-rank"><div class="sg-rank-top"><b>ขั้นวิชา ${n.rank + 1}/${n.rankMax + 1}</b><span>${rankLabel} +${n.rank * rate}%${n.nextLv ? " → +" + (n.rank + 1) * rate + "%" : ""}</span></div>
+        rankHtml = `<div class="sg-rank"><div class="sg-rank-top"><b>ขั้นวิชา ${n.rank + 1}/${n.rankMax + 1}</b><span>${sgRankText(kind,n)}</span></div>
           <div class="sg-pips big">${Array.from({ length: n.rankMax + 1 }, (_, i) => `<i class="${i <= n.rank ? "on" : ""}"></i>`).join("")}</div>
           ${n.nextLv ? `<ul class="sg-checks"><li class="${lvNow >= n.nextLv ? "ok" : "no"}">${lvNow >= n.nextLv ? "✓" : "✗"} เลเวล ${n.nextLv}</li><li class="${n.rankDone >= n.rankNeed ? "ok" : "no"}">${n.rankDone >= n.rankNeed ? "✓" : "✗"} ฝึกรวม ${n.rankDone}/${n.rankNeed}</li>${n.rankBlocked ? `<li class="no">✗ ใช้สำนักนี้</li>` : ""}</ul>
           <button type="button" class="sg-up" data-sg-upgrade="${sgEsc(n.id)}" ${can ? "" : "disabled"}>${pts < 1 ? "แต้มไม่พอ" : "อัปขั้น · 1 แต้ม"}</button>` : `<p class="sg-passive">ขั้นสูงสุดแล้ว</p>`}</div>`;
