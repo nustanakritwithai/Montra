@@ -54,14 +54,14 @@ import { BLADE_LESSONS, BLADE_PRACTICE_LABELS, BLADE_RANKABLE_SKILLS, bladePoint
 import { SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_RANKABLE_SKILLS, SENTINEL_CONTROL, sentinelPoints, newSentinelBook, validateSentinelBook, type SentinelBook, type SentinelLesson, type SentinelSkillId } from "./SentinelRules.js";
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
-import { MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
+import { isMuayFoundation, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
 import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
 import type { MonsterTier } from "./MonsterProfiles.js";
-import { PROGRESSION, SKILL_RANK_LEVELS, SKILL_RANK_PRACTICE, skillRankCost, skillRankMultiplier, addExperience, calculateDamage, calculateStats, emptyAllocations,
+import { PROGRESSION, SKILL_RANK_LEVELS, SKILL_RANK_PRACTICE, skillRankCost, skillRankMultiplier, supportRankMultiplier, addExperience, calculateDamage, calculateStats, emptyAllocations,
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
   POTION_ID, POTION_COOLDOWN_MS, grantRewardPotion, grantStackReward, SHRINE_RECIPE, SHRINE_SHARD, SHRINE_GLAIVE, parseUseItemCommand,
@@ -140,6 +140,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastWarpMs = new Map<string, number>();
   private provinceClients = new Set<string>();
   private castleClients = new Set<string>();
+  private restApproachClients = new Set<string>();
   private originalReliefClients=new Set<string>();
   private reliefClients = new Set<string>();
   private terrainClients = new Set<string>();
@@ -167,6 +168,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private pendingItemUses = new Map<string, Promise<void>>();
   private lastItemUseMs = new Map<string, number>();
   private lastInventoryReadMs = new Map<string, number>();
+  private lastStatusReadMs = new Map<string, number>();
   private lastWeaponEquipMs = new Map<string, number>();
   private trades = new Map<string, TradeSession>();
   private parties = new PartyManager();
@@ -615,7 +617,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       target.targetId="";(target as Player).combatState="idle";
     }
     if(this.muayDefenseWindows.has(id)){this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");}
-    this.destinations.delete(id);this.attackTargets.delete(id);player.targetId="";player.combatState="idle";
+    this.startSkillAction(id,player,"idle");
     this.clearMuayCombo(id);this.clearGrappleCounter(id,"new_hold");this.clearGrappleCounter(targetId,"new_hold");this.recordCombat(id,targetId);
     this.muayGrapples.set(id,{targetId,until:this.simulatedMs+MUAY_GRAPPLE_HOLD_MS});this.muayHeldBy.set(targetId,id);
     this.sendSwordNotice(client,"muay_grapple",{phase:"held",role:"holder",targetId,durationMs:MUAY_GRAPPLE_HOLD_MS});
@@ -855,14 +857,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     actor.stamina-=skill.stamina;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
     if(offensive && target)actor.facing=facingTo(target.x-actor.x,target.z-actor.z);
-    if(next){this.destinations.delete(id);this.attackTargets.delete(id);actor.targetId="";actor.combatState="idle";this.moveOnSurface(actor,next.x,next.z);}
+    if(next){this.startSkillAction(id,actor,"idle");this.moveOnSurface(actor,next.x,next.z);}
     if(skill.effect==="guard")this.swordGuards.set(id,{until:this.simulatedMs+2500,factor:skill.power,direction:true,counterUntil:0});
     else if(skill.effect==="step" || skill.effect==="anchor"){
-      this.effects.grant(id,{id:"sentinel_"+skillId,sourceId:id,group:"sentinel_self",bonuses:{def:skill.power}},this.simulatedMs+6000);
+      this.effects.grant(id,{id:"sentinel_"+skillId,sourceId:id,group:"sentinel_self",bonuses:{def:skill.power*supportRankMultiplier(book.ranks,skillId)}},this.simulatedMs+6000);
       this.applyStats(id,actor,this.statAllocations.get(id) ?? emptyAllocations());
       if(skill.effect==="anchor")this.sentinelAnchors.set(id,this.simulatedMs+6000);
     } else if(skill.effect==="slam"){
-      this.destinations.delete(id);this.attackTargets.delete(id);actor.targetId="";actor.combatState="attacking";
+      this.startSkillAction(id,actor,"attacking");
       this.sentinelWindups.set(id,{targetId,until:this.simulatedMs+800,power:skill.power*(this.getMonster(targetId)?skillRankMultiplier(book.ranks,skillId):1)});
       this.broadcast("sentinel_windup",{playerId:id,targetId,durationMs:800},{afterNextPatch:true});
     } else if(skill.effect==="stun" || skill.effect==="counter"){
@@ -888,7 +890,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     } else if(skill.effect==="ward" || skill.effect==="party_ward"){
       let assisted=false;
       for(const [member,ally] of allies){
-        this.effects.grant(member,{id:skillId,sourceId:id,group:"sentinel_support",bonuses:{def:skill.power}},this.simulatedMs+8000);
+        this.effects.grant(member,{id:skillId,sourceId:id,group:"sentinel_support",bonuses:{def:skill.power*supportRankMultiplier(book.ranks,skillId)}},this.simulatedMs+8000);
         this.applyStats(member,ally,this.statAllocations.get(member) ?? emptyAllocations());
         if(member!==id && (this.forest.engaged(member) || this.state.monster.targetId===member || Boolean(this.getMonster(this.attackTargets.get(member) ?? ""))))assisted=true;
       }
@@ -915,7 +917,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(Date.now()<(book.cooldowns.cloak ?? 0)) return this.reject(client,"blade_cooldown");
     if(player.stamina<lesson.stamina) return this.reject(client,"insufficient_stamina");
     player.stamina-=lesson.stamina;book.cooldowns.cloak=Date.now()+lesson.cooldownMs;
-    this.attackTargets.delete(id);this.destinations.delete(id);player.targetId="";player.combatState="attacking";
+    this.startSkillAction(id,player,"attacking");
     this.bladeCasts.set(id,this.simulatedMs+600);
     this.broadcast("blade_cloak_cast",{playerId:id,durationMs:600},{afterNextPatch:true});
     this.sendBladeBook(client);void this.saveCharacter(id);
@@ -997,7 +999,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"blade_blocked");
       if(travel>0.00001){const sweep=advanceDash(player,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !isRestArea(player.mapId,{x,z}),map.bounds);
         if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"blade_blocked");}
-      this.destinations.delete(id);this.attackTargets.delete(id);player.targetId="";player.combatState="idle";this.moveOnSurface(player,next.x,next.z);
+      this.startSkillAction(id,player,"idle");this.moveOnSurface(player,next.x,next.z);
     }
     player.stamina-=skill.stamina;book.cooldowns[skillId]=now+skill.cooldownMs;
     if(skill.effect==="evade") {
@@ -1008,8 +1010,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.bladeOpenings.delete(id);this.effects.grant(id,{id:"blade_focus",sourceId:id,group:"blade_attack",bonuses:{atk:skill.power}},this.simulatedMs+8000);
       this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
     } else if(skill.effect==="windup") {
-      this.endBladeCloak(id,"attack");this.destinations.delete(id);this.attackTargets.delete(id);
-      player.targetId="";player.combatState="attacking";
+      this.endBladeCloak(id,"attack");this.startSkillAction(id,player,"attacking");
       this.bladeWindups.set(id,{targetId,until:this.simulatedMs+800,power:skill.power*(monster?skillRankMultiplier(book.ranks,skillId):1)*(cloaked?(monster?1.5:1.2):1),ambush:cloaked});
     } else if(target && skill.effect!=="approach") {
       const ambush=this.endBladeCloak(id,"attack");
@@ -1204,7 +1205,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!snapshot) return this.reject(client,"build_unavailable");
     this.pendingWarps.add(id);
     const task=characterStore.save({...snapshot,occultBook:next}).then(()=>{
-      this.occultBooks.set(id,next);this.sendOccultBook(client);
+      this.occultBooks.set(id,next);
+      if (!this.legacyCombatRoom()) {
+        if (player.possessionActive && !this.canPrepareSpirit(id,path,true)) this.endPossession(id,"loadout_changed");
+        if (this.state.summons.has(id) && !this.canPrepareSpirit(id,path,false)) this.despawnSummon(id,"loadout_changed");
+      }
+      this.sendOccultBook(client);
       try {client.send("occult_book_changed",{action});} catch(error) {console.warn("MONTRA occult book confirmation was not delivered",error);}
     },error=>{console.error("MONTRA occult book save failed",error);this.reject(client,"occult_book_save_failed");})
       .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
@@ -1327,14 +1333,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     } else {
       let trained=false;
+      const supportPower=lesson.power*supportRankMultiplier(book.ranks,skillId);
       for (const [member,target] of targets) {
         if (lesson.effect==="heal" || lesson.effect==="heal_area" || lesson.effect==="spirit_heal") {
-          const amount=Math.max(1,Math.round(target.maxHp*lesson.power));
+          const amount=Math.max(1,Math.round(target.maxHp*supportPower));
           if (target.hp<target.maxHp) {target.hp=Math.min(target.maxHp,target.hp+amount);trained=true;void this.saveCharacter(member);}
         } else if (lesson.effect==="cleanse" || lesson.effect==="cleanse_area") {
           trained=this.clearOccultCurse(member,"cleansed") || trained;
         } else {
-          const bonuses=path==="seer" ? {magicAtk:lesson.power} : {def:lesson.power,magicDef:lesson.power};
+          const bonuses=path==="seer" ? {magicAtk:supportPower} : {def:supportPower,magicDef:supportPower};
           this.effects.grant(member,{id:skillId,sourceId:id,group:"occult_ward",bonuses},this.simulatedMs+8000);
           this.applyStats(member,target,this.statAllocations.get(member) ?? emptyAllocations());
           if (skillId==="mender_trance") {
@@ -1345,7 +1352,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         }
       }
       if (lesson.effect==="heal_area") this.occultHealingFields.set(id,{mapId:caster.mapId,x:caster.x,y:caster.y,z:caster.z,
-        until:this.simulatedMs+6500,nextTick:this.simulatedMs+2000,power:0.03,range:lesson.range});
+        until:this.simulatedMs+6500,nextTick:this.simulatedMs+2000,power:0.03*supportRankMultiplier(book.ranks,skillId),range:lesson.range});
       if (trained && path==="mender") {
         const categories:(keyof OccultMastery["mender"])[] =
           lesson.effect==="heal" || lesson.effect==="heal_area" ? ["healing"] :
@@ -1441,7 +1448,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const skillId=input.skillId as string;
       if(!Object.hasOwn(MUAY_LESSONS,skillId))return this.reject(client,"invalid_muay_book");
       const lesson=MUAY_LESSONS[skillId as MuayLessonId];
-      if(lesson.school!==next.school)return this.reject(client,"muay_wrong_school");
+      if(!isMuayFoundation(skillId) && lesson.school!==next.school)return this.reject(client,"muay_wrong_school");
       if(next.learned.includes(skillId as MuayLessonId))return this.reject(client,"muay_book_already_learned");
       if(player.level<lesson.level)return this.reject(client,"muay_book_level");
       if(next.learned.length+skillRankCost(next.ranks)>=muayPoints(player.level))return this.reject(client,"muay_book_no_points");
@@ -1469,8 +1476,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       next.school=selected;next.slots=[...next.loadouts[selected]];
     } else if(action==="equip") {
       const skillId=input.skillId as MuaySkillId|null;
-      if(skillId!==null && (!Object.hasOwn(MUAY_SKILLS,skillId) || (!MUAY_BASE_SKILLS.some(skill=>skill===skillId) &&
-        (!next.learned.includes(skillId as MuayLessonId) || MUAY_LESSONS[skillId as MuayLessonId].school!==next.school))))return this.reject(client,"muay_skill_locked");
+      if(skillId!==null && (!Object.hasOwn(MUAY_SKILLS,skillId) || !next.learned.includes(skillId as MuayLessonId) ||
+        (!isMuayFoundation(skillId) && MUAY_LESSONS[skillId as MuayLessonId].school!==next.school)))return this.reject(client,"muay_skill_locked");
       for(let i=0;i<next.slots.length;i++)if(skillId!==null && next.slots[i]===skillId)next.slots[i]=null;
       next.slots[input.slot as number]=skillId;
       next.loadouts[next.school]=[...next.slots];
@@ -1601,7 +1608,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (equippedWeaponId(this.inventories.get(id))!==MUAY_WRAP_ID) return this.reject(client,"muay_wrap_required");
     const book=this.muayBooks.get(id);
     if (!book) return this.reject(client,"muay_class_required");
-    if (Object.hasOwn(MUAY_LESSONS,skillId) && (!book?.learned.includes(skillId as MuayLessonId) || MUAY_LESSONS[skillId as MuayLessonId].school!==book.school)) return this.reject(client,"muay_skill_locked");
+    if (!book.slots.includes(skillId) || !book.learned.includes(skillId as MuayLessonId) || (!isMuayFoundation(skillId) && MUAY_LESSONS[skillId as MuayLessonId].school!==book.school)) return this.reject(client,"muay_skill_locked");
     if (player.flying || !onMapGround(player)) return this.reject(client,"flying");
     if (isRestArea(player.mapId,player)) return this.reject(client,"muay_safe_area");
     const now=Date.now();
@@ -1630,7 +1637,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"muay_blocked");
       const sweep=advanceDash(player,{dx,dz},distance,(x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !isRestArea(player.mapId,{x,z}),map.bounds);
       if(sweep.blocked || sweep.moved+0.00001<distance)return this.reject(client,"muay_blocked");
-      this.destinations.delete(id);this.attackTargets.delete(id);player.targetId="";player.combatState="idle";
+      this.startSkillAction(id,player,"idle");
       this.moveOnSurface(player,next.x,next.z);
     }
     let retreatPoint:{x:number;y:number;z:number}|undefined,muayMoved=false;
@@ -1699,7 +1706,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(skillId==="chaiya_return")player.stamina=Math.min(player.maxStamina,player.stamina+8);
       if(skillId==="korat_finish" && monster && target.alive)this.sendSwordNotice(client,"muay_interrupt",{result:this.interruptMuayTarget(monster,500),source:"korat_finish"});
       if(skillId==="korat_press" && monster && target.alive)this.sendSwordNotice(client,"muay_interrupt",{result:this.interruptMuayTarget(monster,600),source:"korat_press"});
-      if(retreatPoint){this.destinations.delete(id);this.attackTargets.delete(id);player.targetId="";player.combatState="idle";this.moveOnSurface(player,retreatPoint.x,retreatPoint.z);muayMoved=true;}
+      if(retreatPoint){this.startSkillAction(id,player,"idle");this.moveOnSurface(player,retreatPoint.x,retreatPoint.z);muayMoved=true;}
       if(monster)this.recordMuayMastery(id,book.school,countsMuayTechnique(book.school,skillId,muayMoved),comboMultiplier>1 || skillId===followup.finisher);
       if(skillId===followup.opener && target.alive && book.learned.includes(followup.finisher)) {
         this.muayFollowups.set(id,{school:book.school,targetId,until:this.simulatedMs+MUAY_FOLLOWUP_WINDOW_MS});
@@ -2493,6 +2500,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     cast_class_skill: (client: Client, message: unknown) => {
       if(this.blockMounted(client))return;
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_build");
+      if (!this.legacyCombatRoom()) return this.reject(client,"use_learned_skill");
       this.castClassSkill(client);
     },
     allocate_stat: (client: Client, _message: unknown) => this.reject(client, "automatic_stats"),
@@ -2630,6 +2638,21 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         }
       })();
       this.pendingItemUses.set(id, task);
+    },
+    get_character_status: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_status_request");
+      const id=client.sessionId, player=this.state.players.get(id);
+      if (!player) return;
+      const last=this.lastStatusReadMs.get(id) ?? -Infinity;
+      if (this.simulatedMs-last<1_000) return;
+      this.lastStatusReadMs.set(id,this.simulatedMs);
+      const inventory=this.inventories.get(id);
+      client.send("character_status",{
+        level:player.level, weaponId:equippedWeaponId(inventory) ?? "",
+        base:calculateStats(player.level,this.statAllocations.get(id) ?? emptyAllocations()),
+        weapon:{pve:weaponBonuses(inventory,"pve"),pvp:weaponBonuses(inventory,"pvp")},
+        effects:this.effects.active(id,this.simulatedMs)
+      });
     },
     get_inventory: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_inventory_request");
@@ -2827,9 +2850,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       void this.saveCharacter(id);
     },
     move: (client: Client, message: unknown) => {
-      if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
-      if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
-      if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
+      const id=client.sessionId;
+      if(this.sentinelStuns.has(id))return this.reject(client,"sentinel_stunned");
+      if(this.bladeWindups.has(id) || this.bladeCasts.has(id) || this.sentinelWindups.has(id)){
+        // A ground tap releases the monster lock without allowing movement during the cast.
+        const actor=this.state.players.get(id),targetId=this.attackTargets.get(id);
+        if(actor && targetId && this.getMonster(targetId) && parseMoveCommand(message,getWorldMap(actor.mapId)?.bounds)){
+          this.attackTargets.delete(id);actor.targetId="";
+        }
+        return this.reject(client,this.sentinelWindups.has(id)?"sentinel_windup_active":"blade_windup_active");
+      }
       if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
       const destination = parseMoveCommand(message, getWorldMap(this.state.players.get(client.sessionId)?.mapId ?? DEFAULT_MAP_ID)?.bounds);
@@ -2859,12 +2889,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
     attack: (client: Client, message: unknown) => {
       if(this.blockMounted(client))return;
-      if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
+      const monsterOrder = parseAttackCommand(message);
+      if(!monsterOrder && (this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId))) return this.reject(client,"blade_windup_active");
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
-      if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
+      if(!monsterOrder && this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
       if(this.muayControlled(client.sessionId))return this.reject(client,"muay_controlled");
       if (this.pendingWarps.has(client.sessionId)) return this.reject(client, "character_busy");
-      const monsterOrder = parseAttackCommand(message);
       const pkOrder = monsterOrder ? null : parsePkTargetCommand(message);
       if (!monsterOrder && !pkOrder) return this.reject(client, "invalid_attack");
 
@@ -2882,10 +2912,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // same room is eligible for PK. No duel agreement is required.
       const targetId = monsterOrder ? monsterOrder.targetId : pkOrder!.targetId;
       if (targetId === attackerId) return this.reject(client, "self_attack");
-      if (!this.sameCombatMap(attackerId, targetId)) return this.reject(client, "target_unavailable");
-      const target = monsterOrder
-        ? this.getMonster(targetId)
-        : this.state.players.get(targetId);
+      const monster=monsterOrder ? this.getMonster(targetId) : undefined;
+      const target=monsterOrder ? monster : this.state.players.get(targetId);
+      if (!this.canPursueBasic(attackerId,attacker,targetId,monster)) return this.reject(client,"target_unavailable");
 
       if (!target || !target.alive) {
         return this.reject(client, monsterOrder ? "monster_down" : "target_unavailable");
@@ -2897,14 +2926,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.lastCombatMs.set(attackerId, this.simulatedMs);
       attacker.targetId = targetId;
 
-      const attackRange = monsterOrder ? RULES.playerAttackRange : RULES.pkAttackRange;
+      const attackRange = isOccultPath(attacker.pathId) ? FORT.rangedRange : monsterOrder ? RULES.playerAttackRange : RULES.pkAttackRange;
       // Wall/vertical separation cannot be solved by a ground-only chase.
-      if (meleeHeightBlocked(attacker,target,attackRange)) {
+      if (!isOccultPath(attacker.pathId) && meleeHeightBlocked(attacker,target,attackRange)) {
         this.attackTargets.delete(attackerId);
         attacker.targetId = "";
         return this.reject(client, "melee_height_blocked");
       }
-      if (distance3d(attacker, target) > attackRange) {
+      // During a wind-up only change the next basic target, never the skill already in flight.
+      if (this.basicAttackPaused(attackerId)) return;
+      if (isRestArea(attacker.mapId,attacker) || distance3d(attacker, target) > attackRange) {
         attacker.combatState = "approaching";
         client.send("combat_notice", { reason: "approaching" });
       } else {
@@ -2927,6 +2958,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!isOccultPath(player.pathId))return this.reject(client,"occult_class_required");
       if(!this.gates.get(id)?.possession.consume(this.simulatedMs))return this.reject(client,"possession_rate_limited");
       if(player.possessionActive){this.endPossession(id,"cancelled");return;}
+      if(!this.legacyCombatRoom() && !this.canPrepareSpirit(id,player.pathId,true))return this.reject(client,"occult_skill_locked");
       if(POSSESSION_BUFF.requiresSummon && !this.state.summons.has(id))return this.reject(client,"possession_needs_summon");
       if(possessionCoolingDown(this.persistentCharacters.get(id)))return this.reject(client,"possession_cooldown");
       const result=this.buffs.activate(id,this.simulatedMs);
@@ -3033,6 +3065,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = client.sessionId, caster = this.spellCaster(client);
     if (!caster) return;
     if (!isOccultPath(caster.pathId)) return this.reject(client, "occult_class_required");
+    if (!this.legacyCombatRoom()) return this.reject(client,"occult_skill_locked");
     const target = this.getMonster(order.targetId);
     if (!target?.alive || !this.sameCombatMap(id, target.id)) return this.reject(client, "target_unavailable");
     if (distance3d(caster, target) > TALISMAN.range) return this.reject(client, "talisman_out_of_range");
@@ -3056,6 +3089,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = client.sessionId, shooter = this.spellCaster(client);
     if (!shooter) return;
     if (!isOccultPath(shooter.pathId)) return this.reject(client, "occult_class_required");
+    if (!this.legacyCombatRoom()) return this.reject(client,"occult_skill_locked");
     const targetId = monsterOrder ? monsterOrder.targetId : pkOrder!.targetId;
     if (targetId === id) return this.reject(client, "self_attack");
     if (!this.sameCombatMap(id, targetId)) return this.reject(client, "target_unavailable");
@@ -3114,6 +3148,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }, { afterNextPatch:true });
   }
 
+  private legacyCombatRoom():boolean {
+    return process.env.MONTRA_ACCOUNTS_REQUIRED==="0" && process.env.NODE_ENV!=="production";
+  }
+  private canPrepareSpirit(id:string, path:OccultPath, tranceOnly:boolean):boolean {
+    const book=this.occultBooks.get(id);
+    return Boolean(book?.loadouts[path].some(skill=>skill && book.learned[path].includes(skill) &&
+      (tranceOnly ? OCCULT_LESSONS[skill].effect==="trance" :
+      ["spirit","spirit_bind","spirit_heal","spirit_ward","trance"].includes(OCCULT_LESSONS[skill].effect))));
+  }
   private summonSpirit(client: Client, message: unknown, kind: "guardian" | "pot_spirit") {
     if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
     if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
@@ -3123,6 +3166,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const owner = this.state.players.get(id);
     if (!owner || !owner.alive) return this.reject(client, "not_alive");
     if (!isOccultPath(owner.pathId)) return this.reject(client, "occult_class_required");
+    if (!this.legacyCombatRoom() && (kind!=="pot_spirit" || !this.canPrepareSpirit(id,owner.pathId,false))) return this.reject(client,"occult_skill_locked");
     if (owner.possessionActive) return this.reject(client, "possession_active");
     if (this.state.summons.has(id)) return this.reject(client, "summon_limit");
     if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) {
@@ -3548,7 +3592,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private updatePlayerMovement(dt: number) {
     for (const [sessionId, player] of this.state.players) {
-      if (!player.alive || this.sentinelStuns.has(sessionId) || this.sentinelWindups.has(sessionId) || this.pendingWarps.has(sessionId) || this.climbs.has(sessionId) || this.flightTransitions.has(sessionId)) {
+      if (!player.alive || this.basicAttackPaused(sessionId) || this.pendingWarps.has(sessionId) || this.climbs.has(sessionId) || this.flightTransitions.has(sessionId)) {
         this.activeDashes.delete(sessionId);
         continue;
       }
@@ -3586,7 +3630,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           ? (monster?.alive ? monster : undefined)
           : this.state.players.get(targetId);
 
-        if (!target || !target.alive || targetId === sessionId || !this.sameCombatMap(sessionId, targetId)) {
+        if (!target || !target.alive || targetId === sessionId || !this.canPursueBasic(sessionId,player,targetId,monster)) {
           this.endAttack(sessionId, player);
           continue;
         }
@@ -3596,19 +3640,22 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         player.targetId = targetId;
         player.facing = facingTo(dx, dz);
 
-        const attackRange = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
-        if (meleeHeightBlocked(player,target,attackRange)) {
+        const ranged = isOccultPath(player.pathId);
+        const attackRange = ranged ? FORT.rangedRange : isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
+        if (!ranged && meleeHeightBlocked(player,target,attackRange)) {
           this.endAttack(sessionId, player);
           continue;
         }
-        if (distance <= attackRange) {
+        const inRestArea=isMonster && isRestArea(player.mapId,player);
+        const clearShot = !ranged || this.combatSegmentClear(player.mapId,player,target);
+        if (!inRestArea && distance <= attackRange && clearShot) {
           player.combatState = "attacking";
           continue;
         }
 
         // Recalculate every fixed tick so moving players can be chased.
         // Never teleport, regardless of where the client taps.
-        const stopDistance = attackRange - 0.4;
+        const stopDistance = inRestArea || !clearShot ? 0 : attackRange - 0.4;
         const ratio = Math.max(0, (distance - stopDistance) / distance);
         const approach = {
           x: clampToMap(player.x + dx * ratio, getWorldMap(player.mapId)!.bounds, "x"),
@@ -3676,17 +3723,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         continue;
       }
 
+      if (this.basicAttackPaused(attackerId)) continue;
       const monster = this.getMonster(targetId);
       const isMonster = Boolean(monster);
       const target = isMonster
         ? (monster?.alive ? monster : undefined)
         : this.state.players.get(targetId);
-      if (!target || !target.alive || targetId === attackerId || !this.sameCombatMap(attackerId, targetId)) {
+      if (!target || !target.alive || targetId === attackerId || !this.canPursueBasic(attackerId,attacker,targetId,monster)) {
         this.endAttack(attackerId, attacker);
         continue;
       }
 
-      const range = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
+      if (isMonster && isRestArea(attacker.mapId,attacker)) continue;
+      const ranged = isOccultPath(attacker.pathId);
+      const range = ranged ? FORT.rangedRange : isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
       if (distance3d(attacker,target)>range+.00001 || !this.combatSegmentClear(attacker.mapId,attacker,target))continue;
       attacker.facing = facingTo(target.x - attacker.x, target.z - attacker.z);
       attacker.combatState = "attacking";
@@ -3712,10 +3762,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       if (attacker.pathId === "muay_boran" && equippedWeaponId(this.inventories.get(attackerId)) === MUAY_WRAP_ID) this.recordMuayTraining(attackerId,"strikes");
 
-      const meleeBonus = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp").melee;
+      const bonuses = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp");
+      const meleeBonus = bonuses.melee;
       const swordMastery = (dualSword && this.swordTrees.get(attackerId)?.learned.includes("rhythm") ? 1.05 : 1) * (ambush ? (monster?1.5:1.2) : 1);
+      if (ranged) this.broadcast("ranged_hit", {
+        attackerId,targetId,skill:"basic_magic",
+        from:{x:attacker.x,y:attacker.y+FORT.shootOriginHeight,z:attacker.z},
+        to:{x:target.x,y:target.y+FORT.targetBodyHeight,z:target.z},
+      }, {afterNextPatch:true});
       if (monster) {
-        const meleeDamage = calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, monster.defense, monster.level);
+        const meleeDamage = ranged ? calculateDamage(attacker.magicAtk + bonuses.ranged,monster.defense,monster.level)
+          : calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, monster.defense, monster.level);
         monster.hp = Math.max(0, monster.hp - meleeDamage);
         monster.hitSeq += 1;
         this.broadcast("combat_hit", {
@@ -3730,7 +3787,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // FREE PK: health, range, damage, respawn and kill credit are wholly
       // server-owned. The client only submits another session's targetId.
       const victim = target as Player;
-      const meleeDamage = this.swordGuardDamage(targetId,attacker,calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, victim.def, victim.level));
+      const meleeDamage = this.swordGuardDamage(targetId,attacker,ranged
+        ? calculateDamage(attacker.magicAtk + bonuses.ranged,victim.magicDef,victim.level)
+        : calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, victim.def, victim.level));
       victim.hp = Math.max(0, victim.hp - meleeDamage);
       victim.hitSeq += 1;
       this.broadcast("pvp_hit", {
@@ -3997,6 +4056,26 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
+  private canPursueBasic(id:string, player:Player, targetId:string, monster:Monster|undefined):boolean {
+    // A PvE order can walk out of a rest area. Only the damage check requires both sides outside.
+    if (!monster || !this.restApproachClients.has(id))return this.sameCombatMap(id,targetId);
+    return !this.pendingWarps.has(id) && player.mapId===monster.mapId && !isRestArea(monster.mapId,monster);
+  }
+
+  private startSkillAction(id:string, player:Player, state:"idle"|"attacking") {
+    this.destinations.delete(id);
+    const targetId=this.attackTargets.get(id);
+    if (!targetId || !this.getMonster(targetId)?.alive) {
+      this.endAttack(id,player);
+    }
+    player.combatState=state;
+  }
+
+  private basicAttackPaused(id:string):boolean {
+    return this.sentinelStuns.has(id) || this.sentinelWindups.has(id) ||
+      this.bladeWindups.has(id) || this.bladeCasts.has(id) || this.muayControlled(id);
+  }
+
   private endAttack(id: string, player: Player) {
     this.attackTargets.delete(id);
     player.targetId = "";
@@ -4179,6 +4258,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(terrainReady)this.terrainClients.add(client.sessionId);
       if(riverReady)this.riverClients.add(client.sessionId);
       if(castleReady)this.castleClients.add(client.sessionId);
+      if((options as {monsterAutoAttackVersion?:unknown}|undefined)?.monsterAutoAttackVersion===1)this.restApproachClients.add(client.sessionId);
       if(provinceReady)this.provinceClients.add(client.sessionId);
       if(atlasReady)this.atlasClients.add(client.sessionId);
       if(templeReady)this.templeClients.add(client.sessionId);
@@ -4239,6 +4319,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.crestTurns.delete(id);this.gateActions.delete(id);this.warSeats.delete(id);this.warClients.delete(id);this.warSent.delete(id);
     this.riverClients.delete(id);this.terrainClients.delete(id);this.reliefClients.delete(id);this.originalReliefClients.delete(id);
     this.castleClients.delete(id);
+    this.restApproachClients.delete(id);
     this.provinceClients.delete(id);
     this.leaveParty(id);
     const guildCharacter=this.persistentCharacters.get(id);
@@ -4312,6 +4393,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.inventories.delete(id);
       this.lastItemUseMs.delete(id);
       this.lastInventoryReadMs.delete(id);
+      this.lastStatusReadMs.delete(id);
       this.lastWeaponEquipMs.delete(id);
       this.playerSpawn.delete(id);
       this.pendingCharacterLeaves.delete(id);
@@ -4370,6 +4452,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.hpRegenRemainder.clear();
     this.lastItemUseMs.clear();
     this.lastInventoryReadMs.clear();
+    this.lastStatusReadMs.clear();
     this.lastWeaponEquipMs.clear();
     this.activeGuestAccounts.clear();
     this.pendingCharacterLeaves.clear();

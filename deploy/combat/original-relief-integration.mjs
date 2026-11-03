@@ -36,10 +36,10 @@ try{
   const enemy=await until(()=>[...c.r.state.monsters.values()].find(m=>m.mapId==="bound_temple" && m.y<-.5 && Math.hypot(m.x-c.me().x,m.z-c.me().z)<10),"sunken cloister enemy");assert.ok(enemy.alive);await leave(c);
   console.log("PASS forest guardian and temple monsters on old hunting surfaces");
   const keep=await fixture("sam_lan_estuary",32,-48);c=await join(keep);assert.equal(c.me().y,4.5);await walk(c,30,-46);assert.ok(c.me().y>4);await leave(c);
-  for(const [site,x,z,minY] of [["mantra_capital",0,-35,2.9],["moon_pass",82,-58,3.5],["river_watch",-67,-56,3],["tri_wiang_castle",690,100,17]]){
+  for(const [site,x,z,minY] of [["mantra_capital",0,-35,2.9],["moon_pass",82,-58,3.5],["river_watch",-67,-56,3],["tri_wiang_castle",690,100,8]]){
     const token=await fixture(site,x,z);c=await join(token);assert.equal(c.me().mapId,site);assert.ok(c.me().y>minY,site);await leave(c);
   }
-  console.log("PASS old saves at all five cities and war sites including the 18 m pass");
+  console.log("PASS old saves at all five cities and war sites including the resized eastern pass");
   const city="sam_lan_estuary";
   for(const [name,start,end] of [
     ["walk up the command court", [23,-76,0],[23,-64,0]],

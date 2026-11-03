@@ -1,7 +1,7 @@
 import { Monster, type MyRoomState, type Player } from "./schema/MyRoomState.js";
-import { ATLAS_MAPS, ATLAS_SPAWNS, RIFT_WARDEN, isAtlasMap } from "./WorldAtlas.js";
+import { ATLAS_SPAWNS, FRONTIER_SPAWNS, RIFT_WARDEN } from "./WorldAtlas.js";
 import { TEMPLE_MAP, TEMPLE_SPAWNS } from "./TempleMap.js";
-import { type WorldMapDefinition, type WorldWall, FOREST_CAMPS, SHRINE_GUARDIAN, WORLD_EXPANSION, getWorldMap, groundAt, onMapGround, isRestArea, isWorldSegmentClear } from "./WorldMaps.js";
+import { type WorldMapDefinition, type WorldWall, FOREST_CAMPS, SHRINE_GUARDIAN, WORLD_EXPANSION, WORLD_ROOM_CAPACITY, getWorldMap, groundAt, onMapGround, isRestArea, isWorldSegmentClear } from "./WorldMaps.js";
 import { facingTo, planarDistance, stepTowards } from "./GameRules.js";
 import { MonsterRRTNavigator, isMonsterSegmentClear, MONSTER_NAV } from "./MonsterRRT.js";
 import { distance3d } from "./HeightRules.js";
@@ -13,6 +13,7 @@ type Life = {actor:Monster;zone:Navigation; windupUntil:number; nextChargeAt:num
 /** Bounded population, independent clocks and server-owned AI; no player-selected stats. */
 export class ForestEncounters {
   private lives = new Map<string,Life>();
+  private regionalMaps = new Set<string>();
   private activeRegions = new Set<string>();
   private navigation(map:WorldMapDefinition): Navigation {
     const trees=map.obstacles.map(o=>({x:o.x-o.radius,z:o.z-o.radius,width:o.radius*2,length:o.radius*2}));
@@ -29,7 +30,8 @@ export class ForestEncounters {
     })));
     const spawnIds = new Set(normalSpawns.map(spawn => spawn.id));
     // A full world room can populate every atlas hunting region at once.
-    const totalSpawns = normalSpawns.length + TEMPLE_SPAWNS.length + ATLAS_SPAWNS.length + 2;
+    const regionalSpawns = [...ATLAS_SPAWNS, ...FRONTIER_SPAWNS];
+    const totalSpawns = normalSpawns.length + TEMPLE_SPAWNS.length + regionalSpawns.length + 2;
     if (totalSpawns > MONSTER_CONFIG.maxSpawnPointsPerRoom) throw new Error("monster_spawn_cap_exceeded");
     for (const [id, tier] of Object.entries(this.tiers)) {
       if (!spawnIds.has(id)) throw new Error("unknown_monster_spawn_tier");
@@ -37,10 +39,11 @@ export class ForestEncounters {
     }
     const forest=this.navigation(getWorldMap("forbidden_forest")!);
     const temple=this.navigation(getWorldMap(TEMPLE_MAP.id)!);
-    const atlasNavigation=new Map(Object.values(ATLAS_MAPS).map(map=>[map.id,this.navigation(map)]));
+    this.regionalMaps=new Set(regionalSpawns.map(s=>s.mapId));
+    const regionalNavigation=new Map([...this.regionalMaps].map(id=>[id,this.navigation(getWorldMap(id)!)]));
     const spawns:{spawn:{id:string;x:number;z:number;level:number;name:string;tier?:MonsterTier};zone:Navigation}[]=[...[...normalSpawns,SHRINE_GUARDIAN].map(spawn=>({spawn,zone:forest})),
       ...TEMPLE_SPAWNS.map(spawn=>({spawn,zone:temple})),
-      ...ATLAS_SPAWNS.map(spawn=>({spawn,zone:atlasNavigation.get(spawn.mapId)!}))];
+      ...regionalSpawns.map(spawn=>({spawn,zone:regionalNavigation.get(spawn.mapId)!}))];
     for (const {spawn,zone} of spawns) {
       const {id, x, z, level, name} = spawn;
       const tier:MonsterTier = spawn.tier ?? (id === SHRINE_GUARDIAN.id ? "elite" : (this.tiers[id] ?? "normal"));
@@ -49,7 +52,7 @@ export class ForestEncounters {
         attack:Math.round(base.attack*1.55),defense:Math.round(base.defense*1.3)} : base;
       const actor=new Monster({id,x,y:groundAt(zone.map.id,x,z),z,hp:profile.maxHp,maxHp:profile.maxHp,
         alive:true,mapId:zone.map.id,level,tier,displayName:name,defense:profile.defense});
-      if(!zone.map.region)this.monsters.set(id,actor);
+      if(!this.regionalMaps.has(zone.map.id))this.monsters.set(id,actor);
       this.lives.set(id,{actor,zone,x,z,profile,respawnAt:0,lastAttack:-Infinity,returning:false,
         nextChargeAt:0,windupUntil:0,interruptUntil:0,interruptResistUntil:0,tauntOwner:"",tauntUntil:0,tauntResistUntil:0,nav:new MonsterRRTNavigator(zone.obstacles,zone.map.bounds)});
     }
@@ -89,7 +92,8 @@ export class ForestEncounters {
     }
     m.alive=false;m.hp=0;m.targetId="";m.aiState="dead";
     life.windupUntil=0;life.nextChargeAt=0;life.interruptUntil=0;life.interruptResistUntil=0;life.tauntOwner="";life.tauntUntil=0;life.tauntResistUntil=0;
-    life.respawnAt=now+(id===RIFT_WARDEN.id ? RIFT_WARDEN.respawnMs : id===SHRINE_GUARDIAN.id ? SHRINE_GUARDIAN.respawnMs : monsterRespawnDelay(nearby));life.returning=false;life.nav.clear();return true;
+    // A siege can have more hunters than a world room; use the same minimum delay.
+    life.respawnAt=now+(id===RIFT_WARDEN.id ? RIFT_WARDEN.respawnMs : id===SHRINE_GUARDIAN.id ? SHRINE_GUARDIAN.respawnMs : monsterRespawnDelay(Math.min(nearby,WORLD_ROOM_CAPACITY)));life.returning=false;life.nav.clear();return true;
   }
   clearTarget(id:string):void {for(const m of this.monsters.values())if(m.targetId===id)m.targetId="";for(const life of this.lives.values())if(life.tauntOwner===id){life.tauntOwner="";life.tauntUntil=0;}}
   engaged(id:string):boolean {return [...this.monsters.values()].some(m=>m.alive&&m.targetId===id);}
@@ -97,10 +101,10 @@ export class ForestEncounters {
     hit:(targetId:string,monster:Monster,force?:number)=>void,respawn:(id:string)=>void,
     canDetect?:(id:string,player:Player,monster:Monster)=>boolean):void {
     const occupied=new Set(Array.from(players.values(),p=>p.mapId));
-    const regions=new Set([...occupied].filter(isAtlasMap));
+    const regions=new Set([...occupied].filter(id=>this.regionalMaps.has(id)));
     if(regions.size!==this.activeRegions.size || [...regions].some(id=>!this.activeRegions.has(id))){
       // Withdraw first, then add. Room-owned life clocks survive the last player leaving.
-      for(const [id,life] of this.lives)if(life.zone.map.region && this.activeRegions.has(life.zone.map.id) && !regions.has(life.zone.map.id)){
+      for(const [id,life] of this.lives)if(this.activeRegions.has(life.zone.map.id) && !regions.has(life.zone.map.id)){
         life.actor.targetId="";life.windupUntil=0;life.tauntOwner="";life.tauntUntil=0;life.nav.clear();this.monsters.delete(id);
       }
       for(const [id,life] of this.lives)if(regions.has(life.zone.map.id) && !this.activeRegions.has(life.zone.map.id))this.monsters.set(id,life.actor);
@@ -108,8 +112,8 @@ export class ForestEncounters {
     }
     for(const [id,life] of this.lives){
       const {map,obstacles}=life.zone;
-      if(map.region && !regions.has(map.id))continue;
-      const m=this.monsters.get(id)!;
+      const m=this.monsters.get(id);
+      if(!m)continue;
       if(!m.alive){
         if(now>=life.respawnAt){m.x=life.x;m.z=life.z;m.y=groundAt(map.id,m.x,m.z);m.hp=m.maxHp;m.alive=true;m.aiState="patrol";m.targetId="";
           life.lastAttack=-Infinity;life.returning=false;life.nav.clear();respawn(id);}

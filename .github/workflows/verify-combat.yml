@@ -31,6 +31,7 @@ jobs:
           cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
           cp deploy/combat/AccountStore.ts deploy/combat/AccountService.ts deploy/combat/AccountRoutes.ts deploy/combat/account-store.test.ts combat-verify/src/rooms/
           cp deploy/combat/account-integration.mjs combat-verify/account-integration.mjs
+          cp deploy/combat/learned-hotbar-integration.mjs combat-verify/
           cp deploy/combat/guest-delete-integration.mjs combat-verify/guest-delete-integration.mjs
           cp deploy/combat/mount-integration.mjs combat-verify/mount-integration.mjs
           cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
@@ -86,10 +87,12 @@ jobs:
           cp deploy/combat/blade-book-integration.mjs combat-verify/blade-book-integration.mjs
           cp deploy/combat/blade-depth-integration.mjs combat-verify/blade-depth-integration.mjs
           cp deploy/combat/class-rank-integration.mjs combat-verify/class-rank-integration.mjs
+          cp deploy/combat/status-support-integration.mjs combat-verify/status-support-integration.mjs
           cp deploy/combat/skill-ranks.test.ts combat-verify/src/rooms/skill-ranks.test.ts
           cp deploy/combat/advanced-class-integration.mjs combat-verify/advanced-class-integration.mjs
           cp deploy/combat/advanced-lessons.test.ts combat-verify/src/rooms/advanced-lessons.test.ts
           cp deploy/combat/blade-advanced-integration.mjs combat-verify/blade-advanced-integration.mjs
+          cp deploy/combat/auto-attack.test.mjs combat-verify/auto-attack.test.mjs
           cp deploy/combat/occult-rules.test.ts combat-verify/src/rooms/occult-rules.test.ts
           cp deploy/combat/occult-integration.mjs combat-verify/occult-integration.mjs
           cp deploy/combat/class-balance-integration.mjs combat-verify/class-balance-integration.mjs
@@ -256,14 +259,13 @@ jobs:
           grep -q "serverFacing" main.js
           grep -Eq 'main\.js\?v=[0-9]+\.[0-9]+\.[0-9]+' index.html
           grep -q 'id="climb"' index.html
-          grep -q 'id="shoot"' index.html
+          grep -q 'class="skill-bar learned-bar"' index.html
+          if grep -Eq 'id="(shoot|summon|possess|talisman|classSkill|attack)"' index.html; then exit 1; fi
           grep -q 'function syncFortification' main.js
           grep -q 'room.send("climb"' main.js
-          grep -q 'room.send("shoot"' main.js
           grep -q "function syncSummons" main.js
-          grep -q 'room.send("unsummon"' main.js
           grep -q 'room.send("pot_summon"' main.js
-          grep -q 'room.send("blessed_rice"' main.js
+          grep -q 'room.send("occult_skill"' main.js
           grep -q 'tapPlayerForPK' main.js
           grep -q 'pvp_hit' main.js
           grep -q 'id="pkPanel"' index.html
@@ -377,6 +379,18 @@ jobs:
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14213) 2>/dev/null; then break; fi; sleep 0.25; done
           timeout 60s node class-rank-integration.mjs || { cat class-rank-server.log; exit 1; }
 
+      - name: Isolated character status and support ranks
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export PORT=14217 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1 MONTRA_TEST_URL=http://127.0.0.1:14217
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-status-test-XXXXXX)"
+          node --import tsx src/index.ts > status-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14217) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 60s node status-support-integration.mjs || { cat status-server.log; exit 1; }
+
       - name: Isolated account and permanent class
         working-directory: combat-verify
         shell: bash
@@ -388,6 +402,7 @@ jobs:
           trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for n in {1..60}; do if curl -s -o /dev/null "$MONTRA_TEST_URL/montra/account/slots"; then break; fi; sleep 1; done
           node account-integration.mjs
+          node learned-hotbar-integration.mjs
           node guest-delete-integration.mjs
           node mount-integration.mjs
 
@@ -427,6 +442,7 @@ jobs:
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4115) 2>/dev/null; then break; fi; sleep 0.25; done
           timeout 60s node blade-book-integration.mjs || { cat blade-server.log; exit 1; }
           timeout 60s node blade-depth-integration.mjs || { cat blade-server.log; exit 1; }
+          node --import tsx --test auto-attack.test.mjs
           timeout 60s node blade-advanced-integration.mjs || { cat blade-server.log; exit 1; }
 
       - name: Isolated sentinel class

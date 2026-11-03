@@ -9,13 +9,13 @@ const url=process.env.MONTRA_TEST_URL,dir=process.env.MONTRA_CHARACTER_DIR;
 if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url??"") || !/^montra-castle-test-/.test(path.basename(dir??"")) || process.env.MONTRA_CASTLE_PILOT!=="1")throw Error("Requires an isolated local castle pilot");
 const {GuildStore}=await import(existsSync("build/rooms/GuildStore.js")?"./build/rooms/GuildStore.js":"./src/rooms/GuildStore.ts");
 const guild=new GuildStore(path.join(dir,"guilds.sqlite")),sdk=new Client(url),rooms=new Set();
-const options={worldVersion:1,atlasVersion:1,templeVersion:1,provinceVersion:1,warVersion:1};
+const options={worldVersion:1,atlasVersion:1,templeVersion:1,provinceVersion:1,warVersion:1,atlasReliefVersion:1,originalReliefVersion:1};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function wait(fn,label,ms=14000){const end=Date.now()+ms;while(Date.now()<end){const v=fn();if(v)return v;await sleep(55);}throw Error("timeout "+label);}
 async function seed(name,mapId,x,z){
   const token="mt1_"+randomBytes(32).toString("hex"),id=createHash("sha256").update(token).digest("hex"),slots=Array(12).fill(null);
   slots[0]={itemId:"health_potion",quantity:2};slots[1]={itemId:"ritual_dagger",quantity:1};
-  await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level:12,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp:416,mapId,inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
+  await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level:12,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp:416,mapId,...(mapId==="tri_wiang_castle"?{castleLayout:2}:{}),inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
   return {token,id};
 }
 async function join(guest,id,warTicket,version=2){
@@ -47,15 +47,15 @@ try{
   const guest=await seed("Traveller","fallen_city",0,-58);
   let c=await join(guest,undefined,undefined,1);
   await send(c,"warp",{portalId:"fallen_city_to_"+id},"command_rejected",e=>e.reason==="world_client_update_required");await leave(c);
-  c=await join(guest);await warp(c,id);await leave(c);c=await join(guest);assert.equal(c.me().mapId,id);assert.ok(c.me().z>890);
-  await walk(c,-18,900);await warp(c,"castle_cart_north");await walk(c,0,-900);await warp(c,"asura_peak");await sleep(3300);await warp(c,id);
-  await walk(c,-18,-900);await warp(c,"castle_cart_south");await walk(c,0,900);await warp(c,"fallen_city");await leave(c);
+  c=await join(guest);await warp(c,id);await leave(c);c=await join(guest);assert.equal(c.me().mapId,id);assert.ok(Math.abs(c.me().z-313.75)<.1);
+  await walk(c,-18,315);await warp(c,"castle_cart_north");await walk(c,0,-315);await warp(c,"asura_peak");await sleep(3300);await warp(c,id);
+  await walk(c,-18,-315);await warp(c,"castle_cart_south");await walk(c,0,315);await warp(c,"fallen_city");await leave(c);
   console.log("PASS both neighbour portals, civilian carriage in both directions, large-coordinate save and legacy-client guard");
   const sideRooms={attack:[],defend:[]},field=[];
   for(const side of ["attack","defend"]){
     let leader,publicRoom;
     for(let i=0;i<11;i++){
-      const name=(side==="attack"?"West":"East")+i,guest=await seed(name,id,0,880);
+      const name=(side==="attack"?"West":"East")+i,guest=await seed(name,id,0,308);
       if(!i){leader=guest;guild.create(guest.id,name,name+" Guild");}else guild.add(leader.id,guest.id,name);
       const c=await join(guest,i>0&&i<10?publicRoom:undefined);if(!i)publicRoom=c.r.roomId;
       sideRooms[side].push({guest,c,point:[1,2,3][i%3]});
@@ -70,10 +70,12 @@ try{
     field.push({side,point,c:fighter});
   }
   await wait(()=>field.every(e=>e.c.r.state.players.size===20),"twenty synchronized clients");
-  const places={1:[0,630],2:[-680,100],3:[690,100]};
+  const battlefield=JSON.parse(field[0].c.r.state.worldDefinition).maps[id].strategic;
+  const places=Object.fromEntries(battlefield.objectives.map(p=>[p.id,[p.x,p.z]]));
   const departed=Date.now();
   await Promise.all(field.filter(f=>f.side==="attack").map(f=>walk(f.c,...places[f.point])));
-  console.log("Travel to three fronts (last arrival):",Math.round((Date.now()-departed)/1000),"seconds");
+  const travelMs=Date.now()-departed;assert.ok(travelMs<32_000,"approach time "+travelMs);
+  console.log("Travel to three fronts (last arrival):",Math.round(travelMs/1000),"seconds");
   const observer=field[19].c;
   const receipt=setInterval(()=>console.log("Observed capture",observer.latest?.seconds,observer.latest?.pilot?.points.map(p=>p.progress+"/"+p.owner)),15000);
   try{await wait(()=>observer.latest?.pilot?.points.filter(p=>p.owner==="attack").length===3,"three exterior banners replicated",130000);}finally{clearInterval(receipt);}
@@ -93,7 +95,7 @@ try{
     assert.equal(observer.latest.owner,"West0 Guild");
     fixture.prepare("UPDATE territory_battles SET ended=? WHERE site=? AND ended IS NOT NULL").run(Date.now()-8*3600_000,id);
   }finally{fixture.close();}
-  const newLeader=await seed("Invader",id,0,880);guild.create(newLeader.id,"Invader","Mountain");
+  const newLeader=await seed("Invader",id,0,308);guild.create(newLeader.id,"Invader","Mountain");
   const challenger=await join(newLeader);const guard=sideRooms.attack[10];
   async function enlist(c,guest,verb){
     const t=await send(c,verb,{objectiveId:2},"territory_transfer");await leave(c);
@@ -101,23 +103,25 @@ try{
   }
   const raider=await enlist(challenger,newLeader,"territory_start"),keeper=await enlist(guard.c,guard.guest,"territory_join");
   await wait(()=>keeper.latest?.pilot?.throne.defended,"incumbent defence");
-  assert.ok(keeper.me().x>-570 && keeper.me().x<-540);
+  const gateBox=battlefield.rampart.gates.find(g=>g.id==="outer-west").box;
+  const gateX=gateBox.x+gateBox.width/2,gateZ=gateBox.z+gateBox.length/2;
+  assert.ok(keeper.me().x>gateX && keeper.me().x<gateX+15);
   const guardBase={x:keeper.me().x,z:keeper.me().z};
   assert.ok(Object.values(keeper.latest.pilot.gates).every(g=>g.closed));
   const gateId="outer-west",gate=()=>keeper.latest.pilot.gates[gateId];
   await send(raider,"territory_gate",{gateId},"territory_error",e=>e.reason==="war_gate_near");
-  await Promise.all([walk(raider,-573,100),(async()=>{
-    await walk(keeper,-567,100);keeper.r.send("territory_gate",{gateId});
+  await Promise.all([walk(raider,gateX-3,gateZ),(async()=>{
+    await walk(keeper,gateX+3,gateZ);keeper.r.send("territory_gate",{gateId});
     await wait(()=>!gate().closed,"open from inside");
-    await walk(keeper,-569.5,100);await sleep(1050);
+    await walk(keeper,gateX+.5,gateZ);await sleep(1050);
     await send(keeper,"territory_gate",{gateId},"territory_error",e=>e.reason==="war_gate_occupied");
-    await walk(keeper,-567,100);await sleep(1050);keeper.r.send("territory_gate",{gateId});
+    await walk(keeper,gateX+3,gateZ);await sleep(1050);keeper.r.send("territory_gate",{gateId});
     await wait(()=>gate().closed,"close clear gateway");
   })()]);
   for(let hp=105;hp>=0;hp-=15){
     raider.r.send("territory_gate",{gateId});await wait(()=>gate().hp===hp,"replicated breach "+hp);await sleep(1050);
   }
-  await walk(raider,-564,100);assert.ok(!gate().closed);
+  await walk(raider,gateX+6,gateZ);assert.ok(!gate().closed);
   assert.equal(keeper.latest.pilot.gates["inner-west"].hp,120);
   console.log("PASS live score victory, next siege garrison, remote action refused, occupied gate protected, breached gate traversed");
   // Resume two late-battle ownership checkpoints in the isolated fixture. Movement, orders,
@@ -132,7 +136,8 @@ try{
   }
   const selectCamp=(c,campId)=>send(c,"territory_camp",{action:"select",campId},"territory_state",p=>p.local?.supply?.selected===campId);
   const march=(c)=>c.r.send("territory_camp",{action:"march",campId:4});
-  const atCamp=c=>Math.hypot(c.me().x+270,c.me().z+90)<2;
+  const camp=battlefield.forwardCamps.find(c=>c.id===4),[storeX,storeZ]=places[4];
+  const atCamp=c=>Math.hypot(c.me().x-camp.x,c.me().z-camp.z)<2;
   const available=c=>c.latest?.supply?.camps.find(p=>p.id===4)?.status;
   holdWest("attack");await wait(()=>available(raider)==="ready","western supply");
   await selectCamp(raider,4);
@@ -140,15 +145,15 @@ try{
   await leave(raider);
   const scout=await enlist(await join(newLeader),newLeader,"territory_join");
   await wait(()=>scout.latest?.supply?.selected===4 && scout.latest.supply.atBase,"saved preference at original base");
-  march(scout);await wait(()=>atCamp(scout),"march to warehouse");await walk(scout,-250,-110);
+  march(scout);await wait(()=>atCamp(scout),"march to warehouse");await walk(scout,storeX,storeZ);
   holdWest("defend");
   await wait(()=>available(keeper)==="contested" && keeper.latest.supply.drums.includes(4),"friendly drum signal");
   assert.deepEqual(scout.latest.supply.drums,[]);assert.equal(sideRooms.defend[10].c.latest.supply,undefined);
   assert.equal(keeper.latest.pilot.points.find(p=>p.id===4).progress,0);
   await send(keeper,"territory_camp",{action:"select",campId:4},"territory_error",e=>e.reason==="war_camp_cut");
-  await Promise.all([walk(scout,-272,-90),walk(keeper,guardBase.x,guardBase.z)]);
+  await Promise.all([walk(scout,camp.x-2,camp.z),walk(keeper,guardBase.x,guardBase.z)]);
   await wait(()=>available(keeper)==="contested" && !keeper.latest.supply.drums.length,"enemy at camp prevents spawn without a false drum signal");
-  await walk(scout,-255,-94);
+  await walk(scout,storeX-5,storeZ+16);
   await wait(()=>available(keeper)==="ready","enemy left and route reopened");
   await selectCamp(keeper,4);march(keeper);await wait(()=>atCamp(keeper),"incumbent reinforcements");
   async function defeatGuard(){
@@ -156,9 +161,9 @@ try{
     scout.r.send("attack",{targetId:keeper.r.sessionId});await wait(()=>!keeper.me().alive,"defeat at the front",65000);
     await wait(()=>keeper.me().alive,"server respawn",20000);
   }
-  await walk(keeper,-255,-94);
+  await walk(keeper,storeX-5,storeZ+16);
   await defeatGuard();assert.ok(atCamp(keeper),"respawn at selected supplied camp");
-  await walk(keeper,-250,-110);await defeatGuard();
+  await walk(keeper,storeX,storeZ);await defeatGuard();
   assert.ok(Math.hypot(keeper.me().x-guardBase.x,keeper.me().z-guardBase.z)<.2,"contested camp falls back to original base");
   console.log("PASS authenticated dispatch, persisted choice, side-only drums, real death at supplied camp and contested fallback");
 }finally{guild.close();await Promise.allSettled([...rooms].map(r=>r.leave()));}

@@ -13,12 +13,14 @@ async function seed(t,name,x,z,level,school="chaiya",hp=250) {
  const id=createHash("sha256").update(t).digest("hex"),slots=Array(12).fill(null),base=["step","punch","guard","counter"];
  slots[0]={itemId:"health_potion",quantity:3};slots[1]={itemId:"muay_wraps",quantity:1};
  const loadouts={chaiya:[...base],korat:[...base],lopburi:[...base],thasao:[...base]};
+ const equipped=school==="korat"?["step","teep","punch","korat_heavy"]:school==="thasao"?["thasao_flurry",null,null,null]:t===defenderToken?["guard","counter","step",null]:t===safeToken?["step",null,null,null]:[null,null,null,null];
+ loadouts[school]=equipped;
  const learned=school==="korat"?["korat_heavy"]:school==="thasao"?["thasao_step","thasao_flurry"]:[];
- await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp,mapId:"ritual_village",build:{path:"muay_boran",ancestry:"woodland"},muayWrapGranted:true,muayBook:{school,learned,training:{strikes:10,blocks:1},slots:[...base],loadouts},inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
+ await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp,mapId:"ritual_village",build:{path:"muay_boran",ancestry:"woodland"},muayWrapGranted:true,muayBook:{school,learned:[...new Set([...learned,...equipped.filter(Boolean)])],training:{strikes:10,blocks:1},slots:equipped,loadouts},inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
 }
 await seed(attackerToken,"ฝ่ายโจมตี",-10,8,10,"korat");
 await seed(defenderToken,"ฝ่ายตั้งรับ",-10,9.5,5);
-await seed(safeToken,"ผู้พักในหมู่บ้าน",0,0,1);
+await seed(safeToken,"ผู้พักในหมู่บ้าน",0,0,3);
 await seed(farToken,"ผู้เล่นอยู่ไกล",-17,-17,1);
 await seed(victimToken,"ผู้ทดสอบหมดสติ",-11,8,1,"chaiya",35);
 await seed(flurryToken,"ผู้ทดสอบหมัดชุด",-12,8,10,"thasao");

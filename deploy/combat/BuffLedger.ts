@@ -17,6 +17,12 @@ export class BuffLedger {
     const removed=entries.delete(sourceId+":"+id);if(!entries.size)this.owners.delete(owner);return removed;
   }
   modifiers(owner:string):readonly StatModifier[] {return [...(this.owners.get(owner)?.values()??[])].map(e=>e.modifier);}
+  active(owner:string,now:number):Array<{id:string;remainingMs:number}> {
+    if(!Number.isFinite(now) || now<0)throw new Error("invalid_buff_time");
+    return [...(this.owners.get(owner)?.values()??[])]
+      .filter(entry=>entry.expiresAt>now)
+      .map(entry=>({id:entry.modifier.id,remainingMs:entry.expiresAt-now}));
+  }
   expire(now:number):string[] {
     if(!Number.isFinite(now) || now<0)throw new Error("invalid_buff_time");
     const changed:string[]=[];

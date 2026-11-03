@@ -18,7 +18,7 @@ async function seed(token,name,x,z,school="chaiya",learned=[],skills=["step","pu
  const id=createHash("sha256").update(token).digest("hex"),slots=Array(12).fill(null),base=["step","punch","guard","counter"];
  slots[0]={itemId:"health_potion",quantity:3};slots[1]={itemId:"muay_wraps",quantity:1};
  const loadouts={chaiya:[...base],korat:[...base],lopburi:[...base],thasao:[...base]};loadouts[school]=[...skills];
- await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp:9999,mapId:"ritual_village",build:{path:"muay_boran",ancestry:"woodland"},muayWrapGranted:true,muayBook:{school,learned,training:{strikes:30,blocks:4},slots:[...skills],loadouts},inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
+ await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp:9999,mapId:"ritual_village",build:{path:"muay_boran",ancestry:"woodland"},muayWrapGranted:true,muayBook:{school,learned:[...learned,"guard","punch"],training:{strikes:30,blocks:4},slots:[...skills],loadouts},inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
 }
 for(const c of cases){c.token=makeToken();c.victimToken=makeToken();await seed(c.token,"นักมวย"+c.school,c.x,c.z,c.school,c.learned,[c.opener,c.finisher,"guard","punch"]);await seed(c.victimToken,"เป้าหมาย"+c.school,c.x,c.z-1.4,"chaiya",[],undefined,100);}
 const expiryToken=makeToken(),otherToken=makeToken(),learnerToken=makeToken();

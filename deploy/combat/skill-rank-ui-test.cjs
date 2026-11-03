@@ -1,5 +1,13 @@
 const fs=require("node:fs"),vm=require("node:vm"),assert=require("node:assert/strict");
 const source=fs.readFileSync("main.js","utf8");
+{
+  const start=source.indexOf("  function sgRankText("),end=source.indexOf("  const SG_GLYPH",start);
+  assert.ok(start>=0 && end>start,"graph rank labels must exist");
+  const labels=vm.runInNewContext(source.slice(start,end)+"\nsgRankText");
+  assert.match(labels("occult",{effect:"heal",rank:2,nextLv:65}),/PvE และ PvP.*\+4%.*\+6%/);
+  assert.match(labels("sentinel",{effect:"ward",rank:5}),/PvE และ PvP.*\+10%/);
+  assert.match(labels("sentinel",{effect:"stun",rank:2}),/ดาเมจมอนสเตอร์ \+8%/);
+}
 for(const spec of [
   {name:"Sentinel",next:"syncBladeUI",branch:"control",id:"bash"},
   {name:"Blade",next:"syncOccultUI",branch:"edge",id:"hidden_edge"},

@@ -13,6 +13,7 @@ async function seed(index){
  slots[0]={itemId:"health_potion",quantity:2};slots[1]={itemId:muay?"muay_wraps":"ritual_dagger",quantity:1};
  await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"Fighter"+index,level:12,experience:0,pkKills:0,pkDeaths:0,
   x:index===1?0:12,y:0,z:index===1?26:-36,hp:416,mapId:"moon_pass",build:{path:muay?"muay_boran":"seer",ancestry:"woodland"},muayWrapGranted:muay,
+  ...(muay?{muayBook:{learned:["grapple"],training:{strikes:0,blocks:0},slots:["grapple",null,null,null]}}:{}),
   inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
 }
 async function join(index,roomId,ticket){
