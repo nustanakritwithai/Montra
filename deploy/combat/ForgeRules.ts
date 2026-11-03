@@ -84,6 +84,6 @@ export function birthForge(id:string):Forged|undefined {
 export function applyForgeRatings(total:Record<ForgeRating,number>,id:string,f:Forged|undefined):void {
   const profile=personalItem(id)?.forge;
   if(!profile || !f)return;
-  total[profile.primary]+=profile.enhanceMax*f.rank/10;
+  total[profile.primary]+=profile.enhanceRatings?.[f.rank]??profile.enhanceMax*f.rank/10;
   if(f.affix)total[f.affix.stat]+=profile.affixMax*f.affix.tier/3;
 }

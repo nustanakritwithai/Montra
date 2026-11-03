@@ -2591,6 +2591,25 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.broadcast("possession_changed",{playerId:id,active:false,reason},{afterNextPatch:true});
   }
 
+  private coreTrainingAtLevel(id:string,path:string,oldLevel:number,level:number){
+    if(muayCorePoints(level)<=muayCorePoints(oldLevel))return;
+    const schools:Record<string,readonly [Readonly<Record<string,{name:string}>>,Partial<Record<string,number>>|undefined]>={
+      muay_boran:[MUAY_CORE,this.muayBooks.get(id)?.coreRanks],
+      phutthaisawan:[SWORD_CORE,this.swordTrees.get(id)?.coreRanks],
+      seer:[SEER_CORE,this.occultBooks.get(id)?.coreRanks],mender:[MENDER_CORE,this.occultBooks.get(id)?.menderCoreRanks],
+      blade:[BLADE_CORE,this.bladeBooks.get(id)?.coreRanks],sentinel:[SENTINEL_CORE,this.sentinelBooks.get(id)?.coreRanks],
+    };
+    if(!Object.hasOwn(schools,path))return;
+    const [skills,ranks]=schools[path];
+    const points=muayCorePoints(level)-Object.values(ranks??{}).reduce<number>((sum,n)=>sum+(n??0),0);
+    if(points<1)return;
+    const choices=Object.entries(skills).flatMap(([key,skill])=>{
+      const rank=ranks?.[key]??0;
+      return rank<MUAY_CORE_LEVELS.length && MUAY_CORE_LEVELS[rank]<=level?[{name:skill.name,rank:rank+1}]:[];
+    });
+    return choices.length?{points,choices}:undefined;
+  }
+
   private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal", bossLoot = false, monsterId=""): void {
     const player = this.state.players.get(id);
     const priorReward=this.pendingRewards.get(id);
@@ -2636,6 +2655,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           if(leveled && this.sentItemCatalog.has(id))recipient?.send("gear_guides",personalGearGuides(current.pathId,current.level));
           if (loot) recipient?.send("inventory_state",loot);
           recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,
+            ...(leveled?{training:this.coreTrainingAtLevel(id,current.pathId,snapshot.level,next.level)}:{}),
+            ...(fieldDrop?.starterCopy?{starterCopy:fieldDrop.starterCopy}:{}),
             ...(fragment===SHRINE_SHARD ? {shrineShard:fragmentBag?"granted":"bag_full"} : {}),
             ...(fragment && fragment!==SHRINE_SHARD ? {bossFragment:fragment,fragmentGranted:Boolean(fragmentBag)} : {}),
             ...(accessory ? {bossAccessory:accessory.id,accessoryGranted:accessory.granted,bossCopy:!!accessory.banked} : {}),

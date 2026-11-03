@@ -1,10 +1,10 @@
 import { readForged, birthForge, applyForgeRatings, forgeStamp, type Forged } from "./ForgeRules.js";
 import { MAX_FORGE_COPIES, BOSS_GEAR_CHANCE, bossTreasure, personalItem, startingWeapon, firstChest, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
-import {MAX_LOOT_MISSES,rollMonsterLoot} from "./MonsterLoot.js";
+import {MAX_LOOT_MISSES,STARTER_HUNT,isStarterHuntMob,rollMonsterLoot} from "./MonsterLoot.js";
 import {randomInt} from "node:crypto";
 import { PROGRESSION, baseManaAtLevel, type CombatStats } from "./Progression.js";
 import { MUAY_WRAP_ID } from "./MuayRules.js";
-import { usesStaff, type CatalystId, type SalveId, type ForgeRating,type BrewId,type FieldToolId } from "./PersonalItems.js";
+import { gearSchools, usesStaff, type CatalystId, type SalveId, type ForgeRating,type BrewId,type FieldToolId } from "./PersonalItems.js";
 /**
  * MONTRA V0.2.7 — authoritative permanent equipment.
  * Existing v0.2.6 inventory JSON (version:1, slots:[...]) stays readable.
@@ -51,6 +51,7 @@ export type InventorySnapshot = {
   equipmentForges?: Partial<Record<BodySlot,Forged>>;
   firstChestClaimed?:true;
   lootMisses?:number;
+  starterHuntKills?:number;
   forgeCopies?:Record<string,number>;
 };
 export type ItemUseResult =
@@ -111,7 +112,8 @@ export function validateInventory(value: unknown): InventorySnapshot {
   }
   const keys = Object.keys(value);
   const upgraded = Object.prototype.hasOwnProperty.call(value, "equippedWeaponSlot");
-  if (keys.some(key=>!["version","slots","equippedWeaponSlot","equippedChestSlot","equipment","equipmentSockets","equipmentForges","firstChestClaimed","lootMisses","forgeCopies"].includes(key)) ||
+  if (keys.some(key=>!["version","slots","equippedWeaponSlot","equippedChestSlot","equipment","equipmentSockets","equipmentForges","firstChestClaimed","lootMisses","forgeCopies","starterHuntKills"].includes(key)) ||
+      (Object.hasOwn(value,"starterHuntKills") && (!upgraded || !Number.isInteger(value.starterHuntKills) || (value.starterHuntKills as number)<0 || (value.starterHuntKills as number)>STARTER_HUNT.goal)) ||
       (!upgraded && Object.hasOwn(value,"forgeCopies")) ||
       (Object.hasOwn(value,"lootMisses") && (!upgraded || !Number.isInteger(value.lootMisses) || (value.lootMisses as number)<0 || (value.lootMisses as number)>MAX_LOOT_MISSES)) ||
       (!upgraded && (Object.hasOwn(value,"equippedChestSlot") || Object.hasOwn(value,"equipment") || Object.hasOwn(value,"equipmentSockets") || Object.hasOwn(value,"equipmentForges") || Object.hasOwn(value,"firstChestClaimed"))) ||
@@ -159,6 +161,7 @@ export function validateInventory(value: unknown): InventorySnapshot {
     }
   }
   if(value.lootMisses)result.lootMisses=value.lootMisses as number;
+  if(value.starterHuntKills)result.starterHuntKills=value.starterHuntKills as number;
   if (Object.hasOwn(value,"equipment")) {
     if (!record(value.equipment))throw Error("inventory_record_invalid");
     result.equipment={};
@@ -329,7 +332,22 @@ export function equippedStats(base:CombatStats,bag:InventorySnapshot|undefined):
   return result;
 }
 
-export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,tier="normal",playerLevel=monsterLevel,monsterId="possessed-1",draw?:(max:number)=>number):{bag:InventorySnapshot;id?:ItemId|null;quantity?:number;blockedId?:ItemId;missedQuantity?:number;banked?:boolean} {
+type FieldDrop={bag:InventorySnapshot;id?:ItemId|null;quantity?:number;blockedId?:ItemId;missedQuantity?:number;banked?:boolean;starterCopy?:PracticeWeapon};
+export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,tier="normal",playerLevel=monsterLevel,monsterId="possessed-1",draw?:(max:number)=>number):FieldDrop {
+  const drop=fieldLoot(bag,path,monsterLevel,tier,playerLevel,monsterId,draw);
+  const previous=bag.starterHuntKills??0;
+  if(playerLevel>STARTER_HUNT.maxLevel || previous===STARTER_HUNT.goal || !isStarterHuntMob(monsterId) || !Object.hasOwn(gearSchools,path))return drop;
+  const weapon=startingWeapon(path);
+  const hasCopy=(drop.bag.forgeCopies?.[weapon]??0)>0 || drop.bag.slots.some(s=>s?.itemId===weapon && (s.forge?.rank??0)>0);
+  const kills=hasCopy?STARTER_HUNT.goal:previous+1;
+  drop.bag={...drop.bag,starterHuntKills:kills};
+  if(!hasCopy && kills===STARTER_HUNT.goal){
+    drop.bag=bankForgeCopy(drop.bag,weapon)!;
+    drop.starterCopy=weapon;
+  }
+  return drop;
+}
+function fieldLoot(bag:InventorySnapshot,path:string,monsterLevel:number,tier:string,playerLevel:number,monsterId:string,draw?: (max:number)=>number):FieldDrop {
   let pendingChest:BodyItemId|undefined;
   if(!bag.firstChestClaimed){
     const id=firstChest(path,Math.min(monsterLevel,playerLevel));
@@ -347,7 +365,10 @@ export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,ti
   const partialStacks=bag.slots.includes(null)?undefined:new Set(bag.slots.flatMap(s=>s && s.quantity<INVENTORY_STACK_LIMIT?[s.itemId]:[]));
   const worn=new Set<string>(Object.values(bag.equipment??{}));
   const weapon=bag.slots[bag.equippedWeaponSlot??-1];if(weapon)worn.add(weapon.itemId);
-  const roll=rollMonsterLoot(monsterId,path,owned,playerLevel,bag.lootMisses??0,tier,draw,partialStacks,bag.forgeCopies??{},worn);
+  const rank=weapon?.forge?.rank??0;
+  const training=rank>=1 && rank<3 && playerLevel<=STARTER_HUNT.maxLevel && isStarterHuntMob(monsterId) && Object.hasOwn(gearSchools,path)?startingWeapon(path):undefined;
+  const focus=training && training===weapon?.itemId && !bag.forgeCopies?.[training]?training:undefined;
+  const roll=rollMonsterLoot(monsterId,path,owned,playerLevel,bag.lootMisses??0,tier,draw,partialStacks,bag.forgeCopies??{},worn,focus);
   const chestNotice=pendingChest?{bag,id:null as null,quantity:0,blockedId:pendingChest,missedQuantity:1}:null;
   if(!roll)return chestNotice??{bag};
   const {id}=roll;

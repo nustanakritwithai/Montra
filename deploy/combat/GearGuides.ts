@@ -1,5 +1,5 @@
-import {PERSONAL_ITEMS,gearSchools,guideFamily,type CardId,type PersonalId,type BodySlot,type ForgeRating,type ItemStats} from "./PersonalItems.js";
-import {cardHunt,cardHunts,findItemHunt} from "./MonsterLoot.js";
+import {PERSONAL_ITEMS,gearSchools,guideFamily,startingWeapon,type CardId,type PersonalId,type BodySlot,type ForgeRating,type ItemStats} from "./PersonalItems.js";
+import {STARTER_HUNT,cardHunt,cardHunts,findItemHunt} from "./MonsterLoot.js";
 import {PROGRESSION,baseManaAtLevel} from "./Progression.js";
 export {cardHunt} from "./MonsterLoot.js";
 
@@ -68,5 +68,6 @@ export function personalGearGuides(path:string,level:number){
     });
     return {style,name:gearSchools[school][style==="pressure"?2:3],focus:playNotes[school][style==="pressure"?0:1],totals,maxMana,slots};
   });
-  return {path,level,baseMana:baseManaAtLevel(level),manaCap:PROGRESSION.maxMana,builds};
+  const starterHunt=level<=STARTER_HUNT.maxLevel?{...STARTER_HUNT,weapon:startingWeapon(school)}:undefined;
+  return {path,level,baseMana:baseManaAtLevel(level),manaCap:PROGRESSION.maxMana,builds,starterHunt};
 }

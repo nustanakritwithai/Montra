@@ -37,3 +37,33 @@ tracker.bind(button,"fragment",4);button.onclick();tracker.bind(button,"fragment
 assert.deepEqual(Array.from(tracker.route(ui.worldDefinitions,"a","c")),["a","b","c"]);
 assert.deepEqual(Array.from(tracker.route(ui.worldDefinitions,"c","a")),[]);
 console.log("PASS item hunt routes, live target, boss respawn, saved character scope, progress and cancel");
+
+const fieldSource=source.slice(source.indexOf("  function fieldRecipeProgress("),source.indexOf("  function hudGuide()"));
+const drawerSource=source.slice(source.indexOf("  function renderFieldGoalDrawer("),source.indexOf('  ui.quest.addEventListener("click"'));
+const camp={mapId:"forbidden_forest",name:"ชายป่ากระซิบ",mobs:["west1","west2"],x:10,z:10,goal:10,maxLevel:10,weapon:"wrap"};
+const gear={name:"ผ้าพันหมัด",level:1,craftGold:4,recipe:[{item:"hide",qty:3},{item:"fiber",qty:2}]};
+const docs={wrap:gear,hide:{name:"หนัง",huntTarget:{open:true}},fiber:{name:"ใย"},fragment:{name:"เศษตรา",bossGear:"amulet",sourceBoss:"boss",huntTarget:{mapId:camp.mapId}},
+  amulet:{name:"สร้อย",level:12,sourceBoss:"boss",craftGold:24,recipe:[{item:"fragment",qty:3},{item:"hide",qty:2}]}};
+const bag={slots:[{itemId:"wrap",quantity:1},{itemId:"hide",quantity:2}],starterHuntKills:4,forgeCopies:{}};
+const controls={},get=id=>controls[id]??={scrollIntoView(){},click(){}};
+const me={pathId:"muay_boran",level:3},context={mode:"live",ownServerCharacter:()=>me,inventoryState:bag,
+  economyReady:()=>true,gearGuides:{path:me.pathId,starterHunt:camp},fieldTrainingTip:null,territoryState:null,activeMapId:camp.mapId,
+  personalItems:docs,itemHuntCount:id=>bag.slots.reduce((n,s)=>n+(s.itemId===id?s.quantity:0),0),
+  room:{state:{monsters:new Map([["west1",{x:9,z:8,alive:false}],["west2",{x:12,z:8,alive:true}]])}},
+  getLocalAvatar:()=>({x:10,z:8}),worldDefinitions:{},$:get,ui:{drawerTitle:{}},openBag(){},selectBenchRecipe(...v){context.opened=v;},
+  bindItemHuntButton(_,id,qty){context.tracked={id,qty};}};
+const field=vm.runInNewContext(fieldSource+drawerSource+"\n({goal:fieldGearGoal,draw:renderFieldGoalDrawer})",context);
+let g=field.goal();assert.equal(g.to.x,12);assert.match(g.progress,/4\/10/);field.draw(g);
+assert.match(get("fieldGoalInputs").textContent,/หนัง 2\/3/);assert.equal(context.tracked.id,"hide");
+bag.slots[1].quantity=3;bag.slots.push({itemId:"fiber",quantity:2});
+g=field.goal();assert.match(g.step,/วัตถุดิบครบ/);field.draw(g);get("fieldGoalRecipe").onclick();assert.deepEqual(context.opened,["all","1","wrap"]);
+bag.forgeCopies.wrap=1;g=field.goal();field.draw(g);assert.equal(get("fieldGoalForge").hidden,false);
+bag.slots[0].forge={rank:1};bag.forgeCopies={};assert.equal(field.goal().nextRank,2);
+bag.slots[0].forge.rank=3;assert.equal(field.goal(),null);
+me.level=12;bag.slots=[{itemId:"fragment",quantity:1},{itemId:"hide",quantity:1}];
+g=field.goal();assert.match(g.progress,/1\/3/);field.draw(g);assert.equal(context.tracked.id,"hide");
+get("fieldGoalRecipe").onclick();assert.deepEqual(context.opened,["boss","12","amulet"]);
+context.room.sessionId="hunter";context.fieldTrainingTip={session:"hunter",path:me.pathId,points:1,choices:[{name:"หมัด",rank:1}]};
+bag.slots=[];g=field.goal();assert(g.trainingOnly);field.draw(g);assert.match(get("fieldTrainingNames").textContent,/ศาลหมู่บ้าน.*หมัด ขั้น 1/);
+assert.equal(get("fieldTrainingBook").hidden,false);context.room.sessionId="other";assert.equal(field.goal(),null);
+console.log("PASS starter camp HUD, recipe links, first forge, boss supplies and character-scoped training");

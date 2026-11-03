@@ -79,6 +79,12 @@ try{
   active=await join({characterSetup:{name:"นักดาบฝึกหัด",build:{path:"phutthaisawan",ancestry:"shrine"}}});
   const {room,bag,me,event}=active;
   assert(Object.keys(active.catalog).length>400);
+  const route=(await until(()=>event("gear_guides",g=>g.starterHunt?.weapon==="wp_twins_1"),"starter camp guide")).starterHunt;
+  assert.equal(route.goal,10);assert.equal(route.mobs.length,4);
+  assert.equal(active.catalog.wp_twins_1.forge.enhanceRatings[3],3);
+  const shrineRecipe=active.catalog[active.catalog.shrine_shard.bossGear];
+  assert.equal(shrineRecipe.recipe.find(i=>i.item==="shrine_shard").qty,3);
+  assert(shrineRecipe.recipe.some(i=>i.item!=="shrine_shard"));
   const endgame=active.catalog.wp_twins_10;assert.equal(endgame.level,100);
   assert.equal(endgame.forge.affixTierCap,3);
   assert(active.catalog.arm_heavy_chest_8.recommended.includes("mender"));

@@ -1,12 +1,17 @@
 import {randomInt} from "node:crypto";
 import {REGIONAL_BOSSES} from "./RegionalBosses.js";
-import {PERSONAL_ITEMS,MAX_FORGE_COPIES,BOSS_GEAR_CHANCE,monsterCardFor,type CardId,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
+import {PERSONAL_ITEMS,MAX_FORGE_COPIES,BOSS_GEAR_CHANCE,gearSchools,startingWeapon,monsterCardFor,type CardId,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
 import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
 import {TEMPLE_ID,TEMPLE_MAP,TEMPLE_SPAWNS} from "./TempleMap.js";
 import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS,RIFT_WARDEN} from "./WorldAtlas.js";
 
 type Theme="grove"|"hunter"|"guard"|"spirit";
 type Hunt={id:string;name:string;level:number;mapId:string;tier?:string;theme:Theme};
+const firstCamp=FOREST_CAMPS.find(c=>c.id==="west")!;
+const firstCampSpawns=new Set(firstCamp.levels.map((_,i)=>`forest_${firstCamp.id}_${i+1}`));
+export const STARTER_HUNT={mapId:"forbidden_forest",name:firstCamp.name,x:firstCamp.x,z:firstCamp.z,mobs:[...firstCampSpawns],goal:10,maxLevel:10} as const;
+export function isStarterHuntMob(id:string){return firstCampSpawns.has(id);}
+const starterWeapons=new Set<string>(Object.keys(gearSchools).map(startingWeapon));
 // Court order follows the named camps in the world definitions. All individuals in a court share its theme.
 const courtThemes:Readonly<Record<string,readonly Theme[]>>={
   bamboo_frontier:["grove","hunter","grove","grove","hunter"], lotus_basin:["grove","hunter","hunter","grove","guard"],
@@ -60,7 +65,8 @@ for(const id of Object.keys(PERSONAL_ITEMS) as PersonalId[]){
   // Offer one accessible hunt near the unlock if the specialist camp starts much later.
   const early=eligible.filter(m=>m.level<=item.level!+2 && m.tier!=="elite" && m.tier!=="boss");
   const alternate=early.some(m=>primary.includes(m))?undefined:early.find(m=>m.theme===nearbyTheme[material])??early[0];
-  const sites=eligible.filter(m=>primary.includes(m)||m===alternate||m.tier==="elite"||m.tier==="boss");
+  const sites=eligible.filter(m=>primary.includes(m)||m===alternate||m.tier==="elite"||m.tier==="boss"||
+    (starterWeapons.has(id) && isStarterHuntMob(m.id)));
   sources.set(id,sites);
   for(const m of sites){
     const table=tables.get(m.id)!;
@@ -98,7 +104,7 @@ const catalog=Object.entries(PERSONAL_ITEMS).map(([id,item])=>{
 export const CATALOG_PAGES=Array.from({length:Math.ceil(catalog.length/16)},(_,i)=>Object.fromEntries(catalog.slice(i*16,i*16+16)));
 
 export const MAX_LOOT_MISSES=3;
-export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<string>|ReadonlyMap<string,number>,playerLevel:number,misses:number,tier:string,draw:(max:number)=>number=randomInt,partialStacks?:ReadonlySet<string>,forgeCopies?:Readonly<Record<string,number>>,worn?:ReadonlySet<string>){
+export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<string>|ReadonlyMap<string,number>,playerLevel:number,misses:number,tier:string,draw:(max:number)=>number=randomInt,partialStacks?:ReadonlySet<string>,forgeCopies?:Readonly<Record<string,number>>,worn?:ReadonlySet<string>,trainingWeapon?:PracticeWeapon){
   const table=tables.get(monsterId);
   if(!table)return null;
   const candidates=table.gear.filter(id=>{
@@ -119,12 +125,14 @@ export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<s
   const repeats=forgeCopies?table.gear.filter(id=>owned.has(id) && !candidates.includes(id) && (forgeCopies[id]??0)<MAX_FORGE_COPIES &&
     (PERSONAL_ITEMS[id].path==="all" || PERSONAL_ITEMS[id].path===path)):[];
   const focus=repeats.filter(id=>worn?.has(id));
+  const training=trainingWeapon && repeats.includes(trainingWeapon)?[trainingWeapon]:null;
   const bankOnly=Boolean(partialStacks && repeats.length);
   if((candidates.length || repeats.length) && (guaranteed || draw(100)<chance)){
     // Full bags can still collect workshop copies. Keep a pending wearable guarantee for the next free slot.
     let pool=[...candidates,...useful,...useful,...repeats];
-    if(bankOnly && (!guaranteed || draw(100)<chance))pool=focus.length?focus:repeats;
+    if(bankOnly && (!guaranteed || draw(100)<chance))pool=training??(focus.length?focus:repeats);
     else if(guaranteed)pool=useful;
+    else if(training)pool=training;
     else if(focus.length && draw(100)<40)pool=focus;
     const id=pool[draw(pool.length)];
     const upgrade=useful.includes(id);
