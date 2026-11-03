@@ -2963,10 +2963,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!this.legacyCombatRoom() && !this.canPrepareSpirit(id,player.pathId,true))return this.reject(client,"occult_skill_locked");
       if(POSSESSION_BUFF.requiresSummon && !this.state.summons.has(id))return this.reject(client,"possession_needs_summon");
       if(possessionCoolingDown(this.persistentCharacters.get(id)))return this.reject(client,"possession_cooldown");
-      if(player.mana<20)return this.reject(client,"insufficient_mana");
+      if(player.mana<15)return this.reject(client,"insufficient_mana");
       const result=this.buffs.activate(id,this.simulatedMs);
       if(result!=="ok")return this.reject(client,result==="cooldown" ? "possession_cooldown" : "possession_active");
-      player.mana-=20;
+      player.mana-=15;
       this.effects.grant(id,POSSESSION_MODIFIER,this.simulatedMs+POSSESSION_BUFF.durationMs);
       this.despawnSummon(id,"possessed");
       player.possessionActive=true;this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
