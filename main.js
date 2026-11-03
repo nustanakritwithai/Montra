@@ -7166,7 +7166,8 @@
     const label = button.querySelector("span:last-child");
     const definition=worldDefinitions?.[activeMapId];
     const forbidden=!active && mode==="live" && (definition?.region?.noFlight===true || definition?.strategic?.kind==="territory");
-    button.hidden=mode!=="live" || !active;
+    const canFly=mode==="live" && room?.state?.flightAvailable===true && (data?.pathId==="seer" || data?.pathId==="mender");
+    button.hidden=mode!=="live" || !(active || canFly);
     button.disabled=forbidden;
     if (label) label.textContent = forbidden ? "เขตห้ามบิน" : changing ? "กำลังบิน" : active ? "ลง" : "บิน";
     button.classList.toggle("fly-active", Boolean(active));
@@ -7455,12 +7456,12 @@
   }
   const orbWide = matchMedia("(min-width: 820px) and (min-height: 520px), (pointer: fine) and (min-width: 700px) and (orientation: landscape)");
   // Phones: skills wrap the orb on a quarter-circle arc (MOBA style); wide screens keep one horizontal bar.
-  const ORB = 84, ORB_R = 30, ORB_B = 26, SLOT = 50, ARC_R = 77;
+  const ORB = 84, ORB_R = 34, ORB_B = 26, SLOT = 50, ARC_R = 77;
   function layoutOrbArc() {
     const bar = document.querySelector(".learned-bar"); if (!bar) return;
     const wide = orbWide.matches; bar.toggleAttribute("data-wide", wide); bar.toggleAttribute("data-arc", !wide);
     const hot = [...bar.querySelectorAll(".sword-hotbar")].find(h => !h.hidden), slots = hot ? [...hot.querySelectorAll("button")] : [];
-    const mount = $("mountButton"), all = [...bar.querySelectorAll(".sword-hotbar button"), mount, vitalOrb?.el].filter(Boolean);
+    const mount = $("mountButton"), all = [...bar.querySelectorAll(".sword-hotbar button"), mount, $("fly"), bar.querySelector(".orb-fx"), vitalOrb?.el].filter(Boolean);
     for (const b of all) { b.style.removeProperty("right"); b.style.removeProperty("bottom"); }
     if (wide) return;
     const cx = ORB_R + ORB / 2, cy = ORB_B + ORB / 2;
@@ -7472,6 +7473,9 @@
       b.style.right = Math.round(cx - Math.cos(t) * ARC_R - SLOT / 2) + "px"; b.style.bottom = Math.round(cy - Math.sin(t) * ARC_R - SLOT / 2) + "px"; });
     // Small horse button in the very bottom-right corner, on the orb's right-hand side.
     if (mount) { mount.style.right = "0px"; mount.style.bottom = "0px"; }
+    // Fly sits right above the horse, against the right edge.
+    const fly = $("fly"); if (fly) { fly.style.right = "0px"; fly.style.bottom = "36px"; }
+    const ofx = bar.querySelector(".orb-fx"); if (ofx) { ofx.style.right = ORB_R + "px"; ofx.style.width = ORB + "px"; ofx.style.bottom = "4px"; }
   }
   const syncOrbLayout = () => requestAnimationFrame(layoutOrbArc);
   orbWide.addEventListener?.("change", syncOrbLayout); addEventListener("resize", syncOrbLayout);
@@ -7575,6 +7579,9 @@
     if (loc && nav) { (name || loc.lastElementChild).after(nav); nav.classList.add("map-shortcuts"); }
     const mount = $("mountButton"), orbEl = document.querySelector(".vital-orb");
     if (mount && orbEl) { orbEl.before(mount); mount.classList.add("orb-mount"); }
+    const fly = $("fly"); if (fly && orbEl) { orbEl.before(fly); fly.classList.add("orb-mount", "orb-fly"); fly.classList.remove("warp-button", "flight-context"); }
+    // Harmful-effect boxes in the small gap under the orb.
+    if (orbEl) { const fx = document.createElement("div"); fx.className = "fx-row orb-fx"; fx.hidden = true; orbEl.after(fx); }
   }
   // ---- Status boxes: small squares for effects on the player (under the player card) and party members ----
   const STATUS_FX = {
@@ -7618,6 +7625,8 @@
     if (!selfStatusBox) return;
     const list = selfEffects(me), key = JSON.stringify(list); if (selfStatusBox.dataset.key === key) return;
     selfStatusBox.dataset.key = key; selfStatusBox.hidden = !list.length; selfStatusBox.innerHTML = fxBoxesHtml(list, 8);
+    const orbFx = document.querySelector(".orb-fx"), bad = list.filter(([id]) => fxInfo(id)[2] === "bad");
+    if (orbFx) { orbFx.hidden = !bad.length; orbFx.innerHTML = fxBoxesHtml(bad, 5); }
   }
   function updateHud(now) {
     const me = mode === "live" ? ownServerCharacter() : null, hero = getLocalAvatar();
