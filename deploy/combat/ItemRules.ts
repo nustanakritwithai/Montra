@@ -1,8 +1,8 @@
-import { readForged, birthForge, applyForgeRatings, type Forged } from "./ForgeRules.js";
+import { readForged, birthForge, applyForgeRatings, forgeStamp, type Forged } from "./ForgeRules.js";
 import { BOSS_GEAR_CHANCE, bossTreasure, personalItem, startingWeapon, firstChest, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
 import {MAX_LOOT_MISSES,rollMonsterLoot} from "./MonsterLoot.js";
 import {randomInt} from "node:crypto";
-import { PROGRESSION, type CombatStats } from "./Progression.js";
+import { PROGRESSION, baseManaAtLevel, type CombatStats } from "./Progression.js";
 import { MUAY_WRAP_ID } from "./MuayRules.js";
 import { usesStaff, type CatalystId, type SalveId, type ForgeRating,type BrewId,type FieldToolId } from "./PersonalItems.js";
 /**
@@ -116,7 +116,6 @@ export function validateInventory(value: unknown): InventorySnapshot {
       (Object.hasOwn(value,"firstChestClaimed") && value.firstChestClaimed!==true)) {
     throw new Error("inventory_record_invalid");
   }
-  const seenWeapons = new Set<ItemId>();
   const slots = value.slots.map((entry: unknown): InventoryStack | null => {
     if (entry === null) return null;
     if (!record(entry) || Object.keys(entry).some(key => !["itemId","quantity","forge","bound","socket"].includes(key)) ||
@@ -134,8 +133,7 @@ export function validateInventory(value: unknown): InventorySnapshot {
     const body=equipPositions(personalItem(itemId)?.kind).length>0;
     if (!upgraded || (!isWeaponId(itemId) && !body) ||
         (Object.hasOwn(entry,"bound") && (!personalItem(itemId) || entry.bound!==true)) ||
-        entry.quantity!==1 || seenWeapons.has(itemId)) throw Error("inventory_record_invalid");
-    seenWeapons.add(itemId);
+        entry.quantity!==1) throw Error("inventory_record_invalid");
     const socket=Object.hasOwn(entry,"socket")?entry.socket:undefined;
     if(socket!==undefined && socket!==null && !isCardId(socket))throw Error("inventory_record_invalid");
     return {itemId,quantity:1,...(entry.bound===true ? {bound:true as const} : {}), ...(Object.hasOwn(entry,"forge") ? {forge:readForged(entry.forge)} : {}),
@@ -155,10 +153,8 @@ export function validateInventory(value: unknown): InventorySnapshot {
     if (!record(value.equipment))throw Error("inventory_record_invalid");
     result.equipment={};
     for (const [slot,id] of Object.entries(value.equipment)) {
-      if (!isBodySlot(slot) || !equipPositions(personalItem(id)?.kind).includes(slot) ||
-          seenWeapons.has(id as ItemId))throw Error("inventory_record_invalid");
+      if (!isBodySlot(slot) || !equipPositions(personalItem(id)?.kind).includes(slot))throw Error("inventory_record_invalid");
       result.equipment[slot]=id as BodyItemId;
-      seenWeapons.add(id as ItemId);
     }
   }
   // Read the chest-only trial snapshot once. Moving a worn piece frees its former bag slot.
@@ -187,6 +183,14 @@ export function validateInventory(value: unknown): InventorySnapshot {
       result.equipmentSockets[position]=card as CardId|null;
     }
   }
+  const counts=new Map<ItemId,number>(),identities=new Set<string>();
+  function registerGear(id:ItemId,forge?:Forged){
+    const count=(counts.get(id)??0)+1,identity=forge?.instanceId??id;
+    if(count>(personalItem(id)?.copyLimit??1) || identities.has(identity))throw Error("inventory_record_invalid");
+    counts.set(id,count);identities.add(identity);
+  }
+  for(const stack of slots)if(stack && !isStackableItem(stack.itemId))registerGear(stack.itemId,stack.forge);
+  for(const [slot,id] of Object.entries(result.equipment??{}))registerGear(id,result.equipmentForges?.[slot as BodySlot]);
   return result;
 }
 
@@ -244,13 +248,25 @@ export function equipInventoryWeapon(
   };
 }
 
+export function gearCounts(bag:InventorySnapshot):Map<string,number>{
+  const counts=new Map<string,number>();
+  for(const id of [...Object.values(bag.equipment??{}),...bag.slots.flatMap(s=>s && !isStackableItem(s.itemId)?[s.itemId]:[])])
+    counts.set(id,(counts.get(id)??0)+1);
+  return counts;
+}
+export function matchesGearStamp(bag:InventorySnapshot,id:string,forge:Forged|undefined,stamp:string|undefined){
+  if(stamp!==undefined)return forgeStamp({itemId:id,forge})===stamp;
+  return personalItem(id)?.copyLimit!==2 || (gearCounts(bag).get(id)??0)<2;
+}
 /** A worn body piece owns its equipment slot; it no longer consumes a bag cell. */
-export function equipBody(inventory:InventorySnapshot,position:BodySlot,slot:number|null,expected:BodyItemId,path:string,level=1):
+export function equipBody(inventory:InventorySnapshot,position:BodySlot,slot:number|null,expected:BodyItemId,path:string,level=1,stamp?:string):
   EquipWeaponResult | {ok:false;reason:"inventory_full"|"equipment_changed"} {
   const next=validateInventory(inventory);
   const worn=next.equipment?.[position];
   const def=personalItem(expected);
   if (!def || !equipPositions(def.kind).includes(position))return {ok:false,reason:"equipment_changed"};
+  const targetForge=slot===null?next.equipmentForges?.[position]:next.slots[slot]?.forge;
+  if(!matchesGearStamp(next,expected,targetForge,stamp))return {ok:false,reason:"equipment_changed"};
   const equipment={...next.equipment};
   const sockets={...next.equipmentSockets};
   const forges={...next.equipmentForges};
@@ -283,10 +299,11 @@ export function equipBody(inventory:InventorySnapshot,position:BodySlot,slot:num
 }
 
 export function parseBodyCommand(message:unknown) {
-  if(!record(message) || Object.keys(message).length!==3 || !isBodySlot(message.position) ||
+  if(!record(message) || Object.keys(message).some(k=>!["position","expected","slot","stamp"].includes(k)) ||
+    (Object.hasOwn(message,"stamp") && (typeof message.stamp!=="string" || message.stamp.length>100)) || !isBodySlot(message.position) ||
       !equipPositions(personalItem(message.expected)?.kind).includes(message.position) ||
       (message.slot!==null && (!Number.isInteger(message.slot) || (message.slot as number)<0 || (message.slot as number)>=INVENTORY_SLOT_COUNT)))return null;
-  return {slot:message.slot as number|null,position:message.position,expected:message.expected as BodyItemId};
+  return {slot:message.slot as number|null,position:message.position,expected:message.expected as BodyItemId,...(typeof message.stamp==="string"?{stamp:message.stamp}:{})};
 }
 
 export function equippedStats(base:CombatStats,bag:InventorySnapshot|undefined):CombatStats {
@@ -298,12 +315,12 @@ export function equippedStats(base:CombatStats,bag:InventorySnapshot|undefined):
   return result;
 }
 
-export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,tier="normal",playerLevel=monsterLevel,monsterId="possessed-1",draw?:(max:number)=>number):{bag:InventorySnapshot;id?:PersonalId|null;quantity?:number} {
+export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,tier="normal",playerLevel=monsterLevel,monsterId="possessed-1",draw?:(max:number)=>number):{bag:InventorySnapshot;id?:PersonalId|null;quantity?:number;blockedId?:PersonalId;missedQuantity?:number} {
   if(!bag.firstChestClaimed){
     const id=firstChest(path,Math.min(monsterLevel,playerLevel));
     if(bag.equipment?.chest!==id && !bag.slots.some(s=>s?.itemId===id)){
       const index=bag.slots.indexOf(null);
-      if(index<0)return {bag,id:null};
+      if(index<0)return {bag,id:null,quantity:0,blockedId:id,missedQuantity:1};
       const slots=bag.slots.slice();
       const forge=birthForge(id);
       slots[index]={itemId:id,quantity:1,bound:true,...(forge?{forge}:{})};
@@ -311,7 +328,7 @@ export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,ti
     }
     bag={...bag,firstChestClaimed:true};
   }
-  const owned=new Set<string>([...Object.values(bag.equipment??{}),...bag.slots.flatMap(stack=>stack?[stack.itemId]:[])]);
+  const owned=gearCounts(bag);
   const partialStacks=bag.slots.includes(null)?undefined:new Set(bag.slots.flatMap(s=>s && s.quantity<INVENTORY_STACK_LIMIT?[s.itemId]:[]));
   const roll=rollMonsterLoot(monsterId,path,owned,playerLevel,bag.lootMisses??0,tier,draw,partialStacks);
   if(!roll)return {bag};
@@ -325,10 +342,10 @@ export function practiceLoot(bag:InventorySnapshot,path:string,monsterLevel=1,ti
       if(!added)break;
       bag=added;quantity++;
     }
-    return {bag,id:quantity?id:null,quantity};
+    return {bag,id:quantity?id:null,quantity,...(quantity<limit?{blockedId:id,missedQuantity:limit-quantity}:{})};
   }
   const index=bag.slots.indexOf(null);
-  if(index<0)return {bag:roll.useful?{...bag,lootMisses:MAX_LOOT_MISSES}:bag,id:null};
+  if(index<0)return {bag:roll.useful?{...bag,lootMisses:MAX_LOOT_MISSES}:bag,id:null,quantity:0,blockedId:id,missedQuantity:1};
   const slots=bag.slots.slice();
   const forge=birthForge(id);
   slots[index]={itemId:id,quantity:1,...(forge?{forge}:{})};
@@ -380,7 +397,7 @@ export function overflowStaminaRegen(base:CombatStats,bag:InventorySnapshot|unde
   return Math.min(2,Math.max(0,raw.maxStamina-PROGRESSION.maxStamina)/25);
 }
 export function gearMana(level:number,bag:InventorySnapshot|undefined){
-  let raw=PROGRESSION.baseMana+(level-1)*2;
+  let raw=baseManaAtLevel(level);
   if(bag){
     const main=bag.slots[bag.equippedWeaponSlot??-1];
     for(const id of [main?.itemId,main?.socket,...Object.values(bag.equipment??{}),...Object.values(bag.equipmentSockets??{})])

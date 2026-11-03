@@ -1,4 +1,4 @@
-import { forgeStamp, quoteForge, rollForge, birthForge, forgeIngredient, type ForgeAction } from "./ForgeRules.js";
+import { forgeStamp, quoteForge, rollForge, birthForge, plainForge, forgeIngredient, type ForgeAction } from "./ForgeRules.js";
 import { changeCardSocket, DRILL_COST, type SocketOrder } from "./CardSockets.js";
 import {resourceNodes,resourceStock,rawResource,GATHER_DELAY,REFINE_INPUT,type ResourceNode,type ResourceStock} from "./WorldResources.js";
 import {WORLD_MAPS} from "./WorldMaps.js";
@@ -6,7 +6,7 @@ import {WORLD_MAPS} from "./WorldMaps.js";
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 import { personalItem, type BodySlot, type PersonalId } from "./PersonalItems.js";
-import { SHRINE_RECIPE, isStackableItem, validateInventory, type InventorySnapshot, type InventoryStack } from "./ItemRules.js";
+import { SHRINE_RECIPE, gearCounts, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack } from "./ItemRules.js";
 import type {SalvageOrder} from "./EconomyRules.js";
 
 export const STARTER_GOLD = 1000;
@@ -44,8 +44,10 @@ function add(inventory: InventorySnapshot, item: InventoryStack): InventorySnaps
       stack.quantity += amount; remaining -= amount;
       if (!remaining) break;
     }
-  } else if (slots.some(stack => stack?.itemId === item.itemId) || Object.values(original.equipment??{}).some(id=>id===item.itemId)) {
-    throw new Error("duplicate_weapon");
+  } else {
+    const limit=personalItem(item.itemId)?.copyLimit??1;
+    if((gearCounts(original).get(item.itemId)??0)>=limit)throw Error(limit===2?"accessory_limit":"duplicate_weapon");
+    if(limit===2 && !item.forge)item={...item,forge:plainForge()};
   }
   if (remaining) {
     const free = slots.findIndex(slot => slot === null);
@@ -317,12 +319,14 @@ export class EconomyStore {
       return result;
     });
   }
-  listItem(id: string, request: string, slot: number, amount: number, price: number): { listingId: string } {
+  listItem(id: string, request: string, slot: number, amount: number, price: number, stamp?:string): { listingId: string } {
     positiveInteger(price, MAX_GOLD);
-    return this.once(id, request, "list", { slot, amount, price }, () => {
+    return this.once(id, request, "list", { slot, amount, price, ...(stamp===undefined?{}:{stamp}) }, () => {
       const count=this.db.prepare("SELECT COUNT(*) AS total FROM listings WHERE seller=? AND state='open'").get(id);
       if (typeof count?.total !== "number" || count.total>=20) throw new Error("listing_limit");
-      const seller = this.account(id), removed = take(seller.inventory, slot, amount);
+      const seller=this.account(id),item=seller.inventory.slots[slot];
+      if(item && !matchesGearStamp(seller.inventory,item.itemId,item.forge,stamp))throw Error("item_unavailable");
+      const removed=take(seller.inventory,slot,amount);
       seller.inventory = removed.inventory; this.put(id, seller);
       const listingId = randomUUID();
       this.db.prepare("INSERT INTO listings(id,seller,item,price,state) VALUES(?,?,?,?,?)").run(listingId,id,JSON.stringify(removed.item),price,"open");

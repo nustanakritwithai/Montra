@@ -2,6 +2,8 @@ const assert=require("node:assert/strict"),fs=require("node:fs"),vm=require("nod
 const source=fs.readFileSync("main.js","utf8");
 const start=source.indexOf("  function salvageSelectedGear("),end=source.indexOf("  function renderCardSocket(",start);
 assert(start>=0 && end>start && source.includes('$("salvageGear").onclick=salvageSelectedGear'));
+const stampStart=source.indexOf("  function gearStamp("),stampEnd=source.indexOf("  function accessoryStamp(",stampStart);
+assert(stampStart>=0 && stampEnd>stampStart);
 const item={itemId:"wp_twins_10",bound:true,forge:{instanceId:"example",revision:2},socket:"card_rift_warden"};
 const prompts=[],sent=[];
 let accepted=false,equipped=null;
@@ -9,7 +11,7 @@ const ui={selectedBagSlot:2,currentBagSlots:()=>[null,null,item],currentEquipped
   personalItems:{wp_twins_10:{name:"ดาบคู่",salvage:{item:"mat_metal_7",quantity:3}},mat_metal_7:{name:"แร่เหล็ก"},card_rift_warden:{name:"การ์ดราชัน"}},
   economyReady:()=>true,economyPending:false,itemUsePending:false,forgeLabel:()=>" +1",renderBag:()=>{},economyRequestId:()=>"ui_request",
   window:{confirm:msg=>{prompts.push(msg);return accepted;}},economySend:(...args)=>sent.push(args)};
-const click=vm.runInNewContext(source.slice(start,end)+"\nsalvageSelectedGear",ui);
+const click=vm.runInNewContext(source.slice(stampStart,stampEnd)+source.slice(start,end)+"\nsalvageSelectedGear",ui);
 click();assert.equal(sent.length,0);
 assert.match(prompts[0],/ดาบคู่ \+1/);assert.match(prompts[0],/แร่เหล็ก ×3/);assert.match(prompts[0],/คืนการ์ดราชัน/);
 accepted=true;click();

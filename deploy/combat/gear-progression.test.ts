@@ -5,15 +5,17 @@ import {CATALOG_PAGES,hunts,findItemHunt,rollMonsterLoot} from "./MonsterLoot.js
 import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses,practiceLoot,validateInventory} from "./ItemRules.js";
 import {EconomyStore} from "./EconomyStore.js";
 import {parseSalvage,type SalvageOrder} from "./EconomyRules.js";
-import {rollForge,forgeStamp,forgeIngredient} from "./ForgeRules.js";
+import {birthForge,rollForge,forgeStamp,forgeIngredient} from "./ForgeRules.js";
 import {changeCardSocket} from "./CardSockets.js";
 import {ATLAS_SPAWNS} from "./WorldAtlas.js";
 import {FOREST_CAMPS} from "./WorldMaps.js";
 import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {personalGearGuides,cardHunt} from "./GearGuides.js";
 import {gearMana} from "./ItemRules.js";
+import {calculateDamage,calculateStats,emptyAllocations,PROGRESSION} from "./Progression.js";
+import {monsterProfile} from "./MonsterProfiles.js";
 import {bossAccessoryReward,grantStackReward} from "./ItemRules.js";
-import {BOSS_TREASURES,type MaterialId} from "./PersonalItems.js";
+import {BOSS_TREASURES,type CardId,type MaterialId} from "./PersonalItems.js";
 import {MyRoom} from "./MyRoom.js";
 import {Player} from "./schema/MyRoomState.js";
 
@@ -53,6 +55,17 @@ test("a listed monster really drops the item, and crafted and harvested products
   }
 });
 
+test("tracker targets match the server drop sources for equipment, materials and monster cards",()=>{
+  const catalog=Object.assign({},...CATALOG_PAGES);
+  for(const [id,item] of entries){
+    const expected=item.kind==="card"?cardHunt(id as CardId):findItemHunt(id as PersonalId,item.level!);
+    const source=catalog[id].huntTarget;
+    if(!expected){assert.equal(source,undefined,id);continue;}
+    assert.deepEqual(source,{id:expected.id,mapId:expected.mapId,monster:expected.monster,open:expected.open},id);
+    assert(hunts.some(m=>m.id===source.id && m.mapId===source.mapId),id);
+  }
+});
+
 test("each named encounter owns its fragment and accessory; three fragments craft the same wearable reward",()=>{
   const store=new EconomyStore(":memory:");
   try{
@@ -64,7 +77,7 @@ test("each named encounter owns its fragment and accessory; three fragments craf
       assert.equal(gear.recipe![0].item,t.fragment);assert.equal(gear.recipe![0].qty,3);
       assert.equal(rollMonsterLoot("forest_west_1","muay_boran",new Set(),100,0,"normal",()=>0)?.id===t.gear,false);
       const preview=CATALOG_PAGES.find(page=>page[t.gear])![t.gear];
-      assert("dropHint" in preview);assert.match(preview.dropHint,/20%/);
+      assert("dropHint" in preview && preview.dropHint);assert.match(preview.dropHint,/20%/);
       assert.equal(bossAccessoryReward(bag,boss,t.level-1,()=>0),null);
       assert.equal(bossAccessoryReward(bag,boss,t.level,()=>20),null);
       assert.equal(bossAccessoryReward(bag,"forest_west_1",100,()=>0),null);
@@ -108,14 +121,69 @@ test("three misses survive reload and a full bag preserves the guaranteed upgrad
     const full={...bag,slots:bag.slots.map(s=>s??{itemId:"health_potion" as const,quantity:99})};
     const blocked=practiceLoot(full,path,10,"normal",15,mob,miss);
     assert.equal(blocked.id,null);assert.equal(blocked.bag.lootMisses,3);
+    assert(blocked.blockedId && PERSONAL_ITEMS[blocked.blockedId]?.forge);assert.equal(blocked.quantity,0);assert.equal(blocked.missedQuantity,1);
     const material=path==="phutthaisawan"?"mat_metal_2":"mat_hide_2";
     const tight={...full,lootMisses:0,slots:full.slots.map(s=>s.itemId.startsWith("mat_")?{...s,quantity:99}:s)};
     tight.slots[11]={itemId:material,quantity:98};
     const stacked=practiceLoot(tight,path,10,"normal",15,mob,miss);
     assert.equal(stacked.id,material);assert.equal(stacked.quantity,1);assert.equal(stacked.bag.slots[11]?.quantity,99);
+    assert.equal(stacked.blockedId,material);assert.equal(stacked.missedQuantity,1);
     const reward=practiceLoot(bag,path,10,"normal",15,mob,miss);
     assert(reward.id && PERSONAL_ITEMS[reward.id].recommended?.includes(path));assert.equal(reward.bag.lootMisses??0,0);
   }
+});
+
+test("ordinary rings and earrings accept a second distinct copy but never a third or a cloned instance",()=>{
+  for(const id of ["acc_ring_atk_1","acc_earrings_hunter_1"] as const){
+    const mob=findItemHunt(id,1)!,owned=new Map(entries.map(([key])=>[key,2]));
+    owned.set(id,1);
+    assert.equal(rollMonsterLoot(mob.id,"muay_boran",owned,1,0,"normal",()=>0)?.id,id);
+    owned.set(id,2);
+    assert.notEqual(rollMonsterLoot(mob.id,"muay_boran",owned,1,0,"normal",()=>0)?.id,id);
+    const bag=makeClassInventory("muay_boran"),newCopy=birthForge(id)!;
+    assert.equal(newCopy.affix,null);
+    bag.slots[2]={itemId:id,quantity:1}; // One pre-update copy with no instance ID.
+    bag.slots[3]={itemId:id,quantity:1,forge:newCopy};
+    assert.deepEqual(validateInventory(JSON.parse(JSON.stringify(bag))),bag);
+    bag.slots[4]={itemId:id,quantity:1,forge:birthForge(id)};
+    assert.throws(()=>validateInventory(bag),/inventory_record_invalid/);
+    bag.slots[4]=null;bag.slots[2]!.forge=newCopy;
+    assert.throws(()=>validateInventory(bag),/inventory_record_invalid/);
+  }
+  assert.equal(PERSONAL_ITEMS.acc_rift_star.copyLimit,undefined);
+});
+
+test("duplicate rings keep cards and forge identities during socketing, market purchase, retries and trade",()=>{
+  const store=new EconomyStore(":memory:"),a="a".repeat(64),b="b".repeat(64),id="acc_ring_atk_1";
+  try{
+    const bag=makeClassInventory("blade"),buyer=makeClassInventory("blade");
+    const ring=()=>({itemId:id as typeof id,quantity:1,forge:birthForge(id)!});
+    const first=ring(),second=ring();
+    bag.slots[2]=first;bag.slots[3]=second;bag.slots[4]={itemId:"mat_metal_1",quantity:2};
+    bag.slots[5]={itemId:"card_possessed",quantity:1};buyer.slots[2]=ring();
+    store.register(a,bag);store.register(b,buyer);
+    const drill={requestId:"test_pair_socket_drill",target:2,gear:id,expected:"sealed",action:"drill",card:null} as const;
+    assert.throws(()=>store.socketItem(a,drill),/socket_changed/);
+    assert.throws(()=>store.socketItem(a,{...drill,stamp:forgeStamp(second)}),/socket_changed/);
+    assert.deepEqual(store.getAccount(a).inventory,bag);
+    store.socketItem(a,{...drill,stamp:forgeStamp(first)});
+    store.socketItem(a,{...drill,requestId:"test_pair_socket_insert",action:"insert",expected:"empty",card:"card_possessed",stamp:forgeStamp(first)});
+    const current=store.getAccount(a).inventory;
+    assert.equal(current.slots[2]?.socket,"card_possessed");assert.equal(current.slots[3]?.socket,undefined);
+    assert.equal(equipBody(current,"leftRing",2,id,"blade",1,forgeStamp(second)).ok,false);
+    assert.throws(()=>store.listItem(a,"test_pair_stale_listing",2,1,10,forgeStamp(second)),/item_unavailable/);
+    const listing=store.listItem(a,"test_pair_first_listing",2,1,10,forgeStamp(first));
+    store.buy(b,"test_pair_buyer_request",listing.listingId);
+    store.buy(b,"test_pair_buyer_request",listing.listingId);
+    const purchase=store.getAccount(b).inventory,slot=purchase.slots.findIndex(s=>s?.forge?.instanceId===first.forge.instanceId);
+    assert.equal(purchase.slots[slot]?.socket,"card_possessed");
+    const third=store.listItem(a,"test_pair_next_listing",3,1,10,forgeStamp(second)),before=store.getAccount(b);
+    assert.throws(()=>store.buy(b,"test_pair_limit_request",third.listingId),/accessory_limit/);
+    assert.deepEqual(store.getAccount(b),before);
+    store.cancel(a,"test_pair_cancel_listing",third.listingId);
+    store.trade(b,a,"test_pair_trade_request",{slot,amount:1,gold:0},{slot:null,amount:0,gold:0});
+    assert.equal(store.getAccount(a).inventory.slots.find(s=>s?.forge?.instanceId===first.forge.instanceId)?.socket,"card_possessed");
+  }finally{store.close();}
 });
 
 test("a dropped pair of wraps can be equipped and its Muay strike damages a monster",()=>{
@@ -145,6 +213,7 @@ test("twelve suggested builds resolve to legal gear, cards and hunting grounds a
       for(const piece of build.slots){
         const def=PERSONAL_ITEMS[piece.id];
         assert(def.level!<=level&&(def.path==="all"||def.path===path));
+        assert(def.recommended?.includes(path),path+" workbench filters out "+piece.id);
         assert(def.forge!.pool.includes(piece.affix));
         assert(piece.hunt && piece.hunt.level>=def.level! && piece.hunt.level<=def.dropMax!,piece.id);
         if(piece.card){
@@ -172,6 +241,96 @@ test("twelve suggested builds resolve to legal gear, cards and hunting grounds a
   assert.equal(gearMana(100,bag).max,320);
   assert(gearMana(100,bag).restRegen>0&&gearMana(100,bag).restRegen<=1);
   assert.equal(personalGearGuides("unknown",50),null);
+});
+
+test("shared defensive recipes retain their forge roles and enter the useful drop pool for the classes that wear them",()=>{
+  const chest=PERSONAL_ITEMS.arm_heavy_chest_8;
+  assert.equal(chest.forge!.primary,"guard");
+  assert.deepEqual(chest.forge!.pool,["guard","melee"]);
+  assert.equal(PERSONAL_ITEMS.acc_earrings_ward_8.forge!.primary,"guard");
+  const mob=findItemHunt("arm_heavy_chest_8",100)!;
+  // Leave all chest candidates available so only the useful pool is exercised.
+  const owned=new Set(entries.filter(([,def])=>def.kind!=="chest").map(([id])=>id));
+  let candidates=0;
+  rollMonsterLoot(mob.id,"mender",owned,100,3,"normal",max=>{candidates=max;return 0;});
+  const results=Array.from({length:candidates},(_,i)=>rollMonsterLoot(mob.id,"mender",owned,100,3,"normal",()=>i));
+  assert(results.some(result=>result?.useful && result.id==="arm_heavy_chest_8"));
+});
+
+test("all six classes gain casting capacity from both hands and have a suggested unlock at every level",()=>{
+  for(const [path,offHand] of [["muay_boran","off_brace_1"],["phutthaisawan","off_guard_1"],["blade","off_veil_1"],["sentinel","off_shield_1"],["seer","off_jar_1"],["mender","off_bell_1"]] as const){
+    const room=new MyRoom(),bag=makeClassInventory(path),p=new Player({pathId:path,level:1,mana:30});
+    const server=room as unknown as {inventories:Map<string,typeof bag>;applyStats(id:string,p:Player,a:ReturnType<typeof emptyAllocations>):void};
+    server.inventories.set("wearer",bag);
+    server.applyStats("wearer",p,emptyAllocations());
+    assert(p.maxMana>PROGRESSION.baseMana && p.mana===30,path);
+    const mainCapacity=p.maxMana;
+    bag.slots[2]={itemId:offHand,quantity:1};
+    const worn=equipBody(bag,"offHand",2,offHand,path,1);assert(worn.ok);
+    server.inventories.set("wearer",worn.inventory);server.applyStats("wearer",p,emptyAllocations());
+    assert(p.maxMana>mainCapacity && p.mana===30,path);
+    let previousMana=[0,0];
+    for(let level=1;level<=100;level++){
+      const [attack,defend]=personalGearGuides(path,level)!.builds;
+      const builds=[attack,defend];
+      assert(builds.some(b=>b.slots.some(s=>PERSONAL_ITEMS[s.id].level===level)),path+" has no suggested unlock at "+level);
+      assert((attack.totals.mana??0)>0 && (defend.totals.mana??0)>0,path);
+      const monster=monsterProfile(level),survival:number[]=[];
+      for(const [i,build] of builds.entries()){
+        const outfit=makeClassInventory(path);
+        for(const piece of build.slots){
+          if(piece.position==="mainHand")outfit.slots[1]={itemId:piece.id,quantity:1};
+          else outfit.equipment![piece.position]=piece.id as BodyItemId;
+          if(piece.card)assert(piece.cardHunt?.open,path);
+        }
+        assert.equal(build.maxMana,gearMana(level,outfit).max);
+        assert(build.maxMana>=previousMana[i],path+" maximum MP regressed at "+level);
+        const stats=equippedStats(calculateStats(level,emptyAllocations()),outfit);
+        survival.push(stats.maxHp/calculateDamage(monster.attack,stats.def,level));
+      }
+      assert(survival[1]>survival[0],path+" defensive set at "+level);
+      previousMana=builds.map(b=>b.maxMana);
+    }
+    assert.deepEqual(previousMana,[PROGRESSION.maxMana,PROGRESSION.maxMana]);
+  }
+});
+
+test("endgame weapons improve a blow or healing tick from each playable class in PvE",()=>{
+  for(const [path,upgrade] of [["muay_boran","wp_wrap_10"],["phutthaisawan","wp_twins_10"],["blade","wp_shadow_10"],["sentinel","wp_pike_10"],["seer","wp_wand_10"],["mender","wp_crook_10"]] as const){
+    const room=new MyRoom(),bag=makeClassInventory(path),target=room.state.monster;
+    const server=room as unknown as {
+      inventories:Map<string,typeof bag>;applyStats(id:string,p:Player,a:ReturnType<typeof emptyAllocations>):void;
+      muayCoreHit(id:string,target:string,power:number):boolean;swordCoreHit(id:string,target:string,power:number):boolean;
+      bladeDamage(id:string,target:string,power:number):boolean;sentinelDamage(id:string,target:string,power:number,stun:boolean):boolean;
+      seerBuffaloCasts:Map<string,{targetId:string;until:number;rank:number;x:number;z:number}>;
+      priestRegens:Map<string,{ownerId:string;mapId:string;until:number;nextTick:number;fraction:number}>;
+      updateOccultEffects():void;broadcast:()=>void;
+    };
+    const id="wearer",actor=new Player({pathId:path,level:100,x:-10,y:0,z:8,alive:true});
+    room.state.players.set(id,actor);server.broadcast=()=>{};
+    Object.assign(target,{x:-10,y:0,z:9,hp:5000,maxHp:5000});
+    function effect(){
+      server.inventories.set(id,bag);server.applyStats(id,actor,emptyAllocations());
+      const before=target.hp;
+      if(path==="muay_boran")assert(server.muayCoreHit(id,target.id,1));
+      if(path==="phutthaisawan")assert(server.swordCoreHit(id,target.id,1));
+      if(path==="blade")assert(server.bladeDamage(id,target.id,1));
+      if(path==="sentinel")assert(server.sentinelDamage(id,target.id,1,false));
+      if(path==="seer"){
+        server.seerBuffaloCasts.set(id,{targetId:target.id,rank:0,until:0,x:target.x,z:target.z});
+        server.updateOccultEffects();
+      }
+      if(path==="mender"){
+        actor.hp=1;
+        server.priestRegens.set(id,{ownerId:id,mapId:actor.mapId,until:10000,nextTick:0,fraction:.02});
+        server.updateOccultEffects();return actor.hp-1;
+      }
+      return before-target.hp;
+    }
+    const starter=effect();
+    bag.slots[1]={itemId:upgrade,quantity:1};
+    assert(starter>0 && effect()>starter,path);
+  }
 });
 
 test("every class has a legal, craftable outfit from 1 to 100, including two distinct rings and earrings",()=>{
@@ -218,7 +377,9 @@ test("every class has a legal, craftable outfit from 1 to 100, including two dis
 test("late monster cards unlock through real hunts and the first high-level chest rolls an affix",()=>{
   const leftEar=(level:number)=>personalGearGuides("mender",level)!.builds[0].slots.find(s=>s.position==="leftEar")!;
   assert.notEqual(leftEar(85).card,"card_light_eater");
-  assert.equal(leftEar(88).card,"card_light_eater");
+  // In the full healer outfit MP is already capped by this socket. Prefer HP alongside magic attack.
+  if(cardHunt("card_dream")?.open)assert.equal(leftEar(88).card,"card_dream");
+  else assert(!leftEar(88).card || leftEar(88).cardHunt?.open);
   assert.equal(cardHunt("card_last_spirit")?.level,96);
   assert.equal(cardHunt("card_star_warden")?.level,98);
   const source=ATLAS_SPAWNS.find(s=>s.id==="atlas_spirit_rift_2_1")!;

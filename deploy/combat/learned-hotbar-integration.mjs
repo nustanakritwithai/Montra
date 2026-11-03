@@ -26,7 +26,10 @@ for(const [slot,job,first] of [[1,"seer","seer_mark"],[2,"muay_boran","guard"]])
     if(job==="seer"){
       const fresh=await send("occult_book_get",{},"occult_book_state",()=>true);
       assert.deepEqual(fresh.data.book.loadouts.seer,[null,null,null,null]);assert.deepEqual(fresh.data.book.learned.seer,[]);
-      for(const [type,payload] of [["pot_summon",{}],["possess",{}],["apply_talisman",{targetId:"possessed-1"}],["blessed_rice",{targetId:"possessed-1"}],["shoot",{targetId:"possessed-1"}],["cast_class_skill",{}]]){
+      // The seer's core pot works before any optional occult lesson is learned.
+      await send("pot_summon",{},"summon_spawn",e=>e.ownerId===room.sessionId && e.kind==="pot_spirit");
+      await send("unsummon",{},"summon_despawn",e=>e.ownerId===room.sessionId && e.reason==="dismissed");
+      for(const [type,payload] of [["possess",{}],["apply_talisman",{targetId:"possessed-1"}],["blessed_rice",{targetId:"possessed-1"}],["shoot",{targetId:"possessed-1"}],["cast_class_skill",{}]]){
         await send(type,payload,"command_rejected",e=>e.reason===(type==="cast_class_skill"?"use_learned_skill":"occult_skill_locked"));
       }
       assert.equal(room.state.summons.has(room.sessionId),false);
@@ -53,4 +56,4 @@ for(const [slot,job,first] of [[1,"seer","seer_mark"],[2,"muay_boran","guard"]])
     }
   }finally{await room.leave();await sleep(400);}
 }
-console.log("PASS: authenticated characters start without skills; level, learning, equipment, reset and retired actions verified");
+console.log("PASS: core spirit summon, empty learned slots, level gates, equipment, reset and retired actions verified");

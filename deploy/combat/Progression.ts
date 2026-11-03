@@ -19,6 +19,9 @@ export const PROGRESSION = Object.freeze({
 export function emptyAllocations(): Allocations {
   return { hp: 0, atk: 0, def: 0, magicAtk: 0, magicDef: 0, stamina: 0 };
 }
+export function baseManaAtLevel(level:number):number {
+  return PROGRESSION.baseMana+(level-1)*2;
+}
 export function pointsAvailable(level: number, allocations: Allocations): number {
   validateAllocations(allocations, level);
   return 0; // The current system grows automatically; old allocations remain readable.

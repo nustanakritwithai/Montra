@@ -32,23 +32,22 @@ async function join(extra){
   const catalog=Object.assign({},...events.filter(e=>e.type==="item_catalog_page").map(e=>e.data.items));
   return {room,me,bag,event,events,catalog};
 }
-async function setTestChest(client,slot) {
-  const expected="arm_medium_chest_1";
+async function setTestGear(client,slot,position="chest",expected="arm_medium_chest_1",stamp) {
   for(let attempt=0;attempt<4;attempt++){
     await delay(850);
     const start=client.events.length;
-    client.room.send("equip_gear",{position:"chest",slot,expected});
+    client.room.send("equip_gear",{position,slot,expected,...(stamp?{stamp}:{})});
     const reply=await until(()=>client.events.slice(start).find(e=>
       e.type==="command_rejected" || e.type==="item_use_failed" ||
-      e.type==="inventory_state" && (e.data.equipment?.chest??null)===(slot===null?null:expected)
-    ),"server acknowledges chest change");
-    if(reply.type==="inventory_state")return;
+      e.type==="inventory_state" && (e.data.equipment?.[position]??null)===(slot===null?null:expected)
+    ),"server acknowledges "+position+" change");
+    if(reply.type==="inventory_state")return reply.data;
     assert.equal(reply.data.reason,"equipment_cooldown");
   }
-  throw Error("chest equip cooldown did not clear");
+  throw Error("equipment cooldown did not clear");
 }
 // Seed only the offline test character created by this file, in its disposable account database.
-function prepareCapstone(prefix,recipe){
+function seedMaterials(prefix,name,pathId,inputs,level){
   assert.match(prefix,/^[a-f0-9]{12}$/);
   const db=new DatabaseSync(path.join(folder,"economy.sqlite"));
   try{
@@ -56,19 +55,22 @@ function prepareCapstone(prefix,recipe){
     const found=db.prepare("SELECT id,snapshot FROM characters WHERE id LIKE ?").all(prefix+"%");
     assert.equal(found.length,1);
     const {id,snapshot}=found[0], saved=JSON.parse(snapshot);
-    assert.equal(saved.name,"นักดาบฝึกหัด");assert.equal(saved.build.path,"phutthaisawan");
+    assert.equal(saved.name,name);assert.equal(saved.build.path,pathId);
     const bag=JSON.parse(db.prepare("SELECT inventory FROM accounts WHERE id=?").get(id).inventory);
-    assert(recipe.some(r=>r.item==="mat_ingot_7"&&r.qty===1));
-    const ingredients=recipe.filter(r=>r.item!=="mat_ingot_7").map(r=>[r.item,r.qty]);
-    for(const [itemId,quantity] of [...ingredients,["mat_raw_wood_7",2],["mat_raw_stone_7",2],["ref_flux_7",1],["mat_metal_1",1],["card_rift_warden",1],["use_mana_7",1]]){
+    for(const [itemId,quantity] of inputs){
       const index=bag.slots.findIndex(s=>s?.itemId===itemId),free=index>=0?index:bag.slots.indexOf(null);
       assert(free>=0);bag.slots[free]={itemId,quantity:quantity+(bag.slots[free]?.quantity||0)};
     }
-    saved.inventory=bag;saved.level=100;saved.experience=0;saved.mana=20;
+    saved.inventory=bag;saved.level=level;saved.experience=0;saved.mana=20;
     db.prepare("UPDATE accounts SET inventory=? WHERE id=?").run(JSON.stringify(bag),id);
     db.prepare("UPDATE characters SET snapshot=? WHERE id=?").run(JSON.stringify(saved),id);
     db.exec("COMMIT");
   }finally{db.close();}
+}
+function prepareCapstone(prefix,recipe){
+  assert(recipe.some(r=>r.item==="mat_ingot_7"&&r.qty===1));
+  const inputs=recipe.filter(r=>r.item!=="mat_ingot_7").map(r=>[r.item,r.qty]);
+  seedMaterials(prefix,"นักดาบฝึกหัด","phutthaisawan",[...inputs,["mat_raw_wood_7",2],["mat_raw_stone_7",2],["ref_flux_7",1],["mat_metal_1",1],["card_rift_warden",1],["use_mana_7",1]],100);
 }
 let active;
 try{
@@ -76,17 +78,25 @@ try{
   const {room,bag,me,event}=active;
   assert(Object.keys(active.catalog).length>400);
   const endgame=active.catalog.wp_twins_10;assert.equal(endgame.level,100);
+  assert.equal(endgame.forge.affixTierCap,3);
+  assert(active.catalog.arm_heavy_chest_8.recommended.includes("mender"));
+  assert.equal(active.catalog.wp_twins_2.huntTarget.id,"temple_forecourt_3");
+  assert.equal(active.catalog.card_possessed.huntTarget.id,room.state.monster.id);
+  assert.equal(active.catalog.mat_rift_star.huntTarget.mapId,"spirit_rift");
+  assert.equal(active.catalog.mat_ingot_1.huntTarget,undefined);
   assert.match(active.catalog.wp_twins_2.dropHint,/ภูตทวารบาล/);
   assert.match(active.catalog.wp_wrap_2.dropHint,/พรายกอกก/);
   assert.equal(active.catalog.mat_ingot_1.dropHint,undefined);
   const guides=active.event("gear_guides",p=>p.path==="phutthaisawan");
   assert.equal(guides?.builds.length,2);
+  assert.equal(guides.baseMana,120);assert.equal(guides.manaCap,320);
   assert.equal(guides.builds[0].slots.find(s=>s.position==="offHand").next,"arm_field_phutthaisawan_2");
   assert.equal(active.catalog.arm_field_phutthaisawan_2.path,"phutthaisawan");
   assert.deepEqual(bag.cardDrill,{gold:20,itemId:"mat_metal_1",quantity:1});
   assert.deepEqual(bag.slots.filter(Boolean).map(s=>s.itemId),["health_potion","wp_twins_1"]);
   assert.equal(bag.slots[bag.equippedWeaponSlot].bound,true);
   assert.equal(me().equippedWeaponId,"wp_twins_1");
+  await until(()=>me().maxMana===120+active.catalog.wp_twins_1.stats.mana && me().maxMana>120,"starter swords expand the live skill mana pool");
   room.send("card_socket",{requestId:"test_drill_no_material",target:bag.equippedWeaponSlot,gear:"wp_twins_1",expected:"sealed",action:"drill",card:null});
   await until(()=>event("economy_error",e=>e.reason==="drill_missing_metal"),"new character needs ore before drilling");
   room.send("attack",{targetId:room.state.monster.id});
@@ -95,11 +105,11 @@ try{
   await until(()=>me().level>1 || event("experience_gained"),"reward committed");
   await delay(250);
   const before={def:me().def,atk:me().atk};
-  await setTestChest(active,slot);
+  await setTestGear(active,slot);
   await until(()=>me().def===before.def+4&&me().atk===before.atk+2,"armor changes real stats");
-  await setTestChest(active,null);
+  await setTestGear(active,null);
   await until(()=>me().def===before.def&&me().atk===before.atk,"unequip restores both stats");
-  await setTestChest(active,slot);
+  await setTestGear(active,slot);
   await until(()=>me().def===before.def+4,"re-equip");
   await room.leave(); active=null;await delay(400);
   active=await join({});
@@ -121,7 +131,10 @@ try{
   await active.room.leave();active=null;await delay(400);
   prepareCapstone(prefix,endgame.recipe);active=await join({});
   assert.equal(active.me().level,100);
-  assert.equal(active.event("gear_guides",p=>p.level===100)?.builds[0].slots.find(s=>s.position==="mainHand").id,"wp_twins_10");
+  const finalBuild=active.event("gear_guides",p=>p.level===100)?.builds[0];
+  assert.equal(finalBuild?.slots.find(s=>s.position==="mainHand").id,"wp_twins_10");
+  assert.equal(finalBuild.maxMana,320);
+  assert(active.catalog.wp_twins_10.stats.atk>active.catalog.wp_twins_9.stats.atk);
   const r=active.room;
   r.send("refine_resource",{requestId:"capstone_refine_07",expected:"mat_raw_stone_7"});
   await until(()=>active.event("resource_result",v=>v.item==="mat_metal_7"),"refine ore for the kiln");
@@ -188,11 +201,50 @@ try{
   active.room.send("move",{x:-4,z:-17});
   await until(()=>Math.hypot(active.me().x+4,active.me().z+17)<1.8,"walk to the forest gate",18000);
   active.room.send("warp",{portalId:"village_to_forest"});
-  await until(()=>active.me().mapId==="forbidden_forest","enter original forest",10000);
+  await until(()=>active.me().mapId==="forbidden_forest" && active.event("warp_complete",v=>v.mapId==="forbidden_forest"),"enter original forest",10000);
   active.room.send("move",{x:7,z:9.3});
   await until(()=>Math.hypot(active.me().x-7,active.me().z-7)<3.4,"walk beside the original east tree",15000);
   const start=active.events.length;
   active.room.send("harvest_resource",{node:"forbidden_forest/tree-east-1",requestId:"test_existing_tree_001"});
   await until(()=>active.events.slice(start).some(e=>e.type==="resource_result"&&e.data.item==="mat_raw_wood_1"),"cut original forest scenery");
-  console.log("PERSONAL GEAR PASS: crafting, sockets, salvage with card return and durable retry, world refining and harvesting.");
+  for(const [characterSlot,path,name,weapon] of [[2,"blade","เงาฝึกหัด","wp_shadow_1"],[3,"sentinel","ทวนฝึกหัด","wp_pike_1"]]){
+    await active.room.leave();active=null;await delay(400);
+    active=await join({characterSlot,characterSetup:{name,build:{path,ancestry:"shrine"}}});
+    await until(()=>active.me().equippedWeaponId===weapon && active.me().maxMana===120+active.catalog[weapon].stats.mana,"starting gear for "+path);
+    const builds=active.event("gear_guides",g=>g.path===path).builds;
+    assert(builds.every(build=>build.slots.find(s=>s.position==="mainHand")?.id===weapon && build.maxMana>active.me().maxMana));
+  }
+  const ring="acc_ring_atk_1",ringDef=active.catalog[ring],prefix3=active.me().characterId;
+  assert.equal(ringDef.copyLimit,2);
+  await active.room.leave();active=null;await delay(400);
+  seedMaterials(prefix3,"ทวนฝึกหัด","sentinel",[...ringDef.recipe.map(r=>[r.item,r.qty*3]),["mat_metal_1",1],["card_possessed",1],["ref_flux_1",1]],1);
+  active=await join({characterSlot:3});
+  let pairBag;
+  for(let n=1;n<=2;n++){
+    active.room.send("craft_weapon",{recipeId:ring,requestId:"paired_ring_craft_0"+n});
+    pairBag=await until(()=>active.event("inventory_state",v=>v.slots.filter(s=>s?.itemId===ring).length===n),"craft ring "+n);
+  }
+  const pair=pairBag.slots.filter(s=>s?.itemId===ring),stamps=pair.map(s=>s.forge.instanceId+"."+s.forge.revision);
+  assert.notEqual(stamps[0],stamps[1]);
+  active.room.send("craft_weapon",{recipeId:ring,requestId:"paired_ring_limit_03"});
+  await until(()=>active.event("economy_error",e=>e.reason==="accessory_limit"),"third ring rejected");
+  const firstSlot=pairBag.slots.indexOf(pair[0]);
+  active.room.send("card_socket",{requestId:"paired_ring_drill_01",target:firstSlot,gear:ring,stamp:stamps[0],expected:"sealed",action:"drill",card:null});
+  await until(()=>active.event("inventory_state",v=>v.slots[firstSlot]?.socket===null),"drill only the first ring");
+  active.room.send("card_socket",{requestId:"paired_ring_insert_01",target:firstSlot,gear:ring,stamp:stamps[0],expected:"empty",action:"insert",card:"card_possessed"});
+  await until(()=>active.event("inventory_state",v=>v.slots[firstSlot]?.socket==="card_possessed"),"install card in first ring");
+  active.room.send("forge_weapon",{requestId:"paired_ring_forge_01",slot:firstSlot,stamp:stamps[0],action:"enhance"});
+  const forged=await until(()=>active.event("inventory_state",v=>v.slots[firstSlot]?.forge?.rank===1),"enhance only the first ring");
+  stamps[0]=forged.slots[firstSlot].forge.instanceId+"."+forged.slots[firstSlot].forge.revision;
+  await setTestGear(active,firstSlot,"leftRing",ring,stamps[0]);
+  await setTestGear(active,pairBag.slots.indexOf(pair[1]),"rightRing",ring,stamps[1]);
+  const unequipped=await setTestGear(active,null,"leftRing",ring,stamps[0]);
+  const swapped=await setTestGear(active,unequipped.slots.findIndex(s=>s?.forge?.instanceId===pair[0].forge.instanceId),"rightRing",ring,stamps[0]);
+  await setTestGear(active,swapped.slots.findIndex(s=>s?.forge?.instanceId===pair[1].forge.instanceId),"leftRing",ring,stamps[1]);
+  await active.room.leave();active=null;await delay(400);active=await join({characterSlot:3});
+  assert.equal(active.bag.equipmentForges.rightRing.instanceId,pair[0].forge.instanceId);
+  assert.equal(active.bag.equipmentForges.leftRing.instanceId,pair[1].forge.instanceId);
+  assert.equal(active.bag.equipmentForges.rightRing.rank,1);assert.equal(active.bag.equipmentForges.leftRing.rank,0);
+  assert.equal(active.bag.equipmentSockets.rightRing,"card_possessed");assert.equal(active.bag.equipmentSockets.leftRing,undefined);
+  console.log("PERSONAL GEAR PASS: crafting, sockets, salvage, harvesting and two separately equipped rings after reconnect.");
 }finally{if(active)await active.room.leave();}

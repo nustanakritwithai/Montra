@@ -1,6 +1,6 @@
 import {randomInt} from "node:crypto";
 import {REGIONAL_BOSSES} from "./RegionalBosses.js";
-import {PERSONAL_ITEMS,BOSS_GEAR_CHANCE,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
+import {PERSONAL_ITEMS,BOSS_GEAR_CHANCE,monsterCardFor,type CardId,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
 import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
 import {TEMPLE_ID,TEMPLE_MAP,TEMPLE_SPAWNS} from "./TempleMap.js";
 import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS,RIFT_WARDEN} from "./WorldAtlas.js";
@@ -69,7 +69,7 @@ for(const id of Object.keys(PERSONAL_ITEMS) as PersonalId[]){
 }
 export function huntDetails(mob:Hunt){
   const map=getWorldMap(mob.mapId)??ATLAS_MAPS[mob.mapId]??(mob.mapId===TEMPLE_ID?TEMPLE_MAP:undefined);
-  return {monster:mob.name,level:mob.level,mapId:mob.mapId,map:map?.name??mob.mapId,
+  return {id:mob.id,monster:mob.name,level:mob.level,mapId:mob.mapId,map:map?.name??mob.mapId,
     open:mob.mapId==="ritual_village"||Boolean(WORLD_EXPANSION&&getWorldMap(mob.mapId))};
 }
 export function findItemHunt(id:PersonalId,playerLevel:number){
@@ -80,26 +80,39 @@ export function findItemHunt(id:PersonalId,playerLevel:number){
   }
   return best? huntDetails(best):null;
 }
+export const cardHunts=new Map<CardId,ReturnType<typeof huntDetails>>();
+for(const mob of hunts){
+  const card=monsterCardFor(mob.id,mob.level);
+  if(!card)continue;
+  const candidate=huntDetails(mob),previous=cardHunts.get(card);
+  if(!previous || (candidate.open!==previous.open?candidate.open:candidate.level<previous.level))cardHunts.set(card,candidate);
+}
+export function cardHunt(card:CardId){return cardHunts.get(card)??null;}
 const catalog=Object.entries(PERSONAL_ITEMS).map(([id,item])=>{
   const hunt=findItemHunt(id as PersonalId,item.level??1);
+  const source=hunt??(item.kind==="card"?cardHunt(id as CardId):null);
   const rate=item.sourceBoss?(item.forge?" · โอกาส "+BOSS_GEAR_CHANCE+"% เมื่อเลเวลถึงและยังไม่มีชิ้นนี้":" · ได้ 1 ชิ้นเมื่อชนะ"):"";
-  return [id,hunt?{...item,dropHint:hunt.monster+" Lv."+hunt.level+" · "+hunt.map+rate+(hunt.open?"":" · พื้นที่ยังไม่เปิด")}:item] as const;
+  const dropHint=hunt?hunt.monster+" Lv."+hunt.level+" · "+hunt.map+rate+(hunt.open?"":" · พื้นที่ยังไม่เปิด"):undefined;
+  return [id,source?{...item,dropHint,huntTarget:{id:source.id,monster:source.monster,mapId:source.mapId,open:source.open}}:item] as const;
 });
 export const CATALOG_PAGES=Array.from({length:Math.ceil(catalog.length/16)},(_,i)=>Object.fromEntries(catalog.slice(i*16,i*16+16)));
 
 export const MAX_LOOT_MISSES=3;
-export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<string>,playerLevel:number,misses:number,tier:string,draw:(max:number)=>number=randomInt,partialStacks?:ReadonlySet<string>){
+export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<string>|ReadonlyMap<string,number>,playerLevel:number,misses:number,tier:string,draw:(max:number)=>number=randomInt,partialStacks?:ReadonlySet<string>){
   const table=tables.get(monsterId);
   if(!table)return null;
   const candidates=table.gear.filter(id=>{
-    const def=PERSONAL_ITEMS[id];return (def.path==="all" || def.path===path) && !owned.has(id);
+    const def=PERSONAL_ITEMS[id];
+    const available="get" in owned?(owned.get(id)??0)<(def.copyLimit??1):!owned.has(id);
+    return (def.path==="all" || def.path===path) && available;
   });
-  const ownedGear=[...owned].map(id=>PERSONAL_ITEMS[id as PersonalId]).filter(def=>def?.forge && def.level!<=playerLevel && (def.path==="all"||def.path===path));
+  const ownedGear=[...owned.keys()].map(id=>({def:PERSONAL_ITEMS[id as PersonalId],count:"get" in owned?owned.get(id)!:1}))
+    .filter(({def})=>def?.forge && def.level!<=playerLevel && (def.path==="all"||def.path===path));
   const useful=candidates.filter(id=>{
     const def=PERSONAL_ITEMS[id];
     if(def.level!>playerLevel || !def.recommended?.includes(path))return false;
     const slots=def.kind==="earring"||def.kind==="ring"?2:1;
-    return ownedGear.filter(other=>other.kind===def.kind && other.level!>=def.level!).length<slots;
+    return ownedGear.reduce((n,{def:other,count})=>n+(other.kind===def.kind && other.level!>=def.level!?count:0),0)<slots;
   });
   const chance=tier==="boss"?100:tier==="elite"?60:tier==="strong"?40:25;
   const guaranteed=useful.length>0 && misses===MAX_LOOT_MISSES;
