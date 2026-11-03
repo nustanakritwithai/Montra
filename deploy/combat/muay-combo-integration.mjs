@@ -9,7 +9,7 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn,label,timeout=12000){const end=Date.now()+timeout;while(Date.now()<end){const result=fn();if(result)return result;await sleep(35);}throw Error("timeout: "+label);}
 const token="mt1_"+randomBytes(32).toString("hex"),id=createHash("sha256").update(token).digest("hex");
 const slots=Array(12).fill(null);slots[0]={itemId:"health_potion",quantity:3};slots[1]={itemId:"muay_wraps",quantity:1};
-await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"นักมวยทดลอง",level:5,experience:0,pkKills:0,pkDeaths:0,x:0,y:0,z:0,hp:240,mapId:"ritual_village",build:{path:"muay_boran",ancestry:"woodland"},muayWrapGranted:true,muayBook:{learned:[],training:{strikes:10,blocks:1},slots:["step","punch","guard","counter"]},inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
+await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"นักมวยทดลอง",level:5,experience:0,pkKills:0,pkDeaths:0,x:0,y:0,z:0,hp:240,mapId:"ritual_village",build:{path:"muay_boran",ancestry:"woodland"},muayWrapGranted:true,muayBook:{learned:["step","punch","teep"],training:{strikes:10,blocks:1},slots:["step","punch","guard","counter"]},inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
 const client=new Client(url),room=await client.create("my_room",{guestToken:token,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1});
 const events=[];room.onMessage("*",(type,data)=>events.push({type,data}));
 const me=()=>room.state?.players?.get(room.sessionId),book=()=>JSON.parse(me().muayBookData);
@@ -17,6 +17,9 @@ const seen=(type,predicate=()=>true)=>events.find(event=>event.type===type && pr
 try {
  await until(()=>me()?.persistent && room.state.muayBookCatalog,"join");
  room.send("muay_book",{action:"school",school:"korat"});await until(()=>book().school==="korat","select school");
+ for(const [slot,skillId] of ["step","punch"].entries()){
+   await sleep(600);room.send("muay_book",{action:"equip",slot,skillId});await until(()=>book().slots[slot]===skillId,"equip "+skillId);
+ }
  await sleep(600);room.send("muay_book",{action:"equip",slot:2,skillId:"teep"});await until(()=>book().slots[2]==="teep","equip kick");
  room.send("move",{x:1,z:7.5});await until(()=>Math.hypot(me().x,me().z)>6.4,"leave shrine");
  room.send("muay_skill",{skillId:"step",targetId:"possessed-1"});await until(()=>seen("muay_combo",e=>e.count===1 && e.next==="kick"),"first combo step");

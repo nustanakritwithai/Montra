@@ -54,7 +54,7 @@ import { BLADE_LESSONS, BLADE_PRACTICE_LABELS, BLADE_RANKABLE_SKILLS, bladePoint
 import { SENTINEL_LESSONS, SENTINEL_PRACTICE_LABELS, SENTINEL_RANKABLE_SKILLS, SENTINEL_CONTROL, sentinelPoints, newSentinelBook, validateSentinelBook, type SentinelBook, type SentinelLesson, type SentinelSkillId } from "./SentinelRules.js";
 import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
-import { MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
+import { isMuayFoundation, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
 import { parseCraft, parseForge, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
@@ -1205,7 +1205,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!snapshot) return this.reject(client,"build_unavailable");
     this.pendingWarps.add(id);
     const task=characterStore.save({...snapshot,occultBook:next}).then(()=>{
-      this.occultBooks.set(id,next);this.sendOccultBook(client);
+      this.occultBooks.set(id,next);
+      if (!this.legacyCombatRoom()) {
+        if (player.possessionActive && !this.canPrepareSpirit(id,path,true)) this.endPossession(id,"loadout_changed");
+        if (this.state.summons.has(id) && !this.canPrepareSpirit(id,path,false)) this.despawnSummon(id,"loadout_changed");
+      }
+      this.sendOccultBook(client);
       try {client.send("occult_book_changed",{action});} catch(error) {console.warn("MONTRA occult book confirmation was not delivered",error);}
     },error=>{console.error("MONTRA occult book save failed",error);this.reject(client,"occult_book_save_failed");})
       .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
@@ -1443,7 +1448,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const skillId=input.skillId as string;
       if(!Object.hasOwn(MUAY_LESSONS,skillId))return this.reject(client,"invalid_muay_book");
       const lesson=MUAY_LESSONS[skillId as MuayLessonId];
-      if(lesson.school!==next.school)return this.reject(client,"muay_wrong_school");
+      if(!isMuayFoundation(skillId) && lesson.school!==next.school)return this.reject(client,"muay_wrong_school");
       if(next.learned.includes(skillId as MuayLessonId))return this.reject(client,"muay_book_already_learned");
       if(player.level<lesson.level)return this.reject(client,"muay_book_level");
       if(next.learned.length+skillRankCost(next.ranks)>=muayPoints(player.level))return this.reject(client,"muay_book_no_points");
@@ -1471,8 +1476,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       next.school=selected;next.slots=[...next.loadouts[selected]];
     } else if(action==="equip") {
       const skillId=input.skillId as MuaySkillId|null;
-      if(skillId!==null && (!Object.hasOwn(MUAY_SKILLS,skillId) || (!MUAY_BASE_SKILLS.some(skill=>skill===skillId) &&
-        (!next.learned.includes(skillId as MuayLessonId) || MUAY_LESSONS[skillId as MuayLessonId].school!==next.school))))return this.reject(client,"muay_skill_locked");
+      if(skillId!==null && (!Object.hasOwn(MUAY_SKILLS,skillId) || !next.learned.includes(skillId as MuayLessonId) ||
+        (!isMuayFoundation(skillId) && MUAY_LESSONS[skillId as MuayLessonId].school!==next.school)))return this.reject(client,"muay_skill_locked");
       for(let i=0;i<next.slots.length;i++)if(skillId!==null && next.slots[i]===skillId)next.slots[i]=null;
       next.slots[input.slot as number]=skillId;
       next.loadouts[next.school]=[...next.slots];
@@ -1603,7 +1608,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (equippedWeaponId(this.inventories.get(id))!==MUAY_WRAP_ID) return this.reject(client,"muay_wrap_required");
     const book=this.muayBooks.get(id);
     if (!book) return this.reject(client,"muay_class_required");
-    if (Object.hasOwn(MUAY_LESSONS,skillId) && (!book?.learned.includes(skillId as MuayLessonId) || MUAY_LESSONS[skillId as MuayLessonId].school!==book.school)) return this.reject(client,"muay_skill_locked");
+    if (!book.slots.includes(skillId) || !book.learned.includes(skillId as MuayLessonId) || (!isMuayFoundation(skillId) && MUAY_LESSONS[skillId as MuayLessonId].school!==book.school)) return this.reject(client,"muay_skill_locked");
     if (player.flying || !onMapGround(player)) return this.reject(client,"flying");
     if (isRestArea(player.mapId,player)) return this.reject(client,"muay_safe_area");
     const now=Date.now();
@@ -2495,6 +2500,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     cast_class_skill: (client: Client, message: unknown) => {
       if(this.blockMounted(client))return;
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_build");
+      if (!this.legacyCombatRoom()) return this.reject(client,"use_learned_skill");
       this.castClassSkill(client);
     },
     allocate_stat: (client: Client, _message: unknown) => this.reject(client, "automatic_stats"),
@@ -2944,6 +2950,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!isOccultPath(player.pathId))return this.reject(client,"occult_class_required");
       if(!this.gates.get(id)?.possession.consume(this.simulatedMs))return this.reject(client,"possession_rate_limited");
       if(player.possessionActive){this.endPossession(id,"cancelled");return;}
+      if(!this.legacyCombatRoom() && !this.canPrepareSpirit(id,player.pathId,true))return this.reject(client,"occult_skill_locked");
       if(POSSESSION_BUFF.requiresSummon && !this.state.summons.has(id))return this.reject(client,"possession_needs_summon");
       if(possessionCoolingDown(this.persistentCharacters.get(id)))return this.reject(client,"possession_cooldown");
       const result=this.buffs.activate(id,this.simulatedMs);
@@ -3050,6 +3057,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = client.sessionId, caster = this.spellCaster(client);
     if (!caster) return;
     if (!isOccultPath(caster.pathId)) return this.reject(client, "occult_class_required");
+    if (!this.legacyCombatRoom()) return this.reject(client,"occult_skill_locked");
     const target = this.getMonster(order.targetId);
     if (!target?.alive || !this.sameCombatMap(id, target.id)) return this.reject(client, "target_unavailable");
     if (distance3d(caster, target) > TALISMAN.range) return this.reject(client, "talisman_out_of_range");
@@ -3073,6 +3081,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = client.sessionId, shooter = this.spellCaster(client);
     if (!shooter) return;
     if (!isOccultPath(shooter.pathId)) return this.reject(client, "occult_class_required");
+    if (!this.legacyCombatRoom()) return this.reject(client,"occult_skill_locked");
     const targetId = monsterOrder ? monsterOrder.targetId : pkOrder!.targetId;
     if (targetId === id) return this.reject(client, "self_attack");
     if (!this.sameCombatMap(id, targetId)) return this.reject(client, "target_unavailable");
@@ -3131,6 +3140,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }, { afterNextPatch:true });
   }
 
+  private legacyCombatRoom():boolean {
+    return process.env.MONTRA_ACCOUNTS_REQUIRED==="0" && process.env.NODE_ENV!=="production";
+  }
+  private canPrepareSpirit(id:string, path:OccultPath, tranceOnly:boolean):boolean {
+    const book=this.occultBooks.get(id);
+    return Boolean(book?.loadouts[path].some(skill=>skill && book.learned[path].includes(skill) &&
+      (tranceOnly ? OCCULT_LESSONS[skill].effect==="trance" :
+      ["spirit","spirit_bind","spirit_heal","spirit_ward","trance"].includes(OCCULT_LESSONS[skill].effect))));
+  }
   private summonSpirit(client: Client, message: unknown, kind: "guardian" | "pot_spirit") {
     if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
     if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
@@ -3140,6 +3158,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const owner = this.state.players.get(id);
     if (!owner || !owner.alive) return this.reject(client, "not_alive");
     if (!isOccultPath(owner.pathId)) return this.reject(client, "occult_class_required");
+    if (!this.legacyCombatRoom() && (kind!=="pot_spirit" || !this.canPrepareSpirit(id,owner.pathId,false))) return this.reject(client,"occult_skill_locked");
     if (owner.possessionActive) return this.reject(client, "possession_active");
     if (this.state.summons.has(id)) return this.reject(client, "summon_limit");
     if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import {randomBytes} from "node:crypto";
+import {writeFile} from "node:fs/promises";
+import {createHash,randomBytes} from "node:crypto";
 import path from "node:path";
 import {Client} from "@colyseus/sdk";
 
@@ -10,6 +11,9 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn,label,timeout=12000) { const end=Date.now()+timeout; while(Date.now()<end) { const result=fn(); if(result)return result; await sleep(35); } throw Error("timeout: "+label); }
 const token="mt1_"+randomBytes(32).toString("hex"), client=new Client(url);
 const options={guestToken:token,characterSlot:1,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1};
+// Start with an empty fifth-level save so all three training points are earned but unspent.
+const id=createHash("sha256").update(token).digest("hex");
+await writeFile(path.join(directory,id+".json"),JSON.stringify({version:1,id,name:"นักมวยทดลอง",level:5,experience:0,pkKills:0,pkDeaths:0,x:0,y:0,z:0,hp:250,mapId:"ritual_village",updatedAt:new Date().toISOString()}),{flag:"wx"});
 let room=await client.create("my_room",options);
 try {
   let events=[];
@@ -32,7 +36,14 @@ try {
   events=[]; room.send("get_inventory",{});
   const switched=await until(()=>seen("inventory_state")?.data,"inventory after switch");
   assert.equal(switched.slots.filter(item=>item?.itemId==="muay_wraps").length,1);
-  room.send("muay_skill",{skillId:"guard"});
+  const book=()=>JSON.parse(me().muayBookData);
+  assert.deepEqual(book().slots,[null,null,null,null]);
+  room.send("muay_skill",{skillId:"guard"});await until(()=>seen("command_rejected",e=>e.reason==="muay_skill_locked"),"unlearned guard");
+  for(const [slot,skillId] of ["guard","step","counter"].entries()){
+    await sleep(1200);room.send("muay_book",{action:"learn",skillId});await until(()=>book().learned.includes(skillId),"learn "+skillId);
+    await sleep(1200);room.send("muay_book",{action:"equip",slot,skillId});await until(()=>book().slots[slot]===skillId,"equip "+skillId);
+  }
+  await sleep(600);room.send("muay_skill",{skillId:"guard"});
   await until(()=>seen("command_rejected",e=>e.reason==="muay_safe_area"),"safe area");
   room.send("move",{x:1,z:7.5});
   await until(()=>Math.hypot(me().x,me().z)>6.4,"leave shrine");
