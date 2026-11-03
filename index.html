@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=0.9.7-account-entry" />
+  <link rel="stylesheet" href="./styles.css?v=0.9.8-guest-skills" />
 </head>
 <body>
   <section id="accountEntry" class="account-entry" aria-label="เข้าสู่ระบบ MONTRA"><div id="accountCard" class="account-card" role="dialog" aria-modal="true"><strong>MONTRA</strong><p>กำลังเตรียมหน้าเข้าสู่ระบบ…</p></div></section>
@@ -43,6 +43,8 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <button id="warpButton" class="warp-button" type="button" hidden></button>
     <button id="siegeGateButton" class="warp-button" type="button" hidden></button>
+    <button id="climb" class="warp-button climb-context" type="button" title="ปีนหรือไต่ลงกำแพง" hidden><span aria-hidden="true">⇧</span> <span>ปีน</span></button>
+    <button id="fly" class="warp-button flight-context" type="button" aria-pressed="false" hidden><span aria-hidden="true">✦</span> <span>ลงจอด</span></button>
     <div id="warpLoading" class="warp-loading" role="status" hidden>กำลังเดินทาง…</div>
     <div class="tap-tip">แตะพื้นเดิน · ปัดเหนือสกิลเพื่อพุ่ง · กดบินขึ้นระดับสูงแล้วแตะพื้นเพื่อเคลื่อนที่</div>
 
@@ -64,8 +66,6 @@
         <button id="attack" class="skill" type="button"><span class="glyph red">⚔</span><span>โจมตี</span></button>
         <button id="shoot" class="skill" type="button" aria-pressed="false" aria-label="ข้าวสารปลุกเสก" title="ข้าวสารปลุกเสก · แตะเป้าหมายเพื่อซัดข้าวสาร" hidden><span class="glyph amber" aria-hidden="true">⁙</span><span>ซัดข้าวสาร</span></button>
         <button id="talisman" class="skill" type="button" aria-pressed="false" aria-label="ยันอาคมของขลัง" title="ยันอาคมของขลัง · แปะยันต์บนมอนสเตอร์ระยะประชิด" hidden><span class="glyph red" aria-hidden="true">◇</span><span>แปะยันต์</span></button>
-        <button id="climb" class="skill" type="button" title="ปีนหรือไต่ลงกำแพง"><span class="glyph amber">⇧</span><span>ปีน</span></button>
-        <button id="fly" class="skill" type="button" aria-pressed="false" title="บินขึ้นระดับ 6 เมตร หรือกดลงจอด"><span class="glyph sky">✦</span><span>บิน</span></button>
         <button id="classSkill" class="skill" type="button" hidden><span class="glyph violet">✧</span><span>วิชา</span></button>
         <button id="bag" class="skill" type="button" title="ยาเลือดและชุดอาวุธถาวร"><span class="glyph dark">▣</span><span>ไอเท็ม</span></button>
       </div>
@@ -96,7 +96,7 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js"></script>
   <script src="./audio.js?v=0.9.6-skill-fx-terrain" defer></script>
-  <script src="./account-entry.js?v=1" defer></script>
-  <script src="./main.js?v=0.9.7-account-entry" defer></script>
+  <script src="./account-entry.js?v=2" defer></script>
+  <script src="./main.js?v=0.9.8-guest-skills" defer></script>
 </body>
 </html>

@@ -1,0 +1,52 @@
+import assert from "node:assert/strict";
+import path from "node:path";
+import { randomBytes } from "node:crypto";
+import { Client } from "@colyseus/sdk";
+const url=process.env.MONTRA_TEST_URL,dir=process.env.MONTRA_CHARACTER_DIR;
+if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url||"") || new URL(url).port==="4108" || !dir || !/^montra-(guest|account)-test-/.test(path.basename(dir)))throw Error("Requires isolated server and disposable account test directory");
+const sdk=new Client(url),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const api=async(route,body,session)=>{const r=await fetch(url+"/montra/account/"+route,{method:body?"POST":"GET",headers:{...(body?{"content-type":"application/json"}:{}),...(session?{authorization:"Bearer "+session}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,body:await r.json()};};
+async function until(fn,label){const end=Date.now()+10000;while(Date.now()<end){const value=fn();if(value)return value;await sleep(40);}throw Error("timeout: "+label);}
+const flags={worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1};
+const request=()=>randomBytes(16).toString("hex");
+let room;
+try {
+  const created=await api("guest",{});assert.equal(created.status,200);
+  const {guestKey,session}=created.body,login=await api("guest-login",{guestKey});assert.equal(login.status,200);
+  const slots=await api("slots",null,session);assert.equal(slots.body.guest,true);
+  const slot=slots.body.slots[0], payload={slot:1,revision:slot.revision,name:"ทดสอบ"};
+  const join=async setup=>{
+    room=await sdk.create("my_room",{...flags,accountSession:session,characterSlot:1,...(setup?{characterSetup:setup}:{})});
+    room.onMessage("*",()=>{});
+    await until(()=>room.state?.players?.get(room.sessionId)?.persistent,"join");
+  };
+  const send=async(type,data,want)=>{let answer;room.onMessage(want,message=>{answer=message ?? {empty:true};});room.send(type,data);return await until(()=>answer,want);};
+  const leave=async()=>{await room.leave();room=null;await sleep(400);};
+  await join({name:"ทดสอบ",build:{path:"blade",ancestry:"shrine"}});
+  assert.equal((await send("fly",{},"command_rejected")).reason,"flight_class_required");
+  assert.equal((await api("delete-character",payload,session)).body.error,"character_online");
+  await send("guild_create",{name:"Guild"+randomBytes(3).toString("hex")},"guild_state");
+  const listing=await send("market_create",{requestId:request(),slot:0,amount:1,price:10},"market_result");
+  await leave();
+  assert.equal((await api("delete-character",payload,session)).body.error,"character_in_guild");
+  await join();await send("guild_leave",{},"guild_state");await leave();
+  assert.equal((await api("delete-character",payload,session)).body.error,"character_has_listings");
+  await join();await send("market_cancel",{requestId:request(),listingId:listing.listingId},"market_result");await leave();
+  assert.equal((await api("delete-character",{...payload,name:"wrong"},session)).body.error,"confirm_name_mismatch");
+  assert.equal((await api("delete-character",payload,session)).status,200);
+  assert.equal((await api("delete-character",payload,session)).body.error,"slot_changed");
+  const after=await api("slots",null,session);assert.equal(after.body.slots[0].occupied,false);assert.notEqual(after.body.slots[0].revision,slot.revision);
+  await join({name:"ตัวใหม่",build:{path:"seer",ancestry:"shrine"}});
+  assert.equal(room.state.players.get(room.sessionId).pathId,"seer");
+  await send("fly",{},"flight_started");
+  await until(()=>room.state.players.get(room.sessionId)?.combatState==="idle" && room.state.players.get(room.sessionId)?.flying,"occult flight");
+  await send("fly",{},"flight_started");
+  await until(()=>room.state.players.get(room.sessionId)?.flying===false,"safe landing");
+  await leave();
+  const username="guest_"+randomBytes(4).toString("hex"),password="upgrade-password-123";
+  assert.equal((await api("guest-upgrade",{username,password},session)).status,200);
+  assert.equal((await api("guest-login",{guestKey})).status,400);
+  const account=await api("login",{username,password}),restored=await api("slots",null,account.body.session);
+  assert.equal(restored.body.guest,false);assert.equal(restored.body.slots[0].name,"ตัวใหม่");
+  console.log("MONTRA guest and deletion integration passed");
+} finally {if(room)try{await room.leave();}catch{}}

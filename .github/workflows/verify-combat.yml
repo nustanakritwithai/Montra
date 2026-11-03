@@ -31,6 +31,7 @@ jobs:
           cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
           cp deploy/combat/AccountStore.ts deploy/combat/AccountService.ts deploy/combat/AccountRoutes.ts deploy/combat/account-store.test.ts combat-verify/src/rooms/
           cp deploy/combat/account-integration.mjs combat-verify/account-integration.mjs
+          cp deploy/combat/guest-delete-integration.mjs combat-verify/guest-delete-integration.mjs
           cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
           cp deploy/combat/GameRules.ts combat-verify/src/rooms/GameRules.ts
           cp deploy/combat/DashRules.ts combat-verify/src/rooms/DashRules.ts
@@ -358,6 +359,7 @@ jobs:
           trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for n in {1..60}; do if curl -s -o /dev/null "$MONTRA_TEST_URL/montra/account/slots"; then break; fi; sleep 1; done
           node account-integration.mjs
+          node guest-delete-integration.mjs
 
       - name: Check class balance fixtures
         shell: bash

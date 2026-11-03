@@ -101,3 +101,34 @@ test("all six paths create a persistent character with a usable starter weapon",
     }
   } finally {characters.close();await rm(dir,{recursive:true,force:true});}
 });
+
+test("guest recovery and conversion preserve character identities and revoke other sessions", async () => {
+  const dir=await mkdtemp(path.join(tmpdir(),"montra-guest-account-")), store=new AccountStore(path.join(dir,"accounts.sqlite"));
+  try {
+    const guest=store.createGuest(),initial=store.resolve(guest.session)!;
+    assert.equal(initial.guest,true);
+    const other=store.guestLogin(guest.guestKey);
+    assert.deepEqual(store.resolve(other.session)?.characterIds,initial.characterIds);
+    await store.upgradeGuest(guest.session,"guest_upgrade","upgrade-password-123");
+    assert.equal(store.resolve(other.session),null);
+    assert.throws(()=>store.guestLogin(guest.guestKey),/invalid_guest_key/);
+    const login=await store.login("guest_upgrade","upgrade-password-123");
+    assert.equal(store.resolve(login.session)?.guest,false);
+    assert.deepEqual(store.resolve(login.session)?.characterIds,initial.characterIds);
+  } finally {store.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test("retiring slots cannot be reversed by reusing the old guest token",async()=>{
+  const dir=await mkdtemp(path.join(tmpdir(),"montra-retired-account-")),store=new AccountStore(path.join(dir,"accounts.sqlite"));
+  try {
+    const legacy="mt1_"+"63".repeat(32);
+    await store.register("retired_user","retired-password-123",legacy);
+    const session=(await store.login("retired_user","retired-password-123")).session,first=store.resolve(session)!;
+    for(const slot of CHARACTER_SLOTS)store.retireCharacter(first.accountId,slot,first.characterIds[slot-1]);
+    const changed=store.resolve(session)!;
+    assert.equal(changed.accountId,first.accountId);
+    assert.ok(changed.characterIds.every(id=>!first.characterIds.includes(id)));
+    assert.throws(()=>store.retireCharacter(first.accountId,1,first.characterIds[0]),/slot_changed/);
+    await assert.rejects(store.register("another_user","another-password-123",legacy),/legacy_already_linked/);
+  } finally {store.close();await rm(dir,{recursive:true,force:true});}
+});

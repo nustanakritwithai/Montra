@@ -314,6 +314,14 @@ export class CharacterStore {
     }));
   }
 
+  /** Called only after the account mapping was retired while the account lease is held. */
+  async eraseCharacter(id:string):Promise<void> {
+    this.guardLegacyMode();
+    if(this.economyEnabled)this.economy.eraseCharacter(id);
+    try { await unlink(this.location(id)); }
+    catch(error) { if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error; }
+  }
+
   async save(character: CharacterSnapshot): Promise<void> {
     const snapshot = validateSnapshot(character, character.id);
     this.guardLegacyMode();

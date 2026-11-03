@@ -120,6 +120,21 @@ export class EconomyStore {
     return this.account(id);
   }
   getAccount(id: string): Account { return this.account(id); }
+  hasOpenListings(id:string):boolean {
+    characterId(id);
+    return Boolean(this.db.prepare("SELECT 1 FROM listings WHERE seller=? AND state='open' LIMIT 1").get(id));
+  }
+  /** A character cannot be retired while another player can buy its listings. */
+  eraseCharacter(id:string):void {
+    characterId(id);
+    this.transaction(()=>{
+      if(this.hasOpenListings(id))throw new Error("character_has_listings");
+      this.db.prepare("DELETE FROM listings WHERE seller=?").run(id);
+      this.db.prepare("DELETE FROM receipts WHERE actor=?").run(id);
+      this.db.prepare("DELETE FROM characters WHERE id=?").run(id);
+      this.db.prepare("DELETE FROM accounts WHERE id=?").run(id);
+    });
+  }
   list(id?: string): Listing[] {
     if (id !== undefined) characterId(id);
     const latest=this.db.prepare("SELECT id,seller,item,price,state FROM listings WHERE state='open' ORDER BY rowid DESC LIMIT 100").all();
