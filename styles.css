@@ -919,3 +919,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   background: linear-gradient(180deg, #fffaf0 0%, #fbe9c4 100%); border: 2px solid #c8962e; border-radius: 14px;
   box-shadow: 0 0 0 2px #2a1606, 0 3px 0 2px #2a1606, 0 0 14px #ffc85a88; -webkit-font-smoothing: antialiased; }
 .ftxt.shout::after { bottom: -9px; margin-left: -7px; border-width: 7px; border-top-color: #c8962e; filter: drop-shadow(0 2px 0 #2a1606); }
+/* Brightness picker in the help & settings drawer. */
+.light-choice { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 12px; }
+.light-choice button { padding: 9px 4px; border-radius: 10px; border: 1px solid #5a4a32; background: #1c1610; color: #e9dcc2; font: 700 13px/1.2 "Noto Sans Thai", system-ui, sans-serif; }
+.light-choice button[aria-checked="true"] { background: linear-gradient(180deg, #f3c768, #c8902e); color: #2a1606; border-color: #f3d58c; }
