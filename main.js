@@ -8084,7 +8084,7 @@
         if((joined.state?.players?.get?.(data?.attackerId)?.mapId || "ritual_village") !== activeMapId)return;
         renderMagicBolt(data);
         { const thrower=avatars.get(data?.attackerId); if(thrower) SFX("rice",{x:thrower.x,z:thrower.z}); }
-        if(data?.attackerId===localId) {
+        if(data?.attackerId===localId && data.skill!=="basic_magic") {
           toast("ข้าวสารปลุกเสกโดนเป้าหมาย -" + data.damage + " HP");
         }
       });

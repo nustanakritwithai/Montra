@@ -2926,9 +2926,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.lastCombatMs.set(attackerId, this.simulatedMs);
       attacker.targetId = targetId;
 
-      const attackRange = monsterOrder ? RULES.playerAttackRange : RULES.pkAttackRange;
+      const attackRange = isOccultPath(attacker.pathId) ? FORT.rangedRange : monsterOrder ? RULES.playerAttackRange : RULES.pkAttackRange;
       // Wall/vertical separation cannot be solved by a ground-only chase.
-      if (meleeHeightBlocked(attacker,target,attackRange)) {
+      if (!isOccultPath(attacker.pathId) && meleeHeightBlocked(attacker,target,attackRange)) {
         this.attackTargets.delete(attackerId);
         attacker.targetId = "";
         return this.reject(client, "melee_height_blocked");
@@ -3640,20 +3640,22 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         player.targetId = targetId;
         player.facing = facingTo(dx, dz);
 
-        const attackRange = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
-        if (meleeHeightBlocked(player,target,attackRange)) {
+        const ranged = isOccultPath(player.pathId);
+        const attackRange = ranged ? FORT.rangedRange : isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
+        if (!ranged && meleeHeightBlocked(player,target,attackRange)) {
           this.endAttack(sessionId, player);
           continue;
         }
         const inRestArea=isMonster && isRestArea(player.mapId,player);
-        if (!inRestArea && distance <= attackRange) {
+        const clearShot = !ranged || this.combatSegmentClear(player.mapId,player,target);
+        if (!inRestArea && distance <= attackRange && clearShot) {
           player.combatState = "attacking";
           continue;
         }
 
         // Recalculate every fixed tick so moving players can be chased.
         // Never teleport, regardless of where the client taps.
-        const stopDistance = inRestArea ? 0 : attackRange - 0.4;
+        const stopDistance = inRestArea || !clearShot ? 0 : attackRange - 0.4;
         const ratio = Math.max(0, (distance - stopDistance) / distance);
         const approach = {
           x: clampToMap(player.x + dx * ratio, getWorldMap(player.mapId)!.bounds, "x"),
@@ -3733,7 +3735,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
 
       if (isMonster && isRestArea(attacker.mapId,attacker)) continue;
-      const range = isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
+      const ranged = isOccultPath(attacker.pathId);
+      const range = ranged ? FORT.rangedRange : isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
       if (distance3d(attacker,target)>range+.00001 || !this.combatSegmentClear(attacker.mapId,attacker,target))continue;
       attacker.facing = facingTo(target.x - attacker.x, target.z - attacker.z);
       attacker.combatState = "attacking";
@@ -3759,10 +3762,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       if (attacker.pathId === "muay_boran" && equippedWeaponId(this.inventories.get(attackerId)) === MUAY_WRAP_ID) this.recordMuayTraining(attackerId,"strikes");
 
-      const meleeBonus = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp").melee;
+      const bonuses = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp");
+      const meleeBonus = bonuses.melee;
       const swordMastery = (dualSword && this.swordTrees.get(attackerId)?.learned.includes("rhythm") ? 1.05 : 1) * (ambush ? (monster?1.5:1.2) : 1);
+      if (ranged) this.broadcast("ranged_hit", {
+        attackerId,targetId,skill:"basic_magic",
+        from:{x:attacker.x,y:attacker.y+FORT.shootOriginHeight,z:attacker.z},
+        to:{x:target.x,y:target.y+FORT.targetBodyHeight,z:target.z},
+      }, {afterNextPatch:true});
       if (monster) {
-        const meleeDamage = calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, monster.defense, monster.level);
+        const meleeDamage = ranged ? calculateDamage(attacker.magicAtk + bonuses.ranged,monster.defense,monster.level)
+          : calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, monster.defense, monster.level);
         monster.hp = Math.max(0, monster.hp - meleeDamage);
         monster.hitSeq += 1;
         this.broadcast("combat_hit", {
@@ -3777,7 +3787,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // FREE PK: health, range, damage, respawn and kill credit are wholly
       // server-owned. The client only submits another session's targetId.
       const victim = target as Player;
-      const meleeDamage = this.swordGuardDamage(targetId,attacker,calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, victim.def, victim.level));
+      const meleeDamage = this.swordGuardDamage(targetId,attacker,ranged
+        ? calculateDamage(attacker.magicAtk + bonuses.ranged,victim.magicDef,victim.level)
+        : calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, victim.def, victim.level));
       victim.hp = Math.max(0, victim.hp - meleeDamage);
       victim.hitSeq += 1;
       this.broadcast("pvp_hit", {
