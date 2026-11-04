@@ -5241,8 +5241,10 @@
   });
   let personalItems = Object.create(null), workbenchGold = 0, cardDrill=null, catalogRevision=0, gearGuides=null;
   let resources=null,resourceViewMap="",refineInput=2,resourceReadyAt=0,resourceChoice="",harvestFocus=null;
-  const resourceShapes=new Map();
+  const resourceShapes=new Map(),resourcePickers=new Map();
   function clearResourceView(){
+    for(const picker of resourcePickers.values())picker.dispose();
+    resourcePickers.clear();
     for(const s of resourceShapes.values()){
       if(s.marker)s.marker.dispose();
       if(s.original)continue;
@@ -5300,17 +5302,28 @@
       Number(!a.stock)-Number(!b.stock)||distance(a)-distance(b)||a.id.localeCompare(b.id));
   }
   function nearbyResource(me){
-    const near=nearbyResources(me);return near.find(n=>n.id===resourceChoice)||near[0];
+    const near=nearbyResources(me);return resourceChoice?near.find(n=>n.id===resourceChoice):near[0];
+  }
+  function syncResourcePickers(near){
+    const ids=new Set(near.map(n=>n.id));
+    for(const [id,picker] of resourcePickers)if(!ids.has(id)){picker.dispose();resourcePickers.delete(id);}
+    const terrain=worldDefinitions?.[activeMapId]?.terrain;
+    for(const n of near)if(!resourcePickers.has(n.id)){
+      const height=n.kind==="wood"?5:n.kind==="stone"?1.5:1;
+      const picker=B.MeshBuilder.CreateCylinder("เลือกแหล่งวัตถุดิบ",{height,diameter:Math.max(.8,n.radius*2),tessellation:8},scene);
+      picker.position.set(n.x,(terrain?terrainHeight(terrain,n.x,n.z):0)+height/2,n.z);
+      picker.visibility=.001;picker.isPickable=true;picker.metadata={resourceId:n.id};resourcePickers.set(n.id,picker);
+    }
+  }
+  function selectResource(node){
+    if(mode!=="live" || !node || resources?.mapId!==activeMapId)return;
+    resourceChoice=node.id;const me=ownServerCharacter();updateResourceHud(me);
+    if(!nearbyResources(me).some(n=>n.id===node.id))toast("เลือกจุดแล้ว · เดินเข้าใกล้เพื่อเก็บ");
   }
   function updateResourceHud(me){
     if(resourceViewMap!==activeMapId)renderResourceNodes();
-    const n=nearbyResource(me),button=$("harvestButton");
-    const near=n?nearbyResources(me):[],cycle=$("cycleHarvest");cycle.hidden=near.length<2;
-    if(!cycle.hidden){
-      const index=near.findIndex(s=>s.id===n.id);
-      cycle.textContent="สลับจุด "+(index+1)+"/"+near.length;
-      cycle.onclick=()=>{resourceChoice=near[(index+1)%near.length].id;updateResourceHud(ownServerCharacter());};
-    }
+    const near=nearbyResources(me);syncResourcePickers(near);
+    const n=resourceChoice?near.find(item=>item.id===resourceChoice):near[0],button=$("harvestButton");
     button.hidden=!n;
     if(harvestFocus)harvestFocus.setEnabled(Boolean(n));
     if(n){
@@ -8191,7 +8204,7 @@
       <div class="cb-log" role="button" tabindex="0" aria-label="แตะเพื่อพิมพ์แชท" aria-live="polite"></div>
       <form class="cb-form"><select class="cb-target" aria-label="ผู้รับ" hidden></select><input class="cb-input" maxlength="400" aria-label="ข้อความแชท" placeholder="แตะเพื่อพิมพ์" autocomplete="off" enterkeyhint="send"><button type="submit" class="cb-send" aria-label="ส่ง">➤</button></form>`;
     const harvestControls = document.createElement("div"); harvestControls.className = "chat-harvest";
-    harvestControls.append($("harvestButton"), $("cycleHarvest")); el.prepend(harvestControls);
+    harvestControls.append($("harvestButton")); el.prepend(harvestControls);
     game.append(el);
     const log = el.querySelector(".cb-log"), form = el.querySelector(".cb-form"), input = el.querySelector(".cb-input"), target = el.querySelector(".cb-target");
     const toggle=el.querySelector(".cb-open");
@@ -9924,6 +9937,7 @@
     const picked = scene.pick(px, py, mesh => mesh.isEnabled() && (
       mesh.metadata?.walkable === true ||
       mesh.metadata?.portalId || mesh.metadata?.swordMentor || mesh.metadata?.questRanger || mesh.metadata?.questDefense || mesh.metadata?.warQuartermaster || mesh.metadata?.serviceNpc ||
+      (mode === "live" && resourcePickers.get(mesh.metadata?.resourceId) === mesh) ||
       (mesh === enemy && enemy.isEnabled()) ||
       (mode === "live" && mesh.isEnabled() && forestMonsters.get(mesh.metadata?.monsterId) === mesh) ||
       (fortRoot.isEnabled() && mesh.metadata?.climbableWall) ||
@@ -9933,6 +9947,11 @@
     if (!picked?.hit) return;
     const hitMesh=picked.pickedMesh;
     if(hitMesh?.metadata?.stairId){requestClimb(hitMesh.metadata.stairId);return;}
+    if(hitMesh?.metadata?.resourceId){
+      const node=nearbyResources(ownServerCharacter()).find(n=>n.id===hitMesh.metadata.resourceId);
+      if(node)selectResource(node);
+      return;
+    }
     const otherId=hitMesh?.metadata?.pkPlayerId;
     if(hitMesh?.metadata?.serviceNpc){
       const me=ownServerCharacter(),npc=hitMesh.metadata.serviceNpc;
