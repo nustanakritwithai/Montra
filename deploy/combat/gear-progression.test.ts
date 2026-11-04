@@ -256,7 +256,9 @@ test("each named encounter owns its fragment and accessory; three fragments craf
       assert.equal(gear.recipe![0].item,t.fragment);assert.equal(gear.recipe![0].qty,3);
       assert.equal(rollMonsterLoot("forest_west_1","muay_boran",new Set(),100,0,"normal",()=>0)?.id===t.gear,false);
       const preview=CATALOG_PAGES.find(page=>page[t.gear])![t.gear];
-      assert("dropHint" in preview && preview.dropHint);assert.match(preview.dropHint,/20%/);
+      assert("dropHint" in preview && preview.dropHint);
+      assert.match(preview.dropHint,/อัตราดรอปอาจเปลี่ยนตามสภาพโลก/);
+      assert.doesNotMatch(preview.dropHint,/20%/);
       assert.equal(bossAccessoryReward(bag,boss,t.level-1,()=>0),null);
       assert.equal(bossAccessoryReward(bag,boss,t.level,()=>20),null);
       assert.equal(bossAccessoryReward(bag,"forest_west_1",100,()=>0),null);

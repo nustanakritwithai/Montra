@@ -169,6 +169,7 @@ jobs:
           cp deploy/combat/RebirthTransition.ts combat-verify/src/rooms/RebirthTransition.ts
           cp deploy/combat/ForestObjectives.ts combat-verify/src/rooms/ForestObjectives.ts
           cp deploy/combat/WorldDirector.ts combat-verify/src/rooms/WorldDirector.ts
+          cp deploy/combat/DynamicBalance.ts deploy/combat/HuntEvents.ts deploy/combat/HuntEventStore.ts deploy/combat/HuntEventPage.ts deploy/combat/HuntEventRoutes.ts deploy/combat/hunt-events.test.ts combat-verify/src/rooms/
           cp deploy/combat/TyphoonGuide.ts combat-verify/src/rooms/TyphoonGuide.ts
           cp deploy/combat/QuestAdvisor.ts combat-verify/src/rooms/QuestAdvisor.ts
           cp deploy/combat/GuideAnswers.ts combat-verify/src/rooms/GuideAnswers.ts
@@ -399,6 +400,12 @@ jobs:
           MONTRA_DIRECTOR_PERSIST: '0'
         run: npx tsx --test src/rooms/world-director.test.ts src/rooms/director-reward.test.ts src/rooms/director-accept.test.ts src/rooms/director-deadline.test.ts
 
+      - name: Test persistent hunt events
+        working-directory: combat-verify
+        env:
+          MONTRA_WORLD_EXPANSION: '1'
+        run: npx tsx --test src/rooms/hunt-events.test.ts
+
       - name: Test Typhoon NPC guidance
         working-directory: combat-verify
         env:
@@ -612,7 +619,8 @@ jobs:
         working-directory: combat-verify
         shell: bash
         run: |
-          export MONTRA_WORLD_EXPANSION=1 MONTRA_ECONOMY_ENABLED=0 PORT=4110
+          # Keep baseline fixed-EXP assertions independent of timed hunt bonuses.
+          export MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0 MONTRA_ECONOMY_ENABLED=0 PORT=4110
           export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-world-test-expansion-XXXXXX)"
           export MONTRA_TEST_URL=http://127.0.0.1:4110
           npx tsx --test src/rooms/map-expansion.test.ts src/rooms/forest-monster-config.test.ts src/rooms/temple-map.test.ts src/rooms/world-atlas.test.ts src/rooms/territory-war.test.ts src/rooms/territory-government.test.ts src/rooms/muay-combo.test.ts src/rooms/muay-mastery.test.ts
@@ -658,7 +666,8 @@ jobs:
         shell: bash
         working-directory: combat-verify
         run: |
-          export PORT=4111 MONTRA_WORLD_EXPANSION=1 MONTRA_ECONOMY_ENABLED=1
+          # These legacy integration checks assert fixed pre-event EXP values.
+          export PORT=4111 MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0 MONTRA_ECONOMY_ENABLED=1
           export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-monster-test-XXXXXX)"
           export MONTRA_TEST_URL=http://127.0.0.1:4111
           node --import tsx src/index.ts > monster-server.log 2>&1 &

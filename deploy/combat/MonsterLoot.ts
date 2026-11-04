@@ -1,4 +1,5 @@
 import {randomInt} from "node:crypto";
+import {dynamicDropChance,dynamicCardChance} from "./DynamicBalance.js";
 import {REGIONAL_BOSSES} from "./RegionalBosses.js";
 import {PERSONAL_ITEMS,MAX_FORGE_COPIES,BOSS_GEAR_CHANCE,gearSchools,startingWeapon,monsterCardFor,type CardId,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
 import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
@@ -121,11 +122,15 @@ export function cardHunt(card:CardId){return cardHunts.get(card)??null;}
 const catalog=Object.entries(PERSONAL_ITEMS).map(([id,item])=>{
   const hunt=findItemHunt(id as PersonalId,item.level??1);
   const source=hunt??(item.kind==="card"?cardHunt(id as CardId):null);
-  const rate=item.sourceBoss?(item.forge?" · โอกาส "+BOSS_GEAR_CHANCE+"% เมื่อเลเวลถึง · ชิ้นซ้ำเข้าคลังช่าง":" · ได้ 1 ชิ้นเมื่อชนะ"):"";
+  const rate=item.sourceBoss?(item.forge?" · อัตราดรอปอาจเปลี่ยนตามสภาพโลก · ชิ้นซ้ำเข้าคลังช่าง":" · ได้ 1 ชิ้นเมื่อชนะ"):"";
   const dropHint=hunt?hunt.monster+" Lv."+hunt.level+" · "+hunt.map+rate+(hunt.open?"":" · พื้นที่ยังไม่เปิด"):undefined;
   return [id,source?{...item,dropHint,huntTarget:{id:source.id,monster:source.monster,mapId:source.mapId,open:source.open}}:item] as const;
 });
 export const CATALOG_PAGES=Array.from({length:Math.ceil(catalog.length/16)},(_,i)=>Object.fromEntries(catalog.slice(i*16,i*16+16)));
+export function catalogPageWithRates(items:Record<string,any>){
+  return Object.fromEntries(Object.entries(items).map(([id,item])=>[id,item.kind==="card"?{...item,chancePct:dynamicCardChance(id,item.chancePct??0)}:item]));
+}
+export function cardCatalogWithRates(){return catalogPageWithRates(Object.fromEntries(catalog.filter(([,item])=>item.kind==="card")));}
 
 export const MAX_LOOT_MISSES=3;
 export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<string>|ReadonlyMap<string,number>,playerLevel:number,misses:number,tier:string,draw:(max:number)=>number=randomInt,partialStacks?:ReadonlySet<string>,forgeCopies?:Readonly<Record<string,number>>,worn?:ReadonlySet<string>,trainingWeapon?:PracticeWeapon){
@@ -144,7 +149,7 @@ export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<s
     const slots=def.kind==="earring"||def.kind==="ring"?2:1;
     return ownedGear.reduce((n,{def:other,count})=>n+(other.kind===def.kind && other.level!>=def.level!?count:0),0)<slots;
   });
-  const chance=tier==="boss"?100:tier==="elite"?60:tier==="strong"?40:25;
+  const chance=dynamicDropChance(tier==="boss"?"boss":tier==="elite"?"elite":tier==="strong"?"strong":"normal",tier==="boss"?100:tier==="elite"?60:tier==="strong"?40:25);
   const guaranteed=useful.length>0 && misses===MAX_LOOT_MISSES;
   const next=journeyWeapon(path,playerLevel);
   const firstWeapon=next && useful.includes(next);

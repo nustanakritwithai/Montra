@@ -84,10 +84,12 @@ export function resourceApproach(n:ResourceNode){
   }
   return null;
 }
-export type ResourceStock={stock:number;nextAt:number};
+export type ResourceStock={stock:number;nextAt:number;periodMs?:number};
 export function resourceStock(node:ResourceNode,row:ResourceStock|undefined,now:number):ResourceStock {
   if(!row || row.stock>=node.capacity)return {stock:node.capacity,nextAt:0};
   if(now<row.nextAt)return row;
-  const ticks=1+Math.floor((now-row.nextAt)/node.period),stock=Math.min(node.capacity,row.stock+ticks);
-  return {stock,nextAt:stock===node.capacity?0:row.nextAt+ticks*node.period};
+  // Do not reinterpret elapsed time under a newer AI-generated period.
+  const period=Number.isSafeInteger(row.periodMs) && row.periodMs!>0 ? row.periodMs! : node.period;
+  const ticks=1+Math.floor((now-row.nextAt)/period),stock=Math.min(node.capacity,row.stock+ticks);
+  return {stock,nextAt:stock===node.capacity?0:row.nextAt+ticks*period};
 }
