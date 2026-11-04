@@ -5258,6 +5258,9 @@
   let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
   let economyGold = null, economyListings = [], activeTrade = null, economyPending = false;
   let economyTimer = null, economyTab = "market", tradeUnread = false;
+  let centralMarketVersion=0,centralAuctions=[],centralMine=[],centralSupply=null,centralCredit=0,marketNextCursor=null,marketPageTag=0,marketPageRequest=null;
+  let marketFilters={fixed:{query:"",category:"all",ownOnly:false},auction:{query:"",category:"all",ownOnly:false}};
+  function resetCentralMarket(){centralMarketVersion=0;centralAuctions=[];centralMine=[];centralSupply=null;centralCredit=0;marketNextCursor=null;marketPageTag++;marketPageRequest=null;marketFilters={fixed:{query:"",category:"all",ownOnly:false},auction:{query:"",category:"all",ownOnly:false}};}
   let partyState = null, partyInvitation = null, partyUnread = false;
   let guildState = null, guildInvitation = null, guildUnread = false;
   let guildDirectory = null, guildRecruitment = {pending:null,applications:[]};
@@ -7406,7 +7409,7 @@
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null; sentinelChallengeUntil=0; sentinelCoreStanceUntil=0;seerBoundTarget="";seerPoisoned=false;
     possessed=false;occultBookState=null;occultRequestKey="";selectedOccultSkill="";occultCurseUntil=0;bladeBookState=null;bladeRequestKey="";selectedBladeSkill="";bladeCloakUntil=0;syncBladeUI(null);syncSentinelUI(null);syncOccultUI(null);syncPossessionButton();syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; swordStanceUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);
-    economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
+    economyGold = null; economyListings = []; activeTrade = null; economyPending = false; resetCentralMarket();
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false;
     guildState=null; guildInvitation=null; guildUnread=false;guildDirectory=null;guildRecruitment={pending:null,applications:[]}; updatePartyBadge();
@@ -8830,7 +8833,7 @@
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
       clearChatHistory(true);
-      economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; tradeUnread=false; updateTradeBadge();
+      economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; resetCentralMarket(); tradeUnread=false; updateTradeBadge();
       partyState=null; partyInvitation=null; partyUnread=false;
     guildState=null; guildInvitation=null; guildUnread=false;guildDirectory=null;guildRecruitment={pending:null,applications:[]}; updatePartyBadge();
       inventoryState = null; personalItems=Object.create(null);cardDrill=null;gearGuides=null;resources=null;seerBoundTarget="";seerPoisoned=false;clearResourceView();
@@ -9018,9 +9021,30 @@
         economyGold=message.gold; renderEconomy(); renderBag();
       });
       joined.onMessage("market_state", message => {
-        if (room !== joined || !Array.isArray(message?.listings)) return;
+        if (room !== joined || centralMarketVersion || !Array.isArray(message?.listings)) return;
         economyListings=message.listings.filter(x => x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && typeof x.seller==="string" && /^[a-f0-9]{12}$/.test(x.seller) && x.item && (x.item.itemId===POTION_ITEM_ID || x.item.itemId===SHRINE_SHARD || bagMeta(x.item.itemId)) && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 && Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000).slice(0,120);
         renderEconomy();
+      });
+      joined.onMessage("market_features",message=>{
+        if(room!==joined || message?.version!==1)return;
+        const first=!centralMarketVersion;centralMarketVersion=1;
+        if(first && drawerActive==="economy"){requestMarketOverview();requestMarketPage(true);}
+        renderEconomy();
+      });
+      joined.onMessage("market_overview",message=>{
+        if(room!==joined || !Array.isArray(message?.auctions) || !message?.supply || !Array.isArray(message.supply.items))return;
+        centralMine=message.auctions.slice(0,100);centralSupply=message.supply;
+        centralCredit=Number.isSafeInteger(message.credit)&&message.credit>0?message.credit:0;renderEconomy();
+      });
+      joined.onMessage("market_page",message=>{
+        if(room!==joined || !marketPageRequest || message?.tag!==marketPageRequest.tag || message.market!==marketPageRequest.market)return;
+        const rows=message.market==="fixed"?message.listings:message.auctions;
+        if(!Array.isArray(rows))return;
+        const valid=rows.filter(x=>x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && typeof x.seller==="string" && /^[a-f0-9]{12}$/.test(x.seller) && x.item && typeof x.item.itemId==="string" && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 &&
+          (message.market==="fixed"?Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000:Number.isSafeInteger(x.opening) && x.opening>0 && x.opening<=1_000_000_000 && Number.isSafeInteger(x.bid) && x.bid>=0 && x.bid<=1_000_000_000 && Number.isSafeInteger(x.endsAt))).slice(0,30);
+        if(message.market==="fixed")economyListings=marketPageRequest.append?economyListings.concat(valid):valid;
+        else centralAuctions=marketPageRequest.append?centralAuctions.concat(valid):valid;
+        marketNextCursor=Number.isSafeInteger(message.nextCursor) && message.nextCursor>0?message.nextCursor:null;marketPageRequest=null;renderEconomy();
       });
       joined.onMessage("craft_result", result => {
         if (room !== joined) return;
@@ -9066,7 +9090,12 @@
       joined.onMessage("market_result", message => {
         if (room !== joined) return;
         finishEconomyPending(); toast(message?.action === "buy" ? "ซื้อสำเร็จ · ของเข้ากระเป๋าแล้ว" : message?.action === "cancel" ? "ยกเลิกฝากขายแล้ว" : "ฝากขายสำเร็จ");
-        try { joined.send("market_list",{}); } catch (_) {} renderEconomy();
+        if(centralMarketVersion)requestMarketPage(true);else try { joined.send("market_list",{}); } catch (_) {} renderEconomy();
+      });
+      joined.onMessage("market_action_result",message=>{
+        if(room!==joined)return;finishEconomyPending();
+        const notices={auction_create:"เปิดประมูลแล้ว",auction_bid:"เสนอราคาแล้ว · เงินถูกกันไว้",auction_claim:"รับของจากประมูลแล้ว",auction_cancel:"ยกเลิกประมูลแล้ว",auction_credit:"รับเงินที่รอคืนแล้ว",starter_supply_buy:"ซื้อสินค้าสำรองแล้ว"};
+        toast(notices[message?.action]||"ทำรายการตลาดสำเร็จ");requestMarketOverview();requestMarketPage(true);renderEconomy();
       });
       let resourcePage=null;
       joined.onMessage("world_resource_page",p=>{
@@ -9138,7 +9167,7 @@
         const reasons={forge_downgrade_unconfirmed:"กรุณารีเฟรชแล้วตรวจโอกาสลดขั้นก่อนยืนยัน",forge_stock_changed:"ยอดของสำรองเปลี่ยนแล้ว · ตรวจคลังช่างอีกครั้ง",forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
         const socketErrors={item_level_required:"เลเวลยังไม่ถึงที่อุปกรณ์กำหนด",card_gear_level:"การ์ดนี้ต้องใช้อุปกรณ์เลเวลสูงกว่านี้",socket_changed:"อุปกรณ์หรือรูการ์ดเปลี่ยนไปแล้ว",card_unavailable:"ไม่มีการ์ดที่เลือกในกระเป๋า",drill_missing_metal:"แร่เหล็กไม่พอสำหรับเจาะรู"};
         reasons.salvage_changed="อุปกรณ์เปลี่ยนไปแล้ว โปรดเลือกชิ้นที่จะแยกอีกครั้ง";
-        const gatherErrors={resource_range:"ขยับเข้าใกล้ต้นไม้หรือหินบนแผนที่นี้",resource_ground:"ลงจากม้าหรือลงสู่พื้นก่อนเก็บวัตถุดิบ",resource_empty:"จุดนี้กำลังฟื้นตัว",resource_cooldown:"รอสักครู่ก่อนเก็บครั้งถัดไป",
+        const gatherErrors={resource_range:"ขยับเข้าใกล้ต้นไม้หรือหินบนแผนที่นี้",resource_ground:"ลงจากม้าหรือลงสู่พื้นก่อนเก็บวัตถุดิบ",resource_empty:"จุดนี้กำลังฟื้นตัว",resource_cooldown:"รอสักครู่ก่อนเก็บครั้งถัดไป",starter_supply_limit:"สินค้าสำรองถึงจำนวนจำกัดวันนี้แล้ว",auction_limit:"เปิดประมูลได้ไม่เกิน 20 รายการ",auction_bid_limit:"มีรายการเสนอราคาค้างสูงสุด 20 รายการ",auction_unavailable:"ประมูลจบแล้วหรือรายการไม่พร้อมใช้งาน",cannot_bid_own_auction:"เสนอราคาประมูลของตัวเองไม่ได้",auction_bid_too_low:"ราคาต้องสูงกว่าราคาล่าสุด",auction_claim_unavailable:"ยังรับรายการนี้ไม่ได้",auction_cancel_unavailable:"ยกเลิกไม่ได้เมื่อมีผู้เสนอราคาแล้ว",auction_credit_unavailable:"ยังไม่มีเงินรอรับหรือเงินในตัวเต็ม",
           fish_water:"แตะจุดในน้ำเพื่อเหวี่ยงเบ็ด",fish_ground:"ลงจากม้าและยืนบนพื้นก่อนตกปลา",fish_range:"เข้าใกล้น้ำในระยะ 9 เมตร",fish_blocked:"มีสิ่งกีดขวางระหว่างคุณกับน้ำ",fish_interrupted:"การตกปลาถูกขัดจังหวะ",fish_expired:"รอบตกปลาหมดแล้ว",fish_pending:"รับปลาที่จับไว้ก่อนเริ่มตกใหม่",fish_no_pending:"ไม่มีปลารอรับ"};
         if(fishingPending){fishingPending=false;if(message?.reason!=="inventory_full")clearFishing(false);}
         toast(gatherErrors[message?.reason] || socketErrors[message?.reason] || reasons[message?.reason] || "ทำรายการไม่สำเร็จ · ลองตรวจข้อมูลอีกครั้ง"); renderEconomy();renderBag();
@@ -13092,6 +13121,15 @@
     const socket=item.socket===null?" · รูว่าง":personalItems[item.socket]?.kind==="card"?" · "+personalItems[item.socket].name:"";
     return name + forgeLabel(item) + socket + " ×" + Number(item.quantity || 0);
   }
+  function requestMarketOverview(){if(!centralMarketVersion || !economyReady() || !room)return;try{room.send("market_overview",{});}catch(_){}}
+  function requestMarketPage(reset){
+    if(!centralMarketVersion || !economyReady() || !room || !["market","auction"].includes(economyTab))return;
+    const market=economyTab==="auction"?"auction":"fixed",filter=marketFilters[market];
+    if(!reset && marketNextCursor===null)return;
+    const tag=++marketPageTag,before=reset?null:marketNextCursor;marketPageRequest={tag,market,append:!reset};
+    if(reset){marketNextCursor=null;if(market==="fixed")economyListings=[];else centralAuctions=[];}
+    try{room.send("market_browse",{market,query:filter.query,category:filter.category,before,ownOnly:filter.ownOnly,tag});}catch(_){marketPageRequest=null;}
+  }
   function economySend(command, payload, durable=false) {
     if (!economyReady() || !room) { toast("เข้า LIVE ที่เปิดระบบตลาดก่อน"); return; }
     if (durable && economyPending) return;
@@ -13101,7 +13139,7 @@
       economyTimer=setTimeout(()=>{
         if (room!==target || !economyPending) return;
         finishEconomyPending(); toast("ยังไม่ได้รับผล · ตรวจยอดและรายการก่อนทำซ้ำ");
-        try { target.send("get_economy",{}); target.send("market_list",{}); } catch (_) {}
+        try { target.send("get_economy",{}); if(centralMarketVersion){requestMarketOverview();requestMarketPage(true);}else target.send("market_list",{}); } catch (_) {}
         renderEconomy();
       },6000);
     }
@@ -13133,31 +13171,92 @@
     if ([...select.options].some(option=>option.value===old)) select.value=old;
     if (!select.options.length) { const option=document.createElement("option"); option.value=""; option.textContent="ไม่มีผู้เล่นใกล้ตัว"; select.appendChild(option); }
   }
+  function renderCentralMarket(ready){
+    const enabled=ready && centralMarketVersion>0,auctionList=$("auctionListings"),mine=$("auctionMine"),supply=$("starterSupplyRows");
+    if(!auctionList || !mine || !supply)return;
+    auctionList.replaceChildren();mine.replaceChildren();supply.replaceChildren();
+    if(!centralMarketVersion){for(const box of [auctionList,mine,supply]){const p=document.createElement("p");p.className="note";p.textContent="เซิร์ฟเวอร์ยังไม่รองรับตลาดรุ่นนี้";box.append(p);}return;}
+    const empty=(box,text)=>{if(!box.childElementCount){const p=document.createElement("p");p.className="note";p.textContent=text;box.append(p);}};
+    const detail=(row,entry,extra)=>{const content=document.createElement("div"),title=document.createElement("strong"),sub=document.createElement("small");title.textContent=economyItemName(entry.item);sub.textContent=extra;content.append(title,sub);row.append(content);};
+    for(const item of centralAuctions){
+      if(!item?.item || !Number.isSafeInteger(item.opening) || !Number.isSafeInteger(item.bid) || !Number.isFinite(item.endsAt))continue;
+      const row=document.createElement("div");row.className="market-row";
+      const price=item.bid||item.opening,when=new Date(item.endsAt).toLocaleString("th-TH",{dateStyle:"short",timeStyle:"short"});
+      detail(row,item,(item.bid?"ราคาล่าสุด ":"เริ่มที่ ")+price.toLocaleString("th-TH")+" เงิน · จบ "+when+(item.isBidder?" · คุณเสนอสูงสุด":item.isMine?" · ของคุณ":""));
+      if(!item.isMine){
+        const controls=document.createElement("div"),input=document.createElement("input"),button=document.createElement("button");controls.className="auction-bid-controls";
+        input.type="number";input.inputMode="numeric";input.min=String(item.bid?item.bid+1:item.opening);input.max="1000000000";input.value=input.min;input.setAttribute("aria-label","ราคาเสนอสำหรับ "+economyItemName(item.item));
+        button.type="button";button.textContent="เสนอราคา";button.disabled=!enabled||economyPending||item.endsAt<=Date.now();
+        input.oninput=()=>{button.dataset.confirm="";button.textContent="เสนอราคา";};
+        button.onclick=()=>{const amount=Number(input.value);if(!Number.isSafeInteger(amount)||amount<Number(input.min)||amount>1_000_000_000)return toast("ตรวจราคาเสนออีกครั้ง");
+          if(button.dataset.confirm!==String(amount)){button.dataset.confirm=String(amount);button.textContent="ยืนยัน "+amount.toLocaleString("th-TH");return;}
+          economySend("auction_bid",{requestId:economyRequestId(),auctionId:item.id,amount},true);};
+        controls.append(input,button);row.append(controls);
+      }
+      auctionList.append(row);
+    }
+    empty(auctionList,"ยังไม่มีรายการประมูลที่ตรงกับการค้นหา");
+    for(const item of centralMine){
+      if(!item?.item)continue;const row=document.createElement("div");row.className="market-row";
+      const extra=item.canClaim?(item.isBidder?"ชนะประมูล · รับของได้":"หมดเวลาไม่มีผู้เสนอ · รับของคืนได้"):
+        item.state==="settled"?(item.isMine && item.bid?"ขายแล้ว "+Number(item.bid).toLocaleString("th-TH")+" เงิน · ตรวจเงินในตัวหรือยอดรอรับ":"รับของแล้ว"):
+        item.isMine?(item.bid?"มีผู้เสนอ "+Number(item.bid).toLocaleString("th-TH")+" เงิน":"รอผู้เสนอราคา"):
+        "คุณเสนอสูงสุด "+Number(item.bid).toLocaleString("th-TH")+" เงิน";
+      detail(row,item,extra);
+      if(item.canClaim || (item.isMine && item.state==="open" && !item.bid)){
+        const button=document.createElement("button");button.type="button";button.textContent=item.canClaim?"รับของ":"ยกเลิก";button.disabled=!enabled||economyPending;
+        button.onclick=()=>{const command=item.canClaim?"auction_claim":"auction_cancel";if(button.dataset.confirm!=="yes"){button.dataset.confirm="yes";button.textContent=item.canClaim?"ยืนยันรับของ":"ยืนยันยกเลิก";return;}economySend(command,{requestId:economyRequestId(),auctionId:item.id},true);};row.append(button);
+      }
+      mine.append(row);
+    }
+    empty(mine,"ไม่มีการประมูลหรือของที่รอรับ");
+    $("auctionCredit").hidden=!centralCredit;$("auctionCredit").disabled=!enabled||economyPending;
+    $("auctionCredit").textContent="รับเงินที่รอคืน "+centralCredit.toLocaleString("th-TH")+" เงิน";
+    for(const item of centralSupply?.items||[]){
+      if(!item || typeof item.item!=="string" || !Number.isSafeInteger(item.price) || !Number.isSafeInteger(item.remaining))continue;
+      const row=document.createElement("div"),info=document.createElement("div"),title=document.createElement("strong"),sub=document.createElement("small"),button=document.createElement("button");row.className="market-row";
+      title.textContent=economyItemName({itemId:item.item,quantity:1});sub.textContent=item.price.toLocaleString("th-TH")+" เงิน · ซื้อได้อีก "+item.remaining+" ชิ้นวันนี้";info.append(title,sub);
+      button.type="button";button.textContent="ซื้อ 1";button.disabled=!enabled||economyPending||item.remaining<=0;
+      button.onclick=()=>{if(button.dataset.confirm!=="yes"){button.dataset.confirm="yes";button.textContent="ยืนยันซื้อ";return;}economySend("starter_supply_buy",{requestId:economyRequestId(),item:item.item,quantity:1},true);};
+      row.append(info,button);supply.append(row);
+    }
+    empty(supply,"กำลังโหลดสินค้าสำรอง");
+    $("auctionCreate").disabled=!enabled||economyPending||!$("auctionItem").options.length;
+    for(const id of ["auctionSearch","auctionRefresh","auctionMore","marketSearch","marketMore"])if($(id))$(id).disabled=!enabled||economyPending;
+    $("marketMore").hidden=economyTab!=="market" || marketNextCursor===null;
+    $("auctionMore").hidden=economyTab!=="auction" || marketNextCursor===null;
+  }
   function renderEconomy() {
     if (drawerActive!=="economy" || !$('economyStatus')) return;
     const ready=economyReady();
     $("economyStatus").textContent=ready ? "เงินในตัว " + (economyGold===null ? "กำลังโหลด…" : economyGold.toLocaleString("th-TH")) : "เข้า LIVE ที่เปิดระบบตลาดเพื่อใช้งาน";
     $("economyMarketTab").setAttribute("aria-pressed",String(economyTab==="market"));
     $("economyTradeTab").setAttribute("aria-pressed",String(economyTab==="trade"));
+    $("economyAuctionTab").setAttribute("aria-pressed",String(economyTab==="auction"));
+    $("economySupplyTab").setAttribute("aria-pressed",String(economyTab==="supply"));
+    $("economyAuctionTab").disabled=!centralMarketVersion;$("economySupplyTab").disabled=!centralMarketVersion;
     $("economyMarketPanel").hidden=economyTab!=="market";
     $("economyTradePanel").hidden=economyTab!=="trade";
-    fillEconomySlots($("marketItem"),false); fillEconomySlots($("tradeItem"),true);
+    $("economyAuctionPanel").hidden=economyTab!=="auction";$("economySupplyPanel").hidden=economyTab!=="supply";
+    fillEconomySlots($("marketItem"),false); fillEconomySlots($("tradeItem"),true);fillEconomySlots($("auctionItem"),false);
     const list=$("marketListings"); list.replaceChildren();
     if (!economyListings.length) { const p=document.createElement("p"); p.className="note"; p.textContent=ready ? "ยังไม่มีรายการฝากขาย" : "รายการจะแสดงเมื่อเชื่อมต่อ"; list.appendChild(p); }
     const ownId=String(ownServerCharacter()?.characterId || "");
     for (const listing of economyListings) {
       const row=document.createElement("div"); row.className="market-row";
       const details=document.createElement("div"), title=document.createElement("strong"), sub=document.createElement("small");
-      title.textContent=economyItemName(listing.item); sub.textContent=listing.price.toLocaleString("th-TH") + " เงิน · " + (listing.seller===ownId ? "ของคุณ" : "ผู้ขาย " + listing.seller.slice(0,6));
-      details.append(title,sub); const action=document.createElement("button"); action.type="button"; action.textContent=listing.seller===ownId ? "ยกเลิก" : "ซื้อ"; action.disabled=!ready || economyPending;
+      const mine=typeof listing.isMine==="boolean"?listing.isMine:listing.seller===ownId;
+      title.textContent=economyItemName(listing.item); sub.textContent=listing.price.toLocaleString("th-TH") + " เงินรวม"+(listing.item.quantity>1?" · "+(listing.price/listing.item.quantity).toLocaleString("th-TH",{maximumFractionDigits:2})+"/ชิ้น":"")+" · " + (mine ? "ของคุณ" : "ผู้ขาย " + listing.seller.slice(0,6));
+      details.append(title,sub); const action=document.createElement("button"); action.type="button"; action.textContent=mine ? "ยกเลิก" : "ซื้อ"; action.disabled=!ready || economyPending;
       action.onclick=()=>{
-        if (action.dataset.confirm!=="yes") { action.dataset.confirm="yes"; action.textContent=listing.seller===ownId ? "ยืนยันยกเลิก" : "ยืนยันซื้อ"; return; }
-        economySend(listing.seller===ownId ? "market_cancel" : "market_buy",{requestId:economyRequestId(),listingId:listing.id},true);
+        if (action.dataset.confirm!=="yes") { action.dataset.confirm="yes"; action.textContent=mine ? "ยืนยันยกเลิก" : "ยืนยันซื้อ"; return; }
+        economySend(mine ? "market_cancel" : "market_buy",{requestId:economyRequestId(),listingId:listing.id},true);
       };
       row.append(details,action); list.appendChild(row);
     }
     $("marketSell").disabled=!ready || economyPending || !$("marketItem").options.length;
     $("marketRefresh").disabled=!ready || economyPending;
+    $("marketFilters").hidden=!centralMarketVersion;renderCentralMarket(ready);
     $("tradeInviteArea").hidden=Boolean(activeTrade);
     $("tradeActiveArea").hidden=!activeTrade;
     $("tradeInvite").disabled=!ready || economyPending;
@@ -13173,12 +13272,30 @@
   function openEconomy() {
     tradeUnread=false; updateTradeBadge(); if (activeTrade) economyTab="trade";
     openDrawer("economy","ตลาดและการค้า",
-      '<div class="economy-balance" id="economyStatus" role="status"></div><div class="chat-tabs" role="group" aria-label="เลือกตลาดหรือเทรด"><button id="economyMarketTab" type="button">ตลาดฝากขาย</button><button id="economyTradeTab" type="button">เทรดใกล้ตัว</button></div>' +
-      '<section id="economyMarketPanel"><div class="economy-heading"><h3>รายการฝากขาย</h3><button id="marketRefresh" type="button">รีเฟรช</button></div><div id="marketListings" class="market-list"></div><h3>ฝากขายไอเท็ม</h3><label class="field" for="marketItem">ไอเท็มที่ไม่ได้สวมใส่</label><select id="marketItem"></select><div class="economy-inputs"><label>จำนวน<input id="marketAmount" type="number" inputmode="numeric" min="1" max="99" value="1"></label><label>ราคาเงิน<input id="marketPrice" type="number" inputmode="numeric" min="1" max="1000000000" value="100"></label></div><button class="primary" id="marketSell" type="button">ฝากขาย</button><p class="note">ของจะออกจากกระเป๋าระหว่างฝากขาย · ยกเลิกได้เมื่อมีที่ว่าง</p></section>' +
+      '<div class="economy-balance" id="economyStatus" role="status"></div><div class="chat-tabs" role="group" aria-label="เลือกประเภทตลาด"><button id="economyMarketTab" type="button">ฝากขาย</button><button id="economyAuctionTab" type="button" disabled>ประมูล</button><button id="economySupplyTab" type="button" disabled>สินค้าสำรอง</button><button id="economyTradeTab" type="button">เทรดใกล้ตัว</button></div>' +
+      '<section id="economyMarketPanel"><div class="economy-heading"><h3>ตลาดกลาง · ราคาคงที่</h3><button id="marketRefresh" type="button">รีเฟรช</button></div><div id="marketFilters" hidden><label class="field" for="marketQuery">ค้นหาชื่อไอเท็ม</label><input id="marketQuery" maxlength="60" placeholder="เช่น ไม้ หรือ แร่"><label class="field" for="marketCategory">ประเภทสินค้า</label><select id="marketCategory"><option value="all">ทั้งหมด</option><option value="material">วัตถุดิบ</option><option value="equipment">อุปกรณ์และเครื่องมือ</option><option value="card">การ์ด</option><option value="consumable">ยาและของใช้</option></select><label class="market-check"><input id="marketOwnOnly" type="checkbox"> เฉพาะรายการของฉัน</label><button class="secondary" id="marketSearch" type="button">ค้นหา</button></div><div id="marketListings" class="market-list"></div><button class="secondary" id="marketMore" type="button" hidden>ดูรายการถัดไป</button><h3>ฝากขายไอเท็ม</h3><label class="field" for="marketItem">ไอเท็มที่ไม่ได้สวมใส่</label><select id="marketItem"></select><div class="economy-inputs"><label>จำนวน<input id="marketAmount" type="number" inputmode="numeric" min="1" max="99" value="1"></label><label>ราคารวม<input id="marketPrice" type="number" inputmode="numeric" min="1" max="1000000000" value="100"></label></div><button class="primary" id="marketSell" type="button">ฝากขาย</button><p class="note">ของจะออกจากกระเป๋าระหว่างฝากขาย · ยกเลิกได้เมื่อมีที่ว่าง</p></section>' +
+      '<section id="economyAuctionPanel" hidden><div class="economy-heading"><h3>ประมูลกลาง</h3><button id="auctionRefresh" type="button">รีเฟรช</button></div><label class="field" for="auctionQuery">ค้นหาชื่อไอเท็ม</label><input id="auctionQuery" maxlength="60" placeholder="ค้นหาสินค้าประมูล"><label class="field" for="auctionCategory">ประเภทสินค้า</label><select id="auctionCategory"><option value="all">ทั้งหมด</option><option value="material">วัตถุดิบ</option><option value="equipment">อุปกรณ์และเครื่องมือ</option><option value="card">การ์ด</option><option value="consumable">ยาและของใช้</option></select><button class="secondary" id="auctionSearch" type="button">ค้นหา</button><div id="auctionListings" class="market-list"></div><button class="secondary" id="auctionMore" type="button" hidden>ดูรายการถัดไป</button><h3>ประมูลและของรอรับของฉัน</h3><div id="auctionMine" class="market-list"></div><button class="secondary" id="auctionCredit" type="button" hidden></button><h3>เปิดประมูล</h3><label class="field" for="auctionItem">ไอเท็มที่ไม่ได้สวมใส่</label><select id="auctionItem"></select><div class="economy-inputs"><label>จำนวน<input id="auctionAmount" type="number" inputmode="numeric" min="1" max="99" value="1"></label><label>ราคาเริ่มต้น<input id="auctionOpening" type="number" inputmode="numeric" min="1" max="1000000000" value="100"></label></div><label class="field" for="auctionHours">ระยะเวลาประมูล</label><select id="auctionHours"><option value="1">1 ชั่วโมง</option><option value="6">6 ชั่วโมง</option><option value="24">24 ชั่วโมง</option></select><button class="primary" id="auctionCreate" type="button">เปิดประมูล</button><p class="note">เงินผู้เสนอราคาสูงสุดจะถูกกันไว้และคืนเมื่อมีผู้เสนอสูงกว่า · ผู้ขายยกเลิกได้ก่อนมีผู้เสนอเท่านั้น · เมื่อจบผู้ชนะกดรับของได้ หากไม่มีผู้เสนอ ผู้ขายกดรับของคืน</p></section>' +
+      '<section id="economySupplyPanel" hidden><div class="economy-heading"><h3>สินค้าสำรองพื้นฐาน</h3><button id="supplyRefresh" type="button">รีเฟรช</button></div><p class="note">สินค้าจาก NPC เพื่อช่วยเริ่มต้น จำกัด 20 ชิ้นต่อชนิดต่อวันต่อตัวละคร และมีสต็อกส่วนกลาง 500 ชิ้นต่อชนิดต่อวัน · รีเซ็ต 07.00 น. เวลาไทย</p><div id="starterSupplyRows" class="market-list"></div></section>' +
       '<section id="economyTradePanel" hidden><div id="tradeInviteArea"><p class="note">อยู่ใกล้ผู้เล่นในแผนที่เดียวกันไม่เกิน 5 หน่วย</p><label class="field" for="tradeTarget">ผู้เล่นใกล้ตัว</label><select id="tradeTarget"></select><button class="secondary" id="tradeRefresh" type="button">ค้นหาผู้เล่นใกล้ตัว</button><button class="primary" id="tradeInvite" type="button">ขอเทรด</button></div><div id="tradeActiveArea" hidden><h3>เทรดกับ <span id="tradePartner"></span></h3><div class="status-line"><span>ของคุณ</span><strong id="tradeOwnOffer"></strong></div><div class="status-line"><span>อีกฝ่ายเสนอ</span><strong id="tradeOtherOffer"></strong></div><label class="field" for="tradeItem">ไอเท็มของคุณ</label><select id="tradeItem"></select><div class="economy-inputs"><label>จำนวน<input id="tradeAmount" type="number" inputmode="numeric" min="0" max="99" value="1"></label><label>เงินที่เสนอ<input id="tradeGold" type="number" inputmode="numeric" min="0" max="1000000000" value="0"></label></div><button class="secondary" id="tradeSetOffer" type="button">ตั้งข้อเสนอของฉัน</button><button class="primary" id="tradeConfirm" type="button">ยืนยันข้อเสนอทั้งสองฝ่าย</button><button class="secondary" id="tradeCancel" type="button">ยกเลิกเทรด</button><p class="note">ตรวจของและเงินทั้งสองฝ่ายก่อนยืนยัน · แก้ข้อเสนอแล้วต้องยืนยันใหม่ · คำขออยู่ได้ 60 วินาที</p></div></section>');
-    $("economyMarketTab").onclick=()=>{economyTab="market";renderEconomy();};
+    $("marketQuery").value=marketFilters.fixed.query;$("marketCategory").value=marketFilters.fixed.category;$("marketOwnOnly").checked=marketFilters.fixed.ownOnly;
+    $("auctionQuery").value=marketFilters.auction.query;$("auctionCategory").value=marketFilters.auction.category;
+    $("economyMarketTab").onclick=()=>{economyTab="market";requestMarketPage(true);renderEconomy();};
+    $("economyAuctionTab").onclick=()=>{economyTab="auction";requestMarketOverview();requestMarketPage(true);renderEconomy();};
+    $("economySupplyTab").onclick=()=>{economyTab="supply";requestMarketOverview();renderEconomy();};
     $("economyTradeTab").onclick=()=>{economyTab="trade";fillTradeTargets();renderEconomy();};
-    $("marketRefresh").onclick=()=>{economySend("get_economy",{});economySend("market_list",{});};
+    $("marketRefresh").onclick=()=>{if(centralMarketVersion){requestMarketOverview();requestMarketPage(true);}else{economySend("get_economy",{});economySend("market_list",{});}};
+    $("marketSearch").onclick=()=>{marketFilters.fixed={query:$("marketQuery").value,category:$("marketCategory").value,ownOnly:$("marketOwnOnly").checked};requestMarketPage(true);renderEconomy();};
+    $("marketMore").onclick=()=>requestMarketPage(false);
+    $("auctionSearch").onclick=()=>{marketFilters.auction={query:$("auctionQuery").value,category:$("auctionCategory").value,ownOnly:false};requestMarketPage(true);renderEconomy();};
+    $("auctionMore").onclick=()=>requestMarketPage(false);
+    $("auctionRefresh").onclick=()=>{requestMarketOverview();requestMarketPage(true);};
+    $("supplyRefresh").onclick=requestMarketOverview;
+    $("auctionCredit").onclick=()=>economySend("auction_credit",{requestId:economyRequestId()},true);
+    $("auctionCreate").onclick=()=>{
+      const slot=Number($("auctionItem").value),amount=Number($("auctionAmount").value),opening=Number($("auctionOpening").value),durationHours=Number($("auctionHours").value);
+      if(!$("auctionItem").value || !Number.isSafeInteger(slot) || !Number.isSafeInteger(amount) || amount<1 || amount>99 || !Number.isSafeInteger(opening) || opening<1 || opening>1_000_000_000 || ![1,6,24].includes(durationHours))return toast("ตรวจจำนวน ราคา และระยะเวลาประมูล");
+      economySend("auction_create",{requestId:economyRequestId(),slot,amount,opening,durationHours,...accessoryStamp(currentBagSlots()?.[slot])},true);
+    };
     $("marketSell").onclick=()=>{
       const slot=Number($("marketItem").value), amount=Number($("marketAmount").value), price=Number($("marketPrice").value);
       if (!$("marketItem").value || !Number.isSafeInteger(slot) || !Number.isSafeInteger(amount) || amount<1 || amount>99 || !Number.isSafeInteger(price) || price<1 || price>1_000_000_000) return toast("ตรวจจำนวนและราคาก่อนฝากขาย");
@@ -13195,7 +13312,7 @@
     $("tradeConfirm").onclick=()=>{if(activeTrade) economySend("trade_confirm",{tradeId:activeTrade.tradeId});};
     $("tradeCancel").onclick=()=>{if(activeTrade) economySend("trade_cancel",{tradeId:activeTrade.tradeId});};
     fillTradeTargets(); renderEconomy();
-    if (economyReady()) { economySend("get_economy",{}); economySend("market_list",{}); }
+    if (economyReady()) { economySend("get_economy",{}); if(centralMarketVersion){requestMarketOverview();requestMarketPage(true);}else economySend("market_list",{}); }
   }
   function updatePartyBadge() { const badge=$("partyUnread"); if(badge)badge.hidden=!(partyUnread || guildUnread); const guildBadge=$("guildBadge");if(guildBadge)guildBadge.hidden=!guildUnread; updateFieldAlerts(); }
   function partyReady() { return mode==="live" && room?.state?.partyAvailable===true && ownServerCharacter()?.persistent===true; }
