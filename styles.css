@@ -1383,6 +1383,16 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 /* Phone: keep the tab row small and scrollable above the compact feed. */
 .chat-box:not(.wide) .cb-tabs { display: flex; padding: 2px 2px 0; } .chat-box:not(.wide) .cb-tab { padding: 2px 5px 3px; font-size: 9px; }
 .chat-box:not(.wide) .cb-tabs .cb-open { display: none; }
+/* Compose in the existing HUD box; keep it above the mobile keyboard. */
+.cb-tabs .cb-open { position:sticky; right:0; min-width:34px; background:#0d1512; border-radius:6px; }
+.chat-box:not(.wide) .cb-tabs .cb-open { display:block; }
+.chat-box:not(.wide).composing { z-index:12; width:min(calc(100vw - 16px),400px); bottom:calc(max(8px, env(safe-area-inset-bottom)) + var(--chat-keyboard-offset, 0px)); background:#070b09f5; }
+.chat-box:not(.wide).composing .cb-form { display:flex; }
+.chat-box:not(.wide).composing .cb-log { height:clamp(64px,18dvh,140px); opacity:1; font-size:12px; }
+.chat-box.composing .cb-tab, .chat-box.composing .cb-open { min-height:36px; }
+.chat-box.composing .cb-input, .chat-box.composing .cb-target { min-height:44px; font-size:16px; }
+.chat-box.composing .cb-target { max-width:120px; }
+.chat-box.composing .cb-send { min-width:44px; min-height:44px; }
 /* Fly button next to the horse; harmful-effect boxes under the orb. */
 .learned-bar #fly.orb-fly > span:last-child { display: none; } .learned-bar #fly.orb-fly > span:first-child { font-size: 17px; }
 .learned-bar #fly.orb-fly { bottom: auto; left: auto; }

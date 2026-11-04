@@ -8178,7 +8178,7 @@
     hudSet(s.online, "rsO", String(online));
     hudSet(s.fps, "rsF", String(Math.round(engine.getFps())));
   }
-  // ---- Chat box (bottom-left): live feed of every channel; type on wide screens, tap to open on phones ----
+  // ---- One chat box for reading and composing on both phones and desktop ----
   const chatFeed = [];
   const CHAT_TAGS = { map: "แผนที่", world: "รวมในห้อง", party: "ปาร์ตี้", private: "กระซิบ", bug: "รายงานบัค" };
   // Tabs over the chat box (like a PC MMO): All plus every channel; each tab counts unread lines.
@@ -8187,16 +8187,28 @@
   const chatBox = (() => {
     const game = $("game"); if (!game) return null;
     const el = document.createElement("section"); el.id = "chatBox"; el.className = "chat-box"; el.setAttribute("aria-label", "กล่องแชท");
-    el.innerHTML = `<div class="cb-tabs" role="tablist">${CHAT_BOX_TABS.map(([id, label]) => `<button type="button" role="tab" data-cb-tab="${id}" class="cb-tab tab-${id}" aria-selected="${id === "all"}">${label}<b hidden></b></button>`).join("")}<button type="button" class="cb-open" aria-label="เปิดแชทเต็ม">⤢</button></div>
-      <div class="cb-log" aria-live="polite"></div>
-      <form class="cb-form"><select class="cb-target" aria-label="ผู้รับ" hidden></select><input class="cb-input" maxlength="200" placeholder="กด Enter เพื่อพิมพ์" autocomplete="off"><button type="submit" class="cb-send" aria-label="ส่ง">➤</button></form>`;
+    el.innerHTML = `<div class="cb-tabs" role="tablist">${CHAT_BOX_TABS.map(([id, label]) => `<button type="button" role="tab" data-cb-tab="${id}" class="cb-tab tab-${id}" aria-selected="${id === "all"}">${label}<b hidden></b></button>`).join("")}<button type="button" class="cb-open" aria-label="พิมพ์ข้อความ">✎</button></div>
+      <div class="cb-log" role="button" tabindex="0" aria-label="แตะเพื่อพิมพ์แชท" aria-live="polite"></div>
+      <form class="cb-form"><select class="cb-target" aria-label="ผู้รับ" hidden></select><input class="cb-input" maxlength="400" aria-label="ข้อความแชท" placeholder="แตะเพื่อพิมพ์" autocomplete="off" enterkeyhint="send"><button type="submit" class="cb-send" aria-label="ส่ง">➤</button></form>`;
     const harvestControls = document.createElement("div"); harvestControls.className = "chat-harvest";
     harvestControls.append($("harvestButton"), $("cycleHarvest")); el.prepend(harvestControls);
     game.append(el);
     const log = el.querySelector(".cb-log"), form = el.querySelector(".cb-form"), input = el.querySelector(".cb-input"), target = el.querySelector(".cb-target");
-    el.querySelector(".cb-open").onclick = () => { if (chatBoxTab !== "all") chatChannel = chatBoxTab; openChat(); };
-    log.onclick = () => { if (!chatWide.matches) { if (chatBoxTab !== "all") chatChannel = chatBoxTab; openChat(); } };
-    for (const b of el.querySelectorAll("[data-cb-tab]")) b.onclick = () => { chatBoxTab = b.dataset.cbTab; chatBoxUnread[chatBoxTab] = 0; renderChatBox(true); };
+    const toggle=el.querySelector(".cb-open");
+    toggle.onclick = () => { if(el.classList.contains("composing"))closeChatComposer();else openChat(); };
+    log.onclick = () => openChat();
+    log.onkeydown = e => {if(e.key==="Enter" || e.key===" "){e.preventDefault();openChat();}};
+    for (const b of el.querySelectorAll("[data-cb-tab]")) b.onclick = () => {
+      chatDraft[chatBoxTab === "all" ? "map" : chatBoxTab]=input.value;
+      chatBoxTab=b.dataset.cbTab;chatChannel=chatBoxTab === "all" ? "map" : chatBoxTab;
+      input.value=chatDraft[chatChannel];chatBoxUnread[chatBoxTab]=0;
+      if(chatBoxTab==="all"){for(const key of Object.keys(chatUnread))chatUnread[key]=0;}
+      else chatUnread[chatBoxTab]=0;
+      updateChatBadge();renderChatBox(true);openChat();
+    };
+    target.onchange=()=>{chatTargetId=target.value;};
+    input.addEventListener("input",()=>{chatDraft[chatBoxTab === "all" ? "map" : chatBoxTab]=input.value;});
+    input.addEventListener("focus",()=>{if(!el.classList.contains("composing"))openChat();else syncChatViewport();});
     form.onsubmit = e => {
       e.preventDefault(); const text = input.value.normalize("NFC").trim(), channel = chatBoxTab === "all" ? "map" : chatBoxTab;
       if (!text) { input.blur(); return; }
@@ -8207,11 +8219,11 @@
       if (chatPending) return;
       const command = channel === "private" ? { text, channel, targetId: target.value } : { text, channel };
       chatPending = { ...command }; chatDraft[channel] = text;
-      try { room.send("chat", command); input.value = ""; } catch { finishChatPending(); toast("ส่งข้อความไม่สำเร็จ"); return; }
-      clearTimeout(chatTimer); chatTimer = setTimeout(() => { finishChatPending(); }, 5000);
+      try { room.send("chat", command); } catch { finishChatPending(); toast("ส่งข้อความไม่สำเร็จ"); return; }
+      clearTimeout(chatTimer); chatTimer = setTimeout(() => { finishChatPending();toast("ยังไม่ได้รับการยืนยันข้อความ"); }, 5000);
     };
-    input.addEventListener("keydown", e => { if (e.key === "Escape") { input.value = ""; input.blur(); } e.stopPropagation(); });
-    return { el, log, input, target, form };
+    input.addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault();closeChatComposer(); } e.stopPropagation(); });
+    return { el, log, input, target, form, toggle };
   })();
   const chatWide = matchMedia("(min-width: 820px) and (min-height: 520px), (pointer: fine) and (min-width: 700px) and (orientation: landscape)");
   const syncChatWide = () => chatBox?.el.classList.toggle("wide", chatWide.matches); chatWide.addEventListener?.("change", syncChatWide); syncChatWide();
@@ -8224,8 +8236,9 @@
     for (const b of chatBox.el.querySelectorAll("[data-cb-tab]")) { const id = b.dataset.cbTab, n = chatBoxUnread[id], badge = b.querySelector("b");
       b.setAttribute("aria-selected", String(id === chatBoxTab)); badge.hidden = !n || id === chatBoxTab; badge.textContent = n > 99 ? "99+" : String(n); }
     const priv = chatBoxTab === "private"; chatBox.target.hidden = !priv; chatBox.el.dataset.tab = chatBoxTab;
-    if (priv) { const cur = chatBox.target.value; chatBox.target.replaceChildren(new Option("ผู้รับ", ""));
-      room?.state?.players?.forEach?.((pl, id) => { if (id !== localId) chatBox.target.append(new Option(String(pl.characterName || "ผู้เล่น"), id)); }); chatBox.target.value = cur; }
+    if (priv && document.activeElement!==chatBox.target) { chatBox.target.replaceChildren(new Option("เลือกผู้รับ", ""));
+      room?.state?.players?.forEach?.((pl, id) => { if (id !== localId) chatBox.target.append(new Option(String(pl.characterName || "ผู้เล่น"), id)); }); chatBox.target.value = chatTargetId;
+      if(chatBox.target.value!==chatTargetId)chatTargetId=""; }
     chatBox.input.placeholder = chatBoxTab === "bug" ? "เล่าบัคที่เจอ แล้วกด Enter" : "พิมพ์ถึง " + (chatBoxTab === "all" ? "แผนที่" : CHAT_TAGS[chatBoxTab]) + " · Enter";
     if (full) { chatBox.log.replaceChildren(...chatFeed.filter(i => chatBoxTab === "all" || i.channel === chatBoxTab).slice(-60).map(chatLine)); chatBox.log.scrollTop = chatBox.log.scrollHeight; }
   }
@@ -8246,7 +8259,7 @@
   addEventListener("keydown", e => {
     if (!chatBox || e.key !== "Enter" || !chatWide.matches || !ui.drawer.hidden) return;
     const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-    e.preventDefault(); chatBox.input.focus();
+    e.preventDefault(); openChat();
   });
   // ---- Layout moves: menu buttons under the minimap, horse button beside the vital orb ----
   {
@@ -8729,13 +8742,15 @@
         if (chatHistory[channel].length > 100) chatHistory[channel].shift();
         pushChatFeed(channel, chatHistory[channel].at(-1).name, message.text.slice(0, 400), own);
         if (own && chatPending && chatPending.channel === channel && chatPending.text === message.text && (channel !== "private" || chatPending.targetId === message.targetId)) {
-          if (chatDraft[channel].normalize("NFC").trim() === message.text) chatDraft[channel] = "";
+          if (chatDraft[channel].normalize("NFC").trim() === message.text) {
+            chatDraft[channel] = "";
+            if((chatBoxTab === "all" ? "map" : chatBoxTab)===channel && chatBox?.input.value.normalize("NFC").trim()===message.text)chatBox.input.value="";
+          }
           finishChatPending();
-        } else if (!own && (drawerActive !== "chat" || chatChannel !== channel)) {
+        } else if (!own && !(chatBox?.el.classList.contains("composing") && (chatBoxTab==="all" || chatBoxTab===channel))) {
           chatUnread[channel] = Math.min(99, chatUnread[channel] + 1);
         }
         updateChatBadge();
-        if (drawerActive === "chat") renderChat();
       });
       const onTerritoryState=message=>{
         if(room!==joined)return;
@@ -8790,10 +8805,10 @@
         if(room!==joined || chatPending?.channel!=="bug") return;
         if(result?.ok === true) {
           chatHistory.bug.push({name:"ระบบ",text:"รับรายงานบัคแล้ว · ขอบคุณที่แจ้ง",own:false});pushChatFeed("bug","ระบบ","รับรายงานบัคแล้ว · ขอบคุณที่แจ้ง",false);
-          if(chatDraft.bug.normalize("NFC").trim()===chatPending.text) chatDraft.bug="";
+          if(chatDraft.bug.normalize("NFC").trim()===chatPending.text){chatDraft.bug="";if(chatBoxTab==="bug" && chatBox?.input.value.normalize("NFC").trim()===chatPending.text)chatBox.input.value="";}
           toast("ส่งรายงานบัคแล้ว");
         } else toast("บันทึกรายงานไม่สำเร็จ · ลองอีกครั้ง");
-        finishChatPending(); if(drawerActive==="chat") renderChat();
+        finishChatPending();
       });
       const onGuildState=message => {
         if(room!==joined)return;
@@ -9677,7 +9692,6 @@
           finishChatPending();
           const chatErrors={chat_rate_limited:"ส่งข้อความเร็วเกินไป · รอสักครู่",chat_unavailable:"ยังส่งแชทไม่ได้ขณะเดินทาง",chat_party_unavailable:"เข้าปาร์ตี้ก่อนส่งข้อความ",chat_target_unavailable:"ผู้รับไม่พร้อมใช้งานหรือออกจากห้องแล้ว",chat_bug_rate_limited:"ส่งรายงานได้ทุก 30 วินาที",invalid_chat:"ข้อความไม่ถูกต้องหรือยาวเกิน 200 ตัวอักษร"};
           toast(chatErrors[info.reason] || "ส่งข้อความไม่สำเร็จ");
-          if (drawerActive === "chat") renderChat();
           return;
         }
         if (info?.reason === "insufficient_mana") { floatAtPlayer(localId, "มานาไม่พอ", "weak", { drift: 0 }); toast("มานาไม่พอสำหรับใช้สกิล"); return; }
@@ -10196,7 +10210,6 @@
     if (event.shiftKey && document.activeElement===first) {event.preventDefault();last?.focus();}
     if (!event.shiftKey && document.activeElement===last) {event.preventDefault();first?.focus();}
   });
-  const chatTabs={map:"แผนที่",world:"รวมในห้อง",party:"ปาร์ตี้",private:"ส่วนตัว",bug:"รายงานบัค"};
   function updateChatBadge() {
     const total=Math.min(99,Object.values(chatUnread).reduce((sum,n)=>sum+n,0)),badge=$("chatUnread");
     badge.hidden=total===0;badge.textContent=total?String(total):"";
@@ -10214,58 +10227,41 @@
       for(const channel of Object.keys(chatBoxUnread))chatBoxUnread[channel]=0;
       chatTargetId="";chatChannel="map";chatBoxTab="all";
       if(chatBox){chatBox.input.value="";chatBox.target.value="";}
+      closeChatComposer();
       finishChatPending();
     }
     renderChatBox(true);
-    updateChatBadge();if(drawerActive==="chat")renderChat();
+    updateChatBadge();
   }
-  function renderChat() {
-    if(drawerActive!=="chat")return;
-    const log=$("chatLog"),input=$("chatInput"),send=$("chatSend"),target=$("chatTarget");
-    if(!log||!input||!send||!target)return;
-    const extended=["party","private","bug"].includes(chatChannel);
-    const canChat=mode==="live" && room?.state?.chatAvailable===true && (!extended || room?.state?.extendedChatAvailable===true);
-    $("chatStatus").textContent=mode!=="live" ? "เข้าออนไลน์เพื่อใช้แชท" : !canChat ? "เซิร์ฟเวอร์ยังไม่รองรับช่องนี้" :
-      chatChannel==="bug" ? "รายงานจะบันทึกให้ผู้ดูแลเซิร์ฟเวอร์" : chatChannel==="private" ? "ส่งถึงผู้เล่นที่เลือกในห้องเดียวกัน" : "ข้อความจะไม่ถูกบันทึกหลังออกเกม";
-    for(const [channel,label] of Object.entries(chatTabs)) {
-      const tab=$("chatTab-"+channel);tab.setAttribute("aria-pressed",String(channel===chatChannel));
-      tab.textContent=label+(chatUnread[channel] ? ` (${chatUnread[channel]})` : "");
-    }
-    $("chatTargetField").hidden=chatChannel!=="private";
-    const choices=[];room?.state?.players?.forEach?.((player,id)=>{if(id!==localId)choices.push({id,name:String(player.characterName||"ผู้เล่น")});});
-    target.replaceChildren();const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="เลือกผู้รับ";target.append(placeholder);
-    for(const choice of choices){const option=document.createElement("option");option.value=choice.id;option.textContent=choice.name;target.append(option);}
-    target.value=chatTargetId;if(target.value!==chatTargetId)chatTargetId="";
-    const nearBottom=log.scrollHeight-log.scrollTop-log.clientHeight<48;log.replaceChildren();
-    for(const item of chatHistory[chatChannel]) {
-      const row=document.createElement("div");row.className="chat-line";
-      const name=document.createElement("strong");name.textContent=item.name+(item.own ? " (คุณ): " : ": ");
-      const body=document.createElement("span");body.textContent=item.text;row.append(name,body);log.append(row);
-    }
-    if(!chatHistory[chatChannel].length){const empty=document.createElement("p");empty.className="chat-empty";empty.textContent="ยังไม่มีข้อความ";log.append(empty);}
-    if(nearBottom)log.scrollTop=log.scrollHeight;
-    if(input.value!==chatDraft[chatChannel])input.value=chatDraft[chatChannel];
-    input.disabled=!canChat;target.disabled=!canChat;send.disabled=!canChat||Boolean(chatPending)||(chatChannel==="private"&&!chatTargetId);
+  // The game HUD is the only chat surface; no separate chat drawer is opened.
+  function syncChatViewport(){
+    if(!chatBox)return;
+    const viewport=window.visualViewport,bottom=viewport?viewport.offsetTop+viewport.height:window.innerHeight;
+    const overlap=Math.max(0,$("game").getBoundingClientRect().bottom-bottom);
+    chatBox.el.style.setProperty("--chat-keyboard-offset",Math.ceil(overlap)+"px");
+  }
+  function closeChatComposer(){
+    if(!chatBox)return;
+    chatBox.el.classList.remove("composing");chatBox.toggle.textContent="✎";
+    chatBox.toggle.setAttribute("aria-label","พิมพ์ข้อความ");chatBox.toggle.setAttribute("aria-expanded","false");
+    if(document.activeElement===chatBox.input || document.activeElement===chatBox.target)document.activeElement.blur();
   }
   function openChat(){
-    chatUnread[chatChannel]=0;updateChatBadge();
-    openDrawer("chat","แชท",'<div class="chat-tabs" role="group" aria-label="เลือกช่องแชท">'+Object.entries(chatTabs).map(([id,label])=>'<button id="chatTab-'+id+'" type="button">'+label+'</button>').join('')+'</div><p id="chatStatus" class="note" role="status"></p><label id="chatTargetField" class="field" for="chatTarget" hidden>ผู้รับ<select id="chatTarget"></select></label><div id="chatLog" class="chat-log" role="log" aria-live="polite"></div><form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">ข้อความแชท</label><input id="chatInput" maxlength="400" autocomplete="off" placeholder="พิมพ์ข้อความ (ไม่เกิน 200 ตัวอักษร)"><button id="chatSend" type="submit">ส่ง</button></form>');
-    for(const channel of Object.keys(chatTabs)) $("chatTab-"+channel).onclick=()=>{chatChannel=channel;chatUnread[channel]=0;updateChatBadge();renderChat();};
-    $("chatTarget").onchange=event=>{chatTargetId=event.target.value;renderChat();};
-    $("chatInput").addEventListener("input",event=>{chatDraft[chatChannel]=event.target.value;});
-    $("chatForm").addEventListener("submit",event=>{
-      event.preventDefault();const channel=chatChannel,extended=["party","private","bug"].includes(channel);
-      if(chatPending||mode!=="live"||!room||room.state?.chatAvailable!==true||(extended&&room.state?.extendedChatAvailable!==true))return;
-      const text=chatDraft[channel].normalize("NFC").trim();
-      if(!text||Array.from(text).length>200){toast("พิมพ์ข้อความไม่เกิน 200 ตัวอักษร");return;}
-      if(channel==="private"&&!chatTargetId){toast("เลือกผู้รับก่อนส่ง");return;}
-      const command=channel==="private"?{text,channel,targetId:chatTargetId}:{text,channel};
-      chatPending={...command};
-      try{room.send("chat",command);}catch(_){finishChatPending();toast("ส่งข้อความไม่สำเร็จ");renderChat();return;}
-      chatTimer=setTimeout(()=>{finishChatPending();toast("ยังไม่ได้รับการยืนยันข้อความ");renderChat();},5000);renderChat();
-    });
-    renderChat();
+    if(!chatBox)return;
+    if(!ui.drawer.hidden)closeDrawer();
+    chatBox.el.classList.add("composing");chatBox.toggle.textContent="×";
+    chatBox.toggle.setAttribute("aria-label","ย่อช่องพิมพ์แชท");chatBox.toggle.setAttribute("aria-expanded","true");
+    chatBoxUnread[chatBoxTab]=0;
+    if(chatBoxTab==="all"){for(const channel of Object.keys(chatUnread))chatUnread[channel]=0;}
+    else chatUnread[chatBoxTab]=0;
+    updateChatBadge();renderChatBox(true);syncChatViewport();
+    chatBox.input.focus({preventScroll:true});
   }
+  window.visualViewport?.addEventListener("resize",syncChatViewport);
+  window.visualViewport?.addEventListener("scroll",syncChatViewport);
+  document.addEventListener("pointerdown",event=>{
+    if(chatBox?.el.classList.contains("composing") && !chatBox.el.contains(event.target))closeChatComposer();
+  },true);
   $("drawerClose").addEventListener("click",closeDrawer);
   // Opening from a canvas pointerup makes the canvas inert immediately. On
   // touch screens the same tap's ensuing click can then be retargeted to the
