@@ -155,6 +155,9 @@ jobs:
           cp deploy/combat/party-experience.test.ts combat-verify/src/rooms/party-experience.test.ts
           cp deploy/combat/party-integration.mjs combat-verify/party-integration.mjs
           cp deploy/combat/EconomyStore.ts combat-verify/src/rooms/EconomyStore.ts
+          cp deploy/combat/Fishing.ts deploy/combat/fishing.test.ts combat-verify/src/rooms/
+          cp deploy/combat/central-market.test.ts combat-verify/src/rooms/central-market.test.ts
+          cp deploy/combat/central-market-integration.mjs combat-verify/central-market-integration.mjs
           cp deploy/combat/EconomyRules.ts combat-verify/src/rooms/EconomyRules.ts
           cp deploy/combat/economy-store.test.ts combat-verify/src/rooms/economy-store.test.ts
           cp deploy/combat/economy-migration.test.ts combat-verify/src/rooms/economy-migration.test.ts
@@ -412,6 +415,16 @@ jobs:
           MONTRA_TYPHOON_API_KEY: ''
           MONTRA_DIRECTOR_PERSIST: '0'
         run: npx tsx --test src/rooms/world-director.test.ts src/rooms/director-reward.test.ts src/rooms/director-accept.test.ts src/rooms/director-deadline.test.ts
+
+      - name: Test central marketplace escrow and reserve
+        working-directory: combat-verify
+        run: npx tsx --test src/rooms/central-market.test.ts
+
+      - name: Test central marketplace across rooms and restart
+        working-directory: combat-verify
+        env:
+          MONTRA_CENTRAL_SERVER_SOURCE: '1'
+        run: timeout 180s node central-market-integration.mjs
 
       - name: Test persistent hunt events
         working-directory: combat-verify

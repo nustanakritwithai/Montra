@@ -7,12 +7,34 @@ import type {FishItem} from "./Fishing.js";
 /** Single-process transactional economy. This store must own inventories before it is wired to gameplay. */
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
-import { personalItem, type BodySlot, type BodyItemId, type PersonalId } from "./PersonalItems.js";
+import { PERSONAL_ITEMS, personalItem, type BodySlot, type BodyItemId, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack, type WeaponItemId } from "./ItemRules.js";
 import type {SalvageOrder} from "./EconomyRules.js";
 
 export const STARTER_GOLD = 1000;
 const MAX_GOLD = 1_000_000_000;
+export const STARTER_SUPPLIES = Object.freeze({
+  health_potion:{price:15,dailyLimit:20,worldLimit:500},
+  mat_raw_wood_1:{price:10,dailyLimit:20,worldLimit:500},
+  mat_raw_stone_1:{price:10,dailyLimit:20,worldLimit:500},
+  mat_herb_1:{price:10,dailyLimit:20,worldLimit:500},
+});
+export type StarterSupplyId=keyof typeof STARTER_SUPPLIES;
+export type MarketCategory="all"|"material"|"equipment"|"card"|"consumable";
+const legacyMarketItems:Record<string,{name:string;kind:string}>={
+  health_potion:{name:"ยาเลือดเล็ก ยาฟื้นพลัง",kind:"consumable"},shrine_shard:{name:"เศษตราผู้พิทักษ์",kind:"material"},
+  ritual_dagger:{name:"มีดหมอ",kind:"mainHand"},arcane_sword:{name:"กระบี่อาคม",kind:"mainHand"},muay_wraps:{name:"ผ้าคาดเชือก",kind:"mainHand"},
+  spirit_staff:{name:"คทาวิญญาณ",kind:"mainHand"},shrine_glaive:{name:"ง้าวจันทร์ผู้พิทักษ์",kind:"mainHand"},
+};
+function marketItemIds(query:string,category:MarketCategory):string[]|null {
+  const word=query.normalize("NFC").trim().toLocaleLowerCase();
+  if(!word && category==="all")return null;
+  const catalog:Record<string,{name:string;kind:string}>={...legacyMarketItems,...PERSONAL_ITEMS};
+  return Object.entries(catalog).filter(([id,item])=>{
+    const kind=item.kind==="material" || item.kind==="catalyst"?"material":item.kind==="card"?"card":item.kind==="consumable"?"consumable":"equipment";
+    return (category==="all" || kind===category) && (!word || id.toLocaleLowerCase().includes(word) || item.name.normalize("NFC").toLocaleLowerCase().includes(word));
+  }).map(([id])=>id);
+}
 type Account = { gold: number; inventory: InventorySnapshot };
 type Listing = { id: string; seller: string; item: InventoryStack; price: number; state: string };
 export type TradeOffer = { slot: number | null; amount: number; gold: number };
@@ -90,6 +112,7 @@ function spendForgeCopies(bag:InventorySnapshot,gear:string,qty:number){
 
 export class EconomyStore {
   private readonly db: DatabaseSync;
+  private auctionTimer:ReturnType<typeof setInterval>|undefined;
   constructor(file:string,private readonly forgeDraw?:()=>number) {
     this.db = new DatabaseSync(file);
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;
@@ -101,9 +124,24 @@ export class EconomyStore {
       CREATE TABLE IF NOT EXISTS resource_periods(map TEXT NOT NULL,node TEXT NOT NULL,periodMs INTEGER NOT NULL,PRIMARY KEY(map,node));
       CREATE TABLE IF NOT EXISTS resource_workers(actor TEXT PRIMARY KEY,lastAt INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS fishing_pending(actor TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,request TEXT NOT NULL UNIQUE,item TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS auctions(id TEXT PRIMARY KEY,seller TEXT NOT NULL,item TEXT NOT NULL,opening INTEGER NOT NULL,bidder TEXT,bid INTEGER NOT NULL DEFAULT 0,ends_at INTEGER NOT NULL,state TEXT NOT NULL,claimant TEXT,claimed INTEGER NOT NULL DEFAULT 0);
+      CREATE INDEX IF NOT EXISTS auctions_due ON auctions(state,ends_at);
+      CREATE INDEX IF NOT EXISTS auctions_seller ON auctions(seller,state);
+      CREATE INDEX IF NOT EXISTS auctions_bidder ON auctions(bidder,state);
+      CREATE TABLE IF NOT EXISTS auction_credits(actor TEXT PRIMARY KEY,amount INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS starter_supply_used(actor TEXT NOT NULL,day TEXT NOT NULL,item TEXT NOT NULL,quantity INTEGER NOT NULL,PRIMARY KEY(actor,day,item));
+      CREATE TABLE IF NOT EXISTS starter_supply_world(day TEXT NOT NULL,item TEXT NOT NULL,quantity INTEGER NOT NULL,PRIMARY KEY(day,item));
+      CREATE INDEX IF NOT EXISTS listings_state ON listings(state);
+      CREATE INDEX IF NOT EXISTS listings_seller_state ON listings(seller,state);
     `);
   }
-  close(): void { this.db.close(); }
+  startAuctionSweeper():void {
+    if(this.auctionTimer)return;
+    try{this.settleExpiredAuctions();}catch(error){console.error("MONTRA auction settlement failed",error);}
+    this.auctionTimer=setInterval(()=>{try{this.settleExpiredAuctions();}catch(error){console.error("MONTRA auction settlement failed",error);}},15000);
+    this.auctionTimer.unref();
+  }
+  close(): void { if(this.auctionTimer)clearInterval(this.auctionTimer);this.auctionTimer=undefined;this.db.close(); }
   catchFish(actor:string,request:string,item:FishItem){
     return this.once(actor,request,"fish",{item},()=>{
       const account=this.account(actor);
@@ -247,7 +285,9 @@ export class EconomyStore {
   getAccount(id: string): Account { return this.account(id); }
   hasOpenListings(id:string):boolean {
     characterId(id);
-    return Boolean(this.db.prepare("SELECT 1 FROM listings WHERE seller=? AND state='open' LIMIT 1").get(id));
+    return Boolean(this.db.prepare("SELECT 1 FROM listings WHERE seller=? AND state='open' LIMIT 1").get(id) ||
+      this.db.prepare("SELECT 1 FROM auctions WHERE (state='open' AND (seller=? OR bidder=?)) OR (state='settled' AND claimant=? AND claimed=0) LIMIT 1").get(id,id,id) ||
+      this.db.prepare("SELECT 1 FROM auction_credits WHERE actor=? AND amount>0 LIMIT 1").get(id));
   }
   /** A character cannot be retired while another player can buy its listings. */
   eraseCharacter(id:string):void {
@@ -255,6 +295,8 @@ export class EconomyStore {
     this.transaction(()=>{
       if(this.hasOpenListings(id))throw new Error("character_has_listings");
       this.db.prepare("DELETE FROM listings WHERE seller=?").run(id);
+      this.db.prepare("DELETE FROM auction_credits WHERE actor=?").run(id);
+      this.db.prepare("DELETE FROM starter_supply_used WHERE actor=?").run(id);
       this.db.prepare("DELETE FROM receipts WHERE actor=?").run(id);
       this.db.prepare("DELETE FROM characters WHERE id=?").run(id);
       this.db.prepare("DELETE FROM accounts WHERE id=?").run(id);
@@ -269,6 +311,136 @@ export class EconomyStore {
       id: String(row.id), seller: String(row.seller), item: JSON.parse(String(row.item)) as InventoryStack,
       price: Number(row.price), state: String(row.state),
     }));
+  }
+  browseMarket(id:string,query:string,category:MarketCategory,before:number|null,ownOnly=false){
+    characterId(id);const ids=marketItemIds(query,category);if(ids && !ids.length)return {listings:[],nextCursor:null};
+    const where=["state='open'"],args:(string|number)[]=[];
+    if(before!==null){where.push("rowid<?");args.push(before);}
+    if(ownOnly){where.push("seller=?");args.push(id);}
+    if(ids){where.push(`json_extract(item,'$.itemId') IN (${ids.map(()=>"?").join(",")})`);args.push(...ids);}
+    const rows=this.db.prepare(`SELECT rowid AS seq,id,seller,item,price FROM listings WHERE ${where.join(" AND ")} ORDER BY rowid DESC LIMIT 31`).all(...args);
+    const page=rows.slice(0,30);
+    return {listings:page.map(row=>({id:String(row.id),seller:String(row.seller).slice(0,12),isMine:row.seller===id,item:JSON.parse(String(row.item)) as InventoryStack,price:Number(row.price)})),nextCursor:rows.length>30?Number(page[page.length-1].seq):null};
+  }
+
+  /** NPC reserve has both a per-character and a shared daily limit; resets at 00:00 UTC. */
+  starterSupplyStatus(id:string,now=Date.now()){
+    characterId(id);const day=new Date(now).toISOString().slice(0,10);
+    return {resetAt:(Math.floor(now/86400000)+1)*86400000,items:Object.entries(STARTER_SUPPLIES).map(([item,config])=>{
+      const used=Number(this.db.prepare("SELECT quantity FROM starter_supply_used WHERE actor=? AND day=? AND item=?").get(id,day,item)?.quantity??0);
+      const world=Number(this.db.prepare("SELECT quantity FROM starter_supply_world WHERE day=? AND item=?").get(day,item)?.quantity??0);
+      return {item,price:config.price,remaining:Math.max(0,Math.min(config.dailyLimit-used,config.worldLimit-world)),personalRemaining:Math.max(0,config.dailyLimit-used),worldRemaining:Math.max(0,config.worldLimit-world)};
+    })};
+  }
+  buyStarterSupply(id:string,request:string,item:StarterSupplyId,quantity:number,now=Date.now()){
+    if(!Object.hasOwn(STARTER_SUPPLIES,item))throw Error("item_unavailable");
+    positiveInteger(quantity,20);
+    return this.once(id,request,"starter_supply",{item,quantity},()=>{
+      const status=this.starterSupplyStatus(id,now).items.find(x=>x.item===item)!;
+      if(quantity>status.remaining)throw Error("starter_supply_limit");
+      const account=this.account(id),cost=status.price*quantity;if(account.gold<cost)throw Error("insufficient_gold");
+      account.inventory=add(account.inventory,{itemId:item,quantity});account.gold-=cost;this.put(id,account);
+      const day=new Date(now).toISOString().slice(0,10);
+      this.db.prepare("INSERT INTO starter_supply_used VALUES(?,?,?,?) ON CONFLICT(actor,day,item) DO UPDATE SET quantity=quantity+excluded.quantity").run(id,day,item,quantity);
+      this.db.prepare("INSERT INTO starter_supply_world VALUES(?,?,?) ON CONFLICT(day,item) DO UPDATE SET quantity=quantity+excluded.quantity").run(day,item,quantity);
+      return {item,quantity,cost};
+    });
+  }
+
+  private creditOrHold(id:string,amount:number):void {
+    positiveInteger(amount,MAX_GOLD);const account=this.account(id);
+    if(account.gold+amount<=MAX_GOLD){account.gold+=amount;this.put(id,account);return;}
+    const pending=Number(this.db.prepare("SELECT amount FROM auction_credits WHERE actor=?").get(id)?.amount??0);
+    if(!Number.isSafeInteger(pending) || !Number.isSafeInteger(pending+amount))throw Error("auction_credit_overflow");
+    this.db.prepare("INSERT INTO auction_credits VALUES(?,?) ON CONFLICT(actor) DO UPDATE SET amount=excluded.amount").run(id,pending+amount);
+  }
+  auctionCredit(id:string):number { characterId(id);return Number(this.db.prepare("SELECT amount FROM auction_credits WHERE actor=?").get(id)?.amount??0); }
+  claimAuctionCredit(id:string,request:string){
+    return this.once(id,request,"auction_credit",{},()=>{
+      const pending=this.auctionCredit(id),account=this.account(id),amount=Math.min(pending,MAX_GOLD-account.gold);
+      if(!Number.isSafeInteger(pending) || amount<=0)throw Error("auction_credit_unavailable");
+      account.gold+=amount;this.put(id,account);
+      if(amount===pending)this.db.prepare("DELETE FROM auction_credits WHERE actor=?").run(id);
+      else this.db.prepare("UPDATE auction_credits SET amount=? WHERE actor=?").run(pending-amount,id);
+      return {amount,remaining:pending-amount};
+    });
+  }
+  createAuction(id:string,request:string,slot:number,amount:number,opening:number,durationHours:number,stamp?:string,now=Date.now()){
+    positiveInteger(opening,MAX_GOLD);if(![1,6,24].includes(durationHours))throw Error("invalid_auction_duration");
+    return this.once(id,request,"auction_create",{slot,amount,opening,durationHours,...(stamp===undefined?{}:{stamp})},()=>{
+      const count=Number(this.db.prepare("SELECT COUNT(*) AS total FROM auctions WHERE seller=? AND (state='open' OR (state='settled' AND claimant=? AND claimed=0))").get(id,id)?.total??0);
+      if(count>=20)throw Error("auction_limit");
+      const seller=this.account(id),item=seller.inventory.slots[slot];
+      if(item && !matchesGearStamp(seller.inventory,item.itemId,item.forge,stamp))throw Error("item_unavailable");
+      const removed=take(seller.inventory,slot,amount);seller.inventory=removed.inventory;this.put(id,seller);
+      const auctionId=randomUUID(),endsAt=now+durationHours*3600000;
+      this.db.prepare("INSERT INTO auctions(id,seller,item,opening,ends_at,state) VALUES(?,?,?,?,?,'open')").run(auctionId,id,JSON.stringify(removed.item),opening,endsAt);
+      return {auctionId,endsAt};
+    });
+  }
+  bidAuction(id:string,request:string,auctionId:string,amount:number,now=Date.now()){
+    positiveInteger(amount,MAX_GOLD);
+    return this.once(id,request,"auction_bid",{auctionId,amount},()=>{
+      const row=this.db.prepare("SELECT seller,bidder,bid,opening,ends_at,state FROM auctions WHERE id=?").get(auctionId);
+      if(!row || row.state!=="open" || Number(row.ends_at)<=now)throw Error("auction_unavailable");
+      if(row.seller===id)throw Error("cannot_bid_own_auction");
+      const previous=Number(row.bid),minimum=previous?previous+1:Number(row.opening);
+      if(amount<minimum)throw Error("auction_bid_too_low");
+      const bidder=this.account(id),oldBidder=typeof row.bidder==="string"?row.bidder:null;
+      if(oldBidder!==id){
+        const pending=Number(this.db.prepare("SELECT COUNT(*) AS total FROM auctions WHERE (state='open' AND bidder=?) OR (state='settled' AND claimant=? AND bidder=? AND claimed=0)").get(id,id,id)?.total??0);
+        if(pending>=20)throw Error("auction_bid_limit");
+      }
+      const debit=oldBidder===id?amount-previous:amount;if(bidder.gold<debit)throw Error("insufficient_gold");
+      bidder.gold-=debit;this.put(id,bidder);
+      if(oldBidder && oldBidder!==id)this.creditOrHold(oldBidder,previous);
+      this.db.prepare("UPDATE auctions SET bidder=?,bid=? WHERE id=?").run(id,amount,auctionId);
+      return {auctionId,amount};
+    });
+  }
+  settleExpiredAuctions(now=Date.now()):number {
+    return this.transaction(()=>{
+      const rows=this.db.prepare("SELECT id,seller,bidder,bid FROM auctions WHERE state='open' AND ends_at<=? ORDER BY ends_at LIMIT 50").all(now);
+      for(const row of rows){
+        const bidder=typeof row.bidder==="string"?row.bidder:null,seller=String(row.seller);
+        if(bidder)this.creditOrHold(seller,Number(row.bid));
+        this.db.prepare("UPDATE auctions SET state='settled',claimant=? WHERE id=? AND state='open'").run(bidder??seller,String(row.id));
+      }
+      return rows.length;
+    });
+  }
+  claimAuctionItem(id:string,request:string,auctionId:string){
+    return this.once(id,request,"auction_item",{auctionId},()=>{
+      const row=this.db.prepare("SELECT claimant,item,state,claimed FROM auctions WHERE id=?").get(auctionId);
+      if(!row || row.state!=="settled" || row.claimant!==id || Number(row.claimed)!==0)throw Error("auction_claim_unavailable");
+      const account=this.account(id);account.inventory=add(account.inventory,JSON.parse(String(row.item)) as InventoryStack);this.put(id,account);
+      this.db.prepare("UPDATE auctions SET claimed=1 WHERE id=?").run(auctionId);return {auctionId};
+    });
+  }
+  cancelAuction(id:string,request:string,auctionId:string,now=Date.now()){
+    return this.once(id,request,"auction_cancel",{auctionId},()=>{
+      const row=this.db.prepare("SELECT seller,item,bidder,ends_at,state FROM auctions WHERE id=?").get(auctionId);
+      if(!row || row.seller!==id || row.state!=="open" || Number(row.ends_at)<=now || row.bidder)throw Error("auction_cancel_unavailable");
+      const seller=this.account(id);seller.inventory=add(seller.inventory,JSON.parse(String(row.item)) as InventoryStack);this.put(id,seller);
+      this.db.prepare("UPDATE auctions SET state='cancelled',claimed=1 WHERE id=?").run(auctionId);return {auctionId};
+    });
+  }
+  browseAuctions(id:string,query:string,category:MarketCategory,before:number|null){
+    characterId(id);const ids=marketItemIds(query,category);if(ids && !ids.length)return {auctions:[],nextCursor:null};
+    const where=["state='open'","ends_at>?"],args:(string|number)[]=[Date.now()];
+    if(before!==null){where.push("rowid<?");args.push(before);}
+    if(ids){where.push(`json_extract(item,'$.itemId') IN (${ids.map(()=>"?").join(",")})`);args.push(...ids);}
+    const rows=this.db.prepare(`SELECT rowid AS seq,id,seller,item,opening,bidder,bid,ends_at FROM auctions WHERE ${where.join(" AND ")} ORDER BY rowid DESC LIMIT 31`).all(...args);
+    const page=rows.slice(0,30);
+    return {auctions:page.map(row=>({id:String(row.id),seller:String(row.seller).slice(0,12),isMine:row.seller===id,isBidder:row.bidder===id,item:JSON.parse(String(row.item)) as InventoryStack,opening:Number(row.opening),bid:Number(row.bid),bidder:typeof row.bidder==="string"?row.bidder.slice(0,12):null,endsAt:Number(row.ends_at)})),nextCursor:rows.length>30?Number(page[page.length-1].seq):null};
+  }
+  myAuctions(id:string){
+    characterId(id);
+    const fields="id,seller,item,opening,bidder,bid,ends_at,state,claimant,claimed";
+    const pending=this.db.prepare(`SELECT ${fields} FROM auctions WHERE (state='open' AND (seller=? OR bidder=?)) OR (state='settled' AND claimant=? AND claimed=0) ORDER BY rowid DESC LIMIT 100`).all(id,id,id);
+    const history=this.db.prepare(`SELECT ${fields} FROM auctions WHERE state='settled' AND ((seller=? AND bidder IS NOT NULL) OR (claimant=? AND claimed=1)) ORDER BY rowid DESC LIMIT 15`).all(id,id);
+    const seen=new Set<string>(),rows=[...pending,...history].filter(row=>{const key=String(row.id);if(seen.has(key))return false;seen.add(key);return true;});
+    return {auctions:rows.map(row=>({id:String(row.id),seller:String(row.seller).slice(0,12),isMine:row.seller===id,isBidder:row.bidder===id,item:JSON.parse(String(row.item)) as InventoryStack,opening:Number(row.opening),bid:Number(row.bid),bidder:typeof row.bidder==="string"?row.bidder.slice(0,12):null,endsAt:Number(row.ends_at),state:String(row.state),canClaim:row.state==="settled" && row.claimant===id && Number(row.claimed)===0})),credit:this.auctionCredit(id)};
   }
   craftShrineGlaive(id: string, request: string) {
     const recipe = SHRINE_RECIPE;
