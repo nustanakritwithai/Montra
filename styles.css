@@ -1468,3 +1468,5 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 @media (max-width:640px) and (orientation:portrait) {
   .monster-status { width:min(38vw,160px); padding:4px 6px; }
 }
+/* Monster health is drawn as a ring under the target in the world. */
+.monster-status { display:none !important; }

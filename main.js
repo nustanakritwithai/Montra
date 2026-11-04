@@ -602,18 +602,36 @@
     spawnFx("disc", "red", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 650, s0: r * 2.4, s1: r * 1.6, a0: .25, a1: .85, follow: mesh });
     spawnFx("dash", "red", mesh.position.x, y + .02, mesh.position.z, { orient: "ground", life: 650, s0: r * 3, s1: r * 1.7, a0: .5, a1: 1, spin: 2.2, follow: mesh });
   }
-  // Persistent rotating gold ring under the selected target.
-  let targetRingMesh = null;
+  // The selected monster's health is a compact ring on the ground beneath it.
+  let targetRingMesh = null, targetRingTexture = null, targetRingPercent = -1;
   function updateTargetRing(now) {
     const id = selectedForestTarget, mesh = id ? (forestMonsters.get(id) || (id === MONSTER_ID ? enemy : null)) : null;
-    if (!mesh || !mesh.isEnabled()) { if (targetRingMesh) targetRingMesh.setEnabled(false); return; }
-    if (!targetRingMesh) { targetRingMesh = B.MeshBuilder.CreatePlane("targetRing", { size: 1 }, scene); targetRingMesh.isPickable = false; targetRingMesh.rotation.x = Math.PI / 2; targetRingMesh.material = vfxMat("seg6", "gold"); }
-    const g = mesh.metadata?.ghost, r = Math.max(2.6, (g?.tall || 1.8) * 1.5);
+    const target = id && !selectedPkTargetId ? hudCurrentTarget(now) : null;
+    if (!mesh || !mesh.isEnabled() || !target?.alive) { if (targetRingMesh) targetRingMesh.setEnabled(false); return; }
+    if (!targetRingMesh) {
+      targetRingTexture = new B.DynamicTexture("monster health ring", {width:128,height:128}, scene, false);
+      targetRingTexture.hasAlpha = true;
+      const material = new B.StandardMaterial("monster health ring", scene);
+      material.diffuseColor = B.Color3.Black(); material.specularColor = B.Color3.Black();
+      material.emissiveTexture = targetRingTexture; material.opacityTexture = targetRingTexture;
+      material.disableLighting = true; material.backFaceCulling = false; material.disableDepthWrite = true;
+      material.fogEnabled = false; material.zOffset = -2;
+      targetRingMesh = B.MeshBuilder.CreatePlane("targetRing", { size: 1 }, scene);
+      targetRingMesh.isPickable = false; targetRingMesh.rotation.x = Math.PI / 2; targetRingMesh.material = material;
+    }
+    const percent = Math.max(0,Math.min(100,Math.round(100 * Number(target.hp) / Math.max(1,Number(target.maxHp)))));
+    if (percent !== targetRingPercent) {
+      const c = targetRingTexture.getContext(); c.clearRect(0,0,128,128);
+      c.lineWidth=11; c.lineCap="butt"; c.strokeStyle="rgba(18,12,13,.88)";
+      c.beginPath(); c.arc(64,64,51,0,Math.PI*2); c.stroke();
+      if(percent>0){c.strokeStyle="#f25751";c.beginPath();c.arc(64,64,51,-Math.PI/2,-Math.PI/2+Math.PI*2*percent/100);c.stroke();}
+      targetRingTexture.update(); targetRingPercent=percent;
+    }
+    const g = mesh.metadata?.ghost, state = mode === "live" ? (id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get?.(id)) : null;
+    const r = Math.max(1.3, Math.min(3.5,(g?.tall || 2) * .68 * (g?.design?.scale || 1)));
     targetRingMesh.setEnabled(true);
-    targetRingMesh.position.set(mesh.position.x, (g?.ty ?? 0) + .14, mesh.position.z);
-    targetRingMesh.rotation.y = now / 900;
-    targetRingMesh.scaling.setAll(r * 2 * (1 + .06 * Math.sin(now / 220)));
-    targetRingMesh.visibility = .8 + .2 * Math.sin(now / 220);
+    targetRingMesh.position.set(mesh.position.x, (g?.ty ?? (Number(state?.y) || 0)) + .14, mesh.position.z);
+    targetRingMesh.scaling.setAll(r * 2);
   }
   // ---- Skill VFX: every action an avatar plays gets a readable effect, timed to its strike frame ----
   const SCHOOL_COL = { ritual_dagger: "violet", arcane_sword: "cyan", spirit_staff: "jade", thai_dual: "gold", muay_wraps: "orange" };
@@ -7310,6 +7328,7 @@
       return;
     }
     if (demoMonsterHp <= 0) { toast("ผีถูกปราบแล้ว · รอเกิดใหม่"); return; }
+    selectedForestTarget=MONSTER_ID;
     marker.setEnabled(false);
     demoAutoAttack = true;
     toast("แตะผีเพื่อโจมตี · DEMO");
