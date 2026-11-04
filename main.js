@@ -3571,7 +3571,7 @@
         mesh.metadata.warning.setEnabled(charging);
       }
       if(!ghost){mesh.position.set(Number(monster.x),Number(monster.y)+(monster.tier==="boss"?2.25:monster.tier==="elite"?1.74:.88),Number(monster.z));mesh.rotation.y=Number(monster.facing)||0;}
-      if(id===selectedForestTarget&&monster.mapId===activeMapId){updateMonsterUI(monster.hp,monster.maxHp,monster.alive);
+      if(id===selectedForestTarget&&monster.mapId===activeMapId){
         ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monsterName(monster,id)+" · Lv "+monster.level+(ownServerCharacter()?.targetId===id?" · ตีอัตโนมัติ":"");}
     });
     for(const [id,mesh] of forestMonsters)if(!seen.has(id)){mesh.metadata?.ghost?.rig?.metadata?.skeletons?.forEach(s=>s.dispose());mesh.dispose();forestMonsters.delete(id);}
@@ -3592,7 +3592,7 @@
     selectedForestTarget=id;spellTargetId=id;selectedPkTargetId=null;syncPKHud();marker.setEnabled(false);
     setTargetedSkill(null);
     try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }
-    updateMonsterUI(target.hp,target.maxHp,target.alive);ui.monsterHint.textContent=monsterName(target,id)+" · Lv "+target.level;
+    ui.monsterHint.textContent=monsterName(target,id)+" · Lv "+target.level;
   }
 
   function switchWorld(mapId) {
@@ -7243,17 +7243,6 @@
   let hitFlashRemaining = 0;
   let lastMonsterHitSeq = 0;
 
-  function updateMonsterUI(hp, maxHp, alive, simulated = false) {
-    const max = Math.max(1, Number(maxHp) || 100);
-    const current = Math.max(0, Math.min(max, Number(hp) || 0));
-    ui.monsterStatus.querySelector(".monster-heading span").textContent=activeMapId !== "ritual_village" ? ("มอนสเตอร์ · "+(worldDefinitions?.[activeMapId]?.name || "ป่าต้องห้าม")) : "ผีเข้าสิง · ตัวทดสอบ";
-    ui.monsterBar.style.width = (100 * current / max) + "%";
-    ui.monsterText.textContent = alive ? Math.ceil(current) + "/" + Math.ceil(max) : "ปราบแล้ว"; // same wording as the HUD frame
-    ui.monsterHint.textContent = simulated
-      ? "ทดลองในเครื่อง · แตะผีเพื่อโจมตี"
-      : ownServerCharacter()?.targetId===MONSTER_ID ? "ออนไลน์ · ตีอัตโนมัติ" : "ออนไลน์ · แตะผีเพื่อเริ่มตี";
-  }
-
   function resetDemoMonster() {
     demoMonsterHp = 100;
     demoRespawnAt = 0;
@@ -7264,19 +7253,17 @@
     enemy.position.x = 1.1;
     enemy.position.z = 10.4;
     enemy.setEnabled(true);
-    updateMonsterUI(100, 100, true, true);
   }
 
   function syncMonsterState(state) {
     if (mode !== "live") return;
     if(activeMapId !== "ritual_village") {
-      monsterReady=false; enemy.setEnabled(false); ui.monsterStatus.hidden=true; return;
+      monsterReady=false; enemy.setEnabled(false); return;
     }
     const monster = state?.monster;
     if (!monster || !Number.isFinite(Number(monster.hp))) {
       monsterReady = false;
       enemy.setEnabled(false);
-      ui.monsterStatus.hidden = true;
       return;
     }
 
@@ -7293,7 +7280,6 @@
     const seq = Number(monster.hitSeq);
     if (Number.isFinite(seq) && seq > lastMonsterHitSeq) hitFlashRemaining = .22;
     if (Number.isFinite(seq)) lastMonsterHitSeq = Math.max(lastMonsterHitSeq, seq);
-    updateMonsterUI(hp, maxHp, alive);
   }
 
   function requestMonsterAttack() {
@@ -7311,6 +7297,7 @@
         return;
       }
       if (!enemy.isEnabled()) { toast("มอนสเตอร์ตายแล้ว · รอเกิดใหม่"); return; }
+      selectedForestTarget=MONSTER_ID;
       spellTargetId=MONSTER_ID;
       marker.setEnabled(false);
       try {
@@ -7715,12 +7702,12 @@
   }
   const hudKills = {};
   let hudTarget = { id: null, until: 0 }, hudCache = new Map(), hudIn = 0;
-  const hudSet = (el, key, value, prop = "textContent") => { if (!el) return; const k = key + prop; if (hudCache.get(k) === value) return; hudCache.set(k, value); if (prop === "width") el.style.width = value; else if (prop === "hidden") el.hidden = value; else el[prop] = value; };
+  const hudSet = (el, key, value, prop = "textContent") => { if (!el) return; const k = key + prop; if (hudCache.get(k) === value && (prop !== "hidden" || el.hidden === value)) return; hudCache.set(k, value); if (prop === "width") el.style.width = value; else if (prop === "hidden") el.hidden = value; else el[prop] = value; };
   const pctOf = (v, max) => Math.max(0, Math.min(100, 100 * (Number(v) || 0) / Math.max(1, Number(max) || 1))).toFixed(1) + "%";
   function hudCurrentTarget(now) {
     const hero = getLocalAvatar();
     if (mode === "live") {
-      const st = room?.state, id = hudTarget.until > now && hudTarget.id ? hudTarget.id : selectedForestTarget;
+      const st = room?.state, id = selectedForestTarget || (hudTarget.until > now ? hudTarget.id : null);
       if (!id) return null;
       if (id === MONSTER_ID && st?.monster && activeMapId === "ritual_village")
         return { name: "ผีเข้าสิง", level: Number(st.monster.level) || 1, hp: st.monster.hp, maxHp: st.monster.maxHp, alive: st.monster.alive !== false };
@@ -9059,9 +9046,6 @@
         }
         if (talisman) showTalisman(enemy);
         hitFlashRemaining = .22;
-        if (Number.isFinite(Number(hit.hp)) && Number.isFinite(Number(hit.maxHp))) {
-          updateMonsterUI(Number(hit.hp), Number(hit.maxHp), Number(hit.hp) > 0);
-        }
         toast(hit.attackerId === localId
           ? (talisman ? "แปะยันต์ใส่ผี -" : "โจมตีผีสำเร็จ -") + String(hit.damage) + " HP"
           : "ผู้เล่นอื่นโจมตีผี -" + String(hit.damage) + " HP");
@@ -13782,7 +13766,6 @@
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
               floatAtMonster(MONSTER_ID, "20", "dealt");
               hitFlashRemaining = .22;
-              updateMonsterUI(demoMonsterHp, 100, demoMonsterHp > 0, true);
               if (demoMonsterHp <= 0) {
                 hudKills.ritual_village = (hudKills.ritual_village || 0) + 1;
                 releaseSoul(enemy.position.x, enemy.position.y + .4, enemy.position.z);

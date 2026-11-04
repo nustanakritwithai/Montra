@@ -1457,3 +1457,14 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .cp-mastery-class svg {width:26px;height:26px;}
 .cp-mastery-class small,.cp-mastery p {font-size:12px;line-height:1.6;overflow-wrap:anywhere;}
 @media (min-width:600px){.cp-mastery-grid {grid-template-columns:repeat(3,minmax(0,1fr));}}
+
+/* Compact target frame keeps health visible without covering the playfield. */
+.monster-status { width:min(24vw,220px); padding:5px 7px; border-radius:8px; }
+.monster-heading { gap:4px; font-size:10px; }
+.monster-heading > span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.monster-heading strong,.target-level { flex-shrink:0; font-size:9px; }
+.target-level { margin:0; }
+.monster-hp-track { height:6px; margin-top:4px; }
+@media (max-width:640px) and (orientation:portrait) {
+  .monster-status { width:min(38vw,160px); padding:4px 6px; }
+}
