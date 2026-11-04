@@ -52,6 +52,30 @@ test("income uses server time, keeps the fraction across a rate change, enforces
   }finally{second.close();}
 }));
 
+test("city policy charges the commander and preserves accumulated income",()=>fixture((s)=>{
+  const end=take(s,site,"a",origin),at=end+2*hour;
+  act(s,"a",at,"collect");assert.equal(view(s,"a",at).balance,120);
+  act(s,"a",at,"focus_trade");assert.equal(view(s,"a",at).rate,72);assert.equal(view(s,"a",at).balance,60);
+  assert.throws(()=>act(s,"a",at,"focus_trade"),/unchanged/);
+  act(s,"a",at+hour,"focus_storage");const estate=view(s,"a",at+hour);
+  assert.equal(estate.available,72);assert.equal(estate.rate,60);assert.equal(estate.hours,12);assert.equal(estate.balance,0);
+  assert.ok(estate.history.some(entry=>entry.reason==="focus_storage" && entry.amount===-60));
+}));
+
+test("deliveries are battle-bound, rate-limited, and pay the winner only once",()=>fixture((s,file)=>{
+  const field=s.war.start(site,s.war.member("a")!,origin),token="11111111-1111-4111-8111-111111111111";
+  s.war.deliverSupply(field,"a","attack",token,origin+9000);
+  assert.throws(()=>s.war.deliverSupply(field,"a","attack",token,origin+10_000),/duplicate/);
+  assert.throws(()=>s.war.deliverSupply(field,"a","attack","22222222-2222-4222-8222-222222222222",origin+10_000),/cooldown/);
+  assert.throws(()=>s.war.deliverSupply(field,"b","attack","33333333-3333-4333-8333-333333333333",origin+10_000),/side|ended/);
+  const second=new GuildStore(file);
+  try{assert.equal(second.war.supplyCount(field,s.war.member("a")!.id),1);}finally{second.close();}
+  for(let n=1;n<=30;n++)s.war.advance(field,origin+10_000+n*1000,2,0);
+  const at=origin+40_000;
+  assert.equal(view(s,"a",at).balance,5);
+  s.war.inspect(site,at+hour);assert.equal(view(s,"a",at+hour).balance,5);
+}));
+
 test("conquest closes the old account once, preserves buildings and credits the next guild only from the result",()=>fixture((s,file)=>{
   const end=take(s,site,"a",origin),at=end+8*hour;
   assert.equal(view(s,"a",at+48*hour).available,480);

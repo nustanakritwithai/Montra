@@ -4,21 +4,23 @@ import type {DatabaseSync} from "node:sqlite";
 const HOUR=3_600_000;
 const upgrades={market:[240,480],warehouse:[180,360],workshop:[120,240]} as const;
 type Building=keyof typeof upgrades;
-type Action=Building|"collect"|"repair";
+type Focus="balanced"|"trade"|"storage";
+type Action=Building|"collect"|"repair"|"focus_balanced"|"focus_trade"|"focus_storage";
 export type GovernmentOrder={site:string;revision:number;action:Action};
 type Member={id:string;officer:boolean;commander?:boolean};
-type Estate={site:string;owner:string|null;settled:number;ticks:number;revision:number;market:number;warehouse:number;workshop:number;damaged:number};
+type Estate={site:string;owner:string|null;settled:number;ticks:number;revision:number;market:number;warehouse:number;workshop:number;damaged:number;focus:Focus};
 
 export function parseGovernmentOrder(input:unknown):GovernmentOrder|null {
   if(!input || typeof input!=="object" || Array.isArray(input))return null;
   const r=input as Record<string,unknown>;
   if(Object.keys(r).length!==3 || typeof r.site!=="string" || typeof r.revision!=="number" ||
      !Number.isSafeInteger(r.revision) || r.revision<1 || typeof r.action!=="string" ||
-     !(r.action==="collect" || r.action==="repair" || Object.hasOwn(upgrades,r.action)))return null;
+     !(r.action==="collect" || r.action==="repair" || r.action==="focus_balanced" || r.action==="focus_trade" || r.action==="focus_storage" || Object.hasOwn(upgrades,r.action)))return null;
   return {site:r.site,revision:r.revision,action:r.action as Action};
 }
 function terms(e:Estate){
-  const rate=60+(e.market-1)*15, hours=8+(e.damaged?0:(e.warehouse-1)*4);
+  const base=60+(e.market-1)*15,rate=e.focus==="trade"?Math.round(base*1.2):base;
+  const hours=8+(e.damaged?0:(e.warehouse-1)*4)+(e.focus==="storage" && !e.damaged?4:0);
   return {rate,hours,cap:rate*hours,repairCost:60-(e.workshop-1)*20};
 }
 function earned(e:Estate,now:number){
@@ -43,6 +45,8 @@ export class TerritoryGovernment {
         guild TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE, site TEXT NOT NULL, at INTEGER NOT NULL,
         reason TEXT NOT NULL, delta INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS guild_treasury_history ON guild_treasury_entries(guild,seq);`);
+    if(!db.prepare("PRAGMA table_info(territory_estates)").all().some(c=>c.name==="focus"))
+      db.exec("ALTER TABLE territory_estates ADD COLUMN focus TEXT NOT NULL DEFAULT 'balanced'");
     // An existing owner starts at deployment. Never mint pre-feature revenue on first visit or restart.
     db.prepare(`INSERT OR IGNORE INTO territory_estates(site,owner,settled)
       SELECT b.site,g.id,? FROM territory_battles b LEFT JOIN guilds g
@@ -65,6 +69,13 @@ export class TerritoryGovernment {
       throw Error("war_funds");
     this.db.prepare("INSERT INTO guild_treasury_entries(guild,site,at,reason,delta) VALUES(?,?,?,?,?)").run(guild,site,at,reason,delta);
   }
+  /** Called only inside the atomic battle settlement. */
+  creditWarSupplies(guild:string,site:string,at:number,deliveries:number):number {
+    if(!Number.isSafeInteger(deliveries) || deliveries<0)throw Error("war_invalid_supply");
+    const amount=Math.min(120,deliveries*5);
+    this.book(guild,site,at,amount*HOUR,"war_supply");
+    return amount;
+  }
   // Called in the same transaction as the battle result.
   settleVictory(site:string,winner:string|null,ended:number,breached:boolean){
     const e=this.estate(site);
@@ -82,7 +93,9 @@ export class TerritoryGovernment {
     if(!member)return;
     const e=this.estate(site);
     if(!e || e.owner!==member.id)return;
-    return {revision:e.revision,market:e.market,warehouse:e.warehouse,workshop:e.workshop,damaged:!!e.damaged,
+    const history=this.db.prepare("SELECT at,reason,delta FROM guild_treasury_entries WHERE guild=? AND site=? ORDER BY seq DESC LIMIT 8").all(member.id,site)
+      .map(row=>({at:Number(row.at),reason:String(row.reason),amount:Number(row.delta)/HOUR}));
+    return {revision:e.revision,market:e.market,warehouse:e.warehouse,workshop:e.workshop,damaged:!!e.damaged,focus:e.focus,focusCost:60,history,
       ...terms(e),available:Math.floor(earned(e,now)/HOUR),balance:this.balance(member.id),
       prices:{market:price(e,"market"),warehouse:price(e,"warehouse"),workshop:price(e,"workshop")},
       officer:member.officer,commander:member.commander===true};
@@ -102,14 +115,17 @@ export class TerritoryGovernment {
     }else if(act==="repair"){
       if(!e.damaged)throw Error("war_no_damage");
       amount=-terms(e).repairCost;e.damaged=0;
+    }else if(act==="focus_balanced" || act==="focus_trade" || act==="focus_storage"){
+      const focus=act.slice(6) as Focus;if(e.focus===focus)throw Error("war_focus_unchanged");
+      amount=-60;e.focus=focus;
     }else{
       if(e.damaged)throw Error("war_repair_first");
       const cost=price(e,act);if(cost===null)throw Error("war_building_max");
       amount=-cost;e[act]++;
     }
     this.book(member.id,e.site,now,amount*HOUR,act);
-    this.db.prepare(`UPDATE territory_estates SET settled=?,ticks=?,damaged=?,market=?,warehouse=?,workshop=?,revision=revision+1 WHERE site=?`)
-      .run(Math.max(now,e.settled),ticks,e.damaged,e.market,e.warehouse,e.workshop,e.site);
+    this.db.prepare(`UPDATE territory_estates SET settled=?,ticks=?,damaged=?,market=?,warehouse=?,workshop=?,focus=?,revision=revision+1 WHERE site=?`)
+      .run(Math.max(now,e.settled),ticks,e.damaged,e.market,e.warehouse,e.workshop,e.focus,e.site);
     return amount;
   }
 }

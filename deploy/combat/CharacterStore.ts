@@ -56,6 +56,8 @@ export type CharacterSnapshot = {
   rebirth?: RebirthState;
   masteryVitals?: MasteryVitals;
   forestObjective?: ForestObjective | null;
+  /** Recent paid director event IDs prevent replay across reconnects. */
+  directorClaims?: string[];
   classSkillReadyAt?: number;
   talismanReadyAt?: number;
   swordTree?: SwordTree;
@@ -151,6 +153,9 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
   const rebirth=value.rebirth === undefined ? undefined : validateRebirthState(value.rebirth);
   validateMasteryVitals(value.masteryVitals,value.updatedAt as string,value.hp as number);
   if(value.forestObjective!==undefined && value.forestObjective!==null)validateForestObjective(value.forestObjective);
+  if(value.directorClaims!==undefined && (!Array.isArray(value.directorClaims) || value.directorClaims.length>16 ||
+     value.directorClaims.some(id=>typeof id!=="string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)) ||
+     new Set(value.directorClaims).size!==value.directorClaims.length))throw Error("invalid_director_claims");
   const learning=(path:CharacterBuild["path"])=>classLearningLevel(rebirth,path,value.level as number);
   const swordTree = value.swordTree === undefined ? undefined : validateSwordTree(value.swordTree, learning("phutthaisawan"));
   if (value.muayWrapGranted !== undefined && typeof value.muayWrapGranted !== "boolean") throw new Error("invalid_muay_grant");

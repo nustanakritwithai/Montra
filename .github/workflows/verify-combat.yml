@@ -168,6 +168,16 @@ jobs:
           cp deploy/combat/RebirthCombat.ts deploy/combat/rebirth-combat.test.ts deploy/combat/mastery-runtime.test.ts combat-verify/src/rooms/
           cp deploy/combat/RebirthTransition.ts combat-verify/src/rooms/RebirthTransition.ts
           cp deploy/combat/ForestObjectives.ts combat-verify/src/rooms/ForestObjectives.ts
+          cp deploy/combat/WorldDirector.ts combat-verify/src/rooms/WorldDirector.ts
+          cp deploy/combat/TyphoonGuide.ts combat-verify/src/rooms/TyphoonGuide.ts
+          cp deploy/combat/QuestAdvisor.ts combat-verify/src/rooms/QuestAdvisor.ts
+          cp deploy/combat/GuideAnswers.ts combat-verify/src/rooms/GuideAnswers.ts
+          cp deploy/combat/typhoon-guide.test.ts combat-verify/src/rooms/typhoon-guide.test.ts
+          cp deploy/combat/npc-guide-room.test.ts combat-verify/src/rooms/npc-guide-room.test.ts
+          cp deploy/combat/world-director.test.ts combat-verify/src/rooms/world-director.test.ts
+          cp deploy/combat/director-reward.test.ts combat-verify/src/rooms/director-reward.test.ts
+          cp deploy/combat/director-accept.test.ts combat-verify/src/rooms/director-accept.test.ts
+          cp deploy/combat/director-deadline.test.ts combat-verify/src/rooms/director-deadline.test.ts
           cp deploy/combat/ServiceNpcs.ts combat-verify/src/rooms/ServiceNpcs.ts
           cp deploy/combat/forest-objectives.test.ts combat-verify/src/rooms/forest-objectives.test.ts
           cp deploy/combat/rebirth.test.ts combat-verify/src/rooms/rebirth.test.ts
@@ -380,6 +390,22 @@ jobs:
         env:
           MONTRA_WORLD_EXPANSION: '1'
         run: npx tsx --test src/rooms/resource-gathering.test.ts
+
+      - name: Test world director events and rewards
+        working-directory: combat-verify
+        env:
+          MONTRA_WORLD_EXPANSION: '1'
+          MONTRA_TYPHOON_API_KEY: ''
+          MONTRA_DIRECTOR_PERSIST: '0'
+        run: npx tsx --test src/rooms/world-director.test.ts src/rooms/director-reward.test.ts src/rooms/director-accept.test.ts src/rooms/director-deadline.test.ts
+
+      - name: Test Typhoon NPC guidance
+        working-directory: combat-verify
+        env:
+          MONTRA_WORLD_EXPANSION: '1'
+          MONTRA_TYPHOON_API_KEY: ''
+          MONTRA_DIRECTOR_PERSIST: '0'
+        run: npx tsx --test src/rooms/typhoon-guide.test.ts src/rooms/npc-guide-room.test.ts
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify

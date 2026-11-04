@@ -73,3 +73,17 @@ export function rebirthBonuses(state: RebirthState, mode: "pve" | "pvp") {
     regen:mastery("mender"), movement:(saved.mastery.blade ?? 0)*(pvp?.005:.01),
   };
 }
+
+/** Player schema holds the PvP-safe value. Reconstruct a contextual PvE value
+ * only for the current calculation; never write it into shared player state. */
+export function contextualRebirthStat(value:number,pvpBonus:number,pveBonus:number,againstMonster:boolean):number {
+  if (![value,pvpBonus,pveBonus].every(Number.isFinite) || value<0 || pvpBonus<0 || pveBonus<0) throw Error("invalid_rebirth_combat_stat");
+  return againstMonster ? Math.max(0,Math.round(value*(1+pveBonus)/(1+pvpBonus))) : value;
+}
+
+/** Represent the extra PvE HP as mitigation of monster damage, keeping the
+ * shared HP pool PvP-safe even when monsters and players attack together. */
+export function contextualMonsterDamage(damage:number,pvpHp:number,pveHp:number):number {
+  if(![damage,pvpHp,pveHp].every(Number.isFinite) || damage<0 || pvpHp<0 || pveHp<0)throw Error("invalid_rebirth_combat_damage");
+  return damage===0 ? 0 : Math.max(1,Math.round(damage*(1+pvpHp)/(1+pveHp)));
+}

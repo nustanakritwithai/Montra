@@ -1,9 +1,10 @@
 import type { CharacterSnapshot } from "./CharacterStore.js";
 import { PATHS, parseBuild, type PathId } from "./CharacterBuilds.js";
 import { equipBody, validateInventory } from "./ItemRules.js";
-import { isBodySlot, personalItem } from "./PersonalItems.js";
+import { isBodySlot, personalItem, startingWeapon } from "./PersonalItems.js";
 import { emptyAllocations, PROGRESSION } from "./Progression.js";
 import { newRebirthState, startNextLife } from "./Rebirth.js";
+import { forgeStamp } from "./ForgeRules.js";
 
 /** Prepare one atomic save; the caller must lock mutations and commit before applying. */
 export function prepareRebirth(snapshot: CharacterSnapshot, path: PathId): CharacterSnapshot {
@@ -13,19 +14,33 @@ export function prepareRebirth(snapshot: CharacterSnapshot, path: PathId): Chara
   if (!build) throw Error("invalid_rebirth_class");
   const rebirth=startNextLife(snapshot.rebirth ?? newRebirthState(),snapshot.build.path,snapshot.level);
   let inventory=validateInventory(snapshot.inventory);
-  const weaponSlot=inventory.equippedWeaponSlot;
-  const weapon=weaponSlot!=null?personalItem(inventory.slots[weaponSlot]?.itemId):undefined;
-  if(path!==snapshot.build.path || (weapon?.level??1)>1){
-    inventory={...inventory,equippedWeaponSlot:null};
+  {
+    // Weapons already occupy a bag cell, so deselecting cannot lose one.
+    const weapon=inventory.slots[inventory.equippedWeaponSlot ?? -1];
+    const weaponDefinition=weapon && personalItem(weapon.itemId);
+    if (weapon && (path!==snapshot.build.path || (weaponDefinition?.level ?? 1)>1))
+      inventory={...inventory,equippedWeaponSlot:null};
+    for (const [position,item] of Object.entries(inventory.equipment ?? {})) {
+      const definition=personalItem(item);
+      if (!definition) throw Error("rebirth_inventory_invalid");
+      if ((definition.path==="all" || definition.path===path) && (definition.level ?? 1)<=1) continue;
+      if (!isBodySlot(position)) throw Error("rebirth_inventory_invalid");
+      const result=equipBody(inventory,position,null,item,path,snapshot.level,forgeStamp({itemId:item,forge:inventory.equipmentForges?.[position]}));
+      if (result.ok === false) throw Error(result.reason==="inventory_full" ? "rebirth_inventory_full" : "rebirth_inventory_invalid");
+      inventory=result.inventory;
+    }
+    if(inventory.equippedWeaponSlot===null){
+      const starter=startingWeapon(path),slots=inventory.slots.slice();
+      let slot=slots.findIndex(item=>item?.itemId===starter);
+      if(slot<0){
+        slot=slots.findIndex(item=>item===null);
+        if(slot<0)throw Error("rebirth_inventory_full");
+        slots[slot]={itemId:starter,quantity:1,bound:true};
+      }
+      inventory=validateInventory({...inventory,slots,equippedWeaponSlot:slot});
+    }
   }
-  for(const [position,item] of Object.entries(inventory.equipment??{})){
-    const definition=personalItem(item);
-    if(!isBodySlot(position) || !definition)throw Error("rebirth_inventory_invalid");
-    if((definition.level??1)<=1 && (definition.path==="all" || definition.path===path))continue;
-    const result=equipBody(inventory,position,null,item,path,snapshot.level);
-    if(result.ok===false)throw Error(result.reason==="inventory_full"?"rebirth_inventory_full":"rebirth_inventory_invalid");
-    inventory=result.inventory;
-  }
-  return {...snapshot,level:1,experience:0,build,rebirth,inventory,statAllocations:emptyAllocations(),
+  return {...snapshot,level:1,experience:0,build,rebirth,inventory,
+    ...(path==="muay_boran"?{muayWrapGranted:true}:{}),statAllocations:emptyAllocations(),
     masteryVitals:{version:1,hpRemainder:0,pvpUntil:0},hp:PROGRESSION.baseHp,stamina:PROGRESSION.baseStamina,mana:PROGRESSION.baseMana,updatedAt:new Date().toISOString()};
 }
