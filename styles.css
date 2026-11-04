@@ -1225,6 +1225,11 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .field-dock .learned-bar .sword-hotbar { margin:0; gap:3px; }
 .field-dock .learned-bar .field-slot { position:relative; flex:0 0 auto; min-height:56px; width:clamp(58px,13vw,72px); padding:2px; justify-content:flex-start; border:0; background:none; box-shadow:none; }
 .field-slot .glyph { position:relative; color:#ffe7b3; background:radial-gradient(ellipse at 50% 35%,#755032,#292622); border-radius:10px; }
+#sentinelHotbar .sentinel-skill-icon { width:72%; height:72%; fill:none; stroke:currentColor; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; pointer-events:none; }
+#sentinelHotbar .field-slot[data-skill-id="shock"] .glyph { color:#ffe7a0; background:radial-gradient(circle at 50% 35%,#8c5f23,#302319); }
+#sentinelHotbar .field-slot[data-skill-id="bulwark"] .glyph { color:#c8ecff; background:radial-gradient(circle at 50% 35%,#355f75,#152936); }
+#sentinelHotbar .field-slot[data-skill-id="riposte"] .glyph { color:#ffd8c1; background:radial-gradient(circle at 50% 35%,#864932,#301d1a); }
+#sentinelHotbar .field-slot[data-skill-id="protect"] .glyph { color:#d7f6dc; background:radial-gradient(circle at 50% 35%,#3e735e,#172c2b); }
 #occultHotbar .field-slot:not(.empty-slot) .glyph { background:radial-gradient(ellipse at 50% 35%,#5f4976,#292435); color:#f5dfff; }
 .field-slot.empty-slot .glyph { border:1px dashed #9d9066; color:#c4b995; background:#192921; }
 .field-slot.empty-slot .field-skill-name { color:#c8c1a6; }

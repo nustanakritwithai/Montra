@@ -11544,6 +11544,13 @@
   function learnedSlots(slots, learned, lessons) {
     return slots.map(id => id && learned?.includes(id) && lessons?.[id] ? id : null);
   }
+  // Fixed SVGs keep the four guardian abilities distinct on Android fonts too.
+  const SENTINEL_SKILL_ICONS=Object.freeze({
+    shock:'<svg class="sentinel-skill-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="15" opacity=".55"/><path d="M24 3v4M24 41v4M3 24h4M41 24h4M8.5 8.5l3 3M36.5 36.5l3 3M39.5 8.5l-3 3M11.5 36.5l-3 3"/><path d="M26 10 16 25h7l-2 13 11-17h-7z" fill="currentColor" stroke="none"/></svg>',
+    bulwark:'<svg class="sentinel-skill-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4 39 10v12c0 10-6 17-15 22C15 39 9 32 9 22V10z"/><path d="M24 11v25M16 19h16"/><path d="M5 19v7M43 19v7" opacity=".65"/></svg>',
+    riposte:'<svg class="sentinel-skill-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M11 38 32 17M28 13l8-4 3 3-4 8zM9 34l5 5"/><path d="M10 22a15 15 0 0 1 22-12M34 7l-1 7-7-1M38 27a15 15 0 0 1-22 12M14 42l1-7 7 1"/></svg>',
+    protect:'<svg class="sentinel-skill-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="14" cy="13" r="5"/><circle cx="34" cy="13" r="5"/><path d="M5 31v-4c0-5 4-8 9-8 3 0 5 1 7 3M43 31v-4c0-5-4-8-9-8-3 0-5 1-7 3"/><path d="M24 20l9 4v7c0 6-4 10-9 13-5-3-9-7-9-13v-7z" fill="#243b46"/><path d="M24 26v10M20 31h8"/></svg>'
+  });
   function arrangeFieldSlots(bar, ids, lessons, openBook) {
     bar.querySelectorAll("button").forEach((button,index)=>{
       const id=ids[index], node=id && lessons[id], n=index+1;
@@ -11554,7 +11561,8 @@
       button.classList.add("skill","field-slot");
       button.dataset.position=String(n);
       if(node){
-        glyph.textContent=SG_GLYPH[node.effect] || "✦";
+        if(bar.id==="sentinelHotbar" && SENTINEL_SKILL_ICONS[id])glyph.innerHTML=SENTINEL_SKILL_ICONS[id];
+        else glyph.textContent=SG_GLYPH[node.effect] || "✦";
         name.textContent=state==="ทุ่ม" || state==="ฉากซ้ำ" ? state : node.name;
         button.dataset.slotNumber=String(n); button.dataset.skillId=id;
         const label="ช่อง "+n+" · "+name.textContent+(cooldown?" · รอ "+cooldown[1]+" วินาที":"")+(cost?" · "+cost.textContent:"");
