@@ -190,6 +190,7 @@ jobs:
           cp deploy/combat/WorldResources.ts combat-verify/src/rooms/WorldResources.ts
           cp deploy/combat/SceneryNodes.ts combat-verify/src/rooms/SceneryNodes.ts
           cp deploy/combat/resource-gathering.test.ts combat-verify/src/rooms/resource-gathering.test.ts
+          cp deploy/combat/resource-gathering-integration.mjs combat-verify/resource-gathering-integration.mjs
           cp deploy/combat/ItemRules.ts combat-verify/src/rooms/ItemRules.ts
           cp deploy/combat/item-rules.test.ts combat-verify/src/rooms/item-rules.test.ts
           cp deploy/combat/height-rules.test.ts combat-verify/src/rooms/height-rules.test.ts
@@ -391,6 +392,18 @@ jobs:
         env:
           MONTRA_WORLD_EXPANSION: '1'
         run: npx tsx --test src/rooms/resource-gathering.test.ts
+
+      - name: Test forest harvesting through the game server
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export PORT=14218 MONTRA_TEST_URL=http://127.0.0.1:14218 MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-resource-test-XXXXXX)"
+          node --import tsx src/index.ts > resource-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14218) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 45s node resource-gathering-integration.mjs || { cat resource-server.log; exit 1; }
 
       - name: Test world director events and rewards
         working-directory: combat-verify

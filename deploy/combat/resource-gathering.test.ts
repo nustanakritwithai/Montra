@@ -10,6 +10,20 @@ import {rollMonsterLoot} from "./MonsterLoot.js";
 import {WORLD_EXPANSION,WORLD_MAPS} from "./WorldMaps.js";
 import {getResourceNode,harvestableFrom,resourceNodes,resourceStock,resourceApproach,rawResource} from "./WorldResources.js";
 import {SCENERY_NODES} from "./SceneryNodes.js";
+import {Player} from "./schema/MyRoomState.js";
+
+test("server schema players can gather nearby wood and stone",()=>{
+  for(const mapId of ["ritual_village","forbidden_forest"])for(const kind of ["wood","stone"] as const){
+    const node=resourceNodes(mapId).find(n=>n.kind===kind && resourceApproach(n))!;
+    const near=resourceApproach(node)!;
+    const player=new Player();
+    player.mapId=near.mapId;player.x=near.x;player.y=near.y;player.z=near.z;
+    player.level=100;player.alive=true;player.mounted=false;player.flying=false;
+    assert.doesNotThrow(()=>harvestableFrom(player,node));
+    player.x+=100;
+    assert.throws(()=>harvestableFrom(player,node),/resource_range/);
+  }
+});
 
 test("gatherable objects have reachable ground, correct tier, map and range",()=>{
   const tiers=new Set<number>();

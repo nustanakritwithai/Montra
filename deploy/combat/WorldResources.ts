@@ -70,7 +70,8 @@ export function harvestableFrom(p:{x:number;y:number;z:number;mapId:string;level
   // Trace only to the near edge; the existing forest tree/rock blocks its own centre.
   const dx=p.x-n.x,dz=p.z-n.z,d=Math.hypot(dx,dz),offset=Math.min(d,n.radius+.08);
   const x=n.access?.x??n.x+(d?dx/d*offset:0),z=n.access?.z??n.z+(d?dz/d*offset:0);
-  if(!provinceShotClear(WORLD_MAPS[p.mapId],{...p,y:p.y+1},{x,y:groundAt(p.mapId,x,z)+1,z}))throw Error("resource_range");
+  // Colyseus schema properties are accessors, so spreading a Player loses x/z.
+  if(!provinceShotClear(WORLD_MAPS[p.mapId],{x:p.x,y:p.y+1,z:p.z},{x,y:groundAt(p.mapId,x,z)+1,z}))throw Error("resource_range");
 }
 export function resourceApproach(n:ResourceNode){
   const map=WORLD_MAPS[n.mapId];
