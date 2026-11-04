@@ -28,6 +28,7 @@ for(const fails of [false,true])test(`rebirth ${fails?"preserves old state when 
     const pending=internal.pendingItemUses.get(id);assert.ok(pending);assert.equal(player.level,100);assert.equal(player.pathId,"sentinel");
     unblock();await pending;
     assert.equal(saved?.build?.path,"seer");
+    assert.deepEqual(saved?.masteryVitals,{version:1,hpRemainder:0,pvpUntil:0});
     assert.equal(player.level,fails?100:1);assert.equal(player.pathId,fails?"sentinel":"seer");
     assert.ok(events.includes(fails?"command_rejected":"rebirth_complete"));
   }finally{unblock();characterStore.save=original;}

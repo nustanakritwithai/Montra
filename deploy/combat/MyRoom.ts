@@ -38,7 +38,9 @@ import {
 } from "./MonsterRRT.js";
 import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.js";
 import type { CharacterSnapshot } from "./CharacterStore.js";
-import { classLearningLevel, newRebirthState, recordClassLevel, rebirthBonuses, contextualRebirthStat, contextualMonsterDamage, MAX_REBIRTHS, type RebirthState } from "./Rebirth.js";
+import {MASTERY_ENABLED,masteryBonuses,masteryCapacity,masteryPreview,encodeMasteryVitals,scaleResource,type MasteryMode} from "./RebirthCombat.js";
+import type {CombatStats} from "./Progression.js";
+import { classLearningLevel, newRebirthState, recordClassLevel, startNextLife, MAX_REBIRTHS, type RebirthState } from "./Rebirth.js";
 import { prepareRebirth } from "./RebirthTransition.js";
 import { FOREST_OBJECTIVES, objectiveRanger, objectiveAvailable, advanceForestObjective, parseForestObjectiveId, type ForestObjective } from "./ForestObjectives.js";
 import { worldDirector, type DirectorEvent } from "./WorldDirector.js";
@@ -85,21 +87,6 @@ import { ForestEncounters } from "./ForestEncounters.js";
 import { mapsWithServiceNpcs, serviceNpcsFor } from "./ServiceNpcs.js";
 
 const mapsWithServices=mapsWithServiceNpcs();
-const rebirthBonusCache=new WeakMap<RebirthState,ReturnType<typeof rebirthBonuses>>();
-const rebirthPveBonusCache=new WeakMap<RebirthState,ReturnType<typeof rebirthBonuses>>();
-const noRebirthBonus=rebirthBonuses(newRebirthState(),"pvp");
-function activeRebirthBonus(state:RebirthState|undefined):ReturnType<typeof rebirthBonuses> {
-  if(!state)return noRebirthBonus;
-  let cached=rebirthBonusCache.get(state);
-  if(!cached){cached=rebirthBonuses(state,"pvp");rebirthBonusCache.set(state,cached);}
-  return cached;
-}
-function monsterRebirthBonus(state:RebirthState|undefined):ReturnType<typeof rebirthBonuses> {
-  if(!state)return noRebirthBonus;
-  let cached=rebirthPveBonusCache.get(state);
-  if(!cached){cached=rebirthBonuses(state,"pve");rebirthPveBonusCache.set(state,cached);}
-  return cached;
-}
 const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices}):"";
 const battlefieldWorldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:WORLD_MAPS},
   (key,value)=>key==="boss" && value?.id?.startsWith("boss_")?undefined:value):"";
@@ -187,6 +174,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private pendingWarps = new Set<string>();
   private statAllocations = new Map<string, Allocations>();
   private rebirthStates = new Map<string, RebirthState>();
+  private masteryBases=new WeakMap<Player,CombatStats>();
+  private masteryHistories=new WeakMap<Player,RebirthState|undefined>();
+  private masteryScales=new WeakMap<Player,{hp:number;mana:number;mode:MasteryMode}>();
   private forestObjectives = new Map<string, ForestObjective>();
   private directorClaims = new Map<string,string[]>();
   private nextDirectorSample=0;
@@ -379,22 +369,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return build ? classLearningLevel(this.rebirthStates.get(id),build.path,player.level) : player.level;
   }
 
-  private contextualStat(id:string,value:number,key:"atk"|"magicAtk"|"def",monster:boolean):number {
-    if(!monster)return value;
-    const state=this.rebirthStates.get(id);
-    return contextualRebirthStat(value,activeRebirthBonus(state)[key],monsterRebirthBonus(state)[key],true);
-  }
-
-  private monsterDamageFor(id:string,damage:number):number {
-    const state=this.rebirthStates.get(id);
-    return contextualMonsterDamage(damage,activeRebirthBonus(state).hp,monsterRebirthBonus(state).hp);
-  }
-
   private sendRebirthState(client:Client):void {
     const player=this.state.players.get(client.sessionId);
     if (!player || !this.persistentCharacters.has(client.sessionId)) return this.reject(client,"rebirth_unavailable");
     const state=this.rebirthStates.get(client.sessionId) ?? newRebirthState();
-    client.send("rebirth_state",{state,level:player.level,path:player.pathId,maximum:MAX_REBIRTHS,paths:PATHS,bonuses:rebirthBonuses(state,"pvp"),pveBonuses:rebirthBonuses(state,"pve")});
+    client.send("rebirth_state",{state,level:player.level,path:player.pathId,maximum:MAX_REBIRTHS,paths:PATHS,enabled:MASTERY_ENABLED,bonuses:masteryBonuses(state,"pvp"),pveBonuses:masteryBonuses(state,"pve"),
+      preview:player.level===100 && state.count<MAX_REBIRTHS ? {before:masteryPreview(state),after:masteryPreview(startNextLife(state,player.pathId as PathId,player.level))}:null});
   }
 
   private beginRebirth(client:Client,message:unknown):void {
@@ -432,6 +412,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.equippedWeaponId=equippedWeaponId(next.inventory) ?? "";
       if(player.pathId==="blade" && !this.bladeBooks.has(id))this.bladeBooks.set(id,newBladeBook());
       if(player.pathId==="sentinel" && !this.sentinelBooks.has(id))this.sentinelBooks.set(id,newSentinelBook());
+      this.lastPvpMs.delete(id);this.hpRegenRemainder.delete(id);this.masteryScales.delete(player);
       this.applyStats(id,player,emptyAllocations());player.hp=player.maxHp;player.stamina=player.maxStamina;player.mana=player.maxMana;
       try {client.send("inventory_state",next.inventory);client.send("rebirth_complete",{});this.sendRebirthState(client);} catch { /* already disconnected */ }
     },error=>{console.error("MONTRA rebirth save failed",error);this.reject(client,"rebirth_save_failed");})
@@ -781,7 +762,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (skill.effect.kind !== "heal" || target.hp < target.maxHp) targets.push([member, target]);
     }
     if (!targets.length) return this.reject(client, "class_skill_no_target");
-    player.mana -= skill.stamina;
+    if(!this.spendSkillMana(client,player,skill.stamina,[],targets.map(([member])=>member)))return;
     player.classSkillReadyAt = now + skill.cooldownMs;
     this.markSupportManaCombat(id, targets);
     for (const [member, target] of targets) {
@@ -1032,7 +1013,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.pendingItemUses.has(holderId) || this.pendingRewards.has(holderId) || this.pendingCharacterLeaves.has(holderId))return this.reject(client,"character_busy");
     if(!this.gates.get(id)?.attack.consume(this.simulatedMs))return this.reject(client,"attack_rate_limited");
     if(player.mana<MUAY_GRAPPLE_ESCAPE_STAMINA)return this.reject(client,"insufficient_mana");
-    player.mana-=MUAY_GRAPPLE_ESCAPE_STAMINA;
+    if(!this.spendSkillMana(client,player,MUAY_GRAPPLE_ESCAPE_STAMINA,[holderId],[]))return;
     this.releaseMuayGrapple(holderId,"escaped");
     this.clearGrappleCounter(id,"replaced");
     this.muayGrappleCounters.set(id,{targetId:holderId,until:this.simulatedMs+MUAY_GRAPPLE_COUNTER_WINDOW_MS});
@@ -1051,10 +1032,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(player.flying || !onMapGround(player) || distance3d(player,opponent)>MUAY_GRAPPLE_COUNTER_RANGE || Math.abs(player.y-opponent.y)>1.1)return this.reject(client,"muay_out_of_range");
     if(!this.bodyPathClear(player.mapId,player,opponent))return this.reject(client,"muay_blocked");
     if(player.mana<MUAY_GRAPPLE_COUNTER_STAMINA)return this.reject(client,"insufficient_mana");
-    player.mana-=MUAY_GRAPPLE_COUNTER_STAMINA;this.clearGrappleCounter(id,"used");
+    if(!this.spendSkillMana(client,player,MUAY_GRAPPLE_COUNTER_STAMINA,[window.targetId],[]))return;this.clearGrappleCounter(id,"used");
     player.facing=facingTo(opponent.x-player.x,opponent.z-player.z);this.recordCombat(id,window.targetId);
-    const attack=(player.atk+weaponBonuses(this.inventories.get(id),"pvp").melee)*MUAY_PVP_DAMAGE_MULTIPLIER;
-    const damage=this.swordGuardDamage(window.targetId,player,calculateDamage(attack,opponent.def,opponent.level));
+    const attack=(this.masteryPower(player,"pvp","atk",weaponBonuses(this.inventories.get(id),"pvp").melee))*MUAY_PVP_DAMAGE_MULTIPLIER;
+    const damage=this.swordGuardDamage(window.targetId,player,calculateDamage(attack,this.masteryPower(opponent,"pvp","def"),opponent.level));
     opponent.hp=Math.max(0,opponent.hp-damage);opponent.hitSeq++;
     this.broadcast("pvp_hit",{attackerId:id,targetId:window.targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"grapple_counter"},{afterNextPatch:true});
     if(opponent.hp===0){player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(window.targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:window.targetId,source:"grapple_counter",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});}
@@ -1077,10 +1058,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(sweep.blocked || sweep.moved<1.4999)return this.reject(client,"muay_throw_blocked");
     this.moveOnSurface(target,next.x,next.z);
     this.releaseMuayGrapple(id,"thrown");this.recordCombat(id,hold.targetId);this.recordMuayTraining(id,"strikes");
-    const pvp=!monster,attack=(this.contextualStat(id,player.atk,"atk",Boolean(monster))+weaponBonuses(this.inventories.get(id),pvp?"pvp":"pve").melee)*MUAY_SKILLS.grapple.power*(pvp?MUAY_PVP_DAMAGE_MULTIPLIER:1);
+    const pvp=!monster,attack=(this.masteryPower(player,pvp?"pvp":"pve","atk",weaponBonuses(this.inventories.get(id),pvp?"pvp":"pve").melee))*MUAY_SKILLS.grapple.power*(pvp?MUAY_PVP_DAMAGE_MULTIPLIER:1);
     if(monster)this.hitMonsterWithSpell(id,monster,calculateDamage(attack,monster.defense,monster.level),"muay");
     else {
-      const opponent=target as Player,damage=this.swordGuardDamage(hold.targetId,player,calculateDamage(attack,opponent.def,opponent.level));
+      const opponent=target as Player,damage=this.swordGuardDamage(hold.targetId,player,calculateDamage(attack,this.masteryPower(opponent,"pvp","def"),opponent.level));
       opponent.hp=Math.max(0,opponent.hp-damage);opponent.hitSeq++;
       this.broadcast("pvp_hit",{attackerId:id,targetId:hold.targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"muay"},{afterNextPatch:true});
       if(opponent.hp===0){player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(hold.targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:hold.targetId,source:"muay",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});}
@@ -1194,10 +1175,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
        (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))) ||
        distance3d(actor,target)>range || meleeHeightBlocked(actor,target,1.1) || !this.bodyPathClear(actor.mapId,actor,target))return false;
     this.recordCombat(id,targetId);
-    const attack=(this.contextualStat(id,actor.atk,"atk",Boolean(monster))+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee)*power*(monster?1:0.75);
+    const attack=(this.masteryPower(actor,monster?"pve":"pvp","atk",weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee))*power*(monster?1:0.75);
     if(monster)this.hitMonsterWithSpell(id,monster,calculateDamage(attack,monster.defense,monster.level),"sword");
     else {
-      const victim=target as Player,damage=this.swordGuardDamage(targetId,actor,calculateDamage(attack,victim.def,victim.level));
+      const victim=target as Player,damage=this.swordGuardDamage(targetId,actor,calculateDamage(attack,this.masteryPower(victim,"pvp","def"),victim.level));
       if(!actor.alive || !victim.alive)return false;
       victim.hp=Math.max(0,victim.hp-damage);victim.hitSeq++;
       this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"sentinel"},{afterNextPatch:true});
@@ -1235,8 +1216,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const active=this.effects.modifiers(id);
       if(active.length>=STACKING_RULES.maxModifiers && !active.some(effect=>effect.id==="sentinel_core_bulwark" && effect.sourceId===id))return this.reject(client,"sentinel_effect_limit");
     }
-    actor.mana-=cost;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
-    this.startSkillAction(id,actor,"idle");
     let shockTargets:string[]|undefined;
     if(skillId==="shock"){
       const candidates:Array<{target:Monster|Player;id:string}>=[...[this.state.monster,...this.state.monsters.values()].map(target=>({target,id:target.id})),...[...this.state.players.entries()].map(([id,target])=>({target,id}))];
@@ -1244,7 +1223,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         .filter(entry=>entry.id && entry.id!==id && entry.target.alive && distance3d(actor,entry.target)<=p.shock.range && Math.abs(actor.y-entry.target.y)<=1.1 && this.sameCombatMap(id,entry.id) && !this.pendingItemUses.has(entry.id) && !this.pendingRewards.has(entry.id) && !this.pendingCharacterLeaves.has(entry.id) && this.bodyPathClear(actor.mapId,actor,entry.target))
         .sort((a,b)=>distance3d(actor,a.target)-distance3d(actor,b.target) || a.id.localeCompare(b.id));
       shockTargets=targets.slice(0,5).map(entry=>entry.id);
-      for(const target of shockTargets)if(this.sentinelInterrupt(id,target,p.shock.monsterStunMs)==="applied")this.recordCombat(id,target);
+    }
+    if(!this.spendSkillMana(client,actor,cost,shockTargets??[],ally?[targetId]:[]))return;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
+    this.startSkillAction(id,actor,"idle");
+    if(skillId==="shock"){
+      for(const target of shockTargets??[])if(this.sentinelInterrupt(id,target,p.shock.monsterStunMs)==="applied")this.recordCombat(id,target);
     } else if(skillId==="bulwark"){
       this.effects.grant(id,{id:"sentinel_core_bulwark",sourceId:id,group:"sentinel_self",bonuses:{def:p.bulwark.defense}},this.simulatedMs+p.bulwark.durationMs);
       this.applyStats(id,actor,this.statAllocations.get(id) ?? emptyAllocations());
@@ -1326,7 +1309,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(travel>0.00001){const sweep=advanceDash(actor,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,surfaceLayer(actor),false,actor.mapId) && !isRestArea(actor.mapId,{x,z}),map.bounds);
         if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"sentinel_blocked");}
     }
-    actor.mana-=skill.stamina;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
+    if(!this.spendSkillMana(client,actor,skill.stamina,offensive?[targetId]:[],allies.map(([member])=>member)))return;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
     if(allies.length)this.markSupportManaCombat(id,allies);
     if(offensive && target)actor.facing=facingTo(target.x-actor.x,target.z-actor.z);
     if(next){this.startSkillAction(id,actor,"idle");this.moveOnSurface(actor,next.x,next.z);}
@@ -1417,10 +1400,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!player?.alive || player.pathId!=="blade" || !target?.alive || !this.sameCombatMap(id,targetId) ||
        distance3d(player,target)>3 || Math.abs(player.y-target.y)>1.1 || !this.bodyPathClear(player.mapId,player,target))return false;
     this.recordCombat(id,targetId);
-    const attack=(this.contextualStat(id,player.atk,"atk",Boolean(monster))+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee)*power*(monster?1:0.75);
+    const attack=(this.masteryPower(player,monster?"pve":"pvp","atk",weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee))*power*(monster?1:0.75);
     if(monster) this.hitMonsterWithSpell(id,monster,calculateDamage(attack,monster.defense,monster.level),"sword");
     else {
-      const victim=target as Player,damage=this.swordGuardDamage(targetId,player,calculateDamage(attack,victim.def,victim.level));
+      const victim=target as Player,damage=this.swordGuardDamage(targetId,player,calculateDamage(attack,this.masteryPower(victim,"pvp","def"),victim.level));
       if(!player.alive || !victim.alive)return false;
       victim.hp=Math.max(0,victim.hp-damage);victim.hitSeq++;
       this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"blade"},{afterNextPatch:true});
@@ -1455,7 +1438,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(distance3d(player,target)>3 || meleeHeightBlocked(player,target,1.1))return this.reject(client,"blade_out_of_range");
       if(!this.bodyPathClear(player.mapId,player,target))return this.reject(client,"blade_blocked");
     }else if(input.targetId!==undefined)return this.reject(client,"invalid_blade_skill");
-    player.mana-=cost;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
+    if(!this.spendSkillMana(client,player,cost,[targetId],[]))return;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
     if(skillId==="blade_vanish"){
       this.endAttack(id,player);this.destinations.delete(id);this.activeDashes.delete(id);
       for(const [attackerId,victimId] of [...this.attackTargets])if(victimId===id){const attacker=this.state.players.get(attackerId);if(attacker)this.endAttack(attackerId,attacker);}
@@ -1513,6 +1496,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(distance3d(player,target)>skill.range || Math.abs(player.y-target.y)>1.1)return this.reject(client,"blade_out_of_range");
       if(!this.bodyPathClear(player.mapId,player,target))return this.reject(client,"blade_blocked");
     } else if(input.targetId!==undefined) return this.reject(client,"invalid_blade_skill");
+    if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[],true))return;
     const cloaked=this.bladeCloaks.has(id),mark=this.bladeMarks.get(id),guard=this.swordGuards.get(id);
     if((skill.effect==="approach" || skillId==="hidden_edge") && !cloaked)return this.reject(client,"blade_cloak_required");
     if(skill.effect==="consume" && (!mark || mark.targetId!==targetId || this.simulatedMs>=mark.until))return this.reject(client,"blade_mark_required");
@@ -1530,7 +1514,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"blade_blocked");}
       this.startSkillAction(id,player,"idle");this.moveOnSurface(player,next.x,next.z);
     }
-    player.mana-=skill.stamina;book.cooldowns[skillId]=now+skill.cooldownMs;
+    if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[]))return;book.cooldowns[skillId]=now+skill.cooldownMs;
     if(skill.effect==="evade") {
       this.endBladeCloak(id,"evade");this.swordGuards.set(id,{until:this.simulatedMs+500,factor:skill.power,direction:true,counterUntil:0});
       this.bladeEvades.set(id,this.simulatedMs+500);
@@ -1828,7 +1812,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!monster && (this.simulatedMs<(this.sentinelStunResists.get(targetId) ?? 0) || (target as Player).flying || !onMapGround(target as Player) || this.climbs.has(targetId) || this.flightTransitions.has(targetId)))return this.reject(client,"seer_binding_immune");
     }
     if(skillId==="seer_poison" && this.seerPoisons.has(targetId) && this.seerPoisons.get(targetId)?.ownerId!==id)return this.reject(client,"seer_poison_busy");
-    caster.mana-=cost;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;this.startSkillAction(id,caster,"idle");
+    if(!this.spendSkillMana(client,caster,cost,[targetId],[]))return;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;this.startSkillAction(id,caster,"idle");
     caster.facing=facingTo(target.x-caster.x,target.z-caster.z);this.recordCombat(id,targetId);
     if(skillId==="seer_binding"){
       if(monster){
@@ -1879,7 +1863,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(skillId==="mender_core_circle")targets=targets.filter(([,target])=>target.hp<target.maxHp);
     if(skillId==="mender_core_cleanse")targets=targets.filter(([member])=>{const effects=this.effects.modifiers(member);return effects.length<STACKING_RULES.maxModifiers || effects.some(effect=>effect.id===skillId && effect.sourceId===id);});
     if(!targets.length)return this.reject(client,skillId==="mender_core_cleanse"?"occult_effect_limit":"class_skill_no_target");
-    caster.mana-=cost;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;this.startSkillAction(id,caster,"idle");
+    if(!this.spendSkillMana(client,caster,cost,[],targets.map(([member])=>member)))return;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;this.startSkillAction(id,caster,"idle");
     this.markSupportManaCombat(id,targets);
     let healed=false,cleansed=false;
     for(const [member,target] of targets){
@@ -1981,7 +1965,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     }
 
-    caster.mana-=lesson.stamina;
+    if(!this.spendSkillMana(client,caster,lesson.stamina,offensive?[targetId]:[],targets.map(([member])=>member)))return;
     book.cooldowns[skillId]=Date.now()+lesson.cooldownMs;
     if (!offensive) this.markSupportManaCombat(id, targets);
     if (offensive) {
@@ -1997,8 +1981,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (lesson.effect==="rice" && hasMark) power*=1.3;
         if (lesson.effect==="detonate") this.occultMarks.delete(id);
         if (lesson.effect==="curse_burst") this.clearOccultCurse(targetId,"detonated");
-        const attack=this.contextualStat(id,caster.magicAtk,"magicAtk",Boolean(monster))+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").ranged;
-        const damage=calculateDamage(attack*power*(opponent?0.65:1),monster?.defense ?? opponent!.magicDef,target.level);
+        const attack=this.masteryPower(caster,monster?"pve":"pvp","magicAtk",weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").ranged);
+        const damage=calculateDamage(attack*power*(opponent?0.65:1),monster?.defense ?? this.masteryPower(opponent!,"pvp","magicDef"),target.level);
         this.occultDamage(id,targetId,damage);
         if (lesson.effect==="rice_area" && monster) {
           const others=[this.state.monster,...this.state.monsters.values()]
@@ -2081,6 +2065,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!target?.alive || target.mapId!==regen.mapId || this.simulatedMs>=regen.until){this.priestRegens.delete(targetId);continue;}
       if(this.simulatedMs<regen.nextTick)continue;
       regen.nextTick=this.simulatedMs+2000;
+      this.supportMastery(regen.ownerId,[targetId]);
       if(this.pendingWarps.has(targetId) || this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))continue;
       if(target.hp<target.maxHp){target.hp=Math.min(target.maxHp,target.hp+this.healAmount(regen.ownerId,targetId,target.maxHp*regen.fraction));this.recordOccultTraining(regen.ownerId,"mender",["healing"]);void this.saveCharacter(targetId);}
     }
@@ -2101,6 +2086,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         poison.nextTick=this.simulatedMs+2500;
         const binding=this.seerBindings.get(targetId);
         const bonus=binding?.ownerId===poison.ownerId ? seerCoreProgress(binding.rank).seer_binding.poisonBonus : 0;
+        this.recordCombat(poison.ownerId,targetId);
         const amount=Math.min(target.hp-1,Math.max(1,Math.round(target.maxHp*(poison.fraction+bonus))));
         if(amount>0){this.recordCombat(poison.ownerId,targetId);this.occultDamage(poison.ownerId,targetId,amount,true);}
       }
@@ -2114,8 +2100,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!target?.alive || !this.sameCombatMap(id,cast.targetId) || Math.hypot(target.x-cast.x,target.z-cast.z)>3 || distance3d(caster,target)>p.range || !this.bodyPathClear(caster.mapId,caster,target)){
         this.sendSwordNotice(this.clients.find(c=>c.sessionId===id),"seer_buffalo_result",{result:"miss"});continue;
       }
-      const attack=this.contextualStat(id,caster.magicAtk,"magicAtk",Boolean(monster))+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").ranged;
-      const damage=calculateDamage(attack*(monster?p.power:2*.65),monster?.defense ?? (target as Player).magicDef,target.level);
+      const attack=this.masteryPower(caster,monster?"pve":"pvp","magicAtk",weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").ranged);
+      const damage=calculateDamage(attack*(monster?p.power:2*.65),monster?.defense ?? this.masteryPower(target as Player,"pvp","magicDef"),target.level);
       this.occultDamage(id,cast.targetId,damage);
       this.broadcast("seer_buffalo_hit",{playerId:id,targetId:cast.targetId,from:{x:caster.x,y:caster.y+.8,z:caster.z},to:{x:target.x,y:target.y+.8,z:target.z}},{afterNextPatch:true});
     }
@@ -2152,6 +2138,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
             (this.field && member!==ownerId && this.warSeats.get(member)?.side!==this.warSeats.get(ownerId)?.side) ||
             distance3d(target,field)>field.range || !isWorldSegmentClear(field.mapId,field,target) ||
             !this.bodyPathClear(field.mapId,field,target)) continue;
+        this.supportMastery(ownerId,[member]);
         target.hp=Math.min(target.maxHp,target.hp+this.healAmount(ownerId,member,target.maxHp*field.power));
         healed=true;
         void this.saveCharacter(member);
@@ -2372,10 +2359,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       owner.combatState="idle";
       this.sendSwordNotice(this.clients.find(client=>client.sessionId===link.ownerId),"sentinel_windup_result",{result:"interrupted"});
     }
-    const ownerDamage=monster?this.monsterDamageFor(link.ownerId,shared):shared;
-    owner.hp=Math.max(0,owner.hp-ownerDamage);owner.hitSeq++;this.lastCombatMs.set(link.ownerId,this.simulatedMs);
+    if(aggressor)this.touchPvp([aggressor[0],link.ownerId]);
+    owner.hp=Math.max(0,owner.hp-shared);owner.hitSeq++;this.lastCombatMs.set(link.ownerId,this.simulatedMs);
     if(monster)this.recordSentinelPractice(link.ownerId,"assist");
-    this.broadcast("sentinel_intercept",{playerId:link.ownerId,targetId:id,damage:ownerDamage,hp:owner.hp,maxHp:owner.maxHp,hitSeq:owner.hitSeq,attackerId:aggressor?.[0] ?? monster?.id,source:summonOwner?"summon":monster?"monster":"player"},{afterNextPatch:true});
+    this.broadcast("sentinel_intercept",{playerId:link.ownerId,targetId:id,damage:shared,hp:owner.hp,maxHp:owner.maxHp,hitSeq:owner.hitSeq,attackerId:aggressor?.[0] ?? monster?.id,source:summonOwner?"summon":monster?"monster":"player"},{afterNextPatch:true});
     if(owner.hp===0){
       this.sentinelInterceptions.delete(id);
       if(aggressor){aggressor[1].pkKills++;owner.pkDeaths++;this.knockoutPlayer(link.ownerId,"pk",aggressor[0]);
@@ -2393,8 +2380,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       actor.flying || !onMapGround(actor) || this.sentinelStuns.has(id) || this.muayControlled(id) ||
       !target?.alive || !this.sameCombatMap(id,targetId) ||
       distance3d(actor,target)>3 || !this.bodyPathClear(actor.mapId,actor,target))return false;
-    const damage=calculateDamage((this.contextualStat(id,actor.atk,"atk",Boolean(monster))+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee)*(monster?power:pvpPower*MUAY_PVP_DAMAGE_MULTIPLIER),
-      monster?.defense ?? (target as Player).def,target.level);
+    const damage=calculateDamage((this.masteryPower(actor,monster?"pve":"pvp","atk",weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee))*(monster?power:pvpPower*MUAY_PVP_DAMAGE_MULTIPLIER),
+      monster?.defense ?? this.masteryPower(target as Player,"pvp","def"),target.level);
     actor.facing=facingTo(target.x-actor.x,target.z-actor.z);
     this.recordCombat(id,targetId);
     if(monster)this.hitMonsterWithSpell(id,monster,damage,"muay");
@@ -2443,6 +2430,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(skill.kind==="target" && (!target?.alive || !this.sameCombatMap(id,targetId) ||
       distance3d(actor,target)>(skillId==="thasao"?progress.thasao.range:3) ||
       !this.bodyPathClear(actor.mapId,actor,target)))return this.reject(client,"muay_out_of_range");
+    if(!this.spendSkillMana(client,actor,manaCost,skill.kind==="target"?[targetId]:[],[],true))return;
     if(skillId==="lopburi" || skillId==="thasao") {
       const intent=skillId==="lopburi" ? this.muayMoveIntent.get(id) ?? {x:-Math.sin(actor.facing),z:-Math.cos(actor.facing)}
         : {x:target!.x-actor.x,z:target!.z-actor.z};
@@ -2459,7 +2447,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if((travel>.05 && total<Math.min(.25,travel)) || (skillId==="thasao" && total+.05<travel))return this.reject(client,"muay_blocked");
       this.destinations.delete(id);this.moveOnSurface(actor,position.x,position.z);actor.facing=facingTo(dir.dx,dir.dz);
     }
-    actor.mana-=manaCost;cooldowns[skillId]=Date.now()+skill.cooldownMs;actor.muayData=JSON.stringify(cooldowns);
+    if(!this.spendSkillMana(client,actor,manaCost,skill.kind==="target"?[targetId]:[],[]))return;cooldowns[skillId]=Date.now()+skill.cooldownMs;actor.muayData=JSON.stringify(cooldowns);
     this.startSkillAction(id,actor,"idle");
     if(skillId==="chaiya") {
       const duration=progress.chaiya.durationMs;
@@ -2539,6 +2527,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const followup=MUAY_FOLLOWUPS[book.school],opening=this.muayFollowups.get(id);
     if(skillId===followup.finisher && (!opening || opening.school!==book.school || opening.targetId!==targetId || this.simulatedMs>=opening.until))
       return this.reject(client,"muay_followup_required");
+    if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[],true))return;
     if(skill.effect==="evade") {
       const dx=Math.sin(player.facing),dz=Math.cos(player.facing),distance=1.2;
       const next={x:player.x+dx*distance,y:player.y,z:player.z+dz*distance},map=getWorldMap(player.mapId);
@@ -2573,7 +2562,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     if(skill.effect==="grapple" && target && !this.startMuayGrapple(client,player,target,monster,targetId))return;
     if(opening && (skillId===followup.finisher || (targetId && opening.targetId!==targetId)))this.clearMuayFollowup(id);
-    player.mana-=skill.stamina;
+    if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[]))return;
     cooldowns[skillId]=now+skill.cooldownMs;
     player.muayData=JSON.stringify(cooldowns);
     if (skill.effect==="guard" || skill.effect==="parry" || skill.effect==="evade") {
@@ -2592,7 +2581,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.recordCombat(id,targetId);
       this.recordMuayTraining(id,"strikes");
       const pvp=!monster,comboMultiplier=this.advanceMuaySkillCombo(id,book.school,targetId,skillId as Exclude<MuaySkillId,"guard"|"parry"|"evade"|"grapple"|"chaiya_cover">,pvp);
-      const attack=(this.contextualStat(id,player.atk,"atk",Boolean(monster))+weaponBonuses(this.inventories.get(id),pvp?"pvp":"pve").melee)*skill.power*comboMultiplier*(pvp?MUAY_PVP_DAMAGE_MULTIPLIER:skillRankMultiplier(book.ranks,skillId));
+      const attack=(this.masteryPower(player,pvp?"pvp":"pve","atk",weaponBonuses(this.inventories.get(id),pvp?"pvp":"pve").melee))*skill.power*comboMultiplier*(pvp?MUAY_PVP_DAMAGE_MULTIPLIER:skillRankMultiplier(book.ranks,skillId));
       const hits=skill.effect==="flurry" || skill.effect==="step_flurry" ? 2 : 1;
       for(let hit=0;hit<hits && target.alive;hit++) {
         if(monster) {
@@ -2600,7 +2589,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           this.hitMonsterWithSpell(id,monster,damage,"muay");
         } else {
           const opponent=target as Player;
-          const damage=this.swordGuardDamage(targetId,player,calculateDamage(attack,opponent.def,opponent.level),skillId==="korat_pierce" ? 0.25 : 0);
+          const damage=this.swordGuardDamage(targetId,player,calculateDamage(attack,this.masteryPower(opponent,"pvp","def"),opponent.level),skillId==="korat_pierce" ? 0.25 : 0);
           opponent.hp=Math.max(0,opponent.hp-damage);opponent.hitSeq++;
           this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"muay"},{afterNextPatch:true});
           if(opponent.hp===0) {
@@ -2662,7 +2651,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       actor.flying || !onMapGround(actor) || this.sentinelStuns.has(id) || this.muayControlled(id) || targetId===id ||
       !target?.alive || (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))) ||
       !this.sameCombatMap(id,targetId) || distance3d(actor,target)>range || Math.abs(actor.y-target.y)>1.1 || !this.bodyPathClear(actor.mapId,actor,target))return false;
-    const damage=calculateDamage((this.contextualStat(id,actor.atk,"atk",Boolean(monster))+weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee)*(monster?power:pvpPower*SWORD_PVP_DAMAGE_MULTIPLIER),monster?.defense ?? (target as Player).def,target.level);
+    const damage=calculateDamage((this.masteryPower(actor,monster?"pve":"pvp","atk",weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee))*(monster?power:pvpPower*SWORD_PVP_DAMAGE_MULTIPLIER),monster?.defense ?? this.masteryPower(target as Player,"pvp","def"),target.level);
     actor.facing=facingTo(target.x-actor.x,target.z-actor.z);this.recordCombat(id,targetId);
     if(monster)this.hitMonsterWithSpell(id,monster,damage,"sword");
     else {
@@ -2703,6 +2692,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       if(!supportTargets.length)return this.reject(client,"sword_effect_limit");
     }
+    if(!this.spendSkillMana(client,actor,mana,skillId==="chumphon_core"?[]:[targetId],supportTargets.map(([member])=>member),true))return;
     if(skillId==="phuttha_core" && target) {
       const dx=target.x-actor.x,dz=target.z-actor.z,length=Math.hypot(dx,dz),travel=Math.max(0,length-1.8);
       if(travel>.001) {
@@ -2713,7 +2703,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.moveOnSurface(actor,position.x,position.z);
       }
     }
-    actor.mana-=mana;tree.cooldowns[skillId]=Date.now()+skill.cooldownMs;actor.swordTreeData=JSON.stringify(tree);
+    if(!this.spendSkillMana(client,actor,mana,skillId==="chumphon_core"?[]:[targetId],supportTargets.map(([member])=>member)))return;tree.cooldowns[skillId]=Date.now()+skill.cooldownMs;actor.swordTreeData=JSON.stringify(tree);
     this.startSkillAction(id,actor,"idle");
     if(skillId==="sritra_core")this.swordCoreStances.set(id,{until:this.simulatedMs+progress.sritra_core.durationMs,rank,nextCounter:0});
     else if(skillId==="phuttha_core" && target)this.swordCoreSequences.set(id,{targetId,next:this.simulatedMs,remaining:3,rank:monster?rank:0});
@@ -2782,6 +2772,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (distance3d(player,target)>skill.range || Math.abs(player.y-target.y)>1.1) return this.reject(client,"sword_out_of_range");
       if (!this.bodyPathClear(player.mapId,player,target)) return this.reject(client,"sword_blocked");
     }
+    const supportTargets:Array<[string,Player]>=skill.effect==="support"?(this.parties.get(id)?.members??[id]).map(member=>[member,this.state.players.get(member)] as const)
+      .filter((entry):entry is [string,Player]=>Boolean(entry[1]?.alive && entry[1].mapId===player.mapId && !this.pendingWarps.has(entry[0]) && distance3d(player,entry[1])<=skill.range && this.bodyPathClear(player.mapId,player,entry[1]) && (this.effects.modifiers(entry[0]).length<STACKING_RULES.maxModifiers || this.effects.modifiers(entry[0]).some(effect=>effect.id===skillId && effect.sourceId===id)))):[];
+    if(!this.spendSkillMana(client,player,skill.stamina,[targetId],supportTargets.map(([member])=>member),true))return;
     if ((skill.effect==="step" || skillId==="riposte") && target) {
       const dx=target.x-player.x,dz=target.z-player.z,distance=Math.hypot(dx,dz);
       const move=Math.max(0,distance-1.7);
@@ -2799,14 +2792,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.destinations.delete(id);
       this.moveOnSurface(player,next.x,next.z);
     }
-    player.mana-=skill.stamina;
+    if(!this.spendSkillMana(client,player,skill.stamina,[targetId],supportTargets.map(([member])=>member)))return;
     tree.cooldowns[skillId]=now+skill.cooldownMs;
     player.swordTreeData=JSON.stringify(tree);
     if (skill.effect==="guard") {
       this.swordGuards.set(id,{until:this.simulatedMs+1200,factor:skill.power,direction:skillId!=="circle_guard",counterUntil:0});
       this.sendSwordNotice(client,"sword_counter_cleared",{});
     } else if (skill.effect==="support") {
-      const members=this.parties.get(id)?.members ?? [id];
+      const members=supportTargets.map(([member])=>member);
       const supported:Array<[string,Player]>=[];
       for (const memberId of members) {
         const member=this.state.players.get(memberId);
@@ -2842,8 +2835,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       for (const victim of victims.slice(0,5)) {
         for (let count=0;count<hits && victim.target.alive;count++) {
           this.recordCombat(id,victim.id);
-          const defense=victim.monster ? (victim.target as Monster).defense : (victim.target as Player).def;
-          const base=(this.contextualStat(id,player.atk,"atk",victim.monster)+weaponBonuses(this.inventories.get(id),victim.monster?"pve":"pvp").melee)*(tree.learned.includes("rhythm")?1.05:1);
+          const defense=victim.monster ? (victim.target as Monster).defense : this.masteryPower(victim.target as Player,"pvp","def");
+          const base=this.masteryPower(player,victim.monster?"pve":"pvp","atk",weaponBonuses(this.inventories.get(id),victim.monster?"pve":"pvp").melee)*(tree.learned.includes("rhythm")?1.05:1);
           let damage=calculateDamage(base*skill.power*(victim.monster?skillRankMultiplier(tree.ranks,skillId):SWORD_PVP_DAMAGE_MULTIPLIER),defense,victim.target.level);
           if (victim.monster) this.hitMonsterWithSpell(id,victim.target as Monster,damage,"sword");
           else {
@@ -2921,9 +2914,42 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.pendingItemUses.set(id, task);
   }
 
+  private masteryMode(id:string):MasteryMode {
+    return this.field || this.simulatedMs-(this.lastPvpMs.get(id)??-Infinity)<PROGRESSION.combatQuietMs ? "pvp":"pve";
+  }
+  private refreshMastery(id:string):void {
+    const player=this.state.players.get(id),prior=player && this.masteryScales.get(player);
+    if(player && prior && prior.mode!==this.masteryMode(id))this.applyStats(id,player,this.statAllocations.get(id)??emptyAllocations());
+  }
+  private touchPvp(ids:readonly string[]):void {
+    for(const id of new Set(ids)){if(!this.state.players.has(id))continue;this.lastPvpMs.set(id,this.simulatedMs);this.refreshMastery(id);}
+  }
+  private supportMastery(owner:string,targets:readonly string[]):void {
+    if([owner,...targets].some(id=>this.masteryMode(id)==="pvp"))this.touchPvp([owner,...targets]);
+  }
+  private masteryPower(player:Player,mode:MasteryMode,stat:"atk"|"magicAtk"|"def"|"magicDef",extra=0):number {
+    return ((this.masteryBases.get(player)?.[stat]??player[stat])+extra)*(1+masteryBonuses(this.masteryHistories.get(player),mode)[stat]);
+  }
+  private spendSkillMana(client:Client,player:Player,cost:number,opponents:readonly string[]=[],allies:readonly string[]=[],preview=false):boolean {
+    const id=client.sessionId;
+    const hostile=opponents.filter(other=>other!==id && this.state.players.get(other)?.alive);
+    const pvp=hostile.length>0 || [id,...allies].some(other=>this.masteryMode(other)==="pvp");
+    // Preflight the post-transition pool before changing combat state or charging.
+    let available=player.mana;
+    const prior=this.masteryScales.get(player);
+    if(MASTERY_ENABLED && pvp && prior?.mode==="pve"){
+      const baseMax=player.maxMana/prior.mana;
+      const nextMax=masteryCapacity(baseMax,masteryBonuses(this.masteryHistories.get(player),"pvp").mana);
+      available=scaleResource(player.mana,player.maxMana,nextMax);
+    }
+    if(available+1e-9<cost){this.reject(client,"insufficient_mana");return false;}
+    if(preview)return true;
+    if(pvp)this.touchPvp([id,...hostile,...allies]);
+    player.mana=Math.max(0,player.mana-cost);return true;
+  }
   private recordCombat(ownerId: string, targetId: string): void {
     this.lastCombatMs.set(ownerId, this.simulatedMs);
-    if (!this.getMonster(targetId)) {this.lastCombatMs.set(targetId,this.simulatedMs);this.lastPvpMs.set(ownerId,this.simulatedMs);this.lastPvpMs.set(targetId,this.simulatedMs);}
+    if (!this.getMonster(targetId)) {this.lastCombatMs.set(targetId,this.simulatedMs);this.touchPvp([ownerId,targetId]);}
   }
 
   private healAmount(owner:string,target:string,base:number):number {
@@ -2937,19 +2963,25 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private applyStats(id:string, player: Player, allocations: Allocations): void {
     const base=calculateStats(player.level,allocations),bag=this.inventories.get(id);
-    // Until separate PvE/PvP stat snapshots exist, use the lower PvP rates in
-    // both modes so a player cannot carry the larger PvE HP into a duel.
-    const bonus=activeRebirthBonus(this.rebirthStates.get(id));
     this.extraStaminaRegen.set(player,overflowStaminaRegen(base,bag));
     const modifiers=this.effects.modifiers(id),stats=calculateModifiedStats(equippedStats(base,bag),modifiers);
+    this.masteryBases.set(player,stats);this.masteryHistories.set(player,this.rebirthStates.get(id));
+    const mode=this.masteryMode(id),bonus=masteryBonuses(this.rebirthStates.get(id),mode),prior=this.masteryScales.get(player);
     const blessings=modifiers.filter(effect=>effect.id==="mender_core_cleanse" && effect.group==="priest_all").map(effect=>effect.bonuses.atk ?? 0).sort((a,b)=>b-a);
     const allStatMultiplier=1+Math.min(STACKING_RULES.maxGroupBonus,blessings.reduce((sum,value,index)=>sum+value*STACKING_RULES.sameGroupFalloff**index,0));
-    player.maxHp = Math.min(PROGRESSION.maxHp,Math.round(stats.maxHp*allStatMultiplier*(1+bonus.hp))); player.atk = Math.round(stats.atk*(1+bonus.atk));
-    player.def = Math.round(stats.def*(1+bonus.def));
-    player.magicAtk = Math.round(stats.magicAtk*(1+bonus.magicAtk)); player.magicDef = Math.round(stats.magicDef*(1+bonus.magicDef));
+    const baseHp=Math.min(PROGRESSION.maxHp,Math.round(stats.maxHp*allStatMultiplier));
+    player.maxHp=masteryCapacity(baseHp,bonus.hp);
+    player.atk=this.masteryPower(player,mode,"atk");player.def=this.masteryPower(player,mode,"def");
+    player.magicAtk=this.masteryPower(player,mode,"magicAtk");player.magicDef=this.masteryPower(player,mode,"magicDef");
     player.maxStamina = Math.min(PROGRESSION.maxStamina,Math.round(stats.maxStamina*allStatMultiplier));
-    const mana=gearMana(player.level,bag);
-    player.maxMana=Math.min(PROGRESSION.maxMana,Math.round(mana.max*allStatMultiplier*(1+bonus.mana)));this.extraRestManaRegen.set(player,mana.restRegen);
+    const mana=gearMana(player.level,bag),baseMana=Math.min(PROGRESSION.maxMana,Math.round(mana.max*allStatMultiplier));
+    player.maxMana=masteryCapacity(baseMana,bonus.mana);this.extraRestManaRegen.set(player,mana.restRegen);
+    if(prior && prior.mode!==mode){
+      player.hp=Math.min(player.maxHp,player.hp/prior.hp*(player.maxHp/baseHp));
+      player.mana=Math.min(player.maxMana,player.mana/prior.mana*(player.maxMana/baseMana));
+      this.hpRegenRemainder.set(id,(this.hpRegenRemainder.get(id)??0)/prior.hp*(player.maxHp/baseHp));
+    }
+    this.masteryScales.set(player,{hp:player.maxHp/baseHp,mana:player.maxMana/baseMana,mode});
     player.mana = Math.min(player.mana, player.maxMana);
     player.hp = Math.min(player.hp, player.maxHp);
     player.stamina = Math.min(player.stamina, player.maxStamina);
@@ -2991,7 +3023,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=client.sessionId, learningLevel=this.learningLevel(id,player);
     const guide=personalGearGuides(player.pathId,player.level,learningLevel);
     const training=player.level>=13?this.coreTrainingAtLevel(id,player.pathId,1,player.level):undefined;
-    client.send("gear_guides",guide && {...guide,learningLevel,cycle:this.rebirthStates.get(id)?.count??0,training:training??null});
+    const history=this.rebirthStates.get(id)??newRebirthState();
+    const rebirthPreview=player.level===100 && history.count<15 && this.playerBuild(player)
+      ? {before:masteryPreview(history),after:masteryPreview(startNextLife(history,this.playerBuild(player)!.path,100))}:null;
+    client.send("gear_guides",guide && {...guide,learningLevel,cycle:history.count,training:training??null,rebirthPreview});
   }
 
   private sendFieldPractice(client:Client,player:Player,action:unknown,skillId:unknown,
@@ -4030,6 +4065,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("character_status",{
         level:player.level, weaponId:equippedWeaponId(inventory) ?? "",
         rebirth:this.rebirthStates.get(id),
+        mastery:{...masteryPreview(this.rebirthStates.get(id)),mode:this.masteryMode(id),combat:Object.fromEntries((["pve","pvp"] as const).map(mode=>[mode,{atk:this.masteryPower(player,mode,"atk",weaponBonuses(inventory,mode).melee),magicAtk:this.masteryPower(player,mode,"magicAtk",weaponBonuses(inventory,mode).ranged),def:this.masteryPower(player,mode,"def",mode==="pve"?equipmentRatings(inventory).guard:0),magicDef:this.masteryPower(player,mode,"magicDef")}])),current:{hp:player.maxHp,mana:player.maxMana,atk:player.atk,def:player.def,magicAtk:player.magicAtk,magicDef:player.magicDef}},
         base:calculateStats(player.level,this.statAllocations.get(id) ?? emptyAllocations()),
         weapon:{pve:weaponBonuses(inventory,"pve"),pvp:weaponBonuses(inventory,"pvp")},forgeRatings:equipmentRatings(inventory),overflowRegen:this.extraStaminaRegen.get(player)??0,
         effects:this.effects.active(id,this.simulatedMs)
@@ -4072,13 +4108,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // The Windows VPS build uses different TS strictness from CI.
       // An explicit property guard narrows ItemUseResult in both modes.
       if ("reason" in result) return this.reject(client, result.reason);
-      const snapshot = this.captureCharacterSnapshot(id, result.inventory, result.hp);
+      const snapshot = this.captureCharacterSnapshot(id, result.inventory, result.hp, player.mana+result.restoredMana);
       if (!snapshot) return this.reject(client, "inventory_unavailable");
 
       // Durability-first transaction: the server writes the decremented stack
       // atomically BEFORE updating HP or acknowledging the potion. If disk is
       // full, neither HP nor potion count changes for the player.
-      if(result.restoredMana)snapshot.mana=player.mana+result.restoredMana;
       const task = (async () => {
         try {
           await characterStore.save(snapshot);
@@ -4449,6 +4484,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (this.activeDashes.has(id)) return this.reject(client, "dashing");
     if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
     if (!this.gates.get(id)?.attack.consume(this.simulatedMs)) return this.reject(client, "attack_rate_limited");
+    this.refreshMastery(id);
     return player;
   }
 
@@ -4477,7 +4513,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     caster.talismanReadyAt = now + TALISMAN.cooldownMs;
     caster.facing = facingTo(target.x - caster.x, target.z - caster.z);
     this.recordCombat(id, target.id);
-    const magic = this.contextualStat(id,caster.magicAtk,"magicAtk",true) + weaponBonuses(this.inventories.get(id), "pve").ranged;
+    const magic = this.masteryPower(caster,"pve","magicAtk",weaponBonuses(this.inventories.get(id),"pve").ranged);
     const damage = calculateDamage(magic * TALISMAN.magicMultiplier, target.defense, target.level);
     this.hitMonsterWithSpell(id, target, damage, "talisman");
     this.recordOccultTraining(id,"seer",["talisman"]);
@@ -4516,9 +4552,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastAttackMs.set(id,this.simulatedMs);
     this.recordCombat(id, targetId);
     shooter.facing = facingTo(target.x-shooter.x, target.z-shooter.z);
-    const rangedAttack = this.contextualStat(id,shooter.magicAtk,"magicAtk",Boolean(monsterOrder)) + weaponBonuses(this.inventories.get(id), monsterOrder ? "pve" : "pvp").ranged;
+    const rangedAttack = this.masteryPower(shooter,monsterOrder?"pve":"pvp","magicAtk",weaponBonuses(this.inventories.get(id),monsterOrder?"pve":"pvp").ranged);
     let rangedDamage = monsterOrder ? calculateDamage(rangedAttack*(shooter.pathId==="mender"?MENDER_PVE_RICE_MULTIPLIER:1), (target as Monster).defense, (target as Monster).level) :
-      calculateDamage(rangedAttack, (target as Player).magicDef, (target as Player).level);
+      calculateDamage(rangedAttack, this.masteryPower(target as Player,"pvp","magicDef"), (target as Player).level);
 
     if (monsterOrder) {
       this.hitMonsterWithSpell(id, target as Monster, rangedDamage, "ranged");
@@ -4785,7 +4821,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const empowered=order?.targetId===targetId && order.until>this.simulatedMs;
       const gearPower=guardian.kind==="pot_spirit" && owner.pathId==="seer" ? spiritGearPower(this.inventories.get(ownerId)) : 0;
       const spiritRank=guardian.kind==="pot_spirit" && owner.pathId==="seer" ? this.occultBooks.get(ownerId)?.coreRanks?.seer_pot ?? 0 : 0;
-      const damage = calculateDamage((RULES.summonAttackDamage+gearPower)*(1+monsterRebirthBonus(this.rebirthStates.get(ownerId)).magicAtk)*(empowered?OCCULT_LESSONS[order.skillId].power:1)*seerCoreProgress(spiritRank).seer_pot.pvePower, monster.defense, monster.level);
+      const damage = calculateDamage((RULES.summonAttackDamage+gearPower)*(1+masteryBonuses(this.rebirthStates.get(ownerId),"pve").magicAtk)*(empowered?OCCULT_LESSONS[order.skillId].power:1)*seerCoreProgress(spiritRank).seer_pot.pvePower, monster.defense, monster.level);
       if (empowered) this.occultSpiritOrders.delete(ownerId);
       if (guardian.kind==="pot_spirit" && (empowered || !this.occultSpiritPracticed.has(ownerId))) {
         this.occultSpiritPracticed.add(ownerId);
@@ -4807,7 +4843,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Summon can help in Free PK only when its owner selected or was attacked
     // by this opponent. Damage/kill attribution belongs to the owner.
     const victim = target as Player;
-    const damage = this.swordGuardDamage(targetId,guardian,calculateDamage(RULES.summonAttackDamage*(1+activeRebirthBonus(this.rebirthStates.get(ownerId)).magicAtk), victim.magicDef, victim.level),0,ownerId);
+    const damage = this.swordGuardDamage(targetId,guardian,calculateDamage(RULES.summonAttackDamage*(1+masteryBonuses(this.rebirthStates.get(ownerId),"pvp").magicAtk), this.masteryPower(victim,"pvp","magicDef"), victim.level),0,ownerId);
     victim.hp = Math.max(0, victim.hp - damage);
     victim.hitSeq += 1;
     this.broadcast("pvp_hit", {
@@ -4931,7 +4967,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const p=this.state.players.get(id);
       if (!p || this.priestProtected(id) || !this.sameCombatMap(id,m.id)) return;
       const profile=this.forest.profile(m.id); if(!profile)return;
-      const damage=this.monsterDamageFor(id,this.swordGuardDamage(id,m,calculateDamage(profile.attack*force,this.contextualStat(id,p.def,"def",true)+equipmentRatings(this.inventories.get(id)).guard,p.level)));
+      const damage=this.swordGuardDamage(id,m,calculateDamage(profile.attack*force,this.masteryPower(p,"pve","def",equipmentRatings(this.inventories.get(id)).guard),p.level));
       this.endBladeCloak(id,"damaged");
       p.hp=Math.max(0,p.hp-damage);p.hitSeq++;this.lastCombatMs.set(id,this.simulatedMs);
       this.broadcast("monster_hit",{targetId:id,attackerId:m.id,damage,hp:p.hp,maxHp:p.maxHp,hitSeq:p.hitSeq},{afterNextPatch:true});
@@ -4960,6 +4996,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private markSupportManaCombat(id:string, targets:readonly [string, Player][]):void {
+    this.supportMastery(id,targets.map(([member])=>member));
     if (targets.some(([member]) => this.isFighting(member) ||
       (member!==id && this.simulatedMs < (this.supportManaCombatUntil.get(member) ?? 0))))
       this.supportManaCombatUntil.set(id,this.simulatedMs + PROGRESSION.combatQuietMs);
@@ -4968,18 +5005,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private updateResources(dt: number): void {
     for (const [id, player] of this.state.players) {
       if (!player.alive || this.pendingWarps.has(id)) continue;
+      this.refreshMastery(id);
+      const recovery=1+masteryBonuses(this.rebirthStates.get(id),this.masteryMode(id)).regen;
       const fighting = this.isFighting(id);
       // HP saves are integer-valued in legacy snapshots. Keep fractional regen
       // in a transient accumulator instead of rounding up on each save/rejoin.
-      const mastery=activeRebirthBonus(this.rebirthStates.get(id));
-      const pending = (this.hpRegenRemainder.get(id) ?? 0) + (fighting ? PROGRESSION.hpRegenIn : PROGRESSION.hpRegenOut) * (1+mastery.regen) * dt;
+      const pending = (this.hpRegenRemainder.get(id) ?? 0) + (fighting ? PROGRESSION.hpRegenIn : PROGRESSION.hpRegenOut) * recovery * dt;
       const healed = Math.floor(pending + 1e-9);
       player.hp = Math.min(player.maxHp, player.hp + healed);
       this.hpRegenRemainder.set(id, player.hp >= player.maxHp ? 0 : pending - healed);
-      player.stamina = Math.min(player.maxStamina, player.stamina + ((fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut)+(this.extraStaminaRegen.get(player)??0)) * (1+mastery.regen) * dt);
+      player.stamina = Math.min(player.maxStamina, player.stamina + ((fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut)+(this.extraStaminaRegen.get(player)??0)) * recovery * dt);
       const manaFighting = fighting || this.simulatedMs < (this.supportManaCombatUntil.get(id) ?? 0);
       const manaRegen = manaFighting ? PROGRESSION.manaRegenIn : Math.max(PROGRESSION.manaRegenOut, player.maxMana / 20)+(this.extraRestManaRegen.get(player)??0);
-      player.mana = Math.min(player.maxMana, player.mana + manaRegen * (1+mastery.regen) * dt);
+      player.mana = Math.min(player.maxMana, player.mana + manaRegen * recovery * dt);
     }
   }
 
@@ -5062,7 +5100,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.activeDashes.delete(sessionId);
         continue;
       }
-      const moveSpeed=player.flying ? FLIGHT.horizontalSpeed : player.mounted ? RULES.mountedSpeed : RULES.playerSpeed * (1+activeRebirthBonus(this.rebirthStates.get(sessionId)).movement) * (this.sentinelAnchors.has(sessionId)?0.6:1) *
+      this.refreshMastery(sessionId);
+      const groundMastery=1+masteryBonuses(this.rebirthStates.get(sessionId),this.masteryMode(sessionId)).movement;
+      const moveSpeed=player.flying ? FLIGHT.horizontalSpeed : player.mounted ? RULES.mountedSpeed : RULES.playerSpeed * groundMastery * (this.sentinelAnchors.has(sessionId)?0.6:1) *
         (this.bladeCloaks.has(sessionId) && this.bladeBooks.get(sessionId)?.learned.includes("quiet_step") ? 1+BLADE_LESSONS.quiet_step.power : 1);
 
       const dash = this.activeDashes.get(sessionId);
@@ -5240,8 +5280,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         to:{x:target.x,y:target.y+FORT.targetBodyHeight,z:target.z},
       }, {afterNextPatch:true});
       if (monster) {
-        const meleeDamage = ranged ? calculateDamage(this.contextualStat(attackerId,attacker.magicAtk,"magicAtk",true) + bonuses.ranged,monster.defense,monster.level)
-          : calculateDamage((this.contextualStat(attackerId,attacker.atk,"atk",true) + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, monster.defense, monster.level);
+        const meleeDamage = ranged ? calculateDamage(this.masteryPower(attacker,monster?"pve":"pvp","magicAtk",bonuses.ranged),monster.defense,monster.level)
+          : calculateDamage((this.masteryPower(attacker,monster?"pve":"pvp","atk",meleeBonus)) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, monster.defense, monster.level);
         monster.hp = Math.max(0, monster.hp - meleeDamage);
         monster.hitSeq += 1;
         this.broadcast("combat_hit", {
@@ -5257,8 +5297,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // server-owned. The client only submits another session's targetId.
       const victim = target as Player;
       const meleeDamage = this.swordGuardDamage(targetId,attacker,ranged
-        ? calculateDamage(attacker.magicAtk + bonuses.ranged,victim.magicDef,victim.level)
-        : calculateDamage((attacker.atk + meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, victim.def, victim.level));
+        ? calculateDamage(this.masteryPower(attacker,monster?"pve":"pvp","magicAtk",bonuses.ranged),this.masteryPower(victim,"pvp","magicDef"),victim.level)
+        : calculateDamage((this.masteryPower(attacker,monster?"pve":"pvp","atk",meleeBonus)) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, this.masteryPower(victim,"pvp","def"), victim.level));
       victim.hp = Math.max(0, victim.hp - meleeDamage);
       victim.hitSeq += 1;
       this.broadcast("pvp_hit", {
@@ -5467,7 +5507,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastMonsterAttackMs = this.simulatedMs;
     this.lastCombatMs.set(targetId, this.simulatedMs);
 
-    const damage = this.monsterDamageFor(targetId,this.swordGuardDamage(targetId,this.state.monster,calculateDamage(RULES.monsterAttackDamage, this.contextualStat(targetId,target.def,"def",true)+equipmentRatings(this.inventories.get(targetId)).guard, target.level)));
+    const damage = this.swordGuardDamage(targetId,this.state.monster,calculateDamage(RULES.monsterAttackDamage, this.masteryPower(target,"pve","def",equipmentRatings(this.inventories.get(targetId)).guard), target.level));
     this.endBladeCloak(targetId,"damaged");
     target.hp = Math.max(0, target.hp - damage);
     target.hitSeq += 1;
@@ -5558,12 +5598,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private captureCharacterSnapshot(
-    id: string, inventoryOverride?: InventorySnapshot, hpOverride?: number,
+    id: string, inventoryOverride?: InventorySnapshot, hpOverride?: number, manaOverride?: number,
   ): CharacterSnapshot | null {
     const characterId = this.persistentCharacters.get(id);
     const player = this.state.players.get(id);
     const inventory = inventoryOverride ?? this.inventories.get(id);
     if (!characterId || !player || !inventory) return null;
+    const scales=this.masteryScales.get(player)??{hp:1,mana:1};
+    const pvpUntil=this.masteryMode(id)==="pvp"?Date.now()+Math.ceil(this.field?PROGRESSION.combatQuietMs:Math.max(0,PROGRESSION.combatQuietMs-(this.simulatedMs-(this.lastPvpMs.get(id)??-Infinity)))):0;
+    const vitals=encodeMasteryVitals(hpOverride??player.hp,manaOverride??player.mana,scales.hp,scales.mana,pvpUntil);
     return {
       version: 1, id: characterId, name: player.characterName,
       level: player.level, experience: player.experience,
@@ -5584,12 +5627,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       sentinelBook: this.sentinelBooks.get(id),
       muayWrapGranted: this.muayWrapGranted.has(id),
       stamina: player.stamina,
-      mana: player.mana,
+      ...vitals,
       x: player.x,
       // Keep stable flight altitude when a transition is mid-flight.
       y: player.flying ? FLIGHT.altitude : getWorldMap(player.mapId)?.reliefLabels ? (isOnPlatform(surfaceLayer(player))?FORT.height:0) : player.y,
       z: player.z,
-      hp: Math.max(0, Math.round(hpOverride ?? player.hp)),
       inventory, updatedAt: new Date().toISOString(),
     };
   }
@@ -5641,6 +5683,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         ? fields.characterSetup as {name?:unknown; build?:unknown} : undefined;
       const saved = characterId ? (await characterStore.loadOrCreateById(characterId, spawn, setup, required)).character : null;
       if (required && !accounts().resolve(fields.accountSession)) throw new Error("login_required");
+      if(saved?.build){
+        const credited=recordClassLevel(saved.rebirth??newRebirthState(),saved.build.path,Math.min(100,saved.level));
+        if(JSON.stringify(credited)!==JSON.stringify(saved.rebirth)){
+          await characterStore.save({...saved,rebirth:credited,updatedAt:new Date().toISOString()});
+          saved.rebirth=credited;
+        }
+      }
       const allocations = saved?.statAllocations ?? emptyAllocations();
       const initialStats = equippedStats(calculateStats(saved?.level ?? 1, allocations),saved?.inventory);
       const initialMaxMana=gearMana(saved?.level??1,saved?.inventory).max;
@@ -5733,7 +5782,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(saved?.forestObjective)this.forestObjectives.set(client.sessionId,saved.forestObjective);
       if(saved?.directorClaims)this.directorClaims.set(client.sessionId,saved.directorClaims);
       if (saved?.inventory)this.inventories.set(client.sessionId,saved.inventory);
+      const normalizedHp=saved ? saved.hp+(saved.masteryVitals?.hpRemainder??0):initialStats.maxHp;
+      if(saved?.masteryVitals?.pvpUntil && saved.masteryVitals.pvpUntil>Date.now())this.lastPvpMs.set(client.sessionId,this.simulatedMs-PROGRESSION.combatQuietMs+Math.min(PROGRESSION.combatQuietMs,saved.masteryVitals.pvpUntil-Date.now()));
       this.applyStats(client.sessionId,player, allocations);
+      const restoredScales=this.masteryScales.get(player)!;
+      player.hp=Math.min(player.maxHp,normalizedHp>0?normalizedHp*(saved?.masteryVitals?restoredScales.hp:1):player.maxHp);
+      player.mana=Math.min(player.maxMana,(saved?.mana??initialMaxMana)*(saved?.masteryVitals?restoredScales.mana:1));
       this.state.players.set(client.sessionId, player);
       client.view=new StateView();
       this.syncPlayerViews();

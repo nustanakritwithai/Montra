@@ -87,6 +87,7 @@ $files = @(
   @{ Name = "BugReports.ts"; Target = "src\rooms\BugReports.ts"; Check = "saveBugReport" },
   @{ Name = "private-chat-integration.mjs"; Target = "montra-private-chat-integration.mjs"; Check = "montra-chat-private-test-" },
   @{ Name = "Progression.ts"; Target = "src\rooms\Progression.ts"; Check = "calculateStats" },
+  @{ Name = "RebirthCombat.ts"; Target = "src\rooms\RebirthCombat.ts"; Check = "MASTERY_ENABLED" },
   @{ Name = "Rebirth.ts"; Target = "src\rooms\Rebirth.ts"; Check = "validateRebirthState" },
   @{ Name = "RebirthTransition.ts"; Target = "src\rooms\RebirthTransition.ts"; Check = "prepareRebirth" },
   @{ Name = "ForestObjectives.ts"; Target = "src\rooms\ForestObjectives.ts"; Check = "advanceForestObjective" },

@@ -24,6 +24,7 @@ import { validateBladeBook, type BladeBook } from "./BladeRules.js";
 import { validateSentinelBook, type SentinelBook } from "./SentinelRules.js";
 
 import { parseBuild, type CharacterBuild,type PathId } from "./CharacterBuilds.js";
+import {validateMasteryVitals,type MasteryVitals} from "./RebirthCombat.js";
 import {prepareRebirth} from "./RebirthTransition.js";
 import { classLearningLevel, validateRebirthState, REBIRTH_SHRINE, type RebirthState } from "./Rebirth.js";
 import { validateForestObjective, type ForestObjective } from "./ForestObjectives.js";
@@ -53,6 +54,7 @@ export type CharacterSnapshot = {
   build?: CharacterBuild;
   /** Absent in existing characters until the rebirth system is used. */
   rebirth?: RebirthState;
+  masteryVitals?: MasteryVitals;
   forestObjective?: ForestObjective | null;
   /** Recent paid director event IDs prevent replay across reconnects. */
   directorClaims?: string[];
@@ -149,6 +151,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
     if (readyAt !== undefined && (typeof readyAt !== "number" || !Number.isSafeInteger(readyAt) || readyAt < 0)) throw new Error("invalid_skill_cooldown");
   }
   const rebirth=value.rebirth === undefined ? undefined : validateRebirthState(value.rebirth);
+  validateMasteryVitals(value.masteryVitals,value.updatedAt as string,value.hp as number);
   if(value.forestObjective!==undefined && value.forestObjective!==null)validateForestObjective(value.forestObjective);
   if(value.directorClaims!==undefined && (!Array.isArray(value.directorClaims) || value.directorClaims.length>16 ||
      value.directorClaims.some(id=>typeof id!=="string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)) ||
@@ -323,7 +326,7 @@ export class CharacterStore {
     const saved=validateSnapshot(record,id);
     if(saved.build?.path!==fromPath || (saved.rebirth?.count??0)!==cycle)throw Error("rebirth_changed");
     const shrine=REBIRTH_SHRINE;
-    if(saved.hp<=0 || saved.mapId!==shrine.mapId || Math.hypot(saved.x-shrine.x,saved.z-shrine.z)>shrine.radius || Math.abs(saved.y)>0.5){
+    if(saved.hp+(saved.masteryVitals?.hpRemainder??0)<=0 || saved.mapId!==shrine.mapId || Math.hypot(saved.x-shrine.x,saved.z-shrine.z)>shrine.radius || Math.abs(saved.y)>0.5){
       throw Error("rebirth_shrine_required");
     }
     const next=prepareRebirth(saved,path);

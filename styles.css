@@ -1431,3 +1431,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
    and chat has its own box, so the horse is never hidden by that setting. */
 #game[data-field-utility] .learned-bar #mountButton.orb-mount:not([hidden]) { display: grid; }
 .field-utility-label { display: none !important; }
+
+/* Rebirth mastery stays inside the character sheet. */
+.cp-mastery {margin-top:12px;padding:12px;border:1px solid #76603d;border-radius:12px;background:#13221e;}
+.cp-mastery summary {cursor:pointer;font-weight:700;color:#e8d5a6;}
+.cp-mastery-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px;}
+.cp-mastery-class {display:grid;gap:5px;padding:9px;border-radius:8px;background:#1d3028;min-width:0;}
+.cp-mastery-class svg {width:26px;height:26px;}
+.cp-mastery-class small,.cp-mastery p {font-size:12px;line-height:1.6;overflow-wrap:anywhere;}
+@media (min-width:600px){.cp-mastery-grid {grid-template-columns:repeat(3,minmax(0,1fr));}}

@@ -11911,6 +11911,26 @@
     if ($("currentBuild")) $("currentBuild").textContent = selectedPath ? [selectedPath.name, swordSchool || muaySchool, talent?.name, getBuildCatalog()?.ancestries?.[p.ancestryId]?.name, ancestryHint(p)].filter(Boolean).join(" · ") : "ยังไม่ได้เลือกสายอาชีพ";
     renderCharacterSheet(p, supported);
   }
+  function renderMasteryPanel(status){
+    const box=$("cpMastery");if(!box)return;
+    const history=status?.rebirth,bonus=status?.mastery;
+    if(!bonus){box.hidden=true;return;}box.hidden=false;
+    const data=JSON.stringify([history,bonus]);if(box.dataset.key===data)return;box.dataset.key=data;
+    const pct=n=>(Math.max(0,Number(n)||0)*100).toFixed(2).replace(/\.?0+$/,"")+"%";
+    const paths=[["muay_boran","fist","นักมวย","HP","hp"],["phutthaisawan","twin","นักดาบ","ATK / MATK","atk"],
+      ["blade","atk","คมดาบ","วิ่ง","movement"],["sentinel","def","ผู้พิทักษ์","DEF / MDEF","def"],
+      ["seer","magicAtk","จอมอาคม","มานา","mana"],["mender","heal","พระ","ฟื้นฟู","regen"]];
+    const count=Math.max(0,Math.min(15,Number(history?.count)||0));
+    $("cpMasterySummary").textContent="ความชำนาญ · เกิดใหม่ "+count+"/15 · "+(bonus.enabled?bonus.mode.toUpperCase():"ยังไม่เปิดผลโบนัส");
+    $("cpMasteryGrid").innerHTML=paths.map(([id,icon,name,label,key])=>{
+      const rank=Math.max(0,Math.min(2,Number(history?.mastery?.[id])||0));
+      const rate=id==="blade"?.01:.025;
+      return '<div class="cp-mastery-class">'+seal(icon)+'<strong>'+name+' '+rank+'/2</strong><small>'+label+' · PvE +'+pct(bonus.enabled?rank*rate:0)+' / PvP +'+pct(bonus.enabled?rank*rate/2:0)+'</small></div>';
+    }).join("");
+    $("cpMasteryTotals").textContent="โบนัสรวม HP / ATK / MATK: PvE +"+pct(bonus.pve?.hp)+" / "+pct(bonus.pve?.atk)+" / "+pct(bonus.pve?.magicAtk)+
+      " · PvP +"+pct(bonus.pvp?.hp)+" / "+pct(bonus.pvp?.atk)+" / "+pct(bonus.pvp?.magicAtk)+
+      " · มานาสูงสุดตอนนี้ "+Math.round(Number(bonus.current?.mana)||0)+" · โบนัสอาชีพสะสมใช้ได้ทุกชีวิต";
+  }
   // ---- Character sheet (status / class / account tabs) ----
   function renderCharacterSheet(p, supported) {
     if (!$("cpRing")) return;
@@ -11942,6 +11962,7 @@
     // The schema already includes buffs; weapon bonuses are applied separately by the server.
     const wpn = p.equippedWeaponId || "";
     const status = characterStatus && characterStatus.level === p.level && characterStatus.weaponId === wpn && performance.now() - characterStatus.receivedAt < 5000 ? characterStatus : null;
+    renderMasteryPanel(status);
     const values = { hp: c.maxHp, stamina: c.maxStamina, atk: c.atk, def: c.def, magicAtk: c.magicAtk, magicDef: c.magicDef };
     const fields = {hp:"maxHp",stamina:"maxStamina",atk:"atk",def:"def",magicAtk:"magicAtk",magicDef:"magicDef"};
     for (const [key, v] of Object.entries(values)) {
@@ -11949,17 +11970,19 @@
       const bits = [];
       if (status) {
         const base=num(status.base[fields[key]]), delta=num(v)-base;
-        bits.push("พื้นฐาน " + base + (delta ? " · ผลสกิล " + (delta > 0 ? "+" : "") + delta : ""));
+        bits.push("พื้นฐาน " + base + (delta ? " · อุปกรณ์ วิชา และความชำนาญ " + (delta > 0 ? "+" : "") + delta : ""));
         const type=key === "atk" ? "melee" : key === "magicAtk" ? "ranged" : "";
         if(type) {
           const pve=num(status.weapon.pve[type]), pvp=num(status.weapon.pvp[type]);
-          if(pve || pvp) bits.push("อาวุธเพิ่มตอนโจมตีมอนสเตอร์ " + (pve >= 0 ? "+" : "") + pve + (pvp !== pve ? " · PvP " + (pvp >= 0 ? "+" : "") + pvp : ""));
+          if(status.mastery?.enabled)bits.push("กำลังโจมตีรวม PvE "+num(status.mastery.combat?.pve?.[key])+" · PvP "+num(status.mastery.combat?.pvp?.[key]));
+          else if(pve || pvp) bits.push("อาวุธเพิ่มตอนโจมตีมอนสเตอร์ " + (pve >= 0 ? "+" : "") + pve + (pvp !== pve ? " · PvP " + (pvp >= 0 ? "+" : "") + pvp : ""));
         }
       } else if (key === "atk" || key === "magicAtk") bits.push("กำลังโหลดข้อมูลอาวุธจากเซิร์ฟเวอร์");
-      if(key==="def" && status?.forgeRatings?.guard)bits.push("ป้องกันมอนสเตอร์จากช่าง +"+num(status.forgeRatings.guard));
+      if(key==="def" && status?.mastery?.enabled)bits.push("ป้องกันรวม PvE "+num(status.mastery.combat?.pve?.def)+" · PvP "+num(status.mastery.combat?.pvp?.def));
+      else if(key==="def" && status?.forgeRatings?.guard)bits.push("ป้องกันมอนสเตอร์จากช่าง +"+num(status.forgeRatings.guard));
       if(key==="magicAtk" && status?.forgeRatings?.healing)bits.push("พลังรักษา PvE จากช่าง +"+num(status.forgeRatings.healing));
       if(key==="stamina" && status?.overflowRegen)bits.push("พลังเกินเพดานช่วยฟื้นเพิ่ม "+Number(status.overflowRegen).toFixed(1)+"/วิ");
-      if (key === "stamina") bits.push("ใช้กับแดช · ฟื้น 4/วิ (สู้อยู่ 2/วิ)");
+      if (key === "stamina") bits.push("ใช้กับแดช · ความชำนาญพระเพิ่มอัตราฟื้นฟูธรรมชาติ");
       $("statBonus-" + key).textContent = bits.join(" · ");
     }
     // Active effects and unspent points.
@@ -12040,6 +12063,7 @@
           meter("hp","hp","พลังชีวิต","cpHpBar","cpHp") + meter("st","stamina","กำลัง","cpStBar","profileStamina") + meter("xp","xp","ประสบการณ์","cpXpBar","profileLevel") +
         '</div>' +
         '<details id="cpEffects" class="cp-buffs" hidden><summary id="cpFxSummary"><span class="cp-fx-icons" id="cpFxIcons" aria-hidden="true"></span></summary><p id="cpFxNames"></p></details>' +
+        '<details id="cpMastery" class="cp-mastery" hidden><summary id="cpMasterySummary">ความชำนาญ</summary><div id="cpMasteryGrid" class="cp-mastery-grid"></div><p id="cpMasteryTotals"></p></details>' +
         '<div id="cpPoints" class="cp-points" hidden>'+seal("points")+'<span id="cpPointsValue"></span></div>' +
         '<div id="profileStats"><div class="cp-section-head"><h3>คุณสมบัติ</h3><button id="cpShowNames" type="button" aria-pressed="false">ชื่อไอคอน</button></div><div class="cp-sigils">'+stats.map(tile).join("")+'</div>'+stats.map(note).join("")+'</div>' +
         '<details id="cpChart" class="cp-chart"><summary>'+seal("radar")+'จุดเด่นตัวละคร</summary><p class="note" id="profileProgressionStatus"></p><svg id="cpRadar" class="cp-radar" viewBox="0 0 220 200" role="img" aria-label="กราฟจุดเด่นสเตตัส"></svg></details>' +
@@ -13200,10 +13224,12 @@
     explanation.textContent="ถึง Lv.100 แล้วเลือกอาชีพได้ทุกรอบ วิชาเดิมยังเก็บไว้ อุปกรณ์ที่เลเวลหรืออาชีพใหม่ใส่ไม่ได้จะกลับเข้ากระเป๋าพร้อมการ์ดและตีบวก";
     body.append(explanation);
     const bonus=document.createElement("p");bonus.className="note";
-    const b=data.bonuses;bonus.textContent=`โบนัสปัจจุบัน: HP +${(b.hp*100).toFixed(1)}% · โจมตี +${(b.atk*100).toFixed(1)}% · เวท +${(b.magicAtk*100).toFixed(1)}% · ป้องกัน +${(b.def*100).toFixed(1)}% · มานา +${(b.mana*100).toFixed(1)}% · ฟื้นฟู +${(b.regen*100).toFixed(1)}% · เดิน +${(b.movement*100).toFixed(1)}%`;
+    const b=data.bonuses;bonus.textContent=`${data.enabled===false?"ยังไม่เปิดโบนัส · ":""}โบนัส PvP: HP +${(b.hp*100).toFixed(1)}% · โจมตี +${(b.atk*100).toFixed(1)}% · เวท +${(b.magicAtk*100).toFixed(1)}% · ป้องกัน +${(b.def*100).toFixed(1)}% · มานา +${(b.mana*100).toFixed(1)}% · ฟื้นฟู +${(b.regen*100).toFixed(1)}% · เดิน +${(b.movement*100).toFixed(1)}%`;
     body.append(bonus);
     if(data.pveBonuses){const p=data.pveBonuses,tuning=document.createElement("p");tuning.className="note";
-      tuning.textContent=`เมื่อต่อสู้กับมอน: โจมตี +${(p.atk*100).toFixed(1)}% · เวท +${(p.magicAtk*100).toFixed(1)}% · ป้องกัน +${(p.def*100).toFixed(1)}% · ความทนทานจาก HP +${(p.hp*100).toFixed(1)}% (แสดงผ่านความเสียหายที่ลดลง) ส่วนมานา ฟื้นฟู และเดินใช้อัตราร่วมข้างต้น`;body.append(tuning);}
+      tuning.textContent=`เมื่อต่อสู้กับมอน: โจมตี +${(p.atk*100).toFixed(1)}% · เวท +${(p.magicAtk*100).toFixed(1)}% · ป้องกัน +${(p.def*100).toFixed(1)}% · HP สูงสุด +${(p.hp*100).toFixed(1)}% · มานา +${(p.mana*100).toFixed(1)}% · ฟื้นฟู +${(p.regen*100).toFixed(1)}% · เดิน +${(p.movement*100).toFixed(1)}%`;body.append(tuning);}
+    if(data.preview?.after){const after=document.createElement("p");after.className="note";const {pve,pvp}=data.preview.after;
+      after.textContent=`หลังเกิดใหม่ HP / ATK / MATK: PvE +${(pve.hp*100).toFixed(1)}% / +${(pve.atk*100).toFixed(1)}% / +${(pve.magicAtk*100).toFixed(1)}% · PvP +${(pvp.hp*100).toFixed(1)}% / +${(pvp.atk*100).toFixed(1)}% / +${(pvp.magicAtk*100).toFixed(1)}%`;body.append(after);}
     const select=document.createElement("select");select.setAttribute("aria-label","เลือกอาชีพหลังเกิดใหม่");
     for(const [id,path] of Object.entries(data.paths)){const option=document.createElement("option");option.value=id;option.textContent=path.name;if(id===data.path)option.selected=true;select.append(option);}
     body.append(select);
@@ -13447,7 +13473,7 @@
         const now=shrineDirection(journey,ownServerCharacter());
         if(!now)return;
         saveJourney({shrine:true});closeDrawer();
-        if(now.arrived)window.MontraEntry?.rebirthAtShrine(ownServerCharacter(),gearGuides.cycle??0);
+        if(now.arrived)window.MontraEntry?.rebirthAtShrine(ownServerCharacter(),gearGuides.cycle??0,gearGuides.rebirthPreview);
         else toast(now.step);
       };
     }

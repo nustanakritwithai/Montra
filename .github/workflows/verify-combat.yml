@@ -31,7 +31,7 @@ jobs:
           cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
           cp deploy/combat/AccountStore.ts deploy/combat/AccountService.ts deploy/combat/AccountRoutes.ts deploy/combat/account-store.test.ts combat-verify/src/rooms/
           cp deploy/combat/account-integration.mjs combat-verify/account-integration.mjs
-          cp deploy/combat/hunting-rebirth-integration.mjs combat-verify/
+          cp deploy/combat/hunting-rebirth-integration.mjs deploy/combat/mastery-save-integration.mjs combat-verify/
           cp deploy/combat/learned-hotbar-integration.mjs deploy/combat/personal-equipment-integration.mjs combat-verify/
           cp deploy/combat/guest-delete-integration.mjs combat-verify/guest-delete-integration.mjs
           cp deploy/combat/mount-integration.mjs combat-verify/mount-integration.mjs
@@ -165,6 +165,7 @@ jobs:
           cp deploy/combat/MonsterRRT.ts combat-verify/src/rooms/MonsterRRT.ts
           cp deploy/combat/CharacterStore.ts combat-verify/src/rooms/CharacterStore.ts
           cp deploy/combat/Rebirth.ts combat-verify/src/rooms/Rebirth.ts
+          cp deploy/combat/RebirthCombat.ts deploy/combat/rebirth-combat.test.ts deploy/combat/mastery-runtime.test.ts combat-verify/src/rooms/
           cp deploy/combat/RebirthTransition.ts combat-verify/src/rooms/RebirthTransition.ts
           cp deploy/combat/ForestObjectives.ts combat-verify/src/rooms/ForestObjectives.ts
           cp deploy/combat/WorldDirector.ts combat-verify/src/rooms/WorldDirector.ts
@@ -485,17 +486,22 @@ jobs:
           node guest-delete-integration.mjs
           node mount-integration.mjs
 
+      - name: Rebirth mastery math and combat runtime
+        working-directory: combat-verify
+        run: MONTRA_MASTERY_ENABLED=1 npx tsx --test src/rooms/rebirth-combat.test.ts src/rooms/mastery-runtime.test.ts
+
       - name: Isolated six-class hunt and rebirth
         working-directory: combat-verify
         shell: bash
         run: |
-          export MONTRA_ACCOUNTS_REQUIRED=1 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1 PORT=14216 MONTRA_TEST_URL=http://127.0.0.1:14216
+          export MONTRA_MASTERY_ENABLED=1 MONTRA_ACCOUNTS_REQUIRED=1 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1 PORT=14216 MONTRA_TEST_URL=http://127.0.0.1:14216
           export MONTRA_CHARACTER_DIR="$(mktemp -d "${RUNNER_TEMP}/montra-account-test-XXXXXX")"
           npx tsx src/index.ts > "$RUNNER_TEMP/montra-hunting-rebirth.log" 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for n in {1..60}; do if curl -s -o /dev/null "$MONTRA_TEST_URL/montra/account/slots"; then break; fi; sleep 1; done
           node hunting-rebirth-integration.mjs
+          node mastery-save-integration.mjs
 
       - name: Check class balance fixtures
         shell: bash
