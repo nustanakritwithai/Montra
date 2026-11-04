@@ -7836,13 +7836,19 @@
     if(!bag || !id)return 0;
     return bag.slots.reduce((n,s)=>n+(s?.itemId===id?s.quantity:0),0)+Object.values(bag.equipment??{}).filter(v=>v===id).length+(includeCopies?(bag.forgeCopies?.[id]??0):0);
   }
+  function refinedResourceSource(id){
+    const match=/^mat_(metal|wood)_([1-7])$/.exec(id||"");
+    if(!match)return null;
+    const kind=match[1]==="metal"?"stone":"wood",tier=Number(match[2]);
+    return {resourceKind:kind,tier,rawId:"mat_raw_"+kind+"_"+tier,open:true};
+  }
   function itemHuntSource(id,guide){
     if(id && guide && gearGuides?.journey?.weapon===id)return gearGuides.journey.camp;
     if(guide)for(const build of gearGuides?.builds??[]){
       const hunt=build.slots.find(s=>s.id===id)?.hunt;
       if(hunt?.id)return hunt;
     }
-    return personalItems[id]?.huntTarget;
+    return refinedResourceSource(id) || personalItems[id]?.huntTarget;
   }
   function bindItemHuntButton(button,id,need,guide=false,includeCopies=false){
     const source=itemHuntSource(id,guide),meta=personalItems[id];
@@ -7873,6 +7879,26 @@
       return null;
     }
     const guide={title:"ตามหา "+item.name,progress:count+"/"+goal.need};
+    if(source.resourceKind){
+      const raw=personalItems[source.rawId],rawCount=itemHuntCount(source.rawId),needed=(goal.need-count)*2;
+      guide.progress=item.name+" "+count+"/"+goal.need+" · "+(raw?.name||"ของดิบ")+" "+rawCount+"/"+needed;
+      if(rawCount>=2)return {...guide,step:"เปิดกระเป๋า → แตะ"+(raw?.name||"ของดิบ")+" → แปรรูป 2 ชิ้น",refineId:source.rawId};
+      const me=ownServerCharacter();
+      if((me?.level||1)<(raw?.level||1))return {...guide,step:"ต้องมี Lv."+raw.level+" เพื่อเก็บวัตถุดิบชั้นนี้"};
+      const nodes=resources?.mapId===activeMapId?resources.nodes.filter(n=>n.kind===source.resourceKind && n.tier===source.tier):[];
+      const distance=n=>me?Math.hypot(me.x-n.x,me.z-n.z):Infinity;
+      nodes.sort((a,b)=>Number(!a.stock)-Number(!b.stock)||distance(a)-distance(b));
+      if(nodes.length){const node=nodes[0],name=source.resourceKind==="stone"?"ก้อนหินปนแร่":"ต้นไม้";
+        return {...guide,step:node.stock?"เดินไป"+name+"ชั้น "+source.tier+" แล้วกด "+(source.resourceKind==="stone"?"ขุดหิน":"ตัดไม้"):
+          name+"ใกล้ตัวกำลังฟื้น · รอหรือหาอีกจุด",to:node};}
+      const minLevel=raw?.level||1,maxLevel=personalItems["mat_raw_"+source.resourceKind+"_"+(source.tier+1)]?.level||101;
+      const candidates=Object.values(worldDefinitions||{}).filter(map=>source.tier===1 && map.id==="ritual_village" ||
+        (map.camps||[]).some(c=>c.levels?.some(level=>level>=minLevel && level<maxLevel)));
+      const routes=candidates.map(map=>({map,route:travelRoute(worldDefinitions,activeMapId,map.id)})).filter(r=>r.route.length>1).sort((a,b)=>a.route.length-b.route.length);
+      const route=routes[0]?.route,gate=route && worldDefinitions?.[activeMapId]?.portals.find(p=>p.targetMapId===route[1]);
+      return {...guide,step:gate?"ไปประตู "+worldDefinitions[route[1]].name+" เพื่อหา"+(source.resourceKind==="stone"?"หินปนแร่":"ต้นไม้"):
+        resources?.mapId!==activeMapId?"กำลังค้นหาจุดเก็บในแผนที่…":"ไม่พบจุดชั้นนี้ในพื้นที่ · เปิดแผนที่เพื่อเลือกพื้นที่ตามเลเวล",to:gate};
+    }
     if(source.mobs)return {...guide,...journeyDirection(source)};
     if(!source.open)return {...guide,step:"พื้นที่ล่านี้ยังไม่เปิด"};
     if(activeMapId!==source.mapId){
@@ -12672,7 +12698,7 @@
     }
     const def=personalItems[select.value],button=$("benchCraft");
     bindItemHuntButton($("benchTrack"),select.value,Math.min(def?.copyLimit??1,itemHuntCount(select.value)+1));
-    const missing=def?.recipe.filter(r=>itemHuntCount(r.item)<r.qty && personalItems[r.item]?.huntTarget?.open)??[];
+    const missing=def?.recipe.filter(r=>itemHuntCount(r.item)<r.qty && itemHuntSource(r.item,false)?.open)??[];
     const supply=$("benchHuntChoice"),choices=missing.map(r=>r.item).join("|");
     if(supply.dataset.choices!==choices){
       const previous=supply.value;
@@ -12699,6 +12725,8 @@
     const cost=def.craftGold??workbenchGold;
     const low=(def.level||1)>level;
     $("benchInfo").textContent=[low?"ต้องการ Lv."+def.level:"",statLine(def.stats),...def.recipe.map((r,i)=>(personalItems[r.item]?.name||r.item)+" "+counts[i]+"/"+r.qty),cost+" ทอง",def.dropHint?"ล่าได้ที่ "+def.dropHint:"",def.forge&&def.level>=25?"มีออปชันสุ่มเมื่อสร้าง":""].filter(Boolean).join(" · ");
+    const ore=def.recipe.find((r,i)=>counts[i]<r.qty && /^mat_metal_[1-7]$/.test(r.item));
+    if(ore){const tier=ore.item.split("_").pop();$("benchInfo").textContent+=" · แร่เหล็ก: ขุดก้อนหินปนแร่ชั้น "+tier+" 2 ก้อน แล้วเลือกในกระเป๋ากดแปรรูป · กดตามหาเพื่อดูตำแหน่งหิน";}
     const gear=def.kind==="mainHand" || wearPositions(def.kind).length;
     const limit=def.copyLimit??1,quantity=itemHuntCount(select.value),banked=inventoryState?.forgeCopies?.[select.value]??0,owned=gear && quantity>=limit && banked>=99;
     if(gear && quantity>=limit)$("benchInfo").textContent+=" · คราฟต์ชิ้นซ้ำเข้าคลังช่าง (มี "+banked+"/99)";
@@ -13625,9 +13653,11 @@
     const followingShrine=gearGuides?.journey?.shrine && journeyNotesForPlayer().shrine && !territoryState?.local?.inField;
     const hunt=followingShrine?null:itemHuntGuide();
     if(hunt && !ui.quest.classList.contains("war-hud")){
-      openDrawer("quest",hunt.title,'<p id="huntStep" class="note"></p><button id="huntMap" type="button" class="secondary">ดูตำแหน่งบนแผนที่</button><button id="endItemHunt" type="button" class="secondary">เลิกติดตาม</button>');
+      openDrawer("quest",hunt.title,'<p id="huntStep" class="note"></p><button id="huntMap" type="button" class="secondary">ดูตำแหน่งบนแผนที่</button><button id="huntRefine" type="button" class="primary" hidden>เปิดกระเป๋าเพื่อแปรรูป</button><button id="endItemHunt" type="button" class="secondary">เลิกติดตาม</button>');
       $("huntStep").textContent=hunt.step+" · "+hunt.progress;
       $("huntMap").onclick=openMap;
+      $("huntRefine").hidden=!hunt.refineId;
+      $("huntRefine").onclick=()=>{const slot=inventoryState?.slots?.findIndex(s=>s?.itemId===hunt.refineId)??-1;openBag();if(slot>=0)$("bagSlot"+slot)?.click();};
       $("endItemHunt").onclick=()=>{saveItemHunt(null);closeDrawer();};
       return;
     }
@@ -13752,7 +13782,7 @@
     progress.textContent=goal.step+" · "+goal.progress+(goal.milestone?" · "+goal.milestone:"");
     if(!goal.recipe){$("fieldGoalInputs").textContent="";recipe.hidden=forge.hidden=$("fieldGoalSupply").hidden=true;return;}
     $("fieldGoalInputs").textContent=goal.inputs.map(i=>i.name+" "+i.have+"/"+i.need).join(" · ")+" · "+personalItems[goal.recipe].craftGold+" ทอง";
-    const missing=goal.inputs.find(i=>i.have<i.need && !personalItems[i.id]?.sourceBoss && personalItems[i.id]?.huntTarget?.open);
+    const missing=goal.inputs.find(i=>i.have<i.need && !personalItems[i.id]?.sourceBoss && itemHuntSource(i.id,false)?.open);
     bindItemHuntButton($("fieldGoalSupply"),goal.bank?null:missing?.id,missing?.need);
     recipe.hidden=false;recipe.onclick=()=>{openBag();selectBenchRecipe(personalItems[goal.recipe].sourceBoss?"boss":"all",String(personalItems[goal.recipe].level||1),goal.recipe);};
     forge.hidden=!goal.bank;
