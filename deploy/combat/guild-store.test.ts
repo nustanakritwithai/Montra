@@ -6,6 +6,30 @@ import path from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import { GuildStore, parseGuildName } from "./GuildStore.js";
 
+test("guild search and applications persist and require an authorized decision",()=>{
+  const directory=mkdtempSync(path.join(tmpdir(),"montra-guild-application-")),file=path.join(directory,"guilds.sqlite");
+  const leader="a".repeat(64),applicant="b".repeat(64),outsider="c".repeat(64);
+  let db=new GuildStore(file);
+  try{
+    db.create(leader,"หัวหน้า","นาคพิทักษ์");
+    const guild=db.directory(applicant,"พิทักษ์")[0];assert.ok(guild);assert.equal(guild.leader,"หัวหน้า");assert.equal(guild.members,1);
+    assert.equal(db.directory(applicant,"ไม่มี").length,0);
+    db.apply(applicant,"ผู้สมัคร",guild.id);
+    assert.equal(db.pending(applicant)?.id,guild.id);
+    assert.throws(()=>db.apply(applicant,"ผู้สมัคร",guild.id),/guild_application_exists/);
+    assert.equal(db.applications(outsider).length,0);
+    db.close();db=new GuildStore(file);
+    const application=db.applications(leader)[0];assert.equal(application.name,"ผู้สมัคร");
+    assert.ok(!JSON.stringify(application).includes(applicant));
+    assert.throws(()=>db.decideApplication(outsider,application.id,true),/guild_officer_required/);
+    db.decideApplication(leader,application.id,true);
+    assert.equal(db.view(applicant,()=>false)?.name,"นาคพิทักษ์");assert.equal(db.pending(applicant),undefined);
+    db.apply(outsider,"อีกคน",guild.id);db.cancelApplication(outsider);assert.equal(db.applications(leader).length,0);
+    db.apply(outsider,"อีกคน",guild.id);db.decideApplication(leader,db.applications(leader)[0].id,false);
+    assert.equal(db.view(outsider,()=>false),null);assert.equal(db.pending(outsider),undefined);
+  }finally{db.close();assert.equal(path.dirname(path.resolve(directory)),path.resolve(tmpdir()));assert.ok(path.basename(directory).startsWith("montra-guild-application-"));rmSync(directory,{recursive:true,force:true});}
+});
+
 test("guild creation, membership, leadership and removal are durable and authoritative",()=>{
   const db=new GuildStore(":memory:");
   const leader="a".repeat(64),member="b".repeat(64),other="c".repeat(64);

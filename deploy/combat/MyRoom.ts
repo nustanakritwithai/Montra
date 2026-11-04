@@ -3161,7 +3161,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     catch(error){
       const reasons=["guild_already_member","guild_name_taken","guild_leader_only","guild_full",
         "guild_not_member","guild_transfer_first","guild_invalid_member","guild_invite_expired","guild_invalid_target",
-        "guild_officer_required","guild_invalid_assignment","guild_squad_required","guild_squad_full","guild_squad_leader_exists"];
+        "guild_officer_required","guild_invalid_assignment","guild_squad_required","guild_squad_full","guild_squad_leader_exists",
+        "guild_not_found","guild_application_exists","guild_applications_full","guild_application_missing"];
       const reason=error instanceof Error && reasons.includes(error.message)?error.message:"guild_error";
       if(reason==="guild_error")console.error("MONTRA guild action failed",error);
       client.send("guild_error",{reason});
@@ -3169,6 +3170,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
   private sendGuild(client:Client,character:string):void {
     client.send("guild_state",guildStore().view(character,guildOnline));
+    client.send("guild_recruitment",{pending:guildStore().pending(character) ?? null,applications:guildStore().applications(character)});
   }
 
   private partyAction(client:Client, action:()=>void): void {
@@ -3640,6 +3642,32 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     get_guild: (client:Client,message:unknown) => {
       if(!parseEmptyCommand(message))return this.reject(client,"guild_invalid_request");
       this.guildAction(client,character=>this.sendGuild(client,character));
+    },
+    guild_search: (client:Client,message:unknown) => {
+      if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"guild_invalid_request");
+      const value=message as Record<string,unknown>;
+      if(Object.keys(value).length!==1 || typeof value.query!=="string" || value.query.length>48)return this.reject(client,"guild_invalid_request");
+      this.guildAction(client,character=>client.send("guild_directory",{query:value.query,guilds:guildStore().directory(character,(value.query as string).normalize("NFC").trim())}));
+    },
+    guild_apply: (client:Client,message:unknown) => {
+      if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"guild_invalid_request");
+      const value=message as Record<string,unknown>;
+      if(Object.keys(value).length!==1 || typeof value.guildId!=="string" || !/^[a-f0-9-]{36}$/.test(value.guildId))return this.reject(client,"guild_invalid_request");
+      this.guildAction(client,character=>{
+        const player=this.state.players.get(client.sessionId);if(!player)throw new Error("guild_invalid_target");
+        guildStore().apply(character,player.characterName,value.guildId as string);notifyGuilds();
+        client.send("guild_notice",{reason:"application_sent"});
+      });
+    },
+    guild_application_cancel: (client:Client,message:unknown) => {
+      if(!parseEmptyCommand(message))return this.reject(client,"guild_invalid_request");
+      this.guildAction(client,character=>{guildStore().cancelApplication(character);notifyGuilds();client.send("guild_notice",{reason:"application_cancelled"});});
+    },
+    guild_application_decide: (client:Client,message:unknown) => {
+      if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"guild_invalid_request");
+      const value=message as Record<string,unknown>;
+      if(Object.keys(value).length!==2 || typeof value.id!=="string" || !/^[a-f0-9-]{36}$/.test(value.id) || typeof value.accept!=="boolean")return this.reject(client,"guild_invalid_request");
+      this.guildAction(client,character=>{guildStore().decideApplication(character,value.id as string,value.accept as boolean);notifyGuilds();client.send("guild_notice",{reason:"application_decided"});});
     },
     guild_create: (client:Client,message:unknown) => {
       const name=parseGuildName(message);if(!name)return this.reject(client,"guild_invalid_name");

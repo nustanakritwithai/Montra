@@ -5242,6 +5242,7 @@
   let economyTimer = null, economyTab = "market", tradeUnread = false;
   let partyState = null, partyInvitation = null, partyUnread = false;
   let guildState = null, guildInvitation = null, guildUnread = false;
+  let guildDirectory = null, guildRecruitment = {pending:null,applications:[]};
   let territoryState=null,territoryReceivedAt=0;
   // Inventory is never stored in localStorage: LIVE comes from VPS each join.
   const INVENTORY_SLOTS = 12;
@@ -7340,7 +7341,7 @@
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false;
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false;
-    guildState=null; guildInvitation=null; guildUnread=false; updatePartyBadge();
+    guildState=null; guildInvitation=null; guildUnread=false;guildDirectory=null;guildRecruitment={pending:null,applications:[]}; updatePartyBadge();
     clearChatHistory(true);
     switchWorld("ritual_village");
     syncWorldDefinition(null);syncForestMonsters(null);
@@ -8731,13 +8732,13 @@
       // the slot check below finishes; keep those first messages and replay
       // them once their handlers exist, or the panels stay empty until a change.
       const earlyMessages=new Map(), earlyHandlers=new Map();
-      for(const type of ["guild_state","territory_state"])joined.onMessage(type,message=>{if(!earlyHandlers.has(type))earlyMessages.set(type,message);});
+      for(const type of ["guild_state","guild_recruitment","territory_state"])joined.onMessage(type,message=>{if(!earlyHandlers.has(type))earlyMessages.set(type,message);});
       await verifyJoinedSlot(joined, requestedSlot);
       room = joined;
       clearChatHistory(true);
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; tradeUnread=false; updateTradeBadge();
       partyState=null; partyInvitation=null; partyUnread=false;
-    guildState=null; guildInvitation=null; guildUnread=false; updatePartyBadge();
+    guildState=null; guildInvitation=null; guildUnread=false;guildDirectory=null;guildRecruitment={pending:null,applications:[]}; updatePartyBadge();
       inventoryState = null; personalItems=Object.create(null);cardDrill=null;gearGuides=null;resources=null;seerBoundTarget="";seerPoisoned=false;clearResourceView();
       characterStatus = null; lastCharacterStatusRequest = 0;
       forestObjectiveState=null;forestDefenseState=null;forestEscortState=null;directorEventState=null;
@@ -8841,18 +8842,36 @@
       });
       const onGuildState=message => {
         if(room!==joined)return;
+        const wasGuildMember=!!guildState;
         if(message===null)guildState=null;
         else if(typeof message?.id==="string" && typeof message.name==="string" &&
           typeof message.ownId==="string" && typeof message.leaderId==="string" &&
           Array.isArray(message.members) && message.members.length<=30)
           guildState={id:message.id,name:message.name,ownId:message.ownId,leaderId:message.leaderId,
+            treasury:Number.isFinite(message.treasury)?message.treasury:0,
             members:message.members.filter(m=>m && typeof m.id==="string" && typeof m.name==="string")};
         else return;
         if(guildState){guildInvitation=null;guildUnread=false;updatePartyBadge();}
+        else if(wasGuildMember && drawerActive==="guild" && guildReady()){
+          guildDirectory=null;room.send("guild_search",{query:""});
+        }
         renderGuild();
       };
       joined.onMessage("guild_state",onGuildState);
       earlyHandlers.set("guild_state",onGuildState);
+      const onGuildRecruitment=message=>{
+        if(room!==joined || !Array.isArray(message?.applications))return;
+        const previousApplications=guildRecruitment.applications.length;
+        guildRecruitment={pending:message.pending && typeof message.pending.id==="string" && typeof message.pending.name==="string"?message.pending:null,
+          applications:message.applications.filter(a=>a && typeof a.id==="string" && typeof a.name==="string").slice(0,50)};
+        if(guildRecruitment.applications.length>previousApplications && drawerActive!=="guild"){guildUnread=true;updatePartyBadge();}
+        renderGuild();
+      };
+      joined.onMessage("guild_recruitment",onGuildRecruitment);earlyHandlers.set("guild_recruitment",onGuildRecruitment);
+      joined.onMessage("guild_directory",message=>{
+        if(room!==joined || !Array.isArray(message?.guilds))return;
+        guildDirectory=message.guilds.filter(g=>g && typeof g.id==="string" && typeof g.name==="string").slice(0,50);renderGuild();
+      });
       for(const [type,message] of earlyMessages)earlyHandlers.get(type)?.(message);
       earlyMessages.clear();
       joined.onMessage("guild_invitation", message=>{
@@ -8865,7 +8884,7 @@
         if(room!==joined)return;guildInvitation=null;guildUnread=false;updatePartyBadge();renderGuild();
       });
       joined.onMessage("guild_notice", message=>{
-        if(room!==joined)return;toast(message?.reason==="invitation_declined"?"ผู้เล่นปฏิเสธคำเชิญกิลด์":"ส่งคำเชิญกิลด์แล้ว");
+        if(room!==joined)return;toast(({invitation_declined:"ผู้เล่นปฏิเสธคำเชิญกิลด์",invitation_sent:"ส่งคำเชิญกิลด์แล้ว",application_sent:"ส่งคำขอสมัครกิลด์แล้ว",application_cancelled:"ยกเลิกคำขอสมัครแล้ว",application_decided:"จัดการคำขอสมัครแล้ว"})[message?.reason]||"ดำเนินการกิลด์แล้ว");
       });
       joined.onMessage("guild_error", message=>{
         if(room!==joined)return;
@@ -8874,7 +8893,8 @@
           guild_not_member:"ยังไม่ได้อยู่ในกิลด์",guild_transfer_first:"ส่งต่อหัวหน้ากิลด์ก่อนออก",
           guild_officer_required:"ต้องเป็นผู้บัญชาการหรือนายทหารที่มีสิทธิ์",guild_invalid_assignment:"ตำแหน่งหรือข้อมูลไม่ถูกต้อง",
           guild_squad_required:"ต้องเลือกหน่วยก่อนแต่งตั้งหัวหน้าหน่วย",guild_squad_full:"หน่วยนี้มีสมาชิกครบ 5 คนแล้ว",
-          guild_squad_leader_exists:"หน่วยนี้มีหัวหน้าอยู่แล้ว",guild_invalid_member:"ไม่พบสมาชิก",guild_invite_expired:"คำเชิญหมดอายุ",guild_invalid_target:"ไม่พบผู้เล่นที่ชวนได้"};
+          guild_squad_leader_exists:"หน่วยนี้มีหัวหน้าอยู่แล้ว",guild_invalid_member:"ไม่พบสมาชิก",guild_invite_expired:"คำเชิญหมดอายุ",guild_invalid_target:"ไม่พบผู้เล่นที่ชวนได้",
+          guild_not_found:"ไม่พบกิลด์นี้แล้ว",guild_application_exists:"คุณมีคำขอสมัครอยู่แล้ว ยกเลิกก่อนสมัครกิลด์อื่น",guild_applications_full:"คำขอสมัครของกิลด์นี้เต็มแล้ว",guild_application_missing:"คำขอนี้ไม่มีแล้ว"};
         if(message?.reason==="guild_invite_expired"){guildInvitation=null;guildUnread=false;updatePartyBadge();}
         toast(reasons[message?.reason]||"ทำรายการกิลด์ไม่สำเร็จ");guildRenderKey="";renderGuild();
       });
@@ -13137,7 +13157,7 @@
       if(id===localId || player.persistent!==true || (guildState?.members||[]).some(m=>m.publicId && m.publicId===player.characterId))return;
       candidates.push({id,name:String(player.characterName || "ผู้เล่น")});
     });
-    const key=JSON.stringify({ready,roles,guildState,guildInvitation,candidates,owners:territoryState?.owners,engagements:territoryState?.engagements});
+    const key=JSON.stringify({ready,roles,guildState,guildInvitation,guildDirectory,guildRecruitment,candidates,owners:territoryState?.owners,engagements:territoryState?.engagements});
     if(guildRenderKey===key)return;
     guildRenderKey=key;
     $("guildStatus").textContent=!ready?"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว":guildState?guildState.name+" · สมาชิก "+guildState.members.length+" / 30":"ยังไม่มีกิลด์";
@@ -13148,10 +13168,36 @@
     $("guildInvitationBox").hidden=!guildInvitation || !!guildState;
     if(guildInvitation){$("guildInviteName").textContent=guildInvitation.guildName;$("guildInviterName").textContent=guildInvitation.fromName;}
     $("guildAccept").disabled=!ready;$("guildDecline").disabled=!ready;
+    const pending=guildRecruitment.pending;
+    $("guildPending").hidden=!pending;
+    $("guildPendingName").textContent=pending?"รอผลสมัครกิลด์ "+pending.name:"";
+    const directory=$("guildDirectory");directory.replaceChildren();
+    if(!guildDirectory){const p=document.createElement("p");p.className="note";p.textContent="กำลังโหลดรายชื่อกิลด์…";directory.append(p);}
+    else if(!guildDirectory.length){const p=document.createElement("p");p.className="note";p.textContent="ไม่พบกิลด์ ลองค้นหาชื่ออื่น";directory.append(p);}
+    else for(const guild of guildDirectory){
+      const row=document.createElement("div"),info=document.createElement("div"),title=document.createElement("strong"),detail=document.createElement("small"),button=document.createElement("button");
+      row.className="gd-fort";button.className="secondary";button.type="button";
+      title.textContent=guild.name;detail.textContent="หัวหน้า "+String(guild.leader||"—")+" · สมาชิก "+Number(guild.members||0)+" / 30";
+      button.textContent=pending?.id===guild.id?"รอผล":Number(guild.members)>=30?"เต็ม":"สมัคร";
+      button.disabled=!ready || !!pending || Number(guild.members)>=30;
+      button.onclick=()=>{if(guildReady())room.send("guild_apply",{guildId:guild.id});};
+      info.append(title,detail);row.append(info,button);directory.append(row);
+    }
+    const applications=$("guildApplications");applications.replaceChildren();
+    $("guildApplicationsArea").hidden=!(commander||officer);
+    if(!guildRecruitment.applications.length){const p=document.createElement("p");p.className="note";p.textContent="ยังไม่มีคำขอสมัคร";applications.append(p);}
+    for(const application of guildRecruitment.applications){
+      const row=document.createElement("div"),name=document.createElement("strong"),actions=document.createElement("div");row.className="gd-fort";actions.className="guild-actions";name.textContent=application.name;
+      for(const [accept,label] of [[true,"รับเข้า"],[false,"ปฏิเสธ"]]){const button=document.createElement("button");button.type="button";button.className="secondary";button.textContent=label;
+        button.disabled=!ready || (accept && (guildState?.members.length||0)>=30);
+        button.onclick=()=>{if(guildReady())room.send("guild_application_decide",{id:application.id,accept});};actions.append(button);}
+      row.append(name,actions);applications.append(row);
+    }
     if(guildState){
       // Seal, counts, own rank.
       const members=guildState.members,online=members.filter(m=>m.online).length,ownRank=own?.id===guildState.leaderId?"commander":own?.rank||"member";
       $("gdName").textContent=guildState.name;
+      $("guildTreasury").textContent="คลังกิลด์ "+guildState.treasury+" หน่วย";
       $("gxMembers").textContent=String(members.length);$("gxOnline").textContent=String(online);
       $("gxCrest").innerHTML=guildCrestSvg(guildState.name);
       $("gdRank").textContent="ตำแหน่งของคุณ · "+(guildRankLabels[ownRank] || "สมาชิก");$("gdRank").dataset.rank=ownRank;
@@ -13251,6 +13297,15 @@
       '<button class="secondary" id="backToParty" type="button">← ปาร์ตี้</button><div class="economy-balance" id="guildStatus" role="status"></div><div id="guildInvitationBox" class="party-invitation" hidden><strong><span id="guildInviterName"></span> ชวนเข้ากิลด์ <span id="guildInviteName"></span></strong><div class="party-actions"><button id="guildAccept" type="button">เข้าร่วม</button><button id="guildDecline" type="button">ปฏิเสธ</button></div><p class="note">คำเชิญมีอายุ 60 วินาที</p></div><div id="guildCreateArea" hidden><div class="gx-empty"><svg class="gx-crest ghost" viewBox="0 0 100 116" aria-hidden="true"><path d="M50 4 L92 18 V58 C92 84 72 102 50 112 C28 102 8 84 8 58 V18 Z"/></svg><strong>ยังไม่มีกิลด์</strong><span>ตั้งกิลด์ของคุณ รวมพลยึดด่าน หรือรอคำเชิญจากผู้บัญชาการกิลด์อื่น</span></div><label class="field" for="guildName">ชื่อกิลด์ 2–24 ตัวอักษร</label><input id="guildName" maxlength="48" autocomplete="off"><button class="primary" id="guildCreate" type="button">สร้างกิลด์</button></div><div id="guildMemberArea" hidden><div class="gx-banner"><svg id="gxCrest" class="gx-crest" viewBox="0 0 100 116" aria-hidden="true"></svg><div class="gx-title"><small>กิลด์</small><strong id="gdName"></strong><em id="gdRank"></em></div></div><div class="gx-stats"><div><b id="gxMembers">0</b><span>สมาชิก / 30</span></div><div><b id="gxOnline">0</b><span>ออนไลน์</span></div><div><b id="gxForts">0</b><span>ด่านที่ครอง</span></div></div><div class="cp-tabs gx-tabs" role="tablist"><button type="button" data-gx="overview" class="on">ภาพรวม</button><button type="button" data-gx="members">สมาชิก</button><button type="button" data-gx="manage">เชิญและตั้งค่า</button></div><section class="gx-page" data-gpage="overview"><h3 class="cp-h">ด่านยุทธศาสตร์</h3><div id="gdForts" class="gd-forts"></div><h3 class="cp-h">หน่วยรบ</h3><div id="gdSquads" class="gx-squads"></div></section><section class="gx-page" data-gpage="members" hidden><div id="guildMembers"></div></section><section class="gx-page" data-gpage="manage" hidden><p class="note" id="guildRolesNote" hidden>ผู้บัญชาการแต่งตั้งนายทหารและหัวหน้าหน่วย · นายทหารช่วยจัดหน่วยและเชิญสมาชิก · หน่วยละไม่เกิน 5 คน</p><div id="guildInviteArea" hidden><label class="field" for="guildTarget">เชิญผู้เล่นในห้อง</label><select id="guildTarget"></select><button class="primary" id="guildInvite" type="button">ส่งคำเชิญ</button></div><button class="secondary" id="guildLeave" type="button">ออกจากกิลด์</button><p class="note">หัวหน้าที่มีสมาชิกต้องส่งต่อตำแหน่งก่อนออก · หากเป็นสมาชิกคนสุดท้าย การออกจะยุบกิลด์</p></section></div></div>');
     const heading=document.createElement("h3"),battles=document.createElement("div");heading.className="cp-h";heading.textContent="ศึกของกิลด์";battles.id="gdBattles";battles.className="gd-forts";
     $("gdForts").before(heading,battles);
+    $("guildCreateArea").insertAdjacentHTML("afterbegin",'<h3 class="cp-h">ค้นหากิลด์เพื่อสมัคร</h3><label class="field" for="guildSearch">ชื่อกิลด์</label><div class="party-actions"><input id="guildSearch" maxlength="48" autocomplete="off" placeholder="พิมพ์ชื่อกิลด์ หรือดูทั้งหมด"><button type="button" class="secondary" id="guildSearchButton">ค้นหา</button></div><div id="guildPending" class="party-invitation" hidden><strong id="guildPendingName"></strong><button type="button" class="secondary" id="guildCancelApplication">ยกเลิกคำขอ</button></div><div id="guildDirectory"></div><p class="note">แสดงสูงสุด 50 กิลด์ · สมัครได้ครั้งละหนึ่งกิลด์ รอผู้บัญชาการหรือนายทหารอนุมัติ</p>');
+    $("gdRank").insertAdjacentHTML("afterend",'<small id="guildTreasury"></small>');
+    $("gdBattles").before(Object.assign(document.createElement("div"),{className:"party-actions",innerHTML:'<button type="button" class="secondary" id="guildWarMap">แผนที่สงคราม</button><button type="button" class="secondary" id="guildWarPanel">สงครามและปกครองด่าน</button>'}));
+    $("guildInviteArea").insertAdjacentHTML("beforebegin",'<div id="guildApplicationsArea" hidden><h3 class="cp-h">คำขอสมัคร</h3><div id="guildApplications"></div></div>');
+    const search=()=>{if(guildReady()){guildDirectory=null;guildRenderKey="";renderGuild();room.send("guild_search",{query:$("guildSearch").value.trim()});}};
+    $("guildSearchButton").onclick=search;
+    $("guildSearch").onkeydown=event=>{if(event.key==="Enter"){event.preventDefault();search();}};
+    $("guildCancelApplication").onclick=()=>{if(guildReady())room.send("guild_application_cancel",{});};
+    $("guildWarMap").onclick=()=>openStrategicMap();$("guildWarPanel").onclick=()=>openWarPanel();
     $("backToParty").onclick=openParty;
     for(const tab of ui.drawerBody.querySelectorAll("[data-gx]"))tab.onclick=()=>{
       for(const t of ui.drawerBody.querySelectorAll("[data-gx]"))t.classList.toggle("on",t===tab);
@@ -13260,7 +13315,7 @@
     $("guildAccept").onclick=()=>{if(guildReady() && guildInvitation)room.send("guild_accept",{inviteId:guildInvitation.inviteId});};
     $("guildDecline").onclick=()=>{if(guildReady() && guildInvitation)room.send("guild_decline",{inviteId:guildInvitation.inviteId});};
     $("guildLeave").onclick=()=>{if(guildReady() && window.confirm("ออกจากกิลด์ใช่หรือไม่"))room.send("guild_leave",{});};
-    renderGuild();if(guildReady())room.send("get_guild",{});
+    renderGuild();if(guildReady()){room.send("get_guild",{});if(!guildState)room.send("guild_search",{query:""});}
   }
   let rebirthState=null;
   function openRebirth(){

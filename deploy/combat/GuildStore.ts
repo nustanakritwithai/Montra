@@ -41,6 +41,10 @@ export class GuildStore {
         guild_id TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
         name TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS guild_members_guild ON guild_members(guild_id);`);
+    this.db.exec(`CREATE TABLE IF NOT EXISTS guild_applications(
+      id TEXT PRIMARY KEY, guild_id TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+      character_id TEXT NOT NULL UNIQUE, name TEXT NOT NULL, created INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS guild_applications_guild ON guild_applications(guild_id,created);`);
     // Existing databases contain only the original member columns.
     this.transaction(()=>{
       const columns=this.db.prepare("PRAGMA table_info(guild_members)").all() as {name:string}[];
@@ -79,6 +83,7 @@ export class GuildStore {
       const id=randomUUID();
       this.db.prepare("INSERT INTO guilds(id,name,name_key,leader) VALUES(?,?,?,?)").run(id,name,name.toLowerCase(),character);
       this.db.prepare("INSERT INTO guild_members(member_id,character_id,guild_id,name) VALUES(?,?,?,?)").run(randomUUID(),character,id,characterName);
+      this.db.prepare("DELETE FROM guild_applications WHERE character_id=?").run(character);
     });
   }
   add(leader:string,member:string,memberName:string):void {
@@ -90,6 +95,53 @@ export class GuildStore {
       const count=this.db.prepare("SELECT COUNT(*) AS n FROM guild_members WHERE guild_id=?").get(guild.id) as {n:number};
       if(count.n>=GUILD_MAX_MEMBERS)throw new Error("guild_full");
       this.db.prepare("INSERT INTO guild_members(member_id,character_id,guild_id,name) VALUES(?,?,?,?)").run(randomUUID(),member,guild.id,memberName);
+      this.db.prepare("DELETE FROM guild_applications WHERE character_id=?").run(member);
+    });
+  }
+  directory(character:string,query:string) {
+    const rows=this.db.prepare(`SELECT g.id,g.name,leader.name AS leader,COUNT(m.member_id) AS members,
+      EXISTS(SELECT 1 FROM guild_applications a WHERE a.guild_id=g.id AND a.character_id=?) AS applied
+      FROM guilds g JOIN guild_members m ON m.guild_id=g.id
+      JOIN guild_members leader ON leader.guild_id=g.id AND leader.character_id=g.leader
+      WHERE instr(lower(g.name),lower(?))>0 GROUP BY g.id ORDER BY g.name_key LIMIT 50`).all(character,query) as {id:string;name:string;leader:string;members:number;applied:number}[];
+    return rows.map(row=>({...row,applied:Boolean(row.applied)}));
+  }
+  applications(actor:string) {
+    const guild=this.guild(actor);
+    if(!guild)return [];
+    const member=this.db.prepare("SELECT rank FROM guild_members WHERE character_id=?").get(actor) as {rank:string}|undefined;
+    if(guild.leader!==actor && member?.rank!=="officer")return [];
+    return this.db.prepare("SELECT id,name,created FROM guild_applications WHERE guild_id=? ORDER BY created LIMIT 50").all(guild.id) as {id:string;name:string;created:number}[];
+  }
+  pending(character:string) {
+    return this.db.prepare("SELECT g.id,g.name FROM guild_applications a JOIN guilds g ON g.id=a.guild_id WHERE a.character_id=?").get(character) as {id:string;name:string}|undefined;
+  }
+  apply(character:string,name:string,guildId:string):void {
+    this.transaction(()=>{
+      if(this.guild(character))throw new Error("guild_already_member");
+      if(!this.db.prepare("SELECT id FROM guilds WHERE id=?").get(guildId))throw new Error("guild_not_found");
+      const count=this.db.prepare("SELECT COUNT(*) AS n FROM guild_members WHERE guild_id=?").get(guildId) as {n:number};
+      if(count.n>=GUILD_MAX_MEMBERS)throw new Error("guild_full");
+      if(this.db.prepare("SELECT id FROM guild_applications WHERE character_id=?").get(character))throw new Error("guild_application_exists");
+      const waiting=this.db.prepare("SELECT COUNT(*) AS n FROM guild_applications WHERE guild_id=?").get(guildId) as {n:number};
+      if(waiting.n>=50)throw new Error("guild_applications_full");
+      this.db.prepare("INSERT INTO guild_applications(id,guild_id,character_id,name,created) VALUES(?,?,?,?,?)").run(randomUUID(),guildId,character,name,Date.now());
+    });
+  }
+  cancelApplication(character:string):void { this.db.prepare("DELETE FROM guild_applications WHERE character_id=?").run(character); }
+  decideApplication(actor:string,id:string,accept:boolean):void {
+    this.transaction(()=>{
+      const guild=this.guild(actor),member=this.db.prepare("SELECT rank FROM guild_members WHERE character_id=?").get(actor) as {rank:string}|undefined;
+      if(!guild || (guild.leader!==actor && member?.rank!=="officer"))throw new Error("guild_officer_required");
+      const application=this.db.prepare("SELECT character_id,name FROM guild_applications WHERE id=? AND guild_id=?").get(id,guild.id) as {character_id:string;name:string}|undefined;
+      if(!application)throw new Error("guild_application_missing");
+      if(accept){
+        if(this.guild(application.character_id))throw new Error("guild_already_member");
+        const count=this.db.prepare("SELECT COUNT(*) AS n FROM guild_members WHERE guild_id=?").get(guild.id) as {n:number};
+        if(count.n>=GUILD_MAX_MEMBERS)throw new Error("guild_full");
+        this.db.prepare("INSERT INTO guild_members(member_id,character_id,guild_id,name) VALUES(?,?,?,?)").run(randomUUID(),application.character_id,guild.id,application.name);
+      }
+      this.db.prepare("DELETE FROM guild_applications WHERE id=?").run(id);
     });
   }
   leave(character:string):void {
