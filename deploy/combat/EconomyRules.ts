@@ -1,6 +1,6 @@
 import { MAX_FORGE_COPIES, personalItem, isBodySlot, isCardId, type CardId, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE, isSocketGear } from "./ItemRules.js";
-import type { TradeOffer } from "./EconomyStore.js";
+import type { TradeOffer,MarketCategory,StarterSupplyId } from "./EconomyStore.js";
 function keys(value: unknown, expected: string[]): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value) &&
     Object.keys(value).length === expected.length && expected.every(key => Object.hasOwn(value,key));
@@ -17,6 +17,34 @@ export function parseMarketCreate(v:unknown): {requestId:string;slot:number;amou
 export function parseMarketAction(v:unknown): {requestId:string;listingId:string}|null {
   if (!keys(v,["requestId","listingId"]) || !requestId(v.requestId) || !uuid(v.listingId)) return null;
   return {requestId:v.requestId,listingId:v.listingId};
+}
+export function parseMarketBrowse(v:unknown):{market:"fixed"|"auction";query:string;category:MarketCategory;before:number|null;ownOnly:boolean;tag:number}|null {
+  if(!keys(v,["market","query","category","before","ownOnly","tag"]) || !["fixed","auction"].includes(String(v.market)) || typeof v.query!=="string" || v.query.length>60 ||
+    !["all","material","equipment","card","consumable"].includes(String(v.category)) ||
+    !(v.before===null || (amount(v.before,Number.MAX_SAFE_INTEGER) && v.before>0)) || typeof v.ownOnly!=="boolean" || !amount(v.tag,Number.MAX_SAFE_INTEGER))return null;
+  return {market:v.market as "fixed"|"auction",query:v.query.normalize("NFC").trim(),category:v.category as MarketCategory,before:v.before as number|null,ownOnly:v.ownOnly,tag:v.tag};
+}
+export function parseAuctionCreate(v:unknown):{requestId:string;slot:number;amount:number;opening:number;durationHours:number;stamp?:string}|null {
+  const fields=["requestId","slot","amount","opening","durationHours"];
+  if((!keys(v,fields) && !keys(v,[...fields,"stamp"])) || (Object.hasOwn(v,"stamp") && (typeof v.stamp!=="string" || v.stamp.length>100)) ||
+    !requestId(v.requestId) || !amount(v.slot,11) || !amount(v.amount,99) || v.amount===0 || !amount(v.opening,1_000_000_000) || v.opening===0 || ![1,6,24].includes(Number(v.durationHours)) || typeof v.durationHours!=="number")return null;
+  return {requestId:v.requestId,slot:v.slot,amount:v.amount,opening:v.opening,durationHours:v.durationHours,...(typeof v.stamp==="string"?{stamp:v.stamp}:{})};
+}
+export function parseAuctionBid(v:unknown):{requestId:string;auctionId:string;amount:number}|null {
+  if(!keys(v,["requestId","auctionId","amount"]) || !requestId(v.requestId) || !uuid(v.auctionId) || !amount(v.amount,1_000_000_000) || v.amount===0)return null;
+  return {requestId:v.requestId,auctionId:v.auctionId,amount:v.amount};
+}
+export function parseAuctionAction(v:unknown):{requestId:string;auctionId:string}|null {
+  if(!keys(v,["requestId","auctionId"]) || !requestId(v.requestId) || !uuid(v.auctionId))return null;
+  return {requestId:v.requestId,auctionId:v.auctionId};
+}
+export function parseAuctionCredit(v:unknown):{requestId:string}|null {
+  if(!keys(v,["requestId"]) || !requestId(v.requestId))return null;return {requestId:v.requestId};
+}
+export function parseStarterSupply(v:unknown):{requestId:string;item:StarterSupplyId;quantity:number}|null {
+  if(!keys(v,["requestId","item","quantity"]) || !requestId(v.requestId) || typeof v.item!=="string" ||
+    !["health_potion","mat_raw_wood_1","mat_raw_stone_1","mat_herb_1"].includes(v.item) || !amount(v.quantity,20) || v.quantity===0)return null;
+  return {requestId:v.requestId,item:v.item as StarterSupplyId,quantity:v.quantity};
 }
 export function parseTradeRequest(v:unknown): {targetId:string}|null {
   if (!keys(v,["targetId"]) || typeof v.targetId!=="string" || !/^[A-Za-z0-9_-]{6,64}$/.test(v.targetId)) return null;

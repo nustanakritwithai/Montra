@@ -71,7 +71,7 @@ import {dynamicBalanceRevision} from "./DynamicBalance.js";
 import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
 import {personalGearGuides} from "./GearGuides.js";
 import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js";
-import { parseSellMaterial, parseSalvage, parseCraft, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
+import { parseSellMaterial, parseSalvage, parseCraft, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseMarketBrowse, parseAuctionCreate, parseAuctionBid, parseAuctionAction, parseAuctionCredit, parseStarterSupply, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
@@ -3228,7 +3228,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_downgrade_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","forge_stock_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level"];
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_downgrade_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","forge_stock_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level","starter_supply_limit","invalid_auction_duration","auction_limit","auction_bid_limit","auction_unavailable","cannot_bid_own_auction","auction_bid_too_low","auction_claim_unavailable","auction_cancel_unavailable","auction_credit_unavailable"];
       const reason=error instanceof Error && (allowed.includes(error.message)||["resource_ground","resource_range","resource_cooldown","resource_empty","fish_water","fish_ground","fish_range","fish_blocked","fish_interrupted","fish_expired","fish_pending","fish_no_pending"].includes(error.message)) ? error.message : "economy_failed";
       if(reason==="fish_pending")client.send("fish_pending",{item:characterStore.economy.pendingFish(id)});
       if(reason==="fish_no_pending")client.send("fish_pending",{item:null});
@@ -3793,7 +3793,46 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     get_economy: (client:Client, message:unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client,"invalid_economy_request");
-      this.economyAction(client,id=>this.syncEconomy(client,id));
+      this.economyAction(client,id=>{this.syncEconomy(client,id);client.send("market_features",{version:1});});
+    },
+    market_overview: (client:Client,message:unknown)=>{
+      if(!parseEmptyCommand(message))return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{
+        const store=characterStore.economy;store.settleExpiredAuctions();this.syncEconomy(client,id);
+        client.send("market_overview",{...store.myAuctions(id),supply:store.starterSupplyStatus(id)});
+      });
+    },
+    market_browse: (client:Client,message:unknown)=>{
+      const order=parseMarketBrowse(message);if(!order)return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{
+        const store=characterStore.economy;
+        const page=order.market==="fixed"?store.browseMarket(id,order.query,order.category,order.before,order.ownOnly):store.browseAuctions(id,order.query,order.category,order.before);
+        client.send("market_page",{market:order.market,tag:order.tag,...page});
+      });
+    },
+    auction_create: (client:Client,message:unknown)=>{
+      const order=parseAuctionCreate(message);if(!order)return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{const r=characterStore.economy.createAuction(id,order.requestId,order.slot,order.amount,order.opening,order.durationHours,order.stamp);this.syncEconomy(client,id);client.send("market_action_result",{action:"auction_create",...r,requestId:order.requestId});});
+    },
+    auction_bid: (client:Client,message:unknown)=>{
+      const order=parseAuctionBid(message);if(!order)return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{const r=characterStore.economy.bidAuction(id,order.requestId,order.auctionId,order.amount);this.syncEconomy(client,id);client.send("market_action_result",{action:"auction_bid",...r,requestId:order.requestId});});
+    },
+    auction_claim: (client:Client,message:unknown)=>{
+      const order=parseAuctionAction(message);if(!order)return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{const r=characterStore.economy.claimAuctionItem(id,order.requestId,order.auctionId);this.syncEconomy(client,id);client.send("market_action_result",{action:"auction_claim",...r,requestId:order.requestId});});
+    },
+    auction_cancel: (client:Client,message:unknown)=>{
+      const order=parseAuctionAction(message);if(!order)return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{const r=characterStore.economy.cancelAuction(id,order.requestId,order.auctionId);this.syncEconomy(client,id);client.send("market_action_result",{action:"auction_cancel",...r,requestId:order.requestId});});
+    },
+    auction_credit: (client:Client,message:unknown)=>{
+      const order=parseAuctionCredit(message);if(!order)return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{const r=characterStore.economy.claimAuctionCredit(id,order.requestId);this.syncEconomy(client,id);client.send("market_action_result",{action:"auction_credit",...r,requestId:order.requestId});});
+    },
+    starter_supply_buy: (client:Client,message:unknown)=>{
+      const order=parseStarterSupply(message);if(!order)return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id=>{const r=characterStore.economy.buyStarterSupply(id,order.requestId,order.item,order.quantity);this.syncEconomy(client,id);client.send("market_action_result",{action:"starter_supply_buy",...r,requestId:order.requestId});});
     },
     market_list: (client:Client, message:unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client,"invalid_economy_request");

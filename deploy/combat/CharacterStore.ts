@@ -200,6 +200,7 @@ export class CharacterStore {
     if (!this.economyDb) {
       mkdirSync(this.directory, { recursive: true, mode: 0o700 });
       this.economyDb = new EconomyStore(path.join(this.directory, "economy.sqlite"));
+      this.economyDb.startAuctionSweeper();
     }
     return this.economyDb;
   }
