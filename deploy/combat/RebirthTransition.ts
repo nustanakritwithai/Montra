@@ -27,5 +27,5 @@ export function prepareRebirth(snapshot: CharacterSnapshot, path: PathId): Chara
     inventory=result.inventory;
   }
   return {...snapshot,level:1,experience:0,build,rebirth,inventory,statAllocations:emptyAllocations(),
-    hp:PROGRESSION.baseHp,stamina:PROGRESSION.baseStamina,mana:PROGRESSION.baseMana,updatedAt:new Date().toISOString()};
+    masteryVitals:{version:1,hpRemainder:0,pvpUntil:0},hp:PROGRESSION.baseHp,stamina:PROGRESSION.baseStamina,mana:PROGRESSION.baseMana,updatedAt:new Date().toISOString()};
 }

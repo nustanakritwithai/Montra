@@ -155,7 +155,7 @@
       } catch(err){error.textContent=err.message;submit.disabled=false;cancel.disabled=false;name.disabled=false;}
     };
   }
-  function rebirthAtShrine(character,cycle){
+  function rebirthAtShrine(character,cycle,preview){
     const slot=summaries.find(s=>s.slot===selectedSlot), session=key();
     if(!slot || !session || !character?.characterId || !slot.revision?.startsWith(character.characterId)){
       view("เปิดพิธีเกิดใหม่ไม่ได้","ข้อมูลบัญชีกับช่องตัวละครไม่ตรงกัน กรุณากลับไปตรวจช่องตัวละคร");
@@ -176,7 +176,11 @@
       const choice=paths.find(p=>p[0]===form.elements.nextClass.value);
       if(!choice)return;
       const notice=view("ยืนยันเกิดใหม่ครั้งที่ "+(cycle+1),character.characterName+" จะเปลี่ยนจาก "+oldClass+" Lv.100 เป็น "+choice[1]+" Lv.1 เมื่อยืนยัน เซิร์ฟเวอร์จะบันทึกตัวละครและออกจากห้องก่อนเริ่มชีวิตใหม่");
-      const back=button("กลับไปเลือกอาชีพ",()=>rebirthAtShrine(character,cycle));
+      if(preview?.after){
+        const after=preview.after,pct=n=>(Math.max(0,Number(n)||0)*100).toFixed(2).replace(/\.?0+$/,"")+"%";
+        card.append(el("p",after.enabled?"โบนัสรวมหลังเกิดใหม่ · HP / ATK / MATK · PvE +"+pct(after.pve.hp)+" / "+pct(after.pve.atk)+" / "+pct(after.pve.magicAtk)+" · PvP +"+pct(after.pvp.hp)+" / "+pct(after.pvp.atk)+" / "+pct(after.pvp.magicAtk)+" · เก็บความชำนาญเดิมครบทุกอาชีพ":"เก็บความชำนาญเดิมไว้ · เซิร์ฟเวอร์นี้ยังไม่เปิดผลโบนัส"));
+      }
+      const back=button("กลับไปเลือกอาชีพ",()=>rebirthAtShrine(character,cycle,preview));
       const confirm=button("ยืนยันเกิดใหม่เป็น"+choice[1],async()=>{
         if(confirm.disabled)return;
         confirm.disabled=back.disabled=true;
