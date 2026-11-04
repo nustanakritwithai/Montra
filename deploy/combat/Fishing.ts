@@ -6,7 +6,7 @@ export const FISH_PERIOD=2800;
 export const FISH_DURATION=45000;
 export const FISH_MAX_DISTANCE=18;
 export type FishItem="mat_fish_common"|"mat_fish_silver"|"mat_fish_spirit";
-export type FishingSession={id:string;mapId:string;x:number;z:number;originX:number;originZ:number;combatAt:number;biteAt:number;lastReel:number;distance:number;initialDistance:number;strength:number;line:number;item:FishItem};
+export type FishingSession={id:string;mapId:string;x:number;z:number;originX:number;originZ:number;combatAt:number;biteAt:number;lastReel:number;lastDriftAt:number;distance:number;initialDistance:number;strength:number;line:number;item:FishItem};
 
 // The village canals are decorative geometry, rather than movement-blocking water.
 // Keep them separate from map.water so existing paths and player movement stay unchanged.
@@ -33,9 +33,17 @@ export function fishNeedle(elapsed:number):number{
   const phase=((elapsed%FISH_PERIOD)+FISH_PERIOD)%FISH_PERIOD/FISH_PERIOD;
   return phase<=.5?phase*2:(1-phase)*2;
 }
+export function advanceFishing(s:FishingSession,now:number):"escaped"|null{
+  if(s.distance<=0 || now<s.biteAt)return null;
+  if(now-s.biteAt>FISH_DURATION)return "escaped";
+  const elapsed=Math.max(0,now-Math.max(s.lastDriftAt,s.biteAt));
+  s.distance=Math.min(FISH_MAX_DISTANCE,s.distance+elapsed/1000*(.12+.35*s.strength/100));
+  s.lastDriftAt=Math.max(s.lastDriftAt,now);
+  return s.distance>=FISH_MAX_DISTANCE?"escaped":null;
+}
 export function pullFish(s:FishingSession,now:number):"early"|"slow"|"perfect"|"good"|"miss"|"escaped"|"broken"|"caught"{
   if(now<s.biteAt)return "early";
-  if(now-s.biteAt>FISH_DURATION)return "escaped";
+  if(advanceFishing(s,now))return "escaped";
   if(now-s.lastReel<450)return "slow";
   s.lastReel=now;
   const needle=fishNeedle(now-s.biteAt);

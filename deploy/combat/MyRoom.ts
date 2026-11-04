@@ -8,7 +8,7 @@ import {RIVER_CITY,riverNodes,riverPosts,riverSupplied} from "./RiverCity.js";
 import {CASTLE_ID,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
 import { Encoder, StateView } from "@colyseus/schema";
 import { randomUUID,randomInt } from "node:crypto";
-import {FISH_BITE_DELAY,FISH_DURATION,fishItem,pullFish,validateFishingPosition,type FishingSession} from "./Fishing.js";
+import {FISH_BITE_DELAY,FISH_DURATION,advanceFishing,fishItem,pullFish,validateFishingPosition,type FishingSession} from "./Fishing.js";
 import {
   CHARACTER_SAVE_INTERVAL_MS, characterStore, characterIdFromToken,
   claimCharacter, releaseCharacter, getGuestToken, parseCharacterName,
@@ -3170,6 +3170,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("guild_error",{reason});
     }
   }
+  private tickFishing():void {
+    const now=Date.now();
+    for(const [id,s] of this.fishing){
+      const p=this.state.players.get(id),client=this.clients.find(c=>c.sessionId===id);
+      const interrupted=!p || !p.alive || p.mounted || p.flying || p.mapId!==s.mapId ||
+        Math.hypot(p.x-s.originX,p.z-s.originZ)>1.5 || (this.lastCombatMs.get(id)??-1)>s.combatAt;
+      const escaped=!interrupted && advanceFishing(s,now)==="escaped";
+      if(interrupted || escaped){
+        this.fishing.delete(id);
+        try{client?.send("fish_result",{result:interrupted?"interrupted":"escaped"});}catch{/* disconnected */}
+      }
+    }
+  }
   private sendGuild(client:Client,character:string):void {
     client.send("guild_state",guildStore().view(character,guildOnline));
     client.send("guild_recruitment",{pending:guildStore().pending(character) ?? null,applications:guildStore().applications(character)});
@@ -3216,7 +3229,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
       const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_downgrade_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","forge_stock_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level"];
-      const reason=error instanceof Error && (allowed.includes(error.message)||["resource_ground","resource_range","resource_cooldown","resource_empty","fish_water","fish_ground","fish_range","fish_blocked","fish_interrupted","fish_expired"].includes(error.message)) ? error.message : "economy_failed";
+      const reason=error instanceof Error && (allowed.includes(error.message)||["resource_ground","resource_range","resource_cooldown","resource_empty","fish_water","fish_ground","fish_range","fish_blocked","fish_interrupted","fish_expired","fish_pending","fish_no_pending"].includes(error.message)) ? error.message : "economy_failed";
+      if(reason==="fish_pending")client.send("fish_pending",{item:characterStore.economy.pendingFish(id)});
+      if(reason==="fish_no_pending")client.send("fish_pending",{item:null});
       if(reason==="forge_stock_changed")this.syncEconomy(client,id);
       if (reason==="economy_failed") console.error("MONTRA economy failed",error);
       client.send("economy_error",{reason});
@@ -3886,11 +3901,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_economy_request");
       const m=message as Record<string,unknown>;
       if(Object.keys(m).length!==2 || typeof m.x!=="number" || typeof m.z!=="number" || !Number.isFinite(m.x) || !Number.isFinite(m.z))return this.reject(client,"invalid_economy_request");
-      this.economyAction(client,()=>{
+      this.economyAction(client,character=>{
         const player=this.state.players.get(client.sessionId)!;validateFishingPosition(player,m.x as number,m.z as number);
+        if(characterStore.economy.pendingFish(character))throw Error("fish_pending");
         const now=Date.now(),id="fish_"+randomUUID().replaceAll("-",""),distance=Math.max(3,Math.ceil(Math.hypot(player.x-(m.x as number),player.z-(m.z as number))));
         const session:FishingSession={id,mapId:player.mapId,x:m.x as number,z:m.z as number,originX:player.x,originZ:player.z,
-          combatAt:this.lastCombatMs.get(client.sessionId)??-1,biteAt:now+FISH_BITE_DELAY,lastReel:0,distance,initialDistance:distance,strength:100,line:100,item:fishItem(randomInt(100))};
+          combatAt:this.lastCombatMs.get(client.sessionId)??-1,biteAt:now+FISH_BITE_DELAY,lastReel:0,lastDriftAt:now+FISH_BITE_DELAY,distance,initialDistance:distance,strength:100,line:100,item:fishItem(randomInt(100))};
         this.destinations.delete(client.sessionId);this.attackTargets.delete(client.sessionId);this.fishing.set(client.sessionId,session);
         client.send("fish_state",{id,x:session.x,z:session.z,wait:FISH_BITE_DELAY,elapsed:0,duration:FISH_DURATION,distance,initialDistance:distance,strength:100,line:100});
       });
@@ -3906,13 +3922,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         try{validateFishingPosition(p,s.x,s.z);}catch(error){this.fishing.delete(client.sessionId);throw error;}
         const now=Date.now(),result=s.distance<=0?"caught":pullFish(s,now);
         if(result==="caught"){
-          let caught:ReturnType<typeof characterStore.economy.catchFish>;
-          try{caught=characterStore.economy.catchFish(character,s.id,s.item);}
-          catch(error){
-            if(error instanceof Error && error.message==="inventory_full")client.send("fish_state",{id:s.id,x:s.x,z:s.z,wait:0,elapsed:Math.max(0,now-s.biteAt),duration:FISH_DURATION,
-              distance:s.distance,initialDistance:s.initialDistance,strength:s.strength,line:s.line});
-            throw error;
-          }
+          const caught=characterStore.economy.catchFish(character,s.id,s.item);
           this.fishing.delete(client.sessionId);this.syncEconomy(client,character);client.send("fish_result",{...caught,result:"caught"});return;
         }
         if(result==="broken" || result==="escaped"){
@@ -3925,6 +3935,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     fish_cancel: (client:Client,message:unknown)=>{
       if(!parseEmptyCommand(message))return this.reject(client,"invalid_economy_request");
       this.fishing.delete(client.sessionId);client.send("fish_result",{result:"cancelled"});
+    },
+    fish_claim: (client:Client,message:unknown)=>{
+      if(!parseEmptyCommand(message))return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,character=>{
+        const caught=characterStore.economy.claimFish(character);this.syncEconomy(client,character);
+        client.send("fish_pending",{item:null});client.send("fish_result",{...caught,result:"claimed"});
+      });
     },
     harvest_resource: (client:Client,message:unknown)=>{
       const m=message as {node?:unknown;requestId?:unknown};
@@ -4165,6 +4182,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       if(characterStore.economyEnabled && !this.field && this.state.players.has(id))this.sendResourceMap(client,characterStore.economy.resourceMap(this.state.players.get(id)!.mapId));
       client.send("inventory_state",{...inventory,catalogReady:true,workbenchGold:WORKBENCH_GOLD,cardDrill:DRILL_COST,refineInput:REFINE_INPUT});
+      const character=this.persistentCharacters.get(id);
+      if(characterStore.economyEnabled && character)client.send("fish_pending",{item:characterStore.economy.pendingFish(character)});
     },
     use_item: (client: Client, message: unknown) => {
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
@@ -5016,6 +5035,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.buildCatalog = BUILD_CATALOG;
     this.state.economyAvailable = characterStore.economyEnabled;
     if(characterStore.economyEnabled && !this.field)this.clock.setInterval(()=>this.sendResources(),5000);
+    if(characterStore.economyEnabled)this.clock.setInterval(()=>this.tickFishing(),500);
     this.forest.initialize(!this.field);
     if(!this.field && WORLD_EXPANSION)this.clock.setInterval(()=>this.sampleHuntEvent(),10_000);
     this.state.worldDefinition=this.field?battlefieldWorldDefinition:worldDefinition;

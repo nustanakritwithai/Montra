@@ -100,14 +100,34 @@ export class EconomyStore {
       CREATE TABLE IF NOT EXISTS resource_stock(map TEXT NOT NULL,node TEXT NOT NULL,stock INTEGER NOT NULL,nextAt INTEGER NOT NULL,PRIMARY KEY(map,node));
       CREATE TABLE IF NOT EXISTS resource_periods(map TEXT NOT NULL,node TEXT NOT NULL,periodMs INTEGER NOT NULL,PRIMARY KEY(map,node));
       CREATE TABLE IF NOT EXISTS resource_workers(actor TEXT PRIMARY KEY,lastAt INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS fishing_pending(actor TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,request TEXT NOT NULL UNIQUE,item TEXT NOT NULL);
     `);
   }
   close(): void { this.db.close(); }
   catchFish(actor:string,request:string,item:FishItem){
     return this.once(actor,request,"fish",{item},()=>{
       const account=this.account(actor);
-      account.inventory=add(account.inventory,{itemId:item,quantity:1});
-      this.put(actor,account);return {item,quantity:1};
+      if(this.pendingFish(actor))throw Error("fish_pending");
+      try{account.inventory=add(account.inventory,{itemId:item,quantity:1});}
+      catch(error){
+        if(!(error instanceof Error) || error.message!=="inventory_full")throw error;
+        this.db.prepare("INSERT INTO fishing_pending(actor,request,item) VALUES(?,?,?)").run(actor,request,item);
+        return {item,quantity:1,pending:true};
+      }
+      this.put(actor,account);return {item,quantity:1,pending:false};
+    });
+  }
+  pendingFish(actor:string):FishItem|null{
+    const row=this.db.prepare("SELECT item FROM fishing_pending WHERE actor=?").get(actor);
+    return row?String(row.item) as FishItem:null;
+  }
+  claimFish(actor:string){
+    characterId(actor);
+    return this.transaction(()=>{
+      const item=this.pendingFish(actor);if(!item)throw Error("fish_no_pending");
+      const account=this.account(actor);account.inventory=add(account.inventory,{itemId:item,quantity:1});
+      this.put(actor,account);this.db.prepare("DELETE FROM fishing_pending WHERE actor=?").run(actor);
+      return {item,quantity:1};
     });
   }
   resourceMap(mapId:string,now=Date.now()){

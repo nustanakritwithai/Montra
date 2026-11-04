@@ -5276,7 +5276,7 @@
   });
   let personalItems = Object.create(null), workbenchGold = 0, cardDrill=null, catalogRevision=0, gearGuides=null;
   let resources=null,resourceViewMap="",refineInput=2,resourceReadyAt=0,resourceChoice="",harvestFocus=null;
-  let fishingSelect=false, fishingState=null, fishingPending=false, fishingPendingUntil=0, fishingFloat=null, fishingLine=null;
+  let fishingSelect=false, fishingState=null, fishingPending=false, fishingPendingUntil=0, fishingFloat=null, fishingLine=null,fishSavedItem=null,fishFloatAt=0;
   const fishingPickers=[];
   function fishingWaters(){return activeMapId==="ritual_village" ? [
     {x:-19.7,z:-60,width:11.2,length:100},{x:8.5,z:-60,width:11.2,length:100},{x:-80,z:20,width:160,length:48}
@@ -5308,17 +5308,20 @@
     if((fishingState || fishingSelect) && (!ready || (fishingState && (activeMapId!==fishingState.mapId || !me?.alive || Math.hypot(me.x-fishingState.originX,me.z-fishingState.originZ)>1.5)))){
       clearFishing(true);toast("หยุดตกปลาแล้ว");
     }
-    const button=$("fishButton");button.hidden=!(ready && !fishingState && (fishingSelect || fishingNearby(me)));
-    button.textContent=fishingSelect?"✕ ยกเลิกเลือกจุด":"🎣 ตกปลา";
+    const button=$("fishButton");button.hidden=!(ready && !fishingState && (fishSavedItem || fishingSelect || fishingNearby(me)));
+    button.textContent=fishSavedItem?"🎣 รับปลาที่จับได้":fishingSelect?"✕ ยกเลิกเลือกจุด":"🎣 ตกปลา";
     if(fishingPending && now>fishingPendingUntil){fishingPending=false;toast("ไม่ได้รับผลตกปลา ลองอีกครั้ง");}
     button.disabled=fishingPending;
     if(!fishingState)return;
     const s=fishingState,age=Math.max(0,now-s.received),wait=Math.max(0,s.wait-age),elapsed=s.elapsed+Math.max(0,age-s.wait);
+    const distance=Math.min(18,s.distance+Math.max(0,age-s.wait)/1000*(.12+.35*s.strength/100));
     const phase=(elapsed%2800)/2800,needle=phase<=.5?phase*2:(1-phase)*2;
     $("fishNeedle").style.left=(needle*100)+"%";
     $("fishStrength").style.width=s.strength+"%";$("fishStrengthText").textContent=s.strength+"%";
     $("fishLine").style.width=s.line+"%";$("fishLineText").textContent=s.line+"%";
-    $("fishDistance").style.width=(Math.min(18,s.distance)/18*100)+"%";$("fishDistanceText").textContent=s.distance+" ม.";
+    $("fishDistance").style.width=(distance/18*100)+"%";$("fishDistanceText").textContent=distance.toFixed(1)+" ม.";
+    $("fishClock").textContent=wait>0?"":Math.max(0,Math.ceil((s.duration-elapsed)/1000))+" วิ";
+    if(now-fishFloatAt>=120){fishFloatAt=now;showFishingFloat({...s,distance},me);}
     $("fishReel").disabled=wait>0 || fishingPending;
     $("fishReel").textContent=wait>0?"รอปลากินเบ็ด "+Math.ceil(wait/1000)+" วิ":s.distance<=0?"รับปลา":"ดึงเบ็ด";
     if(wait>0)$("fishMessage").textContent="กำลังรอปลา…";
@@ -7397,6 +7400,7 @@
     setModeBadge(mode === "live");
   }
   function showDemo() {
+    clearFishing(false);fishSavedItem=null;
     $("mountButton").hidden=true;
     territoryState=null;forestObjectiveState=null;forestDefenseState=null;forestEscortState=null;directorEventState=null;syncQuestRanger();syncWarQuartermaster();$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
@@ -8810,6 +8814,7 @@
       itemUseSequence += 1;
       selectedBagSlot = 0;
       mode = "live"; localId = joined.sessionId; activeCharacterSlot = requestedSlot;
+      clearFishing(false);fishSavedItem=null;
       clearAvatars(); clearSummons(); demoDest = null;
       pendingClimb = null;
       spellTargetId = null;
@@ -9069,19 +9074,26 @@
         const received=performance.now(),advance=fishingPending?Math.min(800,Math.max(0,received-(fishingPendingUntil-8000))):0;
         fishingPending=false;fishingSelect=false;
         fishingState={...data,wait:Math.max(0,data.wait-advance),elapsed:data.elapsed+Math.max(0,advance-data.wait),
+          distance:Math.min(18,data.distance+Math.max(0,advance-data.wait)/1000*(.12+.35*data.strength/100)),
           mapId:activeMapId,originX:fishingState?.originX??me.x,originZ:fishingState?.originZ??me.z,received};
         $("fishingPanel").hidden=false;
         const feedback={perfect:"ยอดเยี่ยม! ปลาขยับเข้ามา",good:"ดึงสำเร็จ ปลาขยับเข้ามา",miss:"พลาด! ปลาหนี เอ็นเสียหาย"};
         $("fishMessage").textContent=feedback[data.result]||"กดเมื่อเข็มอยู่ในแถบสีทอง";
         showFishingFloat(fishingState,me);updateFishing(performance.now());
       });
+      joined.onMessage("fish_pending",data=>{
+        if(room!==joined)return;
+        fishSavedItem=typeof data?.item==="string"?data.item:null;
+      });
       joined.onMessage("fish_result",data=>{
         if(room!==joined)return;
         if(data?.result==="cancelled")return;
         clearFishing(false);
-        if(data?.result==="caught"){toast("ตกได้ "+(personalItems[data.item]?.name||"ปลา")+" × "+(data.quantity||1));renderBag();}
+        if(data?.result==="caught" && data.pending){fishSavedItem=data.item;toast("จับปลาได้แล้ว แต่กระเป๋าเต็ม · เคลียร์ช่องแล้วกดรับปลา");}
+        else if(data?.result==="caught" || data?.result==="claimed"){fishSavedItem=null;toast("ตกได้ "+(personalItems[data.item]?.name||"ปลา")+" × "+(data.quantity||1));renderBag();}
         else if(data?.result==="broken")toast("สายเอ็นขาด ปลาหลุดไปแล้ว");
         else if(data?.result==="escaped")toast("ปลาหนีไปแล้ว");
+        else if(data?.result==="interrupted")toast("การตกปลาถูกขัดจังหวะ");
       });
       joined.onMessage("resource_atlas",zones=>{
         const panel=$("resourceAtlasRows");
@@ -9101,7 +9113,7 @@
         const socketErrors={item_level_required:"เลเวลยังไม่ถึงที่อุปกรณ์กำหนด",card_gear_level:"การ์ดนี้ต้องใช้อุปกรณ์เลเวลสูงกว่านี้",socket_changed:"อุปกรณ์หรือรูการ์ดเปลี่ยนไปแล้ว",card_unavailable:"ไม่มีการ์ดที่เลือกในกระเป๋า",drill_missing_metal:"แร่เหล็กไม่พอสำหรับเจาะรู"};
         reasons.salvage_changed="อุปกรณ์เปลี่ยนไปแล้ว โปรดเลือกชิ้นที่จะแยกอีกครั้ง";
         const gatherErrors={resource_range:"ขยับเข้าใกล้ต้นไม้หรือหินบนแผนที่นี้",resource_ground:"ลงจากม้าหรือลงสู่พื้นก่อนเก็บวัตถุดิบ",resource_empty:"จุดนี้กำลังฟื้นตัว",resource_cooldown:"รอสักครู่ก่อนเก็บครั้งถัดไป",
-          fish_water:"แตะจุดในน้ำเพื่อเหวี่ยงเบ็ด",fish_ground:"ลงจากม้าและยืนบนพื้นก่อนตกปลา",fish_range:"เข้าใกล้น้ำในระยะ 9 เมตร",fish_blocked:"มีสิ่งกีดขวางระหว่างคุณกับน้ำ",fish_interrupted:"การตกปลาถูกขัดจังหวะ",fish_expired:"รอบตกปลาหมดแล้ว"};
+          fish_water:"แตะจุดในน้ำเพื่อเหวี่ยงเบ็ด",fish_ground:"ลงจากม้าและยืนบนพื้นก่อนตกปลา",fish_range:"เข้าใกล้น้ำในระยะ 9 เมตร",fish_blocked:"มีสิ่งกีดขวางระหว่างคุณกับน้ำ",fish_interrupted:"การตกปลาถูกขัดจังหวะ",fish_expired:"รอบตกปลาหมดแล้ว",fish_pending:"รับปลาที่จับไว้ก่อนเริ่มตกใหม่",fish_no_pending:"ไม่มีปลารอรับ"};
         if(fishingPending){fishingPending=false;if(message?.reason!=="inventory_full")clearFishing(false);}
         toast(gatherErrors[message?.reason] || socketErrors[message?.reason] || reasons[message?.reason] || "ทำรายการไม่สำเร็จ · ลองตรวจข้อมูลอีกครั้ง"); renderEconomy();renderBag();
       });
@@ -13825,6 +13837,7 @@
   };
   $("fishButton").onclick=()=>{
     if(!economyReady() || fishingPending)return;
+    if(fishSavedItem){fishingPending=true;fishingPendingUntil=performance.now()+8000;room.send("fish_claim",{});return;}
     fishingSelect=!fishingSelect;if(fishingSelect)createFishingPickers();else clearFishingPickers();
     toast(fishingSelect?"แตะตำแหน่งในน้ำเพื่อเหวี่ยงเบ็ด":"ยกเลิกเลือกจุดตกปลา");
   };
