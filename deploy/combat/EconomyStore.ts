@@ -2,6 +2,7 @@ import { FORGE_CATALOG, forgeStamp, quoteForge, rollForge, birthForge, plainForg
 import { changeCardSocket, DRILL_COST, type SocketOrder } from "./CardSockets.js";
 import {resourceNodes,resourceStock,rawResource,GATHER_DELAY,REFINE_INPUT,type ResourceNode,type ResourceStock} from "./WorldResources.js";
 import {WORLD_MAPS} from "./WorldMaps.js";
+import {dynamicResourcePeriodMs} from "./DynamicBalance.js";
 /** Single-process transactional economy. This store must own inventories before it is wired to gameplay. */
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
@@ -96,13 +97,14 @@ export class EconomyStore {
       CREATE TABLE IF NOT EXISTS receipts(request_id TEXT PRIMARY KEY, actor TEXT NOT NULL, kind TEXT NOT NULL, intent TEXT NOT NULL, result TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS characters(id TEXT PRIMARY KEY, snapshot TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS resource_stock(map TEXT NOT NULL,node TEXT NOT NULL,stock INTEGER NOT NULL,nextAt INTEGER NOT NULL,PRIMARY KEY(map,node));
+      CREATE TABLE IF NOT EXISTS resource_periods(map TEXT NOT NULL,node TEXT NOT NULL,periodMs INTEGER NOT NULL,PRIMARY KEY(map,node));
       CREATE TABLE IF NOT EXISTS resource_workers(actor TEXT PRIMARY KEY,lastAt INTEGER NOT NULL);
     `);
   }
   close(): void { this.db.close(); }
   resourceMap(mapId:string,now=Date.now()){
-    const rows=this.db.prepare("SELECT node,stock,nextAt FROM resource_stock WHERE map=?").all(mapId);
-    const stocks=new Map(rows.map(row=>[String(row.node),{stock:Number(row.stock),nextAt:Number(row.nextAt)}]));
+    const rows=this.db.prepare("SELECT s.node,s.stock,s.nextAt,p.periodMs FROM resource_stock s LEFT JOIN resource_periods p ON p.map=s.map AND p.node=s.node WHERE s.map=?").all(mapId);
+    const stocks=new Map(rows.map(row=>[String(row.node),{stock:Number(row.stock),nextAt:Number(row.nextAt),...(row.periodMs==null?{}:{periodMs:Number(row.periodMs)})}]));
     const nodes=resourceNodes(mapId).map(n=>{
       const s=resourceStock(n,stocks.get(n.id),now);
       return {id:n.id,x:n.x,z:n.z,kind:n.kind,radius:n.radius,tier:n.tier,capacity:n.capacity,existing:n.existing,stock:s.stock,
@@ -122,7 +124,7 @@ export class EconomyStore {
     return this.once(actor,request,"harvest",{node:n.id},()=>{
       const worker=this.db.prepare("SELECT lastAt FROM resource_workers WHERE actor=?").get(actor);
       if(worker && now-Number(worker.lastAt)<GATHER_DELAY)throw Error("resource_cooldown");
-      const row=this.db.prepare("SELECT stock,nextAt FROM resource_stock WHERE map=? AND node=?").get(n.mapId,n.id);
+      const row=this.db.prepare("SELECT s.stock,s.nextAt,p.periodMs FROM resource_stock s LEFT JOIN resource_periods p ON p.map=s.map AND p.node=s.node WHERE s.map=? AND s.node=?").get(n.mapId,n.id);
       const s=resourceStock(n,row as ResourceStock|undefined,now);
       if(!s.stock)throw Error("resource_empty");
       const account=this.account(actor),item=rawResource(n);
@@ -132,12 +134,14 @@ export class EconomyStore {
       if(!space)throw Error("inventory_full");
       const quantity=Math.min(equipped?2:1,s.stock,space);
       account.inventory=add(account.inventory,{itemId:item,quantity});this.put(actor,account);
-      let nextAt=s.nextAt||now+n.period;
+      const period=s.nextAt && Number.isSafeInteger(row?.periodMs) && Number(row?.periodMs)>0 ? Number(row!.periodMs) : s.nextAt ? n.period : dynamicResourcePeriodMs(n.mapId,n.kind,n.period);
+      let nextAt=s.nextAt||now+period;
       if(s.stock===quantity){
         const region=this.resourceMap(n.mapId,now);
-        if((region.available-quantity)*4<=region.capacity)nextAt+=Math.round(n.period*.25);
+        if((region.available-quantity)*4<=region.capacity)nextAt+=Math.round(period*.25);
       }
       this.db.prepare("INSERT OR REPLACE INTO resource_stock VALUES(?,?,?,?)").run(n.mapId,n.id,s.stock-quantity,nextAt);
+      this.db.prepare("INSERT OR REPLACE INTO resource_periods VALUES(?,?,?)").run(n.mapId,n.id,period);
       this.db.prepare("INSERT OR REPLACE INTO resource_workers VALUES(?,?)").run(actor,now);
       return {item,quantity,...(equipped?{tool:equipped.name}:{})};
     });

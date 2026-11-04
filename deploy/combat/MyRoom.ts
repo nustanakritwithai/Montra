@@ -65,7 +65,8 @@ import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_CORE, swordCoreProgress, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordCoreId, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { isMuayFoundation, MUAY_CORE, MUAY_CORE_LEVELS, MUAY_CORE_POINT_LEVELS, MUAY_CORE_MANA_PER_RANK, muayCorePoints, muayCoreManaCost, muayCoreProgress, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayCoreId, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
 import { WORKBENCH_GOLD, personalItem, materialTier, wearsWraps, wearsTwinSwords, monsterCardDrop, bossTreasure, type MaterialId } from "./PersonalItems.js";
-import { CATALOG_PAGES, practiceSite } from "./MonsterLoot.js";
+import { CATALOG_PAGES, practiceSite, catalogPageWithRates, cardCatalogWithRates } from "./MonsterLoot.js";
+import {dynamicBalanceRevision} from "./DynamicBalance.js";
 import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
 import {personalGearGuides} from "./GearGuides.js";
 import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js";
@@ -75,6 +76,7 @@ import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, 
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
 import type { MonsterTier } from "./MonsterProfiles.js";
+import {huntEventDirector,huntBonus,type HuntMap} from "./HuntEvents.js";
 import { PROGRESSION, SKILL_RANK_LEVELS, SKILL_RANK_PRACTICE, skillRankCost, skillRankMultiplier, supportRankMultiplier, addExperience, calculateDamage, calculateStats, cycleExperience, emptyAllocations,
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
@@ -3049,6 +3051,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal", bossLoot = false, monsterId=""): void {
     const player = this.state.players.get(id);
     const directorAt=Date.now(),directorEvent=worldDirector.snapshot(directorAt);
+    const huntEvent=huntEventDirector.snapshot(directorAt);
     const priorReward=this.pendingRewards.get(id);
     if (!player || !this.persistentCharacters.has(id) || (this.pendingWarps.has(id) && !priorReward)) return;
     // Freeze the winner while the previous item mutation and EXP write finish;
@@ -3070,7 +3073,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const objective=killAmount>0 && canAdvance ? advanceForestObjective(savedObjective,monsterId,current.mapId) : {active:savedObjective,completed:null};
         const bonus=objective.completed ? cycleExperience(monsterExperience(current.level,monsterLevel,tier)*2,snapshot.rebirth?.count ?? 0) : 0;
         const eventReward=objective.completed ? this.directorReward(snapshot,savedObjective,current.level,monsterLevel,tier,directorEvent,directorAt) : {bonus:0,claims:snapshot.directorClaims ?? []};
-        const amount=killAmount+bonus+eventReward.bonus;
+        const huntEventBonus=this.field || process.env.MONTRA_HUNT_EVENTS==='0' ? 0 : huntBonus(huntEvent,current.mapId,tier,killAmount,directorAt);
+        const amount=killAmount+bonus+eventReward.bonus+huntEventBonus;
         const personalEligible=this.accountSessions.has(id) && current.alive && Boolean(current.pathId);
         if (amount <= 0 && tier !== "boss" && !bossLoot && !personalEligible) return;
         const next = addExperience(current.level, current.experience, amount);
@@ -3104,7 +3108,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           const recipient = this.clients.find(client => client.sessionId === id);
           if(leveled && recipient && this.sentItemCatalog.has(id))this.sendHuntGuide(recipient,current);
           if (loot) recipient?.send("inventory_state",loot);
-          recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,
+          recipient?.send("experience_gained", {amount,level:next.level,experience:next.experience,...(huntEventBonus?{huntEventBonus}:{}),
             ...(objective.completed ? {forestObjectiveCompleted:objective.completed,forestObjectiveBonus:bonus} : {}),...(eventReward.bonus?{directorBonus:eventReward.bonus}:{}),
             ...(current.level>=13 && (current.level<=25 || tier==="normal")?{fieldPrey:practiceSite(monsterId)}:{}),
             ...(leveled?{training:this.coreTrainingAtLevel(id,current.pathId,snapshot.level,next.level)}:{}),
@@ -4080,7 +4084,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.simulatedMs - last < 1_000) return;
       this.lastInventoryReadMs.set(id, this.simulatedMs);
       if(!this.sentItemCatalog.has(id)){
-        for(const items of CATALOG_PAGES)client.send("item_catalog_page",{items});
+        for(const items of CATALOG_PAGES)client.send("item_catalog_page",{items:catalogPageWithRates(items)});
         const player=this.state.players.get(id);
         if(player)this.sendHuntGuide(client,player);
         this.sentItemCatalog.add(id);
@@ -4873,7 +4877,58 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
+  private huntNotified=new Map<string,string>();
+  private sampleHuntEvent():void {
+    if(this.field || !WORLD_EXPANSION || process.env.MONTRA_HUNT_EVENTS==='0')return;
+    const monsters=new Map<string,Array<{level:number;normal:boolean;strong:boolean}>>();
+    for(const monster of this.state.monsters.values())if(monster.alive && monster.tier!=='boss'){
+      const levels=monsters.get(monster.mapId) ?? [];levels.push({level:monster.level,normal:monster.tier==='weak' || monster.tier==='normal',strong:monster.tier==='strong' || monster.tier==='elite'});monsters.set(monster.mapId,levels);
+    }
+    const maps=new Map<string,HuntMap>();
+    for(const [id,p] of this.state.players){
+      if(!p.alive || !this.persistentCharacters.has(id) || p.level>=PROGRESSION.maxLevel || !monsters.get(p.mapId)?.some(monster=>Math.abs(monster.level-p.level)<=5))continue;
+      const world=getWorldMap(p.mapId);if(!world)continue;
+      const entry=maps.get(p.mapId);
+      const hasNormal=Boolean(monsters.get(p.mapId)?.some(m=>m.normal && Math.abs(m.level-p.level)<=5));
+      const hasStrong=Boolean(monsters.get(p.mapId)?.some(m=>m.strong && Math.abs(m.level-p.level)<=5));
+      if(entry){entry.players++;entry.minLevel=Math.min(entry.minLevel,p.level);entry.maxLevel=Math.max(entry.maxLevel,p.level);entry.hasNormal ||= hasNormal;entry.hasStrong ||= hasStrong;}
+      else maps.set(p.mapId,{mapId:p.mapId,name:world.name,players:1,minLevel:p.level,maxLevel:p.level,hasNormal,hasStrong});
+    }
+    huntEventDirector.observe(this.roomId,[...maps.values()]);
+    const event=huntEventDirector.snapshot();
+    for(const client of this.clients){
+      const player=this.state.players.get(client.sessionId),visible=event && player?.mapId===event.mapId?event:null;
+      const signature=visible?`${visible.id}:${visible.kills}`:'';
+      const previous=this.huntNotified.get(client.sessionId);
+      if(previous===signature)continue;
+      this.huntNotified.set(client.sessionId,signature);
+      try{
+        client.send('hunt_event_state',{event:visible,serverNow:Date.now()});
+        if(visible){
+          const completed=visible.kills>=visible.goal,rate=(visible.kind==='strong_hunt'?20:visible.kind==='normal_hunt'?15:10)+(completed?5:0);
+          const bonus=visible.kind==='strong_hunt'?`EXP มอนสเตอร์แข็งแกร่งและชั้นยอด +${rate}%`:visible.kind==='normal_hunt'?`EXP มอนสเตอร์ทั่วไป +${rate}%`:`EXP มอนสเตอร์ +${rate}%`;
+          const remaining=Math.max(1,Math.ceil((visible.endsAt-Date.now())/60_000));
+          const oldProgress=previous?.startsWith(visible.id+':')?Number(previous.slice(visible.id.length+1)):null;
+          const announce=oldProgress===null || (completed && oldProgress<visible.goal) || Math.floor(visible.kills/5)>Math.floor(oldProgress/5);
+          if(announce){
+            const story=oldProgress===null?`${visible.story} · `:'';
+            const objective=completed?'เป้าหมายร่วมสำเร็จ โบนัสเพิ่มอีก 5%':`เป้าหมายร่วม ${visible.kills}/${visible.goal} · ครบแล้วโบนัสเพิ่มอีก 5%`;
+            client.send('chat_message',{senderId:'system-hunt-event',name:'ระบบเหตุการณ์',mapId:visible.mapId,channel:'map',text:`${story}${objective} · ${bonus} ยกเว้นบอส · เหลือประมาณ ${remaining} นาที`});
+          }
+        }
+      }catch{/* disconnected */}
+    }
+  }
+
   async onCreate(options?:{warRoomKey?:string;field?:Battlefield}) {
+    let cardRevision=dynamicBalanceRevision();
+    this.clock.setInterval(()=>{
+      const next=dynamicBalanceRevision();if(next===cardRevision)return;cardRevision=next;
+      const items=cardCatalogWithRates();
+      for(const client of this.clients)if(this.sentItemCatalog.has(client.sessionId)){
+        try{client.send("item_catalog_page",{items});}catch{/* disconnected */}
+      }
+    },3000);
     if(options?.warRoomKey===warRoomKey && options.field){
       this.field=options.field;
       if(this.field.site===CASTLE_ID)this.maxClients=CASTLE_SEATS*2;
@@ -4888,6 +4943,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.economyAvailable = characterStore.economyEnabled;
     if(characterStore.economyEnabled && !this.field)this.clock.setInterval(()=>this.sendResources(),5000);
     this.forest.initialize(!this.field);
+    if(!this.field && WORLD_EXPANSION)this.clock.setInterval(()=>this.sampleHuntEvent(),10_000);
     this.state.worldDefinition=this.field?battlefieldWorldDefinition:worldDefinition;
     this.state.swordTreeCatalog = swordTreeCatalog;
     this.state.muayBookCatalog = muayBookCatalog;
@@ -5376,8 +5432,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const m=this.state.monsters.get(targetId);
       const profile=this.forest.profile(targetId);
       if(!m || !profile || !this.forest.kill(targetId,this.simulatedMs,this.state.players,this.pendingWarps))return;
+      const winner=this.state.players.get(winnerId);
+      const eligible=Boolean(!this.field && process.env.MONTRA_HUNT_EVENTS!=='0' && winner?.alive && this.persistentCharacters.has(winnerId) &&
+        !this.pendingWarps.has(winnerId) && winner.mapId===m.mapId && winner.level<PROGRESSION.maxLevel && Math.abs(winner.level-m.level)<=5 && distance3d(winner,m)<=PARTY_XP_RADIUS);
       this.clearMuayCombosForTarget(targetId);
       this.awardMonsterExperience(winnerId,m,profile.tier);
+      huntEventDirector.recordKill(m.mapId,profile.tier,eligible);
       for(const [id,target] of this.attackTargets) if(target===targetId){const p=this.state.players.get(id);if(p)this.endAttack(id,p);}
       return;
     }
@@ -5845,6 +5905,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    this.huntNotified.delete(id);
     this.mountHitSequence.delete(id);this.lastMountMs.delete(id);
     this.accountSessions.delete(id);
     this.clearGrappleCountersFor(id,"disconnect");
@@ -5953,6 +6014,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   async onDispose() {
+    huntEventDirector.forget(this.roomId);
     if(this.field)battleRooms.delete(this.field.seq);
     this.buffs.clear();
     this.effects.clear();

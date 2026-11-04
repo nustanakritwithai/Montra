@@ -1,6 +1,7 @@
 import { readForged, birthForge, applyForgeRatings, forgeStamp, type Forged } from "./ForgeRules.js";
 import { MAX_FORGE_COPIES, BOSS_GEAR_CHANCE, bossTreasure, personalItem, startingWeapon, firstChest, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
 import {MAX_LOOT_MISSES,STARTER_HUNT,isStarterHuntMob,rollMonsterLoot} from "./MonsterLoot.js";
+import {dynamicDropChance} from "./DynamicBalance.js";
 import {randomInt} from "node:crypto";
 import { PROGRESSION, baseManaAtLevel, type CombatStats } from "./Progression.js";
 import { MUAY_WRAP_ID } from "./MuayRules.js";
@@ -412,7 +413,7 @@ function fieldLoot(bag:InventorySnapshot,path:string,monsterLevel:number,tier:st
 
 export function bossAccessoryReward(bag:InventorySnapshot,monsterId:string,playerLevel:number,draw=()=>randomInt(100)){
   const treasure=bossTreasure(monsterId);
-  if(!treasure || playerLevel<treasure.level || draw()>=BOSS_GEAR_CHANCE)return null;
+  if(!treasure || playerLevel<treasure.level || draw()>=dynamicDropChance("bossGear",BOSS_GEAR_CHANCE))return null;
   if(gearCounts(bag).has(treasure.gear)){
     const bank=bankForgeCopy(bag,treasure.gear);
     return bank?{id:treasure.gear,bag:bank,granted:true,banked:true}:null;

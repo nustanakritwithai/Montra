@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import {dynamicCardChance,registerDynamicCards} from "./DynamicBalance.js";
 import {REGIONAL_BOSSES} from "./RegionalBosses.js";
 import {baseManaAtLevel,PROGRESSION,type CombatStats} from "./Progression.js";
 
@@ -383,6 +384,7 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
   return Object.freeze(result) as Readonly<Record<PersonalId,PersonalDefinition>>;
 }
 export const PERSONAL_ITEMS=buildPersonalCatalog();
+registerDynamicCards(Object.entries(PERSONAL_ITEMS).filter(([,item])=>item.kind==="card").map(([id])=>id));
 export function personalItem(id:unknown): PersonalDefinition | undefined {
   return typeof id === "string" && Object.hasOwn(PERSONAL_ITEMS,id) ? PERSONAL_ITEMS[id as PersonalId] : undefined;
 }
@@ -400,7 +402,7 @@ export function monsterCardFor(id:string,level:number):CardId|null {
 }
 export function monsterCardDrop(id:string,level:number,draw=()=>randomInt(100)):CardId|null {
   const card=monsterCardFor(id,level);
-  return card && draw()<(PERSONAL_ITEMS[card].chancePct??0)?card:null;
+  return card && draw()<dynamicCardChance(card,PERSONAL_ITEMS[card].chancePct??0)?card:null;
 }
 export function startingWeapon(path:string):PracticeWeapon {
   const id = (Object.keys(STARTING_ITEMS) as BaseId[]).find(key => personalItem(key)?.kind==="mainHand" && personalItem(key)?.path===path);

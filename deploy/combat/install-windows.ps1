@@ -58,6 +58,12 @@ if (!((Get-Content $roomFile -Raw).Contains("export class MyRoom"))) {
 if (!(Test-Path -LiteralPath $appConfig -PathType Leaf)) { throw "Cannot locate app.config.ts. No files were modified." }
 $appConfigText = Get-Content -LiteralPath $appConfig -Raw
 $hasAccountHook = $appConfigText.Contains('installAccountRoutes(app);')
+$hasHuntHook = $appConfigText.Contains('installHuntEventRoutes(app);')
+$hasInlineHunt = $appConfigText.Contains("app.get('/api/hunt-event'")
+if (($hasHuntHook -and !$appConfigText.Contains('from "./rooms/HuntEventRoutes.js"')) -or
+    ($hasInlineHunt -and !$appConfigText.Contains("app.get('/hunt-events'"))) {
+  throw "Cannot safely reconcile hunt event routes in app.config.ts. No files were modified."
+}
 if (($hasAccountHook -and !$appConfigText.Contains('from "./rooms/AccountRoutes.js"')) -or
     (!$hasAccountHook -and ([regex]::Matches($appConfigText, 'express\s*:\s*\(app\)\s*=>\s*\{').Count -ne 1))) {
   throw "Cannot safely insert MONTRA account routes into app.config.ts. No files were modified."
@@ -92,6 +98,11 @@ $files = @(
   @{ Name = "RebirthTransition.ts"; Target = "src\rooms\RebirthTransition.ts"; Check = "prepareRebirth" },
   @{ Name = "ForestObjectives.ts"; Target = "src\rooms\ForestObjectives.ts"; Check = "advanceForestObjective" },
   @{ Name = "WorldDirector.ts"; Target = "src\rooms\WorldDirector.ts"; Check = "class WorldDirector" },
+  @{ Name = "DynamicBalance.ts"; Target = "src\rooms\DynamicBalance.ts"; Check = "validateBalance" },
+  @{ Name = "HuntEvents.ts"; Target = "src\rooms\HuntEvents.ts"; Check = "class HuntEventDirector" },
+  @{ Name = "HuntEventStore.ts"; Target = "src\rooms\HuntEventStore.ts"; Check = "class HuntEventStore" },
+  @{ Name = "HuntEventPage.ts"; Target = "src\rooms\HuntEventPage.ts"; Check = "HUNT_EVENT_PAGE" },
+  @{ Name = "HuntEventRoutes.ts"; Target = "src\rooms\HuntEventRoutes.ts"; Check = "installHuntEventRoutes" },
   @{ Name = "TyphoonGuide.ts"; Target = "src\rooms\TyphoonGuide.ts"; Check = "selectGuideIntent" },
   @{ Name = "QuestAdvisor.ts"; Target = "src\rooms\QuestAdvisor.ts"; Check = "questChoices" },
   @{ Name = "GuideAnswers.ts"; Target = "src\rooms\GuideAnswers.ts"; Check = "guideAnswer" },
@@ -217,9 +228,19 @@ try {
     if (!(Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
     Copy-Item -LiteralPath (Join-Path $download $entry.Name) -Destination $dest -Force
   }
+  $updatedConfig = $appConfigText
   if (!$hasAccountHook) {
     $updatedConfig = 'import { installAccountRoutes } from "./rooms/AccountRoutes.js";' + "`r`n" +
       ([regex]::new('(express\s*:\s*\(app\)\s*=>\s*\{)').Replace($appConfigText, '$1' + "`r`n    installAccountRoutes(app);", 1))
+  }
+  if (!$hasHuntHook -and !$hasInlineHunt) {
+    if ([regex]::Matches($updatedConfig, 'installAccountRoutes\(app\);').Count -ne 1 -or $updatedConfig.Contains('installHuntEventRoutes')) {
+      throw "Cannot safely insert hunt event routes into app.config.ts."
+    }
+    $updatedConfig = 'import { installHuntEventRoutes } from "./rooms/HuntEventRoutes.js";' + "`r`n" +
+      ([regex]::new('installAccountRoutes\(app\);').Replace($updatedConfig, 'installAccountRoutes(app);' + "`r`n    installHuntEventRoutes(app);", 1))
+  }
+  if ($updatedConfig -ne $appConfigText) {
     Set-Content -LiteralPath $appConfig -Value $updatedConfig -Encoding UTF8
   }
 
