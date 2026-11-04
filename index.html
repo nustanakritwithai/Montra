@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=0.3.3-monster-ring-1" />
+  <link rel="stylesheet" href="./styles.css?v=0.3.3-fishing-1" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -75,6 +75,7 @@
       <div class="field-prompts">
     <button id="warpButton" class="warp-button" type="button" hidden></button>
     <button id="harvestButton" class="warp-button" type="button" hidden></button>
+    <button id="fishButton" class="warp-button" type="button" hidden>🎣 ตกปลา</button>
     <button id="siegeGateButton" class="warp-button" type="button" hidden></button>
     <button id="climb" class="warp-button climb-context" type="button" title="ปีนหรือไต่ลงกำแพง" hidden><span aria-hidden="true">⇧</span> <span>ปีน</span></button>
     <button id="fly" class="warp-button flight-context" type="button" aria-pressed="false" hidden><span aria-hidden="true">✦</span> <span>ลงจอด</span></button>
@@ -96,6 +97,14 @@
     </section>
 
     </div>
+    <section id="fishingPanel" class="fishing-panel panel" aria-label="ตกปลา" hidden>
+      <div class="fishing-head"><strong>🎣 ตกปลา</strong><span id="fishMessage" role="status"></span><button id="fishCancel" type="button" aria-label="ยกเลิกตกปลา">✕</button></div>
+      <div class="fishing-aim" aria-label="กดดึงเมื่อเข็มอยู่ในแถบสีทอง"><i class="fishing-zone"></i><i id="fishNeedle" class="fishing-needle"></i></div>
+      <div class="fishing-meter"><span>แรงหนีปลา</span><div><i id="fishStrength"></i></div><b id="fishStrengthText"></b></div>
+      <div class="fishing-meter"><span>ความทนเอ็น</span><div><i id="fishLine"></i></div><b id="fishLineText"></b></div>
+      <div class="fishing-meter"><span>ระยะสาย</span><div><i id="fishDistance"></i></div><b id="fishDistanceText"></b></div>
+      <button id="fishReel" class="primary" type="button" disabled>รอปลากินเบ็ด</button>
+    </section>
     <nav class="field-shortcuts" aria-label="ทางลัดขณะเล่น">
       <button id="fieldMenuButton" type="button" aria-haspopup="dialog" aria-controls="drawer"><span aria-hidden="true">☰</span>เมนู<b id="fieldAlerts" aria-label="มีข้อความหรือคำเชิญใหม่" hidden>!</b></button>
       <button id="bag" type="button"><span aria-hidden="true">▣</span>กระเป๋า</button>
@@ -162,6 +171,6 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
   <script src="./audio.js?v=0.9.10-horse-bright" defer></script>
-  <script src="./main.js?v=0.3.3-monster-ring-1" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
+  <script src="./main.js?v=0.3.3-fishing-1" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>

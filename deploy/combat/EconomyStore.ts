@@ -3,6 +3,7 @@ import { changeCardSocket, DRILL_COST, type SocketOrder } from "./CardSockets.js
 import {resourceNodes,resourceStock,rawResource,GATHER_DELAY,REFINE_INPUT,type ResourceNode,type ResourceStock} from "./WorldResources.js";
 import {WORLD_MAPS} from "./WorldMaps.js";
 import {dynamicResourcePeriodMs} from "./DynamicBalance.js";
+import type {FishItem} from "./Fishing.js";
 /** Single-process transactional economy. This store must own inventories before it is wired to gameplay. */
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
@@ -102,6 +103,13 @@ export class EconomyStore {
     `);
   }
   close(): void { this.db.close(); }
+  catchFish(actor:string,request:string,item:FishItem){
+    return this.once(actor,request,"fish",{item},()=>{
+      const account=this.account(actor);
+      account.inventory=add(account.inventory,{itemId:item,quantity:1});
+      this.put(actor,account);return {item,quantity:1};
+    });
+  }
   resourceMap(mapId:string,now=Date.now()){
     const rows=this.db.prepare("SELECT s.node,s.stock,s.nextAt,p.periodMs FROM resource_stock s LEFT JOIN resource_periods p ON p.map=s.map AND p.node=s.node WHERE s.map=?").all(mapId);
     const stocks=new Map(rows.map(row=>[String(row.node),{stock:Number(row.stock),nextAt:Number(row.nextAt),...(row.periodMs==null?{}:{periodMs:Number(row.periodMs)})}]));

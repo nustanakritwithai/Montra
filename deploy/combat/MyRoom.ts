@@ -7,7 +7,8 @@ import { RIDGE_PASS } from "./GroundTerrain.js";
 import {RIVER_CITY,riverNodes,riverPosts,riverSupplied} from "./RiverCity.js";
 import {CASTLE_ID,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
 import { Encoder, StateView } from "@colyseus/schema";
-import { randomUUID } from "node:crypto";
+import { randomUUID,randomInt } from "node:crypto";
+import {FISH_BITE_DELAY,FISH_DURATION,fishItem,pullFish,validateFishingPosition,type FishingSession} from "./Fishing.js";
 import {
   CHARACTER_SAVE_INTERVAL_MS, characterStore, characterIdFromToken,
   claimCharacter, releaseCharacter, getGuestToken, parseCharacterName,
@@ -162,6 +163,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastPvpMs=new Map<string,number>();
   private sentItemCatalog=new Set<string>();
   private resourceView=new WeakMap<Client,{mapId:string;stock:number[]}>();
+  private fishing=new Map<string,FishingSession>();
   private supportManaCombatUntil = new Map<string, number>();
   private lastWarpMs = new Map<string, number>();
   private provinceClients = new Set<string>();
@@ -3214,7 +3216,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
       const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_downgrade_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","forge_stock_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level"];
-      const reason=error instanceof Error && (allowed.includes(error.message)||["resource_ground","resource_range","resource_cooldown","resource_empty"].includes(error.message)) ? error.message : "economy_failed";
+      const reason=error instanceof Error && (allowed.includes(error.message)||["resource_ground","resource_range","resource_cooldown","resource_empty","fish_water","fish_ground","fish_range","fish_blocked","fish_interrupted","fish_expired"].includes(error.message)) ? error.message : "economy_failed";
       if(reason==="forge_stock_changed")this.syncEconomy(client,id);
       if (reason==="economy_failed") console.error("MONTRA economy failed",error);
       client.send("economy_error",{reason});
@@ -3879,6 +3881,50 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     get_resource_atlas: (client:Client,message:unknown)=>{
       if(!parseEmptyCommand(message) || this.field)return this.reject(client,"invalid_economy_request");
       this.economyAction(client,()=>client.send("resource_atlas",characterStore.economy.resourceAtlas()));
+    },
+    fish_start: (client:Client,message:unknown)=>{
+      if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_economy_request");
+      const m=message as Record<string,unknown>;
+      if(Object.keys(m).length!==2 || typeof m.x!=="number" || typeof m.z!=="number" || !Number.isFinite(m.x) || !Number.isFinite(m.z))return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,()=>{
+        const player=this.state.players.get(client.sessionId)!;validateFishingPosition(player,m.x as number,m.z as number);
+        const now=Date.now(),id="fish_"+randomUUID().replaceAll("-",""),distance=Math.max(3,Math.ceil(Math.hypot(player.x-(m.x as number),player.z-(m.z as number))));
+        const session:FishingSession={id,mapId:player.mapId,x:m.x as number,z:m.z as number,originX:player.x,originZ:player.z,
+          combatAt:this.lastCombatMs.get(client.sessionId)??-1,biteAt:now+FISH_BITE_DELAY,lastReel:0,distance,initialDistance:distance,strength:100,line:100,item:fishItem(randomInt(100))};
+        this.destinations.delete(client.sessionId);this.attackTargets.delete(client.sessionId);this.fishing.set(client.sessionId,session);
+        client.send("fish_state",{id,x:session.x,z:session.z,wait:FISH_BITE_DELAY,elapsed:0,duration:FISH_DURATION,distance,initialDistance:distance,strength:100,line:100});
+      });
+    },
+    fish_reel: (client:Client,message:unknown)=>{
+      if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_economy_request");
+      const m=message as Record<string,unknown>;
+      if(Object.keys(m).length!==1 || typeof m.id!=="string" || !/^fish_[a-f0-9]{32}$/.test(m.id))return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,character=>{
+        const s=this.fishing.get(client.sessionId),p=this.state.players.get(client.sessionId)!;
+        if(!s || s.id!==m.id)throw Error("fish_expired");
+        if(p.mapId!==s.mapId || Math.hypot(p.x-s.originX,p.z-s.originZ)>1.5 || (this.lastCombatMs.get(client.sessionId)??-1)>s.combatAt){this.fishing.delete(client.sessionId);throw Error("fish_interrupted");}
+        try{validateFishingPosition(p,s.x,s.z);}catch(error){this.fishing.delete(client.sessionId);throw error;}
+        const now=Date.now(),result=s.distance<=0?"caught":pullFish(s,now);
+        if(result==="caught"){
+          let caught:ReturnType<typeof characterStore.economy.catchFish>;
+          try{caught=characterStore.economy.catchFish(character,s.id,s.item);}
+          catch(error){
+            if(error instanceof Error && error.message==="inventory_full")client.send("fish_state",{id:s.id,x:s.x,z:s.z,wait:0,elapsed:Math.max(0,now-s.biteAt),duration:FISH_DURATION,
+              distance:s.distance,initialDistance:s.initialDistance,strength:s.strength,line:s.line});
+            throw error;
+          }
+          this.fishing.delete(client.sessionId);this.syncEconomy(client,character);client.send("fish_result",{...caught,result:"caught"});return;
+        }
+        if(result==="broken" || result==="escaped"){
+          this.fishing.delete(client.sessionId);client.send("fish_result",{result});return;
+        }
+        client.send("fish_state",{id:s.id,x:s.x,z:s.z,wait:Math.max(0,s.biteAt-now),elapsed:Math.max(0,now-s.biteAt),duration:FISH_DURATION,
+          distance:s.distance,initialDistance:s.initialDistance,strength:s.strength,line:s.line,result});
+      });
+    },
+    fish_cancel: (client:Client,message:unknown)=>{
+      if(!parseEmptyCommand(message))return this.reject(client,"invalid_economy_request");
+      this.fishing.delete(client.sessionId);client.send("fish_result",{result:"cancelled"});
     },
     harvest_resource: (client:Client,message:unknown)=>{
       const m=message as {node?:unknown;requestId?:unknown};
@@ -5933,6 +5979,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    this.fishing.delete(id);
     this.huntNotified.delete(id);
     this.mountHitSequence.delete(id);this.lastMountMs.delete(id);
     this.accountSessions.delete(id);

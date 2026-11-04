@@ -37,6 +37,9 @@ export type PersonalDefinition = {
   harvestKind?:"wood"|"stone";toolTier?:number;healMana?:number;
 };
 const STARTING_ITEMS = {
+  mat_fish_common: {name:"ปลาช่อน",kind:"material",path:"all",stats:{},sellGold:3},
+  mat_fish_silver: {name:"ปลาตะเพียนเงิน",kind:"material",path:"all",stats:{},sellGold:7},
+  mat_fish_spirit: {name:"ปลาวิญญาณ",kind:"material",path:"all",stats:{},sellGold:18},
   card_possessed: {"name":"การ์ดผีสิง","kind":"card","path":"all","stats":{"atk":1},"monster":"ผีสิง","chancePct":12},
   card_lost_ghost: {"name":"การ์ดผีหลงป่า","kind":"card","path":"all","stats":{"hp":8},"monster":"ผีหลงป่า","chancePct":12},
   card_root_shadow: {"name":"การ์ดเงารากไม้","kind":"card","path":"all","stats":{"def":1},"monster":"เงารากไม้","chancePct":12},
@@ -242,6 +245,7 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
   function put(id:PersonalId,item:PersonalDefinition){if(result[id])throw Error("duplicate_item:"+id);result[id]=item;}
   for(const [baseKey,raw] of Object.entries(STARTING_ITEMS)){
     const base:PersonalDefinition=raw, family=baseKey.replace(/_1$/,"");
+    if(baseKey.startsWith("mat_fish_")){put(baseKey as PersonalId,{...base,level:1,rarity:"common"});continue;}
     if(base.kind==="card"){
       put(baseKey as PersonalId,{...base,family,level:base.level??1,rarity:"rare"});
       continue;
