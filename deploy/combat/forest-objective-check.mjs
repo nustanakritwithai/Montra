@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync} from 'node:fs';
+import {mkdtempSync,rmSync,realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 const dir=mkdtempSync(path.join(tmpdir(),'montra-forest-objective-'));
@@ -23,7 +23,7 @@ try{
   room.changeForestObjective(client,{id:'west'});
   assert.equal(room.forestObjectives.has('hunter'),false,'cannot accept remotely');
   assert.ok(events.some(e=>e.type==='command_rejected' && e.data.reason==='forest_objective_near_ranger'));
-  p.x=3;p.z=12;
+  const forestKeeper=objectiveRanger('forbidden_forest');p.x=forestKeeper.x;p.y=forestKeeper.y;p.z=forestKeeper.z;
   room.changeForestObjective(client,{id:'west'});await room.pendingItemUses.get('hunter');
   p.x=-30;p.z=-17;
   let saved=(await characterStore.loadOrCreateById(id,{x:0,z:0})).character;
@@ -64,4 +64,8 @@ try{
   saved=(await characterStore.loadOrCreateById(id,{x:0,z:0})).character;
   assert.equal(saved.forestObjective.id,'atlas_bamboo_frontier_1');
   console.log('PASS: NPC proximity and locations, forest and regional missions, party credit and atomic rewards');
-} finally {rmSync(dir,{recursive:true,force:true});}
+} finally {
+  const target=realpathSync(dir),tempRoot=realpathSync(tmpdir());
+  if(path.dirname(target)!==tempRoot || !path.basename(target).startsWith('montra-forest-objective-'))throw Error('unsafe test cleanup');
+  rmSync(target,{recursive:true,force:true});
+}

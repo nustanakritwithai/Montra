@@ -1689,6 +1689,7 @@
       head.parent=root;head.position.y=1.6;head.material=rangerHead.material;head.isPickable=false;
       const cap=B.MeshBuilder.CreateCylinder("service npc cap",{height:.22,diameterTop:.4,diameterBottom:.72,tessellation:8},scene);
       cap.parent=root;cap.position.y=1.92;cap.material=look.robe;cap.isPickable=false;
+      attachNpcAvatar(root,npc.id,look.robe,[body,head,cap]);
       const label=B.MeshBuilder.CreatePlane("service npc label",{width:3.6,height:2.2},scene);
       label.parent=root;label.position.y=3;label.material=look.label;label.billboardMode=B.Mesh.BILLBOARDMODE_ALL;label.isPickable=false;
       const hit=B.MeshBuilder.CreateBox("service npc interaction",{width:2.2,height:3,depth:2.2},scene);
@@ -3750,7 +3751,7 @@
     mesh.name = name; mesh.parent = pivot; mesh.isPickable = false;
     return mesh;
   }
-  function avatarMesh(id, local) {
+  function avatarMesh(id, local, npcOptions = null) {
     const parent = new B.TransformNode("avatar-" + id, scene);
     contactShadow(parent, 1.5);
     if(local) {
@@ -3760,7 +3761,7 @@
       locator.parent=parent;locator.position.y=.06;
       locator.material=playerLocatorMat;locator.isPickable=false;
     }
-    const pants = local ? pantsHero : pantsFriend, sash = local ? sashHero : sashFriend;
+    const pants = local ? pantsHero : pantsFriend, sash = npcOptions?.cloth || (local ? sashHero : sashFriend);
     let parts = [];
     const at = (mesh, x, y, z, m) => { mesh.position.set(x, y, z); mesh.material = m; parts.push(mesh); return mesh; };
     const box = (x, y, z, w, h, d, m) => at(B.MeshBuilder.CreateBox("avatar part", { width: w, height: h, depth: d }, scene), x, y, z, m);
@@ -3770,7 +3771,7 @@
     const flush = (pivot, name) => { const m = mergedSegment(parts, pivot, name); parts = []; return m; };
     const body = node("body", parent, 0, 0, 0);
     body.scaling.setAll(1.2); // reads at the farthest camera; hitbox is unchanged
-    const shawl = local ? shawlHero : shawlFriend;
+    const shawl = npcOptions?.cloth || (local ? shawlHero : shawlFriend);
     // Lofted body: rings of [y, halfWidth, halfDepth, zOffset] in pivot space.
     // Proportions follow a 7.5-head male figure, 2.0 units tall before the
     // 1.2 body scale: chin 1.75, shoulders 1.62, waist 1.2, crotch 1.0,
@@ -3874,13 +3875,15 @@
 
     // Remote avatars are touch targets. The player's own avatar remains
     // unpickable so tapping nearby ground still works.
-    const hitbox = B.MeshBuilder.CreateBox("pk-hitbox-" + id,
-      { width: 1.05, height: 2.25, depth: 1.05 }, scene);
-    hitbox.parent = parent;
-    hitbox.position.y = 1.125;
-    hitbox.visibility = .005;
-    hitbox.isPickable = !local;
-    hitbox.metadata = { pkPlayerId: id };
+    if(!npcOptions){
+      const hitbox = B.MeshBuilder.CreateBox("pk-hitbox-" + id,
+        { width: 1.05, height: 2.25, depth: 1.05 }, scene);
+      hitbox.parent = parent;
+      hitbox.position.y = 1.125;
+      hitbox.visibility = .005;
+      hitbox.isPickable = !local;
+      hitbox.metadata = { pkPlayerId: id };
+    }
     const halo = B.MeshBuilder.CreateTorus("flight halo", {
       diameter: 1.3, thickness: .07, tessellation: 18,
     }, scene);
@@ -3947,16 +3950,16 @@
       root.setEnabled(false);
       return root;
     }
-    const weaponModels = {
+    const weaponModels = npcOptions ? {} : {
       ritual_dagger: createHeldWeapon("ritual_dagger"),
       arcane_sword: createHeldWeapon("arcane_sword"),
       spirit_staff: createHeldWeapon("spirit_staff"),
       thai_left: createHeldWeapon("thai_left"),
       thai_right: createHeldWeapon("thai_right"),
     };
-    attachCrescentBlade(weaponModels.arcane_sword);
+    if(!npcOptions)attachCrescentBlade(weaponModels.arcane_sword);
     // Three familiar spirits: a glowing head with a tapering wisp tail.
-    const familiars = familiarMats.map((material, k) => {
+    const familiars = npcOptions ? [] : familiarMats.map((material, k) => {
       const spirit = new B.TransformNode("familiar", scene); spirit.parent = parent;
       const head = B.MeshBuilder.CreateSphere("familiar head", { diameter: .5, segments: 6 }, scene);
       const tail = B.MeshBuilder.CreateCylinder("familiar tail", { height: .95, diameterTop: .44, diameterBottom: 0, tessellation: 6 }, scene);
@@ -3965,7 +3968,7 @@
       return { node: spirit, radius: 1.45 + k * .3, height: 1.8 + k * .4, speed: (1.1 + k * .25) * (k % 2 ? -1 : 1), offset: k * 2.1 };
     });
     const avatar = {
-      id, node: parent, local, x: 0, y: 0, z: 0,
+      id, node: parent, local, npc:Boolean(npcOptions),npcCloth:npcOptions?.cloth,pathId:npcOptions?"seer":"", x: 0, y: 0, z: 0,
       targetX: 0, targetY: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
       serverFacing: null, hitFlashUntil: 0, dashUntil: 0, flightHalo: halo,
@@ -3974,6 +3977,14 @@
     };
     attachShamanModel(avatar);
     return avatar;
+  }
+  function attachNpcAvatar(root,id,cloth,fallback){
+    const actor=avatarMesh("npc-"+id,false,{cloth});actor.node.parent=root;
+    // NPCs keep their existing dedicated interaction hitboxes and labels.
+    for(const mesh of actor.node.getChildMeshes())mesh.isPickable=false;
+    actor.node.onDisposeObservable.add(()=>actor.skin?.copy.skeletons.forEach(skeleton=>skeleton.dispose()));
+    for(const mesh of fallback)mesh.setEnabled(false);
+    return actor.node;
   }
   // Crescent Blade (assets/weapons/crescent-blade-lod2.glb, 1,530 tris, 256px
   // PBR) replaces the procedural arcane sword once loaded; the procedural
@@ -4030,7 +4041,7 @@
     }).catch(error => { console.warn("MONTRA shaman body", error); shamanBody = false; shamanWaiting.length = 0; spiritArmWaiting.length = 0; ghostWaiting.splice(0).forEach(build => build()); });
   } else shamanBody = false;
   function shamanGear(a, nodes) {
-    const shawl = a.local ? shawlHero : shawlFriend, pants = a.local ? pantsHero : pantsFriend, sash = a.local ? sashHero : sashFriend;
+    const shawl = a.npcCloth || (a.local ? shawlHero : shawlFriend), pants = a.local ? pantsHero : pantsFriend, sash = a.npcCloth || (a.local ? sashHero : sashFriend);
     a.ritualGear = [];
     let parts = [];
     const at = (mesh, x, y, z, m) => { mesh.position.set(x, y, z); mesh.material = m; mesh.isPickable = false; parts.push(mesh); return mesh; };
@@ -4165,6 +4176,11 @@
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;
     a.skin = { nodes, copy, holder, body, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
+    if(a.npc){
+      // Rest pose from the player rig, applied once instead of animating every NPC.
+      for(const [name,x,y,z] of [["RightArm",-.62,-.35,1.12],["RightForeArm",0,2,0],["LeftArm",-.58,.35,-1.12],["LeftForeArm",0,-2,0]])
+        if(nodes[name])nodes[name].rotationQuaternion=B.Quaternion.RotationYawPitchRoll(y,x,z);
+    }
   }
   // ---- Action animation set (visual only) ----
   // Every action maps to something the game already replicates: server
@@ -13925,6 +13941,16 @@
   });
   window.addEventListener("resize",()=>{ resizeGameRenderer(); updateStatus(); positionSwordToast(); });
   window.addEventListener("pagehide",()=> { clearSyncPoll();if(room)try{room.leave();}catch(_){} });
+  // Reuse the player's human model for existing NPC roles and keep their hitboxes.
+  attachNpcAvatar(questRangerRoot,"quest-ranger",rangerRobes[0],[rangerBody,rangerHead,rangerHat]);
+  attachNpcAvatar(defenseKeeperRoot,"defense-keeper",rangerRobes[3],[defenseBody,defenseHead]);
+  attachNpcAvatar(escortRoot,"quest-escort",rangerRobes[2],[escortBody,escortHead]);
+  attachNpcAvatar(quartermasterRoot,"quartermaster",rangerRobes[0],[quartermasterBody,quartermasterHead]);
+  const trainerNpcRoot=new B.TransformNode("sword mentor human",scene);
+  trainerNpcRoot.position.set(trainerPosition.x,0,trainerPosition.z);
+  for(const old of [trainerBody,trainerHead]){const index=villageMeshes.indexOf(old);if(index>=0)villageMeshes.splice(index,1);}
+  villageMeshes.push(trainerNpcRoot);
+  attachNpcAvatar(trainerNpcRoot,"sword-mentor",rangerRobes[0],[trainerBody,trainerHead]);
   resetDemoMonster();
   updateStatus();
   updateFlightButton();

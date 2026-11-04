@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync('main.js','utf8'),start=source.indexOf('  function attachNpcAvatar('),end=source.indexOf('  // Crescent Blade',start);
+assert.ok(start>=0&&end>start,'NPC avatar helper exists');
+const children=[{isPickable:true},{isPickable:true}],skeletons=[{disposed:false,dispose(){this.disposed=true}}],listeners=[];
+const actor={node:{getChildMeshes:()=>children,onDisposeObservable:{add:fn=>listeners.push(fn)}},skin:{copy:{skeletons}}};
+let created;
+const attach=vm.runInNewContext(`(${source.slice(start,end)})`,{avatarMesh:(...args)=>{created=args;return actor}});
+const root={},cloth={},fallback=[{setEnabled(x){this.enabled=x}},{setEnabled(x){this.enabled=x}}];
+assert.equal(attach(root,'smith',cloth,fallback),actor.node);assert.equal(created[0],'npc-smith');assert.equal(created[1],false);assert.equal(created[2].cloth,cloth);
+assert.equal(actor.node.parent,root);assert.ok(children.every(child=>child.isPickable===false));assert.ok(fallback.every(item=>item.enabled===false));
+listeners[0]();assert.equal(skeletons[0].disposed,true,'model skeleton is released when its map is disposed');
+assert.match(source,/attachNpcAvatar\(root,npc\.id,look\.robe,\[body,head,cap\]\)/);
+for(const role of ['questRangerRoot','defenseKeeperRoot','escortRoot','quartermasterRoot','trainerNpcRoot'])assert.ok(source.includes(`attachNpcAvatar(${role},`),role+' uses the player model');
+assert.match(source,/const weaponModels = npcOptions \? \{\}/);assert.match(source,/const familiars = npcOptions \? \[\]/);
+console.log('PASS: NPCs reuse the player model while preserving their own hitboxes and cleaning up skeletons');

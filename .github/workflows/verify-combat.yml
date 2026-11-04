@@ -458,6 +458,7 @@ jobs:
           node deploy/combat/chat-feed-identity-test.cjs
           node deploy/combat/inline-chat-ui-test.cjs
           node deploy/combat/sentinel-icon-ui-test.cjs
+          node deploy/combat/npc-human-model-test.cjs
 
       - name: Isolated advanced class lessons
         working-directory: combat-verify

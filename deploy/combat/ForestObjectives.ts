@@ -1,6 +1,6 @@
 import { ATLAS_MAPS, FRONTIER_SPAWNS, RIFT_WARDEN } from "./WorldAtlas.js";
 import { TEMPLE_CAMPS, TEMPLE_ID } from "./TempleMap.js";
-import { getWorldMap, groundAt, isSafeWorldPoint, SHRINE_GUARDIAN, FOREST_CAMPS } from "./WorldMaps.js";
+import { getWorldMap, groundAt, isSafeWorldPoint, isWorldSegmentClear, SHRINE_GUARDIAN, FOREST_CAMPS } from "./WorldMaps.js";
 import { REGIONAL_BOSSES } from "./RegionalBosses.js";
 
 type Stage=Readonly<{camp:string;prefix:string}>;
@@ -79,13 +79,35 @@ export const FOREST_OBJECTIVES:Readonly<Record<string,Definition>>=Object.freeze
 export const FOREST_RANGER = Object.freeze({mapId:forest,x:3,y:0,z:12,radius:3,name:"นายพรานเฝ้าป่า"});
 export type ForestObjectiveId=string;
 export type ForestObjective={id:ForestObjectiveId;progress:number;directorEventId?:string};
+type ObjectiveRanger={mapId:string;x:number;y:number;z:number;radius:number;name:string};
+const rangerCache=new Map<string,ObjectiveRanger|null>();
 
-/** NPCs stand at safe entrances of maps that actually have objectives. */
-export function objectiveRanger(mapId:string) {
-  if(mapId===forest){const map=getWorldMap(mapId);if(!map)return null;const y=groundAt(mapId,FOREST_RANGER.x,FOREST_RANGER.z);return {...FOREST_RANGER,y};}
+/** Place the quest giver on an accessible route near the first hunting area. */
+export function objectiveRanger(mapId:string):ObjectiveRanger|null {
+  if(rangerCache.has(mapId)){const value=rangerCache.get(mapId);return value?{...value}:null;}
+  const value=chooseObjectiveRanger(mapId);rangerCache.set(mapId,value);return value?{...value}:null;
+}
+function chooseObjectiveRanger(mapId:string):ObjectiveRanger|null {
   if(!Object.values(FOREST_OBJECTIVES).some(def=>def.mapId===mapId))return null;
   const map=getWorldMap(mapId);if(!map)return null;
-  const area=map.restAreas?.[0] ?? map.spawn;
+  const camps=map.camps?.length?map.camps:FRONTIER_SPAWNS.filter(item=>item.mapId===mapId);
+  const first=camps[0];
+  if(first){
+    const candidates:{x:number;y:number;z:number;score:number}[]=[];
+    for(const path of map.paths ?? [])for(let i=1;i<path.length;i++){
+      const a=path[i-1],b=path[i];
+      for(const t of [.25,.5,.75,1]){
+        const x=Math.round((a.x+(b.x-a.x)*t)*100)/100,z=Math.round((a.z+(b.z-a.z)*t)*100)/100,y=groundAt(mapId,x,z),point={x,y,z};
+        const distance=Math.hypot(first.x-x,first.z-z);
+        if(distance<9 || distance>28 || camps.some(c=>Math.hypot(c.x-x,c.z-z)<8) || map.portals.some(p=>Math.hypot(p.x-x,p.z-z)<7) ||
+          !isSafeWorldPoint(map,point) || !isWorldSegmentClear(mapId,point,a))continue;
+        candidates.push({...point,score:Math.abs(distance-13)});
+      }
+    }
+    candidates.sort((a,b)=>a.score-b.score || a.x-b.x || a.z-b.z);
+    if(candidates.length){const {x,y,z}=candidates[0];return {mapId,x,y,z,radius:3,name:mapId===forest?FOREST_RANGER.name:mapId===TEMPLE_ID?"ผู้ดูแลหน้าวัด":`ผู้ดูแล${map.name}`};}
+  }
+  const area=map.restAreas?.find(rest=>map.portals.every(p=>Math.hypot(rest.x-p.x,rest.z-p.z)>8)) ?? map.restAreas?.[0] ?? map.spawn;
   for(const [dx,dz] of [[3,0],[-3,0],[0,-3],[0,3],[2,0],[-2,0]] as const){
     const x=area.x+dx,z=area.z+dz,y=groundAt(mapId,x,z);
     if(isSafeWorldPoint(map,{x,y,z}) && map.portals.every(portal=>Math.hypot(portal.x-x,portal.z-z)>2))

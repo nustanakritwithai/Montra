@@ -27,4 +27,12 @@ for(const [role,count] of Object.entries(totals))assert.ok(count>=2,`${role} app
 for(const city of ['ritual_village','mantra_capital'])assert.equal(serviceNpcsFor(city).length,8,`${city} has all service roles`);
 const mentor=serviceNpcsFor('ritual_village').find(n=>n.role==='mentor');
 assert.ok(mentor && Math.hypot(mentor.x,mentor.z)<=6,'village mentor stands in the skill training area');
+const forest=serviceNpcsFor('forbidden_forest');
+assert.ok(forest.every(n=>Math.hypot(n.x,n.z-14)>=15),'forest services are not clustered at the entry portal');
+assert.ok(Math.max(...forest.flatMap(a=>forest.map(b=>Math.hypot(a.x-b.x,a.z-b.z))))>=30,'forest services spread between hunting areas');
+const firstQuest=objectiveRanger('forbidden_forest');assert.ok(firstQuest && Math.hypot(firstQuest.x,firstQuest.z-14)>=10,'quest giver stands on the trail toward the hunting area');
+for(const [mapId,role,kind] of [['moon_pass','strategy','fort'],['moon_pass','market','market'],['sam_lan_estuary','smith','mine'],['tri_wiang_castle','market','market']]){
+  const map=WORLD_MAPS[mapId],npc=serviceNpcsFor(mapId).find(n=>n.role===role),site=map.strategic.sites.find(s=>s.kind===kind);
+  assert.ok(npc && site && Math.hypot(npc.x-site.x,npc.z-site.z)<=20,`${mapId} ${role} stands near the relevant landmark`);
+}
 console.log(`PASS: ${Object.keys(WORLD_MAPS).length} maps, repeated service roles, safe placement and village mentor`);
