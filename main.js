@@ -5311,7 +5311,9 @@
     if((fishingState || fishingSelect) && (!ready || (fishingState && (activeMapId!==fishingState.mapId || !me?.alive || Math.hypot(me.x-fishingState.originX,me.z-fishingState.originZ)>1.5)))){
       clearFishing(true);toast("หยุดตกปลาแล้ว");
     }
-    const button=$("fishButton");button.hidden=!(ready && !fishingState && (fishSavedItem || fishingSelect || fishingNearby(me)));
+    const nearWater=fishingNearby(me);
+    if(fishingSelect && !nearWater){fishingSelect=false;clearFishingPickers();}
+    const button=$("fishButton");button.hidden=!(ready && !fishingState && nearWater);
     button.textContent=fishSavedItem?"🎣 รับปลาที่จับได้":fishingSelect?"✕ ยกเลิกเลือกจุด":"🎣 ตกปลา";
     if(fishingPending && now>fishingPendingUntil){fishingPending=false;toast("ไม่ได้รับผลตกปลา ลองอีกครั้ง");}
     button.disabled=fishingPending;
@@ -8318,7 +8320,7 @@
       <div class="cb-log" role="button" tabindex="0" aria-label="แตะเพื่อพิมพ์แชท" aria-live="polite"></div>
       <form class="cb-form"><select class="cb-target" aria-label="ผู้รับ" hidden></select><input class="cb-input" maxlength="400" aria-label="ข้อความแชท" placeholder="แตะเพื่อพิมพ์" autocomplete="off" enterkeyhint="send"><button type="submit" class="cb-send" aria-label="ส่ง">➤</button></form>`;
     const harvestControls = document.createElement("div"); harvestControls.className = "chat-harvest";
-    harvestControls.append($("harvestButton")); el.prepend(harvestControls);
+    harvestControls.append($("harvestButton"),$("fishButton")); el.prepend(harvestControls);
     game.append(el);
     const log = el.querySelector(".cb-log"), form = el.querySelector(".cb-form"), input = el.querySelector(".cb-input"), target = el.querySelector(".cb-target");
     const toggle=el.querySelector(".cb-open");
