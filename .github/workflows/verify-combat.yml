@@ -439,7 +439,9 @@ jobs:
         run: npx tsx service-npcs-check.mjs
 
       - name: Service NPC dialogue actions
-        run: node deploy/combat/service-npcs-ui-check.cjs
+        run: |
+          node deploy/combat/service-npcs-ui-check.cjs
+          node deploy/combat/npc-shade-touch-test.cjs
 
       - name: Isolated advanced class lessons
         working-directory: combat-verify

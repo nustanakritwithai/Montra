@@ -10256,7 +10256,14 @@
     renderChat();
   }
   $("drawerClose").addEventListener("click",closeDrawer);
-  ui.shade.addEventListener("click",closeDrawer);
+  // Opening from a canvas pointerup makes the canvas inert immediately. On
+  // touch screens the same tap's ensuing click can then be retargeted to the
+  // newly visible shade. Only dismiss if the gesture began on the shade.
+  let shadePressStarted=false;
+  document.addEventListener("pointerdown",()=>{shadePressStarted=false;},true);
+  ui.shade.addEventListener("pointerdown",()=>{shadePressStarted=true;});
+  ui.shade.addEventListener("pointercancel",()=>{shadePressStarted=false;});
+  ui.shade.addEventListener("click",()=>{if(!shadePressStarted)return;shadePressStarted=false;closeDrawer();});
   // Inked night-map style shared by the minimap and the full map drawer.
   const MAP_THEMES = {
     ritual_village: { inner: "#1d2b2e", outer: "#080f12", land: "#2a3328", ink: "#e2c487", grid: "rgba(226,196,135,.06)" },
