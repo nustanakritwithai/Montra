@@ -1,9 +1,12 @@
-import { ATLAS_MAPS, FRONTIER_SPAWNS } from "./WorldAtlas.js";
+import { ATLAS_MAPS, FRONTIER_SPAWNS, RIFT_WARDEN } from "./WorldAtlas.js";
 import { TEMPLE_CAMPS, TEMPLE_ID } from "./TempleMap.js";
-import { getWorldMap, groundAt, isSafeWorldPoint } from "./WorldMaps.js";
+import { getWorldMap, groundAt, isSafeWorldPoint, SHRINE_GUARDIAN, FOREST_CAMPS } from "./WorldMaps.js";
+import { REGIONAL_BOSSES } from "./RegionalBosses.js";
 
 type Stage=Readonly<{camp:string;prefix:string}>;
-type Definition=Readonly<{name:string;camp:string;levels:string;mapId:string;goal:number;prefix?:string;stages?:readonly Stage[]}>;
+type Definition=Readonly<{name:string;camp:string;levels:string;mapId:string;goal:number;prefix?:string;stages?:readonly Stage[];
+  kind?:"delivery"|"elite"|"defense"|"escort";destinationMapId?:string;destinationName?:string;targetId?:string;rewardLevel?:number;
+  defense?:Readonly<{x:number;z:number;radius:number}>;escort?:Readonly<{x:number;z:number;radius:number}>}>;
 const forest="forbidden_forest";
 const forestObjectives:Record<string,Definition>={
   west:{name:"ลาดตระเวนชายป่า",camp:"ชายป่ากระซิบ",levels:"Lv.1–4",mapId:forest,prefix:"forest_west_",goal:8},
@@ -36,10 +39,46 @@ for(const [mapId,group,name,levels] of [
   const id=`frontier_${mapId}_${group}`;
   if(!forestObjectives[id])forestObjectives[id]={name:`ลาดตระเวน${name}`,camp:name,levels,mapId,prefix:`${id}_`,goal:8};
 }
+// Multi-camp patrols require two eligible kills at each of three distinct camps.
+for(const mapId of [TEMPLE_ID,...Object.keys(ATLAS_MAPS)]){
+  const camps=Object.values(forestObjectives).filter(def=>def.mapId===mapId && def.prefix);
+  if(camps.length<2)continue;
+  const picks=camps.length>=3?[camps[0],camps[Math.floor(camps.length/2)],camps[camps.length-1]]:camps;
+  const stages=picks.flatMap(camp=>[{camp:camp.camp,prefix:camp.prefix!},{camp:camp.camp,prefix:camp.prefix!}]);
+  forestObjectives[`patrol_${mapId}`]={name:"ลาดตระเวนหลายค่าย",camp:picks.map(c=>c.camp).join(" → "),levels:picks.map(c=>c.levels).join(" / "),mapId,goal:stages.length,stages};
+}
+// Defense pressure comes from living camp monsters while a player is guarding
+// its supplies. Defeating the camp's enemies reduces that pressure.
+for(const [mapId,camps] of [[forest,FOREST_CAMPS],[TEMPLE_ID,TEMPLE_CAMPS],...Object.entries(ATLAS_MAPS).map(([id,map])=>[id,map.camps ?? []] as const)] as const){
+  const camp=camps[0],local=Object.values(forestObjectives).find(def=>def.mapId===mapId && def.prefix && !def.kind);
+  if(!camp || !local)continue;
+  forestObjectives[`defense_${mapId}`]={name:`ป้องกันเสบียง${camp.name}`,camp:camp.name,levels:local.levels,mapId,goal:6,
+    prefix:local.prefix,kind:"defense",defense:{x:camp.x,z:camp.z,radius:14}};
+  forestObjectives[`escort_${mapId}`]={name:`คุ้มกันผู้เดินทางไป${camp.name}`,camp:camp.name,levels:local.levels,mapId,goal:1,
+    kind:"escort",escort:{x:camp.x,z:camp.z,radius:5},rewardLevel:camp.levels[0]};
+}
+// Each route starts with an actual local hunt and finishes at a ranger in the
+// directly connected map; no portable button can pay the reward.
+for(const [from,to] of [
+  [forest,TEMPLE_ID],[TEMPLE_ID,"moon_cemetery"],["drowned_marsh","moon_cemetery"],
+  ["moon_cemetery","bamboo_frontier"],["bamboo_frontier","moon_cemetery"],
+  ["hex_ridge","naga_cavern"],["naga_cavern","hex_ridge"],["lotus_basin","river_watch"],
+  ["fallen_city","asura_peak"],["asura_peak","fallen_city"],["spirit_rift","asura_peak"],
+  ["moon_pass","moon_cemetery"],["river_watch","fallen_city"],["sam_lan_estuary","river_watch"],
+] as const){
+  const local=Object.values(forestObjectives).find(def=>def.mapId===from && def.prefix && !def.kind);
+  if(!local)continue;
+  const destination=ATLAS_MAPS[to]?.name ?? (to===TEMPLE_ID?"วัดร้างพันธนาการ":to);
+  forestObjectives[`delivery_${from}_${to}`]={name:`ส่งเสบียงไป${destination}`,camp:local.camp,levels:local.levels,mapId:from,
+    goal:5,prefix:local.prefix,kind:"delivery",destinationMapId:to,destinationName:destination,rewardLevel:Number(local.levels.match(/\d+/)?.[0] ?? 1)};
+}
+forestObjectives.elite_forest_shrine={name:`ปราบ${SHRINE_GUARDIAN.name}`,camp:"ศาลร้างในป่าต้องห้าม",levels:"Lv.12",mapId:forest,goal:1,kind:"elite",targetId:SHRINE_GUARDIAN.id};
+for(const boss of REGIONAL_BOSSES)forestObjectives[`elite_${boss.mapId}`]={name:`ปราบ${boss.name}`,camp:boss.name,levels:`Lv.${boss.level}`,mapId:boss.mapId,goal:1,kind:"elite",targetId:boss.id};
+forestObjectives.elite_spirit_rift={name:`ปราบ${RIFT_WARDEN.name}`,camp:RIFT_WARDEN.name,levels:`Lv.${RIFT_WARDEN.level}`,mapId:"spirit_rift",goal:1,kind:"elite",targetId:RIFT_WARDEN.id};
 export const FOREST_OBJECTIVES:Readonly<Record<string,Definition>>=Object.freeze(forestObjectives);
 export const FOREST_RANGER = Object.freeze({mapId:forest,x:3,y:0,z:12,radius:3,name:"นายพรานเฝ้าป่า"});
 export type ForestObjectiveId=string;
-export type ForestObjective={id:ForestObjectiveId;progress:number};
+export type ForestObjective={id:ForestObjectiveId;progress:number;directorEventId?:string};
 
 /** NPCs stand at safe entrances of maps that actually have objectives. */
 export function objectiveRanger(mapId:string) {
@@ -54,21 +93,33 @@ export function objectiveRanger(mapId:string) {
   }
   return null;
 }
+export function objectiveAvailable(id:string):boolean {
+  const def=FOREST_OBJECTIVES[id],map=def && getWorldMap(def.mapId);if(!def || !map)return false;
+  if(def.kind==="delivery")return !!def.destinationMapId && !!getWorldMap(def.destinationMapId) &&
+    map.portals.some(portal=>portal.targetMapId===def.destinationMapId) && !!objectiveRanger(def.destinationMapId);
+  if(def.kind==="elite")return map.guardian?.id===def.targetId || map.boss?.id===def.targetId;
+  return true;
+}
 export function parseForestObjectiveId(value:unknown):ForestObjectiveId|null {
   return typeof value==="string" && Object.hasOwn(FOREST_OBJECTIVES,value) ? value : null;
 }
 export function validateForestObjective(value:unknown):ForestObjective {
   if(!value || typeof value!=="object" || Array.isArray(value))throw Error("invalid_forest_objective");
   const input=value as Record<string,unknown>,id=parseForestObjectiveId(input.id);
-  if(Object.keys(input).sort().join(",")!=="id,progress" || !id || !Number.isInteger(input.progress) ||
+  if(Object.keys(input).some(key=>!["id","progress","directorEventId"].includes(key)) || !id || !Number.isInteger(input.progress) ||
+     (input.directorEventId!==undefined && (typeof input.directorEventId!=="string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(input.directorEventId))) ||
      (input.progress as number)<0 || (input.progress as number)>=FOREST_OBJECTIVES[id].goal)throw Error("invalid_forest_objective");
-  return {id,progress:input.progress as number};
+  return {id,progress:input.progress as number,...(typeof input.directorEventId==="string"?{directorEventId:input.directorEventId}:{})};
 }
 export function advanceForestObjective(active:ForestObjective|null,monsterId:string,mapId:string):{active:ForestObjective|null;completed:ForestObjectiveId|null} {
   if(!active)return {active:null,completed:null};
   const objective=validateForestObjective(active),definition=FOREST_OBJECTIVES[objective.id];
+  if(definition.kind==="escort")return {active:objective,completed:null};
+  if(definition.kind==="elite")return mapId===definition.mapId && monsterId===definition.targetId
+    ? {active:null,completed:objective.id} : {active:objective,completed:null};
+  if(definition.kind==="delivery" && objective.progress>=definition.goal-1)return {active:objective,completed:null};
   const prefix=definition.stages?.[objective.progress]?.prefix ?? definition.prefix;
   if(mapId!==definition.mapId || !prefix || !monsterId.startsWith(prefix) || !/^[1-4]$/.test(monsterId.slice(prefix.length)))return {active:objective,completed:null};
   const progress=objective.progress+1;
-  return progress>=definition.goal ? {active:null,completed:objective.id} : {active:{...objective,progress},completed:null};
+  return progress>=definition.goal && definition.kind!=="delivery" ? {active:null,completed:objective.id} : {active:{...objective,progress},completed:null};
 }

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { advanceForestObjective, parseForestObjectiveId, validateForestObjective } from "./ForestObjectives.js";
+import { advanceForestObjective, parseForestObjectiveId, validateForestObjective, FOREST_OBJECTIVES, objectiveAvailable, objectiveRanger } from "./ForestObjectives.js";
+import { getWorldMap } from "./WorldMaps.js";
 
 test("objectives advance only on the chosen forest camp and complete once",()=>{
   let active=validateForestObjective({id:"west",progress:0});
@@ -34,5 +35,37 @@ test("missions track their own temple, regional and strategic enemies",()=>{
     const active=validateForestObjective({id,progress:0});
     assert.equal(advanceForestObjective(active,monster,map).active?.progress,1);
     assert.equal(advanceForestObjective(active,monster,"forbidden_forest").active?.progress,0);
+  }
+});
+
+test("multi-camp patrols require targets in the specified order",()=>{
+  const id="patrol_bound_temple",definition=FOREST_OBJECTIVES[id];
+  assert.ok(definition.stages && definition.stages.length>=4);
+  let active=validateForestObjective({id,progress:0});
+  const later=definition.stages![1].prefix===definition.stages![0].prefix?2:1;
+  assert.equal(advanceForestObjective(active,definition.stages![later].prefix+"1",definition.mapId).active?.progress,0);
+  for(const stage of definition.stages!.slice(0,-1))active=advanceForestObjective(active,stage.prefix+"1",definition.mapId).active!;
+  assert.equal(advanceForestObjective(active,definition.stages!.at(-1)!.prefix+"1",definition.mapId).completed,id);
+});
+
+test("delivery requires four kills and stays active until handed to an NPC",()=>{
+  const id="delivery_forbidden_forest_bound_temple",def=FOREST_OBJECTIVES[id];
+  let active=validateForestObjective({id,progress:0});
+  for(let i=0;i<4;i++)active=advanceForestObjective(active,def.prefix+"1",def.mapId).active!;
+  assert.equal(active.progress,4);
+  assert.deepEqual(advanceForestObjective(active,def.prefix+"2",def.mapId),{active,completed:null});
+  assert.throws(()=>validateForestObjective({id,progress:5}));
+});
+
+test("elite objectives advance only for the named enemy",()=>{
+  const id="elite_forest_shrine",active=validateForestObjective({id,progress:0});
+  assert.equal(advanceForestObjective(active,"forest_west_1","forbidden_forest").active?.progress,0);
+  assert.equal(advanceForestObjective(active,"forest_shrine_keeper","forbidden_forest").completed,id);
+});
+
+test("available delivery routes have a connected destination and ranger",()=>{
+  for(const [id,def] of Object.entries(FOREST_OBJECTIVES))if(def.kind==="delivery" && objectiveAvailable(id)){
+    assert.ok(def.destinationMapId && objectiveRanger(def.destinationMapId));
+    assert.ok(getWorldMap(def.mapId)?.portals.some(portal=>portal.targetMapId===def.destinationMapId));
   }
 });

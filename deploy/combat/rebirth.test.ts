@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { classLearningLevel, newRebirthState, rebirthBonuses, recordClassLevel, startNextLife, validateRebirthState } from "./Rebirth.js";
+import { classLearningLevel, newRebirthState, rebirthBonuses, recordClassLevel, startNextLife, validateRebirthState, contextualRebirthStat, contextualMonsterDamage } from "./Rebirth.js";
 import { PATHS, type PathId } from "./CharacterBuilds.js";
 import { prepareRebirth } from "./RebirthTransition.js";
 import { equipBody, makeClassInventory } from "./ItemRules.js";
@@ -9,6 +9,20 @@ import { CharacterStore } from "./CharacterStore.js";
 import { newMuayBook } from "./MuayRules.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
+
+test("monster bonuses do not change shared PvP stats or damage",()=>{
+  let state=startNextLife(newRebirthState(),"phutthaisawan",100);
+  state=startNextLife(state,"muay_boran",100);
+  state=startNextLife(state,"sentinel",100);
+  const pvp=rebirthBonuses(state,"pvp"),pve=rebirthBonuses(state,"pve");
+  const displayed=500,versusPlayer=contextualRebirthStat(displayed,pvp.atk,pve.atk,false);
+  const versusMonster=contextualRebirthStat(displayed,pvp.atk,pve.atk,true);
+  assert.equal(versusPlayer,displayed);assert.ok(versusMonster>versusPlayer);
+  assert.ok(contextualRebirthStat(displayed,pvp.def,pve.def,true)>displayed);
+  assert.ok(contextualMonsterDamage(1000,pvp.hp,pve.hp)<1000);
+  assert.equal(contextualMonsterDamage(0,pvp.hp,pve.hp),0);
+  assert.equal(contextualRebirthStat(displayed,0,0,true),displayed);
+});
 
 test("mastery is credited once per cycle and survives changing class",()=>{
   const one=recordClassLevel(newRebirthState(),"muay_boran",100);
@@ -68,6 +82,19 @@ test("class transition preserves items and sockets and rejects a full bag atomic
   assert.equal(full.inventory.equipment?.offHand,"off_shield_1");
 });
 
+test("same-class rebirth moves level-locked equipment and its card to the bag",()=>{
+  let bag=makeClassInventory("sentinel");
+  bag.slots[2]={itemId:"off_shield_2",quantity:1,socket:"card_asura"};
+  const equipped=equipBody(bag,"offHand",2,"off_shield_2","sentinel",100);
+  assert.equal(equipped.ok,true);if(!equipped.ok)throw Error("equip_failed");bag=equipped.inventory;
+  const original:CharacterSnapshot={version:1,id:"b".repeat(64),name:"Tester",level:100,experience:0,pkKills:0,pkDeaths:0,x:0,y:0,z:0,hp:500,
+    build:{path:"sentinel",ancestry:"shrine"},inventory:bag,updatedAt:new Date().toISOString()};
+  const next=prepareRebirth(original,"sentinel");
+  assert.equal(next.inventory?.equipment?.offHand,undefined);
+  assert.equal(next.inventory?.slots.find(item=>item?.itemId==="off_shield_2")?.socket,"card_asura");
+  assert.equal(original.inventory?.equipment?.offHand,"off_shield_2");
+});
+
 test("a reborn level-one save reloads with previously earned level-100 skills",async()=>{
   const dir=await mkdtemp(path.join(process.cwd(),"montra-rebirth-test-"));
   try {
@@ -84,4 +111,18 @@ test("a reborn level-one save reloads with previously earned level-100 skills",a
     assert.equal(restored.rebirth?.mastery.muay_boran,1);
     await assert.rejects(store.save({...next,rebirth:undefined}),/invalid_muay_book/);
   } finally { await rm(dir,{recursive:true,force:true}); }
+});
+
+test("economy save keeps the reborn character and inventory together",async()=>{
+  const dir=await mkdtemp(path.join(process.cwd(),"montra-rebirth-economy-")),store=new CharacterStore(dir,true);
+  try{
+    const token="mt1_"+"cd".repeat(32),original=(await store.loadOrCreate(token,{x:0,z:0})).character;
+    const veteran={...original,level:100,build:{path:"sentinel" as const,ancestry:"shrine" as const},inventory:makeClassInventory("sentinel")};
+    await store.save(veteran);
+    const next=prepareRebirth(veteran,"seer");await store.save(next);
+    const restored=(await store.loadOrCreate(token,{x:0,z:0})).character;
+    assert.equal(restored.build?.path,"seer");assert.equal(restored.level,1);
+    assert.deepEqual(restored.inventory,store.economy.getAccount(restored.id).inventory);
+    assert.deepEqual(restored.inventory,next.inventory);
+  }finally{store.close();await rm(dir,{recursive:true,force:true});}
 });

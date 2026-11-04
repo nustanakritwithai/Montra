@@ -1711,6 +1711,40 @@
   rangerLabel.parent=questRangerRoot;rangerLabel.position.y=3.2;rangerLabel.material=rangerLabelMat;rangerLabel.billboardMode=B.Mesh.BILLBOARDMODE_ALL;rangerLabel.isPickable=false;
   const rangerHitbox=B.MeshBuilder.CreateBox("quest ranger interaction",{width:2.4,height:3.2,depth:2.4},scene);
   rangerHitbox.parent=questRangerRoot;rangerHitbox.position.y=1.4;rangerHitbox.visibility=.001;rangerHitbox.metadata={questRanger:true};
+  const defenseKeeperRoot=new B.TransformNode("defense keeper",scene);defenseKeeperRoot.setEnabled(false);
+  const defenseBody=B.MeshBuilder.CreateCylinder("defense keeper body",{height:1.3,diameterTop:.55,diameterBottom:.8,tessellation:8},scene);
+  defenseBody.parent=defenseKeeperRoot;defenseBody.position.y=.75;defenseBody.material=rangerRobes[3];defenseBody.isPickable=false;
+  const defenseHead=B.MeshBuilder.CreateSphere("defense keeper head",{diameter:.45,segments:8},scene);
+  defenseHead.parent=defenseKeeperRoot;defenseHead.position.y=1.65;defenseHead.material=rangerHead.material;defenseHead.isPickable=false;
+  const defenseLabelMat=mat("defense keeper label","#ffffff","#705427");
+  defenseLabelMat.diffuseTexture=paintTexture("defense keeper name",256,(ctx,size)=>{ctx.clearRect(0,0,size,size);ctx.fillStyle="#ffe0ae";ctx.textAlign="center";ctx.font="bold 34px sans-serif";ctx.fillText("ผู้ดูแลเสบียง",size/2,size/2);});
+  defenseLabelMat.diffuseTexture.hasAlpha=true;defenseLabelMat.useAlphaFromDiffuseTexture=true;
+  const defenseLabel=B.MeshBuilder.CreatePlane("defense keeper label",{width:3.4,height:2.3},scene);
+  defenseLabel.parent=defenseKeeperRoot;defenseLabel.position.y=3.1;defenseLabel.material=defenseLabelMat;defenseLabel.billboardMode=B.Mesh.BILLBOARDMODE_ALL;defenseLabel.isPickable=false;
+  const defenseHitbox=B.MeshBuilder.CreateBox("defense keeper interaction",{width:2.4,height:3.2,depth:2.4},scene);
+  defenseHitbox.parent=defenseKeeperRoot;defenseHitbox.position.y=1.4;defenseHitbox.visibility=.001;defenseHitbox.metadata={questDefense:true};
+  const escortRoot=new B.TransformNode("quest escort",scene);escortRoot.setEnabled(false);
+  const escortBody=B.MeshBuilder.CreateCylinder("escort body",{height:1.2,diameterTop:.5,diameterBottom:.72,tessellation:8},scene);
+  escortBody.parent=escortRoot;escortBody.position.y=.7;escortBody.material=rangerRobes[2];escortBody.isPickable=false;
+  const escortHead=B.MeshBuilder.CreateSphere("escort head",{diameter:.42,segments:8},scene);
+  escortHead.parent=escortRoot;escortHead.position.y=1.52;escortHead.material=rangerHead.material;escortHead.isPickable=false;
+  const escortLabelMat=mat("escort label","#ffffff","#354565");
+  escortLabelMat.diffuseTexture=paintTexture("escort name",256,(ctx,size)=>{ctx.clearRect(0,0,size,size);ctx.fillStyle="#ddedff";ctx.textAlign="center";ctx.font="bold 36px sans-serif";ctx.fillText("ผู้เดินทาง",size/2,size/2);});
+  escortLabelMat.diffuseTexture.hasAlpha=true;escortLabelMat.useAlphaFromDiffuseTexture=true;
+  const escortLabel=B.MeshBuilder.CreatePlane("escort label",{width:3,height:2},scene);
+  escortLabel.parent=escortRoot;escortLabel.position.y=2.8;escortLabel.material=escortLabelMat;escortLabel.billboardMode=B.Mesh.BILLBOARDMODE_ALL;escortLabel.isPickable=false;
+  const quartermasterRoot=new B.TransformNode("war quartermaster",scene);quartermasterRoot.setEnabled(false);
+  const quartermasterBody=B.MeshBuilder.CreateCylinder("quartermaster body",{height:1.25,diameterTop:.5,diameterBottom:.8,tessellation:8},scene);
+  quartermasterBody.parent=quartermasterRoot;quartermasterBody.position.y=.75;quartermasterBody.material=rangerRobes[0];quartermasterBody.isPickable=false;
+  const quartermasterHead=B.MeshBuilder.CreateSphere("quartermaster head",{diameter:.42,segments:8},scene);
+  quartermasterHead.parent=quartermasterRoot;quartermasterHead.position.y=1.6;quartermasterHead.material=rangerHead.material;quartermasterHead.isPickable=false;
+  const quartermasterLabelMat=mat("quartermaster label","#ffffff","#705427");
+  quartermasterLabelMat.diffuseTexture=paintTexture("quartermaster name",256,(ctx,size)=>{ctx.clearRect(0,0,size,size);ctx.fillStyle="#ffe5a9";ctx.textAlign="center";ctx.font="bold 37px sans-serif";ctx.fillText("พลเสบียง",size/2,size/2);});
+  quartermasterLabelMat.diffuseTexture.hasAlpha=true;quartermasterLabelMat.useAlphaFromDiffuseTexture=true;
+  const quartermasterLabel=B.MeshBuilder.CreatePlane("quartermaster label",{width:3,height:2},scene);
+  quartermasterLabel.parent=quartermasterRoot;quartermasterLabel.position.y=2.9;quartermasterLabel.material=quartermasterLabelMat;quartermasterLabel.billboardMode=B.Mesh.BILLBOARDMODE_ALL;quartermasterLabel.isPickable=false;
+  const quartermasterHitbox=B.MeshBuilder.CreateBox("quartermaster interaction",{width:2,height:3,depth:2},scene);
+  quartermasterHitbox.parent=quartermasterRoot;quartermasterHitbox.position.y=1.4;quartermasterHitbox.visibility=.001;quartermasterHitbox.metadata={warQuartermaster:true};
   const expansionResources = [], expansionLabels = [];
   const forestMonsters = new Map();
   let selectedForestTarget = null;
@@ -3578,6 +3612,7 @@
     $("quest").querySelector(".quest-content strong").textContent=village?"เตรียมตัวออกสำรวจ":"สำรวจ"+name;
     $("quest").querySelector(".quest-content span").textContent=village?"พัก จัดกระเป๋า แล้วเดินทางไปป่า":worldDefinitions?.[mapId]?.strategic?.hint || worldDefinitions?.[mapId]?.region?.hint || (mapId==="bound_temple"?"เลือกช่องกำแพง หรืออ้อมตามระเบียงวัด":"เปิดแผนที่เพื่อเลือกค่ายล่าตามเลเวล");
     syncQuestRanger();
+    syncWarQuartermaster();
     if(mode==="live" && room?.state?.forestObjectivesAvailable)room.send("get_forest_objective",{});
     renderForestObjectiveHud();
     marker.setEnabled(false);
@@ -5364,7 +5399,8 @@
   let demoWeaponSlot = 1;
   let inventoryState = null;
   let characterStatus = null, lastCharacterStatusRequest = 0;
-  let forestObjectiveState = null;
+  let forestObjectiveState = null, forestDefenseState = null, forestEscortState = null, directorEventState = null, directorReceivedAt = 0;
+  let npcGuideSeq=0,npcGuidePending=null;
   let itemUsePending = false;
   let itemUseSequence = 0;
   let selectedBagSlot = 0, confirmBindKey = null;
@@ -7268,7 +7304,7 @@
   }
   function showDemo() {
     $("mountButton").hidden=true;
-    territoryState=null;forestObjectiveState=null;syncQuestRanger();$("quest").classList.remove("war-hud");
+    territoryState=null;forestObjectiveState=null;forestDefenseState=null;forestEscortState=null;directorEventState=null;syncQuestRanger();syncWarQuartermaster();$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null; sentinelChallengeUntil=0; sentinelCoreStanceUntil=0;seerBoundTarget="";seerPoisoned=false;
     possessed=false;occultBookState=null;occultRequestKey="";selectedOccultSkill="";occultCurseUntil=0;bladeBookState=null;bladeRequestKey="";selectedBladeSkill="";bladeCloakUntil=0;syncBladeUI(null);syncSentinelUI(null);syncOccultUI(null);syncPossessionButton();syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; swordStanceUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);
@@ -8660,7 +8696,7 @@
     guildState=null; guildInvitation=null; guildUnread=false; updatePartyBadge();
       inventoryState = null; personalItems=Object.create(null);cardDrill=null;gearGuides=null;resources=null;seerBoundTarget="";seerPoisoned=false;clearResourceView();
       characterStatus = null; lastCharacterStatusRequest = 0;
-      forestObjectiveState=null;
+      forestObjectiveState=null;forestDefenseState=null;forestEscortState=null;directorEventState=null;
       itemUsePending = false;
       itemUseSequence += 1;
       selectedBagSlot = 0;
@@ -8702,7 +8738,7 @@
       const onTerritoryState=message=>{
         if(room!==joined)return;
         const oldDrums=territoryState?.local?.supply?.drums || [],previousOwners=territoryState?.owners;
-        territoryState=message;territoryReceivedAt=performance.now();syncGateVisual();syncCastleRings();
+        territoryState=message;territoryReceivedAt=performance.now();syncGateVisual();syncCastleRings();syncWarQuartermaster();
         if(drawerActive==="guild" && previousOwners && guildReady() &&
            Object.keys(message.owners||{}).some(site=>previousOwners[site]!==message.owners[site]))joined.send("get_guild",{});
         const alerts=message.local?.supply?.drums?.filter(id=>!oldDrums.includes(id)) || [];
@@ -8739,7 +8775,11 @@
       joined.onMessage("territory_governed",message=>{
         if(room!==joined || !Number.isFinite(message?.delta))return;
         toast(message.action==="collect"?"เก็บรายได้เข้าคลังกิลด์ "+message.delta+" หน่วย":
-          (message.action==="repair"?"ซ่อมคลังเสบียงแล้ว":"พัฒนาอาคารแล้ว")+" · ใช้ "+Math.abs(message.delta)+" หน่วย");
+          (message.action==="repair"?"ซ่อมคลังเสบียงแล้ว":String(message.action).startsWith("focus_")?"เปลี่ยนนโยบายเมืองแล้ว":"พัฒนาอาคารแล้ว")+" · ใช้ "+Math.abs(message.delta)+" หน่วย");
+      });
+      joined.onMessage("war_supply_notice",message=>{
+        if(room!==joined)return;
+        toast(message?.action==="pickup"?"รับเสบียงแล้ว · นำไปส่งที่จุดยุทธศาสตร์":message?.action==="delivered"?"ส่งเสบียงสำเร็จ · นับผลงานสงครามแล้ว":message?.action==="lost"?"เสบียงตกเมื่อพ่ายแพ้":"ศึกจบแล้ว เสบียงที่ยังถือถูกส่งคืน");
       });
       joined.onMessage("territory_transfer",message=>{
         if(room===joined && typeof message?.roomId==="string" && typeof message.ticket==="string")void connectOnline(endpoint,requestedSlot,message);
@@ -9047,6 +9087,14 @@
       });
       joined.onMessage("build_selected", () => {
         if (room === joined) toast("บันทึกสายอาชีพและเผ่าแล้ว");
+      });
+      joined.onMessage("rebirth_state", data=>{
+        if(room!==joined || !data?.state || !data?.paths)return;
+        rebirthState=data;if(drawerActive==="rebirth")renderRebirth();
+      });
+      joined.onMessage("rebirth_complete",()=>{
+        if(room!==joined)return;
+        toast("เกิดใหม่สำเร็จ · เริ่มต้นเลเวล 1 ในอาชีพที่เลือก");
       });
       joined.onMessage("occult_book_state", data => {
         if (room!==joined || !data?.book || !data?.lessons) return;
@@ -9428,7 +9476,7 @@
         const bossRewards=[[info?.bossFragment,info?.fragmentGranted],[info?.bossAccessory,info?.accessoryGranted]].map(([id,granted])=>{
           const item=personalItems[id];if(item?.bossGear && granted){const need=personalItems[item.bossGear]?.recipe?.find(r=>r.item===id)?.qty;if(need)return " · "+item.name+" "+itemHuntCount(id)+"/"+need+" สำหรับ "+personalItems[item.bossGear].name;}return item?(info.bossCopy && id===info.bossAccessory?" · เข้าคลังช่าง ":granted?" · ได้รับ":" · กระเป๋าเต็ม รับไม่ได้ ")+item.name:"";
         }).join("");
-        const objectiveNotice=info?.forestObjectiveCompleted ? " · ภารกิจสำเร็จ โบนัส +"+Number(info.forestObjectiveBonus || 0)+" EXP" : "";
+        const objectiveNotice=info?.forestObjectiveCompleted ? " · ภารกิจสำเร็จ โบนัส +"+Number(info.forestObjectiveBonus || 0)+" EXP"+(info?.directorBonus?" · เหตุการณ์ +"+Number(info.directorBonus)+" EXP":"") : "";
         const training=info?.training;
         if(training?.choices?.length){
           fieldTrainingTip={...training,session:room.sessionId,path:ownServerCharacter()?.pathId};
@@ -9442,8 +9490,45 @@
       });
       joined.onMessage("forest_objective_state",payload=>{
         if(room!==joined || !payload || typeof payload.options!=="object")return;
-        forestObjectiveState=payload;syncQuestRanger();renderForestObjectiveHud();
+        forestObjectiveState=payload;if(forestDefenseState && forestDefenseState.id!==payload.active?.id)forestDefenseState=null;
+        if(forestEscortState && forestEscortState.id!==payload.active?.id)forestEscortState=null;
+        syncQuestRanger();renderForestObjectiveHud();
         if(drawerActive==="quest")renderForestObjective();
+      });
+      joined.onMessage("director_event_state",payload=>{
+        if(room!==joined || !payload || !Number.isFinite(payload.serverNow))return;
+        const previous=directorEventState?.event?.id;directorEventState=payload;directorReceivedAt=performance.now();
+        if(payload.event && payload.event.id!==previous)toast("เหตุการณ์ใหม่ที่ "+payload.event.mapName+" · คุยกับผู้มอบงานในพื้นที่");
+        renderForestObjectiveHud();if(drawerActive==="quest")renderForestObjective();
+      });
+      joined.onMessage("npc_guide_result",payload=>{
+        if(room!==joined || !npcGuidePending || payload?.requestId!==npcGuidePending.id)return;
+        clearTimeout(npcGuidePending.timer);npcGuidePending=null;
+        if(drawerActive!=="npcGuide")return;
+        const output=$("npcGuideAnswer"),send=$("npcGuideSend");if(send)send.disabled=false;
+        if(!output)return;
+        const errors={near_npc:"เดินกลับไปหาผู้แนะนำก่อนถามอีกครั้ง",unavailable:"ผู้แนะนำยังไม่พร้อม ลองใหม่อีกครั้ง",cooldown:"รอสักครู่ก่อนถามคำถามถัดไป",busy:"ผู้แนะนำกำลังตอบคำถาม ลองใหม่อีกครั้ง"};
+        if(payload.error){output.textContent=errors[payload.error] || "ยังตอบไม่ได้ ลองใหม่อีกครั้ง";return;}
+        if(typeof payload.answer!=="string")return;
+        const stamp=Number.isFinite(payload.asOf)?new Date(payload.asOf).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit"}):"";
+        output.textContent=payload.answer+(stamp?"\nข้อมูลเวลาไทย "+stamp+" น.":"");
+      });
+      joined.onMessage("forest_defense_state",payload=>{
+        if(room!==joined || !payload)return;
+        forestDefenseState=payload.hp>0 ? payload : null;
+        if(payload.failed)toast("เสบียงค่ายเสียหายหมด · เริ่มป้องกันใหม่ได้ที่ค่าย");
+        if(payload.ended)toast("ออกจากพื้นที่ป้องกัน · เริ่มใหม่ได้ที่ค่าย");
+        renderForestObjectiveHud();if(drawerActive==="quest")renderForestObjective();
+      });
+      joined.onMessage("forest_escort_state",payload=>{
+        if(room!==joined || !payload)return;
+        const wasActive=Boolean(forestEscortState);
+        forestEscortState=Number.isFinite(payload.x) && Number.isFinite(payload.z)?payload:null;
+        if(payload.failed)toast("ผู้เดินทางบาดเจ็บ · กลับไปหาผู้มอบงานเพื่อเริ่มใหม่");
+        if(payload.ended)toast("การคุ้มกันสิ้นสุด · กลับไปหาผู้มอบงานเพื่อเริ่มใหม่");
+        syncQuestRanger();renderForestObjectiveHud();
+        const status=$("escortStatus");if(status && forestEscortState)status.textContent=`ผู้เดินทาง ${payload.hp}/${payload.maxHp}${payload.waiting?" · รอให้กลับมารับ":" · เดินตามอยู่"}`;
+        if(drawerActive==="quest" && wasActive!==Boolean(forestEscortState))renderForestObjective();
       });
       joined.onMessage("character_status", payload => {
         if (room !== joined || !Number.isSafeInteger(payload?.level) || typeof payload?.weaponId !== "string" ||
@@ -9548,9 +9633,19 @@
       });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        if(info?.reason==="director_event_unavailable" || info?.reason==="director_event_claimed"){
+          toast(info.reason==="director_event_claimed"?"รับรางวัลเหตุการณ์นี้แล้ว":"เหตุการณ์นี้หมดเวลาหรือเปลี่ยนไปแล้ว");
+          if(drawerActive==="quest")room?.send("get_forest_objective",{});return;
+        }
+        if(info?.reason==="war_supply_flight"){toast("ขณะถือเสบียงต้องเดินทางบนพื้น");return;}
+        if(typeof info?.reason==="string" && info.reason.startsWith("rebirth_")){
+          const reasons={rebirth_unavailable:"ระบบเกิดใหม่ยังไม่พร้อม",rebirth_near_mentor:"เดินไปหาครูวิชาและหยุดต่อสู้ก่อน",rebirth_invalid_class:"อาชีพที่เลือกไม่ถูกต้อง",rebirth_level_required:"ต้องถึงเลเวล 100 ก่อนเกิดใหม่",rebirth_maximum:"เกิดใหม่ครบจำนวนสูงสุดแล้ว",rebirth_inventory_full:"กระเป๋าเต็ม · เว้นช่องสำหรับถอดอุปกรณ์ก่อน",rebirth_inventory_invalid:"ตรวจสอบอุปกรณ์ไม่สำเร็จ",rebirth_inventory_unavailable:"ไม่พบกระเป๋า",rebirth_save_failed:"บันทึกไม่สำเร็จ กรุณาลองใหม่"};
+          toast(reasons[info.reason] || "ไม่สามารถเกิดใหม่ได้ในขณะนี้");if(drawerActive==="rebirth")renderRebirth();return;
+        }
         if(drawerActive==="quest" && ["character_busy","build_rate_limited","build_unavailable"].includes(info?.reason))renderForestObjective();
+        if(drawerActive==="rebirth" && ["character_busy","build_rate_limited","build_unavailable"].includes(info?.reason))renderRebirth();
         if(typeof info?.reason==="string" && info.reason.startsWith("forest_objective_")){
-          const reasons={forest_objective_unavailable:"ภารกิจยังไม่พร้อมในพื้นที่นี้",forest_objective_invalid:"คำสั่งภารกิจไม่ถูกต้อง",forest_objective_near_ranger:"เดินไปหาผู้มอบงานในพื้นที่ก่อน",forest_objective_active:"ยกเลิกภารกิจเดิมก่อนเลือกรายการใหม่",forest_objective_level_cap:"Lv.100 ไม่ได้รับ EXP ภารกิจนี้",forest_objective_save_failed:"บันทึกภารกิจไม่สำเร็จ ลองใหม่"};
+          const reasons={forest_objective_unavailable:"ภารกิจยังไม่พร้อมในพื้นที่นี้",forest_objective_invalid:"คำสั่งภารกิจไม่ถูกต้อง",forest_objective_near_ranger:"เดินไปหาผู้มอบงานในพื้นที่ก่อน",forest_objective_active:"ยกเลิกภารกิจเดิมก่อนเลือกรายการใหม่",forest_objective_level_cap:"Lv.100 ไม่ได้รับ EXP ภารกิจนี้",forest_objective_delivery_not_ready:"รวบรวมเสบียงให้ครบก่อน",forest_objective_delivery_destination:"นำเสบียงไปส่งกับผู้มอบงานปลายทาง",forest_objective_defense_active:"กำลังป้องกันค่ายอยู่",forest_objective_defense_near:"เดินเข้าเขตค่ายก่อนเริ่มป้องกัน",forest_objective_escort_active:"ผู้เดินทางกำลังตามเจ้าอยู่",forest_objective_save_failed:"บันทึกภารกิจไม่สำเร็จ ลองใหม่"};
           toast(reasons[info.reason] || "ใช้ภารกิจไม่ได้ในขณะนี้");if(drawerActive==="quest")renderForestObjective();return;
         }
         const muayReasons={muay_inventory_full:"ช่องกระเป๋าเต็ม · เว้น 1 ช่องเพื่อรับผ้าคาดเชือก",muay_class_required:"เลือกอาชีพนักมวยก่อน",muay_wrap_required:"สวมผ้าคาดเชือกก่อนใช้วิชามวย",muay_safe_area:"ออกจากเขตพักก่อนใช้วิชามวย",muay_cooldown:"วิชามวยกำลังฟื้น",muay_counter_required:"รับการโจมตีสำเร็จก่อนสวน",muay_out_of_range:"เข้าใกล้มอนสเตอร์ก่อน",muay_blocked:"มีสิ่งกีดขวางระหว่างทาง",invalid_muay_target:"เลือกมอนสเตอร์เพื่อใช้วิชามวย",invalid_muay_skill:"คำสั่งวิชามวยไม่ถูกต้อง",invalid_muay_book:"คำสั่งตำรามวยไม่ถูกต้อง",muay_book_needs_shrine:"กลับลานพักและพ้นการต่อสู้ก่อนจัดวิชา",muay_book_level:"เลเวลยังไม่ถึง",muay_book_no_points:"แต้มวิชาไม่พอ",muay_book_training:"ฝึกชกและรับให้ครบก่อน",muay_book_prerequisite:"เรียนวิชาก่อนหน้าก่อน",muay_book_already_learned:"เรียนวิชานี้แล้ว",muay_book_empty:"ยังไม่มีแต้มที่ต้องคืน",muay_book_save_failed:"บันทึกตำรามวยไม่สำเร็จ",muay_skill_locked:"ยังไม่ได้เรียนวิชานี้หรือยังไม่ได้เลือกสำนัก",muay_wrong_school:"เลือกใช้สำนักนี้ก่อนเรียนวิชา",muay_school_selected:"เลือกสำนักนี้อยู่แล้ว"};
@@ -9713,7 +9808,7 @@
         localStorage.setItem(preferredSlotKey(endpoint), String(requestedSlot));
       } catch (_) { /* optional */ }
       if(joined.state?.territoryWarAvailable)joined.send("get_territories",{});
-      if(joined.state?.forestObjectivesAvailable)joined.send("get_forest_objective",{});
+      if(joined.state?.forestObjectivesAvailable){joined.send("get_forest_objective",{});joined.send("get_director_event",{});}
       try { joined.send("get_character_slots", {}); } catch (_) { /* old S2 server */ }
       try { joined.send("get_inventory", {}); } catch (_) { /* older VPS */ }
       closeDrawer();
@@ -9812,7 +9907,7 @@
     // monster and walkable ground. Fire only where the target is visible.
     const picked = scene.pick(px, py, mesh => mesh.isEnabled() && (
       mesh.metadata?.walkable === true ||
-      mesh.metadata?.portalId || mesh.metadata?.swordMentor || mesh.metadata?.questRanger || mesh.metadata?.serviceNpc ||
+      mesh.metadata?.portalId || mesh.metadata?.swordMentor || mesh.metadata?.questRanger || mesh.metadata?.questDefense || mesh.metadata?.warQuartermaster || mesh.metadata?.serviceNpc ||
       (mesh === enemy && enemy.isEnabled()) ||
       (mode === "live" && mesh.isEnabled() && forestMonsters.get(mesh.metadata?.monsterId) === mesh) ||
       (fortRoot.isEnabled() && mesh.metadata?.climbableWall) ||
@@ -9829,6 +9924,18 @@
       else if(me.flying)toast("ลงจอดก่อนพูดคุยกับ "+npc.name);
       else if(Math.hypot(me.x-npc.x,me.z-npc.z)>npc.radius){pointMove(npc.x,npc.z);toast("เดินไปหา"+npc.name+" แล้วแตะอีกครั้ง");}
       else openServiceNpc(npc);
+    } else if(hitMesh?.metadata?.warQuartermaster){
+      const me=ownServerCharacter(),base=territoryState?.local?.cargo?.base;
+      if(!me || !base)toast("เข้าร่วมศึกก่อนพูดคุยกับพลเสบียง");
+      else if(me.flying)toast("ลงจอดก่อนพูดคุยกับพลเสบียง");
+      else if(Math.hypot(me.x-base.x,me.z-base.z)>5){pointMove(base.x,base.z);toast("เดินไปหาพลเสบียง แล้วแตะอีกครั้ง");}
+      else openWarPanel();
+    } else if(hitMesh?.metadata?.questDefense){
+      const me=ownServerCharacter(),active=forestObjectiveState?.active,entry=active && forestObjectiveState?.options?.[active.id],area=entry?.defense;
+      if(!me || !area || entry.mapId!==activeMapId)toast("เข้า LIVE เพื่อพูดคุยกับผู้ดูแลเสบียง");
+      else if(me.flying)toast("ลงจอดก่อนพูดคุยกับผู้ดูแลเสบียง");
+      else if(Math.hypot(me.x-area.x,me.z-area.z)>4){pointMove(area.x,area.z);toast("เดินไปหาผู้ดูแลเสบียง แล้วแตะอีกครั้ง");}
+      else openForestRanger();
     } else if(hitMesh?.metadata?.questRanger){
       const me=ownServerCharacter(),keeper=forestObjectiveState?.keeper;
       if(!me || !keeper || keeper.mapId!==activeMapId)toast("เข้า LIVE เพื่อพูดคุยกับผู้มอบงาน");
@@ -10462,6 +10569,11 @@
     }
     const questNpc=forestObjectiveState?.keeper;
     if(questNpc?.mapId===activeMapId){mapDot(ctx,sx(questNpc.x),sy(questNpc.z),large?5:3,"#ffe08b");if(large)mapText(ctx,"ผู้มอบงาน",sx(questNpc.x),sy(questNpc.z)-10,10,"#ffe8ac");}
+    const warBase=territoryState?.local?.site===activeMapId?territoryState.local.cargo?.base:null;
+    if(warBase){mapDot(ctx,sx(warBase.x),sy(warBase.z),large?5:3,"#ffca76");if(large)mapText(ctx,"พลเสบียง",sx(warBase.x),sy(warBase.z)-10,10,"#ffe5ad");}
+    const activeQuest=forestObjectiveState?.active,defense=activeQuest && forestObjectiveState?.options?.[activeQuest.id];
+    if(defense?.kind==="defense" && defense.mapId===activeMapId && defense.defense){mapDot(ctx,sx(defense.defense.x),sy(defense.defense.z),large?6:3.5,"#ff9d69");if(large)mapText(ctx,"ป้องกันเสบียง",sx(defense.defense.x),sy(defense.defense.z)-10,10,"#ffe1c5");}
+    if(defense?.kind==="escort" && defense.mapId===activeMapId && defense.escort){mapDot(ctx,sx(defense.escort.x),sy(defense.escort.z),large?6:3.5,"#b4dfff");if(large)mapText(ctx,"จุดหมายผู้เดินทาง",sx(defense.escort.x),sy(defense.escort.z)-10,10,"#d3eaff");}
     for(const npc of map?.serviceNpcs || [])if(Object.hasOwn(serviceNpcUi,npc.role))mapDot(ctx,sx(npc.x),sy(npc.z),large?4:2.5,"#f3c776");
     room?.state?.monsters?.forEach(m => {
       if (m.mapId !== activeMapId || !m.alive) return;
@@ -10567,7 +10679,8 @@
     fallen_city:[107,637], tri_wiang_castle:[321,635], asura_peak:[222,710], spirit_rift:[112,780]
   };
   const provinceTitle={capital:"เมืองหลวง",territory:"ด่านสงคราม",hunting:"พื้นที่เก็บเลเวล"};
-  const warErrors={war_camp_cut:"ส่งกำลังไม่ได้ ตรวจธง ประตู และผู้ท้าชิงในวง",war_camp_base:"เลือกค่ายที่เปิดแล้วยืนที่ฐานรวมพลโดยพ้นการต่อสู้",war_camp_fallback:"ค่ายหน้าใช้ไม่ได้ คุณเกิดที่ฐานรวมพลเดิม",
+  const warErrors={war_supply_unavailable:"ส่งเสบียงไม่ได้ในขณะนี้",war_supply_side:"สิทธิฝ่ายรบเปลี่ยนไป",war_supply_cooldown:"รอ 60 วินาทีหลังส่งเสบียงครั้งก่อน",war_supply_base:"กลับไปหาพลเสบียงที่ฐานและพ้นการต่อสู้ก่อน",war_supply_carrying:"กำลังถือเสบียงอยู่",war_supply_missing:"รับเสบียงที่ฐานก่อน",war_supply_destination:"นำเสบียงเดินจากฐานอย่างน้อย 15 เมตรและ 8 วินาทีไปยังจุดยุทธศาสตร์",war_supply_duplicate:"เสบียงชุดนี้ส่งไปแล้ว",war_supply_march:"ถือเสบียงอยู่ ต้องเดินทางไปเอง",war_focus_unchanged:"นโยบายนี้ใช้อยู่แล้ว",
+    war_camp_cut:"ส่งกำลังไม่ได้ ตรวจธง ประตู และผู้ท้าชิงในวง",war_camp_base:"เลือกค่ายที่เปิดแล้วยืนที่ฐานรวมพลโดยพ้นการต่อสู้",war_camp_fallback:"ค่ายหน้าใช้ไม่ได้ คุณเกิดที่ฐานรวมพลเดิม",
     war_guild:"ต้องเป็นสมาชิกกิลด์ก่อนเข้าศึก",war_flag:"เดินเข้าวงธงกลางป้อมก่อนเปิดศึก",war_officer:"ให้ผู้บัญชาการหรือนายทหารเปิดศึก",
     war_other_guild:"สนามนี้มีฝ่ายบุกและฝ่ายรับแล้ว",war_side_full:"ผู้เล่นฝ่ายของคุณเต็มแล้ว",war_busy:"รอให้พ้นการต่อสู้และยืนบนพื้นในด่าน",
     war_gate_repair:"ต้องครองโรงช่างและประตูต้องพ้นการโจมตี 5 วินาที",war_gate_near:"ฝ่ายรับต้องยืนที่ประตูด้านใน",war_gate_occupied:"มีผู้เล่นยืนขวางประตู",war_gate_open:"ประตูเปิดอยู่",war_gate_inactive:"ประตูใช้การไม่ได้แล้ว",
@@ -10578,15 +10691,21 @@
     war_repair_first:"ต้องซ่อมคลังเสบียงก่อนพัฒนาอาคาร",war_no_damage:"คลังเสบียงอยู่ในสภาพพร้อมใช้",war_government_location:"กลับห้องโลกและยืนบนพื้นในด่านที่ครอง"};
   const warPhase=p=>({open:"เปิดให้ท้าชิง",battle:"กำลังรบ",protected:"อยู่ในความคุ้มครอง",finished:"จบศึกแล้ว"})[p] || "กำลังตรวจด่าน";
   const warTime=s=>Math.floor(s/60)+" นาที "+s%60+" วินาที";
+  function syncWarQuartermaster(){
+    const local=territoryState?.local,base=local?.cargo?.base,visible=Boolean(mode==="live" && local?.inField && local.site===activeMapId && base);
+    quartermasterRoot.setEnabled(visible);if(visible)quartermasterRoot.position.set(base.x+1,base.y || 0,base.z);
+  }
   const campStatus={ready:"เปิด",contested:"กำลังถูกชิง",cut:"เส้นทางขาด",unheld:"ยังไม่ได้ครอง"};
   function openWarPanel(){
     openDrawer("war","สงครามยึดด่าน",`<h3 id="warHeading"></h3><p id="warOwner"></p><p id="warStatus" role="status"></p>
       <progress id="warGauge" max="60" aria-label="ความคืบหน้าการยึดธง"></progress><p id="warCount"></p>
+      <p id="warParticipation" role="status" hidden></p><section id="warCargoPanel" hidden><h3>พลเสบียงสนามรบ</h3><p id="warCargoStatus" role="status"></p><button id="warCargoPickup" type="button" class="secondary">รับเสบียงที่ฐาน</button><button id="warCargoDeliver" type="button" class="primary">ส่งเสบียงที่จุดยุทธศาสตร์</button></section>
       <section id="estatePanel" hidden><h3>การปกครองด่าน</h3><p id="estateBalance" role="status"></p><p id="estateTerms"></p>
         <button class="primary" id="estateCollect" type="button">เก็บรายได้เข้าคลังกิลด์</button>
         <p id="estateRole"></p><div class="party-actions"><button id="estateMarket" type="button"></button><button id="estateWarehouse" type="button"></button><button id="estateWorkshop" type="button"></button></div>
+        <label for="estateFocus">นโยบายเมือง</label><select id="estateFocus"><option value="balanced">สมดุล</option><option value="trade">ส่งเสริมการค้า · รายได้ +20%</option><option value="storage">สำรองเสบียง · ความจุ +4 ชั่วโมง</option></select><button id="estateFocusApply" type="button" class="secondary">เปลี่ยนนโยบาย</button><p id="estateHistory"></p>
         <p id="estateDamage" hidden></p><button id="estateRepair" type="button" hidden></button></section>
-      <p class="note" id="warFlag"></p><p class="note" id="warEntryHelp">สมาชิกกิลด์เข้าศึกได้ตั้งแต่ Lv.1 · สนามปรับดาเมจระหว่างผู้เล่นเลเวลต่ำชั่วคราว · ลงมือช่วยยึดจุดหรือประตูเพื่อรับ EXP และวัสดุสงคราม</p><p class="note">ผู้บัญชาการหรือนายทหารเปิดศึกที่วงธง สมาชิกเข้าร่วมได้จากภายในด่าน ฝั่งละ 5 คน ศึกมีเวลา 5 นาที จำนวนคนที่ยืนวงมากกว่าจะดันเกจได้ เมื่อทั้งสองฝ่ายยืนเท่ากัน เกจจะหยุด</p>
+      <p class="note" id="warFlag"></p><p class="note" id="warEntryHelp">สมาชิกกิลด์เข้าศึกได้ตั้งแต่ Lv.1 · ช่วยยึดจุด ประตู ฮีลหรือป้องกันเพื่อนที่กำลังรบใกล้จุดยุทธศาสตร์ และส่งเสบียงเพื่อรับผลงาน EXP กับวัสดุสงคราม</p><p class="note">ผู้บัญชาการหรือนายทหารเปิดศึกที่วงธง สมาชิกเข้าร่วมได้จากภายในด่าน ฝั่งละ 5 คน ศึกมีเวลา 5 นาที จำนวนคนที่ยืนวงมากกว่าจะดันเกจได้ เมื่อทั้งสองฝ่ายยืนเท่ากัน เกจจะหยุด</p>
       <p class="note">แตะบันไดหรือกดขึ้นกำแพงที่ตีนบันไดด้านใน เมื่อถึงหัวบันไดกดลงกำแพง วงเขียวคือฝ่ายเดียวกัน สามเหลี่ยมแดงคือฝ่ายตรงข้าม หลังจบศึกด่านคุ้มครอง 8 ชั่วโมง</p><button id="warAction" class="primary" type="button" hidden></button>`);
     if(activeMapId==="tri_wiang_castle"){
       const supplyPanel=document.createElement("details");supplyPanel.id="castleSupply";supplyPanel.hidden=true;
@@ -10614,6 +10733,12 @@
     $("estateBalance").textContent="คลังกิลด์ "+g.balance+" หน่วย · รายได้รอเก็บ "+g.available+" หน่วย";
     $("estateTerms").textContent="ตลาดผลิต "+g.rate+" หน่วย/ชั่วโมง · เก็บได้ "+g.hours+" ชั่วโมง ("+g.cap+" หน่วย) · ตลาดเพิ่มรายได้ คลังเสบียงเพิ่มความจุ โรงช่างลดค่าซ่อม";
     $("estateRole").textContent=!peace?"กำลังรบ · เปิดให้ทำรายการอีกครั้งเมื่อศึกจบ":g.commander?"ผู้บัญชาการ · เก็บรายได้ พัฒนาอาคาร และซ่อมคลังได้":g.officer?"นายทหาร · เก็บรายได้เข้าคลังกิลด์ได้":"สมาชิกกิลด์ · ดูรายได้และระดับอาคารได้";
+    const focus=$("estateFocus"),apply=$("estateFocusApply");focus.value=g.focus || "balanced";
+    focus.disabled=!peace || !g.commander;apply.textContent="เปลี่ยนนโยบาย · "+g.focusCost+" หน่วย";
+    const syncFocus=()=>{apply.disabled=!peace || !g.commander || focus.value===(g.focus || "balanced") || g.balance<g.focusCost;};
+    focus.onchange=syncFocus;syncFocus();apply.onclick=()=>{if(window.confirm("เปลี่ยนนโยบายเมือง ใช้ "+g.focusCost+" หน่วยจากคลังกิลด์?"))send("focus_"+focus.value);};
+    const labels={collect:"เก็บรายได้",repair:"ซ่อมคลัง",market:"พัฒนาตลาด",warehouse:"พัฒนาคลัง",workshop:"พัฒนาโรงช่าง",handover:"รายได้ก่อนเปลี่ยนผู้ครอง",war_supply:"เสบียงศึกที่ชนะ",focus_trade:"นโยบายการค้า",focus_storage:"นโยบายสำรอง",focus_balanced:"นโยบายสมดุล"};
+    $("estateHistory").textContent=(g.history?.length?"รายการล่าสุด: "+g.history.map(h=>(labels[h.reason] || h.reason)+" "+(h.amount>0?"+":"")+h.amount).join(" · "):"ยังไม่มีรายการคลังในด่านนี้");
     $("estateCollect").disabled=!peace || !g.officer || g.available<1;$("estateCollect").onclick=()=>send("collect");
     for(const [kind,id,label] of [["market","estateMarket","ตลาด"],["warehouse","estateWarehouse","คลังเสบียง"],["workshop","estateWorkshop","โรงช่าง"]]){
       const b=$(id),cost=g.prices[kind];
@@ -10630,6 +10755,19 @@
     const s=territoryState?.local,button=$("warAction");if(!button)return;
     renderGovernment(s);
     if(!s || s.site!==activeMapId){$("warStatus").textContent="ออกจากพื้นที่ด่านแล้ว";button.hidden=true;return;}
+    const cargo=s.cargo,panel=$("warCargoPanel");panel.hidden=!cargo;
+    const contribution=s.participation;$("warParticipation").hidden=!contribution;
+    if(contribution)$("warParticipation").textContent=`ผลงานรอบรางวัล ${contribution.progressSeconds}/${contribution.goalSeconds} วินาที`+(contribution.supportActive?" · กำลังนับการสนับสนุนเพื่อน":"");
+    if(cargo){
+      const now=Number.isFinite(territoryState?.serverNow)?territoryState.serverNow+Math.max(0,performance.now()-territoryReceivedAt):Date.now();
+      const cooldown=Math.max(0,Math.ceil((cargo.readyAt-now)/1000));
+      $("warCargoStatus").textContent=`ฝ่ายเราส่งแล้ว ${cargo.delivered} ชุด · หากชนะ ได้เข้าคลังกิลด์ชุดละ ${cargo.treasuryPerDelivery} หน่วย สูงสุด ${cargo.treasuryCap} หน่วย · `+
+        (cargo.carrying?"ถือเสบียงอยู่ เดินไปส่งที่จุดยุทธศาสตร์ หากล้มเสบียงจะหาย":cooldown?`รับชุดถัดไปได้ใน ${cooldown} วินาที`:cargo.atBase?"คุยกับพลเสบียงที่ฐานเพื่อรับของ":"กลับฐานรวมพลเพื่อรับเสบียง");
+      $("warCargoPickup").disabled=cargo.carrying || !cargo.atBase || cooldown>0;
+      $("warCargoDeliver").disabled=!cargo.carrying || !cargo.canDeliver;
+      $("warCargoPickup").onclick=()=>room?.send("territory_supply",{action:"pickup"});
+      $("warCargoDeliver").onclick=()=>room?.send("territory_supply",{action:"deliver"});
+    }
     $("warHeading").textContent=worldDefinitions?.[s.site]?.name || "ด่านกิลด์";
     $("warOwner").textContent="ธงครองด่าน · "+(s.owner || "เป็นกลาง")+(s.inField?" · คุณอยู่ฝ่าย"+(s.side==="attack"?"บุก":"รับ"):"");
     $("warStatus").textContent=warPhase(s.phase)+(s.phase==="battle"?" · เหลือ "+warTime(s.seconds)+" · "+s.attackName+" บุก / "+(s.defendName || "รอคู่ชิง")+" รับ":"");
@@ -13043,6 +13181,53 @@
     $("guildLeave").onclick=()=>{if(guildReady() && window.confirm("ออกจากกิลด์ใช่หรือไม่"))room.send("guild_leave",{});};
     renderGuild();if(guildReady())room.send("get_guild",{});
   }
+  let rebirthState=null;
+  function openRebirth(){
+    rebirthState=null;
+    openDrawer("rebirth","เกิดใหม่และความชำนาญ",'<div id="rebirthContent"><p class="note">กำลังตรวจข้อมูลตัวละคร…</p></div>');
+    if(room && mode==="live")room.send("get_rebirth",{});else toast("เชื่อมต่อเกมก่อน");
+  }
+  function renderRebirth(){
+    const body=$("rebirthContent"),data=rebirthState;if(!body || !data)return;
+    body.replaceChildren();
+    const line=document.createElement("p");line.className="note";
+    line.textContent=`เกิดใหม่ ${data.state.count}/${data.maximum} ครั้ง · เลเวล ${data.level}/100`;
+    body.append(line);
+    const mastery=document.createElement("p");mastery.className="note";
+    mastery.textContent="ความชำนาญ: "+Object.entries(data.paths).map(([id,path])=>`${path.name} ${data.state.mastery[id] || 0}/2`).join(" · ");
+    body.append(mastery);
+    const explanation=document.createElement("p");explanation.className="note";
+    explanation.textContent="ถึง Lv.100 แล้วเลือกอาชีพได้ทุกรอบ วิชาเดิมยังเก็บไว้ อุปกรณ์ที่เลเวลหรืออาชีพใหม่ใส่ไม่ได้จะกลับเข้ากระเป๋าพร้อมการ์ดและตีบวก";
+    body.append(explanation);
+    const bonus=document.createElement("p");bonus.className="note";
+    const b=data.bonuses;bonus.textContent=`โบนัสปัจจุบัน: HP +${(b.hp*100).toFixed(1)}% · โจมตี +${(b.atk*100).toFixed(1)}% · เวท +${(b.magicAtk*100).toFixed(1)}% · ป้องกัน +${(b.def*100).toFixed(1)}% · มานา +${(b.mana*100).toFixed(1)}% · ฟื้นฟู +${(b.regen*100).toFixed(1)}% · เดิน +${(b.movement*100).toFixed(1)}%`;
+    body.append(bonus);
+    if(data.pveBonuses){const p=data.pveBonuses,tuning=document.createElement("p");tuning.className="note";
+      tuning.textContent=`เมื่อต่อสู้กับมอน: โจมตี +${(p.atk*100).toFixed(1)}% · เวท +${(p.magicAtk*100).toFixed(1)}% · ป้องกัน +${(p.def*100).toFixed(1)}% · ความทนทานจาก HP +${(p.hp*100).toFixed(1)}% (แสดงผ่านความเสียหายที่ลดลง) ส่วนมานา ฟื้นฟู และเดินใช้อัตราร่วมข้างต้น`;body.append(tuning);}
+    const select=document.createElement("select");select.setAttribute("aria-label","เลือกอาชีพหลังเกิดใหม่");
+    for(const [id,path] of Object.entries(data.paths)){const option=document.createElement("option");option.value=id;option.textContent=path.name;if(id===data.path)option.selected=true;select.append(option);}
+    body.append(select);
+    const button=document.createElement("button");button.className="primary";button.type="button";button.textContent="เกิดใหม่เป็นอาชีพที่เลือก";
+    button.disabled=data.level!==100 || data.state.count>=data.maximum;
+    button.onclick=()=>{const name=data.paths[select.value]?.name;if(room && name && window.confirm(`เกิดใหม่เป็น ${name} และเริ่มที่ Lv.1 ใช่ไหม?`)){button.disabled=true;room.send("start_rebirth",{path:select.value});}};
+    body.append(button);
+  }
+  function openNpcGuide(npc){
+    if(npcGuidePending){clearTimeout(npcGuidePending.timer);npcGuidePending=null;}
+    openDrawer("npcGuide",npc.name+" · สอบถาม",'<p class="note">ถามเรื่องสงคราม เหตุการณ์ เก็บเลเวล ภารกิจ กิลด์ หรือเสบียงได้ คำถามและตัวเลือกภารกิจที่เหมาะสมอาจส่งให้ Typhoon เพื่อช่วยทำความเข้าใจ</p><div class="party-actions"><button type="button" class="secondary" id="guideAskWar">ด่านไหนเปิดตี</button><button type="button" class="secondary" id="guideAskEvent">มีเหตุการณ์อะไร</button><button type="button" class="secondary" id="guideAskLevel">เก็บเลเวลที่ไหน</button><button type="button" class="secondary" id="guideAskQuest">แนะนำภารกิจ</button></div><label class="field" for="npcGuideQuestion">คำถาม</label><input id="npcGuideQuestion" maxlength="180" autocomplete="off" placeholder="เช่น แนะนำภารกิจคุ้มกัน"><button id="npcGuideSend" class="primary" type="button">ถามผู้แนะนำ</button><p id="npcGuideAnswer" role="status" style="white-space:pre-line"></p>');
+    const input=$("npcGuideQuestion"),output=$("npcGuideAnswer"),send=$("npcGuideSend");
+    const ask=()=>{
+      const question=input.value.trim();if(!room || mode!=="live")return toast("เข้า LIVE เพื่อคุยกับผู้แนะนำ");
+      if(Array.from(question).length<2 || Array.from(question).length>180)return toast("พิมพ์คำถาม 2–180 ตัวอักษร");
+      if(npcGuidePending)return;
+      npcGuideSeq=npcGuideSeq>=2_147_483_647?1:npcGuideSeq+1;const id=npcGuideSeq;
+      send.disabled=true;output.textContent="กำลังตรวจข้อมูลในเกม…";
+      const timer=setTimeout(()=>{if(npcGuidePending?.id!==id)return;npcGuidePending=null;if(drawerActive==="npcGuide"){send.disabled=false;output.textContent="ผู้แนะนำตอบไม่ทัน ลองใหม่อีกครั้ง";}},9000);
+      npcGuidePending={id,timer};try{room.send("ask_npc_guide",{npcId:npc.id,question,requestId:id});}catch{clearTimeout(timer);npcGuidePending=null;send.disabled=false;output.textContent="ส่งคำถามไม่สำเร็จ ลองใหม่อีกครั้ง";}
+    };
+    send.onclick=ask;input.onkeydown=event=>{if(event.key==="Enter"){event.preventDefault();ask();}};
+    for(const [id,text] of [["guideAskWar","ด่านไหนเปิดตี"],["guideAskEvent","มีเหตุการณ์อะไร"],["guideAskLevel","เก็บเลเวลที่ไหน"],["guideAskQuest","แนะนำภารกิจ"]])$(id).onclick=()=>{input.value=text;ask();};
+  }
   function openServiceNpc(npc){
     if(!Object.hasOwn(serviceNpcUi,npc.role))return;
     const service=serviceNpcUi[npc.role];
@@ -13055,6 +13240,12 @@
           if(books[path])books[path]();else toast("เลือกอาชีพก่อนดูวิชา");}};
       handlers[npc.role]?.();
     };
+    if(npc.role==="mentor"){
+      const rebirth=document.createElement("button");rebirth.type="button";rebirth.className="secondary";rebirth.textContent="เกิดใหม่และความชำนาญ";rebirth.onclick=openRebirth;ui.drawerBody.append(rebirth);
+    }
+    if(npc.role==="guide" || npc.role==="strategy"){
+      const ask=document.createElement("button");ask.type="button";ask.className="secondary";ask.textContent="สอบถามผู้ช่วยภาษาไทย";ask.onclick=()=>openNpcGuide(npc);ui.drawerBody.append(ask);
+    }
     if(npc.role==="strategy" && territoryState?.local?.site===activeMapId){
       const war=document.createElement("button");war.type="button";war.className="secondary";war.textContent="สงครามและการปกครองด่าน";war.onclick=openWarPanel;ui.drawerBody.append(war);
     }
@@ -13063,6 +13254,13 @@
     const keeper=forestObjectiveState?.keeper,visible=Boolean(keeper && keeper.mapId===activeMapId && mode==="live");
     questRangerRoot.setEnabled(visible);
     if(visible){questRangerRoot.position.set(keeper.x,keeper.y || 0,keeper.z);const tint=[...keeper.mapId].reduce((sum,ch)=>sum+ch.charCodeAt(0),0)%rangerRobes.length;rangerBody.material=rangerRobes[tint];}
+    const active=forestObjectiveState?.active,entry=active && forestObjectiveState?.options?.[active.id],area=entry?.defense;
+    const hasDefense=Boolean(mode==="live" && entry?.kind==="defense" && entry.mapId===activeMapId && area);
+    defenseKeeperRoot.setEnabled(hasDefense);
+    if(hasDefense){const map=worldDefinitions?.[activeMapId];defenseKeeperRoot.position.set(area.x,map?.terrain?terrainHeight(map.terrain,area.x,area.z):0,area.z);}
+    const escortVisible=Boolean(mode==="live" && forestEscortState?.mapId===activeMapId && forestEscortState.id===active?.id);
+    escortRoot.setEnabled(escortVisible);
+    if(escortVisible)escortRoot.position.set(forestEscortState.x,forestEscortState.y || 0,forestEscortState.z);
   }
   function nearQuestRanger(){
     const keeper=forestObjectiveState?.keeper,me=ownServerCharacter();
@@ -13071,7 +13269,9 @@
   function forestObjectiveHudGuide(){
     if(mode!=="live" || !room?.state?.forestObjectivesAvailable || !forestObjectiveState)return null;
     const {active,keeper,options}=forestObjectiveState,definition=active && options?.[active.id];
-    if(definition)return {title:definition.name,step:(definition.stages?.[active.progress]?.camp || definition.camp)+" · แตะเพื่อดูภารกิจ",progress:active.progress+"/"+definition.goal};
+    if(definition)return {title:definition.name,step:objectiveStep(definition,active)+" · แตะเพื่อดูภารกิจ",progress:active.progress+"/"+definition.goal};
+    const event=directorEventState?.event;
+    if(event && !forestObjectiveState?.eventClaimed)return {title:event.mapId===activeMapId?"เกิดเหตุการณ์ในพื้นที่":"เหตุการณ์ที่ "+event.mapName,step:"คุยกับผู้มอบงานเพื่อเข้าร่วม",progress:""};
     if(keeper?.mapId===activeMapId)return {title:"พบผู้มอบงาน",step:"คุยกับ "+keeper.name+" เพื่อรับภารกิจ",progress:"",to:keeper};
     return null;
   }
@@ -13082,28 +13282,88 @@
     hudSet(ui.quest.querySelector(".quest-content > span"),"qs",guide.step);
     hudSet($("questProgress"),"qp",guide.progress || "");
   }
+  function objectiveStep(entry,active){
+    if(entry.kind==="escort")return forestEscortState?.id===active.id
+      ? `พาผู้เดินทางไป${entry.camp} · พลัง ${forestEscortState.hp}/${forestEscortState.maxHp}`
+      : `คุยกับผู้มอบงานเพื่อเริ่มคุ้มกันไป${entry.camp}`;
+    if(entry.kind==="defense")return forestDefenseState?.id===active.id
+      ? `เสบียง ${forestDefenseState.hp}/${forestDefenseState.maxHp} · ปราบผี ${active.progress}/${entry.goal}`
+      : `ไป${entry.camp} แล้วเริ่มป้องกัน`;
+    if(entry.kind==="delivery")return active.progress>=entry.goal-1
+      ? "ส่งเสบียงให้ผู้มอบงานที่ "+entry.destinationName
+      : "รวบรวมเสบียงที่ "+entry.camp+" · "+active.progress+" / "+(entry.goal-1);
+    return (entry.stages?.[active.progress]?.camp || entry.camp)+" · "+active.progress+" / "+entry.goal;
+  }
+  function renderEscortControl(body,entry,active){
+    if(entry?.kind!=="escort")return;
+    const note=document.createElement("p");note.className="note";note.textContent="ผู้เดินทางจะตามเมื่ออยู่ใกล้ คอยกำจัดผีที่เข้าใกล้และพาไปถึงจุดหมายบนแผนที่ หากบาดเจ็บหรือออกจากพื้นที่ให้กลับมาเริ่มใหม่";body.append(note);
+    if(forestEscortState?.id===active.id){const status=document.createElement("p");status.id="escortStatus";status.textContent=`ผู้เดินทาง ${forestEscortState.hp}/${forestEscortState.maxHp} · เดินตามอยู่`;body.append(status);return;}
+    if(nearQuestRanger()){const start=document.createElement("button");start.type="button";start.className="primary";start.textContent="คุยกับผู้เดินทางเพื่อเริ่มคุ้มกัน";
+      start.onclick=()=>{start.disabled=true;room?.send("start_forest_escort",{});};body.append(start);}
+  }
+  function renderDefenseControl(body,entry,active){
+    if(entry?.kind!=="defense" || !entry.defense)return;
+    const note=document.createElement("p");note.className="note";
+    note.textContent="ผีที่อยู่ในเขตจะสร้างความเสียหายแก่เสบียง ปราบผีในเขตให้ครบก่อนเสบียงหมด หากพลาดให้เริ่มใหม่";body.append(note);
+    if(forestDefenseState?.id===active.id)return;
+    const me=ownServerCharacter(),area=entry.defense,near=me && me.mapId===entry.mapId && !me.flying && Math.hypot(me.x-area.x,me.z-area.z)<=4;
+    const start=document.createElement("button");start.type="button";start.className="primary";start.textContent=near?"คุยกับผู้ดูแลเพื่อเริ่มป้องกัน":"ไปหาผู้ดูแลเสบียงบนแผนที่";
+    start.onclick=()=>{if(!near)return openMap();start.disabled=true;room?.send("start_forest_defense",{});};body.append(start);
+  }
+  function directorSeconds(event){
+    const base=directorEventState?.event?.id===event?.id && Number.isFinite(directorEventState.serverNow)?directorEventState.serverNow+Math.max(0,performance.now()-directorReceivedAt):Date.now();
+    return Math.max(0,Math.ceil((event.endsAt-base)/1000));
+  }
+  function updateDirectorTimer(){const timer=$("directorTimer"),event=forestObjectiveState?.event || directorEventState?.event;if(timer && event){const seconds=directorSeconds(event);timer.textContent="เหลือ "+Math.floor(seconds/60)+":"+String(seconds%60).padStart(2,"0")+" · โบนัสเหตุการณ์รับได้ครั้งเดียว";}}
   function renderForestObjective(){
     const body=$("forestObjectiveBody");if(!body)return;body.replaceChildren();
     const state=forestObjectiveState;
     if(!state){body.textContent="กำลังโหลดภารกิจ…";return;}
     const explanation=document.createElement("p");explanation.className="note";
-    explanation.textContent=(state.keeper?.name || "ผู้มอบงาน")+": มีงานให้ช่วยในพื้นที่ ปราบผีที่มีสิทธิรับ EXP ให้ครบ แล้วรับโบนัส EXP จากผีตัวสุดท้ายสองเท่า ทำซ้ำได้และเล่นกับปาร์ตี้ได้";body.append(explanation);
+    explanation.textContent=(state.keeper?.name || "ผู้มอบงาน")+": เลือกงานล่า ลาดตระเวน หรือส่งเสบียงได้ ทำซ้ำได้และร่วมล่ากับปาร์ตี้ได้ งานส่งเสบียงต้องนำไปให้ผู้มอบงานปลายทาง";body.append(explanation);
     const active=state.active,entry=active && state.options?.[active.id];
+    const event=state.event;
+    if(event){
+      const heading=document.createElement("h3");heading.textContent=event.name;body.append(heading);
+      const story=document.createElement("p");story.textContent=event.story;body.append(story);
+      const task=state.options?.[event.objectiveId];
+      if(task){const detail=document.createElement("p");detail.textContent=objectiveStep(task,{id:event.objectiveId,progress:0})+" · โบนัส EXP เพิ่มเท่ากับมอนสเตอร์ตามระดับงาน 1 ตัว";body.append(detail);}
+      const timer=document.createElement("p");timer.id="directorTimer";timer.className="note";body.append(timer);updateDirectorTimer();
+      if(state.eventClaimed){const note=document.createElement("p");note.textContent="รับโบนัสเหตุการณ์นี้แล้ว";body.append(note);}
+      else if(!active && nearQuestRanger()){
+        const join=document.createElement("button");join.type="button";join.className="primary";join.textContent="รับภารกิจเหตุการณ์";
+        join.disabled=(ownServerCharacter()?.level ?? 0)>=100 || directorSeconds(event)<=0;
+        join.onclick=()=>{join.disabled=true;room?.send("set_forest_objective",{id:event.objectiveId,eventId:event.id});};body.append(join);
+      }else if(!active){const note=document.createElement("p");note.textContent="ไปคุยกับผู้มอบงานในพื้นที่เพื่อเข้าร่วม";body.append(note);}
+      else if(active.directorEventId===event.id){const note=document.createElement("p");note.textContent="กำลังทำภารกิจเหตุการณ์นี้";body.append(note);}
+      else {const note=document.createElement("p");note.textContent="ทำภารกิจปัจจุบันให้จบหรือยกเลิกก่อนเข้าร่วม";body.append(note);}
+    }else if(directorEventState?.event && directorEventState.event.mapId!==activeMapId){
+      const distant=directorEventState.event,heading=document.createElement("h3");heading.textContent=distant.name+" · "+distant.mapName;body.append(heading);
+      const story=document.createElement("p");story.textContent=distant.story;body.append(story);
+      const timer=document.createElement("p");timer.id="directorTimer";timer.className="note";body.append(timer);updateDirectorTimer();
+      const route=document.createElement("button");route.type="button";route.className="secondary";route.textContent="ดูเส้นทางไปเหตุการณ์";route.onclick=()=>openStrategicMap(distant.mapId);body.append(route);
+    }
+    if(entry){renderDefenseControl(body,entry,active);renderEscortControl(body,entry,active);}
     if(!nearQuestRanger()){
-      if(entry){const heading=document.createElement("h3");heading.textContent=entry.name;body.append(heading);const progress=document.createElement("p");progress.textContent=(entry.stages?.[active.progress]?.camp || entry.camp)+" · "+active.progress+" / "+entry.goal;body.append(progress);}
+      if(entry){const heading=document.createElement("h3");heading.textContent=entry.name;body.append(heading);const progress=document.createElement("p");progress.textContent=objectiveStep(entry,active);body.append(progress);}
       const note=document.createElement("p");note.className="note";note.textContent=state.keeper?"เดินไปคุยกับ "+state.keeper.name+" ที่จุดสีทองบนแผนที่ เพื่อรับหรือยกเลิกงาน":"เดินทางไปแผนที่ล่า แล้วคุยกับผู้มอบงานใกล้จุดพัก";body.append(note);
       const map=document.createElement("button");map.type="button";map.className="secondary";map.textContent="ดูแผนที่";map.onclick=openMap;body.append(map);return;
     }
     if(entry){
       const heading=document.createElement("h3");heading.textContent=entry.name;body.append(heading);
-      const progress=document.createElement("p");progress.setAttribute("role","status");progress.textContent=(entry.stages?.[active.progress]?"จุดต่อไป: "+entry.stages[active.progress].camp:entry.camp)+" · "+active.progress+" / "+entry.goal;body.append(progress);
-      if((ownServerCharacter()?.level ?? 0)>=100){const note=document.createElement("p");note.className="note";note.textContent="ถึง Lv.100 แล้ว ความคืบหน้าจะหยุดจนกว่าจะได้รับ EXP ได้อีกครั้ง";body.append(note);}
+      if(active.directorEventId && (!event || active.directorEventId!==event.id)){const note=document.createElement("p");note.className="note";note.textContent="เหตุการณ์หมดเวลาแล้ว งานนี้ยังทำต่อได้โดยรับรางวัลปกติ";body.append(note);}
+      const progress=document.createElement("p");progress.setAttribute("role","status");progress.textContent=objectiveStep(entry,active);body.append(progress);
+      if(entry.kind==="delivery" && active.progress===entry.goal-1 && activeMapId===entry.destinationMapId){
+        const deliver=document.createElement("button");deliver.type="button";deliver.className="primary";deliver.textContent="ส่งเสบียงและรับรางวัล";
+        deliver.onclick=()=>{deliver.disabled=true;room?.send("finish_forest_delivery",{});};body.append(deliver);
+      }
+      if((ownServerCharacter()?.level ?? 0)>=100){const note=document.createElement("p");note.className="note";note.textContent="ถึง Lv.100 แล้ว งานนี้จะไม่ให้ EXP จนกว่าจะได้รับ EXP ได้อีกครั้ง";body.append(note);}
       const cancel=document.createElement("button");cancel.type="button";cancel.className="secondary";cancel.textContent="ยกเลิกภารกิจนี้";
       cancel.onclick=()=>{cancel.disabled=true;room?.send("set_forest_objective",{id:null});};body.append(cancel);
     } else {
       for(const [id,definition] of Object.entries(state.options || {})){
         const button=document.createElement("button");button.type="button";button.className="secondary";
-        button.textContent=definition.name+" · "+definition.camp+" "+definition.levels+" · "+definition.goal+(definition.stages?" จุด":" ตัว");
+        button.textContent=definition.name+" · "+definition.camp+" "+definition.levels+" · "+(definition.kind==="delivery"?"ล่า "+(definition.goal-1)+" ตัว แล้วส่งปลายทาง":definition.kind==="defense"?"ป้องกันและปราบ "+definition.goal+" ตัว":definition.kind==="escort"?"คุ้มกัน 1 คน":definition.goal+(definition.stages?" เป้าหมาย":" ตัว"));
         button.disabled=(ownServerCharacter()?.level ?? 0)>=100;
         button.onclick=()=>{for(const b of body.querySelectorAll("button"))b.disabled=true;room?.send("set_forest_objective",{id});};body.append(button);
       }
@@ -13111,8 +13371,10 @@
     }
   }
   function openForestRanger(){
-    openDrawer("quest",forestObjectiveState?.keeper?.name || "ผู้มอบงาน",'<div id="forestObjectiveBody" role="region" aria-label="ภารกิจพื้นที่"></div><button type="button" class="secondary" id="rangerFieldGoal" hidden>ดูเส้นทางล่าและอุปกรณ์</button>');
+    openDrawer("quest",forestObjectiveState?.keeper?.name || "ผู้มอบงาน",'<div id="forestObjectiveBody" role="region" aria-label="ภารกิจพื้นที่"></div><button type="button" class="secondary" id="rangerFieldGoal" hidden>ดูเส้นทางล่าและอุปกรณ์</button><button id="rangerAskGuide" type="button" class="secondary">สอบถามและแนะนำภารกิจ</button>');
     const journey=$("rangerFieldGoal");journey.hidden=!fieldGearGoal();journey.onclick=()=>openCurrentQuest(true);
+    const keeper=forestObjectiveState?.keeper,ask=$('rangerAskGuide');ask.hidden=!keeper || mode!=="live" || !room;
+    if(keeper)ask.onclick=()=>openNpcGuide({id:keeper.mapId+"_ranger",name:keeper.name});
     renderForestObjective();room?.send("get_forest_objective",{});
   }
   // Compact portrait HUD: a small quest chip opens the existing detail drawer.
@@ -13316,7 +13578,7 @@
   $("mountButton").onclick=toggleFieldMount;
   $("menuMount").onclick=()=>{closeDrawer();toggleFieldMount();};
   // Cooldown labels must advance even in a quiet room with no schema patches.
-  setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());syncSentinelUI(ownServerCharacter());}if(drawerActive==="strategy")updateAtlasWarTimes();},1000);
+  setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());syncSentinelUI(ownServerCharacter());}if(drawerActive==="strategy")updateAtlasWarTimes();if(drawerActive==="quest")updateDirectorTimer();},1000);
   $("helpButton").onclick=openHelp;
   $("bag").onclick=openBag;
   function syncPossessionButton() {

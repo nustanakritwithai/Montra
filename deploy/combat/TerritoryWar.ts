@@ -10,6 +10,7 @@ export const WAR_DURATION=5*60_000, WAR_PROTECTION=8*60*60_000, WAR_HOLD=60, WAR
 export const WAR_ENTRY_FLOOR_LEVEL=40;
 export const WAR_PARTICIPATION_INTERVAL_MS=30_000;
 export const WAR_SUPPLY_INTERVAL_MS=120_000;
+export const WAR_CARGO_COOLDOWN_MS=60_000;
 /** A modest repeatable EXP award, tied to active objective participation. */
 export function warParticipationExperience(xpToNext:number):number {
   if(!Number.isSafeInteger(xpToNext) || xpToNext<0)throw Error("war_invalid_experience");
@@ -38,6 +39,9 @@ export class TerritoryWar {
       seq INTEGER PRIMARY KEY,site TEXT NOT NULL,incumbent TEXT,attacker TEXT NOT NULL,defender TEXT,
       started INTEGER NOT NULL,progress REAL NOT NULL DEFAULT 0,sample INTEGER NOT NULL,ended INTEGER,winner TEXT);
       CREATE TABLE IF NOT EXISTS castle_pilot_musters(battle INTEGER NOT NULL,character TEXT NOT NULL,point INTEGER NOT NULL,PRIMARY KEY(battle,character));
+      CREATE TABLE IF NOT EXISTS territory_supply_deliveries(battle INTEGER NOT NULL,character TEXT NOT NULL,guild TEXT NOT NULL,side TEXT NOT NULL,at INTEGER NOT NULL,token TEXT NOT NULL UNIQUE);
+      CREATE INDEX IF NOT EXISTS territory_supply_battle ON territory_supply_deliveries(battle,guild);
+      CREATE INDEX IF NOT EXISTS territory_supply_character ON territory_supply_deliveries(battle,character,at);
       CREATE INDEX IF NOT EXISTS territory_recent ON territory_battles(site,seq DESC);
       CREATE UNIQUE INDEX IF NOT EXISTS territory_one_battle ON territory_battles(site) WHERE ended IS NULL;`);
     const musters=db.prepare("PRAGMA table_info(castle_pilot_musters)").all();
@@ -76,6 +80,10 @@ export class TerritoryWar {
         const gates=siege?.gates ?? (b.city_json?(JSON.parse(b.city_json) as RiverBattle).gates:undefined);
         const breached=gates?Object.values(gates).some(g=>g.hp===0):b.gate_hp===0;
         this.government.settleVictory(b.site,winner,ended,breached);
+        if(winner){
+          const row=this.db.prepare("SELECT count(*) AS n FROM territory_supply_deliveries WHERE battle=? AND guild=?").get(b.seq,winner);
+          this.government.creditWarSupplies(winner,b.site,ended,Number(row?.n ?? 0));
+        }
       }
       this.db.exec("RELEASE settle_territory");
     }catch(error){this.db.exec("ROLLBACK TO settle_territory; RELEASE settle_territory");throw error;}
@@ -120,6 +128,25 @@ export class TerritoryWar {
       const member=this.member(character);
       if(!member || member.id!==s.ownerId)throw Error("war_not_owner");
       return this.government.apply(order,member,now);
+    });
+  }
+  supplyReadyAt(field:Battlefield,character:string):number {
+    const row=this.db.prepare("SELECT MAX(at) AS last FROM territory_supply_deliveries WHERE battle=? AND character=?").get(field.seq,character);
+    return row?.last==null ? 0 : Number(row.last)+WAR_CARGO_COOLDOWN_MS;
+  }
+  supplyCount(field:Battlefield,guild:string):number {
+    const row=this.db.prepare("SELECT count(*) AS n FROM territory_supply_deliveries WHERE battle=? AND guild=?").get(field.seq,guild);
+    return Number(row?.n ?? 0);
+  }
+  deliverSupply(field:Battlefield,character:string,side:WarSide,token:string,now:number):void {
+    if(!/^[0-9a-f-]{36}$/.test(token) || !Number.isSafeInteger(now) || now<0)throw Error("war_invalid_supply");
+    this.atomic(()=>{
+      const member=this.member(character);
+      if(!member || this.side(field,member,now)!==side)throw Error("war_supply_side");
+      if(this.db.prepare("SELECT 1 FROM territory_supply_deliveries WHERE token=?").get(token))throw Error("war_supply_duplicate");
+      if(now<this.supplyReadyAt(field,character))throw Error("war_supply_cooldown");
+      this.db.prepare("INSERT INTO territory_supply_deliveries(battle,character,guild,side,at,token) VALUES(?,?,?,?,?,?)")
+        .run(field.seq,character,member.id,side,now,token);
     });
   }
   start(site:string,member:WarMember,now:number):Battlefield {
