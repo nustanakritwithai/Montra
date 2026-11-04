@@ -8180,7 +8180,7 @@
   }
   // ---- Chat box (bottom-left): live feed of every channel; type on wide screens, tap to open on phones ----
   const chatFeed = [];
-  const CHAT_TAGS = { map: "แผนที่", world: "รวม", party: "ปาร์ตี้", private: "กระซิบ", bug: "รายงานบัค" };
+  const CHAT_TAGS = { map: "แผนที่", world: "รวมในห้อง", party: "ปาร์ตี้", private: "กระซิบ", bug: "รายงานบัค" };
   // Tabs over the chat box (like a PC MMO): All plus every channel; each tab counts unread lines.
   const CHAT_BOX_TABS = [["all", "ทั้งหมด"], ...Object.entries(CHAT_TAGS)];
   let chatBoxTab = "all"; const chatBoxUnread = Object.fromEntries(CHAT_BOX_TABS.map(([id]) => [id, 0]));
@@ -10207,7 +10207,16 @@
   function finishChatPending(){clearTimeout(chatTimer);chatTimer=null;chatPending=null;}
   function clearChatHistory(all) {
     chatHistory.map.length=0;chatUnread.map=0;
-    if(all){for(const channel of Object.keys(chatHistory)){chatHistory[channel].length=0;chatUnread[channel]=0;chatDraft[channel]="";}chatTargetId="";finishChatPending();}
+    for(let i=chatFeed.length-1;i>=0;i--)if(all || chatFeed[i].channel==="map")chatFeed.splice(i,1);
+    chatBoxUnread.map=0;chatBoxUnread.all=0;
+    if(all){
+      for(const channel of Object.keys(chatHistory)){chatHistory[channel].length=0;chatUnread[channel]=0;chatDraft[channel]="";}
+      for(const channel of Object.keys(chatBoxUnread))chatBoxUnread[channel]=0;
+      chatTargetId="";chatChannel="map";chatBoxTab="all";
+      if(chatBox){chatBox.input.value="";chatBox.target.value="";}
+      finishChatPending();
+    }
+    renderChatBox(true);
     updateChatBadge();if(drawerActive==="chat")renderChat();
   }
   function renderChat() {
