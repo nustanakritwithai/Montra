@@ -8190,6 +8190,8 @@
     el.innerHTML = `<div class="cb-tabs" role="tablist">${CHAT_BOX_TABS.map(([id, label]) => `<button type="button" role="tab" data-cb-tab="${id}" class="cb-tab tab-${id}" aria-selected="${id === "all"}">${label}<b hidden></b></button>`).join("")}<button type="button" class="cb-open" aria-label="เปิดแชทเต็ม">⤢</button></div>
       <div class="cb-log" aria-live="polite"></div>
       <form class="cb-form"><select class="cb-target" aria-label="ผู้รับ" hidden></select><input class="cb-input" maxlength="200" placeholder="กด Enter เพื่อพิมพ์" autocomplete="off"><button type="submit" class="cb-send" aria-label="ส่ง">➤</button></form>`;
+    const harvestControls = document.createElement("div"); harvestControls.className = "chat-harvest";
+    harvestControls.append($("harvestButton"), $("cycleHarvest")); el.prepend(harvestControls);
     game.append(el);
     const log = el.querySelector(".cb-log"), form = el.querySelector(".cb-form"), input = el.querySelector(".cb-input"), target = el.querySelector(".cb-target");
     el.querySelector(".cb-open").onclick = () => { if (chatBoxTab !== "all") chatChannel = chatBoxTab; openChat(); };

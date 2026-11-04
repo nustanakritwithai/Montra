@@ -1275,6 +1275,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   width: min(360px, 34vw); display: flex; flex-direction: column; border-radius: 10px; background: #070b09b8; border: 1px solid #3c5a4c88; box-shadow: 0 4px 14px #0007;
   color: #ece4cb; font: 500 12px/1.35 "Noto Sans Thai", system-ui, sans-serif; pointer-events: auto; transition: background .3s; }
 .chat-box:hover, .chat-box:focus-within, .chat-box.fresh { background: #070b09e6; }
+.chat-harvest { position:absolute; left:0; bottom:calc(100% + 5px); display:flex; flex-wrap:wrap; gap:4px; width:max-content; max-width:min(260px, 85vw); }
+.chat-harvest .warp-button { position:static; transform:none; min-height:36px; max-width:100%; padding:5px 9px; border-radius:9px; font-size:11px; line-height:1.3; white-space:normal; box-shadow:0 2px 8px #0009; }
 .cb-head { display: flex; justify-content: space-between; align-items: center; padding: 3px 8px; border-bottom: 1px solid #ffffff12; font-weight: 800; font-size: 11px; color: #cfe3d5; }
 .cb-open { border: 0; background: none; color: #cfe3d5; font-size: 13px; padding: 0 2px; cursor: pointer; }
 .cb-log { height: 150px; overflow-y: auto; padding: 4px 8px; overscroll-behavior: contain; scrollbar-width: thin; }
