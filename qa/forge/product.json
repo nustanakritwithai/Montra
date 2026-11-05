@@ -1,0 +1,11 @@
+{
+  "productCommit": "a7a3ddb94089e5bcc4b40463cb7b7933557b853c",
+  "productTree": "3f837be7ff4ffa1cb75353d5e2c89c0129a194c7",
+  "sha256": {
+    "main.js": "2a227a9822c3dea5c319e2ea977efe5481618d33ca8430b9f558780031c5b1c7",
+    "styles.css": "181e49236fe13ca972112312cd60c7b91918dc3519a48e11ac37b374ebd1396f",
+    "index.html": "b3ae510b1c664b6be4bab2f5222bfddf8394055c573cd5f4cb15488cd0c67b82",
+    "account-entry.js": "2d685b7ac3017b5c98187979d04c0132fde9648713b248ae452ccf9a3bd1b758",
+    "audio.js": "daedf9948a3339b6f046e06a2877e5c5f15d54e154f07dc0ab6aae6f5beee5c7"
+  }
+}
