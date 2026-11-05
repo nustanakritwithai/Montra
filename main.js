@@ -12291,7 +12291,7 @@
   let activeEquipSlot = null;
   let bagCategoryFilter = "all";
   let bagCurrentPage = 0;
-  const BAG_PAGE_SIZE = 30;
+  const BAG_PAGE_SIZE = 36;
   const BAG_TOTAL_PAGES = 3;
 
   function isItemForSlot(itemId, slotKey) {
