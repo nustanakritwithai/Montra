@@ -429,18 +429,221 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 .bag-slot.bag-equipped .bag-quantity { color:#8fffe9; font-size:14px; }
 .bag-slot.bag-weapon .bag-symbol { font-size:clamp(21px,6vw,30px); }
-.wear-title { margin:12px 0 6px; font-size:.95rem; }
-.wear-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-areas:"leftEar head rightEar" "shoulders neck arms" "leftHand chest rightHand" "mainHand legs offHand" "leftRing feet rightRing"; gap:5px; }
+.wear-title { margin:14px 0 8px; font-size:.95rem; font-weight:700; color:#f4d59f; display:flex; align-items:center; gap:6px; }
+.wear-grid, .paperdoll-grid {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) minmax(132px, 1.35fr) minmax(70px, 1fr);
+  grid-template-areas:
+    "leftEar   head         rightEar"
+    "neck      doll-stage   arms"
+    "shoulders doll-stage   rightHand"
+    "mainHand  doll-stage   offHand"
+    "leftHand  chest        rightRing"
+    "leftRing  legs         feet";
+  gap: 6px;
+  align-items: stretch;
+  margin: 8px 0 14px;
+}
+@media (max-width: 440px) {
+  .wear-grid, .paperdoll-grid {
+    grid-template-columns: minmax(60px, 1fr) minmax(116px, 1.3fr) minmax(60px, 1fr);
+    gap: 4px;
+  }
+}
+
+/* Central Character Doll Stage */
+.doll-stage {
+  grid-area: doll-stage;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 6px;
+  background: radial-gradient(circle at 50% 36%, rgba(32, 48, 48, 0.95), rgba(9, 17, 18, 0.98));
+  border: 1.5px solid rgba(212, 175, 55, 0.45);
+  border-radius: 12px;
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.75), 0 3px 10px rgba(0, 0, 0, 0.5);
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  min-height: 180px;
+}
+.doll-stage::before {
+  content: "";
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(235, 194, 114, 0.16) 0%, rgba(0, 0, 0, 0) 70%);
+  pointer-events: none;
+  border-radius: 50%;
+}
+.doll-stage .doll-portrait-ring {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 2px solid #dfb76c;
+  background: radial-gradient(circle, #22353b, #0c181a);
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+  position: relative;
+  box-shadow: 0 0 14px rgba(223, 183, 108, 0.35);
+}
+.doll-stage .doll-portrait-seal {
+  width: 42px;
+  height: 42px;
+  color: #f1cf87;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.6));
+}
+.doll-stage .doll-level-pill {
+  position: absolute;
+  bottom: -5px;
+  background: linear-gradient(135deg, #a67c1e, #f5d77f);
+  color: #121008;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0,0,0,.7);
+  letter-spacing: .5px;
+}
+.doll-stage .doll-name {
+  font-size: 14px;
+  font-weight: 750;
+  color: #fff2d1;
+  text-shadow: 0 1px 3px #000;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 95%;
+}
+.doll-stage .doll-path {
+  font-size: 11px;
+  color: #9ec5b8;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 95%;
+}
+.doll-stage .doll-cp {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(223, 183, 108, 0.5);
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin: 2px 0 5px;
+}
+.doll-stage .doll-cp-icon {
+  color: #f3c774;
+  font-size: 11px;
+}
+.doll-stage .doll-cp-label {
+  font-size: 10px;
+  color: #d1b67b;
+}
+.doll-stage .doll-cp-val {
+  font-size: 12px;
+  font-weight: 750;
+  color: #ffe699;
+}
+.doll-stage .doll-vitals-mini {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.doll-stage .doll-vitals-mini span {
+  font-size: 9.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.55);
+  white-space: nowrap;
+}
+.doll-stage .doll-vitals-mini .hp-mini {
+  color: #ff918e;
+  border: 1px solid rgba(255, 90, 80, 0.35);
+}
+.doll-stage .doll-vitals-mini .mp-mini {
+  color: #8ed8ff;
+  border: 1px solid rgba(60, 160, 255, 0.35);
+}
+
+.wear-tile {
+  min-height: 56px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 2px;
+  border: 1px solid rgba(130, 145, 135, 0.45);
+  border-radius: 8px;
+  color: #e2dbc4;
+  background: linear-gradient(145deg, #182827, #0e1a19);
+  cursor: pointer;
+  box-shadow: inset 0 0 6px rgba(0,0,0,0.4);
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.wear-tile:hover {
+  border-color: #dfb76c;
+  background: #203432;
+}
+.wear-tile b {
+  color: #d8be85;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.wear-tile span {
+  font-size: 0.72rem;
+  color: #9db2a5;
+  line-height: 1.1;
+}
+.wear-tile small {
+  width: 90%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #dfdfdf;
+  font-size: 0.65rem;
+  text-align: center;
+}
+.wear-tile.filled {
+  border-color: #c9a65f;
+  background: linear-gradient(145deg, #283a31, #182721);
+  box-shadow: 0 0 6px rgba(201, 166, 95, 0.25);
+}
+.wear-tile.filled b {
+  color: #fce29d;
+}
+.wear-tile.filled small {
+  color: #9affdf;
+  font-weight: 600;
+}
+.wear-tile[aria-pressed="true"], .wear-tile:focus-visible {
+  outline: 2px solid #ffd777;
+  outline-offset: 1px;
+  border-color: #fff;
+}
+@media (max-width: 420px) {
+  .wear-tile { min-height: 48px; }
+  .wear-tile b { font-size: 1rem; }
+  .wear-tile span { font-size: 0.66rem; }
+  .wear-tile small { font-size: 0.6rem; }
+}
+
 .wear-sides:not([hidden]) { display:flex; gap:6px; margin:6px 0; }
 .wear-sides button { flex:1; min-height:44px; }
 .wear-sides button[aria-pressed="true"] { outline:2px solid #f2ca83; }
-.wear-tile { min-height:64px; min-width:0; display:grid; justify-items:center; align-content:center; gap:2px; padding:4px 2px; border:1px solid #677063; border-radius:8px; color:#e2dbc4; background:#162522; cursor:pointer; }
-.wear-tile b { color:#c3ac7c; font-size:1.2rem; line-height:1; }
-.wear-tile span { font-size:.76rem; }
-.wear-tile small { width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#a0b1a6; font-size:.66rem; }
-.wear-tile.filled { border-color:#ba9f67; background:#30382c; }
-.wear-tile[aria-pressed="true"], .wear-tile:focus-visible { outline:2px solid #f2ca83; outline-offset:0; }
-@media(max-width:420px) { .wear-tile { min-height:48px; } }
 #bagEquipped { max-width:61%; text-align:right; overflow-wrap:anywhere; }
 .stat-row { gap:8px; }
 .stat-row span { flex:1; }
@@ -1415,7 +1618,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .learned-bar #fly.orb-fly[hidden] { display: none; }
 .learned-bar[data-wide] #fly.orb-fly { position: relative; width: 40px; height: 40px; }
 /* The vital orb carries HP, mana, stamina and effects, so the player card drops its old bars and status row. */
-.hud-journal .identity .hud-meter.hp, .hud-journal .identity .hud-meter.st, .hud-journal .identity .hud-meter.mana { display: none !important; }
+.identity .hud-meter, .character-info .hud-meter, .hud-journal .identity .hud-meter.hp, .hud-journal .identity .hud-meter.st, .hud-journal .identity .hud-meter.mana { display: none !important; }
 .hud-journal .self-fx { display: none !important; }
 .hud-journal .identity { padding-bottom: 6px; }
 .learned-bar[data-arc] .orb-fx { flex-wrap: nowrap; gap: 1px; } .learned-bar[data-arc] .orb-fx .fx-box { width: 15px; height: 15px; font-size: 9.5px; flex: none; }
