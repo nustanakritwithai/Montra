@@ -12327,7 +12327,7 @@
     swordTreeRenderKey = "";
     swordTreeViewedSchool = data.tree.school || "phuttha";
     skillGraphKey = "";
-    openDrawer("swordTree", "ผังวิชาดาบ (Skill Tree)", '<div id="swordTreeBody"></div>');
+    openDrawer("swordTree", "ผังวิชาดาบ (Knowledge Graph)", '<div id="swordTreeBody"></div>');
     renderSwordTree();
   }
 
@@ -12353,21 +12353,6 @@
       return "เพิ่มป้องกัน " + Math.round(p.defense * 100) + "% · ระยะ " + fmt(p.range) + " · นาน " + fmt(p.durationMs / 1000) + " วิ";
     };
 
-    const branches = [
-      {
-        id: "offensive",
-        title: "สายจู่โจมเพลงดาบ (Offense)",
-        glyph: "⚔️",
-        skills: ["phuttha_core", "atamat_core"]
-      },
-      {
-        id: "defensive",
-        title: "สายตั้งรับและคุ้มกัน (Defense)",
-        glyph: "🛡️",
-        skills: ["sritra_core", "chumphon_core"]
-      }
-    ];
-
     const skillGlyphs = {
       phuttha_core: "⚔️",
       sritra_core: "🛡️",
@@ -12375,56 +12360,57 @@
       chumphon_core: "⛨"
     };
 
-    let branchesHtml = "";
-    for (const b of branches) {
-      const cardsHtml = b.skills.map(id => {
-        const node = catalog.core[id];
-        if (!node) return "";
-        const rank = Number(ranks[id] || 0);
-        const maxRank = levels.length;
-        const nextLv = levels[rank];
-        const isLearned = rank > 0;
-        const isMax = rank >= maxRank;
-        const isReady = !isMax && lvNow >= nextLv && availablePoints > 0;
-        const isLocked = !isLearned && !isReady;
+    function buildKgNode(id, x, y) {
+      const node = catalog.core[id];
+      if (!node) return "";
+      const rank = Number(ranks[id] || 0);
+      const maxRank = levels.length;
+      const nextLv = levels[rank];
+      const isLearned = rank > 0;
+      const isMax = rank >= maxRank;
+      const isReady = !isMax && lvNow >= nextLv && availablePoints > 0;
+      const stateCls = isReady ? "ready" : isLearned ? "learned" : "locked";
+      const glyph = skillGlyphs[id] || "✦";
+      const pipsHtml = Array.from({ length: maxRank }, (_, i) => '<i class="' + (i < rank ? 'on' : '') + '"></i>').join("");
+      const descText = describe(id, rank);
+      const statusLabel = isReady ? "✦ อัปเกรด" : isLearned ? "เรียนแล้ว" : "ยังล็อก";
 
-        const stateCls = isReady ? "ready" : isLearned ? "learned" : "locked";
-        const glyph = skillGlyphs[id] || "✦";
-        const pipsHtml = Array.from({ length: maxRank }, (_, i) => '<i class="' + (i < rank ? 'on' : '') + '"></i>').join("");
-        const descText = describe(id, rank);
-
-        return '<div class="st-skill-card ' + stateCls + '" data-skill-id="' + id + '" data-sword-core-upgrade="' + id + '" role="button" tabindex="0" aria-label="' + node.name + '">' +
-          '<div class="st-card-orb">' +
-            '<span>' + glyph + '</span>' +
-            (rank > 0 ? '<span class="st-card-rank-badge">+' + rank + '</span>' : '') +
-          '</div>' +
-          '<strong class="st-card-name">' + node.name + '</strong>' +
-          '<span class="st-card-rank-text" style="font-size:10px;color:#d1b67b;">ขั้น ' + rank + '/' + maxRank + '</span>' +
-          '<div class="st-card-pips">' + pipsHtml + '</div>' +
-          (descText ? '<div class="st-card-desc-preview" style="font-size:9.5px;color:#a9bfb8;line-height:1.2;margin:3px 0 2px 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-align:center;">' + descText + '</div>' : '') +
-          '<span class="st-card-click-hint">' + (isReady ? "✦ แตะเพื่ออัปเกรด" : "แตะดูรายละเอียด") + '</span>' +
-        '</div>';
-      }).join("");
-
-      branchesHtml += '<div class="st-branch">' +
-        '<div class="st-branch-title">' +
-          '<span>' + b.glyph + ' ' + b.title + '</span>' +
-          '<small style="color:#d1b67b;font-weight:normal;">2 สกิลในสาย</small>' +
+      return '<div class="kg-node ' + stateCls + '" data-skill-id="' + id + '" data-sword-core-upgrade="' + id + '" role="button" tabindex="0" aria-label="' + node.name + '" style="left:' + x + 'px;top:' + y + 'px;">' +
+        '<div class="kg-orb ' + stateCls + '">' +
+          '<span class="kg-glyph">' + glyph + '</span>' +
+          (rank > 0 ? '<span class="st-card-rank-badge">+' + rank + '</span>' : '') +
         '</div>' +
-        '<div class="st-branch-grid">' +
-          cardsHtml +
-        '</div>' +
+        '<strong class="kg-node-name">' + node.name + '</strong>' +
+        '<span class="kg-node-rank">ขั้น ' + rank + '/' + maxRank + '</span>' +
+        '<div class="st-card-pips">' + pipsHtml + '</div>' +
+        '<span class="kg-node-desc" style="display:none;">' + descText + '</span>' +
+        '<span class="kg-node-status">' + statusLabel + '</span>' +
       '</div>';
     }
 
-    container.innerHTML = '<div class="st-container">' +
-      '<!-- Top Class Banner -->' +
-      '<div class="st-header-banner">' +
-        '<div class="st-header-left">' +
-          '<span class="st-header-crest">⚔</span>' +
-          '<div class="st-header-info">' +
-            '<strong class="st-header-title">วิชาดาบพุทธไธสวรรย์</strong>' +
-            '<span class="st-header-sub">นักดาบอยุธยา · เลเวล ' + lvNow + '</span>' +
+    const rankPhuttha = Number(ranks.phuttha_core || 0);
+    const rankAtamat = Number(ranks.atamat_core || 0);
+    const rankSritra = Number(ranks.sritra_core || 0);
+    const rankChumphon = Number(ranks.chumphon_core || 0);
+
+    const edgeRootPhuttha = rankPhuttha > 0 ? "on" : (lvNow >= levels[0] && availablePoints > 0 ? "ready" : "locked");
+    const edgePhutthaAtamat = rankAtamat > 0 ? "on" : (rankPhuttha > 0 && lvNow >= levels[rankAtamat] && availablePoints > 0 ? "ready" : "locked");
+    const edgeRootSritra = rankSritra > 0 ? "on" : (lvNow >= levels[0] && availablePoints > 0 ? "ready" : "locked");
+    const edgeSritraChumphon = rankChumphon > 0 ? "on" : (rankSritra > 0 && lvNow >= levels[rankChumphon] && availablePoints > 0 ? "ready" : "locked");
+
+    const nodePhuttha = buildKgNode("phuttha_core", 90, 160);
+    const nodeAtamat = buildKgNode("atamat_core", 90, 295);
+    const nodeSritra = buildKgNode("sritra_core", 270, 160);
+    const nodeChumphon = buildKgNode("chumphon_core", 270, 295);
+
+    container.innerHTML = '<div class="kg-container">' +
+      '<!-- Top Knowledge Graph Banner -->' +
+      '<div class="kg-banner">' +
+        '<div class="kg-banner-left">' +
+          '<div class="kg-banner-crest">⚔</div>' +
+          '<div class="kg-banner-info">' +
+            '<strong class="kg-banner-title">กราฟความรู้วิชาดาบ (Knowledge Graph)</strong>' +
+            '<span class="kg-banner-sub">วิชาดาบพุทธไธสวรรย์ · อยุธยา Lv.' + lvNow + '</span>' +
           '</div>' +
         '</div>' +
         '<div class="st-points-box">' +
@@ -12432,13 +12418,38 @@
           '<span class="st-points-label">แต้มวิชา ' + (points - spent) + ' / ' + points + '</span>' +
         '</div>' +
       '</div>' +
+
       '<p class="note" style="margin:2px 0;font-size:11px;color:#c7b28a;text-align:center;">' +
-        'แต้มวิชาสะสมตามเลเวลตัวละคร · แตะที่ไอคอนเพื่อดูรายละเอียดและอัปเกรด' +
+        'ผังกราฟเชื่อมโยงสายวิชา (DAG) · แตะที่โหนดสกิลเพื่อเปิดป็อปอัปและอัปเกรดทันที' +
       '</p>' +
-      '<!-- Skill Tree Branches -->' +
-      '<div class="st-tree-board">' +
-        branchesHtml +
+
+      '<!-- Knowledge Graph Canvas -->' +
+      '<div class="kg-canvas-board">' +
+        '<!-- Central Root / Origin Node -->' +
+        '<div class="kg-root-node">' +
+          '<div class="kg-root-orb">⚔</div>' +
+          '<span class="kg-root-title">แกนวิชาดาบ (Origin)</span>' +
+        '</div>' +
+
+        '<!-- Stream Labels -->' +
+        '<div class="kg-stream-header kg-stream-left">สายจู่โจม (Offense)</div>' +
+        '<div class="kg-stream-header kg-stream-right">สายตั้งรับ (Defense)</div>' +
+
+        '<!-- SVG Connector Edges -->' +
+        '<svg class="kg-svg-edges" viewBox="0 0 360 420" preserveAspectRatio="xMidYMid meet">' +
+          '<path class="kg-edge ' + edgeRootPhuttha + '" d="M 180 58 C 180 100, 90 95, 90 134" />' +
+          '<path class="kg-edge ' + edgePhutthaAtamat + '" d="M 90 186 L 90 269" />' +
+          '<path class="kg-edge ' + edgeRootSritra + '" d="M 180 58 C 180 100, 270 95, 270 134" />' +
+          '<path class="kg-edge ' + edgeSritraChumphon + '" d="M 270 186 L 270 269" />' +
+        '</svg>' +
+
+        '<!-- Nodes -->' +
+        nodePhuttha +
+        nodeAtamat +
+        nodeSritra +
+        nodeChumphon +
       '</div>' +
+
       '<!-- Footer Actions -->' +
       '<div class="st-footer-actions">' +
         '<button type="button" class="secondary" id="resetSwordCore" ' + (spent > 0 ? '' : 'disabled') + ' style="width:100%;">คืนแต้มวิชา (' + spent + ' แต้ม)</button>' +
@@ -12446,8 +12457,8 @@
       '</div>' +
     '</div>';
 
-    // Bind card clicks to open popup
-    container.querySelectorAll(".st-skill-card").forEach(card => {
+    // Bind node clicks to open popup
+    container.querySelectorAll(".kg-node").forEach(card => {
       card.onclick = () => {
         const skillId = card.dataset.skillId || card.dataset.swordCoreUpgrade;
         if (skillId) {

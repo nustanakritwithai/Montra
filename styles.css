@@ -3011,3 +3011,297 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   padding-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
+
+/* ==========================================================================
+   MONTRA SKILL KNOWLEDGE GRAPH (KG)
+   ========================================================================== */
+.kg-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 2px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.kg-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: linear-gradient(135deg, rgba(30, 48, 52, 0.95), rgba(14, 25, 28, 0.95));
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 14px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.kg-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kg-banner-crest {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: radial-gradient(circle at 40% 30%, #ffd700, #b8860b 70%, #5a4005);
+  color: #1a1202;
+  font-size: 22px;
+  box-shadow: 0 0 14px rgba(255, 215, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.6);
+  border: 1px solid #ffe39a;
+}
+
+.kg-banner-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kg-banner-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #f7edd7;
+  letter-spacing: 0.5px;
+}
+
+.kg-banner-sub {
+  font-size: 11px;
+  color: #c5b699;
+}
+
+.kg-canvas-board {
+  position: relative;
+  width: 100%;
+  height: 420px;
+  background: radial-gradient(ellipse at 50% 30%, #17262c 0%, #0d1619 65%, #070c0e 100%);
+  border: 1.5px solid rgba(212, 175, 55, 0.35);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.8), 0 8px 24px rgba(0, 0, 0, 0.6);
+  user-select: none;
+}
+
+.kg-canvas-board::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: 
+    radial-gradient(rgba(212, 175, 55, 0.22) 1.2px, transparent 1.2px),
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 24px 24px, 48px 48px, 48px 48px;
+  pointer-events: none;
+}
+
+.kg-svg-edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.kg-edge {
+  fill: none;
+  stroke: #413523;
+  stroke-width: 2.5;
+  stroke-dasharray: 4 4;
+  transition: all 0.3s ease;
+}
+
+.kg-edge.ready {
+  stroke: #7fe8ff;
+  stroke-width: 3;
+  stroke-dasharray: 6 4;
+  animation: kgFlow 1.2s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(127, 232, 255, 0.8));
+}
+
+.kg-edge.on {
+  stroke: #ffd700;
+  stroke-width: 3.5;
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.7));
+}
+
+@keyframes kgFlow {
+  from { stroke-dashoffset: 20; }
+  to { stroke-dashoffset: 0; }
+}
+
+.kg-root-node {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.kg-root-orb {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 30%, #fff2b2, #f5b027 60%, #87500d);
+  border: 2px solid #fff;
+  box-shadow: 0 0 18px rgba(255, 215, 0, 0.7), inset 0 2px 4px rgba(255, 255, 255, 0.8);
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  color: #1a1202;
+  animation: kgCoreGlow 3s ease-in-out infinite alternate;
+}
+
+@keyframes kgCoreGlow {
+  from { box-shadow: 0 0 14px rgba(255, 215, 0, 0.6); }
+  to { box-shadow: 0 0 24px rgba(255, 215, 0, 0.95), 0 0 35px rgba(255, 170, 0, 0.4); }
+}
+
+.kg-root-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffd700;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+  background: rgba(10, 16, 20, 0.8);
+  padding: 1px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+.kg-stream-header {
+  position: absolute;
+  top: 72px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.kg-stream-left {
+  left: 18px;
+  background: rgba(180, 50, 40, 0.35);
+  border: 1px solid rgba(255, 90, 80, 0.5);
+  color: #ffb8b0;
+}
+
+.kg-stream-right {
+  right: 18px;
+  background: rgba(40, 100, 160, 0.35);
+  border: 1px solid rgba(80, 170, 255, 0.5);
+  color: #b0dcff;
+}
+
+.kg-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 96px;
+  cursor: pointer;
+  z-index: 10;
+  padding: 4px;
+  border-radius: 12px;
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.18s ease;
+  user-select: none;
+}
+
+.kg-node:hover, .kg-node:focus-visible {
+  transform: translate(-50%, -50%) scale(1.08);
+  outline: none;
+}
+
+.kg-node:active {
+  transform: translate(-50%, -50%) scale(0.96);
+}
+
+.kg-orb {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  border: 2px solid #5a4b32;
+  background: radial-gradient(circle at 45% 35%, #2a353c, #131b20);
+  color: #8c9fa8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+  transition: all 0.2s ease;
+}
+
+.kg-node.ready .kg-orb {
+  background: radial-gradient(circle at 45% 35%, #183e4a, #0c2026);
+  border-color: #7fe8ff;
+  color: #bff6ff;
+  box-shadow: 0 0 16px rgba(127, 232, 255, 0.6);
+  animation: kgPulse 1.8s ease-in-out infinite;
+}
+
+.kg-node.learned .kg-orb {
+  background: radial-gradient(circle at 45% 35%, #fff2b2, #dca028 65%, #6e410b);
+  border-color: #ffe89f;
+  color: #1f1403;
+  box-shadow: 0 0 16px rgba(255, 215, 0, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.7);
+}
+
+.kg-node.locked .kg-orb {
+  opacity: 0.65;
+  filter: grayscale(0.5);
+}
+
+.kg-node-name {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #f7eedb;
+  text-align: center;
+  line-height: 1.15;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+  max-width: 94px;
+}
+
+.kg-node-rank {
+  font-size: 9.5px;
+  color: #d1b67b;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.kg-node-status {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 6px;
+  margin-top: 2px;
+}
+
+.kg-node.ready .kg-node-status {
+  background: rgba(127, 232, 255, 0.25);
+  color: #7fe8ff;
+  border: 1px solid rgba(127, 232, 255, 0.5);
+  box-shadow: 0 0 6px rgba(127, 232, 255, 0.3);
+}
+
+.kg-node.learned .kg-node-status {
+  background: rgba(255, 215, 0, 0.2);
+  color: #ffd700;
+  border: 1px solid rgba(255, 215, 0, 0.4);
+}
+
+.kg-node.locked .kg-node-status {
+  background: rgba(0, 0, 0, 0.4);
+  color: #777;
+  border: 1px solid #333;
+}
