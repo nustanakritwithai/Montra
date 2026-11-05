@@ -223,10 +223,12 @@ try {
   }
   await page.locator('#benchCraft').scrollIntoViewIfNeeded();
   await page.locator('#benchCraft:enabled').waitFor({ state: 'visible' });
-  const readControlTheme = async selector => page.locator(selector).evaluate(element => {
+  const readControlTheme = async selector => page.evaluate(selector => {
+    const element = document.querySelector(selector);
+    if (!element?.isConnected) throw new Error('Missing live control: ' + selector);
     const style = getComputedStyle(element);
     return { background: style.backgroundColor, borderColor: style.borderColor, borderStyle: style.borderStyle, color: style.color };
-  });
+  }, selector);
   const drawerTheme = { primary: await readControlTheme('#benchCraft'), secondary: await readControlTheme('#craftBag'), select: await readControlTheme('#benchRecipe') };
   await screenshot('03-crafting-before');
   await page.locator('#benchCraft').click();
@@ -248,7 +250,10 @@ try {
   await screenshot('04-crafting-success');
   log('Real server crafts one ring; persistent result, owned count, materials and wallet render correctly');
   await page.locator('#craftBag').click();
-  const readTileStyle = async selector => page.locator(selector).evaluate(element => {
+  const readTileStyle = async selector => page.evaluate(selector => {
+    // Resolve and measure in one browser task; live inventory refresh replaces previews.
+    const element = document.querySelector(selector);
+    if (!element?.isConnected) throw new Error("Missing live item preview: " + selector);
     // Compare the final CSS skin rather than an in-flight 150ms UI transition.
     // Only finite transitions on this thumbnail are finished; no game state changes.
     for (const animation of element.getAnimations()) {
@@ -258,7 +263,7 @@ try {
     return { width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height,
       radius: style.borderRadius, border: style.borderColor, background: style.backgroundImage,
       shadow: style.boxShadow, symbolSize: symbol.fontSize, symbolColor: symbol.color, symbol: element.querySelector('.bag-symbol').textContent };
-  });
+  }, selector);
   // Compare the shared filled-item skin, not the intentional selected-slot highlight.
   if (await page.locator('#bagSlot' + fixture.slot).evaluate(el => el.classList.contains('bag-selected'))) {
     await page.locator('#bagSlot0').click();
