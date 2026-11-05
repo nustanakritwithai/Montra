@@ -8434,8 +8434,8 @@
   renderChatBox(true);
   // Enter focuses the chat input on wide screens (when nothing else is being typed into).
   addEventListener("keydown", e => {
-    if (!chatBox || e.key !== "Enter" || !chatWide.matches || !ui.drawer.hidden) return;
-    const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (!chatBox || e.key !== "Enter" || !chatWide.matches || !ui.drawer.hidden || e.defaultPrevented || e.repeat) return;
+    const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.closest?.('button,a[href],summary,[role="button"]'))) return;
     e.preventDefault(); openChat();
   });
   // ---- Layout moves: menu buttons under the minimap, horse button beside the vital orb ----

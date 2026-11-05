@@ -20,6 +20,8 @@ const {chromium}=require('playwright');
    await page.locator('#loading').waitFor({state:'hidden',timeout:120000});await page.locator('#accountEntry').waitFor({state:'hidden'});
    const card=page.locator('#characterProfile');await card.waitFor({state:'visible'});
    const box=await card.boundingBox(),map=await page.locator('.location-area').boundingBox(),quest=await page.locator('#quest').boundingBox();
+   const minimap=await page.locator('.mini-map').boundingBox();
+   assert(map.x>=0&&map.x+map.width<=width&&minimap.x+minimap.width<=width,'location and minimap inside viewport');
    assert(box.x>=0&&box.y>=0&&box.x+box.width<=width,'card inside viewport');assert(box.height<=80,'compact card height');
    assert(box.x+box.width<=map.x||box.y+box.height<=map.y||map.y+map.height<=box.y,'card and minimap do not overlap');
    if(quest)assert(quest.y>=box.y+box.height,'quest stays below card');
