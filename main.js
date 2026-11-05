@@ -12877,6 +12877,14 @@
       renderBag();
     }
   }
+  function triggerBagPanelPop() {
+    const panel = $("bagItemPanel");
+    if (!panel) return;
+    panel.classList.remove("panel-pop");
+    void panel.offsetWidth;
+    panel.classList.add("panel-pop");
+    panel.classList.add("panel-open");
+  }
   function bindBagControls() {
     const isChar = drawerActive === "character";
     if (isChar) {
@@ -12904,6 +12912,14 @@
         preferredGearSlot = inspectingGear; confirmBindKey = null; inspectingGear = null;
         selectedBagSlot = i;
         renderBag();
+        triggerBagPanelPop();
+      };
+    }
+    const panelClose = $("bagPanelClose");
+    if (panelClose) {
+      panelClose.onclick = () => {
+        const panel = $("bagItemPanel");
+        if (panel) panel.classList.remove("panel-open");
       };
     }
     const prev = $("bagPrevPage");
@@ -13121,6 +13137,57 @@
     if(meta?.recommended?.length)detail+=" · เหมาะกับ"+meta.recommended.map(p=>gearJobs[p]).join("/");
     if(meta?.dropHint)detail+=" · ล่าได้ที่ "+meta.dropHint;
     $("bagItemDescription").textContent=detail;
+    // Update Right-side Half Panel components
+    const slotEl = $("bagPanelSlot");
+    if (slotEl) {
+      slotEl.className = "bag-slot bag-panel-icon" + (chosen ? " bag-filled" : "") + (worn ? " bag-equipped" : "");
+      const sym = $("bagPanelSymbol");
+      if (sym) sym.textContent = meta?.symbol || (!chosen ? "·" : chosen.itemId === SHRINE_SHARD ? "◈" : "🧪");
+      const badge = $("bagPanelBadge");
+      if (badge) {
+        const fRank = chosen?.forge?.rank;
+        badge.textContent = fRank ? ("+" + fRank) : (worn ? "✓" : (chosen?.quantity > 1 ? "×" + chosen.quantity : ""));
+      }
+    }
+    const subEl = $("bagPanelSub");
+    if (subEl) {
+      if (!chosen) subEl.textContent = "แตะไอเท็มในกระเป๋าเพื่อดูข้อมูล";
+      else {
+        const catName = meta?.kind === "mainHand" ? "อาวุธหลัก" : (bodyLabels[meta?.kind] || {consumable:"ของใช้",material:"วัตถุดิบ",catalyst:"ศิลาอาคม",card:"การ์ด",tool:"เครื่องมือ"}[meta?.kind] || "ไอเท็ม");
+        const rarityText = rarityNames[meta?.rarity] || "พื้นฐาน";
+        const lvlText = meta?.level ? (" · ต้องการ Lv." + meta.level) : "";
+        subEl.textContent = rarityText + " · " + catName + lvlText + (chosen.bound ? " · 🔒 ผูกมัด" : "");
+      }
+    }
+    const statsEl = $("bagPanelStats");
+    if (statsEl) {
+      if (!chosen || !meta) statsEl.innerHTML = "";
+      else {
+        const chips = [];
+        if (meta.kind === "mainHand" && meta.melee) chips.push("⚔ โจมตีประชิด +" + meta.melee);
+        if (meta.kind === "mainHand" && meta.ranged) chips.push("🔱 ยิงอาคม +" + meta.ranged);
+        if (meta.stats) {
+          for (const [k, v] of Object.entries(meta.stats)) {
+            if (v) chips.push((statNames[k] || k) + " +" + v);
+          }
+        }
+        if (meta.healHp) chips.push("🧪 ฟื้น " + meta.healHp + " HP");
+        if (meta.healMana) chips.push("✨ ฟื้น " + meta.healMana + " MP");
+        if (meta.cooldown) chips.push("⏱ คูลดาวน์ " + (meta.cooldown / 1000) + " วิ");
+        statsEl.innerHTML = chips.map(c => '<span class="bag-stat-chip">' + c + '</span>').join("");
+      }
+    }
+    const diffEl = $("bagPanelDiff");
+    if (diffEl) {
+      if (gear && chosen) {
+        const diff = gearComparison(chosen, wornGearAt(destination, slots), slots);
+        diffEl.textContent = "เมื่อเทียบกับที่สวมอยู่: " + diff;
+        diffEl.hidden = false;
+      } else {
+        diffEl.textContent = "";
+        diffEl.hidden = true;
+      }
+    }
     const bagGoal=meta?.forge?Math.min(meta.copyLimit??1,itemHuntCount(chosen.itemId)+1):itemHuntCount(chosen?.itemId)+1;
     bindItemHuntButton($("bagTrack"),chosen?.itemId,bagGoal);
     const salvage=$("salvageGear");
@@ -13657,34 +13724,73 @@
   function openBag() {
     confirmBindKey=null; inspectingGear=null; preferredGearSlot=null; benchTrail.length=0;
     openDrawer("bag", "กระเป๋าเก็บของ",
-      '<div class="status-line"><span>สถานะกระเป๋า</span><strong id="bagSaveStatus"></strong></div>' +
-      '<div class="bag-category-tabs" role="tablist">' +
-        '<button type="button" class="bag-tab-chip on" data-bag-tab="all">ทั้งหมด</button>' +
-        '<button type="button" class="bag-tab-chip" data-bag-tab="gear">อุปกรณ์</button>' +
-        '<button type="button" class="bag-tab-chip" data-bag-tab="consumable">ของใช้</button>' +
-        '<button type="button" class="bag-tab-chip" data-bag-tab="material">วัตถุดิบ</button>' +
-      '</div>' +
-      '<div class="bag-page-header">' +
-        '<span>ความจุ: <b id="bagCapacityText">0 / 12 ช่อง</b></span>' +
-        '<div class="bag-pager">' +
-          '<button type="button" class="page-nav-btn" id="bagPrevPage" aria-label="หน้าก่อน">‹</button>' +
-          '<span id="bagPageIndicator">หน้า 1 / 2</span>' +
-          '<button type="button" class="page-nav-btn" id="bagNextPage" aria-label="หน้าถัดไป">›</button>' +
+      '<div class="bag-split-layout">' +
+        '<!-- Left Half: High-Density Bag Matrix -->' +
+        '<div class="bag-split-left">' +
+          '<div class="status-line"><span>สถานะกระเป๋า</span><strong id="bagSaveStatus"></strong></div>' +
+          '<div class="bag-category-tabs" role="tablist">' +
+            '<button type="button" class="bag-tab-chip on" data-bag-tab="all">ทั้งหมด</button>' +
+            '<button type="button" class="bag-tab-chip" data-bag-tab="gear">อุปกรณ์</button>' +
+            '<button type="button" class="bag-tab-chip" data-bag-tab="consumable">ของใช้</button>' +
+            '<button type="button" class="bag-tab-chip" data-bag-tab="material">วัตถุดิบ</button>' +
+          '</div>' +
+          '<div class="bag-page-header">' +
+            '<span>ความจุ: <b id="bagCapacityText">0 / 12 ช่อง</b></span>' +
+            '<div class="bag-pager">' +
+              '<button type="button" class="page-nav-btn" id="bagPrevPage" aria-label="หน้าก่อน">‹</button>' +
+              '<span id="bagPageIndicator">หน้า 1 / 2</span>' +
+              '<button type="button" class="page-nav-btn" id="bagNextPage" aria-label="หน้าถัดไป">›</button>' +
+            '</div>' +
+          '</div>' +
+          bagMultiPageSliderHtml() +
+          '<div class="bag-dots" id="bagDots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>' +
+          '<p class="note" style="text-align:center;font-size:11px;margin-top:4px;">แตะช่องเก็บของเพื่อเปิดแผงข้อมูลไอเท็มอีกฝั่ง</p>' +
         '</div>' +
-      '</div>' +
-      bagMultiPageSliderHtml() +
-      '<div class="bag-dots" id="bagDots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>' +
-      '<div class="bag-detail"><strong id="bagItemName">เลือกไอเท็ม</strong>' +
-      '<p class="note" id="bagItemDescription">แตะที่ช่องไอเท็มเพื่อดูรายละเอียดและใช้งาน</p></div>' +
-      '<div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden><button type="button" class="secondary"></button><button type="button" class="secondary"></button></div>' +
-      '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
-      '<section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>' +
-      '<button class="secondary" id="bagTrack" type="button" hidden></button><button id="refineResource" type="button" class="secondary" hidden></button><button id="bagKiln" type="button" class="secondary" hidden></button><button id="sellBagMaterial" type="button" class="secondary" hidden></button><button id="salvageGear" type="button" class="secondary" hidden></button>' +
-      '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><p><strong id="guideName"></strong></p><select id="guideCopy" aria-label="เลือกชิ้นที่จะเทียบ" hidden></select><p class="note" id="guideCompare"></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button><button class="secondary" id="resumeFieldJourney" type="button" hidden>แสดงเป้าที่ข้ามไว้</button></details>' +
-      '<section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="boss">ของจากบอส</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button class="secondary" id="benchTrack" type="button" hidden></button><select id="benchHuntChoice" aria-label="เลือกวัตถุดิบที่ต้องการตามหา" hidden></select><button class="secondary" id="benchTrackSupply" type="button" hidden></button><button id="benchCraft" type="button" class="secondary">คราฟต์</button><button id="benchIngredient" type="button" class="secondary" hidden></button><button id="benchBack" type="button" class="secondary" hidden></button></section>' +
-      '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
-      '<button class="secondary" id="bagForge" type="button" hidden>ตีบวก / แปรรูปคุณภาพ · ช่างอาคม</button>' +
-      '<p class="note">แตะช่องเก็บของเพื่อดูหรือใช้งาน จัดการวัตถุดิบ คราฟต์ และเปิดหน้าช่างเพื่อตีบวกอุปกรณ์</p>');
+        '<!-- Right Half: Vertical Item Information & Actions Panel -->' +
+        '<aside class="bag-split-right bag-item-panel" id="bagItemPanel" aria-label="แผงข้อมูลไอเท็ม">' +
+          '<div class="bag-panel-header">' +
+            '<div class="bag-panel-title">' +
+              '<div class="bag-slot bag-panel-icon" id="bagPanelSlot">' +
+                '<span class="bag-symbol" id="bagPanelSymbol">·</span>' +
+                '<span class="bag-quantity" id="bagPanelBadge"></span>' +
+              '</div>' +
+              '<div class="bag-panel-naming">' +
+                '<strong class="bag-panel-name" id="bagItemName">เลือกไอเท็ม</strong>' +
+                '<span class="bag-panel-sub" id="bagPanelSub">แตะไอเท็มในกระเป๋าเพื่อดูข้อมูล</span>' +
+              '</div>' +
+            '</div>' +
+            '<button type="button" class="bag-panel-close" id="bagPanelClose" aria-label="ปิดแผงข้อมูล">✕</button>' +
+          '</div>' +
+          '<div class="bag-panel-body" id="bagPanelBody">' +
+            '<div class="bag-panel-stats" id="bagPanelStats"></div>' +
+            '<div class="bag-panel-diff" id="bagPanelDiff" hidden></div>' +
+            '<p class="note bag-panel-desc" id="bagItemDescription">แตะที่ช่องไอเท็มเพื่อดูรายละเอียดและใช้งาน</p>' +
+          '</div>' +
+          '<div class="bag-panel-actions" id="bagPanelActions">' +
+            '<div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden>' +
+              '<button type="button" class="secondary"></button>' +
+              '<button type="button" class="secondary"></button>' +
+            '</div>' +
+            '<button class="primary bag-primary-btn" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
+            '<div class="bag-secondary-grid">' +
+              '<button class="secondary" id="bagTrack" type="button" hidden></button>' +
+              '<button id="refineResource" type="button" class="secondary" hidden></button>' +
+              '<button id="bagKiln" type="button" class="secondary" hidden></button>' +
+              '<button id="sellBagMaterial" type="button" class="secondary" hidden></button>' +
+              '<button id="salvageGear" type="button" class="secondary" hidden></button>' +
+              '<button class="secondary" id="bagForge" type="button" hidden>ตีบวก / แปรรูปคุณภาพ · ช่างอาคม</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="bag-panel-extensions">' +
+            '<section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>' +
+            '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><p><strong id="guideName"></strong></p><select id="guideCopy" aria-label="เลือกชิ้นที่จะเทียบ" hidden></select><p class="note" id="guideCompare"></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button><button class="secondary" id="resumeFieldJourney" type="button" hidden>แสดงเป้าที่ข้ามไว้</button></details>' +
+            '<section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="boss">ของจากบอส</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button class="secondary" id="benchTrack" type="button" hidden></button><select id="benchHuntChoice" aria-label="เลือกวัตถุดิบที่ต้องการตามหา" hidden></select><button class="secondary" id="benchTrackSupply" type="button" hidden></button><button id="benchCraft" type="button" class="secondary">คราฟต์</button><button id="benchIngredient" type="button" class="secondary" hidden></button><button id="benchBack" type="button" class="secondary" hidden></button></section>' +
+            '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
+            '<section id="forgeStock" hidden><h3>คลังช่าง · ของรุ่นเดียวกัน</h3><select id="forgeStockGear" aria-label="อุปกรณ์ในคลังช่าง"></select><p class="note" id="forgeStockInfo"></p><button type="button" class="secondary" id="forgeStockClaim">เบิกชิ้นตั้งต้น +0</button></section>' +
+            '<div id="forgePanel" hidden><h3>ช่างอาคม</h3><progress id="forgeProgress" max="10" value="0" aria-label="ความคืบหน้าตีบวกถึงสิบ"></progress><p class="note" id="forgeSupply"></p><select id="forgeDonor" aria-label="เลือกของรุ่นเดียวกันจากกระเป๋า" hidden></select><button class="secondary" type="button" id="forgeTrack" hidden></button><button class="secondary" type="button" id="forgeCopyRecipe" hidden>เปิดสูตรสร้างของรุ่นนี้</button><p class="note" id="forgeInfo"></p><button class="secondary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeReroll"></button></div>' +
+          '</div>' +
+        '</aside>' +
+      '</div>');
     bindBagControls();
     renderBag();
   }
