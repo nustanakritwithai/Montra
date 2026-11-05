@@ -59,8 +59,8 @@ function reveal(h){h.clock.advance(1260);}
   const h=setup();start(h);reveal(h);assert.equal(h.toasts.length,0);assert.equal(h.ctx.economyPending,true);assert.equal(h.run('forgeAnimationBusy()'),true);wire(h,result(h));assert.equal(h.ctx.economyPending,false);assert.equal(h.run('forgeAnimationBusy()'),false);assert.equal(h.toasts.length,1);
 }
 // Every outcome comes from the server, including failure, downgrade, and destruction.
-for(const [payload,word] of [[{success:false},/ไม่สำเร็จ/],[{success:false,downgraded:true,forge:{rank:4}},/ลด/],[{success:false,broken:true,forge:{rank:5}},/แตก/]]){
-  const h=setup();const before=h.authority();start(h);wire(h,result(h,payload));assert.equal(h.toasts.length,0);reveal(h);assert.match(h.toasts.join(' '),word);assert.equal(h.authority(),before);
+for(const [payload,word,kind] of [[{success:false},/ไม่สำเร็จ/,'failed'],[{success:false,downgraded:true,forge:{rank:4}},/ลด/,'downgraded'],[{success:false,broken:true,forge:{rank:5}},/แตก/,'broken']]){
+  const h=setup();const before=h.authority();start(h);wire(h,result(h,payload));assert.equal(h.toasts.length,0);reveal(h);assert.match(h.toasts.join(' '),word);assert.equal(h.$('forgeOutcome').dataset.kind,kind);assert.equal(h.authority(),before);
 }
 // Server pushes immediately change authority, but production render preserves visible pre-strike data.
 for(const broken of [false,true]){
@@ -170,11 +170,14 @@ for(const reply of ['craft_result','forge_copy_claimed'])for(const failure of ['
     end({animationName:'forge-hammer-strike'});
     assert.equal(h.run('forgeAnimation.strikesCompleted'),hit);
     assert.equal(h.$('forgeHammerMotion').classList.contains('is-striking'),false);
+    assert.equal(h.$('forgeHammerMotion').classList.contains('is-impact'),true,'impact VFX is synchronized with held hammer impact');
+    assert.equal(h.$('forgeOutcome').dataset.kind,'notice','impact VFX cannot claim an unconfirmed result');
     end({animationName:'forge-hammer-strike'});assert.equal(h.run('forgeAnimation.strikesCompleted'),hit,'duplicate end cannot count another hit');
     h.clock.advance(16);assert.equal(h.toasts.length,0,'first rAF leaves an impact frame');
     h.clock.advance(15);assert.equal(h.toasts.length,0,'result waits through final impact hold');
     h.clock.advance(1);
     assert.equal(h.$('forgeHammerMotion').classList.contains('is-striking'),hit<3);
+    assert.equal(h.$('forgeHammerMotion').classList.contains('is-impact'),false,'impact VFX clears before next strike or after reveal');
   }
   assert.equal(h.toasts.length,1);assert.equal(h.run('forgeAnimationBusy()'),false);
 }
@@ -190,9 +193,24 @@ for(const reply of ['craft_result','forge_copy_claimed'])for(const failure of ['
   h.run('submitForge("enhance")');saved();end({animationName:'forge-hammer-strike'});
   assert.equal(h.run('forgeAnimation.strikesCompleted'),0,'old frame/end cannot progress newer animation');
 }
+// Result effects are selected only from an authoritative receipt, never from the swing.
+{
+  const h=setup();start(h);assert.equal(h.$('forgeOutcome').dataset.kind,'notice');wire(h,result(h));
+  assert.equal(h.$('forgeOutcome').dataset.kind,'notice');assert.equal(h.$('forgeOutcome').hidden,true);
+  reveal(h);assert.equal(h.$('forgeOutcome').dataset.kind,'success');assert.equal(h.$('forgeOutcome').hidden,false);
+}
+{
+  const h=setup();h.ctx.forgePageAction='reroll';h.run('submitForge("reroll")');
+  wire(h,result(h,{action:'reroll'}));assert.equal(h.$('forgeOutcome').dataset.kind,'reroll');
+  assert.equal(h.$('forgeHammerMotion').hidden,true);
+}
+{
+  const h=setup();start(h);h.clock.advance(6000);assert.equal(h.$('forgeOutcome').dataset.kind,'notice');
+  assert.equal(h.$('forgeHammerMotion').classList.contains('is-impact'),false);
+}
 // Reduced motion has no forced delay, but still waits for the server.
 {
-  const h=setup({reduced:true});start(h);assert.equal(h.$('forgeHammerMotion').hidden,true);assert.equal(h.$('forgeHammerMotion').classList.contains('is-striking'),false);h.clock.advance(0);assert.equal(h.toasts.length,0);wire(h,result(h));assert.equal(h.toasts.length,1);assert.equal(h.run('forgeAnimationBusy()'),false);
+  const h=setup({reduced:true});start(h);assert.equal(h.$('forgeHammerMotion').hidden,true);assert.equal(h.$('forgeHammerMotion').classList.contains('is-striking'),false);assert.equal(h.$('forgeHammerMotion').classList.contains('is-impact'),false);h.clock.advance(0);assert.equal(h.toasts.length,0);wire(h,result(h));assert.equal(h.toasts.length,1);assert.equal(h.run('forgeAnimationBusy()'),false);
 }
 // Execute the exact production rejection branch without the unrelated combat reasons.
 {
@@ -209,3 +227,6 @@ for(const reply of ['craft_result','forge_copy_claimed'])for(const failure of ['
 assert.match(styles,/@media \(prefers-reduced-motion:reduce\)\s*\{[^}]*\.forge-hammer-motion\s*\{\s*display:none!important/);
 assert.match(styles,/\.forge-hammer,\.forge-sparks\s*\{\s*animation:none!important/);
 console.log('PASS forge animation: actual production request/result handling, early/late responses, authoritative state, failure/downgrade/break, stale messages, duplicates, cancel, rejection, timeout, disconnect, reduced motion');
+
+assert.match(styles,/\.forge-impact-ring,\.forge-outcome\s*\{\s*animation:none!important/);
+assert.match(source,/class="forge-impact-ring"/);
