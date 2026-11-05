@@ -8230,6 +8230,7 @@
       <circle class="vo-rim" cx="50" cy="50" r="40.5"/><g class="vo-ring">${segs}</g></svg>
       <span class="vo-num vo-hpn"></span><span class="vo-num vo-mpn"></span>`;
     bar.append(el);
+    el.onclick = () => { openCharacterProfile(); };
     return { el, hp: el.querySelector(".vo-hp"), mp: el.querySelector(".vo-mp"), hpn: el.querySelector(".vo-hpn"), mpn: el.querySelector(".vo-mpn"), segs: [...el.querySelectorAll(".vo-seg")], last: "" };
   })();
   function updateVitalOrb(hp, maxHp, st, maxSt, mp, maxMp) {
@@ -8750,7 +8751,7 @@
     syncSwordStatus(mine);
     if (drawerActive === "swordTree") renderSwordTree();
     if (drawerActive === "muayBook") renderMuayBook();
-    if (drawerActive === "bag") renderBag(); // HP remains live while bag is open
+    if (drawerActive === "bag" || drawerActive === "character") renderBag(); // HP remains live while bag or character sheet is open
     if (drawerActive === "character") renderProgressionProfile();
     if (drawerActive === "party") renderParty();
     if (drawerActive === "guild") renderGuild();
@@ -12178,9 +12179,16 @@
     // Offline: the sheet is an online feature; show only a notice and the account tab.
     $("cpOffline").hidden = live;
     const tabs = ui.drawerBody.querySelector(".cp-tabs");
-    if (tabs) { tabs.hidden = !live; if (!live) delete tabs.dataset.shown; }
-    if (!live) { for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = true; return; }
-    if (tabs.dataset.shown !== "1") { tabs.dataset.shown = "1"; for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = pg.dataset.page !== (tabs.querySelector(".on")?.dataset.cp || "status"); }
+    if (!live) {
+      if (tabs) {
+        tabs.hidden = false;
+        const curTab = tabs.querySelector(".on")?.dataset.cp || "equipment";
+        for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = pg.dataset.page !== curTab;
+      }
+      return;
+    }
+    if (tabs) tabs.hidden = false;
+    if (tabs && tabs.dataset.shown !== "1") { tabs.dataset.shown = "1"; for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = pg.dataset.page !== (tabs.querySelector(".on")?.dataset.cp || "equipment"); }
     // Hero: glyph, level ring (EXP share), role and school.
     const xpMax = Number(c.xpToNext) || 0, xpShare = xpMax ? Math.min(1, (Number(c.experience) || 0) / xpMax) : 1;
     $("cpRing").style.setProperty("--p", (xpShare * 100).toFixed(1));
@@ -12278,6 +12286,43 @@
     const kills = Object.entries(hudKills).filter(([, n]) => n > 0).map(([id, n]) => '<div class="status-line"><span>ปราบผี · ' + (worldDefinitions?.[id]?.name || (id === "ritual_village" ? "หมู่บ้านอาคม" : id)) + '</span><strong>' + n + '</strong></div>');
     $("cpKills").innerHTML = kills.join("") || '<p class="note">ยังไม่ได้ปราบผีในรอบนี้</p>';
   }
+
+  function paperdollGridHtml() {
+    const stageHtml =
+      '<div class="doll-stage" id="paperdollStage">' +
+        '<div class="doll-portrait-ring">' +
+          '<svg class="doll-portrait-seal" aria-hidden="true"><use id="paperdollSeal" href="#seal-status"></use></svg>' +
+          '<b class="doll-level-pill" id="paperdollLevel">LV. 1</b>' +
+        '</div>' +
+        '<strong class="doll-name" id="paperdollName">นที</strong>' +
+        '<span class="doll-path" id="paperdollPath">นักดาบ</span>' +
+        '<div class="doll-cp" title="พลังรบประเมินจากสเตตัสและอุปกรณ์">' +
+          '<span class="doll-cp-icon">⚔</span>' +
+          '<span class="doll-cp-label">พลังรบ</span>' +
+          '<strong class="doll-cp-val" id="paperdollCp">100</strong>' +
+        '</div>' +
+        '<div class="doll-vitals-mini">' +
+          '<span class="hp-mini" id="paperdollHp">HP 100/100</span>' +
+          '<span class="mp-mini" id="paperdollMp">MP —</span>' +
+        '</div>' +
+      '</div>';
+    const slotsHtml = Object.entries({mainHand:"อาวุธหลัก", ...bodyLabels}).map(([key, name]) =>
+      '<button type="button" id="wear-' + key + '" class="wear-tile" style="grid-area:' + key + '" aria-pressed="false">' +
+      '<b aria-hidden="true">' + (gearSymbols[key] || "◈") + '</b>' +
+      '<span>' + name + '</span>' +
+      '<small>ว่าง</small>' +
+      '</button>'
+    ).join("");
+    return '<div class="paperdoll-grid" role="group" aria-label="ช่องติดตั้งอุปกรณ์รอบตัวละคร">' + stageHtml + slotsHtml + '</div>';
+  }
+  function paperdollBagGridHtml() {
+    return Array.from({ length: INVENTORY_SLOTS }, (_, i) =>
+      '<button type="button" class="bag-slot" id="bagSlot' + i + '" aria-pressed="false" aria-label="ช่องไอเท็ม ' + (i + 1) + '">' +
+      '<span class="bag-symbol">·</span>' +
+      '<span class="bag-quantity"></span>' +
+      '</button>'
+    ).join("");
+  }
   function openCharacterProfile() {
     const me = ownServerCharacter();
     const durable = me?.persistent === true;
@@ -12293,9 +12338,31 @@
     const note = ([key,label,hint]) => '<div id="statDetail-'+key+'" class="cp-inspect" hidden><strong>'+label+'</strong><span>'+hint+'</span><small id="statBonus-'+key+'"></small></div>';
     const meter = (cls,id,label,bar,value) => '<div class="cp-bar '+cls+'" title="'+label+'">'+seal(id)+'<span class="cp-meter-name">'+label+'</span><div aria-hidden="true"><i id="'+bar+'"></i></div><strong id="'+value+'">—</strong></div>';
     openDrawer("character","ตัวละคร",
-      '<div class="cp-tabs" role="group" aria-label="หมวดข้อมูลตัวละคร"><button type="button" data-cp="status" class="on" aria-pressed="true">'+seal("status")+'สถานะ</button><button type="button" data-cp="class" aria-pressed="false">'+seal("book")+'วิชา</button><button type="button" data-cp="account" aria-pressed="false">'+seal("account")+'บัญชี</button></div>' +
+      '<div class="cp-tabs" role="group" aria-label="หมวดข้อมูลตัวละคร">' +
+      '<button type="button" data-cp="equipment" class="on" aria-pressed="true">' + seal("mainHand") + 'ติดตั้งอุปกรณ์</button>' +
+      '<button type="button" data-cp="status" aria-pressed="false">' + seal("status") + 'สถานะ</button>' +
+      '<button type="button" data-cp="class" aria-pressed="false">' + seal("book") + 'วิชา</button>' +
+      '<button type="button" data-cp="account" aria-pressed="false">' + seal("account") + 'บัญชี</button>' +
+      '</div>' +
+      '<section class="cp-page" data-page="equipment">' +
+        '<div class="status-line"><span>สถานะอุปกรณ์</span><strong id="bagSaveStatus"></strong></div>' +
+        '<div class="status-line"><span>พลังชีวิต HP</span><strong id="bagHp"></strong></div>' +
+        paperdollGridHtml() +
+        '<h3 class="wear-title">กระเป๋าตัวละคร · 12 ช่อง</h3>' +
+        '<div class="bag-grid" role="group" aria-label="ช่องไอเท็ม 12 ช่อง">' + paperdollBagGridHtml() + '</div>' +
+        '<div class="bag-detail"><strong id="bagItemName"></strong><p class="note" id="bagItemDescription"></p></div>' +
+        '<div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden><button type="button" class="secondary"></button><button type="button" class="secondary"></button></div>' +
+        '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
+        '<section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>' +
+        '<button class="secondary" id="bagTrack" type="button" hidden></button><button id="refineResource" type="button" class="secondary" hidden></button><button id="bagKiln" type="button" class="secondary" hidden></button><button id="sellBagMaterial" type="button" class="secondary" hidden></button><button id="salvageGear" type="button" class="secondary" hidden></button>' +
+        '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><p><strong id="guideName"></strong></p><select id="guideCopy" aria-label="เลือกชิ้นที่จะเทียบ" hidden></select><p class="note" id="guideCompare"></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button><button class="secondary" id="resumeFieldJourney" type="button" hidden>แสดงเป้าที่ข้ามไว้</button></details>' +
+        '<section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="boss">ของจากบอส</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button class="secondary" id="benchTrack" type="button" hidden></button><select id="benchHuntChoice" aria-label="เลือกวัตถุดิบที่ต้องการตามหา" hidden></select><button class="secondary" id="benchTrackSupply" type="button" hidden></button><button id="benchCraft" type="button" class="secondary">คราฟต์</button><button id="benchIngredient" type="button" class="secondary" hidden></button><button id="benchBack" type="button" class="secondary" hidden></button></section>' +
+        '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
+        '<section id="forgeStock" hidden><h3>คลังช่าง · ของรุ่นเดียวกัน</h3><select id="forgeStockGear" aria-label="อุปกรณ์ในคลังช่าง"></select><p class="note" id="forgeStockInfo"></p><button type="button" class="secondary" id="forgeStockClaim">เบิกชิ้นตั้งต้น +0</button></section>' +
+        '<div id="forgePanel" hidden><h3>ช่างอาคม</h3><progress id="forgeProgress" max="10" value="0" aria-label="ความคืบหน้าตีบวกถึงสิบ"></progress><p class="note" id="forgeSupply"></p><select id="forgeDonor" aria-label="เลือกของรุ่นเดียวกันจากกระเป๋า" hidden></select><button class="secondary" type="button" id="forgeTrack" hidden></button><button class="secondary" type="button" id="forgeCopyRecipe" hidden>เปิดสูตรสร้างของรุ่นนี้</button><p class="note" id="forgeInfo"></p><button class="secondary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeReroll"></button></div>' +
+      '</section>' +
       '<div id="cpOffline" class="cp-offline" hidden><p>แผงสถานะตัวละครใช้ได้เมื่อเล่นออนไลน์</p><button class="primary" id="cpGoOnline" type="button">เข้าเล่นออนไลน์</button></div>' +
-      '<section class="cp-page" data-page="status">' +
+      '<section class="cp-page" data-page="status" hidden>' +
         '<div class="cp-hero"><div class="cp-ring" id="cpRing"><div class="cp-glyph" id="cpGlyph"><svg class="info-seal" aria-hidden="true"><use id="cpPortraitSeal" href="#seal-status"></use></svg></div><b><span class="sr-only">เลเวล </span><span id="cpLevel">1</span></b></div>' +
         '<div class="cp-hero-info"><strong id="profileName"></strong><span id="cpRole"></span><span id="cpSchool"></span></div></div>' +
         '<div class="cp-bars">' +
@@ -12328,7 +12395,11 @@
     for (const tab of ui.drawerBody.querySelectorAll("[data-cp]")) tab.onclick = () => {
       for (const t of ui.drawerBody.querySelectorAll("[data-cp]")) { t.classList.toggle("on", t === tab); t.setAttribute("aria-pressed", String(t === tab)); }
       for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = pg.dataset.page !== tab.dataset.cp;
+      if (tab.dataset.cp === "equipment") renderBag();
+      else if (tab.dataset.cp === "status") renderProgressionProfile();
     };
+    bindBagControls();
+    renderBag();
     const statusPage = ui.drawerBody.querySelector('[data-page="status"]');
     const showNames = on => { statusPage.classList.toggle("cp-named",on); $("cpShowNames").setAttribute("aria-pressed", String(on)); };
     let names = false;
@@ -12430,8 +12501,162 @@
   function currentEquippedWeaponSlot() {
     return mode === "live" ? inventoryState?.equippedWeaponSlot : demoWeaponSlot;
   }
+
+  function sendBagCommand(command,payload) {
+    const requestedRoom=room;
+    itemUsePending = true;
+    const sequence=++itemUseSequence;
+    renderBag();
+    try { room.send(command,payload); }
+    catch (error) {
+      itemUsePending=false;
+      renderBag();
+      toast("ส่งคำสั่งไอเท็มไม่สำเร็จ");
+      return;
+    }
+    setTimeout(() => {
+      if (!itemUsePending || itemUseSequence !== sequence ||
+          mode !== "live" || room !== requestedRoom) return;
+      itemUsePending=false;
+      try { room.send("get_inventory", {}); } catch (_) {}
+      renderBag();
+      toast("ยังไม่ได้รับผลจาก VPS · กรุณาตรวจสถานะไอเท็มอีกครั้ง");
+    },3500);
+  }
+  function handleUseBagItem() {
+    if (itemUsePending) return;
+    if(inspectingGear){
+      if(inspectingGear==="mainHand"){
+        if(mode==="live" && currentEquippedWeaponSlot()!=null)sendBagCommand("equip_weapon",{slot:null});
+        else if(mode!=="live"){demoWeaponSlot=null;setAvatarWeapon(getLocalAvatar(),"");renderBag();}
+      } else {
+        const expected=inventoryState?.equipment?.[inspectingGear];
+        if(expected)sendBagCommand("equip_gear",{position:inspectingGear,slot:null,expected,...accessoryStamp(wornGearAt(inspectingGear,currentBagSlots()))});
+      }
+      return;
+    }
+    const item=currentBagSlots()?.[selectedBagSlot];
+    if (!item) return;
+    const positions=wearPositions(bagMeta(item.itemId)?.kind), armor=positions.length>0;
+    const weapon=bagMeta(item.itemId)?.kind==="mainHand";
+    if (weapon || armor) {
+      if (mode==="live") {
+        if (!room || room.state?.weaponsAvailable !== true || !inventoryState) {
+          toast("VPS ยังไม่รองรับชุดอาวุธ · ต้องติดตั้ง Server V0.2.7");
+          return;
+        }
+        if (ownServerCharacter()?.alive !== true) {
+          toast("ยังสวมอาวุธไม่ได้ · รอเกิดใหม่"); return;
+        }
+        const nextSlot=!armor && currentEquippedWeaponSlot()===selectedBagSlot
+          ? null : selectedBagSlot;
+        const position=gearDestination(positions,inventoryState.equipment||{});
+        if(nextSlot!==null && personalItems[item.itemId] && !item.bound && confirmBindKey!==nextSlot+":"+gearStamp(item)){
+          preferredGearSlot=position;
+          confirmBindKey=nextSlot+":"+gearStamp(item);renderBag();return;
+        }
+        confirmBindKey=null;
+        if(armor)sendBagCommand("equip_gear",{slot:nextSlot,position,expected:item.itemId,...accessoryStamp(item)});
+        else sendBagCommand("equip_weapon",{slot:nextSlot});
+      } else {
+        demoWeaponSlot=demoWeaponSlot===selectedBagSlot ? null : selectedBagSlot;
+        const selected=demoWeaponSlot===null ? "" :
+          currentBagSlots()[demoWeaponSlot]?.itemId || "";
+        setAvatarWeapon(getLocalAvatar(),selected);
+        toast(selected ? "DEMO สวมใส่ " + WEAPON_META[selected].name
+          : "DEMO ถอดอาวุธแล้ว");
+        renderBag();
+      }
+      return;
+    }
+    if (mode==="live" && (item.itemId===POTION_ITEM_ID || bagMeta(item.itemId)?.kind==="consumable")) {
+      sendBagCommand("use_item",{slot:selectedBagSlot});
+    } else if (mode!=="live" && item.itemId===POTION_ITEM_ID && demoPotionCount>0) {
+      demoPotionCount--;
+      demoHp = Math.min(100, demoHp + 30);
+      toast("DEMO ใช้ยาเลือด ฟื้น 30 HP (เหลือ " + demoPotionCount + ")");
+      renderBag();
+    }
+  }
+  function submitForge(action) {
+    const position=inspectingGear==="mainHand"?currentEquippedWeaponSlot():(inspectingGear||selectedBagSlot);
+    const item=typeof position==="string"?{itemId:inventoryState?.equipment?.[position],forge:inventoryState?.equipmentForges?.[position]}:currentBagSlots()?.[position];
+    const meta=bagMeta(item?.itemId);
+    if(!item || !(meta?.kind==="mainHand" || meta?.forge))return;
+    const stamp=gearStamp(item);
+    const payload={slot:position,stamp,action,requestId:economyRequestId()};
+    if(action==="enhance"){
+      const rank=item.forge?.rank??0,terms=JSON.parse(room.state.forgeCatalog).enhanceSteps?.[rank];
+      if(!terms || $("forgeEnhance").disabled)return;
+      payload.copies=terms.copies;
+      const value=$("forgeDonor").value;
+      if(value){const [slot,stamp]=value.split("|");payload.donor={slot:Number(slot),stamp};}
+      const source=value?" (รวมชิ้นจากกระเป๋าช่อง "+(payload.donor.slot+1)+")":" จากคลังช่าง";
+      if(!window.confirm("ตี "+meta.name+" +"+rank+" เป็น +"+(rank+1)+" · สำเร็จ "+terms.chance+"% · "+forgeRiskText(terms,rank)+"\nใช้ของรุ่นเดียวกัน "+terms.copies+" ชิ้น"+source+" และ "+Math.round(terms.gold*(1+((meta.level||1)-1)/100))+" ทอง"))return;
+      if(terms.breakOnFailure)payload.acceptBreak=true;
+      if(terms.downgradeChance)payload.acceptDowngrade=true;
+    }
+    economySend("forge_weapon",payload,true);renderBag();
+  }
+  function bindBagControls() {
+    for (let i = 0; i < INVENTORY_SLOTS; i++) {
+      const slot = $("bagSlot" + i);
+      if (slot) slot.onclick = () => {
+        preferredGearSlot=inspectingGear; confirmBindKey=null; inspectingGear=null;
+        selectedBagSlot = i;
+        renderBag();
+      };
+    }
+    const sidePicker = $("wearSidePicker");
+    if (sidePicker) {
+      for(const button of sidePicker.children)button.onclick=()=>{
+        preferredGearSlot=button.dataset.position; confirmBindKey=null; renderBag();
+      };
+    }
+    for(const key of ["mainHand",...Object.keys(bodyLabels)]){
+      const tile = $("wear-"+key);
+      if (tile) tile.onclick=()=>{
+        inspectingGear=key; confirmBindKey=null;
+        if(key==="mainHand" && Number.isInteger(currentEquippedWeaponSlot()))selectedBagSlot=currentEquippedWeaponSlot();
+        renderBag();
+      };
+    }
+    if ($("gearGuide")) $("gearGuide").ontoggle=$("guideStyle").onchange=$("guideSlot").onchange=$("guideCopy").onchange=()=>renderGearGuide(currentBagSlots());
+    if ($("refineResource")) $("refineResource").onclick=()=>{
+      const id=currentBagSlots()?.[selectedBagSlot]?.itemId;
+      if(!inspectingGear && personalItems[id]?.refinesTo)economySend("refine_resource",{expected:id,requestId:economyRequestId()},true);
+    };
+    if ($("salvageGear")) $("salvageGear").onclick=salvageSelectedGear;
+    if ($("sellBagMaterial")) $("sellBagMaterial").onclick=()=>{
+      const item=currentBagSlots()?.[selectedBagSlot];if(inspectingGear||!personalItems[item?.itemId]?.sellGold)return;
+      economySend("sell_material",{slot:selectedBagSlot,expected:item.itemId,quantity:1,requestId:economyRequestId()},true);renderBag();
+    };
+    if ($("benchHuntChoice")) $("benchHuntChoice").onchange=()=>renderWorkbench(currentBagSlots());
+    if ($("benchGroup")) $("benchGroup").onchange=$("benchLevel").onchange=$("benchRecipe").onchange=()=>{benchTrail.length=0;renderWorkbench(currentBagSlots());};
+    if ($("benchBack")) $("benchBack").onclick=()=>{
+      const prior=benchTrail.pop();if(!prior)return;
+      inspectingGear=prior.position;renderBag();selectBenchRecipe(prior.group,prior.level,prior.id);
+    };
+    if ($("socketCardChoice")) $("socketCardChoice").onchange=renderBag;
+    const resume=$("resumeFieldJourney"),notes=journeyNotesForPlayer();
+    if (resume) {
+      resume.hidden=!notes.skipped?.length && !notes.bossSkipped && !notes.deferredBosses?.length && !notes.savedTraining;
+      resume.onclick=()=>{saveJourney({skipped:[],bossSkipped:false,deferredBosses:[],savedTraining:0});resume.hidden=true;closeDrawer();openCurrentQuest();};
+    }
+    if ($("benchCraft")) $("benchCraft").onclick=()=>{ economySend("craft_weapon",{recipeId:$("benchRecipe").value,requestId:economyRequestId()},true);renderBag(); };
+    if ($("craftGlaive")) $("craftGlaive").onclick = () => {
+      if (!room?.state?.craftRecipe || economyPending) return;
+      const recipe = JSON.parse(room.state.craftRecipe);
+      economySend("craft_weapon", {recipeId: recipe.id, requestId: economyRequestId()}, true);
+      renderBag();
+    };
+    if ($("forgeEnhance")) $("forgeEnhance").onclick = () => submitForge("enhance");
+    if ($("forgeReroll")) $("forgeReroll").onclick = () => submitForge("reroll");
+    if ($("useBagItem")) $("useBagItem").onclick = handleUseBagItem;
+    if (economyReady()) economySend("get_economy", {});
+  }
   function renderBag() {
-    if (drawerActive !== "bag") return;
+    if (drawerActive !== "bag" && drawerActive !== "character") return;
     const slots = currentBagSlots();
     const status = $("bagSaveStatus");
     if (!status) return;
@@ -12453,8 +12678,22 @@
     const equippedItem = equipped === null || equipped === undefined
       ? null : slots?.[equipped];
     const equipment=inventoryState?.equipment || {};
+    if ($("paperdollStage")) {
+      const char = ownServerCharacter() || { characterName: "นที", level: 1, pathId: "phutthaisawan", hp: demoHp, maxHp: 100, stamina: 100, maxStamina: 100, mana: 50, maxMana: 50, atk: 25, def: 18, magicAtk: 15, magicDef: 12 };
+      if ($("paperdollName")) $("paperdollName").textContent = String(char.characterName || "นที");
+      if ($("paperdollLevel")) $("paperdollLevel").textContent = "LV. " + (char.level || 1);
+      const path = getBuildCatalog()?.paths?.[char.pathId];
+      if ($("paperdollPath")) $("paperdollPath").textContent = path ? (path.name || path.role) : "นักดาบพุทธไธสวรรย์";
+      const sealId = "#seal-" + pathSeal(char.pathId || "phutthaisawan");
+      if ($("paperdollSeal") && $("paperdollSeal").getAttribute("href") !== sealId) $("paperdollSeal").setAttribute("href", sealId);
+      const cpVal = Math.round((Number(char.atk)||20)*2 + (Number(char.magicAtk)||15)*2 + (Number(char.def)||15)*1.5 + (Number(char.magicDef)||12)*1.5 + (Number(char.maxHp)||100)*0.5 + (Number(char.level)||1)*20);
+      if ($("paperdollCp")) $("paperdollCp").textContent = String(cpVal);
+      if ($("paperdollHp")) $("paperdollHp").textContent = "HP " + Math.ceil(currentHp) + "/" + Math.ceil(maxHp);
+      if ($("paperdollMp")) $("paperdollMp").textContent = "MP " + (Number.isFinite(char.mana) && char.maxMana > 0 ? Math.round(char.mana) + "/" + Math.round(char.maxMana) : "—");
+    }
     for (const [key,label] of Object.entries({mainHand:"อาวุธหลัก",...bodyLabels})){
       const tile=$("wear-"+key);
+      if (!tile) continue;
       const id=key==="mainHand"?equippedItem?.itemId:equipment[key];
       tile.classList.toggle("filled",!!id);
       tile.setAttribute("aria-pressed",String(inspectingGear===key));
@@ -12926,29 +13165,27 @@
   }
   function openBag() {
     confirmBindKey=null; inspectingGear=null; preferredGearSlot=null;benchTrail.length=0;
-    const wearGrid=Object.entries({mainHand:"อาวุธหลัก",...bodyLabels}).map(([key,name])=>'<button type="button" id="wear-'+key+'" class="wear-tile" style="grid-area:'+key+'" aria-pressed="false"><b aria-hidden="true">'+gearSymbols[key]+'</b><span>'+name+'</span><small>ว่าง</small></button>').join("");
-    const grid = Array.from({ length: INVENTORY_SLOTS }, (_, i) =>
-      '<button type="button" class="bag-slot" id="bagSlot' + i +
-      '" aria-pressed="false" aria-label="ช่องไอเท็ม ' + (i + 1) + '">' +
-      '<span class="bag-symbol">·</span>' +
-      '<span class="bag-quantity"></span></button>').join("");
     openDrawer("bag", "อุปกรณ์และกระเป๋า",
       '<div class="status-line"><span>สถานะกระเป๋า</span><strong id="bagSaveStatus"></strong></div>' +
       '<div class="status-line"><span>พลังชีวิต HP</span><strong id="bagHp"></strong></div>' +
-      '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><p><strong id="guideName"></strong></p><select id="guideCopy" aria-label="เลือกชิ้นที่จะเทียบ" hidden></select><p class="note" id="guideCompare"></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button><button class="secondary" id="resumeFieldJourney" type="button" hidden>แสดงเป้าที่ข้ามไว้</button></details>' +
-      '<h3 class="wear-title">อุปกรณ์ที่สวม</h3><div class="wear-grid" aria-label="ช่องอุปกรณ์ตัวละคร">'+wearGrid+'</div><h3 class="wear-title">กระเป๋า · 12 ช่อง</h3>' +
-      '<div class="bag-grid" role="group" aria-label="ช่องไอเท็ม 12 ช่อง">' + grid + '</div>' +
+      paperdollGridHtml() +
+      '<h3 class="wear-title">กระเป๋า · 12 ช่อง</h3>' +
+      '<div class="bag-grid" role="group" aria-label="ช่องไอเท็ม 12 ช่อง">' + paperdollBagGridHtml() + '</div>' +
       '<div class="bag-detail"><strong id="bagItemName"></strong>' +
       '<p class="note" id="bagItemDescription"></p></div>' +
       '<div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden><button type="button" class="secondary"></button><button type="button" class="secondary"></button></div>' +
       '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
       '<section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>' +
       '<button class="secondary" id="bagTrack" type="button" hidden></button><button id="refineResource" type="button" class="secondary" hidden></button><button id="bagKiln" type="button" class="secondary" hidden></button><button id="sellBagMaterial" type="button" class="secondary" hidden></button><button id="salvageGear" type="button" class="secondary" hidden></button>' +
+      '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><p><strong id="guideName"></strong></p><select id="guideCopy" aria-label="เลือกชิ้นที่จะเทียบ" hidden></select><p class="note" id="guideCompare"></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button><button class="secondary" id="resumeFieldJourney" type="button" hidden>แสดงเป้าที่ข้ามไว้</button></details>' +
       '<section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="boss">ของจากบอส</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button class="secondary" id="benchTrack" type="button" hidden></button><select id="benchHuntChoice" aria-label="เลือกวัตถุดิบที่ต้องการตามหา" hidden></select><button class="secondary" id="benchTrackSupply" type="button" hidden></button><button id="benchCraft" type="button" class="secondary">คราฟต์</button><button id="benchIngredient" type="button" class="secondary" hidden></button><button id="benchBack" type="button" class="secondary" hidden></button></section>' +
       '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
       '<section id="forgeStock" hidden><h3>คลังช่าง · ของรุ่นเดียวกัน</h3><select id="forgeStockGear" aria-label="อุปกรณ์ในคลังช่าง"></select><p class="note" id="forgeStockInfo"></p><button type="button" class="secondary" id="forgeStockClaim">เบิกชิ้นตั้งต้น +0</button></section>' +
       '<div id="forgePanel" hidden><h3>ช่างอาคม</h3><progress id="forgeProgress" max="10" value="0" aria-label="ความคืบหน้าตีบวกถึงสิบ"></progress><p class="note" id="forgeSupply"></p><select id="forgeDonor" aria-label="เลือกของรุ่นเดียวกันจากกระเป๋า" hidden></select><button class="secondary" type="button" id="forgeTrack" hidden></button><button class="secondary" type="button" id="forgeCopyRecipe" hidden>เปิดสูตรสร้างของรุ่นนี้</button><p class="note" id="forgeInfo"></p><button class="secondary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeReroll"></button></div>' +
       '<p class="note">แตะช่องสวมเพื่อดูหรือถอดอุปกรณ์ ล่ามอนสเตอร์เพื่อรับเกราะชิ้นแรก จากนั้นหาอุปกรณ์หรือเก็บวัตถุดิบคราฟต์ที่โต๊ะช่าง</p>');
+    bindBagControls();
+    renderBag();
+    return;
     for (let i = 0; i < INVENTORY_SLOTS; i++) {
       $("bagSlot" + i).onclick = () => {
         preferredGearSlot=inspectingGear; confirmBindKey=null; inspectingGear=null;
