@@ -66,11 +66,31 @@ async function startServer() {
   throw Error('Local server did not become ready');
 }
 async function stopServer() {
-  if (!server || server.exitCode !== null) return;
-  const exited = new Promise(resolve => server.once('exit', resolve));
-  server.kill('SIGTERM');
-  await Promise.race([exited, sleep(10000).then(() => { if (server.exitCode === null) server.kill('SIGKILL'); })]);
-  await exited;
+  const child = server;
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
+    if (server === child) server = undefined;
+    return;
+  }
+  let killTimer;
+  const exited = new Promise((resolve, reject) => {
+    child.once('exit', resolve);
+    child.once('error', reject);
+  });
+  try {
+    child.kill('SIGTERM');
+    killTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    }, 10000);
+    await exited;
+  } finally {
+    clearTimeout(killTimer);
+    if (server === child) server = undefined;
+  }
+}
+async function writeEvidence() {
+  // Persist diagnostics before cleanup, too, so teardown cannot hide a failure.
+  await writeFile(path.join(output, 'report.json'), JSON.stringify(report, null, 2));
+  await writeFile(path.join(output, 'server.log'), clean(serverLog));
 }
 async function screenshot(name) { await page.screenshot({ path: path.join(output, name + '.png') }); }
 async function enterAndTalk(fixture) {
@@ -264,10 +284,15 @@ try {
   if (page && !page.isClosed()) await screenshot('failure').catch(() => {});
   console.error(report.error); process.exitCode = 1;
 } finally {
-  await browser?.close();
-  await stopServer();
-  await new Promise(resolve => staticServer.close(resolve));
   // Never upload fixture.json, storageState, account DBs, authorization headers or network traces.
-  await writeFile(path.join(output, 'report.json'), JSON.stringify(report, null, 2));
-  await writeFile(path.join(output, 'server.log'), clean(serverLog));
+  await writeEvidence();
+  try {
+    await browser?.close();
+    await stopServer();
+    await new Promise(resolve => staticServer.close(resolve));
+  } catch (error) {
+    report.outcome = 'failed'; report.cleanupError = clean(error.stack || error);
+    process.exitCode = 1;
+  }
+  await writeEvidence();
 }
