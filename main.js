@@ -5477,6 +5477,37 @@
   function itemSymbol(id){
     return bagMeta(id)?.symbol||(!id?"·":id===POTION_ITEM_ID?"🧪":"◈");
   }
+  function getItemArtKey(id,meta){
+    if(!id)return "";
+    if(id===POTION_ITEM_ID||meta?.healHp||id==="health_potion"||id==="potion"||id==="medicine")return "potion_health";
+    if(meta?.healMana||id==="mana_potion")return "potion_mana";
+    if(id===SHRINE_SHARD||id==="shrine_shard")return "mat_shard";
+    if(id==="muay_wraps"||meta?.path==="muay_boran")return "weapon_wraps";
+    if(id==="shrine_glaive"||meta?.path==="sentinel")return "weapon_glaive";
+    if(id==="ritual_dagger"||id==="legacy")return "weapon_dagger";
+    if(id==="spirit_staff"||meta?.path==="seer"||meta?.path==="mender")return "weapon_staff";
+    if(id==="blade"||meta?.path==="blade")return "weapon_dual";
+    if(id==="arcane_sword"||meta?.path==="phutthaisawan"||meta?.kind==="mainHand")return "weapon_sword";
+    const kind=meta?.kind;
+    if(kind==="chest")return "armor_chest";
+    if(kind==="head")return "armor_head";
+    if(kind==="legs")return "armor_legs";
+    if(kind==="boots")return "armor_boots";
+    if(kind==="belt")return "armor_belt";
+    if(kind==="ring"||id.includes("ring"))return "acc_ring";
+    if(kind==="amulet"||id.includes("amulet")||id.includes("necklace"))return "acc_amulet";
+    if(kind==="card")return "card_yantra";
+    if(kind==="catalyst"||id.startsWith("ref_seal")||id==="seal")return "cat_seal";
+    if(kind==="tool"||id==="tool")return "tool_rod";
+    if(kind==="material"){
+      if(id.startsWith("mat_metal")||id==="ore")return "mat_metal";
+      if(id.startsWith("mat_wood"))return "mat_wood";
+      if(id.startsWith("mat_herb"))return "mat_herb";
+      if(id.startsWith("mat_soul"))return "mat_soul";
+      return "mat_shard";
+    }
+    return "";
+  }
   // One read-only item thumbnail, shared with inventory slots. Never binds an action.
   function createItemTile(item,options={}){
     const piece=typeof item==="string"?{itemId:item}:item;
@@ -5485,6 +5516,9 @@
     const tile=document.createElement("div"),symbol=document.createElement("span"),badge=document.createElement("span");
     tile.className="bag-slot item-slot";tile.classList.toggle("bag-filled",!!id);tile.classList.toggle("bag-equipped",!!options.equipped);
     tile.setAttribute("role","img");tile.setAttribute("aria-label",name+(rank?" +"+rank:"")+(quantity>1?" ×"+quantity:"")+(options.equipped?" · สวมอยู่":""));
+    const art=getItemArtKey(id,meta);
+    if(art)tile.setAttribute("data-item-art",art);
+    if(meta?.rarity)tile.setAttribute("data-item-rarity",meta.rarity);
     symbol.className="bag-symbol";symbol.setAttribute("aria-hidden","true");symbol.textContent=itemSymbol(id);
     badge.className="bag-quantity";badge.setAttribute("aria-hidden","true");badge.textContent=rank?"+"+rank:quantity>1?"×"+quantity:options.equipped?"✓":"";
     tile.append(symbol,badge);return tile;
@@ -12958,8 +12992,11 @@
         candidates.map((c, i) => {
           const isSel = i === selectedCandidateIndex;
           const fRank = c.item.forge?.rank;
+          const cArt = getItemArtKey(c.item.itemId, c.meta);
+          const cRar = c.meta?.rarity ? ' data-item-rarity="' + c.meta.rarity + '"' : '';
+          const cArtAttr = cArt ? ' data-item-art="' + cArt + '"' : '';
           return (
-            '<button type="button" class="bag-slot bag-filled equip-candidate-slot' + (isSel ? ' bag-selected' : '') + '" data-cand-idx="' + i + '" aria-pressed="' + isSel + '" title="' + (c.meta?.name || c.item.itemId) + '">' +
+            '<button type="button" class="bag-slot bag-filled equip-candidate-slot' + (isSel ? ' bag-selected' : '') + '"' + cArtAttr + cRar + ' data-cand-idx="' + i + '" aria-pressed="' + isSel + '" title="' + (c.meta?.name || c.item.itemId) + '">' +
               '<span class="bag-symbol">' + (c.meta?.symbol || slotSymbol) + '</span>' +
               (fRank ? '<span class="bag-quantity" style="color:#f2ca83;">+' + fRank + '</span>' : '') +
             '</button>'
@@ -13644,6 +13681,11 @@
         tile.classList.toggle("filled",!!id);tile.classList.toggle("bag-filled",!!id);
         tile.setAttribute("aria-pressed",String(inspectingGear===key));
         const meta = bagMeta(id);
+        const art = getItemArtKey(id, meta) || (id ? key : "");
+        if (art) tile.setAttribute("data-item-art", art);
+        else tile.removeAttribute?.("data-item-art");
+        if (meta?.rarity) tile.setAttribute("data-item-rarity", meta.rarity);
+        else tile.removeAttribute?.("data-item-rarity");
         const symEl = tile.querySelector(".bag-symbol");
         if (symEl) symEl.textContent = meta?.symbol || gearSymbols[key] || "◈";
         const qtyEl = tile.querySelector(".bag-quantity");
@@ -13690,6 +13732,11 @@
       slot.classList.toggle("bag-equipped", worn);
       slot.classList.toggle("bag-selected", i === selectedBagSlot);
       slot.classList.toggle("bag-slot-dim", !!item && !matchesCat);
+      const art = getItemArtKey(item?.itemId, meta);
+      if (item && art) slot.setAttribute("data-item-art", art);
+      else slot.removeAttribute?.("data-item-art");
+      if (meta?.rarity) slot.setAttribute("data-item-rarity", meta.rarity);
+      else slot.removeAttribute?.("data-item-rarity");
       slot.setAttribute("aria-pressed", String(i === selectedBagSlot));
       slot.setAttribute("aria-label", "ช่อง " + (i + 1) + " " + name + (worn ? " สวมอยู่" : ""));
       slot.querySelector(".bag-symbol").textContent = itemSymbol(item?.itemId);
