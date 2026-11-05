@@ -12289,6 +12289,7 @@
   }
 
   let activeEquipSlot = null;
+  let selectedCandidateIndex = 0;
   let bagCategoryFilter = "all";
   let bagCurrentPage = 0;
   const BAG_PAGE_SIZE = 36;
@@ -12349,6 +12350,7 @@
 
   function openEquipSlotPopup(slotKey) {
     activeEquipSlot = slotKey;
+    selectedCandidateIndex = 0;
     const { backdrop, popup } = ensureEquipPopupElements();
     backdrop.hidden = false;
     popup.hidden = false;
@@ -12379,47 +12381,70 @@
       const forgeText = worn.forge?.rank ? (" +" + worn.forge.rank) : "";
       wornHtml =
         '<div class="equip-section-title"><span>กำลังสวมใส่อยู่</span></div>' +
-        '<div class="equip-item-card equipped">' +
-          '<div class="equip-item-icon">' + (wornMeta.symbol || slotSymbol) + '</div>' +
-          '<div class="equip-item-info">' +
-            '<strong class="equip-item-name">' + (wornMeta.name || worn.itemId) + (forgeText ? ' <span style="color:#f2ca83;">' + forgeText + '</span>' : '') + '</strong>' +
-            (bonusText ? '<span class="equip-item-stats">' + bonusText + '</span>' : '') +
+        '<div class="equip-worn-card">' +
+          '<div class="bag-slot bag-filled bag-equipped">' +
+            '<span class="bag-symbol">' + (wornMeta.symbol || slotSymbol) + '</span>' +
+            '<span class="bag-quantity">' + (worn.forge?.rank ? ("+" + worn.forge.rank) : "✓") + '</span>' +
           '</div>' +
-          '<button type="button" class="equip-item-btn unequip" id="equipPopupUnequip">ถอดออก</button>' +
+          '<div class="equip-worn-info">' +
+            '<strong class="equip-worn-name">' + (wornMeta.name || worn.itemId) + (forgeText ? ' <span style="color:#f2ca83;">' + forgeText + '</span>' : '') + '</strong>' +
+            (bonusText ? '<span class="equip-worn-stats">' + bonusText + '</span>' : '') +
+          '</div>' +
+          '<button type="button" class="equip-unequip-btn" id="equipPopupUnequip">ถอดออก</button>' +
         '</div>';
     } else {
       wornHtml =
         '<div class="equip-section-title"><span>กำลังสวมใส่อยู่</span></div>' +
-        '<div class="equip-empty-notice" style="padding:10px 14px;margin-bottom:6px;">' +
+        '<div class="equip-empty-notice" style="padding:10px 14px;margin-bottom:4px;">' +
           '<span>ยังไม่ได้ติดตั้งอุปกรณ์ในช่องนี้</span>' +
         '</div>';
     }
 
     let candHtml = "";
     if (candidates.length > 0) {
+      if (selectedCandidateIndex < 0 || selectedCandidateIndex >= candidates.length) {
+        selectedCandidateIndex = 0;
+      }
+      const sel = candidates[selectedCandidateIndex];
+      const selMeta = sel.meta;
+      const selForgeText = sel.item.forge?.rank ? (" +" + sel.item.forge.rank) : "";
+      const diff = gearComparison(sel.item, worn, slots);
+      const reqLevel = selMeta?.level || 1;
+      const lowLevel = reqLevel > (char.level || 1);
+      const wrongClass = selMeta?.path && selMeta.path !== "all" && selMeta.path !== char.pathId;
+      const canEquip = !lowLevel && !wrongClass;
+
+      const gridHtml =
+        '<div class="equip-candidate-grid" role="group" aria-label="ช่องอุปกรณ์ที่สวมใส่ได้">' +
+        candidates.map((c, i) => {
+          const isSel = i === selectedCandidateIndex;
+          const fRank = c.item.forge?.rank;
+          return (
+            '<button type="button" class="equip-candidate-slot' + (isSel ? ' bag-selected' : '') + '" data-cand-idx="' + i + '" aria-pressed="' + isSel + '" title="' + (c.meta?.name || c.item.itemId) + '">' +
+              '<span class="bag-symbol">' + (c.meta?.symbol || slotSymbol) + '</span>' +
+              (fRank ? '<span class="bag-quantity" style="color:#f2ca83;">+' + fRank + '</span>' : '') +
+            '</button>'
+          );
+        }).join("") +
+        '</div>';
+
+      const previewHtml =
+        '<div class="equip-candidate-preview">' +
+          '<div class="equip-preview-name-row">' +
+            '<strong class="equip-preview-name">' + (selMeta?.name || sel.item.itemId) + (selForgeText ? ' <span style="color:#f2ca83;">' + selForgeText + '</span>' : '') + '</strong>' +
+            '<span style="font-size:11px;color:#d1b67b;">ช่องกระเป๋าที่ ' + (sel.slotIndex + 1) + '</span>' +
+          '</div>' +
+          (selMeta?.bonus ? '<span class="equip-preview-stats">' + selMeta.bonus + '</span>' : '') +
+          (diff ? '<span class="equip-preview-diff">เมื่อเทียบ: ' + diff + '</span>' : '') +
+          (lowLevel ? '<span class="equip-preview-req">⚠️ ต้องการเลเวล ' + reqLevel + ' (เลเวลไม่พอ)</span>' : '') +
+          (wrongClass ? '<span class="equip-preview-req">⚠️ เฉพาะสายอาชีพอื่น</span>' : '') +
+          '<button type="button" class="equip-confirm-btn" id="equipConfirmBtn"' + (!canEquip ? ' disabled' : '') + '>สวมใส่อุปกรณ์</button>' +
+        '</div>';
+
       candHtml =
         '<div class="equip-section-title"><span>อุปกรณ์ในกระเป๋าที่สวมได้ (' + candidates.length + ' ชิ้น)</span></div>' +
-        candidates.map(c => {
-          const diff = gearComparison(c.item, worn, slots);
-          const reqLevel = c.meta?.level || 1;
-          const lowLevel = reqLevel > (char.level || 1);
-          const wrongClass = c.meta?.path && c.meta.path !== "all" && c.meta.path !== char.pathId;
-          const forgeText = c.item.forge?.rank ? (" +" + c.item.forge.rank) : "";
-          const canEquip = !lowLevel && !wrongClass;
-          return (
-            '<div class="equip-item-card">' +
-              '<div class="equip-item-icon">' + (c.meta?.symbol || slotSymbol) + '</div>' +
-              '<div class="equip-item-info">' +
-                '<strong class="equip-item-name">' + (c.meta?.name || c.item.itemId) + (forgeText ? ' <span style="color:#f2ca83;">' + forgeText + '</span>' : '') + '</strong>' +
-                (c.meta?.bonus ? '<span class="equip-item-stats">' + c.meta.bonus + '</span>' : '') +
-                (diff ? '<span class="equip-item-diff">เมื่อเทียบ: ' + diff + '</span>' : '') +
-                (lowLevel ? '<span class="equip-item-req">ต้องการเลเวล ' + reqLevel + '</span>' : '') +
-                (wrongClass ? '<span class="equip-item-req">เฉพาะสายอาชีพอื่น</span>' : '') +
-              '</div>' +
-              '<button type="button" class="equip-item-btn" data-equip-slot="' + c.slotIndex + '"' + (!canEquip ? ' disabled' : '') + '>สวมใส่</button>' +
-            '</div>'
-          );
-        }).join("");
+        gridHtml +
+        previewHtml;
     } else {
       candHtml =
         '<div class="equip-section-title"><span>อุปกรณ์ในกระเป๋าที่สวมได้ (0 ชิ้น)</span></div>' +
@@ -12459,25 +12484,45 @@
       closeEquipPopup();
     };
 
-    for (const btn of popup.querySelectorAll("[data-equip-slot]")) {
-      btn.onclick = () => {
-        if (itemUsePending) return;
-        const slotIdx = Number(btn.dataset.equipSlot);
-        const cand = currentBagSlots()?.[slotIdx];
-        if (!cand) return;
-        if (slotKey === "mainHand") {
-          if (mode === "live") {
-            sendBagCommand("equip_weapon", { slot: slotIdx });
-          } else {
-            demoWeaponSlot = slotIdx;
-            setAvatarWeapon(getLocalAvatar(), cand.itemId || "");
-            toast("DEMO สวมใส่ " + (WEAPON_META[cand.itemId]?.name || cand.itemId));
-            renderBag();
-          }
+    const doEquipCandidate = (cand) => {
+      if (!cand || itemUsePending) return;
+      const reqLevel = cand.meta?.level || 1;
+      const lowLevel = reqLevel > (char.level || 1);
+      const wrongClass = cand.meta?.path && cand.meta.path !== "all" && cand.meta.path !== char.pathId;
+      if (lowLevel || wrongClass) return;
+
+      if (slotKey === "mainHand") {
+        if (mode === "live") {
+          sendBagCommand("equip_weapon", { slot: cand.slotIndex });
         } else {
-          sendBagCommand("equip_gear", { slot: slotIdx, position: slotKey, expected: cand.itemId, ...accessoryStamp(cand) });
+          demoWeaponSlot = cand.slotIndex;
+          setAvatarWeapon(getLocalAvatar(), cand.item.itemId || "");
+          toast("DEMO สวมใส่ " + (WEAPON_META[cand.item.itemId]?.name || cand.item.itemId));
+          renderBag();
         }
-        closeEquipPopup();
+      } else {
+        sendBagCommand("equip_gear", { slot: cand.slotIndex, position: slotKey, expected: cand.item.itemId, ...accessoryStamp(cand.item) });
+      }
+      closeEquipPopup();
+    };
+
+    for (const slotBtn of popup.querySelectorAll("[data-cand-idx]")) {
+      const idx = Number(slotBtn.dataset.candIdx);
+      slotBtn.onclick = () => {
+        if (selectedCandidateIndex === idx) {
+          // Second click on already selected slot equips it!
+          doEquipCandidate(candidates[idx]);
+        } else {
+          selectedCandidateIndex = idx;
+          renderEquipPopupContent(slotKey);
+        }
+      };
+    }
+
+    const confirmBtn = $("equipConfirmBtn");
+    if (confirmBtn) {
+      confirmBtn.onclick = () => {
+        doEquipCandidate(candidates[selectedCandidateIndex]);
       };
     }
   }
@@ -12545,11 +12590,18 @@
           '<span class="mp-mini" id="paperdollMp">MP —</span>' +
         '</div>' +
       '</div>';
+    const wearShortTags = {
+      head: "ศีรษะ", shoulders: "ไหล่", chest: "เกราะอก", arms: "แขน",
+      leftHand: "มือซ้าย", rightHand: "มือขวา", legs: "กางเกง", feet: "รองเท้า",
+      offHand: "มือรอง", neck: "สร้อย", leftEar: "หูซ้าย", rightEar: "หูขวา",
+      leftRing: "แหวนซ้าย", rightRing: "แหวนขวา", mainHand: "อาวุธ"
+    };
     const slotsHtml = Object.entries({mainHand:"อาวุธหลัก", ...bodyLabels}).map(([key, name]) =>
-      '<button type="button" id="wear-' + key + '" class="wear-tile" style="grid-area:' + key + '" aria-pressed="false">' +
-      '<b aria-hidden="true">' + (gearSymbols[key] || "◈") + '</b>' +
-      '<span>' + name + '</span>' +
-      '<small>ว่าง</small>' +
+      '<button type="button" id="wear-' + key + '" class="wear-tile" style="grid-area:' + key + '" aria-pressed="false" title="' + name + '">' +
+      '<span class="bag-symbol">' + (gearSymbols[key] || "◈") + '</span>' +
+      '<span class="wear-tag">' + (wearShortTags[key] || name) + '</span>' +
+      '<span class="bag-quantity"></span>' +
+      '<small class="sr-only">ว่าง</small>' +
       '</button>'
     ).join("");
     return '<div class="paperdoll-grid" role="group" aria-label="ช่องติดตั้งอุปกรณ์รอบตัวละคร">' + stageHtml + slotsHtml + '</div>';
@@ -12975,8 +13027,18 @@
         const id=key==="mainHand"?equippedItem?.itemId:equipment[key];
         tile.classList.toggle("filled",!!id);
         tile.setAttribute("aria-pressed",String(inspectingGear===key));
-        tile.lastChild.textContent=bagMeta(id)?.name || "ว่าง";
+        const meta = bagMeta(id);
+        const symEl = tile.querySelector(".bag-symbol");
+        if (symEl) symEl.textContent = meta?.symbol || gearSymbols[key] || "◈";
+        const qtyEl = tile.querySelector(".bag-quantity");
+        if (qtyEl) {
+          const itemObj = key === "mainHand" ? equippedItem : wornGearAt(key, slots);
+          const forgeRank = itemObj?.forge?.rank;
+          qtyEl.textContent = forgeRank ? ("+" + forgeRank) : (id ? "✓" : "");
+        }
+        tile.lastChild.textContent=meta?.name || "ว่าง";
         tile.setAttribute("aria-label",label+" "+tile.lastChild.textContent);
+        tile.setAttribute("title",label+": "+tile.lastChild.textContent);
       }
       if (activeEquipSlot) {
         renderEquipPopupContent(activeEquipSlot);
