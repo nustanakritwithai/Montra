@@ -29,7 +29,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Validate client JavaScript
-        run: node --check main.js && node --check audio.js && node --check account-entry.js && node deploy/combat/account-delete-ui-test.cjs && node deploy/combat/skill-rank-ui-test.cjs
+        run: node --check main.js && node --check audio.js && node --check account-entry.js && node deploy/combat/account-delete-ui-test.cjs && node deploy/combat/skill-rank-ui-test.cjs && node deploy/combat/item-display-ui-test.cjs && node deploy/combat/market-catalog-ui-test.cjs
 
       - name: Verify combat HUD wiring
         shell: bash

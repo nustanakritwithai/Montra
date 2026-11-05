@@ -133,8 +133,9 @@ test('all item display surfaces use shared thumbnails while interactive inventor
   for(const id of ['marketItem','auctionItem','tradeItem'])assert(source.includes(`id="${id}Preview"`),`missing selected preview ${id}`);
   assert.match(slice('  function renderWorkbench(','  function renderCraft('),/row\.append\(createItemTile\(part\.item,\{quantity:part\.qty\}\),name,count\)/);
   const central=slice('  function renderCentralMarket(','  function renderEconomy()');
-  assert.match(central,/row\.append\(createItemTile\(entry\.item\),content\)/);assert.match(central,/row\.append\(createItemTile\(\{itemId:item\.item,quantity:1\}\),info,button\)/);
-  assert.match(slice('  function renderEconomy()','  function renderEconomyItemPreviews('),/row\.append\(createItemTile\(listing\.item\),details,action\)/);
+  assert.match(central,/createMarketProduct\(item\.item,/);assert.match(central,/piece=\{itemId:item\.item,quantity:1\},card=createMarketProduct\(piece,/);
+  assert.match(slice('  function createMarketProduct(','  function marketConfirmButton('),/art\.append\(createItemTile\(item\)\)/);
+  assert.match(slice('  function renderEconomy()','  function renderEconomyItemPreviews('),/createMarketProduct\(listing\.item,/);
   assert.match(source,/<button type="button" class="bag-slot bag-filled equip-candidate-slot/);
   assert.match(source,/class="bag-slot wear-tile"/);assert.match(source,/<button type="button" class="bag-slot" id="bagSlot/);
   assert.match(source,/slot\.querySelector\("\.bag-symbol"\)\.textContent = itemSymbol\(item\?\.itemId\)/);

@@ -1,0 +1,182 @@
+/** Production marketplace rendering and protocol adapters; no external connections. */
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const source=fs.readFileSync(path.join(__dirname,'../../main.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'../../styles.css'),'utf8');
+const slice=(start,end)=>{const a=source.indexOf(start),b=source.indexOf(end,a);assert(a>=0&&b>a,`missing source boundary ${start}`);return source.slice(a,b);};
+const plain=value=>JSON.parse(JSON.stringify(value));let groups=0;
+function test(name,body){try{body();groups++;console.log('PASS '+name);}catch(error){error.message=name+': '+error.message;throw error;}}
+function node(tag='div'){
+  let value='',text='';const classes=new Set();
+  const el={tagName:tag.toUpperCase(),hidden:false,disabled:false,checked:false,open:false,dataset:{},attributes:{},children:[],
+    classList:{contains:k=>classes.has(k),toggle(k,on){if(on)classes.add(k);else classes.delete(k);}},
+    setAttribute(k,v){this.attributes[k]=String(v);},getAttribute(k){return this.attributes[k];},
+    append(...children){for(const child of children)this.appendChild(child);},
+    appendChild(child){this.children.push(child);if(this.tagName==='SELECT'&&this.children.length===1)value=String(child.value);return child;},
+    replaceChildren(...children){this.children=[];text='';if(this.tagName==='SELECT')value='';this.append(...children);},
+    click(){if(!this.disabled)this.onclick?.();},focus(){this.focused=true;}};
+  Object.defineProperties(el,{
+    className:{get(){return [...classes].join(' ');},set(v){classes.clear();for(const c of String(v).split(/\s+/).filter(Boolean))classes.add(c);}},
+    textContent:{get(){return text+this.children.map(c=>c.textContent).join('');},set(v){this.replaceChildren();text=String(v);}},
+    options:{get(){return this.children;}},childElementCount:{get(){return this.children.length;}},
+    value:{get(){return value;},set(v){v=String(v);value=this.tagName==='SELECT'&&!this.children.some(c=>c.value===v)?'':v;}},
+    innerHTML:{set(){assert.fail('dynamic product data must stay inert text');}},
+  });return el;
+}
+const find=(el,cls)=>el.children.flatMap(c=>[c,...desc(c)]).find(c=>c.classList.contains(cls));
+const desc=el=>el.children.flatMap(c=>[c,...desc(c)]);
+const uuid=n=>`${String(n).padStart(8,'0')}-1111-4111-a111-111111111111`;
+function fixture({central=true}={}){
+  const elements=new Map(),wire=[],callbacks={},timers=new Map(),toasts=[];let seq=0;
+  const $=id=>elements.get(id)||null,player={persistent:true,alive:true,characterId:'aaaaaaaaaaaa',level:25,pathId:'blade',mapId:'village',x:0,y:0,z:0};
+  const items={wood:{name:'ไม้ดิบ',kind:'material',level:1},stone:{name:'หิน',kind:'material'},weapon:{name:'ดาบคู่',kind:'mainHand',path:'blade',level:25,rarity:'rare',stats:{atk:5},forge:{primary:'melee',enhanceMax:10,affixMax:6}},ring:{name:'แหวน',kind:'ring',copyLimit:2,level:25},card:{name:'การ์ดทดสอบ',kind:'card',stats:{atk:2}}};
+  const inventory={slots:[{itemId:'wood',quantity:9},{itemId:'weapon',quantity:1,forge:{rank:3,instanceId:'same',revision:2}},{itemId:'stone',quantity:1,bound:true},{itemId:'ring',quantity:1,forge:{rank:1,instanceId:'ring1',revision:4}}],equippedWeaponSlot:1};
+  const ctx={$,document:{createElement:node},Date,mode:'live',room:null,localId:'me',personalItems:items,WEAPON_META:{},POTION_ITEM_ID:'health_potion',SHRINE_SHARD:'shrine_shard',shardName:'เศษตรา',catalogRevision:1,
+    bodyLabels:{leftRing:'แหวนซ้าย',rightRing:'แหวนขวา'},inventoryState:inventory,ownServerCharacter:()=>player,currentBagSlots:()=>inventory.slots,
+    updateTradeBadge(){},renderBag(){},toast:message=>toasts.push(message),fishingPending:false,itemUsePending:false,
+    setTimeout:fn=>{timers.set(++seq,fn);return seq;},clearTimeout:id=>timers.delete(id),
+    window:{crypto:{getRandomValues(bytes){bytes.fill(++seq);}}},
+    openDrawer(name,title,html){ctx.drawerActive=name;ctx.html=html;elements.clear();
+      for(const m of html.matchAll(/<([a-z][a-z0-9]*)\b([^>]*\bid="([^"]+)"[^>]*)>/g)){const el=node(m[1]);el.hidden=/\bhidden\b/.test(m[2]);el.disabled=/\bdisabled\b/.test(m[2]);const v=m[2].match(/\bvalue="([^"]*)"/);if(v)el.value=v[1];elements.set(m[3],el);}
+      for(const m of html.matchAll(/<select\b[^>]*id="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g))for(const o of m[2].matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)){const option=node('option');option.value=o[1];option.textContent=o[2];$(m[1]).append(option);}
+    },
+  };
+  vm.createContext(ctx);const run=code=>vm.runInContext(code,ctx);
+  run(slice('  const rarityNames=','  const practiceModels =')+slice('  function statLine(','  const bodyLabels=')+
+    slice('  const gearSymbols=','  let inspectingGear=')+slice('  function wearPositions(','  function gearDestination(')+
+    slice('  function bagMeta(','  function wornGearAt(')+slice('  function pieceForgeRatings(','  function forgeComparison(')+
+    slice('  let economyGold =','  let partyState =')+slice('  function gearStamp(','  function salvageSelectedGear(')+
+    slice('  let economyPendingRequest=','  function updatePartyBadge()'));
+  ctx.room={state:{economyAvailable:true,players:new Map([['me',player],['near',{persistent:true,alive:true,characterName:'เพื่อน',mapId:'village',x:2,y:0,z:0}]])},send:(command,payload)=>wire.push({command,payload:plain(payload)})};
+  ctx.joined=ctx.room;ctx.joined.onMessage=(name,handler)=>callbacks[name]=handler;
+  run(slice('      joined.onMessage("economy_state",','      joined.onMessage("craft_result",')+
+    slice('      joined.onMessage("market_result",','      let resourcePage=null;')+
+    slice('      joined.onMessage("economy_error",','      joined.onMessage("combat_hit",'));
+  run(`centralMarketVersion=${central?1:0};economyGold=1000;openEconomy()`);
+  const lastBrowse=()=>wire.filter(x=>x.command==='market_browse').at(-1);
+  const page=(entries,nextCursor=null,override={})=>{const request=lastBrowse();callbacks.market_page({tag:request.payload.tag,market:request.payload.market,[request.payload.market==='fixed'?'listings':'auctions']:entries,nextCursor,...override});};
+  const row=(n,item='wood',mine=false)=>({id:uuid(n),seller:mine?player.characterId:'bbbbbbbbbbbb',item:{itemId:item,quantity:3},price:210,isMine:mine});
+  const status=()=>plain(run('({economyPending,economyGold,economyTab,marketPageRequest,marketNextCursor,economyListings,centralAuctions,marketFilters,marketPageError})'));
+  return {ctx,run,$,wire,callbacks,timers,player,items,inventory,lastBrowse,page,row,status,toasts};
+}
+
+test('catalog uses accessible 50px inventory tiles, exact item metadata and inert product text',()=>{
+  const f=fixture(),piece={itemId:'weapon',quantity:1,forge:{rank:3,affix:{stat:'melee',tier:2}},socket:'card',bound:false},before=JSON.stringify(piece);
+  const card=f.ctx.createMarketProduct(piece,{price:1234,badge:'ซื้อทันที',id:uuid(1)});
+  assert.equal(card.tagName,'ARTICLE');assert.equal(card.dataset.listingId,uuid(1));
+  const tile=find(card,'item-slot');assert(tile.classList.contains('bag-slot'));assert.equal(tile.getAttribute('role'),'img');assert.equal(tile.onclick,undefined);
+  assert.match(card.textContent,/ดาบคู่ \+3/);assert.match(card.textContent,/หายาก.*Lv.25/);assert.match(card.textContent,/ออปชัน.*ขั้น 2/);assert.match(card.textContent,/การ์ดทดสอบ/);assert.match(card.textContent,/ผูกกับตัวละครเมื่อสวม/);assert.match(card.textContent,/1,234 ทอง/);
+  assert.equal(JSON.stringify(piece),before);
+  f.items.unsafe={name:'<img src=x onerror=alert(1)>',kind:'material'};
+  assert.match(f.ctx.createMarketProduct({itemId:'unsafe',quantity:1}).textContent,/<img src=x/);
+  assert.match(css,/\.market-products\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css,/--item-slot-size\s*:\s*50px/);assert.doesNotMatch(css,/\.market-products\s*\{[^}]*overflow-y/);
+});
+
+test('new catalog revisions refresh a product label without replacing its listing identity',()=>{
+  const f=fixture();f.page([f.row(1)]);f.items.wood.name='ไม้ชื่อใหม่';f.ctx.catalogRevision++;f.ctx.renderEconomy();
+  assert.match(f.$('marketListings').textContent,/ไม้ชื่อใหม่/);assert.equal(f.$('marketListings').children[0].dataset.listingId,uuid(1));
+});
+
+test('fixed whole-listing purchase has review, cancellation and one pending durable mutation',()=>{
+  const f=fixture();f.page([f.row(1)]);const card=f.$('marketListings').children[0],button=find(card,'market-product-action'),cancel=find(card,'market-product-cancel');
+  assert.match(card.textContent,/210 ทอง/);assert.match(card.textContent,/70 ทอง\/ชิ้น/);
+  button.click();assert(!f.wire.some(x=>x.command==='market_buy'));assert.equal(cancel.hidden,false);assert.match(find(card,'market-product-confirm').textContent,/×3.*210/);
+  cancel.click();assert.equal(cancel.hidden,true);button.click();button.click();button.click();
+  const sent=f.wire.filter(x=>x.command==='market_buy');assert.equal(sent.length,1);assert.deepEqual(Object.keys(sent[0].payload).sort(),['listingId','requestId']);assert.equal(sent[0].payload.listingId,uuid(1));
+  assert.equal(f.status().economyPending,true);assert.equal(find(f.$('marketListings').children[0],'market-product-action').disabled,true);assert.equal(f.status().economyGold,1000);
+});
+
+test('search and paging remain server-authoritative with stale tags and repeat More guarded',()=>{
+  const f=fixture();f.$('marketQuery').value='ไม้';f.$('marketCategory').value='material';f.$('marketFilters').onsubmit({preventDefault(){}});
+  assert.deepEqual({...f.lastBrowse().payload,tag:0},{market:'fixed',query:'ไม้',category:'material',before:null,ownOnly:false,tag:0});
+  const tag=f.lastBrowse().payload.tag;f.page([f.row(9)],9);assert.match(f.$('marketResultStatus').textContent,/1 รายการที่โหลดแล้ว/);
+  f.$('marketMore').click();f.$('marketMore').click();assert.equal(f.wire.filter(x=>x.command==='market_browse'&&x.payload.before===9).length,1);
+  f.page([f.row(8)],8);assert.equal(f.$('marketListings').children.length,2);
+  f.callbacks.market_page({market:'fixed',tag,listings:[f.row(99)],nextCursor:99});assert.equal(f.$('marketListings').children.length,2);
+  f.$('economyShopTab').click();assert.equal(f.lastBrowse().payload.ownOnly,true);assert.equal(f.lastBrowse().payload.query,'');assert.equal(f.lastBrowse().payload.before,null);
+  f.page([f.row(7,'wood',true)]);assert.equal(f.$('marketOwnListings').children.length,1);assert.match(f.$('marketOwnListings').textContent,/ยกเลิกฝากขาย/);
+  f.$('economyMarketTab').click();assert.equal(f.lastBrowse().payload.query,'ไม้');assert.equal(f.lastBrowse().payload.ownOnly,false);
+});
+
+test('late responses cannot replace a newer search or a different market view',()=>{
+  const f=fixture(),first=f.lastBrowse().payload;
+  f.$('marketQuery').value='หิน';f.$('marketFilters').onsubmit({preventDefault(){}});const second=f.lastBrowse().payload;
+  f.callbacks.market_page({market:'fixed',tag:first.tag,listings:[f.row(1)],nextCursor:1});assert.equal(f.status().marketPageRequest.tag,second.tag);assert.equal(f.status().economyListings.length,0);
+  f.callbacks.market_page({market:'auction',tag:second.tag,auctions:[{...f.row(2),opening:100,bid:0,endsAt:Date.now()+60000}],nextCursor:2});assert.equal(f.status().marketPageRequest.tag,second.tag);
+  f.page([f.row(3,'stone')]);assert.equal(f.status().economyListings[0].id,uuid(3));
+  f.$('marketMore').click();assert.equal(f.lastBrowse().payload.tag,second.tag);
+  f.$('economyAuctionTab').click();const auction=f.lastBrowse().payload;
+  f.callbacks.market_page({market:'fixed',tag:second.tag,listings:[f.row(4)],nextCursor:4});assert.equal(f.status().marketPageRequest.tag,auction.tag);assert.equal(f.status().marketNextCursor,null);
+});
+
+test('read failure is distinct from empty, allows refresh and never repeats a mutation',()=>{
+  const f=fixture(),pending=f.status().marketPageRequest;assert(pending);[...f.timers.values()].at(-1)();
+  assert.equal(f.status().marketPageRequest,null);assert.match(f.$('marketResultStatus').textContent,/โหลดรายการไม่สำเร็จ/);assert.equal(f.$('marketRefresh').disabled,false);
+  const before=f.wire.length;f.$('marketRefresh').click();assert(f.wire.length>before);assert(f.status().marketPageRequest);f.page([]);assert.match(f.$('marketListings').textContent,/ไม่พบสินค้า/);
+  f.page([],null,{tag:0});assert(!f.wire.some(x=>/^market_(buy|create|cancel)$/.test(x.command)));
+});
+
+test('own-only filters still combine with name/category and remain separate from My Shop',()=>{
+  const f=fixture();f.$('marketQuery').value='ไม้';f.$('marketCategory').value='material';f.$('marketOwnOnly').checked=true;
+  f.$('marketFilters').onsubmit({preventDefault(){}});assert.equal(f.lastBrowse().payload.ownOnly,true);assert.equal(f.lastBrowse().payload.query,'ไม้');assert.equal(f.lastBrowse().payload.category,'material');
+  f.$('economyShopTab').click();assert.equal(f.lastBrowse().payload.query,'');f.$('economyMarketTab').click();assert.equal(f.lastBrowse().payload.ownOnly,true);assert.equal(f.lastBrowse().payload.category,'material');
+});
+
+test('tab changes and reopen clear purchase/claim confirmations without sending',()=>{
+  const f=fixture();f.callbacks.market_overview({credit:0,auctions:[{...f.row(2),opening:100,bid:0,isMine:true,state:'open'}],supply:{items:[{item:'wood',price:10,remaining:3}]}});
+  f.$('economySupplyTab').click();let button=find(f.$('starterSupplyRows').children[0],'market-product-action');button.click();assert.match(button.getAttribute('aria-label'),/^ยืนยัน/);
+  f.$('economyShopTab').click();f.$('economySupplyTab').click();button=find(f.$('starterSupplyRows').children[0],'market-product-action');assert.notEqual(button.dataset.confirm,'yes');
+  button.click();f.ctx.openEconomy();button=find(f.$('starterSupplyRows').children[0],'market-product-action');assert.notEqual(button.dataset.confirm,'yes');
+  f.$('economyShopTab').click();button=find(f.$('auctionMine').children[0],'market-product-action');button.click();f.$('economySupplyTab').click();f.$('economyShopTab').click();button=find(f.$('auctionMine').children[0],'market-product-action');assert.notEqual(button.dataset.confirm,'yes');
+  assert(!f.wire.some(x=>['starter_supply_buy','auction_cancel'].includes(x.command)));
+});
+
+test('rejected sales remain authoritative and clear pending without automatic retry',()=>{
+  const f=fixture();f.page([f.row(1)]);const button=find(f.$('marketListings').children[0],'market-product-action');button.click();button.click();
+  f.callbacks.economy_error({reason:'listing_unavailable'});assert.equal(f.status().economyPending,false);assert.equal(f.status().economyGold,1000);assert.match(f.toasts.at(-1),/ขายหรือยกเลิก/);assert.equal(f.wire.filter(x=>x.command==='market_buy').length,1);
+  f.callbacks.economy_state({gold:790});assert.equal(f.status().economyGold,790);assert.match(f.$('economyStatus').textContent,/790/);
+});
+
+test('seller forms retain accessory stamp, quantity and authoritative listing cancellation',()=>{
+  const f=fixture();f.$('economyShopTab').click();f.page([f.row(1,'wood',true)]);
+  assert.deepEqual(f.$('marketItem').options.map(o=>o.value),['0','3']);
+  f.$('marketItem').value='3';f.$('marketAmount').value='1';f.$('marketPrice').value='250';f.$('marketSell').click();
+  const sale=f.wire.find(x=>x.command==='market_create');assert.equal(sale.payload.stamp,'ring1.4');assert.equal(sale.payload.price,250);assert.equal(sale.payload.amount,1);
+  f.callbacks.market_result({action:'create'});f.page([f.row(1,'wood',true)]);
+  const cancel=find(f.$('marketOwnListings').children[0],'market-product-action');cancel.click();cancel.click();assert(f.wire.some(x=>x.command==='market_cancel'));
+});
+
+test('auction bid, own claims, pending credit and NPC reserve remain reachable',()=>{
+  const f=fixture();f.$('economyAuctionTab').click();
+  f.page([{...f.row(1),opening:100,bid:150,endsAt:Date.now()+60000,isBidder:true}]);
+  let card=f.$('auctionListings').children[0],controls=find(card,'auction-bid-controls'),input=controls.children[0],button=find(card,'market-product-action');
+  assert.equal(input.min,'151');input.value='200';button.click();input.value='201';input.oninput();button.click();assert(!f.wire.some(x=>x.command==='auction_bid'));button.click();
+  assert.equal(f.wire.find(x=>x.command==='auction_bid').payload.amount,201);
+  f.callbacks.market_action_result({action:'auction_bid'});
+  f.callbacks.market_overview({credit:99,auctions:[{...f.row(2),opening:100,bid:200,isBidder:true,canClaim:true}],supply:{items:[{item:'wood',price:10,remaining:0},{item:'stone',price:15,remaining:5}]}});
+  f.$('economyShopTab').click();assert.equal(f.$('auctionCredit').hidden,false);assert.match(f.$('auctionMine').textContent,/ชนะประมูล/);
+  f.$('auctionCredit').click();assert(f.wire.some(x=>x.command==='auction_credit'));
+  f.callbacks.market_action_result({action:'auction_credit'});const claim=find(f.$('auctionMine').children[0],'market-product-action');claim.click();claim.click();assert(f.wire.some(x=>x.command==='auction_claim'));
+  f.callbacks.market_action_result({action:'auction_claim'});f.$('economySupplyTab').click();const products=f.$('starterSupplyRows').children;
+  assert.equal(find(products[0],'market-product-action').disabled,true);const buy=find(products[1],'market-product-action');buy.click();buy.click();assert.equal(f.wire.find(x=>x.command==='starter_supply_buy').payload.quantity,1);
+});
+
+test('legacy feature fallback and unavailable connections do not fabricate listings',()=>{
+  const f=fixture({central:false});assert(f.wire.some(x=>x.command==='market_list'));assert(!f.lastBrowse());assert.equal(f.$('economyAuctionTab').disabled,true);assert.equal(f.$('marketFilters').hidden,true);
+  f.callbacks.market_state({listings:[f.row(1),f.row(2,'wood',true)]});f.$('economyShopTab').click();assert.equal(f.$('marketOwnListings').children.length,1);
+  f.run('mode="demo";renderEconomy()');assert.equal(find(f.$('marketOwnListings').children[0],'market-product-action').disabled,true);assert.match(f.$('economyStatus').textContent,/เข้า LIVE/);
+});
+
+test('nearby trading, no-item offer, both confirmations and cancellation stay intact',()=>{
+  const f=fixture();f.$('economyTradeTab').click();f.$('tradeInvite').click();assert.equal(f.wire.at(-1).command,'trade_request');assert.equal(f.wire.at(-1).payload.targetId,'near');
+  f.callbacks.trade_update({tradeId:'trade-1',otherName:'เพื่อน',own:{item:null,gold:10},other:{item:{itemId:'wood',quantity:1},gold:0},ownConfirmed:false});
+  f.$('tradeItem').value='none';f.$('tradeGold').value='15';f.$('tradeSetOffer').click();assert.deepEqual(f.wire.at(-1).payload,{tradeId:'trade-1',slot:null,amount:0,gold:15});
+  f.$('tradeConfirm').click();assert.equal(f.wire.at(-1).command,'trade_confirm');f.$('tradeCancel').click();assert.equal(f.wire.at(-1).command,'trade_cancel');
+});
+
+test('timeout recovery, reconnect reset and old room replies never replay purchase',()=>{
+  const f=fixture();f.page([f.row(1)]);const button=find(f.$('marketListings').children[0],'market-product-action');button.click();button.click();
+  [...f.timers.values()].at(-1)();assert.equal(f.wire.filter(x=>x.command==='market_buy').length,1);assert.equal(f.status().economyPending,false);assert(f.wire.some(x=>x.command==='get_economy'));
+  const oldReply=f.callbacks.market_page,tag=f.lastBrowse().payload.tag;f.run('resetCentralMarket()');assert.equal(f.status().marketPageRequest,null);assert.equal(f.status().marketNextCursor,null);assert.equal(f.timers.size,0);
+  f.ctx.room={state:{economyAvailable:false}};oldReply({tag,market:'fixed',listings:[f.row(88)],nextCursor:88});assert.equal(f.status().economyListings.length,0);
+});
+console.log(`PASS marketplace catalog: ${groups} regression groups`);
