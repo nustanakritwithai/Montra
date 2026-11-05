@@ -14174,20 +14174,37 @@
     const run={room,requestId:payload.requestId,action:payload.action,target:payload.slot,itemId:item.itemId,
       snapshot:JSON.parse(JSON.stringify(item)),until:Date.now()+(payload.action==="enhance" && !reduced?1260:0),
       reduced,pending:true,visible:true,dismissed:false,revealed:false,result:null,timer:null,motionTimer:null,
-      motionDone:reduced || payload.action!=="enhance",hammer:$("forgeHammer"),motionEnd:null};
+      motionDone:reduced || payload.action!=="enhance",striking:false,strikesCompleted:0,motionFrame:null,hammer:$("forgeHammer"),motionEnd:null};
     forgeAnimation=run;forgePresentationResult=null;forgeAnimationRuns.set(run.requestId,run);
     // Keep a small, room-local receipt history so a late result cannot unlock a newer request.
     while(forgeAnimationRuns.size>16)forgeAnimationRuns.delete(forgeAnimationRuns.keys().next().value);
     if(!run.motionDone){
+      run.striking=true;
       run.motionEnd=event=>{
-        if(event.animationName!=="forge-hammer-strike" || run.room!==room || run!==forgeAnimation || !run.visible)return;
-        run.motionDone=true;clearTimeout(run.motionTimer);run.motionTimer=null;completeForgeAnimation(run);
+        if(event.animationName!=="forge-hammer-strike" || run.room!==room || run!==forgeAnimation || !run.visible || !run.striking)return;
+        run.striking=false;run.strikesCompleted++;
+        // Let the impact pose paint before starting another finite strike. A slow
+        // renderer must not skip whole hits on a continuously looping timeline.
+        renderForgeAnimation();
+        const next=()=>{
+          run.motionFrame=null;
+          if(run.room!==room || run!==forgeAnimation || !run.visible || run.motionDone)return;
+          run.motionFrame=requestAnimationFrame(()=>{
+            run.motionFrame=null;
+            if(run.room!==room || run!==forgeAnimation || !run.visible || run.motionDone)return;
+            if(run.strikesCompleted>=3){
+              run.motionDone=true;clearTimeout(run.motionTimer);run.motionTimer=null;completeForgeAnimation(run);return;
+            }
+            run.striking=true;renderForgeAnimation();
+          });
+        };
+        run.motionFrame=requestAnimationFrame(next);
       };
       if(run.hammer)run.hammer.onanimationend=run.motionEnd;
       // A slow renderer must finish its actual three strikes before reveal. A
       // missing CSS event cannot trap a confirmed receipt forever (background tabs,
       // disabled styles, or a motion setting changed while the request was pending).
-      run.motionTimer=setTimeout(()=>{run.motionTimer=null;if(run.room!==room || run!==forgeAnimation || !run.visible)return;run.motionDone=true;completeForgeAnimation(run);},5000);
+      run.motionTimer=setTimeout(()=>{run.motionTimer=null;if(run.room!==room || run!==forgeAnimation || !run.visible)return;run.motionDone=true;run.striking=false;cancelAnimationFrame(run.motionFrame);run.motionFrame=null;completeForgeAnimation(run);},10000);
     }
     if(run.until>Date.now())run.timer=setTimeout(()=>{run.timer=null;completeForgeAnimation(run);},run.until-Date.now());
     renderForgeAnimation();
@@ -14237,7 +14254,7 @@
     return true;
   }
   function clearForgeAnimationTimers(run){
-    clearTimeout(run.timer);clearTimeout(run.motionTimer);run.timer=null;run.motionTimer=null;
+    clearTimeout(run.timer);clearTimeout(run.motionTimer);cancelAnimationFrame(run.motionFrame);run.timer=null;run.motionTimer=null;run.motionFrame=null;
     if(run.hammer?.onanimationend===run.motionEnd)run.hammer.onanimationend=null;
   }
   function cancelForgeAnimation(reveal=false,forget=false){
@@ -14257,11 +14274,11 @@
   function renderForgeAnimation(){
     if(drawerActive!=="forge")return;
     const run=forgeAnimation,busy=forgeAnimationBusy(),visible=busy && run.visible;
-    const striking=visible && run.action==="enhance" && !run.reduced && !run.motionDone;
+    const striking=visible && run.action==="enhance" && !run.reduced && !run.motionDone && run.striking;
     const motion=$("forgeHammerMotion"),status=$("forgeAnimationStatus"),outcome=$("forgeOutcome");
     if(motion){motion.hidden=!visible || run.action!=="enhance" || run.reduced;motion.classList.toggle("is-striking",!!striking);}
     $("forgeSelection")?.setAttribute("aria-busy",String(!!visible));
-    if(status){status.hidden=!busy;status.textContent=busy?(striking?"กำลังตีบวก…":"รอผลยืนยันจากเซิร์ฟเวอร์…"):"";}
+    if(status){status.hidden=!busy;status.textContent=busy?(visible && run.action==="enhance" && !run.motionDone?"กำลังตีบวก…":"รอผลยืนยันจากเซิร์ฟเวอร์…"):"";}
     if(outcome){const text=forgePresentationResult?.room===room && forgePresentationResult.action===forgePageAction?forgePresentationResult.message:"";outcome.textContent=text;outcome.hidden=!text || busy;}
     for(const id of ["forgeTabEnhance","forgeTabReroll"])if($(id))$(id).disabled=busy;
     if($("forgeStockGear"))$("forgeStockGear").disabled=busy || economyPending || itemUsePending;

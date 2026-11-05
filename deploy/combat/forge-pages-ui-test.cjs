@@ -25,7 +25,7 @@ const piece={itemId:id,quantity:1,forge:forged('sword')};
 const inventory={slots:[piece,{itemId:id,quantity:1,forge:forged('donor',0)},null,...Array(9).fill(null)],equippedWeaponSlot:0,equipment:{leftRing:ring,rightRing:ring},equipmentForges:{leftRing:forged('left'),rightRing:forged('right')},equipmentSockets:{leftRing:'card'},forgeCopies:{[id]:8,[ring]:4}};
 const config={chances:Array(10).fill(100),rerollCost:60,rareAfter:4,claimCopies:true,enhanceSteps:Array.from({length:10},(_,rank)=>({copies:1+Math.floor(rank/3),gold:12*(rank+1),chance:rank>4?78:100,downgradeChance:rank>4?20:0,breakChance:rank>4?2:0,breakOnFailure:rank>4}))};
 const me={alive:true,level:25,persistent:true};let ready=true,accepted=false;
-const ctx={$,document,Date:{now:()=>10000},setTimeout:()=>1,clearTimeout(){},economyPendingRequest:null,refreshArtisanWallet(){},createItemTile:()=>control(),renderItemTile(){},renderItemPreview(){},triggerBagPanelPop(){},Option:class{constructor(text,value){Object.assign(this,{text,value});}},inventoryState:inventory,room:{state:{forgeCatalog:JSON.stringify(config)}},drawerActive:null,
+const ctx={$,document,Date:{now:()=>10000},setTimeout:()=>1,clearTimeout(){},cancelAnimationFrame(){},economyPendingRequest:null,refreshArtisanWallet(){},createItemTile:()=>control(),renderItemTile(){},renderItemPreview(){},triggerBagPanelPop(){},Option:class{constructor(text,value){Object.assign(this,{text,value});}},inventoryState:inventory,room:{state:{forgeCatalog:JSON.stringify(config)}},drawerActive:null,
   economyReady:()=>ready,currentBagSlots:()=>inventory.slots,currentEquippedWeaponSlot:()=>inventory.equippedWeaponSlot,
   bagMeta:id=>metadata[id],personalItems:metadata,WEAPON_META:{},bodyLabels:{leftRing:'แหวนซ้าย',rightRing:'แหวนขวา'},forgeNames:{melee:'โจมตีประชิด',guard:'ป้องกันมอนสเตอร์'},
   ownServerCharacter:()=>me,economyPending:false,itemUsePending:false,economyGold:1000,selectedBagSlot:0,inspectingGear:null,benchTrail:[],
@@ -102,7 +102,7 @@ assert.match(source,/closeEquipPopup\(\); openForgePage\("enhance", target\)/);
 // Real pending timeout sends only read requests and refreshes the open item view.
 let timeout,refreshes=0;const wire=[];
 const pending={failForgeAnimation(){},economyPendingRequest:null,economyPending:false,economyTimer:null,economyReady:()=>true,room:{send:(command,payload)=>wire.push({command,payload})},centralMarketVersion:0,
-  setTimeout:handler=>{timeout=handler;return 1;},clearTimeout(){},toast(){},renderEconomy(){},renderBag(){refreshes++;}};
+  setTimeout:handler=>{timeout=handler;return 1;},clearTimeout(){},cancelAnimationFrame(){},toast(){},renderEconomy(){},renderBag(){refreshes++;}};
 vm.createContext(pending);vm.runInContext(slice('  function finishEconomyPending(','  function economyReady()')+slice('  function economySend(','  function economyRequestId()'),pending);
 pending.economySend('forge_weapon',{requestId:'one'},true);pending.economySend('forge_weapon',{requestId:'two'},true);assert.equal(wire.length,1);
 timeout();assert.equal(pending.economyPending,false);assert.deepEqual(wire.map(x=>x.command),['forge_weapon','get_economy','market_list']);assert.equal(refreshes,2);

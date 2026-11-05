@@ -14,7 +14,7 @@ function harness({reduced=false,confirm=true,throwSend=false,animationEnd=true}=
       const toggle=node.classList.toggle;
       node.classList.toggle=(name,on)=>{const prior=node.classList.contains(name);toggle(name,on);
         // Model only the browser's finite CSS end event; product owns all state.
-        if(animationEnd && name==='is-striking' && on && !prior)clock.setTimeout(()=>{if(node.classList.contains(name))$('forgeHammer').onanimationend?.({animationName:'forge-hammer-strike'});},1080);
+        if(animationEnd && name==='is-striking' && on && !prior)clock.setTimeout(()=>{if(node.classList.contains(name))$('forgeHammer').onanimationend?.({animationName:'forge-hammer-strike'});},360);
       };
     }
   }return elements.get(id);};
@@ -22,7 +22,7 @@ function harness({reduced=false,confirm=true,throwSend=false,animationEnd=true}=
   const inventory={slots:[item],forgeCopies:{test_sword:3}};
   const meta={name:'ดาบทดสอบ',kind:'mainHand',level:1,forge:{primary:'melee',enhanceRatings:{6:42}},recipe:[{item:'metal',qty:1}]};
   const room={state:{forgeCatalog:JSON.stringify({enhanceSteps:Array.from({length:10},()=>({copies:2,gold:100,chance:75,breakOnFailure:true,downgradeChance:20}))})},send(command,payload){if(throwSend)throw Error('offline');sent.push({command,payload});},onMessage(name,callback){callbacks[name]=callback;}};
-  const ctx={$,room,joined:room,window:{confirm:()=>confirm,matchMedia:()=>({matches:reduced})},document:{hidden:false},performance:{now:clock.now},Date:class extends Date{static now(){return clock.now();}},setTimeout:clock.setTimeout,clearTimeout:clock.clearTimeout,
+  const ctx={$,room,joined:room,window:{confirm:()=>confirm,matchMedia:()=>({matches:reduced})},document:{hidden:false},performance:{now:clock.now},Date:class extends Date{static now(){return clock.now();}},setTimeout:clock.setTimeout,clearTimeout:clock.clearTimeout,requestAnimationFrame:fn=>clock.setTimeout(fn,16),cancelAnimationFrame:clock.clearTimeout,
     inventoryState:inventory,economyGold:1000,economyPending:false,economyTimer:null,itemUsePending:false,drawerActive:'forge',forgePageAction:'enhance',forgePageTarget:0,forgePageIdentity:{itemId:item.itemId,instanceId:'sword'},forgePageRoom:room,
     economyReady:()=>true,forgeTargetItem:()=>inventory.slots[0],bagMeta:value=>value?meta:null,gearStamp:value=>value.forge.instanceId+'.'+value.forge.revision,forgeRiskText:()=> 'เสี่ยงแตก',economyRequestId:()=>`request_${sent.length+1}`,
     renderForgePage:()=>renders.push('forge'),renderBag:()=>renders.push('bag'),renderEconomy:()=>renders.push('economy'),renderForgeStock:()=>renders.push('stock'),forgeNames:{melee:'โจมตี'},centralMarketVersion:0,toast:message=>toasts.push(message),fishingPending:false};
@@ -155,11 +155,40 @@ for(const reply of ['craft_result','forge_copy_claimed'])for(const failure of ['
 {
   const h=setup({animationEnd:false});start(h);wire(h,result(h));h.clock.advance(1260);
   assert.equal(h.run('forgeAnimationBusy()'),true);assert.equal(h.toasts.length,0);assert.equal(h.$('forgeHammerMotion').hidden,false);
-  h.clock.advance(700);h.$('forgeHammer').onanimationend({animationName:'forge-hammer-strike'});
+  h.clock.advance(700);for(let hit=0;hit<3;hit++){h.$('forgeHammer').onanimationend({animationName:'forge-hammer-strike'});assert.equal(h.toasts.length,0);h.clock.advance(32);}
   assert.equal(h.run('forgeAnimationBusy()'),false);assert.match(h.toasts.at(-1),/ตีบวกสำเร็จ/);
 }
 {
-  const h=setup({animationEnd:false});start(h);wire(h,result(h));h.clock.advance(4999);assert.equal(h.toasts.length,0);h.clock.advance(1);assert.match(h.toasts.at(-1),/ตีบวกสำเร็จ/);assert.equal(h.run('forgeAnimationBusy()'),false);
+  const h=setup({animationEnd:false});start(h);wire(h,result(h));h.clock.advance(9999);assert.equal(h.toasts.length,0);h.clock.advance(1);assert.match(h.toasts.at(-1),/ตีบวกสำเร็จ/);assert.equal(h.run('forgeAnimationBusy()'),false);
+}
+// Each native strike completes once, with a painted impact gap before the next.
+{
+  const h=setup({animationEnd:false});start(h);wire(h,result(h));h.clock.advance(1260);
+  const end=h.$('forgeHammer').onanimationend;
+  end({animationName:'other'});assert.equal(h.run('forgeAnimation.strikesCompleted'),0);
+  for(let hit=1;hit<=3;hit++){
+    end({animationName:'forge-hammer-strike'});
+    assert.equal(h.run('forgeAnimation.strikesCompleted'),hit);
+    assert.equal(h.$('forgeHammerMotion').classList.contains('is-striking'),false);
+    end({animationName:'forge-hammer-strike'});assert.equal(h.run('forgeAnimation.strikesCompleted'),hit,'duplicate end cannot count another hit');
+    h.clock.advance(16);assert.equal(h.toasts.length,0,'first rAF leaves an impact frame');
+    h.clock.advance(15);assert.equal(h.toasts.length,0,'result waits through final impact hold');
+    h.clock.advance(1);
+    assert.equal(h.$('forgeHammerMotion').classList.contains('is-striking'),hit<3);
+  }
+  assert.equal(h.toasts.length,1);assert.equal(h.run('forgeAnimationBusy()'),false);
+}
+// Dismissal cancels a pending restart; even an already queued old callback is inert.
+{
+  const h=setup({animationEnd:false});start(h);const end=h.$('forgeHammer').onanimationend;
+  end({animationName:'forge-hammer-strike'});
+  const saved=h.clock.timers.get(h.run('forgeAnimation.motionFrame')).fn;
+  h.run('cancelForgeAnimation(false)');saved();
+  assert.equal(h.run('forgeAnimation.motionFrame'),null);assert.equal(h.run('forgeAnimation.strikesCompleted'),1);
+  assert.equal(h.ctx.economyPending,true,'dismissing animation cannot cancel committed mutation');
+  wire(h,result(h));assert.equal(h.toasts.length,1);
+  h.run('submitForge("enhance")');saved();end({animationName:'forge-hammer-strike'});
+  assert.equal(h.run('forgeAnimation.strikesCompleted'),0,'old frame/end cannot progress newer animation');
 }
 // Reduced motion has no forced delay, but still waits for the server.
 {
