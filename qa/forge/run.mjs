@@ -100,21 +100,34 @@ async function enterAndTalk(fixture) {
   await page.waitForFunction(() => document.getElementById('modeBadge')?.textContent === 'LIVE' && document.getElementById('accountEntry')?.hidden, null, { timeout: 90000 });
   await page.waitForFunction(() => BABYLON.Engine.Instances[0]?.scenes[0]?.meshes.some(m => m.isEnabled() && m.metadata?.serviceNpc?.role === 'smith'));
   await sleep(1000);
-  // Inspect projection only; NPC interaction still goes through actual pointer events/picking.
-  const point = await page.evaluate(() => {
-    const B = BABYLON, scene = B.Engine.Instances[0].scenes[0], camera = scene.activeCamera;
-    const mesh = scene.meshes.find(m => m.isEnabled() && m.metadata?.serviceNpc?.role === 'smith');
-    const canvas = document.getElementById('world'), rect = canvas.getBoundingClientRect();
-    mesh.computeWorldMatrix(true);
-    const center = mesh.getBoundingInfo().boundingBox.centerWorld;
-    const p = B.Vector3.Project(center, B.Matrix.Identity(), scene.getTransformMatrix(), camera.viewport.toGlobal(rect.width, rect.height));
-    return { x: rect.left + p.x, y: rect.top + p.y, width: innerWidth, height: innerHeight, npc: mesh.metadata.serviceNpc.name };
-  });
-  assert.equal(point.npc, 'ช่างอาคม');
-  assert.ok(point.x > 0 && point.x < point.width && point.y > 0 && point.y < point.height, 'smith is onscreen');
   await screenshot('01-world-smith');
-  await page.mouse.click(point.x, point.y);
-  await page.locator('#serviceNpcSpeech').waitFor({ state: 'visible' });
+  // Aim after the screenshot: the live follow-camera may move during capture.
+  // Read picking/projection only; every interaction still uses a real mouse click.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const point = await page.evaluate(() => {
+      const B = BABYLON, scene = B.Engine.Instances[0].scenes[0], camera = scene.activeCamera;
+      const mesh = scene.meshes.find(m => m.isEnabled() && m.metadata?.serviceNpc?.role === 'smith');
+      const canvas = document.getElementById('world'), rect = canvas.getBoundingClientRect();
+      mesh.computeWorldMatrix(true);
+      const center = mesh.getBoundingInfo().boundingBox.centerWorld;
+      const p = B.Vector3.Project(center, B.Matrix.Identity(), scene.getTransformMatrix(), camera.viewport.toGlobal(rect.width, rect.height));
+      const picked = scene.pick(p.x, p.y, m => m.isEnabled() && (m.metadata?.serviceNpc || m.metadata?.walkable || m.metadata?.portalId || m.metadata?.swordMentor || m.metadata?.questRanger || m.metadata?.questDefense || m.metadata?.warQuartermaster || m.metadata?.climbableWall));
+      return { x: rect.left + p.x, y: rect.top + p.y, width: innerWidth, height: innerHeight,
+        npc: mesh.metadata.serviceNpc.name, npcId: mesh.metadata.serviceNpc.id,
+        pickedNpcId: picked?.pickedMesh?.metadata?.serviceNpc?.id || null,
+        pickedMesh: picked?.pickedMesh?.name || null, element: document.elementFromPoint(rect.left + p.x, rect.top + p.y)?.id };
+    });
+    (report.npcClicks ||= []).push(point);
+    assert.equal(point.npc, 'ช่างอาคม');
+    assert.ok(point.x > 0 && point.x < point.width && point.y > 0 && point.y < point.height, 'smith is onscreen');
+    assert.equal(point.element, 'world', 'actual canvas receives the NPC tap');
+    assert.equal(point.pickedNpcId, point.npcId, 'fresh projected point hits the actual smith');
+    await page.mouse.click(point.x, point.y, { delay: 30 });
+    if (await page.locator('#serviceNpcSpeech').isVisible()) break;
+    await page.locator('#serviceNpcSpeech').waitFor({ state: 'visible', timeout: 2500 }).catch(() => {});
+    if (await page.locator('#serviceNpcSpeech').isVisible()) break;
+  }
+  assert.equal(await page.locator('#serviceNpcSpeech').isVisible(), true, 'real NPC tap opens dialogue');
   assert.match(await page.locator('#drawerTitle').innerText(), /ช่างอาคม/);
   await screenshot('02-npc-dialogue');
   await page.locator('#serviceNpcAction').click();
