@@ -25,6 +25,8 @@ const {chromium}=require('playwright');
    assert(box.x>=0&&box.y>=0&&box.x+box.width<=width,'card inside viewport');assert(box.height<=80,'compact card height');
    assert(box.x+box.width<=map.x||box.y+box.height<=map.y||map.y+map.height<=box.y,'card and minimap do not overlap');
    if(quest)assert(quest.y>=box.y+box.height,'quest stays below card');
+   const chat=await page.locator('.chat-box').boundingBox();
+   if(quest&&chat)assert(quest.x+quest.width<=chat.x||chat.x+chat.width<=quest.x||quest.y+quest.height<=chat.y||chat.y+chat.height<=quest.y,'quest and chat do not overlap');
    assert.equal(await page.locator('.identity .hud-meter:visible').count(),0);
    assert.equal(await page.locator('.exp-base').count(),1);
    await card.click();await page.locator('#drawer').waitFor({state:'visible'});assert(await page.locator('#drawerTitle').textContent());
