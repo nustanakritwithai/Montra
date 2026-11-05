@@ -52,17 +52,21 @@ The focused Node animation regression test also runs before browser setup.
 
 Before the real enhancement click, a passive DOM/animation observer records
 `performance.now()` timestamps, computed transforms, CSS animation iterations,
-visibility, displayed rank and control locks. Normal-motion evidence requires
+visibility, motion rectangle/viewport intersection, displayed rank and control locks. Normal-motion evidence requires
 native animation start and two iteration events, varying rendered transforms,
 and the third strike's impact before the authoritative result appears. It also
 sends another real pointer click to the disabled submit button, requires only
 one confirmation, and retains the exact one-receipt/cost checks. No game
 function, timing override, fake server response or animation slowdown is used.
 
-The normal-motion run attempts a hammer screenshot at 320px portrait and records
-whether the asynchronous capture crossed the reveal. A late PNG is not a product
-failure. Real browser video in `browser-video/` preserves the actual rendered
-frames for visual review without altering animation timing. The
+The normal-motion run uses 320px portrait. During the short pending animation,
+no scrolling or PNG capture is requested after the duplicate
+pointer input; passive observers and browser video continue unchanged. The result
+layout and screenshot are captured only after authoritative success. Real browser
+video in `browser-video/` preserves the visible rendered frames for review without
+altering animation timing. Passive snapshots also require changing hammer
+transforms while the motion rectangle intersects the viewport. Inspect video
+for visual appearance; viewport intersection alone cannot prove lack of occlusion. The
 reduced-motion run at 390px requires readable pending text, no hammer animation,
 and the real server result. Both retain the 320/390px picker/result layout and
 restart checks. The duplicate pointer input is attempted only after an immediate

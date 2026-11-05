@@ -102,7 +102,13 @@ async function observeHammer() {
     const snapshot = () => {
       const motion = document.getElementById('forgeHammerMotion'), hammer = motion?.querySelector('.forge-hammer');
       const animation = hammer?.getAnimations()[0], timing = animation?.effect.getComputedTiming();
+      const rect = motion?.getBoundingClientRect();
+      const viewport = { width: innerWidth, height: innerHeight };
+      const motionRect = rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
+      const motionInViewport = visible(motion) && !!rect && rect.width > 0 && rect.height > 0 &&
+        rect.right > 0 && rect.bottom > 0 && rect.left < viewport.width && rect.top < viewport.height;
       return { time: performance.now(), busy: document.getElementById('forgeSelection')?.getAttribute('aria-busy'),
+        motionRect, viewport, motionInViewport,
         motionVisible: visible(motion), statusVisible: visible(document.getElementById('forgeAnimationStatus')),
         outcomeVisible: visible(document.getElementById('forgeOutcome')),
         outcome: document.getElementById('forgeOutcome')?.textContent,
@@ -157,6 +163,8 @@ function verifyHammer(evidence) {
     assert.ok(frames.length >= 3, 'actual rendered hammer frames observed');
     assert.ok(frames.every(frame => frame.iterations === 3 && frame.duration === 360), 'real CSS defines three 360 ms strikes');
     assert.ok(new Set(frames.map(frame => frame.transform)).size >= 3, 'computed hammer transform really moves');
+    const onscreenFrames = frames.filter(frame => frame.motionInViewport);
+    assert.ok(new Set(onscreenFrames.map(frame => frame.transform)).size >= 2, 'changing hammer transforms are observed inside the viewport');
     assert.ok(evidence.events.some(event => event.type === 'animationstart'), 'native CSS animation starts');
     assert.ok(evidence.events.filter(event => event.type === 'animationiteration').length >= 2, 'native CSS reaches all three strike cycles');
     assert.ok(frames.some(frame => frame.iteration === 2 && frame.phase >= .59), 'third impact renders before reveal');
@@ -370,17 +378,8 @@ try {
     assert.equal(duplicateTarget.busy, 'true', 'duplicate click reached the pending window');
     assert.equal(duplicateTarget.disabled, true, 'submit is still disabled immediately before duplicate input');
     await page.mouse.click(duplicateTarget.x, duplicateTarget.y);
-    await page.locator('#forgeSelection').scrollIntoViewIfNeeded();
-    const captureState = await page.evaluate(() => window.__forgeAnimationEvidence.frames.at(-1));
-    await screenshot('03b-hammer-capture-attempt');
-    report.hammerScreenshot = { beforeCapture: captureState, afterCapture: await page.evaluate(() => window.__forgeAnimationEvidence.frames.at(-1)) };
-    report.hammerScreenshot.captureWindow = captureState.motionVisible
-      ? (report.hammerScreenshot.afterCapture.motionVisible ? 'motion visible before and after capture; inspect PNG' : 'capture crossed the reveal; PNG may show the result')
-      : 'capture began after motion; use browser video for hammer frames';
-    // PNG capture is asynchronous and may exceed the presentation duration. Video
-    // preserves actual rendered frames without extending or pausing product timing.
-    const layout = await page.locator('#drawer').evaluate(el => ({ width: el.clientWidth, scroll: el.scrollWidth }));
-    assert.ok(layout.scroll <= layout.width + 1, 'hammer presentation has no horizontal overflow at 320px');
+    // Keep the short animation window free of scroll/PNG capture roundtrips.
+    // Passive observers and browser video continue throughout the real strikes.
   }
 
   await page.waitForFunction(() => document.getElementById('forgeProgress')?.value === 1);
@@ -398,6 +397,9 @@ try {
   assert.match(await page.locator('#forgeItemSymbol .bag-quantity').innerText(), /\+1/);
   assert.match(await page.locator('#forgeEnhance').innerText(), /ตี \+2/);
   assert.equal((await page.locator('#forgeGold').innerText()).replace(/[^0-9]/g, ''), String(fixture.expected.gold));
+  await page.locator('#forgeSelection').scrollIntoViewIfNeeded();
+  const resultLayout = await page.locator('#drawer').evaluate(el => ({ width: el.clientWidth, scroll: el.scrollWidth }));
+  assert.ok(resultLayout.scroll <= resultLayout.width + 1, 'forge result has no horizontal overflow at ' + (reducedMotion ? 390 : 320) + 'px');
   await screenshot('04-enhancement-success');
   log('Real server enhancement returns +1; success status, item selection, progress, next step and wallet render correctly');
   for (const width of [320, 390]) {
