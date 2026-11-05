@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=0.3.5-popup-perfect" />
+  <link rel="stylesheet" href="./styles.css?v=0.3.5-artisan-popup-fixed-1" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -113,41 +113,6 @@
       <button id="mountButton" type="button" aria-pressed="false" hidden><span>♞</span><i>เรียกม้า</i></button>
     </nav>
     <div id="shade" class="shade" hidden></div>
-        <button type="button" class="item-modal-close-btn" id="itemModalClose" aria-label="ปิด">✕</button>
-      </div>
-      
-      <div class="item-modal-body" id="bagPanelBody">
-        <div class="item-stats-section">
-          <div class="item-stats-title">คุณสมบัติและสเตตัส</div>
-          <div class="item-stats-grid" id="bagPanelStats"></div>
-        </div>
-        <div class="item-diff-card" id="bagPanelDiff" hidden></div>
-        <div class="item-desc-section">
-          <p class="note item-modal-desc" id="bagItemDescription"></p>
-        </div>
-        <div class="item-meta-row" id="itemMetaFooter">
-          <span class="item-meta-tag" id="itemMetaLevel" hidden></span>
-          <span class="item-meta-tag" id="itemMetaBound" hidden></span>
-          <span class="item-meta-tag item-price-tag" id="itemMetaPrice" hidden></span>
-        </div>
-      </div>
-
-      <div class="item-modal-actions" id="bagPanelActions">
-        <div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden>
-          <button type="button" class="secondary"></button>
-          <button type="button" class="secondary"></button>
-        </div>
-        <button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>
-        <button class="secondary" id="itemModalCloseBtn" type="button">ปิด</button>
-        
-        <button class="secondary" id="bagTrack" type="button" hidden></button>
-        <button id="refineResource" type="button" class="secondary" hidden></button>
-        <button id="bagKiln" type="button" class="secondary" hidden></button>
-        <button id="sellBagMaterial" type="button" class="secondary" hidden></button>
-        <button id="salvageGear" type="button" class="secondary" hidden></button>
-        <button class="secondary" id="bagForge" type="button" hidden></button>
-      </div>
-    </div>
     <section id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
       <div class="drawer-grip"></div>
       <div class="drawer-header"><button id="drawerMenuBack" type="button" class="drawer-back" aria-label="กลับเมนูเกม" hidden>‹ เมนู</button><h2 id="drawerTitle">แผนที่</h2><button id="drawerClose" class="close" aria-label="ปิด">✕</button></div>
@@ -201,55 +166,63 @@
       <div id="drawerBody" class="drawer-body"></div>
     </section>
   </main>
-  <!-- Popups and Centered Modals placed outside #game so they NEVER inherit inert -->
-  <div id="itemModalBackdrop" class="item-modal-backdrop" hidden></div>
-  <div id="itemDetailModal" class="item-detail-modal" hidden role="dialog" aria-modal="true" aria-label="ข้อมูลสเตตัสไอเท็ม">
-    <div class="item-modal-header">
-      <div class="item-modal-title">
-        <div class="bag-slot bag-panel-icon" id="modalItemSlot">
-          <span class="bag-symbol" id="modalItemSymbol">·</span>
-          <span class="bag-quantity" id="modalItemBadge"></span>
+  <!-- Dialogs remain outside the field input gate. -->
+    <div id="itemModalBackdrop" class="item-modal-backdrop" hidden></div>
+    <div id="itemDetailModal" class="item-detail-modal" hidden role="dialog" aria-modal="true" aria-label="ข้อมูลสเตตัสไอเท็ม">
+      <div class="item-modal-header">
+        <div class="item-modal-title">
+          <div id="bagDetailItem" class="item-slot-host"></div>
+          <div class="item-modal-naming">
+            <strong class="item-modal-name" id="bagItemName">เลือกไอเท็ม</strong>
+            <span class="item-modal-sub" id="bagPanelSub"></span>
+          </div>
         </div>
-        <div class="item-modal-naming">
-          <strong class="item-modal-name" id="modalItemName">เลือกไอเท็ม</strong>
-          <span class="item-modal-sub" id="modalItemSub">แตะที่ช่องไอเท็มเพื่อดูคุณสมบัติและสเตตัส</span>
-        </div>
+        <button type="button" class="item-modal-close-btn" id="itemModalClose" aria-label="ปิด">✕</button>
       </div>
-      <button type="button" class="item-modal-close-btn" id="itemModalClose" aria-label="ปิด">✕</button>
-    </div>
-    
-    <div class="item-modal-body" id="modalItemBody">
-      <div class="item-stats-section">
-        <div class="item-stats-title">คุณสมบัติและสเตตัส</div>
-        <div class="item-stats-grid" id="modalItemStats">
-          <div class="item-stat-empty">แตะช่องไอเท็มเพื่อดูสเตตัส</div>
-        </div>
-      </div>
-      <div class="item-diff-card" id="modalItemDiff" hidden></div>
-      <div class="item-desc-section">
-        <p class="note item-modal-desc" id="modalItemDescription"></p>
-      </div>
-      <div class="item-meta-row" id="modalItemMetaFooter">
-        <span class="item-meta-tag" id="modalItemMetaLevel" hidden></span>
-        <span class="item-meta-tag" id="modalItemMetaBound" hidden></span>
-        <span class="item-meta-tag item-price-tag" id="modalItemMetaPrice" hidden></span>
-      </div>
-    </div>
 
-    <div class="item-modal-actions" id="modalItemActions">
-      <button class="primary" id="modalUseBagItem" type="button">ใช้ไอเท็ม</button>
-      <button class="secondary" id="itemModalCloseBtn" type="button">ปิด</button>
-    </div>
-  </div>
+      <div class="item-modal-body" id="bagPanelBody">
+        <div class="item-stats-section">
+          <div class="item-stats-title">คุณสมบัติและสเตตัส</div>
+          <div class="item-stats-grid" id="bagPanelStats"></div>
+        </div>
+        <div class="item-diff-card" id="bagPanelDiff" hidden></div>
+        <div class="item-desc-section">
+          <p class="note item-modal-desc" id="bagItemDescription"></p>
+        </div>
+        <div id="bagReturnItem" class="item-preview"></div>
+        <section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><div id="socketItemPreview" class="item-preview"></div><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>
+        <details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><div id="guideItems" class="item-slots"><div id="guideTargetItem" class="item-preview"></div><div id="guideCurrentItem" class="item-preview"></div><div id="guideCardItem" class="item-preview"></div><div id="guideNextItem" class="item-preview"></div></div><p><strong id="guideName"></strong></p><select id="guideCopy" aria-label="เลือกชิ้นที่จะเทียบ" hidden></select><p class="note" id="guideCompare"></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button><button class="secondary" id="resumeFieldJourney" type="button" hidden>แสดงเป้าที่ข้ามไว้</button></details>
+        <div class="item-meta-row" id="itemMetaFooter">
+          <span class="item-meta-tag" id="itemMetaLevel" hidden></span>
+          <span class="item-meta-tag" id="itemMetaBound" hidden></span>
+          <span class="item-meta-tag item-price-tag" id="itemMetaPrice" hidden></span>
+        </div>
+      </div>
 
+      <div class="item-modal-actions" id="bagPanelActions">
+        <div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden>
+          <button type="button" class="secondary"></button>
+          <button type="button" class="secondary"></button>
+        </div>
+        <button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>
+        <button class="secondary" id="itemModalCloseBtn" type="button">ปิด</button>
+
+        <button class="secondary" id="bagTrack" type="button" hidden></button>
+        <button id="refineResource" type="button" class="secondary" hidden></button>
+        <button id="bagKiln" type="button" class="secondary" hidden></button>
+        <button id="sellBagMaterial" type="button" class="secondary" hidden></button>
+        <button id="salvageGear" type="button" class="secondary" hidden></button>
+        <button class="secondary" id="bagForge" type="button" hidden>ตีบวก / แปรรูปคุณภาพ · ช่างอาคม</button>
+        <button class="secondary" id="bagCraft" type="button">สร้างของ / โต๊ะช่าง · ช่างอาคม</button>
+      </div>
+    </div>
   <div id="equipPopupBackdrop" class="equip-popup-backdrop" hidden></div>
   <div id="equipPopup" class="equip-popup" hidden role="dialog" aria-modal="true" aria-label="เลือกอุปกรณ์"></div>
-
   <script src="./account-entry.js?v=rebirth-mastery"></script>
   <script src="https://cdn.babylonjs.com/babylon.js" defer></script>
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
   <script src="./audio.js?v=0.9.10-horse-bright" defer></script>
-  <script src="./main.js?v=0.3.5-popup-perfect" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
+  <script src="./main.js?v=0.3.5-artisan-popup-fixed-1" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>

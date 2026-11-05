@@ -45,8 +45,8 @@ const gear={name:"ผ้าพันหมัด",level:1,craftGold:4,recipe:[{i
 const docs={wrap:gear,hide:{name:"หนัง",huntTarget:{open:true}},fiber:{name:"ใย"},fragment:{name:"เศษตรา",bossGear:"amulet",sourceBoss:"boss",huntTarget:{mapId:camp.mapId}},
   amulet:{name:"สร้อย",level:12,sourceBoss:"boss",craftGold:24,recipe:[{item:"fragment",qty:3},{item:"hide",qty:2}]}};
 const bag={slots:[{itemId:"wrap",quantity:1},{itemId:"hide",quantity:2}],starterHuntKills:4,forgeCopies:{}};
-const controls={},get=id=>controls[id]??={scrollIntoView(){},click(){}};
-const me={pathId:"muay_boran",level:3},context={mode:"live",ownServerCharacter:()=>me,inventoryState:bag,
+const controls={},get=id=>controls[id]??={scrollIntoView(){},click(){},replaceChildren(...children){this.children=children;}};
+const me={pathId:"muay_boran",level:3},context={renderItemPreview(){},createItemTile:(id,options)=>({id,options}),mode:"live",ownServerCharacter:()=>me,inventoryState:bag,
   economyReady:()=>true,gearGuides:{path:me.pathId,starterHunt:camp},fieldTrainingTip:null,territoryState:null,activeMapId:camp.mapId,
   personalItems:docs,openForgePage(...v){context.forgeOpened=v;},itemHuntCount:id=>bag.slots.reduce((n,s)=>n+(s.itemId===id?s.quantity:0),0),
   room:{state:{monsters:new Map([["west1",{x:9,z:8,alive:false}],["west2",{x:12,z:8,alive:true}]])}},
