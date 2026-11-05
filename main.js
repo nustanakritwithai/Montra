@@ -12329,12 +12329,13 @@
     return true;
   }
 
-  function closeEquipPopup() {
+  function closeEquipPopup(e) {
+    if (e && e.stopPropagation) e.stopPropagation();
     activeEquipSlot = null;
     const popup = $("equipPopup");
     const backdrop = $("equipPopupBackdrop");
-    if (popup) popup.hidden = true;
-    if (backdrop) backdrop.hidden = true;
+    if (popup) { popup.hidden = true; popup.style.display = "none"; }
+    if (backdrop) { backdrop.hidden = true; backdrop.style.display = "none"; }
   }
 
   function ensureEquipPopupElements() {
@@ -12375,7 +12376,9 @@
     backdrop.inert = false;
     popup.inert = false;
     backdrop.hidden = false;
+    backdrop.style.display = "block";
     popup.hidden = false;
+    popup.style.display = "flex";
     renderEquipPopupContent(slotKey);
   }
 
@@ -12488,6 +12491,7 @@
       '<div class="equip-popup-content">' +
         wornHtml +
         candHtml +
+        '<button type="button" class="secondary" id="equipPopupCloseBtn" style="margin-top:10px;width:100%;">ปิด</button>' +
       '</div>';
 
     if (worn && (wornMeta?.kind === "mainHand" || wornMeta?.forge)) {
@@ -12501,11 +12505,15 @@
       popup.querySelector(".equip-popup-content").appendChild(forge);
     }
 
-    const closeBtn = $("equipPopupClose");
-    if (closeBtn) {
-      closeBtn.onclick = closeEquipPopup;
-      closeBtn.onpointerdown = (e) => { e.stopPropagation(); closeEquipPopup(); };
-    }
+    const bindEquipClose = (el) => {
+      if (!el) return;
+      el.onclick = closeEquipPopup;
+      el.onpointerdown = (e) => { e.stopPropagation(); closeEquipPopup(e); };
+      el.ontouchstart = (e) => { e.stopPropagation(); closeEquipPopup(e); };
+    };
+    bindEquipClose($("equipPopupClose"));
+    bindEquipClose($("equipPopupCloseBtn"));
+    bindEquipClose($("equipPopupBackdrop"));
 
     const unequipBtn = $("equipPopupUnequip");
     if (unequipBtn) unequipBtn.onclick = () => {
@@ -12940,15 +12948,18 @@
     backdrop.inert = false;
     modal.inert = false;
     backdrop.hidden = false;
+    backdrop.style.display = "block";
     modal.hidden = false;
+    modal.style.display = "flex";
     renderBag();
   }
 
-  function closeItemDetailModal() {
+  function closeItemDetailModal(e) {
+    if (e && e.stopPropagation) e.stopPropagation();
     const backdrop = $("itemModalBackdrop");
     const modal = $("itemDetailModal");
-    if (backdrop) backdrop.hidden = true;
-    if (modal) modal.hidden = true;
+    if (backdrop) { backdrop.hidden = true; backdrop.style.display = "none"; }
+    if (modal) { modal.hidden = true; modal.style.display = "none"; }
     const totalSlots = BAG_PAGE_SIZE * BAG_TOTAL_PAGES;
     for (let i = 0; i < totalSlots; i++) {
       const s = $("bagSlot" + i);
@@ -13001,10 +13012,12 @@
       if (!el) return;
       el.onclick = fn;
       el.onpointerdown = (e) => { e.stopPropagation(); fn(e); };
+      el.ontouchstart = (e) => { e.stopPropagation(); fn(e); };
     };
     bindClose($("itemModalClose"), closeItemDetailModal);
     bindClose($("itemModalCloseBtn"), closeItemDetailModal);
     bindClose($("itemModalBackdrop"), closeItemDetailModal);
+    if ($("modalUseBagItem")) $("modalUseBagItem").onclick = handleUseBagItem;
     const prev = $("bagPrevPage");
     if (prev) prev.onclick = () => setBagPage(bagCurrentPage - 1);
     const next = $("bagNextPage");
@@ -13193,8 +13206,9 @@
     const lowLevel = (meta?.level || 1) > (ownServerCharacter()?.level || 1);
     const full = meta?.healMana ? ownServerCharacter()?.mana >= ownServerCharacter()?.maxMana : currentHp >= maxHp;
     const ready = chosen && !wrongClass && !lowLevel && (gear ? hasWeapons : heal && currentHp > 0 && !full) && (mode !== "live" || ownServerCharacter()?.alive);
-    if ($("bagItemName"))
-    $("bagItemName").textContent=meta?.name || (chosen?.itemId===SHRINE_SHARD?shardName:chosen?"ยาเลือดเล็ก":inspectingGear?(bodyLabels[inspectingGear]||"อาวุธหลัก")+" · ช่องว่าง":"ช่องว่าง");
+    const curItemName = meta?.name || (chosen?.itemId===SHRINE_SHARD?shardName:chosen?"ยาเลือดเล็ก":inspectingGear?(bodyLabels[inspectingGear]||"อาวุธหลัก")+" · ช่องว่าง":"ช่องว่าง");
+    if ($("bagItemName")) $("bagItemName").textContent = curItemName;
+    if ($("modalItemName")) $("modalItemName").textContent = curItemName;
     let detail=chosen?"ใช้ฟื้น 30 HP":"ล่ามอนสเตอร์เพื่อหาอุปกรณ์และวัตถุดิบ";
     if(gear){
       const difference=worn?"กำลังสวม":"เมื่อเปลี่ยน "+gearComparison(chosen,wornGearAt(armor?destination:"mainHand",slots),slots);
@@ -13219,104 +13233,113 @@
     if(meta?.level)detail="Lv."+meta.level+" · "+(rarityNames[meta.rarity]||"พื้นฐาน")+" · "+detail+(lowLevel?" · เลเวลยังไม่ถึง":"");
     if(meta?.recommended?.length)detail+=" · เหมาะกับ"+meta.recommended.map(p=>gearJobs[p]).join("/");
     if(meta?.dropHint)detail+=" · ล่าได้ที่ "+meta.dropHint;
-    $("bagItemDescription").textContent=detail;
-    // Update Right-side Half Panel components
-    const slotEl = $("bagPanelSlot");
-    if (slotEl) {
-      slotEl.className = "bag-slot bag-panel-icon" + (chosen ? " bag-filled" : "") + (worn ? " bag-equipped" : "");
-      const sym = $("bagPanelSymbol");
-      if (sym) sym.textContent = meta?.symbol || (!chosen ? "·" : chosen.itemId === SHRINE_SHARD ? "◈" : "🧪");
-      const badge = $("bagPanelBadge");
-      if (badge) {
-        const fRank = chosen?.forge?.rank;
-        badge.textContent = fRank ? ("+" + fRank) : (worn ? "✓" : (chosen?.quantity > 1 ? "×" + chosen.quantity : ""));
-      }
+    if ($("bagItemDescription")) $("bagItemDescription").textContent = detail;
+    if ($("modalItemDescription")) $("modalItemDescription").textContent = detail;
+    // Update both Bag Drawer Card and Center Popup Modal
+    const slotClass = "bag-slot bag-panel-icon" + (chosen ? " bag-filled" : "") + (worn ? " bag-equipped" : "");
+    const symChar = meta?.symbol || (!chosen ? "·" : chosen.itemId === SHRINE_SHARD ? "◈" : "🧪");
+    const badgeText = chosen?.forge?.rank ? ("+" + chosen.forge.rank) : (worn ? "✓" : (chosen?.quantity > 1 ? "×" + chosen.quantity : ""));
+
+    for (const prefix of ["bagPanel", "modalItem"]) {
+      const sEl = $(prefix + "Slot");
+      if (sEl) sEl.className = slotClass;
+      const symEl = $(prefix + "Symbol");
+      if (symEl) symEl.textContent = symChar;
+      const bEl = $(prefix + "Badge");
+      if (bEl) bEl.textContent = badgeText;
     }
-    const subEl = $("bagPanelSub");
-    if (subEl) {
-      if (!chosen) subEl.textContent = "แตะไอเท็มในกระเป๋าเพื่อดูข้อมูล";
-      else {
-        const catName = meta?.kind === "mainHand" ? "อาวุธหลัก" : (bodyLabels[meta?.kind] || {consumable:"ของใช้",material:"วัตถุดิบ",catalyst:"ศิลาอาคม",card:"การ์ด",tool:"เครื่องมือ"}[meta?.kind] || "ไอเท็ม");
-        const rarityText = rarityNames[meta?.rarity] || "พื้นฐาน";
-        const lvlText = meta?.level ? (" · ต้องการ Lv." + meta.level) : "";
-        subEl.textContent = rarityText + " · " + catName + lvlText + (chosen.bound ? " · 🔒 ผูกมัด" : "");
-      }
+
+    let subText = "แตะไอเท็มในกระเป๋าเพื่อดูข้อมูล";
+    if (chosen) {
+      const catName = meta?.kind === "mainHand" ? "อาวุธหลัก" : (bodyLabels[meta?.kind] || {consumable:"ของใช้",material:"วัตถุดิบ",catalyst:"ศิลาอาคม",card:"การ์ด",tool:"เครื่องมือ"}[meta?.kind] || "ไอเท็ม");
+      const rarityText = rarityNames[meta?.rarity] || "พื้นฐาน";
+      const lvlText = meta?.level ? (" · ต้องการ Lv." + meta.level) : "";
+      subText = rarityText + " · " + catName + lvlText + (chosen.bound ? " · 🔒 ผูกมัด" : "");
     }
-    const statsEl = $("bagPanelStats");
-    if (statsEl) {
-      if (!chosen || !meta) {
-        statsEl.innerHTML = '<div class="item-stat-empty">แตะช่องไอเท็มเพื่อดูสเตตัส</div>';
-      } else {
-        const cards = [];
-        if (chosen.itemId === POTION_ITEM_ID || meta.healHp) {
-          const hpAmt = meta.healHp || 30;
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">🧪</span><div class="bag-stat-info"><span class="bag-stat-label">ฟื้นฟูพลังชีวิต</span><strong class="bag-stat-val">+' + hpAmt + ' HP</strong></div></div>');
-        }
-        if (meta.kind === "mainHand" && meta.melee) {
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">⚔️</span><div class="bag-stat-info"><span class="bag-stat-label">โจมตีประชิด</span><strong class="bag-stat-val">+' + meta.melee + '</strong></div></div>');
-        }
-        if (meta.kind === "mainHand" && meta.ranged) {
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">🏹</span><div class="bag-stat-info"><span class="bag-stat-label">ยิงอาคม</span><strong class="bag-stat-val">+' + meta.ranged + '</strong></div></div>');
-        }
-        if (meta.stats) {
-          const statIcons = { hp: "❤️", stamina: "⚡", mana: "💧", atk: "⚔️", def: "🛡️", magicAtk: "🔮", magicDef: "✨" };
-          for (const [k, v] of Object.entries(meta.stats)) {
-            if (v) {
-              const icon = statIcons[k] || "✦";
-              const label = statNames[k] || k;
-              const sign = v > 0 ? "+" : "";
-              cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">' + icon + '</span><div class="bag-stat-info"><span class="bag-stat-label">' + label + '</span><strong class="bag-stat-val">' + sign + v + '</strong></div></div>');
-            }
+    if ($("bagPanelSub")) $("bagPanelSub").textContent = subText;
+    if ($("modalItemSub")) $("modalItemSub").textContent = subText;
+
+    let statsHtml = '<div class="item-stat-empty">แตะช่องไอเท็มเพื่อดูสเตตัส</div>';
+    if (chosen && meta) {
+      const cards = [];
+      if (chosen.itemId === POTION_ITEM_ID || meta.healHp) {
+        const hpAmt = meta.healHp || 30;
+        cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">🧪</span><div class="bag-stat-info"><span class="bag-stat-label">ฟื้นฟูพลังชีวิต</span><strong class="bag-stat-val">+' + hpAmt + ' HP</strong></div></div>');
+      }
+      if (meta.kind === "mainHand" && meta.melee) {
+        cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">⚔️</span><div class="bag-stat-info"><span class="bag-stat-label">โจมตีประชิด</span><strong class="bag-stat-val">+' + meta.melee + '</strong></div></div>');
+      }
+      if (meta.kind === "mainHand" && meta.ranged) {
+        cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">🏹</span><div class="bag-stat-info"><span class="bag-stat-label">ยิงอาคม</span><strong class="bag-stat-val">+' + meta.ranged + '</strong></div></div>');
+      }
+      if (meta.stats) {
+        const statIcons = { hp: "❤️", stamina: "⚡", mana: "💧", atk: "⚔️", def: "🛡️", magicAtk: "🔮", magicDef: "✨" };
+        for (const [k, v] of Object.entries(meta.stats)) {
+          if (v) {
+            const icon = statIcons[k] || "✦";
+            const label = statNames[k] || k;
+            const sign = v > 0 ? "+" : "";
+            cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">' + icon + '</span><div class="bag-stat-info"><span class="bag-stat-label">' + label + '</span><strong class="bag-stat-val">' + sign + v + '</strong></div></div>');
           }
         }
-        if (chosen.forge?.rank > 0) {
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">⚒</span><div class="bag-stat-info"><span class="bag-stat-label">ตีบวกช่างอาคม</span><strong class="bag-stat-val">+' + chosen.forge.rank + ' ขั้น</strong></div></div>');
-        }
-        if (chosen.socket) {
-          const cName = bagMeta(chosen.socket)?.name || chosen.socket;
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">▣</span><div class="bag-stat-info"><span class="bag-stat-label">ผนึกการ์ด</span><strong class="bag-stat-val">' + cName + '</strong></div></div>');
-        }
-        if (meta.healHp) {
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">🧪</span><div class="bag-stat-info"><span class="bag-stat-label">ฟื้นฟูพลังชีวิต</span><strong class="bag-stat-val">+' + meta.healHp + ' HP</strong></div></div>');
-        }
-        if (meta.healMana) {
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">✨</span><div class="bag-stat-info"><span class="bag-stat-label">ฟื้นฟูมานา</span><strong class="bag-stat-val">+' + meta.healMana + ' MP</strong></div></div>');
-        }
-        if (meta.cooldown) {
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">⏱️</span><div class="bag-stat-info"><span class="bag-stat-label">คูลดาวน์</span><strong class="bag-stat-val">' + (meta.cooldown / 1000) + ' วิ</strong></div></div>');
-        }
-        if (!cards.length) {
-          const catLabel = meta.kind === "material" ? "วัตถุดิบอาคม" : (meta.kind === "catalyst" ? "ศิลาอาคม" : "ไอเท็ม");
-          cards.push('<div class="item-stat-empty"><span>' + catLabel + ' · ไม่มีโบนัสสเตตัสการต่อสู้</span></div>');
-        }
-        statsEl.innerHTML = cards.join("");
+      }
+      if (chosen.forge?.rank > 0) {
+        cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">⚒</span><div class="bag-stat-info"><span class="bag-stat-label">ตีบวกช่างอาคม</span><strong class="bag-stat-val">+' + chosen.forge.rank + ' ขั้น</strong></div></div>');
+      }
+      if (chosen.socket) {
+        const cName = bagMeta(chosen.socket)?.name || chosen.socket;
+        cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">▣</span><div class="bag-stat-info"><span class="bag-stat-label">ผนึกการ์ด</span><strong class="bag-stat-val">' + cName + '</strong></div></div>');
+      }
+      if (meta.healHp && chosen.itemId !== POTION_ITEM_ID) {
+        cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">🧪</span><div class="bag-stat-info"><span class="bag-stat-label">ฟื้นฟูพลังชีวิต</span><strong class="bag-stat-val">+' + meta.healHp + ' HP</strong></div></div>');
+      }
+      if (meta.healMana) {
+        cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">✨</span><div class="bag-stat-info"><span class="bag-stat-label">ฟื้นฟูมานา</span><strong class="bag-stat-val">+' + meta.healMana + ' MP</strong></div></div>');
+      }
+      if (meta.cooldown) {
+        cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">⏱️</span><div class="bag-stat-info"><span class="bag-stat-label">คูลดาวน์</span><strong class="bag-stat-val">' + (meta.cooldown / 1000) + ' วิ</strong></div></div>');
+      }
+      if (!cards.length) {
+        const catLabel = meta.kind === "material" ? "วัตถุดิบอาคม" : (meta.kind === "catalyst" ? "ศิลาอาคม" : "ไอเท็ม");
+        cards.push('<div class="item-stat-empty"><span>' + catLabel + ' · ไม่มีโบนัสสเตตัสการต่อสู้</span></div>');
+      }
+      statsHtml = cards.join("");
+    }
+    if ($("bagPanelStats")) $("bagPanelStats").innerHTML = statsHtml;
+    if ($("modalItemStats")) $("modalItemStats").innerHTML = statsHtml;
+
+    for (const pfx of ["itemMeta", "modalItemMeta"]) {
+      const lvlEl = $(pfx + "Level");
+      if (lvlEl) {
+        if (meta?.level) { lvlEl.textContent = "ต้องการเลเวล Lv." + meta.level; lvlEl.hidden = false; }
+        else lvlEl.hidden = true;
+      }
+      const bndEl = $(pfx + "Bound");
+      if (bndEl) {
+        if (chosen) { bndEl.textContent = chosen.bound ? "🔒 ผูกมัดตัวละคร" : "🔓 แลกเปลี่ยนได้"; bndEl.hidden = false; }
+        else bndEl.hidden = true;
+      }
+      const prcEl = $(pfx + "Price");
+      if (prcEl) {
+        const price = meta?.sellGold || meta?.price;
+        if (price) { prcEl.textContent = "💰 ราคา " + price + " ทอง"; prcEl.hidden = false; }
+        else prcEl.hidden = true;
       }
     }
-    if ($("itemMetaLevel")) {
-      if (meta?.level) { $("itemMetaLevel").textContent = "ต้องการเลเวล Lv." + meta.level; $("itemMetaLevel").hidden = false; }
-      else { $("itemMetaLevel").hidden = true; }
+
+    let diffText = "";
+    if (gear && chosen) {
+      diffText = "เมื่อเทียบกับที่สวมอยู่: " + gearComparison(chosen, wornGearAt(destination, slots), slots);
     }
-    if ($("itemMetaBound")) {
-      if (chosen) { $("itemMetaBound").textContent = chosen.bound ? "🔒 ผูกมัดตัวละคร" : "🔓 แลกเปลี่ยนได้"; $("itemMetaBound").hidden = false; }
-      else { $("itemMetaBound").hidden = true; }
-    }
-    if ($("itemMetaPrice")) {
-      const price = meta?.sellGold || meta?.price;
-      if (price) { $("itemMetaPrice").textContent = "💰 ราคา " + price + " ทอง"; $("itemMetaPrice").hidden = false; }
-      else { $("itemMetaPrice").hidden = true; }
-    }
-    const diffEl = $("bagPanelDiff");
-    if (diffEl) {
-      if (gear && chosen) {
-        const diff = gearComparison(chosen, wornGearAt(destination, slots), slots);
-        diffEl.textContent = "เมื่อเทียบกับที่สวมอยู่: " + diff;
-        diffEl.hidden = false;
-      } else {
-        diffEl.textContent = "";
-        diffEl.hidden = true;
+    for (const dId of ["bagPanelDiff", "modalItemDiff"]) {
+      const dEl = $(dId);
+      if (dEl) {
+        dEl.textContent = diffText;
+        dEl.hidden = !diffText;
       }
     }
-    const bagGoal=meta?.forge?Math.min(meta.copyLimit??1,itemHuntCount(chosen.itemId)+1):itemHuntCount(chosen?.itemId)+1;
+
+        const bagGoal=meta?.forge?Math.min(meta.copyLimit??1,itemHuntCount(chosen.itemId)+1):itemHuntCount(chosen?.itemId)+1;
     bindItemHuntButton($("bagTrack"),chosen?.itemId,bagGoal);
     const salvage=$("salvageGear");
     salvage.hidden=!meta?.salvage || !!inspectingGear || worn || !economyReady();
@@ -13341,6 +13364,12 @@
     renderCraft(slots);renderWorkbench(slots);renderGearGuide(slots);
     const use=$("useBagItem");use.disabled=!ready||itemUsePending;
     use.textContent=itemUsePending?"กำลังบันทึก…":!inspectingGear&&chosen && confirmBindKey===selectedBagSlot+":"+gearStamp(chosen)&&gear&&!worn&&!chosen.bound?"ยืนยันผูกและสวม":gear?(worn?"ถอด":"สวม")+(armor?bodyLabels[destination]:"อาวุธ"):heal?(full?(meta?.healMana?"MP เต็ม":"HP เต็ม"):"ใช้ยา"):meta?.kind==="tool"?"ใช้จากกระเป๋าอัตโนมัติ":chosen?"วัตถุดิบ":"ช่องว่าง";
+    const modalUse = $("modalUseBagItem");
+    if (modalUse) {
+      modalUse.disabled = use.disabled;
+      modalUse.textContent = use.textContent;
+      modalUse.onclick = handleUseBagItem;
+    }
     if(meta?.kind==="card")use.textContent="เลือกอุปกรณ์เพื่อใส่การ์ด";
   }
   const gearCoreSkills={
@@ -13869,7 +13898,47 @@
       '</div>' +
       bagMultiPageSliderHtml() +
       '<div class="bag-dots" id="bagDots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>' +
-      '<p class="note" style="text-align:center;font-size:12px;margin:10px 0 0;color:#c7b28a;">แตะที่ช่องไอเท็มเพื่อดูคุณสมบัติสเตตัสและใช้งาน</p>' +
+      '<!-- Item Detail & Stats Showcase Card directly in Bag Drawer -->' +
+      '<div class="bag-detail-card" id="bagDetailCard">' +
+        '<div class="bag-panel-header">' +
+          '<div class="bag-panel-title">' +
+            '<div class="bag-slot bag-panel-icon" id="bagPanelSlot">' +
+              '<span class="bag-symbol" id="bagPanelSymbol">·</span>' +
+              '<span class="bag-quantity" id="bagPanelBadge"></span>' +
+            '</div>' +
+            '<div class="bag-panel-naming">' +
+              '<strong class="bag-panel-name" id="bagItemName">เลือกไอเท็ม</strong>' +
+              '<span class="bag-panel-sub" id="bagPanelSub">แตะที่ช่องไอเท็มเพื่อดูคุณสมบัติและสเตตัส</span>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="bag-panel-body" id="bagPanelBody">' +
+          '<div class="item-stats-section">' +
+            '<div class="item-stats-title">คุณสมบัติและสเตตัส</div>' +
+            '<div class="item-stats-grid" id="bagPanelStats"></div>' +
+          '</div>' +
+          '<div class="item-diff-card" id="bagPanelDiff" hidden style="margin-top:6px;"></div>' +
+          '<p class="note item-modal-desc" id="bagItemDescription" style="margin-top:6px;"></p>' +
+          '<div class="item-meta-row" id="itemMetaFooter" style="margin-top:6px;">' +
+            '<span class="item-meta-tag" id="itemMetaLevel" hidden></span>' +
+            '<span class="item-meta-tag" id="itemMetaBound" hidden></span>' +
+            '<span class="item-meta-tag item-price-tag" id="itemMetaPrice" hidden></span>' +
+          '</div>' +
+          '<div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden style="margin-top:8px;">' +
+            '<button type="button" class="secondary"></button>' +
+            '<button type="button" class="secondary"></button>' +
+          '</div>' +
+          '<button class="primary" id="useBagItem" type="button" style="margin-top:8px;width:100%;">ใช้ไอเท็ม</button>' +
+          '<div class="bag-secondary-grid" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' +
+            '<button class="secondary" id="bagForge" type="button" hidden>ตีบวก / แปรรูปคุณภาพ · ช่างอาคม</button>' +
+            '<button id="sellBagMaterial" type="button" class="secondary" hidden>ขายวัตถุดิบ</button>' +
+            '<button id="salvageGear" type="button" class="secondary" hidden>สกัดชิ้นส่วน</button>' +
+            '<button id="refineResource" type="button" class="secondary" hidden>แปรรูปวัตถุดิบ</button>' +
+            '<button id="bagKiln" type="button" class="secondary" hidden>เผาถ่าน</button>' +
+            '<button class="secondary" id="bagTrack" type="button" hidden>ปักหมุดติดตาม</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
       '<div id="bagHiddenWorkbenches" hidden style="display:none !important;">' +
         '<section id="cardSocketPanel" hidden><select id="socketCardChoice"></select><p id="cardSocketInfo"></p><button type="button" id="cardSocketAction"></button></section>' +
         '<details id="gearGuide" hidden><select id="guideStyle"></select><p id="guideFocus"></p><p id="guideTraining"></p><select id="guideSlot"></select><p><strong id="guideName"></strong></p><select id="guideCopy"></select><p id="guideCompare"></p><p id="guideStats"></p><p id="guideSource"></p><button id="guideTrack"></button><button id="guideTrackCard"></button><button id="guideOpen"></button><button id="resumeFieldJourney"></button></details>' +
