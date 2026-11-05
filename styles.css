@@ -2302,8 +2302,28 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .exp-base i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #b8860b, #ffd23f 70%, #fff0a0); box-shadow: 0 0 6px #ffc83a; transition: width .6s ease; }
 .exp-ticks { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), #0008 calc(10% - 1px) 10%); pointer-events: none; }
 .hud-journal .identity .hud-meter.xp { display: none !important; }
-/* Player card retired: the orb, EXP base line and resource strip carry its information. */
-.hud-journal .identity { display: none !important; }
+/* Compact character medallion: the orb and bottom EXP line remain the only vital meters. */
+.hud-journal .identity { --portrait-gold:#d4b16f; display:block; padding:0; border:0; border-radius:0; background:none; box-shadow:none; backdrop-filter:none; }
+.identity .brand-row { display:none; }
+.identity .profile-trigger { display:flex; align-items:center; justify-content:flex-start; gap:8px; width:100%; min-height:62px; padding:2px 2px 3px; border:0; border-radius:6px; background:linear-gradient(90deg,transparent 12%,#07100de8 30%,#07100db8 85%,transparent); text-align:left; }
+.identity .portrait { width:52px; height:52px; margin:0; border:2px solid var(--portrait-gold); background:radial-gradient(circle at 50% 35%,#8c6344,#282e27 76%); box-shadow:0 0 0 2px #171c17,0 3px 8px #0009; }
+.identity .portrait.low-hp { border-color:#ff6a5a; box-shadow:0 0 0 2px #ff4a3a66,0 0 12px #ff3a2a88; }
+.portrait-figure { width:100%; height:100%; border-radius:50%; overflow:hidden; }
+.identity .portrait-class { position:absolute; top:-3px; left:-5px; width:20px; height:20px; padding:3px; border:1px solid #d4b16f; border-radius:50%; background:#345345; color:#ffe2a1; }
+.identity #levelBadge { right:-3px; bottom:-3px; }
+.identity .character-info { display:grid; gap:2px; min-width:0; padding-right:5px; }
+.identity .name { display:flex; gap:5px; align-items:baseline; min-width:0; margin:0; padding:0; font-size:12px; line-height:1.45; }
+.identity #characterName { float:none; min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:750; color:#fff0d7; }
+.identity #characterLevel { float:none; flex-shrink:0; font-size:9px; font-weight:700; color:#99dbe7; white-space:nowrap; }
+.character-class { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#ddc8a1; font-size:10px; line-height:1.35; }
+.character-power { display:flex; align-items:center; gap:4px; min-width:0; padding:1px 5px 1px 2px; border-top:1px solid #d4b16f70; border-bottom:1px solid #d4b16f40; border-radius:3px 12px 12px 3px; background:linear-gradient(90deg,#b58a45ad,#765c3080,transparent); color:#fff0c9; font-size:9px; line-height:17px; }
+.character-power .info-seal { flex-shrink:0; width:14px; height:14px; }
+.character-power b { min-width:0; overflow:hidden; text-overflow:ellipsis; font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.character-chevron { margin-left:auto; color:#e8c989; }
+.identity .profile-trigger:hover { filter:brightness(1.12); }
+.identity .profile-trigger:active { filter:brightness(1.25); }
+@media(max-width:360px) { .identity .profile-trigger { gap:6px; } .identity .portrait { width:44px; height:44px; } .identity .name { flex-wrap:wrap; gap:0 4px; } .identity #characterName { flex-basis:100%; } .character-power > span:not(.character-chevron) { font-size:8px; } }
+@media(prefers-reduced-motion:reduce) { .identity .portrait.low-hp { animation:none; } }
 .vital-orb { cursor: pointer; }
 .location-area .field-shortcuts.map-shortcuts { grid-template-columns: repeat(4, 30px); }
 .map-shortcuts .map-proxy > span { font-size: 15px; line-height: 30px; }
