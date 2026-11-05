@@ -131,8 +131,9 @@ try {
     if (!report.blockedOrigins.includes(url.origin)) report.blockedOrigins.push(url.origin);
     return route.abort();
   });
-  await context.routeWebSocket('**/*', ws => {
-    if (new URL(ws.url()).origin === backend.replace('http:', 'ws:')) return ws.connectToServer();
+  // Keep the allowed socket native: forwarding it through Playwright changes the
+  // transport under test. Intercept only forbidden destinations and close them.
+  await context.routeWebSocket(url => url.origin !== backend.replace('http:', 'ws:'), ws => {
     report.blockedOrigins.push(new URL(ws.url()).origin);
     ws.close({ code: 1008, reason: 'Nonlocal socket refused by isolated test' });
   });
