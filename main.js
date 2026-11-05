@@ -12418,6 +12418,11 @@
     const edgeCenterAtamat = rankAtamat > 0 ? "on" : (rankPhuttha > 0 && lvNow >= levels[rankAtamat] && availablePoints > 0 ? "ready" : "locked");
     const edgeCenterChumphon = rankChumphon > 0 ? "on" : (rankSritra > 0 && lvNow >= levels[rankChumphon] && availablePoints > 0 ? "ready" : "locked");
 
+    const markerTop = edgeCenterPhuttha === "on" ? "url(#kgArrowGold)" : edgeCenterPhuttha === "ready" ? "url(#kgArrowCyan)" : "url(#kgArrowMuted)";
+    const markerRight = edgeCenterSritra === "on" ? "url(#kgArrowGold)" : edgeCenterSritra === "ready" ? "url(#kgArrowCyan)" : "url(#kgArrowMuted)";
+    const markerBottom = edgeCenterAtamat === "on" ? "url(#kgArrowGold)" : edgeCenterAtamat === "ready" ? "url(#kgArrowCyan)" : "url(#kgArrowMuted)";
+    const markerLeft = edgeCenterChumphon === "on" ? "url(#kgArrowGold)" : edgeCenterChumphon === "ready" ? "url(#kgArrowCyan)" : "url(#kgArrowMuted)";
+
     const nodePhuttha = buildKgNode("phuttha_core", "kg-node-top");
     const nodeSritra = buildKgNode("sritra_core", "kg-node-right");
     const nodeAtamat = buildKgNode("atamat_core", "kg-node-bottom");
@@ -12440,7 +12445,7 @@
       '</div>' +
 
       '<p class="note" style="margin:2px 0;font-size:11px;color:#c7b28a;text-align:center;">' +
-        'อาชีพศูนย์กลางกระจาย 4 ด้าน · แตะที่โหนดสกิลเพื่อดูรายละเอียดและอัปเกรดทันที' +
+        'อาชีพศูนย์กลางเชื่อมโยง 4 ทิศ · แตะที่โหนดสกิลเพื่อดูรายละเอียดและอัปเกรดทันที' +
       '</p>' +
 
       '<!-- Radial 4-Directional Knowledge Graph Canvas -->' +
@@ -12459,18 +12464,29 @@
         '<div class="kg-stream-badge kg-stream-badge-left">ทิศตะวันตก · ม่านมนตร์คุ้มกาย</div>' +
 
         '<!-- SVG Radial Connector Edges -->' +
-        '<svg class="kg-svg-edges" viewBox="0 0 360 440" preserveAspectRatio="xMidYMid meet">' +
+        '<svg class="kg-svg-edges" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;">' +
+          '<defs>' +
+            '<marker id="kgArrowGold" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">' +
+              '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#ffd700" />' +
+            '</marker>' +
+            '<marker id="kgArrowCyan" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">' +
+              '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#7fe8ff" />' +
+            '</marker>' +
+            '<marker id="kgArrowMuted" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">' +
+              '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#5a4b32" />' +
+            '</marker>' +
+          '</defs>' +
           '<!-- Background Arc Rings -->' +
-          '<circle cx="180" cy="220" r="118" fill="none" stroke="rgba(212,175,55,0.18)" stroke-width="1.5" stroke-dasharray="4 6" />' +
-          '<circle cx="180" cy="220" r="54" fill="none" stroke="rgba(255,215,0,0.15)" stroke-width="1" />' +
+          '<circle id="kgOrbitRing" cx="180" cy="220" r="118" fill="none" stroke="rgba(212,175,55,0.22)" stroke-width="1.5" stroke-dasharray="4 6" />' +
+          '<circle id="kgCenterRing" cx="180" cy="220" r="42" fill="none" stroke="rgba(255,215,0,0.2)" stroke-width="1" />' +
           '<!-- Center to Top (Phuttha) -->' +
-          '<path class="kg-edge ' + edgeCenterPhuttha + '" d="M 180 185 L 180 110" />' +
+          '<path id="kgEdge_phuttha" class="kg-edge ' + edgeCenterPhuttha + '" d="M 180 189 L 180 94" marker-end="' + markerTop + '" />' +
           '<!-- Center to Right (Sritra) -->' +
-          '<path class="kg-edge ' + edgeCenterSritra + '" d="M 214 220 L 260 220" />' +
+          '<path id="kgEdge_sritra" class="kg-edge ' + edgeCenterSritra + '" d="M 211 220 L 267 220" marker-end="' + markerRight + '" />' +
           '<!-- Center to Bottom (Atamat) -->' +
-          '<path class="kg-edge ' + edgeCenterAtamat + '" d="M 180 255 L 180 338" />' +
+          '<path id="kgEdge_atamat" class="kg-edge ' + edgeCenterAtamat + '" d="M 180 251 L 180 346" marker-end="' + markerBottom + '" />' +
           '<!-- Center to Left (Chumphon) -->' +
-          '<path class="kg-edge ' + edgeCenterChumphon + '" d="M 146 220 L 100 220" />' +
+          '<path id="kgEdge_chumphon" class="kg-edge ' + edgeCenterChumphon + '" d="M 149 220 L 93 220" marker-end="' + markerLeft + '" />' +
         '</svg>' +
 
         '<!-- 4 Radiating Skill Nodes -->' +
@@ -12486,6 +12502,79 @@
         '<p class="note" style="font-size:10px;color:#8f9e9d;margin:0;">จัดแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · สวมกระบี่อาคมเพื่อใช้วิชา</p>' +
       '</div>' +
     '</div>';
+
+    // Dynamic line connection calculator for 100% pixel-perfect accuracy
+    function updateKgLines() {
+      try {
+        const board = container.querySelector(".kg-canvas-board");
+        if (!board) return;
+        const bRect = board.getBoundingClientRect();
+        if (!bRect.width || !bRect.height) return;
+
+        const centerOrb = board.querySelector(".kg-center-class-orb");
+        if (!centerOrb) return;
+        const cRect = centerOrb.getBoundingClientRect();
+        const cX = cRect.left + cRect.width / 2 - bRect.left;
+        const cY = cRect.top + cRect.height / 2 - bRect.top;
+        const cR = cRect.width / 2;
+
+        const nodes = [
+          { id: "phuttha_core", pathId: "kgEdge_phuttha" },
+          { id: "sritra_core", pathId: "kgEdge_sritra" },
+          { id: "atamat_core", pathId: "kgEdge_atamat" },
+          { id: "chumphon_core", pathId: "kgEdge_chumphon" }
+        ];
+
+        let totalDist = 0;
+        let distCount = 0;
+
+        nodes.forEach(n => {
+          const el = board.querySelector('.kg-node[data-skill-id="' + n.id + '"] .kg-orb');
+          const path = board.querySelector('#' + n.pathId);
+          if (!el || !path) return;
+          const nRect = el.getBoundingClientRect();
+          const nX = nRect.left + nRect.width / 2 - bRect.left;
+          const nY = nRect.top + nRect.height / 2 - bRect.top;
+          const nR = nRect.width / 2;
+
+          const dist = Math.hypot(nX - cX, nY - cY);
+          totalDist += dist;
+          distCount++;
+
+          const angle = Math.atan2(nY - cY, nX - cX);
+          const startX = cX + Math.cos(angle) * (cR + 2);
+          const startY = cY + Math.sin(angle) * (cR + 2);
+          const endX = nX - Math.cos(angle) * (nR + 4);
+          const endY = nY - Math.sin(angle) * (nR + 4);
+
+          path.setAttribute("d", "M " + startX.toFixed(1) + " " + startY.toFixed(1) + " L " + endX.toFixed(1) + " " + endY.toFixed(1));
+        });
+
+        const orbitRing = board.querySelector("#kgOrbitRing");
+        if (orbitRing && distCount > 0) {
+          const avgDist = totalDist / distCount;
+          orbitRing.setAttribute("cx", cX.toFixed(1));
+          orbitRing.setAttribute("cy", cY.toFixed(1));
+          orbitRing.setAttribute("r", avgDist.toFixed(1));
+        }
+
+        const centerRing = board.querySelector("#kgCenterRing");
+        if (centerRing) {
+          centerRing.setAttribute("cx", cX.toFixed(1));
+          centerRing.setAttribute("cy", cY.toFixed(1));
+          centerRing.setAttribute("r", (cR + 10).toFixed(1));
+        }
+      } catch (_) {}
+    }
+
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(updateKgLines);
+      setTimeout(updateKgLines, 60);
+      setTimeout(updateKgLines, 250);
+    }
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("resize", updateKgLines, { passive: true });
+    }
 
     // Bind node clicks to open popup
     container.querySelectorAll(".kg-node").forEach(card => {
