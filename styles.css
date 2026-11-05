@@ -2494,15 +2494,33 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .forge-target { position:relative; }
 .forge-hammer-motion { position:absolute; z-index:2; left:calc(50% - 48px); top:-16px; width:96px; height:88px; pointer-events:none; }
 .forge-hammer-motion[hidden] { display:none; }
-.forge-hammer { display:block; position:absolute; left:43px; top:7px; width:10px; height:51px; border:1px solid #bd8d50; border-radius:3px; background:linear-gradient(90deg,#624020,#ba8146,#704620); transform-origin:50% 90%; transform:translate(0,10px) rotate(-6deg); }
+.forge-hammer { display:block; position:absolute; z-index:1; left:43px; top:7px; width:10px; height:51px; border:1px solid #bd8d50; border-radius:3px; background:linear-gradient(90deg,#624020,#ba8146,#704620); transform-origin:50% 90%; transform:translate(0,10px) rotate(-6deg); }
 .forge-hammer::before { content:""; position:absolute; left:-13px; top:-3px; width:34px; height:19px; border:1px solid #f5d99f; border-radius:3px; background:linear-gradient(#f5d99f,#a88656 48%,#554c41); box-shadow:0 3px 4px #0009; }
 .forge-hammer i { position:absolute; bottom:3px; left:-1px; width:10px; height:14px; border-top:2px solid #4c3019; border-bottom:2px solid #4c3019; }
-.forge-sparks { position:absolute; left:46px; top:44px; width:3px; height:3px; border-radius:50%; background:#ffe6ac; opacity:0; }
+.forge-impact-ring { position:absolute; z-index:0; left:15px; top:15px; width:66px; height:66px; border:1px solid #e4bc71; border-radius:50%; opacity:0; transform:scale(.65); background:radial-gradient(circle,#efc8792b 0 28%,#efc8790d 48%,transparent 70%); box-shadow:0 0 12px #e8b35b55,inset 0 0 9px #e8b35b44; }
+.forge-impact-ring::after { content:""; position:absolute; inset:6px; border:1px dashed #eacb8b88; border-radius:50%; }
+.forge-sparks { position:absolute; z-index:2; left:46px; top:44px; width:3px; height:3px; border-radius:50%; background:#ffe6ac; opacity:0; }
+.is-striking .forge-hammer::before { box-shadow:0 3px 4px #0009,0 0 9px #f4cb6e66; }
+.is-striking .forge-impact-ring { animation:forge-impact-pulse .36s ease-out 1; }
+.is-impact .forge-impact-ring { opacity:.9; transform:scale(1.05); }
+.is-impact .forge-sparks { opacity:.85; transform:scale(1.1); box-shadow:-17px -8px #ffd68a,18px -13px #e7ad54,-9px 16px #ffd68a,20px 11px #e7ad54,1px -21px #ffdea1,-22px 4px #e7ad54; }
 .is-striking .forge-hammer { animation:forge-hammer-strike .36s ease-in-out 1; }
 .is-striking .forge-sparks { animation:forge-hammer-sparks .36s ease-out 1; }
 .forge-animation-status,.forge-outcome { margin:10px 0; font-size:13px; line-height:1.7; overflow-wrap:anywhere; }
 .forge-animation-status { color:#f3d7a1; text-align:center; }
 .forge-outcome { padding:12px; border:1px solid #8f754a; border-radius:10px; background:#241d14; color:#f4e2bd; }
+.forge-outcome[data-kind="success"],.forge-outcome[data-kind="reroll"] { animation:forge-outcome-arrive .32s ease-out 1; }
+.forge-outcome[data-kind="success"] { border-color:#d8b467; background:linear-gradient(115deg,#3b301b,#241d14); box-shadow:inset 3px 0 #d8b467,0 0 15px #dbaf5333; color:#ffe6b0; }
+.forge-outcome[data-kind="reroll"] { border-color:#8bbed0; background:linear-gradient(115deg,#1e353c,#17272c); box-shadow:inset 3px 0 #8bbed0,0 0 12px #6aa9bf22; }
+.forge-outcome[data-kind="failed"],.forge-outcome[data-kind="downgraded"] { border-color:#b68a54; box-shadow:inset 3px 0 #b68a54; background:#30251a; }
+.forge-outcome[data-kind="broken"] { border-color:#b77d70; box-shadow:inset 3px 0 #b77d70; background:#32211e; color:#f2c5b9; }
+@keyframes forge-impact-pulse {
+  0%,50% { opacity:0; transform:scale(.65); }
+  60% { opacity:.9; transform:scale(.82); }
+  85% { opacity:.45; transform:scale(1.12); }
+  100% { opacity:0; transform:scale(1.2); }
+}
+@keyframes forge-outcome-arrive { from { opacity:.45; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 @keyframes forge-hammer-strike {
   0%,100% { transform:translate(16px,-16px) rotate(-42deg); }
   42% { transform:translate(20px,-22px) rotate(-54deg); }
@@ -2517,6 +2535,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 @media (prefers-reduced-motion:reduce) {
   .forge-hammer-motion { display:none!important; }
   .forge-hammer,.forge-sparks { animation:none!important; }
+  .forge-impact-ring,.forge-outcome { animation:none!important; }
 }
 
 /* ==========================================================================
