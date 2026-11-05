@@ -477,13 +477,15 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   flex: 0 0 100%;
   scroll-snap-align: start;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 50px));
+  justify-content: center;
   gap: 4px;
 }
 
 .bag-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 50px));
+  justify-content: center;
   gap: 4px;
   margin: 4px 0 10px;
 }
@@ -494,7 +496,9 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   min-width: 0;
   min-height: 0;
   width: 100%;
-  padding: 3px;
+  max-width: 50px;
+  max-height: 50px;
+  padding: 2px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -555,7 +559,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   cursor: pointer;
 }
 .bag-symbol {
-  font-size: clamp(15px, 4.2vw, 19px);
+  font-size: clamp(14px, 3.6vw, 17px);
   line-height: 1;
   color: #758b8b;
 }
