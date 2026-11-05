@@ -190,6 +190,20 @@ try {
   await page.locator('#forgeEnhance').scrollIntoViewIfNeeded();
   assert.equal(await page.locator('#forgeEnhance').isEnabled(), true);
   await screenshot('03-enhancement-before');
+  // Capture the real status mutation before sending: combat messages can replace
+  // the short success toast while the persistent forge result remains visible.
+  await page.evaluate(() => {
+    const element = document.getElementById('toast');
+    window.__forgeToastEvents = [];
+    window.__forgeToastObserver = new MutationObserver(() => {
+      const style = getComputedStyle(element);
+      if (window.__forgeToastEvents.length < 100) window.__forgeToastEvents.push({
+        text: element.textContent, shown: element.classList.contains('show'),
+        hidden: element.hidden || style.display === 'none' || style.visibility === 'hidden',
+      });
+    });
+    window.__forgeToastObserver.observe(element, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'hidden'] });
+  });
   let confirmed = false;
   page.once('dialog', async dialog => {
     assert.equal(dialog.type(), 'confirm');
@@ -200,13 +214,14 @@ try {
   await page.locator('#forgeEnhance').click();
   await page.waitForFunction(() => document.getElementById('forgeProgress')?.value === 1);
   assert.equal(confirmed, true, 'actual enhancement confirmation appeared');
-  assert.match(await page.locator('#toast').innerText(), /ตีบวกสำเร็จ \+1/);
+  await page.waitForFunction(() => window.__forgeToastEvents.some(event => /ตีบวกสำเร็จ \+1/.test(event.text) && event.shown && !event.hidden));
+  report.toasts = await page.evaluate(() => { window.__forgeToastObserver.disconnect(); return window.__forgeToastEvents; });
   assert.match(await page.locator('#forgeInfo').innerText(), /^\+1/);
   assert.match(await page.locator('#forgeGear option:checked').innerText(), /\+1/);
   assert.match(await page.locator('#forgeEnhance').innerText(), /ตี \+2/);
   assert.equal((await page.locator('#forgeGold').innerText()).replace(/[^0-9]/g, ''), String(fixture.expected.gold));
   await screenshot('04-enhancement-success');
-  log('Real server enhancement returns +1; toast, item selection, progress, next step and wallet render correctly');
+  log('Real server enhancement returns +1; success status, item selection, progress, next step and wallet render correctly');
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await page.locator('#forgeEnhance').scrollIntoViewIfNeeded();
@@ -243,6 +258,7 @@ try {
     entryError: document.querySelector('.account-error')?.textContent,
     online: document.getElementById('onlineCount')?.textContent,
     toast: document.getElementById('toast')?.textContent,
+    observedToasts: window.__forgeToastEvents,
     policyViolations: window.__forgePolicyViolations,
   })).catch(() => ({})))));
   if (page && !page.isClosed()) await screenshot('failure').catch(() => {});
