@@ -12350,12 +12350,22 @@
     if (!data?.catalog?.core || !container) return;
     const { me, tree, catalog } = data;
     const ranks = tree.coreRanks || {};
-    const lvNow = skillLearningLevel(me) || 1;
+    const lvNow = (typeof skillLearningLevel === "function" ? skillLearningLevel(me) : me?.level) || 1;
     const levels = catalog.coreLevels || [1, 10, 25, 40, 55, 70, 85, 100];
     const pointLevels = catalog.corePointLevels || [1, 5, 10, 15, 20, 30, 45, 60, 75, 90, 100];
     const points = pointLevels.filter(lvl => lvNow >= lvl).length;
     const spent = Object.values(ranks).reduce((sum, v) => sum + Number(v || 0), 0);
     const availablePoints = Math.max(0, points - spent);
+
+    const fmt = n => String(Math.round(n * 100) / 100);
+    const describe = (id, rank) => {
+      const p = catalog.coreProgress?.[rank]?.[id];
+      if (!p) return "";
+      if (id === "phuttha_core") return "ฟันมอน " + [.36, .46, p.finalPower].map(n => Math.round(n * p.scale * 100) + "%").join(" + ");
+      if (id === "sritra_core") return "ตั้งรับ " + fmt(p.durationMs / 1000) + " วิ · ลดดาเมจ " + Math.round((1 - p.damageFactor) * 100) + "% · สวนมอน " + Math.round(p.counterPower * 100) + "% · สวนซ้ำทุก " + fmt(p.counterIntervalMs / 1000) + " วิ";
+      if (id === "atamat_core") return "กวาดมอนสูงสุด 3 ตัว · ระยะ " + fmt(p.range) + " · พลัง " + Math.round(p.power * 100) + "%";
+      return "เพิ่มป้องกัน " + Math.round(p.defense * 100) + "% · ระยะ " + fmt(p.range) + " · นาน " + fmt(p.durationMs / 1000) + " วิ";
+    };
 
     const branches = [
       {
@@ -12394,93 +12404,88 @@
 
         const stateCls = isReady ? "ready" : isLearned ? "learned" : "locked";
         const glyph = skillGlyphs[id] || "✦";
-        const pipsHtml = Array.from({ length: maxRank }, (_, i) => `<i class="${i < rank ? "on" : ""}"></i>`).join("");
+        const pipsHtml = Array.from({ length: maxRank }, (_, i) => '<i class="' + (i < rank ? 'on' : '') + '"></i>').join("");
+        const descText = describe(id, rank);
 
-        return `
-          <div class="st-skill-card ${stateCls}" data-skill-id="${id}" role="button" tabindex="0" aria-label="${node.name}">
-            <div class="st-card-orb">
-              <span>${glyph}</span>
-              ${rank > 0 ? `<span class="st-card-rank-badge">+${rank}</span>` : ""}
-            </div>
-            <strong class="st-card-name">${node.name}</strong>
-            <span style="font-size:10px;color:#d1b67b;">ขั้น ${rank}/${maxRank}</span>
-            <div class="st-card-pips">${pipsHtml}</div>
-            <span class="st-card-click-hint">${isReady ? "✦ แตะเพื่ออัปเกรด" : "แตะดูรายละเอียด"}</span>
-          </div>
-        `;
+        return '<div class="st-skill-card ' + stateCls + '" data-skill-id="' + id + '" data-sword-core-upgrade="' + id + '" role="button" tabindex="0" aria-label="' + node.name + '">' +
+          '<div class="st-card-orb">' +
+            '<span>' + glyph + '</span>' +
+            (rank > 0 ? '<span class="st-card-rank-badge">+' + rank + '</span>' : '') +
+          '</div>' +
+          '<strong class="st-card-name">' + node.name + '</strong>' +
+          '<span class="st-card-rank-text" style="font-size:10px;color:#d1b67b;">ขั้น ' + rank + '/' + maxRank + '</span>' +
+          '<div class="st-card-pips">' + pipsHtml + '</div>' +
+          (descText ? '<div class="st-card-desc-preview" style="font-size:9.5px;color:#a9bfb8;line-height:1.2;margin:3px 0 2px 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-align:center;">' + descText + '</div>' : '') +
+          '<span class="st-card-click-hint">' + (isReady ? "✦ แตะเพื่ออัปเกรด" : "แตะดูรายละเอียด") + '</span>' +
+        '</div>';
       }).join("");
 
-      branchesHtml += `
-        <div class="st-branch">
-          <div class="st-branch-title">
-            <span>${b.glyph} ${b.title}</span>
-            <small style="color:#d1b67b;font-weight:normal;">2 สกิลในสาย</small>
-          </div>
-          <div class="st-branch-grid">
-            ${cardsHtml}
-          </div>
-        </div>
-      `;
+      branchesHtml += '<div class="st-branch">' +
+        '<div class="st-branch-title">' +
+          '<span>' + b.glyph + ' ' + b.title + '</span>' +
+          '<small style="color:#d1b67b;font-weight:normal;">2 สกิลในสาย</small>' +
+        '</div>' +
+        '<div class="st-branch-grid">' +
+          cardsHtml +
+        '</div>' +
+      '</div>';
     }
 
-    container.innerHTML = `
-      <div class="st-container">
-        <!-- Top Class Banner -->
-        <div class="st-header-banner">
-          <div class="st-header-left">
-            <span class="st-header-crest">⚔</span>
-            <div class="st-header-info">
-              <strong class="st-header-title">วิชาดาบพุทธไธสวรรย์</strong>
-              <span class="st-header-sub">นักดาบอยุธยา · เลเวล ${lvNow}</span>
-            </div>
-          </div>
-          <div class="st-points-box">
-            <span class="st-points-num">${availablePoints}</span>
-            <span class="st-points-label">แต้มวิชา</span>
-          </div>
-        </div>
-
-        <p class="note" style="margin:2px 0;font-size:11px;color:#c7b28a;text-align:center;">
-          แต้มวิชาสะสมตามเลเวลตัวละคร · แตะที่ไอคอนเพื่อดูรายละเอียดและอัปเกรด
-        </p>
-
-        <!-- Skill Tree Branches -->
-        <div class="st-tree-board">
-          ${branchesHtml}
-        </div>
-
-        <!-- Footer Actions -->
-        <div class="st-footer-actions">
-          <button type="button" class="secondary" id="stResetBtn" ${spent > 0 ? "" : "disabled"} style="width:100%;">คืนแต้มวิชาทั้งหมด (${spent} แต้ม)</button>
-          <p class="note" style="font-size:10px;color:#8f9e9d;margin:0;">จัดแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · สวมกระบี่อาคมเพื่อใช้วิชา</p>
-        </div>
-      </div>
-    `;
+    container.innerHTML = '<div class="st-container">' +
+      '<!-- Top Class Banner -->' +
+      '<div class="st-header-banner">' +
+        '<div class="st-header-left">' +
+          '<span class="st-header-crest">⚔</span>' +
+          '<div class="st-header-info">' +
+            '<strong class="st-header-title">วิชาดาบพุทธไธสวรรย์</strong>' +
+            '<span class="st-header-sub">นักดาบอยุธยา · เลเวล ' + lvNow + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="st-points-box">' +
+          '<span class="st-points-num">' + availablePoints + '</span>' +
+          '<span class="st-points-label">แต้มวิชา ' + (points - spent) + ' / ' + points + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<p class="note" style="margin:2px 0;font-size:11px;color:#c7b28a;text-align:center;">' +
+        'แต้มวิชาสะสมตามเลเวลตัวละคร · แตะที่ไอคอนเพื่อดูรายละเอียดและอัปเกรด' +
+      '</p>' +
+      '<!-- Skill Tree Branches -->' +
+      '<div class="st-tree-board">' +
+        branchesHtml +
+      '</div>' +
+      '<!-- Footer Actions -->' +
+      '<div class="st-footer-actions">' +
+        '<button type="button" class="secondary" id="resetSwordCore" ' + (spent > 0 ? '' : 'disabled') + ' style="width:100%;">คืนแต้มวิชา (' + spent + ' แต้ม)</button>' +
+        '<p class="note" style="font-size:10px;color:#8f9e9d;margin:0;">จัดแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · สวมกระบี่อาคมเพื่อใช้วิชา</p>' +
+      '</div>' +
+    '</div>';
 
     // Bind card clicks to open popup
     container.querySelectorAll(".st-skill-card").forEach(card => {
       card.onclick = () => {
-        const skillId = card.dataset.skillId;
+        const skillId = card.dataset.skillId || card.dataset.swordCoreUpgrade;
         if (skillId) {
-          SFX("tap");
-          openSkillDetailModal(skillId);
+          if (typeof SFX === "function") SFX("tap");
+          if (typeof openSkillDetailModal === "function") openSkillDetailModal(skillId);
         }
       };
     });
 
     // Bind reset
-    const resetBtn = $("stResetBtn");
+    const resetBtn = $("resetSwordCore") || $("stResetBtn");
     if (resetBtn) {
       resetBtn.onclick = () => {
         if (!window.confirm("ต้องการคืนแต้มวิชาทั้งหมดหรือไม่?")) return;
-        if (room && typeof room.send === "function" && mode === "live") {
+        if (typeof room !== "undefined" && room && typeof room.send === "function" && typeof mode !== "undefined" && mode === "live") {
           try { room.send("sword_core_book", { action: "reset" }); } catch (_) {}
           try { room.send("sword_tree_reset", {}); } catch (_) {}
         } else {
-          for (const k of Object.keys(demoSwordTreeData.coreRanks)) {
-            demoSwordTreeData.coreRanks[k] = 0;
+          if (typeof demoSwordTreeData !== "undefined" && demoSwordTreeData?.coreRanks) {
+            for (const k of Object.keys(demoSwordTreeData.coreRanks)) {
+              demoSwordTreeData.coreRanks[k] = 0;
+            }
           }
-          toast("คืนแต้มวิชาเรียบร้อยแล้ว");
+          if (typeof toast === "function") toast("คืนแต้มวิชาเรียบร้อยแล้ว");
           renderSwordTree();
         }
       };
