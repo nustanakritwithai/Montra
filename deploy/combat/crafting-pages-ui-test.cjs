@@ -59,7 +59,7 @@ function fixture(){
       for(const match of html.matchAll(/<([a-z][a-z0-9]*)\b([^>]*\bid="([^"]+)"[^>]*)>/g)){const el=node(match[1]);el.hidden=/\bhidden\b/.test(match[2]);elements.set(match[3],el);}
       for(const match of html.matchAll(/<select\b[^>]*id="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g))for(const o of match[2].matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g))$(match[1]).appendChild(new ctx.Option(o[2],o[1]));
     },
-    openBag(){ctx.drawerActive='bag';elements.clear();},openForgePage(){ctx.drawerActive='forge';},fishingPending:false,
+    closeItemDetailModal(){},openBag(){ctx.drawerActive='bag';elements.clear();},openForgePage(){ctx.drawerActive='forge';},fishingPending:false,
   };
   ctx.room={state:{economyAvailable:true,craftRecipe:JSON.stringify(shrine)},send:(command,payload)=>wire.push({command,payload:plain(payload)})};
   ctx.joined=ctx.room;ctx.joined.onMessage=(name,handler)=>{callbacks[name]=handler;};

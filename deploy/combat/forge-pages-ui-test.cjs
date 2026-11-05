@@ -91,7 +91,7 @@ const bagCode=slice('  function openBag()','  function updateFieldAlerts()');ass
 const profileCode=slice('  function openCharacterProfile()','  // Taps on any game button');
 assert(!profileCode.includes('id="forgePanel"'));assert(!profileCode.includes('id="forgeStock"'));assert(profileCode.includes('id="cpForge"'));
 assert.equal([...source.matchAll(/function submitForge\(/g)].length,1);
-const shortcut={},workshop={},opened=[],binder={drawerActive:"bag",BAG_PAGE_SIZE:0,BAG_TOTAL_PAGES:0,ui:{drawerBody:{querySelectorAll:()=>[]}},$:id=>id==='bagForge'?shortcut:id==='cpForge'?workshop:null,INVENTORY_SLOTS:0,bodyLabels:{},inspectingGear:'leftRing',selectedBagSlot:3,
+const shortcut={},workshop={},opened=[],binder={closeItemDetailModal(){},drawerActive:"bag",BAG_PAGE_SIZE:0,BAG_TOTAL_PAGES:0,ui:{drawerBody:{querySelectorAll:()=>[]}},$:id=>id==='bagForge'?shortcut:id==='cpForge'?workshop:null,INVENTORY_SLOTS:0,bodyLabels:{},inspectingGear:'leftRing',selectedBagSlot:3,
   currentEquippedWeaponSlot:()=>4,openForgePage:(...args)=>opened.push(args),openSmith:()=>opened.push("smith"),journeyNotesForPlayer:()=>({}),economyReady:()=>false};
 vm.runInNewContext(slice('  function bindBagControls()','  function renderBag()')+'\nbindBagControls()',binder);
 shortcut.onclick();assert.deepEqual(opened.at(-1),['enhance','leftRing']);binder.inspectingGear='mainHand';shortcut.onclick();assert.deepEqual(opened.at(-1),['enhance',4]);binder.inspectingGear=null;shortcut.onclick();assert.deepEqual(opened.at(-1),['enhance',3]);

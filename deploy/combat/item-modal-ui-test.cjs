@@ -54,8 +54,8 @@ function dom(){
       stack.at(-1).append(child);if(!['input','img','br','hr','meta','link'].includes(match[1]))stack.push(child);
     }
   }
-  const globalHost=node();parse(globalHost,index.slice(index.indexOf('    <div id="itemModalBackdrop"'),index.indexOf('    <section id="drawer"')));
-  game.append(...globalHost.children);const account=mount('accountEntry');account.hidden=true;
+  const globalHost=node();parse(globalHost,index.slice(index.indexOf('    <div id="itemModalBackdrop"'),index.indexOf('  <script src="./account-entry.js')));
+  document.body.append(...globalHost.children);const account=mount('accountEntry');account.hidden=true;
   return {document,node,elements,listeners,$:id=>elements.get(id)||null,ui:{drawer,shade,drawerBody:body,drawerTitle:title}};
 }
 function fixture(){
@@ -87,7 +87,7 @@ function fixture(){
 
 // Static IDs are global once, not recreated in the bag or duplicated in the profile.
 test('global modal owns shared previews, card panel, guide and actions exactly once',()=>{
-  const modal=index.slice(index.indexOf('<div id="itemDetailModal"'),index.indexOf('<section id="drawer"'));
+  const modal=index.slice(index.indexOf('<div id="itemDetailModal"'),index.indexOf('<div id="equipPopupBackdrop"'));
   const bag=slice('  function openBag()','  function updateFieldAlerts()');
   for(const id of ['bagDetailItem','bagItemName','bagItemDescription','bagReturnItem','socketItemPreview','cardSocketPanel','socketCardChoice','cardSocketAction','gearGuide','guideTargetItem','guideCurrentItem','guideCardItem','guideNextItem','bagCraft','bagForge','useBagItem']){
     assert(modal.includes(`id="${id}"`),id);assert.equal([...(index+source).matchAll(new RegExp(`id="${id}"`,'g'))].length,1,`unique host ${id}`);assert(!bag.includes(`id="${id}"`),id);
@@ -172,4 +172,17 @@ test('health potion render produces one healing stat card, including legacy fall
   assert.equal([...html.matchAll(/ฟื้นฟูพลังชีวิต/g)].length,1);assert.equal([...html.matchAll(/\+30 HP/g)].length,1);
   delete f.items.potion;f.ctx.renderBag();assert.equal([...f.$('bagPanelStats').html.matchAll(/ฟื้นฟูพลังชีวิต/g)].length,1);
 });
+test('static popups are outside the game gate and pointer close restores focus without mutations',()=>{
+  assert(index.indexOf('</main>')<index.indexOf('id="itemDetailModal"'));
+  assert(index.indexOf('</main>')<index.indexOf('id="equipPopup"'));
+  for(const id of ['itemModalClose','itemModalCloseBtn','itemModalBackdrop']){
+    const f=fixture();f.open();f.select(1);const before=f.snapshot();
+    const event={preventDefault(){this.prevented=true;},stopPropagation(){this.stopped=true;}};
+    f.$(id).onpointerdown(event);
+    assert.equal(event.prevented,true);assert.equal(event.stopped,true);assert.equal(f.modal().hidden,true);
+    assert.equal(f.document.activeElement,f.$('bagSlot1'));assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);
+    f.$(id).onclick();assert.equal(f.modal().hidden,true,'subsequent click is idempotent');
+  }
+});
+
 console.log(`PASS centered item modal: ${groups} focused regression groups`);

@@ -141,4 +141,12 @@ test('all item display surfaces use shared thumbnails while interactive inventor
   assert.doesNotMatch(slice('  function createItemTile(','  function wornGearAt('),/economySend|addEventListener|\.onclick\s*=/,'display helpers must never send or bind mutations');
 });
 
+test('forge hidden materials and centered modal controls keep the shared theme',()=>{
+  assert.match(css,/\.forge-material \.item-preview\[hidden\]\s*\{\s*display\s*:\s*none\s*;/);
+  for(const control of ['.primary','.secondary','select']){
+    const selector='.drawer-body '+control+',.item-detail-modal '+control+' {';
+    assert(css.includes(selector),`shared control theme ${control}`);
+  }
+});
+
 console.log(`PASS shared item displays: ${groups} focused regression groups`);
