@@ -51,7 +51,7 @@ const me={pathId:"muay_boran",level:3},context={mode:"live",ownServerCharacter:(
   personalItems:docs,itemHuntCount:id=>bag.slots.reduce((n,s)=>n+(s.itemId===id?s.quantity:0),0),
   room:{state:{monsters:new Map([["west1",{x:9,z:8,alive:false}],["west2",{x:12,z:8,alive:true}]])}},
   getLocalAvatar:()=>({x:10,z:8}),worldDefinitions:{},$:get,ui:{drawerTitle:{}},openBag(){},selectBenchRecipe(...v){context.opened=v;},
-  bindItemHuntButton(_,id,qty){context.tracked={id,qty};}};
+  bindItemHuntButton(_,id,qty){context.tracked={id,qty};},itemHuntSource:(id,g)=>docs[id]?.huntTarget};
 const field=vm.runInNewContext(fieldSource+drawerSource+"\n({goal:fieldGearGoal,draw:renderFieldGoalDrawer})",context);
 let g=field.goal();assert.equal(g.to.x,12);assert.match(g.progress,/4\/10/);field.draw(g);
 assert.match(get("fieldGoalInputs").textContent,/หนัง 2\/3/);assert.equal(context.tracked.id,"hide");
