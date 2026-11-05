@@ -7432,7 +7432,7 @@
     setModeBadge(mode === "live");
   }
   function showDemo() {
-    closeForgePicker(false);closeItemDetailModal(false);
+    cancelForgeAnimation(false,true);finishEconomyPending(true);closeForgePicker(false);closeItemDetailModal(false);
     clearFishing(false);fishSavedItem=null;
     $("mountButton").hidden=true;
     territoryState=null;forestObjectiveState=null;forestDefenseState=null;forestEscortState=null;directorEventState=null;syncQuestRanger();syncWarQuartermaster();$("quest").classList.remove("war-hud");
@@ -8863,6 +8863,7 @@
       const earlyMessages=new Map(), earlyHandlers=new Map();
       for(const type of ["guild_state","guild_recruitment","territory_state"])joined.onMessage(type,message=>{if(!earlyHandlers.has(type))earlyMessages.set(type,message);});
       await verifyJoinedSlot(joined, requestedSlot);
+      cancelForgeAnimation(false,true);finishEconomyPending(true);
       room = joined;
       clearChatHistory(true);
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; resetCentralMarket(); tradeUnread=false; updateTradeBadge();
@@ -9098,29 +9099,12 @@
         finishEconomyPending();
         const slot=inventoryState?.slots.findIndex(s=>s?.forge?.instanceId===result.instanceId)??-1;
         if(drawerActive==="bag" && slot>=0){inspectingGear=null;selectedBagSlot=slot;confirmBindKey=null;}
-        if(drawerActive==="forge" && slot>=0)selectForgeTarget(slot);
+        if(drawerActive==="forge" && slot>=0 && !forgeAnimationBusy()){cancelForgeAnimation(false);forgePresentationResult=null;selectForgeTarget(slot);}
         toast("เบิก "+(bagMeta(result.gear)?.name||"อุปกรณ์")+" +0 แล้ว · เหลือในคลังช่าง "+result.remaining+" ชิ้น");
         renderBag();
       });
       joined.onMessage("forge_result", result => {
-        if (room !== joined) return;
-        finishEconomyPending();
-        const meta=bagMeta(result.itemId),gearName=meta?.name||"อุปกรณ์";
-        const spare=inventoryState?.forgeCopies?.[result.itemId]??0;
-        const source=spare?" · คลังช่างมี "+spare+" ชิ้น เบิกชิ้นใหม่ +0 ได้":meta?.dropHint?" · หาใหม่ที่ "+meta.dropHint:meta?.recipe?" · สร้างชิ้นใหม่ได้ที่โต๊ะช่าง":"";
-        const rank=result.forge.rank;
-        if(result.broken)toast(gearName+" +"+rank+" แตกแล้ว"+source);
-        else if(result.downgraded)toast(gearName+" ลดจาก +"+(rank+1)+" เหลือ +"+rank);
-        else if(result.action==="reroll")toast("สุ่มออปชันแล้ว");
-        else{
-          const score=meta?.forge?.enhanceRatings?.[rank];
-          toast("ตีบวกสำเร็จ +"+rank+(score?" · "+forgeNames[meta.forge.primary]+" +"+score+" เมื่อสวม":""));
-        }
-        renderBag();
-        if(result.broken && drawerActive==="forge" && spare){
-          renderForgeStock(result.itemId);
-          if(!$("forgeStock").hidden){$("forgeStock").open=true;$("forgeStock").scrollIntoView({block:"nearest"});}
-        }
+        receiveForgeResult(result,joined);
       });
       joined.onMessage("market_result", message => {
         if (room !== joined) return;
@@ -9198,7 +9182,8 @@
       });
       joined.onMessage("economy_error", message => {
         if (room !== joined) return;
-        finishEconomyPending();
+        if(economyPendingRequest?.command==="forge_weapon")failForgeAnimation("คำขอถูกปฏิเสธ · ตรวจอุปกรณ์และค่าใช้จ่ายอีกครั้ง");
+        finishEconomyPending(true);
         const reasons={forge_downgrade_unconfirmed:"กรุณารีเฟรชแล้วตรวจโอกาสลดขั้นก่อนยืนยัน",forge_stock_changed:"ยอดของสำรองเปลี่ยนแล้ว · ตรวจคลังช่างอีกครั้ง",forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
         const socketErrors={item_level_required:"เลเวลยังไม่ถึงที่อุปกรณ์กำหนด",card_gear_level:"การ์ดนี้ต้องใช้อุปกรณ์เลเวลสูงกว่านี้",socket_changed:"อุปกรณ์หรือรูการ์ดเปลี่ยนไปแล้ว",card_unavailable:"ไม่มีการ์ดที่เลือกในกระเป๋า",drill_missing_metal:"แร่เหล็กไม่พอสำหรับเจาะรู"};
         reasons.salvage_changed="อุปกรณ์เปลี่ยนไปแล้ว โปรดเลือกชิ้นที่จะแยกอีกครั้ง";
@@ -9918,7 +9903,8 @@
         if (typeof info?.reason==="string" && info.reason.startsWith("guild_")) { const reason={guild_invalid_name:"ชื่อกิลด์ต้องมี 2–24 ตัวอักษร และใช้ตัวอักษรหรือตัวเลข",guild_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",guild_unavailable:"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว"};toast(reason[info.reason] || "ไม่สามารถทำรายการกิลด์ได้");return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
         if (["economy_unavailable","economy_rate_limited","invalid_economy_request","invalid_trade","trade_unavailable","trade_expired","character_busy"].includes(info?.reason) && (drawerActive === "economy" || economyPending)) {
-          finishEconomyPending();
+          if(economyPendingRequest?.command==="forge_weapon")failForgeAnimation("คำขอยังไม่ได้รับการยืนยัน · ตรวจอุปกรณ์ก่อนทำซ้ำ");
+          finishEconomyPending(true);
           if (["trade_unavailable","trade_expired"].includes(info.reason)) activeTrade=null;
           const reason={economy_unavailable:"ต้องเข้า LIVE ที่เปิดระบบตลาด",economy_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",character_busy:"กำลังบันทึกข้อมูล · ลองใหม่",trade_expired:"ข้อเสนอเทรดหมดอายุ",trade_unavailable:"ไม่พบข้อเสนอเทรด"};
           toast(reason[info.reason] || "คำขอไม่ถูกต้อง"); renderEconomy(); renderBag(); return;
@@ -10375,7 +10361,7 @@
     }
   }
   function closeDrawer() {
-    closeForgePicker(false);
+    cancelForgeAnimation(true);closeForgePicker(false);
     if(ui.drawer.hidden)return;
     SFX("close");
     try { closeEquipPopup(); } catch (_) {}
@@ -10387,7 +10373,7 @@
     drawerOpener=null;
   }
   function openDrawer(name,title,html) {
-    closeForgePicker(false);closeItemDetailModal(false);
+    cancelForgeAnimation(true);closeForgePicker(false);closeItemDetailModal(false);
     if(fieldTrainingTip && !(ownServerCharacter()?.level>=13) && ["muayBook","swordTree","bladeBook","sentinelBook","occultBook"].includes(name))fieldTrainingTip=null;
     if(ui.drawer.hidden) {
       SFX("open");
@@ -14177,6 +14163,93 @@
   }
   // Presentation only: all item mutations still use the existing economy protocol.
   let forgePageAction="enhance",forgePageTarget=null,forgePageIdentity=null,forgePageRoom=null;
+  let forgeAnimation=null,forgePresentationResult=null;
+  const forgeAnimationRuns=new Map();
+  function forgeAnimationBusy(){
+    return !!(forgeAnimation && forgeAnimation.room===room && !forgeAnimation.revealed && (forgeAnimation.pending || forgeAnimation.visible && forgeAnimation.result));
+  }
+  function beginForgeAnimation(payload,item){
+    cancelForgeAnimation(true);
+    const reduced=window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches===true;
+    const run={room,requestId:payload.requestId,action:payload.action,target:payload.slot,itemId:item.itemId,
+      snapshot:JSON.parse(JSON.stringify(item)),until:Date.now()+(payload.action==="enhance" && !reduced?1260:0),
+      reduced,pending:true,visible:true,dismissed:false,revealed:false,result:null,timer:null};
+    forgeAnimation=run;forgePresentationResult=null;forgeAnimationRuns.set(run.requestId,run);
+    // Keep a small, room-local receipt history so a late result cannot unlock a newer request.
+    while(forgeAnimationRuns.size>16)forgeAnimationRuns.delete(forgeAnimationRuns.keys().next().value);
+    if(run.until>Date.now())run.timer=setTimeout(()=>{run.timer=null;completeForgeAnimation(run);},run.until-Date.now());
+    renderForgeAnimation();
+    return run;
+  }
+  function forgeResultMessage(result){
+    const meta=bagMeta(result.itemId),name=meta?.name||"อุปกรณ์",rank=result.forge.rank;
+    if(result.broken){
+      const spare=inventoryState?.forgeCopies?.[result.itemId]??0;
+      const source=spare?" · คลังช่างมี "+spare+" ชิ้น เบิกชิ้นใหม่ +0 ได้":meta?.dropHint?" · หาใหม่ที่ "+meta.dropHint:meta?.recipe?" · สร้างชิ้นใหม่ได้ที่โต๊ะช่าง":"";
+      return name+" +"+rank+" แตกแล้ว"+source;
+    }
+    if(result.downgraded)return name+" ลดจาก +"+(rank+1)+" เหลือ +"+rank;
+    if(result.action==="reroll")return name+" · สุ่มออปชันแล้ว";
+    if(result.success===false)return name+" · ตีบวกไม่สำเร็จ · คงขั้น +"+rank;
+    const score=meta?.forge?.enhanceRatings?.[rank];
+    return "ตีบวกสำเร็จ +"+rank+" · "+name+(score?" · "+forgeNames[meta.forge.primary]+" +"+score+" เมื่อสวม":"");
+  }
+  function completeForgeAnimation(run){
+    if(!run || run.room!==room || run.revealed || forgeAnimationRuns.get(run.requestId)!==run)return;
+    if(!run.result){if(run===forgeAnimation)renderForgeAnimation();return;}
+    if(run.visible && run===forgeAnimation && Date.now()<run.until){
+      if(!run.timer)run.timer=setTimeout(()=>{run.timer=null;completeForgeAnimation(run);},run.until-Date.now());
+      return;
+    }
+    const current=run===forgeAnimation,present=current && !run.dismissed && drawerActive==="forge" && forgePageAction===run.action;
+    clearTimeout(run.timer);run.timer=null;run.pending=false;run.visible=false;run.revealed=true;
+    const message=forgeResultMessage(run.result);
+    if(present)forgePresentationResult={room:run.room,action:run.action,requestId:run.requestId,message};
+    toast((current?"":"ผลรายการก่อนหน้า · ")+message);
+    if(!current)return;
+    renderBag();
+    if(present && run.result.broken && (inventoryState?.forgeCopies?.[run.itemId]??0)>0){
+      renderForgeStock(run.itemId);
+      if($("forgeStock") && !$("forgeStock").hidden){$("forgeStock").open=true;$("forgeStock").scrollIntoView({block:"nearest"});}
+    }
+  }
+  function receiveForgeResult(result,joined){
+    if(room!==joined || !result || typeof result.requestId!=="string")return false;
+    const run=forgeAnimationRuns.get(result.requestId);
+    if(!run || run.room!==joined || run.action!==result.action || run.itemId!==result.itemId || run.result || run.revealed ||
+        !Number.isSafeInteger(result.forge?.rank) || result.forge.rank<0 || result.forge.rank>10)return false;
+    run.result=result;run.pending=false;
+    if(economyPendingRequest?.room===joined && economyPendingRequest.command==="forge_weapon" && economyPendingRequest.requestId===run.requestId)finishEconomyPending(economyPendingRequest);
+    completeForgeAnimation(run);
+    return true;
+  }
+  function cancelForgeAnimation(reveal=false,forget=false){
+    const run=forgeAnimation;
+    if(run){clearTimeout(run.timer);run.timer=null;run.visible=false;run.dismissed=true;
+      if(forgePresentationResult?.requestId===run.requestId)forgePresentationResult=null;}
+    if(forget){forgeAnimation=null;forgePresentationResult=null;forgeAnimationRuns.clear();return;}
+    if(reveal && run?.result)completeForgeAnimation(run);
+  }
+  function failForgeAnimation(message){
+    const run=forgeAnimation;
+    if(!run || run.room!==room || !run.pending)return;
+    clearTimeout(run.timer);run.timer=null;run.pending=false;run.visible=false;
+    if(!run.dismissed && drawerActive==="forge")forgePresentationResult={room,action:run.action,requestId:run.requestId,message};
+    // Retain its request ID: an authoritative late outcome is still useful, but owns no new lock.
+  }
+  function renderForgeAnimation(){
+    if(drawerActive!=="forge")return;
+    const run=forgeAnimation,busy=forgeAnimationBusy(),visible=busy && run.visible;
+    const striking=visible && run.action==="enhance" && !run.reduced && Date.now()<run.until;
+    const motion=$("forgeHammerMotion"),status=$("forgeAnimationStatus"),outcome=$("forgeOutcome");
+    if(motion){motion.hidden=!visible || run.action!=="enhance" || run.reduced;motion.classList.toggle("is-striking",!!striking);}
+    $("forgeSelection")?.setAttribute("aria-busy",String(!!visible));
+    if(status){status.hidden=!busy;status.textContent=busy?(striking?"กำลังตีบวก…":"รอผลยืนยันจากเซิร์ฟเวอร์…"):"";}
+    if(outcome){const text=forgePresentationResult?.room===room && forgePresentationResult.action===forgePageAction?forgePresentationResult.message:"";outcome.textContent=text;outcome.hidden=!text || busy;}
+    for(const id of ["forgeTabEnhance","forgeTabReroll"])if($(id))$(id).disabled=busy;
+    if($("forgeStockGear"))$("forgeStockGear").disabled=busy || economyPending || itemUsePending;
+    if(busy)for(const id of ["forgeTargetButton","forgeEnhance","forgeReroll","forgeDonor","forgeStockGear","forgeStockClaim"])if($(id))$(id).disabled=true;
+  }
   function forgeTargetItem(target){
     return typeof target==="string"?wornGearAt(target,currentBagSlots()):Number.isInteger(target)?currentBagSlots()?.[target]:null;
   }
@@ -14220,17 +14293,17 @@
   }
   function chooseForgeTarget(target,expectedItemId,expectedStamp){
     const popup=$("forgePicker");
-    if(!popup?.open || drawerActive!=="forge" || forgePageRoom!==room || !economyReady() || economyPending || itemUsePending)return;
+    if(!popup?.open || drawerActive!=="forge" || forgePageRoom!==room || !economyReady() || economyPending || itemUsePending || forgeAnimationBusy())return;
     const item=forgeTargetItem(target),meta=bagMeta(item?.itemId);
     if(!item || item.itemId!==expectedItemId || gearStamp(item)!==expectedStamp || !(meta?.kind==="mainHand" || meta?.forge)){
       renderForgePage();$("forgePickerStatus").textContent="อุปกรณ์ชิ้นนี้เปลี่ยนไปแล้ว กรุณาเลือกจากรายการล่าสุด";return;
     }
-    selectForgeTarget(target);closeForgePicker();renderForgePage();
+    cancelForgeAnimation(false);forgePresentationResult=null;selectForgeTarget(target);closeForgePicker();renderForgePage();
   }
   function renderForgePicker(){
     const popup=$("forgePicker");if(!popup?.open)return;
     if(drawerActive!=="forge" || forgePageRoom!==room || !economyReady()){closeForgePicker(false);return;}
-    const choices=forgeTargetChoices(),grid=$("forgePickerGrid"),busy=!!(economyPending || itemUsePending);
+    const choices=forgeTargetChoices(),grid=$("forgePickerGrid"),busy=!!(economyPending || itemUsePending || forgeAnimationBusy());
     const signature=JSON.stringify([forgePageTarget,busy,choices.map(c=>[c.key,c.item.itemId,gearStamp(c.item),c.item.forge?.rank,c.item.quantity,c.item.socket,c.item.bound,c.equipped])]);
     $("forgePickerStatus").textContent=busy?"รอรายการอุปกรณ์ก่อนเลือกชิ้นใหม่":choices.length?"เลือกอาวุธหรืออุปกรณ์ · แสดงเฉพาะของที่ใช้กับงานช่างได้":"ยังไม่มีอุปกรณ์ที่ใช้กับงานช่างได้ · ดูกระเป๋าหรือคลังช่าง";
     if(grid.dataset.choices===signature)return;
@@ -14250,7 +14323,7 @@
     if(focusKey){const replacement=[...grid.children].find(el=>el.dataset.forgeTarget===focusKey && !el.disabled);(replacement||$("forgePickerClose")).focus({preventScroll:true});}
   }
   function openForgePicker(){
-    if(drawerActive!=="forge" || forgePageRoom!==room || !economyReady() || economyPending || itemUsePending)return;
+    if(drawerActive!=="forge" || forgePageRoom!==room || !economyReady() || economyPending || itemUsePending || forgeAnimationBusy())return;
     const popup=$("forgePicker");if(!popup || popup.open)return;
     popup.showModal();$("forgeTargetButton").setAttribute("aria-expanded","true");renderForgePicker();
     (popup.querySelector('[aria-pressed="true"]')||$("forgePickerClose")).focus({preventScroll:true});
@@ -14309,6 +14382,7 @@
     $("smithBag").onclick=openBag;
   }
   function openForgePage(action="enhance",preferred){
+    cancelForgeAnimation(true);forgePresentationResult=null;
     forgePageAction=action==="reroll"?"reroll":"enhance";
     forgePageRoom=room;
     const first=(currentBagSlots()||[]).findIndex(item=>{const meta=bagMeta(item?.itemId);return meta?.kind==="mainHand" || meta?.forge;});
@@ -14318,7 +14392,7 @@
       '<div class="forge-page"><div class="forge-nav"><button id="forgeHome" class="secondary" type="button">‹ ช่างอาคม</button><button id="forgeBag" class="secondary" type="button">กระเป๋า / การ์ด</button></div>'+
       '<div class="forge-tabs" role="group" aria-label="เลือกงานช่าง"><button id="forgeTabEnhance" type="button">ตีบวก</button><button id="forgeTabReroll" type="button">แปรรูปคุณภาพ</button></div>'+
       '<p class="note" id="forgePageStatus" role="status"></p><div class="status-line"><span>ทองที่มี</span><strong id="forgeGold"></strong></div>'+
-      '<section class="forge-card forge-selection"><h3 id="forgeItemName"></h3><div class="forge-stage"><div class="forge-target"><button id="forgeTargetButton" class="forge-target-button" type="button" aria-haspopup="dialog" aria-controls="forgePicker" aria-expanded="false"><span id="forgeItemSymbol" class="item-slot-host"></span></button><span>แตะช่องเพื่อเลือกของ</span><small id="forgeTargetLocation"></small></div><span class="forge-plus" aria-hidden="true">+</span><div class="forge-material"><div id="forgeCopyItem" class="item-preview"></div><div id="forgeSealItem" class="item-preview"></div></div></div><p class="note" id="forgeInfo"></p><p class="note" id="forgeEmpty"></p></section>'+
+      '<section id="forgeSelection" class="forge-card forge-selection"><h3 id="forgeItemName"></h3><div class="forge-stage"><div class="forge-target"><button id="forgeTargetButton" class="forge-target-button" type="button" aria-haspopup="dialog" aria-controls="forgePicker" aria-expanded="false"><span id="forgeItemSymbol" class="item-slot-host"></span></button><div id="forgeHammerMotion" class="forge-hammer-motion" aria-hidden="true" hidden><span class="forge-hammer"><i></i></span><span class="forge-sparks"></span></div><span>แตะช่องเพื่อเลือกของ</span><small id="forgeTargetLocation"></small></div><span class="forge-plus" aria-hidden="true">+</span><div class="forge-material"><div id="forgeCopyItem" class="item-preview"></div><div id="forgeSealItem" class="item-preview"></div></div></div><p class="note" id="forgeInfo"></p><p class="note" id="forgeEmpty"></p></section><p class="forge-animation-status" id="forgeAnimationStatus" role="status" aria-live="polite" hidden></p><p class="forge-outcome" id="forgeOutcome" role="status" aria-live="polite" hidden></p>'+
       '<dialog id="forgePicker" class="forge-picker" aria-labelledby="forgePickerTitle" aria-describedby="forgePickerStatus"><div class="forge-picker-header"><h3 id="forgePickerTitle">เลือกอุปกรณ์</h3><button id="forgePickerClose" type="button" aria-label="ปิดหน้าต่างเลือกอุปกรณ์">✕</button></div><p id="forgePickerStatus" class="note" role="status"></p><div id="forgePickerGrid" class="forge-picker-grid"></div></dialog>'+
       '<section id="forgePanel" class="forge-card" hidden>'+
       '<section id="forgeEnhanceSection"><h3>ขั้นตีบวก</h3><progress id="forgeProgress" max="10" value="0" aria-label="ความคืบหน้าตีบวก"></progress><p class="note forge-risk" id="forgeSupply"></p><select id="forgeDonor" aria-label="เลือกของรุ่นเดียวกันจากกระเป๋า" hidden></select><div id="forgeDonorItem" class="item-preview"></div><button id="forgeCardHelp" class="secondary" type="button" hidden>เปิดกระเป๋าเพื่อถอดการ์ดก่อน</button><button class="primary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeTrack" hidden></button><button class="secondary" type="button" id="forgeCopyRecipe" hidden>เปิดสูตรสร้างของรุ่นนี้</button></section>'+
@@ -14343,6 +14417,10 @@
     if(drawerActive!=="forge" || !$("forgeTargetButton"))return;
     refreshArtisanWallet();
     const ready=economyReady(),slots=currentBagSlots(),button=$("forgeTargetButton");
+    if(forgeAnimation?.room!==room || !ready)cancelForgeAnimation(false,true);
+    // Inventory and wallet handlers still apply server state immediately. Only this
+    // visible presentation stays on the submitted item until the real result reveal.
+    if(forgeAnimationBusy() && forgeAnimation.visible){renderForgeAnimation();return;}
     $("forgePageStatus").textContent=!ready?"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว และเซิร์ฟเวอร์ที่เปิดระบบช่าง":!room?.state?.forgeCatalog?"เซิร์ฟเวอร์ยังไม่ส่งข้อมูลช่าง":!slots?"กำลังโหลดอุปกรณ์จากเซิร์ฟเวอร์…":"ช่างอาคม · บันทึกผลและหักค่าใช้จ่ายบนเซิร์ฟเวอร์";
     $("forgeGold").textContent=ready && economyGold!==null?economyGold.toLocaleString()+" ทอง":"…";
     if(forgePageRoom!==room || !ready){closeForgePicker(false);selectForgeTarget(null);forgePageRoom=room;}
@@ -14364,10 +14442,10 @@
     if($("forgePanel").hidden)$("forgeInfo").textContent="";
     $("forgeCopyItem").hidden=$("forgePanel").hidden || forgePageAction!=="enhance" || !$("forgeCopyItem").children.length;
     $("forgeSealItem").hidden=$("forgePanel").hidden || forgePageAction!=="reroll" || !bagMeta(item?.itemId)?.forge;
-    renderForgePicker();
+    renderForgePicker();renderForgeAnimation();
   }
   function submitForge(action){
-    if(drawerActive!=="forge" || action!==forgePageAction || !economyReady() || economyPending || itemUsePending)return;
+    if(drawerActive!=="forge" || action!==forgePageAction || !economyReady() || economyPending || itemUsePending || forgeAnimationBusy())return;
     renderForgePage();
     const item=forgeTargetItem(forgePageTarget),meta=bagMeta(item?.itemId);
     if(!item || !forgePageIdentity || $("forgePanel").hidden || !(meta?.kind==="mainHand" || meta?.forge))return;
@@ -14384,6 +14462,9 @@
       if(terms.breakOnFailure)payload.acceptBreak=true;
       if(terms.downgradeChance)payload.acceptDowngrade=true;
     }
+    const current=forgeTargetItem(payload.slot);
+    if(forgePageRoom!==room || !economyReady() || economyPending || itemUsePending || !current || current.itemId!==item.itemId || gearStamp(current)!==payload.stamp){toast("ข้อมูลอุปกรณ์เปลี่ยนไป · ตรวจอีกครั้งก่อนตีบวก");return;}
+    beginForgeAnimation(payload,item);
     economySend("forge_weapon",payload,true);renderBag();
   }
 
@@ -14428,7 +14509,13 @@
     $("menuNotices").hidden=!partyInvitation && !guildInvitation && !activeTrade;
   }
   function updateTradeBadge() { const badge=$("tradeUnread"); if (badge) badge.hidden=!tradeUnread; updateFieldAlerts(); }
-  function finishEconomyPending() { economyPending=false; clearTimeout(economyTimer); }
+  let economyPendingRequest=null;
+  function finishEconomyPending(owner=null) {
+    // Legacy replies for another timed-out action must not clear a newer forge's
+    // timer or ownership. Generic uncorrelated errors/room teardown pass true.
+    if(economyPendingRequest?.command==="forge_weapon" && owner!==true && owner!==economyPendingRequest)return false;
+    economyPending=false;economyPendingRequest=null;clearTimeout(economyTimer);return true;
+  }
   function economyReady() { return mode === "live" && room?.state?.economyAvailable === true && ownServerCharacter()?.persistent === true; }
   let artisanWalletRoom=null,artisanWalletRequestedAt=-Infinity;
   function refreshArtisanWallet(){
@@ -14456,20 +14543,24 @@
     try{room.send("market_browse",{market,query:filter.query,category:filter.category,before,ownOnly:filter.ownOnly,tag});}catch(_){marketPageRequest=null;}
   }
   function economySend(command, payload, durable=false) {
-    if (!economyReady() || !room) { toast("เข้า LIVE ที่เปิดระบบตลาดก่อน"); return; }
+    if (!economyReady() || !room) { if(command==="forge_weapon")failForgeAnimation("การเชื่อมต่อยังไม่พร้อม · ยังไม่ได้ส่งคำขอ");toast("เข้า LIVE ที่เปิดระบบตลาดก่อน");return; }
     if (durable && economyPending) return;
-    const target=room;
+    const target=room,ticket={room:target,command,requestId:payload?.requestId};
     if (durable) {
-      economyPending=true; clearTimeout(economyTimer);
+      economyPending=true;economyPendingRequest=ticket;clearTimeout(economyTimer);
       economyTimer=setTimeout(()=>{
-        if (room!==target || !economyPending) return;
-        finishEconomyPending(); toast("ยังไม่ได้รับผล · ตรวจยอดและรายการก่อนทำซ้ำ");
+        if (room!==target || !economyPending || economyPendingRequest!==ticket) return;
+        if(command==="forge_weapon")failForgeAnimation("ยังไม่ได้รับผล · ผลยังไม่ยืนยัน ตรวจอุปกรณ์และยอดก่อนทำซ้ำ");
+        finishEconomyPending(ticket);toast("ยังไม่ได้รับผล · ตรวจยอดและรายการก่อนทำซ้ำ");
         try { target.send("get_economy",{}); if(centralMarketVersion){requestMarketOverview();requestMarketPage(true);}else target.send("market_list",{}); } catch (_) {}
-        renderEconomy(); renderBag();
+        renderEconomy();renderBag();
       },6000);
     }
-    try { target.send(command,payload); } catch (_) { finishEconomyPending(); toast("ส่งคำขอไม่สำเร็จ"); }
-    renderEconomy(); renderBag();
+    try { target.send(command,payload); } catch (_) {
+      if(durable && economyPendingRequest===ticket){if(command==="forge_weapon")failForgeAnimation("ส่งคำขอไม่สำเร็จ · ตรวจอุปกรณ์ก่อนทำซ้ำ");finishEconomyPending(ticket);}
+      toast("ส่งคำขอไม่สำเร็จ");
+    }
+    renderEconomy();renderBag();
   }
   function economyRequestId() {
     const bytes=new Uint8Array(16); window.crypto.getRandomValues(bytes);

@@ -69,7 +69,7 @@ function fixture(){
   const equipment={leftRing:'ring',rightRing:'ring',leftEar:'ear',rightEar:'ear',leftHand:'leftGlove',rightHand:'rightGlove',chest:'plainChest'};
   const inventory={slots,equippedWeaponSlot:0,equipment,equipmentForges:Object.fromEntries(Object.keys(equipment).filter(k=>k!=='chest').map(k=>[k,forged(k)])),equipmentSockets:{leftRing:'card'},forgeCopies:{weapon:20,ring:20,ear:20,leftGlove:20,rightGlove:20,max:20,high:20,bound:20,affixed:20,legacy:20}};
   const config={chances:Array(10).fill(100),rerollCost:60,rareAfter:4,claimCopies:true,enhanceSteps:Array.from({length:10},(_,rank)=>({copies:1+Math.floor(rank/3),gold:12*(rank+1),chance:rank>4?78:100,downgradeChance:rank>4?20:0,breakChance:rank>4?2:0,breakOnFailure:rank>4}))};
-  const ctx={...d,refreshArtisanWallet(){},Option:function(text,value){const option=d.node("option");option.textContent=text;option.value=String(value);return option;},drawerActive:null,drawerOpener:null,fieldTrainingTip:null,SFX(){},closeEquipPopup(){},closeItemDetailModal(){},handleItemDetailKey:()=>false,mode:'live',inventoryState:inventory,personalItems:items,WEAPON_META:{legacy:{name:'กริชเก่า',symbol:'†'}},POTION_ITEM_ID:'potion',SHRINE_SHARD:'shrine_shard',
+  const ctx={...d,clearTimeout(){},refreshArtisanWallet(){},Option:function(text,value){const option=d.node("option");option.textContent=text;option.value=String(value);return option;},drawerActive:null,drawerOpener:null,fieldTrainingTip:null,SFX(){},closeEquipPopup(){},closeItemDetailModal(){},handleItemDetailKey:()=>false,mode:'live',inventoryState:inventory,personalItems:items,WEAPON_META:{legacy:{name:'กริชเก่า',symbol:'†'}},POTION_ITEM_ID:'potion',SHRINE_SHARD:'shrine_shard',
     bodyLabels:{leftRing:'แหวนซ้าย',rightRing:'แหวนขวา',leftEar:'ตุ้มหูซ้าย',rightEar:'ตุ้มหูขวา',leftHand:'มือซ้าย',rightHand:'มือขวา',chest:'อก'},forgeNames:{melee:'โจมตีประชิด',guard:'ป้องกัน',ranged:'โจมตีเวท'},statLine:()=>'',
     currentBagSlots:()=>ctx.inventoryState?.slots,currentEquippedWeaponSlot:()=>ctx.inventoryState?.equippedWeaponSlot,ownServerCharacter:()=>player,
     economyReady:()=>ctx.mode==='live'&&ctx.room?.state?.economyAvailable===true,economyPending:false,itemUsePending:false,economyGold:10000,selectedBagSlot:0,inspectingGear:null,benchTrail:[],
@@ -193,7 +193,7 @@ test('room changes, disconnect and unavailable economy close popup and invalidat
   }
   const f=fixture();f.open();f.popup();f.ctx.clearSyncPoll=()=>{};f.ctx.showDemo=()=>{assert.equal(f.$('forgePicker').open,false,'stopOnline closes before resetting connection state');f.ctx.mode='demo';};
   f.run(slice('  function stopOnline(reason) {','  let connectionPending ='));f.ctx.stopOnline('offline');assert.equal(f.$('forgePicker').open,false);assert.equal(f.ctx.mode,'demo');
-  assert.match(source,/function showDemo\(\) \{\s*closeForgePicker\(false\)/);
+  assert.match(source,/function showDemo\(\) \{\s*cancelForgeAnimation\(false,true\);finishEconomyPending\(true\);closeForgePicker\(false\)/);
 });
 
 test('empty and unsupported inventories can show helpful grid status but cannot mutate',()=>{

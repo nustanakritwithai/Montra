@@ -21,7 +21,7 @@ function fixture(drawer='crafting'){
   }};}
   const room=makeRoom('initial');
   const ctx={$:id=>elements.get(id)||null,Date:{now:()=>now},mode:'live',room,joined:room,localId:'me',drawerActive:drawer,
-    economyGold:null,economyPending:false,economyTimer:null,itemUsePending:false,centralMarketVersion:0,
+    forgeAnimation:null,forgeAnimationBusy:()=>false,cancelForgeAnimation(){},renderForgeAnimation(){},failForgeAnimation(){},economyPendingRequest:null,economyGold:null,economyPending:false,economyTimer:null,itemUsePending:false,centralMarketVersion:0,
     craftPageRoom:room,craftPagePosition:null,craftRecipeTarget:null,benchTrail:[],cardDrill:{},craftResultRoom:null,craftResultMessage:'',
     forgePageRoom:room,forgePageTarget:null,forgePageIdentity:null,forgePageAction:'enhance',
     warpPending:false,fishingPending:false,ownServerCharacter:()=>player,currentBagSlots:()=>slots,
@@ -36,7 +36,7 @@ function fixture(drawer='crafting'){
   };
   room.onMessage=(name,handler)=>{callbacks[name]=handler;};
   vm.createContext(ctx);
-  vm.runInContext(slice('  function finishEconomyPending()','  function economyItemName(')+
+  vm.runInContext(slice('  function finishEconomyPending(','  function economyItemName(')+
     slice('  function economySend(','  function economyRequestId()')+
     slice('  function renderCraftingPage()','  function submitCraft(')+
     slice('  function renderForgePage()','  function submitForge(')+

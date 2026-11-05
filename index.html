@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-<link rel="stylesheet" href="./styles.css?v=0.3.6-skilltree-popup" />
+  <link rel="stylesheet" href="./styles.css?v=0.3.6-forge-hammer-1" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -199,7 +199,24 @@
         </div>
       </div>
 
-<div id="skillPopupBackdrop" class="skill-popup-backdrop" hidden></div>
+      <div class="item-modal-actions" id="bagPanelActions">
+        <div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden>
+          <button type="button" class="secondary"></button>
+          <button type="button" class="secondary"></button>
+        </div>
+        <button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>
+        <button class="secondary" id="itemModalCloseBtn" type="button">ปิด</button>
+
+        <button class="secondary" id="bagTrack" type="button" hidden></button>
+        <button id="refineResource" type="button" class="secondary" hidden></button>
+        <button id="bagKiln" type="button" class="secondary" hidden></button>
+        <button id="sellBagMaterial" type="button" class="secondary" hidden></button>
+        <button id="salvageGear" type="button" class="secondary" hidden></button>
+        <button class="secondary" id="bagForge" type="button" hidden>ตีบวก / แปรรูปคุณภาพ · ช่างอาคม</button>
+        <button class="secondary" id="bagCraft" type="button">สร้างของ / โต๊ะช่าง · ช่างอาคม</button>
+      </div>
+    </div>
+  <div id="skillPopupBackdrop" class="skill-popup-backdrop" hidden></div>
   <div id="skillDetailModal" class="skill-detail-modal" hidden role="dialog" aria-modal="true" aria-label="รายละเอียดสกิล">
     <div class="skill-modal-header">
       <div class="skill-modal-title">
@@ -256,6 +273,6 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
   <script src="./audio.js?v=0.9.10-horse-bright" defer></script>
-<script src="./main.js?v=0.3.6-skilltree-popup" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
+  <script src="./main.js?v=0.3.6-forge-hammer-1" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>

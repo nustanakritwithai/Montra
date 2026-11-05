@@ -71,7 +71,7 @@ function fixture(){
     slice('  const benchTrail=[];','  function gearStamp(')+
     slice('  function openCraftingPage(','  function openForgePage(')+
     slice('  function renderBag()','  const gearCoreSkills=')+
-    slice('  function finishEconomyPending()','  function economyItemName(')+
+    slice('  let economyPendingRequest=','  function economyItemName(')+
     slice('  function economySend(','  function economyRequestId()'));
   run(slice('      joined.onMessage("economy_state",','      joined.onMessage("market_state",')+
     slice('      joined.onMessage("craft_result",','      joined.onMessage("card_socket_result",')+
