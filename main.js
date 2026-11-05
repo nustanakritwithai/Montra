@@ -12291,8 +12291,8 @@
   let activeEquipSlot = null;
   let bagCategoryFilter = "all";
   let bagCurrentPage = 0;
-  const BAG_PAGE_SIZE = 16;
-  const BAG_TOTAL_PAGES = 2;
+  const BAG_PAGE_SIZE = 30;
+  const BAG_TOTAL_PAGES = 3;
 
   function isItemForSlot(itemId, slotKey) {
     if (!itemId) return false;
@@ -12726,8 +12726,10 @@
       if (i === 0 && demoPotionCount > 0) {
         return { itemId: POTION_ITEM_ID, quantity: demoPotionCount };
       }
-      const weaponId = ["ritual_dagger","arcane_sword","spirit_staff"][i-1];
-      return weaponId ? { itemId: weaponId, quantity: 1 } : null;
+      const weaponId = ["ritual_dagger", "arcane_sword", "spirit_staff", "muay_wraps", "shrine_glaive"][i - 1];
+      if (weaponId) return { itemId: weaponId, quantity: 1 };
+      if (i === 6) return { itemId: SHRINE_SHARD, quantity: 5 };
+      return null;
     });
   }
   function currentEquippedWeaponSlot() {
@@ -13491,7 +13493,7 @@
         '</div>' +
       '</div>' +
       bagMultiPageSliderHtml() +
-      '<div class="bag-dots" id="bagDots"><span class="dot on"></span><span class="dot"></span></div>' +
+      '<div class="bag-dots" id="bagDots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>' +
       '<div class="bag-detail"><strong id="bagItemName">เลือกไอเท็ม</strong>' +
       '<p class="note" id="bagItemDescription">แตะที่ช่องไอเท็มเพื่อดูรายละเอียดและใช้งาน</p></div>' +
       '<div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden><button type="button" class="secondary"></button><button type="button" class="secondary"></button></div>' +
