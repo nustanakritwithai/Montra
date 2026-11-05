@@ -318,7 +318,9 @@ jobs:
           grep -q '0.3.2' index.html
           grep -Fq 'function currentEquippedWeaponSlot()' main.js
           grep -Fq 'id="personalBench"' main.js
-          grep -Fq 'id="bagKiln"' main.js
+          grep -Fq 'id="bagQuickKiln"' main.js
+          node deploy/combat/crafting-pages-ui-test.cjs
+          node deploy/combat/character-hud-ui-test.cjs
           grep -q 'equip_weapon' main.js
           grep -q 'weaponsAvailable' deploy/combat/MyRoomState.ts
           grep -q 'grantStarterWeapons' deploy/combat/CharacterStore.ts

@@ -7791,6 +7791,25 @@
 
   const localHpBar = document.querySelector(".bar.hp i");
   let hudLevel = 0;
+  // Shared with the character sheet; this is an estimate, never a server combat input.
+  function characterPowerEstimate(char) {
+    if (!char) return null;
+    const weights = { atk: 2, magicAtk: 2, def: 1.5, magicDef: 1.5, maxHp: .5, level: 20 };
+    let total = 0;
+    for (const [key, weight] of Object.entries(weights)) {
+      const value = char[key];
+      if (typeof value !== "number" || !Number.isFinite(value)) return null;
+      total += Math.max(0, value) * weight;
+    }
+    return Number.isFinite(total) ? Math.round(total) : null;
+  }
+  function updateCompactCharacterHud(me) {
+    const path = getBuildCatalog()?.paths?.[me?.pathId];
+    hudSet($("characterClass"), "class", path?.name || path?.role || "นักผจญภัย");
+    const power = characterPowerEstimate(me);
+    hudSet($("characterPower"), "power", power === null ? "—" : power.toLocaleString("en-US"));
+    $("characterProfile").setAttribute("aria-label", "ข้อมูลตัวละคร " + $("characterName").textContent + " · " + $("characterLevel").textContent + " · " + $("characterClass").textContent + (power === null ? "" : " · พลังรบประมาณ " + power));
+  }
   function updateCharacterHud(me) {
     const name = typeof me?.characterName === "string" && me.characterName
       ? me.characterName : "นที";
@@ -8415,8 +8434,8 @@
   renderChatBox(true);
   // Enter focuses the chat input on wide screens (when nothing else is being typed into).
   addEventListener("keydown", e => {
-    if (!chatBox || e.key !== "Enter" || !chatWide.matches || !ui.drawer.hidden) return;
-    const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (!chatBox || e.key !== "Enter" || !chatWide.matches || !ui.drawer.hidden || e.defaultPrevented || e.repeat) return;
+    const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.closest?.('button,a[href],summary,[role="button"]'))) return;
     e.preventDefault(); openChat();
   });
   // ---- Layout moves: menu buttons under the minimap, horse button beside the vital orb ----
@@ -8514,6 +8533,7 @@
     const glyphHref = "#seal-" + pathSeal(me?.pathId);
     if ($("hudClassSeal").getAttribute("href") !== glyphHref) $("hudClassSeal").setAttribute("href",glyphHref);
     $("classGlyph")?.classList.toggle("low-hp", hp / maxHp < .3);
+    updateCompactCharacterHud(me);
     // Target frame: only while there is a target.
     const tg = hudCurrentTarget(now);
     hudSet(ui.monsterStatus, "tgh", !tg, "hidden");
@@ -13612,8 +13632,8 @@
         if ($("paperdollPath")) $("paperdollPath").textContent = path ? (path.name || path.role) : "นักดาบพุทธไธสวรรย์";
         const sealId = "#seal-" + pathSeal(char.pathId || "phutthaisawan");
         if ($("paperdollSeal") && $("paperdollSeal").getAttribute("href") !== sealId) $("paperdollSeal").setAttribute("href", sealId);
-        const cpVal = Math.round((Number(char.atk)||20)*2 + (Number(char.magicAtk)||15)*2 + (Number(char.def)||15)*1.5 + (Number(char.magicDef)||12)*1.5 + (Number(char.maxHp)||100)*0.5 + (Number(char.level)||1)*20);
-        if ($("paperdollCp")) $("paperdollCp").textContent = String(cpVal);
+        const cpVal = characterPowerEstimate(char);
+        if ($("paperdollCp")) $("paperdollCp").textContent = cpVal === null ? "—" : String(cpVal);
         if ($("paperdollHp")) $("paperdollHp").textContent = "HP " + Math.ceil(currentHp) + "/" + Math.ceil(maxHp);
         if ($("paperdollMp")) $("paperdollMp").textContent = "MP " + (Number.isFinite(char.mana) && char.maxMana > 0 ? Math.round(char.mana) + "/" + Math.round(char.maxMana) : "—");
       }
