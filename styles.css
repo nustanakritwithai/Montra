@@ -1,4 +1,4 @@
-:root { color-scheme: dark; font-family: system-ui, -apple-system, "Noto Sans Thai", sans-serif; font-synthesis: none; background: #10191c; color: #f7e6c8; }
+:root { --item-slot-size:50px; color-scheme: dark; font-family: system-ui, -apple-system, "Noto Sans Thai", sans-serif; font-synthesis: none; background: #10191c; color: #f7e6c8; }
 * { box-sizing: border-box; }
 html,body { padding:0; margin:0; width:100%; height:100%; overflow:hidden; }
 button,input { font: inherit; }
@@ -477,14 +477,14 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   flex: 0 0 100%;
   scroll-snap-align: start;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 50px));
+  grid-template-columns: repeat(6, minmax(0, var(--item-slot-size)));
   justify-content: center;
   gap: 4px;
 }
 
 .bag-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 50px));
+  grid-template-columns: repeat(6, minmax(0, var(--item-slot-size)));
   justify-content: center;
   gap: 4px;
   margin: 4px 0 10px;
@@ -496,8 +496,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   min-width: 0;
   min-height: 0;
   width: 100%;
-  max-width: 50px;
-  max-height: 50px;
+  max-width: var(--item-slot-size);
+  max-height: var(--item-slot-size);
   padding: 2px;
   display: flex;
   justify-content: center;
@@ -917,8 +917,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 .equip-worn-card .bag-slot {
   flex-shrink: 0;
-  width: 50px;
-  height: 50px;
+  width: var(--item-slot-size);
+  height: var(--item-slot-size);
 }
 .equip-worn-info {
   flex: 1;
@@ -960,42 +960,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 /* Candidate square item slots grid */
 .equip-candidate-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 50px));
+  grid-template-columns: repeat(5, minmax(0, var(--item-slot-size)));
   gap: 6px;
   justify-content: center;
   margin: 4px 0 6px;
 }
-.equip-candidate-slot {
-  position: relative;
-  aspect-ratio: 1;
-  width: 100%;
-  max-width: 50px;
-  max-height: 50px;
-  border-radius: 9px;
-  border: 1px solid #3d5550;
-  background: linear-gradient(145deg, #18282b, #0f1c1e);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition: all 0.12s ease;
-  user-select: none;
-  font-size: 20px;
-  color: #dedede;
-  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.45);
-  padding: 0;
-}
-.equip-candidate-slot:hover {
-  border-color: #dfb76c;
-  background: #22373a;
-  transform: translateY(-1px);
-}
-.equip-candidate-slot.bag-selected {
-  outline: 2px solid #ffd777;
-  outline-offset: 1px;
-  border-color: #ffe699;
-  background: linear-gradient(145deg, #25393d, #142427);
-  box-shadow: 0 0 10px rgba(255, 215, 119, 0.35);
-}
+.equip-candidate-slot { user-select:none; }
 .equip-candidate-preview {
   display: flex;
   flex-direction: column;
@@ -1086,7 +1056,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .wear-title { margin:14px 0 8px; font-size:.95rem; font-weight:700; color:#f4d59f; display:flex; align-items:center; gap:6px; }
 .wear-grid, .paperdoll-grid {
   display: grid;
-  grid-template-columns: 50px minmax(130px, 1fr) 50px;
+  grid-template-columns: var(--item-slot-size) minmax(130px, 1fr) var(--item-slot-size);
   grid-template-areas:
     "leftEar   head         rightEar"
     "neck      doll-stage   arms"
@@ -1101,7 +1071,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 @media (max-width: 440px) {
   .wear-grid, .paperdoll-grid {
-    grid-template-columns: 48px minmax(116px, 1fr) 48px;
+    grid-template-columns: var(--item-slot-size) minmax(116px, 1fr) var(--item-slot-size);
     gap: 4px;
   }
 }
@@ -1232,45 +1202,10 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   border: 1px solid rgba(60, 160, 255, 0.35);
 }
 
-.wear-tile {
-  position: relative;
-  aspect-ratio: 1;
-  width: 50px;
-  height: 50px;
-  max-width: 50px;
-  max-height: 50px;
-  border-radius: 9px;
-  border: 1px solid #3d5550;
-  background: linear-gradient(145deg, #18282b, #0f1c1e);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition: all 0.12s ease;
-  user-select: none;
-  font-size: 20px;
-  color: #dedede;
-  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.45);
-  padding: 0;
-  justify-self: center;
-}
-.wear-tile:hover {
-  border-color: #dfb76c;
-  background: #22373a;
-  transform: translateY(-1px);
-}
-.wear-tile.filled {
-  border-color: #c0a56c;
-  background: linear-gradient(145deg, #243538, #142225);
-  box-shadow: inset 0 0 8px rgba(212, 175, 55, 0.22);
-  color: #f7dfa6;
-}
+.wear-tile { width:var(--item-slot-size); height:var(--item-slot-size); user-select:none; justify-self:center; }
 .wear-tile[aria-pressed="true"], .wear-tile:focus-visible {
   outline: 2px solid #ffd777;
   outline-offset: 1px;
-}
-.wear-tile .bag-symbol {
-  font-size: 19px;
-  line-height: 1;
 }
 .wear-tile .wear-tag {
   position: absolute;
@@ -1297,15 +1232,6 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   color: #5fe0d0;
   text-shadow: 0 1px 2px #000;
   line-height: 1;
-}
-@media (max-width: 440px) {
-  .wear-tile {
-    width: 48px;
-    height: 48px;
-    max-width: 48px;
-    max-height: 48px;
-    font-size: 18px;
-  }
 }
 
 .wear-sides:not([hidden]) { display:flex; gap:6px; margin:6px 0; }
@@ -1553,7 +1479,6 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .cp-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
 .cp-slots span { font-size: 11.5px; padding: 6px 8px; border-radius: 9px; background: #1c2a2d; border: 1px solid #b18b5033; color: #ecdcb8; text-align: center; }
 .cp-weapon { display: flex; align-items: center; gap: 10px; }
-.cp-weapon i { font-style: normal; font-size: 26px; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 10px; background: #1c2a2d; border: 1px solid #c49a5a66; }
 .cp-weapon strong { display: block; color: #ffe2a6; }
 .cp-weapon small { font-size: 11px; color: #bfb39b; }
 .cp-offline { padding: 18px 14px; border-radius: 14px; background: #0f1b1d; border: 1px solid #b18b5055; text-align: center; margin-bottom: 12px; }
@@ -2381,7 +2306,6 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .forge-card { margin:14px 0; padding:13px; border:1px solid #b7955c70; border-radius:14px; background:linear-gradient(155deg,#243730,#132320); }
 .forge-card[hidden],.forge-page [hidden] { display:none; }
 .forge-item { display:flex; align-items:center; gap:12px; padding-bottom:9px; border-bottom:1px solid #b7955c45; }
-.forge-item > span { flex:0 0 46px; display:grid; place-items:center; min-height:46px; font-size:28px; color:#f4d59f; border:1px solid #b7955c70; border-radius:10px; background:#10221f; }
 .forge-item > div { min-width:0; }
 .forge-item h3 { margin:0; overflow-wrap:anywhere; }
 .forge-page .note { line-height:1.75; }
@@ -2395,3 +2319,82 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 #forgeStock summary::after { content:"⌄"; margin-left:auto; padding-left:8px; }
 #forgeStock[open] summary::after { content:"⌃"; }
 #forgeStock summary:focus-visible { outline:2px solid #f3c783; outline-offset:3px; }
+
+/* Crafting reuses the workshop drawer; no inventory or recipe system is duplicated. */
+.drawer:has(.crafting-page) { max-height:calc(100dvh - max(18px,env(safe-area-inset-top))); }
+.crafting-page { min-width:0; }
+.crafting-page [hidden] { display:none; }
+.crafting-page select { width:100%; max-width:100%; min-width:0; }
+.crafting-page button,.crafting-page h3 { overflow-wrap:anywhere; }
+.crafting-page .note { line-height:1.75; }
+.crafting-page .forge-card > h3:first-child { margin-top:0; }
+.crafting-page .field { display:block; margin-top:12px; }
+.craft-ingredients { list-style:none; margin:0 0 12px; padding:0; }
+.craft-ingredients li { display:flex; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid #b7955c30; line-height:1.6; }
+.craft-ingredients > li > span { min-width:0; overflow-wrap:anywhere; }
+.craft-ingredients > li > strong { flex:none; color:#e8d3a9; }
+.craft-ingredients .missing strong { color:#efa799; }
+.craft-result:empty { display:none; }
+.craft-result:not(:empty) { position:sticky; top:0; z-index:2; margin:10px 0; padding:10px 12px; border:1px solid #b7955c85; border-radius:10px; background:#132b26; color:#f4d59f; }
+#craftPanel summary { min-height:44px; display:flex; align-items:center; cursor:pointer; color:#f4d59f; font-weight:700; }
+#craftPanel summary:focus-visible { outline:2px solid #f3c783; outline-offset:3px; }
+
+/* Item displays share the inventory slot skin, symbols and canonical size. */
+.bag-slot.item-slot { flex:0 0 var(--item-slot-size); width:var(--item-slot-size); height:var(--item-slot-size); flex-direction:row; pointer-events:none; cursor:default; }
+.item-slot-host { display:inline-flex; flex:0 0 var(--item-slot-size); vertical-align:middle; }
+.item-slot-host[hidden],.item-preview[hidden] { display:none; }
+.item-preview { display:flex; align-items:center; gap:10px; min-width:0; margin:8px 0; }
+.item-preview > h3 { min-width:0; margin:0; }
+.item-preview-info { display:flex; flex:1; flex-direction:column; min-width:0; overflow-wrap:anywhere; }
+.item-preview-info strong { color:#f7dbab; }
+.item-preview-info small { color:#c6b9a4; }
+.item-slots { display:flex; flex-wrap:wrap; gap:4px 14px; }
+.item-slots > .item-preview { flex:1 1 160px; }
+.bag-detail > .item-slot-host { float:left; margin:0 10px 6px 0; }
+.bag-detail::after { content:""; display:block; clear:both; }
+.craft-ingredients li { display:grid; grid-template-columns:var(--item-slot-size) minmax(0,1fr) auto; align-items:center; gap:10px; }
+.market-row > div:not(.item-slot):not(.auction-bid-controls) { flex:1; }
+.market-row > button { flex-shrink:0; }
+@media(max-width:380px) {
+  .market-row { flex-wrap:wrap; }
+  .market-row > div:not(.item-slot):not(.auction-bid-controls) { flex-basis:calc(100% - var(--item-slot-size) - 12px); }
+  .market-row > button,.market-row > .auction-bid-controls { margin-left:auto; }
+}
+
+/* Inventory-shaped forge target and a native modal with a live equipment-only grid. */
+.forge-selection > h3 { margin:0 0 14px; text-align:center; overflow-wrap:anywhere; color:#f4d59f; }
+.forge-stage { display:grid; grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr); align-items:start; gap:6px; }
+.forge-target,.forge-material .item-preview { display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; min-width:0; }
+.forge-target > span,.forge-target small,.forge-material small { font-size:11px; line-height:1.5; color:#d6cab6; overflow-wrap:anywhere; }
+.forge-material .item-preview-info { min-width:0; }
+.forge-material strong { font-size:12px; }
+.forge-plus { align-self:start; padding-top:12px; font-size:24px; color:#e8c98b; text-align:center; }
+.forge-target-button { display:block; padding:0; border:0; background:transparent; border-radius:8px; }
+.forge-target-button:focus-visible { outline:2px solid #fff0ba; outline-offset:4px; }
+.forge-target-button .item-slot { cursor:pointer; }
+.forge-picker { box-sizing:border-box; width:min(94vw,460px); max-height:85dvh; padding:16px; color:#ebdfca; background:linear-gradient(150deg,#233733,#101e20); border:1px solid #b7955c; border-radius:16px; box-shadow:0 15px 70px #000b; overflow:auto; overscroll-behavior:contain; }
+.forge-picker::backdrop { background:#000b; }
+.forge-picker-header { position:sticky; top:-16px; z-index:1; background:#20332f; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.forge-picker-header h3 { margin:0; color:#f4d59f; }
+.forge-picker-header button { min-width:44px; min-height:44px; border:1px solid #8d8069; border-radius:9px; background:#284141; color:#f4d59f; }
+.forge-picker-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(76px,1fr)); gap:12px 6px; }
+.forge-picker-choice { min-width:0; display:flex; flex-direction:column; align-items:center; gap:5px; padding:5px 2px; border:1px solid transparent; border-radius:9px; background:transparent; color:#ead6b2; cursor:pointer; }
+.forge-picker-choice strong,.forge-picker-choice small { max-width:100%; font-size:11px; line-height:1.4; overflow-wrap:anywhere; }
+.forge-picker-choice small { font-size:10px; color:#b8c7bc; }
+.forge-picker-choice:focus-visible { outline:2px solid #fff0ba; outline-offset:1px; }
+.forge-picker-choice[aria-pressed=true] { background:#66533250; }
+
+
+.forge-picker-choice .item-slot { cursor:pointer; }
+
+/* Preserve the centered inventory modal while keeping artisan/card actions reachable. */
+.item-detail-modal { box-sizing:border-box; overflow-y:auto; overscroll-behavior:contain; }
+.item-detail-modal [hidden] { display:none !important; }
+.item-detail-modal select { width:100%; max-width:100%; min-width:0; }
+.item-modal-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.item-modal-actions button { min-width:0; min-height:44px; margin:0; overflow-wrap:anywhere; }
+.item-modal-actions .wear-sides,#bagForge,#bagCraft { grid-column:1/-1; }
+.item-modal-close-btn { min-width:44px; min-height:44px; }
+.item-modal-body { flex-shrink:0; overflow:visible; }
+.item-stats-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.item-detail-modal .bag-stat-label,.item-detail-modal .bag-stat-val { white-space:normal; overflow-wrap:anywhere; }
