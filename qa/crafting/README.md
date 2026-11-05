@@ -18,6 +18,8 @@ uploaded. The existing broad game workflow is unchanged and is not run by this
 crafting-only workflow. Product hashes must match the reviewed product commit.
 
 The focused workflow also runs the crafting and shared item-display regressions.
-Read-only navigation compares computed thumbnail style and dimensions in the real
+Navigation-only checks compare settled thumbnail style and dimensions in the real
 bag detail, forge preview and crafting output against the actual inventory slot.
-No enhancement, market, trade or purchase action is sent by this check.
+Only finite CSS transitions on a measured thumbnail are finished before comparing
+its final skin. No game state changes for measurement, and no enhancement, market,
+trade or purchase action is sent by this check.

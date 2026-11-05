@@ -244,6 +244,11 @@ try {
   log('Real server crafts one ring; persistent result, owned count, materials and wallet render correctly');
   await page.locator('#craftBag').click();
   const readTileStyle = async selector => page.locator(selector).evaluate(element => {
+    // Compare the final CSS skin rather than an in-flight 150ms UI transition.
+    // Only finite transitions on this thumbnail are finished; no game state changes.
+    for (const animation of element.getAnimations()) {
+      if (animation instanceof CSSTransition && Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
+    }
     const style = getComputedStyle(element), symbol = getComputedStyle(element.querySelector('.bag-symbol'));
     return { width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height,
       radius: style.borderRadius, border: style.borderColor, background: style.backgroundImage,
@@ -271,7 +276,7 @@ try {
   await page.locator('#bagCraft').click();
   await selectRecipe(fixture, fixture.expected.gold);
   assert.deepEqual(await readTileStyle('#benchOutputItem .item-slot'), inventoryStyle, 'craft output matches the real inventory item slot');
-  report.itemStyle = { inventory: inventoryStyle, surfaces: ['bag detail', 'forge preview', 'craft output'] };
+  report.itemStyle = { comparison: 'Settled finite thumbnail CSS transitions only', inventory: inventoryStyle, surfaces: ['bag detail', 'forge preview', 'craft output'] };
   log('Rendered bag detail, forge and crafting thumbnails match the actual inventory slot style and size');
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
