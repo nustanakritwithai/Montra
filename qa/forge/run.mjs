@@ -15,7 +15,7 @@ const output = path.resolve(process.env.MONTRA_FORGE_ARTIFACTS || path.join(os.t
 const data = await mkdtemp(path.join(os.tmpdir(), 'montra-forge-test-'));
 const fixturePath = path.join(data, 'fixture.json');
 await mkdir(output, { recursive: true });
-const report = { scope: 'Real NPC picking → real enhancement → rendered result → server restart/save', commit: process.env.GITHUB_SHA || 'local', checks: [], blockedOrigins: [], browserErrors: [] };
+const report = { scope: 'Real NPC picking → real enhancement → rendered result → server restart/save', commit: process.env.GITHUB_SHA || 'local', checks: [], blockedOrigins: [], browserErrors: [], console: [], httpErrors: [] };
 const secretPattern = /(?:mt1|ms1|mg1|mr1)_[a-f0-9]{64}/g;
 const clean = value => String(value).replace(secretPattern, '[redacted disposable credential]');
 const log = value => { report.checks.push(value); console.log('PASS:', value); };
@@ -74,6 +74,12 @@ async function enterAndTalk(fixture) {
   page = await context.newPage();
   page.setDefaultTimeout(45000);
   page.on('pageerror', error => report.browserErrors.push(clean(error.message)));
+  page.on('console', message => {
+    if (['warning', 'error'].includes(message.type()) && report.console.length < 100) report.console.push(clean(message.text()));
+  });
+  page.on('response', response => {
+    if (response.status() >= 400) report.httpErrors.push({ status: response.status(), path: new URL(response.url()).pathname });
+  });
   await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.locator('.account-slot').filter({ hasText: fixture.characterName }).click();
   await page.waitForFunction(() => document.getElementById('modeBadge')?.textContent === 'LIVE' && document.getElementById('accountEntry')?.hidden, null, { timeout: 90000 });
@@ -134,6 +140,19 @@ try {
     sessionStorage.setItem('montra_account_session_v1', session);
     localStorage.setItem('montra_guest_access_v1', guestKey);
     localStorage.setItem('montra_endpoint', endpoint);
+    // Observe native socket lifecycle without changing messages or transport behavior.
+    window.__forgeSocketObservation = [];
+    const NativeSocket = window.WebSocket;
+    window.WebSocket = new Proxy(NativeSocket, { construct(Target, args) {
+      const socket = Reflect.construct(Target, args);
+      const row = { path: new URL(args[0], location.href).pathname, opened: false, received: 0 };
+      window.__forgeSocketObservation.push(row);
+      socket.addEventListener('open', () => { row.opened = true; });
+      socket.addEventListener('message', () => { row.received++; });
+      socket.addEventListener('close', event => { row.closed = true; row.code = event.code; row.reason = event.reason; });
+      socket.addEventListener('error', () => { row.error = true; });
+      return socket;
+    } });
   }, { session: fixture.session, guestKey: fixture.guestKey, endpoint: backend });
   await enterAndTalk(fixture);
   log('Actual canvas NPC click opens dialogue, workshop and dedicated enhancement page');
@@ -186,6 +205,14 @@ try {
   report.outcome = 'passed';
 } catch (error) {
   report.outcome = 'failed'; report.error = clean(error.stack || error);
+  if (page && !page.isClosed()) report.lastScreen = JSON.parse(clean(JSON.stringify(await page.evaluate(() => ({
+    mode: document.getElementById('modeBadge')?.textContent,
+    entryHidden: document.getElementById('accountEntry')?.hidden,
+    entryError: document.querySelector('.account-error')?.textContent,
+    online: document.getElementById('onlineCount')?.textContent,
+    toast: document.getElementById('toast')?.textContent,
+    sockets: window.__forgeSocketObservation,
+  })).catch(() => ({})))));
   if (page && !page.isClosed()) await screenshot('failure').catch(() => {});
   console.error(report.error); process.exitCode = 1;
 } finally {
