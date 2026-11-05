@@ -93,7 +93,7 @@ async function writeEvidence() {
   await writeFile(path.join(output, 'server.log'), clean(serverLog));
 }
 async function screenshot(name) { await page.screenshot({ path: path.join(output, name + '.png') }); }
-async function enterAndTalk(fixture) {
+async function enterAndTalk(fixture, expectedGold) {
   page = await context.newPage();
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
@@ -154,6 +154,8 @@ async function enterAndTalk(fixture) {
   await page.locator('#smithEnhance').click();
   await page.locator('#forgeGear').selectOption('bag:' + fixture.slot);
   await page.locator('#forgePanel').waitFor({ state: 'visible' });
+  // Inventory and wallet arrive in independent real server messages after join.
+  await page.waitForFunction(expected => document.getElementById('forgeGold')?.textContent.replace(/[^0-9]/g, '') === String(expected), expectedGold);
 }
 try {
   const product = JSON.parse(await readFile('product.json', 'utf8'));
@@ -203,7 +205,7 @@ try {
       window.__forgePolicyViolations.push({ directive: event.effectiveDirective, origin });
     });
   }, { session: fixture.session, guestKey: fixture.guestKey, endpoint: backend });
-  await enterAndTalk(fixture);
+  await enterAndTalk(fixture, fixture.before.gold);
   log('Actual canvas NPC click opens dialogue, workshop and dedicated enhancement page');
   report.babylonVersion = await page.evaluate(() => BABYLON.Engine.Version);
   assert.match(await page.locator('#forgeInfo').innerText(), /^\+0/);
@@ -258,7 +260,7 @@ try {
   console.log(clean(verified.stdout));
   log('Durable SQLite state matches exact target identity, +1 rank, cost and copy consumption');
   await startServer();
-  await enterAndTalk(fixture);
+  await enterAndTalk(fixture, fixture.expected.gold);
   await page.waitForFunction(() => document.getElementById('forgeProgress')?.value === 1);
   assert.match(await page.locator('#forgeInfo').innerText(), /^\+1/);
   assert.equal((await page.locator('#forgeGold').innerText()).replace(/[^0-9]/g, ''), String(fixture.expected.gold));
