@@ -12360,7 +12360,7 @@
       chumphon_core: "⛨"
     };
 
-    function buildKgNode(id, x, y) {
+    function buildKgNode(id, dirClass) {
       const node = catalog.core[id];
       if (!node) return "";
       const rank = Number(ranks[id] || 0);
@@ -12375,7 +12375,7 @@
       const descText = describe(id, rank);
       const statusLabel = isReady ? "✦ อัปเกรด" : isLearned ? "เรียนแล้ว" : "ยังล็อก";
 
-      return '<div class="kg-node ' + stateCls + '" data-skill-id="' + id + '" data-sword-core-upgrade="' + id + '" role="button" tabindex="0" aria-label="' + node.name + '" style="left:' + x + 'px;top:' + y + 'px;">' +
+      return '<div class="kg-node ' + dirClass + ' ' + stateCls + '" data-skill-id="' + id + '" data-sword-core-upgrade="' + id + '" role="button" tabindex="0" aria-label="' + node.name + '">' +
         '<div class="kg-orb ' + stateCls + '">' +
           '<span class="kg-glyph">' + glyph + '</span>' +
           (rank > 0 ? '<span class="st-card-rank-badge">+' + rank + '</span>' : '') +
@@ -12389,19 +12389,19 @@
     }
 
     const rankPhuttha = Number(ranks.phuttha_core || 0);
-    const rankAtamat = Number(ranks.atamat_core || 0);
     const rankSritra = Number(ranks.sritra_core || 0);
+    const rankAtamat = Number(ranks.atamat_core || 0);
     const rankChumphon = Number(ranks.chumphon_core || 0);
 
-    const edgeRootPhuttha = rankPhuttha > 0 ? "on" : (lvNow >= levels[0] && availablePoints > 0 ? "ready" : "locked");
-    const edgePhutthaAtamat = rankAtamat > 0 ? "on" : (rankPhuttha > 0 && lvNow >= levels[rankAtamat] && availablePoints > 0 ? "ready" : "locked");
-    const edgeRootSritra = rankSritra > 0 ? "on" : (lvNow >= levels[0] && availablePoints > 0 ? "ready" : "locked");
-    const edgeSritraChumphon = rankChumphon > 0 ? "on" : (rankSritra > 0 && lvNow >= levels[rankChumphon] && availablePoints > 0 ? "ready" : "locked");
+    const edgeCenterPhuttha = rankPhuttha > 0 ? "on" : (lvNow >= levels[0] && availablePoints > 0 ? "ready" : "locked");
+    const edgeCenterSritra = rankSritra > 0 ? "on" : (lvNow >= levels[0] && availablePoints > 0 ? "ready" : "locked");
+    const edgeCenterAtamat = rankAtamat > 0 ? "on" : (rankPhuttha > 0 && lvNow >= levels[rankAtamat] && availablePoints > 0 ? "ready" : "locked");
+    const edgeCenterChumphon = rankChumphon > 0 ? "on" : (rankSritra > 0 && lvNow >= levels[rankChumphon] && availablePoints > 0 ? "ready" : "locked");
 
-    const nodePhuttha = buildKgNode("phuttha_core", 90, 160);
-    const nodeAtamat = buildKgNode("atamat_core", 90, 295);
-    const nodeSritra = buildKgNode("sritra_core", 270, 160);
-    const nodeChumphon = buildKgNode("chumphon_core", 270, 295);
+    const nodePhuttha = buildKgNode("phuttha_core", "kg-node-top");
+    const nodeSritra = buildKgNode("sritra_core", "kg-node-right");
+    const nodeAtamat = buildKgNode("atamat_core", "kg-node-bottom");
+    const nodeChumphon = buildKgNode("chumphon_core", "kg-node-left");
 
     container.innerHTML = '<div class="kg-container">' +
       '<!-- Top Knowledge Graph Banner -->' +
@@ -12409,8 +12409,8 @@
         '<div class="kg-banner-left">' +
           '<div class="kg-banner-crest">⚔</div>' +
           '<div class="kg-banner-info">' +
-            '<strong class="kg-banner-title">กราฟความรู้วิชาดาบ (Knowledge Graph)</strong>' +
-            '<span class="kg-banner-sub">วิชาดาบพุทธไธสวรรย์ · อยุธยา Lv.' + lvNow + '</span>' +
+            '<strong class="kg-banner-title">ผังกราฟความรู้วิชาดาบ 4 ทิศ (Knowledge Graph)</strong>' +
+            '<span class="kg-banner-sub">อาชีพนักดาบอยุธยา · พุทธไธสวรรย์ Lv.' + lvNow + '</span>' +
           '</div>' +
         '</div>' +
         '<div class="st-points-box">' +
@@ -12420,33 +12420,43 @@
       '</div>' +
 
       '<p class="note" style="margin:2px 0;font-size:11px;color:#c7b28a;text-align:center;">' +
-        'ผังกราฟเชื่อมโยงสายวิชา (DAG) · แตะที่โหนดสกิลเพื่อเปิดป็อปอัปและอัปเกรดทันที' +
+        'อาชีพศูนย์กลางกระจาย 4 ด้าน · แตะที่โหนดสกิลเพื่อดูรายละเอียดและอัปเกรดทันที' +
       '</p>' +
 
-      '<!-- Knowledge Graph Canvas -->' +
-      '<div class="kg-canvas-board">' +
-        '<!-- Central Root / Origin Node -->' +
-        '<div class="kg-root-node">' +
-          '<div class="kg-root-orb">⚔</div>' +
-          '<span class="kg-root-title">แกนวิชาดาบ (Origin)</span>' +
+      '<!-- Radial 4-Directional Knowledge Graph Canvas -->' +
+      '<div class="kg-canvas-board radial-4way">' +
+        '<!-- Center Class Node (อาชีพนักดาบตรงกลาง) -->' +
+        '<div class="kg-center-class-node">' +
+          '<div class="kg-center-class-orb">⚔</div>' +
+          '<span class="kg-center-class-title">นักดาบอยุธยา</span>' +
+          '<span class="kg-center-class-sub">แกนวิชา · Lv.' + lvNow + '</span>' +
         '</div>' +
 
-        '<!-- Stream Labels -->' +
-        '<div class="kg-stream-header kg-stream-left">สายจู่โจม (Offense)</div>' +
-        '<div class="kg-stream-header kg-stream-right">สายตั้งรับ (Defense)</div>' +
+        '<!-- 4 Directional Stream Badges -->' +
+        '<div class="kg-stream-badge kg-stream-badge-top">ทิศเหนือ · เพลงดาบจู่โจม</div>' +
+        '<div class="kg-stream-badge kg-stream-badge-right">ทิศตะวันออก · วิถีตั้งรับสวน</div>' +
+        '<div class="kg-stream-badge kg-stream-badge-bottom">ทิศใต้ · กวาดฟันรอบกาย</div>' +
+        '<div class="kg-stream-badge kg-stream-badge-left">ทิศตะวันตก · ม่านมนตร์คุ้มกาย</div>' +
 
-        '<!-- SVG Connector Edges -->' +
-        '<svg class="kg-svg-edges" viewBox="0 0 360 420" preserveAspectRatio="xMidYMid meet">' +
-          '<path class="kg-edge ' + edgeRootPhuttha + '" d="M 180 58 C 180 100, 90 95, 90 134" />' +
-          '<path class="kg-edge ' + edgePhutthaAtamat + '" d="M 90 186 L 90 269" />' +
-          '<path class="kg-edge ' + edgeRootSritra + '" d="M 180 58 C 180 100, 270 95, 270 134" />' +
-          '<path class="kg-edge ' + edgeSritraChumphon + '" d="M 270 186 L 270 269" />' +
+        '<!-- SVG Radial Connector Edges -->' +
+        '<svg class="kg-svg-edges" viewBox="0 0 360 440" preserveAspectRatio="xMidYMid meet">' +
+          '<!-- Background Arc Rings -->' +
+          '<circle cx="180" cy="220" r="118" fill="none" stroke="rgba(212,175,55,0.18)" stroke-width="1.5" stroke-dasharray="4 6" />' +
+          '<circle cx="180" cy="220" r="54" fill="none" stroke="rgba(255,215,0,0.15)" stroke-width="1" />' +
+          '<!-- Center to Top (Phuttha) -->' +
+          '<path class="kg-edge ' + edgeCenterPhuttha + '" d="M 180 185 L 180 110" />' +
+          '<!-- Center to Right (Sritra) -->' +
+          '<path class="kg-edge ' + edgeCenterSritra + '" d="M 214 220 L 260 220" />' +
+          '<!-- Center to Bottom (Atamat) -->' +
+          '<path class="kg-edge ' + edgeCenterAtamat + '" d="M 180 255 L 180 338" />' +
+          '<!-- Center to Left (Chumphon) -->' +
+          '<path class="kg-edge ' + edgeCenterChumphon + '" d="M 146 220 L 100 220" />' +
         '</svg>' +
 
-        '<!-- Nodes -->' +
+        '<!-- 4 Radiating Skill Nodes -->' +
         nodePhuttha +
-        nodeAtamat +
         nodeSritra +
+        nodeAtamat +
         nodeChumphon +
       '</div>' +
 
