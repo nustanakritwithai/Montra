@@ -2402,8 +2402,122 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 #forgeStock[open] summary::after { content:"⌃"; }
 #forgeStock summary:focus-visible { outline:2px solid #f3c783; outline-offset:3px; }
 
-/*
+/* Crafting reuses the workshop drawer; no inventory or recipe system is duplicated. */
+.drawer:has(.crafting-page) { max-height:calc(100dvh - max(18px,env(safe-area-inset-top))); }
+.crafting-page { min-width:0; }
+.crafting-page [hidden] { display:none; }
+.crafting-page select { width:100%; max-width:100%; min-width:0; }
+.crafting-page button,.crafting-page h3 { overflow-wrap:anywhere; }
+.crafting-page .note { line-height:1.75; }
+.crafting-page .forge-card > h3:first-child { margin-top:0; }
+.crafting-page .field { display:block; margin-top:12px; }
+.craft-ingredients { list-style:none; margin:0 0 12px; padding:0; }
+.craft-ingredients li { display:flex; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid #b7955c30; line-height:1.6; }
+.craft-ingredients > li > span { min-width:0; overflow-wrap:anywhere; }
+.craft-ingredients > li > strong { flex:none; color:#e8d3a9; }
+.craft-ingredients .missing strong { color:#efa799; }
+.craft-result:empty { display:none; }
+.craft-result:not(:empty) { position:sticky; top:0; z-index:2; margin:10px 0; padding:10px 12px; border:1px solid #b7955c85; border-radius:10px; background:#132b26; color:#f4d59f; }
+#craftPanel summary { min-height:44px; display:flex; align-items:center; cursor:pointer; color:#f4d59f; font-weight:700; }
+#craftPanel summary:focus-visible { outline:2px solid #f3c783; outline-offset:3px; }
 
+/* Item displays share the inventory slot skin, symbols and canonical size. */
+.bag-slot.item-slot { flex:0 0 var(--item-slot-size); width:var(--item-slot-size); height:var(--item-slot-size); flex-direction:row; pointer-events:none; cursor:default; }
+.item-slot-host { display:inline-flex; flex:0 0 var(--item-slot-size); vertical-align:middle; }
+.item-slot-host[hidden],.item-preview[hidden] { display:none; }
+.item-preview { display:flex; align-items:center; gap:10px; min-width:0; margin:8px 0; }
+.item-preview > h3 { min-width:0; margin:0; }
+.item-preview-info { display:flex; flex:1; flex-direction:column; min-width:0; overflow-wrap:anywhere; }
+.item-preview-info strong { color:#f7dbab; }
+.item-preview-info small { color:#c6b9a4; }
+.item-slots { display:flex; flex-wrap:wrap; gap:4px 14px; }
+.item-slots > .item-preview { flex:1 1 160px; }
+.bag-detail > .item-slot-host { float:left; margin:0 10px 6px 0; }
+.bag-detail::after { content:""; display:block; clear:both; }
+.craft-ingredients li { display:grid; grid-template-columns:var(--item-slot-size) minmax(0,1fr) auto; align-items:center; gap:10px; }
+.market-row > div:not(.item-slot):not(.auction-bid-controls) { flex:1; }
+.market-row > button { flex-shrink:0; }
+@media(max-width:380px) {
+  .market-row { flex-wrap:wrap; }
+  .market-row > div:not(.item-slot):not(.auction-bid-controls) { flex-basis:calc(100% - var(--item-slot-size) - 12px); }
+  .market-row > button,.market-row > .auction-bid-controls { margin-left:auto; }
+}
+
+/* Inventory-shaped forge target and a native modal with a live equipment-only grid. */
+.forge-selection > h3 { margin:0 0 14px; text-align:center; overflow-wrap:anywhere; color:#f4d59f; }
+.forge-stage { display:grid; grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr); align-items:start; gap:6px; }
+.forge-target,.forge-material .item-preview { display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; min-width:0; }
+.forge-target > span,.forge-target small,.forge-material small { font-size:11px; line-height:1.5; color:#d6cab6; overflow-wrap:anywhere; }
+.forge-material .item-preview-info { min-width:0; }
+.forge-material strong { font-size:12px; }
+.forge-plus { align-self:start; padding-top:12px; font-size:24px; color:#e8c98b; text-align:center; }
+.forge-target-button { display:block; padding:0; border:0; background:transparent; border-radius:8px; }
+.forge-target-button:focus-visible { outline:2px solid #fff0ba; outline-offset:4px; }
+.forge-target-button .item-slot { cursor:pointer; }
+.forge-picker { box-sizing:border-box; width:min(94vw,460px); max-height:85dvh; padding:16px; color:#ebdfca; background:linear-gradient(150deg,#233733,#101e20); border:1px solid #b7955c; border-radius:16px; box-shadow:0 15px 70px #000b; overflow:auto; overscroll-behavior:contain; }
+.forge-picker::backdrop { background:#000b; }
+.forge-picker-header { position:sticky; top:-16px; z-index:1; background:#20332f; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.forge-picker-header h3 { margin:0; color:#f4d59f; }
+.forge-picker-header button { min-width:44px; min-height:44px; border:1px solid #8d8069; border-radius:9px; background:#284141; color:#f4d59f; }
+.forge-picker-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(76px,1fr)); gap:12px 6px; }
+.forge-picker-choice { min-width:0; display:flex; flex-direction:column; align-items:center; gap:5px; padding:5px 2px; border:1px solid transparent; border-radius:9px; background:transparent; color:#ead6b2; cursor:pointer; }
+.forge-picker-choice strong,.forge-picker-choice small { max-width:100%; font-size:11px; line-height:1.4; overflow-wrap:anywhere; }
+.forge-picker-choice small { font-size:10px; color:#b8c7bc; }
+.forge-picker-choice:focus-visible { outline:2px solid #fff0ba; outline-offset:1px; }
+.forge-picker-choice[aria-pressed=true] { background:#66533250; }
+
+
+.forge-picker-choice .item-slot { cursor:pointer; }
+
+/* Preserve the centered inventory modal while keeping artisan/card actions reachable. */
+.item-detail-modal { box-sizing:border-box; overflow-y:auto; overscroll-behavior:contain; }
+.item-detail-modal [hidden] { display:none !important; }
+.item-detail-modal select { width:100%; max-width:100%; min-width:0; }
+.item-modal-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.item-modal-actions button { min-width:0; min-height:44px; margin:0; overflow-wrap:anywhere; }
+.item-modal-actions .wear-sides,#bagForge,#bagCraft { grid-column:1/-1; }
+.item-modal-close-btn { min-width:44px; min-height:44px; }
+.item-modal-body { flex-shrink:0; overflow:visible; }
+.item-stats-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.item-detail-modal .bag-stat-label,.item-detail-modal .bag-stat-val { white-space:normal; overflow-wrap:anywhere; }
+
+/* Hidden forge materials must win over the shared flex preview layout. */
+.forge-material .item-preview[hidden] { display:none; }
+
+.bag-quick-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.bag-quick-actions button { margin:0; min-width:0; overflow-wrap:anywhere; }
+.bag-quick-actions .wear-sides { grid-column:1/-1; }
+.equip-popup #equipPopupCloseBtn { width:100%; padding:12px; color:#e0d4c3; background:#2a4044; border:1px solid #839c9a; border-radius:12px; }
+
+/* The hammer is presentation only. The selected item stays unchanged until the
+   server's result is revealed; reduced motion uses the same text-only status. */
+.forge-target { position:relative; }
+.forge-hammer-motion { position:absolute; z-index:2; left:calc(50% - 48px); top:-16px; width:96px; height:88px; pointer-events:none; }
+.forge-hammer-motion[hidden] { display:none; }
+.forge-hammer { display:block; position:absolute; left:43px; top:7px; width:10px; height:51px; border:1px solid #bd8d50; border-radius:3px; background:linear-gradient(90deg,#624020,#ba8146,#704620); transform-origin:50% 90%; transform:translate(0,10px) rotate(-6deg); }
+.forge-hammer::before { content:""; position:absolute; left:-13px; top:-3px; width:34px; height:19px; border:1px solid #f5d99f; border-radius:3px; background:linear-gradient(#f5d99f,#a88656 48%,#554c41); box-shadow:0 3px 4px #0009; }
+.forge-hammer i { position:absolute; bottom:3px; left:-1px; width:10px; height:14px; border-top:2px solid #4c3019; border-bottom:2px solid #4c3019; }
+.forge-sparks { position:absolute; left:46px; top:44px; width:3px; height:3px; border-radius:50%; background:#ffe6ac; opacity:0; }
+.is-striking .forge-hammer { animation:forge-hammer-strike .36s ease-in-out 1; }
+.is-striking .forge-sparks { animation:forge-hammer-sparks .36s ease-out 1; }
+.forge-animation-status,.forge-outcome { margin:10px 0; font-size:13px; line-height:1.7; overflow-wrap:anywhere; }
+.forge-animation-status { color:#f3d7a1; text-align:center; }
+.forge-outcome { padding:12px; border:1px solid #8f754a; border-radius:10px; background:#241d14; color:#f4e2bd; }
+@keyframes forge-hammer-strike {
+  0%,100% { transform:translate(16px,-16px) rotate(-42deg); }
+  42% { transform:translate(20px,-22px) rotate(-54deg); }
+  59%,68% { transform:translate(0,10px) rotate(-6deg); }
+  78% { transform:translate(3px,2px) rotate(-14deg); }
+}
+@keyframes forge-hammer-sparks {
+  0%,54%,100% { opacity:0; box-shadow:none; transform:scale(.5); }
+  60% { opacity:1; box-shadow:-10px -5px #ffd68a,11px -8px #e7ad54,-5px 9px #ffd68a,12px 6px #e7ad54; transform:scale(1); }
+  85% { opacity:0; box-shadow:-19px -10px #ffd68a,22px -15px #e7ad54,-10px 18px #ffd68a,23px 12px #e7ad54; transform:scale(1.2); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .forge-hammer-motion { display:none!important; }
+  .forge-hammer,.forge-sparks { animation:none!important; }
+}
 
 /* ==========================================================================
    RPG Skill Tree & Skill Detail Modal

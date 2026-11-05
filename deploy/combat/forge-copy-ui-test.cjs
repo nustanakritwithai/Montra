@@ -13,7 +13,7 @@ function $(key){
 const config={chances:Array(10),maxMisses:3,rerollCost:60,enhanceSteps:Array(10)};
 config.enhanceSteps[3]={copies:2,gold:48,chance:80,downgradeChance:20,breakChance:0,breakOnFailure:false};
 config.enhanceSteps[9]={copies:4,gold:120,chance:40,downgradeChance:40,breakChance:20,breakOnFailure:true};
-const ctx={$,renderItemPreview(){},room:{state:{forgeCatalog:JSON.stringify(config)}},bagMeta:()=>meta,economyReady:()=>true,
+const ctx={$,forgeAnimationBusy:()=>false,beginForgeAnimation(){},renderItemPreview(){},room:{state:{forgeCatalog:JSON.stringify(config)}},bagMeta:()=>meta,economyReady:()=>true,
   forgePageTarget:0,renderForgePage:()=>draw(piece),inventoryState:{forgeCopies:stock},currentBagSlots:()=>slots,inspectingGear:null,selectedBagSlot:0,currentEquippedWeaponSlot:()=>0,
   gearStamp:()=>id,forgeLabel:()=>"",Option:class {constructor(text,value){Object.assign(this,{text,value});}},
   bindItemHuntButton:(...args)=>goals.push(args),itemHuntCount:(_id,include)=>include?2+stock[id]:0,
@@ -34,7 +34,7 @@ assert.equal($("forgeEnhance").disabled,true);assert.match($("forgeSupply").text
 const submitSource=source.slice(source.indexOf("  function submitForge("),source.indexOf("  function openBag()",source.indexOf("  function submitForge(")));
 let confirm=false,prompt="",sent=null;
 Object.assign(ctx,{drawerActive:"forge",forgePageAction:"enhance",forgePageIdentity:{itemId:id},forgeTargetItem:()=>piece,economyRequestId:()=>"forge_ui_confirmation",renderBag(){},economySend:(_name,data)=>{sent=data;},
-  window:{confirm(message){prompt=message;return confirm;}}});
+  forgePageRoom:ctx.room,toast(){},window:{confirm(message){prompt=message;return confirm;}}});
 const submit=vm.runInNewContext(submitSource+"\nsubmitForge",ctx);
 delete piece.socket;piece.forge.rank=9;stock[id]=4;draw(piece);
 submit("enhance");assert.equal(sent,null);assert.match(prompt,/สำเร็จ 40%/);assert.match(prompt,/ลดจาก \+9 เหลือ \+8 40% · แตกถาวร 20%/);
