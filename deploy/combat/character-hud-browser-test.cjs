@@ -30,14 +30,18 @@ const {chromium}=require('playwright');
    await card.focus();await page.keyboard.press('Enter');await page.locator('#drawer').waitFor({state:'visible'});
    await page.keyboard.press('Escape');await page.locator('#drawer').waitFor({state:'hidden'});
    await page.screenshot({path:path.join(out,'hud-'+width+'x'+height+'.png')});
-   // DOM-only stress data: no server/session writes, and no fake gameplay screenshot.
-   await page.evaluate(()=>{document.getElementById('characterName').textContent='นักรบผู้พิทักษ์แห่งอาณาจักรชื่อยาวมาก';document.getElementById('characterLevel').textContent='S3 · LV. 100';document.getElementById('characterClass').textContent='สำนักพุทธไธสวรรย์ระดับสูง';document.getElementById('characterPower').textContent='999,999';document.getElementById('classGlyph').classList.add('low-hp');});
-   const warning=await page.locator('#classGlyph').evaluate(el=>({color:getComputedStyle(el).borderTopColor,animation:getComputedStyle(el).animationName}));
+   // Static DOM clone freezes gameplay updates; these are explicitly stress fixtures, not gameplay.
+   const stress=await context.newPage();
+   await stress.setContent('<base href="'+origin+'/">'+(await page.content()).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,''),{waitUntil:'load'});
+   await stress.evaluate(()=>{document.getElementById('characterName').textContent='นักรบผู้พิทักษ์แห่งอาณาจักรชื่อยาวมาก';document.getElementById('characterLevel').textContent='S3 · LV. 100';document.getElementById('characterClass').textContent='สำนักพุทธไธสวรรย์ระดับสูง';document.getElementById('characterPower').textContent='999,999';document.getElementById('classGlyph').classList.add('low-hp');});
+   const warning=await stress.locator('#classGlyph').evaluate(el=>({color:getComputedStyle(el).borderTopColor,animation:getComputedStyle(el).animationName}));
    assert.equal(warning.color,'rgb(255, 106, 90)');assert.equal(warning.animation,'none');
-   assert(await page.locator('#characterName').evaluate(el=>el.scrollWidth>=el.clientWidth));
-   await page.screenshot({path:path.join(out,'stress-'+width+'x'+height+'.png')});
+   const stressBox=await stress.locator('#characterProfile').boundingBox();
+   assert(stressBox.x>=0&&stressBox.x+stressBox.width<=width&&stressBox.height<=80,'stress card remains compact and inside viewport');
+   assert.equal(await stress.locator('#characterName').evaluate(el=>getComputedStyle(el).textOverflow),'ellipsis');
+   await stress.screenshot({path:path.join(out,'stress-'+width+'x'+height+'.png')});
    report.screens.push({width,height,card:box,warning,profileMouseAndKeyboard:true});await context.close();
   }
   assert.deepEqual(report.errors,[],'no browser runtime errors');console.log(JSON.stringify(report,null,2));
- }finally{fs.writeFileSync(path.join(out,'report.json'),JSON.stringify(report,null,2));await browser.close();await new Promise(resolve=>server.close(resolve));}
+ }finally{for(const context of browser.contexts())for(const page of context.pages())await page.screenshot({path:path.join(out,'last-state-'+context.pages().indexOf(page)+'.png')}).catch(()=>{});fs.writeFileSync(path.join(out,'report.json'),JSON.stringify(report,null,2));await browser.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(error=>{console.error(error);process.exitCode=1;});
