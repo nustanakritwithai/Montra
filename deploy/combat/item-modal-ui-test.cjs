@@ -36,7 +36,7 @@ function dom(){
       textContent:{get(){return text+this.children.map(child=>child.textContent).join('');},set(next){this.replaceChildren();text=String(next);}},
       value:{get(){return value;},set(next){next=String(next);value=this.tagName==='SELECT'&&!this.children.some(c=>c.value===next)?'':next;}},
       options:{get(){return this.children;}},lastChild:{get(){return this.children.at(-1);}},inertTree:{get(){return !!this.inert||!!this.parentNode?.inertTree;}},isConnected:{get(){return this===document.body||!!this.parentNode?.isConnected;}},
-      innerHTML:{configurable:true,set(html){parse(this,html);}},
+      innerHTML:{configurable:true,get(){return this.html||'';},set(html){parse(this,html);}},
     });return el;
   }
   document.createElement=node;document.body=node('body');document.activeElement=document.body;
@@ -183,6 +183,17 @@ test('static popups are outside the game gate and pointer close restores focus w
     assert.equal(f.document.activeElement,f.$('bagSlot1'));assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);
     f.$(id).onclick();assert.equal(f.modal().hidden,true,'subsequent click is idempotent');
   }
+});
+
+test('inline detail mirrors canonical item rendering and delegates existing side/action handlers',()=>{
+  const f=fixture();f.open();f.select(1);
+  assert.equal(f.$('bagQuickName').textContent,f.$('bagItemName').textContent);
+  assert.equal(f.$('bagQuickStats').innerHTML,f.$('bagPanelStats').innerHTML);
+  assert.equal(f.$('bagQuickUse').textContent,f.$('useBagItem').textContent);
+  assert.equal(f.$('bagQuickItem').children[0].getAttribute('aria-label'),f.$('bagDetailItem').children[0].getAttribute('aria-label'));
+  f.ctx.closeItemDetailModal();f.$('bagQuickUse').click();assert.equal(f.routes.at(-1),'use');
+  f.$('useBagItem').disabled=true;f.$('bagQuickUse').click();assert.equal(f.routes.filter(x=>x==='use').length,1,'checks current canonical disabled state');
+  f.$('bagQuickForge').click();assert.equal(f.ctx.drawerActive,'forge');assert.equal(f.modal().hidden,true);assert.equal(f.mutations().length,0);
 });
 
 console.log(`PASS centered item modal: ${groups} focused regression groups`);

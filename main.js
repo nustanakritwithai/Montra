@@ -12520,6 +12520,7 @@
       '<div class="equip-popup-content">' +
         wornHtml +
         candHtml +
+        '<button type="button" class="secondary" id="equipPopupCloseBtn">ปิด</button>' +
       '</div>';
 
     renderItemTile("equipWornItem",worn,{equipped:true});
@@ -12534,10 +12535,10 @@
       popup.querySelector(".equip-popup-content").appendChild(forge);
     }
 
-    const closeBtn = $("equipPopupClose");
-    if (closeBtn) {
-      closeBtn.onclick = closeEquipPopup;
-      closeBtn.onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); closeEquipPopup(); };
+    for(const id of ["equipPopupClose","equipPopupCloseBtn","equipPopupBackdrop"]){
+      const closeBtn=$(id);if(!closeBtn)continue;
+      closeBtn.onclick=event=>{event?.stopPropagation?.();closeEquipPopup();};
+      closeBtn.onpointerdown=event=>{event.preventDefault();event.stopPropagation();closeEquipPopup();};
     }
 
     const unequipBtn = $("equipPopupUnequip");
@@ -13364,6 +13365,28 @@
     const use=$("useBagItem");use.disabled=!ready||itemUsePending;
     use.textContent=itemUsePending?"กำลังบันทึก…":!inspectingGear&&chosen && confirmBindKey===selectedBagSlot+":"+gearStamp(chosen)&&gear&&!worn&&!chosen.bound?"ยืนยันผูกและสวม":gear?(worn?"ถอด":"สวม")+(armor?bodyLabels[destination]:"อาวุธ"):heal?(full?(meta?.healMana?"MP เต็ม":"HP เต็ม"):"ใช้ยา"):meta?.kind==="tool"?"ใช้จากกระเป๋าอัตโนมัติ":chosen?"วัตถุดิบ":"ช่องว่าง";
     if(meta?.kind==="card")use.textContent="เลือกอุปกรณ์เพื่อใส่การ์ด";
+    renderBagQuickDetail(chosen,worn);
+  }
+  function renderBagQuickDetail(chosen,worn){
+    if(drawerActive!=="bag" || !$("bagQuickDetail"))return;
+    renderItemTile("bagQuickItem",chosen||{}, {equipped:worn});
+    for(const [target,source] of [["Name","bagItemName"],["Sub","bagPanelSub"],["Description","bagItemDescription"],["Diff","bagPanelDiff"],["Level","itemMetaLevel"],["Bound","itemMetaBound"],["Price","itemMetaPrice"]]){
+      const to=$("bagQuick"+target),from=$(source);if(!to || !from)continue;
+      to.textContent=from.textContent;to.hidden=from.hidden;
+    }
+    $("bagQuickStats").innerHTML=$("bagPanelStats").innerHTML;
+    for(const [target,source] of [["Use","useBagItem"],["Forge","bagForge"],["Craft","bagCraft"],["Track","bagTrack"],["Refine","refineResource"],["Kiln","bagKiln"],["Sell","sellBagMaterial"],["Salvage","salvageGear"]]){
+      const to=$("bagQuick"+target),from=$(source);if(!to || !from)continue;
+      to.textContent=from.textContent;to.hidden=from.hidden;to.disabled=from.disabled;
+      to.onclick=()=>{if(!from.disabled && !from.hidden)from.onclick?.();};
+    }
+    const sides=$("wearSidePicker"),quickSides=$("bagQuickSides");quickSides.hidden=sides.hidden;
+    for(const [i,button] of [...quickSides.children].entries()){
+      const source=sides.children[i];if(!source)continue;
+      button.textContent=source.textContent;button.disabled=source.disabled;
+      button.setAttribute("aria-pressed",source.getAttribute("aria-pressed")||"false");
+      button.onclick=()=>{if(!source.disabled)source.onclick?.();};
+    }
   }
   const gearCoreSkills={
     muay_boran:{pressure:["korat","thasao"],endurance:["chaiya","lopburi"]},
@@ -14014,6 +14037,13 @@
       bagMultiPageSliderHtml() +
       '<div class="bag-dots" id="bagDots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>' +
       '<p class="note" style="text-align:center;font-size:12px;margin:10px 0 0;color:#c7b28a;">แตะที่ช่องไอเท็มเพื่อดูคุณสมบัติสเตตัสและใช้งาน</p>' +
+      '<section class="bag-detail-card" id="bagQuickDetail" aria-label="รายละเอียดไอเท็มที่เลือก">'+
+        '<div class="item-preview"><div id="bagQuickItem" class="item-slot-host"></div><div><strong id="bagQuickName"></strong><p class="note" id="bagQuickSub"></p></div></div>'+
+        '<div class="item-stats-grid" id="bagQuickStats"></div><div class="item-diff-card" id="bagQuickDiff" hidden></div><p class="note" id="bagQuickDescription"></p>'+
+        '<div class="item-meta-row"><span class="item-meta-tag" id="bagQuickLevel" hidden></span><span class="item-meta-tag" id="bagQuickBound" hidden></span><span class="item-meta-tag item-price-tag" id="bagQuickPrice" hidden></span></div>'+
+        '<div class="bag-quick-actions"><div class="wear-sides" id="bagQuickSides" role="group" aria-label="เลือกข้างที่สวม" hidden><button class="secondary" type="button"></button><button class="secondary" type="button"></button></div>'+
+        '<button class="primary" type="button" id="bagQuickUse"></button><button class="secondary" type="button" id="bagQuickForge" hidden></button><button class="secondary" type="button" id="bagQuickCraft"></button>'+
+        '<button class="secondary" type="button" id="bagQuickTrack" hidden></button><button class="secondary" type="button" id="bagQuickRefine" hidden></button><button class="secondary" type="button" id="bagQuickKiln" hidden></button><button class="secondary" type="button" id="bagQuickSell" hidden></button><button class="secondary" type="button" id="bagQuickSalvage" hidden></button></div></section>'+
       '<button class="secondary" id="bagOpenCraft" type="button">สร้างของ · โต๊ะช่าง</button>');
     $("bagOpenCraft").onclick=()=>openCraftingPage();
     bindBagControls();

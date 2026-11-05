@@ -581,8 +581,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .item-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
-  background: rgba(0, 0, 0, 0.72);
+  z-index: 900 !important;
+  background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   animation: fadeIn 0.16s ease-out both;
@@ -592,6 +592,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 .item-modal-backdrop[hidden] {
   display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 .item-detail-modal {
@@ -599,22 +601,26 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: min(92vw, 390px);
-  max-height: min(88vh, 620px);
-  z-index: 85;
+  width: min(92vw, 420px);
+  max-height: min(88vh, 640px);
+  z-index: 950 !important;
   pointer-events: auto !important;
   background: linear-gradient(165deg, #18282b, #0c1618);
   border: 1.5px solid rgba(212, 175, 55, 0.55);
   border-radius: 16px;
   padding: 16px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85), 0 0 24px rgba(212, 175, 55, 0.22);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85),
+              0 0 24px rgba(212, 175, 55, 0.2);
   display: flex;
   flex-direction: column;
   gap: 12px;
-  animation: itemModalPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.2) both;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 .item-detail-modal[hidden] {
   display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 @keyframes itemModalPop {
   0% { transform: translate(-50%, -46%) scale(0.93); opacity: 0; }
@@ -659,23 +665,31 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .item-modal-close-btn {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.12);
-  border: 1.5px solid rgba(212, 175, 55, 0.5);
+  border: 1.5px solid rgba(212, 175, 55, 0.6);
   color: #fff;
   display: grid;
   place-items: center;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 700;
   cursor: pointer !important;
   pointer-events: auto !important;
   touch-action: manipulation !important;
   flex-shrink: 0;
-  transition: all 0.15s ease;
+  transition: all 0.18s ease;
   user-select: none;
   -webkit-user-select: none;
+}
+.item-modal-close-btn:hover {
+  background: rgba(212, 175, 55, 0.25);
+  border-color: #ffd700;
+  transform: scale(1.08);
+}
+.item-modal-close-btn:active {
+  transform: scale(0.94);
 }
 .item-modal-close-btn:hover,
 .item-modal-close-btn:active {
@@ -816,11 +830,23 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   border-radius: 10px;
 }
 
-/* Bag drawer sizing */
-.drawer:has(.bag-category-tabs) {
-  width: min(96vw, 440px);
-  max-height: min(85dvh, 700px);
+.bag-detail-card {
+  margin-top: 10px;
+  background: linear-gradient(160deg, #18282b, #0c1618);
+  border: 1.5px solid rgba(212, 175, 55, 0.45);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
+.drawer:has(.bag-category-tabs) {
+  width: min(96vw, 480px);
+  max-height: min(88dvh, 740px);
+}
+/* Bag drawer sizing */
+
 
 #useBagItem[disabled] { opacity:.52; cursor:not-allowed; }
 
@@ -828,15 +854,20 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .equip-popup-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  animation: fadeIn 0.16s ease-out both;
+  z-index: 900 !important;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   pointer-events: auto !important;
   cursor: pointer !important;
   touch-action: manipulation !important;
+  animation: fadeIn 0.16s ease-out both;
 }
-.equip-popup-backdrop[hidden] { display: none; }
+.equip-popup-backdrop[hidden] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .equip-popup {
@@ -844,22 +875,56 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: min(92vw, 360px);
-  max-height: min(85vh, 580px);
-  background: linear-gradient(170deg, #18282b, #0c1618);
-  border: 1.5px solid #d4af37;
+  width: min(92vw, 420px);
+  max-height: min(85vh, 600px);
+  z-index: 950 !important;
+  pointer-events: auto !important;
+  background: linear-gradient(165deg, #18282b, #0c1618);
+  border: 1.5px solid rgba(212, 175, 55, 0.55);
   border-radius: 16px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85), 0 0 24px rgba(212, 175, 55, 0.35);
-  z-index: 85;
+  padding: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85),
+              0 0 24px rgba(212, 175, 55, 0.2);
   display: flex;
   flex-direction: column;
-  padding: 14px 14px 14px;
-  animation: popupPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  gap: 12px;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
-.equip-popup[hidden] { display: none; }
+.equip-popup[hidden] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
 @keyframes popupPopIn {
   from { transform: translate(-50%, -46%) scale(0.94); opacity: 0; }
   to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+.equip-popup-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1.5px solid rgba(212, 175, 55, 0.5);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  transition: all 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.equip-popup-close:hover,
+.equip-popup-close:active {
+  background: rgba(212, 175, 55, 0.3);
+  border-color: #ffd700;
+  color: #fff;
+  transform: scale(1.08);
 }
 
 .equip-popup-header {
@@ -2418,3 +2483,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 
 /* Hidden forge materials must win over the shared flex preview layout. */
 .forge-material .item-preview[hidden] { display:none; }
+
+.bag-quick-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.bag-quick-actions button { margin:0; min-width:0; overflow-wrap:anywhere; }
+.bag-quick-actions .wear-sides { grid-column:1/-1; }
+.equip-popup #equipPopupCloseBtn { width:100%; padding:12px; color:#e0d4c3; background:#2a4044; border:1px solid #839c9a; border-radius:12px; }
