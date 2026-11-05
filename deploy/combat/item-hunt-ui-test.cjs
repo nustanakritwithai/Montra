@@ -48,7 +48,7 @@ const bag={slots:[{itemId:"wrap",quantity:1},{itemId:"hide",quantity:2}],starter
 const controls={},get=id=>controls[id]??={scrollIntoView(){},click(){}};
 const me={pathId:"muay_boran",level:3},context={mode:"live",ownServerCharacter:()=>me,inventoryState:bag,
   economyReady:()=>true,gearGuides:{path:me.pathId,starterHunt:camp},fieldTrainingTip:null,territoryState:null,activeMapId:camp.mapId,
-  personalItems:docs,itemHuntCount:id=>bag.slots.reduce((n,s)=>n+(s.itemId===id?s.quantity:0),0),
+  personalItems:docs,openForgePage(...v){context.forgeOpened=v;},itemHuntCount:id=>bag.slots.reduce((n,s)=>n+(s.itemId===id?s.quantity:0),0),
   room:{state:{monsters:new Map([["west1",{x:9,z:8,alive:false}],["west2",{x:12,z:8,alive:true}]])}},
   getLocalAvatar:()=>({x:10,z:8}),worldDefinitions:{},$:get,ui:{drawerTitle:{}},openBag(){},selectBenchRecipe(...v){context.opened=v;},
   bindItemHuntButton(_,id,qty){context.tracked={id,qty};},itemHuntSource:(id,g)=>docs[id]?.huntTarget};
@@ -58,6 +58,7 @@ assert.match(get("fieldGoalInputs").textContent,/หนัง 2\/3/);assert.equa
 bag.slots[1].quantity=3;bag.slots.push({itemId:"fiber",quantity:2});
 g=field.goal();assert.match(g.step,/วัตถุดิบครบ/);field.draw(g);get("fieldGoalRecipe").onclick();assert.deepEqual(context.opened,["all","1","wrap"]);
 bag.forgeCopies.wrap=1;g=field.goal();field.draw(g);assert.equal(get("fieldGoalForge").hidden,false);
+get("fieldGoalForge").onclick();assert.deepEqual(context.forgeOpened,["enhance",g.slot]);
 bag.slots[0].forge={rank:1};bag.forgeCopies={};assert.equal(field.goal().nextRank,2);
 bag.slots[0].forge.rank=3;assert.equal(field.goal(),null);
 me.level=12;bag.slots=[{itemId:"fragment",quantity:1},{itemId:"hide",quantity:1}];

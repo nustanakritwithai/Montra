@@ -9,9 +9,9 @@ const element=()=>({textContent:'',className:'',onclick:null,type:''});
 const context={serviceNpcUi,document:{createElement:()=>element()},ui:{drawerBody:{append:e=>children.push(e)}},
   $:id=>elements[id],openDrawer:()=>{elements.serviceNpcSpeech=element();elements.serviceNpcAction=element();children.length=0;},
   ownServerCharacter:()=>({pathId:context.path}),activeMapId:'moon_pass',territoryState:{local:{site:'moon_pass'}},toast:message=>calls.push(message)};
-for(const name of ['openBag','openEconomy','openGuild','openParty','openMap','openStrategicMap','openHelp','openWarPanel','openMuayBook','openSwordTree','openBladeBook','openSentinelBook','openOccultBook','openRebirth','openNpcGuide'])context[name]=()=>calls.push(name);
+for(const name of ['openBag','openSmith','openEconomy','openGuild','openParty','openMap','openStrategicMap','openHelp','openWarPanel','openMuayBook','openSwordTree','openBladeBook','openSentinelBook','openOccultBook','openRebirth','openNpcGuide'])context[name]=()=>calls.push(name);
 const open=vm.runInNewContext(`(${source.slice(fnStart,fnEnd)})`,context);
-for(const [role,expected] of Object.entries({smith:'openBag',market:'openEconomy',guild:'openGuild',party:'openParty',travel:'openMap',strategy:'openStrategicMap',guide:'openHelp'})){
+for(const [role,expected] of Object.entries({smith:'openSmith',market:'openEconomy',guild:'openGuild',party:'openParty',travel:'openMap',strategy:'openStrategicMap',guide:'openHelp'})){
   calls.length=0;open({role,name:'ผู้ให้บริการ'});assert.ok(elements.serviceNpcSpeech.textContent);assert.ok(elements.serviceNpcAction.textContent);
   elements.serviceNpcAction.onclick();assert.equal(calls[0],expected,`${role} opens its service`);
   if(role==='strategy'){const war=children.find(e=>e.textContent==='สงครามและการปกครองด่าน');assert.ok(war);war.onclick();assert.equal(calls.at(-1),'openWarPanel');}
