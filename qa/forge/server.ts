@@ -36,4 +36,10 @@ server.onShutdown(() => {
   accounts().close();
 });
 await server.listen(port, "127.0.0.1");
+server.transport.server?.on("upgrade", (request: import("node:http").IncomingMessage) => {
+  console.log("Local forge socket upgrade", JSON.stringify({
+    path: new URL(request.url || "/", `http://127.0.0.1:${port}`).pathname,
+    origin: request.headers.origin || "node-sdk",
+  }));
+});
 console.log(`Real forge test server listening on http://127.0.0.1:${port}`);

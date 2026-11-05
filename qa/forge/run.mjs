@@ -8,6 +8,7 @@ import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { chromium } from 'playwright';
+import { Client } from '@colyseus/sdk';
 
 const exec = promisify(execFile), root = path.resolve(process.env.MONTRA_REPO_ROOT || '');
 assert.ok(process.env.MONTRA_REPO_ROOT, 'explicit repository root required');
@@ -15,7 +16,7 @@ const output = path.resolve(process.env.MONTRA_FORGE_ARTIFACTS || path.join(os.t
 const data = await mkdtemp(path.join(os.tmpdir(), 'montra-forge-test-'));
 const fixturePath = path.join(data, 'fixture.json');
 await mkdir(output, { recursive: true });
-const report = { scope: 'Real NPC picking → real enhancement → rendered result → server restart/save', commit: process.env.GITHUB_SHA || 'local', checks: [], blockedOrigins: [], browserErrors: [], console: [], httpErrors: [] };
+const report = { scope: 'Real NPC picking → real enhancement → rendered result → server restart/save', commit: process.env.GITHUB_SHA || 'local', checks: [], blockedOrigins: [], browserErrors: [], console: [], httpErrors: [], socketNetwork: [] };
 const secretPattern = /(?:mt1|ms1|mg1|mr1)_[a-f0-9]{64}/g;
 const clean = value => String(value).replace(secretPattern, '[redacted disposable credential]');
 const log = value => { report.checks.push(value); console.log('PASS:', value); };
@@ -72,6 +73,16 @@ async function stopServer() {
 async function screenshot(name) { await page.screenshot({ path: path.join(output, name + '.png') }); }
 async function enterAndTalk(fixture) {
   page = await context.newPage();
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.enable');
+  cdp.on('Network.webSocketCreated', event => {
+    const url = new URL(event.url);
+    report.socketNetwork.push({ phase: 'created', origin: url.origin, path: url.pathname });
+  });
+  cdp.on('Network.webSocketWillSendHandshakeRequest', () => report.socketNetwork.push({ phase: 'handshake-sent' }));
+  cdp.on('Network.webSocketHandshakeResponseReceived', event => report.socketNetwork.push({ phase: 'handshake-response', status: event.response.status }));
+  cdp.on('Network.webSocketFrameError', event => report.socketNetwork.push({ phase: 'frame-error', error: clean(event.errorMessage) }));
+  cdp.on('Network.webSocketClosed', () => report.socketNetwork.push({ phase: 'closed' }));
   page.setDefaultTimeout(45000);
   page.on('pageerror', error => report.browserErrors.push(clean(error.message)));
   page.on('console', message => {
@@ -80,6 +91,7 @@ async function enterAndTalk(fixture) {
   page.on('response', response => {
     if (response.status() >= 400) report.httpErrors.push({ status: response.status(), path: new URL(response.url()).pathname });
   });
+  page.on('requestfailed', request => report.httpErrors.push({ path: new URL(request.url()).pathname, failure: clean(request.failure()?.errorText) }));
   await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.locator('.account-slot').filter({ hasText: fixture.characterName }).click();
   await page.waitForFunction(() => document.getElementById('modeBadge')?.textContent === 'LIVE' && document.getElementById('accountEntry')?.hidden, null, { timeout: 90000 });
@@ -117,6 +129,17 @@ try {
   const fixture = JSON.parse(await readFile(fixturePath, 'utf8'));
   report.source = { main: sha(await readFile(path.join(root, 'main.js'))), styles: sha(await readFile(path.join(root, 'styles.css'))), babylon: sha(await readFile('libs/babylon.js')), loaders: sha(await readFile('libs/babylonjs.loaders.min.js')) };
   await startServer();
+  // Admission preflight distinguishes a server/fixture problem from browser transport.
+  // It performs no inventory mutation and cannot satisfy the browser forge assertions.
+  const probe = await Promise.race([
+    new Client(backend).joinOrCreate('my_room', { accountSession: fixture.session, characterSlot: fixture.characterSlot,
+      worldVersion: 1, templeVersion: 1, atlasVersion: 1, provinceVersion: 1, warVersion: 1,
+      castleVersion: 2, riverCityVersion: 1, terrainVersion: 1, atlasReliefVersion: 1, originalReliefVersion: 1, monsterAutoAttackVersion: 1 }),
+    sleep(15000).then(() => { throw Error('Real SDK admission preflight timed out'); }),
+  ]);
+  await probe.leave();
+  await sleep(700);
+  log('Real server accepts and releases the disposable account before browser-only forge actions');
   browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, serviceWorkers: 'block' });
   const libraries = {
@@ -146,7 +169,8 @@ try {
     const NativeSocket = window.WebSocket;
     window.WebSocket = new Proxy(NativeSocket, { construct(Target, args) {
       const socket = Reflect.construct(Target, args);
-      const row = { path: new URL(args[0], location.href).pathname, opened: false, received: 0 };
+      const url = new URL(args[0], location.href);
+      const row = { origin: url.origin, path: url.pathname, opened: false, received: 0 };
       window.__forgeSocketObservation.push(row);
       socket.addEventListener('open', () => { row.opened = true; });
       socket.addEventListener('message', () => { row.received++; });
