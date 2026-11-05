@@ -10336,7 +10336,11 @@
   let drawerOpener = null;
   function gateFieldInput(open) {
     for (const child of $("game").children) {
-      if (child !== ui.drawer && child !== ui.shade) child.inert=open;
+      if (child !== ui.drawer && child !== ui.shade &&
+          child.id !== "itemModalBackdrop" && child.id !== "itemDetailModal" &&
+          child.id !== "equipPopupBackdrop" && child.id !== "equipPopup") {
+        child.inert = open;
+      }
     }
   }
   function closeDrawer() {
@@ -12341,7 +12345,6 @@
       backdrop.id = "equipPopupBackdrop";
       backdrop.className = "equip-popup-backdrop";
       backdrop.hidden = true;
-      backdrop.onclick = closeEquipPopup;
       document.body.appendChild(backdrop);
     }
     if (!popup) {
@@ -12354,6 +12357,14 @@
       popup.setAttribute("aria-label", "เลือกอุปกรณ์");
       document.body.appendChild(popup);
     }
+    backdrop.inert = false;
+    popup.inert = false;
+    const bindClose = (el, fn) => {
+      if (!el) return;
+      el.onclick = fn;
+      el.onpointerdown = (e) => { e.stopPropagation(); fn(e); };
+    };
+    bindClose(backdrop, closeEquipPopup);
     return { backdrop, popup };
   }
 
@@ -12361,6 +12372,8 @@
     activeEquipSlot = slotKey;
     selectedCandidateIndex = 0;
     const { backdrop, popup } = ensureEquipPopupElements();
+    backdrop.inert = false;
+    popup.inert = false;
     backdrop.hidden = false;
     popup.hidden = false;
     renderEquipPopupContent(slotKey);
@@ -12489,7 +12502,10 @@
     }
 
     const closeBtn = $("equipPopupClose");
-    if (closeBtn) closeBtn.onclick = closeEquipPopup;
+    if (closeBtn) {
+      closeBtn.onclick = closeEquipPopup;
+      closeBtn.onpointerdown = (e) => { e.stopPropagation(); closeEquipPopup(); };
+    }
 
     const unequipBtn = $("equipPopupUnequip");
     if (unequipBtn) unequipBtn.onclick = () => {
@@ -12893,7 +12909,6 @@
       backdrop.id = "itemModalBackdrop";
       backdrop.className = "item-modal-backdrop";
       backdrop.hidden = true;
-      backdrop.onclick = closeItemDetailModal;
       document.body.appendChild(backdrop);
     }
     if (!modal) {
@@ -12906,12 +12921,24 @@
       modal.setAttribute("aria-label", "ข้อมูลสเตตัสไอเท็ม");
       document.body.appendChild(modal);
     }
+    backdrop.inert = false;
+    modal.inert = false;
+    const bindClose = (el, fn) => {
+      if (!el) return;
+      el.onclick = fn;
+      el.onpointerdown = (e) => { e.stopPropagation(); fn(e); };
+    };
+    bindClose(backdrop, closeItemDetailModal);
+    bindClose($("itemModalClose"), closeItemDetailModal);
+    bindClose($("itemModalCloseBtn"), closeItemDetailModal);
     return { backdrop, modal };
   }
 
   function openItemDetailModal(slotIndex) {
     if (slotIndex !== undefined && slotIndex !== null) selectedBagSlot = slotIndex;
     const { backdrop, modal } = ensureItemDetailModalElements();
+    backdrop.inert = false;
+    modal.inert = false;
     backdrop.hidden = false;
     modal.hidden = false;
     renderBag();
@@ -12970,12 +12997,14 @@
         openItemDetailModal(i);
       };
     }
-    const modalClose = $("itemModalClose");
-    if (modalClose) modalClose.onclick = closeItemDetailModal;
-    const modalCloseBtn = $("itemModalCloseBtn");
-    if (modalCloseBtn) modalCloseBtn.onclick = closeItemDetailModal;
-    const modalBackdrop = $("itemModalBackdrop");
-    if (modalBackdrop) modalBackdrop.onclick = closeItemDetailModal;
+    const bindClose = (el, fn) => {
+      if (!el) return;
+      el.onclick = fn;
+      el.onpointerdown = (e) => { e.stopPropagation(); fn(e); };
+    };
+    bindClose($("itemModalClose"), closeItemDetailModal);
+    bindClose($("itemModalCloseBtn"), closeItemDetailModal);
+    bindClose($("itemModalBackdrop"), closeItemDetailModal);
     const prev = $("bagPrevPage");
     if (prev) prev.onclick = () => setBagPage(bagCurrentPage - 1);
     const next = $("bagNextPage");
