@@ -1,0 +1,64 @@
+name: Verify market catalog browser flow
+
+on:
+  push:
+    paths:
+      - 'qa/market/**'
+      - '.github/workflows/verify-market-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  market-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check marketplace client syntax and contracts
+        run: |
+          node --check main.js
+          node --check qa/market/run.mjs
+          node deploy/combat/market-catalog-ui-test.cjs
+          node deploy/combat/item-display-ui-test.cjs
+      - name: Prepare isolated market runtime
+        shell: bash
+        run: |
+          runtime="$(mktemp -d "$RUNNER_TEMP/montra-market-browser-XXXXXX")"
+          echo "MARKET_RUNTIME=$runtime" >> "$GITHUB_ENV"
+          mkdir -p "$runtime/src/rooms/schema" "$runtime/libs"
+          cp deploy/combat/*.ts "$runtime/src/rooms/"
+          cp deploy/combat/MyRoomState.ts "$runtime/src/rooms/schema/"
+          cp qa/market/seed.ts qa/market/server.ts "$runtime/src/"
+          cp qa/market/package.json qa/market/run.mjs qa/market/product.json "$runtime/"
+          curl --fail --silent --show-error --location https://cdn.babylonjs.com/babylon.js -o "$runtime/libs/babylon.js"
+          curl --fail --silent --show-error --location https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js -o "$runtime/libs/babylonjs.loaders.min.js"
+      - name: Install isolated server and browser dependencies
+        run: |
+          cd "$MARKET_RUNTIME"
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Verify SQLite market behavior
+        run: |
+          cd "$MARKET_RUNTIME"
+          node --import tsx --test src/rooms/central-market.test.ts src/rooms/economy-store.test.ts
+      - name: Sell, browse, confirm, buy and verify restart
+        timeout-minutes: 12
+        env:
+          MONTRA_REPO_ROOT: ${{ github.workspace }}
+          MONTRA_MARKET_ARTIFACTS: ${{ github.workspace }}/market-evidence
+        run: |
+          cd "$MARKET_RUNTIME"
+          node run.mjs
+      - name: Upload sanitized market evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-catalog-browser-${{ github.sha }}
+          path: market-evidence/
+          if-no-files-found: warn
+          retention-days: 7
