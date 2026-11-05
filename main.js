@@ -12396,8 +12396,9 @@
     popup.inert = false;
     const bindClose = (el, fn) => {
       if (!el) return;
-      el.onclick = fn;
-      el.onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); fn(e); };
+      // Dismiss on completed activation so the release cannot click through the removed overlay.
+      el.onpointerdown=null;
+      el.onclick=event=>{event?.preventDefault?.();event?.stopPropagation?.();fn();};
     };
     bindClose(backdrop, closeEquipPopup);
     return { backdrop, popup };
@@ -12537,8 +12538,8 @@
 
     for(const id of ["equipPopupClose","equipPopupCloseBtn","equipPopupBackdrop"]){
       const closeBtn=$(id);if(!closeBtn)continue;
-      closeBtn.onclick=event=>{event?.stopPropagation?.();closeEquipPopup();};
-      closeBtn.onpointerdown=event=>{event.preventDefault();event.stopPropagation();closeEquipPopup();};
+      closeBtn.onpointerdown=null;
+      closeBtn.onclick=event=>{event?.preventDefault?.();event?.stopPropagation?.();closeEquipPopup();};
     }
 
     const unequipBtn = $("equipPopupUnequip");
@@ -12959,8 +12960,9 @@
     modal.inert = false;
     const bindClose = (el, fn) => {
       if (!el) return;
-      el.onclick = fn;
-      el.onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); fn(e); };
+      // Dismiss on completed activation so the release cannot click through the removed overlay.
+      el.onpointerdown=null;
+      el.onclick=event=>{event?.preventDefault?.();event?.stopPropagation?.();fn();};
     };
     bindClose(backdrop, closeItemDetailModal);
     bindClose($("itemModalClose"), closeItemDetailModal);
@@ -13046,8 +13048,9 @@
     }
     const bindClose = (el, fn) => {
       if (!el) return;
-      el.onclick = fn;
-      el.onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); fn(e); };
+      // Dismiss on completed activation so the release cannot click through the removed overlay.
+      el.onpointerdown=null;
+      el.onclick=event=>{event?.preventDefault?.();event?.stopPropagation?.();fn();};
     };
     bindClose($("itemModalClose"), closeItemDetailModal);
     bindClose($("itemModalCloseBtn"), closeItemDetailModal);

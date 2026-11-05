@@ -172,13 +172,14 @@ test('health potion render produces one healing stat card, including legacy fall
   assert.equal([...html.matchAll(/ฟื้นฟูพลังชีวิต/g)].length,1);assert.equal([...html.matchAll(/\+30 HP/g)].length,1);
   delete f.items.potion;f.ctx.renderBag();assert.equal([...f.$('bagPanelStats').html.matchAll(/ฟื้นฟูพลังชีวิต/g)].length,1);
 });
-test('static popups are outside the game gate and pointer close restores focus without mutations',()=>{
+test('static popups close on completed activation without pointer-down click-through',()=>{
   assert(index.indexOf('</main>')<index.indexOf('id="itemDetailModal"'));
   assert(index.indexOf('</main>')<index.indexOf('id="equipPopup"'));
   for(const id of ['itemModalClose','itemModalCloseBtn','itemModalBackdrop']){
     const f=fixture();f.open();f.select(1);const before=f.snapshot();
     const event={preventDefault(){this.prevented=true;},stopPropagation(){this.stopped=true;}};
-    f.$(id).onpointerdown(event);
+    assert.equal(f.$(id).onpointerdown,null,'pointer down must not remove the overlay early');
+    f.$(id).onclick(event);
     assert.equal(event.prevented,true);assert.equal(event.stopped,true);assert.equal(f.modal().hidden,true);
     assert.equal(f.document.activeElement,f.$('bagSlot1'));assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);
     f.$(id).onclick();assert.equal(f.modal().hidden,true,'subsequent click is idempotent');
