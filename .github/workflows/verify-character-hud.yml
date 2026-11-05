@@ -1,0 +1,34 @@
+name: Verify compact character HUD
+on:
+  push:
+    paths:
+      - 'main.js'
+      - 'styles.css'
+      - 'index.html'
+      - 'deploy/combat/character-hud-*.cjs'
+      - '.github/workflows/verify-character-hud.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated browser runner
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Validate helpers and render shipped client
+        run: |
+          node deploy/combat/character-hud-ui-test.cjs
+          node deploy/combat/character-hud-browser-test.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: character-hud-browser-evidence
+          path: hud-browser-evidence
