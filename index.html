@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=0.3.5-artisan-popup-fixed-1" />
+<link rel="stylesheet" href="./styles.css?v=0.3.6-skilltree-popup" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -199,23 +199,56 @@
         </div>
       </div>
 
-      <div class="item-modal-actions" id="bagPanelActions">
-        <div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden>
-          <button type="button" class="secondary"></button>
-          <button type="button" class="secondary"></button>
+<div id="skillPopupBackdrop" class="skill-popup-backdrop" hidden></div>
+  <div id="skillDetailModal" class="skill-detail-modal" hidden role="dialog" aria-modal="true" aria-label="รายละเอียดสกิล">
+    <div class="skill-modal-header">
+      <div class="skill-modal-title">
+        <div class="skill-modal-orb" id="skillModalOrb">
+          <span class="skill-modal-glyph" id="skillModalGlyph">⚔</span>
+          <span class="skill-modal-badge" id="skillModalBadge">Lv.1</span>
         </div>
-        <button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>
-        <button class="secondary" id="itemModalCloseBtn" type="button">ปิด</button>
+        <div class="skill-modal-naming">
+          <strong class="skill-modal-name" id="skillModalName">ชื่อสกิล</strong>
+          <span class="skill-modal-type" id="skillModalType">สกิลกดใช้ (Active)</span>
+        </div>
+      </div>
+      <button type="button" class="skill-modal-close-btn" id="skillModalClose" aria-label="ปิด">✕</button>
+    </div>
 
-        <button class="secondary" id="bagTrack" type="button" hidden></button>
-        <button id="refineResource" type="button" class="secondary" hidden></button>
-        <button id="bagKiln" type="button" class="secondary" hidden></button>
-        <button id="sellBagMaterial" type="button" class="secondary" hidden></button>
-        <button id="salvageGear" type="button" class="secondary" hidden></button>
-        <button class="secondary" id="bagForge" type="button" hidden>ตีบวก / แปรรูปคุณภาพ · ช่างอาคม</button>
-        <button class="secondary" id="bagCraft" type="button">สร้างของ / โต๊ะช่าง · ช่างอาคม</button>
+    <div class="skill-modal-body" id="skillModalBody">
+      <div class="skill-specs-grid" id="skillModalSpecs">
+        <div class="skill-spec-chip"><span class="spec-label">⚡ มานา</span><strong id="skillSpecMana">15 MP</strong></div>
+        <div class="skill-spec-chip"><span class="spec-label">⏱️ คูลดาวน์</span><strong id="skillSpecCooldown">2.5 วิ</strong></div>
+        <div class="skill-spec-chip"><span class="spec-label">🎯 ระยะ</span><strong id="skillSpecRange">2.0 ม.</strong></div>
+      </div>
+
+      <div class="skill-desc-card">
+        <p class="skill-desc-text" id="skillModalDesc"></p>
+      </div>
+
+      <div class="skill-progression-section">
+        <div class="skill-prog-title">สเตตัสและการพัฒนาขั้นวิชา</div>
+        <div class="skill-prog-box current">
+          <div class="prog-tag current">ขั้นปัจจุบัน (<span id="skillProgCurRank">ขั้น 1</span>)</div>
+          <div class="prog-text" id="skillProgCurText">-</div>
+        </div>
+        <div class="skill-prog-box next" id="skillProgNextBox">
+          <div class="prog-tag next">ขั้นถัดไป (<span id="skillProgNextRank">ขั้น 2</span>)</div>
+          <div class="prog-text" id="skillProgNextText">-</div>
+        </div>
+      </div>
+
+      <div class="skill-req-row" id="skillModalReqs">
+        <div class="skill-req-item" id="skillReqLevel">เลเวล 1</div>
+        <div class="skill-req-item" id="skillReqPoints">ใช้ 1 แต้มวิชา</div>
       </div>
     </div>
+
+    <div class="skill-modal-actions">
+      <button class="primary skill-upgrade-btn" id="skillModalUpgradeBtn" type="button">อัปสกิล · 1 แต้ม</button>
+      <button class="secondary" id="skillModalCloseBtn" type="button">ปิด</button>
+    </div>
+  </div>
   <div id="equipPopupBackdrop" class="equip-popup-backdrop" hidden></div>
   <div id="equipPopup" class="equip-popup" hidden role="dialog" aria-modal="true" aria-label="เลือกอุปกรณ์"></div>
   <script src="./account-entry.js?v=rebirth-mastery"></script>
@@ -223,6 +256,6 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
   <script src="./audio.js?v=0.9.10-horse-bright" defer></script>
-  <script src="./main.js?v=0.3.5-artisan-popup-fixed-1" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
+<script src="./main.js?v=0.3.6-skilltree-popup" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>

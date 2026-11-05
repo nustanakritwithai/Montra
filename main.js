@@ -11750,12 +11750,78 @@
     $("resetMuayCore").onclick=()=>{if(window.confirm("คืนแต้มวิชานักมวยทั้งหมด?"))room.send("muay_book",{action:"core_reset"});};
   }
 
+  const DEFAULT_SWORD_CATALOG = {
+    coreLevels: [1, 10, 25, 40, 55, 70, 85, 100],
+    corePointLevels: [1, 5, 10, 15, 20, 30, 45, 60, 75, 90, 100],
+    core: {
+      phuttha_core: {
+        name: "ฟันพุทธไธสวรรย์",
+        description: "เพลงดาบจู่โจมต่อเนื่อง ฟันสามจังหวะทรงพลัง เพิ่มความเสียหายต่อมอนสเตอร์ตามขั้นวิชา",
+        stamina: 8,
+        cooldownMs: 1200,
+        range: 2.2,
+        effect: "strike",
+        power: 1.2
+      },
+      sritra_core: {
+        name: "ตั้งรับศรีตรีงาย",
+        description: "ตั้งกระบี่รับการโจมตี ลดความเสียหายที่ได้รับ และตวัดดาบสวนกลับมอนสเตอร์ทันที",
+        stamina: 10,
+        cooldownMs: 4000,
+        range: 2.0,
+        effect: "parry",
+        power: 0.9
+      },
+      atamat_core: {
+        name: "กวาดอัตมาตย์",
+        description: "ควงกระบี่กวาดฟันรอบกายเป็นวงกว้าง โจมตีศัตรูพร้อมกันสูงสุด 3 ตัว",
+        stamina: 14,
+        cooldownMs: 3500,
+        range: 3.2,
+        effect: "area",
+        power: 1.15
+      },
+      chumphon_core: {
+        name: "ชุมพรคุ้มกัน",
+        description: "ร่ายม่านมนตร์คุ้มกาย เพิ่มพลังป้องกันกายภาพและป้องกันเวทมนตร์ชั่วขณะ",
+        stamina: 16,
+        cooldownMs: 8000,
+        range: 2.0,
+        effect: "ward",
+        power: 0.8
+      }
+    },
+    coreProgress: {
+      0: { phuttha_core: { scale: 1.0, finalPower: 0.65 }, sritra_core: { durationMs: 2000, damageFactor: 0.5, counterPower: 0.8, counterIntervalMs: 1000 }, atamat_core: { range: 3.0, power: 1.0 }, chumphon_core: { defense: 0.15, range: 2.0, durationMs: 6000 } },
+      1: { phuttha_core: { scale: 1.15, finalPower: 0.78 }, sritra_core: { durationMs: 2200, damageFactor: 0.55, counterPower: 0.95, counterIntervalMs: 900 }, atamat_core: { range: 3.2, power: 1.15 }, chumphon_core: { defense: 0.20, range: 2.0, durationMs: 7000 } },
+      2: { phuttha_core: { scale: 1.30, finalPower: 0.92 }, sritra_core: { durationMs: 2400, damageFactor: 0.60, counterPower: 1.10, counterIntervalMs: 800 }, atamat_core: { range: 3.4, power: 1.30 }, chumphon_core: { defense: 0.25, range: 2.0, durationMs: 8000 } },
+      3: { phuttha_core: { scale: 1.45, finalPower: 1.08 }, sritra_core: { durationMs: 2600, damageFactor: 0.65, counterPower: 1.25, counterIntervalMs: 700 }, atamat_core: { range: 3.6, power: 1.45 }, chumphon_core: { defense: 0.30, range: 2.0, durationMs: 9000 } },
+      4: { phuttha_core: { scale: 1.60, finalPower: 1.25 }, sritra_core: { durationMs: 2800, damageFactor: 0.70, counterPower: 1.40, counterIntervalMs: 600 }, atamat_core: { range: 3.8, power: 1.60 }, chumphon_core: { defense: 0.35, range: 2.0, durationMs: 10000 } },
+      5: { phuttha_core: { scale: 1.80, finalPower: 1.45 }, sritra_core: { durationMs: 3000, damageFactor: 0.75, counterPower: 1.60, counterIntervalMs: 500 }, atamat_core: { range: 4.0, power: 1.80 }, chumphon_core: { defense: 0.40, range: 2.0, durationMs: 11000 } },
+      6: { phuttha_core: { scale: 2.00, finalPower: 1.65 }, sritra_core: { durationMs: 3200, damageFactor: 0.80, counterPower: 1.80, counterIntervalMs: 450 }, atamat_core: { range: 4.2, power: 2.00 }, chumphon_core: { defense: 0.45, range: 2.0, durationMs: 12000 } },
+      7: { phuttha_core: { scale: 2.25, finalPower: 1.90 }, sritra_core: { durationMs: 3500, damageFactor: 0.85, counterPower: 2.05, counterIntervalMs: 400 }, atamat_core: { range: 4.5, power: 2.25 }, chumphon_core: { defense: 0.50, range: 2.0, durationMs: 13000 } },
+      8: { phuttha_core: { scale: 2.50, finalPower: 2.20 }, sritra_core: { durationMs: 4000, damageFactor: 0.90, counterPower: 2.30, counterIntervalMs: 350 }, atamat_core: { range: 4.8, power: 2.50 }, chumphon_core: { defense: 0.60, range: 2.0, durationMs: 15000 } }
+    }
+  };
+
+  let demoSwordTreeData = {
+    coreRanks: { phuttha_core: 1, sritra_core: 0, atamat_core: 0, chumphon_core: 0 },
+    learned: ["phuttha_core"],
+    training: { strikes: 12, blocks: 5, finishes: 3 },
+    school: "phuttha"
+  };
   function swordData() {
-    const me=ownServerCharacter();
+    const me = ownServerCharacter() || { characterName: "นที", level: 15, pathId: "phutthaisawan" };
     try {
-      const tree=JSON.parse(me?.swordTreeData || "null"), catalog=JSON.parse(room?.state?.swordTreeCatalog || "null");
-      return tree && catalog ? {me,tree,catalog} : null;
-    } catch { return null; }
+      let tree = null, catalog = null;
+      if (me?.swordTreeData) tree = JSON.parse(me.swordTreeData);
+      if (room?.state?.swordTreeCatalog) catalog = JSON.parse(room.state.swordTreeCatalog);
+      if (!tree) tree = demoSwordTreeData;
+      if (!catalog) catalog = DEFAULT_SWORD_CATALOG;
+      return { me, tree, catalog };
+    } catch {
+      return { me, tree: demoSwordTreeData, catalog: DEFAULT_SWORD_CATALOG };
+    }
   }
 
   function syncSwordStatus(me) {
@@ -11771,7 +11837,7 @@
   }
   function syncSwordTreeButton(me) {
     const button=$("swordTreeButton");
-    button.hidden=!(mode==="live" && me?.pathId==="phutthaisawan" && room?.state?.swordTreeCatalog);
+    button.hidden=!(me?.pathId==="phutthaisawan" || !me);
     if (button.hidden && targetedSkill==="sword") { selectedSwordSkill=""; setTargetedSkill(null); }
   }
 
@@ -12091,37 +12157,334 @@
       skillGraphKey = ""; const body = $(SKILL_BOOKS[kind][0]); if (body) body.innerHTML = ""; SKILL_BOOKS[kind][1]();
     });
   }
+  let activeSkillModalId = null;
+
+  function ensureSkillDetailModalElements() {
+    let backdrop = $("skillPopupBackdrop");
+    let modal = $("skillDetailModal");
+    if (!backdrop) {
+      backdrop = document.createElement("div");
+      backdrop.id = "skillPopupBackdrop";
+      backdrop.className = "skill-popup-backdrop";
+      backdrop.hidden = true;
+      document.body.appendChild(backdrop);
+    }
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "skillDetailModal";
+      modal.className = "skill-detail-modal";
+      modal.hidden = true;
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.setAttribute("aria-label", "รายละเอียดสกิล");
+      document.body.appendChild(modal);
+    }
+    backdrop.inert = false;
+    modal.inert = false;
+
+    const bindClose = (el) => {
+      if (!el) return;
+      el.onclick = closeSkillDetailModal;
+      el.onpointerdown = (e) => { e.stopPropagation(); closeSkillDetailModal(e); };
+      el.ontouchstart = (e) => { e.stopPropagation(); closeSkillDetailModal(e); };
+    };
+    bindClose(backdrop);
+    bindClose($("skillModalClose"));
+    bindClose($("skillModalCloseBtn"));
+
+    return { backdrop, modal };
+  }
+
+  function openSkillDetailModal(skillId) {
+    activeSkillModalId = skillId;
+    const { backdrop, modal } = ensureSkillDetailModalElements();
+    backdrop.inert = false;
+    modal.inert = false;
+    backdrop.hidden = false;
+    backdrop.style.display = "block";
+    modal.hidden = false;
+    modal.style.display = "flex";
+
+    renderSkillModalContent(skillId);
+  }
+
+  function closeSkillDetailModal(e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    activeSkillModalId = null;
+    const backdrop = $("skillPopupBackdrop");
+    const modal = $("skillDetailModal");
+    if (backdrop) { backdrop.hidden = true; backdrop.style.display = "none"; }
+    if (modal) { modal.hidden = true; modal.style.display = "none"; }
+  }
+
+  function renderSkillModalContent(skillId) {
+    const data = swordData();
+    if (!data?.catalog?.core) return;
+    const { me, tree, catalog } = data;
+    const node = catalog.core[skillId];
+    if (!node) return;
+
+    const ranks = tree.coreRanks || {};
+    const rank = Number(ranks[skillId] || 0);
+    const levels = catalog.coreLevels || [1, 10, 25, 40, 55, 70, 85, 100];
+    const pointLevels = catalog.corePointLevels || [1, 5, 10, 15, 20, 30, 45, 60, 75, 90, 100];
+    const maxRank = levels.length;
+    const nextLv = levels[rank];
+    const lvNow = skillLearningLevel(me) || 1;
+    const points = pointLevels.filter(lvl => lvNow >= lvl).length;
+    const spent = Object.values(ranks).reduce((sum, v) => sum + Number(v || 0), 0);
+    const availablePoints = Math.max(0, points - spent);
+
+    const fmt = n => String(Math.round(n * 100) / 100);
+    const describe = (id, r) => {
+      const p = catalog.coreProgress?.[r]?.[id];
+      if (!p) return "";
+      if (id === "phuttha_core") return "ฟันต่อเนื่อง 3 จังหวะ · สเกลพลัง " + Math.round((p.scale || 1) * 100) + "% · ดอกสุดท้าย " + Math.round((p.finalPower || 0.6) * 100) + "%";
+      if (id === "sritra_core") return "ตั้งรับ " + fmt((p.durationMs || 2000) / 1000) + " วิ · ลดดาเมจ " + Math.round((1 - (p.damageFactor || 0.5)) * 100) + "% · สวนกลับ " + Math.round((p.counterPower || 0.8) * 100) + "%";
+      if (id === "atamat_core") return "กวาดมอนรอบตัวสูงสุด 3 ตัว · ระยะ " + fmt(p.range || 3) + " ม. · พลัง " + Math.round((p.power || 1) * 100) + "%";
+      return "ม่านมนตร์คุ้มกาย · เพิ่มป้องกัน " + Math.round((p.defense || 0.15) * 100) + "% · ระยะ " + fmt(p.range || 2) + " ม. · นาน " + fmt((p.durationMs || 6000) / 1000) + " วิ";
+    };
+
+    const skillGlyphs = {
+      phuttha_core: "⚔️",
+      sritra_core: "🛡️",
+      atamat_core: "🌪️",
+      chumphon_core: "⛨"
+    };
+
+    if ($("skillModalName")) $("skillModalName").textContent = node.name;
+    if ($("skillModalGlyph")) $("skillModalGlyph").textContent = skillGlyphs[skillId] || "✦";
+    if ($("skillModalBadge")) $("skillModalBadge").textContent = rank > 0 ? "ขั้น " + rank + "/" + maxRank : "ยังไม่เรียน";
+    if ($("skillModalType")) $("skillModalType").textContent = node.effect === "passive" ? "วิชาติดตัว (Passive)" : "วิชากดใช้ (Active)";
+
+    const cost = (node.stamina || 8) + rank;
+    if ($("skillSpecMana")) $("skillSpecMana").textContent = cost + " MP";
+    if ($("skillSpecCooldown")) $("skillSpecCooldown").textContent = ((node.cooldownMs || 1000) / 1000) + " วิ";
+    if ($("skillSpecRange")) $("skillSpecRange").textContent = (node.range || 2) + " เมตร";
+
+    if ($("skillModalDesc")) $("skillModalDesc").textContent = node.description || "";
+
+    const curDesc = rank > 0 ? describe(skillId, rank) : "ยังไม่ได้อัปเกรดวิชานี้ (ใช้พลังพื้นฐาน)";
+    if ($("skillProgCurRank")) $("skillProgCurRank").textContent = rank > 0 ? "ขั้น " + rank : "ยังไม่เรียน";
+    if ($("skillProgCurText")) $("skillProgCurText").textContent = curDesc;
+
+    const nextBox = $("skillProgNextBox");
+    if (nextBox) {
+      if (rank < maxRank) {
+        nextBox.hidden = false;
+        if ($("skillProgNextRank")) $("skillProgNextRank").textContent = "ขั้น " + (rank + 1);
+        if ($("skillProgNextText")) $("skillProgNextText").textContent = describe(skillId, rank + 1) + " · ใช้มานา " + (cost + 1) + " MP";
+      } else {
+        nextBox.hidden = true;
+      }
+    }
+
+    const reqLevelEl = $("skillReqLevel");
+    const reqPointsEl = $("skillReqPoints");
+    const levelOk = !nextLv || lvNow >= nextLv;
+    const pointsOk = availablePoints > 0;
+    const isMax = rank >= maxRank;
+
+    if (reqLevelEl) {
+      if (isMax) {
+        reqLevelEl.textContent = "✓ บรรลุขั้นสูงสุดแล้ว";
+        reqLevelEl.className = "skill-req-item ok";
+      } else {
+        reqLevelEl.textContent = (levelOk ? "✓ " : "✗ ") + "ต้องการเลเวล " + nextLv + (levelOk ? "" : " (เลเวลยังไม่ถึง)");
+        reqLevelEl.className = "skill-req-item " + (levelOk ? "ok" : "no");
+      }
+    }
+
+    if (reqPointsEl) {
+      if (isMax) {
+        reqPointsEl.hidden = true;
+      } else {
+        reqPointsEl.hidden = false;
+        reqPointsEl.textContent = (pointsOk ? "✓ " : "✗ ") + "ใช้ 1 แต้มวิชา (มี " + availablePoints + " แต้ม)";
+        reqPointsEl.className = "skill-req-item " + (pointsOk ? "ok" : "no");
+      }
+    }
+
+    const upBtn = $("skillModalUpgradeBtn");
+    if (upBtn) {
+      if (isMax) {
+        upBtn.disabled = true;
+        upBtn.textContent = "บรรลุขั้นสูงสุดแล้ว";
+      } else if (!levelOk) {
+        upBtn.disabled = true;
+        upBtn.textContent = "ต้องการเลเวล " + nextLv;
+      } else if (!pointsOk) {
+        upBtn.disabled = true;
+        upBtn.textContent = "แต้มวิชาไม่พอ";
+      } else {
+        upBtn.disabled = false;
+        upBtn.textContent = "อัปสกิล · 1 แต้ม (ขึ้นเป็นขั้น " + (rank + 1) + ")";
+        upBtn.onclick = () => {
+          SFX("equip");
+          if (room && typeof room.send === "function" && mode === "live") {
+            try { room.send("sword_core_book", { action: "upgrade", skillId }); } catch (_) {}
+            try { room.send("sword_tree_upgrade", { skillId }); } catch (_) {}
+          } else {
+            demoSwordTreeData.coreRanks[skillId] = (demoSwordTreeData.coreRanks[skillId] || 0) + 1;
+            renderSkillModalContent(skillId);
+            renderSwordTree();
+            toast("อัปเกรด " + node.name + " เป็นขั้น " + (rank + 1) + " สำเร็จ!");
+          }
+        };
+      }
+    }
+  }
+
   function openSwordTree() {
-    const data=swordData();
-    if (!data || data.me.pathId!=="phutthaisawan") { toast("เลือกอาชีพนักดาบก่อนเรียนวิชา"); return; }
-    swordTreeRenderKey="";
-    swordTreeViewedSchool=data.tree.school;
-    skillGraphKey="";openDrawer("swordTree","สกิล",skillBookShell("sword"));wireSkillBook("sword");
+    const data = swordData();
+    if (!data) { toast("เลือกอาชีพนักดาบก่อนเรียนวิชา"); return; }
+    swordTreeRenderKey = "";
+    swordTreeViewedSchool = data.tree.school || "phuttha";
+    skillGraphKey = "";
+    openDrawer("swordTree", "ผังวิชาดาบ (Skill Tree)", '<div id="swordTreeBody"></div>');
     renderSwordTree();
   }
+
   function renderSwordTree() {
-    const data=swordData(),container=$("swordTreeBody");
-    if(!data?.catalog?.core || !container)return;
-    const {me,tree,catalog}=data,ranks=tree.coreRanks || {};
-    const key=me.level+"|"+me.swordTreeData;
-    if(key===swordTreeRenderKey)return;swordTreeRenderKey=key;
-    const points=(catalog.corePointLevels || []).filter(level=>skillLearningLevel(me)>=level).length;
-    const spent=Object.values(ranks).reduce((sum,value)=>sum+Number(value||0),0),levels=catalog.coreLevels;
-    const fmt=n=>String(Math.round(n*100)/100);
-    const describe=(id,rank)=>{
-      const p=catalog.coreProgress?.[rank]?.[id];if(!p)return "";
-      if(id==="phuttha_core")return "ฟันมอน "+[.36,.46,p.finalPower].map(n=>Math.round(n*p.scale*100)+"%").join(" + ");
-      if(id==="sritra_core")return "ตั้งรับ "+fmt(p.durationMs/1000)+" วิ · ลดดาเมจ "+Math.round((1-p.damageFactor)*100)+"% · สวนมอน "+Math.round(p.counterPower*100)+"% · สวนซ้ำทุก "+fmt(p.counterIntervalMs/1000)+" วิ";
-      if(id==="atamat_core")return "กวาดมอนสูงสุด 3 ตัว · ระยะ "+fmt(p.range)+" · พลัง "+Math.round(p.power*100)+"%";
-      return "เพิ่มป้องกัน "+Math.round(p.defense*100)+"% · ระยะ "+fmt(p.range)+" · นาน "+fmt(p.durationMs/1000)+" วิ";
+    const data = swordData(), container = $("swordTreeBody");
+    if (!data?.catalog?.core || !container) return;
+    const { me, tree, catalog } = data;
+    const ranks = tree.coreRanks || {};
+    const lvNow = skillLearningLevel(me) || 1;
+    const levels = catalog.coreLevels || [1, 10, 25, 40, 55, 70, 85, 100];
+    const pointLevels = catalog.corePointLevels || [1, 5, 10, 15, 20, 30, 45, 60, 75, 90, 100];
+    const points = pointLevels.filter(lvl => lvNow >= lvl).length;
+    const spent = Object.values(ranks).reduce((sum, v) => sum + Number(v || 0), 0);
+    const availablePoints = Math.max(0, points - spent);
+
+    const branches = [
+      {
+        id: "offensive",
+        title: "สายจู่โจมเพลงดาบ (Offense)",
+        glyph: "⚔️",
+        skills: ["phuttha_core", "atamat_core"]
+      },
+      {
+        id: "defensive",
+        title: "สายตั้งรับและคุ้มกัน (Defense)",
+        glyph: "🛡️",
+        skills: ["sritra_core", "chumphon_core"]
+      }
+    ];
+
+    const skillGlyphs = {
+      phuttha_core: "⚔️",
+      sritra_core: "🛡️",
+      atamat_core: "🌪️",
+      chumphon_core: "⛨"
     };
-    container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+catalog.corePointLevels.length+' แต้ม เลือกพัฒนาสกิลที่ถนัด</p><p class="note">ทั้ง 4 ท่าใช้ได้พร้อมกัน · อัปได้ถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก · สวมกระบี่อาคมเพื่อใช้วิชา</p>'+
-      Object.entries(catalog.core).map(([id,node])=>{
-        const rank=Number(ranks[id]||0),next=levels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+levels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>ใช้มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-sword-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
-      }).join("")+'<p class="note">โบนัสพลังโจมตีจากขั้นใช้กับมอน · PvP ใช้พลังพื้นฐาน ส่วนการตั้งรับและคุ้มกันเพิ่มตามขั้น · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetSwordCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
-    container.querySelectorAll("[data-sword-core-upgrade]").forEach(button=>button.onclick=()=>room.send("sword_core_book",{action:"upgrade",skillId:button.dataset.swordCoreUpgrade}));
-    $("resetSwordCore").onclick=()=>{if(window.confirm("คืนแต้มวิชานักดาบทั้งหมด?"))room.send("sword_core_book",{action:"reset"});};
+
+    let branchesHtml = "";
+    for (const b of branches) {
+      const cardsHtml = b.skills.map(id => {
+        const node = catalog.core[id];
+        if (!node) return "";
+        const rank = Number(ranks[id] || 0);
+        const maxRank = levels.length;
+        const nextLv = levels[rank];
+        const isLearned = rank > 0;
+        const isMax = rank >= maxRank;
+        const isReady = !isMax && lvNow >= nextLv && availablePoints > 0;
+        const isLocked = !isLearned && !isReady;
+
+        const stateCls = isReady ? "ready" : isLearned ? "learned" : "locked";
+        const glyph = skillGlyphs[id] || "✦";
+        const pipsHtml = Array.from({ length: maxRank }, (_, i) => `<i class="${i < rank ? "on" : ""}"></i>`).join("");
+
+        return `
+          <div class="st-skill-card ${stateCls}" data-skill-id="${id}" role="button" tabindex="0" aria-label="${node.name}">
+            <div class="st-card-orb">
+              <span>${glyph}</span>
+              ${rank > 0 ? `<span class="st-card-rank-badge">+${rank}</span>` : ""}
+            </div>
+            <strong class="st-card-name">${node.name}</strong>
+            <span style="font-size:10px;color:#d1b67b;">ขั้น ${rank}/${maxRank}</span>
+            <div class="st-card-pips">${pipsHtml}</div>
+            <span class="st-card-click-hint">${isReady ? "✦ แตะเพื่ออัปเกรด" : "แตะดูรายละเอียด"}</span>
+          </div>
+        `;
+      }).join("");
+
+      branchesHtml += `
+        <div class="st-branch">
+          <div class="st-branch-title">
+            <span>${b.glyph} ${b.title}</span>
+            <small style="color:#d1b67b;font-weight:normal;">2 สกิลในสาย</small>
+          </div>
+          <div class="st-branch-grid">
+            ${cardsHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    container.innerHTML = `
+      <div class="st-container">
+        <!-- Top Class Banner -->
+        <div class="st-header-banner">
+          <div class="st-header-left">
+            <span class="st-header-crest">⚔</span>
+            <div class="st-header-info">
+              <strong class="st-header-title">วิชาดาบพุทธไธสวรรย์</strong>
+              <span class="st-header-sub">นักดาบอยุธยา · เลเวล ${lvNow}</span>
+            </div>
+          </div>
+          <div class="st-points-box">
+            <span class="st-points-num">${availablePoints}</span>
+            <span class="st-points-label">แต้มวิชา</span>
+          </div>
+        </div>
+
+        <p class="note" style="margin:2px 0;font-size:11px;color:#c7b28a;text-align:center;">
+          แต้มวิชาสะสมตามเลเวลตัวละคร · แตะที่ไอคอนเพื่อดูรายละเอียดและอัปเกรด
+        </p>
+
+        <!-- Skill Tree Branches -->
+        <div class="st-tree-board">
+          ${branchesHtml}
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="st-footer-actions">
+          <button type="button" class="secondary" id="stResetBtn" ${spent > 0 ? "" : "disabled"} style="width:100%;">คืนแต้มวิชาทั้งหมด (${spent} แต้ม)</button>
+          <p class="note" style="font-size:10px;color:#8f9e9d;margin:0;">จัดแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · สวมกระบี่อาคมเพื่อใช้วิชา</p>
+        </div>
+      </div>
+    `;
+
+    // Bind card clicks to open popup
+    container.querySelectorAll(".st-skill-card").forEach(card => {
+      card.onclick = () => {
+        const skillId = card.dataset.skillId;
+        if (skillId) {
+          SFX("tap");
+          openSkillDetailModal(skillId);
+        }
+      };
+    });
+
+    // Bind reset
+    const resetBtn = $("stResetBtn");
+    if (resetBtn) {
+      resetBtn.onclick = () => {
+        if (!window.confirm("ต้องการคืนแต้มวิชาทั้งหมดหรือไม่?")) return;
+        if (room && typeof room.send === "function" && mode === "live") {
+          try { room.send("sword_core_book", { action: "reset" }); } catch (_) {}
+          try { room.send("sword_tree_reset", {}); } catch (_) {}
+        } else {
+          for (const k of Object.keys(demoSwordTreeData.coreRanks)) {
+            demoSwordTreeData.coreRanks[k] = 0;
+          }
+          toast("คืนแต้มวิชาเรียบร้อยแล้ว");
+          renderSwordTree();
+        }
+      };
+    }
   }
   function ancestryHint(player) {
     const map = worldDefinitions?.[player.mapId];
@@ -14915,8 +15278,9 @@
   $("menuQuest").onclick=openCurrentQuest;
   $("menuGuild").onclick=openGuild;
   $("quickSkills").onclick=()=>{
-    const entry=$("fieldMenu").querySelector(".book-entry:not([hidden])");
-    if(entry)entry.click();
+    const entry=$("fieldMenu")?.querySelector(".book-entry:not([hidden])");
+    if(entry) entry.click();
+    else openSwordTree();
   };
   $("mapButton").onclick=openMap;
   $("chatButton").onclick=openChat;
