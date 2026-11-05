@@ -13,7 +13,7 @@ function $(key){
 const config={chances:Array(10),maxMisses:3,rerollCost:60,enhanceSteps:Array(10)};
 config.enhanceSteps[3]={copies:2,gold:48,chance:80,downgradeChance:20,breakChance:0,breakOnFailure:false};
 config.enhanceSteps[9]={copies:4,gold:120,chance:40,downgradeChance:40,breakChance:20,breakOnFailure:true};
-const ctx={$,room:{state:{forgeCatalog:JSON.stringify(config)}},bagMeta:()=>meta,economyReady:()=>true,
+const ctx={$,renderItemPreview(){},room:{state:{forgeCatalog:JSON.stringify(config)}},bagMeta:()=>meta,economyReady:()=>true,
   forgePageTarget:0,renderForgePage:()=>draw(piece),inventoryState:{forgeCopies:stock},currentBagSlots:()=>slots,inspectingGear:null,selectedBagSlot:0,currentEquippedWeaponSlot:()=>0,
   gearStamp:()=>id,forgeLabel:()=>"",Option:class {constructor(text,value){Object.assign(this,{text,value});}},
   bindItemHuntButton:(...args)=>goals.push(args),itemHuntCount:(_id,include)=>include?2+stock[id]:0,

@@ -12,7 +12,7 @@ const piece={itemId:id,quantity:1,forge:forged('sword')};
 const inventory={slots:[piece,{itemId:id,quantity:1,forge:forged('donor',0)},null,...Array(9).fill(null)],equippedWeaponSlot:0,equipment:{leftRing:ring,rightRing:ring},equipmentForges:{leftRing:forged('left'),rightRing:forged('right')},equipmentSockets:{leftRing:'card'},forgeCopies:{[id]:8,[ring]:4}};
 const config={chances:Array(10).fill(100),rerollCost:60,rareAfter:4,claimCopies:true,enhanceSteps:Array.from({length:10},(_,rank)=>({copies:1+Math.floor(rank/3),gold:12*(rank+1),chance:rank>4?78:100,downgradeChance:rank>4?20:0,breakChance:rank>4?2:0,breakOnFailure:rank>4}))};
 const me={alive:true,level:25,persistent:true};let ready=true,accepted=false;
-const ctx={$,Option:class{constructor(text,value){Object.assign(this,{text,value});}},inventoryState:inventory,room:{state:{forgeCatalog:JSON.stringify(config)}},drawerActive:null,
+const ctx={$,renderItemTile(){},renderItemPreview(){},Option:class{constructor(text,value){Object.assign(this,{text,value});}},inventoryState:inventory,room:{state:{forgeCatalog:JSON.stringify(config)}},drawerActive:null,
   economyReady:()=>ready,currentBagSlots:()=>inventory.slots,currentEquippedWeaponSlot:()=>inventory.equippedWeaponSlot,
   bagMeta:id=>metadata[id],personalItems:metadata,WEAPON_META:{},bodyLabels:{leftRing:'แหวนซ้าย',rightRing:'แหวนขวา'},forgeNames:{melee:'โจมตีประชิด',guard:'ป้องกันมอนสเตอร์'},
   ownServerCharacter:()=>me,economyPending:false,itemUsePending:false,economyGold:1000,selectedBagSlot:0,inspectingGear:null,benchTrail:[],
@@ -60,9 +60,9 @@ assert.equal(ctx.economyPending,false);assert.equal($('forgeGear').value,'bag:2'
 // Legacy first-forge identity acquisition remains selected, then protects its new identity.
 inventory.slots[0]={itemId:id,quantity:1};run('openForgePage("enhance",0)');inventory.slots[0].forge=forged('new');run('renderForgePage()');assert.equal($('forgeGear').value,'bag:0');
 inventory.slots[0].forge=forged('other');run('renderForgePage()');assert.equal($('forgeGear').value,'');
-// Recipe/card routes restore the exact selected slot/side in the existing bag.
+// Card routes retain the exact body target; recipes now use the dedicated crafting route.
 run('openForgePage("enhance","leftRing")');$('forgeCardHelp').onclick();assert.equal(ctx.drawerActive,'bag');assert.equal(ctx.inspectingGear,'leftRing');assert.equal($('cardSocketPanel').scrolled,true);
-run('openForgePage("enhance",1)');$('forgeCopyRecipe').onclick();assert.equal(routes.at(-2),'bag');assert.equal(routes.at(-1)[2],id);assert.equal(ctx.selectedBagSlot,1);
+run('openForgePage("enhance",1)');const recipeRoutes=routes.length;$('forgeCopyRecipe').onclick();assert.equal(routes.length,recipeRoutes+1);assert.deepEqual(routes.at(-1),['all','25',id]);
 // Disconnect, room replacement and unsupported servers cannot retain actionable controls.
 run('openForgePage("enhance",1)');ready=false;run('renderForgePage()');assert.equal($('forgeGear').disabled,true);assert.equal($('forgePanel').hidden,true);assert.equal($('forgeStock').hidden,true);
 ready=true;run('openForgePage("enhance",1)');ctx.room={state:{forgeCatalog:JSON.stringify(config)}};run('renderForgePage()');assert.equal($('forgeGear').value,'');
