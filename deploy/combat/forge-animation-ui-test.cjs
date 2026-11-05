@@ -6,9 +6,18 @@ const styles=fs.readFileSync(path.join(__dirname,'../../styles.css'),'utf8');
 function slice(start,end){const a=source.indexOf(start),b=source.indexOf(end,a);assert(a>=0&&b>a,`production boundaries: ${start} / ${end}`);return source.slice(a,b);}
 function fakeClock(){let now=0,sequence=0;const timers=new Map();return {now:()=>now,timers,setTimeout(fn,delay=0){const id=++sequence;timers.set(id,{at:now+Number(delay),fn});return id;},clearTimeout(id){timers.delete(id);},advance(ms){const end=now+ms;let runs=0;while(true){const next=[...timers].filter(([,timer])=>timer.at<=end).sort((a,b)=>a[1].at-b[1].at||a[0]-b[0])[0];if(!next)break;assert(++runs<10000,'finite timer queue');now=next[1].at;timers.delete(next[0]);next[1].fn();}now=end;}};}
 function element(){const classes=new Set();return {hidden:false,disabled:false,textContent:'',value:'',dataset:{},attributes:{},open:false,children:[],style:{},classList:{add(...names){names.forEach(name=>classes.add(name));},remove(...names){names.forEach(name=>classes.delete(name));},toggle(name,on){if(on??!classes.has(name))classes.add(name);else classes.delete(name);},contains:name=>classes.has(name)},setAttribute(name,value){this.attributes[name]=String(value);},removeAttribute(name){delete this.attributes[name];},getAttribute(name){return this.attributes[name];},scrollIntoView(){this.scrolled=true;},close(){this.open=false;},focus(){this.focused=true;},getClientRects(){return this.hidden?[]:[{}];}};}
-function harness({reduced=false,confirm=true,throwSend=false}={}){
+function harness({reduced=false,confirm=true,throwSend=false,animationEnd=true}={}){
   const clock=fakeClock(),elements=new Map(),sent=[],toasts=[],callbacks={},renders=[];
-  const $=id=>{if(!elements.has(id))elements.set(id,element());return elements.get(id);};
+  const $=id=>{if(!elements.has(id)){
+    const node=element();elements.set(id,node);
+    if(id==='forgeHammerMotion'){
+      const toggle=node.classList.toggle;
+      node.classList.toggle=(name,on)=>{const prior=node.classList.contains(name);toggle(name,on);
+        // Model only the browser's finite CSS end event; product owns all state.
+        if(animationEnd && name==='is-striking' && on && !prior)clock.setTimeout(()=>{if(node.classList.contains(name))$('forgeHammer').onanimationend?.({animationName:'forge-hammer-strike'});},1080);
+      };
+    }
+  }return elements.get(id);};
   const item={itemId:'test_sword',quantity:1,forge:{instanceId:'sword',revision:2,rank:5}};
   const inventory={slots:[item],forgeCopies:{test_sword:3}};
   const meta={name:'ดาบทดสอบ',kind:'mainHand',level:1,forge:{primary:'melee',enhanceRatings:{6:42}},recipe:[{item:'metal',qty:1}]};
@@ -141,6 +150,16 @@ for(const reply of ['craft_result','forge_copy_claimed'])for(const failure of ['
 // Disconnect / room replacement forgets visual ownership and old results.
 {
   const h=setup();start(h);h.ctx.room={state:{}};h.ctx.renderForgePage();wire(h,result(h));h.clock.advance(10000);assert.equal(h.run('forgeAnimationBusy()'),false);assert.equal(h.toasts.length,0);
+}
+// Slow/missing compositor completion never reveals early; bounded fallback cannot trap the result.
+{
+  const h=setup({animationEnd:false});start(h);wire(h,result(h));h.clock.advance(1260);
+  assert.equal(h.run('forgeAnimationBusy()'),true);assert.equal(h.toasts.length,0);assert.equal(h.$('forgeHammerMotion').hidden,false);
+  h.clock.advance(700);h.$('forgeHammer').onanimationend({animationName:'forge-hammer-strike'});
+  assert.equal(h.run('forgeAnimationBusy()'),false);assert.match(h.toasts.at(-1),/ตีบวกสำเร็จ/);
+}
+{
+  const h=setup({animationEnd:false});start(h);wire(h,result(h));h.clock.advance(4999);assert.equal(h.toasts.length,0);h.clock.advance(1);assert.match(h.toasts.at(-1),/ตีบวกสำเร็จ/);assert.equal(h.run('forgeAnimationBusy()'),false);
 }
 // Reduced motion has no forced delay, but still waits for the server.
 {
