@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=0.3.5-popup-perfect" />
+  <link rel="stylesheet" href="./styles.css?v=0.3.6-skilltree-popup" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -242,6 +242,57 @@
     </div>
   </div>
 
+  <div id="skillPopupBackdrop" class="skill-popup-backdrop" hidden></div>
+  <div id="skillDetailModal" class="skill-detail-modal" hidden role="dialog" aria-modal="true" aria-label="รายละเอียดสกิล">
+    <div class="skill-modal-header">
+      <div class="skill-modal-title">
+        <div class="skill-modal-orb" id="skillModalOrb">
+          <span class="skill-modal-glyph" id="skillModalGlyph">⚔</span>
+          <span class="skill-modal-badge" id="skillModalBadge">Lv.1</span>
+        </div>
+        <div class="skill-modal-naming">
+          <strong class="skill-modal-name" id="skillModalName">ชื่อสกิล</strong>
+          <span class="skill-modal-type" id="skillModalType">สกิลกดใช้ (Active)</span>
+        </div>
+      </div>
+      <button type="button" class="skill-modal-close-btn" id="skillModalClose" aria-label="ปิด">✕</button>
+    </div>
+
+    <div class="skill-modal-body" id="skillModalBody">
+      <div class="skill-specs-grid" id="skillModalSpecs">
+        <div class="skill-spec-chip"><span class="spec-label">⚡ มานา</span><strong id="skillSpecMana">15 MP</strong></div>
+        <div class="skill-spec-chip"><span class="spec-label">⏱️ คูลดาวน์</span><strong id="skillSpecCooldown">2.5 วิ</strong></div>
+        <div class="skill-spec-chip"><span class="spec-label">🎯 ระยะ</span><strong id="skillSpecRange">2.0 ม.</strong></div>
+      </div>
+
+      <div class="skill-desc-card">
+        <p class="skill-desc-text" id="skillModalDesc"></p>
+      </div>
+
+      <div class="skill-progression-section">
+        <div class="skill-prog-title">สเตตัสและการพัฒนาขั้นวิชา</div>
+        <div class="skill-prog-box current">
+          <div class="prog-tag current">ขั้นปัจจุบัน (<span id="skillProgCurRank">ขั้น 1</span>)</div>
+          <div class="prog-text" id="skillProgCurText">-</div>
+        </div>
+        <div class="skill-prog-box next" id="skillProgNextBox">
+          <div class="prog-tag next">ขั้นถัดไป (<span id="skillProgNextRank">ขั้น 2</span>)</div>
+          <div class="prog-text" id="skillProgNextText">-</div>
+        </div>
+      </div>
+
+      <div class="skill-req-row" id="skillModalReqs">
+        <div class="skill-req-item" id="skillReqLevel">เลเวล 1</div>
+        <div class="skill-req-item" id="skillReqPoints">ใช้ 1 แต้มวิชา</div>
+      </div>
+    </div>
+
+    <div class="skill-modal-actions">
+      <button class="primary skill-upgrade-btn" id="skillModalUpgradeBtn" type="button">อัปสกิล · 1 แต้ม</button>
+      <button class="secondary" id="skillModalCloseBtn" type="button">ปิด</button>
+    </div>
+  </div>
+
   <div id="equipPopupBackdrop" class="equip-popup-backdrop" hidden></div>
   <div id="equipPopup" class="equip-popup" hidden role="dialog" aria-modal="true" aria-label="เลือกอุปกรณ์"></div>
 
@@ -250,6 +301,6 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
   <script src="./audio.js?v=0.9.10-horse-bright" defer></script>
-  <script src="./main.js?v=0.3.5-popup-perfect" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
+  <script src="./main.js?v=0.3.6-skilltree-popup" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>
