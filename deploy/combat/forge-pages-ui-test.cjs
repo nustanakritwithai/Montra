@@ -75,12 +75,14 @@ assert.match(source,/smith:"character",forge:"character"/);
 const bagCode=slice('  function openBag()','  function updateFieldAlerts()');assert(!bagCode.includes('id="forgePanel"'));assert(!bagCode.includes('id="forgeStock"'));assert(bagCode.includes('id="bagForge"'));
 // Both the paperdoll character tab and the bag use one shared shortcut binder.
 const profileCode=slice('  function openCharacterProfile()','  // Taps on any game button');
-assert(!profileCode.includes('id="forgePanel"'));assert(!profileCode.includes('id="forgeStock"'));assert(profileCode.includes('id="bagForge"'));
+assert(!profileCode.includes('id="forgePanel"'));assert(!profileCode.includes('id="forgeStock"'));assert(profileCode.includes('id="cpForge"'));
 assert.equal([...source.matchAll(/function submitForge\(/g)].length,1);
-const shortcut={},opened=[],binder={$:id=>id==='bagForge'?shortcut:null,INVENTORY_SLOTS:0,bodyLabels:{},inspectingGear:'leftRing',selectedBagSlot:3,
-  currentEquippedWeaponSlot:()=>4,openForgePage:(...args)=>opened.push(args),journeyNotesForPlayer:()=>({}),economyReady:()=>false};
+const shortcut={},workshop={},opened=[],binder={drawerActive:"bag",BAG_PAGE_SIZE:0,BAG_TOTAL_PAGES:0,ui:{drawerBody:{querySelectorAll:()=>[]}},$:id=>id==='bagForge'?shortcut:id==='cpForge'?workshop:null,INVENTORY_SLOTS:0,bodyLabels:{},inspectingGear:'leftRing',selectedBagSlot:3,
+  currentEquippedWeaponSlot:()=>4,openForgePage:(...args)=>opened.push(args),openSmith:()=>opened.push("smith"),journeyNotesForPlayer:()=>({}),economyReady:()=>false};
 vm.runInNewContext(slice('  function bindBagControls()','  function renderBag()')+'\nbindBagControls()',binder);
 shortcut.onclick();assert.deepEqual(opened.at(-1),['enhance','leftRing']);binder.inspectingGear='mainHand';shortcut.onclick();assert.deepEqual(opened.at(-1),['enhance',4]);binder.inspectingGear=null;shortcut.onclick();assert.deepEqual(opened.at(-1),['enhance',3]);
+binder.drawerActive="character";vm.runInNewContext(slice('  function bindBagControls()','  function renderBag()')+'\nbindBagControls()',binder);workshop.onclick();assert.equal(opened.at(-1),"smith");
+assert.match(source,/closeEquipPopup\(\); openForgePage\("enhance", target\)/);
 // Real pending timeout sends only read requests and refreshes the open item view.
 let timeout,refreshes=0;const wire=[];
 const pending={economyPending:false,economyTimer:null,economyReady:()=>true,room:{send:(command,payload)=>wire.push({command,payload})},centralMarketVersion:0,

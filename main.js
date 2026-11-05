@@ -10342,6 +10342,7 @@
   function closeDrawer() {
     if(ui.drawer.hidden)return;
     SFX("close");
+    try { closeEquipPopup(); } catch (_) {}
     ui.drawer.hidden=true; ui.shade.hidden=true; drawerActive=null;
     gateFieldInput(false);
     const target=drawerOpener?.isConnected && drawerOpener.getClientRects().length ? drawerOpener : $("fieldMenuButton");
@@ -12288,6 +12289,300 @@
     $("cpKills").innerHTML = kills.join("") || '<p class="note">ยังไม่ได้ปราบผีในรอบนี้</p>';
   }
 
+  let activeEquipSlot = null;
+  let selectedCandidateIndex = 0;
+  let bagCategoryFilter = "all";
+  let bagCurrentPage = 0;
+  const BAG_PAGE_SIZE = 36;
+  const BAG_TOTAL_PAGES = 3;
+
+  function isItemForSlot(itemId, slotKey) {
+    if (!itemId) return false;
+    const meta = bagMeta(itemId);
+    if (!meta) return false;
+    if (slotKey === "mainHand") {
+      return meta.kind === "mainHand";
+    }
+    const positions = wearPositions(meta.kind);
+    return positions.includes(slotKey);
+  }
+
+  function isItemInCategory(itemId, cat) {
+    if (!itemId || cat === "all") return true;
+    const meta = bagMeta(itemId);
+    if (!meta) return false;
+    if (cat === "gear") return meta.kind === "mainHand" || wearPositions(meta.kind).length > 0;
+    if (cat === "consumable") return itemId === POTION_ITEM_ID || meta.kind === "consumable";
+    if (cat === "material") return meta.kind === "material" || meta.kind === "catalyst" || meta.kind === "card" || meta.station === "kiln";
+    return true;
+  }
+
+  function closeEquipPopup() {
+    activeEquipSlot = null;
+    const popup = $("equipPopup");
+    const backdrop = $("equipPopupBackdrop");
+    if (popup) popup.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+  }
+
+  function ensureEquipPopupElements() {
+    let backdrop = $("equipPopupBackdrop");
+    let popup = $("equipPopup");
+    if (!backdrop) {
+      backdrop = document.createElement("div");
+      backdrop.id = "equipPopupBackdrop";
+      backdrop.className = "equip-popup-backdrop";
+      backdrop.hidden = true;
+      backdrop.onclick = closeEquipPopup;
+      document.body.appendChild(backdrop);
+    }
+    if (!popup) {
+      popup = document.createElement("div");
+      popup.id = "equipPopup";
+      popup.className = "equip-popup";
+      popup.hidden = true;
+      popup.setAttribute("role", "dialog");
+      popup.setAttribute("aria-modal", "true");
+      popup.setAttribute("aria-label", "เลือกอุปกรณ์");
+      document.body.appendChild(popup);
+    }
+    return { backdrop, popup };
+  }
+
+  function openEquipSlotPopup(slotKey) {
+    activeEquipSlot = slotKey;
+    selectedCandidateIndex = 0;
+    const { backdrop, popup } = ensureEquipPopupElements();
+    backdrop.hidden = false;
+    popup.hidden = false;
+    renderEquipPopupContent(slotKey);
+  }
+
+  function renderEquipPopupContent(slotKey) {
+    const popup = $("equipPopup");
+    if (!popup || !slotKey) return;
+    const slotName = slotKey === "mainHand" ? "อาวุธหลัก" : (bodyLabels[slotKey] || slotKey);
+    const slotSymbol = gearSymbols[slotKey] || (slotKey === "mainHand" ? "⚔" : "◈");
+    const slots = currentBagSlots() || [];
+    const worn = wornGearAt(slotKey, slots);
+    const wornMeta = worn ? bagMeta(worn.itemId) : null;
+    const char = ownServerCharacter() || { characterName: "นที", level: 1, pathId: "phutthaisawan" };
+
+    // Candidates: ONLY items in bag that can be equipped in this specific slot!
+    const candidates = [];
+    slots.forEach((s, idx) => {
+      if (s && isItemForSlot(s.itemId, slotKey)) {
+        candidates.push({ item: s, slotIndex: idx, meta: bagMeta(s.itemId) });
+      }
+    });
+
+    let wornHtml = "";
+    if (worn && wornMeta) {
+      const bonusText = wornMeta.bonus || "";
+      const forgeText = worn.forge?.rank ? (" +" + worn.forge.rank) : "";
+      wornHtml =
+        '<div class="equip-section-title"><span>กำลังสวมใส่อยู่</span></div>' +
+        '<div class="equip-worn-card">' +
+          '<div class="bag-slot bag-filled bag-equipped">' +
+            '<span class="bag-symbol">' + (wornMeta.symbol || slotSymbol) + '</span>' +
+            '<span class="bag-quantity">' + (worn.forge?.rank ? ("+" + worn.forge.rank) : "✓") + '</span>' +
+          '</div>' +
+          '<div class="equip-worn-info">' +
+            '<strong class="equip-worn-name">' + (wornMeta.name || worn.itemId) + (forgeText ? ' <span style="color:#f2ca83;">' + forgeText + '</span>' : '') + '</strong>' +
+            (bonusText ? '<span class="equip-worn-stats">' + bonusText + '</span>' : '') +
+          '</div>' +
+          '<button type="button" class="equip-unequip-btn" id="equipPopupUnequip">ถอดออก</button>' +
+        '</div>';
+    } else {
+      wornHtml =
+        '<div class="equip-section-title"><span>กำลังสวมใส่อยู่</span></div>' +
+        '<div class="equip-empty-notice" style="padding:10px 14px;margin-bottom:4px;">' +
+          '<span>ยังไม่ได้ติดตั้งอุปกรณ์ในช่องนี้</span>' +
+        '</div>';
+    }
+
+    let candHtml = "";
+    if (candidates.length > 0) {
+      if (selectedCandidateIndex < 0 || selectedCandidateIndex >= candidates.length) {
+        selectedCandidateIndex = 0;
+      }
+      const sel = candidates[selectedCandidateIndex];
+      const selMeta = sel.meta;
+      const selForgeText = sel.item.forge?.rank ? (" +" + sel.item.forge.rank) : "";
+      const diff = gearComparison(sel.item, worn, slots);
+      const reqLevel = selMeta?.level || 1;
+      const lowLevel = reqLevel > (char.level || 1);
+      const wrongClass = selMeta?.path && selMeta.path !== "all" && selMeta.path !== char.pathId;
+      const canEquip = !lowLevel && !wrongClass;
+
+      const gridHtml =
+        '<div class="equip-candidate-grid" role="group" aria-label="ช่องอุปกรณ์ที่สวมใส่ได้">' +
+        candidates.map((c, i) => {
+          const isSel = i === selectedCandidateIndex;
+          const fRank = c.item.forge?.rank;
+          return (
+            '<button type="button" class="equip-candidate-slot' + (isSel ? ' bag-selected' : '') + '" data-cand-idx="' + i + '" aria-pressed="' + isSel + '" title="' + (c.meta?.name || c.item.itemId) + '">' +
+              '<span class="bag-symbol">' + (c.meta?.symbol || slotSymbol) + '</span>' +
+              (fRank ? '<span class="bag-quantity" style="color:#f2ca83;">+' + fRank + '</span>' : '') +
+            '</button>'
+          );
+        }).join("") +
+        '</div>';
+
+      const previewHtml =
+        '<div class="equip-candidate-preview">' +
+          '<div class="equip-preview-name-row">' +
+            '<strong class="equip-preview-name">' + (selMeta?.name || sel.item.itemId) + (selForgeText ? ' <span style="color:#f2ca83;">' + selForgeText + '</span>' : '') + '</strong>' +
+            '<span style="font-size:11px;color:#d1b67b;">ช่องกระเป๋าที่ ' + (sel.slotIndex + 1) + '</span>' +
+          '</div>' +
+          (selMeta?.bonus ? '<span class="equip-preview-stats">' + selMeta.bonus + '</span>' : '') +
+          (diff ? '<span class="equip-preview-diff">เมื่อเทียบ: ' + diff + '</span>' : '') +
+          (lowLevel ? '<span class="equip-preview-req">⚠️ ต้องการเลเวล ' + reqLevel + ' (เลเวลไม่พอ)</span>' : '') +
+          (wrongClass ? '<span class="equip-preview-req">⚠️ เฉพาะสายอาชีพอื่น</span>' : '') +
+          '<button type="button" class="equip-confirm-btn" id="equipConfirmBtn"' + (!canEquip ? ' disabled' : '') + '>สวมใส่อุปกรณ์</button>' +
+        '</div>';
+
+      candHtml =
+        '<div class="equip-section-title"><span>อุปกรณ์ในกระเป๋าที่สวมได้ (' + candidates.length + ' ชิ้น)</span></div>' +
+        gridHtml +
+        previewHtml;
+    } else {
+      candHtml =
+        '<div class="equip-section-title"><span>อุปกรณ์ในกระเป๋าที่สวมได้ (0 ชิ้น)</span></div>' +
+        '<div class="equip-empty-notice">' +
+          '<span class="empty-icon">🎒</span>' +
+          '<strong>ไม่มีอุปกรณ์สำหรับช่อง' + slotName + 'ในกระเป๋า</strong>' +
+          '<small>สามารถตามหา คราฟต์ หรือดรอปจากมอนสเตอร์ได้</small>' +
+        '</div>';
+    }
+
+    popup.innerHTML =
+      '<div class="equip-popup-header">' +
+        '<div class="equip-popup-title">' +
+          '<b>' + slotSymbol + '</b>' +
+          '<span>ติดตั้ง: ' + slotName + '</span>' +
+        '</div>' +
+        '<button type="button" class="equip-popup-close" id="equipPopupClose" aria-label="ปิด">✕</button>' +
+      '</div>' +
+      '<div class="equip-popup-content">' +
+        wornHtml +
+        candHtml +
+      '</div>';
+
+    if (worn && (wornMeta?.kind === "mainHand" || wornMeta?.forge)) {
+      const forge = document.createElement("button");
+      forge.type = "button"; forge.className = "secondary";
+      forge.id = "equipPopupForge"; forge.textContent = "ตีบวก / แปรรูปคุณภาพ · ช่างอาคม";
+      forge.onclick = () => {
+        const target = slotKey === "mainHand" ? currentEquippedWeaponSlot() : slotKey;
+        closeEquipPopup(); openForgePage("enhance", target);
+      };
+      popup.querySelector(".equip-popup-content").appendChild(forge);
+    }
+
+    const closeBtn = $("equipPopupClose");
+    if (closeBtn) closeBtn.onclick = closeEquipPopup;
+
+    const unequipBtn = $("equipPopupUnequip");
+    if (unequipBtn) unequipBtn.onclick = () => {
+      if (itemUsePending) return;
+      if (slotKey === "mainHand") {
+        if (mode === "live") sendBagCommand("equip_weapon", { slot: null });
+        else { demoWeaponSlot = null; setAvatarWeapon(getLocalAvatar(), ""); toast("DEMO ถอดอาวุธแล้ว"); renderBag(); }
+      } else {
+        const expected = inventoryState?.equipment?.[slotKey];
+        if (expected) sendBagCommand("equip_gear", { position: slotKey, slot: null, expected, ...accessoryStamp(wornGearAt(slotKey, currentBagSlots())) });
+      }
+      closeEquipPopup();
+    };
+
+    const doEquipCandidate = (cand) => {
+      if (!cand || itemUsePending) return;
+      const reqLevel = cand.meta?.level || 1;
+      const lowLevel = reqLevel > (char.level || 1);
+      const wrongClass = cand.meta?.path && cand.meta.path !== "all" && cand.meta.path !== char.pathId;
+      if (lowLevel || wrongClass) return;
+
+      if (slotKey === "mainHand") {
+        if (mode === "live") {
+          sendBagCommand("equip_weapon", { slot: cand.slotIndex });
+        } else {
+          demoWeaponSlot = cand.slotIndex;
+          setAvatarWeapon(getLocalAvatar(), cand.item.itemId || "");
+          toast("DEMO สวมใส่ " + (WEAPON_META[cand.item.itemId]?.name || cand.item.itemId));
+          renderBag();
+        }
+      } else {
+        sendBagCommand("equip_gear", { slot: cand.slotIndex, position: slotKey, expected: cand.item.itemId, ...accessoryStamp(cand.item) });
+      }
+      closeEquipPopup();
+    };
+
+    for (const slotBtn of popup.querySelectorAll("[data-cand-idx]")) {
+      const idx = Number(slotBtn.dataset.candIdx);
+      slotBtn.onclick = () => {
+        if (selectedCandidateIndex === idx) {
+          // Second click on already selected slot equips it!
+          doEquipCandidate(candidates[idx]);
+        } else {
+          selectedCandidateIndex = idx;
+          renderEquipPopupContent(slotKey);
+        }
+      };
+    }
+
+    const confirmBtn = $("equipConfirmBtn");
+    if (confirmBtn) {
+      confirmBtn.onclick = () => {
+        doEquipCandidate(candidates[selectedCandidateIndex]);
+      };
+    }
+  }
+
+  function bagMultiPageSliderHtml() {
+    const pages = [];
+    for (let p = 0; p < BAG_TOTAL_PAGES; p++) {
+      const slots = [];
+      for (let i = 0; i < BAG_PAGE_SIZE; i++) {
+        const idx = p * BAG_PAGE_SIZE + i;
+        slots.push(
+          '<button type="button" class="bag-slot" id="bagSlot' + idx + '" aria-pressed="false" aria-label="ช่องไอเท็ม ' + (idx + 1) + '">' +
+          '<span class="bag-symbol">·</span>' +
+          '<span class="bag-quantity"></span>' +
+          '</button>'
+        );
+      }
+      pages.push('<div class="bag-page" data-page="' + p + '">' + slots.join("") + '</div>');
+    }
+    return '<div class="bag-slider" id="bagSlider">' + pages.join("") + '</div>';
+  }
+
+  function setBagPage(page) {
+    bagCurrentPage = Math.max(0, Math.min(BAG_TOTAL_PAGES - 1, page));
+    const slider = $("bagSlider");
+    if (slider) {
+      const pageEl = slider.children[bagCurrentPage];
+      if (pageEl) {
+        slider.scrollTo({ left: pageEl.offsetLeft, behavior: "smooth" });
+      }
+    }
+    updateBagPagerUi();
+  }
+
+  function updateBagPagerUi() {
+    const prev = $("bagPrevPage");
+    const next = $("bagNextPage");
+    const ind = $("bagPageIndicator");
+    const dots = $("bagDots");
+    if (prev) prev.disabled = bagCurrentPage <= 0;
+    if (next) next.disabled = bagCurrentPage >= BAG_TOTAL_PAGES - 1;
+    if (ind) ind.textContent = "หน้า " + (bagCurrentPage + 1) + " / " + BAG_TOTAL_PAGES;
+    if (dots) {
+      const dotEls = dots.querySelectorAll(".dot");
+      dotEls.forEach((d, i) => d.classList.toggle("on", i === bagCurrentPage));
+    }
+  }
+
   function paperdollGridHtml() {
     const stageHtml =
       '<div class="doll-stage" id="paperdollStage">' +
@@ -12307,11 +12602,18 @@
           '<span class="mp-mini" id="paperdollMp">MP —</span>' +
         '</div>' +
       '</div>';
+    const wearShortTags = {
+      head: "ศีรษะ", shoulders: "ไหล่", chest: "เกราะอก", arms: "แขน",
+      leftHand: "มือซ้าย", rightHand: "มือขวา", legs: "กางเกง", feet: "รองเท้า",
+      offHand: "มือรอง", neck: "สร้อย", leftEar: "หูซ้าย", rightEar: "หูขวา",
+      leftRing: "แหวนซ้าย", rightRing: "แหวนขวา", mainHand: "อาวุธ"
+    };
     const slotsHtml = Object.entries({mainHand:"อาวุธหลัก", ...bodyLabels}).map(([key, name]) =>
-      '<button type="button" id="wear-' + key + '" class="wear-tile" style="grid-area:' + key + '" aria-pressed="false">' +
-      '<b aria-hidden="true">' + (gearSymbols[key] || "◈") + '</b>' +
-      '<span>' + name + '</span>' +
-      '<small>ว่าง</small>' +
+      '<button type="button" id="wear-' + key + '" class="wear-tile" style="grid-area:' + key + '" aria-pressed="false" title="' + name + '">' +
+      '<span class="bag-symbol">' + (gearSymbols[key] || "◈") + '</span>' +
+      '<span class="wear-tag">' + (wearShortTags[key] || name) + '</span>' +
+      '<span class="bag-quantity"></span>' +
+      '<small class="sr-only">ว่าง</small>' +
       '</button>'
     ).join("");
     return '<div class="paperdoll-grid" role="group" aria-label="ช่องติดตั้งอุปกรณ์รอบตัวละคร">' + stageHtml + slotsHtml + '</div>';
@@ -12349,17 +12651,11 @@
         '<div class="status-line"><span>สถานะอุปกรณ์</span><strong id="bagSaveStatus"></strong></div>' +
         '<div class="status-line"><span>พลังชีวิต HP</span><strong id="bagHp"></strong></div>' +
         paperdollGridHtml() +
-        '<h3 class="wear-title">กระเป๋าตัวละคร · 12 ช่อง</h3>' +
-        '<div class="bag-grid" role="group" aria-label="ช่องไอเท็ม 12 ช่อง">' + paperdollBagGridHtml() + '</div>' +
-        '<div class="bag-detail"><strong id="bagItemName"></strong><p class="note" id="bagItemDescription"></p></div>' +
-        '<div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden><button type="button" class="secondary"></button><button type="button" class="secondary"></button></div>' +
-        '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
-        '<section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>' +
-        '<button class="secondary" id="bagTrack" type="button" hidden></button><button id="refineResource" type="button" class="secondary" hidden></button><button id="bagKiln" type="button" class="secondary" hidden></button><button id="sellBagMaterial" type="button" class="secondary" hidden></button><button id="salvageGear" type="button" class="secondary" hidden></button>' +
-        '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary><select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p><select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><p><strong id="guideName"></strong></p><select id="guideCopy" aria-label="เลือกชิ้นที่จะเทียบ" hidden></select><p class="note" id="guideCompare"></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p><button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button><button class="secondary" id="resumeFieldJourney" type="button" hidden>แสดงเป้าที่ข้ามไว้</button></details>' +
-        '<section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="boss">ของจากบอส</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button class="secondary" id="benchTrack" type="button" hidden></button><select id="benchHuntChoice" aria-label="เลือกวัตถุดิบที่ต้องการตามหา" hidden></select><button class="secondary" id="benchTrackSupply" type="button" hidden></button><button id="benchCraft" type="button" class="secondary">คราฟต์</button><button id="benchIngredient" type="button" class="secondary" hidden></button><button id="benchBack" type="button" class="secondary" hidden></button></section>' +
-        '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
-        '<button class="secondary" id="bagForge" type="button" hidden>ตีบวก / แปรรูปคุณภาพ · ช่างอาคม</button>' +
+        '<div class="cp-equip-actions">' +
+          '<p class="note" style="text-align:center;margin:10px 0 4px;color:#a0b2ad;">แตะที่ช่องรอบตัวละครเพื่อเลือกติดตั้งหรือเปลี่ยนอุปกรณ์</p>' +
+          '<button type="button" class="secondary" id="cpOpenBagBtn" style="width:100%;margin-top:4px;">🎒 เปิดกระเป๋าเก็บของ</button>' +
+          '<button type="button" class="secondary" id="cpForge">ตีบวก / แปรรูปคุณภาพ · ช่างอาคม</button>' +
+        '</div>' +
       '</section>' +
       '<div id="cpOffline" class="cp-offline" hidden><p>แผงสถานะตัวละครใช้ได้เมื่อเล่นออนไลน์</p><button class="primary" id="cpGoOnline" type="button">เข้าเล่นออนไลน์</button></div>' +
       '<section class="cp-page" data-page="status" hidden>' +
@@ -12395,6 +12691,7 @@
     for (const tab of ui.drawerBody.querySelectorAll("[data-cp]")) tab.onclick = () => {
       for (const t of ui.drawerBody.querySelectorAll("[data-cp]")) { t.classList.toggle("on", t === tab); t.setAttribute("aria-pressed", String(t === tab)); }
       for (const pg of ui.drawerBody.querySelectorAll(".cp-page")) pg.hidden = pg.dataset.page !== tab.dataset.cp;
+      closeEquipPopup();
       if (tab.dataset.cp === "equipment") renderBag();
       else if (tab.dataset.cp === "status") renderProgressionProfile();
     };
@@ -12494,8 +12791,10 @@
       if (i === 0 && demoPotionCount > 0) {
         return { itemId: POTION_ITEM_ID, quantity: demoPotionCount };
       }
-      const weaponId = ["ritual_dagger","arcane_sword","spirit_staff"][i-1];
-      return weaponId ? { itemId: weaponId, quantity: 1 } : null;
+      const weaponId = ["ritual_dagger", "arcane_sword", "spirit_staff", "muay_wraps", "shrine_glaive"][i - 1];
+      if (weaponId) return { itemId: weaponId, quantity: 1 };
+      if (i === 6) return { itemId: SHRINE_SHARD, quantity: 5 };
+      return null;
     });
   }
   function currentEquippedWeaponSlot() {
@@ -12579,11 +12878,60 @@
     }
   }
   function bindBagControls() {
-    for (let i = 0; i < INVENTORY_SLOTS; i++) {
+    const isChar = drawerActive === "character";
+    if (isChar) {
+      for (const key of ["mainHand", ...Object.keys(bodyLabels)]) {
+        const tile = $("wear-" + key);
+        if (tile) tile.onclick = () => {
+          openEquipSlotPopup(key);
+        };
+      }
+      if ($("cpOpenBagBtn")) $("cpOpenBagBtn").onclick = () => openBag();
+      if ($("cpForge")) $("cpForge").onclick = openSmith;
+      return;
+    }
+
+    // drawerActive === "bag": bind high-density matrix slots
+    const totalSlots = BAG_PAGE_SIZE * BAG_TOTAL_PAGES;
+    for (let i = 0; i < totalSlots; i++) {
       const slot = $("bagSlot" + i);
       if (slot) slot.onclick = () => {
-        preferredGearSlot=inspectingGear; confirmBindKey=null; inspectingGear=null;
+        const bagSlots = currentBagSlots();
+        if (i >= (bagSlots?.length || INVENTORY_SLOTS)) {
+          toast("ช่องว่างเพิ่มเติม (ความจุยังไม่ปลดล็อก)");
+          return;
+        }
+        preferredGearSlot = inspectingGear; confirmBindKey = null; inspectingGear = null;
         selectedBagSlot = i;
+        renderBag();
+      };
+    }
+    const prev = $("bagPrevPage");
+    if (prev) prev.onclick = () => setBagPage(bagCurrentPage - 1);
+    const next = $("bagNextPage");
+    if (next) next.onclick = () => setBagPage(bagCurrentPage + 1);
+    const slider = $("bagSlider");
+    if (slider) {
+      slider.addEventListener("scroll", () => {
+        const w = slider.clientWidth || 1;
+        const page = Math.round(slider.scrollLeft / w);
+        if (page !== bagCurrentPage && page >= 0 && page < BAG_TOTAL_PAGES) {
+          bagCurrentPage = page;
+          updateBagPagerUi();
+        }
+      }, { passive: true });
+    }
+    const dots = $("bagDots");
+    if (dots) {
+      dots.querySelectorAll(".dot").forEach((d, idx) => {
+        d.onclick = () => setBagPage(idx);
+      });
+    }
+    const catTabs = ui.drawerBody.querySelectorAll("[data-bag-tab]");
+    for (const tab of catTabs) {
+      tab.onclick = () => {
+        for (const t of catTabs) t.classList.toggle("on", t === tab);
+        bagCategoryFilter = tab.dataset.bagTab;
         renderBag();
       };
     }
@@ -12591,14 +12939,6 @@
     if (sidePicker) {
       for(const button of sidePicker.children)button.onclick=()=>{
         preferredGearSlot=button.dataset.position; confirmBindKey=null; renderBag();
-      };
-    }
-    for(const key of ["mainHand",...Object.keys(bodyLabels)]){
-      const tile = $("wear-"+key);
-      if (tile) tile.onclick=()=>{
-        inspectingGear=key; confirmBindKey=null;
-        if(key==="mainHand" && Number.isInteger(currentEquippedWeaponSlot()))selectedBagSlot=currentEquippedWeaponSlot();
-        renderBag();
       };
     }
     if ($("gearGuide")) $("gearGuide").ontoggle=$("guideStyle").onchange=$("guideSlot").onchange=$("guideCopy").onchange=()=>renderGearGuide(currentBagSlots());
@@ -12652,62 +12992,109 @@
       ? Number(ownServerCharacter()?.hp || 0) : demoHp;
     const maxHp = mode === "live"
       ? Number(ownServerCharacter()?.maxHp || 100) : 100;
-    $("bagHp").textContent = Math.max(0, Math.ceil(currentHp)) +
-      " / " + Math.max(1, Math.ceil(maxHp));
+    if ($("bagHp")) {
+      $("bagHp").textContent = Math.max(0, Math.ceil(currentHp)) +
+        " / " + Math.max(1, Math.ceil(maxHp));
+    }
     const equipped = currentEquippedWeaponSlot();
     const equippedItem = equipped === null || equipped === undefined
       ? null : slots?.[equipped];
     const equipment=inventoryState?.equipment || {};
-    if ($("paperdollStage")) {
-      const char = ownServerCharacter() || { characterName: "นที", level: 1, pathId: "phutthaisawan", hp: demoHp, maxHp: 100, stamina: 100, maxStamina: 100, mana: 50, maxMana: 50, atk: 25, def: 18, magicAtk: 15, magicDef: 12 };
-      if ($("paperdollName")) $("paperdollName").textContent = String(char.characterName || "นที");
-      if ($("paperdollLevel")) $("paperdollLevel").textContent = "LV. " + (char.level || 1);
-      const path = getBuildCatalog()?.paths?.[char.pathId];
-      if ($("paperdollPath")) $("paperdollPath").textContent = path ? (path.name || path.role) : "นักดาบพุทธไธสวรรย์";
-      const sealId = "#seal-" + pathSeal(char.pathId || "phutthaisawan");
-      if ($("paperdollSeal") && $("paperdollSeal").getAttribute("href") !== sealId) $("paperdollSeal").setAttribute("href", sealId);
-      const cpVal = Math.round((Number(char.atk)||20)*2 + (Number(char.magicAtk)||15)*2 + (Number(char.def)||15)*1.5 + (Number(char.magicDef)||12)*1.5 + (Number(char.maxHp)||100)*0.5 + (Number(char.level)||1)*20);
-      if ($("paperdollCp")) $("paperdollCp").textContent = String(cpVal);
-      if ($("paperdollHp")) $("paperdollHp").textContent = "HP " + Math.ceil(currentHp) + "/" + Math.ceil(maxHp);
-      if ($("paperdollMp")) $("paperdollMp").textContent = "MP " + (Number.isFinite(char.mana) && char.maxMana > 0 ? Math.round(char.mana) + "/" + Math.round(char.maxMana) : "—");
+
+    if (drawerActive === "character") {
+      if ($("paperdollStage")) {
+        const char = ownServerCharacter() || { characterName: "นที", level: 1, pathId: "phutthaisawan", hp: demoHp, maxHp: 100, stamina: 100, maxStamina: 100, mana: 50, maxMana: 50, atk: 25, def: 18, magicAtk: 15, magicDef: 12 };
+        if ($("paperdollName")) $("paperdollName").textContent = String(char.characterName || "นที");
+        if ($("paperdollLevel")) $("paperdollLevel").textContent = "LV. " + (char.level || 1);
+        const path = getBuildCatalog()?.paths?.[char.pathId];
+        if ($("paperdollPath")) $("paperdollPath").textContent = path ? (path.name || path.role) : "นักดาบพุทธไธสวรรย์";
+        const sealId = "#seal-" + pathSeal(char.pathId || "phutthaisawan");
+        if ($("paperdollSeal") && $("paperdollSeal").getAttribute("href") !== sealId) $("paperdollSeal").setAttribute("href", sealId);
+        const cpVal = Math.round((Number(char.atk)||20)*2 + (Number(char.magicAtk)||15)*2 + (Number(char.def)||15)*1.5 + (Number(char.magicDef)||12)*1.5 + (Number(char.maxHp)||100)*0.5 + (Number(char.level)||1)*20);
+        if ($("paperdollCp")) $("paperdollCp").textContent = String(cpVal);
+        if ($("paperdollHp")) $("paperdollHp").textContent = "HP " + Math.ceil(currentHp) + "/" + Math.ceil(maxHp);
+        if ($("paperdollMp")) $("paperdollMp").textContent = "MP " + (Number.isFinite(char.mana) && char.maxMana > 0 ? Math.round(char.mana) + "/" + Math.round(char.maxMana) : "—");
+      }
+      for (const [key,label] of Object.entries({mainHand:"อาวุธหลัก",...bodyLabels})){
+        const tile=$("wear-"+key);
+        if (!tile) continue;
+        const id=key==="mainHand"?equippedItem?.itemId:equipment[key];
+        tile.classList.toggle("filled",!!id);
+        tile.setAttribute("aria-pressed",String(inspectingGear===key));
+        const meta = bagMeta(id);
+        const symEl = tile.querySelector(".bag-symbol");
+        if (symEl) symEl.textContent = meta?.symbol || gearSymbols[key] || "◈";
+        const qtyEl = tile.querySelector(".bag-quantity");
+        if (qtyEl) {
+          const itemObj = key === "mainHand" ? equippedItem : wornGearAt(key, slots);
+          const forgeRank = itemObj?.forge?.rank;
+          qtyEl.textContent = forgeRank ? ("+" + forgeRank) : (id ? "✓" : "");
+        }
+        tile.lastChild.textContent=meta?.name || "ว่าง";
+        tile.setAttribute("aria-label",label+" "+tile.lastChild.textContent);
+        tile.setAttribute("title",label+": "+tile.lastChild.textContent);
+      }
+      if (activeEquipSlot) {
+        renderEquipPopupContent(activeEquipSlot);
+      }
+      return;
     }
-    for (const [key,label] of Object.entries({mainHand:"อาวุธหลัก",...bodyLabels})){
-      const tile=$("wear-"+key);
-      if (!tile) continue;
-      const id=key==="mainHand"?equippedItem?.itemId:equipment[key];
-      tile.classList.toggle("filled",!!id);
-      tile.setAttribute("aria-pressed",String(inspectingGear===key));
-      tile.lastChild.textContent=bagMeta(id)?.name || "ว่าง";
-      tile.setAttribute("aria-label",label+" "+tile.lastChild.textContent);
+
+    // drawerActive === "bag": High-Density 4-column Matrix View
+    const totalSlots = BAG_PAGE_SIZE * BAG_TOTAL_PAGES;
+    const capacity = slots?.length || INVENTORY_SLOTS;
+    const filledCount = (slots || []).filter(Boolean).length;
+    if ($("bagCapacityText")) $("bagCapacityText").textContent = filledCount + " / " + capacity + " ช่อง";
+    updateBagPagerUi();
+
+    for (let i = 0; i < totalSlots; i++) {
+      const slot = $("bagSlot" + i);
+      if (!slot) continue;
+      if (i >= capacity) {
+        slot.className = "bag-slot empty";
+        slot.setAttribute("aria-pressed", "false");
+        slot.setAttribute("aria-label", "ช่องว่าง (ยังไม่ปลดล็อก)");
+        slot.querySelector(".bag-symbol").textContent = "·";
+        slot.querySelector(".bag-quantity").textContent = "";
+        continue;
+      }
+      const item = slots?.[i];
+      const meta = bagMeta(item?.itemId);
+      const worn = i === equipped;
+      const name = meta?.name || (item?.itemId === SHRINE_SHARD ? shardName : item ? "ยาเลือดเล็ก" : "ช่องว่าง");
+      const matchesCat = isItemInCategory(item?.itemId, bagCategoryFilter);
+      slot.className = "bag-slot";
+      slot.classList.toggle("bag-filled", !!item);
+      slot.classList.toggle("bag-equipped", worn);
+      slot.classList.toggle("bag-selected", i === selectedBagSlot);
+      slot.classList.toggle("bag-slot-dim", !!item && !matchesCat);
+      slot.setAttribute("aria-pressed", String(i === selectedBagSlot));
+      slot.setAttribute("aria-label", "ช่อง " + (i + 1) + " " + name + (worn ? " สวมอยู่" : ""));
+      slot.querySelector(".bag-symbol").textContent = meta?.symbol || (!item ? "·" : item.itemId === SHRINE_SHARD ? "◈" : "🧪");
+      slot.querySelector(".bag-quantity").textContent = !item ? "" : worn ? "✓" : item.quantity > 1 ? "×" + item.quantity : "";
     }
-    for (let i=0;i<INVENTORY_SLOTS;i++) {
-      const slot=$("bagSlot"+i), item=slots?.[i], meta=bagMeta(item?.itemId), worn=i===equipped;
-      const name=meta?.name || (item?.itemId===SHRINE_SHARD?shardName:item?"ยาเลือดเล็ก":"ช่องว่าง");
-      slot.classList.toggle("bag-filled",!!item);slot.classList.toggle("bag-equipped",worn);
-      slot.classList.toggle("bag-selected",i===selectedBagSlot);
-      slot.setAttribute("aria-pressed",String(i===selectedBagSlot));slot.setAttribute("aria-label","ช่อง "+(i+1)+" "+name+(worn?" สวมอยู่":""));
-      slot.querySelector(".bag-symbol").textContent=meta?.symbol || (!item?"·":item.itemId===SHRINE_SHARD?"◈":"🧪");
-      slot.querySelector(".bag-quantity").textContent=!item?"":worn?"✓":item.quantity>1?"×"+item.quantity:"";
+    const chosen = inspectingGear ? wornGearAt(inspectingGear, slots) : slots?.[selectedBagSlot];
+    const meta = bagMeta(chosen?.itemId);
+    const positions = wearPositions(meta?.kind);
+    const destination = inspectingGear || gearDestination(positions, equipment);
+    const armor = positions.length > 0, gear = armor || meta?.kind === "mainHand";
+    const sidePicker = $("wearSidePicker");
+    if (sidePicker) {
+      sidePicker.hidden = !!inspectingGear || positions.length !== 2;
+      if (!sidePicker.hidden) for (const [i, button] of [...sidePicker.children].entries()) {
+        button.dataset.position = positions[i];
+        button.textContent = bodyLabels[positions[i]] + (equipment[positions[i]] ? "" : " · ว่าง");
+        button.setAttribute("aria-pressed", String(positions[i] === destination));
+        button.disabled = itemUsePending;
+      }
     }
-    const chosen=inspectingGear?wornGearAt(inspectingGear,slots):slots?.[selectedBagSlot];
-    const meta=bagMeta(chosen?.itemId);
-    const positions=wearPositions(meta?.kind);
-    const destination=inspectingGear || gearDestination(positions,equipment);
-    const armor=positions.length>0, gear=armor||meta?.kind==="mainHand";
-    const sidePicker=$("wearSidePicker");
-    sidePicker.hidden=!!inspectingGear || positions.length!==2;
-    if(!sidePicker.hidden)for(const [i,button] of [...sidePicker.children].entries()){
-      button.dataset.position=positions[i];
-      button.textContent=bodyLabels[positions[i]]+(equipment[positions[i]]?"":" · ว่าง");
-      button.setAttribute("aria-pressed",String(positions[i]===destination));
-      button.disabled=itemUsePending;
-    }
-    const worn=gear && (!!inspectingGear || (!armor && selectedBagSlot===equipped));
-    const job=ownServerCharacter()?.pathId, wrongClass=meta?.path && meta.path!=="all" && meta.path!==job;
-    const heal=chosen?.itemId===POTION_ITEM_ID||meta?.kind==="consumable";
-    const lowLevel=(meta?.level||1)>(ownServerCharacter()?.level||1);
-    const full=meta?.healMana?ownServerCharacter()?.mana>=ownServerCharacter()?.maxMana:currentHp>=maxHp;
-    const ready=chosen && !wrongClass && !lowLevel && (gear?hasWeapons:heal&&currentHp>0&&!full) && (mode!=="live" || ownServerCharacter()?.alive);
+    const worn = gear && (!!inspectingGear || (!armor && selectedBagSlot === equipped));
+    const job = ownServerCharacter()?.pathId, wrongClass = meta?.path && meta.path !== "all" && meta.path !== job;
+    const heal = chosen?.itemId === POTION_ITEM_ID || meta?.kind === "consumable";
+    const lowLevel = (meta?.level || 1) > (ownServerCharacter()?.level || 1);
+    const full = meta?.healMana ? ownServerCharacter()?.mana >= ownServerCharacter()?.maxMana : currentHp >= maxHp;
+    const ready = chosen && !wrongClass && !lowLevel && (gear ? hasWeapons : heal && currentHp > 0 && !full) && (mode !== "live" || ownServerCharacter()?.alive);
+    if ($("bagItemName"))
     $("bagItemName").textContent=meta?.name || (chosen?.itemId===SHRINE_SHARD?shardName:chosen?"ยาเลือดเล็ก":inspectingGear?(bodyLabels[inspectingGear]||"อาวุธหลัก")+" · ช่องว่าง":"ช่องว่าง");
     let detail=chosen?"ใช้ฟื้น 30 HP":"ล่ามอนสเตอร์เพื่อหาอุปกรณ์และวัตถุดิบ";
     if(gear){
@@ -13268,15 +13655,27 @@
   }
 
   function openBag() {
-    confirmBindKey=null; inspectingGear=null; preferredGearSlot=null;benchTrail.length=0;
-    openDrawer("bag", "อุปกรณ์และกระเป๋า",
+    confirmBindKey=null; inspectingGear=null; preferredGearSlot=null; benchTrail.length=0;
+    openDrawer("bag", "กระเป๋าเก็บของ",
       '<div class="status-line"><span>สถานะกระเป๋า</span><strong id="bagSaveStatus"></strong></div>' +
-      '<div class="status-line"><span>พลังชีวิต HP</span><strong id="bagHp"></strong></div>' +
-      paperdollGridHtml() +
-      '<h3 class="wear-title">กระเป๋า · 12 ช่อง</h3>' +
-      '<div class="bag-grid" role="group" aria-label="ช่องไอเท็ม 12 ช่อง">' + paperdollBagGridHtml() + '</div>' +
-      '<div class="bag-detail"><strong id="bagItemName"></strong>' +
-      '<p class="note" id="bagItemDescription"></p></div>' +
+      '<div class="bag-category-tabs" role="tablist">' +
+        '<button type="button" class="bag-tab-chip on" data-bag-tab="all">ทั้งหมด</button>' +
+        '<button type="button" class="bag-tab-chip" data-bag-tab="gear">อุปกรณ์</button>' +
+        '<button type="button" class="bag-tab-chip" data-bag-tab="consumable">ของใช้</button>' +
+        '<button type="button" class="bag-tab-chip" data-bag-tab="material">วัตถุดิบ</button>' +
+      '</div>' +
+      '<div class="bag-page-header">' +
+        '<span>ความจุ: <b id="bagCapacityText">0 / 12 ช่อง</b></span>' +
+        '<div class="bag-pager">' +
+          '<button type="button" class="page-nav-btn" id="bagPrevPage" aria-label="หน้าก่อน">‹</button>' +
+          '<span id="bagPageIndicator">หน้า 1 / 2</span>' +
+          '<button type="button" class="page-nav-btn" id="bagNextPage" aria-label="หน้าถัดไป">›</button>' +
+        '</div>' +
+      '</div>' +
+      bagMultiPageSliderHtml() +
+      '<div class="bag-dots" id="bagDots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>' +
+      '<div class="bag-detail"><strong id="bagItemName">เลือกไอเท็ม</strong>' +
+      '<p class="note" id="bagItemDescription">แตะที่ช่องไอเท็มเพื่อดูรายละเอียดและใช้งาน</p></div>' +
       '<div id="wearSidePicker" class="wear-sides" role="group" aria-label="เลือกข้างที่สวม" hidden><button type="button" class="secondary"></button><button type="button" class="secondary"></button></div>' +
       '<button class="primary" id="useBagItem" type="button">ใช้ไอเท็ม</button>' +
       '<section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>' +
@@ -13285,7 +13684,7 @@
       '<section id="personalBench" hidden><h3>โต๊ะช่าง</h3><select id="benchGroup" aria-label="ประเภทสูตร"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="boss">ของจากบอส</option><option value="all">ทุกสาย</option></select><select id="benchLevel" aria-label="เลเวลสูตร"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select><select id="benchRecipe" aria-label="เลือกสูตรคราฟต์"></select><p class="note" id="benchInfo"></p><button class="secondary" id="benchTrack" type="button" hidden></button><select id="benchHuntChoice" aria-label="เลือกวัตถุดิบที่ต้องการตามหา" hidden></select><button class="secondary" id="benchTrackSupply" type="button" hidden></button><button id="benchCraft" type="button" class="secondary">คราฟต์</button><button id="benchIngredient" type="button" class="secondary" hidden></button><button id="benchBack" type="button" class="secondary" hidden></button></section>' +
       '<section id="craftPanel" hidden><h3>สูตรของศาลร้าง</h3><p class="note" id="craftInfo"></p><button type="button" class="secondary" id="craftGlaive"></button></section>' +
       '<button class="secondary" id="bagForge" type="button" hidden>ตีบวก / แปรรูปคุณภาพ · ช่างอาคม</button>' +
-      '<p class="note">แตะช่องสวมเพื่อดูหรือถอดอุปกรณ์ ล่ามอนสเตอร์เพื่อรับเกราะชิ้นแรก จากนั้นหาอุปกรณ์หรือเก็บวัตถุดิบคราฟต์ที่โต๊ะช่าง</p>');
+      '<p class="note">แตะช่องเก็บของเพื่อดูหรือใช้งาน จัดการวัตถุดิบ คราฟต์ และเปิดหน้าช่างเพื่อตีบวกอุปกรณ์</p>');
     bindBagControls();
     renderBag();
   }
