@@ -16,7 +16,7 @@ const output = path.resolve(process.env.MONTRA_FORGE_ARTIFACTS || path.join(os.t
 const data = await mkdtemp(path.join(os.tmpdir(), 'montra-forge-test-'));
 const fixturePath = path.join(data, 'fixture.json');
 await mkdir(output, { recursive: true });
-const report = { scope: 'Real NPC picking → real enhancement → rendered result → server restart/save', commit: process.env.GITHUB_SHA || 'local', checks: [], blockedOrigins: [], browserErrors: [], console: [], httpErrors: [], socketNetwork: [] };
+const report = { scope: 'Real NPC picking → real enhancement → rendered result → server restart/save', commit: process.env.GITHUB_SHA || 'local', checks: [], blockedOrigins: [], browserErrors: [], console: [], httpErrors: [], socketNetwork: [], policyViolations: [] };
 const secretPattern = /(?:mt1|ms1|mg1|mr1)_[a-f0-9]{64}/g;
 const clean = value => String(value).replace(secretPattern, '[redacted disposable credential]');
 const log = value => { report.checks.push(value); console.log('PASS:', value); };
@@ -35,6 +35,8 @@ const staticServer = http.createServer(async (req, res) => {
       assert.equal(source.split(literal).length, 2, 'account endpoint changed; review isolation');
       bytes = Buffer.from(source.replace(literal, 'const server = ' + JSON.stringify(backend) + ';'));
     }
+    // Browser-enforced network boundary leaves the allowed WebSocket fully native.
+    res.setHeader('Content-Security-Policy', "connect-src 'self' " + backend + ' ' + backend.replace('http:', 'ws:'));
     res.setHeader('Content-Type', ({ '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html; charset=utf-8', '.glb': 'model/gltf-binary' })[path.extname(file)] || 'application/octet-stream');
     res.end(bytes);
   } catch { res.statusCode = 404; res.end(); }
@@ -92,7 +94,8 @@ async function enterAndTalk(fixture) {
     if (response.status() >= 400) report.httpErrors.push({ status: response.status(), path: new URL(response.url()).pathname });
   });
   page.on('requestfailed', request => report.httpErrors.push({ path: new URL(request.url()).pathname, failure: clean(request.failure()?.errorText) }));
-  await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  const documentResponse = await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  assert.equal(documentResponse.headers()['content-security-policy'], "connect-src 'self' " + backend + ' ' + backend.replace('http:', 'ws:'), 'exact local network policy is active');
   await page.locator('.account-slot').filter({ hasText: fixture.characterName }).click();
   await page.waitForFunction(() => document.getElementById('modeBadge')?.textContent === 'LIVE' && document.getElementById('accountEntry')?.hidden, null, { timeout: 90000 });
   await page.waitForFunction(() => BABYLON.Engine.Instances[0]?.scenes[0]?.meshes.some(m => m.isEnabled() && m.metadata?.serviceNpc?.role === 'smith'));
@@ -154,30 +157,18 @@ try {
     if (!report.blockedOrigins.includes(url.origin)) report.blockedOrigins.push(url.origin);
     return route.abort();
   });
-  // Keep the allowed socket native: forwarding it through Playwright changes the
-  // transport under test. Intercept only forbidden destinations and close them.
-  await context.routeWebSocket(url => url.origin !== backend.replace('http:', 'ws:'), ws => {
-    report.blockedOrigins.push(new URL(ws.url()).origin);
-    ws.close({ code: 1008, reason: 'Nonlocal socket refused by isolated test' });
-  });
+  // Do not use routeWebSocket: it injects a socket mock even for passthrough.
+  // The served document's connect-src policy blocks every nonlocal socket.
   await context.addInitScript(({ session, guestKey, endpoint }) => {
     sessionStorage.setItem('montra_account_session_v1', session);
     localStorage.setItem('montra_guest_access_v1', guestKey);
     localStorage.setItem('montra_endpoint', endpoint);
-    // Observe native socket lifecycle without changing messages or transport behavior.
-    window.__forgeSocketObservation = [];
-    const NativeSocket = window.WebSocket;
-    window.WebSocket = new Proxy(NativeSocket, { construct(Target, args) {
-      const socket = Reflect.construct(Target, args);
-      const url = new URL(args[0], location.href);
-      const row = { origin: url.origin, path: url.pathname, opened: false, received: 0 };
-      window.__forgeSocketObservation.push(row);
-      socket.addEventListener('open', () => { row.opened = true; });
-      socket.addEventListener('message', () => { row.received++; });
-      socket.addEventListener('close', event => { row.closed = true; row.code = event.code; row.reason = event.reason; });
-      socket.addEventListener('error', () => { row.error = true; });
-      return socket;
-    } });
+    window.__forgePolicyViolations = [];
+    addEventListener('securitypolicyviolation', event => {
+      let origin = event.blockedURI;
+      try { origin = new URL(event.blockedURI).origin; } catch {}
+      window.__forgePolicyViolations.push({ directive: event.effectiveDirective, origin });
+    });
   }, { session: fixture.session, guestKey: fixture.guestKey, endpoint: backend });
   await enterAndTalk(fixture);
   log('Actual canvas NPC click opens dialogue, workshop and dedicated enhancement page');
@@ -211,6 +202,7 @@ try {
     await screenshot('05-portrait-' + width);
   }
   log('Enhancement controls remain reachable without horizontal overflow at 320px and 390px portrait');
+  report.policyViolations.push(...await page.evaluate(() => window.__forgePolicyViolations));
   await page.close();
   await sleep(700);
   await stopServer();
@@ -225,6 +217,8 @@ try {
   await page.locator('#forgeEnhance').scrollIntoViewIfNeeded();
   await screenshot('06-persisted-after-server-restart');
   log('After real server restart, talking to the NPC shows the saved +1 item and correct wallet');
+  report.policyViolations.push(...await page.evaluate(() => window.__forgePolicyViolations));
+  assert.deepEqual(report.policyViolations, [], 'no attempted connection outside the local network policy');
   assert.deepEqual(report.browserErrors, [], 'no uncaught browser errors');
   assert.ok(!report.blockedOrigins.some(origin => /sslip\.io/.test(origin)), 'no attempted production access');
   report.outcome = 'passed';
@@ -236,7 +230,7 @@ try {
     entryError: document.querySelector('.account-error')?.textContent,
     online: document.getElementById('onlineCount')?.textContent,
     toast: document.getElementById('toast')?.textContent,
-    sockets: window.__forgeSocketObservation,
+    policyViolations: window.__forgePolicyViolations,
   })).catch(() => ({})))));
   if (page && !page.isClosed()) await screenshot('failure').catch(() => {});
   console.error(report.error); process.exitCode = 1;

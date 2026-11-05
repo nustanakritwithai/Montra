@@ -14,7 +14,9 @@ one matching bank copy and the native starter wallet. The first enhancement is
 only temporary source substitution is the account server URL. Babylon and its
 loaders are downloaded from the same official CDN as the shipped page, recorded
 by SHA-256, then served locally. All other external HTTP and WebSocket attempts
-are blocked. Babylon projection locates the NPC on screen; a real pointer click
+are blocked. An exact-origin `connect-src` response policy enforces the browser
+network boundary, so the real localhost WebSocket is not proxied or replaced by
+Playwright. Babylon projection locates the NPC on screen; a real pointer click
 must open its dialogue. No game UI function is called directly.
 
 Assertions cover the visible success toast, +1 item, progress, next upgrade,
