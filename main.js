@@ -137,6 +137,52 @@
   camera.fov = 0.69;
   camera.minZ = 1;
   camera.maxZ = 320;
+
+  // Dynamic camera shake for impactful martial hits, heavy skills and receiving blows
+  let cameraShakeRemaining = 0;
+  let cameraShakeDuration = 250;
+  let cameraShakeIntensity = 0;
+  let cameraShakePrevOffset = { x: 0, y: 0, z: 0 };
+
+  function shakeCamera(intensity = 0.35, durationMs = 280) {
+    if (!Number.isFinite(intensity) || intensity <= 0) return;
+    cameraShakeIntensity = Math.min(1.5, Math.max(cameraShakeIntensity, intensity));
+    cameraShakeDuration = Math.max(cameraShakeDuration, durationMs);
+    cameraShakeRemaining = Math.max(cameraShakeRemaining, durationMs);
+  }
+
+  function applyCameraShake(dt) {
+    if (cameraShakePrevOffset.x !== 0 || cameraShakePrevOffset.y !== 0 || cameraShakePrevOffset.z !== 0) {
+      camera.target.x -= cameraShakePrevOffset.x;
+      camera.target.y -= cameraShakePrevOffset.y;
+      camera.target.z -= cameraShakePrevOffset.z;
+      cameraShakePrevOffset.x = 0;
+      cameraShakePrevOffset.y = 0;
+      cameraShakePrevOffset.z = 0;
+    }
+    if (cameraShakeRemaining > 0) {
+      cameraShakeRemaining = Math.max(0, cameraShakeRemaining - dt * 1000);
+      const progress = cameraShakeRemaining / (cameraShakeDuration || 1);
+      const decay = progress * progress;
+      const curAmp = cameraShakeIntensity * decay;
+      if (curAmp > 0.005) {
+        const t = performance.now() * 0.055;
+        const ox = (Math.sin(t * 1.8) + (Math.random() - 0.5) * 0.5) * curAmp;
+        const oy = (Math.cos(t * 2.3) + (Math.random() - 0.5) * 0.3) * (curAmp * 0.65);
+        const oz = (Math.sin(t * 1.2) + (Math.random() - 0.5) * 0.5) * curAmp;
+        cameraShakePrevOffset.x = ox;
+        cameraShakePrevOffset.y = oy;
+        cameraShakePrevOffset.z = oz;
+        camera.target.x += ox;
+        camera.target.y += oy;
+        camera.target.z += oz;
+      } else {
+        cameraShakeIntensity = 0;
+        cameraShakeRemaining = 0;
+      }
+    }
+  }
+
   const moon = new B.HemisphericLight("moon", new B.Vector3(0.1, 1, 0.2), scene);
   moon.intensity = .85;
   moon.diffuse = B.Color3.FromHexString("#c9dacc");
@@ -261,7 +307,7 @@
   const floatLayer = document.createElement("div"); floatLayer.className = "float-layer"; floatLayer.setAttribute("aria-hidden", "true");
   document.getElementById("game")?.append(floatLayer);
   const floatProj = new B.Vector3();
-  const METAL_KINDS = new Set(["dealt", "skill", "taken", "heal", "spirit", "onoma", "cry", "levelup"]);
+  const METAL_KINDS = new Set(["dealt", "skill", "taken", "heal", "spirit", "onoma", "cry", "levelup", "crit"]);
   function floatText(x, y, z, text, kind = "dealt", opts = {}) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect(), w = engine.getRenderWidth(), h = engine.getRenderHeight();
@@ -516,6 +562,15 @@
       for (let k = 0; k < 3; k++) { const R = s * .78 - k * s * .05, w = [s * .1, s * .05, s * .02][k];
         c.beginPath(); c.arc(0, 0, R, -Math.PI * .86, -Math.PI * .14); c.arc(0, -w * .4, R - w, -Math.PI * .2, -Math.PI * .8, true); c.closePath();
         c.fillStyle = k === 2 ? "rgba(255,255,255,1)" : rgba(col, k ? .95 : .55); c.shadowColor = rgba(col, 1); c.shadowBlur = s / 14; c.fill(); } },
+    // Razor-sharp blade slash cutting across diagonally.
+    slash(c, s, col) { const h = s / 2; c.save(); c.translate(h, h); c.rotate(-Math.PI / 4);
+      const g = c.createLinearGradient(-h * .9, 0, h * .9, 0); g.addColorStop(0, rgba(col, 0)); g.addColorStop(.2, rgba(col, .8)); g.addColorStop(.5, "rgba(255,255,255,1)"); g.addColorStop(.8, rgba(col, .8)); g.addColorStop(1, rgba(col, 0));
+      c.fillStyle = g; c.shadowColor = rgba(col, 1); c.shadowBlur = s / 12; c.beginPath(); c.moveTo(-h * .95, 0); c.quadraticCurveTo(0, -s * .06, h * .95, 0); c.quadraticCurveTo(0, s * .06, -h * .95, 0); c.closePath(); c.fill(); c.restore(); },
+    // Crossed twin razor slashes (X-slash).
+    cross(c, s, col) { const h = s / 2;
+      for (const rot of [-Math.PI / 4, Math.PI / 4]) { c.save(); c.translate(h, h); c.rotate(rot);
+        const g = c.createLinearGradient(-h * .9, 0, h * .9, 0); g.addColorStop(0, rgba(col, 0)); g.addColorStop(.2, rgba(col, .85)); g.addColorStop(.5, "rgba(255,255,255,1)"); g.addColorStop(.8, rgba(col, .85)); g.addColorStop(1, rgba(col, 0));
+        c.fillStyle = g; c.shadowColor = rgba(col, 1); c.shadowBlur = s / 10; c.beginPath(); c.moveTo(-h * .92, 0); c.quadraticCurveTo(0, -s * .055, h * .92, 0); c.quadraticCurveTo(0, s * .055, -h * .92, 0); c.closePath(); c.fill(); c.restore(); } },
     // Forward thrust streak.
     streak(c, s, col) { const g = c.createLinearGradient(0, s, 0, 0);
       g.addColorStop(0, rgba(col, 0)); g.addColorStop(.7, rgba(col, .9)); g.addColorStop(1, "rgba(255,255,255,1)");
@@ -589,12 +644,23 @@
     }
   }
   // Hit flash: starburst plus a ground shock ring; ours are gold, hits on us red, others cyan.
-  function hitBurst(x, z, tone = "gold", heavy = false, y = 0) {
-    const sc = heavy ? 1.45 : 1;
+  function hitBurst(x, z, tone = "gold", heavy = false, y = 0, isCrit = false) {
+    const sc = (heavy || isCrit) ? 1.6 : 1;
     spawnFx("star", tone, x, y + 1.6, z, { life: 280, s0: 1.6 * sc, s1: 6 * sc, a0: 1, a1: 0 });
     spawnFx("star", tone, x, y + 1.6, z, { life: 180, s0: 3 * sc, s1: 1.4 * sc, a0: .9, a1: 0, delay: 30 });
-    spawnFx("ring", tone === "red" ? "red" : "gold", x, y + .15, z, { orient: "ground", life: 420, s0: 1, s1: 6.5 * sc, a0: .95, a1: 0 });
-    if (heavy || tone !== "cyan") sparks(tone, x, y + 1.4, z, heavy ? 10 : 6, { speed: 8, up: 5, size: .8, life: 420 });
+    spawnFx("ring", tone === "red" ? "red" : (isCrit ? "orange" : "gold"), x, y + .15, z, { orient: "ground", life: 420, s0: 1, s1: 6.5 * sc, a0: .95, a1: 0 });
+    if (isCrit) {
+      spawnFx("cross", tone === "red" ? "red" : "orange", x, y + 1.5, z, { life: 280, s0: 2, s1: 7, a0: 1, a1: 0, roll: (Math.random() - .5) * .6 });
+      spawnFx("star", "white", x, y + 1.5, z, { life: 160, s0: 2.8, s1: .8, a0: 1, a1: 0 });
+      sparks(tone, x, y + 1.4, z, 14, { speed: 10, up: 6, size: .9, life: 500 });
+      sparks("white", x, y + 1.4, z, 8, { speed: 8, up: 5, size: .6, life: 360 });
+    } else if (heavy) {
+      spawnFx("slash", tone, x, y + 1.5, z, { life: 240, s0: 1.5, s1: 5.5, a0: 1, a1: 0, roll: (Math.random() - .5) * .8 });
+      sparks(tone, x, y + 1.4, z, 10, { speed: 8, up: 5, size: .8, life: 420 });
+      sparks("white", x, y + 1.4, z, 4, { speed: 6, up: 4, size: .5, life: 300 });
+    } else if (tone !== "cyan") {
+      sparks(tone, x, y + 1.4, z, 6, { speed: 7, up: 4, size: .7, life: 380 });
+    }
   }
   // Wind-up telegraph: a red danger disc that tightens onto the ghost until it strikes.
   function windupTelegraph(mesh, g) {
@@ -764,10 +830,13 @@
     const x = pos.x, z = pos.z, y = o.y ?? (t.y || 0), follow = o.follow || null;
     switch (kind) {
       case "ghost_die":
-        spawnFx("yantra", "violet", x, y + .12, z, { orient: "ground", life: 1400, s0: 7, s1: 3, a0: 1, a1: 1, fade: .5, spin: -2.4 });
-        spawnFx("beam", "violet", x, y + 4.5, z, { orient: "pillar", life: 1300, s0: 1.8, s1: .5, h: 9, a0: .85, a1: .85, fade: .6 });
-        spawnFx("star", "white", x, y + 1.5, z, { life: 260, s0: 2, s1: 6.5, a0: 1, a1: 0 });
-        sparks("violet", x, y + .8, z, 18, { speed: 1.8, up: 6, grav: -1, life: 1300, size: .8, spread: 700 }); break;
+        spawnFx("yantra", "gold", x, y + .12, z, { orient: "ground", life: 1400, s0: 7, s1: 3.5, a0: 1, a1: 1, fade: .5, spin: -2.4 });
+        spawnFx("beam", "gold", x, y + 4.5, z, { orient: "pillar", life: 1300, s0: 2.2, s1: .5, h: 10, a0: .9, a1: .9, fade: .6 });
+        spawnFx("star", "white", x, y + 1.5, z, { life: 280, s0: 2.5, s1: 7, a0: 1, a1: 0 });
+        spawnFx("ring", "violet", x, y + .15, z, { orient: "ground", life: 600, s0: 1, s1: 7.5, a0: 1, a1: 0 });
+        spawnFx("disc", "gold", x, y + .1, z, { orient: "ground", life: 800, s0: 1.5, s1: 6, a0: .8, a1: 0 });
+        sparks("violet", x, y + .8, z, 18, { speed: 2.2, up: 6, grav: -1.2, life: 1300, size: .85, spread: 600 });
+        sparks("gold", x, y + .6, z, 14, { speed: 2.5, up: 7, grav: -1.5, life: 1400, size: .9, spread: 500 }); break;
       case "ghost_spawn":
         spawnFx("disc", "blood", x, y + .1, z, { orient: "ground", life: 900, s0: 1, s1: 5.5, a0: .9, a1: 0 });
         spawnFx("dash", "red", x, y + .12, z, { orient: "ground", life: 900, s0: 6, s1: 3, a0: .2, a1: 1, fade: .3, spin: 3 });
@@ -4312,7 +4381,7 @@
   // Contact sound at the target, chosen by the attacker's weapon and move.
   const HIT_WORDS = { blade: ["ฉัวะ!", "เฉือน!", "ฟึ่บ!"], fist: ["ปั้ก!", "ผัวะ!", "ตุบ!"], elbow: ["เพี้ยะ!", "ป้าบ!"], kick: ["ตุ้บ!", "อั้ก!"],
     blunt: ["โป๊ก!", "ตึง!"], rice: ["ซ่า!", "เปาะ!"], talisman: ["แปะ!", "ฉึบ!"], slam: ["ตูม!"] };
-  function impactAt(attackerId, x, z, source, ghost, kind, victimId) {
+  function impactAt(attackerId, x, z, source, ghost, kind, victimId, isCrit = false) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     const a = avatars.get(attackerId), w = a?.weaponId || "", move = a?.action?.type || "";
     let name = "fist", intensity = 1;
@@ -4322,9 +4391,13 @@
     else if (w === "spirit_staff") name = "blunt";
     else if (w === "muay_wraps") name = /elbow|counter/.test(move) ? "elbow" : /knee|teep|throw/.test(move) ? "kick" : "fist";
     SFX(name, { x, z, intensity });
-    { const mine = attackerId === localId; hitBurst(x, z, mine ? "gold" : victimId === localId ? "red" : "cyan", mine && (SKILL_SOURCES.has(source) || name === "slam" || name === "blunt"), a?.y ?? getLocalAvatar()?.y ?? 0); }
+    { const mine = attackerId === localId;
+      const heavy = mine && (SKILL_SOURCES.has(source) || name === "slam" || name === "blunt" || isCrit);
+      hitBurst(x, z, mine ? (isCrit ? "orange" : "gold") : victimId === localId ? "red" : "cyan", heavy, a?.y ?? getLocalAvatar()?.y ?? 0, isCrit);
+      if (mine && (isCrit || heavy)) shakeCamera(isCrit ? 0.45 : 0.28, isCrit ? 300 : 200);
+    }
     // Comic hit word (short Thai onomatopoeia), only for hits that involve us, to keep the far view readable.
-    if (attackerId === localId) { const words = HIT_WORDS[name] || HIT_WORDS.fist; floatText(x, 2.4, z, words[Math.random() * words.length | 0], "onoma", { side: 46, drift: 30, rise: 26, life: 900 }); }
+    if (attackerId === localId) { const words = isCrit ? ["ฉึบ!", "เปรี้ยง!", "ฟันขาด!"] : (HIT_WORDS[name] || HIT_WORDS.fist); floatText(x, 2.4, z, words[Math.random() * words.length | 0], "onoma", { side: 46, drift: 30, rise: 26, life: 900 }); }
     if (ghost && kind) SFX("ghost", { kind, ev: "hurt", x, z, delay: .03, intensity: .8 });
     else if (ghost) SFX("ghost_hit", { x, z, delay: .02, intensity: .8 });
   }
@@ -7846,6 +7919,15 @@
   }
   function triggerSkillVfx(skillId, caster, target) {
     if (!caster || !fxNear(caster.x, caster.z)) return;
+    if (caster === getLocalAvatar()) {
+      if (skillId === "blade_heavy" || skillId === "shock") {
+        shakeCamera(0.62, 380);
+      } else if (skillId === "korat" || skillId === "seer_buffalo" || skillId === "chumphon_core") {
+        shakeCamera(0.48, 320);
+      } else if (skillId === "phuttha_core" || skillId === "atamat_core" || skillId === "thasao") {
+        shakeCamera(0.36, 260);
+      }
+    }
     const cx = caster.x, cy = caster.y || 0, cz = caster.z;
     const heading = caster.heading || 0, fwd = [-Math.sin(heading), -Math.cos(heading)];
     const tgt = target || { x: cx + fwd[0] * 1.5, y: cy, z: cz + fwd[1] * 1.5 };
@@ -9477,12 +9559,22 @@
         if(struck)struck.hurtAt=performance.now();
         if (typeof hit?.attackerId === "string") {
           const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
+          const mine = hit.attackerId === localId, dmg = Math.round(Number(hit.damage) || 0);
+          const isCrit = dmg >= 40 || (mine && SKILL_SOURCES.has(hit.source) && dmg >= 25);
           playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
-          impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true, struck?.design?.kind);
-          if (hit.attackerId === localId) { hudTarget = { id: hit.targetId, until: performance.now() + 8000 }; if (Number(hit.hp) === 0) hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1; }
-          { const mine = hit.attackerId === localId, dmg = Math.round(Number(hit.damage) || 0);
-            if (dmg > 0) floatAtMonster(hit.targetId, String(dmg), mine ? (SKILL_SOURCES.has(hit.source) ? "skill" : "dealt") : "ally", { big: mine && SKILL_SOURCES.has(hit.source) });
-            if (mine && Number(hit.hp) === 0) { floatAtMonster(hit.targetId, "ปราบ!", "status", { delay: 180, rise: 70, drift: 0 }); if (Number.isFinite(Number(at?.x))) auraFx({ x: Number(at.x), z: Number(at.z), y: Number(at.y) || 0 }, "kill"); } }
+          impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true, struck?.design?.kind, undefined, isCrit);
+          if (hit.attackerId === localId) {
+            hudTarget = { id: hit.targetId, until: performance.now() + 8000 };
+            if (Number(hit.hp) === 0) {
+              hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1;
+              shakeCamera(0.42, 320);
+            }
+          }
+          if (dmg > 0) floatAtMonster(hit.targetId, (isCrit ? "💥 " : "") + String(dmg), isCrit ? "crit" : (mine ? (SKILL_SOURCES.has(hit.source) ? "skill" : "dealt") : "ally"), { big: isCrit || (mine && SKILL_SOURCES.has(hit.source)) });
+          if (mine && Number(hit.hp) === 0) {
+            floatAtMonster(hit.targetId, "ปราบ!", "status", { delay: 180, rise: 70, drift: 0 });
+            if (Number.isFinite(Number(at?.x))) auraFx({ x: Number(at.x), z: Number(at.z), y: Number(at.y) || 0 }, "kill");
+          }
         }
         const talisman = hit?.source === "talisman";
         if (forestTarget) {
@@ -9936,6 +10028,7 @@
           faceAvatarToward(hit.attackerId, victim.x, victim.z);
         }
         if (hit.targetId === localId) {
+          shakeCamera(0.38, 260);
           toast("ถูก " + shortPkName(hit.attackerId) + " โจมตี -" + hit.damage + " HP");
         } else if (hit.attackerId === localId) {
           toast("โจมตี " + shortPkName(hit.targetId) + " -" + hit.damage + " HP");
@@ -9959,7 +10052,10 @@
           playAction(avatars.get(hit?.targetId), "hit");
           { const v = avatars.get(hit?.targetId); if (v) hitBurst(v.x, v.z, hit.targetId === localId ? "red" : "cyan", false, v.y || 0); }
           { const dmg = Math.round(Number(hit?.damage) || 0); if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), hit.targetId === localId ? "taken" : "ally"); }
-          if (hit?.targetId === localId && !(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };
+          if (hit?.targetId === localId) {
+            shakeCamera(0.35, 240);
+            if (!(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };
+          }
           const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost; if (g) g.attackAt = performance.now();
           if (g && !(performance.now() - (g.criedAt || 0) < 1500)) { ghostVoice(g, gm2, "attack"); g.criedAt = performance.now(); }
           if (hit?.attackerId === MONSTER_ID) villageGhost.metadata.ghost.attackAt = performance.now();
@@ -16126,7 +16222,9 @@
               hitFlashRemaining = .22;
               if (demoMonsterHp <= 0) {
                 hudKills.ritual_village = (hudKills.ritual_village || 0) + 1;
+                eventFx("ghost_die", enemy, { y: 0 });
                 releaseSoul(enemy.position.x, enemy.position.y + .4, enemy.position.z);
+                shakeCamera(0.42, 320);
                 enemy.setEnabled(false);
                 demoAutoAttack = false;
                 demoRespawnAt = now + 6000;
@@ -16308,6 +16406,7 @@
     animateGhosts(dt, now);
     scene.fogStart = camera.radius + atmosphere.fogNear + lightLevel().fog;
     scene.fogEnd = camera.radius + atmosphere.fogFar + lightLevel().fog * 1.5;
+    applyCameraShake(dt);
     driftMist(elapsed, camera.target);
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
     if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
