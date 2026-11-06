@@ -9865,24 +9865,7 @@
         if(speakBtn && payload.answer){
           const clean=stripMarkdownForSpeech(payload.answer);
           speakBtn.hidden=false;
-          const doSpeak=()=>{
-            if(window.MontraAudio?.isSpeaking?.()){
-              window.MontraAudio.stopSpeech();
-              speakBtn.textContent="🔊 ฟังเสียงตอบภาษาไทย";
-            }else{
-              window.MontraAudio?.speak?.(clean,{
-                persona:"guide",
-                onEnd:()=>{if(document.getElementById("npcGuideSpeakBtn"))speakBtn.textContent="🔊 ฟังเสียงตอบภาษาไทย";}
-              });
-              speakBtn.textContent="⏹ หยุดเสียงพูด";
-            }
-          };
-          speakBtn.onclick=doSpeak;
-          window.MontraAudio?.speak?.(clean,{
-            persona:"guide",
-            onEnd:()=>{if(document.getElementById("npcGuideSpeakBtn"))speakBtn.textContent="🔊 ฟังเสียงตอบภาษาไทย";}
-          });
-          speakBtn.textContent="⏹ หยุดเสียงพูด";
+          bindSpeechButton(speakBtn, clean, "guide", "🔊 ฟังเสียงตอบภาษาไทย");
         }
       });
       joined.onMessage("forest_defense_state",payload=>{
@@ -13462,12 +13445,49 @@
       else if (key !== "muted") SFX(key === "ui" ? "tap" : "fist", { intensity: .6 });
     });
     const testBtn = root.querySelector("#testVoiceBtn");
-    if (testBtn) {
-      testBtn.onclick = () => {
-        window.MontraAudio?.speak?.("สวัสดี ยินดีต้อนรับสู่อาณาจักรมนตรา ระบบเสียงพูดภาษาไทยพร้อมใช้งานแล้ว", { persona: "guide" });
-      };
-    }
+    if (testBtn) bindSpeechButton(testBtn, "สวัสดี ยินดีต้อนรับสู่อาณาจักรมนตรา ระบบเสียงพูดภาษาไทยพร้อมใช้งานแล้ว", "guide", "🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)");
   }
+  function bindSpeechButton(button, text, persona, label) {
+    let status = button.montraSpeechStatus;
+    if (status) window.MontraAudio?.stopSpeech?.();
+    else {
+      status = button.montraSpeechStatus = document.createElement("p");
+      status.className = "note";
+      status.setAttribute("role", "status");
+      status.setAttribute("aria-live", "polite");
+      button.after(status);
+    }
+    const privacy = "หากอุปกรณ์ไม่มีเสียงไทย ข้อความจะส่งให้ Google เพื่ออ่านเสียง (ไม่เกิน 190 ตัวอักษร)";
+    status.textContent = privacy;
+    button.textContent = label;
+    button.onclick = () => {
+      if (window.MontraAudio?.isSpeaking?.()) {
+        window.MontraAudio.stopSpeech();
+        button.textContent = label;
+        status.textContent = privacy;
+        return;
+      }
+      button.textContent = "ยกเลิกการเตรียมเสียง";
+      status.textContent = "กำลังเตรียมเสียง…";
+      if (!window.MontraAudio?.speak) {
+        button.textContent = label;
+        status.textContent = "ระบบเสียงยังไม่พร้อม กรุณาโหลดหน้าใหม่";
+        return;
+      }
+      window.MontraAudio.speak(text, {
+        persona,
+        onStart: () => { button.textContent = "⏹ หยุดเสียงพูด"; status.textContent = "กำลังเล่นเสียง"; },
+        onEnd: () => { button.textContent = label; status.textContent = privacy; },
+        onError: event => {
+          button.textContent = label;
+          status.textContent = event?.error === "muted" ? "กรุณาเปิดเสียงและเพิ่มความดังรวมกับเสียงพูด" :
+            event?.error === "not-allowed" ? "เบราว์เซอร์ไม่อนุญาตให้เล่นเสียง ลองกดฟังอีกครั้งหรือตรวจสิทธิ์เสียงของเว็บไซต์" :
+            "เล่นเสียงไม่ได้ ตรวจอินเทอร์เน็ตหรือเสียงภาษาไทยของอุปกรณ์ แล้วกดฟังอีกครั้ง";
+        }
+      });
+    };
+  }
+
   function openHelp() {
     openDrawer("help","วิธีเล่นและตั้งค่า",`
       <h3>ออกเดินทาง</h3>
@@ -15487,25 +15507,7 @@
     $("serviceNpcSpeech").textContent=npc.name+": "+service.dialogue;
     const speakBtn=$("serviceNpcSpeak");
     const persona=service.persona || "guide";
-    if(speakBtn){
-      speakBtn.onclick=()=>{
-        if(window.MontraAudio?.isSpeaking?.()){
-          window.MontraAudio.stopSpeech();
-          speakBtn.textContent="🔊 ฟังเสียงพูดไทย";
-        }else{
-          window.MontraAudio?.speak?.(service.dialogue,{
-            persona,
-            onEnd:()=>{if(document.getElementById("serviceNpcSpeak"))speakBtn.textContent="🔊 ฟังเสียงพูดไทย";}
-          });
-          speakBtn.textContent="⏹ หยุดเสียงพูด";
-        }
-      };
-    }
-    window.MontraAudio?.speak?.(service.dialogue,{
-      persona,
-      onEnd:()=>{if(document.getElementById("serviceNpcSpeak"))speakBtn.textContent="🔊 ฟังเสียงพูดไทย";}
-    });
-    if(speakBtn)speakBtn.textContent="⏹ หยุดเสียงพูด";
+    if(speakBtn)bindSpeechButton(speakBtn, service.dialogue, persona, "🔊 ฟังเสียงพูดไทย");
     const action=$("serviceNpcAction");action.textContent=service.action;
     action.onclick=()=>{
       const handlers={smith:openSmith,market:openEconomy,guild:openGuild,party:openParty,travel:openMap,strategy:openStrategicMap,guide:openHelp,

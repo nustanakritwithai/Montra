@@ -1,7 +1,8 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync('main.js','utf8'),start=source.indexOf('  const SENTINEL_SKILL_ICONS='),end=source.indexOf('  // Stamina cost on a skill button',start);
 assert.ok(start>=0&&end>start,'guardian icon renderer exists');
-function element(tag){return {tag,className:'',dataset:{},attrs:{},children:[],classList:{add(){}},
+function element(tag){return {tag,className:'',dataset:{},attrs:{},listeners:{},children:[],classList:{add(){}},
+  addEventListener(type,handler){(this.listeners[type]??=[]).push(handler)},
   setAttribute(k,v){this.attrs[k]=v},append(x){this.children.push(x)},replaceChildren(...nodes){this.children=nodes},
   querySelector(){return null},textContent:'',innerHTML:'',title:''};}
 const context={document:{createElement:element},SG_GLYPH:{stun:'✸',guard:'⛨',counter:'↺',intercept:'⛨'}};
@@ -13,7 +14,7 @@ render({id:'sentinelHotbar',querySelectorAll:()=>buttons},ids,skills,()=>{});
 const icons=buttons.map(button=>button.children[0].innerHTML);
 assert.ok(icons.every(icon=>icon.includes('<svg')&&icon.includes('viewBox="0 0 48 48"')));
 assert.equal(new Set(icons).size,4,'all four skill icons must differ');
-buttons.forEach((button,i)=>{assert.equal(button.dataset.skillId,ids[i]);assert.match(button.attrs['aria-label'],new RegExp(ids[i]));assert.equal(button.onclick(),ids[i]);});
+buttons.forEach((button,i)=>{assert.equal(button.dataset.skillId,ids[i]);assert.match(button.attrs['aria-label'],new RegExp(ids[i]));assert.equal(button.onclick(),ids[i]);assert.equal(button.listeners.click.length,1,'speech listener is registered without replacing gameplay click');});
 assert.equal(buttons[0].children[0].children[0].textContent,'5','cooldown remains visible over the icon');
 const other=element('button');other.firstChild={textContent:'ท่า guard'};
 render({id:'swordHotbar',querySelectorAll:()=>[other]},['guard'],{guard:{name:'ท่า guard',effect:'guard'}},()=>{});
