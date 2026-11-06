@@ -260,8 +260,12 @@
   // and a texture. Events shape them: spawn rises, attack is a full cry,
   // hurt is short and choked, die falls away, idle is a faint murmur.
   const SHAPE = {
-    spawn: { len: 1.0, gain: .7, rise: 1.35, fall: 1 }, attack: { len: .7, gain: 1, rise: 1.15, fall: .8 },
-    hurt: { len: .28, gain: .8, rise: 1.25, fall: .7 }, die: { len: 1.4, gain: .9, rise: 1, fall: .45 }, idle: { len: 1.2, gain: .35, rise: 1.05, fall: .9 },
+    spawn: { len: 1.0, gain: .7, rise: 1.35, fall: 1 },
+    attack: { len: .7, gain: 1, rise: 1.15, fall: .8 },
+    aggro: { len: .85, gain: 1.15, rise: 1.45, fall: .85 },
+    hurt: { len: .32, gain: .95, rise: 1.25, fall: .7 },
+    die: { len: 1.6, gain: 1.1, rise: 1, fall: .35 },
+    idle: { len: 1.2, gain: .35, rise: 1.05, fall: .9 },
   };
   // Formant-filtered voice: a buzzy source through two vowel bands, with vibrato and a pitch contour.
   function vocal(d, t, { base, wave = "sawtooth", f1 = 700, f2 = 1200, q = 6, vib = 5, vibD = .02, len, gain, rise, fall, breath = .2 }) {
@@ -352,11 +356,13 @@
     rumble: (d, t) => noise(d, t, { type: "lowpass", freq: 120, attack: .8, decay: 2.5, gain: .14 }),
     whisper: (d, t) => { for (let i = 0; i < 4; i++) noise(d, t + i * .18 + rnd(0, .1), { freq: rnd(1800, 3200), q: 6, attack: .05, decay: .2, gain: .035 }); },
     shout: (d, t) => vocal(d, t, { base: rnd(180, 240), f1: 700, f2: 1300, q: 5, vib: 6, vibD: .03, len: .6, gain: .05, rise: 1.2, fall: .85, breath: .3 }),
+    waterlap: (d, t) => { for (let i = 0; i < 3; i++) tone(d, t + i * .12, { freq: rnd(350, 600), to: rnd(500, 750), glide: .06, decay: .08, gain: .06 }); noise(d, t, { freq: 1100, q: 2, attack: .05, decay: .25, gain: .07 }); },
+    leaves: (d, t) => noise(d, t, { type: "bandpass", freq: rnd(2200, 3600), q: 2.5, attack: .4, decay: 1.2, gain: .08 }),
   };
   // Beds: [kind, level]. Events: [sound, min gap s, max gap s].
   const AMBIENCE = {
-    ritual_village: { beds: [["insects", .5], ["wind", .18]], events: [["cricket", 1, 3], ["gongfar", 25, 45], ["frog", 12, 25], ["chime", 10, 20]] },
-    forbidden_forest: { beds: [["wind", .45], ["insects", .35]], events: [["owl", 10, 22], ["nightbird", 7, 15], ["creak", 14, 26], ["cricket", 2, 5]] },
+    ritual_village: { beds: [["insects", .5], ["wind", .18]], events: [["cricket", 1, 3], ["gongfar", 25, 45], ["frog", 12, 25], ["chime", 10, 20], ["waterlap", 8, 18]] },
+    forbidden_forest: { beds: [["wind", .45], ["insects", .35]], events: [["owl", 10, 22], ["nightbird", 7, 15], ["creak", 14, 26], ["cricket", 2, 5], ["leaves", 6, 16]] },
     bound_temple: { beds: [["wind", .35], ["insects", .15]], events: [["templebell", 14, 24], ["chime", 6, 11], ["creak", 18, 30], ["whisper", 25, 40]] },
     drowned_marsh: { beds: [["water", .3], ["insects", .35]], events: [["frog", 2, 5], ["nightbird", 10, 20], ["whisper", 30, 50]] },
     lotus_basin: { beds: [["water", .35], ["insects", .3]], events: [["frog", 3, 6], ["templebell", 30, 50], ["chime", 18, 30]] },
@@ -458,6 +464,10 @@
   const noteOf = (th, idx) => thai(th.root, th.pent[idx % 5] + 7 * Math.floor(idx / 5));
   // Instruments (all on the given destination).
   const INST = {
+    khim: (d, t, f, g) => {
+      metal(d, t, f, [[1, 1, 1], [2.01, .45, .8], [3.02, .25, .6], [4.04, .12, .4]], { gain: g, decay: 1.4, attack: .003 });
+      tone(d, t, { freq: f, decay: .9, gain: g * .4 });
+    },
     ranat: (d, t, f, g, oct = true) => { tone(d, t, { freq: f, decay: .32, gain: g }); tone(d, t, { freq: f * 3.93, decay: .06, gain: g * .25 }); noise(d, t, { freq: f * 2, q: 4, decay: .012, gain: g * .5 }); if (oct) tone(d, t, { freq: f * 2, decay: .22, gain: g * .45 }); },
     khong: (d, t, f, g) => metal(d, t, f, [[1, 1, 1], [2.0, .22, .5], [3.1, .1, .35]], { gain: g, decay: 1.6 }),
     ching: (d, t, open, g) => { metal(d, t, 3150, [[1, 1, 1], [1.47, .6, .8], [2.1, .3, .6]], { gain: g, decay: open ? 1.1 : .06 }); if (!open) noise(d, t, { freq: 5000, q: 2, decay: .02, gain: g * 1.5 }); },
@@ -504,6 +514,7 @@
     if (pb === 7) INST.khong(L.base, t + beat * .5, noteOf(th, 0), .05);
     if (pb === 1 || pb === 5) INST.ranat(L.base, t, f / 2, .05, false);
     if (!th.sparse || pb % 2 === 0) INST.ching(L.base, t, pb % 2 === 0, .022);
+    if (pb === 3 || pb === 6) INST.khim(L.base, t, f * 2, .042);
     // Combat: ranat ek eighth-note runs, pi long notes, klong that and taphon.
     if (music.want.combat || music.want.war) {
       INST.ranat(L.combat, t, f, .06); INST.ranat(L.combat, t + beat / 2, noteOf(th, Math.max(0, Math.min(9, idx + (r < .5 ? 1 : -1)))), .05);

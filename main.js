@@ -7545,6 +7545,16 @@
         g.speed += (sp - g.speed) * (1 - Math.exp(-dt * 6));
       }
       ghostVoices(mesh, g, now);
+      // Monster Aggro Roar when targeting hero or entering direct melee threat
+      const hero = getLocalAvatar();
+      const distToHero = hero ? Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) : 999;
+      const isAggro = (mesh.metadata?.monsterId === selectedForestTarget) || g.windup || (g.ai === "attack") || (distToHero < 6 && g.speed > 1.2);
+      if (isAggro && !g.aggroPlayed && distToHero < 22) {
+        g.aggroPlayed = true;
+        ghostVoice(g, mesh, "aggro", 1.25);
+      } else if (!isAggro && distToHero > 28) {
+        g.aggroPlayed = false;
+      }
       const move = Math.min(1, g.speed / 2.5);
       g.walk += dt * (2 + 6 * move);
       const atkAge = (now - g.attackAt) / 1000, hurtAge = (now - g.hurtAt) / 1000;
@@ -9651,7 +9661,13 @@
         if (room !== joined) return;
         const forestTarget=joined.state?.monsters?.get?.(hit?.targetId);
         const struck=(forestMonsters.get(hit?.targetId)||(hit?.targetId===MONSTER_ID?villageGhost:null))?.metadata?.ghost;
-        if(struck)struck.hurtAt=performance.now();
+        if(struck){
+          struck.hurtAt=performance.now();
+          if (hit.attackerId === localId) {
+            const mMesh = forestMonsters.get(hit.targetId) || enemy;
+            ghostVoice(struck, mMesh, "hurt", 0.95);
+          }
+        }
         if (typeof hit?.attackerId === "string") {
           const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
           const mine = hit.attackerId === localId, dmg = Math.round(Number(hit.damage) || 0);
