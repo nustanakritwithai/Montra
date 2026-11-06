@@ -1995,7 +1995,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .class-choices small { display:block; margin-top:3px; color:#c1cec2; line-height:1.45; }
 @media (max-width:380px) { .class-choices { grid-template-columns:1fr; } }
 
-#game:not(:has(.book-entry:not([hidden]))) #quickSkills { display:none; }
+/* quickSkills is always accessible */
+#quickSkills { display: grid !important; }
 .field-layout-picker { display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin-bottom:14px; }
 .field-layout-picker > span { color:var(--field-gold); font-size:12px; margin-right:auto; }
 .field-layout-picker button { min-height:44px; border:1px solid var(--field-line); border-radius:8px; background:var(--field-ink); color:var(--field-paper); padding:5px 12px; }
@@ -4514,4 +4515,23 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   background-size: contain !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
+}
+
+/* Always show and highlight Quick Skills button under minimap */
+#quickSkills,
+.map-shortcuts #quickSkills,
+.field-shortcuts #quickSkills {
+  display: grid !important;
+  align-items: center;
+  justify-items: center;
+}
+.map-shortcuts #quickSkills {
+  background: linear-gradient(135deg, #1c3b2b 0%, #2e5c45 100%) !important;
+  border: 1px solid #e8ba74 !important;
+  box-shadow: 0 0 6px rgba(232, 186, 116, 0.4);
+}
+.map-shortcuts #quickSkills:hover,
+.map-shortcuts #quickSkills:active {
+  background: linear-gradient(135deg, #2e5c45 0%, #448060 100%) !important;
+  transform: scale(1.05);
 }
