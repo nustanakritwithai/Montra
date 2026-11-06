@@ -157,6 +157,103 @@
     levelup: (d, t) => { R.gong(d, t, { freq: 110 }); [784, 988, 1175, 1568].forEach((f, i) => metal(d, t + .25 + i * .09, f, [[1, 1], [2.01, .3, .5]], { gain: .1, decay: 1 })); },
     drum: (d, t, p) => { const k = p.intensity; for (const dt of [0, .22, .44]) { tone(d, t + dt, { freq: 78, to: 52, glide: .12, decay: .22, gain: .5 * k }); noise(d, t + dt, { type: "lowpass", freq: 260, decay: .1, gain: .25 * k }); } },
     thunder: (d, t, p) => { noise(d, t, { type: "lowpass", freq: 900, to: 120, glide: 1.6, attack: .02, decay: 2.2, gain: .55 * p.intensity }); noise(d, t + .1, { type: "lowpass", freq: 200, decay: 1.6, gain: .35 * p.intensity }); },
+    // Class-specific Thai skill SFX
+    phuttha_core: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      [0, .07, .15].forEach((dt, i) => {
+        noise(d, t + dt, { freq: 480 * (1 + i * .3), to: 3400 * (1 + i * .3), glide: .1, attack: .02, decay: .12, gain: .65 * k });
+        metal(d, t + dt + .02, 1750 * (1 + i * .2), [[1, 1], [1.48, .6], [2.2, .4]], { gain: .2 * k, decay: .35 });
+      });
+      noise(d, t + .2, { type: "highpass", freq: 4200, decay: .15, gain: .3 * k });
+      metal(d, t + .22, 3200, [[1, 1], [1.5, .5]], { gain: .14 * k, decay: .5 });
+    },
+    sritra_core: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      metal(d, t, 392, [[1, 1], [1.35, .8], [1.95, .5], [2.7, .3]], { gain: .42 * k, decay: 1.2, attack: .005 });
+      noise(d, t, { type: "lowpass", freq: 480, decay: .14, gain: .45 * k });
+      tone(d, t + .04, { type: "sine", freq: 523, attack: .08, decay: 2.0, gain: .22 * k });
+      tone(d, t + .04, { type: "sine", freq: 1046, attack: .12, decay: 1.6, gain: .1 * k });
+    },
+    atamat_core: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      for (let i = 0; i < 5; i++) {
+        const dt = i * .065;
+        noise(d, t + dt, { freq: rnd(550, 800), to: rnd(2600, 3600), glide: .1, attack: .02, decay: .1, gain: .5 * k });
+        metal(d, t + dt + .01, rnd(1500, 2200), [[1, 1], [1.6, .5]], { gain: .16 * k, decay: .22 });
+      }
+      tone(d, t, { freq: 140, to: 60, glide: .35, decay: .45, gain: .35 * k });
+    },
+    chumphon_core: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      R.gong(d, t, { freq: 110, gain: .5 * k });
+      [659, 880, 1318, 1760].forEach((f, i) => {
+        tone(d, t + .08 + i * .05, { type: "sine", freq: f, attack: .04, decay: 1.2, gain: .07 * k });
+      });
+    },
+    muay_chaiya: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { freq: 1200, q: 2, decay: .03, gain: .38 * k });
+      tone(d, t, { freq: 290, to: 160, glide: .03, decay: .05, gain: .28 * k });
+      R.elbow(d, t + .07, { intensity: 1.2 * k });
+      tone(d, t + .08, { freq: 460, to: 190, glide: .04, decay: .06, gain: .22 * k });
+    },
+    muay_korat: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { freq: 240, to: 1700, glide: .18, attack: .06, decay: .18, gain: .6 * k });
+      tone(d, t + .14, { freq: 85, to: 32, glide: .12, decay: .32, gain: .7 * k });
+      noise(d, t + .14, { type: "lowpass", freq: 400, decay: .25, gain: .55 * k });
+    },
+    muay_lopburi: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { freq: 750, to: 2900, glide: .07, decay: .08, gain: .48 * k });
+      tone(d, t + .02, { freq: 200, to: 80, glide: .04, decay: .06, gain: .38 * k });
+      noise(d, t + .11, { freq: 980, to: 3300, glide: .07, decay: .08, gain: .55 * k });
+      tone(d, t + .13, { freq: 250, to: 90, glide: .04, decay: .07, gain: .42 * k });
+    },
+    muay_thasao: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { freq: 650, to: 4400, glide: .09, attack: .02, decay: .11, gain: .75 * k });
+      noise(d, t + .07, { freq: 3600, q: 3, attack: .005, decay: .03, gain: .6 * k });
+      R.kick(d, t + .08, { intensity: 1.15 * k });
+    },
+    seer_buffalo: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      tone(d, t, { type: "sawtooth", freq: 90, to: 48, glide: .3, decay: .55, gain: .42 * k });
+      noise(d, t, { type: "lowpass", freq: 420, decay: .4, gain: .45 * k });
+      tone(d, t + .16, { freq: 60, to: 30, glide: .18, decay: .65, gain: .55 * k });
+      R.gong(d, t + .2, { freq: 82, gain: .38 * k });
+    },
+    seer_curse: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { freq: 1500, to: 650, glide: .55, q: 8, attack: .12, decay: .65, gain: .32 * k });
+      tone(d, t + .04, { type: "sawtooth", freq: 147, to: 156, glide: .6, attack: .1, decay: .8, gain: .16 * k });
+      tone(d, t + .04, { type: "sawtooth", freq: 220, to: 208, glide: .6, attack: .1, decay: .8, gain: .14 * k });
+    },
+    seer_binding: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      metal(d, t, 1960, [[1, 1], [2.02, .4]], { gain: .22 * k, decay: .14, attack: .001 });
+      tone(d, t, { freq: 880, to: 1760, glide: .07, decay: .11, gain: .22 * k });
+      R.talisman(d, t + .05, { intensity: 1.1 * k });
+    },
+    seer_burst: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      tone(d, t, { freq: 240, to: 920, glide: .16, attack: .03, decay: .18, gain: .32 * k });
+      noise(d, t + .14, { type: "lowpass", freq: 1300, to: 220, glide: .4, decay: .5, gain: .65 * k });
+      metal(d, t + .16, 1400, [[1, 1], [1.7, .45]], { gain: .2 * k, decay: .7 });
+    },
+    seer_pot: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      tone(d, t, { freq: 360, to: 680, glide: .04, decay: .06, gain: .42 * k });
+      noise(d, t, { freq: 2100, decay: .04, gain: .28 * k });
+      noise(d, t + .05, { freq: 320, to: 1900, glide: .5, q: 7, attack: .12, decay: .55, gain: .32 * k });
+    },
+    seer_poison: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { type: "highpass", freq: 3600, decay: .45, gain: .32 * k });
+      for (let i = 0; i < 4; i++) {
+        tone(d, t + .04 + i * .08, { freq: rnd(440, 700), to: rnd(240, 380), glide: .04, decay: .06, gain: .16 * k });
+      }
+    },
   };
   // ---- Ghost voices ----------------------------------------------------
   // Families of synthesised voices; each ghost kind picks a family, a pitch
@@ -212,12 +309,27 @@
     FAMILY[v[0]](d, t, e, k);
     if (v[2]) FAMILY[v[2]](d, t + .04, { ...e, gain: e.gain * .45 }, { base: v[2] === "bell" ? 1568 : v[2] === "choir" ? v[1] * .75 : v[1] });
   };
+  // Skill Aliases
+  R.chaiya = R.muay_chaiya;
+  R.korat = R.muay_korat;
+  R.lopburi = R.muay_lopburi;
+  R.thasao = R.muay_thasao;
+  R.seer_mark = R.talisman;
+  R.seer_rice = R.rice;
+  R.seer_scatter = R.rice;
   // Which bus, how much reverb and base loudness for each sound.
   const META = {
     tap: ["ui", 0, .9], open: ["ui", .05, .9], close: ["ui", .05, .9], toast: ["ui", .25, 1], error: ["ui", 0, 1], coin: ["ui", .2, 1], levelup: ["ui", .4, 1],
     gong: ["sfx", .5, 1], drum: ["sfx", .35, 1], thunder: ["ambience", .5, 1], ghost: ["sfx", .4, .9],
+    phuttha_core: ["sfx", .25, 1], sritra_core: ["sfx", .4, 1], atamat_core: ["sfx", .3, 1], chumphon_core: ["sfx", .5, 1],
+    muay_chaiya: ["sfx", .2, 1], muay_korat: ["sfx", .25, 1], muay_lopburi: ["sfx", .2, 1], muay_thasao: ["sfx", .2, 1],
+    seer_buffalo: ["sfx", .4, 1], seer_curse: ["sfx", .45, 1], seer_binding: ["sfx", .3, 1], seer_burst: ["sfx", .35, 1],
+    seer_pot: ["sfx", .3, 1], seer_poison: ["sfx", .25, 1],
   };
-  const DUR = { ghost: 2.6, gong: 3.5, levelup: 3.5, down: 3.5, summon: 4.5, thunder: 3, ghost_die: 1.6, warp: 1.8, fly: 1.6, respawn: 1.4, toast: .9 };
+  const DUR = { ghost: 2.6, gong: 3.5, levelup: 3.5, down: 3.5, summon: 4.5, thunder: 3, ghost_die: 1.6, warp: 1.8, fly: 1.6, respawn: 1.4, toast: .9,
+    phuttha_core: 1.0, sritra_core: 2.2, atamat_core: 1.2, chumphon_core: 2.5,
+    muay_chaiya: .6, muay_korat: .8, muay_lopburi: .7, muay_thasao: .7,
+    seer_buffalo: 1.8, seer_curse: 1.4, seer_binding: 1.0, seer_burst: 1.2, seer_pot: 1.0, seer_poison: .9 };
 
   // ---- Ambience --------------------------------------------------------
   // Each map is a mix of continuous beds (looped, filtered noise or drones
