@@ -99,7 +99,78 @@
     }
   };
 
-  let voiceGuidanceHud = null, voiceHudTitle = null, voiceHudText = null, voiceHudTimer = null;
+  // ---- Typhoon Tactical Combat Callouts ----
+  const TYPHOON_COMBAT_CALLOUTS = {
+    boss_telegraph: {
+      title: "พราหมณ์เตือนภัย",
+      subtitle: "ระวัง! ถอยออกจากวงอาคมเร็วเข้า!",
+      text: "ระวัง! อสูรร้ายเริ่มร่ายวงอาคมสีเลือด ก้าวถอยออกมาเร็วเข้า!",
+      cooldown: 14000,
+      alert: true,
+      icon: "⚠️"
+    },
+    low_hp: {
+      title: "พราหมณ์เตือนชีพ",
+      subtitle: "พลังชีวิตวิกฤต! จงดื่มน้ำมนต์หรือล่าถอย",
+      text: "ชีพจรเจ้าอ่อนล้าแล้ว! จงรีบดื่มน้ำมนต์หรือถอยออกจากวงต่อสู้!",
+      cooldown: 25000,
+      alert: true,
+      icon: "❤️‍🩹"
+    },
+    boss_enrage: {
+      title: "อสูรคลั่งสะกดจิต",
+      subtitle: "บอสเข้าสู่สภาวะโทสะคลั่ง! พลังโจมตีรุนแรงขึ้น",
+      text: "ระวังตัวให้ดี! อสูรตกอยู่ในโทสะคลั่ง พลังทำลายล้างเพิ่มพูนขึ้นแล้ว!",
+      cooldown: 30000,
+      alert: true,
+      icon: "🔥"
+    },
+    combo_rank_s: {
+      title: "เพลงยุทธ์ปรมาจารย์",
+      subtitle: "คอมโบทะลวงระดับ S! เพลงดาบมนตราไร้เทียมทาน",
+      text: "ยอดเยี่ยมยิ่ง! เพลงดาบมนตราของเจ้าเข้าขั้นปรมาจารย์แล้ว!",
+      cooldown: 20000,
+      alert: false,
+      icon: "⚔️"
+    },
+    execute_finisher: {
+      title: "คมดาบลงทัณฑ์",
+      subtitle: "ปลดปล่อยดวงวิญญาณสูญสลายสำเร็จ!",
+      text: "ลงทัณฑ์เด็ดขาด! ปลดปล่อยดวงวิญญาณร้ายให้สิ้นสูญ",
+      cooldown: 12000,
+      alert: false,
+      icon: "🗡️"
+    }
+  };
+
+  const lastCombatCalloutTimes = new Map();
+  function triggerCombatCallout(key) {
+    if (!isVoiceGuidanceEnabled()) return;
+    const item = TYPHOON_COMBAT_CALLOUTS[key];
+    if (!item) return;
+    const now = performance.now();
+    const last = lastCombatCalloutTimes.get(key) || 0;
+    if (now - last < item.cooldown) return;
+    lastCombatCalloutTimes.set(key, now);
+
+    ensureVoiceGuidanceHud();
+    voiceHudTitle.textContent = item.title;
+    voiceHudText.textContent = item.subtitle;
+    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = item.icon || "🧙‍♂️";
+    voiceGuidanceHud.classList.toggle("combat-alert", Boolean(item.alert));
+    voiceGuidanceHud.hidden = false;
+    clearTimeout(voiceHudTimer);
+    voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(4500, item.subtitle.length * 100));
+    try {
+      window.MontraAudio?.speak?.(item.text, {
+        persona: "guide",
+        onEnd: () => hideVoiceGuidanceHud(),
+        onError: () => {}
+      });
+    } catch (_) {}
+  }
+
+  let voiceGuidanceHud = null, voiceHudTitle = null, voiceHudText = null, voiceHudTimer = null, voiceGuidanceAvatar = null;
   function isVoiceGuidanceEnabled() {
     try { return localStorage.getItem("montra_voice_guidance") !== "false"; }
     catch (_) { return true; }
@@ -113,9 +184,9 @@
     voiceGuidanceHud = document.createElement("div");
     voiceGuidanceHud.className = "voice-guidance-hud";
     voiceGuidanceHud.hidden = true;
-    const avatar = document.createElement("div");
-    avatar.className = "voice-guidance-avatar";
-    avatar.textContent = "🧙‍♂️";
+    voiceGuidanceAvatar = document.createElement("div");
+    voiceGuidanceAvatar.className = "voice-guidance-avatar";
+    voiceGuidanceAvatar.textContent = "🧙‍♂️";
     const content = document.createElement("div");
     content.className = "voice-guidance-content";
     const header = document.createElement("div");
@@ -137,11 +208,14 @@
       window.MontraAudio?.stopSpeech?.();
       hideVoiceGuidanceHud();
     };
-    voiceGuidanceHud.append(avatar, content, skipBtn);
+    voiceGuidanceHud.append(voiceGuidanceAvatar, content, skipBtn);
     document.getElementById("game")?.append(voiceGuidanceHud);
   }
   function hideVoiceGuidanceHud() {
-    if (voiceGuidanceHud) voiceGuidanceHud.hidden = true;
+    if (voiceGuidanceHud) {
+      voiceGuidanceHud.hidden = true;
+      voiceGuidanceHud.classList.remove("combat-alert");
+    }
     clearTimeout(voiceHudTimer);
   }
   function triggerVoiceGuidance(stepKey) {
@@ -156,6 +230,8 @@
     ensureVoiceGuidanceHud();
     voiceHudTitle.textContent = item.title;
     voiceHudText.textContent = item.subtitle;
+    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = "🧙‍♂️";
+    voiceGuidanceHud.classList.remove("combat-alert");
     voiceGuidanceHud.hidden = false;
     clearTimeout(voiceHudTimer);
     voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(5000, item.text.length * 110));
@@ -855,6 +931,9 @@
     spawnFx("ring", "blood", mesh.position.x, y + .03, mesh.position.z, { orient: "ground", life: 750, s0: 0.8, s1: r * 2.4, a0: 0.95, a1: 0.1, follow: mesh });
     spawnFx("cross", "red", mesh.position.x, y + .04, mesh.position.z, { orient: "ground", life: 750, s0: r * 1.6, s1: r * 1.6, a0: 0.85, a1: 0.2, spin: 1.8, follow: mesh });
     sparks("blood", mesh.position.x, y + 0.3, mesh.position.z, 6, { speed: 3.5, up: 1.5, life: 500 });
+    if (g?.tier === "boss" || g?.tier === "elite" || (mesh && mesh.metadata?.ghost?.design?.elite)) {
+      triggerCombatCallout("boss_telegraph");
+    }
   }
   // The selected monster's health is a compact ring on the ground beneath it.
 
@@ -943,7 +1022,10 @@
       comboHudEl.hidden = false;
       comboHitsEl.textContent = String(comboStreak);
       let grade = "C", label = "วิชาคล่องแคล่ว", cls = "grade-c";
-      if (comboStreak >= 25) { grade = "S"; label = "ปรมาจารย์ยุทธ์!"; cls = "grade-s"; }
+      if (comboStreak >= 25) {
+        grade = "S"; label = "ปรมาจารย์ยุทธ์!"; cls = "grade-s";
+        triggerCombatCallout("combo_rank_s");
+      }
       else if (comboStreak >= 15) { grade = "A"; label = "ยอดฝีมือเพลงยุทธ์!"; cls = "grade-a"; }
       else if (comboStreak >= 7) { grade = "B"; label = "ชำนาญการต่อสู้"; cls = "grade-b"; }
       comboLabelEl.textContent = label;
@@ -5503,6 +5585,7 @@
       if (curHp > 0 && curHp / curMax <= 0.30) {
         if (!g.enraged) {
           g.enraged = true;
+          triggerCombatCallout("boss_enrage");
           ghostVoice(g, mesh, "aggro", 1.6);
           shakeCamera(0.55, 480);
           floatAtMonster(mesh.metadata?.monsterId || MONSTER_ID, "จิตคลั่งวิญญาณสถิต! (ENRAGED)", "crit", { big: true });
@@ -9320,6 +9403,9 @@
     const glyphHref = "#seal-" + pathSeal(me?.pathId);
     if ($("hudClassSeal").getAttribute("href") !== glyphHref) $("hudClassSeal").setAttribute("href",glyphHref);
     $("classGlyph")?.classList.toggle("low-hp", hp / maxHp < .3);
+    if (hp > 0 && maxHp > 0 && (hp / maxHp) <= 0.25) {
+      triggerCombatCallout("low_hp");
+    }
     updateCompactCharacterHud(me);
     // Target frame: only while there is a target.
     const tg = hudCurrentTarget(now);
@@ -10038,6 +10124,7 @@
               sparks("gold", Number(at?.x), (Number(at?.y) || 0) + 1.2, Number(at?.z), 18, { speed: 4.5, up: 3.2, life: 550 });
               floatAtPlayer(localId, "วิชาประหารสิ้นสูญ! (EXECUTE)", "crit", { big: true, drift: 0 });
               shakeCamera(0.42, 320);
+              triggerCombatCallout("execute_finisher");
             }
           }
           if (dmg > 0) floatAtMonster(hit.targetId, (isCrit ? "💥 " : "") + String(dmg), isCrit ? "crit" : (mine ? (SKILL_SOURCES.has(hit.source) ? "skill" : "dealt") : "ally"), { big: isCrit || (mine && SKILL_SOURCES.has(hit.source)) });
@@ -16751,6 +16838,7 @@
                 eventFx("ghost_die", enemy, { y: 0 });
                 releaseSoul(enemy.position.x, enemy.position.y + .4, enemy.position.z);
                 shakeCamera(0.42, 320);
+                triggerCombatCallout("execute_finisher");
                 enemy.setEnabled(false);
                 demoAutoAttack = false;
                 demoRespawnAt = now + 6000;

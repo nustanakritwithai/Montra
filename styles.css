@@ -5035,3 +5035,16 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   background: rgba(255, 204, 0, 0.2);
   border-color: #ffcc00;
 }
+.voice-guidance-hud.combat-alert {
+  border-color: #ff3344;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.9), 0 0 18px rgba(255, 51, 68, 0.55);
+}
+.voice-guidance-hud.combat-alert .voice-guidance-avatar {
+  background: radial-gradient(circle, #ff3344 20%, #771122 100%);
+  border-color: #ff6677;
+  animation: pulseAvatarDanger 0.8s infinite alternate;
+}
+@keyframes pulseAvatarDanger {
+  0% { transform: scale(1); filter: drop-shadow(0 0 4px #ff2233); }
+  100% { transform: scale(1.12); filter: drop-shadow(0 0 16px #ff4455); }
+}
