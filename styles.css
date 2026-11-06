@@ -2213,6 +2213,40 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .party-frames .pf-bar { height: 5px; border-radius: 3px; background: #1b0d0a; box-shadow: inset 0 0 0 1px #000; overflow: hidden; }
 .party-frames .pf-bar i { display: block; height: 100%; background: linear-gradient(90deg, #3fd45a, #a6f56a); }
 .party-frames .pf-row.low .pf-bar i { background: linear-gradient(90deg, #d42a1e, #ff7a5a); }
+.party-frames .pf-row.low .pf-av {
+  border-color: #ff3344;
+  box-shadow: 0 0 12px rgba(255, 51, 68, 0.8);
+  animation: pulseAvatarDanger 0.8s infinite alternate;
+}
+.pf-ping-row {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+  justify-content: center;
+}
+.pf-ping-btn {
+  background: rgba(18, 12, 10, 0.85);
+  border: 1px solid #ffd84a;
+  border-radius: 6px;
+  color: #fff4dc;
+  font: 700 9.5px/1 "Noto Sans Thai", system-ui, sans-serif;
+  padding: 3px 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+.pf-ping-btn:active {
+  transform: scale(0.92);
+}
+.pf-ping-btn.rally {
+  border-color: #ffd84a;
+  background: rgba(80, 55, 10, 0.85);
+}
+.pf-ping-btn.help {
+  border-color: #ff4455;
+  background: rgba(80, 15, 20, 0.85);
+}
 .party-frames .pf-row.down .pf-av { filter: grayscale(1) brightness(.6); } .party-frames .pf-row.far { opacity: .7; }
 .hud-journal .party-frames { flex-direction: row; align-items: flex-start; }
 .party-frames .pf-av[data-lv]::after { top: auto; right: auto; }

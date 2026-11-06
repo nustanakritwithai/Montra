@@ -140,6 +140,30 @@
       cooldown: 12000,
       alert: false,
       icon: "🗡️"
+    },
+    party_low_hp: {
+      title: "พราหมณ์เตือนภัยปาร์ตี้",
+      subtitle: "สหายร่วมรบของเจ้าบาดเจ็บหนัก! จงรุดไปช่วยเหลือ",
+      text: "สหายร่วมรบของเจ้าบาดเจ็บหนัก! จงรุดไปคุ้มกันหรือร่ายมนตร์รักษา!",
+      cooldown: 25000,
+      alert: true,
+      icon: "🛡️"
+    },
+    party_rally: {
+      title: "สัญญาณรวมพลปาร์ตี้",
+      subtitle: "รวมพลตรงนี้! ประสานพลังต่อกรอสูรร้าย",
+      text: "สัญญาณรวมพลดังขึ้นแล้ว! เหล่านักรบจงรวมพลังประสานมนตราตรงนี้เร็วเข้า!",
+      cooldown: 18000,
+      alert: false,
+      icon: "🚩"
+    },
+    party_help: {
+      title: "ขอกำลังหนุนด่วน",
+      subtitle: "สหายร่วมรบต้องการความช่วยเหลือเร่งด่วน!",
+      text: "ขอกำลังหนุน! สหายร่วมรบตกอยู่ในอันตราย รีบเข้าช่วยด่วน!",
+      cooldown: 18000,
+      alert: true,
+      icon: "🆘"
     }
   };
 
@@ -804,6 +828,105 @@
     m.scaling.setAll(.001); m.visibility = 0; worldFx.push(f);
     return f;
   }
+  // ---- Phase 8: 3D Shamanic Party Tether & Tactical Ping System ----
+  const partyTetherLines = new Map();
+  let lastTetherSparkTime = 0;
+  let activePartyPing = null; // { type: "rally"|"help", x, y, z, until }
+
+  function sendPartyPing(type = "rally") {
+    const me = avatars.get(localId) || (typeof ownServerCharacter === "function" ? ownServerCharacter() : null);
+    if (!me || !Number.isFinite(me.x) || !Number.isFinite(me.z)) return;
+    const now = performance.now();
+    activePartyPing = {
+      type,
+      x: me.x,
+      y: me.y || 0,
+      z: me.z,
+      senderName: ownServerCharacter()?.name || "ผู้กล้า",
+      until: now + 5500
+    };
+
+    SFX("bell", { intensity: 1.4 });
+    shakeCamera(0.3, 200);
+
+    const tone = type === "help" ? "red" : "gold";
+    spawnFx("beam", tone, me.x, (me.y || 0) + 0.1, me.z, { life: 4500, s0: 1.8, s1: 1.8, a0: 0.85, a1: 0, orient: "pillar", h: 22 });
+    spawnFx("yantra", tone, me.x, (me.y || 0) + 0.15, me.z, { orient: "ground", life: 4500, s0: 3.2, s1: 3.2, a0: 0.85, a1: 0, spin: 1.5 });
+    sparks(tone, me.x, (me.y || 0) + 1.2, me.z, 12, { speed: 4, up: 3, life: 500 });
+
+    floatAtPlayer(localId, type === "help" ? "🆘 ขอกำลังหนุน!" : "🚩 รวมพลตรงนี้!", "status", { big: true });
+    triggerCombatCallout(type === "help" ? "party_help" : "party_rally");
+
+    if (mode === "live" && room) {
+      try { room.send("chat", { channel: "party", text: type === "help" ? "🆘 ขอกำลังหนุนด่วน!" : "🚩 รวมพลที่ตำแหน่งข้า!" }); } catch (_) {}
+    }
+  }
+
+  function updatePartyTethers(now) {
+    const me = avatars.get(localId) || (typeof ownServerCharacter === "function" ? ownServerCharacter() : null);
+    if (!me || !Number.isFinite(me.x) || !Number.isFinite(me.z)) {
+      partyTetherLines.forEach(line => line.setEnabled(false));
+      return;
+    }
+
+    const tetherAllies = [];
+    if (mode === "live" && partyState?.members) {
+      for (const m of partyState.members) {
+        if (m.sessionId === localId) continue;
+        const ally = avatars.get(m.sessionId);
+        if (ally && Number.isFinite(ally.x) && Number.isFinite(ally.z)) {
+          tetherAllies.push({ id: m.sessionId, x: ally.x, y: ally.y || 0, z: ally.z, name: m.name });
+        }
+      }
+    } else if (typeof summonAvatars !== "undefined" && summonAvatars && summonAvatars.size > 0) {
+      for (const [sId, npc] of summonAvatars) {
+        if (npc && Number.isFinite(npc.x) && Number.isFinite(npc.z)) {
+          tetherAllies.push({ id: "summon_" + sId, x: npc.x, y: npc.y || 0, z: npc.z, name: "ภูติผู้พิทักษ์" });
+        }
+      }
+    }
+
+    const activeTetherIds = new Set();
+    const myPos = new B.Vector3(me.x, (me.y || 0) + 0.85, me.z);
+
+    for (const ally of tetherAllies) {
+      const dist = Math.hypot(me.x - ally.x, me.z - ally.z);
+      if (dist > 0.5 && dist <= 18) {
+        activeTetherIds.add(ally.id);
+        const allyPos = new B.Vector3(ally.x, ally.y + 0.85, ally.z);
+        const midX = (me.x + ally.x) / 2;
+        const midY = (me.y || 0) * 0.5 + ally.y * 0.5 + 1.2 + Math.sin(now * 0.005) * 0.15;
+        const midZ = (me.z + ally.z) / 2;
+        const midPos = new B.Vector3(midX, midY, midZ);
+        const pts = [myPos, midPos, allyPos];
+
+        let lineMesh = partyTetherLines.get(ally.id);
+        if (!lineMesh) {
+          lineMesh = B.MeshBuilder.CreateLines("partyTether_" + ally.id, { points: pts, updatable: true }, scene);
+          lineMesh.color = new B.Color3(0.35, 0.92, 1.0);
+          lineMesh.alpha = 0.75;
+          lineMesh.isPickable = false;
+          partyTetherLines.set(ally.id, lineMesh);
+        } else {
+          B.MeshBuilder.CreateLines("partyTether_" + ally.id, { points: pts, instance: lineMesh });
+          lineMesh.setEnabled(true);
+        }
+
+        if (now - lastTetherSparkTime > 360) {
+          lastTetherSparkTime = now;
+          sparks("cyan", midX, midY, midZ, 2, { speed: 1.2, up: 0.6, size: 0.4, life: 320 });
+        }
+      }
+    }
+
+    for (const [id, line] of partyTetherLines) {
+      if (!activeTetherIds.has(id)) {
+        line.setEnabled(false);
+      }
+    }
+  }
+  window.MontraParty = { sendPartyPing, updatePartyTethers };
+
   // Phase 7: Exploration & World Ambient State
   let lastOccultMistTime = 0;
   let lastWaterRippleTime = 0;
@@ -9473,7 +9596,23 @@
       body.append(top, bar);
       if (r.fx.length) { const fxRow = document.createElement("span"); fxRow.className = "fx-row member-fx"; fxRow.innerHTML = fxBoxesHtml(r.fx, 3); body.append(fxRow); }
       row.append(av, body); box.append(row);
+      if (r.low && !r.down) triggerCombatCallout("party_low_hp");
     }
+    // Phase 8: Tactical party ping action shortcuts
+    const pingRow = document.createElement("span");
+    pingRow.className = "pf-ping-row";
+    const rallyBtn = document.createElement("button");
+    rallyBtn.type = "button";
+    rallyBtn.className = "pf-ping-btn rally";
+    rallyBtn.textContent = "🚩 รวมพล";
+    rallyBtn.onclick = (e) => { e.stopPropagation(); sendPartyPing("rally"); };
+    const helpBtn = document.createElement("button");
+    helpBtn.type = "button";
+    helpBtn.className = "pf-ping-btn help";
+    helpBtn.textContent = "🆘 ขอฮีล";
+    helpBtn.onclick = (e) => { e.stopPropagation(); sendPartyPing("help"); };
+    pingRow.append(rallyBtn, helpBtn);
+    box.append(pingRow);
   }
   // Plain words instead of "DEMO · ↑0ม.": mode, players, safe zone, altitude only in the air.
   function renderStatusChip() {
@@ -11915,7 +12054,24 @@
       ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(4, 0); ctx.lineTo(0, 13); ctx.lineTo(-4, 0); ctx.closePath(); ctx.fill();
       ctx.globalAlpha = 1; ctx.setTransform(1, 0, 0, 1, 0, 0);
       mapText(ctx, "N", width - 24, 9, 10, theme.ink, 700);
-    } else {
+    }
+    // Phase 8: Tactical party ping beacon on minimap
+    if (activePartyPing && performance.now() < activePartyPing.until) {
+      const px = sx(activePartyPing.x), py = sy(activePartyPing.z);
+      const pingPhase = ((performance.now() % 1000) / 1000);
+      const pingR = (large ? 10 : 6) + pingPhase * (large ? 24 : 14);
+      ctx.save();
+      ctx.strokeStyle = activePartyPing.type === "help" ? "rgba(255, 68, 68, " + (1 - pingPhase) + ")" : "rgba(255, 215, 0, " + (1 - pingPhase) + ")";
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(px, py, pingR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      mapDot(ctx, px, py, large ? 6 : 3.5, activePartyPing.type === "help" ? "#ff3344" : "#ffcc00", "#1a0808");
+      mapText(ctx, activePartyPing.type === "help" ? "🆘" : "🚩", px, py + (large ? 4 : 2), large ? 14 : 9, "#ffffff", 800);
+    }
+
+    if (!large) {
       // Phase 7: Compact compass indicator for small minimap
       ctx.save();
       ctx.translate(width - 14, 14);
@@ -17026,7 +17182,7 @@
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
     if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
     updateFloatText();
-    updateWorldFx(now); updateTargetRing(now); updateMonsterLabels(); updateTargetOverheadHud(now); updateComboHud(now);
+    updateWorldFx(now); updateTargetRing(now); updateMonsterLabels(); updateTargetOverheadHud(now); updateComboHud(now); updatePartyTethers(now);
     { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);
       // Music state: combat for 6 s after any fight action, war in a live battle, elite when one is near.
       if ((musicSyncIn -= dt) <= 0 && hero) {
