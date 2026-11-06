@@ -59,6 +59,115 @@
     const game=$("game").getBoundingClientRect(), area=anchor.getBoundingClientRect();
     ui.toast.style.bottom=Math.max(0,game.bottom-area.top+8)+"px";
   }
+
+  // ---- New Player Voice Guidance with Typhoon Lore ----
+  const TYPHOON_VOICE_GUIDANCE = {
+    move: {
+      title: "พราหมณ์เฒ่าผู้ชี้แนะ",
+      subtitle: "แตะบนผืนดินเพื่อก้าวเดิน หรือลากหน้าจอเพื่อหมุนมองทิศทาง",
+      text: "ยินดีต้อนรับสู่แดนมนตรา... เจ้าเพิ่งฟื้นจากพิธีสะกดวิญญาณ แตะบนผืนดินเพื่อก้าวเดิน หรือลากหน้าจอเพื่อหมุนมองทิศทาง ดินแดนลี้ลับนี้รอเจ้าอยู่"
+    },
+    target: {
+      title: "วิชากำหนดจิตเล็งเป้า",
+      subtitle: "แตะที่ศัตรูเพื่อเล็งเป้า · เข้าใกล้เพื่อโจมตีอัตโนมัติ",
+      text: "นั่นคือวิญญาณหลงทิศ! แตะที่ตัวมันเพื่อกำหนดจิตล็อกเป้า สังเกตวงแหวนยันต์ทองใต้เท้า เมื่อเข้าใกล้ ตัวเจ้าจะร่ายเพลงยุทธ์ฟาดฟันโดยอัตโนมัติ"
+    },
+    combo: {
+      title: "เพลงยุทธ์ต่อเนื่อง",
+      subtitle: "สะสมคอมโบไต่ระดับยุทธ์ C/B/A/S · แตะสกิลเพื่อใช้วิชา",
+      text: "เพลงยุทธ์ของเจ้าเริ่มไหลลื่น! จงโจมตีต่อเนื่องเพื่อสะสมคอมโบสู่ระดับปรมาจารย์ และอย่าลืมแตะใช้วิชาประจำสายบนแถบวิชาด้านล่าง"
+    },
+    execute: {
+      title: "ตราราหูประหาร",
+      subtitle: "ศัตรูอ่อนแรง! ปล่อยกระบวนท่าเด็ดชีพเพื่อปิดฉาก",
+      text: "ศัตรูเสียหลักแล้ว! ตราราหูประหารสีชาดปรากฏขึ้น จงใช้กระบวนท่าเด็ดชีพเพื่อปลดปล่อยวิญญาณของมันให้สิ้นสูญ!"
+    },
+    levelup: {
+      title: "การเบิกญาณวิชา",
+      subtitle: "เปิดสมุดวิชา → เบิกแต้มทักษะ → ติดตั้งลงในช่องลัด",
+      text: "จิตวิญญาณของเจ้าแข็งแกร่งขึ้นแล้ว! แตะที่สมุดวิชาเพื่อเปิดดูผังต้นไม้วิชา เลือกเบิกเนตรทักษะใหม่ แล้วนำมาติดตั้งลงในช่องลัด"
+    },
+    gear: {
+      title: "ยุทโธปกรณ์อาคม",
+      subtitle: "เปิดกระเป๋า → แตะยุทโธปกรณ์ → เลือก 'สวมใส่'",
+      text: "เจ้าได้ยุทโธปกรณ์ชิ้นใหม่มา แตะที่ย่ามสัมภาระเพื่อเปิดดู หากเป็นอาวุธหรือเครื่องราง ให้แตะสวมใส่เพื่อเพิ่มพลังชีวิตและพลังโจมตี"
+    },
+    forest: {
+      title: "เขตแดนป่าต้องห้าม",
+      subtitle: "ระวังวงยันต์เตือนภัยสีแดงของบอส · ดีดกายหลบให้ทันท่วงที",
+      text: "เบื้องหน้าคือป่าต้องห้าม... หากเจ้าเห็นวงยันต์เตือนภัยสีแดงบนพื้น จงดีดกายถอยหลบออกมาทันที มิฉะนั้นจักโดนพลังทำลายล้างมหาศาล!"
+    }
+  };
+
+  let voiceGuidanceHud = null, voiceHudTitle = null, voiceHudText = null, voiceHudTimer = null;
+  function isVoiceGuidanceEnabled() {
+    try { return localStorage.getItem("montra_voice_guidance") !== "false"; }
+    catch (_) { return true; }
+  }
+  function setVoiceGuidanceEnabled(enabled) {
+    try { localStorage.setItem("montra_voice_guidance", enabled ? "true" : "false"); }
+    catch (_) {}
+  }
+  function ensureVoiceGuidanceHud() {
+    if (voiceGuidanceHud) return;
+    voiceGuidanceHud = document.createElement("div");
+    voiceGuidanceHud.className = "voice-guidance-hud";
+    voiceGuidanceHud.hidden = true;
+    const avatar = document.createElement("div");
+    avatar.className = "voice-guidance-avatar";
+    avatar.textContent = "🧙‍♂️";
+    const content = document.createElement("div");
+    content.className = "voice-guidance-content";
+    const header = document.createElement("div");
+    header.className = "voice-guidance-header";
+    voiceHudTitle = document.createElement("span");
+    voiceHudTitle.className = "voice-guidance-title";
+    const badge = document.createElement("span");
+    badge.className = "voice-guidance-badge";
+    badge.textContent = "TYPHOON AI";
+    header.append(voiceHudTitle, badge);
+    voiceHudText = document.createElement("p");
+    voiceHudText.className = "voice-guidance-text";
+    content.append(header, voiceHudText);
+    const skipBtn = document.createElement("button");
+    skipBtn.type = "button";
+    skipBtn.className = "voice-guidance-skip";
+    skipBtn.textContent = "ข้าม ✕";
+    skipBtn.onclick = () => {
+      window.MontraAudio?.stopSpeech?.();
+      hideVoiceGuidanceHud();
+    };
+    voiceGuidanceHud.append(avatar, content, skipBtn);
+    document.getElementById("game")?.append(voiceGuidanceHud);
+  }
+  function hideVoiceGuidanceHud() {
+    if (voiceGuidanceHud) voiceGuidanceHud.hidden = true;
+    clearTimeout(voiceHudTimer);
+  }
+  function triggerVoiceGuidance(stepKey) {
+    if (!isVoiceGuidanceEnabled()) return;
+    const item = TYPHOON_VOICE_GUIDANCE[stepKey];
+    if (!item) return;
+    const key = "montra_vg_played_" + stepKey;
+    try {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, "1");
+    } catch (_) {}
+    ensureVoiceGuidanceHud();
+    voiceHudTitle.textContent = item.title;
+    voiceHudText.textContent = item.subtitle;
+    voiceGuidanceHud.hidden = false;
+    clearTimeout(voiceHudTimer);
+    voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(5000, item.text.length * 110));
+    try {
+      window.MontraAudio?.speak?.(item.text, {
+        persona: "guide",
+        onEnd: () => hideVoiceGuidanceHud(),
+        onError: () => {}
+      });
+    } catch (_) {}
+  }
+
   // Sound effects (audio.js). Safe no-op until audio is unlocked by the first tap.
   const SFX = (name, opts) => window.MontraAudio?.play(name, opts);
   function toast(message) {
@@ -719,6 +828,7 @@
     targetOverheadFill.style.width = pct + "%";
     targetOverheadDelay.style.width = pct + "%";
     if (pct <= 20 && hp > 0) {
+      triggerVoiceGuidance("execute");
       targetOverheadHud.classList.add("execute-active");
       targetOverheadTag.innerHTML = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp + '<span class="target-overhead-execute">⚔️ ประหาร!</span>';
     } else {
@@ -753,6 +863,7 @@
     lastComboHitAt = now;
     ensureComboHud();
     if (comboStreak >= 3) {
+      triggerVoiceGuidance("combo");
       comboHudEl.hidden = false;
       comboHitsEl.textContent = String(comboStreak);
       let grade = "C", label = "วิชาคล่องแคล่ว", cls = "grade-c";
@@ -3846,6 +3957,7 @@
     for(const label of expansionLabels)label.setEnabled(!me||Math.hypot(me.x-label.position.x,me.z-label.position.z)<45);
   }
   function requestForestAttack(id) {
+    triggerVoiceGuidance("target");
     const target=room?.state?.monsters?.get?.(id);
     if(!target||!target.alive||target.mapId!==activeMapId){toast("เป้าหมายไม่อยู่ในพื้นที่");return;}
     selectedForestTarget=id;spellTargetId=id;selectedPkTargetId=null;syncPKHud();marker.setEnabled(false);
@@ -3879,6 +3991,7 @@
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
   }
   function requestPortalWarp(portalId) {
+    triggerVoiceGuidance("forest");
     if (warpPending) return;
     if (mode !== "live" || !room) {
       toast("ต้องเข้าออนไลน์กับเซิร์ฟเวอร์ V0.2.8 ก่อนเดินทาง");
@@ -7807,6 +7920,7 @@
   }
 
   function requestMonsterAttack() {
+    triggerVoiceGuidance("target");
     setTargetedSkill(null);
     if(mode === "live" && activeMapId !== "ritual_village" && room?.state?.worldDefinition){
       const me=ownServerCharacter();let target=room.state.monsters.get(selectedForestTarget);
@@ -7888,6 +8002,7 @@
   }
   function getLocalAvatar() { return avatars.get(localId); }
   function pointMove(x,z) {
+    triggerVoiceGuidance("move");
     if (mode === "demo" && demoFlightTarget) {
       toast("กำลังเปลี่ยนระดับความสูง · รอให้ถึงก่อน");
       return;
@@ -8399,7 +8514,7 @@
       ? me.characterName : "นที";
     $("characterName").textContent = name;
     const slot = me?.persistent ? (Number(me.characterSlot) || activeCharacterSlot || 1) : null;
-    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) { SFX("levelup", { important: true }); floatAtPlayer(localId, "🌟 LEVEL UP! 🌟", "levelup", { drift: 0, rise: 85, life: 2500, big: true }); shakeCamera(0.48, 450); auraFx(getLocalAvatar(), "levelup"); } hudLevel = me.level; }
+    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) { triggerVoiceGuidance("levelup"); SFX("levelup", { important: true }); floatAtPlayer(localId, "🌟 LEVEL UP! 🌟", "levelup", { drift: 0, rise: 85, life: 2500, big: true }); shakeCamera(0.48, 450); auraFx(getLocalAvatar(), "levelup"); } hudLevel = me.level; }
     $("characterLevel").textContent = (slot ? "S" + slot + " · " : "") + "LV. " + (
       Number.isFinite(me?.level) ? me.level : 1
     );
@@ -13972,7 +14087,7 @@
     const a = window.MontraAudio?.settings; if (!a) return "";
     const row = (key, label) => `<label class="field sound-row">${label}<input type="range" min="0" max="100" step="5" data-sound="${key}" value="${Math.round((a[key] ?? 0.8) * 100)}"></label>`;
     return `<section class="sound-settings"><h3>เสียง</h3><label class="field sound-row"><input type="checkbox" data-sound="muted" ${a.muted ? "" : "checked"}> เปิดเสียง</label>` +
-      row("master", "ความดังรวม") + row("voice", "เสียงพูดและพากย์ไทย") + `<button type="button" id="testVoiceBtn" class="secondary" style="margin:8px 0;width:100%;font-weight:600">🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)</button>` +
+      row("master", "ความดังรวม") + row("voice", "เสียงพูดและพากย์ไทย") + `<label class="field sound-row"><input type="checkbox" id="toggleVoiceGuidance" ${isVoiceGuidanceEnabled() ? "checked" : ""}> 🎙️ เสียงพูดชี้แนะผู้เล่นใหม่ (Typhoon Voice)</label>` + `<button type="button" id="testVoiceBtn" class="secondary" style="margin:8px 0;width:100%;font-weight:600">🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)</button>` +
       row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("music", "ดนตรี") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
   }
   function lightSettingsHtml() {
@@ -13991,6 +14106,10 @@
       if (key === "muted") window.MontraAudio?.set("muted", !input.checked); else window.MontraAudio?.set(key, Number(input.value) / 100);
       if (key === "voice") window.MontraAudio?.speak?.("ทดสอบระดับเสียงพูด", { persona: "guide" });
       else if (key !== "muted") SFX(key === "ui" ? "tap" : "fist", { intensity: .6 });
+    });
+    const vGuideToggle = root.querySelector("#toggleVoiceGuidance");
+    if (vGuideToggle) vGuideToggle.addEventListener("change", () => {
+      setVoiceGuidanceEnabled(vGuideToggle.checked);
     });
     const testBtn = root.querySelector("#testVoiceBtn");
     if (testBtn) bindSpeechButton(testBtn, "สวัสดี ยินดีต้อนรับสู่อาณาจักรมนตรา ระบบเสียงพูดภาษาไทยพร้อมใช้งานแล้ว", "guide", "🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)");
@@ -15374,6 +15493,7 @@
   }
 
   function openBag() {
+    triggerVoiceGuidance("gear");
     confirmBindKey=null; inspectingGear=null; preferredGearSlot=null; benchTrail.length=0;
     openDrawer("bag", "กระเป๋าเก็บของ",
       '<div class="status-line"><span>สถานะกระเป๋า</span><strong id="bagSaveStatus"></strong></div>' +
