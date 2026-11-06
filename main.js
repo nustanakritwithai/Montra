@@ -164,6 +164,22 @@
       cooldown: 18000,
       alert: true,
       icon: "🆘"
+    },
+    forge_success: {
+      title: "พิธีกรรมเสริมอาคม",
+      subtitle: "อาคมแทรกซึมสำเร็จ! พลังยุทธ์เพิ่มพูนขึ้นแล้ว",
+      text: "พลังแห่งยันต์แทรกซึมเข้าสู่อาวุธ! คมดาบเปล่งประกายอาคมอันทรงพลัง",
+      cooldown: 8000,
+      alert: false,
+      icon: "✨"
+    },
+    forge_fail: {
+      title: "อาคมสะท้อนกลับ",
+      subtitle: "ศิลาอาคมแตกสลาย! อาวุธได้รับความเสียหาย",
+      text: "ศิลาอาคมแตกสลาย... จงตั้งจิตให้มั่นแล้วเริ่มพิธีหลอมใหม่อีกครา",
+      cooldown: 8000,
+      alert: true,
+      icon: "💥"
     }
   };
 
@@ -828,6 +844,66 @@
     m.scaling.setAll(.001); m.visibility = 0; worldFx.push(f);
     return f;
   }
+  // ---- Phase 9: Relic Forge & Mystic Weapon Aura System (+1 to +10) ----
+  let lastWeaponAuraTime = 0;
+  function getAvatarWeaponForgeRank(avatar) {
+    if (avatar?.local) {
+      const slot = typeof currentEquippedWeaponSlot === "function" ? currentEquippedWeaponSlot() : null;
+      const bag = typeof currentBagSlots === "function" ? currentBagSlots() : null;
+      if (slot !== null && bag && bag[slot]?.forge?.rank) {
+        return Number(bag[slot].forge.rank) || 0;
+      }
+      return 0;
+    }
+    return avatar?.forgeRank || 0;
+  }
+
+  function updateWeaponAuras(now) {
+    if (now - lastWeaponAuraTime < 180) return;
+    lastWeaponAuraTime = now;
+
+    for (const [id, a] of avatars) {
+      if (!a || !a.node || a.node.isDisposed()) continue;
+      const rank = getAvatarWeaponForgeRank(a);
+      if (rank <= 0) continue;
+
+      let wx = a.x, wy = (a.y || 0) + 1.15, wz = a.z;
+      const handNode = a.skin?.nodes?.Socket_Hand_Weapon_R || (a.weaponModels && a.weaponId && a.weaponModels[a.weaponId]);
+      if (handNode && typeof handNode.getAbsolutePosition === "function") {
+        const abs = handNode.getAbsolutePosition();
+        if (Number.isFinite(abs.x) && Number.isFinite(abs.y) && Number.isFinite(abs.z)) {
+          wx = abs.x; wy = abs.y; wz = abs.z;
+        }
+      } else {
+        const heading = a.heading || a.desiredHeading || 0;
+        wx += Math.sin(heading) * 0.45;
+        wz += Math.cos(heading) * 0.45;
+      }
+
+      if (rank >= 10) {
+        // +10 Divine Gold Yantra Flare
+        sparks("gold", wx, wy, wz, 3, { speed: 1.2, up: 1.1, size: 0.5, life: 360, grav: -0.35 });
+        if (Math.random() < 0.45) {
+          spawnFx("yantra", "gold", wx, wy + 0.1, wz, { life: 280, s0: 0.35, s1: 0.85, a0: 0.75, a1: 0, spin: 2.2 });
+        }
+      } else if (rank >= 7) {
+        // +7 to +9 Violet Spirit Flame
+        sparks("violet", wx, wy, wz, 2, { speed: 0.9, up: 0.8, size: 0.42, life: 320, grav: -0.25 });
+        if (Math.random() < 0.35) {
+          spawnFx("disc", "violet", wx, wy, wz, { life: 240, s0: 0.2, s1: 0.65, a0: 0.5, a1: 0 });
+        }
+      } else if (rank >= 4) {
+        // +4 to +6 Arcane Cyan Glint
+        sparks("cyan", wx, wy, wz, 2, { speed: 0.6, up: 0.5, size: 0.35, life: 260, grav: -0.15 });
+      } else {
+        // +1 to +3 Subtle Steel Spark
+        if (Math.random() < 0.4) {
+          sparks("white", wx, wy, wz, 1, { speed: 0.4, up: 0.3, size: 0.25, life: 200 });
+        }
+      }
+    }
+  }
+
   // ---- Phase 8: 3D Shamanic Party Tether & Tactical Ping System ----
   const partyTetherLines = new Map();
   let lastTetherSparkTime = 0;
@@ -926,6 +1002,7 @@
     }
   }
   window.MontraParty = { sendPartyPing, updatePartyTethers };
+  window.MontraForge = { updateWeaponAuras, getAvatarWeaponForgeRank };
 
   // Phase 7: Exploration & World Ambient State
   let lastOccultMistTime = 0;
@@ -15602,6 +15679,23 @@
     if(present)forgePresentationResult={room:run.room,action:run.action,requestId:run.requestId,message,
       kind:run.result.broken?"broken":run.result.downgraded?"downgraded":run.result.action==="reroll"?"reroll":run.result.success===false?"failed":"success"};
     toast((current?"":"ผลรายการก่อนหน้า · ")+message);
+
+    // Phase 9: Relic forge ritual impact & voice feedback
+    const hero = getLocalAvatar();
+    const hx = hero?.x || 0, hy = (hero?.y || 0) + 1.2, hz = hero?.z || 0;
+    if (run.result.broken || run.result.success === false) {
+      SFX("hurt", { intensity: 1.2 });
+      shakeCamera(0.45, 300);
+      sparks("red", hx, hy, hz, 16, { speed: 4.5, up: 2.5, life: 450 });
+      floatAtPlayer(localId, "อาคมแตกสลาย!", "crit", { big: true });
+      triggerCombatCallout("forge_fail");
+    } else if (run.result.success !== false) {
+      SFX("bell", { intensity: 1.5 });
+      shakeCamera(0.35, 250);
+      sparks("gold", hx, hy, hz, 22, { speed: 5.2, up: 3.8, life: 580 });
+      floatAtPlayer(localId, "เสริมอาคมสำเร็จ! +" + (run.result.forge?.rank || 1), "status", { big: true });
+      triggerCombatCallout("forge_success");
+    }
     if(!current)return;
     renderBag();
     if(present && run.result.broken && (inventoryState?.forgeCopies?.[run.itemId]??0)>0){
@@ -17182,7 +17276,7 @@
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
     if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
     updateFloatText();
-    updateWorldFx(now); updateTargetRing(now); updateMonsterLabels(); updateTargetOverheadHud(now); updateComboHud(now); updatePartyTethers(now);
+    updateWorldFx(now); updateTargetRing(now); updateMonsterLabels(); updateTargetOverheadHud(now); updateComboHud(now); updatePartyTethers(now); updateWeaponAuras(now);
     { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);
       // Music state: combat for 6 s after any fight action, war in a live battle, elite when one is near.
       if ((musicSyncIn -= dt) <= 0 && hero) {
