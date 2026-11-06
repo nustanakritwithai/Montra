@@ -669,6 +669,107 @@
     spawnFx("dash", "red", mesh.position.x, y + .02, mesh.position.z, { orient: "ground", life: 650, s0: r * 3, s1: r * 1.7, a0: .5, a1: 1, spin: 2.2, follow: mesh });
   }
   // The selected monster's health is a compact ring on the ground beneath it.
+
+  // ---- Phase 5: Floating Target Overhead HUD & Combo Streak System ----
+  let targetOverheadHud = null, targetOverheadTag = null, targetOverheadFill = null, targetOverheadDelay = null;
+  function ensureTargetOverheadHud() {
+    if (targetOverheadHud) return;
+    targetOverheadHud = document.createElement("div");
+    targetOverheadHud.className = "target-overhead-hud";
+    targetOverheadHud.hidden = true;
+    targetOverheadTag = document.createElement("span");
+    targetOverheadTag.className = "target-overhead-tag";
+    const wrap = document.createElement("div");
+    wrap.className = "target-overhead-bar-wrap";
+    targetOverheadDelay = document.createElement("div");
+    targetOverheadDelay.className = "target-overhead-delay-bar";
+    targetOverheadFill = document.createElement("div");
+    targetOverheadFill.className = "target-overhead-fill-bar";
+    wrap.append(targetOverheadDelay, targetOverheadFill);
+    targetOverheadHud.append(targetOverheadTag, wrap);
+    document.getElementById("game")?.append(targetOverheadHud);
+  }
+
+  function updateTargetOverheadHud(now) {
+    ensureTargetOverheadHud();
+    const id = selectedForestTarget, mesh = id ? (forestMonsters.get(id) || (id === MONSTER_ID ? enemy : null)) : null;
+    const target = id && !selectedPkTargetId ? hudCurrentTarget(now) : null;
+    if (!mesh || !mesh.isEnabled() || !target?.alive) {
+      targetOverheadHud.hidden = true;
+      return;
+    }
+    const g = mesh.metadata?.ghost;
+    const lift = g ? g.tall * (g.design?.scale || 1) - g.tall / 2 + .75 : .85 * mesh.scaling.y + .9;
+    monsterLabelPoint.set(mesh.position.x, mesh.position.y + lift, mesh.position.z);
+    const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect();
+    const w = engine.getRenderWidth(), h = engine.getRenderHeight(), viewport = camera.viewport.toGlobal(w, h);
+    B.Vector3.ProjectToRef(monsterLabelPoint, B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), viewport, monsterLabelProjection);
+    if (monsterLabelProjection.z < 0 || monsterLabelProjection.z > 1) {
+      targetOverheadHud.hidden = true;
+      return;
+    }
+    const x = monsterLabelProjection.x * rect.width / w, y = monsterLabelProjection.y * rect.height / h;
+    targetOverheadHud.style.left = x.toFixed(1) + "px";
+    targetOverheadHud.style.top = y.toFixed(1) + "px";
+    const hp = Math.max(0, Number(target.hp) || 0), maxHp = Math.max(1, Number(target.maxHp) || 1);
+    const pct = Math.max(0, Math.min(100, Math.round(100 * hp / maxHp)));
+    targetOverheadFill.style.width = pct + "%";
+    targetOverheadDelay.style.width = pct + "%";
+    targetOverheadTag.textContent = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp;
+    targetOverheadHud.hidden = false;
+  }
+
+  let comboStreak = 0, lastComboHitAt = 0;
+  let comboHudEl = null, comboHitsEl = null, comboLabelEl = null, comboGradeEl = null;
+
+  function ensureComboHud() {
+    if (comboHudEl) return;
+    comboHudEl = document.createElement("div");
+    comboHudEl.className = "combo-streak-hud";
+    comboHudEl.hidden = true;
+    comboHitsEl = document.createElement("div");
+    comboHitsEl.className = "combo-streak-hits";
+    comboLabelEl = document.createElement("div");
+    comboLabelEl.className = "combo-streak-label";
+    comboGradeEl = document.createElement("div");
+    comboGradeEl.className = "combo-streak-grade grade-c";
+    comboHudEl.append(comboHitsEl, comboLabelEl, comboGradeEl);
+    document.getElementById("game")?.append(comboHudEl);
+  }
+
+  function registerComboHit() {
+    const now = performance.now();
+    if (now - lastComboHitAt > 3500) comboStreak = 0;
+    comboStreak++;
+    lastComboHitAt = now;
+    ensureComboHud();
+    if (comboStreak >= 3) {
+      comboHudEl.hidden = false;
+      comboHitsEl.textContent = String(comboStreak);
+      let grade = "C", label = "วิชาคล่องแคล่ว", cls = "grade-c";
+      if (comboStreak >= 25) { grade = "S"; label = "ปรมาจารย์ยุทธ์!"; cls = "grade-s"; }
+      else if (comboStreak >= 15) { grade = "A"; label = "ยอดฝีมือเพลงยุทธ์!"; cls = "grade-a"; }
+      else if (comboStreak >= 7) { grade = "B"; label = "ชำนาญการต่อสู้"; cls = "grade-b"; }
+      comboLabelEl.textContent = label;
+      comboGradeEl.textContent = grade;
+      comboGradeEl.className = "combo-streak-grade " + cls;
+      comboHitsEl.style.animation = "none";
+      void comboHitsEl.offsetWidth;
+      comboHitsEl.style.animation = "comboPop 0.18s ease-out";
+      if (comboStreak === 7 || comboStreak === 15 || comboStreak === 25) {
+        SFX("coin", { intensity: 0.8 });
+        floatAtPlayer(localId, grade + " RANK!", "combo", { big: true, drift: 0 });
+      }
+    }
+  }
+
+  function updateComboHud(now) {
+    if (comboStreak > 0 && now - lastComboHitAt > 3500) {
+      comboStreak = 0;
+      if (comboHudEl) comboHudEl.hidden = true;
+    }
+  }
+
   let targetRingMesh = null, targetRingTexture = null, targetRingPercent = -1;
   function updateTargetRing(now) {
     const id = selectedForestTarget, mesh = id ? (forestMonsters.get(id) || (id === MONSTER_ID ? enemy : null)) : null;
@@ -691,6 +792,12 @@
       c.lineWidth=11; c.lineCap="butt"; c.strokeStyle="rgba(18,12,13,.88)";
       c.beginPath(); c.arc(64,64,51,0,Math.PI*2); c.stroke();
       if(percent>0){c.strokeStyle="#f25751";c.beginPath();c.arc(64,64,51,-Math.PI/2,-Math.PI/2+Math.PI*2*percent/100);c.stroke();}
+      // 4-cardinal yantra compass reticle ticks
+      c.fillStyle = "#ffcc00";
+      for (let i = 0; i < 4; i++) {
+        const a = i * Math.PI / 2;
+        c.beginPath(); c.arc(64 + Math.cos(a) * 58, 64 + Math.sin(a) * 58, 3.5, 0, Math.PI * 2); c.fill();
+      }
       targetRingTexture.update(); targetRingPercent=percent;
     }
     const g = mesh.metadata?.ghost, state = mode === "live" ? (id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get?.(id)) : null;
@@ -698,6 +805,7 @@
     targetRingMesh.setEnabled(true);
     targetRingMesh.position.set(mesh.position.x, (g?.ty ?? (Number(state?.y) || 0)) + .14, mesh.position.z);
     targetRingMesh.scaling.setAll(r * 2);
+    targetRingMesh.rotation.y = now * 0.0018;
   }
   // Screen-sized labels reuse HUD names and authoritative levels without extra draw calls.
   const monsterLabelLayer = document.createElement("div");
@@ -9675,6 +9783,7 @@
           playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
           impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true, struck?.design?.kind, undefined, isCrit);
           if (hit.attackerId === localId) {
+            registerComboHit();
             hudTarget = { id: hit.targetId, until: performance.now() + 8000 };
             if (Number(hit.hp) === 0) {
               hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1;
@@ -16329,6 +16438,7 @@
               villageGhost.metadata.ghost.hurtAt = now;
               impactAt(localId, villageGhost.position.x, villageGhost.position.z, "", true, villageGhost.metadata.ghost.design?.kind);
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
+              registerComboHit();
               floatAtMonster(MONSTER_ID, "20", "dealt");
               hitFlashRemaining = .22;
               if (demoMonsterHp <= 0) {
@@ -16523,7 +16633,7 @@
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
     if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
     updateFloatText();
-    updateWorldFx(now); updateTargetRing(now); updateMonsterLabels();
+    updateWorldFx(now); updateTargetRing(now); updateMonsterLabels(); updateTargetOverheadHud(now); updateComboHud(now);
     { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);
       // Music state: combat for 6 s after any fight action, war in a live battle, elite when one is near.
       if ((musicSyncIn -= dt) <= 0 && hero) {

@@ -4855,3 +4855,68 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .field-slot[data-skill-id="protect"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='prtBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300b0ff'/%3E%3Cstop offset='60%25' stop-color='%230091ea'/%3E%3Cstop offset='100%25' stop-color='%230d47a1'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23prtBg)' stroke='%2380d8ff' stroke-width='1.5'/%3E%3Ccircle cx='22' cy='22' r='6' fill='%23ffffff'/%3E%3Cpath d='M14 44 C14 36, 18 32, 22 32 C26 32, 30 36, 30 44 Z' fill='%23ffffff'/%3E%3Ccircle cx='42' cy='22' r='6' fill='%23ffd54f'/%3E%3Cpath d='M34 44 C34 36, 38 32, 42 32 C46 32, 50 36, 50 44 Z' fill='%23ffd54f'/%3E%3C/svg%3E") !important;
 }
+
+/* ===== Phase 5: Floating Target Overhead HUD & Combo Streak ===== */
+.target-overhead-hud {
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -100%);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  pointer-events: none; z-index: 7; will-change: transform, left, top;
+  transition: opacity 0.2s ease-out;
+}
+.target-overhead-hud[hidden] { display: none !important; }
+.target-overhead-tag {
+  font: 800 12px/1 "Noto Sans Thai", system-ui, sans-serif; color: #fff;
+  text-shadow: 0 1px 3px #000, 0 0 6px #000; letter-spacing: 0.3px;
+  background: rgba(18, 12, 10, 0.82); border: 1px solid rgba(255, 206, 90, 0.5);
+  border-radius: 8px; padding: 3px 8px; white-space: nowrap; box-shadow: 0 2px 8px #0008;
+}
+.target-overhead-bar-wrap {
+  width: 96px; height: 8px; background: rgba(10, 10, 10, 0.9);
+  border: 1px solid #4a2818; border-radius: 4px; overflow: hidden;
+  position: relative; box-shadow: 0 2px 6px rgba(0,0,0,0.85);
+}
+.target-overhead-delay-bar {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
+  background: #fff580; transition: width 0.35s ease-out;
+}
+.target-overhead-fill-bar {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
+  background: linear-gradient(90deg, #d32020 0%, #ff5a28 100%);
+  transition: width 0.08s linear;
+}
+.combo-streak-hud {
+  position: absolute; right: 28px; top: 36%; transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: flex-end; pointer-events: none;
+  z-index: 9; transition: opacity 0.25s ease-out, transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.combo-streak-hud[hidden] { display: none !important; }
+.combo-streak-hits {
+  font: 900 38px/1 "Arial Black", Impact, sans-serif; color: #fff;
+  -webkit-text-stroke: 4px #260f00; paint-order: stroke fill;
+  text-shadow: 0 4px 0 #000, 0 0 18px #ff7a10, 0 0 32px #ff4a00cc;
+}
+.combo-streak-hits::after {
+  content: " HITS"; font-size: 18px; color: #ffd84a; -webkit-text-stroke: 3px #260f00;
+}
+.combo-streak-label {
+  font: 900 13px/1 "Noto Sans Thai", system-ui, sans-serif;
+  color: #ffd84a; -webkit-text-stroke: 2px #3a1500; text-transform: uppercase;
+  letter-spacing: 0.8px; margin-top: 2px; text-shadow: 0 2px 4px #000;
+}
+.combo-streak-grade {
+  font: 900 22px/1 "Arial Black", Impact, sans-serif;
+  padding: 2px 10px; border-radius: 6px; margin-top: 4px;
+  background: rgba(18, 12, 10, 0.8); border: 2px solid #ffcc00; box-shadow: 0 0 14px #ffaa0088;
+}
+.combo-streak-grade.grade-c { color: #8ad8ff; border-color: #8ad8ff; box-shadow: 0 0 12px #8ad8ff66; }
+.combo-streak-grade.grade-b { color: #7dff8a; border-color: #7dff8a; box-shadow: 0 0 12px #7dff8a66; }
+.combo-streak-grade.grade-a { color: #ffd84a; border-color: #ffd84a; box-shadow: 0 0 14px #ffd84a88; }
+.combo-streak-grade.grade-s { color: #ff3a2a; border-color: #ff3a2a; box-shadow: 0 0 18px #ff3a2aaa; animation: pulseGrade 0.6s infinite alternate; }
+@keyframes comboPop {
+  0% { transform: scale(1.4) rotate(4deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+@keyframes pulseGrade {
+  0% { transform: scale(1); filter: drop-shadow(0 0 4px #ff3300); }
+  100% { transform: scale(1.12); filter: drop-shadow(0 0 12px #ff7700); }
+}
