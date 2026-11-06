@@ -61,7 +61,7 @@ try {
   await until(()=>burst.me().atk===28 && burst.event("class_skill_used",e=>e.targets===1),"burst ATK");
   assert.equal(burst.me().def,30);assert.equal(burst.me().magicAtk,15);
   for (const caster of [steady,burst]) {
-    assert.ok(caster.me().stamina >= 80 && caster.me().stamina < 81);
+    assert.ok(caster.me().mana >= caster.me().maxMana - 20 && caster.me().mana < caster.me().maxMana - 19, "class skill charges 20 mana before regeneration");
     const remaining = caster.me().classSkillReadyAt - Date.now();
     assert.ok(remaining > 23_000 && remaining <= 25_000);
   }
