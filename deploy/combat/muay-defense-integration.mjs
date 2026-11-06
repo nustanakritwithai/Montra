@@ -26,9 +26,9 @@ try {
  const [,front,back,miss,edge,safe,front2]=rooms,player=id=>d.state?.players?.get(id),defender=()=>player(d.sessionId);
  await until(()=>rooms.every(r=>player(r.sessionId)?.persistent),"players joined");
  safe.send("muay_skill",{skillId:"parry"});await until(()=>seen(safe,"command_rejected",e=>e.reason==="muay_safe_area"),"safe area");
- const edgeStamina=player(edge.sessionId).stamina;edge.send("muay_skill",{skillId:"evade"});await until(()=>seen(edge,"command_rejected",e=>e.reason==="muay_blocked"),"rest boundary blocks evade");
+ const edgeMana=player(edge.sessionId).mana;edge.send("muay_skill",{skillId:"evade"});await until(()=>seen(edge,"command_rejected",e=>e.reason==="muay_blocked"),"rest boundary blocks evade");
  assert.equal(JSON.parse(player(edge.sessionId).muayData).evade,undefined,"blocked evade has no cooldown");
- assert.ok(player(edge.sessionId).stamina>=edgeStamina,"blocked evade costs no stamina");
+ assert.ok(player(edge.sessionId).mana>=edgeMana,"blocked evade costs no mana");
  miss.send("muay_skill",{skillId:"parry"});await until(()=>seen(miss,"muay_defense",e=>e.kind==="parry" && e.phase==="miss"),"miss feedback");
  miss.send("muay_skill",{skillId:"counter",targetId:front.sessionId});await until(()=>seen(miss,"command_rejected",e=>e.reason==="muay_counter_required"),"miss does not open counter");
  d.send("muay_skill",{skillId:"parry"});await until(()=>seen(d,"muay_defense",e=>e.kind==="parry" && e.phase==="start"),"parry starts");
