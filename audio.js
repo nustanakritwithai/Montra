@@ -11,7 +11,7 @@
 (function () {
   "use strict";
   const KEY = "montra-audio-v1";
-  const DEFAULTS = { master: 0.8, sfx: 0.9, ui: 0.6, ambience: 0.6, music: 0.5, muted: false };
+  const DEFAULTS = { master: 0.8, sfx: 0.9, ui: 0.6, ambience: 0.6, music: 0.5, voice: 0.85, muted: false };
   let settings = { ...DEFAULTS };
   try { Object.assign(settings, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (_) { /* private mode */ }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch (_) { /* ignore */ } };
@@ -559,8 +559,69 @@
     R[name](out, t, { intensity: opts.intensity ?? 1, pitch: opts.pitch, len: opts.len, freq: opts.freq, kind: opts.kind, ev: opts.ev });
     return true;
   }
+  // ---- Thai Speech Synthesis Engine (Web Speech API) ---------------------
+  let cachedThaiVoice = null;
+  function getThaiVoice() {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
+    if (cachedThaiVoice) return cachedThaiVoice;
+    try {
+      const vList = window.speechSynthesis.getVoices() || [];
+      cachedThaiVoice = vList.find(v => v.lang === "th-TH" || v.lang.startsWith("th")) ||
+        vList.find(v => /thai/i.test(v.name)) || null;
+    } catch (_) {}
+    return cachedThaiVoice;
+  }
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    window.speechSynthesis.onvoiceschanged = () => { cachedThaiVoice = null; getThaiVoice(); };
+  }
+
+  const PERSONAS = {
+    elder: { pitch: 0.82, rate: 0.88 },
+    monk: { pitch: 0.78, rate: 0.82 },
+    warrior: { pitch: 0.92, rate: 1.08 },
+    merchant: { pitch: 1.15, rate: 1.05 },
+    guide: { pitch: 1.0, rate: 1.0 },
+  };
+
+  function speak(text, opts = {}) {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
+    if (settings.muted || (settings.voice !== undefined && settings.voice === 0)) return false;
+    if (!text || typeof text !== "string") return false;
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "th-TH";
+      const v = getThaiVoice();
+      if (v) u.voice = v;
+      const p = PERSONAS[opts.persona || "guide"] || PERSONAS.guide;
+      u.pitch = Number(opts.pitch ?? p.pitch);
+      u.rate = Number(opts.rate ?? p.rate);
+      u.volume = Math.max(0, Math.min(1, (settings.master ?? 1) * (settings.voice ?? 0.85)));
+      if (typeof opts.onEnd === "function") u.onend = opts.onEnd;
+      if (typeof opts.onError === "function") u.onerror = opts.onError;
+      window.speechSynthesis.speak(u);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function stopSpeech() {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try { window.speechSynthesis.cancel(); } catch (_) {}
+    }
+  }
+
+  function isSpeaking() {
+    return typeof window !== "undefined" && "speechSynthesis" in window ? Boolean(window.speechSynthesis.speaking) : false;
+  }
+
   window.MontraAudio = {
     play,
+    speak,
+    stopSpeech,
+    isSpeaking,
+    getThaiVoice,
     listen(x, z) { listener.x = x; listener.z = z; },
     get settings() { return { ...settings }; },
     set(key, value) { if (!(key in DEFAULTS)) return; settings[key] = key === "muted" ? Boolean(value) : Math.max(0, Math.min(1, Number(value) || 0)); applyVolumes(); save(); },

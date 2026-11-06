@@ -1725,14 +1725,14 @@
   let worldDefinitionKey = "", worldDefinitions = null, expandedMapKey = "";
   const expansionRoot = new B.TransformNode("world-expansion",scene);
   const serviceNpcUi={
-    smith:{color:"#a87145",action:"เปิดโรงช่างอาคม",dialogue:"เลือกตีบวกอุปกรณ์หรือแปรรูปคุณภาพด้วยการสุ่มออปชัน ข้าดูแลงานคราฟต์และการ์ดให้ด้วย"},
-    market:{color:"#806493",action:"เปิดตลาดและการค้า",dialogue:"มาดูของฝากขายหรือแลกเปลี่ยนกับผู้เล่นคนอื่นได้"},
-    guild:{color:"#985b50",action:"จัดการกิลด์",dialogue:"อยากตั้งกิลด์ ดูสมาชิก หรือประสานกำลังรบ คุยกับข้าได้"},
-    party:{color:"#547d70",action:"เปิดปาร์ตี้",dialogue:"รวมเพื่อนออกสำรวจและแบ่งหน้าที่กันได้ที่นี่"},
-    travel:{color:"#527b91",action:"ดูแผนที่",dialogue:"ข้าช่วยดูเส้นทาง จุดพัก และทางออกของพื้นที่นี้ได้"},
-    strategy:{color:"#a08145",action:"ดูแผนที่ยุทธศาสตร์",dialogue:"ตรวจด่าน เส้นทาง และเวลาของสงครามแต่ละพื้นที่ได้"},
-    mentor:{color:"#785b53",action:"ดูวิชาอาชีพ",dialogue:"มาตรวจวิชาของเจ้าได้ การเรียนบางวิชายังต้องทำที่ลานหมู่บ้าน"},
-    guide:{color:"#74835b",action:"เปิดคู่มือ",dialogue:"หากเพิ่งมาถึง ข้าช่วยอธิบายวิธีเล่นและการเดินทางได้"},
+    smith:{color:"#a87145",action:"เปิดโรงช่างอาคม",persona:"warrior",dialogue:"เลือกตีบวกอุปกรณ์หรือแปรรูปคุณภาพด้วยการสุ่มออปชัน ข้าดูแลงานคราฟต์และการ์ดให้ด้วย"},
+    market:{color:"#806493",action:"เปิดตลาดและการค้า",persona:"merchant",dialogue:"มาดูของฝากขายหรือแลกเปลี่ยนกับผู้เล่นคนอื่นได้"},
+    guild:{color:"#985b50",action:"จัดการกิลด์",persona:"elder",dialogue:"อยากตั้งกิลด์ ดูสมาชิก หรือประสานกำลังรบ คุยกับข้าได้"},
+    party:{color:"#547d70",action:"เปิดปาร์ตี้",persona:"warrior",dialogue:"รวมเพื่อนออกสำรวจและแบ่งหน้าที่กันได้ที่นี่"},
+    travel:{color:"#527b91",action:"ดูแผนที่",persona:"guide",dialogue:"ข้าช่วยดูเส้นทาง จุดพัก และทางออกของพื้นที่นี้ได้"},
+    strategy:{color:"#a08145",action:"ดูแผนที่ยุทธศาสตร์",persona:"warrior",dialogue:"ตรวจด่าน เส้นทาง และเวลาของสงครามแต่ละพื้นที่ได้"},
+    mentor:{color:"#785b53",action:"ดูวิชาอาชีพ",persona:"elder",dialogue:"มาตรวจวิชาของเจ้าได้ การเรียนบางวิชายังต้องทำที่ลานหมู่บ้าน"},
+    guide:{color:"#74835b",action:"เปิดคู่มือ",persona:"guide",dialogue:"หากเพิ่งมาถึง ข้าช่วยอธิบายวิธีเล่นและการเดินทางได้"},
   };
   const serviceNpcLooks=new Map();
   function serviceNpcLook(role,name){
@@ -9861,6 +9861,29 @@
         if(typeof payload.answer!=="string")return;
         const stamp=Number.isFinite(payload.asOf)?new Date(payload.asOf).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit"}):"";
         output.textContent=payload.answer+(stamp?"\nข้อมูลเวลาไทย "+stamp+" น.":"");
+        const speakBtn=$("npcGuideSpeakBtn");
+        if(speakBtn && payload.answer){
+          const clean=stripMarkdownForSpeech(payload.answer);
+          speakBtn.hidden=false;
+          const doSpeak=()=>{
+            if(window.MontraAudio?.isSpeaking?.()){
+              window.MontraAudio.stopSpeech();
+              speakBtn.textContent="🔊 ฟังเสียงตอบภาษาไทย";
+            }else{
+              window.MontraAudio?.speak?.(clean,{
+                persona:"guide",
+                onEnd:()=>{if(document.getElementById("npcGuideSpeakBtn"))speakBtn.textContent="🔊 ฟังเสียงตอบภาษาไทย";}
+              });
+              speakBtn.textContent="⏹ หยุดเสียงพูด";
+            }
+          };
+          speakBtn.onclick=doSpeak;
+          window.MontraAudio?.speak?.(clean,{
+            persona:"guide",
+            onEnd:()=>{if(document.getElementById("npcGuideSpeakBtn"))speakBtn.textContent="🔊 ฟังเสียงตอบภาษาไทย";}
+          });
+          speakBtn.textContent="⏹ หยุดเสียงพูด";
+        }
       });
       joined.onMessage("forest_defense_state",payload=>{
         if(room!==joined || !payload)return;
@@ -10472,6 +10495,7 @@
     }
   }
   function closeDrawer() {
+    try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
     cancelForgeAnimation(true);closeForgePicker(false);
     if(ui.drawer.hidden)return;
     SFX("close");
@@ -10484,6 +10508,7 @@
     drawerOpener=null;
   }
   function openDrawer(name,title,html) {
+    try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
     cancelForgeAnimation(true);closeForgePicker(false);closeItemDetailModal(false);
     if(fieldTrainingTip && !(ownServerCharacter()?.level>=13) && ["muayBook","swordTree","bladeBook","sentinelBook","occultBook"].includes(name))fieldTrainingTip=null;
     if(ui.drawer.hidden) {
@@ -13381,9 +13406,9 @@
   // Sound settings, shown at the top of the help sheet.
   function soundSettingsHtml() {
     const a = window.MontraAudio?.settings; if (!a) return "";
-    const row = (key, label) => `<label class="field sound-row">${label}<input type="range" min="0" max="100" step="5" data-sound="${key}" value="${Math.round(a[key] * 100)}"></label>`;
+    const row = (key, label) => `<label class="field sound-row">${label}<input type="range" min="0" max="100" step="5" data-sound="${key}" value="${Math.round((a[key] ?? 0.8) * 100)}"></label>`;
     return `<section class="sound-settings"><h3>เสียง</h3><label class="field sound-row"><input type="checkbox" data-sound="muted" ${a.muted ? "" : "checked"}> เปิดเสียง</label>` +
-      row("master", "ความดังรวม") + row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("music", "ดนตรี") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
+      row("master", "ความดังรวม") + row("voice", "เสียงพูดและพากย์ไทย") + row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("music", "ดนตรี") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
   }
   function lightSettingsHtml() {
     return `<section class="light-settings"><h3>ความสว่าง</h3><div class="light-choice" role="radiogroup">` +
@@ -13399,7 +13424,8 @@
     for (const input of root.querySelectorAll("[data-sound]")) input.addEventListener("input", () => {
       const key = input.dataset.sound;
       if (key === "muted") window.MontraAudio?.set("muted", !input.checked); else window.MontraAudio?.set(key, Number(input.value) / 100);
-      if (key !== "muted") SFX(key === "ui" ? "tap" : "fist", { intensity: .6 });
+      if (key === "voice") window.MontraAudio?.speak?.("ทดสอบระดับเสียงพูด", { persona: "guide" });
+      else if (key !== "muted") SFX(key === "ui" ? "tap" : "fist", { intensity: .6 });
     });
   }
   function openHelp() {
@@ -15389,9 +15415,18 @@
     button.onclick=()=>{const name=data.paths[select.value]?.name;if(room && name && window.confirm(`เกิดใหม่เป็น ${name} และเริ่มที่ Lv.1 ใช่ไหม?`)){button.disabled=true;room.send("start_rebirth",{path:select.value});}};
     body.append(button);
   }
+  function stripMarkdownForSpeech(text) {
+    if (!text || typeof text !== "string") return "";
+    return text
+      .replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1")
+      .replace(/^[\s*-•]+/gm, "")
+      .replace(/[`#_~]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
   function openNpcGuide(npc){
     if(npcGuidePending){clearTimeout(npcGuidePending.timer);npcGuidePending=null;}
-    openDrawer("npcGuide",npc.name+" · สอบถาม",'<p class="note">ถามเรื่องสงคราม เหตุการณ์ เก็บเลเวล ภารกิจ กิลด์ หรือเสบียงได้ คำถามและตัวเลือกภารกิจที่เหมาะสมอาจส่งให้ Typhoon เพื่อช่วยทำความเข้าใจ</p><div class="party-actions"><button type="button" class="secondary" id="guideAskWar">ด่านไหนเปิดตี</button><button type="button" class="secondary" id="guideAskEvent">มีเหตุการณ์อะไร</button><button type="button" class="secondary" id="guideAskLevel">เก็บเลเวลที่ไหน</button><button type="button" class="secondary" id="guideAskQuest">แนะนำภารกิจ</button></div><label class="field" for="npcGuideQuestion">คำถาม</label><input id="npcGuideQuestion" maxlength="180" autocomplete="off" placeholder="เช่น แนะนำภารกิจคุ้มกัน"><button id="npcGuideSend" class="primary" type="button">ถามผู้แนะนำ</button><p id="npcGuideAnswer" role="status" style="white-space:pre-line"></p>');
+    openDrawer("npcGuide",npc.name+" · สอบถาม",'<p class="note">ถามเรื่องสงคราม เหตุการณ์ เก็บเลเวล ภารกิจ กิลด์ หรือเสบียงได้ คำถามและตัวเลือกภารกิจที่เหมาะสมอาจส่งให้ Typhoon เพื่อช่วยทำความเข้าใจ</p><div class="party-actions"><button type="button" class="secondary" id="guideAskWar">ด่านไหนเปิดตี</button><button type="button" class="secondary" id="guideAskEvent">มีเหตุการณ์อะไร</button><button type="button" class="secondary" id="guideAskLevel">เก็บเลเวลที่ไหน</button><button type="button" class="secondary" id="guideAskQuest">แนะนำภารกิจ</button></div><label class="field" for="npcGuideQuestion">คำถาม</label><input id="npcGuideQuestion" maxlength="180" autocomplete="off" placeholder="เช่น แนะนำภารกิจคุ้มกัน"><button id="npcGuideSend" class="primary" type="button">ถามผู้แนะนำ</button><button id="npcGuideSpeakBtn" class="secondary" type="button" style="margin-top:6px" hidden>🔊 ฟังเสียงตอบภาษาไทย</button><p id="npcGuideAnswer" role="status" style="white-space:pre-line"></p>');
     const input=$("npcGuideQuestion"),output=$("npcGuideAnswer"),send=$("npcGuideSend");
     const ask=()=>{
       const question=input.value.trim();if(!room || mode!=="live")return toast("เข้า LIVE เพื่อคุยกับผู้แนะนำ");
@@ -15408,8 +15443,29 @@
   function openServiceNpc(npc){
     if(!Object.hasOwn(serviceNpcUi,npc.role))return;
     const service=serviceNpcUi[npc.role];
-    openDrawer("npc",npc.name,'<p id="serviceNpcSpeech" class="note"></p><button id="serviceNpcAction" class="primary" type="button"></button>');
+    openDrawer("npc",npc.name,'<p id="serviceNpcSpeech" class="note"></p><button id="serviceNpcSpeak" class="secondary" type="button" style="margin-bottom:8px">🔊 ฟังเสียงพูดไทย</button><button id="serviceNpcAction" class="primary" type="button"></button>');
     $("serviceNpcSpeech").textContent=npc.name+": "+service.dialogue;
+    const speakBtn=$("serviceNpcSpeak");
+    const persona=service.persona || "guide";
+    if(speakBtn){
+      speakBtn.onclick=()=>{
+        if(window.MontraAudio?.isSpeaking?.()){
+          window.MontraAudio.stopSpeech();
+          speakBtn.textContent="🔊 ฟังเสียงพูดไทย";
+        }else{
+          window.MontraAudio?.speak?.(service.dialogue,{
+            persona,
+            onEnd:()=>{if(document.getElementById("serviceNpcSpeak"))speakBtn.textContent="🔊 ฟังเสียงพูดไทย";}
+          });
+          speakBtn.textContent="⏹ หยุดเสียงพูด";
+        }
+      };
+    }
+    window.MontraAudio?.speak?.(service.dialogue,{
+      persona,
+      onEnd:()=>{if(document.getElementById("serviceNpcSpeak"))speakBtn.textContent="🔊 ฟังเสียงพูดไทย";}
+    });
+    if(speakBtn)speakBtn.textContent="⏹ หยุดเสียงพูด";
     const action=$("serviceNpcAction");action.textContent=service.action;
     action.onclick=()=>{
       const handlers={smith:openSmith,market:openEconomy,guild:openGuild,party:openParty,travel:openMap,strategy:openStrategicMap,guide:openHelp,
