@@ -43,7 +43,7 @@ try {
   await waitFor(() => a.event("party_state",e=>e.members.length===2),"party formed");
   a.room.send("cast_class_skill",{});
   await waitFor(() => a.me().def===36 && b.me().def===36,"ward on both party members");
-  assert.equal(c.me().def,30); assert.ok(a.me().stamina < a.me().maxStamina);
+  assert.equal(c.me().def,30); assert.ok(a.me().mana < a.me().maxMana, "class skill consumes mana");
   const hp = a.me().hp;
   b.room.send("cast_class_skill",{});
   await waitFor(() => a.me().hp >= hp + 24,"party heal");

@@ -669,6 +669,107 @@
     spawnFx("dash", "red", mesh.position.x, y + .02, mesh.position.z, { orient: "ground", life: 650, s0: r * 3, s1: r * 1.7, a0: .5, a1: 1, spin: 2.2, follow: mesh });
   }
   // The selected monster's health is a compact ring on the ground beneath it.
+
+  // ---- Phase 5: Floating Target Overhead HUD & Combo Streak System ----
+  let targetOverheadHud = null, targetOverheadTag = null, targetOverheadFill = null, targetOverheadDelay = null;
+  function ensureTargetOverheadHud() {
+    if (targetOverheadHud) return;
+    targetOverheadHud = document.createElement("div");
+    targetOverheadHud.className = "target-overhead-hud";
+    targetOverheadHud.hidden = true;
+    targetOverheadTag = document.createElement("span");
+    targetOverheadTag.className = "target-overhead-tag";
+    const wrap = document.createElement("div");
+    wrap.className = "target-overhead-bar-wrap";
+    targetOverheadDelay = document.createElement("div");
+    targetOverheadDelay.className = "target-overhead-delay-bar";
+    targetOverheadFill = document.createElement("div");
+    targetOverheadFill.className = "target-overhead-fill-bar";
+    wrap.append(targetOverheadDelay, targetOverheadFill);
+    targetOverheadHud.append(targetOverheadTag, wrap);
+    document.getElementById("game")?.append(targetOverheadHud);
+  }
+
+  function updateTargetOverheadHud(now) {
+    ensureTargetOverheadHud();
+    const id = selectedForestTarget, mesh = id ? (forestMonsters.get(id) || (id === MONSTER_ID ? enemy : null)) : null;
+    const target = id && !selectedPkTargetId ? hudCurrentTarget(now) : null;
+    if (!mesh || !mesh.isEnabled() || !target?.alive) {
+      targetOverheadHud.hidden = true;
+      return;
+    }
+    const g = mesh.metadata?.ghost;
+    const lift = g ? g.tall * (g.design?.scale || 1) - g.tall / 2 + .75 : .85 * mesh.scaling.y + .9;
+    monsterLabelPoint.set(mesh.position.x, mesh.position.y + lift, mesh.position.z);
+    const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect();
+    const w = engine.getRenderWidth(), h = engine.getRenderHeight(), viewport = camera.viewport.toGlobal(w, h);
+    B.Vector3.ProjectToRef(monsterLabelPoint, B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), viewport, monsterLabelProjection);
+    if (monsterLabelProjection.z < 0 || monsterLabelProjection.z > 1) {
+      targetOverheadHud.hidden = true;
+      return;
+    }
+    const x = monsterLabelProjection.x * rect.width / w, y = monsterLabelProjection.y * rect.height / h;
+    targetOverheadHud.style.left = x.toFixed(1) + "px";
+    targetOverheadHud.style.top = y.toFixed(1) + "px";
+    const hp = Math.max(0, Number(target.hp) || 0), maxHp = Math.max(1, Number(target.maxHp) || 1);
+    const pct = Math.max(0, Math.min(100, Math.round(100 * hp / maxHp)));
+    targetOverheadFill.style.width = pct + "%";
+    targetOverheadDelay.style.width = pct + "%";
+    targetOverheadTag.textContent = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp;
+    targetOverheadHud.hidden = false;
+  }
+
+  let comboStreak = 0, lastComboHitAt = 0;
+  let comboHudEl = null, comboHitsEl = null, comboLabelEl = null, comboGradeEl = null;
+
+  function ensureComboHud() {
+    if (comboHudEl) return;
+    comboHudEl = document.createElement("div");
+    comboHudEl.className = "combo-streak-hud";
+    comboHudEl.hidden = true;
+    comboHitsEl = document.createElement("div");
+    comboHitsEl.className = "combo-streak-hits";
+    comboLabelEl = document.createElement("div");
+    comboLabelEl.className = "combo-streak-label";
+    comboGradeEl = document.createElement("div");
+    comboGradeEl.className = "combo-streak-grade grade-c";
+    comboHudEl.append(comboHitsEl, comboLabelEl, comboGradeEl);
+    document.getElementById("game")?.append(comboHudEl);
+  }
+
+  function registerComboHit() {
+    const now = performance.now();
+    if (now - lastComboHitAt > 3500) comboStreak = 0;
+    comboStreak++;
+    lastComboHitAt = now;
+    ensureComboHud();
+    if (comboStreak >= 3) {
+      comboHudEl.hidden = false;
+      comboHitsEl.textContent = String(comboStreak);
+      let grade = "C", label = "วิชาคล่องแคล่ว", cls = "grade-c";
+      if (comboStreak >= 25) { grade = "S"; label = "ปรมาจารย์ยุทธ์!"; cls = "grade-s"; }
+      else if (comboStreak >= 15) { grade = "A"; label = "ยอดฝีมือเพลงยุทธ์!"; cls = "grade-a"; }
+      else if (comboStreak >= 7) { grade = "B"; label = "ชำนาญการต่อสู้"; cls = "grade-b"; }
+      comboLabelEl.textContent = label;
+      comboGradeEl.textContent = grade;
+      comboGradeEl.className = "combo-streak-grade " + cls;
+      comboHitsEl.style.animation = "none";
+      void comboHitsEl.offsetWidth;
+      comboHitsEl.style.animation = "comboPop 0.18s ease-out";
+      if (comboStreak === 7 || comboStreak === 15 || comboStreak === 25) {
+        SFX("coin", { intensity: 0.8 });
+        floatAtPlayer(localId, grade + " RANK!", "combo", { big: true, drift: 0 });
+      }
+    }
+  }
+
+  function updateComboHud(now) {
+    if (comboStreak > 0 && now - lastComboHitAt > 3500) {
+      comboStreak = 0;
+      if (comboHudEl) comboHudEl.hidden = true;
+    }
+  }
+
   let targetRingMesh = null, targetRingTexture = null, targetRingPercent = -1;
   function updateTargetRing(now) {
     const id = selectedForestTarget, mesh = id ? (forestMonsters.get(id) || (id === MONSTER_ID ? enemy : null)) : null;
@@ -691,6 +792,12 @@
       c.lineWidth=11; c.lineCap="butt"; c.strokeStyle="rgba(18,12,13,.88)";
       c.beginPath(); c.arc(64,64,51,0,Math.PI*2); c.stroke();
       if(percent>0){c.strokeStyle="#f25751";c.beginPath();c.arc(64,64,51,-Math.PI/2,-Math.PI/2+Math.PI*2*percent/100);c.stroke();}
+      // 4-cardinal yantra compass reticle ticks
+      c.fillStyle = "#ffcc00";
+      for (let i = 0; i < 4; i++) {
+        const a = i * Math.PI / 2;
+        c.beginPath(); c.arc(64 + Math.cos(a) * 58, 64 + Math.sin(a) * 58, 3.5, 0, Math.PI * 2); c.fill();
+      }
       targetRingTexture.update(); targetRingPercent=percent;
     }
     const g = mesh.metadata?.ghost, state = mode === "live" ? (id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get?.(id)) : null;
@@ -698,6 +805,7 @@
     targetRingMesh.setEnabled(true);
     targetRingMesh.position.set(mesh.position.x, (g?.ty ?? (Number(state?.y) || 0)) + .14, mesh.position.z);
     targetRingMesh.scaling.setAll(r * 2);
+    targetRingMesh.rotation.y = now * 0.0018;
   }
   // Screen-sized labels reuse HUD names and authoritative levels without extra draw calls.
   const monsterLabelLayer = document.createElement("div");
@@ -808,9 +916,14 @@
     if (!a || !fxNear(a.x, a.z)) return;
     const y = a.y || 0;
     if (kind === "levelup") {
-      spawnFx("beam", "gold", a.x, y + 6, a.z, { orient: "pillar", life: 1800, s0: 3.4, s1: 2.4, h: 12, a0: 1, a1: 1, fade: .45, follow: a });
-      spawnFx("yantra", "gold", a.x, y + .12, a.z, { orient: "ground", life: 1800, s0: 3, s1: 8, a0: 1, a1: 1, fade: .4, spin: 1.2, follow: a });
-      sparks("gold", a.x, y + .6, a.z, 22, { speed: 2.5, up: 7, grav: -1, life: 1300, size: .8, spread: 900, follow: a });
+      spawnFx("beam", "gold", a.x, y + 8, a.z, { orient: "pillar", life: 2200, s0: 4.2, s1: 2.5, h: 16, a0: 1, a1: 1, fade: .45, follow: a });
+      spawnFx("beam", "white", a.x, y + 8, a.z, { orient: "pillar", life: 1700, s0: 2.2, s1: 1.2, h: 16, a0: .95, a1: .95, fade: .5, follow: a });
+      spawnFx("yantra", "gold", a.x, y + .12, a.z, { orient: "ground", life: 2200, s0: 3, s1: 9.5, a0: 1, a1: 1, fade: .4, spin: 1.5, follow: a });
+      spawnFx("ring", "gold", a.x, y + .15, a.z, { orient: "ground", life: 900, s0: 1, s1: 11, a0: 1, a1: 0 });
+      spawnFx("disc", "gold", a.x, y + .1, a.z, { orient: "ground", life: 1000, s0: 2, s1: 8.5, a0: .8, a1: 0 });
+      spawnFx("star", "white", a.x, y + 2, a.z, { life: 450, s0: 2, s1: 8.5, a0: 1, a1: 0 });
+      sparks("gold", a.x, y + .6, a.z, 28, { speed: 3.5, up: 9, grav: -1.2, life: 1600, size: 1.1, spread: 800, follow: a });
+      sparks("white", a.x, y + 1.2, a.z, 16, { speed: 4, up: 8, grav: -1, life: 1200, size: 0.8, spread: 600, follow: a });
     } else if (kind === "possess") {
       spawnFx("beam", "blood", a.x, y + 5, a.z, { orient: "pillar", life: 1400, s0: 3, s1: 2, h: 10, a0: .95, a1: .95, fade: .5, follow: a });
       spawnFx("yantra", "blood", a.x, y + .12, a.z, { orient: "ground", life: 1400, s0: 8, s1: 4.5, a0: 1, a1: 1, fade: .4, spin: -2, follow: a });
@@ -5081,6 +5194,93 @@
   const STEP_SURFACE = { ritual_village: "wood", forbidden_forest: "soil", bound_temple: "stone", drowned_marsh: "water", lotus_basin: "soil",
     moon_cemetery: "soil", hex_ridge: "stone", naga_cavern: "stone", fallen_city: "stone", asura_peak: "stone", spirit_rift: "stone",
     mantra_capital: "brick", moon_pass: "soil", river_watch: "soil", bamboo_frontier: "soil", tri_wiang_castle: "brick" };
+
+  // Footstep dust puff at foot plant, colored by terrain surface
+  function spawnFootstepDust(a, speed, m) {
+    if (!a || !fxNear(a.x, a.z, 36)) return;
+    const surf = STEP_SURFACE[activeMapId] || "soil";
+    const y = (a.y || 0) + .04;
+    const h = a.heading || 0;
+    const fwd = [-Math.sin(h), -Math.cos(h)];
+    const footSide = a.stepSign > 0 ? 0.22 : -0.22;
+    const fx = a.x - fwd[0] * 0.15 - fwd[1] * footSide;
+    const fz = a.z - fwd[1] * 0.15 + fwd[0] * footSide;
+    if (surf === "water") {
+      spawnFx("ring", "cyan", fx, y + .05, fz, { orient: "ground", life: 340, s0: .3, s1: 1.6, a0: .7, a1: 0 });
+    } else {
+      const col = surf === "stone" || surf === "brick" ? "white" : "gold";
+      spawnFx("ring", col, fx, y, fz, { orient: "ground", life: 260, s0: .2, s1: 1.1 * m, a0: .35, a1: 0 });
+      if (speed > 4.2 || (a.dashUntil || 0) > performance.now()) {
+        sparks(col, fx, y + .1, fz, 2, { speed: 1.4, up: 1.2, life: 280, size: .35, spread: 20 });
+      }
+    }
+  }
+
+  // Real-time 3D status aura emissions for buffs, debuffs, spirit possession and haste trails
+  function updateAvatarAuras(a, now, dt) {
+    if (!a || !fxNear(a.x, a.z, 40)) return;
+    const isLocal = a.local || a.id === localId;
+    // Poison debuff: bubbling emerald motes rising
+    if (isLocal && seerPoisoned) {
+      if (now - (a.lastPoisonAura || 0) > 360) {
+        a.lastPoisonAura = now;
+        const px = a.x + (Math.random() - .5) * 0.8;
+        const pz = a.z + (Math.random() - .5) * 0.8;
+        const py = (a.y || 0) + 0.6 + Math.random() * 0.8;
+        spawnFx("glow", "jade", px, py, pz, { life: 550, s0: 0.7, s1: 0.15, a0: 0.85, a1: 0, vel: [0, 1.2, 0] });
+      }
+    }
+    // Spirit possession: rising ethereal violet flame motes
+    if ((isLocal && ownServerCharacter()?.possessionActive) || a.possessionActive) {
+      if (now - (a.lastPossessAura || 0) > 300) {
+        a.lastPossessAura = now;
+        const px = a.x + (Math.random() - .5) * 0.9;
+        const pz = a.z + (Math.random() - .5) * 0.9;
+        const py = (a.y || 0) + 0.5 + Math.random() * 0.9;
+        spawnFx("glow", "violet", px, py, pz, { life: 500, s0: 0.8, s1: 0.2, a0: 0.7, a1: 0, vel: [0, 1.5, 0] });
+      }
+    }
+    // Stun / Talisman binding: orbiting golden stars above head
+    if (seerBindingEffects.has(a.id)) {
+      if (now - (a.lastStunAura || 0) > 380) {
+        a.lastStunAura = now;
+        const headY = (a.y || 0) + 2.3;
+        const angle = now * 0.005;
+        for (let i = 0; i < 3; i++) {
+          const aAngle = angle + (i * Math.PI * 2 / 3);
+          const sx = a.x + Math.cos(aAngle) * 0.55;
+          const sz = a.z + Math.sin(aAngle) * 0.55;
+          spawnFx("star", "gold", sx, headY + Math.sin(now * 0.008 + i) * 0.08, sz, { life: 320, s0: 0.45, s1: 0.15, a0: 0.9, a1: 0 });
+        }
+      }
+    }
+    // Speed Haste / Dash Trail
+    if ((a.dashUntil || 0) > now) {
+      if (now - (a.lastDashTrail || 0) > 60) {
+        a.lastDashTrail = now;
+        spawnFx("glow", "cyan", a.x, (a.y || 0) + 1, a.z, { life: 250, s0: 1.6, s1: .4, a0: .6, a1: 0 });
+      }
+    }
+  }
+
+  // Monster status auras: bound talismans and elite radiance
+  function updateMonsterAuras(mesh, g, now, dt) {
+    if (!mesh || !mesh.isEnabled() || g.deathAt) return;
+    if (seerBindingEffects.has(mesh.metadata?.monsterId)) {
+      if (now - (g.lastBoundAura || 0) > 400) {
+        g.lastBoundAura = now;
+        const topY = mesh.position.y + (g.tall || 2) * 0.55;
+        spawnFx("dash", "gold", mesh.position.x, topY + 0.2, mesh.position.z, { orient: "ground", life: 420, s0: 1.5, s1: 1.5, a0: 0.85, a1: 0.85, spin: 3.5 });
+        sparks("gold", mesh.position.x, topY, mesh.position.z, 3, { speed: 1.2, up: 1.5, life: 350, size: 0.4 });
+      }
+    }
+    if (g.design?.elite && now - (g.lastEliteAura || 0) > 800) {
+      g.lastEliteAura = now;
+      const y = (g.ty ?? 0) + 0.08;
+      spawnFx("ring", "red", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 800, s0: 2, s1: (g.tall || 2) * 1.8, a0: 0.6, a1: 0 });
+    }
+  }
+
   function stepSound(a) {
     const strategic = worldDefinitions?.[activeMapId]?.strategic;
     if (a.y > 2.5 && strategic?.rampart) return strategic.kind === "territory" ? "step_wood" : "step_brick"; // on the wall walk
@@ -5099,8 +5299,10 @@
       a.horse.tail.rotation.x=.35+Math.sin(t*2)*.12;
     }
     // Footstep on each foot plant (the stride sine crossing zero), by surface.
-    if (m > .35 && !flying && !a.serverFlying && a.stepSign && Math.sign(s) && Math.sign(s) !== a.stepSign)
+    if (m > .35 && !flying && !a.serverFlying && a.stepSign && Math.sign(s) && Math.sign(s) !== a.stepSign) {
       SFX(stepSound(a), { x: a.x, z: a.z, intensity: .55 + .45 * Math.min(1, speed / 6) });
+      spawnFootstepDust(a, speed, m);
+    }
     if (Math.sign(s)) a.stepSign = Math.sign(s);
     const flare = a.skin ? animateSkin(a, m, speed, s, c, t, now, dt) : 0;
     for (let i = 0; i < 2; i++) {
@@ -7451,12 +7653,23 @@
         g.speed += (sp - g.speed) * (1 - Math.exp(-dt * 6));
       }
       ghostVoices(mesh, g, now);
+      // Monster Aggro Roar when targeting hero or entering direct melee threat
+      const hero = getLocalAvatar();
+      const distToHero = hero ? Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) : 999;
+      const isAggro = (mesh.metadata?.monsterId === selectedForestTarget) || g.windup || (g.ai === "attack") || (distToHero < 6 && g.speed > 1.2);
+      if (isAggro && !g.aggroPlayed && distToHero < 22) {
+        g.aggroPlayed = true;
+        ghostVoice(g, mesh, "aggro", 1.25);
+      } else if (!isAggro && distToHero > 28) {
+        g.aggroPlayed = false;
+      }
       const move = Math.min(1, g.speed / 2.5);
       g.walk += dt * (2 + 6 * move);
       const atkAge = (now - g.attackAt) / 1000, hurtAge = (now - g.hurtAt) / 1000;
       const atk = g.hold?.atk ?? (atkAge < .7 ? Math.sin(Math.min(1, atkAge / .7) * Math.PI) : 0); // hold: preview frames
       const hurt = g.hold?.hurt ?? (hurtAge < .3 ? Math.sin(hurtAge / .3 * Math.PI) : 0);
       g.update({ t: t + (mesh.uniqueId % 17), move, atk, hurt, walk: g.walk, wind: g.windup ? 1 : 0, g, now });
+      updateMonsterAuras(mesh, g, now, dt);
       // Humanoid rigs play their own spawn and death on the skeleton; the
       // primitive and object rigs rise out of / sink into the ground.
       const humanoid = g.rig.metadata?.skeletons, spawnP = Math.min(1, (now - g.spawnAt) / 700);
@@ -8143,7 +8356,7 @@
       ? me.characterName : "นที";
     $("characterName").textContent = name;
     const slot = me?.persistent ? (Number(me.characterSlot) || activeCharacterSlot || 1) : null;
-    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) { SFX("levelup", { important: true }); floatAtPlayer(localId, "LEVEL UP!", "levelup", { drift: 0, rise: 80, life: 2200 }); auraFx(getLocalAvatar(), "levelup"); } hudLevel = me.level; }
+    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) { SFX("levelup", { important: true }); floatAtPlayer(localId, "🌟 LEVEL UP! 🌟", "levelup", { drift: 0, rise: 85, life: 2500, big: true }); shakeCamera(0.48, 450); auraFx(getLocalAvatar(), "levelup"); } hudLevel = me.level; }
     $("characterLevel").textContent = (slot ? "S" + slot + " · " : "") + "LV. " + (
       Number.isFinite(me?.level) ? me.level : 1
     );
@@ -9556,7 +9769,13 @@
         if (room !== joined) return;
         const forestTarget=joined.state?.monsters?.get?.(hit?.targetId);
         const struck=(forestMonsters.get(hit?.targetId)||(hit?.targetId===MONSTER_ID?villageGhost:null))?.metadata?.ghost;
-        if(struck)struck.hurtAt=performance.now();
+        if(struck){
+          struck.hurtAt=performance.now();
+          if (hit.attackerId === localId) {
+            const mMesh = forestMonsters.get(hit.targetId) || enemy;
+            ghostVoice(struck, mMesh, "hurt", 0.95);
+          }
+        }
         if (typeof hit?.attackerId === "string") {
           const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
           const mine = hit.attackerId === localId, dmg = Math.round(Number(hit.damage) || 0);
@@ -9564,6 +9783,7 @@
           playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
           impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true, struck?.design?.kind, undefined, isCrit);
           if (hit.attackerId === localId) {
+            registerComboHit();
             hudTarget = { id: hit.targetId, until: performance.now() + 8000 };
             if (Number(hit.hp) === 0) {
               hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1;
@@ -16218,6 +16438,7 @@
               villageGhost.metadata.ghost.hurtAt = now;
               impactAt(localId, villageGhost.position.x, villageGhost.position.z, "", true, villageGhost.metadata.ghost.design?.kind);
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
+              registerComboHit();
               floatAtMonster(MONSTER_ID, "20", "dealt");
               hitFlashRemaining = .22;
               if (demoMonsterHp <= 0) {
@@ -16323,6 +16544,7 @@
       a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
       a.node.position.set(a.x, a.y, a.z);
       animateRig(a, Math.hypot(travelX, travelZ) / Math.max(dt, 1e-3), dt, now);
+      updateAvatarAuras(a, now, dt);
       a.flightHalo?.setEnabled(a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain));
     }
     for (const npc of summonAvatars.values()) {
@@ -16411,7 +16633,7 @@
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
     if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
     updateFloatText();
-    updateWorldFx(now); updateTargetRing(now); updateMonsterLabels();
+    updateWorldFx(now); updateTargetRing(now); updateMonsterLabels(); updateTargetOverheadHud(now); updateComboHud(now);
     { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);
       // Music state: combat for 6 s after any fight action, war in a live battle, elite when one is near.
       if ((musicSyncIn -= dt) <= 0 && hero) {
