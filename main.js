@@ -114,13 +114,13 @@
   // as the overhead camera pulls back, even when terrain is nearby.
   scene.fogMode = B.Scene.FOGMODE_LINEAR;
   scene.fogColor = B.Color3.FromHexString("#405a52");
-  // MONTRA is viewed from ABOVE: the player should appear small enough to
-  // read nearby terrain and opponents. Retain the old close-up zoom option.
+  // Start closer so the hero and nearby action are easier to read. Keep the
+  // overhead angle and full manual zoom range for a wider tactical view.
   // Babylon ArcRotateCamera beta is measured downward from the vertical axis:
   // a smaller beta means a higher, more top-down view.
   const CAMERA_ZOOM_MIN = 15;
   const CAMERA_ZOOM_MAX = 85;
-  const CAMERA_DEFAULT_RADIUS = 85;
+  const CAMERA_DEFAULT_RADIUS = 55;
   const CAMERA_DEFAULT_BETA = 0.70;
   const CAMERA_DEFAULT_ALPHA = Math.PI / 2; // look into the forest; north stays ahead
   const camera = new B.ArcRotateCamera("portrait", CAMERA_DEFAULT_ALPHA,
@@ -484,7 +484,7 @@
     return m;
   }
   // ---- World-space VFX for the far camera: hits, telegraphs, target ring and every skill in the game ----
-  // Sized in world units so they read at the default radius-85 view. Pooled additive planes; textures are
+  // Sized in world units so they read at the farthest radius-85 view. Pooled additive planes; textures are
   // painted once per (shape, colour) and shared.
   const FX_COL = {
     gold: [255, 206, 90], red: [255, 70, 50], cyan: [100, 225, 255], violet: [190, 120, 255], green: [110, 255, 140],
@@ -632,6 +632,56 @@
     targetRingMesh.setEnabled(true);
     targetRingMesh.position.set(mesh.position.x, (g?.ty ?? (Number(state?.y) || 0)) + .14, mesh.position.z);
     targetRingMesh.scaling.setAll(r * 2);
+  }
+  // Screen-sized labels reuse HUD names and authoritative levels without extra draw calls.
+  const monsterLabelLayer = document.createElement("div");
+  monsterLabelLayer.className = "monster-label-layer";
+  monsterLabelLayer.setAttribute("aria-hidden", "true");
+  document.getElementById("game")?.append(monsterLabelLayer);
+  const monsterLabels = [], monsterLabelPoint = new B.Vector3(), monsterLabelProjection = new B.Vector3();
+  function updateMonsterLabels() {
+    const hero = getLocalAvatar(), candidates = [];
+    const add = (mesh, state, id, name) => {
+      if (!hero || !mesh?.isEnabled() || mesh.isDisposed() || state?.alive === false || mesh.metadata?.ghost?.deathAt) return;
+      const level = Number(state?.level), distance = Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z);
+      if (!name || !Number.isInteger(level) || level < 1 || distance > 40) return;
+      candidates.push({ mesh, level, name, distance, selected: id === selectedForestTarget });
+    };
+    if (mode === "live") {
+      if (activeMapId === "ritual_village" && room?.state?.monster)
+        add(villageGhost, room.state.monster, MONSTER_ID, "ผีเข้าสิง");
+      room?.state?.monsters?.forEach((state, id) => {
+        if (state.mapId === activeMapId) add(forestMonsters.get(id), state, id, monsterName(state, id));
+      });
+    } else if (activeMapId === "ritual_village") {
+      add(villageGhost, { level: 1, alive: demoMonsterHp > 0 }, MONSTER_ID, "ผีเข้าสิง · ตัวทดสอบ");
+    }
+    candidates.sort((a, b) => Number(b.selected) - Number(a.selected) || a.distance - b.distance);
+    const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect();
+    const w = engine.getRenderWidth(), h = engine.getRenderHeight(), viewport = camera.viewport.toGlobal(w, h);
+    const transform = scene.getTransformMatrix(), occupied = [];
+    let used = 0;
+    for (const candidate of candidates) {
+      if (used >= 24) break;
+      const { mesh, name, level } = candidate, ghost = mesh.metadata?.ghost;
+      const lift = ghost ? ghost.tall * (ghost.design?.scale || 1) - ghost.tall / 2 + .35 : .85 * mesh.scaling.y + .5;
+      monsterLabelPoint.set(mesh.position.x, mesh.position.y + lift, mesh.position.z);
+      B.Vector3.ProjectToRef(monsterLabelPoint, B.Matrix.IdentityReadOnly, transform, viewport, monsterLabelProjection);
+      const x = monsterLabelProjection.x * rect.width / w, y = monsterLabelProjection.y * rect.height / h;
+      if (monsterLabelProjection.z < 0 || monsterLabelProjection.z > 1 || x < 75 || x > rect.width - 75 || y < 18 || y > rect.height - 18) continue;
+      // Prioritize the selected target, then the nearest; avoid overlapping labels.
+      if (occupied.some(p => Math.abs(p.x - x) < 154 && Math.abs(p.y - y) < 21)) continue;
+      occupied.push({ x, y });
+      let label = monsterLabels[used];
+      if (!label) { label = document.createElement("span"); label.className = "monster-label"; label._name = document.createElement("span"); label._name.className = "monster-label-name"; label._level = document.createElement("span"); label.append(label._name); label.append(label._level); monsterLabelLayer.append(label); monsterLabels.push(label); }
+      if (label._name.textContent !== name) label._name.textContent = name;
+      const levelText = " · Lv " + level;
+      if (label._level.textContent !== levelText) label._level.textContent = levelText;
+      label.hidden = false;
+      label.style.left = x.toFixed(1) + "px"; label.style.top = y.toFixed(1) + "px";
+      used++;
+    }
+    for (let i = used; i < monsterLabels.length; i++) monsterLabels[i].hidden = true;
   }
   // ---- Skill VFX: every action an avatar plays gets a readable effect, timed to its strike frame ----
   const SCHOOL_COL = { ritual_dagger: "violet", arcane_sword: "cyan", spirit_staff: "jade", thai_dual: "gold", muay_wraps: "orange" };
@@ -15969,7 +16019,7 @@
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
     if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
     updateFloatText();
-    updateWorldFx(now); updateTargetRing(now);
+    updateWorldFx(now); updateTargetRing(now); updateMonsterLabels();
     { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);
       // Music state: combat for 6 s after any fight action, war in a live battle, elite when one is near.
       if ((musicSyncIn -= dt) <= 0 && hero) {
