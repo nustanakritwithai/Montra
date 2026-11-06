@@ -559,8 +559,10 @@
     R[name](out, t, { intensity: opts.intensity ?? 1, pitch: opts.pitch, len: opts.len, freq: opts.freq, kind: opts.kind, ev: opts.ev });
     return true;
   }
-  // ---- Thai Speech Synthesis Engine (Web Speech API) ---------------------
+  // ---- Dual-Engine Thai Speech Engine (Web Speech API + Cloud Audio Stream Fallback) --
   let cachedThaiVoice = null;
+  let activeAudioEl = null;
+
   function getThaiVoice() {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
     if (cachedThaiVoice) return cachedThaiVoice;
@@ -583,36 +585,81 @@
     guide: { pitch: 1.0, rate: 1.0 },
   };
 
-  function speak(text, opts = {}) {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
-    if (settings.muted || (settings.voice !== undefined && settings.voice === 0)) return false;
-    if (!text || typeof text !== "string") return false;
+  function playAudioTtsStream(clean, vol, p, opts) {
     try {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "th-TH";
-      const v = getThaiVoice();
-      if (v) u.voice = v;
-      const p = PERSONAS[opts.persona || "guide"] || PERSONAS.guide;
-      u.pitch = Number(opts.pitch ?? p.pitch);
-      u.rate = Number(opts.rate ?? p.rate);
-      u.volume = Math.max(0, Math.min(1, (settings.master ?? 1) * (settings.voice ?? 0.85)));
-      if (typeof opts.onEnd === "function") u.onend = opts.onEnd;
-      if (typeof opts.onError === "function") u.onerror = opts.onError;
-      window.speechSynthesis.speak(u);
+      const url = "https://translate.google.com/translate_tts?ie=UTF-8&tl=th&client=tw-ob&q=" + encodeURIComponent(clean.slice(0, 190));
+      const audio = new Audio(url);
+      activeAudioEl = audio;
+      audio.volume = vol;
+      audio.playbackRate = Math.max(0.75, Math.min(1.4, p.rate || 1.0));
+      if (typeof opts.onEnd === "function") {
+        audio.onended = () => { if (activeAudioEl === audio) activeAudioEl = null; opts.onEnd(); };
+      }
+      audio.onerror = () => {
+        if (activeAudioEl === audio) activeAudioEl = null;
+        if (typeof opts.onError === "function") opts.onError();
+      };
+      const playPromise = audio.play();
+      if (playPromise !== undefined) playPromise.catch(() => {});
       return true;
     } catch (_) {
       return false;
     }
   }
 
+  function speak(text, opts = {}) {
+    if (typeof window === "undefined") return false;
+    if (settings.muted || (settings.voice !== undefined && settings.voice === 0)) return false;
+    if (!text || typeof text !== "string") return false;
+    const clean = text.replace(/[*#_~`]/g, "").trim();
+    if (!clean) return false;
+
+    stopSpeech();
+
+    const vol = Math.max(0, Math.min(1, (settings.master ?? 1) * (settings.voice ?? 0.85)));
+    const p = PERSONAS[opts.persona || "guide"] || PERSONAS.guide;
+
+    // Check if browser has an installed Thai voice
+    const thaiVoice = getThaiVoice();
+    if ("speechSynthesis" in window && thaiVoice) {
+      try {
+        window.speechSynthesis.cancel();
+        setTimeout(() => {
+          try {
+            window.speechSynthesis.resume();
+            const u = new SpeechSynthesisUtterance(clean);
+            u.voice = thaiVoice;
+            u.lang = "th-TH";
+            u.pitch = Number(opts.pitch ?? p.pitch);
+            u.rate = Number(opts.rate ?? p.rate);
+            u.volume = vol;
+            if (typeof opts.onEnd === "function") u.onend = opts.onEnd;
+            if (typeof opts.onError === "function") u.onerror = opts.onError;
+            window.speechSynthesis.speak(u);
+          } catch (_) {
+            playAudioTtsStream(clean, vol, p, opts);
+          }
+        }, 25);
+        return true;
+      } catch (_) {}
+    }
+
+    // Direct audio streaming fallback (works on any PC / Mobile without Thai voice packs)
+    return playAudioTtsStream(clean, vol, p, opts);
+  }
+
   function stopSpeech() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
     }
+    if (activeAudioEl) {
+      try { activeAudioEl.pause(); activeAudioEl.currentTime = 0; } catch (_) {}
+      activeAudioEl = null;
+    }
   }
 
   function isSpeaking() {
+    if (activeAudioEl && !activeAudioEl.paused && !activeAudioEl.ended) return true;
     return typeof window !== "undefined" && "speechSynthesis" in window ? Boolean(window.speechSynthesis.speaking) : false;
   }
 

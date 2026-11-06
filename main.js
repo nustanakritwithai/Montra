@@ -11476,7 +11476,7 @@
     };
     container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม เลือกพัฒนาสกิลที่ถนัด</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปได้ถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
       Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-sentinel-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+        return '<article class="sword-node learned"><span class="skill-book-icon" data-skill-glyph="'+id+'"></span><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-sentinel-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
       }).join("")+'<p class="note">PvP สตัน 0.45 วิ และต้านซ้ำ 4 วิ · Elite และบอสต้านสตันและยั่วยุ · เพิ่มขั้นพลังสวนเฉพาะมอน · ท้าทายไม่บังคับเป้าผู้เล่น · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetSentinelCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-sentinel-core-upgrade]").forEach(button=>button.onclick=()=>room.send("sentinel_book",{action:"core_upgrade",skillId:button.dataset.sentinelCoreUpgrade}));
     $("resetSentinelCore").onclick=()=>{if(window.confirm("คืนแต้มวิชาผู้พิทักษ์ทั้งหมด?"))room.send("sentinel_book",{action:"core_reset"});};
@@ -11551,7 +11551,7 @@
       const control=known ? (node.effect==="passive"?'<span class="sword-passive">เรียนแล้ว · ติดตัว</span>':'<label class="sword-slot-label">ช่องลัด <select data-blade-equip="'+clean(id)+'"><option value="">เลือกช่อง</option>'+[0,1,2,3].map(n=>'<option value="'+n+'" '+(slots[n]===id?"selected":"")+'>ช่อง '+(n+1)+'</option>').join("")+'</select></label>') : '<button type="button" data-blade-learn="'+clean(id)+'" '+(locked?"disabled":"")+'>เรียน 1 แต้ม</button>';
       const rank=Number(ranks[id] || 0),rankLevels=data.rankLevels || [],rankable=known && (data.rankable || []).includes(id),next=rankLevels[rank],needed=(data.rankPractice || [])[rank] || 0,done=Object.values(practice).reduce((sum,n)=>sum+n,0);
       const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · ดาเมจมอนสเตอร์ +'+(rank*4)+'%'+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+done+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-blade-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || done<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
-      return heading+'<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small>'+upgrade+'</div>'+control+'</article>';
+      return heading+'<article class="sword-node'+(known?" learned":"")+'"><span class="skill-book-icon" data-skill-glyph="'+clean(id)+'"></span><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small>'+upgrade+'</div>'+control+'</article>';
     }).join("");
     const summary=Object.entries(data.practiceLabels).map(([name,label])=>clean(label)+" "+(practice[name]||0)).join(" · ");
     container.innerHTML='<p>แต้มว่าง '+points+' · ใช้ไป '+(data.points-points)+' / '+data.points+' แต้ม · '+summary+'</p><p class="note">พรางตัวได้หลังพ้นการต่อสู้ 2 วินาที ร่าย 0.6 วินาทีและพราง 5 วินาที · ฝึกจากมอนสเตอร์เท่านั้น</p><p class="note">เรียน จัดช่อง และคืนแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที การคืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetBladeBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
@@ -11571,7 +11571,7 @@
     };
     container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
       Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-blade-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+        return '<article class="sword-node learned"><span class="skill-book-icon" data-skill-glyph="'+id+'"></span><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-blade-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
       }).join("")+'<p class="note">หายตัวระหว่างต่อสู้ได้ · โจมตีหรือถูกโจมตีจะเปิดเผยตัว มอนสเตอร์ตรวจพบได้เมื่อเข้าใกล้ · ฟันถอยเว้นจังหวะ 0.5 วิแล้วตีอัตโนมัติต่อ สั่งเดินหรือโจมตีใหม่ได้ทันที · พุ่งถอยหยุดเมื่อพบสิ่งกีดขวาง · พลังโจมตี PvP ถูกปรับสมดุล 75% และเมื่อเปิดฉากจากการล่องหนเพิ่มอีก 20% · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetBladeCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-blade-core-upgrade]").forEach(button=>button.onclick=()=>room.send("blade_book",{action:"core_upgrade",skillId:button.dataset.bladeCoreUpgrade}));
     $("resetBladeCore").onclick=()=>{if(window.confirm("คืนแต้มวิชาคมดาบทั้งหมด?"))room.send("blade_book",{action:"core_reset"});};
@@ -11722,7 +11722,7 @@
       const support=["heal","heal_area","spirit_heal","ward","ward_area","spirit_ward","trance"].includes(node.effect);
       const rankEffect=support ? 'ผลรักษา/คุ้มกัน +'+(rank*2)+'% (PvE และ PvP)' : 'ดาเมจมอนสเตอร์ +'+(rank*4)+'%';
       const upgrade=rankable?'<small>ขั้น '+(rank+1)+'/'+(rankLevels.length+1)+' · '+rankEffect+(next?' · ขั้นถัดไป Lv.'+next+' · ฝึกรวม '+training+'/'+needed:' · ขั้นสูงสุด')+'</small>'+(next?'<button type="button" data-occult-upgrade="'+clean(id)+'" '+(me.level<next || points<1 || training<needed?'disabled':'')+'>อัปขั้น 1 แต้ม</button>':''):'';
-      return '<article class="sword-node'+(known?" learned":"")+'"><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small>'+upgrade+'</div>'+control+'</article>';
+      return '<article class="sword-node'+(known?" learned":"")+'"><span class="skill-book-icon" data-skill-glyph="'+clean(id)+'"></span><div><strong>'+clean(node.name)+'</strong><small>'+detail+'</small>'+upgrade+'</div>'+control+'</article>';
     }).join("");
     const summary=Object.entries(labels).map(([category,label])=>clean(label)+" "+(progress[category] || 0)).join(" · ");
     container.innerHTML='<p>สาย'+(path==="seer"?"ผู้ร่ายเวท":"พระ")+' · แต้มว่าง '+points+' · ใช้ไป '+(data.points-points)+' / '+data.points+' แต้ม · ผลฝึกรวม '+training+'</p>'+(summary?'<p>ผลฝึกแยกหมวด: '+summary+'</p><p class="note">ผีจากหม้อนับครั้งแรกที่โจมตีมอนสเตอร์ต่อการเรียกหนึ่งครั้ง ส่วนผีที่ได้รับคำสั่งนับเมื่อโจมตีสำเร็จ</p>':'')+
@@ -11748,7 +11748,7 @@
     };
     container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
       Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-seer-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+        return '<article class="sword-node learned"><span class="skill-book-icon" data-skill-glyph="'+id+'"></span><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-seer-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
       }).join("")+'<p class="note">สะกดมอนทั่วไป 1 ตัวค้างไว้ กดซ้ำเพื่อคลาย · ผีไม่ตีมอนที่เจ้าของสะกด · Elite และบอสต้านสะกด · PvP สะกด '+fmt(data.coreProgress[0].seer_binding.pvpDurationMs/1000)+' วิ ต้านซ้ำ '+fmt((data.coreProgress[0].seer_binding.pvpImmunityMs-data.coreProgress[0].seer_binding.pvpDurationMs)/1000)+' วิหลังคลาย · พิษ PvP '+fmt(data.coreProgress[0].seer_poison.pvpFraction*100)+'% ทุก '+fmt(data.coreProgress[0].seer_poison.intervalMs/1000)+' วิ · พิษไม่สังหาร · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetSeerCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-seer-core-upgrade]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"core_upgrade",skillId:button.dataset.seerCoreUpgrade}));
     $("resetSeerCore").onclick=()=>{if(window.confirm("คืนแต้มวิชานักเวททั้งหมด?"))room.send("occult_book",{action:"core_reset"});};
@@ -11766,7 +11766,7 @@
     };
     container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
       Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-mender-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
+        return '<article class="sword-node learned"><span class="skill-book-icon" data-skill-glyph="'+id+'"></span><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-mender-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
       }).join("")+'<p class="note">สกิลหมู่มีผลกับปาร์ตี้ หรือฝ่ายเดียวกันในสงครามที่อยู่ในระยะ · เขตคุ้มภัยอยู่ ณ จุดที่ร่าย · รีเจนที่อ่อนกว่าไม่ทับผลที่แรงกว่า · สถานะสูงสุดอยู่ภายใต้เพดานของเกม · ล้างสถานะหยุดรวมถึงยันต์สะกด · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetMenderCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-mender-core-upgrade]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"core_upgrade",skillId:button.dataset.menderCoreUpgrade}));
     $("resetMenderCore").onclick=()=>{if(window.confirm("คืนแต้มวิชาพระทั้งหมด?"))room.send("occult_book",{action:"core_reset"});};
@@ -11865,7 +11865,7 @@
       Object.entries(catalog.core).map(([id,node])=>{
         const rank=Number(ranks[id]||0),next=levels[rank];
         const cost=node.stamina+rank*Number(catalog.coreManaPerRank||0);
-        return '<article class="sword-node learned"><div><strong>'+node.name+' · ขั้น '+rank+'/'+levels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>'+details[id]+'</small><small>ใช้มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+Number(catalog.coreManaPerRank||0))+'</small>':'')+'</div>'+
+        return '<article class="sword-node learned"><span class="skill-book-icon" data-skill-glyph="'+id+'"></span><div><strong>'+node.name+' · ขั้น '+rank+'/'+levels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>'+details[id]+'</small><small>ใช้มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+Number(catalog.coreManaPerRank||0))+'</small>':'')+'</div>'+
           (next?'<button type="button" data-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
       }).join("")+'<p class="note">การหยุดจังหวะมีช่วงต้านต่อเนื่อง Elite และบอสต้านการหยุด · โบนัสพลังจากขั้นใช้กับมอน ส่วน PvP ใช้พลังพื้นฐาน</p><button type="button" id="resetMuayCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
     container.querySelectorAll("[data-core-upgrade]").forEach(button=>button.onclick=()=>room.send("muay_book",{action:"core_upgrade",skillId:button.dataset.coreUpgrade}));
@@ -12000,6 +12000,9 @@
         else glyph.textContent=SG_GLYPH[node.effect] || "✦";
         name.textContent=state==="ทุ่ม" || state==="ฉากซ้ำ" ? state : node.name;
         button.dataset.slotNumber=String(n); button.dataset.skillId=id; glyph.dataset.skillGlyph=id;
+        button.addEventListener("click", () => {
+          if (SKILL_VOICE_SHOUTS[id]) window.MontraAudio?.speak?.(SKILL_VOICE_SHOUTS[id], { persona: "warrior", rate: 1.15 });
+        });
         const label="ช่อง "+n+" · "+name.textContent+(cooldown?" · รอ "+cooldown[1]+" วินาที":"")+(cost?" · "+cost.textContent:"");
         button.setAttribute("aria-label",label); if(!button.title)button.title=label;
         if(cooldown || state.endsWith("✓")){
@@ -13404,11 +13407,42 @@
   // Taps on any game button give a soft woodblock click.
   document.addEventListener("click", event => { if (event.target.closest?.("button") && !event.target.closest("#drawerClose")) SFX("tap"); }, true);
   // Sound settings, shown at the top of the help sheet.
+  const SKILL_VOICE_SHOUTS = {
+    phuttha_core: "ฟันพุทธไธสวรรย์!",
+    sritra_core: "ศรีตรีงาย!",
+    atamat_core: "ดาบอาทมาต!",
+    chumphon_core: "ยันต์ชุมพร!",
+    blade_vanish: "อำพรางเงา!",
+    blade_heavy: "ดาบสังหาร!",
+    blade_withdraw: "ถอยตวัดฟัน!",
+    blade_fury: "เพลงดาบคลั่ง!",
+    chaiya: "มวยไชยา!",
+    muay_chaiya: "มวยไชยา!",
+    korat: "หมัดโคราช!",
+    muay_korat: "หมัดโคราช!",
+    lopburi: "หมัดลพบุรี!",
+    muay_lopburi: "หมัดลพบุรี!",
+    thasao: "เตะท่าเสา!",
+    muay_thasao: "เตะท่าเสา!",
+    seer_pot: "หม้อสะกดวิญญาณ!",
+    seer_binding: "อาคมพันธนาการ!",
+    seer_poison: "น้ำมันพราย!",
+    seer_buffalo: "วัวธนูอาคม!",
+    mender_core_heal: "น้ำมนต์ศักดิ์สิทธิ์!",
+    mender_core_circle: "วงเวทคุ้มครอง!",
+    mender_core_ward: "กำแพงแก้วเจ็ดชั้น!",
+    mender_core_cleanse: "ปัดเป่าคุณไสย!",
+    shock: "คลื่นกระแทก!",
+    bulwark: "ปราการศิลา!",
+    riposte: "ดาบสวนกลับ!",
+    protect: "คุ้มกันสหาย!"
+  };
   function soundSettingsHtml() {
     const a = window.MontraAudio?.settings; if (!a) return "";
     const row = (key, label) => `<label class="field sound-row">${label}<input type="range" min="0" max="100" step="5" data-sound="${key}" value="${Math.round((a[key] ?? 0.8) * 100)}"></label>`;
     return `<section class="sound-settings"><h3>เสียง</h3><label class="field sound-row"><input type="checkbox" data-sound="muted" ${a.muted ? "" : "checked"}> เปิดเสียง</label>` +
-      row("master", "ความดังรวม") + row("voice", "เสียงพูดและพากย์ไทย") + row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("music", "ดนตรี") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
+      row("master", "ความดังรวม") + row("voice", "เสียงพูดและพากย์ไทย") + `<button type="button" id="testVoiceBtn" class="secondary" style="margin:8px 0;width:100%;font-weight:600">🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)</button>` +
+      row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("music", "ดนตรี") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
   }
   function lightSettingsHtml() {
     return `<section class="light-settings"><h3>ความสว่าง</h3><div class="light-choice" role="radiogroup">` +
@@ -13427,6 +13461,12 @@
       if (key === "voice") window.MontraAudio?.speak?.("ทดสอบระดับเสียงพูด", { persona: "guide" });
       else if (key !== "muted") SFX(key === "ui" ? "tap" : "fist", { intensity: .6 });
     });
+    const testBtn = root.querySelector("#testVoiceBtn");
+    if (testBtn) {
+      testBtn.onclick = () => {
+        window.MontraAudio?.speak?.("สวัสดี ยินดีต้อนรับสู่อาณาจักรมนตรา ระบบเสียงพูดภาษาไทยพร้อมใช้งานแล้ว", { persona: "guide" });
+      };
+    }
   }
   function openHelp() {
     openDrawer("help","วิธีเล่นและตั้งค่า",`

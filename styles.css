@@ -4679,3 +4679,165 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   background: linear-gradient(135deg, #2e5c45 0%, #448060 100%) !important;
   transform: scale(1.05);
 }
+
+/* ========================================================
+   MONTRA Comprehensive 26-Skill SVG Engine & Book Icons
+   ======================================================== */
+
+.skill-book-icon {
+  display: inline-block;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid #d4af37;
+  background-color: #1a2228;
+  background-size: 82% !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.7), inset 0 0 10px rgba(0,0,0,0.5);
+  flex-shrink: 0;
+  vertical-align: middle;
+  margin-right: 12px;
+}
+.sword-node {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+.sword-node > div {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
+/* Universal Specificity Overrides across all Hotbars and Modals */
+.field-slot[data-skill-id] .glyph,
+.skill-bar .field-slot[data-skill-id] .glyph,
+#occultHotbar .field-slot[data-skill-id] .glyph,
+#sentinelHotbar .field-slot[data-skill-id] .glyph,
+#bladeHotbar .field-slot[data-skill-id] .glyph,
+#muayHotbar .field-slot[data-skill-id] .glyph,
+#swordHotbar .field-slot[data-skill-id] .glyph,
+.glyph[data-skill-glyph],
+.skill-book-icon[data-skill-glyph],
+.skill-modal-glyph[data-skill-glyph],
+.kg-glyph[data-skill-glyph] {
+  background-size: 80% !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  font-size: 0 !important;
+  color: transparent !important;
+}
+
+/* --- BLADE (คมดาบ) SKILL ARTWORK --- */
+
+/* blade_vanish: มนต์พรางเงา (Shadow Cloak & Eagle Eye) */
+.kg-glyph[data-skill-glyph="blade_vanish"],
+.skill-book-icon[data-skill-glyph="blade_vanish"],
+.skill-modal-glyph[data-skill-glyph="blade_vanish"],
+.glyph[data-skill-glyph="blade_vanish"],
+.field-slot[data-skill-id="blade_vanish"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='vanBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%236a0dad'/%3E%3Cstop offset='60%25' stop-color='%2338006b'/%3E%3Cstop offset='100%25' stop-color='%23120024'/%3E%3C/radialGradient%3E%3Cfilter id='vanGlow'%3E%3CfeGaussianBlur stdDeviation='2' result='blur'/%3E%3CfeComposite in='SourceGraphic' in2='blur' operator='over'/%3E%3C/filter%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23vanBg)' stroke='%23b388ff' stroke-width='1.5'/%3E%3Cpath d='M10 32 C14 20, 26 14, 32 14 C38 14, 50 20, 54 32 C50 44, 38 50, 32 50 C26 50, 14 44, 10 32 Z' fill='%23240046' stroke='%23d1c4e9' stroke-width='1.5' filter='url(%23vanGlow)'/%3E%3Cellipse cx='32' cy='32' rx='10' ry='10' fill='%23651fff'/%3E%3Ccircle cx='32' cy='32' r='4.5' fill='%2300e5ff' filter='url(%23vanGlow)'/%3E%3Ccircle cx='34' cy='30' r='1.5' fill='%23ffffff'/%3E%3Cpath d='M16 22 C22 28, 30 24, 36 18' stroke='%23b388ff' stroke-width='1.2' fill='none' opacity='0.7'/%3E%3Cpath d='M48 42 C42 36, 34 40, 28 46' stroke='%23b388ff' stroke-width='1.2' fill='none' opacity='0.7'/%3E%3C/svg%3E") !important;
+}
+
+/* blade_heavy: ดาบสังหาร (Crimson Executioner Cleave) */
+.kg-glyph[data-skill-glyph="blade_heavy"],
+.skill-book-icon[data-skill-glyph="blade_heavy"],
+.skill-modal-glyph[data-skill-glyph="blade_heavy"],
+.glyph[data-skill-glyph="blade_heavy"],
+.field-slot[data-skill-id="blade_heavy"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='hvyBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23d50000'/%3E%3Cstop offset='70%25' stop-color='%235c0000'/%3E%3Cstop offset='100%25' stop-color='%231a0000'/%3E%3C/radialGradient%3E%3ClinearGradient id='hvyBlade' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='30%25' stop-color='%23ff8a80'/%3E%3Cstop offset='80%25' stop-color='%23d50000'/%3E%3C/linearGradient%3E%3Cfilter id='hvyGlow'%3E%3CfeGaussianBlur stdDeviation='2.5' result='blur'/%3E%3CfeComposite in='SourceGraphic' in2='blur' operator='over'/%3E%3C/filter%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23hvyBg)' stroke='%23ff5252' stroke-width='1.5'/%3E%3Cpath d='M12 52 C24 40, 44 20, 52 12 C44 28, 28 44, 12 52 Z' fill='url(%23hvyBlade)' filter='url(%23hvyGlow)'/%3E%3Cpolygon points='34,22 42,16 48,22 40,28' fill='%23ffd54f' stroke='%23fff' stroke-width='1'/%3E%3Cpolygon points='30,30 32,36 38,36 33,40 35,46 30,42 25,46 27,40 22,36 28,36' fill='%23ffffff' filter='url(%23hvyGlow)'/%3E%3Ccircle cx='44' cy='18' r='2' fill='%23ffffff'/%3E%3C/svg%3E") !important;
+}
+
+/* blade_withdraw: ก้าวถอยตวัดฟัน (Crescent Moon Shadow Fade) */
+.kg-glyph[data-skill-glyph="blade_withdraw"],
+.skill-book-icon[data-skill-glyph="blade_withdraw"],
+.skill-modal-glyph[data-skill-glyph="blade_withdraw"],
+.glyph[data-skill-glyph="blade_withdraw"],
+.field-slot[data-skill-id="blade_withdraw"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='witBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300b0ff'/%3E%3Cstop offset='60%25' stop-color='%23004385'/%3E%3Cstop offset='100%25' stop-color='%23001737'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23witBg)' stroke='%2340c4ff' stroke-width='1.5'/%3E%3Cpath d='M44 14 C30 18, 20 30, 20 44 C28 40, 36 34, 40 26 Z' fill='%23ffffff' opacity='0.9'/%3E%3Cpath d='M50 20 C38 24, 28 34, 28 48 C34 44, 42 40, 46 32 Z' fill='%2380d8ff' opacity='0.6'/%3E%3Cpolygon points='16,36 24,30 24,42' fill='%2300e5ff'/%3E%3Cline x1='24' y1='36' x2='38' y2='36' stroke='%2300e5ff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+}
+
+/* blade_fury: เพลงดาบคลั่ง (Bladestorm Tempest) */
+.kg-glyph[data-skill-glyph="blade_fury"],
+.skill-book-icon[data-skill-glyph="blade_fury"],
+.skill-modal-glyph[data-skill-glyph="blade_fury"],
+.glyph[data-skill-glyph="blade_fury"],
+.field-slot[data-skill-id="blade_fury"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='furBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23ff6d00'/%3E%3Cstop offset='60%25' stop-color='%23c43e00'/%3E%3Cstop offset='100%25' stop-color='%233e1000'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23furBg)' stroke='%23ffab40' stroke-width='1.5'/%3E%3Cg stroke='%23ffffff' stroke-width='3' stroke-linecap='round'%3E%3Cline x1='14' y1='50' x2='50' y2='14'/%3E%3Cline x1='14' y1='14' x2='50' y2='50'/%3E%3Cline x1='10' y1='32' x2='54' y2='32'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='8' fill='%23ffd600' stroke='%23fff' stroke-width='1.5'/%3E%3Cpolygon points='32,20 35,28 43,32 35,36 32,44 29,36 21,32 29,28' fill='%23ffffff'/%3E%3C/svg%3E") !important;
+}
+
+/* --- MENDER (พระ / นักบวชรักษา) SKILL ARTWORK --- */
+
+/* mender_core_heal: น้ำมนต์ศักดิ์สิทธิ์ (Sacred Water & Golden Bowl) */
+.kg-glyph[data-skill-glyph="mender_core_heal"],
+.skill-book-icon[data-skill-glyph="mender_core_heal"],
+.skill-modal-glyph[data-skill-glyph="mender_core_heal"],
+.glyph[data-skill-glyph="mender_core_heal"],
+.field-slot[data-skill-id="mender_core_heal"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='healBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300e676'/%3E%3Cstop offset='60%25' stop-color='%2300897b'/%3E%3Cstop offset='100%25' stop-color='%23004d40'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23healBg)' stroke='%23b9f6ca' stroke-width='1.5'/%3E%3Cpath d='M32 12 C32 12, 44 26, 44 34 C44 42, 38 48, 32 48 C26 48, 20 42, 20 34 C20 26, 32 12, 32 12 Z' fill='%23e0f2f1' stroke='%23ffffff' stroke-width='1.5'/%3E%3Ccircle cx='32' cy='34' r='6' fill='%2300e676'/%3E%3Cpolygon points='32,24 34,29 39,30 35,34 36,39 32,36 28,39 29,34 25,30 30,29' fill='%23ffd54f'/%3E%3C/svg%3E") !important;
+}
+
+/* mender_core_circle: วงเวทคุ้มครอง (Golden Sacred Mandala) */
+.kg-glyph[data-skill-glyph="mender_core_circle"],
+.skill-book-icon[data-skill-glyph="mender_core_circle"],
+.skill-modal-glyph[data-skill-glyph="mender_core_circle"],
+.glyph[data-skill-glyph="mender_core_circle"],
+.field-slot[data-skill-id="mender_core_circle"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='cirBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23ffd700'/%3E%3Cstop offset='60%25' stop-color='%23ff8f00'/%3E%3Cstop offset='100%25' stop-color='%23bf360c'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23cirBg)' stroke='%23fff' stroke-width='1.5'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%23ffffff' stroke-width='2' stroke-dasharray='4,3'/%3E%3Cpolygon points='32,14 46,24 46,40 32,50 18,40 18,24' fill='none' stroke='%23ffffff' stroke-width='1.5'/%3E%3Ccircle cx='32' cy='32' r='6' fill='%23ffffff'/%3E%3C/svg%3E") !important;
+}
+
+/* mender_core_ward: กำแพงแก้วเจ็ดชั้น (Crystal Prism Ward) */
+.kg-glyph[data-skill-glyph="mender_core_ward"],
+.skill-book-icon[data-skill-glyph="mender_core_ward"],
+.skill-modal-glyph[data-skill-glyph="mender_core_ward"],
+.glyph[data-skill-glyph="mender_core_ward"],
+.field-slot[data-skill-id="mender_core_ward"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='wrdBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300e5ff'/%3E%3Cstop offset='60%25' stop-color='%230091ea'/%3E%3Cstop offset='100%25' stop-color='%2301579b'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23wrdBg)' stroke='%2380d8ff' stroke-width='1.5'/%3E%3Cpolygon points='32,10 52,22 48,46 32,56 16,46 12,22' fill='%23e1f5fe' opacity='0.8' stroke='%23ffffff' stroke-width='1.5'/%3E%3Cpolygon points='32,18 44,26 40,42 32,48 24,42 20,26' fill='%2380d8ff' opacity='0.6' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E") !important;
+}
+
+/* mender_core_cleanse: ปัดเป่าคุณไสย (Sacred Bael Purge) */
+.kg-glyph[data-skill-glyph="mender_core_cleanse"],
+.skill-book-icon[data-skill-glyph="mender_core_cleanse"],
+.skill-modal-glyph[data-skill-glyph="mender_core_cleanse"],
+.glyph[data-skill-glyph="mender_core_cleanse"],
+.field-slot[data-skill-id="mender_core_cleanse"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='clnBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23f48fb1'/%3E%3Cstop offset='60%25' stop-color='%23ad1457'/%3E%3Cstop offset='100%25' stop-color='%234a0072'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23clnBg)' stroke='%23ff80ab' stroke-width='1.5'/%3E%3Cpolygon points='32,8 36,24 52,28 38,36 42,52 32,42 22,52 26,36 12,28 28,24' fill='%23ffffff' stroke='%23ffd54f' stroke-width='1.2'/%3E%3Ccircle cx='32' cy='30' r='5' fill='%23ff4081'/%3E%3C/svg%3E") !important;
+}
+
+/* --- SENTINEL (ผู้พิทักษ์) SKILL ARTWORK --- */
+
+/* shock: คลื่นกระแทก */
+.kg-glyph[data-skill-glyph="shock"],
+.skill-book-icon[data-skill-glyph="shock"],
+.skill-modal-glyph[data-skill-glyph="shock"],
+.glyph[data-skill-glyph="shock"],
+.field-slot[data-skill-id="shock"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='shkBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23ffd600'/%3E%3Cstop offset='60%25' stop-color='%23ff6f00'/%3E%3Cstop offset='100%25' stop-color='%23e65100'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23shkBg)' stroke='%23ffe082' stroke-width='1.5'/%3E%3Cpolygon points='36,6 18,32 30,32 26,56 46,26 34,26' fill='%23ffffff' stroke='%23ff6f00' stroke-width='1.2'/%3E%3Ccircle cx='44' cy='16' r='2' fill='%23fff'/%3E%3Ccircle cx='14' cy='46' r='2' fill='%23fff'/%3E%3C/svg%3E") !important;
+}
+
+/* bulwark: ปราการศิลา */
+.kg-glyph[data-skill-glyph="bulwark"],
+.skill-book-icon[data-skill-glyph="bulwark"],
+.skill-modal-glyph[data-skill-glyph="bulwark"],
+.glyph[data-skill-glyph="bulwark"],
+.field-slot[data-skill-id="bulwark"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='bwBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2378909c'/%3E%3Cstop offset='60%25' stop-color='%2337474f'/%3E%3Cstop offset='100%25' stop-color='%23212121'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23bwBg)' stroke='%23cfd8dc' stroke-width='1.5'/%3E%3Cpath d='M32 10 L48 18 L48 38 C48 48, 32 56, 32 56 C32 56, 16 48, 16 38 L16 18 Z' fill='%23546e7a' stroke='%23ffffff' stroke-width='1.5'/%3E%3Cline x1='32' y1='18' x2='32' y2='48' stroke='%23ffd54f' stroke-width='2.5'/%3E%3Cline x1='22' y1='30' x2='42' y2='30' stroke='%23ffd54f' stroke-width='2.5'/%3E%3C/svg%3E") !important;
+}
+
+/* riposte: ดาบสวนกลับ */
+.kg-glyph[data-skill-glyph="riposte"],
+.skill-book-icon[data-skill-glyph="riposte"],
+.skill-modal-glyph[data-skill-glyph="riposte"],
+.glyph[data-skill-glyph="riposte"],
+.field-slot[data-skill-id="riposte"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='ripBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23ff5722'/%3E%3Cstop offset='60%25' stop-color='%23bf360c'/%3E%3Cstop offset='100%25' stop-color='%233e1000'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23ripBg)' stroke='%23ffab91' stroke-width='1.5'/%3E%3Cg stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round'%3E%3Cline x1='16' y1='48' x2='48' y2='16'/%3E%3Cline x1='48' y1='48' x2='16' y2='16'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='4' fill='%23ffd54f'/%3E%3C/svg%3E") !important;
+}
+
+/* protect: คุ้มกันสหาย */
+.kg-glyph[data-skill-glyph="protect"],
+.skill-book-icon[data-skill-glyph="protect"],
+.skill-modal-glyph[data-skill-glyph="protect"],
+.glyph[data-skill-glyph="protect"],
+.field-slot[data-skill-id="protect"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='prtBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300b0ff'/%3E%3Cstop offset='60%25' stop-color='%230091ea'/%3E%3Cstop offset='100%25' stop-color='%230d47a1'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23prtBg)' stroke='%2380d8ff' stroke-width='1.5'/%3E%3Ccircle cx='22' cy='22' r='6' fill='%23ffffff'/%3E%3Cpath d='M14 44 C14 36, 18 32, 22 32 C26 32, 30 36, 30 44 Z' fill='%23ffffff'/%3E%3Ccircle cx='42' cy='22' r='6' fill='%23ffd54f'/%3E%3Cpath d='M34 44 C34 36, 38 32, 42 32 C46 32, 50 36, 50 44 Z' fill='%23ffd54f'/%3E%3C/svg%3E") !important;
+}

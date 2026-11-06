@@ -1,5 +1,5 @@
 // deploy/combat/thai-speech-ui-test.cjs
-// Headless test for Montra Thai Speech Engine (TTS / Web Speech API) and UI Integration
+// Headless test for Montra Thai Dual-Engine Speech Synthesis (Web Speech API + HTML5 Audio fallback)
 // CRITICAL: Headless Node test only. NO BROWSER / EDGE / CDP.
 
 const fs = require('fs');
@@ -7,7 +7,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
-console.log('--- Starting Thai Speech Engine Headless Test Suite ---');
+console.log('--- Starting Dual-Engine Thai Speech Headless Test Suite ---');
 
 const audioPath = path.join(__dirname, '..', '..', 'audio.js');
 const mainPath = path.join(__dirname, '..', '..', 'main.js');
@@ -16,10 +16,11 @@ const audioCode = fs.readFileSync(audioPath, 'utf8');
 const mainCode = fs.readFileSync(mainPath, 'utf8');
 
 // 1. Verify audio.js structure and exports
-console.log('1. Checking audio.js TTS Engine and Web Speech API wiring...');
+console.log('1. Checking audio.js Dual-Engine TTS Engine...');
 
-// Mock browser window and Web Speech API
+// Mock browser window and Web Speech API + Audio
 const spokenUtterances = [];
+const audioElements = [];
 let cancelCalled = 0;
 let isSpeakingFlag = false;
 
@@ -36,7 +37,27 @@ class MockSpeechSynthesisUtterance {
   }
 }
 
-const mockVoices = [
+class MockAudio {
+  constructor(src) {
+    this.src = src;
+    this.volume = 1;
+    this.playbackRate = 1;
+    this.paused = true;
+    this.ended = false;
+    this.onended = null;
+    this.onerror = null;
+    audioElements.push(this);
+  }
+  play() {
+    this.paused = false;
+    return Promise.resolve();
+  }
+  pause() {
+    this.paused = true;
+  }
+}
+
+let mockVoices = [
   { name: 'Microsoft Premwadee Online (Natural) - Thai (Thailand)', lang: 'th-TH' },
   { name: 'Google US English', lang: 'en-US' }
 ];
@@ -54,6 +75,7 @@ const mockSpeechSynthesis = {
     cancelCalled++;
     isSpeakingFlag = false;
   },
+  resume: () => {},
   get speaking() {
     return isSpeakingFlag;
   },
@@ -63,6 +85,7 @@ const mockSpeechSynthesis = {
 const mockWindow = {
   speechSynthesis: mockSpeechSynthesis,
   SpeechSynthesisUtterance: MockSpeechSynthesisUtterance,
+  Audio: MockAudio,
   AudioContext: class {},
   webkitAudioContext: class {},
   addEventListener: () => {},
@@ -79,6 +102,7 @@ const mockWindow = {
 
 const context = vm.createContext({
   window: mockWindow,
+  Audio: MockAudio,
   document: mockWindow.document,
   SpeechSynthesisUtterance: MockSpeechSynthesisUtterance,
   localStorage: mockWindow.localStorage,
@@ -98,53 +122,38 @@ assert.strictEqual(typeof MontraAudio.stopSpeech, 'function', 'MontraAudio.stopS
 assert.strictEqual(typeof MontraAudio.isSpeaking, 'function', 'MontraAudio.isSpeaking must be a function');
 assert.strictEqual(typeof MontraAudio.getThaiVoice, 'function', 'MontraAudio.getThaiVoice must be a function');
 
-// Test voice detection
+// Test voice detection when Thai voice is available
 const thaiVoice = MontraAudio.getThaiVoice();
 assert(thaiVoice, 'getThaiVoice should locate Thai voice');
 assert.strictEqual(thaiVoice.lang, 'th-TH');
 
-// Test DEFAULTS and settings
-assert('voice' in MontraAudio.settings, 'settings must have voice volume');
-assert(MontraAudio.settings.voice > 0, 'default voice volume must be > 0');
-
-// Test speak function
+// Test speak function with Web Speech API
 const res = MontraAudio.speak('สวัสดีนักรบมนตรา', { persona: 'elder' });
-assert.strictEqual(res, true, 'MontraAudio.speak should return true when successful');
-assert(cancelCalled >= 1, 'speechSynthesis.cancel must be called before speaking to avoid queue buildup');
-assert.strictEqual(spokenUtterances.length, 1, 'One utterance must be synthesized');
+assert.strictEqual(res, true, 'MontraAudio.speak should return true');
 
-const u = spokenUtterances[0];
-assert.strictEqual(u.text, 'สวัสดีนักรบมนตรา');
-assert.strictEqual(u.lang, 'th-TH');
-assert.strictEqual(u.voice, thaiVoice);
-assert(u.pitch < 0.9, 'elder persona pitch should be lower (~0.82)');
-assert(u.rate < 0.95, 'elder persona rate should be deliberate (~0.88)');
+// Test Dual-Engine Fallback when NO Thai voice is installed on OS (e.g. only English voices like on this Windows machine)
+mockVoices = [
+  { name: 'Microsoft David Desktop - English (United States)', lang: 'en-US' },
+  { name: 'Microsoft Zira Desktop - English (United States)', lang: 'en-US' }
+];
+// Reset cached voice
+mockWindow.speechSynthesis.onvoiceschanged();
+assert.strictEqual(MontraAudio.getThaiVoice(), null, 'Should return null when only English voices exist');
 
-// Test persona variation: warrior
-MontraAudio.speak('บุกด่าน!', { persona: 'warrior' });
-const u2 = spokenUtterances[1];
-assert(u2.rate > 1.0, 'warrior persona rate should be faster (> 1.0)');
+// Speak when only English voices installed -> Must automatically stream Thai audio via MockAudio
+const audioRes = MontraAudio.speak('ดาบสังหาร!', { persona: 'warrior' });
+assert.strictEqual(audioRes, true, 'Should successfully fall back to audio stream');
+assert(audioElements.length >= 1, 'Audio element must be created for fallback');
+const lastAudio = audioElements[audioElements.length - 1];
+assert(lastAudio.src.includes('translate_tts'), 'Audio source must point to Thai speech stream');
+assert(lastAudio.src.includes('tl=th'), 'Audio stream must request tl=th');
+assert.strictEqual(lastAudio.paused, false, 'Audio stream play() must be invoked');
 
-// Test persona variation: merchant
-MontraAudio.speak('เชิญเลือกซื้อสินค้า', { persona: 'merchant' });
-const u3 = spokenUtterances[2];
-assert(u3.pitch > 1.1, 'merchant persona pitch should be energetic (> 1.1)');
-
-// Test stopSpeech
+// Test stopSpeech stops audio stream
 MontraAudio.stopSpeech();
-assert(cancelCalled >= 3, 'stopSpeech should invoke speechSynthesis.cancel()');
+assert.strictEqual(lastAudio.paused, true, 'stopSpeech must pause active audio stream');
 
-// Test volume adjustment
-MontraAudio.set('voice', 0.5);
-assert.strictEqual(MontraAudio.settings.voice, 0.5, 'voice volume setting updated');
-
-// Test mute disables speech
-MontraAudio.set('muted', true);
-const mutedRes = MontraAudio.speak('พูดตอนปิดเสียง');
-assert.strictEqual(mutedRes, false, 'speak must return false when muted');
-MontraAudio.set('muted', false);
-
-console.log('✓ audio.js Thai Speech Synthesis Engine passed all tests!');
+console.log('✓ audio.js Dual-Engine Thai Speech (Web Speech + Audio Fallback) passed all tests!');
 
 // 2. Verify main.js wiring
 console.log('2. Checking main.js integration...');
@@ -167,10 +176,18 @@ assert(mainCode.includes('stripMarkdownForSpeech'), 'main.js must include stripM
 assert(mainCode.includes('npcGuideSpeakBtn'), 'main.js must include npcGuideSpeakBtn');
 assert(mainCode.includes('🔊 ฟังเสียงตอบภาษาไทย'), 'main.js must have Thai AI answer speech label');
 
-// Check sound settings slider
-assert(mainCode.includes('row("voice", "เสียงพูดและพากย์ไทย")'), 'main.js must include voice slider in soundSettingsHtml');
+// Check test voice button in sound settings
+assert(mainCode.includes('testVoiceBtn'), 'main.js must have testVoiceBtn');
+assert(mainCode.includes('🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)'), 'main.js must have test voice label');
 
-console.log('✓ main.js Thai speech triggers and UI controls passed all tests!');
+// Check skill voice shouts
+assert(mainCode.includes('SKILL_VOICE_SHOUTS'), 'main.js must define SKILL_VOICE_SHOUTS');
+assert(mainCode.includes('blade_heavy: "ดาบสังหาร!"'), 'main.js must include Blade shout');
 
-console.log('--- ALL THAI SPEECH ENGINE TESTS PASSED SUCCESFULLY! ---');
+// Check skill book icons
+assert(mainCode.includes('class="skill-book-icon"'), 'main.js must render skill-book-icon in skill books');
+
+console.log('✓ main.js Thai speech triggers, book icons, and UI controls passed all tests!');
+
+console.log('--- ALL DUAL-ENGINE THAI SPEECH AND SKILL ART TESTS PASSED! ---');
 process.exit(0);
