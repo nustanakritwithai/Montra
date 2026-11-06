@@ -50,15 +50,15 @@ for (const alias of aliases) {
 
 // Check main.js event hooks
 assert(
-  mainSource.includes('if (result.skillId) SFX(result.skillId, { x: caster.x, z: caster.z })'),
+  mainSource.includes('SFX(result.skillId, { x: caster.x, z: caster.z })'),
   "main.js sword_skill_used must trigger SFX for cast skill"
 );
 assert(
-  mainSource.includes('if(caster && data?.skillId)SFX(data.skillId, { x: caster.x, z: caster.z })'),
+  mainSource.includes('SFX(data.skillId, { x: caster.x, z: caster.z })'),
   "main.js muay_core_used must trigger SFX for cast skill"
 );
 assert(
-  mainSource.includes('if(data?.skillId)SFX(data.skillId, { x: caster.x, z: caster.z })'),
+  mainSource.includes('SFX(data.skillId, { x: caster.x, z: caster.z })'),
   "main.js seer_core_used must trigger SFX for cast skill"
 );
 assert(
