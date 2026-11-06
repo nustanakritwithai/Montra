@@ -16,4 +16,7 @@ for (const id of groups.flat()) {
     assert.ok(rules.some(([, selectors, body]) => selectors.split(',').some(s => s.trim() === selector) && /background-image:\s*url\("data:image\/svg\+xml,/.test(body)), `${selector} needs embedded artwork`);
   }
 }
+const preview = fs.readFileSync('skill-artwork-preview.html', 'utf8');
+assert.equal((preview.match(/data-skill-glyph=/g) || []).length, 96, 'preview must cover all 96 core skill/surface pairs');
+for (const id of groups.flat()) assert.equal((preview.match(new RegExp(`data-skill-glyph="${id}"`, 'g')) || []).length, 4, `${id} preview has all four surfaces`);
 console.log('PASS: all 24 core skill artworks cover book, hotbar, modal and graph');
