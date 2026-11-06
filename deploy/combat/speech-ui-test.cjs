@@ -36,6 +36,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
   bind(button,'text','guide','Listen');assert.match(status.textContent,/Google/);assert.equal(options,undefined,'bind must not auto-play');
   button.onclick();assert.equal(button.textContent,'ยกเลิกการเตรียมเสียง');options.onStart();assert.equal(button.textContent,'⏹ หยุดเสียงพูด');button.onclick();assert.equal(button.textContent,'Listen');
   button.onclick();options.onError({error:'not-allowed'});assert.equal(button.textContent,'Listen');assert.match(status.textContent,/เบราว์เซอร์/);
+  let duplicates=0;button.after=()=>duplicates++;bind(button,'replacement','guide','Listen');assert.equal(duplicates,0,'repeated guide answers reuse one status node');assert.equal(button.montraSpeechStatus,status);
   const npc=main.slice(main.indexOf('  function openServiceNpc('),main.indexOf('    const action=',main.indexOf('  function openServiceNpc(')));
   const guide=main.slice(main.indexOf('joined.onMessage("npc_guide_result"'),main.indexOf('joined.onMessage("forest_defense_state"'));
   assert.ok(!npc.includes('.speak(')&&!npc.includes('?.speak?.(')&&!guide.includes('.speak(')&&!guide.includes('?.speak?.('),'NPC responses must wait for explicit tap');

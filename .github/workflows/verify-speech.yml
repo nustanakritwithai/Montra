@@ -1,0 +1,39 @@
+name: Verify MONTRA speech
+on:
+  push:
+    paths:
+      - 'audio.js'
+      - 'main.js'
+      - 'deploy/combat/speech-*.cjs'
+      - '.github/workflows/verify-speech.yml'
+  pull_request:
+    paths:
+      - 'audio.js'
+      - 'main.js'
+      - 'deploy/combat/speech-*.cjs'
+      - '.github/workflows/verify-speech.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  speech:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check speech state contracts
+        run: node --check audio.js && node --check main.js && node deploy/combat/speech-ui-test.cjs
+      - name: Install isolated browser runner
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Verify synthetic speech playback in desktop and mobile Chromium
+        run: node deploy/combat/speech-browser-test.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: speech-browser-evidence
+          path: speech-browser-evidence
