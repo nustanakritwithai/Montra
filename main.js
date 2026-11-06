@@ -665,8 +665,11 @@
   // Wind-up telegraph: a red danger disc that tightens onto the ghost until it strikes.
   function windupTelegraph(mesh, g) {
     const r = Math.max(3, (g.tall || 1.8) * 1.8), y = (g.ty ?? 0) + .1;
-    spawnFx("disc", "red", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 650, s0: r * 2.4, s1: r * 1.6, a0: .25, a1: .85, follow: mesh });
-    spawnFx("dash", "red", mesh.position.x, y + .02, mesh.position.z, { orient: "ground", life: 650, s0: r * 3, s1: r * 1.7, a0: .5, a1: 1, spin: 2.2, follow: mesh });
+    spawnFx("disc", "red", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 750, s0: r * 2.5, s1: r * 1.5, a0: .25, a1: .9, follow: mesh });
+    spawnFx("dash", "red", mesh.position.x, y + .02, mesh.position.z, { orient: "ground", life: 750, s0: r * 3, s1: r * 1.6, a0: .5, a1: 1, spin: 2.5, follow: mesh });
+    spawnFx("ring", "blood", mesh.position.x, y + .03, mesh.position.z, { orient: "ground", life: 750, s0: 0.8, s1: r * 2.4, a0: 0.95, a1: 0.1, follow: mesh });
+    spawnFx("cross", "red", mesh.position.x, y + .04, mesh.position.z, { orient: "ground", life: 750, s0: r * 1.6, s1: r * 1.6, a0: 0.85, a1: 0.2, spin: 1.8, follow: mesh });
+    sparks("blood", mesh.position.x, y + 0.3, mesh.position.z, 6, { speed: 3.5, up: 1.5, life: 500 });
   }
   // The selected monster's health is a compact ring on the ground beneath it.
 
@@ -715,7 +718,13 @@
     const pct = Math.max(0, Math.min(100, Math.round(100 * hp / maxHp)));
     targetOverheadFill.style.width = pct + "%";
     targetOverheadDelay.style.width = pct + "%";
-    targetOverheadTag.textContent = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp;
+    if (pct <= 20 && hp > 0) {
+      targetOverheadHud.classList.add("execute-active");
+      targetOverheadTag.innerHTML = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp + '<span class="target-overhead-execute">⚔️ ประหาร!</span>';
+    } else {
+      targetOverheadHud.classList.remove("execute-active");
+      targetOverheadTag.textContent = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp;
+    }
     targetOverheadHud.hidden = false;
   }
 
@@ -5279,6 +5288,34 @@
       const y = (g.ty ?? 0) + 0.08;
       spawnFx("ring", "red", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 800, s0: 2, s1: (g.tall || 2) * 1.8, a0: 0.6, a1: 0 });
     }
+    // Phase 6: Boss / Elite Enrage Phase (<30% HP)
+    const isBossOrElite = g.design?.elite || (g.tall || 2) >= 2.2 || mesh.metadata?.monsterId === MONSTER_ID;
+    if (isBossOrElite) {
+      let curHp = 100, curMax = 100;
+      if (mode === "live") {
+        const id = mesh.metadata?.monsterId;
+        const s = id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get?.(id);
+        if (s) { curHp = Number(s.hp) || 0; curMax = Number(s.maxHp) || 1; }
+      } else if (mesh === villageGhost) {
+        curHp = demoMonsterHp; curMax = 100;
+      }
+      if (curHp > 0 && curHp / curMax <= 0.30) {
+        if (!g.enraged) {
+          g.enraged = true;
+          ghostVoice(g, mesh, "aggro", 1.6);
+          shakeCamera(0.55, 480);
+          floatAtMonster(mesh.metadata?.monsterId || MONSTER_ID, "จิตคลั่งวิญญาณสถิต! (ENRAGED)", "crit", { big: true });
+          SFX("shock", { x: mesh.position.x, z: mesh.position.z, intensity: 1.2 });
+        }
+        if (now - (g.lastEnrageAura || 0) > 280) {
+          g.lastEnrageAura = now;
+          const y = (g.ty ?? 0) + 0.1;
+          const r = (g.tall || 2) * 0.7 * (g.design?.scale || 1);
+          spawnFx("ring", "blood", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 550, s0: r * 0.8, s1: r * 2.8, a0: 0.9, a1: 0 });
+          sparks("blood", mesh.position.x, mesh.position.y + 0.6, mesh.position.z, 3, { speed: 2.2, up: 2.5, life: 420 });
+        }
+      }
+    }
   }
 
   function stepSound(a) {
@@ -7632,6 +7669,12 @@
         const r = camera.getDirection(B.Axis.X), away = (mesh.position.x - hero.x) * r.x + (mesh.position.z - hero.z) * r.z >= 0 ? 1 : -1;
         floatText(mesh.position.x, mesh.position.y + (g.tall || 1.8) * .6, mesh.position.z, cries[Math.random() * cries.length | 0], "cry", { side: 52 * away, drift: 12 * away, rise: 20, life: 1000, lift: 14 }); } }
       const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 15) lastCombatAt = now; // music goes to combat
+    } else if (!g.windup && g.wasWindup) {
+      // Windup completed: slam shockwave impact at telegraph center
+      const y = (g.ty ?? 0) + .1;
+      hitBurst(mesh.position.x, mesh.position.z, "red", true, y, true);
+      shakeCamera((g.design?.elite || (g.tall || 2) > 2.2) ? 0.6 : 0.42, 380);
+      SFX("shock", { x: mesh.position.x, z: mesh.position.z, intensity: 1.1 });
     }
     g.wasWindup = g.windup;
     if (!g.nextMurmur) g.nextMurmur = now + 2000 + Math.random() * 8000;
@@ -7673,7 +7716,7 @@
       // Humanoid rigs play their own spawn and death on the skeleton; the
       // primitive and object rigs rise out of / sink into the ground.
       const humanoid = g.rig.metadata?.skeletons, spawnP = Math.min(1, (now - g.spawnAt) / 700);
-      let s = g.design.scale * (humanoid ? 1 : .3 + .7 * ease(spawnP)), sink = humanoid ? 0 : (1 - ease(spawnP)) * -.8;
+      let s = g.design.scale * (humanoid ? 1 : .3 + .7 * ease(spawnP)) * (g.enraged ? 1.15 : 1), sink = humanoid ? 0 : (1 - ease(spawnP)) * -.8;
       if (g.deathAt) {
         const p = (now - g.deathAt) / 1400;
         if (p >= 1) { mesh.setEnabled(false); g.deathAt = 0; return; }
@@ -9787,6 +9830,10 @@
             hudTarget = { id: hit.targetId, until: performance.now() + 8000 };
             if (Number(hit.hp) === 0) {
               hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1;
+              shakeCamera(0.68, 420);
+              SFX("bell", { intensity: 1.2 });
+              sparks("gold", Number(at?.x), (Number(at?.y) || 0) + 1.2, Number(at?.z), 18, { speed: 4.5, up: 3.2, life: 550 });
+              floatAtPlayer(localId, "วิชาประหารสิ้นสูญ! (EXECUTE)", "crit", { big: true, drift: 0 });
               shakeCamera(0.42, 320);
             }
           }
@@ -16443,6 +16490,10 @@
               hitFlashRemaining = .22;
               if (demoMonsterHp <= 0) {
                 hudKills.ritual_village = (hudKills.ritual_village || 0) + 1;
+                shakeCamera(0.68, 420);
+                SFX("bell", { intensity: 1.2 });
+                sparks("gold", enemy.position.x, enemy.position.y + 1.2, enemy.position.z, 18, { speed: 4.5, up: 3.2, life: 550 });
+                floatAtPlayer(localId, "วิชาประหารสิ้นสูญ! (EXECUTE)", "crit", { big: true, drift: 0 });
                 eventFx("ghost_die", enemy, { y: 0 });
                 releaseSoul(enemy.position.x, enemy.position.y + .4, enemy.position.z);
                 shakeCamera(0.42, 320);
