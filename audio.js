@@ -562,6 +562,7 @@
   // ---- Dual-Engine Thai Speech Engine (Web Speech API + Cloud Audio Stream Fallback) --
   let cachedThaiVoice = null;
   let activeAudioEl = null;
+  let speechSession = null;
 
   function getThaiVoice() {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
@@ -585,70 +586,91 @@
     guide: { pitch: 1.0, rate: 1.0 },
   };
 
-  function playAudioTtsStream(clean, vol, p, opts) {
+  // A session owns its callbacks, including late media failures after cancel/replay.
+  function finishSpeech(session, error) {
+    if (speechSession !== session) return;
+    speechSession = null;
+    clearTimeout(session.timer);
+    if (session.audio) {
+      session.audio.pause();
+      if (activeAudioEl === session.audio) activeAudioEl = null;
+    } else if (error && "speechSynthesis" in window) {
+      try { window.speechSynthesis.cancel(); } catch (_) {}
+    }
+    if (error) session.opts.onError?.(error);
+    else session.opts.onEnd?.();
+  }
+  function startSpeech(session) {
+    if (speechSession !== session || session.started) return;
+    session.started = true;
+    clearTimeout(session.timer);
+    session.opts.onStart?.();
+  }
+  function playAudioTtsStream(clean, vol, p, session) {
     try {
+      // Existing fallback only: no new provider or automatic native-error upload.
       const url = "https://translate.google.com/translate_tts?ie=UTF-8&tl=th&client=tw-ob&q=" + encodeURIComponent(clean.slice(0, 190));
       const audio = new Audio(url);
-      activeAudioEl = audio;
+      session.audio = activeAudioEl = audio;
       audio.volume = vol;
       audio.playbackRate = Math.max(0.75, Math.min(1.4, p.rate || 1.0));
-      if (typeof opts.onEnd === "function") {
-        audio.onended = () => { if (activeAudioEl === audio) activeAudioEl = null; opts.onEnd(); };
-      }
-      audio.onerror = () => {
-        if (activeAudioEl === audio) activeAudioEl = null;
-        if (typeof opts.onError === "function") opts.onError();
-      };
-      const playPromise = audio.play();
-      if (playPromise !== undefined) playPromise.catch(() => {});
-      return true;
+      audio.onplaying = () => startSpeech(session);
+      audio.onended = () => finishSpeech(session);
+      audio.onerror = () => finishSpeech(session, { error: "network" });
+      const result = audio.play();
+      if (result?.catch) result.catch(error => finishSpeech(session, {
+        error: error?.name === "NotAllowedError" ? "not-allowed" : "audio-unavailable"
+      }));
+      return true; // Accepted, not yet audible. onStart signals actual playback.
     } catch (_) {
+      finishSpeech(session, { error: "audio-unavailable" });
       return false;
     }
   }
 
   function speak(text, opts = {}) {
     if (typeof window === "undefined") return false;
-    if (settings.muted || (settings.voice !== undefined && settings.voice === 0)) return false;
+    stopSpeech();
+    if (settings.muted || settings.voice === 0 || settings.master === 0) {
+      opts.onError?.({ error: "muted" });
+      return false;
+    }
     if (!text || typeof text !== "string") return false;
     const clean = text.replace(/[*#_~`]/g, "").trim();
     if (!clean) return false;
-
-    stopSpeech();
-
     const vol = Math.max(0, Math.min(1, (settings.master ?? 1) * (settings.voice ?? 0.85)));
     const p = PERSONAS[opts.persona || "guide"] || PERSONAS.guide;
-
-    // Check if browser has an installed Thai voice
+    const session = speechSession = { opts, started: false, audio: null, timer: null };
+    session.timer = setTimeout(() => finishSpeech(session, { error: "start-timeout" }), 10000);
     const thaiVoice = getThaiVoice();
     if ("speechSynthesis" in window && thaiVoice) {
       try {
-        window.speechSynthesis.cancel();
-        setTimeout(() => {
-          try {
-            window.speechSynthesis.resume();
-            const u = new SpeechSynthesisUtterance(clean);
-            u.voice = thaiVoice;
-            u.lang = "th-TH";
-            u.pitch = Number(opts.pitch ?? p.pitch);
-            u.rate = Number(opts.rate ?? p.rate);
-            u.volume = vol;
-            if (typeof opts.onEnd === "function") u.onend = opts.onEnd;
-            if (typeof opts.onError === "function") u.onerror = opts.onError;
-            window.speechSynthesis.speak(u);
-          } catch (_) {
-            playAudioTtsStream(clean, vol, p, opts);
-          }
-        }, 25);
+        // Stay inside the user's tap. A delayed speak loses activation on some mobiles.
+        window.speechSynthesis.resume();
+        const u = new SpeechSynthesisUtterance(clean);
+        session.utterance = u;
+        u.voice = thaiVoice;
+        u.lang = "th-TH";
+        u.pitch = Number(opts.pitch ?? p.pitch);
+        u.rate = Number(opts.rate ?? p.rate);
+        u.volume = vol;
+        u.onstart = () => startSpeech(session);
+        u.onend = () => finishSpeech(session);
+        u.onerror = event => finishSpeech(session, { error: event.error || "synthesis-failed" });
+        window.speechSynthesis.speak(u);
         return true;
-      } catch (_) {}
+      } catch (_) {
+        finishSpeech(session, { error: "synthesis-failed" });
+        return false;
+      }
     }
-
-    // Direct audio streaming fallback (works on any PC / Mobile without Thai voice packs)
-    return playAudioTtsStream(clean, vol, p, opts);
+    return playAudioTtsStream(clean, vol, p, session);
   }
 
   function stopSpeech() {
+    const previous = speechSession;
+    speechSession = null; // Invalidate before cancel fires synchronous events.
+    if (previous) clearTimeout(previous.timer);
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
     }
@@ -656,11 +678,12 @@
       try { activeAudioEl.pause(); activeAudioEl.currentTime = 0; } catch (_) {}
       activeAudioEl = null;
     }
+    previous?.opts.onEnd?.();
   }
 
   function isSpeaking() {
-    if (activeAudioEl && !activeAudioEl.paused && !activeAudioEl.ended) return true;
-    return typeof window !== "undefined" && "speechSynthesis" in window ? Boolean(window.speechSynthesis.speaking) : false;
+    // Includes pending playback so a second tap cancels instead of duplicating it.
+    return Boolean(speechSession);
   }
 
   window.MontraAudio = {
