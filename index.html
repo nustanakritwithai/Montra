@@ -112,10 +112,10 @@
       <button id="fishReel" class="primary" type="button" disabled>รอปลากินเบ็ด</button>
     </section>
     <nav class="field-shortcuts" aria-label="ทางลัดขณะเล่น">
-      <button id="fieldMenuButton" type="button" aria-haspopup="dialog" aria-controls="drawer"><span aria-hidden="true">☰</span>เมนู<b id="fieldAlerts" aria-label="มีข้อความหรือคำเชิญใหม่" hidden>!</b></button>
-      <button id="bag" type="button"><span aria-hidden="true">▣</span>กระเป๋า</button>
-      <button id="quickSkills" type="button" aria-label="เปิดตำราสกิลอาชีพ"><span aria-hidden="true">✧</span>สกิล</button>
-      <button id="chatButton" type="button" aria-label="เปิดแชท"><span>✉</span>แชท <b id="chatUnread" hidden></b></button>
+      <button id="fieldMenuButton" type="button" aria-haspopup="dialog" aria-controls="drawer"><span class="hud-btn-icon" data-hud-icon="menu" aria-hidden="true">☰</span>เมนู<b id="fieldAlerts" aria-label="มีข้อความหรือคำเชิญใหม่" hidden>!</b></button>
+      <button id="bag" type="button"><span class="hud-btn-icon" data-hud-icon="bag" aria-hidden="true">▣</span>กระเป๋า</button>
+      <button id="quickSkills" type="button" aria-label="เปิดตำราสกิลอาชีพ"><span class="hud-btn-icon" data-hud-icon="skills" aria-hidden="true">✧</span>สกิล</button>
+      <button id="chatButton" type="button" aria-label="เปิดแชท"><span class="hud-btn-icon" data-hud-icon="chat">✉</span>แชท <b id="chatUnread" hidden></b></button>
       <button id="mountButton" type="button" aria-pressed="false" hidden><span>♞</span><i>เรียกม้า</i></button>
     </nav>
     <div id="shade" class="shade" hidden></div>
@@ -124,7 +124,7 @@
       <div class="drawer-header"><button id="drawerMenuBack" type="button" class="drawer-back" aria-label="กลับเมนูเกม" hidden>‹ เมนู</button><h2 id="drawerTitle">แผนที่</h2><button id="drawerClose" class="close" aria-label="ปิด">✕</button></div>
       <nav id="fieldMenu" aria-label="บันทึกผจญภัย" hidden>
         <button id="menuQuest" class="journal-objective" type="button">
-          <span aria-hidden="true">◇</span><span><small>เป้าหมายตอนนี้</small><strong id="menuGoalTitle"></strong><span id="menuGoalStep"></span></span><i aria-hidden="true">›</i>
+          <span class="drawer-nav-icon" data-menu-icon="quest" aria-hidden="true">◇</span><span><small>เป้าหมายตอนนี้</small><strong id="menuGoalTitle"></strong><span id="menuGoalStep"></span></span><i aria-hidden="true">›</i>
         </button>
         <div id="menuNotices" class="menu-notices" aria-label="คำเชิญที่รอตอบ" hidden>
           <button id="noticeParty" type="button" hidden>เปิดคำเชิญปาร์ตี้ ›</button>
@@ -138,23 +138,23 @@
           <button type="button" data-journal-tab="system" aria-controls="menu-system" aria-pressed="false">ตั้งค่า</button>
         </div>
         <section id="menu-character" data-journal-panel="character" aria-label="ตัวละครและวิชา"><div class="menu-tiles">
-          <button id="menuCharacter" type="button"><span aria-hidden="true">๛</span><strong>สถานะตัวละคร<small>สเตตัส บัฟ และอาชีพ</small></strong></button>
-          <button id="menuBag" type="button"><span aria-hidden="true">▣</span><strong>กระเป๋า<small>ใช้ยาและสวมอาวุธ</small></strong></button>
-          <button id="swordTreeButton" class="book-entry" type="button" hidden><span>⚔</span>ตำราอาชีพ</button>
+          <button id="menuCharacter" type="button"><span class="drawer-nav-icon" data-menu-icon="character" aria-hidden="true">๛</span><strong>สถานะตัวละคร<small>สเตตัส บัฟ และอาชีพ</small></strong></button>
+          <button id="menuBag" type="button"><span class="drawer-nav-icon" data-menu-icon="bag" aria-hidden="true">▣</span><strong>กระเป๋า<small>ใช้ยาและสวมอาวุธ</small></strong></button>
+          <button id="swordTreeButton" class="book-entry" type="button" hidden><span class="drawer-nav-icon" data-menu-icon="skills">⚔</span>ตำราอาชีพ</button>
           <button id="muayBookButton" class="book-entry" type="button" hidden><span>✊</span>ตำราอาชีพ</button>
           <button id="occultBookButton" class="book-entry" type="button" hidden><span>✧</span>ตำราอาชีพ</button>
           <button id="bladeBookButton" class="book-entry" type="button" aria-label="เปิดสกิลคมดาบ" hidden><span>◈</span>ตำราอาชีพ</button>
           <button id="sentinelBookButton" class="book-entry" type="button" aria-label="เปิดสกิลผู้พิทักษ์" hidden><span>⬟</span>ตำราอาชีพ</button>
         </div></section>
         <section id="menu-travel" data-journal-panel="travel" aria-label="เดินทาง" hidden><div class="menu-tiles">
-          <button id="mapButton" type="button"><span aria-hidden="true">⌖</span><strong>แผนที่<small>ตำแหน่งและจุดเดินทาง</small></strong></button>
-          <button id="menuMount" type="button"><span aria-hidden="true">♞</span><strong id="menuMountLabel">เรียกม้า</strong></button>
+          <button id="mapButton" type="button"><span class="drawer-nav-icon" data-menu-icon="map" aria-hidden="true">⌖</span><strong>แผนที่<small>ตำแหน่งและจุดเดินทาง</small></strong></button>
+          <button id="menuMount" type="button"><span class="drawer-nav-icon" data-menu-icon="mount" aria-hidden="true">♞</span><strong id="menuMountLabel">เรียกม้า</strong></button>
         </div></section>
         <section id="menu-social" data-journal-panel="social" aria-label="ชุมชนและการค้า" hidden><div class="menu-tiles">
-          <button id="menuChat" type="button"><span aria-hidden="true">✉</span><strong>แชท<small>แผนที่ รวม ปาร์ตี้ และส่วนตัว</small></strong><b id="menuChatUnread" hidden></b></button>
-          <button id="partyButton" type="button"><span aria-hidden="true">♧</span><strong>ปาร์ตี้<small>ชวนเพื่อนออกล่า</small></strong><b id="partyUnread" hidden>!</b></button>
-          <button id="menuGuild" type="button"><span aria-hidden="true">⚑</span><strong>กิลด์</strong></button>
-          <button id="marketButton" type="button"><span aria-hidden="true">♢</span><strong>ตลาดและเทรด<small>ฝากขายหรือแลกกับผู้เล่น</small></strong><b id="tradeUnread" hidden>!</b></button>
+          <button id="menuChat" type="button"><span class="drawer-nav-icon" data-menu-icon="chat" aria-hidden="true">✉</span><strong>แชท<small>แผนที่ รวม ปาร์ตี้ และส่วนตัว</small></strong><b id="menuChatUnread" hidden></b></button>
+          <button id="partyButton" type="button"><span class="drawer-nav-icon" data-menu-icon="party" aria-hidden="true">♧</span><strong>ปาร์ตี้<small>ชวนเพื่อนออกล่า</small></strong><b id="partyUnread" hidden>!</b></button>
+          <button id="menuGuild" type="button"><span class="drawer-nav-icon" data-menu-icon="guild" aria-hidden="true">⚑</span><strong>กิลด์</strong></button>
+          <button id="marketButton" type="button"><span class="drawer-nav-icon" data-menu-icon="market" aria-hidden="true">♢</span><strong>ตลาดและเทรด<small>ฝากขายหรือแลกกับผู้เล่น</small></strong><b id="tradeUnread" hidden>!</b></button>
         </div></section>
         <section id="menu-system" data-journal-panel="system" aria-label="ตั้งค่าและบัญชี" hidden>
           <div class="field-layout-picker" role="group" aria-label="รูปแบบหน้าจอ">
@@ -164,8 +164,8 @@
             <select id="fieldUtility"><option value="chat">แชท</option><option value="mount">ขี่ม้า (เมื่อเรียกได้)</option></select>
           </label>
           <div class="menu-tiles">
-            <button id="helpButton" type="button"><span aria-hidden="true">?</span><strong>คู่มือ ภาพ และเสียง</strong></button>
-            <button id="modeButton" type="button"><span aria-hidden="true">◎</span><strong>บัญชีและตัวละคร</strong></button>
+            <button id="helpButton" type="button"><span class="drawer-nav-icon" data-menu-icon="settings" aria-hidden="true">?</span><strong>คู่มือ ภาพ และเสียง</strong></button>
+            <button id="modeButton" type="button"><span class="drawer-nav-icon" data-menu-icon="account" aria-hidden="true">◎</span><strong>บัญชีและตัวละคร</strong></button>
           </div>
         </section>
       </nav>

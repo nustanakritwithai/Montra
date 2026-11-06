@@ -12343,7 +12343,7 @@
     };
 
     if ($("skillModalName")) $("skillModalName").textContent = node.name;
-    if ($("skillModalGlyph")) $("skillModalGlyph").textContent = skillGlyphs[skillId] || "✦";
+    if ($("skillModalGlyph")) { $("skillModalGlyph").textContent = skillGlyphs[skillId] || "✦"; $("skillModalGlyph").setAttribute("data-skill-glyph", skillId); }
     if ($("skillModalBadge")) $("skillModalBadge").textContent = rank > 0 ? "ขั้น " + rank + "/" + maxRank : "ยังไม่เรียน";
     if ($("skillModalType")) $("skillModalType").textContent = node.effect === "passive" ? "วิชาติดตัว (Passive)" : "วิชากดใช้ (Active)";
 
@@ -12481,7 +12481,7 @@
 
       return '<div class="kg-node ' + dirClass + ' ' + stateCls + '" data-skill-id="' + id + '" data-sword-core-upgrade="' + id + '" role="button" tabindex="0" aria-label="' + node.name + '">' +
         '<div class="kg-orb ' + stateCls + '">' +
-          '<span class="kg-glyph">' + glyph + '</span>' +
+          '<span class="kg-glyph" data-skill-glyph="' + id + '">' + glyph + '</span>' +
           (rank > 0 ? '<span class="st-card-rank-badge">+' + rank + '</span>' : '') +
         '</div>' +
         '<strong class="kg-node-name">' + node.name + '</strong>' +
@@ -12536,7 +12536,7 @@
       '<div class="kg-canvas-board radial-4way">' +
         '<!-- Center Class Node (อาชีพนักดาบตรงกลาง) -->' +
         '<div class="kg-center-class-node">' +
-          '<div class="kg-center-class-orb">⚔</div>' +
+          '<div class="kg-center-class-orb" data-skill-glyph="class_sword">⚔</div>' +
           '<span class="kg-center-class-title">นักดาบอยุธยา</span>' +
           '<span class="kg-center-class-sub">แกนวิชา · Lv.' + lvNow + '</span>' +
         '</div>' +
@@ -13859,13 +13859,13 @@
         const cards = [];
         if (chosen.itemId === POTION_ITEM_ID || meta.healHp) {
           const hpAmt = meta.healHp || 30;
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">🧪</span><div class="bag-stat-info"><span class="bag-stat-label">ฟื้นฟูพลังชีวิต</span><strong class="bag-stat-val">+' + hpAmt + ' HP</strong></div></div>');
+          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon" data-stat-icon="hp">🧪</span><div class="bag-stat-info"><span class="bag-stat-label">ฟื้นฟูพลังชีวิต</span><strong class="bag-stat-val">+' + hpAmt + ' HP</strong></div></div>');
         }
         if (meta.kind === "mainHand" && meta.melee) {
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">⚔️</span><div class="bag-stat-info"><span class="bag-stat-label">โจมตีประชิด</span><strong class="bag-stat-val">+' + meta.melee + '</strong></div></div>');
+          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon" data-stat-icon="melee">⚔️</span><div class="bag-stat-info"><span class="bag-stat-label">โจมตีประชิด</span><strong class="bag-stat-val">+' + meta.melee + '</strong></div></div>');
         }
         if (meta.kind === "mainHand" && meta.ranged) {
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">🏹</span><div class="bag-stat-info"><span class="bag-stat-label">ยิงอาคม</span><strong class="bag-stat-val">+' + meta.ranged + '</strong></div></div>');
+          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon" data-stat-icon="ranged">🏹</span><div class="bag-stat-info"><span class="bag-stat-label">ยิงอาคม</span><strong class="bag-stat-val">+' + meta.ranged + '</strong></div></div>');
         }
         if (meta.stats) {
           const statIcons = { hp: "❤️", stamina: "⚡", mana: "💧", atk: "⚔️", def: "🛡️", magicAtk: "🔮", magicDef: "✨" };
@@ -13874,19 +13874,19 @@
               const icon = statIcons[k] || "✦";
               const label = statNames[k] || k;
               const sign = v > 0 ? "+" : "";
-              cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">' + icon + '</span><div class="bag-stat-info"><span class="bag-stat-label">' + label + '</span><strong class="bag-stat-val">' + sign + v + '</strong></div></div>');
+              cards.push('<div class="bag-stat-card"><span class="bag-stat-icon" data-stat-icon="' + k + '">' + icon + '</span><div class="bag-stat-info"><span class="bag-stat-label">' + label + '</span><strong class="bag-stat-val">' + sign + v + '</strong></div></div>');
             }
           }
         }
         if (chosen.forge?.rank > 0) {
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">⚒</span><div class="bag-stat-info"><span class="bag-stat-label">ตีบวกช่างอาคม</span><strong class="bag-stat-val">+' + chosen.forge.rank + ' ขั้น</strong></div></div>');
+          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon" data-stat-icon="forge">⚒</span><div class="bag-stat-info"><span class="bag-stat-label">ตีบวกช่างอาคม</span><strong class="bag-stat-val">+' + chosen.forge.rank + ' ขั้น</strong></div></div>');
         }
         if (chosen.socket) {
           const cName = bagMeta(chosen.socket)?.name || chosen.socket;
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">▣</span><div class="bag-stat-info"><span class="bag-stat-label">ผนึกการ์ด</span><strong class="bag-stat-val">' + cName + '</strong></div></div>');
+          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon" data-stat-icon="socket">▣</span><div class="bag-stat-info"><span class="bag-stat-label">ผนึกการ์ด</span><strong class="bag-stat-val">' + cName + '</strong></div></div>');
         }
         if (meta.healMana) {
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">✨</span><div class="bag-stat-info"><span class="bag-stat-label">ฟื้นฟูมานา</span><strong class="bag-stat-val">+' + meta.healMana + ' MP</strong></div></div>');
+          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon" data-stat-icon="mana">✨</span><div class="bag-stat-info"><span class="bag-stat-label">ฟื้นฟูมานา</span><strong class="bag-stat-val">+' + meta.healMana + ' MP</strong></div></div>');
         }
         if (meta.cooldown) {
           cards.push('<div class="bag-stat-card"><span class="bag-stat-icon">⏱️</span><div class="bag-stat-info"><span class="bag-stat-label">คูลดาวน์</span><strong class="bag-stat-val">' + (meta.cooldown / 1000) + ' วิ</strong></div></div>');
@@ -15709,7 +15709,9 @@
       items.forEach(([id, glyph, label], i) => {
         const src = id && $(id); if (id && !src) return;
         const b = document.createElement("button"); b.type = "button"; b.className = "map-sub"; b.setAttribute("role", "menuitem"); b.style.setProperty("--i", i);
-        b.innerHTML = `<span aria-hidden="true">${glyph}</span><em>${label}</em><b hidden></b>`;
+        const iconMap = { menuCharacter: "character", menuGuild: "guild", marketButton: "market", menuQuest: "quest", modeButton: "account", helpButton: "settings" };
+        const iconKey = id ? (iconMap[id] || "menu") : "menu";
+        b.innerHTML = `<span class="drawer-nav-icon" data-menu-icon="${iconKey}" aria-hidden="true">${glyph}</span><em>${label}</em><b hidden></b>`;
         b.onclick = () => { close(); if (src) src.click(); else openFieldMenu(); };
         fly.append(b);
         const badge = src?.querySelector("b"); if (badge) { const sync = () => { const mine = b.querySelector("b"); mine.hidden = badge.hidden; mine.textContent = badge.textContent; };
