@@ -6,6 +6,7 @@ on:
       - 'styles.css'
       - 'index.html'
       - 'deploy/combat/character-hud-*.cjs'
+      - 'deploy/combat/monster-nameplates-*.cjs'
       - '.github/workflows/verify-character-hud.yml'
   workflow_dispatch:
 permissions:
@@ -25,10 +26,14 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Validate helpers and render shipped client
         run: |
+          node deploy/combat/monster-nameplates-ui-test.cjs
+          node deploy/combat/monster-nameplates-browser-test.cjs
           node deploy/combat/character-hud-ui-test.cjs
           node deploy/combat/character-hud-browser-test.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: character-hud-browser-evidence
-          path: hud-browser-evidence
+          path: |
+            hud-browser-evidence
+            monster-nameplates-browser-evidence
