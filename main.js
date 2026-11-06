@@ -11967,7 +11967,7 @@
         if(bar.id==="sentinelHotbar" && SENTINEL_SKILL_ICONS[id])glyph.innerHTML=SENTINEL_SKILL_ICONS[id];
         else glyph.textContent=SG_GLYPH[node.effect] || "✦";
         name.textContent=state==="ทุ่ม" || state==="ฉากซ้ำ" ? state : node.name;
-        button.dataset.slotNumber=String(n); button.dataset.skillId=id;
+        button.dataset.slotNumber=String(n); button.dataset.skillId=id; glyph.dataset.skillGlyph=id;
         const label="ช่อง "+n+" · "+name.textContent+(cooldown?" · รอ "+cooldown[1]+" วินาที":"")+(cost?" · "+cost.textContent:"");
         button.setAttribute("aria-label",label); if(!button.title)button.title=label;
         if(cooldown || state.endsWith("✓")){
