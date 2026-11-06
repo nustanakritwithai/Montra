@@ -808,9 +808,14 @@
     if (!a || !fxNear(a.x, a.z)) return;
     const y = a.y || 0;
     if (kind === "levelup") {
-      spawnFx("beam", "gold", a.x, y + 6, a.z, { orient: "pillar", life: 1800, s0: 3.4, s1: 2.4, h: 12, a0: 1, a1: 1, fade: .45, follow: a });
-      spawnFx("yantra", "gold", a.x, y + .12, a.z, { orient: "ground", life: 1800, s0: 3, s1: 8, a0: 1, a1: 1, fade: .4, spin: 1.2, follow: a });
-      sparks("gold", a.x, y + .6, a.z, 22, { speed: 2.5, up: 7, grav: -1, life: 1300, size: .8, spread: 900, follow: a });
+      spawnFx("beam", "gold", a.x, y + 8, a.z, { orient: "pillar", life: 2200, s0: 4.2, s1: 2.5, h: 16, a0: 1, a1: 1, fade: .45, follow: a });
+      spawnFx("beam", "white", a.x, y + 8, a.z, { orient: "pillar", life: 1700, s0: 2.2, s1: 1.2, h: 16, a0: .95, a1: .95, fade: .5, follow: a });
+      spawnFx("yantra", "gold", a.x, y + .12, a.z, { orient: "ground", life: 2200, s0: 3, s1: 9.5, a0: 1, a1: 1, fade: .4, spin: 1.5, follow: a });
+      spawnFx("ring", "gold", a.x, y + .15, a.z, { orient: "ground", life: 900, s0: 1, s1: 11, a0: 1, a1: 0 });
+      spawnFx("disc", "gold", a.x, y + .1, a.z, { orient: "ground", life: 1000, s0: 2, s1: 8.5, a0: .8, a1: 0 });
+      spawnFx("star", "white", a.x, y + 2, a.z, { life: 450, s0: 2, s1: 8.5, a0: 1, a1: 0 });
+      sparks("gold", a.x, y + .6, a.z, 28, { speed: 3.5, up: 9, grav: -1.2, life: 1600, size: 1.1, spread: 800, follow: a });
+      sparks("white", a.x, y + 1.2, a.z, 16, { speed: 4, up: 8, grav: -1, life: 1200, size: 0.8, spread: 600, follow: a });
     } else if (kind === "possess") {
       spawnFx("beam", "blood", a.x, y + 5, a.z, { orient: "pillar", life: 1400, s0: 3, s1: 2, h: 10, a0: .95, a1: .95, fade: .5, follow: a });
       spawnFx("yantra", "blood", a.x, y + .12, a.z, { orient: "ground", life: 1400, s0: 8, s1: 4.5, a0: 1, a1: 1, fade: .4, spin: -2, follow: a });
@@ -5081,6 +5086,93 @@
   const STEP_SURFACE = { ritual_village: "wood", forbidden_forest: "soil", bound_temple: "stone", drowned_marsh: "water", lotus_basin: "soil",
     moon_cemetery: "soil", hex_ridge: "stone", naga_cavern: "stone", fallen_city: "stone", asura_peak: "stone", spirit_rift: "stone",
     mantra_capital: "brick", moon_pass: "soil", river_watch: "soil", bamboo_frontier: "soil", tri_wiang_castle: "brick" };
+
+  // Footstep dust puff at foot plant, colored by terrain surface
+  function spawnFootstepDust(a, speed, m) {
+    if (!a || !fxNear(a.x, a.z, 36)) return;
+    const surf = STEP_SURFACE[activeMapId] || "soil";
+    const y = (a.y || 0) + .04;
+    const h = a.heading || 0;
+    const fwd = [-Math.sin(h), -Math.cos(h)];
+    const footSide = a.stepSign > 0 ? 0.22 : -0.22;
+    const fx = a.x - fwd[0] * 0.15 - fwd[1] * footSide;
+    const fz = a.z - fwd[1] * 0.15 + fwd[0] * footSide;
+    if (surf === "water") {
+      spawnFx("ring", "cyan", fx, y + .05, fz, { orient: "ground", life: 340, s0: .3, s1: 1.6, a0: .7, a1: 0 });
+    } else {
+      const col = surf === "stone" || surf === "brick" ? "white" : "gold";
+      spawnFx("ring", col, fx, y, fz, { orient: "ground", life: 260, s0: .2, s1: 1.1 * m, a0: .35, a1: 0 });
+      if (speed > 4.2 || (a.dashUntil || 0) > performance.now()) {
+        sparks(col, fx, y + .1, fz, 2, { speed: 1.4, up: 1.2, life: 280, size: .35, spread: 20 });
+      }
+    }
+  }
+
+  // Real-time 3D status aura emissions for buffs, debuffs, spirit possession and haste trails
+  function updateAvatarAuras(a, now, dt) {
+    if (!a || !fxNear(a.x, a.z, 40)) return;
+    const isLocal = a.local || a.id === localId;
+    // Poison debuff: bubbling emerald motes rising
+    if (isLocal && seerPoisoned) {
+      if (now - (a.lastPoisonAura || 0) > 360) {
+        a.lastPoisonAura = now;
+        const px = a.x + (Math.random() - .5) * 0.8;
+        const pz = a.z + (Math.random() - .5) * 0.8;
+        const py = (a.y || 0) + 0.6 + Math.random() * 0.8;
+        spawnFx("glow", "jade", px, py, pz, { life: 550, s0: 0.7, s1: 0.15, a0: 0.85, a1: 0, vel: [0, 1.2, 0] });
+      }
+    }
+    // Spirit possession: rising ethereal violet flame motes
+    if ((isLocal && ownServerCharacter()?.possessionActive) || a.possessionActive) {
+      if (now - (a.lastPossessAura || 0) > 300) {
+        a.lastPossessAura = now;
+        const px = a.x + (Math.random() - .5) * 0.9;
+        const pz = a.z + (Math.random() - .5) * 0.9;
+        const py = (a.y || 0) + 0.5 + Math.random() * 0.9;
+        spawnFx("glow", "violet", px, py, pz, { life: 500, s0: 0.8, s1: 0.2, a0: 0.7, a1: 0, vel: [0, 1.5, 0] });
+      }
+    }
+    // Stun / Talisman binding: orbiting golden stars above head
+    if (seerBindingEffects.has(a.id)) {
+      if (now - (a.lastStunAura || 0) > 380) {
+        a.lastStunAura = now;
+        const headY = (a.y || 0) + 2.3;
+        const angle = now * 0.005;
+        for (let i = 0; i < 3; i++) {
+          const aAngle = angle + (i * Math.PI * 2 / 3);
+          const sx = a.x + Math.cos(aAngle) * 0.55;
+          const sz = a.z + Math.sin(aAngle) * 0.55;
+          spawnFx("star", "gold", sx, headY + Math.sin(now * 0.008 + i) * 0.08, sz, { life: 320, s0: 0.45, s1: 0.15, a0: 0.9, a1: 0 });
+        }
+      }
+    }
+    // Speed Haste / Dash Trail
+    if ((a.dashUntil || 0) > now) {
+      if (now - (a.lastDashTrail || 0) > 60) {
+        a.lastDashTrail = now;
+        spawnFx("glow", "cyan", a.x, (a.y || 0) + 1, a.z, { life: 250, s0: 1.6, s1: .4, a0: .6, a1: 0 });
+      }
+    }
+  }
+
+  // Monster status auras: bound talismans and elite radiance
+  function updateMonsterAuras(mesh, g, now, dt) {
+    if (!mesh || !mesh.isEnabled() || g.deathAt) return;
+    if (seerBindingEffects.has(mesh.metadata?.monsterId)) {
+      if (now - (g.lastBoundAura || 0) > 400) {
+        g.lastBoundAura = now;
+        const topY = mesh.position.y + (g.tall || 2) * 0.55;
+        spawnFx("dash", "gold", mesh.position.x, topY + 0.2, mesh.position.z, { orient: "ground", life: 420, s0: 1.5, s1: 1.5, a0: 0.85, a1: 0.85, spin: 3.5 });
+        sparks("gold", mesh.position.x, topY, mesh.position.z, 3, { speed: 1.2, up: 1.5, life: 350, size: 0.4 });
+      }
+    }
+    if (g.design?.elite && now - (g.lastEliteAura || 0) > 800) {
+      g.lastEliteAura = now;
+      const y = (g.ty ?? 0) + 0.08;
+      spawnFx("ring", "red", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 800, s0: 2, s1: (g.tall || 2) * 1.8, a0: 0.6, a1: 0 });
+    }
+  }
+
   function stepSound(a) {
     const strategic = worldDefinitions?.[activeMapId]?.strategic;
     if (a.y > 2.5 && strategic?.rampart) return strategic.kind === "territory" ? "step_wood" : "step_brick"; // on the wall walk
@@ -5099,8 +5191,10 @@
       a.horse.tail.rotation.x=.35+Math.sin(t*2)*.12;
     }
     // Footstep on each foot plant (the stride sine crossing zero), by surface.
-    if (m > .35 && !flying && !a.serverFlying && a.stepSign && Math.sign(s) && Math.sign(s) !== a.stepSign)
+    if (m > .35 && !flying && !a.serverFlying && a.stepSign && Math.sign(s) && Math.sign(s) !== a.stepSign) {
       SFX(stepSound(a), { x: a.x, z: a.z, intensity: .55 + .45 * Math.min(1, speed / 6) });
+      spawnFootstepDust(a, speed, m);
+    }
     if (Math.sign(s)) a.stepSign = Math.sign(s);
     const flare = a.skin ? animateSkin(a, m, speed, s, c, t, now, dt) : 0;
     for (let i = 0; i < 2; i++) {
@@ -7457,6 +7551,7 @@
       const atk = g.hold?.atk ?? (atkAge < .7 ? Math.sin(Math.min(1, atkAge / .7) * Math.PI) : 0); // hold: preview frames
       const hurt = g.hold?.hurt ?? (hurtAge < .3 ? Math.sin(hurtAge / .3 * Math.PI) : 0);
       g.update({ t: t + (mesh.uniqueId % 17), move, atk, hurt, walk: g.walk, wind: g.windup ? 1 : 0, g, now });
+      updateMonsterAuras(mesh, g, now, dt);
       // Humanoid rigs play their own spawn and death on the skeleton; the
       // primitive and object rigs rise out of / sink into the ground.
       const humanoid = g.rig.metadata?.skeletons, spawnP = Math.min(1, (now - g.spawnAt) / 700);
@@ -8143,7 +8238,7 @@
       ? me.characterName : "นที";
     $("characterName").textContent = name;
     const slot = me?.persistent ? (Number(me.characterSlot) || activeCharacterSlot || 1) : null;
-    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) { SFX("levelup", { important: true }); floatAtPlayer(localId, "LEVEL UP!", "levelup", { drift: 0, rise: 80, life: 2200 }); auraFx(getLocalAvatar(), "levelup"); } hudLevel = me.level; }
+    if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) { SFX("levelup", { important: true }); floatAtPlayer(localId, "🌟 LEVEL UP! 🌟", "levelup", { drift: 0, rise: 85, life: 2500, big: true }); shakeCamera(0.48, 450); auraFx(getLocalAvatar(), "levelup"); } hudLevel = me.level; }
     $("characterLevel").textContent = (slot ? "S" + slot + " · " : "") + "LV. " + (
       Number.isFinite(me?.level) ? me.level : 1
     );
@@ -16323,6 +16418,7 @@
       a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
       a.node.position.set(a.x, a.y, a.z);
       animateRig(a, Math.hypot(travelX, travelZ) / Math.max(dt, 1e-3), dt, now);
+      updateAvatarAuras(a, now, dt);
       a.flightHalo?.setEnabled(a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain));
     }
     for (const npc of summonAvatars.values()) {
