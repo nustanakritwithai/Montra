@@ -180,6 +180,22 @@
       cooldown: 8000,
       alert: true,
       icon: "💥"
+    },
+    boss_phase_2: {
+      title: "วิญญาณแปรสภาพ",
+      subtitle: "บอสปลดปล่อยพลังขั้นที่ 2! ระวังการโจมตีรอบทิศ",
+      text: "ระวังให้ดี! อสูรปลดปล่อยดวงวิญญาณแปรสภาพเข้าสู่ขั้นที่สองแล้ว เตรียมพร้อมรับมือ!",
+      cooldown: 25000,
+      alert: true,
+      icon: "🔮"
+    },
+    shield_break: {
+      title: "เกราะมนตราแตกสลาย",
+      subtitle: "จังหวะนี้แหละ! เกราะมันแตกแล้ว ระดมโจมตีเต็มกำลัง!",
+      text: "จังหวะนี้แหละ! ม่านอาคมคุ้มกายของมันแตกกระจายแล้ว ระดมโจมตีไม่ยั้ง!",
+      cooldown: 15000,
+      alert: false,
+      icon: "⚡"
     }
   };
 
@@ -1004,6 +1020,120 @@
   window.MontraParty = { sendPartyPing, updatePartyTethers };
   window.MontraForge = { updateWeaponAuras, getAvatarWeaponForgeRank };
 
+  // Phase 10: Boss Raid Phase Shift & Occult Shield System
+  let bossMinionMat = null;
+  function ensureBossMinions(mesh, g) {
+    if (!scene || !B) return [];
+    if (g.minionOrbs && g.minionOrbs.length) return g.minionOrbs;
+    if (!bossMinionMat) {
+      bossMinionMat = new B.StandardMaterial("bossMinionMat", scene);
+      bossMinionMat.emissiveColor = new B.Color3(0.5, 0.15, 0.9);
+      bossMinionMat.diffuseColor = new B.Color3(0.8, 0.25, 1);
+      bossMinionMat.specularColor = new B.Color3(1, 0.6, 1);
+    }
+    const orbs = [];
+    for (let k = 0; k < 3; k++) {
+      const orb = B.MeshBuilder.CreateSphere("boss_minion_" + k, { diameter: 0.55, segments: 6 }, scene);
+      orb.parent = mesh;
+      orb.material = bossMinionMat;
+      orb.isPickable = false;
+      orbs.push({ mesh: orb, angle: k * (Math.PI * 2 / 3), radius: 2.5, height: 1.2 + k * 0.35, speed: 1.8 });
+    }
+    g.minionOrbs = orbs;
+    return orbs;
+  }
+
+  function updateBossMinions(mesh, g, now, dt) {
+    if (!g.minionOrbs) return;
+    const alive = !g.deathAt && mesh.isEnabled();
+    if (!alive) {
+      g.minionOrbs.forEach(o => { try { o.mesh?.dispose(); } catch (_) {} });
+      g.minionOrbs = null;
+      return;
+    }
+    for (const o of g.minionOrbs) {
+      o.angle = (o.angle + dt * o.speed) % (Math.PI * 2);
+      o.mesh.position.set(Math.cos(o.angle) * o.radius, o.height + Math.sin(now / 280 + o.angle) * 0.28, Math.sin(o.angle) * o.radius);
+    }
+    if (now - (g.lastMinionSparks || 0) > 200) {
+      g.lastMinionSparks = now;
+      const o = g.minionOrbs[Math.floor(Math.random() * g.minionOrbs.length)];
+      if (o && o.mesh) {
+        const pos = o.mesh.getAbsolutePosition();
+        sparks("violet", pos.x, pos.y, pos.z, 2, { speed: 1.2, up: 0.6, life: 300, size: 0.35 });
+      }
+    }
+  }
+
+  function triggerBossPhase2(mesh, g) {
+    if (!g || g.phase2) return;
+    g.phase2 = true;
+    g.shieldActive = true;
+    g.shieldHp = 80;
+    g.maxShieldHp = 80;
+    ensureBossMinions(mesh, g);
+    triggerCombatCallout("boss_phase_2");
+    ghostVoice(g, mesh, "aggro", 1.8);
+    shakeCamera(0.65, 520);
+    const id = mesh.metadata?.monsterId || MONSTER_ID;
+    floatAtMonster(id, "วิญญาณเปลี่ยนสภาพ! ปลดปล่อยพลังขั้นที่ 2 (PHASE 2)", "crit", { big: true });
+    SFX("shock", { x: mesh.position.x, z: mesh.position.z, intensity: 1.5 });
+    const y = (g.ty ?? 0) + 0.1;
+    const r = (g.tall || 2) * (g.design?.scale || 1);
+    spawnFx("ring", "violet", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 750, s0: 1, s1: r * 4, a0: 1, a1: 0 });
+    spawnFx("cross", "violet", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 900, s0: 2, s1: r * 3.5, a0: 0.9, a1: 0, spin: 2.2 });
+    sparks("violet", mesh.position.x, mesh.position.y + 1, mesh.position.z, 16, { speed: 3.5, up: 2.8, life: 600 });
+  }
+
+  function breakBossShield(mesh, g, id) {
+    if (!g) return;
+    g.shieldActive = false;
+    g.shieldHp = 0;
+    g.staggeredUntil = performance.now() + 4500;
+    const targetId = id || mesh.metadata?.monsterId || MONSTER_ID;
+    floatAtMonster(targetId, "เกราะมนตราแตกกระจาย! (SHIELD BREAK)", "crit", { big: true });
+    shakeCamera(0.68, 450);
+    SFX("bell", { intensity: 1.4 });
+    const y = (g.ty ?? 0) + 0.1;
+    hitBurst(mesh.position.x, mesh.position.z, "orange", true, y, true);
+    sparks("gold", mesh.position.x, mesh.position.y + 1, mesh.position.z, 22, { speed: 4.2, up: 3.2, life: 600 });
+    triggerCombatCallout("shield_break");
+  }
+
+  function processBossShieldDamage(mesh, g, dmg, id) {
+    if (!g || !g.shieldActive || g.shieldHp <= 0) return false;
+    g.shieldHp = Math.max(0, g.shieldHp - Number(dmg || 15));
+    sparks("cyan", mesh.position.x, mesh.position.y + 1, mesh.position.z, 5, { speed: 2, up: 1.2 });
+    if (g.shieldHp <= 0) {
+      breakBossShield(mesh, g, id);
+    }
+    return true;
+  }
+
+  function getBossStatus(meshOrId) {
+    let mesh = null;
+    if (typeof meshOrId === "string") {
+      mesh = forestMonsters.get(meshOrId) || (meshOrId === MONSTER_ID ? (mode === "demo" ? villageGhost : enemy) : null);
+    } else if (meshOrId) {
+      mesh = meshOrId;
+    } else {
+      mesh = selectedForestTarget ? (forestMonsters.get(selectedForestTarget) || (selectedForestTarget === MONSTER_ID ? (mode === "demo" ? villageGhost : enemy) : null)) : (mode === "demo" ? villageGhost : enemy);
+    }
+    const g = mesh?.metadata?.ghost;
+    const now = performance.now();
+    return {
+      phase2: Boolean(g?.phase2),
+      enraged: Boolean(g?.enraged),
+      shieldActive: Boolean(g?.shieldActive),
+      shieldHp: g?.shieldHp || 0,
+      maxShieldHp: g?.maxShieldHp || 80,
+      staggered: Boolean(g?.staggeredUntil && g.staggeredUntil > now),
+      minionsCount: g?.minionOrbs?.length || 0
+    };
+  }
+
+  window.MontraBoss = { triggerBossPhase2, breakBossShield, processBossShieldDamage, updateBossMinions, ensureBossMinions, getBossStatus };
+
   // Phase 7: Exploration & World Ambient State
   let lastOccultMistTime = 0;
   let lastWaterRippleTime = 0;
@@ -1139,6 +1269,7 @@
 
   // ---- Phase 5: Floating Target Overhead HUD & Combo Streak System ----
   let targetOverheadHud = null, targetOverheadTag = null, targetOverheadFill = null, targetOverheadDelay = null;
+  let targetOverheadShieldWrap = null, targetOverheadShieldFill = null;
   function ensureTargetOverheadHud() {
     if (targetOverheadHud) return;
     targetOverheadHud = document.createElement("div");
@@ -1153,7 +1284,13 @@
     targetOverheadFill = document.createElement("div");
     targetOverheadFill.className = "target-overhead-fill-bar";
     wrap.append(targetOverheadDelay, targetOverheadFill);
-    targetOverheadHud.append(targetOverheadTag, wrap);
+    targetOverheadShieldWrap = document.createElement("div");
+    targetOverheadShieldWrap.className = "target-overhead-shield-wrap";
+    targetOverheadShieldWrap.hidden = true;
+    targetOverheadShieldFill = document.createElement("div");
+    targetOverheadShieldFill.className = "target-overhead-shield-bar";
+    targetOverheadShieldWrap.append(targetOverheadShieldFill);
+    targetOverheadHud.append(targetOverheadTag, wrap, targetOverheadShieldWrap);
     document.getElementById("game")?.append(targetOverheadHud);
   }
 
@@ -1182,13 +1319,27 @@
     const pct = Math.max(0, Math.min(100, Math.round(100 * hp / maxHp)));
     targetOverheadFill.style.width = pct + "%";
     targetOverheadDelay.style.width = pct + "%";
+    if (g?.shieldActive && g.shieldHp > 0) {
+      targetOverheadShieldWrap.hidden = false;
+      const sPct = Math.max(0, Math.min(100, Math.round(100 * g.shieldHp / (g.maxShieldHp || 80))));
+      targetOverheadShieldFill.style.width = sPct + "%";
+    } else {
+      targetOverheadShieldWrap.hidden = true;
+    }
+    let bossBadges = "";
+    if (g?.phase2) bossBadges += '<span class="target-overhead-phase2-badge">🔥 ขั้น 2</span>';
+    if (g?.staggeredUntil && g.staggeredUntil > now) bossBadges += '<span class="target-overhead-stagger-badge">😵 มึนงง!</span>';
     if (pct <= 20 && hp > 0) {
       triggerVoiceGuidance("execute");
       targetOverheadHud.classList.add("execute-active");
-      targetOverheadTag.innerHTML = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp + '<span class="target-overhead-execute">⚔️ ประหาร!</span>';
+      targetOverheadTag.innerHTML = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp + '<span class="target-overhead-execute">⚔️ ประหาร!</span>' + bossBadges;
     } else {
       targetOverheadHud.classList.remove("execute-active");
-      targetOverheadTag.textContent = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp;
+      if (bossBadges) {
+        targetOverheadTag.innerHTML = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp + bossBadges;
+      } else {
+        targetOverheadTag.textContent = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp;
+      }
     }
     targetOverheadHud.hidden = false;
   }
@@ -5782,6 +5933,20 @@
       } else if (mesh === villageGhost) {
         curHp = demoMonsterHp; curMax = 100;
       }
+      // Phase 10: Boss Phase 2 Transition (HP <= 50%)
+      if (curHp > 0 && curHp / curMax <= 0.50) {
+        if (!g.phase2) {
+          triggerBossPhase2(mesh, g);
+        }
+        if (now - (g.lastPhase2Aura || 0) > 420) {
+          g.lastPhase2Aura = now;
+          const y = (g.ty ?? 0) + 0.1;
+          const r = (g.tall || 2) * 0.8 * (g.design?.scale || 1);
+          spawnFx("ring", "violet", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 600, s0: r * 0.8, s1: r * 2.5, a0: 0.85, a1: 0 });
+          sparks("violet", mesh.position.x, mesh.position.y + 0.8, mesh.position.z, 3, { speed: 1.8, up: 2.2, life: 400 });
+        }
+      }
+      updateBossMinions(mesh, g, now, dt);
       if (curHp > 0 && curHp / curMax <= 0.30) {
         if (!g.enraged) {
           g.enraged = true;
@@ -8179,6 +8344,12 @@
         const sp = Math.hypot(mesh.position.x - ox, mesh.position.z - oz) / Math.max(dt, 1e-3);
         g.speed += (sp - g.speed) * (1 - Math.exp(-dt * 6));
       }
+      if (g.staggeredUntil && g.staggeredUntil > now) {
+        g.windup = false;
+        mesh.rotation.z = Math.sin(now / 110) * 0.12;
+      } else if (mesh.rotation.z !== 0) {
+        mesh.rotation.z = 0;
+      }
       ghostVoices(mesh, g, now);
       // Monster Aggro Roar when targeting hero or entering direct melee threat
       const hero = getLocalAvatar();
@@ -8261,6 +8432,18 @@
     enemy.position.x = 1.1;
     enemy.position.z = 10.4;
     enemy.setEnabled(true);
+    if (villageGhost?.metadata?.ghost) {
+      const g = villageGhost.metadata.ghost;
+      g.phase2 = false;
+      g.enraged = false;
+      g.shieldActive = false;
+      g.shieldHp = 0;
+      g.staggeredUntil = 0;
+      if (g.minionOrbs) {
+        g.minionOrbs.forEach(o => { try { o.mesh?.dispose(); } catch (_) {} });
+        g.minionOrbs = null;
+      }
+    }
   }
 
   function syncMonsterState(state) {
@@ -10344,6 +10527,10 @@
             }
           }
           if (dmg > 0) floatAtMonster(hit.targetId, (isCrit ? "💥 " : "") + String(dmg), isCrit ? "crit" : (mine ? (SKILL_SOURCES.has(hit.source) ? "skill" : "dealt") : "ally"), { big: isCrit || (mine && SKILL_SOURCES.has(hit.source)) });
+          if (struck && struck.shieldActive && struck.shieldHp > 0) {
+            const mMesh = forestMonsters.get(hit.targetId) || enemy;
+            processBossShieldDamage(mMesh, struck, dmg, hit.targetId);
+          }
           if (mine && Number(hit.hp) === 0) {
             floatAtMonster(hit.targetId, "ปราบ!", "status", { delay: 180, rise: 70, drift: 0 });
             if (Number.isFinite(Number(at?.x))) auraFx({ x: Number(at.x), z: Number(at.z), y: Number(at.y) || 0 }, "kill");
@@ -17079,6 +17266,10 @@
               registerComboHit();
               floatAtMonster(MONSTER_ID, "20", "dealt");
               hitFlashRemaining = .22;
+              const vgGhost = villageGhost?.metadata?.ghost;
+              if (vgGhost && vgGhost.shieldActive && vgGhost.shieldHp > 0) {
+                processBossShieldDamage(villageGhost, vgGhost, 20, MONSTER_ID);
+              }
               if (demoMonsterHp <= 0) {
                 hudKills.ritual_village = (hudKills.ritual_village || 0) + 1;
                 shakeCamera(0.68, 420);
