@@ -1,3 +1,4 @@
+import {VerticalMovement} from "./VerticalMovement.js";
 import { FORGE_CATALOG } from "./ForgeRules.js";
 import { accounts } from "./AccountService.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
@@ -30,8 +31,8 @@ import {
 } from "./GameRules.js";
 import {
   FORT, distance3d, isOnPlatform, isOnGround, isOnTop, touchesWallBody,
-  parseClimbRequest, progressClimb, step3d,
-  FLIGHT, isFlightAltitude, flightLandingHeight, progressFlightHeight,
+  parseClimbRequest, step3d,
+  FLIGHT, isFlightAltitude, flightLandingHeight,
   type WorldPoint,
 } from "./HeightRules.js";
 import {
@@ -281,8 +282,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   // All guardian state lives on the server; no client may select NPC stats.
   private lastSummonAt = new Map<string, number>();
   private lastSummonAttackAt = new Map<string, number>();
-  private climbs = new Map<string, WorldPoint>();
-  private flightTransitions = new Map<string, { targetY: number; landing: boolean }>();
+  private readonly verticalMovement = new VerticalMovement();
+  private get climbs() { return this.verticalMovement.climbs; }
+  private get flightTransitions() { return this.verticalMovement.flightTransitions; }
 
   private syncPlayerViews():void {
     for(const client of this.clients) {
@@ -5211,49 +5213,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private updateClimbs(dt: number) {
-    for (const [id,destination] of [...this.climbs]) {
-      const player = this.state.players.get(id);
-      if (!player || !player.alive) {
-        this.climbs.delete(id);
-        continue;
-      }
-      const next = progressClimb(player, destination, dt);
-      player.x = clampToMap(next.point.x, getWorldMap(player.mapId)!.bounds, "x");
-      player.y = next.point.y;
-      player.z = clampToMap(next.point.z, getWorldMap(player.mapId)!.bounds, "z");
-      player.facing = facingTo(destination.x-player.x, destination.z-player.z);
-      player.combatState = "climbing";
-      if (next.arrived) {
-        this.climbs.delete(id);
-        player.combatState = "idle";
-        this.broadcast("climb_finished", {
-          playerId:id, height:player.y,
-        }, { afterNextPatch:true });
-      }
-    }
+    this.verticalMovement.updateClimbs(dt, this.state.players, (id, height) => {
+      this.broadcast("climb_finished", {playerId: id, height}, {afterNextPatch: true});
+    });
   }
 
-  /** Flight transitions are vertical only; horizontal movement begins on arrival. */
   private updateFlights(dt: number) {
-    for (const [id, transition] of [...this.flightTransitions]) {
-      const player = this.state.players.get(id);
-      if (!player || !player.alive) {
-        this.flightTransitions.delete(id);
-        continue;
-      }
-      const base=groundAt(player.mapId,player.x,player.z);
-      const next = progressFlightHeight(player.y-base, transition.targetY, dt);
-      player.y = next.y+base;
-      player.combatState = transition.landing ? "descending" : "ascending";
-      if (!next.arrived) continue;
-      this.flightTransitions.delete(id);
-      player.flying = !transition.landing;
-      player.combatState = "idle";
-      this.broadcast("flight_finished", {
-        playerId: id, altitude: player.y, flying: player.flying,
-      }, { afterNextPatch: true });
+    this.verticalMovement.updateFlights(dt, this.state.players, (id, altitude, flying) => {
+      this.broadcast("flight_finished", {playerId: id, altitude, flying}, {afterNextPatch: true});
       void this.saveCharacter(id);
-    }
+    });
   }
 
   private canOccupy(x: number, z: number, feetY: number, flying = false, mapId = DEFAULT_MAP_ID): boolean {
