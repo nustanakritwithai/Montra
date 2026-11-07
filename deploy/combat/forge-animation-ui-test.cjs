@@ -41,7 +41,7 @@ function setup(options){const h=harness(options);
 h.run(slice('  let forgeAnimation=', '  function forgeTargetItem('));h.run(slice('  function submitForge(', '  function openBag()'));h.run(slice('  let economyPendingRequest=', '  function economyReady()'));h.run(slice('  function economySend(', '  function economyRequestId()'));h.run(slice('      joined.onMessage("craft_result",', '      joined.onMessage("market_result",'));h.run(slice('      joined.onMessage("economy_error",', '      joined.onMessage("trade_update",'));h.ctx.renderForgePage();return h;}
 function installLifecycle(h){
   Object.assign(h.ctx,{ui:{drawer:element(),shade:element(),drawerBody:element(),drawerTitle:element()},drawerOpener:null,fieldTrainingTip:null,SFX(){},closeForgePicker(){},closeEquipPopup(){},closeItemDetailModal(){},gateFieldInput(){},ownServerCharacter:()=>({level:25})});
-  h.run(slice('  function closeDrawer()', '  const journalOrigins='));
+  h.run(fs.readFileSync('src/client-modules/drawer-controller.js','utf8')+slice('  const drawerController =', '  const journalOrigins='));
 }
 function result(h,overrides={}){return {requestId:h.sent.find(x=>x.command==='forge_weapon')?.payload.requestId,action:'enhance',itemId:'test_sword',success:true,downgraded:false,broken:false,forge:{...h.item.forge,rank:6},...overrides};}
 function start(h){h.run('submitForge("enhance")');assert.equal(h.sent.filter(x=>x.command==='forge_weapon').length,1);assert.equal(h.ctx.economyPending,true);assert.equal(h.run('forgeAnimationBusy()'),true);}

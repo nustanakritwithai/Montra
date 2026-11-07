@@ -79,8 +79,8 @@ function fixture(){
   };
   ctx.room={state:{economyAvailable:true,inventoryAvailable:true,weaponsAvailable:true,forgeCatalog:JSON.stringify(config)}};
   vm.createContext(ctx);require('./fixtures/item-presentation-loader.cjs').install(ctx);const run=code=>vm.runInContext(code,ctx);
-  run(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function wearPositions(','  function pieceStat(')+slice('  function gearStamp(','  function salvageSelectedGear(')+slice('  function renderCardSocket(','  function openBag()')+slice('  function ensureItemDetailModalElements()','  const gearCoreSkills=')+slice('  function openBag()','  function updateFieldAlerts()')+slice('  function gateFieldInput(','  const journalOrigins='));
-  run(slice('  document.addEventListener("keydown",event=>{\n    if (ui.drawer.hidden','  function updateChatBadge('));
+  run(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function wearPositions(','  function pieceStat(')+slice('  function gearStamp(','  function salvageSelectedGear(')+slice('  function renderCardSocket(','  function openBag()')+slice('  function ensureItemDetailModalElements()','  const gearCoreSkills=')+slice('  function openBag()','  function updateFieldAlerts()')+fs.readFileSync('src/client-modules/drawer-controller.js','utf8')+slice('  const drawerController =','  const journalOrigins='));
+  run(slice('  document.addEventListener("keydown",drawerController.handleKey)','  function updateChatBadge('));
   const open=()=>ctx.openBag(),select=slot=>{const button=d.$('bagSlot'+slot);button.focus();button.click();},modal=()=>d.$('itemDetailModal'),snapshot=()=>JSON.stringify({inventory,gold:ctx.economyGold});
   return {...d,ctx,run,wire,toasts,routes,guidance,player,inventory,items,open,select,modal,snapshot,mutations:()=>wire.filter(e=>e.durable)};
 }
