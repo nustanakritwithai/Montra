@@ -2,12 +2,12 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),http=require('node:http'),path=require('node:path'),crypto=require('node:crypto');
 const {execFileSync}=require('node:child_process');
 const {chromium}=require('playwright');
-const {allowedCDNURL,assertReadyState,sampleFrames}=require('./browser-support.cjs');
+const {allowedCDNURL,assertReadyState,sampleFrames,observeSafely,assertCompleteRuns}=require('./browser-support.cjs');
 (async()=>{
  const [base,candidate,output]=process.argv.slice(2);assert(output,'Usage: browser.cjs BASELINE_ROOT CANDIDATE_ROOT OUTPUT_DIR');
  const roots={baseline:path.resolve(base),candidate:path.resolve(candidate)},out=path.resolve(output);fs.mkdirSync(out,{recursive:true});
  let root=roots.baseline,browser;
- const external=new Map(),report={kind:'headless SwiftShader DEMO observation, not physical mobile/GPU or multiplayer',scenario:{viewports:[[390,844],[1366,768]],rounds:4,drawerCycles:20,frames:120,reducedMotion:'reduce',network:'localhost; shared frozen CDN responses; all WebSockets blocked',seed:'uncontrolled game randomness; no deterministic end-to-end claim',cache:'fresh context per observation, one unmeasured warm-up per variant'},runs:[],external:[],status:'incomplete'};
+ const external=new Map(),report={kind:'headless SwiftShader DEMO observation, not physical mobile/GPU or multiplayer',scenario:{viewports:[[390,844],[1366,768]],rounds:4,drawerCycles:20,frames:120,frameDeadlineMs:15000,observationDeadlineMs:120000,reducedMotion:'reduce',network:'localhost; shared frozen CDN responses; all WebSockets blocked',seed:'uncontrolled game randomness; no deterministic end-to-end claim',cache:'fresh context per observation, one unmeasured warm-up per variant'},runs:[],external:[],status:'incomplete'};
  report.revisions=Object.fromEntries(Object.entries(roots).map(([label,directory])=>[label,{commit:execFileSync('git',['-C',directory,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),tree:execFileSync('git',['-C',directory,'rev-parse','HEAD^{tree}'],{encoding:'utf8'}).trim()}]));
  const checkpoint=()=>{const file=path.join(out,'browser.json');fs.writeFileSync(file+'.tmp',JSON.stringify(report,null,2));fs.renameSync(file+'.tmp',file);};
  checkpoint();
@@ -18,8 +18,9 @@ const {allowedCDNURL,assertReadyState,sampleFrames}=require('./browser-support.c
   browser=await chromium.launch({headless:true,args:['--enable-webgl','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});report.browser=browser.version();
   for(const [width,height] of report.scenario.viewports)for(let round=-1;round<4;round++)for(const label of round%2?['candidate','baseline']:['baseline','candidate']){
    root=roots[label];const run={label,width,height,round,status:'incomplete',errors:[],blocked:[],snapshots:[]};report.runs.push(run);checkpoint();
-   const context=await browser.newContext({viewport:{width,height},reducedMotion:'reduce',serviceWorkers:'block'});
-   try{
+   let context;
+   await observeSafely(run,async()=>{
+    context=await browser.newContext({viewport:{width,height},reducedMotion:'reduce',serviceWorkers:'block'});
     await context.routeWebSocket('**/*',ws=>{run.blocked.push(ws.url());ws.close();});
     await context.route('**/*',async route=>{
      try{
@@ -45,8 +46,9 @@ const {allowedCDNURL,assertReadyState,sampleFrames}=require('./browser-support.c
      const counters=await cdp.send('Memory.getDOMCounters');const {metrics}=await cdp.send('Performance.getMetrics');
      const heap=metrics.find(x=>x.name==='JSHeapUsedSize')?.value;
      assert(Number.isFinite(heap),'Missing JS heap metric');
-     const intervals=await page.evaluate(sampleFrames);
-     run.snapshots.push({stage,...counters,heapBytes:heap,rafIntervalsMs:intervals});checkpoint();
+     const frames=await page.evaluate(sampleFrames);
+     run.snapshots.push({stage,...counters,heapBytes:heap,...frames});checkpoint();
+     assert(frames.complete,`Incomplete frame sample at ${stage}: ${frames.collectedIntervals}/${frames.requestedIntervals} intervals in ${frames.elapsedMs} ms`);
     }
     await snapshot('ready');
     for(let i=1;i<=20;i++){
@@ -54,9 +56,10 @@ const {allowedCDNURL,assertReadyState,sampleFrames}=require('./browser-support.c
      await page.locator('#drawerClose').click();await page.locator('#drawer').waitFor({state:'hidden'});
      if(i%5===0)await snapshot('drawer-cycle-'+i);
     }
-    assert.deepEqual(run.errors,[],'browser runtime/resource errors');run.status='complete';checkpoint();
-   }finally{await context.close();}
+    assert.deepEqual(run.errors,[],'browser runtime/resource errors');
+   },async()=>{if(context)await context.close();},checkpoint,report.scenario.observationDeadlineMs);
   }
+  assertCompleteRuns(report.runs,report.scenario.viewports.length*(report.scenario.rounds+1)*2);
   report.status='observations complete; timing and retention require review, no performance pass claim';
  }catch(error){report.error=String(error.stack||error);throw error;}
  finally{
