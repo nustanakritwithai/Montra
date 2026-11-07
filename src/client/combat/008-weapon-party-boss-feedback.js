@@ -553,57 +553,9 @@
   }
 
   function plantWarBanner(options = {}) {
-    const now = performance.now();
-    if (now - lastBannerPlantTime < BANNER_COOLDOWN) {
-      const waitSec = Math.ceil((BANNER_COOLDOWN - (now - lastBannerPlantTime)) / 1000);
-      toast(`ธงชัยอาคมกำลังฟื้นฟูมนตรา (รอ ${waitSec} วินาที)`);
-      return null;
-    }
-
-    const hero = getLocalAvatar();
-    const x = options.x ?? (hero ? (hero.x ?? 0) : 0);
-    const y = options.y ?? (hero ? (hero.y || 0) : 0);
-    const z = options.z ?? (hero ? (hero.z ?? 0) : 0);
-
-    const id = ++warBannerIdCounter;
-    const mesh = createWarBannerMesh(id, x, y, z);
-
-    const banner = {
-      id,
-      x,
-      y,
-      z,
-      mesh,
-      plantedAt: now,
-      expiresAt: now + BANNER_DURATION,
-      ownerId: localId,
-      seed: Math.random() * 10
-    };
-
-    activeWarBanners.set(id, banner);
-    lastBannerPlantTime = now;
-
-    if (typeof SFX === "function") SFX("banner", { intensity: 1.3, x, z });
-    if (typeof shakeCamera === "function") shakeCamera(0.4, 300);
-    if (typeof spawnFx === "function") {
-      spawnFx("yantra", "gold", x, y + 0.05, z, { orient: "ground", life: 1800, s0: 4, s1: 4, a0: 1, a1: 0.8, spin: 1.8 });
-    }
-    if (typeof sparks === "function") {
-      sparks("gold", x, y + 1.2, z, 18, { speed: 3.2, up: 2.8, life: 600 });
-    }
-    if (typeof floatAtPlayer === "function") {
-      floatAtPlayer(localId, "ปักธงชัยอาคม! 🚩 (+10% ป้องกัน)", "status", { big: true });
-    }
-    if (typeof triggerCombatCallout === "function") {
-      triggerCombatCallout("banner_planted");
-    }
-
-    const btn = $("bannerButton");
-    if (btn) {
-      btn.setAttribute("aria-pressed", "true");
-    }
-
-    return banner;
+    // No server-owned banner ability exists yet. Fail closed for hotkeys and API calls too.
+    toast("ธงชัยอาคม: เร็ว ๆ นี้ · ยังไม่มีผลป้องกัน");
+    return null;
   }
 
   function removeWarBanner(id) {
@@ -633,64 +585,12 @@
   }
 
   function getBannerDefenseBuff(hero = getLocalAvatar()) {
-    if (!hero || activeWarBanners.size === 0) {
-      return { active: false, defBonus: 0, resilience: 0, bannerId: null, distance: Infinity, text: "" };
-    }
-    const hx = hero.x ?? 0, hz = hero.z ?? 0;
-    let minDist = Infinity;
-    let nearestBanner = null;
-    for (const b of activeWarBanners.values()) {
-      const d = Math.hypot(b.x - hx, b.z - hz);
-      if (d <= BANNER_RADIUS && d < minDist) {
-        minDist = d;
-        nearestBanner = b;
-      }
-    }
-    if (nearestBanner) {
-      return {
-        active: true,
-        defBonus: 0.10,
-        resilience: 0.15,
-        bannerId: nearestBanner.id,
-        distance: Math.round(minDist * 10) / 10,
-        text: "+10% ป้องกันธงชัย"
-      };
-    }
     return { active: false, defBonus: 0, resilience: 0, bannerId: null, distance: Infinity, text: "" };
   }
 
   function updateBanners(dt, elapsed) {
-    const now = performance.now();
-    for (const [id, b] of activeWarBanners) {
-      if (now >= b.expiresAt) {
-        if (b.ownerId === localId) {
-          if (typeof triggerCombatCallout === "function") triggerCombatCallout("banner_expired");
-          if (typeof floatText === "function") floatText(b.x, b.y + 2.5, b.z, "ธงชัยอาคมสิ้นฤทธิ์", "status");
-        }
-        removeWarBanner(id);
-        continue;
-      }
-      if (b.mesh?.cloth) {
-        b.mesh.cloth.rotation.y = Math.sin(elapsed * 4.2 + b.seed) * 0.16 + Math.cos(elapsed * 2.1) * 0.06;
-      }
-      if (b.mesh?.auraRing) {
-        b.mesh.auraRing.rotation.z += dt * 0.6;
-      }
-      if (Math.random() < dt * 0.7 && typeof sparks === "function") {
-        sparks("gold", b.x + (Math.random() - 0.5) * 4, b.y + 0.4, b.z + (Math.random() - 0.5) * 4, 1, { speed: 1.0, up: 1.2, life: 350 });
-      }
-    }
-
-    const buff = getBannerDefenseBuff();
     const badge = $("warBannerBuffBadge");
-    if (badge) {
-      if (buff.active) {
-        badge.hidden = false;
-        badge.textContent = `🛡️ ธงชัยอาคม (${buff.text})`;
-      } else {
-        badge.hidden = true;
-      }
-    }
+    if (badge) { badge.hidden = true; badge.textContent = ""; }
   }
 
   window.MontraBanner = {
@@ -711,14 +611,15 @@
     mesh: null,
     x: 0, y: 0, z: 0,
     targetX: 0, targetY: 0, targetZ: 0,
-    lastAssistTime: 0,
-    lastSenseTime: 0,
+    cosmeticOnly: true,
     type: "garuda",
     name: "วายุภักษ์น้อย",
     level: 1,
     exp: 0
   };
 
+  let familiarPetOwner = null;
+  let familiarPetMode = null;
   let petBodyMat = null, petWingMat = null, petGoldMat = null, petEyeMat = null, petSashMat = null;
   function ensurePetMaterials() {
     if (petBodyMat) return;
@@ -802,6 +703,9 @@
     }
 
     const hero = getLocalAvatar();
+    if (!hero) return null;
+    familiarPetOwner = hero;
+    familiarPetMode = mode;
     const x = hero ? (hero.x ?? 0) : 0;
     const y = hero ? (hero.y || 0) + 1.8 : 1.8;
     const z = hero ? (hero.z ?? 0) : 0;
@@ -813,8 +717,6 @@
     familiarPetState.targetX = x;
     familiarPetState.targetY = y;
     familiarPetState.targetZ = z;
-    familiarPetState.lastAssistTime = performance.now();
-    familiarPetState.lastSenseTime = performance.now();
     familiarPetState.mesh = createFamiliarPetMesh(familiarPetState.type);
 
     if (familiarPetState.mesh?.root) {
@@ -829,10 +731,7 @@
       sparks("gold", x, y, z, 14, { speed: 2.2, up: 2.0, life: 500 });
     }
     if (typeof floatAtPlayer === "function") {
-      floatAtPlayer(localId, `อัญเชิญ ${familiarPetState.name}! ✨`, "status", { big: true });
-    }
-    if (typeof triggerCombatCallout === "function") {
-      triggerCombatCallout("familiar_summon");
+      floatAtPlayer(localId, `${familiarPetState.name} · ของตกแต่งเท่านั้น ไม่มีผลต่อการต่อสู้ ✨`, "status", { big: true });
     }
 
     const btn = $("petButton");
@@ -854,6 +753,8 @@
       floatAtPlayer(localId, `${familiarPetState.name} พักผ่อน ✦`, "status");
     }
     familiarPetState.active = false;
+    familiarPetOwner = null;
+    familiarPetMode = null;
 
     const btn = $("petButton");
     if (btn) btn.setAttribute("aria-pressed", "false");
@@ -868,9 +769,7 @@
   function updatePet(dt, elapsed) {
     if (!familiarPetState.active) return;
     const hero = getLocalAvatar();
-    if (!hero) return;
-
-    const now = performance.now();
+    if (!hero || hero !== familiarPetOwner || mode !== familiarPetMode) { dismissFamiliarPet(); return; }
 
     const heroFacing = hero.facing ?? hero.rotation?.y ?? 0;
     const offsetAngle = heroFacing - 0.75;
@@ -897,39 +796,6 @@
       sparks("gold", familiarPetState.x, familiarPetState.y, familiarPetState.z, 1, { speed: 0.8, up: 0.6, life: 300 });
     }
 
-    if (now - familiarPetState.lastAssistTime > 6000) {
-      const isCombat = hero.serverCombat === "combat" || (typeof demoMonsterHp === "number" && demoMonsterHp > 0);
-      if (isCombat) {
-        familiarPetState.lastAssistTime = now;
-        const enemy = typeof villageGhost !== "undefined" && villageGhost?.isEnabled?.() ? villageGhost : null;
-        const tX = enemy ? enemy.position.x : (hero.x ?? 0) + 3;
-        const tY = enemy ? enemy.position.y + 1.2 : (hero.y || 0) + 1.2;
-        const tZ = enemy ? enemy.position.z : (hero.z ?? 0) + 3;
-
-        if (typeof spawnFx === "function") {
-          spawnFx("streak", "gold", familiarPetState.x, familiarPetState.y, familiarPetState.z, { orient: "bill", life: 400 });
-        }
-        if (typeof SFX === "function") SFX("pet_chime", { intensity: 1.0 });
-        if (typeof floatText === "function") {
-          floatText(tX, tY, tZ, "พลังภูติหนุน! +8 ✧", "status");
-        }
-      }
-    }
-
-    if (now - familiarPetState.lastSenseTime > 25000) {
-      const node = typeof nearbyResource === "function" ? nearbyResource(hero) : null;
-      if (node && node.stock > 0) {
-        familiarPetState.lastSenseTime = now;
-        familiarPetState.y += 0.35;
-        if (typeof SFX === "function") SFX("pet_chime", { intensity: 1.2 });
-        if (typeof floatText === "function") {
-          floatText(familiarPetState.x, familiarPetState.y + 0.6, familiarPetState.z, "สัมผัสไอเวทสมบัติ! 💎", "crit", { big: true });
-        }
-        if (typeof triggerCombatCallout === "function") {
-          triggerCombatCallout("familiar_treasure");
-        }
-      }
-    }
   }
 
   window.MontraPet = {
@@ -942,22 +808,21 @@
   };
 
   // Phase 17: Celestial Wing Flight & Airborne Aerial Combat 3D (ระบบสยายปีกทะยานเวหา & การต่อสู้กลางเวหา)
-  let flightState = {
-    active: false,
-    altitude: 0,
-    targetAltitude: 0,
-    maxAltitude: 5.5,
-    minAltitude: 0,
-    wingsMesh: null,
-    lastTakeoffTime: 0,
-    lastSlamTime: 0,
-    isSlamming: false,
-    cooldownRemaining: 0
-  };
-
-  const FLIGHT_TAKEOFF_ALTITUDE = 4.2;
-  const FLIGHT_COOLDOWN = 3000;
-  const SLAM_COOLDOWN = 6000;
+  // Flight gameplay remains owned by the existing server/demo movement path.
+  // Wings are a presentation of its confirmed state, never a second altitude controller.
+  function celestialFlightState(hero = getLocalAvatar()) {
+    if (!hero || hero.node?.isDisposed?.()) return { active: false, altitude: 0, changing: false };
+    const local = hero.id === localId;
+    const player = mode === "live" && local ? ownServerCharacter() : null;
+    const alive = mode === "live" && local ? player?.alive === true : hero.serverAlive !== false;
+    const combat = player?.combatState || hero.serverCombat;
+    const changing = mode === "live" ? ["ascending", "descending"].includes(combat) : Boolean(local && mode === "demo" && demoFlightTarget);
+    const active = alive && (mode === "live"
+      ? (local ? Boolean(player?.flying || changing) : Boolean(hero.serverFlying || changing))
+      : Boolean(mode === "demo" && local && demoFlying));
+    const altitude = active ? (mode === "live" && player ? playerLayer(player) : Number(hero.y) || 0) : 0;
+    return { active, altitude, changing };
+  }
 
   let wingFeatherMat = null, wingFrameMat = null, wingGlowMat = null;
   function ensureWingMaterials() {
@@ -1043,164 +908,59 @@
   }
 
   function takeoffCelestialFlight() {
-    const now = performance.now();
-    if (now - flightState.lastTakeoffTime < FLIGHT_COOLDOWN) {
-      if (typeof toast === "function") toast("ปีกเวหายังอยู่ในช่วงคูลดาวน์");
-      return false;
-    }
-
-    const hero = getLocalAvatar();
-    if (!hero) return false;
-
-    flightState.active = true;
-    flightState.isSlamming = false;
-    flightState.targetAltitude = FLIGHT_TAKEOFF_ALTITUDE;
-    flightState.lastTakeoffTime = now;
-
-    if (!flightState.wingsMesh) {
-      flightState.wingsMesh = createCelestialWingsMesh(hero.root || hero.mesh || hero);
-    }
-    if (flightState.wingsMesh?.root) {
-      flightState.wingsMesh.root.setEnabled(true);
-    }
-
-    if (typeof SFX === "function") SFX("wing_glide", { intensity: 1.2 });
-    if (typeof sparks === "function") {
-      sparks("gold", hero.x ?? 0, (hero.y || 0) + 1.2, hero.z ?? 0, 16, { speed: 2.5, up: 2.5, life: 600 });
-    }
-    if (typeof floatAtPlayer === "function") {
-      floatAtPlayer(localId, "สยายปีกทะยานเวหา! 🪽", "status", { big: true });
-    }
-    if (typeof triggerCombatCallout === "function") {
-      triggerCombatCallout("flight_takeoff");
-    }
-
-    const btn = $("flightButton");
-    if (btn) btn.setAttribute("aria-pressed", "true");
-
-    return true;
+    if (celestialFlightState().active) return false;
+    return toggleFlight();
   }
 
   function landCelestialFlight() {
-    if (!flightState.active) return false;
-
-    flightState.active = false;
-    flightState.isSlamming = false;
-    flightState.targetAltitude = 0;
-
-    const hero = getLocalAvatar();
-    if (typeof SFX === "function") SFX("whoosh", { pitch: 0.85 });
-    if (hero && typeof floatAtPlayer === "function") {
-      floatAtPlayer(localId, "ร่อนลงสู่พื้นดิน ✦", "status");
-    }
-
-    if (flightState.wingsMesh?.root) {
-      flightState.wingsMesh.root.scaling.set(0.01, 0.01, 0.01);
-      flightState.wingsMesh.root.setEnabled(false);
-    }
-
-    const btn = $("flightButton");
-    if (btn) btn.setAttribute("aria-pressed", "false");
-
-    return true;
+    if (!celestialFlightState().active) return false;
+    return toggleFlight();
   }
 
   function meteorSlamAttack() {
-    const now = performance.now();
-    if (!flightState.active || flightState.altitude < 1.0) {
-      return false;
-    }
-    if (now - flightState.lastSlamTime < SLAM_COOLDOWN) {
-      if (typeof toast === "function") toast("ท่าทุบธรณีสะท้านปฐพียังติดคูลดาวน์");
-      return false;
-    }
-
-    flightState.lastSlamTime = now;
-    flightState.isSlamming = true;
-    flightState.targetAltitude = 0;
-    flightState.altitude = 0;
-
-    const hero = getLocalAvatar();
-    const hX = hero ? (hero.x ?? 0) : 0;
-    const hY = hero ? (hero.y || 0) : 0;
-    const hZ = hero ? (hero.z ?? 0) : 0;
-
-    if (typeof SFX === "function") SFX("meteor_slam", { intensity: 1.4 });
-    if (typeof spawnFx === "function") {
-      spawnFx("nova", "gold", hX, hY + 0.1, hZ, { orient: "floor", life: 800, s0: 1.0, s1: 6.5, a0: 1, a1: 0 });
-    }
-    if (typeof sparks === "function") {
-      sparks("gold", hX, hY + 0.2, hZ, 30, { speed: 4.0, up: 1.5, life: 700 });
-      sparks("flame", hX, hY + 0.2, hZ, 20, { speed: 3.5, up: 2.0, life: 600 });
-    }
-    if (typeof triggerCombatCallout === "function") {
-      triggerCombatCallout("flight_slam");
-    }
-    if (typeof floatText === "function") {
-      floatText(hX, hY + 1.2, hZ, "ธรณีสะท้านปฐพี! 💥 150", "crit", { big: true });
-    }
-
-    if (typeof demoMonsterHp === "number" && typeof damageDemoMonster === "function") {
-      damageDemoMonster(150, true);
-    }
-
-    landCelestialFlight();
-    return true;
+    // There is no authoritative meteor skill in the current protocol.
+    // Do not show damage, spend resources or mutate a local combat simulation.
+    toast("ท่าทุบธรณียังไม่เปิดใช้งาน · กดบินอีกครั้งเพื่อลงจอด");
+    return false;
   }
 
   function toggleCelestialFlight() {
-    if (flightState.active) {
-      if (flightState.altitude > 1.8 && (performance.now() - flightState.lastSlamTime >= SLAM_COOLDOWN)) {
-        return meteorSlamAttack();
-      }
-      return landCelestialFlight();
-    }
-    return takeoffCelestialFlight();
+    return toggleFlight();
   }
 
   function updateFlight(dt, elapsed) {
     const hero = getLocalAvatar();
-    if (!hero) return;
-
-    const altLerp = Math.min(1.0, dt * (flightState.isSlamming ? 16.0 : 4.5));
-    flightState.altitude += (flightState.targetAltitude - flightState.altitude) * altLerp;
-
-    if (flightState.active || flightState.altitude > 0.05) {
-      if (hero.root) {
-        hero.root.position.y = (hero.y || 0) + flightState.altitude;
-      }
+    if (!hero?.node || hero.node.isDisposed?.()) return;
+    const state = celestialFlightState(hero);
+    let wings = hero.celestialWings;
+    if (wings?.root?.isDisposed?.()) wings = hero.celestialWings = null;
+    const wasActive = wings?.active === true;
+    if (state.active && !wings) {
+      wings = hero.celestialWings = createCelestialWingsMesh(hero.node);
     }
-
-    if (!flightState.wingsMesh?.root) return;
-
-    const wings = flightState.wingsMesh;
-    if (flightState.active) {
-      const scaleLerp = Math.min(1.0, dt * 8.0);
-      wings.root.scaling.x += (1.0 - wings.root.scaling.x) * scaleLerp;
-      wings.root.scaling.y += (1.0 - wings.root.scaling.y) * scaleLerp;
-      wings.root.scaling.z += (1.0 - wings.root.scaling.z) * scaleLerp;
-
-      const isMoving = Boolean(hero.moving || hero.velX || hero.velZ);
-      const flapFreq = isMoving ? 12.0 : 6.0;
-      const flapAmp = isMoving ? 0.48 : 0.28;
-      const flap = Math.sin(elapsed * flapFreq) * flapAmp;
-      const sweep = Math.cos(elapsed * flapFreq) * 0.12;
-
-      if (wings.leftPivot) {
-        wings.leftPivot.rotation.y = flap;
-        wings.leftPivot.rotation.z = sweep;
-      }
-      if (wings.rightPivot) {
-        wings.rightPivot.rotation.y = -flap;
-        wings.rightPivot.rotation.z = -sweep;
-      }
-
-      if (Math.random() < dt * 4.0 && typeof sparks === "function") {
-        const wingX = (hero.x ?? 0) + (Math.random() > 0.5 ? 0.9 : -0.9);
-        const wingY = (hero.y || 0) + flightState.altitude + 1.6;
-        const wingZ = (hero.z ?? 0) - 0.2;
-        sparks("gold", wingX, wingY, wingZ, 1, { speed: 0.6, up: 0.4, life: 300 });
-      }
+    if (!wings?.root) return;
+    wings.active = state.active;
+    wings.root.setEnabled(state.active);
+    if (!state.active) {
+      wings.root.scaling.set(0.01, 0.01, 0.01);
+      return;
+    }
+    // Parent follows the existing frame-loop coordinates. Never write hero/node Y here.
+    const scaleLerp = Math.min(1.0, dt * 8.0);
+    wings.root.scaling.x += (1.0 - wings.root.scaling.x) * scaleLerp;
+    wings.root.scaling.y += (1.0 - wings.root.scaling.y) * scaleLerp;
+    wings.root.scaling.z += (1.0 - wings.root.scaling.z) * scaleLerp;
+    const moving = Number(hero.moveBlend) > 0.1;
+    const frequency = moving ? 12.0 : 6.0;
+    const flap = Math.sin(elapsed * frequency) * (moving ? 0.48 : 0.28);
+    const sweep = Math.cos(elapsed * frequency) * 0.12;
+    wings.leftPivot.rotation.y = flap;
+    wings.leftPivot.rotation.z = sweep;
+    wings.rightPivot.rotation.y = -flap;
+    wings.rightPivot.rotation.z = -sweep;
+    if (!wasActive && hero.id === localId) {
+      if (typeof SFX === "function") SFX("wing_glide", { intensity: 1.2 });
+      if (typeof triggerCombatCallout === "function") triggerCombatCallout("flight_takeoff");
     }
   }
 
@@ -1209,9 +969,9 @@
     land: landCelestialFlight,
     meteorSlam: meteorSlamAttack,
     toggleFlight: toggleCelestialFlight,
-    isFlying: () => flightState.active,
-    getFlightAltitude: () => flightState.altitude,
-    getFlightState: () => ({ ...flightState }),
+    isFlying: () => celestialFlightState().active,
+    getFlightAltitude: () => celestialFlightState().altitude,
+    getFlightState: () => ({ ...celestialFlightState() }),
     updateFlight
   };
 
@@ -1222,8 +982,9 @@
     x: 1.1,
     y: 0,
     z: 10.4,
-    hp: 1200,
-    maxHp: 1200,
+    available: false,
+    hp: null,
+    maxHp: null,
     isEnraged: false,
     isTelegraphing: false,
     isStaggered: false,
@@ -1386,40 +1147,9 @@
   }
 
   function spawnThaoWessuwanBoss(x = 1.1, z = 10.4) {
-    if (bossTitanState.active && bossTitanState.mesh) {
-      return bossTitanState;
-    }
-
-    bossTitanState.active = true;
-    bossTitanState.x = x;
-    bossTitanState.y = 0;
-    bossTitanState.z = z;
-    bossTitanState.hp = bossTitanState.maxHp;
-    bossTitanState.isEnraged = false;
-    bossTitanState.isTelegraphing = false;
-    bossTitanState.isStaggered = false;
-    bossTitanState.lastSlamTime = performance.now();
-    bossTitanState.mesh = createThaoWessuwanBossMesh(x, 0, z);
-
-    if (typeof SFX === "function") SFX("boss_roar", { intensity: 1.4 });
-    if (typeof spawnFx === "function") {
-      spawnFx("nova", "gold", x, 0.1, z, { orient: "floor", life: 1200, s0: 2, s1: 9, a0: 1, a1: 0 });
-    }
-    if (typeof sparks === "function") {
-      sparks("flame", x, 1.5, z, 35, { speed: 3.5, up: 3.0, life: 800 });
-      sparks("gold", x, 2.0, z, 25, { speed: 3.0, up: 2.5, life: 800 });
-    }
-    if (typeof floatText === "function") {
-      floatText(x, 3.8, z, "ท้าวเวสสุวรรณเทวราช จุติ! 👹", "status", { big: true });
-    }
-    if (typeof triggerCombatCallout === "function") {
-      triggerCombatCallout("boss_titan_spawn");
-    }
-
-    const btn = $("bossEncounterButton");
-    if (btn) btn.setAttribute("aria-pressed", "true");
-
-    return bossTitanState;
+    // Titan has no authoritative target, HP or attack implementation.
+    toast("ท้าวเวสสุวรรณ: เร็ว ๆ นี้ · ยังไม่เปิดการต่อสู้");
+    return null;
   }
 
   function removeThaoWessuwanBoss() {
@@ -1435,59 +1165,11 @@
   }
 
   function triggerBossWindup() {
-    if (!bossTitanState.active || bossTitanState.isStaggered || bossTitanState.isTelegraphing) return;
-    bossTitanState.isTelegraphing = true;
-    bossTitanState.telegraphStartTime = performance.now();
-
-    if (bossTitanState.mesh?.telegraphRing) {
-      bossTitanState.mesh.telegraphRing.setEnabled(true);
-    }
-    if (bossTitanState.mesh?.rightArmPivot) {
-      bossTitanState.mesh.rightArmPivot.rotation.x = -Math.PI * 0.7;
-    }
-
-    if (typeof SFX === "function") SFX("boss_roar", { intensity: 1.1, pitch: 1.05 });
-    if (typeof triggerCombatCallout === "function") {
-      triggerCombatCallout("boss_telegraph");
-    }
+    return false;
   }
 
   function triggerBossSlam() {
-    if (!bossTitanState.active || !bossTitanState.isTelegraphing) return;
-    bossTitanState.isTelegraphing = false;
-    bossTitanState.lastSlamTime = performance.now();
-
-    if (bossTitanState.mesh?.telegraphRing) {
-      bossTitanState.mesh.telegraphRing.setEnabled(false);
-    }
-    if (bossTitanState.mesh?.rightArmPivot) {
-      bossTitanState.mesh.rightArmPivot.rotation.x = 0;
-    }
-
-    const bX = bossTitanState.x;
-    const bZ = bossTitanState.z;
-
-    if (typeof SFX === "function") SFX("boss_slam", { intensity: 1.5 });
-    if (typeof spawnFx === "function") {
-      spawnFx("nova", "gold", bX, 0.1, bZ, { orient: "floor", life: 900, s0: 1.0, s1: 7.5, a0: 1, a1: 0 });
-    }
-    if (typeof sparks === "function") {
-      sparks("flame", bX, 0.3, bZ, 30, { speed: 4.5, up: 2.0, life: 700 });
-      sparks("gold", bX, 0.3, bZ, 25, { speed: 3.5, up: 2.5, life: 600 });
-    }
-    if (typeof floatText === "function") {
-      floatText(bX, 1.8, bZ, "อสนีบาตฟาดปฐพี! 💥 350", "crit", { big: true });
-    }
-
-    const hero = getLocalAvatar();
-    if (hero) {
-      const dist = Math.hypot((hero.x ?? 0) - bX, (hero.z ?? 0) - bZ);
-      if (dist <= 4.5) {
-        if (typeof floatAtPlayer === "function") {
-          floatAtPlayer(localId, "โดนคลื่นอสนีบาต! -60", "crit");
-        }
-      }
-    }
+    return false;
   }
 
   function toggleThaoWessuwanBoss() {
@@ -1495,61 +1177,18 @@
   }
 
   function updateThaoWessuwanBoss(dt, elapsed) {
-    if (!bossTitanState.active || !bossTitanState.mesh?.root) return;
-    const mesh = bossTitanState.mesh;
-    const now = performance.now();
-
-    const bob = Math.sin(elapsed * 2.2) * 0.08;
-    if (mesh.bodyPivot) mesh.bodyPivot.position.y = bob;
-
-    const hero = getLocalAvatar();
-    if (hero) {
-      const dx = (hero.x ?? 0) - bossTitanState.x;
-      const dz = (hero.z ?? 0) - bossTitanState.z;
-      bossTitanState.facing = Math.atan2(dx, dz);
-      mesh.root.rotation.y = bossTitanState.facing;
-    }
-
-    if (!bossTitanState.isEnraged && bossTitanState.hp <= bossTitanState.maxHp * 0.5) {
-      bossTitanState.isEnraged = true;
-      if (typeof SFX === "function") SFX("boss_roar", { intensity: 1.6, pitch: 0.9 });
-      if (typeof triggerCombatCallout === "function") triggerCombatCallout("boss_enrage");
-      if (typeof floatText === "function") {
-        floatText(bossTitanState.x, 3.8, bossTitanState.z, "สภาวะโทสะคลั่ง! 🔥", "crit", { big: true });
-      }
-    }
-
-    if (bossTitanState.isTelegraphing) {
-      const elapsedTelegraph = now - bossTitanState.telegraphStartTime;
-      const pulse = 1.0 + Math.sin(elapsed * 16.0) * 0.15;
-      if (mesh.telegraphRing) mesh.telegraphRing.scaling.set(pulse, pulse, pulse);
-
-      if (elapsedTelegraph >= BOSS_TELEGRAPH_DURATION) {
-        triggerBossSlam();
-      }
-    } else {
-      const slamCd = bossTitanState.isEnraged ? 7000 : BOSS_SLAM_COOLDOWN;
-      if (now - bossTitanState.lastSlamTime >= slamCd) {
-        triggerBossWindup();
-      }
-    }
-
-    if (Math.random() < dt * 3.5 && typeof sparks === "function") {
-      const sx = bossTitanState.x + (Math.random() - 0.5) * 1.5;
-      const sy = 2.4 + (Math.random() - 0.5) * 1.0;
-      const sz = bossTitanState.z + (Math.random() - 0.5) * 1.5;
-      sparks(bossTitanState.isEnraged ? "flame" : "gold", sx, sy, sz, 1, { speed: 1.0, up: 0.8, life: 350 });
-    }
+    // No simulated combat feedback while this encounter is unavailable.
   }
 
   window.MontraBoss = {
+    ...window.MontraBoss,
     spawnBoss: spawnThaoWessuwanBoss,
     removeBoss: removeThaoWessuwanBoss,
     toggleBoss: toggleThaoWessuwanBoss,
     triggerWindup: triggerBossWindup,
     triggerSlam: triggerBossSlam,
     isBossActive: () => bossTitanState.active,
-    getBossStatus: () => ({ ...bossTitanState }),
+    getTitanStatus: () => ({ ...bossTitanState }),
     updateBoss: updateThaoWessuwanBoss
   };
 
