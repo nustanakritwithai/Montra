@@ -1,8 +1,8 @@
 {
   "format": 1,
   "output": "styles.css",
-  "bytes": 342373,
-  "sha256": "63f7060c39380019404bf25ff2453033a0cd673831d2e3a64c729b1dc0bec0cc",
+  "bytes": 342751,
+  "sha256": "a0b0269a05f4693c28853d4ee58e29304df8ecd7851c8e6755a8d31b7250431f",
   "fragments": [
     {
       "path": "base/000-foundation-and-drawers.css",
@@ -272,52 +272,52 @@
     },
     {
       "path": "hud/038-map-shortcuts-and-quick-skills.css",
-      "bytes": 2435,
-      "sha256": "37368ef1d8f0ffeb3a0c9f875e9ff38b4611ad4b550454a24357fba13fba94e7",
+      "bytes": 2813,
+      "sha256": "246fd8e100f8520130c8d1f10803a7a995f3715503a10ceaa75c10bb1ec96353",
       "originalStartLine": 4697,
-      "originalEndLine": 4787
+      "originalEndLine": 4800
     },
     {
       "path": "icons/039-skill-books.css",
       "bytes": 1479,
       "sha256": "4a015c7c59c34deca14f4b785e2aa645a42a73efc0f89d25c8113ebcd7ca12f2",
-      "originalStartLine": 4788,
-      "originalEndLine": 4835
+      "originalStartLine": 4801,
+      "originalEndLine": 4848
     },
     {
       "path": "icons/040-blade-artwork.css",
       "bytes": 5540,
       "sha256": "3e4306750bd448217ac2e26fbd5a742d891c8036033194c73cbbb1e2dd149f05",
-      "originalStartLine": 4836,
-      "originalEndLine": 4873
+      "originalStartLine": 4849,
+      "originalEndLine": 4886
     },
     {
       "path": "icons/041-mender-artwork.css",
       "bytes": 4491,
       "sha256": "b6134545ba91c64905f82da1b3d7c8fb77cca1dad1bbb449894398eedfc710fe",
-      "originalStartLine": 4874,
-      "originalEndLine": 4911
+      "originalStartLine": 4887,
+      "originalEndLine": 4924
     },
     {
       "path": "icons/042-sentinel-artwork.css",
       "bytes": 4038,
       "sha256": "0afa48920322d7e109c41dfd216aa538c710d94fd89efe45aaf73436fe1a4bf4",
-      "originalStartLine": 4912,
-      "originalEndLine": 4949
+      "originalStartLine": 4925,
+      "originalEndLine": 4962
     },
     {
       "path": "combat/043-target-combo-and-boss.css",
       "bytes": 7492,
       "sha256": "43d8c8cefbe3c768f0af9f317467508eb97d6468268011b93a9bd09214ee0659",
-      "originalStartLine": 4950,
-      "originalEndLine": 5145
+      "originalStartLine": 4963,
+      "originalEndLine": 5158
     },
     {
       "path": "audio/044-voice-guidance.css",
       "bytes": 3520,
       "sha256": "39551eecfab95e37f27e37334687c5264b562fb7423b5ad444841d33b58a3e82",
-      "originalStartLine": 5146,
-      "originalEndLine": 5268
+      "originalStartLine": 5159,
+      "originalEndLine": 5281
     }
   ]
 }

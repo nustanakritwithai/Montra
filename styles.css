@@ -4784,6 +4784,19 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   background: radial-gradient(circle, rgba(255, 215, 0, 0.25) 0%, rgba(20, 20, 30, 0.8) 100%);
 }
 
+/* Phase 18: Thao Wessuwan Titan Boss 3D */
+#bossEncounterButton {
+  position: relative;
+  border: 1px solid rgba(255, 23, 68, 0.5);
+}
+#bossEncounterButton:active,
+#bossEncounterButton[aria-pressed="true"] {
+  border-color: #ff1744;
+  box-shadow: 0 0 14px rgba(255, 23, 68, 0.8);
+  background: radial-gradient(circle, rgba(255, 23, 68, 0.3) 0%, rgba(20, 20, 30, 0.8) 100%);
+}
+
+
 
 /* ========================================================
    MONTRA Comprehensive 26-Skill SVG Engine & Book Icons

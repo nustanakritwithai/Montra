@@ -40,8 +40,8 @@ assert(mainSrc.includes('getPersona: getVoicePersona'), 'MontraVoice exports get
 assert(mainSrc.includes('setPersona: setVoicePersona'), 'MontraVoice exports setPersona');
 assert(mainSrc.includes('triggerWhisper'), 'MontraVoice exports triggerWhisper');
 
-assert(/audio\.js\?v=0\.1[2-9]\./.test(indexSrc), 'index.html points to audio.js v0.12.x+');
-assert(/main\.js\?v=0\.1[6-9]\./.test(indexSrc), 'index.html points to main.js v0.16.x+');
+assert(/audio\.js\?v=0\.(1[2-9]|[2-9]\d)\./.test(indexSrc), 'index.html points to audio.js v0.12.x+');
+assert(/main\.js\?v=0\.(1[6-9]|[2-9]\d)\./.test(indexSrc), 'index.html points to main.js v0.16.x+');
 
 // 7. Functional Simulation Test for Persona Transitions & Whispers
 const mockStorage = new Map();
