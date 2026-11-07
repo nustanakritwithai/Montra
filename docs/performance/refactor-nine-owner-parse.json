@@ -1,0 +1,173 @@
+{
+  "kind": "parse-only microbenchmark, not runtime/module invocation or browser startup",
+  "node": "v22.23.4",
+  "platform": "linux",
+  "cpu": "AMD EPYC 9V74 80-Core Processor",
+  "cpus": 9,
+  "revisions": {
+    "baseline": "e458cfd7ed8a7c8a4346dd723bac6e1efa2ad03d",
+    "candidate": "b88467d22f74f713818f5509050166447f807418"
+  },
+  "files": {
+    "baseline": [
+      {
+        "name": "./account-entry.js",
+        "bytes": 28184,
+        "sha256": "2d685b7ac3017b5c98187979d04c0132fde9648713b248ae452ccf9a3bd1b758"
+      },
+      {
+        "name": "./audio.js",
+        "bytes": 55296,
+        "sha256": "fc6fea4bfba1f9f954c480d4036c6b884dcdd98443d43d55b1dc45e5b6c96d68"
+      },
+      {
+        "name": "./main.js",
+        "bytes": 1372310,
+        "sha256": "a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf"
+      }
+    ],
+    "candidate": [
+      {
+        "name": "./account-entry.js",
+        "bytes": 28184,
+        "sha256": "2d685b7ac3017b5c98187979d04c0132fde9648713b248ae452ccf9a3bd1b758"
+      },
+      {
+        "name": "./audio.js",
+        "bytes": 55296,
+        "sha256": "fc6fea4bfba1f9f954c480d4036c6b884dcdd98443d43d55b1dc45e5b6c96d68"
+      },
+      {
+        "name": "./src/client-modules/character-slot-storage.js",
+        "bytes": 1656,
+        "sha256": "cbd22525df6c8edde62942a778390464f1fee59dd7ee83a93fbd00320e338da6"
+      },
+      {
+        "name": "./src/client-modules/world-math.js",
+        "bytes": 1279,
+        "sha256": "f5c17b1ed03d99ca6b56b2576388bfd885fb8c25d4f3890f4b41e833e1c0b956"
+      },
+      {
+        "name": "./src/client-modules/item-presentation.js",
+        "bytes": 8225,
+        "sha256": "a49c688bd34e8103350e7e3648a3cb05de511b6af57ff093f814bb0e6a7965d3"
+      },
+      {
+        "name": "./src/client-modules/voice-guidance.js",
+        "bytes": 15107,
+        "sha256": "01344267150bee1c789c181d10e4efe6ab5600d1b04d90e773a6d30bea34d729"
+      },
+      {
+        "name": "./src/client-modules/pointer-gestures.js",
+        "bytes": 5794,
+        "sha256": "642211e5eee2768d003f76587388fcc5a3fef93ee6180b771b6470cef9cededd"
+      },
+      {
+        "name": "./src/client-modules/lighting-controller.js",
+        "bytes": 8088,
+        "sha256": "41be5595b9ec7127a6d39d08a688405b9c1650208f9132c1d9b31d14188299d7"
+      },
+      {
+        "name": "./src/client-modules/room-state-sync.js",
+        "bytes": 2232,
+        "sha256": "269e1869fc9ec0e73697d9741af4d169f780c0746d3b8bc4ca8cd15eea0d88f4"
+      },
+      {
+        "name": "./src/client-modules/skill-motion.js",
+        "bytes": 3442,
+        "sha256": "b89d4a0b75d7aec4c1e0d3fbb3f639f9b6521b6aa7201a5fa8bd00790490aa4e"
+      },
+      {
+        "name": "./src/client-modules/drawer-controller.js",
+        "bytes": 3341,
+        "sha256": "80be2186f8fdc95af82b28d1f62f2c4d068b494312e0b174257ce731e7c51bfa"
+      },
+      {
+        "name": "./main.js",
+        "bytes": 1334118,
+        "sha256": "1951f5bc16a69e9b8bd8c97c11d906ea0693c43d3f9d117f1b4f1fbe4265b28b"
+      }
+    ]
+  },
+  "compileMs": {
+    "baseline": {
+      "raw": [
+        90.54248799999999,
+        33.26501400000001,
+        37.56527099999994,
+        42.81550200000004,
+        38.02912600000002,
+        42.614949000000024,
+        36.242014999999924,
+        40.682725000000005,
+        39.51883400000008,
+        36.35772999999995,
+        31.714235000000144,
+        37.20087200000012,
+        36.79092300000002,
+        36.009743999999955,
+        42.17390399999999,
+        34.08883700000001,
+        30.116854999999987,
+        35.53301600000009,
+        45.30702100000008,
+        32.621362999999974,
+        40.347087999999985,
+        52.85103200000003,
+        30.03950799999984,
+        31.025354999999763,
+        27.005169999999907,
+        28.05797900000016,
+        26.06380100000024,
+        26.898889999999938,
+        27.69246699999985,
+        27.285953999999947
+      ],
+      "n": 30,
+      "min": 26.06380100000024,
+      "median": 36.242014999999924,
+      "p95": 52.85103200000003,
+      "max": 90.54248799999999
+    },
+    "candidate": {
+      "raw": [
+        43.80704400000002,
+        33.282621000000006,
+        39.073987999999986,
+        34.50440400000002,
+        48.779149000000075,
+        45.30247399999996,
+        38.10219100000006,
+        40.52782000000002,
+        36.383809000000156,
+        40.075738999999885,
+        37.643299999999954,
+        34.60825999999997,
+        36.024677999999994,
+        31.95025099999998,
+        39.48243000000002,
+        34.79535699999997,
+        33.750785999999835,
+        33.71409199999994,
+        40.71233899999993,
+        33.76279499999987,
+        53.93936400000007,
+        61.15529000000015,
+        44.39124900000024,
+        47.635843999999906,
+        31.020688000000064,
+        29.697001,
+        26.71821799999998,
+        32.80202499999996,
+        27.700819000000138,
+        27.720589000000018
+      ],
+      "n": 30,
+      "min": 26.71821799999998,
+      "median": 36.383809000000156,
+      "p95": 53.93936400000007,
+      "max": 61.15529000000015
+    }
+  },
+  "verdict": "MEASUREMENT ONLY: no timing acceptance threshold calibrated"
+}
