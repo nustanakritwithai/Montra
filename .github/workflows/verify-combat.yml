@@ -467,11 +467,9 @@ jobs:
           export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-castle-test-XXXXXX)"
           export MONTRA_TEST_URL=http://127.0.0.1:4115
           npx tsx --test src/rooms/castle-pilot.test.ts
-          node --import tsx src/index.ts > castle-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4115) 2>/dev/null; then break; fi; sleep 0.25; done
-          timeout 540s node --import tsx castle-pilot-integration.mjs || { cat castle-server.log; exit 1; }
+          export MONTRA_CASTLE_IN_PROCESS=1
+          trap 'rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          timeout 540s node --import tsx castle-pilot-integration.mjs
 
       - name: Expanded borderland transit and siege support
         shell: bash

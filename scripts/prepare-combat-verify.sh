@@ -196,7 +196,7 @@ cat > combat-verify/src/index.ts <<'EOF'
 import { defineServer, defineRoom } from "colyseus";
 import { MyRoom } from "./rooms/MyRoom.js";
 import { installAccountRoutes } from "./rooms/AccountRoutes.js";
-const server = defineServer({ rooms: { my_room: defineRoom(MyRoom) }, express: app => installAccountRoutes(app) });
-server.listen(Number(process.env.PORT || 4108));
+export const server = defineServer({ rooms: { my_room: defineRoom(MyRoom) }, express: app => installAccountRoutes(app) });
+export const ready = server.listen(Number(process.env.PORT || 4108));
 EOF
 cp deploy/combat/verify/package.json deploy/combat/verify/package-lock.json deploy/combat/verify/tsconfig.json combat-verify/

@@ -53,6 +53,10 @@ Two subsequent CI runs exposed further fixture assumptions: the elevation test s
 
 No production code was changed to satisfy these tests.
 
+Further paired CI runs exposed SQLite fixture-writer races, rather than gameplay assertion failures. The borderland fixture previously created guilds from a second process while two live battles wrote the same database. It now creates all seven guests and memberships and closes its fixture database before either concurrent scenario joins. Three full isolated repetitions passed with identical movement, assertions and time limits; instrumentation found no late fixture writes or open handles at any of the 14 joins.
+
+Castle checkpoints must deliberately alter test clocks and ownership during the scenario. That fixture now explicitly owns and awaits the existing verification server in the same Node event loop, retaining the real WebSocket clients and every original gameplay assertion. Synchronous fixture transactions and synchronous server transactions therefore cannot overlap. A queued camp-selection request under a held fixture write lock verifies processing after commit, while unrelated SQL errors still propagate. Local-only URL/PORT, temporary-data and ownership guards fail closed; cleanup shuts down the owned server even on assertion failure. Other integration suites keep their existing separate-process startup. This is test coordination for the documented single-process architecture, not a change to runtime SQLite resilience or permission to write a live database from another process. The final complete castle run and full exact-head CI remain release gates.
+
 ## Limits and next gate
 
 - The client still loads Babylon.js and its loader from unversioned external CDN URLs. The distribution's own bytes are reproducible, but those upstream bytes are not yet pinned. Do not claim a fully offline/reproducible runtime.
