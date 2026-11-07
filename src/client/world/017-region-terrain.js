@@ -61,16 +61,15 @@
     }
   }
   const castleDoors=new Map();
-  let provinceDoor=null;
   function syncGateVisual(){
     const local=territoryState?.local;
     for(const [id,ring] of riverPostRings){
       const post=local?.inField && local.phase==="battle" && local.river?.posts.find(p=>p.id===id);
       ring.material=post?.contested?gold:post?.owner==="attack"?warEnemyMat:post?.owner==="defend"?warAllyMat:templeBronze;
     }
-    const gates=local?.river?.gates ?? local?.pilot?.gates;
-    for(const [id,door] of castleDoors)door.setEnabled(Boolean(local?.inField && local.phase==="battle" && gates?.[id]?.closed));
-    if(provinceDoor && !provinceDoor.isDisposed())provinceDoor.setEnabled(territoryState?.local?.site===activeMapId && territoryState.local.gateClosed===true);
+    // Ordinary fields now report every gate separately, like the river city and castle.
+    const gates=local?.river?.gates ?? local?.pilot?.gates ?? local?.gates;
+    for(const [id,door] of castleDoors)door.setEnabled(Boolean(local?.inField && local.site===activeMapId && local.phase==="battle" && gates?.[id]?.closed));
   }
   let appliedVillageTerrain;
   function alignVillage(terrain){
@@ -446,10 +445,10 @@
           for(const side of [-1,1]){
             box(x+(horizontal?side*(span/2+.2):0),1.75,z+(horizontal?0:side*(span/2+.2)),horizontal?.55:3.1,3.5,horizontal?3.1:.55,kind==="territory"?provinceFx.timber:provinceFx.laterite);
           }
-          if(kind==="territory" && (castle || river || i===0)){
+          if(kind==="territory"){
             const door=B.MeshBuilder.CreateBox("reinforced city gate",{width:b.width,height:3.45,depth:b.length},scene);
             door.parent=expansionRoot;door.position.set(x,1.725,z);door.material=wooden;door.isPickable=false;
-            if(castle || river)castleDoors.set(g.id,door);else provinceDoor=door;
+            castleDoors.set(g.id,door);
             syncGateVisual();
           }
           if(!city)expansionLabel(g.name,x,z,10,5.2);

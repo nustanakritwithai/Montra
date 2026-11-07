@@ -19,7 +19,7 @@
     const paint=regionPaint(activeMapId);
     ground.material=paint ? paint.floor : inTemple ? templeFloor : activeMapId==="forbidden_forest" ? forestFloor : groundMat;
     templeCover.length=0;
-    provinceDoor=null;castleDoors.clear();castleRings.clear();riverPostRings.clear();
+    castleDoors.clear();castleRings.clear();riverPostRings.clear();
     for(const child of expansionRoot.getChildren())child.dispose();
     for(const resource of expansionResources)resource.dispose();expansionResources.length=0;expansionLabels.length=0;
     for(let i=lightSpots.length-1;i>=0;i--)if(lightSpots[i].map!=="ritual_village")lightSpots.splice(i,1);

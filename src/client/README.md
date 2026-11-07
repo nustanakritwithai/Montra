@@ -79,3 +79,11 @@ existing behavior and contract gates. Shared-state ownership, import/export
 boundaries, CSS organization and server decomposition have **not** been completed
 by this source-layout change. No Windows staging/deployment claim follows from
 these static checks.
+
+## Reviewed territory-war changes after extraction
+
+The war-gates PR changes four fragments (`017`, `019`, `047`, `059`): draw every
+gate, show per-gate status, and choose the nearest gate. `build-client.test.mjs`
+explicitly pins their reviewed fingerprints and the new assembled bundle; all
+other fragments still have to match the historical extraction evidence. The
+original `extraction-baseline.json` is intentionally not regenerated.

@@ -8,19 +8,45 @@ import { spawnSync } from 'node:child_process';
 import { assembleClient, checkClient, clientRoot, prepareClient, writeClient } from './build-client.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
-test('initial extraction retains every baseline byte and one unchanged IIFE', () => {
+// Intentional post-extraction gate behavior changes. Keep historical extraction
+// evidence unchanged; every other fragment must still match that evidence.
+const reviewedWarFragments = new Map([
+  {
+    "path": "world/017-region-terrain.js",
+    "bytes": 55453,
+    "sha256": "e7c59c83da74bd824e406a25f3ace56d2449b1d1fb272b1e3c1f4ed7ba8767ed"
+  },
+  {
+    "path": "world/019-state-and-portals.js",
+    "bytes": 19219,
+    "sha256": "433a2e4004df0292a90699a71e14453bf843690895ba43d6676b54f270abf500"
+  },
+  {
+    "path": "ui/047-maps-and-strategy.js",
+    "bytes": 72195,
+    "sha256": "05d687136931ba32f235b6477d6285105329d6bb869d4daad289e1b7f4238048"
+  },
+  {
+    "path": "core/059-frame-loop-and-startup.js",
+    "bytes": 18631,
+    "sha256": "14c1cc9bd0f2dd0dbc8317c67138f2ebf99d8e2f56a0be5fb06719782aa23900"
+  }
+].map(entry => [entry.path, entry]));
+
+test('reviewed war client preserves all unchanged extraction bytes and deterministic assembly', () => {
   const baseline = JSON.parse(readFileSync(join(clientRoot, 'src/client/extraction-baseline.json')));
   const bytes = assembleClient();
-  assert.equal(bytes.length, 1442437);
-  assert.equal(hash(bytes), '579f58cc515e9fa306053120fc856a832fb44c74abe0e46ed6a3458286cbd00b');
-  assert.equal(bytes.length, baseline.bytes);
-  assert.equal(hash(bytes), baseline.sha256);
+  assert.equal(baseline.bytes, 1442437);
+  assert.equal(baseline.sha256, '579f58cc515e9fa306053120fc856a832fb44c74abe0e46ed6a3458286cbd00b');
+  assert.equal(bytes.length, 1443302);
+  assert.equal(hash(bytes), '6a9ef6d3272f1b20f1541ecffcc92a5cd7451724aec04fccac5bab3c743676fe');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
     const fragment = readFileSync(join(clientRoot, 'src/client', entry.path));
-    assert.equal(fragment.length, entry.bytes, entry.path);
-    assert.equal(hash(fragment), entry.sha256, entry.path);
+    const expected = reviewedWarFragments.get(entry.path) ?? entry;
+    assert.equal(fragment.length, expected.bytes, entry.path);
+    assert.equal(hash(fragment), expected.sha256, entry.path);
   }
   assert.deepEqual(assembleClient(), assembleClient());
 });

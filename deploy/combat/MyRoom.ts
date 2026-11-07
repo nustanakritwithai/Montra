@@ -147,7 +147,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private warSent=new Map<string,string>();
   private nextWarSample=0;
   private previousPilotSample?:number;
-  private gateClosed=false;
   private closedFieldGates=new Set<string>();
   private gateActions=new Map<string,number>();
   private battleActive=false;
@@ -3335,13 +3334,21 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const castle=this.field.site===CASTLE_ID;
     const req=message as {gateId?:string;repair?:boolean}|null;
     const river=this.field.site===RIVER_CITY;
-    if((castle || river)?(!req || typeof req.gateId!=="string" || (req.repair!==undefined && (!castle || req.repair!==true))):!parseEmptyCommand(message))return;
+    if(castle || river){
+      if(!req || typeof req!=="object" || typeof req.gateId!=="string" || !req.gateId)return client.send("territory_error",{reason:"war_gate_id"});
+      if(req.repair!==undefined && (!castle || req.repair!==true))return;
+    }else if(!parseEmptyCommand(message))return;
     const id=client.sessionId,p=this.state.players.get(id),seat=this.warSeats.get(id),character=this.persistentCharacters.get(id);
     if(!p?.alive || p.flying || !seat || !character || !onMapGround(p) || this.climbs.has(id) || this.pendingCharacterLeaves.has(id))return;
     const now=Date.now();
     if(now-(this.gateActions.get(id)??-Infinity)<1000)return;
     const war=guildStore().war,gates=WORLD_MAPS[this.field.site].strategic!.rampart!.gates;
-    const gate=castle || river?gates.find(g=>g.id===req!.gateId):gates[0];
+    // Ordinary territory commands have no gate ID: use the closest gate center.
+    // Castle/river-city commands continue to require an explicit gate ID.
+    const gate=castle || river?gates.find(g=>g.id===req!.gateId):gates.reduce<typeof gates[number]|undefined>((nearest,g)=>{
+      const distance=(candidate:typeof g)=>Math.hypot(p.x-candidate.box.x-candidate.box.width/2,p.z-candidate.box.z-candidate.box.length/2);
+      return !nearest || distance(g)<distance(nearest)?g:nearest;
+    },undefined);
     if(!gate || war.member(character)?.id!==seat.guild)return;
     const b=gate.box,cx=b.x+b.width/2,cz=b.z+b.length/2;
     const inside=gate.side==="south"?p.z<cz:gate.side==="north"?p.z>cz:gate.side==="east"?p.x<cx:p.x>cx;
@@ -3358,7 +3365,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }else if(river){
         const states=war.riverGate(this.field,gate.id,seat.side,occupied,now);
         this.closedFieldGates=new Set(Object.keys(states).filter(key=>states[key].closed));
-      }else{war.gate(this.field,seat.side,occupied,now,this.fieldCensus().relaySide);this.gateClosed=war.inspect(this.field.site,now).gateClosed;}
+      }else{
+        // Other rooms pick the per-gate state up from the database on their next territory sample.
+        const states=war.gate(this.field,seat.side,occupied,now,this.fieldCensus().relaySide,gate.id);
+        this.closedFieldGates=new Set(Object.keys(states).filter(key=>states[key].closed));
+      }
       this.markWarAction(id,true);
       this.nextWarSample=0;
     }catch(e){const reason=e instanceof Error?e.message:"";if(!reason.startsWith("war_"))console.error("MONTRA gate",e);client.send("territory_error",{reason:reason.startsWith("war_")?reason:"war_unavailable"});}
@@ -3567,8 +3578,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const states=Object.fromEntries(Object.keys(warSites).map(site=>[site,war.inspect(site,now)]));
     if(this.field){
       const s=states[this.field.site];this.battleActive=s.seq===this.field.seq && s.phase==="battle";
-      this.gateClosed=this.battleActive && !s.river && !s.pilot && s.gateClosed;
-      const gates=s.river?.gates ?? s.pilot?.gates;
+      const gates=s.river?.gates ?? s.pilot?.gates ?? s.gates;
       if(gates)this.closedFieldGates=new Set(Object.entries(this.battleActive?gates:{}).filter(([,g])=>g.closed).map(([id])=>id));
       if(this.battleActive)this.updateWarParticipation();
       else if(this.warCargo.size){for(const id of this.warCargo.keys())try{this.clients.find(client=>client.sessionId===id)?.send("war_supply_notice",{action:"ended"});}catch{}this.warCargo.clear();}
@@ -3604,7 +3614,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           goalSeconds:WAR_PARTICIPATION_INTERVAL_MS/1000}:undefined,
         relay:inField && ownBattle && this.battleActive && WORLD_MAPS[p.mapId].strategic?.relay?{side:relaySide,contested}:undefined,
         government:!inField && member && member.id===s.ownerId?war.government.view(p.mapId,member,now):undefined,
-        gateHp:s.gateHp,gateClosed:inField && this.gateClosed,
+        gateHp:s.gateHp,gateClosed:inField && this.battleActive && !s.river && !s.pilot && this.closedFieldGates.size>0,
+        gates:inField && !s.river && !s.pilot?s.gates:undefined,
         canStart:!inField && s.phase==="open" && member?.officer===true && member.id!==s.ownerId,
         canJoin:!inField && s.phase==="battle" && !!member && (member.id===s.attacker || member.id===s.defender || (!s.owner && !s.defendName && member.officer))}:null;
       const engagements=!inField && member ? Object.entries(states).filter(([,state])=>state.phase==="battle" && (state.attacker===member.id || state.defender===member.id)).map(([site,state])=>({site,side:state.attacker===member.id?"attack":"defend"})) : [];
@@ -4833,7 +4844,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private closedGatesFor(mapId:string){
-    return (mapId===CASTLE_ID || mapId===RIVER_CITY)?this.closedFieldGates:this.gateClosed;
+    return this.field?.site===mapId?this.closedFieldGates:false;
   }
   private combatSegmentClear(mapId:string,from:WorldPoint,to:WorldPoint){
     return isWorldSegmentClear(mapId,from,to,this.closedGatesFor(mapId));
@@ -5262,7 +5273,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const r=map?.strategic?.rampart;
       if(r && isOnPlatform(feetY))return onRampart(r,x,z);
       if(r && this.closedFieldGates.size && r.gates.some(g=>this.closedFieldGates.has(g.id) && segmentIntersectsExpandedWall({x,z},{x,z},g.box,.4)))return false;
-      if(r && this.gateClosed && segmentIntersectsExpandedWall({x,z},{x,z},r.gates[0].box,.4))return false;
       if(map?.terrain)return isSafeWorldPoint(map,{x,z,y:groundAt(mapId,x,z)+feetY});
       return Boolean(map && (isOnGround(feetY) || (flying && isFlightAltitude(feetY))) &&
         isSafeWorldPoint(map, { x, y: feetY, z }));
@@ -5932,7 +5942,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           safeSpawn={x:node.x+sideSize*.6-1.2,y:0,z:node.z};
         }else{
           const gate=WORLD_MAPS[mapId].portals.find(p=>p.z===(side==="attack"?26:-58))!;
-          safeSpawn={x:gate.x,y:0,z:gate.z};
+          // The river-watch defenders start inside their fort, west of the canal.
+          // Keep world travel portals (and all other territory bases) unchanged.
+          const base=side==="defend"?map.strategic?.defenderSpawn:undefined;
+          safeSpawn={x:base?.x??gate.x,y:0,z:base?.z??gate.z};
         }
         safeSpawn={...safeSpawn,y:groundAt(mapId,safeSpawn.x,safeSpawn.z)};
         validPosition=false;
