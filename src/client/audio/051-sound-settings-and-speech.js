@@ -43,6 +43,7 @@
       `<option value="warrior"${curP === "warrior" ? " selected" : ""}>⚔️ นักรบมนตรา (ดุดัน ปลุกใจ)</option>` +
       `<option value="spirit"${curP === "spirit" ? " selected" : ""}>✨ วิญญาณผู้พิทักษ์ (ก้องกังวาน นุ่มลึก)</option>` +
       `</select></div>` +
+      `<button type="button" id="replayVoiceGuidanceBtn" class="secondary" ${isVoiceGuidanceEnabled() ? "" : "disabled"}>🔊 เริ่มเสียงชี้แนะใหม่ (ไม่กระทบเซฟ)</button>` +
       `<button type="button" id="testVoiceBtn" class="secondary" style="margin:8px 0;width:100%;font-weight:600">🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)</button>` +
       row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("music", "ดนตรี") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
   }
@@ -66,7 +67,10 @@
     const vGuideToggle = root.querySelector("#toggleVoiceGuidance");
     if (vGuideToggle) vGuideToggle.addEventListener("change", () => {
       setVoiceGuidanceEnabled(vGuideToggle.checked);
+      if (replayBtn) replayBtn.disabled = !vGuideToggle.checked;
     });
+    const replayBtn = root.querySelector("#replayVoiceGuidanceBtn");
+    if (replayBtn) replayBtn.onclick = () => replayVoiceGuidance();
     const personaSelect = root.querySelector("#voicePersonaSelect");
     if (personaSelect) {
       personaSelect.addEventListener("change", () => {
@@ -75,8 +79,11 @@
     }
     const testBtn = root.querySelector("#testVoiceBtn");
     if (testBtn) {
-      const curP = typeof getVoicePersona === "function" ? getVoicePersona() : "elder";
-      bindSpeechButton(testBtn, "สวัสดี ยินดีต้อนรับสู่อาณาจักรมนตรา ระบบเสียงผู้ชี้แนะพร้อมเคียงข้างเจ้า", curP, "🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)");
+      const selectedPersona = () => {
+        const id = getVoicePersona(), p = VOICE_PERSONAS[id];
+        return { persona: id, pitch: p.pitch, rate: p.rate };
+      };
+      bindSpeechButton(testBtn, "สวัสดี ยินดีต้อนรับสู่อาณาจักรมนตรา ระบบเสียงผู้ชี้แนะพร้อมเคียงข้างเจ้า", selectedPersona, "🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)");
     }
   }
   function bindSpeechButton(button, text, persona, label) {
@@ -106,8 +113,9 @@
         status.textContent = "ระบบเสียงยังไม่พร้อม กรุณาโหลดหน้าใหม่";
         return;
       }
+      const voice = typeof persona === "function" ? persona() : { persona };
       window.MontraAudio.speak(text, {
-        persona,
+        ...voice,
         onStart: () => { button.textContent = "⏹ หยุดเสียงพูด"; status.textContent = "กำลังเล่นเสียง"; },
         onEnd: () => { button.textContent = label; status.textContent = privacy; },
         onError: event => {
