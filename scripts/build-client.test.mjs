@@ -10,6 +10,25 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // Explicit reversible substitutions for this extraction only. This is not a new
 // baseline: reconstructing the original bytes still uses the historical SHA below.
+function chatControllerRestoration(current) {
+  const referenceBytes = readFileSync(join(clientRoot, 'deploy/combat/fixtures/chat-controller-reference.json'));
+  assert.equal(hash(referenceBytes), '4a8d3d4d6e10329d507486279ca714f28ded0ff530b25895abfafa1226e8d6bb');
+  const reference = JSON.parse(referenceBytes);
+  assert.equal(hash(readFileSync(join(clientRoot, 'src/client-modules/chat-controller.js'))), '3433a3f0f9be6aad03ae0fa8c25c75937d52080400bc555eb87dd46411479874', 'Reviewed private chat lifecycle');
+  const bindings = [
+    ["state004", "  const chatController = globalThis.MontraChatController.create({\n    getDocument: () => document, $, matchMedia: query => matchMedia(query),\n    addEventListener: (type, listener) => addEventListener(type, listener),\n    makeOption: (label, value) => new Option(label, value),\n    getViewport: () => window.visualViewport, getInnerHeight: () => window.innerHeight,\n    setTimeout: (callback, delay) => setTimeout(callback, delay), clearTimeout: timer => clearTimeout(timer),\n    isDrawerOpen: () => !ui.drawer.hidden, closeDrawer: () => closeDrawer(),\n    updateFieldAlerts: () => updateFieldAlerts(),\n    forEachRecipient: callback => room?.state?.players?.forEach?.(callback), getLocalId: () => localId,\n    validateSend(text, channel) {\n      const extended = [\"party\", \"private\", \"bug\"].includes(channel);\n      if (mode !== \"live\" || !room || room.state?.chatAvailable !== true || (extended && room.state?.extendedChatAvailable !== true)) { toast(mode !== \"live\" ? \"เข้าออนไลน์เพื่อใช้แชท\" : \"เซิร์ฟเวอร์ยังไม่รองรับช่องนี้\"); return false; }\n      if (Array.from(text).length > 200) { toast(\"พิมพ์ข้อความไม่เกิน 200 ตัวอักษร\"); return false; }\n      return true;\n    },\n    makeCommand: (text, channel, targetId) => channel === \"private\" ? { text, channel, targetId } : { text, channel },\n    sendCommand: command => room.send(\"chat\", command), toast: message => toast(message),\n  });\n", "63bb2be0d4c2b13dbd8725212d6b8ad73bca8d4f8c78a9f670fa3d80599667c4"],
+    ["view042", "  // ---- One chat box for reading and composing on both phones and desktop ----\n  const chatView = chatController.initialize();\n", "0b954b8a1638c8bbaa56967c625dbcf4083b0043b32439422096f8a46e3665d0"],
+    ["controls046", "  function finishChatPending(){return chatController.finishChatPending();}\n  function clearChatHistory(all){return chatView.clearChatHistory(all);}\n  function openChat(){return chatView.openChat();}\n  function closeChatComposer(){return chatView.closeChatComposer();}\n  chatView.installViewport();\n", "d0bf2c040f928c6768a13f85514173418d9599133e61fb6876b436c62ac84368"],
+    ["message044", "      joined.onMessage(\"chat_message\", message => {\n        if (room !== joined || !message || ![\"map\", \"world\", \"party\", \"private\"].includes(message.channel) ||\n            typeof message.text !== \"string\" || typeof message.name !== \"string\" ||\n            typeof message.senderId !== \"string\" ||\n            (message.channel === \"map\" && message.mapId !== activeMapId)) return;\n        const channel = message.channel;\n        const own = message.senderId === localId;\n        chatView.receive(message, channel, own);\n      });\n", "fa39d2e75d27ce5dc92f249e5c96089fe73082a19bfed22dcc396f1a71f7bd44"],
+    ["report044", "      joined.onMessage(\"chat_report_result\", result => {\n        if(room!==joined) return;\n        chatView.report(result);\n      });\n", "12a80e31e96dc25a26358c0807abbff93ce2c104fe21d3817631e5198fddd2b0"],
+  ];
+  for (const [key, binding, sha] of bindings) {
+    assert.equal(hash(binding), sha, 'Reviewed chat binding: ' + key);
+    assert.equal(current.split(binding).length, 2, 'Exactly one chat binding: ' + key);
+  }
+  return text => { for (const [key, binding] of bindings) text = text.replace(binding, reference[key]); return text; };
+}
+
 function restoreJoinBootstrap(text) {
   const reference = readFileSync(join(clientRoot, 'deploy/combat/fixtures/join-message-bootstrap-reference.js'), 'utf8');
   assert.equal(hash(reference), 'e5e76844a759b52aa1b0190d1d4c68171e851e74e84adaea2aac8cb13e2ff576');
@@ -241,14 +260,15 @@ test('module extraction preserves the historical byte freeze outside the exact h
   for (const anchor of [worldBinding, terrainAnchor, smoothAnchor]) {
     assert.equal(current.toString().split(anchor).length, 2, 'Exactly one world-math binding/replacement site');
   }
-  const restoreDrawer = drawerControllerRestoration(current.toString());
+  const restoreChat = chatControllerRestoration(current.toString());
+  const restoreDrawer = drawerControllerRestoration(restoreChat(current.toString()));
   const restoreRoom = roomStateSyncRestoration(current.toString());
   const restoreItems = itemPresentationRestoration(current.toString());
   const restoreVoice = voiceGuidanceRestoration(current.toString());
   const restoreGestures = pointerGesturesRestoration(current.toString());
   const restoreLighting = lightingControllerRestoration(current.toString());
   const restoreSkillMotion = skillMotionRestoration(current.toString());
-  const restore = text => restoreSkillMotion(restoreItems(restoreVoice(restoreGestures(restoreLighting(restoreRoom(restoreDrawer(restoreJoinBootstrap(text)))))))).replace(wiring, originalHelpers)
+  const restore = text => restoreSkillMotion(restoreItems(restoreVoice(restoreGestures(restoreLighting(restoreRoom(restoreDrawer(restoreJoinBootstrap(restoreChat(text))))))))).replace(wiring, originalHelpers)
     .replace(worldBinding, '').replace(terrainAnchor, terrainHelpers + terrainAnchor)
     .replace(smoothAnchor, smoothAnchor + smoothHelper);
   const bytes = Buffer.from(restore(current.toString()));

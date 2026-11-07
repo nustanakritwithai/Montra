@@ -209,7 +209,7 @@ test('catalog names remain inert text and selected thumbnail uses shared invento
 test('actual drawer key listener closes only the popup on first Escape, then the drawer',()=>{
   const f=fixture(),account=f.node('div');account.hidden=true;f.elements.set('accountEntry',account);f.document.body.append(account);
   let listener;f.document.addEventListener=(type,handler)=>{assert.equal(type,'keydown');listener=handler;};
-  f.run(slice('  document.addEventListener("keydown",drawerController.handleKey)','  function updateChatBadge('));
+  f.run(slice('  document.addEventListener("keydown",drawerController.handleKey)','  function finishChatPending('));
   f.open();f.popup();const first={key:'Escape',preventDefault(){this.prevented=true;}};listener(first);
   assert.equal(first.prevented,true);assert.equal(f.$('forgePicker').open,false);assert.equal(f.ctx.drawerActive,'forge');assert.equal(f.ui.drawer.hidden,false);assert.equal(f.document.activeElement,f.$('forgeTargetButton'));
   const second={key:'Escape',preventDefault(){this.prevented=true;}};listener(second);assert.equal(second.prevented,true);assert.equal(f.ctx.drawerActive,null);assert.equal(f.ui.drawer.hidden,true);assert.equal(f.mutations().length,0);

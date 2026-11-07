@@ -20,10 +20,24 @@
   let itemHuntOwner="",itemHunt=null,travelRoutes=null;
   let fieldTrainingTip=null;
   let journeyOwner="",journeyNotes={};
-  const chatHistory = { map: [], world: [], party: [], private: [], bug: [] }, chatUnread = { map: 0, world: 0, party: 0, private: 0, bug: 0 };
-  const chatDraft = { map: "", world: "", party: "", private: "", bug: "" };
-  let chatTargetId = "";
-  let chatChannel = "map", chatPending = null, chatTimer = null;
+  const chatController = globalThis.MontraChatController.create({
+    getDocument: () => document, $, matchMedia: query => matchMedia(query),
+    addEventListener: (type, listener) => addEventListener(type, listener),
+    makeOption: (label, value) => new Option(label, value),
+    getViewport: () => window.visualViewport, getInnerHeight: () => window.innerHeight,
+    setTimeout: (callback, delay) => setTimeout(callback, delay), clearTimeout: timer => clearTimeout(timer),
+    isDrawerOpen: () => !ui.drawer.hidden, closeDrawer: () => closeDrawer(),
+    updateFieldAlerts: () => updateFieldAlerts(),
+    forEachRecipient: callback => room?.state?.players?.forEach?.(callback), getLocalId: () => localId,
+    validateSend(text, channel) {
+      const extended = ["party", "private", "bug"].includes(channel);
+      if (mode !== "live" || !room || room.state?.chatAvailable !== true || (extended && room.state?.extendedChatAvailable !== true)) { toast(mode !== "live" ? "เข้าออนไลน์เพื่อใช้แชท" : "เซิร์ฟเวอร์ยังไม่รองรับช่องนี้"); return false; }
+      if (Array.from(text).length > 200) { toast("พิมพ์ข้อความไม่เกิน 200 ตัวอักษร"); return false; }
+      return true;
+    },
+    makeCommand: (text, channel, targetId) => channel === "private" ? { text, channel, targetId } : { text, channel },
+    sendCommand: command => room.send("chat", command), toast: message => toast(message),
+  });
   const scene = new B.Scene(engine);
   // The build exporter collects these placements while running the actual map builders.
   // A normal browser uses the server catalog and never registers resource sites.

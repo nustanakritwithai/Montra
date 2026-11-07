@@ -32,3 +32,6 @@
 
 # Frozen per-join bootstrap characterization bytes.
 /deploy/combat/fixtures/join-message-bootstrap-reference.js -text
+
+# Frozen chat characterization retains exact original source sections on Windows.
+/deploy/combat/fixtures/chat-controller-reference.json -text
