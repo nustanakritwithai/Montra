@@ -9,6 +9,19 @@ import { root, sha256 } from './build-site.mjs';
 // Uses the same locked TypeScript parser as server verification, never executes game code.
 const require = createRequire(join(root, 'combat-verify/package.json'));
 const ts = require('typescript');
+
+// Git may check text files out with CRLF on Windows. Hash the canonical LF
+// bytes while preserving all other bytes, including lone CR and invalid UTF-8.
+export function protectedSourceFingerprint(bytes) {
+  assert(Buffer.isBuffer(bytes), 'Protected source must be a Buffer');
+  const normalized = Buffer.allocUnsafe(bytes.length);
+  let length = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 13 && bytes[i + 1] === 10) continue;
+    normalized[length++] = bytes[i];
+  }
+  return sha256(normalized.subarray(0, length));
+}
 function literalNames(node) {
   if (!node) return [];
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return [node.text];
@@ -69,7 +82,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     format: 2,
     scope: 'Static message-name inventory, schema and persistence-source fingerprints. Dynamic commands and payload semantics require integration tests.',
     ...inventory,
-    protectedSources: Object.fromEntries(['MyRoomState.ts', 'CharacterStore.ts', 'AccountStore.ts', 'EconomyStore.ts'].map(file => [file, sha256(readFileSync(join(root, 'deploy/combat', file)))]))
+    protectedSources: Object.fromEntries(['MyRoomState.ts', 'CharacterStore.ts', 'AccountStore.ts', 'EconomyStore.ts'].map(file => [file, protectedSourceFingerprint(readFileSync(join(root, 'deploy/combat', file)))]))
   };
   const baseline = join(root, 'deploy/combat/verify/contract-baseline.json');
   if (process.argv.includes('--write')) {
