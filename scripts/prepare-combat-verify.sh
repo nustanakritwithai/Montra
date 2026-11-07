@@ -135,6 +135,7 @@ cp deploy/combat/PartyManager.ts combat-verify/src/rooms/PartyManager.ts
 cp deploy/combat/party-manager.test.ts combat-verify/src/rooms/party-manager.test.ts
 cp deploy/combat/party-experience.test.ts combat-verify/src/rooms/party-experience.test.ts
 cp deploy/combat/party-integration.mjs combat-verify/party-integration.mjs
+cp deploy/combat/TradeSessions.ts deploy/combat/trade-sessions*.ts combat-verify/src/rooms/
 cp deploy/combat/EconomyStore.ts combat-verify/src/rooms/EconomyStore.ts
 cp deploy/combat/Fishing.ts deploy/combat/fishing.test.ts combat-verify/src/rooms/
 cp deploy/combat/central-market.test.ts combat-verify/src/rooms/central-market.test.ts
@@ -142,6 +143,7 @@ cp deploy/combat/central-market-integration.mjs combat-verify/central-market-int
 cp deploy/combat/EconomyRules.ts combat-verify/src/rooms/EconomyRules.ts
 cp deploy/combat/economy-store.test.ts combat-verify/src/rooms/economy-store.test.ts
 cp deploy/combat/economy-migration.test.ts combat-verify/src/rooms/economy-migration.test.ts
+cp deploy/combat/trade-sessions-integration.mjs combat-verify/trade-sessions-integration.mjs
 cp deploy/combat/economy-integration.mjs combat-verify/economy-integration.mjs
 cp deploy/combat/progression.test.ts combat-verify/src/rooms/progression.test.ts
 cp deploy/combat/progression-transaction.test.ts combat-verify/src/rooms/progression-transaction.test.ts

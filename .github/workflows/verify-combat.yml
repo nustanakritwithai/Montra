@@ -17,6 +17,7 @@ on:
       - 'scripts/build-site.mjs'
       - 'scripts/prepare-combat-verify.sh'
       - 'scripts/check-contract*.mjs'
+      - 'scripts/trade-sessions-boundary.test.mjs'
       - 'deploy/combat/**'
       - 'main.js'
       - 'audio.js'
@@ -39,6 +40,7 @@ on:
       - 'scripts/build-site.mjs'
       - 'scripts/prepare-combat-verify.sh'
       - 'scripts/check-contract*.mjs'
+      - 'scripts/trade-sessions-boundary.test.mjs'
       - 'deploy/combat/**'
       - 'main.js'
       - 'audio.js'
@@ -71,7 +73,7 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Check client/server contract baseline
-        run: node --test scripts/check-contract.test.mjs && node scripts/check-contract.mjs
+        run: node --test scripts/check-contract.test.mjs scripts/trade-sessions-boundary.test.mjs && node scripts/check-contract.mjs
 
       - name: Verify client fragment statement boundaries
         run: npm run test:client-boundaries
@@ -266,7 +268,7 @@ jobs:
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/vertical-movement.test.ts src/rooms/horizontal-movement.test.ts src/rooms/respawn-lifecycle.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/rebirth.test.ts src/rooms/forest-objectives.test.ts src/rooms/sword-tree-concurrency.test.ts src/rooms/sword-gap-geometry.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/gear-progression.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts src/rooms/guild-store.test.ts src/rooms/guild-invitations.test.ts
+        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/vertical-movement.test.ts src/rooms/horizontal-movement.test.ts src/rooms/respawn-lifecycle.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/rebirth.test.ts src/rooms/forest-objectives.test.ts src/rooms/sword-tree-concurrency.test.ts src/rooms/sword-gap-geometry.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/trade-sessions.test.ts src/rooms/economy-store.test.ts src/rooms/gear-progression.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts src/rooms/guild-store.test.ts src/rooms/guild-invitations.test.ts
 
       - name: Occult book rules
         working-directory: combat-verify
@@ -624,6 +626,7 @@ jobs:
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4109) 2>/dev/null; then break; fi; sleep 0.25; done
           MONTRA_ECONOMY_TEST_STAGE=write timeout 30s node economy-integration.mjs || { cat economy-server.log; exit 1; }
+          timeout 30s node trade-sessions-integration.mjs || { cat economy-server.log; exit 1; }
           kill "$SERVER_PID" 2>/dev/null || true
           wait "$SERVER_PID" 2>/dev/null || true
           node --import tsx src/index.ts > economy-server.log 2>&1 &
