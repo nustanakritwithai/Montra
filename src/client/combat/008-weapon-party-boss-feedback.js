@@ -941,3 +941,277 @@
     updatePet
   };
 
+  // Phase 17: Celestial Wing Flight & Airborne Aerial Combat 3D (ระบบสยายปีกทะยานเวหา & การต่อสู้กลางเวหา)
+  let flightState = {
+    active: false,
+    altitude: 0,
+    targetAltitude: 0,
+    maxAltitude: 5.5,
+    minAltitude: 0,
+    wingsMesh: null,
+    lastTakeoffTime: 0,
+    lastSlamTime: 0,
+    isSlamming: false,
+    cooldownRemaining: 0
+  };
+
+  const FLIGHT_TAKEOFF_ALTITUDE = 4.2;
+  const FLIGHT_COOLDOWN = 3000;
+  const SLAM_COOLDOWN = 6000;
+
+  let wingFeatherMat = null, wingFrameMat = null, wingGlowMat = null;
+  function ensureWingMaterials() {
+    if (wingFeatherMat) return;
+    if (typeof mat !== "function") return;
+    wingFeatherMat = mat("wing celestial feather", "#ffd54f", "#ffca28");
+    wingFrameMat = mat("wing celestial frame", "#ffd700", "#b8860b");
+    wingGlowMat = mat("wing celestial glow", "#80d8ff", "#00e5ff");
+  }
+
+  function createCelestialWingsMesh(parentTransform) {
+    if (typeof B === "undefined" || !scene) return null;
+    ensureWingMaterials();
+
+    const root = new B.TransformNode("celestial-wings-root", scene);
+    if (parentTransform) root.parent = parentTransform;
+    root.position.set(0, 1.45, -0.15); // Mount on character upper back
+
+    // Center jewel / back harness talisman
+    const coreHarness = B.MeshBuilder.CreateSphere("wing-core", { diameter: 0.22, segments: 8 }, scene);
+    coreHarness.parent = root;
+    coreHarness.position.set(0, 0, 0);
+    if (wingFrameMat) coreHarness.material = wingFrameMat;
+    coreHarness.isPickable = false;
+
+    // Left Wing Rig
+    const leftPivot = new B.TransformNode("wing-left-pivot", scene);
+    leftPivot.parent = root;
+    leftPivot.position.set(-0.12, 0.05, 0);
+
+    const leftSpar = B.MeshBuilder.CreateCylinder("wing-l-spar", { diameterTop: 0.03, diameterBottom: 0.08, height: 1.1, tessellation: 6 }, scene);
+    leftSpar.parent = leftPivot;
+    leftSpar.rotation.z = Math.PI / 3;
+    leftSpar.position.set(-0.48, 0.26, 0);
+    if (wingFrameMat) leftSpar.material = wingFrameMat;
+    leftSpar.isPickable = false;
+
+    // Left Feathers (layered ethereal planes)
+    const leftFeather1 = B.MeshBuilder.CreatePlane("wing-l-f1", { width: 0.42, height: 0.95 }, scene);
+    leftFeather1.parent = leftPivot;
+    leftFeather1.rotation.z = Math.PI / 4;
+    leftFeather1.position.set(-0.45, 0.2, -0.02);
+    if (wingFeatherMat) leftFeather1.material = wingFeatherMat;
+    leftFeather1.isPickable = false;
+
+    const leftFeather2 = B.MeshBuilder.CreatePlane("wing-l-f2", { width: 0.36, height: 0.82 }, scene);
+    leftFeather2.parent = leftPivot;
+    leftFeather2.rotation.z = Math.PI / 5;
+    leftFeather2.position.set(-0.72, 0.38, 0.01);
+    if (wingGlowMat) leftFeather2.material = wingGlowMat;
+    leftFeather2.isPickable = false;
+
+    // Right Wing Rig
+    const rightPivot = new B.TransformNode("wing-right-pivot", scene);
+    rightPivot.parent = root;
+    rightPivot.position.set(0.12, 0.05, 0);
+
+    const rightSpar = B.MeshBuilder.CreateCylinder("wing-r-spar", { diameterTop: 0.03, diameterBottom: 0.08, height: 1.1, tessellation: 6 }, scene);
+    rightSpar.parent = rightPivot;
+    rightSpar.rotation.z = -Math.PI / 3;
+    rightSpar.position.set(0.48, 0.26, 0);
+    if (wingFrameMat) rightSpar.material = wingFrameMat;
+    rightSpar.isPickable = false;
+
+    // Right Feathers
+    const rightFeather1 = B.MeshBuilder.CreatePlane("wing-r-f1", { width: 0.42, height: 0.95 }, scene);
+    rightFeather1.parent = rightPivot;
+    rightFeather1.rotation.z = -Math.PI / 4;
+    rightFeather1.position.set(0.45, 0.2, -0.02);
+    if (wingFeatherMat) rightFeather1.material = wingFeatherMat;
+    rightFeather1.isPickable = false;
+
+    const rightFeather2 = B.MeshBuilder.CreatePlane("wing-r-f2", { width: 0.36, height: 0.82 }, scene);
+    rightFeather2.parent = rightPivot;
+    rightFeather2.rotation.z = -Math.PI / 5;
+    rightFeather2.position.set(0.72, 0.38, 0.01);
+    if (wingGlowMat) rightFeather2.material = wingGlowMat;
+    rightFeather2.isPickable = false;
+
+    root.scaling.set(0.01, 0.01, 0.01);
+
+    return { root, leftPivot, rightPivot, leftSpar, rightSpar, leftFeather1, leftFeather2, rightFeather1, rightFeather2 };
+  }
+
+  function takeoffCelestialFlight() {
+    const now = performance.now();
+    if (now - flightState.lastTakeoffTime < FLIGHT_COOLDOWN) {
+      if (typeof toast === "function") toast("ปีกเวหายังอยู่ในช่วงคูลดาวน์");
+      return false;
+    }
+
+    const hero = getLocalAvatar();
+    if (!hero) return false;
+
+    flightState.active = true;
+    flightState.isSlamming = false;
+    flightState.targetAltitude = FLIGHT_TAKEOFF_ALTITUDE;
+    flightState.lastTakeoffTime = now;
+
+    if (!flightState.wingsMesh) {
+      flightState.wingsMesh = createCelestialWingsMesh(hero.root || hero.mesh || hero);
+    }
+    if (flightState.wingsMesh?.root) {
+      flightState.wingsMesh.root.setEnabled(true);
+    }
+
+    if (typeof SFX === "function") SFX("wing_glide", { intensity: 1.2 });
+    if (typeof sparks === "function") {
+      sparks("gold", hero.x ?? 0, (hero.y || 0) + 1.2, hero.z ?? 0, 16, { speed: 2.5, up: 2.5, life: 600 });
+    }
+    if (typeof floatAtPlayer === "function") {
+      floatAtPlayer(localId, "สยายปีกทะยานเวหา! 🪽", "status", { big: true });
+    }
+    if (typeof triggerCombatCallout === "function") {
+      triggerCombatCallout("flight_takeoff");
+    }
+
+    const btn = $("flightButton");
+    if (btn) btn.setAttribute("aria-pressed", "true");
+
+    return true;
+  }
+
+  function landCelestialFlight() {
+    if (!flightState.active) return false;
+
+    flightState.active = false;
+    flightState.isSlamming = false;
+    flightState.targetAltitude = 0;
+
+    const hero = getLocalAvatar();
+    if (typeof SFX === "function") SFX("whoosh", { pitch: 0.85 });
+    if (hero && typeof floatAtPlayer === "function") {
+      floatAtPlayer(localId, "ร่อนลงสู่พื้นดิน ✦", "status");
+    }
+
+    if (flightState.wingsMesh?.root) {
+      flightState.wingsMesh.root.scaling.set(0.01, 0.01, 0.01);
+      flightState.wingsMesh.root.setEnabled(false);
+    }
+
+    const btn = $("flightButton");
+    if (btn) btn.setAttribute("aria-pressed", "false");
+
+    return true;
+  }
+
+  function meteorSlamAttack() {
+    const now = performance.now();
+    if (!flightState.active || flightState.altitude < 1.0) {
+      return false;
+    }
+    if (now - flightState.lastSlamTime < SLAM_COOLDOWN) {
+      if (typeof toast === "function") toast("ท่าทุบธรณีสะท้านปฐพียังติดคูลดาวน์");
+      return false;
+    }
+
+    flightState.lastSlamTime = now;
+    flightState.isSlamming = true;
+    flightState.targetAltitude = 0;
+    flightState.altitude = 0;
+
+    const hero = getLocalAvatar();
+    const hX = hero ? (hero.x ?? 0) : 0;
+    const hY = hero ? (hero.y || 0) : 0;
+    const hZ = hero ? (hero.z ?? 0) : 0;
+
+    if (typeof SFX === "function") SFX("meteor_slam", { intensity: 1.4 });
+    if (typeof spawnFx === "function") {
+      spawnFx("nova", "gold", hX, hY + 0.1, hZ, { orient: "floor", life: 800, s0: 1.0, s1: 6.5, a0: 1, a1: 0 });
+    }
+    if (typeof sparks === "function") {
+      sparks("gold", hX, hY + 0.2, hZ, 30, { speed: 4.0, up: 1.5, life: 700 });
+      sparks("flame", hX, hY + 0.2, hZ, 20, { speed: 3.5, up: 2.0, life: 600 });
+    }
+    if (typeof triggerCombatCallout === "function") {
+      triggerCombatCallout("flight_slam");
+    }
+    if (typeof floatText === "function") {
+      floatText(hX, hY + 1.2, hZ, "ธรณีสะท้านปฐพี! 💥 150", "crit", { big: true });
+    }
+
+    if (typeof demoMonsterHp === "number" && typeof damageDemoMonster === "function") {
+      damageDemoMonster(150, true);
+    }
+
+    landCelestialFlight();
+    return true;
+  }
+
+  function toggleCelestialFlight() {
+    if (flightState.active) {
+      if (flightState.altitude > 1.8 && (performance.now() - flightState.lastSlamTime >= SLAM_COOLDOWN)) {
+        return meteorSlamAttack();
+      }
+      return landCelestialFlight();
+    }
+    return takeoffCelestialFlight();
+  }
+
+  function updateFlight(dt, elapsed) {
+    const hero = getLocalAvatar();
+    if (!hero) return;
+
+    const altLerp = Math.min(1.0, dt * (flightState.isSlamming ? 16.0 : 4.5));
+    flightState.altitude += (flightState.targetAltitude - flightState.altitude) * altLerp;
+
+    if (flightState.active || flightState.altitude > 0.05) {
+      if (hero.root) {
+        hero.root.position.y = (hero.y || 0) + flightState.altitude;
+      }
+    }
+
+    if (!flightState.wingsMesh?.root) return;
+
+    const wings = flightState.wingsMesh;
+    if (flightState.active) {
+      const scaleLerp = Math.min(1.0, dt * 8.0);
+      wings.root.scaling.x += (1.0 - wings.root.scaling.x) * scaleLerp;
+      wings.root.scaling.y += (1.0 - wings.root.scaling.y) * scaleLerp;
+      wings.root.scaling.z += (1.0 - wings.root.scaling.z) * scaleLerp;
+
+      const isMoving = Boolean(hero.moving || hero.velX || hero.velZ);
+      const flapFreq = isMoving ? 12.0 : 6.0;
+      const flapAmp = isMoving ? 0.48 : 0.28;
+      const flap = Math.sin(elapsed * flapFreq) * flapAmp;
+      const sweep = Math.cos(elapsed * flapFreq) * 0.12;
+
+      if (wings.leftPivot) {
+        wings.leftPivot.rotation.y = flap;
+        wings.leftPivot.rotation.z = sweep;
+      }
+      if (wings.rightPivot) {
+        wings.rightPivot.rotation.y = -flap;
+        wings.rightPivot.rotation.z = -sweep;
+      }
+
+      if (Math.random() < dt * 4.0 && typeof sparks === "function") {
+        const wingX = (hero.x ?? 0) + (Math.random() > 0.5 ? 0.9 : -0.9);
+        const wingY = (hero.y || 0) + flightState.altitude + 1.6;
+        const wingZ = (hero.z ?? 0) - 0.2;
+        sparks("gold", wingX, wingY, wingZ, 1, { speed: 0.6, up: 0.4, life: 300 });
+      }
+    }
+  }
+
+  window.MontraFlight = {
+    takeoff: takeoffCelestialFlight,
+    land: landCelestialFlight,
+    meteorSlam: meteorSlamAttack,
+    toggleFlight: toggleCelestialFlight,
+    isFlying: () => flightState.active,
+    getFlightAltitude: () => flightState.altitude,
+    getFlightState: () => ({ ...flightState }),
+    updateFlight
+  };
+
