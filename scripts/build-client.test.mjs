@@ -8,19 +8,34 @@ import { spawnSync } from 'node:child_process';
 import { assembleClient, checkClient, clientRoot, prepareClient, writeClient } from './build-client.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
-test('initial extraction retains every baseline byte and one unchanged IIFE', () => {
+function copyBuildDependencies(temp) {
+  mkdirSync(join(temp, 'node_modules'), { recursive: true });
+  for (const name of ['esbuild', '@esbuild']) cpSync(join(clientRoot, 'node_modules', name), join(temp, 'node_modules', name), { recursive: true });
+}
+
+test('reviewed module extraction preserves untouched fragments and historical baseline', () => {
   const baseline = JSON.parse(readFileSync(join(clientRoot, 'src/client/extraction-baseline.json')));
+  const phase2 = JSON.parse(readFileSync(join(clientRoot, 'src/modules/phase2-baseline.json')));
   const bytes = assembleClient();
-  assert.equal(bytes.length, 1372310);
-  assert.equal(hash(bytes), 'a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf');
-  assert.equal(bytes.length, baseline.bytes);
-  assert.equal(hash(bytes), baseline.sha256);
+  assert.equal(baseline.bytes, 1372310);
+  assert.equal(baseline.sha256, 'a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf');
+  assert.equal(phase2.historicalSourceCommit, baseline.sourceCommit);
+  assert.equal(bytes.length, phase2.output.bytes);
+  assert.equal(hash(bytes), phase2.output.sha256);
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
+  assert.deepEqual(Object.keys(phase2.changedFragments), ['core/028-session-and-economy-state.js', 'render/004-scene-camera-lights.js', 'network/044-state-sync-and-connection.js']);
   for (const entry of baseline.fragments) {
     const fragment = readFileSync(join(clientRoot, 'src/client', entry.path));
-    assert.equal(fragment.length, entry.bytes, entry.path);
-    assert.equal(hash(fragment), entry.sha256, entry.path);
+    const reviewed = phase2.changedFragments[entry.path] || entry;
+    assert.equal(fragment.length, reviewed.bytes, entry.path);
+    assert.equal(hash(fragment), reviewed.sha256, entry.path);
+  }
+  assert.deepEqual(Object.keys(phase2.moduleSources), ['index.mjs', 'core/chat-state.mjs', 'core/connection-lifecycle.mjs', 'core/world-state.mjs', 'network/connection.mjs', 'network/social-handlers.mjs']);
+  for (const [file, expected] of Object.entries(phase2.moduleSources)) {
+    const bytes = readFileSync(join(clientRoot, 'src/modules', file));
+    assert.equal(bytes.length, expected.bytes, file);
+    assert.equal(hash(bytes), expected.sha256, file);
   }
   assert.deepEqual(assembleClient(), assembleClient());
 });
@@ -109,6 +124,7 @@ test('CLI build and check reject output symlinks without reading or overwriting 
     assert.throws(() => prepareClient(temp), /Output symlinks/);
     mkdirSync(join(temp, 'scripts'));
     cpSync(join(clientRoot, 'scripts/build-client.mjs'), join(temp, 'scripts/build-client.mjs'));
+    copyBuildDependencies(temp);
     for (const args of [[], ['--check'], ['--prepare']]) {
       const result = spawnSync(process.execPath, [join(temp, 'scripts/build-client.mjs'), ...args], { encoding: 'utf8' });
       assert.equal(result.status, 1);
@@ -144,6 +160,7 @@ test('clean-checkout CLI preparation succeeds; strict check and stale preparatio
   withClientFixture(temp => {
     mkdirSync(join(temp, 'scripts'));
     cpSync(join(clientRoot, 'scripts/build-client.mjs'), join(temp, 'scripts/build-client.mjs'));
+    copyBuildDependencies(temp);
     const output = join(temp, 'main.js');
     const run = mode => spawnSync(process.execPath, [join(temp, 'scripts/build-client.mjs'), mode], { encoding: 'utf8' });
     rmSync(output);

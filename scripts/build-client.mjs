@@ -3,6 +3,7 @@ import { constants, lstatSync, readFileSync, readdirSync, writeFileSync } from '
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Script } from 'node:vm';
+import { buildSync } from 'esbuild';
 
 export const clientRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const categories = '(?:core|network|world|render|input|combat|ui|audio)';
@@ -15,8 +16,33 @@ function sourceFiles(directory, prefix = '') {
   });
 }
 
-// These are ordered source fragments, not modules. Preserve every byte, including
-// comments, Unicode, whitespace and the original single IIFE. Never add separators.
+// Bundle only the explicit ESM boundary; the legacy IIFE remains byte-preserving
+// apart from reviewed integration sites. Never read module symlinks.
+export function bundleClientModules(source = clientRoot) {
+  const directory = join(source, 'src/modules');
+  const entry = lstatSync(directory);
+  assert(entry.isDirectory() && !entry.isSymbolicLink(), 'Expected non-symlink module source directory');
+  const visit = path => {
+    for (const child of readdirSync(path, { withFileTypes: true })) {
+      const file = join(path, child.name);
+      assert(!child.isSymbolicLink(), `Module symlinks are not supported: ${file}`);
+      if (child.isDirectory()) visit(file);
+    }
+  };
+  visit(directory);
+  const result = buildSync({
+    absWorkingDir: resolve(source), entryPoints: ['src/modules/index.mjs'],
+    bundle: true, write: false, format: 'iife', globalName: 'MONTRA_CLIENT_MODULES',
+    platform: 'browser', target: 'es2020', charset: 'utf8', legalComments: 'none',
+    metafile: true, logLevel: 'silent',
+  });
+  assert(Object.keys(result.metafile.inputs).every(name => name.replaceAll('\\', '/').startsWith('src/modules/')), 'Module bundle contains an external source');
+  assert.equal(result.outputFiles.length, 1, 'Expected one module bundle');
+  return Buffer.from(result.outputFiles[0].contents);
+}
+
+// Preserve legacy fragment bytes and insert the separately bundled ESM boundary
+// just inside the existing IIFE, keeping the browser's classic-script entry.
 export function assembleClient(source = clientRoot) {
   for (const relative of ['src', 'src/client']) {
     const entry = lstatSync(join(source, relative));
@@ -35,7 +61,8 @@ export function assembleClient(source = clientRoot) {
     assert.equal(file.split('/')[1].slice(0, 3), String(index).padStart(3, '0'), 'Fragment numbers must match manifest order');
   });
   assert.deepEqual(files.sort(), [...manifest.fragments].sort(), 'Unlisted or missing client source fragment');
-  const bytes = Buffer.concat(manifest.fragments.map(file => readFileSync(join(directory, file))));
+  const fragments = manifest.fragments.map(file => readFileSync(join(directory, file)));
+  const bytes = Buffer.concat([fragments[0], bundleClientModules(source), ...fragments.slice(1)]);
   new Script(bytes.toString('utf8'), { filename: 'main.js' }); // Parse only; never execute game code.
   return bytes;
 }
@@ -77,5 +104,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   assert(process.argv.length === 2 || (process.argv.length === 3 && ['--check', '--prepare'].includes(process.argv[2])), 'Usage: node scripts/build-client.mjs [--check|--prepare]');
   const mode = process.argv[2];
   const bytes = mode === '--check' ? checkClient() : mode === '--prepare' ? prepareClient() : writeClient();
-  console.log(`${mode === '--check' ? 'Verified' : mode === '--prepare' ? 'Prepared' : 'Generated'} main.js: ${bytes.length} bytes, raw ordered concatenation`);
+  console.log(`${mode === '--check' ? 'Verified' : mode === '--prepare' ? 'Prepared' : 'Generated'} main.js: ${bytes.length} bytes, ESM bundle plus ordered fragments`);
 }

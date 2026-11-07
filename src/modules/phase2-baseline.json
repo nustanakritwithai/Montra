@@ -1,0 +1,49 @@
+{
+  "format": 1,
+  "historicalSourceCommit": "2f4ee0a",
+  "phase2BaseCommit": "0a1ce6b8008531a1f7e6dc8f909271a40ec574f6",
+  "output": {
+    "bytes": 1376471,
+    "sha256": "7759647e089009eb8d0a51d4c310fc2496955fb205e369399649a299a6d8cb21"
+  },
+  "changedFragments": {
+    "core/028-session-and-economy-state.js": {
+      "bytes": 2828,
+      "sha256": "0e8879ded8f38dec45ebba026c478053ac9e6cd1504e31c522d45b0518c60d77"
+    },
+    "render/004-scene-camera-lights.js": {
+      "bytes": 12266,
+      "sha256": "e1857a53c99050a6256fdef0bf3c2688fe5de12978c147fbc65d8da865ce9a33"
+    },
+    "network/044-state-sync-and-connection.js": {
+      "bytes": 134277,
+      "sha256": "b31ba3bbd79574b9eb9c302cf2ce9e49d288a09a3301e128f3e115745af2ee44"
+    }
+  },
+  "moduleSources": {
+    "index.mjs": {
+      "bytes": 399,
+      "sha256": "d9310a2ecb9781c0ebc306fac6b54e75e49d3ad5eba9f9e8864e4092df559974"
+    },
+    "core/chat-state.mjs": {
+      "bytes": 340,
+      "sha256": "64985fd9620ce6d8b742cfdc8d6da9f61f2468927577543c70b29d3bb078f857"
+    },
+    "core/connection-lifecycle.mjs": {
+      "bytes": 436,
+      "sha256": "7b9fd1318b9c5b6e74175f9333c0d7f4e66dba35d794a6d96ea9bc0aac06bf95"
+    },
+    "core/world-state.mjs": {
+      "bytes": 166,
+      "sha256": "4c8f3ae99dec13947613dcdf68af2febb1e519ccf1265f7dfff8de6a8b082103"
+    },
+    "network/connection.mjs": {
+      "bytes": 2277,
+      "sha256": "595952c2ea6877ab4f8e832798d097821f42573085a553895e35abdcb173cb3a"
+    },
+    "network/social-handlers.mjs": {
+      "bytes": 2271,
+      "sha256": "32cd646ceb4397f300492ea40a054422a477138f9af5ce50ba300cd2eeda601a"
+    }
+  }
+}

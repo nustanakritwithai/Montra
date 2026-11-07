@@ -28,6 +28,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Install locked client build dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Prepare generated client from sources
         run: npm run prepare:client
 
@@ -35,7 +37,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Validate client JavaScript
-        run: npm run test:client && npm run test:build
+        run: npm run test:network && npm run test:client && npm run test:build
 
       - name: Verify combat HUD wiring
         shell: bash

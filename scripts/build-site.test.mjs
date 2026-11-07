@@ -54,7 +54,7 @@ test('two builds are byte-identical and preserve the existing Pages payload', ()
 test('clean-checkout static CLI generates the same payload and rejects a stale bundle', () => {
   const temp = mkdtempSync(join(tmpdir(), 'montra-clean-build-'));
   try {
-    for (const path of ['scripts', 'src', 'assets', 'weapon-preview', 'index.html', 'audio.js', 'account-entry.js', 'styles.css', 'package.json']) {
+    for (const path of ['scripts', 'src', 'assets', 'weapon-preview', 'index.html', 'audio.js', 'account-entry.js', 'styles.css', 'package.json', 'node_modules/esbuild', 'node_modules/@esbuild']) {
       cpSync(join(root, path), join(temp, path), { recursive: true });
     }
     assert.equal(existsSync(join(temp, 'main.js')), false);

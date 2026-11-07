@@ -121,28 +121,10 @@
     clearSyncPoll();
     if (mode === "live") { showDemo(); window.MontraEntry?.open(); window.MontraEntry?.failure(reason || "การเชื่อมต่อสิ้นสุด กรุณาเข้าเกมอีกครั้ง"); }
   }
-  let connectionPending = false;
+  const connectionLifecycle = MONTRA_CLIENT_MODULES.createConnectionLifecycle(() => room);
   let refreshCharacterSlotCards = null;
-  async function verifyJoinedSlot(joined, desiredSlot) {
-    for (let attempt = 0; attempt < 75; attempt++) {
-      const me = joined.state?.players?.get?.(joined.sessionId);
-      if (me) {
-        if (!me.persistent || !me.pathId) throw new Error("เซิร์ฟเวอร์ยังไม่รองรับบัญชีและอาชีพถาวร กรุณาติดต่อผู้ดูแล");
-        if (desiredSlot !== 1 &&
-            (!me.persistent || Number(me.characterSlot) !== desiredSlot)) {
-          throw new Error("VPS ยังไม่รองรับ 3 ช่องเซฟ · ต้องติดตั้งระบบใหม่ก่อนเข้าเซฟ " + desiredSlot);
-        }
-        if (me.characterSlot !== undefined && Number(me.characterSlot) !== desiredSlot) {
-          throw new Error("เซิร์ฟเวอร์ส่งช่องเซฟไม่ตรงที่เลือก");
-        }
-        return me;
-      }
-      await new Promise(resolve => setTimeout(resolve, 80));
-    }
-    throw new Error("ไม่ได้รับข้อมูลตัวละครจากเซิร์ฟเวอร์");
-  }
   async function connectOnline(endpoint, requestedSlot = getPreferredSlot(endpoint), transfer=null, characterSetup=null) {
-    if (connectionPending) return;
+    if (connectionLifecycle.isPending()) return;
     if (![1,2,3].includes(requestedSlot)) {
       toast("เลือกช่องเซฟ 1, 2 หรือ 3 เท่านั้น");
       return;
@@ -155,13 +137,11 @@
       return;
     }
     if (!window.Colyseus?.Client) { toast("ไม่พบ Colyseus SDK — ตรวจการโหลดสคริปต์"); return; }
-    const isLocal = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/i.test(endpoint)
-      && location.protocol === "http:" && ["localhost","127.0.0.1"].includes(location.hostname);
-    if (!/^https:\/\/[a-z0-9.-]+(?::\d+)?\/?$/i.test(endpoint) && !isLocal) {
+    if (!MONTRA_CLIENT_MODULES.allowedEndpoint(endpoint, location)) {
       toast("โปรดใช้ HTTPS ของ VPS (การทดสอบ Localhost ใช้ HTTP ได้เฉพาะในเครื่อง)");
       return;
     }
-    connectionPending = true;
+    if (!connectionLifecycle.begin()) return;
     ui.onlineCount.textContent = "กำลังเชื่อมต่อเซิร์ฟเวอร์...";
     const connectButton = $("connectOnline");
     if (connectButton) connectButton.disabled = true;
@@ -179,19 +159,15 @@
       const client = new window.Colyseus.Client(endpoint);
       const accountSession = window.MontraEntry?.session();
       if (!accountSession) throw new Error("กรุณาเข้าสู่ระบบก่อน");
-      const opts={accountSession,characterSlot:requestedSlot,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1};
-      let transferFailed=false;
-      if(transfer?.roomId){
-        try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
-        catch(error){console.warn("MONTRA battlefield admission",error);transferFailed=true;}
-      }
-      if(!joined)joined=await client.joinOrCreate("my_room",opts);
+      const opts=MONTRA_CLIENT_MODULES.buildJoinOptions(accountSession,requestedSlot,characterSetup);
+      const admission=await MONTRA_CLIENT_MODULES.joinWorld(client,opts,transfer,error=>console.warn("MONTRA battlefield admission",error));
+      joined=admission.joined;const transferFailed=admission.transferFailed;
       // The server sends guild and territory status as soon as we join, before
       // the slot check below finishes; keep those first messages and replay
       // them once their handlers exist, or the panels stay empty until a change.
       const earlyMessages=new Map(), earlyHandlers=new Map();
       for(const type of ["guild_state","guild_recruitment","territory_state"])joined.onMessage(type,message=>{if(!earlyHandlers.has(type))earlyMessages.set(type,message);});
-      await verifyJoinedSlot(joined, requestedSlot);
+      await MONTRA_CLIENT_MODULES.verifyJoinedSlot(joined, requestedSlot);
       cancelForgeAnimation(false,true);finishEconomyPending(true);
       room = joined;
       clearChatHistory(true);
@@ -220,28 +196,12 @@
       updateStatus();
       const ok = syncState(joined.state);
       console.info("MONTRA room joined", {roomId:joined.roomId, sessionId:joined.sessionId, initialStateReady:ok});
-      joined.onStateChange(state => syncState(state));
-      joined.onMessage("chat_message", message => {
-        if (room !== joined || !message || !["map", "world", "party", "private"].includes(message.channel) ||
-            typeof message.text !== "string" || typeof message.name !== "string" ||
-            typeof message.senderId !== "string" ||
-            (message.channel === "map" && message.mapId !== activeMapId)) return;
-        const channel = message.channel;
-        const own = message.senderId === localId;
-        chatHistory[channel].push({ name: (channel === "private" && own ? "ถึง " + String(message.targetName || "ผู้เล่น") : message.name).slice(0, 80), text: message.text.slice(0, 400), own });
-        if (chatHistory[channel].length > 100) chatHistory[channel].shift();
-        pushChatFeed(channel, chatHistory[channel].at(-1).name, message.text.slice(0, 400), own);
-        if (own && chatPending && chatPending.channel === channel && chatPending.text === message.text && (channel !== "private" || chatPending.targetId === message.targetId)) {
-          if (chatDraft[channel].normalize("NFC").trim() === message.text) {
-            chatDraft[channel] = "";
-            if((chatBoxTab === "all" ? "map" : chatBoxTab)===channel && chatBox?.input.value.normalize("NFC").trim()===message.text)chatBox.input.value="";
-          }
-          finishChatPending();
-        } else if (!own && !(chatBox?.el.classList.contains("composing") && (chatBoxTab==="all" || chatBoxTab===channel))) {
-          chatUnread[channel] = Math.min(99, chatUnread[channel] + 1);
-        }
-        updateChatBadge();
-      });
+      joined.onStateChange(connectionLifecycle.guard(joined, state => syncState(state)));
+      joined.onMessage("chat_message", MONTRA_CLIENT_MODULES.createChatMessageHandler({
+        joined, getRoom:()=>room, getLocalId:()=>localId, getMapId:()=>activeMapId,
+        state:chatState, pushChatFeed, getPending:()=>chatPending, getBox:()=>chatBox,
+        getTab:()=>chatBoxTab, finishPending:finishChatPending, updateBadge:updateChatBadge
+      }));
       const onTerritoryState=message=>{
         if(room!==joined)return;
         const oldDrums=territoryState?.local?.supply?.drums || [],previousOwners=territoryState?.owners;
@@ -358,12 +318,11 @@
         if(message?.reason==="guild_invite_expired"){guildInvitation=null;guildUnread=false;updatePartyBadge();}
         toast(reasons[message?.reason]||"ทำรายการกิลด์ไม่สำเร็จ");guildRenderKey="";renderGuild();
       });
-      joined.onMessage("party_state", message => {
-        if (room!==joined || !Array.isArray(message?.members) || message.members.length>4) return;
-        partyState=typeof message.partyId==="string" ? {partyId:message.partyId,leaderId:message.leaderId,members:message.members.filter(m=>m && typeof m.sessionId==="string" && typeof m.name==="string")} : null;
-        if (partyState) { partyInvitation=null; partyUnread=false; updatePartyBadge(); }
-        renderParty();
-      });
+      joined.onMessage("party_state", MONTRA_CLIENT_MODULES.createPartyStateHandler({
+        joined, getRoom:()=>room, setParty:value=>{partyState=value;},
+        clearInvitation:()=>{partyInvitation=null;partyUnread=false;},
+        updateBadge:updatePartyBadge, render:renderParty
+      }));
       joined.onMessage("party_invitation", message => {
         if (room!==joined || typeof message?.inviteId!=="string" || typeof message?.fromName!=="string") return;
         partyInvitation=message; partyUnread=drawerActive!=="party"; updatePartyBadge();
@@ -1435,7 +1394,7 @@
       joined.onLeave(() => {
         if (room === joined) stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กรุณาเข้าเกมอีกครั้ง");
       });
-      joined.onError((code,message) => { console.error("MONTRA room error",code,message); toast("เซิร์ฟเวอร์แจ้งข้อผิดพลาด " + code); });
+      joined.onError(connectionLifecycle.guard(joined, (code,message) => { console.error("MONTRA room error",code,message); toast("เซิร์ฟเวอร์แจ้งข้อผิดพลาด " + code); }));
       try {
         localStorage.setItem("montra_endpoint", endpoint);
         localStorage.setItem(preferredSlotKey(endpoint), String(requestedSlot));
@@ -1462,7 +1421,7 @@
       toast("เชื่อมต่อไม่สำเร็จ: " + (err.message || String(err)).slice(0,105));
       if (connectButton) connectButton.disabled = false;
     } finally {
-      connectionPending = false;
+      connectionLifecycle.finish();
     }
   }
 

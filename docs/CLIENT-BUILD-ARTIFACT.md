@@ -1,18 +1,22 @@
 # Client build artifact and rollback
 
 Root `main.js` is generated and ignored, not a checked-in source. The browser
-still loads the same filename, classic script, IIFE and bytes. This change does
-not alter gameplay, network messages, saves, server schema or deployment paths.
+still loads the same filename and classic IIFE script. Phase 2 adds a bundled
+module prelude, so its bytes differ from the original extraction baseline. It
+does not intentionally alter gameplay, network messages, saves, server schema
+or deployment paths.
 
 ## Clean checkout and local work
 
-Use Node 22 or newer (`.nvmrc` selects the CI version). No dependencies are needed
-for client preparation, static packaging or the non-browser client fixtures.
+Use Node 22 or newer (`.nvmrc` selects the CI version). Install locked root
+dependencies before client preparation; the module prelude uses pinned esbuild.
 
 ```sh
+npm ci --ignore-scripts
 npm run prepare:client
 npm run check:client
 npm run test:client
+npm run test:network
 npm run test:build
 npm run build
 ```
@@ -28,8 +32,10 @@ prepare the client. The aggregate client runner, contract/boundary CLIs, combat
 preparation script and browser workflows do this themselves. Boundary and
 contract checks additionally require the locked combat verification dependencies.
 
-The manifest controls order. Assembly concatenates raw buffers without separators,
-transforms or minification and checks syntax without executing game code. Source,
+The manifest controls legacy fragment order. Assembly bundles `src/modules/index.mjs`
+as an unminified browser IIFE and inserts it after the opening fragment; legacy
+fragments are concatenated as raw buffers and syntax is checked without executing
+game code. Source,
 manifest and output symlinks are rejected. Missing, duplicate, unlisted or reordered
 fragments fail. Existing generated output is never silently repaired by preparation.
 
@@ -38,7 +44,8 @@ fragments fail. Existing generated output is never silently repaired by preparat
 `src/client/extraction-baseline.json` records the original source commit, fragment
 hashes, sizes, and statement boundaries. The original 1,372,310-byte bundle has
 SHA-256 `a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf`.
-The build tests retain those exact source and full-bundle assertions. They also
+The build tests retain the historical fingerprint, verify unchanged fragments,
+and compare reviewed phase 2 sources and output with `src/modules/phase2-baseline.json`. They also
 exercise a missing bundle, stale output, unsafe paths, symlinks, syntax errors,
 CLI preparation and byte-for-byte static payload parity. Do not refresh baseline
 fingerprints merely to make an unexpected difference pass.
@@ -46,8 +53,8 @@ fingerprints merely to make an unexpected difference pass.
 Pages publishes `_site/`, not the repository root. Its `build-manifest.json`
 records the revision, output sizes and SHA-256 hashes. Build from a clean committed
 checkout and verify CI for that exact SHA. Source organization changes in later
-phases require their own explicitly reviewed evidence; this artifact change alone
-preserves all runtime bytes. It does not replace browser/staging or server checks.
+phases require their own explicitly reviewed evidence. These checks do not
+replace browser, staging or server checks.
 
 ## Rollback
 
