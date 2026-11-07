@@ -46,6 +46,7 @@
     "icons/041-mender-artwork.css",
     "icons/042-sentinel-artwork.css",
     "combat/043-target-combo-and-boss.css",
-    "audio/044-voice-guidance.css"
+    "audio/044-voice-guidance.css",
+    "world/045-fish-catch-card.css"
   ]
 }

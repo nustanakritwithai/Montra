@@ -1,8 +1,8 @@
 {
   "format": 1,
   "output": "main.js",
-  "bytes": 1444879,
-  "sha256": "b94183a749a1b7b09f19db22172d2531d0b03d2a9bab092fb10cb2cb72710890",
+  "bytes": 1446854,
+  "sha256": "54d083a316046c2d9d7a561265cc5e78ee06878817d0462e2af1391b8fbaac39",
   "fragments": [
     {
       "path": "core/000-wrapper-open.js",
@@ -151,8 +151,8 @@
     },
     {
       "path": "world/029-fishing-and-resources.js",
-      "bytes": 12574,
-      "sha256": "56d30384aacb28dfc171ee091d6c31a24b3efc6bccced8a4737b1ae47fe634e8"
+      "bytes": 14501,
+      "sha256": "e1d659dd562f2bc5367ffa856030d0fb3ade6c6c431de84583c1de5f80c496aa"
     },
     {
       "path": "ui/030-item-art-and-comparison.js",
@@ -226,8 +226,8 @@
     },
     {
       "path": "network/044-state-sync-and-connection.js",
-      "bytes": 137281,
-      "sha256": "280f8edd9d931268911872198771153c249d22c148e5d1902ec657f975e5aa3f"
+      "bytes": 137329,
+      "sha256": "da0d207adaba2dd9117708cd24979672a346480a98dfc54aa3cdc8b0fefb2375"
     },
     {
       "path": "input/045-pointer-touch-and-dash.js",

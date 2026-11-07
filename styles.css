@@ -5279,3 +5279,28 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   gap: 8px;
 }
 
+/* Fish catch card: cream popup with brown frame, centred over the field. */
+.fish-catch-card{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;width:min(300px,calc(100vw - 32px));padding:14px 14px 16px;
+  background:linear-gradient(#fbf4e4,#f3e7cc);border:3px solid #8a5a2b;border-radius:16px;box-shadow:0 0 0 2px #e9d3a6 inset,0 14px 40px rgba(0,0,0,.55);
+  color:#5b4026;text-align:center;font-family:inherit;animation:fishCardIn .22s ease-out}
+.fish-catch-card[hidden]{display:none}
+@keyframes fishCardIn{from{opacity:0;transform:translate(-50%,-44%) scale(.92)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.fish-catch-chips{display:flex;justify-content:center;gap:6px;min-height:22px}
+.fish-chip{padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700}
+.fish-chip-reward{background:#f1ddb8;border:1px solid #c79a5c;color:#6b4320}
+.fish-catch-art{font-size:72px;line-height:1.1;margin:6px 0 4px;filter:drop-shadow(0 4px 4px rgba(90,60,30,.35))}
+.fish-catch-name{display:inline-block;margin:0;padding:5px 20px;border-radius:999px;background:linear-gradient(#69b7f2,#3c8ad8);border:2px solid #2d6fb5;color:#fff;font-size:18px;text-shadow:0 1px 0 #1f4f86}
+.fish-catch-card[data-tone="rare"] .fish-catch-name{background:linear-gradient(#b88cf0,#7b4fd0);border-color:#5d36a8}
+.fish-catch-card[data-tone="epic"] .fish-catch-name{background:linear-gradient(#f5c552,#d98a1c);border-color:#a8620f}
+.fish-catch-meta{margin:6px 0 10px;font-size:12px;color:#8a6a48}
+.fish-catch-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.fish-stat{background:#fffaf0;border:1px solid #d9bf92;border-radius:10px;padding:6px 2px}
+.fish-stat span{display:block;font-size:11px;color:#9a7a55}
+.fish-stat b{font-size:14px;color:#4a3320}
+.fish-catch-note{margin:8px 0 0;font-size:12px;color:#b4442e}
+.fish-catch-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.fish-btn{padding:9px 6px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer}
+.fish-btn kbd{display:inline-block;min-width:18px;padding:0 4px;margin-right:4px;border-radius:4px;background:rgba(255,255,255,.25);font:inherit}
+.fish-btn-keep{background:linear-gradient(#3f6690,#2a4a6e);border:2px solid #1f3956;color:#fff}
+.fish-btn-release{background:#fbf3e2;border:2px solid #c9ab7b;color:#6b4c2c}
+.fish-btn-release:disabled{opacity:.55;cursor:not-allowed}

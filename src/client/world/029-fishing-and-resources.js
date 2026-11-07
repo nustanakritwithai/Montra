@@ -169,3 +169,22 @@
   const gearJobs={muay_boran:"มวยไทยโบราณ",phutthaisawan:"นักดาบอยุธยา",blade:"คมดาบ",sentinel:"ผู้พิทักษ์",seer:"ผู้ร่ายเวท",mender:"พระ"};
   const statNames = {hp:"HP",stamina:"Stamina",mana:"มานา",atk:"โจมตี",def:"ป้องกัน",magicAtk:"เวท",magicDef:"ต้านเวท"};
   const practiceModels = {wp_wrap_1:"muay_wraps",wp_twins_1:"thai_dual",wp_shadow_1:"ritual_dagger",wp_pike_1:"arcane_sword",wp_wand_1:"spirit_staff",wp_crook_1:"spirit_staff"};
+  // Catch card: only server data (item id, pending flag) plus catalog name/sellGold, bag count and Fishing.ts odds.
+  const FISH_TIERS={mat_fish_common:{label:"ทั่วไป",stars:1,odds:70,tone:"common"},mat_fish_silver:{label:"หายาก",stars:2,odds:25,tone:"rare"},mat_fish_spirit:{label:"ล้ำค่า",stars:3,odds:5,tone:"epic"}};
+  function fishOwnedCount(itemId){const slots=inventoryState?.slots;if(!Array.isArray(slots))return null;return slots.reduce((n,s)=>n+(s?.itemId===itemId?Math.max(0,Number(s.quantity)||0):0),0);}
+  function hideFishCatchCard(){const card=$("fishCatchCard");if(card)card.hidden=true;}
+  function showFishCatchCard(data){
+    const card=$("fishCatchCard");if(!card || typeof data?.item!=="string")return;
+    const tier=FISH_TIERS[data.item],meta=personalItems[data.item];
+    card.dataset.tone=tier?.tone||"common";
+    $("fishCatchName").textContent=meta?.name||"ปลา";
+    $("fishCatchMeta").textContent=tier?tier.label+" · "+"★".repeat(tier.stars)+"☆".repeat(3-tier.stars)+" · โอกาส "+tier.odds+"%":"";
+    $("fishCatchPrice").textContent=meta?.sellGold?"🪙 "+meta.sellGold:"—";
+    const owned=data.pending?null:fishOwnedCount(data.item);
+    $("fishCatchReward").textContent="+"+(data.quantity||1)+(owned?" · มีในกระเป๋า "+owned:"");
+    const note=$("fishCatchNote");note.hidden=!data.pending;note.textContent=data.pending?"กระเป๋าเต็ม · ฝากปลาไว้ เคลียร์ช่องแล้วกดรับปลา":"";
+    card.hidden=false;$("fishCatchKeep").focus?.();
+  }
+  if($("fishCatchKeep"))$("fishCatchKeep").onclick=hideFishCatchCard;
+  addEventListener("keydown",e=>{const card=$("fishCatchCard");if(!card || card.hidden)return;
+    if(e.key==="e" || e.key==="E" || e.key==="Escape"){e.preventDefault();e.stopImmediatePropagation();hideFishCatchCard();}},true);

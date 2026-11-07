@@ -493,8 +493,8 @@
         if(room!==joined)return;
         if(data?.result==="cancelled")return;
         clearFishing(false);
-        if(data?.result==="caught" && data.pending){fishSavedItem=data.item;toast("จับปลาได้แล้ว แต่กระเป๋าเต็ม · เคลียร์ช่องแล้วกดรับปลา");}
-        else if(data?.result==="caught" || data?.result==="claimed"){fishSavedItem=null;toast("ตกได้ "+(personalItems[data.item]?.name||"ปลา")+" × "+(data.quantity||1));renderBag();}
+        if(data?.result==="caught" && data.pending){fishSavedItem=data.item;toast("จับปลาได้แล้ว แต่กระเป๋าเต็ม · เคลียร์ช่องแล้วกดรับปลา");showFishCatchCard(data);}
+        else if(data?.result==="caught" || data?.result==="claimed"){fishSavedItem=null;toast("ตกได้ "+(personalItems[data.item]?.name||"ปลา")+" × "+(data.quantity||1));renderBag();showFishCatchCard(data);}
         else if(data?.result==="broken")toast("สายเอ็นขาด ปลาหลุดไปแล้ว");
         else if(data?.result==="escaped")toast("ปลาหนีไปแล้ว");
         else if(data?.result==="interrupted")toast("การตกปลาถูกขัดจังหวะ");

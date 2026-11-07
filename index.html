@@ -104,6 +104,22 @@
     </section>
 
     </div>
+    <section id="fishCatchCard" class="fish-catch-card" role="dialog" aria-modal="false" aria-labelledby="fishCatchName" hidden>
+      <div class="fish-catch-chips"><span id="fishCatchReward" class="fish-chip fish-chip-reward"></span></div>
+      <div id="fishCatchArt" class="fish-catch-art" aria-hidden="true">🐟</div>
+      <h3 id="fishCatchName" class="fish-catch-name"></h3>
+      <p id="fishCatchMeta" class="fish-catch-meta"></p>
+      <div class="fish-catch-stats">
+        <div class="fish-stat"><span>ความยาว</span><b>เร็วๆ นี้</b></div>
+        <div class="fish-stat"><span>น้ำหนัก</span><b>เร็วๆ นี้</b></div>
+        <div class="fish-stat"><span>ราคา</span><b id="fishCatchPrice"></b></div>
+      </div>
+      <p id="fishCatchNote" class="fish-catch-note" hidden></p>
+      <div class="fish-catch-actions">
+        <button id="fishCatchKeep" class="fish-btn fish-btn-keep" type="button"><kbd>E</kbd> เก็บ</button>
+        <button id="fishCatchRelease" class="fish-btn fish-btn-release" type="button" disabled title="เซิร์ฟเวอร์ยังไม่รองรับการปล่อยปลา"><kbd>R</kbd> ปล่อย · เร็วๆ นี้</button>
+      </div>
+    </section>
     <section id="fishingPanel" class="fishing-panel panel" aria-label="ตกปลา" hidden>
       <div class="fishing-head"><strong>🎣 ตกปลา</strong><span id="fishMessage" role="status"></span><b id="fishClock"></b><button id="fishCancel" type="button" aria-label="ยกเลิกตกปลา">✕</button></div>
       <div class="fishing-aim" aria-label="กดดึงเมื่อเข็มอยู่ในแถบสีทอง"><i class="fishing-zone"></i><i id="fishNeedle" class="fishing-needle"></i></div>
