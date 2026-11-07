@@ -34,6 +34,7 @@
 
 ## การตรวจเฉพาะงานนี้
 
+- ใช้ Node ตาม `.nvmrc` แล้วรัน `npm run prepare:client` ที่ root ก่อนชุดตรวจ client นี้
 - `node --check main.js`
 - `node deploy/combat/forge-copy-ui-test.cjs`
 - `node deploy/combat/forge-pages-ui-test.cjs`

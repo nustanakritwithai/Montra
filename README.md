@@ -90,7 +90,7 @@ Optional `MONTRA_WORLD_EXPANSION=1`: a 120 × 120 forest with four hunting camps
 
 See [Phase 01 baseline and repeatable build commands](docs/PHASE01-BASELINE.md) before module extraction. The dependency-free static build preserves client bytes; server verification uses a separate locked test project.
 
-Client source is now organized as [ordered, byte-preserving fragments](src/client/README.md). Edit those sources and run `npm run build:client`; static packaging refuses a stale root `main.js`. This is source organization, not completed module isolation.
+Client source is now organized as [ordered, byte-preserving fragments](src/client/README.md). Commit those sources, not root `main.js`, which is now an ignored build artifact. `npm run build` generates it on a clean checkout; after source edits use `npm run build:client` because static packaging still refuses an existing stale bundle. Before serving the repository root or running individual legacy/browser fixtures, run `npm run prepare:client` with Node from `.nvmrc`. See [build and rollback instructions](docs/CLIENT-BUILD-ARTIFACT.md). This is source organization, not completed module isolation.
 
 Styles are organized as [ordered CSS sources](src/styles/README.md). Run `npm run build:styles` after editing them. Packaging checks that the generated stylesheet preserves source order; this phase keeps the original cascade and all runtime CSS bytes unchanged.
 

@@ -58,6 +58,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Prepare generated client from sources
+        run: npm run prepare:client
 
       - name: Prepare Colyseus 0.18 test project
         run: bash scripts/prepare-combat-verify.sh

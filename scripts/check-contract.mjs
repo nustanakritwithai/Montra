@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { prepareClient } from './build-client.mjs';
 import { root, sha256 } from './build-site.mjs';
 
 // Uses the same locked TypeScript parser as server verification, never executes game code.
@@ -63,7 +64,7 @@ export function inspectProtocol(clientText, serverText) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const inventory = inspectProtocol(readFileSync(join(root, 'main.js'), 'utf8'), readFileSync(join(root, 'deploy/combat/MyRoom.ts'), 'utf8'));
+  const inventory = inspectProtocol(prepareClient().toString('utf8'), readFileSync(join(root, 'deploy/combat/MyRoom.ts'), 'utf8'));
   const snapshot = {
     format: 2,
     scope: 'Static message-name inventory, schema and persistence-source fingerprints. Dynamic commands and payload semantics require integration tests.',

@@ -28,6 +28,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Prepare generated client from sources
+        run: npm run prepare:client
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

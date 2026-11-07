@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+node scripts/build-client.mjs --prepare
 # Generated sandbox only; never points at the VPS or existing player files.
 rm -rf combat-verify/src
 mkdir -p combat-verify/src/rooms/schema

@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Prepare generated client from sources
+        run: npm run prepare:client
       - name: Verify every non-browser client fixture
         run: npm run test:client
       - name: Verify deterministic and legacy-equivalent static build
