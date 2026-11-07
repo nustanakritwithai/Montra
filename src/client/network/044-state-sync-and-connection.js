@@ -246,6 +246,7 @@
         if(room!==joined)return;
         const oldDrums=territoryState?.local?.supply?.drums || [],previousOwners=territoryState?.owners;
         territoryState=message;territoryReceivedAt=performance.now();syncGateVisual();syncCastleRings();syncWarQuartermaster();
+        checkTerritoryWarEvents(message.local);
         if(drawerActive==="guild" && previousOwners && guildReady() &&
            Object.keys(message.owners||{}).some(site=>previousOwners[site]!==message.owners[site]))joined.send("get_guild",{});
         const alerts=message.local?.supply?.drums?.filter(id=>!oldDrums.includes(id)) || [];

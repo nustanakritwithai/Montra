@@ -272,3 +272,100 @@
 
   window.MontraBoss = { triggerBossPhase2, breakBossShield, processBossShieldDamage, updateBossMinions, ensureBossMinions, getBossStatus };
 
+  // Phase 11: Guild Territory War & War Horn Fanfare
+  let warScreenAlertEl = null;
+  function ensureWarScreenAlert() {
+    if (warScreenAlertEl) return warScreenAlertEl;
+    warScreenAlertEl = document.createElement("div");
+    warScreenAlertEl.className = "war-screen-alert";
+    document.body.appendChild(warScreenAlertEl);
+    return warScreenAlertEl;
+  }
+
+  function triggerWarScreenAlert(type) {
+    const el = ensureWarScreenAlert();
+    el.className = "war-screen-alert";
+    void el.offsetWidth;
+    if (type === "contested") {
+      el.classList.add("show-contested");
+      setTimeout(() => el.classList.remove("show-contested"), 2500);
+    } else if (type === "captured") {
+      el.classList.add("show-captured");
+      setTimeout(() => el.classList.remove("show-captured"), 3000);
+    }
+  }
+
+  let lastWarContestedAlert = 0;
+  const lastPostOwnerStates = new Map();
+  let lastWarPhaseState = "";
+
+  function checkTerritoryWarEvents(local) {
+    if (!local) return;
+    const now = performance.now();
+    if (local.phase === "battle" && lastWarPhaseState !== "battle") {
+      SFX("war_horn", { intensity: 1.5 });
+      shakeCamera(0.65, 500);
+      triggerCombatCallout("territory_contested");
+      triggerWarScreenAlert("contested");
+    }
+    lastWarPhaseState = local.phase;
+
+    const posts = local.river?.posts || local.pilot?.points || [];
+    for (const post of posts) {
+      const prev = lastPostOwnerStates.get(post.id);
+      if (post.contested && now - lastWarContestedAlert > 20000) {
+        lastWarContestedAlert = now;
+        SFX("war_horn", { intensity: 1.2 });
+        triggerCombatCallout("territory_contested");
+        triggerWarScreenAlert("contested");
+        if (Number.isFinite(post.x) && Number.isFinite(post.z)) {
+          spawnFx("yantra", "gold", post.x, (post.y || 0) + 0.1, post.z, { orient: "ground", life: 1200, s0: 4, s1: 4, a0: 0.9, a1: 0.9, spin: 2.2 });
+          sparks("gold", post.x, (post.y || 0) + 1.2, post.z, 8, { speed: 2, up: 2.5, life: 500 });
+        }
+      }
+      if (prev && prev !== post.owner && post.owner && post.owner !== "none") {
+        SFX("war_horn", { intensity: 1.4 });
+        shakeCamera(0.55, 450);
+        triggerCombatCallout("territory_captured");
+        triggerWarScreenAlert("captured");
+        if (Number.isFinite(post.x) && Number.isFinite(post.z)) {
+          const isAlly = post.owner === local.side;
+          floatText(post.x, (post.y || 0) + 3.2, post.z, isAlly ? "ยึดครองสำเร็จ! ⚑" : "ศัตรูยึดเสาธง! ⚑", "crit", { big: true });
+          spawnFx("cross", isAlly ? "cyan" : "red", post.x, (post.y || 0) + 0.1, post.z, { orient: "ground", life: 1000, s0: 3, s1: 3, a0: 1, a1: 1, spin: 1.5 });
+          sparks(isAlly ? "cyan" : "blood", post.x, (post.y || 0) + 1.5, post.z, 16, { speed: 3.5, up: 3, life: 600 });
+        }
+      }
+      lastPostOwnerStates.set(post.id, post.owner);
+    }
+  }
+
+  function soundWarHorn(intensity = 1.3) {
+    SFX("war_horn", { intensity });
+    shakeCamera(0.5, 400);
+    triggerWarScreenAlert("contested");
+  }
+
+  function simulateTerritoryCapture(postId = 1, owner = "ally") {
+    const hero = getLocalAvatar();
+    const x = hero ? hero.x : 0, z = hero ? hero.z : 0, y = hero ? hero.y : 0;
+    SFX("war_horn", { intensity: 1.4 });
+    shakeCamera(0.55, 450);
+    triggerCombatCallout("territory_captured");
+    triggerWarScreenAlert("captured");
+    floatText(x, y + 3.2, z, "ยึดครองเสาธงศักดิ์สิทธิ์สำเร็จ! ⚑", "crit", { big: true });
+    spawnFx("cross", "cyan", x, y + 0.1, z, { orient: "ground", life: 1000, s0: 3.5, s1: 3.5, a0: 1, a1: 1, spin: 1.8 });
+    sparks("cyan", x, y + 1.5, z, 18, { speed: 3.8, up: 3.2, life: 650 });
+  }
+
+  function getTerritoryStatus() {
+    return {
+      site: territoryState?.local?.site || activeMapId,
+      phase: territoryState?.local?.phase || "peace",
+      inField: Boolean(territoryState?.local?.inField),
+      seconds: territoryState?.local?.seconds || 0,
+      postsCount: (territoryState?.local?.river?.posts || territoryState?.local?.pilot?.points || []).length
+    };
+  }
+
+  window.MontraWar = { soundWarHorn, triggerWarAlert: triggerWarScreenAlert, simulateTerritoryCapture, checkTerritoryWarEvents, getTerritoryStatus };
+

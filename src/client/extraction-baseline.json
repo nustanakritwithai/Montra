@@ -1,8 +1,8 @@
 {
   "format": 1,
   "sourceCommit": "2f4ee0a",
-  "bytes": 1372310,
-  "sha256": "a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf",
+  "bytes": 1377794,
+  "sha256": "ed9afb34cac8276491b7e52853e0d615c93d87960ceaab5505c381b2bab7c35b",
   "parser": "TypeScript 5.9.3",
   "statementCount": 1579,
   "fragments": [
@@ -22,8 +22,8 @@
     {
       "path": "audio/002-voice-guidance.js",
       "originalStartLine": 63,
-      "bytes": 14651,
-      "sha256": "ce57fafa3cdbb7b377f6edadaefc2849e2ca543738a8d370ad72c82924532950",
+      "bytes": 15760,
+      "sha256": "aa9f13456b84d3df2799e725f5ba25d4483382c72df8d0a7d2f4c59153000787",
       "firstStatement": 13
     },
     {
@@ -64,8 +64,8 @@
     {
       "path": "combat/008-weapon-party-boss-feedback.js",
       "originalStartLine": 863,
-      "bytes": 11863,
-      "sha256": "8cc2d61e5b8d82893ca7d01df2e8f1b184875d34e211705e095a053a2baccc9b",
+      "bytes": 16190,
+      "sha256": "364cd0a109ebec16ecf937a24715b1e41511b78b9747fc422cc4df10c99370a2",
       "firstStatement": 201
     },
     {
@@ -316,8 +316,8 @@
     {
       "path": "network/044-state-sync-and-connection.js",
       "originalStartLine": 9987,
-      "bytes": 137233,
-      "sha256": "ba953bf01576cc5bc598fb99446a367cbc83013e2ec60c223cbc2a1c77b7853c",
+      "bytes": 137281,
+      "sha256": "280f8edd9d931268911872198771153c249d22c148e5d1902ec657f975e5aa3f",
       "firstStatement": 1212
     },
     {
