@@ -29,3 +29,6 @@
 
 # Frozen drawer lifecycle characterization bytes.
 /deploy/combat/fixtures/drawer-controller-reference.js -text
+
+# Frozen per-join bootstrap characterization bytes.
+/deploy/combat/fixtures/join-message-bootstrap-reference.js -text

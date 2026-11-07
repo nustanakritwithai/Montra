@@ -34,6 +34,33 @@ Candidate integration snapshot, **not part of the source-inspection baseline abo
 These candidate statuses are the coordination snapshot for this document, not live
 CI or production observations. Reconcile them before the next release.
 
+## Bounded join-message bootstrap extraction
+
+`join-message-bootstrap.js` owns the per-join pending-message and registered-handler
+Maps previously local to fragment 044. Its only dependency is that joined room's
+`onMessage` registration method. `create(joined)` installs capture callbacks in
+original guild-state, guild-recruitment, territory-state order; the returned frozen
+API exposes `markHandler(type, handler)` and `replay()`. The shell still registers
+the real handlers and marks them only after registration returns. Replaying uses
+the live Map iterator and clears only after successful completion: synchronous
+registration callbacks, replacement order, nested replay, iteration mutation and
+exceptions deliberately retain existing semantics. There is no new disposal API;
+room callback lifetime owns the captured instance, just as it owned the old Maps.
+
+This does **not** finish session architecture. Admission and slot verification,
+shared `mode`/`room`/`localId` state, LIVE/DEMO fallback, stale-room checks, commands,
+storage and all domain reset/render handlers remain in the shell. Moving the full
+join operation now would require a broad cross-domain context. Next characterize
+those state transitions before designing narrow reset/admission interfaces.
+
+The frozen reference is test-only. Differential tests cover original and extracted
+behavior, synchronous capture, latest-message replacement, registration exceptions,
+handler exceptions/retry, nested replay, mutation, empty/missing handlers, load
+failure, and negative controls. Packaging checks cover the explicit registry,
+classic-script order, revisioned URLs and unexpected files. Browser/mobile,
+multiplayer reconnect, deployed performance and release verification are still
+separate gates, not claims made by these unit checks.
+
 ## Source of truth and build boundaries
 
 - `src/client/manifest.json` defines fragment execution order. Numeric prefixes

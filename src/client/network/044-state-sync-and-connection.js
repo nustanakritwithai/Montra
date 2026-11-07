@@ -197,8 +197,7 @@
       // The server sends guild and territory status as soon as we join, before
       // the slot check below finishes; keep those first messages and replay
       // them once their handlers exist, or the panels stay empty until a change.
-      const earlyMessages=new Map(), earlyHandlers=new Map();
-      for(const type of ["guild_state","guild_recruitment","territory_state"])joined.onMessage(type,message=>{if(!earlyHandlers.has(type))earlyMessages.set(type,message);});
+      const joinMessageBootstrap = globalThis.MontraJoinMessageBootstrap.create(joined);
       await verifyJoinedSlot(joined, requestedSlot);
       cancelForgeAnimation(false,true);finishEconomyPending(true);
       room = joined;
@@ -282,7 +281,7 @@
         }
       };
       joined.onMessage("territory_state",onTerritoryState);
-      earlyHandlers.set("territory_state",onTerritoryState);
+      joinMessageBootstrap.markHandler("territory_state",onTerritoryState);
       joined.onMessage("territory_error",message=>{
         if(room!==joined)return;
         toast(activeMapId==="sam_lan_estuary" && message?.reason==="war_flag"?"เดินเข้าค่ายใต้ A เพื่อเปิดศึก":warErrors[message?.reason] || "ทำรายการที่ด่านไม่ได้ในขณะนี้");
@@ -326,7 +325,7 @@
         renderGuild();
       };
       joined.onMessage("guild_state",onGuildState);
-      earlyHandlers.set("guild_state",onGuildState);
+      joinMessageBootstrap.markHandler("guild_state",onGuildState);
       const onGuildRecruitment=message=>{
         if(room!==joined || !Array.isArray(message?.applications))return;
         const previousApplications=guildRecruitment.applications.length;
@@ -335,13 +334,12 @@
         if(guildRecruitment.applications.length>previousApplications && drawerActive!=="guild"){guildUnread=true;updatePartyBadge();}
         renderGuild();
       };
-      joined.onMessage("guild_recruitment",onGuildRecruitment);earlyHandlers.set("guild_recruitment",onGuildRecruitment);
+      joined.onMessage("guild_recruitment",onGuildRecruitment);joinMessageBootstrap.markHandler("guild_recruitment",onGuildRecruitment);
       joined.onMessage("guild_directory",message=>{
         if(room!==joined || !Array.isArray(message?.guilds))return;
         guildDirectory=message.guilds.filter(g=>g && typeof g.id==="string" && typeof g.name==="string").slice(0,50);renderGuild();
       });
-      for(const [type,message] of earlyMessages)earlyHandlers.get(type)?.(message);
-      earlyMessages.clear();
+      joinMessageBootstrap.replay();
       joined.onMessage("guild_invitation", message=>{
         if(room!==joined || typeof message?.inviteId!=="string" || typeof message.guildName!=="string" || typeof message.fromName!=="string")return;
         guildInvitation=message;guildUnread=drawerActive!=="guild";updatePartyBadge();
