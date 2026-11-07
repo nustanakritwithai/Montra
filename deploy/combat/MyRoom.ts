@@ -1,3 +1,5 @@
+import {TradeSessions,type TradeSession} from "./TradeSessions.js";
+import {RespawnLifecycle} from "./RespawnLifecycle.js";
 import {HorizontalMovement} from "./HorizontalMovement.js";
 import {VerticalMovement} from "./VerticalMovement.js";
 import { FORGE_CATALOG } from "./ForgeRules.js";
@@ -121,7 +123,6 @@ type Gates = {
   chat: CommandBucket; bugReport: CommandBucket; possession: CommandBucket; build: CommandBucket; swordTree: CommandBucket; occult: CommandBucket; economy: CommandBucket; party: CommandBucket; guild: CommandBucket;
 };
 
-type TradeSession = { id:string; a:string; b:string; expires:number; offers:Record<string, TradeOffer>; items:Record<string,{itemId:string;quantity:number}|null>; fingerprints:Record<string,string>; confirmed:Set<string> };
 
 /**
  * MONTRA S1: one 20-Hz authoritative simulation per room.
@@ -199,7 +200,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private extraStaminaRegen=new WeakMap<Player,number>();
   private extraRestManaRegen=new WeakMap<Player,number>();
   private hpRegenRemainder = new Map<string, number>();
-  private playerRespawnAt = new Map<string, number>();
+  private readonly respawns = new RespawnLifecycle();
   private playerSpawn = new Map<string, Vec2>();
   private gates = new Map<string, Gates>();
   private lastRejectNoticeMs = new Map<string, number>();
@@ -218,7 +219,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastInventoryReadMs = new Map<string, number>();
   private lastStatusReadMs = new Map<string, number>();
   private lastWeaponEquipMs = new Map<string, number>();
-  private trades = new Map<string, TradeSession>();
+  private trades = new TradeSessions();
   private parties = new PartyManager();
   private buffs = new BuffBook();
   private effects = new BuffLedger();
@@ -276,7 +277,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private guildSubscriptions = new Map<string,()=>void>();
   private guildInvites = new GuildInvitations();
 
-  private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
   private monsterInterruptUntil = 0;
   private monsterInterruptResistUntil = 0;
@@ -3276,10 +3276,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try { client.send("inventory_state",account.inventory); client.send("economy_state",{gold:account.gold}); } catch { /* disconnect does not roll back committed assets */ }
   }
   private tradeFor(client: Client, tradeId:string): TradeSession | null {
-    const trade=this.trades.get(tradeId);
-    if (!trade || (trade.a!==client.sessionId && trade.b!==client.sessionId)) { this.reject(client,"trade_unavailable"); return null; }
-    if (this.simulatedMs >= trade.expires) { this.trades.delete(tradeId); this.reject(client,"trade_expired"); return null; }
-    return trade;
+    return this.trades.lookup(client.sessionId,tradeId,()=>this.simulatedMs,reason=>this.reject(client,reason));
   }
   private tradeSnapshot(id:string, offer:TradeOffer): string {
     const bag=this.inventories.get(id);
@@ -3857,10 +3854,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const order=parseTradeRequest(message); if (!order) return this.reject(client,"invalid_trade");
       this.economyAction(client,()=>{
         const id=client.sessionId, target=this.clients.find(c=>c.sessionId===order.targetId), a=this.state.players.get(id), b=this.state.players.get(order.targetId);
-        for (const [key,trade] of this.trades) if (this.simulatedMs>=trade.expires) this.trades.delete(key);
-        if (!target || !a || !b || id===order.targetId || !this.economyId(target) || this.bladeHiddenFrom(id,order.targetId) || this.bladeHiddenFrom(order.targetId,id) || a.mapId!==b.mapId || distance3d(a,b)>5 || [...this.trades.values()].some(t=>[t.a,t.b].includes(id)||[t.a,t.b].includes(order.targetId))) throw new Error("invalid_trade");
-        const trade:TradeSession={id:randomUUID(),a:id,b:order.targetId,expires:this.simulatedMs+60_000,offers:{},items:{},fingerprints:{},confirmed:new Set()};
-        this.trades.set(trade.id,trade); this.notifyTrade(trade,"trade_update");
+        this.trades.expire(()=>this.simulatedMs);
+        if (!target || !a || !b || id===order.targetId || !this.economyId(target) || this.bladeHiddenFrom(id,order.targetId) || this.bladeHiddenFrom(order.targetId,id) || a.mapId!==b.mapId || distance3d(a,b)>5 || this.trades.hasParticipant(id,order.targetId)) throw new Error("invalid_trade");
+        const trade=this.trades.issue(randomUUID(),id,order.targetId,this.simulatedMs+60_000); this.notifyTrade(trade,"trade_update");
       });
     },
     trade_offer: (client:Client, message:unknown) => {
@@ -3869,10 +3865,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const trade=this.tradeFor(client,order.tradeId); if (!trade) return;
         const offer:TradeOffer={slot:order.slot,amount:order.amount,gold:order.gold};
         if (characterStore.economy.getAccount(id).gold<offer.gold) throw new Error("insufficient_gold");
-        trade.fingerprints[client.sessionId]=this.tradeSnapshot(client.sessionId,offer);
+        this.trades.setFingerprint(trade,client.sessionId,this.tradeSnapshot(client.sessionId,offer));
         const stack=offer.slot===null ? null : this.inventories.get(client.sessionId)?.slots[offer.slot];
-        trade.items[client.sessionId]=stack ? {...stack,quantity:offer.amount} : null;
-        trade.offers[client.sessionId]=offer; trade.confirmed.clear(); this.notifyTrade(trade,"trade_update");
+        this.trades.setOffer(trade,client.sessionId,stack ? {...stack,quantity:offer.amount} : null,offer); this.notifyTrade(trade,"trade_update");
       });
     },
     trade_confirm: (client:Client, message:unknown) => {
@@ -3884,16 +3879,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (!aClient || !bClient || !a || !b || !trade.offers[trade.a] || !trade.offers[trade.b] || a.mapId!==b.mapId || distance3d(a,b)>5) throw new Error("invalid_trade");
         const aId=this.economyId(aClient), bId=this.economyId(bClient);
         if (!aId || !bId) throw new Error("invalid_trade");
-        if ([trade.a,trade.b].some(id=>this.tradeSnapshot(id,trade.offers[id])!==trade.fingerprints[id])) { trade.confirmed.clear(); throw new Error("invalid_trade"); }
-        trade.confirmed.add(client.sessionId);
+        if ([trade.a,trade.b].some(id=>this.tradeSnapshot(id,trade.offers[id])!==trade.fingerprints[id])) { this.trades.resetReadiness(trade); throw new Error("invalid_trade"); }
+        this.trades.confirm(trade,client.sessionId);
         if (trade.confirmed.size<2) { this.notifyTrade(trade,"trade_update"); return; }
         characterStore.economy.trade(aId,bId,trade.id,trade.offers[trade.a],trade.offers[trade.b]);
-        this.trades.delete(trade.id); this.syncEconomy(aClient,aId); this.syncEconomy(bClient,bId); this.notifyTrade(trade,"trade_complete");
+        this.trades.remove(trade.id); this.syncEconomy(aClient,aId); this.syncEconomy(bClient,bId); this.notifyTrade(trade,"trade_complete");
       });
     },
     trade_cancel: (client:Client, message:unknown) => {
       const order=parseTradeId(message); if (!order) return this.reject(client,"invalid_trade");
-      this.economyAction(client,()=>{const trade=this.tradeFor(client,order.tradeId); if (trade) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }});
+      this.economyAction(client,()=>{const trade=this.tradeFor(client,order.tradeId); if (trade) { this.trades.remove(trade.id); this.notifyTrade(trade,"trade_cancelled"); }});
     },
     chat: (client: Client, message: unknown) => {
       const command=parseChatMessage(message);
@@ -5451,7 +5446,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.despawnSummon(id, "owner_dead");
     this.destinations.delete(id);
     this.attackTargets.delete(id);
-    this.playerRespawnAt.set(id, this.simulatedMs + RULES.playerRespawnMs);
+    this.respawns.schedulePlayer(id, this.simulatedMs + RULES.playerRespawnMs);
     void this.saveCharacter(id);
 
     // Everyone chasing this human stops when the target dies. No
@@ -5493,7 +5488,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.monsterNavigator.clear();
     monster.aiState = "dead";
     monster.targetId = "";
-    this.monsterRespawnAt = this.simulatedMs + RULES.monsterRespawnMs;
+    this.respawns.scheduleMonster(this.simulatedMs + RULES.monsterRespawnMs);
     this.monsterReturning = false;
     this.awardMonsterExperience(winnerId);
 
@@ -5629,48 +5624,29 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private updateRespawns() {
-    const monster = this.state.monster;
-    if (!monster.alive && this.monsterRespawnAt &&
-        this.simulatedMs >= this.monsterRespawnAt) {
-      monster.hp = monster.maxHp;
-      this.monsterNavigator.clear();
-      monster.x = RULES.monsterSpawnX;
-      monster.z = RULES.monsterSpawnZ;
-      monster.y=groundAt(DEFAULT_MAP_ID,monster.x,monster.z);
-      monster.facing = 0;
-      monster.alive = true;
-      monster.aiState = "patrol";
-      monster.targetId = "";
-      this.monsterRespawnAt = 0;
-      this.lastMonsterAttackMs = -Infinity;
-      this.broadcast("monster_respawn", { targetId: RULES.monsterId });
-    }
-
-    for (const [id, atMs] of this.playerRespawnAt) {
-      if (this.simulatedMs < atMs) continue;
-      this.playerRespawnAt.delete(id);
-      const player = this.state.players.get(id);
-      if (!player) continue;
-      const camp=this.warSeats.get(id)?.camp;
-      const front=camp?this.fieldCamp(id,camp):undefined;
-      const spawn=front ?? this.playerSpawn.get(id) ?? {x:0,z:0};
-      if(camp && !front)this.clients.find(c=>c.sessionId===id)?.send("territory_error",{reason:"war_camp_fallback"});
-      player.hp = player.maxHp;
-      player.alive = true;
-      player.x = spawn.x;
-      player.y = groundAt(player.mapId,spawn.x,spawn.z);
-      player.z = spawn.z;
-      this.climbs.delete(id);
-      this.flightTransitions.delete(id);
-      player.flying = false;
-      this.activeDashes.delete(id);
-      player.facing = 0;
-      player.combatState = "idle";
-      player.targetId = "";
-      this.lastAttackMs.delete(id);
-      this.broadcast("player_respawn", { playerId: id });
-      void this.saveCharacter(id);
-    }
+    this.respawns.update(this.state.monster, {
+      now: () => this.simulatedMs,
+      clearMonsterNavigation: () => this.monsterNavigator.clear(),
+      monsterRespawned: () => {
+        this.lastMonsterAttackMs = -Infinity;
+        this.broadcast("monster_respawn", { targetId: RULES.monsterId });
+      },
+      player: id => this.state.players.get(id),
+      spawn: id => {
+        const camp=this.warSeats.get(id)?.camp;
+        const front=camp?this.fieldCamp(id,camp):undefined;
+        const spawn=front ?? this.playerSpawn.get(id) ?? {x:0,z:0};
+        if(camp && !front)this.clients.find(c=>c.sessionId===id)?.send("territory_error",{reason:"war_camp_fallback"});
+        return spawn;
+      },
+      clearVertical: id => {this.climbs.delete(id);this.flightTransitions.delete(id);},
+      clearDash: id => {this.activeDashes.delete(id);},
+      playerRespawned: id => {
+        this.lastAttackMs.delete(id);
+        this.broadcast("player_respawn", { playerId: id });
+        void this.saveCharacter(id);
+      },
+    });
   }
 
   private canPursueBasic(id:string, player:Player, targetId:string, monster:Monster|undefined):boolean {
@@ -5972,7 +5948,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.guildInvites.leave(id,to=>{
       this.clients.find(c=>c.sessionId===to)?.send("guild_invitation_closed",{});
     });
-    for (const trade of this.trades.values()) if (trade.a===id || trade.b===id) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }
+    this.trades.leave(id,trade=>this.notifyTrade(trade,"trade_cancelled"));
     const accountId = this.activeGuestAccounts.get(id);
     // Capture the snapshot BEFORE removing the player from server Schema.
     const saving = this.saveCharacter(id);
@@ -5990,7 +5966,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.supportManaCombatUntil.delete(id);
     this.muayMoveIntent.delete(id);this.muayCoreStances.delete(id);this.muayCoreFollowups.delete(id);this.muayCoreSequences.delete(id);this.swordCoreStances.delete(id);this.swordCoreSequences.delete(id);
     this.lastWarpMs.delete(id);
-    this.playerRespawnAt.delete(id);
+    this.respawns.forgetPlayer(id);
     this.playerSpawn.delete(id);
     this.gates.delete(id);
     this.lastRejectNoticeMs.delete(id);
@@ -6121,7 +6097,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.muayMoveIntent.clear();this.muayCoreStances.clear();this.muayCoreFollowups.clear();this.muayCoreSequences.clear();this.swordCoreStances.clear();this.swordCoreSequences.clear();
     this.lastWarpMs.clear();
     this.pendingWarps.clear();
-    this.playerRespawnAt.clear();
+    this.respawns.clearPlayers();
     this.playerSpawn.clear();
     this.gates.clear();
     this.lastRejectNoticeMs.clear();

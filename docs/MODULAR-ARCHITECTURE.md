@@ -217,8 +217,10 @@ The following are logical target domains, not existing directory claims:
   cleanup and combat/EXP integration. Extract these with explicit membership and
   messaging interfaces; preserve current room/map scopes.
 - **economy:** `EconomyRules.ts`, `EconomyStore.ts`, `ItemRules.ts`, forge and
-  resource modules exist. Trade sessions, command handling, inventory refresh and
-  save-before-ack transitions remain coupled to the room.
+  resource modules exist. `TradeSessions.ts` now owns transient sessions, offers,
+  readiness, expiry and disconnect traversal (see `SERVER-TRADE-SESSIONS.md`).
+  Command validation, inventory refresh and save-before-ack coordination remain
+  in the room; durable transaction and rollback ownership stays in EconomyStore.
 - **persistence:** `CharacterStore.ts`, `AccountStore.ts`, `AccountService.ts`,
   `AccountRoutes.ts`, guild/hunt/economy stores exist. Room still builds snapshots,
   claims identities and coordinates periodic/leave saves. Preserve slot 1's legacy

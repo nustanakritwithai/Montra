@@ -77,6 +77,8 @@ $files = @(
   @{ Name = "MyRoomState.ts"; Target = "src\rooms\schema\MyRoomState.ts"; Check = "weaponsAvailable" },
   @{ Name = "GameRules.ts"; Target = "src\rooms\GameRules.ts"; Check = "dashCooldownMs" },
   @{ Name = "DashRules.ts"; Target = "src\rooms\DashRules.ts"; Check = "advanceDash" },
+  @{ Name = "TradeSessions.ts"; Target = "src\rooms\TradeSessions.ts"; Check = "class TradeSessions" },
+  @{ Name = "RespawnLifecycle.ts"; Target = "src\rooms\RespawnLifecycle.ts"; Check = "class RespawnLifecycle" },
   @{ Name = "HorizontalMovement.ts"; Target = "src\rooms\HorizontalMovement.ts"; Check = "class HorizontalMovement" },
   @{ Name = "VerticalMovement.ts"; Target = "src\rooms\VerticalMovement.ts"; Check = "class VerticalMovement" },
   @{ Name = "HeightRules.ts"; Target = "src\rooms\HeightRules.ts"; Check = "flightLandingHeight" },
