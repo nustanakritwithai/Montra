@@ -126,6 +126,7 @@ $files = @(
   @{ Name = "forest-party-monster-integration.mjs"; Target = "montra-forest-party-monster-integration.mjs"; Check = "montra-monster-test-" },
   @{ Name = "TerritoryGovernment.ts"; Target = "src\rooms\TerritoryGovernment.ts"; Check = "class TerritoryGovernment" },
   @{ Name = "TerritoryWar.ts"; Target = "src\rooms\TerritoryWar.ts"; Check = "class TerritoryWar" },
+  @{ Name = "GuildInvitations.ts"; Target = "src\rooms\GuildInvitations.ts"; Check = "class GuildInvitations" },
   @{ Name = "GuildStore.ts"; Target = "src\rooms\GuildStore.ts"; Check = "class GuildStore" },
   @{ Name = "PartyManager.ts"; Target = "src\rooms\PartyManager.ts"; Check = "class PartyManager" },
   @{ Name = "EconomyStore.ts"; Target = "src\rooms\EconomyStore.ts"; Check = "class EconomyStore" },

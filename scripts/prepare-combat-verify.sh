@@ -126,6 +126,7 @@ cp deploy/combat/service-npcs-check.mjs combat-verify/service-npcs-check.mjs
 cp deploy/combat/territory-government.test.ts combat-verify/src/rooms/territory-government.test.ts
 cp deploy/combat/territory-integration.mjs combat-verify/territory-integration.mjs
 cp deploy/combat/province-fronts-integration.mjs combat-verify/province-fronts-integration.mjs
+cp deploy/combat/GuildInvitations.ts deploy/combat/guild-invitations*.ts combat-verify/src/rooms/
 cp deploy/combat/GuildStore.ts combat-verify/src/rooms/GuildStore.ts
 cp deploy/combat/guild-store.test.ts combat-verify/src/rooms/guild-store.test.ts
 cp deploy/combat/guild-integration.mjs combat-verify/guild-integration.mjs

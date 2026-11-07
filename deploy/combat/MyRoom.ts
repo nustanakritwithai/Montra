@@ -76,6 +76,7 @@ import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js"
 import { parseSellMaterial, parseSalvage, parseCraft, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseMarketBrowse, parseAuctionCreate, parseAuctionBid, parseAuctionAction, parseAuctionCredit, parseStarterSupply, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
+import { GuildInvitations } from "./GuildInvitations.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
 import type { MonsterTier } from "./MonsterProfiles.js";
@@ -273,7 +274,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private swordCombos = new Map<string, {count:number; until:number}>();
   private swordGuards = new Map<string, {until:number; factor:number; direction:boolean; counterUntil:number}>();
   private guildSubscriptions = new Map<string,()=>void>();
-  private guildInvites = new Map<string,{from:string;to:string;guildId:string;expires:number}>();
+  private guildInvites = new GuildInvitations();
 
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
@@ -3709,9 +3710,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if(guild.members.length>=GUILD_MAX_MEMBERS)throw new Error("guild_full");
         if(!target || !targetCharacter || request.targetId===client.sessionId || this.pendingCharacterLeaves.has(request.targetId))throw new Error("guild_invalid_target");
         if(guildStore().view(targetCharacter,guildOnline))throw new Error("guild_already_member");
-        for(const [id,invite] of this.guildInvites)if(invite.expires<=this.simulatedMs || invite.to===request.targetId)this.guildInvites.delete(id);
-        const id=randomUUID();
-        this.guildInvites.set(id,{from:client.sessionId,to:request.targetId,guildId:guild.id,expires:this.simulatedMs+60000});
+        const id=this.guildInvites.issue(client.sessionId,request.targetId,guild.id,this.simulatedMs);
         target.send("guild_invitation",{inviteId:id,guildName:guild.name,fromName:this.state.players.get(client.sessionId)?.characterName ?? "",expiresIn:60});
         client.send("guild_notice",{reason:"invitation_sent"});
       });
@@ -3719,25 +3718,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     guild_accept: (client:Client,message:unknown) => {
       const inviteId=this.parsePartyInvitation(message);if(!inviteId)return this.reject(client,"guild_invalid_request");
       this.guildAction(client,character=>{
-        const invite=this.guildInvites.get(inviteId),leader=invite && this.persistentCharacters.get(invite.from);
-        if(!invite || invite.to!==client.sessionId || invite.expires<=this.simulatedMs || !leader || this.pendingCharacterLeaves.has(invite.from)){
-          if(invite && invite.expires<=this.simulatedMs)this.guildInvites.delete(inviteId);
-          throw new Error("guild_invite_expired");
-        }
+        const {invite,leader}=this.guildInvites.prepareAccept(inviteId,client.sessionId,this.simulatedMs,from=>{
+          const character=this.persistentCharacters.get(from);
+          return character && !this.pendingCharacterLeaves.has(from) ? character : undefined;
+        });
         const player=this.state.players.get(client.sessionId);if(!player)throw new Error("guild_invalid_target");
         const inviter=guildStore().view(leader,guildOnline);
         const inviterRank=inviter?.members.find(m=>m.id===inviter.ownId)?.rank;
         if(inviter?.id!==invite.guildId || (inviterRank!=="commander" && inviterRank!=="officer"))throw new Error("guild_invite_expired");
         guildStore().add(leader,character,player.characterName);
-        this.guildInvites.delete(inviteId);client.send("guild_invitation_closed",{});notifyGuilds();
+        this.guildInvites.complete(inviteId);client.send("guild_invitation_closed",{});notifyGuilds();
       });
     },
     guild_decline: (client:Client,message:unknown) => {
       const inviteId=this.parsePartyInvitation(message);if(!inviteId)return this.reject(client,"guild_invalid_request");
       this.guildAction(client,()=>{
-        const invite=this.guildInvites.get(inviteId);
-        if(!invite || invite.to!==client.sessionId || invite.expires<=this.simulatedMs)throw new Error("guild_invite_expired");
-        this.guildInvites.delete(inviteId);client.send("guild_invitation_closed",{});
+        const invite=this.guildInvites.decline(inviteId,client.sessionId,this.simulatedMs);
+        client.send("guild_invitation_closed",{});
         this.clients.find(c=>c.sessionId===invite.from)?.send("guild_notice",{reason:"invitation_declined"});
       });
     },
@@ -5972,10 +5969,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.leaveParty(id);
     const guildCharacter=this.persistentCharacters.get(id);
     if(guildCharacter){this.guildSubscriptions.get(id)?.();this.guildSubscriptions.delete(id);notifyGuilds();}
-    for(const [inviteId,invite] of this.guildInvites)if(invite.from===id || invite.to===id){
-      this.guildInvites.delete(inviteId);
-      this.clients.find(c=>c.sessionId===invite.to)?.send("guild_invitation_closed",{});
-    }
+    this.guildInvites.leave(id,to=>{
+      this.clients.find(c=>c.sessionId===to)?.send("guild_invitation_closed",{});
+    });
     for (const trade of this.trades.values()) if (trade.a===id || trade.b===id) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }
     const accountId = this.activeGuestAccounts.get(id);
     // Capture the snapshot BEFORE removing the player from server Schema.
