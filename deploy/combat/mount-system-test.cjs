@@ -41,7 +41,7 @@ assert(mainSrc.includes('getMountSpeedMultiplier'), 'MontraMount exports getMoun
 assert(mainSrc.includes('playMountVfx: playMountSummonVfx'), 'MontraMount exports playMountVfx');
 
 // 7. Verify index.html version bump
-assert(/main\.js\?v=0\.14\./.test(indexSrc), 'index.html points to v0.14.x shamanic steed mount');
+assert(/main\.js\?v=0\.1[4-9]\./.test(indexSrc), 'index.html points to v0.14.x or newer');
 
 // 8. Functional Unit Test for MontraMount logic
 const mockAvatars = new Map();

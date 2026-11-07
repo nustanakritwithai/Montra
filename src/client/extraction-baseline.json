@@ -1,8 +1,8 @@
 {
   "format": 1,
   "output": "main.js",
-  "bytes": 1382490,
-  "sha256": "d32a96a80ab6ea78d55004631f74d78b128a095096527bf487645852f23a0fea",
+  "bytes": 1388811,
+  "sha256": "d486c3c26a459ce4a82cc280d2a74369d98418560eea10b244d1f6fb37304392",
   "fragments": [
     {
       "path": "core/000-wrapper-open.js",
@@ -16,8 +16,8 @@
     },
     {
       "path": "audio/002-voice-guidance.js",
-      "bytes": 16232,
-      "sha256": "55c4fcb9c141f242772b8d11fad40be59c7ee70cedd30ca34ae9b3ec5460b05c"
+      "bytes": 16900,
+      "sha256": "8db417a959c97aff54c015327d122f72019ab45b3e34ce151daf2cf9c446dfa3"
     },
     {
       "path": "ui/003-toast-and-mode.js",
@@ -36,8 +36,8 @@
     },
     {
       "path": "render/006-materials-atmosphere.js",
-      "bytes": 10382,
-      "sha256": "02ffe348221af37bdc7c4cdf86921257beb40f1e9b7c4b0045e4c60763ac7132"
+      "bytes": 10599,
+      "sha256": "6ccc9fd31e9aa6755ae29ce15ad1153347ab9442f1b76211d530422ee04326d8"
     },
     {
       "path": "render/007-world-effects.js",
@@ -66,8 +66,8 @@
     },
     {
       "path": "render/012-sky-mist-atmosphere.js",
-      "bytes": 11223,
-      "sha256": "356e48f77a2f577ae548ff8b0334516934a9e5ddad00b2f958a0ab2f9d7b2f8b"
+      "bytes": 16586,
+      "sha256": "b8241e14caa6a0ec61f39d65473ea6b13ece36381e15dfd510a660a801c5d381"
     },
     {
       "path": "world/013-ground-and-fortification.js",
@@ -301,8 +301,8 @@
     },
     {
       "path": "core/059-frame-loop-and-startup.js",
-      "bytes": 18015,
-      "sha256": "7061121e4f24fba67f6685a4b9c56368651f6875facdfe4301c899342c75c246"
+      "bytes": 18088,
+      "sha256": "f449ce14d7f9a944a280bee83bad9dccc5c9321ceb87305df9a60b4fdb71a4e7"
     },
     {
       "path": "core/060-wrapper-close.js",

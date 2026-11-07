@@ -300,6 +300,7 @@
     // The horizon only enters the portrait frustum at shallow camera tilts.
     sky.setEnabled(camera.beta > 1.05);
     motes.emitter.copyFrom(camera.target);
+    if (typeof updateWeather === "function") updateWeather(dt, elapsed);
     animatePortals(elapsed, dt);
     if (me) warm.position.set(me.x, me.y + 3.4, me.z + .6);
     scene.render();

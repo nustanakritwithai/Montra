@@ -1,9 +1,8 @@
 {
   "format": 1,
-  "revision": "9673a684260ed6862f649740b441e2215bb9bd18",
   "output": "styles.css",
-  "bytes": 339770,
-  "sha256": "4f162a2dc1ca934a16cd6d154344b1f7b56bd8dfa94c656d4ed7344c85d4a3b5",
+  "bytes": 340281,
+  "sha256": "47ada2834b5aef3cbcdffd716fdb6d087eaf79b38ed735c0f0ef2fc70e2d4ddd",
   "fragments": [
     {
       "path": "base/000-foundation-and-drawers.css",
@@ -309,14 +308,14 @@
     {
       "path": "combat/043-target-combo-and-boss.css",
       "originalStartLine": 4893,
-      "originalEndLine": 5072,
-      "bytes": 6981,
-      "sha256": "dc4b476b5e35c7af071494f9ceaacbf10ab5ef3196f4ebc8e4bd08893cd7573f"
+      "originalEndLine": 5088,
+      "bytes": 7492,
+      "sha256": "43d8c8cefbe3c768f0af9f317467508eb97d6468268011b93a9bd09214ee0659"
     },
     {
       "path": "audio/044-voice-guidance.css",
-      "originalStartLine": 5073,
-      "originalEndLine": 5175,
+      "originalStartLine": 5089,
+      "originalEndLine": 5191,
       "bytes": 2883,
       "sha256": "9480891c27c3553d4d506af663de528baee5aa6f9c1bc94ca6d5dd5dd4a55504"
     }
