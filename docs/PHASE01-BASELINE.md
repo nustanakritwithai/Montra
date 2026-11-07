@@ -17,6 +17,7 @@ npm run test:build
 npm run build
 npm run prepare:combat
 npm ci --prefix combat-verify --no-audit --no-fund
+node --test scripts/check-contract.test.mjs
 node scripts/check-contract.mjs
 (cd combat-verify && npx tsc --noEmit)
 ```
@@ -31,7 +32,7 @@ The complete server test commands and isolated test settings remain in `.github/
 - **Static packaging is byte-preserving.** No minifier, bundler, transpiler, script order change or new client module boundary is introduced. The build preserves the previous Pages output, including the commit cache key and reconstructed preview GLB. This is a reproducible static distribution, not the later JavaScript module-bundling phase.
 - **Two clean builds compare equal.** Each distribution includes `build-manifest.json` with source revision, sorted paths, byte counts and SHA-256 hashes, with no timestamp or machine-specific path. The test compares all output bytes, source assets and the legacy HTML transformation. Only explicitly listed website files are published; no server source, tests, save files, npm project or credentials enter `_site/`.
 - **The server test dependency graph is locked.** `deploy/combat/verify/package-lock.json` is used with `npm ci`. The staging copy list and test server bootstrap are unchanged from the previous workflow. The lock belongs to the test project, not the VPS installer.
-- **Static contract baseline:** the locked TypeScript parser inventories 82 literal/conditional client commands and 114 server handlers, verifies that those client commands have handlers, snapshots incoming/outgoing message names, and fingerprints Schema plus CharacterStore, AccountStore and EconomyStore source. Nine dynamic client call sites still need integration coverage. This does not prove payload semantics, full live client/server equivalence, or save-migration safety. Update the baseline deliberately with `node scripts/check-contract.mjs --write` only after reviewing compatibility changes.
+- **Static contract baseline:** the locked TypeScript parser inventories 102 literal/conditional client commands, 114 server handlers and 138 client listeners, verifies that those client commands have handlers, snapshots incoming/outgoing message names, and fingerprints Schema plus CharacterStore, AccountStore and EconomyStore source. Eleven dynamic client call sites still need integration coverage. Regression tests cover joined/room/target aliases, command wrappers, conditional names, missing listeners and unknown handlers. This does not prove payload semantics, full live client/server equivalence, or save-migration safety. Update the baseline deliberately with `node scripts/check-contract.mjs --write` only after reviewing compatibility changes.
 
 ## Starting failures and fixes
 

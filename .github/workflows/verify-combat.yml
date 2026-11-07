@@ -6,7 +6,7 @@ on:
       - '.nvmrc'
       - 'scripts/build-site.mjs'
       - 'scripts/prepare-combat-verify.sh'
-      - 'scripts/check-contract.mjs'
+      - 'scripts/check-contract*.mjs'
       - 'deploy/combat/**'
       - 'main.js'
       - 'audio.js'
@@ -18,7 +18,7 @@ on:
       - '.nvmrc'
       - 'scripts/build-site.mjs'
       - 'scripts/prepare-combat-verify.sh'
-      - 'scripts/check-contract.mjs'
+      - 'scripts/check-contract*.mjs'
       - 'deploy/combat/**'
       - 'main.js'
       - 'audio.js'
@@ -49,7 +49,7 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Check client/server contract baseline
-        run: node scripts/check-contract.mjs
+        run: node --test scripts/check-contract.test.mjs && node scripts/check-contract.mjs
 
       - name: Type-check combat server
         working-directory: combat-verify
