@@ -1,13 +1,13 @@
 # Ordered client sources (organization phase)
 
-Edit the named fragments here, then run `npm run build:client` and commit the
-updated root `main.js` alongside the source. `manifest.json` is the explicit
+Edit and commit the named fragments here, then run `npm run build:client` to
+refresh the ignored local `main.js` build artifact. Do not commit the bundle. `manifest.json` is the explicit
 execution order. Numeric prefixes are global, not per-directory. The builder
 concatenates raw buffers with **no separator, wrapper, transform or minifier**.
 The first and last fragments contain the original single IIFE wrapper. The
 strict directive, declarations, closures, initialization order and comments are
-unchanged. Root `main.js` remains checked in for Pages and legacy source-slicing
-fixtures. Do not edit it directly. No browser script tags or filenames change. Git attributes disable line-ending
+unchanged. A clean checkout generates root `main.js` for Pages and legacy
+source-slicing fixtures. Do not edit it directly. No browser script tags or filenames change. Git attributes disable line-ending
 conversion for these raw JavaScript bytes, including on Windows.
 
 ## This is not module isolation
@@ -38,19 +38,29 @@ phase and remain unchanged.
 ## Verification
 
 - `npm run build:client`: reproduce root `main.js` from ordered source bytes.
-- `npm run check:client`: dependency-free manifest, inventory, syntax and byte check.
-- `npm run test:client`: check generated-source agreement, then all existing
+- `npm run prepare:client`: generate a missing bundle, or verify an existing one.
+  Existing stale output fails; run `npm run build:client` explicitly after source edits.
+- `npm run check:client`: strict dependency-free manifest, inventory, syntax and byte
+  check. Run preparation first on a clean checkout; missing output also fails.
+- `npm run test:client`: prepare/check generated-source agreement, then all existing
   non-browser fixtures and root-script syntax checks.
 - `npm run test:build`: exact extraction fingerprints, negative build checks and
   two byte-identical Pages distributions.
-- `npm run build`: validate source/generated agreement before static packaging.
-  It deliberately fails on stale output rather than silently repairing it.
+- `npm run build` (or `node scripts/build-site.mjs`): prepare/check the client
+  before static packaging. Both work with no pre-existing bundle. They deliberately
+  fail on stale output rather than silently repairing it.
 - After the normal isolated combat verification setup and locked `npm ci`, run
   `npm run test:client-boundaries`. This uses that project's TypeScript parser
   to prove every interior cut is between top-level statements of the existing
   IIFE, never inside an expression, function, string or comment. TypeScript is
   used only for this audit; build/check and Pages have no package dependencies.
-- Run the existing contract checker and server acceptance workflow unchanged.
+- The boundary and contract CLIs and `npm run prepare:combat` also prepare/check
+  the bundle. Existing contract and server behavioral assertions are unchanged.
+- Before running an individual legacy fixture, browser test, `node --check main.js`,
+  or serving the repository root, use Node from `.nvmrc` and run
+  `npm run prepare:client`. The browser workflows do this explicitly. The aggregate
+  client runner and scenery exporter prepare/check automatically.
+- See [build-artifact and rollback instructions](../../docs/CLIENT-BUILD-ARTIFACT.md).
 
 `extraction-baseline.json` records original byte hashes, line positions and
 statement indices from commit `2f4ee0a` (TypeScript 5.9.3). It is audit evidence,

@@ -22,7 +22,7 @@ node scripts/check-contract.mjs
 (cd combat-verify && npx tsc --noEmit)
 ```
 
-`npm run build` replaces only the generated `_site/` directory. Its revision is `GITHUB_SHA` in CI, or the checked-out Git commit locally. Use a clean, committed checkout for a release: the SHA identifies that checkout, not uncommitted changes. Do not place hand-maintained files in `_site/` or `combat-verify/src/`.
+`npm run build` prepares the ignored root `main.js` if absent (and rejects it if stale), then replaces only the generated `_site/` directory. `node scripts/build-site.mjs` supports the same clean-checkout flow. Its revision is `GITHUB_SHA` in CI, or the checked-out Git commit locally. Use a clean, committed checkout for a release: the SHA identifies that checkout, not uncommitted changes. Do not place hand-maintained files in `_site/` or `combat-verify/src/`.
 
 The complete server test commands and isolated test settings remain in `.github/workflows/verify-combat.yml`. Run that workflow for the exact candidate commit; a successful focused check is not a complete server pass. The workflow creates disposable directories and runs local test servers, never the VPS. Some `tsx` CLI commands need an IPC socket; in a sandbox that forbids it, `node --import tsx ...` can run the same test files without the CLI's IPC listener. That local workaround is not a substitute for the GitHub Actions run.
 

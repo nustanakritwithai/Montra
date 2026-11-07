@@ -60,13 +60,22 @@ export function writeClient(source = clientRoot) {
 export function checkClient(source = clientRoot) {
   const output = outputPath(source);
   const bytes = assembleClient(source);
-  assert(bytes.equals(readFileSync(output)), 'Generated main.js is stale. Run npm run build:client and commit it with the source fragments.');
+  assert(lstatSync(output, { throwIfNoEntry: false }), 'Generated main.js is missing. Run npm run prepare:client.');
+  assert(bytes.equals(readFileSync(output)), 'Generated main.js is stale. Run npm run build:client after reviewing source changes.');
   return bytes;
 }
 
+// A clean checkout has no bundle. Once present, never silently repair stale or
+// hand-edited output: rebuilding is an explicit developer action.
+export function prepareClient(source = clientRoot) {
+  const output = outputPath(source);
+  if (!lstatSync(output, { throwIfNoEntry: false })) writeClient(source);
+  return checkClient(source);
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  assert(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === '--check'), 'Usage: node scripts/build-client.mjs [--check]');
-  const check = process.argv[2] === '--check';
-  const bytes = check ? checkClient() : writeClient();
-  console.log(`${check ? 'Verified' : 'Generated'} main.js: ${bytes.length} bytes, raw ordered concatenation`);
+  assert(process.argv.length === 2 || (process.argv.length === 3 && ['--check', '--prepare'].includes(process.argv[2])), 'Usage: node scripts/build-client.mjs [--check|--prepare]');
+  const mode = process.argv[2];
+  const bytes = mode === '--check' ? checkClient() : mode === '--prepare' ? prepareClient() : writeClient();
+  console.log(`${mode === '--check' ? 'Verified' : mode === '--prepare' ? 'Prepared' : 'Generated'} main.js: ${bytes.length} bytes, raw ordered concatenation`);
 }

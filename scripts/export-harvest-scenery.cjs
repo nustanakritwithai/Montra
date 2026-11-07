@@ -6,6 +6,7 @@ const {chromium}=require(process.env.MONTRA_PLAYWRIGHT||"playwright");
 for(const flag of ["MONTRA_WORLD_EXPANSION","MONTRA_RIDGE_TERRAIN","MONTRA_CASTLE_PILOT"])process.env[flag]="1";
 const {WORLD_MAPS}=require("../deploy/combat/WorldMaps.ts");
 async function main(){
+  (await import("./build-client.mjs")).prepareClient();
   const server=http.createServer(async(req,res)=>{
     try{
       const url=new URL(req.url,"http://localhost"),name=url.pathname==="/"?"/index.html":url.pathname;

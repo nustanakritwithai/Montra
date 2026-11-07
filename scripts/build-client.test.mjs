@@ -5,12 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { assembleClient, checkClient, clientRoot, writeClient } from './build-client.mjs';
+import { assembleClient, checkClient, clientRoot, prepareClient, writeClient } from './build-client.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
 test('initial extraction retains every baseline byte and one unchanged IIFE', () => {
   const baseline = JSON.parse(readFileSync(join(clientRoot, 'src/client/extraction-baseline.json')));
-  const bytes = checkClient();
+  const bytes = assembleClient();
   assert.equal(bytes.length, 1372310);
   assert.equal(hash(bytes), 'a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf');
   assert.equal(bytes.length, baseline.bytes);
@@ -29,8 +29,8 @@ test('stale output, omitted/duplicate/reordered sources, unsafe paths and syntax
   const temp = mkdtempSync(join(tmpdir(), 'montra-client-'));
   try {
     cpSync(join(clientRoot, 'src'), join(temp, 'src'), { recursive: true });
-    cpSync(join(clientRoot, 'main.js'), join(temp, 'main.js'));
-    assert.deepEqual(checkClient(temp), checkClient());
+    writeFileSync(join(temp, 'main.js'), assembleClient());
+    assert.deepEqual(checkClient(temp), assembleClient());
     writeFileSync(join(temp, 'main.js'), 'stale');
     assert.throws(() => checkClient(temp), /main.js is stale/);
     const manifestFile = join(temp, 'src/client/manifest.json');
@@ -58,7 +58,7 @@ function withClientFixture(run) {
   const temp = mkdtempSync(join(tmpdir(), 'montra-client-safety-'));
   try {
     cpSync(join(clientRoot, 'src'), join(temp, 'src'), { recursive: true });
-    cpSync(join(clientRoot, 'main.js'), join(temp, 'main.js'));
+    writeFileSync(join(temp, 'main.js'), assembleClient());
     run(temp);
   } finally { rmSync(temp, { recursive: true, force: true }); }
 }
@@ -72,6 +72,9 @@ test('valid source-only changes require rebuilding; missing files and invalid ma
     writeFileSync(fragment, Buffer.concat([original, Buffer.from('  // Valid source-only test edit.\n')]));
     assert.doesNotThrow(() => assembleClient(temp));
     assert.throws(() => checkClient(temp), /main.js is stale/);
+    const stale = readFileSync(join(temp, 'main.js'));
+    assert.throws(() => prepareClient(temp), /main.js is stale/);
+    assert.deepEqual(readFileSync(join(temp, 'main.js')), stale);
     assert.deepEqual(writeClient(temp), checkClient(temp));
     rmSync(fragment);
     assert.throws(() => assembleClient(temp), /Unlisted or missing/);
@@ -83,13 +86,13 @@ test('valid source-only changes require rebuilding; missing files and invalid ma
   });
 });
 
-for (const relative of ['src', 'src/client', 'src/client/core', 'src/client/core/001-storage-and-dom.js']) {
+for (const relative of ['src', 'src/client', 'src/client/core', 'src/client/manifest.json', 'src/client/core/001-storage-and-dom.js']) {
   test(`reject source symlink: ${relative}`, () => {
     withClientFixture(temp => {
       const original = join(temp, relative);
       const target = join(temp, 'link-target');
       renameSync(original, target);
-      symlinkSync(target, original, relative.endsWith('.js') ? 'file' : 'junction');
+      symlinkSync(target, original, /\.(js|json)$/.test(relative) ? 'file' : 'junction');
       assert.throws(() => assembleClient(temp), /[Ss]ource.*symlinks are not supported/);
     });
   });
@@ -103,9 +106,10 @@ test('CLI build and check reject output symlinks without reading or overwriting 
     symlinkSync(target, join(temp, 'main.js'), 'file');
     assert.throws(() => checkClient(temp), /Output symlinks/);
     assert.throws(() => writeClient(temp), /Output symlinks/);
+    assert.throws(() => prepareClient(temp), /Output symlinks/);
     mkdirSync(join(temp, 'scripts'));
     cpSync(join(clientRoot, 'scripts/build-client.mjs'), join(temp, 'scripts/build-client.mjs'));
-    for (const args of [[], ['--check']]) {
+    for (const args of [[], ['--check'], ['--prepare']]) {
       const result = spawnSync(process.execPath, [join(temp, 'scripts/build-client.mjs'), ...args], { encoding: 'utf8' });
       assert.equal(result.status, 1);
       assert.match(result.stderr, /Output symlinks are not supported/);
@@ -114,5 +118,41 @@ test('CLI build and check reject output symlinks without reading or overwriting 
     // Broken links must be rejected too, not treated as a missing output file.
     rmSync(target);
     assert.throws(() => writeClient(temp), /Output symlinks/);
+    assert.throws(() => prepareClient(temp), /Output symlinks/);
+  });
+});
+
+
+test('prepare creates missing output, verifies existing output and never repairs stale bytes', () => {
+  withClientFixture(temp => {
+    const output = join(temp, 'main.js');
+    rmSync(output);
+    assert.throws(() => checkClient(temp), /main.js is missing/);
+    assert.deepEqual(prepareClient(temp), assembleClient(temp));
+    assert.deepEqual(readFileSync(output), assembleClient(temp));
+    assert.deepEqual(prepareClient(temp), checkClient(temp));
+    writeFileSync(output, 'stale');
+    assert.throws(() => prepareClient(temp), /main.js is stale/);
+    assert.equal(readFileSync(output, 'utf8'), 'stale');
+    rmSync(output);
+    mkdirSync(output);
+    assert.throws(() => prepareClient(temp), /Expected regular output file/);
+  });
+});
+
+test('clean-checkout CLI preparation succeeds; strict check and stale preparation fail', () => {
+  withClientFixture(temp => {
+    mkdirSync(join(temp, 'scripts'));
+    cpSync(join(clientRoot, 'scripts/build-client.mjs'), join(temp, 'scripts/build-client.mjs'));
+    const output = join(temp, 'main.js');
+    const run = mode => spawnSync(process.execPath, [join(temp, 'scripts/build-client.mjs'), mode], { encoding: 'utf8' });
+    rmSync(output);
+    assert.match(run('--check').stderr, /main.js is missing/);
+    assert.equal(run('--prepare').status, 0);
+    assert.deepEqual(readFileSync(output), assembleClient(temp));
+    assert.equal(run('--check').status, 0);
+    writeFileSync(output, 'stale');
+    assert.equal(run('--prepare').status, 1);
+    assert.equal(readFileSync(output, 'utf8'), 'stale');
   });
 });

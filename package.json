@@ -15,6 +15,7 @@
     "test:client-boundaries": "node scripts/check-client-boundaries.mjs",
     "build:styles": "node scripts/build-styles.mjs",
     "check:styles": "node scripts/build-styles.mjs --check",
-    "test:styles": "node --test scripts/build-styles.test.mjs"
+    "test:styles": "node --test scripts/build-styles.test.mjs",
+    "prepare:client": "node scripts/build-client.mjs --prepare"
   }
 }

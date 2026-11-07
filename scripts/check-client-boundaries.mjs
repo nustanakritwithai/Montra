@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { checkClient, clientRoot } from './build-client.mjs';
+import { prepareClient, clientRoot } from './build-client.mjs';
 
 // Verification only: reuse the locked server-test parser. The builder and its
 // check mode remain dependency-free and do not use TypeScript or a bundler.
 const require = createRequire(join(clientRoot, 'combat-verify/package.json'));
 const ts = require('typescript');
-const text = checkClient().toString('utf8');
+const text = prepareClient().toString('utf8');
 const ast = ts.createSourceFile('main.js', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
 assert.equal(ast.parseDiagnostics.length, 0, 'Client must parse without recovery');
 assert.equal(ast.statements.length, 1, 'Preserve one outer IIFE statement');
