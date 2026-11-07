@@ -1,0 +1,178 @@
+{
+  "kind": "parse-only microbenchmark, not runtime/module invocation or browser startup",
+  "node": "v22.23.4",
+  "platform": "linux",
+  "cpu": "AMD EPYC 9V74 80-Core Processor",
+  "cpus": 9,
+  "revisions": {
+    "baseline": "e458cfd7ed8a7c8a4346dd723bac6e1efa2ad03d",
+    "candidate": "f471d65b5b68e85abbfc3edbe1fb5e0b6614f6ee"
+  },
+  "files": {
+    "baseline": [
+      {
+        "name": "./account-entry.js",
+        "bytes": 28184,
+        "sha256": "2d685b7ac3017b5c98187979d04c0132fde9648713b248ae452ccf9a3bd1b758"
+      },
+      {
+        "name": "./audio.js",
+        "bytes": 55296,
+        "sha256": "fc6fea4bfba1f9f954c480d4036c6b884dcdd98443d43d55b1dc45e5b6c96d68"
+      },
+      {
+        "name": "./main.js",
+        "bytes": 1372310,
+        "sha256": "a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf"
+      }
+    ],
+    "candidate": [
+      {
+        "name": "./account-entry.js",
+        "bytes": 28184,
+        "sha256": "2d685b7ac3017b5c98187979d04c0132fde9648713b248ae452ccf9a3bd1b758"
+      },
+      {
+        "name": "./audio.js",
+        "bytes": 55296,
+        "sha256": "fc6fea4bfba1f9f954c480d4036c6b884dcdd98443d43d55b1dc45e5b6c96d68"
+      },
+      {
+        "name": "./src/client-modules/character-slot-storage.js",
+        "bytes": 1656,
+        "sha256": "cbd22525df6c8edde62942a778390464f1fee59dd7ee83a93fbd00320e338da6"
+      },
+      {
+        "name": "./src/client-modules/world-math.js",
+        "bytes": 1279,
+        "sha256": "f5c17b1ed03d99ca6b56b2576388bfd885fb8c25d4f3890f4b41e833e1c0b956"
+      },
+      {
+        "name": "./src/client-modules/item-presentation.js",
+        "bytes": 8225,
+        "sha256": "a49c688bd34e8103350e7e3648a3cb05de511b6af57ff093f814bb0e6a7965d3"
+      },
+      {
+        "name": "./src/client-modules/voice-guidance.js",
+        "bytes": 15107,
+        "sha256": "01344267150bee1c789c181d10e4efe6ab5600d1b04d90e773a6d30bea34d729"
+      },
+      {
+        "name": "./src/client-modules/pointer-gestures.js",
+        "bytes": 5794,
+        "sha256": "642211e5eee2768d003f76587388fcc5a3fef93ee6180b771b6470cef9cededd"
+      },
+      {
+        "name": "./src/client-modules/lighting-controller.js",
+        "bytes": 8088,
+        "sha256": "41be5595b9ec7127a6d39d08a688405b9c1650208f9132c1d9b31d14188299d7"
+      },
+      {
+        "name": "./src/client-modules/room-state-sync.js",
+        "bytes": 2232,
+        "sha256": "269e1869fc9ec0e73697d9741af4d169f780c0746d3b8bc4ca8cd15eea0d88f4"
+      },
+      {
+        "name": "./src/client-modules/skill-motion.js",
+        "bytes": 3442,
+        "sha256": "b89d4a0b75d7aec4c1e0d3fbb3f639f9b6521b6aa7201a5fa8bd00790490aa4e"
+      },
+      {
+        "name": "./src/client-modules/drawer-controller.js",
+        "bytes": 3341,
+        "sha256": "80be2186f8fdc95af82b28d1f62f2c4d068b494312e0b174257ce731e7c51bfa"
+      },
+      {
+        "name": "./src/client-modules/join-message-bootstrap.js",
+        "bytes": 706,
+        "sha256": "b4b9c3cc53545715e02aa9e9c7d551c47f0d5be98986fb639f66883becc060a3"
+      },
+      {
+        "name": "./main.js",
+        "bytes": 1333940,
+        "sha256": "35b97a8d063f7ab2a99cc2c283e370d28d9c5f1318773b6b0afe8b09146e0383"
+      }
+    ]
+  },
+  "compileMs": {
+    "baseline": {
+      "raw": [
+        33.742080999999985,
+        29.203085000000044,
+        25.514425000000017,
+        35.22665299999994,
+        76.68769299999997,
+        31.28478999999993,
+        27.583349999999996,
+        34.080111999999986,
+        29.155042999999978,
+        38.769633999999996,
+        33.03838799999994,
+        33.92549699999995,
+        33.14729299999999,
+        33.523554000000104,
+        30.582525000000032,
+        31.606385000000046,
+        30.685900000000174,
+        35.43073800000002,
+        31.34926500000006,
+        31.54796599999986,
+        31.376455999999962,
+        32.75796999999989,
+        30.9085970000001,
+        33.47990200000004,
+        31.161039999999957,
+        25.777593999999908,
+        27.41267099999982,
+        27.86111899999969,
+        29.496298000000024,
+        27.822561999999834
+      ],
+      "n": 30,
+      "min": 25.514425000000017,
+      "median": 31.376455999999962,
+      "p95": 38.769633999999996,
+      "max": 76.68769299999997
+    },
+    "candidate": {
+      "raw": [
+        34.33769000000001,
+        32.85171700000001,
+        31.488818000000038,
+        31.733276999999987,
+        35.22368800000004,
+        31.09024499999998,
+        28.685604000000012,
+        27.511310999999978,
+        33.250107999999955,
+        37.903454999999894,
+        24.42506800000001,
+        30.022838999999976,
+        33.42787599999997,
+        32.66353200000003,
+        35.35016500000006,
+        31.882643000000144,
+        31.038332999999966,
+        32.03223899999989,
+        31.68762700000002,
+        30.630295999999817,
+        31.707959000000074,
+        31.916382999999996,
+        31.090962999999874,
+        32.185861999999815,
+        32.075424999999996,
+        28.334737000000132,
+        26.53759500000001,
+        26.466196999999966,
+        27.547055,
+        28.656375000000025
+      ],
+      "n": 30,
+      "min": 24.42506800000001,
+      "median": 31.707959000000074,
+      "p95": 35.35016500000006,
+      "max": 37.903454999999894
+    }
+  },
+  "verdict": "MEASUREMENT ONLY: no timing acceptance threshold calibrated"
+}

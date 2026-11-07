@@ -1,0 +1,71 @@
+name: Measure refactor performance (report only)
+on:
+  pull_request:
+    paths:
+      - 'scripts/performance/**'
+      - 'docs/performance/**'
+      - '.github/workflows/measure-refactor-performance.yml'
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Full baseline commit SHA
+        required: true
+        default: e458cfd7ed8a7c8a4346dd723bac6e1efa2ad03d
+      candidate:
+        description: Full candidate commit SHA (not a claim of release)
+        required: true
+        default: 45c8cac658cd37b08773aeb1fdd62e47f7916535
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      BASELINE: ${{ inputs.baseline || 'e458cfd7ed8a7c8a4346dd723bac6e1efa2ad03d' }}
+      CANDIDATE: ${{ inputs.candidate || '45c8cac658cd37b08773aeb1fdd62e47f7916535' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate revision inputs
+        run: |
+          [[ "$BASELINE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$CANDIDATE" =~ ^[0-9a-f]{40}$ ]]
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ env.BASELINE }}
+          path: perf-baseline
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ env.CANDIDATE }}
+          path: perf-candidate
+      - name: Record target identities and verify frozen release tree
+        run: |
+          git -C perf-baseline rev-parse HEAD HEAD^{tree}
+          git -C perf-candidate rev-parse HEAD HEAD^{tree}
+          if [[ "$CANDIDATE" == "45c8cac658cd37b08773aeb1fdd62e47f7916535" ]]; then
+            test "$(git -C perf-candidate rev-parse HEAD^{tree})" = "74abdcd754168f196427ac2e4c05c3e9836af186"
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build both exact revisions
+        run: |
+          (cd perf-baseline && node scripts/build-client.mjs --prepare)
+          (cd perf-candidate && node scripts/build-client.mjs --prepare)
+          node --test scripts/performance/*.test.mjs
+          node scripts/performance/compare.mjs perf-baseline perf-candidate performance-evidence
+      - name: Install isolated pinned browser runner
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Observe alternating same-runner DEMO variants
+        run: node scripts/performance/browser.cjs perf-baseline perf-candidate performance-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refactor-performance-observations
+          path: performance-evidence
