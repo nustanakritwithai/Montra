@@ -59,13 +59,13 @@ function dom(){
   return {document,node,elements,listeners,$:id=>elements.get(id)||null,ui:{drawer,shade,drawerBody:body,drawerTitle:title}};
 }
 function fixture(){
-  const d=dom(),wire=[],toasts=[],routes=[],player={alive:true,level:25,pathId:'blade',hp:40,maxHp:100,persistent:true};
+  const d=dom(),wire=[],toasts=[],routes=[],guidance=[],player={alive:true,level:25,pathId:'blade',hp:40,maxHp:100,persistent:true};
   const forge={primary:'melee',pool:['melee'],enhanceMax:10,affixMax:6,affixTierCap:2,materialTier:2};
   const forged=instanceId=>({instanceId,revision:3,rank:5,misses:0});
   const items={weapon:{name:'ดาบทดสอบ',kind:'mainHand',path:'blade',level:25,stats:{atk:3},forge},ring:{name:'แหวนทดสอบ',kind:'ring',level:1,stats:{hp:2},forge,copyLimit:2},potion:{name:'ยาเลือด',kind:'consumable',healHp:30},ore:{name:'แร่',kind:'material'},card:{name:'การ์ดทดสอบ',kind:'card',level:1,stats:{atk:1}},ref_seal_2:{name:'ตรา',kind:'catalyst'}};
   const inventory={slots:[{itemId:'weapon',quantity:1,forge:forged('blade'),socket:'card'},{itemId:'ring',quantity:1,forge:forged('ring')},{itemId:'potion',quantity:3},{itemId:'ore',quantity:10},null,null],equippedWeaponSlot:0,equipment:{leftRing:'ring',rightRing:'ring'},equipmentForges:{leftRing:forged('left'),rightRing:forged('right')},equipmentSockets:{leftRing:'card'},forgeCopies:{weapon:10,ring:10}};
   const config={chances:Array(10).fill(100),rerollCost:60,rareAfter:4,claimCopies:true,enhanceSteps:Array.from({length:10},(_,rank)=>({copies:2,gold:50,chance:78,downgradeChance:20,breakChance:2,breakOnFailure:rank>=5}))};
-  const ctx={...d,finishEconomyPending(){},clearTimeout(){},cancelAnimationFrame(){},drawerActive:null,drawerOpener:null,fieldTrainingTip:null,SFX(){},closeEquipPopup(){},mode:'live',inventoryState:inventory,personalItems:items,WEAPON_META:{},POTION_ITEM_ID:'potion',SHRINE_SHARD:'shrine_shard',shardName:'เศษศาล',
+  const ctx={...d,triggerVoiceGuidance:step=>guidance.push(step),finishEconomyPending(){},clearTimeout(){},cancelAnimationFrame(){},drawerActive:null,drawerOpener:null,fieldTrainingTip:null,SFX(){},closeEquipPopup(){},mode:'live',inventoryState:inventory,personalItems:items,WEAPON_META:{},POTION_ITEM_ID:'potion',SHRINE_SHARD:'shrine_shard',shardName:'เศษศาล',
     BAG_PAGE_SIZE:4,BAG_TOTAL_PAGES:2,INVENTORY_SLOTS:6,bagCurrentPage:0,bagCategoryFilter:'all',selectedBagSlot:0,inspectingGear:null,preferredGearSlot:null,confirmBindKey:null,benchTrail:[],
     rarityNames:{common:'พื้นฐาน'},gearJobs:{blade:'นักดาบ'},bodyLabels:{leftRing:'แหวนซ้าย',rightRing:'แหวนขวา'},forgeNames:{melee:'ประชิด'},statNames:{atk:'โจมตี',hp:'HP'},statLine:()=>'',gearComparison:()=>'+1',
     currentBagSlots:()=>ctx.inventoryState?.slots,currentEquippedWeaponSlot:()=>ctx.inventoryState?.equippedWeaponSlot,ownServerCharacter:()=>player,economyReady:()=>ctx.mode==='live'&&!!ctx.room?.state?.economyAvailable,
@@ -82,7 +82,7 @@ function fixture(){
   run(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function wearPositions(','  function pieceStat(')+slice('  function gearStamp(','  function salvageSelectedGear(')+slice('  function renderCardSocket(','  function openBag()')+slice('  function ensureItemDetailModalElements()','  const gearCoreSkills=')+slice('  function openBag()','  function updateFieldAlerts()')+slice('  function gateFieldInput(','  const journalOrigins='));
   run(slice('  document.addEventListener("keydown",event=>{\n    if (ui.drawer.hidden','  function updateChatBadge('));
   const open=()=>ctx.openBag(),select=slot=>{const button=d.$('bagSlot'+slot);button.focus();button.click();},modal=()=>d.$('itemDetailModal'),snapshot=()=>JSON.stringify({inventory,gold:ctx.economyGold});
-  return {...d,ctx,run,wire,toasts,routes,player,inventory,items,open,select,modal,snapshot,mutations:()=>wire.filter(e=>e.durable)};
+  return {...d,ctx,run,wire,toasts,routes,guidance,player,inventory,items,open,select,modal,snapshot,mutations:()=>wire.filter(e=>e.durable)};
 }
 
 // Static IDs are global once, not recreated in the bag or duplicated in the profile.
@@ -98,7 +98,7 @@ test('global modal owns shared previews, card panel, guide and actions exactly o
 });
 
 test('actual inventory click opens populated modal, inerts drawer and focuses close without mutation',()=>{
-  const f=fixture();f.open();const before=f.snapshot(),count=f.wire.length;f.select(1);
+  const f=fixture();f.open();assert.deepEqual(f.guidance,['gear']);const before=f.snapshot(),count=f.wire.length;f.select(1);assert.deepEqual(f.guidance,['gear'],'item selection does not repeat bag-open guidance');
   assert.equal(f.modal().hidden,false);assert.equal(f.modal().inert,false);assert.equal(f.$('itemModalBackdrop').hidden,false);assert.equal(f.ui.drawer.inert,true);assert.equal(f.$('worldInput').inert,true);
   assert.equal(f.document.activeElement,f.$('itemModalClose'));assert.equal(f.ctx.selectedBagSlot,1);assert.equal(f.$('bagItemName').textContent,'แหวนทดสอบ');assert.match(f.$('bagDetailItem').children[0].getAttribute('aria-label'),/แหวนทดสอบ \+5/);
   assert.equal(f.$('wearSidePicker').hidden,false);assert.equal(f.$('cardSocketPanel').hidden,false);assert.equal(f.$('bagCraft').getClientRects().length,1);assert.equal(f.$('bagSlot1').getAttribute('aria-pressed'),'true');

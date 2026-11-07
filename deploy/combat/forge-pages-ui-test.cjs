@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const source=fs.readFileSync(path.join(__dirname,'../../main.js'),'utf8');
 const index=fs.readFileSync(path.join(__dirname,'../../index.html'),'utf8');
 const slice=(start,end)=>{const a=source.indexOf(start),b=source.indexOf(end,a);assert(a>=0&&b>a,start);return source.slice(a,b);};
-const elements=new Map(),sent=[],prompts=[],routes=[];
+const elements=new Map(),sent=[],prompts=[],routes=[],effects=[];
 const document={activeElement:null,createElement:tag=>control(tag)};
 function control(tag='div'){
   const classes=new Set();
@@ -26,6 +26,9 @@ const inventory={slots:[piece,{itemId:id,quantity:1,forge:forged('donor',0)},nul
 const config={chances:Array(10).fill(100),rerollCost:60,rareAfter:4,claimCopies:true,enhanceSteps:Array.from({length:10},(_,rank)=>({copies:1+Math.floor(rank/3),gold:12*(rank+1),chance:rank>4?78:100,downgradeChance:rank>4?20:0,breakChance:rank>4?2:0,breakOnFailure:rank>4}))};
 const me={alive:true,level:25,persistent:true};let ready=true,accepted=false;
 const ctx={$,document,Date:{now:()=>10000},setTimeout:()=>1,clearTimeout(){},cancelAnimationFrame(){},economyPendingRequest:null,refreshArtisanWallet(){},createItemTile:()=>control(),renderItemTile(){},renderItemPreview(){},triggerBagPanelPop(){},Option:class{constructor(text,value){Object.assign(this,{text,value});}},inventoryState:inventory,room:{state:{forgeCatalog:JSON.stringify(config)}},drawerActive:null,
+  // Keep audiovisual feedback observable without a renderer or audio device.
+  getLocalAvatar:()=>null,localId:'hero',
+  ...Object.fromEntries(['SFX','shakeCamera','sparks','floatAtPlayer','triggerCombatCallout'].map(name=>[name,(...args)=>effects.push({name,args})])),
   economyReady:()=>ready,currentBagSlots:()=>inventory.slots,currentEquippedWeaponSlot:()=>inventory.equippedWeaponSlot,
   bagMeta:id=>metadata[id],personalItems:metadata,WEAPON_META:{},bodyLabels:{leftRing:'แหวนซ้าย',rightRing:'แหวนขวา'},forgeNames:{melee:'โจมตีประชิด',guard:'ป้องกันมอนสเตอร์'},
   ownServerCharacter:()=>me,economyPending:false,itemUsePending:false,economyGold:1000,selectedBagSlot:0,inspectingGear:null,benchTrail:[],
@@ -54,6 +57,8 @@ accepted=true;$('forgeEnhance').onclick();let command=sent.at(-1);
 assert.equal(command.command,'forge_weapon');assert.equal(command.payload.slot,'rightRing');assert.equal(command.payload.stamp,'right.2');assert.equal(command.payload.copies,2);assert.equal(command.payload.acceptBreak,true);assert.equal(command.payload.acceptDowngrade,true);
 assert.equal($('forgeTargetButton').disabled,true);const count=sent.length;$('forgeEnhance').onclick();assert.equal(sent.length,count,'double click cannot duplicate a pending mutation');
 callbacks.forge_result({requestId:command.payload.requestId,itemId:ring,action:'enhance',success:true,forge:{rank:6}});run('renderForgePage()');assert.equal($('forgeTargetButton').disabled,false);assert.equal($('forgeStockGear').disabled,false,'stock choice is restored after reveal');
+assert.equal(effects[0].args[0],'bell');assert.deepEqual(effects[2].args.slice(0,4),['gold',0,1.2,0]);
+assert.equal(effects.at(-1).args[0],'forge_success');
 // Revisions update in place; replacement instances never silently become the target.
 inventory.equipmentForges.rightRing.revision=3;run('renderForgePage()');assert.equal($('forgeTargetButton').dataset.target,'worn:rightRing');
 inventory.equipmentForges.rightRing=forged('replacement');run('renderForgePage()');assert.equal($('forgeTargetButton').dataset.target,'');assert.equal($('forgePanel').hidden,true);
@@ -70,6 +75,7 @@ assert.equal(brokenRequest.payload.action,'enhance');inventory.slots[0]=null;run
 assert.equal($('forgeTargetButton').dataset.target,'bag:0','pending presentation keeps submitted target');
 callbacks.forge_result({requestId:brokenRequest.payload.requestId,itemId:id,broken:true,forge:piece.forge,action:'enhance'});
 assert.equal(ctx.economyPending,false);assert.equal($('forgeTargetButton').dataset.target,'');assert.equal($('forgePanel').hidden,true);assert.equal($('forgeStock').hidden,false);assert.equal($('forgeStock').open,true);assert.equal($('forgeStockGear').value,id);assert.match($('forgeOutcome').textContent,/แตก/);
+assert.equal(effects.at(-1).args[0],'forge_fail');
 inventory.slots[2]={itemId:id,quantity:1,forge:forged('claimed',0)};ctx.economyPending=true;
 callbacks.forge_copy_claimed({gear:id,instanceId:'claimed',remaining:7});
 assert.equal(ctx.economyPending,false);assert.equal($('forgeTargetButton').dataset.target,'bag:2','claim selects returned instance, not another identical model');

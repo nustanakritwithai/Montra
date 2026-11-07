@@ -1,0 +1,12 @@
+{
+  "name": "montra-build-tools",
+  "private": true,
+  "description": "Dependency-free static packaging and baseline checks; not a game runtime package.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node scripts/build-site.mjs",
+    "test:build": "node --test scripts/build-site.test.mjs",
+    "test:client": "node scripts/test-client.mjs",
+    "prepare:combat": "bash scripts/prepare-combat-verify.sh"
+  }
+}

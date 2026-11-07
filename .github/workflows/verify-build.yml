@@ -1,0 +1,24 @@
+name: Verify MONTRA build baseline
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Verify every non-browser client fixture
+        run: npm run test:client
+      - name: Verify deterministic and legacy-equivalent static build
+        run: npm run test:build
+      - name: Build static artifact
+        run: npm run build
