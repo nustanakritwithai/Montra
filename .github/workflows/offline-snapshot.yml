@@ -1,0 +1,40 @@
+name: Offline snapshot verifier (synthetic only)
+on:
+  push:
+    paths:
+      - 'scripts/verify-offline-snapshot*.mjs'
+      - 'docs/OFFLINE-SAVE-VERIFICATION.md'
+      - 'deploy/combat/install-windows.ps1'
+      - '.nvmrc'
+      - '.github/workflows/offline-snapshot.yml'
+  pull_request:
+    paths:
+      - 'scripts/verify-offline-snapshot*.mjs'
+      - 'docs/OFFLINE-SAVE-VERIFICATION.md'
+      - 'deploy/combat/install-windows.ps1'
+      - '.nvmrc'
+      - '.github/workflows/offline-snapshot.yml'
+permissions:
+  contents: read
+jobs:
+  synthetic-verifier:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ['pinned', '24']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        if: matrix.node == 'pinned'
+        with:
+          node-version-file: '.nvmrc'
+      - uses: actions/setup-node@v4
+        if: matrix.node != 'pinned'
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Syntax check offline verifier
+        run: node --check scripts/verify-offline-snapshot.mjs
+      - name: Test synthetic snapshots only
+        run: node --test scripts/verify-offline-snapshot.test.mjs

@@ -40,7 +40,7 @@ export function buildSite(output, revision, source = root) {
   }
   const script = /(<script src="\.\/main\.js\?[^"\n]+)(" defer)/g;
   assert.equal([...html.matchAll(script)].length, 1, 'Expected exactly one versioned main.js script');
-  const versionedScripts = /(<script src="\.\/(?:main\.js|src\/client-modules\/(?:character-slot-storage|world-math|item-presentation|voice-guidance|pointer-gestures|lighting-controller|room-state-sync|skill-motion|drawer-controller|join-message-bootstrap)\.js)\?[^"\n]+)(" defer)/g;
+  const versionedScripts = /(<script src="\.\/(?:main\.js|src\/client-modules\/(?:character-slot-storage|world-math|item-presentation|voice-guidance|pointer-gestures|lighting-controller|room-state-sync|skill-motion|drawer-controller|join-message-bootstrap|chat-controller)\.js)\?[^"\n]+)(" defer)/g;
   const matches = [...html.matchAll(versionedScripts)];
   assert.equal(matches.length, 1 + clientModules.length, 'Expected all revisioned client scripts');
   for (const match of matches) {

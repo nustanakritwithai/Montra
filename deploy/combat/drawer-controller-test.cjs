@@ -104,8 +104,9 @@ if(fs.existsSync(modulePath)) {
     a.disarm();b.disarm();assert.deepEqual(scenario(b),scenario(a));
   }
   const shell=read('src/client/ui/046-drawers-and-chat.js');
-  assert(shell.indexOf('drawerController.handleKey') < shell.indexOf('document.addEventListener("pointerdown",event=>{'));
-  assert(shell.indexOf('document.addEventListener("pointerdown",event=>{') < shell.indexOf('drawerController.installBackdrop()'));
+  assert(shell.indexOf('drawerController.handleKey') < shell.indexOf('chatView.installViewport()'));
+  assert(shell.indexOf('chatView.installViewport()') < shell.indexOf('drawerController.installBackdrop()'));
+  assert(read('src/client-modules/chat-controller.js').includes('getDocument().addEventListener("pointerdown",event=>{'));
   const env={};for(const key of ['window','document'])Object.defineProperty(env,key,{get(){assert.fail('eager '+key);}});
   vm.runInNewContext(read('src/client-modules/drawer-controller.js'),env);
   assert(Object.isFrozen(env.MontraDrawerController));assert.deepEqual(Object.keys(env.MontraDrawerController),['create']);

@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const source=fs.readFileSync('main.js','utf8');
+const source=fs.readFileSync('src/client-modules/chat-controller.js','utf8');
 const start=source.indexOf('  function clearChatHistory(all) {'),end=source.indexOf('  function syncChatViewport()',start);
 assert.ok(start>=0 && end>start,'chat reset function exists');
 const context={chatHistory:{map:[{text:'map'}],world:[{text:'world'}],party:[],private:[{text:'secret'}],bug:[]},

@@ -235,19 +235,7 @@
             (message.channel === "map" && message.mapId !== activeMapId)) return;
         const channel = message.channel;
         const own = message.senderId === localId;
-        chatHistory[channel].push({ name: (channel === "private" && own ? "ถึง " + String(message.targetName || "ผู้เล่น") : message.name).slice(0, 80), text: message.text.slice(0, 400), own });
-        if (chatHistory[channel].length > 100) chatHistory[channel].shift();
-        pushChatFeed(channel, chatHistory[channel].at(-1).name, message.text.slice(0, 400), own);
-        if (own && chatPending && chatPending.channel === channel && chatPending.text === message.text && (channel !== "private" || chatPending.targetId === message.targetId)) {
-          if (chatDraft[channel].normalize("NFC").trim() === message.text) {
-            chatDraft[channel] = "";
-            if((chatBoxTab === "all" ? "map" : chatBoxTab)===channel && chatBox?.input.value.normalize("NFC").trim()===message.text)chatBox.input.value="";
-          }
-          finishChatPending();
-        } else if (!own && !(chatBox?.el.classList.contains("composing") && (chatBoxTab==="all" || chatBoxTab===channel))) {
-          chatUnread[channel] = Math.min(99, chatUnread[channel] + 1);
-        }
-        updateChatBadge();
+        chatView.receive(message, channel, own);
       });
       const onTerritoryState=message=>{
         if(room!==joined)return;
@@ -299,13 +287,8 @@
         if(room===joined && typeof message?.roomId==="string" && typeof message.ticket==="string")void connectOnline(endpoint,requestedSlot,message);
       });
       joined.onMessage("chat_report_result", result => {
-        if(room!==joined || chatPending?.channel!=="bug") return;
-        if(result?.ok === true) {
-          chatHistory.bug.push({name:"ระบบ",text:"รับรายงานบัคแล้ว · ขอบคุณที่แจ้ง",own:false});pushChatFeed("bug","ระบบ","รับรายงานบัคแล้ว · ขอบคุณที่แจ้ง",false);
-          if(chatDraft.bug.normalize("NFC").trim()===chatPending.text){chatDraft.bug="";if(chatBoxTab==="bug" && chatBox?.input.value.normalize("NFC").trim()===chatPending.text)chatBox.input.value="";}
-          toast("ส่งรายงานบัคแล้ว");
-        } else toast("บันทึกรายงานไม่สำเร็จ · ลองอีกครั้ง");
-        finishChatPending();
+        if(room!==joined) return;
+        chatView.report(result);
       });
       const onGuildState=message => {
         if(room!==joined)return;
