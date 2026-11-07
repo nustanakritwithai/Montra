@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { inspectProtocol } from './check-contract.mjs';
+import { readFileSync } from 'node:fs';
+import { root } from './build-site.mjs';
+import { join } from 'node:path';
+import { inspectProtocol, protocolClientSource } from './check-contract.mjs';
 const server = `class MyRoom { messages = { move: () => {}, buy: () => {}, use_item: () => {} }; reply() { client.send('state', {}); this.broadcast('notice', {}); client.send(event, payload); } }`;
 const client = `room.send('move', {}); joined.send('move', {}); target?.send('buy', {});
   sendBagCommand('use_item', {}); economySend('buy', {}); joined.onMessage('state', () => {});
@@ -27,4 +30,12 @@ test('unknown connection aliases and unhandled commands require review', () => {
 });
 test('computed server handlers are not silently omitted', () => {
   assert.throws(() => inspectProtocol(client, server.replace('move:', '[command]:')), /computed\/spread/);
+});
+
+test('shipped module listeners remain part of the unchanged protocol inventory', () => {
+  const all = protocolClientSource();
+  assert(all.includes('globalThis.MontraJoinMessageBootstrap'));
+  assert(all.includes('for(const type of ["guild_state","guild_recruitment","territory_state"])joined.onMessage'));
+  const inventory = inspectProtocol(all, readFileSync(join(root, 'deploy/combat/MyRoom.ts'), 'utf8'));
+  assert.equal(inventory.dynamicClientReceives,2);
 });

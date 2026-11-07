@@ -28,7 +28,7 @@ test('two builds are byte-identical and preserve the existing Pages payload', ()
     assert.deepEqual(buildSite(b, revision), manifest);
     assert.deepEqual(filesIn(a), filesIn(b));
     for (const path of filesIn(a)) assert.deepEqual(readFileSync(join(a, path)), readFileSync(join(b, path)), path);
-    const expected = ['.nojekyll', 'account-entry.js', 'audio.js', 'index.html', 'main.js', 'styles.css', 'src/client-modules/character-slot-storage.js', 'src/client-modules/world-math.js', 'src/client-modules/item-presentation.js', 'src/client-modules/voice-guidance.js', 'src/client-modules/pointer-gestures.js', 'src/client-modules/lighting-controller.js', 'src/client-modules/room-state-sync.js', 'src/client-modules/skill-motion.js', 'src/client-modules/drawer-controller.js',
+    const expected = ['.nojekyll', 'account-entry.js', 'audio.js', 'index.html', 'main.js', 'styles.css', 'src/client-modules/character-slot-storage.js', 'src/client-modules/world-math.js', 'src/client-modules/item-presentation.js', 'src/client-modules/voice-guidance.js', 'src/client-modules/pointer-gestures.js', 'src/client-modules/lighting-controller.js', 'src/client-modules/room-state-sync.js', 'src/client-modules/skill-motion.js', 'src/client-modules/drawer-controller.js', 'src/client-modules/join-message-bootstrap.js',
       ...filesIn(join(root, 'assets')).map(path => `assets/${path}`),
       'weapon-preview/lod2/index.html', 'weapon-preview/lod2/crescent-blade-lod2.glb'].sort();
     assert.deepEqual(manifest.files.map(file => file.path).sort(), expected);
@@ -46,7 +46,7 @@ test('two builds are byte-identical and preserve the existing Pages payload', ()
     const sourceHtml = readFileSync(join(root, 'index.html'), 'utf8');
     const builtHtml = readFileSync(join(a, 'index.html'), 'utf8');
     const urls = [...builtHtml.matchAll(/<script src="([^"]+)"/g)].map(match => match[1]);
-    for (const path of ['./main.js?', './src/client-modules/character-slot-storage.js?', './src/client-modules/world-math.js?', './src/client-modules/item-presentation.js?', './src/client-modules/voice-guidance.js?', './src/client-modules/pointer-gestures.js?', './src/client-modules/lighting-controller.js?', './src/client-modules/room-state-sync.js?', './src/client-modules/skill-motion.js?', './src/client-modules/drawer-controller.js?']) {
+    for (const path of ['./main.js?', './src/client-modules/character-slot-storage.js?', './src/client-modules/world-math.js?', './src/client-modules/item-presentation.js?', './src/client-modules/voice-guidance.js?', './src/client-modules/pointer-gestures.js?', './src/client-modules/lighting-controller.js?', './src/client-modules/room-state-sync.js?', './src/client-modules/skill-motion.js?', './src/client-modules/drawer-controller.js?', './src/client-modules/join-message-bootstrap.js?']) {
       const matching = urls.filter(url => url.startsWith(path));
       assert.equal(matching.length, 1);
       const params = new URL(matching[0].replaceAll('&amp;', '&'), 'https://example.invalid/').searchParams;
@@ -76,7 +76,7 @@ test('packaging rejects absent, duplicate or late module script loading', () => 
       cpSync(join(root, file), join(source, file), { recursive: true });
     }
     const html = readFileSync(join(source, 'index.html'), 'utf8');
-    const lines = ['character-slot-storage', 'world-math', 'item-presentation', 'voice-guidance', 'pointer-gestures', 'lighting-controller', 'room-state-sync', 'skill-motion', 'drawer-controller'].map(name => html.split('\n').find(line => line.includes(`./src/client-modules/${name}.js?`)));
+    const lines = ['character-slot-storage', 'world-math', 'item-presentation', 'voice-guidance', 'pointer-gestures', 'lighting-controller', 'room-state-sync', 'skill-motion', 'drawer-controller', 'join-message-bootstrap'].map(name => html.split('\n').find(line => line.includes(`./src/client-modules/${name}.js?`)));
     const variants = lines.flatMap(line => [html.replace(line, ''), html.replace(line, line + '\n' + line),
       html.replace(line, '').replace('</body>', line + '\n</body>'),
       html.replace(line, line.replace(' defer', ' async')),
@@ -116,9 +116,9 @@ test('packaging publishes only approved module files, never incidental or unreco
     }
     const output = join(temp, 'output');
     const manifest = buildSite(output, revision, source);
-    assert.deepEqual(filesIn(join(output, 'src/client-modules')), ['character-slot-storage.js', 'drawer-controller.js', 'item-presentation.js', 'lighting-controller.js', 'pointer-gestures.js', 'room-state-sync.js', 'skill-motion.js', 'voice-guidance.js', 'world-math.js']);
+    assert.deepEqual(filesIn(join(output, 'src/client-modules')), ['character-slot-storage.js', 'drawer-controller.js', 'item-presentation.js', 'join-message-bootstrap.js', 'lighting-controller.js', 'pointer-gestures.js', 'room-state-sync.js', 'skill-motion.js', 'voice-guidance.js', 'world-math.js']);
     assert.deepEqual(manifest.files.filter(file => file.path.startsWith('src/client-modules/')).map(file => file.path),
-      ['src/client-modules/character-slot-storage.js', 'src/client-modules/drawer-controller.js', 'src/client-modules/item-presentation.js', 'src/client-modules/lighting-controller.js', 'src/client-modules/pointer-gestures.js', 'src/client-modules/room-state-sync.js', 'src/client-modules/skill-motion.js', 'src/client-modules/voice-guidance.js', 'src/client-modules/world-math.js']);
+      ['src/client-modules/character-slot-storage.js', 'src/client-modules/drawer-controller.js', 'src/client-modules/item-presentation.js', 'src/client-modules/join-message-bootstrap.js', 'src/client-modules/lighting-controller.js', 'src/client-modules/pointer-gestures.js', 'src/client-modules/room-state-sync.js', 'src/client-modules/skill-motion.js', 'src/client-modules/voice-guidance.js', 'src/client-modules/world-math.js']);
     writeFileSync(join(modules, 'unrecognized.js'), '');
     assert.throws(() => buildSite(join(temp, 'rejected'), revision, source), /Unlisted or missing client module/);
   } finally { rmSync(temp, { recursive: true, force: true }); }

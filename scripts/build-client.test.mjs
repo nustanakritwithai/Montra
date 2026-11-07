@@ -10,6 +10,15 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // Explicit reversible substitutions for this extraction only. This is not a new
 // baseline: reconstructing the original bytes still uses the historical SHA below.
+function restoreJoinBootstrap(text) {
+  const reference = readFileSync(join(clientRoot, 'deploy/combat/fixtures/join-message-bootstrap-reference.js'), 'utf8');
+  assert.equal(hash(reference), 'e5e76844a759b52aa1b0190d1d4c68171e851e74e84adaea2aac8cb13e2ff576');
+  assert.equal(hash(readFileSync(join(clientRoot, 'src/client-modules/join-message-bootstrap.js'))), 'b4b9c3cc53545715e02aa9e9c7d551c47f0d5be98986fb639f66883becc060a3');
+  return text.replace('      const joinMessageBootstrap = globalThis.MontraJoinMessageBootstrap.create(joined);\n', reference.slice(0, reference.indexOf('      function markHandler')))
+    .replaceAll('joinMessageBootstrap.markHandler(', 'earlyHandlers.set(')
+    .replace('      joinMessageBootstrap.replay();\n', '      for(const [type,message] of earlyMessages)earlyHandlers.get(type)?.(message);\n      earlyMessages.clear();\n');
+}
+
 function drawerControllerRestoration(current) {
   const reference = readFileSync(join(clientRoot, 'deploy/combat/fixtures/drawer-controller-reference.js'), 'utf8');
   assert.equal(hash(reference), '6a02aacaad97c499e3ebca7bdf147796703857840c93ce18fea43f662bd4c9e3');
@@ -239,7 +248,7 @@ test('module extraction preserves the historical byte freeze outside the exact h
   const restoreGestures = pointerGesturesRestoration(current.toString());
   const restoreLighting = lightingControllerRestoration(current.toString());
   const restoreSkillMotion = skillMotionRestoration(current.toString());
-  const restore = text => restoreSkillMotion(restoreItems(restoreVoice(restoreGestures(restoreLighting(restoreRoom(restoreDrawer(text))))))).replace(wiring, originalHelpers)
+  const restore = text => restoreSkillMotion(restoreItems(restoreVoice(restoreGestures(restoreLighting(restoreRoom(restoreDrawer(restoreJoinBootstrap(text)))))))).replace(wiring, originalHelpers)
     .replace(worldBinding, '').replace(terrainAnchor, terrainHelpers + terrainAnchor)
     .replace(smoothAnchor, smoothAnchor + smoothHelper);
   const bytes = Buffer.from(restore(current.toString()));
