@@ -131,7 +131,7 @@ async function craftCases(page,check){
 }
 async function main(){
  fs.mkdirSync(out,{recursive:true});
- const report={revision:process.env.GITHUB_SHA||'local (see checkout HEAD)',cases:[],errors:[],blockedOrigins:[],limits:'Isolated real-DOM fixture with synthetic data and captured sends. Not full-game or logged-in backend QA. Mobile is Chromium emulation.'};
+ const report={revision:process.env.GITHUB_SHA||'local (see checkout HEAD)',cases:[],errors:[],layoutFailures:[],blockedOrigins:[],limits:'Isolated real-DOM fixture with synthetic data and captured sends. Not full-game or logged-in backend QA. Mobile is Chromium emulation.'};
  const scripts={market:fixtureScript('market'),craft:fixtureScript('craft')};
  const server=http.createServer((req,res)=>{
   const url=new URL(req.url,'http://localhost');
@@ -154,17 +154,32 @@ async function main(){
     assert.deepEqual(report.errors,[],'no browser runtime errors');
     const state=await page.evaluate(()=>({viewport:innerWidth,pageWidth:document.documentElement.scrollWidth,drawerWidth:document.getElementById('drawer').clientWidth,drawerScrollWidth:document.getElementById('drawer').scrollWidth,bodyWidth:document.getElementById('drawerBody').clientWidth,bodyScrollWidth:document.getElementById('drawerBody').scrollWidth,leaks:[...document.querySelectorAll('#drawer [hidden]')].filter(e=>getComputedStyle(e).display!=='none').map(e=>e.id)}));
     report.cases.push({name,width,...state});
-    assert(state.pageWidth<=state.viewport+1,'page overflows '+name+': '+JSON.stringify(state));
-    assert(state.drawerScrollWidth<=state.drawerWidth+1,'drawer overflows '+name+': '+JSON.stringify(state));
-    assert(state.bodyScrollWidth<=state.bodyWidth+1,'drawer body overflows '+name+': '+JSON.stringify(state));
-    assert.deepEqual(state.leaks,[],'hidden CSS leaks '+name);
+    const failures=[];
+    if(state.pageWidth>state.viewport+1)failures.push('page overflows');
+    if(state.drawerScrollWidth>state.drawerWidth+1)failures.push('drawer overflows');
+    if(state.bodyScrollWidth>state.bodyWidth+1)failures.push('drawer body overflows');
+    if(state.leaks.length)failures.push('hidden CSS leaks');
+    if(failures.length){
+     const elements=await page.evaluate(()=>{
+      const body=document.getElementById('drawerBody'),edge=body.getBoundingClientRect().right;
+      return [...body.querySelectorAll('*')].filter(el=>el.getClientRects().length&&el.getBoundingClientRect().right>edge+1).slice(0,30).map(el=>({tag:el.tagName,id:el.id,className:el.className,clientWidth:el.clientWidth,scrollWidth:el.scrollWidth,right:el.getBoundingClientRect().right,bodyRight:edge}));
+     });
+     report.layoutFailures.push({name,width,failures,...state,elements});
+    }
     await page.screenshot({path:path.join(out,width+'-'+name+'.png')});
    };
    try{await page.goto(origin+'/'+type,{waitUntil:'load'});assert.deepEqual(report.errors,[]);if(type==='market')await marketCases(page,check);else await craftCases(page,check);}
-   catch(error){await page.screenshot({path:path.join(out,width+'-'+type+'-failure.png')}).catch(()=>{});throw error;}
+   catch(error){
+    report.overflowElements=await page.evaluate(()=>{
+     const body=document.getElementById('drawerBody'),edge=body.getBoundingClientRect().right;
+     return [...body.querySelectorAll('*')].filter(el=>el.getClientRects().length&&el.getBoundingClientRect().right>edge+1).slice(0,30).map(el=>({tag:el.tagName,id:el.id,className:el.className,clientWidth:el.clientWidth,scrollWidth:el.scrollWidth,right:el.getBoundingClientRect().right,bodyRight:edge}));
+    }).catch(()=>[]);
+    await page.screenshot({path:path.join(out,width+'-'+type+'-failure.png')}).catch(()=>{});throw error;
+   }
    finally{await context.close();}
   }
   assert.deepEqual(report.errors,[]);assert.deepEqual(report.blockedOrigins,[],'fixture attempted external traffic');
+  assert.deepEqual(report.layoutFailures,[],'browser layout/hidden checks failed (all viewports collected)');
   console.log('PASS release UI browser: '+report.cases.length+' layout/flow checks');
  }catch(error){report.failure=error.stack||String(error);throw error;}finally{fs.writeFileSync(path.join(out,'report.json'),JSON.stringify(report,null,2));if(browser)await browser.close();if(server.listening)await new Promise(resolve=>server.close(resolve));}
 }
