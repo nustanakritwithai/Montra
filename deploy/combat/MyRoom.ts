@@ -1,3 +1,4 @@
+import {HorizontalMovement} from "./HorizontalMovement.js";
 import {VerticalMovement} from "./VerticalMovement.js";
 import { FORGE_CATALOG } from "./ForgeRules.js";
 import { accounts } from "./AccountService.js";
@@ -38,7 +39,7 @@ import {
 import {
   MonsterRRTNavigator, isMonsterSegmentClear,
 } from "./MonsterRRT.js";
-import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.js";
+import { parseDashCommand, advanceDash } from "./DashRules.js";
 import type { CharacterSnapshot } from "./CharacterStore.js";
 import {MASTERY_ENABLED,masteryBonuses,masteryCapacity,masteryPreview,encodeMasteryVitals,scaleResource,type MasteryMode} from "./RebirthCombat.js";
 import type {CombatStats} from "./Progression.js";
@@ -119,7 +120,6 @@ type Gates = {
   chat: CommandBucket; bugReport: CommandBucket; possession: CommandBucket; build: CommandBucket; swordTree: CommandBucket; occult: CommandBucket; economy: CommandBucket; party: CommandBucket; guild: CommandBucket;
 };
 
-type ActiveDash = DashDirection & { remaining: number };
 type TradeSession = { id:string; a:string; b:string; expires:number; offers:Record<string, TradeOffer>; items:Record<string,{itemId:string;quantity:number}|null>; fingerprints:Record<string,string>; confirmed:Set<string> };
 
 /**
@@ -152,10 +152,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private closedFieldGates=new Set<string>();
   private gateActions=new Map<string,number>();
   private battleActive=false;
-  private destinations = new Map<string, Vec2>();
-  private crestTurns=new Map<string,Vec2[]>();
-  private activeDashes = new Map<string, ActiveDash>();
-  private lastDashMs = new Map<string, number>();
+  private readonly horizontalMovement = new HorizontalMovement<Player>({
+    canOccupy: (x,z,layer,flying,mapId) => this.canOccupy(x,z,layer,flying,mapId),
+    moveOnSurface: (player,x,z) => this.moveOnSurface(player,x,z),
+  }, (playerId,blocked) => this.broadcast("dash_finished", {playerId,blocked}, {afterNextPatch:true}));
+  private get destinations() { return this.horizontalMovement.destinations; }
+  private get crestTurns() { return this.horizontalMovement.crestTurns; }
+  private get activeDashes() { return this.horizontalMovement.activeDashes; }
+  private get lastDashMs() { return this.horizontalMovement.lastDashMs; }
   private attackTargets = new Map<string, string>();
   private mountHitSequence = new Map<string, number>();
   private lastMountMs = new Map<string, number>();
@@ -5263,28 +5267,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const moveSpeed=player.flying ? FLIGHT.horizontalSpeed : player.mounted ? RULES.mountedSpeed : RULES.playerSpeed * groundMastery * (this.sentinelAnchors.has(sessionId)?0.6:1) *
         (this.bladeCloaks.has(sessionId) && this.bladeBooks.get(sessionId)?.learned.includes("quiet_step") ? 1+BLADE_LESSONS.quiet_step.power : 1);
 
-      const dash = this.activeDashes.get(sessionId);
-      if (dash) {
-        const move = advanceDash(
-          player, dash,
-          Math.min(dash.remaining, RULES.dashSpeed * dt),
-          (x, z) => this.canOccupy(x,z,surfaceLayer(player), player.flying, player.mapId),
-          getWorldMap(player.mapId)!.bounds,
-        );
-        this.moveOnSurface(player,move.x,move.z);
-        player.facing = facingTo(dash.dx, dash.dz);
-        dash.remaining = Math.max(0, dash.remaining - move.moved);
-        if (move.blocked || dash.remaining < 0.0001) {
-          this.activeDashes.delete(sessionId);
-          player.combatState = "idle";
-          this.broadcast("dash_finished", {
-            playerId: sessionId, blocked: move.blocked,
-          }, { afterNextPatch: true });
-        } else {
-          player.combatState = "dashing";
-        }
-        continue;
-      }
+      if (this.horizontalMovement.updateDash(sessionId, player, dt)) continue;
 
       const targetId = this.attackTargets.get(sessionId);
       if (targetId) {
@@ -5337,46 +5320,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         continue;
       }
 
-      const destination=this.destinations.get(sessionId);
-      const turns=destination && isOnPlatform(surfaceLayer(player))?this.crestTurns.get(sessionId):undefined;
-      const target=turns?.[0] ?? destination;
-      if (!target) {
-        player.combatState = "idle";
-        player.targetId = "";
-        continue;
-      }
-      const dx = target.x - player.x;
-      const dz = target.z - player.z;
-      if(player.mounted){
-        const distance=Math.hypot(dx,dz);
-        if(distance<.035){player.combatState="idle";this.destinations.delete(sessionId);continue;}
-        const move=advanceDash(player,{dx:dx/distance,dz:dz/distance},Math.min(distance,moveSpeed*dt),
-          (x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId),getWorldMap(player.mapId)!.bounds);
-        if(move.moved)player.facing=facingTo(dx,dz);
-        this.moveOnSurface(player,move.x,move.z);
-        if(move.blocked || Math.hypot(target.x-player.x,target.z-player.z)<.035){this.destinations.delete(sessionId);player.combatState="idle";}
-        else player.combatState="moving";
-        continue;
-      }
-      const next = stepTowards(player, target,
-        moveSpeed * dt);
-      if (next.moved) player.facing = facingTo(dx, dz);
-      if (this.canOccupy(next.x,next.z,surfaceLayer(player),player.flying,player.mapId)) {
-        this.moveOnSurface(player,next.x,next.z);
-      } else {
-        // Slide on the wall face if a legal axis exists; never tunnel through
-        // solid geometry via client destinations or elevated edge tapping.
-        if (this.canOccupy(next.x,player.z,surfaceLayer(player),player.flying,player.mapId)) this.moveOnSurface(player,next.x,player.z);
-        else if (this.canOccupy(player.x,next.z,surfaceLayer(player),player.flying,player.mapId)) this.moveOnSurface(player,player.x,next.z);
-        else {
-          this.destinations.delete(sessionId);
-          player.combatState = "idle";
-          continue;
-        }
-      }
-      const arrived = Math.hypot(target.x-player.x,target.z-player.z) < .035;
-      player.combatState = arrived ? "idle" : "moving";
-      if(arrived){if(turns?.length)turns.shift();else this.destinations.delete(sessionId);}
+      this.horizontalMovement.updateDestination(sessionId, player, dt, moveSpeed);
     }
   }
 
