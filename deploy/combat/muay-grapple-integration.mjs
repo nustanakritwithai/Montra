@@ -8,14 +8,14 @@ if(!/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(url||"") || new URL(url).port
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn,label,timeout=10000){const end=Date.now()+timeout;while(Date.now()<end){const r=fn();if(r)return r;await sleep(30);}throw Error("timeout: "+label);}
 const token=()=>"mt1_"+randomBytes(32).toString("hex"), aToken=token(), dToken=token(), bToken=token(), safeToken=token(), npcToken=token(), disconnectVictimToken=token(), edgeAttackerToken=token(), edgeVictimToken=token();
-async function seed(t,name,x,z){
+async function seed(t,name,x,z,hp=250){
  const id=createHash("sha256").update(t).digest("hex"),slots=Array(12).fill(null),base=["grapple","punch","guard","counter"];
  slots[0]={itemId:"health_potion",quantity:3};slots[1]={itemId:"muay_wraps",quantity:1};
  const loadouts={chaiya:[...base],korat:[...base],lopburi:[...base],thasao:[...base]};
- await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level:10,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp:250,mapId:"ritual_village",build:{path:"muay_boran",ancestry:"woodland"},muayWrapGranted:true,muayBook:{school:"chaiya",learned:[...base],training:{strikes:10,blocks:1},slots:[...base],loadouts},inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
+ await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level:10,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp,mapId:"ritual_village",build:{path:"muay_boran",ancestry:"woodland"},muayWrapGranted:true,muayBook:{school:"chaiya",learned:[...base],training:{strikes:10,blocks:1},slots:[...base],loadouts},inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
 }
 await seed(aToken,"ผู้จับ",-10,8);await seed(dToken,"ผู้ถูกจับ",-10,9.4);await seed(bToken,"ผู้จับอีกคน",-11,10.5);await seed(safeToken,"ผู้พัก",0,0);await seed(npcToken,"ผู้ทดสอบผี",1,8.8);
-await seed(disconnectVictimToken,"ผู้รอหลุด",-11.6,10.5);await seed(edgeAttackerToken,"ผู้จับริมเขตพัก",-8.6,0);await seed(edgeVictimToken,"ผู้ถูกจับริมเขตพัก",-7.2,0);
+await seed(disconnectVictimToken,"ผู้รอหลุด",-11.6,10.5);await seed(edgeAttackerToken,"ผู้จับริมเขตพัก",-8.6,0);await seed(edgeVictimToken,"ผู้ถูกจับริมเขตพัก",-7.2,0,9999);
 const client=new Client(url),options=guestToken=>({guestToken,worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1}),rooms=[];
 const events=new Map(),watch=room=>{const list=[];events.set(room.sessionId,list);room.onMessage("*",(type,data)=>list.push({type,data}));return room;};
 const seen=(room,type,predicate=()=>true)=>events.get(room.sessionId).find(e=>e.type===type && predicate(e.data));
@@ -53,10 +53,15 @@ try {
  // A legal hold cannot throw a victim across the rest-area boundary.
  edgeAttacker.send("muay_skill",{skillId:"grapple",targetId:edgeVictim.sessionId});
  await until(()=>seen(edgeAttacker,"muay_grapple",e=>e.phase==="held"),"hold by rest area");
- const edgeHp=p(edgeVictim.sessionId).hp,edgeX=p(edgeVictim.sessionId).x;
+ // Full health isolates this negative-damage check from passive regeneration.
+ const edgeBefore={...p(edgeVictim.sessionId).toJSON()},edgeEventStart=events.get(a.sessionId).length;
+ assert.equal(edgeBefore.hp,edgeBefore.maxHp);
  edgeAttacker.send("muay_skill",{skillId:"grapple",targetId:edgeVictim.sessionId});
  await until(()=>seen(edgeAttacker,"command_rejected",e=>e.reason==="muay_throw_blocked"),"rest area throw blocked");
- assert.equal(p(edgeVictim.sessionId).x,edgeX);assert.equal(p(edgeVictim.sessionId).hp,edgeHp);
+ await sleep(250); // Observe the next state patch and any afterNextPatch damage event.
+ const edgeAfter=p(edgeVictim.sessionId);
+ for(const field of ["x","y","z","hp","hitSeq"])assert.equal(edgeAfter[field],edgeBefore[field],"blocked throw changed "+field);
+ assert.equal(events.get(a.sessionId).slice(edgeEventStart).filter(e=>["pvp_hit","monster_hit","summon_hit"].includes(e.type) && e.data.targetId===edgeVictim.sessionId).length,0,"blocked throw emitted damage");
  // An uncontrolled monster can be held, and timeout releases it without another input.
  await until(()=>Math.hypot(p(n.sessionId).x-a.state.monster.x,p(n.sessionId).z-a.state.monster.z)<1.8,"monster nearby");
  n.send("muay_skill",{skillId:"grapple",targetId:"possessed-1"});
