@@ -1,8 +1,8 @@
 {
   "format": 1,
   "output": "styles.css",
-  "bytes": 342751,
-  "sha256": "a0b0269a05f4693c28853d4ee58e29304df8ecd7851c8e6755a8d31b7250431f",
+  "bytes": 347997,
+  "sha256": "68d7b5620d41c36440a4d5ba791c69b6829a96c0cbd0f2268af02e91ed815502",
   "fragments": [
     {
       "path": "base/000-foundation-and-drawers.css",
@@ -318,6 +318,13 @@
       "sha256": "39551eecfab95e37f27e37334687c5264b562fb7423b5ad444841d33b58a3e82",
       "originalStartLine": 5159,
       "originalEndLine": 5281
+    },
+    {
+      "path": "market/045-world-market.css",
+      "bytes": 5246,
+      "sha256": "f7f6b556a02c661ff93155b2112af7d1026329edfefa70e5172dc7847a26d81e",
+      "originalStartLine": 5282,
+      "originalEndLine": 5333
     }
   ]
 }

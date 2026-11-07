@@ -1,8 +1,8 @@
 {
   "format": 1,
   "output": "main.js",
-  "bytes": 1442437,
-  "sha256": "579f58cc515e9fa306053120fc856a832fb44c74abe0e46ed6a3458286cbd00b",
+  "bytes": 1457840,
+  "sha256": "b6623516944fd10d6656f0fcdd59b8e5e3bb64af965dd3a4c9ca9b446421b45f",
   "fragments": [
     {
       "path": "core/000-wrapper-open.js",
@@ -281,8 +281,8 @@
     },
     {
       "path": "ui/055-market-and-trade.js",
-      "bytes": 38967,
-      "sha256": "0898ee8b63ffbfa6f470fe8db26733a06a0f3507d09cf516f37155aaf9c53483"
+      "bytes": 54370,
+      "sha256": "2e73690727382472b0113a9748719e8de0d01163a61e2c5fef92ffdf9366bb41"
     },
     {
       "path": "ui/056-party-guild-and-rebirth.js",

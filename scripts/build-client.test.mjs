@@ -11,8 +11,8 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 test('initial extraction retains every baseline byte and one unchanged IIFE', () => {
   const baseline = JSON.parse(readFileSync(join(clientRoot, 'src/client/extraction-baseline.json')));
   const bytes = assembleClient();
-  assert.equal(bytes.length, 1442437);
-  assert.equal(hash(bytes), '579f58cc515e9fa306053120fc856a832fb44c74abe0e46ed6a3458286cbd00b');
+  assert.equal(bytes.length, 1457840);
+  assert.equal(hash(bytes), 'b6623516944fd10d6656f0fcdd59b8e5e3bb64af965dd3a4c9ca9b446421b45f');
   assert.equal(bytes.length, baseline.bytes);
   assert.equal(hash(bytes), baseline.sha256);
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));

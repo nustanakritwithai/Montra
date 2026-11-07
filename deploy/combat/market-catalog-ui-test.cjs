@@ -179,4 +179,25 @@ test('timeout recovery, reconnect reset and old room replies never replay purcha
   const oldReply=f.callbacks.market_page,tag=f.lastBrowse().payload.tag;f.run('resetCentralMarket()');assert.equal(f.status().marketPageRequest,null);assert.equal(f.status().marketNextCursor,null);assert.equal(f.timers.size,0);
   f.ctx.room={state:{economyAvailable:false}};oldReply({tag,market:'fixed',listings:[f.row(88)],nextCursor:88});assert.equal(f.status().economyListings.length,0);
 });
+
+test('World Market shell: tabs, row table, client filters, sort, two-step Buy and coming-soon views',()=>{
+  const f=fixture();assert.match(f.ctx.html,/World Market/);
+  for(const v of ['search','price','wish','sell','orders','auction','rules'])assert(f.$('wmTab-'+v),'tab '+v);
+  assert.equal(f.$('wmTab-search').getAttribute('aria-pressed'),'true');assert.equal(f.$('wmCoins').textContent,'1,000');
+  const a={...f.row(1,'weapon'),price:900},b={...f.row(2),price:50},c={...f.row(3,'stone'),price:300};
+  f.page([a,b,c]);const rows=()=>f.$('wmRowsBody').children.map(r=>r.dataset.listingId);
+  assert.deepEqual(rows(),[uuid(2),uuid(3),uuid(1)]);assert.match(f.$('wmShown').textContent,/^3 shown/);
+  assert.match(f.$('wmRowsBody').children[2].textContent,/ดาบคู่/);assert.match(f.$('wmRowsBody').children[2].textContent,/ไม่หมดอายุ/);
+  f.$('wmSort').value='price-desc';f.$('wmSort').onchange();assert.deepEqual(rows(),[uuid(1),uuid(3),uuid(2)]);
+  f.$('wmPriceMin').value='100';f.$('wmFilterForm').onsubmit({preventDefault(){}});assert.deepEqual(rows(),[uuid(1),uuid(3)]);
+  f.$('wmRarity').value='rare';f.$('wmFilterForm').onsubmit({preventDefault(){}});assert.deepEqual(rows(),[uuid(1)]);
+  assert.equal(f.$('wmBuy').disabled,true);assert.equal(f.$('wmPick').textContent,'Pick an item in the list');
+  f.$('wmRowsBody').children[0].click();assert.equal(f.$('wmBuy').disabled,false);
+  f.$('wmBuy').click();assert.equal(f.wire.filter(x=>x.command==='market_buy').length,0);assert.match(f.$('wmPick').textContent,/ยืนยันซื้อ/);
+  f.$('wmBuy').click();const buy=f.wire.filter(x=>x.command==='market_buy');assert.equal(buy.length,1);assert.equal(buy[0].payload.listingId,uuid(1));
+  f.$('wmTab-price').click();assert.equal(f.$('wmSoon').hidden,false);assert.equal(f.$('wmSearch').hidden,true);
+  f.$('wmTab-rules').click();assert.equal(f.$('wmRules').hidden,false);assert.match(f.ctx.html,/ภาษีขาย 0%/);
+  f.$('wmTab-auction').click();assert.equal(f.status().economyTab,'auction');assert.equal(f.lastBrowse().payload.market,'auction');
+  f.$('wmTab-sell').click();assert.equal(f.status().economyTab,'shop');assert.equal(f.$('marketSellForm').open,true);
+});
 console.log(`PASS marketplace catalog: ${groups} regression groups`);
