@@ -28,18 +28,18 @@ const reviewedWarFragments = new Map([
   },
   {
     "path": "core/059-frame-loop-and-startup.js",
-    "bytes": 18540,
-    "sha256": "7f658402c8057b938385b677136f427d3fb4f6f831ce38cdb85fc984e41284c6"
+    "bytes": 18631,
+    "sha256": "14c1cc9bd0f2dd0dbc8317c67138f2ebf99d8e2f56a0be5fb06719782aa23900"
   }
 ].map(entry => [entry.path, entry]));
 
 test('reviewed war client preserves all unchanged extraction bytes and deterministic assembly', () => {
   const baseline = JSON.parse(readFileSync(join(clientRoot, 'src/client/extraction-baseline.json')));
   const bytes = assembleClient();
-  assert.equal(baseline.bytes, 1427612);
-  assert.equal(baseline.sha256, 'fc2fa4485b7b193325daa33b68aba37b7d1c432485cc154d3ed14451cb18eec4');
-  assert.equal(bytes.length, 1428477);
-  assert.equal(hash(bytes), '94f8cfb0fad829bb74458dfc7a45348f202a42ec449278dd4374aa2955eb1802');
+  assert.equal(baseline.bytes, 1442437);
+  assert.equal(baseline.sha256, '579f58cc515e9fa306053120fc856a832fb44c74abe0e46ed6a3458286cbd00b');
+  assert.equal(bytes.length, 1443302);
+  assert.equal(hash(bytes), '6a9ef6d3272f1b20f1541ecffcc92a5cd7451724aec04fccac5bab3c743676fe');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

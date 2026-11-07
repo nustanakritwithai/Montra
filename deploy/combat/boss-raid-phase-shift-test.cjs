@@ -50,7 +50,7 @@ assert(mainSrc.includes('g.staggeredUntil && g.staggeredUntil > now'), 'checks b
 // 6. Verify Window API & Version Bump
 assert(mainSrc.includes('window.MontraBoss = {'), 'exposes window.MontraBoss');
 assert(mainSrc.includes('getBossStatus'), 'window.MontraBoss provides getBossStatus');
-assert(/main\.js\?v=0\.1[2-9]\./.test(indexSrc), 'index.html points to v0.12.0 or newer');
+assert(/main\.js\?v=0\.(1[2-9]|[2-9]\d)\./.test(indexSrc), 'index.html points to v0.12.0 or newer');
 
 // 7. Functional Simulation Test for Boss State Machine
 const mockGhost = {

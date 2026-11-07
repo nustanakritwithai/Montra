@@ -42,8 +42,8 @@ assert(mainSrc.includes('window.MontraWar = {'), 'exposes window.MontraWar');
 assert(mainSrc.includes('soundWarHorn'), 'window.MontraWar provides soundWarHorn');
 assert(mainSrc.includes('simulateTerritoryCapture'), 'window.MontraWar provides simulateTerritoryCapture');
 assert(mainSrc.includes('getTerritoryStatus'), 'window.MontraWar provides getTerritoryStatus');
-assert(/main\.js\?v=0\.1[3-9]\./.test(indexSrc), 'index.html points to v0.13.0 or newer');
-assert(/audio\.js\?v=0\.1[1-9]\./.test(indexSrc), 'index.html points to audio.js v0.11.0 or newer');
+assert(/main\.js\?v=0\.(1[3-9]|[2-9]\d)\./.test(indexSrc), 'index.html points to v0.13.0 or newer');
+assert(/audio\.js\?v=0\.(1[1-9]|[2-9]\d)\./.test(indexSrc), 'index.html points to audio.js v0.11.0 or newer');
 
 // 6. Functional Simulation Test for Territory Event State Machine
 const mockWarEvents = [];

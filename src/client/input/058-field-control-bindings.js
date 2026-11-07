@@ -82,6 +82,13 @@
   }
   const flightBtn = $("flightButton");
   if (flightBtn) flightBtn.onclick = toggleFlightCommand;
+  function toggleBossCommand() {
+    if (window.MontraBoss?.toggleBoss) {
+      window.MontraBoss.toggleBoss();
+    }
+  }
+  const bossBtn = $("bossEncounterButton");
+  if (bossBtn) bossBtn.onclick = toggleBossCommand;
   addEventListener("keydown", e => {
     if (e.repeat || e.defaultPrevented) return;
     const t = e.target;
@@ -94,5 +101,7 @@
       toggleFamiliarPetCommand();
     } else if (e.key?.toLowerCase() === "f") {
       toggleFlightCommand();
+    } else if (e.key?.toLowerCase() === "v") {
+      toggleBossCommand();
     }
   });

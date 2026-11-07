@@ -1,8 +1,8 @@
 {
   "format": 1,
   "output": "main.js",
-  "bytes": 1427612,
-  "sha256": "fc2fa4485b7b193325daa33b68aba37b7d1c432485cc154d3ed14451cb18eec4",
+  "bytes": 1442437,
+  "sha256": "579f58cc515e9fa306053120fc856a832fb44c74abe0e46ed6a3458286cbd00b",
   "fragments": [
     {
       "path": "core/000-wrapper-open.js",
@@ -16,8 +16,8 @@
     },
     {
       "path": "audio/002-voice-guidance.js",
-      "bytes": 23357,
-      "sha256": "5b731a7bf057768d9201ca2ffa1e73cf68d7ad466ee3bae8e30900e9bbfb8227"
+      "bytes": 24316,
+      "sha256": "309f12bdb8148f1248b35cbf0674c9daf0cba852fe08d94b8fa3d9a9dcf62fc8"
     },
     {
       "path": "ui/003-toast-and-mode.js",
@@ -46,8 +46,8 @@
     },
     {
       "path": "combat/008-weapon-party-boss-feedback.js",
-      "bytes": 48696,
-      "sha256": "905b92f351bd678ed540616dd40eb8deec2a453e8e001e7f5056a39caa2a8572"
+      "bytes": 62179,
+      "sha256": "d18905ee922eae0ebd61ec5d77ee9e8606a7e113fbc9299d67cdcdd706b9a856"
     },
     {
       "path": "render/009-effects-and-target-hud.js",
@@ -296,13 +296,13 @@
     },
     {
       "path": "input/058-field-control-bindings.js",
-      "bytes": 6215,
-      "sha256": "6f8722819060780581d4c03be1e99df83fda5fb4ef80efc10fe558025037f306"
+      "bytes": 6507,
+      "sha256": "b92c6d7045a3124f5a26323d6418ff296f742222fba54b9f5f41bb6b3c03e839"
     },
     {
       "path": "core/059-frame-loop-and-startup.js",
-      "bytes": 18297,
-      "sha256": "89e30432f3183cb034865c2e0252526bb940c1bf8a1a898a716a077794ed2dca"
+      "bytes": 18388,
+      "sha256": "b469ae93d36e7b913177d8c58a9748f7739aca206be90622558f6cf5c57d0905"
     },
     {
       "path": "core/060-wrapper-close.js",

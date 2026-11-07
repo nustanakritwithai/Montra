@@ -1215,3 +1215,341 @@
     updateFlight
   };
 
+  // Phase 18: Thao Wessuwan Asura Titan 3D Boss (โมเดลบอสท้าวเวสสุวรรณเทวราช 3D)
+  let bossTitanState = {
+    active: false,
+    mesh: null,
+    x: 1.1,
+    y: 0,
+    z: 10.4,
+    hp: 1200,
+    maxHp: 1200,
+    isEnraged: false,
+    isTelegraphing: false,
+    isStaggered: false,
+    telegraphStartTime: 0,
+    staggerUntil: 0,
+    lastAttackTime: 0,
+    lastSlamTime: 0,
+    facing: 0
+  };
+
+  const BOSS_SLAM_COOLDOWN = 12000;
+  const BOSS_TELEGRAPH_DURATION = 1800;
+
+  let bossSkinMat = null, bossGoldMat = null, bossRedMat = null, bossEyeMat = null, bossClubMat = null, bossTelegraphMat = null;
+  function ensureBossMaterials() {
+    if (bossSkinMat) return;
+    if (typeof mat !== "function") return;
+    bossSkinMat = mat("boss titan skin", "#212121", "#121212");
+    bossGoldMat = mat("boss titan gold", "#ffd700", "#b8860b");
+    bossRedMat = mat("boss titan red", "#d32f2f", "#b71c1c");
+    bossEyeMat = mat("boss titan eye", "#ff1744", "#ff5252");
+    bossClubMat = mat("boss titan club", "#4e342e", "#ffd700");
+    bossTelegraphMat = mat("boss telegraph ground", "#ff1744", "#d50000");
+  }
+
+  function createThaoWessuwanBossMesh(x = 1.1, y = 0, z = 10.4) {
+    if (typeof B === "undefined" || !scene) return null;
+    ensureBossMaterials();
+
+    const root = new B.TransformNode("boss-wessuwan-root", scene);
+    root.position.set(x, y, z);
+
+    const bodyPivot = new B.TransformNode("boss-body-pivot", scene);
+    bodyPivot.parent = root;
+    bodyPivot.position.set(0, 0, 0);
+
+    // Torso: Muscular obsidian titan chest
+    const torso = B.MeshBuilder.CreateCylinder("boss-torso", { diameterTop: 1.7, diameterBottom: 1.2, height: 1.9, tessellation: 8 }, scene);
+    torso.parent = bodyPivot;
+    torso.position.set(0, 1.6, 0);
+    torso.scaling.set(1.1, 1.0, 0.85);
+    if (bossSkinMat) torso.material = bossSkinMat;
+    torso.isPickable = true;
+
+    // Golden waist belt
+    const belt = B.MeshBuilder.CreateCylinder("boss-belt", { diameter: 1.35, height: 0.28, tessellation: 8 }, scene);
+    belt.parent = bodyPivot;
+    belt.position.set(0, 0.75, 0);
+    if (bossGoldMat) belt.material = bossGoldMat;
+    belt.isPickable = false;
+
+    // Red demon sash
+    const sash = B.MeshBuilder.CreatePlane("boss-sash", { width: 0.6, height: 1.2 }, scene);
+    sash.parent = bodyPivot;
+    sash.position.set(0, 0.45, -0.65);
+    if (bossRedMat) sash.material = bossRedMat;
+    sash.isPickable = false;
+
+    // Spiked Shoulder Pauldrons
+    const shoulderL = B.MeshBuilder.CreateCylinder("boss-shoulder-l", { diameterTop: 0.05, diameterBottom: 0.55, height: 0.6, tessellation: 6 }, scene);
+    shoulderL.parent = bodyPivot;
+    shoulderL.position.set(-1.05, 2.3, 0);
+    shoulderL.rotation.z = Math.PI / 4;
+    if (bossGoldMat) shoulderL.material = bossGoldMat;
+    shoulderL.isPickable = false;
+
+    const shoulderR = B.MeshBuilder.CreateCylinder("boss-shoulder-r", { diameterTop: 0.05, diameterBottom: 0.55, height: 0.6, tessellation: 6 }, scene);
+    shoulderR.parent = bodyPivot;
+    shoulderR.position.set(1.05, 2.3, 0);
+    shoulderR.rotation.z = -Math.PI / 4;
+    if (bossGoldMat) shoulderR.material = bossGoldMat;
+    shoulderR.isPickable = false;
+
+    // Demonic Head
+    const head = B.MeshBuilder.CreateSphere("boss-head", { diameter: 0.85, segments: 10 }, scene);
+    head.parent = bodyPivot;
+    head.position.set(0, 2.85, 0);
+    if (bossSkinMat) head.material = bossSkinMat;
+    head.isPickable = false;
+
+    // Ruby Demonic Eyes
+    const eyeL = B.MeshBuilder.CreateSphere("boss-eye-l", { diameter: 0.14, segments: 6 }, scene);
+    eyeL.parent = head;
+    eyeL.position.set(-0.2, 0.08, -0.38);
+    if (bossEyeMat) eyeL.material = bossEyeMat;
+    eyeL.isPickable = false;
+
+    const eyeR = B.MeshBuilder.CreateSphere("boss-eye-r", { diameter: 0.14, segments: 6 }, scene);
+    eyeR.parent = head;
+    eyeR.position.set(0.2, 0.08, -0.38);
+    if (bossEyeMat) eyeR.material = bossEyeMat;
+    eyeR.isPickable = false;
+
+    // Tiered Golden Crown (ชฎายอดมงกุฎเทวะ)
+    const crownTier1 = B.MeshBuilder.CreateCylinder("boss-crown-1", { diameterTop: 0.5, diameterBottom: 0.8, height: 0.45, tessellation: 8 }, scene);
+    crownTier1.parent = head;
+    crownTier1.position.set(0, 0.55, 0);
+    if (bossGoldMat) crownTier1.material = bossGoldMat;
+    crownTier1.isPickable = false;
+
+    const crownSpire = B.MeshBuilder.CreateCylinder("boss-crown-spire", { diameterTop: 0.02, diameterBottom: 0.35, height: 1.1, tessellation: 8 }, scene);
+    crownSpire.parent = crownTier1;
+    crownSpire.position.set(0, 0.72, 0);
+    if (bossGoldMat) crownSpire.material = bossGoldMat;
+    crownSpire.isPickable = false;
+
+    // Left Arm (Clenched Power Fist)
+    const leftArmPivot = new B.TransformNode("boss-arm-l-pivot", scene);
+    leftArmPivot.parent = bodyPivot;
+    leftArmPivot.position.set(-0.95, 2.1, 0);
+
+    const leftArm = B.MeshBuilder.CreateCylinder("boss-arm-l", { diameter: 0.4, height: 1.4, tessellation: 8 }, scene);
+    leftArm.parent = leftArmPivot;
+    leftArm.position.set(-0.25, -0.6, 0);
+    leftArm.rotation.z = -0.3;
+    if (bossSkinMat) leftArm.material = bossSkinMat;
+    leftArm.isPickable = false;
+
+    // Right Arm (Thunder Mace Wielder)
+    const rightArmPivot = new B.TransformNode("boss-arm-r-pivot", scene);
+    rightArmPivot.parent = bodyPivot;
+    rightArmPivot.position.set(0.95, 2.1, 0);
+
+    const rightArm = B.MeshBuilder.CreateCylinder("boss-arm-r", { diameter: 0.4, height: 1.4, tessellation: 8 }, scene);
+    rightArm.parent = rightArmPivot;
+    rightArm.position.set(0.25, -0.6, 0);
+    rightArm.rotation.z = 0.3;
+    if (bossSkinMat) rightArm.material = bossSkinMat;
+    rightArm.isPickable = false;
+
+    // Giant Thunder Mace (กระบองยันต์ตรีศูลอาคม)
+    const macePivot = new B.TransformNode("boss-mace-pivot", scene);
+    macePivot.parent = rightArm;
+    macePivot.position.set(0, -0.7, -0.2);
+
+    const maceShaft = B.MeshBuilder.CreateCylinder("boss-mace-shaft", { diameter: 0.16, height: 2.6, tessellation: 8 }, scene);
+    maceShaft.parent = macePivot;
+    maceShaft.position.set(0, 0.4, 0);
+    maceShaft.rotation.x = Math.PI / 2;
+    if (bossClubMat) maceShaft.material = bossClubMat;
+    maceShaft.isPickable = false;
+
+    const maceHead = B.MeshBuilder.CreateCylinder("boss-mace-head", { diameterTop: 0.55, diameterBottom: 0.4, height: 0.9, tessellation: 8 }, scene);
+    maceHead.parent = macePivot;
+    maceHead.position.set(0, 0.4, 1.2);
+    maceHead.rotation.x = Math.PI / 2;
+    if (bossGoldMat) maceHead.material = bossGoldMat;
+    maceHead.isPickable = false;
+
+    // Telegraph Ground Decal / Ring (วงแหวนเตือนภัย)
+    const telegraphRing = B.MeshBuilder.CreateDisc("boss-telegraph-ring", { radius: 4.5, tessellation: 32 }, scene);
+    telegraphRing.parent = root;
+    telegraphRing.position.set(0, 0.04, 0);
+    telegraphRing.rotation.x = Math.PI / 2;
+    if (bossTelegraphMat) telegraphRing.material = bossTelegraphMat;
+    telegraphRing.isPickable = false;
+    telegraphRing.setEnabled(false);
+
+    return { root, bodyPivot, torso, head, rightArmPivot, leftArmPivot, macePivot, telegraphRing, eyeL, eyeR };
+  }
+
+  function spawnThaoWessuwanBoss(x = 1.1, z = 10.4) {
+    if (bossTitanState.active && bossTitanState.mesh) {
+      return bossTitanState;
+    }
+
+    bossTitanState.active = true;
+    bossTitanState.x = x;
+    bossTitanState.y = 0;
+    bossTitanState.z = z;
+    bossTitanState.hp = bossTitanState.maxHp;
+    bossTitanState.isEnraged = false;
+    bossTitanState.isTelegraphing = false;
+    bossTitanState.isStaggered = false;
+    bossTitanState.lastSlamTime = performance.now();
+    bossTitanState.mesh = createThaoWessuwanBossMesh(x, 0, z);
+
+    if (typeof SFX === "function") SFX("boss_roar", { intensity: 1.4 });
+    if (typeof spawnFx === "function") {
+      spawnFx("nova", "gold", x, 0.1, z, { orient: "floor", life: 1200, s0: 2, s1: 9, a0: 1, a1: 0 });
+    }
+    if (typeof sparks === "function") {
+      sparks("flame", x, 1.5, z, 35, { speed: 3.5, up: 3.0, life: 800 });
+      sparks("gold", x, 2.0, z, 25, { speed: 3.0, up: 2.5, life: 800 });
+    }
+    if (typeof floatText === "function") {
+      floatText(x, 3.8, z, "ท้าวเวสสุวรรณเทวราช จุติ! 👹", "status", { big: true });
+    }
+    if (typeof triggerCombatCallout === "function") {
+      triggerCombatCallout("boss_titan_spawn");
+    }
+
+    const btn = $("bossEncounterButton");
+    if (btn) btn.setAttribute("aria-pressed", "true");
+
+    return bossTitanState;
+  }
+
+  function removeThaoWessuwanBoss() {
+    if (!bossTitanState.active) return false;
+    if (bossTitanState.mesh?.root) {
+      bossTitanState.mesh.root.dispose();
+      bossTitanState.mesh = null;
+    }
+    bossTitanState.active = false;
+    const btn = $("bossEncounterButton");
+    if (btn) btn.setAttribute("aria-pressed", "false");
+    return true;
+  }
+
+  function triggerBossWindup() {
+    if (!bossTitanState.active || bossTitanState.isStaggered || bossTitanState.isTelegraphing) return;
+    bossTitanState.isTelegraphing = true;
+    bossTitanState.telegraphStartTime = performance.now();
+
+    if (bossTitanState.mesh?.telegraphRing) {
+      bossTitanState.mesh.telegraphRing.setEnabled(true);
+    }
+    if (bossTitanState.mesh?.rightArmPivot) {
+      bossTitanState.mesh.rightArmPivot.rotation.x = -Math.PI * 0.7;
+    }
+
+    if (typeof SFX === "function") SFX("boss_roar", { intensity: 1.1, pitch: 1.05 });
+    if (typeof triggerCombatCallout === "function") {
+      triggerCombatCallout("boss_telegraph");
+    }
+  }
+
+  function triggerBossSlam() {
+    if (!bossTitanState.active || !bossTitanState.isTelegraphing) return;
+    bossTitanState.isTelegraphing = false;
+    bossTitanState.lastSlamTime = performance.now();
+
+    if (bossTitanState.mesh?.telegraphRing) {
+      bossTitanState.mesh.telegraphRing.setEnabled(false);
+    }
+    if (bossTitanState.mesh?.rightArmPivot) {
+      bossTitanState.mesh.rightArmPivot.rotation.x = 0;
+    }
+
+    const bX = bossTitanState.x;
+    const bZ = bossTitanState.z;
+
+    if (typeof SFX === "function") SFX("boss_slam", { intensity: 1.5 });
+    if (typeof spawnFx === "function") {
+      spawnFx("nova", "gold", bX, 0.1, bZ, { orient: "floor", life: 900, s0: 1.0, s1: 7.5, a0: 1, a1: 0 });
+    }
+    if (typeof sparks === "function") {
+      sparks("flame", bX, 0.3, bZ, 30, { speed: 4.5, up: 2.0, life: 700 });
+      sparks("gold", bX, 0.3, bZ, 25, { speed: 3.5, up: 2.5, life: 600 });
+    }
+    if (typeof floatText === "function") {
+      floatText(bX, 1.8, bZ, "อสนีบาตฟาดปฐพี! 💥 350", "crit", { big: true });
+    }
+
+    const hero = getLocalAvatar();
+    if (hero) {
+      const dist = Math.hypot((hero.x ?? 0) - bX, (hero.z ?? 0) - bZ);
+      if (dist <= 4.5) {
+        if (typeof floatAtPlayer === "function") {
+          floatAtPlayer(localId, "โดนคลื่นอสนีบาต! -60", "crit");
+        }
+      }
+    }
+  }
+
+  function toggleThaoWessuwanBoss() {
+    return bossTitanState.active ? removeThaoWessuwanBoss() : spawnThaoWessuwanBoss();
+  }
+
+  function updateThaoWessuwanBoss(dt, elapsed) {
+    if (!bossTitanState.active || !bossTitanState.mesh?.root) return;
+    const mesh = bossTitanState.mesh;
+    const now = performance.now();
+
+    const bob = Math.sin(elapsed * 2.2) * 0.08;
+    if (mesh.bodyPivot) mesh.bodyPivot.position.y = bob;
+
+    const hero = getLocalAvatar();
+    if (hero) {
+      const dx = (hero.x ?? 0) - bossTitanState.x;
+      const dz = (hero.z ?? 0) - bossTitanState.z;
+      bossTitanState.facing = Math.atan2(dx, dz);
+      mesh.root.rotation.y = bossTitanState.facing;
+    }
+
+    if (!bossTitanState.isEnraged && bossTitanState.hp <= bossTitanState.maxHp * 0.5) {
+      bossTitanState.isEnraged = true;
+      if (typeof SFX === "function") SFX("boss_roar", { intensity: 1.6, pitch: 0.9 });
+      if (typeof triggerCombatCallout === "function") triggerCombatCallout("boss_enrage");
+      if (typeof floatText === "function") {
+        floatText(bossTitanState.x, 3.8, bossTitanState.z, "สภาวะโทสะคลั่ง! 🔥", "crit", { big: true });
+      }
+    }
+
+    if (bossTitanState.isTelegraphing) {
+      const elapsedTelegraph = now - bossTitanState.telegraphStartTime;
+      const pulse = 1.0 + Math.sin(elapsed * 16.0) * 0.15;
+      if (mesh.telegraphRing) mesh.telegraphRing.scaling.set(pulse, pulse, pulse);
+
+      if (elapsedTelegraph >= BOSS_TELEGRAPH_DURATION) {
+        triggerBossSlam();
+      }
+    } else {
+      const slamCd = bossTitanState.isEnraged ? 7000 : BOSS_SLAM_COOLDOWN;
+      if (now - bossTitanState.lastSlamTime >= slamCd) {
+        triggerBossWindup();
+      }
+    }
+
+    if (Math.random() < dt * 3.5 && typeof sparks === "function") {
+      const sx = bossTitanState.x + (Math.random() - 0.5) * 1.5;
+      const sy = 2.4 + (Math.random() - 0.5) * 1.0;
+      const sz = bossTitanState.z + (Math.random() - 0.5) * 1.5;
+      sparks(bossTitanState.isEnraged ? "flame" : "gold", sx, sy, sz, 1, { speed: 1.0, up: 0.8, life: 350 });
+    }
+  }
+
+  window.MontraBoss = {
+    spawnBoss: spawnThaoWessuwanBoss,
+    removeBoss: removeThaoWessuwanBoss,
+    toggleBoss: toggleThaoWessuwanBoss,
+    triggerWindup: triggerBossWindup,
+    triggerSlam: triggerBossSlam,
+    isBossActive: () => bossTitanState.active,
+    getBossStatus: () => ({ ...bossTitanState }),
+    updateBoss: updateThaoWessuwanBoss
+  };
+
