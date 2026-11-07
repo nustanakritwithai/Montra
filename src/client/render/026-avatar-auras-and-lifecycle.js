@@ -149,6 +149,9 @@
     if(a.horse && a.mounted){
       a.horse.legs.forEach((leg,i)=>{leg.rotation.x=Math.sin(a.phase+(i===0||i===3?0:Math.PI))*.48*m;});
       a.horse.tail.rotation.x=.35+Math.sin(t*2)*.12;
+      if (m > .35 && a.stepSign && Math.sign(s) && Math.sign(s) !== a.stepSign) {
+        sparks("gold", a.x, (a.y || 0) + 0.08, a.z, 2, { speed: 0.8, up: 0.5, size: 0.28, life: 300 });
+      }
     }
     // Footstep on each foot plant (the stride sine crossing zero), by surface.
     if (m > .35 && !flying && !a.serverFlying && a.stepSign && Math.sign(s) && Math.sign(s) !== a.stepSign) {

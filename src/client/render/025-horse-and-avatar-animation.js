@@ -2,6 +2,8 @@
   const horseCoat = mat("horse coat", "#795039", "#130b08");
   const horseDark = mat("horse mane and hooves", "#30211d", "#080505");
   const horseLeather = mat("horse saddle leather", "#5b2f24", "#160b06");
+  const horseGold = mat("horse shamanic gold", "#ffe082", "#ffd700");
+  const horseEye = mat("horse mystic eye", "#fff59d", "#ffd54f");
   function createHorse(a) {
     const root=new B.TransformNode("horse-"+a.id,scene);root.parent=a.node;
     const part=(name,shape,position,scale,material,parent=root)=>{
@@ -11,12 +13,14 @@
     part("horse body","sphere",[0,1.12,0],[.92,.78,1.8],horseCoat);
     const neck=part("horse neck","box",[0,1.42,-.78],[.38,.83,.45],horseCoat);neck.rotation.x=-.4;
     const head=part("horse head","sphere",[0,1.72,-1.08],[.43,.46,.68],horseCoat);head.rotation.x=-.18;
-    for(const side of [-1,1])part("horse eye","sphere",[side*.213,1.78,-1.18],[.065,.065,.065],horseDark);
+    for(const side of [-1,1])part("horse eye","sphere",[side*.213,1.78,-1.18],[.068,.068,.068],horseEye);
     part("horse muzzle","sphere",[0,1.56,-1.43],[.34,.3,.38],horseDark);
     for(const side of [-1,1])part("horse ear","box",[side*.14,2.02,-1.08],[.09,.26,.1],horseDark);
     part("horse mane","box",[0,1.76,-.62],[.16,.33,.56],horseDark).rotation.x=-.4;
     part("horse saddle","box",[0,1.53,.05],[.64,.13,.67],horseLeather);
+    part("horse saddle gold","box",[0,1.55,.05],[.68,.06,.71],horseGold);
     part("horse saddle front","box",[0,1.64,-.24],[.58,.12,.15],horseDark);
+    part("horse bridle gold","box",[0,1.68,-1.02],[.46,.06,.22],horseGold);
     const tail=part("horse tail","box",[0,1.13,1.02],[.18,.65,.18],horseDark);tail.rotation.x=.35;
     const legs=[];
     for(const x of [-.3,.3])for(const z of [-.58,.58]){
@@ -35,9 +39,24 @@
     a.serverAlive = alive;
     a.serverCombat = typeof p?.combatState === "string" ? p.combatState : "idle";
     a.serverFlying = p?.flying === true;
+    const wasMounted = Boolean(a.mounted);
     a.mounted = p?.mounted === true && alive;
     if(a.mounted && !a.horse)a.horse=createHorse(a);
     a.horse?.root.setEnabled(a.mounted);
+    if (!wasMounted && a.mounted) {
+      if (typeof playMountSummonVfx === "function") playMountSummonVfx(a);
+      if (a.id === localId) {
+        triggerCombatCallout("mount_summon");
+        floatAtPlayer(a.id, "ควบม้าทรงมนตรา! 🐎", "status", { big: true });
+        SFX("whoosh", { pitch: 1.2 });
+        SFX("bell", { intensity: 1.1 });
+      }
+    } else if (wasMounted && !a.mounted && alive) {
+      if (a.id === localId) {
+        floatAtPlayer(a.id, "ลงจากหลังม้า", "status");
+        SFX("whoosh", { pitch: 0.8 });
+      }
+    }
   }
   const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
   // Additive effect materials shared by every avatar.

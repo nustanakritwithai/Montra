@@ -50,6 +50,10 @@
   $("bladeBookButton").onclick=openBladeBook;
   $("sentinelBookButton").onclick=openSentinelBook;
   function toggleFieldMount() {
+    if (window.MontraMount?.toggleMount) {
+      window.MontraMount.toggleMount();
+      return;
+    }
     const why=$("mountButton").dataset.unavailable;
     if(mode==="live" && why==="server"){toast("เซิร์ฟเวอร์ยังไม่เปิดระบบม้า · ต้องอัปเดต VPS");return;}
     if(mode==="live" && why==="guest"){toast("เรียกม้าได้เฉพาะตัวละครที่บันทึกในบัญชี");return;}
@@ -57,3 +61,10 @@
   }
   $("mountButton").onclick=toggleFieldMount;
   $("menuMount").onclick=()=>{closeDrawer();toggleFieldMount();};
+  addEventListener("keydown", e => {
+    if (e.key?.toLowerCase() === "h" && !e.repeat && !e.defaultPrevented) {
+      const t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.closest?.('button,a[href],summary,[role="button"]'))) return;
+      toggleFieldMount();
+    }
+  });

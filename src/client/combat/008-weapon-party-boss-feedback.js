@@ -367,5 +367,63 @@
     };
   }
 
+  function playMountSummonVfx(a) {
+    if (!a) return;
+    const x = a.x ?? 0, y = a.y ?? 0, z = a.z ?? 0;
+    spawnFx("yantra", "gold", x, y + 0.1, z, { orient: "ground", life: 1200, s0: 3, s1: 3, a0: 0.9, a1: 0, spin: 2.5 });
+    sparks("gold", x, y + 1, z, 14, { speed: 2.5, up: 2.5, life: 500 });
+  }
+
+  function isPlayerMounted(playerId = localId) {
+    if (mode === "live") {
+      const p = room?.state?.players?.get?.(playerId);
+      return Boolean(p?.mounted);
+    }
+    const a = avatars.get(playerId);
+    return Boolean(a?.mounted);
+  }
+
+  function getMountSpeedMultiplier(playerId = localId) {
+    return isPlayerMounted(playerId) ? 1.6 : 1.0;
+  }
+
+  function togglePlayerMount(send = true) {
+    if (mode === "live") {
+      const btn = $("mountButton");
+      const why = btn?.dataset.unavailable;
+      if (why === "server") { toast("เซิร์ฟเวอร์ยังไม่เปิดระบบม้า · ต้องอัปเดต VPS"); return false; }
+      if (why === "guest") { toast("เรียกม้าได้เฉพาะตัวละครที่บันทึกในบัญชี"); return false; }
+      if (send && room?.state?.mountAvailable === true && !btn?.disabled) {
+        room.send("toggle_mount", {});
+        return true;
+      }
+      return false;
+    }
+    const me = getLocalAvatar();
+    if (!me) return false;
+    if (demoFlying || (Math.abs((me.targetY ?? me.y ?? 0) - activeFort.height) > 0.2 && (me.targetY ?? me.y ?? 0) > 1)) {
+      toast("เรียกม้าได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");
+      return false;
+    }
+    const next = !me.mounted;
+    me.mounted = next;
+    if (next) {
+      if (!me.horse && typeof createHorse === "function") me.horse = createHorse(me);
+      me.horse?.root?.setEnabled(true);
+      playMountSummonVfx(me);
+      triggerCombatCallout("mount_summon");
+      floatAtPlayer(localId, "ควบม้าทรงมนตรา! 🐎", "status", { big: true });
+      SFX("whoosh", { pitch: 1.2 });
+      SFX("bell", { intensity: 1.1 });
+    } else {
+      me.horse?.root?.setEnabled(false);
+      floatAtPlayer(localId, "ลงจากหลังม้า", "status");
+      SFX("whoosh", { pitch: 0.8 });
+    }
+    if (typeof syncMountButton === "function") syncMountButton();
+    return true;
+  }
+
   window.MontraWar = { soundWarHorn, triggerWarAlert: triggerWarScreenAlert, simulateTerritoryCapture, checkTerritoryWarEvents, getTerritoryStatus };
+  window.MontraMount = { toggleMount: togglePlayerMount, isMounted: isPlayerMounted, getMountSpeedMultiplier, playMountVfx: playMountSummonVfx };
 
