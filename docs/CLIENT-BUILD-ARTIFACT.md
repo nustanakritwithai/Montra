@@ -1,7 +1,9 @@
 # Client build artifact and rollback
 
 Root `main.js` is generated and ignored, not a checked-in source. The browser
-still loads the same filename, classic script, IIFE and bytes. This change does
+still loads the same main filename and classic IIFE shell, preceded by the six
+explicitly allowlisted deferred classic modules. The artifact-generation bridge
+preserves the six-module candidate bytes. This change does
 not alter gameplay, network messages, saves, server schema or deployment paths.
 
 ## Clean checkout and local work
@@ -38,7 +40,9 @@ fragments fail. Existing generated output is never silently repaired by preparat
 `src/client/extraction-baseline.json` records the original source commit, fragment
 hashes, sizes, and statement boundaries. The original 1,372,310-byte bundle has
 SHA-256 `a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf`.
-The build tests retain those exact source and full-bundle assertions. They also
+The build tests reconstruct those historical bytes by reversing only the reviewed
+six module extractions and retain every original fragment and full-bundle
+fingerprint. The historical baseline is immutable. They also
 exercise a missing bundle, stale output, unsafe paths, symlinks, syntax errors,
 CLI preparation and byte-for-byte static payload parity. Do not refresh baseline
 fingerprints merely to make an unexpected difference pass.
@@ -46,7 +50,8 @@ fingerprints merely to make an unexpected difference pass.
 Pages publishes `_site/`, not the repository root. Its `build-manifest.json`
 records the revision, output sizes and SHA-256 hashes. Build from a clean committed
 checkout and verify CI for that exact SHA. Source organization changes in later
-phases require their own explicitly reviewed evidence; this artifact change alone
+phases require their own explicitly reviewed evidence; the six current modules
+have characterization and reconstruction coverage. This artifact change alone
 preserves all runtime bytes. It does not replace browser/staging or server checks.
 
 ## Rollback

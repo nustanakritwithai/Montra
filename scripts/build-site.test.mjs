@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -28,7 +28,7 @@ test('two builds are byte-identical and preserve the existing Pages payload', ()
     assert.deepEqual(buildSite(b, revision), manifest);
     assert.deepEqual(filesIn(a), filesIn(b));
     for (const path of filesIn(a)) assert.deepEqual(readFileSync(join(a, path)), readFileSync(join(b, path)), path);
-    const expected = ['.nojekyll', 'account-entry.js', 'audio.js', 'index.html', 'main.js', 'styles.css',
+    const expected = ['.nojekyll', 'account-entry.js', 'audio.js', 'index.html', 'main.js', 'styles.css', 'src/client-modules/character-slot-storage.js', 'src/client-modules/world-math.js', 'src/client-modules/item-presentation.js', 'src/client-modules/voice-guidance.js', 'src/client-modules/pointer-gestures.js', 'src/client-modules/lighting-controller.js', 'src/client-modules/room-state-sync.js', 'src/client-modules/skill-motion.js', 'src/client-modules/drawer-controller.js', 'src/client-modules/join-message-bootstrap.js',
       ...filesIn(join(root, 'assets')).map(path => `assets/${path}`),
       'weapon-preview/lod2/index.html', 'weapon-preview/lod2/crescent-blade-lod2.glb'].sort();
     assert.deepEqual(manifest.files.map(file => file.path).sort(), expected);
@@ -41,8 +41,24 @@ test('two builds are byte-identical and preserve the existing Pages payload', ()
       }
     }
     const legacyHtml = readFileSync(join(root, 'index.html'), 'utf8')
-      .split('\n').map(line => line.includes('src="./main.js?') ? line.replace('" defer', `&amp;rev=${revision}" defer`) : line).join('\n');
+      .split('\n').map(line => (line.includes('src="./main.js?') || line.includes('src="./src/client-modules/')) ? line.replace('" defer', `&amp;rev=${revision}" defer`) : line).join('\n');
     assert.equal(readFileSync(join(a, 'index.html'), 'utf8'), legacyHtml);
+    const sourceHtml = readFileSync(join(root, 'index.html'), 'utf8');
+    const builtHtml = readFileSync(join(a, 'index.html'), 'utf8');
+    const urls = [...builtHtml.matchAll(/<script src="([^"]+)"/g)].map(match => match[1]);
+    for (const path of ['./main.js?', './src/client-modules/character-slot-storage.js?', './src/client-modules/world-math.js?', './src/client-modules/item-presentation.js?', './src/client-modules/voice-guidance.js?', './src/client-modules/pointer-gestures.js?', './src/client-modules/lighting-controller.js?', './src/client-modules/room-state-sync.js?', './src/client-modules/skill-motion.js?', './src/client-modules/drawer-controller.js?', './src/client-modules/join-message-bootstrap.js?']) {
+      const matching = urls.filter(url => url.startsWith(path));
+      assert.equal(matching.length, 1);
+      const params = new URL(matching[0].replaceAll('&amp;', '&'), 'https://example.invalid/').searchParams;
+      assert.deepEqual(params.getAll('rev'), [revision]);
+      assert.equal(params.getAll('v').length, 1);
+    }
+    // Rebuilding for a different commit reads pristine source, never appends revisions.
+    const nextRevision = 'a'.repeat(40);
+    const c = join(temp, 'c');
+    buildSite(c, nextRevision);
+    assert.equal(readFileSync(join(c, 'index.html'), 'utf8'), builtHtml.replaceAll(revision, nextRevision));
+    assert.equal(readFileSync(join(root, 'index.html'), 'utf8'), sourceHtml);
     // Baseline from the previous workflow's cat part-*.b64 | base64 --decode.
     assert.equal(sha256(readFileSync(join(a, 'weapon-preview/lod2/crescent-blade-lod2.glb'))), '30b9b7b6d84e81ac032ca78ccfbbebd1c2b0956f8ece3247858e4c93bc23f9aa');
     assert.throws(() => buildSite(a, revision), /must be empty/);
@@ -50,6 +66,63 @@ test('two builds are byte-identical and preserve the existing Pages payload', ()
   } finally { rmSync(temp, { recursive: true, force: true }); }
 });
 
+
+test('packaging rejects absent, duplicate or late module script loading', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'montra-load-order-'));
+  try {
+    const source = join(temp, 'source');
+    mkdirSync(source);
+    for (const file of ['src', 'index.html', 'main.js', 'audio.js', 'account-entry.js', 'styles.css']) {
+      cpSync(join(root, file), join(source, file), { recursive: true });
+    }
+    const html = readFileSync(join(source, 'index.html'), 'utf8');
+    const lines = ['character-slot-storage', 'world-math', 'item-presentation', 'voice-guidance', 'pointer-gestures', 'lighting-controller', 'room-state-sync', 'skill-motion', 'drawer-controller', 'join-message-bootstrap'].map(name => html.split('\n').find(line => line.includes(`./src/client-modules/${name}.js?`)));
+    const variants = lines.flatMap(line => [html.replace(line, ''), html.replace(line, line + '\n' + line),
+      html.replace(line, '').replace('</body>', line + '\n</body>'),
+      html.replace(line, line.replace(' defer', ' async')),
+      html.replace(line, line.replace(' defer', ' defer async')),
+      html.replace(line, line.replace(' defer', ' defer type="module"')),
+      html.replace(line, line.replace('?v=1', '?v=1&amp;rev=old'))]);
+    const mainLine = html.split('\n').find(line => line.includes('./main.js?'));
+    for (const line of [...lines, mainLine]) {
+      for (const attribute of ['async', 'ASYNC', 'aSyNc', 'type="module"', 'TYPE="module"', 'tYpE="MoDuLe"']) {
+        variants.push(html.replace(line, line.replace(' defer', ` defer ${attribute}`)));
+      }
+    }
+    variants.push(html.replace('./main.js?v=', './main.js?rev=old&amp;v='));
+    for (let a = 0; a < lines.length; a++) for (let b = a + 1; b < lines.length; b++) {
+      variants.push(html.replace(lines[a], 'MODULE_SWAP').replace(lines[b], lines[a]).replace('MODULE_SWAP', lines[b]));
+    }
+    variants.forEach((value, index) => {
+      writeFileSync(join(source, 'index.html'), value);
+      assert.throws(() => buildSite(join(temp, `out-${index}`), revision, source), /client module|modules must load|generated revision|deferred classic scripts/);
+    });
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
+
+test('packaging publishes only approved module files, never incidental or unrecognized files', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'montra-module-allowlist-'));
+  try {
+    const source = join(temp, 'source');
+    mkdirSync(source);
+    for (const file of ['src', 'index.html', 'main.js', 'audio.js', 'account-entry.js', 'styles.css', 'assets', 'weapon-preview']) {
+      cpSync(join(root, file), join(source, file), { recursive: true });
+    }
+    const modules = join(source, 'src/client-modules');
+    mkdirSync(join(modules, 'notes'));
+    for (const file of ['README.md', 'private.json', 'unrecognized.mjs', 'notes/scratch.txt']) {
+      writeFileSync(join(modules, file), 'Not a public build input');
+    }
+    const output = join(temp, 'output');
+    const manifest = buildSite(output, revision, source);
+    assert.deepEqual(filesIn(join(output, 'src/client-modules')), ['character-slot-storage.js', 'drawer-controller.js', 'item-presentation.js', 'join-message-bootstrap.js', 'lighting-controller.js', 'pointer-gestures.js', 'room-state-sync.js', 'skill-motion.js', 'voice-guidance.js', 'world-math.js']);
+    assert.deepEqual(manifest.files.filter(file => file.path.startsWith('src/client-modules/')).map(file => file.path),
+      ['src/client-modules/character-slot-storage.js', 'src/client-modules/drawer-controller.js', 'src/client-modules/item-presentation.js', 'src/client-modules/join-message-bootstrap.js', 'src/client-modules/lighting-controller.js', 'src/client-modules/pointer-gestures.js', 'src/client-modules/room-state-sync.js', 'src/client-modules/skill-motion.js', 'src/client-modules/voice-guidance.js', 'src/client-modules/world-math.js']);
+    writeFileSync(join(modules, 'unrecognized.js'), '');
+    assert.throws(() => buildSite(join(temp, 'rejected'), revision, source), /Unlisted or missing client module/);
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
 
 test('clean-checkout static CLI generates the same payload and rejects a stale bundle', () => {
   const temp = mkdtempSync(join(tmpdir(), 'montra-clean-build-'));

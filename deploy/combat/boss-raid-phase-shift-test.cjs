@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 
 console.log('[TEST] Verifying Phase 10: Boss Raid Phase Shift & Occult Shield Break System...');
 
-const mainSrc = fs.readFileSync('main.js', 'utf8');
+// Inspect the shipped controller together with its unchanged shell callers.
+const mainSrc = fs.readFileSync('main.js', 'utf8') + '\n' + fs.readFileSync('src/client-modules/voice-guidance.js', 'utf8');
 const cssSrc = fs.readFileSync('styles.css', 'utf8');
 const indexSrc = fs.readFileSync('index.html', 'utf8');
 

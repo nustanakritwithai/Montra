@@ -7,37 +7,27 @@
     try { return localStorage.getItem("montra_endpoint") || MONTRA_VPS_URL; }
     catch (_) { return MONTRA_VPS_URL; }
   }
-  function preferredSlotKey(endpoint) {
-    return "montra_character_slot:" + new URL(endpoint).host;
-  }
-  function slotPreviewKey(endpoint) {
-    return "montra_character_slots_preview:" + new URL(endpoint).host;
-  }
-  function getPreferredSlot(endpoint) {
-    try {
-      const slot = Number(localStorage.getItem(preferredSlotKey(endpoint)) || 1);
-      return [1,2,3].includes(slot) ? slot : 1;
-    } catch (_) { return 1; }
-  }
-  function readSlotPreviews(endpoint) {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(slotPreviewKey(endpoint)) || "[]");
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (_) { return []; }
-  }
-  function rememberSlotPreviews(endpoint, slots) {
-    if (!Array.isArray(slots) || slots.length !== 3) return;
-    const cleaned = slots.map((entry, index) => ({
-      slot: index + 1,
-      occupied: entry?.occupied === true,
-      unavailable: entry?.unavailable === true,
-      name: typeof entry?.name === "string" ? entry.name.slice(0, 24) : "",
-      level: Number.isSafeInteger(entry?.level) ? entry.level : 0,
-    }));
-    try { localStorage.setItem(slotPreviewKey(endpoint), JSON.stringify(cleaned)); }
-    catch (_) { /* only local preview, server remains authoritative */ }
-  }
+  const { preferredSlotKey, slotPreviewKey, getPreferredSlot, readSlotPreviews, rememberSlotPreviews } =
+    globalThis.MontraSlotStorage.create({ getStorage: () => localStorage, URL });
   let activeCharacterSlot = null;
+  const { terrainCell, terrainHeight, smoothPath } = globalThis.MontraWorldMath;
+  const itemPresentation = globalThis.MontraItemPresentation.create({
+    getStatNames: () => statNames,
+    getBodyLabels: () => bodyLabels,
+    getPreferredGearSlot: () => preferredGearSlot,
+    getWeaponMeta: () => WEAPON_META,
+    getPersonalItems: () => personalItems,
+    getGearSymbols: () => gearSymbols,
+    getPotionItemId: () => POTION_ITEM_ID,
+    getShrineShard: () => SHRINE_SHARD,
+    getDocument: () => document,
+    getInventoryState: () => inventoryState,
+    getGearGuides: () => gearGuides,
+    getForgeNames: () => forgeNames,
+    getElementLookup: () => $,
+    getCurrentEquippedWeaponSlot: () => currentEquippedWeaponSlot,
+    getOwnServerCharacter: () => ownServerCharacter,
+  });
   const ui = {
     loading: $("loading"), loadingText: $("loadingText"), world: $("world"), toast: $("toast"),
     modeBadge: $("modeBadge"), onlineCount: $("onlineCount"), drawer: $("drawer"),

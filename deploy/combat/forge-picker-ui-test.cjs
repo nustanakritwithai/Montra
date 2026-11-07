@@ -70,7 +70,7 @@ function fixture(){
   const inventory={slots,equippedWeaponSlot:0,equipment,equipmentForges:Object.fromEntries(Object.keys(equipment).filter(k=>k!=='chest').map(k=>[k,forged(k)])),equipmentSockets:{leftRing:'card'},forgeCopies:{weapon:20,ring:20,ear:20,leftGlove:20,rightGlove:20,max:20,high:20,bound:20,affixed:20,legacy:20}};
   const config={chances:Array(10).fill(100),rerollCost:60,rareAfter:4,claimCopies:true,enhanceSteps:Array.from({length:10},(_,rank)=>({copies:1+Math.floor(rank/3),gold:12*(rank+1),chance:rank>4?78:100,downgradeChance:rank>4?20:0,breakChance:rank>4?2:0,breakOnFailure:rank>4}))};
   const ctx={...d,clearTimeout(){},cancelAnimationFrame(){},refreshArtisanWallet(){},Option:function(text,value){const option=d.node("option");option.textContent=text;option.value=String(value);return option;},drawerActive:null,drawerOpener:null,fieldTrainingTip:null,SFX(){},closeEquipPopup(){},closeItemDetailModal(){},handleItemDetailKey:()=>false,mode:'live',inventoryState:inventory,personalItems:items,WEAPON_META:{legacy:{name:'กริชเก่า',symbol:'†'}},POTION_ITEM_ID:'potion',SHRINE_SHARD:'shrine_shard',
-    bodyLabels:{leftRing:'แหวนซ้าย',rightRing:'แหวนขวา',leftEar:'ตุ้มหูซ้าย',rightEar:'ตุ้มหูขวา',leftHand:'มือซ้าย',rightHand:'มือขวา',chest:'อก'},forgeNames:{melee:'โจมตีประชิด',guard:'ป้องกัน',ranged:'โจมตีเวท'},statLine:()=>'',
+    bodyLabels:{leftRing:'แหวนซ้าย',rightRing:'แหวนขวา',leftEar:'ตุ้มหูซ้าย',rightEar:'ตุ้มหูขวา',leftHand:'มือซ้าย',rightHand:'มือขวา',chest:'อก'},forgeNames:{melee:'โจมตีประชิด',guard:'ป้องกัน',ranged:'โจมตีเวท'},statNames:{},statLine:()=>'',
     currentBagSlots:()=>ctx.inventoryState?.slots,currentEquippedWeaponSlot:()=>ctx.inventoryState?.equippedWeaponSlot,ownServerCharacter:()=>player,
     economyReady:()=>ctx.mode==='live'&&ctx.room?.state?.economyAvailable===true,economyPending:false,itemUsePending:false,economyGold:10000,selectedBagSlot:0,inspectingGear:null,benchTrail:[],
     itemHuntCount:(id,stock=false)=>id==='ref_seal_2'?5:(ctx.inventoryState?.slots||[]).filter(p=>p?.itemId===id).length+Object.values(ctx.inventoryState?.equipment||{}).filter(v=>v===id).length+(stock?(ctx.inventoryState?.forgeCopies?.[id]||0):0),
@@ -79,8 +79,8 @@ function fixture(){
     openBag:()=>{ctx.openDrawer('bag','กระเป๋า','<div id="cardSocketPanel"></div>');routes.push('bag');},triggerBagPanelPop(){},selectBenchRecipe:(...args)=>routes.push(args),
   };
   ctx.room={state:{economyAvailable:true,forgeCatalog:JSON.stringify(config)}};
-  vm.createContext(ctx);const run=code=>vm.runInContext(code,ctx);
-  run(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function bagMeta(','  function pieceStat(')+slice('  function gearStamp(','  function accessoryStamp(')+slice('  function forgeLabel(','  function salvageSelectedGear(')+slice('  function renderForgeStock(','  function openBag()')+slice('  function gateFieldInput(','  const journalOrigins='));
+  vm.createContext(ctx);require('./fixtures/item-presentation-loader.cjs').install(ctx);const run=code=>vm.runInContext(code,ctx);
+  run(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function bagMeta(','  function pieceStat(')+slice('  function gearStamp(','  function accessoryStamp(')+slice('  function forgeLabel(','  function salvageSelectedGear(')+slice('  function renderForgeStock(','  function openBag()')+fs.readFileSync('src/client-modules/drawer-controller.js','utf8')+slice('  const drawerController =','  const journalOrigins='));
   const refresh=()=>ctx.renderForgePage(),open=(action='enhance',target=0)=>ctx.openForgePage(action,target),popup=()=>d.$('forgeTargetButton').click(),key=()=>d.$('forgeTargetButton').dataset.target;
   const buttons=()=>d.$('forgePickerGrid').children,button=target=>buttons().find(b=>b.dataset.forgeTarget===target),pick=target=>{popup();assert(button(target),`missing choice ${target}`);button(target).click();};
   const snapshot=()=>JSON.stringify({inventory:ctx.inventoryState,gold:ctx.economyGold}),mutations=()=>wire.filter(e=>e.durable);
@@ -209,7 +209,7 @@ test('catalog names remain inert text and selected thumbnail uses shared invento
 test('actual drawer key listener closes only the popup on first Escape, then the drawer',()=>{
   const f=fixture(),account=f.node('div');account.hidden=true;f.elements.set('accountEntry',account);f.document.body.append(account);
   let listener;f.document.addEventListener=(type,handler)=>{assert.equal(type,'keydown');listener=handler;};
-  f.run(slice('  document.addEventListener("keydown",event=>{\n    if (ui.drawer.hidden','  function updateChatBadge('));
+  f.run(slice('  document.addEventListener("keydown",drawerController.handleKey)','  function updateChatBadge('));
   f.open();f.popup();const first={key:'Escape',preventDefault(){this.prevented=true;}};listener(first);
   assert.equal(first.prevented,true);assert.equal(f.$('forgePicker').open,false);assert.equal(f.ctx.drawerActive,'forge');assert.equal(f.ui.drawer.hidden,false);assert.equal(f.document.activeElement,f.$('forgeTargetButton'));
   const second={key:'Escape',preventDefault(){this.prevented=true;}};listener(second);assert.equal(second.prevented,true);assert.equal(f.ctx.drawerActive,null);assert.equal(f.ui.drawer.hidden,true);assert.equal(f.mutations().length,0);

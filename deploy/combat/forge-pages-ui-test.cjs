@@ -39,7 +39,7 @@ const ctx={$,document,Date:{now:()=>10000},setTimeout:()=>1,clearTimeout(){},can
   openBag:()=>{ctx.drawerActive='bag';routes.push('bag');elements.clear();for(const id of ['cardSocketPanel','craftPanel'])elements.set(id,control());},
   selectBenchRecipe:(...args)=>routes.push(args),renderBag:()=>{if(ctx.drawerActive==='forge')ctx.renderForgePage();}};
 const code=slice('  function wornGearAt(','  function pieceStat(')+slice('  function gearStamp(','  function accessoryStamp(')+slice('  function forgeLabel(','  function salvageSelectedGear(')+slice('  function renderForgeStock(','  function openBag()');
-vm.createContext(ctx);vm.runInContext(code,ctx);
+vm.createContext(ctx);require('./fixtures/item-presentation-loader.cjs').install(ctx);vm.runInContext(code,ctx);
 const callbacks={};ctx.joined=ctx.room;ctx.joined.onMessage=(name,handler)=>{callbacks[name]=handler;};
 ctx.finishEconomyPending=()=>{ctx.economyPending=false;ctx.economyPendingRequest=null;};ctx.toast=()=>{};
 vm.runInContext(slice('      joined.onMessage("craft_result",','      joined.onMessage("market_result",'),ctx);

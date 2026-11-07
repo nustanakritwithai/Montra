@@ -94,17 +94,6 @@
     const t=worldDefinitions?.[activeMapId]?.terrain;
     return Number(p.y)-(t?terrainHeight(t,p.x,p.z):0);
   }
-  function terrainCell(cuts,v){
-    const i=cuts.findIndex(n=>n>v);
-    return i<0?cuts.length-2:Math.max(0,i-1);
-  }
-  function terrainHeight(t,x,z){
-    x=Math.max(t.xs[0],Math.min(t.xs.at(-1),x));z=Math.max(t.zs[0],Math.min(t.zs.at(-1),z));
-    const i=terrainCell(t.xs,x),j=terrainCell(t.zs,z);
-    const u=(x-t.xs[i])/(t.xs[i+1]-t.xs[i]),v=(z-t.zs[j])/(t.zs[j+1]-t.zs[j]);
-    const a=t.heights[j][i],b=t.heights[j][i+1],c=t.heights[j+1][i],d=t.heights[j+1][i+1];
-    return a+(u>=v?(b-a)*u+(d-b)*v:(d-c)*u+(c-a)*v);
-  }
   // Clip each footprint against the actual terrain faces. A road crossing a ridge
   // must bend exactly at its edges or the rock can poke through the ribbon.
   function reliefPatches(name,t,patches,lift,material){

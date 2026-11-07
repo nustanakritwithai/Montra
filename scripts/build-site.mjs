@@ -1,4 +1,4 @@
-import { prepareClient } from './build-client.mjs';
+import { prepareClient, clientModules } from './build-client.mjs';
 import { checkStyles } from './build-styles.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -24,10 +24,31 @@ export function buildSite(output, revision, source = root) {
   for (const file of ['index.html', 'main.js', 'audio.js', 'account-entry.js', 'styles.css']) {
     cpSync(join(source, file), join(output, file));
   }
+  // Explicit public module allowlist: never publish incidental source-directory files.
+  for (const file of clientModules) {
+    mkdirSync(dirname(join(output, file)), { recursive: true });
+    cpSync(join(source, file), join(output, file));
+  }
   const html = readFileSync(join(source, 'index.html'), 'utf8');
+  let previousModuleIndex = -1;
+  for (const file of clientModules) {
+    const moduleScript = `<script src="./${file}?v=1" defer`;
+    assert.equal(html.split(moduleScript).length, 2, `Expected exactly one deferred client module: ${file}`);
+    const index = html.indexOf(moduleScript);
+    assert(index > previousModuleIndex && index < html.indexOf('<script src="./main.js?'), 'Client modules must load in allowlist order before main.js');
+    previousModuleIndex = index;
+  }
   const script = /(<script src="\.\/main\.js\?[^"\n]+)(" defer)/g;
   assert.equal([...html.matchAll(script)].length, 1, 'Expected exactly one versioned main.js script');
-  writeFileSync(join(output, 'index.html'), html.replace(script, `$1&amp;rev=${revision}$2`));
+  const versionedScripts = /(<script src="\.\/(?:main\.js|src\/client-modules\/(?:character-slot-storage|world-math|item-presentation|voice-guidance|pointer-gestures|lighting-controller|room-state-sync|skill-motion|drawer-controller|join-message-bootstrap)\.js)\?[^"\n]+)(" defer)/g;
+  const matches = [...html.matchAll(versionedScripts)];
+  assert.equal(matches.length, 1 + clientModules.length, 'Expected all revisioned client scripts');
+  for (const match of matches) {
+    const tag = html.slice(match.index, html.indexOf('>', match.index) + 1);
+    assert(!/\basync\b|\btype\s*=/i.test(tag), 'Client scripts must be deferred classic scripts');
+    assert(!/[?&](?:amp;)?rev=/.test(match[1]), 'Source script must not contain a generated revision');
+  }
+  writeFileSync(join(output, 'index.html'), html.replace(versionedScripts, `$1&amp;rev=${revision}$2`));
   cpSync(join(source, 'assets'), join(output, 'assets'), { recursive: true });
   for (const file of ['assets/characters/thai-male.glb', 'assets/characters/thai-golden-spirit.glb', 'assets/weapons/crescent-blade-lod2.glb']) {
     assert(statSync(join(output, file)).size > 0, `Missing model: ${file}`);

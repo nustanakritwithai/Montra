@@ -39,7 +39,7 @@ function fixture({central=true}={}){
       for(const m of html.matchAll(/<select\b[^>]*id="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g))for(const o of m[2].matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)){const option=node('option');option.value=o[1];option.textContent=o[2];$(m[1]).append(option);}
     },
   };
-  vm.createContext(ctx);const run=code=>vm.runInContext(code,ctx);
+  vm.createContext(ctx);require('./fixtures/item-presentation-loader.cjs').install(ctx);const run=code=>vm.runInContext(code,ctx);
   run(slice('  const rarityNames=','  const practiceModels =')+slice('  function statLine(','  const bodyLabels=')+
     slice('  const gearSymbols=','  let inspectingGear=')+slice('  function wearPositions(','  function gearDestination(')+
     slice('  function bagMeta(','  function wornGearAt(')+slice('  function pieceForgeRatings(','  function forgeComparison(')+

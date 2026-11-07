@@ -114,8 +114,16 @@
     if (drawerActive === "guild") renderGuild();
     return true;
   }
-  let syncPoll = null;
-  function clearSyncPoll() { if (syncPoll) clearInterval(syncPoll); syncPoll = null; }
+  const roomStateSync = globalThis.MontraRoomStateSync.create({
+    getRoom: () => room,
+    getActiveMapId: () => activeMapId,
+    getWindow: () => window,
+    getConsole: () => console,
+    getSetInterval: () => setInterval,
+    getClearInterval: () => clearInterval,
+    syncState, setOnlinePlayer, removeOnlinePlayer,
+  });
+  function clearSyncPoll(){return roomStateSync.clearSyncPoll();}
   function stopOnline(reason) {
     closeForgePicker(false);
     clearSyncPoll();
@@ -189,8 +197,7 @@
       // The server sends guild and territory status as soon as we join, before
       // the slot check below finishes; keep those first messages and replay
       // them once their handlers exist, or the panels stay empty until a change.
-      const earlyMessages=new Map(), earlyHandlers=new Map();
-      for(const type of ["guild_state","guild_recruitment","territory_state"])joined.onMessage(type,message=>{if(!earlyHandlers.has(type))earlyMessages.set(type,message);});
+      const joinMessageBootstrap = globalThis.MontraJoinMessageBootstrap.create(joined);
       await verifyJoinedSlot(joined, requestedSlot);
       cancelForgeAnimation(false,true);finishEconomyPending(true);
       room = joined;
@@ -274,7 +281,7 @@
         }
       };
       joined.onMessage("territory_state",onTerritoryState);
-      earlyHandlers.set("territory_state",onTerritoryState);
+      joinMessageBootstrap.markHandler("territory_state",onTerritoryState);
       joined.onMessage("territory_error",message=>{
         if(room!==joined)return;
         toast(activeMapId==="sam_lan_estuary" && message?.reason==="war_flag"?"เดินเข้าค่ายใต้ A เพื่อเปิดศึก":warErrors[message?.reason] || "ทำรายการที่ด่านไม่ได้ในขณะนี้");
@@ -318,7 +325,7 @@
         renderGuild();
       };
       joined.onMessage("guild_state",onGuildState);
-      earlyHandlers.set("guild_state",onGuildState);
+      joinMessageBootstrap.markHandler("guild_state",onGuildState);
       const onGuildRecruitment=message=>{
         if(room!==joined || !Array.isArray(message?.applications))return;
         const previousApplications=guildRecruitment.applications.length;
@@ -327,13 +334,12 @@
         if(guildRecruitment.applications.length>previousApplications && drawerActive!=="guild"){guildUnread=true;updatePartyBadge();}
         renderGuild();
       };
-      joined.onMessage("guild_recruitment",onGuildRecruitment);earlyHandlers.set("guild_recruitment",onGuildRecruitment);
+      joined.onMessage("guild_recruitment",onGuildRecruitment);joinMessageBootstrap.markHandler("guild_recruitment",onGuildRecruitment);
       joined.onMessage("guild_directory",message=>{
         if(room!==joined || !Array.isArray(message?.guilds))return;
         guildDirectory=message.guilds.filter(g=>g && typeof g.id==="string" && typeof g.name==="string").slice(0,50);renderGuild();
       });
-      for(const [type,message] of earlyMessages)earlyHandlers.get(type)?.(message);
-      earlyMessages.clear();
+      joinMessageBootstrap.replay();
       joined.onMessage("guild_invitation", message=>{
         if(room!==joined || typeof message?.inviteId!=="string" || typeof message.guildName!=="string" || typeof message.fromName!=="string")return;
         guildInvitation=message;guildUnread=drawerActive!=="guild";updatePartyBadge();
@@ -1403,35 +1409,7 @@
         clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
         toast("บันทึกไม่สำเร็จ · ยังอยู่แผนที่เดิม");
       });
-      // Colyseus 0.18 schema callbacks are the reliable way to subscribe to nested maps.
-      try {
-        const callbackApi = window.Colyseus.Callbacks;
-        if (callbackApi?.get) {
-          const cb = callbackApi.get(joined);
-          cb.onAdd("players", (p, id) => {
-            const applyServerPlayer = () => {
-              if ((p.mapId || "ritual_village") !== activeMapId) { removeOnlinePlayer(id); return; }
-              setOnlinePlayer(id, Number(p.x), Number(p.z),
-                Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y), p.equippedWeaponId, p.pathId);
-            };
-            applyServerPlayer();
-            if (typeof cb.listen === "function") {
-              cb.listen(p, "x", applyServerPlayer);
-              cb.listen(p, "z", applyServerPlayer);
-              cb.listen(p, "facing", applyServerPlayer);
-              cb.listen(p, "hp", applyServerPlayer);
-              cb.listen(p, "y", applyServerPlayer);
-              cb.listen(p, "maxHp", applyServerPlayer);
-              cb.listen(p, "equippedWeaponId", applyServerPlayer);
-              cb.listen(p, "pathId", applyServerPlayer);
-              cb.listen(p, "mapId", () => syncState(joined.state));
-            }
-          });
-          cb.onRemove("players", (_,id) => removeOnlinePlayer(id));
-        }
-      } catch (err) { console.warn("Callbacks fallback to state updates",err); }
-      // Some SDK/room combinations expose the collection only after the first full state sync.
-      clearSyncPoll(); syncPoll = setInterval(() => { if (room === joined) syncState(joined.state); },350);
+      roomStateSync.observePlayers(joined);
       joined.onLeave(() => {
         if (room === joined) stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กรุณาเข้าเกมอีกครั้ง");
       });
@@ -1466,4 +1444,3 @@
     }
   }
 
-  let pointer = null;

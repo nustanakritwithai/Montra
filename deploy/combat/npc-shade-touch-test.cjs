@@ -1,9 +1,9 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const source=fs.readFileSync('main.js','utf8'),start=source.indexOf('  let shadePressStarted=false;'),end=source.indexOf('  // Inked night-map',start);
+const source=fs.readFileSync('src/client-modules/drawer-controller.js','utf8'),start=source.indexOf('  getDocument().addEventListener("pointerdown"'),end=source.indexOf('  }\n    return Object.freeze',start);
 assert.ok(start>=0 && end>start,'shade gesture handling exists');
 const doc={},shade={};let closed=0;
 const context={document:{addEventListener:(type,fn)=>doc[type]=fn},ui:{shade:{addEventListener:(type,fn)=>shade[type]=fn}},closeDrawer:()=>closed++};
-vm.runInNewContext(source.slice(start,end),context);
+vm.runInNewContext('let shadePressStarted=false;\n'+source.slice(start,end),{...context,getDocument:()=>context.document});
 doc.pointerdown();shade.click();assert.equal(closed,0,'the tap that opened the drawer cannot close it');
 doc.pointerdown();shade.pointerdown();shade.click();assert.equal(closed,1,'a tap beginning on the shade closes the drawer');
 doc.pointerdown();shade.pointerdown();doc.pointerdown();shade.click();assert.equal(closed,1,'a new gesture clears an abandoned shade press');

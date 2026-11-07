@@ -5,3 +5,30 @@
 /styles.css -text
 # Preserve pre-existing whitespace within extracted CSS, including legacy rules.
 /src/styles/**/*.css -text whitespace=-blank-at-eof,-blank-at-eol
+/src/client-modules/**/*.js -text
+
+# Frozen world-math reference is compared byte-for-byte on every platform.
+/deploy/combat/fixtures/world-math-reference.js -text
+
+# Preserve the independent voice-guidance characterization bytes.
+/deploy/combat/fixtures/voice-guidance-reference.js -text whitespace=-blank-at-eof
+
+# Preserve the independent pointer-gesture characterization bytes.
+/deploy/combat/fixtures/pointer-gestures-reference.js -text
+
+# Preserve the independent lighting-controller characterization bytes.
+/deploy/combat/fixtures/lighting-controller-reference.js -text
+
+# Frozen item-presentation reference retains its pinned bytes on every platform.
+/deploy/combat/fixtures/item-presentation-reference.js -text
+
+# Preserve the independent room-state synchronization characterization bytes.
+/deploy/combat/fixtures/room-state-sync-reference.js -text
+# Frozen combat skill-motion characterization bytes.
+/deploy/combat/fixtures/skill-motion-reference.js -text
+
+# Frozen drawer lifecycle characterization bytes.
+/deploy/combat/fixtures/drawer-controller-reference.js -text
+
+# Frozen per-join bootstrap characterization bytes.
+/deploy/combat/fixtures/join-message-bootstrap-reference.js -text

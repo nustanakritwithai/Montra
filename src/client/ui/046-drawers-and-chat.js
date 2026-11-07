@@ -1,45 +1,31 @@
-  function gateFieldInput(open) {
-    for (const child of $("game").children) {
-      if (child !== ui.drawer && child !== ui.shade &&
-          child.id !== "itemModalBackdrop" && child.id !== "itemDetailModal" &&
-          child.id !== "equipPopupBackdrop" && child.id !== "equipPopup") {
-        child.inert = open;
-      }
-    }
-  }
-  function closeDrawer() {
-    try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
-    cancelForgeAnimation(true);closeForgePicker(false);
-    if(ui.drawer.hidden)return;
-    SFX("close");
-    try { closeEquipPopup(); } catch (_) {}
-    try { closeItemDetailModal(false); } catch (_) {}
-    ui.drawer.hidden=true; ui.shade.hidden=true; drawerActive=null;
-    gateFieldInput(false);
-    const target=drawerOpener?.isConnected && drawerOpener.getClientRects().length ? drawerOpener : $("fieldMenuButton");
-    target.focus({preventScroll:true});
-    drawerOpener=null;
-  }
-  function openDrawer(name,title,html) {
+  const drawerController = globalThis.MontraDrawerController.create({
+    ui, $, getDocument: () => document,
+    beforeOpen(name) {
     try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
     cancelForgeAnimation(true);closeForgePicker(false);closeItemDetailModal(false);
     if(fieldTrainingTip && !(ownServerCharacter()?.level>=13) && ["muayBook","swordTree","bladeBook","sentinelBook","occultBook"].includes(name))fieldTrainingTip=null;
-    if(ui.drawer.hidden) {
-      SFX("open");
-      drawerOpener=document.activeElement;
-      gateFieldInput(true);
-    }
-    const menu=name==="fieldMenu";
-    $("fieldMenu").hidden=!menu;
-    $("drawerMenuBack").hidden=menu;
-    ui.drawerBody.hidden=menu;
-    ui.drawerTitle.textContent=title;
-    ui.drawerBody.innerHTML=html;
-    ui.drawer.hidden=false; ui.shade.hidden=false;
-    drawerActive=name;
-    ui.drawer.scrollTop=0;
-    (menu ? $("fieldMenu").querySelector("[data-journal-tab][aria-pressed=true]") : $("drawerMenuBack")).focus({preventScroll:true});
-  }
+    },
+    beforeClose() {
+    try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
+    cancelForgeAnimation(true);closeForgePicker(false);
+    },
+    closeOverlays() {
+    try { closeEquipPopup(); } catch (_) {}
+    try { closeItemDetailModal(false); } catch (_) {}
+    },
+    playSound: name => SFX(name),
+    onActiveChange: name => { drawerActive=name; },
+    handleNestedKey: event => handleForgePickerKey(event) || handleItemDetailKey(event),
+    dismissNestedModal() {
+      const modal = $("itemDetailModal");
+      if (modal && !modal.hidden) { closeItemDetailModal(); return true; }
+      const equipModal = $("equipPopup");
+      if (equipModal && !equipModal.hidden) { closeEquipPopup(); return true; }
+      return false;
+    },
+  });
+  function closeDrawer(){return drawerController.closeDrawer();}
+  function openDrawer(name,title,html){return drawerController.openDrawer(name,title,html);}
   const journalOrigins={
     bag:"character",smith:"character",forge:"character",crafting:"character",character:"character",npc:"character",swordTree:"character",muayBook:"character",bladeBook:"character",sentinelBook:"character",occultBook:"character",
     map:"travel",quest:"travel",war:"travel",strategy:"travel",chat:"social",party:"social",guild:"social",economy:"social",help:"system"
@@ -94,23 +80,7 @@
       try {localStorage.setItem("montra_field_layout",choice.dataset.fieldLayout);} catch {}
     };
   }
-  document.addEventListener("keydown",event=>{
-    if (ui.drawer.hidden || !$("accountEntry").hidden) return;
-    if (handleForgePickerKey(event) || handleItemDetailKey(event)) return;
-    if (event.key==="Escape") {
-      event.preventDefault();
-      const modal = $("itemDetailModal");
-      if (modal && !modal.hidden) { closeItemDetailModal(); return; }
-      const equipModal = $("equipPopup");
-      if (equipModal && !equipModal.hidden) { closeEquipPopup(); return; }
-      closeDrawer();
-    }
-    if (event.key!=="Tab") return;
-    const available=[...ui.drawer.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],summary,[tabindex="0"]')].filter(el=>el.getClientRects().length);
-    const first=available[0],last=available.at(-1);
-    if (event.shiftKey && document.activeElement===first) {event.preventDefault();last?.focus();}
-    if (!event.shiftKey && document.activeElement===last) {event.preventDefault();first?.focus();}
-  });
+  document.addEventListener("keydown",drawerController.handleKey);
   function updateChatBadge() {
     const total=Math.min(99,Object.values(chatUnread).reduce((sum,n)=>sum+n,0)),badge=$("chatUnread");
     badge.hidden=total===0;badge.textContent=total?String(total):"";
@@ -163,12 +133,4 @@
   document.addEventListener("pointerdown",event=>{
     if(chatBox?.el.classList.contains("composing") && !chatBox.el.contains(event.target))closeChatComposer();
   },true);
-  $("drawerClose").addEventListener("click",closeDrawer);
-  // Opening from a canvas pointerup makes the canvas inert immediately. On
-  // touch screens the same tap's ensuing click can then be retargeted to the
-  // newly visible shade. Only dismiss if the gesture began on the shade.
-  let shadePressStarted=false;
-  document.addEventListener("pointerdown",()=>{shadePressStarted=false;},true);
-  ui.shade.addEventListener("pointerdown",()=>{shadePressStarted=true;});
-  ui.shade.addEventListener("pointercancel",()=>{shadePressStarted=false;});
-  ui.shade.addEventListener("click",()=>{if(!shadePressStarted)return;shadePressStarted=false;closeDrawer();});
+  drawerController.installBackdrop();

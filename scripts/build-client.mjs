@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { Script } from 'node:vm';
 
 export const clientRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+export const clientModules = ['src/client-modules/character-slot-storage.js', 'src/client-modules/world-math.js', 'src/client-modules/item-presentation.js', 'src/client-modules/voice-guidance.js', 'src/client-modules/pointer-gestures.js', 'src/client-modules/lighting-controller.js', 'src/client-modules/room-state-sync.js', 'src/client-modules/skill-motion.js', 'src/client-modules/drawer-controller.js', 'src/client-modules/join-message-bootstrap.js'];
 const categories = '(?:core|network|world|render|input|combat|ui|audio)';
 const fragmentPath = new RegExp(`^${categories}/[0-9]{3}-[a-z0-9-]+\\.js$`);
 function sourceFiles(directory, prefix = '') {
@@ -18,11 +19,14 @@ function sourceFiles(directory, prefix = '') {
 // These are ordered source fragments, not modules. Preserve every byte, including
 // comments, Unicode, whitespace and the original single IIFE. Never add separators.
 export function assembleClient(source = clientRoot) {
-  for (const relative of ['src', 'src/client']) {
+  for (const relative of ['src', 'src/client', 'src/client-modules']) {
     const entry = lstatSync(join(source, relative));
     assert(!entry.isSymbolicLink(), `Source directory symlinks are not supported: ${relative}`);
     assert(entry.isDirectory(), `Expected client source directory: ${relative}`);
   }
+  const moduleDirectory = join(source, 'src/client-modules');
+  assert.deepEqual(sourceFiles(moduleDirectory).sort(), clientModules.map(file => file.slice('src/client-modules/'.length)).sort(), 'Unlisted or missing client module');
+  for (const file of clientModules) new Script(readFileSync(join(source, file), 'utf8'), { filename: file });
   const directory = join(source, 'src/client');
   const files = sourceFiles(directory);
   const manifest = JSON.parse(readFileSync(join(directory, 'manifest.json'), 'utf8'));
