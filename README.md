@@ -86,6 +86,10 @@ Optional `MONTRA_WORLD_EXPANSION=1`: a 120 × 120 forest with four hunting camps
 - [Reversible Windows installer](deploy/combat/install-windows.ps1)
 - [Server verification workflow](.github/workflows/verify-combat.yml)
 
+## Test and build baseline
+
+See [Phase 01 baseline and repeatable build commands](docs/PHASE01-BASELINE.md) before module extraction. The dependency-free static build preserves client bytes; server verification uses a separate locked test project.
+
 ## Publish
 
 GitHub Pages is deployed from **GitHub Actions** via

@@ -6,7 +6,7 @@ import {writeFile} from "node:fs/promises";
 import path from "node:path";
 import {Client} from "@colyseus/sdk";
 const url=process.env.MONTRA_TEST_URL,dir=process.env.MONTRA_CHARACTER_DIR;
-if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url??"") || !/^montra-castle-test-/.test(path.basename(dir??"")) || process.env.MONTRA_CASTLE_PILOT!=="1")throw Error("Requires an isolated local castle pilot");
+if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url??"") || !/^montra-castle-test-/.test(path.basename(dir??"")) || process.env.MONTRA_CASTLE_PILOT!=="1" || process.env.MONTRA_CASTLE_IN_PROCESS!=="1" || url!==`http://127.0.0.1:${process.env.PORT}`)throw Error("Requires an owned in-process isolated local castle pilot with matching PORT");
 const {GuildStore}=await import(existsSync("build/rooms/GuildStore.js")?"./build/rooms/GuildStore.js":"./src/rooms/GuildStore.ts");
 const guild=new GuildStore(path.join(dir,"guilds.sqlite")),sdk=new Client(url),rooms=new Set();
 const options={worldVersion:1,atlasVersion:1,templeVersion:1,provinceVersion:1,warVersion:1,atlasReliefVersion:1,originalReliefVersion:1};
@@ -43,7 +43,15 @@ async function warp(c,target){
   throw Error("portal cooldown did not expire for "+p.id);
 }
 const id="tri_wiang_castle";
+let server;
 try{
+  // Share the test server's event loop, not its sockets: all clients still use the
+  // real SDK/WebSocket transport. Synchronous SQLite checkpoint writes cannot
+  // overlap the room's synchronous transactions on another connection.
+  const bootstrap=await import(existsSync("build/index.js")?"./build/index.js":"./src/index.ts");
+  server=bootstrap.server;
+  assert.ok(server && typeof server.gracefullyShutdown==="function" && typeof bootstrap.ready?.then==="function","verification bootstrap must expose server ownership and readiness");
+  await bootstrap.ready;
   const guest=await seed("Traveller","fallen_city",0,-58);
   let c=await join(guest,undefined,undefined,1);
   await send(c,"warp",{portalId:"fallen_city_to_"+id},"command_rejected",e=>e.reason==="world_client_update_required");await leave(c);
@@ -140,7 +148,24 @@ try{
   const atCamp=c=>Math.hypot(c.me().x-camp.x,c.me().z-camp.z)<2;
   const available=c=>c.latest?.supply?.camps.find(p=>p.id===4)?.status;
   holdWest("attack");await wait(()=>available(raider)==="ready","western supply");
-  await selectCamp(raider,4);
+  // Queue a real server write while a fixture transaction owns the writer lock.
+  // The lock spans a 50ms server tick but is released before yielding this event
+  // loop; a separate server process would be able to collide with it.
+  const selection=(()=>{
+    const db=new DatabaseSync(path.join(dir,"guilds.sqlite"));
+    let locked=false;
+    try{
+      assert.throws(()=>db.prepare("UPDATE territory_battles SET __missing_fixture_column=1").run(),e=>e.errcode===1,"SQL errors must propagate");
+      db.exec("BEGIN IMMEDIATE");locked=true;
+      assert.equal(db.prepare("UPDATE territory_battles SET started=started WHERE site=? AND ended IS NULL").run(id).changes,1);
+      const pending=selectCamp(raider,4);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,75);
+      db.exec("COMMIT");locked=false;
+      return pending;
+    }finally{try{if(locked)db.exec("ROLLBACK");}finally{db.close();}}
+  })();
+  await selection;
+  console.log("PASS queued camp write survives fixture writer lock; SQL errors still propagate");
   await send(raider,"territory_camp",{action:"march",campId:4},"territory_error",e=>e.reason==="war_camp_base");
   await leave(raider);
   const scout=await enlist(await join(newLeader),newLeader,"territory_join");
@@ -158,12 +183,38 @@ try{
   await selectCamp(keeper,4);march(keeper);await wait(()=>atCamp(keeper),"incumbent reinforcements");
   async function defeatGuard(){
     await walk(scout,keeper.me().x+.5,keeper.me().z);
-    scout.r.send("attack",{targetId:keeper.r.sessionId});await wait(()=>!keeper.me().alive,"defeat at the front",65000);
-    await wait(()=>keeper.me().alive,"server respawn",20000);
+    const deaths=keeper.me().pkDeaths,kills=scout.me().pkKills,eventStart=scout.events.length;
+    let nextOrderAt=0,orders=0;
+    // This is death setup for the respawn checks, not an uninterrupted auto-attack test.
+    // A participation reward temporarily makes its recipient unavailable while saving;
+    // if that overlaps a combat tick, the server clears the attack target. Resume with
+    // ordinary player commands, only after the target clears and at most once a second.
+    try{
+      await wait(()=>{
+        if(!keeper.me().alive)return true;
+        if(scout.me().targetId!==keeper.r.sessionId && Date.now()>=nextOrderAt){
+          scout.r.send("attack",{targetId:keeper.r.sessionId});nextOrderAt=Date.now()+1000;orders++;
+        }
+        return false;
+      },"defeat at the front",65000);
+      assert.equal(keeper.me().hp,0,"real lethal damage");
+      assert.equal(keeper.me().pkDeaths,deaths+1,"one server-confirmed death");
+      await Promise.all([
+        wait(()=>scout.me().pkKills===kills+1,"server kill credit"),
+        wait(()=>keeper.me().alive,"server respawn",20000),
+      ]);
+    }catch(error){
+      const snapshot=c=>{const p=c.me();return {x:p.x,y:p.y,z:p.z,hp:p.hp,alive:p.alive,targetId:p.targetId,combatState:p.combatState};};
+      throw new Error("front-line death setup failed "+JSON.stringify({orders,scout:snapshot(scout),keeper:snapshot(keeper),
+        combat:scout.events.slice(eventStart).filter(e=>["command_rejected","pvp_hit","pvp_kill","experience_gained"].includes(e.type)).slice(-12)}),{cause:error});
+    }
   }
   await walk(keeper,storeX-5,storeZ+16);
   await defeatGuard();assert.ok(atCamp(keeper),"respawn at selected supplied camp");
   await walk(keeper,storeX,storeZ);await defeatGuard();
   assert.ok(Math.hypot(keeper.me().x-guardBase.x,keeper.me().z-guardBase.z)<.2,"contested camp falls back to original base");
   console.log("PASS authenticated dispatch, persisted choice, side-only drums, real death at supplied camp and contested fallback");
-}finally{guild.close();await Promise.allSettled([...rooms].map(r=>r.leave()));}
+}finally{
+  try{guild.close();await Promise.allSettled([...rooms].map(r=>r.leave()));}
+  finally{if(server)await server.gracefullyShutdown(false);}
+}

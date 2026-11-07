@@ -8,7 +8,7 @@ import {Client} from "@colyseus/sdk";
 const url=process.env.MONTRA_TEST_URL,dir=process.env.MONTRA_CHARACTER_DIR;
 if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url??"") || !/^montra-front-test-/.test(path.basename(dir??"")))throw Error("Requires an isolated borderlands server");
 const {GuildStore}=await import(existsSync("build/rooms/GuildStore.js")?"./build/rooms/GuildStore.js":"./src/rooms/GuildStore.ts");
-const guild=new GuildStore(path.join(dir,"guilds.sqlite")),sdk=new Client(url),rooms=new Set();
+const fixtures=await seedFixtures(),sdk=new Client(url),rooms=new Set();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function wait(fn,label,timeout=16000){
   const end=Date.now()+timeout;while(Date.now()<end){const v=fn();if(v)return v;await sleep(60);}throw Error("timeout "+label);
@@ -18,6 +18,24 @@ async function createGuest(name,mapId,x,z){
   await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level:12,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp:416,mapId,
     inventory:{version:1,slots:Array(12).fill(null),equippedWeaponSlot:null},updatedAt:new Date().toISOString()}),{flag:"wx"});
   return {id,token};
+}
+async function seedFixtures(){
+  // The server owns guild writes once clients join. A fixture connection writing
+  // during either concurrent siege can lock its territory tick and close rooms.
+  const guild=new GuildStore(path.join(dir,"guilds.sqlite"));
+  async function crew(map,tag,flag,withDefender){
+    const leader=await createGuest(tag+"One",map,...flag),scout=await createGuest(tag+"Two",map,...flag);
+    guild.create(leader.id,tag+"One",tag+" Guild");guild.add(leader.id,scout.id,tag+"Two");
+    let defender;
+    if(withDefender){defender=await createGuest(tag+"Guard",map,...flag);guild.create(defender.id,tag+"Guard",tag+" Guard");}
+    return {leader,scout,defender};
+  }
+  try{
+    return {
+      mine:{traveler:await createGuest("Rail","moon_pass",41,17),crew:await crew("moon_pass","Silver",[12,-36],true)},
+      river:{traveler:await createGuest("Ferry","river_watch",-35,18),crew:await crew("river_watch","Delta",[-18,-29],false)},
+    };
+  }finally{guild.close();}
 }
 async function join(guest,ticket){
   const opts={worldVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,guestToken:guest.token,warTicket:ticket?.ticket};
@@ -35,8 +53,8 @@ async function walk(c,route){
     c.r.send("move",{x,z});await wait(()=>Math.hypot(c.me().x-x,c.me().z-z)<.4,"walk "+x+","+z,45000);
   }
 }
-async function transit(map,name,x,z){
-  const g=await createGuest(name,map,x,z);let c=await join(g);
+async function transit(map,g){
+  let c=await join(g);
   const stops=JSON.parse(c.r.state.worldDefinition).maps[map].portals.filter(p=>p.targetMapId===map);
   const [a,b]=stops;
   assert.equal((await request(c,"warp",{portalId:b.id},"command_rejected")).reason,"portal_too_far");
@@ -50,17 +68,15 @@ async function transit(map,name,x,z){
 async function enlist(c,start=false){
   const t=await request(c,start?"territory_start":"territory_join",{},"territory_transfer");await leave(c);return join(c.guest,t);
 }
-async function siege(map,tag,flag,withDefender){
-  const leader=await createGuest(tag+"One",map,...flag),scout=await createGuest(tag+"Two",map,...flag);
-  guild.create(leader.id,tag+"One",tag+" Guild");guild.add(leader.id,scout.id,tag+"Two");
+async function siege({leader,scout,defender}){
   const main=await enlist(await join(leader),true),wing=await enlist(await join(scout));
   let foe;
-  if(withDefender){const g=await createGuest(tag+"Guard",map,...flag);guild.create(g.id,tag+"Guard",tag+" Guard");foe=await enlist(await join(g));}
+  if(defender)foe=await enlist(await join(defender));
   return {main,wing,foe};
 }
-async function mine(){
-  await transit("moon_pass","Rail",41,17);
-  const {main,wing,foe}=await siege("moon_pass","Silver",[12,-36],true);
+async function mine({traveler,crew}){
+  await transit("moon_pass",traveler);
+  const {main,wing,foe}=await siege(crew);
   await Promise.all([walk(main,[[0,10],[0,-17],[12,-25]]),
     walk(wing,[[22,39],[48,42],[77,36],[82,22],[76,8],[76,-22],[83,-40],[82,-58]]),
     walk(foe,[[26,-66],[48,-84],[73,-89],[93,-76],[82,-65]])]);
@@ -70,9 +86,9 @@ async function mine(){
   await walk(wing,[[82,-51]]);await wait(()=>main.local?.relay?.side==="defend","mine defended");await strike(65);
   console.log("PASS Moon Pass railway in both directions, save/rejoin, and 30/15/10 gate hits from live positions");
 }
-async function river(){
-  await transit("river_watch","Ferry",-35,18);
-  const {main,wing}=await siege("river_watch","Delta",[-18,-29],false);
+async function river({traveler,crew}){
+  await transit("river_watch",traveler);
+  const {main,wing}=await siege(crew);
   await Promise.all([walk(main,[[0,12],[-18,12],[-36,8],[-38,-46],[-22,-46],[-22,-35]]),
     walk(wing,[[0,12],[-18,12],[-35,18],[-35,25],[-56,32],[-78,25],[-87,8],[-84,-13],[-72,-35],[-67,-56]])]);
   await wait(()=>main.local?.relay?.side==="attack","river supplied");await sleep(2100);assert.equal(main.local.progress,0);
@@ -85,6 +101,6 @@ async function river(){
   console.log("PASS River Watch ferry/save/return, isolated supply cannot capture, flag crew gets its bonus");
 }
 try{
-  const results=await Promise.allSettled([mine(),river()]);
+  const results=await Promise.allSettled([mine(fixtures.mine),river(fixtures.river)]);
   for(const result of results)if(result.status==="rejected")throw result.reason;
-}finally{guild.close();await Promise.allSettled([...rooms].map(r=>r.leave()));}
+}finally{await Promise.allSettled([...rooms].map(r=>r.leave()));}

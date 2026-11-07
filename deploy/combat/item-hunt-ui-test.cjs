@@ -42,24 +42,62 @@ const fieldSource=source.slice(source.indexOf("  function fieldRecipeProgress(")
 const drawerSource=source.slice(source.indexOf("  function renderFieldGoalDrawer("),source.indexOf('  ui.quest.addEventListener("click"'));
 const camp={mapId:"forbidden_forest",name:"ชายป่ากระซิบ",mobs:["west1","west2"],x:10,z:10,goal:10,maxLevel:10,weapon:"wrap"};
 const gear={name:"ผ้าพันหมัด",level:1,craftGold:4,recipe:[{item:"hide",qty:3},{item:"fiber",qty:2}]};
-const docs={wrap:gear,hide:{name:"หนัง",huntTarget:{open:true}},fiber:{name:"ใย"},fragment:{name:"เศษตรา",bossGear:"amulet",sourceBoss:"boss",huntTarget:{mapId:camp.mapId}},
+const docs={wrap:gear,hide:{name:"หนัง",huntTarget:{...camp,open:true}},fiber:{name:"ใย"},fragment:{name:"เศษตรา",bossGear:"amulet",sourceBoss:"boss",huntTarget:{mapId:camp.mapId}},
   amulet:{name:"สร้อย",level:12,sourceBoss:"boss",craftGold:24,recipe:[{item:"fragment",qty:3},{item:"hide",qty:2}]}};
-const bag={slots:[{itemId:"wrap",quantity:1},{itemId:"hide",quantity:2}],starterHuntKills:4,forgeCopies:{}};
+const bag={slots:[{itemId:"wrap",quantity:1},{itemId:"hide",quantity:2}],starterHuntKills:4,equippedWeaponSlot:0,forgeCopies:{}};
 const controls={},get=id=>controls[id]??={scrollIntoView(){},click(){},replaceChildren(...children){this.children=children;}};
-const me={pathId:"muay_boran",level:3},context={renderItemPreview(){},createItemTile:(id,options)=>({id,options}),mode:"live",ownServerCharacter:()=>me,inventoryState:bag,
+const me={pathId:"muay_boran",level:3,x:10,z:8},context={renderItemPreview(){},createItemTile:(id,options)=>({id,options}),mode:"live",ownServerCharacter:()=>me,inventoryState:bag,
   economyReady:()=>true,gearGuides:{path:me.pathId,starterHunt:camp},fieldTrainingTip:null,territoryState:null,activeMapId:camp.mapId,
-  personalItems:docs,openForgePage(...v){context.forgeOpened=v;},itemHuntCount:id=>bag.slots.reduce((n,s)=>n+(s.itemId===id?s.quantity:0),0),
+  personalItems:docs,MONSTER_ID:"possessed-1",openForgePage(...v){context.forgeOpened=v;},itemHuntCount:id=>bag.slots.reduce((n,s)=>n+(s?.itemId===id?s.quantity:0),0),
   room:{state:{monsters:new Map([["west1",{x:9,z:8,alive:false}],["west2",{x:12,z:8,alive:true}]])}},
   getLocalAvatar:()=>({x:10,z:8}),worldDefinitions:{},$:get,ui:{drawerTitle:{}},openBag(){},selectBenchRecipe(...v){context.opened=v;},
   bindItemHuntButton(_,id,qty){context.tracked={id,qty};},itemHuntSource:(id,g)=>docs[id]?.huntTarget};
-const field=vm.runInNewContext(fieldSource+drawerSource+"\n({goal:fieldGearGoal,draw:renderFieldGoalDrawer})",context);
-let g=field.goal();assert.equal(g.to.x,12);assert.match(g.progress,/4\/10/);field.draw(g);
+// Use the real navigation/equipped-slot helpers: starter goals follow missing
+// crafting supplies, not the old starter kill-count reward.
+const huntGuideSource=source.slice(source.indexOf("  function itemHuntGuide("),end);
+const equippedSource=source.slice(source.indexOf("  function currentEquippedWeaponSlot("),source.indexOf("  function sendBagCommand("));
+const field=vm.runInNewContext(huntGuideSource+equippedSource+fieldSource+drawerSource+"\n({goal:fieldGearGoal,draw:renderFieldGoalDrawer})",context);
+let g=field.goal();assert.equal(g.to.x,12);assert.equal(g.recipe,"wrap");assert.equal(g.slot,0);
+assert(g.copyGoal);assert.equal(g.copyReady,false);assert.equal(g.nextRank,1);assert.match(g.progress,/หนัง 2\/3/);field.draw(g);
+assert.equal(get("fieldGoalForge").hidden,true);assert.equal(get("fieldGoalRecipe").hidden,false);
 assert.match(get("fieldGoalInputs").textContent,/หนัง 2\/3/);assert.equal(context.tracked.id,"hide");
 bag.slots[1].quantity=3;bag.slots.push({itemId:"fiber",quantity:2});
 g=field.goal();assert.match(g.step,/วัตถุดิบครบ/);field.draw(g);get("fieldGoalRecipe").onclick();assert.deepEqual(context.opened,["all","1","wrap"]);
-bag.forgeCopies.wrap=1;g=field.goal();field.draw(g);assert.equal(get("fieldGoalForge").hidden,false);
+assert.equal(g.copyReady,false);assert.equal(get("fieldGoalForge").hidden,true);
+assert.match(get("fieldGoalRecipe").textContent,/อีก 1 ชิ้น/);
+// Crafting ingredients alone cannot unlock forging. A fresh spare copy can.
+bag.slots.push({itemId:"wrap",quantity:1});
+g=field.goal();assert(g.copyReady);assert.equal(g.slot,0);field.draw(g);
+assert.equal(get("fieldGoalForge").hidden,false);assert.equal(get("fieldGoalRecipe").hidden,true);
+assert.equal(get("fieldGoalItems").children.length,0);assert.equal(context.tracked.id,null);
+get("fieldGoalForge").onclick();assert.deepEqual(context.forgeOpened,["enhance",0]);
+// The equipped copy is the target even when another copy precedes it.
+bag.equippedWeaponSlot=3;g=field.goal();assert.equal(g.slot,3);assert(g.copyReady);
+field.draw(g);get("fieldGoalForge").onclick();assert.deepEqual(context.forgeOpened,["enhance",3]);
+bag.equippedWeaponSlot=0;
+for(const protectedCopy of [{socket:"socket"},{forge:{rank:1}},{forge:{misses:1}}]){
+  bag.slots[3]={itemId:"wrap",quantity:1,...protectedCopy};
+  g=field.goal();assert.equal(g.copyReady,false);field.draw(g);assert.equal(get("fieldGoalForge").hidden,true);
+}
+bag.slots.pop();
+// Stored forge copies also unlock the forge without consuming recipe materials.
+bag.forgeCopies.wrap=1;g=field.goal();assert(g.copyReady);field.draw(g);assert.equal(get("fieldGoalForge").hidden,false);
 get("fieldGoalForge").onclick();assert.deepEqual(context.forgeOpened,["enhance",g.slot]);
 bag.slots[0].forge={rank:1};bag.forgeCopies={};assert.equal(field.goal().nextRank,2);
+// A kiln ingredient reserves the material also needed directly by the weapon.
+const originalRecipe=gear.recipe;
+docs.cord={name:"เชือก",station:"kiln",level:1,recipe:[{item:"fiber",qty:2}]};
+gear.recipe=[{item:"cord",qty:1},{item:"fiber",qty:2}];
+g=field.goal();assert.equal(g.missingMaterial.id,"fiber");assert.equal(g.missingMaterial.need,4);
+assert.equal(g.missingMaterial.have,2);assert.equal(g.to,undefined);field.draw(g);
+assert.equal(get("fieldGoalIngredient").hidden,true);assert.equal(get("fieldGoalForge").hidden,true);
+bag.slots[2].quantity=4;g=field.goal();assert.equal(g.craftIngredient,"cord");field.draw(g);
+assert.equal(get("fieldGoalIngredient").hidden,false);get("fieldGoalIngredient").onclick();
+assert.deepEqual(context.opened,["kiln","1","cord"]);
+bag.slots.push({itemId:"cord",quantity:1});bag.slots[2].quantity=2;
+g=field.goal();assert.equal(g.missingMaterial,undefined);assert.equal(g.copyReady,false);field.draw(g);
+assert.equal(get("fieldGoalIngredient").hidden,true);assert.equal(get("fieldGoalForge").hidden,true);
+gear.recipe=originalRecipe;bag.slots.pop();
 bag.slots[0].forge.rank=3;assert.equal(field.goal(),null);
 me.level=12;bag.slots=[{itemId:"fragment",quantity:1},{itemId:"hide",quantity:1}];
 g=field.goal();assert.match(g.progress,/1\/3/);field.draw(g);assert.equal(context.tracked.id,"hide");
@@ -67,7 +105,7 @@ get("fieldGoalRecipe").onclick();assert.deepEqual(context.opened,["boss","12","a
 context.room.sessionId="hunter";context.fieldTrainingTip={session:"hunter",path:me.pathId,points:1,choices:[{name:"หมัด",rank:1}]};
 bag.slots=[];g=field.goal();assert(g.trainingOnly);field.draw(g);assert.match(get("fieldTrainingNames").textContent,/ศาลหมู่บ้าน.*หมัด ขั้น 1/);
 assert.equal(get("fieldTrainingBook").hidden,false);context.room.sessionId="other";assert.equal(field.goal(),null);
-console.log("PASS starter camp HUD, recipe links, first forge, boss supplies and character-scoped training");
+console.log("PASS starter copy supplies, recipe links, spare-copy forge eligibility, boss supplies and character-scoped training");
 
 const journeyWorld={id:"belfry2",mobs:["belfry1","belfry2"],mapId:camp.mapId,map:"วัดร้าง",camp:"หอระฆัง",monster:"เงา",level:15,x:12,z:8,open:true};
 const bossSite={...journeyWorld,id:"bell",mobs:["bell"],monster:"ระฆังผนึก",level:20};

@@ -34,15 +34,16 @@ try {
   const fort=()=>a.state?.fortification;
   const rejected={};
   const shotHits=[];
-  const firstShotEvents=[];
+  const damageEvents=[];
   const finishEvents=[];
   for(const [i,r] of rooms.entries()) {
     rejected[i]=[];
     r.onMessage("command_rejected", m=>rejected[i].push(m.reason));
     r.onMessage("ranged_hit", m=>shotHits.push({i,...m}));
     r.onMessage("climb_finished", m=>finishEvents.push(m));
+    r.onMessage("pvp_hit", m=>damageEvents.push({i,...m}));
     for(const type of [
-      "combat_hit","combat_notice","pvp_hit","pvp_kill","monster_hit",
+      "combat_hit","combat_notice","pvp_kill","monster_hit",
       "player_down","player_respawn","monster_respawn",
       "summon_hit","summon_spawn","summon_despawn","climb_started",
     ])r.onMessage(type,()=>{});
@@ -53,8 +54,8 @@ try {
   assert.ok(rooms.every(r=>r.roomId===a.roomId));
   assert.ok(Math.abs(fort().ladderFootX-6.1)<.005, "Colyseus float32 ladder sync");
   assert.equal(fort().x,8);
-  for (const r of rooms) r.send("select_build",{path:"seer",ancestry:"woodland"});
-  await until(()=>rooms.every(r=>r.state.players.get(r.sessionId)?.pathId==="seer"),6500,"occult classes selected");
+  for (const r of rooms) r.send("select_build",{path:r===d?"blade":"seer",ancestry:"woodland"});
+  await until(()=>rooms.every(r=>r.state.players.get(r.sessionId)?.pathId===(r===d?"blade":"seer")),6500,"ranged and melee classes selected");
   console.log("PASS: four players share authoritative 4m wall and ladder");
 
   // Browser can only send x/z destinations, never y, teleport or climb speed.
@@ -90,16 +91,16 @@ try {
   console.log("PASS: wall blocks ground-level shots; forged damage/Y rejected");
 
   // A must walk to the foot of the ladder and be near enough to climb.
-  a.send("move",{x:fort().ladderFootX,z:fort().ladderFootZ});
-  await until(()=>Math.hypot(aP().x-fort().ladderFootX,
-    aP().z-fort().ladderFootZ)<1.15,4500,"walk to ladder foot");
-  a.send("climb",{structureId:"watchwall-1",direction:"up"});
+  for (const r of [a,d]) r.send("move",{x:fort().ladderFootX,z:fort().ladderFootZ});
+  await until(()=>[aId,dId].every(id=>Math.hypot(p(a,id).x-fort().ladderFootX,
+    p(a,id).z-fort().ladderFootZ)<1.15),4500,"ranged and melee actors walk to ladder foot");
+  for (const r of [a,d]) r.send("climb",{structureId:"watchwall-1",direction:"up"});
   await until(()=>aP().y>0.2 && aP().y<4,2500,"begin server climb");
   const yBefore=aP().y;
   await sleep(200);
   assert.ok(aP().y>yBefore && aP().y-yBefore<0.65,
     "player climbed faster than 2.3 units/s");
-  await until(()=>rooms.every(r=>Math.abs(p(r,aId)?.y-4)<.025),
+  await until(()=>rooms.every(r=>[aId,dId].every(id=>Math.abs(p(r,id)?.y-4)<.025)),
     4500,"top height synchronized");
   assert.ok(rooms.every(r=>Math.abs(p(r,aId).x-8)<.1));
   console.log("PASS: ladder climb y=0 -> y=4 speed-capped and synchronized");
@@ -114,10 +115,16 @@ try {
   console.log("PASS: top is walkable, ground shortcuts rejected");
 
   // Vertical separation excludes melee even if X/Z is near a lower player.
-  a.send("attack",{targetId:bId});
+  assert.equal(p(a,dId).pathId,"blade");
+  assert.equal(p(a,dId).y,4);
+  const beforeMeleeHitSeq=bP().hitSeq, beforeMeleeEvents=damageEvents.length;
+  d.send("attack",{targetId:bId});
   await sleep(250);
+  assert.ok(rejected[3].includes("melee_height_blocked"));
   assert.equal(bP().hp,beforeB);
-  assert.equal(aP().targetId,"");
+  assert.equal(bP().hitSeq,beforeMeleeHitSeq);
+  assert.equal(damageEvents.slice(beforeMeleeEvents).filter(e=>e.targetId===bId).length,0);
+  assert.equal(p(a,dId).targetId,"");
   console.log("PASS: elevated attacker cannot melee through vertical gap");
 
   // Elevated muzzle clears wall parapet and damages the same enemy that

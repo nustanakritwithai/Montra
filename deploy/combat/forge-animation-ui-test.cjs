@@ -7,7 +7,7 @@ function slice(start,end){const a=source.indexOf(start),b=source.indexOf(end,a);
 function fakeClock(){let now=0,sequence=0;const timers=new Map();return {now:()=>now,timers,setTimeout(fn,delay=0){const id=++sequence;timers.set(id,{at:now+Number(delay),fn});return id;},clearTimeout(id){timers.delete(id);},advance(ms){const end=now+ms;let runs=0;while(true){const next=[...timers].filter(([,timer])=>timer.at<=end).sort((a,b)=>a[1].at-b[1].at||a[0]-b[0])[0];if(!next)break;assert(++runs<10000,'finite timer queue');now=next[1].at;timers.delete(next[0]);next[1].fn();}now=end;}};}
 function element(){const classes=new Set();return {hidden:false,disabled:false,textContent:'',value:'',dataset:{},attributes:{},open:false,children:[],style:{},classList:{add(...names){names.forEach(name=>classes.add(name));},remove(...names){names.forEach(name=>classes.delete(name));},toggle(name,on){if(on??!classes.has(name))classes.add(name);else classes.delete(name);},contains:name=>classes.has(name)},setAttribute(name,value){this.attributes[name]=String(value);},removeAttribute(name){delete this.attributes[name];},getAttribute(name){return this.attributes[name];},scrollIntoView(){this.scrolled=true;},close(){this.open=false;},focus(){this.focused=true;},getClientRects(){return this.hidden?[]:[{}];}};}
 function harness({reduced=false,confirm=true,throwSend=false,animationEnd=true}={}){
-  const clock=fakeClock(),elements=new Map(),sent=[],toasts=[],callbacks={},renders=[];
+  const clock=fakeClock(),elements=new Map(),sent=[],toasts=[],callbacks={},renders=[],effects=[];
   const $=id=>{if(!elements.has(id)){
     const node=element();elements.set(id,node);
     if(id==='forgeHammerMotion'){
@@ -23,12 +23,15 @@ function harness({reduced=false,confirm=true,throwSend=false,animationEnd=true}=
   const meta={name:'ดาบทดสอบ',kind:'mainHand',level:1,forge:{primary:'melee',enhanceRatings:{6:42}},recipe:[{item:'metal',qty:1}]};
   const room={state:{forgeCatalog:JSON.stringify({enhanceSteps:Array.from({length:10},()=>({copies:2,gold:100,chance:75,breakOnFailure:true,downgradeChance:20}))})},send(command,payload){if(throwSend)throw Error('offline');sent.push({command,payload});},onMessage(name,callback){callbacks[name]=callback;}};
   const ctx={$,room,joined:room,window:{confirm:()=>confirm,matchMedia:()=>({matches:reduced})},document:{hidden:false},performance:{now:clock.now},Date:class extends Date{static now(){return clock.now();}},setTimeout:clock.setTimeout,clearTimeout:clock.clearTimeout,requestAnimationFrame:fn=>clock.setTimeout(fn,16),cancelAnimationFrame:clock.clearTimeout,
+    // Presentation boundaries record feedback without playing audio or creating 3D effects.
+    getLocalAvatar:()=>({x:2,y:3,z:4}),localId:'hero',
+    ...Object.fromEntries(['SFX','shakeCamera','sparks','floatAtPlayer','triggerCombatCallout'].map(name=>[name,(...args)=>effects.push({name,args})])),
     inventoryState:inventory,economyGold:1000,economyPending:false,economyTimer:null,itemUsePending:false,drawerActive:'forge',forgePageAction:'enhance',forgePageTarget:0,forgePageIdentity:{itemId:item.itemId,instanceId:'sword'},forgePageRoom:room,
     economyReady:()=>true,forgeTargetItem:()=>inventory.slots[0],bagMeta:value=>value?meta:null,gearStamp:value=>value.forge.instanceId+'.'+value.forge.revision,forgeRiskText:()=> 'เสี่ยงแตก',economyRequestId:()=>`request_${sent.length+1}`,
     renderForgePage:()=>renders.push('forge'),renderBag:()=>renders.push('bag'),renderEconomy:()=>renders.push('economy'),renderForgeStock:()=>renders.push('stock'),forgeNames:{melee:'โจมตี'},centralMarketVersion:0,toast:message=>toasts.push(message),fishingPending:false};
   $('forgePanel').hidden=false;
   const run=code=>vm.runInContext(code,ctx);vm.createContext(ctx);
-  return {clock,elements,$,sent,toasts,callbacks,renders,ctx,run,item,inventory,meta,room,authority:()=>JSON.stringify({gold:ctx.economyGold,inventory:ctx.inventoryState})};
+  return {clock,elements,$,sent,toasts,callbacks,renders,effects,ctx,run,item,inventory,meta,room,authority:()=>JSON.stringify({gold:ctx.economyGold,inventory:ctx.inventoryState})};
 }
 function setup(options){const h=harness(options);
   Object.assign(h.ctx,{refreshArtisanWallet(){},currentBagSlots:()=>h.inventory.slots,closeForgePicker(){},selectForgeTarget(){h.ctx.forgePageTarget=null;h.ctx.forgePageIdentity=null;},forgeTargetChoices:()=>h.inventory.slots[0]?[{target:0,key:'bag:0',location:'bag'}]:[],forgeLabel:item=>' +'+item.forge.rank,
@@ -51,8 +54,11 @@ function reveal(h){h.clock.advance(1260);}
 // A fast response releases the network lock but not the presentation lock.
 {
   const h=setup();const before=h.authority();start(h);h.run('submitForge("enhance")');assert.equal(h.sent.length,1,'double click is ignored');
-  h.clock.advance(100);wire(h,result(h));assert.equal(h.ctx.economyPending,false);assert.equal(h.run('forgeAnimationBusy()'),true);assert.equal(h.toasts.length,0,'no early success toast');
+  h.clock.advance(100);wire(h,result(h));assert.equal(h.ctx.economyPending,false);assert.equal(h.run('forgeAnimationBusy()'),true);assert.equal(h.toasts.length,0,'no early success toast');assert.equal(h.effects.length,0,'no feedback before the confirmed reveal');
   h.run('submitForge("enhance")');assert.equal(h.sent.length,1,'early response must not permit second submit before reveal');h.clock.advance(1159);assert.equal(h.toasts.length,0);h.clock.advance(1);assert.equal(h.run('forgeAnimationBusy()'),false);assert.match(h.toasts.join(' '),/สำเร็จ/);assert.equal(h.authority(),before,'presentation never mutates gold or inventory');
+  assert.deepEqual(h.effects.map(e=>e.name),['SFX','shakeCamera','sparks','floatAtPlayer','triggerCombatCallout']);
+  assert.equal(h.effects[0].args[0],'bell');assert.deepEqual(h.effects[2].args.slice(0,4),['gold',2,4.2,4]);
+  assert.equal(h.effects[3].args[0],'hero');assert.equal(h.effects[4].args[0],'forge_success');
 }
 // An elapsed animation cannot manufacture an outcome while the server is pending.
 {
@@ -60,7 +66,7 @@ function reveal(h){h.clock.advance(1260);}
 }
 // Every outcome comes from the server, including failure, downgrade, and destruction.
 for(const [payload,word,kind] of [[{success:false},/ไม่สำเร็จ/,'failed'],[{success:false,downgraded:true,forge:{rank:4}},/ลด/,'downgraded'],[{success:false,broken:true,forge:{rank:5}},/แตก/,'broken']]){
-  const h=setup();const before=h.authority();start(h);wire(h,result(h,payload));assert.equal(h.toasts.length,0);reveal(h);assert.match(h.toasts.join(' '),word);assert.equal(h.$('forgeOutcome').dataset.kind,kind);assert.equal(h.authority(),before);
+  const h=setup();const before=h.authority();start(h);wire(h,result(h,payload));assert.equal(h.toasts.length,0);reveal(h);assert.match(h.toasts.join(' '),word);assert.equal(h.$('forgeOutcome').dataset.kind,kind);assert.equal(h.authority(),before);assert.equal(h.effects[0].args[0],'hurt');assert.equal(h.effects.at(-1).args[0],'forge_fail');
 }
 // Server pushes immediately change authority, but production render preserves visible pre-strike data.
 for(const broken of [false,true]){
@@ -79,7 +85,7 @@ for(const broken of [false,true]){
 // Stale request, wrong action, old room, duplicate result cannot release a pending action.
 {
   const h=setup();start(h);const valid=result(h);wire(h,{...valid,requestId:'stale'});wire(h,{...valid,action:'reroll'});wire(h,{...valid,itemId:'another_item'});wire(h,{...valid,forge:{rank:11}});wire(h,{...valid,forge:{rank:1.5}});wire(h,{...valid,requestId:undefined});assert.equal(h.ctx.economyPending,true);assert.equal(h.toasts.length,0);
-  assert.equal(h.ctx.receiveForgeResult(valid,{}),false);assert.equal(h.ctx.economyPending,true);wire(h,valid);reveal(h);wire(h,valid);assert.equal(h.toasts.length,1,'duplicate outcome not announced twice');
+  assert.equal(h.ctx.receiveForgeResult(valid,{}),false);assert.equal(h.ctx.economyPending,true);wire(h,valid);reveal(h);wire(h,valid);assert.equal(h.toasts.length,1,'duplicate outcome not announced twice');assert.equal(h.effects.length,5,'duplicate outcome cannot replay feedback');
   h.run('submitForge("enhance")');assert.equal(h.sent.length,2);wire(h,valid);assert.equal(h.ctx.economyPending,true,'old response cannot clear a newer request');
 }
 // Rejection, send errors and timeout reset presentation without replaying mutation.
