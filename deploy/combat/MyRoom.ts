@@ -1,3 +1,4 @@
+import {TradeSessions,type TradeSession} from "./TradeSessions.js";
 import {RespawnLifecycle} from "./RespawnLifecycle.js";
 import {HorizontalMovement} from "./HorizontalMovement.js";
 import {VerticalMovement} from "./VerticalMovement.js";
@@ -122,7 +123,6 @@ type Gates = {
   chat: CommandBucket; bugReport: CommandBucket; possession: CommandBucket; build: CommandBucket; swordTree: CommandBucket; occult: CommandBucket; economy: CommandBucket; party: CommandBucket; guild: CommandBucket;
 };
 
-type TradeSession = { id:string; a:string; b:string; expires:number; offers:Record<string, TradeOffer>; items:Record<string,{itemId:string;quantity:number}|null>; fingerprints:Record<string,string>; confirmed:Set<string> };
 
 /**
  * MONTRA S1: one 20-Hz authoritative simulation per room.
@@ -219,7 +219,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastInventoryReadMs = new Map<string, number>();
   private lastStatusReadMs = new Map<string, number>();
   private lastWeaponEquipMs = new Map<string, number>();
-  private trades = new Map<string, TradeSession>();
+  private trades = new TradeSessions();
   private parties = new PartyManager();
   private buffs = new BuffBook();
   private effects = new BuffLedger();
@@ -3276,10 +3276,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try { client.send("inventory_state",account.inventory); client.send("economy_state",{gold:account.gold}); } catch { /* disconnect does not roll back committed assets */ }
   }
   private tradeFor(client: Client, tradeId:string): TradeSession | null {
-    const trade=this.trades.get(tradeId);
-    if (!trade || (trade.a!==client.sessionId && trade.b!==client.sessionId)) { this.reject(client,"trade_unavailable"); return null; }
-    if (this.simulatedMs >= trade.expires) { this.trades.delete(tradeId); this.reject(client,"trade_expired"); return null; }
-    return trade;
+    return this.trades.lookup(client.sessionId,tradeId,()=>this.simulatedMs,reason=>this.reject(client,reason));
   }
   private tradeSnapshot(id:string, offer:TradeOffer): string {
     const bag=this.inventories.get(id);
@@ -3857,10 +3854,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const order=parseTradeRequest(message); if (!order) return this.reject(client,"invalid_trade");
       this.economyAction(client,()=>{
         const id=client.sessionId, target=this.clients.find(c=>c.sessionId===order.targetId), a=this.state.players.get(id), b=this.state.players.get(order.targetId);
-        for (const [key,trade] of this.trades) if (this.simulatedMs>=trade.expires) this.trades.delete(key);
-        if (!target || !a || !b || id===order.targetId || !this.economyId(target) || this.bladeHiddenFrom(id,order.targetId) || this.bladeHiddenFrom(order.targetId,id) || a.mapId!==b.mapId || distance3d(a,b)>5 || [...this.trades.values()].some(t=>[t.a,t.b].includes(id)||[t.a,t.b].includes(order.targetId))) throw new Error("invalid_trade");
-        const trade:TradeSession={id:randomUUID(),a:id,b:order.targetId,expires:this.simulatedMs+60_000,offers:{},items:{},fingerprints:{},confirmed:new Set()};
-        this.trades.set(trade.id,trade); this.notifyTrade(trade,"trade_update");
+        this.trades.expire(()=>this.simulatedMs);
+        if (!target || !a || !b || id===order.targetId || !this.economyId(target) || this.bladeHiddenFrom(id,order.targetId) || this.bladeHiddenFrom(order.targetId,id) || a.mapId!==b.mapId || distance3d(a,b)>5 || this.trades.hasParticipant(id,order.targetId)) throw new Error("invalid_trade");
+        const trade=this.trades.issue(randomUUID(),id,order.targetId,this.simulatedMs+60_000); this.notifyTrade(trade,"trade_update");
       });
     },
     trade_offer: (client:Client, message:unknown) => {
@@ -3869,10 +3865,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const trade=this.tradeFor(client,order.tradeId); if (!trade) return;
         const offer:TradeOffer={slot:order.slot,amount:order.amount,gold:order.gold};
         if (characterStore.economy.getAccount(id).gold<offer.gold) throw new Error("insufficient_gold");
-        trade.fingerprints[client.sessionId]=this.tradeSnapshot(client.sessionId,offer);
+        this.trades.setFingerprint(trade,client.sessionId,this.tradeSnapshot(client.sessionId,offer));
         const stack=offer.slot===null ? null : this.inventories.get(client.sessionId)?.slots[offer.slot];
-        trade.items[client.sessionId]=stack ? {...stack,quantity:offer.amount} : null;
-        trade.offers[client.sessionId]=offer; trade.confirmed.clear(); this.notifyTrade(trade,"trade_update");
+        this.trades.setOffer(trade,client.sessionId,stack ? {...stack,quantity:offer.amount} : null,offer); this.notifyTrade(trade,"trade_update");
       });
     },
     trade_confirm: (client:Client, message:unknown) => {
@@ -3884,16 +3879,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (!aClient || !bClient || !a || !b || !trade.offers[trade.a] || !trade.offers[trade.b] || a.mapId!==b.mapId || distance3d(a,b)>5) throw new Error("invalid_trade");
         const aId=this.economyId(aClient), bId=this.economyId(bClient);
         if (!aId || !bId) throw new Error("invalid_trade");
-        if ([trade.a,trade.b].some(id=>this.tradeSnapshot(id,trade.offers[id])!==trade.fingerprints[id])) { trade.confirmed.clear(); throw new Error("invalid_trade"); }
-        trade.confirmed.add(client.sessionId);
+        if ([trade.a,trade.b].some(id=>this.tradeSnapshot(id,trade.offers[id])!==trade.fingerprints[id])) { this.trades.resetReadiness(trade); throw new Error("invalid_trade"); }
+        this.trades.confirm(trade,client.sessionId);
         if (trade.confirmed.size<2) { this.notifyTrade(trade,"trade_update"); return; }
         characterStore.economy.trade(aId,bId,trade.id,trade.offers[trade.a],trade.offers[trade.b]);
-        this.trades.delete(trade.id); this.syncEconomy(aClient,aId); this.syncEconomy(bClient,bId); this.notifyTrade(trade,"trade_complete");
+        this.trades.remove(trade.id); this.syncEconomy(aClient,aId); this.syncEconomy(bClient,bId); this.notifyTrade(trade,"trade_complete");
       });
     },
     trade_cancel: (client:Client, message:unknown) => {
       const order=parseTradeId(message); if (!order) return this.reject(client,"invalid_trade");
-      this.economyAction(client,()=>{const trade=this.tradeFor(client,order.tradeId); if (trade) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }});
+      this.economyAction(client,()=>{const trade=this.tradeFor(client,order.tradeId); if (trade) { this.trades.remove(trade.id); this.notifyTrade(trade,"trade_cancelled"); }});
     },
     chat: (client: Client, message: unknown) => {
       const command=parseChatMessage(message);
@@ -5953,7 +5948,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.guildInvites.leave(id,to=>{
       this.clients.find(c=>c.sessionId===to)?.send("guild_invitation_closed",{});
     });
-    for (const trade of this.trades.values()) if (trade.a===id || trade.b===id) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }
+    this.trades.leave(id,trade=>this.notifyTrade(trade,"trade_cancelled"));
     const accountId = this.activeGuestAccounts.get(id);
     // Capture the snapshot BEFORE removing the player from server Schema.
     const saving = this.saveCharacter(id);
