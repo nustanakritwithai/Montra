@@ -153,6 +153,10 @@ test("ordinary gates keep separate HP/open state and migrate legacy single-gate 
     assert.deepEqual(store.war.inspect(field.site,start).gates,{"south--18":{hp:45,closed:false},"north--22":{hp:45,closed:false}});
     store.war.gate(field,"defend",false,start,null,"north--22");
     assert.deepEqual(store.war.inspect(field.site,start).gates,{"south--18":{hp:45,closed:false},"north--22":{hp:45,closed:true}});
+    // A corrupt gates_json row falls back to gate_hp/gate_open for every gate instead of crashing inspect().
+    const bad=new DatabaseSync(file);
+    bad.prepare("UPDATE territory_battles SET gates_json='{not json',gate_hp=70,gate_open=0 WHERE seq=?").run(field.seq);bad.close();
+    assert.deepEqual(store.war.inspect(field.site,start).gates,{"south--18":{hp:70,closed:true},"north--22":{hp:70,closed:true}});
   }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
 

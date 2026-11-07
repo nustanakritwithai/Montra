@@ -35,7 +35,9 @@ const fieldGateIds=(site:string)=>PROVINCES[site]?.rampart?.gates.map(g=>g.id) ?
 /** Ordinary fields store one state per gate. Rows written before gates_json existed
  * seed every gate from the legacy single gate_hp/gate_open pair. */
 function fieldGates(b:Pick<Battle,"site"|"gate_hp"|"gate_open"|"gates_json">):Record<string,FieldGate>{
-  const saved=b.gates_json?JSON.parse(b.gates_json) as Record<string,FieldGate>:{};
+  let saved:Record<string,FieldGate>={};
+  // A corrupt gates_json row must not crash inspect(): fall back to the legacy pair for every gate.
+  if(b.gates_json)try{const v=JSON.parse(b.gates_json);if(v && typeof v==="object" && !Array.isArray(v))saved=v;}catch{saved={};}
   return Object.fromEntries(fieldGateIds(b.site).map(id=>[id,saved[id] ?? {hp:b.gate_hp,open:!!b.gate_open}]));
 }
 const gateViews=(gates:Record<string,FieldGate>,active:boolean)=>Object.fromEntries(Object.entries(gates)

@@ -58,3 +58,16 @@ test("every closed ordinary gate blocks movement, not only the first gate",()=>{
   inside.closedFieldGates=new Set(["south--18","north--22"]);
   assert.equal(free(north),false);assert.equal(free(south),false);
 });
+
+test("castle and river-city gate commands without gateId reply war_gate_id",()=>{
+  for(const site of ["tri_wiang_castle","sam_lan_estuary"]){
+    const room=new MyRoom(),inside=room as unknown as Internals;
+    inside.field={site,seq:1};
+    const replies:{type:string;data:unknown}[]=[];
+    const client={sessionId:"x",send:(type:string,data:unknown)=>replies.push({type,data})} as unknown as Client;
+    for(const m of [{},null,{gateId:""},{gateId:3}]){
+      replies.length=0;inside.useCityGate(client,m);
+      assert.deepEqual(replies,[{type:"territory_error",data:{reason:"war_gate_id"}}],site+" "+JSON.stringify(m));
+    }
+  }
+});

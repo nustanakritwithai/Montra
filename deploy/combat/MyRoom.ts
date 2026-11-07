@@ -3334,7 +3334,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const castle=this.field.site===CASTLE_ID;
     const req=message as {gateId?:string;repair?:boolean}|null;
     const river=this.field.site===RIVER_CITY;
-    if((castle || river)?(!req || typeof req.gateId!=="string" || (req.repair!==undefined && (!castle || req.repair!==true))):!parseEmptyCommand(message))return;
+    if(castle || river){
+      if(!req || typeof req!=="object" || typeof req.gateId!=="string" || !req.gateId)return client.send("territory_error",{reason:"war_gate_id"});
+      if(req.repair!==undefined && (!castle || req.repair!==true))return;
+    }else if(!parseEmptyCommand(message))return;
     const id=client.sessionId,p=this.state.players.get(id),seat=this.warSeats.get(id),character=this.persistentCharacters.get(id);
     if(!p?.alive || p.flying || !seat || !character || !onMapGround(p) || this.climbs.has(id) || this.pendingCharacterLeaves.has(id))return;
     const now=Date.now();
