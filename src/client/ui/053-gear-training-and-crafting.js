@@ -128,6 +128,30 @@
     };
   }
   const benchTrail=[];
+  let craftRecipePage=0,craftComingSoon="";
+  function renderCraftRecipeGrid(slots){
+    const grid=$("craftRecipeGrid"),select=$("benchRecipe");if(!grid||!select)return;
+    const options=[...select.options],pages=Math.max(1,Math.ceil(options.length/6));
+    craftRecipePage=Math.min(Math.max(0,craftRecipePage),pages-1);
+    const level=ownServerCharacter()?.level||1;
+    const key=JSON.stringify([catalogRevision,options.map(o=>[o.value,itemHuntCount(o.value)]),select.value,craftRecipePage,level,Boolean(slots)]);
+    if(grid.dataset.render!==key){
+      grid.dataset.render=key;grid.replaceChildren();
+      for(const option of options.slice(craftRecipePage*6,craftRecipePage*6+6)){
+        const def=personalItems[option.value],locked=(def.level||1)>level;
+        const card=document.createElement("button"),name=document.createElement("strong"),owned=document.createElement("span"),requirement=document.createElement("small");
+        card.type="button";card.className="ck-recipe";card.classList.toggle("locked",locked);
+        card.setAttribute("aria-pressed",String(option.value===select.value));
+        card.setAttribute("aria-label",def.name+" · ต้องการ Lv."+(def.level||1));
+        name.textContent=def.name;owned.textContent=slots?"มีอยู่ "+itemHuntCount(option.value):"รอข้อมูลกระเป๋า";
+        requirement.textContent=(locked?"🔒 ต้องการ ":"")+"Lv."+(def.level||1);
+        card.append(createItemTile(option.value),name,owned,requirement);
+        card.onclick=()=>{select.value=option.value;benchTrail.length=0;craftRecipeTarget=null;renderCraftingPage();};grid.appendChild(card);
+      }
+    }
+    $("craftRecipePage").textContent="หน้า "+(craftRecipePage+1)+"/"+pages+" · "+options.length+" สูตร";
+    $("craftRecipePrev").disabled=craftRecipePage===0;$("craftRecipeNext").disabled=craftRecipePage>=pages-1;
+  }
   function benchAction(def){return def?.station!=="kiln"?"คราฟต์":def.family==="mat_charcoal"?"เผาถ่าน":"หลอมเหล็ก";}
   function bagKilnRecipe(id){
     const raw=/^mat_(raw_wood|metal|charcoal)_([1-7])$/.exec(id||"");
@@ -138,6 +162,7 @@
   let craftPagePosition=null,craftPageRoom=null,craftRecipeTarget=null,craftResultMessage="",craftResultRoom=null;
   function selectBenchRecipe(group,level,id,position=null){
     if(drawerActive!=="crafting")openCraftingPage(position);
+    craftComingSoon="";craftRecipePage=0;
     craftPagePosition=position;
     craftRecipeTarget={group,level,id};
     renderCraftingPage();
@@ -146,7 +171,8 @@
   function applyBenchRecipe(target,slots){
     $("benchGroup").value=target.group;renderWorkbench(slots);
     $("benchLevel").value=target.level;renderWorkbench(slots);
-    $("benchRecipe").value=target.id;renderWorkbench(slots);
+    $("benchRecipe").value=target.id;
+    craftRecipePage=Math.max(0,Math.floor([...$("benchRecipe").options].findIndex(o=>o.value===target.id)/6));renderWorkbench(slots);
   }
   function renderWorkbench(slots) {
     const panel=$("personalBench"), select=$("benchRecipe"), lv=$("benchLevel"), group=$("benchGroup");
@@ -174,15 +200,20 @@
         if(group.value==="boss" && !def.sourceBoss)continue;
         const supply=["material","catalyst","consumable","tool"].includes(def.kind);
         if(group.value==="materials" && !supply)continue;
+        if(group.value==="medicine" && def.kind!=="consumable")continue;
+        if(group.value==="weapons" && def.kind!=="mainHand")continue;
+        if(group.value==="armor" && (def.kind==="mainHand" || !wearPositions(def.kind).length))continue;
         if(group.value==="role" && (def.path!=="all" && def.path!==path || !position && !supply && def.recommended && !def.recommended.includes(path)))continue;
         const n=def.level||1;
         if(lv.value==="auto"?!bossRecipes && n>level:n!==(lv.value==="current"?level:Number(lv.value)))continue;
-        const family=(def.family||id)+(group.value==="all"?"/"+def.path:""),old=recipes.get(family);
+        const family=(def.family||id)+(["all","weapons","armor"].includes(group.value)?"/"+def.path:""),old=recipes.get(family);
         if(!old || (old[1].level||1)<n)recipes.set(family,[id,def]);
       }
       for(const [id,def] of recipes.values())select.appendChild(new Option("Lv."+(def.level||1)+" · "+def.name,id));
       if([...select.options].some(o=>o.value===previous))select.value=previous;
     }
+    renderCraftRecipeGrid(slots);
+    $("craftRequirements").replaceChildren();
     const def=personalItems[select.value],button=$("benchCraft");
     bindItemHuntButton($("benchTrack"),select.value,Math.min(def?.copyLimit??1,itemHuntCount(select.value)+1));
     const missing=def?.recipe.filter(r=>itemHuntCount(r.item)<r.qty && itemHuntSource(r.item,false)?.open)??[];
@@ -214,12 +245,15 @@
     const counts=def.recipe.map(r=>(slots||[]).reduce((n,s)=>n+(s?.itemId===r.item?s.quantity:0),0));
     const cost=def.craftGold??workbenchGold;
     const low=(def.level||1)>level;
-    $("benchInfo").textContent=[low?"ต้องการ Lv."+def.level:"Lv."+(def.level||1),statLine(def.stats),def.dropHint?"ล่าได้ที่ "+def.dropHint:"",def.forge&&def.level>=25?"มีออปชันสุ่มเมื่อสร้าง":""].filter(Boolean).join(" · ");
+    $("benchInfo").textContent=[low?"ต้องการ Lv."+def.level:"Lv."+(def.level||1),statLine(def.stats),def.healHp?"ฟื้น HP "+def.healHp:"",def.healMana?"ฟื้น MP "+def.healMana:"",def.dropHint?"ล่าได้ที่ "+def.dropHint:"",def.forge&&def.level>=25?"มีออปชันสุ่มเมื่อสร้าง":""].filter(Boolean).join(" · ");
     $("benchCost").textContent=cost.toLocaleString()+" ทอง";
     for(const [i,part] of def.recipe.entries()){
       const row=document.createElement("li"),name=document.createElement("span"),count=document.createElement("strong");
-      name.textContent=personalItems[part.item]?.name||part.item;count.textContent=counts[i]+" / "+part.qty;
+      name.textContent=personalItems[part.item]?.name||part.item;count.textContent=counts[i]+" / "+part.qty;count.setAttribute("aria-label",(counts[i]>=part.qty?"ครบ":"ขาด")+" · "+counts[i]+" / "+part.qty);
       row.classList.toggle("missing",counts[i]<part.qty);row.append(createItemTile(part.item,{quantity:part.qty}),name,count);$("benchIngredients").append(row);
+    }
+    for(const [ok,label] of [[!low,"ระดับตัวละคร "+level+" / "+(def.level||1)],[Boolean(slots)&&def.recipe.every((r,i)=>counts[i]>=r.qty),"วัสดุในกระเป๋า"],[economyGold!==null&&economyGold>=cost,"ทองเพียงพอ"],[Boolean(player?.alive),"ตัวละครมีชีวิต"]]){
+      const row=document.createElement("li");row.className=ok?"met":"missing";row.textContent=(ok?"✓ ":"✕ ")+label;$("craftRequirements").appendChild(row);
     }
     const ore=def.recipe.find((r,i)=>counts[i]<r.qty && /^mat_metal_[1-7]$/.test(r.item));
     if(ore){const tier=ore.item.split("_").pop();$("benchInfo").textContent+=" · แร่เหล็ก: ขุดก้อนหินปนแร่ชั้น "+tier+" 2 ก้อน แล้วเลือกในกระเป๋ากดแปรรูป · กดตามหาเพื่อดูตำแหน่งหิน";}

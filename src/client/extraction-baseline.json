@@ -1,8 +1,8 @@
 {
   "format": 1,
   "output": "main.js",
-  "bytes": 1444879,
-  "sha256": "b94183a749a1b7b09f19db22172d2531d0b03d2a9bab092fb10cb2cb72710890",
+  "bytes": 1452062,
+  "sha256": "cf187fd168c04f4508963d265a8d67e752af8b0e42aba53a62539f7418b51590",
   "fragments": [
     {
       "path": "core/000-wrapper-open.js",
@@ -271,13 +271,13 @@
     },
     {
       "path": "ui/053-gear-training-and-crafting.js",
-      "bytes": 32522,
-      "sha256": "e9e745ee07d5617c61391722b1b8d530a70fc92d9f3dc04fc0441eb66ab60936"
+      "bytes": 35679,
+      "sha256": "911221a4970d6b78524e36ec69574833accc80d81ebb4319d6ff379c95efcaf2"
     },
     {
       "path": "ui/054-forge-feedback-and-pages.js",
-      "bytes": 38943,
-      "sha256": "b1494fa2c081d2faa6bfba8c05e3dc9d67854494a421b40578ce24e6a58b7f36"
+      "bytes": 42969,
+      "sha256": "5f1d845b5fffc26825dc52c84d7190a6235d6e9ea5d60adc29c2641acc9aabe3"
     },
     {
       "path": "ui/055-market-and-trade.js",
