@@ -81,7 +81,7 @@ async function mine({traveler,crew}){
     walk(wing,[[22,39],[48,42],[77,36],[82,22],[76,8],[76,-22],[83,-40],[82,-58]]),
     walk(foe,[[26,-66],[48,-84],[73,-89],[93,-76],[82,-65]])]);
   await wait(()=>main.local?.relay?.side==="attack","mine held");
-  async function strike(hp){main.r.send("territory_gate",{});await wait(()=>main.local?.gateHp===hp,"gate HP "+hp);}
+  async function strike(hp){main.r.send("territory_gate",{});await wait(()=>main.local?.gates?.["south-12"]?.hp===hp,"gate HP "+hp);}
   await strike(90);await walk(foe,[[82,-58]]);await wait(()=>main.local?.relay?.contested,"mine contested");await strike(75);
   await walk(wing,[[82,-51]]);await wait(()=>main.local?.relay?.side==="defend","mine defended");await strike(65);
   console.log("PASS Moon Pass railway in both directions, save/rejoin, and 30/15/10 gate hits from live positions");
@@ -89,10 +89,20 @@ async function mine({traveler,crew}){
 async function river({traveler,crew}){
   await transit("river_watch",traveler);
   const {main,wing}=await siege(crew);
-  await Promise.all([walk(main,[[0,12],[-18,12],[-36,8],[-38,-46],[-22,-46],[-22,-35]]),
+  await Promise.all([walk(main,[[0,12],[-18,12],[-36,8],[-38,-46],[-22,-46],[-22,-43]]),
     walk(wing,[[0,12],[-18,12],[-35,18],[-35,25],[-56,32],[-78,25],[-87,8],[-84,-13],[-72,-35],[-67,-56]])]);
   await wait(()=>main.local?.relay?.side==="attack","river supplied");await sleep(2100);assert.equal(main.local.progress,0);
-  await walk(main,[[-18,-29]]);
+  // The north gate is no longer an unguarded shortcut. Breach it from outside,
+  // proving nearest-gate selection and that the south gate keeps its own HP.
+  for(let hp=105;hp>=0;hp-=15){
+    main.r.send("territory_gate",{});
+    await wait(()=>main.local?.gates?.["north--22"]?.hp===hp,"river north gate HP "+hp);
+    assert.equal(main.local.gates["south--18"].hp,120);
+    assert.equal(main.local.gates["south--18"].closed,true);
+    await sleep(1100);
+  }
+  assert.equal(main.local.gates["north--22"].closed,false);
+  await walk(main,[[-22,-35],[-18,-29]]);
   await wait(()=>main.local?.attack===1 && main.local.progress>0,"flag crew");
   const sample=main.local;main.events.length=0;
   await wait(()=>main.events.filter(e=>e.type==="territory_state" && e.data.local?.attack===1 && e.data.local?.relay?.side==="attack").length>=5,"five supported banner samples",20000);
