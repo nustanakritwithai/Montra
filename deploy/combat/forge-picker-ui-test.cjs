@@ -80,7 +80,7 @@ function fixture(){
   };
   ctx.room={state:{economyAvailable:true,forgeCatalog:JSON.stringify(config)}};
   vm.createContext(ctx);require('./fixtures/item-presentation-loader.cjs').install(ctx);const run=code=>vm.runInContext(code,ctx);
-  run(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function bagMeta(','  function pieceStat(')+slice('  function gearStamp(','  function accessoryStamp(')+slice('  function forgeLabel(','  function salvageSelectedGear(')+slice('  function renderForgeStock(','  function openBag()')+slice('  function gateFieldInput(','  const journalOrigins='));
+  run(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function bagMeta(','  function pieceStat(')+slice('  function gearStamp(','  function accessoryStamp(')+slice('  function forgeLabel(','  function salvageSelectedGear(')+slice('  function renderForgeStock(','  function openBag()')+fs.readFileSync('src/client-modules/drawer-controller.js','utf8')+slice('  const drawerController =','  const journalOrigins='));
   const refresh=()=>ctx.renderForgePage(),open=(action='enhance',target=0)=>ctx.openForgePage(action,target),popup=()=>d.$('forgeTargetButton').click(),key=()=>d.$('forgeTargetButton').dataset.target;
   const buttons=()=>d.$('forgePickerGrid').children,button=target=>buttons().find(b=>b.dataset.forgeTarget===target),pick=target=>{popup();assert(button(target),`missing choice ${target}`);button(target).click();};
   const snapshot=()=>JSON.stringify({inventory:ctx.inventoryState,gold:ctx.economyGold}),mutations=()=>wire.filter(e=>e.durable);
@@ -209,7 +209,7 @@ test('catalog names remain inert text and selected thumbnail uses shared invento
 test('actual drawer key listener closes only the popup on first Escape, then the drawer',()=>{
   const f=fixture(),account=f.node('div');account.hidden=true;f.elements.set('accountEntry',account);f.document.body.append(account);
   let listener;f.document.addEventListener=(type,handler)=>{assert.equal(type,'keydown');listener=handler;};
-  f.run(slice('  document.addEventListener("keydown",event=>{\n    if (ui.drawer.hidden','  function updateChatBadge('));
+  f.run(slice('  document.addEventListener("keydown",drawerController.handleKey)','  function updateChatBadge('));
   f.open();f.popup();const first={key:'Escape',preventDefault(){this.prevented=true;}};listener(first);
   assert.equal(first.prevented,true);assert.equal(f.$('forgePicker').open,false);assert.equal(f.ctx.drawerActive,'forge');assert.equal(f.ui.drawer.hidden,false);assert.equal(f.document.activeElement,f.$('forgeTargetButton'));
   const second={key:'Escape',preventDefault(){this.prevented=true;}};listener(second);assert.equal(second.prevented,true);assert.equal(f.ctx.drawerActive,null);assert.equal(f.ui.drawer.hidden,true);assert.equal(f.mutations().length,0);

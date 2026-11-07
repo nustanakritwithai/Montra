@@ -163,4 +163,3 @@
   }
 
   let drawerActive = null;
-  let drawerOpener = null;

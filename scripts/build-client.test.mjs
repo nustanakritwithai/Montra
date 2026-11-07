@@ -10,6 +10,24 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // Explicit reversible substitutions for this extraction only. This is not a new
 // baseline: reconstructing the original bytes still uses the historical SHA below.
+function drawerControllerRestoration(current) {
+  const reference = readFileSync(join(clientRoot, 'deploy/combat/fixtures/drawer-controller-reference.js'), 'utf8');
+  assert.equal(hash(reference), '6a02aacaad97c499e3ebca7bdf147796703857840c93ce18fea43f662bd4c9e3');
+  assert.equal(hash(readFileSync(join(clientRoot, 'src/client-modules/drawer-controller.js'))), '80be2186f8fdc95af82b28d1f62f2c4d068b494312e0b174257ce731e7c51bfa', 'Reviewed drawer lifecycle module');
+  const start = current.indexOf('  const drawerController =');
+  const end = current.indexOf('  const journalOrigins=', start);
+  const binding = current.slice(start, end);
+  assert(start > 0 && end > start);
+  assert.equal(hash(binding), '6af8526ab28ab3852a8490b51f59c12562980a645d3713981aafcfe013040a4c', 'Reviewed synchronous shell hooks');
+  const originalBinding = reference.slice(0, reference.indexOf('  const journalOrigins='));
+  const originalKey = reference.slice(reference.indexOf('  document.addEventListener("keydown",event=>{\n    if (ui.drawer.hidden'), reference.indexOf('  function updateChatBadge()'));
+  const originalBackdrop = reference.slice(reference.indexOf('  $("drawerClose").addEventListener'));
+  return text => text.replace(binding, originalBinding)
+    .replace('  document.addEventListener("keydown",drawerController.handleKey);\n', originalKey)
+    .replace('  drawerController.installBackdrop();\n', originalBackdrop)
+    .replace('  let drawerActive = null;\n', '  let drawerActive = null;\n  let drawerOpener = null;\n');
+}
+
 function skillMotionRestoration(current) {
   const module = readFileSync(join(clientRoot, 'src/client-modules/skill-motion.js'), 'utf8');
   const header = "// Visual skill selection and parse caches; authoritative combat remains in the shell.\n\"use strict\";\nglobalThis.MontraSkillMotion = Object.freeze({\n  create({ getRoom, ownServerCharacter }) {\n";
@@ -214,13 +232,14 @@ test('module extraction preserves the historical byte freeze outside the exact h
   for (const anchor of [worldBinding, terrainAnchor, smoothAnchor]) {
     assert.equal(current.toString().split(anchor).length, 2, 'Exactly one world-math binding/replacement site');
   }
+  const restoreDrawer = drawerControllerRestoration(current.toString());
   const restoreRoom = roomStateSyncRestoration(current.toString());
   const restoreItems = itemPresentationRestoration(current.toString());
   const restoreVoice = voiceGuidanceRestoration(current.toString());
   const restoreGestures = pointerGesturesRestoration(current.toString());
   const restoreLighting = lightingControllerRestoration(current.toString());
   const restoreSkillMotion = skillMotionRestoration(current.toString());
-  const restore = text => restoreSkillMotion(restoreItems(restoreVoice(restoreGestures(restoreLighting(restoreRoom(text)))))).replace(wiring, originalHelpers)
+  const restore = text => restoreSkillMotion(restoreItems(restoreVoice(restoreGestures(restoreLighting(restoreRoom(restoreDrawer(text))))))).replace(wiring, originalHelpers)
     .replace(worldBinding, '').replace(terrainAnchor, terrainHelpers + terrainAnchor)
     .replace(smoothAnchor, smoothAnchor + smoothHelper);
   const bytes = Buffer.from(restore(current.toString()));

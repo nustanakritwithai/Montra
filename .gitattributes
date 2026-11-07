@@ -26,3 +26,6 @@
 /deploy/combat/fixtures/room-state-sync-reference.js -text
 # Frozen combat skill-motion characterization bytes.
 /deploy/combat/fixtures/skill-motion-reference.js -text
+
+# Frozen drawer lifecycle characterization bytes.
+/deploy/combat/fixtures/drawer-controller-reference.js -text
