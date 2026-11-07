@@ -1,0 +1,29 @@
+/* Adventure journal: the current objective stays above the selected chapter. */
+.journal-objective { display:flex; align-items:center; gap:12px; width:100%; padding:12px; text-align:left; border:1px solid var(--field-line); border-left:3px solid var(--field-gold); border-radius:9px; background:linear-gradient(110deg,#304638,#182b26); color:var(--field-paper); }
+.journal-objective > span:first-child { font-size:24px; color:var(--field-gold); }
+.journal-objective > span:nth-child(2) { display:grid; gap:2px; min-width:0; }
+.journal-objective small { color:var(--field-gold); font-size:11px; }
+.journal-objective strong { font-size:16px; }
+.journal-objective span span,.menu-tiles strong small { font-size:12px; color:#c7d3c8; font-weight:400; }
+.journal-objective i { margin-left:auto; color:var(--field-gold); font-size:20px; }
+.journal-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:2px; margin:12px 0; padding:3px; border-radius:9px; background:#0d1a18; }
+.journal-tabs button { min-height:44px; padding:3px; border:0; border-radius:6px; background:transparent; font:inherit; font-size:14px; }
+.journal-tabs button[aria-pressed=true] { background:#395442; color:#ffe8bb; font-weight:700; }
+#fieldMenu [data-journal-panel] { margin:0; }
+#fieldMenu .menu-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.menu-tiles strong { min-width:0; overflow-wrap:anywhere; }
+.menu-tiles strong small { display:block; margin-top:2px; line-height:1.45; }
+.menu-notices { display:flex; flex-wrap:wrap; gap:4px; margin:7px 0; }
+.menu-notices[hidden] { display:none; }
+.menu-notices button { min-height:44px; border:1px solid var(--field-line); border-radius:8px; background:#513e24; color:#ffe3ae; }
+.field-utility-label { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:8px 0 14px; font-size:13px; }
+.field-utility-label select { min-height:44px; max-width:60%; padding:3px 8px; color:var(--field-paper); background:var(--field-ink); border:1px solid var(--field-line); border-radius:8px; }
+#game:not(:has(#mountButton:not([hidden]))) #menuMount,
+#game[data-field-utility=chat] #mountButton:not([aria-pressed=true]),
+#game[data-field-utility=mount]:has(#mountButton:not([hidden])) #chatButton,
+#game:has(#mountButton[aria-pressed=true]:not([hidden])) #chatButton { display:none; }
+.account-slot-list { display:grid; gap:7px; margin:12px 0; }
+.account-slot-list .account-slot { display:grid; grid-template-columns:1fr auto; gap:3px 8px; align-items:center; margin:0; }
+.account-slot small { grid-column:1/-1; color:#c5d3c8; text-align:left; }
+.account-slot .slot-play { color:var(--field-gold); font-size:12px; }
+

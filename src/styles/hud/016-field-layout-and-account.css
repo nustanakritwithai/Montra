@@ -1,0 +1,104 @@
+/* Field HUD. The upper rails carry information. Combat and navigation have
+   separate touch surfaces so browsing the menu cannot trigger a swipe dash. */
+:root {
+  --field-ink:#102420;
+  --field-paper:#eddfbf;
+  --field-gold:#efd39b;
+  --field-line:#bc9b616b;
+  --field-gap:clamp(8px,1.6vw,18px);
+}
+.top-hud { inset:max(var(--field-gap),env(safe-area-inset-top)) max(var(--field-gap),env(safe-area-inset-right)) auto max(var(--field-gap),env(safe-area-inset-left)); }
+.hud-journal { display:grid; gap:5px; width:min(54vw,238px); min-width:0; }
+.hud-journal .identity,.hud-journal .quest { width:100%; }
+.hud-journal .quest,.hud-journal .party-frames,.location-area .online-count { position:static; transform:none; }
+.hud-journal .quest { min-height:38px; text-align:left; align-items:center; padding:5px 9px; border-radius:9px; }
+.hud-journal .quest .quest-content { min-width:0; flex:1; }
+.hud-journal .quest .quest-content > span { display:none; }
+.hud-journal .quest strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hud-journal .party-frames { max-height:22dvh; overflow:auto; pointer-events:auto; }
+.location-area { width:min(32vw,150px); min-width:0; display:grid; grid-template-columns:minmax(0,1fr); justify-items:end; gap:5px; }
+.location-area .mini-map { width:clamp(60px,9vw,88px); height:clamp(60px,9vw,88px); }
+.location-area .place-name { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:0; font-size:11px; }
+.location-area .online-count { width:auto; max-width:100%; min-height:0; padding:3px 7px; text-align:right; font-size:10px; }
+.monster-status,.pk-panel { left:50%; right:auto; top:max(12px,env(safe-area-inset-top)); transform:translateX(-50%); width:min(28vw,285px); }
+#game:has(#pkPanel:not([hidden])) .monster-status { display:none; }
+.field-dock { position:absolute; z-index:5; right:max(var(--field-gap),env(safe-area-inset-right)); bottom:max(var(--field-gap),env(safe-area-inset-bottom)); max-width:calc(100% - 2 * var(--field-gap)); pointer-events:none; }
+.field-dock .controls { position:relative; inset:auto; width:fit-content; max-width:100%; margin-left:auto; padding-top:clamp(25px,5dvh,54px); }
+.field-dock .skill-bar { width:fit-content; max-width:100%; margin:0 0 0 auto; padding:4px; justify-content:flex-end; gap:3px; border-radius:14px; background:#102420d9; border:1px solid var(--field-line); }
+.field-dock .skill { flex:0 1 auto; min-width:44px; width:clamp(44px,6.4vw,64px); gap:2px; font-size:10px; }
+.field-dock .skill .glyph { width:clamp(36px,5vw,46px); height:clamp(36px,5vw,46px); font-size:22px; }
+.field-dock .sword-hotbar { justify-content:flex-end; margin:0 0 5px auto; padding:0; }
+.field-dock .sword-hotkey { min-height:44px; flex:0 1 78px; }
+.field-prompts { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:5px; margin-bottom:2px; }
+.field-prompts .warp-button { position:static; transform:none; min-height:44px; max-width:100%; white-space:normal; pointer-events:auto; font-size:12px; }
+.field-shortcuts { position:absolute; left:max(var(--field-gap),env(safe-area-inset-left)); bottom:max(var(--field-gap),env(safe-area-inset-bottom)); z-index:6; display:flex; gap:3px; padding:3px; background:#102420ed; border:1px solid var(--field-line); border-radius:12px; }
+.field-shortcuts button,.menu-tiles button { position:relative; border:0; border-radius:8px; background:transparent; font:inherit; color:var(--field-paper); }
+.field-shortcuts button { display:grid; justify-items:center; align-content:center; min-width:48px; min-height:46px; font-size:11px; line-height:1.2; }
+.field-shortcuts button[hidden],.menu-tiles button[hidden] { display:none; }
+.field-shortcuts span,.menu-tiles button span { color:var(--field-gold); font-size:19px; line-height:1.2; }
+.field-shortcuts #fieldMenuButton { background:#405647; }
+.field-shortcuts b,.menu-tiles b { position:absolute; top:0; right:1px; padding:0 4px; border-radius:1em; background:#9c342e; color:white; font-size:11px; }
+.field-shortcuts button:hover,.menu-tiles button:hover { background:#344d41; }
+.drawer { padding-top:0; overscroll-behavior:contain; scroll-padding-top:62px; }
+.drawer-grip { display:none; }
+.drawer-header { position:sticky; z-index:4; top:0; background:#1a2a29; border-bottom:1px solid var(--field-line); margin:0 -17px 12px; padding:7px 12px; gap:8px; }
+.drawer-header h2 { flex:1; margin:0; }
+.drawer-header button { min-width:44px; min-height:44px; }
+.drawer-back { background:transparent; color:var(--field-gold); border:0; }
+#fieldMenu section + section { margin-top:14px; }
+#fieldMenu h3 { font-size:12px; color:var(--field-gold); margin:0 0 5px; }
+.menu-tiles { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+.menu-tiles button { display:flex; align-items:center; gap:8px; text-align:left; min-height:46px; padding:6px 9px; background:#223a33; border:1px solid var(--field-line); font-size:13px; }
+@media (min-width:860px) {
+  .drawer { left:auto; right:max(var(--field-gap),env(safe-area-inset-right)); bottom:max(var(--field-gap),env(safe-area-inset-bottom)); width:min(48vw,560px); max-height:calc(100dvh - 2 * var(--field-gap)); border:1px solid var(--field-line); border-radius:16px; }
+}
+@media (max-width:640px) and (orientation:portrait) {
+  .field-dock { bottom:calc(max(8px,env(safe-area-inset-bottom)) + 57px); }
+  .field-shortcuts { left:50%; transform:translateX(-50%); bottom:max(8px,env(safe-area-inset-bottom)); }
+  .field-shortcuts button { min-width:55px; }
+  .monster-status,.pk-panel { top:calc(max(8px,env(safe-area-inset-top)) + 130px); left:auto; right:8px; width:min(42vw,210px); transform:none; }
+  .menu-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (orientation:landscape) and (max-height:520px) {
+  .hud-journal { width:min(30vw,202px); }
+  .field-dock .controls { padding-top:20px; }
+  .drawer { max-height:94dvh; }
+  .field-dock .skill { width:46px; }
+}
+.account-entry { background:radial-gradient(ellipse at 20% 10%,#284e40,transparent 55%),linear-gradient(135deg,#112622,#091713 75%); }
+.account-card { border-top:3px solid var(--field-gold); background:#142723; }
+.account-brand { color:var(--field-gold); }
+.account-error:empty { display:none; }
+.account-alternatives,.class-choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.account-card button { border:1px solid var(--field-line); border-radius:9px; padding:8px 12px; color:var(--field-paper); background:#253e35; }
+.account-card .primary { color:#291e0f; background:#e4c489; font-weight:750; }
+.account-options { border-top:1px solid var(--field-line); margin-top:15px; padding-top:5px; }
+.account-options summary { min-height:44px; padding:11px 0; cursor:pointer; }
+.class-choices { border:0; padding:0; margin:14px 0; }
+.class-choices legend { font-weight:700; margin-bottom:7px; }
+.class-choices label { display:flex; align-items:flex-start; gap:6px; padding:9px; border-radius:8px; border:1px solid var(--field-line); cursor:pointer; }
+.class-choices label:has(:checked) { border-color:var(--field-gold); background:#2e4538; }
+.class-choices input { flex:none; width:16px; margin:4px 0 0; accent-color:#e3bf78; }
+.class-choices small { display:block; margin-top:3px; color:#c1cec2; line-height:1.45; }
+@media (max-width:380px) { .class-choices { grid-template-columns:1fr; } }
+
+/* quickSkills is always accessible */
+#quickSkills { display: grid !important; }
+.field-layout-picker { display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin-bottom:14px; }
+.field-layout-picker > span { color:var(--field-gold); font-size:12px; margin-right:auto; }
+.field-layout-picker button { min-height:44px; border:1px solid var(--field-line); border-radius:8px; background:var(--field-ink); color:var(--field-paper); padding:5px 12px; }
+.field-layout-picker button[aria-pressed=true] { color:#211a0c; background:var(--field-gold); }
+#game[data-field-layout=combat] .hud-journal .quest:not(.war-hud),
+#game[data-field-layout=combat] .location-area .online-count:not(.safe) { display:none; }
+#game[data-field-layout=combat] .location-area .mini-map { width:54px; height:54px; }
+.help-topic { border-bottom:1px solid var(--field-line); }
+.help-topic summary { min-height:44px; padding:11px 0; font-weight:700; cursor:pointer; }
+@media (hover:hover) and (pointer:fine) {
+  .sword-hotbar [data-slot-number]::before { content:attr(data-slot-number); margin-right:5px; font-size:10px; color:var(--field-gold); }
+}
+.sword-hotbar .sword-hotkey[hidden] { display:none; }
+@media (max-width:600px) and (orientation:landscape) {
+  .field-shortcuts { gap:0; }
+  .field-shortcuts button { min-width:44px; }
+}
+

@@ -1,0 +1,263 @@
+
+
+   RPG Skill Tree & Skill Detail Modal
+   ========================================================================== */
+.skill-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900 !important;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fadeIn 0.16s ease-out both;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  touch-action: manipulation !important;
+}
+.skill-popup-backdrop[hidden] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.skill-detail-modal {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 420px);
+  max-height: min(88vh, 640px);
+  z-index: 950 !important;
+  pointer-events: auto !important;
+  background: linear-gradient(165deg, #18282b, #0c1618);
+  border: 1.5px solid rgba(212, 175, 55, 0.6);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.9),
+              0 0 28px rgba(212, 175, 55, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  animation: fadeIn 0.18s ease-out both;
+}
+.skill-detail-modal[hidden] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.skill-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.25);
+  padding-bottom: 10px;
+}
+.skill-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.skill-modal-orb {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  background: radial-gradient(circle at 45% 35%, #2a3d42, #10191c);
+  border: 2px solid #f2ca83;
+  box-shadow: 0 0 16px rgba(242, 202, 131, 0.35);
+  flex-shrink: 0;
+}
+.skill-modal-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  background: #f2ca83;
+  color: #1a1508;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 8px;
+  border: 1px solid #fff;
+}
+.skill-modal-naming {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.skill-modal-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: #f6eedb;
+  letter-spacing: 0.3px;
+}
+.skill-modal-type {
+  font-size: 11px;
+  color: #7fe8ff;
+  font-weight: 600;
+}
+.skill-modal-close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1.5px solid rgba(212, 175, 55, 0.6);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+}
+.skill-modal-close-btn:hover {
+  background: rgba(212, 175, 55, 0.3);
+  border-color: #ffd700;
+  transform: scale(1.08);
+}
+
+.skill-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.skill-specs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.skill-spec-chip {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.skill-spec-chip .spec-label {
+  font-size: 10px;
+  color: #a4b3b6;
+}
+.skill-spec-chip strong {
+  font-size: 12px;
+  color: #fff;
+}
+
+.skill-desc-card {
+  background: rgba(16, 26, 28, 0.7);
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.skill-desc-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #d1b67b;
+  margin: 0;
+}
+
+.skill-progression-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.skill-prog-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #7fe8ff;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.skill-prog-box {
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.skill-prog-box.current {
+  background: rgba(242, 202, 131, 0.08);
+  border: 1px solid rgba(242, 202, 131, 0.25);
+}
+.skill-prog-box.next {
+  background: rgba(127, 232, 255, 0.08);
+  border: 1px solid rgba(127, 232, 255, 0.3);
+}
+.prog-tag {
+  font-size: 10px;
+  font-weight: 700;
+}
+.prog-tag.current { color: #f2ca83; }
+.prog-tag.next { color: #7fe8ff; }
+.prog-text {
+  font-size: 12px;
+  color: #f6eedb;
+  line-height: 1.4;
+}
+
+.skill-req-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.skill-req-item {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e0d5be;
+}
+.skill-req-item.ok {
+  color: #5cf2bd;
+  border-color: rgba(92, 242, 189, 0.4);
+  background: rgba(92, 242, 189, 0.08);
+}
+.skill-req-item.no {
+  color: #ff8585;
+  border-color: rgba(255, 133, 133, 0.4);
+  background: rgba(255, 133, 133, 0.08);
+}
+
+.skill-modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.skill-upgrade-btn {
+  flex: 2;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #ffd700, #d4af37);
+  color: #1a1508;
+  border: 1px solid #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(212, 175, 55, 0.4);
+  transition: all 0.16s ease;
+}
+.skill-upgrade-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(212, 175, 55, 0.6);
+}
+.skill-upgrade-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #3a3f42;
+  color: #8b9699;
+  border-color: #555;
+  box-shadow: none;
+}
+

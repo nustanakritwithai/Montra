@@ -1,0 +1,57 @@
+/* ===== Character sheet ===== */
+.cp-tabs { display: flex; gap: 6px; margin: -4px 0 12px; padding: 4px; border-radius: 12px; background: #0a1517; border: 1px solid #b18b5040; }
+.cp-tabs button { flex: 1; min-height: 38px; border: 0; border-radius: 9px; background: transparent; color: #cdbf9f; font: 700 12.5px/1.2 system-ui, sans-serif; }
+.cp-tabs button.on { background: linear-gradient(#5a4220, #3a2a14); color: #ffe2a6; box-shadow: inset 0 0 0 1px #d3a75e88, 0 2px 8px #0008; }
+.cp-page[hidden] { display: none; }
+.cp-hero { position: relative; display: flex; align-items: center; gap: 14px; padding: 12px; border-radius: 14px; background: radial-gradient(circle at 18% 30%, #3c2a16 0%, #14211f 70%); border: 1px solid #c49a5a66; }
+.cp-hero::before, .cp-hero::after { content: "❦"; position: absolute; color: #d9b06999; font-size: 14px; }
+.cp-hero::before { top: 4px; right: 8px; } .cp-hero::after { bottom: 4px; right: 8px; transform: rotate(180deg); }
+.cp-ring { --p: 0; position: relative; flex-shrink: 0; width: 76px; height: 76px; border-radius: 50%; background: conic-gradient(#f2c86e calc(var(--p) * 1%), #2a2a24 0); display: grid; place-items: center; box-shadow: 0 0 18px #e0a84a44; }
+.cp-glyph { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; color: #f6dca2; background: radial-gradient(circle at 50% 35%, #7b5135, #1f2320 80%); border: 1px solid #a9885c; }
+.cp-ring b { position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); min-width: 26px; padding: 1px 7px; border-radius: 10px; background: linear-gradient(#f0c46c, #a8742f); color: #1d1408; font: 800 12px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 2px 6px #000a; }
+.cp-hero-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cp-hero-info strong { font-size: 18px; color: #ffe2a6; }
+.cp-hero-info span { font-size: 12px; color: #d9cfbc; }
+.cp-hero-info em { font-style: normal; font-size: 11px; color: #1d1408; background: #e0b864; border-radius: 8px; padding: 1px 8px; align-self: flex-start; }
+.cp-bars { margin: 12px 0 6px; display: grid; gap: 7px; }
+.cp-bar { display: grid; grid-template-columns: 62px 1fr auto; align-items: center; gap: 8px; font-size: 11.5px; color: #d9cfbc; }
+.cp-bar div { height: 10px; border-radius: 6px; background: #070f11; border: 1px solid #ffffff1c; overflow: hidden; }
+.cp-bar i { display: block; height: 100%; border-radius: 6px; transition: width .4s ease; }
+.cp-bar.hp i { background: linear-gradient(90deg, #ad3a3d, #e36e66); }
+.cp-bar.st i { background: linear-gradient(90deg, #355ab2, #69b5e8); }
+.cp-bar.xp i { background: linear-gradient(90deg, #b68a3a, #f6d58c); }
+.cp-bar strong { font-size: 11.5px; color: #f6e5c4; white-space: nowrap; }
+.cp-effects { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.cp-fx { font-size: 11px; padding: 3px 9px; border-radius: 10px; background: #1f2b2e; border: 1px solid #b18b5055; color: #e8d9b8; }
+.cp-fx.good { background: #173b30; border-color: #5fcf9e88; color: #c9f5df; }
+.cp-points { margin: 6px 0; padding: 7px 10px; border-radius: 10px; background: #3a2a10; border: 1px solid #f0c46c88; color: #ffe2a6; font-weight: 700; font-size: 12px; }
+.cp-points[hidden] { display: none; }
+.cp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+.cp-tile { display: grid; grid-template-columns: 28px 1fr; grid-template-rows: auto auto auto; column-gap: 8px; padding: 9px 10px; border-radius: 12px; background: linear-gradient(160deg, #182629, #0d181a); border: 1px solid #b18b5040; }
+.cp-tile i { grid-row: 1 / 4; align-self: center; font-style: normal; font-size: 20px; color: #f0c46c; text-align: center; }
+.cp-tile span { font-size: 11px; color: #bfb39b; }
+.cp-tile strong { font-size: 20px; color: #fff1d2; line-height: 1.1; }
+.cp-tile small { font-size: 10px; color: #8fe0b4; min-height: 0; }
+.cp-tile small:empty { display: none; }
+.cp-h { margin: 16px 0 2px; }
+.cp-radar { width: 100%; max-width: 300px; display: block; margin: 0 auto; }
+.cp-radar .cp-web { fill: none; stroke: #b18b5044; stroke-width: 1; }
+.cp-radar .cp-shape { fill: #f0c46c33; stroke: #f0c46c; stroke-width: 2; stroke-linejoin: round; }
+.cp-radar text { fill: #d9cfbc; font: 600 11px system-ui, sans-serif; }
+#cpGoOnline[hidden] { display: none; }
+.cp-card { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: #0f1b1d; border: 1px solid #b18b5040; }
+.cp-card[hidden] { display: none; }
+.cp-card h4 { margin: 0 0 6px; font-size: 13px; color: #f4d59f; }
+.cp-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.cp-slots span { font-size: 11.5px; padding: 6px 8px; border-radius: 9px; background: #1c2a2d; border: 1px solid #b18b5033; color: #ecdcb8; text-align: center; }
+.cp-weapon { display: flex; align-items: center; gap: 10px; }
+.cp-weapon strong { display: block; color: #ffe2a6; }
+.cp-weapon small { font-size: 11px; color: #bfb39b; }
+.cp-offline { padding: 18px 14px; border-radius: 14px; background: #0f1b1d; border: 1px solid #b18b5055; text-align: center; margin-bottom: 12px; }
+.cp-offline p { margin: 0 0 12px; color: #e0d4c3; }
+.cp-offline[hidden], .cp-tabs[hidden] { display: none; }
+/* Stamina cost on skill buttons */
+.sword-hotkey .stamina-cost { display: block; margin-top: 1px; font-size: 9px; font-weight: 700; color: #9fd4ff; letter-spacing: .2px; }
+.sword-hotkey.no-stamina { opacity: .55; filter: grayscale(.6); }
+.sword-hotkey.no-stamina .stamina-cost { color: #ff9a8a; }
+

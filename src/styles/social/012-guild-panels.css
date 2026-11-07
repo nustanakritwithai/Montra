@@ -1,0 +1,76 @@
+/* ===== Guild panel ===== */
+.gd-hero { display: flex; align-items: center; gap: 14px; padding: 12px; margin: 6px 0 4px; border-radius: 14px; background: radial-gradient(circle at 15% 30%, #3c2a16, #14211f 70%); border: 1px solid #c49a5a66; }
+.gd-seal { flex-shrink: 0; width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; font: 800 26px/1 Georgia, serif; color: #2a1a08; background: radial-gradient(circle at 40% 35%, #ffe0a0, #c08a3a 70%); box-shadow: 0 0 0 3px #3a2a14, 0 0 0 5px #d3a75e, 0 4px 14px #000a; }
+.gd-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.gd-info strong { font-size: 18px; color: #ffe2a6; }
+.gd-info span { font-size: 12px; color: #d9cfbc; }
+.gd-info em { font-style: normal; font-size: 11px; align-self: flex-start; padding: 1px 8px; border-radius: 8px; background: #2a3a3c; color: #e8d9b8; }
+.gd-info em[data-rank="commander"] { background: #e0b864; color: #1d1408; }
+.gd-info em[data-rank="officer"] { background: #5a3a7a; color: #f0e0ff; }
+.gd-forts { display: grid; gap: 6px; }
+.gd-fort { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: #0f1b1d; border: 1px solid #b18b5040; }
+.gd-fort i { font-style: normal; font-size: 18px; color: #8b9a96; width: 22px; text-align: center; }
+.gd-fort strong { display: block; font-size: 13px; color: #f0e2c4; }
+.gd-fort small { font-size: 11px; color: #bfb39b; }
+.gd-fort.mine { border-color: #e0b86499; background: linear-gradient(90deg, #3a2a10, #0f1b1d); }
+.gd-fort.mine i { color: #f6cf7c; }
+.gd-squads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.gd-squad { display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 9px; background: #0f1b1d; border: 1px solid #b18b5033; font-size: 10.5px; color: #bfb39b; }
+.gd-squad b { font-size: 13px; color: #8b9a96; }
+.gd-squad.used b { color: #ffe2a6; }
+.gd-squad.free { grid-column: span 2; }
+.gd-member { display: flex; align-items: flex-start; gap: 10px; }
+.gd-dot { flex-shrink: 0; width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: #5a6462; }
+.gd-member.online .gd-dot { background: #5fe0a0; box-shadow: 0 0 6px #5fe0a0aa; }
+.gd-member > div:first-of-type { flex: 1; min-width: 0; }
+.gd-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.gd-chip { font-size: 10px; padding: 1px 7px; border-radius: 8px; background: #1c2a2d; border: 1px solid #b18b5033; color: #d9cfbc; }
+.gd-member[data-rank="commander"] .gd-chip.rank { background: #e0b864; color: #1d1408; border-color: transparent; }
+.gd-member[data-rank="officer"] .gd-chip.rank { background: #5a3a7a; color: #f0e0ff; border-color: transparent; }
+.gd-member[data-rank="squad_leader"] .gd-chip.rank { background: #1f4f6a; color: #d8f0ff; border-color: transparent; }
+#guildMembers .gd-member { display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-start; column-gap: 10px; }
+#guildMembers .gd-member > div:first-of-type { flex: 1 1 0; }
+#guildMembers .gd-member > details { flex: 1 0 100%; padding-left: 19px; }
+
+/* ===== Guild panel, v2 ===== */
+.gx-banner { position: relative; display: flex; align-items: center; gap: 14px; margin: 6px 0 10px; padding: 14px 14px 14px 10px; border-radius: 16px; overflow: hidden;
+  background: radial-gradient(120% 140% at 0% 0%, #4a3418 0%, #1a2624 55%, #0c1517 100%); border: 1px solid #d3a75e88; box-shadow: inset 0 0 0 1px #00000055, 0 8px 24px #0008; }
+.gx-banner::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, #ffffff06 0 2px, transparent 2px 10px); pointer-events: none; }
+.gx-banner::after { content: "❦ ❦ ❦"; position: absolute; right: 12px; bottom: 6px; letter-spacing: 6px; font-size: 11px; color: #d9b06966; }
+.gx-crest { flex-shrink: 0; width: 72px; height: 84px; filter: drop-shadow(0 4px 10px #000c) drop-shadow(0 0 12px #e0a84a44); }
+.gx-crest.ghost path { fill: none; stroke: #d3a75e88; stroke-width: 3; stroke-dasharray: 6 5; }
+.gx-title { display: flex; flex-direction: column; gap: 3px; min-width: 0; z-index: 1; }
+.gx-title small { font-size: 10.5px; letter-spacing: 3px; color: #d9b069; }
+.gx-title strong { font: 700 21px/1.15 Georgia, "Noto Serif Thai", serif; color: #ffe7a8; text-shadow: 0 2px 10px #e0a84a55; overflow-wrap: anywhere; }
+.gx-title em { font-style: normal; font-size: 11px; align-self: flex-start; padding: 2px 9px; border-radius: 9px; background: #2a3a3c; color: #e8d9b8; }
+.gx-title em[data-rank="commander"] { background: linear-gradient(#f0c46c, #b07a30); color: #1d1408; }
+.gx-title em[data-rank="officer"] { background: #5a3a7a; color: #f0e0ff; }
+.gx-title em[data-rank="squad_leader"] { background: #1f4f6a; color: #d8f0ff; }
+.gx-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.gx-stats div { display: flex; flex-direction: column; align-items: center; padding: 9px 4px; border-radius: 12px; background: linear-gradient(160deg, #182629, #0d181a); border: 1px solid #b18b5040; }
+.gx-stats b { font-size: 22px; color: #fff1d2; line-height: 1.1; }
+.gx-stats span { font-size: 10.5px; color: #bfb39b; }
+.gx-page[hidden] { display: none; }
+.gx-squads { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gx-squad { padding: 8px 9px; border-radius: 12px; background: #0f1b1d; border: 1px solid #b18b5033; }
+.gx-squad.used { border-color: #c49a5a66; background: linear-gradient(160deg, #1d2a26, #0f1b1d); }
+.gx-squad-head { display: flex; justify-content: space-between; font-size: 11.5px; color: #d9cfbc; margin-bottom: 6px; }
+.gx-squad-head b { color: #f3d18f; }
+.gx-seats { display: flex; flex-wrap: wrap; gap: 5px; }
+.gx-seat { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #5a6462; border: 1px dashed #b18b5040; }
+.gx-seat.filled { border: 1px solid #8b9a96; color: #cfc6b2; background: #1c2a2d; }
+.gx-seat.filled.on { border-color: #5fe0a0; color: #e8fff2; box-shadow: 0 0 6px #5fe0a066; }
+.gx-seat.lead { box-shadow: 0 0 0 2px #e0b864; }
+#guildMembers .gd-member { padding: 10px 6px; border-bottom: 1px solid #ffffff12; }
+.gx-avatar { position: relative; flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font: 700 17px/1 system-ui, sans-serif; color: #f6dca2;
+  background: radial-gradient(circle at 50% 35%, #5a4028, #1f2320 80%); border: 2px solid #5a6462; }
+.gd-member.online .gx-avatar { border-color: #5fe0a0; box-shadow: 0 0 8px #5fe0a055; }
+.gx-rank-icon { position: absolute; top: -6px; right: -6px; font-style: normal; font-size: 13px; color: #f6cf7c; text-shadow: 0 1px 3px #000; }
+.gd-member[data-rank="officer"] .gx-rank-icon { color: #d8b8ff; }
+.gd-member[data-rank="squad_leader"] .gx-rank-icon { color: #9fd4ff; }
+#guildMembers .gd-member > details { padding-left: 50px; }
+.gx-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 10px 6px; text-align: center; }
+.gx-empty strong { font-size: 16px; color: #ffe2a6; }
+.gx-empty span { font-size: 12px; color: #bfb39b; }
+#guildStatus[hidden] { display: none; }
+

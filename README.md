@@ -90,6 +90,10 @@ Optional `MONTRA_WORLD_EXPANSION=1`: a 120 × 120 forest with four hunting camps
 
 See [Phase 01 baseline and repeatable build commands](docs/PHASE01-BASELINE.md) before module extraction. The dependency-free static build preserves client bytes; server verification uses a separate locked test project.
 
+Client source is now organized as [ordered, byte-preserving fragments](src/client/README.md). Edit those sources and run `npm run build:client`; static packaging refuses a stale root `main.js`. This is source organization, not completed module isolation.
+
+Styles are organized as [ordered CSS sources](src/styles/README.md). Run `npm run build:styles` after editing them. Packaging checks that the generated stylesheet preserves source order; this phase keeps the original cascade and all runtime CSS bytes unchanged.
+
 ## Publish
 
 GitHub Pages is deployed from **GitHub Actions** via

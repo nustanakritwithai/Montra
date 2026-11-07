@@ -4,6 +4,15 @@ on:
   push:
     paths:
       - '.nvmrc'
+      - '.gitattributes'
+      - 'package.json'
+      - 'src/client/**'
+      - 'src/styles/**'
+      - 'styles.css'
+      - 'scripts/build-styles*.mjs'
+      - 'scripts/build-client*.mjs'
+      - 'scripts/check-client-boundaries.mjs'
+      - 'scripts/test-client.mjs'
       - 'scripts/build-site.mjs'
       - 'scripts/prepare-combat-verify.sh'
       - 'scripts/check-contract*.mjs'
@@ -16,6 +25,15 @@ on:
   pull_request:
     paths:
       - '.nvmrc'
+      - '.gitattributes'
+      - 'package.json'
+      - 'src/client/**'
+      - 'src/styles/**'
+      - 'styles.css'
+      - 'scripts/build-styles*.mjs'
+      - 'scripts/build-client*.mjs'
+      - 'scripts/check-client-boundaries.mjs'
+      - 'scripts/test-client.mjs'
       - 'scripts/build-site.mjs'
       - 'scripts/prepare-combat-verify.sh'
       - 'scripts/check-contract*.mjs'
@@ -50,6 +68,9 @@ jobs:
 
       - name: Check client/server contract baseline
         run: node --test scripts/check-contract.test.mjs && node scripts/check-contract.mjs
+
+      - name: Verify client fragment statement boundaries
+        run: npm run test:client-boundaries
 
       - name: Type-check combat server
         working-directory: combat-verify

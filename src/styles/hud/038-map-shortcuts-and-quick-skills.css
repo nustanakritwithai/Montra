@@ -1,0 +1,34 @@
+/* Extra styling for map shortcuts & flyout icons */
+.map-shortcuts button .hud-btn-icon {
+  width: 20px !important;
+  height: 20px !important;
+  margin: auto;
+  display: block;
+}
+.map-sub .drawer-nav-icon {
+  width: 18px !important;
+  height: 18px !important;
+  background-size: contain !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+/* Always show and highlight Quick Skills button under minimap */
+#quickSkills,
+.map-shortcuts #quickSkills,
+.field-shortcuts #quickSkills {
+  display: grid !important;
+  align-items: center;
+  justify-items: center;
+}
+.map-shortcuts #quickSkills {
+  background: linear-gradient(135deg, #1c3b2b 0%, #2e5c45 100%) !important;
+  border: 1px solid #e8ba74 !important;
+  box-shadow: 0 0 6px rgba(232, 186, 116, 0.4);
+}
+.map-shortcuts #quickSkills:hover,
+.map-shortcuts #quickSkills:active {
+  background: linear-gradient(135deg, #2e5c45 0%, #448060 100%) !important;
+  transform: scale(1.05);
+}
+

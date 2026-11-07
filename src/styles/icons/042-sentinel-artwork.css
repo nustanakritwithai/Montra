@@ -1,0 +1,38 @@
+/* --- SENTINEL (ผู้พิทักษ์) SKILL ARTWORK --- */
+
+/* shock: คลื่นกระแทก */
+.kg-glyph[data-skill-glyph="shock"],
+.skill-book-icon[data-skill-glyph="shock"],
+.skill-modal-glyph[data-skill-glyph="shock"],
+.glyph[data-skill-glyph="shock"],
+.field-slot[data-skill-id="shock"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='shkBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23ffd600'/%3E%3Cstop offset='60%25' stop-color='%23ff6f00'/%3E%3Cstop offset='100%25' stop-color='%23e65100'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23shkBg)' stroke='%23ffe082' stroke-width='1.5'/%3E%3Cpolygon points='36,6 18,32 30,32 26,56 46,26 34,26' fill='%23ffffff' stroke='%23ff6f00' stroke-width='1.2'/%3E%3Ccircle cx='44' cy='16' r='2' fill='%23fff'/%3E%3Ccircle cx='14' cy='46' r='2' fill='%23fff'/%3E%3C/svg%3E") !important;
+}
+
+/* bulwark: ปราการศิลา */
+.kg-glyph[data-skill-glyph="bulwark"],
+.skill-book-icon[data-skill-glyph="bulwark"],
+.skill-modal-glyph[data-skill-glyph="bulwark"],
+.glyph[data-skill-glyph="bulwark"],
+.field-slot[data-skill-id="bulwark"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='bwBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2378909c'/%3E%3Cstop offset='60%25' stop-color='%2337474f'/%3E%3Cstop offset='100%25' stop-color='%23212121'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23bwBg)' stroke='%23cfd8dc' stroke-width='1.5'/%3E%3Cpath d='M32 10 L48 18 L48 38 C48 48, 32 56, 32 56 C32 56, 16 48, 16 38 L16 18 Z' fill='%23546e7a' stroke='%23ffffff' stroke-width='1.5'/%3E%3Cline x1='32' y1='18' x2='32' y2='48' stroke='%23ffd54f' stroke-width='2.5'/%3E%3Cline x1='22' y1='30' x2='42' y2='30' stroke='%23ffd54f' stroke-width='2.5'/%3E%3C/svg%3E") !important;
+}
+
+/* riposte: ดาบสวนกลับ */
+.kg-glyph[data-skill-glyph="riposte"],
+.skill-book-icon[data-skill-glyph="riposte"],
+.skill-modal-glyph[data-skill-glyph="riposte"],
+.glyph[data-skill-glyph="riposte"],
+.field-slot[data-skill-id="riposte"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='ripBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23ff5722'/%3E%3Cstop offset='60%25' stop-color='%23bf360c'/%3E%3Cstop offset='100%25' stop-color='%233e1000'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23ripBg)' stroke='%23ffab91' stroke-width='1.5'/%3E%3Cg stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round'%3E%3Cline x1='16' y1='48' x2='48' y2='16'/%3E%3Cline x1='48' y1='48' x2='16' y2='16'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='4' fill='%23ffd54f'/%3E%3C/svg%3E") !important;
+}
+
+/* protect: คุ้มกันสหาย */
+.kg-glyph[data-skill-glyph="protect"],
+.skill-book-icon[data-skill-glyph="protect"],
+.skill-modal-glyph[data-skill-glyph="protect"],
+.glyph[data-skill-glyph="protect"],
+.field-slot[data-skill-id="protect"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='prtBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300b0ff'/%3E%3Cstop offset='60%25' stop-color='%230091ea'/%3E%3Cstop offset='100%25' stop-color='%230d47a1'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23prtBg)' stroke='%2380d8ff' stroke-width='1.5'/%3E%3Ccircle cx='22' cy='22' r='6' fill='%23ffffff'/%3E%3Cpath d='M14 44 C14 36, 18 32, 22 32 C26 32, 30 36, 30 44 Z' fill='%23ffffff'/%3E%3Ccircle cx='42' cy='22' r='6' fill='%23ffd54f'/%3E%3Cpath d='M34 44 C34 36, 38 32, 42 32 C46 32, 50 36, 50 44 Z' fill='%23ffd54f'/%3E%3C/svg%3E") !important;
+}
+
