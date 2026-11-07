@@ -1,0 +1,435 @@
+{
+  "format": 1,
+  "sourceCommit": "2f4ee0a",
+  "bytes": 1372310,
+  "sha256": "a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf",
+  "parser": "TypeScript 5.9.3",
+  "statementCount": 1579,
+  "fragments": [
+    {
+      "path": "core/000-wrapper-open.js",
+      "originalStartLine": 1,
+      "bytes": 202,
+      "sha256": "d0b88e6d8238ecc43efc6b2890d8b193110185cd129d73418b878401795790bd"
+    },
+    {
+      "path": "core/001-storage-and-dom.js",
+      "originalStartLine": 5,
+      "bytes": 2716,
+      "sha256": "c89fac684d27e9f0c043b05bc74269c91f806a83d9be60cebc5eede3beac5893",
+      "firstStatement": 0
+    },
+    {
+      "path": "audio/002-voice-guidance.js",
+      "originalStartLine": 63,
+      "bytes": 14651,
+      "sha256": "ce57fafa3cdbb7b377f6edadaefc2849e2ca543738a8d370ad72c82924532950",
+      "firstStatement": 13
+    },
+    {
+      "path": "ui/003-toast-and-mode.js",
+      "originalStartLine": 305,
+      "bytes": 857,
+      "sha256": "e7c2e7714d5dff82a00afb98d6e6e0f65c0c479de14dc442caeaf9cb199daa51",
+      "firstStatement": 24
+    },
+    {
+      "path": "render/004-scene-camera-lights.js",
+      "originalStartLine": 323,
+      "bytes": 12342,
+      "sha256": "27efb23f243b4559ab45eaf20a19bbc9274aaf7feac9bf0e1a9301828bcef713",
+      "firstStatement": 27
+    },
+    {
+      "path": "combat/005-floating-feedback.js",
+      "originalStartLine": 544,
+      "bytes": 4135,
+      "sha256": "2fed5b7d1a72b86e6996a258dfee19de9cb4813b975c529e085e49208b74535c",
+      "firstStatement": 108
+    },
+    {
+      "path": "render/006-materials-atmosphere.js",
+      "originalStartLine": 600,
+      "bytes": 10382,
+      "sha256": "02ffe348221af37bdc7c4cdf86921257beb40f1e9b7c4b0045e4c60763ac7132",
+      "firstStatement": 121
+    },
+    {
+      "path": "render/007-world-effects.js",
+      "originalStartLine": 773,
+      "bytes": 9327,
+      "sha256": "f4179fdb831e4dc83a5594d50a177d811c370e4664be8442ca0b1e595a0f3be5",
+      "firstStatement": 193
+    },
+    {
+      "path": "combat/008-weapon-party-boss-feedback.js",
+      "originalStartLine": 863,
+      "bytes": 11863,
+      "sha256": "8cc2d61e5b8d82893ca7d01df2e8f1b184875d34e211705e095a053a2baccc9b",
+      "firstStatement": 201
+    },
+    {
+      "path": "render/009-effects-and-target-hud.js",
+      "originalStartLine": 1137,
+      "bytes": 20633,
+      "sha256": "884a74aebd0b47c0a84045878276799f1617c32f18cec9a225115389757b3f69",
+      "firstStatement": 219
+    },
+    {
+      "path": "combat/010-action-effects.js",
+      "originalStartLine": 1489,
+      "bytes": 12072,
+      "sha256": "37cf784dd9704af53a457231ed8d666ae8397ccbd93ee7fbe3396fdf2596d81c",
+      "firstStatement": 243
+    },
+    {
+      "path": "world/011-roads-and-wards.js",
+      "originalStartLine": 1602,
+      "bytes": 7261,
+      "sha256": "544696dd83eb011daac4af132442422b35be67036b992ffb97df9156d6a4e1ad",
+      "firstStatement": 247
+    },
+    {
+      "path": "render/012-sky-mist-atmosphere.js",
+      "originalStartLine": 1715,
+      "bytes": 11223,
+      "sha256": "356e48f77a2f577ae548ff8b0334516934a9e5ddad00b2f958a0ab2f9d7b2f8b",
+      "firstStatement": 260
+    },
+    {
+      "path": "world/013-ground-and-fortification.js",
+      "originalStartLine": 1870,
+      "bytes": 4015,
+      "sha256": "2d5dd1e47120dcffb59169bb8447bf9b0a3fe02d0fe0cb2503892847f7103282",
+      "firstStatement": 318
+    },
+    {
+      "path": "world/014-ritual-village.js",
+      "originalStartLine": 1975,
+      "bytes": 16070,
+      "sha256": "edd656a4f3eafb8ba8245ec2e17a0fd9ec80d35710e156af0d76d1b567a32428",
+      "firstStatement": 347
+    },
+    {
+      "path": "world/015-forest-gates-and-services.js",
+      "originalStartLine": 2232,
+      "bytes": 34653,
+      "sha256": "cc3af7766d838d1c03b43e9bd35f6566f655728607d40347ed8e50bc547b5043",
+      "firstStatement": 444
+    },
+    {
+      "path": "world/016-forest-and-temple.js",
+      "originalStartLine": 2655,
+      "bytes": 19218,
+      "sha256": "3f36d490f047feb79bba2f00516938d6655fa5915647904c2de2dfa5fef1b97c",
+      "firstStatement": 648
+    },
+    {
+      "path": "world/017-region-terrain.js",
+      "originalStartLine": 3003,
+      "bytes": 55577,
+      "sha256": "95cc18fb0f78c09633152ed666dac1d1b9b9495f109462b31fb72bb41c9746d7",
+      "firstStatement": 651
+    },
+    {
+      "path": "world/018-region-dressing.js",
+      "originalStartLine": 3968,
+      "bytes": 27262,
+      "sha256": "8539385d1b4557c9a287164a1b71e538e6005e7ea0726855944aa56fbc317a6f",
+      "firstStatement": 673
+    },
+    {
+      "path": "world/019-state-and-portals.js",
+      "originalStartLine": 4287,
+      "bytes": 19237,
+      "sha256": "40c0511e13ac895d22da5dc5476a129dbf5fb442d699c949cf869d3a5d613150",
+      "firstStatement": 707
+    },
+    {
+      "path": "render/020-avatar-materials-and-meshes.js",
+      "originalStartLine": 4528,
+      "bytes": 21767,
+      "sha256": "338ee84c986a0cab9f6145571ecac02d6cdb91c84990bcbeb66e7bbe42bdd1ad",
+      "firstStatement": 716
+    },
+    {
+      "path": "render/021-character-models.js",
+      "originalStartLine": 4882,
+      "bytes": 12744,
+      "sha256": "ddcd50fbc555475f800cd9fc3d8e5aa26682b13fc8077acf0497bc9e39d51836",
+      "firstStatement": 774
+    },
+    {
+      "path": "combat/022-action-timelines.js",
+      "originalStartLine": 5078,
+      "bytes": 2326,
+      "sha256": "aa5855b17876b4b45cbe3dea72dc379ce242a8d6460292e36a6e78d877125577",
+      "firstStatement": 790
+    },
+    {
+      "path": "audio/023-action-and-impact-sounds.js",
+      "originalStartLine": 5104,
+      "bytes": 4964,
+      "sha256": "3ceda3630a9cfc21bf50c03ceb147a804aeacd6d6a3a36a204c24f45364532c9",
+      "firstStatement": 793
+    },
+    {
+      "path": "combat/024-action-and-skill-motion.js",
+      "originalStartLine": 5161,
+      "bytes": 5287,
+      "sha256": "3474cfb4ea4b8bacc661e92a6284fe10355bad94657ea99ca533cd58da6675df",
+      "firstStatement": 798
+    },
+    {
+      "path": "render/025-horse-and-avatar-animation.js",
+      "originalStartLine": 5240,
+      "bytes": 42824,
+      "sha256": "ad0ce309ea920abd0abc870791d57eb2de619aa6773d7fe808d936e659902d62",
+      "firstStatement": 811
+    },
+    {
+      "path": "render/026-avatar-auras-and-lifecycle.js",
+      "originalStartLine": 5835,
+      "bytes": 12194,
+      "sha256": "d66a931b916613ad6322fe58ffbe847f9f54f45c6903e2e48933bd34c8c63af9",
+      "firstStatement": 832
+    },
+    {
+      "path": "render/027-summon-models-and-animation.js",
+      "originalStartLine": 6074,
+      "bytes": 12452,
+      "sha256": "be8a195df468b9bb26ed6b9d0c9bf122dd97e9a9a863a7d99d73e6013d1000df",
+      "firstStatement": 847
+    },
+    {
+      "path": "core/028-session-and-economy-state.js",
+      "originalStartLine": 6269,
+      "bytes": 2742,
+      "sha256": "13f1160c19682c81b0993f45dac07a925d5052cfcfa40ce075344d1d8d8ade8c",
+      "firstStatement": 863
+    },
+    {
+      "path": "world/029-fishing-and-resources.js",
+      "originalStartLine": 6295,
+      "bytes": 12574,
+      "sha256": "56d30384aacb28dfc171ee091d6c31a24b3efc6bccced8a4737b1ae47fe634e8",
+      "firstStatement": 882
+    },
+    {
+      "path": "ui/030-item-art-and-comparison.js",
+      "originalStartLine": 6466,
+      "bytes": 8086,
+      "sha256": "5e493b4e767f6736018ce0edc1e2252b6ef4d7f135a9d88560d5762cbbffb2c9",
+      "firstStatement": 903
+    },
+    {
+      "path": "core/031-inventory-demo-and-combat-state.js",
+      "originalStartLine": 6585,
+      "bytes": 1719,
+      "sha256": "7a3760aaf6b4c131fc9bb9ff19f327eefac6efe0c010cbea4779cdd5a0f4b872",
+      "firstStatement": 920
+    },
+    {
+      "path": "render/032-ghost-primitives.js",
+      "originalStartLine": 6615,
+      "bytes": 32972,
+      "sha256": "dbd9c7ffa1b0a2358e287ecf0179c6b0e0f17a9e9de50193593c0b0d499e2cfc",
+      "firstStatement": 949
+    },
+    {
+      "path": "render/033-ghost-materials-and-surfaces.js",
+      "originalStartLine": 6997,
+      "bytes": 29111,
+      "sha256": "07a389dd9966b28083e1ddd5e5bf4d599d16036badc663c450e32578ac473d68",
+      "firstStatement": 980
+    },
+    {
+      "path": "render/034-humanoid-ghost-designs.js",
+      "originalStartLine": 7307,
+      "bytes": 92313,
+      "sha256": "6e4cedcbee5fe664592257be3a0bab6a8aa1283b8f86d2250671c9a086ad7a48",
+      "firstStatement": 1068
+    },
+    {
+      "path": "render/035-ghost-instantiation.js",
+      "originalStartLine": 8195,
+      "bytes": 9576,
+      "sha256": "665ba6be215441c6a05ec92aa7e166d26a88772c35eb6a037c928a7147a355f4",
+      "firstStatement": 1072
+    },
+    {
+      "path": "audio/036-ghost-voices.js",
+      "originalStartLine": 8302,
+      "bytes": 3233,
+      "sha256": "e6264550198152f2bd1055ded8216cf0d06c90009f9d081e2b232046e64a33fe",
+      "firstStatement": 1082
+    },
+    {
+      "path": "render/037-ghost-animation.js",
+      "originalStartLine": 8336,
+      "bytes": 4142,
+      "sha256": "dd10b0f15ab5b5efc1875e1838d13bddf98515588a5a8c8b42160a9b9cbb474b",
+      "firstStatement": 1086
+    },
+    {
+      "path": "combat/038-demo-and-monster-state.js",
+      "originalStartLine": 8405,
+      "bytes": 7414,
+      "sha256": "312a11f98478f4a7711f459d9247a10b405f3f24a2ff406247264df4e84996ce",
+      "firstStatement": 1087
+    },
+    {
+      "path": "input/039-movement-flight-and-climbing.js",
+      "originalStartLine": 8557,
+      "bytes": 15836,
+      "sha256": "dbfe80b244b307be8257ea899aca5a9b394a8d0467de8735863e156158b7d83c",
+      "firstStatement": 1104
+    },
+    {
+      "path": "combat/040-spell-visuals.js",
+      "originalStartLine": 8812,
+      "bytes": 15419,
+      "sha256": "1f7bf6cbe7c5b8ef45c99285f6a9beb9b7094b6317e0f90fd17912ed6a1d315f",
+      "firstStatement": 1117
+    },
+    {
+      "path": "ui/041-character-hud-and-journey.js",
+      "originalStartLine": 9047,
+      "bytes": 38448,
+      "sha256": "1b777dd65ec042f3b2dee11429043fc54247ab53a88df347f6847c847576e253",
+      "firstStatement": 1124
+    },
+    {
+      "path": "ui/042-vitals-chat-and-status.js",
+      "originalStartLine": 9535,
+      "bytes": 33473,
+      "sha256": "136a6acefa59aaa31e9436f9615af01ba334182cbed0a0ed2a6bb20f8688ed07",
+      "firstStatement": 1168
+    },
+    {
+      "path": "combat/043-player-targeting.js",
+      "originalStartLine": 9912,
+      "bytes": 3266,
+      "sha256": "e2bae4a77a778188dff9b7cb8ef5cff8a8b5450894d5753bf0b16372fac37126",
+      "firstStatement": 1209
+    },
+    {
+      "path": "network/044-state-sync-and-connection.js",
+      "originalStartLine": 9987,
+      "bytes": 137233,
+      "sha256": "ba953bf01576cc5bc598fb99446a367cbc83013e2ec60c223cbc2a1c77b7853c",
+      "firstStatement": 1212
+    },
+    {
+      "path": "input/045-pointer-touch-and-dash.js",
+      "originalStartLine": 11456,
+      "bytes": 14265,
+      "sha256": "2781e4e10c102e03b6b4061814dd6d1318c1635df117d6b3e3a3a608255066c2",
+      "firstStatement": 1224
+    },
+    {
+      "path": "ui/046-drawers-and-chat.js",
+      "originalStartLine": 11735,
+      "bytes": 9581,
+      "sha256": "6a02aacaad97c499e3ebca7bdf147796703857840c93ce18fea43f662bd4c9e3",
+      "firstStatement": 1241
+    },
+    {
+      "path": "ui/047-maps-and-strategy.js",
+      "originalStartLine": 11909,
+      "bytes": 71431,
+      "sha256": "d924a12c016c186094004602b01681627ed551ac245d30ddf3fa866cc250fcc5",
+      "firstStatement": 1272
+    },
+    {
+      "path": "ui/048-class-books-and-hotbars.js",
+      "originalStartLine": 12708,
+      "bytes": 69438,
+      "sha256": "20d943733a4c73d2133b9efc255028e1578e00efdd79834091592de71e120ae4",
+      "firstStatement": 1303
+    },
+    {
+      "path": "ui/049-skill-graph-and-details.js",
+      "originalStartLine": 13374,
+      "bytes": 51583,
+      "sha256": "8f3262e75f0384ce0c9664e2347ec5ca035a48b77df03de1b42927c88f7d6428",
+      "firstStatement": 1346
+    },
+    {
+      "path": "ui/050-character-and-equipment.js",
+      "originalStartLine": 14040,
+      "bytes": 47318,
+      "sha256": "c15c7148c51fbaca895e79c9f9b65edf3bf89bb80c6951f7470fba57df0e473c",
+      "firstStatement": 1371
+    },
+    {
+      "path": "audio/051-sound-settings-and-speech.js",
+      "originalStartLine": 14717,
+      "bytes": 7447,
+      "sha256": "b2063ab170943c84f5297882dd402258bca39b29dbdad4314f27d9637c851dca",
+      "firstStatement": 1395
+    },
+    {
+      "path": "ui/052-help-and-inventory.js",
+      "originalStartLine": 14822,
+      "bytes": 41061,
+      "sha256": "7d7ad0a4c6ff610f8e6d52432003a02ee2d91ad6efa957ad9daefac42cabc087",
+      "firstStatement": 1402
+    },
+    {
+      "path": "ui/053-gear-training-and-crafting.js",
+      "originalStartLine": 15408,
+      "bytes": 32522,
+      "sha256": "e9e745ee07d5617c61391722b1b8d530a70fc92d9f3dc04fc0441eb66ab60936",
+      "firstStatement": 1417
+    },
+    {
+      "path": "ui/054-forge-feedback-and-pages.js",
+      "originalStartLine": 15816,
+      "bytes": 38943,
+      "sha256": "b1494fa2c081d2faa6bfba8c05e3dc9d67854494a421b40578ce24e6a58b7f36",
+      "firstStatement": 1439
+    },
+    {
+      "path": "ui/055-market-and-trade.js",
+      "originalStartLine": 16210,
+      "bytes": 38967,
+      "sha256": "0898ee8b63ffbfa6f470fe8db26733a06a0f3507d09cf516f37155aaf9c53483",
+      "firstStatement": 1468
+    },
+    {
+      "path": "ui/056-party-guild-and-rebirth.js",
+      "originalStartLine": 16541,
+      "bytes": 35011,
+      "sha256": "dd73362133e4d7ee2a62cf3879bff5ff0767d2cae4b7c752b1ab6a10339561ec",
+      "firstStatement": 1491
+    },
+    {
+      "path": "ui/057-npcs-and-objectives.js",
+      "originalStartLine": 16827,
+      "bytes": 36113,
+      "sha256": "422dabc31679f310d6dca5f0e158336f36fbf0b5dfb7f2a047df9c846ea5c04e",
+      "firstStatement": 1505
+    },
+    {
+      "path": "input/058-field-control-bindings.js",
+      "originalStartLine": 17162,
+      "bytes": 4882,
+      "sha256": "6a225abf8e36414ccd72bc723ef5669846dcd79de1ed0b35683bda43e289c726",
+      "firstStatement": 1526
+    },
+    {
+      "path": "core/059-frame-loop-and-startup.js",
+      "originalStartLine": 17221,
+      "bytes": 17930,
+      "sha256": "ab820b1c380b5411df017c4fe8841909d9536e8b8409ca59d38fbb83905dc877",
+      "firstStatement": 1551
+    },
+    {
+      "path": "core/060-wrapper-close.js",
+      "originalStartLine": 17546,
+      "bytes": 7,
+      "sha256": "66941a18a15dc5f27495eb579b47b3d8de975124cf92ae03f0b693275ff60634"
+    }
+  ]
+}

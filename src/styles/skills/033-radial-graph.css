@@ -1,0 +1,122 @@
+/* ==========================================================================
+   MONTRA RADIAL 4-DIRECTIONAL KNOWLEDGE GRAPH
+   ========================================================================== */
+.kg-canvas-board.radial-4way {
+  height: 440px;
+}
+
+.kg-center-class-node {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.kg-center-class-orb {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff4cc, #f0b847 55%, #7a460c);
+  border: 2.5px solid #fff;
+  box-shadow: 0 0 22px rgba(255, 215, 0, 0.75), inset 0 2px 5px rgba(255, 255, 255, 0.85);
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  color: #1a1202;
+  animation: kgClassPulse 3s ease-in-out infinite alternate;
+}
+
+@keyframes kgClassPulse {
+  from {
+    box-shadow: 0 0 16px rgba(255, 215, 0, 0.6), 0 0 0 0 rgba(255, 215, 0, 0.4);
+    transform: scale(1);
+  }
+  to {
+    box-shadow: 0 0 28px rgba(255, 215, 0, 0.95), 0 0 36px rgba(255, 170, 0, 0.5), 0 0 0 8px rgba(255, 215, 0, 0.15);
+    transform: scale(1.04);
+  }
+}
+
+.kg-center-class-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffd700;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95);
+  background: rgba(10, 16, 20, 0.88);
+  padding: 2px 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 215, 0, 0.45);
+  white-space: nowrap;
+}
+
+.kg-center-class-sub {
+  font-size: 9.5px;
+  color: #d8c9a6;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.kg-node-top {
+  left: 50% !important;
+  top: 17% !important;
+}
+
+.kg-node-bottom {
+  left: 50% !important;
+  top: 83% !important;
+}
+
+.kg-node-left {
+  left: 20% !important;
+  top: 50% !important;
+}
+
+.kg-node-right {
+  left: 80% !important;
+  top: 50% !important;
+}
+
+.kg-stream-badge {
+  position: absolute;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 5;
+  white-space: nowrap;
+  background: rgba(10, 16, 20, 0.8);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  color: #e5d7ba;
+}
+
+.kg-stream-badge-top {
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.kg-stream-badge-bottom {
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.kg-stream-badge-left {
+  left: 8px;
+  top: 32%;
+}
+
+.kg-stream-badge-right {
+  right: 8px;
+  top: 32%;
+}
+

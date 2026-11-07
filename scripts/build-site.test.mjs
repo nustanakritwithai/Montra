@@ -1,11 +1,23 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { buildSite, filesIn, root, sha256 } from './build-site.mjs';
 
 const revision = '71567e5a2242a2d2df14e3e425e9bb83f9966f7b';
+test('static packaging rejects stale generated CSS before writing output', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'montra-stale-styles-'));
+  try {
+    const source = join(temp, 'source'), output = join(temp, 'output');
+    cpSync(join(root, 'src'), join(source, 'src'), { recursive: true });
+    cpSync(join(root, 'main.js'), join(source, 'main.js'));
+    writeFileSync(join(source, 'styles.css'), `${readFileSync(join(root, 'styles.css'), 'utf8')}\n/* stale */\n`);
+    assert.throws(() => buildSite(output, revision, source), /styles\.css/);
+    assert.equal(existsSync(output), false, 'stale CSS must fail before any publication files are written');
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
 test('two builds are byte-identical and preserve the existing Pages payload', () => {
   const temp = mkdtempSync(join(tmpdir(), 'montra-build-'));
   try {

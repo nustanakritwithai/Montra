@@ -1,0 +1,54 @@
+/* ---- Vital orb: HP left · mana right · stamina as a yellow segmented ring ---- */
+.field-dock .learned-bar:has(.vital-orb) { display: flex !important; align-items: center; }
+.vital-orb { position: relative; flex: none; order: 1; width: 82px; height: 82px; margin: -10px -2px -2px 4px; pointer-events: auto; filter: drop-shadow(0 4px 6px #000a); }
+.vital-orb svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.vo-back { fill: #0b0806; } .vo-empty { fill: #120d0a; }
+.vo-rim { fill: none; stroke: #c9a35a; stroke-width: 2.2; }
+.vo-split { stroke: #e9cf8a; stroke-width: 1.4; opacity: .85; }
+.vo-hp, .vo-mp { transition: y .35s ease, height .35s ease; }
+.vo-seg { fill: none; stroke: #3a2f18; stroke-width: 5; stroke-linecap: round; }
+.vo-seg.on { stroke: #ffd23f; filter: drop-shadow(0 0 2px #ffb000); }
+.vital-orb.tired .vo-seg.on { stroke: #ff9a2a; }
+.vo-num { position: absolute; top: 50%; transform: translateY(-50%); width: 34%; text-align: center; color: #fff; font: 800 12px/1 system-ui, sans-serif;
+  text-shadow: 0 1px 2px #000, 0 0 4px #000; pointer-events: none; }
+.vo-hpn { left: 14%; } .vo-mpn { right: 14%; }
+.vital-orb.no-mana .vo-mpn { color: #8fa8c8; }
+.vital-orb.low .vo-rim { stroke: #ff4a3a; animation: voPulse .9s ease-in-out infinite; }
+@keyframes voPulse { 50% { stroke-width: 4; filter: drop-shadow(0 0 6px #ff3a2a); } }
+.learned-bar .sword-hotbar { order: 0; }
+/* Wide screens: orb in the middle of the bar, slots 1–2 on its left and the rest on its right. */
+.learned-bar[data-wide] .sword-hotbar:not([hidden]) { display: contents; }
+.learned-bar[data-wide] .vital-orb { order: 2; width: 92px; height: 92px; margin: -18px 8px -6px; }
+.learned-bar[data-wide] .field-slot[data-slot-number="1"], .learned-bar[data-wide] .field-slot[data-slot-number="2"] { order: 1; }
+.learned-bar[data-wide] .field-slot { order: 3; }
+/* ---- Resource strip (top-left) ---- */
+.resource-strip { position: absolute; z-index: 7; top: max(4px, env(safe-area-inset-top)); left: max(var(--field-gap, 8px), env(safe-area-inset-left)); display: flex; align-items: center; gap: 2px;
+  height: 22px; padding: 0 6px; border-radius: 7px; background: linear-gradient(180deg, #0d1512f2, #070b09f2); border: 1px solid #3c5a4c; box-shadow: 0 2px 8px #0008;
+  color: #e9e1c6; font: 700 11px/1 system-ui, sans-serif; pointer-events: none; white-space: nowrap; }
+.rs-item { display: inline-flex; align-items: center; gap: 3px; padding: 0 5px; border-right: 1px solid #ffffff14; } .rs-item:last-child { border-right: 0; }
+.rs-item[hidden] { display: none; }
+.rs-item i { font-style: normal; font-size: 12px; } .rs-clock i { color: #a9c7ff; } .rs-gold i { color: #ffd23f; } .rs-potion i { color: #ff6a5a; }
+.rs-party i { color: #8fe39a; } .rs-online i { color: #7fe8ff; } .rs-fps i { color: #9a9a8a; font-size: 9px; } .rs-fps b { color: #b9b7a5; font-weight: 600; }
+#game.has-strip .top-hud { top: calc(max(var(--field-gap, 8px), env(safe-area-inset-top)) + 26px); }
+/* ---- Chat box (bottom-left) ---- */
+.chat-box { position: absolute; z-index: 5; left: max(var(--field-gap, 8px), env(safe-area-inset-left)); bottom: calc(max(var(--field-gap, 8px), env(safe-area-inset-bottom)) + 60px);
+  width: min(360px, 34vw); display: flex; flex-direction: column; border-radius: 10px; background: #070b09b8; border: 1px solid #3c5a4c88; box-shadow: 0 4px 14px #0007;
+  color: #ece4cb; font: 500 12px/1.35 "Noto Sans Thai", system-ui, sans-serif; pointer-events: auto; transition: background .3s; }
+.chat-box:hover, .chat-box:focus-within, .chat-box.fresh { background: #070b09e6; }
+.chat-harvest { position:absolute; left:0; bottom:calc(100% + 5px); display:flex; flex-wrap:wrap; gap:4px; width:max-content; max-width:min(260px, 85vw); }
+.chat-harvest .warp-button { position:static; transform:none; min-height:36px; max-width:100%; padding:5px 9px; border-radius:9px; font-size:11px; line-height:1.3; white-space:normal; box-shadow:0 2px 8px #0009; }
+.cb-head { display: flex; justify-content: space-between; align-items: center; padding: 3px 8px; border-bottom: 1px solid #ffffff12; font-weight: 800; font-size: 11px; color: #cfe3d5; }
+.cb-open { border: 0; background: none; color: #cfe3d5; font-size: 13px; padding: 0 2px; cursor: pointer; }
+.cb-log { height: 150px; overflow-y: auto; padding: 4px 8px; overscroll-behavior: contain; scrollbar-width: thin; }
+.cb-line { margin: 1px 0; overflow-wrap: anywhere; text-shadow: 0 1px 1px #000; } .cb-line em { font-style: normal; margin-right: 3px; opacity: .85; }
+.cb-line b { color: #ffe39a; } .cb-line.own b { color: #9fe8a6; }
+.cb-line.ch-map em { color: #cfe3d5; } .cb-line.ch-world em { color: #ffcf8a; } .cb-line.ch-party em { color: #7fe8ff; } .cb-line.ch-private em, .cb-line.ch-private span { color: #e2b8ff; }
+.cb-form { display: flex; gap: 4px; padding: 4px; border-top: 1px solid #ffffff12; }
+.cb-ch { flex: none; border-radius: 6px; border: 1px solid #3c5a4c; background: #0d1512; color: #ece4cb; font-size: 11px; }
+.cb-input { flex: 1; min-width: 0; padding: 5px 7px; border-radius: 6px; border: 1px solid #3c5a4c; background: #0d1512; color: #fff; font: inherit; }
+.cb-input:focus { outline: 1px solid #ffd98a; }
+/* Phone: a compact, read-only feed above the skill bar; tap to open the full chat. */
+.chat-box:not(.wide) { width: min(58vw, 230px); bottom: calc(max(8px, env(safe-area-inset-bottom)) + 160px); background: #070b0980; }
+.chat-box:not(.wide) .cb-head, .chat-box:not(.wide) .cb-form { display: none; }
+.chat-box:not(.wide) .cb-log { height: 64px; padding: 3px 6px; font-size: 10.5px; line-height: 1.3; }
+.chat-box:not(.wide):not(.fresh) .cb-log { opacity: .7; }

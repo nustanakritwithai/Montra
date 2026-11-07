@@ -1,3 +1,5 @@
+import { checkClient } from './build-client.mjs';
+import { checkStyles } from './build-styles.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -12,9 +14,11 @@ export function filesIn(directory, prefix = '') {
 }
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
-// Deliberately copy, not transpile/minify: phase 01 preserves script order and bytes.
+// Deliberately copy, not transpile/minify: preserve script order and bytes.
 export function buildSite(output, revision, source = root) {
   assert.match(revision, /^[a-f0-9]{40}$/, 'Build revision must be a full Git commit SHA');
+  checkClient(source); // Refuse to publish a stale or hand-edited generated client.
+  checkStyles(source); // Preserve the exact ordered cascade and generated CSS.
   mkdirSync(output, { recursive: true });
   assert.equal(readdirSync(output).length, 0, 'Build output must be empty');
   for (const file of ['index.html', 'main.js', 'audio.js', 'account-entry.js', 'styles.css']) {

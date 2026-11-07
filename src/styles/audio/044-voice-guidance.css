@@ -1,0 +1,103 @@
+/* ===== Typhoon Voice Guidance Subtitle HUD ===== */
+.voice-guidance-hud {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  width: 90%;
+  max-width: 520px;
+  background: rgba(18, 12, 10, 0.94);
+  border: 1.5px solid #ffcc00;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), 0 0 14px rgba(255, 204, 0, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  z-index: 99;
+  pointer-events: auto;
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.voice-guidance-hud[hidden] {
+  display: none !important;
+}
+.voice-guidance-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffcc00 20%, #8c5210 100%);
+  border: 2px solid #ffd84a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+  box-shadow: 0 0 10px rgba(255, 204, 0, 0.5);
+  animation: pulseAvatar 1.5s infinite alternate;
+}
+@keyframes pulseAvatar {
+  0% { transform: scale(1); filter: drop-shadow(0 0 4px #ffaa00); }
+  100% { transform: scale(1.08); filter: drop-shadow(0 0 12px #ffdd44); }
+}
+.voice-guidance-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.voice-guidance-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.voice-guidance-title {
+  font: 900 13px/1 "Noto Sans Thai", system-ui, sans-serif;
+  color: #ffd84a;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 3px #000;
+}
+.voice-guidance-badge {
+  font: 800 10px/1 "Arial", sans-serif;
+  color: #fff;
+  background: linear-gradient(135deg, #ff4500, #ff8c00);
+  padding: 2px 5px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.voice-guidance-text {
+  font: 600 12px/1.35 "Noto Sans Thai", system-ui, sans-serif;
+  color: #f5eedb;
+  text-shadow: 0 1px 2px #000;
+  margin: 0;
+  word-break: break-word;
+}
+.voice-guidance-skip {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 204, 0, 0.4);
+  color: #ffd84a;
+  font: 700 11px/1 "Noto Sans Thai", system-ui, sans-serif;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.voice-guidance-skip:hover {
+  background: rgba(255, 204, 0, 0.2);
+  border-color: #ffcc00;
+}
+.voice-guidance-hud.combat-alert {
+  border-color: #ff3344;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.9), 0 0 18px rgba(255, 51, 68, 0.55);
+}
+.voice-guidance-hud.combat-alert .voice-guidance-avatar {
+  background: radial-gradient(circle, #ff3344 20%, #771122 100%);
+  border-color: #ff6677;
+  animation: pulseAvatarDanger 0.8s infinite alternate;
+}
+@keyframes pulseAvatarDanger {
+  0% { transform: scale(1); filter: drop-shadow(0 0 4px #ff2233); }
+  100% { transform: scale(1.12); filter: drop-shadow(0 0 16px #ff4455); }
+}

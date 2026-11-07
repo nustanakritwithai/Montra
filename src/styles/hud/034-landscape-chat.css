@@ -1,0 +1,2 @@
+/* Keep the restored identity and quest above chat on short landscape screens. */
+@media (orientation:landscape) and (max-height:520px) { .chat-box .cb-log { height:18dvh; max-height:94px; } }

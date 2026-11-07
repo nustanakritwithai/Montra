@@ -1,0 +1,197 @@
+/* ---- Dedicated High-Density Bag Matrix (4 columns, vertical, compact square, multi-page) ---- */
+.bag-category-tabs {
+  display: flex;
+  gap: 5px;
+  margin: 4px 0 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.bag-category-tabs::-webkit-scrollbar { display: none; }
+.bag-tab-chip {
+  flex: 1 0 auto;
+  min-height: 32px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(177, 139, 80, 0.35);
+  background: #152528;
+  color: #dfd7c5;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.bag-tab-chip.on {
+  background: linear-gradient(135deg, #7a5026, #4d3014);
+  color: #ffe2a6;
+  border-color: #f2ca83;
+  box-shadow: inset 0 0 6px rgba(0,0,0,0.5);
+}
+
+.bag-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  color: #a0b2ad;
+}
+.bag-page-header b {
+  color: #f7dfa6;
+}
+.bag-pager {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.page-nav-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid #74827e;
+  background: #162629;
+  color: #f7dfa6;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.page-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.bag-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+.bag-dots .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.2s;
+}
+.bag-dots .dot.on {
+  background: #f2ca83;
+  width: 16px;
+  border-radius: 3px;
+}
+
+.bag-slider {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  gap: 12px;
+}
+.bag-slider::-webkit-scrollbar { display: none; }
+.bag-page {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, var(--item-slot-size)));
+  justify-content: center;
+  gap: 4px;
+}
+
+.bag-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, var(--item-slot-size)));
+  justify-content: center;
+  gap: 4px;
+  margin: 4px 0 10px;
+}
+
+.bag-slot {
+  position: relative;
+  aspect-ratio: 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  max-width: var(--item-slot-size);
+  max-height: var(--item-slot-size);
+  padding: 2px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid rgba(116, 130, 126, 0.45);
+  border-radius: 6px;
+  background: linear-gradient(150deg, #1b2a2d, #0d1719);
+  touch-action: manipulation;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.4);
+}
+.bag-slot:hover {
+  border-color: #dfb76c;
+  background: #223739;
+}
+.bag-slot.empty {
+  opacity: 0.35;
+  border-style: dashed;
+  border-color: #445654;
+  background: rgba(10, 20, 22, 0.4);
+}
+.bag-slot.bag-filled {
+  border-color: #c0a56c;
+  background: linear-gradient(155deg, #443422, #162426);
+  box-shadow: 0 0 6px rgba(192, 165, 108, 0.25);
+}
+.bag-slot.bag-selected {
+  outline: 2px solid #ffd777;
+  outline-offset: 1px;
+  border-color: #fff;
+}
+.bag-slot.bag-equipped {
+  border-color: #5fe0d0;
+  box-shadow: inset 0 0 8px rgba(95, 224, 208, 0.35), 0 0 6px rgba(95, 224, 208, 0.3);
+}
+.bag-slot.bag-equipped::before {
+  content: "✓";
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  font-size: 10px;
+  font-weight: 900;
+  color: #72f7d2;
+  text-shadow: 0 1px 3px #000;
+}
+.bag-slot.bag-slot-dim {
+  opacity: 0.22;
+  filter: grayscale(0.85);
+}
+.cp-equip-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 8px;
+}
+.bag-dots .dot {
+  cursor: pointer;
+}
+.bag-symbol {
+  font-size: clamp(14px, 3.6vw, 17px);
+  line-height: 1;
+  color: #758b8b;
+}
+.bag-slot.bag-filled .bag-symbol {
+  color: #fce1a7;
+}
+.bag-quantity {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font-size: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #fff5d8;
+  text-shadow: 0 1px 3px #000;
+}
+
