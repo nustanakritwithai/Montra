@@ -81,56 +81,9 @@
     };
   }
   document.addEventListener("keydown",drawerController.handleKey);
-  function updateChatBadge() {
-    const total=Math.min(99,Object.values(chatUnread).reduce((sum,n)=>sum+n,0)),badge=$("chatUnread");
-    badge.hidden=total===0;badge.textContent=total?String(total):"";
-    $("menuChatUnread").hidden=!total;$("menuChatUnread").textContent=badge.textContent;
-    updateFieldAlerts();
-    $("chatButton").setAttribute("aria-label",total ? `เปิดแชท มีข้อความใหม่ ${total} ข้อความ` : "เปิดแชท");
-  }
-  function finishChatPending(){clearTimeout(chatTimer);chatTimer=null;chatPending=null;}
-  function clearChatHistory(all) {
-    chatHistory.map.length=0;chatUnread.map=0;
-    for(let i=chatFeed.length-1;i>=0;i--)if(all || chatFeed[i].channel==="map")chatFeed.splice(i,1);
-    chatBoxUnread.map=0;chatBoxUnread.all=0;
-    if(all){
-      for(const channel of Object.keys(chatHistory)){chatHistory[channel].length=0;chatUnread[channel]=0;chatDraft[channel]="";}
-      for(const channel of Object.keys(chatBoxUnread))chatBoxUnread[channel]=0;
-      chatTargetId="";chatChannel="map";chatBoxTab="all";
-      if(chatBox){chatBox.input.value="";chatBox.target.value="";}
-      closeChatComposer();
-      finishChatPending();
-    }
-    renderChatBox(true);
-    updateChatBadge();
-  }
-  // The game HUD is the only chat surface; no separate chat drawer is opened.
-  function syncChatViewport(){
-    if(!chatBox)return;
-    const viewport=window.visualViewport,bottom=viewport?viewport.offsetTop+viewport.height:window.innerHeight;
-    const overlap=Math.max(0,$("game").getBoundingClientRect().bottom-bottom);
-    chatBox.el.style.setProperty("--chat-keyboard-offset",Math.ceil(overlap)+"px");
-  }
-  function closeChatComposer(){
-    if(!chatBox)return;
-    chatBox.el.classList.remove("composing");chatBox.toggle.textContent="✎";
-    chatBox.toggle.setAttribute("aria-label","พิมพ์ข้อความ");chatBox.toggle.setAttribute("aria-expanded","false");
-    if(document.activeElement===chatBox.input || document.activeElement===chatBox.target)document.activeElement.blur();
-  }
-  function openChat(){
-    if(!chatBox)return;
-    if(!ui.drawer.hidden)closeDrawer();
-    chatBox.el.classList.add("composing");chatBox.toggle.textContent="×";
-    chatBox.toggle.setAttribute("aria-label","ย่อช่องพิมพ์แชท");chatBox.toggle.setAttribute("aria-expanded","true");
-    chatBoxUnread[chatBoxTab]=0;
-    if(chatBoxTab==="all"){for(const channel of Object.keys(chatUnread))chatUnread[channel]=0;}
-    else chatUnread[chatBoxTab]=0;
-    updateChatBadge();renderChatBox(true);syncChatViewport();
-    chatBox.input.focus({preventScroll:true});
-  }
-  window.visualViewport?.addEventListener("resize",syncChatViewport);
-  window.visualViewport?.addEventListener("scroll",syncChatViewport);
-  document.addEventListener("pointerdown",event=>{
-    if(chatBox?.el.classList.contains("composing") && !chatBox.el.contains(event.target))closeChatComposer();
-  },true);
+  function finishChatPending(){return chatController.finishChatPending();}
+  function clearChatHistory(all){return chatView.clearChatHistory(all);}
+  function openChat(){return chatView.openChat();}
+  function closeChatComposer(){return chatView.closeChatComposer();}
+  chatView.installViewport();
   drawerController.installBackdrop();

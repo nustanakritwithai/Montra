@@ -61,6 +61,51 @@ classic-script order, revisioned URLs and unexpected files. Browser/mobile,
 multiplayer reconnect, deployed performance and release verification are still
 separate gates, not claims made by these unit checks.
 
+## Bounded chat HUD ownership extraction
+
+`chat-controller.js` owns histories, drafts, unread counters, selected tab/recipient,
+feed retention, DOM references, composing/focus/scroll behavior, media/viewport
+listeners and both pending-message and freshness timers. Its frozen factory API
+is `initialize()` and `finishChatPending()`; initialization returns the frozen
+`openChat`, `closeChatComposer`, `clearChatHistory`, `receive`, `report` and
+`installViewport` view/message API. No private state or room object is exported.
+The module is the eleventh client owner in this local candidate, not a release claim.
+
+The shell creates the state owner at the old 004 declaration point, initializes
+its DOM/media/global-Enter behavior at 042, and installs viewport/outside-pointer
+listeners at their old 046 position between drawer keyboard and backdrop listeners.
+Browser primitives, recipient iteration, drawer state/actions, badges, validation,
+command construction and sending are explicit synchronous ports. Room/stale-room,
+map/channel/type admission and own-message identity stay in 044. Capability/length
+validation, the literal `chat` command and its payload construction stay in the
+shell. There is no context bag, copied room snapshot or protocol redesign.
+
+Lifecycle quirks are intentional: the page owns installed listeners; no new
+teardown is invented. Map reset removes only map history/feed and map/all counters;
+identity reset clears drafts/target/tab/pending state, but leaves the existing
+freshness timer until it fires. A synchronous acknowledgement inside `room.send`
+still clears pending before the subsequent 5-second timeout is scheduled. Drawer
+focus restoration can synchronously reenter chat opening. The owner preserves
+these operations and exception boundaries rather than silently fixing behavior.
+
+Original-only characterization was committed first (`da581f1`). A pinned test-only
+JSON oracle retains exact original sections. Historical reconstruction still
+checks the original baseline bytes/hashes. Differential tests use actual production
+bindings and observe DOM, callback, timer and command order without exposing private
+state; negative controls cover retention, escaping, timing, drafts and cleanup.
+Existing inline/focus and identity tests retain their assertions against the moved
+function bodies. Registry, deferred loading, cache revisioning, fail-closed loading,
+packaging and Windows byte preservation are checked together.
+
+`chat-browser-test.cjs` and `verify-chat.yml` add an isolated original/candidate
+real-DOM comparison with actual drawer bindings at desktop and two mobile viewport
+sizes. Local fixture syntax is checked; Chromium execution is intentionally not
+attempted here because of the known socket EPERM restriction. Browser CI, physical
+mobile keyboard behavior, real multiplayer/reconnect and deployed performance are
+still pending. Inventory/equipment, party/guild, class books, HUD status and session
+admission/reset orchestration remain shell work; this extraction completes only the
+bounded chat HUD owner.
+
 ## Source of truth and build boundaries
 
 - `src/client/manifest.json` defines fragment execution order. Numeric prefixes
