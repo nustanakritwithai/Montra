@@ -479,6 +479,8 @@
     "world_resources"
   ],
   "dynamicClientSends": 11,
+  "dynamicClientReceives": 2,
+  "dynamicServerSends": 2,
   "protectedSources": {
     "MyRoomState.ts": "4c11148cbacc865d5df158f0c8dcceb56a75f55357cf6dcf4007cace0f136d4b",
     "CharacterStore.ts": "1af8b3b985b1ebcd9c37ad20019b4a0c0fc2847196716d18a8520461e778b881",

@@ -39,8 +39,6 @@ try{
     a.state?.inventoryAvailable===true && b.state?.players?.size===2 &&
     attacker()?.equippedWeaponId==="ritual_dagger",4500,
     "players and starter dagger equipped");
-  a.send("select_build",{path:"seer",ancestry:"woodland"});
-  await until(()=>attacker().pathId==="seer",4500,"occult class selected");
   a.send("get_inventory",{});
   await until(()=>inventory.at(-1)?.slots?.[0]?.quantity===3 &&
     inventory.at(-1)?.slots?.[1]?.itemId==="ritual_dagger" &&
@@ -72,7 +70,12 @@ try{
   a.send("move",{x:0,z:0}); // cancel auto attack
   console.log("PASS: sword adds 8 attack before server applies defense");
 
-  await sleep(900);
+  // Basic attacks are class-based: test melee before selecting an occult path.
+  // Build selection at the shrine requires five seconds without combat.
+  await until(()=>attacker().combatState==="idle",2000,"melee auto-attack cancelled");
+  await sleep(5100);
+  a.send("select_build",{path:"seer",ancestry:"woodland"});
+  await until(()=>attacker().pathId==="seer",4500,"occult class selected after melee");
   a.send("equip_weapon",{slot:3});
   await until(()=>attacker().equippedWeaponId==="spirit_staff" &&
     inventory.at(-1)?.equippedWeaponSlot===3,3200,"equip spirit staff");

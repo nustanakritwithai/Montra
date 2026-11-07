@@ -37,7 +37,7 @@ try {
  const player=(r,id)=>r.state?.players?.get(id);
  await until(()=>rooms.every(r=>player(r,r.sessionId)?.persistent),"players joined");
  const [chaiya,korat,lopburi,thasao]=cases;
- // Chaiya cover protects continuously and enables its stamina-restoring counter.
+ // Chaiya cover protects continuously and enables its mana-restoring counter.
  chaiya.actor.send("muay_skill",{skillId:"korat_pierce",targetId:chaiya.victim.sessionId});
  await until(()=>seen(chaiya.actor,"command_rejected",e=>e.reason==="muay_skill_locked"),"wrong school rejected");
  await sleep(600);
@@ -49,10 +49,10 @@ try {
  chaiya.victim.send("muay_skill",{skillId:"punch",targetId:chaiya.actor.sessionId});
  await until(()=>seen(chaiya.actor,"muay_guarded"),"cover guarded");
  const coverHit=await until(()=>seen(chaiya.actor,"pvp_hit",e=>e.attackerId===chaiya.victim.sessionId)?.data,"cover hit");assert.equal(coverHit.damage,Math.max(1,Math.round(baseCover*0.65)));
- const staminaBefore=player(chaiya.actor,chaiya.actor.sessionId).stamina;
+ const manaBefore=player(chaiya.actor,chaiya.actor.sessionId).mana;
  chaiya.actor.send("muay_skill",{skillId:"chaiya_return",targetId:chaiya.victim.sessionId});await until(()=>seen(chaiya.actor,"pvp_hit",e=>e.attackerId===chaiya.actor.sessionId),"Chaiya counter");
  await until(()=>JSON.parse(player(chaiya.actor,chaiya.actor.sessionId).muayData).chaiya_return>Date.now(),"counter state");
- const spent=staminaBefore-player(chaiya.actor,chaiya.actor.sessionId).stamina;assert.ok(spent>10 && spent<=14.1,"counter restores eight stamina");
+ const spent=manaBefore-player(chaiya.actor,chaiya.actor.sessionId).mana;assert.ok(spent>10 && spent<=14.1,"counter restores eight mana");
  // Korat pierces part of a frontal guard but still gives the defender a counter.
  korat.victim.send("move",{x:korat.x,z:korat.vz+0.3});await until(()=>player(korat.actor,korat.victim.sessionId).z>korat.vz+0.2,"victim turns");
  korat.victim.send("muay_skill",{skillId:"guard"});await until(()=>seen(korat.victim,"muay_skill_used",e=>e.skillId==="guard"),"victim guard");
@@ -92,8 +92,8 @@ try {
  const edge=watch(await client.joinById(first.roomId,options(edgeToken)));rooms.push(edge);
  const edgeVictim=watch(await client.joinById(first.roomId,options(edgeVictimToken)));rooms.push(edgeVictim);
  await until(()=>player(edge,edge.sessionId)?.persistent && player(edge,edgeVictim.sessionId)?.persistent,"edge players");
- const edgeStamina=player(edge,edge.sessionId).stamina,edgeHp=player(edge,edgeVictim.sessionId).hp;
+ const edgeMana=player(edge,edge.sessionId).mana,edgeHp=player(edge,edgeVictim.sessionId).hp;
  edge.send("muay_skill",{skillId:"thasao_retreat",targetId:edgeVictim.sessionId});await until(()=>seen(edge,"command_rejected",e=>e.reason==="muay_blocked"),"retreat cannot enter safe area");
- assert.equal(JSON.parse(player(edge,edge.sessionId).muayData).thasao_retreat,undefined);assert.ok(player(edge,edge.sessionId).stamina>=edgeStamina);assert.equal(player(edge,edgeVictim.sessionId).hp,edgeHp);
+ assert.equal(JSON.parse(player(edge,edge.sessionId).muayData).thasao_retreat,undefined);assert.ok(player(edge,edge.sessionId).mana>=edgeMana);assert.equal(player(edge,edgeVictim.sessionId).hp,edgeHp);
  console.log("PASS: eight school skills, guard, counter, penetration, movement safety, multi-hit, monster pressure, learning and persistence");
 } finally {for(const r of rooms.reverse())await r.leave().catch(()=>{});}

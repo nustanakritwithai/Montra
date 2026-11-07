@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { inspectProtocol } from './check-contract.mjs';
-const server = `class MyRoom { messages = { move: () => {}, buy: () => {}, use_item: () => {} }; reply() { client.send('state', {}); this.broadcast('notice', {}); } }`;
+const server = `class MyRoom { messages = { move: () => {}, buy: () => {}, use_item: () => {} }; reply() { client.send('state', {}); this.broadcast('notice', {}); client.send(event, payload); } }`;
 const client = `room.send('move', {}); joined.send('move', {}); target?.send('buy', {});
   sendBagCommand('use_item', {}); economySend('buy', {}); joined.onMessage('state', () => {});
   room.onMessage('notice', () => {}); room.send(ready ? 'move' : 'buy', {});
   target.send(command, payload); room.send(kind + '_skill', {});
+  joined.onMessage(type, () => {});
   // joined.onMessage('comment-only', () => {});`;
 
 test('inventory includes joined listeners, room/target aliases, wrappers and conditional commands', () => {
@@ -14,6 +15,8 @@ test('inventory includes joined listeners, room/target aliases, wrappers and con
   assert.deepEqual(inventory.clientReceives, ['notice', 'state']);
   assert.deepEqual(inventory.serverSends, ['notice', 'state']);
   assert.equal(inventory.dynamicClientSends, 2);
+  assert.equal(inventory.dynamicClientReceives, 1);
+  assert.equal(inventory.dynamicServerSends, 1);
 });
 test('missing listener coverage cannot silently become an empty baseline', () => {
   assert.throws(() => inspectProtocol(`room.send('move', {});`, server), /both directions/);

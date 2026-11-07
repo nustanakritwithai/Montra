@@ -158,8 +158,31 @@ try{
   await selectCamp(keeper,4);march(keeper);await wait(()=>atCamp(keeper),"incumbent reinforcements");
   async function defeatGuard(){
     await walk(scout,keeper.me().x+.5,keeper.me().z);
-    scout.r.send("attack",{targetId:keeper.r.sessionId});await wait(()=>!keeper.me().alive,"defeat at the front",65000);
-    await wait(()=>keeper.me().alive,"server respawn",20000);
+    const deaths=keeper.me().pkDeaths,kills=scout.me().pkKills,eventStart=scout.events.length;
+    let nextOrderAt=0,orders=0;
+    // This is death setup for the respawn checks, not an uninterrupted auto-attack test.
+    // A participation reward temporarily makes its recipient unavailable while saving;
+    // if that overlaps a combat tick, the server clears the attack target. Resume with
+    // ordinary player commands, only after the target clears and at most once a second.
+    try{
+      await wait(()=>{
+        if(!keeper.me().alive)return true;
+        if(scout.me().targetId!==keeper.r.sessionId && Date.now()>=nextOrderAt){
+          scout.r.send("attack",{targetId:keeper.r.sessionId});nextOrderAt=Date.now()+1000;orders++;
+        }
+        return false;
+      },"defeat at the front",65000);
+      assert.equal(keeper.me().hp,0,"real lethal damage");
+      assert.equal(keeper.me().pkDeaths,deaths+1,"one server-confirmed death");
+      await Promise.all([
+        wait(()=>scout.me().pkKills===kills+1,"server kill credit"),
+        wait(()=>keeper.me().alive,"server respawn",20000),
+      ]);
+    }catch(error){
+      const snapshot=c=>{const p=c.me();return {x:p.x,y:p.y,z:p.z,hp:p.hp,alive:p.alive,targetId:p.targetId,combatState:p.combatState};};
+      throw new Error("front-line death setup failed "+JSON.stringify({orders,scout:snapshot(scout),keeper:snapshot(keeper),
+        combat:scout.events.slice(eventStart).filter(e=>["command_rejected","pvp_hit","pvp_kill","experience_gained"].includes(e.type)).slice(-12)}),{cause:error});
+    }
   }
   await walk(keeper,storeX-5,storeZ+16);
   await defeatGuard();assert.ok(atCamp(keeper),"respawn at selected supplied camp");

@@ -19,7 +19,7 @@ export function inspectProtocol(clientText, serverText) {
   const client = ts.createSourceFile('main.js', clientText, ts.ScriptTarget.Latest, true);
   const server = ts.createSourceFile('MyRoom.ts', serverText, ts.ScriptTarget.Latest, true);
   const clientSends = new Set(), clientReceives = new Set(), serverSends = new Set(), serverReceives = new Set();
-  let dynamicClientSends = 0;
+  let dynamicClientSends = 0, dynamicClientReceives = 0, dynamicServerSends = 0;
   walk(client, node => {
     if (!ts.isCallExpression(node)) return;
     const call = node.expression;
@@ -34,7 +34,11 @@ export function inspectProtocol(clientText, serverText) {
       if (!names.length) dynamicClientSends++;
       names.forEach(name => clientSends.add(name));
     }
-    if (method === 'onMessage') literalNames(node.arguments[0]).forEach(name => clientReceives.add(name));
+    if (method === 'onMessage') {
+      const names = literalNames(node.arguments[0]);
+      if (!names.length) dynamicClientReceives++;
+      names.forEach(name => clientReceives.add(name));
+    }
   });
   walk(server, node => {
     if (ts.isPropertyDeclaration(node) && node.name.getText(server) === 'messages' && node.initializer && ts.isObjectLiteralExpression(node.initializer)) {
@@ -44,7 +48,9 @@ export function inspectProtocol(clientText, serverText) {
       }
     }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && ['send', 'broadcast'].includes(node.expression.name.text)) {
-      literalNames(node.arguments[0]).forEach(name => serverSends.add(name));
+      const names = literalNames(node.arguments[0]);
+      if (!names.length) dynamicServerSends++;
+      names.forEach(name => serverSends.add(name));
     }
   });
   assert(serverReceives.size > 0 && clientSends.size > 0 && clientReceives.size > 0 && serverSends.size > 0, 'Expected non-empty message inventories in both directions');
@@ -52,7 +58,7 @@ export function inspectProtocol(clientText, serverText) {
   assert.deepEqual(missing, [], 'Client literal command has no server handler');
   return {
     clientSends: [...clientSends].sort(), serverReceives: [...serverReceives].sort(),
-    clientReceives: [...clientReceives].sort(), serverSends: [...serverSends].sort(), dynamicClientSends
+    clientReceives: [...clientReceives].sort(), serverSends: [...serverSends].sort(), dynamicClientSends, dynamicClientReceives, dynamicServerSends
   };
 }
 
@@ -70,6 +76,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.log('Wrote contract baseline. Review every change before committing.');
   } else {
     assert.deepEqual(snapshot, JSON.parse(readFileSync(baseline, 'utf8')), 'Contract baseline changed: review protocol/schema/save compatibility before explicitly refreshing');
-    console.log(`PASS contract baseline: ${inventory.clientSends.length} static client commands, ${inventory.serverReceives.length} handlers, ${inventory.clientReceives.length} client listeners; ${inventory.dynamicClientSends} dynamic call sites require integration coverage`);
+    console.log(`PASS contract baseline: ${inventory.clientSends.length} static client commands, ${inventory.serverReceives.length} handlers, ${inventory.clientReceives.length} literal client listener names; dynamic client sends/receives and server sends: ${inventory.dynamicClientSends}/${inventory.dynamicClientReceives}/${inventory.dynamicServerSends} require integration coverage`);
   }
 }
