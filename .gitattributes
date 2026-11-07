@@ -24,3 +24,5 @@
 
 # Preserve the independent room-state synchronization characterization bytes.
 /deploy/combat/fixtures/room-state-sync-reference.js -text
+# Frozen combat skill-motion characterization bytes.
+/deploy/combat/fixtures/skill-motion-reference.js -text

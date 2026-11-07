@@ -7,7 +7,7 @@ concatenates raw buffers with **no separator, wrapper, transform or minifier**.
 The first and last fragments contain the original single IIFE wrapper. The
 strict directive and shared-shell initialization order remain intact. A clean
 checkout generates the ignored root `main.js` for Pages and legacy source-slicing
-fixtures. Do not edit it directly. Six deferred classic module scripts load before
+fixtures. Do not edit it directly. Eight deferred classic module scripts load before
 main.js; see below. Git attributes disable line-ending
 conversion for these raw JavaScript bytes, including on Windows.
 
@@ -382,3 +382,26 @@ it still requires the original full-client and per-fragment fingerprints, with n
 baseline refresh. CSS, artwork, protocol, Schema and save fingerprints are unchanged.
 Browser suites and full exact-commit CI remain publication gates; local VM fixtures
 do not establish real Babylon rendering, mobile behavior or Windows VPS readiness.
+
+## Skill-motion catalog boundary
+
+`../client-modules/skill-motion.js` owns sword and Muay effect-to-animation maps,
+two raw-catalog parse caches and the school-data cache. Its three-operation API
+(`swordSkillAction`, `muayMotion`, `muaySchoolOf`) has only live room access and
+own-character lookup dependencies. The factory neither reads either dependency
+nor touches browser state. Each instance owns its maps and caches. Existing
+hoisted shell forwarding functions preserve animation callers; action timing,
+grapple state, sound, VFX, target facing and authoritative rules remain unchanged.
+Known Muay motion arrays retain their existing mutable identity within an instance.
+
+The independently committed SHA-pinned reference predates extraction. Differential
+coverage checks every explicit Muay skill, catalog effects, malformed/missing data,
+cache hit/invalidation, raw-object conversion failures, receiver and read order,
+short circuits, inherited-key behavior and mutation. Eight deliberately changed
+reference implementations are rejected. Module checks cover isolation, narrow
+frozen API, inert loading, dependency failures/recovery and actual shell/browser
+source wiring. Historical complete-client and all fragment byte fingerprints are
+still reconstructed; no baseline was refreshed. Static allowlists, deferred
+ordering and revision keys include this module. No protocol/schema/save changes.
+Real browser rendering, live multiplayer, staging, remote CI and deployment were
+not run for this local increment and remain publication verification gates.
