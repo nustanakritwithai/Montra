@@ -1,3 +1,4 @@
+import {RespawnLifecycle} from "./RespawnLifecycle.js";
 import {HorizontalMovement} from "./HorizontalMovement.js";
 import {VerticalMovement} from "./VerticalMovement.js";
 import { FORGE_CATALOG } from "./ForgeRules.js";
@@ -199,7 +200,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private extraStaminaRegen=new WeakMap<Player,number>();
   private extraRestManaRegen=new WeakMap<Player,number>();
   private hpRegenRemainder = new Map<string, number>();
-  private playerRespawnAt = new Map<string, number>();
+  private readonly respawns = new RespawnLifecycle();
   private playerSpawn = new Map<string, Vec2>();
   private gates = new Map<string, Gates>();
   private lastRejectNoticeMs = new Map<string, number>();
@@ -276,7 +277,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private guildSubscriptions = new Map<string,()=>void>();
   private guildInvites = new GuildInvitations();
 
-  private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
   private monsterInterruptUntil = 0;
   private monsterInterruptResistUntil = 0;
@@ -5451,7 +5451,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.despawnSummon(id, "owner_dead");
     this.destinations.delete(id);
     this.attackTargets.delete(id);
-    this.playerRespawnAt.set(id, this.simulatedMs + RULES.playerRespawnMs);
+    this.respawns.schedulePlayer(id, this.simulatedMs + RULES.playerRespawnMs);
     void this.saveCharacter(id);
 
     // Everyone chasing this human stops when the target dies. No
@@ -5493,7 +5493,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.monsterNavigator.clear();
     monster.aiState = "dead";
     monster.targetId = "";
-    this.monsterRespawnAt = this.simulatedMs + RULES.monsterRespawnMs;
+    this.respawns.scheduleMonster(this.simulatedMs + RULES.monsterRespawnMs);
     this.monsterReturning = false;
     this.awardMonsterExperience(winnerId);
 
@@ -5629,48 +5629,29 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private updateRespawns() {
-    const monster = this.state.monster;
-    if (!monster.alive && this.monsterRespawnAt &&
-        this.simulatedMs >= this.monsterRespawnAt) {
-      monster.hp = monster.maxHp;
-      this.monsterNavigator.clear();
-      monster.x = RULES.monsterSpawnX;
-      monster.z = RULES.monsterSpawnZ;
-      monster.y=groundAt(DEFAULT_MAP_ID,monster.x,monster.z);
-      monster.facing = 0;
-      monster.alive = true;
-      monster.aiState = "patrol";
-      monster.targetId = "";
-      this.monsterRespawnAt = 0;
-      this.lastMonsterAttackMs = -Infinity;
-      this.broadcast("monster_respawn", { targetId: RULES.monsterId });
-    }
-
-    for (const [id, atMs] of this.playerRespawnAt) {
-      if (this.simulatedMs < atMs) continue;
-      this.playerRespawnAt.delete(id);
-      const player = this.state.players.get(id);
-      if (!player) continue;
-      const camp=this.warSeats.get(id)?.camp;
-      const front=camp?this.fieldCamp(id,camp):undefined;
-      const spawn=front ?? this.playerSpawn.get(id) ?? {x:0,z:0};
-      if(camp && !front)this.clients.find(c=>c.sessionId===id)?.send("territory_error",{reason:"war_camp_fallback"});
-      player.hp = player.maxHp;
-      player.alive = true;
-      player.x = spawn.x;
-      player.y = groundAt(player.mapId,spawn.x,spawn.z);
-      player.z = spawn.z;
-      this.climbs.delete(id);
-      this.flightTransitions.delete(id);
-      player.flying = false;
-      this.activeDashes.delete(id);
-      player.facing = 0;
-      player.combatState = "idle";
-      player.targetId = "";
-      this.lastAttackMs.delete(id);
-      this.broadcast("player_respawn", { playerId: id });
-      void this.saveCharacter(id);
-    }
+    this.respawns.update(this.state.monster, {
+      now: () => this.simulatedMs,
+      clearMonsterNavigation: () => this.monsterNavigator.clear(),
+      monsterRespawned: () => {
+        this.lastMonsterAttackMs = -Infinity;
+        this.broadcast("monster_respawn", { targetId: RULES.monsterId });
+      },
+      player: id => this.state.players.get(id),
+      spawn: id => {
+        const camp=this.warSeats.get(id)?.camp;
+        const front=camp?this.fieldCamp(id,camp):undefined;
+        const spawn=front ?? this.playerSpawn.get(id) ?? {x:0,z:0};
+        if(camp && !front)this.clients.find(c=>c.sessionId===id)?.send("territory_error",{reason:"war_camp_fallback"});
+        return spawn;
+      },
+      clearVertical: id => {this.climbs.delete(id);this.flightTransitions.delete(id);},
+      clearDash: id => {this.activeDashes.delete(id);},
+      playerRespawned: id => {
+        this.lastAttackMs.delete(id);
+        this.broadcast("player_respawn", { playerId: id });
+        void this.saveCharacter(id);
+      },
+    });
   }
 
   private canPursueBasic(id:string, player:Player, targetId:string, monster:Monster|undefined):boolean {
@@ -5990,7 +5971,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.supportManaCombatUntil.delete(id);
     this.muayMoveIntent.delete(id);this.muayCoreStances.delete(id);this.muayCoreFollowups.delete(id);this.muayCoreSequences.delete(id);this.swordCoreStances.delete(id);this.swordCoreSequences.delete(id);
     this.lastWarpMs.delete(id);
-    this.playerRespawnAt.delete(id);
+    this.respawns.forgetPlayer(id);
     this.playerSpawn.delete(id);
     this.gates.delete(id);
     this.lastRejectNoticeMs.delete(id);
@@ -6121,7 +6102,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.muayMoveIntent.clear();this.muayCoreStances.clear();this.muayCoreFollowups.clear();this.muayCoreSequences.clear();this.swordCoreStances.clear();this.swordCoreSequences.clear();
     this.lastWarpMs.clear();
     this.pendingWarps.clear();
-    this.playerRespawnAt.clear();
+    this.respawns.clearPlayers();
     this.playerSpawn.clear();
     this.gates.clear();
     this.lastRejectNoticeMs.clear();
