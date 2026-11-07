@@ -21,3 +21,6 @@
 
 # Frozen item-presentation reference retains its pinned bytes on every platform.
 /deploy/combat/fixtures/item-presentation-reference.js -text
+
+# Preserve the independent room-state synchronization characterization bytes.
+/deploy/combat/fixtures/room-state-sync-reference.js -text

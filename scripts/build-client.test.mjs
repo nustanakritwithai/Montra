@@ -160,6 +160,24 @@ function lightingControllerRestoration(current) {
   return text => text.replace(binding, original).replace('    clearTransientLightSpots();\n', clear).replace('    tickShadows(dt);\n', tick);
 }
 
+function roomStateSyncRestoration(current) {
+  const dependencies = [['room', 'getRoom'], ['activeMapId', 'getActiveMapId'], ['window', 'getWindow'], ['console', 'getConsole'], ['setInterval', 'getSetInterval'], ['clearInterval', 'getClearInterval']];
+  const module = readFileSync(join(clientRoot, 'src/client-modules/room-state-sync.js'), 'utf8');
+  const header = "// Nested player subscriptions and fallback polling, with a privately owned timer.\n// Shell callbacks retain world/render ownership; live getters preserve callback-time reads.\n\"use strict\";\nglobalThis.MontraRoomStateSync = Object.freeze({\n  create({ getRoom, getActiveMapId, getWindow, getConsole, getSetInterval, getClearInterval, syncState, setOnlinePlayer, removeOnlinePlayer }) {\n";
+  const footer = "    return Object.freeze({ clearSyncPoll, observePlayers });\n  },\n});\n";
+  assert(module.startsWith(header) && module.endsWith(footer), 'Only the reviewed subscription factory/API may surround the original blocks');
+  let original = module.slice(header.length, -footer.length);
+  for (const [name, getter] of dependencies) original = original.replaceAll(getter + '()', name);
+  const split = original.indexOf('  function observePlayers(joined) {\n');
+  assert(split > 0 && original.endsWith('  }\n'));
+  const initializer = original.slice(0, split);
+  const subscriptions = original.slice(split + '  function observePlayers(joined) {\n'.length, -'  }\n'.length);
+  const wiring = "  const roomStateSync = globalThis.MontraRoomStateSync.create({\n    getRoom: () => room,\n    getActiveMapId: () => activeMapId,\n    getWindow: () => window,\n    getConsole: () => console,\n    getSetInterval: () => setInterval,\n    getClearInterval: () => clearInterval,\n    syncState, setOnlinePlayer, removeOnlinePlayer,\n  });\n  function clearSyncPoll(){return roomStateSync.clearSyncPoll();}\n";
+  const call = '      roomStateSync.observePlayers(joined);\n';
+  for (const site of [wiring, call]) assert.equal(current.split(site).length, 2, 'Exactly one reviewed room synchronization replacement');
+  return text => text.replace(wiring, initializer).replace(call, subscriptions);
+}
+
 test('module extraction preserves the historical byte freeze outside the exact helper replacement', () => {
   const baseline = JSON.parse(readFileSync(join(clientRoot, 'src/client/extraction-baseline.json')));
   const current = assembleClient();
@@ -184,11 +202,12 @@ test('module extraction preserves the historical byte freeze outside the exact h
   for (const anchor of [worldBinding, terrainAnchor, smoothAnchor]) {
     assert.equal(current.toString().split(anchor).length, 2, 'Exactly one world-math binding/replacement site');
   }
+  const restoreRoom = roomStateSyncRestoration(current.toString());
   const restoreItems = itemPresentationRestoration(current.toString());
   const restoreVoice = voiceGuidanceRestoration(current.toString());
   const restoreGestures = pointerGesturesRestoration(current.toString());
   const restoreLighting = lightingControllerRestoration(current.toString());
-  const restore = text => restoreItems(restoreVoice(restoreGestures(restoreLighting(text)))).replace(wiring, originalHelpers)
+  const restore = text => restoreItems(restoreVoice(restoreGestures(restoreLighting(restoreRoom(text))))).replace(wiring, originalHelpers)
     .replace(worldBinding, '').replace(terrainAnchor, terrainHelpers + terrainAnchor)
     .replace(smoothAnchor, smoothAnchor + smoothHelper);
   const bytes = Buffer.from(restore(current.toString()));

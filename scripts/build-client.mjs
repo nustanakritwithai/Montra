@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { Script } from 'node:vm';
 
 export const clientRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-export const clientModules = ['src/client-modules/character-slot-storage.js', 'src/client-modules/world-math.js', 'src/client-modules/item-presentation.js', 'src/client-modules/voice-guidance.js', 'src/client-modules/pointer-gestures.js', 'src/client-modules/lighting-controller.js'];
+export const clientModules = ['src/client-modules/character-slot-storage.js', 'src/client-modules/world-math.js', 'src/client-modules/item-presentation.js', 'src/client-modules/voice-guidance.js', 'src/client-modules/pointer-gestures.js', 'src/client-modules/lighting-controller.js', 'src/client-modules/room-state-sync.js'];
 const categories = '(?:core|network|world|render|input|combat|ui|audio)';
 const fragmentPath = new RegExp(`^${categories}/[0-9]{3}-[a-z0-9-]+\\.js$`);
 function sourceFiles(directory, prefix = '') {
