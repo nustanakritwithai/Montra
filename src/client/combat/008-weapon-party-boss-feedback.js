@@ -705,3 +705,239 @@
     getCooldownRemaining: () => Math.max(0, BANNER_COOLDOWN - (performance.now() - lastBannerPlantTime))
   };
 
+  // Phase 16: Shamanic Spirit Pet & Talisman Familiar 3D (สัตว์เลี้ยงภูติมนตรา กุมารทอง/พญาครุฑน้อย)
+  let familiarPetState = {
+    active: false,
+    mesh: null,
+    x: 0, y: 0, z: 0,
+    targetX: 0, targetY: 0, targetZ: 0,
+    lastAssistTime: 0,
+    lastSenseTime: 0,
+    type: "garuda",
+    name: "วายุภักษ์น้อย",
+    level: 1,
+    exp: 0
+  };
+
+  let petBodyMat = null, petWingMat = null, petGoldMat = null, petEyeMat = null, petSashMat = null;
+  function ensurePetMaterials() {
+    if (petBodyMat) return;
+    if (typeof mat !== "function") return;
+    petBodyMat = mat("pet spirit body", "#ffe082", "#ffd700");
+    petWingMat = mat("pet spirit wings", "#fff9c4", "#ffeb3b");
+    petGoldMat = mat("pet crown gold", "#ffd700", "#b8860b");
+    petEyeMat = mat("pet mystic eye", "#80d8ff", "#00b0ff");
+    petSashMat = mat("pet red sash", "#d32f2f", "#b71c1c");
+  }
+
+  function createFamiliarPetMesh(type = "garuda") {
+    if (typeof B === "undefined" || !scene) return null;
+    ensurePetMaterials();
+
+    const root = new B.TransformNode("familiar-pet-root", scene);
+    const body = B.MeshBuilder.CreateSphere("pet-body", { diameter: 0.45, segments: 10 }, scene);
+    body.parent = root;
+    body.position.set(0, 0, 0);
+    body.scaling.set(0.85, 1.0, 0.85);
+    if (petBodyMat) body.material = petBodyMat;
+    body.isPickable = false;
+
+    const crown = B.MeshBuilder.CreateCylinder("pet-crown", { diameterTop: 0.02, diameterBottom: 0.18, height: 0.28, tessellation: 8 }, scene);
+    crown.parent = root;
+    crown.position.set(0, 0.32, 0);
+    if (petGoldMat) crown.material = petGoldMat;
+    crown.isPickable = false;
+
+    const leftEye = B.MeshBuilder.CreateSphere("pet-eye-l", { diameter: 0.08, segments: 6 }, scene);
+    leftEye.parent = root;
+    leftEye.position.set(-0.11, 0.06, -0.19);
+    if (petEyeMat) leftEye.material = petEyeMat;
+    leftEye.isPickable = false;
+
+    const rightEye = B.MeshBuilder.CreateSphere("pet-eye-r", { diameter: 0.08, segments: 6 }, scene);
+    rightEye.parent = root;
+    rightEye.position.set(0.11, 0.06, -0.19);
+    if (petEyeMat) rightEye.material = petEyeMat;
+    rightEye.isPickable = false;
+
+    const beak = B.MeshBuilder.CreateCylinder("pet-beak", { diameterTop: 0.01, diameterBottom: 0.08, height: 0.12, tessellation: 4 }, scene);
+    beak.parent = root;
+    beak.rotation.x = Math.PI / 2;
+    beak.position.set(0, -0.02, -0.23);
+    if (petGoldMat) beak.material = petGoldMat;
+    beak.isPickable = false;
+
+    const leftWingPivot = new B.TransformNode("pet-wing-l-pivot", scene);
+    leftWingPivot.parent = root;
+    leftWingPivot.position.set(-0.2, 0.05, 0);
+
+    const leftWing = B.MeshBuilder.CreatePlane("pet-wing-l", { width: 0.35, height: 0.22 }, scene);
+    leftWing.parent = leftWingPivot;
+    leftWing.position.set(-0.16, 0.02, 0);
+    if (petWingMat) leftWing.material = petWingMat;
+    leftWing.isPickable = false;
+
+    const rightWingPivot = new B.TransformNode("pet-wing-r-pivot", scene);
+    rightWingPivot.parent = root;
+    rightWingPivot.position.set(0.2, 0.05, 0);
+
+    const rightWing = B.MeshBuilder.CreatePlane("pet-wing-r", { width: 0.35, height: 0.22 }, scene);
+    rightWing.parent = rightWingPivot;
+    rightWing.position.set(0.16, 0.02, 0);
+    if (petWingMat) rightWing.material = petWingMat;
+    rightWing.isPickable = false;
+
+    const sash = B.MeshBuilder.CreatePlane("pet-sash", { width: 0.12, height: 0.38 }, scene);
+    sash.parent = root;
+    sash.position.set(0, -0.32, 0.08);
+    if (petSashMat) sash.material = petSashMat;
+    sash.isPickable = false;
+
+    return { root, body, crown, leftWingPivot, rightWingPivot, sash, leftEye, rightEye };
+  }
+
+  function summonFamiliarPet(options = {}) {
+    if (familiarPetState.active && familiarPetState.mesh) {
+      return familiarPetState;
+    }
+
+    const hero = getLocalAvatar();
+    const x = hero ? (hero.x ?? 0) : 0;
+    const y = hero ? (hero.y || 0) + 1.8 : 1.8;
+    const z = hero ? (hero.z ?? 0) : 0;
+
+    familiarPetState.active = true;
+    familiarPetState.x = x;
+    familiarPetState.y = y;
+    familiarPetState.z = z;
+    familiarPetState.targetX = x;
+    familiarPetState.targetY = y;
+    familiarPetState.targetZ = z;
+    familiarPetState.lastAssistTime = performance.now();
+    familiarPetState.lastSenseTime = performance.now();
+    familiarPetState.mesh = createFamiliarPetMesh(familiarPetState.type);
+
+    if (familiarPetState.mesh?.root) {
+      familiarPetState.mesh.root.position.set(x, y, z);
+    }
+
+    if (typeof SFX === "function") SFX("pet_chime", { intensity: 1.2, x, z });
+    if (typeof spawnFx === "function") {
+      spawnFx("star", "gold", x, y, z, { orient: "bill", life: 1000, s0: 2, s1: 0.5, a0: 1, a1: 0 });
+    }
+    if (typeof sparks === "function") {
+      sparks("gold", x, y, z, 14, { speed: 2.2, up: 2.0, life: 500 });
+    }
+    if (typeof floatAtPlayer === "function") {
+      floatAtPlayer(localId, `อัญเชิญ ${familiarPetState.name}! ✨`, "status", { big: true });
+    }
+    if (typeof triggerCombatCallout === "function") {
+      triggerCombatCallout("familiar_summon");
+    }
+
+    const btn = $("petButton");
+    if (btn) btn.setAttribute("aria-pressed", "true");
+
+    return familiarPetState;
+  }
+
+  function dismissFamiliarPet() {
+    if (!familiarPetState.active) return false;
+    if (familiarPetState.mesh?.root) {
+      familiarPetState.mesh.root.dispose();
+      familiarPetState.mesh = null;
+    }
+    if (typeof sparks === "function") {
+      sparks("gold", familiarPetState.x, familiarPetState.y, familiarPetState.z, 10, { speed: 1.5, up: 1.5, life: 400 });
+    }
+    if (typeof floatAtPlayer === "function") {
+      floatAtPlayer(localId, `${familiarPetState.name} พักผ่อน ✦`, "status");
+    }
+    familiarPetState.active = false;
+
+    const btn = $("petButton");
+    if (btn) btn.setAttribute("aria-pressed", "false");
+
+    return true;
+  }
+
+  function toggleFamiliarPet() {
+    return familiarPetState.active ? dismissFamiliarPet() : summonFamiliarPet();
+  }
+
+  function updatePet(dt, elapsed) {
+    if (!familiarPetState.active) return;
+    const hero = getLocalAvatar();
+    if (!hero) return;
+
+    const now = performance.now();
+
+    const heroFacing = hero.facing ?? hero.rotation?.y ?? 0;
+    const offsetAngle = heroFacing - 0.75;
+    const targetX = (hero.x ?? 0) + Math.sin(offsetAngle) * 1.35;
+    const targetZ = (hero.z ?? 0) + Math.cos(offsetAngle) * 1.35;
+    const targetY = (hero.y || 0) + 1.85 + Math.sin(elapsed * 3.8) * 0.16;
+
+    const lerpRate = Math.min(1.0, dt * 6.5);
+    familiarPetState.x += (targetX - familiarPetState.x) * lerpRate;
+    familiarPetState.y += (targetY - familiarPetState.y) * lerpRate;
+    familiarPetState.z += (targetZ - familiarPetState.z) * lerpRate;
+
+    if (familiarPetState.mesh?.root) {
+      familiarPetState.mesh.root.position.set(familiarPetState.x, familiarPetState.y, familiarPetState.z);
+      familiarPetState.mesh.root.rotation.y = heroFacing;
+
+      const flap = Math.sin(elapsed * 14.0) * 0.45;
+      if (familiarPetState.mesh.leftWingPivot) familiarPetState.mesh.leftWingPivot.rotation.z = flap;
+      if (familiarPetState.mesh.rightWingPivot) familiarPetState.mesh.rightWingPivot.rotation.z = -flap;
+      if (familiarPetState.mesh.sash) familiarPetState.mesh.sash.rotation.x = Math.sin(elapsed * 4.0) * 0.25 + 0.15;
+    }
+
+    if (Math.random() < dt * 3.0 && typeof sparks === "function") {
+      sparks("gold", familiarPetState.x, familiarPetState.y, familiarPetState.z, 1, { speed: 0.8, up: 0.6, life: 300 });
+    }
+
+    if (now - familiarPetState.lastAssistTime > 6000) {
+      const isCombat = hero.serverCombat === "combat" || (typeof demoMonsterHp === "number" && demoMonsterHp > 0);
+      if (isCombat) {
+        familiarPetState.lastAssistTime = now;
+        const enemy = typeof villageGhost !== "undefined" && villageGhost?.isEnabled?.() ? villageGhost : null;
+        const tX = enemy ? enemy.position.x : (hero.x ?? 0) + 3;
+        const tY = enemy ? enemy.position.y + 1.2 : (hero.y || 0) + 1.2;
+        const tZ = enemy ? enemy.position.z : (hero.z ?? 0) + 3;
+
+        if (typeof spawnFx === "function") {
+          spawnFx("streak", "gold", familiarPetState.x, familiarPetState.y, familiarPetState.z, { orient: "bill", life: 400 });
+        }
+        if (typeof SFX === "function") SFX("pet_chime", { intensity: 1.0 });
+        if (typeof floatText === "function") {
+          floatText(tX, tY, tZ, "พลังภูติหนุน! +8 ✧", "status");
+        }
+      }
+    }
+
+    if (now - familiarPetState.lastSenseTime > 25000) {
+      const node = typeof nearbyResource === "function" ? nearbyResource(hero) : null;
+      if (node && node.stock > 0) {
+        familiarPetState.lastSenseTime = now;
+        familiarPetState.y += 0.35;
+        if (typeof SFX === "function") SFX("pet_chime", { intensity: 1.2 });
+        if (typeof floatText === "function") {
+          floatText(familiarPetState.x, familiarPetState.y + 0.6, familiarPetState.z, "สัมผัสไอเวทสมบัติ! 💎", "crit", { big: true });
+        }
+        if (typeof triggerCombatCallout === "function") {
+          triggerCombatCallout("familiar_treasure");
+        }
+      }
+    }
+  }
+
+  window.MontraPet = {
+    summonPet: summonFamiliarPet,
+    dismissPet: dismissFamiliarPet,
+    togglePet: toggleFamiliarPet,
+    isPetActive: () => familiarPetState.active,
+    getPetStatus: () => ({ ...familiarPetState }),
+    updatePet
+  };
+

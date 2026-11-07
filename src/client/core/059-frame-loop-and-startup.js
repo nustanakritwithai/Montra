@@ -302,6 +302,7 @@
     motes.emitter.copyFrom(camera.target);
     if (typeof updateWeather === "function") updateWeather(dt, elapsed);
     if (typeof updateBanners === "function") updateBanners(dt, elapsed);
+    if (typeof updatePet === "function") updatePet(dt, elapsed);
     animatePortals(elapsed, dt);
     if (me) warm.position.set(me.x, me.y + 3.4, me.z + .6);
     scene.render();

@@ -4761,6 +4761,17 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   50% { box-shadow: 0 0 14px rgba(255, 215, 0, 0.7); }
 }
 
+/* Phase 16: Shamanic Spirit Pet & Familiar */
+#petButton {
+  position: relative;
+  border: 1px solid rgba(128, 216, 255, 0.4);
+}
+#petButton:active,
+#petButton[aria-pressed="true"] {
+  border-color: #80d8ff;
+  box-shadow: 0 0 10px rgba(0, 176, 255, 0.6);
+}
+
 /* ========================================================
    MONTRA Comprehensive 26-Skill SVG Engine & Book Icons
    ======================================================== */

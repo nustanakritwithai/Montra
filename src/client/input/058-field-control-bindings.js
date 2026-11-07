@@ -68,6 +68,13 @@
   }
   const bannerBtn = $("bannerButton");
   if (bannerBtn) bannerBtn.onclick = triggerWarBanner;
+  function toggleFamiliarPetCommand() {
+    if (window.MontraPet?.togglePet) {
+      window.MontraPet.togglePet();
+    }
+  }
+  const petBtn = $("petButton");
+  if (petBtn) petBtn.onclick = toggleFamiliarPetCommand;
   addEventListener("keydown", e => {
     if (e.repeat || e.defaultPrevented) return;
     const t = e.target;
@@ -76,5 +83,7 @@
       toggleFieldMount();
     } else if (e.key?.toLowerCase() === "b") {
       triggerWarBanner();
+    } else if (e.key?.toLowerCase() === "p") {
+      toggleFamiliarPetCommand();
     }
   });

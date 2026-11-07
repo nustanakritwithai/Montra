@@ -238,6 +238,13 @@
       noise(d, t + 0.08, { type: "bandpass", freq: 650, to: 280, glide: 0.8, q: 3.5, attack: 0.05, decay: 0.9, gain: 0.35 * k });
       [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => metal(d, t + 0.15 + i * 0.08, f, [[1, 1], [2.2, 0.3, 0.4]], { gain: 0.12 * k, decay: 1.5 }));
     },
+    pet_chime: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      [1046.5, 1318.51, 1567.98, 2093.0].forEach((f, i) => {
+        metal(d, t + i * 0.05, f, [[1, 1], [2.4, 0.3, 0.4]], { gain: 0.11 * k, decay: 0.8 });
+      });
+      tone(d, t, { type: "sine", freq: 880, to: 1760, glide: 0.18, attack: 0.02, decay: 0.25, gain: 0.15 * k });
+    },
     whisper: (d, t, p) => {
       const k = p.intensity ?? 1;
       noise(d, t, { type: "bandpass", freq: 950, to: 420, glide: 1.2, q: 4.5, attack: 0.18, decay: 1.8, gain: 0.28 * k });
@@ -345,13 +352,13 @@
   // Which bus, how much reverb and base loudness for each sound.
   const META = {
     tap: ["ui", 0, .9], open: ["ui", .05, .9], close: ["ui", .05, .9], toast: ["ui", .25, 1], error: ["ui", 0, 1], coin: ["ui", .2, 1], levelup: ["ui", .4, 1],
-    gong: ["sfx", .5, 1], war_horn: ["sfx", .4, 1.2], drum: ["sfx", .35, 1], thunder: ["ambience", .5, 1], banner: ["sfx", .45, 1.1], whisper: ["sfx", .4, 1.1], ghost: ["sfx", .4, .9],
+    gong: ["sfx", .5, 1], war_horn: ["sfx", .4, 1.2], drum: ["sfx", .35, 1], thunder: ["ambience", .5, 1], pet_chime: ["sfx", .4, 1.0], banner: ["sfx", .45, 1.1], whisper: ["sfx", .4, 1.1], ghost: ["sfx", .4, .9],
     phuttha_core: ["sfx", .25, 1], sritra_core: ["sfx", .4, 1], atamat_core: ["sfx", .3, 1], chumphon_core: ["sfx", .5, 1],
     muay_chaiya: ["sfx", .2, 1], muay_korat: ["sfx", .25, 1], muay_lopburi: ["sfx", .2, 1], muay_thasao: ["sfx", .2, 1],
     seer_buffalo: ["sfx", .4, 1], seer_curse: ["sfx", .45, 1], seer_binding: ["sfx", .3, 1], seer_burst: ["sfx", .35, 1],
     seer_pot: ["sfx", .3, 1], seer_poison: ["sfx", .25, 1],
   };
-  const DUR = { ghost: 2.6, gong: 3.5, war_horn: 3.2, levelup: 3.5, down: 3.5, summon: 4.5, thunder: 3, banner: 2.8, whisper: 2.2, ghost_die: 1.6, warp: 1.8, fly: 1.6, respawn: 1.4, toast: .9,
+  const DUR = { ghost: 2.6, gong: 3.5, war_horn: 3.2, levelup: 3.5, down: 3.5, summon: 4.5, thunder: 3, pet_chime: 1.6, banner: 2.8, whisper: 2.2, ghost_die: 1.6, warp: 1.8, fly: 1.6, respawn: 1.4, toast: .9,
     phuttha_core: 1.0, sritra_core: 2.2, atamat_core: 1.2, chumphon_core: 2.5,
     muay_chaiya: .6, muay_korat: .8, muay_lopburi: .7, muay_thasao: .7,
     seer_buffalo: 1.8, seer_curse: 1.4, seer_binding: 1.0, seer_burst: 1.2, seer_pot: 1.0, seer_poison: .9 };

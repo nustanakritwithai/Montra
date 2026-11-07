@@ -44,8 +44,8 @@ assert(mainSrc.includes('triggerWarBanner'), 'hotkey B triggers war banner');
 // 6. DOM & Styles
 assert(indexSrc.includes('id="bannerButton"'), 'index.html contains bannerButton in field shortcuts');
 assert(indexSrc.includes('id="warBannerBuffBadge"'), 'index.html contains warBannerBuffBadge');
-assert(/audio\.js\?v=0\.13\./.test(indexSrc), 'index.html points to audio.js v0.13.x');
-assert(/main\.js\?v=0\.17\./.test(indexSrc), 'index.html points to main.js v0.17.x');
+assert(/audio\.js\?v=0\.1[3-9]\./.test(indexSrc), 'index.html points to audio.js v0.13.x+');
+assert(/main\.js\?v=0\.1[7-9]\./.test(indexSrc), 'index.html points to main.js v0.17.x+');
 assert(cssSrc.includes('#bannerButton'), 'styles.css defines #bannerButton');
 assert(cssSrc.includes('.war-banner-buff-badge'), 'styles.css defines .war-banner-buff-badge');
 assert(cssSrc.includes('@keyframes bannerPulse'), 'styles.css defines bannerPulse keyframe');
