@@ -427,3 +427,281 @@
   window.MontraWar = { soundWarHorn, triggerWarAlert: triggerWarScreenAlert, simulateTerritoryCapture, checkTerritoryWarEvents, getTerritoryStatus };
   window.MontraMount = { toggleMount: togglePlayerMount, isMounted: isPlayerMounted, getMountSpeedMultiplier, playMountVfx: playMountSummonVfx };
 
+  // Phase 15: Guild Alliance & Shamanic War Banner 3D (ธงชัยอาคมประจำตัวและกิลด์)
+  const activeWarBanners = new Map();
+  let warBannerIdCounter = 0;
+  let lastBannerPlantTime = 0;
+  const BANNER_RADIUS = 12.0;
+  const BANNER_DURATION = 60000;
+  const BANNER_COOLDOWN = 15000;
+
+  let bannerPoleMat = null, bannerGoldMat = null, bannerClothMat = null, bannerStoneMat = null;
+  function ensureBannerMaterials() {
+    if (bannerPoleMat) return;
+    if (typeof mat !== "function") return;
+    bannerPoleMat = mat("war banner pole", "#3d291a", "#120b06");
+    bannerGoldMat = mat("war banner gold", "#ffd700", "#b8860b");
+    bannerStoneMat = mat("war banner stone", "#2e3436", "#111415");
+    if (typeof paintTexture === "function") {
+      const bannerTex = paintTexture("war banner cloth", 256, (c, s) => {
+        const g = c.createLinearGradient(0, 0, s, s);
+        g.addColorStop(0, "#8b0000");
+        g.addColorStop(0.5, "#b22222");
+        g.addColorStop(1, "#5b0000");
+        c.fillStyle = g;
+        c.fillRect(0, 0, s, s);
+
+        c.strokeStyle = "#ffd700";
+        c.lineWidth = 8;
+        c.strokeRect(6, 6, s - 12, s - 12);
+        c.lineWidth = 2;
+        c.strokeRect(14, 14, s - 28, s - 28);
+
+        const h = s / 2;
+        c.fillStyle = "#ffd700";
+        c.strokeStyle = "#ffd700";
+        c.lineWidth = 3;
+        c.beginPath();
+        c.arc(h, h, s * 0.32, 0, Math.PI * 2);
+        c.stroke();
+        c.beginPath();
+        c.arc(h, h, s * 0.22, 0, Math.PI * 2);
+        c.stroke();
+
+        for (let i = 0; i < 8; i++) {
+          const ang = (i * Math.PI) / 4;
+          c.beginPath();
+          c.moveTo(h + Math.cos(ang) * (s * 0.22), h + Math.sin(ang) * (s * 0.22));
+          c.lineTo(h + Math.cos(ang) * (s * 0.32), h + Math.sin(ang) * (s * 0.32));
+          c.stroke();
+        }
+
+        c.font = `bold ${Math.round(s * 0.1)}px "Noto Sans Thai", system-ui, sans-serif`;
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        c.fillText("ธงชัย", h, h - 8);
+        c.fillText("อาคม", h, h + 16);
+      });
+      const m = new B.StandardMaterial("war banner cloth mat", scene);
+      m.diffuseTexture = bannerTex;
+      m.backFaceCulling = false;
+      m.emissiveColor = B.Color3.FromHexString("#4a0e17");
+      bannerClothMat = m;
+    }
+  }
+
+  function createWarBannerMesh(id, x, y, z) {
+    if (typeof B === "undefined" || !scene) return null;
+    ensureBannerMaterials();
+    const root = new B.TransformNode("war-banner-" + id, scene);
+    root.position.set(x, y, z);
+
+    const pedestal = B.MeshBuilder.CreateCylinder("banner-base-" + id, { diameter: 1.1, height: 0.22, tessellation: 8 }, scene);
+    pedestal.parent = root;
+    pedestal.position.set(0, 0.11, 0);
+    if (bannerStoneMat) pedestal.material = bannerStoneMat;
+    pedestal.isPickable = false;
+
+    const ring = B.MeshBuilder.CreateTorus("banner-ring-" + id, { diameter: 1.0, thickness: 0.08, tessellation: 16 }, scene);
+    ring.parent = root;
+    ring.position.set(0, 0.22, 0);
+    if (bannerGoldMat) ring.material = bannerGoldMat;
+    ring.isPickable = false;
+
+    const pole = B.MeshBuilder.CreateCylinder("banner-pole-" + id, { diameter: 0.09, height: 3.6, tessellation: 8 }, scene);
+    pole.parent = root;
+    pole.position.set(0, 1.8, 0);
+    if (bannerPoleMat) pole.material = bannerPoleMat;
+    pole.isPickable = false;
+
+    const yardarm = B.MeshBuilder.CreateCylinder("banner-yardarm-" + id, { diameter: 0.06, height: 1.3, tessellation: 8 }, scene);
+    yardarm.parent = root;
+    yardarm.rotation.z = Math.PI / 2;
+    yardarm.position.set(0.6, 3.45, 0);
+    if (bannerPoleMat) yardarm.material = bannerPoleMat;
+    yardarm.isPickable = false;
+
+    const finial = B.MeshBuilder.CreateCylinder("banner-finial-" + id, { diameterTop: 0.01, diameterBottom: 0.16, height: 0.5, tessellation: 6 }, scene);
+    finial.parent = root;
+    finial.position.set(0, 3.85, 0);
+    if (bannerGoldMat) finial.material = bannerGoldMat;
+    finial.isPickable = false;
+
+    const orb = B.MeshBuilder.CreateSphere("banner-orb-" + id, { diameter: 0.22, segments: 8 }, scene);
+    orb.parent = root;
+    orb.position.set(0, 3.62, 0);
+    if (bannerGoldMat) orb.material = bannerGoldMat;
+    orb.isPickable = false;
+
+    const cloth = B.MeshBuilder.CreatePlane("banner-cloth-" + id, { width: 1.15, height: 1.85 }, scene);
+    cloth.parent = root;
+    cloth.position.set(0.6, 2.45, 0);
+    if (bannerClothMat) cloth.material = bannerClothMat;
+    cloth.isPickable = false;
+
+    let auraRing = null;
+    if (typeof vfxMat === "function") {
+      auraRing = B.MeshBuilder.CreatePlane("banner-aura-" + id, { size: 3.5 }, scene);
+      auraRing.parent = root;
+      auraRing.rotation.x = Math.PI / 2;
+      auraRing.position.set(0, 0.04, 0);
+      auraRing.material = vfxMat("yantra", "gold");
+      auraRing.isPickable = false;
+    }
+
+    return { root, cloth, auraRing, pedestal, pole, yardarm, finial, orb };
+  }
+
+  function plantWarBanner(options = {}) {
+    const now = performance.now();
+    if (now - lastBannerPlantTime < BANNER_COOLDOWN) {
+      const waitSec = Math.ceil((BANNER_COOLDOWN - (now - lastBannerPlantTime)) / 1000);
+      toast(`ธงชัยอาคมกำลังฟื้นฟูมนตรา (รอ ${waitSec} วินาที)`);
+      return null;
+    }
+
+    const hero = getLocalAvatar();
+    const x = options.x ?? (hero ? (hero.x ?? 0) : 0);
+    const y = options.y ?? (hero ? (hero.y || 0) : 0);
+    const z = options.z ?? (hero ? (hero.z ?? 0) : 0);
+
+    const id = ++warBannerIdCounter;
+    const mesh = createWarBannerMesh(id, x, y, z);
+
+    const banner = {
+      id,
+      x,
+      y,
+      z,
+      mesh,
+      plantedAt: now,
+      expiresAt: now + BANNER_DURATION,
+      ownerId: localId,
+      seed: Math.random() * 10
+    };
+
+    activeWarBanners.set(id, banner);
+    lastBannerPlantTime = now;
+
+    if (typeof SFX === "function") SFX("banner", { intensity: 1.3, x, z });
+    if (typeof shakeCamera === "function") shakeCamera(0.4, 300);
+    if (typeof spawnFx === "function") {
+      spawnFx("yantra", "gold", x, y + 0.05, z, { orient: "ground", life: 1800, s0: 4, s1: 4, a0: 1, a1: 0.8, spin: 1.8 });
+    }
+    if (typeof sparks === "function") {
+      sparks("gold", x, y + 1.2, z, 18, { speed: 3.2, up: 2.8, life: 600 });
+    }
+    if (typeof floatAtPlayer === "function") {
+      floatAtPlayer(localId, "ปักธงชัยอาคม! 🚩 (+10% ป้องกัน)", "status", { big: true });
+    }
+    if (typeof triggerCombatCallout === "function") {
+      triggerCombatCallout("banner_planted");
+    }
+
+    const btn = $("bannerButton");
+    if (btn) {
+      btn.setAttribute("aria-pressed", "true");
+    }
+
+    return banner;
+  }
+
+  function removeWarBanner(id) {
+    const banner = activeWarBanners.get(id);
+    if (!banner) return false;
+    if (banner.mesh?.root) {
+      banner.mesh.root.dispose();
+    }
+    if (typeof sparks === "function") {
+      sparks("gold", banner.x, banner.y + 1, banner.z, 10, { speed: 2, up: 2, life: 400 });
+    }
+    activeWarBanners.delete(id);
+    if (activeWarBanners.size === 0) {
+      const btn = $("bannerButton");
+      if (btn) btn.setAttribute("aria-pressed", "false");
+    }
+    return true;
+  }
+
+  function getNearbyBanners(x, z, radius = BANNER_RADIUS) {
+    const result = [];
+    for (const b of activeWarBanners.values()) {
+      const d = Math.hypot(b.x - x, b.z - z);
+      if (d <= radius) result.push({ ...b, distance: d });
+    }
+    return result;
+  }
+
+  function getBannerDefenseBuff(hero = getLocalAvatar()) {
+    if (!hero || activeWarBanners.size === 0) {
+      return { active: false, defBonus: 0, resilience: 0, bannerId: null, distance: Infinity, text: "" };
+    }
+    const hx = hero.x ?? 0, hz = hero.z ?? 0;
+    let minDist = Infinity;
+    let nearestBanner = null;
+    for (const b of activeWarBanners.values()) {
+      const d = Math.hypot(b.x - hx, b.z - hz);
+      if (d <= BANNER_RADIUS && d < minDist) {
+        minDist = d;
+        nearestBanner = b;
+      }
+    }
+    if (nearestBanner) {
+      return {
+        active: true,
+        defBonus: 0.10,
+        resilience: 0.15,
+        bannerId: nearestBanner.id,
+        distance: Math.round(minDist * 10) / 10,
+        text: "+10% ป้องกันธงชัย"
+      };
+    }
+    return { active: false, defBonus: 0, resilience: 0, bannerId: null, distance: Infinity, text: "" };
+  }
+
+  function updateBanners(dt, elapsed) {
+    const now = performance.now();
+    for (const [id, b] of activeWarBanners) {
+      if (now >= b.expiresAt) {
+        if (b.ownerId === localId) {
+          if (typeof triggerCombatCallout === "function") triggerCombatCallout("banner_expired");
+          if (typeof floatText === "function") floatText(b.x, b.y + 2.5, b.z, "ธงชัยอาคมสิ้นฤทธิ์", "status");
+        }
+        removeWarBanner(id);
+        continue;
+      }
+      if (b.mesh?.cloth) {
+        b.mesh.cloth.rotation.y = Math.sin(elapsed * 4.2 + b.seed) * 0.16 + Math.cos(elapsed * 2.1) * 0.06;
+      }
+      if (b.mesh?.auraRing) {
+        b.mesh.auraRing.rotation.z += dt * 0.6;
+      }
+      if (Math.random() < dt * 0.7 && typeof sparks === "function") {
+        sparks("gold", b.x + (Math.random() - 0.5) * 4, b.y + 0.4, b.z + (Math.random() - 0.5) * 4, 1, { speed: 1.0, up: 1.2, life: 350 });
+      }
+    }
+
+    const buff = getBannerDefenseBuff();
+    const badge = $("warBannerBuffBadge");
+    if (badge) {
+      if (buff.active) {
+        badge.hidden = false;
+        badge.textContent = `🛡️ ธงชัยอาคม (${buff.text})`;
+      } else {
+        badge.hidden = true;
+      }
+    }
+  }
+
+  window.MontraBanner = {
+    plantBanner: plantWarBanner,
+    removeBanner: removeWarBanner,
+    getNearbyBanners,
+    getBannerDefenseBuff,
+    isBannerActive: () => activeWarBanners.size > 0,
+    getActiveBanners: () => Array.from(activeWarBanners.values()),
+    updateBanners,
+    clearAllBanners: () => { for (const id of activeWarBanners.keys()) removeWarBanner(id); },
+    getCooldownRemaining: () => Math.max(0, BANNER_COOLDOWN - (performance.now() - lastBannerPlantTime))
+  };
+

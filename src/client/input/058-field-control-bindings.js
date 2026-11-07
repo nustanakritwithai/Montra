@@ -61,10 +61,20 @@
   }
   $("mountButton").onclick=toggleFieldMount;
   $("menuMount").onclick=()=>{closeDrawer();toggleFieldMount();};
+  function triggerWarBanner() {
+    if (window.MontraBanner?.plantBanner) {
+      window.MontraBanner.plantBanner();
+    }
+  }
+  const bannerBtn = $("bannerButton");
+  if (bannerBtn) bannerBtn.onclick = triggerWarBanner;
   addEventListener("keydown", e => {
-    if (e.key?.toLowerCase() === "h" && !e.repeat && !e.defaultPrevented) {
-      const t = e.target;
-      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.closest?.('button,a[href],summary,[role="button"]'))) return;
+    if (e.repeat || e.defaultPrevented) return;
+    const t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.closest?.('button,a[href],summary,[role="button"]'))) return;
+    if (e.key?.toLowerCase() === "h") {
       toggleFieldMount();
+    } else if (e.key?.toLowerCase() === "b") {
+      triggerWarBanner();
     }
   });
