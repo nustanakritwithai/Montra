@@ -5,12 +5,193 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { assembleClient, checkClient, clientRoot, prepareClient, writeClient } from './build-client.mjs';
+import { assembleClient, checkClient, clientModules, clientRoot, prepareClient, writeClient } from './build-client.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
-test('initial extraction retains every baseline byte and one unchanged IIFE', () => {
+// Explicit reversible substitutions for this extraction only. This is not a new
+// baseline: reconstructing the original bytes still uses the historical SHA below.
+function itemPresentationRestoration(current) {
+  const dependencies = [
+    ['statNames', 'getStatNames'], ['bodyLabels', 'getBodyLabels'], ['preferredGearSlot', 'getPreferredGearSlot'],
+    ['WEAPON_META', 'getWeaponMeta'], ['personalItems', 'getPersonalItems'], ['gearSymbols', 'getGearSymbols'],
+    ['POTION_ITEM_ID', 'getPotionItemId'], ['SHRINE_SHARD', 'getShrineShard'], ['document', 'getDocument'],
+    ['inventoryState', 'getInventoryState'], ['gearGuides', 'getGearGuides'], ['forgeNames', 'getForgeNames'],
+    ['$', 'getElementLookup'], ['currentEquippedWeaponSlot', 'getCurrentEquippedWeaponSlot'], ['ownServerCharacter', 'getOwnServerCharacter'],
+  ];
+  const names = ['statLine', 'wearPositions', 'gearDestination', 'bagMeta', 'itemSymbol', 'getItemArtKey', 'createItemTile', 'renderItemTile', 'renderItemPreview', 'wornGearAt', 'pieceStat', 'gearComparison', 'pieceForgeRatings', 'forgeComparison'];
+  const module = readFileSync(join(clientRoot, 'src/client-modules/item-presentation.js'), 'utf8');
+  const start = module.indexOf('  function statLine('), end = module.indexOf('    return Object.freeze', start);
+  assert(start > 0 && end > start);
+  const body = module.slice(start, end);
+  const header = '// Read-only item display and comparison. Authoritative state stays in the shell.\n' +
+    '// Getter dependencies preserve live lexical reads, evaluation order and bare calls.\n' +
+    '"use strict";\nglobalThis.MontraItemPresentation = Object.freeze({\n' +
+    '  create({ ' + dependencies.map(([, getter]) => getter).join(', ') + ' }) {\n';
+  const footer = '    return Object.freeze({ ' + names.join(', ') + ' });\n  },\n});\n';
+  assert.equal(module, header + body + footer, 'Only the reviewed factory/API may surround the extracted functions');
+  const declarations = [...body.matchAll(/^  function (\w+)\(([^\n]*?)\)/gm)];
+  assert.deepEqual(declarations.map(match => match[1]), names);
+  const replacements = declarations.map((match, index) => {
+    let original = body.slice(match.index, declarations[index + 1]?.index ?? body.length);
+    for (const [name, getter] of dependencies) original = original.replaceAll(getter + '()', name);
+    const args = match[2].split(',').map(param => param.split('=')[0].trim()).join(',');
+    const wrapper = `  function ${match[1]}(${match[2]}){return itemPresentation.${match[1]}(${args});}\n`;
+    assert.equal(current.split(wrapper).length, 2, `Exactly one reviewed forwarding declaration: ${match[1]}`);
+    return [wrapper, original];
+  });
+  const wiring = '  const itemPresentation = globalThis.MontraItemPresentation.create({\n' +
+    dependencies.map(([name, getter]) => `    ${getter}: () => ${name},\n`).join('') + '  });\n';
+  assert.equal(current.split(wiring).length, 2, 'Exactly one lazy shell dependency binding');
+  return text => {
+    text = text.replace(wiring, '');
+    for (const [wrapper, original] of replacements) text = text.replace(wrapper, original);
+    return text;
+  };
+}
+
+function voiceGuidanceRestoration(current) {
+  const dependencies = [
+    ['document', 'getDocument'], ['window', 'getWindow'], ['localStorage', 'getStorage'],
+    ['performance', 'getPerformance'], ['setTimeout', 'getSetTimeout'], ['clearTimeout', 'getClearTimeout'],
+  ];
+  const declarations = [
+    ['triggerCombatCallout', 'key'], ['isVoiceGuidanceEnabled', ''], ['setVoiceGuidanceEnabled', 'enabled'],
+    ['ensureVoiceGuidanceHud', ''], ['hideVoiceGuidanceHud', ''], ['triggerVoiceGuidance', 'stepKey'],
+  ];
+  const module = readFileSync(join(clientRoot, 'src/client-modules/voice-guidance.js'), 'utf8');
+  const header = '// Voice guidance and tactical callouts. The shell retains gameplay and audio ownership.\n' +
+    '// Lazy browser dependencies preserve live reads, method receivers and timer bare calls.\n' +
+    '"use strict";\nglobalThis.MontraVoiceGuidance = Object.freeze({\n' +
+    '  create({ ' + dependencies.map(([, getter]) => getter).join(', ') + ' }) {\n';
+  const footer = '    return Object.freeze({ ' + declarations.map(([name]) => name).join(', ') + ' });\n  },\n});\n';
+  assert(module.startsWith(header) && module.endsWith(footer), 'Only the reviewed voice controller factory/API may surround the original body');
+  let original = module.slice(header.length, -footer.length);
+  assert.deepEqual([...original.matchAll(/^  function (\w+)\(([^\n]*?)\)/gm)].map(match => [match[1], match[2]]), declarations);
+  for (const [name, getter] of dependencies) original = original.replaceAll(getter + '()', name);
+  const wiring = '  const voiceGuidance = globalThis.MontraVoiceGuidance.create({\n' +
+    dependencies.map(([name, getter]) => `    ${getter}: () => ${name},\n`).join('') + '  });\n';
+  const wrappers = declarations.map(([name, args]) => `  function ${name}(${args}){return voiceGuidance.${name}(${args});}\n`).join('');
+  const binding = wiring + wrappers + '\n';
+  assert.equal(current.split(binding).length, 2, 'Exactly one controller binding with the reviewed forwarding declarations');
+  return text => text.replace(binding, original);
+}
+
+function pointerGesturesRestoration(current) {
+  const module = readFileSync(join(clientRoot, 'src/client-modules/pointer-gestures.js'), 'utf8');
+  const header = '// Pointer gestures own page-lifetime input state; gameplay stays in synchronous shell callbacks.\n' +
+    '// Installation preserves lazy DOM reads, listener order and partial registration failures.\n' +
+    '"use strict";\nglobalThis.MontraPointerGestures = Object.freeze({\n' +
+    '  create({ camera, getWorld, getDocument, getWindow, getPerformance, setCameraZoom, onWorldTap, onSwipeDash }) {\n' +
+    '    function install() {\n';
+  const footer = '    }\n    return Object.freeze({ install });\n  },\n});\n';
+  assert(module.startsWith(header) && module.endsWith(footer), 'Only the reviewed gesture factory/install envelope is allowed');
+  let gestures = module.slice(header.length, -footer.length);
+  const initializer = '  let pointer = null;\n';
+  assert(gestures.startsWith(initializer));
+  gestures = gestures.slice(initializer.length);
+  for (const [from, to] of [['getWorld()', 'ui.world'], ['getDocument()', 'document'], ['getWindow()', 'window'], ['getPerformance()', 'performance']]) gestures = gestures.replaceAll(from, to);
+  assert.equal(gestures.split('    onWorldTap(event);\n').length, 2);
+  assert.equal(gestures.split('      onSwipeDash(dx, dy);').length, 2);
+  gestures = gestures.replace('      onSwipeDash(dx, dy);', '      requestSwipeDash(dx, dy);');
+  const wiring = '  const pointerGestures = globalThis.MontraPointerGestures.create({\n' +
+    '    camera,\n    getWorld: () => ui.world,\n    getDocument: () => document,\n' +
+    '    getWindow: () => window,\n    getPerformance: () => performance,\n' +
+    '    setCameraZoom,\n    onWorldTap: handleWorldTap,\n    onSwipeDash: requestSwipeDash,\n' +
+    '  });\n  pointerGestures.install();\n\n';
+  const worldStart = '  function handleWorldTap(event) {\n';
+  const worldEnd = '  }\n\n  // Direction is relative to the CURRENT camera';
+  const start = current.indexOf(worldStart), end = current.indexOf(worldEnd, start);
+  assert(start > 0 && end > start);
+  const worldBody = current.slice(start + worldStart.length, end);
+  const dashStart = end + '  }\n\n'.length;
+  const dashEnd = current.indexOf('  let drawerActive = null;', dashStart);
+  assert(dashEnd > dashStart);
+  const dashFunctions = current.slice(dashStart, dashEnd);
+  const shell = wiring + worldStart + worldBody + '  }\n\n' + dashFunctions;
+  assert.equal(current.split(shell).length, 2, 'Exactly one reviewed shell binding and verbatim world/dash declarations');
+  const dashAnchor = '  // The invisible gesture area extends ABOVE';
+  assert.equal(gestures.split(dashAnchor).length, 2);
+  const original = gestures.replace('    onWorldTap(event);\n', worldBody).replace(dashAnchor, dashFunctions + dashAnchor);
+  const networkEnd = '      connectionPending = false;\n    }\n  }\n\n';
+  assert.equal(current.split(networkEnd).length, 2, 'Exactly one original pointer initialization site');
+  return text => text.replace(shell, original).replace(networkEnd, networkEnd + initializer);
+}
+
+function lightingControllerRestoration(current) {
+  const dependencies = [
+    ['activeMapId', 'getActiveMapId'], ['sky', 'getSky'], ['mistLayers', 'getMistLayers'],
+    ['matchMedia', 'getMatchMedia'], ['location', 'getLocation'], ['URLSearchParams', 'getURLSearchParams'],
+  ];
+  const declarations = [
+    ['followShadow', 'target'], ['syncShadowLists', ''], ['watchFrameRate', 'dt'],
+    ['addLightSpot', 'x, y, z, hex = "#ffae5a", strength = 1'],
+    ['addMovingLight', 'node, hex, strength = 1, lift = 1.2'], ['updateLanternLights', 'target, dt, t'],
+  ];
+  const module = readFileSync(join(clientRoot, 'src/client-modules/lighting-controller.js'), 'utf8');
+  const header = '// Page-lifetime light objects, shadow adaptation and the nearest-lantern pool.\n' +
+    '// The shell owns atmosphere writes; lazy getters preserve live reads and TDZ boundaries.\n' +
+    '"use strict";\nglobalThis.MontraLightingController = Object.freeze({\n' +
+    '  create({ B, engine, scene, camera, ' + dependencies.map(([, getter]) => getter).join(', ') + ' }) {\n';
+  const footer = '    return Object.freeze({ moon, keyLight, warm, MAX_LIGHTS, ' +
+    declarations.map(([name]) => name).join(', ') + ', clearTransientLightSpots, tickShadows });\n  },\n});\n';
+  assert(module.startsWith(header) && module.endsWith(footer), 'Only the reviewed lighting factory/API may surround the original block');
+  let original = module.slice(header.length, -footer.length);
+  const clear = '    for(let i=lightSpots.length-1;i>=0;i--)if(lightSpots[i].map!=="ritual_village")lightSpots.splice(i,1);\n';
+  const tick = '    if ((shadowSyncIn -= dt) <= 0) { shadowSyncIn = .5; syncShadowLists(); }\n';
+  const movedStatements = '  function clearTransientLightSpots() {\n' + clear + '  }\n' +
+    '  function tickShadows(dt) {\n' + tick + '  }\n';
+  assert(original.endsWith(movedStatements), 'Only the exact backward-removal and frame-timer statements may move');
+  original = original.slice(0, -movedStatements.length);
+  assert.deepEqual([...original.matchAll(/^  function (\w+)\(([^\n]*?)\)/gm)].map(match => [match[1], match[2]]), declarations);
+  original = original.replaceAll('new (getURLSearchParams())(', 'new URLSearchParams(');
+  for (const [name, getter] of dependencies) original = original.replaceAll(getter + '()', name);
+  const wiring = '  const lightingController = globalThis.MontraLightingController.create({\n    B, engine, scene, camera,\n' +
+    dependencies.map(([name, getter]) => `    ${getter}: () => ${name},\n`).join('') +
+    '  });\n  const { moon, keyLight, warm, MAX_LIGHTS } = lightingController;\n';
+  const wrappers = declarations.map(([name, params]) => {
+    const args = params.split(',').map(param => param.split('=')[0].trim()).join(',');
+    return `  function ${name}(${params}){return lightingController.${name}(${args});}\n`;
+  }).join('') + '  function clearTransientLightSpots(){return lightingController.clearTransientLightSpots();}\n' +
+    '  function tickShadows(dt){return lightingController.tickShadows(dt);}\n';
+  const binding = wiring + wrappers;
+  for (const site of [binding, '    clearTransientLightSpots();\n', '    tickShadows(dt);\n']) {
+    assert.equal(current.split(site).length, 2, 'Exactly one reviewed lighting replacement site');
+  }
+  return text => text.replace(binding, original).replace('    clearTransientLightSpots();\n', clear).replace('    tickShadows(dt);\n', tick);
+}
+
+test('module extraction preserves the historical byte freeze outside the exact helper replacement', () => {
   const baseline = JSON.parse(readFileSync(join(clientRoot, 'src/client/extraction-baseline.json')));
-  const bytes = assembleClient();
+  const current = assembleClient();
+  const moduleText = readFileSync(join(clientRoot, 'src/client-modules/character-slot-storage.js'), 'utf8');
+  const start = moduleText.indexOf('  function preferredSlotKey');
+  const end = moduleText.indexOf('    return Object.freeze', start);
+  assert(start > 0 && end > start);
+  const originalHelpers = moduleText.slice(start, end)
+    .replaceAll('new URLConstructor(', 'new URL(').replaceAll('getStorage().', 'localStorage.');
+  const wiring = '  const { preferredSlotKey, slotPreviewKey, getPreferredSlot, readSlotPreviews, rememberSlotPreviews } =\n    globalThis.MontraSlotStorage.create({ getStorage: () => localStorage, URL });\n';
+  assert.equal(current.toString().split(wiring).length, 2, 'Exactly one explicit shell binding');
+  const worldModule = readFileSync(join(clientRoot, 'src/client-modules/world-math.js'), 'utf8');
+  const terrainStart = worldModule.indexOf('  function terrainCell(');
+  const smoothStart = worldModule.indexOf('  function smoothPath(');
+  const worldEnd = worldModule.indexOf('  return Object.freeze', smoothStart);
+  assert(terrainStart > 0 && smoothStart > terrainStart && worldEnd > smoothStart);
+  const terrainHelpers = worldModule.slice(terrainStart, smoothStart);
+  const smoothHelper = worldModule.slice(smoothStart, worldEnd);
+  const worldBinding = '  const { terrainCell, terrainHeight, smoothPath } = globalThis.MontraWorldMath;\n';
+  const terrainAnchor = '  // Clip each footprint against the actual terrain faces.';
+  const smoothAnchor = '  // Roads: Chaikin-smoothed ribbons with a soft dark verge and rounded ends.\n';
+  for (const anchor of [worldBinding, terrainAnchor, smoothAnchor]) {
+    assert.equal(current.toString().split(anchor).length, 2, 'Exactly one world-math binding/replacement site');
+  }
+  const restoreItems = itemPresentationRestoration(current.toString());
+  const restoreVoice = voiceGuidanceRestoration(current.toString());
+  const restoreGestures = pointerGesturesRestoration(current.toString());
+  const restoreLighting = lightingControllerRestoration(current.toString());
+  const restore = text => restoreItems(restoreVoice(restoreGestures(restoreLighting(text)))).replace(wiring, originalHelpers)
+    .replace(worldBinding, '').replace(terrainAnchor, terrainHelpers + terrainAnchor)
+    .replace(smoothAnchor, smoothAnchor + smoothHelper);
+  const bytes = Buffer.from(restore(current.toString()));
   assert.equal(bytes.length, 1372310);
   assert.equal(hash(bytes), 'a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf');
   assert.equal(bytes.length, baseline.bytes);
@@ -18,7 +199,7 @@ test('initial extraction retains every baseline byte and one unchanged IIFE', ()
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
-    const fragment = readFileSync(join(clientRoot, 'src/client', entry.path));
+    const fragment = Buffer.from(restore(readFileSync(join(clientRoot, 'src/client', entry.path), 'utf8')));
     assert.equal(fragment.length, entry.bytes, entry.path);
     assert.equal(hash(fragment), entry.sha256, entry.path);
   }
@@ -86,7 +267,7 @@ test('valid source-only changes require rebuilding; missing files and invalid ma
   });
 });
 
-for (const relative of ['src', 'src/client', 'src/client/core', 'src/client/manifest.json', 'src/client/core/001-storage-and-dom.js']) {
+for (const relative of ['src', 'src/client', 'src/client/core', 'src/client/manifest.json', 'src/client/core/001-storage-and-dom.js', 'src/client-modules', ...clientModules]) {
   test(`reject source symlink: ${relative}`, () => {
     withClientFixture(temp => {
       const original = join(temp, relative);
@@ -156,3 +337,19 @@ test('clean-checkout CLI preparation succeeds; strict check and stale preparatio
     assert.equal(readFileSync(output, 'utf8'), 'stale');
   });
 });
+
+for (const relative of clientModules) {
+  test(`module omissions and malformed module syntax fail before generated client checks: ${relative}`, () => {
+    withClientFixture(temp => {
+      const file = join(temp, relative);
+      const original = readFileSync(file);
+      rmSync(file);
+      assert.throws(() => checkClient(temp), /Unlisted or missing client module/);
+      writeFileSync(file, 'const = ;');
+      assert.throws(() => checkClient(temp), SyntaxError);
+      writeFileSync(file, original);
+      writeFileSync(join(temp, 'src/client-modules/unlisted.js'), '');
+      assert.throws(() => checkClient(temp), /Unlisted or missing client module/);
+    });
+  });
+}

@@ -1,6 +1,6 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const source=fs.readFileSync('main.js','utf8');
-const start=source.indexOf('  const CAMERA_ZOOM_MIN ='),end=source.indexOf('  const moon =',start);assert(start>=0&&end>start);
+const source=fs.readFileSync('main.js','utf8')+'\n'+fs.readFileSync('src/client-modules/pointer-gestures.js','utf8');
+const start=source.indexOf('  const CAMERA_ZOOM_MIN ='),end=source.indexOf('  const lightingController =',start);assert(start>=0&&end>start);
 class Vector3{constructor(x,y,z){Object.assign(this,{x,y,z});}}
 class ArcRotateCamera{constructor(name,alpha,beta,radius,target){Object.assign(this,{name,alpha,beta,radius,target});}}
 const {camera,setCameraZoom}=vm.runInNewContext(source.slice(start,end)+'\n({camera,setCameraZoom})',{B:{Vector3,ArcRotateCamera},scene:{}});

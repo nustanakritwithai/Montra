@@ -29,8 +29,8 @@ function fixture(){
     medicine:{name:'ยาทดสอบ',kind:'consumable',stats:{}},tool:{name:'เบ็ด',kind:'tool',stats:{}},
   };
   const ctx={document:{createElement:node},$:id=>hosts.get(id),personalItems:items,
-    WEAPON_META:{legacy:{name:'กริชเก่า',symbol:'†',bonus:''}},POTION_ITEM_ID:'health_potion',SHRINE_SHARD:'shrine_shard',statLine:()=>'',inventoryState:{slots:[]}};
-  vm.createContext(ctx);
+    WEAPON_META:{legacy:{name:'กริชเก่า',symbol:'†',bonus:''}},POTION_ITEM_ID:'health_potion',SHRINE_SHARD:'shrine_shard',statNames:{},statLine:()=>'',inventoryState:{slots:[]}};
+  vm.createContext(ctx);require('./fixtures/item-presentation-loader.cjs').install(ctx);
   vm.runInContext(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function bagMeta(','  function wornGearAt(')+slice('  function renderEconomyItemPreviews(','  function openEconomy('),ctx);
   const host=id=>{const element=node();hosts.set(id,element);return element;};
   return {ctx,host,hosts,items};
@@ -139,7 +139,7 @@ test('all item display surfaces use shared thumbnails while interactive inventor
   assert.match(source,/<button type="button" class="bag-slot bag-filled equip-candidate-slot/);
   assert.match(source,/class="bag-slot wear-tile"/);assert.match(source,/<button type="button" class="bag-slot" id="bagSlot/);
   assert.match(source,/slot\.querySelector\("\.bag-symbol"\)\.textContent = itemSymbol\(item\?\.itemId\)/);
-  assert.doesNotMatch(slice('  function createItemTile(','  function wornGearAt('),/economySend|addEventListener|\.onclick\s*=/,'display helpers must never send or bind mutations');
+  assert.doesNotMatch(require('./fixtures/item-presentation-loader.cjs').moduleSource,/economySend|addEventListener|\.onclick\s*=/,'display helpers must never send or bind mutations');
 });
 
 test('forge hidden materials and centered modal controls keep the shared theme',()=>{

@@ -292,7 +292,7 @@
     driftClouds(camera.target, elapsed); updateStrikeLight(performance.now());
     keyLight.intensity = atmosphere.keyI * 1.65 * (1 - .22 * cloudCover);
     stormFlash(dt);
-    if ((shadowSyncIn -= dt) <= 0) { shadowSyncIn = .5; syncShadowLists(); }
+    tickShadows(dt);
     rippleTexture.vOffset = (rippleTexture.vOffset + dt * .025) % 1;
     riverRipple.uOffset = (riverRipple.uOffset + dt * .012) % 1;
     // The horizon only enters the portrait frustum at shallow camera tilts.

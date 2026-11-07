@@ -16,7 +16,7 @@ const env={personalItems:items,inventoryState:gear,gearGuides:{level:100,baseMan
   currentEquippedWeaponSlot:()=>0,ownServerCharacter:()=>({level:100}),economyReady:()=>true,
   statNames:{atk:"โจมตี",def:"ป้องกัน",mana:"มานา"},forgeNames:{melee:"ประชิด",healing:"รักษา"},
   WEAPON_META:{ritual_dagger:{melee:4}},bodyLabels:{leftRing:"แหวนซ้าย",rightRing:"แหวนขวา"}};
-const api=vm.runInNewContext(section("  function statLine(","  const bodyLabels")+
+const api=vm.runInNewContext(require('./fixtures/item-presentation-loader.cjs').prelude+section("  function statLine(","  const bodyLabels")+
   section("  function wearPositions(","  function gearDestination")+
   section("  function wornGearAt(","  let demoWeaponSlot")+
   section("  function guideDestination(","  function selectGuideCopy")+

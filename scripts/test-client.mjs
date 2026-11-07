@@ -1,4 +1,4 @@
-import { prepareClient } from './build-client.mjs';
+import { prepareClient, clientModules } from './build-client.mjs';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -8,7 +8,7 @@ import { root } from './build-site.mjs';
 const tests = readdirSync(join(root, 'deploy/combat')).filter(file => file.endsWith('test.cjs') && !file.includes('-browser-')).sort();
 prepareClient();
 let failed = 0;
-for (const file of ['main.js', 'audio.js', 'account-entry.js']) {
+for (const file of ['main.js', 'audio.js', 'account-entry.js', ...clientModules]) {
   const result = spawnSync(process.execPath, ['--check', file], { cwd: root, stdio: 'inherit', timeout: 30_000 });
   if (result.status !== 0) failed++;
 }
@@ -17,5 +17,5 @@ for (const file of tests) {
   const result = spawnSync(process.execPath, [join('deploy/combat', file)], { cwd: root, stdio: 'inherit', timeout: 30_000 });
   if (result.status !== 0) { console.error(`FAIL ${file}: ${result.error?.message || result.signal || result.status}`); failed++; }
 }
-console.log(`\nClient checks: ${tests.length} fixtures + 3 syntax checks; ${failed} failures`);
+console.log(`\nClient checks: ${tests.length} fixtures + ${3 + clientModules.length} syntax checks; ${failed} failures`);
 process.exitCode = failed ? 1 : 0;

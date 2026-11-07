@@ -119,7 +119,7 @@ Object.assign(context,{drawerActive:null,localId:"hunter",localStorage:ui.localS
 context.room.sessionId="hunter";context.room.state.monsters=new Map([["belfry2",{alive:true,x:12,z:8}],["wrong",{alive:true,x:11,z:7}],["bell",{alive:false,x:5,z:5}]]);
 context.gearGuides={path:me.pathId,level:10,starterHunt:camp,journey,builds:[{style:"pressure",slots:[{id:"plate",position:"chest"},{id:"guard",position:"offHand"}]}]};
 const comparisons=source.slice(source.indexOf("  function wornGearAt("),source.indexOf("  let demoWeaponSlot"));
-const journeyApi=vm.runInNewContext("let journeyOwner='',journeyNotes={};\n"+fieldSource+drawerSource+comparisons+
+const journeyApi=vm.runInNewContext(require('./fixtures/item-presentation-loader.cjs').prelude+"let journeyOwner='',journeyNotes={};\n"+fieldSource+drawerSource+comparisons+
   "\n({goal:fieldGearGoal,draw:renderFieldGoalDrawer,start:startJourneyPractice,cast:recordPracticeCast,kill:recordPracticePrey,notes:journeyNotesForPlayer,save:saveJourney})",context);
 let step=journeyApi.goal();assert.equal(step.recipe,"newWrap");assert.equal(step.to,context.room.state.monsters.get("belfry2"));
 journeyApi.draw(step);assert.match(get("fieldGearCompare").textContent,/เก็บ ผ้าพันหมัด \+3 ไว้ได้/);

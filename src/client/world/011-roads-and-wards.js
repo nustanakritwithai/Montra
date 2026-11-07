@@ -52,18 +52,6 @@
   const portalYantraMat = additiveMat("portal yantra", squareYantraTexture("portal yantra", "rgba(150,255,230,.95)", "#5fffe0"));
   const restYantraMat = additiveMat("rest yantra", squareYantraTexture("rest yantra", "rgba(255,206,120,.4)", "#ffb35a"));
   // Roads: Chaikin-smoothed ribbons with a soft dark verge and rounded ends.
-  function smoothPath(points, iterations = 3) {
-    let p = points.map(q => ({ x: q.x, z: q.z }));
-    for (let it = 0; it < iterations; it++) {
-      const out = [p[0]];
-      for (let i = 0; i < p.length - 1; i++) {
-        const a = p[i], b = p[i + 1];
-        out.push({ x: a.x * .75 + b.x * .25, z: a.z * .75 + b.z * .25 }, { x: a.x * .25 + b.x * .75, z: a.z * .25 + b.z * .75 });
-      }
-      out.push(p[p.length - 1]); p = out;
-    }
-    return p;
-  }
   function ribbonMesh(name, points, width, material, y, seed = 0, wobble = .12) {
     const positions = [], uvs = [], normals = [], indices = [];
     let dist = 0;
