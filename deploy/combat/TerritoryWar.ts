@@ -27,7 +27,19 @@ export const warSites=Object.fromEntries(Object.entries(PROVINCES).filter(([,p])
   .map(([id,p])=>[id,p.sites.find(s=>s.kind==="fort")!]));
 export type WarMember={id:string;officer:boolean;commander?:boolean};
 type Battle={seq:number;site:string;incumbent:string|null;attacker:string;defender:string|null;started:number;
-  progress:number;sample:number;ended:number|null;winner:string|null;gate_hp:number;gate_open:number;pilot_json:string|null;city_json:string|null};
+  progress:number;sample:number;ended:number|null;winner:string|null;gate_hp:number;gate_open:number;gates_json:string|null;pilot_json:string|null;city_json:string|null};
+export type FieldGate={hp:number;open:boolean};
+export type FieldGateView={hp:number;closed:boolean};
+const GATE_HP=120;
+const fieldGateIds=(site:string)=>PROVINCES[site]?.rampart?.gates.map(g=>g.id) ?? [];
+/** Ordinary fields store one state per gate. Rows written before gates_json existed
+ * seed every gate from the legacy single gate_hp/gate_open pair. */
+function fieldGates(b:Pick<Battle,"site"|"gate_hp"|"gate_open"|"gates_json">):Record<string,FieldGate>{
+  const saved=b.gates_json?JSON.parse(b.gates_json) as Record<string,FieldGate>:{};
+  return Object.fromEntries(fieldGateIds(b.site).map(id=>[id,saved[id] ?? {hp:b.gate_hp,open:!!b.gate_open}]));
+}
+const gateViews=(gates:Record<string,FieldGate>,active:boolean)=>Object.fromEntries(Object.entries(gates)
+  .map(([id,g])=>[id,{hp:active?g.hp:GATE_HP,closed:active && g.hp>0 && !g.open}])) as Record<string,FieldGateView>;
 export type Battlefield={site:string;seq:number};
 export type WarSide="attack"|"defend";
 
@@ -49,6 +61,8 @@ export class TerritoryWar {
     const cols=db.prepare("PRAGMA table_info(territory_battles)").all();
     if(!cols.some(c=>c.name==="gate_hp"))db.exec("ALTER TABLE territory_battles ADD COLUMN gate_hp INTEGER NOT NULL DEFAULT 120");
     if(!cols.some(c=>c.name==="gate_open"))db.exec("ALTER TABLE territory_battles ADD COLUMN gate_open INTEGER NOT NULL DEFAULT 0");
+    // Additive only: legacy gate_hp/gate_open stay and remain a summary (lowest HP, any gate open).
+    if(!cols.some(c=>c.name==="gates_json"))db.exec("ALTER TABLE territory_battles ADD COLUMN gates_json TEXT");
     if(!cols.some(c=>c.name==="pilot_json"))db.exec("ALTER TABLE territory_battles ADD COLUMN pilot_json TEXT");
     if(!cols.some(c=>c.name==="city_json"))db.exec("ALTER TABLE territory_battles ADD COLUMN city_json TEXT");
     this.government=new TerritoryGovernment(db);
@@ -78,7 +92,7 @@ export class TerritoryWar {
       if(changed){
         const siege=b.pilot_json?(JSON.parse(b.pilot_json) as PilotState).siege:undefined;
         const gates=siege?.gates ?? (b.city_json?(JSON.parse(b.city_json) as RiverBattle).gates:undefined);
-        const breached=gates?Object.values(gates).some(g=>g.hp===0):b.gate_hp===0;
+        const breached=gates?Object.values(gates).some(g=>g.hp===0):Object.values(fieldGates(b)).some(g=>g.hp===0);
         this.government.settleVictory(b.site,winner,ended,breached);
         if(winner){
           const row=this.db.prepare("SELECT count(*) AS n FROM territory_supply_deliveries WHERE battle=? AND guild=?").get(b.seq,winner);
@@ -114,10 +128,12 @@ export class TerritoryWar {
     const owner=this.guildName(ownerId);
     // A vacant-field timeout has no victor and must not lock out the next war.
     // Owned-field timeouts still award the incumbent a defensive victory.
+    const gates=b && !b.pilot_json && !b.city_json?gateViews(fieldGates(b),active):undefined;
+    const views=gates?Object.values(gates):[];
     const phase=active?"battle":b?.winner && b.ended!=null && now<b.ended+WAR_PROTECTION?"protected":"open";
     return {seq:b?.seq??0,phase,owner,ownerId:owner?ownerId:null,attacker:active?b.attacker:null,defender:active?b.defender:null,
       attackName:active?this.guildName(b.attacker):null,defendName:active?this.guildName(b.defender):null,
-      gateHp:active?b.gate_hp:120,gateClosed:!!(active && b.gate_hp>0 && !b.gate_open),
+      gateHp:views.length?Math.min(...views.map(g=>g.hp)):active?b.gate_hp:GATE_HP,gateClosed:views.some(g=>g.closed),gates,
       pilot:b?.pilot_json?pilotView(JSON.parse(b.pilot_json)):undefined,
       river:b?.city_json?JSON.parse(b.city_json) as RiverBattle:undefined,
       progress:active?b.progress:0,seconds:active?Math.max(0,Math.ceil((b.started+warDuration(site)-now)/1000)):0,
@@ -184,18 +200,25 @@ export class TerritoryWar {
     const row=this.db.prepare("SELECT camp FROM castle_pilot_musters WHERE battle=? AND character=?").get(field.seq,character);
     return Number(row?.camp??0);
   }
-  gate(field:Battlefield,side:WarSide,occupied:boolean,now:number,relaySide:WarSide|null=null):void{
-    this.atomic(()=>{
+  /** Changes one ordinary-field gate; omitted gateId keeps legacy callers on the first gate. */
+  gate(field:Battlefield,side:WarSide,occupied:boolean,now:number,relaySide:WarSide|null=null,gateId?:string):Record<string,FieldGateView>{
+    return this.atomic(()=>{
       const b=this.current(field.site,now);
-      if(!b || b.seq!==field.seq || b.ended!==null || !b.gate_hp)throw Error("war_gate_inactive");
+      if(!b || b.seq!==field.seq || b.ended!==null || b.pilot_json || b.city_json)throw Error("war_gate_inactive");
+      const gates=fieldGates(b),id=gateId ?? fieldGateIds(field.site)[0],gate=id!==undefined?gates[id]:undefined;
+      if(!gate || !gate.hp)throw Error("war_gate_inactive");
       if(side==="attack"){
-        if(b.gate_open)throw Error("war_gate_open");
+        if(gate.open)throw Error("war_gate_open");
         const damage=PROVINCES[field.site].relay?.effect==="gate" && relaySide?(relaySide==="attack"?30:10):15;
-        this.db.prepare("UPDATE territory_battles SET gate_hp=max(0,gate_hp-?) WHERE seq=?").run(damage,b.seq);
+        gate.hp=Math.max(0,gate.hp-damage);
       }else{
-        if(b.gate_open && occupied)throw Error("war_gate_occupied");
-        this.db.prepare("UPDATE territory_battles SET gate_open=? WHERE seq=?").run(b.gate_open?0:1,b.seq);
+        if(gate.open && occupied)throw Error("war_gate_occupied");
+        gate.open=!gate.open;
       }
+      const all=Object.values(gates);
+      this.db.prepare("UPDATE territory_battles SET gates_json=?,gate_hp=?,gate_open=? WHERE seq=?")
+        .run(JSON.stringify(gates),Math.min(...all.map(g=>g.hp)),all.some(g=>g.open)?1:0,b.seq);
+      return gateViews(gates,true);
     });
   }
   riverGate(field:Battlefield,id:string,side:WarSide,occupied:boolean,now:number){

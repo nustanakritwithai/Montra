@@ -3063,16 +3063,15 @@
     }
   }
   const castleDoors=new Map();
-  let provinceDoor=null;
   function syncGateVisual(){
     const local=territoryState?.local;
     for(const [id,ring] of riverPostRings){
       const post=local?.inField && local.phase==="battle" && local.river?.posts.find(p=>p.id===id);
       ring.material=post?.contested?gold:post?.owner==="attack"?warEnemyMat:post?.owner==="defend"?warAllyMat:templeBronze;
     }
-    const gates=local?.river?.gates ?? local?.pilot?.gates;
-    for(const [id,door] of castleDoors)door.setEnabled(Boolean(local?.inField && local.phase==="battle" && gates?.[id]?.closed));
-    if(provinceDoor && !provinceDoor.isDisposed())provinceDoor.setEnabled(territoryState?.local?.site===activeMapId && territoryState.local.gateClosed===true);
+    // Ordinary fields now report every gate separately, like the river city and castle.
+    const gates=local?.river?.gates ?? local?.pilot?.gates ?? local?.gates;
+    for(const [id,door] of castleDoors)door.setEnabled(Boolean(local?.inField && local.site===activeMapId && local.phase==="battle" && gates?.[id]?.closed));
   }
   let appliedVillageTerrain;
   function alignVillage(terrain){
@@ -3448,10 +3447,10 @@
           for(const side of [-1,1]){
             box(x+(horizontal?side*(span/2+.2):0),1.75,z+(horizontal?0:side*(span/2+.2)),horizontal?.55:3.1,3.5,horizontal?3.1:.55,kind==="territory"?provinceFx.timber:provinceFx.laterite);
           }
-          if(kind==="territory" && (castle || river || i===0)){
+          if(kind==="territory"){
             const door=B.MeshBuilder.CreateBox("reinforced city gate",{width:b.width,height:3.45,depth:b.length},scene);
             door.parent=expansionRoot;door.position.set(x,1.725,z);door.material=wooden;door.isPickable=false;
-            if(castle || river)castleDoors.set(g.id,door);else provinceDoor=door;
+            castleDoors.set(g.id,door);
             syncGateVisual();
           }
           if(!city)expansionLabel(g.name,x,z,10,5.2);
@@ -4305,7 +4304,7 @@
     const paint=regionPaint(activeMapId);
     ground.material=paint ? paint.floor : inTemple ? templeFloor : activeMapId==="forbidden_forest" ? forestFloor : groundMat;
     templeCover.length=0;
-    provinceDoor=null;castleDoors.clear();castleRings.clear();riverPostRings.clear();
+    castleDoors.clear();castleRings.clear();riverPostRings.clear();
     for(const child of expansionRoot.getChildren())child.dispose();
     for(const resource of expansionResources)resource.dispose();expansionResources.length=0;expansionLabels.length=0;
     for(let i=lightSpots.length-1;i>=0;i--)if(lightSpots[i].map!=="ritual_village")lightSpots.splice(i,1);
@@ -12395,12 +12394,19 @@
     war_camp_cut:"ส่งกำลังไม่ได้ ตรวจธง ประตู และผู้ท้าชิงในวง",war_camp_base:"เลือกค่ายที่เปิดแล้วยืนที่ฐานรวมพลโดยพ้นการต่อสู้",war_camp_fallback:"ค่ายหน้าใช้ไม่ได้ คุณเกิดที่ฐานรวมพลเดิม",
     war_guild:"ต้องเป็นสมาชิกกิลด์ก่อนเข้าศึก",war_flag:"เดินเข้าวงธงกลางป้อมก่อนเปิดศึก",war_officer:"ให้ผู้บัญชาการหรือนายทหารเปิดศึก",
     war_other_guild:"สนามนี้มีฝ่ายบุกและฝ่ายรับแล้ว",war_side_full:"ผู้เล่นฝ่ายของคุณเต็มแล้ว",war_busy:"รอให้พ้นการต่อสู้และยืนบนพื้นในด่าน",
-    war_gate_repair:"ต้องครองโรงช่างและประตูต้องพ้นการโจมตี 5 วินาที",war_gate_near:"ฝ่ายรับต้องยืนที่ประตูด้านใน",war_gate_occupied:"มีผู้เล่นยืนขวางประตู",war_gate_open:"ประตูเปิดอยู่",war_gate_inactive:"ประตูใช้การไม่ได้แล้ว",
+    war_gate_repair:"ต้องครองโรงช่างและประตูต้องพ้นการโจมตี 5 วินาที",war_gate_near:"ฝ่ายรับต้องยืนที่ประตูด้านใน",war_gate_occupied:"มีผู้เล่นยืนขวางประตู",war_gate_open:"ประตูเปิดอยู่",war_gate_inactive:"ประตูใช้การไม่ได้: พังแล้ว หรือเป็นเมืองร้างที่ประตูเปิดถาวร",
     war_ended:"ศึกนี้จบแล้ว",war_exit:"กลับห้องโลกผ่านหน้าด่านกิลด์",war_unavailable:"ด่านยังเปิดศึกไม่ได้",
     war_not_owner:"เฉพาะกิลด์ผู้ครองด่าน",war_government_role:"ตำแหน่งของคุณทำรายการนี้ไม่ได้",
     war_government_battle:"รอให้ศึกจบก่อนบริหารด่าน",war_government_stale:"บัญชีด่านเปลี่ยนแล้ว ตรวจยอดล่าสุดก่อนทำรายการ",
     war_no_income:"ยังไม่มีรายได้เต็มหน่วยให้เก็บ",war_building_max:"อาคารถึงระดับสูงสุดแล้ว",war_funds:"เงินคลังกิลด์ไม่พอ",
     war_repair_first:"ต้องซ่อมคลังเสบียงก่อนพัฒนาอาคาร",war_no_damage:"คลังเสบียงอยู่ในสภาพพร้อมใช้",war_government_location:"กลับห้องโลกและยืนบนพื้นในด่านที่ครอง"};
+  function warGateText(s){
+    if(s.river && !s.river.defended)return "เมืองร้าง ประตูเปิดถาวร (ไม่มีผู้ครอง จึงปิดหรือทุบประตูไม่ได้)";
+    const defs=worldDefinitions?.[s.site]?.strategic?.rampart?.gates || [];
+    const gates=s.river?.gates || s.pilot?.gates || s.gates;
+    if(!gates)return "ประตู "+(s.gateHp<=0?"พังแล้ว":s.gateClosed?"ปิด":"เปิด")+" "+s.gateHp+"/120";
+    return defs.filter(g=>gates[g.id]).map(g=>{const st=gates[g.id];return (g.name||"ประตู "+g.id)+" "+(st.hp<=0?"พังแล้ว":st.closed?"ปิด":"เปิด")+" "+st.hp+"/120";}).join(" · ");
+  }
   const warPhase=p=>({open:"เปิดให้ท้าชิง",battle:"กำลังรบ",protected:"อยู่ในความคุ้มครอง",finished:"จบศึกแล้ว"})[p] || "กำลังตรวจด่าน";
   const warTime=s=>Math.floor(s/60)+" นาที "+s%60+" วินาที";
   function syncWarQuartermaster(){
@@ -12484,7 +12490,7 @@
     $("warOwner").textContent="ธงครองด่าน · "+(s.owner || "เป็นกลาง")+(s.inField?" · คุณอยู่ฝ่าย"+(s.side==="attack"?"บุก":"รับ"):"");
     $("warStatus").textContent=warPhase(s.phase)+(s.phase==="battle"?" · เหลือ "+warTime(s.seconds)+" · "+s.attackName+" บุก / "+(s.defendName || "รอคู่ชิง")+" รับ":"");
     const fort=worldDefinitions?.[s.site]?.strategic?.sites?.find(site=>site.kind==="fort");
-    $("warFlag").textContent=fort?"ธง ("+fort.x+", "+fort.z+") · รัศมี 5 ม. · บันไดขึ้นลง 2 ทาง ดูจุดสีฟ้าบนแผนที่"+(s.inField?" · ประตู "+(s.gateHp<=0?"พังแล้ว":s.gateClosed?"ปิด":"เปิด")+" "+s.gateHp+"/120":""):"";
+    $("warFlag").textContent=fort?"ธง ("+fort.x+", "+fort.z+") · รัศมี 5 ม. · บันไดขึ้นลง 2 ทาง ดูจุดสีฟ้าบนแผนที่"+(s.inField?" · "+warGateText(s):""):"";
     const isCastle=s.site==="tri_wiang_castle";
     const gauge=$("warGauge");gauge.hidden=isCastle || s.phase!=="battle";gauge.max=s.goal;gauge.value=Math.abs(s.progress);
     $("warCount").textContent=s.phase==="battle"?((s.progress<0?"ฝ่ายรับ":"ฝ่ายบุก")+" ยึดธง "+Math.abs(s.progress)+"/"+s.goal+(s.inField?" · ในวง บุก "+s.attack+" รับ "+s.defend:"")):"";
@@ -17448,7 +17454,7 @@
       return !nearest || distance(g)<distance(nearest)?g:nearest;
     },null);
     const nearGate=gate && authoritative.x>=gate.box.x-2.5 && authoritative.x<=gate.box.x+gate.box.width+2.5 && authoritative.z>=gate.box.z-2.5 && authoritative.z<=gate.box.z+gate.box.length+2.5;
-    const status=nearGate && (riverWar?riverWar.gates[gate.id]:castle?localWar.pilot?.gates?.[gate.id]:{closed:localWar.gateClosed,hp:localWar.gateHp});
+    const status=nearGate && (riverWar?riverWar.gates[gate.id]:castle?localWar.pilot?.gates?.[gate.id]:localWar.gates?.[gate.id] ?? {closed:localWar.gateClosed,hp:localWar.gateHp});
     const inside=gate && (gate.side==="west"?authoritative.x>gate.box.x+gate.box.width/2:gate.side==="east"?authoritative.x<gate.box.x+gate.box.width/2:
       gate.side==="north"?authoritative.z>gate.box.z+gate.box.length/2:authoritative.z<gate.box.z+gate.box.length/2);
     siege.hidden=!(status?.hp && (!castle || localWar.pilot?.throne?.defended) && (!riverWar || riverWar.defended) && (localWar.side==="attack"?status.closed:inside));

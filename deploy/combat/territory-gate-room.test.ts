@@ -27,14 +27,34 @@ test("ordinary gate handler opens either nearest gate but keeps defender inside/
     player.x=x;player.z=z;player.y=groundAt(field.site,x,z);
     inside.gateActions.clear();replies.length=0;inside.useCityGate(client,{});
   };
+  const gates=()=>store.war.inspect(field.site,now).gates;
   use(-22,-38.1);
-  assert.deepEqual(replies,[]);assert.equal(store.war.inspect(field.site,now).gateClosed,false);
+  assert.deepEqual(replies,[]);assert.deepEqual(gates(),{"south--18":{hp:120,closed:true},"north--22":{hp:120,closed:false}});
+  // The room's movement guard follows the per-gate state it just wrote.
+  const mv=room as unknown as Movement;
+  assert.deepEqual([...mv.closedFieldGates],["south--18"]);
+  assert.equal(mv.canOccupy(-18,-20,0,false,"river_watch"),false,"closed south gate still blocks");
+  assert.equal(mv.canOccupy(-22,-40,0,false,"river_watch"),true,"opened north gate lets players through");
   use(-18,-22);
-  assert.deepEqual(replies,[]);assert.equal(store.war.inspect(field.site,now).gateClosed,true);
+  assert.deepEqual(replies,[]);assert.deepEqual(gates(),{"south--18":{hp:120,closed:false},"north--22":{hp:120,closed:false}});
   use(-22,-41.9);
   assert.deepEqual(replies,[{type:"territory_error",data:{reason:"war_gate_near"}}]);
-  assert.equal(store.war.inspect(field.site,now).gateClosed,true);
+  assert.equal(gates()!["north--22"].closed,false);
   use(-22,-30);
   assert.deepEqual(replies,[{type:"territory_error",data:{reason:"war_gate_near"}}]);
-  assert.equal(store.war.inspect(field.site,now).gateClosed,true);
+  assert.equal(gates()!["south--18"].closed,false);
+});
+
+type Movement={closedFieldGates:Set<string>;canOccupy(x:number,z:number,feetY:number,flying?:boolean,mapId?:string):boolean};
+test("every closed ordinary gate blocks movement, not only the first gate",()=>{
+  const room=new MyRoom(),inside=room as unknown as Movement & {field:Battlefield};
+  inside.field={site:"river_watch",seq:1};
+  const north={x:-22,z:-41.4+1.4},south={x:-18,z:-21.4+1.4};
+  const free=(p:{x:number;z:number})=>inside.canOccupy(p.x,p.z,0,false,"river_watch");
+  inside.closedFieldGates=new Set();
+  assert.equal(free(north),true);assert.equal(free(south),true);
+  inside.closedFieldGates=new Set(["north--22"]);
+  assert.equal(free(north),false,"closed north gate blocks");assert.equal(free(south),true);
+  inside.closedFieldGates=new Set(["south--18","north--22"]);
+  assert.equal(free(north),false);assert.equal(free(south),false);
 });

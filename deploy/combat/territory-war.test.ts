@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import {tmpdir} from "node:os";
 import {mkdtempSync,rmSync} from "node:fs";
+import {DatabaseSync} from "node:sqlite";
 import {GuildStore} from "./GuildStore.js";
 import {WAR_PROTECTION,WAR_DURATION,WAR_HOLD,warEntryDamageFactor,warParticipationExperience} from "./TerritoryWar.js";
 
@@ -50,7 +51,9 @@ test("capture progress, contested flags, deadline, independent protection and du
     assert.equal(store.war.inspect(f.site,start).phaseEndsAt,start+WAR_DURATION);
     assert.throws(()=>store.war.start("moon_pass",b,start),/war_unavailable/);
     assert.equal(store.war.side(f,b,start,true),"defend");
-    store.war.gate(f,"defend",false,start);assert.equal(store.war.inspect(f.site,start).gateClosed,false);
+    const [first,second]=Object.keys(store.war.inspect(f.site,start).gates!);
+    store.war.gate(f,"defend",false,start);assert.equal(store.war.inspect(f.site,start).gates![first].closed,false);
+    assert.equal(store.war.inspect(f.site,start).gates![second].closed,true,"only the used gate opens");
     assert.throws(()=>store.war.gate(f,"defend",true,start),/occupied/);
     store.war.gate(f,"defend",false,start);store.war.gate(f,"attack",false,start);
     for(let i=1;i<=4;i++)store.war.advance(f,start+i*1000,2,2);
@@ -60,7 +63,10 @@ test("capture progress, contested flags, deadline, independent protection and du
     store.close();store=new GuildStore(file);
     assert.equal(store.war.inspect(f.site,start+40_000).gateHp,105);
     for(let i=0;i<7;i++)store.war.gate(f,"attack",false,start+40_000);
-    assert.equal(store.war.inspect(f.site,start+40_000).gateClosed,false);
+    // Breaking one gate opens only that gate; the other keeps its HP and still blocks.
+    assert.deepEqual(store.war.inspect(f.site,start+40_000).gates,{[first]:{hp:0,closed:false},[second]:{hp:120,closed:true}});
+    assert.equal(store.war.inspect(f.site,start+40_000).gateClosed,true);
+    assert.throws(()=>store.war.gate(f,"attack",false,start+40_000,null,first),/war_gate_inactive/);
     for(let i=1;i<=29;i++)store.war.advance(f,start+40_000+i*1000,5,0);
     const won=start+69_000,reopen=won+WAR_PROTECTION;
     assert.equal(store.war.inspect(f.site,won).owner,"Moon");
@@ -122,5 +128,45 @@ test("an incumbent retains ownership after an uncaptured siege times out",()=>{
     store.close();store=new GuildStore(file);
     assert.equal(store.war.inspect(field.site,deadline).owner,"Sun");
     assert.equal(store.war.inspect(field.site,deadline).ownerId,a.id);
+  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test("ordinary gates keep separate HP/open state and migrate legacy single-gate rows",()=>{
+  const dir=mkdtempSync(path.join(tmpdir(),"montra-gates-")),file=path.join(dir,"guilds.sqlite");
+  let store=new GuildStore(file);
+  try{
+    store.create("a","A","Sun");store.create("b","B","Moon");
+    const a=store.war.member("a")!,b=store.war.member("b")!,start=100_000;
+    const field=store.war.start("river_watch",a,start);store.war.side(field,b,start,true);
+    assert.deepEqual(store.war.inspect(field.site,start).gates,{"south--18":{hp:120,closed:true},"north--22":{hp:120,closed:true}});
+    for(let i=0;i<8;i++)store.war.gate(field,"attack",false,start,null,"north--22");
+    store.war.gate(field,"defend",false,start,null,"south--18");store.war.gate(field,"defend",false,start,null,"south--18");
+    const s=store.war.inspect(field.site,start);
+    assert.deepEqual(s.gates,{"south--18":{hp:120,closed:true},"north--22":{hp:0,closed:false}});
+    assert.equal(s.gateHp,0);assert.equal(s.gateClosed,true);
+    assert.throws(()=>store.war.gate(field,"attack",false,start,null,"missing"),/war_gate_inactive/);
+    store.close();store=new GuildStore(file);
+    assert.deepEqual(store.war.inspect(field.site,start).gates,s.gates,"per-gate state survives reload");
+    // A row written by the previous single-gate schema seeds every gate from gate_hp/gate_open.
+    const raw=new DatabaseSync(file);
+    raw.prepare("UPDATE territory_battles SET gates_json=NULL,gate_hp=45,gate_open=1 WHERE seq=?").run(field.seq);raw.close();
+    assert.deepEqual(store.war.inspect(field.site,start).gates,{"south--18":{hp:45,closed:false},"north--22":{hp:45,closed:false}});
+    store.war.gate(field,"defend",false,start,null,"north--22");
+    assert.deepEqual(store.war.inspect(field.site,start).gates,{"south--18":{hp:45,closed:false},"north--22":{hp:45,closed:true}});
+  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test("pre-migration databases gain gates_json without dropping legacy gate columns",()=>{
+  const dir=mkdtempSync(path.join(tmpdir(),"montra-gates-old-")),file=path.join(dir,"guilds.sqlite");
+  const old=new DatabaseSync(file);
+  old.exec(`CREATE TABLE territory_battles(seq INTEGER PRIMARY KEY,site TEXT NOT NULL,incumbent TEXT,attacker TEXT NOT NULL,defender TEXT,
+    started INTEGER NOT NULL,progress REAL NOT NULL DEFAULT 0,sample INTEGER NOT NULL,ended INTEGER,winner TEXT,
+    gate_hp INTEGER NOT NULL DEFAULT 120,gate_open INTEGER NOT NULL DEFAULT 0,pilot_json TEXT,city_json TEXT)`);
+  old.close();
+  const store=new GuildStore(file);
+  try{
+    const raw=new DatabaseSync(file);
+    const cols=raw.prepare("PRAGMA table_info(territory_battles)").all().map(c=>c.name);raw.close();
+    for(const c of ["gate_hp","gate_open","gates_json"])assert.ok(cols.includes(c),c);
   }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
