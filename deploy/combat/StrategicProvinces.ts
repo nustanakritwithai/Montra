@@ -91,6 +91,7 @@ export type ProvinceSite = Readonly<{
 export type Province = Readonly<{
   kind:"capital"|"territory"|"hunting"; hint:string; sites:readonly ProvinceSite[];
   safeRoads?:readonly number[];railPath?:number;rampart?:Rampart;
+  defenderSpawn?:Readonly<{x:number;z:number}>;
   huntTrail?:Readonly<{name:string;path:number}>;
   riverCity?:Readonly<{facilities:typeof riverFacilities;nodes:typeof riverNodes;posts:typeof riverPosts}>;
   objectives?:typeof castleObjectives;activeObjectives?:readonly number[];forwardCamps?:typeof forwardCamps;
@@ -121,7 +122,7 @@ export const PROVINCES:Readonly<Record<string,Province>>={
     site("fort","ลานธงจันทรา",12,-36),site("market","ตลาดชายด่าน",-24,-20),site("mine","เหมืองเงินจันทร์",32,-25),
     site("bridge","สะพานตลาด",-30,-4),site("bridge","สะพานเสบียง",0,-4),site("bridge","ทางข้ามเหมือง",27,-4),
     site("bridge","สะพานรางแร่",76,-4),site("mine","ลานแต่งแร่",88,-61),site("shrine","ศาลช่องขนเงิน",49,-89)]},
-  river_watch:{kind:"territory",rampart:ramparts.river_watch,hint:"เลียบคุ้งตะวันตกไปลานเสบียงริมน้ำ หรือข้ามสะพานต้นน้ำย้อนเข้าประตูท่าเรือ ห้องโลกมีเรือข้ามคุ้งสองทาง",safeRoads:[0,1],
+  river_watch:{kind:"territory",defenderSpawn:{x:-22,z:-36},rampart:ramparts.river_watch,hint:"เลียบคุ้งตะวันตกไปลานเสบียงริมน้ำ หรือข้ามสะพานต้นน้ำย้อนเข้าประตูท่าเรือ ห้องโลกมีเรือข้ามคุ้งสองทาง",safeRoads:[0,1],
     relay:{name:"ลานเสบียงคุ้งนอก",x:-67,z:-56,radius:4,effect:"banner"},sites:[
     site("fort","ลานธงปากชล",-18,-29),site("port","ท่าเรือลำเลียง",-23,-49),site("market","ตลาดท่าข้าว",24,9),
     site("bridge","สะพานท่าน้ำ",-4,12,"east"),site("bridge","สะพานคลังเสบียง",-4,-14,"east"),site("bridge","สะพานท่าลับ",-4,-46,"east"),

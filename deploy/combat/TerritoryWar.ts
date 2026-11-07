@@ -112,7 +112,9 @@ export class TerritoryWar {
     const b=this.current(site,now),active=b?.ended===null;
     const ownerId=active?b.incumbent:b?.winner;
     const owner=this.guildName(ownerId);
-    const phase=active?"battle":b?.ended!=null && now<b.ended+WAR_PROTECTION?"protected":"open";
+    // A vacant-field timeout has no victor and must not lock out the next war.
+    // Owned-field timeouts still award the incumbent a defensive victory.
+    const phase=active?"battle":b?.winner && b.ended!=null && now<b.ended+WAR_PROTECTION?"protected":"open";
     return {seq:b?.seq??0,phase,owner,ownerId:owner?ownerId:null,attacker:active?b.attacker:null,defender:active?b.defender:null,
       attackName:active?this.guildName(b.attacker):null,defendName:active?this.guildName(b.defender):null,
       gateHp:active?b.gate_hp:120,gateClosed:!!(active && b.gate_hp>0 && !b.gate_open),

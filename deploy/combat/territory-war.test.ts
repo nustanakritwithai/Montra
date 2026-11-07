@@ -67,7 +67,7 @@ test("capture progress, contested flags, deadline, independent protection and du
     assert.equal(store.war.inspect(f.site,won).phaseEndsAt,reopen);
     assert.equal(store.war.inspect(other.site,start+WAR_DURATION).owner,null);
     assert.equal(store.war.inspect(f.site,reopen-1).phase,"protected");
-    assert.equal(store.war.inspect(other.site,reopen).phase,"protected");
+    assert.equal(store.war.inspect(other.site,reopen).phase,"open");
     assert.throws(()=>store.war.start(f.site,a,reopen),/war_unavailable/);
     const next=store.war.start(f.site,b,reopen);
     assert.equal(store.war.side(next,a,reopen),"defend");assert.equal(store.war.inspect(next.site,reopen).gateHp,120);
@@ -79,5 +79,48 @@ test("capture progress, contested flags, deadline, independent protection and du
     assert.equal(store.war.inspect(f.site,reopen+WAR_DURATION+WAR_PROTECTION).owner,"Moon");
     store.leave("c");store.leave("a");
     assert.equal(store.war.inspect(f.site,reopen+WAR_DURATION+WAR_PROTECTION).owner,null);
+  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+
+test("no-winner timeout reopens immediately, survives reload, and permits a new war",()=>{
+  const dir=mkdtempSync(path.join(tmpdir(),"montra-war-timeout-")),file=path.join(dir,"guilds.sqlite");
+  let store=new GuildStore(file);
+  try{
+    store.create("a","A","Sun");store.create("b","B","Moon");
+    const a=store.war.member("a")!,b=store.war.member("b")!,start=100_000;
+    const field=store.war.start("river_watch",a,start),deadline=start+WAR_DURATION;
+    store.war.side(field,b,start,true);
+    assert.equal(store.war.inspect(field.site,deadline-1).phase,"battle");
+    const expired=store.war.inspect(field.site,deadline);
+    assert.equal(expired.phase,"open");assert.equal(expired.ownerId,null);
+    assert.equal(expired.owner,null);assert.equal(expired.phaseEndsAt,null);
+    assert.equal(expired.attacker,null);assert.equal(expired.defender,null);
+    assert.throws(()=>store.war.side(field,a,deadline),/war_ended/);
+    store.close();store=new GuildStore(file);
+    assert.equal(store.war.inspect(field.site,deadline).phase,"open");
+    const next=store.war.start(field.site,b,deadline);
+    assert.ok(next.seq>field.seq);assert.equal(store.war.inspect(field.site,deadline).phase,"battle");
+    assert.equal(store.war.inspect(field.site,deadline).owner,null);
+  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test("an incumbent retains ownership after an uncaptured siege times out",()=>{
+  const dir=mkdtempSync(path.join(tmpdir(),"montra-war-owner-")),file=path.join(dir,"guilds.sqlite");
+  let store=new GuildStore(file);
+  try{
+    store.create("a","A","Sun");store.create("b","B","Moon");
+    const a=store.war.member("a")!,b=store.war.member("b")!,start=100_000;
+    const field=store.war.start("river_watch",a,start);
+    for(let i=1;i<=WAR_HOLD;i++)store.war.advance(field,start+i*1000,1,0);
+    const attackAt=start+WAR_HOLD*1000+WAR_PROTECTION;
+    store.war.start(field.site,b,attackAt);
+    const deadline=attackAt+WAR_DURATION;
+    assert.equal(store.war.inspect(field.site,deadline).ownerId,a.id);
+    // This is a defensive victory, not the no-winner case.
+    assert.equal(store.war.inspect(field.site,deadline).phase,"protected");
+    store.close();store=new GuildStore(file);
+    assert.equal(store.war.inspect(field.site,deadline).owner,"Sun");
+    assert.equal(store.war.inspect(field.site,deadline).ownerId,a.id);
   }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });

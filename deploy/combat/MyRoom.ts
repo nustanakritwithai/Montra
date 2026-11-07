@@ -3341,7 +3341,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const now=Date.now();
     if(now-(this.gateActions.get(id)??-Infinity)<1000)return;
     const war=guildStore().war,gates=WORLD_MAPS[this.field.site].strategic!.rampart!.gates;
-    const gate=castle || river?gates.find(g=>g.id===req!.gateId):gates[0];
+    // Ordinary territory commands have no gate ID: use the closest gate center.
+    // Castle/river-city commands continue to require an explicit gate ID.
+    const gate=castle || river?gates.find(g=>g.id===req!.gateId):gates.reduce<typeof gates[number]|undefined>((nearest,g)=>{
+      const distance=(candidate:typeof g)=>Math.hypot(p.x-candidate.box.x-candidate.box.width/2,p.z-candidate.box.z-candidate.box.length/2);
+      return !nearest || distance(g)<distance(nearest)?g:nearest;
+    },undefined);
     if(!gate || war.member(character)?.id!==seat.guild)return;
     const b=gate.box,cx=b.x+b.width/2,cz=b.z+b.length/2;
     const inside=gate.side==="south"?p.z<cz:gate.side==="north"?p.z>cz:gate.side==="east"?p.x<cx:p.x>cx;
@@ -5932,7 +5937,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           safeSpawn={x:node.x+sideSize*.6-1.2,y:0,z:node.z};
         }else{
           const gate=WORLD_MAPS[mapId].portals.find(p=>p.z===(side==="attack"?26:-58))!;
-          safeSpawn={x:gate.x,y:0,z:gate.z};
+          // The river-watch defenders start inside their fort, west of the canal.
+          // Keep world travel portals (and all other territory bases) unchanged.
+          const base=side==="defend"?map.strategic?.defenderSpawn:undefined;
+          safeSpawn={x:base?.x??gate.x,y:0,z:base?.z??gate.z};
         }
         safeSpawn={...safeSpawn,y:groundAt(mapId,safeSpawn.x,safeSpawn.z)};
         validPosition=false;
