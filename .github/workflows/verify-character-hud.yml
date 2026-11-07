@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'main.js'
+      - 'src/client-modules/**'
       - 'src/client/**'
       - 'scripts/build-client*.mjs'
       - 'package.json'

@@ -4,16 +4,8 @@ const { resolve } = require("node:path");
 const { test } = require("node:test");
 const vm = require("node:vm");
 
-// Characterize the real helpers before moving them into a client module. Do not
-// copy their implementation here or evaluate the game, account entry or network.
-const source = readFileSync(resolve(__dirname, "../../main.js"), "utf8");
-const start = source.indexOf("  function preferredSlotKey(endpoint) {");
-const end = source.indexOf("  let activeCharacterSlot = null;", start);
-assert.ok(start >= 0 && end > start, "Locate the existing slot storage helpers");
-const helperSource = '"use strict";\n' + source.slice(start, end) + `\n({
-  preferredSlotKey, slotPreviewKey, getPreferredSlot,
-  readSlotPreviews, rememberSlotPreviews
-})`;
+// The original eleven characterization cases now exercise the module's explicit API.
+const helperSource = readFileSync(resolve(__dirname, "../../src/client-modules/character-slot-storage.js"), "utf8");
 
 const endpoint = "https://world.example.invalid:8443/montra";
 const preferredKey = "montra_character_slot:world.example.invalid:8443";
@@ -31,11 +23,12 @@ function memoryStorage(entries = []) {
 
 function loadHelpers(storage, getStorage = () => storage) {
   let storageAccesses = 0;
-  const sandbox = { URL };
-  Object.defineProperty(sandbox, "localStorage", {
-    get() { storageAccesses++; return getStorage(); },
+  const sandbox = {};
+  vm.runInNewContext(helperSource, sandbox, { timeout: 1000 });
+  const helpers = sandbox.MontraSlotStorage.create({
+    URL,
+    getStorage() { storageAccesses++; return getStorage(); },
   });
-  const helpers = vm.runInNewContext(helperSource, sandbox, { timeout: 1000 });
   return { helpers, storageAccesses: () => storageAccesses };
 }
 
@@ -181,4 +174,63 @@ test("invalid endpoint errors remain contained by read and write helpers", () =>
   assert.doesNotThrow(() => helpers.rememberSlotPreviews("not a URL", [{}, {}, {}]));
   assert.deepEqual(storage.reads, []);
   assert.deepEqual(storage.writes, []);
+});
+
+test("classic module exports only a factory and instances expose only the five helpers", () => {
+  const sandbox = {};
+  vm.runInNewContext(helperSource, sandbox);
+  assert.deepEqual(Object.keys(sandbox), ["MontraSlotStorage"]);
+  assert.deepEqual(Object.keys(sandbox.MontraSlotStorage), ["create"]);
+  assert.ok(Object.isFrozen(sandbox.MontraSlotStorage));
+  const helpers = sandbox.MontraSlotStorage.create({ getStorage() { assert.fail("must stay lazy"); }, URL });
+  assert.deepEqual(Object.keys(helpers), ["preferredSlotKey", "slotPreviewKey", "getPreferredSlot", "readSlotPreviews", "rememberSlotPreviews"]);
+  assert.ok(Object.isFrozen(helpers));
+});
+
+test("URL dependency is injected and instance storage dependencies remain isolated", () => {
+  const sandbox = {};
+  vm.runInNewContext(helperSource, sandbox);
+  const urls = [];
+  class FakeURL { constructor(value) { urls.push(value); this.host = "injected:99"; } }
+  const one = memoryStorage([["montra_character_slot:injected:99", "2"]]);
+  const two = memoryStorage([["montra_character_slot:injected:99", "3"]]);
+  const create = storage => sandbox.MontraSlotStorage.create({ URL: FakeURL, getStorage: () => storage });
+  assert.equal(create(one).getPreferredSlot("opaque"), 2);
+  assert.equal(create(two).getPreferredSlot("opaque"), 3);
+  assert.deepEqual(urls, ["opaque", "opaque"]);
+});
+
+const shellSource = readFileSync(resolve(__dirname, "../../src/client/core/001-storage-and-dom.js"), "utf8");
+const shellPrefix = shellSource.slice(0, shellSource.indexOf("  let activeCharacterSlot"));
+test("deferred module loads before shell and shell injects lazy browser storage and URL", () => {
+  const html = readFileSync(resolve(__dirname, "../../index.html"), "utf8");
+  const scripts = [...html.matchAll(/<script src="([^"]+)"([^>]*)>/g)];
+  const moduleIndex = scripts.findIndex(match => match[1].startsWith("./src/client-modules/character-slot-storage.js?"));
+  const mainIndex = scripts.findIndex(match => match[1].startsWith("./main.js?"));
+  assert(moduleIndex >= 0 && moduleIndex < mainIndex);
+  for (const index of [moduleIndex, mainIndex]) {
+    assert.match(scripts[index][2], /\bdefer\b/);
+    assert.doesNotMatch(scripts[index][2], /\basync\b/);
+    assert.match(scripts[index][2], /worldUnavailable/);
+  }
+  let accesses = 0;
+  const storage = memoryStorage([[preferredKey, "3"]]);
+  const sandbox = { URL };
+  Object.defineProperty(sandbox, "localStorage", { get() { accesses++; return storage; } });
+  vm.createContext(sandbox);
+  vm.runInContext(helperSource, sandbox);
+  vm.runInContext(shellPrefix, sandbox);
+  assert.equal(accesses, 0);
+  assert.equal(vm.runInContext(`getPreferredSlot(${JSON.stringify(endpoint)})`, sandbox), 3);
+  assert.equal(accesses, 1);
+});
+
+test("missing module fails before game initialization; inaccessible storage still allows shell binding", () => {
+  assert.throws(() => vm.runInNewContext(shellPrefix, { URL }), { name: "TypeError" });
+  const sandbox = { URL };
+  Object.defineProperty(sandbox, "localStorage", { get() { throw new Error("disabled"); } });
+  vm.createContext(sandbox);
+  vm.runInContext(helperSource, sandbox);
+  assert.doesNotThrow(() => vm.runInContext(shellPrefix, sandbox));
+  assert.equal(vm.runInContext(`getPreferredSlot(${JSON.stringify(endpoint)})`, sandbox), 1);
 });

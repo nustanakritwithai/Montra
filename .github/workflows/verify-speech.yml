@@ -4,6 +4,8 @@ on:
     paths:
       - 'audio.js'
       - 'main.js'
+      - 'src/client-modules/**'
+      - 'index.html'
       - 'src/client/**'
       - 'scripts/build-client*.mjs'
       - 'package.json'
@@ -14,6 +16,8 @@ on:
     paths:
       - 'audio.js'
       - 'main.js'
+      - 'src/client-modules/**'
+      - 'index.html'
       - 'src/client/**'
       - 'scripts/build-client*.mjs'
       - 'package.json'

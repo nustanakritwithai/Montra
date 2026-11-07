@@ -22,7 +22,7 @@
     provinceDoor=null;castleDoors.clear();castleRings.clear();riverPostRings.clear();
     for(const child of expansionRoot.getChildren())child.dispose();
     for(const resource of expansionResources)resource.dispose();expansionResources.length=0;expansionLabels.length=0;
-    for(let i=lightSpots.length-1;i>=0;i--)if(lightSpots[i].map!=="ritual_village")lightSpots.splice(i,1);
+    clearTransientLightSpots();
     const bounds=mapBounds();
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;

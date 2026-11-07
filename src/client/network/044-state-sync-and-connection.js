@@ -1466,4 +1466,3 @@
     }
   }
 
-  let pointer = null;

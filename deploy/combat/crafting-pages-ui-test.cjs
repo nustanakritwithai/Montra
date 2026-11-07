@@ -49,7 +49,7 @@ function fixture(){
     inventoryState:{version:1,slots,equippedWeaponSlot:null,equipment:{},forgeCopies:{}},economyGold:1000,economyPending:false,economyTimer:null,itemUsePending:false,
     centralMarketVersion:0,INVENTORY_SLOTS:12,POTION_ITEM_ID:'small_potion',SHRINE_SHARD:'shrine_shard',WEAPON_META:{},
     bodyLabels:{chest:'อก',leftRing:'แหวนซ้าย',rightRing:'แหวนขวา',leftEar:'ตุ้มหูซ้าย',rightEar:'ตุ้มหูขวา'},
-    bagMeta:id=>items[id],statLine:()=>'',ownServerCharacter:()=>player,currentBagSlots:()=>ctx.inventoryState?.slots,
+    bagMeta:id=>items[id],statNames:{},statLine:()=>'',ownServerCharacter:()=>player,currentBagSlots:()=>ctx.inventoryState?.slots,
     currentEquippedWeaponSlot:()=>ctx.inventoryState?.equippedWeaponSlot,
     itemHuntCount:id=>(ctx.inventoryState?.slots||[]).reduce((n,s)=>n+(s?.itemId===id?s.quantity:0),0)+Object.values(ctx.inventoryState?.equipment||{}).filter(x=>x===id).length,
     itemHuntSource:()=>({open:true}),bindItemHuntButton:(button,id,quantity)=>{button.hidden=!id;button.target=id;button.quantity=quantity;},
@@ -63,7 +63,7 @@ function fixture(){
   };
   ctx.room={state:{economyAvailable:true,craftRecipe:JSON.stringify(shrine)},send:(command,payload)=>wire.push({command,payload:plain(payload)})};
   ctx.joined=ctx.room;ctx.joined.onMessage=(name,handler)=>{callbacks[name]=handler;};
-  vm.createContext(ctx);
+  vm.createContext(ctx);require('./fixtures/item-presentation-loader.cjs').install(ctx);
   const run=code=>vm.runInContext(code,ctx);
   run(slice('  const gearSymbols=','  let inspectingGear=')+
     slice('  function bagMeta(','  function wornGearAt(')+
