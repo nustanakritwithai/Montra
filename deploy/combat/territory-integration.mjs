@@ -70,8 +70,22 @@ try{
       c.r.send("climb",{structureId,direction});
       await until(()=>c.me().y===(direction==="up"?4:0) && c.me().combatState!=="climbing","stair "+direction);
     }
-    await Promise.all([travel(attacker,[[0,10],[0,-4],[0,-18],[12,-21]]),
-      travel(defender,[[27,-56],[27,-36],[16,-36],[12,-31]])]);
+    // Both gates now block ground movement. The old defender route silently
+    // walked through the secondary (east) gate while it was still closed.
+    await Promise.all([travel(attacker,[[0,10],[0,-4],[0,-18],[27,-18],[27,-36],[25.5,-36]]),
+      travel(defender,[[27,-56],[27,-36]])]);
+    defender.r.send("move",{x:16,z:-36});await sleep(2000);
+    assert.ok(defender.me().x>23.7,"closed secondary gate blocks the defender too");
+    await walk(defender,27,-36);
+    // Breach only the secondary gate; the main south gate stays closed at 120.
+    for(let hp=105;hp>=0;hp-=15){
+      const state=await send(attacker,"territory_gate",{},"territory_state",s=>s.local?.gates?.["east--36"]?.hp===hp);
+      assert.equal(state.local.gates["south-12"].hp,120);
+      assert.equal(state.local.gates["south-12"].closed,true);
+      await sleep(1100);
+    }
+    await Promise.all([travel(attacker,[[27,-36],[27,-18],[12,-21]]),
+      travel(defender,[[16,-36],[12,-31]])]);
     const shot=(c,victim)=>send(c,"blessed_rice",{targetId:victim.r.sessionId},"pvp_hit",e=>e.attackerId===c.r.sessionId&&e.source==="ranged");
     await send(attacker,"blessed_rice",{targetId:defender.r.sessionId},"command_rejected",e=>e.reason==="shot_blocked");
     await send(defender,"territory_gate",{},"territory_state",s=>s.local.gateClosed===false);
@@ -90,7 +104,7 @@ try{
     assert.ok(attacker.me().z>-26.7,"closed gate blocks ground runner");
     for(let hp=105;hp>=0;hp-=15){
       attacker.events.length=0;attacker.r.send("territory_gate",{});
-      try{await event(attacker,"territory_state",s=>s.local.gateHp===hp);}
+      try{await event(attacker,"territory_state",s=>s.local.gates?.["south-12"]?.hp===hp);}
       catch(error){throw Error("gate "+hp+" at "+JSON.stringify({x:attacker.me().x,z:attacker.me().z,events:attacker.events.filter(e=>e.type.startsWith("territory")).slice(-3)})+" "+error);}
       await sleep(1100);
     }

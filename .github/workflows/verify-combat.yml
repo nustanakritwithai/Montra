@@ -470,7 +470,7 @@ jobs:
           export MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0 MONTRA_ECONOMY_ENABLED=0 PORT=4110
           export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-world-test-expansion-XXXXXX)"
           export MONTRA_TEST_URL=http://127.0.0.1:4110
-          npx tsx --test src/rooms/map-expansion.test.ts src/rooms/forest-monster-config.test.ts src/rooms/temple-map.test.ts src/rooms/world-atlas.test.ts src/rooms/territory-war.test.ts src/rooms/territory-government.test.ts src/rooms/muay-combo.test.ts src/rooms/muay-mastery.test.ts
+          npx tsx --test src/rooms/map-expansion.test.ts src/rooms/forest-monster-config.test.ts src/rooms/temple-map.test.ts src/rooms/world-atlas.test.ts src/rooms/territory-war.test.ts src/rooms/territory-gate-room.test.ts src/rooms/territory-government.test.ts src/rooms/muay-combo.test.ts src/rooms/muay-mastery.test.ts
           node --import tsx src/index.ts > expansion-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
