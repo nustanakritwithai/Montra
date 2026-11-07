@@ -10,6 +10,18 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // Explicit reversible substitutions for this extraction only. This is not a new
 // baseline: reconstructing the original bytes still uses the historical SHA below.
+function skillMotionRestoration(current) {
+  const module = readFileSync(join(clientRoot, 'src/client-modules/skill-motion.js'), 'utf8');
+  const header = "// Visual skill selection and parse caches; authoritative combat remains in the shell.\n\"use strict\";\nglobalThis.MontraSkillMotion = Object.freeze({\n  create({ getRoom, ownServerCharacter }) {\n";
+  const footer = "    return Object.freeze({ swordSkillAction, muayMotion, muaySchoolOf });\n  },\n});\n";
+  assert(module.startsWith(header) && module.endsWith(footer), 'Reviewed skill-motion factory envelope');
+  const original = module.slice(header.length, -footer.length).replaceAll('getRoom()?.', 'room?.');
+  assert.equal(original, readFileSync(join(clientRoot, 'deploy/combat/fixtures/skill-motion-reference.js'), 'utf8'));
+  const binding = "  const skillMotion = globalThis.MontraSkillMotion.create({ getRoom: () => room, ownServerCharacter: () => ownServerCharacter() });\n  function swordSkillAction(skillId){return skillMotion.swordSkillAction(skillId);}\n  function muayMotion(skillId){return skillMotion.muayMotion(skillId);}\n  function muaySchoolOf(a){return skillMotion.muaySchoolOf(a);}\n";
+  assert.equal(current.split(binding).length, 2, 'Exactly one skill-motion shell binding');
+  return text => text.replace(binding, original);
+}
+
 function itemPresentationRestoration(current) {
   const dependencies = [
     ['statNames', 'getStatNames'], ['bodyLabels', 'getBodyLabels'], ['preferredGearSlot', 'getPreferredGearSlot'],
@@ -207,7 +219,8 @@ test('module extraction preserves the historical byte freeze outside the exact h
   const restoreVoice = voiceGuidanceRestoration(current.toString());
   const restoreGestures = pointerGesturesRestoration(current.toString());
   const restoreLighting = lightingControllerRestoration(current.toString());
-  const restore = text => restoreItems(restoreVoice(restoreGestures(restoreLighting(restoreRoom(text))))).replace(wiring, originalHelpers)
+  const restoreSkillMotion = skillMotionRestoration(current.toString());
+  const restore = text => restoreSkillMotion(restoreItems(restoreVoice(restoreGestures(restoreLighting(restoreRoom(text)))))).replace(wiring, originalHelpers)
     .replace(worldBinding, '').replace(terrainAnchor, terrainHelpers + terrainAnchor)
     .replace(smoothAnchor, smoothAnchor + smoothHelper);
   const bytes = Buffer.from(restore(current.toString()));
