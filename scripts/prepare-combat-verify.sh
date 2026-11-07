@@ -16,6 +16,7 @@ cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
 cp deploy/combat/GameRules.ts combat-verify/src/rooms/GameRules.ts
 cp deploy/combat/DashRules.ts combat-verify/src/rooms/DashRules.ts
 cp deploy/combat/dash-rules.test.ts combat-verify/src/rooms/dash-rules.test.ts
+cp deploy/combat/RespawnLifecycle.ts deploy/combat/respawn-lifecycle*.ts combat-verify/src/rooms/
 cp deploy/combat/HorizontalMovement.ts deploy/combat/horizontal-movement*.ts combat-verify/src/rooms/
 cp deploy/combat/VerticalMovement.ts deploy/combat/vertical-movement*.ts combat-verify/src/rooms/
 cp deploy/combat/HeightRules.ts combat-verify/src/rooms/HeightRules.ts
