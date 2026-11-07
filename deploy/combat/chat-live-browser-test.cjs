@@ -58,12 +58,17 @@ async function run(){
                (url.origin===server.endpoint && url.pathname.startsWith('/matchmake/')))return route.continue();
             report.blockedRequests.push(url.origin+url.pathname);return route.abort();
           });
-          await context.routeWebSocket('**/*',socket=>{
-            const url=new URL(socket.url());
-            if(url.origin===server.endpoint.replace('http:','ws:')){socket.connectToServer();return;}
-            report.errors.push('Unexpected socket '+url.origin);socket.close();
+          // Keep native WebSocket: Playwright 1.56 routing changes synchronous
+          // constructor validation required by the SDK's browser fallback.
+          // Exact local-only CSP connect-src remains the pre-request socket guard.
+          const page=await context.newPage();pages.push(page);
+          page.on('pageerror',error=>report.errors.push(error.message));
+          page.on('console',message=>{if(message.type()==='error')report.errors.push(message.text());});
+          page.on('websocket',socket=>{
+            const url=new URL(socket.url()); // Never record session query parameters.
+            if(url.origin!==server.endpoint.replace('http:','ws:'))report.errors.push('Unexpected socket '+url.origin);
+            socket.on('socketerror',()=>report.errors.push('Local game socket error'));
           });
-          const page=await context.newPage();pages.push(page);page.on('pageerror',error=>report.errors.push(error.message));
           const room=i?await pages[0].evaluate(()=>liveChat.roomId):null;
           await page.goto(origin+(room?'/?room='+encodeURIComponent(room):'/'));
           await page.waitForFunction(()=>window.liveChat || window.fixtureError);
@@ -144,7 +149,7 @@ async function run(){
     }
     assert.deepEqual(report.errors,[]);
     console.log(`PASS live local multiplayer chat: ${report.cases.length} Chromium viewport cases`);
-  }catch(error){report.failure=error.stack;throw error;}
+  }catch(error){report.failure=error.stack;console.error(JSON.stringify({errors:report.errors,blockedRequests:report.blockedRequests}));throw error;}
   finally{
     await browser?.close();if(web?.listening)await new Promise(resolve=>web.close(resolve));
     if(server){fs.writeFileSync(path.join(out,'server.log'),server.log());await server.stop();}

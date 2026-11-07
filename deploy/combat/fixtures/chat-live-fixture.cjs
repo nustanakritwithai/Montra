@@ -43,7 +43,13 @@ const config=await (await fetch('/config')).json();
 const client=new Colyseus.Client(config.endpoint);
 const token='mt1_'+Array.from(crypto.getRandomValues(new Uint8Array(32)),n=>n.toString(16).padStart(2,'0')).join('');
 const roomId=new URL(location.href).searchParams.get('room');
-const joined=roomId?await client.joinById(roomId,{guestToken:token}):await client.create('my_room',{guestToken:token});
+let joinTimer;
+window.fixtureStage='joining';
+const joined=await Promise.race([
+ roomId?client.joinById(roomId,{guestToken:token}):client.create('my_room',{guestToken:token}),
+ new Promise((_,reject)=>{joinTimer=setTimeout(()=>reject(new Error('Local SDK create/join timeout before initial state')),10000);}),
+]).finally(()=>clearTimeout(joinTimer));
+window.fixtureStage='waiting-for-initial-state';
 let room=joined,localId=joined.sessionId;
 joined.onMessage('*',(type,data)=>events.push({type,data}));
 await new Promise((resolve,reject)=>{
@@ -57,6 +63,7 @@ const expose = `
 // additional listeners; never replace/wrap send or the production listeners.
 for(const type of ['chat_message','chat_report_result','command_rejected'])
   joined.onMessage(type,data=>events.push({type,data}));
+window.fixtureStage='ready';
 window.liveChat={roomId:joined.roomId,id:localId,events,toasts,
  count:()=>joined.state.players.size,
  // Only non-chat party setup uses this test control. Chat always uses DOM submit.

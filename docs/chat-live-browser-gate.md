@@ -61,6 +61,7 @@ npm run build:styles
 npm ci --prefix combat-verify --ignore-scripts
 node deploy/combat/chat-live-browser-test.cjs --check-fixtures
 node deploy/combat/chat-live-fixture-test.cjs
+node deploy/combat/chat-live-dependency-check.cjs
 node deploy/combat/chat-live-browser-test.cjs --sdk-preflight
 # Only in an environment where Chromium launch is permitted:
 npm install --no-save --package-lock=false playwright@1.56.1
@@ -76,8 +77,11 @@ or game source. It uses a fresh `montra-chat-private-test-*` temporary store and
 an allowlisted child environment: accounts off, economy on, world expansion,
 hunt events, director and director persistence off; external model keys empty.
 No real account, login, public server, inherited endpoint or persistent store is
-used. The server and fixture HTTP listener bind loopback. Browser HTTP/WebSocket
-routes and CSP only admit the fixture and local game server; external asset
+used. The server and fixture HTTP listener bind loopback. Browser HTTP routes and exact-origin CSP only admit the fixture and local
+game server; native WebSocket is retained with passive error observations.
+Playwright 1.56 socket interception changes constructor validation needed by
+the SDK browser fallback, so this gate does not intercept socket frames.
+Create/join is bounded by a ten-second timeout before initial state. External asset
 requests are blocked. Dependency installation is setup, not browser runtime traffic.
 A test-only Node preload disables dotenv file loading before Colyseus imports,
 so `/etc/environment` and local `.env` files cannot repopulate that allowlist.
@@ -86,8 +90,11 @@ unit check verifies the preload. Each launch uses a unique generated entry.
 The launcher removes only its generated entry and its own temporary store.
 
 `--check-fixtures` compiles fixture/SDK syntax without starting a server or browser.
-`chat-live-fixture-test.cjs` is explicitly a synthetic unit test of pending/reset
-bindings and the installed SDK observer semantics, not browser evidence.
+`chat-live-fixture-test.cjs` is a dependency-free synthetic unit test of pending/reset
+bindings, included in the full `npm run test:client` fixture discovery.
+`chat-live-dependency-check.cjs` separately tests installed SDK observer semantics
+and dotenv isolation; the live workflow explicitly invokes it after installing
+locked server dependencies. Neither check is browser evidence.
 `--sdk-preflight` runs the unchanged existing private/party/bug SDK integration
 against the same disposable launcher and never loads Playwright. These are separate
 checks and neither implies the browser gate passed.

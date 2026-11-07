@@ -42,6 +42,7 @@ jobs:
           node deploy/combat/chat-browser-test.cjs --check-fixtures
           node deploy/combat/chat-live-browser-test.cjs --check-fixtures
           node deploy/combat/chat-live-fixture-test.cjs
+          node deploy/combat/chat-live-dependency-check.cjs
       - name: Real-server SDK preflight without browser
         run: timeout 45s node deploy/combat/chat-live-browser-test.cjs --sdk-preflight
       - name: Install pinned browser runner
