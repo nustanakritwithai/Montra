@@ -1,3 +1,5 @@
+import {HorizontalMovement} from "./HorizontalMovement.js";
+import {VerticalMovement} from "./VerticalMovement.js";
 import { FORGE_CATALOG } from "./ForgeRules.js";
 import { accounts } from "./AccountService.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
@@ -30,14 +32,14 @@ import {
 } from "./GameRules.js";
 import {
   FORT, distance3d, isOnPlatform, isOnGround, isOnTop, touchesWallBody,
-  parseClimbRequest, progressClimb, step3d,
-  FLIGHT, isFlightAltitude, flightLandingHeight, progressFlightHeight,
+  parseClimbRequest, step3d,
+  FLIGHT, isFlightAltitude, flightLandingHeight,
   type WorldPoint,
 } from "./HeightRules.js";
 import {
   MonsterRRTNavigator, isMonsterSegmentClear,
 } from "./MonsterRRT.js";
-import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.js";
+import { parseDashCommand, advanceDash } from "./DashRules.js";
 import type { CharacterSnapshot } from "./CharacterStore.js";
 import {MASTERY_ENABLED,masteryBonuses,masteryCapacity,masteryPreview,encodeMasteryVitals,scaleResource,type MasteryMode} from "./RebirthCombat.js";
 import type {CombatStats} from "./Progression.js";
@@ -74,6 +76,7 @@ import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js"
 import { parseSellMaterial, parseSalvage, parseCraft, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseMarketBrowse, parseAuctionCreate, parseAuctionBid, parseAuctionAction, parseAuctionCredit, parseStarterSupply, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
+import { GuildInvitations } from "./GuildInvitations.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
 import type { MonsterTier } from "./MonsterProfiles.js";
@@ -118,7 +121,6 @@ type Gates = {
   chat: CommandBucket; bugReport: CommandBucket; possession: CommandBucket; build: CommandBucket; swordTree: CommandBucket; occult: CommandBucket; economy: CommandBucket; party: CommandBucket; guild: CommandBucket;
 };
 
-type ActiveDash = DashDirection & { remaining: number };
 type TradeSession = { id:string; a:string; b:string; expires:number; offers:Record<string, TradeOffer>; items:Record<string,{itemId:string;quantity:number}|null>; fingerprints:Record<string,string>; confirmed:Set<string> };
 
 /**
@@ -151,10 +153,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private closedFieldGates=new Set<string>();
   private gateActions=new Map<string,number>();
   private battleActive=false;
-  private destinations = new Map<string, Vec2>();
-  private crestTurns=new Map<string,Vec2[]>();
-  private activeDashes = new Map<string, ActiveDash>();
-  private lastDashMs = new Map<string, number>();
+  private readonly horizontalMovement = new HorizontalMovement<Player>({
+    canOccupy: (x,z,layer,flying,mapId) => this.canOccupy(x,z,layer,flying,mapId),
+    moveOnSurface: (player,x,z) => this.moveOnSurface(player,x,z),
+  }, (playerId,blocked) => this.broadcast("dash_finished", {playerId,blocked}, {afterNextPatch:true}));
+  private get destinations() { return this.horizontalMovement.destinations; }
+  private get crestTurns() { return this.horizontalMovement.crestTurns; }
+  private get activeDashes() { return this.horizontalMovement.activeDashes; }
+  private get lastDashMs() { return this.horizontalMovement.lastDashMs; }
   private attackTargets = new Map<string, string>();
   private mountHitSequence = new Map<string, number>();
   private lastMountMs = new Map<string, number>();
@@ -268,7 +274,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private swordCombos = new Map<string, {count:number; until:number}>();
   private swordGuards = new Map<string, {until:number; factor:number; direction:boolean; counterUntil:number}>();
   private guildSubscriptions = new Map<string,()=>void>();
-  private guildInvites = new Map<string,{from:string;to:string;guildId:string;expires:number}>();
+  private guildInvites = new GuildInvitations();
 
   private monsterRespawnAt = 0;
   private lastMonsterAttackMs = -Infinity;
@@ -281,8 +287,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   // All guardian state lives on the server; no client may select NPC stats.
   private lastSummonAt = new Map<string, number>();
   private lastSummonAttackAt = new Map<string, number>();
-  private climbs = new Map<string, WorldPoint>();
-  private flightTransitions = new Map<string, { targetY: number; landing: boolean }>();
+  private readonly verticalMovement = new VerticalMovement();
+  private get climbs() { return this.verticalMovement.climbs; }
+  private get flightTransitions() { return this.verticalMovement.flightTransitions; }
 
   private syncPlayerViews():void {
     for(const client of this.clients) {
@@ -3703,9 +3710,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if(guild.members.length>=GUILD_MAX_MEMBERS)throw new Error("guild_full");
         if(!target || !targetCharacter || request.targetId===client.sessionId || this.pendingCharacterLeaves.has(request.targetId))throw new Error("guild_invalid_target");
         if(guildStore().view(targetCharacter,guildOnline))throw new Error("guild_already_member");
-        for(const [id,invite] of this.guildInvites)if(invite.expires<=this.simulatedMs || invite.to===request.targetId)this.guildInvites.delete(id);
-        const id=randomUUID();
-        this.guildInvites.set(id,{from:client.sessionId,to:request.targetId,guildId:guild.id,expires:this.simulatedMs+60000});
+        const id=this.guildInvites.issue(client.sessionId,request.targetId,guild.id,this.simulatedMs);
         target.send("guild_invitation",{inviteId:id,guildName:guild.name,fromName:this.state.players.get(client.sessionId)?.characterName ?? "",expiresIn:60});
         client.send("guild_notice",{reason:"invitation_sent"});
       });
@@ -3713,25 +3718,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     guild_accept: (client:Client,message:unknown) => {
       const inviteId=this.parsePartyInvitation(message);if(!inviteId)return this.reject(client,"guild_invalid_request");
       this.guildAction(client,character=>{
-        const invite=this.guildInvites.get(inviteId),leader=invite && this.persistentCharacters.get(invite.from);
-        if(!invite || invite.to!==client.sessionId || invite.expires<=this.simulatedMs || !leader || this.pendingCharacterLeaves.has(invite.from)){
-          if(invite && invite.expires<=this.simulatedMs)this.guildInvites.delete(inviteId);
-          throw new Error("guild_invite_expired");
-        }
+        const {invite,leader}=this.guildInvites.prepareAccept(inviteId,client.sessionId,this.simulatedMs,from=>{
+          const character=this.persistentCharacters.get(from);
+          return character && !this.pendingCharacterLeaves.has(from) ? character : undefined;
+        });
         const player=this.state.players.get(client.sessionId);if(!player)throw new Error("guild_invalid_target");
         const inviter=guildStore().view(leader,guildOnline);
         const inviterRank=inviter?.members.find(m=>m.id===inviter.ownId)?.rank;
         if(inviter?.id!==invite.guildId || (inviterRank!=="commander" && inviterRank!=="officer"))throw new Error("guild_invite_expired");
         guildStore().add(leader,character,player.characterName);
-        this.guildInvites.delete(inviteId);client.send("guild_invitation_closed",{});notifyGuilds();
+        this.guildInvites.complete(inviteId);client.send("guild_invitation_closed",{});notifyGuilds();
       });
     },
     guild_decline: (client:Client,message:unknown) => {
       const inviteId=this.parsePartyInvitation(message);if(!inviteId)return this.reject(client,"guild_invalid_request");
       this.guildAction(client,()=>{
-        const invite=this.guildInvites.get(inviteId);
-        if(!invite || invite.to!==client.sessionId || invite.expires<=this.simulatedMs)throw new Error("guild_invite_expired");
-        this.guildInvites.delete(inviteId);client.send("guild_invitation_closed",{});
+        const invite=this.guildInvites.decline(inviteId,client.sessionId,this.simulatedMs);
+        client.send("guild_invitation_closed",{});
         this.clients.find(c=>c.sessionId===invite.from)?.send("guild_notice",{reason:"invitation_declined"});
       });
     },
@@ -5211,49 +5214,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private updateClimbs(dt: number) {
-    for (const [id,destination] of [...this.climbs]) {
-      const player = this.state.players.get(id);
-      if (!player || !player.alive) {
-        this.climbs.delete(id);
-        continue;
-      }
-      const next = progressClimb(player, destination, dt);
-      player.x = clampToMap(next.point.x, getWorldMap(player.mapId)!.bounds, "x");
-      player.y = next.point.y;
-      player.z = clampToMap(next.point.z, getWorldMap(player.mapId)!.bounds, "z");
-      player.facing = facingTo(destination.x-player.x, destination.z-player.z);
-      player.combatState = "climbing";
-      if (next.arrived) {
-        this.climbs.delete(id);
-        player.combatState = "idle";
-        this.broadcast("climb_finished", {
-          playerId:id, height:player.y,
-        }, { afterNextPatch:true });
-      }
-    }
+    this.verticalMovement.updateClimbs(dt, this.state.players, (id, height) => {
+      this.broadcast("climb_finished", {playerId: id, height}, {afterNextPatch: true});
+    });
   }
 
-  /** Flight transitions are vertical only; horizontal movement begins on arrival. */
   private updateFlights(dt: number) {
-    for (const [id, transition] of [...this.flightTransitions]) {
-      const player = this.state.players.get(id);
-      if (!player || !player.alive) {
-        this.flightTransitions.delete(id);
-        continue;
-      }
-      const base=groundAt(player.mapId,player.x,player.z);
-      const next = progressFlightHeight(player.y-base, transition.targetY, dt);
-      player.y = next.y+base;
-      player.combatState = transition.landing ? "descending" : "ascending";
-      if (!next.arrived) continue;
-      this.flightTransitions.delete(id);
-      player.flying = !transition.landing;
-      player.combatState = "idle";
-      this.broadcast("flight_finished", {
-        playerId: id, altitude: player.y, flying: player.flying,
-      }, { afterNextPatch: true });
+    this.verticalMovement.updateFlights(dt, this.state.players, (id, altitude, flying) => {
+      this.broadcast("flight_finished", {playerId: id, altitude, flying}, {afterNextPatch: true});
       void this.saveCharacter(id);
-    }
+    });
   }
 
   private canOccupy(x: number, z: number, feetY: number, flying = false, mapId = DEFAULT_MAP_ID): boolean {
@@ -5294,28 +5264,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const moveSpeed=player.flying ? FLIGHT.horizontalSpeed : player.mounted ? RULES.mountedSpeed : RULES.playerSpeed * groundMastery * (this.sentinelAnchors.has(sessionId)?0.6:1) *
         (this.bladeCloaks.has(sessionId) && this.bladeBooks.get(sessionId)?.learned.includes("quiet_step") ? 1+BLADE_LESSONS.quiet_step.power : 1);
 
-      const dash = this.activeDashes.get(sessionId);
-      if (dash) {
-        const move = advanceDash(
-          player, dash,
-          Math.min(dash.remaining, RULES.dashSpeed * dt),
-          (x, z) => this.canOccupy(x,z,surfaceLayer(player), player.flying, player.mapId),
-          getWorldMap(player.mapId)!.bounds,
-        );
-        this.moveOnSurface(player,move.x,move.z);
-        player.facing = facingTo(dash.dx, dash.dz);
-        dash.remaining = Math.max(0, dash.remaining - move.moved);
-        if (move.blocked || dash.remaining < 0.0001) {
-          this.activeDashes.delete(sessionId);
-          player.combatState = "idle";
-          this.broadcast("dash_finished", {
-            playerId: sessionId, blocked: move.blocked,
-          }, { afterNextPatch: true });
-        } else {
-          player.combatState = "dashing";
-        }
-        continue;
-      }
+      if (this.horizontalMovement.updateDash(sessionId, player, dt)) continue;
 
       const targetId = this.attackTargets.get(sessionId);
       if (targetId) {
@@ -5368,46 +5317,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         continue;
       }
 
-      const destination=this.destinations.get(sessionId);
-      const turns=destination && isOnPlatform(surfaceLayer(player))?this.crestTurns.get(sessionId):undefined;
-      const target=turns?.[0] ?? destination;
-      if (!target) {
-        player.combatState = "idle";
-        player.targetId = "";
-        continue;
-      }
-      const dx = target.x - player.x;
-      const dz = target.z - player.z;
-      if(player.mounted){
-        const distance=Math.hypot(dx,dz);
-        if(distance<.035){player.combatState="idle";this.destinations.delete(sessionId);continue;}
-        const move=advanceDash(player,{dx:dx/distance,dz:dz/distance},Math.min(distance,moveSpeed*dt),
-          (x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId),getWorldMap(player.mapId)!.bounds);
-        if(move.moved)player.facing=facingTo(dx,dz);
-        this.moveOnSurface(player,move.x,move.z);
-        if(move.blocked || Math.hypot(target.x-player.x,target.z-player.z)<.035){this.destinations.delete(sessionId);player.combatState="idle";}
-        else player.combatState="moving";
-        continue;
-      }
-      const next = stepTowards(player, target,
-        moveSpeed * dt);
-      if (next.moved) player.facing = facingTo(dx, dz);
-      if (this.canOccupy(next.x,next.z,surfaceLayer(player),player.flying,player.mapId)) {
-        this.moveOnSurface(player,next.x,next.z);
-      } else {
-        // Slide on the wall face if a legal axis exists; never tunnel through
-        // solid geometry via client destinations or elevated edge tapping.
-        if (this.canOccupy(next.x,player.z,surfaceLayer(player),player.flying,player.mapId)) this.moveOnSurface(player,next.x,player.z);
-        else if (this.canOccupy(player.x,next.z,surfaceLayer(player),player.flying,player.mapId)) this.moveOnSurface(player,player.x,next.z);
-        else {
-          this.destinations.delete(sessionId);
-          player.combatState = "idle";
-          continue;
-        }
-      }
-      const arrived = Math.hypot(target.x-player.x,target.z-player.z) < .035;
-      player.combatState = arrived ? "idle" : "moving";
-      if(arrived){if(turns?.length)turns.shift();else this.destinations.delete(sessionId);}
+      this.horizontalMovement.updateDestination(sessionId, player, dt, moveSpeed);
     }
   }
 
@@ -6059,10 +5969,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.leaveParty(id);
     const guildCharacter=this.persistentCharacters.get(id);
     if(guildCharacter){this.guildSubscriptions.get(id)?.();this.guildSubscriptions.delete(id);notifyGuilds();}
-    for(const [inviteId,invite] of this.guildInvites)if(invite.from===id || invite.to===id){
-      this.guildInvites.delete(inviteId);
-      this.clients.find(c=>c.sessionId===invite.to)?.send("guild_invitation_closed",{});
-    }
+    this.guildInvites.leave(id,to=>{
+      this.clients.find(c=>c.sessionId===to)?.send("guild_invitation_closed",{});
+    });
     for (const trade of this.trades.values()) if (trade.a===id || trade.b===id) { this.trades.delete(trade.id); this.notifyTrade(trade,"trade_cancelled"); }
     const accountId = this.activeGuestAccounts.get(id);
     // Capture the snapshot BEFORE removing the player from server Schema.
