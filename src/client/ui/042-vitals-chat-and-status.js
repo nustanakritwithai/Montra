@@ -19,7 +19,7 @@
       <circle class="vo-rim" cx="50" cy="50" r="40.5"/><g class="vo-ring">${segs}</g></svg>
       <span class="vo-num vo-hpn"></span><span class="vo-num vo-mpn"></span>`;
     bar.append(el);
-    el.onclick = () => { openCharacterProfile(); };
+    // Tapping the orb is the auto-attack command (bound in field-control bindings); the character sheet opens from the player card or the menu.
     return { el, hp: el.querySelector(".vo-hp"), mp: el.querySelector(".vo-mp"), hpn: el.querySelector(".vo-hpn"), mpn: el.querySelector(".vo-mpn"), segs: [...el.querySelectorAll(".vo-seg")], last: "" };
   })();
   function updateVitalOrb(hp, maxHp, st, maxSt, mp, maxMp) {
@@ -84,11 +84,14 @@
     const text = live ? "EXP " + Math.floor(xp).toLocaleString("th-TH") + " / " + Math.floor(max).toLocaleString("th-TH") + " · " + pct.toFixed(1) + "%" : "EXP · เล่นออนไลน์เพื่อเก็บ";
     if (expBase.el.title !== text) { expBase.el.title = text; expBase.el.setAttribute("aria-valuetext", text); }
   }
+  let stripWalletAskedAt = -Infinity;
   function updateResourceStrip() {
     if (!resourceStrip) return;
     const d = new Date(), s = resourceStrip;
     hudSet(s.clock, "rsC", String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"));
     hudSet(s.gold, "rsG", mode === "live" && Number.isFinite(economyGold) ? economyGold.toLocaleString("th-TH") : "–");
+    // The wallet is only sent on request; ask once (throttled) so the strip shows gold right after entering the world.
+    if (economyGold === null && economyReady() && !economyPending && Date.now() - stripWalletAskedAt > 15000) { stripWalletAskedAt = Date.now(); economySend("get_economy", {}); }
     let pots = 0; try { for (const slot of currentBagSlots() || []) if (slot?.itemId === POTION_ITEM_ID) pots += Number(slot.quantity) || 0; } catch {}
     hudSet(s.potion, "rsP", String(pots));
     const partyN = mode === "live" && partyState?.members?.length || 0;
