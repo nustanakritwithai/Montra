@@ -52,6 +52,8 @@
     "guild_search",
     "harvest_resource",
     "market_browse",
+    "market_buy",
+    "market_cancel",
     "market_create",
     "market_list",
     "market_overview",

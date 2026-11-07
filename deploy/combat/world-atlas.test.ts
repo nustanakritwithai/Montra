@@ -213,3 +213,19 @@ test("rift victory keeps capped participants eligible for loot without diluting 
     {...base,sessionId:"away",mapId:"asura_peak"},{...base,sessionId:"fallen",alive:false}]),
     [...solo,{sessionId:"veteran",amount:0}]);
 });
+
+
+test("river-watch defender base is inside the fort and reaches its flag with gates closed",()=>{
+  const map=WORLD_MAPS.river_watch,base=map.strategic!.defenderSpawn!;
+  const flag=map.strategic!.sites.find(s=>s.kind==="fort")!;
+  assert.deepEqual(base,{x:-22,z:-36});
+  assert.ok(isSafeWorldPoint(map,{...base,y:groundAt(map.id,base.x,base.z)}));
+  const gates=new Set(map.strategic!.rampart!.gates.map(g=>g.id));
+  assert.ok(isWorldSegmentClear(map.id,base,flag,gates));
+  assert.ok(Math.hypot(base.x-flag.x,base.z-flag.z)>5,"do not spawn on capture point");
+  assert.ok(Math.hypot(base.x-flag.x,base.z-flag.z)<10,"defenders can reach flag promptly");
+  // Travel portals and attacker entry are not moved along with the war-only base.
+  assert.ok(map.portals.some(p=>p.x===0 && p.z===-58));
+  assert.ok(map.portals.some(p=>p.x===0 && p.z===26));
+  assert.deepEqual(JSON.parse(JSON.stringify(map)).strategic.defenderSpawn,base);
+});

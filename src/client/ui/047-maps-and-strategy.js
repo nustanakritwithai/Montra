@@ -487,12 +487,19 @@
     war_camp_cut:"ส่งกำลังไม่ได้ ตรวจธง ประตู และผู้ท้าชิงในวง",war_camp_base:"เลือกค่ายที่เปิดแล้วยืนที่ฐานรวมพลโดยพ้นการต่อสู้",war_camp_fallback:"ค่ายหน้าใช้ไม่ได้ คุณเกิดที่ฐานรวมพลเดิม",
     war_guild:"ต้องเป็นสมาชิกกิลด์ก่อนเข้าศึก",war_flag:"เดินเข้าวงธงกลางป้อมก่อนเปิดศึก",war_officer:"ให้ผู้บัญชาการหรือนายทหารเปิดศึก",
     war_other_guild:"สนามนี้มีฝ่ายบุกและฝ่ายรับแล้ว",war_side_full:"ผู้เล่นฝ่ายของคุณเต็มแล้ว",war_busy:"รอให้พ้นการต่อสู้และยืนบนพื้นในด่าน",
-    war_gate_repair:"ต้องครองโรงช่างและประตูต้องพ้นการโจมตี 5 วินาที",war_gate_near:"ฝ่ายรับต้องยืนที่ประตูด้านใน",war_gate_occupied:"มีผู้เล่นยืนขวางประตู",war_gate_open:"ประตูเปิดอยู่",war_gate_inactive:"ประตูใช้การไม่ได้แล้ว",
+    war_gate_repair:"ต้องครองโรงช่างและประตูต้องพ้นการโจมตี 5 วินาที",war_gate_near:"ฝ่ายรับต้องยืนที่ประตูด้านใน",war_gate_occupied:"มีผู้เล่นยืนขวางประตู",war_gate_open:"ประตูเปิดอยู่",war_gate_inactive:"ประตูใช้การไม่ได้: พังแล้ว หรือเป็นเมืองร้างที่ประตูเปิดถาวร",
     war_ended:"ศึกนี้จบแล้ว",war_exit:"กลับห้องโลกผ่านหน้าด่านกิลด์",war_unavailable:"ด่านยังเปิดศึกไม่ได้",
     war_not_owner:"เฉพาะกิลด์ผู้ครองด่าน",war_government_role:"ตำแหน่งของคุณทำรายการนี้ไม่ได้",
     war_government_battle:"รอให้ศึกจบก่อนบริหารด่าน",war_government_stale:"บัญชีด่านเปลี่ยนแล้ว ตรวจยอดล่าสุดก่อนทำรายการ",
     war_no_income:"ยังไม่มีรายได้เต็มหน่วยให้เก็บ",war_building_max:"อาคารถึงระดับสูงสุดแล้ว",war_funds:"เงินคลังกิลด์ไม่พอ",
     war_repair_first:"ต้องซ่อมคลังเสบียงก่อนพัฒนาอาคาร",war_no_damage:"คลังเสบียงอยู่ในสภาพพร้อมใช้",war_government_location:"กลับห้องโลกและยืนบนพื้นในด่านที่ครอง"};
+  function warGateText(s){
+    if(s.river && !s.river.defended)return "เมืองร้าง ประตูเปิดถาวร (ไม่มีผู้ครอง จึงปิดหรือทุบประตูไม่ได้)";
+    const defs=worldDefinitions?.[s.site]?.strategic?.rampart?.gates || [];
+    const gates=s.river?.gates || s.pilot?.gates || s.gates;
+    if(!gates)return "ประตู "+(s.gateHp<=0?"พังแล้ว":s.gateClosed?"ปิด":"เปิด")+" "+s.gateHp+"/120";
+    return defs.filter(g=>gates[g.id]).map(g=>{const st=gates[g.id];return (g.name||"ประตู "+g.id)+" "+(st.hp<=0?"พังแล้ว":st.closed?"ปิด":"เปิด")+" "+st.hp+"/120";}).join(" · ");
+  }
   const warPhase=p=>({open:"เปิดให้ท้าชิง",battle:"กำลังรบ",protected:"อยู่ในความคุ้มครอง",finished:"จบศึกแล้ว"})[p] || "กำลังตรวจด่าน";
   const warTime=s=>Math.floor(s/60)+" นาที "+s%60+" วินาที";
   function syncWarQuartermaster(){
@@ -576,7 +583,7 @@
     $("warOwner").textContent="ธงครองด่าน · "+(s.owner || "เป็นกลาง")+(s.inField?" · คุณอยู่ฝ่าย"+(s.side==="attack"?"บุก":"รับ"):"");
     $("warStatus").textContent=warPhase(s.phase)+(s.phase==="battle"?" · เหลือ "+warTime(s.seconds)+" · "+s.attackName+" บุก / "+(s.defendName || "รอคู่ชิง")+" รับ":"");
     const fort=worldDefinitions?.[s.site]?.strategic?.sites?.find(site=>site.kind==="fort");
-    $("warFlag").textContent=fort?"ธง ("+fort.x+", "+fort.z+") · รัศมี 5 ม. · บันไดขึ้นลง 2 ทาง ดูจุดสีฟ้าบนแผนที่"+(s.inField?" · ประตู "+(s.gateHp<=0?"พังแล้ว":s.gateClosed?"ปิด":"เปิด")+" "+s.gateHp+"/120":""):"";
+    $("warFlag").textContent=fort?"ธง ("+fort.x+", "+fort.z+") · รัศมี 5 ม. · บันไดขึ้นลง 2 ทาง ดูจุดสีฟ้าบนแผนที่"+(s.inField?" · "+warGateText(s):""):"";
     const isCastle=s.site==="tri_wiang_castle";
     const gauge=$("warGauge");gauge.hidden=isCastle || s.phase!=="battle";gauge.max=s.goal;gauge.value=Math.abs(s.progress);
     $("warCount").textContent=s.phase==="battle"?((s.progress<0?"ฝ่ายรับ":"ฝ่ายบุก")+" ยึดธง "+Math.abs(s.progress)+"/"+s.goal+(s.inField?" · ในวง บุก "+s.attack+" รับ "+s.defend:"")):"";

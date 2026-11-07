@@ -8,19 +8,50 @@ import { spawnSync } from 'node:child_process';
 import { assembleClient, checkClient, clientRoot, prepareClient, writeClient } from './build-client.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
-test('initial extraction retains every baseline byte and one unchanged IIFE', () => {
+// Intentional reviewed gate compatibility and market behavior changes. Keep snapshot
+// evidence unchanged; every other fragment must still match that evidence.
+const reviewedReleaseFragments = new Map([
+  {
+    "path": "world/017-region-terrain.js",
+    "bytes": 55705,
+    "sha256": "4178b32e10cde7f1ff798732f831397317cc4809444108338d75bcf624c7b00d"
+  },
+  {
+    "path": "world/019-state-and-portals.js",
+    "bytes": 19219,
+    "sha256": "433a2e4004df0292a90699a71e14453bf843690895ba43d6676b54f270abf500"
+  },
+  {
+    "path": "ui/047-maps-and-strategy.js",
+    "bytes": 72195,
+    "sha256": "05d687136931ba32f235b6477d6285105329d6bb869d4daad289e1b7f4238048"
+  },
+  {
+    "path": "core/059-frame-loop-and-startup.js",
+    "bytes": 18707,
+    "sha256": "a73a400a703a8700c1123716baa12ccc4941338a9d0b8a0589b9353404bbb35c"
+  },
+  {
+    "path": "ui/055-market-and-trade.js",
+    "bytes": 55367,
+    "sha256": "2cf0b6272de3ff4cbd59ab5ca19319cff7b098d0eadfc82f18af8a090ee52678"
+  }
+].map(entry => [entry.path, entry]));
+
+test('reviewed combined client preserves unchanged snapshot bytes and deterministic assembly', () => {
   const baseline = JSON.parse(readFileSync(join(clientRoot, 'src/client/extraction-baseline.json')));
   const bytes = assembleClient();
-  assert.equal(bytes.length, 1444879);
-  assert.equal(hash(bytes), 'b94183a749a1b7b09f19db22172d2531d0b03d2a9bab092fb10cb2cb72710890');
-  assert.equal(bytes.length, baseline.bytes);
-  assert.equal(hash(bytes), baseline.sha256);
+  assert.equal(baseline.bytes, 1467465);
+  assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
+  assert.equal(bytes.length, 1469655);
+  assert.equal(hash(bytes), '027aff1818e0150141daa2712a949a9dbe5caab0cc78a86ec1d0b9ff4b5f8629');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
     const fragment = readFileSync(join(clientRoot, 'src/client', entry.path));
-    assert.equal(fragment.length, entry.bytes, entry.path);
-    assert.equal(hash(fragment), entry.sha256, entry.path);
+    const expected = reviewedReleaseFragments.get(entry.path) ?? entry;
+    assert.equal(fragment.length, expected.bytes, entry.path);
+    assert.equal(hash(fragment), expected.sha256, entry.path);
   }
   assert.deepEqual(assembleClient(), assembleClient());
 });
