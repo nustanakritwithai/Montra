@@ -1,0 +1,5 @@
+# Generated client, verification projects and static build output only.
+/combat-verify/
+/_site/
+/node_modules/
+/main.js

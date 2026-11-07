@@ -114,6 +114,15 @@
     error: (d, t) => { tone(d, t, { type: "triangle", freq: 190, to: 140, glide: .12, decay: .16, gain: .35 }); },
     coin: (d, t) => { metal(d, t, 1318, [[1, 1], [1.5, .5, .6]], { gain: .18, decay: .35 }); metal(d, t + .08, 1975, [[1, 1], [1.5, .4, .6]], { gain: .14, decay: .4 }); },
     gong: (d, t, p) => { const b = p.freq || 98; metal(d, t, b, [[1, 1, 1], [1.48, .5, .8], [2.02, .4, .6], [2.76, .25, .45], [3.9, .12, .3]], { gain: .42, decay: 3.2, attack: .01 }); noise(d, t, { type: "lowpass", freq: 600, decay: .12, gain: .15 }); },
+    war_horn: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      [146.83, 220, 293.66].forEach((f, i) => {
+        tone(d, t + i * 0.22, { type: "sawtooth", freq: f, to: f * 1.02, glide: 0.4, attack: 0.12, decay: 1.4, gain: 0.35 * k });
+        tone(d, t + i * 0.22, { type: "triangle", freq: f * 2, attack: 0.15, decay: 1.2, gain: 0.2 * k });
+      });
+      noise(d, t, { type: "bandpass", freq: 800, q: 2.5, attack: 0.1, decay: 1.6, gain: 0.15 * k });
+      R.gong(d, t + 0.66, { freq: 73.4, intensity: 1.2 });
+    },
     // Footsteps per surface.
     step_wood: (d, t, p) => { tone(d, t, { freq: rnd(115, 135), to: 70, glide: .05, decay: .06, gain: .32 * p.intensity }); noise(d, t, { freq: rnd(550, 700), q: 2.5, decay: .045, gain: .2 * p.intensity }); },
     step_soil: (d, t, p) => { noise(d, t, { type: "lowpass", freq: rnd(420, 600), decay: .08, gain: .6 * p.intensity }); tone(d, t, { freq: 80, to: 55, glide: .05, decay: .05, gain: .3 * p.intensity }); },
@@ -223,6 +232,37 @@
       tone(d, t + .16, { freq: 60, to: 30, glide: .18, decay: .65, gain: .55 * k });
       R.gong(d, t + .2, { freq: 82, gain: .38 * k });
     },
+    banner: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      R.gong(d, t, { freq: 110, gain: 0.5 * k });
+      noise(d, t + 0.08, { type: "bandpass", freq: 650, to: 280, glide: 0.8, q: 3.5, attack: 0.05, decay: 0.9, gain: 0.35 * k });
+      [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => metal(d, t + 0.15 + i * 0.08, f, [[1, 1], [2.2, 0.3, 0.4]], { gain: 0.12 * k, decay: 1.5 }));
+    },
+    wing_glide: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { type: "bandpass", freq: 520, Q: 1.6, gain: 0.16 * k, decay: 0.8 });
+      tone(d, t, { type: "sine", freq: 587.33, to: 880, glide: 0.22, attack: 0.04, decay: 0.5, gain: 0.12 * k });
+      tone(d, t + 0.08, { type: "triangle", freq: 880, to: 1174.66, glide: 0.18, attack: 0.03, decay: 0.45, gain: 0.09 * k });
+    },
+    meteor_slam: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { type: "lowpass", freq: 180, gain: 0.35 * k, decay: 1.1 });
+      tone(d, t, { type: "sawtooth", freq: 120, to: 42, glide: 0.18, attack: 0.01, decay: 0.7, gain: 0.3 * k });
+      metal(d, t + 0.02, 130.81, [[1, 1], [1.5, 0.4]], { gain: 0.24 * k, decay: 1.3 });
+    },
+    pet_chime: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      [1046.5, 1318.51, 1567.98, 2093.0].forEach((f, i) => {
+        metal(d, t + i * 0.05, f, [[1, 1], [2.4, 0.3, 0.4]], { gain: 0.11 * k, decay: 0.8 });
+      });
+      tone(d, t, { type: "sine", freq: 880, to: 1760, glide: 0.18, attack: 0.02, decay: 0.25, gain: 0.15 * k });
+    },
+    whisper: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { type: "bandpass", freq: 950, to: 420, glide: 1.2, q: 4.5, attack: 0.18, decay: 1.8, gain: 0.28 * k });
+      noise(d, t + 0.1, { type: "bandpass", freq: 2200, to: 1600, glide: 0.9, q: 5.5, attack: 0.12, decay: 1.4, gain: 0.22 * k });
+      tone(d, t + 0.05, { type: "sine", freq: 280, to: 140, glide: 1.1, attack: 0.2, decay: 1.6, gain: 0.14 * k });
+    },
     seer_curse: (d, t, p) => {
       const k = p.intensity ?? 1;
       noise(d, t, { freq: 1500, to: 650, glide: .55, q: 8, attack: .12, decay: .65, gain: .32 * k });
@@ -324,13 +364,13 @@
   // Which bus, how much reverb and base loudness for each sound.
   const META = {
     tap: ["ui", 0, .9], open: ["ui", .05, .9], close: ["ui", .05, .9], toast: ["ui", .25, 1], error: ["ui", 0, 1], coin: ["ui", .2, 1], levelup: ["ui", .4, 1],
-    gong: ["sfx", .5, 1], drum: ["sfx", .35, 1], thunder: ["ambience", .5, 1], ghost: ["sfx", .4, .9],
+    gong: ["sfx", .5, 1], war_horn: ["sfx", .4, 1.2], drum: ["sfx", .35, 1], thunder: ["ambience", .5, 1], wing_glide: ["sfx", .4, 1.0], meteor_slam: ["sfx", .5, 1.2], pet_chime: ["sfx", .4, 1.0], banner: ["sfx", .45, 1.1], whisper: ["sfx", .4, 1.1], ghost: ["sfx", .4, .9],
     phuttha_core: ["sfx", .25, 1], sritra_core: ["sfx", .4, 1], atamat_core: ["sfx", .3, 1], chumphon_core: ["sfx", .5, 1],
     muay_chaiya: ["sfx", .2, 1], muay_korat: ["sfx", .25, 1], muay_lopburi: ["sfx", .2, 1], muay_thasao: ["sfx", .2, 1],
     seer_buffalo: ["sfx", .4, 1], seer_curse: ["sfx", .45, 1], seer_binding: ["sfx", .3, 1], seer_burst: ["sfx", .35, 1],
     seer_pot: ["sfx", .3, 1], seer_poison: ["sfx", .25, 1],
   };
-  const DUR = { ghost: 2.6, gong: 3.5, levelup: 3.5, down: 3.5, summon: 4.5, thunder: 3, ghost_die: 1.6, warp: 1.8, fly: 1.6, respawn: 1.4, toast: .9,
+  const DUR = { ghost: 2.6, gong: 3.5, war_horn: 3.2, levelup: 3.5, down: 3.5, summon: 4.5, thunder: 3, wing_glide: 1.4, meteor_slam: 2.0, pet_chime: 1.6, banner: 2.8, whisper: 2.2, ghost_die: 1.6, warp: 1.8, fly: 1.6, respawn: 1.4, toast: .9,
     phuttha_core: 1.0, sritra_core: 2.2, atamat_core: 1.2, chumphon_core: 2.5,
     muay_chaiya: .6, muay_korat: .8, muay_lopburi: .7, muay_thasao: .7,
     seer_buffalo: 1.8, seer_curse: 1.4, seer_binding: 1.0, seer_burst: 1.2, seer_pot: 1.0, seer_poison: .9 };
@@ -593,6 +633,7 @@
     elder: { pitch: 0.82, rate: 0.88 },
     monk: { pitch: 0.78, rate: 0.82 },
     warrior: { pitch: 0.92, rate: 1.08 },
+    spirit: { pitch: 1.16, rate: 0.92 },
     merchant: { pitch: 1.15, rate: 1.05 },
     guide: { pitch: 1.0, rate: 1.0 },
   };

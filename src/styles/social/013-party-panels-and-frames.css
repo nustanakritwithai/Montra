@@ -1,0 +1,49 @@
+/* ===== Party panel ===== */
+.px-banner { padding-right: 16px; }
+.px-banner::after { content: none; }
+.px-emblem { flex-shrink: 0; width: 60px; height: 60px; border-radius: 16px; display: grid; place-items: center; font-size: 30px; color: #2a1a08; background: radial-gradient(circle at 40% 35%, #ffe0a0, #c08a3a 70%); box-shadow: 0 0 0 3px #3a2a14, 0 0 0 5px #d3a75e, 0 4px 14px #000a; transform: rotate(-6deg); }
+.px-pips { margin-left: auto; display: flex; gap: 5px; z-index: 1; }
+.px-pips i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #d3a75e88; }
+.px-pips i.on { background: #f2c86e; box-shadow: 0 0 8px #f2c86e99; }
+.px-invite { border: 1px solid #f0c46c99; background: linear-gradient(90deg, #3a2a10, #14211f); border-radius: 12px; padding: 10px 12px; margin: 8px 0; }
+.px-members { display: grid; gap: 8px; margin: 10px 0; }
+.px-card { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 14px; background: linear-gradient(160deg, #182629, #0d181a); border: 1px solid #b18b5040; }
+.px-card.me { border-color: #d3a75e88; box-shadow: inset 0 0 0 1px #d3a75e22; }
+.px-card.down { opacity: .6; filter: grayscale(.5); }
+.px-card.empty { border-style: dashed; background: #0c1517; }
+.px-card.empty .px-avatar { border-style: dashed; color: #8b9a96; background: none; }
+.px-avatar { font-size: 19px; }
+.px-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.px-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.px-head strong { color: #ffe2a6; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px-lv { font-size: 11px; color: #1d1408; background: linear-gradient(#f0c46c, #a8742f); padding: 1px 7px; border-radius: 8px; }
+.px-class { font-size: 11px; color: #bfb39b; }
+.px-bar { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
+.px-bar div { height: 8px; border-radius: 5px; background: #070f11; border: 1px solid #ffffff1c; overflow: hidden; }
+.px-bar i { display: block; height: 100%; transition: width .3s ease; }
+.px-bar.hp i { background: linear-gradient(90deg, #ad3a3d, #e36e66); }
+.px-bar.st i { background: linear-gradient(90deg, #355ab2, #69b5e8); }
+.px-bar small { font-size: 10.5px; color: #f0e2c4; min-width: 64px; text-align: right; }
+.px-loc { font-size: 11px; color: #9fd4c0; }
+.px-loc.far { color: #ffb28a; }
+.px-banner .gx-title strong { font-size: 18px; overflow-wrap: normal; word-break: normal; }
+
+/* ===== Party frames on the play screen ===== */
+.party-frames { position: absolute; z-index: 3; left: 12px; top: 300px; width: min(42vw, 168px); padding: 0; border: 0; background: none; display: flex; flex-direction: column; gap: 5px; text-align: left; color: inherit; font: inherit; }
+.party-frames[hidden] { display: none; }
+.pf-row { display: flex; align-items: center; gap: 7px; padding: 5px 7px; border-radius: 10px; background: #0b1618d9; border: 1px solid #b18b5055; box-shadow: 0 4px 12px #0007; }
+.pf-av { position: relative; flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 13px; color: #f6dca2; background: radial-gradient(circle at 50% 35%, #5a4028, #1f2320 80%); border: 1px solid #a9885c; }
+.pf-av[data-lead]::after { content: attr(data-lead); position: absolute; top: -7px; right: -5px; font-size: 10px; color: #f6cf7c; text-shadow: 0 1px 2px #000; }
+.pf-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pf-top { display: flex; justify-content: space-between; gap: 4px; font-size: 10px; }
+.pf-top b { color: #f3e2c0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-top small { flex-shrink: 0; font-size: 9px; color: #9fd4c0; }
+.pf-bar { display: block; height: 5px; border-radius: 4px; background: #070f11; border: 1px solid #ffffff1c; overflow: hidden; }
+.pf-bar i { display: block; height: 100%; background: linear-gradient(90deg, #ad3a3d, #e36e66); transition: width .3s ease; }
+.pf-row.low .pf-av { border-color: #ff6a5a; box-shadow: 0 0 8px #ff4a3a88; }
+.pf-row.far { opacity: .75; } .pf-row.far .pf-top small { color: #ffb28a; }
+.pf-row.down { opacity: .55; filter: grayscale(.7); }
+@media (max-width: 640px) and (orientation: portrait) {
+  .party-frames { top: calc(var(--portrait-hud-top) + 208px); left: 8px; }
+}
+

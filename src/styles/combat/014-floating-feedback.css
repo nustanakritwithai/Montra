@@ -1,0 +1,131 @@
+/* ===== Floating combat text (Ragnarok-style) ===== */
+.float-layer { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+.ftxt { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none;
+  font: 900 22px/1 "Arial Black", "Segoe UI Black", Impact, system-ui, sans-serif; letter-spacing: .5px; color: #fff;
+  -webkit-text-stroke: 4px #1a0d06; paint-order: stroke fill; text-shadow: 0 3px 0 #0008, 0 0 10px #0006;
+  animation: ftPop 1.25s cubic-bezier(.2,.8,.3,1) forwards; will-change: transform, opacity; }
+.ftxt.big { font-size: 30px; }
+.ftxt.dealt { color: #ffffff; }
+.ftxt.skill { color: #ffd84a; -webkit-text-stroke-color: #3a1e00; }
+.ftxt.ally { color: #d8d8d0; font-size: 15px; -webkit-text-stroke-width: 3px; opacity: .9; }
+.ftxt.taken { color: #ff4a3d; -webkit-text-stroke-color: #2a0000; }
+.ftxt.spirit { color: #e2b8ff; -webkit-text-stroke-color: #2a0a3a; }
+.ftxt.heal { color: #7dff8a; -webkit-text-stroke-color: #002a08; animation-name: ftRise; }
+.ftxt.exp { color: #8ad8ff; font-size: 16px; -webkit-text-stroke-width: 3px; -webkit-text-stroke-color: #001a2a; animation-name: ftRise; }
+.ftxt.status { color: #f0b8ff; font: 900 18px/1 system-ui, "Noto Sans Thai", sans-serif; -webkit-text-stroke: 4px #2a0a3a; paint-order: stroke fill; animation-name: ftRise; }
+.ftxt.combo { color: #ffb84a; font: 900 17px/1 system-ui, "Noto Sans Thai", sans-serif; -webkit-text-stroke: 4px #3a1400; paint-order: stroke fill; animation-name: ftRise; }
+.ftxt.combo.big { font-size: 24px; }
+.ftxt.weak { color: #9fd4ff; font: 800 14px/1 system-ui, sans-serif; -webkit-text-stroke: 3px #001a2a; paint-order: stroke fill; animation-name: ftRise; }
+.ftxt.levelup { color: #ffe27a; font: 900 34px/1 Georgia, serif; -webkit-text-stroke: 5px #3a2000; paint-order: stroke fill; text-shadow: 0 0 18px #ffb84a, 0 0 36px #ff9a2a88; animation: ftLevel 2.2s ease-out forwards; }
+/* Pop, overshoot, arc sideways and drop while fading (the Ragnarok bounce). */
+@keyframes ftPop {
+  0% { transform: translate(-50%, -50%) scale(.3); opacity: 0; }
+  10% { transform: translate(-50%, -80%) scale(1.75); opacity: 1; }
+  22% { transform: translate(calc(-50% + var(--dx) * .25), calc(-50% - var(--rise))) scale(1); }
+  60% { transform: translate(calc(-50% + var(--dx) * .7), calc(-50% - var(--rise) * .55)) scale(.95); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + 18px)) scale(.8); opacity: 0; }
+}
+@keyframes ftRise {
+  0% { transform: translate(-50%, -30%) scale(.5); opacity: 0; }
+  15% { transform: translate(-50%, -60%) scale(1.25); opacity: 1; }
+  70% { transform: translate(-50%, calc(-60% - var(--rise))) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, calc(-60% - var(--rise) * 1.3)) scale(1); opacity: 0; }
+}
+@keyframes ftLevel {
+  0% { transform: translate(-50%, -50%) scale(.2) rotate(-8deg); opacity: 0; }
+  15% { transform: translate(-50%, -90%) scale(1.5) rotate(3deg); opacity: 1; }
+  30% { transform: translate(-50%, -110%) scale(1) rotate(0); }
+  80% { transform: translate(-50%, -150%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -180%) scale(1.05); opacity: 0; }
+}
+/* Comic words: hit onomatopoeia, skill shouts in a bubble, ghost cries. */
+.ftxt.onoma { color: #ffe9b8; font: 900 19px/1 system-ui, "Noto Sans Thai", sans-serif; -webkit-text-stroke: 4px #2a1400; paint-order: stroke fill; transform-origin: center; animation-name: ftOnoma; }
+.ftxt.shout { color: #1d1408; font: 800 13px/1.1 system-ui, "Noto Sans Thai", sans-serif; -webkit-text-stroke: 0; padding: 5px 10px; border-radius: 12px; background: #fff3d8; border: 2px solid #2a1a08; box-shadow: 0 3px 0 #2a1a08, 0 4px 12px #0008; animation-name: ftShout; }
+.ftxt.shout::after { content: ""; position: absolute; left: 50%; bottom: -8px; margin-left: -6px; border: 6px solid transparent; border-top-color: #2a1a08; }
+.ftxt.cry { color: #ff6a6a; font: 900 20px/1 system-ui, "Noto Sans Thai", sans-serif; -webkit-text-stroke: 4px #2a0000; paint-order: stroke fill; animation-name: ftCry; }
+@keyframes ftOnoma {
+  0% { transform: translate(-50%, -50%) scale(.2) rotate(-14deg); opacity: 0; }
+  14% { transform: translate(calc(-50% + var(--dx) * .5), -80%) scale(1.45) rotate(8deg); opacity: 1; }
+  40% { transform: translate(calc(-50% + var(--dx) * .8), calc(-50% - var(--rise))) scale(1) rotate(-4deg); }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% - var(--rise) * 1.2)) scale(.9) rotate(0); opacity: 0; }
+}
+@keyframes ftShout {
+  0% { transform: translate(-50%, -100%) scale(.4); opacity: 0; }
+  12% { transform: translate(-50%, -120%) scale(1.12); opacity: 1; }
+  22% { transform: translate(-50%, -120%) scale(1); }
+  82% { transform: translate(-50%, calc(-120% - var(--rise))) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, calc(-120% - var(--rise))) scale(.96); opacity: 0; }
+}
+@keyframes ftCry {
+  0%, 100% { opacity: 0; }
+  0% { transform: translate(-50%, -50%) scale(.5); }
+  12% { transform: translate(-52%, -70%) scale(1.3); opacity: 1; }
+  18% { transform: translate(-48%, -70%) scale(1.2); }
+  24% { transform: translate(-52%, -70%) scale(1.25); }
+  30% { transform: translate(-50%, -70%) scale(1.15); }
+  80% { transform: translate(-50%, calc(-70% - var(--rise))) scale(1); opacity: 1; }
+}
+/* Far camera is the main way to play: keep popups large and crisp. */
+.ftxt { font-size: 24px; }
+.ftxt.big { font-size: 32px; }
+.ftxt.cry { z-index: 3; }
+.ftxt.shout { z-index: 1; opacity: .96; }
+.ftxt.taken, .ftxt.dealt, .ftxt.skill { z-index: 2; }
+/* Far-view polish: metallic gradient faces over a thick dark stroke, a coloured glow, and a heavier slam for big hits. */
+.ftxt.skill { display: block; width: auto; gap: 0; } /* the HUD .skill button rule otherwise turns the popup into a fixed-width flex box */
+.ftxt.metal { --g1: #ffffff; --g2: #fff1cc; --g3: #ffbe55; --sk: #1a0d06; --glow: #ffb84a55;
+  color: var(--sk); -webkit-text-stroke-color: var(--sk); text-shadow: 0 3px 0 #000b, 0 0 14px var(--glow), 0 0 4px var(--glow); }
+.ftxt.metal::after { content: attr(data-t); position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: inherit; white-space: nowrap;
+  -webkit-text-stroke: 0; text-shadow: none; color: transparent;
+  background: linear-gradient(180deg, var(--g1) 0%, var(--g1) 38%, var(--g2) 52%, var(--g3) 100%); -webkit-background-clip: text; background-clip: text; }
+.ftxt.metal.dealt { --g1: #ffffff; --g2: #fdf3dc; --g3: #e8c27a; --glow: #ffffff44; }
+.ftxt.metal.skill { --g1: #fffbe2; --g2: #ffd84a; --g3: #ff8a10; --sk: #3a1800; --glow: #ffae2a99; }
+.ftxt.metal.taken { --g1: #ffe0da; --g2: #ff4a3d; --g3: #b0100a; --sk: #2a0000; --glow: #ff2a2a88; }
+.ftxt.metal.heal { --g1: #f0fff0; --g2: #7dff8a; --g3: #18a83a; --sk: #002a08; --glow: #4aff6a77; }
+.ftxt.metal.spirit { --g1: #fbefff; --g2: #e2b8ff; --g3: #9a4aff; --sk: #1e0636; --glow: #c07aff88; }
+.ftxt.metal.onoma { --g1: #ffffff; --g2: #ffe9b8; --g3: #ff9a3a; --sk: #2a1400; --glow: #ff9a3a66; }
+.ftxt.metal.cry { --g1: #ffe2e2; --g2: #ff5a5a; --g3: #8a0a3a; --sk: #200008; --glow: #ff2a5a88; }
+.ftxt.metal.levelup { --g1: #fffbe0; --g2: #ffd24a; --g3: #d07a00; --sk: #3a2000; --glow: #ffb84acc; }
+.ftxt.metal.big { --glow: #ffd84acc; -webkit-text-stroke-width: 5px; }
+.ftxt.crit { z-index: 4; font-size: 34px; color: #ff5533; -webkit-text-stroke-color: #3a0000; }
+.ftxt.metal.crit { --g1: #ffffff; --g2: #fff580; --g3: #ff2a00; --sk: #300000; --glow: #ff4a10ee;
+  color: var(--sk); -webkit-text-stroke-color: var(--sk); -webkit-text-stroke-width: 5px;
+  text-shadow: 0 4px 0 #000, 0 0 16px #ff4a10, 0 0 32px #ff8a00cc;
+  animation-name: ftCritPop; }
+.ftxt.metal.big:not(.heal):not(.levelup):not(.crit) { animation-name: ftSmash; }
+@keyframes ftCritPop {
+  0% { transform: translate(-50%, -50%) scale(.2) rotate(-8deg); opacity: 0; }
+  10% { transform: translate(-50%, -85%) scale(2.2) rotate(4deg); opacity: 1; }
+  18% { transform: translate(-46%, -80%) scale(1.6) rotate(-3deg); }
+  26% { transform: translate(-54%, -82%) scale(1.7) rotate(2deg); }
+  34% { transform: translate(calc(-50% + var(--dx) * .25), calc(-50% - var(--rise) * 1.1)) scale(1.3) rotate(0); }
+  68% { transform: translate(calc(-50% + var(--dx) * .7), calc(-50% - var(--rise) * .6)) scale(1.15); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + 22px)) scale(.9); opacity: 0; }
+}
+.ftxt.metal.taken.big { --glow: #ff3a2acc; }
+@keyframes ftSmash {
+  0% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+  8% { transform: translate(-50%, -60%) scale(1.5); opacity: 1; }
+  12% { transform: translate(-46%, -62%) scale(1.6) rotate(-4deg); }
+  16% { transform: translate(-54%, -60%) scale(1.45) rotate(3deg); }
+  22% { transform: translate(calc(-50% + var(--dx) * .25), calc(-50% - var(--rise))) scale(1.15) rotate(0); }
+  62% { transform: translate(calc(-50% + var(--dx) * .7), calc(-50% - var(--rise) * .55)) scale(1.05); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + 18px)) scale(.85); opacity: 0; }
+}
+/* Skill-shout bubble: crisp text with no inherited outline shadow (it doubled the glyphs), gilded edge. */
+.ftxt.shout { text-shadow: none; -webkit-text-stroke: 0; paint-order: normal; opacity: 1; color: #2a1606;
+  font: 800 14px/1.15 "Noto Sans Thai", system-ui, sans-serif; letter-spacing: 0; padding: 6px 12px 7px;
+  background: linear-gradient(180deg, #fffaf0 0%, #fbe9c4 100%); border: 2px solid #c8962e; border-radius: 14px;
+  box-shadow: 0 0 0 2px #2a1606, 0 3px 0 2px #2a1606, 0 0 14px #ffc85a88; -webkit-font-smoothing: antialiased; }
+.ftxt.shout::after { bottom: -9px; margin-left: -7px; border-width: 7px; border-top-color: #c8962e; filter: drop-shadow(0 2px 0 #2a1606); }
+.account-entry { position:fixed; inset:0; z-index:10000; overflow-y:auto; display:grid; place-items:center; padding:24px 16px; background:radial-gradient(ellipse at top,#294b40,#0c191a 70%); color:#f4e9cc; }
+.account-entry[hidden] { display:none; }
+.account-card { width:min(100%,480px); padding:24px; border:1px solid #9d8a5d; border-radius:18px; background:#142522; box-shadow:0 16px 48px #0008; }
+.account-brand { color:#e9cc89; font-weight:800; letter-spacing:.16em; }
+.account-card h1 { font-size:1.5rem; margin:12px 0; }
+.account-note { color:#cfdbcb; line-height:1.5; }
+.account-error { color:#ffd1b9; min-height:1.3em; }
+.account-field { display:grid; gap:6px; margin:12px 0; }
+.account-card input,.account-card select,.account-card textarea { width:100%; box-sizing:border-box; padding:11px; border:1px solid #6b8976; border-radius:8px; background:#0c1918; color:#fff; font:inherit; }
+.account-card button { width:100%; margin:6px 0; min-height:44px; cursor:pointer; }
+.account-slot { display:block; padding:12px; text-align:left; border:1px solid #7a927c; border-radius:9px; background:#243d34; color:#fff; font:inherit; }

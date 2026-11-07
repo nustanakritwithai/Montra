@@ -1,0 +1,59 @@
+/* ---- Party portraits (top-left, under the quest) ---- */
+.hud-journal .party-frames { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0; background: none; border: 0; box-shadow: none; max-height: none; overflow: visible; }
+.party-frames .pf-row { position: relative; display: flex; flex-direction: column; align-items: center; width: 56px; gap: 2px; padding: 0; background: none; border: 0; }
+.party-frames .pf-av { position: relative; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; font-style: normal; font-size: 21px; color: #fff4dc;
+  background: radial-gradient(circle at 50% 30%, #6a5a40, #241c12); border: 2px solid #c9a35a; box-shadow: 0 2px 6px #000a; }
+.party-frames .pf-row[data-path="phutthaisawan"] .pf-av { background: radial-gradient(circle at 50% 30%, #ffe08a, #8a5a14); }
+.party-frames .pf-row[data-path="muay_boran"] .pf-av { background: radial-gradient(circle at 50% 30%, #ffa26a, #7a2410); }
+.party-frames .pf-row[data-path="blade"] .pf-av { background: radial-gradient(circle at 50% 30%, #cfa8ff, #3e1a72); }
+.party-frames .pf-row[data-path="sentinel"] .pf-av { background: radial-gradient(circle at 50% 30%, #b9d4f0, #24405e); }
+.party-frames .pf-row[data-path="seer"] .pf-av { background: radial-gradient(circle at 50% 30%, #8fefff, #145a70); }
+.party-frames .pf-row[data-path="mender"] .pf-av { background: radial-gradient(circle at 50% 30%, #a6f5c0, #155a34); }
+.party-frames .pf-av[data-lead]::before { content: attr(data-lead); position: absolute; top: -9px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #ffd23f; text-shadow: 0 1px 2px #000; }
+.party-frames .pf-av[data-lv]::after { content: attr(data-lv); position: absolute; left: -4px; bottom: -3px; min-width: 16px; height: 16px; border-radius: 50%; background: #1a1208; border: 1px solid #c9a35a; font: 800 9px/14px system-ui; text-align: center; color: #ffe39a; }
+.party-frames .pf-body { display: flex; flex-direction: column; align-items: stretch; width: 100%; gap: 2px; }
+.party-frames .pf-top { display: flex; flex-direction: column; align-items: center; }
+.party-frames .pf-top b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: #fff; background: #0b0806cc; padding: 0 4px; border-radius: 4px; }
+.party-frames .pf-top small { font-size: 8.5px; color: #cfc3a6; }
+.party-frames .pf-bar { height: 5px; border-radius: 3px; background: #1b0d0a; box-shadow: inset 0 0 0 1px #000; overflow: hidden; }
+.party-frames .pf-bar i { display: block; height: 100%; background: linear-gradient(90deg, #3fd45a, #a6f56a); }
+.party-frames .pf-row.low .pf-bar i { background: linear-gradient(90deg, #d42a1e, #ff7a5a); }
+.party-frames .pf-row.low .pf-av {
+  border-color: #ff3344;
+  box-shadow: 0 0 12px rgba(255, 51, 68, 0.8);
+  animation: pulseAvatarDanger 0.8s infinite alternate;
+}
+.pf-ping-row {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+  justify-content: center;
+}
+.pf-ping-btn {
+  background: rgba(18, 12, 10, 0.85);
+  border: 1px solid #ffd84a;
+  border-radius: 6px;
+  color: #fff4dc;
+  font: 700 9.5px/1 "Noto Sans Thai", system-ui, sans-serif;
+  padding: 3px 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+.pf-ping-btn:active {
+  transform: scale(0.92);
+}
+.pf-ping-btn.rally {
+  border-color: #ffd84a;
+  background: rgba(80, 55, 10, 0.85);
+}
+.pf-ping-btn.help {
+  border-color: #ff4455;
+  background: rgba(80, 15, 20, 0.85);
+}
+.party-frames .pf-row.down .pf-av { filter: grayscale(1) brightness(.6); } .party-frames .pf-row.far { opacity: .7; }
+.hud-journal .party-frames { flex-direction: row; align-items: flex-start; }
+.party-frames .pf-av[data-lv]::after { top: auto; right: auto; }
+.party-frames .pf-row { box-shadow: none; border-radius: 0; }
+@media (max-width: 640px) { .party-frames .pf-row { width: 50px; } .party-frames .pf-av { width: 40px; height: 40px; font-size: 18px; } }

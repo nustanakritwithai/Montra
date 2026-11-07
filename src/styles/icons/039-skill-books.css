@@ -1,0 +1,48 @@
+/* ========================================================
+   MONTRA Comprehensive 26-Skill SVG Engine & Book Icons
+   ======================================================== */
+
+.skill-book-icon {
+  display: inline-block;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid #d4af37;
+  background-color: #1a2228;
+  background-size: 82% !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.7), inset 0 0 10px rgba(0,0,0,0.5);
+  flex-shrink: 0;
+  vertical-align: middle;
+  margin-right: 12px;
+}
+.sword-node {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+.sword-node > div {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
+/* Universal Specificity Overrides across all Hotbars and Modals */
+.field-slot[data-skill-id] .glyph,
+.skill-bar .field-slot[data-skill-id] .glyph,
+#occultHotbar .field-slot[data-skill-id] .glyph,
+#sentinelHotbar .field-slot[data-skill-id] .glyph,
+#bladeHotbar .field-slot[data-skill-id] .glyph,
+#muayHotbar .field-slot[data-skill-id] .glyph,
+#swordHotbar .field-slot[data-skill-id] .glyph,
+.glyph[data-skill-glyph],
+.skill-book-icon[data-skill-glyph],
+.skill-modal-glyph[data-skill-glyph],
+.kg-glyph[data-skill-glyph] {
+  background-size: 80% !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  font-size: 0 !important;
+  color: transparent !important;
+}
+

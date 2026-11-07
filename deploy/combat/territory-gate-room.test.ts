@@ -1,5 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {mkdtempSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import path from "node:path";
+import {characterStore} from "./CharacterStore.js";
 import type {Client} from "colyseus";
 import {MyRoom} from "./MyRoom.js";
 import {Player} from "./schema/MyRoomState.js";
@@ -11,7 +15,13 @@ type Internals={field:Battlefield;warSeats:Map<string,{guild:string;side:"attack
   persistentCharacters:Map<string,string>;gateActions:Map<string,number>;useCityGate(client:Client,message:unknown):void};
 
 test("ordinary gate handler opens either nearest gate but keeps defender inside/near checks",()=>{
+  // Do not inherit a server's character directory or retain fixture guilds
+  // between repeated runs of this regression.
+  const directory=mkdtempSync(path.join(tmpdir(),"montra-gate-room-"));
+  const mutable=characterStore as unknown as {directory:string},previous=mutable.directory;
+  mutable.directory=directory;
   const store=guildStore(),now=Date.now();
+  try{
   store.create("gate-attacker","A","Gate attackers");store.create("gate-defender","D","Gate defenders");
   const a=store.war.member("gate-attacker")!,d=store.war.member("gate-defender")!;
   const field=store.war.start("river_watch",a,now);
@@ -43,6 +53,7 @@ test("ordinary gate handler opens either nearest gate but keeps defender inside/
   use(-22,-30);
   assert.deepEqual(replies,[{type:"territory_error",data:{reason:"war_gate_near"}}]);
   assert.equal(gates()!["south--18"].closed,false);
+  }finally{store.close();mutable.directory=previous;rmSync(directory,{recursive:true,force:true});}
 });
 
 type Movement={closedFieldGates:Set<string>;canOccupy(x:number,z:number,feetY:number,flying?:boolean,mapId?:string):boolean};

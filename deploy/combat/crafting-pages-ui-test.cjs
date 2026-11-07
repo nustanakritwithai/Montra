@@ -271,7 +271,7 @@ test('bag shortcut and every existing recipe entry route open the dedicated page
   }
   // Field objectives preserve ordinary/boss grouping.
   for(const itemId of ['blade_25','boss_50']){
-    f.ctx.drawerActive='quest';f.ctx.goal={recipe:itemId};f.ctx.recipe=node('button');f.run(line('recipe.hidden=false;recipe.onclick=()=>{selectBenchRecipe('));f.ctx.recipe.onclick();
+    f.ctx.drawerActive='quest';f.ctx.goal={recipe:itemId};f.ctx.recipe=node('button');f.run(line('recipe.onclick=()=>{selectBenchRecipe(personalItems[goal.recipe].sourceBoss?'));f.ctx.recipe.onclick();
     assert.equal(f.ctx.drawerActive,'crafting');assert.equal(f.$('benchRecipe').value,itemId);assert.equal(f.$('benchGroup').value,f.items[itemId].sourceBoss?'boss':'all');
   }
 });

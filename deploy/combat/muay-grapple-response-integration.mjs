@@ -8,11 +8,11 @@ if(!/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(url||"") || new URL(url).port
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn,label,timeout=9000){const end=Date.now()+timeout;while(Date.now()<end){const r=fn();if(r)return r;await sleep(25);}throw Error("timeout: "+label);}
 const token=()=>"mt1_"+randomBytes(32).toString("hex"),tokens=Array.from({length:9},token);
-async function seed(t,name,x,z,job="muay_boran",stamina=100,hp=9999){
+async function seed(t,name,x,z,job="muay_boran",mana=100,hp=9999){
  const id=createHash("sha256").update(t).digest("hex"),slots=Array(12).fill(null),base=["grapple","punch","guard","counter"];
  slots[0]={itemId:"health_potion",quantity:3};if(job==="muay_boran")slots[1]={itemId:"muay_wraps",quantity:1};
  const loadouts={chaiya:[...base],korat:[...base],lopburi:[...base],thasao:[...base]};
- await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level:10,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp,stamina,mapId:"ritual_village",build:{path:job,ancestry:"woodland"},muayWrapGranted:job==="muay_boran",muayBook:{school:"chaiya",learned:[...base],training:{strikes:10,blocks:1},slots:[...base],loadouts},inventory:{version:1,slots,equippedWeaponSlot:job==="muay_boran"?1:null},updatedAt:new Date().toISOString()}),{flag:"wx"});
+ await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name,level:10,experience:0,pkKills:0,pkDeaths:0,x,y:0,z,hp,mana,mapId:"ritual_village",build:{path:job,ancestry:"woodland"},muayWrapGranted:job==="muay_boran",muayBook:{school:"chaiya",learned:[...base],training:{strikes:10,blocks:1},slots:[...base],loadouts},inventory:{version:1,slots,equippedWeaponSlot:job==="muay_boran"?1:null},updatedAt:new Date().toISOString()}),{flag:"wx"});
 }
 await seed(tokens[0],"ผู้จับ",-10,8);await seed(tokens[1],"ผู้แก้จับ",-10,9.4,"seer");
 await seed(tokens[2],"ผู้จับสอง",-14,8);await seed(tokens[3],"แรงไม่พอ",-14,9.4,"seer",0);
@@ -27,22 +27,22 @@ try {
  for(const t of tokens.slice(1,4)){const r=watch(await client.joinById(a.roomId,options(t)));rooms.push(r);}
  let [,victim,b,low]=rooms;const p=id=>a.state?.players?.get(id);
  await until(()=>rooms.every(r=>p(r.sessionId)?.persistent),"first players joined");
- b.send("muay_skill",{skillId:"grapple",targetId:low.sessionId});await until(()=>seen(low,"muay_grapple",e=>e.phase==="held"),"low stamina held");
- low.send("grapple_escape",{});await until(()=>seen(low,"command_rejected",e=>e.reason==="insufficient_stamina"),"low stamina cannot escape");
+ b.send("muay_skill",{skillId:"grapple",targetId:low.sessionId});await until(()=>seen(low,"muay_grapple",e=>e.phase==="held"),"low mana held");
+ low.send("grapple_escape",{});await until(()=>seen(low,"command_rejected",e=>e.reason==="insufficient_mana"),"low mana cannot escape");
  await until(()=>seen(low,"muay_grapple",e=>e.phase==="released" && e.reason==="ended"),"hold times out");
  assert.equal(Boolean(seen(low,"muay_grapple_counter",e=>e.active)),false,"timeout never grants a counter");
  for(const t of tokens.slice(4,7)){const r=watch(await client.joinById(a.roomId,options(t)));rooms.push(r);}
  let [, , , ,c,expiryHolder,expiryVictim]=rooms;
  await until(()=>rooms.every(r=>p(r.sessionId)?.persistent),"all players joined");
- const initialStamina=p(victim.sessionId).stamina;
+ const initialMana=p(victim.sessionId).mana;
  victim.send("grapple_counter",{targetId:c.sessionId});await until(()=>seen(victim,"command_rejected",e=>e.reason==="invalid_grapple_response"),"forged counter rejected");
  await sleep(600);victim.send("grapple_escape",{});await until(()=>seen(victim,"command_rejected",e=>e.reason==="muay_grapple_ended"),"escape requires an active hold");
- assert.ok(p(victim.sessionId).stamina>=initialStamina,"invalid escape has no cost");
+ assert.ok(p(victim.sessionId).mana>=initialMana,"invalid escape has no cost");
  await sleep(600);a.send("muay_skill",{skillId:"grapple",targetId:victim.sessionId});await until(()=>seen(victim,"muay_grapple",e=>e.phase==="held"),"seer held");
- const beforeEscape=p(victim.sessionId).stamina;victim.send("grapple_escape",{});
+ const beforeEscape=p(victim.sessionId).mana;victim.send("grapple_escape",{});
  await until(()=>seen(a,"muay_grapple",e=>e.phase==="released" && e.reason==="escaped"),"holder informed");
  await until(()=>seen(victim,"muay_grapple_counter",e=>e.active && e.stamina===18),"escape opens counter");
- await until(()=>p(victim.sessionId).stamina<beforeEscape-10,"escape stamina charged");
+ await until(()=>p(victim.sessionId).mana<beforeEscape-10,"escape mana charged");
  victim.send("grapple_counter",{targetId:c.sessionId,damage:99999});await until(()=>eventMap.get(victim.sessionId).filter(e=>e.type==="command_rejected" && e.data.reason==="invalid_grapple_response").length>=2,"counter cannot choose target or damage");
  const opponent=p(a.sessionId),striker=p(victim.sessionId),base=Math.max(1,Math.round((striker.atk*0.75)*(100*(1+(opponent.level-1)/15))/(100*(1+(opponent.level-1)/15)+opponent.def)));
  victim.send("grapple_counter",{});const hit=await until(()=>hits(victim,"grapple_counter")[0]?.data,"valid counter");
@@ -65,5 +65,5 @@ try {
  koVictim.send("grapple_counter",{});await sleep(400);
  assert.equal(eventMap.get(koVictim.sessionId).filter(e=>e.type==="pvp_kill" && e.data.loserId===koHolder.sessionId).length,1);
  assert.equal(p(koVictim.sessionId).pkKills,1);assert.equal(p(koHolder.sessionId).pkDeaths,1);
- console.log("PASS: universal escape, stamina, target validation, single counter, resistance after reconnect, expiry and knockout");
+ console.log("PASS: universal escape, mana, target validation, single counter, resistance after reconnect, expiry and knockout");
 } finally {for(const r of rooms.reverse())await r.leave().catch(()=>{});}

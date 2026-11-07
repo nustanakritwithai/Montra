@@ -1,0 +1,82 @@
+/* MONTRA online combat: shared boss HP fed by authoritative server state. */
+.monster-status {
+  position:absolute;
+  z-index:3;
+  top:185px;
+  left:12px;
+  width:min(68vw,310px);
+  padding:10px 11px;
+  border-radius:12px;
+  pointer-events:none;
+}
+.monster-status[hidden] { display:none; }
+.monster-heading {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  font-size:11px;
+  font-weight:700;
+  color:#facbba;
+}
+.monster-heading strong { white-space:nowrap; color:#ffe5d5; font-size:10px; }
+.monster-hp-track {
+  margin-top:7px;
+  width:100%;
+  height:9px;
+  background:#24161a;
+  border:1px solid #8d5655;
+  border-radius:999px;
+  overflow:hidden;
+}
+#monsterBar {
+  width:100%;
+  height:100%;
+  background:linear-gradient(90deg,#a7323c,#f07865);
+  border-radius:999px;
+  transition:width .15s ease;
+}
+#monsterHint { display:block; margin-top:5px; color:#c9c8c1; font-size:10px; }
+@media(max-height:640px) { .monster-status { top:164px; } }
+
+/* MONTRA FreePK mobile: target HP comes from server Schema, never client calculations. */
+.pk-panel {
+  position: absolute;
+  z-index: 4;
+  top: 270px;
+  right: 12px;
+  width: min(78vw, 300px);
+  border-radius: 12px;
+  padding: 10px 11px;
+  border-color: #ad6669a8;
+  background: linear-gradient(125deg, rgba(51, 24, 31, .94), rgba(14, 25, 28, .93));
+  pointer-events: none;
+}
+.pk-panel[hidden], .pk-hp-track[hidden] { display: none; }
+.pk-heading { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.pk-heading strong { color: #ffd2c8; font-size: 12px; white-space: nowrap; }
+.pk-heading span { font-size: 11px; color: #f4ddb8; }
+.pk-hp-track {
+  margin: 7px 0;
+  height: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #301a1d;
+  border: 1px solid #845153;
+}
+#pkHpBar {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ae3943, #f17967);
+  transition: width .15s linear;
+}
+#pkHint {
+  display: block;
+  color: #e0cbc5;
+  font-size: 10px;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+@media(max-height:640px) { .pk-panel { top: 240px; } }
+
+

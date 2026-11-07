@@ -1,0 +1,6 @@
+/* Small screen-sized monster labels, below HUD, never intercept movement or attacks. */
+.monster-label-layer { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+.monster-label { display: flex; gap: 3px; box-sizing: border-box; position: absolute; transform: translate(-50%, -100%); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 4px; border-radius: 4px; background: rgba(12, 15, 20, .65); color: #f4e8cf; font: 600 11px/17px "Noto Sans Thai", sans-serif; text-shadow: 0 1px 2px #000; pointer-events: none; }
+.monster-label[hidden] { display: none; }
+.monster-label-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.monster-label > span:last-child { flex-shrink: 0; }

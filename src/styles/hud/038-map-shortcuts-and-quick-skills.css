@@ -1,0 +1,91 @@
+/* Extra styling for map shortcuts & flyout icons */
+.map-shortcuts button .hud-btn-icon {
+  width: 20px !important;
+  height: 20px !important;
+  margin: auto;
+  display: block;
+}
+.map-sub .drawer-nav-icon {
+  width: 18px !important;
+  height: 18px !important;
+  background-size: contain !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+/* Always show and highlight Quick Skills button under minimap */
+#quickSkills,
+.map-shortcuts #quickSkills,
+.field-shortcuts #quickSkills {
+  display: grid !important;
+  align-items: center;
+  justify-items: center;
+}
+.map-shortcuts #quickSkills {
+  background: linear-gradient(135deg, #1c3b2b 0%, #2e5c45 100%) !important;
+  border: 1px solid #e8ba74 !important;
+  box-shadow: 0 0 6px rgba(232, 186, 116, 0.4);
+}
+.map-shortcuts #quickSkills:hover,
+.map-shortcuts #quickSkills:active {
+  background: linear-gradient(135deg, #2e5c45 0%, #448060 100%) !important;
+  transform: scale(1.05);
+}
+
+/* Phase 15: Shamanic War Banner */
+#bannerButton {
+  position: relative;
+  border: 1px solid rgba(255, 206, 90, 0.4);
+}
+#bannerButton:active,
+#bannerButton[aria-pressed="true"] {
+  border-color: #ffe082;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
+}
+.war-banner-buff-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  margin-top: 4px;
+  border-radius: 12px;
+  background: rgba(26, 18, 8, 0.85);
+  border: 1px solid #ffd700;
+  color: #ffe082;
+  font-size: 11px;
+  font-weight: bold;
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.35);
+  animation: bannerPulse 2s infinite ease-in-out;
+}
+.war-banner-buff-badge[hidden] {
+  display: none !important;
+}
+@keyframes bannerPulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(255, 215, 0, 0.3); }
+  50% { box-shadow: 0 0 14px rgba(255, 215, 0, 0.7); }
+}
+
+/* Phase 16: Shamanic Spirit Pet & Familiar */
+#petButton {
+  position: relative;
+  border: 1px solid rgba(128, 216, 255, 0.4);
+}
+#petButton:active,
+#petButton[aria-pressed="true"] {
+  border-color: #80d8ff;
+  box-shadow: 0 0 10px rgba(0, 176, 255, 0.6);
+}
+
+/* Phase 17: Celestial Wing Flight & Aerial Combat */
+#flightButton {
+  position: relative;
+  border: 1px solid rgba(255, 215, 0, 0.45);
+}
+#flightButton:active,
+#flightButton[aria-pressed="true"] {
+  border-color: #ffd700;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.7);
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.25) 0%, rgba(20, 20, 30, 0.8) 100%);
+}
+
+

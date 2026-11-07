@@ -1,0 +1,49 @@
+/* Compact character medallion: the orb and bottom EXP line remain the only vital meters. */
+.hud-journal .identity { --portrait-gold:#d4b16f; display:block; padding:0; border:0; border-radius:0; background:none; box-shadow:none; backdrop-filter:none; }
+.identity .brand-row { display:none; }
+.identity .profile-trigger { display:flex; align-items:center; justify-content:flex-start; gap:8px; width:100%; min-height:62px; padding:2px 2px 3px; border:0; border-radius:6px; background:linear-gradient(90deg,transparent 12%,#07100de8 30%,#07100db8 85%,transparent); text-align:left; }
+.identity .portrait { width:52px; height:52px; margin:0; border:2px solid var(--portrait-gold); background:radial-gradient(circle at 50% 35%,#8c6344,#282e27 76%); box-shadow:0 0 0 2px #171c17,0 3px 8px #0009; }
+.identity .portrait.low-hp { border-color:#ff6a5a; box-shadow:0 0 0 2px #ff4a3a66,0 0 12px #ff3a2a88; }
+.portrait-figure { width:100%; height:100%; border-radius:50%; overflow:hidden; }
+.identity .portrait-class { position:absolute; top:-3px; left:-5px; width:20px; height:20px; padding:3px; border:1px solid #d4b16f; border-radius:50%; background:#345345; color:#ffe2a1; }
+.identity #levelBadge { right:-3px; bottom:-3px; }
+.identity .character-info { display:grid; gap:2px; min-width:0; padding-right:5px; }
+.identity .name { display:flex; gap:5px; align-items:baseline; min-width:0; margin:0; padding:0; font-size:12px; line-height:1.45; }
+.identity #characterName { float:none; min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:750; color:#fff0d7; }
+.identity #characterLevel { float:none; flex-shrink:0; font-size:9px; font-weight:700; color:#99dbe7; white-space:nowrap; }
+.character-class { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#ddc8a1; font-size:10px; line-height:1.35; }
+.character-power { display:flex; align-items:center; gap:4px; min-width:0; padding:1px 5px 1px 2px; border-top:1px solid #d4b16f70; border-bottom:1px solid #d4b16f40; border-radius:3px 12px 12px 3px; background:linear-gradient(90deg,#b58a45ad,#765c3080,transparent); color:#fff0c9; font-size:9px; line-height:17px; }
+.character-power > span:not(.character-chevron) { white-space:nowrap; flex-shrink:0; }
+.character-power .info-seal { flex-shrink:0; width:14px; height:14px; }
+.character-power b { min-width:0; overflow:hidden; text-overflow:ellipsis; font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.character-chevron { margin-left:auto; color:#e8c989; }
+.identity .profile-trigger:hover { filter:brightness(1.12); }
+.identity .profile-trigger:active { filter:brightness(1.25); }
+@media(max-width:360px) { .location-area { width:110px; } .identity .profile-trigger { gap:6px; } .identity .portrait { width:44px; height:44px; } .identity .name { flex-wrap:wrap; gap:0 4px; } .identity #characterName { flex-basis:100%; } .character-power > span:not(.character-chevron) { display:none; } }
+@media(prefers-reduced-motion:reduce) { .identity .portrait.low-hp { animation:none; } }
+.vital-orb { cursor: pointer; }
+.location-area .field-shortcuts.map-shortcuts { grid-template-columns: repeat(4, 30px); }
+.map-shortcuts .map-proxy > span { font-size: 15px; line-height: 30px; }
+.map-shortcuts .map-proxy b[hidden] { display: none; }
+.vital-orb.orb-strike { transform: scale(.92); filter: drop-shadow(0 0 10px #ff5a3a); }
+.vital-orb { transition: transform .12s; }
+.location-area .field-shortcuts.map-shortcuts { grid-template-columns: repeat(3, 34px); gap: 4px; }
+.map-shortcuts button { width: 34px; height: 34px; } .map-shortcuts button > span { line-height: 34px; font-size: 16px; }
+.map-shortcuts #chatButton { display: none !important; }
+/* Menu fan-out: the ☰ button expands into a column of labelled sub-buttons under the minimap. */
+.map-flyout { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin: 4px 0 0 auto; pointer-events: auto; }
+.map-flyout[hidden] { display: none; }
+.map-sub { position: relative; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px 0 6px; border-radius: 16px; border: 1px solid #3c5a4c; background: #0b1512eb; color: #ece4cb;
+  font: 700 12px/1 "Noto Sans Thai", system-ui, sans-serif; box-shadow: 0 3px 8px #0009; cursor: pointer; animation: subIn .18s ease-out both; animation-delay: calc(var(--i) * 25ms); }
+.map-sub span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #1f3a2f; font-size: 13px; }
+.map-sub em { font-style: normal; }
+.map-sub b { position: absolute; top: -4px; left: -4px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: #c0392b; color: #fff; font: 800 9px/15px system-ui; text-align: center; } .map-sub b[hidden] { display: none; }
+.map-sub:active { background: #1f3a2f; }
+@keyframes subIn { from { opacity: 0; transform: translateY(-6px) scale(.9); } to { opacity: 1; transform: none; } }
+#fieldMenuButton.open { background: #2c5a48; box-shadow: inset 0 0 0 1px #f3c768; }
+.learned-bar #mountButton.orb-mount.mount-off { filter: grayscale(1) brightness(.75); border-style: dashed; }
+/* The old "field shortcut: chat or horse" choice no longer applies: the horse has its own corner button
+   and chat has its own box, so the horse is never hidden by that setting. */
+#game[data-field-utility] .learned-bar #mountButton.orb-mount:not([hidden]) { display: grid; }
+.field-utility-label { display: none !important; }
+

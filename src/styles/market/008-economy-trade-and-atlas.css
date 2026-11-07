@@ -1,0 +1,90 @@
+/* Market and trading stay inside the existing drawer, keeping the world clear. */
+#tradeUnread { min-width:17px; padding:1px 4px; border-radius:10px; background:#a34a38; font-size:10px; }
+.economy-balance { margin-bottom:12px; padding:11px 13px; border:1px solid #b7965c; border-radius:11px; color:#ffe0a1; background:linear-gradient(120deg,#44382a,#1d3030); font-size:15px; font-weight:700; }
+.economy-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.economy-heading h3 { margin:15px 0 8px; }
+.economy-heading button, .market-row button { min-height:40px; padding:7px 11px; border:1px solid #c6a36e; border-radius:9px; background:#59402a; color:#fff1d3; }
+.market-list { max-height: min(32dvh, 260px); overflow-y:auto; border:1px solid #a8875555; border-radius:11px; padding:5px 10px; background:#0c1c1e; }
+.market-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid #ffffff1c; }
+.market-row:last-child { border-bottom:0; }
+.market-row div { min-width:0; display:flex; flex-direction:column; overflow-wrap:anywhere; }
+.market-row strong { color:#f7dbab; }
+.market-row small { color:#c6b9a4; font-size:11px; }
+.drawer-body select,.item-detail-modal select { width:100%; min-height:46px; padding:10px; color:#f8e5c5; background:#081316; border:1px solid #a88b60; border-radius:10px; font:inherit; }
+.economy-inputs { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+.economy-inputs label { min-width:0; font-size:12px; }
+.economy-inputs input { margin-top:5px; font-size:16px; }
+.drawer-body .market-check { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:13px; }
+.drawer-body .market-check input { width:auto; min-height:20px; }
+.market-row .auction-bid-controls { flex:0 0 min(38%,160px); gap:5px; }
+.drawer-body .auction-bid-controls input { min-width:0; min-height:40px; padding:6px 8px; font-size:16px; }
+#economyMarketPanel[hidden], #economyAuctionPanel[hidden], #economySupplyPanel[hidden], #economyTradePanel[hidden], #tradeInviteArea[hidden], #tradeActiveArea[hidden] { display:none; }
+.drawer-body button:disabled { opacity:.5; cursor:not-allowed; }
+
+#partyUnread { min-width:17px; padding:1px 4px; border-radius:10px; background:#a34a38; font-size:10px; }
+.party-invitation { margin:10px 0; padding:12px; border:1px solid #d9b378; border-radius:11px; background:#473a2a; }
+.party-invitation[hidden] { display:none; }
+.party-actions { display:flex; gap:8px; margin-top:9px; }
+.party-actions button { flex:1; min-height:43px; border:1px solid #c8a46d; border-radius:9px; background:#654a2d; }
+.party-member { display:flex; justify-content:space-between; gap:8px; padding:9px 0; border-bottom:1px solid #fff2; }
+.party-member strong { overflow-wrap:anywhere; color:#f7dbab; }
+.party-member span { white-space:nowrap; color:#b9d6ca; }
+
+#chatTargetField[hidden] { display:none; }
+
+.skill[aria-pressed="true"] .glyph { box-shadow:0 0 16px #b677ef; outline:2px solid #e0bcff; }
+
+#buildFields[hidden], #occultBookButton[hidden], #muayBookButton[hidden], #bladeBookButton[hidden], #sentinelBookButton[hidden] { display:none; }
+
+#swordTreeButton[hidden] { display:none; }
+.sword-schools { display:flex; flex-wrap:wrap; gap:6px; }
+.sword-school.selected { outline:2px solid #e5c586; }
+.sword-node { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; margin:7px 0; border:1px solid #8e7654; border-radius:9px; background:#25221f; }
+.sword-node.learned { border-color:#d5b46e; }
+.sword-node p { margin:4px 0; }
+.sword-node small { display:block; opacity:.8; }
+.sword-node button { flex:none; min-height:42px; }
+.sword-passive { color:#e8cb8c; white-space:nowrap; }
+
+.sword-hotbar { display:flex; justify-content:center; gap:5px; margin:0 auto 7px; padding:0 8px; }
+.sword-hotbar[hidden] { display:none; }
+.sword-hotkey { min-width:0; max-width:110px; min-height:40px; padding:4px 8px; border:1px solid #c4a265; border-radius:8px; background:#30291fdf; color:#fff0c8; font-size:11px; }
+.sword-hotkey:disabled { opacity:.55; }
+.sword-slot-label { display:block; margin-top:5px; font-size:12px; }
+.sword-slot-label select { max-width:115px; margin-left:6px; }
+
+.sword-status { width:max-content; max-width:90%; margin:0 auto 4px; padding:3px 9px; border-radius:8px; background:#201a14df; color:#ffe3a0; font-size:11px; text-align:center; }
+.sword-status[hidden] { display:none; }
+
+.guild-member { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 0; border-bottom:1px solid #fff2; }
+.guild-member > div:first-child { display:flex; flex-direction:column; min-width:0; overflow-wrap:anywhere; }
+.guild-member strong { color:#f7dbab; }
+.guild-member small { color:#b9d6ca; }
+.guild-actions { display:flex; flex-wrap:wrap; gap:5px; justify-content:flex-end; }
+.guild-actions button { min-height:40px; padding:5px 9px; border:1px solid #c8a46d; border-radius:9px; background:#59402a; color:#fff1d3; }
+#guildCreateArea[hidden], #guildMemberArea[hidden], #guildInviteArea[hidden], #guildInvitationBox[hidden] { display:none; }
+
+.guild-member { flex-direction:column; align-items:stretch; }
+.guild-management summary { display:block; min-height:42px; padding:10px 12px; border:1px solid #a88b60; border-radius:9px; color:#f7dbab; cursor:pointer; }
+.guild-management summary::before { content:"▸ "; }
+.guild-management[open] summary::before { content:"▾ "; }
+.guild-management-panel { display:grid; gap:8px; padding:10px 2px; }
+.guild-management-panel .field { margin:0; }
+.guild-management-panel select { margin-top:4px; }
+.atlas-back {padding:7px 12px;border:1px solid #8e8060;border-radius:8px;background:#273536;color:#f5dcad}
+.atlas-summary {min-height:80px;margin:8px 0;padding:9px 12px;background:#152c2c;border-left:3px solid #ddba74;border-radius:4px}
+.atlas-summary strong {color:#ffe2ab}.atlas-summary p {margin:2px 0;font-size:12px}
+.atlas-scroll {height:min(41dvh,350px);overflow:auto;overscroll-behavior:contain;border:1px solid #817051;border-radius:12px;background:radial-gradient(ellipse at top right,#34463c,#142b30 55%,#101e24)}
+.atlas-board {position:relative;width:100%;min-width:275px;height:827px;isolation:isolate}
+.atlas-board svg {position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.atlas-board line {stroke:#849385;stroke-width:2}.atlas-board line.route {stroke:#ffd180;stroke-width:4}
+.atlas-cell {position:absolute;transform:translate(-50%,-50%);width:25%;max-width:122px;min-height:54px;padding:5px 3px;background:#284741;color:#e5f0dd;border:1px solid #92b198;border-radius:18px 4px;line-height:1.2;font-size:12px;text-align:center}
+.atlas-cell {--rim:#92b198;--land:#284741;isolation:isolate;border:0;padding:4px 7px;border-radius:0;background:var(--rim);clip-path:polygon(12% 0,88% 0,100% 50%,88% 100%,12% 100%,0 50%)}
+.atlas-cell::before {content:"";position:absolute;inset:1px;z-index:-1;background:var(--land);clip-path:inherit}
+.atlas-cell b {display:block;font-size:16px;color:#b9d9ad}.atlas-cell.capital {--rim:#efc67e;--land:#60492e}.atlas-cell.capital b {color:#ffe098}
+.atlas-cell .atlas-war-time {display:block;color:#ffe2ab;font-size:10px;font-weight:700;white-space:nowrap}
+.atlas-cell.territory {--rim:#c69bc2;--land:#49324d;min-height:68px}.atlas-cell.territory b {color:#f0b8dc}
+.atlas-cell.here::after {content:"●";position:absolute;top:3px;right:14px;color:#8dfce0}
+.atlas-cell[aria-pressed=true],.atlas-cell:focus-visible {--rim:#ffe2a5}
+.atlas-cell[aria-pressed=true]::before,.atlas-cell:focus-visible::before {inset:3px}
+

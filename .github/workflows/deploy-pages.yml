@@ -25,11 +25,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Prepare generated client from sources
+        run: npm run prepare:client
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
       - name: Validate client JavaScript
-        run: node --check main.js && node deploy/combat/camera-ui-test.cjs && node --check audio.js && node deploy/combat/speech-ui-test.cjs && node --check account-entry.js && node deploy/combat/account-delete-ui-test.cjs && node deploy/combat/skill-rank-ui-test.cjs && node deploy/combat/item-display-ui-test.cjs && node deploy/combat/market-catalog-ui-test.cjs && node deploy/combat/character-hud-ui-test.cjs && node deploy/combat/monster-nameplates-ui-test.cjs && node deploy/combat/combat-feedback-test.cjs && node deploy/combat/status-aura-test.cjs && node deploy/combat/adaptive-audio-test.cjs && node deploy/combat/target-combo-test.cjs && node deploy/combat/boss-encounter-test.cjs && node deploy/combat/voice-guidance-typhoon-test.cjs && node deploy/combat/exploration-world-test.cjs && node deploy/combat/tactical-voice-callouts-test.cjs && node deploy/combat/party-synergy-test.cjs && node deploy/combat/relic-forge-aura-test.cjs
+        run: npm run test:client && npm run test:build
 
       - name: Verify combat HUD wiring
         shell: bash
@@ -39,23 +45,7 @@ jobs:
           grep -q 'syncMonsterState' main.js
 
       - name: Prepare website
-        shell: bash
-        run: |
-          mkdir -p _site
-          cp index.html main.js audio.js account-entry.js styles.css _site/
-          # A release of the map and its client must load together even if the label in index.html was reused.
-          sed -i '/src="\.\/main\.js?/s/" defer/\&amp;rev='"$GITHUB_SHA"'" defer/' _site/index.html
-          grep -Fq "&amp;rev=${GITHUB_SHA}\" defer" _site/index.html
-          # Game models (shaman body, Crescent Blade) loaded by main.js.
-          cp -r assets _site/assets
-          test -s _site/assets/characters/thai-male.glb
-          test -s _site/assets/characters/thai-golden-spirit.glb
-          test -s _site/assets/weapons/crescent-blade-lod2.glb
-          mkdir -p _site/weapon-preview/lod2
-          cp weapon-preview/lod2/index.html _site/weapon-preview/lod2/index.html
-          cat weapon-preview/lod2/chunks/part-*.b64 | base64 --decode > _site/weapon-preview/lod2/crescent-blade-lod2.glb
-          test "$(wc -c < _site/weapon-preview/lod2/crescent-blade-lod2.glb)" -eq 6307460
-          touch _site/.nojekyll
+        run: npm run build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

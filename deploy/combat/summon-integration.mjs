@@ -131,10 +131,33 @@ try {
   console.log("PASS: owner knockout immediately removes owned NPC for all clients");
 
   // B's guardian can attack a ghost the owner targets or that attacks owner.
+  // A seer's basic attack reaches 15m, beyond the guardian's 8m engage
+  // distance. Attacking from B's spawn therefore does not approach the ghost.
+  // Move through the public command and wait for replicated owner/guardian
+  // positions before asking for combat, rather than relying on patrol timing.
+  const guardianHitSeqBefore = owned(b, bId).hitSeq;
+  const monsterHpBefore = b.state.monster.hp;
+  b.send("move", { x: 2, z: 5 });
+  await until(() => rooms.every(r => {
+    const owner = r.state.players.get(bId);
+    const guardian = owned(r, bId);
+    const monster = r.state.monster;
+    return owner?.alive && guardian && monster.alive &&
+      Math.hypot(owner.x - 2, owner.z - 5) < 0.2 &&
+      Math.hypot(owner.x - monster.x, owner.y - monster.y, owner.z - monster.z) < 7 &&
+      Math.hypot(owner.x - guardian.x, owner.y - guardian.y, owner.z - guardian.z) < 2;
+  }), 6000, "owner and guardian positioned for shared monster combat");
   b.send("attack", { targetId: "possessed-1" });
-  await until(() => guardianPveHits.some(h => h.ownerId === bId &&
-                                             h.targetId === "possessed-1"),
+  const guardianHit = await until(() => guardianPveHits.find(h => h.ownerId === bId &&
+                                             h.summonId === bId &&
+                                             h.targetId === "possessed-1" &&
+                                             h.hitSeq > guardianHitSeqBefore),
     12000, "guardian attacks shared monster");
+  assert.ok(guardianHit.damage > 0, "guardian event must report real damage");
+  assert.ok(guardianHit.hp < monsterHpBefore, "guardian hit must lower monster HP");
+  await until(() => rooms.every(r => owned(r, bId)?.hitSeq >= guardianHit.hitSeq &&
+                                    r.state.monster.hp <= guardianHit.hp),
+    2500, "guardian attack sequence and damage replicated");
   assert.ok(rooms.every(r => Number(r.state.monster.hp) <= 100));
   console.log("PASS: guardian damages real monster via fixed server tick");
 
