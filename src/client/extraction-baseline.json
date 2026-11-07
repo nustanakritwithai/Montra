@@ -1,8 +1,8 @@
 {
   "format": 1,
   "output": "main.js",
-  "bytes": 1388811,
-  "sha256": "d486c3c26a459ce4a82cc280d2a74369d98418560eea10b244d1f6fb37304392",
+  "bytes": 1393463,
+  "sha256": "e41f0a332665571e118806c7971cf6fb1ef6f162e31b17283081929258806bb3",
   "fragments": [
     {
       "path": "core/000-wrapper-open.js",
@@ -16,8 +16,8 @@
     },
     {
       "path": "audio/002-voice-guidance.js",
-      "bytes": 16900,
-      "sha256": "8db417a959c97aff54c015327d122f72019ab45b3e34ce151daf2cf9c446dfa3"
+      "bytes": 20279,
+      "sha256": "7ff125164d2679db0fc0e46e06a093decd456ff55268fcee9cf37bc0bd87ce35"
     },
     {
       "path": "ui/003-toast-and-mode.js",
@@ -261,8 +261,8 @@
     },
     {
       "path": "audio/051-sound-settings-and-speech.js",
-      "bytes": 7447,
-      "sha256": "b2063ab170943c84f5297882dd402258bca39b29dbdad4314f27d9637c851dca"
+      "bytes": 8720,
+      "sha256": "726c85df787e82cf5d43b856ec4586b903dc2904e4f8c6b86dc50917bff51d06"
     },
     {
       "path": "ui/052-help-and-inventory.js",

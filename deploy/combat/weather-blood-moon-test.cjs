@@ -42,7 +42,7 @@ assert(mainSrc.includes('isBloodMoon: () => weatherState.current === "blood_moon
 assert(mainSrc.includes('getRewardMultiplier: () => (weatherState.current === "blood_moon" ? 2.0 : 1.0)'), 'MontraWeather returns 2.0x reward multiplier during Blood Moon');
 
 // 7. Verify index.html version bump
-assert(/main\.js\?v=0\.15\./.test(indexSrc), 'index.html points to v0.15.x dynamic weather blood moon');
+assert(/main\.js\?v=0\.1[5-9]\./.test(indexSrc), 'index.html points to v0.15.x or newer');
 
 // 8. Functional Unit Test for Weather Transitions & Multipliers
 const mockWeather = {

@@ -169,6 +169,83 @@
     }
   };
 
+  const VOICE_PERSONAS = {
+    elder: {
+      id: "elder",
+      name: "พราหมณ์เฒ่า",
+      role: "ผู้หยั่งรู้และชี้แนะแห่งแดนมนตรา",
+      icon: "🧙‍♂️",
+      pitch: 0.82,
+      rate: 0.88
+    },
+    warrior: {
+      id: "warrior",
+      name: "นักรบมนตรา",
+      role: "ยอดนักรบเพลงยุทธ์ผู้เจนสมรภูมิ",
+      icon: "⚔️",
+      pitch: 0.95,
+      rate: 1.08
+    },
+    spirit: {
+      id: "spirit",
+      name: "วิญญาณผู้พิทักษ์",
+      role: "จิตวิญญาณศักดิ์สิทธิ์ผู้ปกปักษ์แดนลี้ลับ",
+      icon: "✨",
+      pitch: 1.16,
+      rate: 0.92
+    }
+  };
+
+  function getVoicePersona() {
+    try {
+      const p = localStorage.getItem("montra_voice_persona");
+      return VOICE_PERSONAS[p] ? p : "elder";
+    } catch (_) {
+      return "elder";
+    }
+  }
+
+  function setVoicePersona(id) {
+    if (!VOICE_PERSONAS[id]) return false;
+    try {
+      localStorage.setItem("montra_voice_persona", id);
+    } catch (_) {}
+    const p = VOICE_PERSONAS[id];
+    if (typeof floatAtPlayer === "function" && typeof localId !== "undefined") {
+      floatAtPlayer(localId, `สลับเสียงผู้ชี้แนะ: ${p.name} ${p.icon}`, "status");
+    }
+    SFX("bell", { intensity: 1.2, pitch: p.pitch });
+    triggerWhisper(`จิตวิญญาณแห่ง${p.name} สถิตเคียงข้างเจ้าแล้ว`, { persona: id });
+    return true;
+  }
+
+  function triggerWhisper(text, options = {}) {
+    if (!isVoiceGuidanceEnabled()) return;
+    const personaId = options.persona || getVoicePersona();
+    const persona = VOICE_PERSONAS[personaId] || VOICE_PERSONAS.elder;
+
+    SFX("whisper", { intensity: options.intensity || 1.1 });
+    ensureVoiceGuidanceHud();
+    voiceHudTitle.textContent = options.title || persona.name;
+    voiceHudText.textContent = text;
+    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = persona.icon;
+    voiceGuidanceHud.classList.remove("combat-alert");
+    voiceGuidanceHud.classList.add("spirit-whisper");
+    voiceGuidanceHud.hidden = false;
+    clearTimeout(voiceHudTimer);
+    voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(4000, text.length * 95));
+
+    try {
+      window.MontraAudio?.speak?.(text, {
+        persona: personaId,
+        pitch: persona.pitch,
+        rate: persona.rate,
+        onEnd: () => hideVoiceGuidanceHud(),
+        onError: () => {}
+      });
+    } catch (_) {}
+  }
+
   const lastCombatCalloutTimes = new Map();
   function triggerCombatCallout(key) {
     if (!isVoiceGuidanceEnabled()) return;
@@ -179,17 +256,23 @@
     if (now - last < item.cooldown) return;
     lastCombatCalloutTimes.set(key, now);
 
+    const personaId = getVoicePersona();
+    const persona = VOICE_PERSONAS[personaId] || VOICE_PERSONAS.elder;
+
     ensureVoiceGuidanceHud();
     voiceHudTitle.textContent = item.title;
     voiceHudText.textContent = item.subtitle;
-    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = item.icon || "🧙‍♂️";
+    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = item.icon || persona.icon;
+    voiceGuidanceHud.classList.remove("spirit-whisper");
     voiceGuidanceHud.classList.toggle("combat-alert", Boolean(item.alert));
     voiceGuidanceHud.hidden = false;
     clearTimeout(voiceHudTimer);
     voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(4500, item.subtitle.length * 100));
     try {
       window.MontraAudio?.speak?.(item.text, {
-        persona: "guide",
+        persona: personaId,
+        pitch: persona.pitch,
+        rate: persona.rate,
         onEnd: () => hideVoiceGuidanceHud(),
         onError: () => {}
       });
@@ -240,7 +323,7 @@
   function hideVoiceGuidanceHud() {
     if (voiceGuidanceHud) {
       voiceGuidanceHud.hidden = true;
-      voiceGuidanceHud.classList.remove("combat-alert");
+      voiceGuidanceHud.classList.remove("combat-alert", "spirit-whisper");
     }
     clearTimeout(voiceHudTimer);
   }
@@ -253,22 +336,37 @@
       if (localStorage.getItem(key)) return;
       localStorage.setItem(key, "1");
     } catch (_) {}
+
+    const personaId = getVoicePersona();
+    const persona = VOICE_PERSONAS[personaId] || VOICE_PERSONAS.elder;
+
     ensureVoiceGuidanceHud();
     voiceHudTitle.textContent = item.title;
     voiceHudText.textContent = item.subtitle;
-    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = "🧙‍♂️";
-    voiceGuidanceHud.classList.remove("combat-alert");
+    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = persona.icon;
+    voiceGuidanceHud.classList.remove("combat-alert", "spirit-whisper");
     voiceGuidanceHud.hidden = false;
     clearTimeout(voiceHudTimer);
     voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(5000, item.text.length * 110));
     try {
       window.MontraAudio?.speak?.(item.text, {
-        persona: "guide",
+        persona: personaId,
+        pitch: persona.pitch,
+        rate: persona.rate,
         onEnd: () => hideVoiceGuidanceHud(),
         onError: () => {}
       });
     } catch (_) {}
   }
+
+  window.MontraVoice = {
+    getPersona: getVoicePersona,
+    setPersona: setVoicePersona,
+    getPersonas: () => Object.values(VOICE_PERSONAS),
+    triggerWhisper,
+    isVoiceEnabled: isVoiceGuidanceEnabled,
+    setVoiceEnabled: setVoiceGuidanceEnabled
+  };
 
   // Sound effects (audio.js). Safe no-op until audio is unlocked by the first tap.
   const SFX = (name, opts) => window.MontraAudio?.play(name, opts);
