@@ -6,6 +6,7 @@ const http = require('node:http');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+const serverCatalogs = require('./core-skill-catalog-fixture.cjs');
 const ids = {
   phutthaisawan: ['phuttha_core', 'sritra_core', 'atamat_core', 'chumphon_core'],
   muay_boran: ['chaiya', 'korat', 'lopburi', 'thasao'],
@@ -49,11 +50,8 @@ ${quickBinding}
 ${drawerKeys}
 $('drawerClose').onclick=closeDrawer;
 const classIds=${JSON.stringify(ids)};
-function catalog(path){
- const core=Object.fromEntries(classIds[path].map(id=>[id,{name:id,description:'Synthetic server skill '+id,stamina:8,cooldownMs:1000}]));
- const progress=Object.fromEntries(classIds[path].map(id=>[id,{pvpDurationMs:450,pvpImmunityMs:4000,pvpFraction:.01,intervalMs:1000,scale:1,finalPower:.6,durationMs:2000,damageFactor:.5,counterPower:.8,counterIntervalMs:1000,range:3,power:1,pvpPower:.75,defense:.15,distance:2,followMs:1000,followPower:1,hits:3,hitPower:.5,staggerMs:300,pvePower:1,poisonBonus:.01,pveFraction:.01,castMs:100,tickFraction:.05,fraction:.1,bonus:.1}]));
- return {core,coreLevels:[1,10,25,40,55,70,85,100],corePointLevels:[1,5,10,15,20,30,45,60,75,90,100],coreProgress:{0:progress,1:progress}};
-}
+const serverCatalogs=${JSON.stringify(serverCatalogs)};
+function catalog(path){return structuredClone(serverCatalogs[path]);}
 function snapshot(path){
  const book={coreRanks:{},menderCoreRanks:{},cooldowns:{},school:'phuttha',learned:[],training:{}};
  const me={pathId:path,level:100,alive:true,swordTreeData:JSON.stringify(book),muayBookData:JSON.stringify(book)};
@@ -67,6 +65,16 @@ function snapshot(path){
  return me;
 }
 window.fixture={snapshot,wire,notices,room,ownServerCharacter,swordData,syncSwordTreeButton,openSwordTree,
+ model:coreSkillGraphData,renderModal:renderSkillModalContent,
+ setRanks(ranks){
+   const path=ownServerCharacter().pathId;
+   if(path==='phutthaisawan'||path==='muay_boran'){
+     const key=path==='phutthaisawan'?'swordTreeData':'muayBookData', book=JSON.parse(ownServerCharacter()[key]);book.coreRanks=ranks;ownServerCharacter()[key]=JSON.stringify(book);
+   }else{const state=path==='blade'?bladeBookState:path==='sentinel'?sentinelBookState:occultBookState;state.book[path==='mender'?'menderCoreRanks':'coreRanks']=ranks;}
+   syncClassSkillBookContext();
+ },
+ rerender(){renderCoreSkillKnowledgeGraph(coreSkillGraphData(),document.querySelector('#drawerBody > div'));},
+
  navigate(){openDrawer('fixtureOther','Other panel','<p id=fixtureOtherPanel>Other panel</p>');},
  get drawerActive(){return drawerActive;},get demo(){return JSON.stringify(demoSwordTreeData);},
  setMode(value){mode=value;}, switchPath(path){ownServerCharacter().pathId=path;syncSwordTreeButton(ownServerCharacter());}};
@@ -115,7 +123,86 @@ async function artworkCases(page, check) {
     await page.locator('#artworkAudit').evaluate(e => e.remove());
   }
 }
+async function assertGraphGeometry(page) {
+ await page.waitForFunction(()=>[...document.querySelectorAll('.kg-edge')].length===4 && [...document.querySelectorAll('.kg-edge')].every(e=>e.getAttribute('d')));
+ const geometry=await page.evaluate(()=>{
+   const board=document.querySelector('.radial-4way'), svg=board.querySelector('svg'), b=svg.getBoundingClientRect();
+   const box=e=>{const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,w:r.width,h:r.height,left:r.left,right:r.right,top:r.top,bottom:r.bottom};};
+   const center=box(board.querySelector('.kg-center-class-orb'));
+   return {center,centerBox:box(board.querySelector(".kg-center-class-node")),width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,
+     nodes:[...board.querySelectorAll('.kg-node')].map(node=>({id:node.dataset.skillId,box:box(node),orb:box(node.querySelector('.kg-orb')),badge:box(board.querySelector('.kg-stream-badge-'+['top','right','bottom','left'][[...board.querySelectorAll('.kg-node')].indexOf(node)])),
+       d:board.querySelector('[data-kg-edge="'+node.dataset.skillId+'"]').getAttribute('d').match(/-?[\d.]+/g).map(Number)})),svg:{x:b.left,y:b.top}};
+ });
+ assert.equal(geometry.overflow,false,'no horizontal page overflow');
+ for(const [i,n] of geometry.nodes.entries()){
+   assert(n.box.left>=0 && n.box.right<=geometry.width,'node '+n.id+' stays inside viewport');
+   assert(n.box.w>=44&&n.box.h>=44,'touch target');
+   assert(Math.max(0,Math.min(n.box.right,n.badge.right)-Math.max(n.box.left,n.badge.left))*Math.max(0,Math.min(n.box.bottom,n.badge.bottom)-Math.max(n.box.top,n.badge.top))===0,n.id+' direction label does not overlap node');
+   const cb=geometry.centerBox;
+   assert(Math.max(0,Math.min(n.box.right,cb.right)-Math.max(n.box.left,cb.left))*Math.max(0,Math.min(n.box.bottom,cb.bottom)-Math.max(n.box.top,cb.top))===0,n.id+' node does not overlap class center');
+   const {center:c,svg}=geometry, angle=Math.atan2(n.orb.y-c.y,n.orb.x-c.x);
+   const expected=[c.x-svg.x+Math.cos(angle)*(c.w/2+2),c.y-svg.y+Math.sin(angle)*(c.w/2+2),n.orb.x-svg.x-Math.cos(angle)*(n.orb.w/2+4),n.orb.y-svg.y-Math.sin(angle)*(n.orb.w/2+4)];
+   n.d.forEach((x,j)=>assert(Math.abs(x-expected[j])<.8,n.id+' connector endpoint '+j));
+   if(i===0)assert(n.orb.y<c.y);if(i===1)assert(n.orb.x>c.x);if(i===2)assert(n.orb.y>c.y);if(i===3)assert(n.orb.x<c.x);
+ }
+}
+async function radialCases(page, check) {
+ const commands={phutthaisawan:'sword_core_book',muay_boran:'muay_book',blade:'blade_book',sentinel:'sentinel_book',seer:'occult_book',mender:'occult_book'};
+ for(const [className,skills] of Object.entries(ids)){
+   await page.evaluate(path=>{fixture.snapshot(path);fixture.wire.length=0;},className);
+   await page.locator('#quickSkills').click();await assertGraphGeometry(page);
+   await check(className+'-radial-layout');
+   for(const id of skills){
+     await page.locator('[data-skill-id="'+id+'"]').click();await assertModalArtwork(page);
+     assert.equal(await page.locator('#skillModalName').textContent(),serverCatalogs[className].core[id].name);
+     assert.match(await page.locator('#skillModalBadge').textContent(),/0\/8/);
+     assert(!/NaN|undefined/.test(await page.locator('#skillDetailModal').textContent()),'complete current/next descriptions');
+     const before=await page.evaluate(()=>JSON.stringify(fixture.model().ranks));
+     await page.locator('#skillModalUpgradeBtn').click();
+     const sent=await page.evaluate(()=>fixture.wire.pop());
+     assert.deepEqual(sent,{command:commands[className],payload:{action:className==='phutthaisawan'?'upgrade':'core_upgrade',skillId:id}});
+     assert.equal(await page.evaluate(()=>JSON.stringify(fixture.model().ranks)),before,'no optimistic rank mutation');
+     await page.evaluate(id=>fixture.setRanks({[id]:1}),id);
+     assert.match(await page.locator('#skillModalBadge').textContent(),/1\/8/);await assertModalArtwork(page);
+     await page.evaluate(id=>fixture.setRanks({[id]:8}),id);
+     assert.equal(await page.locator('#skillModalUpgradeBtn').isDisabled(),true,'max rank');
+     await page.locator('#skillModalCloseBtn').click();
+     await page.evaluate(()=>fixture.setRanks({}));
+   }
+   // Level and point constraints come from the current catalog, not other skills.
+   await page.evaluate(()=>{fixture.ownServerCharacter().level=1;fixture.rerender();});
+   await page.locator('[data-skill-id="'+skills[0]+'"]').click();
+   assert.equal(await page.locator('#skillModalUpgradeBtn').isDisabled(),true,'level gate');
+   await page.keyboard.press('Escape');
+   await page.evaluate(skills=>{fixture.ownServerCharacter().level=100;fixture.setRanks({[skills[0]]:8,[skills[1]]:4});fixture.rerender();},skills);
+   await page.locator('[data-skill-id="'+skills[2]+'"]').click();
+   assert.equal(await page.locator('#skillModalUpgradeBtn').isDisabled(),true,'point pool exhausted');
+   await page.keyboard.press('Escape');
+   const reset=page.locator('#drawerBody .st-footer-actions button');
+   page.once('dialog',d=>d.dismiss());await reset.click();
+   assert.equal(await page.evaluate(()=>fixture.wire.length),0,'cancel reset sends nothing');
+   page.once('dialog',d=>d.accept());await reset.click();
+   assert.deepEqual(await page.evaluate(()=>fixture.wire.pop()),{command:commands[className],payload:{action:className==='phutthaisawan'?'reset':'core_reset'}});
+   assert.equal(await page.evaluate(()=>fixture.model().spent),12,'reset waits for server');
+   await page.evaluate(()=>{fixture.setRanks({});fixture.rerender();});
+   // Native button activation and stale handler protection.
+   await page.locator('[data-skill-id="'+skills[0]+'"]').focus();await page.keyboard.press('Enter');
+   assert.equal(await page.locator('#skillDetailModal').isVisible(),true);
+   await page.evaluate(()=>{window.staleUpgrade=document.getElementById('skillModalUpgradeBtn').onclick;});
+   await page.evaluate(path=>fixture.switchPath(path==='seer'?'mender':'seer'),className);
+   await page.evaluate(()=>window.staleUpgrade());
+   assert.equal(await page.evaluate(()=>fixture.wire.length),0,'stale class cannot upgrade');
+   assert.equal(await page.locator('#drawer').isVisible(),false);
+   await check(className+'-radial-actions');
+ }
+ // Resize an open graph (portrait/landscape) and verify the actual SVG endpoints.
+ await page.evaluate(()=>fixture.snapshot('phutthaisawan'));await page.locator('#quickSkills').click();
+ const original=page.viewportSize();await page.setViewportSize({width:844,height:390});await page.waitForTimeout(100);await assertGraphGeometry(page);
+ await page.setViewportSize(original);await page.waitForTimeout(100);await assertGraphGeometry(page);
+ await page.locator('#drawerClose').click();await check('radial-resize');
+}
 async function cases(page, check) {
+  await radialCases(page, check);
   for (const path of Object.keys(ids)) {
     await page.evaluate(path => fixture.snapshot(path), path);
     // Leave every menu entry stale-visible, with sword first: the original bug.

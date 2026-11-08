@@ -3,6 +3,9 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const {test}=require('node:test');
 const source=fs.readFileSync('main.js','utf8');
 function slice(start,end){const a=source.indexOf(start),b=source.indexOf(end,a+start.length);assert(a>=0&&b>a,start);return source.slice(a,b);}
+const graphSource=slice('  // Core-book adapter', '  let activeSkillModalId =');
+const graphClasses=slice('  const SG_CLASS =', '  function skillLearningLevel(');
+const graphEscape=slice('  const sgEsc =', '  const sgCombatLine =');
 const route=slice('  function openClassSkillBook(', '  function getBuildCatalog(');
 const dataSource=slice('  function swordData(', '  function syncSwordStatus(');
 const buttonSource=slice('  function syncSwordTreeButton(', '  let swordHotbarKey=');
@@ -25,7 +28,7 @@ function fixture(code=''){
     openDrawer:(kind,title,html)=>{ctx.drawerActive=kind;opened.push(kind);},closeDrawer:()=>ctx.drawerActive=null,
     window:{confirm:()=>true},renderSwordTree:()=>{},
   };
-  vm.createContext(ctx);vm.runInContext(dataSource+ownerSource+modalSource+code,ctx);
+  vm.createContext(ctx);vm.runInContext(graphEscape+graphClasses+graphSource+dataSource+ownerSource+modalSource+code,ctx);
   return {ctx,nodes,node,wire,opened,toasts,run:s=>vm.runInContext(s,ctx),catalog};
 }
 test('quick skill entry routes all six authoritative classes independent of DOM visibility/order',()=>{

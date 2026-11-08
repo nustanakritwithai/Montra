@@ -4298,7 +4298,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
    MONTRA RADIAL 4-DIRECTIONAL KNOWLEDGE GRAPH
    ========================================================================== */
 .kg-canvas-board.radial-4way {
-  height: 440px;
+  height: 460px;
 }
 
 .kg-center-class-node {
@@ -4416,6 +4416,45 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   top: 32%;
 }
 
+/* Keep the restored layout readable at 320 px and keyboard/touch accessible. */
+.kg-banner-left, .kg-banner-info { min-width: 0; }
+.kg-banner-crest, .st-points-box { flex-shrink: 0; }
+.kg-banner-title { overflow-wrap: anywhere; }
+.kg-graph-help { margin: 2px 0; text-align: center; font-size: 11px; }
+.radial-4way .kg-node {
+  border: 0;
+  background: none;
+  color: inherit;
+  min-height: 44px;
+  min-width: 44px;
+  width: 88px;
+  box-shadow: none;
+  font: inherit;
+}
+.radial-4way .kg-node:hover, .radial-4way .kg-node:focus-visible,
+.radial-4way .kg-node:active { transform: translate(-50%, -50%); }
+.radial-4way .kg-node:focus-visible { outline: 2px solid #7fe8ff; outline-offset: 2px; }
+.radial-4way .kg-node-top { top: 21% !important; }
+.radial-4way .kg-node-bottom { top: 79% !important; }
+.radial-4way .kg-node-left { left: 16% !important; }
+.radial-4way .kg-node-right { left: 84% !important; }
+.radial-4way .kg-node-name { max-width: 84px; overflow-wrap: anywhere; }
+.radial-4way .kg-center-class-title { max-width: 84px; white-space: normal; text-align: center; }
+.radial-4way .kg-center-class-orb { animation: none; }
+.radial-4way .kg-node-status { white-space: nowrap; }
+.radial-4way .kg-stream-badge-left, .radial-4way .kg-stream-badge-right { top: 30%; }
+@media (max-width: 380px) {
+  .kg-banner { gap: 6px; padding: 9px 8px; }
+  .kg-banner-left { gap: 6px; }
+  .kg-banner-crest { width: 30px; height: 34px; font-size: 20px; }
+  .kg-banner-title { font-size: 12px; letter-spacing: 0; }
+  .radial-4way .kg-node { width: 80px; padding: 2px; }
+  .radial-4way .kg-node-name { font-size: 10.5px; max-width: 76px; }
+  .radial-4way .kg-center-class-title { max-width: 70px; padding: 2px 5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .radial-4way .kg-orb, .radial-4way .kg-edge { animation: none !important; transition: none; }
+}
 /* Keep the restored identity and quest above chat on short landscape screens. */
 @media (orientation:landscape) and (max-height:520px) { .chat-box .cb-log { height:18dvh; max-height:94px; } }
 /* ========================================================
