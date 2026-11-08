@@ -199,6 +199,7 @@
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; resetCentralMarket(); tradeUnread=false; updateTradeBadge();
       partyState=null; partyInvitation=null; partyUnread=false;
     guildState=null; guildInvitation=null; guildUnread=false;guildDirectory=null;guildRecruitment={pending:null,applications:[]}; updatePartyBadge();
+      resetLootFeed();
       inventoryState = null; personalItems=Object.create(null);cardDrill=null;gearGuides=null;resources=null;seerBoundTarget="";seerPoisoned=false;clearResourceView();
       characterStatus = null; lastCharacterStatusRequest = 0;
       forestObjectiveState=null;forestDefenseState=null;forestEscortState=null;directorEventState=null;
@@ -1252,6 +1253,7 @@
             ? selected : undefined;
         const equipment=Object.fromEntries(Object.entries(payload.equipment||{}).filter(([position,id])=>wearPositions(personalItems[id]?.kind).includes(position)));
         const equipmentSockets=Object.fromEntries(Object.entries(payload.equipmentSockets||{}).filter(([key,card])=>equipment[key] && (card===null || personalItems[card]?.kind==="card")));
+        observeLootInventory(payload);
         inventoryState={version:1,slots,equippedWeaponSlot,equipment,equipmentSockets,equipmentForges:payload.equipmentForges||{},forgeCopies:payload.forgeCopies||{},starterHuntKills:payload.starterHuntKills??0};
         if(drawerActive==="quest" && $("fieldGoalProgress"))renderFieldGoalDrawer(fieldGearGoal());
         itemUsePending = false;

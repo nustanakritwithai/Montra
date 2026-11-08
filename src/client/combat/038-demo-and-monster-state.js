@@ -112,6 +112,7 @@
     cancelForgeAnimation(false,true);finishEconomyPending(true);closeForgePicker(false);closeItemDetailModal(false);
     clearCombatVfx();
     clearFishing(false);fishSavedItem=null;
+    resetLootFeed();
     syncMountButton();
     territoryState=null;forestObjectiveState=null;forestDefenseState=null;forestEscortState=null;directorEventState=null;syncQuestRanger();syncWarQuartermaster();$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
