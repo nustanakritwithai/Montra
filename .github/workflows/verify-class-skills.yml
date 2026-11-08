@@ -44,6 +44,7 @@ jobs:
         run: |
           node deploy/combat/class-skill-routing-test.cjs
           node deploy/combat/class-skills-browser-test.cjs
+          node deploy/combat/class-skills-hotbar-browser-test.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
