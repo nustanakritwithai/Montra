@@ -105,11 +105,11 @@ test('crafting output, materials and shrine recipes use accessible inventory thu
   };
   check(f.$('benchOutputItem').children[0],'ดาบคู่','🗡');assert.equal(f.$('benchOutput').textContent,'ดาบคู่');
   let rows=f.$('benchIngredients').children;assert.equal(rows.length,1);
-  check(rows[0].children[0],'แท่งเหล็ก ×2','◆','×2');assert.equal(rows[0].children[1].textContent,'แท่งเหล็ก');assert.equal(rows[0].children[2].textContent,'2 / 2');
+  check(rows[0].children[0].children[0],'แท่งเหล็ก ×2','◆','×2');assert.equal(rows[0].children[1].textContent,'แท่งเหล็ก');assert.equal(rows[0].children[2].textContent,'2 / 2');
   check(f.$('craftShrineOutput').children[0],'ง้าวจันทร์ผู้พิทักษ์','◈');
   check(f.$('craftShrineInput').children[0],'เศษตรา ×5','◆','×5');
   f.choose('kiln','mat_ingot_1');check(f.$('benchOutputItem').children[0],'แท่งเหล็ก','◆');
-  rows=f.$('benchIngredients').children;assert.equal(rows.length,2);check(rows[0].children[0],'แร่เหล็ก ×2','◆','×2');check(rows[1].children[0],'ถ่าน','◆');
+  rows=f.$('benchIngredients').children;assert.equal(rows.length,2);check(rows[0].children[0].children[0],'แร่เหล็ก ×2','◆','×2');check(rows[1].children[0].children[0],'ถ่าน','◆');
   f.run('renderBag();renderBag();');assert.equal(f.$('benchOutputItem').children.length,1);assert.equal(f.$('benchIngredients').children.length,2,'refresh replaces thumbnails rather than accumulating them');
   for(const item of Object.values(f.items))delete item.recipe;
   f.ctx.catalogRevision++;f.run('renderBag()');assert.equal(f.$('benchOutputItem').hidden,true);assert.equal(f.$('benchOutputItem').children.length,0);assert.equal(f.$('benchIngredients').children.length,0);
@@ -129,7 +129,7 @@ test('live gold and inventory events refresh counts, costs and insufficient-reso
   const f=fixture();f.choose('all','blade_25');f.callbacks.economy_state({gold:59});assert.equal(f.$('benchCraft').disabled,true);assert.equal(f.$('craftGold').textContent,'59 ทอง');
   f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);f.callbacks.economy_state({gold:60});assert.equal(f.$('benchCraft').disabled,false);
   const changed=f.payload();changed.slots[0].quantity=1;f.callbacks.inventory_state(changed);assert.equal(f.$('benchCraft').disabled,true);
-  const row=f.$('benchIngredients').children[0];assert.equal(row.children[2].textContent,'1 / 2');assert.equal(row.children[0].children[1].textContent,'×2','thumbnail shows required quantity, not current stock');assert.equal(row.classList.contains('missing'),true);
+  const row=f.$('benchIngredients').children[0];assert.equal(row.children[2].textContent,'1 / 2');assert.equal(row.children[0].children[0].children[1].textContent,'×2','thumbnail shows required quantity, not current stock');assert.equal(row.classList.contains('missing'),true);
   f.ctx.inventoryState.forgeCopies.mat_ingot_1=99;f.ctx.inventoryState.equipment.leftRing='mat_ingot_1';f.run('renderBag()');
   assert.equal(f.$('benchCraft').disabled,true,'only carried material stacks satisfy crafting ingredients');
   changed.slots[0].quantity=2;f.callbacks.inventory_state(changed);assert.equal(f.$('benchCraft').disabled,false);

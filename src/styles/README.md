@@ -75,3 +75,11 @@ button layout and reduced-motion rules in `skills/033-radial-graph.css`. The
 repeated detail-modal rules in `skills/026` and `skills/029` now keep header and
 actions visible while long localized copy scrolls within the body. See
 `docs/RADIAL-SKILL-GRAPH-20261108.md` for historical references and verification.
+
+## Basic attack orb follow-up
+
+The reviewed style pins include the intentional native attack button reset
+and visible keyboard focus ring. The orb retains its resource fill, dimensions
+and responsive placement. Historical extraction metadata stays unchanged.
+The basic-attack browser fixture checks real touch,
+keyboard, resource labels and one existing attack order per activation.

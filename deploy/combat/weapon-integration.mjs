@@ -30,15 +30,17 @@ try{
   const attackerId=a.sessionId, victimId=b.sessionId;
   const attacker=()=>a.state?.players?.get(attackerId);
   const victim=()=>a.state?.players?.get(victimId);
-  const inventory=[],equipEvents=[],rejected=[],pvp=[];
+  const inventory=[],equipEvents=[],rejected=[],pvp=[],basicHits=[];
   a.onMessage("inventory_state",payload=>inventory.push(payload));
   a.onMessage("weapon_equipped",payload=>equipEvents.push(payload));
   a.onMessage("command_rejected",notice=>rejected.push(notice.reason));
   a.onMessage("pvp_hit",info=>pvp.push(info));
+  a.onMessage("ranged_hit",info=>{if(info.skill==="basic_magic")basicHits.push(info);});
   await until(()=>a.state?.weaponsAvailable===true &&
     a.state?.inventoryAvailable===true && b.state?.players?.size===2 &&
     attacker()?.equippedWeaponId==="ritual_dagger",4500,
     "players and starter dagger equipped");
+  assert.deepEqual(JSON.parse(a.state.buildCatalog).basicAttackRanges,{ranged:8,melee:2.8,pk:2.8},"replicated catalog reports the authoritative basic ranges");
   a.send("get_inventory",{});
   await until(()=>inventory.at(-1)?.slots?.[0]?.quantity===3 &&
     inventory.at(-1)?.slots?.[1]?.itemId==="ritual_dagger" &&
@@ -85,6 +87,20 @@ try{
     hit.damage===18 && hit.targetId===victimId),2600,
     "staff ranged PvP damage after magic defense");
   console.log("PASS: spirit staff adds 6 magic attack before server applies magic defense");
+
+  // A real attack packet must walk to the shorter basic range. Spell reach above
+  // stays separate; the hit event carries server coordinates, not client guesses.
+  b.send("move",{x:-12,z:0});
+  await until(()=>Math.hypot(victim().x+12,victim().z)<.2,5500,"victim reaches isolated ranged boundary");
+  assert(Math.hypot(attacker().x-victim().x,attacker().z-victim().z)>10);
+  a.send("attack",{targetId:victimId});
+  await until(()=>attacker().combatState==="approaching",1500,"basic attack approaches from outside 8m");
+  await sleep(200);assert.equal(basicHits.length,0,"no instant basic hit inside old 15m range");
+  await until(()=>basicHits.length===1,4500,"server basic hit after approach");
+  const hit=basicHits[0];
+  assert(Math.hypot(hit.from.x-hit.to.x,(hit.from.y-1.55)-(hit.to.y-1),hit.from.z-hit.to.z)<=8.00001,"server hit position respects 3D range");
+  a.send("move",{x:attacker().x,z:attacker().z});
+  console.log("PASS: replicated 8m basic range, approach and hit coordinates through real WebSocket protocol");
 
   await sleep(850);
   a.send("equip_weapon",{slot:null});
