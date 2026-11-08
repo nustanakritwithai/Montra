@@ -185,7 +185,8 @@
     c.fillStyle = "#000"; c.fillRect(0, 0, s, s);
     for (let i = 0; i < 80; i++) {
       const x = noise(i, 81) * s, y = noise(i, 82) * s, w = 10 + noise(i, 83) * 34;
-      c.strokeStyle = `rgba(80,125,165,${.22 + noise(i, 84) * .34})`; c.lineWidth = 1 + noise(i, 85) * 1.5;
+      // Mostly moonlit blue ripples, with a few warm lantern glints.
+      c.strokeStyle = i % 9 === 0 ? `rgba(255,190,110,${.35 + noise(i, 84) * .3})` : `rgba(120,175,215,${.28 + noise(i, 84) * .38})`; c.lineWidth = 1 + noise(i, 85) * 1.6;
       for (const dx of [-s, 0, s]) { c.beginPath(); c.moveTo(x + dx - w / 2, y); c.quadraticCurveTo(x + dx, y - 3, x + dx + w / 2, y); c.stroke(); }
     }
   });
@@ -195,7 +196,7 @@
   const riverRipple = rippleTexture.clone(); riverRipple.uScale = 16; riverRipple.vScale = 5;
   riverWater.emissiveTexture = riverRipple;
   scene.getMeshByName("river").material = riverWater;
-  const lotusPad = mat("lotus pad", "#2b4f35"), lotusBloom = mat("lotus bloom", "#e7a2b3", "#5a2a34"), reedMat = mat("reeds", "#4a5631");
+  const lotusPad = mat("lotus pad", "#3a6b44", "#0b1f10"), lotusBloom = mat("lotus bloom", "#e7a2b3", "#5a2a34"), reedMat = mat("reeds", "#4a5631");
   for (const side of [-1, 1]) {
     for (let i = 0; i < 22; i++) {
       const x = side * (15.4 + noise(i, side + 90) * 3.8), z = -19 + noise(i, side + 91) * 38, d = .7 + noise(i, 92) * .6;

@@ -41,7 +41,8 @@
   const darkWood = mat("wood black", "#241e1a");
   const roofMat = mat("thai roof", "#6b2a22");
   const gold = mat("gold", "#b48640", "#3d2a0c");
-  const water = mat("water", "#0a1c27", "#04111a");
+  // Night water reads as deep jade-blue rather than near-black, so ripples, lotus and lantern glints show at the far camera.
+  const water = mat("water", "#0f2635", "#051520");
   // Glossy enough that lantern and strike lights glint off canals and pools.
   water.specularColor = B.Color3.FromHexString("#c8d8ea");
   water.specularPower = 110;
