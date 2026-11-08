@@ -36,6 +36,8 @@ function productionSources(){
  run(fn('src/client/render/004-scene-camera-lights.js','addMovingLight'));
  for(const n of ['mat','paintTexture','radialTexture','additiveMat','contactShadow'])run(fn(materials,n));
  run(read(materials).match(/  const noise = .*;/)[0]);
+ // Headless/pyre rigs borrow the production atmosphere particle texture.
+ run(section(read('src/client/render/012-sky-mist-atmosphere.js'),'  const motes =','  const ATMOSPHERES ='));
  run(read('src/client/render/025-horse-and-avatar-animation.js').match(/  const ease = .*;/)[0]);
  const palette=['src/client/render/006-materials-atmosphere.js','src/client/world/014-ritual-village.js','src/client/world/015-forest-gates-and-services.js','src/client/render/020-avatar-materials-and-meshes.js'].map(read).join('\n');
  for(const n of ['reedMat','lotusBloom','mossMat','ropeRed','bronzeMat','hairMat','ghostMat','eyesMat','strikeMat','keeperMat','gold','darkWood','templeBronze','templeStone','templeGold','templeLacquer','rootSpiritMat','elderSpiritMat']){
