@@ -22,6 +22,7 @@ function fixtureScript(){return `
  window.fixture={wire,notices,refresh,counts:()=>({profiles,dashes,wire:wire.length}),forest:()=>{activeMapId='forbidden_forest';selectedForestTarget=null;room.state.monsters=new Map([['near',{id:'near',alive:true,mapId:activeMapId,x:2,z:0,level:1}],['far',{id:'far',alive:true,mapId:activeMapId,x:9,z:0,level:1}]]);},selected:id=>{selectedForestTarget=id;},empty:()=>{room.state.monsters.clear();}};
  `;}
 if(require.main===module){
+ assert.match(fs.readFileSync(root+'/index.html','utf8'),/styles\.css\?v=nested-recipes-20261108-attack-button-20261108/,'native-button styling has a new cache key');
  assert.match(source,/document.createElement\("button"\); el.type = "button"; el.className = "vital-orb"/);
  assert(!slice('  const ORB_SEGS =','  const orbWide =').includes('openCharacterProfile()'));
  assert.match(fixtureScript(),/room.send\("attack", \{ targetId: MONSTER_ID \}\)/);
