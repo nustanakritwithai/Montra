@@ -620,9 +620,6 @@
         else glyph.textContent=SG_GLYPH[node.effect] || "✦";
         name.textContent=state==="ทุ่ม" || state==="ฉากซ้ำ" ? state : node.name;
         button.dataset.slotNumber=String(n); button.dataset.skillId=id; glyph.dataset.skillGlyph=id;
-        button.addEventListener("click", () => {
-          if (SKILL_VOICE_SHOUTS[id]) window.MontraAudio?.speak?.(SKILL_VOICE_SHOUTS[id], { persona: "warrior", rate: 1.15 });
-        });
         const label="ช่อง "+n+" · "+name.textContent+(cooldown?" · รอ "+cooldown[1]+" วินาที":"")+(cost?" · "+cost.textContent:"");
         button.setAttribute("aria-label",label); if(!button.title)button.title=label;
         if(cooldown || state.endsWith("✓")){

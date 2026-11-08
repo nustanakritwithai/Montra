@@ -16,7 +16,7 @@
   try { Object.assign(settings, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (_) { /* private mode */ }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch (_) { /* ignore */ } };
 
-  let ctx = null, master = null, buses = {}, reverb = null, noiseBuf = null;
+  let ctx = null, master = null, buses = {}, reverb = {}, noiseBuf = null;
   const listener = { x: 0, z: 0, right: -1 }; // camera looks north (-Z): screen right is -X
   const MAX_VOICES = 24, voices = new Set(), recent = new Map();
 
@@ -36,10 +36,14 @@
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.knee.value = 12; comp.ratio.value = 4; comp.attack.value = .004; comp.release.value = .2;
     master = ctx.createGain(); master.connect(comp); comp.connect(ctx.destination);
-    // A night-air room: a generated impulse response on a shared send.
-    reverb = ctx.createConvolver(); reverb.buffer = makeImpulse(1.8, 3.2);
-    const wet = ctx.createGain(); wet.gain.value = .32; reverb.connect(wet); wet.connect(master);
-    for (const name of ["sfx", "ui", "ambience", "music"]) { const g = ctx.createGain(); g.connect(master); buses[name] = g; }
+    // Share the room impulse, never the signal: dry and wet returns both pass
+    // through their category fader, including tails already in the convolver.
+    const impulse = makeImpulse(1.8, 3.2);
+    for (const name of ["sfx", "ui", "ambience", "music"]) {
+      const g = ctx.createGain(); g.connect(master); buses[name] = g;
+      const room = ctx.createConvolver(); room.buffer = impulse; reverb[name] = room;
+      const wet = ctx.createGain(); wet.gain.value = .32; room.connect(wet); wet.connect(g);
+    }
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
     applyVolumes();
@@ -60,6 +64,7 @@
   }
   for (const ev of ["pointerdown", "touchend", "keydown"]) window.addEventListener(ev, unlock, { capture: true, passive: true });
   document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopSpeech();
     if (!ctx) return;
     if (document.hidden) ctx.suspend().catch(() => {}); else ctx.resume().catch(() => {});
   });
@@ -71,7 +76,7 @@
     let node = out;
     if (pan && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); out.connect(p); node = p; }
     node.connect(buses[bus]);
-    if (wet > 0) { const s = ctx.createGain(); s.gain.value = wet; out.connect(s); s.connect(reverb); }
+    if (wet > 0) { const s = ctx.createGain(); s.gain.value = wet; out.connect(s); s.connect(reverb[bus]); }
     const v = { out }; voices.add(v);
     setTimeout(() => { voices.delete(v); try { out.disconnect(); } catch (_) { /* gone */ } }, (dur + .3) * 1000);
     return out;
@@ -123,6 +128,23 @@
       noise(d, t, { type: "bandpass", freq: 800, q: 2.5, attack: 0.1, decay: 1.6, gain: 0.15 * k });
       R.gong(d, t + 0.66, { freq: 73.4, intensity: 1.2 });
     },
+    // Blade: disappearing air, a heavy edge, retreating cut, then a rising pulse.
+    blade_vanish: (d, t, p) => { noise(d, t, { freq: 2200, to: 180, glide: .35, attack: .02, decay: .42, gain: .3 * p.intensity }); },
+    blade_heavy: (d, t, p) => { R.whoosh(d, t, { intensity: p.intensity, pitch: .7 }); R.blade(d, t + .16, p); R.blunt(d, t + .16, p); },
+    blade_withdraw: (d, t, p) => { R.blade(d, t, p); noise(d, t + .08, { freq: 1900, to: 250, glide: .3, attack: .02, decay: .32, gain: .4 * p.intensity }); },
+    blade_fury: (d, t, p) => { [110, 165, 220].forEach((freq, i) => tone(d, t + i * .12, { type: "triangle", freq, to: freq * 1.5, glide: .18, decay: .4, gain: .22 * p.intensity })); },
+    // Sentinel: a ground shock and distinct planted-metal defensive cues.
+    shock: (d, t, p) => { R.blunt(d, t, p); noise(d, t, { type: "lowpass", freq: 460, to: 80, glide: .35, decay: .4, gain: .5 * p.intensity }); },
+    bulwark: (d, t, p) => { R.block(d, t, p); metal(d, t + .08, 165, [[1, 1], [2.02, .35]], { gain: .24 * p.intensity, decay: .9 }); },
+    riposte: (d, t, p) => { R.block(d, t, p); metal(d, t + .1, 880, [[1, 1], [1.5, .4]], { gain: .18 * p.intensity, decay: .4 }); },
+    protect: (d, t, p) => { [220, 330].forEach((freq, i) => metal(d, t + i * .14, freq, [[1, 1], [2, .3]], { gain: .22 * p.intensity, decay: .85 })); },
+    // Mender: warm rising tones, wider circle, sustained ward and bright blessing.
+    mender_core_heal: (d, t, p) => { [523, 659, 784].forEach((freq, i) => tone(d, t + i * .1, { freq, attack: .035, decay: .45, gain: .17 * p.intensity })); },
+    mender_core_circle: (d, t, p) => { R.mender_core_heal(d, t, p); [392, 523, 784].forEach(freq => tone(d, t + .25, { freq, attack: .12, decay: .8, gain: .12 * p.intensity })); },
+    mender_core_ward: (d, t, p) => { [330, 495, 660].forEach(freq => tone(d, t, { freq, attack: .15, decay: 1.1, gain: .12 * p.intensity })); metal(d, t + .15, 1320, [[1, 1], [2, .25]], { gain: .08 * p.intensity, decay: .9 }); },
+    mender_core_cleanse: (d, t, p) => { noise(d, t, { type: "highpass", freq: 3000, attack: .04, decay: .25, gain: .1 * p.intensity }); [784, 1047, 1568].forEach((freq, i) => metal(d, t + i * .08, freq, [[1, 1], [2.5, .2]], { gain: .1 * p.intensity, decay: .65 })); },
+    bell: (d, t, p) => metal(d, t, 784, [[1, 1], [2.76, .35], [5.4, .12]], { gain: .18 * p.intensity, decay: 1.4 }),
+    equip: (d, t, p) => { R.block(d, t, p); metal(d, t + .05, 1320, [[1, 1], [1.5, .3]], { gain: .1 * p.intensity, decay: .25 }); },
     // Footsteps per surface.
     step_wood: (d, t, p) => { tone(d, t, { freq: rnd(115, 135), to: 70, glide: .05, decay: .06, gain: .32 * p.intensity }); noise(d, t, { freq: rnd(550, 700), q: 2.5, decay: .045, gain: .2 * p.intensity }); },
     step_soil: (d, t, p) => { noise(d, t, { type: "lowpass", freq: rnd(420, 600), decay: .08, gain: .6 * p.intensity }); tone(d, t, { freq: 80, to: 55, glide: .05, decay: .05, gain: .3 * p.intensity }); },
@@ -381,11 +403,24 @@
     muay_chaiya: ["sfx", .2, 1], muay_korat: ["sfx", .25, 1], muay_lopburi: ["sfx", .2, 1], muay_thasao: ["sfx", .2, 1],
     seer_buffalo: ["sfx", .4, 1], seer_curse: ["sfx", .45, 1], seer_binding: ["sfx", .3, 1], seer_burst: ["sfx", .35, 1],
     seer_pot: ["sfx", .3, 1], seer_poison: ["sfx", .25, 1],
+    blade_vanish: ["sfx", .2, 1], blade_heavy: ["sfx", .2, 1], blade_withdraw: ["sfx", .2, 1], blade_fury: ["sfx", .3, 1],
+    shock: ["sfx", .25, 1], bulwark: ["sfx", .3, 1], riposte: ["sfx", .2, 1], protect: ["sfx", .3, 1],
+    mender_core_heal: ["sfx", .3, 1], mender_core_circle: ["sfx", .4, 1], mender_core_ward: ["sfx", .4, 1], mender_core_cleanse: ["sfx", .3, 1],
+    bell: ["ui", .3, 1], equip: ["ui", .1, 1],
   };
   const DUR = { ghost: 2.6, gong: 3.5, war_horn: 3.2, levelup: 3.5, down: 3.5, summon: 4.5, thunder: 3, boss_roar: 2.4, boss_slam: 2.2, wing_glide: 1.4, meteor_slam: 2.0, pet_chime: 1.6, banner: 2.8, whisper: 2.2, ghost_die: 1.6, warp: 1.8, fly: 1.6, respawn: 1.4, toast: .9,
-    phuttha_core: 1.0, sritra_core: 2.2, atamat_core: 1.2, chumphon_core: 2.5,
+    phuttha_core: 1.0, sritra_core: 2.2, atamat_core: 1.2, chumphon_core: 3.5,
     muay_chaiya: .6, muay_korat: .8, muay_lopburi: .7, muay_thasao: .7,
-    seer_buffalo: 1.8, seer_curse: 1.4, seer_binding: 1.0, seer_burst: 1.2, seer_pot: 1.0, seer_poison: .9 };
+    blade_vanish: .6, blade_heavy: .9, blade_withdraw: .8, blade_fury: .9,
+    shock: .6, bulwark: 1.2, riposte: .7, protect: 1.2,
+    mender_core_heal: .9, mender_core_circle: 1.4, mender_core_ward: 1.5, mender_core_cleanse: 1.0,
+    bell: 1.7, equip: .5,
+    seer_buffalo: 3.5, seer_curse: 1.4, seer_binding: 1.0, seer_burst: 1.2, seer_pot: 1.0, seer_poison: .9 };
+
+  // Core aliases inherit the complete mix and lifetime contract, not just notes.
+  for (const name of ["chaiya", "korat", "lopburi", "thasao"]) {
+    META[name] = META["muay_" + name]; DUR[name] = DUR["muay_" + name];
+  }
 
   // ---- Ambience --------------------------------------------------------
   // Each map is a mix of continuous beds (looped, filtered noise or drones
@@ -452,7 +487,7 @@
   function startAmbience(mapId) {
     const prof = AMBIENCE[mapId] || AMBIENCE.ritual_village, out = ctx.createGain();
     out.gain.value = .0001; out.connect(buses.ambience);
-    const wet = ctx.createGain(); wet.gain.value = .25; out.connect(wet); wet.connect(reverb);
+    const wet = ctx.createGain(); wet.gain.value = .25; out.connect(wet); wet.connect(reverb.ambience);
     const sources = [];
     // Per-bed trims, measured so wind, insects, water, drone, crowd and fire sit at similar loudness.
     const TRIM = { wind: 1.0, insects: 1.2, water: .35, drone: .3, crowd: 2.6, fire: 1.0 };
@@ -535,7 +570,7 @@
     gonglow: (d, t, g) => metal(d, t, 73, [[1, 1, 1], [1.48, .5, .8], [2.02, .35, .6], [2.76, .2, .4]], { gain: g, decay: 4, attack: .015 }),
   };
   let music = null, musicWanted = { map: "ritual_village", combat: false, war: false, elite: false };
-  function musicLayer(name) { const g = ctx.createGain(); g.gain.value = .0001; g.connect(buses.music); const w = ctx.createGain(); w.gain.value = .3; g.connect(w); w.connect(reverb); return g; }
+  function musicLayer(name) { const g = ctx.createGain(); g.gain.value = .0001; g.connect(buses.music); const w = ctx.createGain(); w.gain.value = .3; g.connect(w); w.connect(reverb.music); return g; }
   function startDrone(th, dest, ratio2 = Math.pow(2, 4 / 7), wave = th.drone, level = th.droneGain) {
     const out = [], f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 600; f.connect(dest);
     for (const ratio of [.5, .5 * ratio2]) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = wave; o.frequency.value = th.root * ratio; g.gain.value = level; o.connect(g); g.connect(f); o.start(); out.push(o, lfo(g.gain, .07 + ratio * .03, level * .5)); }
@@ -626,6 +661,7 @@
   let cachedThaiVoice = null;
   let activeAudioEl = null;
   let speechSession = null;
+  let speechGeneration = 0;
 
   function getThaiVoice() {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
@@ -658,7 +694,7 @@
     if (session.audio) {
       session.audio.pause();
       if (activeAudioEl === session.audio) activeAudioEl = null;
-    } else if (error && "speechSynthesis" in window) {
+    } else if (error && session.utterance && "speechSynthesis" in window) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
     }
     if (error) session.opts.onError?.(error);
@@ -694,7 +730,17 @@
 
   function speak(text, opts = {}) {
     if (typeof window === "undefined") return false;
-    stopSpeech();
+    const request = stopSpeech();
+    // onEnd may synchronously speak/stop again. That newer intent wins, even
+    // if it has already finished; never overwrite it or orphan its resources.
+    if (request !== speechGeneration) {
+      opts.onError?.({ error: "interrupted" });
+      return false;
+    }
+    if (document.hidden) {
+      opts.onError?.({ error: "hidden" });
+      return false;
+    }
     if (settings.muted || settings.voice === 0 || settings.master === 0) {
       opts.onError?.({ error: "muted" });
       return false;
@@ -732,10 +778,11 @@
   }
 
   function stopSpeech() {
+    const generation = ++speechGeneration;
     const previous = speechSession;
     speechSession = null; // Invalidate before cancel fires synchronous events.
     if (previous) clearTimeout(previous.timer);
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    if (previous?.utterance && typeof window !== "undefined" && "speechSynthesis" in window) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
     }
     if (activeAudioEl) {
@@ -743,6 +790,16 @@
       activeAudioEl = null;
     }
     previous?.opts.onEnd?.();
+    return generation;
+  }
+
+  function updateSpeechVolume() {
+    if (!speechSession) return;
+    const volume = settings.muted ? 0 : settings.master * settings.voice;
+    // Native engines may snapshot utterance volume at start. Cancel rather than
+    // leave old-volume speech playing or restart without a fresh user gesture.
+    if (volume === 0 || speechSession.utterance) stopSpeech();
+    else if (speechSession.audio) speechSession.audio.volume = volume;
   }
 
   function isSpeaking() {
@@ -758,7 +815,13 @@
     getThaiVoice,
     listen(x, z) { listener.x = x; listener.z = z; },
     get settings() { return { ...settings }; },
-    set(key, value) { if (!(key in DEFAULTS)) return; settings[key] = key === "muted" ? Boolean(value) : Math.max(0, Math.min(1, Number(value) || 0)); applyVolumes(); save(); },
+    set(key, value) {
+      if (!(key in DEFAULTS)) return;
+      const previous = settings[key];
+      settings[key] = key === "muted" ? Boolean(value) : Math.max(0, Math.min(1, Number(value) || 0));
+      applyVolumes(); save();
+      if (previous !== settings[key] && ["master", "voice", "muted"].includes(key)) updateSpeechVolume();
+    },
     get ready() { return Boolean(ctx && ctx.state === "running"); },
     get voices() { return voices.size; },
     unlock,
