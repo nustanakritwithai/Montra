@@ -1,3 +1,13 @@
+  // Emitter meshes dispose their particle systems before holder callbacks run.
+  // Give each system an owned, painted texture so that cleanup cannot destroy
+  // the shared atmosphere texture. DynamicTexture.clone() alone is blank.
+  function cloneGhostParticleTexture(source) {
+    const texture = source.clone();
+    texture.name = source.name + " ghost particle";
+    texture.getContext().drawImage(source.getContext().canvas, 0, 0);
+    texture.update();
+    return texture;
+  }
   // ---- Monster action timeline (shared by every rig) ----
   // k.wind: anticipation, k.hit: strike, k.rec: recovery, k.hurt: flinch,
   // k.die / k.rise: death and spawn progress, k.chase: hunting blend.
@@ -370,11 +380,11 @@
       tube("pyre log", [[0, -.15, 0], [.01, .3, 0], [-.01, .75, 0]], .045, .06, gm.charWood, 7).parent = log;
       const fire = B.MeshBuilder.CreateCylinder("log fire", { height: .45, diameterTop: 0, diameterBottom: .2, tessellation: 7 }, scene); fire.material = gm.flameMat; fire.parent = log; fire.position.y = .98; fire.isPickable = false;
       const embers = new B.ParticleSystem("pyre embers", 40, scene);
-      embers.particleTexture = motes.particleTexture; embers.emitter = fire; embers.minEmitBox = new B.Vector3(-.05, 0, -.05); embers.maxEmitBox = new B.Vector3(.05, .1, .05);
+      embers.particleTexture = cloneGhostParticleTexture(motes.particleTexture); embers.emitter = fire; embers.minEmitBox = new B.Vector3(-.05, 0, -.05); embers.maxEmitBox = new B.Vector3(.05, .1, .05);
       embers.color1 = new B.Color4(1, .6, .2, 1); embers.color2 = new B.Color4(1, .3, .05, .8); embers.colorDead = new B.Color4(.3, .05, 0, 0);
       embers.minSize = .04; embers.maxSize = .1; embers.minLifeTime = .5; embers.maxLifeTime = 1.1; embers.emitRate = 20;
       embers.direction1 = new B.Vector3(-.3, 1, -.3); embers.direction2 = new B.Vector3(.3, 1.5, .3); embers.minEmitPower = .4; embers.maxEmitPower = 1; embers.blendMode = B.ParticleSystem.BLENDMODE_ADD; embers.start();
-      holder.onDisposeObservable.add(() => embers.dispose());
+      holder.onDisposeObservable.add(() => embers.dispose()); // This system owns its copied particle texture.
       const base = { Spine: [.1, -.2, 0], Head: [.05, .2, 0], RightArm: [-.5, .1, 1.1], RightForeArm: [0, 1.1, 0], LeftArm: [-.2, 0, -1.2], LeftForeArm: [0, -.5, 0],
         LeftUpLeg: [-.25, 0, .15], RightUpLeg: [.15, 0, -.12], LeftLeg: [.3, 0, 0], RightLeg: [.25, 0, 0] };
       const brand = { Spine: [-.25, -.5, 0], RightArm: [-2.8, -.3, .9], RightForeArm: [0, .4, 0], LeftArm: [-1.2, .3, -1.1] };
@@ -588,11 +598,11 @@
       ghostEyes(nodes, gm.eyeAmber, .034);
       const stump = B.MeshBuilder.CreateCylinder("neck stump", { height: .02, diameter: .1, tessellation: 10 }, scene); stump.material = gm.mouth; stump.position.set(0, 1.5, 0); stump.isPickable = false; onBone(nodes, "Neck", stump);
       const smoke = new B.ParticleSystem("neck smoke", 50, scene);
-      smoke.particleTexture = motes.particleTexture; smoke.emitter = stump; smoke.minEmitBox = new B.Vector3(-.03, 0, -.03); smoke.maxEmitBox = new B.Vector3(.03, .02, .03);
+      smoke.particleTexture = cloneGhostParticleTexture(motes.particleTexture); smoke.emitter = stump; smoke.minEmitBox = new B.Vector3(-.03, 0, -.03); smoke.maxEmitBox = new B.Vector3(.03, .02, .03);
       smoke.color1 = new B.Color4(.12, .1, .14, .9); smoke.color2 = new B.Color4(.3, .05, .05, .7); smoke.colorDead = new B.Color4(0, 0, 0, 0);
       smoke.minSize = .12; smoke.maxSize = .3; smoke.minLifeTime = .8; smoke.maxLifeTime = 1.6; smoke.emitRate = 24;
       smoke.direction1 = new B.Vector3(-.15, 1, -.15); smoke.direction2 = new B.Vector3(.15, 1.4, .15); smoke.minEmitPower = .2; smoke.maxEmitPower = .5; smoke.blendMode = B.ParticleSystem.BLENDMODE_STANDARD; smoke.start();
-      holder.onDisposeObservable.add(() => smoke.dispose());
+      holder.onDisposeObservable.add(() => smoke.dispose()); // This system owns its copied particle texture.
       const sword = new B.TransformNode("dap sword", scene); sword.parent = nodes.Socket_Hand_Weapon_R; sword.rotationQuaternion = quatFromUp(new B.Vector3(0, .2, 1));
       tube("dap grip", [[0, -.12, 0], [0, .1, 0]], .02, .02, gm.beam, 6).parent = sword;
       const blade = lathe("dap blade", [[0, .08], [.025, .12], [.03, .6], [.02, .78], [0, .86]], gm.steelBlade, 8); blade.parent = sword; blade.scaling.z = .25;

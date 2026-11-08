@@ -2126,7 +2126,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 #sentinelHotbar .field-slot[data-skill-id="bulwark"] .glyph { color:#c8ecff; background:radial-gradient(circle at 50% 35%,#355f75,#152936); }
 #sentinelHotbar .field-slot[data-skill-id="riposte"] .glyph { color:#ffd8c1; background:radial-gradient(circle at 50% 35%,#864932,#301d1a); }
 #sentinelHotbar .field-slot[data-skill-id="protect"] .glyph { color:#d7f6dc; background:radial-gradient(circle at 50% 35%,#3e735e,#172c2b); }
-#occultHotbar .field-slot:not(.empty-slot) .glyph { background:radial-gradient(ellipse at 50% 35%,#5f4976,#292435); color:#f5dfff; }
+/* Keep the fallback below skill artwork specificity; a gradient is not an icon. */
+:where(#occultHotbar) .field-slot:not(.empty-slot) .glyph { background:radial-gradient(ellipse at 50% 35%,#5f4976,#292435); color:#f5dfff; }
 .field-slot.empty-slot .glyph { border:1px dashed #9d9066; color:#c4b995; background:#192921; }
 .field-slot.empty-slot .field-skill-name { color:#c8c1a6; }
 .field-slot .field-skill-name { max-width:100%; font:600 10px/1.3 system-ui,sans-serif; overflow-wrap:anywhere; }
@@ -2141,7 +2142,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 /* ---- Vital orb: HP left · mana right · stamina as a yellow segmented ring ---- */
 .field-dock .learned-bar:has(.vital-orb) { display: flex !important; align-items: center; }
-.vital-orb { position: relative; flex: none; order: 1; width: 82px; height: 82px; margin: -10px -2px -2px 4px; pointer-events: auto; filter: drop-shadow(0 4px 6px #000a); }
+.vital-orb { appearance: none; padding: 0; border: 0; background: transparent; border-radius: 50%; touch-action: manipulation; position: relative; flex: none; order: 1; width: 82px; height: 82px; margin: -10px -2px -2px 4px; pointer-events: auto; filter: drop-shadow(0 4px 6px #000a); }
+.vital-orb:focus-visible { outline: 2px solid #ffe098; outline-offset: 3px; }
 .vital-orb svg { width: 100%; height: 100%; display: block; overflow: visible; }
 .vo-back { fill: #0b0806; } .vo-empty { fill: #120d0a; }
 .vo-rim { fill: none; stroke: #c9a35a; stroke-width: 2.2; }
@@ -2658,6 +2660,24 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .crafting-page button:focus-visible { outline:2px solid #f4d688; outline-offset:3px; }
 @media(max-width:700px) { .drawer:has(.crafting-page) { width:calc(100vw - 12px); bottom:6px; max-height:calc(100dvh - max(16px,env(safe-area-inset-top))); padding-left:12px; padding-right:12px; }.drawer:has(.crafting-page) .drawer-header { margin-left:-12px; margin-right:-12px; }.ck-workspace { grid-template-columns:1fr; padding:10px; gap:14px; }.ck-detail { border-left:0; border-top:1px solid var(--ck-line); padding:14px 0 0; }.ck-hero { align-items:flex-start; gap:8px; }.crafting-page .ck-hero h3 { font-size:21px; }.ck-skill { min-width:0; padding:8px; font-size:12px; }.ck-skill span { font-size:10px; }.ck-categories button { flex:1 0 20%; padding:8px; }.ck-grid { gap:7px; }.ck-recipe { min-height:143px; }.ck-wallet { font-size:12px; }.ck-requirements { gap:7px; } }
 @media(prefers-reduced-motion:reduce) { .crafting-page * { scroll-behavior:auto; } }
+
+/* The recipe graph is read-only; native buttons expose every ingredient by touch or keyboard. */
+.ck-recipe-explorer { min-width:0; margin:12px 0; }
+.ck-inspect-nav { display:flex; gap:8px; flex-wrap:wrap; }
+.ck-inspect-nav button { flex:1; min-width:0; min-height:44px; }
+.ck-relation { padding:10px; margin-bottom:8px; border:1px solid var(--ck-line); border-radius:7px; background:#14251b; }
+.ck-formula { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+.ck-recipe-node { display:flex; flex-direction:column; align-items:center; gap:4px; width:66px; min-height:44px; padding:4px; border:1px solid #9d8653; border-radius:6px; background:#263a29; color:#e9d8a4; cursor:pointer; font:inherit; }
+.ck-recipe-node .item-slot { --item-slot-size:48px; }
+.ck-recipe-node > span { font-size:10px; line-height:1.4; max-width:100%; overflow-wrap:anywhere; }
+.ck-recipe-node > small { font-size:12px; }
+.ck-recipe-symbol { color:#ddbc72; font-size:20px; }
+.ck-relation > .note { font-size:11px; margin:8px 0 0; }
+.ck-recipe-hint { color:#dfca91; font-size:12px; }
+.crafting-page .craft-ingredients li { grid-template-columns:44px minmax(0,1fr); }
+.crafting-page .craft-ingredients .ck-recipe-node { width:44px; padding:2px; }
+.craft-ingredients .ck-recipe-node > span,.craft-ingredients .ck-recipe-node > small { display:none; }
+@media(max-width:380px) { .ck-relation { padding:7px; }.ck-recipe-node { width:60px; }.ck-recipe-node .item-slot { --item-slot-size:44px; } }
 /* ==========================================================================
    RPG Skill Tree & Skill Detail Modal
    ========================================================================== */
@@ -2697,7 +2717,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto;
+  overflow: hidden;
   box-sizing: border-box;
   animation: fadeIn 0.18s ease-out both;
 }
@@ -2708,6 +2728,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .skill-modal-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2716,6 +2737,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   padding-bottom: 10px;
 }
 .skill-modal-title {
+  min-width: 0;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -2734,9 +2757,11 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   flex-shrink: 0;
 }
 .skill-modal-badge {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
+  /* Status belongs beside the name, never over the skill artwork. */
+  display: inline-block;
+  align-self: flex-start;
+  white-space: nowrap;
+  line-height: 1.35;
   background: #f2ca83;
   color: #1a1508;
   font-size: 10px;
@@ -2746,11 +2771,13 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   border: 1px solid #fff;
 }
 .skill-modal-naming {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .skill-modal-name {
+  overflow-wrap: anywhere;
   font-size: 16px;
   font-weight: 800;
   color: #f6eedb;
@@ -2785,6 +2812,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .skill-modal-body {
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2890,6 +2919,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .skill-modal-actions {
+  flex-shrink: 0;
   display: flex;
   gap: 8px;
   margin-top: 4px;
@@ -3485,7 +3515,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto;
+  overflow: hidden;
   box-sizing: border-box;
   animation: fadeIn 0.18s ease-out both;
 }
@@ -3496,6 +3526,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .skill-modal-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3504,6 +3535,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   padding-bottom: 10px;
 }
 .skill-modal-title {
+  min-width: 0;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -3522,9 +3555,11 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   flex-shrink: 0;
 }
 .skill-modal-badge {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
+  /* Status belongs beside the name, never over the skill artwork. */
+  display: inline-block;
+  align-self: flex-start;
+  white-space: nowrap;
+  line-height: 1.35;
   background: #f2ca83;
   color: #1a1508;
   font-size: 10px;
@@ -3534,11 +3569,13 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   border: 1px solid #fff;
 }
 .skill-modal-naming {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .skill-modal-name {
+  overflow-wrap: anywhere;
   font-size: 16px;
   font-weight: 800;
   color: #f6eedb;
@@ -3573,6 +3610,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .skill-modal-body {
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -3678,6 +3717,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .skill-modal-actions {
+  flex-shrink: 0;
   display: flex;
   gap: 8px;
   margin-top: 4px;
@@ -4301,7 +4341,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
    MONTRA RADIAL 4-DIRECTIONAL KNOWLEDGE GRAPH
    ========================================================================== */
 .kg-canvas-board.radial-4way {
-  height: 440px;
+  height: 460px;
 }
 
 .kg-center-class-node {
@@ -4419,6 +4459,45 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   top: 32%;
 }
 
+/* Keep the restored layout readable at 320 px and keyboard/touch accessible. */
+.kg-banner-left, .kg-banner-info { min-width: 0; }
+.kg-banner-crest, .st-points-box { flex-shrink: 0; }
+.kg-banner-title { overflow-wrap: anywhere; }
+.kg-graph-help { margin: 2px 0; text-align: center; font-size: 11px; }
+.radial-4way .kg-node {
+  border: 0;
+  background: none;
+  color: inherit;
+  min-height: 44px;
+  min-width: 44px;
+  width: 88px;
+  box-shadow: none;
+  font: inherit;
+}
+.radial-4way .kg-node:hover, .radial-4way .kg-node:focus-visible,
+.radial-4way .kg-node:active { transform: translate(-50%, -50%); }
+.radial-4way .kg-node:focus-visible { outline: 2px solid #7fe8ff; outline-offset: 2px; }
+.radial-4way .kg-node-top { top: 21% !important; }
+.radial-4way .kg-node-bottom { top: 79% !important; }
+.radial-4way .kg-node-left { left: 16% !important; }
+.radial-4way .kg-node-right { left: 84% !important; }
+.radial-4way .kg-node-name { max-width: 84px; overflow-wrap: anywhere; }
+.radial-4way .kg-center-class-title { max-width: 84px; white-space: normal; text-align: center; }
+.radial-4way .kg-center-class-orb { animation: none; }
+.radial-4way .kg-node-status { white-space: nowrap; }
+.radial-4way .kg-stream-badge-left, .radial-4way .kg-stream-badge-right { top: 30%; }
+@media (max-width: 380px) {
+  .kg-banner { gap: 6px; padding: 9px 8px; }
+  .kg-banner-left { gap: 6px; }
+  .kg-banner-crest { width: 30px; height: 34px; font-size: 20px; }
+  .kg-banner-title { font-size: 12px; letter-spacing: 0; }
+  .radial-4way .kg-node { width: 80px; padding: 2px; }
+  .radial-4way .kg-node-name { font-size: 10.5px; max-width: 76px; }
+  .radial-4way .kg-center-class-title { max-width: 70px; padding: 2px 5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .radial-4way .kg-orb, .radial-4way .kg-edge { animation: none !important; transition: none; }
+}
 /* Keep the restored identity and quest above chat on short landscape screens. */
 @media (orientation:landscape) and (max-height:520px) { .chat-box .cb-log { height:18dvh; max-height:94px; } }
 /* ========================================================
@@ -4484,6 +4563,126 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .bag-slot[data-item-rarity="epic"] { border-color: #af7ac5 !important; box-shadow: 0 0 10px rgba(175, 122, 197, 0.55) !important; }
 .bag-slot[data-item-rarity="legendary"] { border-color: #f5b041 !important; box-shadow: 0 0 12px rgba(245, 176, 65, 0.65) !important; }
 
+
+/* Reviewed sheet cells; unknown and unmatched items retain their legacy fallback. */
+.bag-slot[data-item-art="sheet_wp_wrap"] .bag-symbol { background-image: url("./assets/items/wp_wrap.webp?v=f00881bfd01b"); }
+.bag-slot[data-item-art="sheet_wp_twins"] .bag-symbol { background-image: url("./assets/items/wp_twins.webp?v=3149aac962eb"); }
+.bag-slot[data-item-art="sheet_wp_shadow"] .bag-symbol { background-image: url("./assets/items/wp_shadow.webp?v=6db15504dece"); }
+.bag-slot[data-item-art="sheet_wp_pike"] .bag-symbol { background-image: url("./assets/items/wp_pike.webp?v=45fc0818d0d0"); }
+.bag-slot[data-item-art="sheet_wp_wand"] .bag-symbol { background-image: url("./assets/items/wp_wand.webp?v=7962b80fe480"); }
+.bag-slot[data-item-art="sheet_wp_crook"] .bag-symbol { background-image: url("./assets/items/wp_crook.webp?v=a90153df301a"); }
+.bag-slot[data-item-art="sheet_ritual_dagger"] .bag-symbol { background-image: url("./assets/items/ritual_dagger.webp?v=b8928cae123b"); }
+.bag-slot[data-item-art="sheet_arcane_sword"] .bag-symbol { background-image: url("./assets/items/arcane_sword.webp?v=d8e9568cabc6"); }
+.bag-slot[data-item-art="sheet_spirit_staff"] .bag-symbol { background-image: url("./assets/items/spirit_staff.webp?v=e9dbbb71856b"); }
+.bag-slot[data-item-art="sheet_shrine_glaive"] .bag-symbol { background-image: url("./assets/items/shrine_glaive.webp?v=dc3349600478"); }
+.bag-slot[data-item-art="sheet_arm_cloth_chest"] .bag-symbol { background-image: url("./assets/items/arm_cloth_chest.webp?v=8f979c1be4b7"); }
+.bag-slot[data-item-art="sheet_arm_hide_chest"] .bag-symbol { background-image: url("./assets/items/arm_hide_chest.webp?v=06e45aeb3e49"); }
+.bag-slot[data-item-art="sheet_arm_medium_chest"] .bag-symbol { background-image: url("./assets/items/arm_medium_chest.webp?v=e236e0ec46d7"); }
+.bag-slot[data-item-art="sheet_arm_heavy_chest"] .bag-symbol { background-image: url("./assets/items/arm_heavy_chest.webp?v=e02d8d5ef559"); }
+.bag-slot[data-item-art="sheet_arm_cloth_head"] .bag-symbol { background-image: url("./assets/items/arm_cloth_head.webp?v=5e0a79322397"); }
+.bag-slot[data-item-art="sheet_arm_hide_head"] .bag-symbol { background-image: url("./assets/items/arm_hide_head.webp?v=8ec4c58a8399"); }
+.bag-slot[data-item-art="sheet_arm_medium_head"] .bag-symbol { background-image: url("./assets/items/arm_medium_head.webp?v=30b737426075"); }
+.bag-slot[data-item-art="sheet_arm_heavy_head"] .bag-symbol { background-image: url("./assets/items/arm_heavy_head.webp?v=ede461085c64"); }
+.bag-slot[data-item-art="sheet_arm_cloth_shoulders"] .bag-symbol { background-image: url("./assets/items/arm_cloth_shoulders.webp?v=21481417ba27"); }
+.bag-slot[data-item-art="sheet_arm_hide_shoulders"] .bag-symbol { background-image: url("./assets/items/arm_hide_shoulders.webp?v=817476c6d514"); }
+.bag-slot[data-item-art="sheet_arm_medium_shoulders"] .bag-symbol { background-image: url("./assets/items/arm_medium_shoulders.webp?v=a34a37a29818"); }
+.bag-slot[data-item-art="sheet_arm_heavy_shoulders"] .bag-symbol { background-image: url("./assets/items/arm_heavy_shoulders.webp?v=8ab02c471cb6"); }
+.bag-slot[data-item-art="sheet_arm_cloth_feet"] .bag-symbol { background-image: url("./assets/items/arm_cloth_feet.webp?v=e5ecf6e2629b"); }
+.bag-slot[data-item-art="sheet_arm_hide_feet"] .bag-symbol { background-image: url("./assets/items/arm_hide_feet.webp?v=f0c479fde554"); }
+.bag-slot[data-item-art="sheet_arm_medium_feet"] .bag-symbol { background-image: url("./assets/items/arm_medium_feet.webp?v=537a3c69dc4c"); }
+.bag-slot[data-item-art="sheet_arm_heavy_feet"] .bag-symbol { background-image: url("./assets/items/arm_heavy_feet.webp?v=6ed47cc2bc48"); }
+.bag-slot[data-item-art="sheet_acc_torc"] .bag-symbol { background-image: url("./assets/items/acc_torc.webp?v=f68417e0beec"); }
+.bag-slot[data-item-art="sheet_acc_gorget"] .bag-symbol { background-image: url("./assets/items/acc_gorget.webp?v=bde8f1635fa9"); }
+.bag-slot[data-item-art="sheet_acc_fang"] .bag-symbol { background-image: url("./assets/items/acc_fang.webp?v=c218f58620dc"); }
+.bag-slot[data-item-art="sheet_acc_spell"] .bag-symbol { background-image: url("./assets/items/acc_spell.webp?v=f4e7fdd6bf85"); }
+.bag-slot[data-item-art="sheet_acc_earrings_duelist"] .bag-symbol { background-image: url("./assets/items/acc_earrings_duelist.webp?v=31f6db04cc09"); }
+.bag-slot[data-item-art="sheet_acc_earrings_focus"] .bag-symbol { background-image: url("./assets/items/acc_earrings_focus.webp?v=d983ba590f68"); }
+.bag-slot[data-item-art="sheet_acc_earrings_lotus"] .bag-symbol { background-image: url("./assets/items/acc_earrings_lotus.webp?v=15862ab0f302"); }
+.bag-slot[data-item-art="sheet_acc_earrings_ward"] .bag-symbol { background-image: url("./assets/items/acc_earrings_ward.webp?v=ee3ec0d34588"); }
+.bag-slot[data-item-art="sheet_acc_ring_spell"] .bag-symbol { background-image: url("./assets/items/acc_ring_spell.webp?v=91cb7d784d2d"); }
+.bag-slot[data-item-art="sheet_acc_ring_atk"] .bag-symbol { background-image: url("./assets/items/acc_ring_atk.webp?v=150f1c170e8d"); }
+.bag-slot[data-item-art="sheet_acc_ring_heal"] .bag-symbol { background-image: url("./assets/items/acc_ring_heal.webp?v=f603adfcfe1e"); }
+.bag-slot[data-item-art="sheet_acc_ring_guard"] .bag-symbol { background-image: url("./assets/items/acc_ring_guard.webp?v=53227fb84344"); }
+.bag-slot[data-item-art="sheet_use_herbal"] .bag-symbol { background-image: url("./assets/items/use_herbal.webp?v=b8faae428b39"); }
+.bag-slot[data-item-art="sheet_use_mana"] .bag-symbol { background-image: url("./assets/items/use_mana.webp?v=45746b893381"); }
+.bag-slot[data-item-art="sheet_shrine_shard"] .bag-symbol { background-image: url("./assets/items/shrine_shard.webp?v=205ed460b708"); }
+.bag-slot[data-item-art="sheet_mat_raw_wood"] .bag-symbol { background-image: url("./assets/items/mat_raw_wood.webp?v=d8b1b42875b7"); }
+.bag-slot[data-item-art="sheet_mat_raw_stone"] .bag-symbol { background-image: url("./assets/items/mat_raw_stone.webp?v=78e34473cbe6"); }
+.bag-slot[data-item-art="sheet_mat_metal"] .bag-symbol { background-image: url("./assets/items/mat_metal.webp?v=6c12e405429d"); }
+.bag-slot[data-item-art="sheet_mat_wood"] .bag-symbol { background-image: url("./assets/items/mat_wood.webp?v=0a026017a692"); }
+.bag-slot[data-item-art="sheet_mat_fiber"] .bag-symbol { background-image: url("./assets/items/mat_fiber.webp?v=bbfbdc0ab31c"); }
+.bag-slot[data-item-art="sheet_mat_hide"] .bag-symbol { background-image: url("./assets/items/mat_hide.webp?v=f8efdcb9ae5f"); }
+.bag-slot[data-item-art="sheet_mat_ink"] .bag-symbol { background-image: url("./assets/items/mat_ink.webp?v=21c3c61d5343"); }
+.bag-slot[data-item-art="sheet_mat_herb"] .bag-symbol { background-image: url("./assets/items/mat_herb.webp?v=0c0c86f1f91e"); }
+.bag-slot[data-item-art="sheet_mat_resin"] .bag-symbol { background-image: url("./assets/items/mat_resin.webp?v=03750839b8a6"); }
+.bag-slot[data-item-art="sheet_mat_charcoal"] .bag-symbol { background-image: url("./assets/items/mat_charcoal.webp?v=aaf1268cee3a"); }
+.bag-slot[data-item-art="sheet_mat_ingot"] .bag-symbol { background-image: url("./assets/items/mat_ingot.webp?v=e949d55561ca"); }
+.bag-slot[data-item-art="sheet_ref_seal"] .bag-symbol { background-image: url("./assets/items/ref_seal.webp?v=0451c1a57fb7"); }
+.bag-slot[data-item-art="sheet_ref_powder"] .bag-symbol { background-image: url("./assets/items/ref_powder.webp?v=b88ea3658bae"); }
+.bag-slot[data-item-art="sheet_ref_oil"] .bag-symbol { background-image: url("./assets/items/ref_oil.webp?v=e877c0eb82b6"); }
+.bag-slot[data-item-art="sheet_tool_axe"] .bag-symbol { background-image: url("./assets/items/tool_axe.webp?v=1c3874d10d7e"); }
+.bag-slot[data-item-art="sheet_tool_pick"] .bag-symbol { background-image: url("./assets/items/tool_pick.webp?v=0269078125a7"); }
+.bag-slot[data-item-art="sheet_card_possessed"] .bag-symbol { background-image: url("./assets/items/card_possessed.webp?v=4c11c6de283d"); }
+.bag-slot[data-item-art="sheet_card_lost_ghost"] .bag-symbol { background-image: url("./assets/items/card_lost_ghost.webp?v=65b653052408"); }
+.bag-slot[data-item-art="sheet_card_root_shadow"] .bag-symbol { background-image: url("./assets/items/card_root_shadow.webp?v=10b2b6320f56"); }
+.bag-slot[data-item-art="sheet_card_arcane_spirit"] .bag-symbol { background-image: url("./assets/items/card_arcane_spirit.webp?v=5b98edadd72b"); }
+.bag-slot[data-item-art="sheet_card_shrine_keeper"] .bag-symbol { background-image: url("./assets/items/card_shrine_keeper.webp?v=b11f03d72f49"); }
+.bag-slot[data-item-art="sheet_card_bamboo"] .bag-symbol { background-image: url("./assets/items/card_bamboo.webp?v=5b1aef315625"); }
+.bag-slot[data-item-art="sheet_card_lotus"] .bag-symbol { background-image: url("./assets/items/card_lotus.webp?v=bc5f27943919"); }
+.bag-slot[data-item-art="sheet_card_dream"] .bag-symbol { background-image: url("./assets/items/card_dream.webp?v=1abb3249dce9"); }
+.bag-slot[data-item-art="sheet_mat_boss_bound_temple"] .bag-symbol { background-image: url("./assets/items/mat_boss_bound_temple.webp?v=87db13a1bb10"); }
+.bag-slot[data-item-art="sheet_mat_boss_drowned_marsh"] .bag-symbol { background-image: url("./assets/items/mat_boss_drowned_marsh.webp?v=a18f3d60be69"); }
+.bag-slot[data-item-art="sheet_mat_boss_moon_cemetery"] .bag-symbol { background-image: url("./assets/items/mat_boss_moon_cemetery.webp?v=ecac1bf3db3d"); }
+.bag-slot[data-item-art="sheet_mat_boss_moon_pass"] .bag-symbol { background-image: url("./assets/items/mat_boss_moon_pass.webp?v=5dd114e4e812"); }
+.bag-slot[data-item-art="sheet_mat_boss_bamboo_frontier"] .bag-symbol { background-image: url("./assets/items/mat_boss_bamboo_frontier.webp?v=f1543b014e3a"); }
+.bag-slot[data-item-art="sheet_mat_boss_lotus_basin"] .bag-symbol { background-image: url("./assets/items/mat_boss_lotus_basin.webp?v=bf2e0398d5f6"); }
+.bag-slot[data-item-art="sheet_mat_boss_river_watch"] .bag-symbol { background-image: url("./assets/items/mat_boss_river_watch.webp?v=c0552652b3eb"); }
+.bag-slot[data-item-art="sheet_mat_boss_asura_peak"] .bag-symbol { background-image: url("./assets/items/mat_boss_asura_peak.webp?v=6ee62f9fe242"); }
+.bag-slot[data-item-art="sheet_acc_shrine_ward"] .bag-symbol { background-image: url("./assets/items/acc_shrine_ward.webp?v=22190fe18fc9"); }
+.bag-slot[data-item-art="sheet_acc_rift_star"] .bag-symbol { background-image: url("./assets/items/acc_rift_star.webp?v=c8f73ddff633"); }
+.bag-slot[data-item-art="sheet_acc_boss_bound_temple"] .bag-symbol { background-image: url("./assets/items/acc_boss_bound_temple.webp?v=fdb12edabfc0"); }
+.bag-slot[data-item-art="sheet_acc_boss_drowned_marsh"] .bag-symbol { background-image: url("./assets/items/acc_boss_drowned_marsh.webp?v=bd7830f32bc4"); }
+.bag-slot[data-item-art="sheet_acc_boss_moon_cemetery"] .bag-symbol { background-image: url("./assets/items/acc_boss_moon_cemetery.webp?v=c177f605fd7f"); }
+.bag-slot[data-item-art="sheet_acc_boss_moon_pass"] .bag-symbol { background-image: url("./assets/items/acc_boss_moon_pass.webp?v=096ab0c02b8d"); }
+.bag-slot[data-item-art="sheet_acc_boss_bamboo_frontier"] .bag-symbol { background-image: url("./assets/items/acc_boss_bamboo_frontier.webp?v=db5a93d45d18"); }
+.bag-slot[data-item-art="sheet_acc_boss_hex_ridge"] .bag-symbol { background-image: url("./assets/items/acc_boss_hex_ridge.webp?v=b14108e86400"); }
+.bag-slot[data-item-art="sheet_acc_boss_lotus_basin"] .bag-symbol { background-image: url("./assets/items/acc_boss_lotus_basin.webp?v=af7a547d0199"); }
+.bag-slot[data-item-art="sheet_acc_boss_river_watch"] .bag-symbol { background-image: url("./assets/items/acc_boss_river_watch.webp?v=b3aaca81f950"); }
+.bag-slot[data-item-art="sheet_acc_boss_twin_neck_pass"] .bag-symbol { background-image: url("./assets/items/acc_boss_twin_neck_pass.webp?v=e2edf00b5ddb"); }
+.bag-slot[data-item-art="sheet_acc_boss_sam_lan_estuary"] .bag-symbol { background-image: url("./assets/items/acc_boss_sam_lan_estuary.webp?v=e4335e525ee1"); }
+.bag-slot[data-item-art="sheet_acc_boss_naga_cavern"] .bag-symbol { background-image: url("./assets/items/acc_boss_naga_cavern.webp?v=75124cd864d5"); }
+.bag-slot[data-item-art="sheet_acc_boss_fallen_city"] .bag-symbol { background-image: url("./assets/items/acc_boss_fallen_city.webp?v=9cd3dff9e037"); }
+.bag-slot[data-item-art="sheet_acc_boss_tri_wiang_castle"] .bag-symbol { background-image: url("./assets/items/acc_boss_tri_wiang_castle.webp?v=d0738baacd82"); }
+.bag-slot[data-item-art="sheet_acc_boss_asura_peak"] .bag-symbol { background-image: url("./assets/items/acc_boss_asura_peak.webp?v=b0d94a8c1745"); }
+.bag-slot[data-item-art="sheet_card_reed"] .bag-symbol { background-image: url("./assets/items/card_reed.webp?v=5fccf9332f72"); }
+.bag-slot[data-item-art="sheet_card_merchant"] .bag-symbol { background-image: url("./assets/items/card_merchant.webp?v=862a642be32b"); }
+.bag-slot[data-item-art="sheet_card_asura"] .bag-symbol { background-image: url("./assets/items/card_asura.webp?v=0b0109660ce0"); }
+.bag-slot[data-item-art="sheet_card_forge_master"] .bag-symbol { background-image: url("./assets/items/card_forge_master.webp?v=658c43c7bcd6"); }
+.bag-slot[data-item-art="sheet_card_light_eater"] .bag-symbol { background-image: url("./assets/items/card_light_eater.webp?v=58b08bbd3829"); }
+.bag-slot[data-item-art="sheet_card_last_spirit"] .bag-symbol { background-image: url("./assets/items/card_last_spirit.webp?v=ac978d89379b"); }
+.bag-slot[data-item-art="sheet_card_star_warden"] .bag-symbol { background-image: url("./assets/items/card_star_warden.webp?v=500cb666fea5"); }
+.bag-slot[data-item-art="sheet_card_rift_warden"] .bag-symbol { background-image: url("./assets/items/card_rift_warden.webp?v=7034ebda12d0"); }
+.bag-slot[data-item-art="sheet_off_brace"] .bag-symbol { background-image: url("./assets/items/off_brace.webp?v=9e4f707d4332"); }
+.bag-slot[data-item-art="sheet_off_guard"] .bag-symbol { background-image: url("./assets/items/off_guard.webp?v=c896bd426103"); }
+.bag-slot[data-item-art="sheet_off_veil"] .bag-symbol { background-image: url("./assets/items/off_veil.webp?v=d6ed34f02ceb"); }
+.bag-slot[data-item-art="sheet_off_shield"] .bag-symbol { background-image: url("./assets/items/off_shield.webp?v=db129242ff5e"); }
+.bag-slot[data-item-art="sheet_off_jar"] .bag-symbol { background-image: url("./assets/items/off_jar.webp?v=38499fd54062"); }
+.bag-slot[data-item-art="sheet_off_bell"] .bag-symbol { background-image: url("./assets/items/off_bell.webp?v=55d3303b4c6b"); }
+.bag-slot[data-item-art="sheet_arm_cloth_arms"] .bag-symbol { background-image: url("./assets/items/arm_cloth_arms.webp?v=a9ef7c027c73"); }
+.bag-slot[data-item-art="sheet_arm_hide_arms"] .bag-symbol { background-image: url("./assets/items/arm_hide_arms.webp?v=454c2a35e246"); }
+.bag-slot[data-item-art="sheet_arm_medium_arms"] .bag-symbol { background-image: url("./assets/items/arm_medium_arms.webp?v=c66370d0e67d"); }
+.bag-slot[data-item-art="sheet_arm_heavy_arms"] .bag-symbol { background-image: url("./assets/items/arm_heavy_arms.webp?v=4f2ffa14ad2d"); }
+.bag-slot[data-item-art="sheet_arm_cloth_leftHand"] .bag-symbol { background-image: url("./assets/items/arm_cloth_leftHand.webp?v=73154b88bc8a"); }
+.bag-slot[data-item-art="sheet_arm_hide_leftHand"] .bag-symbol { background-image: url("./assets/items/arm_hide_leftHand.webp?v=8f155d6387cf"); }
+.bag-slot[data-item-art="sheet_arm_medium_leftHand"] .bag-symbol { background-image: url("./assets/items/arm_medium_leftHand.webp?v=c765f33bc422"); }
+.bag-slot[data-item-art="sheet_arm_heavy_leftHand"] .bag-symbol { background-image: url("./assets/items/arm_heavy_leftHand.webp?v=573c6183f933"); }
+.bag-slot[data-item-art="sheet_arm_cloth_rightHand"] .bag-symbol { background-image: url("./assets/items/arm_cloth_rightHand.webp?v=04f3493a080a"); }
+.bag-slot[data-item-art="sheet_arm_hide_rightHand"] .bag-symbol { background-image: url("./assets/items/arm_hide_rightHand.webp?v=dac8ad32054b"); }
+.bag-slot[data-item-art="sheet_arm_medium_rightHand"] .bag-symbol { background-image: url("./assets/items/arm_medium_rightHand.webp?v=9276a20b3fa1"); }
+.bag-slot[data-item-art="sheet_arm_heavy_rightHand"] .bag-symbol { background-image: url("./assets/items/arm_heavy_rightHand.webp?v=834483a8d7a6"); }
+.bag-slot[data-item-art="sheet_mat_fish_silver"] .bag-symbol { background-image: url("./assets/items/mat_fish_silver.webp?v=4b79c3aedefa"); }
+.bag-slot[data-item-art="sheet_mat_fish_spirit"] .bag-symbol { background-image: url("./assets/items/mat_fish_spirit.webp?v=d045a689c70c"); }
+.bag-slot[data-item-art="sheet_use_salve"] .bag-symbol { background-image: url("./assets/items/use_salve.webp?v=53387ccd1bcf"); }
 /* Small screen-sized monster labels, below HUD, never intercept movement or attacks. */
 .monster-label-layer { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
 .monster-label { display: flex; gap: 3px; box-sizing: border-box; position: absolute; transform: translate(-50%, -100%); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 4px; border-radius: 4px; background: rgba(12, 15, 20, .65); color: #f4e8cf; font: 600 11px/17px "Noto Sans Thai", sans-serif; text-shadow: 0 1px 2px #000; pointer-events: none; }
@@ -4539,6 +4738,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="phuttha_core"],
+.skill-book-icon[data-skill-glyph="phuttha_core"],
 .skill-modal-glyph[data-skill-glyph="phuttha_core"],
 .glyph[data-skill-glyph="phuttha_core"],
 .field-slot[data-skill-id="phuttha_core"] .glyph {
@@ -4546,6 +4746,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="sritra_core"],
+.skill-book-icon[data-skill-glyph="sritra_core"],
 .skill-modal-glyph[data-skill-glyph="sritra_core"],
 .glyph[data-skill-glyph="sritra_core"],
 .field-slot[data-skill-id="sritra_core"] .glyph {
@@ -4553,6 +4754,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="atamat_core"],
+.skill-book-icon[data-skill-glyph="atamat_core"],
 .skill-modal-glyph[data-skill-glyph="atamat_core"],
 .glyph[data-skill-glyph="atamat_core"],
 .field-slot[data-skill-id="atamat_core"] .glyph {
@@ -4560,6 +4762,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="chumphon_core"],
+.skill-book-icon[data-skill-glyph="chumphon_core"],
 .skill-modal-glyph[data-skill-glyph="chumphon_core"],
 .glyph[data-skill-glyph="chumphon_core"],
 .field-slot[data-skill-id="chumphon_core"] .glyph {
@@ -4567,6 +4770,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="class_sword"],
+.skill-book-icon[data-skill-glyph="class_sword"],
 .skill-modal-glyph[data-skill-glyph="class_sword"],
 .glyph[data-skill-glyph="class_sword"],
 .field-slot[data-skill-id="class_sword"] .glyph,
@@ -4575,10 +4779,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="muay_chaiya"],
+.skill-book-icon[data-skill-glyph="muay_chaiya"],
 .skill-modal-glyph[data-skill-glyph="muay_chaiya"],
 .glyph[data-skill-glyph="muay_chaiya"],
 .field-slot[data-skill-id="muay_chaiya"] .glyph,
 .kg-glyph[data-skill-glyph="chaiya"],
+.skill-book-icon[data-skill-glyph="chaiya"],
 .skill-modal-glyph[data-skill-glyph="chaiya"],
 .glyph[data-skill-glyph="chaiya"],
 .field-slot[data-skill-id="chaiya"] .glyph {
@@ -4586,10 +4792,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="muay_korat"],
+.skill-book-icon[data-skill-glyph="muay_korat"],
 .skill-modal-glyph[data-skill-glyph="muay_korat"],
 .glyph[data-skill-glyph="muay_korat"],
 .field-slot[data-skill-id="muay_korat"] .glyph,
 .kg-glyph[data-skill-glyph="korat"],
+.skill-book-icon[data-skill-glyph="korat"],
 .skill-modal-glyph[data-skill-glyph="korat"],
 .glyph[data-skill-glyph="korat"],
 .field-slot[data-skill-id="korat"] .glyph {
@@ -4597,10 +4805,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="muay_lopburi"],
+.skill-book-icon[data-skill-glyph="muay_lopburi"],
 .skill-modal-glyph[data-skill-glyph="muay_lopburi"],
 .glyph[data-skill-glyph="muay_lopburi"],
 .field-slot[data-skill-id="muay_lopburi"] .glyph,
 .kg-glyph[data-skill-glyph="lopburi"],
+.skill-book-icon[data-skill-glyph="lopburi"],
 .skill-modal-glyph[data-skill-glyph="lopburi"],
 .glyph[data-skill-glyph="lopburi"],
 .field-slot[data-skill-id="lopburi"] .glyph {
@@ -4608,10 +4818,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="muay_thasao"],
+.skill-book-icon[data-skill-glyph="muay_thasao"],
 .skill-modal-glyph[data-skill-glyph="muay_thasao"],
 .glyph[data-skill-glyph="muay_thasao"],
 .field-slot[data-skill-id="muay_thasao"] .glyph,
 .kg-glyph[data-skill-glyph="thasao"],
+.skill-book-icon[data-skill-glyph="thasao"],
 .skill-modal-glyph[data-skill-glyph="thasao"],
 .glyph[data-skill-glyph="thasao"],
 .field-slot[data-skill-id="thasao"] .glyph {
@@ -4619,6 +4831,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_mark"],
+.skill-book-icon[data-skill-glyph="seer_mark"],
 .skill-modal-glyph[data-skill-glyph="seer_mark"],
 .glyph[data-skill-glyph="seer_mark"],
 .field-slot[data-skill-id="seer_mark"] .glyph {
@@ -4626,10 +4839,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_rice"],
+.skill-book-icon[data-skill-glyph="seer_rice"],
 .skill-modal-glyph[data-skill-glyph="seer_rice"],
 .glyph[data-skill-glyph="seer_rice"],
 .field-slot[data-skill-id="seer_rice"] .glyph,
 .kg-glyph[data-skill-glyph="seer_scatter"],
+.skill-book-icon[data-skill-glyph="seer_scatter"],
 .skill-modal-glyph[data-skill-glyph="seer_scatter"],
 .glyph[data-skill-glyph="seer_scatter"],
 .field-slot[data-skill-id="seer_scatter"] .glyph {
@@ -4637,6 +4852,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_buffalo"],
+.skill-book-icon[data-skill-glyph="seer_buffalo"],
 .skill-modal-glyph[data-skill-glyph="seer_buffalo"],
 .glyph[data-skill-glyph="seer_buffalo"],
 .field-slot[data-skill-id="seer_buffalo"] .glyph {
@@ -4644,6 +4860,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_curse"],
+.skill-book-icon[data-skill-glyph="seer_curse"],
 .skill-modal-glyph[data-skill-glyph="seer_curse"],
 .glyph[data-skill-glyph="seer_curse"],
 .field-slot[data-skill-id="seer_curse"] .glyph {
@@ -4651,6 +4868,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_binding"],
+.skill-book-icon[data-skill-glyph="seer_binding"],
 .skill-modal-glyph[data-skill-glyph="seer_binding"],
 .glyph[data-skill-glyph="seer_binding"],
 .field-slot[data-skill-id="seer_binding"] .glyph {
@@ -4658,6 +4876,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_burst"],
+.skill-book-icon[data-skill-glyph="seer_burst"],
 .skill-modal-glyph[data-skill-glyph="seer_burst"],
 .glyph[data-skill-glyph="seer_burst"],
 .field-slot[data-skill-id="seer_burst"] .glyph {
@@ -4665,6 +4884,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_pot"],
+.skill-book-icon[data-skill-glyph="seer_pot"],
 .skill-modal-glyph[data-skill-glyph="seer_pot"],
 .glyph[data-skill-glyph="seer_pot"],
 .field-slot[data-skill-id="seer_pot"] .glyph {
@@ -4672,6 +4892,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_poison"],
+.skill-book-icon[data-skill-glyph="seer_poison"],
 .skill-modal-glyph[data-skill-glyph="seer_poison"],
 .glyph[data-skill-glyph="seer_poison"],
 .field-slot[data-skill-id="seer_poison"] .glyph {
@@ -5410,7 +5631,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .wm-list-head h3{margin:0;color:#f2d27a;display:inline}
 .wm-list-head small{margin-left:8px;color:#8193bb}
 .wm-rule-line{margin:0;color:#8193bb;font-size:11px}
-.wm-sort{display:flex;align-items:center;gap:4px}
+.wm-sort{display:flex;align-items:center;gap:4px}.wm-sort>span{flex-shrink:0;white-space:nowrap}
 .wm-sort button,.wm-footer button:not(.wm-buy){background:#1d3160;color:#e7ecf7;border:1px solid #2d4373;border-radius:4px;padding:5px 10px;cursor:pointer}
 .wm-cols,.wm-row{display:grid;grid-template-columns:minmax(0,1fr) 50px 110px 100px;gap:8px;align-items:center}
 .wm-cols{padding:4px 10px;color:#8193bb;font-size:11px;border-bottom:1px solid #2d4373}
@@ -5440,3 +5661,23 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   .wm-footer{flex-wrap:wrap}
   .wm-footer span{flex:1 1 100%;min-width:0;overflow-wrap:anywhere}
 }
+/* Read-only recent gains. Never intercept world taps or cover the action bar. */
+.loot-feed { position:absolute; z-index:4; left:max(8px,env(safe-area-inset-left)); top:calc(max(8px,env(safe-area-inset-top)) + 180px); width:min(48vw,238px); pointer-events:none; color:#f7efd9; text-shadow:0 1px 2px #000; }
+.loot-feed[hidden], #game:has(.drawer:not([hidden])) .loot-feed, #game:has(.account-entry:not([hidden])) .loot-feed { display:none; }
+.loot-title { display:block; font-size:10px; color:#d7e4c6; margin:0 0 4px 2px; }
+.loot-list { list-style:none; padding:0; margin:0; display:grid; gap:4px; }
+.loot-row { display:flex; align-items:center; gap:7px; min-width:0; padding:4px 6px; border:1px solid #78965d66; border-radius:8px; background:linear-gradient(90deg,#10241dec,#10241d99); }
+.loot-row .bag-slot { flex:none; width:32px; height:32px; min-height:32px; padding:2px; border-radius:6px; pointer-events:none; }
+.loot-row .bag-symbol { width:27px; height:27px; font-size:20px; }
+.loot-row .bag-quantity { display:none; }
+.loot-info { flex:1; min-width:0; }
+.loot-info strong { display:block; font-size:11px; line-height:1.35; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.loot-info small { display:block; font-size:10px; color:#dac596; }
+.loot-quantity { flex:none; color:#b8f28f; font-size:12px; font-variant-numeric:tabular-nums; }
+.loot-history { margin:6px 0 10px; border:1px solid #78965d66; border-radius:9px; padding:0 8px; }
+.loot-history summary { min-height:44px; padding:11px 0; color:#d7e4c6; font-size:12px; cursor:pointer; }
+.loot-history .loot-list { max-height:240px; overflow:auto; overscroll-behavior:contain; margin-bottom:8px; }
+.loot-history .loot-info strong { white-space:normal; overflow-wrap:anywhere; }
+.loot-history .note { font-size:11px; }
+@media (max-width:640px) and (max-height:640px) { .loot-feed .loot-row:nth-child(n+3) { display:none; } }
+@media (orientation:landscape) and (max-height:520px) { .loot-feed { top:120px; left:calc(min(30vw,202px) + 28px); width:220px; } .loot-feed .loot-row:nth-child(n+2) { display:none; } }

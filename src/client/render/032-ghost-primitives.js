@@ -32,7 +32,15 @@
     c.clearRect(0, 0, s, s); c.fillStyle = g; c.fillRect(0, 0, s, s);
   });
   gm.smoke.opacityTexture.hasAlpha = true; gm.smoke.backFaceCulling = false;
-  gm.smokeWhite = gm.smoke.clone("white ghost smoke"); gm.smokeWhite.diffuseColor = B.Color3.FromHexString("#bdbab0"); gm.smokeWhite.emissiveColor = B.Color3.FromHexString("#2a2a2e");
+  // These variants change only color. DynamicTexture.clone() creates an empty,
+  // unuploaded canvas, so keep the already-painted shared opacity gradient.
+  function cloneGhostSmokeMaterial(source, name) {
+    const material = source.clone(name);
+    if (material.opacityTexture && material.opacityTexture !== source.opacityTexture) material.opacityTexture.dispose();
+    material.opacityTexture = source.opacityTexture;
+    return material;
+  }
+  gm.smokeWhite = cloneGhostSmokeMaterial(gm.smoke, "white ghost smoke"); gm.smokeWhite.diffuseColor = B.Color3.FromHexString("#bdbab0"); gm.smokeWhite.emissiveColor = B.Color3.FromHexString("#2a2a2e");
   const ringMat = additiveMat("bell shockwave", radialTexture("bell ring", 128, [[0, "rgba(255,210,140,0)"], [.72, "rgba(255,210,140,0)"], [.85, "rgba(255,200,120,.85)"], [1, "rgba(255,200,120,0)"]]));
 
   // Rig builder: joints are TransformNodes; parts are merged per joint.

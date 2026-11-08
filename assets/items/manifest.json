@@ -1,0 +1,3232 @@
+{
+  "format": 1,
+  "origin": "User-requested MONTRA generated item sheets, 2026-11-08. Cropping and encoding only; no new generated art.",
+  "encoder": {
+    "sharp": "0.35.5",
+    "size": 256,
+    "contentSize": 240,
+    "quality": 90,
+    "alphaQuality": 100
+  },
+  "sheets": [
+    {
+      "id": "A1",
+      "filename": "image-gen-1(20261108-040500).png",
+      "width": 1254,
+      "height": 1254,
+      "cols": 4,
+      "rows": 3,
+      "sha256": "3fd9852c5e33777871f75b11a0a2b2bcaf220a906c81829a44d037b6e967146c"
+    },
+    {
+      "id": "A2",
+      "filename": "image-gen-2(20261108-040505).png",
+      "width": 1254,
+      "height": 1254,
+      "cols": 4,
+      "rows": 4,
+      "sha256": "3e08f055318cebe4ea2a0d3b232a591b4a70119df43e0818f317583ac706e37d"
+    },
+    {
+      "id": "A3",
+      "filename": "image-gen-3(20261108-040511).png",
+      "width": 1254,
+      "height": 1254,
+      "cols": 4,
+      "rows": 4,
+      "sha256": "cec337ba40822897af74923f818413b096234d0c663dffe69838392652108b22"
+    },
+    {
+      "id": "A4",
+      "filename": "image-gen-4(20261108-040516).png",
+      "width": 1254,
+      "height": 1254,
+      "cols": 4,
+      "rows": 4,
+      "sha256": "33f9ef3db28509908364b8ab0e0ec8b6df2a3242cad8340311cf81153fa85ed1"
+    },
+    {
+      "id": "A5",
+      "filename": "image-gen-5(3).png",
+      "width": 1254,
+      "height": 1254,
+      "cols": 4,
+      "rows": 4,
+      "sha256": "9e833fe11f54cd0fbfcef9cc486619ad062c037be9b4c5f45b541db95fbd1a10"
+    },
+    {
+      "id": "B1",
+      "filename": "image-gen-1(20261108-081529).png",
+      "width": 1254,
+      "height": 1254,
+      "cols": 4,
+      "rows": 4,
+      "sha256": "7b649311944f48650537e8e1fd4b4c5f8397e23aa8b92164a015ae44f000543d"
+    },
+    {
+      "id": "B2",
+      "filename": "image-gen-2(20261108-081533).png",
+      "width": 1774,
+      "height": 887,
+      "cols": 4,
+      "rows": 2,
+      "sha256": "18f68a44e23916fb056987f2640e416573216a0b9f5b0802a117fed2d7c33be3"
+    },
+    {
+      "id": "B3",
+      "filename": "image-gen-3(20261108-081538).png",
+      "width": 1254,
+      "height": 1254,
+      "cols": 4,
+      "rows": 4,
+      "sha256": "cc101b26863da5615647d7b61ac24345ddb0ff2ca6d5be7935de34648ded9b43"
+    },
+    {
+      "id": "B4",
+      "filename": "image-gen-4(20261108-081543).png",
+      "width": 1254,
+      "height": 1254,
+      "cols": 4,
+      "rows": 4,
+      "sha256": "ee4809a40da8ae4908a5689a3f58fe05c46099af21ec20930682792965486ad8"
+    },
+    {
+      "id": "B5",
+      "filename": "image-gen-5(4).png",
+      "width": 1448,
+      "height": 1086,
+      "cols": 4,
+      "rows": 3,
+      "sha256": "118d2da009ccf8e5b4248885b461fbd50dcee8ca99dc4a11f95bcc086af9917f"
+    }
+  ],
+  "cells": [
+    {
+      "key": "wp_wrap",
+      "sheet": "A1",
+      "row": 1,
+      "col": 1,
+      "crop": [
+        0,
+        0,
+        317,
+        412
+      ],
+      "file": "assets/items/wp_wrap.webp",
+      "bytes": 26300,
+      "sha256": "f00881bfd01b3e1ec172e179d04922c3c8003f02a7aba2a2ec5ec0f3dd11c0d8",
+      "status": "canonical",
+      "exactIds": [
+        "muay_wraps"
+      ],
+      "families": [
+        "wp_wrap"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "wp_twins",
+      "sheet": "A1",
+      "row": 1,
+      "col": 2,
+      "crop": [
+        317,
+        0,
+        331,
+        412
+      ],
+      "file": "assets/items/wp_twins.webp",
+      "bytes": 22218,
+      "sha256": "3149aac962eba917905b1c62635d825a7543e963ce40cfcefb64a6937e24aad1",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "wp_twins"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "wp_shadow",
+      "sheet": "A1",
+      "row": 1,
+      "col": 3,
+      "crop": [
+        648,
+        0,
+        292,
+        408
+      ],
+      "file": "assets/items/wp_shadow.webp",
+      "bytes": 20052,
+      "sha256": "6db15504dece3a94b26af6ec60fa4e8ac8e4a0b88ab6c7ad7760942e74ea4d82",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "wp_shadow"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "wp_pike",
+      "sheet": "A1",
+      "row": 1,
+      "col": 4,
+      "crop": [
+        940,
+        0,
+        314,
+        408
+      ],
+      "file": "assets/items/wp_pike.webp",
+      "bytes": 17946,
+      "sha256": "45fc0818d0d0d083c874bad921e692e4885f790459a6674f470401b51163129c",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "wp_pike"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "wp_wand",
+      "sheet": "A1",
+      "row": 2,
+      "col": 1,
+      "crop": [
+        0,
+        412,
+        308,
+        392
+      ],
+      "file": "assets/items/wp_wand.webp",
+      "bytes": 26810,
+      "sha256": "7962b80fe4805f8e431cc82bf876c6c3319e4be5f6144080f29eebf779418062",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "wp_wand"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "wp_crook",
+      "sheet": "A1",
+      "row": 2,
+      "col": 2,
+      "crop": [
+        308,
+        412,
+        324,
+        392
+      ],
+      "file": "assets/items/wp_crook.webp",
+      "bytes": 27694,
+      "sha256": "a90153df301a64f89dcbfd32725f7d6d4f0ad16cdbffb7e10bf94d97f4362cfd",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "wp_crook"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "ritual_dagger",
+      "sheet": "A1",
+      "row": 2,
+      "col": 3,
+      "crop": [
+        632,
+        408,
+        294,
+        406
+      ],
+      "file": "assets/items/ritual_dagger.webp",
+      "bytes": 19426,
+      "sha256": "b8928cae123b5e51b6c2483799acfbece6588690b17c1fb14adfad1d0b62a6b8",
+      "status": "canonical",
+      "exactIds": [
+        "ritual_dagger"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "arcane_sword",
+      "sheet": "A1",
+      "row": 2,
+      "col": 4,
+      "crop": [
+        926,
+        408,
+        328,
+        396
+      ],
+      "file": "assets/items/arcane_sword.webp",
+      "bytes": 27660,
+      "sha256": "d8e9568cabc63c277ce92fb402401f737cdefc1cc16781a75b262802d0d0d9ff",
+      "status": "canonical",
+      "exactIds": [
+        "arcane_sword"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "spirit_staff",
+      "sheet": "A1",
+      "row": 3,
+      "col": 1,
+      "crop": [
+        0,
+        804,
+        314,
+        450
+      ],
+      "file": "assets/items/spirit_staff.webp",
+      "bytes": 23044,
+      "sha256": "e9dbbb71856bdfe88b4e7c085b06858528fff9cf344680c7e3a8795f4331907f",
+      "status": "canonical",
+      "exactIds": [
+        "spirit_staff"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "shrine_glaive",
+      "sheet": "A1",
+      "row": 3,
+      "col": 2,
+      "crop": [
+        314,
+        804,
+        278,
+        450
+      ],
+      "file": "assets/items/shrine_glaive.webp",
+      "bytes": 16062,
+      "sha256": "dc33496004783170d47743b63f7b95085442818e193b9383ff86019970903d41",
+      "status": "canonical",
+      "exactIds": [
+        "shrine_glaive"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "off_shield_alt_a1",
+      "sheet": "A1",
+      "row": 3,
+      "col": 3,
+      "crop": [
+        592,
+        814,
+        365,
+        440
+      ],
+      "file": "assets/items/off_shield_alt_a1.webp",
+      "bytes": 23018,
+      "sha256": "dd7e649cac7948e5ac2b57f2819105cf721a40529c54e88b4f2fcf3109fc9cfa",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "off_shield"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family."
+    },
+    {
+      "key": "off_jar_alt_a1",
+      "sheet": "A1",
+      "row": 3,
+      "col": 4,
+      "crop": [
+        957,
+        804,
+        297,
+        450
+      ],
+      "file": "assets/items/off_jar_alt_a1.webp",
+      "bytes": 16100,
+      "sha256": "1bc5f362f2ed60966423af7b4e3564f25e12f32808cb47e2d5f99a542cdc1a35",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "off_jar"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family."
+    },
+    {
+      "key": "arm_cloth_chest",
+      "sheet": "A2",
+      "row": 1,
+      "col": 1,
+      "crop": [
+        0,
+        0,
+        320,
+        332
+      ],
+      "file": "assets/items/arm_cloth_chest.webp",
+      "bytes": 35484,
+      "sha256": "8f979c1be4b7ab3560c1edb02a84abcb163ffa7c893749a40d0b4a52bc54f0d1",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_cloth_chest"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_hide_chest",
+      "sheet": "A2",
+      "row": 1,
+      "col": 2,
+      "crop": [
+        320,
+        0,
+        312,
+        342
+      ],
+      "file": "assets/items/arm_hide_chest.webp",
+      "bytes": 29780,
+      "sha256": "06e45aeb3e494552d6d3b2d0509518639c6786db556ba680e8457ad0ac824a09",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_hide_chest"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_medium_chest",
+      "sheet": "A2",
+      "row": 1,
+      "col": 3,
+      "crop": [
+        632,
+        0,
+        306,
+        336
+      ],
+      "file": "assets/items/arm_medium_chest.webp",
+      "bytes": 27920,
+      "sha256": "e236e0ec46d766ebd7e6ba4a9176320cbecdd64baa984138a886cc5e99136833",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_medium_chest"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_heavy_chest",
+      "sheet": "A2",
+      "row": 1,
+      "col": 4,
+      "crop": [
+        938,
+        0,
+        316,
+        332
+      ],
+      "file": "assets/items/arm_heavy_chest.webp",
+      "bytes": 35878,
+      "sha256": "e02d8d5ef5594d2c06ae06e016133f9c0289834bd91e6ed9273063d855ba0bdf",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_heavy_chest"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_cloth_head",
+      "sheet": "A2",
+      "row": 2,
+      "col": 1,
+      "crop": [
+        0,
+        332,
+        302,
+        319
+      ],
+      "file": "assets/items/arm_cloth_head.webp",
+      "bytes": 37564,
+      "sha256": "5e0a79322397a3ef2fbc6229cdbd80b8bb121455f9ed74099aa0d051a1d2dcd3",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_cloth_head"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_hide_head",
+      "sheet": "A2",
+      "row": 2,
+      "col": 2,
+      "crop": [
+        302,
+        342,
+        330,
+        314
+      ],
+      "file": "assets/items/arm_hide_head.webp",
+      "bytes": 25906,
+      "sha256": "8ec4c58a8399f6d16a00fd57ceb4cf0ff819f5a6d2c57c8f72540f69064e2c96",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_hide_head"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_medium_head",
+      "sheet": "A2",
+      "row": 2,
+      "col": 3,
+      "crop": [
+        632,
+        336,
+        306,
+        309
+      ],
+      "file": "assets/items/arm_medium_head.webp",
+      "bytes": 28628,
+      "sha256": "30b737426075643c495118f92838ccf6a912a65965af94883406d540cec93c1a",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_medium_head"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_heavy_head",
+      "sheet": "A2",
+      "row": 2,
+      "col": 4,
+      "crop": [
+        938,
+        332,
+        316,
+        309
+      ],
+      "file": "assets/items/arm_heavy_head.webp",
+      "bytes": 40104,
+      "sha256": "ede461085c641813bee0b33a764f06f7a5e2d60551721193d797274f0d37895e",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_heavy_head"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_cloth_shoulders",
+      "sheet": "A2",
+      "row": 3,
+      "col": 1,
+      "crop": [
+        0,
+        651,
+        302,
+        277
+      ],
+      "file": "assets/items/arm_cloth_shoulders.webp",
+      "bytes": 36382,
+      "sha256": "21481417ba27304c81c30d714a2ff8df27c99e48338dd94ad9ee8aaf70cab5c4",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_cloth_shoulders"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_hide_shoulders",
+      "sheet": "A2",
+      "row": 3,
+      "col": 2,
+      "crop": [
+        302,
+        656,
+        319,
+        264
+      ],
+      "file": "assets/items/arm_hide_shoulders.webp",
+      "bytes": 29516,
+      "sha256": "817476c6d514543992017cdc9728526da002e19f9121808e6642bf83368dfa96",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_hide_shoulders"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_medium_shoulders",
+      "sheet": "A2",
+      "row": 3,
+      "col": 3,
+      "crop": [
+        621,
+        645,
+        303,
+        265
+      ],
+      "file": "assets/items/arm_medium_shoulders.webp",
+      "bytes": 28860,
+      "sha256": "a34a37a2981878a2f5a356bb3951590c86edabbd19c29e0d7d17c5906f204b6c",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_medium_shoulders"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_heavy_shoulders",
+      "sheet": "A2",
+      "row": 3,
+      "col": 4,
+      "crop": [
+        924,
+        641,
+        330,
+        269
+      ],
+      "file": "assets/items/arm_heavy_shoulders.webp",
+      "bytes": 34450,
+      "sha256": "8ab02c471cb629bf8bfe1b2daff9410751d6831566723a2531c3f6c62cb3044d",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_heavy_shoulders"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_cloth_feet",
+      "sheet": "A2",
+      "row": 4,
+      "col": 1,
+      "crop": [
+        0,
+        928,
+        304,
+        326
+      ],
+      "file": "assets/items/arm_cloth_feet.webp",
+      "bytes": 26300,
+      "sha256": "e5ecf6e2629bc176f613391ec83ee67dbe60defa38ab4a037e30a1e809e73966",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_cloth_feet"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_hide_feet",
+      "sheet": "A2",
+      "row": 4,
+      "col": 2,
+      "crop": [
+        304,
+        920,
+        317,
+        334
+      ],
+      "file": "assets/items/arm_hide_feet.webp",
+      "bytes": 29332,
+      "sha256": "f0c479fde5547c883d3204c067392014dd2b5ead0fca1b587203ab3bdae5b2e8",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_hide_feet"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_medium_feet",
+      "sheet": "A2",
+      "row": 4,
+      "col": 3,
+      "crop": [
+        621,
+        910,
+        295,
+        344
+      ],
+      "file": "assets/items/arm_medium_feet.webp",
+      "bytes": 27170,
+      "sha256": "537a3c69dc4c934259fa7e3b5bf6ded9b6da2c644071cb1dd043bc99fe8cb287",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_medium_feet"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_heavy_feet",
+      "sheet": "A2",
+      "row": 4,
+      "col": 4,
+      "crop": [
+        916,
+        910,
+        338,
+        344
+      ],
+      "file": "assets/items/arm_heavy_feet.webp",
+      "bytes": 35438,
+      "sha256": "6ed47cc2bc483ea3805389bb32d330507de1f0e46f649ce1623780e3f0365e87",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_heavy_feet"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "acc_torc",
+      "sheet": "A3",
+      "row": 1,
+      "col": 1,
+      "crop": [
+        0,
+        0,
+        300,
+        316
+      ],
+      "file": "assets/items/acc_torc.webp",
+      "bytes": 38792,
+      "sha256": "f68417e0beec3cea3763e8c7849418d5ee90dead8a8db2deedb99f34ef0016d2",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "acc_torc"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "acc_gorget",
+      "sheet": "A3",
+      "row": 1,
+      "col": 2,
+      "crop": [
+        300,
+        0,
+        330,
+        312
+      ],
+      "file": "assets/items/acc_gorget.webp",
+      "bytes": 35526,
+      "sha256": "bde8f1635fa96c933687803f85aa1e551eb09abd7fddbaff9ac94ba3a0f3fa0d",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "acc_gorget"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "acc_fang",
+      "sheet": "A3",
+      "row": 1,
+      "col": 3,
+      "crop": [
+        630,
+        0,
+        308,
+        316
+      ],
+      "file": "assets/items/acc_fang.webp",
+      "bytes": 35526,
+      "sha256": "c218f58620dc687a317192e7309051beec09bae72d7bcd26e2df35600321179a",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "acc_fang"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "acc_spell",
+      "sheet": "A3",
+      "row": 1,
+      "col": 4,
+      "crop": [
+        938,
+        0,
+        316,
+        311
+      ],
+      "file": "assets/items/acc_spell.webp",
+      "bytes": 43726,
+      "sha256": "f4e7fdd6bf8549fb1cb4367221a985af13b96d0795c373a58daeec1d81471586",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "acc_spell"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "acc_earrings_duelist",
+      "sheet": "A3",
+      "row": 2,
+      "col": 1,
+      "crop": [
+        0,
+        316,
+        304,
+        307
+      ],
+      "file": "assets/items/acc_earrings_duelist.webp",
+      "bytes": 36154,
+      "sha256": "31f6db04cc094a976c514f226d23c0f7c4d296b76f7c03c9e138fdfbd3a6ce66",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "acc_earrings_duelist"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "acc_earrings_focus",
+      "sheet": "A3",
+      "row": 2,
+      "col": 2,
+      "crop": [
+        304,
+        312,
+        323,
+        310
+      ],
+      "file": "assets/items/acc_earrings_focus.webp",
+      "bytes": 40194,
+      "sha256": "d983ba590f681a9be76ae1a5c2de209338e5117eb95504fda4c1b324aac1cedf",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "acc_earrings_focus"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "acc_earrings_lotus",
+      "sheet": "A3",
+      "row": 2,
+      "col": 3,
+      "crop": [
+        627,
+        316,
+        307,
+        305
+      ],
+      "file": "assets/items/acc_earrings_lotus.webp",
+      "bytes": 41028,
+      "sha256": "15862ab0f3023b02e9723e289e4eaa3a19c1af00e1108c33b2efb82160bbba03",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "acc_earrings_lotus"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "acc_earrings_ward",
+      "sheet": "A3",
+      "row": 2,
+      "col": 4,
+      "crop": [
+        934,
+        311,
+        320,
+        311
+      ],
+      "file": "assets/items/acc_earrings_ward.webp",
+      "bytes": 39296,
+      "sha256": "ee3ec0d345887b8989dacff22ee2f8b405b5d5df2182118d4d2eb15b0e7b708c",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "acc_earrings_ward"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "acc_ring_spell",
+      "sheet": "A3",
+      "row": 3,
+      "col": 1,
+      "crop": [
+        0,
+        623,
+        299,
+        279
+      ],
+      "file": "assets/items/acc_ring_spell.webp",
+      "bytes": 33732,
+      "sha256": "91cb7d784d2dcb2a867284cb743ab9c128873dd9802a9919d3dc2f4fd84790e8",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "acc_ring_spell"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "acc_ring_atk",
+      "sheet": "A3",
+      "row": 3,
+      "col": 2,
+      "crop": [
+        299,
+        622,
+        327,
+        276
+      ],
+      "file": "assets/items/acc_ring_atk.webp",
+      "bytes": 31416,
+      "sha256": "150f1c170e8d600e754e84e0f44f5e7e32102fd8bd3b69b1dbcef2f5bdd3c408",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "acc_ring_atk"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "acc_ring_heal",
+      "sheet": "A3",
+      "row": 3,
+      "col": 3,
+      "crop": [
+        626,
+        621,
+        308,
+        273
+      ],
+      "file": "assets/items/acc_ring_heal.webp",
+      "bytes": 34156,
+      "sha256": "f603adfcfe1e3b91996cf3a8ce3cdb6f405639c72ad737a535aea7193767474e",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "acc_ring_heal"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "acc_ring_guard",
+      "sheet": "A3",
+      "row": 3,
+      "col": 4,
+      "crop": [
+        934,
+        622,
+        320,
+        274
+      ],
+      "file": "assets/items/acc_ring_guard.webp",
+      "bytes": 32426,
+      "sha256": "53227fb843442f1f798c6d3bfd75751bc789db830dfacde64bd1d65007f11d89",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "acc_ring_guard"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "use_salve_alt_a3",
+      "sheet": "A3",
+      "row": 4,
+      "col": 1,
+      "crop": [
+        0,
+        902,
+        338,
+        352
+      ],
+      "file": "assets/items/use_salve_alt_a3.webp",
+      "bytes": 26482,
+      "sha256": "b50f017a36293282407cf84256924e829e19361801ab190598a55ef0316a3e7d",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "use_salve"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family. Herbal compress is canonical (B5R3C4); green ointment is an alternate (A3R4C1)."
+    },
+    {
+      "key": "use_herbal",
+      "sheet": "A3",
+      "row": 4,
+      "col": 2,
+      "crop": [
+        338,
+        898,
+        290,
+        356
+      ],
+      "file": "assets/items/use_herbal.webp",
+      "bytes": 21930,
+      "sha256": "b8faae428b39d39cb5c571e81a513cf5b1e84dacf7fed91fa4c1ba8f89948f77",
+      "status": "canonical",
+      "exactIds": [
+        "health_potion"
+      ],
+      "families": [
+        "use_herbal"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers. Red health-potion image also fits legacy health_potion."
+    },
+    {
+      "key": "use_mana",
+      "sheet": "A3",
+      "row": 4,
+      "col": 3,
+      "crop": [
+        628,
+        894,
+        325,
+        360
+      ],
+      "file": "assets/items/use_mana.webp",
+      "bytes": 27640,
+      "sha256": "45746b893381f6850e4a96fbd91178ef41f9c23891a29c36e5fef3fd08c89a29",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "use_mana"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "shrine_shard",
+      "sheet": "A3",
+      "row": 4,
+      "col": 4,
+      "crop": [
+        953,
+        896,
+        301,
+        358
+      ],
+      "file": "assets/items/shrine_shard.webp",
+      "bytes": 24898,
+      "sha256": "205ed460b708bc7e28457ac2ba490a2eb80e357cf5670145c6cac9c2ad9723b3",
+      "status": "canonical",
+      "exactIds": [
+        "shrine_shard"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "mat_raw_wood",
+      "sheet": "A4",
+      "row": 1,
+      "col": 1,
+      "crop": [
+        0,
+        0,
+        324,
+        318
+      ],
+      "file": "assets/items/mat_raw_wood.webp",
+      "bytes": 29494,
+      "sha256": "d8b1b42875b7a4b0bbd6da198bb0a12f220e5f67cb3f8e389a1c1f7366db34d2",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "mat_raw_wood"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "mat_raw_stone",
+      "sheet": "A4",
+      "row": 1,
+      "col": 2,
+      "crop": [
+        324,
+        0,
+        300,
+        315
+      ],
+      "file": "assets/items/mat_raw_stone.webp",
+      "bytes": 27786,
+      "sha256": "78e34473cbe64e4483e6b01b3a6e65fbd94c7f9795a2d97527bd2677a8ac952a",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "mat_raw_stone"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "mat_metal",
+      "sheet": "A4",
+      "row": 1,
+      "col": 3,
+      "crop": [
+        624,
+        0,
+        318,
+        310
+      ],
+      "file": "assets/items/mat_metal.webp",
+      "bytes": 29726,
+      "sha256": "6c12e405429dd1cc8cb00ca3ee78a3cea7b930acc62d4751a821ff71e12cd4ce",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "mat_metal"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "mat_wood",
+      "sheet": "A4",
+      "row": 1,
+      "col": 4,
+      "crop": [
+        942,
+        0,
+        312,
+        316
+      ],
+      "file": "assets/items/mat_wood.webp",
+      "bytes": 27598,
+      "sha256": "0a026017a692798cf5884537d6908de28f0707e79bf24ff5b2f5633480b6878f",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "mat_wood"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "mat_fiber",
+      "sheet": "A4",
+      "row": 2,
+      "col": 1,
+      "crop": [
+        0,
+        318,
+        318,
+        314
+      ],
+      "file": "assets/items/mat_fiber.webp",
+      "bytes": 38410,
+      "sha256": "bbfbdc0ab31cec963ec26b3b053f787747497f684e148d958461a453e365c44a",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "mat_fiber"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "mat_hide",
+      "sheet": "A4",
+      "row": 2,
+      "col": 2,
+      "crop": [
+        318,
+        315,
+        310,
+        309
+      ],
+      "file": "assets/items/mat_hide.webp",
+      "bytes": 30884,
+      "sha256": "f8efdcb9ae5fbe9f3e29a51ced67b30c7328c0a5dba352c83be0cd8f201dfb10",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "mat_hide"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "mat_ink",
+      "sheet": "A4",
+      "row": 2,
+      "col": 3,
+      "crop": [
+        628,
+        310,
+        309,
+        322
+      ],
+      "file": "assets/items/mat_ink.webp",
+      "bytes": 31212,
+      "sha256": "21c3c61d5343d279adfa97e07a4aef54cf6d125701f35e5a3cf67e87e764dac1",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "mat_ink"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "mat_herb",
+      "sheet": "A4",
+      "row": 2,
+      "col": 4,
+      "crop": [
+        937,
+        316,
+        317,
+        312
+      ],
+      "file": "assets/items/mat_herb.webp",
+      "bytes": 42282,
+      "sha256": "0c0c86f1f91e188d4691f73c076766afe63896f6057d850fcc621c93617e0beb",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "mat_herb"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "mat_resin",
+      "sheet": "A4",
+      "row": 3,
+      "col": 1,
+      "crop": [
+        0,
+        632,
+        306,
+        292
+      ],
+      "file": "assets/items/mat_resin.webp",
+      "bytes": 39886,
+      "sha256": "03750839b8a663a96f863776b2982fa71275bb42f8f799c09d67295b66aec9de",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "mat_resin"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "mat_charcoal",
+      "sheet": "A4",
+      "row": 3,
+      "col": 2,
+      "crop": [
+        306,
+        624,
+        319,
+        283
+      ],
+      "file": "assets/items/mat_charcoal.webp",
+      "bytes": 28524,
+      "sha256": "aaf1268cee3aae54ec0b6fbb7054bb225bd57133182b367adeca33ede22c6ccf",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "mat_charcoal"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "mat_ingot",
+      "sheet": "A4",
+      "row": 3,
+      "col": 3,
+      "crop": [
+        625,
+        632,
+        311,
+        274
+      ],
+      "file": "assets/items/mat_ingot.webp",
+      "bytes": 21318,
+      "sha256": "e949d55561cacef479aa130ad57f2e633719984f63ea6485d828c49d1607526b",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "mat_ingot"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "ref_seal",
+      "sheet": "A4",
+      "row": 3,
+      "col": 4,
+      "crop": [
+        936,
+        628,
+        318,
+        278
+      ],
+      "file": "assets/items/ref_seal.webp",
+      "bytes": 35402,
+      "sha256": "0451c1a57fb706114b684cf49b0f5966cc79895426cc80c2d8e321f42eb8e239",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "ref_seal"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "ref_powder",
+      "sheet": "A4",
+      "row": 4,
+      "col": 1,
+      "crop": [
+        0,
+        924,
+        322,
+        330
+      ],
+      "file": "assets/items/ref_powder.webp",
+      "bytes": 34338,
+      "sha256": "b88ea3658bae03c5cb75e47c42310cd760b63e27ee08fae089c8af4179176bef",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "ref_powder"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "ref_oil",
+      "sheet": "A4",
+      "row": 4,
+      "col": 2,
+      "crop": [
+        322,
+        907,
+        302,
+        347
+      ],
+      "file": "assets/items/ref_oil.webp",
+      "bytes": 25886,
+      "sha256": "e877c0eb82b61a0df94727e85e607105b21c80157cb3136ac215016c096db89a",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "ref_oil"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "tool_axe",
+      "sheet": "A4",
+      "row": 4,
+      "col": 3,
+      "crop": [
+        624,
+        906,
+        300,
+        348
+      ],
+      "file": "assets/items/tool_axe.webp",
+      "bytes": 27292,
+      "sha256": "1c3874d10d7e442e44fe98a5584da1fc6e89bbeae6434b532bfb11b56e1e1834",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "tool_axe"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "tool_pick",
+      "sheet": "A4",
+      "row": 4,
+      "col": 4,
+      "crop": [
+        924,
+        906,
+        330,
+        348
+      ],
+      "file": "assets/items/tool_pick.webp",
+      "bytes": 25404,
+      "sha256": "0269078125a7d5e6c3e2ba93837c244f3f6726bc72fde4eca88bfd8bc012aea8",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "tool_pick"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "card_possessed",
+      "sheet": "A5",
+      "row": 1,
+      "col": 1,
+      "crop": [
+        0,
+        0,
+        327,
+        310
+      ],
+      "file": "assets/items/card_possessed.webp",
+      "bytes": 29602,
+      "sha256": "4c11c6de283d88cb75c39fd8b4a612bc21b929f4d194a9352ee1af008b0c152d",
+      "status": "canonical",
+      "exactIds": [
+        "card_possessed"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_lost_ghost",
+      "sheet": "A5",
+      "row": 1,
+      "col": 2,
+      "crop": [
+        327,
+        0,
+        301,
+        310
+      ],
+      "file": "assets/items/card_lost_ghost.webp",
+      "bytes": 32046,
+      "sha256": "65b653052408aa027bc632bef310e104d3e64ecb098832c7e62aad3b6e2baa5d",
+      "status": "canonical",
+      "exactIds": [
+        "card_lost_ghost"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_root_shadow",
+      "sheet": "A5",
+      "row": 1,
+      "col": 3,
+      "crop": [
+        628,
+        0,
+        302,
+        310
+      ],
+      "file": "assets/items/card_root_shadow.webp",
+      "bytes": 32222,
+      "sha256": "10b2b6320f568cc10ca69c959acf1efc453991b72260cbe14de2b3721def68f4",
+      "status": "canonical",
+      "exactIds": [
+        "card_root_shadow"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_arcane_spirit",
+      "sheet": "A5",
+      "row": 1,
+      "col": 4,
+      "crop": [
+        930,
+        0,
+        324,
+        310
+      ],
+      "file": "assets/items/card_arcane_spirit.webp",
+      "bytes": 30062,
+      "sha256": "5b98edadd72b1bd24efdab8c259ef65658c2dc92381bcf27974d7d38f616d6bd",
+      "status": "canonical",
+      "exactIds": [
+        "card_arcane_spirit"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_shrine_keeper",
+      "sheet": "A5",
+      "row": 2,
+      "col": 1,
+      "crop": [
+        0,
+        310,
+        324,
+        308
+      ],
+      "file": "assets/items/card_shrine_keeper.webp",
+      "bytes": 32522,
+      "sha256": "b11f03d72f4997ad9ab20f4e315258d18aecd3c08dbc01e16bc0cde192d0494b",
+      "status": "canonical",
+      "exactIds": [
+        "card_shrine_keeper"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_bamboo",
+      "sheet": "A5",
+      "row": 2,
+      "col": 2,
+      "crop": [
+        324,
+        310,
+        302,
+        313
+      ],
+      "file": "assets/items/card_bamboo.webp",
+      "bytes": 33832,
+      "sha256": "5b1aef3156259c8f32815539e87cb735a7e2230ebd51e03388df99b455c444eb",
+      "status": "canonical",
+      "exactIds": [
+        "card_bamboo"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_lotus",
+      "sheet": "A5",
+      "row": 2,
+      "col": 3,
+      "crop": [
+        626,
+        310,
+        304,
+        317
+      ],
+      "file": "assets/items/card_lotus.webp",
+      "bytes": 32930,
+      "sha256": "bc5f27943919fcffd1e5281dc623ca3fb91178378a90b35c2fcccafebd193aac",
+      "status": "canonical",
+      "exactIds": [
+        "card_lotus"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_dream",
+      "sheet": "A5",
+      "row": 2,
+      "col": 4,
+      "crop": [
+        930,
+        310,
+        324,
+        310
+      ],
+      "file": "assets/items/card_dream.webp",
+      "bytes": 31774,
+      "sha256": "1abb3249dce9273f8a7ed5a81fafb0fa641873152ab302917d69c898cb4ff69d",
+      "status": "canonical",
+      "exactIds": [
+        "card_dream"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "mat_boss_bound_temple",
+      "sheet": "A5",
+      "row": 3,
+      "col": 1,
+      "crop": [
+        0,
+        618,
+        314,
+        305
+      ],
+      "file": "assets/items/mat_boss_bound_temple.webp",
+      "bytes": 27926,
+      "sha256": "87db13a1bb100f33a763a0c04b8ccec232167fd9f833e45561fca8d7a46fa2c6",
+      "status": "canonical",
+      "exactIds": [
+        "mat_boss_bound_temple"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "mat_boss_drowned_marsh",
+      "sheet": "A5",
+      "row": 3,
+      "col": 2,
+      "crop": [
+        314,
+        623,
+        306,
+        307
+      ],
+      "file": "assets/items/mat_boss_drowned_marsh.webp",
+      "bytes": 35568,
+      "sha256": "a18f3d60be697211f617edb735607e58d34ab6f8cd99b2a7964ecb1210b17aa3",
+      "status": "canonical",
+      "exactIds": [
+        "mat_boss_drowned_marsh"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "mat_boss_moon_cemetery",
+      "sheet": "A5",
+      "row": 3,
+      "col": 3,
+      "crop": [
+        620,
+        627,
+        318,
+        301
+      ],
+      "file": "assets/items/mat_boss_moon_cemetery.webp",
+      "bytes": 28988,
+      "sha256": "ecac1bf3db3d326fca12c3a32e15d19ef226ad4661e545382f19cb27fcdca3f7",
+      "status": "canonical",
+      "exactIds": [
+        "mat_boss_moon_cemetery"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "mat_boss_moon_pass",
+      "sheet": "A5",
+      "row": 3,
+      "col": 4,
+      "crop": [
+        938,
+        620,
+        316,
+        310
+      ],
+      "file": "assets/items/mat_boss_moon_pass.webp",
+      "bytes": 31566,
+      "sha256": "5dd114e4e8122033e50a39009ccf8cd0d76da40b5f1e49e8352bfde4d461237d",
+      "status": "canonical",
+      "exactIds": [
+        "mat_boss_moon_pass"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "mat_boss_bamboo_frontier",
+      "sheet": "A5",
+      "row": 4,
+      "col": 1,
+      "crop": [
+        0,
+        923,
+        318,
+        331
+      ],
+      "file": "assets/items/mat_boss_bamboo_frontier.webp",
+      "bytes": 34328,
+      "sha256": "f1543b014e3a1aff5bdade9f364d599a213fee875da13eb60bca79fc868bb95d",
+      "status": "canonical",
+      "exactIds": [
+        "mat_boss_bamboo_frontier"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "mat_boss_lotus_basin",
+      "sheet": "A5",
+      "row": 4,
+      "col": 2,
+      "crop": [
+        318,
+        930,
+        310,
+        324
+      ],
+      "file": "assets/items/mat_boss_lotus_basin.webp",
+      "bytes": 35926,
+      "sha256": "bf2e0398d5f67a806e3b6228e4b32b77a058c957b5832c200903a855a2a959f3",
+      "status": "canonical",
+      "exactIds": [
+        "mat_boss_lotus_basin"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "mat_boss_river_watch",
+      "sheet": "A5",
+      "row": 4,
+      "col": 3,
+      "crop": [
+        628,
+        928,
+        302,
+        326
+      ],
+      "file": "assets/items/mat_boss_river_watch.webp",
+      "bytes": 28018,
+      "sha256": "c0552652b3eb2430226c8e1e1a2657934ddacb8c42c1eec5bd1173a7aa70aa74",
+      "status": "canonical",
+      "exactIds": [
+        "mat_boss_river_watch"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "mat_boss_asura_peak",
+      "sheet": "A5",
+      "row": 4,
+      "col": 4,
+      "crop": [
+        930,
+        930,
+        324,
+        324
+      ],
+      "file": "assets/items/mat_boss_asura_peak.webp",
+      "bytes": 33832,
+      "sha256": "6ee62f9fe242521373faf205897d1639c3b1e158a0973de9e93b72a2a8bdce82",
+      "status": "canonical",
+      "exactIds": [
+        "mat_boss_asura_peak"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_shrine_ward",
+      "sheet": "B1",
+      "row": 1,
+      "col": 1,
+      "crop": [
+        0,
+        0,
+        332,
+        311
+      ],
+      "file": "assets/items/acc_shrine_ward.webp",
+      "bytes": 40276,
+      "sha256": "22190fe18fc960047cd2a0bbadcf8eba4662024adfdb3bd33478b308d96ea547",
+      "status": "canonical",
+      "exactIds": [
+        "acc_shrine_ward"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_rift_star",
+      "sheet": "B1",
+      "row": 1,
+      "col": 2,
+      "crop": [
+        332,
+        0,
+        284,
+        308
+      ],
+      "file": "assets/items/acc_rift_star.webp",
+      "bytes": 38514,
+      "sha256": "c8f73ddff633aca07ca32ce6688ca7156dca21824943e4278013a6c1cb251d4b",
+      "status": "canonical",
+      "exactIds": [
+        "acc_rift_star"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_bound_temple",
+      "sheet": "B1",
+      "row": 1,
+      "col": 3,
+      "crop": [
+        616,
+        0,
+        329,
+        316
+      ],
+      "file": "assets/items/acc_boss_bound_temple.webp",
+      "bytes": 42142,
+      "sha256": "fdb12edabfc018f233f122dbca87bf00dfd207007aadc716b4ce1438f3a7ae7e",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_bound_temple"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_drowned_marsh",
+      "sheet": "B1",
+      "row": 1,
+      "col": 4,
+      "crop": [
+        945,
+        0,
+        309,
+        298
+      ],
+      "file": "assets/items/acc_boss_drowned_marsh.webp",
+      "bytes": 36894,
+      "sha256": "bd7830f32bc4ca7157e0691c172312fdcf2069d7aae70c17ddb1bf84f1aad4d8",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_drowned_marsh"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_moon_cemetery",
+      "sheet": "B1",
+      "row": 2,
+      "col": 1,
+      "crop": [
+        0,
+        311,
+        323,
+        315
+      ],
+      "file": "assets/items/acc_boss_moon_cemetery.webp",
+      "bytes": 43344,
+      "sha256": "c177f605fd7fdf36e0c025ca92df4a4b3f47c00e52cf0d31a24c7a9e5db3637f",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_moon_cemetery"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_moon_pass",
+      "sheet": "B1",
+      "row": 2,
+      "col": 2,
+      "crop": [
+        323,
+        308,
+        295,
+        316
+      ],
+      "file": "assets/items/acc_boss_moon_pass.webp",
+      "bytes": 42826,
+      "sha256": "096ab0c02b8d29cb7e1ad1d4bd07af91a51f77177440f36a1c28803b3032e8d9",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_moon_pass"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_bamboo_frontier",
+      "sheet": "B1",
+      "row": 2,
+      "col": 3,
+      "crop": [
+        618,
+        316,
+        330,
+        312
+      ],
+      "file": "assets/items/acc_boss_bamboo_frontier.webp",
+      "bytes": 44874,
+      "sha256": "db5a93d45d189749971d3da370a8915340d0e3d5fc9a25f08c7428cb71e6525d",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_bamboo_frontier"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_hex_ridge",
+      "sheet": "B1",
+      "row": 2,
+      "col": 4,
+      "crop": [
+        948,
+        298,
+        306,
+        318
+      ],
+      "file": "assets/items/acc_boss_hex_ridge.webp",
+      "bytes": 39984,
+      "sha256": "b14108e86400ec03da2e225fe16869a1605ecebece03e3a78ba62fed86160953",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_hex_ridge"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_lotus_basin",
+      "sheet": "B1",
+      "row": 3,
+      "col": 1,
+      "crop": [
+        0,
+        626,
+        324,
+        308
+      ],
+      "file": "assets/items/acc_boss_lotus_basin.webp",
+      "bytes": 41234,
+      "sha256": "af7a547d01994026648a73d1e8cabfe14c378d8adbf8460e92049be073c3ea0a",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_lotus_basin"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_river_watch",
+      "sheet": "B1",
+      "row": 3,
+      "col": 2,
+      "crop": [
+        324,
+        624,
+        308,
+        303
+      ],
+      "file": "assets/items/acc_boss_river_watch.webp",
+      "bytes": 40630,
+      "sha256": "b3aaca81f950735ff472aad35c902a4bfad93274c28465bb132740ceb09d3c1a",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_river_watch"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_twin_neck_pass",
+      "sheet": "B1",
+      "row": 3,
+      "col": 3,
+      "crop": [
+        632,
+        628,
+        299,
+        300
+      ],
+      "file": "assets/items/acc_boss_twin_neck_pass.webp",
+      "bytes": 41202,
+      "sha256": "e2edf00b5ddb11ff41b655bfa012b0f3eb96fe0f3a3a9b7bb00007f0eafb3cdf",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_twin_neck_pass"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_sam_lan_estuary",
+      "sheet": "B1",
+      "row": 3,
+      "col": 4,
+      "crop": [
+        931,
+        616,
+        323,
+        313
+      ],
+      "file": "assets/items/acc_boss_sam_lan_estuary.webp",
+      "bytes": 42348,
+      "sha256": "e4335e525ee1979d1951662ed0ebff08df2e47743a46e7eec747c466622dec82",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_sam_lan_estuary"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_naga_cavern",
+      "sheet": "B1",
+      "row": 4,
+      "col": 1,
+      "crop": [
+        0,
+        934,
+        314,
+        320
+      ],
+      "file": "assets/items/acc_boss_naga_cavern.webp",
+      "bytes": 35796,
+      "sha256": "75124cd864d5cfd22e1faa14e144cccf9f10ced5da46992929bbce9a1277ea63",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_naga_cavern"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_fallen_city",
+      "sheet": "B1",
+      "row": 4,
+      "col": 2,
+      "crop": [
+        314,
+        927,
+        310,
+        327
+      ],
+      "file": "assets/items/acc_boss_fallen_city.webp",
+      "bytes": 38538,
+      "sha256": "9cd3dff9e037c44570bff41f8b01b6227fe7770b2707c045dd80f201d0559499",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_fallen_city"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_tri_wiang_castle",
+      "sheet": "B1",
+      "row": 4,
+      "col": 3,
+      "crop": [
+        624,
+        928,
+        330,
+        326
+      ],
+      "file": "assets/items/acc_boss_tri_wiang_castle.webp",
+      "bytes": 38554,
+      "sha256": "d0738baacd82db2cfdfdf700698d37df54f5181a3be03500d63f58a39aa38ec6",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_tri_wiang_castle"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "acc_boss_asura_peak",
+      "sheet": "B1",
+      "row": 4,
+      "col": 4,
+      "crop": [
+        954,
+        929,
+        300,
+        325
+      ],
+      "file": "assets/items/acc_boss_asura_peak.webp",
+      "bytes": 33874,
+      "sha256": "b0d94a8c17450fff504b3d3c41625a05bece08cfd04681ae6d6ee33a07a4f565",
+      "status": "canonical",
+      "exactIds": [
+        "acc_boss_asura_peak"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_reed",
+      "sheet": "B2",
+      "row": 1,
+      "col": 1,
+      "crop": [
+        0,
+        0,
+        459,
+        436
+      ],
+      "file": "assets/items/card_reed.webp",
+      "bytes": 28126,
+      "sha256": "5fccf9332f729c9737e7fdd127ea9fe41fec6449081a03ddbb36ad79af036fef",
+      "status": "canonical",
+      "exactIds": [
+        "card_reed"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_merchant",
+      "sheet": "B2",
+      "row": 1,
+      "col": 2,
+      "crop": [
+        459,
+        0,
+        421,
+        436
+      ],
+      "file": "assets/items/card_merchant.webp",
+      "bytes": 30318,
+      "sha256": "862a642be32be38cd5fe5c04a18bd813a150a65b6d5a795ac834c921db95f31d",
+      "status": "canonical",
+      "exactIds": [
+        "card_merchant"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_asura",
+      "sheet": "B2",
+      "row": 1,
+      "col": 3,
+      "crop": [
+        880,
+        0,
+        428,
+        436
+      ],
+      "file": "assets/items/card_asura.webp",
+      "bytes": 30922,
+      "sha256": "0b0109660ce04b4ae9cfc68caca51dbae71434304989900aebfeb0fcedcd3010",
+      "status": "canonical",
+      "exactIds": [
+        "card_asura"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_forge_master",
+      "sheet": "B2",
+      "row": 1,
+      "col": 4,
+      "crop": [
+        1308,
+        0,
+        466,
+        436
+      ],
+      "file": "assets/items/card_forge_master.webp",
+      "bytes": 27530,
+      "sha256": "658c43c7bcd6f8b24ffe6efea8ccee3f0597a8781fd0a6baad9da4fdad35e6bb",
+      "status": "canonical",
+      "exactIds": [
+        "card_forge_master"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_light_eater",
+      "sheet": "B2",
+      "row": 2,
+      "col": 1,
+      "crop": [
+        0,
+        436,
+        460,
+        451
+      ],
+      "file": "assets/items/card_light_eater.webp",
+      "bytes": 27660,
+      "sha256": "58b08bbd3829889b0b98b04d3c77a0b6b88827a456661b8c1bf60b9637b622ea",
+      "status": "canonical",
+      "exactIds": [
+        "card_light_eater"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_last_spirit",
+      "sheet": "B2",
+      "row": 2,
+      "col": 2,
+      "crop": [
+        460,
+        436,
+        423,
+        451
+      ],
+      "file": "assets/items/card_last_spirit.webp",
+      "bytes": 27872,
+      "sha256": "ac978d89379b5dd74a35bbc7d5737a986804d24bbd4b7d91e560379cf279e00f",
+      "status": "canonical",
+      "exactIds": [
+        "card_last_spirit"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_star_warden",
+      "sheet": "B2",
+      "row": 2,
+      "col": 3,
+      "crop": [
+        883,
+        436,
+        425,
+        451
+      ],
+      "file": "assets/items/card_star_warden.webp",
+      "bytes": 29002,
+      "sha256": "500cb666fea5156d43e9de6e8a0d6a374ff66a2ebbd95ef72647d915661c2379",
+      "status": "canonical",
+      "exactIds": [
+        "card_star_warden"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "card_rift_warden",
+      "sheet": "B2",
+      "row": 2,
+      "col": 4,
+      "crop": [
+        1308,
+        436,
+        466,
+        451
+      ],
+      "file": "assets/items/card_rift_warden.webp",
+      "bytes": 28046,
+      "sha256": "7034ebda12d06a4f11f11015c83fe1623ff3755854954c29d0c2c52966fd4ba9",
+      "status": "canonical",
+      "exactIds": [
+        "card_rift_warden"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "off_brace",
+      "sheet": "B3",
+      "row": 1,
+      "col": 1,
+      "crop": [
+        0,
+        0,
+        322,
+        319
+      ],
+      "file": "assets/items/off_brace.webp",
+      "bytes": 33962,
+      "sha256": "9e4f707d43328bfcd02f388469af5a2bcbbeff9bf085a5e15dd71acd0d800ca1",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "off_brace"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "off_guard",
+      "sheet": "B3",
+      "row": 1,
+      "col": 2,
+      "crop": [
+        322,
+        0,
+        312,
+        316
+      ],
+      "file": "assets/items/off_guard.webp",
+      "bytes": 36806,
+      "sha256": "c896bd4261032cffe1d232d5592a6be982b6b53fc27123d049d7d5cae085deb8",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "off_guard"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "off_veil",
+      "sheet": "B3",
+      "row": 1,
+      "col": 3,
+      "crop": [
+        634,
+        0,
+        308,
+        311
+      ],
+      "file": "assets/items/off_veil.webp",
+      "bytes": 33682,
+      "sha256": "d6ed34f02ceb284620df554c4f6e9008afa8d5b485f7abfb0da7a46d95ca81ae",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "off_veil"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "off_shield",
+      "sheet": "B3",
+      "row": 1,
+      "col": 4,
+      "crop": [
+        942,
+        0,
+        312,
+        316
+      ],
+      "file": "assets/items/off_shield.webp",
+      "bytes": 32710,
+      "sha256": "db129242ff5e2035b7b7dd2d039b0f51297408fc053a00b2e652df4fa45414af",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "off_shield"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "off_jar",
+      "sheet": "B3",
+      "row": 2,
+      "col": 1,
+      "crop": [
+        0,
+        319,
+        313,
+        313
+      ],
+      "file": "assets/items/off_jar.webp",
+      "bytes": 26278,
+      "sha256": "38499fd54062b6a8eb80796fbf5f74ffcfc3a08e72beb7794737f665400aa87b",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "off_jar"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "off_bell",
+      "sheet": "B3",
+      "row": 2,
+      "col": 2,
+      "crop": [
+        313,
+        316,
+        317,
+        311
+      ],
+      "file": "assets/items/off_bell.webp",
+      "bytes": 31706,
+      "sha256": "55d3303b4c6bd1b473627894d53081ca7623f972e4170b98a95ea519898d026c",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "off_bell"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "hand_mirror_unmatched",
+      "sheet": "B3",
+      "row": 2,
+      "col": 3,
+      "crop": [
+        630,
+        311,
+        312,
+        322
+      ],
+      "file": "assets/items/hand_mirror_unmatched.webp",
+      "bytes": 35938,
+      "sha256": "a910b9cc62a349bfe6477f20e6255b4ce60927699b90fa7f595ad700d8ec4a83",
+      "status": "unmatched",
+      "exactIds": [],
+      "families": [],
+      "note": "No matching current item identified. Retain crop without assigning an item."
+    },
+    {
+      "key": "incense_burner_unmatched",
+      "sheet": "B3",
+      "row": 2,
+      "col": 4,
+      "crop": [
+        942,
+        316,
+        312,
+        308
+      ],
+      "file": "assets/items/incense_burner_unmatched.webp",
+      "bytes": 33960,
+      "sha256": "fe6e87ea9c2abcfa8e7430d8599055c8683656a7a39a308ef80b5d41fbdf7765",
+      "status": "unmatched",
+      "exactIds": [],
+      "families": [],
+      "note": "No matching current item identified. Retain crop without assigning an item."
+    },
+    {
+      "key": "bamboo_tube_unmatched",
+      "sheet": "B3",
+      "row": 3,
+      "col": 1,
+      "crop": [
+        0,
+        632,
+        302,
+        309
+      ],
+      "file": "assets/items/bamboo_tube_unmatched.webp",
+      "bytes": 25906,
+      "sha256": "148319447eac091929a27857450bcb20ee4198602b8704624c1103c51881c85c",
+      "status": "unmatched",
+      "exactIds": [],
+      "families": [],
+      "note": "No matching current item identified. Retain crop without assigning an item."
+    },
+    {
+      "key": "herb_pouch_unmatched",
+      "sheet": "B3",
+      "row": 3,
+      "col": 2,
+      "crop": [
+        302,
+        627,
+        339,
+        317
+      ],
+      "file": "assets/items/herb_pouch_unmatched.webp",
+      "bytes": 29422,
+      "sha256": "15dc2a43bae104b97a2539c2b90900367650cb78a83078a8dc0ed500ecd4f225",
+      "status": "unmatched",
+      "exactIds": [],
+      "families": [],
+      "note": "No matching current item identified. Retain crop without assigning an item."
+    },
+    {
+      "key": "skull_fang_charm_unmatched",
+      "sheet": "B3",
+      "row": 3,
+      "col": 3,
+      "crop": [
+        641,
+        633,
+        318,
+        307
+      ],
+      "file": "assets/items/skull_fang_charm_unmatched.webp",
+      "bytes": 28692,
+      "sha256": "b4da4c06c4236560f58621f4ffa441283707c925f25fa97f5dbe186461a883bd",
+      "status": "unmatched",
+      "exactIds": [],
+      "families": [],
+      "note": "No matching current item identified. Retain crop without assigning an item."
+    },
+    {
+      "key": "lantern_unmatched",
+      "sheet": "B3",
+      "row": 3,
+      "col": 4,
+      "crop": [
+        959,
+        624,
+        295,
+        317
+      ],
+      "file": "assets/items/lantern_unmatched.webp",
+      "bytes": 27110,
+      "sha256": "55515e36e5f09f873434c5f08eaea74436eb5b7caf7266783bb1bc254c37cf7d",
+      "status": "unmatched",
+      "exactIds": [],
+      "families": [],
+      "note": "No matching current item identified. Retain crop without assigning an item."
+    },
+    {
+      "key": "scroll_tube_unmatched",
+      "sheet": "B3",
+      "row": 4,
+      "col": 1,
+      "crop": [
+        0,
+        941,
+        314,
+        313
+      ],
+      "file": "assets/items/scroll_tube_unmatched.webp",
+      "bytes": 29692,
+      "sha256": "694e1c0e7b2deac9d7357203d178b494f7e03de6648c79bcc8600a247deb57e9",
+      "status": "unmatched",
+      "exactIds": [],
+      "families": [],
+      "note": "No matching current item identified. Retain crop without assigning an item."
+    },
+    {
+      "key": "thorn_loop_unmatched",
+      "sheet": "B3",
+      "row": 4,
+      "col": 2,
+      "crop": [
+        314,
+        944,
+        308,
+        310
+      ],
+      "file": "assets/items/thorn_loop_unmatched.webp",
+      "bytes": 36778,
+      "sha256": "c051a858d6e1ae90a88d06c7b7fcd84499ff00a4d57b959eb054c47c4847bcab",
+      "status": "unmatched",
+      "exactIds": [],
+      "families": [],
+      "note": "No matching current item identified. Retain crop without assigning an item."
+    },
+    {
+      "key": "ceremonial_fan_unmatched",
+      "sheet": "B3",
+      "row": 4,
+      "col": 3,
+      "crop": [
+        622,
+        940,
+        315,
+        314
+      ],
+      "file": "assets/items/ceremonial_fan_unmatched.webp",
+      "bytes": 33266,
+      "sha256": "76ca24151612dbcd0324a4b0b1b10d388e7dff6b0b88fac637d79cf857cbf958",
+      "status": "unmatched",
+      "exactIds": [],
+      "families": [],
+      "note": "No matching current item identified. Retain crop without assigning an item."
+    },
+    {
+      "key": "horn_unmatched",
+      "sheet": "B3",
+      "row": 4,
+      "col": 4,
+      "crop": [
+        937,
+        941,
+        317,
+        313
+      ],
+      "file": "assets/items/horn_unmatched.webp",
+      "bytes": 28294,
+      "sha256": "ea8492c0b9f91186ab5750c7befc8dd383e187babc47688029d95fca415f0329",
+      "status": "unmatched",
+      "exactIds": [],
+      "families": [],
+      "note": "No matching current item identified. Retain crop without assigning an item."
+    },
+    {
+      "key": "arm_cloth_arms",
+      "sheet": "B4",
+      "row": 1,
+      "col": 1,
+      "crop": [
+        0,
+        0,
+        324,
+        318
+      ],
+      "file": "assets/items/arm_cloth_arms.webp",
+      "bytes": 37072,
+      "sha256": "a9ef7c027c732627d2ff897f6cd3512b8fa97c2d33b05c2ce345df36574e1ad8",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_cloth_arms"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_hide_arms",
+      "sheet": "B4",
+      "row": 1,
+      "col": 2,
+      "crop": [
+        324,
+        0,
+        308,
+        312
+      ],
+      "file": "assets/items/arm_hide_arms.webp",
+      "bytes": 32446,
+      "sha256": "454c2a35e2466d7ee10d049d4f66bf313e66616f2b45d45b3e195c5f365b6bda",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_hide_arms"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_medium_arms",
+      "sheet": "B4",
+      "row": 1,
+      "col": 3,
+      "crop": [
+        632,
+        0,
+        310,
+        315
+      ],
+      "file": "assets/items/arm_medium_arms.webp",
+      "bytes": 32782,
+      "sha256": "c66370d0e67dfff30f86ea6117a871f72f466450a57c9519d63039476e34ffe7",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_medium_arms"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_heavy_arms",
+      "sheet": "B4",
+      "row": 1,
+      "col": 4,
+      "crop": [
+        942,
+        0,
+        312,
+        315
+      ],
+      "file": "assets/items/arm_heavy_arms.webp",
+      "bytes": 41970,
+      "sha256": "4f2ffa14ad2d7c750f1a0de1675928750bf05f68c9ce9fe96ab1844bd5773d45",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_heavy_arms"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers."
+    },
+    {
+      "key": "arm_cloth_feet_alt_b4",
+      "sheet": "B4",
+      "row": 2,
+      "col": 1,
+      "crop": [
+        0,
+        318,
+        304,
+        307
+      ],
+      "file": "assets/items/arm_cloth_feet_alt_b4.webp",
+      "bytes": 32694,
+      "sha256": "99b754184248856b4f2e03f527ccdb8fe10cf68c7e4417cd80d92d1cf1743730",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "arm_cloth_feet"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family. These are boots, not leg-slot armor; never map to arm_*_legs."
+    },
+    {
+      "key": "arm_hide_feet_alt_b4",
+      "sheet": "B4",
+      "row": 2,
+      "col": 2,
+      "crop": [
+        304,
+        312,
+        324,
+        314
+      ],
+      "file": "assets/items/arm_hide_feet_alt_b4.webp",
+      "bytes": 35164,
+      "sha256": "3be6224b70498a20303857bd7dbcc14300667963a2b537dc74d3a90372762a18",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "arm_hide_feet"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family. These are boots, not leg-slot armor; never map to arm_*_legs."
+    },
+    {
+      "key": "arm_medium_feet_alt_b4",
+      "sheet": "B4",
+      "row": 2,
+      "col": 3,
+      "crop": [
+        628,
+        315,
+        310,
+        312
+      ],
+      "file": "assets/items/arm_medium_feet_alt_b4.webp",
+      "bytes": 35298,
+      "sha256": "bd927e6fe421cdd9382b1faeac49a895bc92bd53b9ba85a2fc3d7d1515da9ad6",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "arm_medium_feet"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family. These are boots, not leg-slot armor; never map to arm_*_legs."
+    },
+    {
+      "key": "arm_heavy_feet_alt_b4",
+      "sheet": "B4",
+      "row": 2,
+      "col": 4,
+      "crop": [
+        938,
+        315,
+        316,
+        311
+      ],
+      "file": "assets/items/arm_heavy_feet_alt_b4.webp",
+      "bytes": 41822,
+      "sha256": "9da4d201df0a5b7368723c21e51344612a46b456a864c4a349b8448b1b314fbe",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "arm_heavy_feet"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family. These are boots, not leg-slot armor; never map to arm_*_legs."
+    },
+    {
+      "key": "arm_cloth_leftHand",
+      "sheet": "B4",
+      "row": 3,
+      "col": 1,
+      "crop": [
+        0,
+        625,
+        322,
+        311
+      ],
+      "file": "assets/items/arm_cloth_leftHand.webp",
+      "bytes": 37134,
+      "sha256": "73154b88bc8ab2d4e259f4938422f741dc9248a173d5da99b98fefc63c6563fd",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_cloth_leftHand"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers. Left/right assignment follows mirrored sheet-row order; anatomy alone does not prove handedness."
+    },
+    {
+      "key": "arm_hide_leftHand",
+      "sheet": "B4",
+      "row": 3,
+      "col": 2,
+      "crop": [
+        322,
+        626,
+        296,
+        310
+      ],
+      "file": "assets/items/arm_hide_leftHand.webp",
+      "bytes": 33630,
+      "sha256": "8f155d6387cf74e918baffa533c01a724ecbb6b664dcaed3b669051817f0afe5",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_hide_leftHand"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers. Left/right assignment follows mirrored sheet-row order; anatomy alone does not prove handedness."
+    },
+    {
+      "key": "arm_medium_leftHand",
+      "sheet": "B4",
+      "row": 3,
+      "col": 3,
+      "crop": [
+        618,
+        627,
+        320,
+        313
+      ],
+      "file": "assets/items/arm_medium_leftHand.webp",
+      "bytes": 31122,
+      "sha256": "c765f33bc422379d349374d1854a2d70df6ccc2c89fe8b2a1d5faa2d012bfb11",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_medium_leftHand"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers. Left/right assignment follows mirrored sheet-row order; anatomy alone does not prove handedness."
+    },
+    {
+      "key": "arm_heavy_leftHand",
+      "sheet": "B4",
+      "row": 3,
+      "col": 4,
+      "crop": [
+        938,
+        626,
+        316,
+        314
+      ],
+      "file": "assets/items/arm_heavy_leftHand.webp",
+      "bytes": 40498,
+      "sha256": "573c6183f933c82871b1f907ef60791dfd616944823e7598cd25b670ce376c8a",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_heavy_leftHand"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers. Left/right assignment follows mirrored sheet-row order; anatomy alone does not prove handedness."
+    },
+    {
+      "key": "arm_cloth_rightHand",
+      "sheet": "B4",
+      "row": 4,
+      "col": 1,
+      "crop": [
+        0,
+        936,
+        314,
+        318
+      ],
+      "file": "assets/items/arm_cloth_rightHand.webp",
+      "bytes": 35802,
+      "sha256": "04f3493a080ad6f579a459c2acfd840fc8e532d5572105e87039b6b8753aa277",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_cloth_rightHand"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers. Left/right assignment follows mirrored sheet-row order; anatomy alone does not prove handedness."
+    },
+    {
+      "key": "arm_hide_rightHand",
+      "sheet": "B4",
+      "row": 4,
+      "col": 2,
+      "crop": [
+        314,
+        936,
+        311,
+        318
+      ],
+      "file": "assets/items/arm_hide_rightHand.webp",
+      "bytes": 29496,
+      "sha256": "dac8ad32054bac63f53b577e6af2a5c99ae3874c3e71eec8e180befc43dad19d",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_hide_rightHand"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers. Left/right assignment follows mirrored sheet-row order; anatomy alone does not prove handedness."
+    },
+    {
+      "key": "arm_medium_rightHand",
+      "sheet": "B4",
+      "row": 4,
+      "col": 3,
+      "crop": [
+        625,
+        940,
+        315,
+        314
+      ],
+      "file": "assets/items/arm_medium_rightHand.webp",
+      "bytes": 29028,
+      "sha256": "9276a20b3fa1e664adb911d0f80896988156e2606c4aa534de408c3e46e71b0f",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_medium_rightHand"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers. Left/right assignment follows mirrored sheet-row order; anatomy alone does not prove handedness."
+    },
+    {
+      "key": "arm_heavy_rightHand",
+      "sheet": "B4",
+      "row": 4,
+      "col": 4,
+      "crop": [
+        940,
+        940,
+        314,
+        314
+      ],
+      "file": "assets/items/arm_heavy_rightHand.webp",
+      "bytes": 38212,
+      "sha256": "834483a8d7a6cf686019ee7e079d8bdacad4842fb4950dee03bc10f999a66c79",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "arm_heavy_rightHand"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers. Left/right assignment follows mirrored sheet-row order; anatomy alone does not prove handedness."
+    },
+    {
+      "key": "mat_fish_common_ambiguous",
+      "sheet": "B5",
+      "row": 1,
+      "col": 1,
+      "crop": [
+        0,
+        0,
+        366,
+        361
+      ],
+      "file": "assets/items/mat_fish_common_ambiguous.webp",
+      "bytes": 31196,
+      "sha256": "f94fb69a8d4fc61c885d1b96641bfd77789fac81dc010545f84b0badca4fa0b5",
+      "status": "ambiguous",
+      "exactIds": [],
+      "families": [],
+      "note": "Candidate only: carp-like brown fish, not the catalog snakehead (ปลาช่อน). No automatic assignment."
+    },
+    {
+      "key": "mat_fish_silver",
+      "sheet": "B5",
+      "row": 1,
+      "col": 2,
+      "crop": [
+        366,
+        0,
+        366,
+        350
+      ],
+      "file": "assets/items/mat_fish_silver.webp",
+      "bytes": 29966,
+      "sha256": "4b79c3aedefab775ca9354aed858f890a31e08e697758dfd74d3464b46a14772",
+      "status": "canonical",
+      "exactIds": [
+        "mat_fish_silver"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "mat_fish_spirit",
+      "sheet": "B5",
+      "row": 1,
+      "col": 3,
+      "crop": [
+        732,
+        0,
+        350,
+        358
+      ],
+      "file": "assets/items/mat_fish_spirit.webp",
+      "bytes": 43350,
+      "sha256": "d045a689c70ccf10eaa9b3d7d7d3ed5e08470241a4e3f30026d5e239ad05b615",
+      "status": "canonical",
+      "exactIds": [
+        "mat_fish_spirit"
+      ],
+      "families": [],
+      "note": "Visually matches named item motif."
+    },
+    {
+      "key": "lotus_bouquet_unmatched",
+      "sheet": "B5",
+      "row": 1,
+      "col": 4,
+      "crop": [
+        1082,
+        0,
+        366,
+        362
+      ],
+      "file": "assets/items/lotus_bouquet_unmatched.webp",
+      "bytes": 33814,
+      "sha256": "b82401281fdc29cef9a4c579b34bb0c2634f86a967e142b0eeab2a4f9b410744",
+      "status": "unmatched",
+      "exactIds": [],
+      "families": [],
+      "note": "No matching current item identified. Retain crop without assigning an item."
+    },
+    {
+      "key": "mat_herb_alt_b5",
+      "sheet": "B5",
+      "row": 2,
+      "col": 1,
+      "crop": [
+        0,
+        361,
+        380,
+        343
+      ],
+      "file": "assets/items/mat_herb_alt_b5.webp",
+      "bytes": 30874,
+      "sha256": "461f7bfbda6eb19c7601d3f549c5283a114022335dc07385361f3938fb764907",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "mat_herb"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family."
+    },
+    {
+      "key": "ref_oil_alt_b5",
+      "sheet": "B5",
+      "row": 2,
+      "col": 2,
+      "crop": [
+        380,
+        350,
+        333,
+        361
+      ],
+      "file": "assets/items/ref_oil_alt_b5.webp",
+      "bytes": 27360,
+      "sha256": "3bfd885620528773ed66f47553fcff01574f6abea917558eafb8bc0a6a1289e1",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "ref_oil"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family."
+    },
+    {
+      "key": "mat_fiber_alt_b5",
+      "sheet": "B5",
+      "row": 2,
+      "col": 3,
+      "crop": [
+        713,
+        358,
+        361,
+        344
+      ],
+      "file": "assets/items/mat_fiber_alt_b5.webp",
+      "bytes": 34048,
+      "sha256": "3a0cfc5457e1a331471f4d0b78b3577ebd6087da122a97e0dff6267d1809a010",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "mat_fiber"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family."
+    },
+    {
+      "key": "mat_hide_alt_b5",
+      "sheet": "B5",
+      "row": 2,
+      "col": 4,
+      "crop": [
+        1074,
+        362,
+        374,
+        336
+      ],
+      "file": "assets/items/mat_hide_alt_b5.webp",
+      "bytes": 29154,
+      "sha256": "c892681ae62916a286e6198470af7601b02943e0bdbc2673e7368597de8f555f",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "mat_hide"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family."
+    },
+    {
+      "key": "mat_charcoal_alt_b5",
+      "sheet": "B5",
+      "row": 3,
+      "col": 1,
+      "crop": [
+        0,
+        704,
+        351,
+        382
+      ],
+      "file": "assets/items/mat_charcoal_alt_b5.webp",
+      "bytes": 29782,
+      "sha256": "3d8f74fa6b911894b934923256270f7d1c9d473d4cf8b2efd74ba611018209ae",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "mat_charcoal"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family."
+    },
+    {
+      "key": "mat_ingot_alt_b5",
+      "sheet": "B5",
+      "row": 3,
+      "col": 2,
+      "crop": [
+        351,
+        711,
+        387,
+        375
+      ],
+      "file": "assets/items/mat_ingot_alt_b5.webp",
+      "bytes": 27326,
+      "sha256": "e34f8e5c3e1f8a8f50d69f54d8493d62a19eeec3de4b41711d7e67859a124607",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "mat_ingot"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family."
+    },
+    {
+      "key": "ref_powder_alt_b5",
+      "sheet": "B5",
+      "row": 3,
+      "col": 3,
+      "crop": [
+        738,
+        702,
+        317,
+        384
+      ],
+      "file": "assets/items/ref_powder_alt_b5.webp",
+      "bytes": 29972,
+      "sha256": "663d534bf8ded438c81d24d16af89099a0bdd9f4fad35cf6c51e7da863789217",
+      "status": "alternate",
+      "exactIds": [],
+      "families": [
+        "ref_powder"
+      ],
+      "note": "Duplicate variant; do not override the canonical cell for this family."
+    },
+    {
+      "key": "use_salve",
+      "sheet": "B5",
+      "row": 3,
+      "col": 4,
+      "crop": [
+        1055,
+        698,
+        393,
+        388
+      ],
+      "file": "assets/items/use_salve.webp",
+      "bytes": 29300,
+      "sha256": "53387ccd1bcfbc3273ed27f6f2288447ff6ce8e4b2b7862188fe6fd2e968c46c",
+      "status": "canonical",
+      "exactIds": [],
+      "families": [
+        "use_salve"
+      ],
+      "note": "Visually matches item family; reuse only for canonical family and its tiers. Herbal compress is canonical (B5R3C4); green ointment is an alternate (A3R4C1)."
+    }
+  ],
+  "cropMethod": "Reviewed source-pixel rectangular boundaries, minimum alpha>=32 occupancy near actual inter-item gaps. No pixels invented or masked.",
+  "cropBoundaryNotes": [
+    [
+      "mat_resin",
+      "bottom",
+      7
+    ],
+    [
+      "ref_powder",
+      "top",
+      7
+    ],
+    [
+      "card_possessed",
+      "bottom",
+      5
+    ],
+    [
+      "card_lost_ghost",
+      "bottom",
+      5
+    ],
+    [
+      "card_root_shadow",
+      "bottom",
+      6
+    ],
+    [
+      "card_arcane_spirit",
+      "bottom",
+      5
+    ],
+    [
+      "card_shrine_keeper",
+      "top",
+      5
+    ],
+    [
+      "card_bamboo",
+      "top",
+      5
+    ],
+    [
+      "card_lotus",
+      "top",
+      6
+    ],
+    [
+      "card_dream",
+      "top",
+      5
+    ],
+    [
+      "mat_boss_bound_temple",
+      "bottom",
+      9
+    ],
+    [
+      "mat_boss_drowned_marsh",
+      "bottom",
+      10
+    ],
+    [
+      "mat_boss_bamboo_frontier",
+      "top",
+      9
+    ],
+    [
+      "mat_boss_lotus_basin",
+      "top",
+      10
+    ],
+    [
+      "card_reed",
+      "bottom",
+      2
+    ],
+    [
+      "card_merchant",
+      "bottom",
+      2
+    ],
+    [
+      "card_light_eater",
+      "top",
+      2
+    ],
+    [
+      "card_last_spirit",
+      "top",
+      2
+    ],
+    [
+      "off_brace",
+      "bottom",
+      5
+    ],
+    [
+      "off_veil",
+      "bottom",
+      12
+    ],
+    [
+      "off_jar",
+      "top",
+      5
+    ],
+    [
+      "hand_mirror_unmatched",
+      "top",
+      12
+    ],
+    [
+      "hand_mirror_unmatched",
+      "bottom",
+      2
+    ],
+    [
+      "skull_fang_charm_unmatched",
+      "top",
+      2
+    ]
+  ]
+}

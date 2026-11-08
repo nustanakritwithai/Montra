@@ -9,6 +9,7 @@
   }
   function closeDrawer() {
     if (typeof closeSkillDetailModal === "function") closeSkillDetailModal();
+    if (typeof clearCoreGraphLines === "function") clearCoreGraphLines();
     try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
     cancelForgeAnimation(true);closeForgePicker(false);
     if(ui.drawer.hidden)return;
@@ -23,6 +24,7 @@
   }
   function openDrawer(name,title,html) {
     if (typeof closeSkillDetailModal === "function") closeSkillDetailModal();
+    if (typeof clearCoreGraphLines === "function") clearCoreGraphLines();
     try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
     cancelForgeAnimation(true);closeForgePicker(false);closeItemDetailModal(false);
     if(fieldTrainingTip && !(ownServerCharacter()?.level>=13) && ["muayBook","swordTree","bladeBook","sentinelBook","occultBook"].includes(name))fieldTrainingTip=null;

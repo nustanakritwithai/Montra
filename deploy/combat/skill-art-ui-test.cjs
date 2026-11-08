@@ -81,3 +81,36 @@ assert(
 );
 
 console.log("PASS All 26 skills + aliases + book icons verified in styles.css and main.js!");
+
+// Existence of a skill name anywhere in CSS does not guarantee each UI surface
+// receives artwork. Compare the concrete image for all 24 current core skills.
+const coreSkills = [
+  'phuttha_core', 'sritra_core', 'atamat_core', 'chumphon_core',
+  'chaiya', 'korat', 'lopburi', 'thasao',
+  'seer_pot', 'seer_binding', 'seer_poison', 'seer_buffalo',
+  'blade_vanish', 'blade_heavy', 'blade_withdraw', 'blade_fury',
+  'mender_core_heal', 'mender_core_circle', 'mender_core_ward', 'mender_core_cleanse',
+  'shock', 'bulwark', 'riposte', 'protect'
+];
+const rules = [...styles.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]+)\}/g)];
+const images = new Set();
+for (const id of coreSkills) {
+  const artwork = ['skill-book-icon', 'glyph', 'skill-modal-glyph', 'kg-glyph'].map(surface => {
+    const selector = `.${surface}[data-skill-glyph="${id}"]`;
+    const rule = rules.find(([, selectors, body]) => selectors.split(',').some(s => s.trim() === selector) && /background-image:/.test(body));
+    assert(rule, `${selector} needs its own artwork mapping`);
+    const image = rule[2].match(/background-image:\s*url\("(data:image\/svg\+xml,[^"]+)"\)/)?.[1];
+    assert(image, `${selector} needs embedded SVG artwork`);
+    assert.match(decodeURIComponent(image.split(',').slice(1).join(',')), /^<svg\s/);
+    return image;
+  });
+  assert(artwork.every(image => image === artwork[0]), `${id} must use the same artwork on all four surfaces`);
+  images.add(artwork[0]);
+}
+assert.equal(images.size, coreSkills.length, 'current core skills retain distinct artwork');
+const index = fs.readFileSync('index.html', 'utf8');
+const orb = index.match(/<div class="skill-modal-orb"[\s\S]*?<\/div>/)?.[0] || '';
+const naming = index.match(/<div class="skill-modal-naming"[\s\S]*?<\/div>/)?.[0] || '';
+assert(!orb.includes('id="skillModalBadge"'), 'status must not overlap the artwork orb');
+assert(naming.includes('id="skillModalBadge"'), 'status remains visible beside the skill name');
+console.log('PASS: 24 distinct core artworks match across all 96 surface mappings; status is outside the artwork');

@@ -22,7 +22,7 @@ function harness({reduced=false,confirm=true,throwSend=false,animationEnd=true}=
   const inventory={slots:[item],forgeCopies:{test_sword:3}};
   const meta={name:'ดาบทดสอบ',kind:'mainHand',level:1,forge:{primary:'melee',enhanceRatings:{6:42}},recipe:[{item:'metal',qty:1}]};
   const room={state:{forgeCatalog:JSON.stringify({enhanceSteps:Array.from({length:10},()=>({copies:2,gold:100,chance:75,breakOnFailure:true,downgradeChance:20}))})},send(command,payload){if(throwSend)throw Error('offline');sent.push({command,payload});},onMessage(name,callback){callbacks[name]=callback;}};
-  const ctx={$,room,joined:room,window:{confirm:()=>confirm,matchMedia:()=>({matches:reduced})},document:{hidden:false},performance:{now:clock.now},Date:class extends Date{static now(){return clock.now();}},setTimeout:clock.setTimeout,clearTimeout:clock.clearTimeout,requestAnimationFrame:fn=>clock.setTimeout(fn,16),cancelAnimationFrame:clock.clearTimeout,
+  const ctx={clearCombatVfx(){},$,room,joined:room,window:{confirm:()=>confirm,matchMedia:()=>({matches:reduced})},document:{hidden:false},performance:{now:clock.now},Date:class extends Date{static now(){return clock.now();}},setTimeout:clock.setTimeout,clearTimeout:clock.clearTimeout,requestAnimationFrame:fn=>clock.setTimeout(fn,16),cancelAnimationFrame:clock.clearTimeout,
     // Presentation boundaries record feedback without playing audio or creating 3D effects.
     getLocalAvatar:()=>({x:2,y:3,z:4}),localId:'hero',
     ...Object.fromEntries(['SFX','shakeCamera','sparks','floatAtPlayer','triggerCombatCallout'].map(name=>[name,(...args)=>effects.push({name,args})])),

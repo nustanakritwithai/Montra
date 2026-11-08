@@ -11,6 +11,7 @@ on:
       - 'scripts/build-styles*.mjs'
       - 'deploy/combat/class-skills-*.cjs'
       - 'deploy/combat/class-skill-routing-test.cjs'
+      - 'deploy/combat/core-skill-catalog-fixture.cjs'
       - '.github/workflows/verify-class-skills.yml'
   pull_request:
     paths:
@@ -19,6 +20,7 @@ on:
       - 'src/styles/**'
       - 'deploy/combat/class-skills-*.cjs'
       - 'deploy/combat/class-skill-routing-test.cjs'
+      - 'deploy/combat/core-skill-catalog-fixture.cjs'
       - '.github/workflows/verify-class-skills.yml'
   workflow_dispatch:
 permissions:
@@ -44,6 +46,7 @@ jobs:
         run: |
           node deploy/combat/class-skill-routing-test.cjs
           node deploy/combat/class-skills-browser-test.cjs
+          node deploy/combat/class-skills-hotbar-browser-test.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

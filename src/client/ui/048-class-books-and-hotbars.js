@@ -81,24 +81,9 @@
     sentinelBookRenderKey="";openClassBookDrawer("sentinelBook","วิชาผู้พิทักษ์",'<div id="sentinelBookBody"></div>');renderSentinelBook();
   }
   function renderSentinelBook(){
-    const data=sentinelBookState,me=ownServerCharacter(),container=$("sentinelBookBody");if(!data?.book || !data.core || !me || !container)return;
-    const key=JSON.stringify([data.book,me.level]);if(key===sentinelBookRenderKey)return;sentinelBookRenderKey=key;
-    const ranks=data.book.coreRanks || {},points=data.corePointLevels.filter(level=>skillLearningLevel(me)>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
-    const fmt=n=>String(Math.round(n*100)/100);
-    const describe=(id,rank)=>{
-      const p=data.coreProgress?.[rank]?.[id];if(!p)return "";
-      if(id==="shock")return "ระยะ "+fmt(p.range)+" · สตันมอน "+fmt(p.monsterStunMs/1000)+" วิ · สูงสุด 5 เป้าหมาย";
-      if(id==="bulwark")return "เพิ่มป้องกัน "+Math.round(p.defense*100)+"% · นาน "+fmt(p.durationMs/1000)+" วิ";
-      if(id==="riposte")return "ตั้งรับ "+fmt(p.durationMs/1000)+" วิ · ลดดาเมจ "+Math.round((1-p.damageFactor)*100)+"% · สวนมอน "+Math.round(p.counterPower*100)+"% · สวนซ้ำทุก "+fmt(p.counterIntervalMs/1000)+" วิ";
-      return "รับแทน 30% · นาน "+fmt(p.durationMs/1000)+" วิ · ท้าทายมอนระยะ "+fmt(p.tauntRange)+" สูงสุด 3 ตัว นาน "+fmt(p.tauntMs/1000)+" วิ";
-    };
-    container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม เลือกพัฒนาสกิลที่ถนัด</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปได้ถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
-      Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><span class="skill-book-icon" data-skill-glyph="'+id+'"></span><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-sentinel-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
-      }).join("")+'<p class="note">PvP สตัน 0.45 วิ และต้านซ้ำ 4 วิ · Elite และบอสต้านสตันและยั่วยุ · เพิ่มขั้นพลังสวนเฉพาะมอน · ท้าทายไม่บังคับเป้าผู้เล่น · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetSentinelCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
-    container.querySelectorAll("[data-sentinel-core-upgrade]").forEach(button=>button.onclick=()=>room.send("sentinel_book",{action:"core_upgrade",skillId:button.dataset.sentinelCoreUpgrade}));
-    $("resetSentinelCore").onclick=()=>{if(window.confirm("คืนแต้มวิชาผู้พิทักษ์ทั้งหมด?"))room.send("sentinel_book",{action:"core_reset"});};
+    renderCoreSkillKnowledgeGraph(coreSkillGraphData("sentinel"), $("sentinelBookBody"));
   }
+
   function syncBladeUI(me) {
     const active=mode==="live" && room?.state?.bladeAvailable===true && me?.pathId==="blade";
     const button=$("bladeBookButton"),bar=$("bladeHotbar"),status=$("bladeStatus"),now=performance.now(),parts=[];
@@ -179,21 +164,9 @@
     $("resetBladeBook").onclick=()=>{if(window.confirm("คืนแต้มสายคมดาบ? ผลฝึกและคูลดาวน์ยังคงอยู่"))room.send("blade_book",{action:"reset"});};
   }
   function renderBladeCoreBook(data,me,container){
-    const key=JSON.stringify([data.book,me.level]);if(key===bladeBookRenderKey)return;bladeBookRenderKey=key;
-    const ranks=data.book.coreRanks || {},points=data.corePointLevels.filter(level=>skillLearningLevel(me)>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
-    const fmt=n=>String(Math.round(n*100)/100),describe=(id,rank)=>{const p=data.coreProgress?.[rank]?.[id];if(!p)return "";
-      if(id==="blade_vanish")return "หายตัวทันที นาน "+fmt(p.durationMs/1000)+" วิ";
-      if(id==="blade_heavy")return "พลังโจมตีมอนสเตอร์ "+fmt(p.power*100)+"% · PvP "+fmt(p.pvpPower*100)+"% ก่อนปรับสมดุล · ระยะ "+fmt(p.range);
-      if(id==="blade_withdraw")return "พลังโจมตีมอนสเตอร์ "+fmt(p.power*100)+"% · PvP "+fmt(p.pvpPower*100)+"% ก่อนปรับสมดุล · ถอย "+fmt(p.distance)+" หน่วย";
-      return "โจมตี +"+fmt(p.bonus*100)+"% นาน "+fmt(p.durationMs/1000)+" วิ";
-    };
-    container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
-      Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><span class="skill-book-icon" data-skill-glyph="'+id+'"></span><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-blade-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
-      }).join("")+'<p class="note">หายตัวระหว่างต่อสู้ได้ · โจมตีหรือถูกโจมตีจะเปิดเผยตัว มอนสเตอร์ตรวจพบได้เมื่อเข้าใกล้ · ฟันถอยเว้นจังหวะ 0.5 วิแล้วตีอัตโนมัติต่อ สั่งเดินหรือโจมตีใหม่ได้ทันที · พุ่งถอยหยุดเมื่อพบสิ่งกีดขวาง · พลังโจมตี PvP ถูกปรับสมดุล 75% และเมื่อเปิดฉากจากการล่องหนเพิ่มอีก 20% · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetBladeCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
-    container.querySelectorAll("[data-blade-core-upgrade]").forEach(button=>button.onclick=()=>room.send("blade_book",{action:"core_upgrade",skillId:button.dataset.bladeCoreUpgrade}));
-    $("resetBladeCore").onclick=()=>{if(window.confirm("คืนแต้มวิชาคมดาบทั้งหมด?"))room.send("blade_book",{action:"core_reset"});};
+    renderCoreSkillKnowledgeGraph(coreSkillGraphData("blade"), container);
   }
+
   function syncOccultUI(me) {
     const status=$("occultStatus"), cursed=mode==="live" && performance.now()<occultCurseUntil,parts=[];
     if(cursed)parts.push("ติดคำสาป · "+Math.ceil((occultCurseUntil-performance.now())/1000)+" วิ");
@@ -355,39 +328,11 @@
   }
 
   function renderSeerCoreBook(data,me,container){
-    const key=JSON.stringify([data.book,me.level]);if(key===occultBookRenderKey)return;occultBookRenderKey=key;
-    const ranks=data.book.coreRanks || {},points=data.corePointLevels.filter(level=>skillLearningLevel(me)>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
-    const fmt=n=>String(Math.round(n*100)/100),describe=(id,rank)=>{
-      const p=data.coreProgress?.[rank]?.[id];if(!p)return "";
-      if(id==="seer_pot")return "ผีโจมตีมอน "+Math.round(p.pvePower*100)+"% · ผี 1 ตัวต่อผู้เล่น";
-      if(id==="seer_binding")return "ระยะ "+fmt(p.range)+" · สะกดมอนทั่วไปจนคลาย · พิษขณะสะกดเพิ่ม "+fmt(p.poisonBonus*100)+"% ต่อครั้ง";
-      if(id==="seer_poison")return "ระยะ "+fmt(p.range)+" · มอนเสียเลือด "+fmt(p.pveFraction*100)+"% ทุก "+fmt(p.intervalMs/1000)+" วิ จนเหลือ 1 HP";
-      return "ระยะมอน "+fmt(p.range)+" · พลัง "+Math.round(p.power*100)+"% · ร่าย "+fmt(p.castMs/1000)+" วิ";
-    };
-    container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
-      Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><span class="skill-book-icon" data-skill-glyph="'+id+'"></span><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-seer-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
-      }).join("")+'<p class="note">สะกดมอนทั่วไป 1 ตัวค้างไว้ กดซ้ำเพื่อคลาย · ผีไม่ตีมอนที่เจ้าของสะกด · Elite และบอสต้านสะกด · PvP สะกด '+fmt(data.coreProgress[0].seer_binding.pvpDurationMs/1000)+' วิ ต้านซ้ำ '+fmt((data.coreProgress[0].seer_binding.pvpImmunityMs-data.coreProgress[0].seer_binding.pvpDurationMs)/1000)+' วิหลังคลาย · พิษ PvP '+fmt(data.coreProgress[0].seer_poison.pvpFraction*100)+'% ทุก '+fmt(data.coreProgress[0].seer_poison.intervalMs/1000)+' วิ · พิษไม่สังหาร · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetSeerCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
-    container.querySelectorAll("[data-seer-core-upgrade]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"core_upgrade",skillId:button.dataset.seerCoreUpgrade}));
-    $("resetSeerCore").onclick=()=>{if(window.confirm("คืนแต้มวิชานักเวททั้งหมด?"))room.send("occult_book",{action:"core_reset"});};
+    renderCoreSkillKnowledgeGraph(coreSkillGraphData("seer"), container);
   }
 
   function renderMenderCoreBook(data,me,container){
-    const key=JSON.stringify([data.book,me.level]);if(key===occultBookRenderKey)return;occultBookRenderKey=key;
-    const ranks=data.book.menderCoreRanks || {},points=data.corePointLevels.filter(level=>skillLearningLevel(me)>=level).length,spent=Object.values(ranks).reduce((sum,n)=>sum+Number(n||0),0);
-    const fmt=n=>String(Math.round(n*100)/100),describe=(id,rank)=>{
-      const p=data.coreProgress?.[rank]?.[id];if(!p)return "";
-      if(id==="mender_core_heal")return "ล้างพิษ คำสาป และสถานะหยุด · ฟื้น "+fmt(p.tickFraction*100)+"% HP สูงสุดทุก "+fmt(p.intervalMs/1000)+" วิ นาน "+fmt(p.durationMs/1000)+" วิ · ระยะ "+fmt(p.range);
-      if(id==="mender_core_circle")return "ฟื้น "+fmt(p.fraction*100)+"% HP สูงสุดทันทีครั้งเดียว · ระยะ "+fmt(p.range);
-      if(id==="mender_core_ward")return "ป้องกันการโจมตี 100% · นาน "+fmt(p.durationMs/1000)+" วิ · รัศมี "+fmt(p.range);
-      return "เพิ่ม HP มานา กำลังสูงสุดและค่าต่อสู้ "+fmt(p.bonus*100)+"% · นาน "+fmt(p.durationMs/1000)+" วิ · ระยะ "+fmt(p.range);
-    };
-    container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · สูงสุด '+data.corePointLevels.length+' แต้ม</p><p class="note">ใช้ทั้ง 4 ท่าได้พร้อมกัน · อัปถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
-      Object.entries(data.core).map(([id,node])=>{const rank=Number(ranks[id]||0),next=data.coreLevels[rank],cost=node.stamina+rank;
-        return '<article class="sword-node learned"><span class="skill-book-icon" data-skill-glyph="'+id+'"></span><div><strong>'+node.name+' · ขั้น '+rank+'/'+data.coreLevels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+1)+'</small>':'')+'</div>'+(next?'<button type="button" data-mender-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
-      }).join("")+'<p class="note">สกิลหมู่มีผลกับปาร์ตี้ หรือฝ่ายเดียวกันในสงครามที่อยู่ในระยะ · เขตคุ้มภัยอยู่ ณ จุดที่ร่าย · รีเจนที่อ่อนกว่าไม่ทับผลที่แรงกว่า · สถานะสูงสุดอยู่ภายใต้เพดานของเกม · ล้างสถานะหยุดรวมถึงยันต์สะกด · ข้อมูลวิชาเดิมยังเก็บอยู่</p><button type="button" id="resetMenderCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
-    container.querySelectorAll("[data-mender-core-upgrade]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"core_upgrade",skillId:button.dataset.menderCoreUpgrade}));
-    $("resetMenderCore").onclick=()=>{if(window.confirm("คืนแต้มวิชาพระทั้งหมด?"))room.send("occult_book",{action:"core_reset"});};
+    renderCoreSkillKnowledgeGraph(coreSkillGraphData("mender"), container);
   }
 
   let selectedMuaySkill="", muayCounterUntil=0, muayHotbarKey="", muayBookRenderKey="", muayBookViewedSchool="", muayGrabTarget="",muayGrabUntil=0,muayFollowupSkill="",muayFollowupTarget="",muayFollowupUntil=0,muayCoreStanceUntil=0;
@@ -456,38 +401,7 @@
     renderMuayBook();
   }
   function renderMuayBook() {
-    const data=muayBookData(),container=$("muayBookBody");
-    if(!data?.catalog?.core || !container)return;
-    const {me,book,catalog}=data,ranks=book.coreRanks || {};
-    const key=me.level+"|"+me.muayBookData;
-    if(key===muayBookRenderKey)return;muayBookRenderKey=key;
-    const points=(catalog.corePointLevels || []).filter(level=>skillLearningLevel(me)>=level).length;
-    const spent=Object.values(ranks).reduce((sum,value)=>sum+Number(value||0),0);
-    const levels=catalog.coreLevels;
-    const details={
-      chaiya:"ขั้น 4 และ 8 สวนซ้ำได้เร็วขึ้น · พลังสวนเพิ่มเฉพาะมอน",
-      korat:"หมัดสุดท้ายหนักขึ้นที่ขั้น 4 และ 8 · พลังเพิ่มเฉพาะมอน",
-      lopburi:"ขั้น 4 และ 8 ท่าซ้ำหยุดมอนทั่วไปชั่วครู่",
-      thasao:"ขั้น 8 ยืดเวลาหยุดมอนท้ายชุด · PvP ใช้ 3 หมัด"
-    };
-    const fmt=n=>String(Math.round(n*100)/100);
-    const describe=(id,rank)=>{
-      const p=catalog.coreProgress?.[rank]?.[id];
-      if(!p)return "";
-      if(id==="chaiya")return "ตั้งรับ "+fmt(p.durationMs/1000)+" วิ · ลดดาเมจ "+Math.round((1-p.damageFactor)*100)+"% · สวนมอน "+Math.round(p.counterPower*100)+"% · สวนซ้ำทุก "+fmt(p.counterIntervalMs/1000)+" วิ";
-      if(id==="korat")return "หมัดมอน "+[.42,.53,p.finalPower].map(n=>Math.round(n*p.scale*100)+"%").join(" + ");
-      if(id==="lopburi")return "พุ่ง "+fmt(p.distance)+" · กดซ้ำภายใน "+fmt(p.followMs/1000)+" วิ · โจมตีมอน "+Math.round(p.followPower*100)+"%"+(p.staggerMs?" · หยุดมอน "+fmt(p.staggerMs/1000)+" วิ":"");
-      return "พุ่งถึง "+fmt(p.range)+" · ตีมอน "+p.hits+" ครั้ง ครั้งละ "+Math.round(p.hitPower*100)+"% · หยุดมอน "+fmt(p.staggerMs/1000)+" วิ";
-    };
-    container.innerHTML='<p>แต้มวิชา '+(points-spent)+' / '+points+' · มีสูงสุด '+(catalog.corePointLevels || []).length+' แต้ม เลือกพัฒนาสกิลที่ถนัด</p><p class="note">พื้นฐานทั้ง 4 ใช้ได้พร้อมกัน · อัปได้ถึงขั้น 8 ที่ Lv.100 · จัดแต้มที่ลานพัก</p>'+
-      Object.entries(catalog.core).map(([id,node])=>{
-        const rank=Number(ranks[id]||0),next=levels[rank];
-        const cost=node.stamina+rank*Number(catalog.coreManaPerRank||0);
-        return '<article class="sword-node learned"><span class="skill-book-icon" data-skill-glyph="'+id+'"></span><div><strong>'+node.name+' · ขั้น '+rank+'/'+levels.length+'</strong><small>'+node.description+'</small><small>ปัจจุบัน · '+describe(id,rank)+'</small><small>'+details[id]+'</small><small>ใช้มานา '+cost+' · รอ '+node.cooldownMs/1000+' วิ'+(next?' · ขั้นต่อไป Lv.'+next:' · สูงสุด')+'</small>'+(next?'<small>ขั้นถัดไป · '+describe(id,rank+1)+' · มานา '+(cost+Number(catalog.coreManaPerRank||0))+'</small>':'')+'</div>'+
-          (next?'<button type="button" data-core-upgrade="'+id+'" '+(skillLearningLevel(me)<next||points<=spent?'disabled':'')+'>อัป 1 แต้ม</button>':'')+'</article>';
-      }).join("")+'<p class="note">การหยุดจังหวะมีช่วงต้านต่อเนื่อง Elite และบอสต้านการหยุด · โบนัสพลังจากขั้นใช้กับมอน ส่วน PvP ใช้พลังพื้นฐาน</p><button type="button" id="resetMuayCore" class="secondary" '+(spent?'':'disabled')+'>คืนแต้มวิชา</button>';
-    container.querySelectorAll("[data-core-upgrade]").forEach(button=>button.onclick=()=>room.send("muay_book",{action:"core_upgrade",skillId:button.dataset.coreUpgrade}));
-    $("resetMuayCore").onclick=()=>{if(window.confirm("คืนแต้มวิชานักมวยทั้งหมด?"))room.send("muay_book",{action:"core_reset"});};
+    renderCoreSkillKnowledgeGraph(coreSkillGraphData("muay_boran"), $("muayBookBody"));
   }
 
   const DEFAULT_SWORD_CATALOG = {

@@ -56,3 +56,30 @@ heading before the repeated modal remain byte-for-byte intact. Deduplicating,
 repairing, reordering or scoping them could change the cascade/browser recovery
 and belongs in a separately reviewed visual change. This split does not claim
 completed style encapsulation or visual cleanup.
+
+## Skill artwork and status follow-up
+
+The reviewed snapshot now includes the intentional skill-book selector additions
+and moves the skill-detail status badge beside the name, outside the artwork orb.
+`extraction-baseline.json` and the byte pins in `build-styles.test.mjs` track this
+reviewed stylesheet, not a claim that later visual changes are extraction-only.
+The original extraction metrics above remain historical context. The artwork
+fixture checks all 24 core skills on four surfaces; the class browser suite checks
+image decoding, real book rendering and non-overlapping unlearned/learned/max-rank
+status badges at desktop and mobile widths.
+
+## Radial graph restoration
+
+The reviewed snapshot also includes the four-direction core graph's narrow-screen
+button layout and reduced-motion rules in `skills/033-radial-graph.css`. The
+repeated detail-modal rules in `skills/026` and `skills/029` now keep header and
+actions visible while long localized copy scrolls within the body. See
+`docs/RADIAL-SKILL-GRAPH-20261108.md` for historical references and verification.
+
+## Basic attack orb follow-up
+
+The reviewed style pins include the intentional native attack button reset
+and visible keyboard focus ring. The orb retains its resource fill, dimensions
+and responsive placement. Historical extraction metadata stays unchanged.
+The basic-attack browser fixture checks real touch,
+keyboard, resource labels and one existing attack order per activation.

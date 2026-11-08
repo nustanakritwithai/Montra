@@ -194,11 +194,13 @@
       for(const type of ["guild_state","guild_recruitment","territory_state"])joined.onMessage(type,message=>{if(!earlyHandlers.has(type))earlyMessages.set(type,message);});
       await verifyJoinedSlot(joined, requestedSlot);
       cancelForgeAnimation(false,true);finishEconomyPending(true);
+      clearCombatVfx();
       room = joined;
       clearChatHistory(true);
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; resetCentralMarket(); tradeUnread=false; updateTradeBadge();
       partyState=null; partyInvitation=null; partyUnread=false;
     guildState=null; guildInvitation=null; guildUnread=false;guildDirectory=null;guildRecruitment={pending:null,applications:[]}; updatePartyBadge();
+      resetLootFeed();
       inventoryState = null; personalItems=Object.create(null);cardDrill=null;gearGuides=null;resources=null;seerBoundTarget="";seerPoisoned=false;clearResourceView();
       characterStatus = null; lastCharacterStatusRequest = 0;
       forestObjectiveState=null;forestDefenseState=null;forestEscortState=null;directorEventState=null;
@@ -538,6 +540,8 @@
       joined.onMessage("combat_hit", hit => {
         if (room !== joined) return;
         const forestTarget=joined.state?.monsters?.get?.(hit?.targetId);
+        const struckState = hit?.targetId === MONSTER_ID ? joined.state?.monster : forestTarget;
+        if (!struckState || (struckState.mapId || "ritual_village") !== activeMapId) return;
         const struck=(forestMonsters.get(hit?.targetId)||(hit?.targetId===MONSTER_ID?villageGhost:null))?.metadata?.ghost;
         if(struck){
           struck.hurtAt=performance.now();
@@ -715,8 +719,8 @@
         if(data?.skillId) {
           SFX(data.skillId, { x: caster.x, z: caster.z });
           playSkillVoiceShout(data.skillId, data.playerId);
-          const target=monsterForSpell(spellTargetId || caster.targetId);
-          triggerSkillVfx(data.skillId, caster, target);
+          const target=data.skillId === "shock" ? caster : skillVfxTarget(data.targetId);
+          triggerSkillVfx(data.skillId, caster, target, data.targetId);
         }
         if(data.playerId===localId && data.skillId==="riposte")sentinelCoreStanceUntil=performance.now()+Number(data.durationMs||0);
         if(data.playerId===localId)syncSentinelUI(ownServerCharacter());
@@ -792,8 +796,8 @@
           if(data?.skillId) {
             SFX(data.skillId, { x: caster.x, z: caster.z });
             playSkillVoiceShout(data.skillId, data.playerId);
-            const target=monsterForSpell(spellTargetId || caster.targetId);
-            triggerSkillVfx(data.skillId, caster, target);
+            const target=skillVfxTarget(data.targetId);
+            triggerSkillVfx(data.skillId, caster, target, data.targetId);
           }
         }
         if(data?.playerId===localId){if(data.skillId==="counter")bladeCounterUntil=0;if(data.skillId==="killer_focus")bladeOpeningUntil=0;const name=bladeBookState?.core?.[data.skillId]?.name || bladeBookState?.lessons?.[data.skillId]?.name;if(name)toast(data.skillId==="piercing_edge"?"ตั้งท่าคมอาคมทะลวง":"ใช้ "+name);syncBladeUI(ownServerCharacter());}
@@ -828,18 +832,23 @@
       joined.onMessage("seer_core_used",data=>{
         if(room===joined)recordPracticeCast(data);
         if(room!==joined)return;
-        const caster=joined.state?.players?.get?.(data?.playerId),target=monsterForSpell(data?.targetId) || joined.state?.players?.get?.(data?.targetId);
+        const caster=joined.state?.players?.get?.(data?.playerId),target=skillVfxTarget(data?.targetId);
         if(!caster || (caster.mapId || "ritual_village")!==activeMapId)return;
         playAction(avatars.get(data.playerId),"cast");
         if(data?.skillId) {
           SFX(data.skillId, { x: caster.x, z: caster.z });
           playSkillVoiceShout(data.skillId, data.playerId);
-          triggerSkillVfx(data.skillId, caster, target);
+          triggerSkillVfx(data.skillId, caster, target, data.targetId);
         }
         if(target && data.skillId!=="seer_buffalo")renderMagicBolt({skill:"blessed_rice",from:{x:caster.x,y:caster.y+1,z:caster.z},to:{x:target.x,y:target.y+1,z:target.z}});
         if(data.playerId===localId && data.skillId==="seer_buffalo")toast("กำลังร่ายควายธนู");
       });
-      joined.onMessage("seer_buffalo_hit",data=>{if(room===joined)renderBuffaloBolt(data);});
+      joined.onMessage("seer_buffalo_hit",data=>{
+        if(room!==joined)return;
+        const caster=joined.state?.players?.get?.(data?.playerId);
+        if(!caster || (caster.mapId || "ritual_village")!==activeMapId || !skillVfxTarget(data?.targetId))return;
+        renderBuffaloBolt(data);
+      });
       joined.onMessage("seer_buffalo_result",data=>{if(room===joined && data?.result==="miss")toast("ควายธนูไม่โดนเป้าหมาย");});
       joined.onMessage("seer_binding_visual",data=>{
         if(room!==joined || typeof data?.targetId!=="string")return;
@@ -854,11 +863,12 @@
       joined.onMessage("mender_core_used",data=>{
         if(room===joined)recordPracticeCast(data);
         if(room!==joined)return;
-        const caster=joined.state?.players?.get?.(data?.playerId),target=joined.state?.players?.get?.(data?.targetId);
+        const caster=joined.state?.players?.get?.(data?.playerId),target=skillVfxTarget(data?.targetId);
         if(!caster || (caster.mapId || "ritual_village")!==activeMapId)return;
         playAction(avatars.get(data.playerId),"cast");
         SFX(data.skillId, { x: caster.x, z: caster.z });
         playSkillVoiceShout(data.skillId, data.playerId);
+        triggerSkillVfx(data.skillId, caster, target, data.targetId);
         if(target)eventFx("bolt",{x:target.x,y:target.y+1,z:target.z},{color:"jade"});
         if(data.skillId==="mender_core_ward" && data.area && [data.area.x,data.area.y,data.area.z,data.area.radius,data.area.durationMs].every(Number.isFinite)){
           const previous=priestAreaEffects.get(data.playerId);if(previous)previous.mesh.dispose();
@@ -945,8 +955,8 @@
         if(caster && data?.skillId) {
           SFX(data.skillId, { x: caster.x, z: caster.z });
           playSkillVoiceShout(data.skillId, data.playerId);
-          const target=monsterForSpell(spellTargetId || caster.targetId);
-          triggerSkillVfx(data.skillId, caster, target);
+          const target=skillVfxTarget(data.targetId);
+          triggerSkillVfx(data.skillId, caster, target, data.targetId);
         }
         if(data?.playerId===localId && data.skillId==="chaiya")muayCoreStanceUntil=performance.now()+Number(data.durationMs||0);
       });
@@ -990,13 +1000,13 @@
         if (room!==joined) return;
         const caster=joined.state?.players?.get?.(result?.playerId);
         if (!caster || (caster.mapId || "ritual_village")!==activeMapId) return;
-        const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
+        const target=skillVfxTarget(result.targetId);
         if (target) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
         playAction(avatars.get(result.playerId), swordSkillAction(result.skillId));
         if (result.skillId) {
           SFX(result.skillId, { x: caster.x, z: caster.z });
           playSkillVoiceShout(result.skillId, result.playerId);
-          triggerSkillVfx(result.skillId, caster, target);
+          triggerSkillVfx(result.skillId, caster, target, result.targetId);
         }
         { const catalog=JSON.parse(joined.state?.swordTreeCatalog||"null"),node=catalog?.core?.[result.skillId] || catalog?.nodes?.[result.skillId]; if(node?.name) floatAtPlayer(result.playerId,node.name+"!","shout",{drift:0,side:0,rise:34,life:1400,lift:30}); }
         const ring=B.MeshBuilder.CreateTorus("sword skill ring",{diameter:1.3,thickness:.045,tessellation:16},scene);
@@ -1071,7 +1081,9 @@
             shakeCamera(0.35, 240);
             if (!(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };
           }
-          const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost; if (g) g.attackAt = performance.now();
+          const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost;
+          // A confirmed boss hit starts at the strike, not a fresh windup after damage.
+          if (g) g.attackAt = performance.now() - (g.design?.boss ? 450 : 0);
           if (g && !(performance.now() - (g.criedAt || 0) < 1500)) { ghostVoice(g, gm2, "attack"); g.criedAt = performance.now(); }
           if (hit?.attackerId === MONSTER_ID) villageGhost.metadata.ghost.attackAt = performance.now();
         }
@@ -1242,6 +1254,7 @@
             ? selected : undefined;
         const equipment=Object.fromEntries(Object.entries(payload.equipment||{}).filter(([position,id])=>wearPositions(personalItems[id]?.kind).includes(position)));
         const equipmentSockets=Object.fromEntries(Object.entries(payload.equipmentSockets||{}).filter(([key,card])=>equipment[key] && (card===null || personalItems[card]?.kind==="card")));
+        observeLootInventory(payload);
         inventoryState={version:1,slots,equippedWeaponSlot,equipment,equipmentSockets,equipmentForges:payload.equipmentForges||{},forgeCopies:payload.forgeCopies||{},starterHuntKills:payload.starterHuntKills??0};
         if(drawerActive==="quest" && $("fieldGoalProgress"))renderFieldGoalDrawer(fieldGearGoal());
         itemUsePending = false;

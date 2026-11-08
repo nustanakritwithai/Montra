@@ -9,28 +9,6 @@ import { assembleStyles, checkStyleBoundary, checkStyles, stylesRoot, writeStyle
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
-// Intentional, reviewed style changes after extraction (cosmetic fixes). Every other fragment must
-// still match the extraction evidence byte for byte; the assembled sheet is pinned below.
-const reviewedStyleFragments = new Map([
-{
-  "path": "hud/022-chat-compose-and-vitals.css",
-  "bytes": 6469,
-  "sha256": "bba63466dafb8c940fffdc5f8af9795a55fba1a22f5359f78ac2e1639cf231bf"
-},
-{
-  "path": "audio/044-voice-guidance.css",
-  "bytes": 4615,
-  "sha256": "726eb14d122c28f2a2440119b966dafcf2b2074e2766151e3f6c76382aadcad7"
-},
-{
-  "path": "hud/038-map-shortcuts-and-quick-skills.css",
-  "bytes": 9313,
-  "sha256": "a479b5e78ae23d3656f63b3f18f28500c0dd1d84fe098390bf3f4f9d59b200e7"
-}
-].map(entry => [entry.path, entry]));
-const reviewedStylesBytes = 363553;
-const reviewedStylesSha = 'ec77f6f6f32be6eaa396f46338b1a6581b84b8abe790ab40660acb0da641cf98';
-
 function withStylesFixture(run) {
   const temp = mkdtempSync(join(tmpdir(), 'montra-styles-'));
   try {
@@ -40,26 +18,32 @@ function withStylesFixture(run) {
   } finally { rmSync(temp, { recursive: true, force: true }); }
 }
 
-test('initial style extraction retains all bytes, cascade order, URLs and legacy overrides', () => {
+test('reviewed style snapshot retains pinned bytes, cascade order, URLs and legacy overrides', () => {
   const baseline = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/extraction-baseline.json')));
   const manifest = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/manifest.json')));
   const bytes = checkStyles();
-  assert.equal(baseline.bytes, 355010);
-  assert.equal(baseline.sha256, '0e3cf0696ae9d7676560f3c9554efb23926294e9433789cbe4ce2e9ef6d62b95');
-  assert.equal(bytes.length, reviewedStylesBytes);
-  assert.equal(hash(bytes), reviewedStylesSha);
-  assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
+  assert.equal(bytes.length, 387560);
+  assert.equal(hash(bytes), '67b6b605bbc90b1f2c1885d5bce662c7f4b394e065ae1b377c59efd18f817e4a');
+  // Retain historical extraction evidence, pin only intentionally changed sources.
+  const reviewedStyles = new Map([{"path": "hud/019-vital-orb-resources-and-chat.css", "bytes": 5832, "sha256": "71477a110f30679c2e281eb5e825ab4557d21ee02eebbb49c2a6c16b1a500b7a"}, {"path": "forge/025-artisan-crafting-and-effects.css", "bytes": 21713, "sha256": "8100aa53a6502b7a31377b1ff9bd2dab8b94acb9079435d70ac0c0946df1ee79"}, {"path": "market/045-world-market.css", "bytes": 5767, "sha256": "6202004601ad13fcb19d476017e489cd971bc5ac523d9c74257aac0b43af50a0"}, {"path": "audio/044-voice-guidance.css", "bytes": 4615, "sha256": "726eb14d122c28f2a2440119b966dafcf2b2074e2766151e3f6c76382aadcad7"}, {"path": "hud/022-chat-compose-and-vitals.css", "bytes": 6469, "sha256": "bba63466dafb8c940fffdc5f8af9795a55fba1a22f5359f78ac2e1639cf231bf"}, {"path": "hud/038-map-shortcuts-and-quick-skills.css", "bytes": 9313, "sha256": "a479b5e78ae23d3656f63b3f18f28500c0dd1d84fe098390bf3f4f9d59b200e7"}].map(entry => [entry.path, entry]));
+  const addedStyles = [{"path": "inventory/046-loot-feed.css", "bytes": 2086, "sha256": "d34cce17e03c96ff0e7df9c7c48e08303ca7fefeed5ea89377bd454b19357970"}];
+  assert.deepEqual(manifest.fragments, [...baseline.fragments.map(entry => entry.path), ...addedStyles.map(entry => entry.path)]);
   let nextLine = 1;
   for (const entry of baseline.fragments) {
     const fragment = readFileSync(join(stylesRoot, 'src/styles', entry.path));
-    const reviewed = reviewedStyleFragments.get(entry.path);
-    assert.equal(fragment.length, (reviewed ?? entry).bytes, entry.path);
-    assert.equal(hash(fragment), (reviewed ?? entry).sha256, entry.path);
+    const expected = reviewedStyles.get(entry.path) ?? entry;
+    assert.equal(fragment.length, expected.bytes, entry.path);
+    assert.equal(hash(fragment), expected.sha256, entry.path);
     assert.equal(entry.originalStartLine, nextLine);
-    if (!reviewed) assert.equal(fragment.toString('utf8').split('\n').length - 1, entry.originalEndLine - entry.originalStartLine + 1);
+    if(expected === entry) assert.equal(fragment.toString('utf8').split('\n').length - 1, entry.originalEndLine - entry.originalStartLine + 1);
     nextLine = entry.originalEndLine + 1;
   }
-  assert.equal(nextLine, 5387);
+  assert.equal(nextLine, 5589);
+  for (const entry of addedStyles) {
+    const fragment = readFileSync(join(stylesRoot, 'src/styles', entry.path));
+    assert.equal(fragment.length, entry.bytes, entry.path);
+    assert.equal(hash(fragment), entry.sha256, entry.path);
+  }
   assert.deepEqual(assembleStyles(), assembleStyles());
 });
 

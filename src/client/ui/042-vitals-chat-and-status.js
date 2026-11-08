@@ -4,7 +4,7 @@
   const ORB_SEGS = 24;
   const vitalOrb = (() => {
     const bar = document.querySelector(".learned-bar"); if (!bar) return null;
-    const el = document.createElement("div"); el.className = "vital-orb"; el.setAttribute("role", "group"); el.setAttribute("aria-label", "เลือด มานา และกำลัง");
+    const el = document.createElement("button"); el.type = "button"; el.className = "vital-orb"; el.setAttribute("aria-label", "โจมตีปกติ · เลือด มานา และกำลัง");
     const segs = Array.from({ length: ORB_SEGS }, (_, i) => { const a0 = (i / ORB_SEGS) * Math.PI * 2 - Math.PI / 2 + .035, a1 = ((i + 1) / ORB_SEGS) * Math.PI * 2 - Math.PI / 2 - .035, r = 46;
       return `<path class="vo-seg" d="M${(50 + Math.cos(a0) * r).toFixed(2)} ${(50 + Math.sin(a0) * r).toFixed(2)} A${r} ${r} 0 0 1 ${(50 + Math.cos(a1) * r).toFixed(2)} ${(50 + Math.sin(a1) * r).toFixed(2)}"/>`; }).join("");
     el.innerHTML = `<svg viewBox="0 0 100 100" aria-hidden="true"><defs>
@@ -19,20 +19,21 @@
       <circle class="vo-rim" cx="50" cy="50" r="40.5"/><g class="vo-ring">${segs}</g></svg>
       <span class="vo-num vo-hpn"></span><span class="vo-num vo-mpn"></span>`;
     bar.append(el);
-    // Tapping the orb is the auto-attack command (bound in field-control bindings); the character sheet opens from the player card or the menu.
     return { el, hp: el.querySelector(".vo-hp"), mp: el.querySelector(".vo-mp"), hpn: el.querySelector(".vo-hpn"), mpn: el.querySelector(".vo-mpn"), segs: [...el.querySelectorAll(".vo-seg")], last: "" };
   })();
   function updateVitalOrb(hp, maxHp, st, maxSt, mp, maxMp) {
     if (!vitalOrb) return;
     const fh = Math.max(0, Math.min(1, hp / (maxHp || 1))), hasMp = Number.isFinite(mp) && maxMp > 0, fm = hasMp ? Math.max(0, Math.min(1, mp / maxMp)) : 0;
     const fs = Number.isFinite(st) && maxSt > 0 ? Math.max(0, Math.min(1, st / maxSt)) : 1, lit = Math.round(fs * ORB_SEGS);
-    const key = [fh.toFixed(3), fm.toFixed(3), lit, hasMp, Math.ceil(hp), Math.round(mp)].join("|"); if (key === vitalOrb.last) return; vitalOrb.last = key;
+    const attackHint = "โจมตีปกติ · แตะเพื่อโจมตีมอนสเตอร์";
+    const key = [fh.toFixed(3), fm.toFixed(3), lit, hasMp, Math.ceil(hp), Math.round(mp), maxHp, maxMp, maxSt, st, attackHint].join("|"); if (key === vitalOrb.last) return; vitalOrb.last = key;
     vitalOrb.hp.setAttribute("y", (11 + 78 * (1 - fh)).toFixed(1)); vitalOrb.hp.setAttribute("height", (78 * fh).toFixed(1));
     vitalOrb.mp.setAttribute("y", (11 + 78 * (1 - fm)).toFixed(1)); vitalOrb.mp.setAttribute("height", (78 * fm).toFixed(1));
     vitalOrb.segs.forEach((s, i) => s.classList.toggle("on", i < lit));
     vitalOrb.hpn.textContent = Math.max(0, Math.ceil(hp)); vitalOrb.mpn.textContent = hasMp ? Math.round(mp) : "–";
     vitalOrb.el.classList.toggle("low", fh < .3); vitalOrb.el.classList.toggle("no-mana", !hasMp); vitalOrb.el.classList.toggle("tired", lit <= ORB_SEGS * .2);
-    vitalOrb.el.title = "เลือด " + Math.ceil(hp) + "/" + Math.ceil(maxHp) + " · มานา " + (hasMp ? Math.round(mp) + "/" + Math.round(maxMp) : "ยังไม่เปิดใช้") + " · กำลัง " + (Number.isFinite(st) && maxSt > 0 ? Math.round(st) + "/" + Math.round(maxSt) : "เต็ม");
+    vitalOrb.el.title = attackHint + " · เลือด " + Math.ceil(hp) + "/" + Math.ceil(maxHp) + " · มานา " + (hasMp ? Math.round(mp) + "/" + Math.round(maxMp) : "ยังไม่เปิดใช้") + " · กำลัง " + (Number.isFinite(st) && maxSt > 0 ? Math.round(st) + "/" + Math.round(maxSt) : "เต็ม");
+    vitalOrb.el.setAttribute("aria-label", vitalOrb.el.title);
   }
   const orbWide = matchMedia("(min-width: 820px) and (min-height: 520px), (pointer: fine) and (min-width: 700px) and (orientation: landscape)");
   // Phones: skills wrap the orb on a quarter-circle arc (MOBA style); wide screens keep one horizontal bar.
@@ -84,14 +85,11 @@
     const text = live ? "EXP " + Math.floor(xp).toLocaleString("th-TH") + " / " + Math.floor(max).toLocaleString("th-TH") + " · " + pct.toFixed(1) + "%" : "EXP · เล่นออนไลน์เพื่อเก็บ";
     if (expBase.el.title !== text) { expBase.el.title = text; expBase.el.setAttribute("aria-valuetext", text); }
   }
-  let stripWalletAskedAt = -Infinity;
   function updateResourceStrip() {
     if (!resourceStrip) return;
     const d = new Date(), s = resourceStrip;
     hudSet(s.clock, "rsC", String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"));
     hudSet(s.gold, "rsG", mode === "live" && Number.isFinite(economyGold) ? economyGold.toLocaleString("th-TH") : "–");
-    // The wallet is only sent on request; ask once (throttled) so the strip shows gold right after entering the world.
-    if (economyGold === null && economyReady() && !economyPending && Date.now() - stripWalletAskedAt > 15000) { stripWalletAskedAt = Date.now(); economySend("get_economy", {}); }
     let pots = 0; try { for (const slot of currentBagSlots() || []) if (slot?.itemId === POTION_ITEM_ID) pots += Number(slot.quantity) || 0; } catch {}
     hudSet(s.potion, "rsP", String(pots));
     const partyN = mode === "live" && partyState?.members?.length || 0;
@@ -104,8 +102,7 @@
   const chatFeed = [];
   const CHAT_TAGS = { map: "แผนที่", world: "รวมในห้อง", party: "ปาร์ตี้", private: "กระซิบ", bug: "รายงานบัค" };
   // Tabs over the chat box (like a PC MMO): All plus every channel; each tab counts unread lines.
-  // Short tab labels so every tab fits the small box; chat lines keep the full channel names.
-  const CHAT_BOX_TABS = [["all", "ทั้งหมด"], ["map", "แผนที่"], ["world", "รวม"], ["party", "ปาร์ตี้"], ["private", "กระซิบ"], ["bug", "บัค"]];
+  const CHAT_BOX_TABS = [["all", "ทั้งหมด"], ...Object.entries(CHAT_TAGS)];
   let chatBoxTab = "all"; const chatBoxUnread = Object.fromEntries(CHAT_BOX_TABS.map(([id]) => [id, 0]));
   const chatBox = (() => {
     const game = $("game"); if (!game) return null;

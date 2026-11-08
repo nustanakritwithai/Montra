@@ -37,7 +37,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto;
+  overflow: hidden;
   box-sizing: border-box;
   animation: fadeIn 0.18s ease-out both;
 }
@@ -48,6 +48,7 @@
 }
 
 .skill-modal-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -56,6 +57,8 @@
   padding-bottom: 10px;
 }
 .skill-modal-title {
+  min-width: 0;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -74,9 +77,11 @@
   flex-shrink: 0;
 }
 .skill-modal-badge {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
+  /* Status belongs beside the name, never over the skill artwork. */
+  display: inline-block;
+  align-self: flex-start;
+  white-space: nowrap;
+  line-height: 1.35;
   background: #f2ca83;
   color: #1a1508;
   font-size: 10px;
@@ -86,11 +91,13 @@
   border: 1px solid #fff;
 }
 .skill-modal-naming {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .skill-modal-name {
+  overflow-wrap: anywhere;
   font-size: 16px;
   font-weight: 800;
   color: #f6eedb;
@@ -125,6 +132,8 @@
 }
 
 .skill-modal-body {
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -230,6 +239,7 @@
 }
 
 .skill-modal-actions {
+  flex-shrink: 0;
   display: flex;
   gap: 8px;
   margin-top: 4px;
