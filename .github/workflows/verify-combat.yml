@@ -279,6 +279,18 @@ jobs:
         working-directory: combat-verify
         run: npx tsx blade-core-check.mjs
 
+      - name: Verify six class skill contracts through isolated server
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export PORT=14229 MONTRA_TEST_URL=http://127.0.0.1:14229 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-class-skills-test-XXXXXX)"
+          node --import tsx src/index.ts > class-skills-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14229) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 180s node --import tsx class-skills-contract-integration.mjs || { cat class-skills-server.log; exit 1; }
+
       - name: Early war participation
         working-directory: combat-verify
         run: npx tsx war-entry-check.mjs

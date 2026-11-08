@@ -13,9 +13,29 @@ function copyBuildDependencies(temp) {
   for (const name of ['esbuild', '@esbuild']) cpSync(join(clientRoot, 'node_modules', name), join(temp, 'node_modules', name), { recursive: true });
 }
 
-// Intentional gate, market, flight and cosmetic-safeguard changes. Keep snapshot
+// Intentional gate, market, flight, class-skill, audio and cosmetic-safeguard changes. Keep snapshot
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
+{
+  "path": "ui/046-drawers-and-chat.js",
+  "bytes": 9866,
+  "sha256": "678c70cc8f20b4c04d8cfa161a660506c5de197694535589887042a8d0038aad"
+},
+{
+  "path": "ui/048-class-books-and-hotbars.js",
+  "bytes": 70197,
+  "sha256": "60a5e524e669a9a95fc49e159d785c597e08a04c943ad2348c27a5653e8dad45"
+},
+{
+  "path": "ui/049-skill-graph-and-details.js",
+  "bytes": 53305,
+  "sha256": "5845fd7eb336182b4bfac408e5469f1bdb3d2dc2a5503d93089777ee9ba8afc1"
+},
+{
+  "path": "input/058-field-control-bindings.js",
+  "bytes": 6385,
+  "sha256": "d19a108b7d1405e75a3b8ac767bb27dd653bcfceeccac2c51f3dab06a0d336c0"
+},
 {
   "path": "combat/008-weapon-party-boss-feedback.js",
   "bytes": 49803,
@@ -50,6 +70,16 @@ const reviewedReleaseFragments = new Map([
     "path": "ui/055-market-and-trade.js",
     "bytes": 55367,
     "sha256": "2cf0b6272de3ff4cbd59ab5ca19319cff7b098d0eadfc82f18af8a090ee52678"
+  },
+  {
+    "path": "network/044-state-sync-and-connection.js",
+    "bytes": 138100,
+    "sha256": "01e70fe17a7361aec65c944b6ae592db95534f5ec792694b1dc141c4d0539e7a"
+  },
+  {
+    "path": "audio/051-sound-settings-and-speech.js",
+    "bytes": 9828,
+    "sha256": "01ed1a822470a5af32a7dc3500dbb561d006fa933be0bfaed817f3ec8f791f17"
   }
 ].map(entry => [entry.path, entry]));
 
@@ -59,7 +89,7 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(phase2.integrationBaseCommit, 'ba13f644b24db84e0e606f3ebde7e9b310eab6ca');
+  assert.equal(phase2.integrationBaseCommit, '6c72db0ebf57c455c70ba06b7729aabbab7498c3');
   assert.equal(bytes.length, phase2.output.bytes);
   assert.equal(hash(bytes), phase2.output.sha256);
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
@@ -67,8 +97,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   assert.deepEqual(Object.keys(phase2.changedFragments), ['core/028-session-and-economy-state.js', 'render/004-scene-camera-lights.js', 'network/044-state-sync-and-connection.js']);
   for (const file of reviewedReleaseFragments.keys()) {
     assert(manifest.fragments.includes(file), `Reviewed release fragment is missing: ${file}`);
-    assert(!phase2.changedFragments[file], `Review overlapping fragment changes: ${file}`);
   }
+  assert.deepEqual([...reviewedReleaseFragments.keys()].filter(file=>phase2.changedFragments[file]),['network/044-state-sync-and-connection.js']);
   for (const entry of baseline.fragments) {
     const fragment = readFileSync(join(clientRoot, 'src/client', entry.path));
     const reviewed = phase2.changedFragments[entry.path] || reviewedReleaseFragments.get(entry.path) || entry;

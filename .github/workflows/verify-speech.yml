@@ -11,6 +11,7 @@ on:
       - 'package.json'
       - '.nvmrc'
       - 'deploy/combat/speech-*.cjs'
+      - 'deploy/combat/audio-*.cjs'
       - '.github/workflows/verify-speech.yml'
   pull_request:
     paths:
@@ -23,6 +24,7 @@ on:
       - 'package.json'
       - '.nvmrc'
       - 'deploy/combat/speech-*.cjs'
+      - 'deploy/combat/audio-*.cjs'
       - '.github/workflows/verify-speech.yml'
   workflow_dispatch:
 permissions:
@@ -41,7 +43,7 @@ jobs:
       - name: Prepare generated client from sources
         run: npm run prepare:client
       - name: Check speech state contracts
-        run: node --check audio.js && node --check main.js && node deploy/combat/speech-ui-test.cjs
+        run: node --check audio.js && node --check main.js && node deploy/combat/speech-ui-test.cjs && node deploy/combat/audio-engine-contract-test.cjs && node deploy/combat/audio-event-contract-test.cjs
       - name: Install isolated browser runner
         run: |
           npm install --no-save --package-lock=false playwright@1.56.1

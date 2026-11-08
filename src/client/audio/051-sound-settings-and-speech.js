@@ -31,6 +31,13 @@
     riposte: "ดาบสวนกลับ!",
     protect: "คุ้มกันสหาย!"
   };
+  // A click may only select a target or be rejected. Announce a local skill
+  // only after its authoritative success event, and never interrupt a warning,
+  // NPC answer, or voice preview. These are the same fixed public skill lines.
+  function playSkillVoiceShout(skillId, playerId) {
+    if (playerId !== localId || !SKILL_VOICE_SHOUTS[skillId] || window.MontraAudio?.isSpeaking?.()) return;
+    window.MontraAudio?.speak?.(SKILL_VOICE_SHOUTS[skillId], { persona: "warrior", rate: 1.15 });
+  }
   function soundSettingsHtml() {
     const a = window.MontraAudio?.settings; if (!a) return "";
     const curP = typeof getVoicePersona === "function" ? getVoicePersona() : "elder";

@@ -15,9 +15,10 @@ assert(start >= 0 && end > start, 'shipped speech helper exists');
 const helper = main.slice(start, end);
 const guidanceSource = fs.readFileSync(path.join(root, 'src/client/audio/002-voice-guidance.js'), 'utf8');
 const soundSettingsSource = fs.readFileSync(path.join(root, 'src/client/audio/051-sound-settings-and-speech.js'), 'utf8');
+const skillVoiceHelper = soundSettingsSource.slice(soundSettingsSource.indexOf('  const SKILL_VOICE_SHOUTS ='), soundSettingsSource.indexOf('  function soundSettingsHtml('));
 assert(main.includes(guidanceSource) && main.includes(soundSettingsSource), 'guidance fixture uses exact shipped source');
 const guidanceStyles = fs.readFileSync(path.join(root, 'src/styles/audio/044-voice-guidance.css'), 'utf8');
-const allowedSpeech = new Set(['สวัสดี',
+const allowedSpeech = new Set(['สวัสดี', 'ฟันพุทธไธสวรรย์!',
   'จิตวิญญาณแห่งวิญญาณผู้พิทักษ์ สถิตเคียงข้างเจ้าแล้ว',
   'สวัสดี ยินดีต้อนรับสู่อาณาจักรมนตรา ระบบเสียงผู้ชี้แนะพร้อมเคียงข้างเจ้า',
   'ยินดีต้อนรับสู่แดนมนตรา... เจ้าเพิ่งฟื้นจากพิธีสะกดวิญญาณ แตะบนผืนดินเพื่อก้าวเดิน หรือลากหน้าจอเพื่อหมุนมองทิศทาง ดินแดนลี้ลับนี้รอเจ้าอยู่',
@@ -47,12 +48,16 @@ const guidanceFixture = `<!doctype html><meta charset="utf-8"><meta name="viewpo
 document.querySelector('#move').onclick=()=>triggerVoiceGuidance('move');
 document.querySelector('#target').onclick=()=>triggerVoiceGuidance('target');
 document.querySelector('#settings').innerHTML=soundSettingsHtml();bindSoundSettings(document.querySelector('#settings'));</script>`;
+const skillFixture = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Accepted skill voice fixture</title>
+<button id="cast" style="min-height:48px">Cast then receive acceptance</button>
+<script src="/audio.js"></script><script>const localId='me';${skillVoiceHelper}
+document.querySelector('#cast').onclick=()=>setTimeout(()=>playSkillVoiceShout('phuttha_core','me'),80);</script>`;
 (async () => {
   const out = path.join(root, 'speech-browser-evidence'); fs.mkdirSync(out, { recursive: true });
   const report = { cases: [], errors: [], blockedOrigins: [], limits: 'Synthetic media fixture; no full game, physical device, native Thai voice, or Google service verification.' };
   const server = http.createServer((req, res) => {
     if (req.url === '/audio.js') { res.setHeader('Content-Type', 'text/javascript'); return res.end(fs.readFileSync(path.join(root, 'audio.js'))); }
-    res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(req.url === '/guidance' ? guidanceFixture : fixture);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(req.url === '/guidance' ? guidanceFixture : req.url === '/skills' ? skillFixture : fixture);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
@@ -83,6 +88,7 @@ document.querySelector('#settings').innerHTML=soundSettingsHtml();bindSoundSetti
         const RealAudio = window.Audio;
         window.Audio = function (url) {
           const audio = new RealAudio(url);
+          window.__lastMedia = audio;
           for (const type of ['playing', 'ended', 'pause']) audio.addEventListener(type, () => window.__mediaEvents.push(type));
           audio.addEventListener('playing', () => window.__mediaDetails.push({ rate: audio.playbackRate, volume: audio.volume }));
           return audio; // Still a genuine, detached HTMLAudioElement.
@@ -119,6 +125,22 @@ document.querySelector('#settings').innerHTML=soundSettingsHtml();bindSoundSetti
       await page.evaluate(() => MontraAudio.set('muted', true)); const beforeMute = requests;
       await tap('#listen'); await label('Listen'); assert.match(await status.textContent(), /เปิดเสียง/); assert.equal(requests, beforeMute);
       await page.evaluate(() => MontraAudio.set('muted', false));
+      // Active playback obeys controls too, not only requests made after muting.
+      toneSeconds = 15;
+      for (const [key, value, restore] of [['muted', true, false], ['master', 0, .8], ['voice', 0, .85]]) {
+        await tap('#listen'); await label('⏹ หยุดเสียงพูด');
+        await page.evaluate(([key, value]) => MontraAudio.set(key, value), [key, value]);
+        await label('Listen');
+        assert.equal(await page.evaluate(() => MontraAudio.isSpeaking()), false, key + ' stops active speech');
+        await page.evaluate(([key, value]) => MontraAudio.set(key, value), [key, restore]);
+        assert.equal(await page.evaluate(() => MontraAudio.isSpeaking()), false, 'unmute never replays');
+      }
+      await tap('#listen'); await label('⏹ หยุดเสียงพูด');
+      await page.evaluate(() => MontraAudio.set('master', .25));
+      assert.equal(await page.evaluate(() => window.__lastMedia.volume), .25 * .85);
+      await tap('#close'); await label('Listen');
+      await page.evaluate(() => MontraAudio.set('master', .8));
+      toneSeconds = 2;
       // Deterministic NotAllowedError injection tests UI handling, not actual OS policy.
       await page.evaluate(() => { window.__realPlay = HTMLMediaElement.prototype.play; HTMLMediaElement.prototype.play = function () { return Promise.reject(new DOMException('Test rejection', 'NotAllowedError')); }; });
       await tap('#listen'); await label('Listen'); assert.match(await status.textContent(), /เบราว์เซอร์/);
@@ -129,7 +151,7 @@ document.querySelector('#settings').innerHTML=soundSettingsHtml();bindSoundSetti
       await page.screenshot({ path: path.join(out, `${name}-playing.png`), fullPage: true });
       await label('Listen');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'fixture does not overflow mobile viewport');
-      report.cases.push({ name, requests, pendingCancel: true, realPlayingAndEnded: true, rebindAndStop: true, mute: true, injectedRejection: true, networkFailureAndRetry: true });
+      report.cases.push({ name, requests, pendingCancel: true, realPlayingAndEnded: true, rebindAndStop: true, mute: true, activeMuteAndZero: true, liveMediaVolume: true, injectedRejection: true, networkFailureAndRetry: true });
       // The actual guidance and settings source must recover from blocked audio,
       // not just the generic speech button used by NPCs.
       mode = 'network'; await page.goto(origin + '/guidance');
@@ -169,6 +191,17 @@ document.querySelector('#settings').innerHTML=soundSettingsHtml();bindSoundSetti
       await page.screenshot({ path: path.join(out, `${name}-selected-persona.png`), fullPage: true });
       await page.waitForFunction(() => document.querySelector('#testVoiceBtn').textContent !== '⏹ หยุดเสียงพูด');
       report.cases.push({ name: `${name}-guidance`, failedNotConsumed: true, explicitRetryStarted: true, repeatedEventsBounded: true, newerHudRetained: true, replayPreservesOtherStorage: true, skip: true, currentPersonaPreview: true });
+      // The newly authoritative path is asynchronous, unlike an NPC listen tap.
+      // Chromium decoding is real; rejected playback is injected, not OS-policy proof.
+      mode = 'tone'; toneSeconds = 2; await page.goto(origin + '/skills');
+      await tap('#cast');
+      await page.waitForFunction(() => window.__mediaEvents.includes('playing'));
+      await page.waitForFunction(() => window.__mediaEvents.includes('ended'));
+      assert.equal(await page.evaluate(() => MontraAudio.isSpeaking()), false);
+      await page.evaluate(() => { window.__rejectedSkillPlays = 0; HTMLMediaElement.prototype.play = function () { window.__rejectedSkillPlays++; return Promise.reject(new DOMException('Test async policy rejection', 'NotAllowedError')); }; });
+      await tap('#cast');
+      await page.waitForFunction(() => window.__rejectedSkillPlays === 1 && !MontraAudio.isSpeaking());
+      report.cases.push({ name: `${name}-accepted-skill`, delayedMediaPlayingAndEnded: true, injectedAutoplayRejectionSettled: true });
       await context.close();
     }
     assert.deepEqual(report.errors, []); assert.deepEqual(report.blockedOrigins, []);

@@ -2,10 +2,10 @@
   "format": 1,
   "historicalSourceCommit": "2f4ee0a",
   "phase2BaseCommit": "0a1ce6b8008531a1f7e6dc8f909271a40ec574f6",
-  "integrationBaseCommit": "ba13f644b24db84e0e606f3ebde7e9b310eab6ca",
+  "integrationBaseCommit": "6c72db0ebf57c455c70ba06b7729aabbab7498c3",
   "output": {
-    "bytes": 1462294,
-    "sha256": "8bc5920291dd508f66ff7db1bbad5b59faae819a5f5e137b15c5bfced304558e"
+    "bytes": 1466256,
+    "sha256": "fcd49a422a00cbe74a50f9106302b787e260b560fa0b207b3acfec6352beb208"
   },
   "changedFragments": {
     "core/028-session-and-economy-state.js": {
@@ -17,8 +17,8 @@
       "sha256": "e1857a53c99050a6256fdef0bf3c2688fe5de12978c147fbc65d8da865ce9a33"
     },
     "network/044-state-sync-and-connection.js": {
-      "bytes": 134325,
-      "sha256": "cc43394b37ae3fdf1b95679aec02155d7d23490c2e7cc2d5e2917a5e61f96114"
+      "bytes": 135144,
+      "sha256": "f32e09ea4e732553d134157372943e4f5240ceb577158ae4f44633ce76740984"
     }
   },
   "moduleSources": {

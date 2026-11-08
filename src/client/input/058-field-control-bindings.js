@@ -32,11 +32,7 @@
   $("noticeTrade").onclick=()=>{economyTab="trade";openEconomy();};
   $("menuQuest").onclick=openCurrentQuest;
   $("menuGuild").onclick=openGuild;
-  $("quickSkills").onclick=()=>{
-    const entry=$("fieldMenu")?.querySelector(".book-entry:not([hidden])");
-    if(entry) entry.click();
-    else openSwordTree();
-  };
+  $("quickSkills").onclick=openClassSkillBook;
   $("mapButton").onclick=openMap;
   $("chatButton").onclick=openChat;
   $("marketButton").onclick=openEconomy;

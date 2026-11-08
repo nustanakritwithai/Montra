@@ -1,7 +1,8 @@
 const fs=require("node:fs"),vm=require("node:vm"),assert=require("node:assert/strict");
 const source=fs.readFileSync("main.js","utf8");
 const learning=source.slice(source.indexOf("  function skillLearningLevel("),source.indexOf("  function skillGraphModel("));
-function bookSource(start,end){return "const gearGuides=null;"+learning+source.slice(start,end);}
+const identity=source.slice(source.indexOf("  function classSkillBookIdentity("),source.indexOf("  function openClassBookDrawer("));
+function bookSource(start,end){return "const gearGuides=null;"+learning+identity+source.slice(start,end);}
 {
   const level=vm.runInNewContext(learning+"\nskillLearningLevel",{gearGuides:{path:"sentinel",level:35,learningLevel:80}});
   assert.equal(level({pathId:"sentinel",level:35}),80);
@@ -112,7 +113,7 @@ for(const spec of [
   const ids=["phuttha_core","sritra_core","atamat_core","chumphon_core"],core=Object.fromEntries(ids.map(id=>[id,{name:id,description:id,stamina:20,cooldownMs:10000}]));
   const progress=Array.from({length:9},()=>({phuttha_core:{scale:1,finalPower:.65},sritra_core:{durationMs:2000,damageFactor:.7,counterPower:1,counterIntervalMs:400},atamat_core:{range:3.5,power:.85},chumphon_core:{range:8,defense:.1,durationMs:8000}}));
   const data={me:{level:25,swordTreeData:"v"},tree:{coreRanks:{sritra_core:1}},catalog:{core,coreLevels:[5,15,25,35,45,60,80,100],corePointLevels:[5,15,25,35,45,55,65,75,80,85,95,100],coreProgress:progress}};
-  const context={swordData:()=>data,$:id=>id==="swordTreeBody"?container:dummy,swordTreeRenderKey:"",window:{confirm:()=>false},room:{send(){}}};
+  const context={mode:"live",localId:"fixture",ownServerCharacter:()=>data.me,swordData:()=>data,$:id=>id==="swordTreeBody"?container:dummy,swordTreeRenderKey:"",window:{confirm:()=>false},room:{send(){}}};
   vm.runInNewContext(bookSource(start,end)+"\nrenderSwordTree();",context);
   assert.ok(container.innerHTML.includes("แต้มวิชา 2 / 3"));assert.ok(container.innerHTML.includes("ขั้น 1/8"));
   assert.ok(container.innerHTML.includes('data-sword-core-upgrade="sritra_core"'));assert.ok(container.innerHTML.includes("สวนซ้ำทุก"));

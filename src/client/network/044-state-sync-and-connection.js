@@ -672,6 +672,7 @@
         if(action)playAction(avatars.get(data.playerId),action);
         if(data?.skillId) {
           SFX(data.skillId, { x: caster.x, z: caster.z });
+          playSkillVoiceShout(data.skillId, data.playerId);
           const target=monsterForSpell(spellTargetId || caster.targetId);
           triggerSkillVfx(data.skillId, caster, target);
         }
@@ -724,7 +725,14 @@
         if(room===joined && data?.active && data.skillId)recordPracticeCast({playerId:localId,skillId:data.skillId});
         if(room!==joined)return;
         bladeCloakUntil=data?.active ? performance.now()+Math.max(0,Math.min(9000,Number(data.durationMs)||0)) : 0;
-        if (data?.active) eventFx("cloak",getLocalAvatar());
+        if (data?.active) {
+          const caster=getLocalAvatar();
+          if(caster && data.skillId==="blade_vanish") {
+            SFX(data.skillId, { x: caster.x, z: caster.z });
+            playSkillVoiceShout(data.skillId, localId);
+          }
+          eventFx("cloak",caster);
+        }
         syncBladeUI(ownServerCharacter());toast(data?.active ? "อำพรางตัวแล้ว" : data?.reason==="interrupted" ? "การร่ายพรางถูกขัดจังหวะ" : "การอำพรางสิ้นสุด");
       });
       joined.onMessage("blade_cloak_cast",data=>{if(room===joined){playAction(avatars.get(data?.playerId),"cast");if(data?.playerId===localId)toast("กำลังร่ายพรางกาย");}});
@@ -741,6 +749,7 @@
           else playAction(avatars.get(data.playerId),"slash");
           if(data?.skillId) {
             SFX(data.skillId, { x: caster.x, z: caster.z });
+            playSkillVoiceShout(data.skillId, data.playerId);
             const target=monsterForSpell(spellTargetId || caster.targetId);
             triggerSkillVfx(data.skillId, caster, target);
           }
@@ -763,6 +772,7 @@
         if(room===joined)recordPracticeCast(data);
         if (room!==joined) return;
         const caster=joined.state?.players?.get?.(data?.playerId);
+        if (!caster || (caster.mapId || "ritual_village")!==activeMapId) return;
         if (data?.skillId && caster) SFX(data.skillId, { x: caster.x, z: caster.z });
         if (data?.playerId!==localId) return;
         const name=occultBookState?.lessons?.[data.skillId]?.name;
@@ -781,6 +791,7 @@
         playAction(avatars.get(data.playerId),"cast");
         if(data?.skillId) {
           SFX(data.skillId, { x: caster.x, z: caster.z });
+          playSkillVoiceShout(data.skillId, data.playerId);
           triggerSkillVfx(data.skillId, caster, target);
         }
         if(target && data.skillId!=="seer_buffalo")renderMagicBolt({skill:"blessed_rice",from:{x:caster.x,y:caster.y+1,z:caster.z},to:{x:target.x,y:target.y+1,z:target.z}});
@@ -804,6 +815,8 @@
         const caster=joined.state?.players?.get?.(data?.playerId),target=joined.state?.players?.get?.(data?.targetId);
         if(!caster || (caster.mapId || "ritual_village")!==activeMapId)return;
         playAction(avatars.get(data.playerId),"cast");
+        SFX(data.skillId, { x: caster.x, z: caster.z });
+        playSkillVoiceShout(data.skillId, data.playerId);
         if(target)eventFx("bolt",{x:target.x,y:target.y+1,z:target.z},{color:"jade"});
         if(data.skillId==="mender_core_ward" && data.area && [data.area.x,data.area.y,data.area.z,data.area.radius,data.area.durationMs].every(Number.isFinite)){
           const previous=priestAreaEffects.get(data.playerId);if(previous)previous.mesh.dispose();
@@ -884,10 +897,12 @@
         if(room===joined)recordPracticeCast(data);
         if(room!==joined)return;
         const caster=joined.state?.players?.get?.(data?.playerId);
+        if(!caster || (caster.mapId || "ritual_village")!==activeMapId)return;
         const action={chaiya:"guard",korat:"m_basic",lopburi:"m_side",thasao:"flurry"}[data?.skillId];
         if(action)playAction(avatars.get(data?.playerId),action);
         if(caster && data?.skillId) {
           SFX(data.skillId, { x: caster.x, z: caster.z });
+          playSkillVoiceShout(data.skillId, data.playerId);
           const target=monsterForSpell(spellTargetId || caster.targetId);
           triggerSkillVfx(data.skillId, caster, target);
         }
@@ -938,6 +953,7 @@
         playAction(avatars.get(result.playerId), swordSkillAction(result.skillId));
         if (result.skillId) {
           SFX(result.skillId, { x: caster.x, z: caster.z });
+          playSkillVoiceShout(result.skillId, result.playerId);
           triggerSkillVfx(result.skillId, caster, target);
         }
         { const catalog=JSON.parse(joined.state?.swordTreeCatalog||"null"),node=catalog?.core?.[result.skillId] || catalog?.nodes?.[result.skillId]; if(node?.name) floatAtPlayer(result.playerId,node.name+"!","shout",{drift:0,side:0,rise:34,life:1400,lift:30}); }

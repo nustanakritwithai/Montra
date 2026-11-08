@@ -90,3 +90,11 @@ the reviewed market navigation correction (`055`), and the assembled bundle.
 All other fragments match the reconciled speech, crafting, and market snapshot.
 The compatibility fixes do not regenerate that snapshot. See
 `docs/COMBINED-RELEASE-115-136-137.md` for scope and deployment limits.
+
+## Reviewed class-skill correction
+
+The class-skill panel fix changes `046`, `048`, `049` and `058`: authoritative
+class routing, LIVE/DEMO separation, book/detail ownership and canonical sword
+core commands. Their explicit build-test pins change; the historical snapshot
+and every other fragment remain protected. See
+[`CLASS-SKILL-PANELS.md`](../../docs/CLASS-SKILL-PANELS.md) for contracts and gates.
