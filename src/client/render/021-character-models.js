@@ -408,7 +408,8 @@
     },
     veil(p) { // Blade: a dark cloth veil over the lower face, tails at the nape.
       const k = gearKit(), cloth = gearMat("shadow veil", "#1d1c22");
-      k.cyl(0, 1.565, .03, .08, .2, .19, cloth, 14).scaling.z = 1.05; k.box(0, 1.56, -.13, .05, .2, .01, cloth).rotation.x = .3;
+      // Face at mouth height: half-width ~.07, front ~.097 (centre z ~.013); the veil runs from under the nose to the chin.
+      k.cyl(0, 1.553, .012, .062, .158, .15, cloth, 16).scaling.z = 1.3; k.box(0, 1.53, -.095, .045, .16, .008, cloth).rotation.x = .25;
       return [["Head", k.take()]];
     },
     shield(p) { // Sentinel: round rattan dang with a brass boss, on the left forearm.
@@ -457,7 +458,8 @@
     }
     if (/^acc_earrings/.test(family)) {
       const gem = family.includes("lotus") ? GEM.heal : family.includes("focus") ? GEM.spell : family.includes("ward") ? GEM.guard : GEM.atk;
-      for (const s of [-1, 1]) { k.cyl(s * .088, 1.585, .005, .015, .018, .018, gold, 8); k.ball(s * .088, 1.56, .005, .025, gearMat("gem " + gem, gem, "#120808", .5), 6); }
+      // Ear lobes sit at about (+-.08, 1.6, -.01): a small stud with the gem just below it.
+      for (const s of [-1, 1]) { k.cyl(s * .082, 1.605, -.01, .012, .014, .014, gold, 8); k.ball(s * .083, 1.588, -.01, .018, gearMat("gem " + gem, gem, "#120808", .5), 6); }
       return [["Head", k.take()]];
     }
     return [];
