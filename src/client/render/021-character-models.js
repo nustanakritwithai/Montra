@@ -163,7 +163,8 @@
   // fingers point -X and the thumb +Z. A fist grip holds every weapon along
   // the thumb axis, so blades point forward-up and the staff stands upright
   // once the elbow bends.
-  const HAND_GRIPS = { ritual_dagger: new B.Vector3(0, .15, 1), arcane_sword: new B.Vector3(0, .1, 1), spirit_staff: new B.Vector3(0, 0, 1) };
+  const HAND_GRIPS = { ritual_dagger: new B.Vector3(0, .15, 1), arcane_sword: new B.Vector3(0, .1, 1), spirit_staff: new B.Vector3(0, 0, 1),
+    sentinel_pike: new B.Vector3(0, .05, 1), seer_wand: new B.Vector3(0, .25, 1), mender_crook: new B.Vector3(0, 0, 1) };
   const DEFAULT_GRIP = new B.Vector3(0, .1, 1);
   function attachShamanModel(a) {
     if (shamanBody === null) { shamanWaiting.push(a); return; }
@@ -188,9 +189,311 @@
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;
     a.skin = { nodes, copy, holder, body, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
+    if (a.gearLook) setAvatarGear(a, a.gearLook);
     if(a.npc){
       // Rest pose from the player rig, applied once instead of animating every NPC.
       for(const [name,x,y,z] of [["RightArm",-.62,-.35,1.12],["RightForeArm",0,2,0],["LeftArm",-.58,.35,-1.12],["LeftForeArm",0,-2,0]])
         if(nodes[name])nodes[name].rotationQuaternion=B.Quaternion.RotationYawPitchRoll(y,x,z);
     }
+  }
+  // ---- Worn equipment on the skinned body (assets/characters/thai-male.glb) ----
+  // Armour, off-hands and jewellery are built procedurally in model space (metres, T-pose, facing +Z;
+  // every rest rotation is identity) and re-based onto the bone that carries them, so they bend with
+  // the rig without any skinning. One parametric builder per slot covers every armour weight
+  // (cloth, hide, medium, heavy) and tier, so ~1,100 item IDs share a few dozen visual families.
+  // The server sends only `gearLook` ("slot=family:tier;…"): visible families, never bag contents.
+  const GEAR_REST = {
+    Hips: [0, .88, 0], Spine: [0, 1.032, -.005], Chest: [0, 1.337, -.004], Head: [0, 1.539, .004],
+    LeftArm: [.165, 1.385, -.004], RightArm: [-.165, 1.385, -.004], LeftForeArm: [.395, 1.366, -.002], RightForeArm: [-.395, 1.366, -.002],
+    LeftHand: [.635, 1.354, 0], RightHand: [-.635, 1.354, 0], LeftUpLeg: [.09, .822, .004], RightUpLeg: [-.09, .822, .004],
+    LeftLeg: [.094, .472, -.002], RightLeg: [-.094, .472, -.002], LeftFoot: [.096, .119, -.015], RightFoot: [-.096, .119, -.015],
+  };
+  // Field kits (arm_field_<path>) wear the class's armour weight.
+  const FIELD_WEIGHT = { muay_boran: "hide", phutthaisawan: "medium", blade: "hide", sentinel: "heavy", seer: "cloth", mender: "cloth" };
+  const gearMats = new Map();
+  function gearMat(name, hex, emissive, spec = .06) {
+    if (gearMats.has(name)) return gearMats.get(name);
+    const m = mat("gear " + name, hex, emissive); m.specularColor = new B.Color3(spec, spec, spec);
+    if (spec > .2) m.specularPower = 48;
+    gearMats.set(name, m); return m;
+  }
+  // Palette per armour weight; the tier adds gold trim (3+), red lacquer (5+) and a soft glow (7+).
+  function gearPalette(weight, tier) {
+    const t = Math.max(1, Math.min(9, tier | 0));
+    const base = {
+      cloth: [["cloth indigo", "#2c3a5c"], ["cloth saffron", "#9a6a22"]],
+      hide: [["hide", "#5e4029"], ["hide dark", "#3f2a1b"]],
+      medium: [["lamellar", "#5b5148"], ["lamellar cord", "#7a2a1f"]],
+      heavy: [["plate", t >= 5 ? "#3d4048" : "#70747a"], ["plate dark", "#2b2d33"]],
+    }[weight] || [["plate", "#70747a"], ["plate dark", "#2b2d33"]];
+    const spec = weight === "heavy" ? .35 : weight === "medium" ? .18 : .05;
+    return {
+      main: gearMat(base[0][0] + (t >= 5 ? " fine" : ""), base[0][1], undefined, spec),
+      second: gearMat(base[1][0], base[1][1], undefined, spec * .6),
+      trim: t >= 3 ? gearMat("gold trim", "#c9a24a", "#2a1d06", .4) : gearMat("bronze trim", "#7b5a33", undefined, .25),
+      lacquer: t >= 5 ? gearMat("red lacquer", "#7a1c16", "#1a0302", .3) : base[1] && gearMat(base[1][0], base[1][1]),
+      glow: t >= 7 ? amuletGlow : null,
+      leather: gearMat("strap leather", "#3a2617"),
+      tier: t,
+    };
+  }
+  // Piece helpers: everything is created in model space and merged per bone.
+  function gearKit() {
+    let parts = [];
+    const at = (mesh, x, y, z, m) => { mesh.position.set(x, y, z); mesh.material = m; mesh.isPickable = false; parts.push(mesh); return mesh; };
+    const k = {
+      box: (x, y, z, w, h, d, m) => at(B.MeshBuilder.CreateBox("gear", { width: w, height: h, depth: d }, scene), x, y, z, m),
+      cyl: (x, y, z, h, top, bottom, m, n = 10) => at(B.MeshBuilder.CreateCylinder("gear", { height: h, diameterTop: top, diameterBottom: bottom, tessellation: n }, scene), x, y, z, m),
+      ball: (x, y, z, d, m, seg = 8) => at(B.MeshBuilder.CreateSphere("gear", { diameter: d, segments: seg }, scene), x, y, z, m),
+      dome: (x, y, z, d, m, slice = .5) => at(B.MeshBuilder.CreateSphere("gear", { diameter: d, segments: 10, slice, sideOrientation: B.Mesh.DOUBLESIDE }, scene), x, y, z, m),
+      // Elliptic tube through rings [y, halfWidth, halfDepth, zOffset].
+      loft: (rings, m, segs = 14) => {
+        const paths = rings.map(([y, w, d, zo = 0]) => { const ring = []; for (let i = 0; i <= segs; i++) { const t = i / segs * Math.PI * 2; ring.push(new B.Vector3(Math.cos(t) * w, y, zo + Math.sin(t) * d)); } return ring; });
+        const mesh = B.MeshBuilder.CreateRibbon("gear loft", { pathArray: paths, sideOrientation: B.Mesh.DOUBLESIDE }, scene);
+        mesh.material = m; mesh.isPickable = false; parts.push(mesh); return mesh;
+      },
+      // A sleeve along the X axis (arms in the T-pose): from x0 to x1 around (y, z).
+      sleeve: (x0, x1, y, z, r0, r1, m, n = 10) => { const c = k.cyl((x0 + x1) / 2, y, z, Math.abs(x1 - x0), r1 * 2, r0 * 2, m, n); c.rotation.z = (x1 > x0 ? -1 : 1) * Math.PI / 2; return c; },
+      take: () => { const out = parts; parts = []; return out; },
+    };
+    return k;
+  }
+  function gearOnBone(nodes, bone, parts, name) {
+    const node = nodes[bone];
+    if (!parts.length) return null;
+    if (!node) { parts.forEach(p => p.dispose()); return null; }
+    const mesh = mergedSegment(parts, node, name), j = GEAR_REST[bone];
+    mesh.position.set(-j[0], -j[1], -j[2]); mesh.alwaysSelectAsActiveMesh = true;
+    return mesh;
+  }
+  // ---- Armour slots. Each builder returns [bone, parts] pairs. ----
+  const ARMOR_BUILDERS = {
+    head(w, p) {
+      const k = gearKit();
+      if (w === "cloth") {
+        k.cyl(0, 1.655, .004, .04, .232, .232, p.main, 14).scaling.z = 1.1; k.box(-.02, 1.62, -.13, .06, .14, .02, p.main).rotation.z = .3;
+        if (p.tier >= 3) k.box(0, 1.66, .12, .05, .05, .02, p.trim);
+      } else if (w === "hide") {
+        k.dome(0, 1.64, .0, .27, p.main).scaling.set(1, .95, 1.08); k.cyl(0, 1.64, 0, .03, .275, .275, p.second, 14);
+      } else {
+        // Medium: lamellar cap with neck flaps; heavy: Thai war helmet with a brim, cheek plates and a tall gold spire.
+        const heavy = w === "heavy";
+        k.dome(0, 1.635, 0, heavy ? .29 : .275, p.main).scaling.set(1, heavy ? 1.15 : 1, 1.08);
+        k.cyl(0, 1.637, 0, .035, heavy ? .33 : .29, heavy ? .33 : .29, heavy ? p.trim : p.second, 16).scaling.z = 1.08;
+        for (const s of [-1, 1]) k.box(s * .13, 1.57, .0, .02, .13, .15, p.main).rotation.z = s * .12;
+        k.box(0, 1.55, -.12, .2, .14, .02, p.second).rotation.x = .25;
+        if (heavy) {
+          k.cyl(0, 1.84, 0, .2, 0, .07, p.trim, 8); k.cyl(0, 1.755, 0, .05, .08, .1, p.lacquer, 10);
+          for (let i = 0; i < 3; i++) k.cyl(0, 1.95 + i * .035, 0, .02, .03 - i * .007, .03 - i * .007, p.trim, 8);
+          k.box(0, 1.69, .14, .04, .1, .02, p.trim);
+          if (p.glow) k.ball(0, 2.02, 0, .04, p.glow, 6);
+        }
+      }
+      return [["Head", k.take()]];
+    },
+    shoulders(w, p) {
+      const out = [];
+      for (const [side, bone] of [[1, "LeftArm"], [-1, "RightArm"]]) {
+        const k = gearKit(), x = side * .19;
+        if (w === "cloth") { k.dome(x, 1.41, 0, .17, p.main).scaling.set(1.1, .55, 1.05); }
+        else if (w === "hide") { k.dome(x, 1.415, 0, .18, p.main).scaling.set(1.15, .6, 1.1); k.box(x - side * .02, 1.4, 0, .02, .05, .17, p.leather); }
+        else {
+          const n = w === "heavy" ? 3 : 2;
+          for (let i = 0; i < n; i++) {
+            const plate = k.dome(x + side * i * .025, 1.43 - i * .045, 0, .2 - i * .015, i ? p.second : p.main);
+            plate.scaling.set(1.15, .5, 1.1); plate.rotation.z = -side * (.35 + i * .12);
+          }
+          k.cyl(x, 1.44, 0, .015, .205, .205, p.trim, 14).rotation.z = -side * .35;
+          if (w === "heavy" && p.tier >= 5) k.cyl(x + side * .09, 1.47, 0, .1, 0, .04, p.trim, 6).rotation.z = -side * 1.1;
+        }
+        out.push([bone, k.take()]);
+      }
+      return out;
+    },
+    chest(w, p) {
+      const up = gearKit(), mid = gearKit(), heavy = w === "heavy";
+      const puff = { cloth: .012, hide: .018, medium: .024, heavy: .032 }[w] ?? .02;
+      up.loft([[1.2, .185 + puff, .135 + puff, .005], [1.3, .205 + puff, .148 + puff, .005], [1.4, .215 + puff, .135 + puff, -.002], [1.455, .14 + puff * .6, .095 + puff * .5, -.004]], p.main, 16);
+      mid.loft([[1.0, .168 + puff, .12 + puff, .004], [1.1, .172 + puff, .125 + puff, .004], [1.22, .187 + puff, .137 + puff, .005]], w === "cloth" ? p.main : p.second, 16);
+      if (w === "cloth") { up.box(0, 1.2, .14, .05, .42, .015, p.second).rotation.z = .55; mid.cyl(0, 1.03, .004, .06, .36, .35, p.second, 14).scaling.z = .75; }
+      if (w === "hide") { for (const s of [-1, 1]) up.box(s * .07, 1.26, .15, .03, .38, .012, p.leather).rotation.z = s * .5; mid.cyl(0, 1.04, .004, .05, .37, .36, p.leather, 14).scaling.z = .75; }
+      if (w === "medium" || heavy) {
+        // Lamellar rows across the front and back; heavy adds the round breast disc (ทับทรวง) and a back plate.
+        for (let r = 0; r < 4; r++) for (let c = -3; c <= 3; c++) {
+          const y = 1.17 + r * .06, z = .15 + puff - Math.abs(c) * .012;
+          up.box(c * .05, y, z, .045, .055, .012, (r + c) % 2 ? p.main : p.second);
+        }
+        mid.cyl(0, 1.03, .004, .07, .38, .37, p.lacquer, 16).scaling.z = .76;
+        mid.box(0, 1.03, .145, .07, .06, .015, p.trim);
+        if (heavy) {
+          const disc = up.cyl(0, 1.33, .182, .025, .15, .15, p.trim, 18); disc.rotation.x = Math.PI / 2;
+          const inner = up.cyl(0, 1.33, .196, .01, .09, .09, p.lacquer, 16); inner.rotation.x = Math.PI / 2;
+          if (p.glow) { const g = up.cyl(0, 1.33, .203, .006, .04, .04, p.glow, 10); g.rotation.x = Math.PI / 2; }
+          up.box(0, 1.3, -.158, .3, .3, .02, p.main);
+          for (const s of [-1, 1]) up.box(s * .12, 1.43, .03, .05, .02, .26, p.trim);
+        }
+      }
+      return [["Chest", up.take()], ["Spine", mid.take()]];
+    },
+    arms(w, p) {
+      const out = [];
+      for (const [side, bone] of [[1, "LeftForeArm"], [-1, "RightForeArm"]]) {
+        const k = gearKit(), x0 = side * .44, x1 = side * .6;
+        const r = { cloth: .048, hide: .052, medium: .056, heavy: .06 }[w] ?? .055;
+        k.sleeve(x0, x1, 1.364, -.002, r * 1.08, r * .92, w === "cloth" ? p.main : p.main);
+        if (w !== "cloth") for (const x of [x0 + side * .01, x1 - side * .01]) k.sleeve(x - side * .012, x + side * .012, 1.364, -.002, r * 1.12, r * 1.12, p.trim);
+        if (w === "heavy") k.box((x0 + x1) / 2, 1.364 + r * .9, -.002, .13, .02, .07, p.second);
+        if (w === "hide") k.sleeve(x0 + side * .06, x0 + side * .08, 1.364, -.002, r * 1.1, r * 1.1, p.leather);
+        out.push([bone, k.take()]);
+      }
+      return out;
+    },
+    hand(w, p, side) {
+      const k = gearKit(), bone = side > 0 ? "LeftHand" : "RightHand", x = side * .655;
+      k.sleeve(side * .615, side * .665, 1.354, 0, .05, .046, w === "cloth" ? p.second : p.main);
+      if (w === "medium" || w === "heavy") { k.box(side * .705, 1.375, .005, .08, .02, .07, p.main); k.box(x, 1.35, .045, .03, .03, .012, p.trim); }
+      return [[bone, k.take()]];
+    },
+    legs(w, p) {
+      const out = [], hips = gearKit();
+      // Tassets hang from the belt over the thighs (carried by the hips so walking never folds them).
+      if (w !== "cloth") for (const s of [-1, 1]) for (let i = 0; i < (w === "heavy" ? 2 : 1); i++)
+        hips.box(s * .1, .86 - i * .07, .115 - i * .006, .13, .08, .014, i ? p.second : p.main).rotation.z = s * .08;
+      if (w === "cloth") hips.cyl(0, .9, .004, .16, .42, .38, p.main, 14).scaling.z = .8;
+      out.push(["Hips", hips.take()]);
+      for (const [side, leg] of [[1, "LeftLeg"], [-1, "RightLeg"]]) {
+        const k = gearKit(), x = side * .095;
+        if (w === "cloth") k.cyl(x, .25, .0, .1, .095, .1, p.second, 10);
+        else {
+          const greave = k.cyl(x, .3, .02, .3, .12, .1, p.main, 10); greave.scaling.z = .85;
+          k.ball(x, .47, .045, w === "heavy" ? .11 : .09, w === "heavy" ? p.trim : p.second, 8).scaling.z = .6;
+          for (const y of [.17, .43]) k.cyl(x, y, .02, .015, .125, .125, p.leather, 10);
+        }
+        out.push([leg, k.take()]);
+      }
+      return out;
+    },
+    feet(w, p) {
+      const out = [];
+      for (const [side, bone] of [[1, "LeftFoot"], [-1, "RightFoot"]]) {
+        const k = gearKit(), x = side * .098;
+        k.box(x, .045, .04, .105, .09, .23, w === "cloth" ? p.second : p.main);
+        k.cyl(x, .12, -.01, .1, .11, .1, w === "cloth" ? p.main : p.second, 10);
+        if (w === "heavy" || w === "medium") k.box(x, .07, .145, .09, .05, .04, p.trim);
+        out.push([bone, k.take()]);
+      }
+      return out;
+    },
+  };
+  // ---- Off-hands: one per class school. ----
+  const OFFHAND_BUILDERS = {
+    brace(p) { // Muay Thai: rope wraps up the left forearm.
+      const k = gearKit();
+      for (let i = 0; i < 6; i++) k.sleeve(.44 + i * .028, .46 + i * .028, 1.364, 0, .054, .054, i % 2 ? ropeRed : gearMat("rope hemp", "#c9b48a"));
+      return [["LeftForeArm", k.take()]];
+    },
+    guard(p) { // Twin-sword school: a lacquered forearm parrying guard.
+      const k = gearKit();
+      k.box(.52, 1.364, .055, .2, .09, .025, p.lacquer || p.main); k.box(.52, 1.364, .07, .16, .02, .01, p.trim);
+      return [["LeftForeArm", k.take()]];
+    },
+    veil(p) { // Blade: a dark cloth veil over the lower face, tails at the nape.
+      const k = gearKit(), cloth = gearMat("shadow veil", "#1d1c22");
+      k.cyl(0, 1.565, .03, .08, .2, .19, cloth, 14).scaling.z = 1.05; k.box(0, 1.56, -.13, .05, .2, .01, cloth).rotation.x = .3;
+      return [["Head", k.take()]];
+    },
+    shield(p) { // Sentinel: round rattan dang with a brass boss, on the left forearm.
+      const k = gearKit(), rattan = gearMat("rattan shield", "#7a5a32");
+      // Kept small and close to the elbow so the raised guard does not hide the face.
+      const disc = k.cyl(.48, 1.364, .075, .035, .4, .4, rattan, 20); disc.rotation.x = Math.PI / 2;
+      const rim = k.cyl(.48, 1.364, .075, .045, .42, .42, p.trim, 20); rim.rotation.x = Math.PI / 2; rim.scaling.y = .6;
+      k.ball(.48, 1.364, .1, .1, p.trim, 10).scaling.z = .5;
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + .4; k.ball(.48 + Math.cos(a) * .13, 1.364 + Math.sin(a) * .13, .097, .03, p.trim, 6); }
+      return [["LeftForeArm", k.take()]];
+    },
+    jar(p) { // Seer: a small sealed spirit jar held in the left hand.
+      const k = gearKit();
+      k.ball(.7, 1.3, .03, .16, jarCarved, 10).scaling.y = 1.1; k.cyl(.7, 1.395, .03, .05, .07, .1, jarClay, 8);
+      k.box(.7, 1.3, .03, .165, .012, .165, ropeRed); k.box(.73, 1.28, .11, .04, .1, .004, gearMat("talisman paper", "#e8d9a8"));
+      return [["LeftHand", k.take()]];
+    },
+    bell(p) { // Mender: a bronze hand bell (กระดิ่ง) with a red cord.
+      const k = gearKit();
+      k.cyl(.7, 1.33, .03, .13, .04, .12, gearMat("bell bronze", "#8a6a3a", "#1a1206", .4), 12).rotation.x = Math.PI; k.cyl(.7, 1.42, .03, .08, .025, .03, p.trim, 8);
+      k.ball(.7, 1.25, .03, .03, p.trim, 6); k.box(.7, 1.47, .03, .01, .06, .01, ropeRed);
+      return [["LeftHand", k.take()]];
+    },
+  };
+  // ---- Jewellery: neck, ears and rings. ----
+  const GEM = { atk: "#b3261e", spell: "#3b6fd6", heal: "#3fae6a", guard: "#c9a24a" };
+  function accessoryBuilder(family, p) {
+    const k = gearKit(), gold = gearMat("gold trim", "#c9a24a", "#2a1d06", .4);
+    if (/^acc_(torc|gorget|fang|spell|shrine|rift|boss)/.test(family)) {
+      if (family === "acc_gorget") { k.cyl(0, 1.47, -.004, .06, .2, .24, p.main, 16).scaling.z = .85; k.cyl(0, 1.44, -.004, .012, .25, .25, gold, 16).scaling.z = .85; }
+      else {
+        for (let i = 0; i <= 10; i++) { const t = i / 5 - 1, y = 1.455 - (1 - t * t) * .1; k.ball(t * .085, y, .07 + (1 - t * t) * .04, .022, family === "acc_torc" ? gold : beadMat, 4); }
+        const pend = family === "acc_fang" ? k.cyl(0, 1.33, .115, .07, 0, .03, gearMat("bone fang", "#e8dcc2"), 6) : k.ball(0, 1.345, .118, .045, family === "acc_spell" ? gearMat("spell gem", GEM.spell, "#0a1630", .5) : amuletGlow, 8);
+        if (family === "acc_fang") pend.rotation.x = Math.PI;
+      }
+      return [["Chest", k.take()]];
+    }
+    if (/^acc_earrings/.test(family)) {
+      const gem = family.includes("lotus") ? GEM.heal : family.includes("focus") ? GEM.spell : family.includes("ward") ? GEM.guard : GEM.atk;
+      for (const s of [-1, 1]) { k.cyl(s * .088, 1.585, .005, .015, .018, .018, gold, 8); k.ball(s * .088, 1.56, .005, .025, gearMat("gem " + gem, gem, "#120808", .5), 6); }
+      return [["Head", k.take()]];
+    }
+    return [];
+  }
+  function ringBuilder(family, side) {
+    const k = gearKit(), gem = family.includes("heal") ? GEM.heal : family.includes("spell") ? GEM.spell : family.includes("guard") ? GEM.guard : GEM.atk;
+    const x = side * .72;
+    const band = k.cyl(x, 1.354, .02, .02, .045, .045, gearMat("gold trim", "#c9a24a", "#2a1d06", .4), 10); band.rotation.z = Math.PI / 2;
+    k.ball(x, 1.354, .045, .022, gearMat("gem " + gem, gem, "#120808", .5), 6);
+    return [[side > 0 ? "LeftHand" : "RightHand", k.take()]];
+  }
+  // "slot=family:tier;…" → {slot: {family, tier}}
+  function parseGearLook(look) {
+    const out = {};
+    for (const part of String(look || "").split(";")) {
+      const m = /^([a-zA-Z]+)=([a-z_]+):(\d+)$/.exec(part);
+      if (m) out[m[1]] = { family: m[2], tier: Number(m[3]) };
+    }
+    return out;
+  }
+  function buildGearSlot(slot, family, tier) {
+    let weight = null, m;
+    if ((m = /^arm_field_([a-z_]+)$/.exec(family))) weight = FIELD_WEIGHT[m[1]] || "medium";
+    else if ((m = /^arm_(cloth|hide|medium|heavy)_/.exec(family))) weight = m[1];
+    const p = gearPalette(weight || "medium", tier);
+    if (weight) {
+      if (slot === "leftHand" || slot === "rightHand") return ARMOR_BUILDERS.hand(weight, p, slot === "leftHand" ? 1 : -1);
+      return ARMOR_BUILDERS[slot] ? ARMOR_BUILDERS[slot](weight, p) : [];
+    }
+    if (slot === "offHand" && (m = /^off_([a-z]+)$/.exec(family)) && OFFHAND_BUILDERS[m[1]]) return OFFHAND_BUILDERS[m[1]](p);
+    if (slot === "leftRing" || slot === "rightRing") return ringBuilder(family, slot === "leftRing" ? 1 : -1);
+    if (/^acc_/.test(family)) return accessoryBuilder(family, p);
+    return [];
+  }
+  // Apply a gear look to an avatar. Pieces are rebuilt only for slots whose family or tier changed;
+  // without the skinned body (still loading or unavailable) the look is kept and applied on attach.
+  function setAvatarGear(avatar, look) {
+    if (!avatar) return;
+    const text = String(look || "");
+    if (avatar.gearLook === text && (avatar.gearApplied === text || !avatar.skin?.nodes)) return;
+    avatar.gearLook = text;
+    if (!avatar.skin?.nodes) return;
+    avatar.gearApplied = text;
+    const want = parseGearLook(avatar.gearLook);
+    avatar.gearParts ||= {};
+    for (const slot of new Set([...Object.keys(avatar.gearParts), ...Object.keys(want)])) {
+      const have = avatar.gearParts[slot], next = want[slot], key = next ? next.family + ":" + next.tier : "";
+      if (have?.key === key) continue;
+      have?.meshes.forEach(mesh => mesh?.dispose());
+      delete avatar.gearParts[slot];
+      if (!next) continue;
+      const meshes = buildGearSlot(slot, next.family, next.tier).map(([bone, parts]) => gearOnBone(avatar.skin.nodes, bone, parts, "gear " + slot)).filter(Boolean);
+      avatar.gearParts[slot] = { key, meshes };
+    }
+    // A worn cuirass or helmet replaces the ritual shawl and headband of the base outfit.
+    setAvatarRitualGear(avatar, avatar.pathId);
   }

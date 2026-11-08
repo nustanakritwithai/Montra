@@ -12,6 +12,21 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
 {
+  "path": "network/044-state-sync-and-connection.js",
+  "bytes": 138339,
+  "sha256": "6ac9c202ba47298bb742c0c14bd221911dd9b6f6018d19b59817409931992edf"
+},
+{
+  "path": "render/026-avatar-auras-and-lifecycle.js",
+  "bytes": 12518,
+  "sha256": "86b70b0155ca62560afdc27c5ff380f01fda621b008250c98b0bd037b487127a"
+},
+{
+  "path": "render/021-character-models.js",
+  "bytes": 32099,
+  "sha256": "3757bbfb7c10a836c2d46215ab83c9fdb031bff6e5c65dfce76e2e3f6b16f767"
+},
+{
   "path": "world/013-ground-and-fortification.js",
   "bytes": 4123,
   "sha256": "4f2951095b7f9967605459edfa92c9bb7768cfc13668a008c22beeaaa8907cde"
@@ -33,8 +48,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/029-fishing-and-resources.js",
-  "bytes": 13257,
-  "sha256": "78a3191b570001e75250f75ebb96b1af2c120ae555772c2660925d792dc4889d"
+  "bytes": 13255,
+  "sha256": "7a2009556926749651397b24be68677d46803f9bf935629ffc0b22a55eda7f86"
 },
 {
   "path": "world/017-region-terrain.js",
@@ -68,8 +83,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/020-avatar-materials-and-meshes.js",
-  "bytes": 22113,
-  "sha256": "3372ccd48e189b25b5445d3b858e71fd602c05e551e79cd3e05c49e6a492beb4"
+  "bytes": 24728,
+  "sha256": "0f1e1ce6a01a2b6cf385eb843cd33840ec5c93cc4f9c793957236ce3c9beebad"
 },
 {
   "path": "ui/042-vitals-chat-and-status.js",
@@ -117,11 +132,6 @@ const reviewedReleaseFragments = new Map([
     "sha256": "2cf0b6272de3ff4cbd59ab5ca19319cff7b098d0eadfc82f18af8a090ee52678"
   },
   {
-    "path": "network/044-state-sync-and-connection.js",
-    "bytes": 138100,
-    "sha256": "01e70fe17a7361aec65c944b6ae592db95534f5ec792694b1dc141c4d0539e7a"
-  },
-  {
     "path": "audio/051-sound-settings-and-speech.js",
     "bytes": 9828,
     "sha256": "01ed1a822470a5af32a7dc3500dbb561d006fa933be0bfaed817f3ec8f791f17"
@@ -133,8 +143,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1527176);
-  assert.equal(hash(bytes), 'ea393bb8ab8a53dddc0bc8ec3463b807963edd4f5c7703ee2257f72a1a7e0705');
+  assert.equal(bytes.length, 1549513);
+  assert.equal(hash(bytes), '551e3dd3c97c7aa4527ecd886f6b9f3f7ad22a8e5e327f05c76c3e851abdc885');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

@@ -176,4 +176,4 @@
   const forgeNames={melee:"โจมตีประชิด",ranged:"โจมตีเวท",guard:"ป้องกันมอนสเตอร์",healing:"พลังรักษา"};
   const gearJobs={muay_boran:"มวยไทยโบราณ",phutthaisawan:"นักดาบอยุธยา",blade:"คมดาบ",sentinel:"ผู้พิทักษ์",seer:"ผู้ร่ายเวท",mender:"พระ"};
   const statNames = {hp:"HP",stamina:"Stamina",mana:"มานา",atk:"โจมตี",def:"ป้องกัน",magicAtk:"เวท",magicDef:"ต้านเวท"};
-  const practiceModels = {wp_wrap_1:"muay_wraps",wp_twins_1:"thai_dual",wp_shadow_1:"ritual_dagger",wp_pike_1:"arcane_sword",wp_wand_1:"spirit_staff",wp_crook_1:"spirit_staff"};
+  const practiceModels = {wp_wrap_1:"muay_wraps",wp_twins_1:"thai_dual",wp_shadow_1:"ritual_dagger",wp_pike_1:"sentinel_pike",wp_wand_1:"seer_wand",wp_crook_1:"mender_crook"};

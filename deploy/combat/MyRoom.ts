@@ -83,7 +83,7 @@ import { PROGRESSION, SKILL_RANK_LEVELS, SKILL_RANK_PRACTICE, skillRankCost, ski
 import {
   POTION_COOLDOWN_MS, grantRewardPotion, grantStackReward, bossAccessoryReward, SHRINE_RECIPE, SHRINE_SHARD, SHRINE_GLAIVE, parseUseItemCommand,
   useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon, equipBody, parseBodyCommand, equippedStats, equipmentRatings, gearHealing, spiritGearPower, gearMana, overflowStaminaRegen, practiceLoot,
-  equippedWeaponId, weaponBonuses, type InventorySnapshot,
+  equippedWeaponId, gearLook, weaponBonuses, type InventorySnapshot,
 } from "./ItemRules.js";
 
 import { ForestEncounters } from "./ForestEncounters.js";
@@ -2966,6 +2966,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private applyStats(id:string, player: Player, allocations: Allocations): void {
     const base=calculateStats(player.level,allocations),bag=this.inventories.get(id);
+    player.gearLook=gearLook(bag);
     this.extraStaminaRegen.set(player,overflowStaminaRegen(base,bag));
     const modifiers=this.effects.modifiers(id),stats=calculateModifiedStats(equippedStats(base,bag),modifiers);
     this.masteryBases.set(player,stats);this.masteryHistories.set(player,this.rebirthStates.get(id));

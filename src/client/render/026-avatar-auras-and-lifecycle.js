@@ -191,7 +191,8 @@
   const avatars = new Map();
   function setAvatarRitualGear(avatar, pathId) {
     avatar.pathId = pathId || "";
-    const visible = pathId === "seer" || pathId === "mender";
+    // A worn cuirass replaces the ritual shawl, sash and jar of the base outfit.
+    const visible = (pathId === "seer" || pathId === "mender") && !/(^|;)chest=/.test(avatar.gearLook || "");
     for (const part of avatar.ritualGear || []) part?.setEnabled(visible);
   }
   function weaponModelFor(weaponId,pathId) {
