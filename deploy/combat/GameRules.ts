@@ -20,6 +20,9 @@ export const RULES = Object.freeze({
   dashCommandRatePerSecond: 2,
   playerMaxHp: 100,
   playerAttackRange: 2.8,
+  // Basic occult attacks stay shorter than ranged skills (FORT.rangedRange).
+  // Playtest tuning: matches the existing 8-unit seer mark / guardian engagement.
+  rangedBasicAttackRange: 8,
   playerAttackDamage: 20,
   playerAttackCooldownMs: 1000,
   playerRespawnMs: 4000,

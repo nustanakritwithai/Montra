@@ -4506,7 +4506,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.lastCombatMs.set(attackerId, this.simulatedMs);
       attacker.targetId = targetId;
 
-      const attackRange = isOccultPath(attacker.pathId) ? FORT.rangedRange : monsterOrder ? RULES.playerAttackRange : RULES.pkAttackRange;
+      const attackRange = isOccultPath(attacker.pathId) ? RULES.rangedBasicAttackRange : monsterOrder ? RULES.playerAttackRange : RULES.pkAttackRange;
       // Wall/vertical separation cannot be solved by a ground-only chase.
       if (!isOccultPath(attacker.pathId) && meleeHeightBlocked(attacker,target,attackRange)) {
         this.attackTargets.delete(attackerId);
@@ -5082,7 +5082,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(WORLD_EXPANSION && !this.field && process.env.MONTRA_DIRECTOR_ENABLED!=="0")worldDirector.restore();
     if (characterStore.economyEnabled) this.state.craftRecipe = JSON.stringify(SHRINE_RECIPE);
     this.state.forgeCatalog = JSON.stringify(FORGE_CATALOG);
-    this.state.buildCatalog = BUILD_CATALOG;
+    // Additive catalog metadata: old clients ignore it; new clients never claim a
+    // range that a legacy server has not advertised. No schema/save migration.
+    this.state.buildCatalog = JSON.stringify({...JSON.parse(BUILD_CATALOG), basicAttackRanges: {
+      ranged: RULES.rangedBasicAttackRange, melee: RULES.playerAttackRange, pk: RULES.pkAttackRange,
+    }});
     this.state.economyAvailable = characterStore.economyEnabled;
     if(characterStore.economyEnabled && !this.field)this.clock.setInterval(()=>this.sendResources(),5000);
     if(characterStore.economyEnabled)this.clock.setInterval(()=>this.tickFishing(),500);
@@ -5347,7 +5351,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         player.facing = facingTo(dx, dz);
 
         const ranged = isOccultPath(player.pathId);
-        const attackRange = ranged ? FORT.rangedRange : isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
+        const attackRange = ranged ? RULES.rangedBasicAttackRange : isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
         if (!ranged && meleeHeightBlocked(player,target,attackRange)) {
           this.endAttack(sessionId, player);
           continue;
@@ -5444,7 +5448,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
       if (isMonster && isRestArea(attacker.mapId,attacker)) continue;
       const ranged = isOccultPath(attacker.pathId);
-      const range = ranged ? FORT.rangedRange : isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
+      const range = ranged ? RULES.rangedBasicAttackRange : isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
       if (distance3d(attacker,target)>range+.00001 || !this.combatSegmentClear(attacker.mapId,attacker,target))continue;
       attacker.facing = facingTo(target.x - attacker.x, target.z - attacker.z);
       attacker.combatState = "attacking";

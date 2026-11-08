@@ -22,8 +22,8 @@ test('reviewed style snapshot retains pinned bytes, cascade order, URLs and lega
   const baseline = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/extraction-baseline.json')));
   const manifest = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/manifest.json')));
   const bytes = checkStyles();
-  assert.equal(bytes.length, 375216);
-  assert.equal(hash(bytes), '047f8e528f4669eda5d8f2d5a44e81bfa7af332716b5202b28ab29d6dadc2ef3');
+  assert.equal(bytes.length, 375408);
+  assert.equal(hash(bytes), 'b4e5b9b571328832821e8704a99f43ddfc23327e140471ef082c4da6afa96b6a');
   assert.equal(bytes.length, baseline.bytes);
   assert.equal(hash(bytes), baseline.sha256);
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
@@ -36,7 +36,7 @@ test('reviewed style snapshot retains pinned bytes, cascade order, URLs and lega
     assert.equal(fragment.toString('utf8').split('\n').length - 1, entry.originalEndLine - entry.originalStartLine + 1);
     nextLine = entry.originalEndLine + 1;
   }
-  assert.equal(nextLine, 5589);
+  assert.equal(nextLine, 5590);
   assert.deepEqual(assembleStyles(), assembleStyles());
 });
 

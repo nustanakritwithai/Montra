@@ -33,6 +33,12 @@ const {chromium}=require('playwright');
    await page.locator('#drawerClose').click();await page.locator('#drawer').waitFor({state:'hidden'});
    await card.focus();await page.keyboard.press('Enter');await page.locator('#drawer').waitFor({state:'visible'});
    await page.keyboard.press('Escape');await page.locator('#drawer').waitFor({state:'hidden'});
+   const orb=page.locator('.vital-orb');
+   assert.equal(await orb.evaluate(el=>el.tagName),'BUTTON');
+   await orb.click();assert.equal(await page.locator('#drawer').isVisible(),false,'orb attacks without opening profile');
+   await orb.focus();await page.keyboard.press('Enter');await page.keyboard.press('Space');
+   assert.equal(await page.locator('#drawer').isVisible(),false,'native orb keyboard activation never opens profile');
+   assert.match(await orb.getAttribute('aria-label'),/โจมตีปกติ.*เลือด/);
    await page.screenshot({path:path.join(out,'hud-'+width+'x'+height+'.png')});
    // Static DOM clone freezes gameplay updates; these are explicitly stress fixtures, not gameplay.
    const stress=await context.newPage();

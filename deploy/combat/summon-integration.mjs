@@ -131,8 +131,8 @@ try {
   console.log("PASS: owner knockout immediately removes owned NPC for all clients");
 
   // B's guardian can attack a ghost the owner targets or that attacks owner.
-  // A seer's basic attack reaches 15m, beyond the guardian's 8m engage
-  // distance. Attacking from B's spawn therefore does not approach the ghost.
+  // Position inside both the seer's basic range and guardian engagement range;
+  // owner damage alone does not prove the guardian is close enough to engage.
   // Move through the public command and wait for replicated owner/guardian
   // positions before asking for combat, rather than relying on patrol timing.
   const guardianHitSeqBefore = owned(b, bId).hitSeq;

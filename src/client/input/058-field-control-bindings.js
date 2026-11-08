@@ -1,6 +1,9 @@
-  // Tapping the vital orb is the auto-attack command: current target, otherwise the nearest monster.
-  { const orb = document.querySelector(".vital-orb"); if (orb) { orb.setAttribute("role", "button"); orb.tabIndex = 0; orb.title = "โจมตีอัตโนมัติ · แตะเพื่อตีเป้าหมายหรือมอนสเตอร์ที่ใกล้ที่สุด";
-    orb.addEventListener("click", () => { orb.classList.add("orb-strike"); setTimeout(() => orb.classList.remove("orb-strike"), 220); requestMonsterAttack(); }); } }
+  // One activation sends the existing monster attack order; the server owns its
+  // pursuit/cooldown loop. Native button semantics cover touch, Enter and Space.
+  { const orb = document.querySelector(".vital-orb"); if (orb) {
+    orb.addEventListener("keydown", e => { if (e.repeat && (e.key === "Enter" || e.key === " ")) e.preventDefault(); });
+    orb.onclick = () => { orb.classList.add("orb-strike"); setTimeout(() => orb.classList.remove("orb-strike"), 220); requestMonsterAttack(); };
+  } }
   // Under the minimap only Menu, Bag and Skills stay. Menu fans out into a column of sub-buttons
   // (character, party, guild, market, quest, chat, online, settings, full menu) instead of opening a drawer.
   { const nav = document.querySelector(".map-shortcuts"), menuBtn = $("fieldMenuButton");

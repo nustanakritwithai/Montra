@@ -76,3 +76,52 @@ test("a tap can pursue an exposed monster from safety, but cannot hit across the
   mob.z=5.8;const hp=mob.hp;room.simulatedMs+=1000;room.updatePlayerAttacks();
   assert.equal(actor.targetId,"");assert.equal(mob.hp,hp);
 });
+
+function rangeFixture(path, pvp=false, distance=10) {
+  const room=new MyRoom(),events=[],client={sessionId:'range_actor',send:(type,data)=>events.push({type,data})};
+  const actor=new Player({pathId:path,x:0,y:0,z:8,alive:true,atk:20,magicAtk:20});
+  const target=pvp?new Player({x:0,y:0,z:8+distance,alive:true,hp:10000,maxHp:10000}):room.state.monster;
+  Object.assign(target,{x:0,y:0,z:8+distance,mapId:actor.mapId,hp:10000,maxHp:10000,alive:true});
+  const targetId=pvp?'range_victim':RULES.monsterId;
+  if(pvp)room.state.players.set(targetId,target);else target.id=targetId;
+  room.state.players.set(client.sessionId,actor);
+  room.gates.set(client.sessionId,{attack:new CommandBucket(4,4),move:new CommandBucket(4,4)});
+  room.broadcast=(type,data)=>events.push({type,data});
+  return {room,actor,target,targetId,client,events};
+}
+for(const path of ['seer','mender'])for(const pvp of [false,true]){
+  test(`${path} ${pvp?'PvP':'PvE'} basic attack approaches from 10m and only hits within 8m`,()=>{
+    const {room,actor,target,targetId,client,events}=rangeFixture(path,pvp);
+    room.messages.attack(client,{targetId});
+    assert.equal(actor.combatState,'approaching');
+    room.updatePlayerAttacks();assert.equal(target.hp,10000,'no remote basic hit inside the old 15m range');
+    assert(!events.some(e=>e.type==='ranged_hit'));
+    let ticks=0;
+    while(Math.hypot(target.x-actor.x,target.y-actor.y,target.z-actor.z)>8){
+      const before=target.hp;room.updatePlayerAttacks();assert.equal(target.hp,before);
+      room.updatePlayerMovement(.05);room.simulatedMs+=50;assert(++ticks<100,'bounded server pursuit');
+    }
+    room.updatePlayerAttacks();assert(target.hp<10000);const hp=target.hp;
+    room.updatePlayerAttacks();assert.equal(target.hp,hp,'same cooldown cannot repeat a hit');
+    room.messages.move(client,{x:actor.x+1,z:actor.z});room.simulatedMs+=1000;room.updatePlayerAttacks();
+    assert.equal(target.hp,hp,'manual movement still cancels auto attack');
+  });
+  test(`${path} ${pvp?'PvP':'PvE'} basic range uses a 3D boundary`,()=>{
+    const {room,actor,target,targetId,client}=rangeFixture(path,pvp,8);
+    target.y=.1;room.messages.attack(client,{targetId});room.updatePlayerAttacks();
+    assert.equal(target.hp,10000,'8m horizontal plus height is outside 8m');
+    target.y=actor.y;room.updatePlayerAttacks();assert(target.hp<10000,'exact 8m is eligible');
+  });
+}
+test('melee and blessed-rice reach remain independent of shorter ranged basics',async()=>{
+  const {FORT}=await load('HeightRules');assert.equal(FORT.rangedRange,15);
+  assert.equal(RULES.playerAttackRange,2.8);assert.equal(RULES.pkAttackRange,2.8);
+  for(const pvp of [false,true]){
+    const {room,target,targetId,client}=rangeFixture('blade',pvp,2.81);
+    room.messages.attack(client,{targetId});room.updatePlayerAttacks();assert.equal(target.hp,10000);
+    target.z=10.8;room.updatePlayerAttacks();assert(target.hp<10000);
+  }
+  const {room,target,targetId,client}=rangeFixture('seer',false,10);
+  room.legacyCombatRoom=()=>true; // Existing legacy shoot protocol, independent from basic order.
+  room.messages.shoot(client,{targetId});assert(target.hp<10000,'15m skill still hits beyond 8m basic reach');
+});
