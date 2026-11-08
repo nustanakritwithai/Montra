@@ -78,7 +78,8 @@ actions visible while long localized copy scrolls within the body. See
 
 ## Basic attack orb follow-up
 
-The reviewed style snapshot includes the intentional native attack button reset
+The reviewed style pins include the intentional native attack button reset
 and visible keyboard focus ring. The orb retains its resource fill, dimensions
-and responsive placement. The basic-attack browser fixture checks real touch,
+and responsive placement. Historical extraction metadata stays unchanged.
+The basic-attack browser fixture checks real touch,
 keyboard, resource labels and one existing attack order per activation.

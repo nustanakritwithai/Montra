@@ -1079,7 +1079,9 @@
             shakeCamera(0.35, 240);
             if (!(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };
           }
-          const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost; if (g) g.attackAt = performance.now();
+          const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost;
+          // A confirmed boss hit starts at the strike, not a fresh windup after damage.
+          if (g) g.attackAt = performance.now() - (g.design?.boss ? 450 : 0);
           if (g && !(performance.now() - (g.criedAt || 0) < 1500)) { ghostVoice(g, gm2, "attack"); g.criedAt = performance.now(); }
           if (hit?.attackerId === MONSTER_ID) villageGhost.metadata.ghost.attackAt = performance.now();
         }

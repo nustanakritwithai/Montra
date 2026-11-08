@@ -83,6 +83,8 @@
     }
   }
   function makeForestMonster(monster,id) {
+    const boss = bossDesign(monster, id);
+    if (boss) return makeGhostMonster(monster, id, boss);
     if(monster.tier!=="boss" && (monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||ATLAS_GHOSTS[monster.mapId]))return makeGhostMonster(monster,id);
     const mesh=enemy.clone("monster-"+id);
     // The legacy tap sphere is hidden in the village; atlas monsters still show it.
@@ -151,8 +153,12 @@
       if(ghost){
         // Ghost rigs play a death (soul released) before hiding, and rise on respawn.
         const alive=monster.alive!==false;
+        // A late join to an already defeated boss must not replay its spawn.
+        if (ghost.design.boss && ghost.wasAlive === undefined && !alive) { ghost.deathAt=0; mesh.setEnabled(false); }
         if(!alive&&ghost.wasAlive){ghost.deathAt=performance.now();ghostVoice(ghost,mesh,"die");eventFx("ghost_die",mesh,{y:ghost.ty??0});releaseSoul(mesh.position.x,mesh.position.y+.4,mesh.position.z);}
-        if(alive&&ghost.wasAlive===false){ghost.deathAt=0;ghost.spawnAt=performance.now();ghostVoice(ghost,mesh,"spawn",.8);eventFx("ghost_spawn",mesh,{y:ghost.ty??0});}
+        if(alive&&ghost.wasAlive===false){
+          if (ghost.design.boss) { ghost.attackAt=-1e9; ghost.hurtAt=-1e9; ghost.wasWindup=false; ghost.aggroPlayed=false; }
+          ghost.deathAt=0;ghost.spawnAt=performance.now();ghostVoice(ghost,mesh,"spawn",.8);eventFx("ghost_spawn",mesh,{y:ghost.ty??0});}
         ghost.wasAlive=alive;if(alive)mesh.setEnabled(true);else if(!ghost.deathAt)mesh.setEnabled(false);
         ghost.tx=Number(monster.x);ghost.tz=Number(monster.z);ghost.ty=Number(monster.y)||0;ghost.tf=Number(monster.facing)||0;
         ghost.windup=monster.aiState==="windup";ghost.ai=monster.aiState;

@@ -37,6 +37,25 @@ function html(){return `<!doctype html><html><head><meta charset="utf-8"><meta n
 async function marketCases(page,check){
  await page.evaluate(()=>{f.page([f.row(1),f.row(2,'weapon')]);f.callbacks.market_overview({credit:0,auctions:[],supply:{items:[{item:'wood',price:10,remaining:3}]}});});
  await check('market-search');
+ assert.equal(await page.locator('.wm-header h2').textContent(),'ตลาดกลาง');
+ assert.deepEqual(await page.locator('.wm-tabs button').allTextContents(),['ค้นหา','ราคาตลาด','รายการที่อยากได้','ขาย','รายการของฉัน','ประมูล','กฎตลาด','เทรดใกล้ตัว','ร้านค้าสำรอง']);
+ assert.equal(await page.locator('#wmBuy').textContent(),'ซื้อ');
+ assert.equal(await page.locator('#wmPick').textContent(),'เลือกไอเท็มในรายการ');
+ assert.equal(await page.locator('#wmShown').textContent(),'แสดง 2 รายการ');
+ assert.doesNotMatch(await page.locator('#worldMarket').innerText(),/World Market|Search|Market price|Wish list|My orders|Enhance at least|All must match|Time left|shown|Pick an item|\bBuy\b|\bmaterial\b/);
+ await page.locator('#wmRowsBody .wm-row').last().click();
+ await page.locator('#wmDetailsBtn').click();
+ assert.match(await page.locator('#wmDetails').innerText(),/ต้องการเลเวล 25/);
+ await check('market-thai-details');
+ await page.evaluate(()=>{document.getElementById('wmRefresh').click();[...f.timers.values()].at(-1)();});
+ assert.match(await page.locator('#wmRowsBody').innerText(),/โหลดรายการไม่สำเร็จ/);
+ await check('market-thai-error');
+ await page.locator('#wmRefresh').click();
+ assert.match(await page.locator('#wmRowsBody').innerText(),/กำลังโหลดสินค้า/);
+ await check('market-thai-loading');
+ await page.evaluate(()=>f.page([]));
+ assert.match(await page.locator('#wmRowsBody').innerText(),/ไม่พบสินค้า/);
+ await check('market-thai-empty');
  await page.evaluate(()=>f.run('activeTrade={tradeId:"fixture-trade",own:null,other:null};openEconomy()'));
  assert.equal(await page.locator('#worldMarket').getAttribute('data-view'),'trade');
  assert.equal(await page.locator('#economyTradePanel').isVisible(),true);

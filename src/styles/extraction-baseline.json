@@ -1,8 +1,8 @@
 {
   "format": 1,
   "output": "styles.css",
-  "bytes": 375408,
-  "sha256": "b4e5b9b571328832821e8704a99f43ddfc23327e140471ef082c4da6afa96b6a",
+  "bytes": 375216,
+  "sha256": "047f8e528f4669eda5d8f2d5a44e81bfa7af332716b5202b28ab29d6dadc2ef3",
   "fragments": [
     {
       "path": "base/000-foundation-and-drawers.css",
@@ -139,192 +139,192 @@
     },
     {
       "path": "hud/019-vital-orb-resources-and-chat.css",
-      "bytes": 5832,
-      "sha256": "71477a110f30679c2e281eb5e825ab4557d21ee02eebbb49c2a6c16b1a500b7a",
+      "bytes": 5640,
+      "sha256": "73f5fa3e939b593a5742bce128db76ea008d5b36fd63e809a471c2fc3dc83319",
       "originalStartLine": 2143,
-      "originalEndLine": 2197
+      "originalEndLine": 2196
     },
     {
       "path": "social/020-party-portraits.css",
       "bytes": 3989,
       "sha256": "d0b1bb53b4888a393ed4712fe49cda12b0b51444b90713e862e0255a3787bc82",
-      "originalStartLine": 2198,
-      "originalEndLine": 2256
+      "originalStartLine": 2197,
+      "originalEndLine": 2255
     },
     {
       "path": "hud/021-map-menu-status-and-skill-arc.css",
       "bytes": 5659,
       "sha256": "554602a8eb95815f8ca0bc247b095aebf59b810e72cf3f25384ff9955ad94b9c",
-      "originalStartLine": 2257,
-      "originalEndLine": 2306
+      "originalStartLine": 2256,
+      "originalEndLine": 2305
     },
     {
       "path": "hud/022-chat-compose-and-vitals.css",
       "bytes": 5521,
       "sha256": "b9c38809bdd6836d24a2a2ea495c19d407572ae4d7ff88c1d07b3309dbeb8e92",
-      "originalStartLine": 2307,
-      "originalEndLine": 2355
+      "originalStartLine": 2306,
+      "originalEndLine": 2354
     },
     {
       "path": "character/023-medallion-and-map-menu.css",
       "bytes": 5498,
       "sha256": "82a484497de5a3b495defe145f0f0554ba183eb22384910dd80def430b03c702",
-      "originalStartLine": 2356,
-      "originalEndLine": 2404
+      "originalStartLine": 2355,
+      "originalEndLine": 2403
     },
     {
       "path": "world/024-rebirth-target-and-gathering.css",
       "bytes": 3105,
       "sha256": "e6358205d31d4f92c11bcf67510755992c0ff86c3b6effd6836bd2c41975eb03",
-      "originalStartLine": 2405,
-      "originalEndLine": 2445
+      "originalStartLine": 2404,
+      "originalEndLine": 2444
     },
     {
       "path": "forge/025-artisan-crafting-and-effects.css",
       "bytes": 20237,
       "sha256": "a0f28b96c90de1dfdac2a1e8f895616bb14966b9bdbd2060d7aa193f3c848f79",
-      "originalStartLine": 2446,
-      "originalEndLine": 2654
+      "originalStartLine": 2445,
+      "originalEndLine": 2653
     },
     {
       "path": "skills/026-detail-modal.css",
       "bytes": 5962,
       "sha256": "c2b514938a61433189c13ab64c6aa233af97794bdbb9a7f160d19c6ce625ae75",
-      "originalStartLine": 2655,
-      "originalEndLine": 2926
+      "originalStartLine": 2654,
+      "originalEndLine": 2925
     },
     {
       "path": "skills/027-tree-drawer.css",
       "bytes": 5098,
       "sha256": "67c8ac2c1c3b285d188b2b700bf88c0f54e8d8b7543a4e7eafeb4a5c0190b481",
-      "originalStartLine": 2927,
-      "originalEndLine": 3157
+      "originalStartLine": 2926,
+      "originalEndLine": 3156
     },
     {
       "path": "skills/028-knowledge-graph.css",
       "bytes": 6544,
       "sha256": "71dadce901840a9ef8a2438702749d063b064213dcdb195185af4e911dbc9253",
-      "originalStartLine": 3158,
-      "originalEndLine": 3451
+      "originalStartLine": 3157,
+      "originalEndLine": 3450
     },
     {
       "path": "skills/029-legacy-detail-modal-override.css",
       "bytes": 5886,
       "sha256": "e2a9c3507acdc5d2955395e5edddfe1403ba67e1e1083b339d49c64646dd5ba6",
-      "originalStartLine": 3452,
-      "originalEndLine": 3724
+      "originalStartLine": 3451,
+      "originalEndLine": 3723
     },
     {
       "path": "skills/030-legacy-tree-drawer-override.css",
       "bytes": 5098,
       "sha256": "67c8ac2c1c3b285d188b2b700bf88c0f54e8d8b7543a4e7eafeb4a5c0190b481",
-      "originalStartLine": 3725,
-      "originalEndLine": 3955
+      "originalStartLine": 3724,
+      "originalEndLine": 3954
     },
     {
       "path": "skills/031-legacy-graph-override.css",
       "bytes": 6544,
       "sha256": "71dadce901840a9ef8a2438702749d063b064213dcdb195185af4e911dbc9253",
-      "originalStartLine": 3956,
-      "originalEndLine": 4249
+      "originalStartLine": 3955,
+      "originalEndLine": 4248
     },
     {
       "path": "market/032-catalog.css",
       "bytes": 7067,
       "sha256": "3a5b71d6667f00550a44064b8e0d93ca647f012a96673df35b56b94b606950a3",
-      "originalStartLine": 4250,
-      "originalEndLine": 4313
+      "originalStartLine": 4249,
+      "originalEndLine": 4312
     },
     {
       "path": "skills/033-radial-graph.css",
       "bytes": 4343,
       "sha256": "ea8b6e91c5d0eef357a768ec294733f71eb90a7e79b21fc3f43911f8328a017f",
-      "originalStartLine": 4314,
-      "originalEndLine": 4474
+      "originalStartLine": 4313,
+      "originalEndLine": 4473
     },
     {
       "path": "hud/034-landscape-chat.css",
       "bytes": 193,
       "sha256": "76cc83b9095868b842e6d3b9d5e4c57682af2252a0020a216a3c113480f4772f",
-      "originalStartLine": 4475,
-      "originalEndLine": 4476
+      "originalStartLine": 4474,
+      "originalEndLine": 4475
     },
     {
       "path": "icons/035-inventory-artwork.css",
       "bytes": 64159,
       "sha256": "f840e152b7c3c36db0db6dc8c51c7a57457484339de915a66a9b259e345bfb60",
-      "originalStartLine": 4477,
-      "originalEndLine": 4659
+      "originalStartLine": 4476,
+      "originalEndLine": 4658
     },
     {
       "path": "combat/036-monster-labels.css",
       "bytes": 767,
       "sha256": "53e167d77c9c6c1e72b9c1246b66daf574dc6ef434539cc95e01e8b9b86c08ff",
-      "originalStartLine": 4660,
-      "originalEndLine": 4665
+      "originalStartLine": 4659,
+      "originalEndLine": 4664
     },
     {
       "path": "icons/037-skill-artwork.css",
       "bytes": 65334,
       "sha256": "1c0df14392c05e7d879b0b389671e0bffacb92b64e57d04ee947dc589ed859ec",
-      "originalStartLine": 4666,
-      "originalEndLine": 4941
+      "originalStartLine": 4665,
+      "originalEndLine": 4940
     },
     {
       "path": "hud/038-map-shortcuts-and-quick-skills.css",
       "bytes": 2813,
       "sha256": "246fd8e100f8520130c8d1f10803a7a995f3715503a10ceaa75c10bb1ec96353",
-      "originalStartLine": 4942,
-      "originalEndLine": 5045
+      "originalStartLine": 4941,
+      "originalEndLine": 5044
     },
     {
       "path": "icons/039-skill-books.css",
       "bytes": 1479,
       "sha256": "4a015c7c59c34deca14f4b785e2aa645a42a73efc0f89d25c8113ebcd7ca12f2",
-      "originalStartLine": 5046,
-      "originalEndLine": 5093
+      "originalStartLine": 5045,
+      "originalEndLine": 5092
     },
     {
       "path": "icons/040-blade-artwork.css",
       "bytes": 5540,
       "sha256": "3e4306750bd448217ac2e26fbd5a742d891c8036033194c73cbbb1e2dd149f05",
-      "originalStartLine": 5094,
-      "originalEndLine": 5131
+      "originalStartLine": 5093,
+      "originalEndLine": 5130
     },
     {
       "path": "icons/041-mender-artwork.css",
       "bytes": 4491,
       "sha256": "b6134545ba91c64905f82da1b3d7c8fb77cca1dad1bbb449894398eedfc710fe",
-      "originalStartLine": 5132,
-      "originalEndLine": 5169
+      "originalStartLine": 5131,
+      "originalEndLine": 5168
     },
     {
       "path": "icons/042-sentinel-artwork.css",
       "bytes": 4038,
       "sha256": "0afa48920322d7e109c41dfd216aa538c710d94fd89efe45aaf73436fe1a4bf4",
-      "originalStartLine": 5170,
-      "originalEndLine": 5207
+      "originalStartLine": 5169,
+      "originalEndLine": 5206
     },
     {
       "path": "combat/043-target-combo-and-boss.css",
       "bytes": 7492,
       "sha256": "43d8c8cefbe3c768f0af9f317467508eb97d6468268011b93a9bd09214ee0659",
-      "originalStartLine": 5208,
-      "originalEndLine": 5403
+      "originalStartLine": 5207,
+      "originalEndLine": 5402
     },
     {
       "path": "audio/044-voice-guidance.css",
       "bytes": 3520,
       "sha256": "39551eecfab95e37f27e37334687c5264b562fb7423b5ad444841d33b58a3e82",
-      "originalStartLine": 5404,
-      "originalEndLine": 5526
+      "originalStartLine": 5403,
+      "originalEndLine": 5525
     },
     {
       "path": "market/045-world-market.css",
       "bytes": 5720,
       "sha256": "e8b41aba201e580b5ef08bd613385491a300511ade9a4a0e5cd72d8ceb7c9494",
-      "originalStartLine": 5527,
-      "originalEndLine": 5589
+      "originalStartLine": 5526,
+      "originalEndLine": 5588
     }
   ]
 }
