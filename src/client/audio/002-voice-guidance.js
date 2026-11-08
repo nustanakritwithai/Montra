@@ -134,8 +134,163 @@
       cooldown: 15000,
       alert: false,
       icon: "⚡"
+    },
+    territory_contested: {
+      title: "สัญญาณศึกแดนศักดิ์สิทธิ์",
+      subtitle: "เสาธงอาคมถูกโจมตี! นักรบกิลด์จงรุดไปสกัดกั้น",
+      text: "สัญญาณศึกดังขึ้นแล้ว! เสาธงอาคมของเรากำลังถูกเข้าตี รีบไปสกัดกั้นเร็วเข้า!",
+      cooldown: 25000,
+      alert: true,
+      icon: "🚩"
+    },
+    territory_captured: {
+      title: "ชัยชนะแห่งสงครามกิลด์",
+      subtitle: "ยึดเสาธงอาคมสำเร็จ! สถาปนาอำนาจครองแดน",
+      text: "ชัยชนะเป็นของเรา! เสาธงแดนศักดิ์สิทธิ์ถูกสถาปนาขึ้นแล้ว อำนาจแห่งกิลด์จงเจริญ!",
+      cooldown: 20000,
+      alert: false,
+      icon: "🏆"
+    },
+    mount_summon: {
+      title: "ม้าทรงอาคม",
+      subtitle: "ควบขี่ม้าทรงมนตรา ท่องแดนไสยเวทได้รวดเร็วขึ้น",
+      text: "ม้าทรงอาคมพร้อมออกศึกแล้ว! ควบทะยานข้ามแดนได้อย่างรวดเร็ว",
+      cooldown: 12000,
+      alert: false,
+      icon: "🐎"
+    },
+    blood_moon_rise: {
+      title: "ราตรีจันทร์สีเลือด",
+      subtitle: "จันทร์เพ็ญสีเลือดปรากฏ! อสูรดุร้ายขึ้น แต่พลังอาคมพรั่งพรู",
+      text: "ระวังตัวให้ดี! จันทร์สีเลือดลอยเด่นเหนือฟ้า มนต์ดำครอบงำเหล่าอสูร ทว่าพลังอาคมและค่าประสบการณ์จักทวีคูณ!",
+      cooldown: 30000,
+      alert: true,
+      icon: "🌕"
+    },
+    banner_planted: {
+      title: "ธงชัยอาคม",
+      subtitle: "ปักธงชัยอาคมพิทักษ์พันธมิตรกิลด์ เพิ่มพลังป้องกันและต้านทานอาถรรพ์",
+      text: "ปักธงชัยอาคม! แนวพิทักษ์แห่งกิลด์เริ่มทำงาน เหล่าพันธมิตรจงรวมพลังในรัศมีอาคม",
+      cooldown: 15000,
+      alert: true,
+      icon: "🚩"
+    },
+    banner_expired: {
+      title: "ธงชัยสิ้นฤทธิ์",
+      subtitle: "อาคมพิทักษ์ของธงชัยจางหายไปแล้ว",
+      text: "ธงชัยอาคมสิ้นฤทธิ์มนตราแล้ว จงระวังตัวและถอยร่นเข้าสู่แนวปลอดภัย",
+      cooldown: 20000,
+      alert: false,
+      icon: "🏳️"
+    },
+    familiar_summon: {
+      title: "ภูติอาคมคู่หู",
+      subtitle: "อัญเชิญกุมารทอง/พญาครุฑน้อยเคียงข้าง ช่วยรบและค้นหาไอเทม",
+      text: "ภูติอาคมคู่หูพร้อมเคียงข้างท่านแล้ว! กุมารน้อยจะช่วยสอดส่องและคุ้มกันภัย",
+      cooldown: 12000,
+      alert: true,
+      icon: "✨"
+    },
+    familiar_treasure: {
+      title: "สัมผัสไอเวทสมบัติ",
+      subtitle: "ภูติอาคมตรวจพบแหล่งพลังงานหรือสมบัติล้ำค่าใกล้ตัว",
+      text: "ภูติอาคมตรวจพบแหล่งพลังเวทหรือสมบัติล้ำค่าในบริเวณใกล้เคียง รีบตามไปดูเร็ว!",
+      cooldown: 25000,
+      alert: true,
+      icon: "💎"
+    },
+    flight_takeoff: {
+      title: "สยายปีกเวหา",
+      subtitle: "กางปีกเทวะมนตรา ทะยานลอยตัวขึ้นสู่ท้องฟ้า",
+      text: "สยายปีกมนตราทะยานสู่เวหา! ควบคุมกระแสลมเหนือสมรภูมิ",
+      cooldown: 8000,
+      alert: true,
+      icon: "🪽"
+    },
+    flight_slam: {
+      title: "ธรณีสะท้านปฐพี",
+      subtitle: "พุ่งดิ่งลงจากเวหาฟาดคลื่นพลังทำลายล้าง",
+      text: "พุ่งกระแทกธรณีสะท้านปฐพี! คลื่นอัดกระแทกกระจายรอบทิศ",
+      cooldown: 10000,
+      alert: true,
+      icon: "⚡"
+    },
+    boss_titan_spawn: {
+      title: "ท้าวเวสสุวรรณเทวราช",
+      subtitle: "จอมอสูรเทวะผู้พิทักษ์ทิศอุดรปรากฏกาย!",
+      text: "ท้าวเวสสุวรรณเทวราชปรากฏกายแล้ว! ระวังพลังอสนีบาตจากกระบองยันต์",
+      cooldown: 20000,
+      alert: true,
+      icon: "👹"
+    },
+    boss_titan_stagger: {
+      title: "เกราะอสูรสะท้าน",
+      subtitle: "ท้าวเวสสุวรรณสูญเสียสมดุลชั่วคราว!",
+      text: "เกราะอาคมของท้าวเวสสุวรรณแตกแล้ว! ระดมโจมตีจุดอ่อนเร็วเข้า!",
+      cooldown: 15000,
+      alert: true,
+      icon: "💥"
     }
   };
+
+  const VOICE_PERSONAS = {
+    elder: {
+      id: "elder",
+      name: "พราหมณ์เฒ่า",
+      role: "ผู้หยั่งรู้และชี้แนะแห่งแดนมนตรา",
+      icon: "🧙‍♂️",
+      pitch: 0.82,
+      rate: 0.88
+    },
+    warrior: {
+      id: "warrior",
+      name: "นักรบมนตรา",
+      role: "ยอดนักรบเพลงยุทธ์ผู้เจนสมรภูมิ",
+      icon: "⚔️",
+      pitch: 0.95,
+      rate: 1.08
+    },
+    spirit: {
+      id: "spirit",
+      name: "วิญญาณผู้พิทักษ์",
+      role: "จิตวิญญาณศักดิ์สิทธิ์ผู้ปกปักษ์แดนลี้ลับ",
+      icon: "✨",
+      pitch: 1.16,
+      rate: 0.92
+    }
+  };
+
+  function getVoicePersona() {
+    try {
+      const p = localStorage.getItem("montra_voice_persona");
+      return VOICE_PERSONAS[p] ? p : "elder";
+    } catch (_) {
+      return "elder";
+    }
+  }
+
+  function setVoicePersona(id) {
+    if (!VOICE_PERSONAS[id]) return false;
+    try {
+      localStorage.setItem("montra_voice_persona", id);
+    } catch (_) {}
+    const p = VOICE_PERSONAS[id];
+    if (typeof floatAtPlayer === "function" && typeof localId !== "undefined") {
+      floatAtPlayer(localId, `สลับเสียงผู้ชี้แนะ: ${p.name} ${p.icon}`, "status");
+    }
+    SFX("bell", { intensity: 1.2, pitch: p.pitch });
+    triggerWhisper(`จิตวิญญาณแห่ง${p.name} สถิตเคียงข้างเจ้าแล้ว`, { persona: id });
+    return true;
+  }
+
+  function triggerWhisper(text, options = {}) {
+    if (!isVoiceGuidanceEnabled()) return;
+    const personaId = options.persona || getVoicePersona();
+    const persona = VOICE_PERSONAS[personaId] || VOICE_PERSONAS.elder;
+    SFX("whisper", { intensity: options.intensity || 1.1 });
+    playVoiceGuidance({ title: options.title || persona.name, subtitle: text, text, icon: persona.icon }, null,
+      { persona: personaId, whisper: true });
+  }
 
   const lastCombatCalloutTimes = new Map();
   function triggerCombatCallout(key) {
@@ -143,28 +298,17 @@
     const item = TYPHOON_COMBAT_CALLOUTS[key];
     if (!item) return;
     const now = performance.now();
-    const last = lastCombatCalloutTimes.get(key) || 0;
-    if (now - last < item.cooldown) return;
+    const last = lastCombatCalloutTimes.get(key);
+    if (last !== undefined && now - last < item.cooldown) return;
     lastCombatCalloutTimes.set(key, now);
 
-    ensureVoiceGuidanceHud();
-    voiceHudTitle.textContent = item.title;
-    voiceHudText.textContent = item.subtitle;
-    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = item.icon || "🧙‍♂️";
-    voiceGuidanceHud.classList.toggle("combat-alert", Boolean(item.alert));
-    voiceGuidanceHud.hidden = false;
-    clearTimeout(voiceHudTimer);
-    voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(4500, item.subtitle.length * 100));
-    try {
-      window.MontraAudio?.speak?.(item.text, {
-        persona: "guide",
-        onEnd: () => hideVoiceGuidanceHud(),
-        onError: () => {}
-      });
-    } catch (_) {}
+    playVoiceGuidance(item);
   }
 
-  let voiceGuidanceHud = null, voiceHudTitle = null, voiceHudText = null, voiceHudTimer = null, voiceGuidanceAvatar = null;
+  let voiceGuidanceHud = null, voiceHudTitle = null, voiceHudText = null, voiceHudTimer = null, voiceGuidanceAvatar = null, voiceHudRetry = null;
+  let voiceGuidancePlayback = null;
+  const attemptedVoiceGuidance = new Set();
+
   function isVoiceGuidanceEnabled() {
     try { return localStorage.getItem("montra_voice_guidance") !== "false"; }
     catch (_) { return true; }
@@ -172,6 +316,12 @@
   function setVoiceGuidanceEnabled(enabled) {
     try { localStorage.setItem("montra_voice_guidance", enabled ? "true" : "false"); }
     catch (_) {}
+    if (!enabled && voiceGuidancePlayback) {
+      const active = voiceGuidancePlayback.active;
+      voiceGuidancePlayback = null;
+      if (active) window.MontraAudio?.stopSpeech?.();
+      hideVoiceGuidanceHud();
+    }
   }
   function ensureVoiceGuidanceHud() {
     if (voiceGuidanceHud) return;
@@ -193,13 +343,28 @@
     header.append(voiceHudTitle, badge);
     voiceHudText = document.createElement("p");
     voiceHudText.className = "voice-guidance-text";
-    content.append(header, voiceHudText);
+    voiceHudRetry = document.createElement("button");
+    voiceHudRetry.type = "button";
+    voiceHudRetry.className = "secondary";
+    voiceHudRetry.textContent = "🔊 ลองฟังอีกครั้ง";
+    voiceHudRetry.hidden = true;
+    voiceHudRetry.onclick = () => {
+      const current = voiceGuidancePlayback;
+      if (current && isVoiceGuidanceEnabled()) playVoiceGuidance(current.item, current.playedKey, current.speechOptions);
+    };
+    content.append(header, voiceHudText, voiceHudRetry);
     const skipBtn = document.createElement("button");
     skipBtn.type = "button";
     skipBtn.className = "voice-guidance-skip";
     skipBtn.textContent = "ข้าม ✕";
     skipBtn.onclick = () => {
-      window.MontraAudio?.stopSpeech?.();
+      // An explicit skip dismisses this milestone, unlike a playback failure.
+      if (voiceGuidancePlayback?.playedKey) {
+        try { localStorage.setItem(voiceGuidancePlayback.playedKey, "1"); } catch (_) {}
+      }
+      const active = voiceGuidancePlayback?.active;
+      voiceGuidancePlayback = null;
+      if (active) window.MontraAudio?.stopSpeech?.();
       hideVoiceGuidanceHud();
     };
     voiceGuidanceHud.append(voiceGuidanceAvatar, content, skipBtn);
@@ -208,35 +373,86 @@
   function hideVoiceGuidanceHud() {
     if (voiceGuidanceHud) {
       voiceGuidanceHud.hidden = true;
-      voiceGuidanceHud.classList.remove("combat-alert");
+      voiceGuidanceHud.classList.remove("combat-alert", "spirit-whisper");
     }
     clearTimeout(voiceHudTimer);
   }
+  function playVoiceGuidance(item, playedKey = null, speechOptions = {}) {
+    const personaId = speechOptions.persona || getVoicePersona();
+    const persona = VOICE_PERSONAS[personaId] || VOICE_PERSONAS.elder;
+    ensureVoiceGuidanceHud();
+    // Replace the owner before speak() cancels the old session synchronously.
+    const playback = voiceGuidancePlayback = { item, playedKey, speechOptions, active: true };
+    voiceHudTitle.textContent = item.title;
+    voiceHudText.textContent = item.subtitle;
+    voiceGuidanceAvatar.textContent = item.icon || persona.icon;
+    voiceGuidanceHud.classList.remove("spirit-whisper");
+    if (speechOptions.whisper) voiceGuidanceHud.classList.add("spirit-whisper");
+    voiceGuidanceHud.classList.toggle("combat-alert", Boolean(item.alert));
+    voiceHudRetry.hidden = true;
+    voiceGuidanceHud.hidden = false;
+    clearTimeout(voiceHudTimer);
+    voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(12000, item.text.length * 110));
+    const failed = event => {
+      if (voiceGuidancePlayback !== playback) return;
+      playback.active = false;
+      voiceHudText.textContent = item.subtitle + (event?.error === "muted"
+        ? " · เปิดเสียงและเพิ่มความดังรวมกับเสียงพูด แล้วลองฟังอีกครั้ง"
+        : " · เล่นเสียงไม่ได้ ลองกดฟังอีกครั้ง");
+      voiceHudRetry.hidden = false;
+      clearTimeout(voiceHudTimer);
+      voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), 15000);
+    };
+    try {
+      if (!window.MontraAudio?.speak) { failed(); return; }
+      window.MontraAudio.speak(item.text, {
+        persona: personaId,
+        pitch: persona.pitch,
+        rate: persona.rate,
+        onStart: () => {
+          if (voiceGuidancePlayback !== playback) return;
+          // A rejected/autoplay-blocked attempt must not permanently consume it.
+          if (playedKey) { try { localStorage.setItem(playedKey, "1"); } catch (_) {} }
+        },
+        onEnd: () => {
+          if (voiceGuidancePlayback !== playback) return;
+          voiceGuidancePlayback = null;
+          hideVoiceGuidanceHud();
+        },
+        onError: failed
+      });
+    } catch (_) { failed(); }
+  }
   function triggerVoiceGuidance(stepKey) {
-    if (!isVoiceGuidanceEnabled()) return;
+    if (!isVoiceGuidanceEnabled() || attemptedVoiceGuidance.has(stepKey)) return;
     const item = TYPHOON_VOICE_GUIDANCE[stepKey];
     if (!item) return;
     const key = "montra_vg_played_" + stepKey;
-    try {
-      if (localStorage.getItem(key)) return;
-      localStorage.setItem(key, "1");
-    } catch (_) {}
-    ensureVoiceGuidanceHud();
-    voiceHudTitle.textContent = item.title;
-    voiceHudText.textContent = item.subtitle;
-    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = "🧙‍♂️";
-    voiceGuidanceHud.classList.remove("combat-alert");
-    voiceGuidanceHud.hidden = false;
-    clearTimeout(voiceHudTimer);
-    voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(5000, item.text.length * 110));
-    try {
-      window.MontraAudio?.speak?.(item.text, {
-        persona: "guide",
-        onEnd: () => hideVoiceGuidanceHud(),
-        onError: () => {}
-      });
-    } catch (_) {}
+    try { if (localStorage.getItem(key)) return; } catch (_) {}
+    // Do not retry from repeated game events. Recovery is an explicit tap, or
+    // a later page visit if playback never started.
+    attemptedVoiceGuidance.add(stepKey);
+    playVoiceGuidance(item, key);
   }
+  function replayVoiceGuidance() {
+    if (!isVoiceGuidanceEnabled()) return;
+    voiceGuidancePlayback = null;
+    window.MontraAudio?.stopSpeech?.();
+    for (const stepKey of Object.keys(TYPHOON_VOICE_GUIDANCE)) {
+      try { localStorage.removeItem("montra_vg_played_" + stepKey); } catch (_) {}
+    }
+    attemptedVoiceGuidance.clear();
+    triggerVoiceGuidance("move");
+  }
+
+  window.MontraVoice = {
+    getPersona: getVoicePersona,
+    setPersona: setVoicePersona,
+    getPersonas: () => Object.values(VOICE_PERSONAS),
+    triggerWhisper,
+    isVoiceEnabled: isVoiceGuidanceEnabled,
+    setVoiceEnabled: setVoiceGuidanceEnabled
+  };
 
   // Sound effects (audio.js). Safe no-op until audio is unlocked by the first tap.
   const SFX = (name, opts) => window.MontraAudio?.play(name, opts);

@@ -22,8 +22,8 @@ test('initial style extraction retains all bytes, cascade order, URLs and legacy
   const baseline = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/extraction-baseline.json')));
   const manifest = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/manifest.json')));
   const bytes = checkStyles();
-  assert.equal(bytes.length, 338554);
-  assert.equal(hash(bytes), 'b611ba0b9bd2d5e9511fe403ea43ad2f06ca989e3ac32c4cc5dc94c2b6db3c5f');
+  assert.equal(bytes.length, 355010);
+  assert.equal(hash(bytes), '0e3cf0696ae9d7676560f3c9554efb23926294e9433789cbe4ce2e9ef6d62b95');
   assert.equal(bytes.length, baseline.bytes);
   assert.equal(hash(bytes), baseline.sha256);
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
@@ -36,7 +36,7 @@ test('initial style extraction retains all bytes, cascade order, URLs and legacy
     assert.equal(fragment.toString('utf8').split('\n').length - 1, entry.originalEndLine - entry.originalStartLine + 1);
     nextLine = entry.originalEndLine + 1;
   }
-  assert.equal(nextLine, 5135);
+  assert.equal(nextLine, 5387);
   assert.deepEqual(assembleStyles(), assembleStyles());
 });
 

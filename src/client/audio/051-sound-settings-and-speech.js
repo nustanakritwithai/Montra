@@ -31,11 +31,27 @@
     riposte: "ดาบสวนกลับ!",
     protect: "คุ้มกันสหาย!"
   };
+  // A click may only select a target or be rejected. Announce a local skill
+  // only after its authoritative success event, and never interrupt a warning,
+  // NPC answer, or voice preview. These are the same fixed public skill lines.
+  function playSkillVoiceShout(skillId, playerId) {
+    if (playerId !== localId || !SKILL_VOICE_SHOUTS[skillId] || window.MontraAudio?.isSpeaking?.()) return;
+    window.MontraAudio?.speak?.(SKILL_VOICE_SHOUTS[skillId], { persona: "warrior", rate: 1.15 });
+  }
   function soundSettingsHtml() {
     const a = window.MontraAudio?.settings; if (!a) return "";
+    const curP = typeof getVoicePersona === "function" ? getVoicePersona() : "elder";
     const row = (key, label) => `<label class="field sound-row">${label}<input type="range" min="0" max="100" step="5" data-sound="${key}" value="${Math.round((a[key] ?? 0.8) * 100)}"></label>`;
     return `<section class="sound-settings"><h3>เสียง</h3><label class="field sound-row"><input type="checkbox" data-sound="muted" ${a.muted ? "" : "checked"}> เปิดเสียง</label>` +
-      row("master", "ความดังรวม") + row("voice", "เสียงพูดและพากย์ไทย") + `<label class="field sound-row"><input type="checkbox" id="toggleVoiceGuidance" ${isVoiceGuidanceEnabled() ? "checked" : ""}> 🎙️ เสียงพูดชี้แนะผู้เล่นใหม่ (Typhoon Voice)</label>` + `<button type="button" id="testVoiceBtn" class="secondary" style="margin:8px 0;width:100%;font-weight:600">🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)</button>` +
+      row("master", "ความดังรวม") + row("voice", "เสียงพูดและพากย์ไทย") +
+      `<label class="field sound-row"><input type="checkbox" id="toggleVoiceGuidance" ${isVoiceGuidanceEnabled() ? "checked" : ""}> 🎙️ เสียงพูดชี้แนะผู้เล่นใหม่ (Typhoon Voice)</label>` +
+      `<div class="field sound-row voice-persona-row"><span>บุคลิกเสียงผู้ชี้แนะ</span><select id="voicePersonaSelect" style="background:#1e1410;color:#ffd84a;border:1px solid #ffcc00;border-radius:6px;padding:4px 8px;font-weight:700">` +
+      `<option value="elder"${curP === "elder" ? " selected" : ""}>🧙‍♂️ พราหมณ์เฒ่า (สุขุม ลึกลับ)</option>` +
+      `<option value="warrior"${curP === "warrior" ? " selected" : ""}>⚔️ นักรบมนตรา (ดุดัน ปลุกใจ)</option>` +
+      `<option value="spirit"${curP === "spirit" ? " selected" : ""}>✨ วิญญาณผู้พิทักษ์ (ก้องกังวาน นุ่มลึก)</option>` +
+      `</select></div>` +
+      `<button type="button" id="replayVoiceGuidanceBtn" class="secondary" ${isVoiceGuidanceEnabled() ? "" : "disabled"}>🔊 เริ่มเสียงชี้แนะใหม่ (ไม่กระทบเซฟ)</button>` +
+      `<button type="button" id="testVoiceBtn" class="secondary" style="margin:8px 0;width:100%;font-weight:600">🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)</button>` +
       row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("music", "ดนตรี") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
   }
   function lightSettingsHtml() {
@@ -58,9 +74,24 @@
     const vGuideToggle = root.querySelector("#toggleVoiceGuidance");
     if (vGuideToggle) vGuideToggle.addEventListener("change", () => {
       setVoiceGuidanceEnabled(vGuideToggle.checked);
+      if (replayBtn) replayBtn.disabled = !vGuideToggle.checked;
     });
+    const replayBtn = root.querySelector("#replayVoiceGuidanceBtn");
+    if (replayBtn) replayBtn.onclick = () => replayVoiceGuidance();
+    const personaSelect = root.querySelector("#voicePersonaSelect");
+    if (personaSelect) {
+      personaSelect.addEventListener("change", () => {
+        if (typeof setVoicePersona === "function") setVoicePersona(personaSelect.value);
+      });
+    }
     const testBtn = root.querySelector("#testVoiceBtn");
-    if (testBtn) bindSpeechButton(testBtn, "สวัสดี ยินดีต้อนรับสู่อาณาจักรมนตรา ระบบเสียงพูดภาษาไทยพร้อมใช้งานแล้ว", "guide", "🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)");
+    if (testBtn) {
+      const selectedPersona = () => {
+        const id = getVoicePersona(), p = VOICE_PERSONAS[id];
+        return { persona: id, pitch: p.pitch, rate: p.rate };
+      };
+      bindSpeechButton(testBtn, "สวัสดี ยินดีต้อนรับสู่อาณาจักรมนตรา ระบบเสียงผู้ชี้แนะพร้อมเคียงข้างเจ้า", selectedPersona, "🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)");
+    }
   }
   function bindSpeechButton(button, text, persona, label) {
     let status = button.montraSpeechStatus;
@@ -89,8 +120,9 @@
         status.textContent = "ระบบเสียงยังไม่พร้อม กรุณาโหลดหน้าใหม่";
         return;
       }
+      const voice = typeof persona === "function" ? persona() : { persona };
       window.MontraAudio.speak(text, {
-        persona,
+        ...voice,
         onStart: () => { button.textContent = "⏹ หยุดเสียงพูด"; status.textContent = "กำลังเล่นเสียง"; },
         onEnd: () => { button.textContent = label; status.textContent = privacy; },
         onError: event => {

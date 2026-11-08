@@ -79,3 +79,22 @@ existing behavior and contract gates. Shared-state ownership, import/export
 boundaries, CSS organization and server decomposition have **not** been completed
 by this source-layout change. No Windows staging/deployment claim follows from
 these static checks.
+
+## Reviewed territory-war changes after extraction
+
+The war-gates PR changes four fragments (`017`, `019`, `047`, `059`): draw every
+gate, show per-gate status, and choose the nearest gate. Combined-release
+compatibility preserves first-gate behavior when an older server does not send
+per-gate state. `build-client.test.mjs` explicitly pins these reviewed fragments,
+the reviewed market navigation correction (`055`), and the assembled bundle.
+All other fragments match the reconciled speech, crafting, and market snapshot.
+The compatibility fixes do not regenerate that snapshot. See
+`docs/COMBINED-RELEASE-115-136-137.md` for scope and deployment limits.
+
+## Reviewed class-skill correction
+
+The class-skill panel fix changes `046`, `048`, `049` and `058`: authoritative
+class routing, LIVE/DEMO separation, book/detail ownership and canonical sword
+core commands. Their explicit build-test pins change; the historical snapshot
+and every other fragment remain protected. See
+[`CLASS-SKILL-PANELS.md`](../../docs/CLASS-SKILL-PANELS.md) for contracts and gates.

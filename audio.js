@@ -16,7 +16,7 @@
   try { Object.assign(settings, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (_) { /* private mode */ }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch (_) { /* ignore */ } };
 
-  let ctx = null, master = null, buses = {}, reverb = null, noiseBuf = null;
+  let ctx = null, master = null, buses = {}, reverb = {}, noiseBuf = null;
   const listener = { x: 0, z: 0, right: -1 }; // camera looks north (-Z): screen right is -X
   const MAX_VOICES = 24, voices = new Set(), recent = new Map();
 
@@ -36,10 +36,14 @@
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.knee.value = 12; comp.ratio.value = 4; comp.attack.value = .004; comp.release.value = .2;
     master = ctx.createGain(); master.connect(comp); comp.connect(ctx.destination);
-    // A night-air room: a generated impulse response on a shared send.
-    reverb = ctx.createConvolver(); reverb.buffer = makeImpulse(1.8, 3.2);
-    const wet = ctx.createGain(); wet.gain.value = .32; reverb.connect(wet); wet.connect(master);
-    for (const name of ["sfx", "ui", "ambience", "music"]) { const g = ctx.createGain(); g.connect(master); buses[name] = g; }
+    // Share the room impulse, never the signal: dry and wet returns both pass
+    // through their category fader, including tails already in the convolver.
+    const impulse = makeImpulse(1.8, 3.2);
+    for (const name of ["sfx", "ui", "ambience", "music"]) {
+      const g = ctx.createGain(); g.connect(master); buses[name] = g;
+      const room = ctx.createConvolver(); room.buffer = impulse; reverb[name] = room;
+      const wet = ctx.createGain(); wet.gain.value = .32; room.connect(wet); wet.connect(g);
+    }
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
     applyVolumes();
@@ -60,6 +64,7 @@
   }
   for (const ev of ["pointerdown", "touchend", "keydown"]) window.addEventListener(ev, unlock, { capture: true, passive: true });
   document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopSpeech();
     if (!ctx) return;
     if (document.hidden) ctx.suspend().catch(() => {}); else ctx.resume().catch(() => {});
   });
@@ -71,7 +76,7 @@
     let node = out;
     if (pan && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); out.connect(p); node = p; }
     node.connect(buses[bus]);
-    if (wet > 0) { const s = ctx.createGain(); s.gain.value = wet; out.connect(s); s.connect(reverb); }
+    if (wet > 0) { const s = ctx.createGain(); s.gain.value = wet; out.connect(s); s.connect(reverb[bus]); }
     const v = { out }; voices.add(v);
     setTimeout(() => { voices.delete(v); try { out.disconnect(); } catch (_) { /* gone */ } }, (dur + .3) * 1000);
     return out;
@@ -114,6 +119,32 @@
     error: (d, t) => { tone(d, t, { type: "triangle", freq: 190, to: 140, glide: .12, decay: .16, gain: .35 }); },
     coin: (d, t) => { metal(d, t, 1318, [[1, 1], [1.5, .5, .6]], { gain: .18, decay: .35 }); metal(d, t + .08, 1975, [[1, 1], [1.5, .4, .6]], { gain: .14, decay: .4 }); },
     gong: (d, t, p) => { const b = p.freq || 98; metal(d, t, b, [[1, 1, 1], [1.48, .5, .8], [2.02, .4, .6], [2.76, .25, .45], [3.9, .12, .3]], { gain: .42, decay: 3.2, attack: .01 }); noise(d, t, { type: "lowpass", freq: 600, decay: .12, gain: .15 }); },
+    war_horn: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      [146.83, 220, 293.66].forEach((f, i) => {
+        tone(d, t + i * 0.22, { type: "sawtooth", freq: f, to: f * 1.02, glide: 0.4, attack: 0.12, decay: 1.4, gain: 0.35 * k });
+        tone(d, t + i * 0.22, { type: "triangle", freq: f * 2, attack: 0.15, decay: 1.2, gain: 0.2 * k });
+      });
+      noise(d, t, { type: "bandpass", freq: 800, q: 2.5, attack: 0.1, decay: 1.6, gain: 0.15 * k });
+      R.gong(d, t + 0.66, { freq: 73.4, intensity: 1.2 });
+    },
+    // Blade: disappearing air, a heavy edge, retreating cut, then a rising pulse.
+    blade_vanish: (d, t, p) => { noise(d, t, { freq: 2200, to: 180, glide: .35, attack: .02, decay: .42, gain: .3 * p.intensity }); },
+    blade_heavy: (d, t, p) => { R.whoosh(d, t, { intensity: p.intensity, pitch: .7 }); R.blade(d, t + .16, p); R.blunt(d, t + .16, p); },
+    blade_withdraw: (d, t, p) => { R.blade(d, t, p); noise(d, t + .08, { freq: 1900, to: 250, glide: .3, attack: .02, decay: .32, gain: .4 * p.intensity }); },
+    blade_fury: (d, t, p) => { [110, 165, 220].forEach((freq, i) => tone(d, t + i * .12, { type: "triangle", freq, to: freq * 1.5, glide: .18, decay: .4, gain: .22 * p.intensity })); },
+    // Sentinel: a ground shock and distinct planted-metal defensive cues.
+    shock: (d, t, p) => { R.blunt(d, t, p); noise(d, t, { type: "lowpass", freq: 460, to: 80, glide: .35, decay: .4, gain: .5 * p.intensity }); },
+    bulwark: (d, t, p) => { R.block(d, t, p); metal(d, t + .08, 165, [[1, 1], [2.02, .35]], { gain: .24 * p.intensity, decay: .9 }); },
+    riposte: (d, t, p) => { R.block(d, t, p); metal(d, t + .1, 880, [[1, 1], [1.5, .4]], { gain: .18 * p.intensity, decay: .4 }); },
+    protect: (d, t, p) => { [220, 330].forEach((freq, i) => metal(d, t + i * .14, freq, [[1, 1], [2, .3]], { gain: .22 * p.intensity, decay: .85 })); },
+    // Mender: warm rising tones, wider circle, sustained ward and bright blessing.
+    mender_core_heal: (d, t, p) => { [523, 659, 784].forEach((freq, i) => tone(d, t + i * .1, { freq, attack: .035, decay: .45, gain: .17 * p.intensity })); },
+    mender_core_circle: (d, t, p) => { R.mender_core_heal(d, t, p); [392, 523, 784].forEach(freq => tone(d, t + .25, { freq, attack: .12, decay: .8, gain: .12 * p.intensity })); },
+    mender_core_ward: (d, t, p) => { [330, 495, 660].forEach(freq => tone(d, t, { freq, attack: .15, decay: 1.1, gain: .12 * p.intensity })); metal(d, t + .15, 1320, [[1, 1], [2, .25]], { gain: .08 * p.intensity, decay: .9 }); },
+    mender_core_cleanse: (d, t, p) => { noise(d, t, { type: "highpass", freq: 3000, attack: .04, decay: .25, gain: .1 * p.intensity }); [784, 1047, 1568].forEach((freq, i) => metal(d, t + i * .08, freq, [[1, 1], [2.5, .2]], { gain: .1 * p.intensity, decay: .65 })); },
+    bell: (d, t, p) => metal(d, t, 784, [[1, 1], [2.76, .35], [5.4, .12]], { gain: .18 * p.intensity, decay: 1.4 }),
+    equip: (d, t, p) => { R.block(d, t, p); metal(d, t + .05, 1320, [[1, 1], [1.5, .3]], { gain: .1 * p.intensity, decay: .25 }); },
     // Footsteps per surface.
     step_wood: (d, t, p) => { tone(d, t, { freq: rnd(115, 135), to: 70, glide: .05, decay: .06, gain: .32 * p.intensity }); noise(d, t, { freq: rnd(550, 700), q: 2.5, decay: .045, gain: .2 * p.intensity }); },
     step_soil: (d, t, p) => { noise(d, t, { type: "lowpass", freq: rnd(420, 600), decay: .08, gain: .6 * p.intensity }); tone(d, t, { freq: 80, to: 55, glide: .05, decay: .05, gain: .3 * p.intensity }); },
@@ -223,6 +254,49 @@
       tone(d, t + .16, { freq: 60, to: 30, glide: .18, decay: .65, gain: .55 * k });
       R.gong(d, t + .2, { freq: 82, gain: .38 * k });
     },
+    banner: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      R.gong(d, t, { freq: 110, gain: 0.5 * k });
+      noise(d, t + 0.08, { type: "bandpass", freq: 650, to: 280, glide: 0.8, q: 3.5, attack: 0.05, decay: 0.9, gain: 0.35 * k });
+      [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => metal(d, t + 0.15 + i * 0.08, f, [[1, 1], [2.2, 0.3, 0.4]], { gain: 0.12 * k, decay: 1.5 }));
+    },
+    boss_roar: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { type: "lowpass", freq: 220, gain: 0.38 * k, decay: 1.4 });
+      tone(d, t, { type: "sawtooth", freq: 95, to: 48, glide: 0.45, attack: 0.03, decay: 1.2, gain: 0.32 * k });
+      metal(d, t + 0.05, 82.4, [[1, 1], [1.3, 0.5]], { gain: 0.22 * k, decay: 1.5 });
+    },
+    boss_slam: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { type: "lowpass", freq: 160, gain: 0.45 * k, decay: 1.5 });
+      tone(d, t, { type: "triangle", freq: 130, to: 38, glide: 0.25, attack: 0.01, decay: 1.1, gain: 0.38 * k });
+      metal(d, t + 0.02, 110.0, [[1, 1], [1.8, 0.4], [2.2, 0.3]], { gain: 0.28 * k, decay: 1.8 });
+    },
+    wing_glide: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { type: "bandpass", freq: 520, Q: 1.6, gain: 0.16 * k, decay: 0.8 });
+      tone(d, t, { type: "sine", freq: 587.33, to: 880, glide: 0.22, attack: 0.04, decay: 0.5, gain: 0.12 * k });
+      tone(d, t + 0.08, { type: "triangle", freq: 880, to: 1174.66, glide: 0.18, attack: 0.03, decay: 0.45, gain: 0.09 * k });
+    },
+    meteor_slam: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { type: "lowpass", freq: 180, gain: 0.35 * k, decay: 1.1 });
+      tone(d, t, { type: "sawtooth", freq: 120, to: 42, glide: 0.18, attack: 0.01, decay: 0.7, gain: 0.3 * k });
+      metal(d, t + 0.02, 130.81, [[1, 1], [1.5, 0.4]], { gain: 0.24 * k, decay: 1.3 });
+    },
+    pet_chime: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      [1046.5, 1318.51, 1567.98, 2093.0].forEach((f, i) => {
+        metal(d, t + i * 0.05, f, [[1, 1], [2.4, 0.3, 0.4]], { gain: 0.11 * k, decay: 0.8 });
+      });
+      tone(d, t, { type: "sine", freq: 880, to: 1760, glide: 0.18, attack: 0.02, decay: 0.25, gain: 0.15 * k });
+    },
+    whisper: (d, t, p) => {
+      const k = p.intensity ?? 1;
+      noise(d, t, { type: "bandpass", freq: 950, to: 420, glide: 1.2, q: 4.5, attack: 0.18, decay: 1.8, gain: 0.28 * k });
+      noise(d, t + 0.1, { type: "bandpass", freq: 2200, to: 1600, glide: 0.9, q: 5.5, attack: 0.12, decay: 1.4, gain: 0.22 * k });
+      tone(d, t + 0.05, { type: "sine", freq: 280, to: 140, glide: 1.1, attack: 0.2, decay: 1.6, gain: 0.14 * k });
+    },
     seer_curse: (d, t, p) => {
       const k = p.intensity ?? 1;
       noise(d, t, { freq: 1500, to: 650, glide: .55, q: 8, attack: .12, decay: .65, gain: .32 * k });
@@ -324,16 +398,29 @@
   // Which bus, how much reverb and base loudness for each sound.
   const META = {
     tap: ["ui", 0, .9], open: ["ui", .05, .9], close: ["ui", .05, .9], toast: ["ui", .25, 1], error: ["ui", 0, 1], coin: ["ui", .2, 1], levelup: ["ui", .4, 1],
-    gong: ["sfx", .5, 1], drum: ["sfx", .35, 1], thunder: ["ambience", .5, 1], ghost: ["sfx", .4, .9],
+    gong: ["sfx", .5, 1], war_horn: ["sfx", .4, 1.2], drum: ["sfx", .35, 1], thunder: ["ambience", .5, 1], boss_roar: ["sfx", .5, 1.2], boss_slam: ["sfx", .5, 1.3], wing_glide: ["sfx", .4, 1.0], meteor_slam: ["sfx", .5, 1.2], pet_chime: ["sfx", .4, 1.0], banner: ["sfx", .45, 1.1], whisper: ["sfx", .4, 1.1], ghost: ["sfx", .4, .9],
     phuttha_core: ["sfx", .25, 1], sritra_core: ["sfx", .4, 1], atamat_core: ["sfx", .3, 1], chumphon_core: ["sfx", .5, 1],
     muay_chaiya: ["sfx", .2, 1], muay_korat: ["sfx", .25, 1], muay_lopburi: ["sfx", .2, 1], muay_thasao: ["sfx", .2, 1],
     seer_buffalo: ["sfx", .4, 1], seer_curse: ["sfx", .45, 1], seer_binding: ["sfx", .3, 1], seer_burst: ["sfx", .35, 1],
     seer_pot: ["sfx", .3, 1], seer_poison: ["sfx", .25, 1],
+    blade_vanish: ["sfx", .2, 1], blade_heavy: ["sfx", .2, 1], blade_withdraw: ["sfx", .2, 1], blade_fury: ["sfx", .3, 1],
+    shock: ["sfx", .25, 1], bulwark: ["sfx", .3, 1], riposte: ["sfx", .2, 1], protect: ["sfx", .3, 1],
+    mender_core_heal: ["sfx", .3, 1], mender_core_circle: ["sfx", .4, 1], mender_core_ward: ["sfx", .4, 1], mender_core_cleanse: ["sfx", .3, 1],
+    bell: ["ui", .3, 1], equip: ["ui", .1, 1],
   };
-  const DUR = { ghost: 2.6, gong: 3.5, levelup: 3.5, down: 3.5, summon: 4.5, thunder: 3, ghost_die: 1.6, warp: 1.8, fly: 1.6, respawn: 1.4, toast: .9,
-    phuttha_core: 1.0, sritra_core: 2.2, atamat_core: 1.2, chumphon_core: 2.5,
+  const DUR = { ghost: 2.6, gong: 3.5, war_horn: 3.2, levelup: 3.5, down: 3.5, summon: 4.5, thunder: 3, boss_roar: 2.4, boss_slam: 2.2, wing_glide: 1.4, meteor_slam: 2.0, pet_chime: 1.6, banner: 2.8, whisper: 2.2, ghost_die: 1.6, warp: 1.8, fly: 1.6, respawn: 1.4, toast: .9,
+    phuttha_core: 1.0, sritra_core: 2.2, atamat_core: 1.2, chumphon_core: 3.5,
     muay_chaiya: .6, muay_korat: .8, muay_lopburi: .7, muay_thasao: .7,
-    seer_buffalo: 1.8, seer_curse: 1.4, seer_binding: 1.0, seer_burst: 1.2, seer_pot: 1.0, seer_poison: .9 };
+    blade_vanish: .6, blade_heavy: .9, blade_withdraw: .8, blade_fury: .9,
+    shock: .6, bulwark: 1.2, riposte: .7, protect: 1.2,
+    mender_core_heal: .9, mender_core_circle: 1.4, mender_core_ward: 1.5, mender_core_cleanse: 1.0,
+    bell: 1.7, equip: .5,
+    seer_buffalo: 3.5, seer_curse: 1.4, seer_binding: 1.0, seer_burst: 1.2, seer_pot: 1.0, seer_poison: .9 };
+
+  // Core aliases inherit the complete mix and lifetime contract, not just notes.
+  for (const name of ["chaiya", "korat", "lopburi", "thasao"]) {
+    META[name] = META["muay_" + name]; DUR[name] = DUR["muay_" + name];
+  }
 
   // ---- Ambience --------------------------------------------------------
   // Each map is a mix of continuous beds (looped, filtered noise or drones
@@ -400,7 +487,7 @@
   function startAmbience(mapId) {
     const prof = AMBIENCE[mapId] || AMBIENCE.ritual_village, out = ctx.createGain();
     out.gain.value = .0001; out.connect(buses.ambience);
-    const wet = ctx.createGain(); wet.gain.value = .25; out.connect(wet); wet.connect(reverb);
+    const wet = ctx.createGain(); wet.gain.value = .25; out.connect(wet); wet.connect(reverb.ambience);
     const sources = [];
     // Per-bed trims, measured so wind, insects, water, drone, crowd and fire sit at similar loudness.
     const TRIM = { wind: 1.0, insects: 1.2, water: .35, drone: .3, crowd: 2.6, fire: 1.0 };
@@ -483,7 +570,7 @@
     gonglow: (d, t, g) => metal(d, t, 73, [[1, 1, 1], [1.48, .5, .8], [2.02, .35, .6], [2.76, .2, .4]], { gain: g, decay: 4, attack: .015 }),
   };
   let music = null, musicWanted = { map: "ritual_village", combat: false, war: false, elite: false };
-  function musicLayer(name) { const g = ctx.createGain(); g.gain.value = .0001; g.connect(buses.music); const w = ctx.createGain(); w.gain.value = .3; g.connect(w); w.connect(reverb); return g; }
+  function musicLayer(name) { const g = ctx.createGain(); g.gain.value = .0001; g.connect(buses.music); const w = ctx.createGain(); w.gain.value = .3; g.connect(w); w.connect(reverb.music); return g; }
   function startDrone(th, dest, ratio2 = Math.pow(2, 4 / 7), wave = th.drone, level = th.droneGain) {
     const out = [], f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 600; f.connect(dest);
     for (const ratio of [.5, .5 * ratio2]) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = wave; o.frequency.value = th.root * ratio; g.gain.value = level; o.connect(g); g.connect(f); o.start(); out.push(o, lfo(g.gain, .07 + ratio * .03, level * .5)); }
@@ -574,6 +661,7 @@
   let cachedThaiVoice = null;
   let activeAudioEl = null;
   let speechSession = null;
+  let speechGeneration = 0;
 
   function getThaiVoice() {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
@@ -593,6 +681,7 @@
     elder: { pitch: 0.82, rate: 0.88 },
     monk: { pitch: 0.78, rate: 0.82 },
     warrior: { pitch: 0.92, rate: 1.08 },
+    spirit: { pitch: 1.16, rate: 0.92 },
     merchant: { pitch: 1.15, rate: 1.05 },
     guide: { pitch: 1.0, rate: 1.0 },
   };
@@ -605,7 +694,7 @@
     if (session.audio) {
       session.audio.pause();
       if (activeAudioEl === session.audio) activeAudioEl = null;
-    } else if (error && "speechSynthesis" in window) {
+    } else if (error && session.utterance && "speechSynthesis" in window) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
     }
     if (error) session.opts.onError?.(error);
@@ -641,7 +730,17 @@
 
   function speak(text, opts = {}) {
     if (typeof window === "undefined") return false;
-    stopSpeech();
+    const request = stopSpeech();
+    // onEnd may synchronously speak/stop again. That newer intent wins, even
+    // if it has already finished; never overwrite it or orphan its resources.
+    if (request !== speechGeneration) {
+      opts.onError?.({ error: "interrupted" });
+      return false;
+    }
+    if (document.hidden) {
+      opts.onError?.({ error: "hidden" });
+      return false;
+    }
     if (settings.muted || settings.voice === 0 || settings.master === 0) {
       opts.onError?.({ error: "muted" });
       return false;
@@ -679,10 +778,11 @@
   }
 
   function stopSpeech() {
+    const generation = ++speechGeneration;
     const previous = speechSession;
     speechSession = null; // Invalidate before cancel fires synchronous events.
     if (previous) clearTimeout(previous.timer);
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    if (previous?.utterance && typeof window !== "undefined" && "speechSynthesis" in window) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
     }
     if (activeAudioEl) {
@@ -690,6 +790,16 @@
       activeAudioEl = null;
     }
     previous?.opts.onEnd?.();
+    return generation;
+  }
+
+  function updateSpeechVolume() {
+    if (!speechSession) return;
+    const volume = settings.muted ? 0 : settings.master * settings.voice;
+    // Native engines may snapshot utterance volume at start. Cancel rather than
+    // leave old-volume speech playing or restart without a fresh user gesture.
+    if (volume === 0 || speechSession.utterance) stopSpeech();
+    else if (speechSession.audio) speechSession.audio.volume = volume;
   }
 
   function isSpeaking() {
@@ -705,7 +815,13 @@
     getThaiVoice,
     listen(x, z) { listener.x = x; listener.z = z; },
     get settings() { return { ...settings }; },
-    set(key, value) { if (!(key in DEFAULTS)) return; settings[key] = key === "muted" ? Boolean(value) : Math.max(0, Math.min(1, Number(value) || 0)); applyVolumes(); save(); },
+    set(key, value) {
+      if (!(key in DEFAULTS)) return;
+      const previous = settings[key];
+      settings[key] = key === "muted" ? Boolean(value) : Math.max(0, Math.min(1, Number(value) || 0));
+      applyVolumes(); save();
+      if (previous !== settings[key] && ["master", "voice", "muted"].includes(key)) updateSpeechVolume();
+    },
     get ready() { return Boolean(ctx && ctx.state === "running"); },
     get voices() { return voices.size; },
     unlock,

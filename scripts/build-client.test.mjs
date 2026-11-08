@@ -8,19 +8,90 @@ import { spawnSync } from 'node:child_process';
 import { assembleClient, checkClient, clientRoot, prepareClient, writeClient } from './build-client.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
-test('initial extraction retains every baseline byte and one unchanged IIFE', () => {
+// Intentional gate, market, flight, class-skill, audio and cosmetic-safeguard changes. Keep snapshot
+// evidence unchanged; every other fragment must still match that evidence.
+const reviewedReleaseFragments = new Map([
+{
+  "path": "ui/046-drawers-and-chat.js",
+  "bytes": 9866,
+  "sha256": "678c70cc8f20b4c04d8cfa161a660506c5de197694535589887042a8d0038aad"
+},
+{
+  "path": "ui/048-class-books-and-hotbars.js",
+  "bytes": 70197,
+  "sha256": "60a5e524e669a9a95fc49e159d785c597e08a04c943ad2348c27a5653e8dad45"
+},
+{
+  "path": "ui/049-skill-graph-and-details.js",
+  "bytes": 53305,
+  "sha256": "5845fd7eb336182b4bfac408e5469f1bdb3d2dc2a5503d93089777ee9ba8afc1"
+},
+{
+  "path": "input/058-field-control-bindings.js",
+  "bytes": 6385,
+  "sha256": "d19a108b7d1405e75a3b8ac767bb27dd653bcfceeccac2c51f3dab06a0d336c0"
+},
+{
+  "path": "combat/008-weapon-party-boss-feedback.js",
+  "bytes": 49803,
+  "sha256": "afe577ae7154216c90705bc74a4c0f1d4bc656bd982f17b230c341c08c934685"
+},
+{
+  "path": "input/039-movement-flight-and-climbing.js",
+  "bytes": 16746,
+  "sha256": "2c6eabadd237367cf857e4b50c844481226566d9e902b89bbe816986c10aff23"
+},
+  {
+    "path": "world/017-region-terrain.js",
+    "bytes": 55705,
+    "sha256": "4178b32e10cde7f1ff798732f831397317cc4809444108338d75bcf624c7b00d"
+  },
+  {
+    "path": "world/019-state-and-portals.js",
+    "bytes": 19219,
+    "sha256": "433a2e4004df0292a90699a71e14453bf843690895ba43d6676b54f270abf500"
+  },
+  {
+    "path": "ui/047-maps-and-strategy.js",
+    "bytes": 72195,
+    "sha256": "05d687136931ba32f235b6477d6285105329d6bb869d4daad289e1b7f4238048"
+  },
+  {
+    "path": "core/059-frame-loop-and-startup.js",
+    "bytes": 18707,
+    "sha256": "a73a400a703a8700c1123716baa12ccc4941338a9d0b8a0589b9353404bbb35c"
+  },
+  {
+    "path": "ui/055-market-and-trade.js",
+    "bytes": 55367,
+    "sha256": "2cf0b6272de3ff4cbd59ab5ca19319cff7b098d0eadfc82f18af8a090ee52678"
+  },
+  {
+    "path": "network/044-state-sync-and-connection.js",
+    "bytes": 138100,
+    "sha256": "01e70fe17a7361aec65c944b6ae592db95534f5ec792694b1dc141c4d0539e7a"
+  },
+  {
+    "path": "audio/051-sound-settings-and-speech.js",
+    "bytes": 9828,
+    "sha256": "01ed1a822470a5af32a7dc3500dbb561d006fa933be0bfaed817f3ec8f791f17"
+  }
+].map(entry => [entry.path, entry]));
+
+test('reviewed combined client preserves unchanged snapshot bytes and deterministic assembly', () => {
   const baseline = JSON.parse(readFileSync(join(clientRoot, 'src/client/extraction-baseline.json')));
   const bytes = assembleClient();
-  assert.equal(bytes.length, 1372310);
-  assert.equal(hash(bytes), 'a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf');
-  assert.equal(bytes.length, baseline.bytes);
-  assert.equal(hash(bytes), baseline.sha256);
+  assert.equal(baseline.bytes, 1467465);
+  assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
+  assert.equal(bytes.length, 1462095);
+  assert.equal(hash(bytes), '80b2922586c81f822ceb5d456d1f75514d10b5830eaee60c1511f286c98561b8');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
     const fragment = readFileSync(join(clientRoot, 'src/client', entry.path));
-    assert.equal(fragment.length, entry.bytes, entry.path);
-    assert.equal(hash(fragment), entry.sha256, entry.path);
+    const expected = reviewedReleaseFragments.get(entry.path) ?? entry;
+    assert.equal(fragment.length, expected.bytes, entry.path);
+    assert.equal(hash(fragment), expected.sha256, entry.path);
   }
   assert.deepEqual(assembleClient(), assembleClient());
 });

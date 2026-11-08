@@ -32,11 +32,7 @@
   $("noticeTrade").onclick=()=>{economyTab="trade";openEconomy();};
   $("menuQuest").onclick=openCurrentQuest;
   $("menuGuild").onclick=openGuild;
-  $("quickSkills").onclick=()=>{
-    const entry=$("fieldMenu")?.querySelector(".book-entry:not([hidden])");
-    if(entry) entry.click();
-    else openSwordTree();
-  };
+  $("quickSkills").onclick=openClassSkillBook;
   $("mapButton").onclick=openMap;
   $("chatButton").onclick=openChat;
   $("marketButton").onclick=openEconomy;
@@ -50,6 +46,10 @@
   $("bladeBookButton").onclick=openBladeBook;
   $("sentinelBookButton").onclick=openSentinelBook;
   function toggleFieldMount() {
+    if (window.MontraMount?.toggleMount) {
+      window.MontraMount.toggleMount();
+      return;
+    }
     const why=$("mountButton").dataset.unavailable;
     if(mode==="live" && why==="server"){toast("เซิร์ฟเวอร์ยังไม่เปิดระบบม้า · ต้องอัปเดต VPS");return;}
     if(mode==="live" && why==="guest"){toast("เรียกม้าได้เฉพาะตัวละครที่บันทึกในบัญชี");return;}
@@ -57,3 +57,47 @@
   }
   $("mountButton").onclick=toggleFieldMount;
   $("menuMount").onclick=()=>{closeDrawer();toggleFieldMount();};
+  function triggerWarBanner() {
+    if (window.MontraBanner?.plantBanner) {
+      window.MontraBanner.plantBanner();
+    }
+  }
+  const bannerBtn = $("bannerButton");
+  if (bannerBtn) bannerBtn.onclick = triggerWarBanner;
+  function toggleFamiliarPetCommand() {
+    if (window.MontraPet?.togglePet) {
+      window.MontraPet.togglePet();
+    }
+  }
+  const petBtn = $("petButton");
+  if (petBtn) petBtn.onclick = toggleFamiliarPetCommand;
+  function toggleFlightCommand() {
+    if (window.MontraFlight?.toggleFlight) {
+      window.MontraFlight.toggleFlight();
+    }
+  }
+  const flightBtn = $("flightButton");
+  if (flightBtn) flightBtn.onclick = toggleFlightCommand;
+  function toggleBossCommand() {
+    if (window.MontraBoss?.toggleBoss) {
+      window.MontraBoss.toggleBoss();
+    }
+  }
+  const bossBtn = $("bossEncounterButton");
+  if (bossBtn) bossBtn.onclick = toggleBossCommand;
+  addEventListener("keydown", e => {
+    if (e.repeat || e.defaultPrevented) return;
+    const t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.closest?.('button,a[href],summary,[role="button"]'))) return;
+    if (e.key?.toLowerCase() === "h") {
+      toggleFieldMount();
+    } else if (e.key?.toLowerCase() === "b") {
+      triggerWarBanner();
+    } else if (e.key?.toLowerCase() === "p") {
+      toggleFamiliarPetCommand();
+    } else if (e.key?.toLowerCase() === "f") {
+      toggleFlightCommand();
+    } else if (e.key?.toLowerCase() === "v") {
+      toggleBossCommand();
+    }
+  });

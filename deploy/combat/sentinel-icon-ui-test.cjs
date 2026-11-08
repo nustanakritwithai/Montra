@@ -14,7 +14,7 @@ render({id:'sentinelHotbar',querySelectorAll:()=>buttons},ids,skills,()=>{});
 const icons=buttons.map(button=>button.children[0].innerHTML);
 assert.ok(icons.every(icon=>icon.includes('<svg')&&icon.includes('viewBox="0 0 48 48"')));
 assert.equal(new Set(icons).size,4,'all four skill icons must differ');
-buttons.forEach((button,i)=>{assert.equal(button.dataset.skillId,ids[i]);assert.match(button.attrs['aria-label'],new RegExp(ids[i]));assert.equal(button.onclick(),ids[i]);assert.equal(button.listeners.click.length,1,'speech listener is registered without replacing gameplay click');});
+buttons.forEach((button,i)=>{assert.equal(button.dataset.skillId,ids[i]);assert.match(button.attrs['aria-label'],new RegExp(ids[i]));assert.equal(button.onclick(),ids[i]);assert.equal((button.listeners.click || []).length,0,'hotbar preserves gameplay click and waits for authoritative acceptance before speech');});
 assert.equal(buttons[0].children[0].children[0].textContent,'5','cooldown remains visible over the icon');
 const other=element('button');other.firstChild={textContent:'ท่า guard'};
 render({id:'swordHotbar',querySelectorAll:()=>[other]},['guard'],{guard:{name:'ท่า guard',effect:'guard'}},()=>{});

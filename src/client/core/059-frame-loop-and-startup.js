@@ -154,7 +154,9 @@
       const me=getLocalAvatar();
       if(me) {
         const dx=demoDest.x-me.targetX, dz=demoDest.z-me.targetZ, d=Math.hypot(dx,dz);
-        const step=(demoFlying?4:(possessed?4.6:3))*dt;
+        const baseStep=(demoFlying?4:(possessed?4.6:3));
+        const mountMult=me.mounted?1.6:1;
+        const step=baseStep*mountMult*dt;
         if(d<=step) { me.targetX=demoDest.x;me.targetZ=demoDest.z;demoDest=null; }
         else if(d>0){ me.targetX+=dx/d*step;me.targetZ+=dz/d*step; }
       }
@@ -223,11 +225,13 @@
     const siege=$("siegeGateButton"),localWar=territoryState?.local,castle=activeMapId==="tri_wiang_castle";
     const riverWar=localWar?.river;
     const canUse=localWar?.site===activeMapId && localWar.inField && localWar.phase==="battle" && authoritative?.alive && Math.abs(playerLayer(authoritative))<.1;
-    const gate=canUse && worldDefinitions[activeMapId].strategic?.rampart?.gates.find((g,i)=>{
-      const b=g.box;
-      return (castle || riverWar || i===0) && authoritative.x>=b.x-2.5 && authoritative.x<=b.x+b.width+2.5 && authoritative.z>=b.z-2.5 && authoritative.z<=b.z+b.length+2.5;
-    });
-    const status=gate && (riverWar?riverWar.gates[gate.id]:castle?localWar.pilot?.gates?.[gate.id]:{closed:localWar.gateClosed,hp:localWar.gateHp});
+    const gate=canUse && worldDefinitions[activeMapId].strategic?.rampart?.gates.reduce((nearest,g,i)=>{
+      if(!castle && !riverWar && !localWar.gates && i!==0)return nearest;
+      const distance=gate=>Math.hypot(authoritative.x-gate.box.x-gate.box.width/2,authoritative.z-gate.box.z-gate.box.length/2);
+      return !nearest || distance(g)<distance(nearest)?g:nearest;
+    },null);
+    const nearGate=gate && authoritative.x>=gate.box.x-2.5 && authoritative.x<=gate.box.x+gate.box.width+2.5 && authoritative.z>=gate.box.z-2.5 && authoritative.z<=gate.box.z+gate.box.length+2.5;
+    const status=nearGate && (riverWar?riverWar.gates[gate.id]:castle?localWar.pilot?.gates?.[gate.id]:localWar.gates?.[gate.id] ?? {closed:localWar.gateClosed,hp:localWar.gateHp});
     const inside=gate && (gate.side==="west"?authoritative.x>gate.box.x+gate.box.width/2:gate.side==="east"?authoritative.x<gate.box.x+gate.box.width/2:
       gate.side==="north"?authoritative.z>gate.box.z+gate.box.length/2:authoritative.z<gate.box.z+gate.box.length/2);
     siege.hidden=!(status?.hp && (!castle || localWar.pilot?.throne?.defended) && (!riverWar || riverWar.defended) && (localWar.side==="attack"?status.closed:inside));
@@ -298,6 +302,11 @@
     // The horizon only enters the portrait frustum at shallow camera tilts.
     sky.setEnabled(camera.beta > 1.05);
     motes.emitter.copyFrom(camera.target);
+    if (typeof updateWeather === "function") updateWeather(dt, elapsed);
+    if (typeof updateBanners === "function") updateBanners(dt, elapsed);
+    if (typeof updatePet === "function") updatePet(dt, elapsed);
+    if (typeof updateFlight === "function") updateFlight(dt, elapsed);
+    if (typeof updateThaoWessuwanBoss === "function") updateThaoWessuwanBoss(dt, elapsed);
     animatePortals(elapsed, dt);
     if (me) warm.position.set(me.x, me.y + 3.4, me.z + .6);
     scene.render();

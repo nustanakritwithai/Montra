@@ -11,7 +11,8 @@ function fixture(drawer='crafting'){
   const elements=new Map(),wire=[],callbacks={},timers=new Map(),toasts=[];
   let now=100000,depth=0,maxDepth=0,renderCount=0,timerId=0,sendHook=null;
   const player={alive:true,persistent:true,level:1},slots=[];
-  for(const id of ['personalBench','craftPageStatus','craftGold','craftActionStatus',
+  for(const id of ['personalBench','craftPageStatus','craftGold','craftActionStatus','craftPlayerLevel','craftComingSoon','craftRecipePane','craftDetailPane','benchGroup',
+    ...['all','food','medicine','weapons','armor','materials','furniture'].map(c=>'ckCategory-'+c),
     'forgeTargetButton','forgePageStatus','forgeGold','forgeTargetLocation','forgeEmpty',
     'forgeEnhanceSection','forgeRerollSection','forgeItemName','forgeInfo','forgeCopyItem','forgeSealItem','forgePanel']){
     elements.set(id,{textContent:'',hidden:false,disabled:false,dataset:{},attributes:{},children:[],setAttribute(k,v){this.attributes[k]=String(v);}});
@@ -22,7 +23,7 @@ function fixture(drawer='crafting'){
   const room=makeRoom('initial');
   const ctx={$:id=>elements.get(id)||null,Date:{now:()=>now},mode:'live',room,joined:room,localId:'me',drawerActive:drawer,
     forgeAnimation:null,forgeAnimationBusy:()=>false,cancelForgeAnimation(){},renderForgeAnimation(){},failForgeAnimation(){},economyPendingRequest:null,economyGold:null,economyPending:false,economyTimer:null,itemUsePending:false,centralMarketVersion:0,
-    craftPageRoom:room,craftPagePosition:null,craftRecipeTarget:null,benchTrail:[],cardDrill:{},craftResultRoom:null,craftResultMessage:'',
+    craftComingSoon:'',craftPageRoom:room,craftPagePosition:null,craftRecipeTarget:null,benchTrail:[],cardDrill:{},craftResultRoom:null,craftResultMessage:'',
     forgePageRoom:room,forgePageTarget:null,forgePageIdentity:null,forgePageAction:'enhance',
     warpPending:false,fishingPending:false,ownServerCharacter:()=>player,currentBagSlots:()=>slots,
     renderWorkbench(){},renderCraft(){},renderForge(){},renderForgeStock(){},renderForgePicker(){},renderItemTile(){},

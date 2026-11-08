@@ -1,32 +1,49 @@
   // Sky: gradient night, stars and a cloud-veiled crescent moon. It is only
   // seen at shallow camera angles but keeps the horizon from reading as void.
   const skyTexture = new B.DynamicTexture("night sky", { width: 1024, height: 512 }, scene, false);
-  {
+  function drawSkyTexture(isBloodMoon = false) {
     const c = skyTexture.getContext();
+    c.clearRect(0, 0, 1024, 512);
     const g = c.createLinearGradient(0, 0, 0, 512);
-    g.addColorStop(0, "#03050a"); g.addColorStop(.38, "#0b1220"); g.addColorStop(.5, "#1f2a36"); g.addColorStop(.6, "#10140f"); g.addColorStop(1, "#0c100c");
+    if (isBloodMoon) {
+      g.addColorStop(0, "#150205"); g.addColorStop(.38, "#2d050b"); g.addColorStop(.5, "#420710"); g.addColorStop(.6, "#220406"); g.addColorStop(1, "#150204");
+    } else {
+      g.addColorStop(0, "#03050a"); g.addColorStop(.38, "#0b1220"); g.addColorStop(.5, "#1f2a36"); g.addColorStop(.6, "#10140f"); g.addColorStop(1, "#0c100c");
+    }
     c.fillStyle = g; c.fillRect(0, 0, 1024, 512);
     for (let i = 0; i < 320; i++) {
       const y = noise(i, 7) * 230, a = .25 + noise(i, 8) * .7;
-      c.fillStyle = `rgba(230,236,255,${a * (1 - y / 260)})`;
+      c.fillStyle = isBloodMoon ? `rgba(255,180,180,${a * (1 - y / 260)})` : `rgba(230,236,255,${a * (1 - y / 260)})`;
       c.fillRect(noise(i, 9) * 1024, y, noise(i, 5) > .93 ? 2 : 1, noise(i, 5) > .93 ? 2 : 1);
     }
-    const moon = document.createElement("canvas"); moon.width = moon.height = 128;
-    const m = moon.getContext("2d");
+    const moonCanvas = document.createElement("canvas"); moonCanvas.width = moonCanvas.height = 128;
+    const m = moonCanvas.getContext("2d");
     const halo = m.createRadialGradient(64, 64, 10, 64, 64, 64);
-    halo.addColorStop(0, "rgba(220,230,255,.35)"); halo.addColorStop(1, "rgba(220,230,255,0)");
-    m.fillStyle = halo; m.fillRect(0, 0, 128, 128);
-    m.fillStyle = "#eef1ff"; m.beginPath(); m.arc(64, 64, 22, 0, Math.PI * 2); m.fill();
-    m.globalCompositeOperation = "destination-out"; m.beginPath(); m.arc(75, 57, 20, 0, Math.PI * 2); m.fill();
-    c.drawImage(moon, 300, 90);
+    if (isBloodMoon) {
+      halo.addColorStop(0, "rgba(255,40,60,.65)"); halo.addColorStop(0.5, "rgba(200,20,40,.3)"); halo.addColorStop(1, "rgba(200,20,40,0)");
+      m.fillStyle = halo; m.fillRect(0, 0, 128, 128);
+      m.fillStyle = "#ff3b4b"; m.beginPath(); m.arc(64, 64, 24, 0, Math.PI * 2); m.fill();
+      m.fillStyle = "rgba(180,15,30,0.55)";
+      m.beginPath(); m.arc(58, 56, 6, 0, Math.PI * 2); m.fill();
+      m.beginPath(); m.arc(72, 68, 5, 0, Math.PI * 2); m.fill();
+      m.beginPath(); m.arc(66, 52, 4, 0, Math.PI * 2); m.fill();
+    } else {
+      halo.addColorStop(0, "rgba(220,230,255,.35)"); halo.addColorStop(1, "rgba(220,230,255,0)");
+      m.fillStyle = halo; m.fillRect(0, 0, 128, 128);
+      m.fillStyle = "#eef1ff"; m.beginPath(); m.arc(64, 64, 22, 0, Math.PI * 2); m.fill();
+      m.globalCompositeOperation = "destination-out"; m.beginPath(); m.arc(75, 57, 20, 0, Math.PI * 2); m.fill();
+    }
+    c.drawImage(moonCanvas, 300, 90);
     for (let i = 0; i < 26; i++) {
       const x = noise(i, 11) * 1024, y = 120 + noise(i, 12) * 140, w = 60 + noise(i, 13) * 160;
       const cloud = c.createRadialGradient(x, y, 0, x, y, w);
-      cloud.addColorStop(0, "rgba(40,48,60,.55)"); cloud.addColorStop(1, "rgba(40,48,60,0)");
+      cloud.addColorStop(0, isBloodMoon ? "rgba(70,20,30,.6)" : "rgba(40,48,60,.55)");
+      cloud.addColorStop(1, "rgba(0,0,0,0)");
       c.fillStyle = cloud; c.beginPath(); c.ellipse(x, y, w, w * .32, 0, 0, Math.PI * 2); c.fill();
     }
     skyTexture.update();
   }
+  drawSkyTexture(false);
   const skyMat = new B.StandardMaterial("night sky", scene);
   skyMat.emissiveTexture = skyTexture; skyMat.diffuseColor = B.Color3.Black(); skyMat.specularColor = B.Color3.Black();
   skyMat.disableLighting = true; skyMat.backFaceCulling = false; skyMat.fogEnabled = false;
@@ -131,9 +148,111 @@
   }
   // Mix a hex colour toward a lighter tint (the map's sky) so lifted fog and background keep the map's hue.
   const liftHex = (hex, toward, k) => B.Color3.FromHexString(hex).scale(1 - k).add(B.Color3.FromHexString(toward).scale(k * .55));
+  const BLOOD_MOON_ATMOSPHERE = {
+    clear: "#1b0407", fog: "#2c090e", fogNear: 4, fogFar: 95, hemi: .72, carry: .75,
+    sky: "#ff3344", ground: "#3d1015", key: "#ff4455", keyI: .62,
+    mist: "#5c121a", mistAlpha: .36, mote: ["#ff2244", "#ff8833"], skyLevel: 1.25
+  };
+
+  const rainTexture = paintTexture("rain droplet", 32, (c, s) => {
+    c.clearRect(0, 0, s, s);
+    const g = c.createLinearGradient(s / 2, 0, s / 2, s);
+    g.addColorStop(0, "rgba(200,225,255,0)");
+    g.addColorStop(0.7, "rgba(220,240,255,0.7)");
+    g.addColorStop(1, "rgba(255,255,255,0.95)");
+    c.fillStyle = g;
+    c.fillRect(s * 0.4, 0, s * 0.2, s);
+  });
+  const rainParticles = new B.ParticleSystem("weather rain", 500, scene);
+  rainParticles.particleTexture = rainTexture;
+  rainParticles.emitter = new B.Vector3(0, 0, 0);
+  rainParticles.minEmitBox = new B.Vector3(-28, 14, -28);
+  rainParticles.maxEmitBox = new B.Vector3(28, 18, 28);
+  rainParticles.direction1 = new B.Vector3(-0.4, -22, -0.4);
+  rainParticles.direction2 = new B.Vector3(0.2, -26, 0.2);
+  rainParticles.color1 = new B.Color4(0.75, 0.85, 1.0, 0.55);
+  rainParticles.color2 = new B.Color4(0.55, 0.75, 0.95, 0.35);
+  rainParticles.minSize = 0.08; rainParticles.maxSize = 0.18;
+  rainParticles.minLifeTime = 0.55; rainParticles.maxLifeTime = 0.85;
+  rainParticles.emitRate = 0;
+  rainParticles.blendMode = B.ParticleSystem.BLENDMODE_ADD;
+  rainParticles.start();
+
+  let bloodMoonVignetteEl = null;
+  function ensureBloodMoonVignette() {
+    if (!bloodMoonVignetteEl && typeof document !== "undefined") {
+      bloodMoonVignetteEl = document.querySelector(".blood-moon-vignette");
+      if (!bloodMoonVignetteEl && document.body) {
+        bloodMoonVignetteEl = document.createElement("div");
+        bloodMoonVignetteEl.className = "blood-moon-vignette";
+        document.body.appendChild(bloodMoonVignetteEl);
+      }
+    }
+    return bloodMoonVignetteEl;
+  }
+
+  const weatherState = {
+    current: "clear", // "clear" | "rain" | "storm" | "blood_moon"
+    timer: 0,
+    cycleDuration: 240,
+    bloodMoonActive: false
+  };
+
+  function setWeather(type) {
+    if (!["clear", "rain", "storm", "blood_moon"].includes(type)) return false;
+    weatherState.current = type;
+    weatherState.timer = 0;
+    const isBlood = type === "blood_moon";
+    weatherState.bloodMoonActive = isBlood;
+    drawSkyTexture(isBlood);
+    const vig = ensureBloodMoonVignette();
+    if (vig) vig.classList.toggle("active", isBlood);
+
+    if (type === "rain") {
+      rainParticles.emitRate = 350;
+      floatAtPlayer(localId, "สายฝนมนตราโปรยปราย 🌧️", "status");
+    } else if (type === "storm") {
+      rainParticles.emitRate = 450;
+      floatAtPlayer(localId, "พายุอสนีบาตคำราม! ⛈️", "status");
+      window.MontraAudio?.play("thunder", { delay: 0.2, intensity: 1.2 });
+    } else if (type === "blood_moon") {
+      rainParticles.emitRate = 0;
+      triggerCombatCallout("blood_moon_rise");
+      floatAtPlayer(localId, "ราตรีจันทร์สีเลือด! 🌕 (EXP x2)", "crit", { big: true });
+      SFX("gong", { pitch: 0.65, intensity: 1.4 });
+      SFX("whoosh", { pitch: 0.6 });
+    } else {
+      rainParticles.emitRate = 0;
+      floatAtPlayer(localId, "ท้องฟ้าแจ่มใส ☀️", "status");
+    }
+    applyAtmosphere(atmosphereMap);
+    return true;
+  }
+
+  function updateWeather(dt, elapsed) {
+    rainParticles.emitter.copyFrom(camera.target);
+    weatherState.timer += dt;
+    if (weatherState.timer >= weatherState.cycleDuration) {
+      weatherState.timer = 0;
+      const next = weatherState.current === "clear" ? "rain" :
+                   weatherState.current === "rain" ? "storm" : "clear";
+      setWeather(next);
+    }
+  }
+
+  window.MontraWeather = {
+    getWeather: () => weatherState.current,
+    setWeather,
+    triggerBloodMoon: () => setWeather("blood_moon"),
+    isBloodMoon: () => weatherState.current === "blood_moon",
+    isRaining: () => weatherState.current === "rain" || weatherState.current === "storm",
+    getRewardMultiplier: () => (weatherState.current === "blood_moon" ? 2.0 : 1.0)
+  };
+
   function applyAtmosphere(mapId) {
     atmosphereMap = mapId;
-    atmosphere = ATMOSPHERES[mapId] || ATMOSPHERES.ritual_village;
+    const isBlood = weatherState.current === "blood_moon";
+    atmosphere = isBlood ? BLOOD_MOON_ATMOSPHERE : (ATMOSPHERES[mapId] || ATMOSPHERES.ritual_village);
     const a = atmosphere, c3 = hex => B.Color3.FromHexString(hex);
     const L = lightLevel();
     const clear = liftHex(a.clear, a.sky, L.lift);
@@ -145,7 +264,7 @@
     // Darker maps get a little more exposure so they stay readable on a phone.
     grade.exposure = ({ forbidden_forest: 1.55, bound_temple: 1.6, naga_cavern: 1.55, drowned_marsh: 1.5 }[mapId] || 1.4) + L.exposure * lightDim();
     grade.vignetteWeight = L.vignette; grade.contrast = L.contrast;
-    mistMat.emissiveColor = c3(a.mist); mistMat.alpha = a.mistAlpha * L.mist;
+    mistMat.emissiveColor = c3(a.mist); mistMat.alpha = a.mistAlpha * L.mist * (weatherState.current === "rain" || weatherState.current === "storm" ? 1.5 : 1);
     skyTexture.level = a.skyLevel;
     const [c1, c2] = a.mote.map(h => B.Color4.FromHexString(h + "ff"));
     motes.color1 = c1; motes.color2 = c2; motes.colorDead = new B.Color4(c2.r, c2.g, c2.b, 0);

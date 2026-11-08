@@ -2608,6 +2608,48 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   .forge-impact-ring,.forge-outcome { animation:none!important; }
 }
 
+
+/* Craft & kitchen: real workbench recipes, no simulated cooking/house state. */
+.drawer:has(.crafting-page) { width:min(1100px,calc(100vw - 32px)); left:50%; right:auto; bottom:18px; transform:translateX(-50%); border:2px solid #b89858; border-radius:14px; background:linear-gradient(125deg,#192c23,#090f0d 65%); box-shadow:0 0 0 3px #151810,0 0 0 4px #75603b,0 22px 80px #000c; }
+.drawer:has(.crafting-page) .drawer-header { background:linear-gradient(90deg,#263c2b,#111d16); border-color:#a08348; }
+.crafting-page { --ck-gold:#d5b66e; --ck-line:#89734280; color:#e7ddc3; }
+.ck-hero { display:flex; justify-content:space-between; align-items:center; gap:18px; padding:10px 8px 18px; border-bottom:1px solid var(--ck-line); }
+.crafting-page .ck-hero h3 { font-size:26px; margin:2px 0; color:#f2db9c; text-shadow:0 2px 6px #000; }
+.ck-hero p { color:#c4c3a2; }
+.ck-eyebrow { font-size:10px; letter-spacing:.1em; color:#b99c60; }
+.ck-skill { display:grid; gap:7px; min-width:180px; padding:12px 18px; border:1px solid var(--ck-line); border-radius:6px; background:#0b1712; color:#dfca8c; }
+.ck-skill span { font-size:11px; color:#b6b9a6; }
+.crafting-page .forge-nav { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.crafting-page .forge-nav button { width:auto; margin-top:10px; padding:8px 14px; background:#20372b; border-color:var(--ck-line); }
+.ck-wallet { margin-left:auto; color:#c5bd9b; }.ck-wallet strong { display:inline-block; margin-left:12px; color:#f0d184; }
+.ck-categories { display:flex; gap:6px; padding:8px 0 12px; flex-wrap:wrap; }
+.ck-categories button { min-height:42px; flex:1; border:1px solid var(--ck-line); border-radius:5px; color:#e2d7b1; background:linear-gradient(#273b2b,#15241a); font:inherit; padding:8px 12px; }
+.ck-categories button[aria-pressed="true"] { background:linear-gradient(#b39451,#68502c); color:#fff0c1; border-color:#e4c77b; box-shadow:inset 0 0 8px #f4d58733; }
+.ck-workspace { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:20px; padding:14px; border:1px solid var(--ck-line); border-radius:6px; background:#0c1813aa; }
+.ck-recipes,.ck-detail { min-width:0; }.ck-detail { padding-left:20px; border-left:1px solid var(--ck-line); }
+.ck-recipes > h3 { margin-top:0; padding-bottom:8px; border-bottom:1px solid var(--ck-line); }
+.ck-filters { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.crafting-page .ck-filters .field { margin-top:0; }
+.crafting-page select { background:#111f17; border-color:var(--ck-line); border-radius:5px; }
+.ck-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:14px; }
+.ck-recipe { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; min-width:0; min-height:152px; padding:12px 5px; border:1px solid #75643c; border-radius:6px; background:radial-gradient(ellipse at top,#34452a,#152119 75%); color:#e9d8a4; font:inherit; text-align:center; cursor:pointer; box-shadow:inset 0 0 0 3px #0b140b66; }
+.ck-recipe strong { font-size:12px; line-height:1.6; }.ck-recipe > span,.ck-recipe small { font-size:11px; color:#c1c7a6; }
+.ck-recipe[aria-pressed="true"] { border-color:#edcc7c; background:radial-gradient(ellipse at top,#5b5733,#26351e 75%); box-shadow:inset 0 0 0 2px #b79a5480,0 0 10px #c2a56122; }
+.ck-recipe.locked { background:#101712; color:#a4a38c; }.ck-recipe.locked .item-slot { filter:brightness(.55); }
+.ck-recipe .item-slot { --item-slot-size:50px; pointer-events:none; }
+.ck-pagination { display:flex; align-items:center; justify-content:center; gap:12px; margin-top:12px; color:#c8bd91; font-size:12px; }
+.ck-pagination button { min-width:44px; min-height:44px; color:#dbc58b; border:1px solid var(--ck-line); background:#1c2c20; border-radius:5px; font-size:20px; }
+.ck-output { gap:14px; padding:6px 0 14px; border-bottom:1px solid var(--ck-line); }.ck-output .item-slot { --item-slot-size:74px; }
+.ck-output h3 { font-size:20px; margin-top:2px; }.ck-detail h4 { font-size:14px; color:#dfca91; margin:16px 0 8px; }.ck-detail h4 small { float:right; font-weight:400; color:#a6b39c; }
+.crafting-page .craft-ingredients { display:grid; grid-template-columns:1fr 1fr; gap:8px; }.crafting-page .craft-ingredients li { grid-template-columns:40px minmax(0,1fr); gap:4px 8px; border:1px solid #596747; border-radius:5px; padding:8px; background:#1c2e20; }
+.crafting-page .craft-ingredients li .item-slot { --item-slot-size:38px; }.crafting-page .craft-ingredients li > span { font-size:12px; }.crafting-page .craft-ingredients li > strong { grid-column:2; color:#b8dc91; }.crafting-page .craft-ingredients li:not(.missing) > strong::after { content:" ✓"; }.crafting-page .craft-ingredients li.missing { background:#30251d; border-color:#9b664a; }.crafting-page .craft-ingredients li.missing > strong { color:#f0b19c; }
+.ck-requirements { list-style:none; margin:10px 0; padding:0; display:grid; grid-template-columns:1fr 1fr; gap:5px; font-size:12px; }.ck-requirements .met { color:#b8cf9a; }.ck-requirements .missing { color:#edac92; }
+.crafting-page #benchCraft { background:linear-gradient(#bfa05b,#7a572d); border:1px solid #edcb78; border-radius:6px; font-size:17px; color:#fff0c8; box-shadow:inset 0 0 0 2px #735a30; min-height:52px; }
+.ck-tracking { display:flex; flex-wrap:wrap; gap:6px; }.crafting-page .ck-tracking button { flex:1 1 45%; background:#1a2b20; border-color:var(--ck-line); padding:8px; font-size:12px; }
+.ck-future { color:#a8b09c; }.ck-coming { text-align:center; padding:60px 20px; border:1px solid var(--ck-line); background:#0d1b14; color:#e1cc90; }
+.crafting-page button:focus-visible { outline:2px solid #f4d688; outline-offset:3px; }
+@media(max-width:700px) { .drawer:has(.crafting-page) { width:calc(100vw - 12px); bottom:6px; max-height:calc(100dvh - max(16px,env(safe-area-inset-top))); padding-left:12px; padding-right:12px; }.drawer:has(.crafting-page) .drawer-header { margin-left:-12px; margin-right:-12px; }.ck-workspace { grid-template-columns:1fr; padding:10px; gap:14px; }.ck-detail { border-left:0; border-top:1px solid var(--ck-line); padding:14px 0 0; }.ck-hero { align-items:flex-start; gap:8px; }.crafting-page .ck-hero h3 { font-size:21px; }.ck-skill { min-width:0; padding:8px; font-size:12px; }.ck-skill span { font-size:10px; }.ck-categories button { flex:1 0 20%; padding:8px; }.ck-grid { gap:7px; }.ck-recipe { min-height:143px; }.ck-wallet { font-size:12px; }.ck-requirements { gap:7px; } }
+@media(prefers-reduced-motion:reduce) { .crafting-page * { scroll-behavior:auto; } }
 /* ==========================================================================
    RPG Skill Tree & Skill Detail Modal
    ========================================================================== */
@@ -4728,6 +4770,76 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   transform: scale(1.05);
 }
 
+/* Phase 15: Shamanic War Banner */
+#bannerButton {
+  position: relative;
+  border: 1px solid rgba(255, 206, 90, 0.4);
+}
+#bannerButton:active,
+#bannerButton[aria-pressed="true"] {
+  border-color: #ffe082;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
+}
+.war-banner-buff-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  margin-top: 4px;
+  border-radius: 12px;
+  background: rgba(26, 18, 8, 0.85);
+  border: 1px solid #ffd700;
+  color: #ffe082;
+  font-size: 11px;
+  font-weight: bold;
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.35);
+  animation: bannerPulse 2s infinite ease-in-out;
+}
+.war-banner-buff-badge[hidden] {
+  display: none !important;
+}
+@keyframes bannerPulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(255, 215, 0, 0.3); }
+  50% { box-shadow: 0 0 14px rgba(255, 215, 0, 0.7); }
+}
+
+/* Phase 16: Shamanic Spirit Pet & Familiar */
+#petButton {
+  position: relative;
+  border: 1px solid rgba(128, 216, 255, 0.4);
+}
+#petButton:active,
+#petButton[aria-pressed="true"] {
+  border-color: #80d8ff;
+  box-shadow: 0 0 10px rgba(0, 176, 255, 0.6);
+}
+
+/* Phase 17: Celestial Wing Flight & Aerial Combat */
+#flightButton {
+  position: relative;
+  border: 1px solid rgba(255, 215, 0, 0.45);
+}
+#flightButton:active,
+#flightButton[aria-pressed="true"] {
+  border-color: #ffd700;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.7);
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.25) 0%, rgba(20, 20, 30, 0.8) 100%);
+}
+
+/* Phase 18: Thao Wessuwan Titan Boss 3D */
+#bossEncounterButton {
+  position: relative;
+  border: 1px solid rgba(255, 23, 68, 0.5);
+}
+#bossEncounterButton:active,
+#bossEncounterButton[aria-pressed="true"] {
+  border-color: #ff1744;
+  box-shadow: 0 0 14px rgba(255, 23, 68, 0.8);
+  background: radial-gradient(circle, rgba(255, 23, 68, 0.3) 0%, rgba(20, 20, 30, 0.8) 100%);
+}
+
+
+
 /* ========================================================
    MONTRA Comprehensive 26-Skill SVG Engine & Book Icons
    ======================================================== */
@@ -5029,6 +5141,63 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   transition: width 0.12s ease-out;
 }
 
+/* ===== Phase 11: Guild Territory War & War Horn Alert ===== */
+.war-screen-alert {
+  position: fixed; inset: 0; pointer-events: none; z-index: 99;
+  opacity: 0; transition: opacity 0.3s ease-out;
+}
+.war-screen-alert.show-contested {
+  opacity: 1;
+  background: radial-gradient(circle at center, transparent 40%, rgba(220, 38, 38, 0.45) 85%, rgba(185, 28, 28, 0.8) 100%);
+  animation: pulseWarBorder 0.8s infinite alternate;
+}
+.war-screen-alert.show-captured {
+  opacity: 1;
+  background: radial-gradient(circle at center, transparent 40%, rgba(234, 179, 8, 0.45) 85%, rgba(202, 138, 4, 0.85) 100%);
+  animation: pulseWarVictory 1.2s ease-out forwards;
+}
+@keyframes pulseWarBorder {
+  0% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+@keyframes pulseWarVictory {
+  0% { opacity: 0; }
+  30% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.war-hud .quest-content strong {
+  color: #facc15;
+  text-shadow: 0 0 8px #ca8a04, 0 1px 2px #000;
+  letter-spacing: 0.5px;
+}
+.war-flag-indicator {
+  display: inline-block;
+  font-size: 11px;
+  color: #ffd700;
+  margin-left: 4px;
+  animation: flagWave 1.2s infinite ease-in-out alternate;
+}
+@keyframes flagWave {
+  0% { transform: rotate(-6deg); }
+  100% { transform: rotate(6deg); }
+}
+
+/* ===== Phase 13: Blood Moon Screen Vignette ===== */
+.blood-moon-vignette {
+  position: fixed; inset: 0; pointer-events: none; z-index: 98;
+  opacity: 0; transition: opacity 1.2s ease-in-out;
+  background: radial-gradient(circle at center, transparent 35%, rgba(185, 28, 28, 0.35) 75%, rgba(127, 29, 29, 0.75) 100%);
+}
+.blood-moon-vignette.active {
+  opacity: 1;
+  animation: pulseBloodMoon 3.5s infinite ease-in-out alternate;
+}
+@keyframes pulseBloodMoon {
+  0% { opacity: 0.65; }
+  100% { opacity: 1; }
+}
+
+
 /* ===== Typhoon Voice Guidance Subtitle HUD ===== */
 .voice-guidance-hud {
   position: absolute;
@@ -5131,4 +5300,87 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 @keyframes pulseAvatarDanger {
   0% { transform: scale(1); filter: drop-shadow(0 0 4px #ff2233); }
   100% { transform: scale(1.12); filter: drop-shadow(0 0 16px #ff4455); }
+}
+.voice-guidance-hud.spirit-whisper {
+  border-color: #38bdf8;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.9), 0 0 18px rgba(56, 189, 248, 0.55);
+}
+.voice-guidance-hud.spirit-whisper .voice-guidance-avatar {
+  background: radial-gradient(circle, #38bdf8 20%, #0369a1 100%);
+  border-color: #7dd3fc;
+  animation: pulseAvatarSpirit 1.2s infinite alternate;
+}
+@keyframes pulseAvatarSpirit {
+  0% { transform: scale(1); filter: drop-shadow(0 0 4px #0284c7); }
+  100% { transform: scale(1.1); filter: drop-shadow(0 0 16px #38bdf8); }
+}
+.voice-persona-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* World Market shell over the existing market catalog. */
+#drawer:has(.world-market){width:min(1100px,96vw);max-width:96vw;left:50%;right:auto;transform:translateX(-50%);background:#0f1a33;border:2px solid #c9a24a;box-shadow:0 0 0 1px #5a4317,0 18px 50px rgba(0,0,0,.6)}
+.world-market{color:#e7ecf7;font-size:13px}
+.wm-header{display:flex;align-items:center;gap:12px;padding:6px 4px 10px;border-bottom:1px solid #c9a24a66}
+.wm-header h2{flex:1;margin:0;text-align:center;color:#f2d27a;letter-spacing:.06em;font-size:20px}
+.wm-coins{color:#f2d27a;font-weight:700;min-width:90px}
+.wm-close{background:transparent;border:1px solid #c9a24a;color:#f2d27a;border-radius:6px;width:32px;height:32px;cursor:pointer}
+.wm-tabs{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0}
+.wm-tabs button{flex:1 1 auto;background:#16264a;color:#b9c6e4;border:1px solid #2d4373;border-radius:6px 6px 0 0;padding:8px 10px;cursor:pointer;font-weight:600}
+.wm-tabs button[aria-pressed=true]{background:#f2c94c;color:#2a1d00;border-color:#f2c94c}
+.world-market[data-view=search] .market-catalog,.world-market[data-view=price] .market-catalog,.world-market[data-view=wish] .market-catalog,.world-market[data-view=rules] .market-catalog{display:none}
+.world-market .market-banner,.world-market .market-tabs{display:none}
+.wm-body{display:grid;grid-template-columns:240px minmax(0,1fr);gap:12px}
+.wm-filters form{display:flex;flex-direction:column;gap:8px;background:#122042;border:1px solid #2d4373;border-radius:8px;padding:10px}
+.wm-filters label{display:flex;flex-direction:column;gap:3px;color:#b9c6e4}
+.wm-filters input,.wm-filters select,.wm-sort select{background:#0b1430;color:#e7ecf7;border:1px solid #2d4373;border-radius:4px;padding:5px}
+.wm-filters .wm-check{flex-direction:row;align-items:center;gap:6px}
+.wm-range{display:grid;grid-template-columns:50px 1fr 1fr;gap:4px;align-items:center;color:#b9c6e4}
+.wm-range input{min-width:0}
+.wm-cat-toggle{background:#1d3160;color:#f2d27a;border:1px solid #c9a24a88;border-radius:4px;padding:6px;text-align:left;font-weight:700}
+.wm-cat-list{display:flex;flex-direction:column;gap:2px}
+.wm-cat-list button{background:transparent;color:#cfd8ee;border:0;text-align:left;padding:4px 10px;cursor:pointer}
+.wm-advanced{border:1px solid #2d4373;border-radius:6px;display:flex;flex-direction:column;gap:4px;opacity:.6}
+.wm-advanced p{margin:0;font-size:11px}
+.wm-soon-tag{font-style:normal;font-size:10px;background:#6b4f12;color:#ffe9a8;border-radius:8px;padding:1px 6px;margin-left:4px}
+.wm-apply,.wm-buy{background:linear-gradient(#f5d77a,#c9962e);color:#2a1d00;border:1px solid #8a6416;border-radius:6px;font-weight:700;padding:7px 16px;cursor:pointer}
+.wm-buy:disabled{opacity:.5}
+.wm-note{margin:0;font-size:11px;color:#8193bb}
+.wm-main{display:flex;flex-direction:column;gap:6px;min-width:0}
+.wm-list-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between}
+.wm-list-head h3{margin:0;color:#f2d27a;display:inline}
+.wm-list-head small{margin-left:8px;color:#8193bb}
+.wm-rule-line{margin:0;color:#8193bb;font-size:11px}
+.wm-sort{display:flex;align-items:center;gap:4px}
+.wm-sort button,.wm-footer button:not(.wm-buy){background:#1d3160;color:#e7ecf7;border:1px solid #2d4373;border-radius:4px;padding:5px 10px;cursor:pointer}
+.wm-cols,.wm-row{display:grid;grid-template-columns:minmax(0,1fr) 50px 110px 100px;gap:8px;align-items:center}
+.wm-cols{padding:4px 10px;color:#8193bb;font-size:11px;border-bottom:1px solid #2d4373}
+.wm-cols span:first-child{padding-left:56px}
+.wm-rows{display:flex;flex-direction:column;gap:3px;max-height:52vh;overflow-y:auto}
+.wm-row{grid-template-columns:48px minmax(0,1fr) 50px 110px 100px;background:#14244a;border:1px solid transparent;border-radius:6px;padding:4px 10px;color:inherit;text-align:left;cursor:pointer}
+.wm-row:hover{border-color:#2d4373}.wm-row.is-selected{border-color:#f2c94c;background:#1d3160}
+.wm-icon{position:relative;--item-slot-size:44px}
+.wm-badge{position:absolute;right:-2px;bottom:-2px;background:#0b1430;border:1px solid #c9a24a;color:#f2d27a;font-size:10px;border-radius:6px;padding:0 4px}
+.wm-info{display:flex;flex-direction:column;min-width:0}.wm-info small{color:#8193bb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wm-name.rarity-common{color:#e7ecf7}.wm-name.rarity-uncommon{color:#6fd36f}.wm-name.rarity-rare{color:#5aa7ff}.wm-name.rarity-epic{color:#c27bff}.wm-name.rarity-legendary{color:#ffb347}
+.wm-price{color:#f2d27a;font-weight:700;text-align:right}.wm-lv,.wm-time{color:#cfd8ee;text-align:center}
+.wm-details{background:#122042;border:1px solid #2d4373;border-radius:6px;padding:6px 10px}.wm-details p{margin:2px 0}
+.wm-footer{display:flex;align-items:center;gap:6px;border-top:1px solid #c9a24a66;padding-top:8px}
+.wm-footer span{flex:1;color:#b9c6e4}
+.wm-soon,.wm-rules{background:#122042;border:1px solid #2d4373;border-radius:8px;padding:18px;text-align:center}
+.wm-soon h3{color:#f2d27a;font-size:22px}.wm-rules{text-align:left}.wm-rules h3{color:#f2d27a}
+@media (max-width:760px){.wm-body{grid-template-columns:1fr}.wm-row{grid-template-columns:40px minmax(0,1fr) 34px 80px}.wm-row .wm-time,.wm-cols span:last-child{display:none}.wm-cols{grid-template-columns:minmax(0,1fr) 34px 80px}}
+
+/* Author display rules must not override inactive panels or collapsed controls. */
+.world-market [hidden] { display:none !important; }
+
+/* Keep every search action reachable on narrow phones without clipping controls. */
+@media (max-width:760px){
+  .wm-sort{flex-wrap:wrap;min-width:0;max-width:100%}
+  .wm-sort select{flex:1 1 140px;width:auto;min-width:0;max-width:100%}
+  .wm-footer{flex-wrap:wrap}
+  .wm-footer span{flex:1 1 100%;min-width:0;overflow-wrap:anywhere}
 }

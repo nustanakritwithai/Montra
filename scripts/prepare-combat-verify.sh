@@ -67,6 +67,7 @@ cp deploy/combat/blade-book-integration.mjs combat-verify/blade-book-integration
 cp deploy/combat/blade-depth-integration.mjs combat-verify/blade-depth-integration.mjs
 cp deploy/combat/blade-core-check.mjs combat-verify/blade-core-check.mjs
 cp deploy/combat/class-rank-integration.mjs combat-verify/class-rank-integration.mjs
+cp deploy/combat/class-skills-contract-integration.mjs combat-verify/class-skills-contract-integration.mjs
 cp deploy/combat/status-support-integration.mjs combat-verify/status-support-integration.mjs
 cp deploy/combat/skill-ranks.test.ts combat-verify/src/rooms/skill-ranks.test.ts
 cp deploy/combat/advanced-class-integration.mjs combat-verify/advanced-class-integration.mjs
@@ -117,7 +118,7 @@ cp deploy/combat/forest-guardian-integration.mjs combat-verify/forest-guardian-i
 cp deploy/combat/forest-party-monster-integration.mjs combat-verify/forest-party-monster-integration.mjs
 cp deploy/combat/TerritoryGovernment.ts combat-verify/src/rooms/TerritoryGovernment.ts
 cp deploy/combat/TerritoryWar.ts combat-verify/src/rooms/TerritoryWar.ts
-cp deploy/combat/territory-war.test.ts combat-verify/src/rooms/territory-war.test.ts
+cp deploy/combat/territory-war.test.ts deploy/combat/territory-gate-room.test.ts combat-verify/src/rooms/
 cp deploy/combat/war-entry-check.mjs combat-verify/war-entry-check.mjs
 cp deploy/combat/forest-objective-check.mjs combat-verify/forest-objective-check.mjs
 cp deploy/combat/service-npcs-check.mjs combat-verify/service-npcs-check.mjs

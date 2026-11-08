@@ -86,6 +86,7 @@ function fixture(){
   return {ctx,run,$,elements,wire,callbacks,timers,items,slots,player,shrine,choose,change,ids,mutations,payload,toasts};
 }
 
+if(require.main===module){
 test('smith routes to dedicated crafting page and back, with a fresh economy read',()=>{
   const f=fixture();f.run('openSmith()');f.$('smithCraft').click();
   assert.equal(f.ctx.drawerActive,'crafting');assert.match(f.ctx.title,/สร้างของ/);assert.equal(f.$('personalBench').hidden,false);
@@ -288,3 +289,6 @@ test('bag/profile contain no duplicate crafting panels; live HUD and shared refr
   assert.equal([...(source+index).matchAll(/id="personalBench"/g)].length,1);assert.equal([...(source+index).matchAll(/id="craftGlaive"/g)].length,1);
 });
 console.log(`PASS dedicated crafting page: ${assertions} focused regression groups`);
+
+}
+module.exports={fixture};

@@ -111,7 +111,7 @@
   function showDemo() {
     cancelForgeAnimation(false,true);finishEconomyPending(true);closeForgePicker(false);closeItemDetailModal(false);
     clearFishing(false);fishSavedItem=null;
-    $("mountButton").hidden=true;
+    syncMountButton();
     territoryState=null;forestObjectiveState=null;forestDefenseState=null;forestEscortState=null;directorEventState=null;syncQuestRanger();syncWarQuartermaster();$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null; sentinelChallengeUntil=0; sentinelCoreStanceUntil=0;seerBoundTarget="";seerPoisoned=false;
