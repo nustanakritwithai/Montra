@@ -4840,6 +4840,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 
 
 
+/* Hidden shortcut buttons (skills before a class book loads, chat, horse) must not leave empty tiles under the minimap. */
+.location-area .map-shortcuts button[hidden], .location-area .map-shortcuts .map-proxy[hidden] { display: none !important; }
 /* ========================================================
    MONTRA Comprehensive 26-Skill SVG Engine & Book Icons
    ======================================================== */
