@@ -164,7 +164,9 @@
   // the thumb axis, so blades point forward-up and the staff stands upright
   // once the elbow bends.
   const HAND_GRIPS = { ritual_dagger: new B.Vector3(0, .15, 1), arcane_sword: new B.Vector3(0, .1, 1), spirit_staff: new B.Vector3(0, 0, 1),
-    sentinel_pike: new B.Vector3(0, .05, 1), seer_wand: new B.Vector3(0, .25, 1), mender_crook: new B.Vector3(0, 0, 1) };
+    sentinel_pike: new B.Vector3(0, .05, 1), seer_wand: new B.Vector3(0, .25, 1), mender_crook: new B.Vector3(0, 0, 1),
+    // The left daab of a twin pair leaves the fist on the other side so both blades point away from the body.
+    thai_left: new B.Vector3(0, .1, -1) };
   const DEFAULT_GRIP = new B.Vector3(0, .1, 1);
   function attachShamanModel(a) {
     if (shamanBody === null) { shamanWaiting.push(a); return; }
@@ -410,18 +412,23 @@
     shield(p) { // Sentinel: round rattan dang with a brass boss, on the left forearm.
       const k = gearKit(), rattan = gearMat("rattan shield", "#7a5a32");
       // Kept small and close to the elbow so the raised guard does not hide the face.
-      const disc = k.cyl(.48, 1.364, .06, .025, .28, .28, rattan, 20); disc.rotation.x = Math.PI / 2;
-      const rim = k.cyl(.48, 1.364, .06, .032, .292, .292, p.trim, 20); rim.rotation.x = Math.PI / 2; rim.scaling.y = .6;
-      k.ball(.48, 1.364, .075, .07, p.trim, 10).scaling.z = .5;
-      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + .4; k.ball(.48 + Math.cos(a) * .09, 1.364 + Math.sin(a) * .09, .074, .02, p.trim, 6); }
+      // Strapped to the back of the forearm and hand (+Y in the T-pose; the palm faces -Y), facing outward.
+      const disc = k.cyl(.555, 1.41, -.002, .025, .28, .28, rattan, 20);
+      const rim = k.cyl(.555, 1.41, -.002, .032, .292, .292, p.trim, 20); rim.scaling.x = rim.scaling.z = 1; rim.scaling.y = .6;
+      k.ball(.555, 1.425, -.002, .07, p.trim, 10).scaling.y = .5;
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + .4; k.ball(.555 + Math.cos(a) * .09, 1.424, -.002 + Math.sin(a) * .09, .02, p.trim, 6); }
       return [["LeftForeArm", k.take()]];
     },
     jar(p) { // Seer: a small sealed spirit jar held in the left hand.
       const k = gearKit();
-      // Held by the neck: the neck sits in the fist (grip socket at .665, 1.339) and the body hangs below the palm.
-      k.cyl(.665, 1.335, .012, .05, .045, .06, jarClay, 8);
-      k.ball(.665, 1.275, .012, .085, jarCarved, 10).scaling.y = 1.08; k.box(.665, 1.277, .012, .088, .008, .088, ropeRed);
-      k.box(.665, 1.268, .056, .022, .05, .003, gearMat("talisman paper", "#e8d9a8"));
+      // Upright jar: the neck passes through the fist along the thumb axis (+Z) and the body sits under the
+      // little-finger side, so it stands vertical whenever the fist does.
+      const along = (mesh) => { mesh.rotation.x = Math.PI / 2; return mesh; };
+      along(k.cyl(.665, 1.339, .02, .06, .05, .045, jarClay, 8));
+      along(k.cyl(.665, 1.339, .056, .014, .06, .06, jarClay, 8));
+      k.ball(.665, 1.339, -.052, .09, jarCarved, 10).scaling.z = 1.12;
+      along(k.cyl(.665, 1.339, -.05, .008, .093, .093, ropeRed, 10));
+      k.box(.665, 1.388, -.055, .026, .004, .05, gearMat("talisman paper", "#e8d9a8"));
       return [["LeftHand", k.take()]];
     },
     bell(p) { // Mender: a bronze hand bell (กระดิ่ง) with a red cord.
