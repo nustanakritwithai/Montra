@@ -11,8 +11,9 @@ export type FishingSession={id:string;mapId:string;x:number;z:number;originX:num
 // The village canals are decorative geometry, rather than movement-blocking water.
 // Keep them separate from map.water so existing paths and player movement stay unchanged.
 const villageWater:readonly WorldWall[]=[
-  {x:-19.7,z:-60,width:11.2,length:100},{x:8.5,z:-60,width:11.2,length:100},
-  {x:-80,z:20,width:160,length:48},
+  {x:-19.7,z:-26,width:11.2,length:74},{x:8.5,z:-26,width:11.2,length:74},
+  {x:-80,z:48,width:160,length:40},          // the river along the south edge
+  {x:-50,z:-50,width:14,length:10},          // the field pond
 ];
 export function fishingWater(mapId:string):readonly WorldWall[]{
   const map=WORLD_MAPS[mapId];if(!map)return [];

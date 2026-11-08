@@ -48,7 +48,7 @@ function buildRelief(map:WorldMapDefinition,shapes:readonly Landform[],step:numb
   for(const s of map.strategic?.rampart?.stairs??[])
     foundations.push({x:Math.min(s.foot.x,s.top.x)-2,z:Math.min(s.foot.z,s.top.z)-2,width:Math.abs(s.foot.x-s.top.x)+4,length:Math.abs(s.foot.z-s.top.z)+4});
   const village=map.id==="ritual_village";
-  if(village)foundations.push({x:FORT.ladderFootX-2,z:FORT.z-FORT.length/2-2,width:6,length:FORT.length+4},{x:-6,z:-4,width:13,length:8});
+  if(village)foundations.push({x:FORT.ladderFootX-2,z:FORT.z-FORT.length/2-2,width:6,length:FORT.length+4},{x:-6,z:-4,width:13,length:8},...(map.walls??[]));
   const guard=original?Math.SQRT2*step+.6:9;
   const pad=original?guard+2:12,blend=original?Math.max(6,step*(map.id==="moon_pass"?5:2.5)):16;
   const dryEdges=[...map.water??[],...foundations];

@@ -190,7 +190,8 @@ try{
     assert.equal(count(inventory,output.item),beforeMaterial+output.quantity);
     assert.equal(count(inventory,card),beforeCards+1);
   }
-  const tree=active.event("world_resources",v=>v.mapId==="ritual_village").nodes.find(n=>n.kind==="wood");
+  const villageNodes=active.event("world_resources",v=>v.mapId==="ritual_village").nodes,tree=villageNodes.find(n=>n.kind==="wood");
+  const woodBefore=villageNodes.filter(n=>n.kind==="wood").reduce((sum,n)=>sum+n.stock,0);
   active.room.send("move",{x:tree.x-1.5,z:tree.z});
   await until(()=>Math.hypot(active.me().x-tree.x,active.me().z-tree.z)<2.8,"walk to a village tree",15000);
   for(let i=0;i<2;i++){
@@ -202,12 +203,12 @@ try{
   active.room.send("refine_resource",{expected:"mat_raw_wood_1",requestId:"test_resource_refine_01"});
   await until(()=>active.event("resource_result",v=>v.action==="refine"&&v.item==="mat_wood_1"),"process wood");
   active.room.send("get_resource_atlas",{});
-  await until(()=>active.event("resource_atlas",v=>v.some(z=>z.mapId==="ritual_village"&&z.wood===2)),"world harvest accounting");
+  await until(()=>active.event("resource_atlas",v=>v.some(z=>z.mapId==="ritual_village"&&z.wood===woodBefore-2)),"world harvest accounting");
   await active.room.leave();active=null;await delay(400);active=await join({});
   assert(active.bag.slots.some(s=>s?.itemId==="mat_wood_1"));
   assert.equal(active.event("world_resources",v=>v.mapId==="ritual_village").nodes.find(n=>n.id===tree.id).stock,2);
-  active.room.send("move",{x:-4,z:-17});
-  await until(()=>Math.hypot(active.me().x+4,active.me().z+17)<1.8,"walk to the forest gate",18000);
+  active.room.send("move",{x:-10,z:-56});
+  await until(()=>Math.hypot(active.me().x+10,active.me().z+56)<1.8,"walk to the forest gate",30000);
   active.room.send("warp",{portalId:"village_to_forest"});
   await until(()=>active.me().mapId==="forbidden_forest" && active.event("warp_complete",v=>v.mapId==="forbidden_forest"),"enter original forest",10000);
   active.room.send("move",{x:7,z:9.3});

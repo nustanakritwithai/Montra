@@ -10,7 +10,7 @@
   const portalMat = mat("portal glow", "#a0e1d2", "#2f9c8f");
   glowMats.add(portalMat);
   const portals = {
-    ritual_village: { id:"village_to_forest", x:-4, z:-17, label:"เดินทางไปป่าต้องห้าม" },
+    ritual_village: { id:"village_to_forest", x:-10, z:-56, label:"เดินทางไปป่าต้องห้าม" },
     forbidden_forest: { id:"forest_to_village", x:0, z:14, label:"กลับหมู่บ้านอาคม" }
   };
   const fixedCrowns = [], forestCrowns = [];
@@ -405,7 +405,7 @@
   const forestMonsters = new Map();
   let selectedForestTarget = null;
   function mapBounds() {
-    return worldDefinitions?.[activeMapId]?.bounds || {minX:-20,maxX:20,minZ:-20,maxZ:20};
+    return worldDefinitions?.[activeMapId]?.bounds || (activeMapId==="ritual_village" ? {minX:-60,maxX:60,minZ:-60,maxZ:60} : {minX:-20,maxX:20,minZ:-20,maxZ:20});
   }
   function activePortals() {
     return worldDefinitions?.[activeMapId]?.portals || [portals[activeMapId]];

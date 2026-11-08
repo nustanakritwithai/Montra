@@ -12,6 +12,11 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
 {
+  "path": "ui/041-character-hud-and-journey.js",
+  "bytes": 38449,
+  "sha256": "f99550d62c85c79d66c4b83b7010a279c259b8fc06fb5123fdd5293d1f767bcf"
+},
+{
   "path": "world/018-region-dressing.js",
   "bytes": 29219,
   "sha256": "523f97592df51182f45944ef5d1d2af9de27b18a947b46fb66a38a1b6999f972"
@@ -38,13 +43,13 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/015-forest-gates-and-services.js",
-  "bytes": 35583,
-  "sha256": "d21dda5bec76f6bcd27edb27a3bd45a0f0616761accb42e98da23eac9bd1c350"
+  "bytes": 35657,
+  "sha256": "b84c944ce8d8dfda1f151ffeff7f95fde2088818ae651b72ced427e5d3baa5fb"
 },
 {
   "path": "world/014-ritual-village.js",
-  "bytes": 16732,
-  "sha256": "4a7734ff37dffb875051e0868d72fa9818f4cedd7abf17b52d0345b1287eef36"
+  "bytes": 27480,
+  "sha256": "ece95a0addff7d3a62be56b753c318ba245414c951161c4859d2d2354881b762"
 },
 {
   "path": "render/006-materials-atmosphere.js",
@@ -123,8 +128,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1511846);
-  assert.equal(hash(bytes), '14798d75fd367f119e867efc5a52bd7bb3f0b3b9c0cba0af71f5b92b7357585c');
+  assert.equal(bytes.length, 1522669);
+  assert.equal(hash(bytes), '924f770a741507661712fad907177888d4eef085e196b3717f211c78fe0a2753');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
