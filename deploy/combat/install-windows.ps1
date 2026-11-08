@@ -135,6 +135,7 @@ $files = @(
   @{ Name = "CardSockets.ts"; Target = "src\rooms\CardSockets.ts"; Check = "changeCardSocket" },
   @{ Name = "GearGuides.ts"; Target = "src\rooms\GearGuides.ts"; Check = "personalGearGuides" },
   @{ Name = "WorldResources.ts"; Target = "src\rooms\WorldResources.ts"; Check = "harvestableFrom" },
+  @{ Name = "Fishing.ts"; Target = "src\rooms\Fishing.ts"; Check = "fishingWater" },
   @{ Name = "SceneryNodes.ts"; Target = "src\rooms\SceneryNodes.ts"; Check = "SCENERY_NODES" },
   @{ Name = "ItemRules.ts"; Target = "src\rooms\ItemRules.ts"; Check = "grantStarterWeapons" },
   @{ Name = "smoke-test.mjs"; Target = "montra-combat-smoke-test.mjs"; Check = "combat_hit" },
