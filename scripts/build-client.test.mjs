@@ -28,13 +28,13 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/017-region-terrain.js",
-  "bytes": 61185,
-  "sha256": "4bc6197d313d26171bff99fbd63a5a7de98355c9e359bb86a469024642e37972"
+  "bytes": 61322,
+  "sha256": "5dda0849b9a723b92111dc742d4e8de43cc1052c9c0af9b7cc7ed141f7fc6571"
 },
 {
   "path": "world/016-forest-and-temple.js",
-  "bytes": 19785,
-  "sha256": "9b1bfb1a6affa6763e6db0837133a13d07a70f2908ad5ef3ef79eb92445e364e"
+  "bytes": 20053,
+  "sha256": "e298e2ff3de7422a953153ae4425922975be6c76a5e39e60e3e6cb017c5f6b84"
 },
 {
   "path": "world/015-forest-gates-and-services.js",
@@ -78,8 +78,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/006-materials-atmosphere.js",
-  "bytes": 72746,
-  "sha256": "4c5ffda1fedaabec20b3bbd0a9d0ede8d7b5a2ec3f1f4b4aea3580c1fae3bc99"
+  "bytes": 76185,
+  "sha256": "c677ae311506a138abc1ec1c9bcfd8ab2234aec98a99374bde5d592fc032a7cf"
 },
 {
   "path": "network/044-state-sync-and-connection.js",
@@ -213,8 +213,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1611115);
-  assert.equal(hash(bytes), 'fbc18a71bc8a2feb6f1d72177485febfb068d558b3147174492f493910674e5a');
+  assert.equal(bytes.length, 1614959);
+  assert.equal(hash(bytes), '2fd29842db7195e76744774e9428a7c84c34673180ecf8f42dc4594394b731e3');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

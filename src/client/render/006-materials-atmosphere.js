@@ -244,6 +244,22 @@
     const [count, len, wid, curve] = shapes;
     const tex = paintTexture("leaf card " + style, 256, (c, S) => {
       c.clearRect(0, 0, S, S);
+      const leafG = W => { const g = c.createLinearGradient(0, -W, 0, W); g.addColorStop(0, "#c9d6b8"); g.addColorStop(.5, "#f4f8ec"); g.addColorStop(1, "#aebda0"); return g; };
+      if (style === "palm") {
+        // Coconut frond (v runs from the base at the bottom to the tip): a rib with narrow leaflets
+        // angled forward on both sides, shortening toward the tip.
+        c.strokeStyle = "rgba(170,160,110,1)"; c.lineWidth = 4; c.beginPath(); c.moveTo(S / 2, S); c.lineTo(S / 2, 0); c.stroke();
+        for (let i = 0; i < 26; i++) { const y = S * (1 - (i + .5) / 26), L = S * .5 * (1 - i / 34), W = S * .018;
+          for (const d of [-1, 1]) { c.save(); c.translate(S / 2, y); c.rotate(-Math.PI / 2 + d * (1.05 - i * .006)); c.fillStyle = leafG(W); c.beginPath(); c.moveTo(0, 0); c.quadraticCurveTo(L * .5, -W, L, 0); c.quadraticCurveTo(L * .5, W, 0, 0); c.fill(); c.restore(); } }
+        return;
+      }
+      if (style === "fan") {
+        // Sugar-palm fan: pleated segments radiating from the centre with split tips.
+        for (let i = 0; i < 34; i++) { const a = i / 34 * Math.PI * 2, L = S * .48, W = S * .05;
+          c.save(); c.translate(S / 2, S / 2); c.rotate(a); c.fillStyle = leafG(W); c.beginPath(); c.moveTo(0, 0); c.lineTo(L * .92, -W); c.lineTo(L, -W * .2); c.lineTo(L * .9, 0); c.lineTo(L, W * .2); c.lineTo(L * .92, W); c.closePath(); c.fill();
+          c.strokeStyle = "rgba(110,130,90,.8)"; c.lineWidth = 1; c.beginPath(); c.moveTo(0, 0); c.lineTo(L * .9, 0); c.stroke(); c.restore(); }
+        return;
+      }
       // Stem from the bottom centre, leaves alternating along it and fanning at the tip.
       c.strokeStyle = "rgba(90,70,50,1)"; c.lineWidth = 3; c.beginPath(); c.moveTo(S * .5, S); c.quadraticCurveTo(S * .45, S * .55, S * .52, S * .12); c.stroke();
       for (let i = 0; i < count; i++) {
@@ -265,6 +281,30 @@
     m.specularColor = new B.Color3(.05, .06, .04); m.emissiveColor = new B.Color3(.02, .03, .02);
     if (typeof TreeWindPlugin === "function") new TreeWindPlugin(m, true);
     leafCardMats.set(style, m); return m;
+  }
+  // A frond as a bending strip of leaf-card texture along a path (palm fronds).
+  function frondStrip(path, w0, w1, hex, rng) {
+    if (!foliageSink) return;
+    const g = foliageSink, col = treeRgb(hex).map(v => Math.min(1, v * (.85 + rng() * .3))), base = g.p.length / 3, N = path.length;
+    for (let i = 0; i < N; i++) {
+      const p = path[i], q = path[Math.min(N - 1, i + 1)], o = path[Math.max(0, i - 1)];
+      let dx = q[0] - o[0], dy = q[1] - o[1], dz = q[2] - o[2]; const dl = Math.hypot(dx, dy, dz) || 1; dx /= dl; dy /= dl; dz /= dl;
+      let ax = -dz, az = dx; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
+      const t = i / (N - 1), w = (w0 + (w1 - w0) * t) / 2, sag = w * .35;
+      for (const e of [-1, 1]) { g.p.push(p[0] + ax * w * e, p[1] - sag, p[2] + az * w * e); g.uv.push(e < 0 ? 0 : 1, t); g.c.push(col[0], col[1], col[2], 1); }
+    }
+    for (let i = 0; i < N - 1; i++) { const a = base + i * 2; g.i.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  }
+  // A flat fan card centred at c with normal n (sugar-palm leaves).
+  function fanCard(c, n, size, hex, rng) {
+    if (!foliageSink) return;
+    const g = foliageSink, col = treeRgb(hex).map(v => Math.min(1, v * (.85 + rng() * .3))), base = g.p.length / 3;
+    let ux = -n[2], uz = n[0], uy = 0; const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
+    const vx = n[1] * uz - n[2] * uy, vy = n[2] * ux - n[0] * uz, vz = n[0] * uy - n[1] * ux, h = size / 2;
+    for (const [a, b, uu, vv] of [[-1, -1, 0, 0], [1, -1, 1, 0], [1, 1, 1, 1], [-1, 1, 0, 1]]) {
+      g.p.push(c[0] + (ux * a + vx * b) * h, c[1] + (uy * a + vy * b) * h, c[2] + (uz * a + vz * b) * h); g.uv.push(uu, vv); g.c.push(col[0], col[1], col[2], 1);
+    }
+    g.i.push(base, base + 1, base + 2, base, base + 2, base + 3);
   }
   function treeFoliage(parts, x, y, z, r, sy, hex, topHex, rng) {
     if (!foliageSink) { parts.push(treeBlob(x, y, z, r, sy, hex, topHex, rng)); return; }
@@ -389,9 +429,10 @@
     tan(rng, parts) {
       const trunk = trunkPath(7.5, .2, .04, rng, 6); parts.push(treeTube(trunk, .26, .2, TREE_BARK.tan, 6));
       const top = trunk[6];
-      for (let k = 0; k < 13; k++) { const a = k / 13 * Math.PI * 2, tilt = .7 + rng() * .5, fan = B.MeshBuilder.CreateCylinder("palm fan", { height: .05, diameter: 2.3, tessellation: 10 }, scene);
-        fan.rotation.set(Math.PI / 2 - tilt, a, 0); fan.position.set(top[0] + Math.cos(a) * .85, top[1] + .2 + Math.sin(tilt) * .4, top[2] + Math.sin(a) * .85);
-        fan.bakeCurrentTransformIntoVertices(); parts.push(treePaint(fan, "#4f7a3a", .3, .12)); }
+      for (let k = 0; k < 13; k++) { const a = k / 13 * Math.PI * 2, tilt = .7 + rng() * .5;
+        // The old fan disc's axis (local Y after rotating by (pi/2 - tilt, a, 0)) is the card normal.
+        const m = B.Matrix.RotationYawPitchRoll(a, Math.PI / 2 - tilt, 0), nrm = B.Vector3.TransformNormal(B.Axis.Y, m);
+        fanCard([top[0] + Math.cos(a) * .85, top[1] + .2 + Math.sin(tilt) * .4, top[2] + Math.sin(a) * .85], [nrm.x, nrm.y, nrm.z], 2.4, k % 3 ? "#4f7a3a" : "#5f8a44", rng); }
       parts.push(treeBlob(top[0], top[1] - .1, top[2], .45, 1, "#5a4630", "#7a6040", rng, 0));
     },
     // มะพร้าว: a leaning curved trunk with long arched fronds.
@@ -400,7 +441,8 @@
       const top = trunk[7];
       for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2 + rng() * .3, len = 2.6 + rng() * .6, f = [];
         for (let i = 0; i <= 5; i++) { const t = i / 5; f.push([top[0] + Math.cos(a) * len * t, top[1] + .3 + .9 * t - 2.1 * t * t, top[2] + Math.sin(a) * len * t]); }
-        const frond = treeTube(f, .2, .03, "#5c8f3e", 3, .3); frond.scaling.y = 1; parts.push(frond); }
+        parts.push(treeTube(f, .04, .015, "#7a8a4a", 3, .2)); // rib
+        frondStrip(f, .9, .25, k % 2 ? "#5c8f3e" : "#6a9a46", rng); }
       for (let k = 0; k < 3; k++) parts.push(treeBlob(top[0] + Math.cos(k * 2) * .25, top[1] - .2, top[2] + Math.sin(k * 2) * .25, .18, 1, "#7a6a2a", "#a08a3a", rng, 0));
     },
     // ไผ่: a clump of tall jointed canes with feathery leaf tufts.
@@ -423,7 +465,7 @@
     const key = species + ":" + variant; if (thaiTreeMasters.has(key)) return thaiTreeMasters.get(key);
     const parts = [], build = TREE_SPECIES[species] || TREE_SPECIES.pradu;
     foliageSink = { p: [], uv: [], c: [], i: [] };
-    foliageStyle = { pho: "broad", sai: "broad", makham: "fine", pradu: "fine", phai: "long" }[species] || "general";
+    foliageStyle = { pho: "broad", sai: "broad", makham: "fine", pradu: "fine", phai: "long", maprao: "palm", tan: "fan" }[species] || "general";
     build(treeRng(1000 + variant * 7919 + species.length * 131 + species.charCodeAt(0)), parts);
     const sink = foliageSink; foliageSink = null;
     const mesh = B.Mesh.MergeMeshes(parts, true, true, undefined, false, false);

@@ -389,7 +389,9 @@
       }
       for(let i=0;!castle && !relay && !huntTrail && !river && i<18;i++)for(const side of [-1,1]){
         const h=4+(i*7)%6;
-        cone(side*(46+i%4),h*.33,-65+i*5.6,h,6+i%4,.25,bamboo||lotus?forestLeaf:stone,6);
+        // Bamboo and lotus provinces frame the edge with kit trees; elsewhere the backdrop is rock.
+        if(bamboo||lotus){const x=side*(46+i%4),z=-65+i*5.6;tree(bamboo?"phai":["sai","maprao","tan"][i%3],x,z,.8+(i%3)*.12);tree(bamboo?"phai":"makham",x+side*2.5,z+2,.7);}
+        else cone(side*(46+i%4),h*.33,-65+i*5.6,h,6+i%4,.25,stone,6);
         cone(-48+i*5.6,h*.32,side>0?36+i%3:-72-i%4,h,6+i%5,.2,floor,6);
       }
       for(const w of map.water||[]){
@@ -759,12 +761,9 @@
           const z=i<54?-57+81*noise(i,26):bounds.minZ+5+(bounds.maxZ-bounds.minZ-10)*noise(i,26);
           if(!sceneryClear(x,z,huntTrail?8:2.8,map))continue;
           if(bamboo){
-            for(let j=0;j<4;j++){
-              const bx=x+(j-1.5)*.57,bz=z+Math.sin(j)*.7,h=2.6+noise(i+j,16)*2;
-              sceneryPoint("wood",bx,bz,.35);
-              cone(bx,h/2,bz,h,.27,.19,decor.bamboo,6);
-              for(const dir of [-1,1]){const leaf=cone(bx+dir*.5,h*.78,bz,.36,1.8,.35,paint.court,4);leaf.rotation.z=dir*.43;}
-            }
+            // Bamboo clump from the tree kit (real leaves) over the same four gatherable canes.
+            for(let j=0;j<4;j++)sceneryPoint("wood",x+(j-1.5)*.57,z+Math.sin(j)*.7,.35);
+            tree("phai",x,z+.3,.55+noise(i,16)*.15);
           }else{
             for(let j=0;j<3;j++){const reed=cone(x+j*.46,.86,z,.98+j*.29,.19,.1,decor.bamboo,5);reed.rotation.z=(j-1)*.22;}
             cone(x,.14,z,.12,1.1,1.28,civicRoad,8);cone(x,.44,z,.53,.8,.15,light,6);

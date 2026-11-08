@@ -20,7 +20,7 @@
         const kind=kinds[Math.abs(Math.round(x*7+z*3))%kinds.length];
         const tree=placeThaiTree(kind,x,map.terrain?terrainHeight(map.terrain,x,z):0,z,{clone:true,parent:expansionRoot,scale:Math.max(.85,Math.min(1.3,(obstacle.radius||2)/2))});
         forestCrowns.push(tree);
-        for(let i=0;i<3;i++)column(x+Math.cos(i*2)*1.4,.42,z+Math.sin(i*2)*1.4,.85,.7,0,forestLeaf,4);
+        for(let i=0;i<3;i++){const bx=x+Math.cos(i*2)*1.4,bz=z+Math.sin(i*2)*1.4;placeLeafBush(bx,map.terrain?terrainHeight(map.terrain,bx,bz):0,bz,.75,{parent:expansionRoot,variant:i});}
         continue;
       }
       if(id.startsWith("temple-post-")){
@@ -205,8 +205,9 @@
     block(0,map.terrain?-8:-.82,-20,174,.6,179,forestFloor);
     for(let i=0;i<21;i++)for(const sign of [-1,1]){
       const x=-61+i*6.2,z=sign===1?45+(i*5)%8:-84-(i*5)%8;
-      column(x,1.25,z,3.4,5+i%3,.3,forestLeaf,6);
-      column(sign*(60+(i*3)%8),1.2,-80+6*i,3.4,5.5,0,forestLeaf,6);
+      // Distant grove round the temple: kit trees instead of leaf cones.
+      placeThaiTree(["yangna","sai","takhian"][i%3],x,0,z,{parent:expansionRoot,scale:.62+(i%3)*.08});
+      placeThaiTree(["sai","takhian","yangna"][i%3],sign*(60+(i*3)%8),0,-80+6*i,{parent:expansionRoot,scale:.62+(i%2)*.1});
     }
     finish("temple distant grove");
     for(const wall of map.walls||[]){
