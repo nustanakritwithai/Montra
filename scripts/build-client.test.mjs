@@ -12,6 +12,11 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
 {
+  "path": "world/015-forest-gates-and-services.js",
+  "bytes": 35118,
+  "sha256": "0435cd13031c43acd92ad9d1a7a0dd243b41fbea2534e7d19749718cba9f7bb2"
+},
+{
   "path": "world/014-ritual-village.js",
   "bytes": 16215,
   "sha256": "134b6ed881bc183cf4a7f52ade00ec18eb0d037511564e0ccb0c2a6411cb7e28"
@@ -103,8 +108,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1463698);
-  assert.equal(hash(bytes), '03aa91645d59024f78c81442acf8974aedaa0efe305bea51b9fe54bf011c324a');
+  assert.equal(bytes.length, 1464163);
+  assert.equal(hash(bytes), '63283b0ba0594706af7aeac46aa4b9896fa87a8958901780526a4314bcfbc7ee');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

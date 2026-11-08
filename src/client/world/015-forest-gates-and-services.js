@@ -320,8 +320,12 @@
     const spec=serviceNpcUi[role],robe=mat("service robe "+role,spec.color);
     const label=mat("service label "+role,"#ffffff","#4b3921");
     label.diffuseTexture=paintTexture("service name "+role,256,(ctx,size)=>{
-      ctx.clearRect(0,0,size,size);ctx.textAlign="center";ctx.lineWidth=7;ctx.strokeStyle="#241a10";ctx.fillStyle="#ffe6ae";ctx.font="bold 38px sans-serif";
-      ctx.strokeText(name,size/2,size/2,245);ctx.fillText(name,size/2,size/2,245);
+      // Name plate: dark jade pill with a thin gold edge, matching the field HUD, readable from the far camera.
+      ctx.clearRect(0,0,size,size);ctx.textAlign="center";ctx.textBaseline="middle";ctx.font='bold 34px "Noto Sans Thai", system-ui, sans-serif';
+      const w=Math.min(244,ctx.measureText(name).width+40),h=52,x=(size-w)/2,y=size/2-h/2,r=h/2;
+      ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+      ctx.fillStyle="rgba(10,18,15,.86)";ctx.fill();ctx.lineWidth=3;ctx.strokeStyle="rgba(232,190,100,.9)";ctx.stroke();
+      ctx.fillStyle="#ffe6ae";ctx.fillText(name,size/2,size/2+2,w-24);
     });
     label.diffuseTexture.hasAlpha=true;label.useAlphaFromDiffuseTexture=true;
     const result={robe,label};serviceNpcLooks.set(role,result);return result;
