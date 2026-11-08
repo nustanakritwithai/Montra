@@ -104,7 +104,8 @@
   const chatFeed = [];
   const CHAT_TAGS = { map: "แผนที่", world: "รวมในห้อง", party: "ปาร์ตี้", private: "กระซิบ", bug: "รายงานบัค" };
   // Tabs over the chat box (like a PC MMO): All plus every channel; each tab counts unread lines.
-  const CHAT_BOX_TABS = [["all", "ทั้งหมด"], ...Object.entries(CHAT_TAGS)];
+  // Short tab labels so every tab fits the small box; chat lines keep the full channel names.
+  const CHAT_BOX_TABS = [["all", "ทั้งหมด"], ["map", "แผนที่"], ["world", "รวม"], ["party", "ปาร์ตี้"], ["private", "กระซิบ"], ["bug", "บัค"]];
   let chatBoxTab = "all"; const chatBoxUnread = Object.fromEntries(CHAT_BOX_TABS.map(([id]) => [id, 0]));
   const chatBox = (() => {
     const game = $("game"); if (!game) return null;

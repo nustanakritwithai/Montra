@@ -13,13 +13,23 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // still match the extraction evidence byte for byte; the assembled sheet is pinned below.
 const reviewedStyleFragments = new Map([
 {
+  "path": "hud/022-chat-compose-and-vitals.css",
+  "bytes": 6469,
+  "sha256": "bba63466dafb8c940fffdc5f8af9795a55fba1a22f5359f78ac2e1639cf231bf"
+},
+{
+  "path": "audio/044-voice-guidance.css",
+  "bytes": 4615,
+  "sha256": "726eb14d122c28f2a2440119b966dafcf2b2074e2766151e3f6c76382aadcad7"
+},
+{
   "path": "hud/038-map-shortcuts-and-quick-skills.css",
-  "bytes": 3062,
-  "sha256": "07e55c50e2932817a83c8681ce64c00be753ea912b6089012f2c999f0f3ab31e"
+  "bytes": 7186,
+  "sha256": "3c6765ca17d2d6e9a1ea2a6fceec5883ac6f3f3e81e11fba4ff9e1e41def6b0f"
 }
 ].map(entry => [entry.path, entry]));
-const reviewedStylesBytes = 355259;
-const reviewedStylesSha = 'a3bdaf7916ba7f792e5cbebec5aa570a4fbc3428badcbd8bfc7ff4f323cc2ef8';
+const reviewedStylesBytes = 361426;
+const reviewedStylesSha = '5acecefd0da0e4cb7a7d285859b314f0308350336d41786861904d9b1c011e97';
 
 function withStylesFixture(run) {
   const temp = mkdtempSync(join(tmpdir(), 'montra-styles-'));
