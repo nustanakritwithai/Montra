@@ -18,12 +18,12 @@ function withStylesFixture(run) {
   } finally { rmSync(temp, { recursive: true, force: true }); }
 }
 
-test('initial style extraction retains all bytes, cascade order, URLs and legacy overrides', () => {
+test('reviewed style snapshot retains pinned bytes, cascade order, URLs and legacy overrides', () => {
   const baseline = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/extraction-baseline.json')));
   const manifest = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/manifest.json')));
   const bytes = checkStyles();
-  assert.equal(bytes.length, 355010);
-  assert.equal(hash(bytes), '0e3cf0696ae9d7676560f3c9554efb23926294e9433789cbe4ce2e9ef6d62b95');
+  assert.equal(bytes.length, 356311);
+  assert.equal(hash(bytes), '4c3fc8a8ed2a2d54cdc68f00cf9ab24b067a593e140f40bef8ee663e7c7593af');
   assert.equal(bytes.length, baseline.bytes);
   assert.equal(hash(bytes), baseline.sha256);
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
@@ -36,7 +36,7 @@ test('initial style extraction retains all bytes, cascade order, URLs and legacy
     assert.equal(fragment.toString('utf8').split('\n').length - 1, entry.originalEndLine - entry.originalStartLine + 1);
     nextLine = entry.originalEndLine + 1;
   }
-  assert.equal(nextLine, 5387);
+  assert.equal(nextLine, 5413);
   assert.deepEqual(assembleStyles(), assembleStyles());
 });
 

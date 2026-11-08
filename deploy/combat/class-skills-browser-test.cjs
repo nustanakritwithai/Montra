@@ -74,6 +74,47 @@ snapshot('phutthaisawan');
 `;
   return {script, html:`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/styles.css"></head><body><main id="game">${quick[0]}<button id="fieldMenuButton">Menu</button><div id="shade" class="shade" hidden></div>${drawer}</main><div id="accountEntry" hidden></div>${modal}<script src="/fixture.js"></script></body></html>`};
 }
+async function assertModalArtwork(page) {
+  const state = await page.evaluate(() => {
+    const glyph = document.getElementById('skillModalGlyph'), badge = document.getElementById('skillModalBadge');
+    const g = glyph.getBoundingClientRect(), b = badge.getBoundingClientRect();
+    return { image: getComputedStyle(glyph).backgroundImage, width: g.width, height: g.height,
+      overlap: Math.max(0, Math.min(g.right, b.right) - Math.max(g.left, b.left)) * Math.max(0, Math.min(g.bottom, b.bottom) - Math.max(g.top, b.top)),
+      badgeInside: b.left >= 0 && b.right <= innerWidth && b.top >= 0 && b.bottom <= innerHeight,
+      text: badge.textContent };
+  });
+  assert.match(state.image, /^url\("data:image\/svg\+xml,/);
+  assert(state.width >= 40 && state.height >= 40, 'modal artwork retains readable dimensions');
+  assert.equal(state.overlap, 0, 'status badge never covers any part of the skill artwork');
+  assert(state.badgeInside && state.text, 'status stays visible inside the viewport');
+}
+async function artworkCases(page, check) {
+  for (const [className, skills] of Object.entries(ids)) {
+    await page.evaluate(({className, skills}) => {
+      const panel = document.createElement('section'); panel.id = 'artworkAudit';
+      panel.style.cssText = 'position:fixed;inset:12px;z-index:2000;overflow:auto;background:#10191c;padding:12px';
+      panel.innerHTML = '<h2>' + className + ': artwork surfaces</h2>' + skills.map(id =>
+        '<article data-audit-skill="'+id+'" style="margin:20px 0"><strong>'+id+'</strong><div style="display:flex;justify-content:space-around;gap:8px;padding:8px 0">' +
+        ['skill-book-icon','kg-glyph','skill-modal-glyph','glyph'].map(surface => '<div style="text-align:center"><small style="display:block;font-size:10px">'+surface.replace('skill-','')+'</small><span class="'+surface+'" data-skill-glyph="'+id+'">✦</span></div>').join('') + '</div></article>').join('');
+      document.body.append(panel);
+    }, {className, skills});
+    const rows = await page.locator('#artworkAudit [data-audit-skill]').evaluateAll(nodes => Promise.all(nodes.map(async node => {
+      const surfaces = [...node.querySelectorAll('[data-skill-glyph]')].map(e => ({image:getComputedStyle(e).backgroundImage,width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height}));
+      const decoded = await Promise.all(surfaces.map(s => new Promise(resolve => {
+        if (!s.image.startsWith('url("data:image/svg+xml,')) return resolve(false);
+        const image = new Image(); image.onload = () => resolve(image.naturalWidth > 0 && image.naturalHeight > 0); image.onerror = () => resolve(false);
+        image.src = s.image.slice(5,-2);
+      })));
+      return {id:node.dataset.auditSkill,surfaces,decoded};
+    })));
+    for (const row of rows) {
+      assert(row.decoded.every(Boolean), row.id+' decodes on every surface');
+      assert(row.surfaces.every(s => s.width > 0 && s.height > 0 && s.image === row.surfaces[0].image), row.id+' has matching visible artwork on every surface');
+    }
+    await check('artwork-'+className);
+    await page.locator('#artworkAudit').evaluate(e => e.remove());
+  }
+}
 async function cases(page, check) {
   for (const path of Object.keys(ids)) {
     await page.evaluate(path => fixture.snapshot(path), path);
@@ -83,7 +124,14 @@ async function cases(page, check) {
       await page.locator('#quickSkills').click();
       const actual=await page.locator('#drawerBody [data-skill-glyph]').evaluateAll(nodes=>nodes.map(n=>n.dataset.skillGlyph).filter(id=>!id.startsWith('class_')));
       assert.deepEqual(actual.sort(), [...ids[path]].sort(), path+' renders only own four skills');
+      const images = await page.locator('#drawerBody [data-skill-glyph]').evaluateAll(nodes => nodes.map(e => getComputedStyle(e).backgroundImage));
+      assert(images.every(image => image.startsWith('url("data:image/svg+xml,')), path+' actual book has no blank artwork');
       await check(path+'-open-'+repeat);
+      if (path === 'phutthaisawan' && repeat === 0) for (const id of ids[path]) {
+        await page.locator('[data-skill-id="'+id+'"]').click();
+        await assertModalArtwork(page); await check(id+'-unlearned');
+        await page.locator('#skillModalCloseBtn').click();
+      }
       await page.locator('#drawerClose').click();
       assert.equal(await page.locator('#drawer').isVisible(),false);
     }
@@ -128,6 +176,12 @@ async function cases(page, check) {
   assert.deepEqual(await page.evaluate(()=>({tree:fixture.ownServerCharacter().swordTreeData,demo:fixture.demo})),before,'live rank remains server-authoritative');
   await page.evaluate(()=>{const me=fixture.ownServerCharacter(), tree=JSON.parse(me.swordTreeData);tree.coreRanks.phuttha_core=1;me.swordTreeData=JSON.stringify(tree);fixture.syncSwordTreeButton(me);});
   assert.match(await page.locator('#skillModalBadge').textContent(),/1\/8/,'server snapshot refreshes modal');
+  await assertModalArtwork(page); await check('sword-modal-learned');
+  await page.evaluate(()=>{const me=fixture.ownServerCharacter(),tree=JSON.parse(me.swordTreeData);tree.coreRanks.phuttha_core=8;me.swordTreeData=JSON.stringify(tree);fixture.syncSwordTreeButton(me);});
+  assert.match(await page.locator('#skillModalBadge').textContent(),/8\/8/);
+  await assertModalArtwork(page); await check('sword-modal-max-rank');
+  // Restore an upgradable snapshot so the existing stale-handler check remains meaningful.
+  await page.evaluate(()=>{const me=fixture.ownServerCharacter(),tree=JSON.parse(me.swordTreeData);tree.coreRanks.phuttha_core=1;me.swordTreeData=JSON.stringify(tree);fixture.syncSwordTreeButton(me);});
   await page.locator('#skillModalCloseBtn').click();
   assert.equal(await page.locator('#skillDetailModal').isVisible(),false);
   await page.locator('[data-skill-id="phuttha_core"]').click();
@@ -176,8 +230,9 @@ async function main(){
    const page=await context.newPage();page.on('pageerror',e=>report.errors.push(e.message));
    try{
     await page.goto(origin,{waitUntil:'load'});assert.deepEqual(report.errors,[]);
-    await cases(page,async name=>{assert.deepEqual(report.errors,[]);report.cases.push({name,width});await page.screenshot({path:path.join(out,width+'-'+name+'.png')});});
-   }catch(error){await page.screenshot({path:path.join(out,width+'-failure.png')}).catch(()=>{});throw error;}
+    await artworkCases(page,async name=>{assert.deepEqual(report.errors,[]);report.cases.push({name,width});await page.screenshot({animations:'disabled',path:path.join(out,width+'-'+name+'.png')});});
+    await cases(page,async name=>{assert.deepEqual(report.errors,[]);report.cases.push({name,width});await page.screenshot({animations:'disabled',path:path.join(out,width+'-'+name+'.png')});});
+   }catch(error){await page.screenshot({animations:'disabled',path:path.join(out,width+'-failure.png')}).catch(()=>{});throw error;}
    finally{await context.close();}
   }
   assert.deepEqual(report.errors,[]);assert.deepEqual(report.blocked,[]);
