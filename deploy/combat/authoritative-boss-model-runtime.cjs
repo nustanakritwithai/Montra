@@ -107,3 +107,17 @@ test('repeated create/map-exit cycles release owned meshes and MultiMaterials wi
   assert.equal(f.scene.materials.length,baseline.materials,'shared material count changed');
  }finally{f.dispose();}
 });
+
+test('production smoke color variants share the painted opacity texture without empty clone textures',()=>{
+ const f=fixture();try{
+  const materials=f.run('[gm.smoke,gm.smokeWhite,gm.moonMist]'),texture=materials[0].opacityTexture;
+  assert.equal(new Set(materials).size,3,'color variants remain separate materials');
+  assert(materials.every(m=>m.opacityTexture===texture),'variants must use original painted opacity gradient');
+  assert.equal(f.scene.textures.filter(t=>t.name==='smoke fade').length,1,'dispose unused DynamicTexture clones');
+  assert.equal(texture.hasAlpha,true);
+  const m=state(roster.find(e=>e.mapId==='moon_cemetery'));add(f,m);f.ctx.activeMapId='ritual_village';f.sync();
+  assert(f.scene.textures.includes(texture),'boss teardown must not dispose shared opacity texture');
+  assert(materials.every(m=>f.scene.materials.includes(m)),'boss teardown must preserve shared smoke materials');
+  // NullEngine has no GPU upload; actual texture readiness is asserted by WebGL CI.
+ }finally{f.dispose();}
+});
