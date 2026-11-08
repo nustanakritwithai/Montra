@@ -624,5 +624,6 @@
       if (dead) { left = right = [.15, 0]; }
       setHandPose(a, left, right, dt);
     }
+    updateAvatarCloth(a, dt, now);
     return flare;
   }
