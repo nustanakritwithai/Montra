@@ -63,7 +63,7 @@ test('catalog uses accessible 50px inventory tiles, exact item metadata and iner
   const card=f.ctx.createMarketProduct(piece,{price:1234,badge:'ซื้อทันที',id:uuid(1)});
   assert.equal(card.tagName,'ARTICLE');assert.equal(card.dataset.listingId,uuid(1));
   const tile=find(card,'item-slot');assert(tile.classList.contains('bag-slot'));assert.equal(tile.getAttribute('role'),'img');assert.equal(tile.onclick,undefined);
-  assert.match(card.textContent,/ดาบคู่ \+3/);assert.match(card.textContent,/หายาก.*Lv.25/);assert.match(card.textContent,/ออปชัน.*ขั้น 2/);assert.match(card.textContent,/การ์ดทดสอบ/);assert.match(card.textContent,/ผูกกับตัวละครเมื่อสวม/);assert.match(card.textContent,/1,234 ทอง/);
+  assert.match(card.textContent,/ดาบคู่ \+3/);assert.match(card.textContent,/หายาก.*เลเวล 25/);assert.match(card.textContent,/ออปชัน.*ขั้น 2/);assert.match(card.textContent,/การ์ดทดสอบ/);assert.match(card.textContent,/ผูกกับตัวละครเมื่อสวม/);assert.match(card.textContent,/1,234 ทอง/);
   assert.equal(JSON.stringify(piece),before);
   f.items.unsafe={name:'<img src=x onerror=alert(1)>',kind:'material'};
   assert.match(f.ctx.createMarketProduct({itemId:'unsafe',quantity:1}).textContent,/<img src=x/);
@@ -163,7 +163,7 @@ test('auction bid, own claims, pending credit and NPC reserve remain reachable',
 test('legacy feature fallback and unavailable connections do not fabricate listings',()=>{
   const f=fixture({central:false});assert(f.wire.some(x=>x.command==='market_list'));assert(!f.lastBrowse());assert.equal(f.$('economyAuctionTab').disabled,true);assert.equal(f.$('marketFilters').hidden,true);
   f.callbacks.market_state({listings:[f.row(1),f.row(2,'wood',true)]});f.$('economyShopTab').click();assert.equal(f.$('marketOwnListings').children.length,1);
-  f.run('mode="demo";renderEconomy()');assert.equal(find(f.$('marketOwnListings').children[0],'market-product-action').disabled,true);assert.match(f.$('economyStatus').textContent,/เข้า LIVE/);
+  f.run('mode="demo";renderEconomy()');assert.equal(find(f.$('marketOwnListings').children[0],'market-product-action').disabled,true);assert.match(f.$('economyStatus').textContent,/เข้าเล่นออนไลน์/);
 });
 
 test('nearby trading, no-item offer, both confirmations and cancellation stay intact',()=>{
@@ -181,17 +181,17 @@ test('timeout recovery, reconnect reset and old room replies never replay purcha
 });
 
 test('World Market shell: tabs, row table, client filters, sort, two-step Buy and coming-soon views',()=>{
-  const f=fixture();assert.match(f.ctx.html,/World Market/);
+  const f=fixture();assert.match(f.ctx.html,/<h2>ตลาดกลาง<\/h2>/);
   for(const v of ['search','price','wish','sell','orders','auction','rules'])assert(f.$('wmTab-'+v),'tab '+v);
   assert.equal(f.$('wmTab-search').getAttribute('aria-pressed'),'true');assert.equal(f.$('wmCoins').textContent,'1,000');
   const a={...f.row(1,'weapon'),price:900},b={...f.row(2),price:50},c={...f.row(3,'stone'),price:300};
   f.page([a,b,c]);const rows=()=>f.$('wmRowsBody').children.map(r=>r.dataset.listingId);
-  assert.deepEqual(rows(),[uuid(2),uuid(3),uuid(1)]);assert.match(f.$('wmShown').textContent,/^3 shown/);
+  assert.deepEqual(rows(),[uuid(2),uuid(3),uuid(1)]);assert.match(f.$('wmShown').textContent,/^แสดง 3 รายการ/);
   assert.match(f.$('wmRowsBody').children[2].textContent,/ดาบคู่/);assert.match(f.$('wmRowsBody').children[2].textContent,/ไม่หมดอายุ/);
   f.$('wmSort').value='price-desc';f.$('wmSort').onchange();assert.deepEqual(rows(),[uuid(1),uuid(3),uuid(2)]);
   f.$('wmPriceMin').value='100';f.$('wmFilterForm').onsubmit({preventDefault(){}});assert.deepEqual(rows(),[uuid(1),uuid(3)]);
   f.$('wmRarity').value='rare';f.$('wmFilterForm').onsubmit({preventDefault(){}});assert.deepEqual(rows(),[uuid(1)]);
-  assert.equal(f.$('wmBuy').disabled,true);assert.equal(f.$('wmPick').textContent,'Pick an item in the list');
+  assert.equal(f.$('wmBuy').disabled,true);assert.equal(f.$('wmPick').textContent,'เลือกไอเท็มในรายการ');
   f.$('wmRowsBody').children[0].click();assert.equal(f.$('wmBuy').disabled,false);
   f.$('wmBuy').click();assert.equal(f.wire.filter(x=>x.command==='market_buy').length,0);assert.match(f.$('wmPick').textContent,/ยืนยันซื้อ/);
   f.$('wmBuy').click();const buy=f.wire.filter(x=>x.command==='market_buy');assert.equal(buy.length,1);assert.equal(buy[0].payload.listingId,uuid(1));
@@ -229,4 +229,57 @@ test('World Market search refresh recovers failed browse without replaying mutat
   assert(f.lastBrowse().payload.tag>old.payload.tag);f.page([f.row(1)]);
   assert.equal(f.$('wmRowsBody').children.length,1);assert(!f.wire.some(x=>x.command==='market_buy'));
 });
+
+test('market interface text, labels and options are Thai without changing wire values',()=>{
+  const f=fixture(),html=f.ctx.html;
+  const visible=html.replace(/<[^>]*>/g,' ').replace(/MONTRA|Montra/g,'');
+  assert.doesNotMatch(visible,/[A-Za-z]/,'static player-facing market text must be Thai');
+  for(const [,label] of html.matchAll(/(?:aria-label|title|placeholder)="([^"]*)"/g))assert.doesNotMatch(label,/[A-Za-z]/);
+  for(const label of ['ตลาดกลาง','ค้นหา','ราคาตลาด','รายการที่อยากได้','รายการของฉัน','ประมูล','กฎตลาด','ชนิดสินค้า','ความหายาก','ตีบวกขั้นต่ำ','ตรงเลเวลและอาชีพของฉัน','มีการ์ดใส่ในรู','ต้องตรงทุกเงื่อนไข','ราคา ต่ำ→สูง','ราคา สูง→ต่ำ','เลเวล สูง→ต่ำ','ใหม่ล่าสุด','รายละเอียด','อยากได้'])assert(html.includes(label),label);
+  assert.deepEqual(f.$('wmRarity').options.map(x=>x.value),['all','common','uncommon','rare','epic','legendary']);
+  assert.deepEqual(f.$('wmSort').options.map(x=>x.value),['price-asc','price-desc','level-desc','newest']);
+  assert.equal(f.$('wmPick').textContent,'เลือกไอเท็มในรายการ');assert.equal(f.$('wmBuy').textContent,'ซื้อ');
+  f.page([f.row(1)],2);assert.equal(f.$('wmShown').textContent,'แสดง 1 รายการ · ยังมีบนเซิร์ฟเวอร์');
+  f.$('wmRowsBody').children[0].click();assert.equal(f.$('wmBuy').textContent,'ซื้อ');
+  f.$('wmBuy').click();assert.equal(f.$('wmBuy').textContent,'ยืนยันซื้อ');assert(!f.wire.some(x=>x.command==='market_buy'));
+  f.$('wmTab-search').click();f.page([f.row(2,'ring',true)]);f.$('wmRowsBody').children[0].click();
+  assert.equal(f.$('wmBuy').textContent,'ยกเลิกฝากขาย');f.$('wmBuy').click();assert.equal(f.$('wmBuy').textContent,'ยืนยันยกเลิก');
+});
+test('market item kinds and status details are Thai while unknown metadata and user content stay intact',()=>{
+  const f=fixture();
+  for(const [kind,label] of Object.entries({mainHand:'อาวุธ',material:'วัตถุดิบ',catalyst:'ตัวเร่ง',consumable:'ของใช้',card:'การ์ด',tool:'เครื่องมือ',ring:'แหวน',earring:'ตุ้มหู',leftRing:'แหวนซ้าย',rightRing:'แหวนขวา'})){
+    f.items.sample={name:'Custom item 名',kind,stats:{hp:10,stamina:2}};
+    assert.equal(f.ctx.wmSubline({itemId:'sample',quantity:3}),label+' · พลังชีวิต +10 · พลังกาย +2 · ×3');
+    assert.equal(f.ctx.wmName({itemId:'sample',quantity:3}),'Custom item 名');assert.equal(f.items.sample.kind,kind);
+  }
+  f.items.sample={name:'Custom item 名',kind:'future_kind',path:'future_path',rarity:'future_rarity'};
+  assert.equal(f.ctx.wmSubline({itemId:'sample',quantity:1}),'future_kind · ×1');
+  assert.equal(f.ctx.wmName({itemId:'unknown_item_v2',quantity:1}),'unknown_item_v2');
+  assert(f.ctx.marketItemDetails({itemId:'sample',quantity:1}).includes('อาชีพ future_path'));
+  assert(f.ctx.marketItemDetails({itemId:'unknown_item_v2',quantity:1}).includes('รหัสสินค้า unknown_item_v2'));
+  const shippedBonus='หายาก · iLv 12 · ประชิด +10 เมื่อสู้มอนสเตอร์ / +8 ใน PvP';
+  assert(source.includes('bonus: "'+shippedBonus+'"'),'review translations when shipped legacy stats change');
+  f.ctx.WEAPON_META.shrine_glaive={name:'ง้าวจันทร์ผู้พิทักษ์',bonus:shippedBonus};
+  assert.match(f.ctx.wmSubline({itemId:'shrine_glaive',quantity:1}),/เลเวลไอเท็ม 12.*\+8 เมื่อสู้ผู้เล่น/);
+  assert.doesNotMatch(f.ctx.marketItemDetails({itemId:'shrine_glaive',quantity:1}).slice(0,-1).join(' '),/[A-Za-z]/);
+  assert.equal(f.ctx.WEAPON_META.shrine_glaive.bonus,shippedBonus);
+  f.ctx.WEAPON_META.shrine_glaive.bonus='Future balance description';
+  assert.match(f.ctx.wmSubline({itemId:'shrine_glaive',quantity:1}),/Future balance description/);
+  f.items.tonic={kind:'consumable',stats:{hp:3,stamina:2},healHp:15,healMana:10};
+  const details=f.ctx.marketItemDetails({itemId:'tonic',quantity:1}).join(' ');
+  assert.match(details,/พลังชีวิต \+3 · พลังกาย \+2/);assert.match(details,/ฟื้น 15 พลังชีวิต/);assert.match(details,/ฟื้น 10 มานา/);
+  f.callbacks.trade_update({tradeId:'trade-english',otherName:'Alice <b>Example</b>',own:null,other:null});
+  assert.equal(f.$('tradePartner').textContent,'Alice <b>Example</b>');
+});
+test('market loading, empty, offline, timeout and rejection messages stay Thai',()=>{
+  const f=fixture();assert.match(f.$('wmRowsBody').textContent,/กำลังโหลดสินค้า/);
+  [...f.timers.values()].at(-1)();assert.match(f.$('wmRowsBody').textContent,/โหลดรายการไม่สำเร็จ/);
+  f.$('wmRefresh').click();f.page([]);assert.match(f.$('wmRowsBody').textContent,/ไม่พบสินค้า/);
+  for(const reason of ['listing_unavailable','insufficient_gold','inventory_full','auction_unavailable','auction_bid_too_low','auction_cancel_unavailable','starter_supply_limit','unknown_server_error']){
+    f.callbacks.economy_error({reason});assert.match(f.toasts.at(-1),/[ก-๙]/);assert.doesNotMatch(f.toasts.at(-1),/[A-Za-z]/);
+  }
+  f.run('mode="demo";renderEconomy()');assert.match(f.$('economyStatus').textContent,/เข้าเล่นออนไลน์/);assert.match(f.$('wmRowsBody').textContent,/รายการจะแสดงเมื่อเชื่อมต่อ/);
+  assert(!f.wire.some(x=>/^(market_buy|market_create|market_cancel|auction_bid|starter_supply_buy)$/.test(x.command)));
+});
+
 console.log(`PASS marketplace catalog: ${groups} regression groups`);

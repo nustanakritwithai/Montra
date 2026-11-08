@@ -44,7 +44,7 @@
     renderEconomy();
   }
   function economySend(command, payload, durable=false) {
-    if (!economyReady() || !room) { if(command==="forge_weapon")failForgeAnimation("การเชื่อมต่อยังไม่พร้อม · ยังไม่ได้ส่งคำขอ");toast("เข้า LIVE ที่เปิดระบบตลาดก่อน");return; }
+    if (!economyReady() || !room) { if(command==="forge_weapon")failForgeAnimation("การเชื่อมต่อยังไม่พร้อม · ยังไม่ได้ส่งคำขอ");toast("เข้าเล่นออนไลน์บนเซิร์ฟเวอร์ที่เปิดระบบตลาดก่อน");return; }
     if (durable && economyPending) return;
     const target=room,ticket={room:target,command,requestId:payload?.requestId};
     if (durable) {
@@ -91,24 +91,36 @@
   function marketText(tag,className,text){
     const node=document.createElement(tag);node.className=className;if(text!==undefined)node.textContent=text;return node;
   }
+  function marketStatLine(stats){
+    const labels={...statNames,hp:"พลังชีวิต",stamina:"พลังกาย"};
+    return Object.entries(stats||{}).filter(([key,value])=>Object.hasOwn(labels,key)&&Number.isFinite(value)&&value!==0)
+      .map(([key,value])=>labels[key]+" "+(value>0?"+":"")+value).join(" · ");
+  }
+  function marketBonusText(item,meta){
+    if(meta?.stats)return marketStatLine(meta.stats);
+    const bonus=meta?.bonus||"";
+    // Translate this shipped legacy description only; future and unknown data stay intact.
+    return item.itemId==="shrine_glaive" && bonus==="หายาก · iLv 12 · ประชิด +10 เมื่อสู้มอนสเตอร์ / +8 ใน PvP"
+      ? "หายาก · เลเวลไอเท็ม 12 · ประชิด +10 เมื่อสู้มอนสเตอร์ / +8 เมื่อสู้ผู้เล่น" : bonus;
+  }
   function marketItemDetails(item){
     const meta=bagMeta(item.itemId),lines=[];
-    if(meta?.level)lines.push("ต้องการ Lv."+meta.level);
+    if(meta?.level)lines.push("ต้องการเลเวล "+meta.level);
     if(meta?.path && meta.path!=="all")lines.push("อาชีพ "+(gearJobs[meta.path]||meta.path));
-    if(meta?.bonus)lines.push(meta.bonus);
+    const bonus=marketBonusText(item,meta);if(bonus)lines.push(bonus);
     if(item.forge){
       lines.push("ตีบวก +"+item.forge.rank);
       if(item.forge.affix)lines.push("ออปชัน "+(forgeNames[item.forge.affix.stat]||item.forge.affix.stat)+" ขั้น "+item.forge.affix.tier);
       const bonuses=pieceForgeRatings(item),text=Object.entries(bonuses).filter(([,value])=>value).map(([key,value])=>(forgeNames[key]||key)+" +"+Number(value.toFixed(2))).join(" · ");
-      if(text)lines.push("โบนัส PvE "+text);
+      if(text)lines.push("โบนัสสู้มอนสเตอร์ "+text);
     }
     if(item.socket===null)lines.push("รูการ์ดว่าง");
-    else if(typeof item.socket==="string")lines.push("การ์ด "+(personalItems[item.socket]?.name||item.socket)+(personalItems[item.socket]?.stats?" · "+statLine(personalItems[item.socket].stats):""));
+    else if(typeof item.socket==="string")lines.push("การ์ด "+(personalItems[item.socket]?.name||item.socket)+(personalItems[item.socket]?.stats?" · "+marketStatLine(personalItems[item.socket].stats):""));
     if(item.bound)lines.push("ผูกกับตัวละครแล้ว");
     else if(meta && (meta.kind==="mainHand" || wearPositions(meta.kind).length) && personalItems[item.itemId])lines.push("ผูกกับตัวละครเมื่อสวมครั้งแรก");
-    if(meta?.healHp)lines.push("ฟื้น "+meta.healHp+" HP");
-    if(meta?.healMana)lines.push("ฟื้น "+meta.healMana+" MP");
-    if(item.itemId===POTION_ITEM_ID)lines.push("ฟื้น 30 HP");
+    if(meta?.healHp)lines.push("ฟื้น "+meta.healHp+" พลังชีวิต");
+    if(meta?.healMana)lines.push("ฟื้น "+meta.healMana+" มานา");
+    if(item.itemId===POTION_ITEM_ID)lines.push("ฟื้นพลังชีวิต 30");
     lines.push("รหัสสินค้า "+item.itemId);return lines;
   }
   function createMarketProduct(item,{badge,price,priceLabel="ราคารวม",caption="",id=""}={}){
@@ -118,7 +130,7 @@
     if(badge)art.append(marketText("span","market-product-badge",badge));
     const name=meta?.name||(item.itemId===POTION_ITEM_ID?"ยาเลือดเล็ก":item.itemId===SHRINE_SHARD?shardName:item.itemId);
     info.append(marketText("h4","market-product-title",name+(item.forge?" +"+item.forge.rank:"")));
-    info.append(marketText("p","market-product-meta",[meta?.rarity?rarityNames[meta.rarity]||meta.rarity:"",meta?.level?"Lv."+meta.level:"","×"+item.quantity+" ชิ้น"].filter(Boolean).join(" · ")));
+    info.append(marketText("p","market-product-meta",[meta?.rarity?rarityNames[meta.rarity]||meta.rarity:"",meta?.level?"เลเวล "+meta.level:"","×"+item.quantity+" ชิ้น"].filter(Boolean).join(" · ")));
     if(caption)info.append(marketText("p","market-product-caption",caption));
     const details=marketText("details","market-product-details"),summary=marketText("summary","","รายละเอียดไอเท็ม");details.append(summary);
     for(const line of marketItemDetails(item))details.append(marketText("p","",line));
@@ -182,7 +194,7 @@
         if(!mine.childElementCount)marketEmpty(mine,"ไม่มีการประมูลหรือของที่รอรับ");
         for(const item of centralSupply?.items||[]){
           if(!item || typeof item.item!=="string" || !Number.isSafeInteger(item.price) || !Number.isSafeInteger(item.remaining))continue;
-          const piece={itemId:item.item,quantity:1},card=createMarketProduct(piece,{badge:"ร้าน NPC",price:item.price,priceLabel:"ราคาต่อชิ้น",caption:"ซื้อได้อีก "+item.remaining+" ชิ้นวันนี้"});
+          const piece={itemId:item.item,quantity:1},card=createMarketProduct(piece,{badge:"ร้านค้าสำรอง",price:item.price,priceLabel:"ราคาต่อชิ้น",caption:"ซื้อได้อีก "+item.remaining+" ชิ้นวันนี้"});
           marketConfirmButton(card,{label:item.remaining<=0?"หมดวันนี้":"ซื้อ 1 ชิ้น",confirmation:economyItemName(piece)+" · รวม "+item.price.toLocaleString("th-TH")+" ทอง",disabled:!enabled||economyPending||item.remaining<=0,command:"starter_supply_buy",payload:{item:item.item,quantity:1}});supply.append(card);
         }
         if(!supply.childElementCount)marketEmpty(supply,"กำลังโหลดสินค้าสำรอง");
@@ -197,7 +209,7 @@
   function renderEconomy() {
     if (drawerActive!=="economy" || !$('economyStatus')) return;
     const ready=economyReady();
-    $("economyStatus").textContent=ready ? "ทองในกระเป๋า " + (economyGold===null ? "กำลังโหลด…" : economyGold.toLocaleString("th-TH")) : "เข้า LIVE ที่เปิดระบบตลาดเพื่อใช้งาน";
+    $("economyStatus").textContent=ready ? "ทองในกระเป๋า " + (economyGold===null ? "กำลังโหลด…" : economyGold.toLocaleString("th-TH")) : "เข้าเล่นออนไลน์บนเซิร์ฟเวอร์ที่เปิดระบบตลาดเพื่อใช้งาน";
     for(const [name,tab] of [["Market","market"],["Auction","auction"],["Shop","shop"],["Supply","supply"],["Trade","trade"]]){
       $("economy"+name+"Tab").setAttribute("aria-pressed",String(economyTab===tab));$("economy"+name+"Panel").hidden=economyTab!==tab;
     }
@@ -243,7 +255,7 @@
   // World Market shell: presentation over the existing market protocol. Only
   // query/category/ownOnly are server-side; the remaining filters narrow rows
   // already loaded from market_browse. Unsupported views show "เร็วๆ นี้".
-  const WM_TABS=[["search","Search","ค้นหา"],["price","Market price","ราคาตลาด"],["wish","Wish list","รายการที่อยากได้"],["sell","Sell","ขาย"],["orders","My orders","ออเดอร์ของฉัน"],["auction","Auction","ประมูล"],["rules","Rules","กฎ"],["trade","Trade","เทรดใกล้ตัว"],["supply","NPC supply","สินค้าสำรอง NPC"]];
+  const WM_TABS=[["search","ค้นหา"],["price","ราคาตลาด"],["wish","รายการที่อยากได้"],["sell","ขาย"],["orders","รายการของฉัน"],["auction","ประมูล"],["rules","กฎตลาด"],["trade","เทรดใกล้ตัว"],["supply","ร้านค้าสำรอง"]];
   const WM_PAGE=20,WM_SOON="เร็วๆ นี้";
   let wmView="search",wmSelected=null,wmConfirm=false,wmPage=0,wmSort="price-asc",wmShowDetails=false;
   let wmFilters={rarity:"all",lvMin:"",lvMax:"",priceMin:"",priceMax:"",enhance:"",mine:false,jewels:false};
@@ -266,9 +278,10 @@
     return rows.slice().sort(by);
   }
   function wmName(item){const meta=bagMeta(item.itemId);return (meta?.name||(item.itemId===POTION_ITEM_ID?"ยาเลือดเล็ก":item.itemId===SHRINE_SHARD?shardName:item.itemId))+(item.forge?" +"+item.forge.rank:"");}
+  const wmKindNames={...bodyLabels,mainHand:"อาวุธ",earring:"ตุ้มหู",ring:"แหวน",material:"วัตถุดิบ",catalyst:"ตัวเร่ง",consumable:"ของใช้",card:"การ์ด",tool:"เครื่องมือ"};
   function wmSubline(item){
-    const meta=bagMeta(item.itemId),slot=meta?.kind==="mainHand"?"อาวุธ":meta?.kind||"";
-    const stats=meta?.stats?statLine(meta.stats):meta?.bonus||"";
+    const meta=bagMeta(item.itemId),slot=wmKindNames[meta?.kind]||meta?.kind||"";
+    const stats=marketBonusText(item,meta);
     return [slot,stats,"×"+Number(item.quantity||0)].filter(Boolean).join(" · ");
   }
   function wmTimeLeft(endsAt){
@@ -290,7 +303,7 @@
     const shown=rows.slice(wmPage*WM_PAGE,(wmPage+1)*WM_PAGE);
     if(wmSelected && !rows.some(r=>r.id===wmSelected)){wmSelected=null;wmConfirm=false;wmShowDetails=false;}
     $("wmCategoryTitle").textContent=wmCategoryNames[marketFilters.fixed.category]||"ทั้งหมด";
-    $("wmShown").textContent=shown.length+" shown"+(rows.length>shown.length?" จาก "+rows.length:"")+(marketNextCursor!==null?" · ยังมีบนเซิร์ฟเวอร์":"");
+    $("wmShown").textContent="แสดง "+shown.length+" รายการ"+(rows.length>shown.length?" จาก "+rows.length:"")+(marketNextCursor!==null?" · ยังมีบนเซิร์ฟเวอร์":"");
     $("wmPageLabel").textContent=(wmPage+1)+" / "+pages;$("wmPrev").disabled=wmPage<=0;$("wmNext").disabled=wmPage>=pages-1;
     $("wmRefresh").disabled=!ready||economyPending||!!marketPageRequest;
     $("wmLoadMore").hidden=marketNextCursor===null;$("wmLoadMore").disabled=!ready||!!marketPageRequest;
@@ -307,11 +320,11 @@
       table.append(row);
     }
     const picked=rows.find(r=>r.id===wmSelected),mine=picked&&(typeof picked.isMine==="boolean"?picked.isMine:picked.seller===ownId);
-    $("wmPick").textContent=picked?(wmConfirm?(mine?"ยืนยันยกเลิกฝากขาย ":"ยืนยันซื้อ ")+economyItemName(picked.item)+(mine?"":" · รวม "+picked.price.toLocaleString("th-TH")+" ทอง"):wmName(picked.item)+" · "+picked.price.toLocaleString("th-TH")+" ทอง"):"Pick an item in the list";
+    $("wmPick").textContent=picked?(wmConfirm?(mine?"ยืนยันยกเลิกฝากขาย ":"ยืนยันซื้อ ")+economyItemName(picked.item)+(mine?"":" · รวม "+picked.price.toLocaleString("th-TH")+" ทอง"):wmName(picked.item)+" · "+picked.price.toLocaleString("th-TH")+" ทอง"):"เลือกไอเท็มในรายการ";
     const details=$("wmDetails");details.hidden=!(picked&&wmShowDetails);details.replaceChildren();
     if(picked&&wmShowDetails)for(const line of marketItemDetails(picked.item))details.append(marketText("p","",line));
     $("wmDetailsBtn").disabled=!picked;$("wmBuy").disabled=!picked||!ready||economyPending;
-    $("wmBuy").textContent=!picked?"Buy":wmConfirm?(mine?"ยืนยันยกเลิก":"ยืนยันซื้อ"):(mine?"ยกเลิกฝากขาย":"Buy");
+    $("wmBuy").textContent=!picked?"ซื้อ":wmConfirm?(mine?"ยืนยันยกเลิก":"ยืนยันซื้อ"):(mine?"ยกเลิกฝากขาย":"ซื้อ");
   }
   function bindWorldMarket(switchTab){
     for(const [view] of WM_TABS)$("wmTab-"+view).onclick=()=>{
@@ -346,31 +359,31 @@
   function worldMarketShell(){
     const soon=' <em class="wm-soon-tag">'+WM_SOON+'</em>';
     return `<div class="world-market" id="worldMarket" data-view="search">
-<header class="wm-header"><div class="wm-coins" title="ทองในกระเป๋า"><span aria-hidden="true">◉</span> <strong id="wmCoins">—</strong></div><h2>World Market</h2><button id="wmClose" class="wm-close" type="button" aria-label="ปิดตลาด">✕</button></header>
-<nav class="wm-tabs" aria-label="World Market">${WM_TABS.map(([v,en,th])=>`<button id="wmTab-${v}" type="button" title="${th}">${en}</button>`).join("")}</nav>
+<header class="wm-header"><div class="wm-coins" title="ทองในกระเป๋า"><span aria-hidden="true">◉</span> <strong id="wmCoins">—</strong></div><h2>ตลาดกลาง</h2><button id="wmClose" class="wm-close" type="button" aria-label="ปิดตลาด">✕</button></header>
+<nav class="wm-tabs" aria-label="ตลาดกลาง">${WM_TABS.map(([v,label])=>`<button id="wmTab-${v}" type="button" title="${label}">${label}</button>`).join("")}</nav>
 <div id="wmSoon" class="wm-soon" hidden><h3>${WM_SOON}</h3><p>ราคาตลาดย้อนหลังและรายการที่อยากได้ยังไม่มีบนเซิร์ฟเวอร์</p></div>
 <section id="wmRules" class="wm-rules" hidden><h3>กฎตลาด Montra</h3><ul><li>ภาษีขาย 0% · ไม่มีค่าลงขาย</li><li>สินค้าซื้อทันทีไม่มีวันหมดอายุ · ผู้ขายยกเลิกรับของคืนได้เมื่อกระเป๋ามีที่ว่าง</li><li>เงินโอนเข้ากระเป๋าผู้ขายทันทีเมื่อขายได้ (ไม่ส่งทางจดหมาย)</li><li>ซื้อได้ทั้งชุดตามจำนวนที่ลงขายเท่านั้น</li><li>ประมูลเปิดได้ 1, 6 หรือ 24 ชั่วโมง · เงินเสนอสูงสุดถูกกันไว้และคืนเมื่อมีผู้เสนอสูงกว่า</li><li>ผู้ขายยกเลิกประมูลได้ก่อนมีผู้เสนอเท่านั้น</li></ul></section>
 <div id="wmSearch" class="wm-body">
 <aside class="wm-filters"><form id="wmFilterForm">
 <button id="wmCategoryToggle" class="wm-cat-toggle" type="button" aria-expanded="true">หมวดหมู่ ▾</button>
 <div id="wmCategoryList" class="wm-cat-list">${Object.entries(wmCategoryNames).map(([k,l])=>`<button id="wmCat-${k}" type="button">${l}</button>`).join("")}</div>
-<label>Type<select id="wmType" disabled><option value="all">ทั้งหมด</option></select>${soon}</label>
-<label>Rarity<select id="wmRarity"><option value="all">ทั้งหมด</option><option value="common">พื้นฐาน</option><option value="uncommon">พิเศษ</option><option value="rare">หายาก</option><option value="epic">ชั้นยอด</option><option value="legendary">ตำนาน</option></select></label>
-<label>Item name<input id="wmName" type="search" maxlength="60" placeholder="ชื่อไอเท็ม"></label>
-<div class="wm-range"><span>Level</span><input id="wmLvMin" type="number" min="0" placeholder="min" aria-label="เลเวลต่ำสุด"><input id="wmLvMax" type="number" min="0" placeholder="max" aria-label="เลเวลสูงสุด"></div>
-<div class="wm-range"><span>Price</span><input id="wmPriceMin" type="number" min="0" placeholder="min" aria-label="ราคาต่ำสุด"><input id="wmPriceMax" type="number" min="0" placeholder="max" aria-label="ราคาสูงสุด"></div>
-<label>Enhance at least<input id="wmEnhance" type="number" min="0" max="20" placeholder="+0"></label>
-<label class="wm-check"><input id="wmMyLevel" type="checkbox"> My level/class</label>
-<label class="wm-check"><input id="wmJewels" type="checkbox"> Has jewels set (การ์ดในรู)</label>
-<fieldset class="wm-advanced" disabled><legend>Advanced search${soon}</legend><p>All must match</p><select><option>Stat</option></select><select><option>Stat</option></select><select><option>Stat</option></select></fieldset>
+<label>ชนิดสินค้า<select id="wmType" disabled><option value="all">ทั้งหมด</option></select>${soon}</label>
+<label>ความหายาก<select id="wmRarity"><option value="all">ทั้งหมด</option><option value="common">พื้นฐาน</option><option value="uncommon">พิเศษ</option><option value="rare">หายาก</option><option value="epic">ชั้นยอด</option><option value="legendary">ตำนาน</option></select></label>
+<label>ชื่อไอเท็ม<input id="wmName" type="search" maxlength="60" placeholder="ชื่อไอเท็ม"></label>
+<div class="wm-range"><span>เลเวล</span><input id="wmLvMin" type="number" min="0" placeholder="ต่ำสุด" aria-label="เลเวลต่ำสุด"><input id="wmLvMax" type="number" min="0" placeholder="สูงสุด" aria-label="เลเวลสูงสุด"></div>
+<div class="wm-range"><span>ราคา</span><input id="wmPriceMin" type="number" min="0" placeholder="ต่ำสุด" aria-label="ราคาต่ำสุด"><input id="wmPriceMax" type="number" min="0" placeholder="สูงสุด" aria-label="ราคาสูงสุด"></div>
+<label>ตีบวกขั้นต่ำ<input id="wmEnhance" type="number" min="0" max="20" placeholder="+0"></label>
+<label class="wm-check"><input id="wmMyLevel" type="checkbox"> ตรงเลเวลและอาชีพของฉัน</label>
+<label class="wm-check"><input id="wmJewels" type="checkbox"> มีการ์ดใส่ในรู</label>
+<fieldset class="wm-advanced" disabled><legend>ค้นหาขั้นสูง${soon}</legend><p>ต้องตรงทุกเงื่อนไข</p><select><option>ค่าสถานะ</option></select><select><option>ค่าสถานะ</option></select><select><option>ค่าสถานะ</option></select></fieldset>
 <button class="wm-apply" type="submit">ค้นหา</button><p class="wm-note">ชื่อและหมวดค้นจากเซิร์ฟเวอร์ · ตัวกรองอื่นใช้กับรายการที่โหลดแล้ว</p>
 </form></aside>
-<div class="wm-main"><div class="wm-list-head"><div><h3 id="wmCategoryTitle">ทั้งหมด</h3><small id="wmShown">0 shown</small></div><p class="wm-rule-line">ภาษีขาย 0% · ไม่หมดอายุ · ไม่มีค่าลงขาย · เงินเข้ากระเป๋าผู้ขายทันที</p>
-<div class="wm-sort"><button id="wmRefresh" type="button">รีเฟรช</button><select id="wmSort" aria-label="เรียงลำดับ"><option value="price-asc">Price low→high</option><option value="price-desc">Price high→low</option><option value="level-desc">Level high→low</option><option value="newest">Newest</option></select><button id="wmPrev" type="button" aria-label="หน้าก่อน">‹</button><span id="wmPageLabel">1 / 1</span><button id="wmNext" type="button" aria-label="หน้าถัดไป">›</button></div></div>
-<div class="wm-cols" aria-hidden="true"><span>Item</span><span>Lv</span><span>Price</span><span>Time left</span></div>
+<div class="wm-main"><div class="wm-list-head"><div><h3 id="wmCategoryTitle">ทั้งหมด</h3><small id="wmShown">แสดง 0 รายการ</small></div><p class="wm-rule-line">ภาษีขาย 0% · ไม่หมดอายุ · ไม่มีค่าลงขาย · เงินเข้ากระเป๋าผู้ขายทันที</p>
+<div class="wm-sort"><button id="wmRefresh" type="button">รีเฟรช</button><select id="wmSort" aria-label="เรียงลำดับ"><option value="price-asc">ราคา ต่ำ→สูง</option><option value="price-desc">ราคา สูง→ต่ำ</option><option value="level-desc">เลเวล สูง→ต่ำ</option><option value="newest">ใหม่ล่าสุด</option></select><button id="wmPrev" type="button" aria-label="หน้าก่อน">‹</button><span id="wmPageLabel">1 / 1</span><button id="wmNext" type="button" aria-label="หน้าถัดไป">›</button></div></div>
+<div class="wm-cols" aria-hidden="true"><span>ไอเท็ม</span><span>เลเวล</span><span>ราคา</span><span>เวลาที่เหลือ</span></div>
 <div id="wmRowsBody" class="wm-rows" role="list"></div><button id="wmLoadMore" class="secondary" type="button" hidden>โหลดเพิ่มจากเซิร์ฟเวอร์</button>
 <div id="wmDetails" class="wm-details" hidden></div>
-<footer class="wm-footer"><span id="wmPick">Pick an item in the list</span><button id="wmDetailsBtn" type="button">Details</button><button id="wmPriceBtn" type="button">Market price</button><button id="wmWish" type="button">Wish</button><button id="wmBuy" class="wm-buy" type="button">Buy</button></footer>
+<footer class="wm-footer"><span id="wmPick">เลือกไอเท็มในรายการ</span><button id="wmDetailsBtn" type="button">รายละเอียด</button><button id="wmPriceBtn" type="button">ราคาตลาด</button><button id="wmWish" type="button">อยากได้</button><button id="wmBuy" class="wm-buy" type="button">ซื้อ</button></footer>
 </div></div>`;
   }
   function renderEconomyItemPreviews(){
@@ -385,9 +398,9 @@
     tradeUnread=false; updateTradeBadge(); if (activeTrade) economyTab="trade";
     wmConfirm=false;wmShowDetails=false;
     openDrawer("economy","ตลาดและการค้า",worldMarketShell()+`<div class="market-catalog">
- <header class="market-banner"><div><small>MONTRA MARKET</small><h3>ตลาดกลาง</h3><p>เลือกไอเท็มจากร้านผู้เล่น</p></div><div class="economy-balance" id="economyStatus" role="status"></div></header>
+ <header class="market-banner"><div><small>ตลาด MONTRA</small><h3>ตลาดกลาง</h3><p>เลือกไอเท็มจากร้านผู้เล่น</p></div><div class="economy-balance" id="economyStatus" role="status"></div></header>
  <nav class="market-tabs" aria-label="เลือกประเภทตลาด"><button id="economyMarketTab" type="button" aria-controls="economyMarketPanel">ซื้อทันที</button><button id="economyAuctionTab" type="button" aria-controls="economyAuctionPanel" disabled>ประมูล</button><button id="economyShopTab" type="button" aria-controls="economyShopPanel">ร้านของฉัน</button></nav>
- <div class="market-utilities" role="group" aria-label="บริการตลาด"><button id="economySupplyTab" type="button" aria-controls="economySupplyPanel" disabled>สินค้าสำรอง NPC</button><button id="economyTradeTab" type="button" aria-controls="economyTradePanel">เทรดใกล้ตัว</button></div>
+ <div class="market-utilities" role="group" aria-label="บริการตลาด"><button id="economySupplyTab" type="button" aria-controls="economySupplyPanel" disabled>สินค้าสำรอง</button><button id="economyTradeTab" type="button" aria-controls="economyTradePanel">เทรดใกล้ตัว</button></div>
  <p id="marketActionStatus" class="market-action-status" role="status" hidden></p>
  <section id="economyMarketPanel" aria-label="สินค้าซื้อทันที">
  <form id="marketFilters" class="market-search" aria-label="ค้นหาสินค้า">
@@ -419,7 +432,7 @@
  <p class="note">ผู้ขายยกเลิกได้ก่อนมีผู้เสนอเท่านั้น · เมื่อจบผู้ชนะกดรับของได้ หากไม่มีผู้เสนอ ผู้ขายกดรับของคืน</p></details>
  <h3>สินค้าที่ฝากขาย</h3><p id="shopResultStatus" class="market-results-status" role="status"></p><div id="marketOwnListings" class="market-products"></div><button class="secondary" id="marketOwnMore" type="button" hidden>ดูสินค้าเพิ่มเติม</button>
  <h3>ประมูลและของรอรับ</h3><button class="secondary" id="auctionCredit" type="button" hidden></button><div id="auctionMine" class="market-products"></div></section>
- <section id="economySupplyPanel" aria-label="สินค้าสำรอง NPC" hidden><div class="economy-heading"><div><h3>สินค้าสำรอง NPC</h3><p>วัตถุดิบเริ่มต้นและยาฟื้นพลัง</p></div><button id="supplyRefresh" type="button">รีเฟรช</button></div><p class="note">จำกัด 20 ชิ้นต่อชนิดต่อวันต่อตัวละคร และมีสต็อกส่วนกลาง 500 ชิ้นต่อชนิดต่อวัน · รีเซ็ต 07.00 น. เวลาไทย</p><div id="starterSupplyRows" class="market-products"></div></section>
+ <section id="economySupplyPanel" aria-label="สินค้าสำรอง" hidden><div class="economy-heading"><div><h3>สินค้าสำรอง</h3><p>วัตถุดิบเริ่มต้นและยาฟื้นพลัง</p></div><button id="supplyRefresh" type="button">รีเฟรช</button></div><p class="note">จำกัด 20 ชิ้นต่อชนิดต่อวันต่อตัวละคร และมีสต็อกส่วนกลาง 500 ชิ้นต่อชนิดต่อวัน · รีเซ็ต 07.00 น. เวลาไทย</p><div id="starterSupplyRows" class="market-products"></div></section>
  <section id="economyTradePanel" hidden><div id="tradeInviteArea"><p class="note">อยู่ใกล้ผู้เล่นในแผนที่เดียวกันไม่เกิน 5 หน่วย</p><label class="field" for="tradeTarget">ผู้เล่นใกล้ตัว</label><select id="tradeTarget"></select><button class="secondary" id="tradeRefresh" type="button">ค้นหาผู้เล่นใกล้ตัว</button><button class="primary" id="tradeInvite" type="button">ขอเทรด</button></div><div id="tradeActiveArea" hidden><h3>เทรดกับ <span id="tradePartner"></span></h3><div class="status-line"><span>ของคุณ</span><div id="tradeOwnItem" class="item-slot-host"></div><strong id="tradeOwnOffer"></strong></div><div class="status-line"><span>อีกฝ่ายเสนอ</span><div id="tradeOtherItem" class="item-slot-host"></div><strong id="tradeOtherOffer"></strong></div><label class="field" for="tradeItem">ไอเท็มของคุณ</label><select id="tradeItem"></select><div id="tradeItemPreview" class="item-preview"></div><div class="economy-inputs"><label>จำนวน<input id="tradeAmount" type="number" inputmode="numeric" min="0" max="99" value="1"></label><label>เงินที่เสนอ<input id="tradeGold" type="number" inputmode="numeric" min="0" max="1000000000" value="0"></label></div><button class="secondary" id="tradeSetOffer" type="button">ตั้งข้อเสนอของฉัน</button><button class="primary" id="tradeConfirm" type="button">ยืนยันข้อเสนอทั้งสองฝ่าย</button><button class="secondary" id="tradeCancel" type="button">ยกเลิกเทรด</button><p class="note">ตรวจของและเงินทั้งสองฝ่ายก่อนยืนยัน · แก้ข้อเสนอแล้วต้องยืนยันใหม่ · คำขออยู่ได้ 60 วินาที</p></div></section></div></div>`);
     for(const id of ["marketItem","auctionItem","tradeItem"]){$(id).onchange=renderEconomyItemPreviews;$(id.replace("Item","Amount")).oninput=renderEconomyItemPreviews;}
     $("marketQuery").value=marketFilters.fixed.query;$("marketCategory").value=marketFilters.fixed.category;$("marketOwnOnly").checked=marketFilters.fixed.ownOnly;

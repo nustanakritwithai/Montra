@@ -31,7 +31,7 @@
 .wm-list-head h3{margin:0;color:#f2d27a;display:inline}
 .wm-list-head small{margin-left:8px;color:#8193bb}
 .wm-rule-line{margin:0;color:#8193bb;font-size:11px}
-.wm-sort{display:flex;align-items:center;gap:4px}
+.wm-sort{display:flex;align-items:center;gap:4px}.wm-sort>span{flex-shrink:0;white-space:nowrap}
 .wm-sort button,.wm-footer button:not(.wm-buy){background:#1d3160;color:#e7ecf7;border:1px solid #2d4373;border-radius:4px;padding:5px 10px;cursor:pointer}
 .wm-cols,.wm-row{display:grid;grid-template-columns:minmax(0,1fr) 50px 110px 100px;gap:8px;align-items:center}
 .wm-cols{padding:4px 10px;color:#8193bb;font-size:11px;border-bottom:1px solid #2d4373}
