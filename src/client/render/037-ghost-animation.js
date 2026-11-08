@@ -15,7 +15,9 @@
       } else if (mesh.rotation.z !== 0) {
         mesh.rotation.z = 0;
       }
-      ghostVoices(mesh, g, now);
+      // Boss windup uses the exact server-radius mesh in syncForestMonsters.
+      // Do not infer a slam/damage from windup ending or add a second fake ring.
+      if (!g.design?.boss) ghostVoices(mesh, g, now);
       // Monster Aggro Roar when targeting hero or entering direct melee threat
       const hero = getLocalAvatar();
       const distToHero = hero ? Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) : 999;

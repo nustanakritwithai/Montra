@@ -69,12 +69,62 @@
       : { kind: "stump", scale: 1 + (level - 5) * .04, eye: gm.eyeGreen };
     return { kind: "longhair", scale: 1 + (level - 9) * .03, eye: gm.eyeRed };
   }
+  // Visual-only registry for the existing server roster. IDs, maps, health,
+  // combat rules and respawn clocks remain owned by ForestEncounters.
+  // Reuse the shipped Thai ghost rigs and shared body, not a second encounter.
+  const BOSS_VISUALS = Object.freeze({
+    boss_bound_temple: { mapId: "bound_temple", kind: "bell", scale: 1.45, crown: "seal" },
+    boss_drowned_marsh: { mapId: "drowned_marsh", kind: "boatman", fallback: "corpse", scale: 1.7, crown: "tide" },
+    boss_moon_cemetery: { mapId: "moon_cemetery", kind: "moonspirit", fallback: "longhair", scale: 1.65, crown: "moon" },
+    boss_moon_pass: { mapId: "moon_pass", kind: "statue", scale: 1.55, spire: .6, crown: "crystal" },
+    boss_bamboo_frontier: { mapId: "bamboo_frontier", kind: "stump", scale: 1.65, crown: "bamboo" },
+    boss_hex_ridge: { mapId: "hex_ridge", kind: "krahang", fallback: "corpse", scale: 1.45, crown: "storm" },
+    boss_lotus_basin: { mapId: "lotus_basin", kind: "waterspirit", fallback: "longhair", scale: 1.65, crown: "flame" },
+    boss_river_watch: { mapId: "river_watch", kind: "phipop", fallback: "corpse", scale: 1.95, crown: "fang" },
+    boss_twin_neck_pass: { mapId: "twin_neck_pass", kind: "krahang", fallback: "corpse", scale: 1.65, crown: "feather" },
+    boss_sam_lan_estuary: { mapId: "sam_lan_estuary", kind: "boatman", fallback: "corpse", scale: 1.85, crown: "anchor" },
+    boss_naga_cavern: { mapId: "naga_cavern", kind: "waterspirit", fallback: "longhair", scale: 1.8, crown: "crystal" },
+    boss_fallen_city: { mapId: "fallen_city", kind: "bell", scale: 1.65, crown: "drum" },
+    boss_tri_wiang_castle: { mapId: "tri_wiang_castle", kind: "headless", fallback: "corpse", scale: 1.9, crown: "armor" },
+    boss_asura_peak: { mapId: "asura_peak", kind: "phitakhon", fallback: "statue", scale: 1.75, spire: .5, crown: "flame" },
+    atlas_rift_warden: { mapId: "spirit_rift", kind: "preta", fallback: "statue", scale: 1.5, spire: .8, crown: "rift" },
+  });
+  for (const visual of Object.values(BOSS_VISUALS)) Object.freeze(visual);
+  function bossDesign(monster, id) {
+    const visual = BOSS_VISUALS[id];
+    if (monster?.tier !== "boss" || !visual || visual.mapId !== monster.mapId) return null;
+    return { ...visual, boss: true, eye: gm.eyeAmber, cloth: gm.lacquer, spire: visual.spire ?? .5 };
+  }
+  // One shared, non-pickable royal seal distinguishes a boss from its ordinary
+  // rig. It is cosmetic; the orange boundary below is the only strike radius.
+  function bossRoyalSeal(rig, design) {
+    const seal = new B.TransformNode("boss royal seal " + design.crown, scene); seal.parent = rig;
+    const materials = { tide: gm.eyeGreen, moon: gm.eyeMoon, crystal: gm.eyeGreen, bamboo: gm.eyeGreen,
+      storm: gm.eyeMoon, flame: gm.crack, fang: gm.eyeRed, feather: gold, anchor: bronzeMat,
+      drum: bronzeMat, armor: gold, rift: gm.eyeMoon, seal: gold };
+    const material = materials[design.crown] || gold;
+    const band = B.MeshBuilder.CreateTorus("boss royal seal", { diameter: 1.2, thickness: .035, tessellation: 24 }, scene);
+    band.parent = seal; band.position.y = .35; band.material = material; band.isPickable = false;
+    // This vertical emblem cannot be mistaken for the ground damage boundary.
+    band.rotation.x = Math.PI / 2; seal.position.set(0, 1.65, .38);
+    for (let i = 0; i < 3; i++) {
+      const point = B.MeshBuilder.CreateCylinder("boss seal crest", { height: .23, diameterTop: 0, diameterBottom: .1, tessellation: 4 }, scene);
+      point.parent = seal; point.position.set((i - 1) * .28, .98 - Math.abs(i - 1) * .15, 0); point.material = material; point.isPickable = false;
+    }
+    return k => { seal.rotation.y = Math.sin(k.t * .45) * .12; };
+  }
   const soulMeshes = [];
   // Builds the pickable root plus the visual rig for one monster.
-  function makeGhostMonster(monster, id) {
-    const design = ghostDesign(monster, id);
-    const tall = { hanged: 3.4, bell: 2.6, longhair: 2.2, statue: 2.4, waterspirit: 2.4, moonspirit: 2.4, boatman: 2.2, preta: 3.2, krahang: 2.4, krasue: 2.2, takhian: 2.4, elephant: 3.6, childghost: 1.3 }[design.kind] || 2;
-    const root = B.MeshBuilder.CreateBox("monster-" + id, { width: 1.3, height: tall, depth: 1.3 }, scene);
+  function makeGhostMonster(monster, id, design = ghostDesign(monster, id)) {
+    // Include crowns, rope crests and the shared seal in boss picking/nameplates.
+    // These conservative bounds cover both the skinned rig and its fallback;
+    // only the visual proxy changes, never server collision or strike radius.
+    const bossHeight = { bell: 4.5, boatman: 3.1, moonspirit: 3.9, statue: 4.3, stump: 3.1,
+      krahang: 3.7, waterspirit: 3.9, phipop: 3.1, headless: 3.1, phitakhon: 4.2, preta: 4.4 };
+    const tall = (design.boss ? bossHeight[design.kind] : undefined) ?? ({ hanged: 3.4, bell: 2.6, longhair: 2.2, statue: 2.4, waterspirit: 2.4, moonspirit: 2.4, boatman: 2.2, preta: 3.2, krahang: 2.4, krasue: 2.2, takhian: 2.4, elephant: 3.6, childghost: 1.3 }[design.kind] || 2);
+    const pickHeight = design.boss ? tall * design.scale : tall;
+    const root = B.MeshBuilder.CreateBox("monster-" + id, { width: design.boss ? 2.1 : 1.3, height: pickHeight, depth: design.boss ? 2.1 : 1.3 }, scene);
+    if (design.boss) root.bakeTransformIntoVertices(B.Matrix.Translation(0, (pickHeight - tall) / 2, 0));
     root.visibility = .001; root.isPickable = true;
     const rig = new B.TransformNode("ghost rig", scene); rig.parent = root; rig.position.y = -tall / 2; rig.scaling.setAll(design.scale);
     contactShadow(rig, design.kind === "elephant" ? 3.4 : 1.7);
@@ -85,11 +135,36 @@
     let update = () => {};
     const ghostState = { get update() { return update; } };
     const fallback = GHOST_KINDS[design.kind] || GHOST_KINDS[design.fallback || "corpse"];
-    const build = () => { update = shamanBody && HUMANOID_KINDS.has(design.kind) ? buildHumanoidGhost(rig, design) : fallback(rig, design); };
-    if (shamanBody === null && HUMANOID_KINDS.has(design.kind)) ghostWaiting.push(() => { if (!root.isDisposed()) build(); }); else build();
-    root.metadata = { monsterId: id, ghost: { update: k => ghostState.update(k), rig, tall, design, attackAt: -1e9, hurtAt: -1e9, deathAt: 0, spawnAt: performance.now(), walk: 0, speed: 0 } };
-    if (design.elite) {
-      const radius = worldDefinitions?.forbidden_forest?.guardian?.strikeRadius ?? 2.8;
+    const visualRoot = design.boss ? new B.TransformNode("boss model", scene) : rig;
+    if (design.boss) visualRoot.parent = rig;
+    const bossMaterials = new Set();
+    const releaseBossMaterials = () => {
+      // mergedSegment owns these wrappers, but their submaterials are shared.
+      for (const material of bossMaterials) material.dispose(false, false, false);
+      bossMaterials.clear();
+    };
+    if (design.boss) root.onDisposeObservable.add(releaseBossMaterials);
+    const build = () => {
+      if (design.boss) {
+        releaseBossMaterials();
+        for (const child of visualRoot.getChildren()) child.dispose();
+        rig.metadata?.skeletons?.forEach(s => s.dispose());
+        rig.metadata = null; visualRoot.metadata = null;
+      }
+      const pose = shamanBody && HUMANOID_KINDS.has(design.kind) ? buildHumanoidGhost(visualRoot, design) : fallback(visualRoot, design);
+      if (design.boss) rig.metadata = visualRoot.metadata;
+      const seal = design.boss ? bossRoyalSeal(visualRoot, design) : null;
+      if (design.boss) for (const mesh of visualRoot.getChildMeshes()) if (mesh.material instanceof B.MultiMaterial) bossMaterials.add(mesh.material);
+      update = seal ? k => { pose(k); seal(k); } : pose;
+    };
+    if (shamanBody === null && HUMANOID_KINDS.has(design.kind)) {
+      // Bosses remain visible and animated during a slow/failed shared GLB load.
+      if (design.boss) build();
+      ghostWaiting.push(() => { if (!root.isDisposed() && (!design.boss || shamanBody)) build(); });
+    } else build();
+    root.metadata = { monsterId: id, ghost: { tier: monster.tier, update: k => ghostState.update(k), rig, tall, design, attackAt: -1e9, hurtAt: -1e9, deathAt: 0, spawnAt: performance.now(), walk: 0, speed: 0 } };
+    if (design.elite || design.boss) {
+      const radius = design.boss ? (worldDefinitions?.[monster.mapId]?.boss?.strikeRadius ?? 3.2) : (worldDefinitions?.forbidden_forest?.guardian?.strikeRadius ?? 2.8);
       const warning = B.MeshBuilder.CreateTorus("keeper strike boundary", { diameter: 2 * radius, thickness: .12, tessellation: 40 }, scene);
       warning.parent = root; warning.position.y = -tall / 2 + .11; warning.isPickable = false; warning.material = strikeMat; warning.setEnabled(false);
       root.metadata.warning = warning;

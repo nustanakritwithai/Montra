@@ -75,6 +75,9 @@
   // Monster status auras: bound talismans and elite radiance
   function updateMonsterAuras(mesh, g, now, dt) {
     if (!mesh || !mesh.isEnabled() || g.deathAt) return;
+    // These bosses only display the server-owned encounter. Legacy local
+    // phase/shield/enrage effects are not a boss combat contract.
+    if (g.design?.boss) return;
     if (seerBindingEffects.has(mesh.metadata?.monsterId)) {
       if (now - (g.lastBoundAura || 0) > 400) {
         g.lastBoundAura = now;

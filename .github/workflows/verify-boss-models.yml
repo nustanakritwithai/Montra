@@ -1,0 +1,43 @@
+name: Verify authoritative boss models
+on:
+  push:
+    paths:
+      - 'src/client/**'
+      - 'assets/characters/thai-male.glb'
+      - 'deploy/combat/RegionalBosses.ts'
+      - 'deploy/combat/WorldAtlas.ts'
+      - 'deploy/combat/authoritative-boss-model-*.cjs'
+      - '.github/workflows/verify-boss-models.yml'
+  pull_request:
+    paths:
+      - 'src/client/**'
+      - 'assets/characters/thai-male.glb'
+      - 'deploy/combat/RegionalBosses.ts'
+      - 'deploy/combat/WorldAtlas.ts'
+      - 'deploy/combat/authoritative-boss-model-*.cjs'
+      - '.github/workflows/verify-boss-models.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  production-boss-models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Install pinned test-only renderer and browser
+        run: |
+          npm install --prefix "$RUNNER_TEMP/montra-boss-test" --ignore-scripts --no-audit --no-fund babylonjs@8.34.0 babylonjs-loaders@8.34.0 playwright@1.56.1
+          "$RUNNER_TEMP/montra-boss-test/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify production models against real Babylon geometry
+        run: NODE_PATH="$RUNNER_TEMP/montra-boss-test/node_modules" node --test deploy/combat/authoritative-boss-model-runtime.cjs
+      - name: Verify real GLB, fallback and lifecycle in WebGL
+        run: NODE_PATH="$RUNNER_TEMP/montra-boss-test/node_modules" node deploy/combat/authoritative-boss-model-browser-test.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: authoritative-boss-model-evidence
+          path: artifacts/boss-models
