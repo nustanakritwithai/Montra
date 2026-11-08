@@ -16,10 +16,17 @@
     asura_peak: ["#775a55","#be9273","#9c7160","#54484a","#ffa164","#632f3d"],
     spirit_rift: ["#686190","#b0a1cc","#857daf","#64567f","#c4abff","#373458"],
   };
+  const REGION_GROUNDS = {
+    twin_neck_pass:["grass","path","temple"], sam_lan_estuary:["sand","path","temple"], tri_wiang_castle:["grass","laterite","laterite"],
+    mantra_capital:["grass","temple","temple"], moon_pass:["grass","path","rock"], river_watch:["grass","gravel","temple"],
+    bamboo_frontier:["bamboo","path","temple"], lotus_basin:["mud","sand","temple"], drowned_marsh:["marsh","mud","gravel"],
+    moon_cemetery:["cemetery","temple","temple"], hex_ridge:["rock","path","rock"], naga_cavern:["rock","gravel","temple"],
+    fallen_city:["dirt","laterite","laterite"], asura_peak:["ash","rock","rock"], spirit_rift:["rift","cemetery","rift"] };
   const regionPaints=new Map();
   const forestReliefRoad=mat("forest ridge trail","#968763","#322f1b");
   const templeReliefRoad=mat("temple terrace paving","#ae9874","#3a3126");
   const civicRoad=mat('protected jade paving','#8eb6a0','#243e38');
+  applyGroundSurface(civicRoad,"temple",{uScale:1,vScale:1,tint:.55,bump:false,bright:.78}); // safe roads keep their jade hue on laid stone
   function regionPaint(id) {
     if(!regionStyles[id])return null;
     if(!regionPaints.has(id)){
@@ -40,6 +47,9 @@
       const castleBounds=id==="tri_wiang_castle" && worldDefinitions?.[id]?.bounds;
       terrain.update();terrain.uScale=castleBounds?(castleBounds.maxX-castleBounds.minX)*.095:9;
       terrain.vScale=castleBounds?(castleBounds.maxZ-castleBounds.minZ)*.095:12;floor.diffuseTexture=terrain;
+      // Ground surfaces per region (floor, road, court) from the G01–G16 library; the palette still tints them.
+      const kinds=REGION_GROUNDS[id] || ["grass","path","temple"];
+      applyGroundSurface(floor,kinds[0],{tint:.35,tile:6});applyGroundSurface(road,kinds[1],{uScale:1,vScale:1,tint:.3,bump:false,bright:.72});applyGroundSurface(court,kinds[2],{uScale:terrain.uScale,vScale:terrain.vScale,tint:.35});
       // Night grade: the atlas palette is kept but pulled down toward moonlight.
       const outerHunt=worldDefinitions?.[id]?.huntTrail;
       const clearTerrain=province || outerHunt;
@@ -47,7 +57,7 @@
       if(clearTerrain){floor.emissiveColor=floor.diffuseColor.scale(.22);road.emissiveColor=road.diffuseColor.scale(outerHunt ? .28:.17);}
       if(outerHunt){court.emissiveColor=court.diffuseColor.scale(.17);stone.emissiveColor=stone.diffuseColor.scale(.12);}
       stone.diffuseColor.scaleInPlace(.8);deep.diffuseColor.scaleInPlace(.7);
-      court.diffuseTexture=terrain;glowMats.add(light);
+      glowMats.add(light);
       regionPaints.set(id,{floor,road,court,stone,light,deep});
     }
     return regionPaints.get(id);
@@ -78,6 +88,7 @@
   function alignVillage(terrain){
     if(terrain===appliedVillageTerrain)return;
     appliedVillageTerrain=terrain;
+    for(const tree of villageTreeNodes)tree.position.y=terrain?terrainHeight(terrain,tree.position.x,tree.position.z):0;
     for(const item of villageBatches){
       const {mesh,anchors}=item,kind=B.VertexBuffer.PositionKind;
       if(!item.base)item.base=mesh.getVerticesData(kind).slice();
@@ -99,6 +110,57 @@
   function terrainCell(cuts,v){
     const i=cuts.findIndex(n=>n>v);
     return i<0?cuts.length-2:Math.max(0,i-1);
+  }
+  // ---- Ground patches: soft-edged pools of a second surface (grass, moss, leaves, gravel …) so no floor
+  // reads as one flat colour. Visual only, laid a few millimetres over the floor and under roads and courts.
+  const PATCH_KINDS={grass:["dirt","moss","leaves"],dirt:["grass","gravel","moss"],sand:["grass","mud"],mud:["grass","marsh","moss"],
+    marsh:["mud","moss"],cemetery:["moss","dirt","gravel"],rock:["gravel","moss","dirt"],ash:["rock","gravel"],rift:["ash","rock"],
+    bamboo:["leaves","moss","mud"],leaves:["moss","mud","grass"],temple:["moss","leaves"]};
+  const MAP_FLOORS={ritual_village:"dirt",forbidden_forest:"leaves",bound_temple:"temple"};
+  let patchMask=null;const patchMats=new Map();
+  function groundPatchMask(){
+    if(patchMask)return patchMask;
+    // A soft blob with a ragged edge, used as the opacity of every patch (second UV set).
+    patchMask=paintTexture("ground patch mask",128,(c,s)=>{
+      c.clearRect(0,0,s,s);const h=s/2;
+      for(let i=0;i<9;i++){const a=i/9*Math.PI*2,r=s*(.14+noise(i,71)*.12),x=h+Math.cos(a)*s*.16,y=h+Math.sin(a)*s*.16;
+        const g=c.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,"rgba(255,255,255,.95)");g.addColorStop(.55,"rgba(255,255,255,.6)");g.addColorStop(1,"rgba(255,255,255,0)");
+        c.fillStyle=g;c.fillRect(0,0,s,s);}
+      const g=c.createRadialGradient(h,h,0,h,h,h*.62);g.addColorStop(0,"rgba(255,255,255,1)");g.addColorStop(1,"rgba(255,255,255,0)");c.fillStyle=g;c.fillRect(0,0,s,s);
+    });
+    patchMask.hasAlpha=true;patchMask.coordinatesIndex=1;patchMask.wrapU=patchMask.wrapV=B.Texture.CLAMP_ADDRESSMODE;
+    return patchMask;
+  }
+  function groundPatchMaterial(kind,base){
+    const key=kind+":"+base.toHexString();if(patchMats.has(key))return patchMats.get(key);
+    const m=new B.StandardMaterial("ground patch "+kind,scene);m.diffuseColor=base.clone();
+    applyGroundSurface(m,kind,{uScale:1,vScale:1,tint:.35,bump:false,bright:1});
+    m.diffuseColor=new B.Color3(base.r*.5+m.diffuseColor.r*.5,base.g*.5+m.diffuseColor.g*.5,base.b*.5+m.diffuseColor.b*.5);
+    m.opacityTexture=groundPatchMask();m.useAlphaFromDiffuseTexture=false;m.backFaceCulling=true;m.zOffset=-1;
+    m.specularColor=new B.Color3(.03,.03,.03);m.metadata={noShadow:true};
+    patchMats.set(key,m);return m;
+  }
+  function scatterGroundPatches(map,floorMat,floorKind,roadsClear){
+    const kinds=PATCH_KINDS[floorKind];if(!kinds || !floorMat)return;
+    const b=map.bounds,w=b.maxX-b.minX,d=b.maxZ-b.minZ,count=Math.min(90,Math.round(w*d/130)),t=map.terrain,byKind=new Map();
+    const base=floorMat.diffuseColor||new B.Color3(.6,.6,.6);
+    for(let i=0,n=0;i<count*3&&n<count;i++){
+      const x=b.minX+noise(i,701)*w,z=b.minZ+noise(i,702)*d,size=4+noise(i,703)*9;
+      if(roadsClear && !roadsClear(x,z,size*.3))continue;
+      const g=B.MeshBuilder.CreateGround("ground patch",{width:size,height:size*(.7+noise(i,704)*.6),subdivisions:t?4:1,updatable:true},scene);
+      const rot=noise(i,705)*Math.PI,c=Math.cos(rot),s=Math.sin(rot),pos=g.getVerticesData(B.VertexBuffer.PositionKind),uv=g.getVerticesData(B.VertexBuffer.UVKind),uv2=[];
+      for(let k=0;k<pos.length;k+=3){
+        const px=x+pos[k]*c+pos[k+2]*s,pz=z-pos[k]*s+pos[k+2]*c;
+        pos[k]=px;pos[k+2]=pz;pos[k+1]=t?terrainHeight(t,px,pz)+.006:-.1;
+        uv2.push(uv[k/3*2],uv[k/3*2+1]);uv[k/3*2]=px/4;uv[k/3*2+1]=pz/4;
+      }
+      g.setVerticesData(B.VertexBuffer.PositionKind,pos);g.setVerticesData(B.VertexBuffer.UVKind,uv);g.setVerticesData(B.VertexBuffer.UV2Kind,uv2);
+      const kind=kinds[n%kinds.length];if(!byKind.has(kind))byKind.set(kind,[]);byKind.get(kind).push(g);n++;
+    }
+    for(const [kind,parts] of byKind){
+      const mesh=B.Mesh.MergeMeshes(parts,true,true);if(!mesh)continue;
+      mesh.name=map.id+" ground patches "+kind;mesh.parent=expansionRoot;mesh.isPickable=false;mesh.material=groundPatchMaterial(kind,base);mesh.metadata={noShadow:true};
+    }
   }
   function terrainHeight(t,x,z){
     x=Math.max(t.xs[0],Math.min(t.xs.at(-1),x));z=Math.max(t.zs[0],Math.min(t.zs.at(-1),z));
@@ -250,9 +312,8 @@
     }
     for(const z of [42,-36])for(let x=-235;x<250;x+=9){
       if(Math.abs(x)<18 || Math.abs(x-(z===42?-95:95))<21)continue;
-      const cairn=B.MeshBuilder.CreateCylinder("shale outcrop",{height:.68,diameterBottom:2.1,diameterTop:1.5,tessellation:5},scene);
       sceneryPoint("stone",x,z-1.5,1.05);
-      cairn.position.set(x,terrainHeight(t,x,z)+.10,z-1.5);cairn.material=paint.stone;ornaments.push(cairn);
+      placeRock("plain",x,terrainHeight(t,x,z-1.5),z-1.5,{parent:expansionRoot,scale:1.05}); // shale outcrop from the rock kit
     }
     for(const m of new Set(ornaments.map(p=>p.material))){
       const group=ornaments.filter(p=>p.material===m),merged=B.Mesh.MergeMeshes(group,true,true);
@@ -262,6 +323,9 @@
   function buildRegion(map,paint) {
     let parts=[];
     const elevation=(x,z)=>map.reliefLabels?terrainHeight(map.terrain,x,z):0;
+    // Thai tree / rock kit instances seated on the relief (they are not merged with the carved parts).
+    const tree=(species,x,z,scale=1)=>placeThaiTree(species,x,elevation(x,z),z,{parent:expansionRoot,scale});
+    const rock=(kind,x,z,scale=1)=>placeRock(kind,x,elevation(x,z),z,{parent:expansionRoot,scale});
     function put(mesh,x,y,z,material){
       mesh.position.set(x,y+elevation(x,z),z);mesh.material=material;mesh.isPickable=false;parts.push(mesh);return mesh;
     }
@@ -556,7 +620,7 @@
           for(let j=0;j<n;j++){
             const t=(j+.5)/n,bx=along?w.x+t*w.width:x,bz=along?z:w.z+t*w.length;
             sceneryPoint("wood",bx,bz,w.width>w.length?w.length/2:w.width/2);
-            cone(bx,1.7,bz,3.4,.48,.31,decor.bamboo,5);cone(bx,3.05,bz,.75,1.45,.36,forestLeaf,5);
+            if(j%2===0)tree("phai",bx,bz,.55+noise(j+bx,571)*.15); // bamboo hedge from the tree kit
           }
         }else if(city){
           box(x,.5,z,w.width+.3,1,w.length+.3,provinceFx.laterite);box(x,2.2,z,w.width,2.4,w.length,provinceFx.brick);
@@ -649,7 +713,8 @@
           cone(x,7.6,z,1.4,.35,0,gold,8);
           cone(x,1.6,z,2.1,.42,.38,templeGold,10);ball(x,2.85,z,.6,gold,6);
         }else if(s.kind==="grove"){
-          for(let i=0;i<8;i++){const a=i*2.4,bx=x+Math.cos(a)*1.2,bz=z+Math.sin(a)*1.2;sceneryPoint("wood",bx,bz,.4);cone(bx,2,bz,4+i%3,.32,.20,forestLeaf);}
+          for(let i=0;i<8;i++){const a=i*2.4,bx=x+Math.cos(a)*1.2,bz=z+Math.sin(a)*1.2;sceneryPoint("wood",bx,bz,.4);
+            if(i<3)tree(["yangna","takhian","pradu"][i],x+Math.cos(a)*1.6,z+Math.sin(a)*1.6,.7+i*.08);}
         }
         if(s.kind!=="bridge")lamp(x+2.2,z+1.5);
         finish(s.kind,true);
@@ -711,7 +776,7 @@
         const x=huntTrail?(i%2?bounds.maxX-4:bounds.minX+4):(i%2?1:-1)*(35+i%4);
         const z=huntTrail?bounds.minZ+6+(bounds.maxZ-bounds.minZ-12)*noise(i,197):-58+(i*29)%83;
         if(huntTrail && !sceneryClear(x,z,8,map))continue;
-        if(bamboo){for(let j=0;j<4;j++){sceneryPoint("wood",x+j*.3,z+j*.2,.3);cone(x+j*.3,2,z+j*.2,4+j*.7,.21,.13,forestLeaf,5).rotation.z=(j-2)*.07;}}
+        if(bamboo){for(let j=0;j<4;j++)sceneryPoint("wood",x+j*.3,z+j*.2,.3);tree("phai",x+.45,z+.3,.75+noise(i,198)*.2);}
         else {cone(x,.12,z,.16,1.7,1.8,forestLeaf,8);cone(x,.4,z,.4,.8,.3,paint.light,6);}
       }
       finish("lanterns and fields");

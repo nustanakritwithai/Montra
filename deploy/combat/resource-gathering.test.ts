@@ -86,9 +86,13 @@ test("two characters share one stock and clock across database handles, retries,
     store.harvest(a,"resource_stone_0002",stone,now+4700);
     other.harvest(b,"resource_stone_0003",stone,now+4700);
     const world=store.resourceAtlas(now+4700).find(z=>z.mapId===stone.mapId)!;
-    assert.equal(world.stone,0);assert.equal(world.wood,0);
-    const next=other.resourceMap(stone.mapId,now+4700).nodes.find(n=>n.id===stone.id)!.nextIn;
-    assert.equal(next,stone.period+Math.round(stone.period*.25)-1600);
+    // The expanded village has more nodes (fields, orchard, bank trees); only the two used here are empty.
+    const untouched=(kind:string,used:string)=>resourceNodes(stone.mapId).filter(n=>n.kind===kind&&n.id!==used).reduce((sum,n)=>sum+n.capacity,0);
+    assert.equal(world.stone,untouched("stone",stone.id));assert.equal(world.wood,untouched("wood",wood.id));
+    const region=other.resourceMap(stone.mapId,now+4700),next=region.nodes.find(n=>n.id===stone.id)!.nextIn;
+    // The 25% slow-down applies only when the whole map is nearly stripped (the larger village usually is not).
+    const scarce=region.available*4<=region.capacity;
+    assert.equal(next,stone.period+(scarce?Math.round(stone.period*.25):0)-1600);
     assert.equal(store.refine(a,"resource_ore_refine1","mat_raw_stone_1",1).item,"mat_metal_1");
     store.socketItem(a,{requestId:"resource_drill_0001",target:1,gear:"wp_crook_1",action:"drill",expected:"sealed",card:null});
     assert.equal(store.getAccount(a).inventory.slots[1]?.socket,null);

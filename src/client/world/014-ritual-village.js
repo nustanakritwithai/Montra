@@ -107,28 +107,20 @@
   }
   // Canals (visible just above the walkable ground) and the southern river.
   for (const x of [-14.1, 14.1]) {
-    vbox("canal", x, -.09, -10, 11.2, .08, 100, water);
-    for (let i = 0; i < 14; i++) {
-      const z = -19 + i * 2.9;
+    vbox("canal", x, -.09, 11, 11.2, .08, 74, water);
+    for (let i = 0; i < 24; i++) {
+      const z = -24 + i * 3;
       vbox("moon streak", x + (noise(i, x) - .5) * 6, -.04, z, 1.2 + noise(i, 3) * 1.6, .01, .12, moonStreak);
     }
   }
-  vbox("river", 0, -.13, 44, 160, .08, 48, water);
-  for (let i = 0; i < 26; i++) vbox("moon streak", (noise(i, 41) - .5) * 70, -.08, 22 + noise(i, 42) * 30, 1.5 + noise(i, 43) * 3, .01, .14, moonStreak);
+  vbox("river", 0, -.13, 74, 240, .08, 52, water);
+  for (let i = 0; i < 40; i++) vbox("moon streak", (noise(i, 41) - .5) * 120, -.08, 50 + noise(i, 42) * 30, 1.5 + noise(i, 43) * 3, .01, .14, moonStreak);
   // South pier: stepped landing, mooring posts and moored long-tail boats.
-  for (let s = 0; s < 3; s++) vbox("pier step", 0, -.08 - s * .07, 19.4 + s * .9, 8.5 - s * .6, .12, .9, woodenAlt);
-  for (const x of [-4, 4]) vbox("mooring post", x, .3, 22, .25, 1.4, .25, darkWood);
-  boatNodes.push(longTailBoat(-6.2, 24.5, .25), longTailBoat(6.5, 25.2, -.18), longTailBoat(-14.4, 15.5, .05), longTailBoat(13.6, -16.5, Math.PI - .08));
+  for (let s = 0; s < 3; s++) vbox("pier step", 0, -.08 - s * .07, 46.4 + s * .9, 8.5 - s * .6, .12, .9, woodenAlt);
+  for (const x of [-4, 4]) vbox("mooring post", x, .3, 49, .25, 1.4, .25, darkWood);
+  boatNodes.push(longTailBoat(-6.2, 51.5, .25), longTailBoat(6.5, 52.2, -.18), longTailBoat(-14.4, 15.5, .05), longTailBoat(13.6, -16.5, Math.PI - .08), longTailBoat(-24, 54, 1.4));
   // The east house at z 3.4 stands behind the climbable watchwall: no veranda there.
   [[-10,-13,4], [10,-13,3.5],[-10,-4,3.5],[10,3.4,4.1,false],[-10,12,3.5],[10,15,3.5]].forEach(v => house(...v));
-  // Darker second row beyond the canals gives the quarter depth.
-  for (const side of [-1, 1]) for (let i = 0; i < 5; i++) {
-    const x = side * (26 + noise(i, side) * 3), z = -20 + i * 10 + noise(i, 5) * 3, size = 4.4 + noise(i, 6) * 1.6;
-    for (const dx of [-1, 1]) vbox("far stilt", x + dx * size * .4, .3, z, .25, 1.2, size * .9, darkWood);
-    vbox("far house", x, 2.1, z, size, 2.4, size, wooden);
-    vbox("far window", x - side * (size / 2 + .03), 2.3, z, .05, .5, .6, glowMat);
-    thaiRoof(x, 3.3, z, size + 1.2, size + .8);
-  }
   // Spirit house shrine with candles, offerings and talisman flags.
   vbox("shrine platform", -4.2, .35, -1.5, 2.2, .7, 1.6, darkWood);
   vcyl("shrine pillar", -4.2, 1.05, -1.5, .9, .42, .36, shrineWhite, 8);
@@ -166,26 +158,35 @@
   vbox("gate lintel", 0, 4.2, -19.4, 12.6, .3, .5, darkWood);
   vbox("gate plaque", 0, 3.75, -19.4, 2.4, .6, .1, gold);
   thaiRoof(0, 4.4, -19.4, 1.6, 13.2, .7);
-  // Trees framing the quarter: layered dark canopies.
+  // Trees framing the quarter: Thai village trees along the canals — tamarind, sugar palm and coconut,
+  // with a sacred bodhi wrapped in the three-colour cloth on each bank.
+  const villageTreeNodes = []; // re-seated on the ground by alignVillage when the village sits on terrain
+  const villageTrees = ["makham", "tan", "makham", "maprao", "pho", "makham", "maprao", "tan", "makham"];
   for (let i = 0; i < 18; i++) {
     const x = (i % 2 ? -1 : 1) * (21 + noise(i, 51) * 2.5);
     const z = -21 + (i >> 1) * 4.8 + noise(i, 52) * 2;
-    const h = 2.2 + noise(i, 53) * 1.2;
     sceneryPoint("wood",x,z,1.5);
-    vcyl("tree trunk", x, h / 2, z, h, .45, .3, darkWood, 6);
-    vcyl("canopy low", x, h + .5, z, 1.6, 3.2, 1.6, leafDark, 7);
-    vcyl("canopy high", x, h + 1.6, z, 1.6, 2.2, .2, leafMid, 7);
+    const species = villageTrees[(i >> 1) % villageTrees.length], tall = species === "tan" || species === "maprao";
+    villageTreeNodes.push(placeThaiTree(species, x, 0, z, { scale: (tall ? .72 : .62) + noise(i, 53) * .16 }));
   }
-  for (let i = 0; i < 26; i++) {
-    const x = -40 + i * 3.2, z = -27 - noise(i, 61) * 6, h = 3 + noise(i, 62) * 2;
-    vcyl("forest edge", x, h * .55, z, h * 1.1, 4 + noise(i, 63) * 2, .2, i % 2 ? leafDark : leafMid, 6);
+  // The old forest behind the village: tall yang-na and takhian with bamboo clumps between them.
+  const edgeTrees = ["yangna", "takhian", "phai", "yangna", "sai", "takhian", "phai", "yangna"];
+  for (let i = 0; i < 40; i++) {
+    const x = -68 + i * 3.5, z = -63 - noise(i, 61) * 6;
+    if (Math.abs(x + 10) < 5 || Math.abs(x - 10) < 5) continue; // keep the two outer gates open
+    villageTreeNodes.push(placeThaiTree(edgeTrees[i % edgeTrees.length], x, 0, z, { scale: .7 + noise(i, 62) * .3 }));
+  }
+  for (const side of [-1, 1]) for (let i = 0; i < 26; i++) {
+    const z = -56 + i * 4.3, x = side * (64 + noise(i, side + 63) * 5);
+    villageTreeNodes.push(placeThaiTree(side < 0 ? ["yangna", "phai", "takhian", "maprao"][i % 4] : ["tan", "yangna", "makham", "phai"][i % 4], x, 0, z, { scale: .7 + noise(i, 64) * .3 }));
   }
   // Living water: scrolling ripples, lotus, reeds and floating krathong.
   const rippleTexture = paintTexture("canal ripples", 256, (c, s) => {
     c.fillStyle = "#000"; c.fillRect(0, 0, s, s);
     for (let i = 0; i < 80; i++) {
       const x = noise(i, 81) * s, y = noise(i, 82) * s, w = 10 + noise(i, 83) * 34;
-      c.strokeStyle = `rgba(80,125,165,${.22 + noise(i, 84) * .34})`; c.lineWidth = 1 + noise(i, 85) * 1.5;
+      // Mostly moonlit blue ripples, with a few warm lantern glints.
+      c.strokeStyle = i % 9 === 0 ? `rgba(255,190,110,${.35 + noise(i, 84) * .3})` : `rgba(120,175,215,${.28 + noise(i, 84) * .38})`; c.lineWidth = 1 + noise(i, 85) * 1.6;
       for (const dx of [-s, 0, s]) { c.beginPath(); c.moveTo(x + dx - w / 2, y); c.quadraticCurveTo(x + dx, y - 3, x + dx + w / 2, y); c.stroke(); }
     }
   });
@@ -195,7 +196,7 @@
   const riverRipple = rippleTexture.clone(); riverRipple.uScale = 16; riverRipple.vScale = 5;
   riverWater.emissiveTexture = riverRipple;
   scene.getMeshByName("river").material = riverWater;
-  const lotusPad = mat("lotus pad", "#2b4f35"), lotusBloom = mat("lotus bloom", "#e7a2b3", "#5a2a34"), reedMat = mat("reeds", "#4a5631");
+  const lotusPad = mat("lotus pad", "#3a6b44", "#0b1f10"), lotusBloom = mat("lotus bloom", "#e7a2b3", "#5a2a34"), reedMat = mat("reeds", "#4a5631");
   for (const side of [-1, 1]) {
     for (let i = 0; i < 22; i++) {
       const x = side * (15.4 + noise(i, side + 90) * 3.8), z = -19 + noise(i, side + 91) * 38, d = .7 + noise(i, 92) * .6;
@@ -207,16 +208,141 @@
       vcyl("reed", side * (19.3 + noise(i, side + 94) * .8), h / 2 - .05, -19.5 + i * 1.18 + noise(i, 95) * .6, h, .1, 0, reedMat, 3);
     }
   }
-  for (const [x, z] of [[-16.5, -7], [17.2, -1], [-17.8, 6.5], [16.4, 9], [-15.8, 17], [3, 27], [-9, 30], [14, 33]]) {
+  for (const [x, z] of [[-16.5, -7], [17.2, -1], [-17.8, 6.5], [16.4, 9], [-15.8, 17], [3, 53], [-9, 56], [14, 58], [-30, 54], [28, 55]]) {
     vcyl("krathong", x, 0, z, .14, .55, .7, lotusPad, 8);
     vcyl("krathong petals", x, .1, z, .16, .5, .2, lotusBloom, 8);
     vcyl("krathong flame", x, .26, z, .14, .08, 0, candleMat, 4);
     vpool(x, z, 1.3, .03);
   }
   // Dark banks beyond the canals so the quarter never floats in a void.
-  const bankMat = mat("river bank", "#2a3326"); bankMat.diffuseTexture = groundMat.diffuseTexture;
-  for (const side of [-1, 1]) vbox("river bank", side * 45, -.16, -5, 50.6, .06, 90, bankMat);
-  vbox("north bank", 0, -.16, -45, 39.4, .06, 50, bankMat);
+  // ---- The expanded village (120 m). Positions match VILLAGE_LAYOUT / VILLAGE_BUILDINGS on the server:
+  // temple court to the north with the two outer gates, the market east, rice fields west, and the
+  // training ground and old graves along the river to the south. Solid buildings collide on the server.
+  const villageSurface = (name, kind, bright) => {
+    const m = mat(name, "#ffffff"); applyGroundSurface(m, kind, { uScale: 1, vScale: 1, tint: 0, bump: false, bright });
+    m.specularColor = new B.Color3(.03, .03, .03); return m;
+  };
+  const courtPaving = villageSurface("village temple paving", "temple", .6), marketPaving = villageSurface("village market paving", "laterite", .55);
+  const laneDirt = villageSurface("village lanes", "path", .56), sandYard = villageSurface("village training sand", "sand", .48);
+  const paddyMud = villageSurface("rice paddy", "mud", .5), graveSoil = villageSurface("old graves", "cemetery", .85);
+  const riceMat = mat("young rice", "#5f8a3c", "#0d1a08"), dikeMat = mat("paddy dike", "#4a3b28");
+  const plasterMat = mat("temple plaster", "#cfc6b2", "#141210"), oldStone = mat("weathered stupa", "#7d776b");
+  const awningMats = [clothRed, mat("indigo awning", "#2f3f6b"), mat("saffron awning", "#b8792a")];
+  // Flat ground pieces with world-space UVs, so every piece of a surface joins without seams.
+  function flatDecal(name, x, z, w, d, material, tile = 4, rot = 0, y = .012) {
+    const g = B.MeshBuilder.CreateGround(name, { width: w, height: d }, scene);
+    g.position.set(x, y, z); g.rotation.y = rot; g.material = material; g.isPickable = false;
+    const pos = g.getVerticesData(B.VertexBuffer.PositionKind), uv = [], c = Math.cos(rot), s = Math.sin(rot);
+    for (let i = 0; i < pos.length; i += 3) uv.push((x + pos[i] * c + pos[i + 2] * s) / tile, (z - pos[i] * s + pos[i + 2] * c) / tile);
+    g.setVerticesData(B.VertexBuffer.UVKind, uv);
+    villageParts.push(g); return g;
+  }
+  function villageLane(ax, az, bx, bz, w = 3.2, material = laneDirt) {
+    const dx = bx - ax, dz = bz - az;
+    return flatDecal("village lane", (ax + bx) / 2, (az + bz) / 2, w, Math.hypot(dx, dz) + w * .5, material, 4, Math.atan2(dx, dz), .016);
+  }
+  function plankBridge(x, z, length, width = 3) {
+    for (let i = 0; i < Math.round(length / .9); i++) vbox("bridge plank", x - length / 2 + .45 + i * .9, .08, z, .82, .12, width, i % 3 ? wooden : woodenAlt);
+    for (const side of [-1, 1]) {
+      vbox("bridge rail", x, .75, z + side * width / 2, length, .08, .08, darkWood);
+      for (let i = 0; i <= 4; i++) vbox("bridge post", x - length / 2 + i * length / 4, .4, z + side * width / 2, .14, .8, .14, darkWood);
+    }
+  }
+  function smallStupa(x, z, s = 1, material = oldStone) {
+    vbox("stupa base", x, .25 * s, z, 1.5 * s, .5 * s, 1.5 * s, material);
+    vcyl("stupa drum", x, .7 * s, z, .4 * s, 1.2 * s, 1.0 * s, material, 10);
+    vcyl("stupa bell", x, 1.3 * s, z, .8 * s, .7 * s, .95 * s, material, 10);
+    vcyl("stupa spire", x, 2.2 * s, z, 1.2 * s, .32 * s, 0, material, 8);
+  }
+  // Lanes: north to the temple and the two outer gates, bridges east and west, south to the river pier.
+  villageLane(0, -20, 0, -31, 4); villageLane(-11, -32, -10, -54); villageLane(11, -32, 10, -54);
+  plankBridge(14.1, -4, 11.6); villageLane(20, -4, 28, -4, 3.6);
+  plankBridge(-14.1, -8, 11.6); villageLane(-20, -8, -58, -8, 3.2); villageLane(-40, -46, -40, 26, 2.6);
+  villageLane(0, 19, 0, 46, 3.6); villageLane(-2, 30, -26, 34, 2.8); villageLane(2, 30, 30, 36, 2.8);
+  plankBridge(-14.1, 32, 11.6, 2.6); plankBridge(14.1, 33, 11.6, 2.6);
+  for (const [x, z] of [[-3, -26], [3, -34], [-11, -44], [11, -44], [24, -6], [-26, -10], [-34, -6], [4, 28], [-3, 40], [-20, 33], [22, 35]]) makeLantern(x, z);
+
+  // Temple court (ลานวัด): ordination hall, chedi, bell tower, sema stones and a sacred bodhi.
+  flatDecal("temple court", 0, -40, 28, 20, courtPaving, 3);
+  vbox("ubosot plinth", 0, .4, -48.5, 13, .8, 8, plasterMat);
+  vbox("ubosot hall", 0, 2.3, -48.5, 11, 3, 6.2, plasterMat);
+  for (const dx of [-4.5, -1.5, 1.5, 4.5]) vbox("ubosot column", dx, 2.3, -45.2, .5, 3, .5, plasterMat);
+  vbox("ubosot door", 0, 2.1, -45.35, 1.8, 2.4, .08, gold);
+  for (const dx of [-3.4, 3.4]) vbox("ubosot window", dx, 2.5, -45.36, .9, 1.2, .06, glowMat);
+  for (let s = 0; s < 3; s++) vbox("ubosot steps", 0, .12 + s * .25, -44.3 + (2 - s) * .45, 3.4, .25, .5, plasterMat);
+  const hallRidge = thaiRoof(0, 3.8, -48.5, 12.6, 8.6, .78);
+  thaiRoof(0, 3.8 + (hallRidge - 3.8) * .45, -48.5, 8, 7.2, .95);
+  for (const [x, z] of [[-7.5, -53], [7.5, -53], [-7.5, -44], [7.5, -44], [0, -54.2], [0, -43], [-7.5, -48.5], [7.5, -48.5]]) {
+    vbox("sema base", x, .15, z, .7, .3, .7, plasterMat); vbox("sema leaf", x, .6, z, .45, .7, .12, gold);
+  }
+  smallStupa(-17, -43, 2.4, plasterMat); vcyl("chedi finial", -17, 6.1, -43, .6, .16, 0, gold, 8);
+  candles(-17, -39.8, 7, .6);
+  vbox("bell tower deck", 17, .3, -43, 4, .6, 4, darkWood);
+  for (const dx of [-1.6, 1.6]) for (const dz of [-1.6, 1.6]) vbox("bell tower post", 17 + dx, 2.4, -43 + dz, .22, 4.2, .22, darkWood);
+  vcyl("temple bell", 17, 3.3, -43, 1.1, 1.0, .55, bronzeMat, 12);
+  thaiRoof(17, 4.5, -43, 4.4, 4.4, .85);
+  villageTreeNodes.push(placeThaiTree("pho", 12, 0, -36, { scale: .9 }));
+  for (const x of [-9, 9]) { vbox("court lamp", x, .9, -34, .3, 1.8, .3, plasterMat); vcyl("court lamp flame", x, 1.95, -34, .3, .3, .2, candleMat, 6); vpool(x, -34, 2.6, .05); }
+  // The outer gates to the forbidden forest and the capital road.
+  for (const gx of [-10, 10]) {
+    for (const dx of [-3.2, 3.2]) { vbox("outer gate post", gx + dx, 2.4, -58, .5, 4.8, .5, clothRed); vbox("outer gate base", gx + dx, .3, -58, .8, .6, .8, darkWood); }
+    vbox("outer gate lintel", gx, 4.6, -58, 7.4, .3, .5, darkWood); vbox("outer gate plaque", gx, 4.1, -57.7, 2.2, .55, .1, gold);
+    thaiRoof(gx, 4.8, -58, 1.4, 7.8, .7);
+  }
+
+  // Market (ตลาดริมคลอง): paved square, two rows of awning stalls, a hall, a smithy and two storehouses.
+  flatDecal("market square", 40, -4, 28, 30, marketPaving, 3);
+  [[35, -8], [40, -8], [45, -8], [35, 0], [40, 0], [45, 0]].forEach(([x, z], i) => {
+    vbox("stall table", x, .45, z, 2.6, .9, 1.3, woodenAlt);
+    for (const dx of [-1.2, 1.2]) for (const dz of [-.6, .6]) vbox("stall post", x + dx, 1.2, z + dz, .1, 2.4, .1, darkWood);
+    vbox("stall awning", x, 2.45, z, 3, .08, 1.9, awningMats[i % 3]).rotation.x = (z < -4 ? 1 : -1) * .18;
+    for (let k = 0; k < 4; k++) vcyl("stall goods", x - .9 + k * .6, 1.02, z, .25, .45, .38, k % 2 ? burlap : lotusPadGoods(), 8);
+  });
+  function lotusPadGoods() { return leafMid; }
+  vbox("market hall", 49, 1.3, -11.5, 6, 2.6, 5, woodenAlt); vbox("market hall sign", 45.95, 2.2, -11.5, .08, .6, 2.4, gold);
+  thaiRoof(49, 2.6, -11.5, 6.8, 5.8);
+  vbox("smithy", 49, 1.2, 4.5, 6, 2.4, 5, darkWood); vbox("forge glow", 45.96, .9, 4.5, .06, .8, 1.6, glowMat);
+  vbox("smithy chimney", 50.5, 3.6, 5.8, .8, 2.4, .8, oldStone); vbox("anvil", 44.6, .45, 3.2, .9, .5, .4, bronzeMat);
+  thaiRoof(49, 2.4, 4.5, 6.8, 5.8);
+  for (const z of [-20, 16]) { vbox("storehouse", 30.5, 1.4, z, 5, 2.8, 4, wooden); thaiRoof(30.5, 2.8, z, 5.8, 4.8); }
+  for (const [x, z] of [[33, -14], [47, -18], [33, 8], [48, 10], [40, -18], [40, 10]]) makeLantern(x, z);
+  for (const [x, z] of [[29.5, -15], [31.5, 11]]) for (let i = 0; i < 3; i++) vbox("crate", x + i * .7, .3, z, .6, .55, .6, crateWood);
+
+  // Rice fields (ทุ่งนา): paddies with dikes and young rice, farm huts, a lotus pond and palms.
+  const nearCamp = (x, z) => [[-40, -24], [-40, 10], [-24, 30]].some(([cx, cz]) => Math.hypot(x - cx, z - cz) < 8);
+  const nearHut = (x, z) => [[-49.5, -27.5], [-49.5, 16.5], [-26, -34]].some(([cx, cz]) => Math.hypot(x - cx, z - cz) < 6);
+  for (let x = -55; x <= -25; x += 7.5) for (let z = -38; z <= 22; z += 7.5) {
+    if (Math.abs(z + 8) < 5 || Math.abs(x + 40) < 4.5 || nearCamp(x, z) || nearHut(x, z)) continue;
+    flatDecal("rice paddy", x, z, 6.6, 6.6, paddyMud, 3, 0, .008);
+    for (const [dx, dz, w, d] of [[0, -3.4, 7, .3], [0, 3.4, 7, .3], [-3.4, 0, .3, 7], [3.4, 0, .3, 7]]) vbox("paddy dike", x + dx, .02, z + dz, w, .18, d, dikeMat);
+    for (let i = 0; i < 9; i++) vcyl("rice", x - 2 + (i % 3) * 2 + noise(i, x) * .6, .2, z - 2 + Math.floor(i / 3) * 2 + noise(i, z) * .6, .45, .32, .05, riceMat, 4);
+  }
+  house(-49.5, -27.5, 3.6); house(-49.5, 16.5, 3.6); house(-26, -34, 3.2, false);
+  vbox("field pond", -43, -.09, -45, 14, .08, 10, water);
+  for (let i = 0; i < 10; i++) { const d = .7 + noise(i, 97) * .5; vcyl("lotus pad", -48 + noise(i, 98) * 10, -.035, -48 + noise(i, 99) * 6, .02, d, d, lotusPad, 10); }
+  for (const [x, z] of [[-30, -46], [-56, -40], [-58, 4], [-30, 22], [-56, 24], [-22, -24]]) villageTreeNodes.push(placeThaiTree(x < -50 ? "tan" : "maprao", x, 0, z, { scale: .7 + noise(Math.round(x), Math.round(z)) * .15 }));
+  for (const [x, z] of [[-33, -16], [-47, 2]]) { // scarecrows
+    vbox("scarecrow post", x, 1, z, .12, 2, .12, darkWood); vbox("scarecrow arms", x, 1.5, z, 1.4, .1, .1, darkWood);
+    vcyl("scarecrow coat", x, 1.25, z, .8, .5, .35, burlap, 6); vcyl("scarecrow hat", x, 2.05, z, .25, .9, .1, burlap, 8);
+  }
+  for (const [x, z] of [[-44, -14], [-36, 2]]) vcyl("haystack", x, .7, z, 1.4, 1.8, .2, burlap, 8);
+
+  // Training ground (ลานฝึกยุทธ์): sand yard, straw dummies, a roped sparring ring and weapon racks.
+  flatDecal("training yard", -34, 34, 20, 15, sandYard, 3);
+  [[-38, 30], [-34, 30], [-30, 30], [-38, 38], [-30, 38]].forEach(([x, z]) => {
+    vbox("dummy post", x, .9, z, .16, 1.8, .16, darkWood); vbox("dummy arms", x, 1.35, z, 1.1, .12, .12, darkWood);
+    vcyl("dummy straw", x, 1.05, z, .8, .5, .42, burlap, 7); vcyl("dummy head", x, 1.65, z, .35, .3, .3, burlap, 6);
+  });
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; vbox("ring post", -34 + Math.cos(a) * 3, .5, 34 + Math.sin(a) * 3, .12, 1, .12, darkWood); }
+  for (let i = 0; i < 8; i++) { const a = (i + .5) / 8 * Math.PI * 2; vbox("ring rope", -34 + Math.cos(a) * 2.78, .85, 34 + Math.sin(a) * 2.78, .04, .04, 2.3, clothRed).rotation.y = -a; }
+  for (const x of [-42, -26]) { vbox("weapon rack", x, .9, 34, .2, 1.8, 2.4, darkWood); for (let k = 0; k < 4; k++) vbox("practice staff", x + .15, 1, 33.2 + k * .5, .06, 1.9, .06, woodenAlt).rotation.z = .2; }
+  for (const x of [-42, -26]) for (const z of [28, 40]) makeLantern(x, z);
+
+  // Old graves (ป่าช้าเก่า) by the river: weathered stupas, a silk-cotton tree and votive candles (level 1 ghosts roam here).
+  flatDecal("old graves", 38, 38, 24, 21, graveSoil, 3);
+  [[32, 32], [44, 30], [30, 44], [46, 42], [40, 44]].forEach(([x, z], i) => { smallStupa(x, z, .9 + (i % 2) * .25); candles(x, z + 1.2, 3, .3); });
+  villageTreeNodes.push(placeThaiTree("ngiu", 50, 0, 36, { scale: .85 }), placeThaiTree("sai", 26, 0, 44, { scale: .75 }));
+  for (const [x, z] of [[36, 38], [48, 46], [28, 38]]) villageTreeNodes.push(placeRock("plain", x, 0, z, { scale: .6 }));
   // Strings of paper lanterns sag across the boardwalk between the posts.
   for (const z of [-13.8, -5.4, 3.0, 11.4]) {
     for (let k = 0; k < 4; k++) {

@@ -94,6 +94,7 @@
   // Thai daab: bright steel with a pale moonlit edge so the pair reads far away.
   const daabSteel = mat("daab steel", "#a8b0b8", "#161a20"); daabSteel.specularColor = B.Color3.FromHexString("#eef4ff"); daabSteel.specularPower = 64;
   const daabEdge = mat("daab edge", "#e8f0ff", "#5a6a88");
+  const weaponBoneMat = mat("carved bone grip", "#d9ccb0"), weaponTalismanMat = mat("wand talisman", "#e8d9a8", "#2a2210"), crookWoodMat = mat("crook wood", "#b89a6a");
   // Far-camera identity: a yantra shawl (read from above), glowing amulets
   // and three familiar spirits orbiting the shaman.
   const shawlCloth = (name, base, trim) => {
@@ -300,6 +301,33 @@
         for (const k of [-1, 0, 1]) cyl(k * .08, .1, 0, .2, 0, .07, copper, 4).rotation.z = -k * .6;
         curvedBlade(1.05, .17, 7, emberEdge);
         root.rotation.x = -2.3; // carried low, the crescent edge sweeping forward
+      } else if (kind === "sentinel_pike") {
+        // Sentinel ngao (ง้าว): long red-lacquered shaft, gold collar, crescent blade and a horsehair tassel.
+        cyl(0, .25, 0, 1.9, .05, .06, darkWood, 8);
+        for (const y of [-.2, .0, .2]) cyl(0, y, 0, .03, .075, .075, copper, 8);
+        cyl(0, -.72, 0, .12, .06, 0, blackSteel, 5).rotation.x = Math.PI;
+        cyl(0, 1.22, 0, .08, .085, .065, gold, 8);
+        for (let i = 0; i < 6; i++) { const seg = box(.03 + Math.sin(i * .3) * .05, 1.3 + i * .09, 0, .11 - i * .011, .1, .018, blackSteel); seg.rotation.z = -i * .12; }
+        box(-.045, 1.32, 0, .018, .15, .014, daabEdge);
+        for (let i = 0; i < 5; i++) cyl((i - 2) * .012, 1.12, 0, .2, .02, .005, ropeRed, 4).rotation.z = (i - 2) * .12;
+        root.rotation.x = -.2;
+      } else if (kind === "seer_wand") {
+        // Seer wand: carved bone grip bound in red thread, a yantra-wrapped shaft and a smoky spirit crystal.
+        cyl(0, -.05, 0, .26, .055, .065, weaponBoneMat, 8);
+        for (const y of [-.14, -.05, .04]) cyl(0, y, 0, .02, .07, .07, ropeRed, 8);
+        cyl(0, .25, 0, .35, .035, .05, darkWood, 8);
+        box(.02, .24, .024, .04, .18, .004, weaponTalismanMat);
+        ball(0, .47, 0, .11, weaponCrystal, 8).scaling.y = 1.3;
+        for (let i = 0; i < 4; i++) cyl(Math.cos(i * 1.57) * .045, .43, Math.sin(i * 1.57) * .045, .1, 0, .025, copper, 4).rotation.x = Math.sin(i * 1.57) * .4;
+        root.rotation.x = -1.0;
+      } else if (kind === "mender_crook") {
+        // Mender crook: pale wood staff curling into a lotus hook, with small bells hanging from the curl.
+        cyl(0, .25, 0, 1.6, .05, .06, crookWoodMat, 8);
+        for (let i = 0; i < 7; i++) { const a = i / 6 * Math.PI * 1.15; const seg = cyl(Math.sin(a) * .13, 1.05 + (1 - Math.cos(a)) * .13 + .02, 0, .09, .045, .05, crookWoodMat, 8); seg.rotation.z = -a; }
+        for (let i = 0; i < 5; i++) { const t = i / 4 * Math.PI * 2; cyl(.26 + Math.cos(t) * .045, 1.12, Math.sin(t) * .045, .06, 0, .04, gold, 4).rotation.z = Math.cos(t) * .5; }
+        for (const dx of [.18, .24]) { box(dx, 1.0, 0, .006, .08, .006, ropeRed); cyl(dx, .94, 0, .045, .02, .045, gold, 8); }
+        cyl(0, -.58, 0, .1, .055, 0, copper, 5).rotation.x = Math.PI;
+        root.rotation.x = -.2;
       } else {
         // Naga staff: banded shaft, coiled neck, flame crest and spirit orb.
         cyl(0, .2, 0, 1.75, .07, .08, blackSteel, 8);
@@ -320,6 +348,9 @@
       ritual_dagger: createHeldWeapon("ritual_dagger"),
       arcane_sword: createHeldWeapon("arcane_sword"),
       spirit_staff: createHeldWeapon("spirit_staff"),
+      sentinel_pike: createHeldWeapon("sentinel_pike"),
+      seer_wand: createHeldWeapon("seer_wand"),
+      mender_crook: createHeldWeapon("mender_crook"),
       thai_left: createHeldWeapon("thai_left"),
       thai_right: createHeldWeapon("thai_right"),
     };
@@ -344,11 +375,15 @@
     attachShamanModel(avatar);
     return avatar;
   }
+  // Service NPCs reuse the player rig; they are animated with the idle pose each frame (see the frame loop),
+  // otherwise the skinned model stays in its bind pose with both arms raised.
+  const npcActors = new Set();
   function attachNpcAvatar(root,id,cloth,fallback){
     const actor=avatarMesh("npc-"+id,false,{cloth});actor.node.parent=root;
     // NPCs keep their existing dedicated interaction hitboxes and labels.
     for(const mesh of actor.node.getChildMeshes())mesh.isPickable=false;
     actor.node.onDisposeObservable.add(()=>actor.skin?.copy.skeletons.forEach(skeleton=>skeleton.dispose()));
+    if(typeof npcActors!=="undefined"){npcActors.add(actor);actor.node.onDisposeObservable.add(()=>npcActors.delete(actor));}
     for(const mesh of fallback)mesh.setEnabled(false);
     return actor.node;
   }

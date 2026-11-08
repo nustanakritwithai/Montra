@@ -15,9 +15,11 @@
       const {x,z,id}=obstacle;
       if(id.startsWith("grove-")) {
         sceneryPoint("wood",x,z,obstacle.radius);
-        column(x,1.8,z,3.6,1.3,.7,darkWood);
-        const crown=column(x,4.5,z,5.5,5.2,.7,forestLeaf,7,false);
-        crown.rotation.y=x*.3;forestCrowns.push(crown);
+        // Old-forest groves: a big tree per footprint (sai with hanging roots, takhian, yang-na), fading over the hero.
+        const kinds=map.id==="moon_cemetery"?["ngiu","sai","ngiu"]:map.id==="bound_temple"?["pho","sai","pho"]:["sai","takhian","yangna","takhian"];
+        const kind=kinds[Math.abs(Math.round(x*7+z*3))%kinds.length];
+        const tree=placeThaiTree(kind,x,map.terrain?terrainHeight(map.terrain,x,z):0,z,{clone:true,parent:expansionRoot,scale:Math.max(.85,Math.min(1.3,(obstacle.radius||2)/2))});
+        forestCrowns.push(tree);
         for(let i=0;i<3;i++)column(x+Math.cos(i*2)*1.4,.42,z+Math.sin(i*2)*1.4,.85,.7,0,forestLeaf,4);
         continue;
       }
@@ -55,9 +57,9 @@
       const along=low-13+(high-low+26)*i/19;
       const edge=horizontal?(sign<0?bounds.minZ:bounds.maxZ):(sign<0?bounds.minX:bounds.maxX);
       const offset=10+(i*7+side*3)%13, x=horizontal?along:edge+sign*offset, z=horizontal?edge+sign*offset:along;
-      const height=2.5+offset*.10;
-      column(x,height*.48-.45,z,height,5.5+i%4,0,forestLeaf,6);
-      column(x,height*.95,z,height*.65,(5.5+i%4)*.55,0,forestLeafLight,6);
+      // Distant tree line: instanced yang-na, takhian, sai and bamboo, sized up with distance.
+      const far=["yangna","takhian","sai","phai","yangna","pradu"][(i+side*2)%6];
+      placeThaiTree(far,x,map.terrain?-1.2:-.4,z,{parent:expansionRoot,scale:.72+offset*.03});
     }
     if(map.guardian){
       const {x,z}=map.guardian;
@@ -119,8 +121,8 @@
       }else if(rocks<18){
         const d=1+noise(i,125)*.9;
         sceneryPoint("stone",x,z,d/2);
-        place(B.MeshBuilder.CreateSphere("boulder",{diameter:d,segments:4},scene),x,d*.22,z,forestStone).scaling.y=.55;
-        place(B.MeshBuilder.CreateSphere("moss cap",{diameter:d*.82,segments:4},scene),x+.05,d*.36,z-.05,mossMat).scaling.y=.32;
+        // Moss-covered boulder from the rock kit (forest stones are mossy; the bound temple's are plain).
+        placeRock(activeMapId==="forbidden_forest"?"moss":"plain",x,map.terrain?terrainHeight(map.terrain,x,z):0,z,{parent:expansionRoot,scale:d*.55});
         rocks++;
       }
     }

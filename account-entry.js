@@ -16,6 +16,11 @@
   let startGame = null, leaveGame = null, selectedSlot = 1, summaries = [], isGuest = false;
   let pendingEntry = null, startupIssue = "";
   const root = document.getElementById("accountEntry");
+  // Browser validation bubbles default to the device language ("Please fill out this field."); speak Thai instead.
+  root?.addEventListener("invalid",event=>{const field=event.target;if(!field?.validity?.valueMissing)return;
+    field.setCustomValidity(field.type==="radio" ? "กรุณาเลือกอาชีพก่อน" : field.type==="password" ? "กรุณากรอกรหัสผ่าน" : "กรุณากรอกช่องนี้");},true);
+  for(const type of ["input","change"])root?.addEventListener(type,event=>{const field=event.target;if(field?.setCustomValidity){field.setCustomValidity("");
+    if(field.type==="radio")for(const other of root.querySelectorAll('input[type=radio][name="'+field.name+'"]'))other.setCustomValidity("");}},true);
   const card = document.getElementById("accountCard");
   const key = () => sessionStorage.getItem(sessionKey) || "";
   function el(tag, text, cls) { const node=document.createElement(tag); if(text)node.textContent=text; if(cls)node.className=cls; return node; }

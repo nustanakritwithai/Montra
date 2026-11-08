@@ -471,7 +471,7 @@
         if (enemy.isEnabled() && kills < 1) return { title: "ลองปราบผีทดสอบ", step: "เดินเข้าใกล้ผีที่ลานกลาง แล้วแตะตัวผี", progress: "ปราบ " + kills + "/1", to: { x: enemy.position.x, z: enemy.position.z } };
         return { title: "พร้อมออกเดินทาง", step: "กดปุ่ม ออนไลน์ ด้านล่าง เพื่อเข้าเล่นจริงและวาร์ปไปป่า", progress: kills ? "ปราบแล้ว " + kills : "" };
       }
-      const gate = (map?.portals || []).find(p => p.targetMapId === "forbidden_forest") || { x: -4, z: -17 };
+      const gate = (map?.portals || []).find(p => p.targetMapId === "forbidden_forest") || { x: -10, z: -56 };
       return { title: "ออกล่าผี", step: "เดินไปประตูวาร์ป ป่าต้องห้าม", progress: "", to: gate };
     }
     if (map?.strategic?.kind === "capital") {

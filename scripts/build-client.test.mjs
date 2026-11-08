@@ -11,6 +11,86 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // Intentional gate, market, flight, class-skill, audio, VFX and cosmetic-safeguard changes. Keep snapshot
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
+{
+  "path": "world/029-fishing-and-resources.js",
+  "bytes": 13255,
+  "sha256": "7a2009556926749651397b24be68677d46803f9bf935629ffc0b22a55eda7f86"
+},
+{
+  "path": "world/019-state-and-portals.js",
+  "bytes": 20675,
+  "sha256": "d88ac600381bb589ac7836a373cc714112a82c2a2f21077167874f00e8a071c7"
+},
+{
+  "path": "world/018-region-dressing.js",
+  "bytes": 29219,
+  "sha256": "523f97592df51182f45944ef5d1d2af9de27b18a947b46fb66a38a1b6999f972"
+},
+{
+  "path": "world/017-region-terrain.js",
+  "bytes": 61185,
+  "sha256": "4bc6197d313d26171bff99fbd63a5a7de98355c9e359bb86a469024642e37972"
+},
+{
+  "path": "world/016-forest-and-temple.js",
+  "bytes": 19712,
+  "sha256": "2735da1dfaa00f6c3dcb0cc2f0c8cd95016e9f74de5b302042ae0a7e411e9c45"
+},
+{
+  "path": "world/015-forest-gates-and-services.js",
+  "bytes": 35657,
+  "sha256": "b84c944ce8d8dfda1f151ffeff7f95fde2088818ae651b72ced427e5d3baa5fb"
+},
+{
+  "path": "world/014-ritual-village.js",
+  "bytes": 27480,
+  "sha256": "8074f07ef4e64c6d50366952e535e6d2501d3ecea14e3f39c9397c9cd4eb5078"
+},
+{
+  "path": "world/013-ground-and-fortification.js",
+  "bytes": 4123,
+  "sha256": "4f2951095b7f9967605459edfa92c9bb7768cfc13668a008c22beeaaa8907cde"
+},
+{
+  "path": "ui/041-character-hud-and-journey.js",
+  "bytes": 38449,
+  "sha256": "f99550d62c85c79d66c4b83b7010a279c259b8fc06fb5123fdd5293d1f767bcf"
+},
+{
+  "path": "render/026-avatar-auras-and-lifecycle.js",
+  "bytes": 12691,
+  "sha256": "89301226a696e2cc831f4ec7740a9637bd3baf959bee73bf65ae7be3bf51ec22"
+},
+{
+  "path": "render/025-horse-and-avatar-animation.js",
+  "bytes": 44774,
+  "sha256": "f07dabb370d1accc700d32a5acad72f6f01459d363a6e56ca4079ab0b5a45712"
+},
+{
+  "path": "render/021-character-models.js",
+  "bytes": 38720,
+  "sha256": "dced881523152655fa1b3baf1cb16ede316f8006c0118c259aebc5d8eeea7ca2"
+},
+{
+  "path": "render/020-avatar-materials-and-meshes.js",
+  "bytes": 24730,
+  "sha256": "6aec60c01daba916361954cf9eefe6c02ceb264ffb5e931caf4f527d4c7d02ff"
+},
+{
+  "path": "render/006-materials-atmosphere.js",
+  "bytes": 52193,
+  "sha256": "cd7427f522c299acf6351e6ef75d54929aa06387100ecbb0b27734ed60105c51"
+},
+{
+  "path": "network/044-state-sync-and-connection.js",
+  "bytes": 138983,
+  "sha256": "746b3485fe2be545240cc8d71085a4e8b80bcab2bcaf44f6f18f08ac0f39e106"
+},
+{
+  "path": "core/059-frame-loop-and-startup.js",
+  "bytes": 19066,
+  "sha256": "3005aff3fb353bbebf1aa1338042e0c35d6c4b77528eaf6022ce82bbb607e7f3"
+},
   {
     "path": "ui/053-gear-training-and-crafting.js",
     "bytes": 45220,
@@ -62,34 +142,14 @@ const reviewedReleaseFragments = new Map([
     "sha256": "2c6eabadd237367cf857e4b50c844481226566d9e902b89bbe816986c10aff23"
   },
   {
-    "path": "world/017-region-terrain.js",
-    "bytes": 55705,
-    "sha256": "4178b32e10cde7f1ff798732f831397317cc4809444108338d75bcf624c7b00d"
-  },
-  {
-    "path": "world/019-state-and-portals.js",
-    "bytes": 19673,
-    "sha256": "4ae167f2b2f8185a20d1ce63ef74c3bb56de9ef57546141d54fc0677df788649"
-  },
-  {
     "path": "ui/047-maps-and-strategy.js",
     "bytes": 72195,
     "sha256": "05d687136931ba32f235b6477d6285105329d6bb869d4daad289e1b7f4238048"
   },
   {
-    "path": "core/059-frame-loop-and-startup.js",
-    "bytes": 18707,
-    "sha256": "a73a400a703a8700c1123716baa12ccc4941338a9d0b8a0589b9353404bbb35c"
-  },
-  {
     "path": "ui/055-market-and-trade.js",
     "bytes": 57458,
     "sha256": "e322de05b0a4c4bcabae1199869636ac286978c863d106df2e33b184d7310471"
-  },
-  {
-    "path": "network/044-state-sync-and-connection.js",
-    "bytes": 138744,
-    "sha256": "c239efce1a7082f0ecc7c741ee01d9a77ed877784a5956dbbf4286a571145c4e"
   },
   {
     "path": "audio/051-sound-settings-and-speech.js",
@@ -127,11 +187,6 @@ const reviewedReleaseFragments = new Map([
     "sha256": "2fa0e4e1230e19ee855c812ba9912f7ff144cfc6f18401b90ef949beb448a6ea"
   },
   {
-    "path": "render/026-avatar-auras-and-lifecycle.js",
-    "bytes": 12561,
-    "sha256": "36fa273c1ff22a326f914ef3c8433c53577bcaae35cb7a8621fa1f0e8bd92582"
-  },
-  {
     "path": "render/032-ghost-primitives.js",
     "bytes": 33439,
     "sha256": "a59f7e1682b391500e45734972348c53c7549107d9f85fcb3f1ffc4ff8087617"
@@ -158,8 +213,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1484927);
-  assert.equal(hash(bytes), '15a3b42e5f7e2721a54c7ab727169ddb107976571326fb3776e154220a2495c4');
+  assert.equal(bytes.length, 1579352);
+  assert.equal(hash(bytes), 'f156b3f2d06d31312161e7ef8a738fc86d6bf28fd9561eacdc7ad7d80da37317');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

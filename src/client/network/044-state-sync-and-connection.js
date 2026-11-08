@@ -80,6 +80,7 @@
         Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y),
         p.equippedWeaponId, p.pathId);
       noteAvatarState(avatars.get(id), p);
+      if (typeof p.gearLook === "string") setAvatarGear(avatars.get(id), p.gearLook);
     });
     const localActor=avatars.get(localId);
     const farArrival=activeMapId==="tri_wiang_castle" && mine && localActor && (Math.hypot(localActor.x-mine.x,localActor.z-mine.z)>90 || Math.hypot(camera.target.x-mine.x,camera.target.z-mine.z)>90);
@@ -1444,6 +1445,7 @@
               if ((p.mapId || "ritual_village") !== activeMapId) { removeOnlinePlayer(id); return; }
               setOnlinePlayer(id, Number(p.x), Number(p.z),
                 Number(p.facing), Number(p.hp), Number(p.maxHp), Number(p.y), p.equippedWeaponId, p.pathId);
+              if (typeof p.gearLook === "string") setAvatarGear(avatars.get(id), p.gearLook);
             };
             applyServerPlayer();
             if (typeof cb.listen === "function") {
@@ -1455,6 +1457,7 @@
               cb.listen(p, "maxHp", applyServerPlayer);
               cb.listen(p, "equippedWeaponId", applyServerPlayer);
               cb.listen(p, "pathId", applyServerPlayer);
+              cb.listen(p, "gearLook", applyServerPlayer);
               cb.listen(p, "mapId", () => syncState(joined.state));
             }
           });

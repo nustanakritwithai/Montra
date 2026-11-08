@@ -69,6 +69,21 @@ export type WorldMapDefinition = Readonly<{
   paths?: readonly (readonly {x:number; z:number}[])[];
 }>;
 export const DEFAULT_MAP_ID = "ritual_village";
+// The expanded village (120 m square). The canal quarter, shrine and skill training stay at the
+// centre; the temple court lies north toward the gates, the market east, rice fields west, and the
+// training ground and old graves (level 1 ghosts) along the river to the south.
+export const VILLAGE_LAYOUT = Object.freeze({
+  temple:{x:0,z:-40}, market:{x:40,z:-4}, fields:{x:-40,z:-8}, training:{x:-34,z:34}, graves:{x:38,z:38},
+  forestGate:{x:-10,z:-56}, cityGate:{x:10,z:-56},
+});
+// Solid village buildings (boxes). Shared by the server collision and the client models.
+export const VILLAGE_BUILDINGS: readonly WorldWall[] = [
+  {x:-6,z:-52,width:12,length:7},                                   // ordination hall (ubosot)
+  {x:-19.5,z:-45.5,width:5,length:5}, {x:15,z:-45,width:4,length:4}, // chedi and bell tower
+  {x:46,z:-14,width:6,length:5}, {x:46,z:2,width:6,length:5},        // market hall and smithy
+  {x:28,z:-22,width:5,length:4}, {x:28,z:14,width:5,length:4},       // market storehouses
+  {x:-52,z:-30,width:5,length:5}, {x:-52,z:14,width:5,length:5}, {x:-28,z:-36,width:4,length:4}, // farm huts
+];
 // One starting position per world-room seat, inside the village rest area.
 export const VILLAGE_ARRIVALS = [
   {x:0,z:0}, {x:2,z:0}, {x:4,z:0}, {x:6,z:0},
@@ -79,11 +94,19 @@ const maps: Record<string,WorldMapDefinition>={
   ...(WORLD_EXPANSION ? {[TEMPLE_ID]:TEMPLE_MAP,...ATLAS_MAPS,...makeHubs(atlasPortals), ...(RIDGE_ENABLED?{[RIDGE_PASS]:makeRidgePass(atlasPortals(RIDGE_PASS))}:{})} : {}),
   ritual_village: {
     id: "ritual_village", name: "หมู่บ้านอาคม",
-    bounds: { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
+    bounds: { minX: -60, maxX: 60, minZ: -60, maxZ: 60 },
     spawn: { x: 0, y: 0, z: 0 },
-    obstacles: [],
-    restAreas: WORLD_EXPANSION ? [{x:0,z:0,radius:6,name:"ลานพักและตลาดอาคม"},{x:-4,z:-16,radius:3,name:"ประตูป่า"},{x:4,z:-16,radius:3,name:"ประตูนคร"}] : [],
-    portals: [{ id: "village_to_forest", x: -4, z: -17,
+    walls: VILLAGE_BUILDINGS,
+    obstacles: [
+      ...[[-38,30],[-34,30],[-30,30],[-38,38],[-30,38]].map(([x,z],i)=>({id:"training-dummy-"+(i+1),x,z,radius:.45})),
+      ...[[32,32],[44,30],[30,44],[46,42],[38,48]].map(([x,z],i)=>({id:"old-stupa-"+(i+1),x,z,radius:.8})),
+      {id:"temple-bodhi",x:12,z:-36,radius:1.2},
+    ],
+    restAreas: WORLD_EXPANSION ? [{x:0,z:0,radius:6,name:"ลานพักและตลาดอาคม"},
+      {x:VILLAGE_LAYOUT.forestGate.x,z:VILLAGE_LAYOUT.forestGate.z+1,radius:3,name:"ประตูป่า"},{x:VILLAGE_LAYOUT.cityGate.x,z:VILLAGE_LAYOUT.cityGate.z+1,radius:3,name:"ประตูนคร"},
+      {...VILLAGE_LAYOUT.temple,radius:8,name:"ลานวัดอาคม"},{...VILLAGE_LAYOUT.market,radius:9,name:"ตลาดริมคลอง"},
+      {...VILLAGE_LAYOUT.training,radius:7,name:"ลานฝึกยุทธ์"}] : [],
+    portals: [{ id: "village_to_forest", x: VILLAGE_LAYOUT.forestGate.x, z: VILLAGE_LAYOUT.forestGate.z,
       targetMapId: "forbidden_forest", targetSpawn: { x: 0, y: 0, z: 12 } },...(WORLD_EXPANSION?atlasPortals(DEFAULT_MAP_ID):[])],
   },
   forbidden_forest: {
@@ -129,7 +152,7 @@ const maps: Record<string,WorldMapDefinition>={
       ] : []),
     ],
     portals: [{ id: "forest_to_village", x: 0, z: 14,
-      targetMapId: "ritual_village", targetSpawn: { x: -4, y: 0, z: -15 } },
+      targetMapId: "ritual_village", targetSpawn: { x: VILLAGE_LAYOUT.forestGate.x, y: 0, z: VILLAGE_LAYOUT.forestGate.z+2 } },
       ...(WORLD_EXPANSION ? [{id:"forest_to_temple",...TEMPLE_GATE,targetMapId:TEMPLE_ID,targetSpawn:TEMPLE_MAP.spawn},...atlasPortals("forbidden_forest")] : [])],
   },
 };

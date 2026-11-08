@@ -16,7 +16,7 @@ const own=r=>r.state.players.get(r.sessionId);
 async function seed(t,mapId,x,z){const r=await open(t);await r.leave();await sleep(500);const f=file(t),s=JSON.parse(await readFile(f,"utf8"));s.mapId=mapId;s.x=x;s.y=0;s.z=z;s.build={path:"seer",ancestry:"woodland"};s.inventory.slots[0].quantity=2;s.inventory.equippedWeaponSlot=2;await writeFile(f,JSON.stringify(s));}
 const aToken=token(),bToken=token(),cToken=token(); let rooms=[];
 try{
- await seed(aToken,"ritual_village",-4,-17); await seed(bToken,"forbidden_forest",-4,-17); await seed(cToken,"forbidden_forest",1.1,10.4);
+ await seed(aToken,"ritual_village",-10,-56); await seed(bToken,"forbidden_forest",-4,-17); await seed(cToken,"forbidden_forest",1.1,10.4);
  const a=await open(aToken);rooms.push(a);const b=await open(bToken,a.roomId);rooms.push(b);const c=await open(cToken,a.roomId);rooms.push(c);
  await until(()=>a.state.players.size===3,"all players"); const rejects=[];a.onMessage("command_rejected",e=>rejects.push(e.reason));
  const ahp=own(a).hp,bhp=own(b).hp,chp=own(c).hp;
@@ -28,7 +28,7 @@ try{
  a.send("warp",{portalId:"forest_to_village"});await sleep(600);assert.equal(own(a).mapId,"forbidden_forest","cooldown must prevent immediate return");
  await a.leave();rooms=rooms.filter(x=>x!==a);await sleep(600);const resumed=await open(aToken,b.roomId);rooms.push(resumed);assert.equal(own(resumed).mapId,"forbidden_forest");assert.equal(own(resumed).equippedWeaponId,"arcane_sword");
  resumed.send("warp",{portalId:"forest_to_village"});await until(()=>own(resumed).mapId==="ritual_village","return to village");
- assert.equal(own(resumed).x,-4);assert.equal(own(resumed).z,-15);
+ assert.equal(own(resumed).x,-10);assert.equal(own(resumed).z,-54);
  await sleep(3200);resumed.send("warp",{portalId:"village_to_forest"});await resumed.leave();rooms=rooms.filter(x=>x!==resumed);await sleep(800);
  const after=await open(aToken,b.roomId);rooms.push(after);disk=JSON.parse(await readFile(file(aToken),"utf8"));assert.equal(own(after).mapId,disk.mapId);assert.equal(own(after).x,disk.x);assert.equal(own(after).z,disk.z);assert.equal(disk.inventory.slots[0].quantity,2);assert.equal(disk.inventory.equippedWeaponSlot,2);
  console.log("PASS: real isolated room: cross-map combat, monster isolation, forged command, round trip, cooldown, reconnect and disconnect race");

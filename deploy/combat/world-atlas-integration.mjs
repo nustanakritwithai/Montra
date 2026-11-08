@@ -10,7 +10,7 @@ const routes=[
   ["forbidden_forest",48,-84,"drowned_marsh"],["bound_temple",32,-65,"moon_cemetery"],
   ["drowned_marsh",0,-58,"moon_cemetery"],["moon_cemetery",0,-58,"moon_pass"],["moon_pass",0,-58,"hex_ridge"],
   ["hex_ridge",0,-58,"naga_cavern"],["naga_cavern",0,-58,"river_watch"],["river_watch",0,-58,"fallen_city"],
-  ["ritual_village",4,-16,"mantra_capital"],["mantra_capital",-34,-14,"bamboo_frontier"],["bamboo_frontier",0,-58,"moon_cemetery"],
+  ["ritual_village",10,-56,"mantra_capital"],["mantra_capital",-34,-14,"bamboo_frontier"],["bamboo_frontier",0,-58,"moon_cemetery"],
   ["mantra_capital",0,-58,"moon_pass"],["mantra_capital",34,-14,"lotus_basin"],["lotus_basin",0,-58,"river_watch"],
   ["fallen_city",0,-58,"asura_peak"],["asura_peak",0,-58,"spirit_rift"],
 ];
