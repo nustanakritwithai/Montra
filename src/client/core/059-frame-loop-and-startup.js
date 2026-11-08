@@ -10,7 +10,7 @@
   $("harvestButton").onclick=()=>{
     const n=nearbyResource(ownServerCharacter());
     if(!n || !n.stock || !economyReady() || economyPending)return;
-    resourceReadyAt=performance.now()+1500;
+    resourceReadyAt=performance.now()+1500;harvestBurst(n);
     economySend("harvest_resource",{node:n.id,requestId:economyRequestId()},true);
   };
   $("fishButton").onclick=()=>{

@@ -48,7 +48,7 @@
       terrain.vScale=castleBounds?(castleBounds.maxZ-castleBounds.minZ)*.095:12;floor.diffuseTexture=terrain;
       // Ground surfaces per region (floor, road, court) from the G01–G16 library; the palette still tints them.
       const kinds=REGION_GROUNDS[id] || ["grass","path","temple"];
-      applyGroundSurface(floor,kinds[0],{tint:.35,tile:6});applyGroundSurface(road,kinds[1],{uScale:1,vScale:1,tint:.3,bump:false});applyGroundSurface(court,kinds[2],{uScale:terrain.uScale,vScale:terrain.vScale,tint:.35});
+      applyGroundSurface(floor,kinds[0],{tint:.35,tile:6});applyGroundSurface(road,kinds[1],{uScale:1,vScale:1,tint:.3,bump:false,bright:.72});applyGroundSurface(court,kinds[2],{uScale:terrain.uScale,vScale:terrain.vScale,tint:.35});
       // Night grade: the atlas palette is kept but pulled down toward moonlight.
       const outerHunt=worldDefinitions?.[id]?.huntTrail;
       const clearTerrain=province || outerHunt;

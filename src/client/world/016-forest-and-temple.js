@@ -121,8 +121,8 @@
       }else if(rocks<18){
         const d=1+noise(i,125)*.9;
         sceneryPoint("stone",x,z,d/2);
-        place(B.MeshBuilder.CreateSphere("boulder",{diameter:d,segments:4},scene),x,d*.22,z,forestStone).scaling.y=.55;
-        place(B.MeshBuilder.CreateSphere("moss cap",{diameter:d*.82,segments:4},scene),x+.05,d*.36,z-.05,mossMat).scaling.y=.32;
+        // Moss-covered boulder from the rock kit (forest stones are mossy; the bound temple's are plain).
+        placeRock(activeMapId==="forbidden_forest"?"moss":"plain",x,map.terrain?terrainHeight(map.terrain,x,z):0,z,{parent:expansionRoot,scale:d*.55});
         rocks++;
       }
     }

@@ -156,7 +156,7 @@
       for(let i=0;i<46;i++){const t=i/46,w=b.maxX-b.minX,x=t<.5?b.minX+1+(t*2)*w*.98:(i%2?b.minX+1:b.maxX-1),z=t<.5?b.minZ+1:b.minZ+((t-.5)*2)*(b.maxZ-b.minZ);
         const st=cone(x,1.2,z,2.4+noise(i,631)*.8,.32,.08,darkWood,5);st.rotation.z=(noise(i,632)-.5)*.3;}
       if(id==="moon_pass"){const mine=sites.find(s=>s.kind==="mine");
-        if(mine)for(let k=0;k<10;k++){const a=k*.63,r=4+noise(k,633)*3,x=mine.x+Math.cos(a)*r,z=mine.z+Math.sin(a)*r;sceneryPoint("stone",x,z,.55);cone(x,.5,z,.8+noise(k,634),1.1,.1,provinceFx.ore,5);}}
+        if(mine)for(let k=0;k<10;k++){const a=k*.63,r=4+noise(k,633)*3,x=mine.x+Math.cos(a)*r,z=mine.z+Math.sin(a)*r;sceneryPoint("stone",x,z,.55);placeRock(k%3?"iron2":"iron3",x,map.reliefLabels?terrainHeight(map.terrain,x,z):0,z,{parent:expansionRoot,scale:.55+noise(k,634)*.25});}}
       if(id==="river_watch")for(const w of map.water||[]){const horizontal=w.width>w.length;
         for(let k=0;k<3;k++){const t=(k+.5)/3,x=w.x+(horizontal?w.width*t:w.width/2),z=w.z+(horizontal?w.length/2:w.length*t);
           if(sites.some(s=>Math.hypot(x-s.x,z-s.z)<6))continue;
@@ -187,6 +187,8 @@
       if(size>=2.5&&(m===lightPoolMat||m===greenPool||m===violetPool))addLightSpot(x,1.8,z,m===greenPool?"#9dff7a":m===violetPool?"#b48aff":"#ffa65a",Math.min(1.2,size/3.6));
       const g=put(B.MeshBuilder.CreateGround("region decal",{width:size,height:size},scene),x,y,z,m);g.rotation.y=rot;return g;};
     const b=map.bounds,id=map.id,{stone,deep,light,court,road}=paint;
+    // Themed rock models (rock kit in the materials file): instances seated on the terrain, size from the old sphere diameter.
+    const rock=(kind,x,z,d)=>placeRock(kind,x,map.reliefLabels?terrainHeight(map.terrain,x,z):0,z,{parent:expansionRoot,scale:d*.55});
     const clear=(x,z,courts=12.5)=>sceneryClear(x,z,courts,map);
     const scatter=(count,seed,fn,courts)=>{for(let i=0,n=0;i<count*8&&n<count;i++){
       const x=b.minX+2.5+noise(i,seed)*(b.maxX-b.minX-5),z=b.minZ+2.5+noise(i,seed+1)*(b.maxZ-b.minZ-5);
@@ -241,9 +243,9 @@
     }else if(id==="hex_ridge"){
       scatter(30,361,(x,z,k)=>{sceneryPoint("wood",x,z,.9);const h=4+noise(k,362)*3;cone(x,h*.3,z,h*.6,.35,.2,decor.deadWood,5).rotation.z=(noise(k,363)-.5)*.35;
         cone(x,h*.62,z,h*.45,2.6,.4,decor.pine,6);cone(x,h*.95,z,h*.4,1.6,0,decor.pineHi,6);});
-      scatter(40,365,(x,z,k)=>{const d=.8+noise(k,366)*1.4;sceneryPoint("stone",x,z,d/2);ball(x,d*.25,z,d,decor.rock).scaling.y=.6;},12.5);
+      scatter(40,365,(x,z,k)=>{const d=.8+noise(k,366)*1.4;sceneryPoint("stone",x,z,d/2);rock(k%3===0?"iron1":"plain",x,z,d);},12.5);
       for(const w of map.walls||[])for(let t=1;t<w.width;t+=2.2)for(const side of [-1,1]){const k=t*7+side;if(noise(k,367)<.4)continue;
-        const d=.8+noise(k,368)*1.2,z=w.z+w.length/2+side*(w.length/2+.5);sceneryPoint("stone",w.x+t,z,d/2);ball(w.x+t,d*.3,z,d,decor.rock).scaling.y=.65;}
+        const d=.8+noise(k,368)*1.2,z=w.z+w.length/2+side*(w.length/2+.5);sceneryPoint("stone",w.x+t,z,d/2);rock(k%4===0?"iron2":"plain",w.x+t,z,d);}
       scatter(10,369,(x,z,k)=>{const tab=box(x,1.1,z,1.2,2.2,.4,stone);tab.rotation.y=noise(k,370)*3;for(let j=0;j<4;j++)box(x,.5+j*.42,z,.9,.06,.44,light).rotation.y=tab.rotation.y;});
       for(const camp of map.camps)for(let side=0;side<2;side++){
         const a=side*Math.PI+.8,x1=camp.x+Math.cos(a)*13,z1=camp.z+Math.sin(a)*13,x2=camp.x+Math.cos(a+.9)*13,z2=camp.z+Math.sin(a+.9)*13;
@@ -261,7 +263,7 @@
         for(const fan of [-1,0,1])cone(lm.x+Math.cos(.4)*3.4+fan*.3,2.2,lm.z+Math.sin(.4)*3.4,.8,.2,0,gold,4).rotation.z=-fan*.5;}
       rim(44,389,(x,z,k)=>{const h=7+noise(k,390)*9;cone(x,h/2,z,h,5+noise(k,391)*5,.6,decor.rock,5);});
     }else if(id==="fallen_city"){
-      scatter(45,401,(x,z,k)=>{for(let j=0;j<3;j++)box(x+(noise(k*3+j,402)-.5)*1.8,.3,z+(noise(k*3+j,403)-.5)*1.8,.95,.55,.6,j%2?stone:deep).rotation.y=noise(k+j,404)*3;},12.5);
+      scatter(45,401,(x,z,k)=>rock("laterite",x,z,1.3+noise(k,402)*.9),12.5); // laterite rubble from the fallen walls
       for(const w of map.walls||[]){
         for(const side of [-1,1])box(w.x+w.width/2+side*w.width*.24,4.9,w.z+w.length/2,w.width*.56,.18,w.length+.6,roofMat).rotation.z=-side*.55;
         box(w.x-.05,2.2,w.z+w.length*.3,.06,.7,.6,glowMat);
@@ -275,7 +277,7 @@
         if(k%2)for(const side of [-1,1])box(x+side*w*.25,h+.6,z,w*.6,.2,w*.9,roofMat).rotation.z=-side*.6;else cone(x,h+1.6,z,3.2,w*.5,0,stone,6);});
     }else if(id==="asura_peak"){
       scatter(30,421,(x,z,k)=>decal(x,z,5+noise(k,422)*4,lavaMat,noise(k,423)*3,.05),11);
-      scatter(34,425,(x,z,k)=>{const d=.9+noise(k,426)*1.6;sceneryPoint("stone",x,z,d/2);ball(x,d*.25,z,d,decor.rock).scaling.y=.6;if(k%3===0)cone(x,d*.55,z,.3,.3,0,decor.ember,4);},12.5);
+      scatter(34,425,(x,z,k)=>{const d=.9+noise(k,426)*1.6;sceneryPoint("stone",x,z,d/2);rock(k%3===0?"iron3":"plain",x,z,d);if(k%3===0)cone(x,d*.55,z,.3,.3,0,decor.ember,4);},12.5);
       alongTrails(12,2.8,(x,z)=>brazier(x,z));
       const spears=map.camps.find(c=>c.id==="court2");
       if(spears)for(let k=0;k<10;k++){const a=k/10*Math.PI*2,x=spears.x+Math.cos(a)*12.8,z=spears.z+Math.sin(a)*12.8;if(nearMapPath(map,x,z,2.6))continue;

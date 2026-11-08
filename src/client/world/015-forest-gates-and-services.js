@@ -118,8 +118,7 @@
     fixedCrowns.push(tree);forestResourceShapes.set(x+","+z,[tree]);
   });
   for(const [x,z,r] of [[5,-9,1.8],[-9,-3,1.5]]) {
-    const rock=B.MeshBuilder.CreateSphere("forest rock",{diameter:r*2,segments:5},scene);
-    rock.position.set(x,r*.45,z);rock.scaling.y=.6;rock.material=forestStone;rock.isPickable=false;rock.parent=forestRoot;
+    const rock=placeRock("moss",x,0,z,{clone:true,parent:forestRoot,scale:r*.95});
     forestResourceShapes.set(x+","+z,[rock]);
   }
   // Ruined forest shrine: stone plinth, lacquered sanctum, gilded Thai roof,

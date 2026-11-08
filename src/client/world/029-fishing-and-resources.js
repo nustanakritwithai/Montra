@@ -112,6 +112,15 @@
       else for(const [mesh,y,scale] of s.parts){mesh.scaling.y=scale*size;mesh.position.y=(ground?terrainHeight(ground,n.x,n.z):0)+y*size;}
     }
   }
+  // Gather feedback (visual only): chips and sparks off ore, splinters off timber, leaf bits off herbs, then a dust ring.
+  function harvestBurst(n){
+    if(!n || typeof spawnFx!=="function")return;
+    const terrain=worldDefinitions?.[activeMapId]?.terrain,y=(terrain?terrainHeight(terrain,n.x,n.z):0)+(n.kind==="wood"?1.2:.7);
+    const col=n.kind==="stone"?["white","gold"]:n.kind==="wood"?["orange","gold"]:["green","jade"];
+    for(let i=0;i<9;i++){const a=i/9*Math.PI*2+Math.random()*.5,v=1.6+Math.random()*1.8;
+      spawnFx(i%3?"glow":"star",col[i%2],n.x,y,n.z,{delay:i*18,life:420+Math.random()*220,s0:.22,s1:.08,a0:.95,a1:0,vel:[Math.cos(a)*v,2.6+Math.random()*1.6,Math.sin(a)*v],grav:9});}
+    spawnFx("ring","white",n.x,(terrain?terrainHeight(terrain,n.x,n.z):0)+.08,n.z,{orient:"ground",life:520,s0:.6,s1:2.6,a0:.35,a1:0});
+  }
   function nearbyResources(me){
     if(!me?.alive || me.mounted || me.flying || resources?.mapId!==me.mapId || activeMapId!==me.mapId || Math.abs(playerLayer(me))>=.1)return [];
     const distance=n=>Math.hypot(me.x-n.x,me.z-n.z)-n.radius;

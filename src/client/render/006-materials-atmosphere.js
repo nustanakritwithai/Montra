@@ -445,7 +445,7 @@
     laterite: (t, r) => r < .14 ? "#4a2414" : r < .5 ? "#9a4a2a" : t > .6 ? "#b0603a" : "#8a3f22",
     host: (t, r) => r < .16 ? "#7a3a20" : r < .3 ? "#8f4a26" : t > .6 ? "#5c5a58" : "#4c4a49",
     hostDark: (t, r) => r < .22 ? "#7e3618" : r < .32 ? "#9fa6ad" : t > .6 ? "#3f3e40" : "#333234",
-    ore: (t, r) => t > .7 ? "#c4ccd4" : r < .35 ? "#8a929b" : r < .7 ? "#5d646d" : "#6e3a22"
+    ore: (t, r) => t > .55 ? "#dde4ea" : r < .4 ? "#a9b2bb" : r < .72 ? "#7a828b" : "#9a4a24"
   };
   const ROCK_SHAPES = {
     plain(rng, parts, v) {
@@ -611,12 +611,19 @@
   }
   // Dress an existing material with a ground surface, keeping its UV tiling (uScale/vScale) and night grade.
   // tint mixes a little of the material's old colour back in, so each region keeps its own mood.
+  // DynamicTexture.clone() returns a blank canvas, so each material gets a light Texture that shares the painted GPU texture.
+  function shareGroundTexture(src) {
+    const t = new B.Texture(null, scene, false, false); t.name = src.name;
+    t._texture = src.getInternalTexture(); t._texture.incrementReferences();
+    t.wrapU = t.wrapV = B.Texture.WRAP_ADDRESSMODE; t.anisotropicFilteringLevel = 4;
+    return t;
+  }
   function applyGroundSurface(material, kind, opts = {}) {
     const surface = groundSurface(kind), old = material.diffuseTexture, scale = opts.scale ?? 1;
     const uS = (opts.uScale ?? old?.uScale ?? 1) * scale, vS = (opts.vScale ?? old?.vScale ?? 1) * scale;
-    const tex = surface.diffuse.clone(); tex.uScale = uS; tex.vScale = vS; material.diffuseTexture = tex;
-    if (opts.bump !== false) { const bump = surface.bump.clone(); bump.uScale = uS; bump.vScale = vS; bump.level = opts.bumpLevel ?? .7; material.bumpTexture = bump; }
-    if (surface.glow) { const glow = surface.glow.clone(); glow.uScale = uS; glow.vScale = vS; material.emissiveTexture = glow; }
+    const tex = shareGroundTexture(surface.diffuse); tex.uScale = uS; tex.vScale = vS; material.diffuseTexture = tex;
+    if (opts.bump !== false) { const bump = shareGroundTexture(surface.bump); bump.uScale = uS; bump.vScale = vS; bump.level = opts.bumpLevel ?? .7; material.bumpTexture = bump; }
+    if (surface.glow) { const glow = shareGroundTexture(surface.glow); glow.uScale = uS; glow.vScale = vS; material.emissiveTexture = glow; }
     const tint = opts.tint ?? .25, bright = opts.bright ?? 1, base = material.diffuseColor;
     material.diffuseColor = new B.Color3(bright * (1 - tint + base.r * tint), bright * (1 - tint + base.g * tint), bright * (1 - tint + base.b * tint));
     material.specularColor = new B.Color3(.04, .04, .04);
