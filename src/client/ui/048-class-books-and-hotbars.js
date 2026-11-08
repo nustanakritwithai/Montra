@@ -1,3 +1,18 @@
+  // Route from the current authoritative character, never DOM order or cached cards.
+  function openClassSkillBook() {
+    if (mode === "demo") return openSwordTree();
+    const me = ownServerCharacter();
+    if (mode !== "live" || !room || !me) return toast("กำลังรอข้อมูลอาชีพจากเซิร์ฟเวอร์");
+    switch (me.pathId) {
+      case "phutthaisawan": return openSwordTree();
+      case "muay_boran": return openMuayBook();
+      case "blade": return openBladeBook();
+      case "sentinel": return openSentinelBook();
+      case "seer":
+      case "mender": return openOccultBook();
+      default: return toast("เลือกอาชีพก่อนเปิดตำราสกิล");
+    }
+  }
   function getBuildCatalog() {
     const raw = room?.state?.buildCatalog || "";
     if (raw !== catalogKey) {
@@ -63,7 +78,7 @@
   function openSentinelBook(){
     if(!room || mode!=="live" || ownServerCharacter()?.pathId!=="sentinel")return toast("เข้า LIVE และเลือกผู้พิทักษ์ก่อน");
     if(!sentinelBookState?.core){if(performance.now()-sentinelRequestAt>1500){sentinelRequestAt=performance.now();room.send("sentinel_book_get",{});}return toast("กำลังขอตำราผู้พิทักษ์");}
-    sentinelBookRenderKey="";openDrawer("sentinelBook","วิชาผู้พิทักษ์",'<div id="sentinelBookBody"></div>');renderSentinelBook();
+    sentinelBookRenderKey="";openClassBookDrawer("sentinelBook","วิชาผู้พิทักษ์",'<div id="sentinelBookBody"></div>');renderSentinelBook();
   }
   function renderSentinelBook(){
     const data=sentinelBookState,me=ownServerCharacter(),container=$("sentinelBookBody");if(!data?.book || !data.core || !me || !container)return;
@@ -131,8 +146,8 @@
   function openBladeBook() {
     if(!room || mode!=="live" || ownServerCharacter()?.pathId!=="blade")return toast("เข้า LIVE และเลือกสายคมดาบก่อน");
     if(!bladeBookState){if(performance.now()-bladeRequestAt>1500){bladeRequestAt=performance.now();room.send("blade_book_get",{});}return toast("กำลังขอตำราคมดาบจากเซิร์ฟเวอร์");}
-    bladeBookRenderKey="";skillGraphKey="";if(bladeBookState.core)openDrawer("bladeBook","วิชาคมดาบ",'<div id="bladeBookBody"></div>');
-    else {openDrawer("bladeBook","สกิล",skillBookShell("blade"));wireSkillBook("blade");}renderBladeBook();
+    bladeBookRenderKey="";skillGraphKey="";if(bladeBookState.core)openClassBookDrawer("bladeBook","วิชาคมดาบ",'<div id="bladeBookBody"></div>');
+    else {openClassBookDrawer("bladeBook","สกิล",skillBookShell("blade"));wireSkillBook("blade");}renderBladeBook();
   }
   function renderBladeBook() {
     const data=bladeBookState,me=ownServerCharacter(),container=$("bladeBookBody");if(!data || !me || !container)return;
@@ -294,8 +309,8 @@
       return toast("กำลังขอตำราอาคมจากเซิร์ฟเวอร์");
     }
     occultBookRenderKey="";
-    if(occultBookState.core)openDrawer("occultBook",occultBookState.path==="seer"?"วิชานักเวท":"วิชาพระ",'<div id="occultBookBody"></div>');
-    else {skillGraphKey="";openDrawer("occultBook","สกิล",skillBookShell("occult"));wireSkillBook("occult");}
+    if(occultBookState.core)openClassBookDrawer("occultBook",occultBookState.path==="seer"?"วิชานักเวท":"วิชาพระ",'<div id="occultBookBody"></div>');
+    else {skillGraphKey="";openClassBookDrawer("occultBook","สกิล",skillBookShell("occult"));wireSkillBook("occult");}
     renderOccultBook();
   }
   function renderOccultBook() {
@@ -437,7 +452,7 @@
     const data=muayBookData();
     if(!data || data.me.pathId!=="muay_boran"){toast("เลือกอาชีพนักมวยก่อน");return;}
     muayBookRenderKey="";
-    openDrawer("muayBook","วิชานักมวย",'<div id="muayBookBody"></div>');
+    openClassBookDrawer("muayBook","วิชานักมวย",'<div id="muayBookBody"></div>');
     renderMuayBook();
   }
   function renderMuayBook() {
@@ -536,17 +551,18 @@
     school: "phuttha"
   };
   function swordData() {
-    const me = ownServerCharacter() || { characterName: "นที", level: 15, pathId: "phutthaisawan" };
+    if (mode === "demo") return {
+      me: { characterName: "นที", level: 15, pathId: "phutthaisawan" },
+      tree: demoSwordTreeData, catalog: DEFAULT_SWORD_CATALOG
+    };
+    const me = ownServerCharacter();
+    if (mode !== "live" || !room || me?.pathId !== "phutthaisawan") return null;
     try {
-      let tree = null, catalog = null;
-      if (me?.swordTreeData) tree = JSON.parse(me.swordTreeData);
-      if (room?.state?.swordTreeCatalog) catalog = JSON.parse(room.state.swordTreeCatalog);
-      if (!tree) tree = demoSwordTreeData;
-      if (!catalog) catalog = DEFAULT_SWORD_CATALOG;
+      const tree = JSON.parse(me.swordTreeData), catalog = JSON.parse(room.state.swordTreeCatalog);
+      if (!tree || typeof tree !== "object" || Array.isArray(tree) ||
+          !catalog || typeof catalog !== "object" || Array.isArray(catalog)) return null;
       return { me, tree, catalog };
-    } catch {
-      return { me, tree: demoSwordTreeData, catalog: DEFAULT_SWORD_CATALOG };
-    }
+    } catch { return null; }
   }
 
   function syncSwordStatus(me) {
@@ -562,7 +578,8 @@
   }
   function syncSwordTreeButton(me) {
     const button=$("swordTreeButton");
-    button.hidden=false; // Always visible so player can access skill tree anytime
+    button.hidden=!(mode==="demo" || (mode==="live" && me?.pathId==="phutthaisawan"));
+    syncClassSkillBookContext();
     if (button.hidden && targetedSkill==="sword") { selectedSwordSkill=""; setTargetedSkill(null); }
   }
 

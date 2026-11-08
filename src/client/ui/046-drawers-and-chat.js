@@ -8,6 +8,7 @@
     }
   }
   function closeDrawer() {
+    if (typeof closeSkillDetailModal === "function") closeSkillDetailModal();
     try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
     cancelForgeAnimation(true);closeForgePicker(false);
     if(ui.drawer.hidden)return;
@@ -21,6 +22,7 @@
     drawerOpener=null;
   }
   function openDrawer(name,title,html) {
+    if (typeof closeSkillDetailModal === "function") closeSkillDetailModal();
     try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
     cancelForgeAnimation(true);closeForgePicker(false);closeItemDetailModal(false);
     if(fieldTrainingTip && !(ownServerCharacter()?.level>=13) && ["muayBook","swordTree","bladeBook","sentinelBook","occultBook"].includes(name))fieldTrainingTip=null;
@@ -99,6 +101,8 @@
     if (handleForgePickerKey(event) || handleItemDetailKey(event)) return;
     if (event.key==="Escape") {
       event.preventDefault();
+      const skillModal = $("skillDetailModal");
+      if (skillModal && !skillModal.hidden) { closeSkillDetailModal(); return; }
       const modal = $("itemDetailModal");
       if (modal && !modal.hidden) { closeItemDetailModal(); return; }
       const equipModal = $("equipPopup");
