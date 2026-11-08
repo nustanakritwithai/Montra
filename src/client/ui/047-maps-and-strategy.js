@@ -656,7 +656,7 @@
       if($("castleFront"))$("castleFront").parentElement.hidden=s.inField || !(s.canStart || s.canJoin);
       if(s.canStart)button.textContent="เปิดสนามทดลอง 10 ต่อ 10 · 45 นาที";
     }
-    button.onclick=()=>{if(s.inField)void connectOnline(currentCharacterEndpoint(),activeCharacterSlot,{world:true});
+    button.onclick=()=>{if(s.inField)void connectOnline(currentCharacterEndpoint(),sessionState.activeCharacterSlot,{world:true});
       else if(room)room.send(s.canStart?"territory_start":"territory_join",isCastle?{objectiveId:Number($("castleFront").value)}:{});};
   }
   function updateAtlasOwner(){

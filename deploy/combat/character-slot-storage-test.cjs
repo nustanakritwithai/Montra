@@ -8,7 +8,7 @@ const vm = require("node:vm");
 // copy their implementation here or evaluate the game, account entry or network.
 const source = readFileSync(resolve(__dirname, "../../main.js"), "utf8");
 const start = source.indexOf("  function preferredSlotKey(endpoint) {");
-const end = source.indexOf("  let activeCharacterSlot = null;", start);
+const end = source.indexOf("  const sessionState = MONTRA_CLIENT_MODULES.createSessionState();", start);
 assert.ok(start >= 0 && end > start, "Locate the existing slot storage helpers");
 const helperSource = '"use strict";\n' + source.slice(start, end) + `\n({
   preferredSlotKey, slotPreviewKey, getPreferredSlot,

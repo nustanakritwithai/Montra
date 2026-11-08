@@ -10,6 +10,7 @@ import { createConnectionLifecycle } from '../src/modules/core/connection-lifecy
 import { allowedEndpoint, buildJoinOptions, joinWorld, verifyJoinedSlot } from '../src/modules/network/connection.mjs';
 import { createChatState } from '../src/modules/core/chat-state.mjs';
 import { createChatMessageHandler, createPartyStateHandler } from '../src/modules/network/social-handlers.mjs';
+import { createEarlyMessageBuffer } from '../src/modules/network/early-messages.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const stage=path.join(root,'combat-verify');
@@ -68,6 +69,14 @@ try{
   const loginAgain=await api('login',{username,password});assert.equal(loginAgain.status,200);
   const result=await joinWorld(client,buildJoinOptions(loginAgain.body.session,2,null),null);room=result.joined;
   assert.equal((await verifyJoinedSlot(room,2)).characterName,seen[1]);
+  const early=createEarlyMessageBuffer(room),earlyValues=[];let observed=false;
+  room.onMessage('guild_state',()=>{observed=true});room.send('get_guild',{});
+  const earlyDeadline=Date.now()+10000;
+  while(!observed && Date.now()<earlyDeadline)await sleep(50);
+  assert(observed,'guild snapshot received before handler is ready');
+  const guildHandler=value=>earlyValues.push(value);
+  room.onMessage('guild_state',guildHandler);early.setHandler('guild_state',guildHandler);early.replay();
+  assert.deepEqual(earlyValues,[null],'buffer replays initial no-guild snapshot once');
   const chatState=createChatState(),joined=room;let party='unreceived',renders=0;
   joined.onMessage('chat_message',createChatMessageHandler({joined,getRoom:()=>room,getLocalId:()=>joined.sessionId,getMapId:()=>joined.state.players.get(joined.sessionId)?.mapId,
     state:chatState,pushChatFeed:()=>{},getPending:()=>null,getBox:()=>null,getTab:()=>'all',finishPending:()=>{},updateBadge:()=>{}}));

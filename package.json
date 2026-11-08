@@ -9,7 +9,7 @@
     "build": "node scripts/build-site.mjs",
     "test:build": "node --test scripts/build-client.test.mjs scripts/build-styles.test.mjs scripts/build-site.test.mjs",
     "test:client": "node scripts/test-client.mjs",
-    "test:network": "node --test scripts/phase2-network.test.mjs scripts/phase2-social-handlers.test.mjs",
+    "test:network": "node --test scripts/phase2-network.test.mjs scripts/phase2-social-handlers.test.mjs scripts/phase2-session-state.test.mjs",
     "prepare:combat": "bash scripts/prepare-combat-verify.sh",
     "build:client": "node scripts/build-client.mjs",
     "check:client": "node scripts/build-client.mjs --check",

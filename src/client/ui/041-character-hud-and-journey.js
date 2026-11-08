@@ -21,7 +21,7 @@
     const name = typeof me?.characterName === "string" && me.characterName
       ? me.characterName : "นที";
     $("characterName").textContent = name;
-    const slot = me?.persistent ? (Number(me.characterSlot) || activeCharacterSlot || 1) : null;
+    const slot = me?.persistent ? (Number(me.characterSlot) || sessionState.activeCharacterSlot || 1) : null;
     if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) { triggerVoiceGuidance("levelup"); SFX("levelup", { important: true }); floatAtPlayer(localId, "🌟 LEVEL UP! 🌟", "levelup", { drift: 0, rise: 85, life: 2500, big: true }); shakeCamera(0.48, 450); auraFx(getLocalAvatar(), "levelup"); } hudLevel = me.level; }
     $("characterLevel").textContent = (slot ? "S" + slot + " · " : "") + "LV. " + (
       Number.isFinite(me?.level) ? me.level : 1

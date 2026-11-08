@@ -13,6 +13,13 @@ contains the existing endpoint policy, join options, transfer fallback, and
 character-slot verification. The old client calls these modules through the
 generated bundle; server message names, schema and save format are unchanged.
 
+`src/modules/core/session-state.mjs` owns the selected active character slot and
+the state-sync timer reference; legacy UI and transition code access that same
+object. `src/modules/network/early-messages.mjs` keeps the latest initial guild,
+recruitment and territory snapshots until their handlers are registered, then
+replays them in their original type-arrival order. Room, mode and player ID
+remain in the legacy client and have not yet been extracted.
+
 `src/modules/core/world-state.mjs` owns the client-side map of online player
 positions; the legacy renderer keeps an alias to the same Map. Positions
 remain server-authoritative. `src/modules/core/chat-state.mjs` owns chat history,
@@ -38,16 +45,16 @@ The bundle is generated using the locked esbuild version; see
 ## Verification
 
 - `npm run test:network`: isolated lifecycle, endpoint, join, transfer,
-  slot-validation, world-state, chat-state and social-handler tests, including the built
-  module prelude.
+  slot-validation, session/world/chat-state, early-message and social-handler
+  tests, including the built module prelude.
 - `npm run test:client`, `npm run test:client-boundaries`,
   `node --test scripts/check-contract.test.mjs`, `node scripts/check-contract.mjs`,
   and `npm run test:build`: existing non-browser regression, source boundary,
   protocol inventory and deterministic build checks.
 - `node scripts/phase2-server-integration.mjs`: real Colyseus protocol with a
   test account and all three character slots, leave/re-enter, logout/login,
-  stale callback verification, and real chat and party messages handled by the
-  extracted modules. It requires the isolated `combat-verify`
+  stale callback verification, real chat and party messages, and buffered guild
+  state handled by the extracted modules. It requires the isolated `combat-verify`
   project prepared by the repository's CI setup. The test starts its own server
   on a random loopback port, refuses port 4108, and writes synthetic account data
   into a unique `combat-verify/phase2-test-data` directory. It does not load

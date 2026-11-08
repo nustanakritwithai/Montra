@@ -94,18 +94,18 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   assert.equal(hash(bytes), phase2.output.sha256);
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
-  assert.deepEqual(Object.keys(phase2.changedFragments), ['core/028-session-and-economy-state.js', 'render/004-scene-camera-lights.js', 'network/044-state-sync-and-connection.js']);
+  assert.deepEqual(Object.keys(phase2.changedFragments), ['core/001-storage-and-dom.js', 'core/028-session-and-economy-state.js', 'render/004-scene-camera-lights.js', 'combat/038-demo-and-monster-state.js', 'network/044-state-sync-and-connection.js', 'ui/041-character-hud-and-journey.js', 'ui/047-maps-and-strategy.js', 'ui/050-character-and-equipment.js']);
   for (const file of reviewedReleaseFragments.keys()) {
     assert(manifest.fragments.includes(file), `Reviewed release fragment is missing: ${file}`);
   }
-  assert.deepEqual([...reviewedReleaseFragments.keys()].filter(file=>phase2.changedFragments[file]),['network/044-state-sync-and-connection.js']);
+  assert.deepEqual([...reviewedReleaseFragments.keys()].filter(file=>phase2.changedFragments[file]),['ui/047-maps-and-strategy.js','network/044-state-sync-and-connection.js']);
   for (const entry of baseline.fragments) {
     const fragment = readFileSync(join(clientRoot, 'src/client', entry.path));
     const reviewed = phase2.changedFragments[entry.path] || reviewedReleaseFragments.get(entry.path) || entry;
     assert.equal(fragment.length, reviewed.bytes, entry.path);
     assert.equal(hash(fragment), reviewed.sha256, entry.path);
   }
-  assert.deepEqual(Object.keys(phase2.moduleSources), ['index.mjs', 'core/chat-state.mjs', 'core/connection-lifecycle.mjs', 'core/world-state.mjs', 'network/connection.mjs', 'network/social-handlers.mjs']);
+  assert.deepEqual(Object.keys(phase2.moduleSources), ['index.mjs', 'core/chat-state.mjs', 'core/connection-lifecycle.mjs', 'core/session-state.mjs', 'core/world-state.mjs', 'network/connection.mjs', 'network/early-messages.mjs', 'network/social-handlers.mjs']);
   for (const [file, expected] of Object.entries(phase2.moduleSources)) {
     const bytes = readFileSync(join(clientRoot, 'src/modules', file));
     assert.equal(bytes.length, expected.bytes, file);

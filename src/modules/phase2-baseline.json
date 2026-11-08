@@ -4,10 +4,14 @@
   "phase2BaseCommit": "0a1ce6b8008531a1f7e6dc8f909271a40ec574f6",
   "integrationBaseCommit": "6c72db0ebf57c455c70ba06b7729aabbab7498c3",
   "output": {
-    "bytes": 1466256,
-    "sha256": "fcd49a422a00cbe74a50f9106302b787e260b560fa0b207b3acfec6352beb208"
+    "bytes": 1467044,
+    "sha256": "8095e90a95bda6a25131e4dec56a621b776b2f158c4468635551a6c17dd3d25e"
   },
   "changedFragments": {
+    "core/001-storage-and-dom.js": {
+      "bytes": 2749,
+      "sha256": "1d8b45c9de98780c240ad9173ec472fa075ee5b51f18bb212f77ef17586247bf"
+    },
     "core/028-session-and-economy-state.js": {
       "bytes": 2828,
       "sha256": "0e8879ded8f38dec45ebba026c478053ac9e6cd1504e31c522d45b0518c60d77"
@@ -16,15 +20,31 @@
       "bytes": 12266,
       "sha256": "e1857a53c99050a6256fdef0bf3c2688fe5de12978c147fbc65d8da865ce9a33"
     },
+    "combat/038-demo-and-monster-state.js": {
+      "bytes": 7416,
+      "sha256": "3d91bbfe4141b9a1f28fa7b788cfb1f1cf3e8197652d288eb76886fbb39be504"
+    },
     "network/044-state-sync-and-connection.js": {
-      "bytes": 135144,
-      "sha256": "f32e09ea4e732553d134157372943e4f5240ceb577158ae4f44633ce76740984"
+      "bytes": 134983,
+      "sha256": "a7b36a306f5a0b8d428b0ed6bb99d1c319cf2083aba1f3fa1627dfc12469af68"
+    },
+    "ui/041-character-hud-and-journey.js": {
+      "bytes": 38461,
+      "sha256": "9e3ba5b0448100c180f38a4d840acc0bfbbe128cc724cd02c45029109593a08f"
+    },
+    "ui/047-maps-and-strategy.js": {
+      "bytes": 72208,
+      "sha256": "e3d8bb5f0adb6aa0e6d8c646bb0cfcf2bec04ee413fd8c76dafcaa0a5ca4962b"
+    },
+    "ui/050-character-and-equipment.js": {
+      "bytes": 47331,
+      "sha256": "80286398b3ce3461cbe2fa6f6fec93aa8e2c9fbd36023362f2676be4d681171b"
     }
   },
   "moduleSources": {
     "index.mjs": {
-      "bytes": 399,
-      "sha256": "d9310a2ecb9781c0ebc306fac6b54e75e49d3ad5eba9f9e8864e4092df559974"
+      "bytes": 535,
+      "sha256": "d5af006bea5d9740c96b24258770de07ca14484e8cdf707ed20de16aec609415"
     },
     "core/chat-state.mjs": {
       "bytes": 340,
@@ -34,6 +54,10 @@
       "bytes": 436,
       "sha256": "7b9fd1318b9c5b6e74175f9333c0d7f4e66dba35d794a6d96ea9bc0aac06bf95"
     },
+    "core/session-state.mjs": {
+      "bytes": 177,
+      "sha256": "cfae0a6abdfb7b73684c49e965cb00c17294484096459288f2512aa1842bbe06"
+    },
     "core/world-state.mjs": {
       "bytes": 166,
       "sha256": "4c8f3ae99dec13947613dcdf68af2febb1e519ccf1265f7dfff8de6a8b082103"
@@ -41,6 +65,10 @@
     "network/connection.mjs": {
       "bytes": 2277,
       "sha256": "595952c2ea6877ab4f8e832798d097821f42573085a553895e35abdcb173cb3a"
+    },
+    "network/early-messages.mjs": {
+      "bytes": 524,
+      "sha256": "cd73f063eb4caa4887fc9be4ed075d0e66fb82ac262046c9a64ed36598460059"
     },
     "network/social-handlers.mjs": {
       "bytes": 2271,

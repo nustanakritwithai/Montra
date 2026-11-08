@@ -114,8 +114,7 @@
     if (drawerActive === "guild") renderGuild();
     return true;
   }
-  let syncPoll = null;
-  function clearSyncPoll() { if (syncPoll) clearInterval(syncPoll); syncPoll = null; }
+  function clearSyncPoll() { if (sessionState.syncPoll) clearInterval(sessionState.syncPoll); sessionState.syncPoll = null; }
   function stopOnline(reason) {
     closeForgePicker(false);
     clearSyncPoll();
@@ -129,7 +128,7 @@
       toast("เลือกช่องเซฟ 1, 2 หรือ 3 เท่านั้น");
       return;
     }
-    if (!transfer && room && mode === "live" && activeCharacterSlot === requestedSlot &&
+    if (!transfer && room && mode === "live" && sessionState.activeCharacterSlot === requestedSlot &&
         currentCharacterEndpoint() === endpoint) {
       closeDrawer();
       window.MontraEntry?.success();
@@ -165,8 +164,7 @@
       // The server sends guild and territory status as soon as we join, before
       // the slot check below finishes; keep those first messages and replay
       // them once their handlers exist, or the panels stay empty until a change.
-      const earlyMessages=new Map(), earlyHandlers=new Map();
-      for(const type of ["guild_state","guild_recruitment","territory_state"])joined.onMessage(type,message=>{if(!earlyHandlers.has(type))earlyMessages.set(type,message);});
+      const earlyMessages=MONTRA_CLIENT_MODULES.createEarlyMessageBuffer(joined);
       await MONTRA_CLIENT_MODULES.verifyJoinedSlot(joined, requestedSlot);
       cancelForgeAnimation(false,true);finishEconomyPending(true);
       room = joined;
@@ -180,7 +178,7 @@
       itemUsePending = false;
       itemUseSequence += 1;
       selectedBagSlot = 0;
-      mode = "live"; localId = joined.sessionId; activeCharacterSlot = requestedSlot;
+      mode = "live"; localId = joined.sessionId; sessionState.activeCharacterSlot = requestedSlot;
       clearFishing(false);fishSavedItem=null;
       clearAvatars(); clearSummons(); demoDest = null;
       pendingClimb = null;
@@ -235,7 +233,7 @@
         }
       };
       joined.onMessage("territory_state",onTerritoryState);
-      earlyHandlers.set("territory_state",onTerritoryState);
+      earlyMessages.setHandler("territory_state",onTerritoryState);
       joined.onMessage("territory_error",message=>{
         if(room!==joined)return;
         toast(activeMapId==="sam_lan_estuary" && message?.reason==="war_flag"?"เดินเข้าค่ายใต้ A เพื่อเปิดศึก":warErrors[message?.reason] || "ทำรายการที่ด่านไม่ได้ในขณะนี้");
@@ -279,7 +277,7 @@
         renderGuild();
       };
       joined.onMessage("guild_state",onGuildState);
-      earlyHandlers.set("guild_state",onGuildState);
+      earlyMessages.setHandler("guild_state",onGuildState);
       const onGuildRecruitment=message=>{
         if(room!==joined || !Array.isArray(message?.applications))return;
         const previousApplications=guildRecruitment.applications.length;
@@ -288,13 +286,12 @@
         if(guildRecruitment.applications.length>previousApplications && drawerActive!=="guild"){guildUnread=true;updatePartyBadge();}
         renderGuild();
       };
-      joined.onMessage("guild_recruitment",onGuildRecruitment);earlyHandlers.set("guild_recruitment",onGuildRecruitment);
+      joined.onMessage("guild_recruitment",onGuildRecruitment);earlyMessages.setHandler("guild_recruitment",onGuildRecruitment);
       joined.onMessage("guild_directory",message=>{
         if(room!==joined || !Array.isArray(message?.guilds))return;
         guildDirectory=message.guilds.filter(g=>g && typeof g.id==="string" && typeof g.name==="string").slice(0,50);renderGuild();
       });
-      for(const [type,message] of earlyMessages)earlyHandlers.get(type)?.(message);
-      earlyMessages.clear();
+      earlyMessages.replay();
       joined.onMessage("guild_invitation", message=>{
         if(room!==joined || typeof message?.inviteId!=="string" || typeof message.guildName!=="string" || typeof message.fromName!=="string")return;
         guildInvitation=message;guildUnread=drawerActive!=="guild";updatePartyBadge();
@@ -1407,7 +1404,7 @@
         }
       } catch (err) { console.warn("Callbacks fallback to state updates",err); }
       // Some SDK/room combinations expose the collection only after the first full state sync.
-      clearSyncPoll(); syncPoll = setInterval(() => { if (room === joined) syncState(joined.state); },350);
+      clearSyncPoll(); sessionState.syncPoll = setInterval(() => { if (room === joined) syncState(joined.state); },350);
       joined.onLeave(() => {
         if (room === joined) stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กรุณาเข้าเกมอีกครั้ง");
       });

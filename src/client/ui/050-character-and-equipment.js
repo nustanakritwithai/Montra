@@ -655,7 +655,7 @@
     $("cpGoOnline").onclick = openOnline;
     openBuildFields(me);
     $("profileSaveStatus").textContent = durable ? "เก็บบน VPS" : "ยังไม่เปิดใช้ (DEMO/Server เดิม)";
-    $("profileSlot").textContent = durable ? "เซฟที่ " + (activeCharacterSlot || 1) + " / 3" : "ยังไม่ได้เข้าออนไลน์";
+    $("profileSlot").textContent = durable ? "เซฟที่ " + (sessionState.activeCharacterSlot || 1) + " / 3" : "ยังไม่ได้เข้าออนไลน์";
     $("switchCharacterSlot").onclick = openOnline;
     $("profileName").textContent = String(me?.characterName || "นที");
     renderProgressionProfile();

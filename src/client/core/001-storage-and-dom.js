@@ -37,7 +37,7 @@
     try { localStorage.setItem(slotPreviewKey(endpoint), JSON.stringify(cleaned)); }
     catch (_) { /* only local preview, server remains authoritative */ }
   }
-  let activeCharacterSlot = null;
+  const sessionState = MONTRA_CLIENT_MODULES.createSessionState();
   const ui = {
     loading: $("loading"), loadingText: $("loadingText"), world: $("world"), toast: $("toast"),
     modeBadge: $("modeBadge"), onlineCount: $("onlineCount"), drawer: $("drawer"),
