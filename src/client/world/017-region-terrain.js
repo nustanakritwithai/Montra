@@ -26,6 +26,7 @@
   const forestReliefRoad=mat("forest ridge trail","#968763","#322f1b");
   const templeReliefRoad=mat("temple terrace paving","#ae9874","#3a3126");
   const civicRoad=mat('protected jade paving','#8eb6a0','#243e38');
+  applyGroundSurface(civicRoad,"temple",{uScale:1,vScale:1,tint:.55,bump:false,bright:.78}); // safe roads keep their jade hue on laid stone
   function regionPaint(id) {
     if(!regionStyles[id])return null;
     if(!regionPaints.has(id)){
