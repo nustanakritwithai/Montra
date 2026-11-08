@@ -7,7 +7,7 @@ function section(s,a,b){const i=s.indexOf(a),j=s.indexOf(b,i+a.length);assert(i>
 function fn(file,name){const s=read(file),i=s.indexOf(`  function ${name}(`);assert(i>=0,name);const j=s.indexOf('\n  }',i);assert(j>i,name);return s.slice(i,j+4);}
 class Canvas {
  constructor(width=128,height=128){this.width=width;this.height=height;this.style={};}
- getContext(){return new Proxy({canvas:this,createLinearGradient:()=>({addColorStop(){}}),createRadialGradient:()=>({addColorStop(){}}),createImageData:(w,h)=>({data:new Uint8ClampedArray(w*h*4)}),getImageData:()=>({data:new Uint8ClampedArray(this.width*this.height*4)}),measureText:()=>({width:10})},{get:(o,k)=>k in o?o[k]:()=>{}});}
+ getContext(){return new Proxy({canvas:this,drawImage:(...args)=>{(this.drawCalls??=[]).push(args);},createLinearGradient:()=>({addColorStop(){}}),createRadialGradient:()=>({addColorStop(){}}),createImageData:(w,h)=>({data:new Uint8ClampedArray(w*h*4)}),getImageData:()=>({data:new Uint8ClampedArray(this.width*this.height*4)}),measureText:()=>({width:10})},{get:(o,k)=>k in o?o[k]:()=>{}});}
  addEventListener(){} removeEventListener(){}
 }
 function fixture(){

@@ -121,3 +121,21 @@ test('production smoke color variants share the painted opacity texture without 
   // NullEngine has no GPU upload; actual texture readiness is asserted by WebGL CI.
  }finally{f.dispose();}
 });
+
+test('emitter mesh disposal releases owned painted particle texture without destroying atmosphere texture',()=>{
+ const f=fixture();try{
+  const shared=f.run('motes.particleTexture'),baseline=f.scene.textures.length;
+  for(let cycle=0;cycle<3;cycle++){
+   const owned=f.ctx.cloneGhostParticleTexture(shared);
+   assert.notEqual(owned,shared);assert.notEqual(owned.getContext().canvas,shared.getContext().canvas);
+   assert.equal(owned.getContext().canvas.drawCalls[0][0],shared.getContext().canvas,'copy actual painted source canvas, not a blank clone');
+   const holder=new f.B.TransformNode('particle holder',f.scene),emitter=new f.B.Mesh('particle emitter',f.scene);emitter.parent=holder;
+   const particles=new f.B.ParticleSystem('owned ghost particles',2,f.scene);particles.emitter=emitter;particles.particleTexture=owned;
+   holder.onDisposeObservable.add(()=>particles.dispose());
+   emitter.dispose(); // Babylon auto-disposes attached particle systems first.
+   assert(!f.scene.particleSystems.includes(particles));assert(!f.scene.textures.includes(owned));
+   assert(f.scene.textures.includes(shared),'atmosphere texture survived emitter auto-disposal');
+   holder.dispose();assert.equal(f.scene.textures.length,baseline,'holder callback leaves no copied texture leak');
+  }
+ }finally{f.dispose();}
+});

@@ -44,10 +44,20 @@ function diagnostic(){
   counts:{meshes:scene.meshes.length,skeletons:scene.skeletons.length,materials:scene.materials.length,multiMaterials:scene.multiMaterials.length},
   waitingItems:safe(()=>scene.getWaitingItemsCount()),effectsReady:safe(()=>engine.areAllEffectsReady()),
   unreadyMeshes:scene.meshes.filter(m=>m.subMeshes?.length&&!safe(()=>m.isReady(true))).map(m=>({name:m.name,enabled:m.isEnabled(),material:m.material?.name,errors:m.subMeshes.map(sm=>safe(()=>sm.effect?.getCompilationError?.())).filter(Boolean)})),
+  particles:scene.particleSystems.map(p=>({name:p.name,ready:safe(()=>p.isReady()),texturePresentInScene:scene.textures.includes(p.particleTexture),textureReady:safe(()=>p.particleTexture?.isReady()),shadersLoaded:p._shadersLoaded,emitterDisposed:safe(()=>p.emitter?.isDisposed?.())})),
   unreadyTextures:scene.textures.filter(t=>!safe(()=>t.isReady())).map(t=>({name:t.name,url:t.url})),
   bosses:[...forestMonsters].map(([id,m])=>({id,enabled:m.isEnabled(),disposed:m.isDisposed(),kind:m.metadata.ghost?.design.kind}))};
 }
 window.fixture={diagnostic,
+ particleTextureOwnership(){
+  const original=motes.particleTexture,baseline=scene.textures.length,owned=cloneGhostParticleTexture(original),size=original.getSize();
+  assert(owned!==original&&owned.getContext().canvas!==original.getContext().canvas,'particle texture ownership not isolated');
+  const expected=original.getContext().getImageData(0,0,size.width,size.height).data,actual=owned.getContext().getImageData(0,0,size.width,size.height).data;
+  assert(expected.length===actual.length&&expected.every((value,i)=>value===actual[i]),'particle texture pixels differ from painted source');
+  assert(expected.some((value,i)=>i%4===3&&value>0),'source particle sprite is empty');assert(owned.isReady(),'copied particle texture not uploaded');
+  const emitter=new B.Mesh('particle ownership emitter',scene),particles=new B.ParticleSystem('particle ownership probe',2,scene);particles.emitter=emitter;particles.particleTexture=owned;
+  emitter.dispose();assert(!scene.particleSystems.includes(particles)&&!scene.textures.includes(owned),'emitter cleanup leaked owned particles/texture');
+  assert(scene.textures.includes(original)&&original.isReady(),'emitter cleanup damaged atmosphere texture');assert(scene.textures.length===baseline,'copied texture leak');return {bytes:expected.length,identical:true};},
  smokeTextures(){const variants=[gm.smoke,gm.smokeWhite,gm.moonMist],texture=gm.smoke.opacityTexture;assert(new Set(variants).size===3,'smoke color materials collapsed');assert(variants.every(m=>m.opacityTexture===texture),'smoke variants do not share painted opacity');assert(scene.textures.filter(t=>t.name==='smoke fade').length===1,'unused smoke texture clone');assert(texture.isReady(),'painted smoke opacity not GPU ready');return true;},ids:Object.keys(BOSS_VISUALS),asset:()=>shamanBody===null?'pending':shamanBody===false?'failed':'ready',
  show(id){const {mesh,g}=show(id);return {kind:g.design.kind,vertices:mesh.getChildMeshes().reduce((n,m)=>n+m.getTotalVertices(),0),skeletons:g.rig.metadata?.skeletons?.length||0,humanoid:HUMANOID_KINDS.has(g.design.kind)};},
  check(id){const {m,mesh,g}=show(id);const before=JSON.stringify(m);frame(performance.now()+300);assert(JSON.stringify(m)===before,'renderer mutated server state');assert(g.attackAt<0&&g.hurtAt<0,'idle attack/hurt');assert(!g.phase2&&!g.shieldActive&&!g.enraged&&!g.staggeredUntil,'local combat state');return true;},
@@ -97,6 +107,7 @@ async function main(){
    page=await context.newPage();page.on('pageerror',e=>{errors.push(e.message);console.error('[boss] pageerror '+e.message);});page.on('console',msg=>{if(['error','warning'].includes(msg.type())){browserConsole.push({type:msg.type(),text:msg.text()});console.log('[boss] browser '+msg.type()+': '+msg.text());}});
    await step(prefix+' navigate',()=>page.goto(origin,{waitUntil:'domcontentloaded'}));await step(prefix+' fixture ready',()=>page.waitForFunction(()=>window.ready));
    await evaluate(prefix+' smoke texture ownership',()=>fixture.smokeTextures());
+   await evaluate(prefix+' particle texture pixels and disposal',()=>fixture.particleTextureOwnership());
    assert.equal(await evaluate(prefix+' pending state',()=>fixture.asset()),'pending');await evaluate(prefix+' pending lifecycle',()=>fixture.pending());releaseAsset();await step(prefix+' asset settled',()=>page.waitForFunction(()=>fixture.asset()!=='pending'));assert.equal(await evaluate(prefix+' asset outcome',()=>fixture.asset()),failure?'failed':'ready');await evaluate(prefix+' upgrade identity',failed=>fixture.upgraded(failed),failure);
    const ids=await evaluate(prefix+' roster',()=>fixture.ids);assert.equal(ids.length,15);
    for(const id of ids){const stats=await evaluate(prefix+' show '+id,id=>{fixture.check(id);return fixture.show(id);},id);assert(stats.vertices>0,id);if(!failure&&stats.humanoid)assert(stats.skeletons>0,id+' must use real GLB skeleton');

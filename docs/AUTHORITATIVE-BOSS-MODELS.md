@@ -11,7 +11,7 @@ This release renders the 14 existing `RegionalBosses` definitions and `atlas_rif
 - Boss rigs skip the legacy local phase-2/shield/enrage system. No shield HP, stagger, minion damage or new phase mechanics are advertised as server state.
 - Color-only white and moon smoke variants share the original painted opacity texture. Babylon material cloning otherwise creates an empty DynamicTexture, which prevents the moon robe from becoming ready in WebGL. Unused cloned textures are disposed; the shared gradient remains owned by the material palette.
 - A slow or failed shared body download retains an animated primitive fallback. A successful load replaces only the visual children, retaining the authoritative target root and warning mesh. Late callbacks cannot resurrect a disposed root.
-- Repeated dead snapshots do not replay death; a late join to a defeated boss starts hidden. Respawn clears the prior action timeline. Leaving a map disposes model children, skeletons and owned MultiMaterial wrappers while preserving shared submaterials and the atmosphere particle texture borrowed by headless/pyre rigs.
+- Repeated dead snapshots do not replay death; a late join to a defeated boss starts hidden. Respawn clears the prior action timeline. Leaving a map disposes model children, skeletons and owned MultiMaterial wrappers while preserving shared submaterials. Headless/pyre particle systems own pixel-copied textures so emitter-mesh disposal cannot destroy the shared atmosphere texture.
 - Conservative pick/nameplate heights cover both skinned and fallback crowns and crests. They are visual proxies, not server collision or attack range.
 
 ## Deferred work and deployment scope
