@@ -13,6 +13,7 @@ on:
       - 'deploy/combat/release-ui-browser-test.cjs'
       - 'deploy/combat/market-catalog-ui-test.cjs'
       - 'deploy/combat/crafting-pages-ui-test.cjs'
+      - 'deploy/combat/nested-recipes-*'
       - 'index.html'
       - 'deploy/combat/character-hud-*.cjs'
       - 'deploy/combat/monster-nameplates-*.cjs'
@@ -35,7 +36,7 @@ jobs:
           npm run build:styles
       - name: Install isolated browser runner
         run: |
-          npm install --no-save --package-lock=false playwright@1.56.1
+          npm install --no-save --package-lock=false playwright@1.56.1 tsx@4.21.0
           npx playwright install --with-deps chromium
       - name: Validate helpers and render shipped client
         run: |
@@ -44,7 +45,10 @@ jobs:
           node deploy/combat/character-hud-ui-test.cjs
           node deploy/combat/character-hud-browser-test.cjs
       - name: Validate isolated market and crafting browser flows
-        run: node deploy/combat/release-ui-browser-test.cjs
+        run: |
+          node deploy/combat/release-ui-browser-test.cjs
+          node --import tsx deploy/combat/nested-recipes-catalog-test.ts nested-recipes-browser-evidence/catalog.json
+          MONTRA_RECIPE_CATALOG=nested-recipes-browser-evidence/catalog.json node deploy/combat/nested-recipes-browser-test.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -53,3 +57,4 @@ jobs:
             hud-browser-evidence
             monster-nameplates-browser-evidence
             release-ui-browser-evidence
+            nested-recipes-browser-evidence

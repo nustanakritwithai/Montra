@@ -207,3 +207,21 @@
 .crafting-page button:focus-visible { outline:2px solid #f4d688; outline-offset:3px; }
 @media(max-width:700px) { .drawer:has(.crafting-page) { width:calc(100vw - 12px); bottom:6px; max-height:calc(100dvh - max(16px,env(safe-area-inset-top))); padding-left:12px; padding-right:12px; }.drawer:has(.crafting-page) .drawer-header { margin-left:-12px; margin-right:-12px; }.ck-workspace { grid-template-columns:1fr; padding:10px; gap:14px; }.ck-detail { border-left:0; border-top:1px solid var(--ck-line); padding:14px 0 0; }.ck-hero { align-items:flex-start; gap:8px; }.crafting-page .ck-hero h3 { font-size:21px; }.ck-skill { min-width:0; padding:8px; font-size:12px; }.ck-skill span { font-size:10px; }.ck-categories button { flex:1 0 20%; padding:8px; }.ck-grid { gap:7px; }.ck-recipe { min-height:143px; }.ck-wallet { font-size:12px; }.ck-requirements { gap:7px; } }
 @media(prefers-reduced-motion:reduce) { .crafting-page * { scroll-behavior:auto; } }
+
+/* The recipe graph is read-only; native buttons expose every ingredient by touch or keyboard. */
+.ck-recipe-explorer { min-width:0; margin:12px 0; }
+.ck-inspect-nav { display:flex; gap:8px; flex-wrap:wrap; }
+.ck-inspect-nav button { flex:1; min-width:0; min-height:44px; }
+.ck-relation { padding:10px; margin-bottom:8px; border:1px solid var(--ck-line); border-radius:7px; background:#14251b; }
+.ck-formula { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+.ck-recipe-node { display:flex; flex-direction:column; align-items:center; gap:4px; width:66px; min-height:44px; padding:4px; border:1px solid #9d8653; border-radius:6px; background:#263a29; color:#e9d8a4; cursor:pointer; font:inherit; }
+.ck-recipe-node .item-slot { --item-slot-size:48px; }
+.ck-recipe-node > span { font-size:10px; line-height:1.4; max-width:100%; overflow-wrap:anywhere; }
+.ck-recipe-node > small { font-size:12px; }
+.ck-recipe-symbol { color:#ddbc72; font-size:20px; }
+.ck-relation > .note { font-size:11px; margin:8px 0 0; }
+.ck-recipe-hint { color:#dfca91; font-size:12px; }
+.crafting-page .craft-ingredients li { grid-template-columns:44px minmax(0,1fr); }
+.crafting-page .craft-ingredients .ck-recipe-node { width:44px; padding:2px; }
+.craft-ingredients .ck-recipe-node > span,.craft-ingredients .ck-recipe-node > small { display:none; }
+@media(max-width:380px) { .ck-relation { padding:7px; }.ck-recipe-node { width:60px; }.ck-recipe-node .item-slot { --item-slot-size:44px; } }

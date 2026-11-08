@@ -131,7 +131,8 @@ test('all item display surfaces use shared thumbnails while interactive inventor
   for(const id of ids){assert((source+index).includes(`id="${id}"`),`missing host ${id}`);assert.match(source,new RegExp(`renderItem(?:Tile|Preview)\\("${id}"\\s*,`),`missing shared renderer ${id}`);}
   assert.match(source,/renderItemPreview\("fieldGoalItem",goal\?\.comparison\?\.piece\|\|goal\?\.recipe\|\|goal\?\.bossGear/);
   for(const id of ['marketItem','auctionItem','tradeItem'])assert(source.includes(`id="${id}Preview"`),`missing selected preview ${id}`);
-  assert.match(slice('  function renderWorkbench(','  function renderCraft('),/row\.append\(createItemTile\(part\.item,\{quantity:part\.qty\}\),name,count\)/);
+  assert.match(slice('  function renderWorkbench(','  function renderCraft('),/row\.append\(benchRecipeNode\(part\.item,part\.qty\),name,count\)/);
+  assert.match(slice('  function benchRecipeNode(','  function renderBenchRecipeExplorer('),/button\.append\(createItemTile\(id,\{quantity\}\),name,amount\)/);
   const central=slice('  function renderCentralMarket(','  function renderEconomy()');
   assert.match(central,/createMarketProduct\(item\.item,/);assert.match(central,/piece=\{itemId:item\.item,quantity:1\},card=createMarketProduct\(piece,/);
   assert.match(slice('  function createMarketProduct(','  function marketConfirmButton('),/art\.append\(createItemTile\(item\)\)/);
