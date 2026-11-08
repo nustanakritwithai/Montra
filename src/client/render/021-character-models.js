@@ -664,10 +664,13 @@
   function stepCloth(a, cloth, dt, t, colliders, groundY) {
     const { pos: P, prev: Q, links, n, C, spec } = cloth, pinned = (spec.pinRows ?? 1) * C;
     const w = CLOTH_WIND[activeMapId] || [.4, 0, .2], gust = .55 + .45 * Math.sin(t * .9 + n) * Math.sin(t * 2.3);
-    const drag = spec.drag ?? .965, g = -9.8 * (spec.gravity ?? 1) * dt * dt;
+    const drag = spec.drag ?? .965, g = -9.8 * (spec.gravity ?? 1) * dt * dt, R = cloth.R;
+    // Air moving past the body: walking or dashing pushes the cloth back (relative wind = -body velocity).
+    const air = a.clothAir || [0, 0, 0], airK = spec.air ?? .9;
     for (let i = pinned; i < n; i++) {
-      const k = i * 3, flutter = Math.sin(t * 7 + i * 1.7) * .35;
-      const ax = (w[0] * gust + flutter * w[2]) * (spec.wind ?? 1) * dt * dt, ay = (w[1] * gust) * dt * dt, az = (w[2] * gust - flutter * w[0]) * (spec.wind ?? 1) * dt * dt;
+      const k = i * 3, row = Math.floor(i / C) / Math.max(1, R - 1), flutter = Math.sin(t * 7.5 + i * 1.7) * (.35 + .9 * row);
+      const wx = w[0] * gust - air[0] * airK, wz = w[2] * gust - air[2] * airK, wl = Math.hypot(wx, wz) || 1;
+      const ax = (wx + flutter * wz / wl * .8) * (spec.wind ?? 1) * dt * dt, ay = (w[1] * gust + Math.abs(flutter) * .15 * row) * dt * dt, az = (wz - flutter * wx / wl * .8) * (spec.wind ?? 1) * dt * dt;
       const x = P[k], y = P[k + 1], z = P[k + 2];
       P[k] += (x - Q[k]) * drag + ax; P[k + 1] += (y - Q[k + 1]) * drag + g + ay; P[k + 2] += (z - Q[k + 2]) * drag + az;
       Q[k] = x; Q[k + 1] = y; Q[k + 2] = z;
@@ -677,7 +680,7 @@
       _clothV.set(c[0] - GEAR_REST[spec.bone][0], c[1] - GEAR_REST[spec.bone][1], c[2] - GEAR_REST[spec.bone][2]);
       B.Vector3.TransformCoordinatesToRef(_clothV, cloth.bone.getWorldMatrix(), _clothW); return [_clothW.x, _clothW.y, _clothW.z, _clothW.x, _clothW.y, _clothW.z, c[3] * s];
     });
-    for (let it = 0; it < 4; it++) {
+    for (let it = 0; it < (spec.iterations ?? 5); it++) {
       for (const [i, k, len0, stiff] of links) {
         const ia = i * 3, kb = k * 3, dx = P[kb] - P[ia], dy = P[kb + 1] - P[ia + 1], dz = P[kb + 2] - P[ia + 2], d = Math.hypot(dx, dy, dz) || 1e-6;
         const rest = len0 * s, diff = (d - rest) / d * .5 * stiff * (spec.stretch ?? 1);
@@ -703,6 +706,10 @@
   function updateAvatarCloth(a, dt, now) {
     if (!a.cloths?.length || !a.skin) return;
     const t = now / 1000, root = a.node.getAbsolutePosition();
+    // Body velocity (smoothed) for the relative wind on the cloth.
+    if (a.clothRoot && dt > 0) { const vx = (root.x - a.clothRoot[0]) / dt, vz = (root.z - a.clothRoot[2]) / dt, air = a.clothAir || (a.clothAir = [0, 0, 0]);
+      const ok = Math.hypot(vx, vz) < 25; air[0] += ((ok ? vx : 0) - air[0]) * .2; air[2] += ((ok ? vz : 0) - air[2]) * .2; }
+    a.clothRoot = [root.x, root.y, root.z];
     const near = Math.hypot(root.x - camera.target.x, root.z - camera.target.z) < CLOTH_NEAR;
     let colliders = null;
     for (const cloth of a.cloths) {
@@ -734,11 +741,14 @@
     const headband = () => { const m = a.skin.nodes.Head?.getChildMeshes(true).find(x => x.name === "gear Head"); return !m || m.isEnabled(); };
     clothPaper ||= clothMaterial(gearMat("talisman paper cloth", "#e8d9a8", "#2a2210"));
     // Shoulder shawl: a ring pinned round the neck that drapes over the shoulders and chest.
-    makeCloth(a, "shawl", { bone: "Chest", closed: true, pinRows: 1, bend: .5, drag: .955, pad: .014,
-      rows: clothRing(14, 4, (ang, v) => [Math.cos(ang) * (.115 + .14 * v), 1.445 - .12 * v, -.006 + Math.sin(ang) * (.088 + .07 * v)]) }, shawl, ritual);
+    makeCloth(a, "shawl", { bone: "Chest", closed: true, pinRows: 1, bend: .14, shear: .35, drag: .978, pad: .014, air: .6,
+      rows: clothRing(18, 5, (ang, v) => [Math.cos(ang) * (.115 + .15 * v), 1.445 - .13 * v, -.006 + Math.sin(ang) * (.088 + .075 * v)]) }, shawl, ritual);
     // Back cape hanging from the shoulder blades.
-    makeCloth(a, "cape", { bone: "Chest", pinRows: 1, bend: .4, wind: 1.2,
-      rows: clothGrid(5, 7, (u, v) => [-.17 + .34 * u, 1.39 - .46 * v, -.15 - .03 * v]) }, shawl, ritual);
+    // Finer grid, little bending stiffness and light damping so it folds, swings and billows.
+    makeCloth(a, "cape", { bone: "Chest", pinRows: 1, bend: .08, shear: .3, drag: .985, wind: 1.6, air: 1.1, pad: .016,
+      // Rest shape with three soft vertical pleats that deepen toward a flared hem, so it hangs in folds.
+      rows: clothGrid(9, 12, (u, v) => [(-.17 - .06 * v) + (.34 + .12 * v) * u + .012 * v * Math.sin(u * Math.PI * 6),
+        1.39 - .52 * v + .012 * v * Math.cos(u * Math.PI * 4), -.135 - .02 * v - .015 * Math.sin(Math.PI * u) - (.008 + .03 * v) * Math.sin(u * Math.PI * 6)]) }, shawl, ritual);
     // Sash knot tails at the front left of the waist.
     for (const [x, len] of [[-.075, .3], [-.045, .24]]) makeCloth(a, "sash tail", { bone: "Hips", pinRows: 1, bend: .5, wind: .8,
       rows: ribbonTail(x - .022, x + .022, .93, .125, len, 6, .02) }, clothMaterial(sash), null);
