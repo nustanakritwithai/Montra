@@ -22,11 +22,11 @@ test('reviewed style snapshot retains pinned bytes, cascade order, URLs and lega
   const baseline = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/extraction-baseline.json')));
   const manifest = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/manifest.json')));
   const bytes = checkStyles();
-  assert.equal(bytes.length, 390672);
-  assert.equal(hash(bytes), '5c00a3b8c0add5f86fad7887050bb41225eb62979670d135dc2e9a68a3035183');
+  assert.equal(bytes.length, 391011);
+  assert.equal(hash(bytes), 'a8277f372497bdbbffbf68cfe97c1d23955cf342d60a65549406d0f0b8949777');
   // Retain historical extraction evidence, pin only intentionally changed sources.
   const reviewedStyles = new Map([{"path": "hud/019-vital-orb-resources-and-chat.css", "bytes": 5832, "sha256": "71477a110f30679c2e281eb5e825ab4557d21ee02eebbb49c2a6c16b1a500b7a"}, {"path": "forge/025-artisan-crafting-and-effects.css", "bytes": 24825, "sha256": "4b9f978536a89670550965fb9a818175b742011d501d33a7a49781c1ad9ffa8e"}, {"path": "market/045-world-market.css", "bytes": 5767, "sha256": "6202004601ad13fcb19d476017e489cd971bc5ac523d9c74257aac0b43af50a0"}, {"path": "audio/044-voice-guidance.css", "bytes": 4615, "sha256": "726eb14d122c28f2a2440119b966dafcf2b2074e2766151e3f6c76382aadcad7"}, {"path": "hud/022-chat-compose-and-vitals.css", "bytes": 6469, "sha256": "bba63466dafb8c940fffdc5f8af9795a55fba1a22f5359f78ac2e1639cf231bf"}, {"path": "hud/038-map-shortcuts-and-quick-skills.css", "bytes": 9313, "sha256": "a479b5e78ae23d3656f63b3f18f28500c0dd1d84fe098390bf3f4f9d59b200e7"}].map(entry => [entry.path, entry]));
-  const addedStyles = [{"path": "inventory/046-loot-feed.css", "bytes": 2086, "sha256": "d34cce17e03c96ff0e7df9c7c48e08303ca7fefeed5ea89377bd454b19357970"}];
+  const addedStyles = [{"path": "inventory/046-loot-feed.css", "bytes": 2425, "sha256": "a984e95266bed22c735aff33e90ea027c26dd771ddaa774b2fa8338062b91126"}];
   assert.deepEqual(manifest.fragments, [...baseline.fragments.map(entry => entry.path), ...addedStyles.map(entry => entry.path)]);
   let nextLine = 1;
   for (const entry of baseline.fragments) {
