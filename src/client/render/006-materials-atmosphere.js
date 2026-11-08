@@ -227,9 +227,67 @@
   }
   // A fuller canopy cluster: one main blob with three smaller ones bulging out of its sides and top.
   function treeCluster(parts, x, y, z, r, sy, hex, topHex, rng) {
-    parts.push(treeBlob(x, y, z, r, sy, hex, topHex, rng));
+    treeFoliage(parts, x, y, z, r, sy, hex, topHex, rng);
     for (let k = 0; k < 3; k++) { const a = k * 2.1 + rng() * 1.2, d = r * (.55 + rng() * .25);
-      parts.push(treeBlob(x + Math.cos(a) * d, y + (k === 2 ? r * sy * .55 : (rng() - .3) * r * sy * .5), z + Math.sin(a) * d, r * (.55 + rng() * .15), sy * 1.05, hex, topHex, rng)); }
+      treeFoliage(parts, x + Math.cos(a) * d, y + (k === 2 ? r * sy * .55 : (rng() - .3) * r * sy * .5), z + Math.sin(a) * d, r * (.55 + rng() * .15), sy * 1.05, hex, topHex, rng); }
+  }
+  // ---- Leaf cards: canopies are sprays of real leaves instead of faceted clumps ----
+  // Each card is a quad with a painted spray of 6–9 leaves on a stem (alpha-tested, two-sided), tinted
+  // per card from the clump's dark underside to its sunlit top. Cards sit over the clump's ellipsoid,
+  // facing outward and a little upward, with a few inside so the crown is not hollow; the gaps let light
+  // and sky through. They share the GPU wind of the tree prototype (sway plus leaf flutter).
+  let foliageSink = null, foliageStyle = "general";
+  const leafCardMats = new Map();
+  function leafCardMaterial(style) {
+    if (leafCardMats.has(style)) return leafCardMats.get(style);
+    const shapes = { broad: [9, .3, .2, .9], fine: [14, .14, .07, 1.25], long: [7, .36, .06, 1.05], general: [10, .22, .11, 1] }[style] || [10, .22, .11, 1];
+    const [count, len, wid, curve] = shapes;
+    const tex = paintTexture("leaf card " + style, 256, (c, S) => {
+      c.clearRect(0, 0, S, S);
+      // Stem from the bottom centre, leaves alternating along it and fanning at the tip.
+      c.strokeStyle = "rgba(90,70,50,1)"; c.lineWidth = 3; c.beginPath(); c.moveTo(S * .5, S); c.quadraticCurveTo(S * .45, S * .55, S * .52, S * .12); c.stroke();
+      for (let i = 0; i < count; i++) {
+        const t = .15 + i / count * .8, sx = S * (.5 - .03 * Math.sin(t * 3)), sy = S * (1 - t * .9), side = i % 2 ? 1 : -1;
+        const ang = -Math.PI / 2 + side * (.9 - t * .5) * curve + (noise(i, 931) - .5) * .4, L = S * len * (.8 + noise(i, 932) * .4), W = S * wid * (.8 + noise(i, 933) * .4);
+        c.save(); c.translate(sx, sy); c.rotate(ang);
+        const g = c.createLinearGradient(0, -W, 0, W); g.addColorStop(0, "#c9d6b8"); g.addColorStop(.5, "#f4f8ec"); g.addColorStop(1, "#aebda0");
+        c.fillStyle = g; c.beginPath(); c.moveTo(0, 0);
+        if (style === "broad") { c.bezierCurveTo(L * .2, -W * 1.2, L * .75, -W * .9, L, 0); c.bezierCurveTo(L * .75, W * .9, L * .2, W * 1.2, 0, 0); }
+        else { c.quadraticCurveTo(L * .45, -W, L, 0); c.quadraticCurveTo(L * .45, W, 0, 0); }
+        c.fill(); c.strokeStyle = "rgba(120,140,100,.8)"; c.lineWidth = 1.2; c.beginPath(); c.moveTo(0, 0); c.lineTo(L * .95, 0); c.stroke();
+        c.restore();
+      }
+    });
+    tex.hasAlpha = true;
+    const m = new B.StandardMaterial("leaf cards " + style, scene);
+    m.diffuseTexture = tex; m.useAlphaFromDiffuseTexture = true; m.transparencyMode = B.Material.MATERIAL_ALPHATEST; m.alphaCutOff = .45;
+    m.backFaceCulling = false; m.twoSidedLighting = true; m.diffuseColor = new B.Color3(.62, .66, .6);
+    m.specularColor = new B.Color3(.05, .06, .04); m.emissiveColor = new B.Color3(.02, .03, .02);
+    if (typeof TreeWindPlugin === "function") new TreeWindPlugin(m, true);
+    leafCardMats.set(style, m); return m;
+  }
+  function treeFoliage(parts, x, y, z, r, sy, hex, topHex, rng) {
+    if (!foliageSink) { parts.push(treeBlob(x, y, z, r, sy, hex, topHex, rng)); return; }
+    const g = foliageSink, lo = treeRgb(hex), hi = treeRgb(topHex || hex), n = Math.max(7, Math.min(70, Math.round(15 * r * r * (.6 + sy * .5))));
+    for (let k = 0; k < n; k++) {
+      // Point on (or, for one card in five, inside) the clump, biased to the upper half.
+      const u = rng() * 2 - 1, phi = rng() * Math.PI * 2, uy = Math.min(1, u * .85 + .2), rr = Math.sqrt(Math.max(0, 1 - uy * uy));
+      const dir = [Math.cos(phi) * rr, uy, Math.sin(phi) * rr], depth = k % 5 === 0 ? .35 + rng() * .3 : .78 + rng() * .25;
+      const cx = x + dir[0] * r * depth, cy = y + dir[1] * r * sy * depth, cz = z + dir[2] * r * depth;
+      let nx = dir[0], ny = dir[1] + .55, nz = dir[2]; const nl = Math.hypot(nx, ny, nz); nx /= nl; ny /= nl; nz /= nl;
+      // Card axes: "up" along the leaf spray, "across" perpendicular, both in the card plane.
+      let ax = -nz, az = nx, ay = 0; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
+      const bx = ny * az - nz * ay, by = nz * ax - nx * az, bz = nx * ay - ny * ax, roll = rng() * Math.PI * 2, c0 = Math.cos(roll), s0 = Math.sin(roll);
+      const ux = ax * c0 + bx * s0, uy2 = ay * c0 + by * s0, uz = az * c0 + bz * s0, vx = bx * c0 - ax * s0, vy = by * c0 - ay * s0, vz = bz * c0 - az * s0;
+      const size = r * (.62 + rng() * .32), h = size / 2, t = Math.min(1, Math.max(0, .5 + dir[1] * .5 + (rng() - .5) * .25)), j = .85 + rng() * .3;
+      const col = [0, 1, 2].map(i => Math.min(1, (lo[i] + (hi[i] - lo[i]) * t) * j));
+      const base = g.p.length / 3, flip = rng() < .5;
+      for (const [a, b, uu, vv] of [[-1, -1, 0, 0], [1, -1, 1, 0], [1, 1, 1, 1], [-1, 1, 0, 1]]) {
+        g.p.push(cx + (vx * a + ux * b) * h, cy + (vy * a + uy2 * b) * h, cz + (vz * a + uz * b) * h);
+        g.uv.push(flip ? 1 - uu : uu, vv); g.c.push(col[0], col[1], col[2], 1);
+      }
+      g.i.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
   }
   function treeCone(x, y, z, h, rb, rt, hex, tess = 5, rotX = 0, rotZ = 0) {
     const m = B.MeshBuilder.CreateCylinder("tree detail", { height: h, diameterBottom: rb * 2, diameterTop: rt * 2, tessellation: tess }, scene);
@@ -323,7 +381,7 @@
         parts.push(treeCone(p[0] + Math.cos(a) * r, p[1] + (rng() - .5) * .5, p[2] + Math.sin(a) * r, .26, .07, 0, "#5a5048", 4, Math.sin(a) * 1.57, -Math.cos(a) * 1.57)); }
       for (const [lvl, len] of [[3, 2.4], [4.4, 1.9], [5.6, 1.3]]) for (let k = 0; k < 4; k++) {
         const a = k * 1.57 + lvl, b = branchPath([trunk[Math.round(lvl / 6.2 * 8)][0], lvl, trunk[Math.round(lvl / 6.2 * 8)][2]], a, len, .15, -.05); parts.push(treeTube(b, .1, .04, bark, 4));
-        parts.push(treeBlob(b[4][0], b[4][1] + .15, b[4][2], .5, .6, "#4f6638", "#7f9a52", rng));
+        treeFoliage(parts, b[4][0], b[4][1] + .15, b[4][2], .55, .6, "#4f6638", "#7f9a52", rng);
         for (let f = 0; f < 3; f++) parts.push(treeBlob(b[4][0] + (rng() - .5) * .7, b[4][1] + .35 + rng() * .2, b[4][2] + (rng() - .5) * .7, .16, 1, "#c0261e", "#ff6a3a", rng, 0));
       }
     },
@@ -349,7 +407,7 @@
     phai(rng, parts) {
       for (let k = 0; k < 13; k++) { const a = rng() * Math.PI * 2, d = rng() * .7, sx = Math.cos(a) * d, sz = Math.sin(a) * d, h = 5 + rng() * 3;
         const cane = trunkPath(h, 1 + rng() * 1.4, .05, rng, 6, sx, sz); parts.push(treeTube(cane, .07, .04, k % 3 ? "#8f9a3e" : "#a7a24a", 4, .2));
-        for (let j = 3; j <= 6; j++) parts.push(treeBlob(cane[j][0], cane[j][1], cane[j][2], .35 + j * .05, .5, "#55803a", "#9cc35c", rng, 0)); }
+        for (let j = 3; j <= 6; j++) treeFoliage(parts, cane[j][0], cane[j][1], cane[j][2], .4 + j * .05, .6, "#55803a", "#9cc35c", rng); }
     },
     // ประดู่: a sturdy timber tree with a round, dense crown (the gatherable wood tree).
     pradu(rng, parts) {
@@ -364,8 +422,19 @@
   function thaiTreeMaster(species, variant = 0) {
     const key = species + ":" + variant; if (thaiTreeMasters.has(key)) return thaiTreeMasters.get(key);
     const parts = [], build = TREE_SPECIES[species] || TREE_SPECIES.pradu;
+    foliageSink = { p: [], uv: [], c: [], i: [] };
+    foliageStyle = { pho: "broad", sai: "broad", makham: "fine", pradu: "fine", phai: "long" }[species] || "general";
     build(treeRng(1000 + variant * 7919 + species.length * 131 + species.charCodeAt(0)), parts);
+    const sink = foliageSink; foliageSink = null;
     const mesh = B.Mesh.MergeMeshes(parts, true, true, undefined, false, false);
+    if (sink.i.length) {
+      const leaves = new B.Mesh("thai tree leaves " + key, scene), vd = new B.VertexData(), normals = [];
+      B.VertexData.ComputeNormals(sink.p, sink.i, normals);
+      Object.assign(vd, { positions: sink.p, indices: sink.i, uvs: sink.uv, colors: sink.c, normals }); vd.applyToMesh(leaves);
+      leaves.material = leafCardMaterial(foliageStyle); leaves.isPickable = false; leaves.isVisible = false;
+      leaves.metadata = { thaiTree: species, thaiTreeMaster: true }; leaves.parent = mesh;
+      mesh.treeLeaves = leaves;
+    }
     // Masters stay enabled (instances need an enabled source) but invisible, and are excluded from the village show/hide list.
     mesh.name = "thai tree " + key; mesh.material = thaiTreeMaterial(); mesh.isPickable = false; mesh.isVisible = false; mesh.position.y = -500;
     mesh.metadata = { thaiTree: species, thaiTreeMaster: true };
@@ -376,6 +445,13 @@
     const master = thaiTreeMaster(species, opts.variant ?? (Math.abs(Math.round(x * 3 + z * 7)) % 3));
     const tree = opts.clone ? master.clone("thai tree " + species, null, true) : master.createInstance("thai tree " + species);
     if (opts.clone) { tree.parent = null; tree.material = thaiTreeMaterial(); tree.isVisible = true; tree.metadata = { thaiTree: species }; }
+    if (master.treeLeaves) {
+      // Leaves ride on the tree (instance or clone) as a child, so moving, scaling or fading the tree carries them.
+      const leaves = opts.clone ? master.treeLeaves.clone("thai tree leaves " + species, null, true) : master.treeLeaves.createInstance("thai tree leaves " + species);
+      leaves.parent = tree; leaves.position.setAll(0); leaves.rotation.setAll(0); leaves.scaling.setAll(1); leaves.isPickable = false;
+      if (opts.clone) { leaves.isVisible = true; leaves.metadata = { thaiTree: species }; }
+      leaves.setEnabled(true);
+    }
     tree.setEnabled(true);
     tree.position.set(x, y, z); tree.rotation.y = opts.rot ?? noise(Math.round(x * 13 + z), 31) * Math.PI * 2;
     tree.scaling.setAll(opts.scale ?? 1); tree.isPickable = false;
@@ -508,6 +584,32 @@
     rock.scaling.setAll(opts.scale ?? 1); rock.isPickable = false;
     if (opts.parent) rock.parent = opts.parent;
     return rock;
+  }
+
+  // ---- Leaf bushes: low clumps of leaf cards (instanced) for undergrowth, tree-foot bushes and herbs ----
+  const bushMasters = new Map();
+  function bushMaster(variant = 0, style = "general") {
+    const key = style + ":" + variant; if (bushMasters.has(key)) return bushMasters.get(key);
+    const rng = treeRng(5100 + variant * 313 + style.length * 17), sinkBefore = foliageSink;
+    foliageSink = { p: [], uv: [], c: [], i: [] };
+    const colors = style === "herb" ? ["#3f6a2e", "#86b85a"] : variant % 2 ? ["#20402a", "#4f7a40"] : ["#2a4a2c", "#5f8a46"];
+    treeFoliage([], 0, .3, 0, .62, .6, colors[0], colors[1], rng);
+    for (let k = 0; k < 2; k++) treeFoliage([], (rng() - .5) * .6, .25, (rng() - .5) * .6, .38, .6, colors[0], colors[1], rng);
+    const sink = foliageSink; foliageSink = sinkBefore;
+    const m = new B.Mesh("leaf bush " + key, scene), vd = new B.VertexData(), normals = [];
+    B.VertexData.ComputeNormals(sink.p, sink.i, normals);
+    Object.assign(vd, { positions: sink.p, indices: sink.i, uvs: sink.uv, colors: sink.c, normals }); vd.applyToMesh(m);
+    m.material = leafCardMaterial(style === "herb" ? "broad" : "general"); m.isPickable = false; m.isVisible = false; m.position.y = -500;
+    m.metadata = { thaiTreeMaster: true };
+    bushMasters.set(key, m); return m;
+  }
+  // A bush of about 1.2 m across at scale 1 (sit it on the ground: y is its base).
+  function placeLeafBush(x, y, z, scale = 1, opts = {}) {
+    const b = bushMaster(opts.variant ?? (Math.abs(Math.round(x * 7 + z * 3)) % 3), opts.style).createInstance("leaf bush");
+    b.setEnabled(true); b.isPickable = false; b.position.set(x, y, z); b.rotation.y = noise(Math.round(x * 11 + z), 57) * Math.PI * 2;
+    b.scaling.set(scale, scale * (opts.flat ?? 1), scale);
+    if (opts.parent) b.parent = opts.parent;
+    return b;
   }
 
   // ---- Ground surface library (G01–G16): seamless painted textures with matching normal maps ----

@@ -96,8 +96,8 @@
       if(!/^(grove-|tree-|north-grove)/.test(o.id))continue;
       for(let k=0;k<5;k++){
         const a=k*1.26+o.x,r=o.radius+.6+noise(k,o.z)*1.2,size=.8+noise(k,o.x)*.9;
-        const bush=place(B.MeshBuilder.CreateSphere("bush",{diameter:size*1.6,segments:4},scene),o.x+Math.cos(a)*r,size*.3,o.z+Math.sin(a)*r,k%2?bushDark:bushMid);
-        bush.scaling.y=.55;
+        const bx=o.x+Math.cos(a)*r,bz=o.z+Math.sin(a)*r;
+        placeLeafBush(bx,map.terrain?terrainHeight(map.terrain,bx,bz):0,bz,size*1.25,{parent:expansionRoot,variant:k%3,flat:.8});
       }
     }
     // Stones line the trail verges.
@@ -130,7 +130,7 @@
     for(let i=0;i<260;i++){
       const x=bounds.minX+2+noise(i,181)*(spanX-4),z=bounds.minZ+2+noise(i,182)*(spanZ-4);
       if(!clearOfProps(x,z))continue;
-      if(i%3===0){const size=.7+noise(i,183)*.7;place(B.MeshBuilder.CreateSphere("shrub",{diameter:size*1.5,segments:4},scene),x,size*.22,z,i%2?bushDark:bushMid).scaling.y=.45;}
+      if(i%3===0){const size=.7+noise(i,183)*.7;placeLeafBush(x,map.terrain?terrainHeight(map.terrain,x,z):0,z,size*1.1,{parent:expansionRoot,variant:i%3,flat:.65});}
       else for(let k=0;k<4;k++)column(x+(noise(i*4+k,184)-.5)*1.4,.06,z+(noise(i*4+k,185)-.5)*1.4,.05,.24,.18,i%2?wildflower:wildflowerGold,6);
     }
     // Roadside spirit houses (san ta yai) with candles at trail junctions.
@@ -165,6 +165,7 @@
       const x=p.x-hero.x,y=p.y-hero.y-1,z=p.z-hero.z,t=(x*dx+y*dy+z*dz)/length;
       const blocks=t>0&&t<1&&Math.hypot(x-t*dx,y-t*dy,z-t*dz)<sphere.radiusWorld;
       crown.visibility=blocks ? .18 : 1;
+      for(const leaves of crown.getChildMeshes(true))leaves.visibility=crown.visibility;
     }
   }
   function buildTemple(map) {
