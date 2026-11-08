@@ -75,9 +75,11 @@
   flex-shrink: 0;
 }
 .skill-modal-badge {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
+  /* Status belongs beside the name, never over the skill artwork. */
+  display: inline-block;
+  align-self: flex-start;
+  white-space: nowrap;
+  line-height: 1.35;
   background: #f2ca83;
   color: #1a1508;
   font-size: 10px;

@@ -2726,9 +2726,11 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   flex-shrink: 0;
 }
 .skill-modal-badge {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
+  /* Status belongs beside the name, never over the skill artwork. */
+  display: inline-block;
+  align-self: flex-start;
+  white-space: nowrap;
+  line-height: 1.35;
   background: #f2ca83;
   color: #1a1508;
   font-size: 10px;
@@ -3514,9 +3516,11 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   flex-shrink: 0;
 }
 .skill-modal-badge {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
+  /* Status belongs beside the name, never over the skill artwork. */
+  display: inline-block;
+  align-self: flex-start;
+  white-space: nowrap;
+  line-height: 1.35;
   background: #f2ca83;
   color: #1a1508;
   font-size: 10px;
@@ -4531,6 +4535,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="phuttha_core"],
+.skill-book-icon[data-skill-glyph="phuttha_core"],
 .skill-modal-glyph[data-skill-glyph="phuttha_core"],
 .glyph[data-skill-glyph="phuttha_core"],
 .field-slot[data-skill-id="phuttha_core"] .glyph {
@@ -4538,6 +4543,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="sritra_core"],
+.skill-book-icon[data-skill-glyph="sritra_core"],
 .skill-modal-glyph[data-skill-glyph="sritra_core"],
 .glyph[data-skill-glyph="sritra_core"],
 .field-slot[data-skill-id="sritra_core"] .glyph {
@@ -4545,6 +4551,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="atamat_core"],
+.skill-book-icon[data-skill-glyph="atamat_core"],
 .skill-modal-glyph[data-skill-glyph="atamat_core"],
 .glyph[data-skill-glyph="atamat_core"],
 .field-slot[data-skill-id="atamat_core"] .glyph {
@@ -4552,6 +4559,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="chumphon_core"],
+.skill-book-icon[data-skill-glyph="chumphon_core"],
 .skill-modal-glyph[data-skill-glyph="chumphon_core"],
 .glyph[data-skill-glyph="chumphon_core"],
 .field-slot[data-skill-id="chumphon_core"] .glyph {
@@ -4559,6 +4567,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="class_sword"],
+.skill-book-icon[data-skill-glyph="class_sword"],
 .skill-modal-glyph[data-skill-glyph="class_sword"],
 .glyph[data-skill-glyph="class_sword"],
 .field-slot[data-skill-id="class_sword"] .glyph,
@@ -4567,10 +4576,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="muay_chaiya"],
+.skill-book-icon[data-skill-glyph="muay_chaiya"],
 .skill-modal-glyph[data-skill-glyph="muay_chaiya"],
 .glyph[data-skill-glyph="muay_chaiya"],
 .field-slot[data-skill-id="muay_chaiya"] .glyph,
 .kg-glyph[data-skill-glyph="chaiya"],
+.skill-book-icon[data-skill-glyph="chaiya"],
 .skill-modal-glyph[data-skill-glyph="chaiya"],
 .glyph[data-skill-glyph="chaiya"],
 .field-slot[data-skill-id="chaiya"] .glyph {
@@ -4578,10 +4589,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="muay_korat"],
+.skill-book-icon[data-skill-glyph="muay_korat"],
 .skill-modal-glyph[data-skill-glyph="muay_korat"],
 .glyph[data-skill-glyph="muay_korat"],
 .field-slot[data-skill-id="muay_korat"] .glyph,
 .kg-glyph[data-skill-glyph="korat"],
+.skill-book-icon[data-skill-glyph="korat"],
 .skill-modal-glyph[data-skill-glyph="korat"],
 .glyph[data-skill-glyph="korat"],
 .field-slot[data-skill-id="korat"] .glyph {
@@ -4589,10 +4602,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="muay_lopburi"],
+.skill-book-icon[data-skill-glyph="muay_lopburi"],
 .skill-modal-glyph[data-skill-glyph="muay_lopburi"],
 .glyph[data-skill-glyph="muay_lopburi"],
 .field-slot[data-skill-id="muay_lopburi"] .glyph,
 .kg-glyph[data-skill-glyph="lopburi"],
+.skill-book-icon[data-skill-glyph="lopburi"],
 .skill-modal-glyph[data-skill-glyph="lopburi"],
 .glyph[data-skill-glyph="lopburi"],
 .field-slot[data-skill-id="lopburi"] .glyph {
@@ -4600,10 +4615,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="muay_thasao"],
+.skill-book-icon[data-skill-glyph="muay_thasao"],
 .skill-modal-glyph[data-skill-glyph="muay_thasao"],
 .glyph[data-skill-glyph="muay_thasao"],
 .field-slot[data-skill-id="muay_thasao"] .glyph,
 .kg-glyph[data-skill-glyph="thasao"],
+.skill-book-icon[data-skill-glyph="thasao"],
 .skill-modal-glyph[data-skill-glyph="thasao"],
 .glyph[data-skill-glyph="thasao"],
 .field-slot[data-skill-id="thasao"] .glyph {
@@ -4611,6 +4628,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_mark"],
+.skill-book-icon[data-skill-glyph="seer_mark"],
 .skill-modal-glyph[data-skill-glyph="seer_mark"],
 .glyph[data-skill-glyph="seer_mark"],
 .field-slot[data-skill-id="seer_mark"] .glyph {
@@ -4618,10 +4636,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_rice"],
+.skill-book-icon[data-skill-glyph="seer_rice"],
 .skill-modal-glyph[data-skill-glyph="seer_rice"],
 .glyph[data-skill-glyph="seer_rice"],
 .field-slot[data-skill-id="seer_rice"] .glyph,
 .kg-glyph[data-skill-glyph="seer_scatter"],
+.skill-book-icon[data-skill-glyph="seer_scatter"],
 .skill-modal-glyph[data-skill-glyph="seer_scatter"],
 .glyph[data-skill-glyph="seer_scatter"],
 .field-slot[data-skill-id="seer_scatter"] .glyph {
@@ -4629,6 +4649,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_buffalo"],
+.skill-book-icon[data-skill-glyph="seer_buffalo"],
 .skill-modal-glyph[data-skill-glyph="seer_buffalo"],
 .glyph[data-skill-glyph="seer_buffalo"],
 .field-slot[data-skill-id="seer_buffalo"] .glyph {
@@ -4636,6 +4657,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_curse"],
+.skill-book-icon[data-skill-glyph="seer_curse"],
 .skill-modal-glyph[data-skill-glyph="seer_curse"],
 .glyph[data-skill-glyph="seer_curse"],
 .field-slot[data-skill-id="seer_curse"] .glyph {
@@ -4643,6 +4665,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_binding"],
+.skill-book-icon[data-skill-glyph="seer_binding"],
 .skill-modal-glyph[data-skill-glyph="seer_binding"],
 .glyph[data-skill-glyph="seer_binding"],
 .field-slot[data-skill-id="seer_binding"] .glyph {
@@ -4650,6 +4673,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_burst"],
+.skill-book-icon[data-skill-glyph="seer_burst"],
 .skill-modal-glyph[data-skill-glyph="seer_burst"],
 .glyph[data-skill-glyph="seer_burst"],
 .field-slot[data-skill-id="seer_burst"] .glyph {
@@ -4657,6 +4681,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_pot"],
+.skill-book-icon[data-skill-glyph="seer_pot"],
 .skill-modal-glyph[data-skill-glyph="seer_pot"],
 .glyph[data-skill-glyph="seer_pot"],
 .field-slot[data-skill-id="seer_pot"] .glyph {
@@ -4664,6 +4689,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .kg-glyph[data-skill-glyph="seer_poison"],
+.skill-book-icon[data-skill-glyph="seer_poison"],
 .skill-modal-glyph[data-skill-glyph="seer_poison"],
 .glyph[data-skill-glyph="seer_poison"],
 .field-slot[data-skill-id="seer_poison"] .glyph {
