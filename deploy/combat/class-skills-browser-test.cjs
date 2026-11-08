@@ -203,6 +203,18 @@ async function radialCases(page, check) {
 }
 async function cases(page, check) {
   await radialCases(page, check);
+  // Long localized copy must scroll inside the body without hiding rank or actions.
+  await page.evaluate(()=>fixture.snapshot('blade'));await page.locator('#quickSkills').click();
+  await page.locator('[data-skill-id="blade_heavy"]').click();
+  await page.evaluate(()=>{const desc=document.getElementById('skillModalDesc');desc.textContent=desc.textContent.repeat(8);});
+  const scroll=await page.locator('#skillModalBody').evaluate(e=>{e.scrollTop=e.scrollHeight;return {top:e.scrollTop,height:e.clientHeight,full:e.scrollHeight};});
+  assert(scroll.top>0 && scroll.height<scroll.full,'long description has its own scroll area');
+  await assertModalArtwork(page);
+  for(const selector of ['#skillModalClose','#skillModalUpgradeBtn','#skillModalCloseBtn']) {
+    const box=await page.locator(selector).boundingBox(),viewport=page.viewportSize();
+    assert(box.x>=0 && box.y>=0 && box.x+box.width<=viewport.width && box.y+box.height<=viewport.height,selector+' remains in viewport while body scrolls');
+  }
+  await check('modal-long-copy-scroll');await page.locator('#skillModalCloseBtn').click();await page.locator('#drawerClose').click();
   for (const path of Object.keys(ids)) {
     await page.evaluate(path => fixture.snapshot(path), path);
     // Leave every menu entry stale-visible, with sword first: the original bug.

@@ -45,6 +45,9 @@ full touch targets and the center remain separate; browser assertions cover all
 three instead of checking only visible artwork. Actual Thai catalog names are used in browser tests. All nodes
 retain the existing artwork; the class glyph changes with the current class.
 The center-to-orb geometry is measured after rendering and on container resize.
+The detail dialog keeps its header and actions visible while long localized
+descriptions scroll within the body. This covers the taller Thai fallback font
+used by hosted Chromium, which exposed a whole-dialog scrolling issue.
 One owned ResizeObserver replaces the previous permanent window listener and
 multiple timers added on each render. Drawer close/navigation cancels the frame
 and disconnects the observer. Reduced motion disables graph motion.
@@ -62,7 +65,7 @@ Local Node 22.23.4 checks:
 - Existing isolated real Colyseus six-class integration passes catalog membership,
   foreign cast/upgrade and forged-rank rejection, upgrade/reconnect persistence,
   fixed core slots, reset and successful cast for all six classes.
-- Chromium: 135 recorded cases at 1366, 390 and 320 px, no page errors or external
+- Chromium: 138 recorded cases at 1366, 390 and 320 px, no page errors or external
   requests. Covers all six class graphs and 24 skill details, current/next
   progression, rank 0/1/8, exact single upgrade/reset commands, reset cancel,
   level/point gates, stale class handlers, keyboard activation, repeated opens,

@@ -71,5 +71,7 @@ status badges at desktop and mobile widths.
 ## Radial graph restoration
 
 The reviewed snapshot also includes the four-direction core graph's narrow-screen
-button layout and reduced-motion rules in `skills/033-radial-graph.css`. See
+button layout and reduced-motion rules in `skills/033-radial-graph.css`. The
+repeated detail-modal rules in `skills/026` and `skills/029` now keep header and
+actions visible while long localized copy scrolls within the body. See
 `docs/RADIAL-SKILL-GRAPH-20261108.md` for historical references and verification.

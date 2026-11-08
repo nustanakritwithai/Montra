@@ -2690,7 +2690,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto;
+  overflow: hidden;
   box-sizing: border-box;
   animation: fadeIn 0.18s ease-out both;
 }
@@ -2701,6 +2701,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .skill-modal-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2709,6 +2710,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   padding-bottom: 10px;
 }
 .skill-modal-title {
+  min-width: 0;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -2741,11 +2744,13 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   border: 1px solid #fff;
 }
 .skill-modal-naming {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .skill-modal-name {
+  overflow-wrap: anywhere;
   font-size: 16px;
   font-weight: 800;
   color: #f6eedb;
@@ -2780,6 +2785,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .skill-modal-body {
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2885,6 +2892,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .skill-modal-actions {
+  flex-shrink: 0;
   display: flex;
   gap: 8px;
   margin-top: 4px;
@@ -3480,7 +3488,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto;
+  overflow: hidden;
   box-sizing: border-box;
   animation: fadeIn 0.18s ease-out both;
 }
@@ -3491,6 +3499,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .skill-modal-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3499,6 +3508,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   padding-bottom: 10px;
 }
 .skill-modal-title {
+  min-width: 0;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -3531,11 +3542,13 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   border: 1px solid #fff;
 }
 .skill-modal-naming {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .skill-modal-name {
+  overflow-wrap: anywhere;
   font-size: 16px;
   font-weight: 800;
   color: #f6eedb;
@@ -3570,6 +3583,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .skill-modal-body {
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -3675,6 +3690,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 .skill-modal-actions {
+  flex-shrink: 0;
   display: flex;
   gap: 8px;
   margin-top: 4px;
