@@ -204,6 +204,9 @@ jobs:
           node --check deploy/combat/occult-integration.mjs
           node --check deploy/combat/occult-depth-integration.mjs
 
+      - name: Test committed inventory pickup display contract
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs scripts/loot-feed-server-contract.mjs
+
       - name: Test harvest sites and shared world regeneration
         working-directory: combat-verify
         env:

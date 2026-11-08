@@ -47,6 +47,7 @@
     "icons/042-sentinel-artwork.css",
     "combat/043-target-combo-and-boss.css",
     "audio/044-voice-guidance.css",
-    "market/045-world-market.css"
+    "market/045-world-market.css",
+    "inventory/046-loot-feed.css"
   ]
 }

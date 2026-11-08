@@ -64,6 +64,7 @@ function fixture(){
   ctx.room={state:{economyAvailable:true,craftRecipe:JSON.stringify(shrine)},send:(command,payload)=>wire.push({command,payload:plain(payload)})};
   ctx.joined=ctx.room;ctx.joined.onMessage=(name,handler)=>{callbacks[name]=handler;};
   vm.createContext(ctx);
+  vm.runInContext(slice('  let lootInventoryCounts =', '  let demoWeaponSlot ='),ctx);
   const run=code=>vm.runInContext(code,ctx);
   run(slice('  const gearSymbols=','  let inspectingGear=')+
     slice('  function bagMeta(','  function wornGearAt(')+
