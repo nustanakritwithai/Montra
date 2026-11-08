@@ -219,6 +219,131 @@
       skillGraphKey = ""; const body = $(SKILL_BOOKS[kind][0]); if (body) body.innerHTML = ""; SKILL_BOOKS[kind][1]();
     });
   }
+  // Core-book adapter for the original e207c0b / 9fb515f four-direction graph.
+  // Lines mean class membership, not prerequisites: all four core skills are fixed slots.
+  const CORE_GRAPH_IDS = {
+    phutthaisawan: ["phuttha_core", "sritra_core", "atamat_core", "chumphon_core"],
+    muay_boran: ["chaiya", "korat", "lopburi", "thasao"],
+    blade: ["blade_vanish", "blade_heavy", "blade_withdraw", "blade_fury"],
+    sentinel: ["shock", "bulwark", "riposte", "protect"],
+    seer: ["seer_pot", "seer_binding", "seer_poison", "seer_buffalo"],
+    mender: ["mender_core_heal", "mender_core_circle", "mender_core_ward", "mender_core_cleanse"]
+  };
+  const CORE_GRAPH_RESET_IDS = { phutthaisawan: "resetSwordCore", muay_boran: "resetMuayCore", blade: "resetBladeCore", sentinel: "resetSentinelCore", seer: "resetSeerCore", mender: "resetMenderCore" };
+  function coreSkillGraphData(expectedPath) {
+    const me = mode === "demo" ? swordData()?.me : ownServerCharacter();
+    const path = mode === "demo" ? "phutthaisawan" : me?.pathId;
+    if (!me || (expectedPath && path !== expectedPath) || !CORE_GRAPH_IDS[path] || (mode !== "demo" && (mode !== "live" || !room))) return null;
+    let book, catalog;
+    if (path === "phutthaisawan") { const data = swordData(); book = data?.tree; catalog = data?.catalog; }
+    else if (path === "muay_boran") { const data = muayBookData(); book = data?.book; catalog = data?.catalog; }
+    else {
+      const data = path === "blade" ? bladeBookState : path === "sentinel" ? sentinelBookState : occultBookState;
+      if ((path === "seer" || path === "mender") && data?.path !== path) return null;
+      book = data?.book; catalog = data;
+    }
+    const ids = CORE_GRAPH_IDS[path];
+    if (!book || !catalog?.core || ids.some(id => !catalog.core[id]) ||
+        !Array.isArray(catalog.coreLevels) || !catalog.coreLevels.length || !Array.isArray(catalog.corePointLevels)) return null;
+    const ranks = (path === "mender" ? book.menderCoreRanks : book.coreRanks) || {};
+    const level = skillLearningLevel(me), levels = catalog.coreLevels;
+    const points = catalog.corePointLevels.filter(lv => level >= lv).length;
+    const spent = Object.values(ranks).reduce((sum, rank) => sum + Number(rank || 0), 0);
+    return { me, path, catalog, ranks, ids, levels, level, points, spent, available: Math.max(0, points - spent),
+      manaPerRank: path === "muay_boran" ? Number(catalog.coreManaPerRank || 0) : 1,
+      identity: SG_CLASS[path], owner: classSkillBookIdentity() };
+  }
+  function describeCoreSkill(path, catalog, id, rank) {
+    const fmt = n => String(Math.round(n * 100) / 100);
+    if (path === "sentinel") {
+      const p=catalog.coreProgress?.[rank]?.[id];if(!p)return "";
+      if(id==="shock")return "ระยะ "+fmt(p.range)+" · สตันมอน "+fmt(p.monsterStunMs/1000)+" วิ · สูงสุด 5 เป้าหมาย";
+      if(id==="bulwark")return "เพิ่มป้องกัน "+Math.round(p.defense*100)+"% · นาน "+fmt(p.durationMs/1000)+" วิ";
+      if(id==="riposte")return "ตั้งรับ "+fmt(p.durationMs/1000)+" วิ · ลดดาเมจ "+Math.round((1-p.damageFactor)*100)+"% · สวนมอน "+Math.round(p.counterPower*100)+"% · สวนซ้ำทุก "+fmt(p.counterIntervalMs/1000)+" วิ";
+      return "รับแทน 30% · นาน "+fmt(p.durationMs/1000)+" วิ · ท้าทายมอนระยะ "+fmt(p.tauntRange)+" สูงสุด 3 ตัว นาน "+fmt(p.tauntMs/1000)+" วิ";
+    }
+    if (path === "blade") {const p=catalog.coreProgress?.[rank]?.[id];if(!p)return "";
+      if(id==="blade_vanish")return "หายตัวทันที นาน "+fmt(p.durationMs/1000)+" วิ";
+      if(id==="blade_heavy")return "พลังโจมตีมอนสเตอร์ "+fmt(p.power*100)+"% · PvP "+fmt(p.pvpPower*100)+"% ก่อนปรับสมดุล · ระยะ "+fmt(p.range);
+      if(id==="blade_withdraw")return "พลังโจมตีมอนสเตอร์ "+fmt(p.power*100)+"% · PvP "+fmt(p.pvpPower*100)+"% ก่อนปรับสมดุล · ถอย "+fmt(p.distance)+" หน่วย";
+      return "โจมตี +"+fmt(p.bonus*100)+"% นาน "+fmt(p.durationMs/1000)+" วิ";
+    }
+    if (path === "seer") {
+      const p=catalog.coreProgress?.[rank]?.[id];if(!p)return "";
+      if(id==="seer_pot")return "ผีโจมตีมอน "+Math.round(p.pvePower*100)+"% · ผี 1 ตัวต่อผู้เล่น";
+      if(id==="seer_binding")return "ระยะ "+fmt(p.range)+" · สะกดมอนทั่วไปจนคลาย · พิษขณะสะกดเพิ่ม "+fmt(p.poisonBonus*100)+"% ต่อครั้ง";
+      if(id==="seer_poison")return "ระยะ "+fmt(p.range)+" · มอนเสียเลือด "+fmt(p.pveFraction*100)+"% ทุก "+fmt(p.intervalMs/1000)+" วิ จนเหลือ 1 HP";
+      return "ระยะมอน "+fmt(p.range)+" · พลัง "+Math.round(p.power*100)+"% · ร่าย "+fmt(p.castMs/1000)+" วิ";
+    }
+    if (path === "mender") {
+      const p=catalog.coreProgress?.[rank]?.[id];if(!p)return "";
+      if(id==="mender_core_heal")return "ล้างพิษ คำสาป และสถานะหยุด · ฟื้น "+fmt(p.tickFraction*100)+"% HP สูงสุดทุก "+fmt(p.intervalMs/1000)+" วิ นาน "+fmt(p.durationMs/1000)+" วิ · ระยะ "+fmt(p.range);
+      if(id==="mender_core_circle")return "ฟื้น "+fmt(p.fraction*100)+"% HP สูงสุดทันทีครั้งเดียว · ระยะ "+fmt(p.range);
+      if(id==="mender_core_ward")return "ป้องกันการโจมตี 100% · นาน "+fmt(p.durationMs/1000)+" วิ · รัศมี "+fmt(p.range);
+      return "เพิ่ม HP มานา กำลังสูงสุดและค่าต่อสู้ "+fmt(p.bonus*100)+"% · นาน "+fmt(p.durationMs/1000)+" วิ · ระยะ "+fmt(p.range);
+    }
+    if (path === "muay_boran") {
+      const p=catalog.coreProgress?.[rank]?.[id];
+      if(!p)return "";
+      if(id==="chaiya")return "ตั้งรับ "+fmt(p.durationMs/1000)+" วิ · ลดดาเมจ "+Math.round((1-p.damageFactor)*100)+"% · สวนมอน "+Math.round(p.counterPower*100)+"% · สวนซ้ำทุก "+fmt(p.counterIntervalMs/1000)+" วิ";
+      if(id==="korat")return "หมัดมอน "+[.42,.53,p.finalPower].map(n=>Math.round(n*p.scale*100)+"%").join(" + ");
+      if(id==="lopburi")return "พุ่ง "+fmt(p.distance)+" · กดซ้ำภายใน "+fmt(p.followMs/1000)+" วิ · โจมตีมอน "+Math.round(p.followPower*100)+"%"+(p.staggerMs?" · หยุดมอน "+fmt(p.staggerMs/1000)+" วิ":"");
+      return "พุ่งถึง "+fmt(p.range)+" · ตีมอน "+p.hits+" ครั้ง ครั้งละ "+Math.round(p.hitPower*100)+"% · หยุดมอน "+fmt(p.staggerMs/1000)+" วิ";
+    }
+    if (path === "phutthaisawan") {
+      const p = catalog.coreProgress?.[rank]?.[id];
+      if (!p) return "";
+      if (id === "phuttha_core") return "ฟันมอน " + [.36, .46, p.finalPower].map(n => Math.round(n * p.scale * 100) + "%").join(" + ");
+      if (id === "sritra_core") return "ตั้งรับ " + fmt(p.durationMs / 1000) + " วิ · ลดดาเมจ " + Math.round((1 - p.damageFactor) * 100) + "% · สวนมอน " + Math.round(p.counterPower * 100) + "% · สวนซ้ำทุก " + fmt(p.counterIntervalMs / 1000) + " วิ";
+      if (id === "atamat_core") return "กวาดมอนสูงสุด 3 ตัว · ระยะ " + fmt(p.range) + " · พลัง " + Math.round(p.power * 100) + "%";
+      return "เพิ่มป้องกัน " + Math.round(p.defense * 100) + "% · ระยะ " + fmt(p.range) + " · นาน " + fmt(p.durationMs / 1000) + " วิ";
+    }
+    return "";
+  }
+  function coreSkillNotes(model, skillId) {
+    const fmt = n => String(Math.round(n * 100) / 100);
+    const { path, catalog } = model;
+    if (path === "muay_boran") return ({
+      chaiya: "ขั้น 4 และ 8 สวนซ้ำได้เร็วขึ้น · พลังสวนเพิ่มเฉพาะมอน",
+      korat: "หมัดสุดท้ายหนักขึ้นที่ขั้น 4 และ 8 · พลังเพิ่มเฉพาะมอน",
+      lopburi: "ขั้น 4 และ 8 ท่าซ้ำหยุดมอนทั่วไปชั่วครู่",
+      thasao: "ขั้น 8 ยืดเวลาหยุดมอนท้ายชุด · PvP ใช้ 3 หมัด"
+    }[skillId] || "") + " · การหยุดจังหวะมีช่วงต้านต่อเนื่อง Elite และบอสต้านการหยุด · โบนัสพลังจากขั้นใช้กับมอน ส่วน PvP ใช้พลังพื้นฐาน";
+    if (path === "sentinel") return "PvP สตัน 0.45 วิ และต้านซ้ำ 4 วิ · Elite และบอสต้านสตันและยั่วยุ · เพิ่มขั้นพลังสวนเฉพาะมอน · ท้าทายไม่บังคับเป้าผู้เล่น · ข้อมูลวิชาเดิมยังเก็บอยู่";
+    if (path === "blade") return "หายตัวระหว่างต่อสู้ได้ · โจมตีหรือถูกโจมตีจะเปิดเผยตัว มอนสเตอร์ตรวจพบได้เมื่อเข้าใกล้ · ฟันถอยเว้นจังหวะ 0.5 วิแล้วตีอัตโนมัติต่อ สั่งเดินหรือโจมตีใหม่ได้ทันที · พุ่งถอยหยุดเมื่อพบสิ่งกีดขวาง · พลังโจมตี PvP ถูกปรับสมดุล 75% และเมื่อเปิดฉากจากการล่องหนเพิ่มอีก 20% · ข้อมูลวิชาเดิมยังเก็บอยู่";
+    if (path === "mender") return "สกิลหมู่มีผลกับปาร์ตี้ หรือฝ่ายเดียวกันในสงครามที่อยู่ในระยะ · เขตคุ้มภัยอยู่ ณ จุดที่ร่าย · รีเจนที่อ่อนกว่าไม่ทับผลที่แรงกว่า · สถานะสูงสุดอยู่ภายใต้เพดานของเกม · ล้างสถานะหยุดรวมถึงยันต์สะกด · ข้อมูลวิชาเดิมยังเก็บอยู่";
+    if (path === "seer") {
+      const binding = catalog.coreProgress?.[0]?.seer_binding, poison = catalog.coreProgress?.[0]?.seer_poison;
+      return "สะกดมอนทั่วไป 1 ตัวค้างไว้ กดซ้ำเพื่อคลาย · ผีไม่ตีมอนที่เจ้าของสะกด · Elite และบอสต้านสะกด" +
+        (binding ? " · PvP สะกด " + fmt(binding.pvpDurationMs / 1000) + " วิ ต้านซ้ำ " + fmt((binding.pvpImmunityMs - binding.pvpDurationMs) / 1000) + " วิหลังคลาย" : "") +
+        (poison ? " · พิษ PvP " + fmt(poison.pvpFraction * 100) + "% ทุก " + fmt(poison.intervalMs / 1000) + " วิ" : "") + " · พิษไม่สังหาร · ข้อมูลวิชาเดิมยังเก็บอยู่";
+    }
+    return "สวมกระบี่อาคมเพื่อใช้วิชา · ข้อมูลวิชาเดิมยังเก็บอยู่";
+  }
+  function sendCoreBookAction(model, action, skillId) {
+    if (!model || !isCurrentClassSkillBook(model.owner)) return;
+    const current = coreSkillGraphData(model.path);
+    if (!current || (skillId && !current.ids.includes(skillId))) return;
+    if (action === "upgrade") {
+      const next = current.levels[Number(current.ranks[skillId] || 0)];
+      if (!next || current.level < next || current.available < 1) return;
+    }
+    if (mode === "demo") {
+      if (action === "reset") for (const id of current.ids) demoSwordTreeData.coreRanks[id] = 0;
+      else demoSwordTreeData.coreRanks[skillId] = Number(current.ranks[skillId] || 0) + 1;
+      renderSwordTree(); if (activeSkillModalId) renderSkillModalContent(activeSkillModalId);
+      return;
+    }
+    const payload = action === "upgrade" ? { action: "core_upgrade", skillId } : { action: "core_reset" };
+    switch (current.path) {
+      case "phutthaisawan": room.send("sword_core_book", action === "upgrade" ? { action: "upgrade", skillId } : { action: "reset" }); break;
+      case "muay_boran": room.send("muay_book", payload); break;
+      case "blade": room.send("blade_book", payload); break;
+      case "sentinel": room.send("sentinel_book", payload); break;
+      case "seer": case "mender": room.send("occult_book", payload); break;
+    }
+  }
+
   let activeSkillModalId = null, activeSkillModalOwner = null, classSkillBookOwner = null;
   function classSkillBookIdentity() {
     return { mode, room, localId, path: mode === "demo" ? "phutthaisawan" : ownServerCharacter()?.pathId };
@@ -282,7 +407,7 @@
   }
 
   function openSkillDetailModal(skillId) {
-    if (!swordData()?.catalog?.core?.[skillId]) return;
+    if (!coreSkillGraphData()?.ids.includes(skillId)) return;
     activeSkillModalId = skillId;
     activeSkillModalOwner = classSkillBookIdentity();
     const { backdrop, modal } = ensureSkillDetailModalElements();
@@ -307,56 +432,28 @@
   }
 
   function renderSkillModalContent(skillId) {
-    const data = swordData();
-    if (!isCurrentClassSkillBook(activeSkillModalOwner) || !data?.catalog?.core?.[skillId]) {
-      closeSkillDetailModal();
-      return;
+    const model = coreSkillGraphData();
+    if (!isCurrentClassSkillBook(activeSkillModalOwner) || !model?.ids.includes(skillId)) {
+      closeSkillDetailModal(); return;
     }
-    const { me, tree, catalog } = data;
-    const node = catalog.core[skillId];
-
-    const ranks = tree.coreRanks || {};
-    const rank = Number(ranks[skillId] || 0);
-    const levels = catalog.coreLevels || [1, 10, 25, 40, 55, 70, 85, 100];
-    const pointLevels = catalog.corePointLevels || [1, 5, 10, 15, 20, 30, 45, 60, 75, 90, 100];
-    const maxRank = levels.length;
-    const nextLv = levels[rank];
-    const lvNow = skillLearningLevel(me) || 1;
-    const points = pointLevels.filter(lvl => lvNow >= lvl).length;
-    const spent = Object.values(ranks).reduce((sum, v) => sum + Number(v || 0), 0);
-    const availablePoints = Math.max(0, points - spent);
-
-    const fmt = n => String(Math.round(n * 100) / 100);
-    const describe = (id, r) => {
-      const p = catalog.coreProgress?.[r]?.[id];
-      if (!p) return "";
-      if (id === "phuttha_core") return "ฟันต่อเนื่อง 3 จังหวะ · สเกลพลัง " + Math.round((p.scale || 1) * 100) + "% · ดอกสุดท้าย " + Math.round((p.finalPower || 0.6) * 100) + "%";
-      if (id === "sritra_core") return "ตั้งรับ " + fmt((p.durationMs || 2000) / 1000) + " วิ · ลดดาเมจ " + Math.round((1 - (p.damageFactor || 0.5)) * 100) + "% · สวนกลับ " + Math.round((p.counterPower || 0.8) * 100) + "%";
-      if (id === "atamat_core") return "กวาดมอนรอบตัวสูงสุด 3 ตัว · ระยะ " + fmt(p.range || 3) + " ม. · พลัง " + Math.round((p.power || 1) * 100) + "%";
-      return "ม่านมนตร์คุ้มกาย · เพิ่มป้องกัน " + Math.round((p.defense || 0.15) * 100) + "% · ระยะ " + fmt(p.range || 2) + " ม. · นาน " + fmt((p.durationMs || 6000) / 1000) + " วิ";
-    };
-
-    const skillGlyphs = {
-      phuttha_core: "⚔️",
-      sritra_core: "🛡️",
-      atamat_core: "🌪️",
-      chumphon_core: "⛨"
-    };
-
+    const { catalog, ranks, levels, level: lvNow, available: availablePoints } = model;
+    const node = catalog.core[skillId], rank = Number(ranks[skillId] || 0), maxRank = levels.length, nextLv = levels[rank];
+    const describe = (id, r) => describeCoreSkill(model.path, catalog, id, r);
+    const skillGlyphs = {};
     if ($("skillModalName")) $("skillModalName").textContent = node.name;
     if ($("skillModalGlyph")) { $("skillModalGlyph").textContent = skillGlyphs[skillId] || "✦"; $("skillModalGlyph").setAttribute("data-skill-glyph", skillId); }
-    if ($("skillModalBadge")) $("skillModalBadge").textContent = rank > 0 ? "ขั้น " + rank + "/" + maxRank : "ยังไม่เรียน";
+    if ($("skillModalBadge")) $("skillModalBadge").textContent = "ขั้น " + rank + "/" + maxRank;
     if ($("skillModalType")) $("skillModalType").textContent = node.effect === "passive" ? "วิชาติดตัว (Passive)" : "วิชากดใช้ (Active)";
 
-    const cost = (node.stamina || 8) + rank;
+    const cost = Number(node.stamina || 0) + rank * model.manaPerRank;
     if ($("skillSpecMana")) $("skillSpecMana").textContent = cost + " MP";
-    if ($("skillSpecCooldown")) $("skillSpecCooldown").textContent = ((node.cooldownMs || 1000) / 1000) + " วิ";
-    if ($("skillSpecRange")) $("skillSpecRange").textContent = (node.range || 2) + " เมตร";
+    if ($("skillSpecCooldown")) $("skillSpecCooldown").textContent = ((node.cooldownMs || 0) / 1000) + " วิ";
+    if ($("skillSpecRange")) $("skillSpecRange").textContent = (catalog.coreProgress?.[rank]?.[skillId]?.range ?? node.range ?? "—") + " หน่วย";
 
-    if ($("skillModalDesc")) $("skillModalDesc").textContent = node.description || "";
+    if ($("skillModalDesc")) $("skillModalDesc").textContent = (node.description || "") + " · " + coreSkillNotes(model, skillId);
 
-    const curDesc = rank > 0 ? describe(skillId, rank) : "ยังไม่ได้อัปเกรดวิชานี้ (ใช้พลังพื้นฐาน)";
-    if ($("skillProgCurRank")) $("skillProgCurRank").textContent = rank > 0 ? "ขั้น " + rank : "ยังไม่เรียน";
+    const curDesc = describe(skillId, rank);
+    if ($("skillProgCurRank")) $("skillProgCurRank").textContent = "ขั้น " + rank + (rank === 0 ? " · พลังพื้นฐาน" : "");
     if ($("skillProgCurText")) $("skillProgCurText").textContent = curDesc;
 
     const nextBox = $("skillProgNextBox");
@@ -364,7 +461,7 @@
       if (rank < maxRank) {
         nextBox.hidden = false;
         if ($("skillProgNextRank")) $("skillProgNextRank").textContent = "ขั้น " + (rank + 1);
-        if ($("skillProgNextText")) $("skillProgNextText").textContent = describe(skillId, rank + 1) + " · ใช้มานา " + (cost + 1) + " MP";
+        if ($("skillProgNextText")) $("skillProgNextText").textContent = describe(skillId, rank + 1) + " · ใช้มานา " + (cost + model.manaPerRank) + " MP";
       } else {
         nextBox.hidden = true;
       }
@@ -413,16 +510,9 @@
         upBtn.textContent = "อัปสกิล · 1 แต้ม (ขึ้นเป็นขั้น " + (rank + 1) + ")";
         const owner = activeSkillModalOwner;
         upBtn.onclick = () => {
-          if (!isCurrentClassSkillBook(owner) || activeSkillModalId !== skillId || !swordData()?.catalog?.core?.[skillId]) return;
+          if (!isCurrentClassSkillBook(owner) || activeSkillModalId !== skillId) return;
           SFX("equip");
-          if (mode === "live") {
-            room.send("sword_core_book", { action: "upgrade", skillId });
-          } else if (mode === "demo") {
-            demoSwordTreeData.coreRanks[skillId] = (demoSwordTreeData.coreRanks[skillId] || 0) + 1;
-            renderSkillModalContent(skillId);
-            renderSwordTree();
-            toast("อัปเกรด " + node.name + " เป็นขั้น " + (rank + 1) + " สำเร็จ!");
-          }
+          sendCoreBookAction(model, "upgrade", skillId);
         };
       }
     }
@@ -440,261 +530,93 @@
   }
 
   function renderSwordTree() {
-    const data = swordData(), container = $("swordTreeBody");
+    renderCoreSkillKnowledgeGraph(coreSkillGraphData("phutthaisawan"), $("swordTreeBody"));
+  }
+  function renderCoreSkillKnowledgeGraph(model, container) {
     if (!container) return;
-    if (!data?.catalog?.core) { container.textContent = "กำลังรอตำราวิชาดาบจากเซิร์ฟเวอร์"; return; }
-    const { me, tree, catalog } = data;
-    const ranks = tree.coreRanks || {};
-    const lvNow = (typeof skillLearningLevel === "function" ? skillLearningLevel(me) : me?.level) || 1;
-    const levels = catalog.coreLevels || [1, 10, 25, 40, 55, 70, 85, 100];
-    const pointLevels = catalog.corePointLevels || [1, 5, 10, 15, 20, 30, 45, 60, 75, 90, 100];
-    const points = pointLevels.filter(lvl => lvNow >= lvl).length;
-    const spent = Object.values(ranks).reduce((sum, v) => sum + Number(v || 0), 0);
-    const availablePoints = Math.max(0, points - spent);
-
-    const fmt = n => String(Math.round(n * 100) / 100);
-    const describe = (id, rank) => {
-      const p = catalog.coreProgress?.[rank]?.[id];
-      if (!p) return "";
-      if (id === "phuttha_core") return "ฟันมอน " + [.36, .46, p.finalPower].map(n => Math.round(n * p.scale * 100) + "%").join(" + ");
-      if (id === "sritra_core") return "ตั้งรับ " + fmt(p.durationMs / 1000) + " วิ · ลดดาเมจ " + Math.round((1 - p.damageFactor) * 100) + "% · สวนมอน " + Math.round(p.counterPower * 100) + "% · สวนซ้ำทุก " + fmt(p.counterIntervalMs / 1000) + " วิ";
-      if (id === "atamat_core") return "กวาดมอนสูงสุด 3 ตัว · ระยะ " + fmt(p.range) + " · พลัง " + Math.round(p.power * 100) + "%";
-      return "เพิ่มป้องกัน " + Math.round(p.defense * 100) + "% · ระยะ " + fmt(p.range) + " · นาน " + fmt(p.durationMs / 1000) + " วิ";
-    };
-
-    const skillGlyphs = {
-      phuttha_core: "⚔️",
-      sritra_core: "🛡️",
-      atamat_core: "🌪️",
-      chumphon_core: "⛨"
-    };
-
-    function buildKgNode(id, dirClass) {
-      const node = catalog.core[id];
-      if (!node) return "";
-      const rank = Number(ranks[id] || 0);
-      const maxRank = levels.length;
-      const nextLv = levels[rank];
-      const isLearned = rank > 0;
-      const isMax = rank >= maxRank;
-      const isReady = !isMax && lvNow >= nextLv && availablePoints > 0;
-      const stateCls = isReady ? "ready" : isLearned ? "learned" : "locked";
-      const glyph = skillGlyphs[id] || "✦";
-      const pipsHtml = Array.from({ length: maxRank }, (_, i) => '<i class="' + (i < rank ? 'on' : '') + '"></i>').join("");
-      const descText = describe(id, rank);
-      const statusLabel = isReady ? "✦ อัปเกรด" : isLearned ? "เรียนแล้ว" : "ยังล็อก";
-
-      return '<div class="kg-node ' + dirClass + ' ' + stateCls + '" data-skill-id="' + id + '" data-sword-core-upgrade="' + id + '" role="button" tabindex="0" aria-label="' + node.name + '">' +
-        '<div class="kg-orb ' + stateCls + '">' +
-          '<span class="kg-glyph" data-skill-glyph="' + id + '">' + glyph + '</span>' +
-          (rank > 0 ? '<span class="st-card-rank-badge">+' + rank + '</span>' : '') +
-        '</div>' +
-        '<strong class="kg-node-name">' + node.name + '</strong>' +
-        '<span class="kg-node-rank">ขั้น ' + rank + '/' + maxRank + '</span>' +
-        '<div class="st-card-pips">' + pipsHtml + '</div>' +
-        '<span class="kg-node-desc" style="display:none;">' + descText + '</span>' +
-        '<span class="kg-node-status">' + statusLabel + '</span>' +
-      '</div>';
-    }
-
-    const rankPhuttha = Number(ranks.phuttha_core || 0);
-    const rankSritra = Number(ranks.sritra_core || 0);
-    const rankAtamat = Number(ranks.atamat_core || 0);
-    const rankChumphon = Number(ranks.chumphon_core || 0);
-
-    const edgeCenterPhuttha = rankPhuttha > 0 ? "on" : (lvNow >= levels[0] && availablePoints > 0 ? "ready" : "locked");
-    const edgeCenterSritra = rankSritra > 0 ? "on" : (lvNow >= levels[0] && availablePoints > 0 ? "ready" : "locked");
-    const edgeCenterAtamat = rankAtamat > 0 ? "on" : (rankPhuttha > 0 && lvNow >= levels[rankAtamat] && availablePoints > 0 ? "ready" : "locked");
-    const edgeCenterChumphon = rankChumphon > 0 ? "on" : (rankSritra > 0 && lvNow >= levels[rankChumphon] && availablePoints > 0 ? "ready" : "locked");
-
-    const markerTop = edgeCenterPhuttha === "on" ? "url(#kgArrowGold)" : edgeCenterPhuttha === "ready" ? "url(#kgArrowCyan)" : "url(#kgArrowMuted)";
-    const markerRight = edgeCenterSritra === "on" ? "url(#kgArrowGold)" : edgeCenterSritra === "ready" ? "url(#kgArrowCyan)" : "url(#kgArrowMuted)";
-    const markerBottom = edgeCenterAtamat === "on" ? "url(#kgArrowGold)" : edgeCenterAtamat === "ready" ? "url(#kgArrowCyan)" : "url(#kgArrowMuted)";
-    const markerLeft = edgeCenterChumphon === "on" ? "url(#kgArrowGold)" : edgeCenterChumphon === "ready" ? "url(#kgArrowCyan)" : "url(#kgArrowMuted)";
-
-    const nodePhuttha = buildKgNode("phuttha_core", "kg-node-top");
-    const nodeSritra = buildKgNode("sritra_core", "kg-node-right");
-    const nodeAtamat = buildKgNode("atamat_core", "kg-node-bottom");
-    const nodeChumphon = buildKgNode("chumphon_core", "kg-node-left");
-
-    container.innerHTML = '<div class="kg-container">' +
-      '<!-- Top Knowledge Graph Banner -->' +
-      '<div class="kg-banner">' +
-        '<div class="kg-banner-left">' +
-          '<div class="kg-banner-crest">⚔</div>' +
-          '<div class="kg-banner-info">' +
-            '<strong class="kg-banner-title">ผังกราฟความรู้วิชาดาบ 4 ทิศ (Knowledge Graph)</strong>' +
-            '<span class="kg-banner-sub">อาชีพนักดาบอยุธยา · พุทธไธสวรรย์ Lv.' + lvNow + '</span>' +
-          '</div>' +
-        '</div>' +
-        '<div class="st-points-box">' +
-          '<span class="st-points-num">' + availablePoints + '</span>' +
-          '<span class="st-points-label">แต้มวิชา ' + (points - spent) + ' / ' + points + '</span>' +
-        '</div>' +
-      '</div>' +
-
-      '<p class="note" style="margin:2px 0;font-size:11px;color:#c7b28a;text-align:center;">' +
-        'อาชีพศูนย์กลางเชื่อมโยง 4 ทิศ · แตะที่โหนดสกิลเพื่อดูรายละเอียดและอัปเกรดทันที' +
-      '</p>' +
-
-      '<!-- Radial 4-Directional Knowledge Graph Canvas -->' +
-      '<div class="kg-canvas-board radial-4way">' +
-        '<!-- Center Class Node (อาชีพนักดาบตรงกลาง) -->' +
-        '<div class="kg-center-class-node">' +
-          '<div class="kg-center-class-orb" data-skill-glyph="class_sword">⚔</div>' +
-          '<span class="kg-center-class-title">นักดาบอยุธยา</span>' +
-          '<span class="kg-center-class-sub">แกนวิชา · Lv.' + lvNow + '</span>' +
-        '</div>' +
-
-        '<!-- 4 Directional Stream Badges -->' +
-        '<div class="kg-stream-badge kg-stream-badge-top">ทิศเหนือ · เพลงดาบจู่โจม</div>' +
-        '<div class="kg-stream-badge kg-stream-badge-right">ทิศตะวันออก · วิถีตั้งรับสวน</div>' +
-        '<div class="kg-stream-badge kg-stream-badge-bottom">ทิศใต้ · กวาดฟันรอบกาย</div>' +
-        '<div class="kg-stream-badge kg-stream-badge-left">ทิศตะวันตก · ม่านมนตร์คุ้มกาย</div>' +
-
-        '<!-- SVG Radial Connector Edges -->' +
-        '<svg class="kg-svg-edges" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;">' +
-          '<defs>' +
-            '<marker id="kgArrowGold" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">' +
-              '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#ffd700" />' +
-            '</marker>' +
-            '<marker id="kgArrowCyan" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">' +
-              '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#7fe8ff" />' +
-            '</marker>' +
-            '<marker id="kgArrowMuted" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">' +
-              '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#5a4b32" />' +
-            '</marker>' +
-          '</defs>' +
-          '<!-- Background Arc Rings -->' +
-          '<circle id="kgOrbitRing" cx="180" cy="220" r="118" fill="none" stroke="rgba(212,175,55,0.22)" stroke-width="1.5" stroke-dasharray="4 6" />' +
-          '<circle id="kgCenterRing" cx="180" cy="220" r="42" fill="none" stroke="rgba(255,215,0,0.2)" stroke-width="1" />' +
-          '<!-- Center to Top (Phuttha) -->' +
-          '<path id="kgEdge_phuttha" class="kg-edge ' + edgeCenterPhuttha + '" d="M 180 189 L 180 94" marker-end="' + markerTop + '" />' +
-          '<!-- Center to Right (Sritra) -->' +
-          '<path id="kgEdge_sritra" class="kg-edge ' + edgeCenterSritra + '" d="M 211 220 L 267 220" marker-end="' + markerRight + '" />' +
-          '<!-- Center to Bottom (Atamat) -->' +
-          '<path id="kgEdge_atamat" class="kg-edge ' + edgeCenterAtamat + '" d="M 180 251 L 180 346" marker-end="' + markerBottom + '" />' +
-          '<!-- Center to Left (Chumphon) -->' +
-          '<path id="kgEdge_chumphon" class="kg-edge ' + edgeCenterChumphon + '" d="M 149 220 L 93 220" marker-end="' + markerLeft + '" />' +
-        '</svg>' +
-
-        '<!-- 4 Radiating Skill Nodes -->' +
-        nodePhuttha +
-        nodeSritra +
-        nodeAtamat +
-        nodeChumphon +
-      '</div>' +
-
-      '<!-- Footer Actions -->' +
-      '<div class="st-footer-actions">' +
-        '<button type="button" class="secondary" id="resetSwordCore" ' + (spent > 0 ? '' : 'disabled') + ' style="width:100%;">คืนแต้มวิชา (' + spent + ' แต้ม)</button>' +
-        '<p class="note" style="font-size:10px;color:#8f9e9d;margin:0;">จัดแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · สวมกระบี่อาคมเพื่อใช้วิชา</p>' +
-      '</div>' +
-    '</div>';
-
-    // Dynamic line connection calculator for 100% pixel-perfect accuracy
-    function updateKgLines() {
-      try {
-        const board = container.querySelector(".kg-canvas-board");
-        if (!board) return;
-        const bRect = board.getBoundingClientRect();
-        if (!bRect.width || !bRect.height) return;
-
-        const centerOrb = board.querySelector(".kg-center-class-orb");
-        if (!centerOrb) return;
-        const cRect = centerOrb.getBoundingClientRect();
-        const cX = cRect.left + cRect.width / 2 - bRect.left;
-        const cY = cRect.top + cRect.height / 2 - bRect.top;
-        const cR = cRect.width / 2;
-
-        const nodes = [
-          { id: "phuttha_core", pathId: "kgEdge_phuttha" },
-          { id: "sritra_core", pathId: "kgEdge_sritra" },
-          { id: "atamat_core", pathId: "kgEdge_atamat" },
-          { id: "chumphon_core", pathId: "kgEdge_chumphon" }
-        ];
-
-        let totalDist = 0;
-        let distCount = 0;
-
-        nodes.forEach(n => {
-          const el = board.querySelector('.kg-node[data-skill-id="' + n.id + '"] .kg-orb');
-          const path = board.querySelector('#' + n.pathId);
-          if (!el || !path) return;
-          const nRect = el.getBoundingClientRect();
-          const nX = nRect.left + nRect.width / 2 - bRect.left;
-          const nY = nRect.top + nRect.height / 2 - bRect.top;
-          const nR = nRect.width / 2;
-
-          const dist = Math.hypot(nX - cX, nY - cY);
-          totalDist += dist;
-          distCount++;
-
-          const angle = Math.atan2(nY - cY, nX - cX);
-          const startX = cX + Math.cos(angle) * (cR + 2);
-          const startY = cY + Math.sin(angle) * (cR + 2);
-          const endX = nX - Math.cos(angle) * (nR + 4);
-          const endY = nY - Math.sin(angle) * (nR + 4);
-
-          path.setAttribute("d", "M " + startX.toFixed(1) + " " + startY.toFixed(1) + " L " + endX.toFixed(1) + " " + endY.toFixed(1));
-        });
-
-        const orbitRing = board.querySelector("#kgOrbitRing");
-        if (orbitRing && distCount > 0) {
-          const avgDist = totalDist / distCount;
-          orbitRing.setAttribute("cx", cX.toFixed(1));
-          orbitRing.setAttribute("cy", cY.toFixed(1));
-          orbitRing.setAttribute("r", avgDist.toFixed(1));
-        }
-
-        const centerRing = board.querySelector("#kgCenterRing");
-        if (centerRing) {
-          centerRing.setAttribute("cx", cX.toFixed(1));
-          centerRing.setAttribute("cy", cY.toFixed(1));
-          centerRing.setAttribute("r", (cR + 10).toFixed(1));
-        }
-      } catch (_) {}
-    }
-
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(updateKgLines);
-      setTimeout(updateKgLines, 60);
-      setTimeout(updateKgLines, 250);
-    }
-    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
-      window.addEventListener("resize", updateKgLines, { passive: true });
-    }
-
-    // Bind node clicks to open popup
-    container.querySelectorAll(".kg-node").forEach(card => {
-      card.onclick = () => {
-        const skillId = card.dataset.skillId || card.dataset.swordCoreUpgrade;
-        if (skillId) {
-          if (typeof SFX === "function") SFX("tap");
-          if (typeof openSkillDetailModal === "function") openSkillDetailModal(skillId);
-        }
-      };
+    if (!model) { clearCoreGraphLines(); container._coreGraphKey = null; container.textContent = "กำลังรอตำราวิชาจากเซิร์ฟเวอร์"; return; }
+    const { path, ids, catalog, ranks, levels, level, points, spent, available, identity } = model;
+    const key = JSON.stringify([path, catalog, ranks, level]);
+    if (container._coreGraphKey === key) return;
+    container._coreGraphKey = key;
+    const directions = ["top", "right", "bottom", "left"];
+    const states = ids.map(id => {
+      const rank = Number(ranks[id] || 0), next = levels[rank];
+      return next && level >= next && available > 0 ? "ready" : rank > 0 ? "learned" : "locked";
     });
-
-    // Bind reset
-    const resetBtn = $("resetSwordCore") || $("stResetBtn");
-    if (resetBtn) {
-      const owner = classSkillBookIdentity();
-      resetBtn.onclick = () => {
-        if (!isCurrentClassSkillBook(owner) || !swordData()?.catalog?.core) return;
-        if (!window.confirm("ต้องการคืนแต้มวิชาทั้งหมดหรือไม่?")) return;
-        if (!isCurrentClassSkillBook(owner)) return;
-        if (mode === "live") {
-          room.send("sword_core_book", { action: "reset" });
-        } else if (mode === "demo") {
-          if (typeof demoSwordTreeData !== "undefined" && demoSwordTreeData?.coreRanks) {
-            for (const k of Object.keys(demoSwordTreeData.coreRanks)) {
-              demoSwordTreeData.coreRanks[k] = 0;
-            }
-          }
-          if (typeof toast === "function") toast("คืนแต้มวิชาเรียบร้อยแล้ว");
-          renderSwordTree();
-        }
-      };
+    const nodes = ids.map((id, i) => {
+      const node = catalog.core[id], rank = Number(ranks[id] || 0), state = states[i];
+      const status = rank >= levels.length ? "ขั้นสูงสุด" : state === "ready" ? "✦ อัปเกรด" : "อัปต่อ Lv." + levels[rank];
+      return '<button type="button" class="kg-node kg-node-' + directions[i] + ' ' + state + '" data-skill-id="' + id + '" aria-label="' + sgEsc(node.name + ' ขั้น ' + rank + '/' + levels.length) + '">' +
+        '<span class="kg-orb ' + state + '"><span class="kg-glyph" data-skill-glyph="' + id + '">✦</span>' +
+          (rank > 0 ? '<span class="st-card-rank-badge">+' + rank + '</span>' : '') + '</span>' +
+        '<strong class="kg-node-name">' + sgEsc(node.name) + '</strong><span class="kg-node-rank">ขั้น ' + rank + '/' + levels.length + '</span>' +
+        '<span class="st-card-pips">' + levels.map((_, n) => '<i class="' + (n < rank ? 'on' : '') + '"></i>').join('') + '</span>' +
+        '<span class="kg-node-status">' + status + '</span></button>';
+    }).join('');
+    container.innerHTML = '<div class="kg-container" data-core-graph-path="' + path + '">' +
+      '<div class="kg-banner"><div class="kg-banner-left"><div class="kg-banner-crest">' + identity.glyph + '</div><div class="kg-banner-info">' +
+        '<strong class="kg-banner-title">ผังวิชา 4 ทิศ (Knowledge Graph)</strong><span class="kg-banner-sub">' + identity.name + ' · Lv.' + level + '</span></div></div>' +
+        '<div class="st-points-box"><span class="st-points-num">' + available + '</span><span class="st-points-label">แต้มวิชา ' + available + ' / ' + points + '</span></div></div>' +
+      '<p class="note kg-graph-help">อาชีพตรงกลางเชื่อม 4 วิชา · แตะดูรายละเอียดและอัปขั้น<br>เส้นแสดงวิชาของอาชีพ ไม่ต้องอัปวิชาอื่นก่อน</p>' +
+      '<div class="kg-canvas-board radial-4way"><div class="kg-center-class-node">' +
+        '<div class="kg-center-class-orb"' + (path === 'phutthaisawan' ? ' data-skill-glyph="class_sword"' : '') + '>' + identity.glyph + '</div>' +
+        '<span class="kg-center-class-title">' + identity.name + '</span><span class="kg-center-class-sub">แกนวิชา · Lv.' + level + '</span></div>' +
+        '<div class="kg-stream-badge kg-stream-badge-top">ทิศเหนือ</div><div class="kg-stream-badge kg-stream-badge-right">ทิศตะวันออก</div>' +
+        '<div class="kg-stream-badge kg-stream-badge-bottom">ทิศใต้</div><div class="kg-stream-badge kg-stream-badge-left">ทิศตะวันตก</div>' +
+        '<svg class="kg-svg-edges" aria-hidden="true"><circle data-kg-orbit fill="none" stroke="rgba(212,175,55,.22)" stroke-width="1.5" stroke-dasharray="4 6" />' +
+          '<circle data-kg-center fill="none" stroke="rgba(255,215,0,.2)" />' +
+          ids.map((id, i) => '<path data-kg-edge="' + id + '" class="kg-edge ' + (states[i] === 'learned' ? 'on' : states[i]) + '" />').join('') + '</svg>' + nodes + '</div>' +
+      '<div class="st-footer-actions"><button type="button" class="secondary" id="' + CORE_GRAPH_RESET_IDS[path] + '" ' + (spent ? '' : 'disabled') + '>คืนแต้มวิชา (' + spent + ' แต้ม)</button>' +
+        '<p class="note">ใช้ทั้ง 4 วิชาในช่องเดิม · จัดแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · เซิร์ฟเวอร์ตรวจเงื่อนไขก่อนอัปขั้น</p></div></div>';
+    container.querySelectorAll('.kg-node').forEach(button => button.onclick = () => {
+      if (!isCurrentClassSkillBook(model.owner)) return;
+      SFX('tap'); openSkillDetailModal(button.dataset.skillId);
+    });
+    const reset = $(CORE_GRAPH_RESET_IDS[path]);
+    if (reset) reset.onclick = () => {
+      if (!isCurrentClassSkillBook(model.owner)) return;
+      if (window.confirm('คืนแต้มวิชา' + identity.name + 'ทั้งหมด?')) sendCoreBookAction(model, 'reset');
+    };
+    scheduleCoreGraphLines(container);
+  }
+  // The original 9fb515f measurement algorithm, with one owned observer instead
+  // of a new permanent window listener on every render/frame.
+  let coreGraphResizeObserver = null, coreGraphFrame = null;
+  function clearCoreGraphLines() {
+    if (coreGraphResizeObserver) coreGraphResizeObserver.disconnect();
+    coreGraphResizeObserver = null;
+    if (coreGraphFrame !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(coreGraphFrame);
+    coreGraphFrame = null;
+  }
+  function scheduleCoreGraphLines(container) {
+    clearCoreGraphLines();
+    const update = () => {
+      coreGraphFrame = null;
+      const board = container.querySelector('.kg-canvas-board');
+      if (!board || !board.isConnected) return;
+      const svg = board.querySelector('.kg-svg-edges'), center = board.querySelector('.kg-center-class-orb');
+      const b = svg.getBoundingClientRect(), c = center.getBoundingClientRect();
+      if (!b.width || !b.height) return;
+      const cx = c.left + c.width / 2 - b.left, cy = c.top + c.height / 2 - b.top, cr = c.width / 2;
+      let distance = 0, count = 0;
+      board.querySelectorAll('.kg-node').forEach(node => {
+        const n = node.querySelector('.kg-orb').getBoundingClientRect();
+        const x = n.left + n.width / 2 - b.left, y = n.top + n.height / 2 - b.top;
+        const angle = Math.atan2(y - cy, x - cx), nr = n.width / 2;
+        const edge = board.querySelector('[data-kg-edge="' + node.dataset.skillId + '"]');
+        edge.setAttribute('d', 'M ' + (cx + Math.cos(angle) * (cr + 2)).toFixed(1) + ' ' + (cy + Math.sin(angle) * (cr + 2)).toFixed(1) +
+          ' L ' + (x - Math.cos(angle) * (nr + 4)).toFixed(1) + ' ' + (y - Math.sin(angle) * (nr + 4)).toFixed(1));
+        distance += Math.hypot(x - cx, y - cy); count++;
+      });
+      for (const [selector, radius] of [['[data-kg-orbit]', distance / count], ['[data-kg-center]', cr + 10]]) {
+        const ring = board.querySelector(selector); ring.setAttribute('cx', cx); ring.setAttribute('cy', cy); ring.setAttribute('r', radius);
+      }
+    };
+    if (typeof requestAnimationFrame !== 'function') return;
+    const queue = () => { if (coreGraphFrame === null) coreGraphFrame = requestAnimationFrame(update); };
+    queue();
+    if (typeof ResizeObserver === 'function') {
+      coreGraphResizeObserver = new ResizeObserver(queue); coreGraphResizeObserver.observe(container);
     }
   }
