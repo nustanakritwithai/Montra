@@ -22,16 +22,18 @@ test('reviewed style snapshot retains pinned bytes, cascade order, URLs and lega
   const baseline = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/extraction-baseline.json')));
   const manifest = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/manifest.json')));
   const bytes = checkStyles();
-  assert.equal(bytes.length, 375216);
-  assert.equal(hash(bytes), '047f8e528f4669eda5d8f2d5a44e81bfa7af332716b5202b28ab29d6dadc2ef3');
-  assert.equal(bytes.length, baseline.bytes);
-  assert.equal(hash(bytes), baseline.sha256);
+  assert.equal(bytes.length, 375263);
+  assert.equal(hash(bytes), '60b1e0d1dfce017d5c2a715cb0c05976a9f51b5a2d93b8f26f580c8d7c3ddff6');
+  // Keep historical extraction evidence unchanged; only the reviewed market
+  // pagination rule differs from this snapshot.
+  const reviewedMarket = {path:'market/045-world-market.css',bytes:5767,sha256:'6202004601ad13fcb19d476017e489cd971bc5ac523d9c74257aac0b43af50a0'};
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   let nextLine = 1;
   for (const entry of baseline.fragments) {
     const fragment = readFileSync(join(stylesRoot, 'src/styles', entry.path));
-    assert.equal(fragment.length, entry.bytes, entry.path);
-    assert.equal(hash(fragment), entry.sha256, entry.path);
+    const expected = entry.path === reviewedMarket.path ? reviewedMarket : entry;
+    assert.equal(fragment.length, expected.bytes, entry.path);
+    assert.equal(hash(fragment), expected.sha256, entry.path);
     assert.equal(entry.originalStartLine, nextLine);
     assert.equal(fragment.toString('utf8').split('\n').length - 1, entry.originalEndLine - entry.originalStartLine + 1);
     nextLine = entry.originalEndLine + 1;
