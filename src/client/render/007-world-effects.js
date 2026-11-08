@@ -71,18 +71,32 @@
     else { m.disableDepthWrite = true; m.zOffset = -2; }
     fxMatCache.set(key, m); return m;
   }
-  const worldFx = [], worldFxPool = [], FX_MAX = 140;
+  const worldFx = [], worldFxPool = [], FX_MAX = 140, FX_WARNING_RESERVE = 24;
+  function releaseWorldFx(index) {
+    const [effect] = worldFx.splice(index, 1);
+    effect.m.setEnabled(false); worldFxPool.push(effect.m);
+  }
+  function clearWorldFx() {
+    while (worldFx.length) releaseWorldFx(worldFx.length - 1);
+  }
   const fxNear = (x, z, r = 48) => Math.hypot(x - camera.target.x, z - camera.target.z) < r;
   // orient: "bill" (faces camera), "ground" (flat, spins with yaw), "flat" (flat at height, aimed by yaw), "pillar" (Y-billboard column)
   function spawnFx(shape, color, x, y, z, o = {}) {
-    if (worldFx.length >= FX_MAX) return null;
+    // Cosmetic bursts may not consume the warning reserve. Critical warnings
+    // can also replace an older cosmetic at the hard cap, never another warning.
+    if (!o.critical && worldFx.length >= FX_MAX - FX_WARNING_RESERVE) return null;
+    if (worldFx.length >= FX_MAX) {
+      const expendable = worldFx.findIndex(effect => !effect.critical);
+      if (!o.critical || expendable < 0) return null;
+      releaseWorldFx(expendable);
+    }
     let m = worldFxPool.pop();
     if (!m) { m = B.MeshBuilder.CreatePlane("worldFx", { size: 1 }, scene); m.isPickable = false; }
     const orient = o.orient || "bill";
     m.material = vfxMat(shape, color); m.setEnabled(true); m.position.set(x, y, z);
     m.billboardMode = orient === "bill" ? B.Mesh.BILLBOARDMODE_ALL : orient === "pillar" ? B.Mesh.BILLBOARDMODE_Y : B.Mesh.BILLBOARDMODE_NONE;
     m.rotation.set(orient === "ground" || orient === "flat" ? Math.PI / 2 : 0, o.yaw || 0, orient === "bill" ? (o.roll ?? Math.random() * Math.PI) : 0);
-    const f = { m, orient, born: performance.now() + (o.delay || 0), life: o.life || 380, s0: o.s0 ?? .4, s1: o.s1 ?? 4, a0: o.a0 ?? 1, a1: o.a1 ?? 0,
+    const f = { m, orient, mapId: activeMapId, room, critical: o.critical === true, born: performance.now() + (o.delay || 0), life: o.life || 380, s0: o.s0 ?? .4, s1: o.s1 ?? 4, a0: o.a0 ?? 1, a1: o.a1 ?? 0,
       spin: o.spin || 0, follow: o.follow || null, fx: 0, fz: 0, pulse: o.pulse || 0, h: o.h || 0, vel: o.vel || null, grav: o.grav || 0, last: 0, fade: o.fade || 0 };
     if (f.follow) { const p = f.follow.position || f.follow; f.fx = x - p.x; f.fz = z - p.z; }
     m.scaling.setAll(.001); m.visibility = 0; worldFx.push(f);

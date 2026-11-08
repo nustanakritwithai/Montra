@@ -110,6 +110,7 @@
   }
   function showDemo() {
     cancelForgeAnimation(false,true);finishEconomyPending(true);closeForgePicker(false);closeItemDetailModal(false);
+    clearCombatVfx();
     clearFishing(false);fishSavedItem=null;
     syncMountButton();
     territoryState=null;forestObjectiveState=null;forestDefenseState=null;forestEscortState=null;directorEventState=null;syncQuestRanger();syncWarQuartermaster();$("quest").classList.remove("war-hud");
