@@ -344,11 +344,15 @@
     attachShamanModel(avatar);
     return avatar;
   }
+  // Service NPCs reuse the player rig; they are animated with the idle pose each frame (see the frame loop),
+  // otherwise the skinned model stays in its bind pose with both arms raised.
+  const npcActors = new Set();
   function attachNpcAvatar(root,id,cloth,fallback){
     const actor=avatarMesh("npc-"+id,false,{cloth});actor.node.parent=root;
     // NPCs keep their existing dedicated interaction hitboxes and labels.
     for(const mesh of actor.node.getChildMeshes())mesh.isPickable=false;
     actor.node.onDisposeObservable.add(()=>actor.skin?.copy.skeletons.forEach(skeleton=>skeleton.dispose()));
+    if(typeof npcActors!=="undefined"){npcActors.add(actor);actor.node.onDisposeObservable.add(()=>npcActors.delete(actor));}
     for(const mesh of fallback)mesh.setEnabled(false);
     return actor.node;
   }

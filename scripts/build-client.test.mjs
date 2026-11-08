@@ -12,6 +12,16 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
 {
+  "path": "core/059-frame-loop-and-startup.js",
+  "bytes": 19050,
+  "sha256": "4a34c71cb5dea885fbab2982115ef991b1519df99f38b3b27aa393a58320ad90"
+},
+{
+  "path": "render/020-avatar-materials-and-meshes.js",
+  "bytes": 22113,
+  "sha256": "3372ccd48e189b25b5445d3b858e71fd602c05e551e79cd3e05c49e6a492beb4"
+},
+{
   "path": "ui/042-vitals-chat-and-status.js",
   "bytes": 33903,
   "sha256": "b4392384ef3b0ad1e1ad204ccfdfc268496d31263252a766d9941eefc2c75c8b"
@@ -62,11 +72,6 @@ const reviewedReleaseFragments = new Map([
     "sha256": "05d687136931ba32f235b6477d6285105329d6bb869d4daad289e1b7f4238048"
   },
   {
-    "path": "core/059-frame-loop-and-startup.js",
-    "bytes": 18707,
-    "sha256": "a73a400a703a8700c1123716baa12ccc4941338a9d0b8a0589b9353404bbb35c"
-  },
-  {
     "path": "ui/055-market-and-trade.js",
     "bytes": 55367,
     "sha256": "2cf0b6272de3ff4cbd59ab5ca19319cff7b098d0eadfc82f18af8a090ee52678"
@@ -88,8 +93,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1462525);
-  assert.equal(hash(bytes), '08739be20212037e243bcd38e87c0f95efc9a109cd0952a9282b69335e7a8b81');
+  assert.equal(bytes.length, 1463214);
+  assert.equal(hash(bytes), '7cb3817bdc1af9a94c321769f39f9ba2be0c6a011caa6a7ec5a0015c6b3aa19b');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

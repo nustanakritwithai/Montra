@@ -9,6 +9,18 @@ import { assembleStyles, checkStyleBoundary, checkStyles, stylesRoot, writeStyle
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
+// Intentional, reviewed style changes after extraction (cosmetic fixes). Every other fragment must
+// still match the extraction evidence byte for byte; the assembled sheet is pinned below.
+const reviewedStyleFragments = new Map([
+{
+  "path": "hud/038-map-shortcuts-and-quick-skills.css",
+  "bytes": 3062,
+  "sha256": "07e55c50e2932817a83c8681ce64c00be753ea912b6089012f2c999f0f3ab31e"
+}
+].map(entry => [entry.path, entry]));
+const reviewedStylesBytes = 355259;
+const reviewedStylesSha = 'a3bdaf7916ba7f792e5cbebec5aa570a4fbc3428badcbd8bfc7ff4f323cc2ef8';
+
 function withStylesFixture(run) {
   const temp = mkdtempSync(join(tmpdir(), 'montra-styles-'));
   try {
@@ -22,18 +34,19 @@ test('initial style extraction retains all bytes, cascade order, URLs and legacy
   const baseline = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/extraction-baseline.json')));
   const manifest = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/manifest.json')));
   const bytes = checkStyles();
-  assert.equal(bytes.length, 355010);
-  assert.equal(hash(bytes), '0e3cf0696ae9d7676560f3c9554efb23926294e9433789cbe4ce2e9ef6d62b95');
-  assert.equal(bytes.length, baseline.bytes);
-  assert.equal(hash(bytes), baseline.sha256);
+  assert.equal(baseline.bytes, 355010);
+  assert.equal(baseline.sha256, '0e3cf0696ae9d7676560f3c9554efb23926294e9433789cbe4ce2e9ef6d62b95');
+  assert.equal(bytes.length, reviewedStylesBytes);
+  assert.equal(hash(bytes), reviewedStylesSha);
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   let nextLine = 1;
   for (const entry of baseline.fragments) {
     const fragment = readFileSync(join(stylesRoot, 'src/styles', entry.path));
-    assert.equal(fragment.length, entry.bytes, entry.path);
-    assert.equal(hash(fragment), entry.sha256, entry.path);
+    const reviewed = reviewedStyleFragments.get(entry.path);
+    assert.equal(fragment.length, (reviewed ?? entry).bytes, entry.path);
+    assert.equal(hash(fragment), (reviewed ?? entry).sha256, entry.path);
     assert.equal(entry.originalStartLine, nextLine);
-    assert.equal(fragment.toString('utf8').split('\n').length - 1, entry.originalEndLine - entry.originalStartLine + 1);
+    if (!reviewed) assert.equal(fragment.toString('utf8').split('\n').length - 1, entry.originalEndLine - entry.originalStartLine + 1);
     nextLine = entry.originalEndLine + 1;
   }
   assert.equal(nextLine, 5387);

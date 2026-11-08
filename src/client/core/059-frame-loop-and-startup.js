@@ -195,6 +195,11 @@
       updateAvatarAuras(a, now, dt);
       a.flightHalo?.setEnabled(a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain));
     }
+    // Idle breathing pose for nearby service NPCs (standing still, so speed 0).
+    for (const npc of npcActors) {
+      const w = npc.node.getAbsolutePosition();
+      if (npc.node.isEnabled(true) && Math.hypot(w.x - camera.target.x, w.z - camera.target.z) < 70) { npc.x = w.x; npc.y = w.y; npc.z = w.z; animateRig(npc, 0, dt, now); }
+    }
     for (const npc of summonAvatars.values()) {
       if (npc.demo) {
         // DEMO: hover at the hero's right shoulder and face where the hero faces.
