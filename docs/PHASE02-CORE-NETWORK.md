@@ -1,7 +1,8 @@
 # Phase 2: client core and network extraction
 
-This checkout is based on phase 1 commit `0a1ce6b8008531a1f7e6dc8f909271a40ec574f6`.
-It is development work only; no production installation is part of this phase.
+This checkout integrates phase 1 commit `0a1ce6b8008531a1f7e6dc8f909271a40ec574f6`
+and main commit `0bdda6ec49fc515a35f1416b74089eed72d33d6a`. It is development
+work only; no production installation is part of this phase.
 
 ## Scope and boundaries
 
@@ -27,9 +28,10 @@ disconnect behavior remains: the player must enter again; this change does not
 add automatic reconnect. Initial guild and territory messages retain their
 existing early-message handling and room guards.
 
-`src/client/extraction-baseline.json` is the original phase 1 evidence and is
-not replaced. The reviewed phase 2 source and generated bundle fingerprints
-are in `src/modules/phase2-baseline.json`. Review changes before updating them.
+`src/client/extraction-baseline.json` is the main branch's baseline before this
+integration. Earlier phase 1 evidence remains in Git history. The reviewed
+integrated phase 2 source and generated bundle fingerprints are in
+`src/modules/phase2-baseline.json`. Review changes before updating them.
 The bundle is generated using the locked esbuild version; see
 `docs/CLIENT-BUILD-ARTIFACT.md` for the commands.
 

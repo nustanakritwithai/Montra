@@ -98,9 +98,14 @@
   const STORM_MAPS = { asura_peak: "#ffd0b0", spirit_rift: "#d8c8ff" };
   let stormIn = 8, stormT = -1;
   function stormFlash(dt) {
-    const tint = STORM_MAPS[activeMapId];
+    const isStormWeather = typeof window !== "undefined" && window.MontraWeather?.getWeather?.() === "storm";
+    const tint = STORM_MAPS[activeMapId] || (isStormWeather ? "#e0e8ff" : null);
     if (!tint) { stormT = -1; return; }
-    if ((stormIn -= dt) <= 0) { stormIn = 10 + Math.random() * 15; stormT = 0; window.MontraAudio?.play("thunder", { delay: .3 + Math.random() * .7, intensity: .8 + Math.random() * .4 }); }
+    if ((stormIn -= dt) <= 0) {
+      stormIn = (isStormWeather ? 5 : 10) + Math.random() * (isStormWeather ? 6 : 15);
+      stormT = 0;
+      window.MontraAudio?.play("thunder", { delay: .3 + Math.random() * .7, intensity: .8 + Math.random() * .4 });
+    }
     if (stormT < 0) return;
     stormT += dt;
     const k = Math.max(Math.exp(-stormT * 18), stormT > .16 ? Math.exp(-(stormT - .16) * 9) * .8 : 0);

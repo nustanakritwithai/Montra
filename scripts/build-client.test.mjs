@@ -17,9 +17,9 @@ test('reviewed module extraction preserves untouched fragments and historical ba
   const baseline = JSON.parse(readFileSync(join(clientRoot, 'src/client/extraction-baseline.json')));
   const phase2 = JSON.parse(readFileSync(join(clientRoot, 'src/modules/phase2-baseline.json')));
   const bytes = assembleClient();
-  assert.equal(baseline.bytes, 1372310);
-  assert.equal(baseline.sha256, 'a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf');
-  assert.equal(phase2.historicalSourceCommit, baseline.sourceCommit);
+  assert.equal(baseline.bytes, 1442437);
+  assert.equal(baseline.sha256, '579f58cc515e9fa306053120fc856a832fb44c74abe0e46ed6a3458286cbd00b');
+  assert.equal(phase2.integrationBaseCommit, '0bdda6ec49fc515a35f1416b74089eed72d33d6a');
   assert.equal(bytes.length, phase2.output.bytes);
   assert.equal(hash(bytes), phase2.output.sha256);
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));

@@ -154,7 +154,9 @@
       const me=getLocalAvatar();
       if(me) {
         const dx=demoDest.x-me.targetX, dz=demoDest.z-me.targetZ, d=Math.hypot(dx,dz);
-        const step=(demoFlying?4:(possessed?4.6:3))*dt;
+        const baseStep=(demoFlying?4:(possessed?4.6:3));
+        const mountMult=me.mounted?1.6:1;
+        const step=baseStep*mountMult*dt;
         if(d<=step) { me.targetX=demoDest.x;me.targetZ=demoDest.z;demoDest=null; }
         else if(d>0){ me.targetX+=dx/d*step;me.targetZ+=dz/d*step; }
       }
@@ -298,6 +300,11 @@
     // The horizon only enters the portrait frustum at shallow camera tilts.
     sky.setEnabled(camera.beta > 1.05);
     motes.emitter.copyFrom(camera.target);
+    if (typeof updateWeather === "function") updateWeather(dt, elapsed);
+    if (typeof updateBanners === "function") updateBanners(dt, elapsed);
+    if (typeof updatePet === "function") updatePet(dt, elapsed);
+    if (typeof updateFlight === "function") updateFlight(dt, elapsed);
+    if (typeof updateThaoWessuwanBoss === "function") updateThaoWessuwanBoss(dt, elapsed);
     animatePortals(elapsed, dt);
     if (me) warm.position.set(me.x, me.y + 3.4, me.z + .6);
     scene.render();

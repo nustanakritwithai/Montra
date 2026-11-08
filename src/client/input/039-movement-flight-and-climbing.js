@@ -194,16 +194,16 @@
   function syncMountButton() {
     const button=$("mountButton"),me=ownServerCharacter();
     if(!button)return;
-    // Always shown while online; greyed out with a reason when the server or character cannot ride.
-    const reason=room?.state?.mountAvailable!==true ? "server" : !me?.persistent ? "guest" : "";
-    button.hidden=mode!=="live";
+    const isMounted = mode === "live" ? Boolean(me?.mounted) : Boolean(getLocalAvatar()?.mounted);
+    const reason=mode==="live" ? (room?.state?.mountAvailable!==true ? "server" : !me?.persistent ? "guest" : "") : "";
+    button.hidden=false;
     button.dataset.unavailable=reason; button.classList.toggle("mount-off",Boolean(reason));
-    button.disabled=!me?.alive;
-    button.setAttribute("aria-pressed",String(Boolean(me?.mounted)));
-    button.querySelector("i").textContent=me?.mounted ? "ลงม้า" : "เรียกม้า";
+    button.disabled=mode==="live" ? !me?.alive : getLocalAvatar()?.serverAlive === false;
+    button.setAttribute("aria-pressed",String(isMounted));
+    button.querySelector("i").textContent=isMounted ? "ลงม้า" : "เรียกม้า";
     $("menuMountLabel").textContent=button.querySelector("i").textContent;
     $("menuMount").disabled=button.disabled;
-    button.title=me?.mounted ? "ลงจากม้าเพื่อใช้วิชาต่อสู้" : "เรียกม้าสำหรับเดินทาง";
+    button.title=isMounted ? "ลงจากม้าเพื่อใช้วิชาต่อสู้" : "เรียกม้าสำหรับเดินทาง";
   }
   function requestClimb(stairId) {
     if (!hasLiveElevation()) {

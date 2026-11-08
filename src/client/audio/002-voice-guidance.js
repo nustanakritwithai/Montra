@@ -134,8 +134,181 @@
       cooldown: 15000,
       alert: false,
       icon: "⚡"
+    },
+    territory_contested: {
+      title: "สัญญาณศึกแดนศักดิ์สิทธิ์",
+      subtitle: "เสาธงอาคมถูกโจมตี! นักรบกิลด์จงรุดไปสกัดกั้น",
+      text: "สัญญาณศึกดังขึ้นแล้ว! เสาธงอาคมของเรากำลังถูกเข้าตี รีบไปสกัดกั้นเร็วเข้า!",
+      cooldown: 25000,
+      alert: true,
+      icon: "🚩"
+    },
+    territory_captured: {
+      title: "ชัยชนะแห่งสงครามกิลด์",
+      subtitle: "ยึดเสาธงอาคมสำเร็จ! สถาปนาอำนาจครองแดน",
+      text: "ชัยชนะเป็นของเรา! เสาธงแดนศักดิ์สิทธิ์ถูกสถาปนาขึ้นแล้ว อำนาจแห่งกิลด์จงเจริญ!",
+      cooldown: 20000,
+      alert: false,
+      icon: "🏆"
+    },
+    mount_summon: {
+      title: "ม้าทรงอาคม",
+      subtitle: "ควบขี่ม้าทรงมนตรา ท่องแดนไสยเวทได้รวดเร็วขึ้น",
+      text: "ม้าทรงอาคมพร้อมออกศึกแล้ว! ควบทะยานข้ามแดนได้อย่างรวดเร็ว",
+      cooldown: 12000,
+      alert: false,
+      icon: "🐎"
+    },
+    blood_moon_rise: {
+      title: "ราตรีจันทร์สีเลือด",
+      subtitle: "จันทร์เพ็ญสีเลือดปรากฏ! อสูรดุร้ายขึ้น แต่พลังอาคมพรั่งพรู",
+      text: "ระวังตัวให้ดี! จันทร์สีเลือดลอยเด่นเหนือฟ้า มนต์ดำครอบงำเหล่าอสูร ทว่าพลังอาคมและค่าประสบการณ์จักทวีคูณ!",
+      cooldown: 30000,
+      alert: true,
+      icon: "🌕"
+    },
+    banner_planted: {
+      title: "ธงชัยอาคม",
+      subtitle: "ปักธงชัยอาคมพิทักษ์พันธมิตรกิลด์ เพิ่มพลังป้องกันและต้านทานอาถรรพ์",
+      text: "ปักธงชัยอาคม! แนวพิทักษ์แห่งกิลด์เริ่มทำงาน เหล่าพันธมิตรจงรวมพลังในรัศมีอาคม",
+      cooldown: 15000,
+      alert: true,
+      icon: "🚩"
+    },
+    banner_expired: {
+      title: "ธงชัยสิ้นฤทธิ์",
+      subtitle: "อาคมพิทักษ์ของธงชัยจางหายไปแล้ว",
+      text: "ธงชัยอาคมสิ้นฤทธิ์มนตราแล้ว จงระวังตัวและถอยร่นเข้าสู่แนวปลอดภัย",
+      cooldown: 20000,
+      alert: false,
+      icon: "🏳️"
+    },
+    familiar_summon: {
+      title: "ภูติอาคมคู่หู",
+      subtitle: "อัญเชิญกุมารทอง/พญาครุฑน้อยเคียงข้าง ช่วยรบและค้นหาไอเทม",
+      text: "ภูติอาคมคู่หูพร้อมเคียงข้างท่านแล้ว! กุมารน้อยจะช่วยสอดส่องและคุ้มกันภัย",
+      cooldown: 12000,
+      alert: true,
+      icon: "✨"
+    },
+    familiar_treasure: {
+      title: "สัมผัสไอเวทสมบัติ",
+      subtitle: "ภูติอาคมตรวจพบแหล่งพลังงานหรือสมบัติล้ำค่าใกล้ตัว",
+      text: "ภูติอาคมตรวจพบแหล่งพลังเวทหรือสมบัติล้ำค่าในบริเวณใกล้เคียง รีบตามไปดูเร็ว!",
+      cooldown: 25000,
+      alert: true,
+      icon: "💎"
+    },
+    flight_takeoff: {
+      title: "สยายปีกเวหา",
+      subtitle: "กางปีกเทวะมนตรา ทะยานลอยตัวขึ้นสู่ท้องฟ้า",
+      text: "สยายปีกมนตราทะยานสู่เวหา! ควบคุมกระแสลมเหนือสมรภูมิ",
+      cooldown: 8000,
+      alert: true,
+      icon: "🪽"
+    },
+    flight_slam: {
+      title: "ธรณีสะท้านปฐพี",
+      subtitle: "พุ่งดิ่งลงจากเวหาฟาดคลื่นพลังทำลายล้าง",
+      text: "พุ่งกระแทกธรณีสะท้านปฐพี! คลื่นอัดกระแทกกระจายรอบทิศ",
+      cooldown: 10000,
+      alert: true,
+      icon: "⚡"
+    },
+    boss_titan_spawn: {
+      title: "ท้าวเวสสุวรรณเทวราช",
+      subtitle: "จอมอสูรเทวะผู้พิทักษ์ทิศอุดรปรากฏกาย!",
+      text: "ท้าวเวสสุวรรณเทวราชปรากฏกายแล้ว! ระวังพลังอสนีบาตจากกระบองยันต์",
+      cooldown: 20000,
+      alert: true,
+      icon: "👹"
+    },
+    boss_titan_stagger: {
+      title: "เกราะอสูรสะท้าน",
+      subtitle: "ท้าวเวสสุวรรณสูญเสียสมดุลชั่วคราว!",
+      text: "เกราะอาคมของท้าวเวสสุวรรณแตกแล้ว! ระดมโจมตีจุดอ่อนเร็วเข้า!",
+      cooldown: 15000,
+      alert: true,
+      icon: "💥"
     }
   };
+
+  const VOICE_PERSONAS = {
+    elder: {
+      id: "elder",
+      name: "พราหมณ์เฒ่า",
+      role: "ผู้หยั่งรู้และชี้แนะแห่งแดนมนตรา",
+      icon: "🧙‍♂️",
+      pitch: 0.82,
+      rate: 0.88
+    },
+    warrior: {
+      id: "warrior",
+      name: "นักรบมนตรา",
+      role: "ยอดนักรบเพลงยุทธ์ผู้เจนสมรภูมิ",
+      icon: "⚔️",
+      pitch: 0.95,
+      rate: 1.08
+    },
+    spirit: {
+      id: "spirit",
+      name: "วิญญาณผู้พิทักษ์",
+      role: "จิตวิญญาณศักดิ์สิทธิ์ผู้ปกปักษ์แดนลี้ลับ",
+      icon: "✨",
+      pitch: 1.16,
+      rate: 0.92
+    }
+  };
+
+  function getVoicePersona() {
+    try {
+      const p = localStorage.getItem("montra_voice_persona");
+      return VOICE_PERSONAS[p] ? p : "elder";
+    } catch (_) {
+      return "elder";
+    }
+  }
+
+  function setVoicePersona(id) {
+    if (!VOICE_PERSONAS[id]) return false;
+    try {
+      localStorage.setItem("montra_voice_persona", id);
+    } catch (_) {}
+    const p = VOICE_PERSONAS[id];
+    if (typeof floatAtPlayer === "function" && typeof localId !== "undefined") {
+      floatAtPlayer(localId, `สลับเสียงผู้ชี้แนะ: ${p.name} ${p.icon}`, "status");
+    }
+    SFX("bell", { intensity: 1.2, pitch: p.pitch });
+    triggerWhisper(`จิตวิญญาณแห่ง${p.name} สถิตเคียงข้างเจ้าแล้ว`, { persona: id });
+    return true;
+  }
+
+  function triggerWhisper(text, options = {}) {
+    if (!isVoiceGuidanceEnabled()) return;
+    const personaId = options.persona || getVoicePersona();
+    const persona = VOICE_PERSONAS[personaId] || VOICE_PERSONAS.elder;
+
+    SFX("whisper", { intensity: options.intensity || 1.1 });
+    ensureVoiceGuidanceHud();
+    voiceHudTitle.textContent = options.title || persona.name;
+    voiceHudText.textContent = text;
+    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = persona.icon;
+    voiceGuidanceHud.classList.remove("combat-alert");
+    voiceGuidanceHud.classList.add("spirit-whisper");
+    voiceGuidanceHud.hidden = false;
+    clearTimeout(voiceHudTimer);
+    voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(4000, text.length * 95));
+
+    try {
+      window.MontraAudio?.speak?.(text, {
+        persona: personaId,
+        pitch: persona.pitch,
+        rate: persona.rate,
+        onEnd: () => hideVoiceGuidanceHud(),
+        onError: () => {}
+      });
+    } catch (_) {}
+  }
 
   const lastCombatCalloutTimes = new Map();
   function triggerCombatCallout(key) {
@@ -147,17 +320,23 @@
     if (now - last < item.cooldown) return;
     lastCombatCalloutTimes.set(key, now);
 
+    const personaId = getVoicePersona();
+    const persona = VOICE_PERSONAS[personaId] || VOICE_PERSONAS.elder;
+
     ensureVoiceGuidanceHud();
     voiceHudTitle.textContent = item.title;
     voiceHudText.textContent = item.subtitle;
-    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = item.icon || "🧙‍♂️";
+    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = item.icon || persona.icon;
+    voiceGuidanceHud.classList.remove("spirit-whisper");
     voiceGuidanceHud.classList.toggle("combat-alert", Boolean(item.alert));
     voiceGuidanceHud.hidden = false;
     clearTimeout(voiceHudTimer);
     voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(4500, item.subtitle.length * 100));
     try {
       window.MontraAudio?.speak?.(item.text, {
-        persona: "guide",
+        persona: personaId,
+        pitch: persona.pitch,
+        rate: persona.rate,
         onEnd: () => hideVoiceGuidanceHud(),
         onError: () => {}
       });
@@ -208,7 +387,7 @@
   function hideVoiceGuidanceHud() {
     if (voiceGuidanceHud) {
       voiceGuidanceHud.hidden = true;
-      voiceGuidanceHud.classList.remove("combat-alert");
+      voiceGuidanceHud.classList.remove("combat-alert", "spirit-whisper");
     }
     clearTimeout(voiceHudTimer);
   }
@@ -221,22 +400,37 @@
       if (localStorage.getItem(key)) return;
       localStorage.setItem(key, "1");
     } catch (_) {}
+
+    const personaId = getVoicePersona();
+    const persona = VOICE_PERSONAS[personaId] || VOICE_PERSONAS.elder;
+
     ensureVoiceGuidanceHud();
     voiceHudTitle.textContent = item.title;
     voiceHudText.textContent = item.subtitle;
-    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = "🧙‍♂️";
-    voiceGuidanceHud.classList.remove("combat-alert");
+    if (voiceGuidanceAvatar) voiceGuidanceAvatar.textContent = persona.icon;
+    voiceGuidanceHud.classList.remove("combat-alert", "spirit-whisper");
     voiceGuidanceHud.hidden = false;
     clearTimeout(voiceHudTimer);
     voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(5000, item.text.length * 110));
     try {
       window.MontraAudio?.speak?.(item.text, {
-        persona: "guide",
+        persona: personaId,
+        pitch: persona.pitch,
+        rate: persona.rate,
         onEnd: () => hideVoiceGuidanceHud(),
         onError: () => {}
       });
     } catch (_) {}
   }
+
+  window.MontraVoice = {
+    getPersona: getVoicePersona,
+    setPersona: setVoicePersona,
+    getPersonas: () => Object.values(VOICE_PERSONAS),
+    triggerWhisper,
+    isVoiceEnabled: isVoiceGuidanceEnabled,
+    setVoiceEnabled: setVoiceGuidanceEnabled
+  };
 
   // Sound effects (audio.js). Safe no-op until audio is unlocked by the first tap.
   const SFX = (name, opts) => window.MontraAudio?.play(name, opts);

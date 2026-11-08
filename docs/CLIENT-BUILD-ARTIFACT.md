@@ -41,10 +41,10 @@ fragments fail. Existing generated output is never silently repaired by preparat
 
 ## Evidence and release checks
 
-`src/client/extraction-baseline.json` records the original source commit, fragment
-hashes, sizes, and statement boundaries. The original 1,372,310-byte bundle has
-SHA-256 `a6ef7e6c12120dd8d2f0fd641765d152871c6dbcb6df7a110801f1ef9cb5ebbf`.
-The build tests retain the historical fingerprint, verify unchanged fragments,
+`src/client/extraction-baseline.json` records the main branch's pre-integration
+fragment hashes and sizes. Its 1,442,437-byte bundle has SHA-256
+`579f58cc515e9fa306053120fc856a832fb44c74abe0e46ed6a3458286cbd00b`.
+The build tests retain this fingerprint, verify unchanged fragments,
 and compare reviewed phase 2 sources and output with `src/modules/phase2-baseline.json`. They also
 exercise a missing bundle, stale output, unsafe paths, symlinks, syntax errors,
 CLI preparation and byte-for-byte static payload parity. Do not refresh baseline

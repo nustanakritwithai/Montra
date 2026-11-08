@@ -33,9 +33,17 @@
   };
   function soundSettingsHtml() {
     const a = window.MontraAudio?.settings; if (!a) return "";
+    const curP = typeof getVoicePersona === "function" ? getVoicePersona() : "elder";
     const row = (key, label) => `<label class="field sound-row">${label}<input type="range" min="0" max="100" step="5" data-sound="${key}" value="${Math.round((a[key] ?? 0.8) * 100)}"></label>`;
     return `<section class="sound-settings"><h3>เสียง</h3><label class="field sound-row"><input type="checkbox" data-sound="muted" ${a.muted ? "" : "checked"}> เปิดเสียง</label>` +
-      row("master", "ความดังรวม") + row("voice", "เสียงพูดและพากย์ไทย") + `<label class="field sound-row"><input type="checkbox" id="toggleVoiceGuidance" ${isVoiceGuidanceEnabled() ? "checked" : ""}> 🎙️ เสียงพูดชี้แนะผู้เล่นใหม่ (Typhoon Voice)</label>` + `<button type="button" id="testVoiceBtn" class="secondary" style="margin:8px 0;width:100%;font-weight:600">🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)</button>` +
+      row("master", "ความดังรวม") + row("voice", "เสียงพูดและพากย์ไทย") +
+      `<label class="field sound-row"><input type="checkbox" id="toggleVoiceGuidance" ${isVoiceGuidanceEnabled() ? "checked" : ""}> 🎙️ เสียงพูดชี้แนะผู้เล่นใหม่ (Typhoon Voice)</label>` +
+      `<div class="field sound-row voice-persona-row"><span>บุคลิกเสียงผู้ชี้แนะ</span><select id="voicePersonaSelect" style="background:#1e1410;color:#ffd84a;border:1px solid #ffcc00;border-radius:6px;padding:4px 8px;font-weight:700">` +
+      `<option value="elder"${curP === "elder" ? " selected" : ""}>🧙‍♂️ พราหมณ์เฒ่า (สุขุม ลึกลับ)</option>` +
+      `<option value="warrior"${curP === "warrior" ? " selected" : ""}>⚔️ นักรบมนตรา (ดุดัน ปลุกใจ)</option>` +
+      `<option value="spirit"${curP === "spirit" ? " selected" : ""}>✨ วิญญาณผู้พิทักษ์ (ก้องกังวาน นุ่มลึก)</option>` +
+      `</select></div>` +
+      `<button type="button" id="testVoiceBtn" class="secondary" style="margin:8px 0;width:100%;font-weight:600">🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)</button>` +
       row("sfx", "เอฟเฟกต์และการต่อสู้") + row("ambience", "บรรยากาศ") + row("music", "ดนตรี") + row("ui", "ปุ่มและการแจ้งเตือน") + `</section>`;
   }
   function lightSettingsHtml() {
@@ -59,8 +67,17 @@
     if (vGuideToggle) vGuideToggle.addEventListener("change", () => {
       setVoiceGuidanceEnabled(vGuideToggle.checked);
     });
+    const personaSelect = root.querySelector("#voicePersonaSelect");
+    if (personaSelect) {
+      personaSelect.addEventListener("change", () => {
+        if (typeof setVoicePersona === "function") setVoicePersona(personaSelect.value);
+      });
+    }
     const testBtn = root.querySelector("#testVoiceBtn");
-    if (testBtn) bindSpeechButton(testBtn, "สวัสดี ยินดีต้อนรับสู่อาณาจักรมนตรา ระบบเสียงพูดภาษาไทยพร้อมใช้งานแล้ว", "guide", "🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)");
+    if (testBtn) {
+      const curP = typeof getVoicePersona === "function" ? getVoicePersona() : "elder";
+      bindSpeechButton(testBtn, "สวัสดี ยินดีต้อนรับสู่อาณาจักรมนตรา ระบบเสียงผู้ชี้แนะพร้อมเคียงข้างเจ้า", curP, "🔊 ทดสอบเสียงพูดภาษาไทย (กดเพื่อฟัง)");
+    }
   }
   function bindSpeechButton(button, text, persona, label) {
     let status = button.montraSpeechStatus;

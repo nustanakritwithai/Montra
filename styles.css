@@ -4728,6 +4728,76 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   transform: scale(1.05);
 }
 
+/* Phase 15: Shamanic War Banner */
+#bannerButton {
+  position: relative;
+  border: 1px solid rgba(255, 206, 90, 0.4);
+}
+#bannerButton:active,
+#bannerButton[aria-pressed="true"] {
+  border-color: #ffe082;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
+}
+.war-banner-buff-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  margin-top: 4px;
+  border-radius: 12px;
+  background: rgba(26, 18, 8, 0.85);
+  border: 1px solid #ffd700;
+  color: #ffe082;
+  font-size: 11px;
+  font-weight: bold;
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.35);
+  animation: bannerPulse 2s infinite ease-in-out;
+}
+.war-banner-buff-badge[hidden] {
+  display: none !important;
+}
+@keyframes bannerPulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(255, 215, 0, 0.3); }
+  50% { box-shadow: 0 0 14px rgba(255, 215, 0, 0.7); }
+}
+
+/* Phase 16: Shamanic Spirit Pet & Familiar */
+#petButton {
+  position: relative;
+  border: 1px solid rgba(128, 216, 255, 0.4);
+}
+#petButton:active,
+#petButton[aria-pressed="true"] {
+  border-color: #80d8ff;
+  box-shadow: 0 0 10px rgba(0, 176, 255, 0.6);
+}
+
+/* Phase 17: Celestial Wing Flight & Aerial Combat */
+#flightButton {
+  position: relative;
+  border: 1px solid rgba(255, 215, 0, 0.45);
+}
+#flightButton:active,
+#flightButton[aria-pressed="true"] {
+  border-color: #ffd700;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.7);
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.25) 0%, rgba(20, 20, 30, 0.8) 100%);
+}
+
+/* Phase 18: Thao Wessuwan Titan Boss 3D */
+#bossEncounterButton {
+  position: relative;
+  border: 1px solid rgba(255, 23, 68, 0.5);
+}
+#bossEncounterButton:active,
+#bossEncounterButton[aria-pressed="true"] {
+  border-color: #ff1744;
+  box-shadow: 0 0 14px rgba(255, 23, 68, 0.8);
+  background: radial-gradient(circle, rgba(255, 23, 68, 0.3) 0%, rgba(20, 20, 30, 0.8) 100%);
+}
+
+
+
 /* ========================================================
    MONTRA Comprehensive 26-Skill SVG Engine & Book Icons
    ======================================================== */
@@ -5029,6 +5099,63 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   transition: width 0.12s ease-out;
 }
 
+/* ===== Phase 11: Guild Territory War & War Horn Alert ===== */
+.war-screen-alert {
+  position: fixed; inset: 0; pointer-events: none; z-index: 99;
+  opacity: 0; transition: opacity 0.3s ease-out;
+}
+.war-screen-alert.show-contested {
+  opacity: 1;
+  background: radial-gradient(circle at center, transparent 40%, rgba(220, 38, 38, 0.45) 85%, rgba(185, 28, 28, 0.8) 100%);
+  animation: pulseWarBorder 0.8s infinite alternate;
+}
+.war-screen-alert.show-captured {
+  opacity: 1;
+  background: radial-gradient(circle at center, transparent 40%, rgba(234, 179, 8, 0.45) 85%, rgba(202, 138, 4, 0.85) 100%);
+  animation: pulseWarVictory 1.2s ease-out forwards;
+}
+@keyframes pulseWarBorder {
+  0% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+@keyframes pulseWarVictory {
+  0% { opacity: 0; }
+  30% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.war-hud .quest-content strong {
+  color: #facc15;
+  text-shadow: 0 0 8px #ca8a04, 0 1px 2px #000;
+  letter-spacing: 0.5px;
+}
+.war-flag-indicator {
+  display: inline-block;
+  font-size: 11px;
+  color: #ffd700;
+  margin-left: 4px;
+  animation: flagWave 1.2s infinite ease-in-out alternate;
+}
+@keyframes flagWave {
+  0% { transform: rotate(-6deg); }
+  100% { transform: rotate(6deg); }
+}
+
+/* ===== Phase 13: Blood Moon Screen Vignette ===== */
+.blood-moon-vignette {
+  position: fixed; inset: 0; pointer-events: none; z-index: 98;
+  opacity: 0; transition: opacity 1.2s ease-in-out;
+  background: radial-gradient(circle at center, transparent 35%, rgba(185, 28, 28, 0.35) 75%, rgba(127, 29, 29, 0.75) 100%);
+}
+.blood-moon-vignette.active {
+  opacity: 1;
+  animation: pulseBloodMoon 3.5s infinite ease-in-out alternate;
+}
+@keyframes pulseBloodMoon {
+  0% { opacity: 0.65; }
+  100% { opacity: 1; }
+}
+
+
 /* ===== Typhoon Voice Guidance Subtitle HUD ===== */
 .voice-guidance-hud {
   position: absolute;
@@ -5132,3 +5259,23 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   0% { transform: scale(1); filter: drop-shadow(0 0 4px #ff2233); }
   100% { transform: scale(1.12); filter: drop-shadow(0 0 16px #ff4455); }
 }
+.voice-guidance-hud.spirit-whisper {
+  border-color: #38bdf8;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.9), 0 0 18px rgba(56, 189, 248, 0.55);
+}
+.voice-guidance-hud.spirit-whisper .voice-guidance-avatar {
+  background: radial-gradient(circle, #38bdf8 20%, #0369a1 100%);
+  border-color: #7dd3fc;
+  animation: pulseAvatarSpirit 1.2s infinite alternate;
+}
+@keyframes pulseAvatarSpirit {
+  0% { transform: scale(1); filter: drop-shadow(0 0 4px #0284c7); }
+  100% { transform: scale(1.1); filter: drop-shadow(0 0 16px #38bdf8); }
+}
+.voice-persona-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
