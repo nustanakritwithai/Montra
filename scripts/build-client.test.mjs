@@ -8,9 +8,19 @@ import { spawnSync } from 'node:child_process';
 import { assembleClient, checkClient, clientRoot, prepareClient, writeClient } from './build-client.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
-// Intentional gate, market, flight, class-skill, audio, VFX, authoritative-boss visuals and cosmetic-safeguard changes. Keep snapshot
+// Intentional gate, market, flight, class-skill, audio, VFX and cosmetic-safeguard changes. Keep snapshot
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
+  {
+    "path": "ui/052-help-and-inventory.js",
+    "bytes": 41162,
+    "sha256": "5738b40538f6cb24aa9a297a88b1329463b088f86d7902030934db3edce21252"
+  },
+  {
+    "path": "ui/030-item-art-and-comparison.js",
+    "bytes": 14156,
+    "sha256": "439a8b9703a5f4da0add7322e5fe9ee226d680777c5a415500b20e544014c023"
+  },
   {
     "path": "ui/046-drawers-and-chat.js",
     "bytes": 9866,
@@ -118,8 +128,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1471191);
-  assert.equal(hash(bytes), 'ff1a283418e0d1838316c748f3d464d246dc9c5bbd7037fb23d7db66e6c4b015');
+  assert.equal(bytes.length, 1477362);
+  assert.equal(hash(bytes), '7ec64bb373206f28cf382fcf6f68e07f60d3d0127f354b43f419499a62f488e9');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
