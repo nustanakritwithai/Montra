@@ -24,12 +24,12 @@ const reviewedStyleFragments = new Map([
 },
 {
   "path": "hud/038-map-shortcuts-and-quick-skills.css",
-  "bytes": 7186,
-  "sha256": "3c6765ca17d2d6e9a1ea2a6fceec5883ac6f3f3e81e11fba4ff9e1e41def6b0f"
+  "bytes": 9313,
+  "sha256": "a479b5e78ae23d3656f63b3f18f28500c0dd1d84fe098390bf3f4f9d59b200e7"
 }
 ].map(entry => [entry.path, entry]));
-const reviewedStylesBytes = 361426;
-const reviewedStylesSha = '5acecefd0da0e4cb7a7d285859b314f0308350336d41786861904d9b1c011e97';
+const reviewedStylesBytes = 363553;
+const reviewedStylesSha = 'ec77f6f6f32be6eaa396f46338b1a6581b84b8abe790ab40660acb0da641cf98';
 
 function withStylesFixture(run) {
   const temp = mkdtempSync(join(tmpdir(), 'montra-styles-'));

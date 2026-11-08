@@ -4862,6 +4862,28 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .location-area .map-shortcuts button:not([hidden]) { display: grid !important; place-items: center; padding: 0 !important; }
 .location-area .map-shortcuts button > i { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .location-area .map-shortcuts button .hud-btn-icon { margin: 0 !important; }
+/* ---- Beauty pass 2: one HUD family ----
+   Every field panel (player card, quest, strip, minimap buttons, place chips, chat) shares the same
+   night-jade glass, thin gold edge, radius and shadow, instead of a mix of teal, green and black boxes. */
+#game { --hud-glass: linear-gradient(160deg, rgba(18, 31, 27, .9), rgba(8, 14, 12, .86)); --hud-edge: rgba(214, 176, 98, .42); --hud-edge-hot: rgba(243, 199, 104, .8);
+  --hud-round: 12px; --hud-shadow: 0 6px 16px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 240, 200, .06); }
+#game .top-hud .panel, #game .resource-strip, #game .location-area .map-shortcuts, #game .chat-box, #game .location-area .online-count {
+  background: var(--hud-glass); border: 1px solid var(--hud-edge); box-shadow: var(--hud-shadow); }
+#game .top-hud .panel, #game .location-area .map-shortcuts, #game .chat-box { border-radius: var(--hud-round); }
+#game .resource-strip, #game .location-area .online-count { border-radius: 9px; }
+#game .top-hud .quest:hover, #game .top-hud .quest:focus-visible { border-color: var(--hud-edge-hot); }
+#game .location-area .map-shortcuts button { background: rgba(255, 255, 255, .04); border: 1px solid rgba(214, 176, 98, .18); }
+#game .location-area .map-shortcuts button[aria-pressed="true"], #game .location-area .map-shortcuts button.open { border-color: var(--hud-edge-hot); background: rgba(243, 199, 104, .12); }
+/* Place name under the minimap wraps instead of being cut ("หมู่บ้านอาคม · เขตพัก…"). */
+#game .location-area .place-name { white-space: normal; text-overflow: clip; max-width: 150px; margin-left: auto; text-align: right; line-height: 1.25; font-size: 10.5px;
+  text-shadow: 0 1px 2px #000, 0 0 6px #000; }
+/* Wide screens: the field HUD was drawn at phone size; scale it up so it reads at desktop distance. */
+@media (min-width: 1200px) and (min-height: 680px) {
+  #game .top-hud, #game .resource-strip, #game .chat-box, #game .field-dock { zoom: 1.22; }
+}
+@media (min-width: 1700px) and (min-height: 900px) {
+  #game .top-hud, #game .resource-strip, #game .chat-box, #game .field-dock { zoom: 1.45; }
+}
 /* ========================================================
    MONTRA Comprehensive 26-Skill SVG Engine & Book Icons
    ======================================================== */
