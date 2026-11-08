@@ -58,8 +58,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "world/019-state-and-portals.js",
-    "bytes": 19241,
-    "sha256": "cd49e6c00b182217ab9bda65979e185a7c62c21b135fa9416e280bea00a0e17f"
+    "bytes": 19673,
+    "sha256": "4ae167f2b2f8185a20d1ce63ef74c3bb56de9ef57546141d54fc0677df788649"
   },
   {
     "path": "ui/047-maps-and-strategy.js",
@@ -78,8 +78,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "network/044-state-sync-and-connection.js",
-    "bytes": 138475,
-    "sha256": "476218fd0ffb6e56a535352171f6620c473273c01cb7a667f6a6cea8982977d3"
+    "bytes": 138603,
+    "sha256": "5cd0c46d1d4a68eb76f53376dd11a0b2907e33e53fdf0405b9c7963a48cea1e1"
   },
   {
     "path": "audio/051-sound-settings-and-speech.js",
@@ -105,6 +105,36 @@ const reviewedReleaseFragments = new Map([
     "path": "combat/040-spell-visuals.js",
     "bytes": 16480,
     "sha256": "3c2585347212c4a3ba5673701f46910b1d44365441ee410c497b25735f411f39"
+  },
+  {
+    "path": "render/035-ghost-instantiation.js",
+    "bytes": 15358,
+    "sha256": "a5f4fa4b9478bc9ee2c0fef80ffd522099141ba3a1257079868fa9380513cabc"
+  },
+  {
+    "path": "render/037-ghost-animation.js",
+    "bytes": 4323,
+    "sha256": "2fa0e4e1230e19ee855c812ba9912f7ff144cfc6f18401b90ef949beb448a6ea"
+  },
+  {
+    "path": "render/026-avatar-auras-and-lifecycle.js",
+    "bytes": 12561,
+    "sha256": "36fa273c1ff22a326f914ef3c8433c53577bcaae35cb7a8621fa1f0e8bd92582"
+  },
+  {
+    "path": "render/032-ghost-primitives.js",
+    "bytes": 33439,
+    "sha256": "a59f7e1682b391500e45734972348c53c7549107d9f85fcb3f1ffc4ff8087617"
+  },
+  {
+    "path": "render/033-ghost-materials-and-surfaces.js",
+    "bytes": 29130,
+    "sha256": "cfa9d8a68854827f604d4add3270ffc01400baa43de1d334eda6f3282a258c92"
+  },
+  {
+    "path": "render/034-humanoid-ghost-designs.js",
+    "bytes": 92950,
+    "sha256": "41d3298f8656da9105576a7be0e68ec1ed7069456e848ef6e0a02d12f18b5ed2"
   }
 ].map(entry => [entry.path, entry]));
 
@@ -113,8 +143,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1456288);
-  assert.equal(hash(bytes), '6221917f8ad1119e066a2d88eb4422dee2e36e35f06454bfd5ef187ff7b22a62');
+  assert.equal(bytes.length, 1464107);
+  assert.equal(hash(bytes), '7b0a57a6812715b3edee3cd5aa77cf18c5c0f8a1b5d5391baf5dbde031a8b6da');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

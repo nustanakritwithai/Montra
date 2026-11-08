@@ -69,7 +69,7 @@
   gm.waterRing = additiveMat("water ring", radialTexture("water ring", 128, [[0, "rgba(120,200,190,0)"], [.8, "rgba(120,200,190,0)"], [.92, "rgba(150,230,210,.7)"], [1, "rgba(150,230,210,0)"]]));
   gm.waveMat = additiveMat("water wave", radialTexture("water wave", 128, [[0, "rgba(120,220,210,0)"], [.75, "rgba(120,220,210,0)"], [.88, "rgba(160,240,230,.8)"], [1, "rgba(160,240,230,0)"]]));
   gm.waterBody = new B.StandardMaterial("water spirit body", scene); gm.waterBody.diffuseColor = B.Color3.FromHexString("#3d8a86"); gm.waterBody.emissiveColor = B.Color3.FromHexString("#1d5a58"); gm.waterBody.alpha = .7; gm.waterBody.specularColor = B.Color3.FromHexString("#c8fff4"); gm.waterBody.specularPower = 64; gm.waterBody.backFaceCulling = false;
-  gm.moonMist = gm.smokeWhite.clone("moon mist"); gm.moonMist.diffuseColor = B.Color3.FromHexString("#9fb4e0"); gm.moonMist.emissiveColor = B.Color3.FromHexString("#3a4e80");
+  gm.moonMist = cloneGhostSmokeMaterial(gm.smokeWhite, "moon mist"); gm.moonMist.diffuseColor = B.Color3.FromHexString("#9fb4e0"); gm.moonMist.emissiveColor = B.Color3.FromHexString("#3a4e80");
   gm.moonGlow = mat("crescent halo", "#e8f2ff", "#b8d4ff");
   gm.moonBeam = additiveMat("moonbeam", paintTexture("moonbeam", 64, (c, s) => { const g = c.createLinearGradient(0, 0, s, 0); g.addColorStop(0, "rgba(180,210,255,0)"); g.addColorStop(.5, "rgba(200,225,255,.7)"); g.addColorStop(1, "rgba(180,210,255,0)"); c.fillStyle = g; c.fillRect(0, 0, s, s); }));
   for (const m of [gm.flameMat, gm.eyeMoon, gm.moonGlow]) glowMats.add(m);
