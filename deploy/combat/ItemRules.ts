@@ -531,3 +531,16 @@ export function useInventoryItem(
     inventory: { ...original, slots },
   };
 }
+
+// Visible worn gear for other players' renderers: "slot=family:tier" pairs (e.g. "chest=arm_heavy_chest:3").
+// Only families and tiers of equipped body items are exposed; stats, cards and bag contents stay private.
+export function gearLook(inventory: InventorySnapshot | undefined): string {
+  const worn = inventory?.equipment;
+  if (!worn) return "";
+  const out: string[] = [];
+  for (const [slot, id] of Object.entries(worn)) {
+    const match = typeof id === "string" ? /^([a-z_]+?)_(\d+)$/.exec(id) : null;
+    if (match) out.push(`${slot}=${match[1]}:${Math.min(99, Number(match[2]))}`);
+  }
+  return out.sort().join(";");
+}

@@ -47,3 +47,11 @@
 .exp-base i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #b8860b, #ffd23f 70%, #fff0a0); box-shadow: 0 0 6px #ffc83a; transition: width .6s ease; }
 .exp-ticks { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), #0008 calc(10% - 1px) 10%); pointer-events: none; }
 .hud-journal .identity .hud-meter.xp { display: none !important; }
+/* Beauty pass: an empty chat box reads as a quiet hint, and the tab row fades at the edge when it scrolls. */
+.cb-log:empty::before { content: "ยังไม่มีข้อความ"; display: block; padding: 6px 2px; color: #9fb3a6; font-size: 11px; font-style: italic; opacity: .8; }
+.chat-box:not(.wide) .cb-log:empty::before { content: "ยังไม่มีข้อความ · แตะเพื่อเปิดแชท"; }
+.chat-box:has(.cb-log:empty):not(:focus-within):not(:hover) { background: #070b0966; border-color: #3c5a4c55; }
+.chat-box:has(.cb-log:empty) .cb-log { height: auto; min-height: 30px; max-height: 150px; }
+.chat-box:not(.wide):has(.cb-log:empty) .cb-log { height: auto; min-height: 26px; }
+.cb-tabs { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.chat-box.wide .cb-tabs { -webkit-mask-image: none; mask-image: none; }

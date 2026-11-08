@@ -86,18 +86,17 @@
           const root=new B.TransformNode("แหล่งวัตถุดิบ",scene);
           root.position.set(n.x,ground?terrainHeight(ground,n.x,n.z):0,n.z);
           if(n.kind==="wood"){
-            const trunk=B.MeshBuilder.CreateCylinder("ต้นไม้เก็บได้",{height:2.8,diameter:.65,tessellation:7},scene);
-            const crown=B.MeshBuilder.CreateCylinder("เรือนยอด",{height:2.8,diameterBottom:3,diameterTop:.4,tessellation:7},scene);
-            trunk.parent=crown.parent=root;trunk.position.y=1.4;crown.position.y=3.2;
-            trunk.material=darkWood;crown.material=forestLeaf;trunk.isPickable=crown.isPickable=false;
+            // Gatherable timber: a pradu (or a bamboo clump on bamboo maps) instead of a cylinder and cone.
+            placeThaiTree(activeMapId==="bamboo_frontier"?"phai":"pradu",0,0,0,{parent:root,scale:.85});
           }else if(n.kind==="herb"){
             for(let j=0;j<3;j++){
               const leaf=B.MeshBuilder.CreateSphere("สมุนไพร",{diameter:.7,segments:4},scene);
               leaf.parent=root;leaf.position.set(Math.cos(j*2)*.24,.25,Math.sin(j*2)*.24);leaf.scaling.set(.7,.85,.5);leaf.material=leafMid;leaf.isPickable=false;
             }
           }else{
-            const rock=B.MeshBuilder.CreateSphere("สายแร่",{diameter:1.65,segments:5},scene);
-            rock.parent=root;rock.position.y=.48;rock.scaling.y=.65;rock.material=forestStone;rock.isPickable=false;
+            // Iron-ore vein sized by tier; two shapes per tier, picked from the node id so neighbours differ.
+            let h=0;for(const ch of n.id)h=(h*31+ch.charCodeAt(0))|0;
+            placeRock(ironRockKind(n.tier||1),0,0,0,{parent:root,variant:Math.abs(h)%2,rot:(Math.abs(h)%628)/100,scale:.85+(Math.abs(h>>3)%20)/100});
           }
           s={root};
         }
@@ -112,6 +111,15 @@
       }else if(s.root){s.root.scaling.y=size;s.root.position.y=ground?terrainHeight(ground,n.x,n.z):0;}
       else for(const [mesh,y,scale] of s.parts){mesh.scaling.y=scale*size;mesh.position.y=(ground?terrainHeight(ground,n.x,n.z):0)+y*size;}
     }
+  }
+  // Gather feedback (visual only): chips and sparks off ore, splinters off timber, leaf bits off herbs, then a dust ring.
+  function harvestBurst(n){
+    if(!n || typeof spawnFx!=="function")return;
+    const terrain=worldDefinitions?.[activeMapId]?.terrain,y=(terrain?terrainHeight(terrain,n.x,n.z):0)+(n.kind==="wood"?1.2:.7);
+    const col=n.kind==="stone"?["white","gold"]:n.kind==="wood"?["orange","gold"]:["green","jade"];
+    for(let i=0;i<9;i++){const a=i/9*Math.PI*2+Math.random()*.5,v=1.6+Math.random()*1.8;
+      spawnFx(i%3?"glow":"star",col[i%2],n.x,y,n.z,{delay:i*18,life:420+Math.random()*220,s0:.22,s1:.08,a0:.95,a1:0,vel:[Math.cos(a)*v,2.6+Math.random()*1.6,Math.sin(a)*v],grav:9});}
+    spawnFx("ring","white",n.x,(terrain?terrainHeight(terrain,n.x,n.z):0)+.08,n.z,{orient:"ground",life:520,s0:.6,s1:2.6,a0:.35,a1:0});
   }
   function nearbyResources(me){
     if(!me?.alive || me.mounted || me.flying || resources?.mapId!==me.mapId || activeMapId!==me.mapId || Math.abs(playerLayer(me))>=.1)return [];
@@ -168,4 +176,4 @@
   const forgeNames={melee:"โจมตีประชิด",ranged:"โจมตีเวท",guard:"ป้องกันมอนสเตอร์",healing:"พลังรักษา"};
   const gearJobs={muay_boran:"มวยไทยโบราณ",phutthaisawan:"นักดาบอยุธยา",blade:"คมดาบ",sentinel:"ผู้พิทักษ์",seer:"ผู้ร่ายเวท",mender:"พระ"};
   const statNames = {hp:"HP",stamina:"Stamina",mana:"มานา",atk:"โจมตี",def:"ป้องกัน",magicAtk:"เวท",magicDef:"ต้านเวท"};
-  const practiceModels = {wp_wrap_1:"muay_wraps",wp_twins_1:"thai_dual",wp_shadow_1:"ritual_dagger",wp_pike_1:"arcane_sword",wp_wand_1:"spirit_staff",wp_crook_1:"spirit_staff"};
+  const practiceModels = {wp_wrap_1:"muay_wraps",wp_twins_1:"thai_dual",wp_shadow_1:"ritual_dagger",wp_pike_1:"sentinel_pike",wp_wand_1:"seer_wand",wp_crook_1:"mender_crook"};

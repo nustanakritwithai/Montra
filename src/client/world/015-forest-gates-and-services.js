@@ -1,6 +1,6 @@
   // Both maps share one scene and ground. Their static meshes are created once
   // and toggled; switching maps must not accumulate scenes or WebGL resources.
-  const villageMeshes = scene.meshes.filter(mesh => mesh !== ground && mesh !== sky && !mistLayers.includes(mesh));
+  const villageMeshes = scene.meshes.filter(mesh => mesh !== ground && mesh !== sky && !mistLayers.includes(mesh) && !mesh.metadata?.thaiTreeMaster);
   const villageLights = scene.lights.filter(light => light !== moon && light !== keyLight && light !== warm);
   const forestRoot = new B.TransformNode("forbidden-forest", scene);
   const forestLeaf = mat("forest leaves", "#203f2e");
@@ -10,7 +10,7 @@
   const portalMat = mat("portal glow", "#a0e1d2", "#2f9c8f");
   glowMats.add(portalMat);
   const portals = {
-    ritual_village: { id:"village_to_forest", x:-4, z:-17, label:"เดินทางไปป่าต้องห้าม" },
+    ritual_village: { id:"village_to_forest", x:-10, z:-56, label:"เดินทางไปป่าต้องห้าม" },
     forbidden_forest: { id:"forest_to_village", x:0, z:14, label:"กลับหมู่บ้านอาคม" }
   };
   const fixedCrowns = [], forestCrowns = [];
@@ -41,6 +41,8 @@
     for(let i=0;i<220;i++){c.fillStyle=["#bfb196","#e6dcc6","#a89a80","#cbbfa6"][i%4];const r=1+noise(i,108)*2.5;c.beginPath();c.arc(noise(i,109)*s,noise(i,110)*s,r,0,Math.PI*2);c.fill();}
   });
   forestPath.backFaceCulling=false;
+  // ป่าต้องห้าม: G04 leaf-litter floor, G02 packed trails, G03 grassy clearings.
+  applyGroundSurface(forestFloor,"leaves",{tint:.25,tile:6});applyGroundSurface(forestPath,"path",{tint:.2,bump:false});applyGroundSurface(forestClearing,"grass",{uScale:3,vScale:3,tint:.2});
   const forestVerge=vergeMat("trail verge","#241f16");
   const forestGrass=mat("night grass","#2b4a30"), forestFern=mat("fern","#355a3a");
   const bushDark=mat("undergrowth","#1c3524"), bushMid=mat("moonlit shrub","#2a4a33"), mossMat=mat("moss","#3c5a36");
@@ -88,6 +90,8 @@
       for(let k=0;k<5;k++){x+=(noise(i*5+k,136)-.5)*42;y+=(noise(i*5+k,137)-.5)*42;c.lineTo(x,y);}c.stroke();}
   });
   tile.uScale=6;tile.vScale=6.5;templeFloor.diffuseTexture=tile;
+  // วัดร้าง: G12 temple stone with moss in the joints for the floor, court and processional walk.
+  applyGroundSurface(templeFloor,"temple",{tint:.25,tile:5});applyGroundSurface(templeCourt,"temple",{uScale:2,vScale:2,tint:.3});applyGroundSurface(templePaving,"temple",{tint:.3,bump:false});
   templeBrick.diffuseTexture=paintTexture("laterite courses",256,(c,s)=>{
     c.fillStyle="#6b4a3a";c.fillRect(0,0,s,s);
     for(let row=0;row<8;row++)for(let col=-1;col<5;col++){
@@ -106,16 +110,15 @@
   glowMats.add(strikeMat);
   buildRoad([{x:0,z:19},{x:0,z:-19}],4.6,forestPath,forestVerge,forestRoot,7);
   const forestResourceShapes=new Map();
-  for(const [x,z] of [[-6,6],[7,7],[-15,-15],[-16,-8],[-14,2],[-15,12],[15,-15],[15,-5],[15,3],[15,14]]) {
-    const trunk=B.MeshBuilder.CreateCylinder("forest tree",{diameter:1.2,height:4,tessellation:7},scene);
-    trunk.position.set(x,2,z);trunk.material=darkWood;trunk.isPickable=false;trunk.parent=forestRoot;
-    const crown=B.MeshBuilder.CreateCylinder("forest canopy",{diameterTop:0,diameterBottom:4,height:4,tessellation:7},scene);
-    fixedCrowns.push(crown);crown.position.set(x,5,z);crown.material=forestLeaf;crown.isPickable=false;crown.parent=forestRoot;
-    forestResourceShapes.set(x+","+z,[trunk,crown]);
-  }
+  // Forbidden-forest timber: takhian, sai and pradu. Each is its own clone (not an instance) so its canopy
+  // can fade when it hides the hero, and so a felled tree can shrink on its own.
+  const forestKinds=["takhian","pradu","sai","pradu","takhian","pradu","sai","takhian","pradu","pradu"];
+  [[-6,6],[7,7],[-15,-15],[-16,-8],[-14,2],[-15,12],[15,-15],[15,-5],[15,3],[15,14]].forEach(([x,z],i)=>{
+    const tree=placeThaiTree(forestKinds[i],x,0,z,{clone:true,parent:forestRoot,scale:.95+noise(i,57)*.2});
+    fixedCrowns.push(tree);forestResourceShapes.set(x+","+z,[tree]);
+  });
   for(const [x,z,r] of [[5,-9,1.8],[-9,-3,1.5]]) {
-    const rock=B.MeshBuilder.CreateSphere("forest rock",{diameter:r*2,segments:5},scene);
-    rock.position.set(x,r*.45,z);rock.scaling.y=.6;rock.material=forestStone;rock.isPickable=false;rock.parent=forestRoot;
+    const rock=placeRock("moss",x,0,z,{clone:true,parent:forestRoot,scale:r*.95});
     forestResourceShapes.set(x+","+z,[rock]);
   }
   // Ruined forest shrine: stone plinth, lacquered sanctum, gilded Thai roof,
@@ -320,8 +323,12 @@
     const spec=serviceNpcUi[role],robe=mat("service robe "+role,spec.color);
     const label=mat("service label "+role,"#ffffff","#4b3921");
     label.diffuseTexture=paintTexture("service name "+role,256,(ctx,size)=>{
-      ctx.clearRect(0,0,size,size);ctx.textAlign="center";ctx.lineWidth=7;ctx.strokeStyle="#241a10";ctx.fillStyle="#ffe6ae";ctx.font="bold 38px sans-serif";
-      ctx.strokeText(name,size/2,size/2,245);ctx.fillText(name,size/2,size/2,245);
+      // Name plate: dark jade pill with a thin gold edge, matching the field HUD, readable from the far camera.
+      ctx.clearRect(0,0,size,size);ctx.textAlign="center";ctx.textBaseline="middle";ctx.font='bold 34px "Noto Sans Thai", system-ui, sans-serif';
+      const w=Math.min(244,ctx.measureText(name).width+40),h=52,x=(size-w)/2,y=size/2-h/2,r=h/2;
+      ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+      ctx.fillStyle="rgba(10,18,15,.86)";ctx.fill();ctx.lineWidth=3;ctx.strokeStyle="rgba(232,190,100,.9)";ctx.stroke();
+      ctx.fillStyle="#ffe6ae";ctx.fillText(name,size/2,size/2+2,w-24);
     });
     label.diffuseTexture.hasAlpha=true;label.useAlphaFromDiffuseTexture=true;
     const result={robe,label};serviceNpcLooks.set(role,result);return result;
@@ -398,7 +405,7 @@
   const forestMonsters = new Map();
   let selectedForestTarget = null;
   function mapBounds() {
-    return worldDefinitions?.[activeMapId]?.bounds || {minX:-20,maxX:20,minZ:-20,maxZ:20};
+    return worldDefinitions?.[activeMapId]?.bounds || (activeMapId==="ritual_village" ? {minX:-60,maxX:60,minZ:-60,maxZ:60} : {minX:-20,maxX:20,minZ:-20,maxZ:20});
   }
   function activePortals() {
     return worldDefinitions?.[activeMapId]?.portals || [portals[activeMapId]];

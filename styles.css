@@ -2353,6 +2353,14 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .exp-base i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #b8860b, #ffd23f 70%, #fff0a0); box-shadow: 0 0 6px #ffc83a; transition: width .6s ease; }
 .exp-ticks { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), #0008 calc(10% - 1px) 10%); pointer-events: none; }
 .hud-journal .identity .hud-meter.xp { display: none !important; }
+/* Beauty pass: an empty chat box reads as a quiet hint, and the tab row fades at the edge when it scrolls. */
+.cb-log:empty::before { content: "ยังไม่มีข้อความ"; display: block; padding: 6px 2px; color: #9fb3a6; font-size: 11px; font-style: italic; opacity: .8; }
+.chat-box:not(.wide) .cb-log:empty::before { content: "ยังไม่มีข้อความ · แตะเพื่อเปิดแชท"; }
+.chat-box:has(.cb-log:empty):not(:focus-within):not(:hover) { background: #070b0966; border-color: #3c5a4c55; }
+.chat-box:has(.cb-log:empty) .cb-log { height: auto; min-height: 30px; max-height: 150px; }
+.chat-box:not(.wide):has(.cb-log:empty) .cb-log { height: auto; min-height: 26px; }
+.cb-tabs { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.chat-box.wide .cb-tabs { -webkit-mask-image: none; mask-image: none; }
 /* Compact character medallion: the orb and bottom EXP line remain the only vital meters. */
 .hud-journal .identity { --portrait-gold:#d4b16f; display:block; padding:0; border:0; border-radius:0; background:none; box-shadow:none; backdrop-filter:none; }
 .identity .brand-row { display:none; }
@@ -5061,6 +5069,42 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 
 
 
+/* Hidden shortcut buttons (skills before a class book loads, chat, horse) must not leave empty tiles under the minimap. */
+.location-area .map-shortcuts button[hidden], .location-area .map-shortcuts .map-proxy[hidden] { display: none !important; }
+/* "Coming soon" buttons (disabled banner and boss) stay out of the minimap grid until they do something. */
+.location-area .map-shortcuts #bannerButton:disabled, .location-area .map-shortcuts #bossEncounterButton:disabled { display: none !important; }
+
+/* SVG art for the newer minimap buttons (their emoji are hidden by .hud-btn-icon[data-hud-icon]). */
+.hud-btn-icon[data-hud-icon="pet"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E%3Cdefs%3E%3CradialGradient id=%22g%22 cx=%2240%25%22 cy=%2235%25%22 r=%2265%25%22%3E%3Cstop offset=%220%22 stop-color=%22%23e8fbff%22/%3E%3Cstop offset=%22.45%22 stop-color=%22%237fd8ff%22/%3E%3Cstop offset=%221%22 stop-color=%22%232a5aa0%22/%3E%3C/radialGradient%3E%3C/defs%3E%3Cpath d=%22M24 8c8 0 13 6 13 13 0 9-7 13-9 19-2-4-3-6-6-7-6-2-11-6-11-12 0-7 6-13 13-13z%22 fill=%22url%28%23g%29%22 stroke=%22%23ffd54f%22 stroke-width=%221.2%22/%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%222.2%22 fill=%22%230b2340%22/%3E%3Ccircle cx=%2228%22 cy=%2220%22 r=%222.2%22 fill=%22%230b2340%22/%3E%3Cpath d=%22M20 26q4 3 8 0%22 fill=%22none%22 stroke=%22%230b2340%22 stroke-width=%221.4%22 stroke-linecap=%22round%22/%3E%3Ccircle cx=%2238%22 cy=%2210%22 r=%221.6%22 fill=%22%23ffe082%22/%3E%3Ccircle cx=%229%22 cy=%2214%22 r=%221.2%22 fill=%22%23ffe082%22/%3E%3C/svg%3E"); }
+.hud-btn-icon[data-hud-icon="flight"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E%3Cdefs%3E%3ClinearGradient id=%22w%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23fffbe8%22/%3E%3Cstop offset=%22.6%22 stop-color=%22%239fd8ff%22/%3E%3Cstop offset=%221%22 stop-color=%22%233a78c0%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d=%22M24 30C18 18 9 12 3 13c4 3 5 6 4 9 3-1 5 0 6 2-3 1-4 3-4 5 5-2 10-1 15 1z%22 fill=%22url%28%23w%29%22 stroke=%22%23ffd54f%22 stroke-width=%221.1%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M24 30c6-12 15-18 21-17-4 3-5 6-4 9-3-1-5 0-6 2 3 1 4 3 4 5-5-2-10-1-15 1z%22 fill=%22url%28%23w%29%22 stroke=%22%23ffd54f%22 stroke-width=%221.1%22 stroke-linejoin=%22round%22/%3E%3Ccircle cx=%2224%22 cy=%2231%22 r=%223%22 fill=%22%23ffb300%22 stroke=%22%23fff%22 stroke-width=%22.8%22/%3E%3C/svg%3E"); }
+.hud-btn-icon[data-hud-icon="banner"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E%3Cline x1=%2212%22 y1=%226%22 x2=%2212%22 y2=%2243%22 stroke=%22%23ffd54f%22 stroke-width=%222.4%22 stroke-linecap=%22round%22/%3E%3Cpath d=%22M13 9h22l-5 7 5 7H13z%22 fill=%22%23c62828%22 stroke=%22%23ffd54f%22 stroke-width=%221.1%22 stroke-linejoin=%22round%22/%3E%3Ccircle cx=%2222%22 cy=%2216%22 r=%223.2%22 fill=%22%23ffb300%22/%3E%3Ccircle cx=%2212%22 cy=%226%22 r=%222.2%22 fill=%22%23ffe082%22/%3E%3C/svg%3E"); }
+.hud-btn-icon[data-hud-icon="boss"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E%3Cdefs%3E%3ClinearGradient id=%22c%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23ffe082%22/%3E%3Cstop offset=%221%22 stop-color=%22%23b8860b%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d=%22M9 34l-2-18 9 7 8-13 8 13 9-7-2 18z%22 fill=%22url%28%23c%29%22 stroke=%22%23fff3c4%22 stroke-width=%221.1%22 stroke-linejoin=%22round%22/%3E%3Crect x=%229%22 y=%2234%22 width=%2230%22 height=%225%22 rx=%221.5%22 fill=%22%238d6e63%22 stroke=%22%23ffd54f%22 stroke-width=%221%22/%3E%3Ccircle cx=%2224%22 cy=%2227%22 r=%223%22 fill=%22%23d32f2f%22 stroke=%22%23fff%22 stroke-width=%22.7%22/%3E%3C/svg%3E"); }
+/* Centre every minimap shortcut icon; the text labels stay for screen readers only. */
+.location-area .map-shortcuts button:not([hidden]) { display: grid !important; place-items: center; padding: 0 !important; }
+.location-area .map-shortcuts button > i { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.location-area .map-shortcuts button .hud-btn-icon { margin: 0 !important; }
+/* ---- Beauty pass 2: one HUD family ----
+   Every field panel (player card, quest, strip, minimap buttons, place chips, chat) shares the same
+   night-jade glass, thin gold edge, radius and shadow, instead of a mix of teal, green and black boxes. */
+#game { --hud-glass: linear-gradient(160deg, rgba(18, 31, 27, .9), rgba(8, 14, 12, .86)); --hud-edge: rgba(214, 176, 98, .42); --hud-edge-hot: rgba(243, 199, 104, .8);
+  --hud-round: 12px; --hud-shadow: 0 6px 16px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 240, 200, .06); }
+#game .top-hud .panel, #game .resource-strip, #game .location-area .map-shortcuts, #game .chat-box, #game .location-area .online-count {
+  background: var(--hud-glass); border: 1px solid var(--hud-edge); box-shadow: var(--hud-shadow); }
+#game .top-hud .panel, #game .location-area .map-shortcuts, #game .chat-box { border-radius: var(--hud-round); }
+#game .resource-strip, #game .location-area .online-count { border-radius: 9px; }
+#game .top-hud .quest:hover, #game .top-hud .quest:focus-visible { border-color: var(--hud-edge-hot); }
+#game .location-area .map-shortcuts button { background: rgba(255, 255, 255, .04); border: 1px solid rgba(214, 176, 98, .18); }
+#game .location-area .map-shortcuts button[aria-pressed="true"], #game .location-area .map-shortcuts button.open { border-color: var(--hud-edge-hot); background: rgba(243, 199, 104, .12); }
+/* Place name under the minimap wraps instead of being cut ("หมู่บ้านอาคม · เขตพัก…"). */
+#game .location-area .place-name { white-space: normal; text-overflow: clip; max-width: 150px; margin-left: auto; text-align: right; line-height: 1.25; font-size: 10.5px;
+  text-shadow: 0 1px 2px #000, 0 0 6px #000; }
+/* Wide screens: the field HUD was drawn at phone size; scale it up so it reads at desktop distance. */
+@media (min-width: 1200px) and (min-height: 680px) {
+  #game .top-hud, #game .resource-strip, #game .chat-box, #game .field-dock { zoom: 1.22; }
+}
+@media (min-width: 1700px) and (min-height: 900px) {
+  #game .top-hud, #game .resource-strip, #game .chat-box, #game .field-dock { zoom: 1.45; }
+}
 /* ========================================================
    MONTRA Comprehensive 26-Skill SVG Engine & Book Icons
    ======================================================== */
@@ -5542,6 +5586,18 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   gap: 8px;
 }
 
+/* Beauty pass: a lighter subtitle bar that sits below the top HUD instead of covering the player card. */
+.voice-guidance-hud { top: 16px; width: min(92%, 460px); gap: 9px; padding: 7px 10px; border-width: 1px; border-color: #c9a35a99; border-radius: 14px;
+  background: linear-gradient(180deg, rgba(14, 18, 14, .82), rgba(8, 10, 8, .78)); box-shadow: 0 6px 18px rgba(0, 0, 0, .55); backdrop-filter: blur(3px); }
+.voice-guidance-avatar { width: 32px; height: 32px; font-size: 17px; border-width: 1.5px; animation-duration: 2.2s; }
+.voice-guidance-title { font-size: 12px; }
+.voice-guidance-badge { font-size: 8.5px; padding: 1px 4px; opacity: .85; }
+.voice-guidance-text { font-size: 12.5px; line-height: 1.4; }
+.voice-guidance-skip { padding: 5px 8px; font-size: 10.5px; }
+@media (max-width: 640px) and (orientation: portrait) {
+  /* Phones: a subtitle above the skill arc, clear of the top HUD and the menu buttons under the minimap. */
+  .voice-guidance-hud { top: auto; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 262px); width: calc(100% - 20px); transform: translateX(-50%); }
+}
 /* World Market shell over the existing market catalog. */
 #drawer:has(.world-market){width:min(1100px,96vw);max-width:96vw;left:50%;right:auto;transform:translateX(-50%);background:#0f1a33;border:2px solid #c9a24a;box-shadow:0 0 0 1px #5a4317,0 18px 50px rgba(0,0,0,.6)}
 .world-market{color:#e7ecf7;font-size:13px}

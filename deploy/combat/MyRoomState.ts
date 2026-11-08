@@ -52,6 +52,7 @@ export const Player = schema({
   mounted: t.boolean().default(false), // temporary horse mount; never stored in character saves
   mana: t.number().default(120),
   maxMana: t.number().default(120),
+  gearLook: t.string().default(""), // append-only: visible worn gear "slot=family:tier;…", never bag contents
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;

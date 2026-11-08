@@ -121,3 +121,15 @@
   gap: 8px;
 }
 
+/* Beauty pass: a lighter subtitle bar that sits below the top HUD instead of covering the player card. */
+.voice-guidance-hud { top: 16px; width: min(92%, 460px); gap: 9px; padding: 7px 10px; border-width: 1px; border-color: #c9a35a99; border-radius: 14px;
+  background: linear-gradient(180deg, rgba(14, 18, 14, .82), rgba(8, 10, 8, .78)); box-shadow: 0 6px 18px rgba(0, 0, 0, .55); backdrop-filter: blur(3px); }
+.voice-guidance-avatar { width: 32px; height: 32px; font-size: 17px; border-width: 1.5px; animation-duration: 2.2s; }
+.voice-guidance-title { font-size: 12px; }
+.voice-guidance-badge { font-size: 8.5px; padding: 1px 4px; opacity: .85; }
+.voice-guidance-text { font-size: 12.5px; line-height: 1.4; }
+.voice-guidance-skip { padding: 5px 8px; font-size: 10.5px; }
+@media (max-width: 640px) and (orientation: portrait) {
+  /* Phones: a subtitle above the skill arc, clear of the top HUD and the menu buttons under the minimap. */
+  .voice-guidance-hud { top: auto; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 262px); width: calc(100% - 20px); transform: translateX(-50%); }
+}

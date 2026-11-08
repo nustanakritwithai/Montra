@@ -10,7 +10,7 @@
   $("harvestButton").onclick=()=>{
     const n=nearbyResource(ownServerCharacter());
     if(!n || !n.stock || !economyReady() || economyPending)return;
-    resourceReadyAt=performance.now()+1500;
+    resourceReadyAt=performance.now()+1500;harvestBurst(n);
     economySend("harvest_resource",{node:n.id,requestId:economyRequestId()},true);
   };
   $("fishButton").onclick=()=>{
@@ -194,6 +194,11 @@
       animateRig(a, Math.hypot(travelX, travelZ) / Math.max(dt, 1e-3), dt, now);
       updateAvatarAuras(a, now, dt);
       a.flightHalo?.setEnabled(a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain));
+    }
+    // Idle breathing pose for nearby service NPCs (standing still, so speed 0).
+    for (const npc of npcActors) {
+      const w = npc.node.getAbsolutePosition();
+      if (npc.node.isEnabled(true) && Math.hypot(w.x - camera.target.x, w.z - camera.target.z) < 70) { npc.x = w.x; npc.y = w.y; npc.z = w.z; animateRig(npc, 0, dt, now); }
     }
     for (const npc of summonAvatars.values()) {
       if (npc.demo) {

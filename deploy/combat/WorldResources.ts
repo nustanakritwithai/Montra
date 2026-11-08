@@ -27,7 +27,11 @@ function campSite(map:WorldMapDefinition,key:string,x:number,z:number,level:numb
   }
 }
 for(const map of Object.values(WORLD_MAPS)){
-  if(map.id==="ritual_village")campSite(map,"village",0,1,1);
+  if(map.id==="ritual_village"){
+    campSite(map,"village",0,1,1);
+    // Rice fields and orchards to the west: starter wood, stone and herbs.
+    for(const [key,x,z] of [["fields_north",-40,-24],["fields_south",-40,10],["orchard",-24,30]] as const)campSite(map,key,x,z,1);
+  }
   else if(map.id==="forbidden_forest"){
     for(const o of map.obstacles){
       if(!/^(tree-|stone-)/.test(o.id))continue;

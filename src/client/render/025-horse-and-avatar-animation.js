@@ -119,6 +119,7 @@
     }
     const hands = skinnedCut(body, "muay hand wraps", x => Math.abs(x) > .6, x => .011 + .003 * Math.sin(Math.abs(x) * 160), muayWrapMats[0]);
     const rope = skinnedCut(body, "muay wrist rope", x => Math.abs(x) > .5 && Math.abs(x) < .61, (x, y, z) => .017 + .007 * Math.sin(Math.atan2(z, y - 1.354) * 2 + Math.abs(x) * 95), muayWrapMats[1]);
+    addHandMorphs(hands); // the wraps close into the same fist as the hand inside them
     return [hands, rope];
   }
   function animateSkin(a, m, speed, s, c, t, now, dt) {
@@ -610,5 +611,18 @@
     for (let i = 0; i < 3; i++) o[i] += (off[i] - o[i]) * blend;
     n.Hips.position.set(a.skin.rest.hipsX + o[0], a.skin.rest.hipsY + o[1], a.skin.rest.hipsZ + o[2]);
     if (a.skin.holder) a.skin.holder.rotation.y = Math.PI + (a.mounted ? 0 : spin); // whole-body turns (sweep, dance)
+    // Hands: grip what is held, clench for Muay Thai and shields, open for casting, wai and rallies, relax otherwise.
+    {
+      const relaxed = [.3, 0], grip = [1, 0], fist = [0, 1], open = [0, 0];
+      const off = /(^|;)offHand=off_([a-z]+):/.exec(a.gearLook || "")?.[2] || "";
+      const acting = act && now < act.end && !dead ? act.type : "";
+      const openHands = /^(cast|summon|rally|dance|m_wai|rise|arrive)$/.test(acting);
+      let right = weapon === "muay_wraps" ? fist : weapon ? grip : relaxed;
+      let left = weapon === "muay_wraps" ? fist : weapon === "thai_dual" ? grip : off === "jar" || off === "bell" ? grip : off === "shield" || off === "guard" || off === "brace" ? [.2, .8] : relaxed;
+      if (acting === "drink") right = grip;
+      if (openHands) { left = open; if (!weapon || weapon === "muay_wraps") right = open; }
+      if (dead) { left = right = [.15, 0]; }
+      setHandPose(a, left, right, dt);
+    }
     return flare;
   }

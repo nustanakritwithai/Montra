@@ -47,7 +47,7 @@ try{
    const cHp=own(c).hp;c.send('move',{x:-40,z:-30});await sleep(500);assert.ok(cHp>0);
    const bad=[];a.onMessage('command_rejected',e=>bad.push(e.reason));a.send('move',{x:999,z:-40});await until(()=>bad.includes('invalid_move'),'bounds forgery rejected');
    await leave(d);await leave(b);await leave(c);await leave(a);
-   await seed(token(5),'ritual_village',-4,-17);const w=await open(token(5));
+   await seed(token(5),'ritual_village',-10,-56);const w=await open(token(5));
    w.send('warp',{portalId:'village_to_forest'});await until(()=>own(w).mapId==='forbidden_forest','warp to expanded forest');assert.equal(own(w).z,12);
    // Cooldown uses simulation time; a busy render/test host may advance it slower than wall time.
    let warpRejection;w.onMessage('command_rejected',notice=>{warpRejection=notice.reason;});

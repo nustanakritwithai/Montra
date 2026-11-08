@@ -16,10 +16,12 @@ export type ServiceNpc=Readonly<{id:string;role:NpcService;name:string;x:number;
 const roles=Object.keys(NPC_SERVICES) as NpcService[];
 const mapOrder=Object.keys(WORLD_MAPS).sort();
 const placementCache=new Map<string,ServiceNpc[]>();
+// The mentor and the newcomer guide stay in the central quarter; the trades stand around the east market.
 const villageAnchors:Record<NpcService,{x:number;z:number}>={
-  mentor:{x:-2,z:3},smith:{x:-3,z:8},market:{x:3,z:-7},guild:{x:-3,z:-10},
-  party:{x:3,z:9},travel:{x:0,z:-12},strategy:{x:4,z:-3},guide:{x:-3,z:14}
+  mentor:{x:-2,z:3},guide:{x:-3,z:14},
+  smith:{x:42,z:9},market:{x:34,z:-11},guild:{x:44,z:-19},party:{x:33,z:4},travel:{x:40,z:-24},strategy:{x:50,z:-6}
 };
+const villageCore=(role:NpcService)=>role==="mentor" || role==="guide";
 const siteOrder:Record<NpcService,readonly string[]>={
   smith:["mine","market","port"],market:["market","port"],guild:["palace","fort","market"],party:["grove","shrine","market"],
   travel:["port","bridge","market"],strategy:["fort","palace","tower"],mentor:["shrine","palace"],guide:["shrine","market","grove"]
@@ -66,7 +68,7 @@ export function serviceNpcsFor(mapId:string):ServiceNpc[] {
             const angle=(n+roleIndex*3)*Math.PI/8,x=Math.round((anchor.x+Math.cos(angle)*distance)*100)/100,z=Math.round((anchor.z+Math.sin(angle)*distance)*100)/100,y=groundAt(mapId,x,z),point={x,y,z};
             if(!isSafeWorldPoint(map,point) || map.portals.some(p=>Math.hypot(p.x-x,p.z-z)<(role==="travel"?4.5:8)) ||
               (keeper && Math.hypot(keeper.x-x,keeper.z-z)<5) || (mapId==="ritual_village" && Math.hypot(x-2.4,z-2.4)<3.2) ||
-              (mapId==="ritual_village" && Math.abs(x)>5) || (map.camps ?? []).some(c=>Math.hypot(c.x-x,c.z-z)<8) ||
+              (mapId==="ritual_village" && villageCore(role) && Math.abs(x)>5) || (map.camps ?? []).some(c=>Math.hypot(c.x-x,c.z-z)<8) ||
               (role==="mentor" && mapId==="ritual_village" && Math.hypot(x,z)>5.5) ||
               placed.some(p=>Math.hypot(p.x-x,p.z-z)<separation) || !nearbyRoad(map,point))continue;
             chosen={id:`${mapId}_${role}`,role,name:NPC_SERVICES[role].name,x,y,z,radius:2.7};break;

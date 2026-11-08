@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { checkWarp, parseWarpCommand } from "./WarpRules.js";
 import { DEFAULT_MAP_ID, getSafeMapSpawn, getWorldMap } from "./WorldMaps.js";
 const context = {
-  mapId: DEFAULT_MAP_ID, position: { x: -4, y: 0, z: -17 },
+  mapId: DEFAULT_MAP_ID, position: { x: -10, y: 0, z: -56 },
   alive: true, flying: false, climbing: false, dashing: false,
   changingHeight: false, lastCombatMs: -Infinity,
   lastWarpMs: -Infinity, nowMs: 10_000
@@ -46,6 +46,6 @@ test("unsafe altitudes and village wall positions fall back without changing map
 
 test("portal proximity includes authoritative height", () => {
   assert.equal(checkWarp({ portalId: "village_to_forest" }, {
-    ...context, position: { x: -4, y: 4, z: -17 }
+    ...context, position: { x: -10, y: 4, z: -56 }
   }).ok, false);
 });

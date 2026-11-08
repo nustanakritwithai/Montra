@@ -19,7 +19,7 @@ const courtThemes:Readonly<Record<string,readonly Theme[]>>={
   drowned_marsh:["grove","hunter","spirit","hunter","guard"], moon_cemetery:["spirit","guard","spirit","hunter","guard"],
   hex_ridge:["guard","grove","guard","spirit","guard"], naga_cavern:["guard","hunter","hunter","spirit","guard"],
   fallen_city:["hunter","guard","guard","spirit","guard"], asura_peak:["hunter","guard","guard","guard","guard"],
-  spirit_rift:["spirit","hunter","spirit","grove","guard"], moon_pass:["guard","guard"], river_watch:["grove","hunter"],
+  spirit_rift:["spirit","hunter","spirit","grove","guard"], ritual_village:["spirit"], moon_pass:["guard","guard"], river_watch:["grove","hunter"],
   twin_neck_pass:["hunter","guard"], sam_lan_estuary:["hunter","grove"], tri_wiang_castle:["hunter","guard"],
 };
 const templeThemes:Record<string,Theme>={forecourt:"guard",cloister:"spirit",belfry:"guard",sanctum:"spirit"};

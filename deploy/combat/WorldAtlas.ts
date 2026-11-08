@@ -118,7 +118,7 @@ const edges:readonly (readonly [GateEnd,GateEnd])[]=[
   [["forbidden_forest",48,-84],["drowned_marsh",0,26]],
   [["bound_temple",32,-65],["moon_cemetery",-18,25]],
   [["drowned_marsh",0,-58],["moon_cemetery",18,25]],
-  [["ritual_village",4,-16],["mantra_capital",0,26]],
+  [["ritual_village",10,-56],["mantra_capital",0,26]],
   [["mantra_capital",-34,-14],["bamboo_frontier",0,26]],
   [["bamboo_frontier",0,-58],["moon_cemetery",-34,12]],
   [["moon_cemetery",0,-58],["moon_pass",0,26]],
@@ -190,6 +190,8 @@ function frontierGroup(mapId:string,group:number,name:string,homes:readonly (rea
   return homes.map(([x,z,level],i)=>({id:`frontier_${mapId}_${group}_${i+1}`,name,mapId,x,z,level,tier:"normal"}));
 }
 export const FRONTIER_SPAWNS:readonly AtlasSpawn[]=[
+  // Level 1–2 ghosts among the old graves at the village's south-east edge.
+  ...frontierGroup("ritual_village",1,"ผีเร่ร่อนป่าช้าเก่า",[[34,36,1],[44,34,1],[36,46,2],[46,46,2]]),
   ...frontierGroup("moon_pass",1,"พรายกองแร่",[[31,38,28],[65,35,30],[54,-25,32]]),
   ...frontierGroup("moon_pass",2,"เงาคนร่อนเงิน",[[87,-28,33],[53,-82,35]]),
   ...frontierGroup("river_watch",1,"พรายโกดังข้าว",[[52,21,46],[58,-9,48]]),
