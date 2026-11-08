@@ -22,10 +22,10 @@ test('reviewed style snapshot retains pinned bytes, cascade order, URLs and lega
   const baseline = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/extraction-baseline.json')));
   const manifest = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/manifest.json')));
   const bytes = checkStyles();
-  assert.equal(bytes.length, 379017);
-  assert.equal(hash(bytes), 'ab264b6ea7cff05f55d27f2d05459b8bbd42d61bfd4138f01e78c16e6fd1c994');
+  assert.equal(bytes.length, 382129);
+  assert.equal(hash(bytes), '983d671c9768764ac167a29fbf8266ed4920adfafd8e4aaf2d0bda5a1dcf7d43');
   // Retain historical extraction evidence, pin only intentionally changed sources.
-  const reviewedStyles = new Map([{"path": "hud/019-vital-orb-resources-and-chat.css", "bytes": 5832, "sha256": "71477a110f30679c2e281eb5e825ab4557d21ee02eebbb49c2a6c16b1a500b7a"}, {"path": "forge/025-artisan-crafting-and-effects.css", "bytes": 21713, "sha256": "8100aa53a6502b7a31377b1ff9bd2dab8b94acb9079435d70ac0c0946df1ee79"}, {"path": "market/045-world-market.css", "bytes": 5767, "sha256": "6202004601ad13fcb19d476017e489cd971bc5ac523d9c74257aac0b43af50a0"}].map(entry => [entry.path, entry]));
+  const reviewedStyles = new Map([{"path": "hud/019-vital-orb-resources-and-chat.css", "bytes": 5832, "sha256": "71477a110f30679c2e281eb5e825ab4557d21ee02eebbb49c2a6c16b1a500b7a"}, {"path": "forge/025-artisan-crafting-and-effects.css", "bytes": 24825, "sha256": "4b9f978536a89670550965fb9a818175b742011d501d33a7a49781c1ad9ffa8e"}, {"path": "market/045-world-market.css", "bytes": 5767, "sha256": "6202004601ad13fcb19d476017e489cd971bc5ac523d9c74257aac0b43af50a0"}].map(entry => [entry.path, entry]));
   const addedStyles = [{"path": "inventory/046-loot-feed.css", "bytes": 2086, "sha256": "d34cce17e03c96ff0e7df9c7c48e08303ca7fefeed5ea89377bd454b19357970"}];
   assert.deepEqual(manifest.fragments, [...baseline.fragments.map(entry => entry.path), ...addedStyles.map(entry => entry.path)]);
   let nextLine = 1;

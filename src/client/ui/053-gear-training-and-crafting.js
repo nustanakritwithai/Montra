@@ -140,17 +140,46 @@
       for(const option of options.slice(craftRecipePage*6,craftRecipePage*6+6)){
         const def=personalItems[option.value],locked=(def.level||1)>level;
         const card=document.createElement("button"),name=document.createElement("strong"),owned=document.createElement("span"),requirement=document.createElement("small");
-        card.type="button";card.className="ck-recipe";card.classList.toggle("locked",locked);
+        card.type="button";card.className="ck-recipe";card.dataset.recipe=option.value;card.setAttribute("aria-haspopup","dialog");card.classList.toggle("locked",locked);
         card.setAttribute("aria-pressed",String(option.value===select.value));
         card.setAttribute("aria-label",def.name+" · ต้องการ Lv."+(def.level||1));
         name.textContent=def.name;owned.textContent=slots?"มีอยู่ "+itemHuntCount(option.value):"รอข้อมูลกระเป๋า";
         requirement.textContent=(locked?"🔒 ต้องการ ":"")+"Lv."+(def.level||1);
         card.append(createItemTile(option.value),name,owned,requirement);
-        card.onclick=()=>{select.value=option.value;benchTrail.length=0;craftRecipeTarget=null;renderCraftingPage();};grid.appendChild(card);
+        card.onclick=()=>{select.value=option.value;benchTrail.length=0;craftRecipeTarget=null;renderCraftingPage();openCraftRecipePopup();};grid.appendChild(card);
       }
     }
     $("craftRecipePage").textContent="หน้า "+(craftRecipePage+1)+"/"+pages+" · "+options.length+" สูตร";
     $("craftRecipePrev").disabled=craftRecipePage===0;$("craftRecipeNext").disabled=craftRecipePage>=pages-1;
+  }
+  function closeCraftRecipePopup(restore=true){
+    const popup=$("craftRecipePopup");if(!popup?.open)return;
+    popup.close();
+    if(restore && drawerActive==="crafting"){
+      const id=$("benchRecipe").value;
+      const target=[...$("craftRecipeGrid").children].find(node=>node.dataset.recipe===id)||$("benchRecipe");
+      target.focus?.({preventScroll:true});
+    }
+  }
+  function openCraftRecipePopup(){
+    const popup=$("craftRecipePopup");
+    if(drawerActive!=="crafting" || !popup || $("personalBench").hidden || craftComingSoon || !personalItems[$("benchRecipe").value]?.recipe)return;
+    benchInspectItem=null;benchInspectTrail=[];benchUsesPage=0;$("benchRecipeExplorer").dataset.graphKey="";
+    $("benchUsesDetails").open=false;
+    renderCraftingPage();
+    if(!popup.open)popup.showModal();
+    $("craftRecipePopupBody").scrollTop=0;$("craftRecipePopupTitle").focus?.({preventScroll:true});
+  }
+  function handleCraftRecipePopupKey(event){
+    const popup=$("craftRecipePopup");if(!popup?.open)return false;
+    if(event.key==="Escape"){event.preventDefault();closeCraftRecipePopup();return true;}
+    if(event.key==="Tab"){
+      const available=[...popup.querySelectorAll('button:not(:disabled),select:not(:disabled),summary,[tabindex="0"]')].filter(node=>node.getClientRects().length);
+      const first=available[0],last=available.at(-1);
+      if(event.shiftKey && (document.activeElement===first || !available.includes(document.activeElement))){event.preventDefault();last?.focus();}
+      else if(!event.shiftKey && (document.activeElement===last || !available.includes(document.activeElement))){event.preventDefault();first?.focus();}
+    }
+    return true;
   }
   // Read-only recipe browsing. All edges come from the server item catalog;
   // browsing never selects a bag slot or submits a craft/refine command.
@@ -172,7 +201,7 @@
     else benchInspectTrail=[...benchInspectTrail,current].slice(-32);
     benchInspectItem=id===$("benchRecipe").value?null:id;benchUsesPage=0;
     renderCraftingPage();$("benchRecipeExplorer").scrollIntoView({block:"start"});
-    $("benchInspectTitle").focus?.({preventScroll:true});
+    $(benchInspectItem?"benchInspectTitle":"craftRecipePopupTitle").focus?.({preventScroll:true});
   }
   function benchRecipeNode(id,quantity){
     const button=document.createElement("button"),name=document.createElement("span"),amount=document.createElement("small");
@@ -186,9 +215,9 @@
     const panel=$("benchRecipeExplorer");if(!panel)return;
     const key=[$("benchGroup").value,$("benchLevel").value,rootId,craftPagePosition].join("/");
     if(panel.dataset.root!==key || benchInspectRoom!==room){benchInspectItem=null;benchInspectTrail=[];benchUsesPage=0;panel.dataset.root=key;benchInspectRoom=room;}
-    panel.hidden=!personalItems[rootId];if(panel.hidden){$("benchSelectedSummary").hidden=false;$("benchCraftDetails").hidden=false;$("benchInspectBack").hidden=true;panel.dataset.graphKey="";return;}
+    panel.hidden=!personalItems[rootId];if(panel.hidden){$("benchSelectedSummary").hidden=false;$("benchCraftDetails").hidden=false;$("benchCraftFooter").hidden=false;$("benchInspectBack").hidden=true;panel.dataset.graphKey="";return;}
     const id=benchInspectItem||rootId,def=personalItems[id],nested=Boolean(benchInspectItem);
-    $("benchSelectedSummary").hidden=nested;$("benchCraftDetails").hidden=nested;
+    $("benchSelectedSummary").hidden=nested;$("benchCraftDetails").hidden=nested;$("benchCraftFooter").hidden=nested;
     const graphKey=JSON.stringify([catalogRevision,key,id,benchUsesPage,refineInput]);
     if(panel.dataset.graphKey===graphKey)return;panel.dataset.graphKey=graphKey;
     $("benchInspectHeading").hidden=!nested;
@@ -197,8 +226,8 @@
     const back=$("benchInspectBack"),home=$("benchInspectRoot");back.hidden=!nested;home.hidden=!nested;
     const prior=benchInspectTrail.at(-1)||rootId;
     back.textContent="‹ กลับไป "+(personalItems[prior]?.name||"สูตรก่อนหน้า");
-    back.onclick=()=>{benchInspectItem=benchInspectTrail.pop()||null;if(benchInspectItem===rootId)benchInspectItem=null;benchUsesPage=0;renderCraftingPage();};
-    home.onclick=()=>{benchInspectItem=null;benchInspectTrail=[];benchUsesPage=0;renderCraftingPage();};
+    back.onclick=()=>{benchInspectItem=benchInspectTrail.pop()||null;if(benchInspectItem===rootId)benchInspectItem=null;benchUsesPage=0;renderCraftingPage();$(benchInspectItem?"benchInspectTitle":"craftRecipePopupTitle").focus?.({preventScroll:true});};
+    home.onclick=()=>{benchInspectItem=null;benchInspectTrail=[];benchUsesPage=0;renderCraftingPage();$("craftRecipePopupTitle").focus?.({preventScroll:true});};
     const edges=benchRecipeEdges(),from=edges.filter(edge=>edge.output===id),uses=edges.filter(edge=>edge.inputs.some(part=>part.item===id));
     function renderRows(hostId,rows,empty){
       const host=$(hostId);host.replaceChildren();
@@ -217,6 +246,7 @@
       }
     }
     renderRows("benchCreatedFrom",from,def?"ไม่มีสูตรสร้างหรือแปรรูปของชิ้นนี้ · "+(def.dropHint?"หาได้ที่ "+def.dropHint:"ตรวจแหล่งที่มาในกระเป๋า"):"ข้อมูลรายการนี้ไม่อยู่ในสูตรจากเซิร์ฟเวอร์แล้ว");
+    $("benchUsesLabel").textContent="กลายเป็น · "+uses.length+" สูตร";
     const pages=Math.max(1,Math.ceil(uses.length/6));benchUsesPage=Math.min(benchUsesPage,pages-1);
     renderRows("benchUsedFor",uses.slice(benchUsesPage*6,benchUsesPage*6+6),"ยังไม่มีสูตรที่ใช้ของชิ้นนี้เป็นวัตถุดิบ");
     $("benchUsesPagination").hidden=uses.length<=6;$("benchUsesCount").textContent="หน้า "+(benchUsesPage+1)+"/"+pages+" · "+uses.length+" สูตร";
@@ -245,7 +275,7 @@
     craftPagePosition=position;
     craftRecipeTarget={group,level,id};
     renderCraftingPage();
-    $("personalBench")?.scrollIntoView({block:"center"});
+    openCraftRecipePopup();
   }
   function applyBenchRecipe(target,slots){
     $("benchGroup").value=target.group;renderWorkbench(slots);

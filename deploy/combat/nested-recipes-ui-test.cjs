@@ -58,4 +58,16 @@ test('legacy catalyst refinement quantity follows the existing server contract; 
  assert.equal(nodes(f,'benchCreatedFrom').find(n=>n.dataset.item==='mat_metal_1').disabled,true);
  assert.equal(f.mutations().length,0);
 });
+test('popup opens only on explicit recipe choice, closes without crafting and clears on room changes',()=>{
+ const f=fixture();f.run('openCraftingPage()');assert.equal(f.$('craftRecipePopup').open,false);
+ f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);
+ f.$('craftRecipeGrid').children[0].click();assert.equal(f.$('craftRecipePopup').open,true);
+ f.$('craftRecipePopupClose').click();assert.equal(f.$('craftRecipePopup').open,false);
+ f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);
+ f.choose('all','blade_25');tap(f,'benchCreatedFrom','mat_ingot_1');f.$('craftRecipePopupClose').click();
+ f.$('craftRecipeGrid').children.find(n=>n.dataset.recipe==='blade_25').click();assert.equal(f.$('benchInspectBack').hidden,true);
+ f.run('room={...room};renderCraftingPage()');assert.equal(f.$('craftRecipePopup').open,false);
+ f.choose('all','blade_25');f.ctx.cardDrill=null;f.run('renderCraftingPage()');assert.equal(f.$('craftRecipePopup').open,false);
+ assert.equal(f.mutations().length,0);
+});
 console.log(`PASS nested recipe UI: ${count} groups`);
