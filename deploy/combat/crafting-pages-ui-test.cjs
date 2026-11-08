@@ -16,7 +16,7 @@ function node(tag='div'){
     replaceChildren(...children){this.children=[];value='';this.append(...children);},
     append(...children){for(const child of children)this.appendChild(child);},
     appendChild(child){this.children.push(child);if(this.tagName==='SELECT'&&this.children.length===1)value=String(child.value);return child;},
-    scrollIntoView(){this.scrolled=true;},addEventListener(){},querySelectorAll(){return [];},click(){if(!this.disabled)this.onclick?.();}};
+    showModal(){this.open=true;},close(){this.open=false;},focus(){},scrollIntoView(){this.scrolled=true;},addEventListener(){},querySelectorAll(){return [];},click(){if(!this.disabled)this.onclick?.();}};
   Object.defineProperties(el,{className:{get(){return [...classes].join(' ');},set(next){classes.clear();for(const name of String(next).split(/\s+/).filter(Boolean))classes.add(name);}},options:{get(){return this.children;}},value:{get(){return value;},set(next){next=String(next);value=this.tagName==='SELECT'&&!this.children.some(c=>String(c.value)===next)?'':next;}}});
   return el;
 }
@@ -189,7 +189,7 @@ test('catalog and connection guards hide stale mutation panels and defer request
   }
   const f=fixture();f.ctx.cardDrill=null;f.choose('all','ring_25','leftRing');assert.equal(f.$('personalBench').hidden,true);assert.match(f.$('craftPageStatus').textContent,/โหลดสูตร/);
   f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);
-  f.callbacks.inventory_state(f.payload({catalogReady:true,cardDrill:{gold:10},workbenchGold:41}));assert.equal(f.$('personalBench').hidden,false);assert.equal(f.$('benchRecipe').value,'ring_25');assert.equal(f.$('benchCost').textContent,'41 ทอง');
+  f.callbacks.inventory_state(f.payload({catalogReady:true,cardDrill:{gold:10},workbenchGold:41}));assert.equal(f.$('personalBench').hidden,false);assert.equal(f.$('benchRecipe').value,'ring_25');assert.equal(f.$('benchCost').textContent,'41 ทอง');assert.equal(f.$('craftRecipePopup').open,true,'deferred explicit choice opens its popup after catalog arrives');
   f.ctx.room.state.craftRecipe='';f.run('renderBag()');assert.equal(f.$('craftPanel').hidden,true);f.$('craftGlaive').onclick();assert.equal(f.mutations().length,0);
 });
 

@@ -11,7 +11,7 @@ function fixture(drawer='crafting'){
   const elements=new Map(),wire=[],callbacks={},timers=new Map(),toasts=[];
   let now=100000,depth=0,maxDepth=0,renderCount=0,timerId=0,sendHook=null;
   const player={alive:true,persistent:true,level:1},slots=[];
-  for(const id of ['personalBench','craftPageStatus','craftGold','craftActionStatus','craftPlayerLevel','craftComingSoon','craftRecipePane','craftDetailPane','benchGroup',
+  for(const id of ['personalBench','benchRecipe','craftPageResult','craftPageStatus','craftGold','craftActionStatus','craftPlayerLevel','craftComingSoon','craftRecipePane','craftDetailPane','benchGroup',
     ...['all','food','medicine','weapons','armor','materials','furniture'].map(c=>'ckCategory-'+c),
     'forgeTargetButton','forgePageStatus','forgeGold','forgeTargetLocation','forgeEmpty',
     'forgeEnhanceSection','forgeRerollSection','forgeItemName','forgeInfo','forgeCopyItem','forgeSealItem','forgePanel']){
@@ -27,7 +27,7 @@ function fixture(drawer='crafting'){
     forgePageRoom:room,forgePageTarget:null,forgePageIdentity:null,forgePageAction:'enhance',
     warpPending:false,fishingPending:false,ownServerCharacter:()=>player,currentBagSlots:()=>slots,
     renderWorkbench(){},renderCraft(){},renderForge(){},renderForgeStock(){},renderForgePicker(){},renderItemTile(){},
-    closeForgePicker(){},selectForgeTarget(){ctx.forgePageTarget=null;ctx.forgePageIdentity=null;},forgeTargetItem:()=>null,forgeTargetChoices:()=>[],bagMeta:()=>null,
+    personalItems:{},closeCraftRecipePopup(){},openCraftRecipePopup(){},closeForgePicker(){},selectForgeTarget(){ctx.forgePageTarget=null;ctx.forgePageIdentity=null;},forgeTargetItem:()=>null,forgeTargetChoices:()=>[],bagMeta:()=>null,
     renderEconomy(){},toast:message=>toasts.push(message),
     setTimeout(fn,ms){timers.set(++timerId,{fn,ms});return timerId;},clearTimeout:id=>timers.delete(id),
     renderBag(){

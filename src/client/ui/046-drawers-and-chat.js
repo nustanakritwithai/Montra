@@ -11,6 +11,7 @@
     if (typeof closeSkillDetailModal === "function") closeSkillDetailModal();
     if (typeof clearCoreGraphLines === "function") clearCoreGraphLines();
     try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
+    if(typeof closeCraftRecipePopup==="function")closeCraftRecipePopup(false);
     cancelForgeAnimation(true);closeForgePicker(false);
     if(ui.drawer.hidden)return;
     SFX("close");
@@ -26,6 +27,7 @@
     if (typeof closeSkillDetailModal === "function") closeSkillDetailModal();
     if (typeof clearCoreGraphLines === "function") clearCoreGraphLines();
     try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
+    if(typeof closeCraftRecipePopup==="function")closeCraftRecipePopup(false);
     cancelForgeAnimation(true);closeForgePicker(false);closeItemDetailModal(false);
     if(fieldTrainingTip && !(ownServerCharacter()?.level>=13) && ["muayBook","swordTree","bladeBook","sentinelBook","occultBook"].includes(name))fieldTrainingTip=null;
     if(ui.drawer.hidden) {
@@ -100,6 +102,7 @@
   }
   document.addEventListener("keydown",event=>{
     if (ui.drawer.hidden || !$("accountEntry").hidden) return;
+    if (typeof handleCraftRecipePopupKey==="function" && handleCraftRecipePopupKey(event)) return;
     if (handleForgePickerKey(event) || handleItemDetailKey(event)) return;
     if (event.key==="Escape") {
       event.preventDefault();

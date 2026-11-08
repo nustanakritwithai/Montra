@@ -24,7 +24,7 @@ function fixtureScript(type){
  const shim=`let bridgeReady=false;function bridge(target){return new Proxy(target,{get(target,key){return bridgeReady?window[key]:target[key];},set(target,key,value){if(bridgeReady)window[key]=value;else target[key]=value;return true;}});}
  const vm={createContext(ctx){
    ctx.document=document;ctx.Option=Option;ctx.window=window;
-   ctx.closeDrawer=()=>{window.drawerActive=null;document.getElementById('drawer').hidden=true;};
+   ctx.closeDrawer=()=>{if(typeof closeCraftRecipePopup==="function")closeCraftRecipePopup(false);window.drawerActive=null;document.getElementById('drawer').hidden=true;};
    ctx.openDrawer=(name,title,html)=>{window.drawerActive=name;document.getElementById('drawer').hidden=false;document.getElementById('drawerBody').innerHTML=html;document.getElementById('drawerTitle').textContent=title;};
    for(const [key,value] of Object.entries(ctx))if(!['document','window'].includes(key))window[key]=value;
    bridgeReady=true;
@@ -120,6 +120,7 @@ async function craftCases(page,check){
  await page.locator('#benchBack').click();assert.equal(await page.locator('#benchRecipe').inputValue(),'mat_ingot_1');
  await page.locator('#benchBack').click();assert.equal(await page.locator('#benchRecipe').inputValue(),'ring_25');
  assert.equal(await page.locator('#benchBack').isVisible(),false);await check('craft-restored-recipe');
+ await page.locator('#craftRecipePopupClose').click();
  for(const category of ['food','furniture']){
   await page.locator('#ckCategory-'+category).click();
   assert.equal(await page.locator('#craftComingSoon').isVisible(),true);
@@ -134,7 +135,7 @@ async function craftCases(page,check){
  await page.locator('#drawerClose').click();assert.equal(await page.locator('#drawer').isVisible(),false);
  await page.locator('#fixtureOpen').click();
  assert.equal(await page.locator('#craftComingSoon').isVisible(),false);
- assert.equal(await page.locator('#craftDetailPane').isVisible(),true);
+ assert.equal(await page.locator('#craftRecipePopup').isVisible(),false);
  await check('craft-reopen');
  await page.locator('#ckCategory-weapons').click();
  await page.locator('#craftRecipeGrid > button').first().click();

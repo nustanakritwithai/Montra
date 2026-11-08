@@ -22,11 +22,11 @@ test('reviewed style snapshot retains pinned bytes, cascade order, URLs and lega
   const baseline = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/extraction-baseline.json')));
   const manifest = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/manifest.json')));
   const bytes = checkStyles();
-  assert.equal(bytes.length, 387790);
-  assert.equal(hash(bytes), '6e3dc81ec44c70b30a549fbaa5ef41ced2d0f33c60cfc8eaec080abef07eb3d9');
+  assert.equal(bytes.length, 391474);
+  assert.equal(hash(bytes), 'c9d527aef71da6959c80d00b05e6e3b9dd6ea4bba3b594c3e68bbf3e087464ed');
   // Retain historical extraction evidence, pin only intentionally changed sources.
-  const reviewedStyles = new Map([{"path": "hud/019-vital-orb-resources-and-chat.css", "bytes": 5832, "sha256": "71477a110f30679c2e281eb5e825ab4557d21ee02eebbb49c2a6c16b1a500b7a"}, {"path": "forge/025-artisan-crafting-and-effects.css", "bytes": 21713, "sha256": "8100aa53a6502b7a31377b1ff9bd2dab8b94acb9079435d70ac0c0946df1ee79"}, {"path": "market/045-world-market.css", "bytes": 5767, "sha256": "6202004601ad13fcb19d476017e489cd971bc5ac523d9c74257aac0b43af50a0"}, {"path": "audio/044-voice-guidance.css", "bytes": 4615, "sha256": "726eb14d122c28f2a2440119b966dafcf2b2074e2766151e3f6c76382aadcad7"}, {"path": "hud/022-chat-compose-and-vitals.css", "bytes": 6469, "sha256": "bba63466dafb8c940fffdc5f8af9795a55fba1a22f5359f78ac2e1639cf231bf"}, {"path": "hud/038-map-shortcuts-and-quick-skills.css", "bytes": 9543, "sha256": "947dcbb2940d2ab342378c2773165e377c1f300e7051df308467336774341fdb"}].map(entry => [entry.path, entry]));
-  const addedStyles = [{"path": "inventory/046-loot-feed.css", "bytes": 2086, "sha256": "d34cce17e03c96ff0e7df9c7c48e08303ca7fefeed5ea89377bd454b19357970"}];
+  const reviewedStyles = new Map([{"path": "hud/019-vital-orb-resources-and-chat.css", "bytes": 5832, "sha256": "71477a110f30679c2e281eb5e825ab4557d21ee02eebbb49c2a6c16b1a500b7a"}, {"path": "forge/025-artisan-crafting-and-effects.css", "bytes": 24825, "sha256": "4b9f978536a89670550965fb9a818175b742011d501d33a7a49781c1ad9ffa8e"}, {"path": "market/045-world-market.css", "bytes": 5767, "sha256": "6202004601ad13fcb19d476017e489cd971bc5ac523d9c74257aac0b43af50a0"}, {"path": "audio/044-voice-guidance.css", "bytes": 4615, "sha256": "726eb14d122c28f2a2440119b966dafcf2b2074e2766151e3f6c76382aadcad7"}, {"path": "hud/022-chat-compose-and-vitals.css", "bytes": 6469, "sha256": "bba63466dafb8c940fffdc5f8af9795a55fba1a22f5359f78ac2e1639cf231bf"}, {"path": "hud/038-map-shortcuts-and-quick-skills.css", "bytes": 9543, "sha256": "947dcbb2940d2ab342378c2773165e377c1f300e7051df308467336774341fdb"}].map(entry => [entry.path, entry]));
+  const addedStyles = [{"path": "inventory/046-loot-feed.css", "bytes": 2658, "sha256": "29a8b363283eb0472d74dfd68aed4f8e0e4203398ee2dadfc06d541376e1a0c5"}];
   assert.deepEqual(manifest.fragments, [...baseline.fragments.map(entry => entry.path), ...addedStyles.map(entry => entry.path)]);
   let nextLine = 1;
   for (const entry of baseline.fragments) {
