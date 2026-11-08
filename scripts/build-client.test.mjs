@@ -12,6 +12,11 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
 {
+  "path": "render/025-horse-and-avatar-animation.js",
+  "bytes": 44774,
+  "sha256": "f07dabb370d1accc700d32a5acad72f6f01459d363a6e56ca4079ab0b5a45712"
+},
+{
   "path": "network/044-state-sync-and-connection.js",
   "bytes": 138339,
   "sha256": "6ac9c202ba47298bb742c0c14bd221911dd9b6f6018d19b59817409931992edf"
@@ -23,8 +28,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/021-character-models.js",
-  "bytes": 32099,
-  "sha256": "3757bbfb7c10a836c2d46215ab83c9fdb031bff6e5c65dfce76e2e3f6b16f767"
+  "bytes": 37651,
+  "sha256": "d7b6ddb55cd6c11e6f21ea1d6272f7bab4da9eee1edd25b4dadf9f9233c96b88"
 },
 {
   "path": "world/013-ground-and-fortification.js",
@@ -83,8 +88,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/020-avatar-materials-and-meshes.js",
-  "bytes": 24728,
-  "sha256": "0f1e1ce6a01a2b6cf385eb843cd33840ec5c93cc4f9c793957236ce3c9beebad"
+  "bytes": 24730,
+  "sha256": "6aec60c01daba916361954cf9eefe6c02ceb264ffb5e931caf4f527d4c7d02ff"
 },
 {
   "path": "ui/042-vitals-chat-and-status.js",
@@ -143,8 +148,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1549513);
-  assert.equal(hash(bytes), '551e3dd3c97c7aa4527ecd886f6b9f3f7ad22a8e5e327f05c76c3e851abdc885');
+  assert.equal(bytes.length, 1556094);
+  assert.equal(hash(bytes), 'bf820f49671dd3edf51afdf196d731cfa6d17660c22c2ea4e690f343bcfd5cd5');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

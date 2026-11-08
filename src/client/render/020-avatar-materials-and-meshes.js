@@ -303,13 +303,13 @@
         root.rotation.x = -2.3; // carried low, the crescent edge sweeping forward
       } else if (kind === "sentinel_pike") {
         // Sentinel ngao (ง้าว): long red-lacquered shaft, gold collar, crescent blade and a horsehair tassel.
-        cyl(0, .35, 0, 2.3, .055, .065, darkWood, 8);
+        cyl(0, .25, 0, 1.9, .05, .06, darkWood, 8);
         for (const y of [-.2, .0, .2]) cyl(0, y, 0, .03, .075, .075, copper, 8);
-        cyl(0, -.82, 0, .14, .07, 0, blackSteel, 5).rotation.x = Math.PI;
-        cyl(0, 1.52, 0, .08, .09, .07, gold, 8);
-        for (let i = 0; i < 6; i++) { const seg = box(.03 + Math.sin(i * .3) * .05, 1.6 + i * .1, 0, .12 - i * .012, .11, .02, blackSteel); seg.rotation.z = -i * .12; }
-        box(-.05, 1.62, 0, .02, .16, .015, daabEdge);
-        for (let i = 0; i < 5; i++) cyl((i - 2) * .012, 1.42, 0, .22, .02, .005, ropeRed, 4).rotation.z = (i - 2) * .12;
+        cyl(0, -.72, 0, .12, .06, 0, blackSteel, 5).rotation.x = Math.PI;
+        cyl(0, 1.22, 0, .08, .085, .065, gold, 8);
+        for (let i = 0; i < 6; i++) { const seg = box(.03 + Math.sin(i * .3) * .05, 1.3 + i * .09, 0, .11 - i * .011, .1, .018, blackSteel); seg.rotation.z = -i * .12; }
+        box(-.045, 1.32, 0, .018, .15, .014, daabEdge);
+        for (let i = 0; i < 5; i++) cyl((i - 2) * .012, 1.12, 0, .2, .02, .005, ropeRed, 4).rotation.z = (i - 2) * .12;
         root.rotation.x = -.2;
       } else if (kind === "seer_wand") {
         // Seer wand: carved bone grip bound in red thread, a yantra-wrapped shaft and a smoky spirit crystal.

@@ -178,12 +178,12 @@
     for (const m of model.getChildMeshes()) { m.isPickable = false; m.alwaysSelectAsActiveMesh = true; }
     shamanGear(a, nodes);
     const body = model.getChildMeshes().find(m => m.skeleton);
-    if (body) skinnedTrousers(body, a.local ? pantsHero : pantsFriend);
+    if (body) { skinnedTrousers(body, a.local ? pantsHero : pantsFriend); if (!a.npc) addHandMorphs(body); }
     // Every weapon rides a hand socket; the left blade of a Thai dual pair
     // goes to the left hand, and unknown weapons use the standard fist grip.
     for (const [kind, root] of Object.entries(a.weaponModels)) {
       root.parent = kind === "thai_left" ? nodes.Socket_Hand_Weapon_L : nodes.Socket_Hand_Weapon_R;
-      root.position.set(0, 0, 0); root.scaling.setAll(.92);
+      root.position.set(0, 0, 0); root.scaling.setAll(.6); // weapons were modelled for the larger procedural rig
       root.rotationQuaternion = quatFromUp(HAND_GRIPS[kind] || DEFAULT_GRIP);
     }
     a.rig.body.setEnabled(false);
@@ -271,22 +271,22 @@
     head(w, p) {
       const k = gearKit();
       if (w === "cloth") {
-        k.cyl(0, 1.655, .004, .04, .232, .232, p.main, 14).scaling.z = 1.1; k.box(-.02, 1.62, -.13, .06, .14, .02, p.main).rotation.z = .3;
+        k.cyl(0, 1.655, -.002, .032, .222, .222, p.main, 14).scaling.z = 1.1; k.box(-.02, 1.62, -.122, .04, .1, .012, p.main).rotation.z = .3;
         if (p.tier >= 3) k.box(0, 1.66, .12, .05, .05, .02, p.trim);
       } else if (w === "hide") {
-        k.dome(0, 1.64, .0, .27, p.main).scaling.set(1, .95, 1.08); k.cyl(0, 1.64, 0, .03, .275, .275, p.second, 14);
+        k.dome(0, 1.645, -.005, .236, p.main).scaling.set(1, .92, 1.1); k.cyl(0, 1.645, -.005, .02, .24, .24, p.second, 14).scaling.z = 1.1;
       } else {
         // Medium: lamellar cap with neck flaps; heavy: Thai war helmet with a brim, cheek plates and a tall gold spire.
         const heavy = w === "heavy";
-        k.dome(0, 1.635, 0, heavy ? .29 : .275, p.main).scaling.set(1, heavy ? 1.15 : 1, 1.08);
-        k.cyl(0, 1.637, 0, .035, heavy ? .33 : .29, heavy ? .33 : .29, heavy ? p.trim : p.second, 16).scaling.z = 1.08;
-        for (const s of [-1, 1]) k.box(s * .13, 1.57, .0, .02, .13, .15, p.main).rotation.z = s * .12;
-        k.box(0, 1.55, -.12, .2, .14, .02, p.second).rotation.x = .25;
+        k.dome(0, 1.64, -.005, heavy ? .245 : .238, p.main).scaling.set(1, heavy ? 1.1 : 1, 1.1);
+        k.cyl(0, 1.642, -.005, .022, heavy ? .262 : .25, heavy ? .262 : .25, heavy ? p.trim : p.second, 16).scaling.z = 1.1;
+        for (const s of [-1, 1]) k.box(s * .112, 1.585, .0, .014, .09, .11, p.main).rotation.z = s * .1;
+        k.box(0, 1.57, -.11, .15, .09, .014, p.second).rotation.x = .25;
         if (heavy) {
-          k.cyl(0, 1.84, 0, .2, 0, .07, p.trim, 8); k.cyl(0, 1.755, 0, .05, .08, .1, p.lacquer, 10);
-          for (let i = 0; i < 3; i++) k.cyl(0, 1.95 + i * .035, 0, .02, .03 - i * .007, .03 - i * .007, p.trim, 8);
-          k.box(0, 1.69, .14, .04, .1, .02, p.trim);
-          if (p.glow) k.ball(0, 2.02, 0, .04, p.glow, 6);
+          k.cyl(0, 1.81, -.005, .12, 0, .045, p.trim, 8); k.cyl(0, 1.765, -.005, .035, .05, .065, p.lacquer, 10);
+          for (let i = 0; i < 2; i++) k.cyl(0, 1.875 + i * .025, -.005, .014, .02 - i * .005, .02 - i * .005, p.trim, 8);
+          k.box(0, 1.685, .123, .03, .07, .012, p.trim);
+          if (p.glow) k.ball(0, 1.92, -.005, .028, p.glow, 6);
         }
       }
       return [["Head", k.take()]];
@@ -294,17 +294,17 @@
     shoulders(w, p) {
       const out = [];
       for (const [side, bone] of [[1, "LeftArm"], [-1, "RightArm"]]) {
-        const k = gearKit(), x = side * .19;
-        if (w === "cloth") { k.dome(x, 1.41, 0, .17, p.main).scaling.set(1.1, .55, 1.05); }
-        else if (w === "hide") { k.dome(x, 1.415, 0, .18, p.main).scaling.set(1.15, .6, 1.1); k.box(x - side * .02, 1.4, 0, .02, .05, .17, p.leather); }
+        const k = gearKit(), x = side * .185;
+        if (w === "cloth") { k.dome(x, 1.41, 0, .13, p.main).scaling.set(1.1, .5, 1.05); }
+        else if (w === "hide") { k.dome(x, 1.412, 0, .14, p.main).scaling.set(1.1, .55, 1.05); k.box(x - side * .02, 1.4, 0, .014, .035, .13, p.leather); }
         else {
           const n = w === "heavy" ? 3 : 2;
           for (let i = 0; i < n; i++) {
-            const plate = k.dome(x + side * i * .025, 1.43 - i * .045, 0, .2 - i * .015, i ? p.second : p.main);
-            plate.scaling.set(1.15, .5, 1.1); plate.rotation.z = -side * (.35 + i * .12);
+            const plate = k.dome(x + side * i * .02, 1.42 - i * .035, 0, .15 - i * .012, i ? p.second : p.main);
+            plate.scaling.set(1.1, .45, 1.05); plate.rotation.z = -side * (.35 + i * .12);
           }
-          k.cyl(x, 1.44, 0, .015, .205, .205, p.trim, 14).rotation.z = -side * .35;
-          if (w === "heavy" && p.tier >= 5) k.cyl(x + side * .09, 1.47, 0, .1, 0, .04, p.trim, 6).rotation.z = -side * 1.1;
+          k.cyl(x, 1.428, 0, .01, .152, .152, p.trim, 14).rotation.z = -side * .35;
+          if (w === "heavy" && p.tier >= 5) k.cyl(x + side * .065, 1.452, 0, .06, 0, .025, p.trim, 6).rotation.z = -side * 1.1;
         }
         out.push([bone, k.take()]);
       }
@@ -312,7 +312,7 @@
     },
     chest(w, p) {
       const up = gearKit(), mid = gearKit(), heavy = w === "heavy";
-      const puff = { cloth: .012, hide: .018, medium: .024, heavy: .032 }[w] ?? .02;
+      const puff = { cloth: .006, hide: .01, medium: .014, heavy: .018 }[w] ?? .012;
       up.loft([[1.2, .185 + puff, .135 + puff, .005], [1.3, .205 + puff, .148 + puff, .005], [1.4, .215 + puff, .135 + puff, -.002], [1.455, .14 + puff * .6, .095 + puff * .5, -.004]], p.main, 16);
       mid.loft([[1.0, .168 + puff, .12 + puff, .004], [1.1, .172 + puff, .125 + puff, .004], [1.22, .187 + puff, .137 + puff, .005]], w === "cloth" ? p.main : p.second, 16);
       if (w === "cloth") { up.box(0, 1.2, .14, .05, .42, .015, p.second).rotation.z = .55; mid.cyl(0, 1.03, .004, .06, .36, .35, p.second, 14).scaling.z = .75; }
@@ -321,16 +321,16 @@
         // Lamellar rows across the front and back; heavy adds the round breast disc (ทับทรวง) and a back plate.
         for (let r = 0; r < 4; r++) for (let c = -3; c <= 3; c++) {
           const y = 1.17 + r * .06, z = .15 + puff - Math.abs(c) * .012;
-          up.box(c * .05, y, z, .045, .055, .012, (r + c) % 2 ? p.main : p.second);
+          up.box(c * .045, y, z, .04, .05, .008, (r + c) % 2 ? p.main : p.second);
         }
-        mid.cyl(0, 1.03, .004, .07, .38, .37, p.lacquer, 16).scaling.z = .76;
+        mid.cyl(0, 1.03, .004, .05, .36, .35, p.lacquer, 16).scaling.z = .76;
         mid.box(0, 1.03, .145, .07, .06, .015, p.trim);
         if (heavy) {
-          const disc = up.cyl(0, 1.33, .182, .025, .15, .15, p.trim, 18); disc.rotation.x = Math.PI / 2;
-          const inner = up.cyl(0, 1.33, .196, .01, .09, .09, p.lacquer, 16); inner.rotation.x = Math.PI / 2;
-          if (p.glow) { const g = up.cyl(0, 1.33, .203, .006, .04, .04, p.glow, 10); g.rotation.x = Math.PI / 2; }
-          up.box(0, 1.3, -.158, .3, .3, .02, p.main);
-          for (const s of [-1, 1]) up.box(s * .12, 1.43, .03, .05, .02, .26, p.trim);
+          const disc = up.cyl(0, 1.33, .165, .014, .1, .1, p.trim, 18); disc.rotation.x = Math.PI / 2;
+          const inner = up.cyl(0, 1.33, .173, .006, .06, .06, p.lacquer, 16); inner.rotation.x = Math.PI / 2;
+          if (p.glow) { const g = up.cyl(0, 1.33, .177, .004, .028, .028, p.glow, 10); g.rotation.x = Math.PI / 2; }
+          up.box(0, 1.3, -.15, .26, .26, .012, p.main);
+          for (const s of [-1, 1]) up.box(s * .11, 1.425, .02, .035, .012, .2, p.trim);
         }
       }
       return [["Chest", up.take()], ["Spine", mid.take()]];
@@ -338,12 +338,13 @@
     arms(w, p) {
       const out = [];
       for (const [side, bone] of [[1, "LeftForeArm"], [-1, "RightForeArm"]]) {
-        const k = gearKit(), x0 = side * .44, x1 = side * .6;
-        const r = { cloth: .048, hide: .052, medium: .056, heavy: .06 }[w] ?? .055;
-        k.sleeve(x0, x1, 1.364, -.002, r * 1.08, r * .92, w === "cloth" ? p.main : p.main);
-        if (w !== "cloth") for (const x of [x0 + side * .01, x1 - side * .01]) k.sleeve(x - side * .012, x + side * .012, 1.364, -.002, r * 1.12, r * 1.12, p.trim);
-        if (w === "heavy") k.box((x0 + x1) / 2, 1.364 + r * .9, -.002, .13, .02, .07, p.second);
-        if (w === "hide") k.sleeve(x0 + side * .06, x0 + side * .08, 1.364, -.002, r * 1.1, r * 1.1, p.leather);
+        // Measured forearm: half-width ~.044 at x .44 tapering to ~.033 at x .58; the bracer sits just over it.
+        const k = gearKit(), x0 = side * .44, x1 = side * .58, t = { cloth: .003, hide: .004, medium: .005, heavy: .006 }[w] ?? .005;
+        const r0 = .046 + t, r1 = .035 + t, at = f => r0 + (r1 - r0) * f;
+        k.sleeve(x0, x1, 1.364, -.002, r0, r1, p.main);
+        if (w !== "cloth") for (const f of [.06, .94]) { const x = x0 + (x1 - x0) * f; k.sleeve(x - side * .008, x + side * .008, 1.364, -.002, at(f) + .003, at(f) + .003, p.trim); }
+        if (w === "heavy") k.box((x0 + x1) / 2, 1.364 + at(.5) * .9, -.002, .1, .012, .04, p.second);
+        if (w === "hide") { const x = x0 + (x1 - x0) * .4; k.sleeve(x, x + side * .014, 1.364, -.002, at(.4) + .003, at(.45) + .003, p.leather); }
         out.push([bone, k.take()]);
       }
       return out;
@@ -357,17 +358,20 @@
     legs(w, p) {
       const out = [], hips = gearKit();
       // Tassets hang from the belt over the thighs (carried by the hips so walking never folds them).
-      if (w !== "cloth") for (const s of [-1, 1]) for (let i = 0; i < (w === "heavy" ? 2 : 1); i++)
-        hips.box(s * .1, .86 - i * .07, .115 - i * .006, .13, .08, .014, i ? p.second : p.main).rotation.z = s * .08;
+      // Tassets hang straight down from the belt over the front of each thigh, clear of the loose trousers.
+      if (w !== "cloth") for (const s of [-1, 1]) for (let i = 0; i < (w === "heavy" ? 2 : 1); i++) {
+        const plate = hips.box(s * .095, .89 - i * .075, .15 + i * .006, .1, .085, .008, i ? p.second : p.main); plate.rotation.x = -.12;
+        hips.box(s * .095, .93 - i * .075, .153 + i * .006, .1, .008, .01, p.trim).rotation.x = -.12;
+      }
       if (w === "cloth") hips.cyl(0, .9, .004, .16, .42, .38, p.main, 14).scaling.z = .8;
       out.push(["Hips", hips.take()]);
       for (const [side, leg] of [[1, "LeftLeg"], [-1, "RightLeg"]]) {
         const k = gearKit(), x = side * .095;
         if (w === "cloth") k.cyl(x, .25, .0, .1, .095, .1, p.second, 10);
         else {
-          const greave = k.cyl(x, .3, .02, .3, .12, .1, p.main, 10); greave.scaling.z = .85;
-          k.ball(x, .47, .045, w === "heavy" ? .11 : .09, w === "heavy" ? p.trim : p.second, 8).scaling.z = .6;
-          for (const y of [.17, .43]) k.cyl(x, y, .02, .015, .125, .125, p.leather, 10);
+          const greave = k.cyl(x, .29, .015, .26, .1, .085, p.main, 10); greave.scaling.z = .85;
+          k.ball(x, .465, .04, w === "heavy" ? .085 : .07, w === "heavy" ? p.trim : p.second, 8).scaling.z = .6;
+          for (const y of [.18, .4]) k.cyl(x, y, .015, .01, .104, .104, p.leather, 10);
         }
         out.push([leg, k.take()]);
       }
@@ -377,9 +381,9 @@
       const out = [];
       for (const [side, bone] of [[1, "LeftFoot"], [-1, "RightFoot"]]) {
         const k = gearKit(), x = side * .098;
-        k.box(x, .045, .04, .105, .09, .23, w === "cloth" ? p.second : p.main);
-        k.cyl(x, .12, -.01, .1, .11, .1, w === "cloth" ? p.main : p.second, 10);
-        if (w === "heavy" || w === "medium") k.box(x, .07, .145, .09, .05, .04, p.trim);
+        k.box(x, .04, .035, .088, .08, .2, w === "cloth" ? p.second : p.main);
+        k.cyl(x, .11, -.012, .08, .09, .085, w === "cloth" ? p.main : p.second, 10);
+        if (w === "heavy" || w === "medium") k.box(x, .06, .13, .075, .04, .03, p.trim);
         out.push([bone, k.take()]);
       }
       return out;
@@ -389,12 +393,13 @@
   const OFFHAND_BUILDERS = {
     brace(p) { // Muay Thai: rope wraps up the left forearm.
       const k = gearKit();
-      for (let i = 0; i < 6; i++) k.sleeve(.44 + i * .028, .46 + i * .028, 1.364, 0, .054, .054, i % 2 ? ropeRed : gearMat("rope hemp", "#c9b48a"));
+      // The forearm tapers from ~.044 (elbow side) to ~.032 (wrist): each turn follows it.
+      for (let i = 0; i < 6; i++) k.sleeve(.44 + i * .024, .458 + i * .024, 1.364, 0, .048 - i * .0022, .048 - i * .0022, i % 2 ? ropeRed : gearMat("rope hemp", "#c9b48a"));
       return [["LeftForeArm", k.take()]];
     },
     guard(p) { // Twin-sword school: a lacquered forearm parrying guard.
       const k = gearKit();
-      k.box(.52, 1.364, .055, .2, .09, .025, p.lacquer || p.main); k.box(.52, 1.364, .07, .16, .02, .01, p.trim);
+      k.box(.51, 1.364, .05, .16, .06, .014, p.lacquer || p.main); k.box(.51, 1.364, .058, .13, .014, .006, p.trim);
       return [["LeftForeArm", k.take()]];
     },
     veil(p) { // Blade: a dark cloth veil over the lower face, tails at the nape.
@@ -405,22 +410,26 @@
     shield(p) { // Sentinel: round rattan dang with a brass boss, on the left forearm.
       const k = gearKit(), rattan = gearMat("rattan shield", "#7a5a32");
       // Kept small and close to the elbow so the raised guard does not hide the face.
-      const disc = k.cyl(.48, 1.364, .075, .035, .4, .4, rattan, 20); disc.rotation.x = Math.PI / 2;
-      const rim = k.cyl(.48, 1.364, .075, .045, .42, .42, p.trim, 20); rim.rotation.x = Math.PI / 2; rim.scaling.y = .6;
-      k.ball(.48, 1.364, .1, .1, p.trim, 10).scaling.z = .5;
-      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + .4; k.ball(.48 + Math.cos(a) * .13, 1.364 + Math.sin(a) * .13, .097, .03, p.trim, 6); }
+      const disc = k.cyl(.48, 1.364, .06, .025, .28, .28, rattan, 20); disc.rotation.x = Math.PI / 2;
+      const rim = k.cyl(.48, 1.364, .06, .032, .292, .292, p.trim, 20); rim.rotation.x = Math.PI / 2; rim.scaling.y = .6;
+      k.ball(.48, 1.364, .075, .07, p.trim, 10).scaling.z = .5;
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + .4; k.ball(.48 + Math.cos(a) * .09, 1.364 + Math.sin(a) * .09, .074, .02, p.trim, 6); }
       return [["LeftForeArm", k.take()]];
     },
     jar(p) { // Seer: a small sealed spirit jar held in the left hand.
       const k = gearKit();
-      k.ball(.7, 1.3, .03, .16, jarCarved, 10).scaling.y = 1.1; k.cyl(.7, 1.395, .03, .05, .07, .1, jarClay, 8);
-      k.box(.7, 1.3, .03, .165, .012, .165, ropeRed); k.box(.73, 1.28, .11, .04, .1, .004, gearMat("talisman paper", "#e8d9a8"));
+      // Held by the neck: the neck sits in the fist (grip socket at .665, 1.339) and the body hangs below the palm.
+      k.cyl(.665, 1.335, .012, .05, .045, .06, jarClay, 8);
+      k.ball(.665, 1.275, .012, .085, jarCarved, 10).scaling.y = 1.08; k.box(.665, 1.277, .012, .088, .008, .088, ropeRed);
+      k.box(.665, 1.268, .056, .022, .05, .003, gearMat("talisman paper", "#e8d9a8"));
       return [["LeftHand", k.take()]];
     },
     bell(p) { // Mender: a bronze hand bell (กระดิ่ง) with a red cord.
       const k = gearKit();
-      k.cyl(.7, 1.33, .03, .13, .04, .12, gearMat("bell bronze", "#8a6a3a", "#1a1206", .4), 12).rotation.x = Math.PI; k.cyl(.7, 1.42, .03, .08, .025, .03, p.trim, 8);
-      k.ball(.7, 1.25, .03, .03, p.trim, 6); k.box(.7, 1.47, .03, .01, .06, .01, ropeRed);
+      // Handle in the fist, the bell hanging mouth-down below the palm.
+      k.cyl(.665, 1.35, .012, .07, .022, .026, darkWood, 8); k.cyl(.665, 1.312, .012, .015, .035, .035, p.trim, 8);
+      k.cyl(.665, 1.275, .012, .06, .026, .065, gearMat("bell bronze", "#8a6a3a", "#1a1206", .4), 12);
+      k.ball(.665, 1.24, .012, .018, p.trim, 6); k.box(.665, 1.385, .012, .008, .03, .008, ropeRed);
       return [["LeftHand", k.take()]];
     },
   };
@@ -496,4 +505,78 @@
     }
     // A worn cuirass or helmet replaces the ritual shawl and headband of the base outfit.
     setAvatarRitualGear(avatar, avatar.pathId);
+  }
+  // ---- Hand poses: fist, grip, relaxed and open ----
+  // The skeleton has one bone per hand and no finger bones, so finger poses are morph targets baked
+  // from the T-pose mesh: each finger (x past the knuckles at |x| 0.695) curls about three joints toward
+  // the palm, and the thumb folds across. Targets: [left grip, left fist, right grip, right fist];
+  // "relaxed" is a light grip and "open" is the rest pose. Wrap meshes cut from the body share them.
+  const HAND_POSES = { grip: { curl: [1.05, 1.3, .9], thumb: [.85, .4] }, fist: { curl: [1.45, 1.7, 1.25], thumb: [1.15, .75] } };
+  const HAND_JOINTS = [.695, .725, .752], HAND_PIVOT_Y = 1.343;
+  const handMorphCache = new Map();
+  function rotateAbout(p, pivot, axis, angle) {
+    // Rodrigues rotation of point p about a unit axis through pivot.
+    const x = p[0] - pivot[0], y = p[1] - pivot[1], z = p[2] - pivot[2], c = Math.cos(angle), s = Math.sin(angle);
+    const [ax, ay, az] = axis, dot = ax * x + ay * y + az * z;
+    return [pivot[0] + x * c + (ay * z - az * y) * s + ax * dot * (1 - c), pivot[1] + y * c + (az * x - ax * z) * s + ay * dot * (1 - c), pivot[2] + z * c + (ax * y - ay * x) * s + az * dot * (1 - c)];
+  }
+  function handPoseVertex(p, side, pose, normal) {
+    const ax = p[0] * side; // distance along the arm in this hand's direction
+    if (ax < .6) return null;
+    let q = p.slice(), n = normal ? normal.slice() : null;
+    const spin = (pivot, axis, angle) => { q = rotateAbout(q, pivot, axis, angle); if (n) n = rotateAbout(n, [0, 0, 0], axis, angle); };
+    const thumbW = Math.min(1, Math.max(0, (p[2] - .041) / .012)) * (ax > .635 && ax < .75 ? 1 : 0);
+    if (thumbW > 0) {
+      // Thumb: bend down past the palm, then swing across toward the curled fingers.
+      const dir = [.6 * side, 0, .8], axis = [dir[2], 0, -dir[0]], len = Math.hypot(axis[0], axis[2]);
+      spin([.645 * side, 1.35, .028], [axis[0] / len, 0, axis[2] / len], pose.thumb[0] * thumbW);
+      spin([.645 * side, 1.35, .028], [0, 1, 0], -side * pose.thumb[1] * thumbW);
+      return [q, n];
+    }
+    if (ax < HAND_JOINTS[0]) return null;
+    // Fingers: distal joint first, then middle, then knuckle, each about its rest pivot (forward kinematics).
+    const pinky = 1 + Math.max(0, -p[2]) * 3; // the outer fingers close a little tighter
+    for (let j = 2; j >= 0; j--) if (ax > HAND_JOINTS[j]) spin([HAND_JOINTS[j] * side, HAND_PIVOT_Y, 0], [0, 0, 1], -side * pose.curl[j] * pinky);
+    return [q, n];
+  }
+  function handMorphTargets(mesh) {
+    const K = B.VertexBuffer, pos = mesh.getVerticesData(K.PositionKind), nor = mesh.getVerticesData(K.NormalKind);
+    if (!pos) return null;
+    const key = mesh.name + ":" + pos.length;
+    if (handMorphCache.has(key)) return handMorphCache.get(key);
+    const out = [];
+    for (const side of [1, -1]) for (const poseName of ["grip", "fist"]) {
+      const P = Float32Array.from(pos), N = nor ? Float32Array.from(nor) : null;
+      for (let i = 0; i < pos.length; i += 3) {
+        const r = handPoseVertex([pos[i], pos[i + 1], pos[i + 2]], side, HAND_POSES[poseName], nor ? [nor[i], nor[i + 1], nor[i + 2]] : null);
+        if (!r) continue;
+        P[i] = r[0][0]; P[i + 1] = r[0][1]; P[i + 2] = r[0][2];
+        if (N && r[1]) { N[i] = r[1][0]; N[i + 1] = r[1][1]; N[i + 2] = r[1][2]; }
+      }
+      out.push({ name: (side > 0 ? "L " : "R ") + poseName, P, N });
+    }
+    handMorphCache.set(key, out); return out;
+  }
+  function addHandMorphs(mesh) {
+    if (!mesh || mesh.morphTargetManager || !B.MorphTargetManager) return;
+    const targets = handMorphTargets(mesh);
+    if (!targets) return;
+    const manager = new B.MorphTargetManager(scene);
+    for (const t of targets) {
+      const target = new B.MorphTarget(t.name, 0, scene);
+      target.setPositions(t.P); if (t.N) target.setNormals(t.N);
+      manager.addTarget(target);
+    }
+    mesh.morphTargetManager = manager;
+  }
+  // Ease every hand mesh of an avatar toward {left:[grip, fist], right:[grip, fist]}.
+  function setHandPose(a, left, right, dt) {
+    const want = [left[0], left[1], right[0], right[1]], cur = a.handPose || (a.handPose = [0, 0, 0, 0]);
+    const k = 1 - Math.exp(-dt * 14);
+    for (let i = 0; i < 4; i++) cur[i] += (want[i] - cur[i]) * k;
+    for (const mesh of [a.skin?.body, ...(a.skin?.wraps || [])]) {
+      const manager = mesh?.morphTargetManager;
+      if (!manager || !mesh.isEnabled()) continue;
+      for (let i = 0; i < 4 && i < manager.numTargets; i++) manager.getTarget(i).influence = cur[i];
+    }
   }
