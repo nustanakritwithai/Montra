@@ -260,9 +260,8 @@
     }
     for(const z of [42,-36])for(let x=-235;x<250;x+=9){
       if(Math.abs(x)<18 || Math.abs(x-(z===42?-95:95))<21)continue;
-      const cairn=B.MeshBuilder.CreateCylinder("shale outcrop",{height:.68,diameterBottom:2.1,diameterTop:1.5,tessellation:5},scene);
       sceneryPoint("stone",x,z-1.5,1.05);
-      cairn.position.set(x,terrainHeight(t,x,z)+.10,z-1.5);cairn.material=paint.stone;ornaments.push(cairn);
+      placeRock("plain",x,terrainHeight(t,x,z-1.5),z-1.5,{parent:expansionRoot,scale:1.05}); // shale outcrop from the rock kit
     }
     for(const m of new Set(ornaments.map(p=>p.material))){
       const group=ornaments.filter(p=>p.material===m),merged=B.Mesh.MergeMeshes(group,true,true);
@@ -272,6 +271,9 @@
   function buildRegion(map,paint) {
     let parts=[];
     const elevation=(x,z)=>map.reliefLabels?terrainHeight(map.terrain,x,z):0;
+    // Thai tree / rock kit instances seated on the relief (they are not merged with the carved parts).
+    const tree=(species,x,z,scale=1)=>placeThaiTree(species,x,elevation(x,z),z,{parent:expansionRoot,scale});
+    const rock=(kind,x,z,scale=1)=>placeRock(kind,x,elevation(x,z),z,{parent:expansionRoot,scale});
     function put(mesh,x,y,z,material){
       mesh.position.set(x,y+elevation(x,z),z);mesh.material=material;mesh.isPickable=false;parts.push(mesh);return mesh;
     }
@@ -566,7 +568,7 @@
           for(let j=0;j<n;j++){
             const t=(j+.5)/n,bx=along?w.x+t*w.width:x,bz=along?z:w.z+t*w.length;
             sceneryPoint("wood",bx,bz,w.width>w.length?w.length/2:w.width/2);
-            cone(bx,1.7,bz,3.4,.48,.31,decor.bamboo,5);cone(bx,3.05,bz,.75,1.45,.36,forestLeaf,5);
+            if(j%2===0)tree("phai",bx,bz,.55+noise(j+bx,571)*.15); // bamboo hedge from the tree kit
           }
         }else if(city){
           box(x,.5,z,w.width+.3,1,w.length+.3,provinceFx.laterite);box(x,2.2,z,w.width,2.4,w.length,provinceFx.brick);
@@ -659,7 +661,8 @@
           cone(x,7.6,z,1.4,.35,0,gold,8);
           cone(x,1.6,z,2.1,.42,.38,templeGold,10);ball(x,2.85,z,.6,gold,6);
         }else if(s.kind==="grove"){
-          for(let i=0;i<8;i++){const a=i*2.4,bx=x+Math.cos(a)*1.2,bz=z+Math.sin(a)*1.2;sceneryPoint("wood",bx,bz,.4);cone(bx,2,bz,4+i%3,.32,.20,forestLeaf);}
+          for(let i=0;i<8;i++){const a=i*2.4,bx=x+Math.cos(a)*1.2,bz=z+Math.sin(a)*1.2;sceneryPoint("wood",bx,bz,.4);
+            if(i<3)tree(["yangna","takhian","pradu"][i],x+Math.cos(a)*1.6,z+Math.sin(a)*1.6,.7+i*.08);}
         }
         if(s.kind!=="bridge")lamp(x+2.2,z+1.5);
         finish(s.kind,true);
@@ -721,7 +724,7 @@
         const x=huntTrail?(i%2?bounds.maxX-4:bounds.minX+4):(i%2?1:-1)*(35+i%4);
         const z=huntTrail?bounds.minZ+6+(bounds.maxZ-bounds.minZ-12)*noise(i,197):-58+(i*29)%83;
         if(huntTrail && !sceneryClear(x,z,8,map))continue;
-        if(bamboo){for(let j=0;j<4;j++){sceneryPoint("wood",x+j*.3,z+j*.2,.3);cone(x+j*.3,2,z+j*.2,4+j*.7,.21,.13,forestLeaf,5).rotation.z=(j-2)*.07;}}
+        if(bamboo){for(let j=0;j<4;j++)sceneryPoint("wood",x+j*.3,z+j*.2,.3);tree("phai",x+.45,z+.3,.75+noise(i,198)*.2);}
         else {cone(x,.12,z,.16,1.7,1.8,forestLeaf,8);cone(x,.4,z,.4,.8,.3,paint.light,6);}
       }
       finish("lanterns and fields");
