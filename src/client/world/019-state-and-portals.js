@@ -191,6 +191,7 @@
 
   function switchWorld(mapId) {
     if(activeMapId===mapId || !(portals[mapId] || worldDefinitions?.[mapId]))return;
+    clearCombatVfx();
     activeMapId=mapId;
     $("quest").classList.remove("war-hud");
     spellTargetId=null;

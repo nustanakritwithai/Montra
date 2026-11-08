@@ -31,9 +31,29 @@
     const start=new B.Vector3(from.x,from.y,from.z),end=new B.Vector3(to.x,to.y,to.z);root.position.copyFrom(start);
     skillEffects.push({mesh:root,mapId:activeMapId,start,end,until:performance.now()+300});
   }
-  function triggerSkillVfx(skillId, caster, target) {
-    if (!caster || !fxNear(caster.x, caster.z)) return;
-    if (caster === getLocalAvatar()) {
+  // Resolve accepted event IDs, never the observing client's selected target.
+  function skillVfxTarget(targetId) {
+    if (typeof targetId !== "string" || !targetId) return null;
+    const target = monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
+    return target && (target.mapId || "ritual_village") === activeMapId ? target : null;
+  }
+  function skillVfxTargetMesh(targetId) {
+    if (!skillVfxTarget(targetId)) return null;
+    return forestMonsters.get(targetId) || (targetId === MONSTER_ID ? villageGhost : avatars.get(targetId)?.node) || null;
+  }
+  function clearCombatVfx() {
+    clearWorldFx();
+    for (const effect of skillEffects) effect.mesh.dispose();
+    skillEffects.length = 0;
+    for (const effects of [seerBindingEffects, priestAreaEffects]) {
+      for (const effect of effects.values()) effect.mesh.dispose();
+      effects.clear();
+    }
+    floatLayer.replaceChildren(); floatStack.clear();
+  }
+  function triggerSkillVfx(skillId, caster, target, targetId = "") {
+    if (!caster || !fxNear(caster.x, caster.z) || (targetId && !target)) return;
+    if (caster === getLocalAvatar() || caster === ownServerCharacter()) {
       if (skillId === "blade_heavy" || skillId === "shock") {
         shakeCamera(0.62, 380);
       } else if (skillId === "korat" || skillId === "seer_buffalo" || skillId === "chumphon_core") {
@@ -43,7 +63,7 @@
       }
     }
     const cx = caster.x, cy = caster.y || 0, cz = caster.z;
-    const heading = caster.heading || 0, fwd = [-Math.sin(heading), -Math.cos(heading)];
+    const heading = Number.isFinite(caster.heading) ? caster.heading : (caster.facing || 0), fwd = [-Math.sin(heading), -Math.cos(heading)];
     const tgt = target || { x: cx + fwd[0] * 1.5, y: cy, z: cz + fwd[1] * 1.5 };
     const tx = tgt.x, ty = (tgt.y || 0) + 1.2, tz = tgt.z;
 
@@ -144,23 +164,23 @@
         sparks("violet", cx, cy + 1.2, cz, 16, { speed: 2, up: 4, grav: -0.5, life: 800 });
         break;
       case "seer_binding":
-        showTalismanSeal(avatars.get(tgt.id || tgt.sessionId) || tgt);
-        spawnFx("yantra", "gold", tx, (tgt.y || cy) + 0.12, tz, { orient: "ground", life: 1400, s0: 2, s1: 5.5, a0: 1, a1: 1, fade: 0.3, spin: 2, follow: tgt });
-        spawnFx("ring", "gold", tx, (tgt.y || cy) + 0.15, tz, { orient: "ground", life: 500, s0: 1, s1: 6, a0: 0.9, a1: 0 });
+        showTalisman(skillVfxTargetMesh(targetId || tgt.id));
+        spawnFx("yantra", "gold", tx, (tgt.y ?? cy) + 0.12, tz, { orient: "ground", life: 1400, s0: 2, s1: 5.5, a0: 1, a1: 1, fade: 0.3, spin: 2, follow: tgt });
+        spawnFx("ring", "gold", tx, (tgt.y ?? cy) + 0.15, tz, { orient: "ground", life: 500, s0: 1, s1: 6, a0: 0.9, a1: 0 });
         sparks("gold", tx, ty - 0.4, tz, 14, { speed: 2, up: 4, life: 700 });
         break;
       case "seer_poison":
         for (let i = 0; i < 6; i++) {
-          spawnFx("glow", "green", tx + (Math.random() - 0.5) * 1.5, (tgt.y || cy) + 0.5 + Math.random() * 0.8, tz + (Math.random() - 0.5) * 1.5, { delay: i * 60, life: 800, s0: 1.2, s1: 3, a0: 0.8, a1: 0, vel: [0, 0.6, 0] });
+          spawnFx("glow", "green", tx + (Math.random() - 0.5) * 1.5, (tgt.y ?? cy) + 0.5 + Math.random() * 0.8, tz + (Math.random() - 0.5) * 1.5, { delay: i * 60, life: 800, s0: 1.2, s1: 3, a0: 0.8, a1: 0, vel: [0, 0.6, 0] });
         }
-        spawnFx("ring", "green", tx, (tgt.y || cy) + 0.15, tz, { orient: "ground", life: 600, s0: 1, s1: 5, a0: 0.85, a1: 0 });
+        spawnFx("ring", "green", tx, (tgt.y ?? cy) + 0.15, tz, { orient: "ground", life: 600, s0: 1, s1: 5, a0: 0.85, a1: 0 });
         sparks("green", tx, ty - 0.4, tz, 14, { speed: 1.8, up: 4, life: 750 });
         break;
 
       // --- Occult Mender (พระ / จอมอาคมรักษา) ---
       case "mender_core_heal":
-        spawnFx("beam", "green", tx, (tgt.y || cy) + 4.5, tz, { orient: "pillar", life: 900, s0: 2.2, s1: 0.8, h: 9, a0: 0.85, a1: 0.85, fade: 0.5, follow: tgt });
-        spawnFx("ring", "green", tx, (tgt.y || cy) + 0.15, tz, { orient: "ground", life: 700, s0: 5, s1: 1.2, a0: 0.4, a1: 1, follow: tgt });
+        spawnFx("beam", "green", tx, (tgt.y ?? cy) + 4.5, tz, { orient: "pillar", life: 900, s0: 2.2, s1: 0.8, h: 9, a0: 0.85, a1: 0.85, fade: 0.5, follow: tgt });
+        spawnFx("ring", "green", tx, (tgt.y ?? cy) + 0.15, tz, { orient: "ground", life: 700, s0: 5, s1: 1.2, a0: 0.4, a1: 1, follow: tgt });
         sparks("green", tx, ty, tz, 18, { speed: 2, up: 5, grav: -1, life: 900, follow: tgt });
         break;
       case "mender_core_circle":
@@ -181,7 +201,7 @@
 
       // --- Sentinel (ผู้พิทักษ์) ---
       case "shock":
-        spawnFx("ring", "gold", tx, (tgt.y || cy) + 0.15, tz, { orient: "ground", life: 550, s0: 1.5, s1: 8.5, a0: 1, a1: 0 });
+        spawnFx("ring", "gold", tx, (tgt.y ?? cy) + 0.15, tz, { orient: "ground", life: 550, s0: 1.5, s1: 8.5, a0: 1, a1: 0 });
         spawnFx("star", "white", tx, ty, tz, { life: 250, s0: 1.5, s1: 5.5, a0: 1, a1: 0 });
         sparks("gold", tx, ty - 0.4, tz, 20, { speed: 6, up: 5, grav: -2, life: 650 });
         break;
@@ -196,7 +216,7 @@
         sparks("red", cx, cy + 1.2, cz, 18, { speed: 5.5, up: 4, life: 500 });
         break;
       case "protect":
-        spawnFx("dash", "cyan", tx, (tgt.y || cy) + 1.2, tz, { life: 1400, s0: 2.6, s1: 3, a0: 0.85, a1: 0.85, fade: 0.3, follow: tgt });
+        spawnFx("dash", "cyan", tx, (tgt.y ?? cy) + 1.2, tz, { life: 1400, s0: 2.6, s1: 3, a0: 0.85, a1: 0.85, fade: 0.3, follow: tgt });
         sparks("cyan", tx, ty - 0.4, tz, 12, { speed: 2, up: 4, life: 750, follow: tgt });
         break;
     }

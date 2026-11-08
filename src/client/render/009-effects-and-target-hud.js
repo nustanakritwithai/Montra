@@ -6,9 +6,10 @@
   function updateWorldFx(now) {
     for (let i = worldFx.length - 1; i >= 0; i--) {
       const f = worldFx[i], k = (now - f.born) / f.life;
+      if (f.mapId !== activeMapId || f.room !== room || (typeof f.follow?.mapId === "string" && (f.follow.mapId || "ritual_village") !== activeMapId)) { releaseWorldFx(i); continue; }
       if (k < 0) continue;
       const gone = f.follow && (f.follow.isEnabled ? !f.follow.isEnabled() : f.follow.node && !f.follow.node.isEnabled?.());
-      if (k >= 1 || gone) { f.m.setEnabled(false); worldFxPool.push(f.m); worldFx.splice(i, 1); continue; }
+      if (k >= 1 || gone) { releaseWorldFx(i); continue; }
       const e = 1 - Math.pow(1 - k, 3), s = (f.s0 + (f.s1 - f.s0) * e) * (1 + f.pulse * Math.sin(now / 60));
       if (f.h) f.m.scaling.set(s, f.h * (k < .2 ? k / .2 : 1), 1); else f.m.scaling.setAll(s);
       // a0 → a1 linearly, optionally holding then fading in the last `fade` fraction
@@ -120,10 +121,10 @@
   // Wind-up telegraph: a red danger disc that tightens onto the ghost until it strikes.
   function windupTelegraph(mesh, g) {
     const r = Math.max(3, (g.tall || 1.8) * 1.8), y = (g.ty ?? 0) + .1;
-    spawnFx("disc", "red", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 750, s0: r * 2.5, s1: r * 1.5, a0: .25, a1: .9, follow: mesh });
-    spawnFx("dash", "red", mesh.position.x, y + .02, mesh.position.z, { orient: "ground", life: 750, s0: r * 3, s1: r * 1.6, a0: .5, a1: 1, spin: 2.5, follow: mesh });
-    spawnFx("ring", "blood", mesh.position.x, y + .03, mesh.position.z, { orient: "ground", life: 750, s0: 0.8, s1: r * 2.4, a0: 0.95, a1: 0.1, follow: mesh });
-    spawnFx("cross", "red", mesh.position.x, y + .04, mesh.position.z, { orient: "ground", life: 750, s0: r * 1.6, s1: r * 1.6, a0: 0.85, a1: 0.2, spin: 1.8, follow: mesh });
+    spawnFx("disc", "red", mesh.position.x, y, mesh.position.z, { critical: true, orient: "ground", life: 750, s0: r * 2.5, s1: r * 1.5, a0: .25, a1: .9, follow: mesh });
+    spawnFx("dash", "red", mesh.position.x, y + .02, mesh.position.z, { critical: true, orient: "ground", life: 750, s0: r * 3, s1: r * 1.6, a0: .5, a1: 1, spin: 2.5, follow: mesh });
+    spawnFx("ring", "blood", mesh.position.x, y + .03, mesh.position.z, { critical: true, orient: "ground", life: 750, s0: 0.8, s1: r * 2.4, a0: 0.95, a1: 0.1, follow: mesh });
+    spawnFx("cross", "red", mesh.position.x, y + .04, mesh.position.z, { critical: true, orient: "ground", life: 750, s0: r * 1.6, s1: r * 1.6, a0: 0.85, a1: 0.2, spin: 1.8, follow: mesh });
     sparks("blood", mesh.position.x, y + 0.3, mesh.position.z, 6, { speed: 3.5, up: 1.5, life: 500 });
     if (g?.tier === "boss" || g?.tier === "elite" || (mesh && mesh.metadata?.ghost?.design?.elite)) {
       triggerCombatCallout("boss_telegraph");
