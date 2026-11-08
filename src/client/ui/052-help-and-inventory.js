@@ -290,6 +290,7 @@
     if (drawerActive === "forge") { renderForgePage(); return; }
     if (drawerActive === "crafting") { renderCraftingPage(); return; }
     if (drawerActive !== "bag" && drawerActive !== "character") return;
+    renderLootHistory();
     const slots = currentBagSlots();
     const status = $("bagSaveStatus");
     if (!status) return;

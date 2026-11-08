@@ -1,0 +1,44 @@
+name: Verify collected-item feed
+on:
+  push:
+    paths:
+      - 'src/client/**'
+      - 'src/styles/**'
+      - 'index.html'
+      - 'styles.css'
+      - 'deploy/combat/loot-feed-*.cjs'
+      - '.github/workflows/verify-loot-feed.yml'
+  pull_request:
+    paths:
+      - 'src/client/**'
+      - 'src/styles/**'
+      - 'index.html'
+      - 'styles.css'
+      - 'deploy/combat/loot-feed-*.cjs'
+      - '.github/workflows/verify-loot-feed.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  collected-item-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: npm run prepare:client
+      - name: Verify inventory snapshot and lifecycle behavior
+        run: node deploy/combat/loot-feed-ui-test.cjs
+      - name: Install pinned test-only renderer and browser
+        run: |
+          npm install --prefix "$RUNNER_TEMP/montra-loot-test" --ignore-scripts --no-audit --no-fund babylonjs@8.34.0 playwright@1.56.1
+          "$RUNNER_TEMP/montra-loot-test/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify full HUD and item history at mobile and desktop sizes
+        run: NODE_PATH="$RUNNER_TEMP/montra-loot-test/node_modules" node deploy/combat/loot-feed-browser-test.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: collected-item-feed-evidence
+          path: loot-feed-browser-evidence

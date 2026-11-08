@@ -384,6 +384,7 @@
     confirmBindKey=null; inspectingGear=null; preferredGearSlot=null; benchTrail.length=0;
     openDrawer("bag", "กระเป๋าเก็บของ",
       '<div class="status-line"><span>สถานะกระเป๋า</span><strong id="bagSaveStatus"></strong></div>' +
+      '<details class="loot-history"><summary>ไอเท็มที่ได้รับล่าสุด</summary><p class="note">20 รายการล่าสุดในการเชื่อมต่อครั้งนี้ · ไม่ใช่จำนวนคงเหลือ</p><p class="note" id="lootHistoryEmpty"></p><ul id="lootHistoryList" class="loot-list"></ul></details>' +
       '<div class="bag-category-tabs" role="tablist">' +
         '<button type="button" class="bag-tab-chip on" data-bag-tab="all">ทั้งหมด</button>' +
         '<button type="button" class="bag-tab-chip" data-bag-tab="gear">อุปกรณ์</button>' +

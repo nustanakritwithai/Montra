@@ -22,11 +22,12 @@ test('reviewed style snapshot retains pinned bytes, cascade order, URLs and lega
   const baseline = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/extraction-baseline.json')));
   const manifest = JSON.parse(readFileSync(join(stylesRoot, 'src/styles/manifest.json')));
   const bytes = checkStyles();
-  assert.equal(bytes.length, 376931);
-  assert.equal(hash(bytes), '460eeb455614017f42e3386c4be71d073352582f51e755d501472511d5f7aa69');
+  assert.equal(bytes.length, 379017);
+  assert.equal(hash(bytes), 'ab264b6ea7cff05f55d27f2d05459b8bbd42d61bfd4138f01e78c16e6fd1c994');
   // Retain historical extraction evidence, pin only intentionally changed sources.
   const reviewedStyles = new Map([{"path": "hud/019-vital-orb-resources-and-chat.css", "bytes": 5832, "sha256": "71477a110f30679c2e281eb5e825ab4557d21ee02eebbb49c2a6c16b1a500b7a"}, {"path": "forge/025-artisan-crafting-and-effects.css", "bytes": 21713, "sha256": "8100aa53a6502b7a31377b1ff9bd2dab8b94acb9079435d70ac0c0946df1ee79"}, {"path": "market/045-world-market.css", "bytes": 5767, "sha256": "6202004601ad13fcb19d476017e489cd971bc5ac523d9c74257aac0b43af50a0"}].map(entry => [entry.path, entry]));
-  assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
+  const addedStyles = [{"path": "inventory/046-loot-feed.css", "bytes": 2086, "sha256": "d34cce17e03c96ff0e7df9c7c48e08303ca7fefeed5ea89377bd454b19357970"}];
+  assert.deepEqual(manifest.fragments, [...baseline.fragments.map(entry => entry.path), ...addedStyles.map(entry => entry.path)]);
   let nextLine = 1;
   for (const entry of baseline.fragments) {
     const fragment = readFileSync(join(stylesRoot, 'src/styles', entry.path));
@@ -38,6 +39,11 @@ test('reviewed style snapshot retains pinned bytes, cascade order, URLs and lega
     nextLine = entry.originalEndLine + 1;
   }
   assert.equal(nextLine, 5589);
+  for (const entry of addedStyles) {
+    const fragment = readFileSync(join(stylesRoot, 'src/styles', entry.path));
+    assert.equal(fragment.length, entry.bytes, entry.path);
+    assert.equal(hash(fragment), entry.sha256, entry.path);
+  }
   assert.deepEqual(assembleStyles(), assembleStyles());
 });
 
