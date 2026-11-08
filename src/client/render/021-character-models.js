@@ -273,22 +273,22 @@
     head(w, p) {
       const k = gearKit();
       if (w === "cloth") {
-        k.cyl(0, 1.655, -.002, .032, .222, .222, p.main, 14).scaling.z = 1.1; k.box(-.02, 1.62, -.122, .04, .1, .012, p.main).rotation.z = .3;
-        if (p.tier >= 3) k.box(0, 1.66, .12, .05, .05, .02, p.trim);
+        k.cyl(0, 1.672, -.004, .03, .218, .218, p.main, 14).scaling.z = 1.1; // across the brow, above the eyes k.box(-.02, 1.62, -.122, .04, .1, .012, p.main).rotation.z = .3;
+        if (p.tier >= 3) k.box(0, 1.675, .118, .04, .04, .012, p.trim);
       } else if (w === "hide") {
         k.dome(0, 1.645, -.005, .236, p.main).scaling.set(1, .92, 1.1); k.cyl(0, 1.645, -.005, .02, .24, .24, p.second, 14).scaling.z = 1.1;
       } else {
         // Medium: lamellar cap with neck flaps; heavy: Thai war helmet with a brim, cheek plates and a tall gold spire.
         const heavy = w === "heavy";
-        k.dome(0, 1.64, -.005, heavy ? .245 : .238, p.main).scaling.set(1, heavy ? 1.1 : 1, 1.1);
-        k.cyl(0, 1.642, -.005, .022, heavy ? .262 : .25, heavy ? .262 : .25, heavy ? p.trim : p.second, 16).scaling.z = 1.1;
-        for (const s of [-1, 1]) k.box(s * .112, 1.585, .0, .014, .09, .11, p.main).rotation.z = s * .1;
-        k.box(0, 1.57, -.11, .15, .09, .014, p.second).rotation.x = .25;
+        k.dome(0, 1.668, -.008, heavy ? .245 : .238, p.main).scaling.set(1, heavy ? 1.1 : 1, 1.1);
+        k.cyl(0, 1.67, -.008, .02, heavy ? .262 : .25, heavy ? .262 : .25, heavy ? p.trim : p.second, 16).scaling.z = 1.1;
+        for (const s of [-1, 1]) k.box(s * .112, 1.615, -.02, .012, .08, .1, p.main).rotation.z = s * .1;
+        k.box(0, 1.6, -.115, .15, .09, .012, p.second).rotation.x = .25;
         if (heavy) {
-          k.cyl(0, 1.81, -.005, .12, 0, .045, p.trim, 8); k.cyl(0, 1.765, -.005, .035, .05, .065, p.lacquer, 10);
-          for (let i = 0; i < 2; i++) k.cyl(0, 1.875 + i * .025, -.005, .014, .02 - i * .005, .02 - i * .005, p.trim, 8);
-          k.box(0, 1.685, .123, .03, .07, .012, p.trim);
-          if (p.glow) k.ball(0, 1.92, -.005, .028, p.glow, 6);
+          k.cyl(0, 1.838, -.008, .12, 0, .045, p.trim, 8); k.cyl(0, 1.793, -.008, .035, .05, .065, p.lacquer, 10);
+          for (let i = 0; i < 2; i++) k.cyl(0, 1.903 + i * .025, -.008, .014, .02 - i * .005, .02 - i * .005, p.trim, 8);
+          k.box(0, 1.71, .12, .028, .06, .01, p.trim);
+          if (p.glow) k.ball(0, 1.948, -.008, .028, p.glow, 6);
         }
       }
       return [["Head", k.take()]];
@@ -445,7 +445,7 @@
   function accessoryBuilder(family, p) {
     const k = gearKit(), gold = gearMat("gold trim", "#c9a24a", "#2a1d06", .4);
     if (/^acc_(torc|gorget|fang|spell|shrine|rift|boss)/.test(family)) {
-      if (family === "acc_gorget") { k.cyl(0, 1.47, -.004, .06, .2, .24, p.main, 16).scaling.z = .85; k.cyl(0, 1.44, -.004, .012, .25, .25, gold, 16).scaling.z = .85; }
+      if (family === "acc_gorget") { k.cyl(0, 1.462, -.004, .05, .15, .19, p.main, 16).scaling.z = .9; k.cyl(0, 1.438, -.004, .01, .195, .195, gold, 16).scaling.z = .9; }
       else {
         for (let i = 0; i <= 10; i++) { const t = i / 5 - 1, y = 1.455 - (1 - t * t) * .1; k.ball(t * .085, y, .07 + (1 - t * t) * .04, .022, family === "acc_torc" ? gold : beadMat, 4); }
         const pend = family === "acc_fang" ? k.cyl(0, 1.33, .115, .07, 0, .03, gearMat("bone fang", "#e8dcc2"), 6) : k.ball(0, 1.345, .118, .045, family === "acc_spell" ? gearMat("spell gem", GEM.spell, "#0a1630", .5) : amuletGlow, 8);
@@ -512,6 +512,9 @@
     }
     // A worn cuirass or helmet replaces the ritual shawl and headband of the base outfit.
     setAvatarRitualGear(avatar, avatar.pathId);
+    // A cap or helmet replaces the base outfit's headband and topknot (a cloth headband keeps them).
+    const helmet = want.head && !/^arm_cloth_|^arm_field_(seer|mender)$/.test(want.head.family);
+    for (const mesh of avatar.skin.nodes.Head?.getChildMeshes(true) || []) if (mesh.name === "gear Head") mesh.setEnabled(!helmet);
   }
   // ---- Hand poses: fist, grip, relaxed and open ----
   // The skeleton has one bone per hand and no finger bones, so finger poses are morph targets baked
