@@ -16,6 +16,12 @@
     asura_peak: ["#775a55","#be9273","#9c7160","#54484a","#ffa164","#632f3d"],
     spirit_rift: ["#686190","#b0a1cc","#857daf","#64567f","#c4abff","#373458"],
   };
+  const REGION_GROUNDS = {
+    twin_neck_pass:["grass","path","temple"], sam_lan_estuary:["sand","path","temple"], tri_wiang_castle:["grass","laterite","laterite"],
+    mantra_capital:["grass","temple","temple"], moon_pass:["grass","path","rock"], river_watch:["grass","gravel","temple"],
+    bamboo_frontier:["bamboo","path","temple"], lotus_basin:["mud","sand","temple"], drowned_marsh:["marsh","mud","gravel"],
+    moon_cemetery:["cemetery","temple","temple"], hex_ridge:["rock","path","rock"], naga_cavern:["rock","gravel","temple"],
+    fallen_city:["dirt","laterite","laterite"], asura_peak:["ash","rock","rock"], spirit_rift:["rift","cemetery","rift"] };
   const regionPaints=new Map();
   const forestReliefRoad=mat("forest ridge trail","#968763","#322f1b");
   const templeReliefRoad=mat("temple terrace paving","#ae9874","#3a3126");
@@ -40,6 +46,9 @@
       const castleBounds=id==="tri_wiang_castle" && worldDefinitions?.[id]?.bounds;
       terrain.update();terrain.uScale=castleBounds?(castleBounds.maxX-castleBounds.minX)*.095:9;
       terrain.vScale=castleBounds?(castleBounds.maxZ-castleBounds.minZ)*.095:12;floor.diffuseTexture=terrain;
+      // Ground surfaces per region (floor, road, court) from the G01–G16 library; the palette still tints them.
+      const kinds=REGION_GROUNDS[id] || ["grass","path","temple"];
+      applyGroundSurface(floor,kinds[0],{tint:.35,tile:6});applyGroundSurface(road,kinds[1],{uScale:1,vScale:1,tint:.3,bump:false});applyGroundSurface(court,kinds[2],{uScale:terrain.uScale,vScale:terrain.vScale,tint:.35});
       // Night grade: the atlas palette is kept but pulled down toward moonlight.
       const outerHunt=worldDefinitions?.[id]?.huntTrail;
       const clearTerrain=province || outerHunt;
@@ -47,7 +56,7 @@
       if(clearTerrain){floor.emissiveColor=floor.diffuseColor.scale(.22);road.emissiveColor=road.diffuseColor.scale(outerHunt ? .28:.17);}
       if(outerHunt){court.emissiveColor=court.diffuseColor.scale(.17);stone.emissiveColor=stone.diffuseColor.scale(.12);}
       stone.diffuseColor.scaleInPlace(.8);deep.diffuseColor.scaleInPlace(.7);
-      court.diffuseTexture=terrain;glowMats.add(light);
+      glowMats.add(light);
       regionPaints.set(id,{floor,road,court,stone,light,deep});
     }
     return regionPaints.get(id);

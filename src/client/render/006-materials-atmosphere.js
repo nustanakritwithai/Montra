@@ -382,3 +382,246 @@
     if (opts.parent) tree.parent = opts.parent;
     return tree;
   }
+
+  // ---- Rock kit: plain boulders, moss stones, laterite blocks and iron-ore veins by tier ----
+  // Built from faceted icospheres with per-face vertex colours, merged into one master per shape and instanced.
+  // Gatherable stone stays server kind "stone" (same drops); only the model shows what is being mined.
+  const rockMasters = new Map();
+  let rockMat = null;
+  function rockMaterial() {
+    if (rockMat) return rockMat;
+    rockMat = new B.StandardMaterial("rocks", scene);
+    rockMat.diffuseColor = new B.Color3(.62, .62, .62); rockMat.specularColor = new B.Color3(.12, .12, .13); rockMat.specularPower = 40;
+    rockMat.emissiveColor = new B.Color3(.02, .02, .022);
+    return rockMat;
+  }
+  // Per-face colours: flat icospheres keep three vertices per face, so each face gets one pick.
+  function rockPaint(mesh, rng, pick) {
+    const pos = mesh.getVerticesData(B.VertexBuffer.PositionKind), n = pos.length / 3, out = new Float32Array(n * 4);
+    let lo = Infinity, hi = -Infinity; for (let i = 0; i < n; i++) { lo = Math.min(lo, pos[i * 3 + 1]); hi = Math.max(hi, pos[i * 3 + 1]); }
+    for (let f = 0; f < n; f += 3) {
+      const y = (pos[f * 3 + 1] + pos[f * 3 + 4] + pos[f * 3 + 7]) / 3, t = hi > lo ? (y - lo) / (hi - lo) : 0;
+      const c = treeRgb(pick(t, rng())), j = .9 + rng() * .2;
+      for (let v = f; v < f + 3 && v < n; v++) { for (let k = 0; k < 3; k++) out[v * 4 + k] = Math.min(1, c[k] * j); out[v * 4 + 3] = 1; }
+    }
+    mesh.setVerticesData(B.VertexBuffer.ColorKind, out);
+    return mesh;
+  }
+  // A boulder: a flat-shaded icosphere pushed in and out, squashed, with its underside flattened into the ground.
+  function rockBoulder(x, y, z, r, sy, rng, pick, opts = {}) {
+    const m = B.MeshBuilder.CreateIcoSphere("rock part", { radius: r, subdivisions: opts.sub ?? 1, flat: true, updatable: true }, scene);
+    const pos = m.getVerticesData(B.VertexBuffer.PositionKind), bump = opts.bump ?? .34, seed = rng() * 97;
+    for (let i = 0; i < pos.length; i += 3) {
+      const k = 1 + (noise(Math.round(pos[i] * 40 + seed), Math.round(pos[i + 1] * 31 + pos[i + 2] * 17)) - .5) * bump;
+      pos[i] *= k * (opts.sx ?? 1); pos[i + 1] = Math.max(pos[i + 1] * k * sy, -r * .18); pos[i + 2] *= k * (opts.sz ?? 1);
+      pos[i] += x; pos[i + 1] += y; pos[i + 2] += z;
+    }
+    m.setVerticesData(B.VertexBuffer.PositionKind, pos); m.refreshBoundingInfo();
+    if (opts.rot) m.rotation.y = opts.rot;
+    return rockPaint(m, rng, pick);
+  }
+  // A laterite block: a box with its corners chipped and a porous red-brick face.
+  function rockBlock(x, y, z, w, h, d, rot, rng, pick) {
+    const m = B.MeshBuilder.CreateBox("rock block", { width: w, height: h, depth: d, updatable: true }, scene);
+    const pos = m.getVerticesData(B.VertexBuffer.PositionKind), seed = rng() * 53;
+    for (let i = 0; i < pos.length; i += 3) {
+      const k = 1 + (noise(Math.round(pos[i] * 9 + seed), Math.round(pos[i + 1] * 7 + pos[i + 2] * 5)) - .5) * .22;
+      pos[i] = pos[i] * k + x; pos[i + 1] = pos[i + 1] * k + y + h / 2; pos[i + 2] = pos[i + 2] * k + z;
+    }
+    m.setVerticesData(B.VertexBuffer.PositionKind, pos); m.rotation.y = rot;
+    m.convertToFlatShadedMesh(); m.refreshBoundingInfo();
+    return rockPaint(m, rng, pick);
+  }
+  // An ore shard: a four- or five-sided spike leaning out of the rock.
+  function rockShard(x, y, z, len, r, tiltX, tiltZ, rng, pick) {
+    const m = B.MeshBuilder.CreateCylinder("ore shard", { height: len, diameterTop: 0, diameterBottom: r * 2, tessellation: rng() < .5 ? 4 : 5 }, scene);
+    m.convertToFlatShadedMesh();
+    m.position.set(x, y + len * .4, z); m.rotation.set(tiltX, rng() * Math.PI, tiltZ); m.bakeCurrentTransformIntoVertices();
+    return rockPaint(m, rng, pick);
+  }
+  const ROCK_PICKS = {
+    plain: (t, r) => r < .1 ? "#5d554b" : t > .7 ? (r < .5 ? "#8e8a80" : "#83807a") : r < .45 ? "#6f6c66" : "#77706a",
+    moss: (t, r) => t > .45 && r < .45 + t * .5 ? (r < .2 ? "#4f6a34" : "#3e5a2c") : r < .5 ? "#5c625a" : "#535a54",
+    laterite: (t, r) => r < .14 ? "#4a2414" : r < .5 ? "#9a4a2a" : t > .6 ? "#b0603a" : "#8a3f22",
+    host: (t, r) => r < .16 ? "#7a3a20" : r < .3 ? "#8f4a26" : t > .6 ? "#5c5a58" : "#4c4a49",
+    hostDark: (t, r) => r < .22 ? "#7e3618" : r < .32 ? "#9fa6ad" : t > .6 ? "#3f3e40" : "#333234",
+    ore: (t, r) => t > .7 ? "#c4ccd4" : r < .35 ? "#8a929b" : r < .7 ? "#5d646d" : "#6e3a22"
+  };
+  const ROCK_SHAPES = {
+    plain(rng, parts, v) {
+      parts.push(rockBoulder(0, 0, 0, .9, .62, rng, ROCK_PICKS.plain, { sx: 1.15 }));
+      if (v) parts.push(rockBoulder(.85, 0, .35, .45, .7, rng, ROCK_PICKS.plain));
+      else parts.push(rockBoulder(-.7, 0, -.55, .38, .55, rng, ROCK_PICKS.plain), rockBoulder(.6, 0, -.6, .26, .6, rng, ROCK_PICKS.plain));
+    },
+    moss(rng, parts) {
+      parts.push(rockBoulder(0, 0, 0, .95, .48, rng, ROCK_PICKS.moss, { sx: 1.25, sz: .95, bump: .28 }));
+      parts.push(rockBoulder(.9, 0, .4, .32, .5, rng, ROCK_PICKS.moss));
+      for (let i = 0; i < 2; i++) parts.push(treeTube([[-.4 + i * .6, .4, .5], [-.5 + i * .7, .2, .95], [-.6 + i * .8, -.05, 1.25]], .07, .04, "#4a3726", 5, .1));
+    },
+    laterite(rng, parts, v) {
+      parts.push(rockBlock(0, 0, 0, 1.35, .62, .8, v * .4, rng, ROCK_PICKS.laterite));
+      parts.push(rockBlock(.2, .58, -.05, .9, .5, .6, .25 + v * .3, rng, ROCK_PICKS.laterite));
+      if (!v) parts.push(rockBlock(-1.05, 0, .45, .6, .35, .45, .8, rng, ROCK_PICKS.laterite));
+    },
+    // Iron-ore tiers 1–4: the vein grows from a few rusty flecks to a dark outcrop bristling with metal shards.
+    iron1(rng, parts, v) {
+      parts.push(rockBoulder(0, 0, 0, .7, .66, rng, ROCK_PICKS.host, { sx: 1.1 }));
+      for (let i = 0; i < 2 + v; i++) { const a = i * 2.3 + v; parts.push(rockShard(Math.cos(a) * .35, .25, Math.sin(a) * .3, .5, .1, Math.sin(a) * .5, Math.cos(a) * .5, rng, ROCK_PICKS.ore)); }
+    },
+    iron2(rng, parts, v) {
+      parts.push(rockBoulder(0, 0, 0, .95, .7, rng, ROCK_PICKS.host, { sx: 1.15, bump: .4 }));
+      parts.push(rockBoulder(.8, 0, -.4, .45, .7, rng, ROCK_PICKS.host));
+      for (let i = 0; i < 4 + v; i++) { const a = i * 1.6 + v; parts.push(rockShard(Math.cos(a) * .45, .35, Math.sin(a) * .38, .62 + (i % 2) * .2, .13, Math.sin(a) * .55, Math.cos(a) * .55, rng, ROCK_PICKS.ore)); }
+    },
+    iron3(rng, parts, v) {
+      // Layered outcrop: two broken slabs stacked off-centre with shards out of the joints.
+      parts.push(rockBoulder(0, 0, 0, 1.25, .55, rng, ROCK_PICKS.hostDark, { sx: 1.2, bump: .3 }));
+      parts.push(rockBoulder(.25, .55, -.1, .85, .6, rng, ROCK_PICKS.hostDark, { sx: 1.1, bump: .36 }));
+      parts.push(rockBoulder(-1.1, 0, .6, .5, .6, rng, ROCK_PICKS.host));
+      for (let i = 0; i < 6 + v; i++) { const a = i * 1.1 + v * .7; parts.push(rockShard(Math.cos(a) * .7, .4 + (i % 3) * .25, Math.sin(a) * .55, .75 + (i % 3) * .2, .16, Math.sin(a) * .6, Math.cos(a) * .6, rng, ROCK_PICKS.ore)); }
+    },
+    iron4(rng, parts, v) {
+      parts.push(rockBoulder(0, 0, 0, 1.35, .7, rng, ROCK_PICKS.hostDark, { sx: 1.15, bump: .38 }));
+      parts.push(rockBoulder(.9, 0, .7, .6, .75, rng, ROCK_PICKS.hostDark));
+      parts.push(rockShard(0, .6, 0, 1.9, .34, .08, -.06, rng, ROCK_PICKS.ore));
+      for (let i = 0; i < 9 + v; i++) { const a = i * .72 + v; parts.push(rockShard(Math.cos(a) * .8, .35 + (i % 3) * .2, Math.sin(a) * .7, .7 + (i % 4) * .22, .17, Math.sin(a) * .7, Math.cos(a) * .7, rng, ROCK_PICKS.ore)); }
+    }
+  };
+  function rockMaster(kind, variant = 0) {
+    const key = kind + ":" + variant; if (rockMasters.has(key)) return rockMasters.get(key);
+    const parts = [], build = ROCK_SHAPES[kind] || ROCK_SHAPES.plain;
+    build(treeRng(4000 + variant * 6151 + kind.length * 97 + kind.charCodeAt(kind.length - 1)), parts, variant);
+    const mesh = B.Mesh.MergeMeshes(parts, true, true, undefined, false, false);
+    mesh.name = "rock " + key; mesh.isPickable = false; mesh.isVisible = false; mesh.position.y = -500;
+    mesh.material = kind === "moss" ? (() => { const m = rockMaterial().clone("rocks moss"); m.diffuseColor = new B.Color3(.6, .62, .6); m.specularColor = new B.Color3(.05, .05, .05); return m; })() : rockMaterial();
+    mesh.metadata = { rock: kind, thaiTreeMaster: true }; // the master flag keeps it out of the village show/hide snapshot
+    rockMasters.set(key, mesh); return mesh;
+  }
+  // Iron-ore look by material tier (1–7), matching the drops the server already gives.
+  const ironRockKind = tier => tier <= 2 ? "iron1" : tier <= 4 ? "iron2" : tier <= 6 ? "iron3" : "iron4";
+  function placeRock(kind, x, y, z, opts = {}) {
+    const master = rockMaster(kind, opts.variant ?? (Math.abs(Math.round(x * 5 + z * 11)) % 2));
+    const rock = opts.clone ? master.clone("rock " + kind, null, true) : master.createInstance("rock " + kind);
+    if (opts.clone) { rock.parent = null; rock.isVisible = true; rock.metadata = { rock: kind }; }
+    rock.setEnabled(true);
+    rock.position.set(x, y, z); rock.rotation.y = opts.rot ?? noise(Math.round(x * 17 + z), 43) * Math.PI * 2;
+    rock.scaling.setAll(opts.scale ?? 1); rock.isPickable = false;
+    if (opts.parent) rock.parent = opts.parent;
+    return rock;
+  }
+
+  // ---- Ground surface library (G01–G16): seamless painted textures with matching normal maps ----
+  // Painted at 512 px with every large element wrapped across the edges, so tiles join without seams.
+  // A normal map is derived from each texture's brightness (grout, cracks and gaps read as low), and the
+  // magical grounds (G15 ash, G16 rift) also get an emissive map for their glowing cracks.
+  // Only the look changes: walking, collision and heights stay on the server-defined meshes.
+  const groundSurfaces = new Map();
+  const GROUND_KINDS = {
+    dirt: "G01 ดินหมู่บ้าน", path: "G02 ทางเดินดินอัด", grass: "G03 หญ้าธรรมชาติ", leaves: "G04 พื้นป่าใบไม้", bamboo: "G05 พื้นป่าไผ่", moss: "G06 มอสรากไม้",
+    mud: "G07 ดินโคลน", marsh: "G08 ดินบึงพราย", sand: "G09 ทรายริมแม่น้ำ", gravel: "G10 กรวดลำน้ำ", laterite: "G11 อิฐศิลาแลง", temple: "G12 พื้นหินวัด",
+    cemetery: "G13 ดินสุสาน", rock: "G14 หินภูเขา", ash: "G15 ดินไหม้อสูร", rift: "G16 ดินรอยแยกวิญญาณ" };
+  function groundSurface(kind) {
+    if (groundSurfaces.has(kind)) return groundSurfaces.get(kind);
+    const S = 512, rng = treeRng(9000 + Object.keys(GROUND_KINDS).indexOf(kind) * 977), R = () => rng();
+    const pick = list => list[Math.floor(R() * list.length)];
+    let glow = null;
+    const diffuse = new B.DynamicTexture("ground " + kind, S, scene, true), c = diffuse.getContext();
+    // Wrapped drawing: repeat an element at the eight neighbouring offsets so it continues across edges.
+    const wrap = (x, y, r, draw) => { for (const dx of [-S, 0, S]) for (const dy of [-S, 0, S]) if (x + dx > -r && x + dx < S + r && y + dy > -r && y + dy < S + r) draw(x + dx, y + dy); };
+    const blob = (ctx, x, y, r, rgba0, rgba1 = rgba0.replace(/[\d.]+\)$/, "0)")) => wrap(x, y, r, (px, py) => { const g = ctx.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, rgba0); g.addColorStop(1, rgba1); ctx.fillStyle = g; ctx.fillRect(px - r, py - r, r * 2, r * 2); });
+    const specks = (n, colours, w = 2, h = 2) => { for (let i = 0; i < n; i++) { c.fillStyle = pick(colours); c.fillRect(R() * S, R() * S, 1 + R() * w, 1 + R() * h); } };
+    const ellipse = (ctx, x, y, rx, ry, rot, fill) => wrap(x, y, Math.max(rx, ry) + 2, (px, py) => { ctx.beginPath(); ctx.ellipse(px, py, rx, ry, rot, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill(); });
+    const pebbles = (n, rmin, rmax, colours, shade = "rgba(0,0,0,.35)") => { for (let i = 0; i < n; i++) { const x = R() * S, y = R() * S, r = rmin + R() * (rmax - rmin), rot = R() * 3;
+      ellipse(c, x + r * .25, y + r * .3, r, r * .75, rot, shade); ellipse(c, x, y, r, r * .75, rot, pick(colours)); ellipse(c, x - r * .25, y - r * .25, r * .45, r * .3, rot, "rgba(255,255,255,.18)"); } };
+    const crack = (ctx, x, y, len, width, colour, branches = 2) => { let px = x, py = y, a = R() * Math.PI * 2;
+      ctx.strokeStyle = colour; ctx.lineWidth = width; ctx.lineCap = "round";
+      for (let i = 0; i < len; i++) { const nx = px + Math.cos(a) * 9, ny = py + Math.sin(a) * 9; wrap(px, py, 12, (qx, qy) => { ctx.beginPath(); ctx.moveTo(qx, qy); ctx.lineTo(qx + nx - px, qy + ny - py); ctx.stroke(); });
+        px = nx; py = ny; a += (R() - .5) * .9; if (branches && R() < .08) crack(ctx, px, py, len / 3 | 0, width * .6, colour, branches - 1); } };
+    const strokes = (n, len, colours, width = 1.2, angle = null, spread = Math.PI) => { c.lineCap = "round";
+      for (let i = 0; i < n; i++) { const x = R() * S, y = R() * S, a = angle === null ? R() * Math.PI * 2 : angle + (R() - .5) * spread, l = len * (.5 + R());
+        c.strokeStyle = pick(colours); c.lineWidth = width * (.6 + R() * .8); wrap(x, y, l, (px, py) => { c.beginPath(); c.moveTo(px, py); c.lineTo(px + Math.cos(a) * l, py + Math.sin(a) * l); c.stroke(); }); } };
+    const leaves = (n, size, colours, thin = .45) => { for (let i = 0; i < n; i++) { const x = R() * S, y = R() * S, l = size * (.6 + R() * .7), rot = R() * Math.PI, col = pick(colours);
+      ellipse(c, x + 1.5, y + 2, l, l * thin, rot, "rgba(0,0,0,.28)"); ellipse(c, x, y, l, l * thin, rot, col);
+      c.strokeStyle = "rgba(0,0,0,.25)"; c.lineWidth = 1; wrap(x, y, l, (px, py) => { c.beginPath(); c.moveTo(px - Math.cos(rot) * l * .9, py - Math.sin(rot) * l * .9); c.lineTo(px + Math.cos(rot) * l * .9, py + Math.sin(rot) * l * .9); c.stroke(); }); } };
+    const base = (hex, blobs, tones, rmin = 30, rmax = 110, alpha = .45) => { c.fillStyle = hex; c.fillRect(0, 0, S, S);
+      for (let i = 0; i < blobs; i++) blob(c, R() * S, R() * S, rmin + R() * (rmax - rmin), "rgba(" + pick(tones) + "," + alpha + ")"); };
+    const glowLayer = () => { const t = new B.DynamicTexture("ground glow " + kind, S, scene, true), g = t.getContext(); g.fillStyle = "#000"; g.fillRect(0, 0, S, S); glow = t; return g; };
+    // Brick / slab courses for laterite and temple stone.
+    const courses = (rows, cols, jitter, colours, grout, groutW, chip) => { c.fillStyle = grout; c.fillRect(0, 0, S, S);
+      const h = S / rows, w = S / cols;
+      for (let r = 0; r < rows; r++) for (let k = -1; k <= cols; k++) {
+        const x = k * w + (r % 2 ? w / 2 : 0) + (R() - .5) * jitter, y = r * h + (R() - .5) * jitter * .5, col = pick(colours);
+        wrap(x + w / 2, y + h / 2, w, (px, py) => { const x0 = px - w / 2 + groutW, y0 = py - h / 2 + groutW, ww = w - groutW * 2, hh = h - groutW * 2;
+          c.fillStyle = col; c.beginPath(); c.roundRect ? c.roundRect(x0, y0, ww, hh, 4) : c.rect(x0, y0, ww, hh); c.fill();
+          const g = c.createLinearGradient(x0, y0, x0, y0 + hh); g.addColorStop(0, "rgba(255,255,255,.10)"); g.addColorStop(1, "rgba(0,0,0,.18)"); c.fillStyle = g; c.fill(); });
+        for (let p = 0; p < chip; p++) { c.fillStyle = "rgba(0,0,0," + (.15 + R() * .2) + ")"; c.beginPath(); c.arc(x + R() * w, y + R() * h, .8 + R() * 2.2, 0, Math.PI * 2); c.fill(); }
+      } };
+    switch (kind) {
+      case "dirt": base("#7d6650", 26, ["150,124,92", "96,78,58", "168,142,104"]); pebbles(70, 2, 5, ["#9a8468", "#7a6650", "#b09a7a"]); specks(2600, ["#6a5642", "#a08a6c", "#8a7458", "#5a4836"]);
+        for (let i = 0; i < 5; i++) crack(c, R() * S, R() * S, 8, 1.2, "rgba(50,38,28,.45)", 1); break;
+      case "path": base("#8e7858", 20, ["170,148,112", "112,94,70"], 40, 120, .4); strokes(26, 90, ["rgba(60,48,34,.25)"], 7, 0, .12); pebbles(110, 1.5, 4, ["#a89070", "#867054", "#c0aa86"]);
+        specks(3000, ["#7a6548", "#a89270", "#6a563e"]); for (let i = 0; i < 18; i++) ellipse(c, R() * S, R() * S, 7, 4, R() * 3, "rgba(60,46,32,.22)"); break;
+      case "grass": base("#3f5230", 30, ["92,110,58", "52,66,34", "110,94,62"], 30, 100, .5); for (let i = 0; i < 9; i++) blob(c, R() * S, R() * S, 25 + R() * 40, "rgba(104,86,58,.55)");
+        strokes(5200, 7, ["#5d7a3c", "#6f8c46", "#4a6232", "#8aa253", "#3e5428"], 1.3, -Math.PI / 2, 1.2); specks(500, ["#c9b86a", "#e3d8a0"], 1, 1); break;
+      case "leaves": base("#2e241a", 24, ["70,54,36", "40,30,22"], 30, 100, .5); strokes(160, 18, ["#4a3828", "#3a2c20"], 2);
+        leaves(900, 7, ["#7a4e2a", "#9a6a34", "#5e3e24", "#8a7a3a", "#6a5a2a", "#a4743a", "#4e5a2a"]); leaves(140, 6, ["#5a6a30", "#3e5228"]); break;
+      case "bamboo": base("#7a6a40", 22, ["150,128,78", "96,82,48"], 30, 100, .45); leaves(1300, 11, ["#b09a5a", "#9c8648", "#c8b06a", "#8a7a40", "#a8945a"], .18);
+        strokes(60, 30, ["#6a5a30"], 2.5); break;
+      case "moss": base("#34472c", 30, ["70,98,52", "42,58,32", "92,120,62"], 25, 90, .55); for (let i = 0; i < 9; i++) crack(c, R() * S, R() * S, 14, 6, "rgba(78,58,40,.85)", 2);
+        for (let i = 0; i < 9; i++) crack(c, R() * S, R() * S, 10, 3, "rgba(110,84,58,.6)", 1); specks(2600, ["#6a8a44", "#4c6a34", "#88a858"], 3, 3); leaves(120, 6, ["#7a4e2a", "#9a6a34"]); break;
+      case "mud": base("#3e3024", 26, ["74,58,42", "36,28,22", "92,72,50"], 30, 110, .55); for (let i = 0; i < 14; i++) ellipse(c, R() * S, R() * S, 14 + R() * 30, 8 + R() * 16, R() * 3, "rgba(24,30,34,.55)");
+        for (let i = 0; i < 26; i++) ellipse(c, R() * S, R() * S, 6 + R() * 16, 3 + R() * 6, R() * 3, "rgba(170,180,190,.12)"); specks(1600, ["#5a4634", "#2e2218"], 3, 2);
+        for (let i = 0; i < 16; i++) ellipse(c, R() * S, R() * S, 6, 3.5, R() * 3, "rgba(20,14,10,.4)"); break;
+      case "marsh": base("#23251c", 30, ["44,52,34", "30,30,24", "52,66,40"], 30, 110, .6); for (let i = 0; i < 30; i++) blob(c, R() * S, R() * S, 10 + R() * 30, "rgba(48,80,48,.5)");
+        strokes(600, 14, ["#3e4a2a", "#4a3a24", "#2e3a22"], 1.6); for (let i = 0; i < 18; i++) ellipse(c, R() * S, R() * S, 10 + R() * 24, 6 + R() * 12, R() * 3, "rgba(30,50,58,.45)"); specks(1200, ["#5a6a3a", "#1a1a14"]); break;
+      case "sand": base("#b8a07a", 16, ["206,188,150", "160,138,102"], 40, 120, .4); c.lineWidth = 2;
+        for (let y = 0; y < S; y += 14) { c.strokeStyle = "rgba(120,100,70,.22)"; c.beginPath(); for (let x = 0; x <= S; x += 8) c.lineTo(x, y + Math.sin(x / S * Math.PI * 4 + y * .05) * 4); c.stroke(); }
+        specks(4200, ["#a48c66", "#d4bf94", "#8e7856", "#e6d6b0"], 1, 1); pebbles(20, 2, 4, ["#9a8a70", "#c8b896"]); break;
+      case "gravel": base("#8e8270", 10, ["160,150,130"], 40, 100, .4); pebbles(900, 3, 8, ["#9a9488", "#7e786c", "#b4ac9c", "#6a6458", "#a89a82", "#8c7a64"]); specks(1500, ["#5a5448", "#c8c0b0"]); break;
+      case "laterite": courses(10, 4, 4, ["#7e4a36", "#6e3e2c", "#8a5640", "#5e3426", "#7a4e38", "#946048", "#6a4a3a"], "#3e3228", 3, 34);
+        for (let i = 0; i < 10; i++) crack(c, R() * S, R() * S, 7, 1.2, "rgba(40,24,18,.6)", 1); specks(1800, ["rgba(60,30,20,.4)", "rgba(200,140,100,.25)"], 2, 2);
+        for (let i = 0; i < 26; i++) blob(c, R() * S, R() * S, 20 + R() * 50, "rgba(120,112,92,.26)"); for (let i = 0; i < 10; i++) blob(c, R() * S, R() * S, 14 + R() * 26, "rgba(60,80,44,.3)"); break;
+      case "temple": courses(5, 3, 18, ["#8a857a", "#7a7468", "#969080", "#706a5e", "#827c6e"], "#3e4234", 3, 14);
+        c.strokeStyle = "rgba(78,104,58,.7)"; for (let i = 0; i < 300; i++) { const x = R() * S, y = Math.round(R() * 5) * (S / 5); c.lineWidth = 1 + R() * 2.5; c.beginPath(); c.moveTo(x, y + (R() - .5) * 3); c.lineTo(x + (R() - .5) * 10, y + (R() - .5) * 6); c.stroke(); }
+        for (let i = 0; i < 12; i++) crack(c, R() * S, R() * S, 8, 1.2, "rgba(40,40,34,.55)", 1); for (let i = 0; i < 12; i++) blob(c, R() * S, R() * S, 16 + R() * 30, "rgba(70,96,52,.28)"); specks(1400, ["rgba(30,30,26,.35)", "rgba(220,214,200,.2)"]); break;
+      case "cemetery": base("#5e5a54", 24, ["120,116,108", "70,66,60", "90,86,80"], 30, 110, .5); specks(3200, ["#46423e", "#8a8680", "#a8a49c", "#3a3632"], 2, 2);
+        leaves(260, 6, ["#6e6248", "#5a5040", "#7a6a50", "#4a443a"]); for (let i = 0; i < 20; i++) blob(c, R() * S, R() * S, 8 + R() * 20, "rgba(40,38,36,.45)"); break;
+      case "rock": base("#6a6660", 20, ["120,116,108", "80,76,70"], 40, 120, .45); for (let i = 0; i < 26; i++) crack(c, R() * S, R() * S, 16, 2.2, "rgba(34,32,30,.75)", 2);
+        for (let i = 0; i < 26; i++) crack(c, R() * S, R() * S, 10, 1, "rgba(200,196,186,.2)", 0); pebbles(160, 2, 6, ["#7a766e", "#5a5650", "#94908a"]); specks(1500, ["#4a4640", "#a8a49a"]); break;
+      case "ash": { base("#241c1a", 26, ["60,44,38", "30,22,20", "80,58,48"], 30, 110, .5); specks(3000, ["#3a2e2a", "#5a4a44", "#151010"], 2, 2);
+        const g = glowLayer(); for (let i = 0; i < 12; i++) { crack(c, R() * S, R() * S, 14, 3, "rgba(20,10,8,.9)", 2); }
+        for (let i = 0; i < 12; i++) crack(g, R() * S, R() * S, 12, 2.2, "rgba(255,110,40,.9)", 2); for (let i = 0; i < 140; i++) { g.fillStyle = pick(["#ff7a2a", "#ffb04a", "#c83a1a"]); g.fillRect(R() * S, R() * S, 1.5, 1.5); } break; }
+      case "rift": { base("#211a30", 26, ["52,40,76", "26,20,38", "66,54,96"], 30, 110, .55); for (let i = 0; i < 14; i++) crack(c, R() * S, R() * S, 16, 4, "rgba(10,6,18,.9)", 2);
+        specks(1800, ["#3a2e54", "#141020", "#5a4a80"], 2, 2); const g = glowLayer();
+        for (let i = 0; i < 14; i++) crack(g, R() * S, R() * S, 14, 2.4, pick(["rgba(170,120,255,.95)", "rgba(110,220,255,.9)"]), 2); for (let i = 0; i < 160; i++) { g.fillStyle = pick(["#b48cff", "#7fe0ff"]); g.fillRect(R() * S, R() * S, 1.6, 1.6); } break; }
+    }
+    diffuse.update(); diffuse.wrapU = diffuse.wrapV = B.Texture.WRAP_ADDRESSMODE;
+    // Normal map from brightness (lighter = higher), sampled with wrap so it tiles like the colour map.
+    const img = c.getImageData(0, 0, S, S).data, hgt = new Float32Array(S * S);
+    for (let i = 0; i < S * S; i++) hgt[i] = (img[i * 4] * .3 + img[i * 4 + 1] * .59 + img[i * 4 + 2] * .11) / 255;
+    const N = S / 2, bump = new B.DynamicTexture("ground bump " + kind, N, scene, true), bc = bump.getContext(), out = bc.createImageData(N, N), str = ["laterite", "temple", "rock", "gravel"].includes(kind) ? 4 : 2.5;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const h = (xx, yy) => hgt[((yy * 2 + S) % S) * S + ((xx * 2 + S) % S)], dx = (h(x + 1, y) - h(x - 1, y)) * str, dy = (h(x, y + 1) - h(x, y - 1)) * str, l = Math.hypot(dx, dy, 1), o = (y * N + x) * 4;
+      out.data[o] = (-dx / l * .5 + .5) * 255; out.data[o + 1] = (dy / l * .5 + .5) * 255; out.data[o + 2] = (1 / l * .5 + .5) * 255; out.data[o + 3] = 255;
+    }
+    bc.putImageData(out, 0, 0); bump.update(); bump.wrapU = bump.wrapV = B.Texture.WRAP_ADDRESSMODE;
+    if (glow) { glow.update(); glow.wrapU = glow.wrapV = B.Texture.WRAP_ADDRESSMODE; }
+    const surface = { kind, label: GROUND_KINDS[kind], diffuse, bump, glow };
+    groundSurfaces.set(kind, surface); return surface;
+  }
+  // Dress an existing material with a ground surface, keeping its UV tiling (uScale/vScale) and night grade.
+  // tint mixes a little of the material's old colour back in, so each region keeps its own mood.
+  function applyGroundSurface(material, kind, opts = {}) {
+    const surface = groundSurface(kind), old = material.diffuseTexture, scale = opts.scale ?? 1;
+    const uS = (opts.uScale ?? old?.uScale ?? 1) * scale, vS = (opts.vScale ?? old?.vScale ?? 1) * scale;
+    const tex = surface.diffuse.clone(); tex.uScale = uS; tex.vScale = vS; material.diffuseTexture = tex;
+    if (opts.bump !== false) { const bump = surface.bump.clone(); bump.uScale = uS; bump.vScale = vS; bump.level = opts.bumpLevel ?? .7; material.bumpTexture = bump; }
+    if (surface.glow) { const glow = surface.glow.clone(); glow.uScale = uS; glow.vScale = vS; material.emissiveTexture = glow; }
+    const tint = opts.tint ?? .25, bright = opts.bright ?? 1, base = material.diffuseColor;
+    material.diffuseColor = new B.Color3(bright * (1 - tint + base.r * tint), bright * (1 - tint + base.g * tint), bright * (1 - tint + base.b * tint));
+    material.specularColor = new B.Color3(.04, .04, .04);
+    if (opts.tile) material.metadata = { ...(material.metadata || {}), groundTile: opts.tile }; // metres per repeat on the flat walk plane
+    if (kind === "mud" || kind === "marsh") { material.specularColor = new B.Color3(.22, .24, .26); material.specularPower = 48; }
+    return material;
+  }
+  applyGroundSurface(groundMat, "dirt", { uScale: 9, vScale: 9, tint: .3 }); // หมู่บ้านอาคม: G01 village earth

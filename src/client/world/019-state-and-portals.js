@@ -26,6 +26,9 @@
     const bounds=mapBounds();
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
+    // Ground surfaces keep a fixed size in metres on the stretched walk plane (visual only; the plane itself is unchanged).
+    const groundTile=ground.material?.metadata?.groundTile;
+    if(groundTile)for(const t of [ground.material.diffuseTexture,ground.material.bumpTexture,ground.material.emissiveTexture])if(t){t.uScale=(bounds.maxX-bounds.minX)/groundTile;t.vScale=(bounds.maxZ-bounds.minZ)/groundTile;}
     const map=worldDefinitions?.[activeMapId];alignVillage(worldDefinitions?.ritual_village?.terrain);
     ground.setEnabled(!map?.terrain);if(!map)return;
     buildServiceNpcs(map);

@@ -41,6 +41,8 @@
     for(let i=0;i<220;i++){c.fillStyle=["#bfb196","#e6dcc6","#a89a80","#cbbfa6"][i%4];const r=1+noise(i,108)*2.5;c.beginPath();c.arc(noise(i,109)*s,noise(i,110)*s,r,0,Math.PI*2);c.fill();}
   });
   forestPath.backFaceCulling=false;
+  // ป่าต้องห้าม: G04 leaf-litter floor, G02 packed trails, G03 grassy clearings.
+  applyGroundSurface(forestFloor,"leaves",{tint:.25,tile:6});applyGroundSurface(forestPath,"path",{tint:.2,bump:false});applyGroundSurface(forestClearing,"grass",{uScale:3,vScale:3,tint:.2});
   const forestVerge=vergeMat("trail verge","#241f16");
   const forestGrass=mat("night grass","#2b4a30"), forestFern=mat("fern","#355a3a");
   const bushDark=mat("undergrowth","#1c3524"), bushMid=mat("moonlit shrub","#2a4a33"), mossMat=mat("moss","#3c5a36");
@@ -88,6 +90,8 @@
       for(let k=0;k<5;k++){x+=(noise(i*5+k,136)-.5)*42;y+=(noise(i*5+k,137)-.5)*42;c.lineTo(x,y);}c.stroke();}
   });
   tile.uScale=6;tile.vScale=6.5;templeFloor.diffuseTexture=tile;
+  // วัดร้าง: G12 temple stone with moss in the joints for the floor, court and processional walk.
+  applyGroundSurface(templeFloor,"temple",{tint:.25,tile:5});applyGroundSurface(templeCourt,"temple",{uScale:2,vScale:2,tint:.3});applyGroundSurface(templePaving,"temple",{tint:.3,bump:false});
   templeBrick.diffuseTexture=paintTexture("laterite courses",256,(c,s)=>{
     c.fillStyle="#6b4a3a";c.fillRect(0,0,s,s);
     for(let row=0;row<8;row++)for(let col=-1;col<5;col++){

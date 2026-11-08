@@ -94,8 +94,9 @@
               leaf.parent=root;leaf.position.set(Math.cos(j*2)*.24,.25,Math.sin(j*2)*.24);leaf.scaling.set(.7,.85,.5);leaf.material=leafMid;leaf.isPickable=false;
             }
           }else{
-            const rock=B.MeshBuilder.CreateSphere("สายแร่",{diameter:1.65,segments:5},scene);
-            rock.parent=root;rock.position.y=.48;rock.scaling.y=.65;rock.material=forestStone;rock.isPickable=false;
+            // Iron-ore vein sized by tier; two shapes per tier, picked from the node id so neighbours differ.
+            let h=0;for(const ch of n.id)h=(h*31+ch.charCodeAt(0))|0;
+            placeRock(ironRockKind(n.tier||1),0,0,0,{parent:root,variant:Math.abs(h)%2,rot:(Math.abs(h)%628)/100,scale:.85+(Math.abs(h>>3)%20)/100});
           }
           s={root};
         }
