@@ -123,6 +123,15 @@
     button.classList.toggle("fly-active", Boolean(active));
     button.setAttribute("aria-pressed", String(Boolean(active)));
     button.title = forbidden ? "เดินหรือพุ่งผ่านเส้นทางภาคพื้นในเขตนี้" : active ? "ลดระดับความสูงและลงจอด" : "ขึ้นบินเหนือกำแพง แล้วแตะพื้นเพื่อเคลื่อนที่";
+    const wingButton = $("flightButton");
+    if (wingButton) {
+      wingButton.hidden = mode === "live" && !(active || canFly);
+      wingButton.disabled = changing || forbidden || (mode === "live" && data?.alive !== true);
+      wingButton.setAttribute("aria-pressed", String(Boolean(active)));
+      const wingLabel = wingButton.querySelector("i");
+      if (wingLabel) wingLabel.textContent = changing ? "กำลังบิน" : active ? "ลงจอด" : mode === "demo" ? "บิน · DEMO" : "ทะยานฟ้า";
+      wingButton.title = button.title + " [F]";
+    }
   }
 
   function toggleFlight() {
@@ -137,6 +146,8 @@
         return;
       }
       if (!me.flying && me.pathId!=="seer" && me.pathId!=="mender") {toast("วิชาเหินเวหาเป็นของจอมอาคม");return;}
+      const definition = worldDefinitions?.[activeMapId];
+      if (!me.flying && (definition?.region?.noFlight === true || definition?.strategic?.kind === "territory")) {toast("เขตนี้ไม่อนุญาตให้ขึ้นบิน");return;}
       if (["ascending", "descending"].includes(me.combatState)) {
         toast("กำลังเปลี่ยนระดับความสูง");
         return;

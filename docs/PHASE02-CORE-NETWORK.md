@@ -1,7 +1,7 @@
 # Phase 2: client core and network extraction
 
 This checkout integrates phase 1 commit `0a1ce6b8008531a1f7e6dc8f909271a40ec574f6`
-and main commit `0bdda6ec49fc515a35f1416b74089eed72d33d6a`. It is development
+and main commit `ba13f644b24db84e0e606f3ebde7e9b310eab6ca`. It is development
 work only; no production installation is part of this phase.
 
 ## Scope and boundaries

@@ -1,0 +1,29 @@
+name: Flight Authority Runtime
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  production-flight-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install pinned Babylon test engine without lifecycle scripts
+        run: npm install --prefix "$RUNNER_TEMP/montra-flight-engine" --ignore-scripts --no-audit --no-fund babylonjs@9.35.0
+      - name: Run shipped flight and cosmetic safeguards against real Babylon
+        shell: bash
+        run: |
+          export MONTRA_TEST_BABYLON_PATH="$RUNNER_TEMP/montra-flight-engine/node_modules/babylonjs/babylon.js"
+          test -s "$MONTRA_TEST_BABYLON_PATH"
+          node deploy/combat/flight-aerial-combat-test.cjs
+          node deploy/combat/pet-familiar-test.cjs
+          node deploy/combat/war-banner-test.cjs
+          node deploy/combat/boss-titan-model-test.cjs

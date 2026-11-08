@@ -117,7 +117,7 @@ cp deploy/combat/forest-guardian-integration.mjs combat-verify/forest-guardian-i
 cp deploy/combat/forest-party-monster-integration.mjs combat-verify/forest-party-monster-integration.mjs
 cp deploy/combat/TerritoryGovernment.ts combat-verify/src/rooms/TerritoryGovernment.ts
 cp deploy/combat/TerritoryWar.ts combat-verify/src/rooms/TerritoryWar.ts
-cp deploy/combat/territory-war.test.ts combat-verify/src/rooms/territory-war.test.ts
+cp deploy/combat/territory-war.test.ts deploy/combat/territory-gate-room.test.ts combat-verify/src/rooms/
 cp deploy/combat/war-entry-check.mjs combat-verify/war-entry-check.mjs
 cp deploy/combat/forest-objective-check.mjs combat-verify/forest-objective-check.mjs
 cp deploy/combat/service-npcs-check.mjs combat-verify/service-npcs-check.mjs

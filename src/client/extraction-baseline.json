@@ -1,8 +1,8 @@
 {
   "format": 1,
   "output": "main.js",
-  "bytes": 1442437,
-  "sha256": "579f58cc515e9fa306053120fc856a832fb44c74abe0e46ed6a3458286cbd00b",
+  "bytes": 1467465,
+  "sha256": "a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4",
   "fragments": [
     {
       "path": "core/000-wrapper-open.js",
@@ -16,8 +16,8 @@
     },
     {
       "path": "audio/002-voice-guidance.js",
-      "bytes": 24316,
-      "sha256": "309f12bdb8148f1248b35cbf0674c9daf0cba852fe08d94b8fa3d9a9dcf62fc8"
+      "bytes": 26149,
+      "sha256": "674ebd3dbbcd21d8e3f2a65c4fffa6cbc9146c6c9a979f8ad72f0aada91b890d"
     },
     {
       "path": "ui/003-toast-and-mode.js",
@@ -261,8 +261,8 @@
     },
     {
       "path": "audio/051-sound-settings-and-speech.js",
-      "bytes": 8720,
-      "sha256": "726c85df787e82cf5d43b856ec4586b903dc2904e4f8c6b86dc50917bff51d06"
+      "bytes": 9329,
+      "sha256": "817d7fe8fb34a633d5f3a3b1c73dc5a096fd37156f60feb7916f68cb034aac15"
     },
     {
       "path": "ui/052-help-and-inventory.js",
@@ -271,18 +271,18 @@
     },
     {
       "path": "ui/053-gear-training-and-crafting.js",
-      "bytes": 32522,
-      "sha256": "e9e745ee07d5617c61391722b1b8d530a70fc92d9f3dc04fc0441eb66ab60936"
+      "bytes": 35679,
+      "sha256": "911221a4970d6b78524e36ec69574833accc80d81ebb4319d6ff379c95efcaf2"
     },
     {
       "path": "ui/054-forge-feedback-and-pages.js",
-      "bytes": 38943,
-      "sha256": "b1494fa2c081d2faa6bfba8c05e3dc9d67854494a421b40578ce24e6a58b7f36"
+      "bytes": 42969,
+      "sha256": "5f1d845b5fffc26825dc52c84d7190a6235d6e9ea5d60adc29c2641acc9aabe3"
     },
     {
       "path": "ui/055-market-and-trade.js",
-      "bytes": 38967,
-      "sha256": "0898ee8b63ffbfa6f470fe8db26733a06a0f3507d09cf516f37155aaf9c53483"
+      "bytes": 54370,
+      "sha256": "2e73690727382472b0113a9748719e8de0d01163a61e2c5fef92ffdf9366bb41"
     },
     {
       "path": "ui/056-party-guild-and-rebirth.js",

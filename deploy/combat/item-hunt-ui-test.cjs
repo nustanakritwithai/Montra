@@ -55,7 +55,12 @@ const me={pathId:"muay_boran",level:3,x:10,z:8},context={renderItemPreview(){},c
 // Use the real navigation/equipped-slot helpers: starter goals follow missing
 // crafting supplies, not the old starter kill-count reward.
 const huntGuideSource=source.slice(source.indexOf("  function itemHuntGuide("),end);
-const equippedSource=source.slice(source.indexOf("  function currentEquippedWeaponSlot("),source.indexOf("  function sendBagCommand("));
+// These helpers live outside fieldSource. Omitting them from the VM (the old
+// fixture) caused ReferenceError even though the browser bundle defined them.
+const equippedStart=source.indexOf("  function currentEquippedWeaponSlot(");
+const equippedEnd=source.indexOf("  function sendBagCommand(",equippedStart);
+assert(equippedStart>=0 && equippedEnd>equippedStart,"equipped helper extraction must not silently become empty");
+const equippedSource=source.slice(equippedStart,equippedEnd);
 const field=vm.runInNewContext(huntGuideSource+equippedSource+fieldSource+drawerSource+"\n({goal:fieldGearGoal,draw:renderFieldGoalDrawer})",context);
 let g=field.goal();assert.equal(g.to.x,12);assert.equal(g.recipe,"wrap");assert.equal(g.slot,0);
 assert(g.copyGoal);assert.equal(g.copyReady,false);assert.equal(g.nextRank,1);assert.match(g.progress,/หนัง 2\/3/);field.draw(g);
