@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { assembleClient, checkClient, clientRoot, prepareClient, writeClient } from './build-client.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
-// Intentional gate, market, flight, class-skill and cosmetic-safeguard changes. Keep snapshot
+// Intentional gate, market, flight, class-skill, audio and cosmetic-safeguard changes. Keep snapshot
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
 {
@@ -18,8 +18,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "ui/048-class-books-and-hotbars.js",
-  "bytes": 70385,
-  "sha256": "420ec450ea494e7b3366aa9b8a4cd71532b662c07daa478d81eb7faeac030f0f"
+  "bytes": 70197,
+  "sha256": "60a5e524e669a9a95fc49e159d785c597e08a04c943ad2348c27a5653e8dad45"
 },
 {
   "path": "ui/049-skill-graph-and-details.js",
@@ -65,6 +65,16 @@ const reviewedReleaseFragments = new Map([
     "path": "ui/055-market-and-trade.js",
     "bytes": 55367,
     "sha256": "2cf0b6272de3ff4cbd59ab5ca19319cff7b098d0eadfc82f18af8a090ee52678"
+  },
+  {
+    "path": "network/044-state-sync-and-connection.js",
+    "bytes": 138100,
+    "sha256": "01e70fe17a7361aec65c944b6ae592db95534f5ec792694b1dc141c4d0539e7a"
+  },
+  {
+    "path": "audio/051-sound-settings-and-speech.js",
+    "bytes": 9828,
+    "sha256": "01ed1a822470a5af32a7dc3500dbb561d006fa933be0bfaed817f3ec8f791f17"
   }
 ].map(entry => [entry.path, entry]));
 
@@ -73,8 +83,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1460965);
-  assert.equal(hash(bytes), '2e7877c0627fa970d772d6dc0e9ba37327791d60c113213edb0dabd12582f9cf');
+  assert.equal(bytes.length, 1462095);
+  assert.equal(hash(bytes), '80b2922586c81f822ceb5d456d1f75514d10b5830eaee60c1511f286c98561b8');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
