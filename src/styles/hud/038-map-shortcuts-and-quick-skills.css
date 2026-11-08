@@ -138,3 +138,5 @@
 @media (min-width: 1700px) and (min-height: 900px) {
   #game .top-hud, #game .resource-strip, #game .chat-box, #game .field-dock { zoom: 1.45; }
 }
+/* The desktop HUD zoom makes the quest panel taller: start the collected-item feed below it. */
+@media (min-width: 900px) and (min-height: 521px) { #lootFeed.loot-feed { top: calc(max(8px, env(safe-area-inset-top)) + 206px); } }
