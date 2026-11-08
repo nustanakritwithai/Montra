@@ -111,6 +111,57 @@
     const i=cuts.findIndex(n=>n>v);
     return i<0?cuts.length-2:Math.max(0,i-1);
   }
+  // ---- Ground patches: soft-edged pools of a second surface (grass, moss, leaves, gravel …) so no floor
+  // reads as one flat colour. Visual only, laid a few millimetres over the floor and under roads and courts.
+  const PATCH_KINDS={grass:["dirt","moss","leaves"],dirt:["grass","gravel","moss"],sand:["grass","mud"],mud:["grass","marsh","moss"],
+    marsh:["mud","moss"],cemetery:["moss","dirt","gravel"],rock:["gravel","moss","dirt"],ash:["rock","gravel"],rift:["ash","rock"],
+    bamboo:["leaves","moss","mud"],leaves:["moss","mud","grass"],temple:["moss","leaves"]};
+  const MAP_FLOORS={ritual_village:"dirt",forbidden_forest:"leaves",bound_temple:"temple"};
+  let patchMask=null;const patchMats=new Map();
+  function groundPatchMask(){
+    if(patchMask)return patchMask;
+    // A soft blob with a ragged edge, used as the opacity of every patch (second UV set).
+    patchMask=paintTexture("ground patch mask",128,(c,s)=>{
+      c.clearRect(0,0,s,s);const h=s/2;
+      for(let i=0;i<9;i++){const a=i/9*Math.PI*2,r=s*(.14+noise(i,71)*.12),x=h+Math.cos(a)*s*.16,y=h+Math.sin(a)*s*.16;
+        const g=c.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,"rgba(255,255,255,.95)");g.addColorStop(.55,"rgba(255,255,255,.6)");g.addColorStop(1,"rgba(255,255,255,0)");
+        c.fillStyle=g;c.fillRect(0,0,s,s);}
+      const g=c.createRadialGradient(h,h,0,h,h,h*.62);g.addColorStop(0,"rgba(255,255,255,1)");g.addColorStop(1,"rgba(255,255,255,0)");c.fillStyle=g;c.fillRect(0,0,s,s);
+    });
+    patchMask.hasAlpha=true;patchMask.coordinatesIndex=1;patchMask.wrapU=patchMask.wrapV=B.Texture.CLAMP_ADDRESSMODE;
+    return patchMask;
+  }
+  function groundPatchMaterial(kind,base){
+    const key=kind+":"+base.toHexString();if(patchMats.has(key))return patchMats.get(key);
+    const m=new B.StandardMaterial("ground patch "+kind,scene);m.diffuseColor=base.clone();
+    applyGroundSurface(m,kind,{uScale:1,vScale:1,tint:.35,bump:false,bright:1});
+    m.diffuseColor=new B.Color3(base.r*.5+m.diffuseColor.r*.5,base.g*.5+m.diffuseColor.g*.5,base.b*.5+m.diffuseColor.b*.5);
+    m.opacityTexture=groundPatchMask();m.useAlphaFromDiffuseTexture=false;m.backFaceCulling=true;m.zOffset=-1;
+    m.specularColor=new B.Color3(.03,.03,.03);m.metadata={noShadow:true};
+    patchMats.set(key,m);return m;
+  }
+  function scatterGroundPatches(map,floorMat,floorKind,roadsClear){
+    const kinds=PATCH_KINDS[floorKind];if(!kinds || !floorMat)return;
+    const b=map.bounds,w=b.maxX-b.minX,d=b.maxZ-b.minZ,count=Math.min(90,Math.round(w*d/130)),t=map.terrain,byKind=new Map();
+    const base=floorMat.diffuseColor||new B.Color3(.6,.6,.6);
+    for(let i=0,n=0;i<count*3&&n<count;i++){
+      const x=b.minX+noise(i,701)*w,z=b.minZ+noise(i,702)*d,size=4+noise(i,703)*9;
+      if(roadsClear && !roadsClear(x,z,size*.3))continue;
+      const g=B.MeshBuilder.CreateGround("ground patch",{width:size,height:size*(.7+noise(i,704)*.6),subdivisions:t?4:1,updatable:true},scene);
+      const rot=noise(i,705)*Math.PI,c=Math.cos(rot),s=Math.sin(rot),pos=g.getVerticesData(B.VertexBuffer.PositionKind),uv=g.getVerticesData(B.VertexBuffer.UVKind),uv2=[];
+      for(let k=0;k<pos.length;k+=3){
+        const px=x+pos[k]*c+pos[k+2]*s,pz=z-pos[k]*s+pos[k+2]*c;
+        pos[k]=px;pos[k+2]=pz;pos[k+1]=t?terrainHeight(t,px,pz)+.006:-.1;
+        uv2.push(uv[k/3*2],uv[k/3*2+1]);uv[k/3*2]=px/4;uv[k/3*2+1]=pz/4;
+      }
+      g.setVerticesData(B.VertexBuffer.PositionKind,pos);g.setVerticesData(B.VertexBuffer.UVKind,uv);g.setVerticesData(B.VertexBuffer.UV2Kind,uv2);
+      const kind=kinds[n%kinds.length];if(!byKind.has(kind))byKind.set(kind,[]);byKind.get(kind).push(g);n++;
+    }
+    for(const [kind,parts] of byKind){
+      const mesh=B.Mesh.MergeMeshes(parts,true,true);if(!mesh)continue;
+      mesh.name=map.id+" ground patches "+kind;mesh.parent=expansionRoot;mesh.isPickable=false;mesh.material=groundPatchMaterial(kind,base);mesh.metadata={noShadow:true};
+    }
+  }
   function terrainHeight(t,x,z){
     x=Math.max(t.xs[0],Math.min(t.xs.at(-1),x));z=Math.max(t.zs[0],Math.min(t.zs.at(-1),z));
     const i=terrainCell(t.xs,x),j=terrainCell(t.zs,z);

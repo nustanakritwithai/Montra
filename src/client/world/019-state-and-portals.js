@@ -45,6 +45,9 @@
     const terrainPaint=paint || {floor:ground.material,road:inTemple?templeReliefRoad:activeMapId==="forbidden_forest"?forestReliefRoad:civicRoad,stone:inTemple?templeStone:forestStone,court:inTemple?templeCourt:forestClearing};
     if(map.terrain)buildTerrainGround(map,terrainPaint);
     else (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic || map.huntTrail)));
+    // Soft pools of a second ground surface break up every floor (kept off the roads; the village core stays clean).
+    scatterGroundPatches(map,map.terrain?terrainPaint.floor:ground.material,REGION_GROUNDS[activeMapId]?.[0]||MAP_FLOORS[activeMapId]||"grass",
+      (x,z,r)=>!nearMapPath(map,x,z,r+2.5)&&!(map.portals||[]).some(p=>Math.hypot(p.x-x,p.z-z)<r+4)&&!(activeMapId==="ritual_village"&&Math.abs(x)<21&&z>-24&&z<48));
     for(const camp of map.camps||[]){
       if(map.reliefLabels)reliefPatches("terraced hunt clearing",map.terrain,[reliefDisk(camp.x,camp.z,inTemple?10:12,32)],.023,terrainPaint.court);
       else {

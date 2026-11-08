@@ -1,5 +1,6 @@
   const ground = B.MeshBuilder.CreateGround("walkableGround", { width: 40, height: 40 }, scene);
   ground.position.y = -0.12;
+  ground.scaling.x = ground.scaling.z = 3; // the expanded 120 m village until a map definition rescales it
   ground.material = groundMat;
   ground.metadata = { walkable: true };
 

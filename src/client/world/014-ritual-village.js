@@ -224,12 +224,12 @@
   };
   const courtPaving = villageSurface("village temple paving", "temple", .6), marketPaving = villageSurface("village market paving", "laterite", .55);
   const laneDirt = villageSurface("village lanes", "path", .56), sandYard = villageSurface("village training sand", "sand", .48);
-  const paddyMud = villageSurface("rice paddy", "mud", .5), graveSoil = villageSurface("old graves", "cemetery", .5);
+  const paddyMud = villageSurface("rice paddy", "mud", .5), graveSoil = villageSurface("old graves", "cemetery", .85);
   const riceMat = mat("young rice", "#5f8a3c", "#0d1a08"), dikeMat = mat("paddy dike", "#4a3b28");
   const plasterMat = mat("temple plaster", "#cfc6b2", "#141210"), oldStone = mat("weathered stupa", "#7d776b");
   const awningMats = [clothRed, mat("indigo awning", "#2f3f6b"), mat("saffron awning", "#b8792a")];
   // Flat ground pieces with world-space UVs, so every piece of a surface joins without seams.
-  function flatDecal(name, x, z, w, d, material, tile = 4, rot = 0, y = -.06) {
+  function flatDecal(name, x, z, w, d, material, tile = 4, rot = 0, y = .012) {
     const g = B.MeshBuilder.CreateGround(name, { width: w, height: d }, scene);
     g.position.set(x, y, z); g.rotation.y = rot; g.material = material; g.isPickable = false;
     const pos = g.getVerticesData(B.VertexBuffer.PositionKind), uv = [], c = Math.cos(rot), s = Math.sin(rot);
@@ -239,7 +239,7 @@
   }
   function villageLane(ax, az, bx, bz, w = 3.2, material = laneDirt) {
     const dx = bx - ax, dz = bz - az;
-    return flatDecal("village lane", (ax + bx) / 2, (az + bz) / 2, w, Math.hypot(dx, dz) + w * .5, material, 4, Math.atan2(dx, dz), -.065);
+    return flatDecal("village lane", (ax + bx) / 2, (az + bz) / 2, w, Math.hypot(dx, dz) + w * .5, material, 4, Math.atan2(dx, dz), .016);
   }
   function plankBridge(x, z, length, width = 3) {
     for (let i = 0; i < Math.round(length / .9); i++) vbox("bridge plank", x - length / 2 + .45 + i * .9, .08, z, .82, .12, width, i % 3 ? wooden : woodenAlt);
@@ -313,7 +313,7 @@
   const nearHut = (x, z) => [[-49.5, -27.5], [-49.5, 16.5], [-26, -34]].some(([cx, cz]) => Math.hypot(x - cx, z - cz) < 6);
   for (let x = -55; x <= -25; x += 7.5) for (let z = -38; z <= 22; z += 7.5) {
     if (Math.abs(z + 8) < 5 || Math.abs(x + 40) < 4.5 || nearCamp(x, z) || nearHut(x, z)) continue;
-    flatDecal("rice paddy", x, z, 6.6, 6.6, paddyMud, 3, 0, -.07);
+    flatDecal("rice paddy", x, z, 6.6, 6.6, paddyMud, 3, 0, .008);
     for (const [dx, dz, w, d] of [[0, -3.4, 7, .3], [0, 3.4, 7, .3], [-3.4, 0, .3, 7], [3.4, 0, .3, 7]]) vbox("paddy dike", x + dx, .02, z + dz, w, .18, d, dikeMat);
     for (let i = 0; i < 9; i++) vcyl("rice", x - 2 + (i % 3) * 2 + noise(i, x) * .6, .2, z - 2 + Math.floor(i / 3) * 2 + noise(i, z) * .6, .45, .32, .05, riceMat, 4);
   }
@@ -339,7 +339,7 @@
   for (const x of [-42, -26]) for (const z of [28, 40]) makeLantern(x, z);
 
   // Old graves (ป่าช้าเก่า) by the river: weathered stupas, a silk-cotton tree and votive candles (level 1 ghosts roam here).
-  flatDecal("old graves", 38, 40, 22, 16, graveSoil, 3);
+  flatDecal("old graves", 38, 38, 24, 21, graveSoil, 3);
   [[32, 32], [44, 30], [30, 44], [46, 42], [40, 44]].forEach(([x, z], i) => { smallStupa(x, z, .9 + (i % 2) * .25); candles(x, z + 1.2, 3, .3); });
   villageTreeNodes.push(placeThaiTree("ngiu", 50, 0, 36, { scale: .85 }), placeThaiTree("sai", 26, 0, 44, { scale: .75 }));
   for (const [x, z] of [[36, 38], [48, 46], [28, 38]]) villageTreeNodes.push(placeRock("plain", x, 0, z, { scale: .6 }));

@@ -631,4 +631,4 @@
     if (kind === "mud" || kind === "marsh") { material.specularColor = new B.Color3(.22, .24, .26); material.specularPower = 48; }
     return material;
   }
-  applyGroundSurface(groundMat, "dirt", { uScale: 9, vScale: 9, tint: .3 }); // หมู่บ้านอาคม: G01 village earth
+  applyGroundSurface(groundMat, "dirt", { uScale: 24, vScale: 24, tint: .3, tile: 5 }); // 120 m plane / 5 m tiles // หมู่บ้านอาคม: G01 village earth
