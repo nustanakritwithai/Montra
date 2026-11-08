@@ -273,22 +273,24 @@
     head(w, p) {
       const k = gearKit();
       if (w === "cloth") {
-        k.cyl(0, 1.672, -.004, .03, .218, .218, p.main, 14).scaling.z = 1.1; // across the brow, above the eyes k.box(-.02, 1.62, -.122, .04, .1, .012, p.main).rotation.z = .3;
-        if (p.tier >= 3) k.box(0, 1.675, .118, .04, .04, .012, p.trim);
+        // Measured head at the brow: half-width .076, half-depth .093 (centre z -.005), crown at 1.75.
+        k.cyl(0, 1.672, -.005, .028, .164, .164, p.main, 14).scaling.z = 1.18; // across the brow, above the eyes k.box(-.02, 1.63, -.1, .035, .09, .01, p.main).rotation.z = .3;
+        if (p.tier >= 3) k.box(0, 1.675, .094, .03, .03, .01, p.trim);
       } else if (w === "hide") {
-        k.dome(0, 1.645, -.005, .236, p.main).scaling.set(1, .92, 1.1); k.cyl(0, 1.645, -.005, .02, .24, .24, p.second, 14).scaling.z = 1.1;
+        k.dome(0, 1.66, -.005, .182, p.main).scaling.set(1, 1.18, 1.18); k.cyl(0, 1.66, -.005, .016, .182, .182, p.second, 14).scaling.z = 1.18;
       } else {
         // Medium: lamellar cap with neck flaps; heavy: Thai war helmet with a brim, cheek plates and a tall gold spire.
         const heavy = w === "heavy";
-        k.dome(0, 1.668, -.008, heavy ? .245 : .238, p.main).scaling.set(1, heavy ? 1.1 : 1, 1.1);
-        k.cyl(0, 1.67, -.008, .02, heavy ? .262 : .25, heavy ? .262 : .25, heavy ? p.trim : p.second, 16).scaling.z = 1.1;
-        for (const s of [-1, 1]) k.box(s * .112, 1.615, -.02, .012, .08, .1, p.main).rotation.z = s * .1;
-        k.box(0, 1.6, -.115, .15, .09, .012, p.second).rotation.x = .25;
+        // Shell ~1.2 cm outside the measured head; brim on the brow, cheek and neck guards just clear of the face.
+        k.dome(0, 1.668, -.005, .178, p.main).scaling.set(1, heavy ? 1.15 : 1.08, 1.18);
+        k.cyl(0, 1.67, -.005, .018, heavy ? .19 : .186, heavy ? .19 : .186, heavy ? p.trim : p.second, 16).scaling.z = 1.18;
+        for (const s of [-1, 1]) k.box(s * .09, 1.615, -.025, .01, .075, .085, p.main).rotation.z = s * .08;
+        k.box(0, 1.605, -.105, .13, .08, .01, p.second).rotation.x = .2;
         if (heavy) {
-          k.cyl(0, 1.838, -.008, .12, 0, .045, p.trim, 8); k.cyl(0, 1.793, -.008, .035, .05, .065, p.lacquer, 10);
-          for (let i = 0; i < 2; i++) k.cyl(0, 1.903 + i * .025, -.008, .014, .02 - i * .005, .02 - i * .005, p.trim, 8);
-          k.box(0, 1.71, .12, .028, .06, .01, p.trim);
-          if (p.glow) k.ball(0, 1.948, -.008, .028, p.glow, 6);
+          k.cyl(0, 1.835, -.005, .1, 0, .036, p.trim, 8); k.cyl(0, 1.78, -.005, .03, .04, .052, p.lacquer, 10);
+          for (let i = 0; i < 2; i++) k.cyl(0, 1.89 + i * .022, -.005, .012, .018 - i * .004, .018 - i * .004, p.trim, 8);
+          k.box(0, 1.705, .098, .022, .05, .008, p.trim);
+          if (p.glow) k.ball(0, 1.93, -.005, .024, p.glow, 6);
         }
       }
       return [["Head", k.take()]];
