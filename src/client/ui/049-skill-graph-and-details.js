@@ -219,7 +219,31 @@
       skillGraphKey = ""; const body = $(SKILL_BOOKS[kind][0]); if (body) body.innerHTML = ""; SKILL_BOOKS[kind][1]();
     });
   }
-  let activeSkillModalId = null;
+  let activeSkillModalId = null, activeSkillModalOwner = null, classSkillBookOwner = null;
+  function classSkillBookIdentity() {
+    return { mode, room, localId, path: mode === "demo" ? "phutthaisawan" : ownServerCharacter()?.pathId };
+  }
+  function isCurrentClassSkillBook(owner) {
+    const current = classSkillBookIdentity();
+    return !!owner && ["mode", "room", "localId", "path"].every(key => owner[key] === current[key]);
+  }
+  function openClassBookDrawer(kind, title, html) {
+    classSkillBookOwner = classSkillBookIdentity();
+    closeSkillDetailModal();
+    openDrawer(kind, title, html);
+  }
+  function syncClassSkillBookContext() {
+    if (["swordTree", "muayBook", "bladeBook", "sentinelBook", "occultBook"].includes(drawerActive) &&
+        !isCurrentClassSkillBook(classSkillBookOwner)) {
+      closeSkillDetailModal();
+      closeDrawer();
+      classSkillBookOwner = null;
+    }
+    if (activeSkillModalId) {
+      if (!isCurrentClassSkillBook(activeSkillModalOwner)) closeSkillDetailModal();
+      else renderSkillModalContent(activeSkillModalId);
+    }
+  }
 
   function ensureSkillDetailModalElements() {
     let backdrop = $("skillPopupBackdrop");
@@ -258,7 +282,9 @@
   }
 
   function openSkillDetailModal(skillId) {
+    if (!swordData()?.catalog?.core?.[skillId]) return;
     activeSkillModalId = skillId;
+    activeSkillModalOwner = classSkillBookIdentity();
     const { backdrop, modal } = ensureSkillDetailModalElements();
     backdrop.inert = false;
     modal.inert = false;
@@ -273,6 +299,7 @@
   function closeSkillDetailModal(e) {
     if (e && e.stopPropagation) e.stopPropagation();
     activeSkillModalId = null;
+    activeSkillModalOwner = null;
     const backdrop = $("skillPopupBackdrop");
     const modal = $("skillDetailModal");
     if (backdrop) { backdrop.hidden = true; backdrop.style.display = "none"; }
@@ -281,10 +308,12 @@
 
   function renderSkillModalContent(skillId) {
     const data = swordData();
-    if (!data?.catalog?.core) return;
+    if (!isCurrentClassSkillBook(activeSkillModalOwner) || !data?.catalog?.core?.[skillId]) {
+      closeSkillDetailModal();
+      return;
+    }
     const { me, tree, catalog } = data;
     const node = catalog.core[skillId];
-    if (!node) return;
 
     const ranks = tree.coreRanks || {};
     const rank = Number(ranks[skillId] || 0);
@@ -369,6 +398,7 @@
 
     const upBtn = $("skillModalUpgradeBtn");
     if (upBtn) {
+      upBtn.onclick = null;
       if (isMax) {
         upBtn.disabled = true;
         upBtn.textContent = "บรรลุขั้นสูงสุดแล้ว";
@@ -381,12 +411,13 @@
       } else {
         upBtn.disabled = false;
         upBtn.textContent = "อัปสกิล · 1 แต้ม (ขึ้นเป็นขั้น " + (rank + 1) + ")";
+        const owner = activeSkillModalOwner;
         upBtn.onclick = () => {
+          if (!isCurrentClassSkillBook(owner) || activeSkillModalId !== skillId || !swordData()?.catalog?.core?.[skillId]) return;
           SFX("equip");
-          if (room && typeof room.send === "function" && mode === "live") {
-            try { room.send("sword_core_book", { action: "upgrade", skillId }); } catch (_) {}
-            try { room.send("sword_tree_upgrade", { skillId }); } catch (_) {}
-          } else {
+          if (mode === "live") {
+            room.send("sword_core_book", { action: "upgrade", skillId });
+          } else if (mode === "demo") {
             demoSwordTreeData.coreRanks[skillId] = (demoSwordTreeData.coreRanks[skillId] || 0) + 1;
             renderSkillModalContent(skillId);
             renderSwordTree();
@@ -399,18 +430,19 @@
 
   function openSwordTree() {
     const data = swordData();
-    // Always open swordTree with available data
-    if (!data) data = swordData();
+    if (!data?.catalog?.core) return toast(mode === "live" && ownServerCharacter()?.pathId !== "phutthaisawan"
+      ? "เลือกอาชีพนักดาบก่อน" : "กำลังรอตำราวิชาดาบจากเซิร์ฟเวอร์");
     swordTreeRenderKey = "";
     swordTreeViewedSchool = data.tree.school || "phuttha";
     skillGraphKey = "";
-    openDrawer("swordTree", "ผังวิชาดาบ (Knowledge Graph)", '<div id="swordTreeBody"></div>');
+    openClassBookDrawer("swordTree", "ผังวิชาดาบ (Knowledge Graph)", '<div id="swordTreeBody"></div>');
     renderSwordTree();
   }
 
   function renderSwordTree() {
     const data = swordData(), container = $("swordTreeBody");
-    if (!data?.catalog?.core || !container) return;
+    if (!container) return;
+    if (!data?.catalog?.core) { container.textContent = "กำลังรอตำราวิชาดาบจากเซิร์ฟเวอร์"; return; }
     const { me, tree, catalog } = data;
     const ranks = tree.coreRanks || {};
     const lvNow = (typeof skillLearningLevel === "function" ? skillLearningLevel(me) : me?.level) || 1;
@@ -647,12 +679,14 @@
     // Bind reset
     const resetBtn = $("resetSwordCore") || $("stResetBtn");
     if (resetBtn) {
+      const owner = classSkillBookIdentity();
       resetBtn.onclick = () => {
+        if (!isCurrentClassSkillBook(owner) || !swordData()?.catalog?.core) return;
         if (!window.confirm("ต้องการคืนแต้มวิชาทั้งหมดหรือไม่?")) return;
-        if (typeof room !== "undefined" && room && typeof room.send === "function" && typeof mode !== "undefined" && mode === "live") {
-          try { room.send("sword_core_book", { action: "reset" }); } catch (_) {}
-          try { room.send("sword_tree_reset", {}); } catch (_) {}
-        } else {
+        if (!isCurrentClassSkillBook(owner)) return;
+        if (mode === "live") {
+          room.send("sword_core_book", { action: "reset" });
+        } else if (mode === "demo") {
           if (typeof demoSwordTreeData !== "undefined" && demoSwordTreeData?.coreRanks) {
             for (const k of Object.keys(demoSwordTreeData.coreRanks)) {
               demoSwordTreeData.coreRanks[k] = 0;

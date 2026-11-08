@@ -67,6 +67,7 @@ cp deploy/combat/blade-book-integration.mjs combat-verify/blade-book-integration
 cp deploy/combat/blade-depth-integration.mjs combat-verify/blade-depth-integration.mjs
 cp deploy/combat/blade-core-check.mjs combat-verify/blade-core-check.mjs
 cp deploy/combat/class-rank-integration.mjs combat-verify/class-rank-integration.mjs
+cp deploy/combat/class-skills-contract-integration.mjs combat-verify/class-skills-contract-integration.mjs
 cp deploy/combat/status-support-integration.mjs combat-verify/status-support-integration.mjs
 cp deploy/combat/skill-ranks.test.ts combat-verify/src/rooms/skill-ranks.test.ts
 cp deploy/combat/advanced-class-integration.mjs combat-verify/advanced-class-integration.mjs

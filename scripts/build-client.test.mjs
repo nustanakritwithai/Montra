@@ -8,9 +8,29 @@ import { spawnSync } from 'node:child_process';
 import { assembleClient, checkClient, clientRoot, prepareClient, writeClient } from './build-client.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
-// Intentional gate, market, flight and cosmetic-safeguard changes. Keep snapshot
+// Intentional gate, market, flight, class-skill and cosmetic-safeguard changes. Keep snapshot
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
+{
+  "path": "ui/046-drawers-and-chat.js",
+  "bytes": 9866,
+  "sha256": "678c70cc8f20b4c04d8cfa161a660506c5de197694535589887042a8d0038aad"
+},
+{
+  "path": "ui/048-class-books-and-hotbars.js",
+  "bytes": 70385,
+  "sha256": "420ec450ea494e7b3366aa9b8a4cd71532b662c07daa478d81eb7faeac030f0f"
+},
+{
+  "path": "ui/049-skill-graph-and-details.js",
+  "bytes": 53305,
+  "sha256": "5845fd7eb336182b4bfac408e5469f1bdb3d2dc2a5503d93089777ee9ba8afc1"
+},
+{
+  "path": "input/058-field-control-bindings.js",
+  "bytes": 6385,
+  "sha256": "d19a108b7d1405e75a3b8ac767bb27dd653bcfceeccac2c51f3dab06a0d336c0"
+},
 {
   "path": "combat/008-weapon-party-boss-feedback.js",
   "bytes": 49803,
@@ -53,8 +73,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1458133);
-  assert.equal(hash(bytes), '8b3510b63ed3c20a1fffc910786096a8e605ca0bc4e1a534b645f74166c0f170');
+  assert.equal(bytes.length, 1460965);
+  assert.equal(hash(bytes), '2e7877c0627fa970d772d6dc0e9ba37327791d60c113213edb0dabd12582f9cf');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
