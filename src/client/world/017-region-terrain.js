@@ -78,6 +78,7 @@
   function alignVillage(terrain){
     if(terrain===appliedVillageTerrain)return;
     appliedVillageTerrain=terrain;
+    for(const tree of villageTreeNodes)tree.position.y=terrain?terrainHeight(terrain,tree.position.x,tree.position.z):0;
     for(const item of villageBatches){
       const {mesh,anchors}=item,kind=B.VertexBuffer.PositionKind;
       if(!item.base)item.base=mesh.getVerticesData(kind).slice();

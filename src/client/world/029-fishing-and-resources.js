@@ -86,10 +86,8 @@
           const root=new B.TransformNode("แหล่งวัตถุดิบ",scene);
           root.position.set(n.x,ground?terrainHeight(ground,n.x,n.z):0,n.z);
           if(n.kind==="wood"){
-            const trunk=B.MeshBuilder.CreateCylinder("ต้นไม้เก็บได้",{height:2.8,diameter:.65,tessellation:7},scene);
-            const crown=B.MeshBuilder.CreateCylinder("เรือนยอด",{height:2.8,diameterBottom:3,diameterTop:.4,tessellation:7},scene);
-            trunk.parent=crown.parent=root;trunk.position.y=1.4;crown.position.y=3.2;
-            trunk.material=darkWood;crown.material=forestLeaf;trunk.isPickable=crown.isPickable=false;
+            // Gatherable timber: a pradu (or a bamboo clump on bamboo maps) instead of a cylinder and cone.
+            placeThaiTree(activeMapId==="bamboo_frontier"?"phai":"pradu",0,0,0,{parent:root,scale:.85});
           }else if(n.kind==="herb"){
             for(let j=0;j<3;j++){
               const leaf=B.MeshBuilder.CreateSphere("สมุนไพร",{diameter:.7,segments:4},scene);

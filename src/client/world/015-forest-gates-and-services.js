@@ -1,6 +1,6 @@
   // Both maps share one scene and ground. Their static meshes are created once
   // and toggled; switching maps must not accumulate scenes or WebGL resources.
-  const villageMeshes = scene.meshes.filter(mesh => mesh !== ground && mesh !== sky && !mistLayers.includes(mesh));
+  const villageMeshes = scene.meshes.filter(mesh => mesh !== ground && mesh !== sky && !mistLayers.includes(mesh) && !mesh.metadata?.thaiTreeMaster);
   const villageLights = scene.lights.filter(light => light !== moon && light !== keyLight && light !== warm);
   const forestRoot = new B.TransformNode("forbidden-forest", scene);
   const forestLeaf = mat("forest leaves", "#203f2e");
@@ -106,13 +106,13 @@
   glowMats.add(strikeMat);
   buildRoad([{x:0,z:19},{x:0,z:-19}],4.6,forestPath,forestVerge,forestRoot,7);
   const forestResourceShapes=new Map();
-  for(const [x,z] of [[-6,6],[7,7],[-15,-15],[-16,-8],[-14,2],[-15,12],[15,-15],[15,-5],[15,3],[15,14]]) {
-    const trunk=B.MeshBuilder.CreateCylinder("forest tree",{diameter:1.2,height:4,tessellation:7},scene);
-    trunk.position.set(x,2,z);trunk.material=darkWood;trunk.isPickable=false;trunk.parent=forestRoot;
-    const crown=B.MeshBuilder.CreateCylinder("forest canopy",{diameterTop:0,diameterBottom:4,height:4,tessellation:7},scene);
-    fixedCrowns.push(crown);crown.position.set(x,5,z);crown.material=forestLeaf;crown.isPickable=false;crown.parent=forestRoot;
-    forestResourceShapes.set(x+","+z,[trunk,crown]);
-  }
+  // Forbidden-forest timber: takhian, sai and pradu. Each is its own clone (not an instance) so its canopy
+  // can fade when it hides the hero, and so a felled tree can shrink on its own.
+  const forestKinds=["takhian","pradu","sai","pradu","takhian","pradu","sai","takhian","pradu","pradu"];
+  [[-6,6],[7,7],[-15,-15],[-16,-8],[-14,2],[-15,12],[15,-15],[15,-5],[15,3],[15,14]].forEach(([x,z],i)=>{
+    const tree=placeThaiTree(forestKinds[i],x,0,z,{clone:true,parent:forestRoot,scale:.95+noise(i,57)*.2});
+    fixedCrowns.push(tree);forestResourceShapes.set(x+","+z,[tree]);
+  });
   for(const [x,z,r] of [[5,-9,1.8],[-9,-3,1.5]]) {
     const rock=B.MeshBuilder.CreateSphere("forest rock",{diameter:r*2,segments:5},scene);
     rock.position.set(x,r*.45,z);rock.scaling.y=.6;rock.material=forestStone;rock.isPickable=false;rock.parent=forestRoot;

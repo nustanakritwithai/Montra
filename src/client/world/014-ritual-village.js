@@ -166,19 +166,22 @@
   vbox("gate lintel", 0, 4.2, -19.4, 12.6, .3, .5, darkWood);
   vbox("gate plaque", 0, 3.75, -19.4, 2.4, .6, .1, gold);
   thaiRoof(0, 4.4, -19.4, 1.6, 13.2, .7);
-  // Trees framing the quarter: layered dark canopies.
+  // Trees framing the quarter: Thai village trees along the canals — tamarind, sugar palm and coconut,
+  // with a sacred bodhi wrapped in the three-colour cloth on each bank.
+  const villageTreeNodes = []; // re-seated on the ground by alignVillage when the village sits on terrain
+  const villageTrees = ["makham", "tan", "makham", "maprao", "pho", "makham", "maprao", "tan", "makham"];
   for (let i = 0; i < 18; i++) {
     const x = (i % 2 ? -1 : 1) * (21 + noise(i, 51) * 2.5);
     const z = -21 + (i >> 1) * 4.8 + noise(i, 52) * 2;
-    const h = 2.2 + noise(i, 53) * 1.2;
     sceneryPoint("wood",x,z,1.5);
-    vcyl("tree trunk", x, h / 2, z, h, .45, .3, darkWood, 6);
-    vcyl("canopy low", x, h + .5, z, 1.6, 3.2, 1.6, leafDark, 7);
-    vcyl("canopy high", x, h + 1.6, z, 1.6, 2.2, .2, leafMid, 7);
+    const species = villageTrees[(i >> 1) % villageTrees.length], tall = species === "tan" || species === "maprao";
+    villageTreeNodes.push(placeThaiTree(species, x, 0, z, { scale: (tall ? .72 : .62) + noise(i, 53) * .16 }));
   }
+  // The old forest behind the village: tall yang-na and takhian with bamboo clumps between them.
+  const edgeTrees = ["yangna", "takhian", "phai", "yangna", "sai", "takhian", "phai", "yangna"];
   for (let i = 0; i < 26; i++) {
-    const x = -40 + i * 3.2, z = -27 - noise(i, 61) * 6, h = 3 + noise(i, 62) * 2;
-    vcyl("forest edge", x, h * .55, z, h * 1.1, 4 + noise(i, 63) * 2, .2, i % 2 ? leafDark : leafMid, 6);
+    const x = -40 + i * 3.2, z = -27 - noise(i, 61) * 6;
+    villageTreeNodes.push(placeThaiTree(edgeTrees[i % edgeTrees.length], x, 0, z - 2, { scale: .7 + noise(i, 62) * .3 }));
   }
   // Living water: scrolling ripples, lotus, reeds and floating krathong.
   const rippleTexture = paintTexture("canal ripples", 256, (c, s) => {
