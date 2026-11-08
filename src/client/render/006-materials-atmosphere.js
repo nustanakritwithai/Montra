@@ -308,7 +308,7 @@
   }
   function treeFoliage(parts, x, y, z, r, sy, hex, topHex, rng) {
     if (!foliageSink) { parts.push(treeBlob(x, y, z, r, sy, hex, topHex, rng)); return; }
-    const g = foliageSink, lo = treeRgb(hex), hi = treeRgb(topHex || hex), n = Math.max(7, Math.min(70, Math.round(15 * r * r * (.6 + sy * .5))));
+    const g = foliageSink, lo = treeRgb(hex), hi = treeRgb(topHex || hex), n = Math.max(LITE ? 5 : 7, Math.min(70, Math.round(15 * r * r * (.6 + sy * .5) * (LITE ? .6 : 1))));
     for (let k = 0; k < n; k++) {
       // Point on (or, for one card in five, inside) the clump, biased to the upper half.
       const u = rng() * 2 - 1, phi = rng() * Math.PI * 2, uy = Math.min(1, u * .85 + .2), rr = Math.sqrt(Math.max(0, 1 - uy * uy));
@@ -482,6 +482,13 @@
     mesh.metadata = { thaiTree: species, thaiTreeMaster: true };
     thaiTreeMasters.set(key, mesh); return mesh;
   }
+  // Scenery that never moves skips its per-frame world-matrix update: only when it sits on the static
+  // map root (resource nodes and village trees, which are re-seated or rescaled, stay live).
+  function freezeIfStatic(mesh, opts) {
+    if (opts.parent?.name !== "world-expansion") return;
+    mesh.computeWorldMatrix(true); mesh.freezeWorldMatrix();
+    for (const child of mesh.getChildMeshes(true)) { child.computeWorldMatrix(true); child.freezeWorldMatrix(); }
+  }
   // Place one tree. Returns the instance (its own transform; shares the master's geometry and material).
   function placeThaiTree(species, x, y, z, opts = {}) {
     const master = thaiTreeMaster(species, opts.variant ?? (Math.abs(Math.round(x * 3 + z * 7)) % 3));
@@ -498,6 +505,7 @@
     tree.position.set(x, y, z); tree.rotation.y = opts.rot ?? noise(Math.round(x * 13 + z), 31) * Math.PI * 2;
     tree.scaling.setAll(opts.scale ?? 1); tree.isPickable = false;
     if (opts.parent) tree.parent = opts.parent;
+    freezeIfStatic(tree, opts);
     return tree;
   }
 
@@ -625,6 +633,7 @@
     rock.position.set(x, y, z); rock.rotation.y = opts.rot ?? noise(Math.round(x * 17 + z), 43) * Math.PI * 2;
     rock.scaling.setAll(opts.scale ?? 1); rock.isPickable = false;
     if (opts.parent) rock.parent = opts.parent;
+    freezeIfStatic(rock, opts);
     return rock;
   }
 
@@ -651,6 +660,7 @@
     b.setEnabled(true); b.isPickable = false; b.position.set(x, y, z); b.rotation.y = noise(Math.round(x * 11 + z), 57) * Math.PI * 2;
     b.scaling.set(scale, scale * (opts.flat ?? 1), scale);
     if (opts.parent) b.parent = opts.parent;
+    freezeIfStatic(b, opts);
     return b;
   }
 
@@ -766,7 +776,7 @@
     const surface = groundSurface(kind), old = material.diffuseTexture, scale = opts.scale ?? 1;
     const uS = (opts.uScale ?? old?.uScale ?? 1) * scale, vS = (opts.vScale ?? old?.vScale ?? 1) * scale;
     const tex = shareGroundTexture(surface.diffuse); tex.uScale = uS; tex.vScale = vS; material.diffuseTexture = tex;
-    if (opts.bump !== false) { const bump = shareGroundTexture(surface.bump); bump.uScale = uS; bump.vScale = vS; bump.level = opts.bumpLevel ?? .7; material.bumpTexture = bump; }
+    if (opts.bump !== false && !LITE) { const bump = shareGroundTexture(surface.bump); bump.uScale = uS; bump.vScale = vS; bump.level = opts.bumpLevel ?? .7; material.bumpTexture = bump; }
     if (surface.glow) { const glow = shareGroundTexture(surface.glow); glow.uScale = uS; glow.vScale = vS; material.emissiveTexture = glow; }
     const tint = opts.tint ?? .25, bright = opts.bright ?? 1, base = material.diffuseColor;
     material.diffuseColor = new B.Color3(bright * (1 - tint + base.r * tint), bright * (1 - tint + base.g * tint), bright * (1 - tint + base.b * tint));

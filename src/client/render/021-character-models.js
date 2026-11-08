@@ -606,7 +606,7 @@
   // camera it simulates; farther away it simply follows its bone in the rest shape.
   const CLOTH_WIND = { ritual_village: [.5, 0, .3], forbidden_forest: [.3, 0, .2], drowned_marsh: [.15, 0, .1], asura_peak: [1.3, .1, .6],
     spirit_rift: [.9, .25, -.9], hex_ridge: [1.1, 0, .4], moon_pass: [1, 0, .5], moon_cemetery: [.5, 0, -.4] };
-  const CLOTH_STEP = 1 / 30, CLOTH_NEAR = 22;
+  const CLOTH_STEP = LITE ? 1 / 20 : 1 / 30, CLOTH_NEAR = LITE ? 12 : 22;
   let clothPaper = null;
   function clothMaterial(m) { if (m && m.backFaceCulling !== false) m.backFaceCulling = false; return m; }
   // spec: {bone, rows:[[x,y,z]…]…] in rest model space, pinRows, closed, stretch, bend, drag, colliders:[[x,y,z,r]] rest-space spheres}
@@ -680,7 +680,7 @@
       _clothV.set(c[0] - GEAR_REST[spec.bone][0], c[1] - GEAR_REST[spec.bone][1], c[2] - GEAR_REST[spec.bone][2]);
       B.Vector3.TransformCoordinatesToRef(_clothV, cloth.bone.getWorldMatrix(), _clothW); return [_clothW.x, _clothW.y, _clothW.z, _clothW.x, _clothW.y, _clothW.z, c[3] * s];
     });
-    for (let it = 0; it < (spec.iterations ?? 5); it++) {
+    for (let it = 0; it < (spec.iterations ?? (LITE ? 3 : 5)); it++) {
       for (const [i, k, len0, stiff] of links) {
         const ia = i * 3, kb = k * 3, dx = P[kb] - P[ia], dy = P[kb + 1] - P[ia + 1], dz = P[kb + 2] - P[ia + 2], d = Math.hypot(dx, dy, dz) || 1e-6;
         const rest = len0 * s, diff = (d - rest) / d * .5 * stiff * (spec.stretch ?? 1);
@@ -710,7 +710,8 @@
     if (a.clothRoot && dt > 0) { const vx = (root.x - a.clothRoot[0]) / dt, vz = (root.z - a.clothRoot[2]) / dt, air = a.clothAir || (a.clothAir = [0, 0, 0]);
       const ok = Math.hypot(vx, vz) < 25; air[0] += ((ok ? vx : 0) - air[0]) * .2; air[2] += ((ok ? vz : 0) - air[2]) * .2; }
     a.clothRoot = [root.x, root.y, root.z];
-    const near = Math.hypot(root.x - camera.target.x, root.z - camera.target.z) < CLOTH_NEAR;
+    // Lite: only the player's own cloth and other characters close by simulate.
+    const near = Math.hypot(root.x - camera.target.x, root.z - camera.target.z) < (a.local ? CLOTH_NEAR * 2 : CLOTH_NEAR);
     let colliders = null;
     for (const cloth of a.cloths) {
       const show = cloth.visible ? cloth.visible() !== false : true;

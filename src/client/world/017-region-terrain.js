@@ -142,7 +142,7 @@
   }
   function scatterGroundPatches(map,floorMat,floorKind,roadsClear){
     const kinds=PATCH_KINDS[floorKind];if(!kinds || !floorMat)return;
-    const b=map.bounds,w=b.maxX-b.minX,d=b.maxZ-b.minZ,count=Math.min(90,Math.round(w*d/130)),t=map.terrain,byKind=new Map();
+    const b=map.bounds,w=b.maxX-b.minX,d=b.maxZ-b.minZ,count=Math.min(LITE?30:90,Math.round(w*d/(LITE?380:130))),t=map.terrain,byKind=new Map();
     const base=floorMat.diffuseColor||new B.Color3(.6,.6,.6);
     for(let i=0,n=0;i<count*3&&n<count;i++){
       const x=b.minX+noise(i,701)*w,z=b.minZ+noise(i,702)*d,size=4+noise(i,703)*9;
