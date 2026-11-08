@@ -11,6 +11,7 @@ on:
       - 'scripts/build-styles*.mjs'
       - 'deploy/combat/class-skills-*.cjs'
       - 'deploy/combat/class-skill-routing-test.cjs'
+      - 'deploy/combat/core-skill-catalog-fixture.cjs'
       - '.github/workflows/verify-class-skills.yml'
   pull_request:
     paths:
@@ -19,6 +20,7 @@ on:
       - 'src/styles/**'
       - 'deploy/combat/class-skills-*.cjs'
       - 'deploy/combat/class-skill-routing-test.cjs'
+      - 'deploy/combat/core-skill-catalog-fixture.cjs'
       - '.github/workflows/verify-class-skills.yml'
   workflow_dispatch:
 permissions:
