@@ -12,11 +12,12 @@ function fixtureScript(){return `
  const ownServerCharacter=()=>me,getBuildCatalog=()=>JSON.parse(room.state.buildCatalog),openCharacterProfile=()=>{profiles++;};
  ${slice('  function requestForestAttack(', '  function switchWorld(')}
  ${slice('  function requestMonsterAttack(', '  function updateStatus(')}
- ${slice('  const ORB_SEGS =', '  const orbWide =')}
+ ${slice('  const ORB_SEGS =', '  // ---- Resource strip (top-left):')}
+ ${slice('  // ---- Layout moves:', '  // ---- Status boxes:')}
  ${slice('  const dashZone =','  let drawerActive =')}
  ${slice('  // One activation sends the existing monster attack order;', '  // Under the minimap')}
  $('characterProfile').onclick=openCharacterProfile;
- const bar=document.querySelector('.learned-bar');bar.setAttribute('data-arc','');vitalOrb.el.style.right='34px';vitalOrb.el.style.bottom='26px';
+ layoutOrbArc();
  const refresh=()=>updateVitalOrb(73,100,35,100,20,60);refresh();
  window.fixture={wire,notices,refresh,counts:()=>({profiles,dashes,wire:wire.length}),setPath:path=>{me.pathId=path;refresh();},setRanges:ranges=>{room.state.buildCatalog=JSON.stringify({basicAttackRanges:ranges});refresh();},forest:()=>{activeMapId='forbidden_forest';selectedForestTarget=null;room.state.monsters=new Map([['near',{id:'near',alive:true,mapId:activeMapId,x:2,z:0,level:1}],['far',{id:'far',alive:true,mapId:activeMapId,x:9,z:0,level:1}]]);},selected:id=>{selectedForestTarget=id;},empty:()=>{room.state.monsters.clear();}};
  `;}

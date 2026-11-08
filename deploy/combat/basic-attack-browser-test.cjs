@@ -17,6 +17,7 @@ const {chromium}=require('playwright'),{fixtureScript}=require('./basic-attack-u
   const orb=page.locator('.vital-orb');await orb.waitFor({state:'visible'});
   assert.equal(await orb.evaluate(e=>e.tagName),'BUTTON');assert.equal(await orb.getAttribute('type'),'button');
   assert.match(await orb.getAttribute('aria-label'),/โจมตีปกติ.*ระยะ 8 เมตร.*เลือด 73\/100.*มานา 20\/60.*กำลัง 35\/100/);
+  assert.equal(await page.locator('.location-area .map-shortcuts').count(),1,'production relocation removes the obsolete bottom navigation');
   const box=await orb.boundingBox();assert(box.width>=44&&box.height>=44&&box.x>=0&&box.x+box.width<=width&&box.y+box.height<=height);
   await orb.tap();assert.deepEqual(await page.evaluate(()=>fixture.wire),[{type:'attack',data:{targetId:'possessed-1'}}]);
   assert.equal(await page.evaluate(()=>fixture.counts().profiles),0);assert.equal(await page.locator('#drawer').isVisible(),false);
