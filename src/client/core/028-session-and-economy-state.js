@@ -1,4 +1,6 @@
-  let mode = "demo", room = null, localId = "demo", demoDest = null, onlinePlayers = new Map();
+  const worldState = MONTRA_CLIENT_MODULES.createWorldState();
+  const onlinePlayers = worldState.onlinePlayers;
+  let mode = "demo", room = null, localId = "demo", demoDest = null;
   let economyGold = null, economyListings = [], activeTrade = null, economyPending = false;
   let economyTimer = null, economyTab = "market", tradeUnread = false;
   let centralMarketVersion=0,centralAuctions=[],centralMine=[],centralSupply=null,centralCredit=0,marketNextCursor=null,marketPageTag=0,marketPageRequest=null,marketPageTimer=null,marketPageError="";

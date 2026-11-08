@@ -192,7 +192,7 @@ test('room changes, disconnect and unavailable economy close popup and invalidat
     const f=fixture();f.open();f.popup();const stale=f.button('bag:2');change(f);f.refresh();assert.equal(f.$('forgePicker').open,false);assert.equal(f.key(),'');assert.equal(f.$('forgePanel').hidden,true);stale.onclick();assert.equal(f.key(),'');assert.equal(f.mutations().length,0);
   }
   const f=fixture();f.open();f.popup();f.ctx.clearSyncPoll=()=>{};f.ctx.showDemo=()=>{assert.equal(f.$('forgePicker').open,false,'stopOnline closes before resetting connection state');f.ctx.mode='demo';};
-  f.run(slice('  function stopOnline(reason) {','  let connectionPending ='));f.ctx.stopOnline('offline');assert.equal(f.$('forgePicker').open,false);assert.equal(f.ctx.mode,'demo');
+  f.run(slice('  function stopOnline(reason) {','  const connectionLifecycle ='));f.ctx.stopOnline('offline');assert.equal(f.$('forgePicker').open,false);assert.equal(f.ctx.mode,'demo');
   assert.match(source,/function showDemo\(\) \{\s*cancelForgeAnimation\(false,true\);finishEconomyPending\(true\);closeForgePicker\(false\)/);
 });
 

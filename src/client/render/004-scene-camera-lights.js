@@ -20,8 +20,8 @@
   let itemHuntOwner="",itemHunt=null,travelRoutes=null;
   let fieldTrainingTip=null;
   let journeyOwner="",journeyNotes={};
-  const chatHistory = { map: [], world: [], party: [], private: [], bug: [] }, chatUnread = { map: 0, world: 0, party: 0, private: 0, bug: 0 };
-  const chatDraft = { map: "", world: "", party: "", private: "", bug: "" };
+  const chatState = MONTRA_CLIENT_MODULES.createChatState();
+  const { history: chatHistory, unread: chatUnread, draft: chatDraft } = chatState;
   let chatTargetId = "";
   let chatChannel = "map", chatPending = null, chatTimer = null;
   const scene = new B.Scene(engine);

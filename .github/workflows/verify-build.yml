@@ -16,8 +16,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Install locked client build dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Prepare generated client from sources
         run: npm run prepare:client
+      - name: Test isolated network lifecycle
+        run: npm run test:network
       - name: Verify every non-browser client fixture
         run: npm run test:client
       - name: Verify deterministic and legacy-equivalent static build

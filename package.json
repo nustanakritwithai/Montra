@@ -1,7 +1,7 @@
 {
   "name": "montra-build-tools",
   "private": true,
-  "description": "Dependency-free static packaging and baseline checks; not a game runtime package.",
+  "description": "Deterministic client packaging and baseline checks; not a game runtime package.",
   "engines": {
     "node": ">=22"
   },
@@ -9,6 +9,7 @@
     "build": "node scripts/build-site.mjs",
     "test:build": "node --test scripts/build-client.test.mjs scripts/build-styles.test.mjs scripts/build-site.test.mjs",
     "test:client": "node scripts/test-client.mjs",
+    "test:network": "node --test scripts/phase2-network.test.mjs scripts/phase2-social-handlers.test.mjs",
     "prepare:combat": "bash scripts/prepare-combat-verify.sh",
     "build:client": "node scripts/build-client.mjs",
     "check:client": "node scripts/build-client.mjs --check",
@@ -17,5 +18,8 @@
     "check:styles": "node scripts/build-styles.mjs --check",
     "test:styles": "node --test scripts/build-styles.test.mjs",
     "prepare:client": "node scripts/build-client.mjs --prepare"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }

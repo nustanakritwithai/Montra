@@ -8,6 +8,11 @@ import { spawnSync } from 'node:child_process';
 import { assembleClient, checkClient, clientRoot, prepareClient, writeClient } from './build-client.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
+function copyBuildDependencies(temp) {
+  mkdirSync(join(temp, 'node_modules'), { recursive: true });
+  for (const name of ['esbuild', '@esbuild']) cpSync(join(clientRoot, 'node_modules', name), join(temp, 'node_modules', name), { recursive: true });
+}
+
 // Intentional gate, market, flight, class-skill, audio and cosmetic-safeguard changes. Keep snapshot
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
@@ -80,18 +85,31 @@ const reviewedReleaseFragments = new Map([
 
 test('reviewed combined client preserves unchanged snapshot bytes and deterministic assembly', () => {
   const baseline = JSON.parse(readFileSync(join(clientRoot, 'src/client/extraction-baseline.json')));
+  const phase2 = JSON.parse(readFileSync(join(clientRoot, 'src/modules/phase2-baseline.json')));
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1462095);
-  assert.equal(hash(bytes), '80b2922586c81f822ceb5d456d1f75514d10b5830eaee60c1511f286c98561b8');
+  assert.equal(phase2.integrationBaseCommit, '6c72db0ebf57c455c70ba06b7729aabbab7498c3');
+  assert.equal(bytes.length, phase2.output.bytes);
+  assert.equal(hash(bytes), phase2.output.sha256);
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
+  assert.deepEqual(Object.keys(phase2.changedFragments), ['core/028-session-and-economy-state.js', 'render/004-scene-camera-lights.js', 'network/044-state-sync-and-connection.js']);
+  for (const file of reviewedReleaseFragments.keys()) {
+    assert(manifest.fragments.includes(file), `Reviewed release fragment is missing: ${file}`);
+  }
+  assert.deepEqual([...reviewedReleaseFragments.keys()].filter(file=>phase2.changedFragments[file]),['network/044-state-sync-and-connection.js']);
   for (const entry of baseline.fragments) {
     const fragment = readFileSync(join(clientRoot, 'src/client', entry.path));
-    const expected = reviewedReleaseFragments.get(entry.path) ?? entry;
-    assert.equal(fragment.length, expected.bytes, entry.path);
-    assert.equal(hash(fragment), expected.sha256, entry.path);
+    const reviewed = phase2.changedFragments[entry.path] || reviewedReleaseFragments.get(entry.path) || entry;
+    assert.equal(fragment.length, reviewed.bytes, entry.path);
+    assert.equal(hash(fragment), reviewed.sha256, entry.path);
+  }
+  assert.deepEqual(Object.keys(phase2.moduleSources), ['index.mjs', 'core/chat-state.mjs', 'core/connection-lifecycle.mjs', 'core/world-state.mjs', 'network/connection.mjs', 'network/social-handlers.mjs']);
+  for (const [file, expected] of Object.entries(phase2.moduleSources)) {
+    const bytes = readFileSync(join(clientRoot, 'src/modules', file));
+    assert.equal(bytes.length, expected.bytes, file);
+    assert.equal(hash(bytes), expected.sha256, file);
   }
   assert.deepEqual(assembleClient(), assembleClient());
 });
@@ -180,6 +198,7 @@ test('CLI build and check reject output symlinks without reading or overwriting 
     assert.throws(() => prepareClient(temp), /Output symlinks/);
     mkdirSync(join(temp, 'scripts'));
     cpSync(join(clientRoot, 'scripts/build-client.mjs'), join(temp, 'scripts/build-client.mjs'));
+    copyBuildDependencies(temp);
     for (const args of [[], ['--check'], ['--prepare']]) {
       const result = spawnSync(process.execPath, [join(temp, 'scripts/build-client.mjs'), ...args], { encoding: 'utf8' });
       assert.equal(result.status, 1);
@@ -215,6 +234,7 @@ test('clean-checkout CLI preparation succeeds; strict check and stale preparatio
   withClientFixture(temp => {
     mkdirSync(join(temp, 'scripts'));
     cpSync(join(clientRoot, 'scripts/build-client.mjs'), join(temp, 'scripts/build-client.mjs'));
+    copyBuildDependencies(temp);
     const output = join(temp, 'main.js');
     const run = mode => spawnSync(process.execPath, [join(temp, 'scripts/build-client.mjs'), mode], { encoding: 'utf8' });
     rmSync(output);

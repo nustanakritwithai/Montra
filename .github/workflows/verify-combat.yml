@@ -6,6 +6,10 @@ on:
       - '.nvmrc'
       - '.gitattributes'
       - 'package.json'
+      - 'package-lock.json'
+      - 'src/modules/**'
+      - 'scripts/phase2-network.test.mjs'
+      - 'scripts/phase2-server-integration.mjs'
       - 'src/client/**'
       - 'src/styles/**'
       - 'styles.css'
@@ -27,6 +31,10 @@ on:
       - '.nvmrc'
       - '.gitattributes'
       - 'package.json'
+      - 'package-lock.json'
+      - 'src/modules/**'
+      - 'scripts/phase2-network.test.mjs'
+      - 'scripts/phase2-server-integration.mjs'
       - 'src/client/**'
       - 'src/styles/**'
       - 'styles.css'
@@ -58,6 +66,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Install locked client build dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Prepare generated client from sources
         run: npm run prepare:client
 
@@ -73,6 +83,9 @@ jobs:
 
       - name: Verify client fragment statement boundaries
         run: npm run test:client-boundaries
+
+      - name: Verify modular connection against an isolated server
+        run: timeout 180s node scripts/phase2-server-integration.mjs
 
       - name: Type-check combat server
         working-directory: combat-verify

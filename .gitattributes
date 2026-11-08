@@ -2,6 +2,8 @@
 # Blank lines at fragment ends belong to the original source and must be retained.
 /main.js -text
 /src/client/**/*.js -text whitespace=-blank-at-eof
+# ES module source bytes must not depend on Git autocrlf.
+/src/modules/**/*.mjs -text
 /styles.css -text
 # Preserve pre-existing whitespace within extracted CSS, including legacy rules.
 /src/styles/**/*.css -text whitespace=-blank-at-eof,-blank-at-eol

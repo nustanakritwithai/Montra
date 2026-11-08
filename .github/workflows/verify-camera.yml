@@ -4,6 +4,8 @@ on:
     paths:
       - 'main.js'
       - 'src/client/**'
+      - 'src/modules/**'
+      - 'package-lock.json'
       - 'scripts/build-client*.mjs'
       - 'package.json'
       - '.nvmrc'
@@ -21,6 +23,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Install locked client build dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Prepare generated client from sources
         run: npm run prepare:client
       - run: node --check main.js && node deploy/combat/camera-ui-test.cjs
