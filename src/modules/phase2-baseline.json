@@ -2,10 +2,10 @@
   "format": 1,
   "historicalSourceCommit": "2f4ee0a",
   "phase2BaseCommit": "0a1ce6b8008531a1f7e6dc8f909271a40ec574f6",
-  "integrationBaseCommit": "6c72db0ebf57c455c70ba06b7729aabbab7498c3",
+  "integrationBaseCommit": "21ab886fc37ea0552fca8feb01ec4022f70861af",
   "output": {
-    "bytes": 1467044,
-    "sha256": "8095e90a95bda6a25131e4dec56a621b776b2f158c4468635551a6c17dd3d25e"
+    "bytes": 1469444,
+    "sha256": "3fb45adebc3496657501f38394521b7d7f7782819bc5342b560218aca03d3647"
   },
   "changedFragments": {
     "core/001-storage-and-dom.js": {
@@ -21,12 +21,12 @@
       "sha256": "e1857a53c99050a6256fdef0bf3c2688fe5de12978c147fbc65d8da865ce9a33"
     },
     "combat/038-demo-and-monster-state.js": {
-      "bytes": 7416,
-      "sha256": "3d91bbfe4141b9a1f28fa7b788cfb1f1cf3e8197652d288eb76886fbb39be504"
+      "bytes": 7438,
+      "sha256": "e3bbe0574a0aa0e793e90669d9be629d251026fa16e83e42f1d5ff18fb8bd72f"
     },
     "network/044-state-sync-and-connection.js": {
-      "bytes": 134983,
-      "sha256": "a7b36a306f5a0b8d428b0ed6bb99d1c319cf2083aba1f3fa1627dfc12469af68"
+      "bytes": 135358,
+      "sha256": "847643a00ed8531905c0db9dec1d636170fc6e8cf1a312b4744e641655e59e6c"
     },
     "ui/041-character-hud-and-journey.js": {
       "bytes": 38461,

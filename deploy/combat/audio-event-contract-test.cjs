@@ -21,7 +21,7 @@ function fixture(event,{remote=false,map='ritual_village',stale=false,speaking=f
   const ctx={joined,room:stale?{}:joined,localId:'me',activeMapId:'ritual_village',
     avatars:new Map([[id,caster]]),getLocalAvatar:()=>caster,recordPracticeCast:noop,
     SFX:(...args)=>sfx.push(args),window:{MontraAudio:{speak:(...args)=>speech.push(args),isSpeaking:()=>speaking}},
-    performance:{now:()=>1000},monsterForSpell:()=>null,spellTargetId:'',playAction:noop,triggerSkillVfx:noop,ownServerCharacter:()=>caster,
+    performance:{now:()=>1000},monsterForSpell:()=>null,skillVfxTarget:()=>null,spellTargetId:'',playAction:noop,triggerSkillVfx:noop,ownServerCharacter:()=>caster,
     syncSentinelUI:noop,syncOccultUI:noop,syncBladeUI:noop,syncMuayHotbar:noop,syncSwordStatus:noop,
     swordSkillAction:()=> 'cast',faceAvatarToward:noop,floatAtPlayer:noop,toast:noop,swordData:()=>null,
     bladeBookState:null,occultBookState:null,priestAreaEffects:new Map(),renderMagicBolt:noop,eventFx:noop,
