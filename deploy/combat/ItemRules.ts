@@ -539,7 +539,7 @@ export function gearLook(inventory: InventorySnapshot | undefined): string {
   if (!worn) return "";
   const out: string[] = [];
   for (const [slot, id] of Object.entries(worn)) {
-    const match = typeof id === "string" ? /^([a-z_]+?)_(\d+)$/.exec(id) : null;
+    const match = typeof id === "string" ? /^([a-zA-Z_]+?)_(\d+)$/.exec(id) : null;
     if (match) out.push(`${slot}=${match[1]}:${Math.min(99, Number(match[2]))}`);
   }
   return out.sort().join(";");

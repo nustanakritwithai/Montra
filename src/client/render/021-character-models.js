@@ -264,6 +264,9 @@
     const node = nodes[bone];
     if (!parts.length) return null;
     if (!node) { parts.forEach(p => p.dispose()); return null; }
+    // A lone piece is not merged, so bake its own offset and rotation first; otherwise re-basing onto the
+    // bone would overwrite them and the piece would float at the bone origin (cloth bracers, cloth skirt).
+    if (parts.length === 1) parts[0].bakeCurrentTransformIntoVertices();
     const mesh = mergedSegment(parts, node, name), j = GEAR_REST[bone];
     mesh.position.set(-j[0], -j[1], -j[2]); mesh.alwaysSelectAsActiveMesh = true;
     return mesh;
@@ -475,7 +478,7 @@
   function parseGearLook(look) {
     const out = {};
     for (const part of String(look || "").split(";")) {
-      const m = /^([a-zA-Z]+)=([a-z_]+):(\d+)$/.exec(part);
+      const m = /^([a-zA-Z]+)=([a-zA-Z_]+):(\d+)$/.exec(part); // families include arm_*_leftHand / _rightHand
       if (m) out[m[1]] = { family: m[2], tier: Number(m[3]) };
     }
     return out;
