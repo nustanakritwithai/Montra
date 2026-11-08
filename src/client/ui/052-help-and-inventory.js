@@ -370,6 +370,8 @@
       if (!slot) continue;
       if (i >= capacity) {
         slot.className = "bag-slot empty";
+        slot.removeAttribute?.("data-item-art");
+        slot.removeAttribute?.("data-item-rarity");
         slot.setAttribute("aria-pressed", "false");
         slot.setAttribute("aria-label", "ช่องว่าง (ยังไม่ปลดล็อก)");
         slot.querySelector(".bag-symbol").textContent = "·";

@@ -1,8 +1,8 @@
 {
   "format": 1,
   "output": "styles.css",
-  "bytes": 356403,
-  "sha256": "f90f734ed4eb6aa4be1612f63124e7577aa54041e19bb2040462c0eb56133e85",
+  "bytes": 373086,
+  "sha256": "cdfb8ee24004dcf35400245d96ee16947423d9c60309d96d42ba7661926662d1",
   "fragments": [
     {
       "path": "base/000-foundation-and-drawers.css",
@@ -251,80 +251,80 @@
     },
     {
       "path": "icons/035-inventory-artwork.css",
-      "bytes": 47476,
-      "sha256": "b4537a7eb34eafd7c6dd9eb9f83f78291e0be736931aaef90cba04644addd41f",
+      "bytes": 64159,
+      "sha256": "f840e152b7c3c36db0db6dc8c51c7a57457484339de915a66a9b259e345bfb60",
       "originalStartLine": 4421,
-      "originalEndLine": 4483
+      "originalEndLine": 4603
     },
     {
       "path": "combat/036-monster-labels.css",
       "bytes": 767,
       "sha256": "53e167d77c9c6c1e72b9c1246b66daf574dc6ef434539cc95e01e8b9b86c08ff",
-      "originalStartLine": 4484,
-      "originalEndLine": 4489
+      "originalStartLine": 4604,
+      "originalEndLine": 4609
     },
     {
       "path": "icons/037-skill-artwork.css",
       "bytes": 65334,
       "sha256": "1c0df14392c05e7d879b0b389671e0bffacb92b64e57d04ee947dc589ed859ec",
-      "originalStartLine": 4490,
-      "originalEndLine": 4765
+      "originalStartLine": 4610,
+      "originalEndLine": 4885
     },
     {
       "path": "hud/038-map-shortcuts-and-quick-skills.css",
       "bytes": 2813,
       "sha256": "246fd8e100f8520130c8d1f10803a7a995f3715503a10ceaa75c10bb1ec96353",
-      "originalStartLine": 4766,
-      "originalEndLine": 4869
+      "originalStartLine": 4886,
+      "originalEndLine": 4989
     },
     {
       "path": "icons/039-skill-books.css",
       "bytes": 1479,
       "sha256": "4a015c7c59c34deca14f4b785e2aa645a42a73efc0f89d25c8113ebcd7ca12f2",
-      "originalStartLine": 4870,
-      "originalEndLine": 4917
+      "originalStartLine": 4990,
+      "originalEndLine": 5037
     },
     {
       "path": "icons/040-blade-artwork.css",
       "bytes": 5540,
       "sha256": "3e4306750bd448217ac2e26fbd5a742d891c8036033194c73cbbb1e2dd149f05",
-      "originalStartLine": 4918,
-      "originalEndLine": 4955
+      "originalStartLine": 5038,
+      "originalEndLine": 5075
     },
     {
       "path": "icons/041-mender-artwork.css",
       "bytes": 4491,
       "sha256": "b6134545ba91c64905f82da1b3d7c8fb77cca1dad1bbb449894398eedfc710fe",
-      "originalStartLine": 4956,
-      "originalEndLine": 4993
+      "originalStartLine": 5076,
+      "originalEndLine": 5113
     },
     {
       "path": "icons/042-sentinel-artwork.css",
       "bytes": 4038,
       "sha256": "0afa48920322d7e109c41dfd216aa538c710d94fd89efe45aaf73436fe1a4bf4",
-      "originalStartLine": 4994,
-      "originalEndLine": 5031
+      "originalStartLine": 5114,
+      "originalEndLine": 5151
     },
     {
       "path": "combat/043-target-combo-and-boss.css",
       "bytes": 7492,
       "sha256": "43d8c8cefbe3c768f0af9f317467508eb97d6468268011b93a9bd09214ee0659",
-      "originalStartLine": 5032,
-      "originalEndLine": 5227
+      "originalStartLine": 5152,
+      "originalEndLine": 5347
     },
     {
       "path": "audio/044-voice-guidance.css",
       "bytes": 3520,
       "sha256": "39551eecfab95e37f27e37334687c5264b562fb7423b5ad444841d33b58a3e82",
-      "originalStartLine": 5228,
-      "originalEndLine": 5350
+      "originalStartLine": 5348,
+      "originalEndLine": 5470
     },
     {
       "path": "market/045-world-market.css",
       "bytes": 5720,
       "sha256": "e8b41aba201e580b5ef08bd613385491a300511ade9a4a0e5cd72d8ceb7c9494",
-      "originalStartLine": 5351,
-      "originalEndLine": 5413
+      "originalStartLine": 5471,
+      "originalEndLine": 5533
     }
   ]
 }

@@ -1,0 +1,35 @@
+name: Verify item artwork
+on:
+  push:
+    paths: ['assets/items/**', 'src/client/**', 'src/styles/**', 'styles.css', 'scripts/check-item-art-catalog.ts', 'deploy/combat/PersonalItems.ts', 'deploy/combat/ItemRules.ts', 'deploy/combat/RegionalBosses.ts', 'deploy/combat/item-art*.cjs', 'docs/item-art-coverage.json', '.github/workflows/verify-item-art.yml']
+  pull_request:
+    paths: ['assets/items/**', 'src/client/**', 'src/styles/**', 'styles.css', 'scripts/check-item-art-catalog.ts', 'deploy/combat/PersonalItems.ts', 'deploy/combat/ItemRules.ts', 'deploy/combat/RegionalBosses.ts', 'deploy/combat/item-art*.cjs', 'docs/item-art-coverage.json', '.github/workflows/verify-item-art.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Assemble production client and styles
+        run: npm run prepare:client && npm run check:styles
+      - name: Install pinned isolated test tools
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1 tsx@4.21.0
+          npx playwright install --with-deps chromium
+      - name: Check image bytes and current catalog mappings
+        run: |
+          node deploy/combat/item-art-test.cjs
+          npx tsx scripts/check-item-art-catalog.ts item-art-browser-evidence/catalog.json
+      - name: Check desktop and mobile item artwork
+        run: node deploy/combat/item-art-browser-test.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: item-art-browser-evidence
+          path: item-art-browser-evidence
