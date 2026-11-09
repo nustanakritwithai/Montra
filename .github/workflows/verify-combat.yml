@@ -53,11 +53,17 @@ jobs:
     runs-on: ubuntu-latest
     env:
       MONTRA_ACCOUNTS_REQUIRED: '0'
+    outputs:
+      server: ${{ steps.changes.outputs.server }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+
       - name: Prepare generated client from sources
         run: npm run prepare:client
 
@@ -67,6 +73,28 @@ jobs:
       - name: Install server dependencies
         working-directory: combat-verify
         run: npm ci --no-audit --no-fund
+
+      # Server integration suites only run when server-side files change; a client-only
+      # change cannot affect them (the sandbox server is built from deploy/combat alone).
+      - name: Detect server-side changes
+        id: changes
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          base="$PUSH_BEFORE"; [ "$EVENT" = "pull_request" ] && base="$PR_BASE"
+          if [ "$EVENT" = "workflow_dispatch" ] || [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "server=true" >> "$GITHUB_OUTPUT"; echo "Full suite (no comparable base)"; exit 0
+          fi
+          changed="$(git diff --name-only "$base" HEAD)"
+          echo "$changed"
+          if echo "$changed" | grep -Eq '^(deploy/combat/|scripts/(prepare-combat-verify\.sh|check-contract|class-|progression-audit|loot-feed-server)|package(-lock)?\.json$|\.nvmrc$|\.github/workflows/verify-combat\.yml$)'; then
+            echo "server=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "server=false" >> "$GITHUB_OUTPUT"; echo "Client-only change: server integration jobs skipped"
+          fi
 
       - name: Check client/server contract baseline
         run: node --test scripts/check-contract.test.mjs && node scripts/check-contract.mjs
@@ -204,95 +232,6 @@ jobs:
           node --check deploy/combat/occult-integration.mjs
           node --check deploy/combat/occult-depth-integration.mjs
 
-      - name: Test committed inventory pickup display contract
-        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs scripts/loot-feed-server-contract.mjs
-
-      - name: Test harvest sites and shared world regeneration
-        working-directory: combat-verify
-        env:
-          MONTRA_WORLD_EXPANSION: '1'
-        run: npx tsx --test src/rooms/resource-gathering.test.ts
-
-      - name: Test forest harvesting through the game server
-        working-directory: combat-verify
-        shell: bash
-        run: |
-          export PORT=14218 MONTRA_TEST_URL=http://127.0.0.1:14218 MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1
-          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-resource-test-XXXXXX)"
-          node --import tsx src/index.ts > resource-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14218) 2>/dev/null; then break; fi; sleep 0.25; done
-          timeout 45s node resource-gathering-integration.mjs || { cat resource-server.log; exit 1; }
-
-      - name: Test world director events and rewards
-        working-directory: combat-verify
-        env:
-          MONTRA_WORLD_EXPANSION: '1'
-          MONTRA_TYPHOON_API_KEY: ''
-          MONTRA_DIRECTOR_PERSIST: '0'
-        run: npx tsx --test src/rooms/world-director.test.ts src/rooms/director-reward.test.ts src/rooms/director-accept.test.ts src/rooms/director-deadline.test.ts
-
-      - name: Test central marketplace escrow and reserve
-        working-directory: combat-verify
-        run: npx tsx --test src/rooms/central-market.test.ts
-
-      - name: Test central marketplace across rooms and restart
-        working-directory: combat-verify
-        env:
-          MONTRA_CENTRAL_SERVER_SOURCE: '1'
-        run: timeout 180s node central-market-integration.mjs
-
-      - name: Test persistent hunt events
-        working-directory: combat-verify
-        env:
-          MONTRA_WORLD_EXPANSION: '1'
-        run: npx tsx --test src/rooms/hunt-events.test.ts
-
-      - name: Test Typhoon NPC guidance
-        working-directory: combat-verify
-        env:
-          MONTRA_WORLD_EXPANSION: '1'
-          MONTRA_TYPHOON_API_KEY: ''
-          MONTRA_DIRECTOR_PERSIST: '0'
-        run: npx tsx --test src/rooms/typhoon-guide.test.ts src/rooms/npc-guide-room.test.ts
-
-      - name: Test strict message validation and movement math
-        working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/rebirth.test.ts src/rooms/forest-objectives.test.ts src/rooms/sword-tree-concurrency.test.ts src/rooms/sword-gap-geometry.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/gear-progression.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts src/rooms/guild-store.test.ts
-
-      - name: Occult book rules
-        working-directory: combat-verify
-        run: npx tsx --test src/rooms/occult-rules.test.ts src/rooms/blade-rules.test.ts src/rooms/sentinel-rules.test.ts src/rooms/skill-ranks.test.ts src/rooms/advanced-lessons.test.ts src/rooms/account-store.test.ts
-
-      - name: Blade core skills
-        working-directory: combat-verify
-        run: npx tsx blade-core-check.mjs
-
-      - name: Verify six class skill contracts through isolated server
-        working-directory: combat-verify
-        shell: bash
-        run: |
-          export PORT=14229 MONTRA_TEST_URL=http://127.0.0.1:14229 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0
-          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-class-skills-test-XXXXXX)"
-          node --import tsx src/index.ts > class-skills-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14229) 2>/dev/null; then break; fi; sleep 0.25; done
-          timeout 180s node --import tsx class-skills-contract-integration.mjs || { cat class-skills-server.log; exit 1; }
-
-      - name: Early war participation
-        working-directory: combat-verify
-        run: npx tsx war-entry-check.mjs
-
-      - name: Forest objectives and durable rewards
-        working-directory: combat-verify
-        run: npx tsx forest-objective-check.mjs
-
-      - name: Service NPC placement
-        working-directory: combat-verify
-        run: npx tsx service-npcs-check.mjs
-
       - name: Service NPC dialogue actions
         run: |
           node deploy/combat/service-npcs-ui-check.cjs
@@ -303,139 +242,28 @@ jobs:
           node deploy/combat/speech-ui-test.cjs
           node deploy/combat/npc-human-model-test.cjs
 
-      - name: Isolated advanced class lessons
-        working-directory: combat-verify
-        shell: bash
-        run: |
-          export PORT=14215 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1 MONTRA_TEST_URL=http://127.0.0.1:14215
-          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-advanced-test-XXXXXX)"
-          node --import tsx src/index.ts > advanced-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14215) 2>/dev/null; then break; fi; sleep 0.25; done
-          timeout 60s node advanced-class-integration.mjs || { cat advanced-server.log; exit 1; }
+  server-worlds:
+    needs: typecheck
+    if: needs.typecheck.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    env:
+      MONTRA_ACCOUNTS_REQUIRED: '0'
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Isolated class skill ranks and save compatibility
-        working-directory: combat-verify
-        shell: bash
-        run: |
-          export PORT=14213 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1 MONTRA_TEST_URL=http://127.0.0.1:14213
-          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-class-rank-test-XXXXXX)"
-          node --import tsx src/index.ts > class-rank-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14213) 2>/dev/null; then break; fi; sleep 0.25; done
-          timeout 60s node class-rank-integration.mjs || { cat class-rank-server.log; exit 1; }
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
 
-      - name: Isolated character status and support ranks
-        working-directory: combat-verify
-        shell: bash
-        run: |
-          export PORT=14217 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1 MONTRA_TEST_URL=http://127.0.0.1:14217
-          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-status-test-XXXXXX)"
-          node --import tsx src/index.ts > status-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14217) 2>/dev/null; then break; fi; sleep 0.25; done
-          timeout 60s node status-support-integration.mjs || { cat status-server.log; exit 1; }
+      - name: Prepare generated client from sources
+        run: npm run prepare:client
 
-      - name: Isolated account and permanent class
-        working-directory: combat-verify
-        shell: bash
-        run: |
-          export MONTRA_ACCOUNTS_REQUIRED=1 MONTRA_ECONOMY_ENABLED=1 PORT=14199 MONTRA_TEST_URL=http://127.0.0.1:14199
-          export MONTRA_CHARACTER_DIR="$(mktemp -d "${RUNNER_TEMP}/montra-account-test-XXXXXX")"
-          npx tsx src/index.ts > "$RUNNER_TEMP/montra-account-server.log" 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for n in {1..60}; do if curl -s -o /dev/null "$MONTRA_TEST_URL/montra/account/slots"; then break; fi; sleep 1; done
-          node account-integration.mjs
-          node learned-hotbar-integration.mjs
-          node personal-equipment-integration.mjs
-          node guest-delete-integration.mjs
-          node mount-integration.mjs
+      - name: Prepare Colyseus 0.18 test project
+        run: bash scripts/prepare-combat-verify.sh
 
-      - name: Rebirth mastery math and combat runtime
+      - name: Install server dependencies
         working-directory: combat-verify
-        run: MONTRA_MASTERY_ENABLED=1 npx tsx --test src/rooms/rebirth-combat.test.ts src/rooms/mastery-runtime.test.ts
-
-      - name: Isolated six-class hunt and rebirth
-        working-directory: combat-verify
-        shell: bash
-        run: |
-          export MONTRA_MASTERY_ENABLED=1 MONTRA_ACCOUNTS_REQUIRED=1 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1 PORT=14216 MONTRA_TEST_URL=http://127.0.0.1:14216
-          export MONTRA_CHARACTER_DIR="$(mktemp -d "${RUNNER_TEMP}/montra-account-test-XXXXXX")"
-          npx tsx src/index.ts > "$RUNNER_TEMP/montra-hunting-rebirth.log" 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for n in {1..60}; do if curl -s -o /dev/null "$MONTRA_TEST_URL/montra/account/slots"; then break; fi; sleep 1; done
-          node hunting-rebirth-integration.mjs
-          node mastery-save-integration.mjs
-
-      - name: Check class balance fixtures
-        shell: bash
-        run: |
-          combat-verify/node_modules/.bin/tsc scripts/class-balance.ts scripts/class-rotation.ts scripts/progression-audit.ts --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --typeRoots combat-verify/node_modules/@types
-          combat-verify/node_modules/.bin/tsx scripts/class-balance.ts > /dev/null
-          combat-verify/node_modules/.bin/tsx scripts/class-rotation.ts > /dev/null
-          MONTRA_WORLD_EXPANSION=1 combat-verify/node_modules/.bin/tsx scripts/progression-audit.ts > /dev/null
-
-      - name: Isolated occult class
-        shell: bash
-        working-directory: combat-verify
-        run: |
-          export PORT=4115 MONTRA_ECONOMY_ENABLED=1
-          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-occult-test-XXXXXX)"
-          export MONTRA_TEST_URL=http://127.0.0.1:4115
-          node --import tsx src/index.ts > occult-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4115) 2>/dev/null; then break; fi; sleep 0.25; done
-          timeout 100s node occult-integration.mjs || { cat occult-server.log; exit 1; }
-          timeout 100s node occult-depth-integration.mjs || { cat occult-server.log; exit 1; }
-          timeout 60s node class-balance-integration.mjs || { cat occult-server.log; exit 1; }
-
-      - name: Isolated blade book
-        shell: bash
-        working-directory: combat-verify
-        run: |
-          export PORT=4115 MONTRA_ECONOMY_ENABLED=1
-          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-blade-test-XXXXXX)"
-          export MONTRA_TEST_URL=http://127.0.0.1:4115
-          node --import tsx src/index.ts > blade-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4115) 2>/dev/null; then break; fi; sleep 0.25; done
-          timeout 60s node blade-book-integration.mjs || { cat blade-server.log; exit 1; }
-          timeout 60s node blade-depth-integration.mjs || { cat blade-server.log; exit 1; }
-          node --import tsx --test auto-attack.test.mjs
-          timeout 60s node blade-advanced-integration.mjs || { cat blade-server.log; exit 1; }
-
-      - name: Isolated sentinel class
-        shell: bash
-        working-directory: combat-verify
-        run: |
-          export PORT=4117 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1 MONTRA_RIDGE_TERRAIN=1
-          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-sentinel-test-XXXXXX)"
-          export MONTRA_TEST_URL=http://127.0.0.1:4117
-          node --import tsx src/index.ts > sentinel-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4117) 2>/dev/null; then break; fi; sleep 0.25; done
-          timeout 60s node sentinel-integration.mjs || { cat sentinel-server.log; exit 1; }
-
-      - name: Isolated party and EXP integration
-        shell: bash
-        working-directory: combat-verify
-        run: |
-          export PORT=4110 MONTRA_ECONOMY_ENABLED=1
-          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-party-test-XXXXXX)"
-          export MONTRA_TEST_URL=http://127.0.0.1:4110
-          node --import tsx src/index.ts > party-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4110) 2>/dev/null; then break; fi; sleep 0.25; done
-          timeout 35s node party-integration.mjs || { cat party-server.log; exit 1; }
+        run: npm ci --no-audit --no-fund
 
       - name: Original worlds, wall layers and settlement saves
         shell: bash
@@ -463,6 +291,87 @@ jobs:
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4118) 2>/dev/null; then break; fi; sleep 0.25; done
           timeout 130s node atlas-relief-integration.mjs || { cat relief-server.log; exit 1; }
+
+  server-forest:
+    needs: typecheck
+    if: needs.typecheck.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    env:
+      MONTRA_ACCOUNTS_REQUIRED: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Prepare generated client from sources
+        run: npm run prepare:client
+
+      - name: Prepare Colyseus 0.18 test project
+        run: bash scripts/prepare-combat-verify.sh
+
+      - name: Install server dependencies
+        working-directory: combat-verify
+        run: npm ci --no-audit --no-fund
+
+      - name: Isolated forest party monster rewards
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          # These legacy integration checks assert fixed pre-event EXP values.
+          export PORT=4111 MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-monster-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4111
+          node --import tsx src/index.ts > monster-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4111) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 100s node world-capacity-integration.mjs || { cat monster-server.log; exit 1; }
+          timeout 40s node forest-party-monster-integration.mjs || { cat monster-server.log; exit 1; }
+          timeout 90s node guild-integration.mjs
+          timeout 230s node territory-integration.mjs
+          timeout 120s node world-atlas-integration.mjs
+          MONTRA_ATLAS_STAGE=hunts timeout 300s node world-atlas-integration.mjs
+          MONTRA_ATLAS_STAGE=marsh-moon timeout 300s node world-atlas-integration.mjs
+          MONTRA_ATLAS_STAGE=ridge-naga timeout 300s node world-atlas-integration.mjs
+          MONTRA_ATLAS_STAGE=endgame timeout 300s node world-atlas-integration.mjs
+          npx tsx --test src/rooms/river-city.test.ts
+          timeout 85s node temple-integration.mjs
+          timeout 50s node forest-guardian-integration.mjs
+          kill "$SERVER_PID"
+          wait "$SERVER_PID" || true
+          node --import tsx src/index.ts > guardian-restart.log 2>&1 &
+          SERVER_PID=$!
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4111) 2>/dev/null; then break; fi; sleep 0.25; done
+          MONTRA_GUILD_STAGE=read timeout 45s node guild-integration.mjs
+          MONTRA_WAR_STAGE=read timeout 25s node territory-integration.mjs
+          MONTRA_ATLAS_STAGE=read timeout 90s node world-atlas-integration.mjs
+          MONTRA_TEMPLE_STAGE=read timeout 45s node temple-integration.mjs
+          MONTRA_GUARDIAN_STAGE=read timeout 30s node forest-guardian-integration.mjs
+
+  server-terrain:
+    needs: typecheck
+    if: needs.typecheck.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    env:
+      MONTRA_ACCOUNTS_REQUIRED: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Prepare generated client from sources
+        run: npm run prepare:client
+
+      - name: Prepare Colyseus 0.18 test project
+        run: bash scripts/prepare-combat-verify.sh
+
+      - name: Install server dependencies
+        working-directory: combat-verify
+        run: npm ci --no-audit --no-fund
 
       - name: Two-level ridge ramps and cross-elevation combat
         shell: bash
@@ -522,40 +431,28 @@ jobs:
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4116) 2>/dev/null; then break; fi; sleep 0.25; done
           timeout 240s node --import tsx province-fronts-integration.mjs || { cat front-server.log; exit 1; }
 
-      - name: Isolated forest party monster rewards
-        shell: bash
+  server-combat:
+    needs: typecheck
+    if: needs.typecheck.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    env:
+      MONTRA_ACCOUNTS_REQUIRED: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Prepare generated client from sources
+        run: npm run prepare:client
+
+      - name: Prepare Colyseus 0.18 test project
+        run: bash scripts/prepare-combat-verify.sh
+
+      - name: Install server dependencies
         working-directory: combat-verify
-        run: |
-          # These legacy integration checks assert fixed pre-event EXP values.
-          export PORT=4111 MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0 MONTRA_ECONOMY_ENABLED=1
-          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-monster-test-XXXXXX)"
-          export MONTRA_TEST_URL=http://127.0.0.1:4111
-          node --import tsx src/index.ts > monster-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
-          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4111) 2>/dev/null; then break; fi; sleep 0.25; done
-          timeout 100s node world-capacity-integration.mjs || { cat monster-server.log; exit 1; }
-          timeout 40s node forest-party-monster-integration.mjs || { cat monster-server.log; exit 1; }
-          timeout 90s node guild-integration.mjs
-          timeout 230s node territory-integration.mjs
-          timeout 120s node world-atlas-integration.mjs
-          MONTRA_ATLAS_STAGE=hunts timeout 300s node world-atlas-integration.mjs
-          MONTRA_ATLAS_STAGE=marsh-moon timeout 300s node world-atlas-integration.mjs
-          MONTRA_ATLAS_STAGE=ridge-naga timeout 300s node world-atlas-integration.mjs
-          MONTRA_ATLAS_STAGE=endgame timeout 300s node world-atlas-integration.mjs
-          npx tsx --test src/rooms/river-city.test.ts
-          timeout 85s node temple-integration.mjs
-          timeout 50s node forest-guardian-integration.mjs
-          kill "$SERVER_PID"
-          wait "$SERVER_PID" || true
-          node --import tsx src/index.ts > guardian-restart.log 2>&1 &
-          SERVER_PID=$!
-          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4111) 2>/dev/null; then break; fi; sleep 0.25; done
-          MONTRA_GUILD_STAGE=read timeout 45s node guild-integration.mjs
-          MONTRA_WAR_STAGE=read timeout 25s node territory-integration.mjs
-          MONTRA_ATLAS_STAGE=read timeout 90s node world-atlas-integration.mjs
-          MONTRA_TEMPLE_STAGE=read timeout 45s node temple-integration.mjs
-          MONTRA_GUARDIAN_STAGE=read timeout 30s node forest-guardian-integration.mjs
+        run: npm ci --no-audit --no-fund
 
       - name: Isolated party, private and bug chat
         shell: bash
@@ -741,3 +638,249 @@ jobs:
             cat restarted-server.log
             exit 1
           }
+
+  server-classes:
+    needs: typecheck
+    if: needs.typecheck.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    env:
+      MONTRA_ACCOUNTS_REQUIRED: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Prepare generated client from sources
+        run: npm run prepare:client
+
+      - name: Prepare Colyseus 0.18 test project
+        run: bash scripts/prepare-combat-verify.sh
+
+      - name: Install server dependencies
+        working-directory: combat-verify
+        run: npm ci --no-audit --no-fund
+
+      - name: Test committed inventory pickup display contract
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs scripts/loot-feed-server-contract.mjs
+
+      - name: Test harvest sites and shared world regeneration
+        working-directory: combat-verify
+        env:
+          MONTRA_WORLD_EXPANSION: '1'
+        run: npx tsx --test src/rooms/resource-gathering.test.ts
+
+      - name: Test forest harvesting through the game server
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export PORT=14218 MONTRA_TEST_URL=http://127.0.0.1:14218 MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-resource-test-XXXXXX)"
+          node --import tsx src/index.ts > resource-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14218) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 45s node resource-gathering-integration.mjs || { cat resource-server.log; exit 1; }
+
+      - name: Test world director events and rewards
+        working-directory: combat-verify
+        env:
+          MONTRA_WORLD_EXPANSION: '1'
+          MONTRA_TYPHOON_API_KEY: ''
+          MONTRA_DIRECTOR_PERSIST: '0'
+        run: npx tsx --test src/rooms/world-director.test.ts src/rooms/director-reward.test.ts src/rooms/director-accept.test.ts src/rooms/director-deadline.test.ts
+
+      - name: Test central marketplace escrow and reserve
+        working-directory: combat-verify
+        run: npx tsx --test src/rooms/central-market.test.ts
+
+      - name: Test central marketplace across rooms and restart
+        working-directory: combat-verify
+        env:
+          MONTRA_CENTRAL_SERVER_SOURCE: '1'
+        run: timeout 180s node central-market-integration.mjs
+
+      - name: Test persistent hunt events
+        working-directory: combat-verify
+        env:
+          MONTRA_WORLD_EXPANSION: '1'
+        run: npx tsx --test src/rooms/hunt-events.test.ts
+
+      - name: Test Typhoon NPC guidance
+        working-directory: combat-verify
+        env:
+          MONTRA_WORLD_EXPANSION: '1'
+          MONTRA_TYPHOON_API_KEY: ''
+          MONTRA_DIRECTOR_PERSIST: '0'
+        run: npx tsx --test src/rooms/typhoon-guide.test.ts src/rooms/npc-guide-room.test.ts
+
+      - name: Test strict message validation and movement math
+        working-directory: combat-verify
+        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/rebirth.test.ts src/rooms/forest-objectives.test.ts src/rooms/sword-tree-concurrency.test.ts src/rooms/sword-gap-geometry.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/gear-progression.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts src/rooms/guild-store.test.ts
+
+      - name: Occult book rules
+        working-directory: combat-verify
+        run: npx tsx --test src/rooms/occult-rules.test.ts src/rooms/blade-rules.test.ts src/rooms/sentinel-rules.test.ts src/rooms/skill-ranks.test.ts src/rooms/advanced-lessons.test.ts src/rooms/account-store.test.ts
+
+      - name: Blade core skills
+        working-directory: combat-verify
+        run: npx tsx blade-core-check.mjs
+
+      - name: Verify six class skill contracts through isolated server
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export PORT=14229 MONTRA_TEST_URL=http://127.0.0.1:14229 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-class-skills-test-XXXXXX)"
+          node --import tsx src/index.ts > class-skills-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14229) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 180s node --import tsx class-skills-contract-integration.mjs || { cat class-skills-server.log; exit 1; }
+
+      - name: Early war participation
+        working-directory: combat-verify
+        run: npx tsx war-entry-check.mjs
+
+      - name: Forest objectives and durable rewards
+        working-directory: combat-verify
+        run: npx tsx forest-objective-check.mjs
+
+      - name: Service NPC placement
+        working-directory: combat-verify
+        run: npx tsx service-npcs-check.mjs
+
+      - name: Isolated advanced class lessons
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export PORT=14215 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1 MONTRA_TEST_URL=http://127.0.0.1:14215
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-advanced-test-XXXXXX)"
+          node --import tsx src/index.ts > advanced-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14215) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 60s node advanced-class-integration.mjs || { cat advanced-server.log; exit 1; }
+
+      - name: Isolated class skill ranks and save compatibility
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export PORT=14213 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1 MONTRA_TEST_URL=http://127.0.0.1:14213
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-class-rank-test-XXXXXX)"
+          node --import tsx src/index.ts > class-rank-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14213) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 60s node class-rank-integration.mjs || { cat class-rank-server.log; exit 1; }
+
+      - name: Isolated character status and support ranks
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export PORT=14217 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_ECONOMY_ENABLED=1 MONTRA_TEST_URL=http://127.0.0.1:14217
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-status-test-XXXXXX)"
+          node --import tsx src/index.ts > status-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14217) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 60s node status-support-integration.mjs || { cat status-server.log; exit 1; }
+
+      - name: Isolated account and permanent class
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export MONTRA_ACCOUNTS_REQUIRED=1 MONTRA_ECONOMY_ENABLED=1 PORT=14199 MONTRA_TEST_URL=http://127.0.0.1:14199
+          export MONTRA_CHARACTER_DIR="$(mktemp -d "${RUNNER_TEMP}/montra-account-test-XXXXXX")"
+          npx tsx src/index.ts > "$RUNNER_TEMP/montra-account-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for n in {1..60}; do if curl -s -o /dev/null "$MONTRA_TEST_URL/montra/account/slots"; then break; fi; sleep 1; done
+          node account-integration.mjs
+          node learned-hotbar-integration.mjs
+          node personal-equipment-integration.mjs
+          node guest-delete-integration.mjs
+          node mount-integration.mjs
+
+      - name: Rebirth mastery math and combat runtime
+        working-directory: combat-verify
+        run: MONTRA_MASTERY_ENABLED=1 npx tsx --test src/rooms/rebirth-combat.test.ts src/rooms/mastery-runtime.test.ts
+
+      - name: Isolated six-class hunt and rebirth
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          export MONTRA_MASTERY_ENABLED=1 MONTRA_ACCOUNTS_REQUIRED=1 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1 PORT=14216 MONTRA_TEST_URL=http://127.0.0.1:14216
+          export MONTRA_CHARACTER_DIR="$(mktemp -d "${RUNNER_TEMP}/montra-account-test-XXXXXX")"
+          npx tsx src/index.ts > "$RUNNER_TEMP/montra-hunting-rebirth.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for n in {1..60}; do if curl -s -o /dev/null "$MONTRA_TEST_URL/montra/account/slots"; then break; fi; sleep 1; done
+          node hunting-rebirth-integration.mjs
+          node mastery-save-integration.mjs
+
+      - name: Check class balance fixtures
+        shell: bash
+        run: |
+          combat-verify/node_modules/.bin/tsc scripts/class-balance.ts scripts/class-rotation.ts scripts/progression-audit.ts --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --typeRoots combat-verify/node_modules/@types
+          combat-verify/node_modules/.bin/tsx scripts/class-balance.ts > /dev/null
+          combat-verify/node_modules/.bin/tsx scripts/class-rotation.ts > /dev/null
+          MONTRA_WORLD_EXPANSION=1 combat-verify/node_modules/.bin/tsx scripts/progression-audit.ts > /dev/null
+
+      - name: Isolated occult class
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4115 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-occult-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4115
+          node --import tsx src/index.ts > occult-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4115) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 100s node occult-integration.mjs || { cat occult-server.log; exit 1; }
+          timeout 100s node occult-depth-integration.mjs || { cat occult-server.log; exit 1; }
+          timeout 60s node class-balance-integration.mjs || { cat occult-server.log; exit 1; }
+
+      - name: Isolated blade book
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4115 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-blade-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4115
+          node --import tsx src/index.ts > blade-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4115) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 60s node blade-book-integration.mjs || { cat blade-server.log; exit 1; }
+          timeout 60s node blade-depth-integration.mjs || { cat blade-server.log; exit 1; }
+          node --import tsx --test auto-attack.test.mjs
+          timeout 60s node blade-advanced-integration.mjs || { cat blade-server.log; exit 1; }
+
+      - name: Isolated sentinel class
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4117 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1 MONTRA_RIDGE_TERRAIN=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-sentinel-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4117
+          node --import tsx src/index.ts > sentinel-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4117) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 60s node sentinel-integration.mjs || { cat sentinel-server.log; exit 1; }
+
+      - name: Isolated party and EXP integration
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=4110 MONTRA_ECONOMY_ENABLED=1
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-party-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:4110
+          node --import tsx src/index.ts > party-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4110) 2>/dev/null; then break; fi; sleep 0.25; done
+          timeout 35s node party-integration.mjs || { cat party-server.log; exit 1; }
