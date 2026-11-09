@@ -13,11 +13,13 @@
   // watch can step the resolution down further on very slow phones.
   const qualityPref = new URLSearchParams(location.search).get("quality");
   const LITE = qualityPref === "low" || (qualityPref !== "high" && matchMedia("(pointer: coarse)").matches);
-  let renderDensityCap = LITE ? 1 : 1.5;
+  // Lite starts sharp (2 physical px per CSS px) and adapts between 1.25 and 2 by frame rate.
+  const DENSITY_MAX = LITE ? 2 : 1.5, DENSITY_MIN = LITE ? 1.25 : 1;
+  let renderDensityCap = DENSITY_MAX;
   // Babylon divides the canvas size by this value. A value above 1 blurs
-  // high-density phones, so render up to 1.5 physical pixels per CSS pixel.
+  // high-density phones, so render up to 1.5 (phones: 2) physical pixels per CSS pixel.
   function resizeGameRenderer() {
-    const density = Math.min(renderDensityCap, Math.max(LITE ? .7 : 1, Math.min(window.devicePixelRatio || 1, renderDensityCap)));
+    const density = Math.min(renderDensityCap, Math.max(DENSITY_MIN, Math.min(window.devicePixelRatio || 1, renderDensityCap)));
     const scaling = 1 / density;
     if (engine.getHardwareScalingLevel() !== scaling) engine.setHardwareScalingLevel(scaling);
     else engine.resize();
@@ -130,7 +132,7 @@
   // ?shadows=off|on forces it; otherwise it backs off on slow devices.
   // Touch devices get a 1024 map, desktops 2048 for crisper edges.
   const SHADOW_HALF = 38, SHADOW_DIST = 90;
-  const SHADOW_SIZE = LITE ? 512 : matchMedia("(pointer: coarse)").matches || engine.getCaps().maxTextureSize < 4096 ? 1024 : 2048;
+  const SHADOW_SIZE = LITE ? 1024 : matchMedia("(pointer: coarse)").matches || engine.getCaps().maxTextureSize < 4096 ? 1024 : 2048;
   const shadowPref = new URLSearchParams(location.search).get("shadows");
   keyLight.autoUpdateExtends = false; keyLight.autoCalcShadowZBounds = false;
   keyLight.shadowMinZ = 1; keyLight.shadowMaxZ = SHADOW_DIST * 2;
@@ -185,9 +187,11 @@
     if (frameWatch.t < 4) return;
     const fps = frameWatch.n / frameWatch.t; frameWatch.t = frameWatch.n = 0;
     frameWatch.slow = fps < 22 ? frameWatch.slow + 1 : 0;
-    // Lite: below 30 fps for two windows, render at 0.85 then 0.7 pixels per CSS pixel.
-    if (LITE) { frameWatch.lowRes = fps < 30 ? (frameWatch.lowRes || 0) + 1 : 0;
-      if (frameWatch.lowRes >= 2 && renderDensityCap > .7) { renderDensityCap = Math.max(.7, renderDensityCap - .15); resizeGameRenderer(); frameWatch.lowRes = 0; } }
+    // Lite: below 30 fps for two windows, step the resolution down (never under 1 px per CSS px);
+    // at 50+ fps for three windows, step it back up so the picture sharpens again.
+    if (LITE) { frameWatch.lowRes = fps < 30 ? (frameWatch.lowRes || 0) + 1 : 0; frameWatch.highRes = fps > 50 ? (frameWatch.highRes || 0) + 1 : 0;
+      if (frameWatch.lowRes >= 2 && renderDensityCap > DENSITY_MIN) { renderDensityCap = Math.max(DENSITY_MIN, renderDensityCap - .25); resizeGameRenderer(); frameWatch.lowRes = 0; }
+      else if (frameWatch.highRes >= 3 && renderDensityCap < DENSITY_MAX) { renderDensityCap = Math.min(DENSITY_MAX, renderDensityCap + .25); resizeGameRenderer(); frameWatch.highRes = 0; } }
     if (frameWatch.slow >= 2 && keyLight.shadowEnabled) {
       const map = shadowGen.getShadowMap();
       if (map.refreshRate === 1) map.refreshRate = 2; else keyLight.shadowEnabled = false;
