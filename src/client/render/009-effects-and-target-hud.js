@@ -170,7 +170,7 @@
     const g = mesh.metadata?.ghost;
     const lift = g ? g.tall * (g.design?.scale || 1) - g.tall / 2 + .75 : .85 * mesh.scaling.y + .9;
     monsterLabelPoint.set(mesh.position.x, mesh.position.y + lift, mesh.position.z);
-    const rect = canvasRect();
+    const rect = typeof canvasRect === "function" ? canvasRect() : engine.getRenderingCanvas().getBoundingClientRect();
     const w = engine.getRenderWidth(), h = engine.getRenderHeight(), viewport = camera.viewport.toGlobal(w, h);
     B.Vector3.ProjectToRef(monsterLabelPoint, B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), viewport, monsterLabelProjection);
     if (monsterLabelProjection.z < 0 || monsterLabelProjection.z > 1) {
@@ -324,7 +324,7 @@
       add(villageGhost, { level: 1, alive: demoMonsterHp > 0 }, MONSTER_ID, "ผีเข้าสิง · ตัวทดสอบ");
     }
     candidates.sort((a, b) => Number(b.selected) - Number(a.selected) || a.distance - b.distance);
-    const rect = canvasRect();
+    const rect = typeof canvasRect === "function" ? canvasRect() : engine.getRenderingCanvas().getBoundingClientRect();
     const w = engine.getRenderWidth(), h = engine.getRenderHeight(), viewport = camera.viewport.toGlobal(w, h);
     const transform = scene.getTransformMatrix(), occupied = [];
     let used = 0;
