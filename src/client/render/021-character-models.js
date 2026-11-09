@@ -30,7 +30,7 @@
   // painted across the back. Bones are posed in code; the shaman's gear is
   // built in model space (metres, facing +Z) and rides on bones/sockets.
   // The lofted body above remains the fallback if the file cannot load.
-  const SHAMAN_SCALE = 1.3, SHAMAN_ARM_JOINT = [.165, 1.385];
+  const SHAMAN_SCALE = 1.3;
   const SHAMAN_JOINTS = { Hips: [0, .88, 0], Chest: [0, 1.336, -.004], Head: [0, 1.538, .004],
     LeftUpLeg: [.09, .822, .004], RightUpLeg: [-.09, .822, .004], LeftLeg: [.094, .472, -.002], RightLeg: [-.094, .472, -.002] };
   const shamanWaiting = [];
@@ -62,7 +62,7 @@
     const idx = name => skel.bones.findIndex(b => b.name === name);
     const arms = new Set([idx("LeftArm"), idx("RightArm")].filter(i => i >= 0)), chest = idx("Chest"), spine1 = idx("Spine1");
     if (!arms.size || chest < 0) return;
-    const jx = Math.abs(SHAMAN_ARM_JOINT[0]), jy = SHAMAN_ARM_JOINT[1], clamp = v => Math.max(0, Math.min(1, v));
+    const jx = .165, jy = 1.385, clamp = v => Math.max(0, Math.min(1, v));
     const done = new Set();
     for (const mesh of container.meshes) {
       const geo = mesh.geometry; if (!geo || done.has(geo) || !mesh.skeleton) continue; done.add(geo);
