@@ -119,6 +119,7 @@
   function clearSyncPoll() { if (syncPoll) clearInterval(syncPoll); syncPoll = null; }
   function stopOnline(reason) {
     closeForgePicker(false);
+    if(typeof closeCraftRecipePopup==="function")closeCraftRecipePopup(false);
     clearSyncPoll();
     if (mode === "live") { showDemo(); window.MontraEntry?.open(); window.MontraEntry?.failure(reason || "การเชื่อมต่อสิ้นสุด กรุณาเข้าเกมอีกครั้ง"); }
   }

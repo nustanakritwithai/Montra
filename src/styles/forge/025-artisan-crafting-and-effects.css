@@ -225,3 +225,44 @@
 .crafting-page .craft-ingredients .ck-recipe-node { width:44px; padding:2px; }
 .craft-ingredients .ck-recipe-node > span,.craft-ingredients .ck-recipe-node > small { display:none; }
 @media(max-width:380px) { .ck-relation { padding:7px; }.ck-recipe-node { width:60px; }.ck-recipe-node .item-slot { --item-slot-size:44px; } }
+
+/* A compact recipe popup keeps the item picker clear until a player chooses. */
+.drawer:has(.crafting-page) { width:min(720px,calc(100vw - 24px)); }
+.ck-workspace { grid-template-columns:minmax(0,1fr); padding:10px; }
+.ck-recipe { min-height:108px; padding:8px 5px; }
+.ck-recipe .item-slot { --item-slot-size:40px; }
+.ck-popup { --ck-line:#89734280; width:min(480px,calc(100vw - 20px)); max-width:none; max-height:min(620px,calc(100dvh - 32px)); padding:0; border:1px solid #b89858; border-radius:12px; color:#e7ddc3; background:#101e16; box-shadow:0 16px 64px #000c; overflow:hidden; }
+.ck-popup[open] { display:flex; flex-direction:column; }
+.ck-popup::backdrop { background:#030906b8; }
+.ck-popup-header { display:flex; flex:none; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; border-bottom:1px solid var(--ck-line); background:#203326; }
+.ck-popup-header h3 { margin:0; font-size:16px; color:#f0d796; }
+.crafting-page .ck-popup-header button { width:44px; min-width:44px; height:44px; margin:0; padding:0; font-size:18px; }
+.ck-popup-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:12px; }
+.ck-popup .ck-detail { border:0; padding:0; }
+.ck-popup .ck-output { gap:10px; padding:0 0 8px; }
+.ck-popup .ck-output .item-slot { --item-slot-size:46px; }
+.ck-popup .ck-output h3 { font-size:16px; margin:0; }
+.ck-popup .ck-detail h4 { margin:10px 0 6px; font-size:13px; }
+.ck-popup .ck-recipe-explorer { margin:8px 0; }
+.ck-popup .ck-relation { padding:6px; margin-bottom:6px; }
+.ck-popup .ck-recipe-node { width:58px; }
+.ck-popup .ck-recipe-node .item-slot { --item-slot-size:38px; }
+.ck-popup .ck-recipe-symbol { font-size:16px; }
+.ck-popup .craft-ingredients { gap:6px; }
+.ck-popup .craft-ingredients li { padding:6px; }
+.ck-popup .craft-ingredients .ck-recipe-node { width:44px; }
+.ck-popup .ck-future { display:none; }
+.crafting-page .ck-popup #benchCraft { min-height:44px; font-size:15px; }
+@media(max-width:700px) { .drawer:has(.crafting-page) { width:calc(100vw - 12px); }.ck-hero { padding-bottom:10px; }.crafting-page .ck-hero h3 { font-size:18px; }.ck-skill { font-size:11px; }.ck-recipe { min-height:108px; } }
+@media(max-width:380px) { .ck-popup-body { padding:10px; }.ck-popup .craft-ingredients { grid-template-columns:1fr; }.ck-popup .ck-inspect-nav { gap:4px; }.ck-popup .ck-inspect-nav button { font-size:12px; padding:6px; } }
+
+.ck-popup p { margin:8px 0; }
+.ck-popup #craftActionStatus:empty { display:none; }
+.ck-popup .ck-uses-details { margin:8px 0; border:1px solid var(--ck-line); border-radius:6px; padding:0 8px; }
+.ck-popup .ck-uses-details summary { min-height:44px; display:flex; align-items:center; cursor:pointer; font-size:12px; color:#dfca91; }
+.ck-popup .ck-uses-details summary::before { content:"▸"; margin-right:8px; }
+.ck-popup .ck-uses-details[open] summary::before { content:"▾"; }
+
+.ck-popup-footer { flex:none; padding:8px 12px 10px; border-top:1px solid var(--ck-line); background:#17291d; }
+.ck-popup-footer .status-line { margin:0 0 6px; font-size:12px; }
+.ck-popup-footer #benchCraft { margin-top:0; }

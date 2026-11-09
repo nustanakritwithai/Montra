@@ -110,6 +110,7 @@
   }
   function showDemo() {
     cancelForgeAnimation(false,true);finishEconomyPending(true);closeForgePicker(false);closeItemDetailModal(false);
+    if(typeof closeCraftRecipePopup==="function")closeCraftRecipePopup(false);
     clearCombatVfx();
     clearFishing(false);fishSavedItem=null;
     resetLootFeed();

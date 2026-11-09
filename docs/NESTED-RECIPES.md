@@ -17,3 +17,11 @@ Verification:
 - With Playwright Chromium: `MONTRA_RECIPE_CATALOG=nested-recipes-browser-evidence/catalog.json node deploy/combat/nested-recipes-browser-test.cjs`
 
 Browser fixtures render production functions/styles at 1366, 390 and 320 px, first with synthetic edge cases, then the real server catalog. They capture sends locally and do not connect to a live player account. Physical-device and live-account behavior are not claimed by these checks. The character HUD workflow runs these browser checks and retains the screenshots/report.
+
+## Compact popup (follow-up)
+
+The picker now stays separate from recipe details. Choosing a card, changing the recipe selector, or following a recipe shortcut opens a native modal dialog, limited to 480 px wide and 620 px high (and constrained by the viewport). The close button and the selected recipe's cost/craft action remain outside the scroll area. Used-for recipes are expandable to keep the first view small; ingredient inspection and back controls are unchanged.
+
+Escape, close, and backdrop dismiss the popup without crafting and return keyboard focus to the selected recipe card. Native modal behavior blocks clicks behind the popup. Tab stays inside it. Reopening resets inspection; leaving the drawer, demo/disconnect, room changes and missing catalog close it. A stale craft handler is blocked while the popup is closed or inspecting another item. Close never cancels or replays an already submitted server request.
+
+The browser suite also covers a short landscape viewport (844 × 390), popup size/overflow, keyboard containment, focus restoration, dismiss/reopen, closed-handler guards and room resets. The shared market/crafting regression and all prior catalog tests remain in place. No server code is changed.
