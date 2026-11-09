@@ -488,17 +488,26 @@
       const k = gearKit();
       // The forearm tapers from ~.044 (elbow side) to ~.032 (wrist): each turn follows it.
       for (let i = 0; i < 6; i++) k.sleeve(.44 + i * .024, .458 + i * .024, 1.364, 0, .048 - i * .0022, .048 - i * .0022, i % 2 ? ropeRed : gearMat("rope hemp", "#c9b48a"));
+      // Tier 5+: gold wrist ring and a folded yantra tag; tier 7+: a second ring and a glowing bead.
+      if (p.tier >= 5) { k.sleeve(.585, .597, 1.364, 0, .036, .036, p.trim, 12); k.box(.52, 1.364, .05, .03, .035, .004, gearMat("talisman paper cloth", "#e8d9a8", "#2a2210")); }
+      if (p.tier >= 7) { k.sleeve(.432, .444, 1.364, 0, .05, .05, p.trim, 12); k.ball(.52, 1.364, .056, .016, p.glow || amuletGlow, 6); }
       return [["LeftForeArm", k.take()]];
     },
     guard(p) { // Twin-sword school: a lacquered forearm parrying guard.
       const k = gearKit();
       k.box(.51, 1.364, .05, .16, .06, .014, p.lacquer || p.main); k.box(.51, 1.364, .058, .13, .014, .006, p.trim);
+      // Tier 5+: gold kanok prongs at both ends; tier 7+: a longer guard with a glowing centre gem.
+      if (p.tier >= 5) for (const x of [.43, .59]) { const c = k.cyl(x, 1.364, .052, .05, 0, .026, p.trim, 4); c.rotation.z = (x < .5 ? 1 : -1) * Math.PI / 2; }
+      if (p.tier >= 7) { k.box(.51, 1.364, .046, .22, .07, .008, p.trim); k.ball(.51, 1.364, .062, .022, p.glow || amuletGlow, 6); }
       return [["LeftForeArm", k.take()]];
     },
     veil(p) { // Blade: a dark cloth veil over the lower face, tails at the nape.
       const k = gearKit(), cloth = gearMat("shadow veil", "#1d1c22");
       // Face at mouth height: half-width ~.07, front ~.097 (centre z ~.013); the veil runs from under the nose to the chin.
       k.cyl(0, 1.553, .012, .062, .158, .15, cloth, 16).scaling.z = 1.3; k.box(0, 1.56, -.088, .04, .02, .012, cloth); // knot; the tail is cloth
+      // Tier 5+: a gold edge along the top of the veil; tier 7+: a glowing bead at the knot and a gold drop.
+      if (p.tier >= 5) k.cyl(0, 1.585, .012, .006, .16, .16, p.trim, 16).scaling.z = 1.3;
+      if (p.tier >= 7) { k.ball(0, 1.56, -.098, .02, p.glow || amuletGlow, 6); k.cyl(0, 1.52, -.098, .04, .012, 0, p.trim, 5); }
       return [["Head", k.take()]];
     },
     shield(p) { // Sentinel: round rattan dang with a brass boss, on the left forearm.
@@ -509,6 +518,9 @@
       const rim = k.cyl(.555, 1.41, -.002, .032, .292, .292, p.trim, 20); rim.scaling.x = rim.scaling.z = 1; rim.scaling.y = .6;
       k.ball(.555, 1.425, -.002, .07, p.trim, 10).scaling.y = .5;
       for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + .4; k.ball(.555 + Math.cos(a) * .09, 1.424, -.002 + Math.sin(a) * .09, .02, p.trim, 6); }
+      // Tier 5+: a gold sunburst of eight rays round the boss; tier 7+: an outer gold ring and a glowing boss gem.
+      if (p.tier >= 5) for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, r = k.box(.555 + Math.cos(a) * .055, 1.426, -.002 + Math.sin(a) * .055, .012, .006, .04, p.trim); r.rotation.y = -a + Math.PI / 2; }
+      if (p.tier >= 7) { for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; k.ball(.555 + Math.cos(a) * .118, 1.426, -.002 + Math.sin(a) * .118, .018, p.trim, 5); } k.ball(.555, 1.44, -.002, .03, p.glow || amuletGlow, 8); }
       return [["LeftForeArm", k.take()]];
     },
     jar(p) { // Seer: a small sealed spirit jar held in the left hand.
@@ -520,6 +532,9 @@
       along(k.cyl(.665, 1.339, .056, .014, .06, .06, jarClay, 8));
       k.ball(.665, 1.339, -.052, .09, jarCarved, 10).scaling.z = 1.12;
       along(k.cyl(.665, 1.339, -.05, .008, .093, .093, ropeRed, 10));
+      // Tier 5+: a gold neck band and two talisman strips; tier 7+: a spirit wisp glowing above the seal.
+      if (p.tier >= 5) { along(k.cyl(.665, 1.339, .045, .01, .064, .064, p.trim, 10)); for (const dx of [-.025, .025]) k.box(.665 + dx, 1.3, -.02, .016, .05, .003, gearMat("talisman paper cloth", "#e8d9a8", "#2a2210")); }
+      if (p.tier >= 7) k.ball(.665, 1.339, .1, .04, p.glow || amuletGlow, 8);
       return [["LeftHand", k.take()]];
     },
     bell(p) { // Mender: a bronze hand bell (กระดิ่ง) with a red cord.
@@ -528,6 +543,9 @@
       k.cyl(.665, 1.35, .012, .07, .022, .026, darkWood, 8); k.cyl(.665, 1.312, .012, .015, .035, .035, p.trim, 8);
       k.cyl(.665, 1.275, .012, .06, .026, .065, gearMat("bell bronze", "#8a6a3a", "#1a1206", .4), 12);
       k.ball(.665, 1.24, .012, .018, p.trim, 6); k.box(.665, 1.385, .012, .008, .03, .008, ropeRed);
+      // Tier 5+: a gold band round the bell and two small dangles; tier 7+: a gold lotus on the handle and a glow.
+      if (p.tier >= 5) { k.cyl(.665, 1.268, .012, .01, .06, .06, p.trim, 12); for (const dz of [-.03, .03]) k.ball(.665, 1.235, .012 + dz, .012, p.trim, 5); }
+      if (p.tier >= 7) { for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, pe = k.cyl(.665 + Math.cos(a) * .015, 1.405, .012 + Math.sin(a) * .015, .035, 0, .018, p.trim, 4); pe.rotation.set(Math.sin(a) * .6, 0, -Math.cos(a) * .6); } k.ball(.665, 1.42, .012, .018, p.glow || amuletGlow, 6); }
       return [["LeftHand", k.take()]];
     },
   };
