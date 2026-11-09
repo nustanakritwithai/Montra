@@ -1,0 +1,1001 @@
+id,name,kind,visual_family,level,path,slots,model_3d,renders_before,renders_after,items_sharing_model,model_type,triangles,icon_key,icon_image
+arm_cloth_arms_1,ปลอกแขนผ้าจารอักขระฝึกหัด,arms,arm_cloth_arms,1,all,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_seer_3,ปลอกแขนผ้าจารอักขระสายครูอาคม รุ่น 3,arms,arm_cloth_arms,3,seer,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_mender_3,ปลอกแขนผ้าจารอักขระสายเรียกขวัญ รุ่น 3,arms,arm_cloth_arms,3,mender,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_cloth_arms_2,ปลอกแขนผ้าจารอักขระชายป่า,arms,arm_cloth_arms,10,all,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_seer_16,ปลอกแขนผ้าจารอักขระสายครูอาคม รุ่น 16,arms,arm_cloth_arms,16,seer,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_mender_16,ปลอกแขนผ้าจารอักขระสายเรียกขวัญ รุ่น 16,arms,arm_cloth_arms,16,mender,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_cloth_arms_3,ปลอกแขนผ้าจารอักขระสำนักครู,arms,arm_cloth_arms,25,all,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_seer_31,ปลอกแขนผ้าจารอักขระสายครูอาคม รุ่น 31,arms,arm_cloth_arms,31,seer,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_mender_31,ปลอกแขนผ้าจารอักขระสายเรียกขวัญ รุ่น 31,arms,arm_cloth_arms,31,mender,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_seer_44,ปลอกแขนผ้าจารอักขระสายครูอาคม รุ่น 44,arms,arm_cloth_arms,44,seer,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_mender_44,ปลอกแขนผ้าจารอักขระสายเรียกขวัญ รุ่น 44,arms,arm_cloth_arms,44,mender,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_cloth_arms_4,ปลอกแขนผ้าจารอักขระค่ายหน้า,arms,arm_cloth_arms,45,all,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_seer_58,ปลอกแขนผ้าจารอักขระสายครูอาคม รุ่น 58,arms,arm_cloth_arms,58,seer,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_mender_58,ปลอกแขนผ้าจารอักขระสายเรียกขวัญ รุ่น 58,arms,arm_cloth_arms,58,mender,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_cloth_arms_5,ปลอกแขนผ้าจารอักขระเวียงเหล็ก,arms,arm_cloth_arms,65,all,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_seer_73,ปลอกแขนผ้าจารอักขระสายครูอาคม รุ่น 73,arms,arm_cloth_arms,73,seer,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_mender_73,ปลอกแขนผ้าจารอักขระสายเรียกขวัญ รุ่น 73,arms,arm_cloth_arms,73,mender,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_cloth_arms_6,ปลอกแขนผ้าจารอักขระทัพหลวง,arms,arm_cloth_arms,85,all,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_seer_86,ปลอกแขนผ้าจารอักขระสายครูอาคม รุ่น 86,arms,arm_cloth_arms,86,seer,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_mender_86,ปลอกแขนผ้าจารอักขระสายเรียกขวัญ รุ่น 86,arms,arm_cloth_arms,86,mender,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_cloth_arms_7,ปลอกแขนผ้าจารอักขระราชสำนัก,arms,arm_cloth_arms,95,all,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_seer_99,ปลอกแขนผ้าจารอักขระสายครูอาคม รุ่น 99,arms,arm_cloth_arms,99,seer,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_field_mender_99,ปลอกแขนผ้าจารอักขระสายเรียกขวัญ รุ่น 99,arms,arm_cloth_arms,99,mender,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_cloth_arms_8,ปลอกแขนผ้าจารอักขระพิชัยยุทธ์,arms,arm_cloth_arms,100,all,arms,arm_cloth_arms,yes,yes,24,procedural-shared,80,sheet_arm_cloth_arms,yes
+arm_heavy_arms_1,ปลอกแขนเกราะรักษาเวียงฝึกหัด,arms,arm_heavy_arms,1,all,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_field_sentinel_3,ปลอกแขนเกราะรักษาเวียงสายรักษาด่าน รุ่น 3,arms,arm_heavy_arms,3,sentinel,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_heavy_arms_2,ปลอกแขนเกราะรักษาเวียงชายป่า,arms,arm_heavy_arms,10,all,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_field_sentinel_16,ปลอกแขนเกราะรักษาเวียงสายรักษาด่าน รุ่น 16,arms,arm_heavy_arms,16,sentinel,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_heavy_arms_3,ปลอกแขนเกราะรักษาเวียงสำนักครู,arms,arm_heavy_arms,25,all,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_field_sentinel_31,ปลอกแขนเกราะรักษาเวียงสายรักษาด่าน รุ่น 31,arms,arm_heavy_arms,31,sentinel,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_field_sentinel_44,ปลอกแขนเกราะรักษาเวียงสายรักษาด่าน รุ่น 44,arms,arm_heavy_arms,44,sentinel,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_heavy_arms_4,ปลอกแขนเกราะรักษาเวียงค่ายหน้า,arms,arm_heavy_arms,45,all,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_field_sentinel_58,ปลอกแขนเกราะรักษาเวียงสายรักษาด่าน รุ่น 58,arms,arm_heavy_arms,58,sentinel,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_heavy_arms_5,ปลอกแขนเกราะรักษาเวียงเวียงเหล็ก,arms,arm_heavy_arms,65,all,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_field_sentinel_73,ปลอกแขนเกราะรักษาเวียงสายรักษาด่าน รุ่น 73,arms,arm_heavy_arms,73,sentinel,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_heavy_arms_6,ปลอกแขนเกราะรักษาเวียงทัพหลวง,arms,arm_heavy_arms,85,all,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_field_sentinel_86,ปลอกแขนเกราะรักษาเวียงสายรักษาด่าน รุ่น 86,arms,arm_heavy_arms,86,sentinel,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_heavy_arms_7,ปลอกแขนเกราะรักษาเวียงราชสำนัก,arms,arm_heavy_arms,95,all,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_field_sentinel_99,ปลอกแขนเกราะรักษาเวียงสายรักษาด่าน รุ่น 99,arms,arm_heavy_arms,99,sentinel,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_heavy_arms_8,ปลอกแขนเกราะรักษาเวียงพิชัยยุทธ์,arms,arm_heavy_arms,100,all,arms,arm_heavy_arms,yes,yes,16,procedural-shared,264,sheet_arm_heavy_arms,yes
+arm_hide_arms_1,ปลอกแขนหนังพรานเงาฝึกหัด,arms,arm_hide_arms,1,all,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_muay_boran_3,ปลอกแขนหนังพรานเงาสายคาดเชือก รุ่น 3,arms,arm_hide_arms,3,muay_boran,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_blade_3,ปลอกแขนหนังพรานเงาสายพรางเงา รุ่น 3,arms,arm_hide_arms,3,blade,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_hide_arms_2,ปลอกแขนหนังพรานเงาชายป่า,arms,arm_hide_arms,10,all,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_muay_boran_16,ปลอกแขนหนังพรานเงาสายคาดเชือก รุ่น 16,arms,arm_hide_arms,16,muay_boran,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_blade_16,ปลอกแขนหนังพรานเงาสายพรางเงา รุ่น 16,arms,arm_hide_arms,16,blade,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_hide_arms_3,ปลอกแขนหนังพรานเงาสำนักครู,arms,arm_hide_arms,25,all,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_muay_boran_31,ปลอกแขนหนังพรานเงาสายคาดเชือก รุ่น 31,arms,arm_hide_arms,31,muay_boran,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_blade_31,ปลอกแขนหนังพรานเงาสายพรางเงา รุ่น 31,arms,arm_hide_arms,31,blade,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_muay_boran_44,ปลอกแขนหนังพรานเงาสายคาดเชือก รุ่น 44,arms,arm_hide_arms,44,muay_boran,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_blade_44,ปลอกแขนหนังพรานเงาสายพรางเงา รุ่น 44,arms,arm_hide_arms,44,blade,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_hide_arms_4,ปลอกแขนหนังพรานเงาค่ายหน้า,arms,arm_hide_arms,45,all,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_muay_boran_58,ปลอกแขนหนังพรานเงาสายคาดเชือก รุ่น 58,arms,arm_hide_arms,58,muay_boran,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_blade_58,ปลอกแขนหนังพรานเงาสายพรางเงา รุ่น 58,arms,arm_hide_arms,58,blade,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_hide_arms_5,ปลอกแขนหนังพรานเงาเวียงเหล็ก,arms,arm_hide_arms,65,all,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_muay_boran_73,ปลอกแขนหนังพรานเงาสายคาดเชือก รุ่น 73,arms,arm_hide_arms,73,muay_boran,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_blade_73,ปลอกแขนหนังพรานเงาสายพรางเงา รุ่น 73,arms,arm_hide_arms,73,blade,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_hide_arms_6,ปลอกแขนหนังพรานเงาทัพหลวง,arms,arm_hide_arms,85,all,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_muay_boran_86,ปลอกแขนหนังพรานเงาสายคาดเชือก รุ่น 86,arms,arm_hide_arms,86,muay_boran,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_blade_86,ปลอกแขนหนังพรานเงาสายพรางเงา รุ่น 86,arms,arm_hide_arms,86,blade,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_hide_arms_7,ปลอกแขนหนังพรานเงาราชสำนัก,arms,arm_hide_arms,95,all,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_muay_boran_99,ปลอกแขนหนังพรานเงาสายคาดเชือก รุ่น 99,arms,arm_hide_arms,99,muay_boran,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_field_blade_99,ปลอกแขนหนังพรานเงาสายพรางเงา รุ่น 99,arms,arm_hide_arms,99,blade,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_hide_arms_8,ปลอกแขนหนังพรานเงาพิชัยยุทธ์,arms,arm_hide_arms,100,all,arms,arm_hide_arms,yes,yes,24,procedural-shared,320,sheet_arm_hide_arms,yes
+arm_medium_arms_1,ปลอกแขนเกราะเกล็ดทัพฝึกหัด,arms,arm_medium_arms,1,all,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_field_phutthaisawan_3,ปลอกแขนเกราะเกล็ดทัพสายดาบคู่ รุ่น 3,arms,arm_medium_arms,3,phutthaisawan,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_medium_arms_2,ปลอกแขนเกราะเกล็ดทัพชายป่า,arms,arm_medium_arms,10,all,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_field_phutthaisawan_16,ปลอกแขนเกราะเกล็ดทัพสายดาบคู่ รุ่น 16,arms,arm_medium_arms,16,phutthaisawan,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_medium_arms_3,ปลอกแขนเกราะเกล็ดทัพสำนักครู,arms,arm_medium_arms,25,all,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_field_phutthaisawan_31,ปลอกแขนเกราะเกล็ดทัพสายดาบคู่ รุ่น 31,arms,arm_medium_arms,31,phutthaisawan,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_field_phutthaisawan_44,ปลอกแขนเกราะเกล็ดทัพสายดาบคู่ รุ่น 44,arms,arm_medium_arms,44,phutthaisawan,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_medium_arms_4,ปลอกแขนเกราะเกล็ดทัพค่ายหน้า,arms,arm_medium_arms,45,all,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_field_phutthaisawan_58,ปลอกแขนเกราะเกล็ดทัพสายดาบคู่ รุ่น 58,arms,arm_medium_arms,58,phutthaisawan,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_medium_arms_5,ปลอกแขนเกราะเกล็ดทัพเวียงเหล็ก,arms,arm_medium_arms,65,all,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_field_phutthaisawan_73,ปลอกแขนเกราะเกล็ดทัพสายดาบคู่ รุ่น 73,arms,arm_medium_arms,73,phutthaisawan,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_medium_arms_6,ปลอกแขนเกราะเกล็ดทัพทัพหลวง,arms,arm_medium_arms,85,all,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_field_phutthaisawan_86,ปลอกแขนเกราะเกล็ดทัพสายดาบคู่ รุ่น 86,arms,arm_medium_arms,86,phutthaisawan,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_medium_arms_7,ปลอกแขนเกราะเกล็ดทัพราชสำนัก,arms,arm_medium_arms,95,all,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_field_phutthaisawan_99,ปลอกแขนเกราะเกล็ดทัพสายดาบคู่ รุ่น 99,arms,arm_medium_arms,99,phutthaisawan,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_medium_arms_8,ปลอกแขนเกราะเกล็ดทัพพิชัยยุทธ์,arms,arm_medium_arms,100,all,arms,arm_medium_arms,yes,yes,16,procedural-shared,240,sheet_arm_medium_arms,yes
+arm_cloth_chest_1,เสื้อผ้าจารอักขระฝึกหัด,chest,arm_cloth_chest,1,all,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_cloth_chest_2,เสื้อผ้าจารอักขระชายป่า,chest,arm_cloth_chest,10,all,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_seer_14,เสื้อผ้าจารอักขระสายครูอาคม รุ่น 14,chest,arm_cloth_chest,14,seer,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_mender_14,เสื้อผ้าจารอักขระสายเรียกขวัญ รุ่น 14,chest,arm_cloth_chest,14,mender,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_cloth_chest_3,เสื้อผ้าจารอักขระสำนักครู,chest,arm_cloth_chest,25,all,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_seer_28,เสื้อผ้าจารอักขระสายครูอาคม รุ่น 28,chest,arm_cloth_chest,28,seer,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_mender_28,เสื้อผ้าจารอักขระสายเรียกขวัญ รุ่น 28,chest,arm_cloth_chest,28,mender,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_seer_42,เสื้อผ้าจารอักขระสายครูอาคม รุ่น 42,chest,arm_cloth_chest,42,seer,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_mender_42,เสื้อผ้าจารอักขระสายเรียกขวัญ รุ่น 42,chest,arm_cloth_chest,42,mender,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_cloth_chest_4,เสื้อผ้าจารอักขระค่ายหน้า,chest,arm_cloth_chest,45,all,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_seer_56,เสื้อผ้าจารอักขระสายครูอาคม รุ่น 56,chest,arm_cloth_chest,56,seer,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_mender_56,เสื้อผ้าจารอักขระสายเรียกขวัญ รุ่น 56,chest,arm_cloth_chest,56,mender,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_cloth_chest_5,เสื้อผ้าจารอักขระเวียงเหล็ก,chest,arm_cloth_chest,65,all,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_seer_71,เสื้อผ้าจารอักขระสายครูอาคม รุ่น 71,chest,arm_cloth_chest,71,seer,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_mender_71,เสื้อผ้าจารอักขระสายเรียกขวัญ รุ่น 71,chest,arm_cloth_chest,71,mender,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_seer_83,เสื้อผ้าจารอักขระสายครูอาคม รุ่น 83,chest,arm_cloth_chest,83,seer,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_mender_83,เสื้อผ้าจารอักขระสายเรียกขวัญ รุ่น 83,chest,arm_cloth_chest,83,mender,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_cloth_chest_6,เสื้อผ้าจารอักขระทัพหลวง,chest,arm_cloth_chest,85,all,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_cloth_chest_7,เสื้อผ้าจารอักขระราชสำนัก,chest,arm_cloth_chest,95,all,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_seer_97,เสื้อผ้าจารอักขระสายครูอาคม รุ่น 97,chest,arm_cloth_chest,97,seer,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_field_mender_97,เสื้อผ้าจารอักขระสายเรียกขวัญ รุ่น 97,chest,arm_cloth_chest,97,mender,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_cloth_chest_8,เสื้อผ้าจารอักขระพิชัยยุทธ์,chest,arm_cloth_chest,100,all,chest,arm_cloth_chest,yes,yes,22,procedural-shared,388,sheet_arm_cloth_chest,yes
+arm_heavy_chest_1,เสื้อเกราะรักษาเวียงฝึกหัด,chest,arm_heavy_chest,1,all,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_heavy_chest_2,เสื้อเกราะรักษาเวียงชายป่า,chest,arm_heavy_chest,10,all,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_field_sentinel_14,เสื้อเกราะรักษาเวียงสายรักษาด่าน รุ่น 14,chest,arm_heavy_chest,14,sentinel,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_heavy_chest_3,เสื้อเกราะรักษาเวียงสำนักครู,chest,arm_heavy_chest,25,all,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_field_sentinel_28,เสื้อเกราะรักษาเวียงสายรักษาด่าน รุ่น 28,chest,arm_heavy_chest,28,sentinel,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_field_sentinel_42,เสื้อเกราะรักษาเวียงสายรักษาด่าน รุ่น 42,chest,arm_heavy_chest,42,sentinel,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_heavy_chest_4,เสื้อเกราะรักษาเวียงค่ายหน้า,chest,arm_heavy_chest,45,all,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_field_sentinel_56,เสื้อเกราะรักษาเวียงสายรักษาด่าน รุ่น 56,chest,arm_heavy_chest,56,sentinel,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_heavy_chest_5,เสื้อเกราะรักษาเวียงเวียงเหล็ก,chest,arm_heavy_chest,65,all,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_field_sentinel_71,เสื้อเกราะรักษาเวียงสายรักษาด่าน รุ่น 71,chest,arm_heavy_chest,71,sentinel,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_field_sentinel_83,เสื้อเกราะรักษาเวียงสายรักษาด่าน รุ่น 83,chest,arm_heavy_chest,83,sentinel,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_heavy_chest_6,เสื้อเกราะรักษาเวียงทัพหลวง,chest,arm_heavy_chest,85,all,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_heavy_chest_7,เสื้อเกราะรักษาเวียงราชสำนัก,chest,arm_heavy_chest,95,all,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_field_sentinel_97,เสื้อเกราะรักษาเวียงสายรักษาด่าน รุ่น 97,chest,arm_heavy_chest,97,sentinel,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_heavy_chest_8,เสื้อเกราะรักษาเวียงพิชัยยุทธ์,chest,arm_heavy_chest,100,all,chest,arm_heavy_chest,yes,yes,15,procedural-shared,904,sheet_arm_heavy_chest,yes
+arm_hide_chest_1,เสื้อหนังพรานเงาฝึกหัด,chest,arm_hide_chest,1,all,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_hide_chest_2,เสื้อหนังพรานเงาชายป่า,chest,arm_hide_chest,10,all,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_muay_boran_14,เสื้อหนังพรานเงาสายคาดเชือก รุ่น 14,chest,arm_hide_chest,14,muay_boran,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_blade_14,เสื้อหนังพรานเงาสายพรางเงา รุ่น 14,chest,arm_hide_chest,14,blade,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_hide_chest_3,เสื้อหนังพรานเงาสำนักครู,chest,arm_hide_chest,25,all,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_muay_boran_28,เสื้อหนังพรานเงาสายคาดเชือก รุ่น 28,chest,arm_hide_chest,28,muay_boran,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_blade_28,เสื้อหนังพรานเงาสายพรางเงา รุ่น 28,chest,arm_hide_chest,28,blade,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_muay_boran_42,เสื้อหนังพรานเงาสายคาดเชือก รุ่น 42,chest,arm_hide_chest,42,muay_boran,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_blade_42,เสื้อหนังพรานเงาสายพรางเงา รุ่น 42,chest,arm_hide_chest,42,blade,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_hide_chest_4,เสื้อหนังพรานเงาค่ายหน้า,chest,arm_hide_chest,45,all,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_muay_boran_56,เสื้อหนังพรานเงาสายคาดเชือก รุ่น 56,chest,arm_hide_chest,56,muay_boran,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_blade_56,เสื้อหนังพรานเงาสายพรางเงา รุ่น 56,chest,arm_hide_chest,56,blade,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_hide_chest_5,เสื้อหนังพรานเงาเวียงเหล็ก,chest,arm_hide_chest,65,all,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_muay_boran_71,เสื้อหนังพรานเงาสายคาดเชือก รุ่น 71,chest,arm_hide_chest,71,muay_boran,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_blade_71,เสื้อหนังพรานเงาสายพรางเงา รุ่น 71,chest,arm_hide_chest,71,blade,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_muay_boran_83,เสื้อหนังพรานเงาสายคาดเชือก รุ่น 83,chest,arm_hide_chest,83,muay_boran,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_blade_83,เสื้อหนังพรานเงาสายพรางเงา รุ่น 83,chest,arm_hide_chest,83,blade,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_hide_chest_6,เสื้อหนังพรานเงาทัพหลวง,chest,arm_hide_chest,85,all,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_hide_chest_7,เสื้อหนังพรานเงาราชสำนัก,chest,arm_hide_chest,95,all,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_muay_boran_97,เสื้อหนังพรานเงาสายคาดเชือก รุ่น 97,chest,arm_hide_chest,97,muay_boran,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_field_blade_97,เสื้อหนังพรานเงาสายพรางเงา รุ่น 97,chest,arm_hide_chest,97,blade,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_hide_chest_8,เสื้อหนังพรานเงาพิชัยยุทธ์,chest,arm_hide_chest,100,all,chest,arm_hide_chest,yes,yes,22,procedural-shared,400,sheet_arm_hide_chest,yes
+arm_medium_chest_1,เสื้อเกราะเกล็ดทัพฝึกหัด,chest,arm_medium_chest,1,all,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_medium_chest_2,เสื้อเกราะเกล็ดทัพชายป่า,chest,arm_medium_chest,10,all,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_field_phutthaisawan_14,เสื้อเกราะเกล็ดทัพสายดาบคู่ รุ่น 14,chest,arm_medium_chest,14,phutthaisawan,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_medium_chest_3,เสื้อเกราะเกล็ดทัพสำนักครู,chest,arm_medium_chest,25,all,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_field_phutthaisawan_28,เสื้อเกราะเกล็ดทัพสายดาบคู่ รุ่น 28,chest,arm_medium_chest,28,phutthaisawan,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_field_phutthaisawan_42,เสื้อเกราะเกล็ดทัพสายดาบคู่ รุ่น 42,chest,arm_medium_chest,42,phutthaisawan,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_medium_chest_4,เสื้อเกราะเกล็ดทัพค่ายหน้า,chest,arm_medium_chest,45,all,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_field_phutthaisawan_56,เสื้อเกราะเกล็ดทัพสายดาบคู่ รุ่น 56,chest,arm_medium_chest,56,phutthaisawan,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_medium_chest_5,เสื้อเกราะเกล็ดทัพเวียงเหล็ก,chest,arm_medium_chest,65,all,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_field_phutthaisawan_71,เสื้อเกราะเกล็ดทัพสายดาบคู่ รุ่น 71,chest,arm_medium_chest,71,phutthaisawan,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_field_phutthaisawan_83,เสื้อเกราะเกล็ดทัพสายดาบคู่ รุ่น 83,chest,arm_medium_chest,83,phutthaisawan,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_medium_chest_6,เสื้อเกราะเกล็ดทัพทัพหลวง,chest,arm_medium_chest,85,all,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_medium_chest_7,เสื้อเกราะเกล็ดทัพราชสำนัก,chest,arm_medium_chest,95,all,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_field_phutthaisawan_97,เสื้อเกราะเกล็ดทัพสายดาบคู่ รุ่น 97,chest,arm_medium_chest,97,phutthaisawan,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+arm_medium_chest_8,เสื้อเกราะเกล็ดทัพพิชัยยุทธ์,chest,arm_medium_chest,100,all,chest,arm_medium_chest,yes,yes,15,procedural-shared,732,sheet_arm_medium_chest,yes
+acc_boss_bound_temple,ตุ้มหูเสียงระฆัง,earring,acc_boss_bound_temple,20,all,leftEar|rightEar,acc_boss_bound_temple,no,yes,1,procedural-shared,312,sheet_acc_boss_bound_temple,yes
+acc_boss_fallen_city,ตุ้มหูกลองอาถรรพ์,earring,acc_boss_fallen_city,72,all,leftEar|rightEar,acc_boss_fallen_city,no,yes,1,procedural-shared,312,sheet_acc_boss_fallen_city,yes
+acc_boss_hex_ridge,ตุ้มหูวายุสามตรา,earring,acc_boss_hex_ridge,45,all,leftEar|rightEar,acc_boss_hex_ridge,no,yes,1,procedural-shared,312,sheet_acc_boss_hex_ridge,yes
+acc_boss_moon_cemetery,ตุ้มหูจันทร์ดับ,earring,acc_boss_moon_cemetery,32,all,leftEar|rightEar,acc_boss_moon_cemetery,no,yes,1,procedural-shared,312,sheet_acc_boss_moon_cemetery,yes
+acc_earrings_duelist_1,ตุ้มหูคมศึกฝึกหัด,earring,acc_earrings_duelist,1,all,leftEar|rightEar,acc_earrings_duelist,yes,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+acc_earrings_duelist_2,ตุ้มหูคมศึกชายป่า,earring,acc_earrings_duelist,10,all,leftEar|rightEar,acc_earrings_duelist,yes,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_muay_boran_12,ตุ้มหูคมศึกสายคาดเชือก รุ่น 12,earring,acc_earrings_duelist,12,muay_boran,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_blade_12,ตุ้มหูคมศึกสายพรางเงา รุ่น 12,earring,acc_earrings_duelist,12,blade,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+acc_earrings_duelist_3,ตุ้มหูคมศึกสำนักครู,earring,acc_earrings_duelist,25,all,leftEar|rightEar,acc_earrings_duelist,yes,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_muay_boran_26,ตุ้มหูคมศึกสายคาดเชือก รุ่น 26,earring,acc_earrings_duelist,26,muay_boran,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_blade_26,ตุ้มหูคมศึกสายพรางเงา รุ่น 26,earring,acc_earrings_duelist,26,blade,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_muay_boran_39,ตุ้มหูคมศึกสายคาดเชือก รุ่น 39,earring,acc_earrings_duelist,39,muay_boran,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_blade_39,ตุ้มหูคมศึกสายพรางเงา รุ่น 39,earring,acc_earrings_duelist,39,blade,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+acc_earrings_duelist_4,ตุ้มหูคมศึกค่ายหน้า,earring,acc_earrings_duelist,45,all,leftEar|rightEar,acc_earrings_duelist,yes,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_muay_boran_54,ตุ้มหูคมศึกสายคาดเชือก รุ่น 54,earring,acc_earrings_duelist,54,muay_boran,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_blade_54,ตุ้มหูคมศึกสายพรางเงา รุ่น 54,earring,acc_earrings_duelist,54,blade,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+acc_earrings_duelist_5,ตุ้มหูคมศึกเวียงเหล็ก,earring,acc_earrings_duelist,65,all,leftEar|rightEar,acc_earrings_duelist,yes,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_muay_boran_68,ตุ้มหูคมศึกสายคาดเชือก รุ่น 68,earring,acc_earrings_duelist,68,muay_boran,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_blade_68,ตุ้มหูคมศึกสายพรางเงา รุ่น 68,earring,acc_earrings_duelist,68,blade,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_muay_boran_81,ตุ้มหูคมศึกสายคาดเชือก รุ่น 81,earring,acc_earrings_duelist,81,muay_boran,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_blade_81,ตุ้มหูคมศึกสายพรางเงา รุ่น 81,earring,acc_earrings_duelist,81,blade,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+acc_earrings_duelist_6,ตุ้มหูคมศึกทัพหลวง,earring,acc_earrings_duelist,85,all,leftEar|rightEar,acc_earrings_duelist,yes,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_muay_boran_94,ตุ้มหูคมศึกสายคาดเชือก รุ่น 94,earring,acc_earrings_duelist,94,muay_boran,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+arm_field_blade_94,ตุ้มหูคมศึกสายพรางเงา รุ่น 94,earring,acc_earrings_duelist,94,blade,leftEar|rightEar,acc_earrings_duelist,no,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+acc_earrings_duelist_7,ตุ้มหูคมศึกราชสำนัก,earring,acc_earrings_duelist,95,all,leftEar|rightEar,acc_earrings_duelist,yes,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+acc_earrings_duelist_8,ตุ้มหูคมศึกพิชัยยุทธ์,earring,acc_earrings_duelist,100,all,leftEar|rightEar,acc_earrings_duelist,yes,yes,22,procedural-shared,288,sheet_acc_earrings_duelist,yes
+acc_earrings_focus_1,ตุ้มหูจารคาถาฝึกหัด,earring,acc_earrings_focus,1,all,leftEar|rightEar,acc_earrings_focus,yes,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+acc_earrings_focus_2,ตุ้มหูจารคาถาชายป่า,earring,acc_earrings_focus,10,all,leftEar|rightEar,acc_earrings_focus,yes,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_seer_12,ตุ้มหูจารคาถาสายครูอาคม รุ่น 12,earring,acc_earrings_focus,12,seer,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_mender_12,ตุ้มหูจารคาถาสายเรียกขวัญ รุ่น 12,earring,acc_earrings_focus,12,mender,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+acc_earrings_focus_3,ตุ้มหูจารคาถาสำนักครู,earring,acc_earrings_focus,25,all,leftEar|rightEar,acc_earrings_focus,yes,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_seer_26,ตุ้มหูจารคาถาสายครูอาคม รุ่น 26,earring,acc_earrings_focus,26,seer,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_mender_26,ตุ้มหูจารคาถาสายเรียกขวัญ รุ่น 26,earring,acc_earrings_focus,26,mender,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_seer_39,ตุ้มหูจารคาถาสายครูอาคม รุ่น 39,earring,acc_earrings_focus,39,seer,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_mender_39,ตุ้มหูจารคาถาสายเรียกขวัญ รุ่น 39,earring,acc_earrings_focus,39,mender,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+acc_earrings_focus_4,ตุ้มหูจารคาถาค่ายหน้า,earring,acc_earrings_focus,45,all,leftEar|rightEar,acc_earrings_focus,yes,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_seer_54,ตุ้มหูจารคาถาสายครูอาคม รุ่น 54,earring,acc_earrings_focus,54,seer,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_mender_54,ตุ้มหูจารคาถาสายเรียกขวัญ รุ่น 54,earring,acc_earrings_focus,54,mender,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+acc_earrings_focus_5,ตุ้มหูจารคาถาเวียงเหล็ก,earring,acc_earrings_focus,65,all,leftEar|rightEar,acc_earrings_focus,yes,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_seer_68,ตุ้มหูจารคาถาสายครูอาคม รุ่น 68,earring,acc_earrings_focus,68,seer,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_mender_68,ตุ้มหูจารคาถาสายเรียกขวัญ รุ่น 68,earring,acc_earrings_focus,68,mender,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_seer_81,ตุ้มหูจารคาถาสายครูอาคม รุ่น 81,earring,acc_earrings_focus,81,seer,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_mender_81,ตุ้มหูจารคาถาสายเรียกขวัญ รุ่น 81,earring,acc_earrings_focus,81,mender,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+acc_earrings_focus_6,ตุ้มหูจารคาถาทัพหลวง,earring,acc_earrings_focus,85,all,leftEar|rightEar,acc_earrings_focus,yes,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_seer_94,ตุ้มหูจารคาถาสายครูอาคม รุ่น 94,earring,acc_earrings_focus,94,seer,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+arm_field_mender_94,ตุ้มหูจารคาถาสายเรียกขวัญ รุ่น 94,earring,acc_earrings_focus,94,mender,leftEar|rightEar,acc_earrings_focus,no,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+acc_earrings_focus_7,ตุ้มหูจารคาถาราชสำนัก,earring,acc_earrings_focus,95,all,leftEar|rightEar,acc_earrings_focus,yes,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+acc_earrings_focus_8,ตุ้มหูจารคาถาพิชัยยุทธ์,earring,acc_earrings_focus,100,all,leftEar|rightEar,acc_earrings_focus,yes,yes,22,procedural-shared,288,sheet_acc_earrings_focus,yes
+acc_earrings_hunter_1,ตุ้มหูพรานป่า,earring,acc_earrings_hunter,1,all,leftEar|rightEar,acc_earrings_hunter,yes,yes,15,procedural-shared,288,acc_ring,yes
+acc_earrings_hunter_2,ตุ้มหูพรานป่าชายป่า,earring,acc_earrings_hunter,10,all,leftEar|rightEar,acc_earrings_hunter,yes,yes,15,procedural-shared,288,acc_ring,yes
+arm_field_phutthaisawan_12,ตุ้มหูพรานป่าสายดาบคู่ รุ่น 12,earring,acc_earrings_hunter,12,phutthaisawan,leftEar|rightEar,acc_earrings_hunter,no,yes,15,procedural-shared,288,,no
+acc_earrings_hunter_3,ตุ้มหูพรานป่าสำนักครู,earring,acc_earrings_hunter,25,all,leftEar|rightEar,acc_earrings_hunter,yes,yes,15,procedural-shared,288,acc_ring,yes
+arm_field_phutthaisawan_26,ตุ้มหูพรานป่าสายดาบคู่ รุ่น 26,earring,acc_earrings_hunter,26,phutthaisawan,leftEar|rightEar,acc_earrings_hunter,no,yes,15,procedural-shared,288,,no
+arm_field_phutthaisawan_39,ตุ้มหูพรานป่าสายดาบคู่ รุ่น 39,earring,acc_earrings_hunter,39,phutthaisawan,leftEar|rightEar,acc_earrings_hunter,no,yes,15,procedural-shared,288,,no
+acc_earrings_hunter_4,ตุ้มหูพรานป่าค่ายหน้า,earring,acc_earrings_hunter,45,all,leftEar|rightEar,acc_earrings_hunter,yes,yes,15,procedural-shared,288,acc_ring,yes
+arm_field_phutthaisawan_54,ตุ้มหูพรานป่าสายดาบคู่ รุ่น 54,earring,acc_earrings_hunter,54,phutthaisawan,leftEar|rightEar,acc_earrings_hunter,no,yes,15,procedural-shared,288,,no
+acc_earrings_hunter_5,ตุ้มหูพรานป่าเวียงเหล็ก,earring,acc_earrings_hunter,65,all,leftEar|rightEar,acc_earrings_hunter,yes,yes,15,procedural-shared,288,acc_ring,yes
+arm_field_phutthaisawan_68,ตุ้มหูพรานป่าสายดาบคู่ รุ่น 68,earring,acc_earrings_hunter,68,phutthaisawan,leftEar|rightEar,acc_earrings_hunter,no,yes,15,procedural-shared,288,,no
+arm_field_phutthaisawan_81,ตุ้มหูพรานป่าสายดาบคู่ รุ่น 81,earring,acc_earrings_hunter,81,phutthaisawan,leftEar|rightEar,acc_earrings_hunter,no,yes,15,procedural-shared,288,,no
+acc_earrings_hunter_6,ตุ้มหูพรานป่าทัพหลวง,earring,acc_earrings_hunter,85,all,leftEar|rightEar,acc_earrings_hunter,yes,yes,15,procedural-shared,288,acc_ring,yes
+arm_field_phutthaisawan_94,ตุ้มหูพรานป่าสายดาบคู่ รุ่น 94,earring,acc_earrings_hunter,94,phutthaisawan,leftEar|rightEar,acc_earrings_hunter,no,yes,15,procedural-shared,288,,no
+acc_earrings_hunter_7,ตุ้มหูพรานป่าราชสำนัก,earring,acc_earrings_hunter,95,all,leftEar|rightEar,acc_earrings_hunter,yes,yes,15,procedural-shared,288,acc_ring,yes
+acc_earrings_hunter_8,ตุ้มหูพรานป่าพิชัยยุทธ์,earring,acc_earrings_hunter,100,all,leftEar|rightEar,acc_earrings_hunter,yes,yes,15,procedural-shared,288,acc_ring,yes
+acc_earrings_lotus_1,ตุ้มหูบัวลงอาคม,earring,acc_earrings_lotus,1,all,leftEar|rightEar,acc_earrings_lotus,yes,yes,8,procedural-shared,288,sheet_acc_earrings_lotus,yes
+acc_earrings_lotus_2,ตุ้มหูบัวลงอาคมชายป่า,earring,acc_earrings_lotus,10,all,leftEar|rightEar,acc_earrings_lotus,yes,yes,8,procedural-shared,288,sheet_acc_earrings_lotus,yes
+acc_earrings_lotus_3,ตุ้มหูบัวลงอาคมสำนักครู,earring,acc_earrings_lotus,25,all,leftEar|rightEar,acc_earrings_lotus,yes,yes,8,procedural-shared,288,sheet_acc_earrings_lotus,yes
+acc_earrings_lotus_4,ตุ้มหูบัวลงอาคมค่ายหน้า,earring,acc_earrings_lotus,45,all,leftEar|rightEar,acc_earrings_lotus,yes,yes,8,procedural-shared,288,sheet_acc_earrings_lotus,yes
+acc_earrings_lotus_5,ตุ้มหูบัวลงอาคมเวียงเหล็ก,earring,acc_earrings_lotus,65,all,leftEar|rightEar,acc_earrings_lotus,yes,yes,8,procedural-shared,288,sheet_acc_earrings_lotus,yes
+acc_earrings_lotus_6,ตุ้มหูบัวลงอาคมทัพหลวง,earring,acc_earrings_lotus,85,all,leftEar|rightEar,acc_earrings_lotus,yes,yes,8,procedural-shared,288,sheet_acc_earrings_lotus,yes
+acc_earrings_lotus_7,ตุ้มหูบัวลงอาคมราชสำนัก,earring,acc_earrings_lotus,95,all,leftEar|rightEar,acc_earrings_lotus,yes,yes,8,procedural-shared,288,sheet_acc_earrings_lotus,yes
+acc_earrings_lotus_8,ตุ้มหูบัวลงอาคมพิชัยยุทธ์,earring,acc_earrings_lotus,100,all,leftEar|rightEar,acc_earrings_lotus,yes,yes,8,procedural-shared,288,sheet_acc_earrings_lotus,yes
+acc_earrings_ward_1,ตุ้มหูยันต์คุ้มกาย,earring,acc_earrings_ward,1,all,leftEar|rightEar,acc_earrings_ward,yes,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+acc_earrings_ward_2,ตุ้มหูยันต์คุ้มกายชายป่า,earring,acc_earrings_ward,10,all,leftEar|rightEar,acc_earrings_ward,yes,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+arm_field_sentinel_12,ตุ้มหูยันต์คุ้มกายสายรักษาด่าน รุ่น 12,earring,acc_earrings_ward,12,sentinel,leftEar|rightEar,acc_earrings_ward,no,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+acc_earrings_ward_3,ตุ้มหูยันต์คุ้มกายสำนักครู,earring,acc_earrings_ward,25,all,leftEar|rightEar,acc_earrings_ward,yes,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+arm_field_sentinel_26,ตุ้มหูยันต์คุ้มกายสายรักษาด่าน รุ่น 26,earring,acc_earrings_ward,26,sentinel,leftEar|rightEar,acc_earrings_ward,no,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+arm_field_sentinel_39,ตุ้มหูยันต์คุ้มกายสายรักษาด่าน รุ่น 39,earring,acc_earrings_ward,39,sentinel,leftEar|rightEar,acc_earrings_ward,no,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+acc_earrings_ward_4,ตุ้มหูยันต์คุ้มกายค่ายหน้า,earring,acc_earrings_ward,45,all,leftEar|rightEar,acc_earrings_ward,yes,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+arm_field_sentinel_54,ตุ้มหูยันต์คุ้มกายสายรักษาด่าน รุ่น 54,earring,acc_earrings_ward,54,sentinel,leftEar|rightEar,acc_earrings_ward,no,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+acc_earrings_ward_5,ตุ้มหูยันต์คุ้มกายเวียงเหล็ก,earring,acc_earrings_ward,65,all,leftEar|rightEar,acc_earrings_ward,yes,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+arm_field_sentinel_68,ตุ้มหูยันต์คุ้มกายสายรักษาด่าน รุ่น 68,earring,acc_earrings_ward,68,sentinel,leftEar|rightEar,acc_earrings_ward,no,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+arm_field_sentinel_81,ตุ้มหูยันต์คุ้มกายสายรักษาด่าน รุ่น 81,earring,acc_earrings_ward,81,sentinel,leftEar|rightEar,acc_earrings_ward,no,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+acc_earrings_ward_6,ตุ้มหูยันต์คุ้มกายทัพหลวง,earring,acc_earrings_ward,85,all,leftEar|rightEar,acc_earrings_ward,yes,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+arm_field_sentinel_94,ตุ้มหูยันต์คุ้มกายสายรักษาด่าน รุ่น 94,earring,acc_earrings_ward,94,sentinel,leftEar|rightEar,acc_earrings_ward,no,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+acc_earrings_ward_7,ตุ้มหูยันต์คุ้มกายราชสำนัก,earring,acc_earrings_ward,95,all,leftEar|rightEar,acc_earrings_ward,yes,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+acc_earrings_ward_8,ตุ้มหูยันต์คุ้มกายพิชัยยุทธ์,earring,acc_earrings_ward,100,all,leftEar|rightEar,acc_earrings_ward,yes,yes,15,procedural-shared,288,sheet_acc_earrings_ward,yes
+arm_cloth_feet_1,รองเท้าผ้าจารอักขระฝึกหัด,feet,arm_cloth_feet,1,all,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_seer_5,รองเท้าผ้าจารอักขระสายครูอาคม รุ่น 5,feet,arm_cloth_feet,5,seer,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_mender_5,รองเท้าผ้าจารอักขระสายเรียกขวัญ รุ่น 5,feet,arm_cloth_feet,5,mender,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_cloth_feet_2,รองเท้าผ้าจารอักขระชายป่า,feet,arm_cloth_feet,10,all,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_seer_18,รองเท้าผ้าจารอักขระสายครูอาคม รุ่น 18,feet,arm_cloth_feet,18,seer,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_mender_18,รองเท้าผ้าจารอักขระสายเรียกขวัญ รุ่น 18,feet,arm_cloth_feet,18,mender,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_cloth_feet_3,รองเท้าผ้าจารอักขระสำนักครู,feet,arm_cloth_feet,25,all,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_seer_33,รองเท้าผ้าจารอักขระสายครูอาคม รุ่น 33,feet,arm_cloth_feet,33,seer,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_mender_33,รองเท้าผ้าจารอักขระสายเรียกขวัญ รุ่น 33,feet,arm_cloth_feet,33,mender,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_cloth_feet_4,รองเท้าผ้าจารอักขระค่ายหน้า,feet,arm_cloth_feet,45,all,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_seer_47,รองเท้าผ้าจารอักขระสายครูอาคม รุ่น 47,feet,arm_cloth_feet,47,seer,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_mender_47,รองเท้าผ้าจารอักขระสายเรียกขวัญ รุ่น 47,feet,arm_cloth_feet,47,mender,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_seer_61,รองเท้าผ้าจารอักขระสายครูอาคม รุ่น 61,feet,arm_cloth_feet,61,seer,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_mender_61,รองเท้าผ้าจารอักขระสายเรียกขวัญ รุ่น 61,feet,arm_cloth_feet,61,mender,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_cloth_feet_5,รองเท้าผ้าจารอักขระเวียงเหล็ก,feet,arm_cloth_feet,65,all,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_seer_75,รองเท้าผ้าจารอักขระสายครูอาคม รุ่น 75,feet,arm_cloth_feet,75,seer,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_mender_75,รองเท้าผ้าจารอักขระสายเรียกขวัญ รุ่น 75,feet,arm_cloth_feet,75,mender,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_cloth_feet_6,รองเท้าผ้าจารอักขระทัพหลวง,feet,arm_cloth_feet,85,all,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_seer_88,รองเท้าผ้าจารอักขระสายครูอาคม รุ่น 88,feet,arm_cloth_feet,88,seer,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_field_mender_88,รองเท้าผ้าจารอักขระสายเรียกขวัญ รุ่น 88,feet,arm_cloth_feet,88,mender,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_cloth_feet_7,รองเท้าผ้าจารอักขระราชสำนัก,feet,arm_cloth_feet,95,all,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_cloth_feet_8,รองเท้าผ้าจารอักขระพิชัยยุทธ์,feet,arm_cloth_feet,100,all,feet,arm_cloth_feet,yes,yes,22,procedural-shared,104,sheet_arm_cloth_feet,yes
+arm_heavy_feet_1,รองเท้าเกราะรักษาเวียงฝึกหัด,feet,arm_heavy_feet,1,all,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_field_sentinel_5,รองเท้าเกราะรักษาเวียงสายรักษาด่าน รุ่น 5,feet,arm_heavy_feet,5,sentinel,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_heavy_feet_2,รองเท้าเกราะรักษาเวียงชายป่า,feet,arm_heavy_feet,10,all,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_field_sentinel_18,รองเท้าเกราะรักษาเวียงสายรักษาด่าน รุ่น 18,feet,arm_heavy_feet,18,sentinel,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_heavy_feet_3,รองเท้าเกราะรักษาเวียงสำนักครู,feet,arm_heavy_feet,25,all,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_field_sentinel_33,รองเท้าเกราะรักษาเวียงสายรักษาด่าน รุ่น 33,feet,arm_heavy_feet,33,sentinel,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_heavy_feet_4,รองเท้าเกราะรักษาเวียงค่ายหน้า,feet,arm_heavy_feet,45,all,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_field_sentinel_47,รองเท้าเกราะรักษาเวียงสายรักษาด่าน รุ่น 47,feet,arm_heavy_feet,47,sentinel,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_field_sentinel_61,รองเท้าเกราะรักษาเวียงสายรักษาด่าน รุ่น 61,feet,arm_heavy_feet,61,sentinel,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_heavy_feet_5,รองเท้าเกราะรักษาเวียงเวียงเหล็ก,feet,arm_heavy_feet,65,all,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_field_sentinel_75,รองเท้าเกราะรักษาเวียงสายรักษาด่าน รุ่น 75,feet,arm_heavy_feet,75,sentinel,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_heavy_feet_6,รองเท้าเกราะรักษาเวียงทัพหลวง,feet,arm_heavy_feet,85,all,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_field_sentinel_88,รองเท้าเกราะรักษาเวียงสายรักษาด่าน รุ่น 88,feet,arm_heavy_feet,88,sentinel,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_heavy_feet_7,รองเท้าเกราะรักษาเวียงราชสำนัก,feet,arm_heavy_feet,95,all,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_heavy_feet_8,รองเท้าเกราะรักษาเวียงพิชัยยุทธ์,feet,arm_heavy_feet,100,all,feet,arm_heavy_feet,yes,yes,15,procedural-shared,128,sheet_arm_heavy_feet,yes
+arm_hide_feet_1,รองเท้าหนังพรานเงาฝึกหัด,feet,arm_hide_feet,1,all,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_muay_boran_5,รองเท้าหนังพรานเงาสายคาดเชือก รุ่น 5,feet,arm_hide_feet,5,muay_boran,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_blade_5,รองเท้าหนังพรานเงาสายพรางเงา รุ่น 5,feet,arm_hide_feet,5,blade,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_hide_feet_2,รองเท้าหนังพรานเงาชายป่า,feet,arm_hide_feet,10,all,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_muay_boran_18,รองเท้าหนังพรานเงาสายคาดเชือก รุ่น 18,feet,arm_hide_feet,18,muay_boran,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_blade_18,รองเท้าหนังพรานเงาสายพรางเงา รุ่น 18,feet,arm_hide_feet,18,blade,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_hide_feet_3,รองเท้าหนังพรานเงาสำนักครู,feet,arm_hide_feet,25,all,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_muay_boran_33,รองเท้าหนังพรานเงาสายคาดเชือก รุ่น 33,feet,arm_hide_feet,33,muay_boran,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_blade_33,รองเท้าหนังพรานเงาสายพรางเงา รุ่น 33,feet,arm_hide_feet,33,blade,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_hide_feet_4,รองเท้าหนังพรานเงาค่ายหน้า,feet,arm_hide_feet,45,all,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_muay_boran_47,รองเท้าหนังพรานเงาสายคาดเชือก รุ่น 47,feet,arm_hide_feet,47,muay_boran,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_blade_47,รองเท้าหนังพรานเงาสายพรางเงา รุ่น 47,feet,arm_hide_feet,47,blade,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_muay_boran_61,รองเท้าหนังพรานเงาสายคาดเชือก รุ่น 61,feet,arm_hide_feet,61,muay_boran,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_blade_61,รองเท้าหนังพรานเงาสายพรางเงา รุ่น 61,feet,arm_hide_feet,61,blade,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_hide_feet_5,รองเท้าหนังพรานเงาเวียงเหล็ก,feet,arm_hide_feet,65,all,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_muay_boran_75,รองเท้าหนังพรานเงาสายคาดเชือก รุ่น 75,feet,arm_hide_feet,75,muay_boran,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_blade_75,รองเท้าหนังพรานเงาสายพรางเงา รุ่น 75,feet,arm_hide_feet,75,blade,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_hide_feet_6,รองเท้าหนังพรานเงาทัพหลวง,feet,arm_hide_feet,85,all,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_muay_boran_88,รองเท้าหนังพรานเงาสายคาดเชือก รุ่น 88,feet,arm_hide_feet,88,muay_boran,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_field_blade_88,รองเท้าหนังพรานเงาสายพรางเงา รุ่น 88,feet,arm_hide_feet,88,blade,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_hide_feet_7,รองเท้าหนังพรานเงาราชสำนัก,feet,arm_hide_feet,95,all,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_hide_feet_8,รองเท้าหนังพรานเงาพิชัยยุทธ์,feet,arm_hide_feet,100,all,feet,arm_hide_feet,yes,yes,22,procedural-shared,104,sheet_arm_hide_feet,yes
+arm_medium_feet_1,รองเท้าเกราะเกล็ดทัพฝึกหัด,feet,arm_medium_feet,1,all,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_field_phutthaisawan_5,รองเท้าเกราะเกล็ดทัพสายดาบคู่ รุ่น 5,feet,arm_medium_feet,5,phutthaisawan,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_medium_feet_2,รองเท้าเกราะเกล็ดทัพชายป่า,feet,arm_medium_feet,10,all,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_field_phutthaisawan_18,รองเท้าเกราะเกล็ดทัพสายดาบคู่ รุ่น 18,feet,arm_medium_feet,18,phutthaisawan,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_medium_feet_3,รองเท้าเกราะเกล็ดทัพสำนักครู,feet,arm_medium_feet,25,all,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_field_phutthaisawan_33,รองเท้าเกราะเกล็ดทัพสายดาบคู่ รุ่น 33,feet,arm_medium_feet,33,phutthaisawan,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_medium_feet_4,รองเท้าเกราะเกล็ดทัพค่ายหน้า,feet,arm_medium_feet,45,all,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_field_phutthaisawan_47,รองเท้าเกราะเกล็ดทัพสายดาบคู่ รุ่น 47,feet,arm_medium_feet,47,phutthaisawan,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_field_phutthaisawan_61,รองเท้าเกราะเกล็ดทัพสายดาบคู่ รุ่น 61,feet,arm_medium_feet,61,phutthaisawan,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_medium_feet_5,รองเท้าเกราะเกล็ดทัพเวียงเหล็ก,feet,arm_medium_feet,65,all,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_field_phutthaisawan_75,รองเท้าเกราะเกล็ดทัพสายดาบคู่ รุ่น 75,feet,arm_medium_feet,75,phutthaisawan,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_medium_feet_6,รองเท้าเกราะเกล็ดทัพทัพหลวง,feet,arm_medium_feet,85,all,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_field_phutthaisawan_88,รองเท้าเกราะเกล็ดทัพสายดาบคู่ รุ่น 88,feet,arm_medium_feet,88,phutthaisawan,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_medium_feet_7,รองเท้าเกราะเกล็ดทัพราชสำนัก,feet,arm_medium_feet,95,all,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_medium_feet_8,รองเท้าเกราะเกล็ดทัพพิชัยยุทธ์,feet,arm_medium_feet,100,all,feet,arm_medium_feet,yes,yes,15,procedural-shared,128,sheet_arm_medium_feet,yes
+arm_cloth_head_1,เครื่องสวมศีรษะผ้าจารอักขระฝึกหัด,head,arm_cloth_head,1,all,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_seer_4,เครื่องสวมศีรษะผ้าจารอักขระสายครูอาคม รุ่น 4,head,arm_cloth_head,4,seer,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_mender_4,เครื่องสวมศีรษะผ้าจารอักขระสายเรียกขวัญ รุ่น 4,head,arm_cloth_head,4,mender,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_cloth_head_2,เครื่องสวมศีรษะผ้าจารอักขระชายป่า,head,arm_cloth_head,10,all,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_seer_17,เครื่องสวมศีรษะผ้าจารอักขระสายครูอาคม รุ่น 17,head,arm_cloth_head,17,seer,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_mender_17,เครื่องสวมศีรษะผ้าจารอักขระสายเรียกขวัญ รุ่น 17,head,arm_cloth_head,17,mender,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_cloth_head_3,เครื่องสวมศีรษะผ้าจารอักขระสำนักครู,head,arm_cloth_head,25,all,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_seer_32,เครื่องสวมศีรษะผ้าจารอักขระสายครูอาคม รุ่น 32,head,arm_cloth_head,32,seer,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_mender_32,เครื่องสวมศีรษะผ้าจารอักขระสายเรียกขวัญ รุ่น 32,head,arm_cloth_head,32,mender,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_cloth_head_4,เครื่องสวมศีรษะผ้าจารอักขระค่ายหน้า,head,arm_cloth_head,45,all,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_seer_46,เครื่องสวมศีรษะผ้าจารอักขระสายครูอาคม รุ่น 46,head,arm_cloth_head,46,seer,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_mender_46,เครื่องสวมศีรษะผ้าจารอักขระสายเรียกขวัญ รุ่น 46,head,arm_cloth_head,46,mender,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_seer_59,เครื่องสวมศีรษะผ้าจารอักขระสายครูอาคม รุ่น 59,head,arm_cloth_head,59,seer,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_mender_59,เครื่องสวมศีรษะผ้าจารอักขระสายเรียกขวัญ รุ่น 59,head,arm_cloth_head,59,mender,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_cloth_head_5,เครื่องสวมศีรษะผ้าจารอักขระเวียงเหล็ก,head,arm_cloth_head,65,all,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_seer_74,เครื่องสวมศีรษะผ้าจารอักขระสายครูอาคม รุ่น 74,head,arm_cloth_head,74,seer,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_mender_74,เครื่องสวมศีรษะผ้าจารอักขระสายเรียกขวัญ รุ่น 74,head,arm_cloth_head,74,mender,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_cloth_head_6,เครื่องสวมศีรษะผ้าจารอักขระทัพหลวง,head,arm_cloth_head,85,all,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_seer_87,เครื่องสวมศีรษะผ้าจารอักขระสายครูอาคม รุ่น 87,head,arm_cloth_head,87,seer,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_field_mender_87,เครื่องสวมศีรษะผ้าจารอักขระสายเรียกขวัญ รุ่น 87,head,arm_cloth_head,87,mender,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_cloth_head_7,เครื่องสวมศีรษะผ้าจารอักขระราชสำนัก,head,arm_cloth_head,95,all,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_cloth_head_8,เครื่องสวมศีรษะผ้าจารอักขระพิชัยยุทธ์,head,arm_cloth_head,100,all,head,arm_cloth_head,yes,yes,22,procedural-shared,68,sheet_arm_cloth_head,yes
+arm_heavy_head_1,เครื่องสวมศีรษะเกราะรักษาเวียงฝึกหัด,head,arm_heavy_head,1,all,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_field_sentinel_4,เครื่องสวมศีรษะเกราะรักษาเวียงสายรักษาด่าน รุ่น 4,head,arm_heavy_head,4,sentinel,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_heavy_head_2,เครื่องสวมศีรษะเกราะรักษาเวียงชายป่า,head,arm_heavy_head,10,all,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_field_sentinel_17,เครื่องสวมศีรษะเกราะรักษาเวียงสายรักษาด่าน รุ่น 17,head,arm_heavy_head,17,sentinel,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_heavy_head_3,เครื่องสวมศีรษะเกราะรักษาเวียงสำนักครู,head,arm_heavy_head,25,all,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_field_sentinel_32,เครื่องสวมศีรษะเกราะรักษาเวียงสายรักษาด่าน รุ่น 32,head,arm_heavy_head,32,sentinel,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_heavy_head_4,เครื่องสวมศีรษะเกราะรักษาเวียงค่ายหน้า,head,arm_heavy_head,45,all,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_field_sentinel_46,เครื่องสวมศีรษะเกราะรักษาเวียงสายรักษาด่าน รุ่น 46,head,arm_heavy_head,46,sentinel,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_field_sentinel_59,เครื่องสวมศีรษะเกราะรักษาเวียงสายรักษาด่าน รุ่น 59,head,arm_heavy_head,59,sentinel,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_heavy_head_5,เครื่องสวมศีรษะเกราะรักษาเวียงเวียงเหล็ก,head,arm_heavy_head,65,all,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_field_sentinel_74,เครื่องสวมศีรษะเกราะรักษาเวียงสายรักษาด่าน รุ่น 74,head,arm_heavy_head,74,sentinel,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_heavy_head_6,เครื่องสวมศีรษะเกราะรักษาเวียงทัพหลวง,head,arm_heavy_head,85,all,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_field_sentinel_87,เครื่องสวมศีรษะเกราะรักษาเวียงสายรักษาด่าน รุ่น 87,head,arm_heavy_head,87,sentinel,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_heavy_head_7,เครื่องสวมศีรษะเกราะรักษาเวียงราชสำนัก,head,arm_heavy_head,95,all,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_heavy_head_8,เครื่องสวมศีรษะเกราะรักษาเวียงพิชัยยุทธ์,head,arm_heavy_head,100,all,head,arm_heavy_head,yes,yes,15,procedural-shared,1400,sheet_arm_heavy_head,yes
+arm_hide_head_1,เครื่องสวมศีรษะหนังพรานเงาฝึกหัด,head,arm_hide_head,1,all,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_muay_boran_4,เครื่องสวมศีรษะหนังพรานเงาสายคาดเชือก รุ่น 4,head,arm_hide_head,4,muay_boran,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_blade_4,เครื่องสวมศีรษะหนังพรานเงาสายพรางเงา รุ่น 4,head,arm_hide_head,4,blade,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_hide_head_2,เครื่องสวมศีรษะหนังพรานเงาชายป่า,head,arm_hide_head,10,all,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_muay_boran_17,เครื่องสวมศีรษะหนังพรานเงาสายคาดเชือก รุ่น 17,head,arm_hide_head,17,muay_boran,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_blade_17,เครื่องสวมศีรษะหนังพรานเงาสายพรางเงา รุ่น 17,head,arm_hide_head,17,blade,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_hide_head_3,เครื่องสวมศีรษะหนังพรานเงาสำนักครู,head,arm_hide_head,25,all,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_muay_boran_32,เครื่องสวมศีรษะหนังพรานเงาสายคาดเชือก รุ่น 32,head,arm_hide_head,32,muay_boran,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_blade_32,เครื่องสวมศีรษะหนังพรานเงาสายพรางเงา รุ่น 32,head,arm_hide_head,32,blade,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_hide_head_4,เครื่องสวมศีรษะหนังพรานเงาค่ายหน้า,head,arm_hide_head,45,all,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_muay_boran_46,เครื่องสวมศีรษะหนังพรานเงาสายคาดเชือก รุ่น 46,head,arm_hide_head,46,muay_boran,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_blade_46,เครื่องสวมศีรษะหนังพรานเงาสายพรางเงา รุ่น 46,head,arm_hide_head,46,blade,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_muay_boran_59,เครื่องสวมศีรษะหนังพรานเงาสายคาดเชือก รุ่น 59,head,arm_hide_head,59,muay_boran,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_blade_59,เครื่องสวมศีรษะหนังพรานเงาสายพรางเงา รุ่น 59,head,arm_hide_head,59,blade,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_hide_head_5,เครื่องสวมศีรษะหนังพรานเงาเวียงเหล็ก,head,arm_hide_head,65,all,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_muay_boran_74,เครื่องสวมศีรษะหนังพรานเงาสายคาดเชือก รุ่น 74,head,arm_hide_head,74,muay_boran,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_blade_74,เครื่องสวมศีรษะหนังพรานเงาสายพรางเงา รุ่น 74,head,arm_hide_head,74,blade,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_hide_head_6,เครื่องสวมศีรษะหนังพรานเงาทัพหลวง,head,arm_hide_head,85,all,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_muay_boran_87,เครื่องสวมศีรษะหนังพรานเงาสายคาดเชือก รุ่น 87,head,arm_hide_head,87,muay_boran,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_field_blade_87,เครื่องสวมศีรษะหนังพรานเงาสายพรางเงา รุ่น 87,head,arm_hide_head,87,blade,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_hide_head_7,เครื่องสวมศีรษะหนังพรานเงาราชสำนัก,head,arm_hide_head,95,all,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_hide_head_8,เครื่องสวมศีรษะหนังพรานเงาพิชัยยุทธ์,head,arm_hide_head,100,all,head,arm_hide_head,yes,yes,22,procedural-shared,1208,sheet_arm_hide_head,yes
+arm_medium_head_1,เครื่องสวมศีรษะเกราะเกล็ดทัพฝึกหัด,head,arm_medium_head,1,all,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_field_phutthaisawan_4,เครื่องสวมศีรษะเกราะเกล็ดทัพสายดาบคู่ รุ่น 4,head,arm_medium_head,4,phutthaisawan,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_medium_head_2,เครื่องสวมศีรษะเกราะเกล็ดทัพชายป่า,head,arm_medium_head,10,all,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_field_phutthaisawan_17,เครื่องสวมศีรษะเกราะเกล็ดทัพสายดาบคู่ รุ่น 17,head,arm_medium_head,17,phutthaisawan,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_medium_head_3,เครื่องสวมศีรษะเกราะเกล็ดทัพสำนักครู,head,arm_medium_head,25,all,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_field_phutthaisawan_32,เครื่องสวมศีรษะเกราะเกล็ดทัพสายดาบคู่ รุ่น 32,head,arm_medium_head,32,phutthaisawan,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_medium_head_4,เครื่องสวมศีรษะเกราะเกล็ดทัพค่ายหน้า,head,arm_medium_head,45,all,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_field_phutthaisawan_46,เครื่องสวมศีรษะเกราะเกล็ดทัพสายดาบคู่ รุ่น 46,head,arm_medium_head,46,phutthaisawan,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_field_phutthaisawan_59,เครื่องสวมศีรษะเกราะเกล็ดทัพสายดาบคู่ รุ่น 59,head,arm_medium_head,59,phutthaisawan,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_medium_head_5,เครื่องสวมศีรษะเกราะเกล็ดทัพเวียงเหล็ก,head,arm_medium_head,65,all,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_field_phutthaisawan_74,เครื่องสวมศีรษะเกราะเกล็ดทัพสายดาบคู่ รุ่น 74,head,arm_medium_head,74,phutthaisawan,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_medium_head_6,เครื่องสวมศีรษะเกราะเกล็ดทัพทัพหลวง,head,arm_medium_head,85,all,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_field_phutthaisawan_87,เครื่องสวมศีรษะเกราะเกล็ดทัพสายดาบคู่ รุ่น 87,head,arm_medium_head,87,phutthaisawan,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_medium_head_7,เครื่องสวมศีรษะเกราะเกล็ดทัพราชสำนัก,head,arm_medium_head,95,all,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_medium_head_8,เครื่องสวมศีรษะเกราะเกล็ดทัพพิชัยยุทธ์,head,arm_medium_head,100,all,head,arm_medium_head,yes,yes,15,procedural-shared,1252,sheet_arm_medium_head,yes
+arm_cloth_leftHand_1,ถุงมือซ้ายผ้าจารอักขระฝึกหัด,leftHand,arm_cloth_leftHand,1,all,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_cloth_leftHand_2,ถุงมือซ้ายผ้าจารอักขระชายป่า,leftHand,arm_cloth_leftHand,10,all,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_seer_11,ถุงมือซ้ายผ้าจารอักขระสายครูอาคม รุ่น 11,leftHand,arm_cloth_leftHand,11,seer,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_mender_11,ถุงมือซ้ายผ้าจารอักขระสายเรียกขวัญ รุ่น 11,leftHand,arm_cloth_leftHand,11,mender,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_seer_24,ถุงมือซ้ายผ้าจารอักขระสายครูอาคม รุ่น 24,leftHand,arm_cloth_leftHand,24,seer,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_mender_24,ถุงมือซ้ายผ้าจารอักขระสายเรียกขวัญ รุ่น 24,leftHand,arm_cloth_leftHand,24,mender,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_cloth_leftHand_3,ถุงมือซ้ายผ้าจารอักขระสำนักครู,leftHand,arm_cloth_leftHand,25,all,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_seer_38,ถุงมือซ้ายผ้าจารอักขระสายครูอาคม รุ่น 38,leftHand,arm_cloth_leftHand,38,seer,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_mender_38,ถุงมือซ้ายผ้าจารอักขระสายเรียกขวัญ รุ่น 38,leftHand,arm_cloth_leftHand,38,mender,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_cloth_leftHand_4,ถุงมือซ้ายผ้าจารอักขระค่ายหน้า,leftHand,arm_cloth_leftHand,45,all,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_seer_53,ถุงมือซ้ายผ้าจารอักขระสายครูอาคม รุ่น 53,leftHand,arm_cloth_leftHand,53,seer,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_mender_53,ถุงมือซ้ายผ้าจารอักขระสายเรียกขวัญ รุ่น 53,leftHand,arm_cloth_leftHand,53,mender,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_cloth_leftHand_5,ถุงมือซ้ายผ้าจารอักขระเวียงเหล็ก,leftHand,arm_cloth_leftHand,65,all,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_seer_67,ถุงมือซ้ายผ้าจารอักขระสายครูอาคม รุ่น 67,leftHand,arm_cloth_leftHand,67,seer,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_mender_67,ถุงมือซ้ายผ้าจารอักขระสายเรียกขวัญ รุ่น 67,leftHand,arm_cloth_leftHand,67,mender,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_seer_80,ถุงมือซ้ายผ้าจารอักขระสายครูอาคม รุ่น 80,leftHand,arm_cloth_leftHand,80,seer,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_mender_80,ถุงมือซ้ายผ้าจารอักขระสายเรียกขวัญ รุ่น 80,leftHand,arm_cloth_leftHand,80,mender,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_cloth_leftHand_6,ถุงมือซ้ายผ้าจารอักขระทัพหลวง,leftHand,arm_cloth_leftHand,85,all,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_seer_93,ถุงมือซ้ายผ้าจารอักขระสายครูอาคม รุ่น 93,leftHand,arm_cloth_leftHand,93,seer,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_field_mender_93,ถุงมือซ้ายผ้าจารอักขระสายเรียกขวัญ รุ่น 93,leftHand,arm_cloth_leftHand,93,mender,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_cloth_leftHand_7,ถุงมือซ้ายผ้าจารอักขระราชสำนัก,leftHand,arm_cloth_leftHand,95,all,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_cloth_leftHand_8,ถุงมือซ้ายผ้าจารอักขระพิชัยยุทธ์,leftHand,arm_cloth_leftHand,100,all,leftHand,arm_cloth_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_leftHand,yes
+arm_heavy_leftHand_1,ถุงมือซ้ายเกราะรักษาเวียงฝึกหัด,leftHand,arm_heavy_leftHand,1,all,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_heavy_leftHand_2,ถุงมือซ้ายเกราะรักษาเวียงชายป่า,leftHand,arm_heavy_leftHand,10,all,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_field_sentinel_11,ถุงมือซ้ายเกราะรักษาเวียงสายรักษาด่าน รุ่น 11,leftHand,arm_heavy_leftHand,11,sentinel,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_field_sentinel_24,ถุงมือซ้ายเกราะรักษาเวียงสายรักษาด่าน รุ่น 24,leftHand,arm_heavy_leftHand,24,sentinel,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_heavy_leftHand_3,ถุงมือซ้ายเกราะรักษาเวียงสำนักครู,leftHand,arm_heavy_leftHand,25,all,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_field_sentinel_38,ถุงมือซ้ายเกราะรักษาเวียงสายรักษาด่าน รุ่น 38,leftHand,arm_heavy_leftHand,38,sentinel,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_heavy_leftHand_4,ถุงมือซ้ายเกราะรักษาเวียงค่ายหน้า,leftHand,arm_heavy_leftHand,45,all,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_field_sentinel_53,ถุงมือซ้ายเกราะรักษาเวียงสายรักษาด่าน รุ่น 53,leftHand,arm_heavy_leftHand,53,sentinel,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_heavy_leftHand_5,ถุงมือซ้ายเกราะรักษาเวียงเวียงเหล็ก,leftHand,arm_heavy_leftHand,65,all,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_field_sentinel_67,ถุงมือซ้ายเกราะรักษาเวียงสายรักษาด่าน รุ่น 67,leftHand,arm_heavy_leftHand,67,sentinel,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_field_sentinel_80,ถุงมือซ้ายเกราะรักษาเวียงสายรักษาด่าน รุ่น 80,leftHand,arm_heavy_leftHand,80,sentinel,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_heavy_leftHand_6,ถุงมือซ้ายเกราะรักษาเวียงทัพหลวง,leftHand,arm_heavy_leftHand,85,all,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_field_sentinel_93,ถุงมือซ้ายเกราะรักษาเวียงสายรักษาด่าน รุ่น 93,leftHand,arm_heavy_leftHand,93,sentinel,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_heavy_leftHand_7,ถุงมือซ้ายเกราะรักษาเวียงราชสำนัก,leftHand,arm_heavy_leftHand,95,all,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_heavy_leftHand_8,ถุงมือซ้ายเกราะรักษาเวียงพิชัยยุทธ์,leftHand,arm_heavy_leftHand,100,all,leftHand,arm_heavy_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_leftHand,yes
+arm_hide_leftHand_1,ถุงมือซ้ายหนังพรานเงาฝึกหัด,leftHand,arm_hide_leftHand,1,all,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_hide_leftHand_2,ถุงมือซ้ายหนังพรานเงาชายป่า,leftHand,arm_hide_leftHand,10,all,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_muay_boran_11,ถุงมือซ้ายหนังพรานเงาสายคาดเชือก รุ่น 11,leftHand,arm_hide_leftHand,11,muay_boran,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_blade_11,ถุงมือซ้ายหนังพรานเงาสายพรางเงา รุ่น 11,leftHand,arm_hide_leftHand,11,blade,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_muay_boran_24,ถุงมือซ้ายหนังพรานเงาสายคาดเชือก รุ่น 24,leftHand,arm_hide_leftHand,24,muay_boran,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_blade_24,ถุงมือซ้ายหนังพรานเงาสายพรางเงา รุ่น 24,leftHand,arm_hide_leftHand,24,blade,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_hide_leftHand_3,ถุงมือซ้ายหนังพรานเงาสำนักครู,leftHand,arm_hide_leftHand,25,all,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_muay_boran_38,ถุงมือซ้ายหนังพรานเงาสายคาดเชือก รุ่น 38,leftHand,arm_hide_leftHand,38,muay_boran,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_blade_38,ถุงมือซ้ายหนังพรานเงาสายพรางเงา รุ่น 38,leftHand,arm_hide_leftHand,38,blade,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_hide_leftHand_4,ถุงมือซ้ายหนังพรานเงาค่ายหน้า,leftHand,arm_hide_leftHand,45,all,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_muay_boran_53,ถุงมือซ้ายหนังพรานเงาสายคาดเชือก รุ่น 53,leftHand,arm_hide_leftHand,53,muay_boran,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_blade_53,ถุงมือซ้ายหนังพรานเงาสายพรางเงา รุ่น 53,leftHand,arm_hide_leftHand,53,blade,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_hide_leftHand_5,ถุงมือซ้ายหนังพรานเงาเวียงเหล็ก,leftHand,arm_hide_leftHand,65,all,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_muay_boran_67,ถุงมือซ้ายหนังพรานเงาสายคาดเชือก รุ่น 67,leftHand,arm_hide_leftHand,67,muay_boran,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_blade_67,ถุงมือซ้ายหนังพรานเงาสายพรางเงา รุ่น 67,leftHand,arm_hide_leftHand,67,blade,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_muay_boran_80,ถุงมือซ้ายหนังพรานเงาสายคาดเชือก รุ่น 80,leftHand,arm_hide_leftHand,80,muay_boran,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_blade_80,ถุงมือซ้ายหนังพรานเงาสายพรางเงา รุ่น 80,leftHand,arm_hide_leftHand,80,blade,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_hide_leftHand_6,ถุงมือซ้ายหนังพรานเงาทัพหลวง,leftHand,arm_hide_leftHand,85,all,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_muay_boran_93,ถุงมือซ้ายหนังพรานเงาสายคาดเชือก รุ่น 93,leftHand,arm_hide_leftHand,93,muay_boran,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_field_blade_93,ถุงมือซ้ายหนังพรานเงาสายพรางเงา รุ่น 93,leftHand,arm_hide_leftHand,93,blade,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_hide_leftHand_7,ถุงมือซ้ายหนังพรานเงาราชสำนัก,leftHand,arm_hide_leftHand,95,all,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_hide_leftHand_8,ถุงมือซ้ายหนังพรานเงาพิชัยยุทธ์,leftHand,arm_hide_leftHand,100,all,leftHand,arm_hide_leftHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_leftHand,yes
+arm_medium_leftHand_1,ถุงมือซ้ายเกราะเกล็ดทัพฝึกหัด,leftHand,arm_medium_leftHand,1,all,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_medium_leftHand_2,ถุงมือซ้ายเกราะเกล็ดทัพชายป่า,leftHand,arm_medium_leftHand,10,all,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_field_phutthaisawan_11,ถุงมือซ้ายเกราะเกล็ดทัพสายดาบคู่ รุ่น 11,leftHand,arm_medium_leftHand,11,phutthaisawan,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_field_phutthaisawan_24,ถุงมือซ้ายเกราะเกล็ดทัพสายดาบคู่ รุ่น 24,leftHand,arm_medium_leftHand,24,phutthaisawan,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_medium_leftHand_3,ถุงมือซ้ายเกราะเกล็ดทัพสำนักครู,leftHand,arm_medium_leftHand,25,all,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_field_phutthaisawan_38,ถุงมือซ้ายเกราะเกล็ดทัพสายดาบคู่ รุ่น 38,leftHand,arm_medium_leftHand,38,phutthaisawan,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_medium_leftHand_4,ถุงมือซ้ายเกราะเกล็ดทัพค่ายหน้า,leftHand,arm_medium_leftHand,45,all,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_field_phutthaisawan_53,ถุงมือซ้ายเกราะเกล็ดทัพสายดาบคู่ รุ่น 53,leftHand,arm_medium_leftHand,53,phutthaisawan,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_medium_leftHand_5,ถุงมือซ้ายเกราะเกล็ดทัพเวียงเหล็ก,leftHand,arm_medium_leftHand,65,all,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_field_phutthaisawan_67,ถุงมือซ้ายเกราะเกล็ดทัพสายดาบคู่ รุ่น 67,leftHand,arm_medium_leftHand,67,phutthaisawan,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_field_phutthaisawan_80,ถุงมือซ้ายเกราะเกล็ดทัพสายดาบคู่ รุ่น 80,leftHand,arm_medium_leftHand,80,phutthaisawan,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_medium_leftHand_6,ถุงมือซ้ายเกราะเกล็ดทัพทัพหลวง,leftHand,arm_medium_leftHand,85,all,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_field_phutthaisawan_93,ถุงมือซ้ายเกราะเกล็ดทัพสายดาบคู่ รุ่น 93,leftHand,arm_medium_leftHand,93,phutthaisawan,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_medium_leftHand_7,ถุงมือซ้ายเกราะเกล็ดทัพราชสำนัก,leftHand,arm_medium_leftHand,95,all,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_medium_leftHand_8,ถุงมือซ้ายเกราะเกล็ดทัพพิชัยยุทธ์,leftHand,arm_medium_leftHand,100,all,leftHand,arm_medium_leftHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_leftHand,yes
+arm_cloth_legs_1,สนับเพลาผ้าจารอักขระฝึกหัด,legs,arm_cloth_legs,1,all,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_seer_9,สนับเพลาผ้าจารอักขระสายครูอาคม รุ่น 9,legs,arm_cloth_legs,9,seer,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_mender_9,สนับเพลาผ้าจารอักขระสายเรียกขวัญ รุ่น 9,legs,arm_cloth_legs,9,mender,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_cloth_legs_2,สนับเพลาผ้าจารอักขระชายป่า,legs,arm_cloth_legs,10,all,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_seer_23,สนับเพลาผ้าจารอักขระสายครูอาคม รุ่น 23,legs,arm_cloth_legs,23,seer,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_mender_23,สนับเพลาผ้าจารอักขระสายเรียกขวัญ รุ่น 23,legs,arm_cloth_legs,23,mender,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_cloth_legs_3,สนับเพลาผ้าจารอักขระสำนักครู,legs,arm_cloth_legs,25,all,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_seer_37,สนับเพลาผ้าจารอักขระสายครูอาคม รุ่น 37,legs,arm_cloth_legs,37,seer,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_mender_37,สนับเพลาผ้าจารอักขระสายเรียกขวัญ รุ่น 37,legs,arm_cloth_legs,37,mender,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_cloth_legs_4,สนับเพลาผ้าจารอักขระค่ายหน้า,legs,arm_cloth_legs,45,all,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_seer_52,สนับเพลาผ้าจารอักขระสายครูอาคม รุ่น 52,legs,arm_cloth_legs,52,seer,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_mender_52,สนับเพลาผ้าจารอักขระสายเรียกขวัญ รุ่น 52,legs,arm_cloth_legs,52,mender,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_cloth_legs_5,สนับเพลาผ้าจารอักขระเวียงเหล็ก,legs,arm_cloth_legs,65,all,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_seer_66,สนับเพลาผ้าจารอักขระสายครูอาคม รุ่น 66,legs,arm_cloth_legs,66,seer,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_mender_66,สนับเพลาผ้าจารอักขระสายเรียกขวัญ รุ่น 66,legs,arm_cloth_legs,66,mender,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_seer_79,สนับเพลาผ้าจารอักขระสายครูอาคม รุ่น 79,legs,arm_cloth_legs,79,seer,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_mender_79,สนับเพลาผ้าจารอักขระสายเรียกขวัญ รุ่น 79,legs,arm_cloth_legs,79,mender,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_cloth_legs_6,สนับเพลาผ้าจารอักขระทัพหลวง,legs,arm_cloth_legs,85,all,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_seer_92,สนับเพลาผ้าจารอักขระสายครูอาคม รุ่น 92,legs,arm_cloth_legs,92,seer,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_field_mender_92,สนับเพลาผ้าจารอักขระสายเรียกขวัญ รุ่น 92,legs,arm_cloth_legs,92,mender,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_cloth_legs_7,สนับเพลาผ้าจารอักขระราชสำนัก,legs,arm_cloth_legs,95,all,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_cloth_legs_8,สนับเพลาผ้าจารอักขระพิชัยยุทธ์,legs,arm_cloth_legs,100,all,legs,arm_cloth_legs,yes,yes,22,procedural-shared,80,armor_legs,yes
+arm_heavy_legs_1,สนับเพลาเกราะรักษาเวียงฝึกหัด,legs,arm_heavy_legs,1,all,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_field_sentinel_9,สนับเพลาเกราะรักษาเวียงสายรักษาด่าน รุ่น 9,legs,arm_heavy_legs,9,sentinel,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_heavy_legs_2,สนับเพลาเกราะรักษาเวียงชายป่า,legs,arm_heavy_legs,10,all,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_field_sentinel_23,สนับเพลาเกราะรักษาเวียงสายรักษาด่าน รุ่น 23,legs,arm_heavy_legs,23,sentinel,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_heavy_legs_3,สนับเพลาเกราะรักษาเวียงสำนักครู,legs,arm_heavy_legs,25,all,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_field_sentinel_37,สนับเพลาเกราะรักษาเวียงสายรักษาด่าน รุ่น 37,legs,arm_heavy_legs,37,sentinel,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_heavy_legs_4,สนับเพลาเกราะรักษาเวียงค่ายหน้า,legs,arm_heavy_legs,45,all,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_field_sentinel_52,สนับเพลาเกราะรักษาเวียงสายรักษาด่าน รุ่น 52,legs,arm_heavy_legs,52,sentinel,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_heavy_legs_5,สนับเพลาเกราะรักษาเวียงเวียงเหล็ก,legs,arm_heavy_legs,65,all,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_field_sentinel_66,สนับเพลาเกราะรักษาเวียงสายรักษาด่าน รุ่น 66,legs,arm_heavy_legs,66,sentinel,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_field_sentinel_79,สนับเพลาเกราะรักษาเวียงสายรักษาด่าน รุ่น 79,legs,arm_heavy_legs,79,sentinel,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_heavy_legs_6,สนับเพลาเกราะรักษาเวียงทัพหลวง,legs,arm_heavy_legs,85,all,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_field_sentinel_92,สนับเพลาเกราะรักษาเวียงสายรักษาด่าน รุ่น 92,legs,arm_heavy_legs,92,sentinel,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_heavy_legs_7,สนับเพลาเกราะรักษาเวียงราชสำนัก,legs,arm_heavy_legs,95,all,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_heavy_legs_8,สนับเพลาเกราะรักษาเวียงพิชัยยุทธ์,legs,arm_heavy_legs,100,all,legs,arm_heavy_legs,yes,yes,15,procedural-shared,1136,armor_legs,yes
+arm_hide_legs_1,สนับเพลาหนังพรานเงาฝึกหัด,legs,arm_hide_legs,1,all,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_muay_boran_9,สนับเพลาหนังพรานเงาสายคาดเชือก รุ่น 9,legs,arm_hide_legs,9,muay_boran,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_blade_9,สนับเพลาหนังพรานเงาสายพรางเงา รุ่น 9,legs,arm_hide_legs,9,blade,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_hide_legs_2,สนับเพลาหนังพรานเงาชายป่า,legs,arm_hide_legs,10,all,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_muay_boran_23,สนับเพลาหนังพรานเงาสายคาดเชือก รุ่น 23,legs,arm_hide_legs,23,muay_boran,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_blade_23,สนับเพลาหนังพรานเงาสายพรางเงา รุ่น 23,legs,arm_hide_legs,23,blade,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_hide_legs_3,สนับเพลาหนังพรานเงาสำนักครู,legs,arm_hide_legs,25,all,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_muay_boran_37,สนับเพลาหนังพรานเงาสายคาดเชือก รุ่น 37,legs,arm_hide_legs,37,muay_boran,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_blade_37,สนับเพลาหนังพรานเงาสายพรางเงา รุ่น 37,legs,arm_hide_legs,37,blade,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_hide_legs_4,สนับเพลาหนังพรานเงาค่ายหน้า,legs,arm_hide_legs,45,all,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_muay_boran_52,สนับเพลาหนังพรานเงาสายคาดเชือก รุ่น 52,legs,arm_hide_legs,52,muay_boran,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_blade_52,สนับเพลาหนังพรานเงาสายพรางเงา รุ่น 52,legs,arm_hide_legs,52,blade,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_hide_legs_5,สนับเพลาหนังพรานเงาเวียงเหล็ก,legs,arm_hide_legs,65,all,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_muay_boran_66,สนับเพลาหนังพรานเงาสายคาดเชือก รุ่น 66,legs,arm_hide_legs,66,muay_boran,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_blade_66,สนับเพลาหนังพรานเงาสายพรางเงา รุ่น 66,legs,arm_hide_legs,66,blade,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_muay_boran_79,สนับเพลาหนังพรานเงาสายคาดเชือก รุ่น 79,legs,arm_hide_legs,79,muay_boran,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_blade_79,สนับเพลาหนังพรานเงาสายพรางเงา รุ่น 79,legs,arm_hide_legs,79,blade,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_hide_legs_6,สนับเพลาหนังพรานเงาทัพหลวง,legs,arm_hide_legs,85,all,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_muay_boran_92,สนับเพลาหนังพรานเงาสายคาดเชือก รุ่น 92,legs,arm_hide_legs,92,muay_boran,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_field_blade_92,สนับเพลาหนังพรานเงาสายพรางเงา รุ่น 92,legs,arm_hide_legs,92,blade,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_hide_legs_7,สนับเพลาหนังพรานเงาราชสำนัก,legs,arm_hide_legs,95,all,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_hide_legs_8,สนับเพลาหนังพรานเงาพิชัยยุทธ์,legs,arm_hide_legs,100,all,legs,arm_hide_legs,yes,yes,22,procedural-shared,1088,armor_legs,yes
+arm_medium_legs_1,สนับเพลาเกราะเกล็ดทัพฝึกหัด,legs,arm_medium_legs,1,all,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_field_phutthaisawan_9,สนับเพลาเกราะเกล็ดทัพสายดาบคู่ รุ่น 9,legs,arm_medium_legs,9,phutthaisawan,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_medium_legs_2,สนับเพลาเกราะเกล็ดทัพชายป่า,legs,arm_medium_legs,10,all,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_field_phutthaisawan_23,สนับเพลาเกราะเกล็ดทัพสายดาบคู่ รุ่น 23,legs,arm_medium_legs,23,phutthaisawan,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_medium_legs_3,สนับเพลาเกราะเกล็ดทัพสำนักครู,legs,arm_medium_legs,25,all,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_field_phutthaisawan_37,สนับเพลาเกราะเกล็ดทัพสายดาบคู่ รุ่น 37,legs,arm_medium_legs,37,phutthaisawan,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_medium_legs_4,สนับเพลาเกราะเกล็ดทัพค่ายหน้า,legs,arm_medium_legs,45,all,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_field_phutthaisawan_52,สนับเพลาเกราะเกล็ดทัพสายดาบคู่ รุ่น 52,legs,arm_medium_legs,52,phutthaisawan,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_medium_legs_5,สนับเพลาเกราะเกล็ดทัพเวียงเหล็ก,legs,arm_medium_legs,65,all,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_field_phutthaisawan_66,สนับเพลาเกราะเกล็ดทัพสายดาบคู่ รุ่น 66,legs,arm_medium_legs,66,phutthaisawan,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_field_phutthaisawan_79,สนับเพลาเกราะเกล็ดทัพสายดาบคู่ รุ่น 79,legs,arm_medium_legs,79,phutthaisawan,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_medium_legs_6,สนับเพลาเกราะเกล็ดทัพทัพหลวง,legs,arm_medium_legs,85,all,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_field_phutthaisawan_92,สนับเพลาเกราะเกล็ดทัพสายดาบคู่ รุ่น 92,legs,arm_medium_legs,92,phutthaisawan,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_medium_legs_7,สนับเพลาเกราะเกล็ดทัพราชสำนัก,legs,arm_medium_legs,95,all,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+arm_medium_legs_8,สนับเพลาเกราะเกล็ดทัพพิชัยยุทธ์,legs,arm_medium_legs,100,all,legs,arm_medium_legs,yes,yes,15,procedural-shared,1088,armor_legs,yes
+wp_crook_1,ไม้เท้าขวัญลานฝึก,mainHand,wp_crook,1,mender,mainHand,mender_crook,yes,yes,10,procedural-shared,444,sheet_wp_crook,yes
+wp_crook_2,ไม้เท้าขวัญชายป่า,mainHand,wp_crook,10,mender,mainHand,mender_crook,yes,yes,10,procedural-shared,444,sheet_wp_crook,yes
+wp_crook_3,ไม้เท้าขวัญศาลเก่า,mainHand,wp_crook,20,mender,mainHand,mender_crook,yes,yes,10,procedural-shared,444,sheet_wp_crook,yes
+wp_crook_4,ไม้เท้าขวัญด่านคลอง,mainHand,wp_crook,30,mender,mainHand,mender_crook,yes,yes,10,procedural-shared,444,sheet_wp_crook,yes
+wp_crook_5,ไม้เท้าขวัญป่าลึก,mainHand,wp_crook,40,mender,mainHand,mender_crook,yes,yes,10,procedural-shared,444,sheet_wp_crook,yes
+wp_crook_6,ไม้เท้าขวัญค่ายหน้า,mainHand,wp_crook,50,mender,mainHand,mender_crook,yes,yes,10,procedural-shared,444,sheet_wp_crook,yes
+wp_crook_7,ไม้เท้าขวัญเวียงเหล็ก,mainHand,wp_crook,60,mender,mainHand,mender_crook,yes,yes,10,procedural-shared,444,sheet_wp_crook,yes
+wp_crook_8,ไม้เท้าขวัญภูผา,mainHand,wp_crook,70,mender,mainHand,mender_crook,yes,yes,10,procedural-shared,444,sheet_wp_crook,yes
+wp_crook_9,ไม้เท้าขวัญทัพหลวง,mainHand,wp_crook,85,mender,mainHand,mender_crook,yes,yes,10,procedural-shared,444,sheet_wp_crook,yes
+wp_crook_10,ไม้เท้าขวัญพิชัยยุทธ์,mainHand,wp_crook,100,mender,mainHand,mender_crook,yes,yes,10,procedural-shared,444,sheet_wp_crook,yes
+wp_pike_1,ทวนรักษาด่านลานฝึก,mainHand,wp_pike,1,sentinel,mainHand,sentinel_pike,yes,yes,10,procedural-shared,344,sheet_wp_pike,yes
+wp_pike_2,ทวนรักษาด่านชายป่า,mainHand,wp_pike,10,sentinel,mainHand,sentinel_pike,yes,yes,10,procedural-shared,344,sheet_wp_pike,yes
+wp_pike_3,ทวนรักษาด่านศาลเก่า,mainHand,wp_pike,20,sentinel,mainHand,sentinel_pike,yes,yes,10,procedural-shared,344,sheet_wp_pike,yes
+wp_pike_4,ทวนรักษาด่านด่านคลอง,mainHand,wp_pike,30,sentinel,mainHand,sentinel_pike,yes,yes,10,procedural-shared,344,sheet_wp_pike,yes
+wp_pike_5,ทวนรักษาด่านป่าลึก,mainHand,wp_pike,40,sentinel,mainHand,sentinel_pike,yes,yes,10,procedural-shared,344,sheet_wp_pike,yes
+wp_pike_6,ทวนรักษาด่านค่ายหน้า,mainHand,wp_pike,50,sentinel,mainHand,sentinel_pike,yes,yes,10,procedural-shared,344,sheet_wp_pike,yes
+wp_pike_7,ทวนรักษาด่านเวียงเหล็ก,mainHand,wp_pike,60,sentinel,mainHand,sentinel_pike,yes,yes,10,procedural-shared,344,sheet_wp_pike,yes
+wp_pike_8,ทวนรักษาด่านภูผา,mainHand,wp_pike,70,sentinel,mainHand,sentinel_pike,yes,yes,10,procedural-shared,344,sheet_wp_pike,yes
+wp_pike_9,ทวนรักษาด่านทัพหลวง,mainHand,wp_pike,85,sentinel,mainHand,sentinel_pike,yes,yes,10,procedural-shared,344,sheet_wp_pike,yes
+wp_pike_10,ทวนรักษาด่านพิชัยยุทธ์,mainHand,wp_pike,100,sentinel,mainHand,sentinel_pike,yes,yes,10,procedural-shared,344,sheet_wp_pike,yes
+wp_shadow_1,กริชเงาลานฝึก,mainHand,wp_shadow,1,blade,mainHand,ritual_dagger,yes,yes,10,procedural-shared,420,sheet_wp_shadow,yes
+wp_shadow_2,กริชเงาชายป่า,mainHand,wp_shadow,10,blade,mainHand,ritual_dagger,yes,yes,10,procedural-shared,420,sheet_wp_shadow,yes
+wp_shadow_3,กริชเงาศาลเก่า,mainHand,wp_shadow,20,blade,mainHand,ritual_dagger,yes,yes,10,procedural-shared,420,sheet_wp_shadow,yes
+wp_shadow_4,กริชเงาด่านคลอง,mainHand,wp_shadow,30,blade,mainHand,ritual_dagger,yes,yes,10,procedural-shared,420,sheet_wp_shadow,yes
+wp_shadow_5,กริชเงาป่าลึก,mainHand,wp_shadow,40,blade,mainHand,ritual_dagger,yes,yes,10,procedural-shared,420,sheet_wp_shadow,yes
+wp_shadow_6,กริชเงาค่ายหน้า,mainHand,wp_shadow,50,blade,mainHand,ritual_dagger,yes,yes,10,procedural-shared,420,sheet_wp_shadow,yes
+wp_shadow_7,กริชเงาเวียงเหล็ก,mainHand,wp_shadow,60,blade,mainHand,ritual_dagger,yes,yes,10,procedural-shared,420,sheet_wp_shadow,yes
+wp_shadow_8,กริชเงาภูผา,mainHand,wp_shadow,70,blade,mainHand,ritual_dagger,yes,yes,10,procedural-shared,420,sheet_wp_shadow,yes
+wp_shadow_9,กริชเงาทัพหลวง,mainHand,wp_shadow,85,blade,mainHand,ritual_dagger,yes,yes,10,procedural-shared,420,sheet_wp_shadow,yes
+wp_shadow_10,กริชเงาพิชัยยุทธ์,mainHand,wp_shadow,100,blade,mainHand,ritual_dagger,yes,yes,10,procedural-shared,420,sheet_wp_shadow,yes
+wp_twins_1,ดาบคู่ลานฝึก,mainHand,wp_twins,1,phutthaisawan,mainHand,thai_dual,yes,yes,10,procedural-shared,,sheet_wp_twins,yes
+wp_twins_2,ดาบคู่ชายป่า,mainHand,wp_twins,10,phutthaisawan,mainHand,thai_dual,yes,yes,10,procedural-shared,,sheet_wp_twins,yes
+wp_twins_3,ดาบคู่ศาลเก่า,mainHand,wp_twins,20,phutthaisawan,mainHand,thai_dual,yes,yes,10,procedural-shared,,sheet_wp_twins,yes
+wp_twins_4,ดาบคู่ด่านคลอง,mainHand,wp_twins,30,phutthaisawan,mainHand,thai_dual,yes,yes,10,procedural-shared,,sheet_wp_twins,yes
+wp_twins_5,ดาบคู่ป่าลึก,mainHand,wp_twins,40,phutthaisawan,mainHand,thai_dual,yes,yes,10,procedural-shared,,sheet_wp_twins,yes
+wp_twins_6,ดาบคู่ค่ายหน้า,mainHand,wp_twins,50,phutthaisawan,mainHand,thai_dual,yes,yes,10,procedural-shared,,sheet_wp_twins,yes
+wp_twins_7,ดาบคู่เวียงเหล็ก,mainHand,wp_twins,60,phutthaisawan,mainHand,thai_dual,yes,yes,10,procedural-shared,,sheet_wp_twins,yes
+wp_twins_8,ดาบคู่ภูผา,mainHand,wp_twins,70,phutthaisawan,mainHand,thai_dual,yes,yes,10,procedural-shared,,sheet_wp_twins,yes
+wp_twins_9,ดาบคู่ทัพหลวง,mainHand,wp_twins,85,phutthaisawan,mainHand,thai_dual,yes,yes,10,procedural-shared,,sheet_wp_twins,yes
+wp_twins_10,ดาบคู่พิชัยยุทธ์,mainHand,wp_twins,100,phutthaisawan,mainHand,thai_dual,yes,yes,10,procedural-shared,,sheet_wp_twins,yes
+wp_wand_1,ไม้ครูลงยันต์ลานฝึก,mainHand,wp_wand,1,seer,mainHand,seer_wand,yes,yes,10,procedural-shared,636,sheet_wp_wand,yes
+wp_wand_2,ไม้ครูลงยันต์ชายป่า,mainHand,wp_wand,10,seer,mainHand,seer_wand,yes,yes,10,procedural-shared,636,sheet_wp_wand,yes
+wp_wand_3,ไม้ครูลงยันต์ศาลเก่า,mainHand,wp_wand,20,seer,mainHand,seer_wand,yes,yes,10,procedural-shared,636,sheet_wp_wand,yes
+wp_wand_4,ไม้ครูลงยันต์ด่านคลอง,mainHand,wp_wand,30,seer,mainHand,seer_wand,yes,yes,10,procedural-shared,636,sheet_wp_wand,yes
+wp_wand_5,ไม้ครูลงยันต์ป่าลึก,mainHand,wp_wand,40,seer,mainHand,seer_wand,yes,yes,10,procedural-shared,636,sheet_wp_wand,yes
+wp_wand_6,ไม้ครูลงยันต์ค่ายหน้า,mainHand,wp_wand,50,seer,mainHand,seer_wand,yes,yes,10,procedural-shared,636,sheet_wp_wand,yes
+wp_wand_7,ไม้ครูลงยันต์เวียงเหล็ก,mainHand,wp_wand,60,seer,mainHand,seer_wand,yes,yes,10,procedural-shared,636,sheet_wp_wand,yes
+wp_wand_8,ไม้ครูลงยันต์ภูผา,mainHand,wp_wand,70,seer,mainHand,seer_wand,yes,yes,10,procedural-shared,636,sheet_wp_wand,yes
+wp_wand_9,ไม้ครูลงยันต์ทัพหลวง,mainHand,wp_wand,85,seer,mainHand,seer_wand,yes,yes,10,procedural-shared,636,sheet_wp_wand,yes
+wp_wand_10,ไม้ครูลงยันต์พิชัยยุทธ์,mainHand,wp_wand,100,seer,mainHand,seer_wand,yes,yes,10,procedural-shared,636,sheet_wp_wand,yes
+wp_wrap_1,ผ้าพันหมัดลานฝึก,mainHand,wp_wrap,1,muay_boran,mainHand,muay_wraps,yes,yes,10,procedural-shared,,sheet_wp_wrap,yes
+wp_wrap_2,ผ้าพันหมัดชายป่า,mainHand,wp_wrap,10,muay_boran,mainHand,muay_wraps,yes,yes,10,procedural-shared,,sheet_wp_wrap,yes
+wp_wrap_3,ผ้าพันหมัดศาลเก่า,mainHand,wp_wrap,20,muay_boran,mainHand,muay_wraps,yes,yes,10,procedural-shared,,sheet_wp_wrap,yes
+wp_wrap_4,ผ้าพันหมัดด่านคลอง,mainHand,wp_wrap,30,muay_boran,mainHand,muay_wraps,yes,yes,10,procedural-shared,,sheet_wp_wrap,yes
+wp_wrap_5,ผ้าพันหมัดป่าลึก,mainHand,wp_wrap,40,muay_boran,mainHand,muay_wraps,yes,yes,10,procedural-shared,,sheet_wp_wrap,yes
+wp_wrap_6,ผ้าพันหมัดค่ายหน้า,mainHand,wp_wrap,50,muay_boran,mainHand,muay_wraps,yes,yes,10,procedural-shared,,sheet_wp_wrap,yes
+wp_wrap_7,ผ้าพันหมัดเวียงเหล็ก,mainHand,wp_wrap,60,muay_boran,mainHand,muay_wraps,yes,yes,10,procedural-shared,,sheet_wp_wrap,yes
+wp_wrap_8,ผ้าพันหมัดภูผา,mainHand,wp_wrap,70,muay_boran,mainHand,muay_wraps,yes,yes,10,procedural-shared,,sheet_wp_wrap,yes
+wp_wrap_9,ผ้าพันหมัดทัพหลวง,mainHand,wp_wrap,85,muay_boran,mainHand,muay_wraps,yes,yes,10,procedural-shared,,sheet_wp_wrap,yes
+wp_wrap_10,ผ้าพันหมัดพิชัยยุทธ์,mainHand,wp_wrap,100,muay_boran,mainHand,muay_wraps,yes,yes,10,procedural-shared,,sheet_wp_wrap,yes
+acc_boss_bamboo_frontier,สร้อยไผ่แดง,neck,acc_boss_bamboo_frontier,35,all,neck,acc_boss_bamboo_frontier,no,yes,1,procedural-shared,1984,sheet_acc_boss_bamboo_frontier,yes
+acc_boss_lotus_basin,สร้อยเกสรนาคา,neck,acc_boss_lotus_basin,52,all,neck,acc_boss_lotus_basin,no,yes,1,procedural-shared,1984,sheet_acc_boss_lotus_basin,yes
+acc_boss_moon_pass,สร้อยผลึกจันทรา,neck,acc_boss_moon_pass,34,all,neck,acc_boss_moon_pass,no,yes,1,procedural-shared,1984,sheet_acc_boss_moon_pass,yes
+acc_boss_naga_cavern,สร้อยเกล็ดเขี้ยวนิล,neck,acc_boss_naga_cavern,58,all,neck,acc_boss_naga_cavern,no,yes,1,procedural-shared,1984,sheet_acc_boss_naga_cavern,yes
+acc_boss_sam_lan_estuary,สร้อยสมอเหล็ก,neck,acc_boss_sam_lan_estuary,56,all,neck,acc_boss_sam_lan_estuary,no,yes,1,procedural-shared,1984,sheet_acc_boss_sam_lan_estuary,yes
+acc_boss_tri_wiang_castle,สร้อยเกราะเวียง,neck,acc_boss_tri_wiang_castle,74,all,neck,acc_boss_tri_wiang_castle,no,yes,1,procedural-shared,1984,sheet_acc_boss_tri_wiang_castle,yes
+acc_fang_1,สร้อยเขี้ยวเสือฝึกหัด,neck,acc_fang,1,all,neck,acc_fang,yes,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_muay_boran_6,สร้อยเขี้ยวเสือสายคาดเชือก รุ่น 6,neck,acc_fang,6,muay_boran,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_phutthaisawan_6,สร้อยเขี้ยวเสือสายดาบคู่ รุ่น 6,neck,acc_fang,6,phutthaisawan,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_blade_6,สร้อยเขี้ยวเสือสายพรางเงา รุ่น 6,neck,acc_fang,6,blade,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+acc_fang_2,สร้อยเขี้ยวเสือชายป่า,neck,acc_fang,10,all,neck,acc_fang,yes,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_muay_boran_19,สร้อยเขี้ยวเสือสายคาดเชือก รุ่น 19,neck,acc_fang,19,muay_boran,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_phutthaisawan_19,สร้อยเขี้ยวเสือสายดาบคู่ รุ่น 19,neck,acc_fang,19,phutthaisawan,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_blade_19,สร้อยเขี้ยวเสือสายพรางเงา รุ่น 19,neck,acc_fang,19,blade,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+acc_fang_3,สร้อยเขี้ยวเสือสำนักครู,neck,acc_fang,25,all,neck,acc_fang,yes,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_muay_boran_34,สร้อยเขี้ยวเสือสายคาดเชือก รุ่น 34,neck,acc_fang,34,muay_boran,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_phutthaisawan_34,สร้อยเขี้ยวเสือสายดาบคู่ รุ่น 34,neck,acc_fang,34,phutthaisawan,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_blade_34,สร้อยเขี้ยวเสือสายพรางเงา รุ่น 34,neck,acc_fang,34,blade,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+acc_fang_4,สร้อยเขี้ยวเสือค่ายหน้า,neck,acc_fang,45,all,neck,acc_fang,yes,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_muay_boran_48,สร้อยเขี้ยวเสือสายคาดเชือก รุ่น 48,neck,acc_fang,48,muay_boran,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_phutthaisawan_48,สร้อยเขี้ยวเสือสายดาบคู่ รุ่น 48,neck,acc_fang,48,phutthaisawan,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_blade_48,สร้อยเขี้ยวเสือสายพรางเงา รุ่น 48,neck,acc_fang,48,blade,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_muay_boran_62,สร้อยเขี้ยวเสือสายคาดเชือก รุ่น 62,neck,acc_fang,62,muay_boran,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_phutthaisawan_62,สร้อยเขี้ยวเสือสายดาบคู่ รุ่น 62,neck,acc_fang,62,phutthaisawan,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_blade_62,สร้อยเขี้ยวเสือสายพรางเงา รุ่น 62,neck,acc_fang,62,blade,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+acc_fang_5,สร้อยเขี้ยวเสือเวียงเหล็ก,neck,acc_fang,65,all,neck,acc_fang,yes,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_muay_boran_76,สร้อยเขี้ยวเสือสายคาดเชือก รุ่น 76,neck,acc_fang,76,muay_boran,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_phutthaisawan_76,สร้อยเขี้ยวเสือสายดาบคู่ รุ่น 76,neck,acc_fang,76,phutthaisawan,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_blade_76,สร้อยเขี้ยวเสือสายพรางเงา รุ่น 76,neck,acc_fang,76,blade,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+acc_fang_6,สร้อยเขี้ยวเสือทัพหลวง,neck,acc_fang,85,all,neck,acc_fang,yes,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_muay_boran_89,สร้อยเขี้ยวเสือสายคาดเชือก รุ่น 89,neck,acc_fang,89,muay_boran,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_phutthaisawan_89,สร้อยเขี้ยวเสือสายดาบคู่ รุ่น 89,neck,acc_fang,89,phutthaisawan,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+arm_field_blade_89,สร้อยเขี้ยวเสือสายพรางเงา รุ่น 89,neck,acc_fang,89,blade,neck,acc_fang,no,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+acc_fang_7,สร้อยเขี้ยวเสือราชสำนัก,neck,acc_fang,95,all,neck,acc_fang,yes,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+acc_fang_8,สร้อยเขี้ยวเสือพิชัยยุทธ์,neck,acc_fang,100,all,neck,acc_fang,yes,yes,29,procedural-shared,1608,sheet_acc_fang,yes
+acc_gorget_1,สร้อยเกราะห่วงฝึกหัด,neck,acc_gorget,1,all,neck,acc_gorget,yes,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+arm_field_sentinel_6,สร้อยเกราะห่วงสายรักษาด่าน รุ่น 6,neck,acc_gorget,6,sentinel,neck,acc_gorget,no,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+acc_gorget_2,สร้อยเกราะห่วงชายป่า,neck,acc_gorget,10,all,neck,acc_gorget,yes,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+arm_field_sentinel_19,สร้อยเกราะห่วงสายรักษาด่าน รุ่น 19,neck,acc_gorget,19,sentinel,neck,acc_gorget,no,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+acc_gorget_3,สร้อยเกราะห่วงสำนักครู,neck,acc_gorget,25,all,neck,acc_gorget,yes,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+arm_field_sentinel_34,สร้อยเกราะห่วงสายรักษาด่าน รุ่น 34,neck,acc_gorget,34,sentinel,neck,acc_gorget,no,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+acc_gorget_4,สร้อยเกราะห่วงค่ายหน้า,neck,acc_gorget,45,all,neck,acc_gorget,yes,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+arm_field_sentinel_48,สร้อยเกราะห่วงสายรักษาด่าน รุ่น 48,neck,acc_gorget,48,sentinel,neck,acc_gorget,no,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+arm_field_sentinel_62,สร้อยเกราะห่วงสายรักษาด่าน รุ่น 62,neck,acc_gorget,62,sentinel,neck,acc_gorget,no,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+acc_gorget_5,สร้อยเกราะห่วงเวียงเหล็ก,neck,acc_gorget,65,all,neck,acc_gorget,yes,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+arm_field_sentinel_76,สร้อยเกราะห่วงสายรักษาด่าน รุ่น 76,neck,acc_gorget,76,sentinel,neck,acc_gorget,no,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+acc_gorget_6,สร้อยเกราะห่วงทัพหลวง,neck,acc_gorget,85,all,neck,acc_gorget,yes,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+arm_field_sentinel_89,สร้อยเกราะห่วงสายรักษาด่าน รุ่น 89,neck,acc_gorget,89,sentinel,neck,acc_gorget,no,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+acc_gorget_7,สร้อยเกราะห่วงราชสำนัก,neck,acc_gorget,95,all,neck,acc_gorget,yes,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+acc_gorget_8,สร้อยเกราะห่วงพิชัยยุทธ์,neck,acc_gorget,100,all,neck,acc_gorget,yes,yes,15,procedural-shared,128,sheet_acc_gorget,yes
+acc_shrine_ward,สร้อยตราศาลร้าง,neck,acc_shrine_ward,12,all,neck,acc_shrine_ward,no,yes,1,procedural-shared,1984,sheet_acc_shrine_ward,yes
+acc_spell_1,สร้อยตราอักขระฝึกหัด,neck,acc_spell,1,all,neck,acc_spell,yes,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+arm_field_seer_6,สร้อยตราอักขระสายครูอาคม รุ่น 6,neck,acc_spell,6,seer,neck,acc_spell,no,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+acc_spell_2,สร้อยตราอักขระชายป่า,neck,acc_spell,10,all,neck,acc_spell,yes,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+arm_field_seer_19,สร้อยตราอักขระสายครูอาคม รุ่น 19,neck,acc_spell,19,seer,neck,acc_spell,no,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+acc_spell_3,สร้อยตราอักขระสำนักครู,neck,acc_spell,25,all,neck,acc_spell,yes,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+arm_field_seer_34,สร้อยตราอักขระสายครูอาคม รุ่น 34,neck,acc_spell,34,seer,neck,acc_spell,no,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+acc_spell_4,สร้อยตราอักขระค่ายหน้า,neck,acc_spell,45,all,neck,acc_spell,yes,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+arm_field_seer_48,สร้อยตราอักขระสายครูอาคม รุ่น 48,neck,acc_spell,48,seer,neck,acc_spell,no,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+arm_field_seer_62,สร้อยตราอักขระสายครูอาคม รุ่น 62,neck,acc_spell,62,seer,neck,acc_spell,no,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+acc_spell_5,สร้อยตราอักขระเวียงเหล็ก,neck,acc_spell,65,all,neck,acc_spell,yes,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+arm_field_seer_76,สร้อยตราอักขระสายครูอาคม รุ่น 76,neck,acc_spell,76,seer,neck,acc_spell,no,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+acc_spell_6,สร้อยตราอักขระทัพหลวง,neck,acc_spell,85,all,neck,acc_spell,yes,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+arm_field_seer_89,สร้อยตราอักขระสายครูอาคม รุ่น 89,neck,acc_spell,89,seer,neck,acc_spell,no,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+acc_spell_7,สร้อยตราอักขระราชสำนัก,neck,acc_spell,95,all,neck,acc_spell,yes,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+acc_spell_8,สร้อยตราอักขระพิชัยยุทธ์,neck,acc_spell,100,all,neck,acc_spell,yes,yes,15,procedural-shared,1984,sheet_acc_spell,yes
+acc_torc_1,สร้อยลูกประคำฝึกหัด,neck,acc_torc,1,all,neck,acc_torc,yes,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+arm_field_mender_6,สร้อยลูกประคำสายเรียกขวัญ รุ่น 6,neck,acc_torc,6,mender,neck,acc_torc,no,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+acc_torc_2,สร้อยลูกประคำชายป่า,neck,acc_torc,10,all,neck,acc_torc,yes,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+arm_field_mender_19,สร้อยลูกประคำสายเรียกขวัญ รุ่น 19,neck,acc_torc,19,mender,neck,acc_torc,no,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+acc_torc_3,สร้อยลูกประคำสำนักครู,neck,acc_torc,25,all,neck,acc_torc,yes,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+arm_field_mender_34,สร้อยลูกประคำสายเรียกขวัญ รุ่น 34,neck,acc_torc,34,mender,neck,acc_torc,no,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+acc_torc_4,สร้อยลูกประคำค่ายหน้า,neck,acc_torc,45,all,neck,acc_torc,yes,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+arm_field_mender_48,สร้อยลูกประคำสายเรียกขวัญ รุ่น 48,neck,acc_torc,48,mender,neck,acc_torc,no,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+arm_field_mender_62,สร้อยลูกประคำสายเรียกขวัญ รุ่น 62,neck,acc_torc,62,mender,neck,acc_torc,no,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+acc_torc_5,สร้อยลูกประคำเวียงเหล็ก,neck,acc_torc,65,all,neck,acc_torc,yes,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+arm_field_mender_76,สร้อยลูกประคำสายเรียกขวัญ รุ่น 76,neck,acc_torc,76,mender,neck,acc_torc,no,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+acc_torc_6,สร้อยลูกประคำทัพหลวง,neck,acc_torc,85,all,neck,acc_torc,yes,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+arm_field_mender_89,สร้อยลูกประคำสายเรียกขวัญ รุ่น 89,neck,acc_torc,89,mender,neck,acc_torc,no,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+acc_torc_7,สร้อยลูกประคำราชสำนัก,neck,acc_torc,95,all,neck,acc_torc,yes,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+acc_torc_8,สร้อยลูกประคำพิชัยยุทธ์,neck,acc_torc,100,all,neck,acc_torc,yes,yes,15,procedural-shared,1984,sheet_acc_torc,yes
+off_bell_1,กระดิ่งเรียกขวัญฝึกหัด,offHand,off_bell,1,mender,offHand,off_bell,yes,yes,16,procedural-shared,380,sheet_off_bell,yes
+arm_field_mender_2,กระดิ่งเรียกขวัญสายเรียกขวัญ รุ่น 2,offHand,off_bell,2,mender,offHand,off_bell,no,yes,16,procedural-shared,380,sheet_off_bell,yes
+off_bell_2,กระดิ่งเรียกขวัญชายป่า,offHand,off_bell,10,mender,offHand,off_bell,yes,yes,16,procedural-shared,380,sheet_off_bell,yes
+arm_field_mender_15,กระดิ่งเรียกขวัญสายเรียกขวัญ รุ่น 15,offHand,off_bell,15,mender,offHand,off_bell,no,yes,16,procedural-shared,380,sheet_off_bell,yes
+off_bell_3,กระดิ่งเรียกขวัญสำนักครู,offHand,off_bell,25,mender,offHand,off_bell,yes,yes,16,procedural-shared,380,sheet_off_bell,yes
+arm_field_mender_29,กระดิ่งเรียกขวัญสายเรียกขวัญ รุ่น 29,offHand,off_bell,29,mender,offHand,off_bell,no,yes,16,procedural-shared,380,sheet_off_bell,yes
+arm_field_mender_43,กระดิ่งเรียกขวัญสายเรียกขวัญ รุ่น 43,offHand,off_bell,43,mender,offHand,off_bell,no,yes,16,procedural-shared,380,sheet_off_bell,yes
+off_bell_4,กระดิ่งเรียกขวัญค่ายหน้า,offHand,off_bell,45,mender,offHand,off_bell,yes,yes,16,procedural-shared,380,sheet_off_bell,yes
+arm_field_mender_57,กระดิ่งเรียกขวัญสายเรียกขวัญ รุ่น 57,offHand,off_bell,57,mender,offHand,off_bell,no,yes,16,procedural-shared,380,sheet_off_bell,yes
+off_bell_5,กระดิ่งเรียกขวัญเวียงเหล็ก,offHand,off_bell,65,mender,offHand,off_bell,yes,yes,16,procedural-shared,380,sheet_off_bell,yes
+arm_field_mender_72,กระดิ่งเรียกขวัญสายเรียกขวัญ รุ่น 72,offHand,off_bell,72,mender,offHand,off_bell,no,yes,16,procedural-shared,380,sheet_off_bell,yes
+arm_field_mender_84,กระดิ่งเรียกขวัญสายเรียกขวัญ รุ่น 84,offHand,off_bell,84,mender,offHand,off_bell,no,yes,16,procedural-shared,380,sheet_off_bell,yes
+off_bell_6,กระดิ่งเรียกขวัญทัพหลวง,offHand,off_bell,85,mender,offHand,off_bell,yes,yes,16,procedural-shared,380,sheet_off_bell,yes
+off_bell_7,กระดิ่งเรียกขวัญราชสำนัก,offHand,off_bell,95,mender,offHand,off_bell,yes,yes,16,procedural-shared,380,sheet_off_bell,yes
+arm_field_mender_98,กระดิ่งเรียกขวัญสายเรียกขวัญ รุ่น 98,offHand,off_bell,98,mender,offHand,off_bell,no,yes,16,procedural-shared,380,sheet_off_bell,yes
+off_bell_8,กระดิ่งเรียกขวัญพิชัยยุทธ์,offHand,off_bell,100,mender,offHand,off_bell,yes,yes,16,procedural-shared,380,sheet_off_bell,yes
+off_brace_1,ปลอกหมัดถักฝึกหัด,offHand,off_brace,1,muay_boran,offHand,off_brace,yes,yes,16,procedural-shared,240,sheet_off_brace,yes
+arm_field_muay_boran_2,ปลอกหมัดถักสายคาดเชือก รุ่น 2,offHand,off_brace,2,muay_boran,offHand,off_brace,no,yes,16,procedural-shared,240,sheet_off_brace,yes
+off_brace_2,ปลอกหมัดถักชายป่า,offHand,off_brace,10,muay_boran,offHand,off_brace,yes,yes,16,procedural-shared,240,sheet_off_brace,yes
+arm_field_muay_boran_15,ปลอกหมัดถักสายคาดเชือก รุ่น 15,offHand,off_brace,15,muay_boran,offHand,off_brace,no,yes,16,procedural-shared,240,sheet_off_brace,yes
+off_brace_3,ปลอกหมัดถักสำนักครู,offHand,off_brace,25,muay_boran,offHand,off_brace,yes,yes,16,procedural-shared,240,sheet_off_brace,yes
+arm_field_muay_boran_29,ปลอกหมัดถักสายคาดเชือก รุ่น 29,offHand,off_brace,29,muay_boran,offHand,off_brace,no,yes,16,procedural-shared,240,sheet_off_brace,yes
+arm_field_muay_boran_43,ปลอกหมัดถักสายคาดเชือก รุ่น 43,offHand,off_brace,43,muay_boran,offHand,off_brace,no,yes,16,procedural-shared,240,sheet_off_brace,yes
+off_brace_4,ปลอกหมัดถักค่ายหน้า,offHand,off_brace,45,muay_boran,offHand,off_brace,yes,yes,16,procedural-shared,240,sheet_off_brace,yes
+arm_field_muay_boran_57,ปลอกหมัดถักสายคาดเชือก รุ่น 57,offHand,off_brace,57,muay_boran,offHand,off_brace,no,yes,16,procedural-shared,240,sheet_off_brace,yes
+off_brace_5,ปลอกหมัดถักเวียงเหล็ก,offHand,off_brace,65,muay_boran,offHand,off_brace,yes,yes,16,procedural-shared,240,sheet_off_brace,yes
+arm_field_muay_boran_72,ปลอกหมัดถักสายคาดเชือก รุ่น 72,offHand,off_brace,72,muay_boran,offHand,off_brace,no,yes,16,procedural-shared,240,sheet_off_brace,yes
+arm_field_muay_boran_84,ปลอกหมัดถักสายคาดเชือก รุ่น 84,offHand,off_brace,84,muay_boran,offHand,off_brace,no,yes,16,procedural-shared,240,sheet_off_brace,yes
+off_brace_6,ปลอกหมัดถักทัพหลวง,offHand,off_brace,85,muay_boran,offHand,off_brace,yes,yes,16,procedural-shared,240,sheet_off_brace,yes
+off_brace_7,ปลอกหมัดถักราชสำนัก,offHand,off_brace,95,muay_boran,offHand,off_brace,yes,yes,16,procedural-shared,240,sheet_off_brace,yes
+arm_field_muay_boran_98,ปลอกหมัดถักสายคาดเชือก รุ่น 98,offHand,off_brace,98,muay_boran,offHand,off_brace,no,yes,16,procedural-shared,240,sheet_off_brace,yes
+off_brace_8,ปลอกหมัดถักพิชัยยุทธ์,offHand,off_brace,100,muay_boran,offHand,off_brace,yes,yes,16,procedural-shared,240,sheet_off_brace,yes
+off_guard_1,เครื่องรางกระบังดาบฝึกหัด,offHand,off_guard,1,phutthaisawan,offHand,off_guard,yes,yes,16,procedural-shared,24,sheet_off_guard,yes
+arm_field_phutthaisawan_2,เครื่องรางกระบังดาบสายดาบคู่ รุ่น 2,offHand,off_guard,2,phutthaisawan,offHand,off_guard,no,yes,16,procedural-shared,24,sheet_off_guard,yes
+off_guard_2,เครื่องรางกระบังดาบชายป่า,offHand,off_guard,10,phutthaisawan,offHand,off_guard,yes,yes,16,procedural-shared,24,sheet_off_guard,yes
+arm_field_phutthaisawan_15,เครื่องรางกระบังดาบสายดาบคู่ รุ่น 15,offHand,off_guard,15,phutthaisawan,offHand,off_guard,no,yes,16,procedural-shared,24,sheet_off_guard,yes
+off_guard_3,เครื่องรางกระบังดาบสำนักครู,offHand,off_guard,25,phutthaisawan,offHand,off_guard,yes,yes,16,procedural-shared,24,sheet_off_guard,yes
+arm_field_phutthaisawan_29,เครื่องรางกระบังดาบสายดาบคู่ รุ่น 29,offHand,off_guard,29,phutthaisawan,offHand,off_guard,no,yes,16,procedural-shared,24,sheet_off_guard,yes
+arm_field_phutthaisawan_43,เครื่องรางกระบังดาบสายดาบคู่ รุ่น 43,offHand,off_guard,43,phutthaisawan,offHand,off_guard,no,yes,16,procedural-shared,24,sheet_off_guard,yes
+off_guard_4,เครื่องรางกระบังดาบค่ายหน้า,offHand,off_guard,45,phutthaisawan,offHand,off_guard,yes,yes,16,procedural-shared,24,sheet_off_guard,yes
+arm_field_phutthaisawan_57,เครื่องรางกระบังดาบสายดาบคู่ รุ่น 57,offHand,off_guard,57,phutthaisawan,offHand,off_guard,no,yes,16,procedural-shared,24,sheet_off_guard,yes
+off_guard_5,เครื่องรางกระบังดาบเวียงเหล็ก,offHand,off_guard,65,phutthaisawan,offHand,off_guard,yes,yes,16,procedural-shared,24,sheet_off_guard,yes
+arm_field_phutthaisawan_72,เครื่องรางกระบังดาบสายดาบคู่ รุ่น 72,offHand,off_guard,72,phutthaisawan,offHand,off_guard,no,yes,16,procedural-shared,24,sheet_off_guard,yes
+arm_field_phutthaisawan_84,เครื่องรางกระบังดาบสายดาบคู่ รุ่น 84,offHand,off_guard,84,phutthaisawan,offHand,off_guard,no,yes,16,procedural-shared,24,sheet_off_guard,yes
+off_guard_6,เครื่องรางกระบังดาบทัพหลวง,offHand,off_guard,85,phutthaisawan,offHand,off_guard,yes,yes,16,procedural-shared,24,sheet_off_guard,yes
+off_guard_7,เครื่องรางกระบังดาบราชสำนัก,offHand,off_guard,95,phutthaisawan,offHand,off_guard,yes,yes,16,procedural-shared,24,sheet_off_guard,yes
+arm_field_phutthaisawan_98,เครื่องรางกระบังดาบสายดาบคู่ รุ่น 98,offHand,off_guard,98,phutthaisawan,offHand,off_guard,no,yes,16,procedural-shared,24,sheet_off_guard,yes
+off_guard_8,เครื่องรางกระบังดาบพิชัยยุทธ์,offHand,off_guard,100,phutthaisawan,offHand,off_guard,yes,yes,16,procedural-shared,24,sheet_off_guard,yes
+off_jar_1,หม้อวิญญาณฝึกหัด,offHand,off_jar,1,seer,offHand,off_jar,yes,yes,16,procedural-shared,680,sheet_off_jar,yes
+arm_field_seer_2,หม้อวิญญาณสายครูอาคม รุ่น 2,offHand,off_jar,2,seer,offHand,off_jar,no,yes,16,procedural-shared,680,sheet_off_jar,yes
+off_jar_2,หม้อวิญญาณชายป่า,offHand,off_jar,10,seer,offHand,off_jar,yes,yes,16,procedural-shared,680,sheet_off_jar,yes
+arm_field_seer_15,หม้อวิญญาณสายครูอาคม รุ่น 15,offHand,off_jar,15,seer,offHand,off_jar,no,yes,16,procedural-shared,680,sheet_off_jar,yes
+off_jar_3,หม้อวิญญาณสำนักครู,offHand,off_jar,25,seer,offHand,off_jar,yes,yes,16,procedural-shared,680,sheet_off_jar,yes
+arm_field_seer_29,หม้อวิญญาณสายครูอาคม รุ่น 29,offHand,off_jar,29,seer,offHand,off_jar,no,yes,16,procedural-shared,680,sheet_off_jar,yes
+arm_field_seer_43,หม้อวิญญาณสายครูอาคม รุ่น 43,offHand,off_jar,43,seer,offHand,off_jar,no,yes,16,procedural-shared,680,sheet_off_jar,yes
+off_jar_4,หม้อวิญญาณค่ายหน้า,offHand,off_jar,45,seer,offHand,off_jar,yes,yes,16,procedural-shared,680,sheet_off_jar,yes
+arm_field_seer_57,หม้อวิญญาณสายครูอาคม รุ่น 57,offHand,off_jar,57,seer,offHand,off_jar,no,yes,16,procedural-shared,680,sheet_off_jar,yes
+off_jar_5,หม้อวิญญาณเวียงเหล็ก,offHand,off_jar,65,seer,offHand,off_jar,yes,yes,16,procedural-shared,680,sheet_off_jar,yes
+arm_field_seer_72,หม้อวิญญาณสายครูอาคม รุ่น 72,offHand,off_jar,72,seer,offHand,off_jar,no,yes,16,procedural-shared,680,sheet_off_jar,yes
+arm_field_seer_84,หม้อวิญญาณสายครูอาคม รุ่น 84,offHand,off_jar,84,seer,offHand,off_jar,no,yes,16,procedural-shared,680,sheet_off_jar,yes
+off_jar_6,หม้อวิญญาณทัพหลวง,offHand,off_jar,85,seer,offHand,off_jar,yes,yes,16,procedural-shared,680,sheet_off_jar,yes
+off_jar_7,หม้อวิญญาณราชสำนัก,offHand,off_jar,95,seer,offHand,off_jar,yes,yes,16,procedural-shared,680,sheet_off_jar,yes
+arm_field_seer_98,หม้อวิญญาณสายครูอาคม รุ่น 98,offHand,off_jar,98,seer,offHand,off_jar,no,yes,16,procedural-shared,680,sheet_off_jar,yes
+off_jar_8,หม้อวิญญาณพิชัยยุทธ์,offHand,off_jar,100,seer,offHand,off_jar,yes,yes,16,procedural-shared,680,sheet_off_jar,yes
+off_shield_1,โล่หวายฝึกหัด,offHand,off_shield,1,sentinel,offHand,off_shield,yes,yes,16,procedural-shared,1760,sheet_off_shield,yes
+arm_field_sentinel_2,โล่หวายสายรักษาด่าน รุ่น 2,offHand,off_shield,2,sentinel,offHand,off_shield,no,yes,16,procedural-shared,1760,sheet_off_shield,yes
+off_shield_2,โล่หวายชายป่า,offHand,off_shield,10,sentinel,offHand,off_shield,yes,yes,16,procedural-shared,1760,sheet_off_shield,yes
+arm_field_sentinel_15,โล่หวายสายรักษาด่าน รุ่น 15,offHand,off_shield,15,sentinel,offHand,off_shield,no,yes,16,procedural-shared,1760,sheet_off_shield,yes
+off_shield_3,โล่หวายสำนักครู,offHand,off_shield,25,sentinel,offHand,off_shield,yes,yes,16,procedural-shared,1760,sheet_off_shield,yes
+arm_field_sentinel_29,โล่หวายสายรักษาด่าน รุ่น 29,offHand,off_shield,29,sentinel,offHand,off_shield,no,yes,16,procedural-shared,1760,sheet_off_shield,yes
+arm_field_sentinel_43,โล่หวายสายรักษาด่าน รุ่น 43,offHand,off_shield,43,sentinel,offHand,off_shield,no,yes,16,procedural-shared,1760,sheet_off_shield,yes
+off_shield_4,โล่หวายค่ายหน้า,offHand,off_shield,45,sentinel,offHand,off_shield,yes,yes,16,procedural-shared,1760,sheet_off_shield,yes
+arm_field_sentinel_57,โล่หวายสายรักษาด่าน รุ่น 57,offHand,off_shield,57,sentinel,offHand,off_shield,no,yes,16,procedural-shared,1760,sheet_off_shield,yes
+off_shield_5,โล่หวายเวียงเหล็ก,offHand,off_shield,65,sentinel,offHand,off_shield,yes,yes,16,procedural-shared,1760,sheet_off_shield,yes
+arm_field_sentinel_72,โล่หวายสายรักษาด่าน รุ่น 72,offHand,off_shield,72,sentinel,offHand,off_shield,no,yes,16,procedural-shared,1760,sheet_off_shield,yes
+arm_field_sentinel_84,โล่หวายสายรักษาด่าน รุ่น 84,offHand,off_shield,84,sentinel,offHand,off_shield,no,yes,16,procedural-shared,1760,sheet_off_shield,yes
+off_shield_6,โล่หวายทัพหลวง,offHand,off_shield,85,sentinel,offHand,off_shield,yes,yes,16,procedural-shared,1760,sheet_off_shield,yes
+off_shield_7,โล่หวายราชสำนัก,offHand,off_shield,95,sentinel,offHand,off_shield,yes,yes,16,procedural-shared,1760,sheet_off_shield,yes
+arm_field_sentinel_98,โล่หวายสายรักษาด่าน รุ่น 98,offHand,off_shield,98,sentinel,offHand,off_shield,no,yes,16,procedural-shared,1760,sheet_off_shield,yes
+off_shield_8,โล่หวายพิชัยยุทธ์,offHand,off_shield,100,sentinel,offHand,off_shield,yes,yes,16,procedural-shared,1760,sheet_off_shield,yes
+off_veil_1,ผ้ายันต์พรางเงาฝึกหัด,offHand,off_veil,1,blade,offHand,off_veil,yes,yes,16,procedural-shared,76,sheet_off_veil,yes
+arm_field_blade_2,ผ้ายันต์พรางเงาสายพรางเงา รุ่น 2,offHand,off_veil,2,blade,offHand,off_veil,no,yes,16,procedural-shared,76,sheet_off_veil,yes
+off_veil_2,ผ้ายันต์พรางเงาชายป่า,offHand,off_veil,10,blade,offHand,off_veil,yes,yes,16,procedural-shared,76,sheet_off_veil,yes
+arm_field_blade_15,ผ้ายันต์พรางเงาสายพรางเงา รุ่น 15,offHand,off_veil,15,blade,offHand,off_veil,no,yes,16,procedural-shared,76,sheet_off_veil,yes
+off_veil_3,ผ้ายันต์พรางเงาสำนักครู,offHand,off_veil,25,blade,offHand,off_veil,yes,yes,16,procedural-shared,76,sheet_off_veil,yes
+arm_field_blade_29,ผ้ายันต์พรางเงาสายพรางเงา รุ่น 29,offHand,off_veil,29,blade,offHand,off_veil,no,yes,16,procedural-shared,76,sheet_off_veil,yes
+arm_field_blade_43,ผ้ายันต์พรางเงาสายพรางเงา รุ่น 43,offHand,off_veil,43,blade,offHand,off_veil,no,yes,16,procedural-shared,76,sheet_off_veil,yes
+off_veil_4,ผ้ายันต์พรางเงาค่ายหน้า,offHand,off_veil,45,blade,offHand,off_veil,yes,yes,16,procedural-shared,76,sheet_off_veil,yes
+arm_field_blade_57,ผ้ายันต์พรางเงาสายพรางเงา รุ่น 57,offHand,off_veil,57,blade,offHand,off_veil,no,yes,16,procedural-shared,76,sheet_off_veil,yes
+off_veil_5,ผ้ายันต์พรางเงาเวียงเหล็ก,offHand,off_veil,65,blade,offHand,off_veil,yes,yes,16,procedural-shared,76,sheet_off_veil,yes
+arm_field_blade_72,ผ้ายันต์พรางเงาสายพรางเงา รุ่น 72,offHand,off_veil,72,blade,offHand,off_veil,no,yes,16,procedural-shared,76,sheet_off_veil,yes
+arm_field_blade_84,ผ้ายันต์พรางเงาสายพรางเงา รุ่น 84,offHand,off_veil,84,blade,offHand,off_veil,no,yes,16,procedural-shared,76,sheet_off_veil,yes
+off_veil_6,ผ้ายันต์พรางเงาทัพหลวง,offHand,off_veil,85,blade,offHand,off_veil,yes,yes,16,procedural-shared,76,sheet_off_veil,yes
+off_veil_7,ผ้ายันต์พรางเงาราชสำนัก,offHand,off_veil,95,blade,offHand,off_veil,yes,yes,16,procedural-shared,76,sheet_off_veil,yes
+arm_field_blade_98,ผ้ายันต์พรางเงาสายพรางเงา รุ่น 98,offHand,off_veil,98,blade,offHand,off_veil,no,yes,16,procedural-shared,76,sheet_off_veil,yes
+off_veil_8,ผ้ายันต์พรางเงาพิชัยยุทธ์,offHand,off_veil,100,blade,offHand,off_veil,yes,yes,16,procedural-shared,76,sheet_off_veil,yes
+arm_cloth_rightHand_1,ถุงมือขวาผ้าจารอักขระฝึกหัด,rightHand,arm_cloth_rightHand,1,all,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_cloth_rightHand_2,ถุงมือขวาผ้าจารอักขระชายป่า,rightHand,arm_cloth_rightHand,10,all,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_seer_13,ถุงมือขวาผ้าจารอักขระสายครูอาคม รุ่น 13,rightHand,arm_cloth_rightHand,13,seer,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_mender_13,ถุงมือขวาผ้าจารอักขระสายเรียกขวัญ รุ่น 13,rightHand,arm_cloth_rightHand,13,mender,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_cloth_rightHand_3,ถุงมือขวาผ้าจารอักขระสำนักครู,rightHand,arm_cloth_rightHand,25,all,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_seer_27,ถุงมือขวาผ้าจารอักขระสายครูอาคม รุ่น 27,rightHand,arm_cloth_rightHand,27,seer,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_mender_27,ถุงมือขวาผ้าจารอักขระสายเรียกขวัญ รุ่น 27,rightHand,arm_cloth_rightHand,27,mender,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_seer_41,ถุงมือขวาผ้าจารอักขระสายครูอาคม รุ่น 41,rightHand,arm_cloth_rightHand,41,seer,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_mender_41,ถุงมือขวาผ้าจารอักขระสายเรียกขวัญ รุ่น 41,rightHand,arm_cloth_rightHand,41,mender,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_cloth_rightHand_4,ถุงมือขวาผ้าจารอักขระค่ายหน้า,rightHand,arm_cloth_rightHand,45,all,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_seer_55,ถุงมือขวาผ้าจารอักขระสายครูอาคม รุ่น 55,rightHand,arm_cloth_rightHand,55,seer,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_mender_55,ถุงมือขวาผ้าจารอักขระสายเรียกขวัญ รุ่น 55,rightHand,arm_cloth_rightHand,55,mender,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_cloth_rightHand_5,ถุงมือขวาผ้าจารอักขระเวียงเหล็ก,rightHand,arm_cloth_rightHand,65,all,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_seer_69,ถุงมือขวาผ้าจารอักขระสายครูอาคม รุ่น 69,rightHand,arm_cloth_rightHand,69,seer,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_mender_69,ถุงมือขวาผ้าจารอักขระสายเรียกขวัญ รุ่น 69,rightHand,arm_cloth_rightHand,69,mender,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_seer_82,ถุงมือขวาผ้าจารอักขระสายครูอาคม รุ่น 82,rightHand,arm_cloth_rightHand,82,seer,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_mender_82,ถุงมือขวาผ้าจารอักขระสายเรียกขวัญ รุ่น 82,rightHand,arm_cloth_rightHand,82,mender,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_cloth_rightHand_6,ถุงมือขวาผ้าจารอักขระทัพหลวง,rightHand,arm_cloth_rightHand,85,all,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_cloth_rightHand_7,ถุงมือขวาผ้าจารอักขระราชสำนัก,rightHand,arm_cloth_rightHand,95,all,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_seer_96,ถุงมือขวาผ้าจารอักขระสายครูอาคม รุ่น 96,rightHand,arm_cloth_rightHand,96,seer,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_field_mender_96,ถุงมือขวาผ้าจารอักขระสายเรียกขวัญ รุ่น 96,rightHand,arm_cloth_rightHand,96,mender,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_cloth_rightHand_8,ถุงมือขวาผ้าจารอักขระพิชัยยุทธ์,rightHand,arm_cloth_rightHand,100,all,rightHand,arm_cloth_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_cloth_rightHand,yes
+arm_heavy_rightHand_1,ถุงมือขวาเกราะรักษาเวียงฝึกหัด,rightHand,arm_heavy_rightHand,1,all,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_heavy_rightHand_2,ถุงมือขวาเกราะรักษาเวียงชายป่า,rightHand,arm_heavy_rightHand,10,all,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_field_sentinel_13,ถุงมือขวาเกราะรักษาเวียงสายรักษาด่าน รุ่น 13,rightHand,arm_heavy_rightHand,13,sentinel,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_heavy_rightHand_3,ถุงมือขวาเกราะรักษาเวียงสำนักครู,rightHand,arm_heavy_rightHand,25,all,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_field_sentinel_27,ถุงมือขวาเกราะรักษาเวียงสายรักษาด่าน รุ่น 27,rightHand,arm_heavy_rightHand,27,sentinel,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_field_sentinel_41,ถุงมือขวาเกราะรักษาเวียงสายรักษาด่าน รุ่น 41,rightHand,arm_heavy_rightHand,41,sentinel,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_heavy_rightHand_4,ถุงมือขวาเกราะรักษาเวียงค่ายหน้า,rightHand,arm_heavy_rightHand,45,all,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_field_sentinel_55,ถุงมือขวาเกราะรักษาเวียงสายรักษาด่าน รุ่น 55,rightHand,arm_heavy_rightHand,55,sentinel,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_heavy_rightHand_5,ถุงมือขวาเกราะรักษาเวียงเวียงเหล็ก,rightHand,arm_heavy_rightHand,65,all,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_field_sentinel_69,ถุงมือขวาเกราะรักษาเวียงสายรักษาด่าน รุ่น 69,rightHand,arm_heavy_rightHand,69,sentinel,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_field_sentinel_82,ถุงมือขวาเกราะรักษาเวียงสายรักษาด่าน รุ่น 82,rightHand,arm_heavy_rightHand,82,sentinel,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_heavy_rightHand_6,ถุงมือขวาเกราะรักษาเวียงทัพหลวง,rightHand,arm_heavy_rightHand,85,all,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_heavy_rightHand_7,ถุงมือขวาเกราะรักษาเวียงราชสำนัก,rightHand,arm_heavy_rightHand,95,all,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_field_sentinel_96,ถุงมือขวาเกราะรักษาเวียงสายรักษาด่าน รุ่น 96,rightHand,arm_heavy_rightHand,96,sentinel,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_heavy_rightHand_8,ถุงมือขวาเกราะรักษาเวียงพิชัยยุทธ์,rightHand,arm_heavy_rightHand,100,all,rightHand,arm_heavy_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_heavy_rightHand,yes
+arm_hide_rightHand_1,ถุงมือขวาหนังพรานเงาฝึกหัด,rightHand,arm_hide_rightHand,1,all,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_hide_rightHand_2,ถุงมือขวาหนังพรานเงาชายป่า,rightHand,arm_hide_rightHand,10,all,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_muay_boran_13,ถุงมือขวาหนังพรานเงาสายคาดเชือก รุ่น 13,rightHand,arm_hide_rightHand,13,muay_boran,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_blade_13,ถุงมือขวาหนังพรานเงาสายพรางเงา รุ่น 13,rightHand,arm_hide_rightHand,13,blade,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_hide_rightHand_3,ถุงมือขวาหนังพรานเงาสำนักครู,rightHand,arm_hide_rightHand,25,all,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_muay_boran_27,ถุงมือขวาหนังพรานเงาสายคาดเชือก รุ่น 27,rightHand,arm_hide_rightHand,27,muay_boran,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_blade_27,ถุงมือขวาหนังพรานเงาสายพรางเงา รุ่น 27,rightHand,arm_hide_rightHand,27,blade,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_muay_boran_41,ถุงมือขวาหนังพรานเงาสายคาดเชือก รุ่น 41,rightHand,arm_hide_rightHand,41,muay_boran,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_blade_41,ถุงมือขวาหนังพรานเงาสายพรางเงา รุ่น 41,rightHand,arm_hide_rightHand,41,blade,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_hide_rightHand_4,ถุงมือขวาหนังพรานเงาค่ายหน้า,rightHand,arm_hide_rightHand,45,all,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_muay_boran_55,ถุงมือขวาหนังพรานเงาสายคาดเชือก รุ่น 55,rightHand,arm_hide_rightHand,55,muay_boran,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_blade_55,ถุงมือขวาหนังพรานเงาสายพรางเงา รุ่น 55,rightHand,arm_hide_rightHand,55,blade,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_hide_rightHand_5,ถุงมือขวาหนังพรานเงาเวียงเหล็ก,rightHand,arm_hide_rightHand,65,all,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_muay_boran_69,ถุงมือขวาหนังพรานเงาสายคาดเชือก รุ่น 69,rightHand,arm_hide_rightHand,69,muay_boran,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_blade_69,ถุงมือขวาหนังพรานเงาสายพรางเงา รุ่น 69,rightHand,arm_hide_rightHand,69,blade,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_muay_boran_82,ถุงมือขวาหนังพรานเงาสายคาดเชือก รุ่น 82,rightHand,arm_hide_rightHand,82,muay_boran,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_blade_82,ถุงมือขวาหนังพรานเงาสายพรางเงา รุ่น 82,rightHand,arm_hide_rightHand,82,blade,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_hide_rightHand_6,ถุงมือขวาหนังพรานเงาทัพหลวง,rightHand,arm_hide_rightHand,85,all,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_hide_rightHand_7,ถุงมือขวาหนังพรานเงาราชสำนัก,rightHand,arm_hide_rightHand,95,all,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_muay_boran_96,ถุงมือขวาหนังพรานเงาสายคาดเชือก รุ่น 96,rightHand,arm_hide_rightHand,96,muay_boran,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_field_blade_96,ถุงมือขวาหนังพรานเงาสายพรางเงา รุ่น 96,rightHand,arm_hide_rightHand,96,blade,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_hide_rightHand_8,ถุงมือขวาหนังพรานเงาพิชัยยุทธ์,rightHand,arm_hide_rightHand,100,all,rightHand,arm_hide_rightHand,yes,yes,22,procedural-shared,40,sheet_arm_hide_rightHand,yes
+arm_medium_rightHand_1,ถุงมือขวาเกราะเกล็ดทัพฝึกหัด,rightHand,arm_medium_rightHand,1,all,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_medium_rightHand_2,ถุงมือขวาเกราะเกล็ดทัพชายป่า,rightHand,arm_medium_rightHand,10,all,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_field_phutthaisawan_13,ถุงมือขวาเกราะเกล็ดทัพสายดาบคู่ รุ่น 13,rightHand,arm_medium_rightHand,13,phutthaisawan,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_medium_rightHand_3,ถุงมือขวาเกราะเกล็ดทัพสำนักครู,rightHand,arm_medium_rightHand,25,all,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_field_phutthaisawan_27,ถุงมือขวาเกราะเกล็ดทัพสายดาบคู่ รุ่น 27,rightHand,arm_medium_rightHand,27,phutthaisawan,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_field_phutthaisawan_41,ถุงมือขวาเกราะเกล็ดทัพสายดาบคู่ รุ่น 41,rightHand,arm_medium_rightHand,41,phutthaisawan,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_medium_rightHand_4,ถุงมือขวาเกราะเกล็ดทัพค่ายหน้า,rightHand,arm_medium_rightHand,45,all,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_field_phutthaisawan_55,ถุงมือขวาเกราะเกล็ดทัพสายดาบคู่ รุ่น 55,rightHand,arm_medium_rightHand,55,phutthaisawan,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_medium_rightHand_5,ถุงมือขวาเกราะเกล็ดทัพเวียงเหล็ก,rightHand,arm_medium_rightHand,65,all,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_field_phutthaisawan_69,ถุงมือขวาเกราะเกล็ดทัพสายดาบคู่ รุ่น 69,rightHand,arm_medium_rightHand,69,phutthaisawan,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_field_phutthaisawan_82,ถุงมือขวาเกราะเกล็ดทัพสายดาบคู่ รุ่น 82,rightHand,arm_medium_rightHand,82,phutthaisawan,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_medium_rightHand_6,ถุงมือขวาเกราะเกล็ดทัพทัพหลวง,rightHand,arm_medium_rightHand,85,all,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_medium_rightHand_7,ถุงมือขวาเกราะเกล็ดทัพราชสำนัก,rightHand,arm_medium_rightHand,95,all,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_field_phutthaisawan_96,ถุงมือขวาเกราะเกล็ดทัพสายดาบคู่ รุ่น 96,rightHand,arm_medium_rightHand,96,phutthaisawan,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+arm_medium_rightHand_8,ถุงมือขวาเกราะเกล็ดทัพพิชัยยุทธ์,rightHand,arm_medium_rightHand,100,all,rightHand,arm_medium_rightHand,yes,yes,15,procedural-shared,64,sheet_arm_medium_rightHand,yes
+acc_boss_asura_peak,แหวนเพลิงเตาหลวง,ring,acc_boss_asura_peak,85,all,leftRing|rightRing,acc_boss_asura_peak,no,yes,1,procedural-shared,296,sheet_acc_boss_asura_peak,yes
+acc_boss_drowned_marsh,แหวนพรายกระแสน้ำ,ring,acc_boss_drowned_marsh,22,all,leftRing|rightRing,acc_boss_drowned_marsh,no,yes,1,procedural-shared,296,sheet_acc_boss_drowned_marsh,yes
+acc_boss_river_watch,แหวนเขี้ยวสมิง,ring,acc_boss_river_watch,54,all,leftRing|rightRing,acc_boss_river_watch,no,yes,1,procedural-shared,296,sheet_acc_boss_river_watch,yes
+acc_boss_twin_neck_pass,แหวนครุฑสันผา,ring,acc_boss_twin_neck_pass,55,all,leftRing|rightRing,acc_boss_twin_neck_pass,no,yes,1,procedural-shared,296,sheet_acc_boss_twin_neck_pass,yes
+acc_rift_star,แหวนดาวราชัน,ring,acc_rift_star,100,all,leftRing|rightRing,acc_rift_star,no,yes,1,procedural-shared,296,sheet_acc_rift_star,yes
+acc_ring_atk_1,แหวนคมศึกฝึกหัด,ring,acc_ring_atk,1,all,leftRing|rightRing,acc_ring_atk,yes,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_muay_boran_8,แหวนคมศึกสายคาดเชือก รุ่น 8,ring,acc_ring_atk,8,muay_boran,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_phutthaisawan_8,แหวนคมศึกสายดาบคู่ รุ่น 8,ring,acc_ring_atk,8,phutthaisawan,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_blade_8,แหวนคมศึกสายพรางเงา รุ่น 8,ring,acc_ring_atk,8,blade,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+acc_ring_atk_2,แหวนคมศึกชายป่า,ring,acc_ring_atk,10,all,leftRing|rightRing,acc_ring_atk,yes,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_muay_boran_22,แหวนคมศึกสายคาดเชือก รุ่น 22,ring,acc_ring_atk,22,muay_boran,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_phutthaisawan_22,แหวนคมศึกสายดาบคู่ รุ่น 22,ring,acc_ring_atk,22,phutthaisawan,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_blade_22,แหวนคมศึกสายพรางเงา รุ่น 22,ring,acc_ring_atk,22,blade,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+acc_ring_atk_3,แหวนคมศึกสำนักครู,ring,acc_ring_atk,25,all,leftRing|rightRing,acc_ring_atk,yes,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_muay_boran_36,แหวนคมศึกสายคาดเชือก รุ่น 36,ring,acc_ring_atk,36,muay_boran,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_phutthaisawan_36,แหวนคมศึกสายดาบคู่ รุ่น 36,ring,acc_ring_atk,36,phutthaisawan,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_blade_36,แหวนคมศึกสายพรางเงา รุ่น 36,ring,acc_ring_atk,36,blade,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+acc_ring_atk_4,แหวนคมศึกค่ายหน้า,ring,acc_ring_atk,45,all,leftRing|rightRing,acc_ring_atk,yes,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_muay_boran_51,แหวนคมศึกสายคาดเชือก รุ่น 51,ring,acc_ring_atk,51,muay_boran,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_phutthaisawan_51,แหวนคมศึกสายดาบคู่ รุ่น 51,ring,acc_ring_atk,51,phutthaisawan,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_blade_51,แหวนคมศึกสายพรางเงา รุ่น 51,ring,acc_ring_atk,51,blade,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_muay_boran_64,แหวนคมศึกสายคาดเชือก รุ่น 64,ring,acc_ring_atk,64,muay_boran,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_phutthaisawan_64,แหวนคมศึกสายดาบคู่ รุ่น 64,ring,acc_ring_atk,64,phutthaisawan,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_blade_64,แหวนคมศึกสายพรางเงา รุ่น 64,ring,acc_ring_atk,64,blade,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+acc_ring_atk_5,แหวนคมศึกเวียงเหล็ก,ring,acc_ring_atk,65,all,leftRing|rightRing,acc_ring_atk,yes,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_muay_boran_78,แหวนคมศึกสายคาดเชือก รุ่น 78,ring,acc_ring_atk,78,muay_boran,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_phutthaisawan_78,แหวนคมศึกสายดาบคู่ รุ่น 78,ring,acc_ring_atk,78,phutthaisawan,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_blade_78,แหวนคมศึกสายพรางเงา รุ่น 78,ring,acc_ring_atk,78,blade,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+acc_ring_atk_6,แหวนคมศึกทัพหลวง,ring,acc_ring_atk,85,all,leftRing|rightRing,acc_ring_atk,yes,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_muay_boran_91,แหวนคมศึกสายคาดเชือก รุ่น 91,ring,acc_ring_atk,91,muay_boran,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_phutthaisawan_91,แหวนคมศึกสายดาบคู่ รุ่น 91,ring,acc_ring_atk,91,phutthaisawan,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+arm_field_blade_91,แหวนคมศึกสายพรางเงา รุ่น 91,ring,acc_ring_atk,91,blade,leftRing|rightRing,acc_ring_atk,no,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+acc_ring_atk_7,แหวนคมศึกราชสำนัก,ring,acc_ring_atk,95,all,leftRing|rightRing,acc_ring_atk,yes,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+acc_ring_atk_8,แหวนคมศึกพิชัยยุทธ์,ring,acc_ring_atk,100,all,leftRing|rightRing,acc_ring_atk,yes,yes,29,procedural-shared,296,sheet_acc_ring_atk,yes
+acc_ring_guard_1,แหวนพิทักษ์ศาล,ring,acc_ring_guard,1,all,leftRing|rightRing,acc_ring_guard,yes,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+arm_field_sentinel_8,แหวนพิทักษ์ศาลสายรักษาด่าน รุ่น 8,ring,acc_ring_guard,8,sentinel,leftRing|rightRing,acc_ring_guard,no,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+acc_ring_guard_2,แหวนพิทักษ์ศาลชายป่า,ring,acc_ring_guard,10,all,leftRing|rightRing,acc_ring_guard,yes,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+arm_field_sentinel_22,แหวนพิทักษ์ศาลสายรักษาด่าน รุ่น 22,ring,acc_ring_guard,22,sentinel,leftRing|rightRing,acc_ring_guard,no,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+acc_ring_guard_3,แหวนพิทักษ์ศาลสำนักครู,ring,acc_ring_guard,25,all,leftRing|rightRing,acc_ring_guard,yes,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+arm_field_sentinel_36,แหวนพิทักษ์ศาลสายรักษาด่าน รุ่น 36,ring,acc_ring_guard,36,sentinel,leftRing|rightRing,acc_ring_guard,no,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+acc_ring_guard_4,แหวนพิทักษ์ศาลค่ายหน้า,ring,acc_ring_guard,45,all,leftRing|rightRing,acc_ring_guard,yes,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+arm_field_sentinel_51,แหวนพิทักษ์ศาลสายรักษาด่าน รุ่น 51,ring,acc_ring_guard,51,sentinel,leftRing|rightRing,acc_ring_guard,no,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+arm_field_sentinel_64,แหวนพิทักษ์ศาลสายรักษาด่าน รุ่น 64,ring,acc_ring_guard,64,sentinel,leftRing|rightRing,acc_ring_guard,no,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+acc_ring_guard_5,แหวนพิทักษ์ศาลเวียงเหล็ก,ring,acc_ring_guard,65,all,leftRing|rightRing,acc_ring_guard,yes,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+arm_field_sentinel_78,แหวนพิทักษ์ศาลสายรักษาด่าน รุ่น 78,ring,acc_ring_guard,78,sentinel,leftRing|rightRing,acc_ring_guard,no,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+acc_ring_guard_6,แหวนพิทักษ์ศาลทัพหลวง,ring,acc_ring_guard,85,all,leftRing|rightRing,acc_ring_guard,yes,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+arm_field_sentinel_91,แหวนพิทักษ์ศาลสายรักษาด่าน รุ่น 91,ring,acc_ring_guard,91,sentinel,leftRing|rightRing,acc_ring_guard,no,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+acc_ring_guard_7,แหวนพิทักษ์ศาลราชสำนัก,ring,acc_ring_guard,95,all,leftRing|rightRing,acc_ring_guard,yes,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+acc_ring_guard_8,แหวนพิทักษ์ศาลพิชัยยุทธ์,ring,acc_ring_guard,100,all,leftRing|rightRing,acc_ring_guard,yes,yes,15,procedural-shared,296,sheet_acc_ring_guard,yes
+acc_ring_heal_1,แหวนขวัญฝึกหัด,ring,acc_ring_heal,1,all,leftRing|rightRing,acc_ring_heal,yes,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+arm_field_mender_8,แหวนขวัญสายเรียกขวัญ รุ่น 8,ring,acc_ring_heal,8,mender,leftRing|rightRing,acc_ring_heal,no,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+acc_ring_heal_2,แหวนขวัญชายป่า,ring,acc_ring_heal,10,all,leftRing|rightRing,acc_ring_heal,yes,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+arm_field_mender_22,แหวนขวัญสายเรียกขวัญ รุ่น 22,ring,acc_ring_heal,22,mender,leftRing|rightRing,acc_ring_heal,no,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+acc_ring_heal_3,แหวนขวัญสำนักครู,ring,acc_ring_heal,25,all,leftRing|rightRing,acc_ring_heal,yes,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+arm_field_mender_36,แหวนขวัญสายเรียกขวัญ รุ่น 36,ring,acc_ring_heal,36,mender,leftRing|rightRing,acc_ring_heal,no,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+acc_ring_heal_4,แหวนขวัญค่ายหน้า,ring,acc_ring_heal,45,all,leftRing|rightRing,acc_ring_heal,yes,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+arm_field_mender_51,แหวนขวัญสายเรียกขวัญ รุ่น 51,ring,acc_ring_heal,51,mender,leftRing|rightRing,acc_ring_heal,no,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+arm_field_mender_64,แหวนขวัญสายเรียกขวัญ รุ่น 64,ring,acc_ring_heal,64,mender,leftRing|rightRing,acc_ring_heal,no,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+acc_ring_heal_5,แหวนขวัญเวียงเหล็ก,ring,acc_ring_heal,65,all,leftRing|rightRing,acc_ring_heal,yes,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+arm_field_mender_78,แหวนขวัญสายเรียกขวัญ รุ่น 78,ring,acc_ring_heal,78,mender,leftRing|rightRing,acc_ring_heal,no,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+acc_ring_heal_6,แหวนขวัญทัพหลวง,ring,acc_ring_heal,85,all,leftRing|rightRing,acc_ring_heal,yes,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+arm_field_mender_91,แหวนขวัญสายเรียกขวัญ รุ่น 91,ring,acc_ring_heal,91,mender,leftRing|rightRing,acc_ring_heal,no,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+acc_ring_heal_7,แหวนขวัญราชสำนัก,ring,acc_ring_heal,95,all,leftRing|rightRing,acc_ring_heal,yes,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+acc_ring_heal_8,แหวนขวัญพิชัยยุทธ์,ring,acc_ring_heal,100,all,leftRing|rightRing,acc_ring_heal,yes,yes,15,procedural-shared,296,sheet_acc_ring_heal,yes
+acc_ring_spell_1,แหวนตราผีฝึกหัด,ring,acc_ring_spell,1,all,leftRing|rightRing,acc_ring_spell,yes,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+arm_field_seer_8,แหวนตราผีสายครูอาคม รุ่น 8,ring,acc_ring_spell,8,seer,leftRing|rightRing,acc_ring_spell,no,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+acc_ring_spell_2,แหวนตราผีชายป่า,ring,acc_ring_spell,10,all,leftRing|rightRing,acc_ring_spell,yes,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+arm_field_seer_22,แหวนตราผีสายครูอาคม รุ่น 22,ring,acc_ring_spell,22,seer,leftRing|rightRing,acc_ring_spell,no,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+acc_ring_spell_3,แหวนตราผีสำนักครู,ring,acc_ring_spell,25,all,leftRing|rightRing,acc_ring_spell,yes,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+arm_field_seer_36,แหวนตราผีสายครูอาคม รุ่น 36,ring,acc_ring_spell,36,seer,leftRing|rightRing,acc_ring_spell,no,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+acc_ring_spell_4,แหวนตราผีค่ายหน้า,ring,acc_ring_spell,45,all,leftRing|rightRing,acc_ring_spell,yes,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+arm_field_seer_51,แหวนตราผีสายครูอาคม รุ่น 51,ring,acc_ring_spell,51,seer,leftRing|rightRing,acc_ring_spell,no,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+arm_field_seer_64,แหวนตราผีสายครูอาคม รุ่น 64,ring,acc_ring_spell,64,seer,leftRing|rightRing,acc_ring_spell,no,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+acc_ring_spell_5,แหวนตราผีเวียงเหล็ก,ring,acc_ring_spell,65,all,leftRing|rightRing,acc_ring_spell,yes,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+arm_field_seer_78,แหวนตราผีสายครูอาคม รุ่น 78,ring,acc_ring_spell,78,seer,leftRing|rightRing,acc_ring_spell,no,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+acc_ring_spell_6,แหวนตราผีทัพหลวง,ring,acc_ring_spell,85,all,leftRing|rightRing,acc_ring_spell,yes,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+arm_field_seer_91,แหวนตราผีสายครูอาคม รุ่น 91,ring,acc_ring_spell,91,seer,leftRing|rightRing,acc_ring_spell,no,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+acc_ring_spell_7,แหวนตราผีราชสำนัก,ring,acc_ring_spell,95,all,leftRing|rightRing,acc_ring_spell,yes,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+acc_ring_spell_8,แหวนตราผีพิชัยยุทธ์,ring,acc_ring_spell,100,all,leftRing|rightRing,acc_ring_spell,yes,yes,15,procedural-shared,296,sheet_acc_ring_spell,yes
+arm_cloth_shoulders_1,เกราะไหล่ผ้าจารอักขระฝึกหัด,shoulders,arm_cloth_shoulders,1,all,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_seer_7,เกราะไหล่ผ้าจารอักขระสายครูอาคม รุ่น 7,shoulders,arm_cloth_shoulders,7,seer,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_mender_7,เกราะไหล่ผ้าจารอักขระสายเรียกขวัญ รุ่น 7,shoulders,arm_cloth_shoulders,7,mender,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_cloth_shoulders_2,เกราะไหล่ผ้าจารอักขระชายป่า,shoulders,arm_cloth_shoulders,10,all,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_seer_21,เกราะไหล่ผ้าจารอักขระสายครูอาคม รุ่น 21,shoulders,arm_cloth_shoulders,21,seer,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_mender_21,เกราะไหล่ผ้าจารอักขระสายเรียกขวัญ รุ่น 21,shoulders,arm_cloth_shoulders,21,mender,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_cloth_shoulders_3,เกราะไหล่ผ้าจารอักขระสำนักครู,shoulders,arm_cloth_shoulders,25,all,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_seer_35,เกราะไหล่ผ้าจารอักขระสายครูอาคม รุ่น 35,shoulders,arm_cloth_shoulders,35,seer,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_mender_35,เกราะไหล่ผ้าจารอักขระสายเรียกขวัญ รุ่น 35,shoulders,arm_cloth_shoulders,35,mender,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_cloth_shoulders_4,เกราะไหล่ผ้าจารอักขระค่ายหน้า,shoulders,arm_cloth_shoulders,45,all,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_seer_49,เกราะไหล่ผ้าจารอักขระสายครูอาคม รุ่น 49,shoulders,arm_cloth_shoulders,49,seer,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_mender_49,เกราะไหล่ผ้าจารอักขระสายเรียกขวัญ รุ่น 49,shoulders,arm_cloth_shoulders,49,mender,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_seer_63,เกราะไหล่ผ้าจารอักขระสายครูอาคม รุ่น 63,shoulders,arm_cloth_shoulders,63,seer,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_mender_63,เกราะไหล่ผ้าจารอักขระสายเรียกขวัญ รุ่น 63,shoulders,arm_cloth_shoulders,63,mender,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_cloth_shoulders_5,เกราะไหล่ผ้าจารอักขระเวียงเหล็ก,shoulders,arm_cloth_shoulders,65,all,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_seer_77,เกราะไหล่ผ้าจารอักขระสายครูอาคม รุ่น 77,shoulders,arm_cloth_shoulders,77,seer,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_mender_77,เกราะไหล่ผ้าจารอักขระสายเรียกขวัญ รุ่น 77,shoulders,arm_cloth_shoulders,77,mender,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_cloth_shoulders_6,เกราะไหล่ผ้าจารอักขระทัพหลวง,shoulders,arm_cloth_shoulders,85,all,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_seer_90,เกราะไหล่ผ้าจารอักขระสายครูอาคม รุ่น 90,shoulders,arm_cloth_shoulders,90,seer,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_field_mender_90,เกราะไหล่ผ้าจารอักขระสายเรียกขวัญ รุ่น 90,shoulders,arm_cloth_shoulders,90,mender,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_cloth_shoulders_7,เกราะไหล่ผ้าจารอักขระราชสำนัก,shoulders,arm_cloth_shoulders,95,all,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_cloth_shoulders_8,เกราะไหล่ผ้าจารอักขระพิชัยยุทธ์,shoulders,arm_cloth_shoulders,100,all,shoulders,arm_cloth_shoulders,yes,yes,22,procedural-shared,2304,sheet_arm_cloth_shoulders,yes
+arm_heavy_shoulders_1,เกราะไหล่เกราะรักษาเวียงฝึกหัด,shoulders,arm_heavy_shoulders,1,all,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_field_sentinel_7,เกราะไหล่เกราะรักษาเวียงสายรักษาด่าน รุ่น 7,shoulders,arm_heavy_shoulders,7,sentinel,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_heavy_shoulders_2,เกราะไหล่เกราะรักษาเวียงชายป่า,shoulders,arm_heavy_shoulders,10,all,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_field_sentinel_21,เกราะไหล่เกราะรักษาเวียงสายรักษาด่าน รุ่น 21,shoulders,arm_heavy_shoulders,21,sentinel,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_heavy_shoulders_3,เกราะไหล่เกราะรักษาเวียงสำนักครู,shoulders,arm_heavy_shoulders,25,all,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_field_sentinel_35,เกราะไหล่เกราะรักษาเวียงสายรักษาด่าน รุ่น 35,shoulders,arm_heavy_shoulders,35,sentinel,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_heavy_shoulders_4,เกราะไหล่เกราะรักษาเวียงค่ายหน้า,shoulders,arm_heavy_shoulders,45,all,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_field_sentinel_49,เกราะไหล่เกราะรักษาเวียงสายรักษาด่าน รุ่น 49,shoulders,arm_heavy_shoulders,49,sentinel,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_field_sentinel_63,เกราะไหล่เกราะรักษาเวียงสายรักษาด่าน รุ่น 63,shoulders,arm_heavy_shoulders,63,sentinel,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_heavy_shoulders_5,เกราะไหล่เกราะรักษาเวียงเวียงเหล็ก,shoulders,arm_heavy_shoulders,65,all,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_field_sentinel_77,เกราะไหล่เกราะรักษาเวียงสายรักษาด่าน รุ่น 77,shoulders,arm_heavy_shoulders,77,sentinel,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_heavy_shoulders_6,เกราะไหล่เกราะรักษาเวียงทัพหลวง,shoulders,arm_heavy_shoulders,85,all,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_field_sentinel_90,เกราะไหล่เกราะรักษาเวียงสายรักษาด่าน รุ่น 90,shoulders,arm_heavy_shoulders,90,sentinel,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_heavy_shoulders_7,เกราะไหล่เกราะรักษาเวียงราชสำนัก,shoulders,arm_heavy_shoulders,95,all,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_heavy_shoulders_8,เกราะไหล่เกราะรักษาเวียงพิชัยยุทธ์,shoulders,arm_heavy_shoulders,100,all,shoulders,arm_heavy_shoulders,yes,yes,15,procedural-shared,7024,sheet_arm_heavy_shoulders,yes
+arm_hide_shoulders_1,เกราะไหล่หนังพรานเงาฝึกหัด,shoulders,arm_hide_shoulders,1,all,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_muay_boran_7,เกราะไหล่หนังพรานเงาสายคาดเชือก รุ่น 7,shoulders,arm_hide_shoulders,7,muay_boran,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_blade_7,เกราะไหล่หนังพรานเงาสายพรางเงา รุ่น 7,shoulders,arm_hide_shoulders,7,blade,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_hide_shoulders_2,เกราะไหล่หนังพรานเงาชายป่า,shoulders,arm_hide_shoulders,10,all,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_muay_boran_21,เกราะไหล่หนังพรานเงาสายคาดเชือก รุ่น 21,shoulders,arm_hide_shoulders,21,muay_boran,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_blade_21,เกราะไหล่หนังพรานเงาสายพรางเงา รุ่น 21,shoulders,arm_hide_shoulders,21,blade,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_hide_shoulders_3,เกราะไหล่หนังพรานเงาสำนักครู,shoulders,arm_hide_shoulders,25,all,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_muay_boran_35,เกราะไหล่หนังพรานเงาสายคาดเชือก รุ่น 35,shoulders,arm_hide_shoulders,35,muay_boran,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_blade_35,เกราะไหล่หนังพรานเงาสายพรางเงา รุ่น 35,shoulders,arm_hide_shoulders,35,blade,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_hide_shoulders_4,เกราะไหล่หนังพรานเงาค่ายหน้า,shoulders,arm_hide_shoulders,45,all,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_muay_boran_49,เกราะไหล่หนังพรานเงาสายคาดเชือก รุ่น 49,shoulders,arm_hide_shoulders,49,muay_boran,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_blade_49,เกราะไหล่หนังพรานเงาสายพรางเงา รุ่น 49,shoulders,arm_hide_shoulders,49,blade,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_muay_boran_63,เกราะไหล่หนังพรานเงาสายคาดเชือก รุ่น 63,shoulders,arm_hide_shoulders,63,muay_boran,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_blade_63,เกราะไหล่หนังพรานเงาสายพรางเงา รุ่น 63,shoulders,arm_hide_shoulders,63,blade,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_hide_shoulders_5,เกราะไหล่หนังพรานเงาเวียงเหล็ก,shoulders,arm_hide_shoulders,65,all,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_muay_boran_77,เกราะไหล่หนังพรานเงาสายคาดเชือก รุ่น 77,shoulders,arm_hide_shoulders,77,muay_boran,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_blade_77,เกราะไหล่หนังพรานเงาสายพรางเงา รุ่น 77,shoulders,arm_hide_shoulders,77,blade,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_hide_shoulders_6,เกราะไหล่หนังพรานเงาทัพหลวง,shoulders,arm_hide_shoulders,85,all,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_muay_boran_90,เกราะไหล่หนังพรานเงาสายคาดเชือก รุ่น 90,shoulders,arm_hide_shoulders,90,muay_boran,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_field_blade_90,เกราะไหล่หนังพรานเงาสายพรางเงา รุ่น 90,shoulders,arm_hide_shoulders,90,blade,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_hide_shoulders_7,เกราะไหล่หนังพรานเงาราชสำนัก,shoulders,arm_hide_shoulders,95,all,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_hide_shoulders_8,เกราะไหล่หนังพรานเงาพิชัยยุทธ์,shoulders,arm_hide_shoulders,100,all,shoulders,arm_hide_shoulders,yes,yes,22,procedural-shared,2328,sheet_arm_hide_shoulders,yes
+arm_medium_shoulders_1,เกราะไหล่เกราะเกล็ดทัพฝึกหัด,shoulders,arm_medium_shoulders,1,all,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_field_phutthaisawan_7,เกราะไหล่เกราะเกล็ดทัพสายดาบคู่ รุ่น 7,shoulders,arm_medium_shoulders,7,phutthaisawan,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_medium_shoulders_2,เกราะไหล่เกราะเกล็ดทัพชายป่า,shoulders,arm_medium_shoulders,10,all,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_field_phutthaisawan_21,เกราะไหล่เกราะเกล็ดทัพสายดาบคู่ รุ่น 21,shoulders,arm_medium_shoulders,21,phutthaisawan,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_medium_shoulders_3,เกราะไหล่เกราะเกล็ดทัพสำนักครู,shoulders,arm_medium_shoulders,25,all,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_field_phutthaisawan_35,เกราะไหล่เกราะเกล็ดทัพสายดาบคู่ รุ่น 35,shoulders,arm_medium_shoulders,35,phutthaisawan,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_medium_shoulders_4,เกราะไหล่เกราะเกล็ดทัพค่ายหน้า,shoulders,arm_medium_shoulders,45,all,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_field_phutthaisawan_49,เกราะไหล่เกราะเกล็ดทัพสายดาบคู่ รุ่น 49,shoulders,arm_medium_shoulders,49,phutthaisawan,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_field_phutthaisawan_63,เกราะไหล่เกราะเกล็ดทัพสายดาบคู่ รุ่น 63,shoulders,arm_medium_shoulders,63,phutthaisawan,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_medium_shoulders_5,เกราะไหล่เกราะเกล็ดทัพเวียงเหล็ก,shoulders,arm_medium_shoulders,65,all,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_field_phutthaisawan_77,เกราะไหล่เกราะเกล็ดทัพสายดาบคู่ รุ่น 77,shoulders,arm_medium_shoulders,77,phutthaisawan,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_medium_shoulders_6,เกราะไหล่เกราะเกล็ดทัพทัพหลวง,shoulders,arm_medium_shoulders,85,all,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_field_phutthaisawan_90,เกราะไหล่เกราะเกล็ดทัพสายดาบคู่ รุ่น 90,shoulders,arm_medium_shoulders,90,phutthaisawan,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_medium_shoulders_7,เกราะไหล่เกราะเกล็ดทัพราชสำนัก,shoulders,arm_medium_shoulders,95,all,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes
+arm_medium_shoulders_8,เกราะไหล่เกราะเกล็ดทัพพิชัยยุทธ์,shoulders,arm_medium_shoulders,100,all,shoulders,arm_medium_shoulders,yes,yes,15,procedural-shared,4720,sheet_arm_medium_shoulders,yes

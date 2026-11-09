@@ -171,3 +171,47 @@ test("Weapon loadout: validate strict equip command and reject forged damage/sta
   assert.throws(()=>validateInventory({...modified,equippedWeaponSlot:25}),
     /inventory_record_invalid/);
 });
+
+// ---- Visible gear look (display only) ----
+import { gearLook, gearLookPart } from "./ItemRules.js";
+import { PERSONAL_ITEMS, OUTFIT_LEVELS } from "./PersonalItems.js";
+const lookSlots: Record<string, string[]> = { head: ["head"], shoulders: ["shoulders"], chest: ["chest"], arms: ["arms"], leftHand: ["leftHand"], rightHand: ["rightHand"],
+  legs: ["legs"], feet: ["feet"], offHand: ["offHand"], neck: ["neck"], earring: ["leftEar", "rightEar"], ring: ["leftRing", "rightRing"] };
+const wornLook = (slot: string, id: string) => gearLook({ version: 1, slots: [], equippedWeaponSlot: 1, equipment: { [slot]: id } } as never);
+
+test("Gear look: regular pieces keep their family and tier", () => {
+  assert.equal(wornLook("head", "arm_cloth_head_3"), "head=arm_cloth_head:3");
+  assert.equal(wornLook("offHand", "off_jar_8"), "offHand=off_jar:8");
+  assert.equal(wornLook("leftEar", "acc_earrings_lotus_2"), "leftEar=acc_earrings_lotus:2");
+  assert.equal(gearLook(undefined), "");
+});
+
+test("Gear look: class field-kit pieces show their real piece at the outfit tier", () => {
+  const tierOf = (level: number) => OUTFIT_LEVELS.filter(min => min <= level).length;
+  let checked = 0;
+  for (const [id, def] of Object.entries(PERSONAL_ITEMS)) {
+    if (!id.startsWith("arm_field_")) continue;
+    const slot = lookSlots[def.kind]![0]!;
+    assert.equal(wornLook(slot, id), `${slot}=${def.family}:${tierOf(def.level!)}`, id);
+    assert.doesNotMatch(wornLook(slot, id), /arm_field_/, id);
+    checked++;
+  }
+  assert.ok(checked > 500);
+  // A level-37 sentinel field piece is outfit tier 3 (25 <= 37 < 45), not tier 37.
+  const sentinel = Object.entries(PERSONAL_ITEMS).find(([id, d]) => id.startsWith("arm_field_sentinel_") && d.level === 37)!;
+  assert.match(gearLookPart(sentinel[0])!, /:3$/);
+});
+
+test("Gear look: boss accessories without a numeric suffix are sent", () => {
+  const boss = Object.entries(PERSONAL_ITEMS).filter(([, d]) => d.sourceBoss && ["neck", "earring", "ring"].includes(d.kind));
+  assert.ok(boss.length >= 16);
+  for (const [id, def] of boss) {
+    const slot = lookSlots[def.kind]![0]!;
+    assert.match(wornLook(slot, id), new RegExp(`^${slot}=${def.family}:\\d+$`), id);
+  }
+});
+
+test("Gear look: every wearable piece has a look in every slot it fits", () => {
+  for (const [id, def] of Object.entries(PERSONAL_ITEMS))
+    for (const slot of lookSlots[def.kind] ?? []) assert.match(wornLook(slot, id), /^[a-zA-Z]+=[a-zA-Z_]+:\d+$/, `${id} in ${slot}`);
+});

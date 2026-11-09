@@ -810,6 +810,7 @@ jobs:
           node personal-equipment-integration.mjs
           node guest-delete-integration.mjs
           node mount-integration.mjs
+          node gear-look-integration.mjs
 
       - name: Rebirth mastery math and combat runtime
         working-directory: combat-verify
