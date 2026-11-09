@@ -21,7 +21,7 @@ function fixture(drawer='crafting'){
     wire.push({room:name,command,payload:plain(payload)});sendHook?.(command,payload);
   }};}
   const room=makeRoom('initial');
-  const ctx={$:id=>elements.get(id)||null,Date:{now:()=>now},mode:'live',room,joined:room,localId:'me',drawerActive:drawer,
+  const ctx={$:id=>elements.get(id)||null,Date:{now:()=>now},mode:'live',questNavigation:null,room,joined:room,localId:'me',drawerActive:drawer,
     forgeAnimation:null,forgeAnimationBusy:()=>false,cancelForgeAnimation(){},renderForgeAnimation(){},failForgeAnimation(){},economyPendingRequest:null,economyGold:null,economyPending:false,economyTimer:null,itemUsePending:false,centralMarketVersion:0,
     craftComingSoon:'',craftPageRoom:room,craftPagePosition:null,craftRecipeTarget:null,benchTrail:[],cardDrill:{},craftResultRoom:null,craftResultMessage:'',
     forgePageRoom:room,forgePageTarget:null,forgePageIdentity:null,forgePageAction:'enhance',

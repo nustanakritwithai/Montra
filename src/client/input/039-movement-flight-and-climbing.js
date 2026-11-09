@@ -1,5 +1,6 @@
   function getLocalAvatar() { return avatars.get(localId); }
-  function pointMove(x,z) {
+  function pointMove(x,z,fromQuestNavigation=false) {
+    if(!fromQuestNavigation)cancelQuestNavigation("",false);
     triggerVoiceGuidance("move");
     if (mode === "demo" && demoFlightTarget) {
       toast("กำลังเปลี่ยนระดับความสูง · รอให้ถึงก่อน");
@@ -32,7 +33,7 @@
     demoAutoAttack = false;
     if (!ui.monsterStatus.hidden) ui.monsterHint.textContent = "แตะผีเพื่อโจมตี";
     if (mode === "live" && room) {
-      try { room.send("move", target); } catch (err) { toast("ส่งคำสั่งเดินไม่สำเร็จ"); }
+      try { room.send("move", target); } catch (err) { toast("ส่งคำสั่งเดินไม่สำเร็จ"); return false; }
     } else if (mode === "demo") {
       demoDest = target;
     }
@@ -263,4 +264,207 @@
     pendingClimb=null;
     try {room.send("climb",{structureId,direction});}
     catch(err){console.error(err);toast("ส่งคำสั่งปีนไม่สำเร็จ");}
+  }
+
+  // Quest navigation owns only temporary client waypoints. The server still
+  // validates every ordinary move/warp and remains the only LIVE position owner.
+  let questNavigation = null;
+  function questNavigationPoint(p) {
+    return Boolean(p && Number.isFinite(p.x) && Number.isFinite(p.z));
+  }
+  function questNavigationGeometry(map, fort) {
+    if (!map?.bounds || map.strategic?.rampart) return null;
+    const radius = .45, bounds = map.bounds;
+    const walls = [...(map.walls || []), ...(map.water || [])];
+    if (map.id === "ritual_village" && fort) walls.push({x:fort.x-fort.width/2,z:fort.z-fort.length/2,width:fort.width,length:fort.length});
+    const circles = map.obstacles || [];
+    function clear(a,b) {
+      if (![a,b].every(p=>questNavigationPoint(p) && p.x>=bounds.minX+radius && p.x<=bounds.maxX-radius && p.z>=bounds.minZ+radius && p.z<=bounds.maxZ-radius)) return false;
+      const dx=b.x-a.x,dz=b.z-a.z,length=dx*dx+dz*dz;
+      for (const w of walls) {
+        let lo=0,hi=1;
+        for (const [value,delta,min,max] of [[a.x,dx,w.x-radius,w.x+w.width+radius],[a.z,dz,w.z-radius,w.z+w.length+radius]]) {
+          if (Math.abs(delta)<1e-9) { if(value<min || value>max){lo=2;break;} }
+          else {const p=(min-value)/delta,q=(max-value)/delta;lo=Math.max(lo,Math.min(p,q));hi=Math.min(hi,Math.max(p,q));}
+        }
+        if(lo<=hi) return false;
+      }
+      for (const o of circles) {
+        const k=length?Math.max(0,Math.min(1,((o.x-a.x)*dx+(o.z-a.z)*dz)/length)):0;
+        if(Math.hypot(o.x-a.x-k*dx,o.z-a.z-k*dz)<=o.radius+radius)return false;
+      }
+      const t=map.terrain;
+      if(t){
+        // Split at every terrain grid edge AND triangle diagonal. A thin steep
+        // face must not disappear between two coarse navigation samples.
+        const cuts=[0,1];
+        for(const [axis,value,delta] of [[t.xs,a.x,dx],[t.zs,a.z,dz]])if(delta)for(const edge of axis){const k=(edge-value)/delta;if(k>0 && k<1)cuts.push(k);}
+        cuts.sort((p,q)=>p-q);
+        const faces=[...cuts];
+        for(let n=1;n<cuts.length;n++){
+          const low=cuts[n-1],high=cuts[n],mid=(low+high)/2,i=terrainCell(t.xs,a.x+dx*mid),j=terrainCell(t.zs,a.z+dz*mid);
+          const w=t.xs[i+1]-t.xs[i],h=t.zs[j+1]-t.zs[j],delta=dx/w-dz/h;
+          if(delta){const k=((a.z-t.zs[j])/h-(a.x-t.xs[i])/w)/delta;if(k>low && k<high)faces.push(k);}
+        }
+        faces.sort((p,q)=>p-q);
+        for(let n=0;n<faces.length;n++){
+          const k=n?(faces[n-1]+faces[n])/2:faces[n],x=a.x+dx*k,z=a.z+dz*k,i=terrainCell(t.xs,x),j=terrainCell(t.zs,z);
+          const w=t.xs[i+1]-t.xs[i],h=t.zs[j+1]-t.zs[j],u=(x-t.xs[i])/w,v=(z-t.zs[j])/h;
+          const aa=t.heights[j][i],bb=t.heights[j][i+1],cc=t.heights[j+1][i],dd=t.heights[j+1][i+1];
+          if(Math.hypot((u>=v?bb-aa:dd-cc)/w,(u>=v?dd-bb:cc-aa)/h)>t.maxGrade)return false;
+        }
+      }
+      return true;
+    }
+    return {clear,bounds};
+  }
+  function* questNavigationPlan(map, from, target, fort) {
+    const geometry=questNavigationGeometry(map,fort);
+    if(!geometry || !questNavigationPoint(from) || !questNavigationPoint(target))return null;
+    const {clear,bounds}=geometry,ends=[{x:target.x,z:target.z}];
+    // Stand near resources/NPCs rather than requiring their occupied center.
+    for(let i=0;i<12;i++){const angle=Math.atan2(from.z-target.z,from.x-target.x)+i*Math.PI/6;ends.push({x:target.x+Math.cos(angle)*1.25,z:target.z+Math.sin(angle)*1.25});}
+    const validEnds=ends.filter(p=>clear(p,p)).sort((a,b)=>Math.hypot(a.x-from.x,a.z-from.z)-Math.hypot(b.x-from.x,b.z-from.z));
+    if(!validEnds.length)return null;
+    const direct=validEnds.find(p=>clear(from,p));if(direct)return [direct];
+    // Bounded A* on the supplied map, never on decorative meshes. Each edge is
+    // collision checked; diagonal corner cutting and unsafe smoothing fail closed.
+    const step=1.5,key=(x,z)=>x+","+z,heap=[],nodes=new Map(),closed=new Set();
+    const heuristic=p=>Math.max(0,Math.hypot(p.x-target.x,p.z-target.z)-1.25);
+    function push(n){heap.push(n);let i=heap.length-1;while(i){const p=(i-1)>>1;if(heap[p].f<=n.f)break;heap[i]=heap[p];i=p;}heap[i]=n;}
+    function pop(){const first=heap[0],last=heap.pop();if(heap.length){let i=0;while(i*2+1<heap.length){let c=i*2+1;if(c+1<heap.length && heap[c+1].f<heap[c].f)c++;if(heap[c].f>=last.f)break;heap[i]=heap[c];i=c;}heap[i]=last;}return first;}
+    const start={x:from.x,z:from.z,ix:0,iz:0,g:0,f:heuristic(from),parent:null};nodes.set("0,0",start);push(start);
+    let finish=null,endpoint=null,sliceStarted=performance.now();
+    for(let visits=0;heap.length && visits<16000;visits++){
+      // Release the main thread regularly so mobile camera, cancellation and
+      // incoming authoritative patches remain responsive during harder searches.
+      if(visits && (visits%256===0 || performance.now()-sliceStarted>=6)){yield; sliceStarted=performance.now();}
+      const node=pop(),id=key(node.ix,node.iz);if(closed.has(id))continue;closed.add(id);
+      if(heuristic(node)<step*2){endpoint=validEnds.find(p=>clear(node,p));if(endpoint){finish=node;break;}}
+      for(const [ix,iz] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]]){
+        const nx=node.ix+ix,nz=node.iz+iz,id=key(nx,nz);if(closed.has(id))continue;
+        const next={x:from.x+nx*step,z:from.z+nz*step,ix:nx,iz:nz};
+        if(next.x<bounds.minX || next.x>bounds.maxX || next.z<bounds.minZ || next.z>bounds.maxZ || !clear(node,next))continue;
+        const g=node.g+step*Math.hypot(ix,iz);if((nodes.get(id)?.g??Infinity)<=g)continue;
+        Object.assign(next,{g,f:g+heuristic(next),parent:node});nodes.set(id,next);push(next);
+      }
+    }
+    if(!finish)return null;
+    const raw=[endpoint];for(let n=finish;n.parent;n=n.parent)raw.unshift({x:n.x,z:n.z});
+    const result=[];let anchor=from;
+    for(let i=0;i<raw.length;){let far=i;while(far+1<raw.length && clear(anchor,raw[far+1]))far++;result.push(raw[far]);anchor=raw[far];i=far+1;}
+    return result;
+  }
+  // Synchronous adapter for geometry verification; LIVE consumes the generator
+  // incrementally from the existing animation loop instead.
+  function planQuestNavigation(map,from,target,fort){
+    const work=questNavigationPlan(map,from,target,fort);let result;
+    do{result=work.next();}while(!result.done);
+    return result.value;
+  }
+  function advanceQuestNavigationPlan(nav,now){
+    if(questNavigation!==nav || !nav.planner)return;
+    const result=nav.planner.next();
+    if(!result.done)return;
+    nav.planner=null;
+    if(!result.value){cancelQuestNavigation("ไม่พบทางเดินที่ปลอดภัย · เปิดแผนที่แล้วเลือกทางเอง");return;}
+    nav.path=result.value;nav.progressAt=now;nav.nextTick=0;syncQuestNavigationUi();
+  }
+  function questNavigationGuideKey(guide) {
+    const hunt=currentItemHunt(),active=forestObjectiveState?.active,notes=journeyNotesForPlayer();
+    return JSON.stringify([guide?.title,hunt?.id,hunt?.need,active?.id,active?.progress,notes.campId,notes.boss,notes.shrine,notes.trial?.id]);
+  }
+  function syncQuestNavigationUi(message) {
+    const active=Boolean(questNavigation);
+    ui.quest.setAttribute("aria-pressed",String(active));
+    ui.quest.setAttribute("aria-label",active?"หยุดเดินอัตโนมัติไปภารกิจ":"เดินอัตโนมัติไปภารกิจ · ดูรายละเอียดได้ในเมนูภารกิจ");
+    const label=$("questNavigationStatus");if(label)label.textContent=message || (active?"กำลังเดิน · แตะเพื่อหยุด":"แตะเพื่อเดิน · รายละเอียดในเมนูภารกิจ");
+  }
+  function cancelQuestNavigation(message="", stop=true) {
+    const previous=questNavigation;if(!previous)return;
+    questNavigation=null;
+    if(previous.warp && message==="หยุดเดินอัตโนมัติแล้ว")message="หยุดนำทางแล้ว · คำสั่งผ่านประตูที่ส่งไปอาจยังเสร็จสิ้น";
+    if(stop && previous.room===room && mode==="live"){
+      const me=ownServerCharacter();
+      if(me?.alive && me.mapId===previous.mapId && questNavigationPoint(me))try{room.send("move",{x:me.x,z:me.z});}catch{}
+    }else if(stop && mode==="demo")demoDest=null;
+    marker.setEnabled(false);syncQuestNavigationUi(message);
+    if(message)toast(message);
+  }
+  function startQuestNavigation() {
+    if(questNavigation){cancelQuestNavigation("หยุดเดินอัตโนมัติแล้ว");return;}
+    if(ui.quest.classList.contains("war-hud") || territoryState?.local?.inField){toast("เขตสงครามต้องเลือกเส้นทางเอง");openCurrentQuest();return;}
+    const me=ownServerCharacter(),guide=hudGuide(),target=guide?.to;
+    if(mode!=="live" || !room || !me){toast("เข้า LIVE เพื่อเดินอัตโนมัติไปภารกิจ");return;}
+    if(!me.alive || me.flying || Math.abs(playerLayer(me))>.15 || ["climbing","ascending","descending","dashing"].includes(me.combatState)){toast("ยืนบนพื้นและหยุดบิน ปีน หรือพุ่งก่อนนำทาง");return;}
+    if(!questNavigationPoint(target)){toast("ขั้นตอนนี้ยังไม่มีจุดให้เดินไป · ดูรายละเอียดภารกิจ");openCurrentQuest();return;}
+    if(worldDefinitions?.[activeMapId]?.strategic?.rampart){toast("พื้นที่กำแพงเมืองต้องเลือกทางผ่านเอง");return;}
+    const now=performance.now();
+    questNavigation={room,owner:localId,mapId:activeMapId,key:questNavigationGuideKey(guide),target:null,path:null,waypoint:null,nextTick:0,nextSend:0,started:now,progressAt:now,position:{x:me.x,z:me.z},hops:0};
+    closeDrawer();syncQuestNavigationUi();updateQuestNavigation(now);
+  }
+  function updateQuestNavigation(now) {
+    const nav=questNavigation;if(!nav)return;
+    if(now<nav.nextTick){advanceQuestNavigationPlan(nav,now);return;}nav.nextTick=now+150;
+    const me=ownServerCharacter();
+    if(mode!=="live" || room!==nav.room || localId!==nav.owner || !me?.alive){cancelQuestNavigation("หยุดนำทาง · ตัวละครหรือการเชื่อมต่อเปลี่ยนแล้ว",false);return;}
+    if(document.hidden || me.flying || Math.abs(playerLayer(me))>.15 || territoryState?.local?.inField || ["climbing","ascending","descending","dashing"].includes(me.combatState)){
+      cancelQuestNavigation("หยุดนำทาง · กลับมายืนบนพื้นแล้วแตะภารกิจใหม่");return;
+    }
+    if(now-nav.started>600000){cancelQuestNavigation("หยุดนำทาง · ใช้เวลานานเกินไป ลองเลือกเป้าหมายใหม่");return;}
+    if(nav.warp){
+      if(activeMapId===nav.warp.mapId && me.mapId===activeMapId){
+        nav.mapId=activeMapId;nav.warp=null;nav.path=null;nav.waypoint=null;nav.target=null;nav.progressAt=now;nav.position={x:me.x,z:me.z};nav.readyAt=now+1500;
+      }else {if(now-nav.warp.at>8500)cancelQuestNavigation("เดินทางผ่านประตูไม่สำเร็จ · ลองแตะประตูอีกครั้ง",false);return;}
+    }
+    if(activeMapId!==nav.mapId || me.mapId!==nav.mapId){cancelQuestNavigation("หยุดนำทาง · เปลี่ยนแผนที่แล้ว",false);return;}
+    if(now<(nav.readyAt||0))return;
+    const guide=hudGuide(),target=guide?.to;
+    if(questNavigationGuideKey(guide)!==nav.key || !questNavigationPoint(target) || target.alive===false || target.mapId && !target.targetMapId && target.mapId!==activeMapId){
+      cancelQuestNavigation("เป้าหมายภารกิจเปลี่ยนแล้ว · แตะภารกิจเพื่อเลือกเส้นทางใหม่");return;
+    }
+    const map=worldDefinitions?.[activeMapId],portal=(map?.portals||[]).find(p=>p.id===target.id && p.targetMapId===target.targetMapId);
+    if(portal && (!room.state?.worldMapsAvailable || !worldDefinitions?.[portal.targetMapId] || worldDefinitions[portal.targetMapId].strategic?.rampart)){
+      cancelQuestNavigation("เส้นทางนี้ยังเดินข้ามแผนที่อัตโนมัติไม่ได้ · เลือกประตูเอง");return;
+    }
+    const escort=forestEscortState?.id===forestObjectiveState?.active?.id?forestEscortState:null;
+    if(escort?.mapId===activeMapId && questNavigationPoint(escort)){
+      const distance=Math.hypot(me.x-escort.x,me.z-escort.z);
+      if(distance>10 || nav.escortWait && distance>7){
+        if(!nav.escortWait){nav.escortWait=now;nav.waypoint=null;try{room.send("move",{x:me.x,z:me.z});}catch{}syncQuestNavigationUi("รอผู้เดินทางตามมา · แตะเพื่อหยุด");}
+        if(now-nav.escortWait>15000)cancelQuestNavigation("ผู้เดินทางตามมาไม่ได้ · กลับไปตรวจเส้นทางคุ้มกัน");
+        return;
+      }
+      if(nav.escortWait){nav.escortWait=0;nav.progressAt=now;syncQuestNavigationUi();}
+    }
+    if(nav.target && (nav.target.id || null)!==(target.id || null)){cancelQuestNavigation("เป้าหมายเปลี่ยนแล้ว · แตะภารกิจใหม่");return;}
+    if(!nav.path && !nav.planner || !nav.target || Math.hypot(nav.target.x-target.x,nav.target.z-target.z)>2.5){
+      if(nav.waypoint || me.combatState==="moving")try{room.send("move",{x:me.x,z:me.z});}catch{cancelQuestNavigation("ส่งคำสั่งหยุดเพื่อหาเส้นทางไม่สำเร็จ",false);return;}
+      nav.planner=questNavigationPlan(map,{x:me.x,z:me.z},{x:target.x,z:target.z},activeFort);
+      nav.path=null;nav.waypoint=null;nav.target={x:target.x,z:target.z,id:target.id};
+      syncQuestNavigationUi("กำลังหาเส้นทาง · แตะเพื่อหยุด");
+      advanceQuestNavigationPlan(nav,now);
+    }
+    if(questNavigation!==nav || nav.planner)return;
+    if(Math.hypot(nav.position.x-me.x,nav.position.z-me.z)>.2){nav.position={x:me.x,z:me.z};nav.progressAt=now;}
+    if(now-nav.progressAt>5000){cancelQuestNavigation("เดินต่อไม่ได้หรือถูกขวาง · ลองเลือกทางเอง");return;}
+    // Wait for authoritative arrival. Do not advance from rendered/interpolated positions.
+    if(nav.waypoint && Math.hypot(me.x-nav.waypoint.x,me.z-nav.waypoint.z)>.05)return;
+    nav.waypoint=null;
+    while(nav.path.length && Math.hypot(me.x-nav.path[0].x,me.z-nav.path[0].z)<.05)nav.path.shift();
+    if(!nav.path.length){
+      if(Math.hypot(me.x-target.x,me.z-target.z)>1.6){nav.path=null;return;}
+      if(portal && isNearPortal(me,portal)){
+        if(++nav.hops>12){cancelQuestNavigation("เส้นทางผ่านประตูมากเกินไป · เลือกทางเอง");return;}
+        nav.warp={mapId:portal.targetMapId,at:now};syncQuestNavigationUi("กำลังผ่านประตู · แตะเพื่อหยุด");requestPortalWarp(portal.id);
+        if(!warpPending)cancelQuestNavigation("ส่งคำสั่งผ่านประตูไม่สำเร็จ",false);
+      }else cancelQuestNavigation("ถึงจุดหมายแล้ว · แตะเป้าหมายเพื่อทำภารกิจ");
+      return;
+    }
+    if(now<nav.nextSend)return;
+    const end=nav.path[0],distance=Math.hypot(end.x-me.x,end.z-me.z),scale=Math.min(1,4/distance);
+    const waypoint={x:Math.round((me.x+(end.x-me.x)*scale)*100)/100,z:Math.round((me.z+(end.z-me.z)*scale)*100)/100};
+    if(!questNavigationGeometry(map,activeFort)?.clear(me,waypoint)){cancelQuestNavigation("เส้นทางเปลี่ยนหรือมีสิ่งกีดขวาง · เลือกทางใหม่");return;}
+    nav.waypoint=waypoint;nav.nextSend=now+450;
+    if(pointMove(waypoint.x,waypoint.z,true)===false)cancelQuestNavigation("ส่งคำสั่งนำทางไม่สำเร็จ",false);
   }

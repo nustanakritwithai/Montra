@@ -64,12 +64,33 @@
     const keeper=forestObjectiveState?.keeper,me=ownServerCharacter();
     return Boolean(keeper && me && keeper.mapId===activeMapId && !me.flying && Math.hypot(me.x-keeper.x,me.z-keeper.z)<=keeper.radius);
   }
+  function forestObjectiveNavigationTarget(definition,active,keeper){
+    const delivery=definition.kind==="delivery" && active.progress>=definition.goal-1;
+    const mapId=delivery?definition.destinationMapId:definition.mapId;
+    if(mapId!==activeMapId){
+      const route=travelRoute(worldDefinitions,activeMapId,mapId);
+      return worldDefinitions?.[activeMapId]?.portals?.find(p=>p.targetMapId===route[1]);
+    }
+    if(delivery || definition.kind==="escort" && forestEscortState?.id!==active.id)return keeper?.mapId===mapId?keeper:null;
+    if(definition.kind==="escort")return {...definition.escort,mapId};
+    if(definition.kind==="defense")return {...definition.defense,mapId};
+    const prefix=definition.stages?.[active.progress]?.prefix || definition.prefix;
+    const me=ownServerCharacter();let nearest=null,distance=Infinity;
+    for(const [id,mob] of room?.state?.monsters || []){
+      if(!mob.alive || mob.mapId!==mapId || !(definition.targetId?id===definition.targetId:prefix && id.startsWith(prefix)))continue;
+      const d=Math.hypot(me.x-mob.x,me.z-mob.z);if(d<distance){nearest=mob;distance=d;}
+    }
+    if(nearest)return nearest;
+    const map=worldDefinitions?.[mapId],camp=definition.stages?.[active.progress]?.camp || definition.camp;
+    const home=definition.targetId?[map?.boss,map?.guardian].find(p=>p?.id===definition.targetId):(map?.camps||[]).find(p=>p.name===camp);
+    return home?{...home,mapId}:null;
+  }
   function forestObjectiveHudGuide(){
     if(mode!=="live" || !room?.state?.forestObjectivesAvailable || !forestObjectiveState)return null;
     const {active,keeper,options}=forestObjectiveState,definition=active && options?.[active.id];
-    if(definition)return {title:definition.name,step:objectiveStep(definition,active)+" · แตะเพื่อดูภารกิจ",progress:active.progress+"/"+definition.goal};
+    if(definition)return {title:definition.name,step:objectiveStep(definition,active)+" · แตะเพื่อเดิน",progress:active.progress+"/"+definition.goal,to:forestObjectiveNavigationTarget(definition,active,keeper)};
     const event=directorEventState?.event;
-    if(event && !forestObjectiveState?.eventClaimed)return {title:event.mapId===activeMapId?"เกิดเหตุการณ์ในพื้นที่":"เหตุการณ์ที่ "+event.mapName,step:"คุยกับผู้มอบงานเพื่อเข้าร่วม",progress:""};
+    if(event && !forestObjectiveState?.eventClaimed)return {title:event.mapId===activeMapId?"เกิดเหตุการณ์ในพื้นที่":"เหตุการณ์ที่ "+event.mapName,step:"คุยกับผู้มอบงานเพื่อเข้าร่วม",progress:"",to:event.mapId===activeMapId?keeper:worldDefinitions?.[activeMapId]?.portals?.find(p=>p.targetMapId===travelRoute(worldDefinitions,activeMapId,event.mapId)[1])};
     if(keeper?.mapId===activeMapId)return {title:"พบผู้มอบงาน",step:"คุยกับ "+keeper.name+" เพื่อรับภารกิจ",progress:"",to:keeper};
     return null;
   }
@@ -328,7 +349,17 @@
     if(goal.nextRank)forge.textContent="เปิดช่างตี +"+goal.nextRank;
     forge.onclick=()=>openForgePage("enhance",goal.slot);
   }
-  ui.quest.addEventListener("click",openCurrentQuest);
+  ui.quest.addEventListener("click",startQuestNavigation);
+  syncQuestNavigationUi();
+  // Explicit player actions take ownership immediately; camera drags/pinches do not.
+  document.addEventListener("click",event=>{
+    if(questNavigation && event.target?.closest?.("button, input, select, a") && !event.target.closest("#quest"))cancelQuestNavigation();
+  },true);
+  document.addEventListener("keydown",event=>{
+    if(event.target?.closest?.("#quest") && ["Enter"," "].includes(event.key)){if(event.repeat)event.preventDefault();return;}
+    if(questNavigation && !["Shift","Control","Alt","Meta","Tab"].includes(event.key))cancelQuestNavigation();
+  },true);
+  document.addEventListener("visibilitychange",()=>{if(document.hidden)cancelQuestNavigation();});
   $("characterProfile").onclick=openCharacterProfile;
   $("fieldMenuButton").onclick=openFieldMenu;
   $("drawerMenuBack").onclick=openFieldMenu;

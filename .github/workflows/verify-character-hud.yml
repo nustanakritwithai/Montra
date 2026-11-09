@@ -17,6 +17,7 @@ on:
       - 'index.html'
       - 'deploy/combat/character-hud-*.cjs'
       - 'deploy/combat/basic-attack-*.cjs'
+      - 'deploy/combat/quest-navigation-*'
       - 'deploy/combat/monster-nameplates-*.cjs'
       - '.github/workflows/verify-character-hud.yml'
   workflow_dispatch:
@@ -47,6 +48,10 @@ jobs:
           node deploy/combat/character-hud-browser-test.cjs
           node deploy/combat/basic-attack-ui-test.cjs
           node deploy/combat/basic-attack-browser-test.cjs
+          node deploy/combat/quest-navigation-test.cjs
+          node deploy/combat/quest-navigation-swipe-test.cjs
+          node deploy/combat/quest-navigation-browser-test.cjs
+          MONTRA_WORLD_EXPANSION=1 MONTRA_ORIGINAL_RELIEF=1 MONTRA_ATLAS_RELIEF=1 MONTRA_RIDGE_TERRAIN=1 MONTRA_CASTLE_PILOT=1 node --import tsx --test deploy/combat/quest-navigation-world-test.ts
       - name: Validate isolated market and crafting browser flows
         run: |
           node deploy/combat/release-ui-browser-test.cjs
@@ -58,6 +63,7 @@ jobs:
           name: character-hud-browser-evidence
           path: |
             basic-attack-browser-evidence
+            quest-navigation-browser-evidence
             hud-browser-evidence
             monster-nameplates-browser-evidence
             release-ui-browser-evidence

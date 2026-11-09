@@ -33,6 +33,7 @@
     const now = performance.now();
     updateFishing(now);
     checkClimbApproach();
+    updateQuestNavigation(now);
     for(const [id,fx] of seerBindingEffects){
       const target=monsterForSpell(id) || room?.state?.players?.get?.(id);
       if(mode!=="live" || now>=fx.until || !target?.alive || (target.mapId || "ritual_village")!==activeMapId){fx.mesh.dispose();seerBindingEffects.delete(id);continue;}
