@@ -4,7 +4,7 @@ import { PARTY_XP_RADIUS } from "./PartyManager.js";
 import { PROGRESSION, monsterExperience } from "./Progression.js";
 export type PartyRewardMember = Readonly<{
   sessionId:string; mapId:string; x:number; y:number; z:number;
-  alive:boolean; persistent:boolean; level:number; inTransit:boolean;
+  alive:boolean; persistent:boolean; level:number; inTransit:boolean; hasObjective?:boolean;
 }>;
 export type RewardMonster = Readonly<{mapId:string;level:number;tier:MonsterTier;x:number;y:number;z:number}>;
 export type PartyMonsterShare = Readonly<{sessionId:string;amount:number}>;
@@ -23,12 +23,14 @@ export function partyMonsterShares(winnerLevel:number, monster:RewardMonster, me
     if(!member.sessionId || unique.has(member.sessionId) || ![member.x,member.y,member.z].every(Number.isFinite) || !Number.isSafeInteger(member.level) || member.level<1 || member.level>1000) throw new Error("invalid_party_member");
     unique.add(member.sessionId);
   }
-  const eligible=members.filter(member=>member.alive && member.persistent && !member.inTransit && (includeLootOnly || monster.tier==="boss" || member.level<PROGRESSION.maxLevel) && member.mapId===monster.mapId && Math.hypot(member.x-monster.x,member.y-monster.y,member.z-monster.z)<=radius);
+  // Existing accepted quests still need kill credit at zero EXP, without widening loot eligibility.
+  const questMembers=new Set(members.filter(member=>member.hasObjective).map(member=>member.sessionId));
+  const eligible=members.filter(member=>member.alive && member.persistent && !member.inTransit && (includeLootOnly || member.hasObjective || monster.tier==="boss" || member.level<PROGRESSION.maxLevel) && member.mapId===monster.mapId && Math.hypot(member.x-monster.x,member.y-monster.y,member.z-monster.z)<=radius);
   if(!eligible.length)return [];
   const earning=eligible.filter(member=>member.level<PROGRESSION.maxLevel).length;
   const factor=1+Math.min(3,Math.max(0,earning-1))*.1;
   return eligible.map(member=>{
     const reward=member.level<PROGRESSION.maxLevel ? monsterExperience(member.level,monster.level,monster.tier) : 0;
     return {sessionId:member.sessionId,amount:reward>0 ? Math.max(1,Math.floor(reward*factor/earning)) : 0};
-  }).filter(member=>includeLootOnly || member.amount>0 || monster.tier==="boss");
+  }).filter(member=>includeLootOnly || questMembers.has(member.sessionId) || member.amount>0 || monster.tier==="boss");
 }

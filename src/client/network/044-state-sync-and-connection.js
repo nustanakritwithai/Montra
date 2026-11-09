@@ -61,6 +61,20 @@
     updateStatus();
   }
 
+  // Reward messages can arrive before the replicated level/EXP patch. Refresh
+  // open field-quest details again when their authoritative inputs catch up.
+  let fieldQuestProgressKey = null;
+  function refreshOpenFieldQuest(force=false) {
+    const detail=drawerActive==="quest" && ($("huntStep") || $("fieldGoalProgress"));
+    if(!detail){fieldQuestProgressKey=null;return;}
+    const player=ownServerCharacter();
+    const key=[detail,room?.sessionId,player?.characterId,player?.pathId,player?.level,player?.experience,player?.xpToNext,
+      player?.mapId,player?.alive,gearGuides,inventoryState,catalogRevision,resources];
+    if(!force && fieldQuestProgressKey && key.every((value,index)=>value===fieldQuestProgressKey[index]))return;
+    fieldQuestProgressKey=key;
+    if($("huntStep"))renderItemHuntDrawer();else renderFieldGoalDrawer(fieldGearGoal());
+  }
+
   function syncState(state) {
     const mine=state?.players?.get?.(localId);
     const previousMapId=activeMapId;
@@ -110,6 +124,7 @@
     if (drawerActive === "swordTree") renderSwordTree();
     if (drawerActive === "muayBook") renderMuayBook();
     if (["bag","character","forge","crafting"].includes(drawerActive)) renderBag(); // Keep item availability, level and life state live.
+    refreshOpenFieldQuest();
     if (drawerActive === "character") renderProgressionProfile();
     if (drawerActive === "party") renderParty();
     if (drawerActive === "guild") renderGuild();
@@ -460,7 +475,7 @@
         if(room!==joined)return;
         const nodes=data.nodes??(resourcePage?.mapId===data.mapId && resourcePage.nodes.length===data.nodeCount?resourcePage.nodes:null);
         resourcePage=null;if(!Array.isArray(nodes))return;
-        resources={...data,nodes,received:performance.now()};renderResourceNodes();updateResourceHud(ownServerCharacter());
+        resources={...data,nodes,received:performance.now()};renderResourceNodes();updateResourceHud(ownServerCharacter());refreshOpenFieldQuest();
       });
       joined.onMessage("world_resource_delta",d=>{
         if(room!==joined || resources?.mapId!==d?.mapId || !Array.isArray(d.nodes))return;
@@ -468,7 +483,7 @@
         for(const n of resources.nodes){
           const changed=changes.get(n.id);if(changed){if(changed.stock<n.stock)playRemoteHarvest(n);n.stock=changed.stock;n.readyAt=now+changed.nextIn;}
         }
-        resources.available=d.available;renderResourceNodes();updateResourceHud(ownServerCharacter());
+        resources.available=d.available;renderResourceNodes();updateResourceHud(ownServerCharacter());refreshOpenFieldQuest(true);
       });
       joined.onMessage("resource_result",data=>{
         if(room!==joined)return;
@@ -1138,12 +1153,12 @@
         const training=info?.training;
         if(training?.choices?.length){
           fieldTrainingTip={...training,session:room.sessionId,path:ownServerCharacter()?.pathId};
-          if(drawerActive==="quest" && $("fieldGoalProgress"))renderFieldGoalDrawer(fieldGearGoal());
         }
         const lesson=training?.choices?.length?" · Lv."+info.level+" ฝึก "+training.choices[0].name+" ขั้น "+training.choices[0].rank+" หรือเลือกวิชาอื่นในตำรา · มี "+training.points+" แต้ม ไปศาลหมู่บ้านหลังพ้นการต่อสู้":"";
         const firstCopy=info?.starterCopy?" · ครบเป้าล่า! "+(personalItems[info.starterCopy]?.name||"อาวุธรุ่นเดียวกัน")+" เข้าคลังช่าง 1 ชิ้น":"";
         toast((info?.source==="war"?(info?.amount?"EXP จากการร่วมยึดจุด":"รางวัลร่วมยึดจุด"):info?.riftVictory?"โค่นราชันรอยแยกได้แล้ว":info?.shrineShard && !info.amount?"รางวัลศาลร้าง":!info?.amount && info?.level===100?"ผลการล่า Lv.100":"ได้รับ EXP") + (info?.amount?" +"+Number(info.amount):"") + objectiveNotice + firstCopy + lesson + prize + shard + bossRewards + loot + cardNotice + guarantee);
         recordPracticePrey(info?.fieldPrey);
+        refreshOpenFieldQuest(true);
         renderProgressionProfile();
       });
       joined.onMessage("forest_objective_state",payload=>{
@@ -1210,6 +1225,7 @@
         if(room!==joined)return;
         gearGuides=Array.isArray(payload?.builds)?payload:null;
         if(gearGuides && "training" in gearGuides)fieldTrainingTip=gearGuides.training?.choices?.length?{...gearGuides.training,session:joined.sessionId,path:gearGuides.path}:null;
+        refreshOpenFieldQuest();
         renderBag();
       });
       joined.onMessage("material_sold",result=>{
@@ -1257,7 +1273,7 @@
         const equipmentSockets=Object.fromEntries(Object.entries(payload.equipmentSockets||{}).filter(([key,card])=>equipment[key] && (card===null || personalItems[card]?.kind==="card")));
         observeLootInventory(payload);
         inventoryState={version:1,slots,equippedWeaponSlot,equipment,equipmentSockets,equipmentForges:payload.equipmentForges||{},forgeCopies:payload.forgeCopies||{},starterHuntKills:payload.starterHuntKills??0};
-        if(drawerActive==="quest" && $("fieldGoalProgress"))renderFieldGoalDrawer(fieldGearGoal());
+        refreshOpenFieldQuest();
         itemUsePending = false;
         renderBag();
         renderEconomy();

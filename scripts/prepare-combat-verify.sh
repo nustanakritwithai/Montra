@@ -163,7 +163,7 @@ cp deploy/combat/director-accept.test.ts combat-verify/src/rooms/director-accept
 cp deploy/combat/director-deadline.test.ts combat-verify/src/rooms/director-deadline.test.ts
 cp deploy/combat/ServiceNpcs.ts combat-verify/src/rooms/ServiceNpcs.ts
 cp deploy/combat/forest-objectives.test.ts combat-verify/src/rooms/forest-objectives.test.ts
-cp deploy/combat/quest-guidance-room.test.ts combat-verify/src/rooms/quest-guidance-room.test.ts
+cp deploy/combat/quest-guidance-room.test.ts deploy/combat/quest-kill-progress-room.test.ts combat-verify/src/rooms/
 cp deploy/combat/rebirth.test.ts combat-verify/src/rooms/rebirth.test.ts
 cp deploy/combat/PersonalItems.ts combat-verify/src/rooms/PersonalItems.ts
 cp deploy/combat/MonsterLoot.ts combat-verify/src/rooms/MonsterLoot.ts

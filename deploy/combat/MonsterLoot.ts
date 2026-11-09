@@ -124,9 +124,20 @@ const catalog=Object.entries(PERSONAL_ITEMS).map(([id,item])=>{
   const source=hunt??(item.kind==="card"?cardHunt(id as CardId):null);
   const rate=item.sourceBoss?(item.forge?" · อัตราดรอปอาจเปลี่ยนตามสภาพโลก · ชิ้นซ้ำเข้าคลังช่าง":" · ได้ 1 ชิ้นเมื่อชนะ"):"";
   const dropHint=hunt?hunt.monster+" Lv."+hunt.level+" · "+hunt.map+rate+(hunt.open?"":" · พื้นที่ยังไม่เปิด"):undefined;
-  return [id,source?{...item,dropHint,huntTarget:{id:source.id,monster:source.monster,mapId:source.mapId,open:source.open}}:item] as const;
+  return [id,source?{...item,dropHint,huntTarget:{...source,...(hunt?itemCamp(id as PersonalId,item.level??1):{})}}:item] as const;
 });
-export const CATALOG_PAGES=Array.from({length:Math.ceil(catalog.length/16)},(_,i)=>Object.fromEntries(catalog.slice(i*16,i*16+16)));
+// Hunt locations and model metadata vary in UTF-8 size. Retain the 16-item cap,
+// but reserve space below the transport ceiling for the envelope and live rates.
+export const CATALOG_PAGES:Record<string,typeof catalog[number][1]>[]=[];
+let catalogPage:Record<string,typeof catalog[number][1]>={};
+for(const [id,item] of catalog){
+  const count=Object.keys(catalogPage).length;
+  if(count && (count>=16 || Buffer.byteLength(JSON.stringify({...catalogPage,[id]:item}))>15_000)){
+    CATALOG_PAGES.push(catalogPage);catalogPage={};
+  }
+  catalogPage[id]=item;
+}
+if(Object.keys(catalogPage).length)CATALOG_PAGES.push(catalogPage);
 export function catalogPageWithRates(items:Record<string,any>){
   return Object.fromEntries(Object.entries(items).map(([id,item])=>[id,item.kind==="card"?{...item,chancePct:dynamicCardChance(id,item.chancePct??0)}:item]));
 }
