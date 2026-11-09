@@ -598,7 +598,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
       const client=this.clients.find(c=>c.sessionId===id);
       try{client?.send("forest_escort_state",{id:active.id,completed:true});
-        if(leveled && this.sentItemCatalog.has(id))client?.send("gear_guides",personalGearGuides(player.pathId,player.level));
+        if(leveled && client && this.sentItemCatalog.has(id))this.sendHuntGuide(client,player);
         client?.send("experience_gained",{amount:bonus+eventReward.bonus,level:next.level,experience:next.experience,forestObjectiveCompleted:active.id,forestObjectiveBonus:bonus,...(eventReward.bonus?{directorBonus:eventReward.bonus}:{})});
         if(client)this.sendForestObjective(client);
       }catch{/* saved even if disconnected */}
@@ -657,7 +657,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const leveled=player.level!==next.level;player.level=next.level;player.experience=next.experience;
       this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
       try{
-        if(leveled && this.sentItemCatalog.has(id))client.send("gear_guides",personalGearGuides(player.pathId,player.level));
+        if(leveled && this.sentItemCatalog.has(id))this.sendHuntGuide(client,player);
         client.send("experience_gained",{amount:bonus+eventReward.bonus,level:next.level,experience:next.experience,forestObjectiveCompleted:active.id,forestObjectiveBonus:bonus,...(eventReward.bonus?{directorBonus:eventReward.bonus}:{})});
         this.sendForestObjective(client);
       }catch{/* saved even if disconnected */}
