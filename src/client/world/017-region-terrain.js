@@ -91,6 +91,7 @@
     for(const tree of villageTreeNodes)tree.position.y=terrain?terrainHeight(terrain,tree.position.x,tree.position.z):0;
     for(const item of villageBatches){
       const {mesh,anchors}=item,kind=B.VertexBuffer.PositionKind;
+      if(mesh.isDisposed()||!mesh.getVerticesData(kind))continue; // never let one lost batch stop the world loading
       if(!item.base)item.base=mesh.getVerticesData(kind).slice();
       const points=item.base.slice(),inv=mesh.computeWorldMatrix(true).clone().invert();
       const up=B.Vector3.TransformNormal(B.Axis.Y,inv);
