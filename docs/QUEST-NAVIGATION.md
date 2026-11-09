@@ -26,6 +26,9 @@ their existing details instead of guessing a location.
   blind client-speed simulation. Escort routes pause for the NPC to catch up.
 - Stop on changed goal/target, death, disconnect/character change, manual actions,
   hidden page, unexpected map change, stuck movement, server rejection or timeout.
+- A valid swipe-dash gesture stops the outstanding navigation waypoint before
+  attempting the dash, even when dash is unavailable, on cooldown, short of stamina
+  or blocked while mounted. Short/slow/cancelled gestures do not cancel a route.
 - Unsupported elevated/flight, war and rampart paths fail clearly. The player may
   still use the existing manual controls. Routes are guidance, not proof that a
   changing server state will permit a step.
@@ -42,6 +45,9 @@ from the generic map-version refresh notice.
 - `node deploy/combat/quest-navigation-browser-test.cjs` uses real page markup/CSS
   and production navigation functions with a synthetic room. It checks tap,
   repeated tap, keyboard cancellation and manual control at 320, 390 and 1366px.
+  Native touchscreen swipes cover non-button controls and rejected/unavailable dash;
+  `quest-navigation-swipe-test.cjs` additionally covers invalid/cancelled gestures,
+  gesture thresholds, send failure and takeover during pending route planning.
   This is not full-game rendering, physical-device or live-server evidence.
 - `quest-navigation-world-test.ts` sweeps actual server map definitions with
   independent server collision checks. Enable world expansion, original/atlas

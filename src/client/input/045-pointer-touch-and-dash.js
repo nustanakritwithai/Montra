@@ -191,6 +191,9 @@
   function requestSwipeDash(screenDx, screenDy) {
     const direction = dashDirectionFromSwipe(screenDx, screenDy);
     if (!direction) return;
+    // Manual intent takes over even if the dash is unavailable or rejected.
+    // Stop the outstanding waypoint before dash so a rejection cannot resume it.
+    cancelQuestNavigation();
     if (mode === "live" && room) {
       // Fail visibly against an old VPS that doesn't know the dash message.
       if (room.state?.dashAvailable !== true) {
