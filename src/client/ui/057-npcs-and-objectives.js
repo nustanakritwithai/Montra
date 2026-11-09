@@ -242,7 +242,7 @@
     const journey=gearGuides?.journey, course=journey?.course;
     const lesson=midgame && gearGuides?.journey?.lesson;
     names.hidden=!training && !lesson && !course;book.hidden=!training && !midgame;book.onclick=openFieldTraining;
-    const deep=$("fieldDeepBook");deep.hidden=!midgame;deep.onclick=openFieldDeepTraining;
+    const deep=$("fieldDeepBook");deep.hidden=mode!=="live" || !fieldSkillKind();deep.onclick=openFieldDeepTraining;
     const cast=$("fieldPracticeCast");cast.hidden=!goal?.trial?.deep || goal.trial.used;
     if(!cast.hidden){cast.textContent="ลอง "+goal.trial.name;cast.onclick=()=>tryFieldTechnique(goal.trial);}
 

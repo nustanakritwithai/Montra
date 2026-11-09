@@ -18,8 +18,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "ui/057-npcs-and-objectives.js",
-  "bytes": 38475,
-  "sha256": "89e31a09805379c16c09476fa7dbe0f85552e4c22c986e42b9085708998d1a7d"
+  "bytes": 38501,
+  "sha256": "2658aa72123dfd71340fb58a7e04ecdd7e47144ed48581ad5b157add64afd6b6"
 },
 {
   "path": "input/045-pointer-touch-and-dash.js",
@@ -88,8 +88,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "ui/041-character-hud-and-journey.js",
-  "bytes": 38449,
-  "sha256": "f99550d62c85c79d66c4b83b7010a279c259b8fc06fb5123fdd5293d1f767bcf"
+  "bytes": 38826,
+  "sha256": "737a795165c9166ff2ec46d63ef541fe088655c0858075ab055ff061d5c084aa"
 },
 {
   "path": "render/026-avatar-auras-and-lifecycle.js",
@@ -158,8 +158,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/049-skill-graph-and-details.js",
-    "bytes": 57616,
-    "sha256": "85ae272aea7ad5a541f2842e9ec6ee87923532dc9f1abb640e1c2db20f54214a"
+    "bytes": 60998,
+    "sha256": "577b7ad698b3548b179eb7e2b535e33823055f8f5a9e3842972cc4075d20350b"
   },
   {
     "path": "input/058-field-control-bindings.js",
@@ -238,8 +238,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1658163);
-  assert.equal(hash(bytes), '8124e24ec7aa987ed90d012947a117bace9a23970d708426b67e8f7d4f57610e');
+  assert.equal(bytes.length, 1661948);
+  assert.equal(hash(bytes), '2d94baae9a4d3ae40e4160c0dc380ca5a9b8c4717c4f02977af6aa9112684a55');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

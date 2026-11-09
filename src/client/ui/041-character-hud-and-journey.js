@@ -322,13 +322,13 @@
     return candidates.find(t=>t.school===muaySchoolOf({local:true})) ?? candidates[0];
   }
   function openFieldDeepTraining(){
-    const kind=fieldSkillKind();if(!kind)return;
+    const kind=fieldSkillKind();if(mode!=="live" || !room || !kind)return;
     const trial=journeyNotesForPlayer().trial;
     const course=gearGuides?.journey?.course, suggested=fieldTechnique(course);
     if(trial?.deep || suggested)skillGraphSel[kind]=trial?.deep?trial.id:suggested.id;
-    openDrawer("fieldSkills","วิชาเสริม · แต้มสายและผลฝึก",'<p id="fieldRankHelp" class="note"></p><div id="fieldSkillGraph"></div>');
-    $("fieldRankHelp").textContent=(course?.ranks?.map(r=>"ขั้น "+r.rank+" · Lv."+r.level+" · ฝึก "+r.practice).join(" / ") ||
-      "ขั้น 1 · Lv.25 · ฝึก 3 / ขั้น 2 · Lv.45 · ฝึก 8")+" · เรียนหรืออัปขั้นใช้แต้มสายครั้งละ 1 แต้ม";
+    openClassBookDrawer("fieldSkills","ผังสกิล · วิชาแกนและวิชาเสริม",'<button id="fieldCoreBook" type="button" class="secondary">กลับไปวิชาแกน</button><p id="fieldRankHelp" class="note"></p><div id="fieldSkillGraph" aria-live="polite"></div>');
+    $("fieldCoreBook").onclick=openClassSkillBook;
+    $("fieldRankHelp").textContent="ดูวิชาเสริมได้ตั้งแต่ Lv.1 · แต้มสายแยกจากแต้มวิชาแกน · เรียนหรืออัปขั้นใช้ 1 แต้มเมื่อครบเงื่อนไขของวิชานั้น · แถบสกิลหลักยังใช้วิชาแกน 4 ช่อง วิชาเสริมยังไม่แสดงบนแถบนี้";
     if(["blade","sentinel","occult"].includes(kind))room.send(kind+"_book_get",{});
     $("fieldSkillGraph").textContent="กำลังอ่านตำราของตัวละคร…";skillGraphKey="";renderSkillGraph(kind,$("fieldSkillGraph"));
   }
