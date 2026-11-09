@@ -234,6 +234,7 @@
     a.skin = { nodes, copy, holder, body, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
     attachOutfitCloth(a, a.npcCloth || (a.local ? shawlHero : shawlFriend), a.npcCloth || (a.local ? sashHero : sashFriend));
     if (a.gearLook) setAvatarGear(a, a.gearLook);
+    if (a.weaponBand) setMuayPrajiad(a, a.weaponBand);
     if(a.npc){
       // Rest pose from the player rig, applied once instead of animating every NPC.
       for(const [name,x,y,z] of [["RightArm",-.62,-.35,1.12],["RightForeArm",0,2,0],["LeftArm",-.58,.35,-1.12],["LeftForeArm",0,-2,0]])
@@ -589,6 +590,28 @@
     // A cap or helmet replaces the base outfit's headband and topknot (a cloth headband keeps them).
     const helmet = want.head && !/^arm_cloth_|^arm_field_(seer|mender)$/.test(want.head.family);
     for (const mesh of avatar.skin.nodes.Head?.getChildMeshes(true) || []) if (mesh.name === "gear Head") mesh.setEnabled(!helmet);
+  }
+  // ---- Muay prajiad (ประเจียด) by wrap tier ----
+  // Muay wraps have no held model, so their tier shows on the upper arms: band 2 a red sacred cord with
+  // yellow pattern and hanging tails, band 3 adds a gold armlet and a small yantra tag. Built on the arm bones.
+  function setMuayPrajiad(avatar, band) {
+    const want = avatar?.weaponId === "muay_wraps" && band >= 2 ? band : 0;
+    if (!avatar?.skin?.nodes || avatar.prajiadBand === want) return;
+    avatar.prajiad?.forEach(mesh => mesh?.dispose()); avatar.prajiad = []; avatar.prajiadBand = want;
+    if (!want) return;
+    const red = gearMat("prajiad red", "#9a1a14", "#1a0302"), yellow = gearMat("prajiad yellow", "#d8b040", "#1a1204"), gold = gearMat("gold trim", "#c9a24a", "#2a1d06", .4);
+    for (const [side, bone] of [[1, "LeftArm"], [-1, "RightArm"]]) {
+      const k = gearKit(), x = side * .265, y = 1.388;
+      k.sleeve(x - side * .016, x + side * .016, y, -.002, .047, .045, red, 12);
+      k.sleeve(x - side * .004, x + side * .004, y, -.002, .049, .048, yellow, 12);
+      for (const dz of [-.012, .012]) { const t = k.box(x, y - .07, .045 + dz, .012, .12, .006, red); t.rotation.x = .15; }
+      if (want > 2) {
+        k.sleeve(x + side * .045, x + side * .06, y, -.002, .044, .043, gold, 14);
+        k.box(x, y - .015, .05, .03, .04, .004, gearMat("talisman paper cloth", "#e8d9a8", "#2a2210"));
+      }
+      const mesh = gearOnBone(avatar.skin.nodes, bone, k.take(), "prajiad " + bone);
+      if (mesh) avatar.prajiad.push(mesh);
+    }
   }
   // ---- Hand poses: fist, grip, relaxed and open ----
   // The skeleton has one bone per hand and no finger bones, so finger poses are morph targets baked

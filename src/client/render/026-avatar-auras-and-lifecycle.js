@@ -214,6 +214,7 @@
       model.setEnabled(id === safeId || (safeId === "thai_dual" && (id === "thai_left" || id === "thai_right")));
     }
     for (const id of safeId === "thai_dual" ? ["thai_left", "thai_right"] : [safeId]) if (avatar.weaponModels[id]) showWeaponTrim(avatar.weaponModels[id], id, band);
+    setMuayPrajiad(avatar, band);
   }
   // ---- Weapon tiers (visual only) ----
   // Catalog weapons wp_<family>_<1..10> share one model per class. The upper tiers add trim built lazily on
@@ -228,13 +229,20 @@
   const trimRed = () => gearMat("trim tassel red", "#8a1a14", "#1a0302");
   const trimGlow = () => gearMat("weapon edge glow", "#ffd9a0", "#ffb24a", .2);
   const WEAPON_TRIMS = {
-    // [y along the shaft/blade (model units, before the 0.6 grip scale), …parts]
-    seer_wand: (k, band) => { k.ring(.34, .06, .012); k.ring(.15, .07, .01); if (band > 2) { k.halo(.47, .17); k.gem(.62, .05); } },
-    mender_crook: (k, band) => { for (const y of [.3, .62]) k.ring(y, .07, .014); if (band > 2) { k.halo(1.18, .3); k.tassel(.98, .2); } },
-    sentinel_pike: (k, band) => { k.ring(.92, .085, .016); k.ring(1.08, .08, .012); k.gem(1.0, .045); if (band > 2) { k.edge(.03, 1.32, .5); k.tassel(1.12, .32); } },
-    ritual_dagger: (k, band) => { k.ring(.0, .09, .012); k.gem(.03, .035); if (band > 2) { k.curveEdge(.5, .09, 5); k.tassel(-.3, .16); } },
-    thai_left: (k, band) => { k.ring(-.03, .075, .012); k.ring(-.21, .075, .012); if (band > 2) k.curveEdge(.95, .105, 7); },
-    thai_right: (k, band) => { k.ring(-.03, .075, .012); k.ring(-.21, .075, .012); if (band > 2) k.curveEdge(.95, .105, 7); },
+    // Coordinates along the shaft/blade in model units, before the 0.6 grip scale. Band 2 adds collars, a gem
+    // and a second motif; band 3 changes the silhouette (crystal cluster, lotus hook, back blade, guard prongs).
+    seer_wand: (k, band) => { k.ring(.34, .06, .012); k.ring(.15, .07, .01); for (let i = 0; i < 4; i++) k.prong(Math.cos(i * 1.57) * .05, .5, Math.sin(i * 1.57) * .05, .12, i * 1.57);
+      if (band > 2) { k.halo(.5, .22); for (const [x, y, d] of [[.07, .56, .07], [-.065, .55, .06], [0, .66, .08]]) k.crystal(x, y, d); k.tassel(.12, .22); } },
+    mender_crook: (k, band) => { for (const y of [.3, .62]) k.ring(y, .07, .014); k.gem(.46, .04);
+      if (band > 2) { k.lotus(.26, 1.12, .12); k.halo(1.18, .34); k.tassel(.98, .22); } },
+    sentinel_pike: (k, band) => { k.ring(.92, .085, .016); k.ring(1.08, .08, .012); k.gem(1.0, .045);
+      if (band > 2) { k.edge(.03, 1.32, .5); k.backBlade(1.22); k.tassel(1.12, .34); } },
+    ritual_dagger: (k, band) => { k.ring(.0, .09, .012); k.gem(.03, .035); k.guard(.02, .16);
+      if (band > 2) { k.curveEdge(.5, .09, 5); k.tassel(-.3, .16); } },
+    thai_left: (k, band) => { k.ring(-.03, .075, .012); k.ring(-.21, .075, .012); k.gem(-.26, .05);
+      if (band > 2) { k.curveEdge(.95, .105, 7); k.guard(.03, .2); } },
+    thai_right: (k, band) => { k.ring(-.03, .075, .012); k.ring(-.21, .075, .012); k.gem(-.26, .05);
+      if (band > 2) { k.curveEdge(.95, .105, 7); k.guard(.03, .2); } },
   };
   function showWeaponTrim(root, modelId, band) {
     const trims = root.metadata?.trims || {};
@@ -246,6 +254,14 @@
       gem: (y, d) => at(B.MeshBuilder.CreateSphere("trim", { diameter: d, segments: 6 }, scene), amuletGlow).position.set(0, y, d * .6),
       halo: (y, d) => { const t = at(B.MeshBuilder.CreateTorus("trim", { diameter: d, thickness: .014, tessellation: 18 }, scene), trimGlow()); t.position.set(0, y, 0); t.rotation.x = Math.PI / 2; },
       edge: (x, y, len) => at(B.MeshBuilder.CreateBox("trim", { width: .012, height: len, depth: .034 }, scene), trimGlow()).position.set(x, y, 0),
+      prong: (x, y, z, len, yaw) => { const c = at(B.MeshBuilder.CreateCylinder("trim", { height: len, diameterTop: 0, diameterBottom: .022, tessellation: 4 }, scene), trimGold()); c.position.set(x, y, z); c.rotation.set(Math.cos(yaw) * -.35, 0, Math.sin(yaw) * .35); },
+      crystal: (x, y, d) => { const c = at(B.MeshBuilder.CreateCylinder("trim", { height: d * 2.4, diameterTop: 0, diameterBottom: d, tessellation: 5 }, scene), amuletGlow); c.position.set(x, y, 0); c.rotation.z = -x * 3; },
+      // Gold lotus: a ring of petals opening around the shaft at height y.
+      lotus: (r, y, len) => { for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, p = at(B.MeshBuilder.CreateCylinder("trim", { height: len, diameterTop: 0, diameterBottom: .05, tessellation: 4 }, scene), trimGold()); p.position.set(Math.cos(a) * r * .3, y, Math.sin(a) * r * .3); p.rotation.set(Math.sin(a) * .8, 0, -Math.cos(a) * .8); } },
+      // A second, smaller crescent on the back of a pole blade.
+      backBlade: y => { for (let i = 0; i < 4; i++) { const b = at(B.MeshBuilder.CreateBox("trim", { width: .07 - i * .012, height: .08, depth: .016 }, scene), trimGold()); b.position.set(-.06 - Math.sin(i * .3) * .04, y + i * .07, 0); b.rotation.z = i * .14; } },
+      // Curved guard prongs (naga tongues) either side of the grip.
+      guard: (y, span) => { for (const s of [-1, 1]) { const g = at(B.MeshBuilder.CreateCylinder("trim", { height: span * .6, diameterTop: 0, diameterBottom: .025, tessellation: 5 }, scene), trimGold()); g.position.set(s * span * .3, y + .03, 0); g.rotation.z = -s * 1.1; } },
       // Glowing edge that follows a curved blade (same path as curvedBlade in the avatar builder).
       curveEdge: (length, base, segs) => {
         let x = 0, y = .05, a = 0;
