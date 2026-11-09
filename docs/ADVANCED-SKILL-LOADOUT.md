@@ -36,8 +36,8 @@ remain unchanged. No server runtime or database deployment is needed.
   tree entry checks cover 144 cases. Old core and graph contracts remain intact.
 - Isolated server `advanced-class-integration.mjs` verifies representative learn
   and accepted damage/healing casts for all six classes plus level-95 learning.
-  An additional local disposable-character run verifies learn → equip → saved
-  loadout → reconnect → accepted cast on the same character for all six classes.
+  The same integration verifies learn → equip → saved SQLite loadout → reconnect
+  → accepted cast on the same disposable character for all six classes.
 - Relevant TypeScript/rules tests, aggregate client checks, deterministic build,
   static contracts and source boundaries must pass on the final commit.
 
