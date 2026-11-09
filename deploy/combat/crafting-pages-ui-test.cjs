@@ -53,6 +53,7 @@ function fixture(){
     currentEquippedWeaponSlot:()=>ctx.inventoryState?.equippedWeaponSlot,
     itemHuntCount:id=>(ctx.inventoryState?.slots||[]).reduce((n,s)=>n+(s?.itemId===id?s.quantity:0),0)+Object.values(ctx.inventoryState?.equipment||{}).filter(x=>x===id).length,
     itemHuntSource:()=>({open:true}),bindItemHuntButton:(button,id,quantity)=>{button.hidden=!id;button.target=id;button.quantity=quantity;},
+    refreshOpenFieldQuest(){assert.notEqual(ctx.drawerActive,'quest','quest details use their dedicated receipt fixture');},
     renderEconomy(){ctx.economyRenders++;},economyRenders:0,economyRequestId:()=>`request_${++request}`,
     toast:message=>toasts.push(message),setTimeout:fn=>{timers.set(++timerId,fn);return timerId;},clearTimeout:id=>timers.delete(id),
     openDrawer(name,title,html){ctx.drawerActive=name;ctx.title=title;ctx.html=html;elements.clear();

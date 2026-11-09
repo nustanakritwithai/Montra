@@ -8,7 +8,6 @@ import {SEER_CORE,MENDER_CORE,OCCULT_LESSONS} from "./OccultRules.js";
 import {RIFT_WARDEN} from "./WorldAtlas.js";
 import {MAX_REBIRTHS,REBIRTH_SHRINE} from "./Rebirth.js";
 import {REGIONAL_BOSSES,BOSS_RESPAWN_MS} from "./RegionalBosses.js";
-import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {PROGRESSION,SKILL_RANK_LEVELS,SKILL_RANK_PRACTICE,baseManaAtLevel} from "./Progression.js";
 export {cardHunt} from "./MonsterLoot.js";
 
@@ -109,11 +108,21 @@ function upperCourse(school:School,level:number,learningLevel:number){
     ranks:SKILL_RANK_LEVELS.map((lv,i)=>({level:lv,rank:i+1,practice:SKILL_RANK_PRACTICE[i]}))};
 }
 function fieldPracticeSite(level:number,preferredMap?:string){
-  if(level<=25)return practiceSite(TEMPLE_SPAWNS.find(m=>m.level===15)!.id);
   const candidates=hunts.filter(m=>(!m.tier || m.tier==="normal") && m.level<=level && level-m.level<=4)
     .map(m=>practiceSite(m.id)!).filter(site=>site.open);
   candidates.sort((a,b)=>b.level-a.level || Number(b.mapId===preferredMap)-Number(a.mapId===preferredMap));
   return candidates[0]??null;
+}
+// Early journeys alternate equipment goals with ordinary, level-eligible camps.
+// Use the same authoritative spawns as loot and EXP, never a future Lv15 target.
+function earlyCamps(level:number){
+  const seen=new Set<string>();
+  return hunts.filter(m=>(!m.tier || m.tier==="normal") && m.level<=level && level-m.level<=4)
+    .sort((a,b)=>b.level-a.level).flatMap(m=>{
+      const site=practiceSite(m.id),key=m.mapId+"/"+m.id.slice(0,m.id.lastIndexOf("_"))+"/"+m.name;
+      if(!site?.open || seen.has(key))return [];
+      seen.add(key);return [site];
+    });
 }
 export function personalGearGuides(path:string,level:number,learningLevel=level){
   if(!Object.hasOwn(gearSchools,path) || !Number.isInteger(level) || level<1 || level>100)return null;
@@ -147,7 +156,7 @@ export function personalGearGuides(path:string,level:number,learningLevel=level)
   const weapon=journeyWeapon(school,Math.max(10,level));
   const camp=weapon?itemCamp(weapon,PERSONAL_ITEMS[weapon].level!):null;
   const upper=level>=51;
-  const camps=upper?upperCamps(level):[];
+  const camps=upper?upperCamps(level):level<=25?earlyCamps(level):[];
   const challenges=level>=98?hunts.filter(m=>m.mapId==="spirit_rift" && m.tier==="strong" && m.level<=level)
     .flatMap(m=>{const site=practiceSite(m.id);return site?.open?[site]:[];}):[];
   const course=upper?upperCourse(school,level,learningLevel):undefined;
