@@ -556,6 +556,7 @@
   const GEM = { atk: "#b3261e", spell: "#3b6fd6", heal: "#3fae6a", guard: "#c9a24a" };
   function accessoryBuilder(family, p, neck = false) {
     const k = gearKit(), gold = gearMat("gold trim", "#c9a24a", "#2a1d06", .4);
+    if (BOSS_NECK[family]) { BOSS_NECK[family](k, bossMetal()); return [["Chest", k.take()]]; }
     if (neck || /^acc_(torc|gorget|fang|spell|shrine|rift|boss)/.test(family)) {
       if (family === "acc_gorget") { k.cyl(0, 1.462, -.004, .05, .15, .19, p.main, 16).scaling.z = .9; k.cyl(0, 1.438, -.004, .01, .195, .195, gold, 16).scaling.z = .9; }
       else {
@@ -567,11 +568,118 @@
     }
     return [];
   }
+  // ---- Boss jewellery: one piece per regional boss, shaped after its name and map ----
+  // Model space (T-pose, metres): ear lobe at (±.083, 1.588, -.01); ring top at (±.72, 1.354, .045) with
+  // "outward" along +z; the necklace hangs on the chest curve with its pendant at (0, 1.345, .118).
+  const bossGlows = new Map();
+  function bossGlow(hex) {
+    if (!bossGlows.has(hex)) { const m = mat("boss glow " + hex, hex, hex); if (typeof glowMats !== "undefined") glowMats.add(m); bossGlows.set(hex, m); }
+    return bossGlows.get(hex);
+  }
+  const bossMetal = () => ({
+    gold: gearMat("gold trim", "#c9a24a", "#2a1d06", .4), silver: gearMat("moon silver", "#c9d2dc", "#1a1f26", .5),
+    iron: gearMat("black iron", "#3a3d42", undefined, .45), bronze: gearMat("bell bronze", "#9a6a2c", "#1a0f02", .45),
+    red: gearMat("red lacquer", "#7a1c16", "#1a0302", .3), bone: gearMat("bone fang", "#e8dcc2"),
+  });
+  // Necklace chain: `n` pieces along the chest curve, made by `bead(x, y, z, t)` (t from -1 to 1); it sits
+  // a little proud of the skin so the chain shows over the pectorals instead of sinking into them.
+  function bossChain(bead, n = 10) { for (let i = 0; i <= n; i++) { const t = i / (n / 2) - 1; bead(t * .088, 1.455 - (1 - t * t) * .1, .086 + (1 - t * t) * .04, t); } }
+  const BOSS_NECK = {
+    // สร้อยผลึกจันทรา: silver chain, a crescent of silver round a pale moon crystal.
+    acc_boss_moon_pass(k, M) {
+      bossChain((x, y, z) => k.ball(x, y, z, .016, M.silver, 4));
+      for (let i = 0; i < 7; i++) { const a = Math.PI * (.15 + i / 6 * .7) + Math.PI; k.ball(Math.cos(a) * .036, 1.345 + Math.sin(a) * -.036, .118, .014, M.silver, 4); }
+      const c = k.cyl(0, 1.345, .121, .05, 0, .022, bossGlow("#a8d8ff"), 4); k.cyl(0, 1.37, .121, .02, .022, 0, bossGlow("#a8d8ff"), 4); c.position.y = 1.335;
+    },
+    // สร้อยไผ่แดง: red bamboo segments with gold nodes; a bamboo tube pendant with a leaf.
+    acc_boss_bamboo_frontier(k, M) {
+      bossChain((x, y, z, t) => { const s = k.cyl(x, y, z, .02, .013, .013, M.red, 6); s.rotation.z = Math.PI / 2 - Math.atan(t * .2 / .088); }, 14);
+      k.cyl(0, 1.335, .118, .07, .022, .022, M.red, 8); for (const y of [1.312, 1.345]) k.cyl(0, y, .118, .006, .026, .026, M.gold, 8);
+      const leaf = k.ball(.02, 1.38, .118, .03, gearMat("bamboo leaf", "#4f7a32"), 4); leaf.scaling.set(.45, 1, .2); leaf.rotation.z = -.6;
+      k.ball(0, 1.296, .118, .014, bossGlow("#ff5a3a"), 6);
+    },
+    // สร้อยเกสรนาคา: gold chain; a pink lotus of six petals round a burning pollen heart.
+    acc_boss_lotus_basin(k, M) {
+      bossChain((x, y, z) => k.ball(x, y, z, .014, M.gold, 4), 12);
+      for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, pt = k.ball(Math.sin(a) * .026, 1.345 + Math.cos(a) * .026, .116, .034, gearMat("lotus petal", "#e58aa8", "#2a0a14"), 6); pt.scaling.set(.5, 1, .25); pt.rotation.z = -a; }
+      k.ball(0, 1.345, .124, .024, bossGlow("#ffb24a"), 8);
+    },
+    // สร้อยสมอเหล็ก: heavy iron links and an iron anchor with a sea-green spirit light at its stock.
+    acc_boss_sam_lan_estuary(k, M) {
+      bossChain((x, y, z) => { const l = k.ball(x, y, z, .02, M.iron, 4); l.scaling.set(1, .6, .6); }, 9);
+      k.cyl(0, 1.335, .12, .08, .01, .01, M.iron, 6); const bar = k.cyl(0, 1.364, .12, .05, .008, .008, M.iron, 6); bar.rotation.z = Math.PI / 2;
+      for (let i = 0; i <= 6; i++) { const a = Math.PI * (1.1 + i / 6 * .8); k.ball(Math.cos(a) * .03, 1.322 + Math.sin(a) * .03, .12, .012, M.iron, 4); }
+      for (const s of [-1, 1]) { const f = k.cyl(s * .03, 1.312, .12, .018, 0, .014, M.iron, 4); f.rotation.z = s * .6; }
+      k.ball(0, 1.376, .12, .016, bossGlow("#7fd6c8"), 6);
+    },
+    // สร้อยเกล็ดเขี้ยวนิล: overlapping teal naga scales and a sapphire fang in a gold cap.
+    acc_boss_naga_cavern(k, M) {
+      const scale = gearMat("naga scale", "#1f6f6a", "#031412", .5);
+      bossChain((x, y, z, t) => { const sc = k.ball(x, y, z, .026, scale, 4); sc.scaling.set(1, 1.2, .35); sc.rotation.y = t * .6; }, 12);
+      k.cyl(0, 1.36, .118, .012, .03, .022, M.gold, 8);
+      const fang = k.cyl(0, 1.322, .118, .06, .024, 0, bossGlow("#3a5cff"), 6); fang.rotation.x = Math.PI;
+    },
+    // สร้อยเกราะเวียง: a collar of small gold lamellar plates and a war medallion with a red heart.
+    acc_boss_tri_wiang_castle(k, M) {
+      bossChain((x, y, z, t) => { const pl = k.box(x, y, z, .022, .032, .006, M.gold); pl.rotation.y = -t * .7; pl.rotation.z = -t * .5; }, 12);
+      const disc = k.cyl(0, 1.345, .12, .008, .056, .056, M.gold, 14); disc.rotation.x = Math.PI / 2;
+      const rim = k.cyl(0, 1.345, .124, .006, .04, .04, M.red, 14); rim.rotation.x = Math.PI / 2;
+      k.ball(0, 1.345, .128, .02, bossGlow("#ff4a3a"), 6);
+    },
+    // สร้อยตราศาลร้าง: old wooden beads, a paper talisman plate with a red cloth tail and a burning seal.
+    acc_shrine_ward(k, M) {
+      bossChain((x, y, z) => k.ball(x, y, z, .018, beadMat, 4));
+      k.box(0, 1.34, .12, .05, .062, .006, gearMat("talisman paper", "#d8c79a", "#1a1408"));
+      k.box(0, 1.296, .119, .018, .04, .003, M.red);
+      k.ball(0, 1.345, .125, .018, bossGlow("#ff6a3a"), 6);
+    },
+  };
+  const BOSS_EAR = {
+    // ตุ้มหูเสียงระฆัง: a tiny bronze temple bell with a glowing clapper.
+    acc_boss_bound_temple(k, M, x) { k.cyl(x, 1.572, -.01, .024, .008, .026, M.bronze, 10); k.cyl(x, 1.559, -.01, .004, .029, .029, M.bronze, 10); k.ball(x, 1.555, -.01, .01, bossGlow("#ffd27a"), 6); },
+    // ตุ้มหูจันทร์ดับ: a silver crescent round a dark moon with a violet rim of light.
+    acc_boss_moon_cemetery(k, M, x) {
+      for (let i = 0; i < 6; i++) { const a = Math.PI * (.6 + i / 5 * .8); k.ball(x + Math.cos(a) * -.016, 1.568 + Math.sin(a) * -.016, -.01, .009, M.silver, 4); }
+      k.ball(x, 1.568, -.01, .016, gearMat("dark moon", "#14121c", "#100820", .4), 6); k.ball(x, 1.568, -.004, .007, bossGlow("#9a8cff"), 4);
+    },
+    // ตุ้มหูวายุสามตรา: three gold seals strung one under another, wind-blue light between them.
+    acc_boss_hex_ridge(k, M, x) {
+      for (let i = 0; i < 3; i++) { const d = k.cyl(x, 1.578 - i * .016, -.01, .004, .016, .016, M.gold, 10); d.rotation.x = Math.PI / 2; }
+      for (let i = 0; i < 2; i++) k.ball(x, 1.57 - i * .016, -.01, .006, bossGlow("#bfe8ff"), 4);
+    },
+    // ตุ้มหูกลองอาถรรพ์: a tiny red war drum with gold rims and a cursed ember tassel.
+    acc_boss_fallen_city(k, M, x) {
+      k.cyl(x, 1.57, -.01, .016, .02, .02, M.red, 10); for (const y of [1.578, 1.562]) k.cyl(x, y, -.01, .003, .022, .022, M.gold, 10);
+      k.cyl(x, 1.548, -.01, .016, .002, .008, M.red, 6); k.ball(x, 1.539, -.01, .007, bossGlow("#ff7a3a"), 4);
+    },
+  };
+  const BOSS_RING = {
+    // แหวนพรายกระแสน้ำ: a silver band holding a cyan water drop.
+    acc_boss_drowned_marsh(k, M, x) { k.ball(x, 1.354, .056, .026, bossGlow("#5fe0ff"), 8); const tail = k.cyl(x - .018 * Math.sign(x), 1.354, .056, .022, 0, .018, bossGlow("#5fe0ff"), 6); tail.rotation.z = Math.sign(x) * Math.PI / 2; return M.silver; },
+    // แหวนเขี้ยวสมิง: a tiger fang along the finger and an amber eye.
+    acc_boss_river_watch(k, M, x) { const f = k.cyl(x, 1.354, .055, .05, 0, .018, M.bone, 6); f.rotation.z = Math.sign(x) * Math.PI / 2; k.ball(x, 1.354, .062, .014, bossGlow("#ffa53a"), 6); return M.gold; },
+    // แหวนครุฑสันผา: two gold garuda wings round a red gem.
+    acc_boss_twin_neck_pass(k, M, x) {
+      for (const s of [-1, 1]) { const w = k.box(x, 1.354 + s * .02, .05, .03, .02, .004, M.gold); w.rotation.z = s * .5; w.rotation.x = .3; }
+      k.ball(x, 1.354, .056, .018, bossGlow("#ff4a4a"), 6); return M.gold;
+    },
+    // แหวนเพลิงเตาหลวง: three flame tongues from the furnace, orange round a yellow core.
+    acc_boss_asura_peak(k, M, x) {
+      for (let i = -1; i <= 1; i++) { const f = k.cyl(x + i * .008, 1.354 + i * .008, .064, .034 - Math.abs(i) * .01, 0, .016, bossGlow("#ff6a1a"), 5); f.rotation.x = Math.PI / 2; }
+      k.ball(x, 1.354, .055, .012, bossGlow("#ffe27a"), 4); return M.iron;
+    },
+    // แหวนดาวราชัน: a four-point star of violet light.
+    acc_rift_star(k, M, x) {
+      for (let i = 0; i < 4; i++) { const sp = k.cyl(x + Math.cos(i * Math.PI / 2) * .014, 1.354 + Math.sin(i * Math.PI / 2) * .014, .056, .022, 0, .01, bossGlow("#c79bff"), 4); sp.rotation.z = i * Math.PI / 2 - Math.PI / 2; }
+      k.ball(x, 1.354, .056, .016, bossGlow("#e7d4ff"), 6); return M.silver;
+    },
+  };
   // One earring per ear slot (side 1 = left ear at +x in model space): a stud with the gem just below it.
   function earringBuilder(family, side) {
     const k = gearKit(), gold = gearMat("gold trim", "#c9a24a", "#2a1d06", .4);
     const gem = family.includes("lotus") ? GEM.heal : family.includes("focus") ? GEM.spell : family.includes("ward") ? GEM.guard : GEM.atk;
     k.cyl(side * .082, 1.605, -.01, .012, .014, .014, gold, 8);
+    if (BOSS_EAR[family]) { BOSS_EAR[family](k, bossMetal(), side * .083); return [["Head", k.take()]]; }
     k.ball(side * .083, 1.588, -.01, .018, isBossAccessory(family) ? amuletGlow : gearMat("gem " + gem, gem, "#120808", .5), 6);
     if (isBossAccessory(family)) k.cyl(side * .083, 1.566, -.01, .022, .012, 0, gold, 6); // small drop pendant
     return [["Head", k.take()]];
@@ -579,6 +687,10 @@
   function ringBuilder(family, side) {
     const k = gearKit(), gem = family.includes("heal") ? GEM.heal : family.includes("spell") ? GEM.spell : family.includes("guard") ? GEM.guard : GEM.atk;
     const x = side * .72;
+    if (BOSS_RING[family]) {
+      const metal = BOSS_RING[family](k, bossMetal(), x), band = k.cyl(x, 1.354, .02, .02, .045, .045, metal, 10); band.rotation.z = Math.PI / 2;
+      return [[side > 0 ? "LeftHand" : "RightHand", k.take()]];
+    }
     const band = k.cyl(x, 1.354, .02, .02, .045, .045, gearMat("gold trim", "#c9a24a", "#2a1d06", .4), 10); band.rotation.z = Math.PI / 2;
     k.ball(x, 1.354, .045, isBossAccessory(family) ? .028 : .022, isBossAccessory(family) ? amuletGlow : gearMat("gem " + gem, gem, "#120808", .5), 6);
     return [[side > 0 ? "LeftHand" : "RightHand", k.take()]];

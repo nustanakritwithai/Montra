@@ -1092,7 +1092,7 @@
   function buildBackdrop(map, bounds) {
     const w = bounds.maxX - bounds.minX, d = bounds.maxZ - bounds.minZ;
     if (w > 600 || d > 600) return; // the open-world castle map has no edge in sight
-    if (!backdropGroundMat) backdropGroundMat = backdropMaterial("backdrop ground", .3);
+    if (!backdropGroundMat) backdropGroundMat = backdropMaterial("backdrop ground", .15);
     backdropGroundMat.metadata.base = B.Color3.FromHexString(atmosphere.ground || "#2a2a22");
     const cx = (bounds.minX + bounds.maxX) / 2, cz = (bounds.minZ + bounds.maxZ) / 2;
     // Ground on to the horizon, a little under the map so the map's own floor and relief always win;
@@ -1100,12 +1100,16 @@
     const skirt = B.MeshBuilder.CreateGround("backdrop ground", { width: w + 640, height: d + 640 }, scene);
     skirt.position.set(cx, -.3, cz); skirt.material = backdropGroundMat; skirt.isPickable = false; skirt.parent = expansionRoot; skirt.metadata = { noShadow: true };
     // Mist curtains: [metres outside the edge, height, opacity at the foot, drift speed]. Phones get three.
-    const layers = LITE ? [[10, 16, .45, .006], [38, 30, .75, -.004], [95, 60, 1, .002]]
-      : [[6, 12, .32, .007], [20, 20, .5, -.005], [45, 32, .75, .004], [95, 60, 1, -.002]];
+    // They start well past the edge and stay light, so the map itself reads clearly and only the far
+    // distance goes to haze; the last ring closes the horizon.
+    const layers = LITE ? [[30, 14, .2, .006], [70, 26, .42, -.004], [130, 55, .9, .002]]
+      : [[20, 10, .14, .007], [45, 18, .28, -.005], [80, 30, .5, .004], [130, 55, .9, -.002]];
     layers.forEach(([off, h, foot, drift], k) => {
       if (!backdropCurtains[k]) {
         const m = backdropMaterial("far mist " + k, 1); m.opacityTexture = backdropMistTexture().clone();
-        m.backFaceCulling = false; m.disableDepthWrite = true; m.useVertexAlpha = true; m.alpha = .999; m.metadata.drift = drift;
+        // One-sided: drawn only from inside the ring looking out. A camera that has swung past the map edge
+        // behind the hero would otherwise look through the near curtains and see the hero in thick fog.
+        m.backFaceCulling = true; m.disableDepthWrite = true; m.useVertexAlpha = true; m.alpha = .999; m.metadata.drift = drift;
         m.metadata.lift = .22 - k * .06; // near banks catch a little more light than the haze behind them
         backdropCurtains[k] = m;
       }

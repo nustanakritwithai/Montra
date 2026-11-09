@@ -28,13 +28,17 @@
       } else if (!isAggro && distToHero > 28) {
         g.aggroPlayed = false;
       }
+      updateMonsterAuras(mesh, g, now, dt);
+      // Mid-distance ghosts pose at 15/s (position, voices and death above/below stay per frame).
+      g.poseAcc = (g.poseAcc || 0) + dt;
+      if (!g.deathAt && typeof poseInterval === "function" && g.poseAcc < poseInterval(false, Math.hypot(mesh.position.x - camera.target.x, mesh.position.z - camera.target.z))) return;
+      const pdt = g.poseAcc; g.poseAcc = 0;
       const move = Math.min(1, g.speed / 2.5);
-      g.walk += dt * (2 + 6 * move);
+      g.walk += pdt * (2 + 6 * move);
       const atkAge = (now - g.attackAt) / 1000, hurtAge = (now - g.hurtAt) / 1000;
       const atk = g.hold?.atk ?? (atkAge < .7 ? Math.sin(Math.min(1, atkAge / .7) * Math.PI) : 0); // hold: preview frames
       const hurt = g.hold?.hurt ?? (hurtAge < .3 ? Math.sin(hurtAge / .3 * Math.PI) : 0);
       g.update({ t: t + (mesh.uniqueId % 17), move, atk, hurt, walk: g.walk, wind: g.windup ? 1 : 0, g, now });
-      updateMonsterAuras(mesh, g, now, dt);
       // Humanoid rigs play their own spawn and death on the skeleton; the
       // primitive and object rigs rise out of / sink into the ground.
       const humanoid = g.rig.metadata?.skeletons, spawnP = Math.min(1, (now - g.spawnAt) / 700);
