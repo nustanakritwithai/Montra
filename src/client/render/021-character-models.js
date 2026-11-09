@@ -307,7 +307,7 @@
       box: (x, y, z, w, h, d, m) => at(B.MeshBuilder.CreateBox("gear", { width: w, height: h, depth: d }, scene), x, y, z, m),
       cyl: (x, y, z, h, top, bottom, m, n = 10) => at(B.MeshBuilder.CreateCylinder("gear", { height: h, diameterTop: top, diameterBottom: bottom, tessellation: n }, scene), x, y, z, m),
       ball: (x, y, z, d, m, seg = 8) => at(B.MeshBuilder.CreateSphere("gear", { diameter: d, segments: seg }, scene), x, y, z, m),
-      dome: (x, y, z, d, m, slice = .5) => at(B.MeshBuilder.CreateSphere("gear", { diameter: d, segments: 10, slice, sideOrientation: B.Mesh.DOUBLESIDE }, scene), x, y, z, m),
+      dome: (x, y, z, d, m, slice = .5, seg = 10, double = true) => at(B.MeshBuilder.CreateSphere("gear", { diameter: d, segments: seg, slice, sideOrientation: double ? B.Mesh.DOUBLESIDE : B.Mesh.FRONTSIDE }, scene), x, y, z, m),
       // Elliptic tube through rings [y, halfWidth, halfDepth, zOffset].
       loft: (rings, m, segs = 14) => {
         const paths = rings.map(([y, w, d, zo = 0]) => { const ring = []; for (let i = 0; i <= segs; i++) { const t = i / segs * Math.PI * 2; ring.push(new B.Vector3(Math.cos(t) * w, y, zo + Math.sin(t) * d)); } return ring; });
@@ -362,12 +362,13 @@
       const out = [];
       for (const [side, bone] of [[1, "LeftArm"], [-1, "RightArm"]]) {
         const k = gearKit(), x = side * .185;
-        if (w === "cloth") { k.dome(x, 1.41, 0, .13, p.main).scaling.set(1.1, .5, 1.05); }
-        else if (w === "hide") { k.dome(x, 1.412, 0, .14, p.main).scaling.set(1.1, .55, 1.05); k.box(x - side * .02, 1.4, 0, .014, .035, .13, p.leather); }
+        // Shoulder caps are small on screen: low-segment domes keep a fully armoured hero within the mobile budget.
+        if (w === "cloth") { k.dome(x, 1.41, 0, .13, p.main, .5, 6, false).scaling.set(1.1, .5, 1.05); }
+        else if (w === "hide") { k.dome(x, 1.412, 0, .14, p.main, .5, 6, false).scaling.set(1.1, .55, 1.05); k.box(x - side * .02, 1.4, 0, .014, .035, .13, p.leather); }
         else {
           const n = w === "heavy" ? 3 : 2;
           for (let i = 0; i < n; i++) {
-            const plate = k.dome(x + side * i * .02, 1.42 - i * .035, 0, .15 - i * .012, i ? p.second : p.main);
+            const plate = k.dome(x + side * i * .02, 1.42 - i * .035, 0, .15 - i * .012, i ? p.second : p.main, .5, i ? 4 : 6, false);
             plate.scaling.set(1.1, .45, 1.05); plate.rotation.z = -side * (.35 + i * .12);
           }
           k.cyl(x, 1.428, 0, .01, .152, .152, p.trim, 14).rotation.z = -side * .35;

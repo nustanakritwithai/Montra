@@ -206,11 +206,63 @@
     setAvatarRitualGear(avatar, pathId);
     const modelId = weaponModelFor(weaponId,pathId);
     const safeId = modelId === "thai_dual" || modelId === "muay_wraps" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
-    if (avatar.weaponId === safeId) return;
-    avatar.weaponId = safeId;
+    const band = weaponBand(weaponId);
+    if (avatar.weaponId === safeId && avatar.weaponBand === band) return;
+    avatar.weaponId = safeId; avatar.weaponBand = band;
     for(const [id,model] of Object.entries(avatar.weaponModels)) {
+      if (id.startsWith("tool_")) continue; // gathering tools are shown by showGatherTool
       model.setEnabled(id === safeId || (safeId === "thai_dual" && (id === "thai_left" || id === "thai_right")));
     }
+    for (const id of safeId === "thai_dual" ? ["thai_left", "thai_right"] : [safeId]) if (avatar.weaponModels[id]) showWeaponTrim(avatar.weaponModels[id], id, band);
+  }
+  // ---- Weapon tiers (visual only) ----
+  // Catalog weapons wp_<family>_<1..10> share one model per class. The upper tiers add trim built lazily on
+  // the held model: band 2 (tier 6-8, level 50+) gold collars and a gem, band 3 (tier 9-10, level 85+) a
+  // glowing edge or crystal halo and a red tassel. Legacy weapons without a tier stay plain.
+  function weaponBand(weaponId) {
+    const m = /^wp_[a-z]+_(\d+)$/.exec(String(weaponId || ""));
+    const tier = m ? Number(m[1]) : 0;
+    return tier >= 9 ? 3 : tier >= 6 ? 2 : 1;
+  }
+  const trimGold = () => gearMat("gold trim", "#c9a24a", "#2a1d06", .4);
+  const trimRed = () => gearMat("trim tassel red", "#8a1a14", "#1a0302");
+  const trimGlow = () => gearMat("weapon edge glow", "#ffd9a0", "#ffb24a", .2);
+  const WEAPON_TRIMS = {
+    // [y along the shaft/blade (model units, before the 0.6 grip scale), …parts]
+    seer_wand: (k, band) => { k.ring(.34, .06, .012); k.ring(.15, .07, .01); if (band > 2) { k.halo(.47, .17); k.gem(.62, .05); } },
+    mender_crook: (k, band) => { for (const y of [.3, .62]) k.ring(y, .07, .014); if (band > 2) { k.halo(1.18, .3); k.tassel(.98, .2); } },
+    sentinel_pike: (k, band) => { k.ring(.92, .085, .016); k.ring(1.08, .08, .012); k.gem(1.0, .045); if (band > 2) { k.edge(.03, 1.32, .5); k.tassel(1.12, .32); } },
+    ritual_dagger: (k, band) => { k.ring(.0, .09, .012); k.gem(.03, .035); if (band > 2) { k.curveEdge(.5, .09, 5); k.tassel(-.3, .16); } },
+    thai_left: (k, band) => { k.ring(-.03, .075, .012); k.ring(-.21, .075, .012); if (band > 2) k.curveEdge(.95, .105, 7); },
+    thai_right: (k, band) => { k.ring(-.03, .075, .012); k.ring(-.21, .075, .012); if (band > 2) k.curveEdge(.95, .105, 7); },
+  };
+  function showWeaponTrim(root, modelId, band) {
+    const trims = root.metadata?.trims || {};
+    for (const [b, node] of Object.entries(trims)) node.setEnabled(Number(b) === band);
+    if (band < 2 || trims[band] || !WEAPON_TRIMS[modelId]) return;
+    const parts = [], at = (mesh, mat) => { mesh.material = mat; mesh.isPickable = false; parts.push(mesh); return mesh; };
+    const k = {
+      ring: (y, d, h) => at(B.MeshBuilder.CreateCylinder("trim", { height: h, diameter: d, tessellation: 10 }, scene), trimGold()).position.set(0, y, 0),
+      gem: (y, d) => at(B.MeshBuilder.CreateSphere("trim", { diameter: d, segments: 6 }, scene), amuletGlow).position.set(0, y, d * .6),
+      halo: (y, d) => { const t = at(B.MeshBuilder.CreateTorus("trim", { diameter: d, thickness: .014, tessellation: 18 }, scene), trimGlow()); t.position.set(0, y, 0); t.rotation.x = Math.PI / 2; },
+      edge: (x, y, len) => at(B.MeshBuilder.CreateBox("trim", { width: .012, height: len, depth: .034 }, scene), trimGlow()).position.set(x, y, 0),
+      // Glowing edge that follows a curved blade (same path as curvedBlade in the avatar builder).
+      curveEdge: (length, base, segs) => {
+        let x = 0, y = .05, a = 0;
+        for (let i = 0; i < segs; i++) {
+          const w = base * (1 - i / (segs + 1) * .55), l = length / segs;
+          const e = at(B.MeshBuilder.CreateBox("trim", { width: .014, height: l * 1.04, depth: .036 }, scene), trimGlow());
+          e.position.set(x - Math.sin(a) * l / 2 + Math.cos(a) * (w / 2 + .004), y + Math.cos(a) * l / 2 + Math.sin(a) * (w / 2 + .004), 0); e.rotation.z = a;
+          x -= Math.sin(a) * l; y += Math.cos(a) * l; a += .16;
+        }
+      },
+      tassel: (y, len) => { for (const dx of [-.012, 0, .012]) { const t = at(B.MeshBuilder.CreateCylinder("trim", { height: len, diameterTop: .018, diameterBottom: .004, tessellation: 4 }, scene), trimRed()); t.position.set(dx, y - len / 2, .03); } },
+    };
+    WEAPON_TRIMS[modelId](k, band);
+    const merged = B.Mesh.MergeMeshes(parts, true, true, undefined, false, true);
+    if (!merged) return;
+    merged.name = "weapon trim " + band; merged.parent = root; merged.isPickable = false; merged.alwaysSelectAsActiveMesh = true;
+    root.metadata = { ...root.metadata, trims: { ...trims, [band]: merged } };
   }
   // Forward of the prototype avatar faces local -Z when rotation.y == 0.
   // Keep this local to rendering; no change to server movement or combat.
