@@ -88,6 +88,7 @@
        mesh.metadata.pkPlayerId !== localId)
     ));
     if (!picked?.hit) return;
+    cancelQuestNavigation();
     const hitMesh=picked.pickedMesh;
     if(hitMesh?.metadata?.stairId){requestClimb(hitMesh.metadata.stairId);return;}
     if(hitMesh?.metadata?.resourceId){
