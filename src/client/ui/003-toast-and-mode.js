@@ -1,7 +1,11 @@
   function toast(message) {
     SFX("toast");
-    positionSwordToast();
+    // Drawers make field children inert, and #game isolates their stacking order.
+    // Keep notices above drawers/detail modals without intercepting their controls.
+    if (ui.toast.parentElement !== document.body) document.body.appendChild(ui.toast);
+    ui.toast.inert = false;
     ui.toast.textContent = message;
+    positionSwordToast();
     ui.toast.classList.add("show");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => ui.toast.classList.remove("show"), 2800);

@@ -55,7 +55,8 @@
     const areas=Array.from(document.querySelectorAll(".field-prompts .warp-button:not([hidden]), .controls .sword-status:not([hidden]), .controls .sword-hotbar:not([hidden]) button"))
       .map(el=>el.getBoundingClientRect()).filter(area=>area.width>0 && area.height>0);
     if(!areas.length){ui.toast.style.removeProperty("bottom");return;}
-    const game=$("game").getBoundingClientRect(),top=Math.min(...areas.map(area=>area.top));
-    ui.toast.style.bottom=Math.max(0,game.bottom-top+8)+"px";
+    const height=window.innerHeight,top=Math.min(...areas.map(area=>area.top));
+    const maxBottom=Math.max(8,height-ui.toast.getBoundingClientRect().height-8);
+    ui.toast.style.bottom=Math.max(8,Math.min(height-top+8,maxBottom))+"px";
   }
 
