@@ -96,3 +96,24 @@
 .sg-wrap .sg-lane em { background: var(--sg-a); }
 .sg-wrap .sg-node.learned .sg-lv { color: var(--sg-a); }
 
+/* A shared class link is not an unlock requirement. Keep it dotted and separate
+   from the solid, catalog-defined prerequisite edges in the advanced tree. */
+.sg-core-tree { margin-top: 12px; padding-bottom: 18px; }
+.sg-core-heading { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--sg-a); }
+.sg-core-nodes { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px 0 20px; }
+.sg-core-nodes::after { content: ""; position: absolute; left: 12.5%; right: 12.5%; bottom: 0; border-bottom: 2px dashed var(--sg-a); opacity: .6; }
+.sg-core-nodes > button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; min-height: 100px; padding: 6px 2px; border: 1px solid #7b6745; border-radius: 12px; color: #f4e6c8; background: #211c17; }
+.sg-core-nodes > button::after { content: ""; position: absolute; top: 100%; height: 20px; left: 50%; border-left: 2px dashed var(--sg-a); opacity: .6; }
+.sg-core-nodes .kg-glyph[data-skill-glyph] { width: 44px; height: 44px; flex: none; }
+.sg-core-nodes strong { font: 700 11px/1.4 "Noto Sans Thai", system-ui; overflow-wrap: anywhere; }
+.sg-core-nodes small { margin-top: auto; font-size: 10px; color: #d8c9a6; }
+.sg-tree-join { position: relative; margin: 18px auto 0; padding: 5px 8px; width: fit-content; max-width: 100%; border: 1px dashed var(--sg-a); border-radius: 8px; font-size: 11px; text-align: center; color: #e9dcc2; }
+.sg-tree-join::before { content: ""; position: absolute; bottom: 100%; left: 50%; height: 18px; border-left: 2px dashed var(--sg-a); opacity: .6; }
+.sg-tree-join::after { content: ""; position: absolute; top: 100%; left: 50%; height: 18px; border-left: 2px dashed var(--sg-a); opacity: .6; }
+.sg-tree-key { font-size: 11px; line-height: 1.5; }
+.sg-advanced .sg-view { border-top: 2px dashed var(--sg-a); }
+.sg-advanced .sg-edge { stroke-dasharray: none; }
+.sg-group-edge { fill: none; stroke: var(--sg-a); stroke-width: 2; stroke-dasharray: 2 5; opacity: .6; }
+.sg-advanced .sg-slots { flex-wrap: wrap; }
+.sg-advanced .sg-slots > span { width: 100%; }
+
