@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import {createHash,randomBytes} from "node:crypto";
 import {mkdir,writeFile} from "node:fs/promises";
 import path from "node:path";
+import {DatabaseSync} from "node:sqlite";
 import {Client} from "@colyseus/sdk";
 
 const url=process.env.MONTRA_TEST_URL,dir=process.env.MONTRA_CHARACTER_DIR;
-if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url||"") || new URL(url).port==="4108" || !dir || !path.basename(dir).startsWith("montra-advanced-test-"))
+if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url||"") || new URL(url).port==="4108" || process.env.MONTRA_ECONOMY_ENABLED!=="1" || !dir || !path.basename(dir).startsWith("montra-advanced-test-"))
   throw Error("Requires isolated localhost server and disposable advanced test directory");
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),sdk=new Client(url),rooms=[];
 async function until(fn,label){const end=Date.now()+12000;while(Date.now()<end){const value=fn();if(value)return value;await sleep(40);}throw Error("timeout: "+label);}
@@ -56,10 +57,20 @@ try{
     const changed=spec.path==="phutthaisawan"?"sword_tree_changed":spec.path==="muay_boran"?"muay_book_changed":spec.path==="blade"?"blade_book_changed":spec.path==="sentinel"?"sentinel_book_changed":"occult_book_changed";
     learner.send(bookCommand,spec.path==="phutthaisawan"?{skillId:spec.skill}:{action:"learn",skillId:spec.skill});
     await until(()=>learnedEvents.some(e=>e.type===changed),"learn "+spec.path);
+    await sleep(700);
+    learner.send(spec.path==="phutthaisawan"?"sword_tree_equip":bookCommand,spec.path==="phutthaisawan"?{skillId:spec.skill,slot:1}:{action:"equip",skillId:spec.skill,slot:1});
+    await until(()=>learnedEvents.filter(e=>e.type===changed).length>=2,"equip "+spec.path);
     await learner.leave();rooms.splice(rooms.indexOf(learner),1);
-    const token=await fixture(spec),room=await sdk.create("my_room",{guestToken:token,worldVersion:1,templeVersion:1,atlasVersion:1});rooms.push(room);
+    await sleep(500);
+    const savedId=createHash("sha256").update(learningToken).digest("hex");
+    const db=new DatabaseSync(path.join(dir,"economy.sqlite"),{readOnly:true});const saved=JSON.parse(db.prepare("SELECT snapshot FROM characters WHERE id=?").get(savedId).snapshot);db.close();
+    const savedBook=saved[spec.bookKey],savedSlots=spec.path==="phutthaisawan"?savedBook.loadouts[savedBook.school]:spec.path==="seer"||spec.path==="mender"?savedBook.loadouts[spec.path]:savedBook.slots;
+    assert.equal(savedSlots[1],spec.skill,spec.path+" equip persisted before reconnect");
+
+    const token=learningToken,room=await sdk.create("my_room",{guestToken:token,worldVersion:1,templeVersion:1,atlasVersion:1});rooms.push(room);
     const events=[];room.onMessage("*",(type,data)=>events.push({type,data}));
     await until(()=>room.state?.players?.get(room.sessionId)?.persistent,"join "+spec.path);
+    room.send("move",{x:1.1,z:12.2});await until(()=>{const p=room.state.players.get(room.sessionId);return Math.hypot(p.x-1.1,p.z-12.2)<.5;},"leave shrine "+spec.path);
     const player=room.state.players.get(room.sessionId),monster=room.state.monster,initialHp=player.hp;
     const target=spec.heal?room.sessionId:monster.id;
     room.send(spec.command,spec.self?{skillId:spec.skill}:{skillId:spec.skill,targetId:target});
@@ -68,7 +79,7 @@ try{
     else await until(()=>events.some(e=>e.type==="combat_hit" && e.data.targetId===monster.id),"hit "+spec.path);
     assert.ok(!events.some(e=>e.type==="command_rejected"),spec.path+" should cast its advanced lesson");
     await room.leave();rooms.splice(rooms.indexOf(room),1);
-    console.log("Advanced lesson learn and cast passed:",spec.path);
+    console.log("Advanced learn/equip/persist/reconnect/cast passed:",spec.path);
   }
   for(const spec of finals){
     const token=await fixture(spec,true),room=await sdk.create("my_room",{guestToken:token,worldVersion:1,templeVersion:1,atlasVersion:1});rooms.push(room);

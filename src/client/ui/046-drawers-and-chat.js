@@ -83,7 +83,7 @@
     if(mode!=="live" || drawerActive || !$("accountEntry").hidden || event.defaultPrevented ||
        event.repeat || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
        !/^[1-4]$/.test(event.key) || event.target.closest?.("input,select,textarea,[contenteditable=true]")) return;
-    const bar=document.querySelector(".learned-bar .sword-hotbar:not([hidden])");
+    const bar=document.querySelector('.learned-bar[data-skill-bank="advanced"] #advancedHotbar:not([hidden])') || document.querySelector('.learned-bar:not([data-skill-bank="advanced"]) .sword-hotbar:not([hidden])');
     const skill=bar?.querySelector('[data-slot-number="'+event.key+'"]');
     if(skill && !skill.disabled){event.preventDefault();skill.click();}
   });
