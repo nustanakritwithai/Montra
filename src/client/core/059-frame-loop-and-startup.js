@@ -198,7 +198,7 @@
     // Idle breathing pose for nearby service NPCs (standing still, so speed 0).
     for (const npc of npcActors) {
       const w = npc.node.getAbsolutePosition();
-      if (npc.node.isEnabled(true) && Math.hypot(w.x - camera.target.x, w.z - camera.target.z) < 70) { npc.x = w.x; npc.y = w.y; npc.z = w.z; animateRig(npc, 0, dt, now); }
+      if (npc.node.isEnabled(true) && Math.hypot(w.x - camera.target.x, w.z - camera.target.z) < (LITE ? 35 : 70)) { npc.x = w.x; npc.y = w.y; npc.z = w.z; animateRig(npc, 0, dt, now); }
     }
     for (const npc of summonAvatars.values()) {
       if (npc.demo) {
@@ -270,7 +270,7 @@
     marker.rotation.z+=dt*.2;
 
     // Maps are 2D canvases with soft shadows: ~10 redraws per second is plenty.
-    if(now-lastMapDraw>100){
+    if(now-lastMapDraw>(LITE?250:100)){
       lastMapDraw=now;
       drawMap(ui.minimap.getContext("2d"),ui.minimap.width,ui.minimap.height);
       if(drawerActive==="map") {
@@ -332,6 +332,7 @@
   updateStatus();
   updateFlightButton();
   ui.loading.hidden=true;
+  setTimeout(()=>{warmCombatFx();warmMaterials();},1500);
   window.MontraEntry?.start((endpoint,slot,setup) => connectOnline(endpoint,slot,null,setup), async () => {
     const old = room; room = null; clearSyncPoll();
     if (old) { try { await old.leave(); } catch (_) {} }

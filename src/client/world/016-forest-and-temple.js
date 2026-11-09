@@ -20,7 +20,7 @@
         const kind=kinds[Math.abs(Math.round(x*7+z*3))%kinds.length];
         const tree=placeThaiTree(kind,x,map.terrain?terrainHeight(map.terrain,x,z):0,z,{clone:true,parent:expansionRoot,scale:Math.max(.85,Math.min(1.3,(obstacle.radius||2)/2))});
         forestCrowns.push(tree);
-        for(let i=0;i<3;i++)column(x+Math.cos(i*2)*1.4,.42,z+Math.sin(i*2)*1.4,.85,.7,0,forestLeaf,4);
+        for(let i=0;i<3;i++){const bx=x+Math.cos(i*2)*1.4,bz=z+Math.sin(i*2)*1.4;placeLeafBush(bx,map.terrain?terrainHeight(map.terrain,bx,bz):0,bz,.75,{parent:expansionRoot,variant:i});}
         continue;
       }
       if(id.startsWith("temple-post-")){
@@ -96,8 +96,8 @@
       if(!/^(grove-|tree-|north-grove)/.test(o.id))continue;
       for(let k=0;k<5;k++){
         const a=k*1.26+o.x,r=o.radius+.6+noise(k,o.z)*1.2,size=.8+noise(k,o.x)*.9;
-        const bush=place(B.MeshBuilder.CreateSphere("bush",{diameter:size*1.6,segments:4},scene),o.x+Math.cos(a)*r,size*.3,o.z+Math.sin(a)*r,k%2?bushDark:bushMid);
-        bush.scaling.y=.55;
+        const bx=o.x+Math.cos(a)*r,bz=o.z+Math.sin(a)*r;
+        placeLeafBush(bx,map.terrain?terrainHeight(map.terrain,bx,bz):0,bz,size*1.25,{parent:expansionRoot,variant:k%3,flat:.8});
       }
     }
     // Stones line the trail verges.
@@ -130,7 +130,7 @@
     for(let i=0;i<260;i++){
       const x=bounds.minX+2+noise(i,181)*(spanX-4),z=bounds.minZ+2+noise(i,182)*(spanZ-4);
       if(!clearOfProps(x,z))continue;
-      if(i%3===0){const size=.7+noise(i,183)*.7;place(B.MeshBuilder.CreateSphere("shrub",{diameter:size*1.5,segments:4},scene),x,size*.22,z,i%2?bushDark:bushMid).scaling.y=.45;}
+      if(i%3===0){const size=.7+noise(i,183)*.7;placeLeafBush(x,map.terrain?terrainHeight(map.terrain,x,z):0,z,size*1.1,{parent:expansionRoot,variant:i%3,flat:.65});}
       else for(let k=0;k<4;k++)column(x+(noise(i*4+k,184)-.5)*1.4,.06,z+(noise(i*4+k,185)-.5)*1.4,.05,.24,.18,i%2?wildflower:wildflowerGold,6);
     }
     // Roadside spirit houses (san ta yai) with candles at trail junctions.
@@ -164,7 +164,10 @@
       const sphere=crown.getBoundingInfo().boundingSphere, p=sphere.centerWorld;
       const x=p.x-hero.x,y=p.y-hero.y-1,z=p.z-hero.z,t=(x*dx+y*dy+z*dz)/length;
       const blocks=t>0&&t<1&&Math.hypot(x-t*dx,y-t*dy,z-t*dz)<sphere.radiusWorld;
-      crown.visibility=blocks ? .18 : 1;
+      const vis=blocks ? .18 : 1;
+      if(crown.visibility===vis)continue; // only touch meshes when the fade actually changes
+      crown.visibility=vis;
+      for(const leaves of (crown._fadeKids ||= crown.getChildMeshes(true)))leaves.visibility=vis;
     }
   }
   function buildTemple(map) {
@@ -204,8 +207,9 @@
     block(0,map.terrain?-8:-.82,-20,174,.6,179,forestFloor);
     for(let i=0;i<21;i++)for(const sign of [-1,1]){
       const x=-61+i*6.2,z=sign===1?45+(i*5)%8:-84-(i*5)%8;
-      column(x,1.25,z,3.4,5+i%3,.3,forestLeaf,6);
-      column(sign*(60+(i*3)%8),1.2,-80+6*i,3.4,5.5,0,forestLeaf,6);
+      // Distant grove round the temple: kit trees instead of leaf cones.
+      placeThaiTree(["yangna","sai","takhian"][i%3],x,0,z,{parent:expansionRoot,scale:.62+(i%3)*.08});
+      placeThaiTree(["sai","takhian","yangna"][i%3],sign*(60+(i*3)%8),0,-80+6*i,{parent:expansionRoot,scale:.62+(i%2)*.1});
     }
     finish("temple distant grove");
     for(const wall of map.walls||[]){

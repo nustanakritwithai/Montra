@@ -170,7 +170,7 @@
     const g = mesh.metadata?.ghost;
     const lift = g ? g.tall * (g.design?.scale || 1) - g.tall / 2 + .75 : .85 * mesh.scaling.y + .9;
     monsterLabelPoint.set(mesh.position.x, mesh.position.y + lift, mesh.position.z);
-    const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect();
+    const rect = typeof canvasRect === "function" ? canvasRect() : engine.getRenderingCanvas().getBoundingClientRect();
     const w = engine.getRenderWidth(), h = engine.getRenderHeight(), viewport = camera.viewport.toGlobal(w, h);
     B.Vector3.ProjectToRef(monsterLabelPoint, B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), viewport, monsterLabelProjection);
     if (monsterLabelProjection.z < 0 || monsterLabelProjection.z > 1) {
@@ -247,9 +247,8 @@
       comboLabelEl.textContent = label;
       comboGradeEl.textContent = grade;
       comboGradeEl.className = "combo-streak-grade " + cls;
-      comboHitsEl.style.animation = "none";
-      void comboHitsEl.offsetWidth;
-      comboHitsEl.style.animation = "comboPop 0.18s ease-out";
+      // Web Animations restart: re-triggering the CSS animation needed a forced page layout every hit.
+      comboHitsEl.animate([{ transform: "scale(1.4) rotate(4deg)" }, { transform: "scale(1) rotate(0deg)" }], { duration: 180, easing: "ease-out" });
       if (comboStreak === 7 || comboStreak === 15 || comboStreak === 25) {
         SFX("coin", { intensity: 0.8 });
         floatAtPlayer(localId, grade + " RANK!", "combo", { big: true, drift: 0 });
@@ -325,7 +324,7 @@
       add(villageGhost, { level: 1, alive: demoMonsterHp > 0 }, MONSTER_ID, "ผีเข้าสิง · ตัวทดสอบ");
     }
     candidates.sort((a, b) => Number(b.selected) - Number(a.selected) || a.distance - b.distance);
-    const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect();
+    const rect = typeof canvasRect === "function" ? canvasRect() : engine.getRenderingCanvas().getBoundingClientRect();
     const w = engine.getRenderWidth(), h = engine.getRenderHeight(), viewport = camera.viewport.toGlobal(w, h);
     const transform = scene.getTransformMatrix(), occupied = [];
     let used = 0;

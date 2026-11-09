@@ -6,10 +6,18 @@
     window.MontraEntry?.worldUnavailable("เบราว์เซอร์เปิดฉาก 3D ไม่สำเร็จ ลองเปิดการเร่งกราฟิกหรือใช้เบราว์เซอร์อื่น");
     return;
   }
+  // ---- Quality profile ----
+  // "lite" on touch devices (phones and tablets) unless ?quality=high; ?quality=low forces it anywhere.
+  // Lite renders at 1 pixel per CSS pixel, lights fewer sources, casts shadows only from characters,
+  // drops ground normal maps, thins ground patches and leaves, and simulates less cloth. A frame-rate
+  // watch can step the resolution down further on very slow phones.
+  const qualityPref = new URLSearchParams(location.search).get("quality");
+  const LITE = qualityPref === "low" || (qualityPref !== "high" && matchMedia("(pointer: coarse)").matches);
+  let renderDensityCap = LITE ? 1 : 1.5;
   // Babylon divides the canvas size by this value. A value above 1 blurs
   // high-density phones, so render up to 1.5 physical pixels per CSS pixel.
   function resizeGameRenderer() {
-    const density = Math.min(1.5, Math.max(1, window.devicePixelRatio || 1));
+    const density = Math.min(renderDensityCap, Math.max(LITE ? .7 : 1, Math.min(window.devicePixelRatio || 1, renderDensityCap)));
     const scaling = 1 / density;
     if (engine.getHardwareScalingLevel() !== scaling) engine.setHardwareScalingLevel(scaling);
     else engine.resize();
@@ -25,6 +33,8 @@
   let chatTargetId = "";
   let chatChannel = "map", chatPending = null, chatTimer = null;
   const scene = new B.Scene(engine);
+  // No hover picking: taps pick explicitly, and ray-testing ~800 meshes on every touch move stutters phones.
+  scene.skipPointerMovePicking = true;
   // The build exporter collects these placements while running the actual map builders.
   // A normal browser uses the server catalog and never registers resource sites.
   const sceneryPoint=(kind,x,z,radius=.7)=>scene.metadata?.collectResource?.(activeMapId,kind,x,z,radius);
@@ -120,7 +130,7 @@
   // ?shadows=off|on forces it; otherwise it backs off on slow devices.
   // Touch devices get a 1024 map, desktops 2048 for crisper edges.
   const SHADOW_HALF = 38, SHADOW_DIST = 90;
-  const SHADOW_SIZE = matchMedia("(pointer: coarse)").matches || engine.getCaps().maxTextureSize < 4096 ? 1024 : 2048;
+  const SHADOW_SIZE = LITE ? 512 : matchMedia("(pointer: coarse)").matches || engine.getCaps().maxTextureSize < 4096 ? 1024 : 2048;
   const shadowPref = new URLSearchParams(location.search).get("shadows");
   keyLight.autoUpdateExtends = false; keyLight.autoCalcShadowZBounds = false;
   keyLight.shadowMinZ = 1; keyLight.shadowMaxZ = SHADOW_DIST * 2;
@@ -130,6 +140,7 @@
   if (engine.webGLVersion >= 2) { shadowGen.usePercentageCloserFiltering = true; shadowGen.filteringQuality = B.ShadowGenerator.QUALITY_LOW; }
   else shadowGen.usePoissonSampling = true;
   shadowGen.bias = .0016; shadowGen.normalBias = .025; shadowGen.darkness = 0;
+  if (LITE) shadowGen.getShadowMap().refreshRate = 2;
   keyLight.shadowEnabled = shadowPref !== "off";
   // Coverage follows the zoom: tight and crisp up close, wide at the far camera.
   let shadowHalf = SHADOW_HALF;
@@ -144,6 +155,13 @@
     keyLight.position.set(x - d.x * SHADOW_DIST, target.y - d.y * SHADOW_DIST, z - d.z * SHADOW_DIST);
   }
   let shadowListKey = "", shadowSyncIn = 0;
+  // Map scenery: everything under the expansion root, the village snapshot, and kit trees, rocks and bushes.
+  function isStaticScenery(m) {
+    if (/^(thai tree|rock |leaf bush|real tree)/.test(m.name)) return true;
+    if (typeof villageMeshes !== "undefined" && villageMeshes.includes(m)) return true;
+    for (let p = m.parent; p; p = p.parent) if (p.name === "world-expansion") return true;
+    return false;
+  }
   function syncShadowLists() {
     const key = scene.meshes.length + ":" + activeMapId;
     if (key === shadowListKey) return;
@@ -154,6 +172,7 @@
       if (!mt || m === sky || m.metadata?.noShadow || m.visibility < .5 || mt.disableLighting || mt.alphaMode === B.Engine.ALPHA_ADD || mistLayers.includes(m)) continue;
       m.receiveShadows = true;
       const bb = m.getBoundingInfo?.().boundingBox;
+      if (LITE && isStaticScenery(m)) continue; // lite: only characters, monsters and summons cast shadows
       if (bb && bb.maximumWorld.y - bb.minimumWorld.y > .35 && !/ground|road|trail|pool|decal|water|label|clearing|court/i.test(m.name)) casters.push(m);
     }
     shadowGen.getShadowMap().renderList = casters;
@@ -166,6 +185,9 @@
     if (frameWatch.t < 4) return;
     const fps = frameWatch.n / frameWatch.t; frameWatch.t = frameWatch.n = 0;
     frameWatch.slow = fps < 22 ? frameWatch.slow + 1 : 0;
+    // Lite: below 30 fps for two windows, render at 0.85 then 0.7 pixels per CSS pixel.
+    if (LITE) { frameWatch.lowRes = fps < 30 ? (frameWatch.lowRes || 0) + 1 : 0;
+      if (frameWatch.lowRes >= 2 && renderDensityCap > .7) { renderDensityCap = Math.max(.7, renderDensityCap - .15); resizeGameRenderer(); frameWatch.lowRes = 0; } }
     if (frameWatch.slow >= 2 && keyLight.shadowEnabled) {
       const map = shadowGen.getShadowMap();
       if (map.refreshRate === 1) map.refreshRate = 2; else keyLight.shadowEnabled = false;
@@ -176,7 +198,7 @@
   // Lamps, braziers and gates register a light spot; a small pool of real
   // point lights jumps to the spots nearest the camera target and flickers,
   // so lanterns actually light the ground and the characters walking past.
-  const LANTERN_POOL = 3;
+  const LANTERN_POOL = LITE ? 1 : 3;
   const lightSpots = [];
   function addLightSpot(x, y, z, hex = "#ffae5a", strength = 1) {
     lightSpots.push({ x, y, z, map: activeMapId, color: B.Color3.FromHexString(hex), strength });

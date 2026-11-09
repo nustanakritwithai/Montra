@@ -5,10 +5,17 @@
   const floatLayer = document.createElement("div"); floatLayer.className = "float-layer"; floatLayer.setAttribute("aria-hidden", "true");
   document.getElementById("game")?.append(floatLayer);
   const floatProj = new B.Vector3();
+  // Canvas size in CSS pixels, read once per frame: getBoundingClientRect forces layout, and the
+  // overlay code otherwise called it several times a frame between DOM writes.
+  let canvasRectFrame = -1, canvasRectCache = null;
+  function canvasRect() {
+    if (canvasRectFrame !== engine.frameId || !canvasRectCache) { canvasRectCache = engine.getRenderingCanvas().getBoundingClientRect(); canvasRectFrame = engine.frameId; }
+    return canvasRectCache;
+  }
   const METAL_KINDS = new Set(["dealt", "skill", "taken", "heal", "spirit", "onoma", "cry", "levelup", "crit"]);
   function floatText(x, y, z, text, kind = "dealt", opts = {}) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
-    const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect(), w = engine.getRenderWidth(), h = engine.getRenderHeight();
+    const rect = canvasRect(), w = engine.getRenderWidth(), h = engine.getRenderHeight();
     B.Vector3.ProjectToRef(new B.Vector3(x, y, z), B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), camera.viewport.toGlobal(w, h), floatProj);
     if (floatProj.z < 0 || floatProj.z > 1) return;
     const sx = floatProj.x * rect.width / w, sy = floatProj.y * rect.height / h;
@@ -27,7 +34,7 @@
   }
   function updateFloatText() {
     if (!floatLayer.firstElementChild) return;
-    const canvas = engine.getRenderingCanvas(), rect = canvas.getBoundingClientRect(), w = engine.getRenderWidth(), h = engine.getRenderHeight();
+    const rect = canvasRect(), w = engine.getRenderWidth(), h = engine.getRenderHeight();
     const tm = scene.getTransformMatrix(), vp = camera.viewport.toGlobal(w, h);
     for (const el of floatLayer.children) {
       const p = el._world; if (!p) continue;

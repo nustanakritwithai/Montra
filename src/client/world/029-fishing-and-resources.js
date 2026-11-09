@@ -89,10 +89,8 @@
             // Gatherable timber: a pradu (or a bamboo clump on bamboo maps) instead of a cylinder and cone.
             placeThaiTree(activeMapId==="bamboo_frontier"?"phai":"pradu",0,0,0,{parent:root,scale:.85});
           }else if(n.kind==="herb"){
-            for(let j=0;j<3;j++){
-              const leaf=B.MeshBuilder.CreateSphere("สมุนไพร",{diameter:.7,segments:4},scene);
-              leaf.parent=root;leaf.position.set(Math.cos(j*2)*.24,.25,Math.sin(j*2)*.24);leaf.scaling.set(.7,.85,.5);leaf.material=leafMid;leaf.isPickable=false;
-            }
+            // Herb: a small clump of broad leaves (leaf cards) instead of three spheres.
+            placeLeafBush(0,0,0,.55,{parent:root,style:"herb",variant:0});
           }else{
             // Iron-ore vein sized by tier; two shapes per tier, picked from the node id so neighbours differ.
             let h=0;for(const ch of n.id)h=(h*31+ch.charCodeAt(0))|0;

@@ -220,6 +220,7 @@
     for(const mesh of villageMeshes) mesh.setEnabled(village);
     for(const light of villageLights) light.setEnabled(village);
     villagePortal.setEnabled(village);forestRoot.setEnabled(mapId==="forbidden_forest");
+    setTimeout(warmMaterials,400);
     const name=worldDefinitions?.[mapId]?.name || (village?"หมู่บ้านอาคม":"ป่าต้องห้าม");
     $("worldMapName").textContent=name;
     $("quest").querySelector(".quest-content strong").textContent=village?"เตรียมตัวออกสำรวจ":"สำรวจ"+name;

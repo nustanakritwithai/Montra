@@ -78,8 +78,9 @@
       return mesh;
     };
     // Chest: yantra shawl over the shoulders, back cape, cross band, beads.
-    loft([[1.35, .245, .145, -.012], [1.405, .21, .125, -.01], [1.445, .115, .085, -.006]], shawl, 14);
-    box(0, 1.17, -.14, .34, .4, .02, shawl).rotation.x = .08;
+    // Players get simulated cloth for the shawl and cape (attachOutfitCloth); NPCs keep the rigid shapes.
+    if (a.npc) { loft([[1.35, .245, .145, -.012], [1.405, .21, .125, -.01], [1.445, .115, .085, -.006]], shawl, 14); box(0, 1.17, -.14, .34, .4, .02, shawl).rotation.x = .08; }
+    else loft([[1.425, .13, .095, -.006], [1.445, .115, .085, -.006]], shawl, 14); // the collar the cloth shawl hangs from
     box(0, 1.205, .125, .05, .46, .015, shawl).rotation.z = .62;
     for (const [drop, width] of [[.15, .07], [.22, .09]]) {
       for (let i = 0; i <= 8; i++) { const t = i / 4 - 1, y = 1.44 - (1 - t * t) * drop; ball(t * width, y, .075 + (1 - t * t) * .05, .03, beadMat, 4); }
@@ -93,7 +94,7 @@
     onBone("Head");
     // Hips: trouser seat, cloth sash with a knot, rice pouch, spirit jar.
     cyl(0, .965, 0, .055, .305, .3, sash, 12).scaling.z = .72;
-    box(-.06, .9, .108, .055, .12, .015, sash).rotation.z = -.15;
+    if (a.npc) box(-.06, .9, .108, .055, .12, .015, sash).rotation.z = -.15; else box(-.06, .93, .118, .05, .035, .02, sash); // knot; tails are cloth
     onBone("Hips");
     ball(-.178, .85, .035, .12, pouchCloth, 6).scaling.set(1, 1.15, .85);
     cyl(-.178, .925, .035, .035, .035, .055, pouchCloth, 6);
@@ -105,7 +106,7 @@
     cyl(jx, jy - .2 * j, jz, .14 * j, .15 * j, 0, jarClay, 8).rotation.x = Math.PI;
     cyl(jx, jy + .17 * j, jz, .07 * j, .1 * j, .16 * j, jarClay, 8);
     box(jx, jy, jz, .31 * j, .01, .31 * j, ropeRed);
-    for (const side of [-1, 1]) box(jx + side * .05, jy + .015, jz + .03, .03, .13, .006, talismanPaper).rotation.z = side * .25;
+    if (a.npc) for (const side of [-1, 1]) box(jx + side * .05, jy + .015, jz + .03, .03, .13, .006, talismanPaper).rotation.z = side * .25;
     for (const dx of [-.02, 0, .02]) cyl(jx + dx, jy + .095, jz + .035, .01, .024, .024, waxRed, 8).rotation.x = 1.1;
     a.ritualGear.push(onBone("Hips"));
     setAvatarRitualGear(a, a.pathId);
@@ -191,6 +192,7 @@
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;
     a.skin = { nodes, copy, holder, body, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
+    attachOutfitCloth(a, a.npcCloth || (a.local ? shawlHero : shawlFriend), a.npcCloth || (a.local ? sashHero : sashFriend));
     if (a.gearLook) setAvatarGear(a, a.gearLook);
     if(a.npc){
       // Rest pose from the player rig, applied once instead of animating every NPC.
@@ -264,6 +266,9 @@
     const node = nodes[bone];
     if (!parts.length) return null;
     if (!node) { parts.forEach(p => p.dispose()); return null; }
+    // A lone piece is not merged, so bake its own offset and rotation first; otherwise re-basing onto the
+    // bone would overwrite them and the piece would float at the bone origin (cloth bracers, cloth skirt).
+    if (parts.length === 1) parts[0].bakeCurrentTransformIntoVertices();
     const mesh = mergedSegment(parts, node, name), j = GEAR_REST[bone];
     mesh.position.set(-j[0], -j[1], -j[2]); mesh.alwaysSelectAsActiveMesh = true;
     return mesh;
@@ -367,7 +372,7 @@
         const plate = hips.box(s * .095, .89 - i * .075, .15 + i * .006, .1, .085, .008, i ? p.second : p.main); plate.rotation.x = -.12;
         hips.box(s * .095, .93 - i * .075, .153 + i * .006, .1, .008, .01, p.trim).rotation.x = -.12;
       }
-      if (w === "cloth") hips.cyl(0, .9, .004, .16, .42, .38, p.main, 14).scaling.z = .8;
+      // A cloth skirt is simulated (see gearCloth).
       out.push(["Hips", hips.take()]);
       for (const [side, leg] of [[1, "LeftLeg"], [-1, "RightLeg"]]) {
         const k = gearKit(), x = side * .095;
@@ -408,7 +413,8 @@
     },
     veil(p) { // Blade: a dark cloth veil over the lower face, tails at the nape.
       const k = gearKit(), cloth = gearMat("shadow veil", "#1d1c22");
-      k.cyl(0, 1.565, .03, .08, .2, .19, cloth, 14).scaling.z = 1.05; k.box(0, 1.56, -.13, .05, .2, .01, cloth).rotation.x = .3;
+      // Face at mouth height: half-width ~.07, front ~.097 (centre z ~.013); the veil runs from under the nose to the chin.
+      k.cyl(0, 1.553, .012, .062, .158, .15, cloth, 16).scaling.z = 1.3; k.box(0, 1.56, -.088, .04, .02, .012, cloth); // knot; the tail is cloth
       return [["Head", k.take()]];
     },
     shield(p) { // Sentinel: round rattan dang with a brass boss, on the left forearm.
@@ -430,7 +436,6 @@
       along(k.cyl(.665, 1.339, .056, .014, .06, .06, jarClay, 8));
       k.ball(.665, 1.339, -.052, .09, jarCarved, 10).scaling.z = 1.12;
       along(k.cyl(.665, 1.339, -.05, .008, .093, .093, ropeRed, 10));
-      k.box(.665, 1.388, -.055, .026, .004, .05, gearMat("talisman paper", "#e8d9a8"));
       return [["LeftHand", k.take()]];
     },
     bell(p) { // Mender: a bronze hand bell (กระดิ่ง) with a red cord.
@@ -457,7 +462,8 @@
     }
     if (/^acc_earrings/.test(family)) {
       const gem = family.includes("lotus") ? GEM.heal : family.includes("focus") ? GEM.spell : family.includes("ward") ? GEM.guard : GEM.atk;
-      for (const s of [-1, 1]) { k.cyl(s * .088, 1.585, .005, .015, .018, .018, gold, 8); k.ball(s * .088, 1.56, .005, .025, gearMat("gem " + gem, gem, "#120808", .5), 6); }
+      // Ear lobes sit at about (+-.08, 1.6, -.01): a small stud with the gem just below it.
+      for (const s of [-1, 1]) { k.cyl(s * .082, 1.605, -.01, .012, .014, .014, gold, 8); k.ball(s * .083, 1.588, -.01, .018, gearMat("gem " + gem, gem, "#120808", .5), 6); }
       return [["Head", k.take()]];
     }
     return [];
@@ -473,7 +479,7 @@
   function parseGearLook(look) {
     const out = {};
     for (const part of String(look || "").split(";")) {
-      const m = /^([a-zA-Z]+)=([a-z_]+):(\d+)$/.exec(part);
+      const m = /^([a-zA-Z]+)=([a-zA-Z_]+):(\d+)$/.exec(part); // families include arm_*_leftHand / _rightHand
       if (m) out[m[1]] = { family: m[2], tier: Number(m[3]) };
     }
     return out;
@@ -507,10 +513,11 @@
       const have = avatar.gearParts[slot], next = want[slot], key = next ? next.family + ":" + next.tier : "";
       if (have?.key === key) continue;
       have?.meshes.forEach(mesh => mesh?.dispose());
+      have?.cloths?.forEach(cloth => disposeCloth(avatar, cloth));
       delete avatar.gearParts[slot];
       if (!next) continue;
       const meshes = buildGearSlot(slot, next.family, next.tier).map(([bone, parts]) => gearOnBone(avatar.skin.nodes, bone, parts, "gear " + slot)).filter(Boolean);
-      avatar.gearParts[slot] = { key, meshes };
+      avatar.gearParts[slot] = { key, meshes, cloths: gearCloth(avatar, slot, next.family, next.tier) };
     }
     // A worn cuirass or helmet replaces the ritual shawl and headband of the base outfit.
     setAvatarRitualGear(avatar, avatar.pathId);
@@ -591,4 +598,202 @@
       if (!manager || !mesh.isEnabled()) continue;
       for (let i = 0; i < 4 && i < manager.numTargets; i++) manager.getTarget(i).influence = cur[i];
     }
+  }
+  // ---- Character cloth: shoulder shawl, back cape, sash and headband tails, veil tail, cloth skirt and
+  // the talisman papers on the spirit jars. A light verlet simulation (visual only): each piece is a grid
+  // of points pinned at the top to a bone, kept apart by distance constraints, pushed out of capsules
+  // around the torso, limbs and head, kept above the ground, and blown by a per-map wind. Near the
+  // camera it simulates; farther away it simply follows its bone in the rest shape.
+  const CLOTH_WIND = { ritual_village: [.5, 0, .3], forbidden_forest: [.3, 0, .2], drowned_marsh: [.15, 0, .1], asura_peak: [1.3, .1, .6],
+    spirit_rift: [.9, .25, -.9], hex_ridge: [1.1, 0, .4], moon_pass: [1, 0, .5], moon_cemetery: [.5, 0, -.4] };
+  const CLOTH_STEP = LITE ? 1 / 20 : 1 / 30, CLOTH_NEAR = LITE ? 12 : 22;
+  let clothPaper = null;
+  function clothMaterial(m) { if (m && m.backFaceCulling !== false) m.backFaceCulling = false; return m; }
+  // spec: {bone, rows:[[x,y,z]…]…] in rest model space, pinRows, closed, stretch, bend, drag, colliders:[[x,y,z,r]] rest-space spheres}
+  function makeCloth(a, name, spec, material, visible) {
+    const nodes = a.skin?.nodes, bone = nodes?.[spec.bone], j = GEAR_REST[spec.bone];
+    if (!bone || !j) return null;
+    const rows = spec.rows, R = rows.length, C = rows[0].length, n = R * C;
+    const rest = new Float32Array(n * 3);
+    rows.forEach((row, r) => row.forEach((p, c) => { const i = (r * C + c) * 3; rest[i] = p[0] - j[0]; rest[i + 1] = p[1] - j[1]; rest[i + 2] = p[2] - j[2]; }));
+    const links = [], idx = (r, c) => r * C + ((c + C) % C);
+    const dist = (i, k) => Math.hypot(rest[i * 3] - rest[k * 3], rest[i * 3 + 1] - rest[k * 3 + 1], rest[i * 3 + 2] - rest[k * 3 + 2]);
+    const link = (i, k, s) => links.push([i, k, dist(i, k), s]);
+    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+      const i = idx(r, c), wrap = spec.closed || c + 1 < C;
+      if (wrap && C > 1) link(i, idx(r, c + 1), 1);
+      if (r + 1 < R) link(i, idx(r + 1, c), 1);
+      if (r + 1 < R && wrap && C > 1) { link(i, idx(r + 1, c + 1), spec.shear ?? .6); link(idx(r, c + 1), idx(r + 1, c), spec.shear ?? .6); }
+      if (r + 2 < R) link(i, idx(r + 2, c), spec.bend ?? .3);
+      if (C > 2 && (spec.closed || c + 2 < C)) link(i, idx(r, c + 2), spec.bend ?? .3);
+    }
+    const paths = rows.map(row => row.map(() => new B.Vector3()));
+    const mesh = B.MeshBuilder.CreateRibbon("cloth " + name, { pathArray: paths, closePath: !!spec.closed, sideOrientation: B.Mesh.DOUBLESIDE, updatable: true }, scene);
+    mesh.parent = a.node; mesh.material = clothMaterial(material); mesh.isPickable = false; mesh.alwaysSelectAsActiveMesh = true;
+    const cloth = { name, spec, bone, rest, links, R, C, n, pos: new Float32Array(n * 3), prev: new Float32Array(n * 3), paths, mesh, visible, acc: 0, ready: false };
+    (a.cloths ||= []).push(cloth);
+    return cloth;
+  }
+  function disposeCloth(a, cloth) {
+    if (!cloth) return;
+    cloth.mesh.dispose();
+    if (a.cloths) a.cloths = a.cloths.filter(c => c !== cloth);
+  }
+  const _clothM = new B.Matrix(), _clothInv = new B.Matrix(), _clothV = new B.Vector3(), _clothW = new B.Vector3();
+  function clothAnchor(cloth, i, out) {
+    _clothV.set(cloth.rest[i * 3], cloth.rest[i * 3 + 1], cloth.rest[i * 3 + 2]);
+    B.Vector3.TransformCoordinatesToRef(_clothV, cloth.bone.getWorldMatrix(), out); return out;
+  }
+  // Capsules (world space) around the body this frame: [ax,ay,az,bx,by,bz,r].
+  function clothColliders(a) {
+    const n = a.skin.nodes, s = (a.skin.holder?.scaling.x || 1.3), out = [];
+    const p = name => n[name]?.getAbsolutePosition();
+    const cap = (from, to, r) => { const u = p(from), v = p(to); if (u && v) out.push([u.x, u.y, u.z, v.x, v.y, v.z, r * s]); };
+    cap("Hips", "Chest", .12); cap("Chest", "Neck", .1); cap("LeftUpLeg", "LeftLeg", .075); cap("RightUpLeg", "RightLeg", .075);
+    cap("LeftLeg", "LeftFoot", .055); cap("RightLeg", "RightFoot", .055); cap("LeftArm", "LeftForeArm", .05); cap("RightArm", "RightForeArm", .05);
+    const h = p("Head"); if (h) out.push([h.x, h.y + .1 * s, h.z, h.x, h.y + .1 * s, h.z, .1 * s]);
+    return out;
+  }
+  function pushOut(P, i, c, pad) {
+    const ax = c[0], ay = c[1], az = c[2], dx = c[3] - ax, dy = c[4] - ay, dz = c[5] - az, l = dx * dx + dy * dy + dz * dz;
+    const px = P[i] - ax, py = P[i + 1] - ay, pz = P[i + 2] - az;
+    const t = l > 1e-8 ? Math.max(0, Math.min(1, (px * dx + py * dy + pz * dz) / l)) : 0;
+    const qx = px - dx * t, qy = py - dy * t, qz = pz - dz * t, d = Math.hypot(qx, qy, qz), r = c[6] + pad;
+    if (d < r && d > 1e-6) { const k = (r - d) / d; P[i] += qx * k; P[i + 1] += qy * k; P[i + 2] += qz * k; }
+  }
+  function stepCloth(a, cloth, dt, t, colliders, groundY) {
+    const { pos: P, prev: Q, links, n, C, spec } = cloth, pinned = (spec.pinRows ?? 1) * C;
+    const w = CLOTH_WIND[activeMapId] || [.4, 0, .2], gust = .55 + .45 * Math.sin(t * .9 + n) * Math.sin(t * 2.3);
+    const drag = spec.drag ?? .965, g = -9.8 * (spec.gravity ?? 1) * dt * dt, R = cloth.R;
+    // Air moving past the body: walking or dashing pushes the cloth back (relative wind = -body velocity).
+    const air = a.clothAir || [0, 0, 0], airK = spec.air ?? .9;
+    for (let i = pinned; i < n; i++) {
+      const k = i * 3, row = Math.floor(i / C) / Math.max(1, R - 1), flutter = Math.sin(t * 7.5 + i * 1.7) * (.35 + .9 * row);
+      const wx = w[0] * gust - air[0] * airK, wz = w[2] * gust - air[2] * airK, wl = Math.hypot(wx, wz) || 1;
+      const ax = (wx + flutter * wz / wl * .8) * (spec.wind ?? 1) * dt * dt, ay = (w[1] * gust + Math.abs(flutter) * .15 * row) * dt * dt, az = (wz - flutter * wx / wl * .8) * (spec.wind ?? 1) * dt * dt;
+      const x = P[k], y = P[k + 1], z = P[k + 2];
+      P[k] += (x - Q[k]) * drag + ax; P[k + 1] += (y - Q[k + 1]) * drag + g + ay; P[k + 2] += (z - Q[k + 2]) * drag + az;
+      Q[k] = x; Q[k + 1] = y; Q[k + 2] = z;
+    }
+    for (let i = 0; i < pinned; i++) { const k = i * 3; clothAnchor(cloth, i, _clothW); P[k] = Q[k] = _clothW.x; P[k + 1] = Q[k + 1] = _clothW.y; P[k + 2] = Q[k + 2] = _clothW.z; }
+    const s = a.skin.holder?.scaling.x || 1.3, extra = cloth.extra ||= (spec.colliders || []).map(() => new Array(7));
+    (spec.colliders || []).forEach((c, j) => {
+      _clothV.set(c[0] - GEAR_REST[spec.bone][0], c[1] - GEAR_REST[spec.bone][1], c[2] - GEAR_REST[spec.bone][2]);
+      B.Vector3.TransformCoordinatesToRef(_clothV, cloth.bone.getWorldMatrix(), _clothW);
+      const e = extra[j]; e[0] = e[3] = _clothW.x; e[1] = e[4] = _clothW.y; e[2] = e[5] = _clothW.z; e[6] = c[3] * s;
+    });
+    for (let it = 0; it < (spec.iterations ?? (LITE ? 3 : 5)); it++) {
+      for (let li = 0; li < links.length; li++) {
+        const L = links[li], i = L[0], k = L[1], len0 = L[2], stiff = L[3];
+        const ia = i * 3, kb = k * 3, dx = P[kb] - P[ia], dy = P[kb + 1] - P[ia + 1], dz = P[kb + 2] - P[ia + 2], d = Math.hypot(dx, dy, dz) || 1e-6;
+        const rest = len0 * s, diff = (d - rest) / d * .5 * stiff * (spec.stretch ?? 1);
+        const ai = i >= pinned ? 1 : 0, bi = k >= pinned ? 1 : 0, tot = ai + bi; if (!tot) continue;
+        const f = diff * 2 / tot;
+        if (ai) { P[ia] += dx * f; P[ia + 1] += dy * f; P[ia + 2] += dz * f; }
+        if (bi) { P[kb] -= dx * f; P[kb + 1] -= dy * f; P[kb + 2] -= dz * f; }
+      }
+      for (let i = pinned; i < n; i++) {
+        const k = i * 3;
+        for (const c of colliders) pushOut(P, k, c, spec.pad ?? .012);
+        for (const c of extra) pushOut(P, k, c, .006);
+        if (P[k + 1] < groundY) P[k + 1] = groundY;
+      }
+    }
+  }
+  function writeCloth(a, cloth) {
+    a.node.computeWorldMatrix(true).invertToRef(_clothInv);
+    const { pos: P, paths, C } = cloth;
+    paths.forEach((row, r) => row.forEach((v, c) => { const k = (r * C + c) * 3; _clothV.set(P[k], P[k + 1], P[k + 2]); B.Vector3.TransformCoordinatesToRef(_clothV, _clothInv, v); }));
+    // Write straight into preallocated vertex buffers: rebuilding the ribbon each frame allocated
+    // fresh arrays per cloth, which showed up as GC spikes on phones.
+    let buf = cloth.buf;
+    if (buf === undefined) {
+      const pos = cloth.mesh.getVerticesData(B.VertexBuffer.PositionKind), side = paths.length * (C + (cloth.spec.closed ? 1 : 0));
+      buf = cloth.buf = pos && pos.length === side * 6 ? { pos: Float32Array.from(pos), nrm: new Float32Array(pos.length), idx: cloth.mesh.getIndices(), side } : null;
+    }
+    if (!buf) { B.MeshBuilder.CreateRibbon(cloth.mesh.name, { pathArray: paths, instance: cloth.mesh, closePath: !!cloth.spec.closed }); return; }
+    const out = buf.pos, back = buf.side * 3, closed = !!cloth.spec.closed;
+    let o = 0;
+    for (const row of paths) {
+      for (let c = 0; c <= (closed ? C : C - 1); c++) { const v = row[c % C]; out[o] = out[back + o] = v.x; out[o + 1] = out[back + o + 1] = v.y; out[o + 2] = out[back + o + 2] = v.z; o += 3; }
+    }
+    B.VertexData.ComputeNormals(out, buf.idx, buf.nrm);
+    cloth.mesh.updateVerticesData(B.VertexBuffer.PositionKind, out, false, false);
+    cloth.mesh.updateVerticesData(B.VertexBuffer.NormalKind, buf.nrm, false, false);
+  }
+  function updateAvatarCloth(a, dt, now) {
+    if (!a.cloths?.length || !a.skin) return;
+    const t = now / 1000, root = a.node.getAbsolutePosition();
+    // Body velocity (smoothed) for the relative wind on the cloth.
+    if (a.clothRoot && dt > 0) { const vx = (root.x - a.clothRoot[0]) / dt, vz = (root.z - a.clothRoot[2]) / dt, air = a.clothAir || (a.clothAir = [0, 0, 0]);
+      const ok = Math.hypot(vx, vz) < 25; air[0] += ((ok ? vx : 0) - air[0]) * .2; air[2] += ((ok ? vz : 0) - air[2]) * .2; }
+    a.clothRoot = [root.x, root.y, root.z];
+    // Lite: only the player's own cloth and other characters close by simulate.
+    const near = Math.hypot(root.x - camera.target.x, root.z - camera.target.z) < (a.local ? CLOTH_NEAR * 2 : CLOTH_NEAR);
+    let colliders = null;
+    for (const cloth of a.cloths) {
+      const show = cloth.visible ? cloth.visible() !== false : true;
+      cloth.mesh.setEnabled(show);
+      if (!show) { cloth.ready = false; continue; }
+      cloth.bone.computeWorldMatrix(true);
+      // First frame, far away, or a teleport/warp: snap to the rest shape on the bone.
+      const jump = cloth.ready && Math.hypot(cloth.pos[0] - (clothAnchor(cloth, 0, _clothW).x), cloth.pos[1] - _clothW.y, cloth.pos[2] - _clothW.z) > 1.5;
+      if (!cloth.ready || !near || jump) {
+        for (let i = 0; i < cloth.n; i++) { clothAnchor(cloth, i, _clothW); const k = i * 3; cloth.pos[k] = cloth.prev[k] = _clothW.x; cloth.pos[k + 1] = cloth.prev[k + 1] = _clothW.y; cloth.pos[k + 2] = cloth.prev[k + 2] = _clothW.z; }
+        cloth.ready = true; cloth.acc = 0;
+      } else {
+        colliders ||= clothColliders(a);
+        cloth.acc = Math.min(cloth.acc + dt, CLOTH_STEP * 3);
+        while (cloth.acc >= CLOTH_STEP) { stepCloth(a, cloth, CLOTH_STEP, t, colliders, root.y + .03); cloth.acc -= CLOTH_STEP; }
+      }
+      writeCloth(a, cloth);
+    }
+  }
+  // Rest-shape builders (model space, metres, T-pose facing +Z).
+  function clothGrid(cols, rowsN, at) { const rows = []; for (let r = 0; r < rowsN; r++) { const row = []; for (let c = 0; c < cols; c++) row.push(at(c / Math.max(1, cols - 1), r / Math.max(1, rowsN - 1))); rows.push(row); } return rows; }
+  function clothRing(cols, rowsN, at) { const rows = []; for (let r = 0; r < rowsN; r++) { const row = []; for (let c = 0; c < cols; c++) row.push(at(c / cols * Math.PI * 2, r / Math.max(1, rowsN - 1))); rows.push(row); } return rows; }
+  function ribbonTail(x0, x1, y, z, length, rowsN, dz = -.02) { return clothGrid(2, rowsN, (u, v) => [x0 + (x1 - x0) * u, y - length * v, z + dz * v]); }
+  // Base outfit cloth for players: shawl and cape (seer/mender ritual gear), sash tails, headband tails, jar papers.
+  function attachOutfitCloth(a, shawl, sash) {
+    if (a.npc || !a.skin) return;
+    const ritual = () => a.ritualGear?.[0]?.isEnabled() === true, jarOn = () => a.ritualGear?.[1]?.isEnabled() === true;
+    const headband = () => { const m = a.skin.nodes.Head?.getChildMeshes(true).find(x => x.name === "gear Head"); return !m || m.isEnabled(); };
+    clothPaper ||= clothMaterial(gearMat("talisman paper cloth", "#e8d9a8", "#2a2210"));
+    // Shoulder shawl: a ring pinned round the neck that drapes over the shoulders and chest.
+    makeCloth(a, "shawl", { bone: "Chest", closed: true, pinRows: 1, bend: .14, shear: .35, drag: .978, pad: .014, air: .6,
+      rows: clothRing(18, 5, (ang, v) => [Math.cos(ang) * (.115 + .15 * v), 1.445 - .13 * v, -.006 + Math.sin(ang) * (.088 + .075 * v)]) }, shawl, ritual);
+    // Back cape hanging from the shoulder blades.
+    // Finer grid, little bending stiffness and light damping so it folds, swings and billows.
+    makeCloth(a, "cape", { bone: "Chest", pinRows: 1, bend: .08, shear: .3, drag: .985, wind: 1.6, air: 1.1, pad: .016,
+      // Rest shape with three soft vertical pleats that deepen toward a flared hem, so it hangs in folds.
+      rows: clothGrid(9, 12, (u, v) => [(-.17 - .06 * v) + (.34 + .12 * v) * u + .012 * v * Math.sin(u * Math.PI * 6),
+        1.39 - .52 * v + .012 * v * Math.cos(u * Math.PI * 4), -.135 - .02 * v - .015 * Math.sin(Math.PI * u) - (.008 + .03 * v) * Math.sin(u * Math.PI * 6)]) }, shawl, ritual);
+    // Sash knot tails at the front left of the waist.
+    for (const [x, len] of [[-.075, .3], [-.045, .24]]) makeCloth(a, "sash tail", { bone: "Hips", pinRows: 1, bend: .5, wind: .8,
+      rows: ribbonTail(x - .022, x + .022, .93, .125, len, 6, .02) }, clothMaterial(sash), null);
+    // Headband tails falling from the knot at the back of the head.
+    for (const x of [-.018, .018]) makeCloth(a, "headband tail", { bone: "Head", pinRows: 1, bend: .5, wind: 1.1, pad: .01,
+      rows: ribbonTail(x - .014, x + .014, 1.655, -.105, .2, 5, -.02) }, shawl, headband);
+    // Talisman papers on the hip spirit jar (stiffer, lighter).
+    const jx = .18, jy = .83, jz = -.01;
+    for (const side of [-1, 1]) makeCloth(a, "jar talisman", { bone: "Hips", pinRows: 1, bend: .8, stretch: 1, gravity: .7, wind: .6, drag: .94,
+      colliders: [[jx, jy, jz, .075]], rows: ribbonTail(jx + side * .05 - .014, jx + side * .05 + .014, jy + .06, jz + .07, .13, 4, .01) }, clothPaper, jarOn);
+  }
+  // Cloth that comes with worn gear: the veil tail, a cloth-weight skirt and the talisman on a held spirit jar.
+  function gearCloth(a, slot, family, tier) {
+    if (a.npc) return [];
+    const out = [];
+    if (slot === "offHand" && family === "off_veil")
+      out.push(makeCloth(a, "veil tail", { bone: "Head", pinRows: 1, bend: .45, wind: 1.1, pad: .01, rows: ribbonTail(-.022, .022, 1.56, -.092, .18, 5, -.02) },
+        clothMaterial(gearMat("shadow veil", "#1d1c22")), null));
+    if (slot === "offHand" && family === "off_jar")
+      out.push(makeCloth(a, "jar talisman", { bone: "LeftHand", pinRows: 1, bend: .8, gravity: .7, wind: .6, drag: .94, colliders: [[.665, 1.339, -.052, .045]],
+        rows: ribbonTail(.653, .677, 1.386, -.035, .1, 4, -.012) }, clothPaper || clothMaterial(gearMat("talisman paper cloth", "#e8d9a8", "#2a2210")), null));
+    const weight = /^arm_field_(seer|mender)$/.test(family) ? "cloth" : /^arm_cloth_/.test(family) ? "cloth" : null;
+    if (slot === "legs" && weight === "cloth")
+      out.push(makeCloth(a, "cloth skirt", { bone: "Hips", closed: true, pinRows: 1, bend: .35, drag: .955, pad: .045, wind: .7,
+        // Clear of the loose fisherman trousers (they bulge ~5 cm past the legs).
+        rows: clothRing(14, 5, (ang, v) => [Math.cos(ang) * (.215 + .07 * v), .975 - .31 * v, .004 + Math.sin(ang) * (.17 + .07 * v)]) },
+        clothMaterial(gearPalette("cloth", tier).main), null));
+    return out.filter(Boolean);
   }
