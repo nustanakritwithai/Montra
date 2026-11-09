@@ -106,7 +106,7 @@
       for(let t=1.2;t<len;t+=2.2)for(const side of [-1,1]){
         const k=Math.round(t*10)+i*97+side;if(noise(k,115)<.35)continue;
         const off=2.35+noise(k,116)*.5,d=.32+noise(k,117)*.34;
-        const stone=place(B.MeshBuilder.CreateSphere("verge stone",{diameter:d,segments:3},scene),a.x+(b.x-a.x)*t/len+nx*off*side,d*.18,a.z+(b.z-a.z)*t/len+nz*off*side,forestStone);
+        const stone=place(B.MeshBuilder.CreateIcoSphere("verge stone",{radius:d/2,subdivisions:1,flat:true},scene),a.x+(b.x-a.x)*t/len+nx*off*side,d*.18,a.z+(b.z-a.z)*t/len+nz*off*side,forestStone);
         stone.scaling.y=.5;
         sceneryPoint("stone",stone.position.x,stone.position.z,d/2);
       }
@@ -151,10 +151,7 @@
       }
     }
     // Batch static decorations by material; crowns remain individually fadeable.
-    for(const parts of groups.values()){
-      const merged=B.Mesh.MergeMeshes(parts,true,true);
-      if(merged){merged.parent=expansionRoot;merged.isPickable=false;}
-    }
+    for(const {mesh} of mergeByCell([...groups.values()].flat()))mesh.parent=expansionRoot;
   }
   function fadeForestCrowns(hero) {
     const eye=camera.position,dx=eye.x-hero.x,dy=eye.y-hero.y-1,dz=eye.z-hero.z;
@@ -184,12 +181,7 @@
       return place(B.MeshBuilder.CreateCylinder("temple carving",{height,diameterBottom:base,diameterTop:top,tessellation:sides},scene),x,y,z,material);
     }
     function finish(name,cover=false){
-      const materials=new Set(parts.map(m=>m.material));
-      for(const material of materials){
-        const group=parts.filter(p=>p.material===material);
-        const mesh=group.length===1?group[0]:B.Mesh.MergeMeshes(group,true,true);
-        if(mesh){mesh.name=name;mesh.parent=expansionRoot;mesh.isPickable=false;if(cover)templeCover.push(mesh);}
-      }
+      for(const {mesh} of mergeByCell(parts)){mesh.name=name;mesh.parent=expansionRoot;if(cover)templeCover.push(mesh);}
       parts=[];
     }
     function spire(x,y,z,size){

@@ -63,33 +63,33 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/019-state-and-portals.js",
-  "bytes": 20710,
-  "sha256": "03413327454db9e7ce3d4ad55f2d00126c76c6be556b4b1778b5d4cb04ad3b7b"
+  "bytes": 20705,
+  "sha256": "7366b27f616a1508dc0ebbc9354cdded5ca3a1319a78e4e5d6500dcf582ac66f"
 },
 {
   "path": "world/018-region-dressing.js",
-  "bytes": 29219,
-  "sha256": "523f97592df51182f45944ef5d1d2af9de27b18a947b46fb66a38a1b6999f972"
+  "bytes": 29020,
+  "sha256": "d7c0ca740501cc335809d9c7a6ed7c39d5f0527ac843207042e7fcc9f89af116"
 },
 {
   "path": "world/017-region-terrain.js",
-  "bytes": 61341,
-  "sha256": "3efb48822b9a6fe0009133724c0a3c511a03d8198917684c8df1eb55fa5c7be0"
+  "bytes": 67251,
+  "sha256": "25c7bbb89d6cbe080d0bad288d2e7dce1a9506de349d99fda13de39c79092929"
 },
 {
   "path": "world/016-forest-and-temple.js",
-  "bytes": 20177,
-  "sha256": "1f48d6d32dc19e191f708cb1c92638ac454ead41a9b4b780016c33ace8b0e44a"
+  "bytes": 19872,
+  "sha256": "a81a9b4cbc16810d551abdcf9f707fcad4778315944aacab0707fc0fdb8c4d38"
 },
 {
   "path": "world/015-forest-gates-and-services.js",
-  "bytes": 35657,
-  "sha256": "b84c944ce8d8dfda1f151ffeff7f95fde2088818ae651b72ced427e5d3baa5fb"
+  "bytes": 35119,
+  "sha256": "d67c697a6c0cce8995c0ba820bcfcf27323b431c56efac396f7485927a193c98"
 },
 {
   "path": "world/014-ritual-village.js",
-  "bytes": 28486,
-  "sha256": "ed4698fa8d713dda529d97834357d1157429468e8b048005119f9f7437385d19"
+  "bytes": 28293,
+  "sha256": "ad24daf0c47452cc936da18e01bf47c582c33b987957480ba374c682b4958b01"
 },
 {
   "path": "world/013-ground-and-fortification.js",
@@ -103,8 +103,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/026-avatar-auras-and-lifecycle.js",
-  "bytes": 12691,
-  "sha256": "89301226a696e2cc831f4ec7740a9637bd3baf959bee73bf65ae7be3bf51ec22"
+  "bytes": 19325,
+  "sha256": "8ad0666252acfc431e107b949f2e982210c36ccf232e9da70862952ce9630443"
 },
 {
   "path": "render/025-horse-and-avatar-animation.js",
@@ -113,8 +113,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/021-character-models.js",
-  "bytes": 60483,
-  "sha256": "53726d9d220ded1a25bdb414feaadfcb406694edacfee15c0cc9cd9e8da26513"
+  "bytes": 67893,
+  "sha256": "bc3712dff7d49d8d422c8a9ce54af6468fe93fdb467e068bc1bb790dc52786ad"
 },
 {
   "path": "render/020-avatar-materials-and-meshes.js",
@@ -123,8 +123,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/006-materials-atmosphere.js",
-  "bytes": 76860,
-  "sha256": "559d7b4fafae38fec40cac137f6cb69572abca82d733b7787bedae57ff777c9b"
+  "bytes": 83079,
+  "sha256": "f93db8d4cff8fcc1a30f9f74266f3874d1085b572b4d7ac1eadb60ecfcd411c7"
 },
 {
   "path": "network/044-state-sync-and-connection.js",
@@ -133,8 +133,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
-  "bytes": 19203,
-  "sha256": "08cbf58094c9e5873f6ec5b801458664546dea30906ebafdbfe799ffd1738336"
+  "bytes": 19247,
+  "sha256": "fbace942d509c32b0d80257a0c338305e5106d8c5d264f6137e5dcd987cfaf1e"
 },
   {
     "path": "ui/053-gear-training-and-crafting.js",
@@ -248,8 +248,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1683162);
-  assert.equal(hash(bytes), '40cf9d7662c74b6f1f9bed9035befc41f7c1a4e74ef445b47210501ae1d86ba5');
+  assert.equal(bytes.length, 1708139);
+  assert.equal(hash(bytes), '292cbb5ac7a50d42840544e86bb4853ac53fa504888575f4cc06efb56be23c4a');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

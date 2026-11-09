@@ -234,6 +234,7 @@
     a.skin = { nodes, copy, holder, body, rest: { hipsX: hips.x, hipsY: hips.y, hipsZ: hips.z } };
     attachOutfitCloth(a, a.npcCloth || (a.local ? shawlHero : shawlFriend), a.npcCloth || (a.local ? sashHero : sashFriend));
     if (a.gearLook) setAvatarGear(a, a.gearLook);
+    if (a.weaponBand) setMuayPrajiad(a, a.weaponBand);
     if(a.npc){
       // Rest pose from the player rig, applied once instead of animating every NPC.
       for(const [name,x,y,z] of [["RightArm",-.62,-.35,1.12],["RightForeArm",0,2,0],["LeftArm",-.58,.35,-1.12],["LeftForeArm",0,-2,0]])
@@ -307,7 +308,7 @@
       box: (x, y, z, w, h, d, m) => at(B.MeshBuilder.CreateBox("gear", { width: w, height: h, depth: d }, scene), x, y, z, m),
       cyl: (x, y, z, h, top, bottom, m, n = 10) => at(B.MeshBuilder.CreateCylinder("gear", { height: h, diameterTop: top, diameterBottom: bottom, tessellation: n }, scene), x, y, z, m),
       ball: (x, y, z, d, m, seg = 8) => at(B.MeshBuilder.CreateSphere("gear", { diameter: d, segments: seg }, scene), x, y, z, m),
-      dome: (x, y, z, d, m, slice = .5) => at(B.MeshBuilder.CreateSphere("gear", { diameter: d, segments: 10, slice, sideOrientation: B.Mesh.DOUBLESIDE }, scene), x, y, z, m),
+      dome: (x, y, z, d, m, slice = .5, seg = 10, double = true) => at(B.MeshBuilder.CreateSphere("gear", { diameter: d, segments: seg, slice, sideOrientation: double ? B.Mesh.DOUBLESIDE : B.Mesh.FRONTSIDE }, scene), x, y, z, m),
       // Elliptic tube through rings [y, halfWidth, halfDepth, zOffset].
       loft: (rings, m, segs = 14) => {
         const paths = rings.map(([y, w, d, zo = 0]) => { const ring = []; for (let i = 0; i <= segs; i++) { const t = i / segs * Math.PI * 2; ring.push(new B.Vector3(Math.cos(t) * w, y, zo + Math.sin(t) * d)); } return ring; });
@@ -329,6 +330,9 @@
     if (parts.length === 1) parts[0].bakeCurrentTransformIntoVertices();
     const mesh = mergedSegment(parts, node, name), j = GEAR_REST[bone];
     mesh.position.set(-j[0], -j[1], -j[2]); mesh.alwaysSelectAsActiveMesh = true;
+    // Rings, earrings, necklaces and armbands are a pixel or two past the middle distance; armour pieces
+    // last to the far band. The body itself carries the silhouette all the way to the fog.
+    if (typeof trackViewLod === "function") trackViewLod(mesh, [[/^(gear (leftRing|rightRing|leftEar|rightEar|neck)|prajiad)/.test(name) ? "detail" : "far", null]]);
     return mesh;
   }
   // ---- Armour slots. Each builder returns [bone, parts] pairs. ----
@@ -356,23 +360,41 @@
           if (p.glow) k.ball(0, 1.93, -.005, .024, p.glow, 6);
         }
       }
+      // Tier shapes (outfit tier 5+ / 7+): a gold browband ornament, then a crest that changes the silhouette.
+      if (p.tier >= 5) {
+        const front = w === "cloth" ? .094 : w === "hide" ? .1 : .102;
+        const jewel = k.box(0, w === "cloth" ? 1.692 : 1.705, front + .004, .03, .03, .008, p.trim); jewel.rotation.z = Math.PI / 4; // ประจำยาม
+        if (w === "heavy") for (const s of [-1, 1]) { const ear = k.cyl(s * .1, 1.7, -.03, .07, 0, .03, p.trim, 4); ear.rotation.z = -s * .9; } // หูกระจัง
+        if (w === "medium") k.cyl(0, 1.81, -.005, .07, 0, .03, p.trim, 6);
+        if (w === "hide") for (const s of [-1, 1]) { const tusk = k.cyl(s * .06, 1.79, -.07, .09, 0, .022, gearMat("bone fang", "#e8dcc2"), 5); tusk.rotation.set(-.5, 0, -s * .5); }
+      }
+      if (p.tier >= 7) {
+        if (w === "heavy") for (let i = 0; i < 3; i++) k.cyl(0, 1.95 + i * .045, -.005, .04, .012 - i * .003, .022 - i * .004, p.trim, 6); // ชฎา tiers
+        else { const crest = k.cyl(0, w === "cloth" ? 1.76 : 1.84, .07, .1, 0, .035, p.trim, 4); crest.rotation.x = -.35; } // กนก crest
+        k.ball(0, w === "cloth" ? 1.7 : 1.715, .112, .018, p.glow || amuletGlow, 6);
+      }
       return [["Head", k.take()]];
     },
     shoulders(w, p) {
       const out = [];
       for (const [side, bone] of [[1, "LeftArm"], [-1, "RightArm"]]) {
         const k = gearKit(), x = side * .185;
-        if (w === "cloth") { k.dome(x, 1.41, 0, .13, p.main).scaling.set(1.1, .5, 1.05); }
-        else if (w === "hide") { k.dome(x, 1.412, 0, .14, p.main).scaling.set(1.1, .55, 1.05); k.box(x - side * .02, 1.4, 0, .014, .035, .13, p.leather); }
+        // Shoulder caps are small on screen: low-segment domes keep a fully armoured hero within the mobile budget.
+        if (w === "cloth") { k.dome(x, 1.41, 0, .13, p.main, .5, 6, false).scaling.set(1.1, .5, 1.05); }
+        else if (w === "hide") { k.dome(x, 1.412, 0, .14, p.main, .5, 6, false).scaling.set(1.1, .55, 1.05); k.box(x - side * .02, 1.4, 0, .014, .035, .13, p.leather); }
         else {
           const n = w === "heavy" ? 3 : 2;
           for (let i = 0; i < n; i++) {
-            const plate = k.dome(x + side * i * .02, 1.42 - i * .035, 0, .15 - i * .012, i ? p.second : p.main);
+            const plate = k.dome(x + side * i * .02, 1.42 - i * .035, 0, .15 - i * .012, i ? p.second : p.main, .5, i ? 4 : 6, false);
             plate.scaling.set(1.1, .45, 1.05); plate.rotation.z = -side * (.35 + i * .12);
           }
           k.cyl(x, 1.428, 0, .01, .152, .152, p.trim, 14).rotation.z = -side * .35;
           if (w === "heavy" && p.tier >= 5) k.cyl(x + side * .065, 1.452, 0, .06, 0, .025, p.trim, 6).rotation.z = -side * 1.1;
         }
+        // Tier shapes: a gold rim round the cap at 5+, gold beads and a glowing gem on the cap at 7+
+        // (round pieces read the same whichever way the arm swings).
+        if (p.tier >= 5) k.cyl(x, 1.405, 0, .01, .158, .158, p.trim, 14).rotation.z = -side * .25;
+        if (p.tier >= 7) { for (const dz of [-.035, 0, .035]) k.ball(x + side * .01, 1.452, dz, .022, p.trim, 5); k.ball(x + side * .045, 1.44, 0, .026, p.glow || amuletGlow, 6); }
         out.push([bone, k.take()]);
       }
       return out;
@@ -399,6 +421,13 @@
           up.box(0, 1.3, -.15, .26, .26, .012, p.main);
           for (const s of [-1, 1]) up.box(s * .11, 1.425, .02, .035, .012, .2, p.trim);
         }
+      }
+      // Tier shapes: gold sangwan (สังวาล) chains crossing the chest at 5+, a glowing yantra disc or sunburst at 7+.
+      if (p.tier >= 5 && !heavy) for (const s of [-1, 1]) { const chain = up.box(s * .05, 1.27, .158 + puff, .016, .34, .008, p.trim); chain.rotation.z = s * .55; }
+      if (p.tier >= 5 && heavy) for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, ray = up.box(Math.cos(a) * .072, 1.33 + Math.sin(a) * .072, .17, .012, .04, .006, p.trim); ray.rotation.z = a - Math.PI / 2; }
+      if (p.tier >= 7) {
+        const disc = up.cyl(0, heavy ? 1.33 : 1.27, (heavy ? .18 : .162 + puff), .006, heavy ? .04 : .07, heavy ? .04 : .07, p.glow || amuletGlow, 14); disc.rotation.x = Math.PI / 2;
+        if (!heavy) { const rim = up.cyl(0, 1.27, .158 + puff, .008, .09, .09, p.trim, 16); rim.rotation.x = Math.PI / 2; }
       }
       return [["Chest", up.take()], ["Spine", mid.take()]];
     },
@@ -462,17 +491,26 @@
       const k = gearKit();
       // The forearm tapers from ~.044 (elbow side) to ~.032 (wrist): each turn follows it.
       for (let i = 0; i < 6; i++) k.sleeve(.44 + i * .024, .458 + i * .024, 1.364, 0, .048 - i * .0022, .048 - i * .0022, i % 2 ? ropeRed : gearMat("rope hemp", "#c9b48a"));
+      // Tier 5+: gold wrist ring and a folded yantra tag; tier 7+: a second ring and a glowing bead.
+      if (p.tier >= 5) { k.sleeve(.585, .597, 1.364, 0, .036, .036, p.trim, 12); k.box(.52, 1.364, .05, .03, .035, .004, gearMat("talisman paper cloth", "#e8d9a8", "#2a2210")); }
+      if (p.tier >= 7) { k.sleeve(.432, .444, 1.364, 0, .05, .05, p.trim, 12); k.ball(.52, 1.364, .056, .016, p.glow || amuletGlow, 6); }
       return [["LeftForeArm", k.take()]];
     },
     guard(p) { // Twin-sword school: a lacquered forearm parrying guard.
       const k = gearKit();
       k.box(.51, 1.364, .05, .16, .06, .014, p.lacquer || p.main); k.box(.51, 1.364, .058, .13, .014, .006, p.trim);
+      // Tier 5+: gold kanok prongs at both ends; tier 7+: a longer guard with a glowing centre gem.
+      if (p.tier >= 5) for (const x of [.43, .59]) { const c = k.cyl(x, 1.364, .052, .05, 0, .026, p.trim, 4); c.rotation.z = (x < .5 ? 1 : -1) * Math.PI / 2; }
+      if (p.tier >= 7) { k.box(.51, 1.364, .046, .22, .07, .008, p.trim); k.ball(.51, 1.364, .062, .022, p.glow || amuletGlow, 6); }
       return [["LeftForeArm", k.take()]];
     },
     veil(p) { // Blade: a dark cloth veil over the lower face, tails at the nape.
       const k = gearKit(), cloth = gearMat("shadow veil", "#1d1c22");
       // Face at mouth height: half-width ~.07, front ~.097 (centre z ~.013); the veil runs from under the nose to the chin.
       k.cyl(0, 1.553, .012, .062, .158, .15, cloth, 16).scaling.z = 1.3; k.box(0, 1.56, -.088, .04, .02, .012, cloth); // knot; the tail is cloth
+      // Tier 5+: a gold edge along the top of the veil; tier 7+: a glowing bead at the knot and a gold drop.
+      if (p.tier >= 5) k.cyl(0, 1.585, .012, .006, .16, .16, p.trim, 16).scaling.z = 1.3;
+      if (p.tier >= 7) { k.ball(0, 1.56, -.098, .02, p.glow || amuletGlow, 6); k.cyl(0, 1.52, -.098, .04, .012, 0, p.trim, 5); }
       return [["Head", k.take()]];
     },
     shield(p) { // Sentinel: round rattan dang with a brass boss, on the left forearm.
@@ -483,6 +521,9 @@
       const rim = k.cyl(.555, 1.41, -.002, .032, .292, .292, p.trim, 20); rim.scaling.x = rim.scaling.z = 1; rim.scaling.y = .6;
       k.ball(.555, 1.425, -.002, .07, p.trim, 10).scaling.y = .5;
       for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + .4; k.ball(.555 + Math.cos(a) * .09, 1.424, -.002 + Math.sin(a) * .09, .02, p.trim, 6); }
+      // Tier 5+: a gold sunburst of eight rays round the boss; tier 7+: an outer gold ring and a glowing boss gem.
+      if (p.tier >= 5) for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, r = k.box(.555 + Math.cos(a) * .055, 1.426, -.002 + Math.sin(a) * .055, .012, .006, .04, p.trim); r.rotation.y = -a + Math.PI / 2; }
+      if (p.tier >= 7) { for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; k.ball(.555 + Math.cos(a) * .118, 1.426, -.002 + Math.sin(a) * .118, .018, p.trim, 5); } k.ball(.555, 1.44, -.002, .03, p.glow || amuletGlow, 8); }
       return [["LeftForeArm", k.take()]];
     },
     jar(p) { // Seer: a small sealed spirit jar held in the left hand.
@@ -494,6 +535,9 @@
       along(k.cyl(.665, 1.339, .056, .014, .06, .06, jarClay, 8));
       k.ball(.665, 1.339, -.052, .09, jarCarved, 10).scaling.z = 1.12;
       along(k.cyl(.665, 1.339, -.05, .008, .093, .093, ropeRed, 10));
+      // Tier 5+: a gold neck band and two talisman strips; tier 7+: a spirit wisp glowing above the seal.
+      if (p.tier >= 5) { along(k.cyl(.665, 1.339, .045, .01, .064, .064, p.trim, 10)); for (const dx of [-.025, .025]) k.box(.665 + dx, 1.3, -.02, .016, .05, .003, gearMat("talisman paper cloth", "#e8d9a8", "#2a2210")); }
+      if (p.tier >= 7) k.ball(.665, 1.339, .1, .04, p.glow || amuletGlow, 8);
       return [["LeftHand", k.take()]];
     },
     bell(p) { // Mender: a bronze hand bell (กระดิ่ง) with a red cord.
@@ -502,6 +546,9 @@
       k.cyl(.665, 1.35, .012, .07, .022, .026, darkWood, 8); k.cyl(.665, 1.312, .012, .015, .035, .035, p.trim, 8);
       k.cyl(.665, 1.275, .012, .06, .026, .065, gearMat("bell bronze", "#8a6a3a", "#1a1206", .4), 12);
       k.ball(.665, 1.24, .012, .018, p.trim, 6); k.box(.665, 1.385, .012, .008, .03, .008, ropeRed);
+      // Tier 5+: a gold band round the bell and two small dangles; tier 7+: a gold lotus on the handle and a glow.
+      if (p.tier >= 5) { k.cyl(.665, 1.268, .012, .01, .06, .06, p.trim, 12); for (const dz of [-.03, .03]) k.ball(.665, 1.235, .012 + dz, .012, p.trim, 5); }
+      if (p.tier >= 7) { for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, pe = k.cyl(.665 + Math.cos(a) * .015, 1.405, .012 + Math.sin(a) * .015, .035, 0, .018, p.trim, 4); pe.rotation.set(Math.sin(a) * .6, 0, -Math.cos(a) * .6); } k.ball(.665, 1.42, .012, .018, p.glow || amuletGlow, 6); }
       return [["LeftHand", k.take()]];
     },
   };
@@ -588,6 +635,28 @@
     // A cap or helmet replaces the base outfit's headband and topknot (a cloth headband keeps them).
     const helmet = want.head && !/^arm_cloth_|^arm_field_(seer|mender)$/.test(want.head.family);
     for (const mesh of avatar.skin.nodes.Head?.getChildMeshes(true) || []) if (mesh.name === "gear Head") mesh.setEnabled(!helmet);
+  }
+  // ---- Muay prajiad (ประเจียด) by wrap tier ----
+  // Muay wraps have no held model, so their tier shows on the upper arms: band 2 a red sacred cord with
+  // yellow pattern and hanging tails, band 3 adds a gold armlet and a small yantra tag. Built on the arm bones.
+  function setMuayPrajiad(avatar, band) {
+    const want = avatar?.weaponId === "muay_wraps" && band >= 2 ? band : 0;
+    if (!avatar?.skin?.nodes || avatar.prajiadBand === want) return;
+    avatar.prajiad?.forEach(mesh => mesh?.dispose()); avatar.prajiad = []; avatar.prajiadBand = want;
+    if (!want) return;
+    const red = gearMat("prajiad red", "#9a1a14", "#1a0302"), yellow = gearMat("prajiad yellow", "#d8b040", "#1a1204"), gold = gearMat("gold trim", "#c9a24a", "#2a1d06", .4);
+    for (const [side, bone] of [[1, "LeftArm"], [-1, "RightArm"]]) {
+      const k = gearKit(), x = side * .265, y = 1.388;
+      k.sleeve(x - side * .016, x + side * .016, y, -.002, .047, .045, red, 12);
+      k.sleeve(x - side * .004, x + side * .004, y, -.002, .049, .048, yellow, 12);
+      for (const dz of [-.012, .012]) { const t = k.box(x, y - .07, .045 + dz, .012, .12, .006, red); t.rotation.x = .15; }
+      if (want > 2) {
+        k.sleeve(x + side * .045, x + side * .06, y, -.002, .044, .043, gold, 14);
+        k.box(x, y - .015, .05, .03, .04, .004, gearMat("talisman paper cloth", "#e8d9a8", "#2a2210"));
+      }
+      const mesh = gearOnBone(avatar.skin.nodes, bone, k.take(), "prajiad " + bone);
+      if (mesh) avatar.prajiad.push(mesh);
+    }
   }
   // ---- Hand poses: fist, grip, relaxed and open ----
   // The skeleton has one bone per hand and no finger bones, so finger poses are morph targets baked
