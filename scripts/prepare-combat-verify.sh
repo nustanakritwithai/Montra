@@ -12,6 +12,7 @@ cp deploy/combat/hunting-rebirth-integration.mjs deploy/combat/mastery-save-inte
 cp deploy/combat/learned-hotbar-integration.mjs deploy/combat/personal-equipment-integration.mjs combat-verify/
 cp deploy/combat/guest-delete-integration.mjs combat-verify/guest-delete-integration.mjs
 cp deploy/combat/mount-integration.mjs combat-verify/mount-integration.mjs
+cp deploy/combat/gear-look-integration.mjs combat-verify/gear-look-integration.mjs
 cp deploy/combat/MyRoomState.ts combat-verify/src/rooms/schema/MyRoomState.ts
 cp deploy/combat/GameRules.ts combat-verify/src/rooms/GameRules.ts
 cp deploy/combat/DashRules.ts combat-verify/src/rooms/DashRules.ts
