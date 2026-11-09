@@ -357,6 +357,19 @@
           if (p.glow) k.ball(0, 1.93, -.005, .024, p.glow, 6);
         }
       }
+      // Tier shapes (outfit tier 5+ / 7+): a gold browband ornament, then a crest that changes the silhouette.
+      if (p.tier >= 5) {
+        const front = w === "cloth" ? .094 : w === "hide" ? .1 : .102;
+        const jewel = k.box(0, w === "cloth" ? 1.692 : 1.705, front + .004, .03, .03, .008, p.trim); jewel.rotation.z = Math.PI / 4; // ประจำยาม
+        if (w === "heavy") for (const s of [-1, 1]) { const ear = k.cyl(s * .1, 1.7, -.03, .07, 0, .03, p.trim, 4); ear.rotation.z = -s * .9; } // หูกระจัง
+        if (w === "medium") k.cyl(0, 1.81, -.005, .07, 0, .03, p.trim, 6);
+        if (w === "hide") for (const s of [-1, 1]) { const tusk = k.cyl(s * .06, 1.79, -.07, .09, 0, .022, gearMat("bone fang", "#e8dcc2"), 5); tusk.rotation.set(-.5, 0, -s * .5); }
+      }
+      if (p.tier >= 7) {
+        if (w === "heavy") for (let i = 0; i < 3; i++) k.cyl(0, 1.95 + i * .045, -.005, .04, .012 - i * .003, .022 - i * .004, p.trim, 6); // ชฎา tiers
+        else { const crest = k.cyl(0, w === "cloth" ? 1.76 : 1.84, .07, .1, 0, .035, p.trim, 4); crest.rotation.x = -.35; } // กนก crest
+        k.ball(0, w === "cloth" ? 1.7 : 1.715, .112, .018, p.glow || amuletGlow, 6);
+      }
       return [["Head", k.take()]];
     },
     shoulders(w, p) {
@@ -375,6 +388,10 @@
           k.cyl(x, 1.428, 0, .01, .152, .152, p.trim, 14).rotation.z = -side * .35;
           if (w === "heavy" && p.tier >= 5) k.cyl(x + side * .065, 1.452, 0, .06, 0, .025, p.trim, 6).rotation.z = -side * 1.1;
         }
+        // Tier shapes: a gold rim round the cap at 5+, gold beads and a glowing gem on the cap at 7+
+        // (round pieces read the same whichever way the arm swings).
+        if (p.tier >= 5) k.cyl(x, 1.405, 0, .01, .158, .158, p.trim, 14).rotation.z = -side * .25;
+        if (p.tier >= 7) { for (const dz of [-.035, 0, .035]) k.ball(x + side * .01, 1.452, dz, .022, p.trim, 5); k.ball(x + side * .045, 1.44, 0, .026, p.glow || amuletGlow, 6); }
         out.push([bone, k.take()]);
       }
       return out;
@@ -401,6 +418,13 @@
           up.box(0, 1.3, -.15, .26, .26, .012, p.main);
           for (const s of [-1, 1]) up.box(s * .11, 1.425, .02, .035, .012, .2, p.trim);
         }
+      }
+      // Tier shapes: gold sangwan (สังวาล) chains crossing the chest at 5+, a glowing yantra disc or sunburst at 7+.
+      if (p.tier >= 5 && !heavy) for (const s of [-1, 1]) { const chain = up.box(s * .05, 1.27, .158 + puff, .016, .34, .008, p.trim); chain.rotation.z = s * .55; }
+      if (p.tier >= 5 && heavy) for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, ray = up.box(Math.cos(a) * .072, 1.33 + Math.sin(a) * .072, .17, .012, .04, .006, p.trim); ray.rotation.z = a - Math.PI / 2; }
+      if (p.tier >= 7) {
+        const disc = up.cyl(0, heavy ? 1.33 : 1.27, (heavy ? .18 : .162 + puff), .006, heavy ? .04 : .07, heavy ? .04 : .07, p.glow || amuletGlow, 14); disc.rotation.x = Math.PI / 2;
+        if (!heavy) { const rim = up.cyl(0, 1.27, .158 + puff, .008, .09, .09, p.trim, 16); rim.rotation.x = Math.PI / 2; }
       }
       return [["Chest", up.take()], ["Spine", mid.take()]];
     },
