@@ -63,6 +63,7 @@ jobs:
           node deploy/combat/class-skills-browser-test.cjs
           node deploy/combat/class-skills-hotbar-browser-test.cjs
           node deploy/combat/class-skills-entry-browser-test.cjs
+          node deploy/combat/class-skills-feedback-browser-test.cjs
           MONTRA_ADVANCED_EVIDENCE=class-skills-browser-evidence/advanced node deploy/combat/advanced-skills-loadout-browser-test.cjs
       - uses: actions/upload-artifact@v4
         if: always()
