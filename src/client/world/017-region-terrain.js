@@ -1023,3 +1023,114 @@
       finish("relic",true);
     }
   }
+  // ---- Far backdrop: what lies past the map edge ----
+  // The walkable map ends at its bounds; past them the camera used to see the bare clear colour, a black
+  // band at the top of the screen. Each map now sits in a landscape: the ground runs on to the horizon,
+  // a near ring of the map's own scenery (tree line, rice and palms, peaks, ruined prang, cave rock,
+  // rift crystals) hugs the edge, a taller far ring stands behind it, and a band of haze sits on the
+  // horizon. The rings are flat-lit silhouettes tinted toward the live fog colour (near ~40%, far ~72%),
+  // so they read as distance in every light and weather, and cost a few thousand triangles in all.
+  const BACKDROP_THEMES = {
+    forest: { near: "trees", far: "hills", tone: "#1f3a24", farTone: "#2a3a33" },
+    village: { near: "palms", far: "hills", tone: "#22361f", farTone: "#2c3540", stupa: true },
+    ridge: { near: "rocks", far: "peaks", tone: "#4a4636", farTone: "#3f4148" },
+    city: { near: "ruins", far: "hills", tone: "#4b3e34", farTone: "#3d3a3a", stupa: true },
+    cave: { near: "rocks", far: "walls", tone: "#22343a", farTone: "#1d2a30" },
+    peak: { near: "rocks", far: "peaks", tone: "#4a2b28", farTone: "#3a2526" },
+    rift: { near: "crystals", far: "peaks", tone: "#3a3456", farTone: "#2e2b45" },
+    marsh: { near: "reeds", far: "trees", tone: "#24382e", farTone: "#2a3a36" },
+  };
+  const BACKDROP_BY_MAP = { ritual_village: "village", forbidden_forest: "forest", bound_temple: "forest", bamboo_frontier: "forest",
+    lotus_basin: "marsh", drowned_marsh: "marsh", moon_cemetery: "forest", hex_ridge: "ridge", moon_pass: "ridge", river_watch: "forest",
+    naga_cavern: "cave", fallen_city: "city", mantra_capital: "city", tri_wiang_castle: "city", asura_peak: "peak", spirit_rift: "rift" };
+  const backdropMats = [];
+  function backdropMaterial(name, fogShare) {
+    const m = new B.StandardMaterial(name, scene);
+    // Unlit: the colour is the emissive term (times the vertex shading), so night light cannot blacken it.
+    m.disableLighting = true; m.specularColor = new B.Color3(0, 0, 0); m.diffuseColor = new B.Color3(0, 0, 0); m.emissiveColor = new B.Color3(0, 0, 0);
+    m.metadata = { fogShare, base: new B.Color3(.2, .25, .2) }; backdropMats.push(m);
+    return m;
+  }
+  let backdropNearMat = null, backdropFarMat = null, backdropHazeMat = null, backdropGroundMat = null;
+  // Called every frame: the fog colour follows the hour and the weather, and the rings follow the fog.
+  function updateBackdrop() {
+    const f = scene.fogColor;
+    for (const m of backdropMats) { const k = m.metadata.fogShare, b = m.metadata.base;
+      m.emissiveColor.set(b.r + (f.r - b.r) * k, b.g + (f.g - b.g) * k, b.b + (f.b - b.b) * k); }
+  }
+  function buildBackdrop(map, bounds) {
+    const w = bounds.maxX - bounds.minX, d = bounds.maxZ - bounds.minZ;
+    if (w > 600 || d > 600) return; // the open-world castle map has no edge in sight
+    if (!backdropNearMat) {
+      backdropNearMat = backdropMaterial("backdrop near", LITE ? .45 : .4); backdropFarMat = backdropMaterial("backdrop far", .72);
+      backdropHazeMat = backdropMaterial("backdrop haze", 0); backdropHazeMat.metadata.fogShare = 1;
+      backdropHazeMat.alpha = .999; backdropHazeMat.useVertexAlpha = true; backdropHazeMat.backFaceCulling = false;
+      // The ground keeps the scene fog on top, so it runs from the map's tone at the edge into the haze.
+      backdropGroundMat = backdropMaterial("backdrop ground", .3);
+    }
+    const theme = BACKDROP_THEMES[BACKDROP_BY_MAP[map.id] || "forest"], c3 = h => B.Color3.FromHexString(h);
+    backdropNearMat.metadata.base = c3(theme.tone); backdropFarMat.metadata.base = c3(theme.farTone);
+    backdropGroundMat.metadata.base = c3(atmosphere.ground || "#2a2a22");
+    const cx = (bounds.minX + bounds.maxX) / 2, cz = (bounds.minZ + bounds.maxZ) / 2, rng = treeRng(7700 + map.id.length * 131 + map.id.charCodeAt(0));
+    const near = [], far = [];
+    // Ground on to the horizon, a little under the map so the map's own floor and relief always win.
+    const skirt = B.MeshBuilder.CreateGround("backdrop ground", { width: w + 640, height: d + 640 }, scene);
+    skirt.position.set(cx, -.3, cz); skirt.material = backdropGroundMat; skirt.isPickable = false; skirt.parent = expansionRoot; skirt.metadata = { noShadow: true };
+    // A point on the map's rectangle pushed `off` metres outward, at perimeter fraction t.
+    const ring = (t, off) => {
+      const hw = w / 2 + off, hd = d / 2 + off, P = 4 * (hw + hd), s = ((t % 1) + 1) % 1 * P;
+      if (s < 2 * hw) return [cx - hw + s, cz - hd];
+      if (s < 2 * hw + 2 * hd) return [cx + hw, cz - hd + (s - 2 * hw)];
+      if (s < 4 * hw + 2 * hd) return [cx + hw - (s - 2 * hw - 2 * hd), cz + hd];
+      return [cx - hw, cz + hd - (s - 4 * hw - 2 * hd)];
+    };
+    const shade = (m, lo = .62, hi = 1.12) => { // darker at the foot, lighter at the crest, one tone per mesh
+      const pos = m.getVerticesData(B.VertexBuffer.PositionKind), n = pos.length / 3, col = new Float32Array(n * 4); let y0 = Infinity, y1 = -Infinity;
+      for (let i = 0; i < n; i++) { y0 = Math.min(y0, pos[i * 3 + 1]); y1 = Math.max(y1, pos[i * 3 + 1]); }
+      const j = .9 + rng() * .2;
+      for (let i = 0; i < n; i++) { const t = y1 > y0 ? (pos[i * 3 + 1] - y0) / (y1 - y0) : 1, v = (lo + (hi - lo) * t) * j; col.set([v, v, v, 1], i * 4); }
+      m.setVerticesData(B.VertexBuffer.ColorKind, col); return m;
+    };
+    const cone = (list, x, z, h, r, tess = 6, y = 0) => { const m = B.MeshBuilder.CreateCylinder("backdrop", { height: h, diameterBottom: r * 2, diameterTop: 0, tessellation: tess }, scene);
+      m.position.set(x, y + h / 2 - .5, z); m.rotation.y = rng() * 6; list.push(shade(m)); return m; };
+    const blob = (list, x, y, z, r, sy = .8) => { const m = B.MeshBuilder.CreateIcoSphere("backdrop", { radius: r, subdivisions: 1, flat: true }, scene);
+      m.scaling.set(1, sy, 1); m.position.set(x, y, z); list.push(shade(m, .7, 1.1)); return m; };
+    const post = (list, x, z, h, r, y = 0) => { const m = B.MeshBuilder.CreateCylinder("backdrop", { height: h, diameter: r * 2, tessellation: 5 }, scene);
+      m.position.set(x, y + h / 2 - .3, z); list.push(shade(m, .55, .8)); return m; };
+    const n = Math.round((w + d) * (LITE ? .55 : .8));
+    // Near ring: 8–30 m past the edge, the map's own kind of scenery.
+    for (let i = 0; i < n; i++) {
+      const [x, z] = ring((i + rng() * .8) / n, 8 + rng() * 22), s = .8 + rng() * .6;
+      switch (theme.near) {
+        case "trees": post(near, x, z, 5 * s, .35 * s); blob(near, x, 6 * s, z, 3.4 * s); if (rng() < .5) blob(near, x + 2 * s, 4.6 * s, z + 1.5 * s, 2.4 * s); break;
+        case "palms": if (rng() < .45) { post(near, x, z, 8 * s, .2 * s); blob(near, x, 8.2 * s, z, 1.8 * s, .45); } else blob(near, x, 1.6 * s, z, 2.8 * s, .6); break;
+        case "reeds": blob(near, x, 1 * s, z, 2.6 * s, .45); if (rng() < .3) { post(near, x + 1, z, 4 * s, .25 * s); blob(near, x + 1, 4.4 * s, z, 2 * s, .7); } break;
+        case "rocks": cone(near, x, z, (6 + rng() * 10) * s, (4 + rng() * 4) * s, 5); break;
+        case "ruins": if (rng() < .4) { post(near, x, z, (6 + rng() * 6) * s, 1.4 * s); cone(near, x, z, 4 * s, 1.6 * s, 6, (6 + rng() * 6) * s); } else post(near, x, z, (2 + rng() * 5) * s, (.8 + rng()) * s); break;
+        case "crystals": cone(near, x, z, (8 + rng() * 14) * s, (1.2 + rng() * 1.4) * s, 4); break;
+      }
+    }
+    // Far ring: 45–110 m out, big shapes that rise over the near ring.
+    const nf = Math.round((w + d) * .22);
+    for (let i = 0; i < nf; i++) {
+      const [x, z] = ring((i + rng()) / nf, 45 + rng() * 65), s = .8 + rng() * .7;
+      switch (theme.far) {
+        case "hills": blob(far, x, -4, z, (16 + rng() * 14) * s, .55); break;
+        case "peaks": cone(far, x, z, (28 + rng() * 34) * s, (16 + rng() * 12) * s, 5); break;
+        case "walls": cone(far, x, z, (40 + rng() * 30) * s, (14 + rng() * 8) * s, 5); break;
+        case "trees": blob(far, x, 6 * s, z, (7 + rng() * 5) * s, .8); break;
+      }
+    }
+    // A far stupa or prang on the skyline: the village and the old capital are not the only places people built.
+    if (theme.stupa) { const [x, z] = ring(.62, 70); post(far, x, z, 10, 6); cone(far, x, z, 26, 5, 8, 10); }
+    for (const [list, mat, name] of [[near, backdropNearMat, "backdrop near"], [far, backdropFarMat, "backdrop far"]]) {
+      for (const { mesh } of mergeByCell(list, { key: () => name, cell: 80, noCull: true })) { mesh.name = name; mesh.material = mat; mesh.applyFog = false; mesh.parent = expansionRoot; mesh.metadata = { noShadow: true }; }
+    }
+    // Horizon haze: an open cylinder outside both rings, fog-coloured at its foot and clear at its top.
+    const R = Math.hypot(w, d) / 2 + 125, haze = B.MeshBuilder.CreateCylinder("backdrop haze", { height: 46, diameter: R * 2, tessellation: 40, cap: B.Mesh.NO_CAP }, scene);
+    const hp = haze.getVerticesData(B.VertexBuffer.PositionKind), hc = new Float32Array(hp.length / 3 * 4);
+    for (let i = 0; i < hp.length / 3; i++) hc.set([1, 1, 1, hp[i * 3 + 1] < 0 ? 1 : 0], i * 4);
+    haze.setVerticesData(B.VertexBuffer.ColorKind, hc); haze.hasVertexAlpha = true;
+    haze.position.set(cx, 18, cz); haze.material = backdropHazeMat; haze.applyFog = false; haze.isPickable = false; haze.parent = expansionRoot; haze.metadata = { noShadow: true };
+    updateBackdrop();
+  }

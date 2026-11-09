@@ -521,7 +521,8 @@
   // drew all of it every frame; per-cell batches let the frustum and the fog distance drop what is not seen.
   const BATCH_CELL = 24;
   // opts.key groups parts (default: material); opts.before(group) runs on each group before it is merged
-  // and its result is returned as `info` (the village keeps per-part anchors for terrain seating).
+  // and its result is returned as `info` (the village keeps per-part anchors for terrain seating);
+  // opts.noCull keeps a batch past the fog distance (the far backdrop is drawn in the fog on purpose).
   function mergeByCell(parts, opts = {}) {
     const keyOf = opts.key || (p => p.material), cell = opts.cell || BATCH_CELL, groups = new Map();
     for (const part of parts) {
@@ -536,7 +537,7 @@
     for (const cells of groups.values()) for (const group of cells.values()) {
       const info = opts.before ? opts.before(group) : undefined;
       const mesh = group.length > 1 ? B.Mesh.MergeMeshes(group, true, true) : group[0];
-      if (mesh) { mesh.isPickable = false; trackViewLod(mesh, [["cull", null]]); out.push({ mesh, info }); }
+      if (mesh) { mesh.isPickable = false; if (!opts.noCull) trackViewLod(mesh, [["cull", null]]); out.push({ mesh, info }); }
     }
     return out;
   }
