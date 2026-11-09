@@ -661,6 +661,7 @@
       if(!["stun","slam","counter","step"].includes(node.effect)){room.send("sentinel_skill",{skillId:id});return;}selectedSentinelSkill=id;
     }else if(kind==="occult"){
       if(["spirit","spirit_bind","spirit_heal","spirit_ward","trance"].includes(node.effect)){
+        if(node.effect!=="trance" && me.possessionActive){room.send("possess",{});return toast("ออกจากการเข้าทรง · กดวิชาอีกครั้งเพื่อเรียกผี");}
         if(!me.possessionActive && !room.state.summons?.has(localId)){room.send("pot_summon",{});return toast("เรียกผีใช้ 15 มานา · กดวิชาอีกครั้งเมื่อผีปรากฏ");}
         if(node.effect==="trance" && !me.possessionActive){room.send("possess",{});return toast("เข้าทรงใช้ 15 มานา · กดวิชาอีกครั้งเมื่อเข้าทรงแล้ว");}
       }
