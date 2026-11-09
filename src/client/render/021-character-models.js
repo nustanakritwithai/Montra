@@ -46,12 +46,51 @@
         }
         m.maxSimultaneousLights = MAX_LIGHTS;
       }
+      fixTorsoArmWeights(container);
       shamanBody = container;
       shamanWaiting.splice(0).forEach(attachShamanModel);
       spiritArmWaiting.splice(0).forEach(attachSpiritArms);
       ghostWaiting.splice(0).forEach(build => build());
     }).catch(error => { console.warn("MONTRA shaman body", error); shamanBody = false; shamanWaiting.length = 0; spiritArmWaiting.length = 0; ghostWaiting.splice(0).forEach(build => build()); });
   } else shamanBody = false;
+  // The file binds the chest sides (inside the shoulder joint, below the armpit) up to ~70% to the
+  // upper-arm bones. Arms are posed ~70 degrees down from the T-pose, so those torso vertices swung
+  // into the body and the chest caved in at the sides. Move that arm weight onto the chest/spine,
+  // fading it back in toward the armpit so the shoulder and armpit still follow the arm.
+  function fixTorsoArmWeights(container) {
+    const skel = container.skeletons[0]; if (!skel) return;
+    const idx = name => skel.bones.findIndex(b => b.name === name);
+    const arms = new Set([idx("LeftArm"), idx("RightArm")].filter(i => i >= 0)), chest = idx("Chest"), spine1 = idx("Spine1");
+    if (!arms.size || chest < 0) return;
+    const jx = .165, jy = 1.385, clamp = v => Math.max(0, Math.min(1, v));
+    const done = new Set();
+    for (const mesh of container.meshes) {
+      const geo = mesh.geometry; if (!geo || done.has(geo) || !mesh.skeleton) continue; done.add(geo);
+      const P = mesh.getVerticesData(B.VertexBuffer.PositionKind), I = mesh.getVerticesData(B.VertexBuffer.MatricesIndicesKind), W = mesh.getVerticesData(B.VertexBuffer.MatricesWeightsKind);
+      if (!P || !I || !W) continue;
+      let changed = 0;
+      for (let v = 0; v < P.length / 3; v++) {
+        const ax = Math.abs(P[v * 3]), y = P[v * 3 + 1];
+        // 1 deep inside the torso, 0 at the shoulder joint; 1 well below the armpit, fading out toward it.
+        const inside = clamp((jx + .01 - ax) / .055), below = clamp((jy - .015 - y) / .09);
+        const k = inside * below; if (k <= 0) continue;
+        let moved = 0;
+        for (let j = 0; j < 4; j++) { const o = v * 4 + j; if (arms.has(I[o]) && W[o] > 0) { const d = W[o] * k; W[o] -= d; moved += d; } }
+        if (moved <= 0) continue;
+        const target = y < jy - .17 && spine1 >= 0 ? spine1 : chest;
+        let slot = -1;
+        for (let j = 0; j < 4; j++) if (I[v * 4 + j] === target) slot = j;
+        if (slot < 0) for (let j = 0; j < 4; j++) if (W[v * 4 + j] <= 1e-4) { slot = j; break; }
+        if (slot < 0) { slot = 0; for (let j = 1; j < 4; j++) if (W[v * 4 + j] < W[v * 4 + slot]) slot = j; moved += W[v * 4 + slot]; W[v * 4 + slot] = 0; }
+        if (I[v * 4 + slot] !== target) { I[v * 4 + slot] = target; W[v * 4 + slot] = 0; }
+        W[v * 4 + slot] += moved;
+        const sum = W[v * 4] + W[v * 4 + 1] + W[v * 4 + 2] + W[v * 4 + 3];
+        for (let j = 0; j < 4; j++) W[v * 4 + j] /= sum || 1;
+        changed++;
+      }
+      if (changed) { mesh.setVerticesData(B.VertexBuffer.MatricesIndicesKind, I, false, 4); mesh.setVerticesData(B.VertexBuffer.MatricesWeightsKind, W, false, 4); }
+    }
+  }
   function shamanGear(a, nodes) {
     const shawl = a.npcCloth || (a.local ? shawlHero : shawlFriend), pants = a.local ? pantsHero : pantsFriend, sash = a.npcCloth || (a.local ? sashHero : sashFriend);
     a.ritualGear = [];
