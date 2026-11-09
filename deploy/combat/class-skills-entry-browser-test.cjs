@@ -178,7 +178,7 @@ async function cases(page, check) {
     assert.equal(await page.locator('.sg-points b').textContent(),'0','snapshot spends one server point');
     assert.match(await page.locator('.sg-sum').textContent(),/ใช้ไป 1 \/ 1 แต้ม/);
     assert.equal(await page.locator('[data-sg-equip]').count(),4 === model.slotCount ? 4 : 3,'existing advanced training slots preserved');
-    assert.match(await page.locator('.sg-slots').textContent(),/ช่องวิชาเสริมสำหรับฝึก/);
+    assert.match(await page.locator('.sg-slots').textContent(),/ช่องลัดวิชาเสริม/);
     const beforeEquip=await page.evaluate(()=>fixture.book());
     const hotbarBefore=await page.locator('.learned-bar').innerHTML();
     await page.locator('[data-sg-equip="1"]').click();

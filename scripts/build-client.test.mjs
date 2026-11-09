@@ -11,6 +11,7 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // Intentional quest navigation, gate, market, flight, class-skill, audio, VFX and cosmetic-safeguard changes. Keep snapshot
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
+{"path": "core/001-storage-and-dom.js", "bytes": 2990, "sha256": "42023b85a09000c8866473b8aee36c685f5269877962e1ad09e098f9769b2de0"},
 {
   "path": "combat/022-action-timelines.js",
   "bytes": 2517,
@@ -148,18 +149,18 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/046-drawers-and-chat.js",
-    "bytes": 10271,
-    "sha256": "c4a2cfbbacbe63f4b120abc1b8bd41e348480ef55f56873bca4ca8fde326889c"
+    "bytes": 10405,
+    "sha256": "3923a080bd93ede4c63b032d366af9adad5f6a1d3dedd8643579c19ef4f70ad3"
   },
   {
     "path": "ui/048-class-books-and-hotbars.js",
-    "bytes": 51360,
-    "sha256": "ca926c1b6e73ab7f18de783b9c3122879b6454df25286d7a429a9d70d9bc0088"
+    "bytes": 64254,
+    "sha256": "cf03365eacfb7ac46b6cea1daaa6ca23c3c97ed4eeca97c3fc3f107d7490e094"
   },
   {
     "path": "ui/049-skill-graph-and-details.js",
-    "bytes": 60998,
-    "sha256": "577b7ad698b3548b179eb7e2b535e33823055f8f5a9e3842972cc4075d20350b"
+    "bytes": 61357,
+    "sha256": "cd52ae4e037637c0a374df93b31cf21d3b05dbd89d550eccb66fcb1ba12a7d5b"
   },
   {
     "path": "input/058-field-control-bindings.js",
@@ -173,8 +174,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
   "path": "input/039-movement-flight-and-climbing.js",
-  "bytes": 33585,
-  "sha256": "fbb8cee0b96a2804f0877b4f76f94e47c8a3f429ff19e61a55c362297216966c"
+  "bytes": 33846,
+  "sha256": "53fad71e5cfab006302818cd3c73b3d2d021a76b1f43d1b5d9b8e2755feb073e"
 },
   {
     "path": "ui/047-maps-and-strategy.js",
@@ -228,8 +229,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/042-vitals-chat-and-status.js",
-    "bytes": 33682,
-    "sha256": "d02aeba9ac5d00f48cdd1144519ec6da53e0d3a37cb419b266bca3845dfb3626"
+    "bytes": 33768,
+    "sha256": "358e485adb9e2f119f7f41ef3ed2d6f2853f713950194a79fafa1531ad0edb4b"
   }
 ].map(entry => [entry.path, entry]));
 
@@ -238,8 +239,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1664048);
-  assert.equal(hash(bytes), 'ad28ef2e66f64a08d6e2051bc1298a04e06fcfa2e7df4e00b8f01e2dfa5bf8ca');
+  assert.equal(bytes.length, 1678056);
+  assert.equal(hash(bytes), '0e065eca4a69e68823da8eec00edda717b8e4a4227018648747e6712f67caa9b');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

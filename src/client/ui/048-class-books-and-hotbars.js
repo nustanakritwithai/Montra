@@ -592,3 +592,119 @@
     arrangeFieldSlots(bar,slots,skills,openSwordTree);
     positionSwordToast();
   }
+  // Two visible banks preserve every core action without changing the saved class contracts.
+  let fieldSkillBank="core", fieldSkillOwner=null, advancedHotbarKey="", skillLoadoutKey="", skillLoadoutPending=null;
+  function advancedSkillData() {
+    const me=ownServerCharacter();if(mode!=="live" || !room || !me)return null;
+    const path=me.pathId,kind={phutthaisawan:"sword",muay_boran:"muay",blade:"blade",sentinel:"sentinel",seer:"occult",mender:"occult"}[path];
+    let book,lessons,slots,cooldowns;
+    if(kind==="sword") {const data=swordData();if(!data)return null;book=data.tree;lessons=data.catalog.nodes;slots=book.loadouts?.[book.school];cooldowns=book.cooldowns;}
+    else if(kind==="muay") {const data=muayBookData();if(!data)return null;book=data.book;lessons=data.catalog.skills;slots=book.slots;try{cooldowns=JSON.parse(me.muayData || "{}");}catch{return null;}}
+    else {const data=kind==="blade"?bladeBookState:kind==="sentinel"?sentinelBookState:occultBookState;
+      if(!data?.book || (kind==="occult" && data.path!==path))return null;book=data.book;lessons=data.lessons;slots=kind==="occult"?book.loadouts?.[path]:book.slots;cooldowns=book.cooldowns;}
+    if(!kind || !lessons || !Array.isArray(slots))return null;
+    const learned=kind==="occult"?book.learned?.[path]:book.learned;
+    const usable=id=>{const n=lessons[id];if(!n || !learned?.includes(id) || n.effect==="passive")return false;
+      if(kind==="sword")return n.school==="common" || n.school===book.school;
+      if(kind==="muay"){const c=muayBookData()?.catalog;return c?.base?.includes(id) || c?.lessons?.[id]?.school===book.school;}
+      return kind!=="occult" || n.path===path;};
+    return {me,path,kind,book,lessons,slots:slots.map(id=>id && usable(id)?id:null),cooldowns:cooldowns || {}};
+  }
+  function setFieldSkillBank(bank) {
+    fieldSkillBank=bank==="advanced"?"advanced":"core";setTargetedSkill(null);advancedHotbarKey="";
+    syncAdvancedSkillUI();layoutOrbArc();
+  }
+  function syncAdvancedSkillUI() {
+    const wrap=document.querySelector(".learned-bar"),bar=$("advancedHotbar"),toggle=$("skillBankToggle"),config=$("skillLoadoutButton");
+    if(!wrap || !bar || !toggle || !config)return;
+    const owner=classSkillBookIdentity();
+    if(!isCurrentClassSkillBook(fieldSkillOwner)){if(drawerActive==="advancedTarget")closeDrawer();fieldSkillOwner=owner;fieldSkillBank="core";advancedHotbarKey="";skillLoadoutPending=null;setTargetedSkill(null);}
+    const active=mode==="live" && !!CORE_GRAPH_IDS[owner.path],data=active?advancedSkillData():null;
+    toggle.hidden=config.hidden=!active;toggle.disabled=!data;toggle.textContent=fieldSkillBank==="advanced"?"วิชาเสริม ▸ แกน":"วิชาแกน ▸ เสริม";
+    toggle.setAttribute("aria-pressed",String(fieldSkillBank==="advanced"));toggle.onclick=()=>setFieldSkillBank(fieldSkillBank==="advanced"?"core":"advanced");config.onclick=openSkillLoadout;
+    const bank=active && data?fieldSkillBank:"core";
+    if(wrap.dataset.skillBank!==bank){wrap.dataset.skillBank=bank;layoutOrbArc();}
+    for(const core of wrap.querySelectorAll(".sword-hotbar:not(#advancedHotbar)"))core.inert=bank==="advanced";
+    bar.hidden=bank!=="advanced";
+    if(data && bank==="advanced"){
+      const {me,slots,lessons,cooldowns,kind}=data;
+      const times=slots.map(id=>Math.max(0,Math.ceil(((cooldowns[id]||0)-Date.now())/1000)));
+      const grapple=kind==="muay" && muayGrabTarget && performance.now()<muayGrabUntil;
+      const key=JSON.stringify([owner.path,slots,times,me.alive,me.stunned,grapple,affordKey(slots,lessons,me)]);
+      if(key!==advancedHotbarKey){advancedHotbarKey=key;bar.replaceChildren();
+        slots.forEach((id,i)=>{const node=id && lessons[id],b=document.createElement("button"),finish=id==="grapple" && grapple;
+          b.type="button";b.className="sword-hotkey";b.textContent=node?(finish?"ทุ่ม":node.name+(times[i]?" "+times[i]+" วิ":"")):"ช่องว่าง";
+          b.disabled=!node || !me.alive || me.stunned || Boolean(times[i] && !finish);
+          b.onclick=()=>{if(isCurrentClassSkillBook(owner))useAdvancedSkill(id);};if(node && !times[i] && !finish)staminaCost(b,node.stamina,me);bar.append(b);});
+        arrangeFieldSlots(bar,slots,lessons,openSkillLoadout);layoutOrbArc();
+      }
+    }
+    if(drawerActive==="skillLoadout"){
+      if(!isCurrentClassSkillBook(classSkillBookOwner))closeDrawer();else renderSkillLoadout();
+    }
+  }
+  function useAdvancedSkill(id) {
+    const data=advancedSkillData();if(!data || fieldSkillBank!=="advanced" || !data.slots.includes(id))return;
+    const {kind,me,lessons}=data,node=lessons[id],owner=classSkillBookIdentity();
+    const button=Array.from($("advancedHotbar")?.querySelectorAll("button") || []).find(b=>b.dataset.skillId===id);
+    if(!node || !button || button.disabled || !me.alive || me.stunned)return;
+    if(kind==="sword")return useSwordSkill(id);
+    if(kind==="muay"){
+      if(weaponModelFor(me.equippedWeaponId,me.pathId)!=="muay_wraps")return toast("สวมผ้าคาดเชือกก่อนใช้วิชามวย");
+      if(id==="grapple" && muayGrabTarget && performance.now()<muayGrabUntil){room.send("muay_skill",{skillId:id,targetId:muayGrabTarget});return;}
+      if(["guard","parry","evade"].includes(node.effect)){room.send("muay_skill",{skillId:id});return;}
+      selectedMuaySkill=id;
+    }else if(kind==="blade"){
+      if(!["approach","strike","consume","windup","counter"].includes(node.effect)){room.send("blade_skill",{skillId:id});return;}selectedBladeSkill=id;
+    }else if(kind==="sentinel"){
+      if(["ward","intercept"].includes(node.effect))return chooseAdvancedAlly(id,node,"sentinel_skill",owner,node.effect==="intercept");
+      if(!["stun","slam","counter","step"].includes(node.effect)){room.send("sentinel_skill",{skillId:id});return;}selectedSentinelSkill=id;
+    }else if(kind==="occult"){
+      if(["spirit","spirit_bind","spirit_heal","spirit_ward","trance"].includes(node.effect)){
+        if(!me.possessionActive && !room.state.summons?.has(localId)){room.send("pot_summon",{});return toast("เรียกผีใช้ 15 มานา · กดวิชาอีกครั้งเมื่อผีปรากฏ");}
+        if(node.effect==="trance" && !me.possessionActive){room.send("possess",{});return toast("เข้าทรงใช้ 15 มานา · กดวิชาอีกครั้งเมื่อเข้าทรงแล้ว");}
+      }
+      if(["heal","spirit_heal","ward","cleanse","spirit_ward"].includes(node.effect))return chooseAdvancedAlly(id,node,"occult_skill",owner);
+      if(!["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind","pve_rice"].includes(node.effect)){room.send("occult_skill",{skillId:id});return;}selectedOccultSkill=id;
+    }
+    setTargetedSkill(kind);
+    const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
+    if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId)castAtTarget(targetId);else toast(node.name+" · แตะเป้าหมาย");
+  }
+  function chooseAdvancedAlly(id,node,command,owner,otherOnly=false) {
+    const data=advancedSkillData();if(!data)return;
+    const ids=[...new Set([localId,...(partyState?.members || []).map(m=>m.sessionId)])];
+    const allies=ids.map(id=>[id,room?.state?.players?.get?.(id)]).filter(([id,p])=>p?.alive && (!otherOnly || id!==localId) && (p.mapId || "ritual_village")===activeMapId && Math.hypot(data.me.x-p.x,data.me.y-p.y,data.me.z-p.z)<=node.range);
+    if(!allies.length)return toast("ต้องมีเพื่อนร่วมปาร์ตี้ในระยะ "+node.range+" หน่วย");
+    const send=targetId=>{if(!isCurrentClassSkillBook(owner) || !advancedSkillData()?.slots.includes(id))return;room.send(command==="sentinel_skill"?"sentinel_skill":"occult_skill",{skillId:id,targetId});};
+    if(allies.length===1 && allies[0][0]===localId)return send(localId);
+    openDrawer("advancedTarget","เลือกผู้รับ "+node.name,'<div id="advancedTargetList"></div>');
+    for(const [targetId,p] of allies){const b=document.createElement("button");b.type="button";b.className="secondary";b.textContent=(p.characterName || "ผู้เล่น")+(targetId===localId?" · คุณ":"");b.onclick=()=>{if(drawerActive!=="advancedTarget")return;closeDrawer();send(targetId);};$("advancedTargetList").append(b);}
+  }
+  function openSkillLoadout() {
+    if(mode!=="live" || !ownServerCharacter())return toast("เข้า LIVE เพื่อจัดช่องสกิล");
+    skillLoadoutKey="";openClassBookDrawer("skillLoadout","ปรับแต่งสกิล",'<div id="skillLoadoutBody"></div>');renderSkillLoadout();
+  }
+  function renderSkillLoadout() {
+    const el=$("skillLoadoutBody");if(!el || drawerActive!=="skillLoadout" || !isCurrentClassSkillBook(classSkillBookOwner))return;
+    const data=advancedSkillData(),core=coreSkillGraphData();
+    if(!data || !core){el.textContent="กำลังรอตำราจากเซิร์ฟเวอร์…";skillLoadoutKey="";return;}
+    const model=skillGraphModel(data.kind),owner=classSkillBookOwner,slotsKey=JSON.stringify(data.slots);
+    if(skillLoadoutPending && (skillLoadoutPending.slots!==slotsKey || performance.now()>skillLoadoutPending.until))skillLoadoutPending=null;
+    const pending=!!skillLoadoutPending,key=JSON.stringify([model.key,core.ids,fieldSkillBank,pending]);
+    if(key===skillLoadoutKey)return;
+    // Do not replace an open native mobile picker while a state patch arrives.
+    if(el.contains(document.activeElement) && document.activeElement.matches("select"))return;
+    skillLoadoutKey=key;
+    const choices=model.nodes.filter(n=>n.canEquip && !n.passive);
+    el.innerHTML=`<div class="skill-loadout"><p>สลับแถบได้ขณะเล่น วิชาแกน 4 ช่องยังอยู่ครบ วิชาเสริมใช้ช่องที่เซิร์ฟเวอร์บันทึกไว้</p><div class="skill-bank-choices"><button type="button" data-loadout-bank="core" aria-pressed="${fieldSkillBank==="core"}">วิชาแกน</button><button type="button" data-loadout-bank="advanced" aria-pressed="${fieldSkillBank==="advanced"}">วิชาเสริม</button></div><h3>วิชาแกน 4 ช่อง</h3><div class="loadout-core">${core.ids.map((id,i)=>`<span>${i+1}. ${sgEsc(core.catalog.core[id].name)}</span>`).join("")}</div><h3>จัดช่องวิชาเสริม</h3><p class="note">จัดช่องที่ลานพักหลังพ้นการต่อสู้ 5 วินาที เลือกเฉพาะวิชาที่เรียนแล้วในสำนักที่ใช้อยู่ วิชาติดตัวทำงานเอง</p>${data.slots.map((id,i)=>`<label class="loadout-slot"><strong>ช่อง ${i+1}</strong><select data-loadout-slot="${i}" aria-label="วิชาเสริมช่อง ${i+1}" ${pending?"disabled":""}><option value="">ว่าง</option>${choices.map(n=>`<option value="${sgEsc(n.id)}" ${id===n.id?"selected":""}>${sgEsc(n.name)}</option>`).join("")}</select></label>`).join("")}<p class="note" role="status">${pending?"กำลังรอเซิร์ฟเวอร์ยืนยันช่อง…":choices.length?"ช่องที่แสดงมาจากข้อมูลเซิร์ฟเวอร์":"ยังไม่มีวิชาเสริมพร้อมใช้ เปิดผังเพื่อเรียนวิชาก่อน"}</p><button type="button" class="secondary" id="loadoutLearn">เปิดผังเพื่อเรียนวิชา</button><button type="button" id="loadoutPlay">ใช้แถบนี้แล้วกลับไปเล่น</button></div>`;
+    const current=()=>drawerActive==="skillLoadout" && isCurrentClassSkillBook(owner);
+    el.querySelectorAll("[data-loadout-bank]").forEach(b=>b.onclick=()=>{if(current()){setFieldSkillBank(b.dataset.loadoutBank);renderSkillLoadout();}});
+    el.querySelectorAll("[data-loadout-slot]").forEach(select=>select.onchange=()=>{
+      if(!current() || skillLoadoutPending)return;
+      const slot=Number(select.dataset.loadoutSlot),id=select.value || null;
+      if(id===data.slots[slot])return select.blur();
+      skillLoadoutPending={slots:slotsKey,until:performance.now()+5000};model.equip(id,slot);select.blur();renderSkillLoadout();
+    });
+    $("loadoutLearn").onclick=()=>{if(current())openFieldDeepTraining();};$("loadoutPlay").onclick=()=>{if(current())closeDrawer();};
+  }

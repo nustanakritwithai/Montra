@@ -177,7 +177,7 @@
       `<path class="sg-group-edge" data-sg-group-edge="${sgEsc(n.id)}" d="M${n._x} 54 V${n._y - 26}"/>`).join("") : "";
     const lanesHtml = L.lanes.map(l => `<div class="sg-lane${l.active ? " active" : ""}" style="left:${l.x}px;width:${l.w}px"><b>${sgEsc(l.name)}</b>${l.note ? `<small>${sgEsc(l.note)}</small>` : ""}${l.active ? `<em>ใช้อยู่</em>` : l.choose ? `<button type="button" data-sg-school="${sgEsc(l.id)}">เลือกใช้</button>` : ""}</div>`).join("");
     const nodesHtml = model.nodes.filter(n => n._x != null).map(n => `<button type="button" class="sg-node ${n._state}${n.id === sel ? " sel" : ""}${n.basic ? " basic" : ""}" data-sg-node="${sgEsc(n.id)}" style="left:${n._x}px;top:${n._y}px" aria-label="${sgEsc(n.name)}">
-      <span class="sg-orb">${SG_GLYPH[n.effect] || "✦"}${n.slot >= 0 ? `<i class="sg-slot" title="${advanced ? "ช่องวิชาเสริมสำหรับฝึก " : "ช่องลัด "}${n.slot + 1}">${n.slot + 1}</i>` : ""}</span><span class="sg-name">${sgEsc(n.name)}</span><span class="sg-lv">${n.basic ? "พื้นฐาน" : n.rankable ? "ขั้นเสริม " + n.rank + "/" + n.rankMax : n.learned ? "เรียนแล้ว" : "Lv." + n.level}</span>${n.rankable ? `<span class="sg-pips">${Array.from({ length: n.rankMax }, (_, i) => `<i class="${i < n.rank ? "on" : ""}"></i>`).join("")}</span>` : ""}</button>`).join("");
+      <span class="sg-orb">${SG_GLYPH[n.effect] || "✦"}${n.slot >= 0 ? `<i class="sg-slot" title="${advanced ? "ช่องลัดวิชาเสริม " : "ช่องลัด "}${n.slot + 1}">${n.slot + 1}</i>` : ""}</span><span class="sg-name">${sgEsc(n.name)}</span><span class="sg-lv">${n.basic ? "พื้นฐาน" : n.rankable ? "ขั้นเสริม " + n.rank + "/" + n.rankMax : n.learned ? "เรียนแล้ว" : "Lv." + n.level}</span>${n.rankable ? `<span class="sg-pips">${Array.from({ length: n.rankMax }, (_, i) => `<i class="${i < n.rank ? "on" : ""}"></i>`).join("")}</span>` : ""}</button>`).join("");
     const n = sel && L.byId.get(sel);
     let detail = `<div class="sg-detail empty">แตะโหนดเพื่อดูวิชา · <span class="sg-key"><i class="k ready"></i>เรียนได้</span><span class="sg-key"><i class="k learned"></i>เรียนแล้ว</span><span class="sg-key"><i class="k locked"></i>ยังล็อก</span></div>`;
     if (n) {
@@ -191,7 +191,7 @@
           <button type="button" class="sg-up" data-sg-upgrade="${sgEsc(n.id)}" ${can ? "" : "disabled"}>${pts < 1 ? "แต้มไม่พอ" : "อัปขั้น · 1 แต้ม"}</button>` : `<p class="sg-passive">ขั้นสูงสุดแล้ว</p>`}</div>`;
       }
       const learnBtn = n.learned ? "" : `<button type="button" class="primary" data-sg-learn="${sgEsc(n.id)}" ${n._state === "ready" ? "" : "disabled"}>${pts < 1 ? "แต้มไม่พอ" : n._state === "ready" ? "เรียน · 1 แต้ม" : "ยังเรียนไม่ได้"}</button>`;
-      const slotBtns = n.canEquip && !n.passive ? `<div class="sg-slots"><span>${advanced ? "ช่องวิชาเสริมสำหรับฝึก" : "ช่องลัด"}</span>${Array.from({ length: model.slotCount }, (_, i) => `<button type="button" data-sg-equip="${i}" class="${n.slot === i ? "on" : ""}">${i + 1}</button>`).join("")}</div>` : n.learned && n.passive ? `<p class="sg-passive">ติดตัวแล้ว · ทำงานเองตลอด</p>` : "";
+      const slotBtns = n.canEquip && !n.passive ? `<div class="sg-slots"><span>${advanced ? "ช่องลัดวิชาเสริม" : "ช่องลัด"}</span>${Array.from({ length: model.slotCount }, (_, i) => `<button type="button" data-sg-equip="${i}" class="${n.slot === i ? "on" : ""}">${i + 1}</button>`).join("")}</div>` : n.learned && n.passive ? `<p class="sg-passive">ติดตัวแล้ว · ทำงานเองตลอด</p>` : "";
       detail = `<div class="sg-detail"><div class="sg-dh"><span class="sg-orb sm ${n._state}">${SG_GLYPH[n.effect] || "✦"}</span><div><strong>${sgEsc(n.name)}</strong><small>${sgEsc(sgCombatLine(n))}</small></div></div>
         <p>${sgEsc(n.description || "")}</p>${n.checks.length ? `<ul class="sg-checks">${n.checks.map(c => `<li class="${c.ok ? "ok" : "no"}">${c.ok ? "✓" : "✗"} ${sgEsc(c.label)}</li>`).join("")}</ul>` : ""}
         ${!n.learned && missing.some(c => /^ใช้สำนัก/.test(c.label)) ? `<p class="note">เลือกใช้สำนักนี้ที่หัวคอลัมน์ก่อน (ทำได้ที่ลานพัก)</p>` : ""}${learnBtn}${rankHtml}${slotBtns}</div>`;
@@ -367,15 +367,16 @@
   function openClassBookDrawer(kind, title, html) {
     classSkillBookOwner = classSkillBookIdentity();
     closeSkillDetailModal();
-    const advancedEntry = mode === "live" && kind !== "fieldSkills" && !!CORE_GRAPH_IDS[classSkillBookOwner.path];
-    openDrawer(kind, title, (advancedEntry ? '<button id="classAdvancedBook" type="button" class="secondary">ผังสกิลทั้งหมด · วิชาแกนและวิชาเสริม</button>' : "") + html);
+    const advancedEntry = mode === "live" && kind !== "fieldSkills" && kind !== "skillLoadout" && !!CORE_GRAPH_IDS[classSkillBookOwner.path];
+    openDrawer(kind, title, (advancedEntry ? '<button id="classAdvancedBook" type="button" class="secondary">ผังสกิลทั้งหมด · วิชาแกนและวิชาเสริม</button>' : "") + (mode==="live" && kind!=="skillLoadout" ? '<button id="classSkillLoadout" type="button" class="secondary">ปรับแต่งช่องสกิล</button>' : "") + html);
+    if($("classSkillLoadout")){const owner=classSkillBookOwner;$("classSkillLoadout").onclick=()=>{if(drawerActive===kind && isCurrentClassSkillBook(owner))openSkillLoadout();};}
     if(advancedEntry){
       const owner=classSkillBookOwner;
       $("classAdvancedBook").onclick=()=>{if(drawerActive===kind && isCurrentClassSkillBook(owner))openFieldDeepTraining();};
     }
   }
   function syncClassSkillBookContext() {
-    if (["swordTree", "muayBook", "bladeBook", "sentinelBook", "occultBook", "fieldSkills"].includes(drawerActive) &&
+    if (["swordTree", "muayBook", "bladeBook", "sentinelBook", "occultBook", "fieldSkills", "skillLoadout"].includes(drawerActive) &&
         !isCurrentClassSkillBook(classSkillBookOwner)) {
       closeSkillDetailModal();
       closeDrawer();

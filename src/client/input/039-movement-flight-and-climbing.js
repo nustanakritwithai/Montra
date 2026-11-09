@@ -54,7 +54,7 @@
     const picked = targetedSkill; setTargetedSkill(null);
     const selected = {sword:selectedSwordSkill, muay:selectedMuaySkill, occult:selectedOccultSkill,
       blade:selectedBladeSkill, sentinel:selectedSentinelSkill}[picked];
-    const source=document.querySelector(".learned-bar .sword-hotbar:not([hidden])");
+    const source=document.querySelector('.learned-bar[data-skill-bank="advanced"] #advancedHotbar:not([hidden])') || document.querySelector('.learned-bar:not([data-skill-bank="advanced"]) .sword-hotbar:not([hidden])');
     if(!selected || !Array.from(source?.querySelectorAll("button[data-skill-id]") || []).some(b=>b.dataset.skillId===selected && !b.disabled))return;
     if(picked==="sentinel"){
       const node=sentinelBookState?.lessons?.[selectedSentinelSkill],monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;
@@ -93,7 +93,7 @@
       spellTargetId=id;
       selectedPkTargetId=opponent ? id : null;
       syncPKHud();
-      room.send("muay_core_skill",{skillId:selectedMuaySkill,targetId:id});
+      room.send(muayBookData()?.catalog?.core?.[selectedMuaySkill]?"muay_core_skill":"muay_skill",{skillId:selectedMuaySkill,targetId:id});
       return;
     }
     if (picked === "sword") {
@@ -102,7 +102,7 @@
       if(opponent && partyState?.members?.some(member=>member.sessionId===id)){toast("โจมตีสมาชิกปาร์ตี้ไม่ได้");return;}
       spellTargetId=id;
       selectedPkTargetId=opponent ? id : null;syncPKHud();
-      room.send("sword_core_skill",{skillId:selectedSwordSkill,targetId:id});
+      room.send(swordData()?.catalog?.core?.[selectedSwordSkill]?"sword_core_skill":"sword_skill",{skillId:selectedSwordSkill,targetId:id});
       return;
     }
   }

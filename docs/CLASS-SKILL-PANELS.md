@@ -79,3 +79,11 @@ multiplayer and physical-device QA are distinct from these isolated tests.
 GitHub Pages publication does not install or verify the Windows VPS. Server
 staging, coherent backups and rollback remain separate requirements for any
 future VPS change; this correction needs only a frontend release.
+
+## Advanced loadout follow-up
+
+The core contracts above remain unchanged. The subsequent
+[advanced loadout release](ADVANCED-SKILL-LOADOUT.md) exposes the existing saved
+advanced slots as a separate visible bank, with a mobile configuration drawer.
+It uses the pre-existing authoritative advanced equip and cast commands, without
+replacing or re-equipping core skills.
