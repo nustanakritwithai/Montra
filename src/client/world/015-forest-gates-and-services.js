@@ -142,9 +142,7 @@
     for(let i=0;i<7;i++){const h=.18+noise(i,x)*.22,cx=-1.1+i*.37;cyl(cx,.84+h/2,1.15,h,.09,.09,waxMat,6);cyl(cx,.9+h,1.15,.12,.07,0,candleMat,4);}
     for(const side of [-1,1]){cyl(side*2.6,1.5,1.6,3,.08,.08,darkWood,5);box(side*2.6+side*.22,2.4,1.6,.4,1.0,.03,clothRed);}
     const pool=lightPool(x,z+1.6*size,3.2*size,.05);pool.isPickable=false;parts.push(pool);
-    const byMaterial=new Map();
-    for(const part of parts){if(!byMaterial.has(part.material))byMaterial.set(part.material,[]);byMaterial.get(part.material).push(part);}
-    for(const group of byMaterial.values()){const mesh=group.length>1?B.Mesh.MergeMeshes(group,true,true):group[0];if(mesh){mesh.isPickable=false;if(parent)mesh.parent=parent;}}
+    for(const {mesh} of mergeByCell(parts)){if(parent)mesh.parent=parent;}
   }
   shrineRuin(0,-12,forestRoot,.8);
   // ---- Spirit gates: every warp point is an occult Thai gateway ----
@@ -298,9 +296,7 @@
       if(k%3===0){const tag=B.MeshBuilder.CreateBox("ward talisman",{width:.18,height:.3,depth:.02},scene);
         tag.position.set(x,.48,z);tag.rotation.y=-Math.atan2(nz-z,nx-x);tag.material=talismanPaper;parts.push(tag);}
     }
-    const byMaterial=new Map();
-    for(const m of parts){m.isPickable=false;if(!byMaterial.has(m.material))byMaterial.set(m.material,[]);byMaterial.get(m.material).push(m);}
-    for(const group of byMaterial.values()){const merged=B.Mesh.MergeMeshes(group,true,true);if(merged){merged.isPickable=false;merged.parent=parent;}}
+    for(const {mesh} of mergeByCell(parts))mesh.parent=parent;
   }
   const villagePortal=makePortal("ritual_village");
   const forestPortal=makePortal("forbidden_forest",forestRoot);forestRoot.setEnabled(false);

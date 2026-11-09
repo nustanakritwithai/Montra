@@ -330,6 +330,9 @@
     if (parts.length === 1) parts[0].bakeCurrentTransformIntoVertices();
     const mesh = mergedSegment(parts, node, name), j = GEAR_REST[bone];
     mesh.position.set(-j[0], -j[1], -j[2]); mesh.alwaysSelectAsActiveMesh = true;
+    // Rings, earrings, necklaces and armbands are a pixel or two past the middle distance; armour pieces
+    // last to the far band. The body itself carries the silhouette all the way to the fog.
+    if (typeof trackViewLod === "function") trackViewLod(mesh, [[/^(gear (leftRing|rightRing|leftEar|rightEar|neck)|prajiad)/.test(name) ? "detail" : "far", null]]);
     return mesh;
   }
   // ---- Armour slots. Each builder returns [bone, parts] pairs. ----

@@ -367,16 +367,9 @@
     }
   }
   {
-    const byMaterial = new Map();
-    for (const part of villageParts) {
-      if (!byMaterial.has(part.material)) byMaterial.set(part.material, []);
-      byMaterial.get(part.material).push(part);
-    }
-    for (const parts of byMaterial.values()) {
-      const anchors=parts.map(p=>{p.computeWorldMatrix(true);const c=p.getBoundingInfo().boundingBox.centerWorld;return {x:c.x,z:c.z,count:p.getTotalVertices()};});
-      const merged = parts.length > 1 ? B.Mesh.MergeMeshes(parts, true, true) : parts[0];
-      if (merged){merged.isPickable=false;villageBatches.push({mesh:merged,anchors});}
-    }
+    // Per material and per map cell, so the camera only draws the blocks of the village it can see.
+    const anchorsOf = parts => parts.map(p=>{p.computeWorldMatrix(true);const c=p.getBoundingInfo().boundingBox.centerWorld;return {x:c.x,z:c.z,count:p.getTotalVertices()};});
+    for (const { mesh, info } of mergeByCell(villageParts, { before: anchorsOf })) villageBatches.push({ mesh, anchors: info });
     boatNodes.forEach(node => node.dispose());
   }
   // Village sword mentor; teaching remains server-authoritative at the rest area.

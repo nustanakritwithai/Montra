@@ -157,8 +157,7 @@
       g.setVerticesData(B.VertexBuffer.PositionKind,pos);g.setVerticesData(B.VertexBuffer.UVKind,uv);g.setVerticesData(B.VertexBuffer.UV2Kind,uv2);
       const kind=kinds[n%kinds.length];if(!byKind.has(kind))byKind.set(kind,[]);byKind.get(kind).push(g);n++;
     }
-    for(const [kind,parts] of byKind){
-      const mesh=B.Mesh.MergeMeshes(parts,true,true);if(!mesh)continue;
+    for(const [kind,parts] of byKind)for(const {mesh} of mergeByCell(parts,{key:()=>kind,cell:48})){
       mesh.name=map.id+" ground patches "+kind;mesh.parent=expansionRoot;mesh.isPickable=false;mesh.material=groundPatchMaterial(kind,base);mesh.metadata={noShadow:true};
     }
   }
@@ -315,10 +314,7 @@
       sceneryPoint("stone",x,z-1.5,1.05);
       placeRock("plain",x,terrainHeight(t,x,z-1.5),z-1.5,{parent:expansionRoot,scale:1.05}); // shale outcrop from the rock kit
     }
-    for(const m of new Set(ornaments.map(p=>p.material))){
-      const group=ornaments.filter(p=>p.material===m),merged=B.Mesh.MergeMeshes(group,true,true);
-      if(merged){merged.parent=expansionRoot;merged.isPickable=false;}
-    }
+    for(const {mesh} of mergeByCell(ornaments))mesh.parent=expansionRoot;
   }
   function buildRegion(map,paint) {
     let parts=[];
@@ -342,10 +338,8 @@
       return put(B.MeshBuilder.CreateSphere("region knob",{diameter:d,segments:5},scene),x,y,z,m);
     }
     function finish(name,cover=false){
-      for(const material of new Set(parts.map(p=>p.material))){
-        const group=parts.filter(p=>p.material===material);
-        const mesh=group.length===1?group[0]:B.Mesh.MergeMeshes(group,true,true);
-        mesh.name=map.id+" "+name;mesh.parent=expansionRoot;mesh.isPickable=false;
+      for(const {mesh} of mergeByCell(parts)){
+        mesh.name=map.id+" "+name;mesh.parent=expansionRoot;
         if(cover)templeCover.push(mesh);
       }
       parts=[];

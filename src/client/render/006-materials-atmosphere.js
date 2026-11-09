@@ -304,7 +304,7 @@
     for (const [a, b, uu, vv] of [[-1, -1, 0, 0], [1, -1, 1, 0], [1, 1, 1, 1], [-1, 1, 0, 1]]) {
       g.p.push(c[0] + (ux * a + vx * b) * h, c[1] + (uy * a + vy * b) * h, c[2] + (uz * a + vz * b) * h); g.uv.push(uu, vv); g.c.push(col[0], col[1], col[2], 1);
     }
-    g.i.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    g.i.push(base, base + 1, base + 2, base, base + 2, base + 3); (g.cards ||= []).push(base);
   }
   function treeFoliage(parts, x, y, z, r, sy, hex, topHex, rng) {
     if (!foliageSink) { parts.push(treeBlob(x, y, z, r, sy, hex, topHex, rng)); return; }
@@ -326,7 +326,7 @@
         g.p.push(cx + (vx * a + ux * b) * h, cy + (vy * a + uy2 * b) * h, cz + (vz * a + uz * b) * h);
         g.uv.push(flip ? 1 - uu : uu, vv); g.c.push(col[0], col[1], col[2], 1);
       }
-      g.i.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      g.i.push(base, base + 1, base + 2, base, base + 2, base + 3); (g.cards ||= []).push(base);
     }
   }
   function treeCone(x, y, z, h, rb, rt, hex, tess = 5, rotX = 0, rotZ = 0) {
@@ -460,6 +460,86 @@
       treeCluster(parts, trunk[6][0], 3.9, trunk[6][2], 1.55, .8, "#33582b", "#729f50", rng);
     },
   };
+  // ---- View distance: near / mid / far models, and nothing past the fog ----
+  // Distances are from the camera and follow the zoom and the map's fog every frame: crowns thin out to
+  // fewer, larger leaf cards in the middle distance and to a sparse silhouette further out, small undergrowth
+  // and gear trims drop away once they are a few pixels, and everything stops drawing where the fog has
+  // swallowed it, so the cut is never seen. Instances share their master's levels (one update per master).
+  const viewLods = []; let viewLodKey = "", viewLodAdds = 0;
+  const viewRange = { cull: 300, far: 160, mid: 110, small: 120, detail: 100 };
+  function trackViewLod(mesh, steps) {
+    if (!mesh || typeof mesh.addLODLevel !== "function") return mesh;
+    const levels = [];
+    steps.forEach(([band, lodMesh], k) => {
+      const d = 1e6 - k; mesh.addLODLevel(d, lodMesh || null);
+      const level = mesh.getLODLevels().find(l => l.distanceOrScreenCoverage === d);
+      if (level) levels.push([level, band]);
+    });
+    // Map switches dispose whole batches: drop their entries now and then so the list does not grow.
+    if (++viewLodAdds % 256 === 0) for (let i = viewLods.length - 1; i >= 0; i--) if (viewLods[i].mesh.isDisposed()) viewLods.splice(i, 1);
+    viewLods.push({ mesh, levels }); viewLodKey = "";
+    return mesh;
+  }
+  function updateViewDistance() {
+    const R = camera.radius, F = scene.fogEnd, S = scene.fogStart, key = Math.round(R) + ":" + Math.round(F) + ":" + viewLods.length;
+    if (key === viewLodKey) return; viewLodKey = key;
+    // Past ~93% fog a mesh is the fog colour to within a shade; the ground under it is fogged the same.
+    const cull = Math.max(R + 30, F - (F - S) * .07);
+    viewRange.cull = cull;
+    viewRange.far = Math.min(cull - 1, R + (LITE ? 50 : 75));
+    viewRange.mid = Math.min(viewRange.far - 1, R + (LITE ? 24 : 36));
+    viewRange.small = Math.min(cull, R + (LITE ? 45 : 70));
+    viewRange.detail = Math.min(cull, R + (LITE ? 28 : 42));
+    // Levels are kept in descending order (Babylon walks them first to last): the k-th step of a mesh sits
+    // a hair inside the one before it even when two bands clamp to the same distance.
+    for (const { levels } of viewLods) {
+      let prev = Infinity;
+      for (const [level, band] of levels) { const d = Math.min(viewRange[band], prev - .01); level.distanceOrScreenCoverage = d; prev = d; }
+    }
+  }
+  // A thinner copy of a leaf-card sink: keeps one card in `every`, grown about its centre so the crown keeps
+  // its outline and roughly its coverage with a half or a quarter of the cards. Fronds (strips) stay whole.
+  function leafCardLod(sink, normals, every, grow, name, material) {
+    const p = sink.p.slice(), owner = new Int32Array(p.length / 3).fill(-1), drop = new Uint8Array(sink.cards.length);
+    sink.cards.forEach((b, n) => {
+      for (let v = 0; v < 4; v++) owner[b + v] = n;
+      if (n % every) { drop[n] = 1; return; }
+      for (let k = 0; k < 3; k++) {
+        const c = (p[b * 3 + k] + p[b * 3 + 3 + k] + p[b * 3 + 6 + k] + p[b * 3 + 9 + k]) / 4;
+        for (let v = 0; v < 4; v++) p[(b + v) * 3 + k] = c + (p[(b + v) * 3 + k] - c) * grow;
+      }
+    });
+    const idx = [];
+    for (let t = 0; t < sink.i.length; t += 3) { const o = owner[sink.i[t]]; if (o < 0 || !drop[o]) idx.push(sink.i[t], sink.i[t + 1], sink.i[t + 2]); }
+    const m = new B.Mesh(name, scene), vd = new B.VertexData();
+    Object.assign(vd, { positions: p, indices: idx, uvs: sink.uv, colors: sink.c, normals }); vd.applyToMesh(m);
+    m.material = material; m.isPickable = false; m.isVisible = false; m.position.y = -500;
+    m.metadata = { thaiTreeMaster: true, lodOf: name };
+    return m;
+  }
+  // Static parts merged per material *and* per map cell: one map-wide mesh is always "in view", so the GPU
+  // drew all of it every frame; per-cell batches let the frustum and the fog distance drop what is not seen.
+  const BATCH_CELL = 24;
+  // opts.key groups parts (default: material); opts.before(group) runs on each group before it is merged
+  // and its result is returned as `info` (the village keeps per-part anchors for terrain seating).
+  function mergeByCell(parts, opts = {}) {
+    const keyOf = opts.key || (p => p.material), cell = opts.cell || BATCH_CELL, groups = new Map();
+    for (const part of parts) {
+      part.computeWorldMatrix(true);
+      const c = part.getBoundingInfo().boundingBox.centerWorld, k = keyOf(part);
+      if (!groups.has(k)) groups.set(k, new Map());
+      const cells = groups.get(k), id = Math.floor(c.x / cell) + ":" + Math.floor(c.z / cell);
+      if (!cells.has(id)) cells.set(id, []);
+      cells.get(id).push(part);
+    }
+    const out = [];
+    for (const cells of groups.values()) for (const group of cells.values()) {
+      const info = opts.before ? opts.before(group) : undefined;
+      const mesh = group.length > 1 ? B.Mesh.MergeMeshes(group, true, true) : group[0];
+      if (mesh) { mesh.isPickable = false; trackViewLod(mesh, [["cull", null]]); out.push({ mesh, info }); }
+    }
+    return out;
+  }
   // Build (once) and return the hidden master mesh for a species variant.
   function thaiTreeMaster(species, variant = 0) {
     const key = species + ":" + variant; if (thaiTreeMasters.has(key)) return thaiTreeMasters.get(key);
@@ -476,10 +556,16 @@
       leaves.material = leafCardMaterial(foliageStyle); leaves.isPickable = false; leaves.isVisible = false;
       leaves.metadata = { thaiTree: species, thaiTreeMaster: true }; leaves.parent = mesh;
       mesh.treeLeaves = leaves;
+      // Near: every card. Mid: half the cards, 1.4x. Far: a quarter, 1.95x. Past the fog: nothing.
+      if ((sink.cards?.length || 0) >= 12) trackViewLod(leaves, [["cull", null],
+        ["far", leafCardLod(sink, normals, 4, 1.95, "thai tree leaves far " + key, leaves.material)],
+        ["mid", leafCardLod(sink, normals, 2, 1.4, "thai tree leaves mid " + key, leaves.material)]]);
+      else trackViewLod(leaves, [["cull", null]]);
     }
     // Masters stay enabled (instances need an enabled source) but invisible, and are excluded from the village show/hide list.
     mesh.name = "thai tree " + key; mesh.material = thaiTreeMaterial(); mesh.isPickable = false; mesh.isVisible = false; mesh.position.y = -500;
     mesh.metadata = { thaiTree: species, thaiTreeMaster: true };
+    trackViewLod(mesh, [["cull", null]]);
     thaiTreeMasters.set(key, mesh); return mesh;
   }
   // Scenery that never moves skips its per-frame world-matrix update: only when it sits on the static
@@ -505,6 +591,8 @@
     tree.position.set(x, y, z); tree.rotation.y = opts.rot ?? noise(Math.round(x * 13 + z), 31) * Math.PI * 2;
     tree.scaling.setAll(opts.scale ?? 1); tree.isPickable = false;
     if (opts.parent) tree.parent = opts.parent;
+    // A clone has its own geometry, so it gets its own fog cut (instances use the master's levels).
+    if (opts.clone) { trackViewLod(tree, [["cull", null]]); for (const leaves of tree.getChildMeshes(true)) trackViewLod(leaves, [["cull", null]]); }
     freezeIfStatic(tree, opts);
     return tree;
   }
@@ -621,6 +709,7 @@
     mesh.name = "rock " + key; mesh.isPickable = false; mesh.isVisible = false; mesh.position.y = -500;
     mesh.material = kind === "moss" ? (() => { const m = rockMaterial().clone("rocks moss"); m.diffuseColor = new B.Color3(.6, .62, .6); m.specularColor = new B.Color3(.05, .05, .05); return m; })() : rockMaterial();
     mesh.metadata = { rock: kind, thaiTreeMaster: true }; // the master flag keeps it out of the village show/hide snapshot
+    trackViewLod(mesh, [["cull", null]]);
     rockMasters.set(key, mesh); return mesh;
   }
   // Iron-ore look by material tier (1–7), matching the drops the server already gives.
@@ -652,6 +741,7 @@
     Object.assign(vd, { positions: sink.p, indices: sink.i, uvs: sink.uv, colors: sink.c, normals }); vd.applyToMesh(m);
     m.material = leafCardMaterial(style === "herb" ? "broad" : "general"); m.isPickable = false; m.isVisible = false; m.position.y = -500;
     m.metadata = { thaiTreeMaster: true };
+    trackViewLod(m, [["small", null]]); // knee-high clumps are a few pixels long before the fog takes them
     bushMasters.set(key, m); return m;
   }
   // A bush of about 1.2 m across at scale 1 (sit it on the ground: y is its base).
@@ -942,6 +1032,7 @@
     const wood = finishGeo(bark, "real tree wood " + key, barkM), foliage = finishGeo(leaves, "real tree leaves " + key, leafM);
     foliage.parent = wood;
     wood.isVisible = foliage.isVisible = false; wood.position.y = -500; wood.metadata = { thaiTreeMaster: true, realTree: kind };
+    trackViewLod(wood, [["cull", null]]); trackViewLod(foliage, [["cull", null]]);
     const master = { wood, foliage, leaves: leaves.p.length / 3 / 15, tris: (bark.i.length + leaves.i.length) / 3 };
     thaiTreeMasters.set(key, master); return master;
   }

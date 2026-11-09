@@ -278,6 +278,7 @@
     const merged = B.Mesh.MergeMeshes(parts, true, true, undefined, false, true);
     if (!merged) return;
     merged.name = "weapon trim " + band; merged.parent = root; merged.isPickable = false; merged.alwaysSelectAsActiveMesh = true;
+    if (typeof trackViewLod === "function") trackViewLod(merged, [["detail", null]]);
     root.metadata = { ...root.metadata, trims: { ...trims, [band]: merged } };
   }
   // Forward of the prototype avatar faces local -Z when rotation.y == 0.

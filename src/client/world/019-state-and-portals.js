@@ -41,7 +41,7 @@
       for(const o of map.obstacles||[])ao.push([o.x,o.z,o.radius*2.7,o.radius*2.7]);
       for(const w of map.walls||[])ao.push([w.x+w.width/2,w.z+w.length/2,w.width+2.2,w.length+2.2]);
       const parts=ao.map(([x,z,w,l])=>{const g=B.MeshBuilder.CreateGround("base occlusion",{width:w,height:l},scene);g.position.set(x,.03+(map.terrain?terrainHeight(map.terrain,x,z):0),z);return g;});
-      if(parts.length){const mesh=B.Mesh.MergeMeshes(parts,true,true);mesh.parent=expansionRoot;mesh.material=baseOcclusionMat();mesh.isPickable=false;mesh.metadata={noShadow:true};}}
+      for(const {mesh} of mergeByCell(parts,{cell:48})){mesh.parent=expansionRoot;mesh.material=baseOcclusionMat();mesh.metadata={noShadow:true};}}
     const terrainPaint=paint || {floor:ground.material,road:inTemple?templeReliefRoad:activeMapId==="forbidden_forest"?forestReliefRoad:civicRoad,stone:inTemple?templeStone:forestStone,court:inTemple?templeCourt:forestClearing};
     if(map.terrain)buildTerrainGround(map,terrainPaint);
     else (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic || map.huntTrail)));
