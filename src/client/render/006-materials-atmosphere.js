@@ -486,8 +486,8 @@
   // map root (resource nodes and village trees, which are re-seated or rescaled, stay live).
   function freezeIfStatic(mesh, opts) {
     if (opts.parent?.name !== "world-expansion") return;
-    mesh.computeWorldMatrix(true); mesh.freezeWorldMatrix();
-    for (const child of mesh.getChildMeshes(true)) { child.computeWorldMatrix(true); child.freezeWorldMatrix(); }
+    mesh.computeWorldMatrix(true); mesh.freezeWorldMatrix(); mesh.doNotSyncBoundingInfo = true;
+    for (const child of mesh.getChildMeshes(true)) { child.computeWorldMatrix(true); child.freezeWorldMatrix(); child.doNotSyncBoundingInfo = true; }
   }
   // Place one tree. Returns the instance (its own transform; shares the master's geometry and material).
   function placeThaiTree(species, x, y, z, opts = {}) {

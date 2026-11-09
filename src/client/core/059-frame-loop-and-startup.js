@@ -270,7 +270,7 @@
     marker.rotation.z+=dt*.2;
 
     // Maps are 2D canvases with soft shadows: ~10 redraws per second is plenty.
-    if(now-lastMapDraw>100){
+    if(now-lastMapDraw>(LITE?250:100)){
       lastMapDraw=now;
       drawMap(ui.minimap.getContext("2d"),ui.minimap.width,ui.minimap.height);
       if(drawerActive==="map") {

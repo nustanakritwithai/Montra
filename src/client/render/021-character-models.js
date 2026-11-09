@@ -676,12 +676,15 @@
       Q[k] = x; Q[k + 1] = y; Q[k + 2] = z;
     }
     for (let i = 0; i < pinned; i++) { const k = i * 3; clothAnchor(cloth, i, _clothW); P[k] = Q[k] = _clothW.x; P[k + 1] = Q[k + 1] = _clothW.y; P[k + 2] = Q[k + 2] = _clothW.z; }
-    const s = a.skin.holder?.scaling.x || 1.3, extra = (spec.colliders || []).map(c => {
+    const s = a.skin.holder?.scaling.x || 1.3, extra = cloth.extra ||= (spec.colliders || []).map(() => new Array(7));
+    (spec.colliders || []).forEach((c, j) => {
       _clothV.set(c[0] - GEAR_REST[spec.bone][0], c[1] - GEAR_REST[spec.bone][1], c[2] - GEAR_REST[spec.bone][2]);
-      B.Vector3.TransformCoordinatesToRef(_clothV, cloth.bone.getWorldMatrix(), _clothW); return [_clothW.x, _clothW.y, _clothW.z, _clothW.x, _clothW.y, _clothW.z, c[3] * s];
+      B.Vector3.TransformCoordinatesToRef(_clothV, cloth.bone.getWorldMatrix(), _clothW);
+      const e = extra[j]; e[0] = e[3] = _clothW.x; e[1] = e[4] = _clothW.y; e[2] = e[5] = _clothW.z; e[6] = c[3] * s;
     });
     for (let it = 0; it < (spec.iterations ?? (LITE ? 3 : 5)); it++) {
-      for (const [i, k, len0, stiff] of links) {
+      for (let li = 0; li < links.length; li++) {
+        const L = links[li], i = L[0], k = L[1], len0 = L[2], stiff = L[3];
         const ia = i * 3, kb = k * 3, dx = P[kb] - P[ia], dy = P[kb + 1] - P[ia + 1], dz = P[kb + 2] - P[ia + 2], d = Math.hypot(dx, dy, dz) || 1e-6;
         const rest = len0 * s, diff = (d - rest) / d * .5 * stiff * (spec.stretch ?? 1);
         const ai = i >= pinned ? 1 : 0, bi = k >= pinned ? 1 : 0, tot = ai + bi; if (!tot) continue;
@@ -701,7 +704,22 @@
     a.node.computeWorldMatrix(true).invertToRef(_clothInv);
     const { pos: P, paths, C } = cloth;
     paths.forEach((row, r) => row.forEach((v, c) => { const k = (r * C + c) * 3; _clothV.set(P[k], P[k + 1], P[k + 2]); B.Vector3.TransformCoordinatesToRef(_clothV, _clothInv, v); }));
-    B.MeshBuilder.CreateRibbon(cloth.mesh.name, { pathArray: paths, instance: cloth.mesh, closePath: !!cloth.spec.closed });
+    // Write straight into preallocated vertex buffers: rebuilding the ribbon each frame allocated
+    // fresh arrays per cloth, which showed up as GC spikes on phones.
+    let buf = cloth.buf;
+    if (buf === undefined) {
+      const pos = cloth.mesh.getVerticesData(B.VertexBuffer.PositionKind), side = paths.length * (C + (cloth.spec.closed ? 1 : 0));
+      buf = cloth.buf = pos && pos.length === side * 6 ? { pos: Float32Array.from(pos), nrm: new Float32Array(pos.length), idx: cloth.mesh.getIndices(), side } : null;
+    }
+    if (!buf) { B.MeshBuilder.CreateRibbon(cloth.mesh.name, { pathArray: paths, instance: cloth.mesh, closePath: !!cloth.spec.closed }); return; }
+    const out = buf.pos, back = buf.side * 3, closed = !!cloth.spec.closed;
+    let o = 0;
+    for (const row of paths) {
+      for (let c = 0; c <= (closed ? C : C - 1); c++) { const v = row[c % C]; out[o] = out[back + o] = v.x; out[o + 1] = out[back + o + 1] = v.y; out[o + 2] = out[back + o + 2] = v.z; o += 3; }
+    }
+    B.VertexData.ComputeNormals(out, buf.idx, buf.nrm);
+    cloth.mesh.updateVerticesData(B.VertexBuffer.PositionKind, out, false, false);
+    cloth.mesh.updateVerticesData(B.VertexBuffer.NormalKind, buf.nrm, false, false);
   }
   function updateAvatarCloth(a, dt, now) {
     if (!a.cloths?.length || !a.skin) return;

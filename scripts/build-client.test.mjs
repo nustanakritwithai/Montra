@@ -12,9 +12,24 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
 {
+  "path": "render/009-effects-and-target-hud.js",
+  "bytes": 20720,
+  "sha256": "3adb3f4cd01996c562017bedfdbbb05db4743d3c72c96b86f8bcb027d70d5baf"
+},
+{
+  "path": "combat/005-floating-feedback.js",
+  "bytes": 4484,
+  "sha256": "e20bdd0428d9a967732d3c35884e40680e2e121f66e592ca301539dbc9f01684"
+},
+{
+  "path": "render/004-scene-camera-lights.js",
+  "bytes": 14121,
+  "sha256": "9866298a9743ed939b8953b51e922626e68043cd30ea427095d3e5ac8632dfdd"
+},
+{
   "path": "world/029-fishing-and-resources.js",
-  "bytes": 13255,
-  "sha256": "7a2009556926749651397b24be68677d46803f9bf935629ffc0b22a55eda7f86"
+  "bytes": 13100,
+  "sha256": "af4aaa53b7b93abd08b8277027fb7ed1e3984bec3354a549d9a9b4312d7952ca"
 },
 {
   "path": "world/019-state-and-portals.js",
@@ -28,13 +43,13 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/017-region-terrain.js",
-  "bytes": 61185,
-  "sha256": "4bc6197d313d26171bff99fbd63a5a7de98355c9e359bb86a469024642e37972"
+  "bytes": 61341,
+  "sha256": "3efb48822b9a6fe0009133724c0a3c511a03d8198917684c8df1eb55fa5c7be0"
 },
 {
   "path": "world/016-forest-and-temple.js",
-  "bytes": 19712,
-  "sha256": "2735da1dfaa00f6c3dcb0cc2f0c8cd95016e9f74de5b302042ae0a7e411e9c45"
+  "bytes": 20177,
+  "sha256": "1f48d6d32dc19e191f708cb1c92638ac454ead41a9b4b780016c33ace8b0e44a"
 },
 {
   "path": "world/015-forest-gates-and-services.js",
@@ -63,13 +78,13 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/025-horse-and-avatar-animation.js",
-  "bytes": 44774,
-  "sha256": "f07dabb370d1accc700d32a5acad72f6f01459d363a6e56ca4079ab0b5a45712"
+  "bytes": 44809,
+  "sha256": "d556ef06d4ad9ceb2340493b076f6a419245fc962422e9f77ee374431a23f4b2"
 },
 {
   "path": "render/021-character-models.js",
-  "bytes": 38720,
-  "sha256": "dced881523152655fa1b3baf1cb16ede316f8006c0118c259aebc5d8eeea7ca2"
+  "bytes": 55561,
+  "sha256": "aad57f769d24049220c107be53e58b884dc35fc03314b647ea6e131171c51ccd"
 },
 {
   "path": "render/020-avatar-materials-and-meshes.js",
@@ -78,8 +93,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/006-materials-atmosphere.js",
-  "bytes": 52193,
-  "sha256": "cd7427f522c299acf6351e6ef75d54929aa06387100ecbb0b27734ed60105c51"
+  "bytes": 76860,
+  "sha256": "559d7b4fafae38fec40cac137f6cb69572abca82d733b7787bedae57ff777c9b"
 },
 {
   "path": "network/044-state-sync-and-connection.js",
@@ -88,8 +103,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
-  "bytes": 19066,
-  "sha256": "3005aff3fb353bbebf1aa1338042e0c35d6c4b77528eaf6022ce82bbb607e7f3"
+  "bytes": 19091,
+  "sha256": "787c2663ba56731f8d4d571c6e022c3db23dcb58381adfb38707740b3c6cef28"
 },
   {
     "path": "ui/053-gear-training-and-crafting.js",
@@ -162,11 +177,6 @@ const reviewedReleaseFragments = new Map([
     "sha256": "a99a57a1c090788a9a9c3abab6d3a466575bc5b8f3d99a6affc8db2b7d7f16e2"
   },
   {
-    "path": "render/009-effects-and-target-hud.js",
-    "bytes": 20832,
-    "sha256": "5014dcad2b9efcc43dc84c7d5635a1ba45a6eba6aef38cdd6c571d4aa79b46c6"
-  },
-  {
     "path": "combat/038-demo-and-monster-state.js",
     "bytes": 7525,
     "sha256": "d931f47b6f143af85b433b2e7f96a1e43d9ab75ab285fd9312f74b4257745aff"
@@ -213,8 +223,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1579352);
-  assert.equal(hash(bytes), 'f156b3f2d06d31312161e7ef8a738fc86d6bf28fd9561eacdc7ad7d80da37317');
+  assert.equal(bytes.length, 1623402);
+  assert.equal(hash(bytes), '024e92d4e381d8fbc3dfbd929958dd1f339f609345a214439b66d17aba8e8de7');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

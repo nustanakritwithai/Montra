@@ -164,8 +164,10 @@
       const sphere=crown.getBoundingInfo().boundingSphere, p=sphere.centerWorld;
       const x=p.x-hero.x,y=p.y-hero.y-1,z=p.z-hero.z,t=(x*dx+y*dy+z*dz)/length;
       const blocks=t>0&&t<1&&Math.hypot(x-t*dx,y-t*dy,z-t*dz)<sphere.radiusWorld;
-      crown.visibility=blocks ? .18 : 1;
-      for(const leaves of crown.getChildMeshes(true))leaves.visibility=crown.visibility;
+      const vis=blocks ? .18 : 1;
+      if(crown.visibility===vis)continue; // only touch meshes when the fade actually changes
+      crown.visibility=vis;
+      for(const leaves of (crown._fadeKids ||= crown.getChildMeshes(true)))leaves.visibility=vis;
     }
   }
   function buildTemple(map) {
