@@ -3072,13 +3072,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const victim=this.getMonster(monsterId),guard=this.forestDefenses.get(id);
         const canAdvance=def?.kind!=="defense" || Boolean(defense && guard && guard.id===savedObjective?.id && guard.hp>0 && victim &&
           current.mapId===def.mapId && Math.hypot(current.x-defense.x,current.z-defense.z)<=defense.radius && Math.hypot(victim.x-defense.x,victim.z-defense.z)<=defense.radius);
-        const objective=killAmount>0 && canAdvance ? advanceForestObjective(savedObjective,monsterId,current.mapId) : {active:savedObjective,completed:null};
+        // Quest credit follows the accepted kill, even when the level gap or cap awards no EXP.
+        const objective=canAdvance ? advanceForestObjective(savedObjective,monsterId,current.mapId) : {active:savedObjective,completed:null};
+        const objectiveAdvanced=Boolean(objective.completed || objective.active && objective.active.progress!==savedObjective?.progress);
         const bonus=objective.completed ? cycleExperience(monsterExperience(current.level,monsterLevel,tier)*2,snapshot.rebirth?.count ?? 0) : 0;
         const eventReward=objective.completed ? this.directorReward(snapshot,savedObjective,current.level,monsterLevel,tier,directorEvent,directorAt) : {bonus:0,claims:snapshot.directorClaims ?? []};
         const huntEventBonus=this.field || process.env.MONTRA_HUNT_EVENTS==='0' ? 0 : huntBonus(huntEvent,current.mapId,tier,killAmount,directorAt);
         const amount=killAmount+bonus+eventReward.bonus+huntEventBonus;
         const personalEligible=this.accountSessions.has(id) && current.alive && Boolean(current.pathId);
-        if (amount <= 0 && tier !== "boss" && !bossLoot && !personalEligible) return;
+        if (amount <= 0 && !objectiveAdvanced && tier !== "boss" && !bossLoot && !personalEligible) return;
         const next = addExperience(current.level, current.experience, amount);
         const dropsPotion = (tier === "elite" && amount > 0) || tier === "boss";
         const treasure=bossLoot?bossTreasure(monsterId):undefined;
@@ -3148,7 +3150,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for(const id of party.members){
       const player=this.state.players.get(id);
       if(player)members.push({sessionId:id,mapId:player.mapId,x:player.x,y:player.y,z:player.z,alive:player.alive,
-        persistent:this.persistentCharacters.has(id),level:player.level,
+        persistent:this.persistentCharacters.has(id),level:player.level,hasObjective:this.forestObjectives.has(id),
         inTransit:this.pendingWarps.has(id) && !this.pendingRewards.has(id)});
     }
     const shares=partyMonsterShares(winner.level,{mapId:monster.mapId,level:monster.level,tier,x:monster.x,y:monster.y,z:monster.z},members,PARTY_XP_RADIUS,bossLoot || this.accountSessions.has(winnerId));

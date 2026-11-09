@@ -1,14 +1,18 @@
 import {test} from "node:test";
+import {readFileSync,existsSync} from "node:fs";
+import {resolve} from "node:path";
+import {runInNewContext} from "node:vm";
+import {resourceNodes} from "./WorldResources.js";
 import assert from "node:assert/strict";
 import {BODY_SLOTS, personalItem, PERSONAL_ITEMS, WEAPON_LEVELS, OUTFIT_LEVELS, MATERIAL_LEVELS, equipPositions, monsterCardDrop, startingWeapon, wearsTwinSwords, wearsWraps, usesStaff, type BodyItemId, type PersonalId} from "./PersonalItems.js";
-import {CATALOG_PAGES,STARTER_HUNT,hunts,itemCamp,practiceSite,journeyWeapon,findItemHunt,rollMonsterLoot} from "./MonsterLoot.js";
+import {CATALOG_PAGES,catalogPageWithRates,STARTER_HUNT,hunts,itemCamp,practiceSite,journeyWeapon,findItemHunt,rollMonsterLoot} from "./MonsterLoot.js";
 import {makeClassInventory,equipBody,equipInventoryWeapon,equippedStats,equipmentRatings,gearHealing,overflowStaminaRegen,weaponBonuses,practiceLoot,validateInventory} from "./ItemRules.js";
 import {EconomyStore} from "./EconomyStore.js";
 import {parseSalvage,type SalvageOrder} from "./EconomyRules.js";
 import {plainForge,birthForge,rollForge,forgeStamp,rerollIngredient} from "./ForgeRules.js";
 import {changeCardSocket} from "./CardSockets.js";
 import {ATLAS_SPAWNS} from "./WorldAtlas.js";
-import {FOREST_CAMPS,WORLD_EXPANSION} from "./WorldMaps.js";
+import {FOREST_CAMPS,WORLD_EXPANSION,WORLD_MAPS} from "./WorldMaps.js";
 import {TEMPLE_SPAWNS} from "./TempleMap.js";
 import {personalGearGuides,cardHunt} from "./GearGuides.js";
 import {gearMana} from "./ItemRules.js";
@@ -53,7 +57,7 @@ test("class camps unlock the correct weapon, and at least 80% of hunters find it
     const weapon=journeyWeapon(path,level)!;
     const guide=personalGearGuides(path,level)!.journey!;
     assert.equal(guide.weapon,weapon);assert.equal(PERSONAL_ITEMS[weapon].level,level);
-    assert.equal(guide.practice?.level,15);
+    if(WORLD_EXPANSION)assert(guide.practice && guide.practice.level<=level && level-guide.practice.level<=4);
     const camp=itemCamp(weapon,level)!;
     assert(camp.mobs.includes(camp.id));
     for(const id of camp.mobs){
@@ -95,6 +99,89 @@ test("class camps unlock the correct weapon, and at least 80% of hunters find it
       }
     }
     assert(successes>=160,path+" Lv."+level+" reached the target in "+successes+"/200 hunts");
+  }
+});
+
+test("early journeys farm eligible ordinary camps before moving to harder hunts",()=>{
+  for(const path of paths)for(let level=1;level<=25;level++){
+    const journey=personalGearGuides(path,level)!.journey!;
+    const eligible=hunts.filter(m=>(m.tier??"normal")==="normal" && m.level<=level && level-m.level<=4 && practiceSite(m.id)?.open);
+    assert.equal(Boolean(journey.practice),eligible.length>0,path+" Lv."+level);
+    assert.equal(journey.camps.length>0,eligible.length>0);
+    for(const site of [journey.practice,...journey.camps].filter(Boolean)){
+      assert(site!.open && site!.level<=level && level-site!.level<=4);
+      assert(eligible.some(m=>m.id===site!.id),"actual ordinary spawn, not an invented level target");
+    }
+  }
+  const catalog=Object.assign({},...CATALOG_PAGES);
+  for(const id of ["mat_hide_1","mat_fiber_1","mat_resin_1","mat_ink_1"]){
+    const source=catalog[id].huntTarget,expected=itemCamp(id as PersonalId,1)!;
+    assert.equal(source.level,expected.level);assert.equal(source.map,expected.map);
+    assert.deepEqual(source.mobs,expected.mobs);
+    assert(source.mobs.includes(source.id));
+  }
+});
+
+test("actual Lv10 guardian recipes switch supplies across areas after leveling",()=>{
+  if(!WORLD_EXPANSION)return;
+  const relative="src/client/ui/041-character-hud-and-journey.js";
+  const root=existsSync(resolve(relative))?process.cwd():resolve("..");
+  const source=readFileSync(resolve(root,relative),"utf8");
+  const start=source.indexOf("  function travelRoute("),end=source.indexOf("  function hudGuide()");
+  assert(start>=0 && end>start);
+  const catalog=Object.assign({},...CATALOG_PAGES) as Record<string,any>;
+  assert.equal(catalog.mat_fiber_2.huntTarget.id,"temple_forecourt_3");
+  assert.equal(catalog.mat_fiber_2.huntTarget.level,10);
+  assert(!resourceNodes("forbidden_forest").some(n=>n.tier===2),"forest has no tier2 nodes despite Lv10–12 monsters");
+  for(const path of paths){
+    const bag=makeClassInventory(path);bag.slots[1]!.forge={...plainForge(),rank:3};
+    const me={characterId:"recipe-"+path,pathId:path,level:1,x:0,z:0,experience:0,xpToNext:150};
+    const context:any={mode:"live",ownServerCharacter:()=>me,inventoryState:bag,personalItems:catalog,
+      gearGuides:personalGearGuides(path,1),activeMapId:"forbidden_forest",worldDefinitions:WORLD_MAPS,
+      fieldTrainingTip:null,territoryState:null,economyReady:()=>true,MONSTER_ID:"possessed-1",drawerActive:null,
+      room:{state:{monsters:new Map(hunts.map(m=>[m.id,{...m,alive:true}]))}},resources:{mapId:"forbidden_forest",nodes:[]},
+      currentEquippedWeaponSlot:()=>bag.equippedWeaponSlot,wornGearAt:()=>bag.slots[bag.equippedWeaponSlot!],bagMeta:(id:string)=>catalog[id],
+      localStorage:{getItem:():string|null=>null,setItem(){}},toast(){}};
+    const api=runInNewContext("let travelRoutes=null,journeyOwner='',journeyNotes={};\n"+source.slice(start,end)+
+      "\n({goal:fieldGearGoal})",context);
+    for(let level=1;level<10;level++){
+      me.level=level;context.gearGuides=personalGearGuides(path,level);
+      const goal=api.goal();assert(goal.levelGoal,path+" Lv."+level+" must farm before Lv10 gear");
+      assert.match(goal.progress,new RegExp("Lv\\."+level+" / 10"));
+      const target=goal.to;
+      if(target?.level)assert(target.level<=level,"never send a lower-level player to the guardian");
+    }
+    me.level=10;context.gearGuides=personalGearGuides(path,10);
+    context.activeMapId="bound_temple";
+    context.resources={mapId:"bound_temple",nodes:resourceNodes("bound_temple").map(n=>({...n,stock:n.capacity}))};
+    const weapon=context.gearGuides.journey.weapon;
+    if(["blade","phutthaisawan","sentinel"].includes(path))assert.equal(context.gearGuides.journey.camp.id,"temple_forecourt_3");
+    const sequence:string[]=[];
+    for(let step=0;step<20;step++){
+      const goal=api.goal();assert.equal(goal.recipe,weapon);
+      const missing=goal.missingMaterial;
+      if(!missing){assert.equal(goal.to,null);assert.match(goal.step,/วัตถุดิบครบ/);break;}
+      sequence.push(missing.id);
+      if(missing.craftIngredient){
+        for(const part of catalog[missing.id].recipe){
+          const input=bag.slots.find(s=>s?.itemId===part.item)!;assert(input.quantity>=part.qty);input.quantity-=part.qty;
+        }
+      }
+      // A confirmed material receipt (from combat or gathering) updates only inventory.
+      const held=bag.slots.find(s=>s?.itemId===missing.id);
+      if(held)held.quantity=missing.need;else bag.slots.push({itemId:missing.id,quantity:missing.need});
+      if(missing.id==="mat_ingot_2" && path==="blade"){
+        const next=api.goal();assert.equal(next.missingMaterial.id,"mat_hide_2");
+        assert.equal(next.to.targetMapId,"forbidden_forest","guardian materials lead via forest to the marsh for hides");
+      }
+      if(step===19)assert.fail("recipe guidance did not finish "+path);
+    }
+    if(["blade","phutthaisawan","sentinel"].includes(path)){
+      assert(sequence.includes("mat_ingot_2") && sequence.includes("mat_charcoal_2") && sequence.includes("mat_raw_wood_2"),"kiln prerequisites are actual next goals");
+    }
+    bag.slots.push({itemId:weapon,quantity:1});
+    const ready=api.goal();assert(ready.itemSlot>=0);bag.equippedWeaponSlot=ready.itemSlot;
+    assert(api.goal().levelGoal,"equipping returns to EXP farming, rather than another completed guardian goal");
   }
 });
 
@@ -240,7 +327,7 @@ test("tracker targets match the server drop sources for equipment, materials and
     const expected=item.kind==="card"?cardHunt(id as CardId):findItemHunt(id as PersonalId,item.level!);
     const source=catalog[id].huntTarget;
     if(!expected){assert.equal(source,undefined,id);continue;}
-    assert.deepEqual(source,{id:expected.id,mapId:expected.mapId,monster:expected.monster,open:expected.open},id);
+    assert.deepEqual(source,{...expected,...(item.kind==="card"?{}:itemCamp(id as PersonalId,item.level??1))},id);
     assert(hunts.some(m=>m.id===source.id && m.mapId===source.mapId),id);
   }
 });
@@ -540,8 +627,12 @@ test("every class has a legal, craftable outfit from 1 to 100, including two dis
     }
   }
   const sent=CATALOG_PAGES.flatMap(Object.keys);
-  assert.equal(new Set(sent).size,entries.length);
-  assert(CATALOG_PAGES.every(page=>Buffer.byteLength(JSON.stringify(page))<16_384));
+  assert.deepEqual(sent,entries.map(([id])=>id),"paging preserves every item once in catalog order");
+  for(const page of CATALOG_PAGES){
+    assert(Object.keys(page).length<=16,"retain item-count cap");
+    assert(Buffer.byteLength(JSON.stringify(page))<=15_000,"UTF-8 budget includes expanded hunt and model metadata");
+    assert(Buffer.byteLength(JSON.stringify({items:catalogPageWithRates(page)}))<16_384,"live catalog message fits including envelope and rates");
+  }
   for(const level of MATERIAL_LEVELS){
     const ids=new Set(hunts.filter(m=>m.level>=level && m.level<(MATERIAL_LEVELS.find(n=>n>level)??101)).flatMap(m=>
       Array.from({length:7},(_,i)=>rollMonsterLoot(m.id,"seer",new Set(),level,0,"normal",max=>max===100?99:i%max)!.id)));

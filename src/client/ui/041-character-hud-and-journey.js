@@ -139,12 +139,19 @@
       return null;
     }
     const guide={title:"ตามหา "+item.name,progress:count+"/"+goal.need};
+    if(source.open && source.level>ownServerCharacter()?.level){
+      const levelGoal=fieldLevelingGoal(ownServerCharacter(),gearGuides?.journey,source.level);
+      return {...guide,...levelGoal,title:guide.title,progress:guide.progress+" · "+levelGoal.progress};
+    }
     if(source.resourceKind){
       const raw=personalItems[source.rawId],rawCount=itemHuntCount(source.rawId),rawGoal=goal.id===source.rawId,needed=rawGoal?goal.need:(goal.need-count)*2;
       guide.progress=rawGoal?item.name+" "+count+"/"+goal.need:item.name+" "+count+"/"+goal.need+" · "+(raw?.name||"ของดิบ")+" "+rawCount+"/"+needed;
       if(!rawGoal && rawCount>=2)return {...guide,step:"เปิดกระเป๋า → แตะ"+(raw?.name||"ของดิบ")+" → แปรรูป 2 ชิ้น",refineId:source.rawId};
       const me=ownServerCharacter();
-      if((me?.level||1)<(raw?.level||1))return {...guide,step:"ต้องมี Lv."+raw.level+" เพื่อเก็บวัตถุดิบชั้นนี้"};
+      if((me?.level||1)<(raw?.level||1)){
+        const levelGoal=fieldLevelingGoal(me,gearGuides?.journey,raw.level);
+        return {...guide,...levelGoal,title:guide.title,progress:guide.progress+" · "+levelGoal.progress};
+      }
       const nodes=resources?.mapId===activeMapId?resources.nodes.filter(n=>n.kind===source.resourceKind && n.tier===source.tier):[];
       const distance=n=>me?Math.hypot(me.x-n.x,me.z-n.z):Infinity;
       nodes.sort((a,b)=>Number(!a.stock)-Number(!b.stock)||distance(a)-distance(b));
@@ -152,8 +159,10 @@
         return {...guide,step:node.stock?"เดินไป"+name+"ชั้น "+source.tier+" แล้วกด "+(source.resourceKind==="stone"?"ขุดหิน":"ตัดไม้"):
           name+"ใกล้ตัวกำลังฟื้น · รอหรือหาอีกจุด",to:node};}
       const minLevel=raw?.level||1,maxLevel=personalItems["mat_raw_"+source.resourceKind+"_"+(source.tier+1)]?.level||101;
-      const candidates=Object.values(worldDefinitions||{}).filter(map=>source.tier===1 && map.id==="ritual_village" ||
-        (map.camps||[]).some(c=>c.levels?.some(level=>level>=minLevel && level<maxLevel)));
+      // WorldResources places camp nodes at the first spawn's tier, not any
+      // member's level. The forest's Lv10–12 members still have tier-one nodes.
+      const candidates=Object.values(worldDefinitions||{}).filter(map=>source.tier===1 && ["ritual_village","forbidden_forest"].includes(map.id) ||
+        (map.id==="bound_temple" || map.region) && (map.camps||[]).some(c=>c.levels?.[0]>=minLevel && c.levels[0]<maxLevel));
       const routes=candidates.map(map=>({map,route:travelRoute(worldDefinitions,activeMapId,map.id)})).filter(r=>r.route.length>1).sort((a,b)=>a.route.length-b.route.length);
       const route=routes[0]?.route,gate=route && worldDefinitions?.[activeMapId]?.portals.find(p=>p.targetMapId===route[1]);
       return {...guide,step:gate?"ไปประตู "+worldDefinitions[route[1]].name+" เพื่อหา"+(source.resourceKind==="stone"?"หินปนแร่":"ต้นไม้"):
@@ -264,13 +273,14 @@
       const gate=worldDefinitions?.[activeMapId]?.portals.find(p=>p.targetMapId===route[1]);
       return {step:gate?"ไปประตู "+worldDefinitions[route[1]].name+" เพื่อไป"+site.map:"ยังไม่มีเส้นทางไป"+site.map,to:gate};
     }
-    const me=ownServerCharacter();let best=null,distance=Infinity;
+    const me=ownServerCharacter();let best=null,waiting=null,distance=Infinity;
     for(const id of site.mobs??[site.id]){
       const mob=id===MONSTER_ID?room?.state?.monster:room?.state?.monsters?.get(id);
-      if(!mob?.alive)continue;
+      if(!mob || mob.level>me.level)continue;
+      if(!mob.alive){waiting??=mob;continue;}
       const d=Math.hypot(me.x-mob.x,me.z-mob.z);if(d<distance){distance=d;best=mob;}
     }
-    return {step:(best?"ล่า ":"ไปยัง ")+(site.camp??site.monster)+" · "+site.map,to:best??(Number.isFinite(site.x)?site:null)};
+    return {step:(best?"ล่า ":waiting?"รอเกิด · ":"ไปยัง ")+(site.camp??site.monster)+" · "+site.map,to:best??waiting??(Number.isFinite(site.x)?site:null)};
   }
   function roleRating(piece,path,position){
     const forge=pieceForgeRatings(piece);
@@ -295,10 +305,19 @@
     if(!entry)return null;
     const meta=personalItems[entry.id],current=wornGearAt(entry.position,slots);
     const slot=slots.findIndex(s=>s?.itemId===entry.id),piece=slot>=0?slots[slot]:{itemId:entry.id};
-    const inputs=fieldRecipeProgress(entry.id),ready=inputs.every(i=>i.have>=i.need);
-    const hunt=entry.hunt,nav=journeyDirection(hunt);
-    return {title:"เป้า Lv."+meta.level+" · "+meta.name,step:slot>=0?"มีชิ้นนี้ในกระเป๋า · แตะดูผลเมื่อเปลี่ยน":ready?"วัตถุดิบครบ · เปิดสูตรเพื่อดูค่าคราฟต์":nav.step,
-      to:slot<0 && !ready?nav.to:null,progress:hunt?hunt.monster+" Lv."+hunt.level+" · "+hunt.map:"สร้างที่โต๊ะช่าง",
+    const inputs=fieldRecipeProgress(entry.id),missing=fieldMissingCopySupply(inputs),ready=!missing;
+    const hunt=entry.hunt;
+    // Finish a supply in its actual area, then recompute the next missing input.
+    // The weapon drop camp cannot supply every ingredient in a multi-area recipe.
+    const supply=slot<0 && missing && !missing.craftIngredient && itemHuntSource(missing.id,false)?.open
+      ?itemHuntGuide({id:missing.id,need:missing.need}):null;
+    const required=Math.max(meta.level||1,!supply && slot<0 && !ready?(hunt?.level||1):1);
+    if(player.level<required)return fieldLevelingGoal(player,journey,required);
+    const nav=supply??journeyDirection(hunt);
+    const materialName=missing && (personalItems[missing.id]?.name||missing.id);
+    return {title:"เป้า Lv."+meta.level+" · "+meta.name,step:slot>=0?"มีชิ้นนี้ในกระเป๋า · แตะดูผลเมื่อเปลี่ยน":ready?"วัตถุดิบครบ · เปิดสูตรเพื่อดูค่าคราฟต์":missing?.craftIngredient?"วัตถุดิบครบ · เปิดสูตรสร้าง "+materialName:supply?"หา "+materialName+" · "+nav.step:nav.step,
+      to:slot<0 && !ready && !missing?.craftIngredient?nav.to:null,progress:supply?supply.progress:hunt?hunt.monster+" Lv."+hunt.level+" · "+hunt.map:"สร้างที่โต๊ะช่าง",
+      missingMaterial:missing,refineId:supply?.refineId,craftIngredient:missing?.craftIngredient,
       recipe:entry.id,inputs,comparison:{piece,current,position:entry.position},itemSlot:slot,track:slot<0&&hunt?.open,canSkip:true};
   }
   function openFieldTraining(){
@@ -314,6 +333,17 @@
     const challenge=allowChallenge && journey?.challenges?.find(c=>c.id===notes.campId);
     if(challenge)return challenge;
     return camps?.find(c=>c.id===notes.campId) ?? camps?.find(c=>c.mapId===activeMapId) ?? journey?.practice;
+  }
+  function fieldLevelingGoal(player,journey,targetLevel){
+    if(!player)return {step:"กำลังอ่านเลเวลตัวละคร…",progress:"เป้า Lv."+targetLevel,levelGoal:true};
+    const eligible=site=>site?.open && site.level<=player.level && player.level-site.level<=4;
+    const camps=(journey?.camps??[]).filter(eligible),preferred=fieldCamp(journey,journeyNotesForPlayer());
+    const site=eligible(preferred)?preferred:camps.find(c=>c.mapId===activeMapId)??camps[0]??(eligible(journey?.practice)?journey.practice:null);
+    const nav=site?journeyDirection(site):{};
+    const xp=Number.isFinite(player.xpToNext) && player.xpToNext>0?" · EXP "+(player.experience||0)+"/"+player.xpToNext:"";
+    return {title:"เก็บเลเวลก่อนเดินทางต่อ",step:site?nav.step+" · เก็บถึง Lv."+targetLevel+" แล้วกลับไปเป้าหมายต่อ":
+      "เก็บเลเวลถึง Lv."+targetLevel+" ก่อน · รอข้อมูลค่ายล่าที่เหมาะกับเลเวล",to:nav.to,
+      progress:"Lv."+player.level+" / "+targetLevel+xp,levelGoal:true};
   }
   function fieldTechnique(course){
     const candidates=course?.techniques;
@@ -368,8 +398,7 @@
       const destination=shrineDirection(journey,player);
       if(destination)return destination;
     }
-    if(camp && player.level<=camp.maxLevel && (player.level<10 || !journey || notes.skipped?.includes(journey.weapon)) &&
-       (activeMapId===camp.mapId || activeMapId==="ritual_village")){
+    if(camp && player.level<=camp.maxLevel && (player.level<10 || !journey || notes.skipped?.includes(journey.weapon))){
       const meta=personalItems[camp.weapon],equipped=currentEquippedWeaponSlot();
       const slot=inventoryState.slots[equipped]?.itemId===camp.weapon?equipped:inventoryState.slots.findIndex(s=>s?.itemId===camp.weapon);
       const piece=inventoryState.slots[slot],bank=inventoryState.forgeCopies?.[camp.weapon]??0;
@@ -447,7 +476,8 @@
       if(boss && !(player.level<=25 && notes.bossSkipped))
         return {title:"ทางเลือก · "+boss.camp.monster,step:"ดูเป้าบอสหรือกลับไปล่ามอนทั่วไป",progress:personalItems[boss.gear].name,bossInvite:true,bossGear:boss.gear};
       const training=currentFieldTraining();
-      return training?{title:"ฝึกวิชาประจำอาชีพ",step:"กลับศาลหมู่บ้านหลังพ้นการต่อสู้ · แตะดูวิชาที่ฝึกได้",progress:training.points+" แต้มวิชา",trainingOnly:true}:null;
+      if(training)return {title:"ฝึกวิชาประจำอาชีพ",step:"กลับศาลหมู่บ้านหลังพ้นการต่อสู้ · แตะดูวิชาที่ฝึกได้",progress:training.points+" แต้มวิชา",trainingOnly:true};
+      return journey && player.level<=25?fieldLevelingGoal(player,journey,player.level<10?10:player.level<20?20:26):null;
     }
     const inputs=fieldRecipeProgress(recipe),f=inputs.find(i=>i.id===fragment.itemId);
     if(!f)return null;

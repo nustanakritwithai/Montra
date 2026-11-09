@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { assembleClient, checkClient, clientRoot, prepareClient, writeClient } from './build-client.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
-// Intentional quest navigation, gate, market, flight, class-skill, audio, VFX and cosmetic-safeguard changes. Keep snapshot
+// Intentional early hunt guidance, quest navigation, gate, market, flight, class-skill, audio, VFX and cosmetic-safeguard changes. Keep snapshot
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
 {"path": "core/001-storage-and-dom.js", "bytes": 2990, "sha256": "42023b85a09000c8866473b8aee36c685f5269877962e1ad09e098f9769b2de0"},
@@ -19,8 +19,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "ui/057-npcs-and-objectives.js",
-  "bytes": 38501,
-  "sha256": "2658aa72123dfd71340fb58a7e04ecdd7e47144ed48581ad5b157add64afd6b6"
+  "bytes": 38765,
+  "sha256": "ecae1bb2b50a75a86d8a0e1ae1e9f0286863b071574643d5df0505c8d7ea1cf5"
 },
 {
   "path": "input/045-pointer-touch-and-dash.js",
@@ -89,8 +89,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "ui/041-character-hud-and-journey.js",
-  "bytes": 38826,
-  "sha256": "737a795165c9166ff2ec46d63ef541fe088655c0858075ab055ff061d5c084aa"
+  "bytes": 41694,
+  "sha256": "a0fa4ea88240b0b2792a0c9eee243148264b7fa1bbfa7fd3ab740c1982f9f382"
 },
 {
   "path": "render/026-avatar-auras-and-lifecycle.js",
@@ -119,8 +119,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 139722,
-  "sha256": "98042316360f499843cd467a494ed4ca4d7b72cf658a9aa9645b64135a128b2b"
+  "bytes": 140572,
+  "sha256": "47836e21ab9d893f852aa6193f06aa30aec6686e8faf415b7ebbc6fcf0117c6b"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
@@ -239,8 +239,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1678287);
-  assert.equal(hash(bytes), '2d7c9371d20d03fac4fc0d05408dd7b627186b07eac1301d6c63210b4d46fdf8');
+  assert.equal(bytes.length, 1682269);
+  assert.equal(hash(bytes), 'e6ede36bbba5b0a98a909dd487de51b3690ca4ba5209fcaf5fd8d7bbb75506af');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

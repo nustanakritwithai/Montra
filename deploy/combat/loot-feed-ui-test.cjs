@@ -12,7 +12,7 @@ function fixture(){
  const ctx={document:{createElement:node},$:id=>nodes.get(id)||null,mode:'live',Date:{now:()=>now},setTimeout:(fn,ms)=>{timers.set(++timerId,{fn,at:now+ms});return timerId;},clearTimeout:id=>timers.delete(id),
   bagMeta:id=>catalog[id]||null,createItemTile:id=>{const tile=node();tile.itemId=id;return tile;},POTION_ITEM_ID:'health_potion',SHRINE_SHARD:'shrine_shard',INVENTORY_SLOTS:12,
   joined:room,room,personalItems:catalog,catalogRevision:0,drawerActive:null,workbenchGold:0,cardDrill:null,refineInput:2,inventoryState:null,itemUsePending:false,
-  wearPositions:kind=>kind==='ring'?['leftRing','rightRing']:[],renderBag(){},renderEconomy(){}};
+  wearPositions:kind=>kind==='ring'?['leftRing','rightRing']:[],renderBag(){},renderEconomy(){},refreshOpenFieldQuest(){assert.notEqual(ctx.drawerActive,'quest','quest details use their dedicated receipt fixture');}};
  vm.createContext(ctx);vm.runInContext(feed+handler,ctx);
  const state=()=>JSON.parse(vm.runInContext('JSON.stringify(lootHistory)',ctx));
  const send=p=>callbacks.inventory_state(structuredClone(p));
