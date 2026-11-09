@@ -157,8 +157,7 @@
       g.setVerticesData(B.VertexBuffer.PositionKind,pos);g.setVerticesData(B.VertexBuffer.UVKind,uv);g.setVerticesData(B.VertexBuffer.UV2Kind,uv2);
       const kind=kinds[n%kinds.length];if(!byKind.has(kind))byKind.set(kind,[]);byKind.get(kind).push(g);n++;
     }
-    for(const [kind,parts] of byKind){
-      const mesh=B.Mesh.MergeMeshes(parts,true,true);if(!mesh)continue;
+    for(const [kind,parts] of byKind)for(const {mesh} of mergeByCell(parts,{key:()=>kind,cell:48})){
       mesh.name=map.id+" ground patches "+kind;mesh.parent=expansionRoot;mesh.isPickable=false;mesh.material=groundPatchMaterial(kind,base);mesh.metadata={noShadow:true};
     }
   }
@@ -315,10 +314,7 @@
       sceneryPoint("stone",x,z-1.5,1.05);
       placeRock("plain",x,terrainHeight(t,x,z-1.5),z-1.5,{parent:expansionRoot,scale:1.05}); // shale outcrop from the rock kit
     }
-    for(const m of new Set(ornaments.map(p=>p.material))){
-      const group=ornaments.filter(p=>p.material===m),merged=B.Mesh.MergeMeshes(group,true,true);
-      if(merged){merged.parent=expansionRoot;merged.isPickable=false;}
-    }
+    for(const {mesh} of mergeByCell(ornaments))mesh.parent=expansionRoot;
   }
   function buildRegion(map,paint) {
     let parts=[];
@@ -342,10 +338,8 @@
       return put(B.MeshBuilder.CreateSphere("region knob",{diameter:d,segments:5},scene),x,y,z,m);
     }
     function finish(name,cover=false){
-      for(const material of new Set(parts.map(p=>p.material))){
-        const group=parts.filter(p=>p.material===material);
-        const mesh=group.length===1?group[0]:B.Mesh.MergeMeshes(group,true,true);
-        mesh.name=map.id+" "+name;mesh.parent=expansionRoot;mesh.isPickable=false;
+      for(const {mesh} of mergeByCell(parts)){
+        mesh.name=map.id+" "+name;mesh.parent=expansionRoot;
         if(cover)templeCover.push(mesh);
       }
       parts=[];
@@ -1028,4 +1022,95 @@
       }
       finish("relic",true);
     }
+  }
+  // ---- Far backdrop: the map edge dissolves into distant mist ----
+  // Past the walkable bounds the camera used to see the bare clear colour, a hard black band. Now the
+  // ground runs on into the fog, and layered curtains of drifting mist stand outside the edge: thin and
+  // see-through close in, thicker further out, the last one solid at its foot, so what lies beyond reads
+  // as a far landscape lost in haze rather than the end of the world. Everything is tinted with the live
+  // fog colour each frame, so it follows the hour, the weather and the blood moon.
+  const backdropMats = [];
+  function backdropMaterial(name, fogShare) {
+    // Unlit: the colour is the emissive term (times any vertex colour), so night light cannot blacken it.
+    const m = new B.StandardMaterial(name, scene);
+    m.disableLighting = true; m.specularColor = new B.Color3(0, 0, 0); m.diffuseColor = new B.Color3(0, 0, 0); m.emissiveColor = new B.Color3(0, 0, 0);
+    m.metadata = { fogShare, base: new B.Color3(.2, .25, .2) }; backdropMats.push(m);
+    return m;
+  }
+  let backdropGroundMat = null, backdropMistTex = null;
+  const backdropCurtains = [];
+  // Called every frame: tint follows the fog; the mist drifts sideways, each layer at its own pace.
+  function updateBackdrop() {
+    const f = scene.fogColor;
+    for (const m of backdropMats) { const k = m.metadata.fogShare, b = m.metadata.base, l = 1 + (m.metadata.lift || 0);
+      m.emissiveColor.set((b.r + (f.r - b.r) * k) * l, (b.g + (f.g - b.g) * k) * l, (b.b + (f.b - b.b) * k) * l); }
+    const t = performance.now() / 1000;
+    for (const m of backdropCurtains) if (m.opacityTexture) m.opacityTexture.uOffset = (t * m.metadata.drift) % 1;
+  }
+  // Soft cloud banks, painted wrapped across the left/right edges so the strip tiles round the map.
+  function backdropMistTexture() {
+    if (backdropMistTex) return backdropMistTex;
+    backdropMistTex = paintTexture("far mist", 256, (c, S) => {
+      c.clearRect(0, 0, S, S); c.fillStyle = "rgba(255,255,255,.3)"; c.fillRect(0, 0, S, S);
+      for (let i = 0; i < 60; i++) {
+        const x = noise(i, 801) * S, y = S * (.2 + noise(i, 802) * .75), r = S * (.07 + noise(i, 803) * .22), a = .25 + noise(i, 804) * .45;
+        for (const dx of [-S, 0, S]) {
+          const g = c.createRadialGradient(x + dx, y, 0, x + dx, y, r);
+          g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(1, "rgba(255,255,255,0)");
+          c.fillStyle = g; c.fillRect(0, 0, S, S);
+        }
+      }
+    });
+    backdropMistTex.hasAlpha = true; backdropMistTex.getAlphaFromRGB = true;
+    backdropMistTex.wrapU = B.Texture.WRAP_ADDRESSMODE; backdropMistTex.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+    return backdropMistTex;
+  }
+  // A closed strip round the map's rectangle, `off` metres outside it (corners rounded), `h` tall, with
+  // its opacity falling from `foot` at the ground to nothing at the top.
+  function mistCurtain(cx, cz, hw, hd, off, h, foot, name) {
+    const pts = [], N = 64, r = off;
+    for (let i = 0; i <= N; i++) {
+      const a = i / N * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+      // superellipse-ish: the rectangle's half sizes plus a round offset
+      pts.push([cx + Math.sign(ca) * Math.min(1, Math.abs(ca) * 1.6) * hw + ca * r, cz + Math.sign(sa) * Math.min(1, Math.abs(sa) * 1.6) * hd + sa * r]);
+    }
+    const ROWS = 6, pos = [], uv = [], col = [], idx = [];
+    let perim = 0; const along = [0];
+    for (let i = 1; i <= N; i++) { perim += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); along.push(perim); }
+    const reps = Math.max(1, Math.round(perim / (h * 2.6)));
+    for (let i = 0; i <= N; i++) for (let j = 0; j <= ROWS; j++) {
+      const v = j / ROWS;
+      pos.push(pts[i][0], -1 + v * h, pts[i][1]); uv.push(along[i] / perim * reps, v);
+      col.push(1, 1, 1, foot * Math.pow(1 - v, 1.4));
+    }
+    for (let i = 0; i < N; i++) for (let j = 0; j < ROWS; j++) { const a = i * (ROWS + 1) + j, b = a + ROWS + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+    const m = new B.Mesh(name, scene), vd = new B.VertexData();
+    Object.assign(vd, { positions: pos, indices: idx, uvs: uv, colors: col }); vd.applyToMesh(m);
+    m.hasVertexAlpha = true; m.isPickable = false; m.applyFog = false; m.parent = expansionRoot; m.metadata = { noShadow: true };
+    return m;
+  }
+  function buildBackdrop(map, bounds) {
+    const w = bounds.maxX - bounds.minX, d = bounds.maxZ - bounds.minZ;
+    if (w > 600 || d > 600) return; // the open-world castle map has no edge in sight
+    if (!backdropGroundMat) backdropGroundMat = backdropMaterial("backdrop ground", .3);
+    backdropGroundMat.metadata.base = B.Color3.FromHexString(atmosphere.ground || "#2a2a22");
+    const cx = (bounds.minX + bounds.maxX) / 2, cz = (bounds.minZ + bounds.maxZ) / 2;
+    // Ground on to the horizon, a little under the map so the map's own floor and relief always win;
+    // it keeps the scene fog on top, so it runs from the map's tone at the edge into the haze.
+    const skirt = B.MeshBuilder.CreateGround("backdrop ground", { width: w + 640, height: d + 640 }, scene);
+    skirt.position.set(cx, -.3, cz); skirt.material = backdropGroundMat; skirt.isPickable = false; skirt.parent = expansionRoot; skirt.metadata = { noShadow: true };
+    // Mist curtains: [metres outside the edge, height, opacity at the foot, drift speed]. Phones get three.
+    const layers = LITE ? [[10, 16, .45, .006], [38, 30, .75, -.004], [95, 60, 1, .002]]
+      : [[6, 12, .32, .007], [20, 20, .5, -.005], [45, 32, .75, .004], [95, 60, 1, -.002]];
+    layers.forEach(([off, h, foot, drift], k) => {
+      if (!backdropCurtains[k]) {
+        const m = backdropMaterial("far mist " + k, 1); m.opacityTexture = backdropMistTexture().clone();
+        m.backFaceCulling = false; m.disableDepthWrite = true; m.useVertexAlpha = true; m.alpha = .999; m.metadata.drift = drift;
+        m.metadata.lift = .22 - k * .06; // near banks catch a little more light than the haze behind them
+        backdropCurtains[k] = m;
+      }
+      const c = mistCurtain(cx, cz, w / 2, d / 2, off, h, foot, "far mist " + k);
+      c.material = backdropCurtains[k]; c.alphaIndex = 1000 - k; // far layers first, near ones over them
+    });
+    updateBackdrop();
   }

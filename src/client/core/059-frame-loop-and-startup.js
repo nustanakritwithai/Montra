@@ -284,6 +284,7 @@
     animateGhosts(dt, now);
     scene.fogStart = camera.radius + atmosphere.fogNear + lightLevel().fog;
     scene.fogEnd = camera.radius + atmosphere.fogFar + lightLevel().fog * 1.5;
+    updateViewDistance(); updateBackdrop();
     applyCameraShake(dt);
     driftMist(elapsed, camera.target);
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);

@@ -320,11 +320,7 @@
           const nx=x+Math.cos(a+Math.PI/4)*8.6,nz=z+Math.sin(a+Math.PI/4)*8.6;
           box((ox+nx)/2,2.4,(oz+nz)/2,Math.hypot(nx-ox,nz-oz),.06,.06,clothRed).rotation.y=-Math.atan2(nz-oz,nx-ox);}}
     }
-    for(const material of new Set(parts.map(p=>p.material))){
-      const group=parts.filter(p=>p.material===material);
-      const mesh=group.length===1?group[0]:B.Mesh.MergeMeshes(group,true,true);
-      if(mesh){mesh.name=id+" dressing";mesh.parent=expansionRoot;mesh.isPickable=false;}
-    }
+    for(const {mesh} of mergeByCell(parts)){mesh.name=id+" dressing";mesh.parent=expansionRoot;}
   }
   function fadeTempleWalls(hero) {
     const eye=camera.position,ray=templeSight;
