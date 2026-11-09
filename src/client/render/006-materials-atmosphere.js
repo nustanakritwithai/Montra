@@ -536,6 +536,9 @@
     const out = [];
     for (const cells of groups.values()) for (const group of cells.values()) {
       const info = opts.before ? opts.before(group) : undefined;
+      // A lone part is kept as it is but detached (world transform kept): merging used to detach every
+      // part, and callers dispose the helper nodes the parts were built under (the village boats).
+      if (group.length === 1 && group[0].parent) group[0].setParent(null);
       const mesh = group.length > 1 ? B.Mesh.MergeMeshes(group, true, true) : group[0];
       if (mesh) { mesh.isPickable = false; if (!opts.noCull) trackViewLod(mesh, [["cull", null]]); out.push({ mesh, info }); }
     }
