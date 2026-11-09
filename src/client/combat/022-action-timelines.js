@@ -19,6 +19,8 @@
     m_guard: { dur: 1.2 }, m_parry: { dur: .55 }, m_evade: { dur: .55 }, m_counter: { dur: .66, swing: true },
     m_clinch: { dur: 1.5 }, m_throw: { dur: .75, swing: true }, m_held: { dur: 1.5 }, m_thrown: { dur: .85 }, m_wai: { dur: 1.3 }, cast: { dur: .58 }, hit: { dur: .34 }, summon: { dur: 1.2 },
     drink: { dur: 1.15 }, dash: { dur: .46 }, rise: { dur: 1.0 }, arrive: { dur: .85 },
+    // Gathering (visual only): three axe chops, three pick strikes, or a crouch to reap. 1.5 s matches the harvest cooldown.
+    chop: { dur: 1.5 }, dig: { dur: 1.5 }, gather: { dur: 1.5 },
   };
   const MELEE = { ritual_dagger: "stab", arcane_sword: "slash", spirit_staff: "smash", thai_dual: "twin", muay_wraps: "m_basic" };
   const POSE_BONES = ["Hips", "Spine", "Spine1", "Chest", "Neck", "Head", "LeftShoulder", "RightShoulder",

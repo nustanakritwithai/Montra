@@ -466,7 +466,7 @@
         if(room!==joined || resources?.mapId!==d?.mapId || !Array.isArray(d.nodes))return;
         const changes=new Map(d.nodes.map(n=>[n.id,n])),now=performance.now();
         for(const n of resources.nodes){
-          const changed=changes.get(n.id);if(changed){n.stock=changed.stock;n.readyAt=now+changed.nextIn;}
+          const changed=changes.get(n.id);if(changed){if(changed.stock<n.stock)playRemoteHarvest(n);n.stock=changed.stock;n.readyAt=now+changed.nextIn;}
         }
         resources.available=d.available;renderResourceNodes();updateResourceHud(ownServerCharacter());
       });

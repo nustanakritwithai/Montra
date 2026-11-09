@@ -206,7 +206,8 @@
   const HAND_GRIPS = { ritual_dagger: new B.Vector3(0, .15, 1), arcane_sword: new B.Vector3(0, .1, 1), spirit_staff: new B.Vector3(0, 0, 1),
     sentinel_pike: new B.Vector3(0, .05, 1), seer_wand: new B.Vector3(0, .25, 1), mender_crook: new B.Vector3(0, 0, 1),
     // The left daab of a twin pair leaves the fist on the other side so both blades point away from the body.
-    thai_left: new B.Vector3(0, .1, -1) };
+    thai_left: new B.Vector3(0, .1, -1),
+    tool_axe: new B.Vector3(0, .05, 1), tool_pick: new B.Vector3(0, .05, 1), tool_sickle: new B.Vector3(0, .2, 1) };
   const DEFAULT_GRIP = new B.Vector3(0, .1, 1);
   function attachShamanModel(a) {
     if (shamanBody === null) { shamanWaiting.push(a); return; }
