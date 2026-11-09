@@ -125,8 +125,8 @@
     return null;
   }
   // Layered layout: row = longest prerequisite chain, lane = group; nodes in a lane are ordered by their parents' x.
-  function layoutSkillGraph(model, avail = 360) {
-    const H = 104, PAD = 8, TOP = 44, GAP = 6, byId = new Map(model.nodes.map(n => [n.id, n]));
+  function layoutSkillGraph(model, avail = 360, TOP = 44) {
+    const H = 104, PAD = 8, GAP = 6, byId = new Map(model.nodes.map(n => [n.id, n]));
     const depth = new Map(), visit = (n, stack = new Set()) => { if (depth.has(n.id)) return depth.get(n.id); if (stack.has(n.id)) return 0; stack.add(n.id);
       const d = n.row ?? n.requires.reduce((m, r) => byId.has(r) ? Math.max(m, visit(byId.get(r), stack) + 1) : m, 0); depth.set(n.id, d); return d; };
     model.nodes.forEach(n => visit(n));
@@ -156,20 +156,28 @@
   }
   function renderSkillGraph(kind, container) {
     const model = skillGraphModel(kind); if (!model || !container) return;
+    const advanced = drawerActive === "fieldSkills", owner = advanced ? classSkillBookOwner : null;
+    const current = () => !advanced || (drawerActive === "fieldSkills" && isCurrentClassSkillBook(owner));
+    const core = advanced ? coreSkillGraphData() : null;
     const sel = skillGraphSel[kind] && model.nodes.some(n => n.id === skillGraphSel[kind]) ? skillGraphSel[kind] : null;
-    const key = JSON.stringify([kind, model.key, sel, skillView]);
+    const key = JSON.stringify([kind, model.key, sel, skillView, advanced, core && [core.ranks, core.level, core.available]]);
     if (key === skillGraphKey && container.querySelector(".sg-wrap")) return; skillGraphKey = key;
     const view = container.querySelector(".sg-view"); if (view) skillGraphScroll[kind] = [view.scrollLeft, view.scrollTop];
-    const L = layoutSkillGraph(model, (container.clientWidth || 360) - 4), pts = Math.max(0, model.points), lvNow = skillLearningLevel(ownServerCharacter());
+    const L = layoutSkillGraph(model, (container.clientWidth || 360) - 4, advanced ? 76 : 44), pts = Math.max(0, model.points), lvNow = skillLearningLevel(ownServerCharacter());
     for (const n of model.nodes) n._state = nodeState(n, pts);
     const edges = [];
     for (const n of model.nodes) for (const r of n.requires) { const p = L.byId.get(r); if (!p || p._x == null || n._x == null) continue;
       const cls = p.learned && n.learned ? "on" : p.learned && n._state === "ready" ? "next" : p.learned ? "half" : "off";
       const y1 = p._y + 48, y2 = n._y - 24, my = y1 + (y2 - y1) * .55;
-      edges.push(`<path class="sg-edge ${cls}${sel && (sel === n.id || sel === p.id) ? " hl" : ""}" d="M${p._x} ${y1} C${p._x} ${my} ${n._x} ${my} ${n._x} ${y2}"/>`); }
+      edges.push(`<path data-sg-prereq="${sgEsc(r)}:${sgEsc(n.id)}" class="sg-edge ${cls}${sel && (sel === n.id || sel === p.id) ? " hl" : ""}" d="M${p._x} ${y1} C${p._x} ${my} ${n._x} ${my} ${n._x} ${y2}"/>`); }
+    // Core ranks are not unlock prerequisites. Connect the shared class to advanced
+    // roots with a separate dotted grouping bus; only catalog requires form solid edges.
+    const roots = advanced ? model.nodes.filter(n => !n.requires.some(id => L.byId.has(id))) : [];
+    const groupEdges = roots.length ? `<path class="sg-group-edge" d="M0 0 V54 H${L.width}"/>` + roots.map(n =>
+      `<path class="sg-group-edge" data-sg-group-edge="${sgEsc(n.id)}" d="M${n._x} 54 V${n._y - 26}"/>`).join("") : "";
     const lanesHtml = L.lanes.map(l => `<div class="sg-lane${l.active ? " active" : ""}" style="left:${l.x}px;width:${l.w}px"><b>${sgEsc(l.name)}</b>${l.note ? `<small>${sgEsc(l.note)}</small>` : ""}${l.active ? `<em>ใช้อยู่</em>` : l.choose ? `<button type="button" data-sg-school="${sgEsc(l.id)}">เลือกใช้</button>` : ""}</div>`).join("");
     const nodesHtml = model.nodes.filter(n => n._x != null).map(n => `<button type="button" class="sg-node ${n._state}${n.id === sel ? " sel" : ""}${n.basic ? " basic" : ""}" data-sg-node="${sgEsc(n.id)}" style="left:${n._x}px;top:${n._y}px" aria-label="${sgEsc(n.name)}">
-      <span class="sg-orb">${SG_GLYPH[n.effect] || "✦"}${n.slot >= 0 ? `<i class="sg-slot">${n.slot + 1}</i>` : ""}</span><span class="sg-name">${sgEsc(n.name)}</span><span class="sg-lv">${n.basic ? "พื้นฐาน" : n.rankable ? "ขั้นเสริม " + n.rank + "/" + n.rankMax : n.learned ? "เรียนแล้ว" : "Lv." + n.level}</span>${n.rankable ? `<span class="sg-pips">${Array.from({ length: n.rankMax }, (_, i) => `<i class="${i < n.rank ? "on" : ""}"></i>`).join("")}</span>` : ""}</button>`).join("");
+      <span class="sg-orb">${SG_GLYPH[n.effect] || "✦"}${n.slot >= 0 ? `<i class="sg-slot" title="${advanced ? "ช่องลัดวิชาเสริม " : "ช่องลัด "}${n.slot + 1}">${n.slot + 1}</i>` : ""}</span><span class="sg-name">${sgEsc(n.name)}</span><span class="sg-lv">${n.basic ? "พื้นฐาน" : n.rankable ? "ขั้นเสริม " + n.rank + "/" + n.rankMax : n.learned ? "เรียนแล้ว" : "Lv." + n.level}</span>${n.rankable ? `<span class="sg-pips">${Array.from({ length: n.rankMax }, (_, i) => `<i class="${i < n.rank ? "on" : ""}"></i>`).join("")}</span>` : ""}</button>`).join("");
     const n = sel && L.byId.get(sel);
     let detail = `<div class="sg-detail empty">แตะโหนดเพื่อดูวิชา · <span class="sg-key"><i class="k ready"></i>เรียนได้</span><span class="sg-key"><i class="k learned"></i>เรียนแล้ว</span><span class="sg-key"><i class="k locked"></i>ยังล็อก</span></div>`;
     if (n) {
@@ -183,17 +191,20 @@
           <button type="button" class="sg-up" data-sg-upgrade="${sgEsc(n.id)}" ${can ? "" : "disabled"}>${pts < 1 ? "แต้มไม่พอ" : "อัปขั้น · 1 แต้ม"}</button>` : `<p class="sg-passive">ขั้นสูงสุดแล้ว</p>`}</div>`;
       }
       const learnBtn = n.learned ? "" : `<button type="button" class="primary" data-sg-learn="${sgEsc(n.id)}" ${n._state === "ready" ? "" : "disabled"}>${pts < 1 ? "แต้มไม่พอ" : n._state === "ready" ? "เรียน · 1 แต้ม" : "ยังเรียนไม่ได้"}</button>`;
-      const slotBtns = n.canEquip && !n.passive ? `<div class="sg-slots"><span>ช่องลัด</span>${Array.from({ length: model.slotCount }, (_, i) => `<button type="button" data-sg-equip="${i}" class="${n.slot === i ? "on" : ""}">${i + 1}</button>`).join("")}</div>` : n.learned && n.passive ? `<p class="sg-passive">ติดตัวแล้ว · ทำงานเองตลอด</p>` : "";
+      const slotBtns = n.canEquip && !n.passive ? `<div class="sg-slots"><span>${advanced ? "ช่องลัดวิชาเสริม" : "ช่องลัด"}</span>${Array.from({ length: model.slotCount }, (_, i) => `<button type="button" data-sg-equip="${i}" class="${n.slot === i ? "on" : ""}">${i + 1}</button>`).join("")}</div>` : n.learned && n.passive ? `<p class="sg-passive">ติดตัวแล้ว · ทำงานเองตลอด</p>` : "";
       detail = `<div class="sg-detail"><div class="sg-dh"><span class="sg-orb sm ${n._state}">${SG_GLYPH[n.effect] || "✦"}</span><div><strong>${sgEsc(n.name)}</strong><small>${sgEsc(sgCombatLine(n))}</small></div></div>
         <p>${sgEsc(n.description || "")}</p>${n.checks.length ? `<ul class="sg-checks">${n.checks.map(c => `<li class="${c.ok ? "ok" : "no"}">${c.ok ? "✓" : "✗"} ${sgEsc(c.label)}</li>`).join("")}</ul>` : ""}
         ${!n.learned && missing.some(c => /^ใช้สำนัก/.test(c.label)) ? `<p class="note">เลือกใช้สำนักนี้ที่หัวคอลัมน์ก่อน (ทำได้ที่ลานพัก)</p>` : ""}${learnBtn}${rankHtml}${slotBtns}</div>`;
     }
     const me = ownServerCharacter(), cls = SG_CLASS[me?.pathId] || { name: model.title, role: "", glyph: "✦", tone: "gold" };
     const activeLane = L.lanes.find(l => l.active), learnedN = model.nodes.filter(x => x.learned && !x.basic).length, totalN = model.nodes.filter(x => !x.basic).length;
-    container.innerHTML = `<div class="sg-wrap" data-tone="${cls.tone}"><div class="sg-banner"><span class="sg-crest">${cls.glyph}</span><div class="sg-title"><small>${sgEsc(cls.role)} · Lv.${lvNow}</small><strong>${sgEsc(cls.name)}</strong><em>${activeLane ? "สำนัก" + sgEsc(activeLane.name) + " · " : ""}เรียนแล้ว ${learnedN}/${totalN} วิชา</em></div><div class="sg-points"><b>${pts}</b><span>แต้มวิชา</span></div></div>
+    const coreTree = core ? `<section class="sg-core-tree" aria-label="วิชาแกนที่เชื่อมกับผังวิชาเสริม"><div class="sg-core-heading"><strong>วิชาแกน 4 ช่อง</strong><span>แต้มแกน ${core.available} / ${core.points}</span></div><div class="sg-core-nodes">${core.ids.map(id =>
+      `<button type="button" data-sg-core="${sgEsc(id)}" aria-label="${sgEsc(core.catalog.core[id].name)} ขั้น ${Number(core.ranks[id] || 0)}"><span class="kg-glyph" data-skill-glyph="${sgEsc(id)}">✦</span><strong>${sgEsc(core.catalog.core[id].name)}</strong><small>ขั้น ${Number(core.ranks[id] || 0)}/${core.levels.length}</small></button>`).join("")}</div><div class="sg-tree-join">${sgEsc(cls.name)} · วิชาอาชีพเดียวกัน</div></section>` : "";
+    container.innerHTML = `<div class="sg-wrap${advanced ? " sg-advanced" : ""}" data-tone="${cls.tone}"><div class="sg-banner"><span class="sg-crest">${cls.glyph}</span><div class="sg-title"><small>${sgEsc(cls.role)} · Lv.${lvNow}</small><strong>${sgEsc(cls.name)}</strong><em>${activeLane ? "สำนัก" + sgEsc(activeLane.name) + " · " : ""}เรียนแล้ว ${learnedN}/${totalN} วิชาเสริม</em></div><div class="sg-points"><b>${pts}</b><span>${advanced ? "แต้มสาย" : "แต้มวิชา"}</span></div></div>
       <div class="sg-sum">ใช้ไป ${1 + Math.floor((Math.min(lvNow,100)-1)/2) - pts} / ${1 + Math.floor((Math.min(lvNow,100)-1)/2)} แต้ม · ${model.summary.map(sgEsc).join(" · ")}</div>
-      <div class="sg-view"><div class="sg-sizer"><div class="sg-canvas" style="width:${L.width}px;height:${L.height}px;--sgw:${L.W - 4}px">${lanesHtml}<svg class="sg-edges" width="${L.width}" height="${L.height}">${edges.join("")}</svg>${nodesHtml}</div></div></div>
-      ${detail}<p class="note">เรียน จัดช่อง และเปลี่ยนสำนักที่ลานพักหลังพ้นการต่อสู้ 5 วินาที</p><button type="button" class="secondary" data-sg-reset>คืนแต้ม</button></div>`;
+      ${advanced ? '<p class="note sg-tree-key">เส้นประเชื่อมวิชาอาชีพเดียวกัน ไม่ใช่เงื่อนไขปลดล็อก · เส้นทึบคือวิชาที่ต้องเรียนก่อน · แตะวิชาแกนหรือวิชาเสริมเพื่อดูรายละเอียด</p>' : ""}${coreTree}
+      <div class="sg-view"><div class="sg-sizer"><div class="sg-canvas" style="width:${L.width}px;height:${L.height}px;--sgw:${L.W - 4}px">${lanesHtml}<svg class="sg-edges" aria-hidden="true" width="${L.width}" height="${L.height}">${groupEdges}${edges.join("")}</svg>${nodesHtml}</div></div></div>
+      ${detail}<p class="note">เรียน จัดช่อง${advanced ? "วิชาเสริม" : ""} และเปลี่ยนสำนักที่ลานพักหลังพ้นการต่อสู้ 5 วินาที</p><button type="button" class="secondary" data-sg-reset>คืนแต้ม${advanced ? "สาย" : ""}</button></div>`;
     const v = container.querySelector(".sg-view"), s = skillGraphScroll[kind];
     // Fit the whole graph to the drawer width when it is a little wider (down to 72%), scroll beyond that.
     const fit = Math.max(.8, Math.min(1, (v.clientWidth - 2) / L.width)), sizer = v.querySelector(".sg-sizer"), canvas = v.querySelector(".sg-canvas");
@@ -201,11 +212,12 @@
     if (s) { v.scrollLeft = s[0]; v.scrollTop = s[1]; }
     else { const act = L.lanes.find(l => l.active); if (act) v.scrollLeft = Math.max(0, act.x - 40); }
     container.querySelectorAll("[data-sg-node]").forEach(b => b.onclick = () => { skillGraphSel[kind] = b.dataset.sgNode === sel ? null : b.dataset.sgNode; SFX("tap"); renderSkillGraph(kind, container); });
-    container.querySelectorAll("[data-sg-school]").forEach(b => b.onclick = () => model.groups.find(g => g.id === b.dataset.sgSchool)?.choose?.());
-    container.querySelector("[data-sg-learn]")?.addEventListener("click", e => model.learn(e.currentTarget.dataset.sgLearn));
-    container.querySelector("[data-sg-upgrade]")?.addEventListener("click", e => model.upgrade?.(e.currentTarget.dataset.sgUpgrade));
-    container.querySelectorAll("[data-sg-equip]").forEach(b => b.onclick = () => model.equip(sel, Number(b.dataset.sgEquip)));
-    container.querySelector("[data-sg-reset]").onclick = () => model.reset();
+    container.querySelectorAll("[data-sg-core]").forEach(b => b.onclick = () => { if(current())openSkillDetailModal(b.dataset.sgCore); });
+    container.querySelectorAll("[data-sg-school]").forEach(b => b.onclick = () => { if(current())model.groups.find(g => g.id === b.dataset.sgSchool)?.choose?.(); });
+    container.querySelector("[data-sg-learn]")?.addEventListener("click", e => { if(current())model.learn(e.currentTarget.dataset.sgLearn); });
+    container.querySelector("[data-sg-upgrade]")?.addEventListener("click", e => { if(current())model.upgrade?.(e.currentTarget.dataset.sgUpgrade); });
+    container.querySelectorAll("[data-sg-equip]").forEach(b => b.onclick = () => { if(current())model.equip(sel, Number(b.dataset.sgEquip)); });
+    container.querySelector("[data-sg-reset]").onclick = () => { if(current())model.reset(); };
   }
   // Graph / list switch shown above every class book.
   const SKILL_BOOKS = { sword: ["swordTreeBody", () => { swordTreeRenderKey = ""; renderSwordTree(); }], muay: ["muayBookBody", () => { muayBookRenderKey = ""; renderMuayBook(); }],
@@ -355,10 +367,16 @@
   function openClassBookDrawer(kind, title, html) {
     classSkillBookOwner = classSkillBookIdentity();
     closeSkillDetailModal();
-    openDrawer(kind, title, html);
+    const advancedEntry = mode === "live" && kind !== "fieldSkills" && kind !== "skillLoadout" && !!CORE_GRAPH_IDS[classSkillBookOwner.path];
+    openDrawer(kind, title, (advancedEntry ? '<button id="classAdvancedBook" type="button" class="secondary">ผังสกิลทั้งหมด · วิชาแกนและวิชาเสริม</button>' : "") + (mode==="live" && kind!=="skillLoadout" ? '<button id="classSkillLoadout" type="button" class="secondary">ปรับแต่งช่องสกิล</button>' : "") + html);
+    if($("classSkillLoadout")){const owner=classSkillBookOwner;$("classSkillLoadout").onclick=()=>{if(drawerActive===kind && isCurrentClassSkillBook(owner))openSkillLoadout();};}
+    if(advancedEntry){
+      const owner=classSkillBookOwner;
+      $("classAdvancedBook").onclick=()=>{if(drawerActive===kind && isCurrentClassSkillBook(owner))openFieldDeepTraining();};
+    }
   }
   function syncClassSkillBookContext() {
-    if (["swordTree", "muayBook", "bladeBook", "sentinelBook", "occultBook"].includes(drawerActive) &&
+    if (["swordTree", "muayBook", "bladeBook", "sentinelBook", "occultBook", "fieldSkills", "skillLoadout"].includes(drawerActive) &&
         !isCurrentClassSkillBook(classSkillBookOwner)) {
       closeSkillDetailModal();
       closeDrawer();

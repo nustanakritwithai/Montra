@@ -715,13 +715,13 @@ jobs:
           MONTRA_DIRECTOR_PERSIST: '0'
         run: npx tsx --test src/rooms/typhoon-guide.test.ts src/rooms/npc-guide-room.test.ts
 
-      - name: Test quest completion guidance across rebirths
+      - name: Test quest kill progress and completion guidance
         working-directory: combat-verify
         env:
           MONTRA_WORLD_EXPANSION: '1'
           MONTRA_DIRECTOR_PERSIST: '0'
           MONTRA_ECONOMY_ENABLED: '0'
-        run: npx tsx --test src/rooms/quest-guidance-room.test.ts
+        run: npx tsx --test src/rooms/quest-guidance-room.test.ts src/rooms/quest-kill-progress-room.test.ts
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify

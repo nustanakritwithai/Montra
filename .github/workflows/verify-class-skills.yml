@@ -10,8 +10,15 @@ on:
       - 'scripts/build-client*.mjs'
       - 'scripts/build-styles*.mjs'
       - 'deploy/combat/class-skills-*.cjs'
+      - 'deploy/combat/advanced-skills-*.cjs'
       - 'deploy/combat/class-skill-routing-test.cjs'
       - 'deploy/combat/core-skill-catalog-fixture.cjs'
+      - 'deploy/combat/SkillCatalog.ts'
+      - 'deploy/combat/MuayRules.ts'
+      - 'deploy/combat/BladeRules.ts'
+      - 'deploy/combat/SentinelRules.ts'
+      - 'deploy/combat/OccultRules.ts'
+      - 'deploy/combat/Progression.ts'
       - '.github/workflows/verify-class-skills.yml'
   pull_request:
     paths:
@@ -19,8 +26,15 @@ on:
       - 'index.html'
       - 'src/styles/**'
       - 'deploy/combat/class-skills-*.cjs'
+      - 'deploy/combat/advanced-skills-*.cjs'
       - 'deploy/combat/class-skill-routing-test.cjs'
       - 'deploy/combat/core-skill-catalog-fixture.cjs'
+      - 'deploy/combat/SkillCatalog.ts'
+      - 'deploy/combat/MuayRules.ts'
+      - 'deploy/combat/BladeRules.ts'
+      - 'deploy/combat/SentinelRules.ts'
+      - 'deploy/combat/OccultRules.ts'
+      - 'deploy/combat/Progression.ts'
       - '.github/workflows/verify-class-skills.yml'
   workflow_dispatch:
 permissions:
@@ -45,8 +59,11 @@ jobs:
       - name: Verify isolated class routing and rendering
         run: |
           node deploy/combat/class-skill-routing-test.cjs
+          node deploy/combat/class-skills-entry-test.cjs
           node deploy/combat/class-skills-browser-test.cjs
           node deploy/combat/class-skills-hotbar-browser-test.cjs
+          node deploy/combat/class-skills-entry-browser-test.cjs
+          MONTRA_ADVANCED_EVIDENCE=class-skills-browser-evidence/advanced node deploy/combat/advanced-skills-loadout-browser-test.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -126,9 +126,9 @@ context.gearGuides={path:me.pathId,level:10,starterHunt:camp,journey,builds:[{st
 const comparisons=source.slice(source.indexOf("  function wornGearAt("),source.indexOf("  let demoWeaponSlot"));
 const journeyApi=vm.runInNewContext("let journeyOwner='',journeyNotes={};\n"+fieldSource+drawerSource+comparisons+
   "\n({goal:fieldGearGoal,draw:renderFieldGoalDrawer,start:startJourneyPractice,cast:recordPracticeCast,kill:recordPracticePrey,notes:journeyNotesForPlayer,save:saveJourney})",context);
-let step=journeyApi.goal();assert.equal(step.recipe,"newWrap");assert.equal(step.to,context.room.state.monsters.get("belfry2"));
+let step=journeyApi.goal();assert.equal(step.recipe,"newWrap");assert.equal(step.to,docs.hide.huntTarget,"missing ingredient leads to its source instead of the weapon drop camp");
 journeyApi.draw(step);assert.match(get("fieldGearCompare").textContent,/เก็บ ผ้าพันหมัด \+3 ไว้ได้/);
-get("fieldGearSkip").onclick();assert.equal(journeyApi.goal(),null);me.characterId="journeyB";assert.equal(journeyApi.goal().recipe,"newWrap");me.characterId="journeyA";assert.equal(journeyApi.goal(),null);
+get("fieldGearSkip").onclick();assert(journeyApi.goal().levelGoal);me.characterId="journeyB";assert.equal(journeyApi.goal().recipe,"newWrap");me.characterId="journeyA";assert(journeyApi.goal().levelGoal);
 journeyApi.save({skipped:[]});bag.slots.push({itemId:"newWrap",quantity:1});step=journeyApi.goal();assert.equal(step.itemSlot,1);
 journeyApi.draw(step);assert.equal(get("fieldGearView").hidden,false);
 me.level=context.gearGuides.level=15;journeyApi.kill(journeyWorld);journeyApi.start({skillId:"punch",name:"หมัด"});
@@ -199,3 +199,16 @@ journeyApi.draw(journeyApi.goal());get("fieldStopShrine").onclick();assert.match
 context.gearGuides.cycle=1;me.level=context.gearGuides.level=1;
 assert.equal(journeyApi.notes().campId,undefined);assert.equal(journeyApi.notes().shrine,undefined);
 console.log("PASS capped practice, selected camp, shrine route, cancel and new-life scope");
+
+// Early EXP goals expose the same camp picker without requiring an upper-level course.
+me.level=context.gearGuides.level=9;context.activeMapId=me.mapId=camp.mapId;
+bag.slots=[{itemId:'wrap',quantity:1,forge:{rank:3}}];bag.equippedWeaponSlot=0;
+const earlyA={...journeyWorld,id:'earlyA',level:9},earlyB={...journeyWorld,id:'earlyB',level:8};
+Object.assign(journey,{weapon:'newWrap',camp:journeyWorld,practice:earlyA,camps:[earlyA,earlyB],bosses:[],boss:null});delete journey.course;
+journeyApi.save({campId:null,boss:null,skipped:[],trial:null});
+step=journeyApi.goal();assert(step.levelGoal);assert.match(step.progress,/Lv\.9 \/ 10/);journeyApi.draw(step);
+assert.equal(get('fieldCampList').hidden,false);assert.equal(get('fieldCampList').options.length,2);
+get('fieldCampList').value='earlyB';get('fieldCampList').onchange();assert.equal(journeyApi.notes().campId,'earlyB');
+assert(journeyApi.goal().levelGoal);me.level=context.gearGuides.level=10;
+assert.equal(journeyApi.goal().recipe,'newWrap','Lv10 resumes the equipment recipe without a new selection');
+console.log('PASS early leveling camp selection and automatic Lv10 equipment transition');

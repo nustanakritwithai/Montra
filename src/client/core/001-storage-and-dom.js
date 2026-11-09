@@ -50,9 +50,12 @@
   };
   let toastTimer;
   function positionSwordToast() {
-    const anchor=document.querySelector(".field-prompts .warp-button:not([hidden]), .controls .sword-status:not([hidden]), .controls .sword-hotbar:not([hidden])");
-    if (!anchor) { ui.toast.style.removeProperty("bottom"); return; }
-    const game=$("game").getBoundingClientRect(), area=anchor.getBoundingClientRect();
-    ui.toast.style.bottom=Math.max(0,game.bottom-area.top+8)+"px";
+    // A hidden bank and display:contents wrappers have no rendered box. Anchor
+    // to the visible controls themselves so notices stay on screen in either bank.
+    const areas=Array.from(document.querySelectorAll(".field-prompts .warp-button:not([hidden]), .controls .sword-status:not([hidden]), .controls .sword-hotbar:not([hidden]) button"))
+      .map(el=>el.getBoundingClientRect()).filter(area=>area.width>0 && area.height>0);
+    if(!areas.length){ui.toast.style.removeProperty("bottom");return;}
+    const game=$("game").getBoundingClientRect(),top=Math.min(...areas.map(area=>area.top));
+    ui.toast.style.bottom=Math.max(0,game.bottom-top+8)+"px";
   }
 

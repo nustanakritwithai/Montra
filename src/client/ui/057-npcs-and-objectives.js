@@ -196,18 +196,24 @@
     if(keeper)ask.onclick=()=>openNpcGuide({id:keeper.mapId+"_ranger",name:keeper.name});
     renderForestObjective();room?.send("get_forest_objective",{});
   }
+  function renderItemHuntDrawer(hunt=itemHuntGuide()){
+    // Completion may replace the drawer body while resolving the current hunt.
+    if(!hunt || !$("huntStep"))return;
+    ui.drawerTitle.textContent=hunt.title;
+    renderItemPreview("huntItemPreview",currentItemHunt()?.id);
+    $("huntStep").textContent=hunt.step+" · "+hunt.progress;
+    $("huntMap").onclick=openMap;
+    $("huntRefine").hidden=!hunt.refineId;
+    $("huntRefine").onclick=()=>{const slot=inventoryState?.slots?.findIndex(s=>s?.itemId===hunt.refineId)??-1;openBag();if(slot>=0)$("bagSlot"+slot)?.click();};
+    $("endItemHunt").onclick=()=>{saveItemHunt(null);closeDrawer();};
+  }
   // Compact portrait HUD: a small quest chip opens the existing detail drawer.
   function openCurrentQuest(preferJourney=false) {
     const followingShrine=gearGuides?.journey?.shrine && journeyNotesForPlayer().shrine && !territoryState?.local?.inField;
     const hunt=followingShrine?null:itemHuntGuide();
     if(hunt && !ui.quest.classList.contains("war-hud")){
       openDrawer("quest",hunt.title,'<div id="huntItemPreview" class="item-preview"></div><p id="huntStep" class="note"></p><button id="huntMap" type="button" class="secondary">ดูตำแหน่งบนแผนที่</button><button id="huntRefine" type="button" class="primary" hidden>เปิดกระเป๋าเพื่อแปรรูป</button><button id="endItemHunt" type="button" class="secondary">เลิกติดตาม</button>');
-      renderItemPreview("huntItemPreview",currentItemHunt()?.id);
-      $("huntStep").textContent=hunt.step+" · "+hunt.progress;
-      $("huntMap").onclick=openMap;
-      $("huntRefine").hidden=!hunt.refineId;
-      $("huntRefine").onclick=()=>{const slot=inventoryState?.slots?.findIndex(s=>s?.itemId===hunt.refineId)??-1;openBag();if(slot>=0)$("bagSlot"+slot)?.click();};
-      $("endItemHunt").onclick=()=>{saveItemHunt(null);closeDrawer();};
+      renderItemHuntDrawer(hunt);
       return;
     }
     if(!followingShrine && territoryState?.local?.site===activeMapId){openWarPanel();return;}
@@ -242,7 +248,7 @@
     const journey=gearGuides?.journey, course=journey?.course;
     const lesson=midgame && gearGuides?.journey?.lesson;
     names.hidden=!training && !lesson && !course;book.hidden=!training && !midgame;book.onclick=openFieldTraining;
-    const deep=$("fieldDeepBook");deep.hidden=!midgame;deep.onclick=openFieldDeepTraining;
+    const deep=$("fieldDeepBook");deep.hidden=mode!=="live" || !fieldSkillKind();deep.onclick=openFieldDeepTraining;
     const cast=$("fieldPracticeCast");cast.hidden=!goal?.trial?.deep || goal.trial.used;
     if(!cast.hidden){cast.textContent="ลอง "+goal.trial.name;cast.onclick=()=>tryFieldTechnique(goal.trial);}
 
@@ -284,7 +290,7 @@
     }
     stopShrine.onclick=()=>{saveJourney({shrine:false});renderFieldGoalDrawer(fieldGearGoal());};
     const camps=[...(journey?.camps??[]),...(journey?.challenges??[])], campList=$("fieldCampList");
-    campList.hidden=!course || camps.length<2;
+    campList.hidden=!(course || goal?.levelGoal) || camps.length<2;
     if(!campList.hidden){
       campList.replaceChildren(...camps.map(c=>new Option(c.map+" · "+c.monster+" Lv."+c.level+(journey.challenges?.includes(c)?" · ท้าทาย":""),c.id)));
       campList.value=fieldCamp(journey,journeyNotesForPlayer())?.id??"";
