@@ -328,6 +328,27 @@
         for (const dx of [.18, .24]) { box(dx, 1.0, 0, .006, .08, .006, ropeRed); cyl(dx, .94, 0, .045, .02, .045, gold, 8); }
         cyl(0, -.58, 0, .1, .055, 0, copper, 5).rotation.x = Math.PI;
         root.rotation.x = -.2;
+      } else if (kind === "tool_axe") {
+        // Woodcutter's axe (ขวาน): ash handle bound with rattan, a wedge iron head and a hammer poll.
+        cyl(0, .22, 0, .86, .036, .044, crookWoodMat, 8);
+        for (const y of [-.12, -.05]) cyl(0, y, 0, .025, .052, .052, ropeRed, 8);
+        box(.09, .6, 0, .16, .1, .05, blackSteel); box(.2, .6, 0, .07, .17, .035, blackSteel); box(.236, .6, 0, .014, .19, .038, daabEdge);
+        box(-.045, .6, 0, .06, .08, .06, blackSteel);
+        root.rotation.x = -.3;
+      } else if (kind === "tool_pick") {
+        // Hoe-pick (อีเต้อ): long handle and a curved iron head, chisel in front and a spike behind.
+        cyl(0, .26, 0, .96, .038, .046, crookWoodMat, 8);
+        cyl(0, .72, 0, .1, .07, .07, blackSteel, 8);
+        for (let i = 0; i < 4; i++) { const seg = box(.06 + i * .07, .72 - i * i * .012, 0, .08, .05 - i * .006, .045 - i * .006, blackSteel); seg.rotation.z = -i * .12; }
+        box(.31, .66, 0, .03, .07, .05, daabEdge);
+        for (let i = 0; i < 3; i++) { const seg = cyl(-.06 - i * .06, .72 - i * i * .01, 0, .07, .03 - i * .009, .04 - i * .009, blackSteel, 6); seg.rotation.z = Math.PI / 2 + i * .12; }
+        root.rotation.x = -.3;
+      } else if (kind === "tool_sickle") {
+        // Harvest sickle (เคียว): short wooden grip and a thin crescent blade.
+        cyl(0, -.04, 0, .22, .04, .045, crookWoodMat, 8);
+        cyl(0, .08, 0, .03, .05, .05, copper, 8);
+        for (let i = 0; i < 7; i++) { const a = i / 6 * Math.PI * .95; const seg = box(Math.sin(a) * .14, .12 + (1 - Math.cos(a)) * .14 + .04, 0, .07, .022, .012, daabSteel); seg.rotation.z = -a - Math.PI / 2; }
+        root.rotation.x = -.8;
       } else {
         // Naga staff: banded shaft, coiled neck, flame crest and spirit orb.
         cyl(0, .2, 0, 1.75, .07, .08, blackSteel, 8);
@@ -353,6 +374,10 @@
       mender_crook: createHeldWeapon("mender_crook"),
       thai_left: createHeldWeapon("thai_left"),
       thai_right: createHeldWeapon("thai_right"),
+      // Gathering tools, shown only while chopping, digging or reaping (see showGatherTool).
+      tool_axe: createHeldWeapon("tool_axe"),
+      tool_pick: createHeldWeapon("tool_pick"),
+      tool_sickle: createHeldWeapon("tool_sickle"),
     };
     if(!npcOptions)attachCrescentBlade(weaponModels.arcane_sword);
     // Three familiar spirits: a glowing head with a tapering wisp tail.

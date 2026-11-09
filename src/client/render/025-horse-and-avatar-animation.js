@@ -95,6 +95,17 @@
     mesh.material = material; mesh.isPickable = false; mesh.ignoreNonUniformScaling = true;
     return mesh;
   }
+  // Gathering tools replace the held weapon only while a chop / dig / gather motion plays.
+  const GATHER_TOOLS = { chop: "tool_axe", dig: "tool_pick", gather: "tool_sickle" };
+  function showGatherTool(a, kind) {
+    const models = a.weaponModels; if (!models || (a.gatherTool || null) === (kind || null)) return;
+    if (a.gatherTool) models[a.gatherTool]?.setEnabled(false);
+    a.gatherTool = kind || null;
+    for (const [id, model] of Object.entries(models)) {
+      if (id.startsWith("tool_")) model.setEnabled(id === kind);
+      else model.setEnabled(!kind && (id === a.weaponId || (a.weaponId === "thai_dual" && (id === "thai_left" || id === "thai_right"))));
+    }
+  }
   // Lazily built per-avatar effect meshes, reused for every action.
   function avatarFx(a) {
     if (a.fx) return a.fx;
@@ -262,6 +273,7 @@
     // ---- Transient actions: coil, strike and follow-through with the hips
     // leading the shoulders and the weight moving onto the front foot.
     const act = a.action, fx = avatarFx(a);
+    showGatherTool(a, act && now < act.end && !dead ? GATHER_TOOLS[act.type] : null);
     for (const arc of Object.values(fx.slashes)) arc.setEnabled(false);
     fx.orb.setEnabled(false); fx.vial.setEnabled(false); fx.seal.setEnabled(false);
     let flare = 0, spin = 0;
@@ -530,6 +542,40 @@
           pose("RightForeArm", [0, .3, 0], [0, .2, 0]); pose("LeftForeArm", [0, -.3, 0], [0, -.2, 0]);
           pose("Head", [-.2, 0, 0], [.35, 0, 0]);
           off[1] += (.04 * (1 - strike)) * w; trail(); break;
+        case "chop": case "dig": {
+          // Three strokes; each winds up over the right shoulder and drives the head in at q ~ .55.
+          const beat = Math.min(2, Math.floor(p * 3)), q = p * 3 - beat, k = ease((q - .33) / .26), back = ease(q / .3) * (1 - k);
+          const lp = (bone, A, Bv) => { const v = lerp(A, Bv, k); mix(bone, v[0], v[1], v[2], w); };
+          if (act.type === "chop") {
+            // Diagonal one-hand cut into a trunk: the torso unwinds from the right and carries the axe across.
+            const v = lerp([-.05, -.7, .16], [.34, .7, -.12], k); bend(v[0], v[1], v[2], w);
+            lp("Hips", [0, -.45, -.04], [.05, .25, .05]);
+            lp("RightShoulder", [0, -.2, -.12], [0, .28, .05]);
+            lp("RightArm", [-2.6, -.35, 1.25], [-.6, .85, 1.0]); lp("RightForeArm", [0, .85, 0], [0, .15, 0]);
+            lp("LeftArm", [-.55, .2, -1.05], [-1.0, -.2, -.95]); lp("LeftForeArm", [0, -.6, 0], [0, -1.3, 0]);
+            lp("Head", [-.1, -.3, 0], [.15, .25, 0]);
+            mix("LeftUpLeg", -.4, .05, .12, w); mix("LeftLeg", .45, 0, 0, w); mix("RightUpLeg", .25, 0, -.1, w); mix("RightLeg", .3, 0, 0, w);
+            off[1] -= (.04 + .04 * k) * w;
+          } else {
+            // Hoe-pick raised high in the right hand and driven down into the ground in front; left arm braced.
+            const v = lerp([-.3, -.1, 0], [.75, .05, 0], k); bend(v[0], v[1], v[2], w);
+            lp("RightArm", [-2.9, -.1, .55], [-.75, .1, .95]); lp("RightForeArm", [0, .7, 0], [0, .1, 0]);
+            lp("LeftArm", [-.7, .1, -1.0], [-1.05, .2, -.9]); lp("LeftForeArm", [0, -1.1, 0], [0, -.7, 0]);
+            lp("Head", [-.25, 0, 0], [.45, 0, 0]);
+            mix("LeftUpLeg", -.55, 0, .14, w); mix("LeftLeg", .8, 0, 0, w); mix("RightUpLeg", .15, 0, -.14, w); mix("RightLeg", .45, 0, 0, w);
+            off[1] -= (.06 + .07 * k) * w; off[2] -= .04 * back * w;
+          }
+          break;
+        }
+        case "gather": {
+          // Crouch, part the leaves with the left hand and cut low with the sickle twice.
+          const c = ease(p / .22) * (1 - ease((p - .82) / .18)), cut = Math.max(0, Math.sin((p - .2) * Math.PI * 4));
+          bend(.7, .15, 0, c); mix("Head", .45, 0, 0, c); off[1] -= .36 * c; off[2] += .06 * c;
+          mix("LeftUpLeg", -1.35, 0, .2, c); mix("LeftLeg", 1.95, 0, 0, c); mix("RightUpLeg", -.75, 0, -.22, c); mix("RightLeg", 1.9, 0, 0, c);
+          mix("RightArm", -.75 + .35 * cut, -.4 * cut, .7, c); mix("RightForeArm", 0, .55 - .4 * cut, 0, c);
+          mix("LeftArm", -.85, .2, -.75, c); mix("LeftForeArm", 0, -.6, 0, c);
+          break;
+        }
         case "cast": {
           weight(strike * .6, .7); spine([-.15, .45, .12], [.2, -.4, -.05]);
           pose("RightArm", [-2.3, 0, 1.0], [-1.65, 0, 1.12]);

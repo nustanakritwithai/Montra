@@ -111,13 +111,40 @@
     }
   }
   // Gather feedback (visual only): chips and sparks off ore, splinters off timber, leaf bits off herbs, then a dust ring.
-  function harvestBurst(n){
+  function harvestBurst(n,count=9,ring=true){
     if(!n || typeof spawnFx!=="function")return;
     const terrain=worldDefinitions?.[activeMapId]?.terrain,y=(terrain?terrainHeight(terrain,n.x,n.z):0)+(n.kind==="wood"?1.2:.7);
     const col=n.kind==="stone"?["white","gold"]:n.kind==="wood"?["orange","gold"]:["green","jade"];
-    for(let i=0;i<9;i++){const a=i/9*Math.PI*2+Math.random()*.5,v=1.6+Math.random()*1.8;
+    for(let i=0;i<count;i++){const a=i/count*Math.PI*2+Math.random()*.5,v=1.6+Math.random()*1.8;
       spawnFx(i%3?"glow":"star",col[i%2],n.x,y,n.z,{delay:i*18,life:420+Math.random()*220,s0:.22,s1:.08,a0:.95,a1:0,vel:[Math.cos(a)*v,2.6+Math.random()*1.6,Math.sin(a)*v],grav:9});}
-    spawnFx("ring","white",n.x,(terrain?terrainHeight(terrain,n.x,n.z):0)+.08,n.z,{orient:"ground",life:520,s0:.6,s1:2.6,a0:.35,a1:0});
+    if(ring)spawnFx("ring","white",n.x,(terrain?terrainHeight(terrain,n.x,n.z):0)+.08,n.z,{orient:"ground",life:520,s0:.6,s1:2.6,a0:.35,a1:0});
+  }
+  // Gather motion (visual only): face the node, swing the right tool, and land chips and a sound on each stroke.
+  // Timed to the 1.5 s chop / dig / gather actions: strokes connect at about .27 s, .77 s and 1.27 s.
+  const HARVEST_MOTION={wood:"chop",stone:"dig",herb:"gather"};
+  let localHarvest={id:"",at:-Infinity};
+  function playHarvestMotion(a,n){
+    if(!a || !n)return;
+    const type=HARVEST_MOTION[n.kind]||"gather",dx=n.x-a.x,dz=n.z-a.z;
+    if(Math.hypot(dx,dz)>.05){a.desiredHeading=a.heading=facingFromTravel(dx,dz);a.facingLockUntil=performance.now()+1600;}
+    playAction(a,type);if(a.local)localHarvest={id:n.id,at:performance.now()};
+    const hits=type==="gather"?[.55,1.05]:[.27,.77,1.27],sound=type==="chop"?"blunt":type==="dig"?"clash":"rice";
+    hits.forEach((t,i)=>setTimeout(()=>{
+      if(a.action?.type!==type)return;
+      harvestBurst(n,i===hits.length-1?8:4,i===hits.length-1);
+      if(typeof SFX==="function")SFX(sound,{intensity:type==="gather"?.6:.85,x:n.x,z:n.z,pitch:.9+Math.random()*.2});
+    },t*1000));
+  }
+  // Other players: the server only shares stock, so a node whose stock just dropped next to someone
+  // means they gathered it; play the same motion on them.
+  function playRemoteHarvest(n){
+    if(localHarvest.id===n.id && performance.now()-localHarvest.at<3000)return; // our own stroke
+    let best=null,dist=Infinity;
+    for(const a of avatars.values()){
+      if(a.local || a.npc)continue;const d=Math.hypot(a.x-n.x,a.z-n.z)-(n.radius||0);
+      if(d<2.6 && d<dist){best=a;dist=d;}
+    }
+    if(best)playHarvestMotion(best,n);
   }
   function nearbyResources(me){
     if(!me?.alive || me.mounted || me.flying || resources?.mapId!==me.mapId || activeMapId!==me.mapId || Math.abs(playerLayer(me))>=.1)return [];
