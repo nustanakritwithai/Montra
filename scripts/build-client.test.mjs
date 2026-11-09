@@ -11,7 +11,16 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // Intentional early hunt guidance, quest navigation, gate, market, flight, class-skill, audio, VFX and cosmetic-safeguard changes. Keep snapshot
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
-{"path": "core/001-storage-and-dom.js", "bytes": 2990, "sha256": "42023b85a09000c8866473b8aee36c685f5269877962e1ad09e098f9769b2de0"},
+{
+  "path": "ui/003-toast-and-mode.js",
+  "bytes": 1140,
+  "sha256": "17376d8893e60624095e82deec4a134e298081232045a7154165e7ccccdaf7d1"
+},
+{
+  "path": "core/001-storage-and-dom.js",
+  "bytes": 3074,
+  "sha256": "989b3139af3ac5d9f4fe68cc2786470fdfe374a0853723e071568b2fdd444f42"
+},
 {
   "path": "combat/022-action-timelines.js",
   "bytes": 2517,
@@ -119,8 +128,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 140572,
-  "sha256": "47836e21ab9d893f852aa6193f06aa30aec6686e8faf415b7ebbc6fcf0117c6b"
+  "bytes": 141098,
+  "sha256": "c208b6cd1d6dd489eb9cd2af8b5fe7040d3436bc95fe2ce7a9f960c6d30ac49c"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
@@ -239,8 +248,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1707246);
-  assert.equal(hash(bytes), 'd4627cacff0a2c5c168efaba086471aa0a0120539379f6e280976b89315fec13');
+  assert.equal(bytes.length, 1708139);
+  assert.equal(hash(bytes), '292cbb5ac7a50d42840544e86bb4853ac53fa504888575f4cc06efb56be23c4a');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
