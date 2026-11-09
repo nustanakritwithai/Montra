@@ -247,9 +247,8 @@
       comboLabelEl.textContent = label;
       comboGradeEl.textContent = grade;
       comboGradeEl.className = "combo-streak-grade " + cls;
-      comboHitsEl.style.animation = "none";
-      void comboHitsEl.offsetWidth;
-      comboHitsEl.style.animation = "comboPop 0.18s ease-out";
+      // Web Animations restart: re-triggering the CSS animation needed a forced page layout every hit.
+      comboHitsEl.animate([{ transform: "scale(1.4) rotate(4deg)" }, { transform: "scale(1) rotate(0deg)" }], { duration: 180, easing: "ease-out" });
       if (comboStreak === 7 || comboStreak === 15 || comboStreak === 25) {
         SFX("coin", { intensity: 0.8 });
         floatAtPlayer(localId, grade + " RANK!", "combo", { big: true, drift: 0 });

@@ -332,6 +332,7 @@
   updateStatus();
   updateFlightButton();
   ui.loading.hidden=true;
+  setTimeout(()=>{warmCombatFx();warmMaterials();},1500);
   window.MontraEntry?.start((endpoint,slot,setup) => connectOnline(endpoint,slot,null,setup), async () => {
     const old = room; room = null; clearSyncPoll();
     if (old) { try { await old.leave(); } catch (_) {} }

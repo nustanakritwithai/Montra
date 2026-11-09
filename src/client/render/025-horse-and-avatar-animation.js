@@ -91,7 +91,8 @@
     const mesh = new B.Mesh("slash arc", scene), data = new B.VertexData();
     data.positions = positions; data.uvs = uvs; data.indices = indices;
     data.normals = []; B.VertexData.ComputeNormals(positions, indices, data.normals); data.applyToMesh(mesh);
-    mesh.material = material; mesh.isPickable = false;
+    // Unlit trail: skip the non-uniform-scale shader variant so the first swing compiles nothing new.
+    mesh.material = material; mesh.isPickable = false; mesh.ignoreNonUniformScaling = true;
     return mesh;
   }
   // Lazily built per-avatar effect meshes, reused for every action.

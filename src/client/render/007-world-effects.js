@@ -72,6 +72,49 @@
     fxMatCache.set(key, m); return m;
   }
   const worldFx = [], worldFxPool = [], FX_MAX = 140, FX_WARNING_RESERVE = 24;
+  // Warm the combat effects while the player is idle after loading: painting an effect texture and
+  // compiling its shader the first time it appears stalled the first hits (badly on phones).
+  const FX_WARM = ["star:white", "ring:white", "ring:gold", "yantra:gold", "star:gold", "ring:violet", "streak:violet", "star:violet",
+    "ring:red", "ring:orange", "glow:violet", "dash:cyan", "beam:gold", "arc:red", "ring:green", "glow:cyan", "ring:cyan", "yantra:blood",
+    "arc:orange", "arc:cyan", "dash:red", "dash:gold", "glow:white", "disc:gold", "beam:white", "ring:blood", "star:red", "star:orange", "star:cyan"];
+  // Compile every material the current map can show, a few meshes per frame, so trees coming into view
+  // or a first strike do not stall a frame compiling shaders. Re-run after each map switch (lights change).
+  let warmQueue = null;
+  function warmMaterials() {
+    const me = typeof getLocalAvatar === "function" ? getLocalAvatar() : null;
+    if (me?.skin) try { avatarFx(me); } catch (err) { /* effect meshes are optional */ }
+    const fresh = !warmQueue; warmQueue = scene.meshes.slice();
+    if (!fresh) return;
+    const step = () => {
+      const t0 = performance.now();
+      while (warmQueue.length && performance.now() - t0 < 6) {
+        const m = warmQueue.pop();
+        if (!m || m.isDisposed() || !m.material || !m.subMeshes?.length || m instanceof B.InstancedMesh) continue;
+        try { m.isReady(true, m.hasInstances); } catch (err) { /* keep warming the rest */ }
+      }
+      if (warmQueue.length) setTimeout(step, 30); else warmQueue = null;
+    };
+    setTimeout(step, 30);
+  }
+  function warmCombatFx() {
+    // A busy render loop can starve idle callbacks, so fall back to small timed slices.
+    const idle = fn => setTimeout(() => { const t0 = performance.now(); fn({ timeRemaining: () => 10 - (performance.now() - t0) }); }, 40);
+    let i = 0, compiled = false;
+    const step = deadline => {
+      while (i < FX_WARM.length && deadline.timeRemaining() > 4) {
+        const [shape, color] = FX_WARM[i++].split(":");
+        if (!FX_SHAPES[shape]) continue;
+        const m = vfxMat(shape, color);
+        if (!compiled) {
+          compiled = true;
+          for (let k = 0; k < 16; k++) { const p = B.MeshBuilder.CreatePlane("worldFx", { size: 1 }, scene); p.isPickable = false; p.setEnabled(false); worldFxPool.push(p); }
+          m.forceCompilation(worldFxPool[0]);
+        }
+      }
+      if (i < FX_WARM.length) idle(step);
+    };
+    idle(step);
+  }
   function releaseWorldFx(index) {
     const [effect] = worldFx.splice(index, 1);
     effect.m.setEnabled(false); worldFxPool.push(effect.m);
