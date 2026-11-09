@@ -11,6 +11,11 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // Intentional early hunt guidance, quest navigation, gate, market, flight, class-skill, audio, VFX and cosmetic-safeguard changes. Keep snapshot
 // evidence unchanged; every other fragment must still match that evidence.
 const reviewedReleaseFragments = new Map([
+{
+  "path": "render/037-ghost-animation.js",
+  "bytes": 4693,
+  "sha256": "9200462f98f8f3ae03662100bb51471151532b810780217ddec3fda08020f409"
+},
 {"path": "core/001-storage-and-dom.js", "bytes": 2990, "sha256": "42023b85a09000c8866473b8aee36c685f5269877962e1ad09e098f9769b2de0"},
 {
   "path": "combat/022-action-timelines.js",
@@ -124,8 +129,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
-  "bytes": 19247,
-  "sha256": "fbace942d509c32b0d80257a0c338305e5106d8c5d264f6137e5dcd987cfaf1e"
+  "bytes": 20066,
+  "sha256": "c5baf151f83584f962c404ad362710ec23f4052dc2f6f8c06ee8d0b66fd5ff68"
 },
   {
     "path": "ui/053-gear-training-and-crafting.js",
@@ -208,11 +213,6 @@ const reviewedReleaseFragments = new Map([
     "sha256": "a5f4fa4b9478bc9ee2c0fef80ffd522099141ba3a1257079868fa9380513cabc"
   },
   {
-    "path": "render/037-ghost-animation.js",
-    "bytes": 4323,
-    "sha256": "2fa0e4e1230e19ee855c812ba9912f7ff144cfc6f18401b90ef949beb448a6ea"
-  },
-  {
     "path": "render/032-ghost-primitives.js",
     "bytes": 33439,
     "sha256": "a59f7e1682b391500e45734972348c53c7549107d9f85fcb3f1ffc4ff8087617"
@@ -239,8 +239,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1707246);
-  assert.equal(hash(bytes), 'd4627cacff0a2c5c168efaba086471aa0a0120539379f6e280976b89315fec13');
+  assert.equal(bytes.length, 1708435);
+  assert.equal(hash(bytes), '5bf8a354b7543f23ffab98737835ba3ab00e70e37e5bc70fedd484db9de1d97e');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

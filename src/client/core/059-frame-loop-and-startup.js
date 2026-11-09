@@ -2,6 +2,12 @@
   setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());syncSentinelUI(ownServerCharacter());}if(drawerActive==="strategy")updateAtlasWarTimes();if(drawerActive==="quest")updateDirectorTimer();},1000);
   $("helpButton").onclick=openHelp;
   $("bag").onclick=openBag;
+  // Pose rate by distance from the camera's focus: full rate near the hero, 15/s in the middle
+  // distance, 8/s further out. The local hero always poses every frame.
+  function poseInterval(local, d) {
+    if (local || d < (LITE ? 16 : 26)) return 0;
+    return d < (LITE ? 32 : 48) ? 1 / 15 : 1 / 8;
+  }
   function syncPossessionButton() {
     const active=mode==="live" ? ownServerCharacter()?.possessionActive===true : possessed;
     heroMat.emissiveColor=B.Color3.FromHexString(active ? "#7c459b" : "#3b2916");
@@ -192,14 +198,21 @@
       const flash = (a.hitFlashUntil || 0) > now;
       a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
       a.node.position.set(a.x, a.y, a.z);
-      animateRig(a, Math.hypot(travelX, travelZ) / Math.max(dt, 1e-3), dt, now);
+      // Far characters pose (skeleton, hands, cloth) at a lower rate; their position above still moves
+      // every frame, so walking stays smooth and only the limbs step at 15 or 8 poses a second.
+      a.poseAcc = (a.poseAcc || 0) + dt;
+      if (a.poseAcc >= poseInterval(a.local, Math.hypot(a.x - camera.target.x, a.z - camera.target.z))) {
+        animateRig(a, Math.hypot(travelX, travelZ) / Math.max(dt, 1e-3), a.poseAcc, now); a.poseAcc = 0;
+      }
       updateAvatarAuras(a, now, dt);
       a.flightHalo?.setEnabled(a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain));
     }
     // Idle breathing pose for nearby service NPCs (standing still, so speed 0).
     for (const npc of npcActors) {
       const w = npc.node.getAbsolutePosition();
-      if (npc.node.isEnabled(true) && Math.hypot(w.x - camera.target.x, w.z - camera.target.z) < (LITE ? 35 : 70)) { npc.x = w.x; npc.y = w.y; npc.z = w.z; animateRig(npc, 0, dt, now); }
+      const d = Math.hypot(w.x - camera.target.x, w.z - camera.target.z);
+      npc.poseAcc = (npc.poseAcc || 0) + dt;
+      if (npc.node.isEnabled(true) && d < (LITE ? 35 : 70) && npc.poseAcc >= poseInterval(false, d)) { npc.x = w.x; npc.y = w.y; npc.z = w.z; animateRig(npc, 0, npc.poseAcc, now); npc.poseAcc = 0; }
     }
     for (const npc of summonAvatars.values()) {
       if (npc.demo) {
