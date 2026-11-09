@@ -254,6 +254,24 @@
   };
   // Field kits (arm_field_<path>) wear the class's armour weight.
   const FIELD_WEIGHT = { muay_boran: "hide", phutthaisawan: "medium", blade: "hide", sentinel: "heavy", seer: "cloth", mender: "cloth" };
+  // Older servers send class field-kit pieces as "arm_field_<path>:<item level>" whatever the slot. Map them
+  // to the kit's real piece (mirrors fieldKits in PersonalItems.ts) and the level to the outfit tier.
+  const FIELD_KIT = { muay_boran: ["off_brace", "acc_fang", "acc_earrings_duelist", "acc_ring_atk"], phutthaisawan: ["off_guard", "acc_fang", "acc_earrings_hunter", "acc_ring_atk"],
+    blade: ["off_veil", "acc_fang", "acc_earrings_duelist", "acc_ring_atk"], sentinel: ["off_shield", "acc_gorget", "acc_earrings_ward", "acc_ring_guard"],
+    seer: ["off_jar", "acc_spell", "acc_earrings_focus", "acc_ring_spell"], mender: ["off_bell", "acc_torc", "acc_earrings_focus", "acc_ring_heal"] };
+  const OUTFIT_LEVELS = [1, 10, 25, 45, 65, 85, 95, 100];
+  function normalizeGearLook(slot, family, tier) {
+    const m = /^arm_field_([a-z_]+)$/.exec(family);
+    if (!m) return [family, tier];
+    const kit = FIELD_KIT[m[1]], t = OUTFIT_LEVELS.filter(min => min <= tier).length || 1;
+    if (kit && slot === "offHand") return [kit[0], t];
+    if (kit && slot === "neck") return [kit[1], t];
+    if (kit && /Ear$/.test(slot)) return [kit[2], t];
+    if (kit && /Ring$/.test(slot)) return [kit[3], t];
+    return ["arm_" + (FIELD_WEIGHT[m[1]] || "medium") + "_" + slot, t];
+  }
+  // Boss accessories (acc_boss_<map>, acc_shrine_ward, acc_rift_star) carry a glowing spirit gem.
+  const isBossAccessory = family => /^acc_(boss|shrine|rift)/.test(family);
   const gearMats = new Map();
   function gearMat(name, hex, emissive, spec = .06) {
     if (gearMats.has(name)) return gearMats.get(name);
@@ -489,9 +507,9 @@
   };
   // ---- Jewellery: neck, ears and rings. ----
   const GEM = { atk: "#b3261e", spell: "#3b6fd6", heal: "#3fae6a", guard: "#c9a24a" };
-  function accessoryBuilder(family, p) {
+  function accessoryBuilder(family, p, neck = false) {
     const k = gearKit(), gold = gearMat("gold trim", "#c9a24a", "#2a1d06", .4);
-    if (/^acc_(torc|gorget|fang|spell|shrine|rift|boss)/.test(family)) {
+    if (neck || /^acc_(torc|gorget|fang|spell|shrine|rift|boss)/.test(family)) {
       if (family === "acc_gorget") { k.cyl(0, 1.462, -.004, .05, .15, .19, p.main, 16).scaling.z = .9; k.cyl(0, 1.438, -.004, .01, .195, .195, gold, 16).scaling.z = .9; }
       else {
         for (let i = 0; i <= 10; i++) { const t = i / 5 - 1, y = 1.455 - (1 - t * t) * .1; k.ball(t * .085, y, .07 + (1 - t * t) * .04, .022, family === "acc_torc" ? gold : beadMat, 4); }
@@ -500,19 +518,22 @@
       }
       return [["Chest", k.take()]];
     }
-    if (/^acc_earrings/.test(family)) {
-      const gem = family.includes("lotus") ? GEM.heal : family.includes("focus") ? GEM.spell : family.includes("ward") ? GEM.guard : GEM.atk;
-      // Ear lobes sit at about (+-.08, 1.6, -.01): a small stud with the gem just below it.
-      for (const s of [-1, 1]) { k.cyl(s * .082, 1.605, -.01, .012, .014, .014, gold, 8); k.ball(s * .083, 1.588, -.01, .018, gearMat("gem " + gem, gem, "#120808", .5), 6); }
-      return [["Head", k.take()]];
-    }
     return [];
+  }
+  // One earring per ear slot (side 1 = left ear at +x in model space): a stud with the gem just below it.
+  function earringBuilder(family, side) {
+    const k = gearKit(), gold = gearMat("gold trim", "#c9a24a", "#2a1d06", .4);
+    const gem = family.includes("lotus") ? GEM.heal : family.includes("focus") ? GEM.spell : family.includes("ward") ? GEM.guard : GEM.atk;
+    k.cyl(side * .082, 1.605, -.01, .012, .014, .014, gold, 8);
+    k.ball(side * .083, 1.588, -.01, .018, isBossAccessory(family) ? amuletGlow : gearMat("gem " + gem, gem, "#120808", .5), 6);
+    if (isBossAccessory(family)) k.cyl(side * .083, 1.566, -.01, .022, .012, 0, gold, 6); // small drop pendant
+    return [["Head", k.take()]];
   }
   function ringBuilder(family, side) {
     const k = gearKit(), gem = family.includes("heal") ? GEM.heal : family.includes("spell") ? GEM.spell : family.includes("guard") ? GEM.guard : GEM.atk;
     const x = side * .72;
     const band = k.cyl(x, 1.354, .02, .02, .045, .045, gearMat("gold trim", "#c9a24a", "#2a1d06", .4), 10); band.rotation.z = Math.PI / 2;
-    k.ball(x, 1.354, .045, .022, gearMat("gem " + gem, gem, "#120808", .5), 6);
+    k.ball(x, 1.354, .045, isBossAccessory(family) ? .028 : .022, isBossAccessory(family) ? amuletGlow : gearMat("gem " + gem, gem, "#120808", .5), 6);
     return [[side > 0 ? "LeftHand" : "RightHand", k.take()]];
   }
   // "slot=family:tier;…" → {slot: {family, tier}}
@@ -525,17 +546,19 @@
     return out;
   }
   function buildGearSlot(slot, family, tier) {
+    [family, tier] = normalizeGearLook(slot, family, tier);
     let weight = null, m;
-    if ((m = /^arm_field_([a-z_]+)$/.exec(family))) weight = FIELD_WEIGHT[m[1]] || "medium";
-    else if ((m = /^arm_(cloth|hide|medium|heavy)_/.exec(family))) weight = m[1];
+    if ((m = /^arm_(cloth|hide|medium|heavy)_/.exec(family))) weight = m[1];
     const p = gearPalette(weight || "medium", tier);
+    // Jewellery and off-hands are chosen by the slot they are worn in; the family only styles them.
+    if (slot === "leftRing" || slot === "rightRing") return ringBuilder(family, slot === "leftRing" ? 1 : -1);
+    if (slot === "leftEar" || slot === "rightEar") return earringBuilder(family, slot === "leftEar" ? 1 : -1);
+    if (slot === "neck") return accessoryBuilder(family, p, true);
+    if (slot === "offHand") return (m = /^off_([a-z]+)$/.exec(family)) && OFFHAND_BUILDERS[m[1]] ? OFFHAND_BUILDERS[m[1]](p) : [];
     if (weight) {
       if (slot === "leftHand" || slot === "rightHand") return ARMOR_BUILDERS.hand(weight, p, slot === "leftHand" ? 1 : -1);
       return ARMOR_BUILDERS[slot] ? ARMOR_BUILDERS[slot](weight, p) : [];
     }
-    if (slot === "offHand" && (m = /^off_([a-z]+)$/.exec(family)) && OFFHAND_BUILDERS[m[1]]) return OFFHAND_BUILDERS[m[1]](p);
-    if (slot === "leftRing" || slot === "rightRing") return ringBuilder(family, slot === "leftRing" ? 1 : -1);
-    if (/^acc_/.test(family)) return accessoryBuilder(family, p);
     return [];
   }
   // Apply a gear look to an avatar. Pieces are rebuilt only for slots whose family or tier changed;
@@ -548,6 +571,7 @@
     if (!avatar.skin?.nodes) return;
     avatar.gearApplied = text;
     const want = parseGearLook(avatar.gearLook);
+    for (const [slot, g] of Object.entries(want)) { const [family, tier] = normalizeGearLook(slot, g.family, g.tier); want[slot] = { family, tier }; }
     avatar.gearParts ||= {};
     for (const slot of new Set([...Object.keys(avatar.gearParts), ...Object.keys(want)])) {
       const have = avatar.gearParts[slot], next = want[slot], key = next ? next.family + ":" + next.tier : "";

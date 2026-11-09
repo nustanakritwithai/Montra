@@ -5,7 +5,7 @@ import {dynamicDropChance} from "./DynamicBalance.js";
 import {randomInt} from "node:crypto";
 import { PROGRESSION, baseManaAtLevel, type CombatStats } from "./Progression.js";
 import { MUAY_WRAP_ID } from "./MuayRules.js";
-import { gearSchools, usesStaff, type CatalystId, type SalveId, type ForgeRating,type BrewId,type FieldToolId } from "./PersonalItems.js";
+import { gearSchools, usesStaff, OUTFIT_LEVELS, type CatalystId, type SalveId, type ForgeRating,type BrewId,type FieldToolId } from "./PersonalItems.js";
 /**
  * MONTRA V0.2.7 — authoritative permanent equipment.
  * Existing v0.2.6 inventory JSON (version:1, slots:[...]) stays readable.
@@ -539,8 +539,22 @@ export function gearLook(inventory: InventorySnapshot | undefined): string {
   if (!worn) return "";
   const out: string[] = [];
   for (const [slot, id] of Object.entries(worn)) {
-    const match = typeof id === "string" ? /^([a-zA-Z_]+?)_(\d+)$/.exec(id) : null;
-    if (match) out.push(`${slot}=${match[1]}:${Math.min(99, Number(match[2]))}`);
+    const look = gearLookPart(id);
+    if (look) out.push(`${slot}=${look}`);
   }
   return out.sort().join(";");
+}
+/**
+ * Visible look of one worn piece: "family:tier". The family is the catalog's visual family, so class
+ * field-kit pieces (arm_field_<path>_<level>) show as their real piece (off_jar, acc_fang, arm_hide_head…)
+ * and boss accessories (acc_boss_<map>, acc_shrine_ward, acc_rift_star: no numeric suffix) are sent at
+ * all. The tier is the outfit tier of the item level, matching the regular family_<tier> pieces.
+ * Display only: stats, IDs and saves are untouched.
+ */
+export function gearLookPart(id: unknown): string | null {
+  const def = personalItem(id);
+  if (def?.family && /^[a-zA-Z_]+$/.test(def.family) && typeof def.level === "number")
+    return `${def.family}:${Math.min(99, OUTFIT_LEVELS.filter(min => min <= def.level!).length || 1)}`;
+  const match = typeof id === "string" ? /^([a-zA-Z_]+?)_(\d+)$/.exec(id) : null;
+  return match ? `${match[1]}:${Math.min(99, Number(match[2]))}` : null;
 }
