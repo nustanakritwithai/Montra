@@ -27,6 +27,17 @@
     if (parent) m.parent = parent;
     villageParts.push(m); return m;
   }
+  const gableLacquer = mat("gable red lacquer", "#7c2618", "#1c0604");
+  // Triangular gable (pediment) filling the roof end; a box here showed as a black slab above the roofline.
+  function vgable(x, y, z, width, height, parent, t = .08) {
+    const w = width / 2, p = [-w, 0, -t / 2, w, 0, -t / 2, 0, height, -t / 2, -w, 0, t / 2, w, 0, t / 2, 0, height, t / 2];
+    const idx = [0, 2, 1, 3, 4, 5, 0, 1, 4, 0, 4, 3, 1, 2, 5, 1, 5, 4, 2, 0, 3, 2, 3, 5];
+    const m = new B.Mesh("gable board", scene), data = new B.VertexData();
+    data.positions = p; data.indices = idx; data.uvs = [0, 0, 1, 0, .5, 1, 0, 0, 1, 0, .5, 1]; data.normals = []; B.VertexData.ComputeNormals(p, idx, data.normals); data.applyToMesh(m);
+    m.convertToFlatShadedMesh(); m.position.set(x, y, z); m.material = gableLacquer; m.isPickable = false;
+    if (parent) m.parent = parent;
+    villageParts.push(m); return m;
+  }
   function vpool(x, z, radius, y) { villageParts.push(lightPool(x, z, radius, y)); }
   function makeLantern(x, z) {
     vbox("lantern pole", x, 1.1, z, .13, 2.2, .13, darkWood);
@@ -54,7 +65,8 @@
     vbox("roof ridge", x, y + rise + .04, z, .16, .14, depth + .3, gold, parent);
     for (const end of [-1, 1]) {
       vcyl("chofa", x, y + rise + .38, z + end * (depth / 2 + .2), .8, .12, 0, gold, 5, parent).rotation.x = end * .55;
-      vbox("gable board", x, y + rise * .45, z + end * depth / 2, span * .55, rise * .8, .08, darkWood, parent);
+      vgable(x, y, z + end * depth / 2, span * .9, rise * .9, parent);
+      vcyl("gable medallion", x, y + rise * .38, z + end * (depth / 2 + .06), .05, rise * .26, rise * .26, gold, 8, parent).rotation.x = Math.PI / 2;
     }
     return y + rise;
   }
