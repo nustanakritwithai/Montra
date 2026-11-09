@@ -106,7 +106,7 @@
       for(let t=1.2;t<len;t+=2.2)for(const side of [-1,1]){
         const k=Math.round(t*10)+i*97+side;if(noise(k,115)<.35)continue;
         const off=2.35+noise(k,116)*.5,d=.32+noise(k,117)*.34;
-        const stone=place(B.MeshBuilder.CreateSphere("verge stone",{diameter:d,segments:3},scene),a.x+(b.x-a.x)*t/len+nx*off*side,d*.18,a.z+(b.z-a.z)*t/len+nz*off*side,forestStone);
+        const stone=place(B.MeshBuilder.CreateIcoSphere("verge stone",{radius:d/2,subdivisions:1,flat:true},scene),a.x+(b.x-a.x)*t/len+nx*off*side,d*.18,a.z+(b.z-a.z)*t/len+nz*off*side,forestStone);
         stone.scaling.y=.5;
         sceneryPoint("stone",stone.position.x,stone.position.z,d/2);
       }
