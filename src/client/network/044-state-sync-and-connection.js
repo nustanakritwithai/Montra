@@ -1298,6 +1298,7 @@
       });
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        if(questNavigation && (questNavigation.warp || ["invalid_move","move_rate_limited","not_alive","climbing","dashing","flight_in_progress","must_descend","movement_busy","character_busy","muay_controlled","sentinel_stunned","sentinel_windup_active","blade_windup_active"].includes(info?.reason)))cancelQuestNavigation("หยุดนำทาง · เซิร์ฟเวอร์ยังไม่อนุญาตให้เดิน",false);
         if(info?.reason==="director_event_unavailable" || info?.reason==="director_event_claimed"){
           toast(info.reason==="director_event_claimed"?"รับรางวัลเหตุการณ์นี้แล้ว":"เหตุการณ์นี้หมดเวลาหรือเปลี่ยนไปแล้ว");
           if(drawerActive==="quest")room?.send("get_forest_objective",{});return;
@@ -1364,7 +1365,7 @@
         else if (info?.reason === "invalid_character_name") toast("ชื่อตัวละครต้องมี 2–20 ตัวอักษร");
         else if (info?.reason === "character_not_persistent") toast("ยังไม่ได้เปิดระบบตัวละครถาวรบนเซิร์ฟเวอร์");
         else if (info?.reason === "rename_cooldown") toast("โปรดเว้น 5 วินาทีก่อนเปลี่ยนชื่อ");
-        else if(info?.reason==="world_client_update_required")toast("รีเฟรชหน้าเกมเพื่อเข้าวัดร้างพันธนาการ");
+        else if(info?.reason==="world_client_update_required")toast("รีเฟรชหน้าเกมเพื่อโหลดแผนที่และเส้นทางรุ่นล่าสุด");
         else if (info?.reason === "target_unavailable") toast("เป้าหมายไม่อยู่ในห้องหรือไม่พร้อมต่อสู้");
         else if (info?.reason === "invalid_attack") toast("คำสั่งโจมตีไม่ถูกต้อง");
         else if (info?.reason === "possession_needs_summon") toast("เรียกวิญญาณก่อนเข้าสิง");
@@ -1417,7 +1418,7 @@
         else if (info?.reason === "flying") toast("ต้องลงจอดก่อนใช้พุ่งหรือปีน");
         else if (info?.reason === "climbing") toast("ยังโจมตีหรือเดินไม่ได้ขณะปีน");
         else if (info?.reason === "ladder_too_far") toast("เดินเข้าหาบันไดก่อนปีน");
-        else if (info?.reason === "melee_height_blocked") toast("โจมตีประชิดข้ามระดับความสูงไม่ได้ · ใช้ข้าวสารปลุกเสก");
+        else if (info?.reason === "melee_height_blocked") toast("โจมตีประชิดข้ามระดับความสูงไม่ได้ · ลงมาอยู่ระดับเดียวกับเป้าหมายแล้วโจมตีอีกครั้ง");
         else if (info?.reason === "must_descend") toast("ต้องลงบันไดก่อนเดินไปพื้นด้านล่าง");
         else if (info?.reason === "invalid_climb") toast("คำสั่งปีนกำแพงไม่ถูกต้อง");
         else if (info?.reason === "invalid_shoot") toast("คำสั่งซัดข้าวสารไม่ถูกต้อง");
@@ -1432,6 +1433,7 @@
       });
       joined.onMessage("warp_failed", () => {
         if(room!==joined)return;
+        cancelQuestNavigation("หยุดนำทาง · เดินทางไม่สำเร็จ",false);
         clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
         toast("บันทึกไม่สำเร็จ · ยังอยู่แผนที่เดิม");
       });

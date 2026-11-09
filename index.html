@@ -52,7 +52,7 @@
             <div class="hud-meter xp" id="hudXpRow" hidden><svg class="info-seal" aria-hidden="true"><use href="#seal-xp"></use></svg><div class="bar xp" id="expBar" role="progressbar" aria-label="ค่าประสบการณ์"><i></i></div><small id="expText" class="exp-text"></small></div>
         </div>
       </section>
-    <button id="quest" class="quest panel" type="button" aria-label="เปิดรายละเอียดภารกิจ"><span class="quest-icon">◇</span><span class="quest-content"><strong>ภารกิจทดลอง</strong><span>แตะทางเดินไม้เพื่อสำรวจหมู่บ้าน</span><small id="questProgress" class="quest-progress"></small></span><span id="questPointer" class="quest-pointer" hidden><i id="questArrow">➤</i><small id="questDistance"></small></span></button>
+    <button id="quest" class="quest panel" type="button" aria-label="เดินอัตโนมัติไปภารกิจ · ดูรายละเอียดได้ในเมนูภารกิจ" aria-pressed="false"><span class="quest-icon">◇</span><span class="quest-content"><strong>ภารกิจทดลอง</strong><span>แตะทางเดินไม้เพื่อสำรวจหมู่บ้าน</span><small id="questProgress" class="quest-progress"></small><small id="questNavigationStatus" class="quest-progress">แตะเพื่อเดิน · รายละเอียดในเมนูภารกิจ</small></span><span id="questPointer" class="quest-pointer" hidden><i id="questArrow">➤</i><small id="questDistance"></small></span></button>
     <button id="partyFrames" class="party-frames" type="button" aria-label="สมาชิกปาร์ตี้ · แตะเพื่อเปิด" hidden></button>
       </div>
       <section class="location-area">
@@ -285,6 +285,6 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
   <script src="./audio.js?v=0.16.1-audio-contracts" defer></script>
-  <script src="./main.js?v=0.20.4-nested-recipes-20261108-recipe-popup-20261108" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
+  <script src="./main.js?v=0.20.5-quest-autowalk" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>
