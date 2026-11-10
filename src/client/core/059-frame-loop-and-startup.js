@@ -1,3 +1,134 @@
+  // Live boats use the village boat mesh and the server's Pirate Fruit deck dimensions.
+  const sailingMeshes = new Map();
+  const sailingKeys = new Set();
+  const sailingTouches = new Map();
+  const boatPanel = $("boatPanel");
+  const sailingInputKeys = new Map([
+    ["KeyW","forward"],["ArrowUp","forward"],["KeyS","reverse"],["ArrowDown","reverse"],
+    ["KeyA","left"],["ArrowLeft","left"],["KeyD","right"],["ArrowRight","right"],
+  ]);
+  let nextHelmInput = 0, requestedBoatAnchor = null, currentHelmBoat = "";
+
+  function sendBoatIntent(action, fields = {}) {
+    if (mode !== "live" || !room?.state?.boatsAvailable) return;
+    try { room.send("boat_intent", {action,...fields}); }
+    catch { if (action !== "input") toast("ส่งคำสั่งเรือไม่สำเร็จ"); }
+  }
+  function resetHelmControls() {
+    sailingKeys.clear();
+    sailingTouches.clear();
+    requestedBoatAnchor = null;
+  }
+  function ownBoatState() {
+    const player = ownServerCharacter();
+    return player?.boatId ? room.state.boats?.get(player.boatId) : null;
+  }
+  function boatAtHelm() {
+    const boat = ownBoatState();
+    return Boolean(boat && boat.helmId === localId);
+  }
+
+  $("boatLaunch").onclick = () => { cancelQuestNavigation();sendBoatIntent("launch"); };
+  $("boatBoard").onclick = () => {
+    const id = $("boatBoard").dataset.boatId;
+    if (id) {cancelQuestNavigation();sendBoatIntent("board",{boatId:id});}
+  };
+  $("boatHelm").onclick = () => sendBoatIntent(boatAtHelm() ? "release" : "helm");
+  $("boatExit").onclick = () => sendBoatIntent("exit");
+  $("boatAnchor").onclick = () => {
+    const boat = ownBoatState();
+    if (boatAtHelm()) requestedBoatAnchor = !boat.anchored;
+  };
+  for (const button of boatPanel.querySelectorAll("[data-boat-drive]")) {
+    button.addEventListener("pointerdown",event=>{
+      if (!boatAtHelm() || event.button !== 0) return;
+      event.preventDefault();
+      button.setPointerCapture(event.pointerId);
+      sailingTouches.set(event.pointerId,button.dataset.boatDrive);
+    });
+    for (const name of ["pointerup","pointercancel","lostpointercapture"]) {
+      button.addEventListener(name,event=>sailingTouches.delete(event.pointerId));
+    }
+  }
+  addEventListener("keydown",event=>{
+    if (!sailingInputKeys.has(event.code) || !boatAtHelm() || event.altKey || event.metaKey || event.ctrlKey ||
+        event.target?.closest?.("input,textarea,select,[contenteditable]")) return;
+    event.preventDefault();
+    sailingKeys.add(event.code);
+  });
+  addEventListener("keyup",event=>sailingKeys.delete(event.code));
+  addEventListener("blur",resetHelmControls);
+  document.addEventListener("visibilitychange",()=>{if(document.hidden)resetHelmControls();});
+
+  function clickSailingDeck(id, point) {
+    const player = ownServerCharacter();
+    if (!player?.boatId) {sendBoatIntent("board",{boatId:id});return;}
+    if (player.boatId !== id || boatAtHelm() || !point) return;
+    const node = sailingMeshes.get(id);
+    if (!node) return;
+    const dx = point.x-node.position.x, dz = point.z-node.position.z;
+    const c = Math.cos(node.rotation.y), s = Math.sin(node.rotation.y);
+    sendBoatIntent("walk",{x:dx*c-dz*s,z:dx*s+dz*c});
+  }
+
+  function updateSailing(now, dt) {
+    const state = mode === "live" ? room?.state : null;
+    const dock = state?.boatsAvailable ? worldDefinitions?.[activeMapId]?.boatDock : null;
+    const player = dock ? ownServerCharacter() : null;
+    const seen = new Set();
+    let nearestId = "", nearestDistance = 6.5;
+    if (dock) state.boats?.forEach((boat,id)=>{
+      if (boat.mapId !== activeMapId || boat.sunk) return;
+      seen.add(id);
+      const distance = player ? Math.hypot(player.x-boat.x,player.z-boat.z) : Infinity;
+      if (distance <= nearestDistance && Math.abs(boat.speed) <= 1) {nearestDistance=distance;nearestId=id;}
+      let node = sailingMeshes.get(id);
+      if (!node) {
+        node = longTailBoat(boat.x,boat.z,boat.heading,true);
+        node.scaling.set(dock.deck.width/.95,dock.deck.y/.16,dock.deck.length/5.1);
+        const pick = B.MeshBuilder.CreateBox("sailing deck pick",{
+          width:.95*.82*1.08,height:.016,depth:5.1*.62*1.08,
+        },scene);
+        pick.parent = node;pick.position.y = .16;
+        pick.visibility = .004;pick.isPickable = true;pick.metadata = {sailingBoatId:id};
+        sailingMeshes.set(id,node);
+      }
+      const blend = 1-Math.exp(-16*dt);
+      node.position.x += (boat.x-node.position.x)*blend;
+      node.position.z += (boat.z-node.position.z)*blend;
+      const yaw = boat.heading-node.rotation.y;
+      node.rotation.y += Math.atan2(Math.sin(yaw),Math.cos(yaw))*blend;
+    });
+    for (const [id,node] of sailingMeshes) if (!seen.has(id)) {node.dispose();sailingMeshes.delete(id);}
+
+    const boat = player?.alive ? ownBoatState() : null;
+    const helm = Boolean(boat && boat.helmId === localId);
+    if (currentHelmBoat !== (helm ? player.boatId : "")) {
+      resetHelmControls();
+      currentHelmBoat = helm ? player.boatId : "";
+      nextHelmInput = 0;
+    }
+    const onLand = player?.alive && !player.boatId && !player.flying && !player.mounted;
+    $("boatLaunch").hidden = !(onLand && Math.hypot(player.x-dock.x,player.z-dock.z) <= dock.range);
+    $("boatBoard").hidden = !(onLand && nearestId);
+    $("boatBoard").dataset.boatId = nearestId;
+    $("boatHelm").hidden = !(boat && (!boat.helmId || helm));
+    $("boatHelm").textContent = helm ? "ปล่อยหางเสือ" : "จับหางเสือ";
+    $("boatExit").hidden = !boat;
+    $("boatAnchor").hidden = !helm;
+    $("boatAnchor").textContent = boat?.anchored ? "ถอนสมอ" : "ทิ้งสมอ";
+    for (const button of boatPanel.querySelectorAll("[data-boat-drive]")) button.hidden = !helm;
+    boatPanel.hidden = !Array.from(boatPanel.children).some(button=>!button.hidden);
+    if (!helm || now < nextHelmInput) return;
+    nextHelmInput = now + 100;
+    const directions = new Set(sailingTouches.values());
+    for (const code of sailingKeys) directions.add(sailingInputKeys.get(code));
+    const throttle = Number(directions.has("forward"))-Number(directions.has("reverse"));
+    const steer = Number(directions.has("left"))-Number(directions.has("right"));
+    if (requestedBoatAnchor === boat.anchored) requestedBoatAnchor = null;
+    sendBoatIntent("input",{throttle,steer,...(requestedBoatAnchor===null ? {} : {anchor:requestedBoatAnchor})});
+  }
+
   // Cooldown labels must advance even in a quiet room with no schema patches.
   setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());syncSentinelUI(ownServerCharacter());}if(drawerActive==="strategy")updateAtlasWarTimes();if(drawerActive==="quest")updateDirectorTimer();},1000);
   $("helpButton").onclick=openHelp;
@@ -38,6 +169,7 @@
     elapsed+=dt;
     const now = performance.now();
     updateFishing(now);
+    updateSailing(now,dt);
     checkClimbApproach();
     updateQuestNavigation(now);
     for(const [id,fx] of seerBindingEffects){

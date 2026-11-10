@@ -18,7 +18,8 @@ import {
   claimCharacter, releaseCharacter, getGuestToken, parseCharacterName,
   parseCharacterSlot, CHARACTER_SLOTS,
 } from "./CharacterStore.js";
-import { MyRoomState, Player, SummonedGuardian, type Monster } from "./schema/MyRoomState.js";
+import { MyRoomState, Player, SailingBoat, SummonedGuardian, type Monster } from "./schema/MyRoomState.js";
+import { BOAT_DECK, BOAT_LAUNCH_RANGE, BOAT_SHORES, MontraBoats, parseBoatIntent } from "./MontraBoats.js";
 import {
   RULES,
   CommandBucket,
@@ -98,7 +99,9 @@ import {
 import { ForestEncounters } from "./ForestEncounters.js";
 import { mapsWithServiceNpcs, serviceNpcsFor } from "./ServiceNpcs.js";
 
-const mapsWithServices=mapsWithServiceNpcs();
+const mapsWithServices=Object.fromEntries(Object.entries(mapsWithServiceNpcs()).map(([id,map])=>[
+  id, BOAT_SHORES[id] ? {...map, boatDock:{...BOAT_SHORES[id],range:BOAT_LAUNCH_RANGE,deck:BOAT_DECK}} : map,
+]));
 const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices,homeMap:characterStore.economyEnabled?{...HOME_MAP,buildGrid:HOME_BUILD_GRID}:undefined}):"";
 const cityPurchaseIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_PURCHASE_ENABLED;
 function syncCityProduction(now: number, site: CitySite = CITY_PRODUCTION_SITE) {
@@ -171,6 +174,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients:number = WORLD_ROOM_CAPACITY;
   state = new MyRoomState();
 
+  private readonly boatWorld = new MontraBoats();
   private readonly ghostConfig = ghostPotConfig();
   private ghostWorker?: LegacyGhostWorker;
   private readonly ghostPots = new Map<string, PotGhost>();
@@ -4027,7 +4031,45 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
+  private boatIntent(client: Client, message: unknown) {
+    const id = client.sessionId, player = this.state.players.get(id);
+    const intent = parseBoatIntent(message);
+    if (!intent) return this.reject(client,"invalid_boat_intent");
+    if (!this.state.boatsAvailable || !player?.alive || !BOAT_SHORES[player.mapId] ||
+        this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
+        this.activeDashes.has(id) || this.climbs.has(id) || this.flightTransitions.has(id) ||
+        player.flying || player.mounted || this.basicAttackPaused(id)) return this.reject(client,"boat_unavailable");
+    if ((intent.action === "launch" || intent.action === "board") && !onMapGround(player)) {
+      return this.reject(client,"boat_unavailable");
+    }
+    if (!this.gates.get(id)?.move.consume(this.simulatedMs)) return this.reject(client,"move_rate_limited");
+    if (!this.boatWorld.act(id,player,intent,this.simulatedMs)) {
+      return this.reject(client,intent.action==="walk" ? "boat_deck_only" : "boat_action_unavailable");
+    }
+    if (intent.action === "walk") this.endAttack(id,player);
+    if (intent.action === "board" || intent.action === "exit" || intent.action === "helm") {
+      this.destinations.delete(id);
+      this.crestTurns.delete(id);
+      this.fishing.delete(id);
+      if (!player.targetId) player.combatState = "idle";
+    }
+  }
+
+  private updateBoats(dt: number) {
+    const boats = this.boatWorld.tick(this.simulatedMs,dt,this.state.players,id=>!this.basicAttackPaused(id));
+    for (const [id,boat] of boats) {
+      const state = {mapId:boat.islandId, x:boat.x, z:boat.z, heading:boat.heading, speed:boat.speed,
+        hp:boat.hp, maxHp:boat.maxHp, anchored:boat.anchor, sunk:boat.state==="sunk" || boat.state==="respawning",
+        helmId:boat.helmId ?? ""};
+      const previous = this.state.boats.get(id);
+      if (previous) Object.assign(previous,state);
+      else this.state.boats.set(id,new SailingBoat(state));
+    }
+    for (const id of this.state.boats.keys()) if (!boats.has(id)) this.state.boats.delete(id);
+  }
+
   messages = {
+    boat_intent: (client: Client, message: unknown) => this.boatIntent(client,message),
     ghost_pot: (client: Client, message: unknown) => this.handleGhostPot(client, message),
     ask_npc_guide:(client:Client,message:unknown)=>this.askNpcGuide(client,message),
     get_director_event:(client:Client,message:unknown)=>{
@@ -4616,6 +4658,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(this.muayControlled(id))return this.reject(client,"muay_controlled");
       const player = this.state.players.get(id);
       if (!player || !this.persistentCharacters.has(id)) return this.reject(client, "character_not_persistent");
+      if (player.boatId) return this.reject(client,"boat_disembark_first");
       if (this.pendingItemUses.has(id) || this.pendingWarps.has(id)) return this.reject(client, "character_busy");
       const engaged = this.attackTargets.has(id) || this.state.monster.targetId === id || this.forest.engaged(id) ||
         [...this.attackTargets.values()].includes(id);
@@ -4758,6 +4801,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const id=client.sessionId, player=this.state.players.get(id);
       if(!player?.alive || !this.persistentCharacters.has(id))return this.reject(client,"mount_unavailable");
       if(player.mounted){this.dismount(id,"manual");return;}
+      if(player.boatId)return this.reject(client,"boat_disembark_first");
       if(this.simulatedMs-(this.lastMountMs.get(id) ?? -Infinity)<1000)return this.reject(client,"mount_cooldown");
       if(this.pendingWarps.has(id) || this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
         this.climbs.has(id) || this.flightTransitions.has(id) || player.flying || !onMapGround(player) || this.activeDashes.has(id) ||
@@ -4772,6 +4816,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     fly: (client: Client, message: unknown) => {
       if(this.blockMounted(client))return;
+      if(this.state.players.get(client.sessionId)?.boatId)return this.reject(client,"boat_disembark_first");
       if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
       if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
@@ -4820,6 +4865,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     dash: (client: Client, message: unknown) => {
       if(this.blockMounted(client))return;
+      if(this.state.players.get(client.sessionId)?.boatId)return this.reject(client,"boat_disembark_first");
       if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
       if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
@@ -4904,6 +4950,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.climbs.has(client.sessionId)) return this.reject(client, "climbing");
       if (this.activeDashes.has(client.sessionId)) return this.reject(client, "dashing");
       if (this.flightTransitions.has(client.sessionId)) return this.reject(client, "flight_in_progress");
+      if (player.boatId) {
+        if (!this.gates.get(id)?.move.consume(this.simulatedMs)) return this.reject(client,"move_rate_limited");
+        if (!this.boatWorld.walk(id,destination)) return this.reject(client,"boat_deck_only");
+        this.endAttack(id,player);
+        return;
+      }
       if (!player.flying && isOnPlatform(surfaceLayer(player)) && !this.canOccupy(destination.x,destination.z,surfaceLayer(player),false,player.mapId)) {
         return this.reject(client, "must_descend");
       }
@@ -4959,6 +5011,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return this.reject(client, monsterOrder ? "monster_down" : "target_unavailable");
       }
 
+      this.boatWorld.stopWalking(attackerId);
       // Tap to attack: cancel manual travel, then follow the target each tick.
       this.markWarAction(attackerId);
       this.bladeRetreatUntil.delete(attackerId);
@@ -5027,6 +5080,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // between ground y=0 and the watchwall top y=4.
     climb: (client: Client, message: unknown) => {
       if(this.blockMounted(client))return;
+      if(this.state.players.get(client.sessionId)?.boatId)return this.reject(client,"boat_disembark_first");
       if(this.bladeWindups.has(client.sessionId) || this.bladeCasts.has(client.sessionId)) return this.reject(client,"blade_windup_active");
       if(this.bladeCloaks.has(client.sessionId)) return this.reject(client,"blade_cloak_action");
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
@@ -5124,6 +5178,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         }
         const current = this.state.players.get(id);
         if (!current) return;
+        this.boatWorld.leave(id,this.state.players);
         this.dismount(id,"warp");
         // Once the durable write succeeds, commit the destination before
         // any optional notifications so a disconnected client cannot turn
@@ -5652,6 +5707,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onCreate(options?:{warRoomKey?:string;field?:Battlefield}) {
     this.state.ghostPotAvailable = Boolean(this.ghostConfig && characterStore.economyEnabled && !options?.field);
+    this.state.boatsAvailable = WORLD_EXPANSION && !options?.field && process.env.MONTRA_BOATS_ENABLED!=="0";
     let cardRevision=dynamicBalanceRevision();
     this.clock.setInterval(()=>{
       const next=dynamicBalanceRevision();if(next===cardRevision)return;cardRevision=next;
@@ -5760,6 +5816,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updateRespawns();
     this.updateClimbs(dt);
     this.updateFlights(dt);
+    if (this.state.boatsAvailable) this.updateBoats(dt);
     this.updatePlayerMovement(dt);
     this.updateMonsterAI(dt);
     this.forest.update(this.simulatedMs, dt, this.state.players, this.pendingWarps, (id,m,force=1) => {
@@ -5890,7 +5947,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return false; // Never trust arbitrary Y from a client/save.
   }
 
-  private moveOnSurface(player:{x:number;y:number;z:number;mapId:string;flying?:boolean},x:number,z:number){
+  private moveOnSurface(player:{x:number;y:number;z:number;mapId:string;flying?:boolean;boatId?:string},x:number,z:number){
+    if(player.boatId)return;
     if(getWorldMap(player.mapId)?.terrain){
       const layer=player.flying?FLIGHT.altitude:isOnPlatform(surfaceLayer(player))?FORT.height:0;
       player.y=groundAt(player.mapId,x,z)+layer;
@@ -5905,6 +5963,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         continue;
       }
       this.refreshMastery(sessionId);
+      // The boat tick carries riders. A target lock must never chase onto the bank.
+      if (player.boatId) continue;
       const groundMastery=1+masteryBonuses(this.rebirthStates.get(sessionId),this.masteryMode(sessionId)).movement;
       const moveSpeed=player.flying ? FLIGHT.horizontalSpeed : player.mounted ? RULES.mountedSpeed : RULES.playerSpeed * groundMastery * (this.sentinelAnchors.has(sessionId)?0.6:1) *
         (this.bladeCloaks.has(sessionId) && this.bladeBooks.get(sessionId)?.learned.includes("quiet_step") ? 1+BLADE_LESSONS.quiet_step.power : 1);
@@ -6140,6 +6200,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const victim = this.state.players.get(id);
     if (!victim || !victim.alive) return;
     this.dismount(id,"dead");
+    this.boatWorld.detach(id,victim);
     victim.stunned=false;
     this.endPossession(id,"owner_dead");
     this.effects.forget(id);
@@ -6235,7 +6296,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Keep an existing target if it is alive and remains in the combat area.
     let targetId = monster.targetId;
     let target = targetId ? this.state.players.get(targetId) : undefined;
-    if (!target || !target.alive || this.pendingWarps.has(targetId) || (this.bladeCloaks.has(targetId) && planarDistance(monster,target)>(this.bladeBooks.get(targetId)?.learned.includes("quiet_step")?0.75:1.5)) || target.mapId !== DEFAULT_MAP_ID || this.isProtectedArea(target.mapId,target) || !onMapGround(target) ||
+    if (!target || !target.alive || this.pendingWarps.has(targetId) || (this.bladeCloaks.has(targetId) && planarDistance(monster,target)>(this.bladeBooks.get(targetId)?.learned.includes("quiet_step")?0.75:1.5)) || target.mapId !== DEFAULT_MAP_ID || this.isProtectedArea(target.mapId,target) || (!target.boatId && !onMapGround(target)) ||
         planarDistance(monster, target) > RULES.monsterGiveUpRadius) {
       target = undefined;
       targetId = "";
@@ -6243,7 +6304,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const taunt=this.sentinelLegacyTaunt,forced=this.state.players.get(taunt.ownerId);
     if(this.simulatedMs<taunt.until && forced?.alive && forced.mapId===DEFAULT_MAP_ID &&
        !this.pendingWarps.has(taunt.ownerId) && !this.isProtectedArea(forced.mapId,forced) &&
-       onMapGround(forced) && !this.bladeCloaks.has(taunt.ownerId) && planarDistance(monster,forced)<=RULES.monsterGiveUpRadius){
+       (forced.boatId || onMapGround(forced)) && !this.bladeCloaks.has(taunt.ownerId) && planarDistance(monster,forced)<=RULES.monsterGiveUpRadius){
       target=forced;targetId=taunt.ownerId;
     }else if(this.simulatedMs>=taunt.until || !forced?.alive){taunt.ownerId="";taunt.until=0;}
 
@@ -6251,7 +6312,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!target) {
       let nearest: number = RULES.monsterAggroRadius;
       for (const [id, player] of this.state.players) {
-        if (!player.alive || this.pendingWarps.has(id) || (this.bladeCloaks.has(id) && planarDistance(monster,player)>(this.bladeBooks.get(id)?.learned.includes("quiet_step")?0.75:1.5)) || player.mapId !== DEFAULT_MAP_ID || this.isProtectedArea(player.mapId,player) || !onMapGround(player)) continue;
+        if (!player.alive || this.pendingWarps.has(id) || (this.bladeCloaks.has(id) && planarDistance(monster,player)>(this.bladeBooks.get(id)?.learned.includes("quiet_step")?0.75:1.5)) || player.mapId !== DEFAULT_MAP_ID || this.isProtectedArea(player.mapId,player) || (!player.boatId && !onMapGround(player))) continue;
         const distance = planarDistance(monster, player);
         if (distance < nearest) {
           nearest = distance;
@@ -6312,7 +6373,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (this.isProtectedArea(DEFAULT_MAP_ID,this.state.monster)) return;
     if (this.priestProtected(targetId)) return;
     if (!target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID || this.isProtectedArea(target.mapId,target)) return;
-    if (distance3d(this.state.monster, target) > RULES.monsterAttackRange) return;
+    if (distance3d(this.state.monster, target) > RULES.monsterAttackRange ||
+        (target.boatId && !this.combatSegmentClear(target.mapId,this.state.monster,target))) return;
     if (this.simulatedMs - this.lastMonsterAttackMs < RULES.monsterAttackCooldownMs) return;
     this.lastMonsterAttackMs = this.simulatedMs;
     this.lastCombatMs.set(targetId, this.simulatedMs);
@@ -6416,6 +6478,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!characterId || !player || !inventory) return null;
     const civilian=this.warCivilianPositions.get(id);
     if(this.field && !civilian)return null;
+    const shore = this.boatWorld.safeSave(id);
     const scales=this.masteryScales.get(player)??{hp:1,mana:1};
     const pvpUntil=this.masteryMode(id)==="pvp"?Date.now()+Math.ceil(this.field?PROGRESSION.combatQuietMs:Math.max(0,PROGRESSION.combatQuietMs-(this.simulatedMs-(this.lastPvpMs.get(id)??-Infinity)))):0;
     const vitals=encodeMasteryVitals(hpOverride??player.hp,manaOverride??player.mana,scales.hp,scales.mana,pvpUntil);
@@ -6441,10 +6504,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       muayWrapGranted: this.muayWrapGranted.has(id),
       stamina: player.stamina,
       ...vitals,
-      x:civilian?.x??player.x,
-      // The civilian snapshot already uses the stored height coordinate system.
-      y:civilian?.y??(player.flying ? FLIGHT.altitude : getWorldMap(player.mapId)?.reliefLabels ? (isOnPlatform(surfaceLayer(player))?FORT.height:0) : player.y),
-      z:civilian?.z??player.z,
+      x:civilian?.x??shore?.x??player.x,
+      // Civilian positions already use the stored height coordinates.
+      y:civilian?.y??(shore ? (getWorldMap(player.mapId)?.reliefLabels ? 0 : shore.y) :
+        player.flying ? FLIGHT.altitude : getWorldMap(player.mapId)?.reliefLabels ? (isOnPlatform(surfaceLayer(player))?FORT.height:0) : player.y),
+      z:civilian?.z??shore?.z??player.z,
       ghostPot: this.ghostPots.get(id),
       inventory, updatedAt: new Date().toISOString(),
     };
@@ -6677,6 +6741,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    this.boatWorld.leave(id,this.state.players);
     this.fishing.delete(id);
     this.huntNotified.delete(id);
     this.mountHitSequence.delete(id);this.lastMountMs.delete(id);
