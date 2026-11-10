@@ -232,6 +232,76 @@ jobs:
           node --check deploy/combat/occult-integration.mjs
           node --check deploy/combat/occult-depth-integration.mjs
 
+      - name: Verify isolated skill prototype rules
+        working-directory: combat-verify
+        run: node --import tsx --test src/rooms/default-monster-occurrence-model.test.ts src/rooms/damage-event-ledger.test.ts src/rooms/prototype-command-gate.test.ts src/rooms/prototype-protocol-room.test.ts src/rooms/combat-prototypes.test.ts src/rooms/shadow-firm-prototype.test.ts src/rooms/occult-prototype-rules.test.ts
+
+      - name: Verify isolated prototype protocol over WebSocket
+        working-directory: combat-verify
+        run: node prototype-protocol-integration.mjs
+
+      - name: Characterize player damage paths
+        env:
+          NODE_ENV: test
+          MONTRA_ECONOMY_ENABLED: '0'
+          MONTRA_CHARACTER_DIR: ${{ runner.temp }}/montra-characterization-unused
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/player-damage-characterization.cjs
+
+      - name: Verify synthetic monster scheduler model
+        run: node --test deploy/combat/synthetic-monster-scheduler.cjs
+
+      - name: Characterize additional player damage paths
+        env:
+          NODE_ENV: test
+          MONTRA_WORLD_EXPANSION: '0'
+          MONTRA_ECONOMY_ENABLED: '0'
+          MONTRA_CHARACTER_DIR: ${{ runner.temp }}/montra-characterization-unused
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/player-damage-paths.cjs
+
+      - name: Verify forest trace differential
+        run: bash deploy/combat/forest-trace-verify.sh
+
+      - name: Characterize monster movement and attack order
+        env:
+          NODE_ENV: test
+          MONTRA_WORLD_EXPANSION: '1'
+          MONTRA_ECONOMY_ENABLED: '0'
+          MONTRA_CHARACTER_DIR: ${{ runner.temp }}/montra-characterization-unused
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/monster-movement-order-characterization.cjs
+
+      - name: Exercise test-only forest hook experiment
+        env:
+          NODE_ENV: test
+          MONTRA_WORLD_EXPANSION: '1'
+          MONTRA_ECONOMY_ENABLED: '0'
+          MONTRA_CHARACTER_DIR: ${{ runner.temp }}/montra-characterization-unused
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/forest-hook-experiment.cjs
+
+      - name: Compare test-only monster occurrence adapter
+        env:
+          NODE_ENV: test
+          MONTRA_ECONOMY_ENABLED: '0'
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/default-monster-occurrence-adapter.cjs
+
+      - name: Characterize default monster damage
+        env:
+          NODE_ENV: test
+          MONTRA_WORLD_EXPANSION: '1'
+          MONTRA_ECONOMY_ENABLED: '0'
+          MONTRA_CHARACTER_DIR: ${{ runner.temp }}/montra-characterization-unused
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/default-monster-characterization.cjs
+
+      - name: Verify disabled gameplay draft using test-only override
+        working-directory: combat-verify
+        run: |
+          node --test prototype-test-process.test.mjs
+          node --import tsx --test prototype-gameplay-room.test.mjs prototype-shadow-room.test.mjs
+          node prototype-gameplay-integration.mjs
+          node prototype-shadow-integration.mjs
+          node prototype-ws-restore.mjs
+          node prototype-ws-restore.mjs --crash
+          node --import tsx --test prototype-reward-crash.test.mjs
+
       - name: Service NPC dialogue actions
         run: |
           node deploy/combat/service-npcs-ui-check.cjs

@@ -7,6 +7,10 @@ rm -rf combat-verify/src
 mkdir -p combat-verify/src/rooms/schema
 cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
 cp deploy/combat/SkillHotbar.ts deploy/combat/skill-hotbar.test.ts deploy/combat/skill-hotbar-disabled.test.ts deploy/combat/rebirth-hotbar-room.test.ts combat-verify/src/rooms/
+cp deploy/combat/DamageEventLedger.ts deploy/combat/PrototypeCommandGate.ts deploy/combat/FlowingBladesPrototype.ts deploy/combat/ChaiyaCounterPrototype.ts deploy/combat/ShadowCutPrototype.ts deploy/combat/FirmGuardPrototype.ts deploy/combat/OccultPrototypeRules.ts combat-verify/src/rooms/
+cp deploy/combat/default-monster-occurrence-model.test.ts deploy/combat/damage-event-ledger.test.ts deploy/combat/prototype-command-gate.test.ts deploy/combat/prototype-protocol-room.test.ts deploy/combat/combat-prototypes.test.ts deploy/combat/shadow-firm-prototype.test.ts deploy/combat/occult-prototype-rules.test.ts combat-verify/src/rooms/
+cp deploy/combat/PrototypeTestRoom.ts deploy/combat/prototype-protocol-test-server.ts deploy/combat/prototype-gameplay-test-server.ts deploy/combat/isolated-class-test-server.ts combat-verify/src/rooms/
+cp deploy/combat/prototype-test-process.mjs deploy/combat/prototype-test-process.test.mjs deploy/combat/prototype-protocol-integration.mjs deploy/combat/prototype-gameplay-integration.mjs deploy/combat/prototype-gameplay-room.test.mjs deploy/combat/prototype-shadow-integration.mjs deploy/combat/prototype-shadow-room.test.mjs deploy/combat/isolated-class-integrations.mjs deploy/combat/prototype-ws-restore.mjs deploy/combat/prototype-reward-crash.test.mjs deploy/combat/check-monster-reward-rollback.mjs combat-verify/
 cp deploy/combat/mixed-hotbar-integration.mjs combat-verify/
 cp deploy/combat/AccountStore.ts deploy/combat/AccountService.ts deploy/combat/AccountRoutes.ts deploy/combat/account-store.test.ts combat-verify/src/rooms/
 cp deploy/combat/account-integration.mjs combat-verify/account-integration.mjs

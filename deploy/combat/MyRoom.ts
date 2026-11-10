@@ -1,3 +1,10 @@
+import {newShadowCutState,markShadowCut,returnShadowCut,clearShadowCut,SHADOW_CUT_TRIAL,type ShadowCutState,type ShadowMark,type ShadowPoint} from "./ShadowCutPrototype.js";
+import {newFlowingState,useFlowing,advanceFlowing,clearFlowing,consumeFlowingGuard,type FlowingState} from "./FlowingBladesPrototype.js";
+import {newCounterCursor,recordChaiyaBlock,validChaiyaOpportunity,grantChaiyaDebuff,consumeChaiyaDebuff,activeChaiyaDebuff,type CounterCursor,type CounterOpportunity,type ChaiyaDebuff} from "./ChaiyaCounterPrototype.js";
+import { PrototypeCommandGate } from "./PrototypeCommandGate.js";
+import {createAshTrap,observeTrapBatch,selectTrapTargets,createRescueTalisman,observeRescue,expirePrototype,
+  type AshTrap,type Position,type TrapMovement,type RescueTalisman,type RescueContext,type Result} from "./OccultPrototypeRules.js";
+import {activateFirmGuard,firmGuardMultiplier,newFirmGuardState,updateFirmGuard,type FirmGuardState,type GuardActor} from "./FirmGuardPrototype.js";
 import {MIXED_SKILLS_ENABLED,hotbarState,hotbarSchool,availableHotbarSlot,validateHotbarSlots,validateMixedSkillLoadouts,type MixedSkillLoadouts,type HotbarBooks} from './SkillHotbar.js';
 import { FORGE_CATALOG } from "./ForgeRules.js";
 import { accounts } from "./AccountService.js";
@@ -91,6 +98,27 @@ import {
 import { ForestEncounters } from "./ForestEncounters.js";
 import { mapsWithServiceNpcs, serviceNpcsFor } from "./ServiceNpcs.js";
 
+type DefaultMonsterHit = Readonly<{sequence:number;targetId:string;target:Player}>;
+type RewardPrey = Readonly<Pick<Monster,"id"|"mapId"|"level"|"x"|"y"|"z">>;
+type MonsterDefeat = Readonly<{winnerId:string;monster:Monster;prey:RewardPrey;hitSeq:number}>;
+
+type PrototypeShadowEndReason = "expired" | "invalidated";
+type PrototypeShadowView = Readonly<{playerId:string;markSeq:number;origin:ShadowPoint;startedAtServerMs:number;expiresAtServerMs:number;durationMs:number}>;
+type PrototypeOccultView = Readonly<{
+  ash:readonly Pick<AshTrap,"castId"|"ownerId"|"mapId"|"position"|"armedAt"|"expiresAt">[];
+  rescues:readonly Pick<RescueTalisman,"castId"|"ownerId"|"targetId"|"mapId"|"expiresAt">[];
+}>;
+export type PrototypeRoomTransport = Readonly<{
+  ready(client:Client, nonce:string|undefined):void;
+  confirmed(client:Client):void;
+  probeResult(client:Client, seq:number):void;
+  shadowState(client:Client, state:Readonly<{version:1;serverNowMs:number;marks:readonly PrototypeShadowView[]}>):void;
+  occultState(client:Client,state:PrototypeOccultView & Readonly<{version:1;serverNowMs:number}>):void;
+  skill(notice:Readonly<{version:1;phase:string;playerId:string;targetId:string;skillId:string;
+    seq?:number;markSeq?:number;castId?:string;amount?:number;targetIds?:readonly string[];reason?:PrototypeShadowEndReason;origin?:ShadowPoint;destination?:ShadowPoint;serverNowMs?:number;startedAtServerMs?:number;armedAtServerMs?:number;
+    expiresAtServerMs?:number;durationMs?:number}>):void;
+}>;
+
 const mapsWithServices=mapsWithServiceNpcs();
 const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices}):"";
 function syncCityProduction(now: number) {
@@ -165,6 +193,495 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastDashMs = new Map<string, number>();
   private attackTargets = new Map<string, string>();
   private mountHitSequence = new Map<string, number>();
+  // Transport-only experiment. The flag is deliberately insufficient on its own:
+  // it must also be an explicitly designated non-production isolated staging process.
+  private prototypeSessions = new Map<string, PrototypeCommandGate>();
+  private prototypeBuckets = new Map<string, CommandBucket>();
+  private prototypeGameplaySessions = new Set<string>();
+  private prototypeGameplayChallenges = new Map<string,string>();
+  private prototypeFlowing = new Map<string,FlowingState>();
+  private prototypeShadows = new Map<string,ShadowCutState>();
+  private prototypeFirmGuards = new Map<string,FirmGuardState>();
+  private prototypeAshTraps = new Map<string,AshTrap>();
+  private prototypeRescues = new Map<string,RescueTalisman>();
+  private monsterHitSequence = 0;
+  private pendingDefaultMonsterHits = new WeakSet<DefaultMonsterHit>();
+  private pendingMonsterDefeats = new WeakSet<MonsterDefeat>();
+  private lastForestHitAt = new WeakMap<Monster,number>();
+  private prototypeCounters = new Map<string,CounterCursor>();
+  private prototypeOpportunities = new Map<string,CounterOpportunity>();
+  private prototypeDebuffs = new Map<string,ChaiyaDebuff>();
+  protected prototypeGameplayEnabled(): boolean {
+    // HARD BLOCK: staged gameplay cannot be enabled until authoritative damage
+    // event identity and complete integration/visibility review are approved.
+    // Only a dedicated room in the verification project overrides this block.
+    return false;
+  }
+  private prototypeGameplayAllowed(id:string):boolean {
+    return this.prototypeGameplayEnabled() && this.prototypeGameplaySessions.has(id) &&
+      this.clients.every(peer=>this.prototypeGameplaySessions.has(peer.sessionId));
+  }
+  private clearPrototypeTransient(id:string):void {
+    this.prototypeFirmGuards.delete(id);
+    this.clearAshTrap(id);
+    for(const talisman of this.prototypeRescues.values())if(talisman.ownerId===id || talisman.targetId===id)this.clearRescue(talisman);
+    const shadow=this.prototypeShadows.get(id);if(shadow)this.endPrototypeShadow(id,shadow,"invalidated");
+    const flow=this.prototypeFlowing.get(id);if(flow)this.prototypeFlowing.set(id,clearFlowing(flow));
+    this.prototypeOpportunities.delete(id);
+    for(const [target,mark] of this.prototypeDebuffs)if(target===id || mark.sourceId===id)this.prototypeDebuffs.delete(target);
+    for(const [owner,opp] of this.prototypeOpportunities)if(opp.attackerId===id)this.prototypeOpportunities.delete(owner);
+    for(const [owner,state] of this.prototypeFlowing)if(state.pending?.targetId===id)this.prototypeFlowing.set(owner,clearFlowing(state));
+  }
+  private clearAllPrototypeEffects():void {
+    for(const shadow of this.prototypeShadows.values())clearShadowCut(shadow);
+    for(const [id,state] of this.prototypeFlowing)this.prototypeFlowing.set(id,clearFlowing(state));
+    this.prototypeOpportunities.clear();this.prototypeDebuffs.clear();this.prototypeFirmGuards.clear();this.prototypeAshTraps.clear();this.prototypeRescues.clear();
+  }
+  private updatePrototypeEffects():void {
+    if(!this.prototypeGameplayEnabled()){this.clearAllPrototypeEffects();return;}
+    for(const [id,shadow] of this.prototypeShadows){
+      const p=this.state.players.get(id);
+      if(!p?.alive || p.pathId!=="blade" || this.pendingWarps.has(id) || (shadow.mark && p.mapId!==shadow.mark.point.mapId))this.endPrototypeShadow(id,shadow,"invalidated");
+      else if(shadow.mark && this.simulatedMs>=shadow.mark.until)this.endPrototypeShadow(id,shadow,"expired");
+    }
+    for(const [id,state] of this.prototypeFlowing) {
+      const p=this.state.players.get(id);
+      if(!p?.alive || p.pathId!=="phutthaisawan" || this.pendingWarps.has(id))this.prototypeFlowing.set(id,clearFlowing(state));
+      else this.prototypeFlowing.set(id,advanceFlowing(state,this.simulatedMs));
+    }
+    this.updatePrototypeFirmGuards();
+    for(const [id,opp] of this.prototypeOpportunities)if(this.simulatedMs>=opp.until || !this.state.players.get(id)?.alive)this.prototypeOpportunities.delete(id);
+    for(const [id,mark] of this.prototypeDebuffs)if(!activeChaiyaDebuff(mark,this.simulatedMs) || !this.getMonster(id)?.alive)this.prototypeDebuffs.delete(id);
+  }
+  private sendPrototypeOccultState(client:Client,transport:PrototypeRoomTransport):void {
+    const viewer=this.state.players.get(client.sessionId);
+    if(!viewer || this.pendingWarps.has(client.sessionId))return;
+    const ash:Array<PrototypeOccultView["ash"][number]>=[],rescues:Array<PrototypeOccultView["rescues"][number]>=[];
+    for(const trap of this.prototypeAshTraps.values()){
+      const {castId,ownerId,mapId,position,armedAt,expiresAt}=trap;
+      if(mapId===viewer.mapId && expiresAt>this.simulatedMs && this.ashTrapOwner(trap))
+        ash.push({castId,ownerId,mapId,position:{...position},armedAt,expiresAt});
+    }
+    for(const talisman of this.prototypeRescues.values()){
+      const {castId,ownerId,targetId,mapId,expiresAt}=talisman;
+      const target=this.state.players.get(targetId);
+      if(mapId!==viewer.mapId || expiresAt<=this.simulatedMs || !target?.alive)continue;
+      const context=this.rescueContext(talisman,target);
+      if(context.mapId===mapId && context.eligible && context.ownerValid)rescues.push({castId,ownerId,targetId,mapId,expiresAt});
+    }
+    try{transport.occultState(client,{version:1,serverNowMs:this.simulatedMs,ash,rescues});}catch{}
+  }
+
+  private ashTrapNotice(trap:AshTrap,phase:"placed"|"triggered"|"expired"|"cleared",targetId:string,targets?:readonly string[]):void {
+    try{
+      this.prototypeTransport()?.skill({version:1,phase,skillId:"seer_ash_rice",playerId:trap.ownerId,targetId,
+        castId:trap.castId,targetIds:targets,origin:{...trap.position,mapId:trap.mapId},serverNowMs:this.simulatedMs,
+        armedAtServerMs:trap.armedAt,expiresAtServerMs:trap.expiresAt});
+    }catch{/* Trap state and combat are already committed. */}
+  }
+
+  private clearAshTrap(id:string):void {
+    const trap=this.prototypeAshTraps.get(id);
+    if(trap){
+      this.prototypeAshTraps.delete(id);
+      this.ashTrapNotice(trap,"cleared","");
+    }
+  }
+
+  private ashTrapOwner(trap:AshTrap):{owner:Player;book:OccultBook}|undefined {
+    const id=trap.ownerId,owner=this.state.players.get(id),book=this.occultBooks.get(id);
+    if(!owner?.alive || owner.pathId!=="seer" || owner.mapId!==trap.mapId || !book?.learned.seer.includes("seer_ash_rice") ||
+      !this.advancedEquipped(id,"seer_ash_rice",book.loadouts.seer.includes("seer_ash_rice")) ||
+      this.pendingWarps.has(id) || this.pendingItemUses.has(id) || this.pendingRewards.has(id) ||
+      this.pendingCharacterLeaves.has(id) || isRestArea(owner.mapId,owner) || !this.prototypeGameplayAllowed(id))return;
+    return {owner,book};
+  }
+
+  private updateAshTraps(movements:readonly TrapMovement[]):void {
+    for(const [id,trap] of this.prototypeAshTraps){
+      const caster=this.ashTrapOwner(trap);
+      if(!caster){this.clearAshTrap(id);continue;}
+      const {owner,book}=caster;
+      const batch=movements.length>1024?movements:movements.map(move=>{
+        const monster=move.mapId===trap.mapId?this.getMonster(move.monsterId):undefined;
+        return {...move,eligible:Boolean(move.eligible && monster?.alive && this.sameCombatMap(id,move.monsterId) &&
+          this.bodyPathClear(trap.mapId,trap.position,move.current))};
+      });
+      const result=observeTrapBatch(trap,{now:this.simulatedMs,ownerValid:true,movements:batch});
+      if(result.state)continue;
+      this.prototypeAshTraps.delete(id);
+      if(result.event?.type!=="trap_triggered"){
+        this.ashTrapNotice(trap,"expired","");
+        continue;
+      }
+      const event=result.event;
+      const targets=selectTrapTargets(event,[this.state.monster,...this.state.monsters.values()].map(monster=>
+        ({id:monster.id,mapId:monster.mapId,alive:monster.alive,position:monster})),candidate=>
+        this.sameCombatMap(id,candidate.id) && this.bodyPathClear(trap.mapId,trap.position,candidate.position));
+      const lesson=OCCULT_LESSONS.seer_ash_rice;
+      const attack=this.masteryPower(owner,"pve","magicAtk",weaponBonuses(this.inventories.get(id),"pve").ranged);
+      const power=lesson.power*skillRankMultiplier(book.ranks,"seer_ash_rice");
+      for(const targetId of targets){
+        const monster=this.getMonster(targetId);
+        if(!monster?.alive)continue;
+        this.recordCombat(id,targetId);
+        const mark=this.occultMarks.get(id);
+        const marked=mark?.targetId===targetId && mark.until>this.simulatedMs;
+        this.occultDamage(id,targetId,calculateDamage(attack*power*(marked?1.3:1),monster.defense,monster.level),false,"direct");
+      }
+      if(targets.length){
+        this.recordOccultTraining(id,"seer",["rice"]);
+        this.ashTrapNotice(trap,"triggered",event.targetId,targets);
+      }else this.ashTrapNotice(trap,"cleared","");
+    }
+  }
+
+  private rescueNotice(talisman:RescueTalisman,phase:"placed"|"triggered"|"expired"|"cleared",amount?:number):void {
+    try{
+      this.prototypeTransport()?.skill({version:1,phase,skillId:"mender_deep_heal",playerId:talisman.ownerId,
+        targetId:talisman.targetId,castId:talisman.castId,amount,serverNowMs:this.simulatedMs,expiresAtServerMs:talisman.expiresAt});
+    }catch{/* The next state patch still carries the authoritative HP. */}
+  }
+
+  private clearRescue(talisman:RescueTalisman):void {
+    this.prototypeRescues.delete(talisman.targetId);
+    this.rescueNotice(talisman,"cleared");
+  }
+
+  private rescueContext(talisman:RescueTalisman,target:Player):RescueContext {
+    const {ownerId,targetId,mapId}=talisman;
+    const owner=this.state.players.get(ownerId),book=this.occultBooks.get(ownerId);
+    const available=(id:string)=>!this.pendingWarps.has(id) && !this.pendingItemUses.has(id) &&
+      !this.pendingRewards.has(id) && !this.pendingCharacterLeaves.has(id);
+    return {targetId,mapId:target.mapId,alive:target.alive,eligible:available(targetId),hp:target.hp,maxHp:target.maxHp,
+      ownerValid:Boolean(owner?.alive && owner.pathId==="mender" && owner.mapId===mapId && available(ownerId) &&
+        this.prototypeGameplayAllowed(ownerId) && book?.learned.mender.includes("mender_deep_heal") &&
+        this.advancedEquipped(ownerId,"mender_deep_heal",book.loadouts.mender.includes("mender_deep_heal")) &&
+        (ownerId===targetId || this.parties.get(ownerId)?.members.includes(targetId)))};
+  }
+
+  private finishRescue(talisman:RescueTalisman,target:Player,result:Result<RescueTalisman>):void {
+    if(result.state)return;
+    this.prototypeRescues.delete(talisman.targetId);
+    const event=result.event;
+    if(event?.type==="rescue_triggered" || event?.type==="rescue_expired"){
+      target.hp=Math.min(target.maxHp,target.hp+event.amount);
+      this.recordOccultTraining(talisman.ownerId,"mender",["healing"]);
+      void this.saveCharacter(talisman.targetId);
+      this.rescueNotice(talisman,event.type==="rescue_triggered"?"triggered":"expired",event.amount);
+    }else this.rescueNotice(talisman,"expired");
+  }
+
+  private resolveRescueAfterDamage(id:string,target:Player,damage:number):void {
+    if(damage<=0 || target.hp<=0 || !target.alive)return;
+    const talisman=this.prototypeRescues.get(id);
+    if(!talisman)return;
+    const context=this.rescueContext(talisman,target);
+    if(context.mapId!==talisman.mapId || !context.eligible || !context.ownerValid){this.clearRescue(talisman);return;}
+    this.finishRescue(talisman,target,observeRescue(talisman,{...context,now:this.simulatedMs}));
+  }
+
+  private updateRescues():void {
+    for(const talisman of this.prototypeRescues.values()){
+      const target=this.state.players.get(talisman.targetId);
+      if(!target){this.clearRescue(talisman);continue;}
+      const context=this.rescueContext(talisman,target);
+      if(!context.alive || context.mapId!==talisman.mapId || !context.eligible || !context.ownerValid){this.clearRescue(talisman);continue;}
+      this.finishRescue(talisman,target,expirePrototype(talisman,this.simulatedMs,context));
+    }
+  }
+
+  private firmGuardActor(id:string,player:Player):GuardActor {
+    const eligible=player.pathId==="sentinel" && !player.flying && !player.mounted && onMapGround(player) &&
+      !isRestArea(player.mapId,player) && !this.pendingWarps.has(id) && !this.pendingItemUses.has(id) &&
+      !this.pendingRewards.has(id) && !this.pendingCharacterLeaves.has(id) && !this.climbs.has(id) &&
+      !this.activeDashes.has(id) && !this.flightTransitions.has(id) && !this.sentinelStuns.has(id) && !this.muayControlled(id) &&
+      this.prototypeGameplayAllowed(id);
+    return {id,point:{x:player.x,y:player.y,z:player.z,mapId:player.mapId},alive:player.alive,eligible};
+  }
+
+  private updatePrototypeFirmGuards():void {
+    for(const [id,state] of this.prototypeFirmGuards){
+      const player=this.state.players.get(id);
+      if(player)updateFirmGuard(state,this.firmGuardActor(id,player),player.facing,this.simulatedMs);
+      if(!player || !state.guard)this.prototypeFirmGuards.delete(id);
+    }
+  }
+
+  private protectMonsterHit(sequence:number,targetId:string,target:Player,monster:Monster):{id:string;factor:number}|undefined {
+    if(!this.prototypeFirmGuards.size || !this.prototypeGameplayAllowed(targetId))return;
+    const ally:GuardActor={id:targetId,point:target,alive:target.alive,
+      eligible:!target.flying && onMapGround(target) && !this.pendingItemUses.has(targetId) &&
+        !this.pendingRewards.has(targetId) && !this.pendingCharacterLeaves.has(targetId)};
+    const attacker:GuardActor={id:monster.id,point:monster,alive:monster.alive,eligible:true};
+    const party=this.parties.get(targetId);
+    // Self first, followed by the first eligible guard in party order.
+    for(const id of new Set([targetId,...(party?.members ?? [])])){
+      const state=this.prototypeFirmGuards.get(id),guardian=this.state.players.get(id);
+      if(!state?.guard || !guardian)continue;
+      const result=firmGuardMultiplier(state,this.simulatedMs,sequence,this.firmGuardActor(id,guardian),guardian.facing,
+        ally,attacker,this.sameCombatMap(id,monster.id),(from,to,enemy)=>
+          this.bodyPathClear(from.mapId,from,to) && this.bodyPathClear(from.mapId,from,enemy));
+      if(result.kind==="protected")return {id,factor:result.factor};
+    }
+  }
+
+  private finishFirmGuardProtection(id:string,targetId:string):void {
+    if(this.state.players.get(id)?.alive)this.sentinelCounters.set(id,this.simulatedMs+3000);
+    this.recordSentinelPractice(id,"guard");
+    this.prototypeNotice("protected",id,targetId,"firm_guard");
+  }
+
+  private prototypeMonsterDamage(monster:Monster,damage:number):number {
+    if(!this.prototypeGameplayEnabled())return damage;
+    const mark=this.prototypeDebuffs.get(monster.id);
+    if(!mark)return damage;
+    if(!this.prototypeGameplayAllowed(mark.sourceId)){
+      this.prototypeDebuffs.delete(monster.id);
+      return damage;
+    }
+    const result=consumeChaiyaDebuff(mark,this.simulatedMs,monster.id,"direct_physical",damage);
+    if(result.debuff)this.prototypeDebuffs.set(monster.id,result.debuff);else this.prototypeDebuffs.delete(monster.id);
+    return result.factor===1?damage:Math.max(1,Math.round(damage*result.factor));
+  }
+  private prototypeNotice(phase:string,playerId:string,targetId:string,skillId:string):void {
+    this.prototypeTransport()?.skill({version:1,phase,playerId,targetId,skillId});
+  }
+  protected prototypeTransport(): PrototypeRoomTransport | undefined {
+    return undefined;
+  }
+  private acknowledgePrototypeProtocol(client: Client, fields: Record<string, unknown>): void {
+    const transport=this.prototypeTransport();
+    const id=client.sessionId;
+    if (!transport || fields.prototypeProtocolVersion !== 1 || this.prototypeSessions.has(id)) return;
+    const nonce=this.prototypeGameplayEnabled() && fields.prototypeGameplayVersion===1 ? randomUUID() : undefined;
+    try {
+      transport.ready(client,nonce);
+      if(nonce)this.prototypeGameplayChallenges.set(id,nonce);
+      this.prototypeSessions.set(id,new PrototypeCommandGate());
+      this.prototypeBuckets.set(id,new CommandBucket(4,1,this.simulatedMs));
+    } catch { this.clearPrototypeTransportSession(id); }
+  }
+  private clearPrototypeTransportSession(id:string):void {
+    this.prototypeSessions.delete(id);
+    this.prototypeBuckets.delete(id);
+    this.prototypeGameplayChallenges.delete(id);
+    this.prototypeGameplaySessions.delete(id);
+  }
+  protected handlePrototypeProtocol(client: Client, message: unknown): void {
+    const transport=this.prototypeTransport();
+    if (!transport) return;
+    const gate = this.prototypeSessions.get(client.sessionId);
+    const bucket = this.prototypeBuckets.get(client.sessionId);
+    // Count malformed messages too, before any payload inspection, to prevent bypass.
+    if (!gate || !bucket || !bucket.consume(this.simulatedMs)) return;
+    if (!message || typeof message !== "object" || Array.isArray(message)) return;
+    const proto = Object.getPrototypeOf(message);
+    if (proto !== Object.prototype && proto !== null) return;
+    const keys = Reflect.ownKeys(message);
+    const action = Object.getOwnPropertyDescriptor(message, "action");
+    if(!action || !("value" in action))return;
+    if(action.value==="confirm_gameplay"){
+      const nonce=Object.getOwnPropertyDescriptor(message,"nonce");
+      const id=client.sessionId, challenge=this.prototypeGameplayChallenges.get(id);
+      if(keys.length!==2 || !this.prototypeGameplayEnabled() || !challenge || !nonce ||
+         !("value" in nonce) || nonce.value!==challenge)return;
+      try {transport.confirmed(client);}catch{return;}
+      this.prototypeGameplayChallenges.delete(id);
+      this.prototypeGameplaySessions.add(id);
+      return;
+    }
+    if(action.value==="occult_state"){
+      if(keys.length===1 && this.prototypeGameplayEnabled() && this.prototypeGameplaySessions.has(client.sessionId))
+        this.sendPrototypeOccultState(client,transport);
+      return;
+    }
+    if(action.value==="shadow_state"){
+      if(keys.length===1 && this.prototypeGameplayEnabled() && this.prototypeGameplaySessions.has(client.sessionId))
+        this.sendPrototypeShadowState(client,transport);
+      return;
+    }
+    const seq = Object.getOwnPropertyDescriptor(message, "seq");
+    if(!seq || !("value" in seq))return;
+    if(action.value==="probe") {
+      if(keys.length!==2 || gate.reserve(seq.value)!=="accepted")return;
+      try {transport.probeResult(client,seq.value);}catch{}
+      return;
+    }
+    if(action.value==="firm_guard"){
+      if(keys.length!==2 || !this.prototypeGameplayAllowed(client.sessionId) || gate.reserve(seq.value)!=="accepted" || this.blockMounted(client))return;
+      if(this.hotbarCastAllowed(client,{skillId:"firm_guard"},"advanced"))this.castSentinelSkill(client,{skillId:"firm_guard"},seq.value as number);
+      return;
+    }
+    if(action.value==="shadow_cut_return"){
+      if(keys.length!==2 || !this.prototypeGameplayAllowed(client.sessionId) || gate.reserve(seq.value)!=="accepted")return;
+      this.castPrototypeShadow(client,undefined,seq.value as number);return;
+    }
+    if(action.value!=="flowing_blades" && action.value!=="chaiya_advanced_counter" && action.value!=="shadow_cut" && action.value!=="seer_ash_rice" && action.value!=="mender_deep_heal")return;
+    const target=Object.getOwnPropertyDescriptor(message,"targetId");
+    if(keys.length!==3 || !target || !("value" in target) || typeof target.value!=="string" || !target.value || target.value.length>256 || !this.prototypeGameplayAllowed(client.sessionId))return;
+    if(gate.reserve(seq.value)!=="accepted")return;
+    if(action.value==="shadow_cut")this.castPrototypeShadow(client,target.value,seq.value as number);
+    else if(action.value==="seer_ash_rice" || action.value==="mender_deep_heal"){
+      const message={skillId:action.value,targetId:target.value};
+      if(!this.blockMounted(client) && this.hotbarCastAllowed(client,message,"advanced"))this.castOccultSkill(client,message,seq.value as number);
+    } else this.castPrototypeSkill(client,action.value,target.value,seq.value as number);
+  }
+  private castPrototypeShadow(client:Client,targetId:string|undefined,seq:number):void {
+    const id=client.sessionId,skillId="shadow_cut",skill=BLADE_LESSONS.shadow_cut;
+    if(!this.prototypeGameplayAllowed(id) || this.blockMounted(client) || !this.hotbarCastAllowed(client,{skillId},"advanced"))return;
+    if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
+    const player=this.spellCaster(client),book=this.bladeBooks.get(id);
+    if(!player || !book)return;
+    if(player.pathId!=="blade" || !this.persistentCharacters.has(id))return this.reject(client,"blade_class_required");
+    if(!book.learned.includes(skillId) || !this.advancedEquipped(id,skillId,book.slots.includes(skillId)))return this.reject(client,"blade_skill_locked");
+    if(player.flying || !onMapGround(player) || isRestArea(player.mapId,player))return this.reject(client,"blade_cloak_location");
+    const state=this.prototypeShadows.get(id)??newShadowCutState();this.prototypeShadows.set(id,state);
+    if(state.mark && this.simulatedMs>=state.mark.until)this.endPrototypeShadow(id,state,"expired");
+    if(targetId===undefined){
+      const mark=state.mark;
+      const result=returnShadowCut(state,{point:{x:player.x,y:player.y,z:player.z,mapId:player.mapId},alive:player.alive,eligible:true},this.simulatedMs,seq,(from,to)=>this.prototypeShadowPathClear(player,from,to));
+      if(!result){
+        if(mark && !state.mark)this.publishPrototypeShadowEnd(id,mark,"invalidated");
+        return this.reject(client,"prototype_return_unavailable");
+      }
+      this.startSkillAction(id,player,"idle");this.destinations.delete(id);this.attackTargets.delete(id);player.targetId="";
+      this.moveOnSurface(player,result.x,result.z);
+      if(mark)this.prototypeShadowNotice("return",id,"",seq,mark,{destination:{x:player.x,y:player.y,z:player.z,mapId:player.mapId}});return;
+    }
+    if(state.mark)return this.reject(client,"prototype_shadow_active");
+    const now=Date.now();if(now<(book.cooldowns[skillId]??0))return this.reject(client,"blade_cooldown");
+    if(player.mana<skill.stamina)return this.reject(client,"insufficient_mana");
+    const order=parseAttackCommand({targetId}) ?? parsePkTargetCommand({targetId});
+    const monster=order?this.getMonster(targetId):undefined,target=monster ?? (order?this.state.players.get(targetId):undefined);
+    if(!order || !target?.alive || targetId===id || !this.sameCombatMap(id,targetId) || (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))))return this.reject(client,"target_unavailable");
+    if(distance3d(player,target)>skill.range || Math.abs(player.y-target.y)>1.1)return this.reject(client,"blade_out_of_range");
+    if(!this.bodyPathClear(player.mapId,player,target))return this.reject(client,"blade_blocked");
+    if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[],true))return;
+    const origin={x:player.x,y:player.y,z:player.z,mapId:player.mapId};
+    if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[]))return;
+    book.cooldowns[skillId]=now+skill.cooldownMs;
+    const ambush=this.endBladeCloak(id,"attack");
+    const hit=this.bladeDamage(id,targetId,skill.power*(monster?skillRankMultiplier(book.ranks,skillId):1)*(ambush?(monster?1.5:1.2):1));
+    if(hit && player.alive && player.pathId==="blade" && player.mapId===origin.mapId && !this.pendingWarps.has(id)){
+      if(ambush)this.recordBladeOpening(id,Boolean(monster));
+      if(markShadowCut(state,{point:origin,alive:true,eligible:true},this.simulatedMs,seq) && state.mark)this.prototypeShadowNotice("marked",id,targetId,seq,state.mark);
+    }
+    this.sendBladeBook(client);void this.saveCharacter(id);
+  }
+  private prototypeShadowView(playerId:string,mark:ShadowMark):PrototypeShadowView {
+    return {playerId,markSeq:mark.sequence,origin:{...mark.point},startedAtServerMs:mark.until-SHADOW_CUT_TRIAL.durationMs,
+      expiresAtServerMs:mark.until,durationMs:SHADOW_CUT_TRIAL.durationMs};
+  }
+  /** Timings are in the room simulation clock. */
+  private prototypeShadowNotice(phase:"marked"|"return"|"cleared",playerId:string,targetId:string,seq:number,mark:ShadowMark,
+    detail:{destination?:ShadowPoint;reason?:PrototypeShadowEndReason}={}):void {
+    this.prototypeTransport()?.skill({version:1,phase,targetId,skillId:"shadow_cut",seq,
+      ...this.prototypeShadowView(playerId,mark),serverNowMs:this.simulatedMs,...detail});
+  }
+  private publishPrototypeShadowEnd(id:string,mark:ShadowMark,reason:PrototypeShadowEndReason):void {
+    try{this.prototypeShadowNotice("cleared",id,"",mark.sequence,mark,{reason});}catch{/* A later snapshot is authoritative. */}
+  }
+  private endPrototypeShadow(id:string,state:ShadowCutState,reason:PrototypeShadowEndReason):void {
+    const mark=state.mark;if(!mark)return;
+    clearShadowCut(state);
+    this.publishPrototypeShadowEnd(id,mark,reason);
+  }
+  private sendPrototypeShadowState(client:Client,transport:PrototypeRoomTransport):void {
+    const viewer=this.state.players.get(client.sessionId);if(!viewer)return;
+    const marks:PrototypeShadowView[]=[];
+    for(const [id,state] of this.prototypeShadows){
+      const mark=state.mark,owner=this.state.players.get(id);
+      if(mark && mark.until>this.simulatedMs && owner?.alive && owner.pathId==="blade" &&
+        owner.mapId===viewer.mapId && mark.point.mapId===viewer.mapId && !this.pendingWarps.has(id))
+        marks.push(this.prototypeShadowView(id,mark));
+    }
+    try{transport.shadowState(client,{version:1,serverNowMs:this.simulatedMs,marks});}catch{}
+  }
+  /** Full server-owned occupancy, terrain and collision sweep; no client positions. */
+  private prototypeShadowPathClear(player:Player,from:ShadowPoint,to:ShadowPoint):boolean {
+    const map=getWorldMap(from.mapId);if(!map || from.mapId!==to.mapId || player.mapId!==from.mapId)return false;
+    const layer=surfaceLayer(player),expectedY=groundAt(to.mapId,to.x,to.z)+layer;
+    if(Math.abs(expectedY-to.y)>0.001 || !this.canOccupy(to.x,to.z,layer,false,to.mapId) || isRestArea(to.mapId,to) || !this.bodyPathClear(to.mapId,from,to) || !this.combatSegmentClear(to.mapId,from,to))return false;
+    const dx=to.x-from.x,dz=to.z-from.z,distance=Math.hypot(dx,dz);if(distance<1e-8)return true;
+    const direction={dx:dx/distance,dz:dz/distance};let pos={x:from.x,z:from.z},moved=0;
+    while(moved+1e-7<distance){
+      const step=advanceDash(pos,direction,distance-moved,(x,z)=>{
+        const next={x,y:groundAt(from.mapId,x,z)+layer,z};
+        return this.canOccupy(x,z,layer,false,from.mapId) && !isRestArea(from.mapId,next) && this.bodyPathClear(from.mapId,from,next) && this.combatSegmentClear(from.mapId,from,next);
+      },map.bounds);
+      if(step.blocked || step.moved<1e-7)return false;pos={x:step.x,z:step.z};moved+=step.moved;
+    }
+    return Math.hypot(pos.x-to.x,pos.z-to.z)<0.001;
+  }
+  private castPrototypeSkill(client:Client,skillId:"flowing_blades"|"chaiya_advanced_counter",targetId:string,seq:number):void {
+    const id=client.sessionId;
+    if(!this.prototypeGameplayAllowed(id) || this.blockMounted(client) || !this.hotbarCastAllowed(client,{skillId},"advanced"))return;
+    if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
+    const player=this.spellCaster(client);if(!player)return;
+    const sword=skillId==="flowing_blades",tree=this.swordTrees.get(id),book=this.muayBooks.get(id),cooldowns=this.muayCooldowns.get(id);
+    if(sword) {
+      if(player.pathId!=="phutthaisawan" || !wearsTwinSwords(equippedWeaponId(this.inventories.get(id))) || !tree || !tree.learned.includes(skillId) || !this.advancedEquipped(id,skillId,tree.loadouts[tree.school].includes(skillId)))return this.reject(client,"sword_skill_locked");
+    } else {
+      if(player.pathId!=="muay_boran" || !wearsWraps(equippedWeaponId(this.inventories.get(id))) || !book || !cooldowns || book.school!=="chaiya" || !book.learned.includes(skillId) || !this.advancedEquipped(id,skillId,book.slots.includes(skillId)))return this.reject(client,"muay_skill_locked");
+    }
+    if(player.flying || !onMapGround(player) || isRestArea(player.mapId,player))return this.reject(client,"prototype_unavailable");
+    const order=parseAttackCommand({targetId}) ?? parsePkTargetCommand({targetId});
+    const monster=order ? this.getMonster(targetId) : undefined;
+    const target=monster ?? (order ? this.state.players.get(targetId):undefined);
+    const skill=sword?SWORD_NODES.flowing_blades:MUAY_SKILLS.chaiya_advanced_counter;
+    if(!order || !target?.alive || targetId===id || !this.sameCombatMap(id,targetId) || (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))))return this.reject(client,"target_unavailable");
+    if(distance3d(player,target)>skill.range || Math.abs(player.y-target.y)>1.1 || !this.bodyPathClear(player.mapId,player,target))return this.reject(client,"prototype_out_of_range");
+    const wallNow=Date.now(), flow=advanceFlowing(this.prototypeFlowing.get(id)??newFlowingState(),this.simulatedMs);
+    if(sword) {
+      const follow=!!flow.pending;
+      if(!follow && wallNow<(tree!.cooldowns[skillId] ?? 0))return this.reject(client,"sword_skill_cooldown");
+      const result=useFlowing(flow,this.simulatedMs,seq,targetId,true);
+      if(result.action==="none"){this.prototypeFlowing.set(id,result.state);return this.reject(client,result.reason??"prototype_unavailable");}
+      if(result.action==="first" && !this.spendSkillMana(client,player,skill.stamina,[targetId],[],true))return;
+      if(result.action==="first" && !this.spendSkillMana(client,player,skill.stamina,[targetId],[]))return;
+      this.prototypeFlowing.set(id,result.state);
+      if(result.action==="first"){tree!.cooldowns[skillId]=wallNow+skill.cooldownMs;player.swordTreeData=JSON.stringify(tree);}
+      if(this.prototypeAttack(id,player,target,targetId,monster,skillId))this.prototypeNotice(result.action,id,targetId,skillId);
+    } else {
+      const guard=this.swordGuards.get(id),opp=this.prototypeOpportunities.get(id);
+      if(wallNow<(cooldowns![skillId]??0))return this.reject(client,"muay_cooldown");
+      if(!guard || this.simulatedMs>=guard.counterUntil || !validChaiyaOpportunity(opp,targetId,this.simulatedMs))return this.reject(client,"muay_counter_required");
+      if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[],true))return;
+      if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[]))return;
+      this.prototypeOpportunities.delete(id);guard.counterUntil=0;
+      cooldowns![skillId]=wallNow+skill.cooldownMs;player.muayData=JSON.stringify(cooldowns);
+      if(!this.prototypeAttack(id,player,target,targetId,monster,skillId)){void this.saveCharacter(id);return;}
+      const granted=grantChaiyaDebuff(this.prototypeCounters.get(id)??newCounterCursor(),this.prototypeDebuffs.get(targetId),this.simulatedMs,seq,id,targetId,monster?.tier==="normal"?"normal_monster":monster?"boss":"player",true,target.alive,opp);
+      this.prototypeCounters.set(id,granted.cursor);if(granted.debuff)this.prototypeDebuffs.set(targetId,granted.debuff);
+      this.prototypeNotice("counter",id,targetId,skillId);
+    }
+    void this.saveCharacter(id);
+  }
+  private prototypeAttack(id:string,player:Player,target:Monster|Player,targetId:string,monster:Monster|undefined,skillId:"flowing_blades"|"chaiya_advanced_counter"):boolean {
+    if(!player.alive || !target.alive)return false;
+    const sword=skillId==="flowing_blades",tree=this.swordTrees.get(id),book=this.muayBooks.get(id),pvp=!monster;
+    player.facing=facingTo(target.x-player.x,target.z-player.z);this.recordCombat(id,targetId);
+    const combo=!sword && book ? this.advanceMuaySkillCombo(id,book.school,targetId,skillId,pvp):1;
+    if(!sword)this.recordMuayTraining(id,"strikes");
+    const skill=sword?SWORD_NODES.flowing_blades:MUAY_SKILLS.chaiya_advanced_counter;
+    // Trial keeps the catalog's existing per-hit power and rank/PvP scaling.
+    let attack=this.masteryPower(player,pvp?"pvp":"pve","atk",weaponBonuses(this.inventories.get(id),pvp?"pvp":"pve").melee)*skill.power;
+    if(sword)attack*=((tree?.learned.includes("rhythm")?1.05:1)*(monster?skillRankMultiplier(tree?.ranks,skillId):SWORD_PVP_DAMAGE_MULTIPLIER));
+    else attack*=combo*(pvp?MUAY_PVP_DAMAGE_MULTIPLIER:skillRankMultiplier(book?.ranks,skillId));
+    const defense=monster?monster.defense:this.masteryPower(target as Player,"pvp","def");
+    let damage=calculateDamage(attack,defense,target.level);
+    if(monster){this.hitMonsterWithSpell(id,monster,damage,sword?"sword":"muay");if(!sword && book)this.recordMuayMastery(id,book.school,countsMuayTechnique(book.school,skillId,false),combo>1);}
+    else {
+      const victim=target as Player;damage=this.directGuardDamage(targetId,player,damage);
+      if(!this.applyPlayerHit(player,targetId,victim,damage,()=>{
+        this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:sword?"sword":"muay"},{afterNextPatch:true});
+      },()=>{
+        player.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,source:sword?"sword":"muay",kills:player.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
+      }))return false;
+    }
+    return true;
+  }
   private lastMountMs = new Map<string, number>();
   private lastAttackMs = new Map<string, number>();
   private lastCombatMs = new Map<string, number>();
@@ -433,7 +950,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.endBladeCloak(id,"class_changed");this.clearBladeMark(id);this.bladeOpenings.delete(id);this.bladeEvades.delete(id);this.bladeWindups.delete(id);this.bladeCasts.delete(id);this.bladeRetreatUntil.delete(id);
       this.occultMarks.delete(id);this.occultSpiritOrders.delete(id);this.occultSpiritPracticed.delete(id);this.occultHealingFields.delete(id);
       for(const [target,curse] of this.occultCurses)if(curse.ownerId===id)this.clearOccultCurse(target,"class_changed");
-      this.swordGuards.delete(id);this.swordCoreStances.delete(id);this.swordCoreSequences.delete(id);this.swordCombos.delete(id);
+      this.clearPrototypeTransient(id);this.swordGuards.delete(id);this.swordCoreStances.delete(id);this.swordCoreSequences.delete(id);this.swordCombos.delete(id);
       this.clearMuayDefense(id,"cancelled");this.clearMuayCombo(id);this.muayCoreStances.delete(id);this.muayCoreFollowups.delete(id);this.muayCoreSequences.delete(id);
       this.destinations.delete(id);this.endAttack(id,player);
       this.rebirthStates.set(id,next.rebirth!);this.inventories.set(id,next.inventory!);this.statAllocations.set(id,emptyAllocations());
@@ -746,6 +1263,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.endPossession(id, "class_changed");
         this.despawnSummon(id, "class_changed");
       }
+      this.clearPrototypeTransient(id);
       player.pathId = build.path;
       player.ancestryId = build.ancestry;
       this.swordGuards.delete(id);
@@ -928,7 +1446,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!committed) return;
       if (action==="equip") committed.loadouts=next.loadouts;
       this.swordTrees.set(id,committed);
-      if (action === "school" || action === "reset") { this.swordGuards.delete(id); this.swordCombos.delete(id); }
+      if (action === "school" || action === "reset") { this.clearPrototypeTransient(id);this.swordGuards.delete(id); this.swordCombos.delete(id); }
       player.swordTreeData=JSON.stringify(committed);this.syncSkillHotbar(id);
       try {
         client.send("sword_tree_changed",{action,id:value});
@@ -1116,10 +1634,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!this.spendSkillMana(client,player,MUAY_GRAPPLE_COUNTER_STAMINA,[window.targetId],[]))return;this.clearGrappleCounter(id,"used");
     player.facing=facingTo(opponent.x-player.x,opponent.z-player.z);this.recordCombat(id,window.targetId);
     const attack=(this.masteryPower(player,"pvp","atk",weaponBonuses(this.inventories.get(id),"pvp").melee))*MUAY_PVP_DAMAGE_MULTIPLIER;
-    const damage=this.swordGuardDamage(window.targetId,player,calculateDamage(attack,this.masteryPower(opponent,"pvp","def"),opponent.level));
-    opponent.hp=Math.max(0,opponent.hp-damage);opponent.hitSeq++;
-    this.broadcast("pvp_hit",{attackerId:id,targetId:window.targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"grapple_counter"},{afterNextPatch:true});
-    if(opponent.hp===0){player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(window.targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:window.targetId,source:"grapple_counter",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});}
+    const damage=this.directGuardDamage(window.targetId,player,calculateDamage(attack,this.masteryPower(opponent,"pvp","def"),opponent.level));
+    this.applyPlayerHit(player,window.targetId,opponent,damage,()=>{
+      this.broadcast("pvp_hit",{attackerId:id,targetId:window.targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"grapple_counter"},{afterNextPatch:true});
+    },()=>{
+      player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(window.targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:window.targetId,source:"grapple_counter",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
+    });
     void this.saveCharacter(id);
   }
   private finishMuayGrapple(client:Client,targetId:unknown):void {
@@ -1142,10 +1662,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const pvp=!monster,attack=(this.masteryPower(player,pvp?"pvp":"pve","atk",weaponBonuses(this.inventories.get(id),pvp?"pvp":"pve").melee))*MUAY_SKILLS.grapple.power*(pvp?MUAY_PVP_DAMAGE_MULTIPLIER:1);
     if(monster)this.hitMonsterWithSpell(id,monster,calculateDamage(attack,monster.defense,monster.level),"muay");
     else {
-      const opponent=target as Player,damage=this.swordGuardDamage(hold.targetId,player,calculateDamage(attack,this.masteryPower(opponent,"pvp","def"),opponent.level));
-      opponent.hp=Math.max(0,opponent.hp-damage);opponent.hitSeq++;
-      this.broadcast("pvp_hit",{attackerId:id,targetId:hold.targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"muay"},{afterNextPatch:true});
-      if(opponent.hp===0){player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(hold.targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:hold.targetId,source:"muay",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});}
+      const opponent=target as Player,damage=this.directGuardDamage(hold.targetId,player,calculateDamage(attack,this.masteryPower(opponent,"pvp","def"),opponent.level));
+      if(!this.applyPlayerHit(player,hold.targetId,opponent,damage,()=>{
+        this.broadcast("pvp_hit",{attackerId:id,targetId:hold.targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"muay"},{afterNextPatch:true});
+      },()=>{
+        player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(hold.targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:hold.targetId,source:"muay",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
+      })){void this.saveCharacter(id);return;}
     }
     this.broadcast("muay_skill_used",{playerId:id,skillId:"grapple",targetId:hold.targetId},{afterNextPatch:true});void this.saveCharacter(id);
   }
@@ -1229,7 +1751,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const task=characterStore.save({...snapshot,sentinelBook:next}).then(()=>{
       this.sentinelBooks.set(id,next);this.sendSentinelBook(client);
       if(action==="reset"){
-        this.sentinelAnchors.delete(id);this.sentinelCounters.delete(id);this.swordGuards.delete(id);
+        this.sentinelAnchors.delete(id);this.sentinelCounters.delete(id);this.swordGuards.delete(id);this.prototypeFirmGuards.delete(id);
         this.effects.remove(id,"sentinel_step",id);this.effects.remove(id,"sentinel_anchor",id);
         for(const [member,link] of this.sentinelInterceptions)if(link.ownerId===id)this.sentinelInterceptions.delete(member);
       }
@@ -1266,11 +1788,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const attack=(this.masteryPower(actor,monster?"pve":"pvp","atk",weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee))*power*(monster?1:0.75);
     if(monster)this.hitMonsterWithSpell(id,monster,calculateDamage(attack,monster.defense,monster.level),"sword");
     else {
-      const victim=target as Player,damage=this.swordGuardDamage(targetId,actor,calculateDamage(attack,this.masteryPower(victim,"pvp","def"),victim.level));
-      if(!actor.alive || !victim.alive)return false;
-      victim.hp=Math.max(0,victim.hp-damage);victim.hitSeq++;
-      this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"sentinel"},{afterNextPatch:true});
-      if(victim.hp===0){actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});}
+      const victim=target as Player,damage=this.directGuardDamage(targetId,actor,calculateDamage(attack,this.masteryPower(victim,"pvp","def"),victim.level));
+      if(!this.applyPlayerHit(actor,targetId,victim,damage,()=>{
+        this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"sentinel"},{afterNextPatch:true});
+      },()=>{
+        actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
+      }))return false;
     }
     if(stun && target.alive) {
       const result=this.sentinelInterrupt(id,targetId);
@@ -1344,13 +1867,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     void this.saveCharacter(id);
   }
 
-  private castSentinelSkill(client:Client,message:unknown):void {
+  private castSentinelSkill(client:Client,message:unknown,prototypeSequence?:number):void {
     if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_sentinel_skill");
     const input=message as Record<string,unknown>;
     if(typeof input.skillId!=="string" || !Object.hasOwn(SENTINEL_LESSONS,input.skillId) ||
       Object.keys(input).some(k=>k!=="skillId" && k!=="targetId") || (input.targetId!==undefined && typeof input.targetId!=="string"))
       return this.reject(client,"invalid_sentinel_skill");
     const id=client.sessionId,skillId=input.skillId as SentinelSkillId,skill:SentinelLesson=SENTINEL_LESSONS[skillId];
+    if(skillId==="firm_guard" && this.prototypeGameplayEnabled() && prototypeSequence===undefined)return this.reject(client,"prototype_protocol_required");
     const actor=this.spellCaster(client),book=this.sentinelBooks.get(id);
     if(!actor || !book)return;
     if(actor.pathId!=="sentinel" || !this.persistentCharacters.has(id))return this.reject(client,"sentinel_class_required");
@@ -1359,6 +1883,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(actor.flying || !onMapGround(actor) || isRestArea(actor.mapId,actor))return this.reject(client,"sentinel_location");
     if(Date.now()<(book.cooldowns[skillId] ?? 0))return this.reject(client,"sentinel_cooldown");
     if(actor.mana<skill.stamina)return this.reject(client,"insufficient_mana");
+    let firmGuard:FirmGuardState|undefined;
+    if(prototypeSequence!==undefined){
+      if(this.field)return this.reject(client,"prototype_unavailable");
+      const state=this.prototypeFirmGuards.get(id);
+      firmGuard=state?{...state}:newFirmGuardState();
+      if(!activateFirmGuard(firmGuard,this.firmGuardActor(id,actor),this.simulatedMs,prototypeSequence,actor.facing))return this.reject(client,"prototype_unavailable");
+    }
     if(skill.effect==="counter" && this.simulatedMs>=(this.sentinelCounters.get(id) ?? 0))return this.reject(client,"sentinel_counter_required");
     if((skill.effect==="step" || skill.effect==="anchor") && this.effects.modifiers(id).length>=STACKING_RULES.maxModifiers &&
       !this.effects.modifiers(id).some(effect=>effect.id==="sentinel_"+skillId && effect.sourceId===id))return this.reject(client,"sentinel_effect_limit");
@@ -1401,7 +1932,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(allies.length)this.markSupportManaCombat(id,allies);
     if(offensive && target)actor.facing=facingTo(target.x-actor.x,target.z-actor.z);
     if(next){this.startSkillAction(id,actor,"idle");this.moveOnSurface(actor,next.x,next.z);}
-    if(skill.effect==="guard")this.swordGuards.set(id,{until:this.simulatedMs+2500,factor:skill.power,direction:true,counterUntil:0});
+    if(firmGuard)this.prototypeFirmGuards.set(id,firmGuard);
+    else if(skill.effect==="guard")this.swordGuards.set(id,{until:this.simulatedMs+2500,factor:skill.power,direction:true,counterUntil:0});
     else if(skill.effect==="step" || skill.effect==="anchor"){
       this.effects.grant(id,{id:"sentinel_"+skillId,sourceId:id,group:"sentinel_self",bonuses:{def:skill.power*supportRankMultiplier(book.ranks,skillId)}},this.simulatedMs+6000);
       this.applyStats(id,actor,this.statAllocations.get(id) ?? emptyAllocations());
@@ -1441,6 +1973,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     } else if(skill.effect==="intercept")this.sentinelInterceptions.set(targetId,{ownerId:id,until:this.simulatedMs+6000,fraction:skill.power});
     this.sendSentinelBook(client);
     this.broadcast("sentinel_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
+    if(firmGuard)this.prototypeNotice("braced",id,id,skillId);
     void this.saveCharacter(id);
   }
 
@@ -1491,11 +2024,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const attack=(this.masteryPower(player,monster?"pve":"pvp","atk",weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").melee))*power*(monster?1:0.75);
     if(monster) this.hitMonsterWithSpell(id,monster,calculateDamage(attack,monster.defense,monster.level),"sword");
     else {
-      const victim=target as Player,damage=this.swordGuardDamage(targetId,player,calculateDamage(attack,this.masteryPower(victim,"pvp","def"),victim.level));
-      if(!player.alive || !victim.alive)return false;
-      victim.hp=Math.max(0,victim.hp-damage);victim.hitSeq++;
-      this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"blade"},{afterNextPatch:true});
-      if(victim.hp===0){player.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:player.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});}
+      const victim=target as Player,damage=this.directGuardDamage(targetId,player,calculateDamage(attack,this.masteryPower(victim,"pvp","def"),victim.level));
+      if(!this.applyPlayerHit(player,targetId,victim,damage,()=>{
+        this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"blade"},{afterNextPatch:true});
+      },()=>{
+        player.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:player.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
+      }))return false;
     }
     return true;
   }
@@ -1986,13 +2520,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     void this.saveCharacter(id);
   }
 
-  private castOccultSkill(client:Client,message:unknown):void {
+  private castOccultSkill(client:Client,message:unknown,prototypeSequence?:number):void {
     if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_occult_skill");
     const input=message as Record<string,unknown>,keys=Object.keys(input);
     if ((keys.length!==1 && keys.length!==2) || typeof input.skillId!=="string" ||
         (keys.length===2 && (typeof input.targetId!=="string" || !Object.hasOwn(input,"targetId"))) ||
         !Object.hasOwn(OCCULT_LESSONS,input.skillId)) return this.reject(client,"invalid_occult_skill");
     const id=client.sessionId,skillId=input.skillId as OccultSkillId,lesson:OccultLesson=OCCULT_LESSONS[skillId];
+    if((skillId==="seer_ash_rice" || skillId==="mender_deep_heal") && this.prototypeGameplayEnabled() && prototypeSequence===undefined)return this.reject(client,"prototype_protocol_required");
     const caster=this.spellCaster(client),book=this.occultBooks.get(id);
     if (!caster || !book) return;
     if (!isOccultPath(caster.pathId)) return this.reject(client,"occult_class_required");
@@ -2047,7 +2582,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (lesson.effect==="trance" && !caster.possessionActive) return this.reject(client,"occult_trance_required");
       if ((lesson.effect==="spirit_ward" || lesson.effect==="spirit_heal") &&
           this.state.summons.get(id)?.kind!=="pot_spirit") return this.reject(client,"possession_needs_summon");
-      if (lesson.effect==="heal" || lesson.effect==="spirit_heal") targets=targets.filter(([,target])=>target.hp<target.maxHp);
+      if (prototypeSequence===undefined && (lesson.effect==="heal" || lesson.effect==="spirit_heal")) targets=targets.filter(([,target])=>target.hp<target.maxHp);
       if (!targets.length) return this.reject(client,"class_skill_no_target");
       if (lesson.effect==="cleanse" && !this.occultCurses.has(targetId) && !this.seerPoisons.has(targetId)) return this.reject(client,"occult_no_curse");
       if (lesson.effect==="cleanse_area" && !targets.some(([member])=>this.occultCurses.has(member) || this.seerPoisons.has(member))) return this.reject(client,"occult_no_curse");
@@ -2060,6 +2595,40 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     }
 
+    if(prototypeSequence!==undefined && skillId==="mender_deep_heal"){
+      if(this.field || caster.flying || !onMapGround(caster) || !this.persistentCharacters.has(id) ||
+        this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
+        [...this.prototypeRescues.values()].some(talisman=>talisman.ownerId===id))return this.reject(client,"prototype_unavailable");
+      const talisman=createRescueTalisman(this.prototypeRescues.get(targetId)??null,{castId:id+"/"+prototypeSequence,
+        ownerId:id,targetId,mapId:caster.mapId,now:this.simulatedMs,durationMs:5000,
+        healFraction:lesson.power*supportRankMultiplier(book.ranks,skillId)});
+      if(!talisman)return this.reject(client,"prototype_unavailable");
+      if(!this.spendSkillMana(client,caster,lesson.stamina,[],[targetId]))return;
+      book.cooldowns[skillId]=Date.now()+lesson.cooldownMs;
+      this.prototypeRescues.set(targetId,talisman);
+      this.markSupportManaCombat(id,targets);
+      void this.saveCharacter(id);
+      this.sendOccultBook(client);
+      this.rescueNotice(talisman,"placed");
+      return;
+    }
+    if(prototypeSequence!==undefined && monster){
+      const position={x:monster.x,y:groundAt(caster.mapId,monster.x,monster.z),z:monster.z};
+      if(this.field || caster.flying || !onMapGround(caster) || !this.persistentCharacters.has(id) ||
+        this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
+        !this.canOccupy(position.x,position.z,0,false,caster.mapId) || !this.bodyPathClear(caster.mapId,caster,position))
+        return this.reject(client,"prototype_unavailable");
+      const trap=createAshTrap(this.prototypeAshTraps.get(id)??null,{castId:id+"/"+prototypeSequence,
+        ownerId:id,mapId:caster.mapId,position,now:this.simulatedMs,armDelayMs:1000,durationMs:5000,radius:2});
+      if(!trap)return this.reject(client,"prototype_unavailable");
+      if(!this.spendSkillMana(client,caster,lesson.stamina,[targetId],[]))return;
+      book.cooldowns[skillId]=Date.now()+lesson.cooldownMs;
+      this.prototypeAshTraps.set(id,trap);
+      void this.saveCharacter(id);
+      this.sendOccultBook(client);
+      this.ashTrapNotice(trap,"placed",targetId);
+      return;
+    }
     if(!this.spendSkillMana(client,caster,lesson.stamina,offensive?[targetId]:[],targets.map(([member])=>member)))return;
     book.cooldowns[skillId]=Date.now()+lesson.cooldownMs;
     if (!offensive) this.markSupportManaCombat(id, targets);
@@ -2078,14 +2647,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (lesson.effect==="curse_burst") this.clearOccultCurse(targetId,"detonated");
         const attack=this.masteryPower(caster,monster?"pve":"pvp","magicAtk",weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").ranged);
         const damage=calculateDamage(attack*power*(opponent?0.65:1),monster?.defense ?? this.masteryPower(opponent!,"pvp","magicDef"),target.level);
-        this.occultDamage(id,targetId,damage);
+        this.occultDamage(id,targetId,damage,false,"direct");
         if (lesson.effect==="rice_area" && monster) {
           const others=[this.state.monster,...this.state.monsters.values()]
             .filter(other=>other.id!==targetId && other.alive && other.mapId===caster.mapId &&
               distance3d(other,monster!)<=3 && this.sameCombatMap(id,other.id) &&
               this.bodyPathClear(caster.mapId,caster,other) && this.bodyPathClear(caster.mapId,monster!,other))
             .sort((a,b)=>distance3d(a,monster!)-distance3d(b,monster!)).slice(0,2);
-          for (const other of others) {this.recordCombat(id,other.id);this.occultDamage(id,other.id,calculateDamage(attack*power,other.defense,other.level));}
+          for (const other of others) {this.recordCombat(id,other.id);this.occultDamage(id,other.id,calculateDamage(attack*power,other.defense,other.level),false,"direct");}
         }
         if (target.alive && monster && lesson.effect==="interrupt") this.interruptMuayTarget(monster,700);
         if (target.alive && lesson.effect==="mark") this.occultMarks.set(id,{targetId,until:this.simulatedMs+8000});
@@ -2137,21 +2706,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     void this.saveCharacter(id);
   }
 
-  private occultDamage(ownerId:string,targetId:string,damage:number,percentDamage=false):void {
+  private occultDamage(ownerId:string,targetId:string,damage:number,percentDamage:boolean,source:"direct"|"dot"):void {
     const monster=this.getMonster(targetId);
     if (monster?.alive) {this.hitMonsterWithSpell(ownerId,monster,damage,"talisman");return;}
     const owner=this.state.players.get(ownerId),victim=this.state.players.get(targetId);
     if (!owner?.alive || !victim?.alive || !this.sameCombatMap(ownerId,targetId,true)) return;
     this.endBladeCloak(targetId,"damaged");
-    damage=this.swordGuardDamage(targetId,owner,damage,0,undefined,percentDamage);
-    if(!owner.alive || !victim.alive)return;
-    victim.hp=Math.max(0,victim.hp-damage);victim.hitSeq++;
-    this.broadcast("pvp_hit",{attackerId:ownerId,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"occult"},{afterNextPatch:true});
-    if (victim.hp===0) {
+    damage=this.swordGuardDamage(targetId,owner,damage,0,undefined,percentDamage,source);
+    if(!this.applyPlayerHit(owner,targetId,victim,damage,()=>{
+      this.broadcast("pvp_hit",{attackerId:ownerId,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"occult"},{afterNextPatch:true});
+    },()=>{
       owner.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",ownerId);
       this.broadcast("pvp_kill",{winnerId:ownerId,loserId:targetId,source:"occult",kills:owner.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
       void this.saveCharacter(ownerId);
-    }
+    }))return;
   }
 
   private updateOccultEffects():void {
@@ -2183,7 +2751,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const bonus=binding?.ownerId===poison.ownerId ? seerCoreProgress(binding.rank).seer_binding.poisonBonus : 0;
         this.recordCombat(poison.ownerId,targetId);
         const amount=Math.min(target.hp-1,Math.max(1,Math.round(target.maxHp*(poison.fraction+bonus))));
-        if(amount>0){this.recordCombat(poison.ownerId,targetId);this.occultDamage(poison.ownerId,targetId,amount,true);}
+        if(amount>0){this.recordCombat(poison.ownerId,targetId);this.occultDamage(poison.ownerId,targetId,amount,true,"dot");}
       }
     }
     for(const [id,cast] of this.seerBuffaloCasts){
@@ -2197,7 +2765,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       const attack=this.masteryPower(caster,monster?"pve":"pvp","magicAtk",weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").ranged);
       const damage=calculateDamage(attack*(monster?p.power:2*.65),monster?.defense ?? this.masteryPower(target as Player,"pvp","magicDef"),target.level);
-      this.occultDamage(id,cast.targetId,damage);
+      this.occultDamage(id,cast.targetId,damage,false,"direct");
       this.broadcast("seer_buffalo_hit",{playerId:id,targetId:cast.targetId,from:{x:caster.x,y:caster.y+.8,z:caster.z},to:{x:target.x,y:target.y+.8,z:target.z}},{afterNextPatch:true});
     }
     for (const [owner,mark] of this.occultMarks) {
@@ -2209,9 +2777,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.simulatedMs>=curse.until || !owner?.alive || owner.pathId!=="seer" || !target?.alive ||
           !this.sameCombatMap(curse.ownerId,targetId,true,true)) {this.clearOccultCurse(targetId,"expired");continue;}
       if (this.simulatedMs>=curse.nextTick) {
-        curse.nextTick+=2000;
+        curse.nextTick=Math.max(curse.nextTick+2000,this.simulatedMs+1);
         this.recordCombat(curse.ownerId,targetId);
-        this.occultDamage(curse.ownerId,targetId,curse.damage);
+        this.occultDamage(curse.ownerId,targetId,curse.damage,false,"dot");
       }
     }
     for (const [owner,order] of this.occultSpiritOrders)
@@ -2321,7 +2889,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.pendingWarps.add(id);
     const task=characterStore.save({...snapshot,muayBook:next}).then(()=>{
       this.muayBooks.set(id,next);this.syncSkillHotbar(id);player.muayBookData=JSON.stringify(next);
-      if(action==="school" || action==="reset") {this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");this.clearMuayCombo(id);this.sendSwordNotice(client,"muay_counter_cleared",{});}
+      if(action==="school" || action==="reset") {this.clearPrototypeTransient(id);this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");this.clearMuayCombo(id);this.sendSwordNotice(client,"muay_counter_cleared",{});}
       try {
         client.send("muay_book_changed",{action});
         this.sendFieldPractice(client,player,action,input.skillId,MUAY_CORE,MUAY_SKILLS);
@@ -2353,8 +2921,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
-  private swordGuardDamage(id:string, attacker:{x:number;z:number}, damage:number,guardPierce=0, summonOwnerId?:string,percentDamage=false):number {
-    if(this.priestProtected(id))return 0;
+  /** Server-owned source class; unknown sources cannot trigger experimental effects. */
+  private directGuardDamage(id:string,attacker:{x:number;z:number},damage:number,guardPierce=0,summonOwnerId?:string,percentDamage=false):number {
+    return this.swordGuardDamage(id,attacker,damage,guardPierce,summonOwnerId,percentDamage,"direct");
+  }
+  private swordGuardDamage(id:string, attacker:{x:number;z:number}, damage:number,guardPierce=0, summonOwnerId?:string,percentDamage=false,source:"direct"|"dot"|"unknown"="unknown"):number {
+    const player=this.state.players.get(id);
+    if((player && (!player.alive || player.hp<=0)) || this.priestProtected(id))return 0;
     if(this.field && this.battleActive && !percentDamage){
       const defender=this.state.players.get(id),defenderSide=this.warSeats.get(id)?.side;
       const summoner=summonOwnerId && this.state.summons.get(summonOwnerId)===attacker ? this.state.players.get(summonOwnerId) : undefined;
@@ -2374,7 +2947,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const winding=this.state.players.get(id);if(winding?.alive)winding.combatState="idle";
       this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"blade_windup",{result:"interrupted"});
     }
-    const stance=this.muayCoreStances.get(id),player=this.state.players.get(id);
+    const stance=this.muayCoreStances.get(id);
     const swordStance=this.swordCoreStances.get(id);
     if(swordStance && player?.alive && player.pathId==="phutthaisawan" && wearsTwinSwords(equippedWeaponId(this.inventories.get(id))) && this.simulatedMs<swordStance.until) {
       const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
@@ -2413,6 +2986,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       return this.sentinelShareDamage(id,attacker,Math.max(1,Math.round(damage*muayCoreProgress(stance.rank).chaiya.damageFactor)),summonOwnerId);
     }
     const guard=this.swordGuards.get(id);
+    if(source==="direct" && player && this.prototypeGameplayAllowed(id)) {
+      const dx=attacker.x-player.x,dz=attacker.z-player.z,length=Math.hypot(dx,dz);
+      const front=length<0.001 || (-Math.sin(player.facing)*dx-Math.cos(player.facing)*dz)/length>=0;
+      const flow=this.prototypeFlowing.get(id);
+      if(flow) {const r=consumeFlowingGuard(flow,this.simulatedMs,front,damage);this.prototypeFlowing.set(id,r.state);
+        if(r.factor!==1){this.recordSwordTraining(id,"blocks");return this.sentinelShareDamage(id,attacker,Math.max(1,Math.round(damage*(r.factor+(1-r.factor)*guardPierce))),summonOwnerId);}}
+    }
     if (!guard || !player || this.simulatedMs>=guard.until) return this.sentinelShareDamage(id,attacker,damage,summonOwnerId);
     const dx=attacker.x-player.x, dz=attacker.z-player.z, length=Math.hypot(dx,dz);
     const front=length<0.001 || (-Math.sin(player.facing)*dx-Math.cos(player.facing)*dz)/length>=0;
@@ -2420,6 +3000,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const defense=this.muayDefenseWindows.get(id);
     const kind=defense && defense.until===guard.until && this.simulatedMs<defense.until ? defense.kind : undefined;
     guard.counterUntil=this.simulatedMs+3000;
+    if(source==="direct" && player.pathId==="muay_boran" && this.prototypeGameplayAllowed(id)) {
+      const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
+      const opponent=monster?.id ?? [...this.state.players.entries()].find(([,p])=>p===attacker)?.[0];
+      const opportunity=opponent && recordChaiyaBlock(opponent,this.simulatedMs);
+      if(opportunity)this.prototypeOpportunities.set(id,opportunity);else this.prototypeOpportunities.delete(id);
+    }
     if(player.pathId==="sentinel"){
       this.sentinelCounters.set(id,this.simulatedMs+3000);
       if(attacker===this.state.monster || [...this.state.monsters.values()].some(monster=>monster===attacker))this.recordSentinelPractice(id,"guard");
@@ -2438,9 +3024,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private sentinelShareDamage(id:string,attacker:{x:number;z:number},damage:number,summonOwnerId?:string):number {
     const link=this.sentinelInterceptions.get(id),victim=this.state.players.get(id);
-    if(!link || !victim)return damage;
+    if(!link || !victim?.alive || victim.hp<=0)return damage;
     const owner=this.state.players.get(link.ownerId),party=this.parties.get(id);
-    if(this.simulatedMs>=link.until || !owner?.alive || owner.pathId!=="sentinel" || !party?.members.includes(link.ownerId) ||
+    if(this.simulatedMs>=link.until || !owner?.alive || owner.hp<=0 || owner.pathId!=="sentinel" || !party?.members.includes(link.ownerId) ||
        owner.mapId!==victim.mapId || distance3d(owner,victim)>6 || isRestArea(owner.mapId,owner) ||
        this.pendingWarps.has(link.ownerId) || this.pendingItemUses.has(link.ownerId) || this.pendingRewards.has(link.ownerId) ||
        this.pendingCharacterLeaves.has(link.ownerId)){
@@ -2449,7 +3035,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
     const summonOwner=summonOwnerId && this.state.summons.get(summonOwnerId)===attacker ? this.state.players.get(summonOwnerId) : undefined;
     const aggressor=summonOwner ? [summonOwnerId!,summonOwner] as const : [...this.state.players.entries()].find(([,p])=>p===attacker);
-    if(monster ? !this.sameCombatMap(link.ownerId,monster.id) : !aggressor || !this.sameCombatMap(aggressor[0],link.ownerId,false,true))return damage;
+    if(monster ? !this.sameCombatMap(link.ownerId,monster.id) : !aggressor || !aggressor[1].alive || aggressor[1].hp<=0 ||
+      !this.sameCombatMap(aggressor[0],link.ownerId,false,true))return damage;
     const shared=Math.min(damage-1,Math.floor(damage*link.fraction));
     if(shared<=0)return damage;
     if(aggressor)this.markWarSupport(link.ownerId,id,true);
@@ -2459,16 +3046,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendSwordNotice(this.clients.find(client=>client.sessionId===link.ownerId),"sentinel_windup_result",{result:"interrupted"});
     }
     if(aggressor)this.touchPvp([aggressor[0],link.ownerId]);
-    owner.hp=Math.max(0,owner.hp-shared);owner.hitSeq++;this.lastCombatMs.set(link.ownerId,this.simulatedMs);
-    if(monster)this.recordSentinelPractice(link.ownerId,"assist");
-    this.broadcast("sentinel_intercept",{playerId:link.ownerId,targetId:id,damage:shared,hp:owner.hp,maxHp:owner.maxHp,hitSeq:owner.hitSeq,attackerId:aggressor?.[0] ?? monster?.id,source:summonOwner?"summon":monster?"monster":"player"},{afterNextPatch:true});
-    if(owner.hp===0){
+    if(!this.applyPlayerHit(aggressor?.[1],link.ownerId,owner,shared,()=>{
+      this.lastCombatMs.set(link.ownerId,this.simulatedMs);
+      if(monster)this.recordSentinelPractice(link.ownerId,"assist");
+      this.broadcast("sentinel_intercept",{playerId:link.ownerId,targetId:id,damage:shared,hp:owner.hp,maxHp:owner.maxHp,hitSeq:owner.hitSeq,attackerId:aggressor?.[0] ?? monster?.id,source:summonOwner?"summon":monster?"monster":"player"},{afterNextPatch:true});
+    },()=>{
       this.sentinelInterceptions.delete(id);
       if(aggressor){aggressor[1].pkKills++;owner.pkDeaths++;this.knockoutPlayer(link.ownerId,"pk",aggressor[0]);
         void this.saveCharacter(aggressor[0]);
         this.broadcast("pvp_kill",{winnerId:aggressor[0],loserId:link.ownerId,kills:aggressor[1].pkKills,deaths:owner.pkDeaths},{afterNextPatch:true});}
       else this.knockoutPlayer(link.ownerId,"monster",monster!.id);
-    }
+    }))return damage;
     return damage-shared;
   }
 
@@ -2485,11 +3073,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.recordCombat(id,targetId);
     if(monster)this.hitMonsterWithSpell(id,monster,damage,"muay");
     else {
-      const victim=target as Player,actual=this.swordGuardDamage(targetId,actor,damage);
-      victim.hp=Math.max(0,victim.hp-actual);victim.hitSeq++;
-      this.broadcast("pvp_hit",{attackerId:id,targetId,damage:actual,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"muay"},{afterNextPatch:true});
-      if(victim.hp===0){actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);void this.saveCharacter(id);
-        this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});}
+      const victim=target as Player,actual=this.directGuardDamage(targetId,actor,damage);
+      if(!this.applyPlayerHit(actor,targetId,victim,actual,()=>{
+        this.broadcast("pvp_hit",{attackerId:id,targetId,damage:actual,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"muay"},{afterNextPatch:true});
+      },()=>{
+        actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);void this.saveCharacter(id);
+        this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
+      }))return false;
     }
     return true;
   }
@@ -2573,12 +3163,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private updateMuayCore():void {
     for(const [id,sequence] of this.muayCoreSequences) {
-      if(this.simulatedMs<sequence.next)continue;
+      if(!sequence.remaining || this.simulatedMs<sequence.next)continue;
       const heavy=muayCoreProgress(sequence.rank).korat;
       const power=sequence.skillId==="korat" ? [.42,.53,heavy.finalPower][3-sequence.remaining]*heavy.scale : sequence.power;
-      if(!this.muayCoreHit(id,sequence.targetId,power)){this.muayCoreSequences.delete(id);continue;}
-      sequence.remaining--;sequence.next+=sequence.interval;
-      if(!sequence.remaining)this.muayCoreSequences.delete(id);
+      sequence.remaining--;
+      sequence.next=Math.max(sequence.next+sequence.interval,this.simulatedMs+1);
+      let hit=false;
+      try{hit=this.muayCoreHit(id,sequence.targetId,power);}
+      finally{if((!hit || !sequence.remaining) && this.muayCoreSequences.get(id)===sequence)this.muayCoreSequences.delete(id);}
     }
     for(const [id,stance] of this.muayCoreStances)if(this.simulatedMs>=stance.until)this.muayCoreStances.delete(id);
     for(const [id,follow] of this.muayCoreFollowups)if(this.simulatedMs>=follow.until)this.muayCoreFollowups.delete(id);
@@ -2688,13 +3280,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           this.hitMonsterWithSpell(id,monster,damage,"muay");
         } else {
           const opponent=target as Player;
-          const damage=this.swordGuardDamage(targetId,player,calculateDamage(attack,this.masteryPower(opponent,"pvp","def"),opponent.level),skillId==="korat_pierce" ? 0.25 : 0);
-          opponent.hp=Math.max(0,opponent.hp-damage);opponent.hitSeq++;
-          this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"muay"},{afterNextPatch:true});
-          if(opponent.hp===0) {
+          const damage=this.directGuardDamage(targetId,player,calculateDamage(attack,this.masteryPower(opponent,"pvp","def"),opponent.level),skillId==="korat_pierce" ? 0.25 : 0);
+          if(!this.applyPlayerHit(player,targetId,opponent,damage,()=>{
+            this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"muay"},{afterNextPatch:true});
+          },()=>{
             player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.clearMuayCombo(id);
             this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,source:"muay",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
-          }
+          })){void this.saveCharacter(id);return;}
         }
       }
       if(skill.effect==="teep" && target.alive)this.sendSwordNotice(client,"muay_interrupt",{result:monster ? this.interruptMuayTarget(monster) : "pvp_no_interrupt"});
@@ -2757,12 +3349,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     actor.facing=facingTo(target.x-actor.x,target.z-actor.z);this.recordCombat(id,targetId);
     if(monster)this.hitMonsterWithSpell(id,monster,damage,"sword");
     else {
-      const victim=target as Player,actual=this.swordGuardDamage(targetId,actor,damage);
-      // A counter may defeat either participant before the original hit lands.
-      if(!actor.alive || !victim.alive)return false;
-      victim.hp=Math.max(0,victim.hp-actual);victim.hitSeq++;
-      this.broadcast("pvp_hit",{attackerId:id,targetId,damage:actual,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"sword"},{afterNextPatch:true});
-      if(victim.hp===0){actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);void this.saveCharacter(id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});}
+      const victim=target as Player,actual=this.directGuardDamage(targetId,actor,damage);
+      if(!this.applyPlayerHit(actor,targetId,victim,actual,()=>{
+        this.broadcast("pvp_hit",{attackerId:id,targetId,damage:actual,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"sword"},{afterNextPatch:true});
+      },()=>{
+        actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);void this.saveCharacter(id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
+      }))return false;
     }
     return true;
   }
@@ -2827,15 +3419,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       this.markSupportManaCombat(id,supportTargets);
     }
+    const prototypeFlow=this.prototypeFlowing.get(id);if(prototypeFlow)this.prototypeFlowing.set(id,clearFlowing(prototypeFlow));
     this.broadcast("sword_skill_used",{playerId:id,skillId,targetId,durationMs:skillId==="sritra_core"?progress.sritra_core.durationMs:0},{afterNextPatch:true});void this.saveCharacter(id);
   }
 
   private updateSwordCore():void {
     for(const [id,sequence] of this.swordCoreSequences) {
-      if(this.simulatedMs<sequence.next)continue;
+      if(!sequence.remaining || this.simulatedMs<sequence.next)continue;
       const p=swordCoreProgress(sequence.rank).phuttha_core,hit=3-sequence.remaining;
-      if(!this.swordCoreHit(id,sequence.targetId,[.36,.46,p.finalPower][hit]*p.scale,[.36,.46,.65][hit])){this.swordCoreSequences.delete(id);continue;}
-      sequence.remaining--;sequence.next+=280;if(!sequence.remaining)this.swordCoreSequences.delete(id);
+      sequence.remaining--;
+      sequence.next=Math.max(sequence.next+280,this.simulatedMs+1);
+      let landed=false;
+      try{landed=this.swordCoreHit(id,sequence.targetId,[.36,.46,p.finalPower][hit]*p.scale,[.36,.46,.65][hit]);}
+      finally{if((!landed || !sequence.remaining) && this.swordCoreSequences.get(id)===sequence)this.swordCoreSequences.delete(id);}
     }
     for(const [id,stance] of this.swordCoreStances)if(this.simulatedMs>=stance.until || !this.state.players.get(id)?.alive)this.swordCoreStances.delete(id);
   }
@@ -2943,18 +3539,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           if (victim.monster) this.hitMonsterWithSpell(id,victim.target as Monster,damage,"sword");
           else {
             const opponent=victim.target as Player;
-            damage=this.swordGuardDamage(victim.id,player,damage);
-            opponent.hp=Math.max(0,opponent.hp-damage); opponent.hitSeq++;
-            this.broadcast("pvp_hit",{attackerId:id,targetId:victim.id,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"sword"},{afterNextPatch:true});
-            if (opponent.hp===0) {
+            damage=this.directGuardDamage(victim.id,player,damage);
+            if(!this.applyPlayerHit(player,victim.id,opponent,damage,()=>{
+              this.broadcast("pvp_hit",{attackerId:id,targetId:victim.id,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"sword"},{afterNextPatch:true});
+            },()=>{
               player.pkKills++; opponent.pkDeaths++; this.knockoutPlayer(victim.id,"pk",id);
               void this.saveCharacter(id);
               this.broadcast("pvp_kill",{winnerId:id,loserId:victim.id,source:"sword",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
-            }
+            })){void this.saveCharacter(id);return;}
           }
         }
       }
     }
+    const prototypeFlow=this.prototypeFlowing.get(id);if(prototypeFlow)this.prototypeFlowing.set(id,clearFlowing(prototypeFlow));
     this.broadcast("sword_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
@@ -2995,6 +3592,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           this.inventories.set(id, change.inventory);
           current.equippedWeaponId = change.weaponId ?? "";
           this.applyStats(id,current,this.statAllocations.get(id) ?? emptyAllocations());
+          if(!body)this.clearPrototypeTransient(id);
           if (!body && current.pathId === "muay_boran" && !wearsWraps(change.weaponId)) {
             this.swordGuards.delete(id);
             this.clearMuayDefense(id,"cancelled");
@@ -3149,8 +3747,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
-  private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal", bossLoot = false, monsterId=""): void {
+  private grantMonsterExperience(id: string, sharedAmount?: number, monsterLevel: number = PROGRESSION.monsterLevel, tier:MonsterTier = "normal", bossLoot = false, monsterId="", defeated:RewardPrey|undefined=this.getMonster(monsterId)): void {
     const player = this.state.players.get(id);
+    const victim=defeated && {x:defeated.x,z:defeated.z};
     const directorAt=Date.now(),directorEvent=worldDirector.snapshot(directorAt);
     const huntEvent=huntEventDirector.snapshot(directorAt);
     const priorReward=this.pendingRewards.get(id);
@@ -3168,7 +3767,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (!current || !snapshot) return;
         const killAmount = current.level >= PROGRESSION.maxLevel ? 0 : cycleExperience(sharedAmount ?? monsterExperience(current.level, monsterLevel, tier),snapshot.rebirth?.count ?? 0);
         const savedObjective=snapshot.forestObjective ?? null,def=savedObjective && FOREST_OBJECTIVES[savedObjective.id],defense=def?.defense;
-        const victim=this.getMonster(monsterId),guard=this.forestDefenses.get(id);
+        const guard=this.forestDefenses.get(id);
         const canAdvance=def?.kind!=="defense" || Boolean(defense && guard && guard.id===savedObjective?.id && guard.hp>0 && victim &&
           current.mapId===def.mapId && Math.hypot(current.x-defense.x,current.z-defense.z)<=defense.radius && Math.hypot(victim.x-defense.x,victim.z-defense.z)<=defense.radius);
         // Quest credit follows the accepted kill, even when the level gap or cap awards no EXP.
@@ -3198,7 +3797,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           ? practiceLoot(beforeField,current.pathId,monsterLevel,tier,current.level,monsterId) : undefined;
         const loot=fieldDrop?.bag ?? accessory?.bag ?? cardBag ?? previousLoot;
         const build=this.playerBuild(current),rebirth=build ? recordClassLevel(snapshot.rebirth ?? newRebirthState(),build.path,Math.min(100,next.level)) : snapshot.rebirth;
-        await characterStore.save({ ...snapshot, ...next, rebirth,directorClaims:eventReward.claims, forestObjective:objective.active, inventory:loot ?? snapshot.inventory, updatedAt: new Date().toISOString() });
+        await characterStore.save({ ...snapshot, ...next, rebirth,directorClaims:eventReward.claims, forestObjective:objective.active, inventory:loot ?? snapshot.inventory, updatedAt: new Date().toISOString() },"monster_reward");
         this.directorClaims.set(id,eventReward.claims);
         if(rebirth)this.rebirthStates.set(id,rebirth);
         if(objective.active)this.forestObjectives.set(id,objective.active);else this.forestObjectives.delete(id);
@@ -3236,13 +3835,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.pendingRewards.set(id, task);
   }
 
-  private awardMonsterExperience(winnerId:string, monster:Monster = this.state.monster, tier:MonsterTier = "normal"): void {
+  private awardMonsterExperience(winnerId:string, monster:RewardPrey = this.state.monster, tier:MonsterTier = "normal"): void {
     const winner=this.state.players.get(winnerId), party=this.parties.get(winnerId);
     const bossLoot=characterStore.economyEnabled && !!bossTreasure(monster.id) && (tier==="elite" || tier==="boss");
     if (!winner) return;
     if (!party) {
       this.grantMonsterExperience(winnerId, undefined, monster.level, tier,
-        bossLoot && winner.alive && winner.mapId === monster.mapId && distance3d(winner,monster) <= PARTY_XP_RADIUS, monster.id);
+        bossLoot && winner.alive && winner.mapId === monster.mapId && distance3d(winner,monster) <= PARTY_XP_RADIUS, monster.id,monster);
       return;
     }
     const members:PartyRewardMember[]=[];
@@ -3253,7 +3852,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         inTransit:this.pendingWarps.has(id) && !this.pendingRewards.has(id)});
     }
     const shares=partyMonsterShares(winner.level,{mapId:monster.mapId,level:monster.level,tier,x:monster.x,y:monster.y,z:monster.z},members,PARTY_XP_RADIUS,bossLoot || this.accountSessions.has(winnerId));
-    for(const share of shares)this.grantMonsterExperience(share.sessionId,share.amount,monster.level,tier,bossLoot,monster.id);
+    for(const share of shares)this.grantMonsterExperience(share.sessionId,share.amount,monster.level,tier,bossLoot,monster.id,monster);
   }
 
   private guildAction(client:Client, action:(character:string)=>void):void {
@@ -3782,6 +4381,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
   messages = {
+    // A distinct message type does not alter the existing commands or their payloads.
     ask_npc_guide:(client:Client,message:unknown)=>this.askNpcGuide(client,message),
     get_director_event:(client:Client,message:unknown)=>{
       if(!parseEmptyCommand(message) || !WORLD_EXPANSION || this.field || !this.persistentCharacters.has(client.sessionId) || process.env.MONTRA_DIRECTOR_ENABLED==="0")return;
@@ -4244,8 +4844,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     sword_core_book: (client: Client, message: unknown) => this.changeSwordCore(client, message),
     sword_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castSwordCore(client, message);},
     // Keep the legacy protocol for older clients while the current HUD uses four core skills.
-    sword_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castSwordSkill(client, message);},
-    muay_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castMuaySkill(client, message);},
+    sword_skill: (client: Client, message: unknown) => {if(this.prototypeGameplayEnabled() && (message as {skillId?:unknown}|null)?.skillId==="flowing_blades")return this.reject(client,"prototype_protocol_required");if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castSwordSkill(client, message);},
+    muay_skill: (client: Client, message: unknown) => {if(this.prototypeGameplayEnabled() && (message as {skillId?:unknown}|null)?.skillId==="chaiya_advanced_counter")return this.reject(client,"prototype_protocol_required");if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castMuaySkill(client, message);},
     muay_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castMuayCore(client, message);},
     grapple_escape: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.escapeMuayGrapple(client, message);},
     grapple_counter: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.counterMuayGrapple(client, message);},
@@ -4269,7 +4869,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendBladeBook(client);
     },
     blade_book: (client: Client, message: unknown) => this.changeBladeBook(client,message),
-    blade_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castBladeSkill(client,message);},
+    blade_skill: (client: Client, message: unknown) => {if(this.prototypeGameplayEnabled() && (message as {skillId?:unknown}|null)?.skillId==="shadow_cut")return this.reject(client,"prototype_protocol_required");if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castBladeSkill(client,message);},
     blade_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castBladeCore(client,message);},
     sentinel_book_get: (client:Client,message:unknown) => {
       if(!parseEmptyCommand(message))return this.reject(client,"invalid_sentinel_book");
@@ -4339,6 +4939,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           // Once the durable write succeeds, commit the destination before
           // any optional notifications so a disconnected client cannot turn
           // a committed warp into a misleading disk-failure result.
+          this.clearPrototypeTransient(id);
           current.mapId = portal.targetMapId;
           current.x = portal.targetSpawn.x; current.y = portal.targetSpawn.y; current.z = portal.targetSpawn.z;
           current.targetId = ""; current.combatState = "idle"; current.flying = false;
@@ -4809,12 +5410,22 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return player;
   }
 
+  private applyMonsterHit(winnerId:string,monster:Monster,damage:number,publish:()=>void):void {
+    if(!monster.alive || monster.hp<=0 || this.getMonster(monster.id)!==monster)return;
+    monster.hp=Math.max(0,monster.hp-damage);
+    monster.hitSeq++;
+    if(monster.hp>0){publish();return;}
+    const prey=Object.freeze({id:monster.id,mapId:monster.mapId,level:monster.level,x:monster.x,y:monster.y,z:monster.z});
+    const defeat=Object.freeze({winnerId,monster,prey,hitSeq:monster.hitSeq});
+    this.pendingMonsterDefeats.add(defeat);
+    // Reserve the winner before publishing. Even a failed notification must
+    // settle death and release the monster for the next legitimate life.
+    try{publish();}finally{this.killMonster(defeat);}
+  }
+
   private hitMonsterWithSpell(id: string, target: Monster, damage: number, source: "ranged" | "talisman" | "sword" | "muay") {
-    target.hp = Math.max(0, target.hp - damage);
-    target.hitSeq++;
-    this.broadcast("combat_hit", {attackerId:id, targetId:target.id, damage, hp:target.hp,
-      maxHp:target.maxHp, hitSeq:target.hitSeq, source}, {afterNextPatch:true});
-    if (target.hp === 0) this.killMonster(id, target.id);
+    this.applyMonsterHit(id,target,damage,()=>this.broadcast("combat_hit", {attackerId:id, targetId:target.id, damage, hp:target.hp,
+      maxHp:target.maxHp, hitSeq:target.hitSeq, source}, {afterNextPatch:true}));
   }
 
   private applyTalisman(client: Client, message: unknown) {
@@ -4882,14 +5493,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.recordOccultTraining(id,"seer",["rice"]);
     } else {
       const victim=target as Player;
-      rangedDamage=this.swordGuardDamage(targetId,shooter,rangedDamage);
-      victim.hp=Math.max(0,victim.hp-rangedDamage);
-      victim.hitSeq+=1;
-      this.broadcast("pvp_hit", {
-        attackerId:id,targetId,damage:rangedDamage,
-        hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"ranged",
-      }, { afterNextPatch:true });
-      if (victim.hp===0) {
+      rangedDamage=this.directGuardDamage(targetId,shooter,rangedDamage);
+      if(!this.applyPlayerHit(shooter,targetId,victim,rangedDamage,()=>{
+        this.broadcast("pvp_hit", {
+          attackerId:id,targetId,damage:rangedDamage,
+          hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"ranged",
+        }, { afterNextPatch:true });
+      },()=>{
         shooter.pkKills+=1;
         victim.pkDeaths+=1;
         this.knockoutPlayer(targetId,"pk",id);
@@ -4898,7 +5508,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           winnerId:id,loserId:targetId,source:"ranged",
           kills:shooter.pkKills,deaths:victim.pkDeaths,
         }, { afterNextPatch:true });
-      }
+      }))return;
     }
 
     this.broadcast("ranged_hit", {
@@ -5151,30 +5761,28 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (owner.pathId==="seer") this.recordOccultTraining(ownerId,"seer",["spirit"]);
         else if (owner.pathId==="mender") this.recordOccultTraining(ownerId,"mender",["spirit"]);
       }
-      monster.hp = Math.max(0, monster.hp - damage);
-      monster.hitSeq += 1;
-      if (empowered && order.skillId==="seer_spirit_bind" && monster.hp>0) this.interruptMuayTarget(monster,700);
-      this.broadcast("summon_hit", {
-        ownerId, summonId: ownerId, targetId,
-        damage, hp: monster.hp,
-        hitSeq: guardian.hitSeq,
-      }, { afterNextPatch: true });
-      if (monster.hp === 0) this.killMonster(ownerId, targetId);
+      this.applyMonsterHit(ownerId,monster,damage,()=>{
+        if (empowered && order.skillId==="seer_spirit_bind" && monster.hp>0) this.interruptMuayTarget(monster,700);
+        this.broadcast("summon_hit", {
+          ownerId, summonId: ownerId, targetId,
+          damage, hp: monster.hp,
+          hitSeq: guardian.hitSeq,
+        }, { afterNextPatch: true });
+      });
       return;
     }
 
     // Summon can help in Free PK only when its owner selected or was attacked
     // by this opponent. Damage/kill attribution belongs to the owner.
     const victim = target as Player;
-    const damage = this.swordGuardDamage(targetId,guardian,calculateDamage(RULES.summonAttackDamage*(1+masteryBonuses(this.rebirthStates.get(ownerId),"pvp").magicAtk), this.masteryPower(victim,"pvp","magicDef"), victim.level),0,ownerId);
-    victim.hp = Math.max(0, victim.hp - damage);
-    victim.hitSeq += 1;
-    this.broadcast("pvp_hit", {
-      attackerId: ownerId, source: "summon", summonOwnerId: ownerId,
-      targetId, damage,
-      hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
-    }, { afterNextPatch: true });
-    if (victim.hp === 0) {
+    const damage = this.directGuardDamage(targetId,guardian,calculateDamage(RULES.summonAttackDamage*(1+masteryBonuses(this.rebirthStates.get(ownerId),"pvp").magicAtk), this.masteryPower(victim,"pvp","magicDef"), victim.level),0,ownerId);
+    if(!this.applyPlayerHit(owner,targetId,victim,damage,()=>{
+      this.broadcast("pvp_hit", {
+        attackerId: ownerId, source: "summon", summonOwnerId: ownerId,
+        targetId, damage,
+        hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
+      }, { afterNextPatch: true });
+    },()=>{
       owner.pkKills += 1;
       victim.pkDeaths += 1;
       this.knockoutPlayer(targetId, "pk", ownerId);
@@ -5184,7 +5792,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         source: "summon",
         kills: owner.pkKills, deaths: victim.pkDeaths,
       }, { afterNextPatch: true });
-    }
+    }))return;
   }
 
   private reject(client: Client, reason: string) {
@@ -5334,6 +5942,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updateWorldDirector();
     this.updateOccultEffects();
     this.updateMuayGrapples();
+    this.updatePrototypeEffects();
     this.updateMuayDefense();
     this.updateMuayCore();
     this.updateSwordCore();
@@ -5343,21 +5952,28 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updateClimbs(dt);
     this.updateFlights(dt);
     this.updatePlayerMovement(dt);
-    this.updateMonsterAI(dt);
-    this.forest.update(this.simulatedMs, dt, this.state.players, this.pendingWarps, (id,m,force=1) => {
-      const p=this.state.players.get(id);
-      if (!p || this.priestProtected(id) || !this.sameCombatMap(id,m.id)) return;
-      const profile=this.forest.profile(m.id); if(!profile)return;
-      const damage=this.swordGuardDamage(id,m,calculateDamage(profile.attack*force,this.masteryPower(p,"pve","def",equipmentRatings(this.inventories.get(id)).guard),p.level));
-      this.endBladeCloak(id,"damaged");
-      p.hp=Math.max(0,p.hp-damage);p.hitSeq++;this.lastCombatMs.set(id,this.simulatedMs);
-      this.broadcast("monster_hit",{targetId:id,attackerId:m.id,damage,hp:p.hp,maxHp:p.maxHp,hitSeq:p.hitSeq},{afterNextPatch:true});
-      if(p.hp===0)this.knockoutPlayer(id,"monster",m.id);
-    }, id => this.broadcast("monster_respawn",{targetId:id}),
+    const trapStep=this.prototypeAshTraps.size?{movements:[] as TrapMovement[],attacks:[] as Array<()=>void>}:undefined;
+    const walk=trapStep?(monster:Monster,previous:Position)=>{
+      if(trapStep.movements.length<=1024)trapStep.movements.push({previousAt:this.simulatedMs-Math.round(dt*1000),
+        monsterId:monster.id,mapId:monster.mapId,previous,current:{x:monster.x,y:monster.y,z:monster.z},eligible:true});
+    }:undefined;
+    const defer=trapStep?(attack:()=>void)=>{trapStep.attacks.push(attack);}:undefined;
+    this.updateMonsterAI(dt,walk,defer);
+    this.forest.update(this.simulatedMs, dt, this.state.players, this.pendingWarps,
+      (id,monster,force,attackAt)=>{
+        if(defer)defer(()=>this.resolveForestMonsterHit(id,monster,force ?? 1,attackAt));
+        else this.resolveForestMonsterHit(id,monster,force ?? 1,attackAt);
+      },
+      id => this.broadcast("monster_respawn",{targetId:id}),
     (id,p,m)=>!this.bladeCloaks.has(id) || planarDistance(p,m)<=(m.tier==="normal"?(this.bladeBooks.get(id)?.learned.includes("quiet_step")?0.75:1.5):5),
-    id=>this.seerBindings.has(id));
+    id=>this.seerBindings.has(id),walk);
+    if(trapStep){
+      this.updateAshTraps(trapStep.movements);
+      for(const attack of trapStep.attacks)attack();
+    }
     this.updatePlayerAttacks();
     this.updateSummons(dt);
+    if(this.prototypeRescues.size)this.updateRescues();
     for(const [id,hitSequence] of this.mountHitSequence) {
       const player=this.state.players.get(id);
       if(!player || !player.alive || player.hitSeq!==hitSequence || this.sentinelStuns.has(id) || this.muayControlled(id))this.dismount(id,"hit");
@@ -5662,31 +6278,26 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (monster) {
         const meleeDamage = ranged ? calculateDamage(this.masteryPower(attacker,monster?"pve":"pvp","magicAtk",bonuses.ranged),monster.defense,monster.level)
           : calculateDamage((this.masteryPower(attacker,monster?"pve":"pvp","atk",meleeBonus)) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, monster.defense, monster.level);
-        monster.hp = Math.max(0, monster.hp - meleeDamage);
-        monster.hitSeq += 1;
-        this.broadcast("combat_hit", {
+        this.applyMonsterHit(attackerId,monster,meleeDamage,()=>this.broadcast("combat_hit", {
           targetId,
           attackerId, damage: meleeDamage,
           hp: monster.hp, maxHp: monster.maxHp, hitSeq: monster.hitSeq,
-        }, { afterNextPatch: true });
-        if (monster.hp === 0) this.killMonster(attackerId, targetId);
+        }, { afterNextPatch: true }));
         continue;
       }
 
       // FREE PK: health, range, damage, respawn and kill credit are wholly
       // server-owned. The client only submits another session's targetId.
       const victim = target as Player;
-      const meleeDamage = this.swordGuardDamage(targetId,attacker,ranged
+      const meleeDamage = this.directGuardDamage(targetId,attacker,ranged
         ? calculateDamage(this.masteryPower(attacker,monster?"pve":"pvp","magicAtk",bonuses.ranged),this.masteryPower(victim,"pvp","magicDef"),victim.level)
         : calculateDamage((this.masteryPower(attacker,monster?"pve":"pvp","atk",meleeBonus)) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, this.masteryPower(victim,"pvp","def"), victim.level));
-      victim.hp = Math.max(0, victim.hp - meleeDamage);
-      victim.hitSeq += 1;
-      this.broadcast("pvp_hit", {
-        attackerId, targetId, damage: meleeDamage,
-        hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
-      }, { afterNextPatch: true });
-
-      if (victim.hp === 0) {
+      if(!this.applyPlayerHit(attacker,targetId,victim,meleeDamage,()=>{
+        this.broadcast("pvp_hit", {
+          attackerId, targetId, damage: meleeDamage,
+          hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
+        }, { afterNextPatch: true });
+      },()=>{
         attacker.pkKills += 1;
         victim.pkDeaths += 1;
         this.knockoutPlayer(targetId, "pk", attackerId);
@@ -5695,11 +6306,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           winnerId: attackerId, loserId: targetId,
           kills: attacker.pkKills, deaths: victim.pkDeaths,
         }, { afterNextPatch: true });
-      }
+      }))continue;
     }
   }
 
+  private applyPlayerHit(attacker:Player|undefined,id:string,victim:Player,damage:number,publish:()=>void,defeat:()=>void):boolean {
+    // A guard can resolve a counter first. HP zero also reserves a defeat
+    // while its hit notice is still being published.
+    if(!victim.alive || victim.hp<=0 || (attacker && (!attacker.alive || attacker.hp<=0)))return false;
+    victim.hp=Math.max(0,victim.hp-damage);victim.hitSeq++;
+    const lethal=victim.hp===0;
+    try{publish();this.resolveRescueAfterDamage(id,victim,damage);}
+    finally{if(lethal)defeat();}
+    return true;
+  }
+
   private knockoutPlayer(id: string, cause: "pk" | "monster", attackerId = "") {
+    this.clearPrototypeTransient(id);
     if(this.warCargo.delete(id))try{this.clients.find(client=>client.sessionId===id)?.send("war_supply_notice",{action:"lost"});}catch{}
     this.endPriestSanctuary(id);this.priestRegens.delete(id);
     this.muayCoreStances.delete(id);this.muayCoreFollowups.delete(id);this.muayCoreSequences.delete(id);this.swordCoreStances.delete(id);this.swordCoreSequences.delete(id);
@@ -5750,33 +6373,36 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }, { afterNextPatch: true });
   }
 
-  private killMonster(winnerId: string, targetId: string = RULES.monsterId) {
-    this.releaseMuayFor(targetId,"knockout");
+  private killMonster(defeat:MonsterDefeat):void {
+    if(!this.pendingMonsterDefeats.delete(defeat))return;
+    const {winnerId,monster,prey,hitSeq}=defeat,targetId=prey.id;
+    if(this.getMonster(targetId)!==monster || !monster.alive || monster.hp!==0 || monster.hitSeq!==hitSeq)return;
     if (targetId !== RULES.monsterId) {
-      const m=this.state.monsters.get(targetId);
       const profile=this.forest.profile(targetId);
-      if(!m || !profile || !this.forest.kill(targetId,this.simulatedMs,this.state.players,this.pendingWarps))return;
+      if(!profile || !this.forest.kill(targetId,this.simulatedMs,this.state.players,this.pendingWarps))return;
       const winner=this.state.players.get(winnerId);
       const eligible=Boolean(!this.field && process.env.MONTRA_HUNT_EVENTS!=='0' && winner?.alive && this.persistentCharacters.has(winnerId) &&
-        !this.pendingWarps.has(winnerId) && winner.mapId===m.mapId && winner.level<PROGRESSION.maxLevel && Math.abs(winner.level-m.level)<=5 && distance3d(winner,m)<=PARTY_XP_RADIUS);
+        !this.pendingWarps.has(winnerId) && winner.mapId===prey.mapId && winner.level<PROGRESSION.maxLevel && Math.abs(winner.level-prey.level)<=5 && distance3d(winner,prey)<=PARTY_XP_RADIUS);
+      this.awardMonsterExperience(winnerId,prey,profile.tier);
+      huntEventDirector.recordKill(prey.mapId,profile.tier,eligible);
+      this.clearPrototypeTransient(targetId);
+      this.releaseMuayFor(targetId,"knockout");
       this.clearMuayCombosForTarget(targetId);
-      this.awardMonsterExperience(winnerId,m,profile.tier);
-      huntEventDirector.recordKill(m.mapId,profile.tier,eligible);
       for(const [id,target] of this.attackTargets) if(target===targetId){const p=this.state.players.get(id);if(p)this.endAttack(id,p);}
       return;
     }
-    const monster = this.state.monster;
-    this.clearMuayCombosForTarget(targetId);
     this.monsterInterruptUntil=0;this.monsterInterruptResistUntil=0;
     this.sentinelLegacyTaunt={ownerId:"",until:0,resistUntil:0};
     monster.alive = false;
-    monster.hp = 0;
     this.monsterNavigator.clear();
     monster.aiState = "dead";
     monster.targetId = "";
     this.monsterRespawnAt = this.simulatedMs + RULES.monsterRespawnMs;
     this.monsterReturning = false;
-    this.awardMonsterExperience(winnerId);
+    this.awardMonsterExperience(winnerId,prey);
+    this.clearPrototypeTransient(targetId);
+    this.releaseMuayFor(targetId,"knockout");
+    this.clearMuayCombosForTarget(targetId);
 
     // Only cancel PvE attacks on this monster. Concurrent Free PK fights
     // must continue even when someone else defeats the ghost.
@@ -5788,7 +6414,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
-  private updateMonsterAI(dt: number) {
+  private updateMonsterAI(dt:number,walk?:(monster:Monster,previous:Position)=>void,defer?:(attack:()=>void)=>void) {
     const monster = this.state.monster;
     if (!monster.alive) return;
     if(this.seerBindings.has(monster.id)){monster.aiState="stagger";return;}
@@ -5801,7 +6427,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (this.monsterReturning) {
       monster.targetId = "";
       monster.aiState = "return";
-      this.moveMonster(spawn, RULES.monsterChaseSpeed * dt, "return");
+      this.moveMonster(spawn, RULES.monsterChaseSpeed * dt, "return",walk);
       if (planarDistance(monster, spawn) < 0.2) this.monsterReturning = false;
       return;
     }
@@ -5841,10 +6467,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       monster.facing = facingTo(target.x - monster.x, target.z - monster.z);
       if (distance > RULES.monsterAttackRange) {
         monster.aiState = "chase";
-        this.moveMonster(target, RULES.monsterChaseSpeed * dt, "chase:" + targetId);
+        this.moveMonster(target, RULES.monsterChaseSpeed * dt, "chase:" + targetId,walk);
       } else {
         monster.aiState = "attack";
-        this.monsterAttack(targetId, target);
+        if(defer){const victim=target;defer(()=>this.monsterAttack(targetId,victim));}
+        else this.monsterAttack(targetId,target);
       }
       return;
     }
@@ -5857,14 +6484,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       z: spawn.z + Math.sin(phase) * RULES.monsterPatrolRadius,
     };
     monster.aiState = "patrol";
-    this.moveMonster(destination, RULES.monsterPatrolSpeed * dt, "patrol");
+    this.moveMonster(destination, RULES.monsterPatrolSpeed * dt, "patrol",walk);
   }
 
   /** RRT routes around obstacles; movement speed remains RULES-based.
    * Planning runs roughly once every 1.3 seconds for a moving target, while
    * the server still applies at most one legal movement step per 20Hz tick.
    */
-  private moveMonster(target: Vec2, step: number, intent: string) {
+  private moveMonster(target:Vec2,step:number,intent:string,walk?:(monster:Monster,previous:Position)=>void) {
     const monster = this.state.monster;
     const waypoint = this.monsterNavigator.nextWaypoint(
       monster, target, this.simulatedMs, intent
@@ -5876,14 +6503,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const next = stepTowards(monster, waypoint, step);
     if (!next.moved || isRestArea(DEFAULT_MAP_ID,next) || !isMonsterSegmentClear(monster, next)) return;
 
+    const previous=walk?{x:monster.x,y:monster.y,z:monster.z}:undefined;
     monster.facing = facingTo(dx,dz);
     monster.x = clampToMap(next.x);
     monster.z = clampToMap(next.z);
     monster.y=groundAt(DEFAULT_MAP_ID,monster.x,monster.z);
+    if(previous)walk?.(monster,previous);
   }
 
   private monsterAttack(targetId: string, target: Player) {
-    if (isRestArea(DEFAULT_MAP_ID,this.state.monster)) return;
+    if (!this.state.monster.alive || isRestArea(DEFAULT_MAP_ID,this.state.monster)) return;
     if (this.priestProtected(targetId)) return;
     if (!target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID || isRestArea(target.mapId,target)) return;
     if (distance3d(this.state.monster, target) > RULES.monsterAttackRange) return;
@@ -5891,7 +6520,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.lastMonsterAttackMs = this.simulatedMs;
     this.lastCombatMs.set(targetId, this.simulatedMs);
 
-    const damage = this.swordGuardDamage(targetId,this.state.monster,calculateDamage(RULES.monsterAttackDamage, this.masteryPower(target,"pve","def",equipmentRatings(this.inventories.get(targetId)).guard), target.level));
+    const hit:DefaultMonsterHit=Object.freeze({sequence:++this.monsterHitSequence,targetId,target});
+    this.pendingDefaultMonsterHits.add(hit);
+    this.resolveDefaultMonsterHit(hit);
+  }
+
+  private resolveDefaultMonsterHit(hit:DefaultMonsterHit):void {
+    // The scheduler admits a single delivery. Consume it before any nested
+    // counter, transfer, hit notification, or knockout can reenter this path.
+    if(!this.pendingDefaultMonsterHits.delete(hit))return;
+    const {targetId,target}=hit,monster=this.state.monster;
+    const rawDamage=this.prototypeMonsterDamage(monster,calculateDamage(RULES.monsterAttackDamage,
+      this.masteryPower(target,"pve","def",equipmentRatings(this.inventories.get(targetId)).guard),target.level));
+    const protection=this.protectMonsterHit(hit.sequence,targetId,target,monster);
+    const damage=this.directGuardDamage(targetId,monster,protection?Math.max(1,Math.round(rawDamage*protection.factor)):rawDamage);
     this.endBladeCloak(targetId,"damaged");
     target.hp = Math.max(0, target.hp - damage);
     target.hitSeq += 1;
@@ -5903,10 +6545,33 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       maxHp: target.maxHp,
       hitSeq: target.hitSeq,
     }, { afterNextPatch: true });
+    this.resolveRescueAfterDamage(targetId,target,damage);
 
     if (target.hp === 0) {
       this.knockoutPlayer(targetId, "monster");
     }
+    if(protection)this.finishFirmGuardProtection(protection.id,targetId);
+  }
+
+  private resolveForestMonsterHit(id:string,monster:Monster,force:number,attackAt:number):void {
+    // ForestEncounters schedules at most one attack per monster per tick.
+    // Commit that occurrence before guard, counters, interception or damage.
+    if(attackAt!==this.simulatedMs || this.state.monsters.get(monster.id)!==monster ||
+      (this.lastForestHitAt.get(monster)??-Infinity)>=attackAt)return;
+    this.lastForestHitAt.set(monster,attackAt);
+    const player=this.state.players.get(id);
+    if(!monster.alive || !player?.alive || this.priestProtected(id) || !this.sameCombatMap(id,monster.id))return;
+    const profile=this.forest.profile(monster.id);if(!profile)return;
+    const rawDamage=this.prototypeMonsterDamage(monster,calculateDamage(profile.attack*force,
+      this.masteryPower(player,"pve","def",equipmentRatings(this.inventories.get(id)).guard),player.level));
+    const protection=this.protectMonsterHit(++this.monsterHitSequence,id,player,monster);
+    const damage=this.directGuardDamage(id,monster,protection?Math.max(1,Math.round(rawDamage*protection.factor)):rawDamage);
+    this.endBladeCloak(id,"damaged");
+    player.hp=Math.max(0,player.hp-damage);player.hitSeq++;this.lastCombatMs.set(id,this.simulatedMs);
+    this.broadcast("monster_hit",{targetId:id,attackerId:monster.id,damage,hp:player.hp,maxHp:player.maxHp,hitSeq:player.hitSeq},{afterNextPatch:true});
+    this.resolveRescueAfterDamage(id,player,damage);
+    if(player.hp===0)this.knockoutPlayer(id,"monster",monster.id);
+    if(protection)this.finishFirmGuardProtection(protection.id,id);
   }
 
   private updateRespawns() {
@@ -6044,6 +6709,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // A valid guest token is a secret bearer credential, never sent in Schema.
     const required = process.env.MONTRA_ACCOUNTS_REQUIRED !== "0";
     const fields = options && typeof options === "object" && !Array.isArray(options) ? options as Record<string,unknown> : {};
+    if(!this.prototypeGameplayEnabled())this.clearAllPrototypeEffects();
+    if(this.prototypeGameplayEnabled() && (fields.prototypeProtocolVersion!==1 || fields.prototypeGameplayVersion!==1))throw new Error("prototype_client_required");
     const identity = required ? accounts().resolve(fields.accountSession) : null;
     if (required && !identity) throw new Error("login_required");
     const token = required ? null : getGuestToken(options);
@@ -6222,9 +6889,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       });
       if(characterId){try{guildStore().rename(characterId,player.characterName);notifyGuilds();}catch(error){console.error("MONTRA guild join failed",error);}}
       if(WORLD_EXPANSION && !this.field && process.env.MONTRA_DIRECTOR_ENABLED!=="0")try{client.send("director_event_state",{event:worldDirector.snapshot(),serverNow:Date.now()});}catch{}
+      this.acknowledgePrototypeProtocol(client, fields);
       console.log("MONTRA 3-slot join:", client.sessionId, "room", this.roomId,
         saved ? "persistent" : "transient", "slot", slot);
     } catch (error) {
+      this.clearPrototypeTransportSession(client.sessionId);
       this.warSeats.delete(client.sessionId);this.warClients.delete(client.sessionId);
       this.playerSpawn.delete(client.sessionId);
       if (accountId) releaseCharacter(accountId, client.sessionId);
@@ -6234,6 +6903,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   async onLeave(client: Client, code: CloseCode) {
     const id = client.sessionId;
+    this.clearPrototypeTransient(id);this.prototypeShadows.delete(id);this.prototypeFlowing.delete(id);this.prototypeCounters.delete(id);
+    this.clearPrototypeTransportSession(id);
     this.fishing.delete(id);
     this.huntNotified.delete(id);
     this.mountHitSequence.delete(id);this.lastMountMs.delete(id);
@@ -6345,6 +7016,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   async onDispose() {
+    this.prototypeSessions.clear(); this.prototypeBuckets.clear();this.prototypeGameplayChallenges.clear();this.prototypeGameplaySessions.clear();this.prototypeFirmGuards.clear();this.prototypeAshTraps.clear();this.prototypeRescues.clear();this.prototypeShadows.clear();this.prototypeFlowing.clear();this.prototypeCounters.clear();this.prototypeOpportunities.clear();this.prototypeDebuffs.clear();
     huntEventDirector.forget(this.roomId);
     if(this.field)battleRooms.delete(this.field.seq);
     this.buffs.clear();

@@ -9,6 +9,20 @@ import { distance3d } from "./HeightRules.js";
 import { FOREST_MONSTER_TIERS, MONSTER_CONFIG, monsterProfile, monsterRespawnDelay, type MonsterProfile, type MonsterTier } from "./MonsterProfiles.js";
 
 export const FOREST_RESPAWN_MS = MONSTER_CONFIG.respawnMs;
+/** Observation only. Events describe code execution order, not sub-tick time,
+ * attack success, damage, continuous trajectories, or a persistent state stream.
+ * Events are buffered internally and can only be drained after control returns.
+ * No callbacks are invoked while the simulation is mutating state. This is
+ * characterization groundwork: after-the-fact records cannot safely apply a
+ * trap before an attack already processed, or establish actionable authority. */
+export type ForestTraceEvent = Readonly<{
+  kind:"move"|"attack_requested"|"died"|"respawned"|"activated"|"withdrawn";
+  now:number; monsterId:string; mapId:string;
+  from?:Readonly<{x:number;y:number;z:number}>; to?:Readonly<{x:number;y:number;z:number}>;
+  targetId?:string; force?:number;
+}>;
+export type ForestTraceBatch = Readonly<{events:readonly ForestTraceEvent[];overflow:boolean;incomplete:boolean}>;
+const FOREST_TRACE_LIMIT=1024;
 type Navigation = {map:WorldMapDefinition; obstacles:WorldWall[]};
 type Life = {actor:Monster;zone:Navigation; windupUntil:number; nextChargeAt:number; interruptUntil:number; interruptResistUntil:number; tauntOwner:string; tauntUntil:number; tauntResistUntil:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; nav:MonsterRRTNavigator};
 /** Bounded population, independent clocks and server-owned AI; no player-selected stats. */
@@ -20,7 +34,26 @@ export class ForestEncounters {
     const trees=map.obstacles.map(o=>({x:o.x-o.radius,z:o.z-o.radius,width:o.radius*2,length:o.radius*2}));
     return {map,obstacles:[...trees,...(map.walls ?? []),...(map.water ?? [])]};
   }
-  constructor(private monsters: MyRoomState["monsters"], private tiers:Readonly<Record<string,MonsterTier>> = FOREST_MONSTER_TIERS) {}
+  private readonly traceEnabled:boolean;
+  private traceEvents:ForestTraceEvent[]=[];
+  private traceOverflow=false;
+  private traceIncomplete=false;
+  private traceUpdateDepth=0;
+  constructor(private monsters: MyRoomState["monsters"], private tiers:Readonly<Record<string,MonsterTier>> = FOREST_MONSTER_TIERS,
+    traceEnabled=false) {this.traceEnabled=traceEnabled===true;}
+  private traceEvent(event:ForestTraceEvent):void {
+    if (!this.traceEnabled || this.traceOverflow) return;
+    if (this.traceEvents.length>=FOREST_TRACE_LIMIT) {this.traceOverflow=true;this.traceIncomplete=true;return;}
+    this.traceEvents.push(Object.freeze({...event,...(event.from?{from:Object.freeze({...event.from})}:{}),...(event.to?{to:Object.freeze({...event.to})}:{})}));
+  }
+  /** Drain after an update/kill returns. An incomplete batch must not be used
+   * for authoritative action. Disabled instances return empty. */
+  drainTrace():ForestTraceBatch {
+    // Existing hit/respawn callbacks may reenter. Never expose partial records.
+    if(this.traceUpdateDepth>0)return Object.freeze({events:Object.freeze([]),overflow:false,incomplete:true});
+    const result=Object.freeze({events:Object.freeze(this.traceEvents.slice()),overflow:this.traceOverflow,incomplete:this.traceIncomplete});
+    this.traceEvents=[];this.traceOverflow=false;this.traceIncomplete=false;return result;
+  }
   initialize(includeRegionalBosses=true):void {
     if(!WORLD_EXPANSION)return;
     const offsets = [[-7,-7],[7,-7],[-7,7],[7,7]];
@@ -97,21 +130,37 @@ export class ForestEncounters {
     life.windupUntil=0;life.nextChargeAt=0;life.interruptUntil=0;life.interruptResistUntil=0;life.tauntOwner="";life.tauntUntil=0;life.tauntResistUntil=0;
     // A siege can have more hunters than a world room; use the same minimum delay.
     const boss=life.zone.map.boss??life.zone.map.guardian;
-    life.respawnAt=now+(boss?.id===id?boss.respawnMs:monsterRespawnDelay(Math.min(nearby,WORLD_ROOM_CAPACITY)));life.returning=false;life.nav.clear();return true;
+    life.respawnAt=now+(boss?.id===id?boss.respawnMs:monsterRespawnDelay(Math.min(nearby,WORLD_ROOM_CAPACITY)));life.returning=false;life.nav.clear();
+    if(this.traceEnabled)this.traceEvent({kind:"died",now,monsterId:id,mapId:m.mapId,to:{x:m.x,y:m.y,z:m.z}});return true;
   }
   clearTarget(id:string):void {for(const m of this.monsters.values())if(m.targetId===id)m.targetId="";for(const life of this.lives.values())if(life.tauntOwner===id){life.tauntOwner="";life.tauntUntil=0;}}
   engaged(id:string):boolean {return [...this.monsters.values()].some(m=>m.alive&&m.targetId===id);}
   update(now:number,dt:number,players:MyRoomState["players"],blocked:ReadonlySet<string>,
-    hit:(targetId:string,monster:Monster,force?:number)=>void,respawn:(id:string)=>void,
-    canDetect?:(id:string,player:Player,monster:Monster)=>boolean,isBound?:(id:string)=>boolean):void {
+    hit:(targetId:string,monster:Monster,force:number|undefined,attackAt:number)=>void,respawn:(id:string)=>void,
+    canDetect?:(id:string,player:Player,monster:Monster)=>boolean,isBound?:(id:string)=>boolean,
+    walk?:(monster:Monster,previous:Readonly<{x:number;y:number;z:number}>)=>void):void {
+    if (!this.traceEnabled) {this.updateImpl(now,dt,players,blocked,hit,respawn,canDetect,isBound,walk);return;}
+    this.traceUpdateDepth++;
+    try {this.updateImpl(now,dt,players,blocked,hit,respawn,canDetect,isBound,walk);}
+    catch(error) {this.traceIncomplete=true;throw error;}
+    finally {this.traceUpdateDepth--;}
+  }
+  private updateImpl(now:number,dt:number,players:MyRoomState["players"],blocked:ReadonlySet<string>,
+    hit:(targetId:string,monster:Monster,force:number|undefined,attackAt:number)=>void,respawn:(id:string)=>void,
+    canDetect?:(id:string,player:Player,monster:Monster)=>boolean,isBound?:(id:string)=>boolean,
+    walk?:(monster:Monster,previous:Readonly<{x:number;y:number;z:number}>)=>void):void {
     const occupied=new Set(Array.from(players.values(),p=>p.mapId));
     const regions=new Set([...occupied].filter(id=>this.regionalMaps.has(id)));
     if(regions.size!==this.activeRegions.size || [...regions].some(id=>!this.activeRegions.has(id))){
       // Withdraw first, then add. Room-owned life clocks survive the last player leaving.
       for(const [id,life] of this.lives)if(this.activeRegions.has(life.zone.map.id) && !regions.has(life.zone.map.id)){
         life.actor.targetId="";life.windupUntil=0;life.tauntOwner="";life.tauntUntil=0;life.nav.clear();this.monsters.delete(id);
+        if(this.traceEnabled)this.traceEvent({kind:"withdrawn",now,monsterId:id,mapId:life.actor.mapId,from:{x:life.actor.x,y:life.actor.y,z:life.actor.z}});
       }
-      for(const [id,life] of this.lives)if(regions.has(life.zone.map.id) && !this.activeRegions.has(life.zone.map.id))this.monsters.set(id,life.actor);
+      for(const [id,life] of this.lives)if(regions.has(life.zone.map.id) && !this.activeRegions.has(life.zone.map.id)){
+        this.monsters.set(id,life.actor);
+        if(this.traceEnabled)this.traceEvent({kind:"activated",now,monsterId:id,mapId:life.actor.mapId,to:{x:life.actor.x,y:life.actor.y,z:life.actor.z}});
+      }
       this.activeRegions=regions;
     }
     for(const [id,life] of this.lives){
@@ -120,7 +169,8 @@ export class ForestEncounters {
       if(!m)continue;
       if(!m.alive){
         if(now>=life.respawnAt){m.x=life.x;m.z=life.z;m.y=groundAt(map.id,m.x,m.z);m.hp=m.maxHp;m.alive=true;m.aiState="patrol";m.targetId="";
-          life.lastAttack=-Infinity;life.returning=false;life.nav.clear();respawn(id);}
+          life.lastAttack=-Infinity;life.returning=false;life.nav.clear();
+          if(this.traceEnabled)this.traceEvent({kind:"respawned",now,monsterId:id,mapId:m.mapId,to:{x:m.x,y:m.y,z:m.z}});respawn(id);}
         continue;
       }
       if(!occupied.has(m.mapId))continue;
@@ -135,7 +185,9 @@ export class ForestEncounters {
         life.windupUntil = 0;
         life.lastAttack = now;
         if (boss?.id===id && eligible(m.targetId,target) && distance3d(m,target) <= boss.strikeRadius &&
-            isMonsterSegmentClear(m,target,obstacles,MONSTER_NAV.radius,map.bounds) && (!map.terrain || isWorldSegmentClear(map.id,m,target))) hit(m.targetId,m,1.6);
+            isMonsterSegmentClear(m,target,obstacles,MONSTER_NAV.radius,map.bounds) && (!map.terrain || isWorldSegmentClear(map.id,m,target))) {
+          if(this.traceEnabled)this.traceEvent({kind:"attack_requested",now,monsterId:id,mapId:m.mapId,targetId:m.targetId,force:1.6,to:{x:m.x,y:m.y,z:m.z}});hit(m.targetId,m,1.6,now);
+        }
         m.aiState="patrol";
         continue;
       }
@@ -159,7 +211,7 @@ export class ForestEncounters {
               life.windupUntil=now+1400;
               life.nextChargeAt=now+8000;
             } else {
-              life.lastAttack=now;hit(m.targetId,m);
+              life.lastAttack=now;if(this.traceEnabled)this.traceEvent({kind:"attack_requested",now,monsterId:id,mapId:m.mapId,targetId:m.targetId,force:1,to:{x:m.x,y:m.y,z:m.z}});hit(m.targetId,m,undefined,now);
             }
           }continue;
         }m.aiState="chase";destination=target;speed=1.9;
@@ -169,7 +221,10 @@ export class ForestEncounters {
       if(!waypoint)continue;
       const next=stepTowards(m,waypoint,speed*dt);
       if(!isRestArea(m.mapId,next)&&isMonsterSegmentClear(m,next,obstacles,MONSTER_NAV.radius,map.bounds)){
+        const from=(this.traceEnabled || walk) ? {x:m.x,y:m.y,z:m.z} : undefined;
         m.facing=facingTo(next.x-m.x,next.z-m.z);m.x=next.x;m.z=next.z;m.y=groundAt(map.id,m.x,m.z);
+        if(from && this.traceEnabled)this.traceEvent({kind:"move",now,monsterId:id,mapId:m.mapId,from,to:{x:m.x,y:m.y,z:m.z}});
+        if(from)walk?.(m,from);
       }
     }
   }
