@@ -279,6 +279,24 @@ test("the mission board distinguishes accepting, gathering and handing in a publ
   assert.deepEqual(submitted,{requestId:submitted.requestId,action:"mission_submit",missionId:"work"});
 });
 
+test("the mission board can post guild-only warehouse work when regular stock is full", () => {
+  const f=fixture({missionSupported:true});
+  f.ctx.openCityMission();
+  const board={enabled:true,warehouseMissions:true,required:3,item:"mat_raw_stone_2",serverNow:1_000_000,
+    maxSlots:4,maxReward:100,hours:[1],atMoon:true,missions:[],
+    manage:{epoch:2,canPost:true,gold:30,free:0,warehouseFree:6}};
+  f.ctx.cityReceiveMission(board);
+  const audience=f.nodes.cityProductionContent.children.find(el=>el.tag==="label" && el.textContent==="ผู้รับงาน").children[0];
+  assert.equal(audience.value,"guild");
+  assert.equal(audience.disabled,true);
+  f.submit("เปิดภารกิจ",3,5);
+  assert.equal(f.wire.at(-1).command,"get_city_missions");
+  f.submit("เปิดภารกิจ",2,5);
+  const order=f.wire.at(-1).payload;
+  assert.deepEqual(order,{requestId:order.requestId,action:"mission_open",epoch:2,
+    audience:"guild",slots:2,reward:5,hours:1,purpose:"warehouse"});
+});
+
 test("city hall shows reserved gold and only enables an on-site commander after the cooldown", () => {
   const f=fixture({governanceAvailable:true});
   f.state({site:"moon_pass",miningSite:"moon_pass"});

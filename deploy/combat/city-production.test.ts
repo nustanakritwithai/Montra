@@ -566,6 +566,146 @@ function missionFixture(t: TestContext) {
   return {...f,get economy(){return f.economy;},get guild(){return f.guild;},board,job,post};
 }
 
+test("Moon warehouse missions fund construction at full stock and the expanded capacity survives restart and capture", t => {
+  const f = missionFixture(t);
+  const stock = f.economy.getAccount(leader).inventory;
+  stock.slots[0] = {itemId: CITY_MINING_ORE, quantity: 99};
+  stock.slots[2] = {itemId: CITY_PRODUCT, quantity: 20};
+  f.economy.saveCharacter(leader, {}, stock);
+  f.mine({action:"deposit", item:CITY_PRODUCT, slot:2, amount:10}, f.now);
+  f.mine({action:"deposit", item:CITY_MINING_ORE, slot:0, amount:20}, f.now);
+  let now = f.now;
+  for (let i = 0; i < 6; i++) now = Number(f.mine({action:"start"}, now).readyAt);
+  assert.equal(f.miningStock(now).stock.find(row => row.item === CITY_MINING_PRODUCT)?.quantity, 6);
+  assert.throws(() => f.factoryOrder(member, {action:"warehouse_start", epoch:f.moonEpoch}, now, f.request(), CITY_MINING_SITE),
+    /city_commander_required/);
+  f.mine({action:"warehouse_start"}, now);
+  f.mine({action:"warehouse_allocate", item:CITY_MINING_PRODUCT, amount:6}, now);
+  const contribution = {action:"warehouse_contribute", item:CITY_MINING_ORE, slot:0};
+  f.mine({...contribution, amount:9}, now);
+  f.mine({action:"deposit", item:CITY_MINING_ORE, slot:0, amount:60 - f.miningStock(now).used}, now);
+  const post = {purpose:"warehouse", audience:"guild", slots:1, reward:10};
+  assert.equal(parseCityOrder({...post, audience:"public", action:"mission_open", epoch:f.moonEpoch, hours:1, requestId:f.request()}), null);
+  assert.throws(() => f.post({slots:1}, now), /city_storage_full/);
+  const cancelled = f.post(post, now);
+  assert.equal(f.board(leader, now).manage?.warehouseFree, 0);
+  assert.throws(() => f.mine({...contribution, amount:1}, now), /city_project_surplus/);
+  assert.throws(() => f.post(post, now), /city_project_surplus/);
+  f.job(leader, {action:"mission_cancel", missionId:cancelled}, now);
+  assert.equal(f.board(leader, now).manage?.warehouseFree, 3);
+  const missionId = f.post(post, now);
+  assert.equal(f.miningStock(now).used, 60);
+  assert.deepEqual(f.miningStock(now).construction.materials[0],
+    {item:CITY_MINING_ORE, amount:12, reserved:9, promised:3});
+  assert.throws(() => f.job(visitor, {action:"mission_accept", missionId}, now), /city_mission_guild_only/);
+  f.job(member, {action:"mission_accept", missionId}, now);
+  for (const delta of [2_000, 4_000, 6_000]) f.economy.harvest(member, f.request(), missionOre, now + delta, 12);
+  now += 6_000;
+  const requestId = f.request(), submit = {action:"mission_submit", missionId};
+  const paid = f.job(member, submit, now, requestId);
+  assert.equal(paid.gold, 10);
+  assert.equal(paid.purpose, "warehouse");
+  assert.equal(f.miningStock(now).used, 60);
+  f.restart();
+  assert.deepEqual(f.job(member, submit, now, requestId), paid);
+  const ready = now + CITY_WAREHOUSE_DURATION_MS;
+  assert.equal(f.miningStock(ready - 1).capacity, 60);
+  assert.equal(f.miningStock(ready).capacity, 90);
+  assert.equal(f.view(leader, ready).capacity, 60);
+  f.open(4, 1, ready);
+  const oreBag = f.economy.getAccount(leader).inventory;
+  oreBag.slots[0] = {itemId:CITY_MINING_ORE, quantity:40};
+  f.economy.saveCharacter(leader, {}, oreBag);
+  f.mine({action:"deposit", item:CITY_MINING_ORE, slot:0, amount:26}, ready);
+  assert.equal(f.miningStock(ready).used, 90);
+  assert.throws(() => f.mine({action:"deposit", item:CITY_MINING_ORE, slot:0, amount:1}, ready), /city_storage_full/);
+  const job = f.mine({action:"start"}, ready);
+  assert.equal(f.miningStock(Number(job.readyAt)).used, 88);
+  f.capture(rival, Number(job.readyAt) + 1, CITY_MINING_SITE);
+  assert.equal(f.view(rival, Number(job.readyAt) + 1, CITY_MINING_SITE).capacity, 90);
+});
+
+test("an unfinished Moon warehouse returns tier-two materials and mission escrow to the old guild", t => {
+  const f = missionFixture(t), now = f.now;
+  const inventory = f.economy.getAccount(leader).inventory;
+  inventory.slots[0] = {itemId:CITY_MINING_ORE, quantity:12};
+  inventory.slots[3] = {itemId:CITY_MINING_PRODUCT, quantity:6};
+  f.economy.saveCharacter(leader, {}, inventory);
+  f.mine({action:"warehouse_start"}, now);
+  f.mine({action:"warehouse_contribute", item:CITY_MINING_ORE, slot:0, amount:9}, now);
+  f.mine({action:"warehouse_contribute", item:CITY_MINING_PRODUCT, slot:3, amount:6}, now);
+  f.post({purpose:"warehouse", audience:"guild", slots:1, reward:10}, now);
+  assert.equal(f.miningStock(now).marketGold, 90);
+  f.capture(rival, now + 1, CITY_MINING_SITE);
+  assert.equal(f.view(rival, now + 1, CITY_MINING_SITE).capacity, 60);
+  assert.deepEqual(f.board(member, now + 1).missions, []);
+  const retired = f.miningStock(now + 1);
+  assert.equal(retired.marketGold, 100);
+  assert.equal(retired.reclaim.find(row => row.item === CITY_MINING_PRODUCT)?.quantity, 6);
+  assert.equal(retired.reclaim.find(row => row.item === CITY_MINING_ORE)?.quantity, 14);
+});
+
+test("Moon warehouse construction waits for the defending guild's siege to settle", t => {
+  const f = missionFixture(t), guildId = f.guildMember(leader).id, siege = 1_000 + WAR_PROTECTION;
+  const db = new DatabaseSync(f.guildFile);
+  try {
+    db.prepare("INSERT INTO territory_battles(site,attacker,started,sample,ended,winner) VALUES(?,?,?,?,?,?)")
+      .run(CITY_MINING_SITE, guildId, 1, 1_000, 1_000, guildId);
+  } finally { db.close(); }
+  const materials = f.economy.getAccount(leader).inventory;
+  materials.slots[0] = {itemId:CITY_MINING_ORE, quantity:12};
+  materials.slots[3] = {itemId:CITY_MINING_PRODUCT, quantity:6};
+  f.economy.saveCharacter(leader, {}, materials);
+  const start = siege - 1_000;
+  f.mine({action:"warehouse_start"}, start);
+  f.mine({action:"warehouse_contribute", item:CITY_MINING_ORE, slot:0, amount:12}, start);
+  f.mine({action:"warehouse_contribute", item:CITY_MINING_PRODUCT, slot:3, amount:6}, start);
+  f.guild.war.start(CITY_MINING_SITE, f.guildMember(rival), siege);
+  const ready = start + CITY_WAREHOUSE_DURATION_MS;
+  assert.equal(f.miningStock(ready).capacity, 60);
+  assert.equal(f.miningStock(ready).construction.siege, true);
+  const end = siege + WAR_DURATION;
+  assert.equal(f.guild.war.inspect(CITY_MINING_SITE, end).ownerId, guildId);
+  assert.equal(f.miningStock(end).capacity, 90);
+});
+
+test("legacy warehouse capacity and a live stock mission retain their original sites and purpose", t => {
+  const f = missionFixture(t), now = f.now;
+  f.factoryOrder(leader, {action:"warehouse_start", epoch:f.epoch}, now);
+  for (const [slot, {item, amount}] of CITY_WAREHOUSE_MATERIALS.entries()) {
+    f.factoryOrder(member, {action:"warehouse_contribute", epoch:f.epoch, slot, item, amount}, now);
+  }
+  const ready = now + CITY_WAREHOUSE_DURATION_MS;
+  assert.equal(f.view(leader, ready).capacity, 90);
+  const missionId = f.post({slots:1}, ready);
+  const db = new DatabaseSync(f.economyFile);
+  try {
+    db.exec(`DROP INDEX city_warehouse_completed_by_site;
+      ALTER TABLE city_warehouse_projects DROP COLUMN site;
+      CREATE UNIQUE INDEX city_warehouse_completed ON city_warehouse_projects((1)) WHERE status='complete';
+      ALTER TABLE city_missions DROP COLUMN purpose;`);
+  } finally { db.close(); }
+  f.restart();
+  assert.equal(f.view(leader, ready).capacity, 90);
+  assert.equal(f.miningStock(ready).capacity, 60);
+  assert.equal(f.board(visitor, ready).missions[0].purpose, "stock");
+  const before = f.miningStock(ready).used;
+  f.job(visitor, {action:"mission_accept", missionId}, ready);
+  for (const delta of [2_000, 4_000, 6_000]) f.economy.harvest(visitor, f.request(), missionOre, ready + delta, 12);
+  assert.equal(f.job(visitor, {action:"mission_submit", missionId}, ready + 6_000).purpose, "stock");
+  assert.equal(f.miningStock(ready + 6_000).used, before);
+  const materials = f.economy.getAccount(leader).inventory;
+  materials.slots[0] = {itemId:CITY_MINING_ORE, quantity:12};
+  materials.slots[3] = {itemId:CITY_MINING_PRODUCT, quantity:6};
+  f.economy.saveCharacter(leader, {}, materials);
+  f.mine({action:"warehouse_start"}, ready + 6_000);
+  f.mine({action:"warehouse_contribute", item:CITY_MINING_ORE, slot:0, amount:12}, ready + 6_000);
+  f.mine({action:"warehouse_contribute", item:CITY_MINING_PRODUCT, slot:3, amount:6}, ready + 6_000);
+  const bothReady = ready + 6_000 + CITY_WAREHOUSE_DURATION_MS;
+  assert.equal(f.miningStock(bothReady).capacity, 90);
+  assert.equal(f.view(leader, bothReady).capacity, 90);
+});
+
 function governanceFixture(t: TestContext) {
   const f=missionFixture(t);
   const summary=(actor:string,now=f.now) => f.economy.viewCityGovernance(f.guildMember(actor),f.sync(now,CITY_MINING_SITE));

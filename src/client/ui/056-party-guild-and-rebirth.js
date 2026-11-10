@@ -315,8 +315,9 @@
       purchase_open:"เปิดใบสั่งซื้อแล้ว · กันทองและพื้นที่คลังเรียบร้อย",
       purchase_cancel:"ยกเลิกแล้ว · คืนทองส่วนที่ยังไม่ได้ใช้",
       purchase_fill:"ส่งวัตถุดิบแล้ว · ได้รับ "+(data.gold ?? 0)+" ทอง",
-      mission_open:"เปิดภารกิจแล้ว · กันค่าจ้างและพื้นที่คลังเรียบร้อย",mission_accept:"รับงานแล้ว · ไปเก็บแร่ที่ลานแต่งแร่",
-      mission_submit:"ส่งงานแล้ว · ได้รับ "+(data.gold ?? 0)+" ทอง",mission_cancel:"ปิดภารกิจแล้ว · คืนค่าจ้างส่วนที่ยังไม่ได้ใช้",
+      mission_open:"เปิดภารกิจแล้ว · กันค่าจ้างเรียบร้อย",mission_accept:"รับงานแล้ว · ไปเก็บแร่ที่ลานแต่งแร่",
+      mission_submit:(data.purpose==="warehouse"?"สมทบแร่เข้าโครงการแล้ว":"ส่งงานแล้ว")+" · ได้รับ "+(data.gold ?? 0)+" ทอง",
+      mission_cancel:"ปิดภารกิจแล้ว · คืนค่าจ้างส่วนที่ยังไม่ได้ใช้",
       mission_abandon:"คืนงานแล้ว · แร่ที่เก็บยังอยู่ในกระเป๋า",
       policy_set:"บันทึกนโยบายเมืองแล้ว · ใช้กับรายการใหม่",
       start_fast:"เริ่มเร่งผลิตแล้ว",list:"ตั้งขายในตลาดโลกแล้ว",cancel:"คืนสินค้าเข้าคลังแล้ว",
@@ -338,7 +339,7 @@
       city_not_owner:"กิลด์ของคุณไม่ได้ครองเมืองแล้ว",city_location:"ไปยังเมืองที่ต้องการทำรายการและยืนบนพื้นก่อน",
       city_item_not_accepted:"คลังเมืองนี้ไม่รับวัสดุชนิดนี้",
       city_ownership_changed:"เมืองเปลี่ยนเจ้าของแล้ว · กรุณารีเฟรช",city_officer_required:"เฉพาะผู้บัญชาการหรือนายทหาร",
-      city_construction_unavailable:"โครงการก่อสร้างยังไม่เปิดใช้งาน",city_construction_location:"ไปที่ลานด้านเหนือของคลังข้าวหลวง",
+      city_construction_unavailable:"โครงการก่อสร้างยังไม่เปิดใช้งาน",city_construction_location:"ไปที่จุดก่อสร้างที่ระบุในโครงการ",
       city_commander_required:"ผู้บัญชาการเท่านั้นที่เปิดโครงการได้",city_construction_siege:"พักการก่อสร้างระหว่างศึก",
       city_warehouse_complete:"เมืองนี้ขยายคลังแล้ว",city_project_exists:"มีโครงการขยายคลังอยู่แล้ว",
       city_project_unavailable:"โครงการไม่ได้อยู่ในช่วงรับวัสดุ",city_project_surplus:"จำนวนเกินยอดที่โครงการยังต้องการ · กรุณารีเฟรช",
@@ -521,12 +522,14 @@
     const {missions,manage,enabled,siege,atMoon,item,required,maxSlots,maxReward,hours}=cityMission;
     const ore=(inventoryState?.slots || []).reduce((sum,stack)=>sum+(stack?.itemId===item && !stack.bound?stack.quantity:0),0);
     body.append(marketText("h3","cp-h","ด่านผนึกจันทรา"));
-    note(body,"เก็บ "+cityItemName(item)+" "+required+" ชิ้นที่ลานแต่งแร่หลังรับงาน แล้วส่งจากกระเป๋าเข้าคลังด่าน");
+    note(body,"เก็บ "+cityItemName(item)+" "+required+" ชิ้นที่ลานแต่งแร่หลังรับงาน แล้วส่งจากกระเป๋าตามที่ระบุในภารกิจ");
     if(siege || !enabled)note(body,siege?"พักเปิด รับ และส่งงานระหว่างศึก":"กระดานพักเปิด รับ และส่งงาน");
     if(!missions.length)note(body,"ยังไม่มีภารกิจที่เปิดให้ตัวละครนี้");
     for(const mission of missions){
       const card=marketText("section","gx-page");body.append(card);
-      card.append(marketText("h3","cp-h","งานเก็บแร่ · "+mission.name));
+      const warehouse=mission.purpose==="warehouse";
+      card.append(marketText("h3","cp-h",(warehouse?"งานขยายคลัง":"งานเก็บแร่")+" · "+mission.name));
+      if(warehouse)note(card,"ส่งแร่เข้าโครงการขยายคลังเมือง");
       note(card,(mission.audience==="guild"?"เฉพาะสมาชิกกิลด์":"เปิดให้ทุกคน")+" · "+mission.reward+" ทอง · ว่าง "+mission.remaining+" / "+mission.slots);
       note(card,"หมดอายุ "+new Date(mission.expiresAt).toLocaleString("th-TH"));
       if(mission.progress!==null){
@@ -544,8 +547,10 @@
     if(!manage || !manage.canPost || !enabled || siege)return;
     note(body,"ทองตลาดพร้อมใช้ "+manage.gold+" ทอง · คลังว่าง "+manage.free+" ชิ้น");
     if(!atMoon){note(body,"ไปที่ด่านผนึกจันทรา ยืนบนพื้นแล้วกดรีเฟรชเพื่อเปิดงาน");return;}
-    const max=Math.min(maxSlots,Math.floor(manage.free/required)), rewardMax=Math.min(maxReward,manage.gold);
-    if(max<1 || rewardMax<1)return;
+    const stockMax=Math.min(maxSlots,Math.floor(manage.free/required));
+    const warehouseMax=cityMission.warehouseMissions?Math.min(maxSlots,Math.floor((manage.warehouseFree||0)/required)):0;
+    const rewardMax=Math.min(maxReward,manage.gold);
+    if(Math.max(stockMax,warehouseMax)<1 || rewardMax<1)return;
     const select=(label,choices)=>{
       const field=marketText("label","field",label),input=document.createElement("select");
       for(const [value,text] of choices){
@@ -553,19 +558,34 @@
       }
       input.disabled=locked;field.append(input);body.append(field);return input;
     };
+    const destinations=stockMax>0?[["stock","คลังด่าน"]]:[];
+    if(warehouseMax>0)destinations.push(["warehouse","โครงการขยายคลัง"]);
+    const purpose=warehouseMax>0?select("ปลายทางส่งแร่",destinations):null;
+    const toWarehouse=()=>purpose?.value==="warehouse";
+    const maxSlotsForPurpose=()=>toWarehouse()?warehouseMax:stockMax;
     const audience=select("ผู้รับงาน",[["public","ผู้เล่นทุกคน"],["guild","เฉพาะสมาชิกกิลด์"]]);
     const duration=select("อายุประกาศ",hours.map(h=>[h,h+" ชั่วโมง"]));
-    const [slots,reward]=cityAmountForm(body,"เปิดภารกิจ",[["จำนวนคน",max],["ค่าจ้างต่อคน",rewardMax]],(count,gold)=>{
-      if(cityPositive(count,max) && cityPositive(gold,rewardMax) && count*gold<=manage.gold)
-        sendCityProduction("mission_open",{epoch:manage.epoch,audience:audience.value,slots:count,reward:gold,hours:Number(duration.value)});
+    const [slots,reward]=cityAmountForm(body,"เปิดภารกิจ",[["จำนวนคน",maxSlotsForPurpose()],["ค่าจ้างต่อคน",rewardMax]],(count,gold)=>{
+      if(cityPositive(count,maxSlotsForPurpose()) && cityPositive(gold,rewardMax) && count*gold<=manage.gold)
+        sendCityProduction("mission_open",{epoch:manage.epoch,audience:audience.value,slots:count,reward:gold,
+          hours:Number(duration.value),...(toWarehouse()?{purpose:"warehouse"}:{})});
     },locked);
     const quote=marketText("p","note");body.append(quote);
     const update=()=>{
-      const count=slots.valueAsNumber,gold=reward.valueAsNumber;
+      const max=maxSlotsForPurpose(), count=slots.valueAsNumber,gold=reward.valueAsNumber;
       quote.textContent=cityPositive(count,max) && cityPositive(gold,rewardMax)?
-        "กัน "+(count*gold)+" ทอง · พื้นที่ "+(count*required)+" ชิ้น"+(count*gold>manage.gold?" · ทองตลาดไม่พอ":""):"";
+        "กัน "+(count*gold)+" ทอง · "+(toWarehouse()?"แร่สำหรับโครงการ ":"พื้นที่คลัง ")+(count*required)+" ชิ้น"+
+        (count*gold>manage.gold?" · ทองตลาดไม่พอ":""):"";
     };
-    slots.oninput=reward.oninput=update;update();
+    const updatePurpose=()=>{
+      slots.max=String(maxSlotsForPurpose());
+      if(slots.valueAsNumber>maxSlotsForPurpose())slots.value=slots.max;
+      if(toWarehouse())audience.value="guild";
+      audience.disabled=locked || toWarehouse();
+      update();
+    };
+    if(purpose)purpose.onchange=updatePurpose;
+    slots.oninput=reward.oninput=update;updatePurpose();
   }
   function renderCityPurchase(){
     const body=$("cityProductionContent"),ready=cityRecoveryReady() && room.state.cityPurchaseSupported===true;
@@ -757,9 +777,10 @@
           else {
             const canWork=local && project.atPlot && !project.siege;
             note(construction,"เพิ่มความจุจาก "+state.capacity+" เป็น "+project.capacity+" ชิ้น · ใช้เวลา "+project.durationMs/60_000+" นาทีเมื่อวัสดุครบ");
-            note(construction,"จุดก่อสร้าง "+project.plot+" ใกล้จุดคลังเสบียงบนแผนที่");
+            const moon=state.site===state.miningSite && Boolean(state.miningSite);
+            note(construction,"จุดก่อสร้าง "+project.plot+(moon?"":" ใกล้จุดคลังเสบียงบนแผนที่"));
             if(project.siege)note(construction,"พักการรับวัสดุระหว่างศึก");
-            else if(!project.atPlot)note(construction,"ไปที่ลานแล้วกดรีเฟรชเพื่อทำรายการ");
+            else if(!project.atPlot)note(construction,"ไปที่จุดก่อสร้างแล้วกดรีเฟรชเพื่อทำรายการ");
             if(!project.status && project.commander){
               construction.append(button("เปิดโครงการขยายคลัง",()=>sendCityProduction("warehouse_start",{epoch}),locked||!canWork));
             }
@@ -767,9 +788,11 @@
               const clock=marketText("p","note");clock.id="cityConstructionClock";construction.append(clock);
             }
             if(project.status==="collecting")note(construction,"วัสดุที่สมทบจะเป็นทรัพย์สินของกิลด์");
-            for(const {item,amount,reserved} of project.materials){
-              const name=cityItemName(item),needed=amount-reserved;
-              note(construction,name+" · "+reserved+" / "+amount);
+            if(moon && project.status==="collecting" && room.state.cityMissionSupported)
+              construction.append(button("ดูกระดานภารกิจเมือง",openCityMission,locked));
+            for(const {item,amount,reserved,promised=0} of project.materials){
+              const name=cityItemName(item),needed=amount-reserved-promised;
+              note(construction,name+" · "+reserved+" / "+amount+(promised?" · กันไว้ให้ภารกิจ "+promised+" ชิ้น":""));
               if(project.status!=="collecting" || !canWork || needed<=0)continue;
               const slots=bagSlots.filter(entry=>entry.item.itemId===item);
               if(slots.length)submitBag(construction,name+" ในกระเป๋า","สมทบ "+name,slots,needed,

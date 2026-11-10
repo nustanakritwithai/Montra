@@ -12,7 +12,7 @@ import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem
 import type {HomeAction, SalvageOrder} from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
 import {
-  CITY_MINING_ORE, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES, isWarehouseOrder,
+  CITY_MINING_ORE, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
   CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityMember, type CityMissionOrder, type CityOrder,
   type CityOwnership, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
   type CityWorkshopOrder,
@@ -362,15 +362,14 @@ export class EconomyStore {
         return {quantity: order.amount};
       }
       this.city.requireCity(member, order.epoch, ownership, site);
-      if (isWarehouseOrder(order) && site !== CITY_PRODUCTION_SITE) throw Error("city_construction_unavailable");
       switch (order.action) {
         case "build": return this.city.build(order.epoch, member, site);
         case "start":
         case "start_fast": return this.city.start(order.epoch, member, now, order.action === "start_fast", site);
         case "list": return this.city.list(order.epoch, member, order.amount, order.price, site);
-        case "warehouse_start": return this.city.warehouseStart(order.epoch, member, ownership);
+        case "warehouse_start": return this.city.warehouseStart(site, order.epoch, member, ownership);
         case "warehouse_allocate":
-          return this.city.warehouseContribute(order.epoch, member, ownership, now, order.item, order.amount, "stock");
+          return this.city.warehouseContribute(site, order.epoch, member, ownership, now, order.item, order.amount, "stock");
         case "deposit":
         case "warehouse_contribute": {
           const account = this.account(actor);
@@ -378,7 +377,7 @@ export class EconomyStore {
           const removed = take(account.inventory, order.slot, order.amount);
           let result: Record<string, string | number> = {quantity: order.amount};
           if (order.action === "deposit") this.city.deposit(order.epoch, member, order.item, order.amount, site);
-          else result = this.city.warehouseContribute(order.epoch, member, ownership, now, order.item, order.amount, "bag");
+          else result = this.city.warehouseContribute(site, order.epoch, member, ownership, now, order.item, order.amount, "bag");
           account.inventory = removed.inventory;
           this.put(actor, account);
           return result;

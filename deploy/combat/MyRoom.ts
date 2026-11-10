@@ -79,7 +79,8 @@ import { parseSellMaterial, parseSalvage, parseCraft, parseHomeAction, parseEcon
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import {
-  CITY_CONSTRUCTION_ENABLED, CITY_MINING_ENABLED, CITY_MINING_SITE, CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE,
+  CITY_CONSTRUCTION_ENABLED, CITY_MINING_CONSTRUCTION_ENABLED, CITY_MINING_ENABLED, CITY_MINING_SITE,
+  CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE,
   CITY_GOVERNANCE_ENABLED, CITY_MISSIONS_ENABLED, CITY_PURCHASE_ENABLED, CITY_SITES, CITY_WORKSHOP_ENABLED,
   isCityMissionOrder, isCityPurchaseOrder, isWarehouseOrder, parseCityOrder,
   type CityMissionOrder, type CityOrder, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
@@ -3392,7 +3393,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const needsCity = order && !recovery && order.action !== "cancel" && order.action !== "reclaim" && order.action !== "workshop_claim";
     const construction = order && isWarehouseOrder(order);
     if (this.field || (needsCity && (!CITY_PRODUCTION_ENABLED || !WORLD_EXPANSION))) return fail("city_unavailable");
-    if (construction && !CITY_CONSTRUCTION_ENABLED) return fail("city_construction_unavailable");
     if (order?.action === "workshop_start" && !CITY_WORKSHOP_ENABLED) return fail("city_workshop_disabled");
     if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
     const actor = this.economyId(client, fail);
@@ -3400,11 +3400,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const player = this.state.players.get(id)!;
     const miningAvailable = this.state.cityProductionAvailable && CITY_MINING_ENABLED;
     const site = miningAvailable && player.mapId === CITY_MINING_SITE ? CITY_MINING_SITE : CITY_PRODUCTION_SITE;
+    const moonConstruction = site === CITY_MINING_SITE;
+    const constructionEnabled = moonConstruction ? CITY_MINING_CONSTRUCTION_ENABLED : CITY_CONSTRUCTION_ENABLED;
+    if (construction && !constructionEnabled) return fail("city_construction_unavailable");
     const grounded = !player.flying && !this.climbs.has(id) && onMapGround(player);
     const atCity = player.mapId === site && grounded;
     const atRiverCity = player.mapId === CITY_PRODUCTION_SITE && grounded;
     const plot = RIVER_WAREHOUSE_PLOT;
-    const atPlot = atRiverCity && Math.hypot(player.x - plot.x, player.z - plot.z) <= plot.radius;
+    const atPlot = moonConstruction ? atCity : atRiverCity && Math.hypot(player.x - plot.x, player.z - plot.z) <= plot.radius;
     if (needsCity && !atCity) return fail("city_location");
     if (order?.action === "workshop_start" && !atRiverCity) return fail("city_workshop_location");
     if (construction && !atPlot) return fail("city_construction_location");
@@ -3458,11 +3461,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       if (!member) return;
       const view = store.viewCity(member, ownership, site);
-      const constructionOpen = site === CITY_PRODUCTION_SITE && CITY_CONSTRUCTION_ENABLED && this.state.cityProductionAvailable;
+      const constructionOpen = constructionEnabled && this.state.cityProductionAvailable;
       client.send("city_production_state", {site, atCity, guildId: member.id, serverNow: now,
         cityName: WORLD_MAPS[site].name, miningSite: miningAvailable ? CITY_MINING_SITE : null,
         canDisband: member.commander && guilds.canDisbandCityGuild(actor, member.id),
-        ...view, construction: constructionOpen ? {...view.construction, plot: plot.name, atPlot} : null});
+        ...view, construction: constructionOpen ? {...view.construction,
+          plot: moonConstruction ? "ด่านผนึกจันทรา" : plot.name, atPlot} : null});
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
       const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",
@@ -3488,6 +3492,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const atMoon = player.mapId === CITY_MINING_SITE && !player.flying && !this.climbs.has(id) && onMapGround(player);
     if (order?.action === "purchase_open" && !atMoon) return fail("city_purchase_location");
     if (order?.action === "mission_open" && !atMoon) return fail("city_mission_location");
+    if (order?.action === "mission_open" && order.purpose === "warehouse" && !CITY_MINING_CONSTRUCTION_ENABLED)
+      return fail("city_construction_unavailable");
     try {
       const now = Date.now(), store = characterStore.economy;
       const ownership = syncCityProduction(now, CITY_MINING_SITE);
@@ -3500,7 +3506,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       const location = {enabled, atMoon, serverNow: now};
       if (purchase) client.send("city_purchase_state", {...store.viewCityPurchase(member, ownership), ...location});
-      else client.send("city_mission_state", {...store.viewCityMissions(actor, member, ownership), ...location});
+      else client.send("city_mission_state", {...store.viewCityMissions(actor, member, ownership),
+        ...location, warehouseMissions: CITY_MINING_CONSTRUCTION_ENABLED});
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
       const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",
