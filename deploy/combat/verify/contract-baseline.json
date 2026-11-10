@@ -82,6 +82,7 @@
     "sentinel_core_skill",
     "sentinel_skill",
     "set_forest_objective",
+    "skill_hotbar_set",
     "start_forest_defense",
     "start_forest_escort",
     "start_rebirth",
@@ -196,6 +197,7 @@
     "sentinel_skill",
     "set_forest_objective",
     "shoot",
+    "skill_hotbar_set",
     "start_forest_defense",
     "start_forest_escort",
     "start_rebirth",
@@ -341,6 +343,7 @@
     "sentinel_taunt",
     "sentinel_windup",
     "sentinel_windup_result",
+    "skill_hotbar_changed",
     "summon_despawn",
     "summon_hit",
     "summon_spawn",
@@ -463,6 +466,7 @@
     "sentinel_skill_used",
     "sentinel_stun",
     "sentinel_windup",
+    "skill_hotbar_changed",
     "summon_despawn",
     "summon_hit",
     "summon_spawn",
@@ -481,12 +485,12 @@
     "world_resource_page",
     "world_resources"
   ],
-  "dynamicClientSends": 11,
+  "dynamicClientSends": 14,
   "dynamicClientReceives": 2,
   "dynamicServerSends": 2,
   "protectedSources": {
-    "MyRoomState.ts": "c47771e272b0c9ef7ecef9d353c04d160cd1f3fd186604e8560abd387628d279",
-    "CharacterStore.ts": "1af8b3b985b1ebcd9c37ad20019b4a0c0fc2847196716d18a8520461e778b881",
+    "MyRoomState.ts": "a146365638e51a0ddd7318051b1e66548ef68954c68fb1133d0c604ad2dc8594",
+    "CharacterStore.ts": "ad9e55b93a38dd33796a4966f435e91b146cf64d6cc00a043c2997d7e7763dbe",
     "AccountStore.ts": "39f50bb2aac688f4e03cb78ca3a556b05a1d1745d6797d9339de666bb07d152e",
     "EconomyStore.ts": "c16abe74eed5b9085bb3cf10c3dc15de64d89b20bbe314a9ab59eae0a6b0771a"
   }

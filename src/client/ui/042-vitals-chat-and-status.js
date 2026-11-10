@@ -41,7 +41,7 @@
   function layoutOrbArc() {
     const bar = document.querySelector(".learned-bar"); if (!bar) return;
     const wide = orbWide.matches; bar.toggleAttribute("data-wide", wide); bar.toggleAttribute("data-arc", !wide);
-    const hot = bar.dataset.skillBank==="advanced" ? $("advancedHotbar") : [...bar.querySelectorAll(".sword-hotbar")].find(h => !h.hidden), slots = hot ? [...hot.querySelectorAll("button")] : [];
+    const hot = [...bar.querySelectorAll(".sword-hotbar")].find(h => !h.hidden), slots = hot ? [...hot.querySelectorAll("button")] : [];
     const mount = $("mountButton"), all = [...bar.querySelectorAll(".sword-hotbar button"), mount, $("fly"), bar.querySelector(".orb-fx"), vitalOrb?.el].filter(Boolean);
     for (const b of all) { b.style.removeProperty("right"); b.style.removeProperty("bottom"); }
     if (wide) return;
