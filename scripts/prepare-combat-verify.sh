@@ -145,7 +145,7 @@ cp deploy/combat/central-market-integration.mjs combat-verify/central-market-int
 cp deploy/combat/EconomyRules.ts combat-verify/src/rooms/EconomyRules.ts
 cp deploy/combat/economy-store.test.ts combat-verify/src/rooms/economy-store.test.ts
 cp deploy/combat/economy-migration.test.ts combat-verify/src/rooms/economy-migration.test.ts
-cp deploy/combat/economy-integration.mjs combat-verify/economy-integration.mjs
+cp deploy/combat/economy-integration.mjs deploy/combat/lifestyle-integration.mjs combat-verify/
 cp deploy/combat/progression.test.ts combat-verify/src/rooms/progression.test.ts
 cp deploy/combat/progression-transaction.test.ts combat-verify/src/rooms/progression-transaction.test.ts
 cp deploy/combat/world-warp-rules.test.ts combat-verify/src/rooms/world-warp-rules.test.ts

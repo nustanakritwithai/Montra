@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 /** MONTRA V0.2.8: declarative world geometry. No client coordinates are trusted. */
 import { isFlightAltitude, isOnGround, isOnPlatform, isOnTop, touchesWallBody, wallBlocksShot, rayHitsBox } from "./HeightRules.js";
 import { groundSample, terrainRayClear, RIDGE_ENABLED, RIDGE_PASS, makeRidgePass, type GroundTerrain } from "./GroundTerrain.js";
@@ -69,6 +70,33 @@ export type WorldMapDefinition = Readonly<{
   paths?: readonly (readonly {x:number; z:number}[])[];
 }>;
 export const DEFAULT_MAP_ID = "ritual_village";
+export const HOME_BUILD_GRID = Object.freeze({
+  originX:-5, originZ:-3.8, step:1.35, wallWidth:1.32, wallDepth:.20, wallHeight:2.1,
+});
+
+export function homeWallBlocks(cell: number, rotation: 0 | 1, point: {x:number;z:number}) {
+  const grid = HOME_BUILD_GRID;
+  const dx = Math.abs(point.x - (grid.originX+(cell%8)*grid.step));
+  const dz = Math.abs(point.z - (grid.originZ+Math.floor(cell/8)*grid.step));
+  const halfX = (rotation ? grid.wallDepth : grid.wallWidth) / 2;
+  const halfZ = (rotation ? grid.wallWidth : grid.wallDepth) / 2;
+  const radius = .35;
+  return dx < halfX+radius && dz < halfZ+radius;
+}
+
+export const HOME_MAP: WorldMapDefinition = Object.freeze({
+  id: "personal_home",
+  name: "เรือนส่วนตัว",
+  bounds: {minX:-10,maxX:10,minZ:-10,maxZ:10},
+  spawn: {x:0,y:0,z:8},
+  obstacles: [],
+  portals: [],
+  restAreas: [{x:0,z:0,radius:15,name:"เขตเรือนส่วนตัว"}],
+  region: {range:[1,100] as const,hint:"จัดเรือน ปลูกสมุนไพร หรือทำอาหารจากเมนูเรือนส่วนตัว",noFlight:true},
+});
+
+export function homeMapId(character: string) { return "personal_home_" + createHash("sha256").update("home:"+character).digest("hex").slice(0,32); }
+export function isHomeMap(mapId: string) { return /^personal_home_[a-f0-9]{32}$/.test(mapId); }
 // The expanded village (120 m square). The canal quarter, shrine and skill training stay at the
 // centre; the temple court lies north toward the gates, the market east, rice fields west, and the
 // training ground and old graves (level 1 ghosts) along the river to the south.
@@ -166,6 +194,7 @@ export const WORLD_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freez
   return [id,world];
 })));
 export function getWorldMap(mapId: string): WorldMapDefinition | undefined {
+  if (mapId === HOME_MAP.id || isHomeMap(mapId)) return HOME_MAP;
   return Object.prototype.hasOwnProperty.call(WORLD_MAPS, mapId) ? WORLD_MAPS[mapId] : undefined;
 }
 /** Rest zones protect actors at every height, including flying attackers. */

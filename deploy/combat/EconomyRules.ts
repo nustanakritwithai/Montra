@@ -1,4 +1,4 @@
-import { MAX_FORGE_COPIES, personalItem, isBodySlot, isCardId, type CardId, type PersonalId } from "./PersonalItems.js";
+import { MAX_FORGE_COPIES, personalItem, isBodySlot, isCardId, type CardId, type FurnitureId, type HomePartId, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE, isSocketGear } from "./ItemRules.js";
 import type { TradeOffer,MarketCategory,StarterSupplyId } from "./EconomyStore.js";
 function keys(value: unknown, expected: string[]): value is Record<string, unknown> {
@@ -85,6 +85,58 @@ export function parseForge(v: unknown) {
     donor={slot:d.slot,stamp:d.stamp};
   }
   return {requestId:v.requestId, slot:v.slot, stamp:v.stamp, action:v.action as "enhance" | "reroll",donor,copies:v.copies as number|undefined,acceptBreak:v.acceptBreak===true,acceptDowngrade:v.acceptDowngrade===true};
+}
+
+export type HomeLayer = "floor" | "structure";
+const isHomeLayer = (value: unknown): value is HomeLayer => value === "floor" || value === "structure";
+const isHomeRotation = (value: unknown): value is 0 | 1 => value === 0 || value === 1;
+
+export type HomeAction = {requestId: string} & (
+  {action: "buy" | "upgrade"} |
+  {action: "place"; itemId: FurnitureId; cell: number} |
+  {action: "move"; from: number; cell: number} |
+  {action: "remove"; cell: number} |
+  {action: "place_part"; itemId: HomePartId; cell: number; rotation: 0 | 1} |
+  {action: "move_part"; layer: HomeLayer; from: number; cell: number; rotation: 0 | 1} |
+  {action: "remove_part"; layer: HomeLayer; cell: number} |
+  {action: "plant" | "water" | "harvest"; plot: number}
+);
+
+export function parseHomeAction(v: unknown): HomeAction | null {
+  const common = ["requestId", "action"];
+  if (!v || typeof v !== "object") return null;
+  const action = (v as Record<string, unknown>).action;
+  if ((action === "buy" || action === "upgrade") && keys(v, common) && requestId(v.requestId)) {
+    return {action, requestId: v.requestId};
+  }
+  if (action === "place" && keys(v, [...common, "itemId", "cell"]) && requestId(v.requestId) &&
+      personalItem(v.itemId)?.furniture && !personalItem(v.itemId)?.homeLayer && amount(v.cell, 63)) {
+    return {action, requestId: v.requestId, itemId: v.itemId as FurnitureId, cell: v.cell};
+  }
+  if (action === "move" && keys(v, [...common, "from", "cell"]) && requestId(v.requestId) &&
+      amount(v.cell, 63) && amount(v.from, 63)) return {action, requestId: v.requestId, from: v.from, cell: v.cell};
+  if (action === "remove" && keys(v, [...common, "cell"]) && requestId(v.requestId) && amount(v.cell, 63)) {
+    return {action, requestId: v.requestId, cell: v.cell};
+  }
+  if (action === "place_part" && keys(v, [...common,"itemId","cell","rotation"]) &&
+      requestId(v.requestId) && personalItem(v.itemId)?.homeLayer && amount(v.cell,63) && isHomeRotation(v.rotation)) {
+    return {action,requestId:v.requestId,itemId:v.itemId as HomePartId,cell:v.cell,rotation:v.rotation};
+  }
+  if (action === "move_part" && keys(v, [...common,"layer","from","cell","rotation"]) &&
+      requestId(v.requestId) && isHomeLayer(v.layer) && amount(v.from,63) && amount(v.cell,63) && isHomeRotation(v.rotation)) {
+    return {action,requestId:v.requestId,layer:v.layer,from:v.from,cell:v.cell,rotation:v.rotation};
+  }
+  if (action === "remove_part" && keys(v, [...common,"layer","cell"]) &&
+      requestId(v.requestId) && isHomeLayer(v.layer) && amount(v.cell,63)) {
+    return {action,requestId:v.requestId,layer:v.layer,cell:v.cell};
+  }
+  if ((action === "plant" || action === "water" || action === "harvest") && keys(v, [...common, "plot"]) &&
+      requestId(v.requestId) && amount(v.plot, 3)) return {action, requestId: v.requestId, plot: v.plot};
+  return null;
+}
+
+export function parseEconomyRequest(v: unknown) {
+  return keys(v, ["requestId"]) && requestId(v.requestId) ? v.requestId : null;
 }
 
 export function parseSellMaterial(v:unknown){

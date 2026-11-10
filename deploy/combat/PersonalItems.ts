@@ -34,6 +34,11 @@ export type PersonalDefinition = {
   forge?:ForgeProfile; craftGold?:number; sellGold?:number; healHp?:number; sourceCamp?:string;
   refinesTo?:MaterialId;
   station?:"kiln";
+  food?:true;
+  cookingLevel?: 1 | 2 | 3;
+  nutrition?: {food?: number; water?: number};
+  furniture?: true;
+  homeLayer?: "floor" | "structure";
   harvestKind?:"wood"|"stone";toolTier?:number;healMana?:number;
 };
 const STARTING_ITEMS = {
@@ -146,7 +151,11 @@ export const BOSS_GEAR_CHANCE=20;
 export function bossTreasure(id:string):BossTreasure|undefined{
   return Object.hasOwn(BOSS_TREASURES,id)?BOSS_TREASURES[id as keyof typeof BOSS_TREASURES]:undefined;
 }
-export type PersonalId = BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}` | FieldGearId | RawMaterialId | KilnMaterialId | FieldToolId | BrewId | BossTreasure["fragment"|"gear"];
+export type FoodId = "food_herbal_fish_soup" | "food_grilled_fish" | "food_spirit_stew";
+export type DrinkId = "drink_clean_water";
+export type HomePartId = "furniture_plank_floor" | "furniture_wood_wall" | "furniture_doorway";
+export type FurnitureId = "furniture_stool" | "furniture_kitchen" | "furniture_lantern" | HomePartId;
+export type PersonalId = FoodId | DrinkId | FurnitureId | BaseId | `${Stem<BaseId>}_${number}` | `ref_${string}_${number}` | FieldGearId | RawMaterialId | KilnMaterialId | FieldToolId | BrewId | BossTreasure["fragment"|"gear"];
 export type PracticeWeapon = Extract<PersonalId,`wp_${string}`>;
 export type ChestId = Extract<BaseId,`arm_${string}_chest_1`>;
 export type BodyItemId = Extract<PersonalId,`arm_${string}`|`off_${string}`|`acc_${string}`>;
@@ -347,6 +356,48 @@ function buildPersonalCatalog():Readonly<Record<PersonalId,PersonalDefinition>> 
       ...(brew==="herbal"?{healHp:18+level}:{healMana:12+Math.floor(level*.6)}),craftGold:3+Math.floor(level/8),
       recipe:[{item:`mat_herb_${tier}`,qty:brew==="herbal"?2:3},{item:`mat_wood_${tier}`,qty:1}]});
   }
+  put("food_herbal_fish_soup", {
+    name: "ต้มปลาช่อนสมุนไพร", kind: "consumable", food: true, path: "all", level: 1, stats: {},
+    healHp: 25, craftGold: 0, cookingLevel: 1, nutrition: {food: 20, water: 8},
+    recipe: [{item: "mat_fish_common", qty: 1}, {item: "mat_herb_1", qty: 1}],
+  });
+  put("food_grilled_fish", {
+    name: "ปลาย่างสมุนไพร", kind: "consumable", food: true, path: "all", level: 1, stats: {},
+    healHp: 40, craftGold: 2, cookingLevel: 2, nutrition: {food: 40},
+    recipe: [{item: "mat_fish_silver", qty: 1}, {item: "mat_herb_1", qty: 1}, {item: "mat_charcoal_1", qty: 1}],
+  });
+  put("food_spirit_stew", {
+    name: "แกงปลาวิญญาณ", kind: "consumable", food: true, path: "all", level: 1, stats: {},
+    healMana: 28, craftGold: 4, cookingLevel: 3, nutrition: {food: 50, water: 15},
+    recipe: [{item: "mat_fish_spirit", qty: 1}, {item: "mat_herb_1", qty: 2}],
+  });
+  put("drink_clean_water", {
+    name: "น้ำสะอาด", kind: "consumable", path: "all", level: 1, stats: {}, nutrition: {water: 35},
+  });
+  put("furniture_stool", {
+    name: "ม้านั่งไม้", kind: "material", furniture: true, path: "all", level: 1, stats: {},
+    craftGold: 5, recipe: [{item: "mat_wood_1", qty: 2}],
+  });
+  put("furniture_kitchen", {
+    name: "เตาครัวบ้าน", kind: "material", furniture: true, path: "all", level: 1, stats: {},
+    craftGold: 15, recipe: [{item: "mat_wood_1", qty: 3}, {item: "mat_raw_stone_1", qty: 3}],
+  });
+  put("furniture_lantern", {
+    name: "โคมอาคม", kind: "material", furniture: true, path: "all", level: 1, stats: {},
+    craftGold: 8, recipe: [{item: "mat_wood_1", qty: 1}, {item: "mat_metal_1", qty: 1}],
+  });
+  put("furniture_plank_floor", {
+    name: "พื้นไม้กระดาน", kind: "material", furniture: true, homeLayer: "floor", path: "all", level: 1, stats: {},
+    craftGold: 0, recipe: [{item: "mat_wood_1", qty: 1}],
+  });
+  put("furniture_wood_wall", {
+    name: "ผนังไม้", kind: "material", furniture: true, homeLayer: "structure", path: "all", level: 1, stats: {},
+    craftGold: 5, recipe: [{item: "mat_wood_1", qty: 2}],
+  });
+  put("furniture_doorway", {
+    name: "ช่องประตูไม้", kind: "material", furniture: true, homeLayer: "structure", path: "all", level: 1, stats: {},
+    craftGold: 8, recipe: [{item: "mat_wood_1", qty: 2}, {item: "mat_metal_1", qty: 1}],
+  });
   // Replace one ore with a smelted ingot in metal weapons and in higher-level metal gear/tools.
   // Apply after field recipes have been derived so the same ingot is never charged twice.
   for(const item of Object.values(result)){

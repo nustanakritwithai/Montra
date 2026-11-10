@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110" />
+  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -146,6 +146,7 @@
         <section id="menu-character" data-journal-panel="character" aria-label="ตัวละครและวิชา"><div class="menu-tiles">
           <button id="menuCharacter" type="button"><span class="drawer-nav-icon" data-menu-icon="character" aria-hidden="true">๛</span><strong>สถานะตัวละคร<small>สเตตัส บัฟ และอาชีพ</small></strong></button>
           <button id="skillLoadoutButton" type="button" aria-label="จัดสกิล · ปรับแต่งช่องสกิล" aria-controls="drawer" hidden><span class="drawer-nav-icon" data-menu-icon="skills" aria-hidden="true">✧</span><strong>จัดสกิล<small>เลือกวิชาลง 4 ช่องลัด</small></strong></button>
+          <button id="menuHome" type="button"><span class="drawer-nav-icon" aria-hidden="true">⌂</span><strong>เรือนส่วนตัว<small>จัดเรือน ทำสวน ทำอาหาร และดูความหิว</small></strong></button>
           <button id="menuBag" type="button"><span class="drawer-nav-icon" data-menu-icon="bag" aria-hidden="true">▣</span><strong>กระเป๋า<small>ใช้ยาและสวมอาวุธ</small></strong></button>
           <button id="swordTreeButton" class="book-entry" type="button"><span class="drawer-nav-icon" data-menu-icon="skills">⚔</span><strong>ผังวิชาดาบ<small>Knowledge Graph 4 ทิศ</small></strong></button>
           <button id="muayBookButton" class="book-entry" type="button" hidden><span>✊</span>ตำราอาชีพ</button>
@@ -287,6 +288,6 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
   <script src="./audio.js?v=0.16.1-audio-contracts" defer></script>
-  <script src="./main.js?v=0.20.5-quest-autowalk" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
+  <script src="./main.js?v=0.20.5-quest-autowalk-personal-housing" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>

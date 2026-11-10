@@ -34,6 +34,7 @@
       addEventListener("keydown", e => { if (e.key === "Escape" && !fly.hidden) { close(); menuBtn.focus({preventScroll:true}); } });
     } }
   $("menuBag").onclick=openBag;
+  $("menuHome").onclick=openHomePanel;
   $("menuChat").onclick=openChat;
   $("noticeParty").onclick=openParty;
   $("noticeGuild").onclick=openGuild;
