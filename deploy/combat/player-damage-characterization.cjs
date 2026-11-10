@@ -27,6 +27,7 @@ updateOccultEffects|target.hp=Math.min(target.maxHp,target.hp+this.healAmount(ow
 applyStats|player.hp=Math.min(player.maxHp,player.hp/prior.hp*(player.maxHp/baseHp))
 applyStats|player.hp=Math.min(player.hp,player.maxHp)
 <top>|current.hp=Math.min(current.maxHp,current.hp+result.healed)
+<top>|player.hp=hp
 applyMonsterHit|monster.hp=Math.max(0,monster.hp-damage)
 applyPlayerHit|victim.hp=Math.max(0,victim.hp-damage)
 finishRescue|target.hp=Math.min(target.maxHp,target.hp+event.amount)
