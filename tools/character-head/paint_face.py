@@ -136,7 +136,7 @@ def paint(S, HEAD_V, Y_TOP, Y_BOT, base_r, sculpt, almond, EYE_X, EYE_Y, EYE_PAT
         lum = photo.mean(2)
         blur = np.asarray(Image.fromarray((lum * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(28)), np.float32) / 255
         target = col.mean(2).mean()
-        photo = np.clip(photo * ((target / np.maximum(blur, .05)) ** .55)[..., None], 0, 1)
+        photo = np.clip(1.22 * photo * ((target / np.maximum(blur, .05)) ** .65)[..., None], 0, 1)
         pm = sm(80, 64, ATH) * sm(1.524, 1.536, Y) * sm(1.703, 1.688, Y)
         # match the painted skin round the sides (and the ears) to the photo's skin tone
         zone = (ATH > 35) & (ATH < 60) & (Y > 1.56) & (Y < 1.62)
@@ -160,27 +160,48 @@ def paint(S, HEAD_V, Y_TOP, Y_BOT, base_r, sculpt, almond, EYE_X, EYE_Y, EYE_PAT
     col = col * (1 - .25 * scalp[..., None])
     col = col * (1 - hair[..., None]) + hair[..., None] * hairc
 
-    # seam: blend into the original neck colour along the bottom row
+    # ---- body: one skin with the face ----
+    # Face and body came from different sources (the face from the portrait, the body from the old
+    # atlas, paler and pinker). Shift the body's skin to the face's tone; tattoo ink, trousers and dark
+    # detail keep their colour because the shift is weighted by how skin-like each texel is.
+    zone = (ATH > 22) & (ATH < 55) & (Y > 1.572) & (Y < 1.612)
+    face_tone = col[zone].mean(0)
+    body = base[S // 2:]
+    lumb = body.mean(2); chroma = body[..., 0] - body[..., 2]
+    skinlike = np.clip((lumb - .22) / .12, 0, 1) * np.clip((chroma - .06) / .08, 0, 1) * (body[..., 0] >= body[..., 1])
+    rr0, rr1 = int(.5 * (.24) * S), int(.5 * (.40) * S)            # chest rows of the body half
+    cc0, cc1 = int(.30 * S), int(.70 * S)
+    ref = body[rr0:rr1, cc0:cc1][skinlike[rr0:rr1, cc0:cc1] > .8]
+    body_tone = ref.mean(0)
+    gain = face_tone / np.maximum(body_tone, 1e-3)
+    # Rendered side by side the body still reads ~15% lighter and pinker than the face (the portrait keeps
+    # more contrast and darker detail than the smooth body paint), so the body goes a step further.
+    gain = gain * np.array([.93, .91, .86])
+    print('face tone', (face_tone * 255).round(), 'body tone', (body_tone * 255).round(), 'gain', gain.round(3))
+    body[:] = body * (1 - skinlike[..., None]) + skinlike[..., None] * np.clip(body * gain, 0, 1)
+
+    # The old atlas has a near-black seam line between its head band and the body (old v .145-.165), on the
+    # top of the neck. Mirror the clean neck skin just below it up over those rows (real texture, no smear),
+    # a little shaded under the jaw (body half of the atlas: v' = .5 + .5 v).
+    # soften the old neck's dark tendon strokes (old v .168-.215): blur that band and fade it back in
+    q0, q1 = int((.5 + .5 * .166) * S), int((.5 + .5 * .218) * S)
+    bandim = Image.fromarray((np.clip(base[q0:q1], 0, 1) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(7))
+    soft = np.asarray(bandim, np.float32) / 255
+    wv = np.sin(np.linspace(0, np.pi, q1 - q0)) ** .5
+    base[q0:q1] = base[q0:q1] * (1 - .75 * wv[:, None, None]) + .75 * wv[:, None, None] * soft
+    r0, r1 = int((.5 + .5 * .138) * S), int((.5 + .5 * .168) * S)
+    n = r1 - r0
+    base[r0:r1] = base[r1:r1 + n][::-1] * np.linspace(.90, 1, n)[:, None, None]
+
+    # seam: the bottom of the head blends into the (recoloured) neck right below it, per column
     th0, u0 = ring0_u
     o = np.argsort(th0); u_of_th = np.interp(th, th0[o], u0[o], period=2 * np.pi)
-    ob = np.asarray(orig_base, np.float32) / 255
-    rowv = int(.174 * ob.shape[0])
-    neck = ob[rowv, np.clip((u_of_th * ob.shape[1]).astype(int), 0, ob.shape[1] - 1)]
-    sb = sm(Y_BOT + .010, Y_BOT + .001, Y)[..., None]
+    rs = int((.5 + .5 * .150) * S)
+    neck = base[rs - 2:rs + 3].mean(0)[np.clip((u_of_th * S).astype(int), 0, S - 1)]
+    sb = sm(Y_BOT + .016, Y_BOT + .001, Y)[..., None] * (1 - hair[..., None])
     col = col * (1 - sb) + sb * neck[None, :, :]
 
     base[:H] = np.clip(col, 0, 1)
-    # The old atlas has a near-black seam line between its head band and the body (old v .145-.165), which
-    # falls on the top of the neck. Replace those rows with the clean neck skin just below, slightly
-    # shaded under the jaw (body half of the atlas: v' = .5 + .5 v).
-    r0, r1, rs = int((.5 + .5 * .138) * S), int((.5 + .5 * .168) * S), int((.5 + .5 * .174) * S)
-    shade = np.linspace(.88, 1, r1 - r0)[:, None, None]
-    row = base[rs - 2:rs + 3].mean(0)
-    k = np.ones(15) / 15; row = np.stack([np.convolve(np.pad(row[:, c], 7, mode='wrap'), k, 'valid') for c in range(3)], 1)
-    base[r0:r1] = row[None, :, :] * shade
-    # feather the copied band into the original neck below it
-    fb = int(.012 * S); t = np.linspace(1, 0, fb)[:, None, None]
-    base[r1:r1 + fb] = base[r1:r1 + fb] * (1 - t * .6) + row[None] * shade[-1] * t * .6
     # ORM: occlusion (baked lightly), roughness by zone, no metal
     rough = np.full((H, Wd), .56, np.float32)
     rough -= .10 * g(X, .010) * g(Y - 1.598, .010) * front    # nose tip

@@ -35,6 +35,16 @@ for im in gl['images']:
 base_img, nrm_img, orm_img = imgs[0], imgs[1], imgs[2]
 
 Y_BOT, Y_TOP = 1.511, 1.75
+
+# The upper neck was thin for the new jaw (head on a stalk): widen it toward the head, 0% at the base of
+# the neck (1.456) rising to 15% at the head seam, before the head is built so the seam ring matches.
+def smooth01(a, b, x): t = np.clip((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t)
+# Above the seam the widening fades out over the jaw at the sides and back only (the chin stays put).
+neckband = (P[:, 1] > 1.40) & (P[:, 1] < 1.552)
+cth = P[:, 2] / np.maximum(np.hypot(P[:, 0], P[:, 2]), 1e-6)
+side = np.clip(1 - np.maximum(cth, 0) * 1.4, 0, 1)
+ks = 1 + (.08 * smooth01(1.405, 1.456, P[:, 1]) + .16 * smooth01(1.456, 1.500, P[:, 1])) * np.where(P[:, 1] > Y_BOT + .002, (1 - smooth01(Y_BOT, 1.550, P[:, 1])) * side, 1)
+P[neckband, 0] *= ks[neckband]; P[neckband, 2] *= ks[neckband]
 HEAD_V = 0.40            # head region occupies v in [0, HEAD_V] of the new atlas
 NJ = 25
 
@@ -110,6 +120,7 @@ def sculpt(x, y, front):
     d += .0058 * g(y - 1.537, .0085) * g(x, .018)
     d -= .0018 * g(y - 1.5525, .0024) * g(x, .016)
     d += .0042 * g(ax - .046, .008) * g(y - 1.539, .010)
+    d += .0050 * smooth(.030, .055, ax) * g(y - 1.528, .010)          # jaw angle, broader toward the neck
     # thin lips, mouth line with the corners a little down, philtrum
     d += .0030 * g(y - 1.5712, .0026) * g(x, .0165)
     d += .0034 * g(y - 1.5622, .0030) * g(x, .0150)
@@ -278,8 +289,10 @@ for i, p in enumerate(newP):
 for ids in key.values():
     if len(ids) > 1: s = nn[ids].sum(0); nn[ids] = s
 nn /= np.linalg.norm(nn, axis=1, keepdims=True) + 1e-12
+seam_fix = {}
 for i, r in enumerate(newRole):
-    if not isinstance(r, int): nn[i] = N[r[1]]
+    if not isinstance(r, int):
+        n = nn[i] + N[r[1]]; n /= np.linalg.norm(n) + 1e-12; nn[i] = n; seam_fix[r[1]] = n
 
 # ---------- assemble the mesh ----------
 headset = P[:, 1] > Y_BOT + .002
@@ -289,6 +302,7 @@ inhead = (P[:, 1] >= Y_BOT - .001)
 keep_tris = I[~inhead[I].all(1)]
 used = np.unique(keep_tris)
 remap = -np.ones(len(P), int); remap[used] = np.arange(len(used))
+for v, n in seam_fix.items(): N[v] = n
 P2, N2, UV2, T2, J2, W2 = P[used], N[used], UV[used], T[used], J[used], W[used]
 UV2 = np.stack([UV2[:, 0], .5 + .5 * UV2[:, 1]], 1)
 off = len(used)
