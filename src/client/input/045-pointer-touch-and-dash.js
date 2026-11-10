@@ -87,7 +87,7 @@
       (mode === "live" && mesh.metadata?.pkPlayerId &&
        mesh.metadata.pkPlayerId !== localId)
     ));
-    if (!picked?.hit) return;
+    if (!picked?.hit) {steerSailingAt(px,py);return;}
     cancelQuestNavigation();
     const hitMesh=picked.pickedMesh;
     if (hitMesh?.metadata?.sailingBoatId) {clickSailingDeck(hitMesh.metadata.sailingBoatId,picked.pickedPoint);return;}
@@ -158,6 +158,8 @@
       } else {
         requestClimb();
       }
+    } else if (boatAtHelm()) {
+      steerSailingAt(px,py);
     } else if(hitMesh?.metadata?.walkable && picked.pickedPoint) {
       pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
     }
