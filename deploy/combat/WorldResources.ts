@@ -1,6 +1,7 @@
 import { WORLD_MAPS, WORLD_EXPANSION, groundAt, isSafeWorldPoint, onMapGround, provinceShotClear, type WorldMapDefinition } from "./WorldMaps.js";
 import { MATERIAL_LEVELS, materialTier, type MaterialId } from "./PersonalItems.js";
 import {SCENERY_NODES} from "./SceneryNodes.js";
+import {CITY_MINING_ENABLED, CITY_MINING_SITE, CITY_PRODUCTION_ENABLED} from "./CityProductionRules.js";
 
 export type ResourceKind="wood"|"stone"|"herb";
 export type ResourceNode={id:string;mapId:string;kind:ResourceKind;x:number;z:number;radius:number;tier:number;capacity:number;period:number;existing:boolean;access?:{x:number;z:number}};
@@ -63,6 +64,11 @@ for(const map of Object.values(WORLD_MAPS)){
       if(!node.access)nodes.delete(node.id);
     }
   }
+}
+if (WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED) {
+  const moon = WORLD_MAPS[CITY_MINING_SITE];
+  for (const [index, [x,z]] of [[84,-57],[89,-60],[87,-67]].entries())
+    place(moon,"moon-ore-"+(index+1),"stone",x,z,2,.8);
 }
 export const resourceNodes=(mapId:string)=>[...nodes.values()].filter(n=>n.mapId===mapId);
 export const getResourceNode=(id:string)=>nodes.get(id);

@@ -277,10 +277,12 @@
         if(drawerActive==="strategy"){updateAtlasOwner();updateAtlasWarTimes();}
         if(drawerActive==="guild")renderGuild();
         const local=message.local;
-        if(drawerActive==="cityProduction" && (cityState?.construction || cityWorkshop?.enabled) && cityRecoveryReady()){
-          const site=cityWorkshop?.site || cityState.site;
-          if(previousOwners?.[site]!==message.owners?.[site] ||
-             (local?.site===site && local.phase!==(previousLocal?.site===site ? previousLocal.phase : undefined)))
+        if(drawerActive==="cityProduction" && (cityState || cityWorkshop?.enabled) && cityRecoveryReady()){
+          const observed=[cityState?.site,cityWorkshop?.site].filter(Boolean);
+          const moved=local?.site!==previousLocal?.site &&
+            [local?.site,previousLocal?.site].some(site=>site && site===cityState?.miningSite);
+          if(moved || observed.some(site=>previousOwners?.[site]!==message.owners?.[site] ||
+             (local?.site===site && local.phase!==(previousLocal?.site===site ? previousLocal.phase : undefined))))
             joined.send("get_city_production",{});
         }
         if(local?.site===activeMapId){

@@ -5,7 +5,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const source = readFileSync(join(__dirname, "../../src/client/ui/056-party-guild-and-rebirth.js"), "utf8");
-const start = source.indexOf("  const cityRawItems=");
+const start = source.indexOf("  const cityProduct=");
 const end = source.indexOf("  let rebirthState=", start);
 assert(start >= 0 && end > start);
 
@@ -194,4 +194,22 @@ test("a visitor can claim a finished personal job after workshop intake is disab
   f.$("cityWorkshopClaim").onclick();
   assert.deepEqual(f.wire.at(-1).payload,{requestId:f.wire.at(-1).payload.requestId,
     action:"workshop_claim",jobId:"personal-job"});
+});
+
+test("the Moon Pass panel uses its recipe, bag slots and real market item", () => {
+  const f=fixture(),ore="mat_raw_stone_2",metalTwo="mat_metal_2";
+  f.ctx.inventoryState.slots=[{itemId:wood,quantity:10},{itemId:ore,quantity:4},{itemId:metal,quantity:4}];
+  f.state({site:"moon_pass",cityName:"ด่านผนึกจันทรา",miningSite:"moon_pass",epoch:2,
+    stock:[{item:ore,quantity:3},{item:metal,quantity:2},{item:metalTwo,quantity:1}],
+    recipe:{inputs:[{item:metal,amount:1},{item:ore,amount:2}],output:metalTwo,amount:1,durationMs:120_000},
+    listings:[{id:"moon-metal",item:metalTwo,quantity:2,price:30}]});
+  const summary=f.nodes.cityProductionContent.children[0];
+  assert.equal(summary.children[0].textContent,"ด่านผนึกจันทรา");
+  const select=summary.children.find(el=>el.tag==="label").children[0];
+  assert.deepEqual(select.children.map(option=>option.value),["1","2"]);
+  f.submit("ฝากวัตถุดิบ",2);
+  const sent=f.wire.at(-1).payload;
+  assert.deepEqual(sent,{requestId:sent.requestId,action:"deposit",epoch:2,slot:1,item:ore,amount:2});
+  const listed=f.nodes.cityProductionContent.children.find(group=>group.children[0].textContent==="ประกาศขายของกิลด์");
+  assert.match(listed.children[1].children[0].textContent,/mat_metal_2/);
 });

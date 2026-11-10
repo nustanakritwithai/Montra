@@ -12,8 +12,9 @@ import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem
 import type {SalvageOrder} from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
 import {
-  CITY_RAW_ITEMS, CITY_RECIPE, type CityDisband, type CityFactoryOrder, type CityMember, type CityOrder,
-  type CityOwnership, type CityWorkshopOrder,
+  CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES, isWarehouseOrder,
+  type CityDisband, type CityFactoryOrder, type CityMember, type CityOrder, type CityOwnership, type CitySite,
+  type CityWorkshopOrder,
 } from "./CityProductionRules.js";
 
 export const STARTER_GOLD = 1000;
@@ -185,13 +186,14 @@ export class EconomyStore {
     this.cityTimer = setInterval(sweep, 5000);
     this.cityTimer.unref();
   }
-  syncCity(readOwnership: (previous: number | null, now: number) => CityOwnership, now: number): CityOwnership {
-    const ownership = readOwnership(this.city.epoch(), now);
-    this.transaction(() => this.city.reconcile(ownership, now));
+  syncCity(readOwnership: (previous: number | null, now: number) => CityOwnership, now: number,
+    site: CitySite = CITY_PRODUCTION_SITE): CityOwnership {
+    const ownership = readOwnership(this.city.epoch(site), now);
+    this.transaction(() => this.city.reconcile(ownership, now, site));
     return ownership;
   }
-  viewCity(member: CityMember, ownership: CityOwnership) {
-    return this.city.view(member, ownership);
+  viewCity(member: CityMember, ownership: CityOwnership, site: CitySite = CITY_PRODUCTION_SITE) {
+    return this.city.view(member, ownership, site);
   }
   viewCityWorkshop(actor: string, ownership: CityOwnership, now: number) {
     return this.city.workshopView(actor, ownership, now);
@@ -231,11 +233,11 @@ export class EconomyStore {
   cityDisbandClosed(actor: string, guild: string): boolean {
     return this.city.closureActor(guild) === actor;
   }
-  closeCityGuild(disband: CityDisband, readOwnership: (previous: number | null) => CityOwnership): void {
-    const ownership = readOwnership(this.city.epoch());
+  closeCityGuild(disband: CityDisband, readOwnership: (previous: number | null, site: CitySite) => CityOwnership): void {
+    const ownerships = new Map(CITY_SITES.map(site => [site, readOwnership(this.city.epoch(site), site)] as const));
     this.transaction(() => {
       this.account(disband.actor);
-      this.city.disband(disband, ownership);
+      this.city.disband(disband, ownerships);
     });
   }
   cityDisbandClaims(actor: string) {
@@ -257,7 +259,8 @@ export class EconomyStore {
       return {guildId, item, amount};
     });
   }
-  cityOrder(actor: string, member: CityMember, order: CityFactoryOrder, ownership: CityOwnership, now: number) {
+  cityOrder(actor: string, member: CityMember, order: CityFactoryOrder, ownership: CityOwnership, now: number,
+    site: CitySite = CITY_PRODUCTION_SITE) {
     const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
     return this.once<Record<string, number | string>>(actor, order.requestId, "city_production", intent, () => {
       if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
@@ -269,12 +272,13 @@ export class EconomyStore {
         this.put(actor, account);
         return {quantity: order.amount};
       }
-      this.city.requireCity(member, order.epoch, ownership);
+      this.city.requireCity(member, order.epoch, ownership, site);
+      if (isWarehouseOrder(order) && site !== CITY_PRODUCTION_SITE) throw Error("city_construction_unavailable");
       switch (order.action) {
-        case "build": return this.city.build(order.epoch, member);
+        case "build": return this.city.build(order.epoch, member, site);
         case "start":
-        case "start_fast": return this.city.start(order.epoch, member, now, order.action === "start_fast");
-        case "list": return this.city.list(order.epoch, member, order.amount, order.price);
+        case "start_fast": return this.city.start(order.epoch, member, now, order.action === "start_fast", site);
+        case "list": return this.city.list(order.epoch, member, order.amount, order.price, site);
         case "warehouse_start": return this.city.warehouseStart(order.epoch, member, ownership);
         case "warehouse_allocate":
           return this.city.warehouseContribute(order.epoch, member, ownership, now, order.item, order.amount, "stock");
@@ -284,7 +288,7 @@ export class EconomyStore {
           if (account.inventory.slots[order.slot]?.itemId !== order.item) throw Error("item_unavailable");
           const removed = take(account.inventory, order.slot, order.amount);
           let result: Record<string, string | number> = {quantity: order.amount};
-          if (order.action === "deposit") this.city.deposit(order.epoch, member, order.item, order.amount);
+          if (order.action === "deposit") this.city.deposit(order.epoch, member, order.item, order.amount, site);
           else result = this.city.warehouseContribute(order.epoch, member, ownership, now, order.item, order.amount, "bag");
           account.inventory = removed.inventory;
           this.put(actor, account);

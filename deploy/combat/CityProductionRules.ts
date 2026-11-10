@@ -1,13 +1,20 @@
 import {RIVER_CITY} from "./RiverCity.js";
 
 export const CITY_PRODUCTION_SITE = RIVER_CITY;
+export const CITY_MINING_SITE = "moon_pass";
+export const CITY_SITES = [CITY_PRODUCTION_SITE, CITY_MINING_SITE] as const;
+export type CitySite = typeof CITY_SITES[number];
 export const CITY_PRODUCTION_ENABLED = process.env.MONTRA_CITY_PRODUCTION === "1";
 export const CITY_CONSTRUCTION_ENABLED = process.env.MONTRA_CITY_CONSTRUCTION === "1";
 export const CITY_WORKSHOP_ENABLED = process.env.MONTRA_CITY_WORKSHOP === "1";
+export const CITY_MINING_ENABLED = process.env.MONTRA_CITY_MINING === "1";
 export const CITY_RAW_ITEMS = ["mat_raw_wood_1", "mat_raw_stone_1"] as const;
 export const CITY_PRODUCT = "mat_metal_1";
-export const CITY_ITEMS = [...CITY_RAW_ITEMS, CITY_PRODUCT] as const;
+export const CITY_MINING_ORE = "mat_raw_stone_2";
+export const CITY_MINING_PRODUCT = "mat_metal_2";
+export const CITY_ITEMS = [...CITY_RAW_ITEMS, CITY_PRODUCT, CITY_MINING_ORE, CITY_MINING_PRODUCT] as const;
 export type CityItem = typeof CITY_ITEMS[number];
+type CityInput = Exclude<CityItem, typeof CITY_MINING_PRODUCT>;
 export type CityAsset = CityItem | "gold";
 
 export const CITY_FACTORY_COSTS = [
@@ -27,6 +34,11 @@ export const CITY_DURATION_MS = [0, 120_000, 60_000] as const;
 export const CITY_RUSH_GOLD = 15;
 export const CITY_WORKSHOP_FEE = 5;
 export const CITY_WORKSHOP_SLOTS = 4;
+export const CITY_LINES = {
+  [CITY_PRODUCTION_SITE]: {inputs: CITY_RAW_ITEMS, output: CITY_PRODUCT, recipe: CITY_RECIPE},
+  [CITY_MINING_SITE]: {inputs: [CITY_PRODUCT, CITY_MINING_ORE], output: CITY_MINING_PRODUCT,
+    recipe: {wood: 1, stone: 2, quantity: 1}},
+} as const;
 
 type WarehouseOrder =
   {action: "warehouse_start"; epoch: number} |
@@ -41,7 +53,7 @@ export type CityWorkshopOrder = {requestId: string} & (
 export type CityFactoryOrder = {requestId: string} & (
   WarehouseOrder |
   {action: "build" | "start" | "start_fast"; epoch: number} |
-  {action: "deposit"; epoch: number; slot: number; item: typeof CITY_RAW_ITEMS[number]; amount: number} |
+  {action: "deposit"; epoch: number; slot: number; item: CityInput; amount: number} |
   {action: "list"; epoch: number; amount: number; price: number} |
   {action: "cancel"; listingId: string} |
   {action: "reclaim"; epoch: number; item: CityItem; amount: number}
@@ -98,7 +110,8 @@ export function parseCityOrder(input: unknown): CityOrder | null {
       return keys("epoch") ? order as CityOrder : null;
     case "deposit":
       return keys("epoch", "slot", "item", "amount") && integer(order.slot, 0, 11) &&
-        CITY_RAW_ITEMS.some(item => item === order.item) && integer(order.amount, 1, 99) ? order as CityOrder : null;
+        (CITY_RAW_ITEMS.some(item => item === order.item) || order.item === CITY_PRODUCT || order.item === CITY_MINING_ORE) &&
+        integer(order.amount, 1, 99) ? order as CityOrder : null;
     case "list":
       return keys("epoch", "amount", "price") && integer(order.amount, 1, 99) &&
         integer(order.price, 1, 1_000_000_000) ? order as CityOrder : null;
@@ -108,7 +121,7 @@ export function parseCityOrder(input: unknown): CityOrder | null {
         integer(order.amount, 1, 99) ? order as CityOrder : null;
     case "warehouse_contribute":
       return keys("epoch", "slot", "item", "amount") && integer(order.slot, 0, 11) &&
-        CITY_ITEMS.some(item => item === order.item) && integer(order.amount, 1, 99) ? order as CityOrder : null;
+        CITY_WAREHOUSE_MATERIALS.some(({item}) => item === order.item) && integer(order.amount, 1, 99) ? order as CityOrder : null;
     default:
       return null;
   }

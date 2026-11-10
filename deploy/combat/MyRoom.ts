@@ -76,8 +76,8 @@ import { parseSellMaterial, parseSalvage, parseCraft, parseForge, parseClaimForg
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import {
-  CITY_CONSTRUCTION_ENABLED, CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE, CITY_WORKSHOP_ENABLED,
-  isWarehouseOrder, parseCityOrder, type CityOrder,
+  CITY_CONSTRUCTION_ENABLED, CITY_MINING_ENABLED, CITY_MINING_SITE, CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE,
+  CITY_SITES, CITY_WORKSHOP_ENABLED, isWarehouseOrder, parseCityOrder, type CityOrder, type CitySite,
 } from "./CityProductionRules.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
@@ -96,12 +96,18 @@ import { mapsWithServiceNpcs, serviceNpcsFor } from "./ServiceNpcs.js";
 
 const mapsWithServices=mapsWithServiceNpcs();
 const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices}):"";
-function syncCityProduction(now: number) {
+function syncCityProduction(now: number, site: CitySite = CITY_PRODUCTION_SITE) {
   const guilds = guildStore(), store = characterStore.economy;
   const pending = guilds.pendingCityDisbands();
   for (const disband of pending) guilds.settleCityDisband(store, disband);
   if (pending.length) notifyGuilds();
-  return store.syncCity(previous => guilds.war.government.cityOwnership(previous), now);
+  return store.syncCity(previous => guilds.war.government.cityOwnership(previous, site), now, site);
+}
+function sweepCityProduction(now: number): void {
+  for (const site of CITY_SITES) {
+    try { syncCityProduction(now, site); }
+    catch (error) { console.error("MONTRA city production settlement failed", site, error); }
+  }
 }
 const battlefieldWorldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:WORLD_MAPS},
   (key,value)=>key==="boss" && value?.id?.startsWith("boss_")?undefined:value):"";
@@ -3355,16 +3361,21 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const actor = this.economyId(client, fail);
     if (!actor) return;
     const player = this.state.players.get(id)!;
-    const atCity = player.mapId === CITY_PRODUCTION_SITE && !player.flying && !this.climbs.has(id) && onMapGround(player);
+    const miningAvailable = this.state.cityProductionAvailable && CITY_MINING_ENABLED;
+    const site = miningAvailable && player.mapId === CITY_MINING_SITE ? CITY_MINING_SITE : CITY_PRODUCTION_SITE;
+    const grounded = !player.flying && !this.climbs.has(id) && onMapGround(player);
+    const atCity = player.mapId === site && grounded;
+    const atRiverCity = player.mapId === CITY_PRODUCTION_SITE && grounded;
     const plot = RIVER_WAREHOUSE_PLOT;
-    const atPlot = atCity && Math.hypot(player.x - plot.x, player.z - plot.z) <= plot.radius;
+    const atPlot = atRiverCity && Math.hypot(player.x - plot.x, player.z - plot.z) <= plot.radius;
     if (needsCity && !atCity) return fail("city_location");
+    if (order?.action === "workshop_start" && !atRiverCity) return fail("city_workshop_location");
     if (construction && !atPlot) return fail("city_construction_location");
     try {
       const now = Date.now(), store = characterStore.economy, guilds = guildStore();
       if (recovery) {
         if (order?.action === "disband") {
-          store.startCityProductionSweeper(syncCityProduction);
+          store.startCityProductionSweeper(sweepCityProduction);
           if (guilds.cityDisbandPending(order.guildId) || guilds.war.member(actor)?.id === order.guildId ||
               !store.cityDisbandClosed(actor, order.guildId)) {
             const disband = guilds.beginCityDisband(actor, order.guildId, now);
@@ -3387,7 +3398,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.syncEconomy(client, actor);
         client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
       }
-      const ownership = syncCityProduction(now);
+      const ownership = syncCityProduction(now, site);
       if (order?.action === "workshop_start") {
         const result = store.startCityWorkshop(actor, order, ownership, now);
         this.syncEconomy(client, actor);
@@ -3397,20 +3408,22 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const guildOrder = order && order.action !== "workshop_start" && order.action !== "workshop_claim";
       if (guildOrder) {
         if (!member) return fail("city_not_member");
-        const result = store.cityOrder(actor, member, order, ownership, now);
+        const result = store.cityOrder(actor, member, order, ownership, now, site);
         if (order.action === "deposit" || order.action === "reclaim" || order.action === "warehouse_contribute")
           this.syncEconomy(client, actor);
         client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
       }
       const workshopEnabled = this.state.cityProductionAvailable && CITY_WORKSHOP_ENABLED;
       if (workshopEnabled || order?.action === "workshop_claim" || store.hasCityWorkshopJob(actor)) {
-        const workshop = store.viewCityWorkshop(actor, ownership, now);
-        client.send("city_workshop_state", {...workshop, site: CITY_PRODUCTION_SITE, enabled: workshopEnabled, atCity, serverNow: now});
+        const riverOwnership = site === CITY_PRODUCTION_SITE ? ownership : syncCityProduction(now);
+        const workshop = store.viewCityWorkshop(actor, riverOwnership, now);
+        client.send("city_workshop_state", {...workshop, site: CITY_PRODUCTION_SITE, enabled: workshopEnabled, atCity: atRiverCity, serverNow: now});
       }
       if (!member) return;
-      const view = store.viewCity(member, ownership);
-      const constructionOpen = CITY_CONSTRUCTION_ENABLED && this.state.cityProductionAvailable;
-      client.send("city_production_state", {site: CITY_PRODUCTION_SITE, atCity, guildId: member.id, serverNow: now,
+      const view = store.viewCity(member, ownership, site);
+      const constructionOpen = site === CITY_PRODUCTION_SITE && CITY_CONSTRUCTION_ENABLED && this.state.cityProductionAvailable;
+      client.send("city_production_state", {site, atCity, guildId: member.id, serverNow: now,
+        cityName: WORLD_MAPS[site].name, miningSite: miningAvailable ? CITY_MINING_SITE : null,
         canDisband: member.commander && guilds.canDisbandCityGuild(actor, member.id),
         ...view, construction: constructionOpen ? {...view.construction, plot: plot.name, atPlot} : null});
     } catch (error) {
@@ -5284,9 +5297,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       await this.setPrivate(true);
     }
     this.state.territoryWarAvailable=WORLD_EXPANSION;
-    if (characterStore.economyEnabled && !this.field &&
-        ((CITY_PRODUCTION_ENABLED && WORLD_EXPANSION) || guildStore().pendingCityDisbands().length))
-      characterStore.economy.startCityProductionSweeper(syncCityProduction);
+    if (characterStore.economyEnabled && !this.field && (WORLD_EXPANSION || guildStore().pendingCityDisbands().length))
+      characterStore.economy.startCityProductionSweeper(sweepCityProduction);
     this.state.forestObjectivesAvailable=WORLD_EXPANSION && !this.field;
     if(WORLD_EXPANSION && !this.field && process.env.MONTRA_DIRECTOR_ENABLED!=="0")worldDirector.restore();
     if (characterStore.economyEnabled) this.state.craftRecipe = JSON.stringify(SHRINE_RECIPE);
