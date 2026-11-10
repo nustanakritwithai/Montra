@@ -106,6 +106,7 @@ const REPLACEMENT_SKILL_FAMILIES = {
   firm_guard: "sentinel",
   seer_ash_rice: "occult",
   mender_deep_heal: "occult",
+  mender_deep_circle: "occult",
 } as const satisfies Record<string,AdvancedSkillFamily>;
 
 function replacementSkillFamily(skillId:unknown):AdvancedSkillFamily|undefined {
@@ -119,9 +120,19 @@ type MonsterDefeat = Readonly<{winnerId:string;monster:Monster;prey:RewardPrey;h
 
 type PrototypeShadowEndReason = "expired" | "invalidated";
 type PrototypeShadowView = Readonly<{playerId:string;markSeq:number;origin:ShadowPoint;startedAtServerMs:number;expiresAtServerMs:number;durationMs:number}>;
+const HEALING_FIELD_INTERVAL_MS=2000;
+const HEALING_FIELD_DURATION_MS=6500;
+const MOVING_CIRCLE_MAX_TARGETS=3;
+const MOVING_CIRCLE_POWER_FACTOR=0.6;
+
+type OccultHealingField={mapId:string;until:number;nextTick:number;power:number;range:number} &
+  ({kind:"fixed";x:number;y:number;z:number} | {kind:"moving";castId:string;startedAt:number});
+type MovingHealingField=Extract<OccultHealingField,{kind:"moving"}>;
+type PrototypeCircleView=Readonly<{castId:string;ownerId:string;mapId:string;position:Position;range:number;expiresAt:number}>;
 type PrototypeOccultView = Readonly<{
   ash:readonly Pick<AshTrap,"castId"|"ownerId"|"mapId"|"position"|"armedAt"|"expiresAt">[];
   rescues:readonly Pick<RescueTalisman,"castId"|"ownerId"|"targetId"|"mapId"|"expiresAt">[];
+  circles:readonly PrototypeCircleView[];
 }>;
 export type PrototypeRoomTransport = Readonly<{
   ready(client:Client, nonce:string|undefined):void;
@@ -237,6 +248,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.clients.every(peer=>this.prototypeGameplaySessions.has(peer.sessionId));
   }
   private clearPrototypeTransient(id:string):void {
+    if(this.occultHealingFields.get(id)?.kind==="moving")this.clearOccultHealingField(id);
     this.prototypeFirmGuards.delete(id);
     this.clearAshTrap(id);
     for(const talisman of this.prototypeRescues.values())if(talisman.ownerId===id || talisman.targetId===id)this.clearRescue(talisman);
@@ -284,7 +296,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const context=this.rescueContext(talisman,target);
       if(context.mapId===mapId && context.eligible && context.ownerValid)rescues.push({castId,ownerId,targetId,mapId,expiresAt});
     }
-    try{transport.occultState(client,{version:1,serverNowMs:this.simulatedMs,ash,rescues});}catch{}
+    const circles:PrototypeCircleView[]=[];
+    for(const [ownerId,field] of this.occultHealingFields){
+      if(field.kind!=="moving" || field.mapId!==viewer.mapId || field.until<=this.simulatedMs)continue;
+      const owner=this.movingHealingOwner(ownerId);
+      if(owner?.mapId===field.mapId)circles.push({castId:field.castId,ownerId,mapId:field.mapId,
+        position:{x:owner.x,y:owner.y,z:owner.z},range:field.range,expiresAt:field.until});
+    }
+    try{transport.occultState(client,{version:1,serverNowMs:this.simulatedMs,ash,rescues,circles});}catch{}
   }
 
   private ashTrapNotice(trap:AshTrap,phase:"placed"|"triggered"|"expired"|"cleared",targetId:string,targets?:readonly string[]):void {
@@ -526,7 +545,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const skillId=action.value==="shadow_cut_return"?"shadow_cut":action.value;
     const family=replacementSkillFamily(skillId);
     if(!family || !this.prototypeGameplayAllowed(client.sessionId))return;
-    if(action.value==="firm_guard" || action.value==="shadow_cut_return"){
+    if(action.value==="firm_guard" || action.value==="shadow_cut_return" || action.value==="mender_deep_circle"){
       if(keys.length===2 && gate.reserve(seq.value)==="accepted")
         this.dispatchAdvancedSkill(client,{skillId},family,seq.value);
       return;
@@ -747,7 +766,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private occultSpiritOrders = new Map<string,{targetId:string;until:number;skillId:"seer_spirit"|"seer_spirit_bind"}>();
   // Base spirit practice counts at most once per summon; commanded strikes count individually.
   private occultSpiritPracticed = new Set<string>();
-  private occultHealingFields = new Map<string,{mapId:string;x:number;y:number;z:number;until:number;nextTick:number;power:number;range:number}>();
+  private occultHealingFields = new Map<string,OccultHealingField>();
   private muayWrapGranted = new Set<string>();
   private swordCombos = new Map<string, {count:number; until:number}>();
   private swordGuards = new Map<string, {until:number; factor:number; direction:boolean; counterUntil:number}>();
@@ -906,7 +925,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sentinelAnchors.delete(id);this.sentinelCounters.delete(id);this.sentinelWindups.delete(id);this.sentinelCoreStances.delete(id);
       for(const [member,link] of this.sentinelInterceptions)if(link.ownerId===id)this.sentinelInterceptions.delete(member);
       this.endBladeCloak(id,"class_changed");this.clearBladeMark(id);this.bladeOpenings.delete(id);this.bladeEvades.delete(id);this.bladeWindups.delete(id);this.bladeCasts.delete(id);this.bladeRetreatUntil.delete(id);
-      this.occultMarks.delete(id);this.occultSpiritOrders.delete(id);this.occultSpiritPracticed.delete(id);this.occultHealingFields.delete(id);
+      this.occultMarks.delete(id);this.occultSpiritOrders.delete(id);this.occultSpiritPracticed.delete(id);this.clearOccultHealingField(id);
       for(const [target,curse] of this.occultCurses)if(curse.ownerId===id)this.clearOccultCurse(target,"class_changed");
       this.clearPrototypeTransient(id);this.swordGuards.delete(id);this.swordCoreStances.delete(id);this.swordCoreSequences.delete(id);this.swordCombos.delete(id);
       this.clearMuayDefense(id,"cancelled");this.clearMuayCombo(id);this.muayCoreStances.delete(id);this.muayCoreFollowups.delete(id);this.muayCoreSequences.delete(id);
@@ -1214,7 +1233,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.occultMarks.delete(id);
         this.occultSpiritOrders.delete(id);
         this.occultSpiritPracticed.delete(id);
-        this.occultHealingFields.delete(id);
+        this.clearOccultHealingField(id);
         for (const [target,curse] of this.occultCurses) if (curse.ownerId===id) this.clearOccultCurse(target,"class_changed");
       }
       if (!isOccultPath(build.path)) {
@@ -2562,6 +2581,21 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     }
 
+    if(prototypeSequence!==undefined && skillId==="mender_deep_circle"){
+      if(!this.movingHealingOwner(id))return this.reject(client,"prototype_unavailable");
+      const field:MovingHealingField={kind:"moving",castId:id+"/"+prototypeSequence,mapId:caster.mapId,
+        startedAt:this.simulatedMs,until:this.simulatedMs+HEALING_FIELD_DURATION_MS,
+        nextTick:this.simulatedMs+HEALING_FIELD_INTERVAL_MS,range:lesson.range,
+        power:lesson.power*MOVING_CIRCLE_POWER_FACTOR*supportRankMultiplier(book.ranks,skillId)};
+      if(!this.spendSkillMana(client,caster,lesson.stamina,[],targets.map(([member])=>member)))return;
+      book.cooldowns[skillId]=Date.now()+lesson.cooldownMs;
+      this.clearOccultHealingField(id);
+      this.occultHealingFields.set(id,field);
+      void this.saveCharacter(id);
+      this.sendOccultBook(client);
+      this.movingCircleNotice(id,field,"placed");
+      return;
+    }
     if(prototypeSequence!==undefined && skillId==="mender_deep_heal"){
       if(this.field || caster.flying || !onMapGround(caster) || !this.persistentCharacters.has(id) ||
         this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
@@ -2658,8 +2692,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           if (this.simulatedMs-(this.lastCombatMs.get(member) ?? -Infinity)<PROGRESSION.combatQuietMs) trained=true;
         }
       }
-      if (lesson.effect==="heal_area") this.occultHealingFields.set(id,{mapId:caster.mapId,x:caster.x,y:caster.y,z:caster.z,
-        until:this.simulatedMs+6500,nextTick:this.simulatedMs+2000,power:0.03*supportRankMultiplier(book.ranks,skillId),range:lesson.range});
+      if(lesson.effect==="heal_area"){
+        this.clearOccultHealingField(id);
+        this.occultHealingFields.set(id,{kind:"fixed",mapId:caster.mapId,x:caster.x,y:caster.y,z:caster.z,
+          until:this.simulatedMs+HEALING_FIELD_DURATION_MS,nextTick:this.simulatedMs+HEALING_FIELD_INTERVAL_MS,
+          power:0.03*supportRankMultiplier(book.ranks,skillId),range:lesson.range});
+      }
       if (trained && path==="mender") {
         const categories:(keyof OccultMastery["mender"])[] =
           lesson.effect==="heal" || lesson.effect==="heal_area" ? ["healing"] :
@@ -2753,29 +2791,70 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for (const [owner,order] of this.occultSpiritOrders)
       if (this.simulatedMs>=order.until || !this.state.summons.has(owner)) this.occultSpiritOrders.delete(owner);
     for (const [ownerId,field] of this.occultHealingFields) {
-      const owner=this.state.players.get(ownerId);
-      if (this.simulatedMs>=field.until || !owner?.alive || owner.pathId!=="mender" || owner.mapId!==field.mapId) {
-        this.occultHealingFields.delete(ownerId);continue;
+      const owner=field.kind==="moving"?this.movingHealingOwner(ownerId):this.state.players.get(ownerId);
+      if(!owner?.alive || owner.pathId!=="mender" || owner.mapId!==field.mapId){
+        this.clearOccultHealingField(ownerId);continue;
       }
-      if (this.simulatedMs<field.nextTick) continue;
-      field.nextTick+=2000;
+      if(this.simulatedMs>=field.until){this.clearOccultHealingField(ownerId,"expired");continue;}
+      if(this.simulatedMs<field.nextTick)continue;
+      // A delayed moving pulse skips missed intervals and cannot burst on catch-up.
+      field.nextTick=(field.kind==="moving"?this.simulatedMs:field.nextTick)+HEALING_FIELD_INTERVAL_MS;
+      const center=field.kind==="moving"?owner:field;
       const party=this.parties.get(ownerId)?.members ?? [ownerId];
-      let healed=false;
-      for (const member of party) {
+      const targets:Array<[string,Player]>=[];
+      for(const member of party){
         const target=this.state.players.get(member);
-        if (!target?.alive || target.mapId!==field.mapId || target.hp>=target.maxHp ||
-            this.pendingWarps.has(member) || this.pendingItemUses.has(member) || this.pendingCharacterLeaves.has(member) ||
-            this.pendingRewards.has(member) ||
-            (this.field && member!==ownerId && this.warSeats.get(member)?.side!==this.warSeats.get(ownerId)?.side) ||
-            distance3d(target,field)>field.range || !isWorldSegmentClear(field.mapId,field,target) ||
-            !this.bodyPathClear(field.mapId,field,target)) continue;
+        if(!target?.alive || target.mapId!==field.mapId || target.hp>=target.maxHp ||
+          this.pendingWarps.has(member) || this.pendingItemUses.has(member) || this.pendingCharacterLeaves.has(member) ||
+          this.pendingRewards.has(member) ||
+          (this.field && member!==ownerId && this.warSeats.get(member)?.side!==this.warSeats.get(ownerId)?.side) ||
+          (field.kind==="moving" && (target.hp<=0 || target.flying || target.mounted || !onMapGround(target))) ||
+          distance3d(target,center)>field.range || !isWorldSegmentClear(field.mapId,center,target) ||
+          !this.bodyPathClear(field.mapId,center,target))continue;
+        targets.push([member,target]);
+      }
+      if(field.kind==="moving"){
+        targets.sort(([,a],[,b])=>a.hp/a.maxHp-b.hp/b.maxHp);
+        targets.splice(MOVING_CIRCLE_MAX_TARGETS);
+      }
+      let amount=0;
+      for(const [member,target] of targets){
         this.supportMastery(ownerId,[member]);
+        const before=target.hp;
         target.hp=Math.min(target.maxHp,target.hp+this.healAmount(ownerId,member,target.maxHp*field.power));
-        healed=true;
+        amount+=target.hp-before;
         void this.saveCharacter(member);
       }
-      if (healed) {this.recordOccultTraining(ownerId,"mender",["healing"]);void this.saveCharacter(ownerId);}
+      if(targets.length){
+        this.recordOccultTraining(ownerId,"mender",["healing"]);void this.saveCharacter(ownerId);
+        if(field.kind==="moving")this.movingCircleNotice(ownerId,field,"pulse",{amount,targetIds:targets.map(([member])=>member)});
+      }
     }
+  }
+
+  private movingHealingOwner(id:string):Player|undefined {
+    const owner=this.state.players.get(id),book=this.occultBooks.get(id);
+    if(this.field || !owner?.alive || owner.hp<=0 || owner.pathId!=="mender" || owner.flying || owner.mounted ||
+      !onMapGround(owner) || this.climbs.has(id) || this.flightTransitions.has(id) || this.pendingWarps.has(id) ||
+      this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
+      !this.persistentCharacters.has(id) || !this.prototypeGameplayAllowed(id) || !book?.learned.mender.includes("mender_deep_circle") ||
+      !this.advancedEquipped(id,"mender_deep_circle",book.loadouts.mender.includes("mender_deep_circle")))return;
+    return owner;
+  }
+
+  private clearOccultHealingField(id:string,phase:"cleared"|"expired"="cleared"):void {
+    const field=this.occultHealingFields.get(id);
+    this.occultHealingFields.delete(id);
+    if(field?.kind==="moving")this.movingCircleNotice(id,field,phase);
+  }
+
+  private movingCircleNotice(id:string,field:MovingHealingField,phase:"placed"|"pulse"|"cleared"|"expired",
+    result?:{amount:number;targetIds:string[]}):void {
+    try{
+      this.prototypeTransport()?.skill({version:1,phase,skillId:"mender_deep_circle",playerId:id,targetId:id,
+        castId:field.castId,serverNowMs:this.simulatedMs,startedAtServerMs:field.startedAt,
+        expiresAtServerMs:field.until,durationMs:HEALING_FIELD_DURATION_MS,...result});
+    }catch{/* Room state and occult_state remain authoritative. */}
   }
 
   private changeMuayBook(client:Client,message:unknown):void {
@@ -7003,7 +7082,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.bladeMarks.delete(id);this.bladeOpenings.delete(id);this.bladeEvades.delete(id);this.bladeWindups.delete(id);
       this.occultMarks.delete(id);
       this.occultSpiritOrders.delete(id);
-      this.occultHealingFields.delete(id);
+      this.clearOccultHealingField(id);
       this.clearOccultCurse(id,"left");
       for (const [target,curse] of this.occultCurses) if (curse.ownerId===id) this.clearOccultCurse(target,"owner_left");
       this.muayWrapGranted.delete(id);

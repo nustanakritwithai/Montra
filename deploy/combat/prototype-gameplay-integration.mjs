@@ -24,6 +24,12 @@ const menderBook={learned:{seer:[],mender:['mender_heal','mender_deep_heal']},
 await writeFile(path.join(chars,menderId+'.json'),JSON.stringify({version:1,id:menderId,name:'Prototype Mender',
  level:40,experience:0,pkKills:0,pkDeaths:0,x:1.1,y:0,z:11.6,hp:100,mapId:'ritual_village',
  build:{path:'mender',ancestry:'woodland'},occultBook:menderBook,updatedAt:new Date().toISOString()}),{flag:'wx'});
+const circleToken='mt1_'+randomBytes(32).toString('hex'),circleId=createHash('sha256').update(circleToken).digest('hex');
+const circleBook={learned:{seer:[],mender:['mender_heal','mender_ward','mender_area','mender_shelter','mender_deep_circle']},
+ loadouts:{seer:[null,null,null,null],mender:['mender_deep_circle',null,null,null]},training:{seer:0,mender:100},cooldowns:{}};
+await writeFile(path.join(chars,circleId+'.json'),JSON.stringify({version:1,id:circleId,name:'Moving Circle',
+ level:75,experience:0,pkKills:0,pkDeaths:0,x:-12,y:0,z:0,hp:100,mapId:'ritual_village',
+ build:{path:'mender',ancestry:'woodland'},occultBook:circleBook,updatedAt:new Date().toISOString()}),{flag:'wx'});
 const chaiyaToken='mt1_'+randomBytes(32).toString('hex'),chaiyaId=createHash('sha256').update(chaiyaToken).digest('hex');
 const chaiyaSlots=['chaiya_cover','chaiya_advanced_counter',null,null];
 const chaiyaBook={school:'chaiya',learned:['chaiya_elbow','chaiya_knee','chaiya_cover','chaiya_advanced_counter'],
@@ -133,6 +139,40 @@ await leaveTestRoom(room);room=undefined;
  const wardSnapshot=(await until(()=>menderEvents.find(e=>e.type==='prototype_occult_v1_state'),'consumed Deep Heal snapshot')).data;
  assert.deepEqual(wardSnapshot.rescues,[]);
  console.log('PASS: isolated Deep Heal cast, replay rejection and heal after authoritative damage');
+
+ await leaveTestRoom(room);room=undefined;
+ room=await joinTestRoom(()=>sdk.create('my_room',{guestToken:circleToken,prototypeProtocolVersion:1,prototypeGameplayVersion:1}));
+ room.reconnection.enabled=false;
+ const circleEvents=[];room.onMessage('*',(type,data)=>circleEvents.push({type,data}));
+ const circleReady=(await until(()=>circleEvents.find(e=>e.type==='prototype_protocol_v1_ready'),'circle ready')).data;
+ room.send('prototype_protocol_v1',{action:'confirm_gameplay',nonce:circleReady.nonce});
+ await until(()=>circleEvents.find(e=>e.type==='prototype_protocol_v1_confirmed'),'circle confirmed');
+ const circlePlayer=await until(()=>room.state?.players?.get(room.sessionId)?.persistent&&room.state.players.get(room.sessionId),'circle player');
+ const startingX=circlePlayer.x;
+ assert.ok(Math.abs(startingX+12)<.01,'circle fixture position');
+ room.send('occult_skill',{skillId:'mender_deep_circle'});
+ await until(()=>circleEvents.find(e=>e.type==='command_rejected'&&e.data.reason==='prototype_protocol_required'),'circle legacy command denied');
+ const circleEvent=phase=>circleEvents.find(e=>e.type==='prototype_skill_v1'&&e.data.skillId==='mender_deep_circle'&&e.data.phase===phase);
+ room.send('prototype_protocol_v1',{action:'mender_deep_circle',seq:1});
+ const circle=(await until(()=>circleEvent('placed'),'moving circle placed')).data;
+ assert.equal(circle.expiresAtServerMs-circle.startedAtServerMs,6500);
+ room.send('prototype_protocol_v1',{action:'mender_deep_circle',seq:1});
+ room.send('move',{x:startingX+.85,z:circlePlayer.z});
+ await until(()=>Math.abs(circlePlayer.x-startingX)>.4,'circle caster moves');
+ room.send('prototype_protocol_v1',{action:'occult_state'});
+ const circleState=(await until(()=>circleEvents.find(e=>e.type==='prototype_occult_v1_state'),'circle snapshot')).data;
+ assert.equal(circleState.circles.length,1);
+ assert.equal(circleState.circles[0].castId,circle.castId);
+ assert.ok(Math.abs(circleState.circles[0].position.x-startingX)>.4);
+ const pulse=(await until(()=>circleEvent('pulse'),'moving circle pulse',5500)).data;
+ assert.equal(pulse.castId,circle.castId);
+ assert.ok(pulse.serverNowMs-circle.startedAtServerMs>=2000);
+ assert.deepEqual(pulse.targetIds,[room.sessionId]);assert.ok(pulse.amount>0);
+ const expiredCircle=(await until(()=>circleEvent('expired'),'moving circle expired',8500)).data;
+ assert.equal(expiredCircle.castId,circle.castId);
+ assert.equal(circleEvents.filter(e=>e.type==='prototype_skill_v1'&&e.data.skillId==='mender_deep_circle'&&e.data.phase==='placed').length,1);
+ assert.ok(circleEvents.filter(e=>e.type==='prototype_skill_v1'&&e.data.skillId==='mender_deep_circle'&&e.data.phase==='pulse').length<=3);
+ console.log('PASS: moving Deep Circle replaces the legacy cast, follows the caster and expires once');
 
  await leaveTestRoom(room);room=undefined;
  room=await joinTestRoom(()=>sdk.create('my_room',{guestToken:chaiyaToken,prototypeProtocolVersion:1,prototypeGameplayVersion:1}));

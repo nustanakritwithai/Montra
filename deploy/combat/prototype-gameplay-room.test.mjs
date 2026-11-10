@@ -302,20 +302,20 @@ test('a legacy Chaiya counter consumes the same block opportunity as the replace
  assert.equal(p.mana,mana-24);assert.ok(m.hp<hp);assert.ok(r.prototypeDebuffs.has(m.id));
 }));
 
-test('each of the six IDs routes to exactly one version, while other IDs keep their normal command',wrap(()=>{
+test('each replacement ID routes to exactly one version, while other IDs keep their normal command',wrap(()=>{
  const {r,client,events,m}=fixture('phutthaisawan');
  r.prototypeBuckets.set('a',{consume:()=>true});
  const families=[
   ['sword','castSwordSkill','flowing_blades'],['muay','castMuaySkill','chaiya_advanced_counter'],
   ['blade','castBladeSkill','shadow_cut'],['sentinel','castSentinelSkill','firm_guard'],
-  ['occult','castOccultSkill','seer_ash_rice'],['occult','castOccultSkill','mender_deep_heal']
+  ['occult','castOccultSkill','seer_ash_rice'],['occult','castOccultSkill','mender_deep_heal'],['occult','castOccultSkill','mender_deep_circle']
  ];
  const routed=[];
  for(const [,method] of families)r[method]=(_client,message,sequence)=>routed.push({method,message,sequence});
  let seq=0;
  for(const [family,method,skillId] of families){
   r.simulatedMs+=1000;
-  const targets=skillId==='firm_guard'?{}:{targetId:m.id};
+  const targets=['firm_guard','mender_deep_circle'].includes(skillId)?{}:{targetId:m.id};
   const message={skillId,...targets};
   r.messages[family+'_skill'](client,message);
   assert.equal(routed.length,seq);
@@ -323,10 +323,10 @@ test('each of the six IDs routes to exactly one version, while other IDs keep th
   assert.deepEqual(routed.at(-1),{method,message,sequence:seq});
   assert.equal(routed.length,seq);
  }
- assert.equal(events.filter(e=>e.type==='command_rejected'&&e.data.reason==='prototype_protocol_required').length,6);
+ assert.equal(events.filter(e=>e.type==='command_rejected'&&e.data.reason==='prototype_protocol_required').length,families.length);
  const twinCut={skillId:'twin_cut',targetId:m.id};
  r.messages.prototype_protocol_v1(client,{action:'twin_cut',seq:++seq,targetId:m.id});
- assert.equal(routed.length,6);
+ assert.equal(routed.length,families.length);
  r.messages.sword_skill(client,twinCut);
  assert.deepEqual(routed.at(-1),{method:'castSwordSkill',message:twinCut,sequence:undefined});
  process.env.MONTRA_PROTOTYPE_GAMEPLAY='0';
@@ -335,5 +335,85 @@ test('each of the six IDs routes to exactly one version, while other IDs keep th
   r.messages[family+'_skill'](client,message);
   assert.deepEqual(routed.at(-1),{method,message,sequence:undefined});
  }
- assert.equal(routed.length,13);
+ assert.equal(routed.length,2*families.length+1);
+}));
+
+function movingCircleFixture(){
+ const setup=fixture('mender'),{r,p,client}=setup;
+ const book=newOccultBook();
+ book.learned.mender=['mender_heal','mender_ward','mender_area','mender_shelter','mender_deep_circle'];
+ book.loadouts.mender=['mender_area','mender_deep_circle',null,null];
+ r.occultBooks.set('a',book);r.persistentCharacters.set('a','synthetic');
+ r.prototypeBuckets.set('a',{consume:()=>true});
+ p.hp=75;p.maxHp=100;r.simulatedMs=10000;
+ const cast=seq=>r.messages.prototype_protocol_v1(client,{action:'mender_deep_circle',seq});
+ return {...setup,book,cast};
+}
+
+test('Deep Circle replaces its immediate heal with one moving, prioritized pulse',wrap(()=>{
+ const {r,p,client,events,book,cast}=movingCircleFixture();
+ const add=(id,hp,inParty=true)=>{
+  const member=new Player({pathId:'mender',x:p.x+12,y:p.y,z:p.z,mapId:p.mapId,hp,maxHp:100,alive:true});
+  r.state.players.set(id,member);
+  if(inParty){
+   const invite=r.parties.invite('a',id,r.simulatedMs);
+   r.parties.accept(id,invite.id,r.simulatedMs);
+  }
+  return member;
+ };
+ const critical=add('critical',20),injured=add('injured',35),hurt=add('hurt',55),outsider=add('outsider',10,false);
+ r.messages.occult_skill(client,{skillId:'mender_deep_circle'});
+ assert.equal(p.mana,100);
+ r.messages.prototype_protocol_v1(client,{action:'mender_deep_circle',seq:1,targetId:'critical'});
+ assert.equal(p.mana,100,'the replacement does not accept a target');
+ cast(1);cast(1);
+ assert.equal(p.mana,70);assert.equal(p.hp,75);assert.ok(book.cooldowns.mender_deep_circle>Date.now());
+ assert.equal(events.filter(e=>e.type==='occult_skill_used').length,0);
+ p.x+=12;
+ r.simulatedMs=11999;r.updateOccultEffects();
+ assert.equal(critical.hp,20);
+ r.simulatedMs=12000;r.updateOccultEffects();r.updateOccultEffects();
+ assert.deepEqual([critical.hp,injured.hp,hurt.hp,p.hp,outsider.hp],[26,41,61,75,10]);
+ const pulse=events.filter(e=>e.type==='prototype_skill_v1'&&e.data.phase==='pulse');
+ assert.equal(pulse.length,1);
+ assert.deepEqual(pulse[0].data.targetIds,['critical','injured','hurt']);
+ assert.equal(pulse[0].data.amount,18);
+ r.messages.prototype_protocol_v1(client,{action:'occult_state'});
+ const snapshot=events.find(e=>e.type==='prototype_occult_v1_state').data;
+ assert.equal(snapshot.circles[0].position.x,p.x);
+ assert.equal(snapshot.circles[0].castId,pulse[0].data.castId);
+}));
+
+test('Deep Circle shares the caster field slot and keeps the basic stationary heal',wrap(()=>{
+ const {r,p,client,events,cast}=movingCircleFixture();
+ cast(1);assert.equal(r.occultHealingFields.get('a').kind,'moving');
+ r.messages.occult_skill(client,{skillId:'mender_area'});
+ assert.equal(p.mana,50);assert.equal(p.hp,84);
+ assert.equal(r.occultHealingFields.get('a').kind,'fixed');
+ assert.equal(events.filter(e=>e.type==='prototype_skill_v1' && e.data.phase==='cleared').length,1);
+ r.simulatedMs=12000;r.updateOccultEffects();
+ assert.equal(p.hp,87);
+ assert.equal(events.some(e=>e.type==='prototype_skill_v1' && e.data.phase==='pulse'),false);
+}));
+
+test('Deep Circle skips missed pulses and stops when the caster starts a warp',wrap(()=>{
+ const {r,p,events,cast}=movingCircleFixture();
+ cast(1);
+ r.simulatedMs=14500;r.updateOccultEffects();r.updateOccultEffects();
+ assert.equal(p.hp,81,'one late pulse, no catch-up');
+ r.pendingWarps.add('a');
+ r.simulatedMs=16500;r.updateOccultEffects();r.updateOccultEffects();
+ assert.equal(p.hp,81);assert.equal(r.occultHealingFields.has('a'),false);
+ assert.equal(events.filter(e=>e.type==='prototype_skill_v1' && e.data.phase==='cleared').length,1);
+}));
+
+test('normal rooms retain the old Deep Circle under the same saved ID',wrap(()=>{
+ const {r,p,client,events,book,cast}=movingCircleFixture();
+ process.env.MONTRA_PROTOTYPE_GAMEPLAY='0';
+ cast(1);assert.equal(p.mana,100);
+ r.messages.occult_skill(client,{skillId:'mender_deep_circle'});
+ assert.equal(p.mana,70);assert.equal(p.hp,85);
+ assert.ok(book.cooldowns.mender_deep_circle>Date.now());
+ assert.equal(r.occultHealingFields.get('a').kind,'fixed');
+ assert.ok(events.some(e=>e.type==='occult_skill_used' && e.data.skillId==='mender_deep_circle'));
 }));

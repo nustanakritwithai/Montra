@@ -1,14 +1,14 @@
-# Six skill prototypes: development status
+# Seven skill prototypes: development status
 
-All six prototypes have server wiring in the synthetic loopback room. The
+All seven prototypes have server wiring in the synthetic loopback room. The
 shipped room hard-disables prototype gameplay even when flags are set. The
 shipped client still needs controls and visual feedback. Existing gameplay
 and character save formats are unchanged by default.
 Do not enable this in production.
 
 The provisional rules retain the existing IDs: `flowing_blades`,
-`chaiya_advanced_counter`, `shadow_cut`, `firm_guard`, `seer_ash_rice`, and
-`mender_deep_heal`. They represent experimental mechanics, not balanced values.
+`chaiya_advanced_counter`, `shadow_cut`, `firm_guard`, `seer_ash_rice`,
+`mender_deep_heal`, and `mender_deep_circle`. They represent experimental mechanics, not balanced values.
 In the verification room, each of these IDs selects the replacement effect
 after the shared class, loadout and target validation. The former effect is
 reachable only through the existing command in rooms with the replacement
@@ -22,11 +22,21 @@ disabled. IDs, prerequisites, cooldown keys and saved loadouts remain stable.
 | `firm_guard` | Personal guard | Directional guard for self or one eligible ally |
 | `seer_ash_rice` | Immediate hit | Armed trap |
 | `mender_deep_heal` | Immediate heal | Ward that heals after damage or at expiry |
+| `mender_deep_circle` | Immediate heal and stationary pulses, like `mender_area` | Moving field that prioritizes injured party members |
 
 Related skills with distinct IDs retain their own effects and prerequisites.
 A regular Chaiya counter consumes the same block opportunity as the
 replacement. Replacing the guard or taking subsequent damage over time
 cannot restore the spent opportunity.
+
+Deep Circle starts without an immediate heal and follows the caster for 6.5
+seconds. At most three pulses can occur, two seconds apart, using the existing
+8-metre range. Each pulse heals up to three eligible targets with the lowest HP
+percentage, for a base 6% of their maximum HP before existing rank and gear
+modifiers. The two circle skills share one field slot per caster. The basic
+`mender_area` remains a prerequisite and retains its stationary effect.
+The moving field clears on a warp, loss of eligibility, or replacement.
+Missed intervals cannot produce multiple pulses at once.
 
 The independent rule tests exercise bounded transient state. They do not prove
 end-to-end gameplay, persistence compatibility, multiplayer, visual feedback,
