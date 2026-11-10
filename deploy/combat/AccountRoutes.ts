@@ -91,13 +91,14 @@ export function installAccountRoutes(app: Application): void {
       if(guildStore().hasMember(expected))throw Error("character_in_guild");
       if(characterStore.economyEnabled && characterStore.economy.hasOpenListings(expected))throw Error("character_has_listings");
       if(characterStore.economyEnabled && characterStore.economy.hasCityDisbandClaims(expected))throw Error("character_has_city_claims");
+      if(characterStore.economyEnabled && characterStore.economy.hasCityWorkshopJob(expected))throw Error("character_has_city_job");
       accounts().retireCharacter(identity.accountId,slot,expected);
       await characterStore.eraseCharacter(expected);
       accounts().completeRetirement(expected);
       res.json({ok:true});
     } catch(error) {
       const code=error instanceof Error ? error.message : "delete_failed";
-      const known=new Set(["slot_changed","confirm_name_mismatch","character_in_guild","character_has_listings","character_has_city_claims"]);
+      const known=new Set(["slot_changed","confirm_name_mismatch","character_in_guild","character_has_listings","character_has_city_claims","character_has_city_job"]);
       res.status(known.has(code)?409:503).json({error:known.has(code)?code:"delete_failed"});
     } finally { releaseCharacter(identity.accountId,lease); }
   });

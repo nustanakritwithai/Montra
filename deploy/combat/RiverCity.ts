@@ -2,6 +2,7 @@
 export const RIVER_CITY="sam_lan_estuary";
 export const CITY_CELL=16, RIVER_WAR_DURATION=10*60_000;
 export const gridPoint=(column:number,row:number)=>({x:(column-15)*CITY_CELL,z:(row-12)*CITY_CELL});
+export const RIVER_WAREHOUSE_PLOT = {name: "ลานด้านเหนือของคลังข้าวหลวง", ...gridPoint(8,12), radius: 8};
 export const riverNodes={
   A:gridPoint(15,23),D:gridPoint(17,7),T:gridPoint(17,9),M:gridPoint(22,15),
   S:gridPoint(8,12),F:gridPoint(8,7),W:gridPoint(16,15)
