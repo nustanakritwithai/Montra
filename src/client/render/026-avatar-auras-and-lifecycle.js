@@ -148,7 +148,7 @@
     const m = a.moveBlend, flying = a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain);
     a.phase = (a.phase + dt * 9.5 * m) % (Math.PI * 2);
     const s = Math.sin(a.phase), c = Math.cos(a.phase), t = now / 1000;
-    if(a.skin?.holder)a.skin.holder.position.y=a.mounted ? .35 + Math.abs(c)*.025*m : 0;
+    if(a.skin?.holder)a.skin.holder.position.y=a.mounted ? .56 + Math.abs(c)*.03*m : 0; // seat on the saddle (top ~1.6)
     if(a.horse && a.mounted){
       a.horse.legs.forEach((leg,i)=>{leg.rotation.x=Math.sin(a.phase+(i===0||i===3?0:Math.PI))*.48*m;});
       a.horse.tail.rotation.x=.35+Math.sin(t*2)*.12;
