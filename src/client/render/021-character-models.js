@@ -127,7 +127,7 @@
     }
     a.ritualGear.push(onBone("Chest"));
     // Head: red yantra headband, topknot and a tail of hair down the nape.
-    cyl(0, 1.655, -.004, .028, .19, .19, shawl, 12).scaling.z = 1.12;
+    cyl(0, 1.672, -.006, .026, .186, .186, shawl, 12).scaling.z = 1.12; // on the forehead, clear of the brows
     ball(0, 1.74, -.04, .075, hairMat, 6);
     cyl(0, 1.715, -.035, .022, .055, .055, shawl, 8);
     onBone("Head");
@@ -1018,7 +1018,7 @@
       rows: ribbonTail(x - .022, x + .022, .93, .125, len, 6, .02) }, clothMaterial(sash), null);
     // Headband tails falling from the knot at the back of the head.
     for (const x of [-.018, .018]) makeCloth(a, "headband tail", { bone: "Head", pinRows: 1, bend: .5, wind: 1.1, pad: .01,
-      rows: ribbonTail(x - .014, x + .014, 1.655, -.105, .2, 5, -.02) }, shawl, headband);
+      rows: ribbonTail(x - .014, x + .014, 1.672, -.106, .2, 5, -.02) }, shawl, headband);
     // Talisman papers on the hip spirit jar (stiffer, lighter).
     const jx = .18, jy = .83, jz = -.01;
     for (const side of [-1, 1]) makeCloth(a, "jar talisman", { bone: "Hips", pinRows: 1, bend: .8, stretch: 1, gravity: .7, wind: .6, drag: .94,
