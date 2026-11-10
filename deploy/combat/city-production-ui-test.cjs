@@ -297,6 +297,32 @@ test("the mission board can post guild-only warehouse work when regular stock is
     audience:"guild",slots:2,reward:5,hours:1,purpose:"warehouse"});
 });
 
+test("the freight board sends the selected scope, destination tenure and delivery only on site", () => {
+  const f=fixture({missionSupported:true}), moon="moon_pass", river="sam_lan_estuary";
+  f.ctx.openCityMission();
+  const board={enabled:true,required:3,item:"mat_raw_stone_2",serverNow:1_000_000,missions:[]};
+  const hauls={enabled:true,paused:false,atCity:moon,jobs:[],manage:{epoch:7,destination:river,destinationEpoch:8,
+    needsApproval:true,item:"mat_metal_2",amount:4,reward:30}};
+  f.ctx.cityReceiveMission({...board,hauls});
+  f.submit("เปิดงานขนเสบียง",3,12);
+  const opened=f.wire.at(-1).payload;
+  assert.deepEqual(opened,{requestId:opened.requestId,action:"haul_open",epoch:7,destination:river,destinationEpoch:8,
+    amount:3,reward:12,audience:"public"});
+  f.ctx.cityReceiveResult(opened);
+  const job={id:"freight",source:moon,destination:river,name:"กิลด์จันทรา",item:"mat_metal_2",amount:3,reward:12,
+    audience:"public",state:"carrying",carrying:true,expires:2_000_000};
+  const carrying={...hauls,jobs:[job],manage:null};
+  f.ctx.cityReceiveMission({...board,hauls:carrying});
+  assert.equal(f.button("ส่งเสบียงและรับทอง").disabled,true);
+  f.ctx.cityReceiveMission({...board,hauls:{...carrying,atCity:river,paused:true}});
+  assert.equal(f.button("ส่งเสบียงและรับทอง").disabled,true);
+  f.ctx.cityReceiveMission({...board,hauls:{...carrying,atCity:river}});
+  assert.equal(f.button("ส่งเสบียงและรับทอง").disabled,false);
+  f.button("ส่งเสบียงและรับทอง").onclick();
+  assert.equal(f.wire.at(-1).payload.action,"haul_deliver");
+  assert.equal(f.wire.at(-1).payload.haulId,"freight");
+});
+
 test("city hall shows reserved gold and only enables an on-site commander after the cooldown", () => {
   const f=fixture({governanceAvailable:true});
   f.state({site:"moon_pass",miningSite:"moon_pass"});

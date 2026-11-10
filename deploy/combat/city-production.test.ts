@@ -11,7 +11,8 @@ import {
   CITY_PRODUCT, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_WAREHOUSE_DURATION_MS, CITY_WAREHOUSE_MATERIALS, parseCityOrder,
   CITY_WORKSHOP_FEE, CITY_WORKSHOP_SLOTS,
   CITY_MINING_ENABLED, CITY_MINING_ORE, CITY_MINING_PRODUCT, CITY_MINING_SITE, CITY_PRODUCTION_ENABLED, type CitySite,
-  CITY_POLICY_COOLDOWN_MS, CITY_PURCHASE_DURATION_MS, isCityMissionOrder, isCityPurchaseOrder, type CityPolicy,
+  CITY_HAUL_DURATION_MS, CITY_POLICY_COOLDOWN_MS, CITY_PURCHASE_DURATION_MS,
+  isCityHaulOrder, isCityMissionOrder, isCityPurchaseOrder, type CityPolicy,
 } from "./CityProductionRules.js";
 import {RIVER_WAR_DURATION} from "./RiverCity.js";
 import {WAR_DURATION, WAR_PROTECTION} from "./TerritoryWar.js";
@@ -59,7 +60,7 @@ function fixture(t: TestContext) {
     const parsed = parseCityOrder({...fields, requestId});
     assert.ok(parsed && parsed.action !== "disband" && parsed.action !== "claim_disband" &&
       parsed.action !== "workshop_start" && parsed.action !== "workshop_claim" &&
-      !isCityPurchaseOrder(parsed) && !isCityMissionOrder(parsed) && parsed.action !== "policy_set");
+      !isCityPurchaseOrder(parsed) && !isCityMissionOrder(parsed) && !isCityHaulOrder(parsed) && parsed.action !== "policy_set");
     return economy.cityOrder(actor, guildMember(actor), parsed, sync(now, site), now, site);
   };
   const view = (actor: string, now = 1000, site: CitySite = CITY_PRODUCTION_SITE) => economy.viewCity(guildMember(actor), sync(now, site), site);
@@ -714,6 +715,179 @@ function governanceFixture(t: TestContext) {
       f.sync(now,CITY_MINING_SITE),now);
   return {...f,get economy(){return f.economy;},get guild(){return f.guild;},summary,choose};
 }
+
+function haulFixture(t: TestContext) {
+  const f = purchaseFixture(t);
+  const cities = (now: number) => ({
+    [CITY_PRODUCTION_SITE]: f.sync(now, CITY_PRODUCTION_SITE), [CITY_MINING_SITE]: f.sync(now, CITY_MINING_SITE),
+  });
+  const haul = (actor: string, atCity: CitySite | null, fields: object, now = f.now, requestId = f.request()) => {
+    const parsed = parseCityOrder({...fields, requestId});
+    assert.ok(parsed && isCityHaulOrder(parsed));
+    return f.economy.cityHaulOrder(actor, f.guild.war.member(actor), parsed, cities(now), atCity, now);
+  };
+  const board = (actor: string, atCity: CitySite | null, now = f.now) =>
+    f.economy.viewCityHauls(actor, f.guild.war.member(actor), cities(now), atCity);
+  return {...f, get economy() {return f.economy;}, get guild() {return f.guild;}, haul, board, cities};
+}
+
+test("cross-guild freight reserves capacity only after approval and pays the assigned courier exactly once", t => {
+  const f = haulFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE;
+  f.capture(rival, f.now, river);
+  const riverEpoch = f.view(rival, f.now, river).epoch!;
+  const factory = (action: string, fields: object = {}, at = f.now) =>
+    f.factoryOrder(rival, {action, epoch:riverEpoch, ...fields}, at, f.request(), river);
+  factory("deposit", {item:wood, slot:0, amount:10});
+  factory("deposit", {item:stone, slot:1, amount:20});
+  factory("build");
+  let now = f.now;
+  for (let i = 0; i < 4; i++) now = Number(factory("start", {}, now).readyAt);
+  const sale = factory("list", {amount:1, price:75}, now);
+  f.economy.buy(visitor, f.request(), String(sale.listingId));
+  const originBefore = f.view(rival, now, river);
+  const oreBag = f.economy.getAccount(leader).inventory;
+  oreBag.slots[0] = {itemId:CITY_MINING_ORE, quantity:99};
+  f.economy.saveCharacter(leader, {}, oreBag);
+  f.mine({action:"deposit", item:CITY_MINING_ORE, slot:0, amount:53-f.miningStock(now).used}, now);
+  const purchaseId = String(f.open(5, 1, now).orderId);
+  const post = {action:"haul_open", epoch:riverEpoch, destination:moon, destinationEpoch:f.moonEpoch,
+    amount:3, reward:20, audience:"public"};
+  assert.equal(parseCityOrder({...post, amount:13, requestId:f.request()}), null);
+  assert.equal(parseCityOrder({...post, source:river, requestId:f.request()}), null);
+  assert.throws(() => f.haul(rival, moon, post, now), /city_haul_location/);
+  assert.equal(f.board(rival, river, now).manage?.amount, 3);
+  const postId = f.request(), {haulId} = f.haul(rival, river, post, now, postId);
+  assert.deepEqual(f.haul(rival, river, post, now, postId), {haulId});
+  assert.equal(f.view(rival, now, river).used, originBefore.used);
+  assert.equal(f.view(rival, now, river).marketGold, 55);
+  assert.equal(f.miningStock(now).used, 58);
+  assert.deepEqual(f.board(visitor, river, now).jobs, []);
+  const approve = {action:"haul_approve", haulId};
+  assert.throws(() => f.haul(member, moon, approve, now), /city_officer_required/);
+  assert.throws(() => f.haul(leader, river, approve, now), /city_haul_location/);
+  assert.throws(() => f.haul(leader, moon, approve, now), /city_storage_full/);
+  f.order(leader, {action:"purchase_cancel", orderId:purchaseId}, now);
+  f.haul(leader, moon, approve, now);
+  assert.equal(f.miningStock(now).used, 56);
+  assert.throws(() => f.mine({action:"deposit", item:CITY_MINING_ORE, slot:0, amount:5}, now), /city_storage_full/);
+  const pickup = {action:"haul_pickup", haulId};
+  assert.throws(() => f.haul(visitor, null, pickup, now), /city_haul_location/);
+  f.haul(visitor, river, pickup, now);
+  assert.throws(() => f.haul(member, river, pickup, now), /city_haul_state/);
+  assert.throws(() => f.haul(rival, river, {action:"haul_cancel", haulId}, now), /city_haul_state/);
+  f.restart();
+  assert.equal(f.board(visitor, moon, now).jobs[0].carrying, true);
+  const delivery = {action:"haul_deliver", haulId}, before = f.economy.getAccount(visitor);
+  assert.throws(() => f.haul(visitor, river, delivery, now), /city_haul_location/);
+  assert.throws(() => f.haul(member, moon, delivery, now), /city_haul_courier/);
+  const db = new DatabaseSync(f.economyFile);
+  try {
+    db.prepare("UPDATE accounts SET gold=1000000000 WHERE id=?").run(visitor);
+    assert.throws(() => f.haul(visitor, moon, delivery, now), /city_wallet_full/);
+    assert.equal(f.board(visitor, moon, now).jobs[0].carrying, true);
+    db.prepare("UPDATE accounts SET gold=? WHERE id=?").run(before.gold, visitor);
+  } finally {db.close();}
+  const receipt = f.request();
+  assert.deepEqual(f.haul(visitor, moon, delivery, now, receipt), {haulId, gold:20});
+  assert.deepEqual(f.haul(visitor, moon, delivery, now+1, receipt), {haulId, gold:20});
+  assert.equal(f.economy.getAccount(visitor).gold, before.gold+20);
+  assert.deepEqual(f.economy.getAccount(visitor).inventory, before.inventory);
+  assert.equal(f.miningStock(now+1).stock.find(row => row.item===CITY_PRODUCT)?.quantity, 4);
+  assert.equal(f.miningStock(now+1).used, 56);
+  assert.equal(f.view(rival, now+1, river).used, originBefore.used-3);
+});
+
+test("same-guild freight goes live immediately and imported Moon iron can be sold at the river", t => {
+  const f = haulFixture(t), moon = CITY_MINING_SITE, river = CITY_PRODUCTION_SITE;
+  const now = Number(f.mine({action:"start"}, f.now).readyAt);
+  const {haulId} = f.haul(leader, moon, {action:"haul_open", epoch:f.moonEpoch, destination:river,
+    destinationEpoch:f.epoch, amount:1, reward:10, audience:"guild"}, now);
+  assert.equal(f.view(leader, now, river).used, 1);
+  assert.equal(f.board(member, moon, now).jobs[0].state, "open");
+  assert.equal(f.economy.viewCityGovernance(f.guildMember(leader), f.sync(now, moon)).treasury.haulHeld, 10);
+  assert.throws(() => f.haul(visitor, moon, {action:"haul_pickup", haulId}, now), /city_mission_guild_only/);
+  f.haul(member, moon, {action:"haul_pickup", haulId}, now);
+  f.haul(member, null, {action:"haul_abandon", haulId}, now);
+  f.haul(leader, moon, {action:"haul_pickup", haulId}, now);
+  f.haul(leader, river, {action:"haul_deliver", haulId}, now);
+  assert.equal(f.view(leader, now, river).stock[0].item, CITY_MINING_PRODUCT);
+  const listed = f.factoryOrder(leader, {action:"list", epoch:f.epoch, amount:1, price:15, item:CITY_MINING_PRODUCT}, now);
+  assert.ok(f.economy.list().some(row => row.id===listed.listingId));
+  f.economy.buy(visitor, f.request(), String(listed.listingId));
+  assert.equal(f.view(leader, now, river).used, 0);
+  assert.equal(f.economy.viewCityGovernance(f.guildMember(leader), f.sync(now, moon)).treasury.haulPaid, 10);
+});
+
+test("an expiring shipment and a lost destination each release freight back to the origin exactly once", t => {
+  const f = haulFixture(t), moon = CITY_MINING_SITE, river = CITY_PRODUCTION_SITE;
+  const now = Number(f.mine({action:"start"}, f.now).readyAt);
+  const open = {action:"haul_open", epoch:f.moonEpoch, destination:river, destinationEpoch:f.epoch, amount:1, reward:10, audience:"public"};
+  f.haul(leader, moon, open, now);
+  const expires = now + CITY_HAUL_DURATION_MS;
+  f.restart();
+  assert.deepEqual(f.board(leader, moon, expires).jobs, []);
+  assert.equal(f.view(leader, expires, river).used, 0);
+  assert.equal(f.miningStock(expires).stock.find(row => row.item===CITY_MINING_PRODUCT)?.quantity, 1);
+  assert.equal(f.miningStock(expires).marketGold, 100);
+  const {haulId} = f.haul(leader, moon, open, expires);
+  f.haul(visitor, moon, {action:"haul_pickup", haulId}, expires);
+  f.capture(rival, expires+1, river);
+  assert.throws(() => f.haul(visitor, river, {action:"haul_deliver", haulId}, expires+1), /city_haul_missing/);
+  f.restart();
+  assert.equal(f.view(rival, expires+2, river).used, 0);
+  assert.equal(f.miningStock(expires+2).stock.find(row => row.item===CITY_MINING_PRODUCT)?.quantity, 1);
+  assert.equal(f.miningStock(expires+2).marketGold, 100);
+  const newDestination = f.view(rival, expires+2, river).epoch!;
+  const newHaul = f.haul(leader, moon, {...open, destinationEpoch:newDestination}, expires+2).haulId;
+  f.haul(rival, river, {action:"haul_approve", haulId:newHaul}, expires+2);
+  f.capture(rival, expires+3, moon);
+  assert.deepEqual(f.board(rival, river, expires+3).jobs, []);
+  assert.equal(f.view(rival, expires+3, river).used, 0);
+  assert.equal(f.miningStock(expires+3).reclaim.find(row => row.item===CITY_MINING_PRODUCT)?.quantity, 1);
+  assert.equal(f.miningStock(expires+3).marketGold, 100);
+});
+
+test("a siege at either endpoint blocks dispatch or delivery, then the defended route can finish", t => {
+  const f = haulFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE, siege = 1_000 + WAR_PROTECTION;
+  const owner = f.guildMember(leader).id, db = new DatabaseSync(f.guildFile);
+  try {
+    db.prepare("INSERT INTO territory_battles(site,attacker,started,sample,ended,winner) VALUES(?,?,?,?,?,?)")
+      .run(river, owner, 1, 1_000, 1_000, owner);
+  } finally {db.close();}
+  const now = Number(f.mine({action:"start"}, f.now).readyAt);
+  const post = {action:"haul_open", epoch:f.moonEpoch, destination:river, destinationEpoch:f.epoch,
+    amount:1, reward:10, audience:"public"};
+  const {haulId} = f.haul(leader, moon, post, siege-1);
+  assert.ok(now<siege);
+  f.haul(visitor, moon, {action:"haul_pickup", haulId}, siege-1);
+  f.guild.war.start(river, f.guildMember(rival), siege);
+  assert.equal(f.board(visitor, river, siege).paused, true);
+  assert.throws(() => f.haul(leader, moon, post, siege), /city_haul_siege/);
+  assert.throws(() => f.haul(visitor, river, {action:"haul_deliver", haulId}, siege), /city_haul_siege/);
+  const end = siege + RIVER_WAR_DURATION;
+  assert.equal(f.guild.war.inspect(river, end).ownerId, owner);
+  assert.equal(f.haul(visitor, river, {action:"haul_deliver", haulId}, end).gold, 10);
+});
+
+test("a receiving guild can decline or disband without locking another guild's cargo or gold", t => {
+  const f = haulFixture(t), moon = CITY_MINING_SITE, river = CITY_PRODUCTION_SITE;
+  f.capture(rival, f.now, river);
+  const riverEpoch = f.view(rival, f.now, river).epoch!;
+  const now = Number(f.mine({action:"start"}, f.now).readyAt);
+  const post = {action:"haul_open", epoch:f.moonEpoch, destination:river, destinationEpoch:riverEpoch,
+    amount:1, reward:10, audience:"public"};
+  const first = f.haul(leader, moon, post, now).haulId;
+  f.haul(rival, null, {action:"haul_decline", haulId:first}, now);
+  const second = f.haul(leader, moon, post, now).haulId;
+  f.haul(rival, river, {action:"haul_approve", haulId:second}, now);
+  f.haul(visitor, moon, {action:"haul_pickup", haulId:second}, now);
+  const guildId = f.guildMember(rival).id;
+  assert.equal(f.economy.hasCityAssets(guildId), true);
+  f.guild.settleCityDisband(f.economy, f.guild.beginCityDisband(rival, guildId, now+1));
+  assert.deepEqual(f.board(visitor, moon, now+2).jobs, []);
+  assert.equal(f.miningStock(now+2).stock.find(row => row.item===CITY_MINING_PRODUCT)?.quantity, 1);
+  assert.equal(f.miningStock(now+2).marketGold, 100);
+});
 
 test("commander policy affects future factory jobs and has a persisted 24-hour cooldown",t=>{
   const f=governanceFixture(t),now=f.now;

@@ -13,8 +13,8 @@ import type {HomeAction, SalvageOrder} from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
 import {
   CITY_MINING_ORE, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
-  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityMember, type CityMissionOrder, type CityOrder,
-  type CityOwnership, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
+  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMember, type CityMissionOrder, type CityOrder,
+  type CityOwnership, type CityOwnerships, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
   type CityWorkshopOrder,
 } from "./CityProductionRules.js";
 
@@ -234,6 +234,26 @@ export class EconomyStore {
   hasOpenCityMission(): boolean {
     return this.city.hasOpenMission();
   }
+  hasOpenCityHaul(): boolean {
+    return this.city.hasOpenHaul();
+  }
+  viewCityHauls(actor: string, member: CityMember | undefined, cities: CityOwnerships, atCity: CitySite | null) {
+    return this.city.haulView(actor, member, cities, atCity);
+  }
+  cityHaulOrder(actor: string, member: CityMember | undefined, order: CityHaulOrder, cities: CityOwnerships,
+    atCity: CitySite | null, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once<Record<string, number | string>>(actor, order.requestId, "city_haul", intent, () => {
+      const result = this.city.haulOrder(actor, member, order, cities, atCity, now);
+      if (result.gold !== undefined) {
+        const account = this.account(actor);
+        if (account.gold + result.gold > MAX_GOLD) throw Error("city_wallet_full");
+        account.gold += result.gold;
+        this.put(actor, account);
+      }
+      return result;
+    });
+  }
   viewCityMissions(actor: string, member: CityMember | undefined, ownership: CityOwnership) {
     return this.city.missionView(actor, member, ownership);
   }
@@ -366,7 +386,7 @@ export class EconomyStore {
         case "build": return this.city.build(order.epoch, member, site);
         case "start":
         case "start_fast": return this.city.start(order.epoch, member, now, order.action === "start_fast", site);
-        case "list": return this.city.list(order.epoch, member, order.amount, order.price, site);
+        case "list": return this.city.list(order.epoch, member, order.amount, order.price, site, order.item);
         case "warehouse_start": return this.city.warehouseStart(site, order.epoch, member, ownership);
         case "warehouse_allocate":
           return this.city.warehouseContribute(site, order.epoch, member, ownership, now, order.item, order.amount, "stock");

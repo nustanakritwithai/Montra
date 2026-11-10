@@ -319,6 +319,10 @@
       mission_submit:(data.purpose==="warehouse"?"สมทบแร่เข้าโครงการแล้ว":"ส่งงานแล้ว")+" · ได้รับ "+(data.gold ?? 0)+" ทอง",
       mission_cancel:"ปิดภารกิจแล้ว · คืนค่าจ้างส่วนที่ยังไม่ได้ใช้",
       mission_abandon:"คืนงานแล้ว · แร่ที่เก็บยังอยู่ในกระเป๋า",
+      haul_open:"บันทึกงานขนเสบียงแล้ว · กันสินค้าและค่าจ้างเรียบร้อย",
+      haul_approve:"อนุมัติรับเสบียงและกันพื้นที่คลังแล้ว",haul_decline:"ปฏิเสธรับเสบียงแล้ว",
+      haul_cancel:"ยกเลิกงานขนเสบียงแล้ว · คืนสินค้าและค่าจ้าง",haul_abandon:"คืนงานขนเสบียงแล้ว",
+      haul_pickup:"รับเสบียงแล้ว · เดินทางไปส่งที่เมืองปลายทาง",haul_deliver:"ส่งเสบียงแล้ว · ได้รับ "+(data.gold ?? 0)+" ทอง",
       policy_set:"บันทึกนโยบายเมืองแล้ว · ใช้กับรายการใหม่",
       start_fast:"เริ่มเร่งผลิตแล้ว",list:"ตั้งขายในตลาดโลกแล้ว",cancel:"คืนสินค้าเข้าคลังแล้ว",
       reclaim:"รับของเข้ากระเป๋าแล้ว",disband:"ยุบกิลด์แล้ว · รับทรัพย์สินได้ด้านล่าง",claim_disband:"รับทรัพย์สินแล้ว"};
@@ -359,6 +363,11 @@
       city_mission_active:"ตัวละครมีงานค้างอยู่แล้ว",city_mission_done:"ตัวละครเคยส่งงานประกาศนี้แล้ว",
       city_mission_full:"งานมีคนรับครบแล้ว · กรุณารีเฟรช",city_mission_progress:"ต้องเก็บแร่ที่ลานแต่งแร่ให้ครบหลังรับงาน",
       city_mission_ore_short:"แร่ในกระเป๋าไม่พอส่งงาน",
+      city_haul_disabled:"ระบบขนเสบียงพักรับและส่งงาน",
+      city_haul_location:"ไปยืนบนพื้นในเมืองที่ระบุแล้วกดรีเฟรช",
+      city_haul_siege:"พักงานขนเสบียงระหว่างศึก",city_haul_missing:"งานขนเสบียงปิดแล้ว · กรุณารีเฟรช",
+      city_haul_exists:"เมืองนี้มีงานขนเสบียงค้างอยู่แล้ว",city_haul_active:"ตัวละครกำลังขนเสบียงอยู่",
+      city_haul_state:"สถานะงานเปลี่ยนแล้ว · กรุณารีเฟรช",city_haul_courier:"ผู้ที่รับเสบียงเท่านั้นที่ส่งหรือคืนงานได้",
       city_policy_disabled:"ศาลาว่าการยังไม่เปิด",city_policy_location:"ไปยืนบนพื้นในด่านผนึกจันทราก่อนเปลี่ยนนโยบาย",
       city_policy_siege:"พักเปลี่ยนนโยบายระหว่างศึก",city_policy_cooldown:"เปลี่ยนนโยบายได้ทุก 24 ชั่วโมง · กรุณารีเฟรช",
       city_purchase_policy_limit:"จำนวนเกินเพดานตามนโยบายเมือง · กรุณารีเฟรช",
@@ -458,6 +467,7 @@
     rush_hold:"กันทองเร่งผลิต",rush_paid:"จ่ายค่าเร่งผลิต",rush_release:"คืนทองค่าเร่งผลิต",
     purchase_hold:"กันทองใบสั่งซื้อ",purchase_paid:"จ่ายค่าของตามใบสั่งซื้อ",purchase_release:"คืนทองใบสั่งซื้อ",
     mission_hold:"กันค่าจ้างภารกิจ",mission_paid:"จ่ายค่าจ้างภารกิจ",mission_release:"คืนค่าจ้างภารกิจ",
+    haul_hold:"กันค่าจ้างขนเสบียง",haul_paid:"จ่ายค่าจ้างขนเสบียง",haul_release:"คืนค่าจ้างขนเสบียง",
     policy_industry:"เลือกนโยบายเน้นผลิต",policy_procurement:"เลือกนโยบายเน้นจัดซื้อ"
   };
   function renderCityGovernance(){
@@ -489,7 +499,8 @@
     } else note(choices,"ผู้บัญชาการเป็นผู้เลือกนโยบาย");
     const ledger=group("ทองตลาดรวมของกิลด์");
     note(ledger,"พร้อมใช้ "+treasury.available+" ทอง · กันไว้ "+treasury.held+" ทอง");
-    note(ledger,"กันใบสั่งซื้อ "+treasury.purchaseHeld+" · ค่าจ้างภารกิจ "+treasury.missionHeld+" · เร่งผลิต "+treasury.rushHeld+" ทอง");
+    note(ledger,"กันใบสั่งซื้อ "+treasury.purchaseHeld+" · ค่าจ้างภารกิจ "+treasury.missionHeld+" · เร่งผลิต "+treasury.rushHeld+
+      " · ขนเสบียง "+(treasury.haulHeld ?? 0)+" ทอง");
     note(ledger,"รายรับสะสม "+treasury.earned+" ทอง · จ่ายแล้ว "+treasury.paid+" ทอง");
     const storage=group("คลังจันทรา");
     note(storage,"ใช้ "+used+" / "+capacity+" ชิ้น รวมพื้นที่ที่กันไว้");
@@ -503,6 +514,51 @@
     if(!cityRecoveryReady() || room.state.cityMissionSupported!==true)return;
     try{room.send("get_city_missions",{});}
     catch(_){cityStatus="เชื่อมต่อไม่ได้ · กรุณารีเฟรช";renderCityProduction();}
+  }
+  const cityHaulNames={sam_lan_estuary:"เวียงปากน้ำสามลาน",moon_pass:"ด่านผนึกจันทรา"};
+  function renderCityHauls(body,hauls,note,button,locked){
+    const {jobs,manage,enabled,paused,atCity}=hauls;
+    const section=marketText("section","gx-page");body.append(section);
+    section.append(marketText("h3","cp-h","ขนเสบียงระหว่างเมือง"));
+    note(section,"รับเสบียงขณะยืนบนพื้นในเมืองต้นทาง แล้วเดินทางไปส่งที่เมืองปลายทางเพื่อรับค่าจ้าง");
+    if(paused || !enabled)note(section,paused?"พักงานขนเสบียงระหว่างศึก":"พักรับและส่งงานขนเสบียง");
+    if(!jobs.length)note(section,"ยังไม่มีงานขนเสบียงที่เปิดให้ตัวละครนี้");
+    const unavailable=locked || paused || !enabled;
+    for(const job of jobs){
+      const card=marketText("section","gx-page");section.append(card);
+      card.append(marketText("h3","cp-h",cityHaulNames[job.source]+" → "+cityHaulNames[job.destination]));
+      note(card,job.name+" · "+cityItemName(job.item)+" × "+job.amount+" · ค่าจ้าง "+job.reward+" ทอง");
+      const status={pending:"รอปลายทางอนุมัติ",open:"เปิดรับผู้ขนส่ง",carrying:"กำลังขนส่ง"}[job.state];
+      note(card,status+" · "+(job.audience==="guild"?"เฉพาะกิลด์ต้นทาง":"ผู้เล่นทุกคน")+" · หมดอายุ "+new Date(job.expires).toLocaleString("th-TH"));
+      const fields={haulId:job.id};
+      if(job.canApprove){
+        button(card,"อนุมัติรับเสบียง",()=>sendCityProduction("haul_approve",fields),unavailable || atCity!==job.destination);
+        button(card,"ปฏิเสธรับเสบียง",()=>sendCityProduction("haul_decline",fields));
+      }
+      if(job.canCancel)button(card,"ยกเลิกงานขนเสบียง",()=>sendCityProduction("haul_cancel",fields));
+      if(job.canPickup)button(card,"รับเสบียงจากต้นทาง",()=>sendCityProduction("haul_pickup",fields),unavailable || atCity!==job.source);
+      if(job.carrying){
+        button(card,"ส่งเสบียงและรับทอง",()=>sendCityProduction("haul_deliver",fields),unavailable || atCity!==job.destination);
+        if(atCity!==job.destination)button(card,"ดูเส้นทางส่งเสบียง",()=>openStrategicMap(job.destination),locked);
+        button(card,"คืนงานขนเสบียง",()=>sendCityProduction("haul_abandon",fields));
+      }
+    }
+    if(!manage || !enabled || paused)return;
+    note(section,"ปลายทาง "+cityHaulNames[manage.destination]+" · "+cityItemName(manage.item)+
+      (manage.needsApproval?" · รอเจ้าหน้าที่ปลายทางอนุมัติ":" · กันพื้นที่ปลายทางทันที"));
+    if(manage.amount<1 || manage.reward<1){
+      note(section,"ต้องมีสินค้า ทองค่าจ้าง และพื้นที่ปลายทางก่อนเปิดงาน");return;
+    }
+    const field=marketText("label","field","ผู้รับงาน"),audience=document.createElement("select");
+    for(const [value,label] of [["public","ผู้เล่นทุกคน"],["guild","เฉพาะสมาชิกกิลด์"]]){
+      const option=marketText("option","",label);option.value=value;audience.append(option);
+    }
+    audience.disabled=locked;field.append(audience);section.append(field);
+    cityAmountForm(section,"เปิดงานขนเสบียง",[["จำนวนสินค้า",manage.amount],["ค่าจ้าง (ทอง)",manage.reward]],(amount,reward)=>{
+      if(cityPositive(amount,manage.amount) && cityPositive(reward,manage.reward))
+        sendCityProduction("haul_open",{epoch:manage.epoch,destination:manage.destination,destinationEpoch:manage.destinationEpoch,
+          amount,reward,audience:audience.value});
+    },locked);
   }
   function renderCityMission(){
     const body=$("cityProductionContent"),ready=cityRecoveryReady() && room.state.cityMissionSupported===true;
@@ -519,6 +575,7 @@
     if(cityPending && !cityPending.waiting)button(body,"ส่งคำขอเดิมซ้ำ",transmitCityProduction,!ready);
     if(!ready)return;
     if(!cityMission){note(body,"กำลังโหลดภารกิจ…");return;}
+    if(cityMission.hauls)renderCityHauls(body,cityMission.hauls,note,button,locked);
     const {missions,manage,enabled,siege,atMoon,item,required,maxSlots,maxReward,hours}=cityMission;
     const ore=(inventoryState?.slots || []).reduce((sum,stack)=>sum+(stack?.itemId===item && !stack.bound?stack.quantity:0),0);
     body.append(marketText("h3","cp-h","ด่านผนึกจันทรา"));
@@ -760,7 +817,8 @@
         const stock=id=>state.stock.find(row=>row.item===id)?.quantity || 0;
         note(summary,"คลัง "+state.used+" / "+state.capacity+" ชิ้น · โรงงานระดับ "+state.level);
         const list=marketText("ul","note");
-        for(const id of [...inputIds,output])list.append(marketText("li","",cityItemName(id)+" × "+stock(id)));
+        const shownItems=new Set([...inputIds,output,...state.stock.map(row=>row.item)]);
+        for(const id of shownItems)list.append(marketText("li","",cityItemName(id)+" × "+stock(id)));
         summary.append(list);
         if(!state.atCity && enabled)note(summary,"ไปที่เมืองและยืนบนพื้นเพื่อฝาก ผลิต หรือตั้งขาย");
         const bagSlots=(inventoryState?.slots || []).flatMap((item,slot)=>item && !item.bound ? [{item,slot}] : []);
@@ -821,6 +879,10 @@
           factory.append(actions);
           if(stock(output)>0)submit(factory,"ตั้งขายในตลาดโลก",[["จำนวนสินค้า",Math.min(99,stock(output))],["ราคารวม (ทอง)",1_000_000_000]],
             (amount,price)=>sendCityProduction("list",{epoch,amount,price}));
+          const imported="mat_metal_2";
+          if(output!==imported && stock(imported)>0)submit(factory,"ตั้งขาย "+cityItemName(imported),
+            [["จำนวนสินค้า",Math.min(99,stock(imported))],["ราคารวม (ทอง)",1_000_000_000]],
+            (amount,price)=>sendCityProduction("list",{epoch,amount,price,item:imported}));
         }
       }
       const listed=group("ประกาศขายของกิลด์");

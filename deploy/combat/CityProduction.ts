@@ -1,14 +1,16 @@
 import {randomUUID} from "node:crypto";
 import type {DatabaseSync} from "node:sqlite";
 import {
-  CITY_CAPACITY, CITY_DURATION_MS, CITY_FACTORY_COSTS, CITY_LINES, CITY_MINING_ORE, CITY_MINING_SITE,
+  CITY_CAPACITY, CITY_DURATION_MS, CITY_FACTORY_COSTS, CITY_HAUL_AMOUNT, CITY_HAUL_DURATION_MS, CITY_LINES,
+  CITY_MINING_ORE, CITY_MINING_PRODUCT, CITY_MINING_SITE,
   CITY_MISSION_HOURS, CITY_MISSION_MAX_REWARD, CITY_MISSION_ORE_COUNT, CITY_MISSION_POST_LIMIT, CITY_MISSION_WORKERS,
   CITY_POLICY_COOLDOWN_MS, CITY_POLICY_PURCHASE_AMOUNT, CITY_POLICY_SPEED,
   CITY_PRODUCT, CITY_PRODUCTION_SITE,
   CITY_PURCHASE_AMOUNT, CITY_PURCHASE_DURATION_MS, CITY_PURCHASE_MAX_PRICE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_RUSH_GOLD, CITY_SITES,
   CITY_MINING_WAREHOUSE_MATERIALS, CITY_WAREHOUSE_CAPACITY, CITY_WAREHOUSE_DURATION_MS, CITY_WAREHOUSE_REQUIREMENTS,
   CITY_WORKSHOP_FEE, CITY_WORKSHOP_SLOTS,
-  type CityAsset, type CityDisband, type CityItem, type CityMember, type CityMissionOrder, type CityOwnership, type CityPolicy, type CitySite,
+  otherCity, type CityAsset, type CityDisband, type CityHaulOrder, type CityItem, type CityMember,
+  type CityMissionOrder, type CityOwnership, type CityOwnerships, type CityPolicy, type CitySite,
 } from "./CityProductionRules.js";
 
 type Job = {id: string; site: CitySite; product: CityItem; epoch: number; guild: string; ready: number;
@@ -28,9 +30,13 @@ type PurchaseOrder = {
 };
 type Mission = {id: string; epoch: number; guild: string; name: string; audience: "guild" | "public";
   slots: number; completed: number; reward: number; expires: number; purpose: "stock" | "warehouse"};
+type Haul = {id: string; source: CitySite; sourceEpoch: number; sender: string; name: string;
+  destination: CitySite; destinationEpoch: number; receiver: string; item: CityItem; amount: number;
+  reward: number; expires: number; audience: "guild" | "public"; state: "pending" | "open" | "carrying";
+  courier: string | null};
 type Policy = {mode: CityPolicy; changed: number};
 type Treasury = {sales: number; workshops: number; rushPaid: number; rushHeld: number; purchasePaid: number;
-  purchaseHeld: number; missionPaid: number; missionHeld: number};
+  purchaseHeld: number; missionPaid: number; missionHeld: number; haulPaid: number; haulHeld: number};
 type Release = {guild: string; gold: number};
 const purchaseTable = `CREATE TABLE IF NOT EXISTS city_purchase_orders (
   id TEXT PRIMARY KEY, epoch INTEGER NOT NULL, guild TEXT NOT NULL, name TEXT NOT NULL,
@@ -41,6 +47,7 @@ const purchaseTable = `CREATE TABLE IF NOT EXISTS city_purchase_orders (
   CHECK((remaining=0)=(state='filled')));`;
 const purchaseIndexes = `CREATE UNIQUE INDEX IF NOT EXISTS city_purchase_one_open ON city_purchase_orders((1)) WHERE state='open';
   CREATE INDEX IF NOT EXISTS city_purchase_guild ON city_purchase_orders(guild);`;
+const activeHauls = "state IN ('pending','open','carrying')";
 
 export class CityProduction {
   constructor(private readonly db: DatabaseSync) {
@@ -107,6 +114,17 @@ export class CityProduction {
       CREATE TABLE IF NOT EXISTS city_guild_closures (
         guild TEXT PRIMARY KEY, actor TEXT NOT NULL, name TEXT NOT NULL, closed INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS city_guild_closures_actor ON city_guild_closures(actor);
+      CREATE TABLE IF NOT EXISTS city_hauls (
+        id TEXT PRIMARY KEY, source TEXT NOT NULL, sourceEpoch INTEGER NOT NULL, sender TEXT NOT NULL, name TEXT NOT NULL,
+        destination TEXT NOT NULL CHECK(destination<>source), destinationEpoch INTEGER NOT NULL, receiver TEXT NOT NULL,
+        item TEXT NOT NULL, amount INTEGER NOT NULL CHECK(amount BETWEEN 1 AND ${CITY_HAUL_AMOUNT}),
+        reward INTEGER NOT NULL CHECK(reward BETWEEN 1 AND ${CITY_MISSION_MAX_REWARD}), expires INTEGER NOT NULL,
+        audience TEXT NOT NULL CHECK(audience IN ('guild','public')), courier TEXT,
+        state TEXT NOT NULL CHECK(state IN ('pending','open','carrying','delivered','cancelled')),
+        CHECK(state NOT IN ('carrying','delivered') OR courier IS NOT NULL));
+      CREATE UNIQUE INDEX IF NOT EXISTS city_haul_per_origin ON city_hauls(sourceEpoch) WHERE ${activeHauls};
+      CREATE UNIQUE INDEX IF NOT EXISTS city_haul_per_courier ON city_hauls(courier) WHERE state='carrying';
+      CREATE INDEX IF NOT EXISTS city_haul_sender ON city_hauls(sender);
       CREATE TABLE IF NOT EXISTS city_disband_assets (
         guild TEXT NOT NULL REFERENCES city_guild_closures(guild), item TEXT NOT NULL,
         awarded INTEGER NOT NULL CHECK(awarded>0),
@@ -188,6 +206,8 @@ export class CityProduction {
     }
     if (epoch !== active)
       this.db.prepare("UPDATE city_factory_sites SET epoch=?,guild=? WHERE site=?").run(active, ownership.active?.guild ?? null, site);
+    this.cancelHauls(`expires<=? OR (source=? AND sourceEpoch IS NOT ?) OR (destination=? AND destinationEpoch IS NOT ?)`,
+      now, now, site, active, site, active);
     if (site === CITY_MINING_SITE) {
       this.released("purchase_release", now, this.db.prepare(`UPDATE city_purchase_orders
         SET state=CASE WHEN epoch IS NOT ? THEN 'cancelled' ELSE 'expired' END
@@ -221,11 +241,13 @@ export class CityProduction {
       (SELECT coalesce(sum((amount-remaining)*unit_price),0) FROM city_purchase_orders WHERE guild=?) AS purchasePaid,
       (SELECT coalesce(sum(remaining*unit_price),0) FROM city_purchase_orders WHERE guild=? AND state='open') AS purchaseHeld,
       (SELECT coalesce(sum(completed*reward),0) FROM city_missions WHERE guild=?) AS missionPaid,
-      (SELECT coalesce(sum((slots-completed)*reward),0) FROM city_missions WHERE guild=? AND state='open') AS missionHeld`)
-      .get(guild, guild, guild, guild, guild, guild, guild, guild) as Treasury;
+      (SELECT coalesce(sum((slots-completed)*reward),0) FROM city_missions WHERE guild=? AND state='open') AS missionHeld,
+      (SELECT coalesce(sum(reward),0) FROM city_hauls WHERE sender=? AND state='delivered') AS haulPaid,
+      (SELECT coalesce(sum(reward),0) FROM city_hauls WHERE sender=? AND ${activeHauls}) AS haulHeld`)
+      .get(guild, guild, guild, guild, guild, guild, guild, guild, guild, guild) as Treasury;
     const earned = values.sales + values.workshops;
-    const paid = values.rushPaid + values.purchasePaid + values.missionPaid;
-    const held = values.rushHeld + values.purchaseHeld + values.missionHeld;
+    const paid = values.rushPaid + values.purchasePaid + values.missionPaid + values.haulPaid;
+    const held = values.rushHeld + values.purchaseHeld + values.missionHeld + values.haulHeld;
     return {...values, earned, paid, held, available: earned - paid - held};
   }
 
@@ -480,6 +502,124 @@ export class CityProduction {
       ? CITY_WAREHOUSE_CAPACITY : CITY_CAPACITY;
   }
 
+  hasOpenHaul(): boolean {
+    return Boolean(this.db.prepare(`SELECT 1 FROM city_hauls WHERE ${activeHauls} LIMIT 1`).get());
+  }
+
+  private cancelHauls(condition: string, now: number, ...args: (string | number | null)[]): void {
+    const rows = this.db.prepare(`UPDATE city_hauls SET state='cancelled',courier=NULL
+      WHERE ${activeHauls} AND (${condition}) RETURNING *`).all(...args) as Haul[];
+    for (const haul of rows) {
+      this.add(haul.sourceEpoch, haul.sender, haul.item, haul.amount);
+      this.treasuryEvent(haul.sender, now, "haul_release", haul.reward);
+    }
+  }
+
+  private haulPaused(cities: CityOwnerships): boolean {
+    return CITY_SITES.some(site => cities[site].siegeStarted !== undefined);
+  }
+
+  haulView(actor: string, member: CityMember | undefined, cities: CityOwnerships, atCity: CitySite | null) {
+    const officer = member?.officer ? member.id : null, paused = this.haulPaused(cities);
+    const rows = this.db.prepare(`SELECT * FROM city_hauls WHERE ${activeHauls} ORDER BY expires`).all() as Haul[];
+    const carrying = rows.some(haul => haul.courier === actor);
+    const jobs = rows.filter(haul => haul.courier === actor || officer === haul.sender || officer === haul.receiver ||
+      (haul.state === "open" && (haul.audience === "public" || member?.id === haul.sender)));
+    const destination = atCity === null ? null : otherCity(atCity);
+    const origin = atCity === null ? null : cities[atCity].active;
+    const target = destination === null ? null : cities[destination].active;
+    const canPost = atCity !== null && destination !== null && origin && target && origin.guild === officer &&
+      !rows.some(haul => haul.sourceEpoch === origin.id);
+    return {
+      atCity, paused,
+      manage: canPost ? {
+        epoch: origin.id, destination, destinationEpoch: target.id,
+        needsApproval: target.guild !== officer, item: CITY_LINES[atCity].output,
+        amount: Math.min(CITY_HAUL_AMOUNT, this.stockQuantity(origin.id, origin.guild, CITY_LINES[atCity].output),
+          target.guild === officer ? Math.max(0, this.capacity(destination) - this.used(target.id)) : CITY_HAUL_AMOUNT),
+        reward: Math.min(CITY_MISSION_MAX_REWARD, this.marketGold(origin.guild)),
+      } : null,
+      jobs: jobs.map(haul => ({
+        id: haul.id, source: haul.source, destination: haul.destination, name: haul.name, state: haul.state,
+        item: haul.item, amount: haul.amount, reward: haul.reward, expires: haul.expires, audience: haul.audience,
+        canApprove: officer === haul.receiver && haul.state === "pending",
+        canCancel: officer === haul.sender && haul.state !== "carrying",
+        canPickup: !carrying && haul.state === "open" && (haul.audience === "public" || member?.id === haul.sender),
+        carrying: haul.courier === actor,
+      })),
+    };
+  }
+
+  private openHaul(member: CityMember | undefined, order: Extract<CityHaulOrder, {action: "haul_open"}>,
+    cities: CityOwnerships, atCity: CitySite | null, now: number) {
+    if (!member) throw Error("city_not_member");
+    this.requireOfficer(member);
+    const destination = order.destination, source = otherCity(destination), target = cities[destination].active;
+    if (atCity !== source) throw Error("city_haul_location");
+    this.requireCity(member, order.epoch, cities[source], source);
+    if (target?.id !== order.destinationEpoch || this.closureActor(target.guild)) throw Error("city_ownership_changed");
+    if (this.haulPaused(cities)) throw Error("city_haul_siege");
+    if (this.db.prepare(`SELECT 1 FROM city_hauls WHERE sourceEpoch=? AND ${activeHauls}`).get(order.epoch))
+      throw Error("city_haul_exists");
+    if (this.marketGold(member.id) < order.reward) throw Error("city_market_funds");
+    const sameGuild = target.guild === member.id;
+    if (sameGuild && this.used(target.id) + order.amount > this.capacity(destination)) throw Error("city_storage_full");
+    const haulId = randomUUID(), item = CITY_LINES[source].output;
+    this.take(order.epoch, member.id, item, order.amount);
+    this.db.prepare(`INSERT INTO city_hauls(id,source,sourceEpoch,sender,name,destination,destinationEpoch,receiver,
+      item,amount,reward,expires,audience,state) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(haulId, source, order.epoch, member.id, member.name, destination, target.id, target.guild,
+        item, order.amount, order.reward, now + CITY_HAUL_DURATION_MS, order.audience, sameGuild ? "open" : "pending");
+    this.treasuryEvent(member.id, now, "haul_hold", order.reward);
+    return {haulId};
+  }
+
+  haulOrder(actor: string, member: CityMember | undefined, order: CityHaulOrder, cities: CityOwnerships, atCity: CitySite | null, now: number) {
+    if (order.action === "haul_open") return this.openHaul(member, order, cities, atCity, now);
+    const haul = this.db.prepare(`SELECT * FROM city_hauls WHERE id=? AND ${activeHauls}`).get(order.haulId) as Haul | undefined;
+    if (!haul || haul.expires <= now || cities[haul.source].active?.id !== haul.sourceEpoch ||
+        cities[haul.destination].active?.id !== haul.destinationEpoch ||
+        this.closureActor(haul.sender) || this.closureActor(haul.receiver)) throw Error("city_haul_missing");
+    const haulId = haul.id;
+    switch (order.action) {
+      case "haul_cancel":
+      case "haul_decline": {
+        const decline = order.action === "haul_decline";
+        if (!member?.officer || member.id !== (decline ? haul.receiver : haul.sender)) throw Error("city_officer_required");
+        if (decline ? haul.state !== "pending" : haul.state === "carrying") throw Error("city_haul_state");
+        this.cancelHauls("id=?", now, haulId);
+        return {haulId};
+      }
+      case "haul_abandon":
+        if (haul.courier !== actor || haul.state !== "carrying") throw Error("city_haul_courier");
+        this.db.prepare("UPDATE city_hauls SET state='open',courier=NULL WHERE id=?").run(haulId);
+        return {haulId};
+    }
+    if (this.haulPaused(cities)) throw Error("city_haul_siege");
+    if (atCity !== (order.action === "haul_pickup" ? haul.source : haul.destination)) throw Error("city_haul_location");
+    switch (order.action) {
+      case "haul_approve":
+        if (!member?.officer || member.id !== haul.receiver) throw Error("city_officer_required");
+        if (haul.state !== "pending") throw Error("city_haul_state");
+        if (this.used(haul.destinationEpoch) + haul.amount > this.capacity(haul.destination)) throw Error("city_storage_full");
+        this.db.prepare("UPDATE city_hauls SET state='open' WHERE id=?").run(haulId);
+        return {haulId};
+      case "haul_pickup":
+        if (haul.state !== "open") throw Error("city_haul_state");
+        if (haul.audience === "guild" && member?.id !== haul.sender) throw Error("city_mission_guild_only");
+        if (this.db.prepare("SELECT 1 FROM city_hauls WHERE courier=? AND state='carrying'").get(actor))
+          throw Error("city_haul_active");
+        this.db.prepare("UPDATE city_hauls SET state='carrying',courier=? WHERE id=?").run(actor, haulId);
+        return {haulId};
+      case "haul_deliver":
+        if (haul.courier !== actor || haul.state !== "carrying") throw Error("city_haul_courier");
+        this.add(haul.destinationEpoch, haul.receiver, haul.item, haul.amount);
+        this.db.prepare("UPDATE city_hauls SET state='delivered' WHERE id=?").run(haulId);
+        this.treasuryEvent(haul.sender, now, "haul_paid", haul.reward);
+        return {haulId, gold: haul.reward};
+    }
+  }
+
   private workshopJob(actor: string): WorkshopJob | undefined {
     return this.db.prepare(`SELECT id,ready AS readyAt,item,quantity FROM city_workshop_jobs WHERE actor=? AND claimed=0`)
       .get(actor) as WorkshopJob | undefined;
@@ -599,8 +739,15 @@ export class CityProduction {
       FROM listings WHERE city_epoch=? AND state='open'`).get(epoch);
     const ordered = this.db.prepare("SELECT remaining FROM city_purchase_orders WHERE epoch=? AND state='open'").get(epoch);
     const missions = this.db.prepare("SELECT coalesce(sum(slots-completed),0) AS slots FROM city_missions WHERE epoch=? AND state='open' AND purpose='stock'").get(epoch);
+    const hauls = this.db.prepare(`SELECT coalesce(sum(amount),0) AS total FROM city_hauls WHERE ${activeHauls}
+      AND (sourceEpoch=? OR (destinationEpoch=? AND state<>'pending'))`).get(epoch, epoch);
     return Number(stock?.total) + Number(listed?.total) + (this.running(epoch)?.quantity ?? 0) +
-      Number(ordered?.remaining ?? 0) + Number(missions?.slots ?? 0) * CITY_MISSION_ORE_COUNT;
+      Number(ordered?.remaining ?? 0) + Number(missions?.slots ?? 0) * CITY_MISSION_ORE_COUNT + Number(hauls?.total);
+  }
+
+  private stockQuantity(epoch: number, guild: string, item: CityItem): number {
+    const row = this.db.prepare("SELECT quantity FROM city_stock WHERE epoch=? AND guild=? AND item=?").get(epoch, guild, item);
+    return Number(row?.quantity ?? 0);
   }
 
   private add(epoch: number, guild: string, item: CityItem, amount: number): void {
@@ -655,11 +802,13 @@ export class CityProduction {
     return {jobId, readyAt, fee};
   }
 
-  list(epoch: number, member: CityMember, amount: number, price: number, site: CitySite): {listingId: string} {
+  list(epoch: number, member: CityMember, amount: number, price: number, site: CitySite,
+    imported?: typeof CITY_MINING_PRODUCT): {listingId: string} {
     this.requireOfficer(member);
     const open = this.db.prepare("SELECT count(*) AS total FROM listings WHERE seller_guild=? AND state='open'").get(member.id);
     if (Number(open?.total) >= 20) throw Error("listing_limit");
-    const itemId = CITY_LINES[site].output;
+    if (imported && site !== CITY_PRODUCTION_SITE) throw Error("city_item_not_accepted");
+    const itemId = imported ?? CITY_LINES[site].output;
     this.take(epoch, member.id, itemId, amount);
     const listingId = randomUUID();
     this.db.prepare(`INSERT INTO listings(id,item,price,state,seller_guild,seller_name,city_epoch)
@@ -695,8 +844,9 @@ export class CityProduction {
       UNION ALL SELECT 1 FROM listings WHERE seller_guild=? AND state='open'
       UNION ALL SELECT 1 FROM city_purchase_orders WHERE guild=? AND state='open'
       UNION ALL SELECT 1 FROM city_missions WHERE guild=? AND state='open'
+      UNION ALL SELECT 1 FROM city_hauls WHERE (sender=? OR receiver=?) AND ${activeHauls}
       UNION ALL SELECT 1 FROM city_warehouse_projects
-        WHERE guild=? AND status IN ('collecting','building') AND wood+stone+metal>0 LIMIT 1`).get(guild, guild, guild, guild, guild, guild))
+        WHERE guild=? AND status IN ('collecting','building') AND wood+stone+metal>0 LIMIT 1`).get(guild, guild, guild, guild, guild, guild, guild, guild))
       || this.marketGold(guild) > 0;
   }
 
@@ -713,6 +863,7 @@ export class CityProduction {
       if (closedBy !== actor) throw Error("city_disband_unavailable");
       return;
     }
+    this.cancelHauls("sender=? OR receiver=?", requested, guild, guild);
     const running = this.db.prepare("SELECT * FROM city_jobs WHERE guild=? AND status='running'").all(guild) as Job[];
     for (const job of running) {
       const ownership = ownerships.get(job.site);
