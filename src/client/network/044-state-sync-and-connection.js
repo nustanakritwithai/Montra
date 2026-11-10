@@ -1386,6 +1386,10 @@
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
         if (typeof homeCommandError === "function" && homeCommandError(info?.reason)) return;
+        if (info?.reason === "boat_action_unavailable") {toast("เข้าใกล้ท่าเรือ หรือหยุดเรือชิดฝั่งก่อนขึ้นลง");return;}
+        if (info?.reason === "boat_disembark_first") {toast("ขึ้นฝั่งก่อนใช้คำสั่งนี้");return;}
+        if (info?.reason === "boat_deck_only") {toast("แตะบนดาดฟ้าเพื่อเดิน หรือกดขึ้นฝั่ง");return;}
+        if (info?.reason === "boat_unavailable") return;
         if(info?.reason==="skill_learning_in_combat"){toast("รอให้พ้นการต่อสู้ 5 วินาทีก่อนเรียนหรืออัปขั้น · ทำได้ทุกที่");return;}
         if(typeof info?.reason==="string" && (info.reason.startsWith("skill_hotbar_") || info.reason==="invalid_skill_hotbar")){
           skillLoadoutPending=null;skillLoadoutKey="";syncAdvancedSkillUI();

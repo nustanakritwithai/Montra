@@ -33,6 +33,7 @@ applyPlayerHit|victim.hp=Math.max(0,victim.hp-damage)
 finishRescue|target.hp=Math.min(target.maxHp,target.hp+event.amount)
 onCreate|this.state.monster.hp=RULES.monsterMaxHp
 resolveForestMonsterHit|player.hp=Math.max(0,player.hp-damage)
+retireMonster|monster.hp=0
 updateResources|player.hp=Math.min(player.maxHp,player.hp+healed)
 knockoutPlayer|victim.hp=0
 resolveDefaultMonsterHit|target.hp=Math.max(0,target.hp-damage)

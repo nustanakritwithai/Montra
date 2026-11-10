@@ -177,7 +177,7 @@ export class ForestEncounters {
       if(isBound?.(id)){m.aiState="stagger";continue;}
       if(now<life.interruptUntil){m.aiState="stagger";continue;}
       const eligible=(pid:string,p:Player|undefined):p is Player=>Boolean(p&&p.alive&&p.mapId===m.mapId&&
-        !blocked.has(pid)&&onMapGround(p)&&!isRestArea(p.mapId,p) && (!canDetect || canDetect(pid,p,m)));
+        !blocked.has(pid)&&(p.boatId || onMapGround(p))&&!isRestArea(p.mapId,p) && (!canDetect || canDetect(pid,p,m)));
       const boss=map.boss??map.guardian;
       if (life.windupUntil > 0) {
         const target = players.get(m.targetId);

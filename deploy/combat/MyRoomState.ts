@@ -56,6 +56,7 @@ export const Player = schema({
   gearLook: t.string().default(""), // append-only: visible worn gear "slot=family:tier;…", never bag contents
   skillHotbarVersion: t.number().default(MIXED_SKILLS_ENABLED?1:0),
   skillHotbarData: t.string().default(""),
+  boatId: t.string().default(""),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
@@ -120,6 +121,19 @@ export const Fortification = schema({
 }, "MontraFortification");
 export type Fortification = SchemaType<typeof Fortification>;
 
+export const SailingBoat = schema({
+  mapId: t.string().default(""),
+  x: t.number().default(0),
+  z: t.number().default(0),
+  heading: t.number().default(0),
+  speed: t.number().default(0),
+  hp: t.number().default(0),
+  maxHp: t.number().default(0),
+  anchored: t.boolean().default(true),
+  sunk: t.boolean().default(false),
+  helmId: t.string().default(""),
+}, "MontraSailingBoat");
+
 export const MyRoomState = schema({
   // A per-client view permits server-side concealment without sending hidden positions.
   players: t.map(Player).view(),
@@ -158,6 +172,8 @@ export const MyRoomState = schema({
   mountAvailable: t.boolean().default(true), // append-only; older servers do not expose horse mounts
   forestObjectivesAvailable: t.boolean().default(false),
   ghostPotAvailable: t.boolean().default(false),
+  boatsAvailable: t.boolean().default(false),
+  boats: t.map(SailingBoat),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

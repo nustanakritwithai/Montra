@@ -66,7 +66,7 @@ function last(room) {
 try {
   const a = observe(await client().create("my_room", ownerOptions));
   const b = observe(await client().joinById(a.roomId, options()));
-  await until(() => a.state?.ghostPotAvailable && a.state.players.size === 2 && b.state.players.size === 2, "two players in the enabled room");
+  await until(() => a.state?.ghostPotAvailable && a.state.players?.size === 2 && b.state?.players?.size === 2, "two players in the enabled room");
   a.send("ghost_pot", {action: "read"});
   assert.deepEqual(await until(() => last(a), "empty pot"), {ghost: null, active: false, status: "ready"});
   b.send("ghost_pot", {action: "summon"});
@@ -86,7 +86,9 @@ try {
     }
   }
   assert.ok(captured?.instanceId, "the original 95%-chance fixture should capture");
-  await until(() => !a.state.monster.alive, "captured ghost removed from the encounter");
+  await until(() => !a.state.monster.alive && !b.state.monster.alive, "captured ghost removed for both players");
+  assert.equal(a.state.monster.hp, 0, "captured ghost has zero HP for its captor");
+  assert.equal(b.state.monster.hp, 0, "captured ghost has zero HP for other players");
   a.send("ghost_pot", {action: "capture", targetId});
   await until(() => rejections.get(a).includes("ghost_pot_occupied"), "repeat capture blocked");
 

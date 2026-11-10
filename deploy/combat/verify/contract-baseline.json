@@ -11,6 +11,7 @@
     "blade_book_get",
     "blade_core_skill",
     "blade_skill",
+    "boat_intent",
     "card_socket",
     "chat",
     "city_production",
@@ -133,6 +134,7 @@
     "blade_core_skill",
     "blade_skill",
     "blessed_rice",
+    "boat_intent",
     "card_socket",
     "cast_class_skill",
     "chat",
@@ -535,7 +537,7 @@
   "dynamicClientReceives": 2,
   "dynamicServerSends": 5,
   "protectedSources": {
-    "MyRoomState.ts": "86612d381223c547eec7f18eccc9df321fa8b62b04c3dc1a55503b294277d186",
+    "MyRoomState.ts": "8f194b0378ef2a6d7e42e4cb0a493d2f24978e607cd90e10f0cf0b56abb3869d",
     "CharacterStore.ts": "3453e4a7184325880006075cb5a11a1da7691e418f7991eacaeb8c6191b7b96b",
     "AccountStore.ts": "39f50bb2aac688f4e03cb78ca3a556b05a1d1745d6797d9339de666bb07d152e",
     "EconomyStore.ts": "1c3ac0976a46b1e4a61eb4bbc5d474f6fc7d200bd9ac09fa238dfa0b989f2031"

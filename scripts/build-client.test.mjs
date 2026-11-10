@@ -38,8 +38,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "input/045-pointer-touch-and-dash.js",
-  "bytes": 14482,
-  "sha256": "b22eebc64646855af654d265e3fa68e2366b1c929ff4980b5fa8d68a990a6254"
+  "bytes": 14634,
+  "sha256": "52476e2dd8663e23c92b8a35b6a8818a9861b66c2f5ec4f6e1b84f42f2c4b914"
 },
 {
   "path": "render/007-world-effects.js",
@@ -93,8 +93,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/014-ritual-village.js",
-  "bytes": 28293,
-  "sha256": "ad24daf0c47452cc936da18e01bf47c582c33b987957480ba374c682b4958b01"
+  "bytes": 28446,
+  "sha256": "861ceef6b5d9e82c2f08dff6994ce9753968aad66dc169237e2087e62fc6c020"
 },
 {
   "path": "world/013-ground-and-fortification.js",
@@ -133,13 +133,13 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 149856,
-  "sha256": "967b8ec2b39ab59dc8e0528dde90594f79796f9adf9b470051798dcfd65f7212"
+  "bytes": 150437,
+  "sha256": "57f0a5fcd262a85c883f7fdc8b5def43c02aae91c1c97a89ac930c99ae9c043b"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
-  "bytes": 20066,
-  "sha256": "c5baf151f83584f962c404ad362710ec23f4052dc2f6f8c06ee8d0b66fd5ff68"
+  "bytes": 26546,
+  "sha256": "1f068b079200ca76a3dc51b42cee3b32ca484104ec6d5adf36c5c3253203de8d"
 },
   {
     "path": "ui/053-gear-training-and-crafting.js",
@@ -249,8 +249,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1811414);
-  assert.equal(hash(bytes), '784aad2fca9328b0c7d8887b227c5cab2ea874eacf312513071cecf672b17267');
+  assert.equal(bytes.length, 1818780);
+  assert.equal(hash(bytes), 'b653feeb0b9d1c31ca90966db461f3a00a7141adb08004eecf369931704102a5');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

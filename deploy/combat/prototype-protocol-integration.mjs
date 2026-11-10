@@ -6,7 +6,12 @@ import {mkdtemp, mkdir, rm} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {Client} from '@colyseus/sdk';
+import NodeWebSocket from 'ws';
+
+// Capture the Node transport so the test can abruptly sever the real socket.
+const originalWebSocket=globalThis.WebSocket;
+globalThis.WebSocket=NodeWebSocket;
+const {Client}=await import('@colyseus/sdk').finally(()=>{globalThis.WebSocket=originalWebSocket;});
 
 armTestDeadline();
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -62,7 +67,19 @@ try{
   a.room.send('prototype_protocol_v1',{seq:2,action:'probe'});
   await until(()=>a.results.length===2,'higher sequence accepted');await delay(200);
   assert.deepEqual(a.results.map(x=>x.seq),[1,3]);assert.equal(legacy.results.length,0);
-  const oldSession=a.room.sessionId;await leave(a);
+  const oldSession=a.room.sessionId, oldToken=a.room.reconnectionToken;
+  await until(()=>legacy.room.state?.players?.has(oldSession),'observer sees the original player');
+  Object.assign(a.room.reconnection,{enabled:true,minUptime:0,maxRetries:1,minDelay:100,maxDelay:100});
+  let dropped=false, disconnected=false, resumed=false;
+  a.room.onDrop(()=>{dropped=true;});
+  a.room.onLeave(()=>{disconnected=true;});
+  a.room.onReconnect(()=>{resumed=true;});
+  a.room.connection.transport.ws.terminate();
+  await until(()=>dropped && disconnected && !legacy.room.state.players.has(oldSession),'socket loss releases the old session');
+  assert.equal(a.room.reconnection.retryCount,1,'SDK attempted automatic reconnection');
+  assert.equal(resumed,false,'the room does not reserve the old session');
+  rooms.splice(rooms.indexOf(a.room),1);
+  await assert.rejects(new Client(endpoint).reconnect(oldToken),{code:524,message:'reconnection token invalid or expired.'});
   const renewed=await connect(endpoint,{prototypeProtocolVersion:1},legacy.room.roomId);
   await until(()=>renewed.ready.length===1,'new session ready');
   assert.notEqual(renewed.room.sessionId,oldSession);
@@ -74,6 +91,6 @@ try{
   const disabled=await connect(endpoint,{prototypeProtocolVersion:1});
   await delay(250);disabled.room.send('prototype_protocol_v1',{seq:1,action:'probe'});await delay(300);
   assert.deepEqual(disabled.ready,[]);assert.deepEqual(disabled.results,[]);
-  await leave(disabled);console.log('PASS: loopback join acknowledgement, legacy and disabled isolation, replay and new-session reset');
+  await leave(disabled);console.log('PASS: loopback join acknowledgement, legacy and disabled isolation, replay, dropped socket rejection and new-session reset');
 } catch(error){throw Error(String(error)+'\nTest server output:\n'+output);}
 finally{await Promise.allSettled(rooms.map(room=>leaveTestRoom(room)));try{await stop();}finally{await rm(home,{recursive:true,force:true});}}

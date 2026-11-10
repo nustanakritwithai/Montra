@@ -482,6 +482,7 @@ test('capturing a monster retires it without a reward while a lethal hit settles
  m.hp=1;
  r.retireMonster(m);
  assert.equal(m.alive,false);
+ assert.equal(m.hp,0);
  assert.equal(m.hitSeq,0);
  assert.deepEqual(rewards,[]);
  assert.ok(!events.some(event=>event.type==='combat_hit'));

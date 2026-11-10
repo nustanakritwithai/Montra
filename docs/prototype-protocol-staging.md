@@ -19,3 +19,7 @@ The exact Ash Rice and Deep Heal casts have `action`, `seq` and `targetId`. Ash 
 The moving Deep Circle accepts exactly {action: "mender_deep_circle", seq: positive safe integer}. Its placement, pulse and terminal notices share castId. Each pulse carries targetIds and the aggregate HP restored. The occult_state snapshot also returns active same-map circles and their current centres.
 
 Spirit Rain accepts {action: "seer_spirit_rain", seq: positive safe integer, targetId: monster ID}. An accepted cast needs the caster’s active mark and emits a chained notice with the ordered list of applied hits.
+
+The room does not reserve a session after an unexpected socket loss. The SDK
+reconnect attempt is rejected and a fresh admission starts with a new session
+and sequence. Same-session resume requires a separately reviewed design.
