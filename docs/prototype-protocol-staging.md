@@ -17,3 +17,5 @@ Confirmed gameplay test clients can send exactly `{seq: positive safe integer, a
 The exact Ash Rice and Deep Heal casts have `action`, `seq` and `targetId`. Ash Rice accepts a monster and chooses the ground point server-side. Deep Heal accepts the caster or an eligible party member. Each placement and its terminal notice share `castId`. The exact `{action: "occult_state"}` request returns same-map active traps and wards, plus the simulation clock, via `prototype_occult_v1_state`.
 
 The moving Deep Circle accepts exactly {action: "mender_deep_circle", seq: positive safe integer}. Its placement, pulse and terminal notices share castId. Each pulse carries targetIds and the aggregate HP restored. The occult_state snapshot also returns active same-map circles and their current centres.
+
+Spirit Rain accepts {action: "seer_spirit_rain", seq: positive safe integer, targetId: monster ID}. An accepted cast needs the caster’s active mark and emits a chained notice with the ordered list of applied hits.

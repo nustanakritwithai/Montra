@@ -308,7 +308,7 @@ test('each replacement ID routes to exactly one version, while other IDs keep th
  const families=[
   ['sword','castSwordSkill','flowing_blades'],['muay','castMuaySkill','chaiya_advanced_counter'],
   ['blade','castBladeSkill','shadow_cut'],['sentinel','castSentinelSkill','firm_guard'],
-  ['occult','castOccultSkill','seer_ash_rice'],['occult','castOccultSkill','mender_deep_heal'],['occult','castOccultSkill','mender_deep_circle']
+  ['occult','castOccultSkill','seer_ash_rice'],['occult','castOccultSkill','mender_deep_heal'],['occult','castOccultSkill','mender_deep_circle'],['occult','castOccultSkill','seer_spirit_rain']
  ];
  const routed=[];
  for(const [,method] of families)r[method]=(_client,message,sequence)=>routed.push({method,message,sequence});
@@ -416,4 +416,61 @@ test('normal rooms retain the old Deep Circle under the same saved ID',wrap(()=>
  assert.ok(book.cooldowns.mender_deep_circle>Date.now());
  assert.equal(r.occultHealingFields.get('a').kind,'fixed');
  assert.ok(events.some(e=>e.type==='occult_skill_used' && e.data.skillId==='mender_deep_circle'));
+}));
+
+function spiritRainFixture(){
+ const setup=fixture('seer'),{r,m,p,client}=setup;
+ const book=newOccultBook();
+ book.learned.seer=['seer_mark','seer_rice','seer_scatter','seer_spirit_rain'];
+ book.loadouts.seer=['seer_mark','seer_scatter','seer_spirit_rain',null];
+ r.occultBooks.set('a',book);r.persistentCharacters.set('a','synthetic');
+ r.prototypeBuckets.set('a',{consume:()=>true});
+ r.simulatedMs=10000;
+ p.magicAtk=100;
+ Object.assign(m,{defense:0,level:1});
+ const add=(id,dx,options={})=>{
+  const monster=new Monster({id,x:m.x+dx,y:m.y,z:m.z,mapId:m.mapId,hp:10000,maxHp:10000,defense:0,level:1,alive:true,...options});
+  r.state.monsters.set(id,monster);return monster;
+ };
+ const mark=(target=m,until=r.simulatedMs+8000)=>r.occultMarks.set('a',{targetId:target.id,until});
+ return {...setup,book,add,mark};
+}
+
+test('Spirit Rain spends one valid mark and chains from each previous monster once',wrap(()=>{
+ const {r,p,m,client,events,book,add,mark,send}=spiritRainFixture();
+ const bridge=add('forest_west_1',4),far=add('forest_west_2',8),blocked=add('forest_west_3',2);
+ const otherMap=add('forest_west_4',1,{mapId:'other'});
+ r.bodyPathClear=(_map,from,to)=>from===p || to!==blocked;
+ r.messages.occult_skill(client,{skillId:'seer_spirit_rain',targetId:m.id});
+ assert.equal(p.mana,100,'legacy packet cannot bypass replacement');
+ send('seer_spirit_rain',1);assert.equal(p.mana,100);
+ mark(bridge);send('seer_spirit_rain',2);assert.equal(p.mana,100);
+ mark(m,r.simulatedMs);send('seer_spirit_rain',3);assert.equal(p.mana,100);
+ assert.equal(book.cooldowns.seer_spirit_rain,undefined);
+ mark();const before=[m.hp,bridge.hp,far.hp];
+ send('seer_spirit_rain',4);send('seer_spirit_rain',4);
+ assert.equal(p.mana,66);assert.equal(r.occultMarks.has('a'),false);
+ assert.ok(book.cooldowns.seer_spirit_rain>Date.now());
+ assert.deepEqual([m.hitSeq,bridge.hitSeq,far.hitSeq,blocked.hitSeq,otherMap.hitSeq],[1,1,1,0,0]);
+ const [first,second,third]=[m,bridge,far].map((monster,index)=>before[index]-monster.hp);
+ assert.ok(first>second && second>third && third>0);
+ const cast=events.filter(e=>e.type==='prototype_skill_v1' && e.data.skillId==='seer_spirit_rain');
+ assert.equal(cast.length,1);assert.equal(cast[0].data.phase,'chained');
+ assert.deepEqual(cast[0].data.targetIds,[m.id,bridge.id,far.id]);
+ assert.equal(events.some(e=>e.type==='occult_skill_used' && e.data.skillId==='seer_spirit_rain'),false);
+}));
+
+test('Scatter keeps its original nearby-target behavior and normal rooms keep legacy Spirit Rain',wrap(()=>{
+ const {r,p,m,client,events,add,send}=spiritRainFixture();
+ const nearby=add('forest_west_1',2),far=add('forest_west_2',5);
+ r.messages.occult_skill(client,{skillId:'seer_scatter',targetId:m.id});
+ assert.equal(p.mana,76);assert.deepEqual([m.hitSeq,nearby.hitSeq,far.hitSeq],[1,1,0]);
+ assert.equal(r.occultMarks.has('a'),false);
+
+ process.env.MONTRA_PROTOTYPE_GAMEPLAY='0';
+ send('seer_spirit_rain',1);assert.equal(p.mana,76);
+ r.messages.occult_skill(client,{skillId:'seer_spirit_rain',targetId:m.id});
+ assert.equal(p.mana,42);assert.deepEqual([m.hitSeq,nearby.hitSeq,far.hitSeq],[2,2,0]);
+ assert.ok(events.some(e=>e.type==='occult_skill_used'&&e.data.skillId==='seer_spirit_rain'));
+ assert.equal(events.some(e=>e.type==='prototype_skill_v1'),false);
 }));

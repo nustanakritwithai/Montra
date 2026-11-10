@@ -18,6 +18,12 @@ const seerBook={learned:{seer:['seer_mark','seer_rice','seer_ash_rice'],mender:[
 await writeFile(path.join(chars,seerId+'.json'),JSON.stringify({version:1,id:seerId,name:'Prototype Seer',
  level:40,experience:0,pkKills:0,pkDeaths:0,x:1.1,y:0,z:11.6,hp:500,mapId:'ritual_village',
  build:{path:'seer',ancestry:'woodland'},occultBook:seerBook,updatedAt:new Date().toISOString()}),{flag:'wx'});
+const rainToken='mt1_'+randomBytes(32).toString('hex'),rainId=createHash('sha256').update(rainToken).digest('hex');
+const rainBook={learned:{seer:['seer_mark','seer_rice','seer_scatter','seer_burst','seer_curse','seer_ash_rice','seer_deep_curse','seer_ward_break','seer_spirit_rain'],mender:[]},
+ loadouts:{seer:['seer_mark','seer_spirit_rain',null,null],mender:[null,null,null,null]},training:{seer:135,mender:0},cooldowns:{}};
+await writeFile(path.join(chars,rainId+'.json'),JSON.stringify({version:1,id:rainId,name:'Spirit Rain Seer',
+ level:95,experience:0,pkKills:0,pkDeaths:0,x:1.1,y:0,z:11.6,hp:500,mapId:'ritual_village',
+ build:{path:'seer',ancestry:'woodland'},occultBook:rainBook,updatedAt:new Date().toISOString()}),{flag:'wx'});
 const menderToken='mt1_'+randomBytes(32).toString('hex'),menderId=createHash('sha256').update(menderToken).digest('hex');
 const menderBook={learned:{seer:[],mender:['mender_heal','mender_deep_heal']},
  loadouts:{seer:[null,null,null,null],mender:['mender_deep_heal',null,null,null]},training:{seer:0,mender:40},cooldowns:{}};
@@ -117,6 +123,34 @@ try{
  assert.equal(room.state.monster.hp,monsterHp,'the stationary monster never enters the trap');
  assert.equal(seerEvents.filter(e=>e.type==='prototype_skill_v1'&&e.data.phase==='placed').length,1);
  console.log('PASS: isolated Ash Rice placement, replay rejection and authoritative expiry');
+
+ await leaveTestRoom(room);room=undefined;
+ room=await joinTestRoom(()=>sdk.create('my_room',{guestToken:rainToken,prototypeProtocolVersion:1,prototypeGameplayVersion:1}));
+ room.reconnection.enabled=false;
+ const rainEvents=[];room.onMessage('*',(type,data)=>rainEvents.push({type,data}));
+ const rainReady=(await until(()=>rainEvents.find(e=>e.type==='prototype_protocol_v1_ready'),'rain ready')).data;
+ room.send('prototype_protocol_v1',{action:'confirm_gameplay',nonce:rainReady.nonce});
+ await until(()=>rainEvents.find(e=>e.type==='prototype_protocol_v1_confirmed'),'rain confirmed');
+ const rainPlayer=await until(()=>room.state?.players?.get(room.sessionId)?.persistent&&room.state.players.get(room.sessionId),'rain player');
+ const rainTarget=room.state.monster.id,initialHitSeq=room.state.monster.hitSeq;
+ const rainCast=seq=>room.send('prototype_protocol_v1',{action:'seer_spirit_rain',seq,targetId:rainTarget});
+ rainCast(1);
+ await until(()=>rainEvents.find(e=>e.type==='command_rejected'&&e.data.reason==='occult_mark_required'),'rain requires a mark');
+ assert.equal(room.state.monster.hitSeq,initialHitSeq);
+ room.send('occult_skill',{skillId:'seer_mark',targetId:rainTarget});
+ await until(()=>rainEvents.find(e=>e.type==='occult_skill_used'&&e.data.skillId==='seer_mark'),'mark applied');
+ assert.equal(room.state.monster.alive,true);
+ const beforeRain=room.state.monster.hitSeq,beforeRainMana=rainPlayer.mana;
+ rainCast(2);
+ const rain=(await until(()=>rainEvents.find(e=>e.type==='prototype_skill_v1'&&e.data.skillId==='seer_spirit_rain'),'rain confirmed hit')).data;
+ assert.equal(rain.phase,'chained');
+ assert.equal(rain.seq,2);assert.deepEqual(rain.targetIds,[rainTarget]);
+ assert.equal(room.state.monster.hitSeq,beforeRain+1);
+ assert.ok(rainPlayer.mana>=beforeRainMana-34-.01 && rainPlayer.mana<=beforeRainMana-33);
+ rainCast(2);await delay(180);
+ assert.equal(room.state.monster.hitSeq,beforeRain+1);
+ assert.equal(rainEvents.filter(e=>e.type==='prototype_skill_v1'&&e.data.skillId==='seer_spirit_rain').length,1);
+ console.log('PASS: Spirit Rain uses a server-owned mark, lands once and rejects replay');
 await leaveTestRoom(room);room=undefined;
  room=await joinTestRoom(()=>sdk.create('my_room',{guestToken:menderToken,prototypeProtocolVersion:1,prototypeGameplayVersion:1}));
  room.reconnection.enabled=false;

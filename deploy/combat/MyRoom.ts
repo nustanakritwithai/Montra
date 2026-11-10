@@ -105,6 +105,7 @@ const REPLACEMENT_SKILL_FAMILIES = {
   shadow_cut: "blade",
   firm_guard: "sentinel",
   seer_ash_rice: "occult",
+  seer_spirit_rain: "occult",
   mender_deep_heal: "occult",
   mender_deep_circle: "occult",
 } as const satisfies Record<string,AdvancedSkillFamily>;
@@ -124,6 +125,8 @@ const HEALING_FIELD_INTERVAL_MS=2000;
 const HEALING_FIELD_DURATION_MS=6500;
 const MOVING_CIRCLE_MAX_TARGETS=3;
 const MOVING_CIRCLE_POWER_FACTOR=0.6;
+const SPIRIT_RAIN_HOP_RANGE=4;
+const SPIRIT_RAIN_HIT_FACTORS=[1,0.75,0.5] as const;
 
 type OccultHealingField={mapId:string;until:number;nextTick:number;power:number;range:number} &
   ({kind:"fixed";x:number;y:number;z:number} | {kind:"moving";castId:string;startedAt:number});
@@ -2611,6 +2614,46 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       void this.saveCharacter(id);
       this.sendOccultBook(client);
       this.rescueNotice(talisman,"placed");
+      return;
+    }
+    if(prototypeSequence!==undefined && skillId==="seer_spirit_rain"){
+      const mark=this.occultMarks.get(id);
+      if(mark?.targetId!==targetId || mark.until<=this.simulatedMs)return this.reject(client,"occult_mark_required");
+      if(!monster || monster.hp<=0 || this.field || caster.flying || !onMapGround(caster) || !this.persistentCharacters.has(id) ||
+        this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))
+        return this.reject(client,"prototype_unavailable");
+
+      const targets=[monster];
+      const candidates=[this.state.monster,...this.state.monsters.values()].filter(candidate=>
+        candidate.alive && candidate.hp>0 && candidate.mapId===caster.mapId && this.sameCombatMap(id,candidate.id));
+      while(targets.length<SPIRIT_RAIN_HIT_FACTORS.length){
+        const from=targets[targets.length-1];
+        const next=candidates.filter(candidate=>!targets.some(hit=>hit.id===candidate.id) &&
+          distance3d(from,candidate)<=SPIRIT_RAIN_HOP_RANGE && this.bodyPathClear(caster.mapId,from,candidate))
+          .sort((a,b)=>distance3d(from,a)-distance3d(from,b) || (a.id<b.id?-1:a.id>b.id?1:0))[0];
+        if(!next)break;
+        targets.push(next);
+      }
+      if(!this.spendSkillMana(client,caster,lesson.stamina,[targetId],[]))return;
+      book.cooldowns[skillId]=Date.now()+lesson.cooldownMs;
+      this.occultMarks.delete(id);
+      caster.facing=facingTo(monster.x-caster.x,monster.z-caster.z);
+      const power=this.masteryPower(caster,"pve","magicAtk",weaponBonuses(this.inventories.get(id),"pve").ranged)*
+        lesson.power*skillRankMultiplier(book.ranks,skillId);
+      const targetIds:string[]=[];
+      for(const [index,target] of targets.entries()){
+        if(!target.alive || target.hp<=0)break;
+        const before=target.hitSeq;
+        this.recordCombat(id,target.id);
+        this.hitMonsterWithSpell(id,target,calculateDamage(power*SPIRIT_RAIN_HIT_FACTORS[index],target.defense,target.level),"talisman");
+        if(target.hitSeq===before)break;
+        targetIds.push(target.id);
+      }
+      if(targetIds.length)this.recordOccultTraining(id,"seer",["rice"]);
+      void this.saveCharacter(id);
+      this.sendOccultBook(client);
+      if(targetIds.length)this.prototypeTransport()?.skill({version:1,phase:"chained",skillId,playerId:id,targetId,
+        seq:prototypeSequence,targetIds,serverNowMs:this.simulatedMs});
       return;
     }
     if(prototypeSequence!==undefined && skillId==="seer_ash_rice"){

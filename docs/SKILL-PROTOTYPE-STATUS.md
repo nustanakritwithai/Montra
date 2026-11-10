@@ -1,6 +1,6 @@
-# Seven skill prototypes: development status
+# Eight skill prototypes: development status
 
-All seven prototypes have server wiring in the synthetic loopback room. The
+All eight prototypes have server wiring in the synthetic loopback room. The
 shipped room hard-disables prototype gameplay even when flags are set. The
 shipped client still needs controls and visual feedback. Existing gameplay
 and character save formats are unchanged by default.
@@ -8,11 +8,11 @@ Do not enable this in production.
 
 The provisional rules retain the existing IDs: `flowing_blades`,
 `chaiya_advanced_counter`, `shadow_cut`, `firm_guard`, `seer_ash_rice`,
-`mender_deep_heal`, and `mender_deep_circle`. They represent experimental mechanics, not balanced values.
+`mender_deep_heal`, `mender_deep_circle`, and `seer_spirit_rain`. They represent experimental mechanics, not balanced values.
 In the verification room, each of these IDs selects the replacement effect
 after the shared class, loadout and target validation. The former effect is
 reachable only through the existing command in rooms with the replacement
-disabled. IDs, prerequisites, cooldown keys and saved loadouts remain stable.
+disabled. IDs, cooldown keys and saved loadouts remain stable.
 
 | Skill ID | Former effect | Replacement effect |
 | --- | --- | --- |
@@ -23,8 +23,11 @@ disabled. IDs, prerequisites, cooldown keys and saved loadouts remain stable.
 | `seer_ash_rice` | Immediate hit | Armed trap |
 | `mender_deep_heal` | Immediate heal | Ward that heals after damage or at expiry |
 | `mender_deep_circle` | Immediate heal and stationary pulses, like `mender_area` | Moving field that prioritizes injured party members |
+| `seer_spirit_rain` | Three-target splash, like `seer_scatter` | Consumes the caster’s mark and chains between visible monsters |
 
-Related skills with distinct IDs retain their own effects and prerequisites.
+Nine redundant direct learning requirements were removed across five paths.
+All 120 lessons still have the same full set of required skills. Level,
+practice, mastery and point requirements remain stable.
 A regular Chaiya counter consumes the same block opportunity as the
 replacement. Replacing the guard or taking subsequent damage over time
 cannot restore the spent opportunity.
@@ -37,6 +40,13 @@ modifiers. The two circle skills share one field slot per caster. The basic
 `mender_area` remains a prerequisite and retains its stationary effect.
 The moving field clears on a warp, loss of eligibility, or replacement.
 Missed intervals cannot produce multiple pulses at once.
+
+Spirit Rain starts at a monster with the caster's active mark. A valid cast
+consumes the mark and costs 34 mana once. The server selects up to two further
+monsters in sequence, using the closest eligible target within four metres of
+the previous one with a clear line of sight. Damage uses 100%, 75% and 50% of
+the skill's per-hit power. Each target can be struck once. Scatter remains
+the immediate splash option.
 
 The independent rule tests exercise bounded transient state. They do not prove
 end-to-end gameplay, persistence compatibility, multiplayer, visual feedback,
