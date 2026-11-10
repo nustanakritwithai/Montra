@@ -678,11 +678,14 @@
   function earringBuilder(family, side) {
     const k = gearKit(), gold = gearMat("gold trim", "#c9a24a", "#2a1d06", .4);
     const gem = family.includes("lotus") ? GEM.heal : family.includes("focus") ? GEM.spell : family.includes("ward") ? GEM.guard : GEM.atk;
+    // Pieces are laid out round the old head's ear (stud at y 1.605); the sculpted ear's lobe sits ~1.5 cm
+    // lower, a little further out and back, so the whole earring moves onto the lobe.
+    const take = () => { const parts = k.take(); for (const m of parts) { m.position.x += side * .004; m.position.y -= .015; m.position.z -= .006; } return parts; };
     k.cyl(side * .082, 1.605, -.01, .012, .014, .014, gold, 8);
-    if (BOSS_EAR[family]) { BOSS_EAR[family](k, bossMetal(), side * .083); return [["Head", k.take()]]; }
+    if (BOSS_EAR[family]) { BOSS_EAR[family](k, bossMetal(), side * .083); return [["Head", take()]]; }
     k.ball(side * .083, 1.588, -.01, .018, isBossAccessory(family) ? amuletGlow : gearMat("gem " + gem, gem, "#120808", .5), 6);
     if (isBossAccessory(family)) k.cyl(side * .083, 1.566, -.01, .022, .012, 0, gold, 6); // small drop pendant
-    return [["Head", k.take()]];
+    return [["Head", take()]];
   }
   function ringBuilder(family, side) {
     const k = gearKit(), gem = family.includes("heal") ? GEM.heal : family.includes("spell") ? GEM.spell : family.includes("guard") ? GEM.guard : GEM.atk;
