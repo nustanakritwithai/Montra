@@ -36,6 +36,8 @@ export type CharacterSlot = typeof CHARACTER_SLOTS[number];
 export type SlotSummary = { slot: CharacterSlot; occupied: boolean; name: string; level: number; path?: string; unavailable?: boolean };
 export type CharacterSetup = { name?: unknown; build?: unknown };
 export type SpawnPoint = { x: number; z: number };
+import {isPotGhost, type PotGhost} from "./LegacyGhostPot.js";
+
 export type CharacterSnapshot = {
   version: 1;
   id: string;
@@ -73,6 +75,7 @@ export type CharacterSnapshot = {
   mana?: number;
   /** Undefined only when loading a legacy S2/three-slot snapshot for migration. */
   inventory?: InventorySnapshot;
+  ghostPot?: PotGhost;
   updatedAt: string;
 };
 const TOKEN_PATTERN = /^mt1_[0-9a-f]{64}$/;
@@ -148,6 +151,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
       typeof value.updatedAt !== "string" || !Number.isFinite(Date.parse(value.updatedAt))) {
     throw new Error("character_record_invalid");
   }
+  if (value.ghostPot !== undefined && !isPotGhost(value.ghostPot)) throw new Error("invalid_ghost_pot");
   if (value.build !== undefined && !parseBuild(value.build)) throw new Error("invalid_character_build");
   for (const readyAt of [value.classSkillReadyAt, value.talismanReadyAt]) {
     if (readyAt !== undefined && (typeof readyAt !== "number" || !Number.isSafeInteger(readyAt) || readyAt < 0)) throw new Error("invalid_skill_cooldown");

@@ -5,7 +5,8 @@ node scripts/build-client.mjs --prepare
 # Generated sandbox only; never points at the VPS or existing player files.
 rm -rf combat-verify/src
 mkdir -p combat-verify/src/rooms/schema
-cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
+cp deploy/combat/MyRoom.ts deploy/combat/LegacyGhostPot.ts combat-verify/src/rooms/
+cp deploy/combat/ghost-pot-integration.mjs combat-verify/
 cp deploy/combat/SkillHotbar.ts deploy/combat/skill-hotbar.test.ts deploy/combat/skill-hotbar-disabled.test.ts deploy/combat/rebirth-hotbar-room.test.ts combat-verify/src/rooms/
 cp deploy/combat/DamageEventLedger.ts deploy/combat/PrototypeCommandGate.ts deploy/combat/FlowingBladesPrototype.ts deploy/combat/ChaiyaCounterPrototype.ts deploy/combat/ShadowCutPrototype.ts deploy/combat/FirmGuardPrototype.ts deploy/combat/OccultPrototypeRules.ts combat-verify/src/rooms/
 cp deploy/combat/default-monster-occurrence-model.test.ts deploy/combat/damage-event-ledger.test.ts deploy/combat/prototype-command-gate.test.ts deploy/combat/prototype-protocol-room.test.ts deploy/combat/combat-prototypes.test.ts deploy/combat/shadow-firm-prototype.test.ts deploy/combat/occult-prototype-rules.test.ts combat-verify/src/rooms/

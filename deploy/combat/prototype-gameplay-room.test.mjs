@@ -474,3 +474,27 @@ test('Scatter keeps its original nearby-target behavior and normal rooms keep le
  assert.ok(events.some(e=>e.type==='occult_skill_used'&&e.data.skillId==='seer_spirit_rain'));
  assert.equal(events.some(e=>e.type==='prototype_skill_v1'),false);
 }));
+
+test('capturing a monster retires it without a reward while a lethal hit settles once',wrap(()=>{
+ const {r,m,events}=fixture('seer');
+ const rewards=[];
+ r.awardMonsterExperience=(winner,prey)=>rewards.push([winner,prey.id]);
+ m.hp=1;
+ r.retireMonster(m);
+ assert.equal(m.alive,false);
+ assert.equal(m.hitSeq,0);
+ assert.deepEqual(rewards,[]);
+ assert.ok(!events.some(event=>event.type==='combat_hit'));
+
+ m.hp=1;
+ m.alive=true;
+ let notifications=0;
+ r.applyMonsterHit('a',m,1,()=>{
+  notifications++;
+  r.applyMonsterHit('a',m,1,()=>notifications++);
+ });
+ assert.equal(m.alive,false);
+ assert.equal(m.hitSeq,1);
+ assert.equal(notifications,1);
+ assert.deepEqual(rewards,[['a',m.id]]);
+}));
