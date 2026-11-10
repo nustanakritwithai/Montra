@@ -3320,10 +3320,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return Object.keys(value).length===1 && typeof value.inviteId==="string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value.inviteId) ? value.inviteId : null;
   }
 
-  private economyId(client: Client): string | null {
+  private economyId(client: Client, reject = (reason: string) => this.reject(client, reason)): string | null {
     const id=client.sessionId, player=this.state.players.get(id), characterId=this.persistentCharacters.get(id);
-    if (!characterStore.economyEnabled || !player || !player.alive || !characterId) { this.reject(client,"economy_unavailable"); return null; }
-    if (this.pendingWarps.has(id) || this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id)) { this.reject(client,"character_busy"); return null; }
+    if (!characterStore.economyEnabled || !player || !player.alive || !characterId) { reject("economy_unavailable"); return null; }
+    if (this.pendingWarps.has(id) || this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id)) { reject("character_busy"); return null; }
     return characterId;
   }
   private economyAction(client: Client, action: (id:string)=>void): void {
@@ -3343,13 +3343,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = client.sessionId;
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
     const recovery = claimsOnly || order?.action === "disband" || order?.action === "claim_disband";
-    if (this.field || (!recovery && (!CITY_PRODUCTION_ENABLED || !WORLD_EXPANSION))) return fail("city_unavailable");
+    const needsCity = order && !recovery && order.action !== "cancel" && order.action !== "reclaim";
+    if (this.field || (needsCity && (!CITY_PRODUCTION_ENABLED || !WORLD_EXPANSION))) return fail("city_unavailable");
     if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
-    const actor = this.economyId(client);
+    const actor = this.economyId(client, fail);
     if (!actor) return;
     const player = this.state.players.get(id)!;
     const atCity = player.mapId === CITY_PRODUCTION_SITE && !player.flying && !this.climbs.has(id) && onMapGround(player);
-    const needsCity = order && !recovery && order.action !== "cancel" && order.action !== "reclaim";
     if (needsCity && !atCity) return fail("city_location");
     try {
       const now = Date.now(), store = characterStore.economy, guilds = guildStore();
@@ -3381,7 +3381,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (order.action === "deposit" || order.action === "reclaim") this.syncEconomy(client, actor);
         client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
       }
-      client.send("city_production_state", {site: CITY_PRODUCTION_SITE, atCity, guildId: member.id,
+      client.send("city_production_state", {site: CITY_PRODUCTION_SITE, atCity, guildId: member.id, serverNow: now,
         canDisband: member.commander && guilds.canDisbandCityGuild(actor, member.id), ...store.viewCity(member, ownership)});
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
@@ -5263,6 +5263,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.forgeCatalog = JSON.stringify(FORGE_CATALOG);
     this.state.buildCatalog = BUILD_CATALOG;
     this.state.economyAvailable = characterStore.economyEnabled;
+    this.state.cityRecoveryAvailable = characterStore.economyEnabled && !this.field;
+    this.state.cityProductionAvailable = this.state.cityRecoveryAvailable && WORLD_EXPANSION && CITY_PRODUCTION_ENABLED;
     if(characterStore.economyEnabled && !this.field)this.clock.setInterval(()=>this.sendResources(),5000);
     if(characterStore.economyEnabled)this.clock.setInterval(()=>this.tickFishing(),500);
     this.forest.initialize(!this.field);

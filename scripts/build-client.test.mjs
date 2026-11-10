@@ -133,8 +133,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 143303,
-  "sha256": "ab7d306bfa49a80c6d05d8a2fbbecec3f246965b6f056e9ce05e6377981606ff"
+  "bytes": 144542,
+  "sha256": "06c66538c4ef81b62117254eb5463093ddfcab9b2dd926c9a083b3bb3d8aecf7"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
@@ -163,8 +163,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/046-drawers-and-chat.js",
-    "bytes": 10430,
-    "sha256": "12f0de6ee5acb19eafcbfb44e4760d74ec9882489221c913b6169a93bba9246f"
+    "bytes": 10454,
+    "sha256": "17d197674414d623cca640b235b5f6f10b4a88fdd70918b090a9557144c09c27"
   },
   {
     "path": "ui/048-class-books-and-hotbars.js",
@@ -198,8 +198,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/055-market-and-trade.js",
-    "bytes": 57458,
-    "sha256": "e322de05b0a4c4bcabae1199869636ac286978c863d106df2e33b184d7310471"
+    "bytes": 58086,
+    "sha256": "dba701bf112949d17f05ed5272b941286758c34e03ac43f587b8f555611312e2"
   },
   {
     "path": "audio/051-sound-settings-and-speech.js",
@@ -208,8 +208,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "combat/038-demo-and-monster-state.js",
-    "bytes": 7525,
-    "sha256": "d931f47b6f143af85b433b2e7f96a1e43d9ab75ab285fd9312f74b4257745aff"
+    "bytes": 7552,
+    "sha256": "d4baabf7dfd4f9f05d38644072c00b0c2282cdf89bfe63ed25272c627f5e196d"
   },
   {
     "path": "combat/040-spell-visuals.js",
@@ -240,6 +240,11 @@ const reviewedReleaseFragments = new Map([
     "path": "ui/042-vitals-chat-and-status.js",
     "bytes": 33709,
     "sha256": "a0f2ebdc65089d571bb1abe728549fa917d1bf295a90c4908660373a5b240b2d"
+  },
+  {
+    "path": "ui/056-party-guild-and-rebirth.js",
+    "bytes": 53019,
+    "sha256": "14850f768a638e8da9057377632a049fbe7bee8c2843b3b4a292dffd0eff4048"
   }
 ].map(entry => [entry.path, entry]));
 
@@ -248,8 +253,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1735273);
-  assert.equal(hash(bytes), '688e2d5bc21d84551924f29681069875d622a80de34159dd81325a07a408c76c');
+  assert.equal(bytes.length, 1755199);
+  assert.equal(hash(bytes), 'a5eddc872da32061641cf3621b95f0686e8577f01b70aa438850dd2e252e88b2');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

@@ -123,6 +123,7 @@
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false;
     guildState=null; guildInvitation=null; guildUnread=false;guildDirectory=null;guildRecruitment={pending:null,applications:[]}; updatePartyBadge();
+    resetCityProduction();
     clearChatHistory(true);
     switchWorld("ritual_village");
     syncWorldDefinition(null);syncForestMonsters(null);

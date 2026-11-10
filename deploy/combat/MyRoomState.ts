@@ -139,6 +139,8 @@ export const MyRoomState = schema({
   worldDefinition: t.string().default(""),
   guildAvailable: t.boolean().default(true),
   guildRolesAvailable: t.boolean().default(true),
+  cityProductionAvailable: t.boolean().default(false),
+  cityRecoveryAvailable: t.boolean().default(false),
   extendedChatAvailable: t.boolean().default(true),
   buffsAvailable: t.boolean().default(true),
   forgeCatalog: t.string().default(""),

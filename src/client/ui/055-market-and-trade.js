@@ -30,6 +30,16 @@
     const socket=item.socket===null?" · รูว่าง":personalItems[item.socket]?.kind==="card"?" · "+personalItems[item.socket].name:"";
     return name + forgeLabel(item) + socket + " ×" + Number(item.quantity || 0);
   }
+  function validMarketSeller(row,guildAllowed=true){
+    if(typeof row.seller!=="string")return false;
+    if(row.sellerGuild===undefined)return /^[a-f0-9]{12}$/.test(row.seller);
+    return guildAllowed && typeof row.sellerGuild==="string" &&
+      /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(row.sellerGuild) &&
+      /^[\p{L}\p{N}][\p{L}\p{M}\p{N} ._-]{1,23}$/u.test(row.seller);
+  }
+  function ownsMarketListing(listing,characterId){
+    return !listing.sellerGuild && (typeof listing.isMine==="boolean"?listing.isMine:listing.seller===characterId);
+  }
   function requestMarketOverview(){if(!centralMarketVersion || !economyReady() || !room)return;try{room.send("market_overview",{});}catch(_){}}
   function requestMarketPage(reset){
     if(!centralMarketVersion || !economyReady() || !room || !["market","auction","shop"].includes(economyTab))return;
@@ -216,14 +226,14 @@
     $("economyAuctionTab").disabled=!centralMarketVersion;$("economySupplyTab").disabled=!centralMarketVersion;
     fillEconomySlots($("marketItem"),false);fillEconomySlots($("tradeItem"),true);fillEconomySlots($("auctionItem"),false);renderEconomyItemPreviews();
     const list=$(economyTab==="shop"?"marketOwnListings":"marketListings"),ownId=String(ownServerCharacter()?.characterId || "");
-    const isMine=listing=>typeof listing.isMine==="boolean"?listing.isMine:listing.seller===ownId;
+    const isMine=listing=>ownsMarketListing(listing,ownId);
     const listings=economyTab==="shop"?economyListings.filter(isMine):economyListings;
     const key=JSON.stringify([ready,economyPending,economyGold,economyTab,catalogRevision,listings,!!marketPageRequest,marketPageError]);
     if(list.dataset.renderKey!==key){
       list.dataset.renderKey=key;list.replaceChildren();
       if(!listings.length)marketEmpty(list,!ready?"รายการจะแสดงเมื่อเชื่อมต่อ":marketPageRequest?"กำลังโหลดสินค้า…":marketPageError|| (economyTab==="shop"?"ยังไม่มีสินค้าที่คุณฝากขาย":"ไม่พบสินค้า · ลองเปลี่ยนคำค้นหรือประเภทสินค้า"));
       for(const listing of listings){
-        const mine=isMine(listing),caption=mine?"สินค้าของคุณ":"ผู้ขาย "+listing.seller.slice(0,6);
+        const mine=isMine(listing),caption=listing.sellerGuild?"กิลด์ "+listing.seller:mine?"สินค้าของคุณ":"ผู้ขาย "+listing.seller.slice(0,6);
         const card=createMarketProduct(listing.item,{id:listing.id,badge:mine?"ของคุณ":"ซื้อทันที",price:listing.price,caption});
         if(listing.item.quantity>1)card.append(marketText("small","market-product-unit",(listing.price/listing.item.quantity).toLocaleString("th-TH",{maximumFractionDigits:2})+" ทอง/ชิ้น · ซื้อทั้งชุด"));
         marketConfirmButton(card,{label:mine?"ยกเลิกฝากขาย":"ซื้อทั้งชุด",confirmation:(mine?"รับคืน ":"ซื้อ ")+economyItemName(listing.item)+(mine?"":" · รวม "+listing.price.toLocaleString("th-TH")+" ทอง"),disabled:!ready||economyPending,command:mine?"market_cancel":"market_buy",payload:{listingId:listing.id}});list.append(card);
@@ -310,16 +320,16 @@
     const table=$("wmRowsBody"),ownId=String(ownServerCharacter()?.characterId||"");table.replaceChildren();
     if(!shown.length)table.append(marketText("p","market-empty",!ready?"รายการจะแสดงเมื่อเชื่อมต่อ":marketPageRequest?"กำลังโหลดสินค้า…":marketPageError||"ไม่พบสินค้าที่ตรงกับตัวกรอง"));
     for(const listing of shown){
-      const item=listing.item,meta=bagMeta(item.itemId),mine=typeof listing.isMine==="boolean"?listing.isMine:listing.seller===ownId;
+      const item=listing.item,meta=bagMeta(item.itemId),mine=ownsMarketListing(listing,ownId);
       const row=marketText("button","wm-row"+(listing.id===wmSelected?" is-selected":""));row.type="button";row.dataset.listingId=listing.id;
       row.setAttribute("aria-pressed",String(listing.id===wmSelected));
       const icon=marketText("span","wm-icon");icon.append(createItemTile(item));if(meta?.level)icon.append(marketText("span","wm-badge",String(meta.level)));
-      const info=marketText("span","wm-info");info.append(marketText("strong","wm-name rarity-"+(meta?.rarity||"common"),wmName(item)),marketText("small","wm-sub",wmSubline(item)+(mine?" · ของคุณ":"")));
+      const info=marketText("span","wm-info");info.append(marketText("strong","wm-name rarity-"+(meta?.rarity||"common"),wmName(item)),marketText("small","wm-sub",wmSubline(item)+(listing.sellerGuild?" · กิลด์ "+listing.seller:mine?" · ของคุณ":"")));
       row.append(icon,info,marketText("span","wm-lv",meta?.level?String(meta.level):"-"),marketText("span","wm-price",listing.price.toLocaleString("th-TH")),marketText("span","wm-time",wmTimeLeft(listing.endsAt)));
       row.onclick=()=>{wmSelected=listing.id;wmConfirm=false;renderWorldMarket(economyReady());};
       table.append(row);
     }
-    const picked=rows.find(r=>r.id===wmSelected),mine=picked&&(typeof picked.isMine==="boolean"?picked.isMine:picked.seller===ownId);
+    const picked=rows.find(r=>r.id===wmSelected),mine=picked&&ownsMarketListing(picked,ownId);
     $("wmPick").textContent=picked?(wmConfirm?(mine?"ยืนยันยกเลิกฝากขาย ":"ยืนยันซื้อ ")+economyItemName(picked.item)+(mine?"":" · รวม "+picked.price.toLocaleString("th-TH")+" ทอง"):wmName(picked.item)+" · "+picked.price.toLocaleString("th-TH")+" ทอง"):"เลือกไอเท็มในรายการ";
     const details=$("wmDetails");details.hidden=!(picked&&wmShowDetails);details.replaceChildren();
     if(picked&&wmShowDetails)for(const line of marketItemDetails(picked.item))details.append(marketText("p","",line));
@@ -351,7 +361,7 @@
     $("wmPriceBtn").onclick=$("wmWish").onclick=()=>toast("ราคาตลาดและรายการที่อยากได้ · "+WM_SOON);
     $("wmBuy").onclick=()=>{
       const picked=wmRows().find(r=>r.id===wmSelected);if(!picked)return;
-      const mine=typeof picked.isMine==="boolean"?picked.isMine:picked.seller===String(ownServerCharacter()?.characterId||"");
+      const mine=ownsMarketListing(picked,String(ownServerCharacter()?.characterId||""));
       if(!wmConfirm){wmConfirm=true;return renderEconomy();}
       wmConfirm=false;economySend(mine?"market_cancel":"market_buy",{requestId:economyRequestId(),listingId:picked.id},true);
     };
@@ -362,7 +372,7 @@
 <header class="wm-header"><div class="wm-coins" title="ทองในกระเป๋า"><span aria-hidden="true">◉</span> <strong id="wmCoins">—</strong></div><h2>ตลาดกลาง</h2><button id="wmClose" class="wm-close" type="button" aria-label="ปิดตลาด">✕</button></header>
 <nav class="wm-tabs" aria-label="ตลาดกลาง">${WM_TABS.map(([v,label])=>`<button id="wmTab-${v}" type="button" title="${label}">${label}</button>`).join("")}</nav>
 <div id="wmSoon" class="wm-soon" hidden><h3>${WM_SOON}</h3><p>ราคาตลาดย้อนหลังและรายการที่อยากได้ยังไม่มีบนเซิร์ฟเวอร์</p></div>
-<section id="wmRules" class="wm-rules" hidden><h3>กฎตลาด Montra</h3><ul><li>ภาษีขาย 0% · ไม่มีค่าลงขาย</li><li>สินค้าซื้อทันทีไม่มีวันหมดอายุ · ผู้ขายยกเลิกรับของคืนได้เมื่อกระเป๋ามีที่ว่าง</li><li>เงินโอนเข้ากระเป๋าผู้ขายทันทีเมื่อขายได้ (ไม่ส่งทางจดหมาย)</li><li>ซื้อได้ทั้งชุดตามจำนวนที่ลงขายเท่านั้น</li><li>ประมูลเปิดได้ 1, 6 หรือ 24 ชั่วโมง · เงินเสนอสูงสุดถูกกันไว้และคืนเมื่อมีผู้เสนอสูงกว่า</li><li>ผู้ขายยกเลิกประมูลได้ก่อนมีผู้เสนอเท่านั้น</li></ul></section>
+<section id="wmRules" class="wm-rules" hidden><h3>กฎตลาด Montra</h3><ul><li>ภาษีขาย 0% · ไม่มีค่าลงขาย</li><li>สินค้าซื้อทันทีไม่มีวันหมดอายุ · ยกเลิกประกาศผู้เล่นเพื่อรับของคืนได้เมื่อกระเป๋ามีที่ว่าง</li><li>เมื่อขายได้ ทองเข้ากระเป๋าผู้เล่นหรือเข้าคลังทองตลาดของกิลด์ผู้ขายทันที</li><li>ซื้อได้ทั้งชุดตามจำนวนที่ลงขายเท่านั้น</li><li>ประมูลเปิดได้ 1, 6 หรือ 24 ชั่วโมง · เงินเสนอสูงสุดถูกกันไว้และคืนเมื่อมีผู้เสนอสูงกว่า</li><li>ผู้ขายยกเลิกประมูลได้ก่อนมีผู้เสนอเท่านั้น</li></ul></section>
 <div id="wmSearch" class="wm-body">
 <aside class="wm-filters"><form id="wmFilterForm">
 <button id="wmCategoryToggle" class="wm-cat-toggle" type="button" aria-expanded="true">หมวดหมู่ ▾</button>

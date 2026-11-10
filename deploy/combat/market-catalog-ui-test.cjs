@@ -76,6 +76,22 @@ test('new catalog revisions refresh a product label without replacing its listin
   assert.match(f.$('marketListings').textContent,/ไม้ชื่อใหม่/);assert.equal(f.$('marketListings').children[0].dataset.listingId,uuid(1));
 });
 
+test('guild sales use the same market and keep the guild name, not the player cancellation action',()=>{
+  const f=fixture(), guildId=uuid(900);
+  const guild={...f.row(6),seller:"ช่างสามลาน",sellerGuild:guildId};
+  const malformed={...f.row(7),seller:"ชื่อกิลด์",sellerGuild:"invalid"};
+  f.page([guild,malformed,f.row(8)]);
+  assert.deepEqual(f.status().economyListings.map(x=>x.id),[guild.id,uuid(8)]);
+  assert.match(f.$('wmRowsBody').textContent,/กิลด์ ช่างสามลาน/);
+  f.$('wmRowsBody').children[0].click();f.$('wmBuy').click();f.$('wmBuy').click();
+  assert.equal(f.wire.filter(x=>x.command==="market_buy").at(-1).payload.listingId,guild.id);
+  const legacy=fixture({central:false});
+  const namedLikePlayer={...legacy.row(9),seller:legacy.player.characterId,sellerGuild:guildId,isMine:undefined};
+  legacy.callbacks.market_state({listings:[namedLikePlayer,malformed]});
+  assert.deepEqual(legacy.status().economyListings.map(x=>x.id),[namedLikePlayer.id]);
+  assert.equal(legacy.run("ownsMarketListing(economyListings[0], ownServerCharacter().characterId)"),false);
+});
+
 test('fixed whole-listing purchase has review, cancellation and one pending durable mutation',()=>{
   const f=fixture();f.page([f.row(1)]);const card=f.$('marketListings').children[0],button=find(card,'market-product-action'),cancel=find(card,'market-product-cancel');
   assert.match(card.textContent,/210 ทอง/);assert.match(card.textContent,/70 ทอง\/ชิ้น/);

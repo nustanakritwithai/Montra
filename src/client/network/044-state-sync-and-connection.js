@@ -216,6 +216,7 @@
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; resetCentralMarket(); tradeUnread=false; updateTradeBadge();
       partyState=null; partyInvitation=null; partyUnread=false;
     guildState=null; guildInvitation=null; guildUnread=false;guildDirectory=null;guildRecruitment={pending:null,applications:[]}; updatePartyBadge();
+    resetCityProduction();
       resetLootFeed();
       inventoryState = null; personalItems=Object.create(null);cardDrill=null;gearGuides=null;resources=null;seerBoundTarget="";seerPoisoned=false;clearResourceView();
       characterStatus = null; lastCharacterStatusRequest = 0;
@@ -322,6 +323,7 @@
       });
       const onGuildState=message => {
         if(room!==joined)return;
+        const previousGuild=guildState;
         const wasGuildMember=!!guildState;
         if(message===null)guildState=null;
         else if(typeof message?.id==="string" && typeof message.name==="string" &&
@@ -331,11 +333,17 @@
             treasury:Number.isFinite(message.treasury)?message.treasury:0,
             members:message.members.filter(m=>m && typeof m.id==="string" && typeof m.name==="string")};
         else return;
+        if(previousGuild?.id!==guildState?.id)cityState=null;
         if(guildState){guildInvitation=null;guildUnread=false;updatePartyBadge();}
         else if(wasGuildMember && drawerActive==="guild" && guildReady()){
           guildDirectory=null;room.send("guild_search",{query:""});
         }
         renderGuild();
+        if(drawerActive==="cityProduction" && (previousGuild?.id!==guildState?.id ||
+          previousGuild?.leaderId!==guildState?.leaderId || previousGuild?.members.length!==guildState?.members.length ||
+          previousGuild?.members.find(m=>m.id===previousGuild.ownId)?.rank!==guildState?.members.find(m=>m.id===guildState.ownId)?.rank)){
+          renderCityProduction();refreshCityProduction();
+        }
       };
       joined.onMessage("guild_state",onGuildState);
       earlyHandlers.set("guild_state",onGuildState);
@@ -376,8 +384,14 @@
           guild_squad_leader_exists:"หน่วยนี้มีหัวหน้าอยู่แล้ว",guild_invalid_member:"ไม่พบสมาชิก",guild_invite_expired:"คำเชิญหมดอายุ",guild_invalid_target:"ไม่พบผู้เล่นที่ชวนได้",
           guild_not_found:"ไม่พบกิลด์นี้แล้ว",guild_application_exists:"คุณมีคำขอสมัครอยู่แล้ว ยกเลิกก่อนสมัครกิลด์อื่น",guild_applications_full:"คำขอสมัครของกิลด์นี้เต็มแล้ว",guild_application_missing:"คำขอนี้ไม่มีแล้ว"};
         if(message?.reason==="guild_invite_expired"){guildInvitation=null;guildUnread=false;updatePartyBadge();}
+        if(message?.reason==="guild_city_assets" && cityRecoveryReady()){openCityProduction();return;}
+        if(message?.reason==="guild_city_disband_pending"){toast("ระบบกำลังจัดการทรัพย์สินก่อนยุบกิลด์");return;}
         toast(reasons[message?.reason]||"ทำรายการกิลด์ไม่สำเร็จ");guildRenderKey="";renderGuild();
       });
+      joined.onMessage("city_production_state", data=>{if(room===joined)cityReceiveState(data);});
+      joined.onMessage("city_production_result", data=>{if(room===joined)cityReceiveResult(data);});
+      joined.onMessage("city_production_error", data=>{if(room===joined)cityReceiveError(data);});
+      joined.onMessage("city_disband_claims", data=>{if(room===joined)cityReceiveClaims(data);});
       joined.onMessage("party_state", message => {
         if (room!==joined || !Array.isArray(message?.members) || message.members.length>4) return;
         partyState=typeof message.partyId==="string" ? {partyId:message.partyId,leaderId:message.leaderId,members:message.members.filter(m=>m && typeof m.sessionId==="string" && typeof m.name==="string")} : null;
@@ -404,7 +418,7 @@
       });
       joined.onMessage("market_state", message => {
         if (room !== joined || centralMarketVersion || !Array.isArray(message?.listings)) return;
-        economyListings=message.listings.filter(x => x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && typeof x.seller==="string" && /^[a-f0-9]{12}$/.test(x.seller) && x.item && (x.item.itemId===POTION_ITEM_ID || x.item.itemId===SHRINE_SHARD || bagMeta(x.item.itemId)) && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 && Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000).slice(0,120);
+        economyListings=message.listings.filter(x => x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && validMarketSeller(x) && x.item && (x.item.itemId===POTION_ITEM_ID || x.item.itemId===SHRINE_SHARD || bagMeta(x.item.itemId)) && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 && Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000).slice(0,120);
         renderEconomy();
       });
       joined.onMessage("market_features",message=>{
@@ -422,7 +436,7 @@
         if(room!==joined || !marketPageRequest || message?.tag!==marketPageRequest.tag || message.market!==marketPageRequest.market)return;
         const rows=message.market==="fixed"?message.listings:message.auctions;
         if(!Array.isArray(rows))return;
-        const valid=rows.filter(x=>x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && typeof x.seller==="string" && /^[a-f0-9]{12}$/.test(x.seller) && x.item && typeof x.item.itemId==="string" && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 &&
+        const valid=rows.filter(x=>x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && validMarketSeller(x,message.market==="fixed") && x.item && typeof x.item.itemId==="string" && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 &&
           (message.market==="fixed"?Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000:Number.isSafeInteger(x.opening) && x.opening>0 && x.opening<=1_000_000_000 && Number.isSafeInteger(x.bid) && x.bid>=0 && x.bid<=1_000_000_000 && Number.isSafeInteger(x.endsAt))).slice(0,30);
         if(message.market==="fixed")economyListings=marketPageRequest.append?economyListings.concat(valid):valid;
         else centralAuctions=marketPageRequest.append?centralAuctions.concat(valid):valid;
@@ -1273,6 +1287,7 @@
         const equipmentSockets=Object.fromEntries(Object.entries(payload.equipmentSockets||{}).filter(([key,card])=>equipment[key] && (card===null || personalItems[card]?.kind==="card")));
         observeLootInventory(payload);
         inventoryState={version:1,slots,equippedWeaponSlot,equipment,equipmentSockets,equipmentForges:payload.equipmentForges||{},forgeCopies:payload.forgeCopies||{},starterHuntKills:payload.starterHuntKills??0};
+        if(drawerActive==="cityProduction")renderCityProduction();
         refreshOpenFieldQuest();
         itemUsePending = false;
         renderBag();
