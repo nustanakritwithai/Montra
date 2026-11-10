@@ -264,7 +264,8 @@
       });
       const onTerritoryState=message=>{
         if(room!==joined)return;
-        const oldDrums=territoryState?.local?.supply?.drums || [],previousOwners=territoryState?.owners;
+        const previousLocal=territoryState?.local,previousOwners=territoryState?.owners;
+        const oldDrums=previousLocal?.supply?.drums || [];
         territoryState=message;territoryReceivedAt=performance.now();syncGateVisual();syncCastleRings();syncWarQuartermaster();
         checkTerritoryWarEvents(message.local);
         if(drawerActive==="guild" && previousOwners && guildReady() &&
@@ -276,6 +277,12 @@
         if(drawerActive==="strategy"){updateAtlasOwner();updateAtlasWarTimes();}
         if(drawerActive==="guild")renderGuild();
         const local=message.local;
+        if(drawerActive==="cityProduction" && cityState?.construction && cityRecoveryReady()){
+          const site=cityState.site;
+          if(previousOwners?.[site]!==message.owners?.[site] ||
+             (local?.site===site && local.phase!==(previousLocal?.site===site ? previousLocal.phase : undefined)))
+            joined.send("get_city_production",{});
+        }
         if(local?.site===activeMapId){
           const title=ui.quest.querySelector("strong");
           const fighting=local.inField && local.phase==="battle";

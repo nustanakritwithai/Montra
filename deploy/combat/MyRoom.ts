@@ -5,7 +5,7 @@ import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
 import { WAR_SIDE_SIZE, WAR_HOLD, WAR_PARTICIPATION_INTERVAL_MS, WAR_SUPPLY_INTERVAL_MS, warSites, warEntryDamageFactor, warParticipationExperience, type Battlefield, type WarSide } from "./TerritoryWar.js";
 import {parseGovernmentOrder} from "./TerritoryGovernment.js";
 import { RIDGE_PASS } from "./GroundTerrain.js";
-import {RIVER_CITY,riverNodes,riverPosts,riverSupplied} from "./RiverCity.js";
+import {RIVER_CITY,RIVER_WAREHOUSE_PLOT,riverNodes,riverPosts,riverSupplied} from "./RiverCity.js";
 import {CASTLE_ID,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
 import { Encoder, StateView } from "@colyseus/schema";
 import { randomUUID,randomInt } from "node:crypto";
@@ -75,7 +75,9 @@ import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js"
 import { parseSellMaterial, parseSalvage, parseCraft, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseMarketBrowse, parseAuctionCreate, parseAuctionBid, parseAuctionAction, parseAuctionCredit, parseStarterSupply, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
-import {CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE, parseCityOrder, type CityOrder} from "./CityProductionRules.js";
+import {
+  CITY_CONSTRUCTION_ENABLED, CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE, isWarehouseOrder, parseCityOrder, type CityOrder,
+} from "./CityProductionRules.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
 import type { MonsterTier } from "./MonsterProfiles.js";
@@ -3344,13 +3346,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
     const recovery = claimsOnly || order?.action === "disband" || order?.action === "claim_disband";
     const needsCity = order && !recovery && order.action !== "cancel" && order.action !== "reclaim";
+    const construction = order && isWarehouseOrder(order);
     if (this.field || (needsCity && (!CITY_PRODUCTION_ENABLED || !WORLD_EXPANSION))) return fail("city_unavailable");
+    if (construction && !CITY_CONSTRUCTION_ENABLED) return fail("city_construction_unavailable");
     if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
     const actor = this.economyId(client, fail);
     if (!actor) return;
     const player = this.state.players.get(id)!;
     const atCity = player.mapId === CITY_PRODUCTION_SITE && !player.flying && !this.climbs.has(id) && onMapGround(player);
+    const plot = RIVER_WAREHOUSE_PLOT;
+    const atPlot = atCity && Math.hypot(player.x - plot.x, player.z - plot.z) <= plot.radius;
     if (needsCity && !atCity) return fail("city_location");
+    if (construction && !atPlot) return fail("city_construction_location");
     try {
       const now = Date.now(), store = characterStore.economy, guilds = guildStore();
       if (recovery) {
@@ -3378,11 +3385,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!member) return fail("city_not_member");
       if (order) {
         const result = store.cityOrder(actor, member, order, ownership, now);
-        if (order.action === "deposit" || order.action === "reclaim") this.syncEconomy(client, actor);
+        if (order.action === "deposit" || order.action === "reclaim" || order.action === "warehouse_contribute")
+          this.syncEconomy(client, actor);
         client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
       }
+      const view = store.viewCity(member, ownership);
+      const constructionOpen = CITY_CONSTRUCTION_ENABLED && this.state.cityProductionAvailable;
       client.send("city_production_state", {site: CITY_PRODUCTION_SITE, atCity, guildId: member.id, serverNow: now,
-        canDisband: member.commander && guilds.canDisbandCityGuild(actor, member.id), ...store.viewCity(member, ownership)});
+        canDisband: member.commander && guilds.canDisbandCityGuild(actor, member.id),
+        ...view, construction: constructionOpen ? {...view.construction, plot: plot.name, atPlot} : null});
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
       const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",

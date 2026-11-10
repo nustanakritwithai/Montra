@@ -7,7 +7,11 @@ import {DatabaseSync} from "node:sqlite";
 import {EconomyStore} from "./EconomyStore.js";
 import {GuildStore} from "./GuildStore.js";
 import {makeClassInventory} from "./ItemRules.js";
-import {CITY_PRODUCT, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, parseCityOrder} from "./CityProductionRules.js";
+import {
+  CITY_PRODUCT, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_WAREHOUSE_DURATION_MS, CITY_WAREHOUSE_MATERIALS, parseCityOrder,
+} from "./CityProductionRules.js";
+import {RIVER_WAR_DURATION} from "./RiverCity.js";
+import {WAR_PROTECTION} from "./TerritoryWar.js";
 
 const leader = "a".repeat(64), member = "b".repeat(64), rival = "c".repeat(64);
 const [wood, stone] = CITY_RAW_ITEMS;
@@ -62,8 +66,126 @@ function fixture(t: TestContext) {
   const deposit = (actor: string, slot: number, amount: number, requestId?: string) =>
     order(actor, {action: "deposit", epoch, item: CITY_RAW_ITEMS[slot], slot, amount}, 1000, requestId);
   return {get economy() { return economy; }, get guild() { return guild; }, guildFile, economyFile,
-    capture, request, order, view, restart, epoch, deposit};
+    capture, request, order, view, restart, epoch, deposit, guildMember};
 }
+
+function warehouseFixture(t: TestContext) {
+  const f = fixture(t), {epoch} = f;
+  // The shared fixture seeds the estate directly. Give the war service its matching battle record.
+  const owner = f.guildMember(leader).id;
+  const db = new DatabaseSync(f.guildFile);
+  db.prepare("INSERT INTO territory_battles(site,attacker,started,sample,ended,winner) VALUES(?,?,?,?,?,?)")
+    .run(CITY_PRODUCTION_SITE, owner, 1, 1_000, 1_000, owner);
+  db.close();
+  const start = {action: "warehouse_start", epoch};
+  const contribute = (actor: string, slot: number, amount: number, now = 1000, requestId?: string) =>
+    f.order(actor, {action: "warehouse_contribute", epoch, slot, item: [...CITY_RAW_ITEMS, CITY_PRODUCT][slot], amount}, now, requestId);
+  const allocate = (actor: string, item: string, amount: number, now: number) =>
+    f.order(actor, {action: "warehouse_allocate", epoch, item, amount}, now);
+  const fund = (at: number) => {
+    const inventory = f.economy.getAccount(member).inventory;
+    inventory.slots[2] = {itemId: CITY_PRODUCT, quantity: 4};
+    f.economy.saveCharacter(member, {}, inventory);
+    for (const [slot, {amount}] of CITY_WAREHOUSE_MATERIALS.entries()) contribute(member, slot, amount, at);
+    return at + CITY_WAREHOUSE_DURATION_MS;
+  };
+  const siege = (at: number) => f.guild.war.start(CITY_PRODUCTION_SITE, f.guildMember(rival), at);
+  return {...f, get economy() { return f.economy; }, get guild() { return f.guild; },
+    start, contribute, allocate, fund, siege, openAt: 1_000 + WAR_PROTECTION};
+}
+
+test("warehouse construction checks roles, reserves exactly once, accepts factory output and expands real capacity after restart", t => {
+  const f = warehouseFixture(t), {epoch} = f;
+  assert.throws(() => f.order(member, f.start), /city_commander_required/);
+  assert.throws(() => f.order(rival, f.start), /city_not_owner/);
+  assert.equal(parseCityOrder({...f.start, requestId: f.request(), amount: 1}), null);
+  f.order(leader, f.start);
+  assert.throws(() => f.order(leader, f.start), /city_project_exists/);
+
+  const request = f.request();
+  const receipt = f.contribute(member, 0, 10, 1_000, request);
+  f.restart();
+  assert.deepEqual(f.contribute(member, 0, 10, 1_001, request), receipt);
+  assert.throws(() => f.contribute(leader, 0, 3, 1_001), /city_project_surplus/);
+  assert.equal(f.economy.getAccount(leader).inventory.slots[0]?.quantity, 99);
+  f.contribute(leader, 0, 2, 1_001);
+  f.contribute(member, 1, 16, 1_001);
+  assert.equal(f.economy.getAccount(member).inventory.slots[0]?.quantity, 89);
+
+  f.deposit(leader, 0, 30);
+  f.deposit(leader, 1, 30);
+  assert.throws(() => f.deposit(member, 0, 1), /city_storage_full/);
+  f.order(leader, {action: "build", epoch});
+  f.order(leader, {action: "build", epoch});
+  for (const now of [2_000, 62_000, 122_000, 182_000]) f.order(leader, {action: "start", epoch}, now);
+  assert.throws(() => f.allocate(member, CITY_PRODUCT, 1, 242_000), /city_officer_required/);
+  f.allocate(leader, CITY_PRODUCT, 4, 242_000);
+  const readyAt = 242_000 + CITY_WAREHOUSE_DURATION_MS;
+  assert.equal(f.view(leader, 242_001).construction.readyAt, readyAt);
+  assert.equal(f.view(leader, 242_001).stock.find(x => x.item === CITY_PRODUCT), undefined);
+  f.restart();
+  assert.equal(f.view(leader, readyAt - 1).capacity, 60);
+  assert.equal(f.view(leader, readyAt).capacity, 90);
+  f.order(leader, {action: "deposit", epoch, slot: 0, item: wood, amount: 60}, readyAt);
+  assert.equal(f.view(leader, readyAt).used, 78);
+  f.capture(rival, readyAt + 1);
+  const next = f.view(rival, readyAt + 1);
+  assert.equal(next.capacity, 90);
+  assert.deepEqual(next.stock, []);
+  assert.throws(() => f.order(rival, {...f.start, epoch: next.epoch}, readyAt + 2), /city_warehouse_complete/);
+});
+
+test("an active siege blocks new work and holds a funded project until the defense settles", t => {
+  const f = warehouseFixture(t);
+  const siegeAt = f.openAt;
+  f.order(leader, f.start, siegeAt - 2);
+  const readyAt = f.fund(siegeAt - 1);
+  f.siege(siegeAt);
+  assert.throws(() => f.contribute(member, 0, 1, siegeAt + 1), /city_construction_siege/);
+  assert.equal(f.view(leader, readyAt).construction.siege, true);
+  assert.equal(f.view(leader, readyAt).capacity, 60);
+  f.restart();
+  const end = siegeAt + RIVER_WAR_DURATION;
+  assert.equal(f.guild.war.inspect(CITY_PRODUCTION_SITE, end).ownerId, f.guildMember(leader).id);
+  assert.equal(f.view(leader, end).epoch, f.epoch);
+  assert.equal(f.view(leader, end).capacity, 90);
+});
+
+test("loss during a siege refunds reserved materials to the old guild even if the deadline has passed", t => {
+  const f = warehouseFixture(t);
+  const siegeAt = f.openAt;
+  f.order(leader, f.start, siegeAt - 2);
+  const readyAt = f.fund(siegeAt - 1);
+  const field = f.siege(siegeAt);
+  for (const gate of ["G11", "G21"])
+    for (let hit = 0; hit < 8; hit++) f.guild.war.riverGate(field, gate, "attack", false, siegeAt);
+  for (let i = 1; i <= 70; i++) {
+    f.guild.war.advance(field, readyAt + i * 1000, 2, 0, undefined, undefined, null,
+      [{attack: 1, defend: 0}, {attack: 0, defend: 0}, {attack: 0, defend: 0}]);
+  }
+  const end = readyAt + 70_000;
+  assert.equal(f.guild.war.inspect(CITY_PRODUCTION_SITE, end).ownerId, f.guildMember(rival).id);
+  f.restart();
+  const next = f.view(rival, end);
+  assert.equal(next.capacity, 60);
+  assert.deepEqual(next.stock, []);
+  const recovered = f.view(leader, end).reclaim.map(({item, quantity}) => [item, quantity]).sort();
+  assert.deepEqual(recovered, CITY_WAREHOUSE_MATERIALS.map(({item, amount}) => [item, amount]).sort());
+  assert.deepEqual(f.view(leader, end + 1).reclaim.map(({item, quantity}) => [item, quantity]).sort(), recovered);
+});
+
+test("disbanding a guild with only reserved construction materials preserves its claim", t => {
+  const f = warehouseFixture(t);
+  f.order(leader, f.start);
+  f.contribute(member, 0, 5);
+  const guildId = f.guildMember(leader).id;
+  assert.equal(f.economy.hasCityAssets(guildId), true);
+  f.guild.leave(member);
+  const intent = f.guild.beginCityDisband(leader, guildId, 2_000);
+  f.guild.settleCityDisband(f.economy, intent);
+  f.restart();
+  assert.deepEqual(f.economy.cityDisbandClaims(leader).map(({item, amount}) => ({item, amount})), [{item: wood, amount: 5}]);
+});
 
 test("only officers can spend market gold to rush production, and interrupted jobs refund the fee", t => {
   const f = fixture(t), {epoch} = f;

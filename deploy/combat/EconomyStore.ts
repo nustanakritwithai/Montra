@@ -240,14 +240,20 @@ export class EconomyStore {
         case "start":
         case "start_fast": return this.city.start(order.epoch, member, now, order.action === "start_fast");
         case "list": return this.city.list(order.epoch, member, order.amount, order.price);
-        case "deposit": {
+        case "warehouse_start": return this.city.warehouseStart(order.epoch, member, ownership);
+        case "warehouse_allocate":
+          return this.city.warehouseContribute(order.epoch, member, ownership, now, order.item, order.amount, "stock");
+        case "deposit":
+        case "warehouse_contribute": {
           const account = this.account(actor);
           if (account.inventory.slots[order.slot]?.itemId !== order.item) throw Error("item_unavailable");
           const removed = take(account.inventory, order.slot, order.amount);
-          this.city.deposit(order.epoch, member, order.item, order.amount);
+          let result: Record<string, string | number> = {quantity: order.amount};
+          if (order.action === "deposit") this.city.deposit(order.epoch, member, order.item, order.amount);
+          else result = this.city.warehouseContribute(order.epoch, member, ownership, now, order.item, order.amount, "bag");
           account.inventory = removed.inventory;
           this.put(actor, account);
-          return {quantity: order.amount};
+          return result;
         }
       }
     });

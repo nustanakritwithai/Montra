@@ -74,8 +74,18 @@ export class TerritoryGovernment {
     const active = this.db.prepare("SELECT id,guild FROM city_tenures WHERE ended IS NULL").get() as CityTenure | undefined;
     const ended = previous === null || active?.id === previous ? undefined :
       this.db.prepare("SELECT guild,ended FROM city_tenures WHERE id=?").get(previous);
-    return {active: active ?? null, previous: typeof ended?.guild === "string" && typeof ended.ended === "number" ?
-      {guild: ended.guild, ended: ended.ended} : null};
+    const siege = this.db.prepare("SELECT started FROM territory_battles WHERE site=? AND ended IS NULL")
+      .get(CITY_PRODUCTION_SITE);
+    const ownership: CityOwnership = {active: active ?? null, previous: null};
+    if (typeof siege?.started === "number") ownership.siegeStarted = siege.started;
+    if (typeof ended?.guild === "string" && typeof ended.ended === "number") {
+      const capture = this.db.prepare(`SELECT started FROM territory_battles
+        WHERE site=? AND incumbent=? AND ended=? AND winner IS NOT NULL AND winner<>incumbent
+        ORDER BY seq DESC LIMIT 1`).get(CITY_PRODUCTION_SITE, ended.guild, ended.ended);
+      ownership.previous = {guild: ended.guild, ended: ended.ended};
+      if (typeof capture?.started === "number") ownership.previous.siegeStarted = capture.started;
+    }
+    return ownership;
   }
   beginBattle(site:string,owner:string|null,now:number){
     this.db.prepare("INSERT OR IGNORE INTO territory_estates(site,owner,settled) VALUES(?,?,?)").run(site,owner,now);

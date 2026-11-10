@@ -2,6 +2,7 @@ import {RIVER_CITY} from "./RiverCity.js";
 
 export const CITY_PRODUCTION_SITE = RIVER_CITY;
 export const CITY_PRODUCTION_ENABLED = process.env.MONTRA_CITY_PRODUCTION === "1";
+export const CITY_CONSTRUCTION_ENABLED = process.env.MONTRA_CITY_CONSTRUCTION === "1";
 export const CITY_RAW_ITEMS = ["mat_raw_wood_1", "mat_raw_stone_1"] as const;
 export const CITY_PRODUCT = "mat_metal_1";
 export const CITY_ITEMS = [...CITY_RAW_ITEMS, CITY_PRODUCT] as const;
@@ -14,10 +15,23 @@ export const CITY_FACTORY_COSTS = [
 ] as const;
 export const CITY_RECIPE = {wood: 1, stone: 2, quantity: 1};
 export const CITY_CAPACITY = 60;
+export const CITY_WAREHOUSE_CAPACITY = 90;
+export const CITY_WAREHOUSE_DURATION_MS = 300_000;
+export const CITY_WAREHOUSE_MATERIALS = [
+  {item: CITY_RAW_ITEMS[0], column: "wood", amount: 12},
+  {item: CITY_RAW_ITEMS[1], column: "stone", amount: 16},
+  {item: CITY_PRODUCT, column: "metal", amount: 4},
+] as const;
 export const CITY_DURATION_MS = [0, 120_000, 60_000] as const;
 export const CITY_RUSH_GOLD = 15;
 
+type WarehouseOrder =
+  {action: "warehouse_start"; epoch: number} |
+  {action: "warehouse_contribute"; epoch: number; slot: number; item: CityItem; amount: number} |
+  {action: "warehouse_allocate"; epoch: number; item: CityItem; amount: number};
+
 export type CityOrder = {requestId: string} & (
+  WarehouseOrder |
   {action: "build" | "start" | "start_fast"; epoch: number} |
   {action: "deposit"; epoch: number; slot: number; item: typeof CITY_RAW_ITEMS[number]; amount: number} |
   {action: "list"; epoch: number; amount: number; price: number} |
@@ -29,9 +43,18 @@ export type CityOrder = {requestId: string} & (
 export type CityFactoryOrder = Exclude<CityOrder, {action: "disband" | "claim_disband"}>;
 export type CityDisband = {guild: string; actor: string; name: string; requested: number};
 
-export type CityMember = {id: string; name: string; officer: boolean};
+export type CityMember = {id: string; name: string; officer: boolean; commander?: boolean};
 export type CityTenure = {id: number; guild: string};
-export type CityOwnership = {active: CityTenure | null; previous: {guild: string; ended: number} | null};
+export type CityOwnership = {
+  active: CityTenure | null;
+  previous: {guild: string; ended: number; siegeStarted?: number} | null;
+  siegeStarted?: number;
+};
+
+export function isWarehouseOrder(order: CityOrder): order is WarehouseOrder & {requestId: string} {
+  return order.action === "warehouse_start" || order.action === "warehouse_contribute" ||
+    order.action === "warehouse_allocate";
+}
 
 export function parseCityOrder(input: unknown): CityOrder | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
@@ -57,6 +80,7 @@ export function parseCityOrder(input: unknown): CityOrder | null {
     case "build":
     case "start":
     case "start_fast":
+    case "warehouse_start":
       return keys("epoch") ? order as CityOrder : null;
     case "deposit":
       return keys("epoch", "slot", "item", "amount") && integer(order.slot, 0, 11) &&
@@ -65,8 +89,12 @@ export function parseCityOrder(input: unknown): CityOrder | null {
       return keys("epoch", "amount", "price") && integer(order.amount, 1, 99) &&
         integer(order.price, 1, 1_000_000_000) ? order as CityOrder : null;
     case "reclaim":
+    case "warehouse_allocate":
       return keys("epoch", "item", "amount") && CITY_ITEMS.some(item => item === order.item) &&
         integer(order.amount, 1, 99) ? order as CityOrder : null;
+    case "warehouse_contribute":
+      return keys("epoch", "slot", "item", "amount") && integer(order.slot, 0, 11) &&
+        CITY_ITEMS.some(item => item === order.item) && integer(order.amount, 1, 99) ? order as CityOrder : null;
     default:
       return null;
   }

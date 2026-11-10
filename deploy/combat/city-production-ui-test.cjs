@@ -122,3 +122,44 @@ test("a former commander can read and claim a partial payout without a guild", (
     requestId:f.wire.at(-1).payload.requestId,action:"claim_disband",guildId:"former",item:"gold",amount:12,
   });
 });
+
+test("construction shows progress and sends the correct source, role and epoch", () => {
+  const f=fixture();
+  const project={plot:"ลานด้านเหนือของคลังข้าวหลวง",atPlot:true,siege:false,commander:true,capacity:90,
+    durationMs:300_000,status:null,materials:[{item:wood,amount:12,reserved:0},{item:metal,amount:4,reserved:0}]};
+  f.state({construction:{...project,atPlot:false}});
+  assert.equal(f.button("เปิดโครงการขยายคลัง").disabled,true);
+  f.state({construction:{...project,commander:false}});
+  assert.equal(f.button("เปิดโครงการขยายคลัง"),undefined);
+  f.state({construction:project});
+  f.button("เปิดโครงการขยายคลัง").onclick();
+  assert.equal(f.wire.at(-1).payload.action,"warehouse_start");
+  f.ctx.cityReceiveResult(f.wire.at(-1).payload);
+
+  const collecting={...project,status:"collecting"};
+  f.state({construction:collecting,officer:false});
+  assert.equal(f.button("จัดสรรจากคลัง · "+metal),undefined);
+  f.submit("สมทบ "+wood,6);
+  assert.deepEqual(f.wire.at(-1).payload,{requestId:f.wire.at(-1).payload.requestId,
+    action:"warehouse_contribute",epoch:1,slot:0,item:wood,amount:6});
+  f.ctx.cityReceiveResult(f.wire.at(-1).payload);
+  f.state({construction:{...collecting,siege:true}});
+  assert.equal(f.button("สมทบ "+wood),undefined);
+  f.state({construction:collecting});
+  f.submit("จัดสรรจากคลัง · "+metal,3);
+  assert.deepEqual(f.wire.at(-1).payload,{requestId:f.wire.at(-1).payload.requestId,
+    action:"warehouse_allocate",epoch:1,item:metal,amount:3});
+});
+
+test("construction timer holds for a siege and refreshes once when due", () => {
+  const f=fixture();
+  const project={status:"building",plot:"ลานคลัง",capacity:90,durationMs:300_000,readyAt:1_002_000,materials:[]};
+  f.state({construction:{...project,siege:true}});
+  assert.match(f.$("cityConstructionClock").textContent,/รอผลศึก/);
+  f.state({construction:project});
+  assert.match(f.$("cityConstructionClock").textContent,/2 วินาที/);
+  f.setNow(2100);
+  f.ctx.updateCityCountdown();
+  f.ctx.updateCityCountdown();
+  assert.equal(f.wire.filter(message=>message.command==="get_city_production").length,2);
+});

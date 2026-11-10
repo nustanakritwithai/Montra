@@ -2,6 +2,7 @@ import {randomUUID} from "node:crypto";
 import type {DatabaseSync} from "node:sqlite";
 import {
   CITY_CAPACITY, CITY_DURATION_MS, CITY_FACTORY_COSTS, CITY_PRODUCT, CITY_RAW_ITEMS, CITY_RECIPE, CITY_RUSH_GOLD,
+  CITY_WAREHOUSE_CAPACITY, CITY_WAREHOUSE_DURATION_MS, CITY_WAREHOUSE_MATERIALS,
   type CityAsset, type CityDisband, type CityItem, type CityMember, type CityOwnership,
 } from "./CityProductionRules.js";
 
@@ -10,6 +11,10 @@ type Factory = {epoch: number | null; guild: string | null; level: 0 | 1 | 2};
 type Stock = {epoch: number; item: CityItem; quantity: number};
 type GuildListing = {id: string; guild: string; name: string; epoch: number; quantity: number; price: number};
 type DisbandClaim = {guildId: string; name: string; item: CityAsset; amount: number};
+type WarehouseProject = {
+  epoch: number; guild: string; wood: number; stone: number; metal: number;
+  ready: number | null; status: "collecting" | "building";
+};
 
 export class CityProduction {
   constructor(private readonly db: DatabaseSync) {
@@ -26,6 +31,12 @@ export class CityProduction {
         wood INTEGER NOT NULL, stone INTEGER NOT NULL, quantity INTEGER NOT NULL,
         status TEXT NOT NULL CHECK(status IN ('running','complete','cancelled')));
       CREATE UNIQUE INDEX IF NOT EXISTS city_one_running_job ON city_jobs(epoch) WHERE status='running';
+      CREATE TABLE IF NOT EXISTS city_warehouse_projects (
+        epoch INTEGER PRIMARY KEY, guild TEXT NOT NULL,
+        wood INTEGER NOT NULL DEFAULT 0 CHECK(wood>=0), stone INTEGER NOT NULL DEFAULT 0 CHECK(stone>=0),
+        metal INTEGER NOT NULL DEFAULT 0 CHECK(metal>=0), ready INTEGER,
+        status TEXT NOT NULL CHECK(status IN ('collecting','building','complete','cancelled')));
+      CREATE UNIQUE INDEX IF NOT EXISTS city_warehouse_completed ON city_warehouse_projects((1)) WHERE status='complete';
       CREATE TABLE IF NOT EXISTS guild_market_gold (
         listing TEXT PRIMARY KEY REFERENCES listings(id), guild TEXT NOT NULL,
         amount INTEGER NOT NULL CHECK(amount>0));
@@ -68,6 +79,8 @@ export class CityProduction {
       } else if (job && epoch !== active) {
         this.cancelJob(job);
       }
+      const siege = "ended" in owner ? owner.siegeStarted : ownership.siegeStarted;
+      this.settleWarehouse(epoch, owner.guild, Math.min(cutoff, siege ?? cutoff), epoch !== active);
     }
     if (epoch !== active)
       this.db.prepare("UPDATE city_factory SET epoch=?,guild=? WHERE id=1").run(active, ownership.active?.guild ?? null);
@@ -100,6 +113,56 @@ export class CityProduction {
     if (!member.officer) throw Error("city_officer_required");
   }
 
+  private capacity(): number {
+    return this.db.prepare("SELECT 1 FROM city_warehouse_projects WHERE status='complete'").get()
+      ? CITY_WAREHOUSE_CAPACITY : CITY_CAPACITY;
+  }
+
+  private warehouseProject(epoch: number): WarehouseProject | undefined {
+    return this.db.prepare("SELECT * FROM city_warehouse_projects WHERE epoch=? AND status IN ('collecting','building')")
+      .get(epoch) as WarehouseProject | undefined;
+  }
+
+  private settleWarehouse(epoch: number, guild: string, cutoff: number, retire: boolean): void {
+    const project = this.warehouseProject(epoch);
+    if (!project) return;
+    if (project.guild !== guild) throw Error("city_ownership_unavailable");
+    if (project.ready !== null && project.ready <= cutoff) {
+      this.db.prepare("UPDATE city_warehouse_projects SET status='complete' WHERE epoch=?").run(epoch);
+    } else if (retire) {
+      for (const {item, column} of CITY_WAREHOUSE_MATERIALS) {
+        if (project[column] > 0) this.add(epoch, guild, item, project[column]);
+      }
+      this.db.prepare("UPDATE city_warehouse_projects SET status='cancelled' WHERE epoch=?").run(epoch);
+    }
+  }
+
+  warehouseStart(epoch: number, member: CityMember, ownership: CityOwnership) {
+    if (!member.commander) throw Error("city_commander_required");
+    if (ownership.siegeStarted !== undefined) throw Error("city_construction_siege");
+    if (this.capacity() === CITY_WAREHOUSE_CAPACITY) throw Error("city_warehouse_complete");
+    if (this.warehouseProject(epoch)) throw Error("city_project_exists");
+    this.db.prepare("INSERT INTO city_warehouse_projects(epoch,guild,status) VALUES(?,?,'collecting')").run(epoch, member.id);
+    return {epoch};
+  }
+
+  warehouseContribute(epoch: number, member: CityMember, ownership: CityOwnership, now: number,
+    item: CityItem, amount: number, source: "bag" | "stock") {
+    if (source === "stock") this.requireOfficer(member);
+    if (ownership.siegeStarted !== undefined) throw Error("city_construction_siege");
+    const project = this.warehouseProject(epoch);
+    if (!project || project.status !== "collecting") throw Error("city_project_unavailable");
+    const material = CITY_WAREHOUSE_MATERIALS.find(entry => entry.item === item);
+    if (!material || amount > material.amount - project[material.column]) throw Error("city_project_surplus");
+    if (source === "stock") this.take(epoch, member.id, item, amount);
+    project[material.column] += amount;
+    const funded = CITY_WAREHOUSE_MATERIALS.every(({column, amount: required}) => project[column] === required);
+    const readyAt = funded ? now + CITY_WAREHOUSE_DURATION_MS : null;
+    this.db.prepare(`UPDATE city_warehouse_projects SET ${material.column}=?,ready=?,status=? WHERE epoch=?`)
+      .run(project[material.column], readyAt, funded ? "building" : "collecting", epoch);
+    return {epoch, item, quantity: amount, source};
+  }
+
   private used(epoch: number): number {
     const stock = this.db.prepare("SELECT coalesce(sum(quantity),0) AS total FROM city_stock WHERE epoch=?").get(epoch);
     const listed = this.db.prepare(`SELECT coalesce(sum(json_extract(item,'$.quantity')),0) AS total
@@ -122,7 +185,7 @@ export class CityProduction {
   }
 
   deposit(epoch: number, member: CityMember, item: typeof CITY_RAW_ITEMS[number], amount: number): void {
-    if (this.used(epoch) + amount > CITY_CAPACITY) throw Error("city_storage_full");
+    if (this.used(epoch) + amount > this.capacity()) throw Error("city_storage_full");
     this.add(epoch, member.id, item, amount);
   }
 
@@ -148,7 +211,7 @@ export class CityProduction {
     const fee = rush ? CITY_RUSH_GOLD : 0;
     if (rush && this.marketGold(member.id) < fee) throw Error("city_market_funds");
     this.consumeRaw(epoch, member.id, CITY_RECIPE);
-    if (this.used(epoch) + CITY_RECIPE.quantity > CITY_CAPACITY) throw Error("city_storage_full");
+    if (this.used(epoch) + CITY_RECIPE.quantity > this.capacity()) throw Error("city_storage_full");
     const jobId = randomUUID(), readyAt = now + (rush ? CITY_DURATION_MS[level] / 2 : CITY_DURATION_MS[level]);
     this.db.prepare(`INSERT INTO city_jobs(id,epoch,guild,ready,wood,stone,quantity,status,fee)
       VALUES(?,?,?,?,?,?,?,'running',?)`).run(jobId, epoch, member.id, readyAt, CITY_RECIPE.wood, CITY_RECIPE.stone, CITY_RECIPE.quantity, fee);
@@ -189,7 +252,9 @@ export class CityProduction {
   hasAssets(guild: string): boolean {
     return Boolean(this.db.prepare(`SELECT 1 FROM city_stock WHERE guild=?
       UNION ALL SELECT 1 FROM city_jobs WHERE guild=? AND status='running'
-      UNION ALL SELECT 1 FROM listings WHERE seller_guild=? AND state='open' LIMIT 1`).get(guild, guild, guild))
+      UNION ALL SELECT 1 FROM listings WHERE seller_guild=? AND state='open'
+      UNION ALL SELECT 1 FROM city_warehouse_projects
+        WHERE guild=? AND status IN ('collecting','building') AND wood+stone+metal>0 LIMIT 1`).get(guild, guild, guild, guild))
       || this.marketGold(guild) > 0;
   }
 
@@ -213,6 +278,14 @@ export class CityProduction {
       const cutoff = "ended" in owner ? Math.min(requested, owner.ended) : requested;
       if (job.ready <= cutoff) this.completeJob(job);
       else this.cancelJob(job);
+    }
+    const epoch = this.epoch();
+    if (epoch !== null && this.warehouseProject(epoch)?.guild === guild) {
+      const owner = ownership.active?.id === epoch ? ownership.active : ownership.previous;
+      if (owner?.guild !== guild) throw Error("city_ownership_unavailable");
+      const siege = "ended" in owner ? owner.siegeStarted : ownership.siegeStarted;
+      const cutoff = "ended" in owner ? Math.min(requested, owner.ended) : requested;
+      this.settleWarehouse(epoch, guild, Math.min(cutoff, siege ?? cutoff), true);
     }
     const stock = this.db.prepare("SELECT item,sum(quantity) AS quantity FROM city_stock WHERE guild=? GROUP BY item")
       .all(guild) as {item: CityItem; quantity: number}[];
@@ -258,11 +331,20 @@ export class CityProduction {
       json_extract(item,'$.quantity') AS quantity,price FROM listings WHERE seller_guild=? AND state='open' ORDER BY rowid DESC`)
       .all(member.id) as GuildListing[];
     const job = ownEpoch === null ? undefined : this.running(ownEpoch);
+    const project = ownEpoch === null ? undefined : this.warehouseProject(ownEpoch);
+    const capacity = this.capacity();
     return {
       epoch: ownEpoch, level, stock: stock.map(row => ({...row})), reclaim: reclaim.map(row => ({...row})),
-      listings: listings.map(row => ({...row})), capacity: CITY_CAPACITY,
+      listings: listings.map(row => ({...row})), capacity,
       used: ownEpoch === null ? 0 : this.used(ownEpoch), marketGold: this.marketGold(member.id),
       officer: member.officer, job: job ? {id: job.id, readyAt: job.ready, fee: job.fee} : null,
+      constructionReserved: !!project && project.wood + project.stone + project.metal > 0,
+      construction: {
+        commander: member.commander === true, siege: ownership.siegeStarted !== undefined,
+        complete: capacity === CITY_WAREHOUSE_CAPACITY, capacity: CITY_WAREHOUSE_CAPACITY,
+        durationMs: CITY_WAREHOUSE_DURATION_MS, status: project?.status ?? null, readyAt: project?.ready ?? null,
+        materials: CITY_WAREHOUSE_MATERIALS.map(({item, column, amount}) => ({item, amount, reserved: project?.[column] ?? 0})),
+      },
       costs: level === 2 ? null : CITY_FACTORY_COSTS[level],
       recipe: {inputs: [{item: CITY_RAW_ITEMS[0], amount: CITY_RECIPE.wood}, {item: CITY_RAW_ITEMS[1], amount: CITY_RECIPE.stone}],
         output: CITY_PRODUCT, amount: CITY_RECIPE.quantity, durationMs: CITY_DURATION_MS[level],
