@@ -136,6 +136,8 @@
     closeForgePicker(false);
     if(typeof closeCraftRecipePopup==="function")closeCraftRecipePopup(false);
     clearSyncPoll();
+    ghostPotState = null;
+    if ($("menuGhostPot")) $("menuGhostPot").hidden = true;
     if (mode === "live") { showDemo(); window.MontraEntry?.open(); window.MontraEntry?.failure(reason || "การเชื่อมต่อสิ้นสุด กรุณาเข้าเกมอีกครั้ง"); }
   }
   let connectionPending = false;
@@ -240,7 +242,28 @@
       updateStatus();
       const ok = syncState(joined.state);
       console.info("MONTRA room joined", {roomId:joined.roomId, sessionId:joined.sessionId, initialStateReady:ok});
-      joined.onStateChange(state => syncState(state));
+      let ghostPotRequested = false;
+      const requestGhostPot = state => {
+        if (state?.ghostPotAvailable && !ghostPotRequested && room === joined) {
+          ghostPotRequested = true;
+          joined.send("ghost_pot", {action: "read"});
+        }
+      };
+      ghostPotState = null;
+      if ($("menuGhostPot")) $("menuGhostPot").hidden = true;
+      joined.onStateChange(state => {syncState(state);requestGhostPot(state);});
+      joined.onMessage("ghost_pot_state", payload => {
+        if (room !== joined || !payload || typeof payload.active !== "boolean") return;
+        const label = $("menuGhostPotLabel"), button = $("menuGhostPot");
+        if (!label || !button) return;
+        ghostPotState = payload;
+        button.hidden = false;
+        label.textContent = payload.active ? "เก็บผีกลับหม้อ" : payload.ghost ? "เรียก" + payload.ghost.name : "จับผีใส่หม้อ";
+        const notice = {captured:"จับ" + (payload.ghost?.name || "ผี") + "ใส่หม้อแล้ว", escaped:"ผีหนีรอด ลองใหม่ได้อีกครั้ง",
+          summoned:"เรียกผีออกจากหม้อแล้ว", recalled:"เก็บผีกลับหม้อแล้ว", unavailable:"หม้ออาคมยังใช้ไม่ได้",
+          target_changed:"เป้าหมายเปลี่ยนไป ลองจับใหม่"};
+        if (Object.hasOwn(notice, payload.status)) toast(notice[payload.status]);
+      });
       joined.onMessage("chat_message", message => {
         if (room !== joined || !message || !["map", "world", "party", "private"].includes(message.channel) ||
             typeof message.text !== "string" || typeof message.name !== "string" ||
@@ -695,19 +718,19 @@
         if (room !== joined) return;
         if(notice?.kind==="pot_spirit")recordPracticeCast({playerId:notice.ownerId,skillId:"seer_pot"});
         playAction(avatars.get(notice?.ownerId), "summon");
-        if (notice?.ownerId === localId) toast("อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
+        if (notice?.ownerId === localId && notice.kind !== "captured_ghost") toast("อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
         syncSummons(joined.state);
         const spirit = joined.state.summons?.get(notice?.ownerId);
-        if (notice?.kind === "pot_spirit" && spirit && summonAvatars.has(notice.ownerId)) {
+        if ((notice?.kind === "pot_spirit" || notice?.kind === "captured_ghost") && spirit && summonAvatars.has(notice.ownerId)) {
           showSpiritPot(spirit);
           summonAvatars.get(notice.ownerId).emergingUntil = performance.now() + 500;
         }
-        if (notice?.ownerId === localId) toast(notice.kind === "pot_spirit" ? "เสกผีจากหม้อแล้ว · ผีจะช่วยโจมตีมอนสเตอร์ใกล้ตัว" : "อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
+        if (notice?.ownerId === localId && notice.kind !== "captured_ghost") toast(notice.kind === "pot_spirit" ? "เสกผีจากหม้อแล้ว · ผีจะช่วยโจมตีมอนสเตอร์ใกล้ตัว" : "อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
       });
       joined.onMessage("summon_despawn", notice => {
         if (room !== joined) return;
         { const s=summonAvatars.get(notice?.ownerId); if (s) eventFx("unsummon",{x:s.x??s.node?.position.x,z:s.z??s.node?.position.z,y:s.y||0}); }
-        if (notice?.ownerId === localId && notice.reason !== "possessed") {
+        if (notice?.ownerId === localId && notice.reason !== "possessed" && notice.reason !== "ghost_recalled") {
           toast(notice.reason === "owner_dead"
             ? "วิญญาณกลับภพเมื่อเจ้าของหมดสติ"
             : "เก็บวิญญาณผู้พิทักษ์แล้ว");
@@ -1445,6 +1468,9 @@
         else if (info?.reason === "invalid_dash") toast("ทิศทางการพุ่งไม่ถูกต้อง");
         else if (info?.reason === "dismount_required") toast("ลงจากม้าก่อนใช้วิชาหรือต่อสู้");
         else if (info?.reason === "mount_in_combat") toast("รอให้พ้นการต่อสู้ก่อนเรียกม้า");
+        else if (info?.reason === "ghost_target_unavailable") toast("ต้องเป็นผีทั่วไปที่ยังมีชีวิตและอยู่ในระยะ");
+        else if (info?.reason === "ghost_pot_busy") toast("รอสักครู่ก่อนใช้หม้ออาคม");
+        else if (info?.reason === "ghost_pot_occupied") toast("มีผีในหม้อหรือมีผีที่เรียกไว้อยู่แล้ว");
         else if (info?.reason === "mount_unavailable") toast("เรียกม้าได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");
         else if (info?.reason === "mount_cooldown") toast("รอสักครู่ก่อนเรียกม้าอีกครั้ง");
         else if (info?.reason === "invalid_flight") toast("คำสั่งบินไม่ถูกต้อง");
@@ -1515,6 +1541,7 @@
         localStorage.setItem("montra_endpoint", endpoint);
         localStorage.setItem(preferredSlotKey(endpoint), String(requestedSlot));
       } catch (_) { /* optional */ }
+      requestGhostPot(joined.state);
       if(joined.state?.territoryWarAvailable)joined.send("get_territories",{});
       if(joined.state?.forestObjectivesAvailable){joined.send("get_forest_objective",{});joined.send("get_director_event",{});}
       try { joined.send("get_character_slots", {}); } catch (_) { /* old S2 server */ }

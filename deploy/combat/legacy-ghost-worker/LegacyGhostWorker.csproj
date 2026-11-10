@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <Target Name="RequireMonsterLifeSource" BeforeTargets="CoreCompile"
+          Condition="!Exists('$(MonsterLifeSource)/scr/OwnedMonsterControlRuntime.cs')">
+    <Error Text="Set MonsterLifeSource to the MonsterLifeServer source checkout." />
+  </Target>
+  <ItemGroup>
+    <EmbeddedResource Include="$(MonsterLifeSource)/scr/catalog/catalog-seed-v8.4.0.json" Link="catalog/catalog-seed-v8.4.0.json" />
+    <EmbeddedResource Include="$(MonsterLifeSource)/scr/catalog/pirate-monster-control-v1.json" Link="catalog/pirate-monster-control-v1.json" />
+    <Compile Include="$(MonsterLifeSource)/scr/Combat/*.cs" LinkBase="MonsterLife/Combat" />
+    <Compile Include="$(MonsterLifeSource)/scr/Combat/Protocol/*.cs" LinkBase="MonsterLife/Protocol" />
+    <Compile Include="$(MonsterLifeSource)/scr/OwnedMonsterControlContract.cs;
+                      $(MonsterLifeSource)/scr/OwnedMonsterControlRuntime.cs;
+                      $(MonsterLifeSource)/scr/OwnedMonsterWorldSource.cs;
+                      $(MonsterLifeSource)/scr/OwnedMonsterNpcRecoveryPolicy.cs;
+                      $(MonsterLifeSource)/scr/PirateCentralSpatialEvaluator.cs;
+                      $(MonsterLifeSource)/scr/WorldPresenceActorReplication.cs;
+                      $(MonsterLifeSource)/scr/WorldPresencePresentation.cs;
+                      $(MonsterLifeSource)/scr/WorldPresenceAnimation.cs;
+                      $(MonsterLifeSource)/scr/MonsterAuthorityContract.cs;
+                      $(MonsterLifeSource)/scr/CombatTiming.cs" LinkBase="MonsterLife" />
+  </ItemGroup>
+</Project>

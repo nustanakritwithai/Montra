@@ -9,6 +9,7 @@ import {RIVER_CITY,riverNodes,riverPosts,riverSupplied} from "./RiverCity.js";
 import {CASTLE_ID,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
 import { Encoder, StateView } from "@colyseus/schema";
 import { randomUUID,randomInt } from "node:crypto";
+import {ghostPotConfig, LegacyGhostWorker, POT_CAPTURE_PROFILE, rollPotCapture, type PotGhost} from "./LegacyGhostPot.js";
 import {FISH_BITE_DELAY,FISH_DURATION,advanceFishing,fishItem,pullFish,validateFishingPosition,type FishingSession} from "./Fishing.js";
 import {
   CHARACTER_SAVE_INTERVAL_MS, characterStore, characterIdFromToken,
@@ -144,6 +145,14 @@ type TradeSession = { id:string; a:string; b:string; expires:number; offers:Reco
 export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients:number = WORLD_ROOM_CAPACITY;
   state = new MyRoomState();
+
+  private readonly ghostConfig = ghostPotConfig();
+  private ghostWorker?: LegacyGhostWorker;
+  private readonly ghostPots = new Map<string, PotGhost>();
+  private readonly ghostGenerations = new Map<string, number>();
+  private readonly ghostControlPending = new Set<string>();
+  private readonly ghostCaptureTargets = new Set<string>();
+  private readonly ghostCaptureReadyAt = new Map<string, number>();
 
   private forest = new ForestEncounters(this.state.monsters);
   private getMonster(id:string): Monster | undefined { return id === RULES.monsterId ? this.state.monster : this.state.monsters.get(id); }
@@ -2021,6 +2030,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return this.reject(client,"occult_curse_required");
       if (lesson.effect==="spirit" || lesson.effect==="spirit_bind") {
         const spirit=this.state.summons.get(id);
+        if (spirit?.kind === "captured_ghost") return this.reject(client, "occult_skill_locked");
         if (!spirit || spirit.kind!=="pot_spirit") return this.reject(client,"possession_needs_summon");
         if (distance3d(caster,target)>RULES.summonEngageDistance) return this.reject(client,"occult_out_of_range");
         if (!this.bodyPathClear(caster.mapId,spirit,target)) return this.reject(client,"occult_blocked");
@@ -3781,7 +3791,125 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(signature!==this.warSent.get(c.sessionId)){c.send("territory_state",payload);this.warSent.set(c.sessionId,signature);}
     }
   }
+  private sendGhostPot(client: Client, status: string) {
+    const id = client.sessionId;
+    client.send("ghost_pot_state", {
+      ghost: this.ghostPots.get(id) ?? null,
+      active: this.ghostGenerations.has(id),
+      status,
+    });
+  }
+
+  private resetGhostWorker(worker: LegacyGhostWorker) {
+    if (this.ghostWorker !== worker) return;
+    this.ghostWorker = undefined;
+    worker.close();
+    for (const owner of this.ghostGenerations.keys()) this.despawnSummon(owner, "ghost_worker_unavailable");
+  }
+
+  private async handleGhostPot(client: Client, message: unknown) {
+    const config = this.ghostConfig, id = client.sessionId, owner = this.state.players.get(id);
+    if (!config || this.field || !characterStore.economyEnabled || !owner || !this.persistentCharacters.has(id))
+      return this.reject(client, "ghost_pot_unavailable");
+    if (!message || typeof message !== "object" || Array.isArray(message)) return this.reject(client, "invalid_ghost_pot");
+    const input = message as {action?: unknown; targetId?: unknown};
+    if (Object.keys(input).some(key => key !== "action" && key !== "targetId"))
+      return this.reject(client, "invalid_ghost_pot");
+    if (input.action === "read" && input.targetId === undefined) return this.sendGhostPot(client, "ready");
+    if (!owner.alive || owner.mounted || owner.possessionActive || this.pendingWarps.has(id) ||
+        this.pendingCharacterLeaves.has(id) || this.pendingItemUses.has(id) || this.pendingRewards.has(id) ||
+        this.ghostControlPending.has(id)) return this.reject(client, "ghost_pot_busy");
+    if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) return this.reject(client, "ghost_pot_busy");
+
+    const ghost = this.ghostPots.get(id);
+    if (input.action === "capture") {
+      if (ghost || this.state.summons.has(id)) return this.reject(client, "ghost_pot_occupied");
+      if (typeof input.targetId !== "string" || input.targetId.length > 96) return this.reject(client, "invalid_ghost_pot");
+      const targetId = input.targetId, target = this.getMonster(targetId);
+      if (!target?.alive || target.hp <= 0 || target.tier !== "normal" || target.level > 60 ||
+          target.mapId !== owner.mapId || distance3d(owner, target) > 8 || !this.bodyPathClear(owner.mapId, owner, target))
+        return this.reject(client, "ghost_target_unavailable");
+      if (this.ghostCaptureTargets.has(targetId) || this.simulatedMs < (this.ghostCaptureReadyAt.get(id) ?? 0))
+        return this.reject(client, "ghost_pot_busy");
+      this.ghostCaptureReadyAt.set(id, this.simulatedMs + 3000);
+      this.ghostCaptureTargets.add(targetId);
+      const task = (async () => {
+        try {
+          const hp = target.hp, hitSeq = target.hitSeq;
+          const caught = await rollPotCapture(config.capture, {hp, maxHp: target.maxHp, level: target.level}, owner.level);
+          if (!owner.alive || !target.alive || target.hitSeq !== hitSeq || target.hp !== hp ||
+              this.getMonster(targetId) !== target || this.pendingCharacterLeaves.has(id) ||
+              owner.mapId !== target.mapId || distance3d(owner, target) > 8 ||
+              !this.bodyPathClear(owner.mapId, owner, target)) return this.sendGhostPot(client, "target_changed");
+          if (!caught) return this.sendGhostPot(client, "escaped");
+          const snapshot = this.captureCharacterSnapshot(id);
+          if (!snapshot) return this.sendGhostPot(client, "unavailable");
+          const captured = {instanceId: randomUUID(), name: (target.displayName || "ผี").slice(0, 80), level: target.level};
+          // Economy-mode saves commit synchronously to SQLite before resolving.
+          // The pot becomes occupied only after the character snapshot commits.
+          await characterStore.save({...snapshot, ghostPot: captured});
+          this.ghostPots.set(id, captured);
+          this.killMonster(id, targetId, false);
+          this.sendGhostPot(client, "captured");
+        } catch (error) {
+          console.error("MONTRA ghost capture failed", error);
+          this.sendGhostPot(client, "unavailable");
+        } finally {
+          this.ghostCaptureTargets.delete(targetId);
+          this.pendingItemUses.delete(id);
+        }
+      })();
+      this.pendingItemUses.set(id, task);
+      return task;
+    }
+
+    const kind = input.action;
+    if ((kind !== "summon" && kind !== "recall") || input.targetId !== undefined)
+      return this.reject(client, "invalid_ghost_pot");
+    if (!ghost) return this.reject(client, "ghost_pot_empty");
+    const generation = this.ghostGenerations.get(id);
+    if (kind === "summon" ? this.state.summons.has(id) : !generation)
+      return this.reject(client, "ghost_pot_busy");
+    const zone = owner.mapId, position = {x: owner.x, y: owner.y, z: owner.z};
+    const worker = this.ghostWorker ??= new LegacyGhostWorker(config.worker);
+    this.ghostControlPending.add(id);
+    try {
+      const reply = await worker.send({owner: id, position, ghost: {...ghost, speciesId: POT_CAPTURE_PROFILE}, command: {
+        commandId: randomUUID(), instanceId: ghost.instanceId, zone, kind,
+        ...(kind === "summon" ? {targetPoint: position} : {expectedActiveGeneration: generation}),
+      }});
+      if (this.ghostWorker !== worker) return;
+      if (!reply.accepted) return this.sendGhostPot(client, "unavailable");
+      if (kind === "recall") {
+        this.despawnSummon(id, "ghost_recalled");
+        return this.sendGhostPot(client, "recalled");
+      }
+      const active = reply.active;
+      if (!active || !Number.isSafeInteger(active.generation) || ![active.x, active.y, active.z].every(Number.isFinite))
+        throw new Error("invalid_ghost_worker_actor");
+      if (this.state.players.get(id) !== owner || !owner.alive || owner.mapId !== zone ||
+          this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) || owner.mounted ||
+          owner.possessionActive || this.state.summons.has(id)) {
+        await worker.send({owner: id, disconnect: true});
+        return;
+      }
+      this.ghostGenerations.set(id, active.generation);
+      this.state.summons.set(id, new SummonedGuardian({
+        ownerId: id, kind: "captured_ghost", x: active.x, y: active.y, z: active.z, facing: owner.facing,
+      }));
+      this.broadcast("summon_spawn", {ownerId: id, kind: "captured_ghost"}, {afterNextPatch: true});
+      this.sendGhostPot(client, "summoned");
+    } catch (error) {
+      console.error("MONTRA ghost worker failed", error);
+      this.resetGhostWorker(worker);
+      this.sendGhostPot(client, "unavailable");
+    } finally {
+      this.ghostControlPending.delete(id);
+    }
+  }
+
   messages = {
+    ghost_pot: (client: Client, message: unknown) => this.handleGhostPot(client, message),
     ask_npc_guide:(client:Client,message:unknown)=>this.askNpcGuide(client,message),
     get_director_event:(client:Client,message:unknown)=>{
       if(!parseEmptyCommand(message) || !WORLD_EXPANSION || this.field || !this.persistentCharacters.has(client.sessionId) || process.env.MONTRA_DIRECTOR_ENABLED==="0")return;
@@ -4713,7 +4841,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!this.gates.get(id)?.possession.consume(this.simulatedMs))return this.reject(client,"possession_rate_limited");
       if(player.possessionActive){this.endPossession(id,"cancelled");return;}
       if((!this.legacyCombatRoom() || this.configuredHotbar(id)) && !this.canPrepareSpirit(id,player.pathId,true))return this.reject(client,"occult_skill_locked");
-      if(POSSESSION_BUFF.requiresSummon && !this.state.summons.has(id))return this.reject(client,"possession_needs_summon");
+      if(POSSESSION_BUFF.requiresSummon && (!this.state.summons.has(id) || this.state.summons.get(id)?.kind === "captured_ghost"))return this.reject(client,"possession_needs_summon");
       if(possessionCoolingDown(this.persistentCharacters.get(id)))return this.reject(client,"possession_cooldown");
       if(player.mana<15)return this.reject(client,"insufficient_mana");
       const result=this.buffs.activate(id,this.simulatedMs);
@@ -4964,7 +5092,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.spiritNavigators.delete(ownerId);
     this.occultSpiritOrders.delete(ownerId);
     this.occultSpiritPracticed.delete(ownerId);
-    if (!this.state.summons.has(ownerId)) return;
+    const summon = this.state.summons.get(ownerId);
+    if (!summon) return;
+    if (summon.kind === "captured_ghost") {
+      this.ghostGenerations.delete(ownerId);
+      const worker = this.ghostWorker;
+      if (worker) void worker.send({owner: ownerId, disconnect: true}).catch(() => this.resetGhostWorker(worker));
+      this.clients.find(client => client.sessionId === ownerId)?.send("ghost_pot_state", {
+        ghost: this.ghostPots.get(ownerId) ?? null, active: false, status: "ready",
+      });
+    }
     this.state.summons.delete(ownerId);
     this.lastSummonAttackAt.delete(ownerId);
     this.broadcast("summon_despawn", { ownerId, reason },
@@ -5063,7 +5200,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
 
       const distanceToOwner = distance3d(guardian, owner);
-      const candidate = distanceToOwner <= RULES.summonLeashDistance
+      const candidate = guardian.kind !== "captured_ghost" && distanceToOwner <= RULES.summonLeashDistance
         ? this.findSummonTarget(ownerId, owner, guardian) : null;
 
       if (candidate) {
@@ -5240,6 +5377,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   async onCreate(options?:{warRoomKey?:string;field?:Battlefield}) {
+    this.state.ghostPotAvailable = Boolean(this.ghostConfig && characterStore.economyEnabled && !options?.field);
     let cardRevision=dynamicBalanceRevision();
     this.clock.setInterval(()=>{
       const next=dynamicBalanceRevision();if(next===cardRevision)return;cardRevision=next;
@@ -5750,7 +5888,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }, { afterNextPatch: true });
   }
 
-  private killMonster(winnerId: string, targetId: string = RULES.monsterId) {
+  private killMonster(winnerId: string, targetId: string = RULES.monsterId, award = true) {
     this.releaseMuayFor(targetId,"knockout");
     if (targetId !== RULES.monsterId) {
       const m=this.state.monsters.get(targetId);
@@ -5760,8 +5898,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const eligible=Boolean(!this.field && process.env.MONTRA_HUNT_EVENTS!=='0' && winner?.alive && this.persistentCharacters.has(winnerId) &&
         !this.pendingWarps.has(winnerId) && winner.mapId===m.mapId && winner.level<PROGRESSION.maxLevel && Math.abs(winner.level-m.level)<=5 && distance3d(winner,m)<=PARTY_XP_RADIUS);
       this.clearMuayCombosForTarget(targetId);
-      this.awardMonsterExperience(winnerId,m,profile.tier);
-      huntEventDirector.recordKill(m.mapId,profile.tier,eligible);
+      if (award) {
+        this.awardMonsterExperience(winnerId,m,profile.tier);
+        huntEventDirector.recordKill(m.mapId,profile.tier,eligible);
+      }
       for(const [id,target] of this.attackTargets) if(target===targetId){const p=this.state.players.get(id);if(p)this.endAttack(id,p);}
       return;
     }
@@ -5776,7 +5916,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     monster.targetId = "";
     this.monsterRespawnAt = this.simulatedMs + RULES.monsterRespawnMs;
     this.monsterReturning = false;
-    this.awardMonsterExperience(winnerId);
+    if (award) this.awardMonsterExperience(winnerId);
 
     // Only cancel PvE attacks on this monster. Concurrent Free PK fights
     // must continue even when someone else defeats the ghost.
@@ -6017,6 +6157,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // Keep stable flight altitude when a transition is mid-flight.
       y: player.flying ? FLIGHT.altitude : getWorldMap(player.mapId)?.reliefLabels ? (isOnPlatform(surfaceLayer(player))?FORT.height:0) : player.y,
       z: player.z,
+      ghostPot: this.ghostPots.get(id),
       inventory, updatedAt: new Date().toISOString(),
     };
   }
@@ -6193,6 +6334,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (characterId && accountId && slotIds) {
         if (!saved?.inventory) throw new Error("inventory_migration_missing");
         this.persistentCharacters.set(client.sessionId, characterId);
+        if (saved.ghostPot) this.ghostPots.set(client.sessionId, saved.ghostPot);
         this.guildSubscriptions.set(client.sessionId,subscribeGuild(characterId,()=>this.sendGuild(client,characterId)));
         this.inventories.set(client.sessionId, saved.inventory);
         this.activeGuestAccounts.set(client.sessionId, accountId);
@@ -6330,6 +6472,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.swordGuards.delete(id);
       this.hpRegenRemainder.delete(id);
       this.inventories.delete(id);
+      this.ghostPots.delete(id);
+      this.ghostCaptureReadyAt.delete(id);
       this.itemUseReadyAt.delete(id);
       this.lastInventoryReadMs.delete(id);
       this.lastStatusReadMs.delete(id);
@@ -6345,6 +6489,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   async onDispose() {
+    const worker = this.ghostWorker;
+    this.ghostWorker = undefined;
+    worker?.close();
     huntEventDirector.forget(this.roomId);
     if(this.field)battleRooms.delete(this.field.seq);
     this.buffs.clear();

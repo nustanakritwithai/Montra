@@ -5,7 +5,8 @@ node scripts/build-client.mjs --prepare
 # Generated sandbox only; never points at the VPS or existing player files.
 rm -rf combat-verify/src
 mkdir -p combat-verify/src/rooms/schema
-cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
+cp deploy/combat/MyRoom.ts deploy/combat/LegacyGhostPot.ts combat-verify/src/rooms/
+cp deploy/combat/ghost-pot-integration.mjs combat-verify/
 cp deploy/combat/SkillHotbar.ts deploy/combat/skill-hotbar.test.ts deploy/combat/skill-hotbar-disabled.test.ts deploy/combat/rebirth-hotbar-room.test.ts combat-verify/src/rooms/
 cp deploy/combat/mixed-hotbar-integration.mjs combat-verify/
 cp deploy/combat/AccountStore.ts deploy/combat/AccountService.ts deploy/combat/AccountRoutes.ts deploy/combat/account-store.test.ts combat-verify/src/rooms/
