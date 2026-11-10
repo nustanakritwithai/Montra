@@ -11,7 +11,11 @@ import { PERSONAL_ITEMS, personalItem, type BodySlot, type BodyItemId, type Furn
 import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack, type WeaponItemId } from "./ItemRules.js";
 import type {HomeAction, SalvageOrder} from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
-import {type CityDisband, type CityFactoryOrder, type CityMember, type CityOrder, type CityOwnership} from "./CityProductionRules.js";
+import {
+  CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES, isWarehouseOrder,
+  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityMember, type CityOrder, type CityOwnership, type CityPurchaseOrder, type CitySite,
+  type CityWorkshopOrder,
+} from "./CityProductionRules.js";
 
 export const STARTER_GOLD = 1000;
 const MAX_GOLD = 1_000_000_000;
@@ -209,13 +213,72 @@ export class EconomyStore {
     this.cityTimer = setInterval(sweep, 5000);
     this.cityTimer.unref();
   }
-  syncCity(readOwnership: (previous: number | null, now: number) => CityOwnership, now: number): CityOwnership {
-    const ownership = readOwnership(this.city.epoch(), now);
-    this.transaction(() => this.city.reconcile(ownership, now));
+  syncCity(readOwnership: (previous: number | null, now: number) => CityOwnership, now: number,
+    site: CitySite = CITY_PRODUCTION_SITE): CityOwnership {
+    const ownership = readOwnership(this.city.epoch(site), now);
+    this.transaction(() => this.city.reconcile(ownership, now, site));
     return ownership;
   }
-  viewCity(member: CityMember, ownership: CityOwnership) {
-    return this.city.view(member, ownership);
+  viewCity(member: CityMember, ownership: CityOwnership, site: CitySite = CITY_PRODUCTION_SITE) {
+    return this.city.view(member, ownership, site);
+  }
+  viewCityWorkshop(actor: string, ownership: CityOwnership, now: number) {
+    return this.city.workshopView(actor, ownership, now);
+  }
+  viewCityPurchase(member: CityMember | undefined, ownership: CityOwnership) {
+    return this.city.purchaseView(member, ownership);
+  }
+  hasOpenCityPurchase(): boolean {
+    return this.city.hasOpenPurchase();
+  }
+  cityPurchaseOrder(actor: string, member: CityMember | undefined, order: CityPurchaseOrder,
+    ownership: CityOwnership, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once<Record<string, number | string>>(actor, order.requestId, "city_purchase", intent, () => {
+      if (order.action === "purchase_fill") {
+        const account = this.account(actor);
+        if (account.inventory.slots[order.slot]?.itemId !== CITY_PRODUCT) throw Error("item_unavailable");
+        const result = this.city.purchaseFill(order.orderId, order.amount, ownership, now);
+        if (account.gold + result.gold > MAX_GOLD) throw Error("city_wallet_full");
+        account.inventory = take(account.inventory, order.slot, order.amount).inventory;
+        account.gold += result.gold;
+        this.put(actor, account);
+        return result;
+      }
+      if (!member) throw Error("city_not_member");
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      if (order.action === "purchase_cancel") return this.city.purchaseCancel(member, order.orderId);
+      return this.city.purchaseOpen(member, ownership, order.epoch, order.amount, order.unitPrice, now);
+    });
+  }
+  hasCityWorkshopJob(actor: string): boolean {
+    return this.city.hasWorkshopJob(actor);
+  }
+  startCityWorkshop(actor: string, order: Extract<CityWorkshopOrder, {action: "workshop_start"}>,
+    ownership: CityOwnership, now: number) {
+    const {requestId, epoch, woodSlot, stoneSlot} = order;
+    return this.once(actor, requestId, "city_workshop_start", {epoch, woodSlot, stoneSlot}, () => {
+      const account = this.account(actor);
+      const result = this.city.workshopStart(actor, epoch, ownership, now);
+      if (account.gold < result.fee) throw Error("city_workshop_funds");
+      if (account.inventory.slots[woodSlot]?.itemId !== CITY_RAW_ITEMS[0] ||
+          account.inventory.slots[stoneSlot]?.itemId !== CITY_RAW_ITEMS[1]) throw Error("item_unavailable");
+      const wood = take(account.inventory, woodSlot, CITY_RECIPE.wood);
+      account.inventory = take(wood.inventory, stoneSlot, CITY_RECIPE.stone).inventory;
+      account.gold -= result.fee;
+      this.put(actor, account);
+      return result;
+    });
+  }
+  claimCityWorkshop(actor: string, order: Extract<CityWorkshopOrder, {action: "workshop_claim"}>, now: number) {
+    const {requestId, jobId} = order;
+    return this.once(actor, requestId, "city_workshop_claim", {jobId}, () => {
+      const account = this.account(actor);
+      const {item, quantity} = this.city.workshopClaim(actor, jobId, now);
+      account.inventory = add(account.inventory, {itemId: item, quantity});
+      this.put(actor, account);
+      return {jobId, item, quantity};
+    });
   }
   hasCityAssets(guild: string): boolean {
     return this.city.hasAssets(guild);
@@ -223,11 +286,11 @@ export class EconomyStore {
   cityDisbandClosed(actor: string, guild: string): boolean {
     return this.city.closureActor(guild) === actor;
   }
-  closeCityGuild(disband: CityDisband, readOwnership: (previous: number | null) => CityOwnership): void {
-    const ownership = readOwnership(this.city.epoch());
+  closeCityGuild(disband: CityDisband, readOwnership: (previous: number | null, site: CitySite) => CityOwnership): void {
+    const ownerships = new Map(CITY_SITES.map(site => [site, readOwnership(this.city.epoch(site), site)] as const));
     this.transaction(() => {
       this.account(disband.actor);
-      this.city.disband(disband, ownership);
+      this.city.disband(disband, ownerships);
     });
   }
   cityDisbandClaims(actor: string) {
@@ -249,7 +312,8 @@ export class EconomyStore {
       return {guildId, item, amount};
     });
   }
-  cityOrder(actor: string, member: CityMember, order: CityFactoryOrder, ownership: CityOwnership, now: number) {
+  cityOrder(actor: string, member: CityMember, order: CityFactoryOrder, ownership: CityOwnership, now: number,
+    site: CitySite = CITY_PRODUCTION_SITE) {
     const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
     return this.once<Record<string, number | string>>(actor, order.requestId, "city_production", intent, () => {
       if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
@@ -261,20 +325,27 @@ export class EconomyStore {
         this.put(actor, account);
         return {quantity: order.amount};
       }
-      this.city.requireCity(member, order.epoch, ownership);
+      this.city.requireCity(member, order.epoch, ownership, site);
+      if (isWarehouseOrder(order) && site !== CITY_PRODUCTION_SITE) throw Error("city_construction_unavailable");
       switch (order.action) {
-        case "build": return this.city.build(order.epoch, member);
+        case "build": return this.city.build(order.epoch, member, site);
         case "start":
-        case "start_fast": return this.city.start(order.epoch, member, now, order.action === "start_fast");
-        case "list": return this.city.list(order.epoch, member, order.amount, order.price);
-        case "deposit": {
+        case "start_fast": return this.city.start(order.epoch, member, now, order.action === "start_fast", site);
+        case "list": return this.city.list(order.epoch, member, order.amount, order.price, site);
+        case "warehouse_start": return this.city.warehouseStart(order.epoch, member, ownership);
+        case "warehouse_allocate":
+          return this.city.warehouseContribute(order.epoch, member, ownership, now, order.item, order.amount, "stock");
+        case "deposit":
+        case "warehouse_contribute": {
           const account = this.account(actor);
           if (account.inventory.slots[order.slot]?.itemId !== order.item) throw Error("item_unavailable");
           const removed = take(account.inventory, order.slot, order.amount);
-          this.city.deposit(order.epoch, member, order.item, order.amount);
+          let result: Record<string, string | number> = {quantity: order.amount};
+          if (order.action === "deposit") this.city.deposit(order.epoch, member, order.item, order.amount, site);
+          else result = this.city.warehouseContribute(order.epoch, member, ownership, now, order.item, order.amount, "bag");
           account.inventory = removed.inventory;
           this.put(actor, account);
-          return {quantity: order.amount};
+          return result;
         }
       }
     });
@@ -465,6 +536,7 @@ export class EconomyStore {
       this.requireSettledMonsterReward(id);
       if(this.hasOpenListings(id))throw new Error("character_has_listings");
       if(this.hasCityDisbandClaims(id))throw new Error("character_has_city_claims");
+      if(this.hasCityWorkshopJob(id))throw new Error("character_has_city_job");
       this.db.prepare("DELETE FROM listings WHERE seller=?").run(id);
       this.db.prepare("DELETE FROM auction_credits WHERE actor=?").run(id);
       this.db.prepare("DELETE FROM starter_supply_used WHERE actor=?").run(id);

@@ -1,5 +1,5 @@
 import type {DatabaseSync} from "node:sqlite";
-import {CITY_PRODUCTION_SITE, type CityOwnership, type CityTenure} from "./CityProductionRules.js";
+import {CITY_PRODUCTION_SITE, CITY_SITES, type CityOwnership, type CitySite, type CityTenure} from "./CityProductionRules.js";
 
 // An income tick is 1/3,600,000 of a guild coin. No fractional income is lost on collection or conquest.
 const HOUR=3_600_000;
@@ -53,29 +53,56 @@ export class TerritoryGovernment {
       SELECT b.site,g.id,? FROM territory_battles b LEFT JOIN guilds g
         ON g.id=CASE WHEN b.ended IS NULL THEN b.incumbent ELSE b.winner END
       WHERE b.seq IN (SELECT MAX(seq) FROM territory_battles GROUP BY site)`).run(Date.now());
-    db.exec(`CREATE TABLE IF NOT EXISTS city_tenures (
-      id INTEGER PRIMARY KEY, guild TEXT NOT NULL, ended INTEGER);
-      CREATE UNIQUE INDEX IF NOT EXISTS city_active_tenure ON city_tenures((1)) WHERE ended IS NULL;
-      INSERT INTO city_tenures(guild)
-        SELECT owner FROM territory_estates WHERE site='${CITY_PRODUCTION_SITE}' AND owner IS NOT NULL
-          AND NOT EXISTS (SELECT 1 FROM city_tenures WHERE ended IS NULL);
-      CREATE TRIGGER IF NOT EXISTS city_ownership_created AFTER INSERT ON territory_estates
-        WHEN NEW.site='${CITY_PRODUCTION_SITE}' AND NEW.owner IS NOT NULL
-        BEGIN INSERT INTO city_tenures(guild) VALUES(NEW.owner); END;
-      CREATE TRIGGER IF NOT EXISTS city_ownership_changed AFTER UPDATE OF owner ON territory_estates
-        WHEN NEW.site='${CITY_PRODUCTION_SITE}' AND NEW.owner IS NOT OLD.owner
-        BEGIN
-          UPDATE city_tenures SET ended=CASE WHEN NEW.owner IS NULL AND NEW.revision=OLD.revision
-            THEN cast(unixepoch('subsec')*1000 AS INTEGER) ELSE NEW.settled END WHERE ended IS NULL;
-          INSERT INTO city_tenures(guild) SELECT NEW.owner WHERE NEW.owner IS NOT NULL;
-        END;`);
+    this.initCityTenures();
   }
-  cityOwnership(previous: number | null): CityOwnership {
-    const active = this.db.prepare("SELECT id,guild FROM city_tenures WHERE ended IS NULL").get() as CityTenure | undefined;
+  private initCityTenures(): void {
+    const sites = CITY_SITES.map(site => "'"+site+"'").join(",");
+    const siteColumn = `site TEXT NOT NULL DEFAULT '${CITY_PRODUCTION_SITE}'`;
+    this.db.exec("SAVEPOINT city_tenure_schema");
+    try {
+      this.db.exec(`CREATE TABLE IF NOT EXISTS city_tenures (
+        id INTEGER PRIMARY KEY, guild TEXT NOT NULL, ended INTEGER, ${siteColumn});`);
+      if (!this.db.prepare("PRAGMA table_info(city_tenures)").all().some(column => column.name === "site"))
+        this.db.exec(`ALTER TABLE city_tenures ADD COLUMN ${siteColumn};`);
+      this.db.exec(`DROP INDEX IF EXISTS city_active_tenure;
+        CREATE UNIQUE INDEX IF NOT EXISTS city_active_tenure_by_site ON city_tenures(site) WHERE ended IS NULL;
+        INSERT INTO city_tenures(guild,site)
+          SELECT e.owner,e.site FROM territory_estates e WHERE e.site IN (${sites}) AND e.owner IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM city_tenures t WHERE t.site=e.site AND t.ended IS NULL);
+        DROP TRIGGER IF EXISTS city_ownership_created;
+        DROP TRIGGER IF EXISTS city_ownership_changed;
+        CREATE TRIGGER city_ownership_created AFTER INSERT ON territory_estates
+          WHEN NEW.site IN (${sites}) AND NEW.owner IS NOT NULL
+          BEGIN INSERT INTO city_tenures(guild,site) VALUES(NEW.owner,NEW.site); END;
+        CREATE TRIGGER city_ownership_changed AFTER UPDATE OF owner ON territory_estates
+          WHEN NEW.site IN (${sites}) AND NEW.owner IS NOT OLD.owner
+          BEGIN
+            UPDATE city_tenures SET ended=CASE WHEN NEW.owner IS NULL AND NEW.revision=OLD.revision
+              THEN cast(unixepoch('subsec')*1000 AS INTEGER) ELSE NEW.settled END WHERE site=NEW.site AND ended IS NULL;
+            INSERT INTO city_tenures(guild,site) SELECT NEW.owner,NEW.site WHERE NEW.owner IS NOT NULL;
+          END;
+        RELEASE city_tenure_schema;`);
+    } catch (error) {
+      this.db.exec("ROLLBACK TO city_tenure_schema; RELEASE city_tenure_schema");
+      throw error;
+    }
+  }
+  cityOwnership(previous: number | null, site: CitySite = CITY_PRODUCTION_SITE): CityOwnership {
+    const active = this.db.prepare("SELECT id,guild FROM city_tenures WHERE site=? AND ended IS NULL").get(site) as CityTenure | undefined;
     const ended = previous === null || active?.id === previous ? undefined :
-      this.db.prepare("SELECT guild,ended FROM city_tenures WHERE id=?").get(previous);
-    return {active: active ?? null, previous: typeof ended?.guild === "string" && typeof ended.ended === "number" ?
-      {guild: ended.guild, ended: ended.ended} : null};
+      this.db.prepare("SELECT guild,ended FROM city_tenures WHERE id=? AND site=?").get(previous, site);
+    const siege = this.db.prepare("SELECT started FROM territory_battles WHERE site=? AND ended IS NULL")
+      .get(site);
+    const ownership: CityOwnership = {active: active ?? null, previous: null};
+    if (typeof siege?.started === "number") ownership.siegeStarted = siege.started;
+    if (typeof ended?.guild === "string" && typeof ended.ended === "number") {
+      const capture = this.db.prepare(`SELECT started FROM territory_battles
+        WHERE site=? AND incumbent=? AND ended=? AND winner IS NOT NULL AND winner<>incumbent
+        ORDER BY seq DESC LIMIT 1`).get(site, ended.guild, ended.ended);
+      ownership.previous = {guild: ended.guild, ended: ended.ended};
+      if (typeof capture?.started === "number") ownership.previous.siegeStarted = capture.started;
+    }
+    return ownership;
   }
   beginBattle(site:string,owner:string|null,now:number){
     this.db.prepare("INSERT OR IGNORE INTO territory_estates(site,owner,settled) VALUES(?,?,?)").run(site,owner,now);
