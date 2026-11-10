@@ -234,6 +234,27 @@
       set("LeftArm", -.58, .35, -1.12); set("LeftForeArm", 0, -2.0, 0);
     }
     add("Chest", breath * .03 * idle, 0, 0); add("LeftShoulder", 0, 0, breath * .025 * idle); add("RightShoulder", 0, 0, -breath * .025 * idle);
+    // ---- Idle life over the stance: slow weight shifts from foot to foot, deeper breathing, a look
+    // round now and then, a little arm sway, and every ~13 s a shoulder roll and neck stretch. Each
+    // character runs on its own phase so a crowd never moves in step.
+    if (idle > .01 && grounded && !a.mounted && !(a.action && now < a.action.end)) {
+      const w = idle, T = t + (a.idlePhase ??= [...String(a.id || "")].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 9973, 7) / 9973 * 60);
+      const ws = Math.sin(T * .9) * .6 + Math.sin(T * .37 + 1.1) * .4;          // -1 left foot .. 1 right foot
+      off[0] += ws * .014 * w; add("Hips", 0, 0, ws * .028 * w); add("Spine", 0, 0, -ws * .018 * w); add("Chest", 0, 0, -ws * .012 * w);
+      add(ws > 0 ? "LeftLeg" : "RightLeg", Math.abs(ws) * .07 * w, 0, 0); off[1] -= Math.abs(ws) * .004 * w;
+      const br = Math.sin(T * 1.55);
+      add("Spine1", br * .014 * w, 0, 0); add("Chest", br * .018 * w, 0, 0);
+      add("LeftShoulder", 0, 0, br * .012 * w); add("RightShoulder", 0, 0, -br * .012 * w);
+      const look = Math.sin(T * .23) * Math.sin(T * .11 + 1.3);
+      add("Neck", Math.sin(T * .41) * .03 * w, look * .24 * w, 0); add("Head", Math.sin(T * .37 + .5) * .035 * w, look * .2 * w, Math.sin(T * .29) * .03 * w);
+      add("LeftForeArm", 0, Math.sin(T * 1.3) * .035 * w, 0); add("RightForeArm", 0, -Math.sin(T * 1.3 + .8) * .035 * w, 0);
+      const u = (((T % 13) + 13) % 13) / 1.9;
+      if (u < 1) {
+        const e = Math.sin(u * Math.PI), r = Math.sin(u * Math.PI * 2);
+        add("LeftShoulder", 0, 0, -.09 * e * r * w); add("RightShoulder", 0, 0, .09 * e * Math.sin(u * Math.PI * 2 + 1) * w);
+        add("Neck", 0, 0, .2 * e * r * w); add("Head", -.07 * e * w, 0, .06 * e * r * w); add("Chest", -.03 * e * w, 0, 0);
+      }
+    }
     // ---- Locomotion blends over the stance: pelvis turns with the stride,
     // the chest counter-twists, the hip drops over the swinging leg.
     if (m > .001) {
