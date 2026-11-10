@@ -3,6 +3,7 @@ import type {DatabaseSync} from "node:sqlite";
 import {
   CITY_CAPACITY, CITY_DURATION_MS, CITY_FACTORY_COSTS, CITY_PRODUCT, CITY_RAW_ITEMS, CITY_RECIPE, CITY_RUSH_GOLD,
   CITY_WAREHOUSE_CAPACITY, CITY_WAREHOUSE_DURATION_MS, CITY_WAREHOUSE_MATERIALS,
+  CITY_WORKSHOP_FEE, CITY_WORKSHOP_SLOTS,
   type CityAsset, type CityDisband, type CityItem, type CityMember, type CityOwnership,
 } from "./CityProductionRules.js";
 
@@ -15,6 +16,7 @@ type WarehouseProject = {
   epoch: number; guild: string; wood: number; stone: number; metal: number;
   ready: number | null; status: "collecting" | "building";
 };
+type WorkshopJob = {id: string; readyAt: number; item: CityItem; quantity: number};
 
 export class CityProduction {
   constructor(private readonly db: DatabaseSync) {
@@ -37,6 +39,13 @@ export class CityProduction {
         metal INTEGER NOT NULL DEFAULT 0 CHECK(metal>=0), ready INTEGER,
         status TEXT NOT NULL CHECK(status IN ('collecting','building','complete','cancelled')));
       CREATE UNIQUE INDEX IF NOT EXISTS city_warehouse_completed ON city_warehouse_projects((1)) WHERE status='complete';
+      CREATE TABLE IF NOT EXISTS city_workshop_jobs (
+        id TEXT PRIMARY KEY, actor TEXT NOT NULL, epoch INTEGER NOT NULL, guild TEXT NOT NULL,
+        ready INTEGER NOT NULL, item TEXT NOT NULL, quantity INTEGER NOT NULL CHECK(quantity>0),
+        fee INTEGER NOT NULL CHECK(fee>0), claimed INTEGER NOT NULL DEFAULT 0 CHECK(claimed IN (0,1)));
+      CREATE UNIQUE INDEX IF NOT EXISTS city_workshop_one_job ON city_workshop_jobs(actor) WHERE claimed=0;
+      CREATE INDEX IF NOT EXISTS city_workshop_running ON city_workshop_jobs(ready) WHERE claimed=0;
+      CREATE INDEX IF NOT EXISTS city_workshop_revenue ON city_workshop_jobs(guild);
       CREATE TABLE IF NOT EXISTS guild_market_gold (
         listing TEXT PRIMARY KEY REFERENCES listings(id), guild TEXT NOT NULL,
         amount INTEGER NOT NULL CHECK(amount>0));
@@ -99,8 +108,9 @@ export class CityProduction {
 
   private marketGold(guild: string): number {
     const row = this.db.prepare(`SELECT
-      (SELECT coalesce(sum(amount),0) FROM guild_market_gold WHERE guild=?) -
-      (SELECT coalesce(sum(fee),0) FROM city_jobs WHERE guild=? AND status<>'cancelled') AS amount`).get(guild, guild);
+      (SELECT coalesce(sum(amount),0) FROM guild_market_gold WHERE guild=?) +
+      (SELECT coalesce(sum(fee),0) FROM city_workshop_jobs WHERE guild=?) -
+      (SELECT coalesce(sum(fee),0) FROM city_jobs WHERE guild=? AND status<>'cancelled') AS amount`).get(guild, guild, guild);
     return Number(row?.amount);
   }
 
@@ -116,6 +126,54 @@ export class CityProduction {
   private capacity(): number {
     return this.db.prepare("SELECT 1 FROM city_warehouse_projects WHERE status='complete'").get()
       ? CITY_WAREHOUSE_CAPACITY : CITY_CAPACITY;
+  }
+
+  private workshopJob(actor: string): WorkshopJob | undefined {
+    return this.db.prepare(`SELECT id,ready AS readyAt,item,quantity FROM city_workshop_jobs WHERE actor=? AND claimed=0`)
+      .get(actor) as WorkshopJob | undefined;
+  }
+
+  hasWorkshopJob(actor: string): boolean {
+    return this.workshopJob(actor) !== undefined;
+  }
+
+  private workshopRunning(now: number): number {
+    return Number(this.db.prepare("SELECT count(*) AS n FROM city_workshop_jobs WHERE claimed=0 AND ready>?").get(now)?.n);
+  }
+
+  workshopView(actor: string, ownership: CityOwnership, now: number) {
+    const {level, epoch} = this.factory();
+    const owner = ownership.active;
+    return {
+      epoch: owner?.id ?? null, unlocked: !!owner && epoch === owner.id && level > 0 &&
+        this.capacity() === CITY_WAREHOUSE_CAPACITY && !this.closureActor(owner.guild),
+      siege: ownership.siegeStarted !== undefined, used: this.workshopRunning(now), slots: CITY_WORKSHOP_SLOTS,
+      fee: CITY_WORKSHOP_FEE, durationMs: CITY_DURATION_MS[level], job: this.workshopJob(actor) ?? null,
+      inputs: [{item: CITY_RAW_ITEMS[0], amount: CITY_RECIPE.wood}, {item: CITY_RAW_ITEMS[1], amount: CITY_RECIPE.stone}],
+      output: {item: CITY_PRODUCT, quantity: CITY_RECIPE.quantity},
+    };
+  }
+
+  workshopStart(actor: string, epoch: number, ownership: CityOwnership, now: number) {
+    const owner = ownership.active;
+    if (!owner || owner.id !== epoch) throw Error("city_ownership_changed");
+    const view = this.workshopView(actor, ownership, now);
+    if (!view.unlocked) throw Error("city_workshop_locked");
+    if (view.siege) throw Error("city_workshop_siege");
+    if (view.job) throw Error("city_workshop_pending");
+    if (view.used >= view.slots) throw Error("city_workshop_full");
+    const jobId = randomUUID(), readyAt = now + view.durationMs;
+    this.db.prepare(`INSERT INTO city_workshop_jobs(id,actor,epoch,guild,ready,item,quantity,fee)
+      VALUES(?,?,?,?,?,?,?,?)`).run(jobId, actor, epoch, owner.guild, readyAt, CITY_PRODUCT, CITY_RECIPE.quantity, CITY_WORKSHOP_FEE);
+    return {jobId, readyAt, fee: CITY_WORKSHOP_FEE};
+  }
+
+  workshopClaim(actor: string, jobId: string, now: number): WorkshopJob {
+    const job = this.workshopJob(actor);
+    if (!job || job.id !== jobId) throw Error("city_workshop_job_missing");
+    if (job.readyAt > now) throw Error("city_workshop_not_ready");
+    this.db.prepare("UPDATE city_workshop_jobs SET claimed=1 WHERE id=?").run(jobId);
+    return job;
   }
 
   private warehouseProject(epoch: number): WarehouseProject | undefined {

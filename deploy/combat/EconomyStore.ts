@@ -11,7 +11,10 @@ import { PERSONAL_ITEMS, personalItem, type BodySlot, type BodyItemId, type Pers
 import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack, type WeaponItemId } from "./ItemRules.js";
 import type {SalvageOrder} from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
-import {type CityDisband, type CityFactoryOrder, type CityMember, type CityOrder, type CityOwnership} from "./CityProductionRules.js";
+import {
+  CITY_RAW_ITEMS, CITY_RECIPE, type CityDisband, type CityFactoryOrder, type CityMember, type CityOrder,
+  type CityOwnership, type CityWorkshopOrder,
+} from "./CityProductionRules.js";
 
 export const STARTER_GOLD = 1000;
 const MAX_GOLD = 1_000_000_000;
@@ -189,6 +192,38 @@ export class EconomyStore {
   }
   viewCity(member: CityMember, ownership: CityOwnership) {
     return this.city.view(member, ownership);
+  }
+  viewCityWorkshop(actor: string, ownership: CityOwnership, now: number) {
+    return this.city.workshopView(actor, ownership, now);
+  }
+  hasCityWorkshopJob(actor: string): boolean {
+    return this.city.hasWorkshopJob(actor);
+  }
+  startCityWorkshop(actor: string, order: Extract<CityWorkshopOrder, {action: "workshop_start"}>,
+    ownership: CityOwnership, now: number) {
+    const {requestId, epoch, woodSlot, stoneSlot} = order;
+    return this.once(actor, requestId, "city_workshop_start", {epoch, woodSlot, stoneSlot}, () => {
+      const account = this.account(actor);
+      const result = this.city.workshopStart(actor, epoch, ownership, now);
+      if (account.gold < result.fee) throw Error("city_workshop_funds");
+      if (account.inventory.slots[woodSlot]?.itemId !== CITY_RAW_ITEMS[0] ||
+          account.inventory.slots[stoneSlot]?.itemId !== CITY_RAW_ITEMS[1]) throw Error("item_unavailable");
+      const wood = take(account.inventory, woodSlot, CITY_RECIPE.wood);
+      account.inventory = take(wood.inventory, stoneSlot, CITY_RECIPE.stone).inventory;
+      account.gold -= result.fee;
+      this.put(actor, account);
+      return result;
+    });
+  }
+  claimCityWorkshop(actor: string, order: Extract<CityWorkshopOrder, {action: "workshop_claim"}>, now: number) {
+    const {requestId, jobId} = order;
+    return this.once(actor, requestId, "city_workshop_claim", {jobId}, () => {
+      const account = this.account(actor);
+      const {item, quantity} = this.city.workshopClaim(actor, jobId, now);
+      account.inventory = add(account.inventory, {itemId: item, quantity});
+      this.put(actor, account);
+      return {jobId, item, quantity};
+    });
   }
   hasCityAssets(guild: string): boolean {
     return this.city.hasAssets(guild);
@@ -411,6 +446,7 @@ export class EconomyStore {
     this.transaction(()=>{
       if(this.hasOpenListings(id))throw new Error("character_has_listings");
       if(this.hasCityDisbandClaims(id))throw new Error("character_has_city_claims");
+      if(this.hasCityWorkshopJob(id))throw new Error("character_has_city_job");
       this.db.prepare("DELETE FROM listings WHERE seller=?").run(id);
       this.db.prepare("DELETE FROM auction_credits WHERE actor=?").run(id);
       this.db.prepare("DELETE FROM starter_supply_used WHERE actor=?").run(id);

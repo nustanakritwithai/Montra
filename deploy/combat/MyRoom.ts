@@ -76,7 +76,8 @@ import { parseSellMaterial, parseSalvage, parseCraft, parseForge, parseClaimForg
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import {
-  CITY_CONSTRUCTION_ENABLED, CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE, isWarehouseOrder, parseCityOrder, type CityOrder,
+  CITY_CONSTRUCTION_ENABLED, CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE, CITY_WORKSHOP_ENABLED,
+  isWarehouseOrder, parseCityOrder, type CityOrder,
 } from "./CityProductionRules.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
@@ -3345,10 +3346,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id = client.sessionId;
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
     const recovery = claimsOnly || order?.action === "disband" || order?.action === "claim_disband";
-    const needsCity = order && !recovery && order.action !== "cancel" && order.action !== "reclaim";
+    const needsCity = order && !recovery && order.action !== "cancel" && order.action !== "reclaim" && order.action !== "workshop_claim";
     const construction = order && isWarehouseOrder(order);
     if (this.field || (needsCity && (!CITY_PRODUCTION_ENABLED || !WORLD_EXPANSION))) return fail("city_unavailable");
     if (construction && !CITY_CONSTRUCTION_ENABLED) return fail("city_construction_unavailable");
+    if (order?.action === "workshop_start" && !CITY_WORKSHOP_ENABLED) return fail("city_workshop_disabled");
     if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
     const actor = this.economyId(client, fail);
     if (!actor) return;
@@ -3380,15 +3382,32 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         client.send("city_disband_claims", {assets});
         return;
       }
+      if (order?.action === "workshop_claim") {
+        const result = store.claimCityWorkshop(actor, order, now);
+        this.syncEconomy(client, actor);
+        client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
+      }
       const ownership = syncCityProduction(now);
+      if (order?.action === "workshop_start") {
+        const result = store.startCityWorkshop(actor, order, ownership, now);
+        this.syncEconomy(client, actor);
+        client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
+      }
       const member = guilds.war.member(actor);
-      if (!member) return fail("city_not_member");
-      if (order) {
+      const guildOrder = order && order.action !== "workshop_start" && order.action !== "workshop_claim";
+      if (guildOrder) {
+        if (!member) return fail("city_not_member");
         const result = store.cityOrder(actor, member, order, ownership, now);
         if (order.action === "deposit" || order.action === "reclaim" || order.action === "warehouse_contribute")
           this.syncEconomy(client, actor);
         client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
       }
+      const workshopEnabled = this.state.cityProductionAvailable && CITY_WORKSHOP_ENABLED;
+      if (workshopEnabled || order?.action === "workshop_claim" || store.hasCityWorkshopJob(actor)) {
+        const workshop = store.viewCityWorkshop(actor, ownership, now);
+        client.send("city_workshop_state", {...workshop, site: CITY_PRODUCTION_SITE, enabled: workshopEnabled, atCity, serverNow: now});
+      }
+      if (!member) return;
       const view = store.viewCity(member, ownership);
       const constructionOpen = CITY_CONSTRUCTION_ENABLED && this.state.cityProductionAvailable;
       client.send("city_production_state", {site: CITY_PRODUCTION_SITE, atCity, guildId: member.id, serverNow: now,
@@ -5276,6 +5295,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.economyAvailable = characterStore.economyEnabled;
     this.state.cityRecoveryAvailable = characterStore.economyEnabled && !this.field;
     this.state.cityProductionAvailable = this.state.cityRecoveryAvailable && WORLD_EXPANSION && CITY_PRODUCTION_ENABLED;
+    this.state.cityWorkshopSupported = this.state.cityRecoveryAvailable;
     if(characterStore.economyEnabled && !this.field)this.clock.setInterval(()=>this.sendResources(),5000);
     if(characterStore.economyEnabled)this.clock.setInterval(()=>this.tickFishing(),500);
     this.forest.initialize(!this.field);

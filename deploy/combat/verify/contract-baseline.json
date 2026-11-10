@@ -253,6 +253,7 @@
     "city_production_error",
     "city_production_result",
     "city_production_state",
+    "city_workshop_state",
     "class_skill_used",
     "climb_finished",
     "climb_started",
@@ -394,6 +395,7 @@
     "city_production_error",
     "city_production_result",
     "city_production_state",
+    "city_workshop_state",
     "class_skill_used",
     "climb_finished",
     "climb_started",
@@ -503,9 +505,9 @@
   "dynamicClientReceives": 2,
   "dynamicServerSends": 2,
   "protectedSources": {
-    "MyRoomState.ts": "fcb072ff15dc6797f20c38dfa5e3493fc4334076ab290530230549f97c8d341b",
+    "MyRoomState.ts": "48ee11d999cf385ee82f7b3ed0b318dcc341962e9ec4998fa1b5745062516072",
     "CharacterStore.ts": "ad9e55b93a38dd33796a4966f435e91b146cf64d6cc00a043c2997d7e7763dbe",
     "AccountStore.ts": "39f50bb2aac688f4e03cb78ca3a556b05a1d1745d6797d9339de666bb07d152e",
-    "EconomyStore.ts": "9358125eb7145f6ae9278057365198741f0e8cde4ba3485b410317cfc915c2e6"
+    "EconomyStore.ts": "01eea10feaa25c4a2f0cfd6a05a74563a52b41d203348f79d877c17c4b1d2518"
   }
 }

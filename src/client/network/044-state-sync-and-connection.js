@@ -277,8 +277,8 @@
         if(drawerActive==="strategy"){updateAtlasOwner();updateAtlasWarTimes();}
         if(drawerActive==="guild")renderGuild();
         const local=message.local;
-        if(drawerActive==="cityProduction" && cityState?.construction && cityRecoveryReady()){
-          const site=cityState.site;
+        if(drawerActive==="cityProduction" && (cityState?.construction || cityWorkshop?.enabled) && cityRecoveryReady()){
+          const site=cityWorkshop?.site || cityState.site;
           if(previousOwners?.[site]!==message.owners?.[site] ||
              (local?.site===site && local.phase!==(previousLocal?.site===site ? previousLocal.phase : undefined)))
             joined.send("get_city_production",{});
@@ -396,6 +396,7 @@
         toast(reasons[message?.reason]||"ทำรายการกิลด์ไม่สำเร็จ");guildRenderKey="";renderGuild();
       });
       joined.onMessage("city_production_state", data=>{if(room===joined)cityReceiveState(data);});
+      joined.onMessage("city_workshop_state", data=>{if(room===joined)cityReceiveWorkshop(data);});
       joined.onMessage("city_production_result", data=>{if(room===joined)cityReceiveResult(data);});
       joined.onMessage("city_production_error", data=>{if(room===joined)cityReceiveError(data);});
       joined.onMessage("city_disband_claims", data=>{if(room===joined)cityReceiveClaims(data);});

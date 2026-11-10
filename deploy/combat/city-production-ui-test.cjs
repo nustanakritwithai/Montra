@@ -24,14 +24,14 @@ function node(tag = "div") {
   };
 }
 
-function fixture({enabled = true, recovery = true, member = true} = {}) {
+function fixture({enabled = true, recovery = true, member = true, workshopSupported = false} = {}) {
   const nodes = {}, wire = [], timers = new Map();
   let serial = 0, now = 100;
   const walk = el => [el, ...el.children.flatMap(walk)];
   const $ = id => nodes[id] || (nodes.cityProductionContent && walk(nodes.cityProductionContent).find(el => el.id === id));
   const ctx = {
     $, document: {createElement: node}, performance: {now: () => now},
-    room: {state: {cityProductionAvailable: enabled, cityRecoveryAvailable: recovery},
+    room: {state: {cityProductionAvailable: enabled, cityRecoveryAvailable: recovery, cityWorkshopSupported: workshopSupported},
       send(command, payload) { wire.push({command, payload: plain(payload)}); }},
     guildState: member ? {id: "guild-1", name: "สามลาน"} : null,
     inventoryState: {slots: [{itemId: wood, quantity: 10}, {itemId: stone, quantity: 6}]},
@@ -162,4 +162,36 @@ test("construction timer holds for a siege and refreshes once when due", () => {
   f.ctx.updateCityCountdown();
   f.ctx.updateCityCountdown();
   assert.equal(f.wire.filter(message=>message.command==="get_city_production").length,2);
+});
+
+const workshop = {
+  enabled: true, unlocked: true, atCity: true, siege: false, epoch: 2, used: 1, slots: 4,
+  fee: 5, durationMs: 120_000, serverNow: 1_000_000,
+  inputs: [{item: wood, amount: 1}, {item: stone, amount: 2}], output: {item: metal, quantity: 1},
+};
+
+test("a guildless visitor can send bag slots when the public workshop is open", () => {
+  const f=fixture({member:false,workshopSupported:true});
+  assert.deepEqual(f.wire.map(msg=>msg.command),["get_city_production","get_city_disband_claims"]);
+  for (const state of [{atCity:false},{siege:true},{unlocked:false},{used:4}]) {
+    f.ctx.cityReceiveWorkshop({...workshop,...state});
+    assert.equal(f.button("ฝากผลิต"),undefined);
+  }
+  f.ctx.cityReceiveWorkshop(workshop);
+  f.button("ฝากผลิต").onclick();
+  assert.deepEqual(f.wire.at(-1).payload,{requestId:f.wire.at(-1).payload.requestId,
+    action:"workshop_start",epoch:2,woodSlot:0,stoneSlot:1});
+});
+
+test("a visitor can claim a finished personal job after workshop intake is disabled", () => {
+  const f=fixture({member:false,workshopSupported:true});
+  f.ctx.cityReceiveWorkshop({...workshop,enabled:false,atCity:false,
+    job:{id:"personal-job",readyAt:1_002_000,item:metal,quantity:1}});
+  assert.equal(f.$("cityWorkshopClaim").disabled,true);
+  f.setNow(2100);
+  f.ctx.updateCityCountdown();
+  assert.equal(f.$("cityWorkshopClaim").disabled,false);
+  f.$("cityWorkshopClaim").onclick();
+  assert.deepEqual(f.wire.at(-1).payload,{requestId:f.wire.at(-1).payload.requestId,
+    action:"workshop_claim",jobId:"personal-job"});
 });

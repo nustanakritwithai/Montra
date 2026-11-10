@@ -3,6 +3,7 @@ import {RIVER_CITY} from "./RiverCity.js";
 export const CITY_PRODUCTION_SITE = RIVER_CITY;
 export const CITY_PRODUCTION_ENABLED = process.env.MONTRA_CITY_PRODUCTION === "1";
 export const CITY_CONSTRUCTION_ENABLED = process.env.MONTRA_CITY_CONSTRUCTION === "1";
+export const CITY_WORKSHOP_ENABLED = process.env.MONTRA_CITY_WORKSHOP === "1";
 export const CITY_RAW_ITEMS = ["mat_raw_wood_1", "mat_raw_stone_1"] as const;
 export const CITY_PRODUCT = "mat_metal_1";
 export const CITY_ITEMS = [...CITY_RAW_ITEMS, CITY_PRODUCT] as const;
@@ -24,23 +25,31 @@ export const CITY_WAREHOUSE_MATERIALS = [
 ] as const;
 export const CITY_DURATION_MS = [0, 120_000, 60_000] as const;
 export const CITY_RUSH_GOLD = 15;
+export const CITY_WORKSHOP_FEE = 5;
+export const CITY_WORKSHOP_SLOTS = 4;
 
 type WarehouseOrder =
   {action: "warehouse_start"; epoch: number} |
   {action: "warehouse_contribute"; epoch: number; slot: number; item: CityItem; amount: number} |
   {action: "warehouse_allocate"; epoch: number; item: CityItem; amount: number};
 
-export type CityOrder = {requestId: string} & (
+export type CityWorkshopOrder = {requestId: string} & (
+  {action: "workshop_start"; epoch: number; woodSlot: number; stoneSlot: number} |
+  {action: "workshop_claim"; jobId: string}
+);
+
+export type CityFactoryOrder = {requestId: string} & (
   WarehouseOrder |
   {action: "build" | "start" | "start_fast"; epoch: number} |
   {action: "deposit"; epoch: number; slot: number; item: typeof CITY_RAW_ITEMS[number]; amount: number} |
   {action: "list"; epoch: number; amount: number; price: number} |
   {action: "cancel"; listingId: string} |
-  {action: "reclaim"; epoch: number; item: CityItem; amount: number} |
+  {action: "reclaim"; epoch: number; item: CityItem; amount: number}
+);
+export type CityOrder = CityFactoryOrder | CityWorkshopOrder | ({requestId: string} & (
   {action: "disband"; guildId: string} |
   {action: "claim_disband"; guildId: string; item: CityAsset; amount: number}
-);
-export type CityFactoryOrder = Exclude<CityOrder, {action: "disband" | "claim_disband"}>;
+));
 export type CityDisband = {guild: string; actor: string; name: string; requested: number};
 
 export type CityMember = {id: string; name: string; officer: boolean; commander?: boolean};
@@ -69,6 +78,8 @@ export function parseCityOrder(input: unknown): CityOrder | null {
 
   if (order.action === "cancel")
     return keys("listingId") && uuid(order.listingId) ? order as CityOrder : null;
+  if (order.action === "workshop_claim")
+    return keys("jobId") && uuid(order.jobId) ? order as CityOrder : null;
   if (order.action === "disband")
     return keys("guildId") && uuid(order.guildId) ? order as CityOrder : null;
   if (order.action === "claim_disband")
@@ -77,6 +88,9 @@ export function parseCityOrder(input: unknown): CityOrder | null {
       integer(order.amount, 1, order.item === "gold" ? 1_000_000_000 : 99) ? order as CityOrder : null;
   if (!integer(order.epoch, 1)) return null;
   switch (order.action) {
+    case "workshop_start":
+      return keys("epoch", "woodSlot", "stoneSlot") && integer(order.woodSlot, 0, 11) &&
+        integer(order.stoneSlot, 0, 11) && order.woodSlot !== order.stoneSlot ? order as CityOrder : null;
     case "build":
     case "start":
     case "start_fast":

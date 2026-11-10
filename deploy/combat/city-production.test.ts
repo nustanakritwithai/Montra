@@ -9,6 +9,7 @@ import {GuildStore} from "./GuildStore.js";
 import {makeClassInventory} from "./ItemRules.js";
 import {
   CITY_PRODUCT, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_WAREHOUSE_DURATION_MS, CITY_WAREHOUSE_MATERIALS, parseCityOrder,
+  CITY_WORKSHOP_FEE, CITY_WORKSHOP_SLOTS,
 } from "./CityProductionRules.js";
 import {RIVER_WAR_DURATION} from "./RiverCity.js";
 import {WAR_PROTECTION} from "./TerritoryWar.js";
@@ -51,7 +52,8 @@ function fixture(t: TestContext) {
   };
   const order = (actor: string, fields: object, now = 1000, requestId = request()) => {
     const parsed = parseCityOrder({...fields, requestId});
-    assert.ok(parsed && parsed.action !== "disband" && parsed.action !== "claim_disband");
+    assert.ok(parsed && parsed.action !== "disband" && parsed.action !== "claim_disband" &&
+      parsed.action !== "workshop_start" && parsed.action !== "workshop_claim");
     return economy.cityOrder(actor, guildMember(actor), parsed, sync(now), now);
   };
   const view = (actor: string, now = 1000) => economy.viewCity(guildMember(actor), sync(now));
@@ -66,7 +68,7 @@ function fixture(t: TestContext) {
   const deposit = (actor: string, slot: number, amount: number, requestId?: string) =>
     order(actor, {action: "deposit", epoch, item: CITY_RAW_ITEMS[slot], slot, amount}, 1000, requestId);
   return {get economy() { return economy; }, get guild() { return guild; }, guildFile, economyFile,
-    capture, request, order, view, restart, epoch, deposit, guildMember};
+    capture, request, order, view, restart, epoch, deposit, guildMember, sync};
 }
 
 function warehouseFixture(t: TestContext) {
@@ -185,6 +187,97 @@ test("disbanding a guild with only reserved construction materials preserves its
   f.guild.settleCityDisband(f.economy, intent);
   f.restart();
   assert.deepEqual(f.economy.cityDisbandClaims(leader).map(({item, amount}) => ({item, amount})), [{item: wood, amount: 5}]);
+});
+
+const visitor = "d".repeat(64);
+function workshopFixture(t: TestContext) {
+  const f = warehouseFixture(t);
+  f.economy.register(visitor, bag());
+  const workshop = (actor: string, now: number) => f.economy.viewCityWorkshop(actor, f.sync(now), now);
+  const unlock = () => {
+    f.order(leader, f.start);
+    const due = f.fund(2_000);
+    f.deposit(leader, 0, 5);
+    f.deposit(leader, 1, 5);
+    f.order(leader, {action: "build", epoch: f.epoch});
+    return due;
+  };
+  const start = (actor: string, now: number, requestId = f.request(), epoch = f.epoch, stoneSlot = 1) =>
+    f.economy.startCityWorkshop(actor, {action: "workshop_start", requestId, epoch, woodSlot: 0, stoneSlot}, f.sync(now), now);
+  const claim = (actor: string, jobId: string, now: number, requestId = f.request()) =>
+    f.economy.claimCityWorkshop(actor, {action: "workshop_claim", requestId, jobId}, now);
+  return {...f, get economy() { return f.economy; }, get guild() { return f.guild; }, workshop, unlock, start, claim};
+}
+
+test("public workshop pays the original owner once and preserves personal orders through restart, conquest and disband", t => {
+  const f = workshopFixture(t);
+  assert.throws(() => f.start(visitor, 1_000), /city_workshop_locked/);
+  const unlocked = f.unlock();
+  assert.equal(f.workshop(visitor, unlocked - 1).unlocked, false);
+  assert.equal(f.workshop(visitor, unlocked).unlocked, true);
+  assert.equal(f.guild.war.member(visitor), undefined);
+  const wallet = new DatabaseSync(f.economyFile);
+  try {
+    wallet.prepare("UPDATE accounts SET gold=? WHERE id=?").run(CITY_WORKSHOP_FEE - 1, visitor);
+    assert.throws(() => f.start(visitor, unlocked), /city_workshop_funds/);
+    assert.equal(f.workshop(visitor, unlocked).job, null);
+    assert.equal(f.view(leader, unlocked).marketGold, 0);
+    wallet.prepare("UPDATE accounts SET gold=1000 WHERE id=?").run(visitor);
+  } finally { wallet.close(); }
+  assert.throws(() => f.start(visitor, unlocked, f.request(), f.epoch, 2), /item_unavailable/);
+  assert.equal(f.workshop(visitor, unlocked).job, null);
+  assert.equal(f.view(leader, unlocked).marketGold, 0);
+  assert.equal(f.economy.getAccount(visitor).gold, 1000);
+
+  const request = f.request(), job = f.start(visitor, unlocked, request);
+  assert.equal(job.fee, CITY_WORKSHOP_FEE);
+  assert.equal(job.readyAt, unlocked + 120_000);
+  assert.throws(() => f.start(visitor, unlocked), /city_workshop_pending/);
+  assert.throws(() => f.claim(visitor, job.jobId, job.readyAt - 1), /city_workshop_not_ready/);
+  assert.throws(() => f.claim(member, job.jobId, job.readyAt), /city_workshop_job_missing/);
+  assert.throws(() => f.economy.eraseCharacter(visitor), /character_has_city_job/);
+  f.capture(rival, unlocked + 1);
+  f.restart();
+  assert.deepEqual(f.start(visitor, unlocked + 2, request), job);
+  assert.throws(() => f.start(visitor, unlocked + 2), /city_ownership_changed/);
+  assert.equal(f.view(rival, unlocked + 2).marketGold, 0);
+  assert.equal(f.view(leader, unlocked + 2).marketGold, CITY_WORKSHOP_FEE);
+  const before = f.economy.getAccount(visitor);
+  assert.equal(before.gold, 1000 - CITY_WORKSHOP_FEE);
+  assert.equal(before.inventory.slots[0]?.quantity, 98);
+  assert.equal(before.inventory.slots[1]?.quantity, 97);
+
+  f.guild.leave(member);
+  const oldGuild = f.guildMember(leader).id;
+  f.guild.settleCityDisband(f.economy, f.guild.beginCityDisband(leader, oldGuild, unlocked + 3));
+  assert.equal(f.economy.cityDisbandClaims(leader).find(row => row.item === "gold")?.amount, CITY_WORKSHOP_FEE);
+  f.economy.saveCharacter(visitor, {}, bag(true));
+  assert.throws(() => f.claim(visitor, job.jobId, job.readyAt), /inventory_full/);
+  assert.equal(f.workshop(visitor, job.readyAt).job?.id, job.jobId);
+  f.economy.saveCharacter(visitor, {}, before.inventory);
+  const claimId = f.request(), result = f.claim(visitor, job.jobId, job.readyAt, claimId);
+  f.restart();
+  assert.deepEqual(f.claim(visitor, job.jobId, job.readyAt, claimId), result);
+  assert.throws(() => f.claim(visitor, job.jobId, job.readyAt), /city_workshop_job_missing/);
+  assert.equal(f.economy.getAccount(visitor).inventory.slots.find(item => item?.itemId === CITY_PRODUCT)?.quantity, 1);
+  f.economy.eraseCharacter(visitor);
+});
+
+test("public workshop enforces its shared queue and pauses intake during a siege", t => {
+  const f = workshopFixture(t), now = f.unlock();
+  const actors = Array.from({length: CITY_WORKSHOP_SLOTS + 1}, (_, index) => String(index + 1).repeat(64));
+  for (const actor of actors) f.economy.register(actor, bag());
+  const jobs = actors.slice(1).map(actor => f.start(actor, now));
+  assert.equal(f.workshop(actors[0], now).used, CITY_WORKSHOP_SLOTS);
+  assert.throws(() => f.start(actors[0], now), /city_workshop_full/);
+  assert.equal(f.economy.getAccount(actors[0]).gold, 1000);
+  assert.equal(f.workshop(actors[0], jobs[0].readyAt).used, 0);
+  f.start(actors[0], jobs[0].readyAt);
+  f.siege(f.openAt);
+  assert.throws(() => f.start(visitor, f.openAt), /city_workshop_siege/);
+  assert.equal(f.claim(actors[1], jobs[0].jobId, f.openAt).quantity, 1);
+  assert.equal(parseCityOrder({action: "workshop_start", requestId: f.request(), epoch: f.epoch, woodSlot: 0, stoneSlot: 0}), null);
+  assert.equal(parseCityOrder({action: "workshop_start", requestId: f.request(), epoch: f.epoch, woodSlot: 0, stoneSlot: 1, fee: 0}), null);
 });
 
 test("only officers can spend market gold to rush production, and interrupted jobs refund the fee", t => {
