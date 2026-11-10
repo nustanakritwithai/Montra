@@ -725,7 +725,13 @@ jobs:
 
       - name: Test strict message validation and movement math
         working-directory: combat-verify
-        run: npx tsx --test src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/rebirth.test.ts src/rooms/forest-objectives.test.ts src/rooms/sword-tree-concurrency.test.ts src/rooms/sword-gap-geometry.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/gear-progression.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts src/rooms/guild-store.test.ts
+        run: npx tsx --test src/rooms/skill-hotbar.test.ts src/rooms/skill-hotbar-disabled.test.ts src/rooms/rebirth-hotbar-room.test.ts src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/rebirth.test.ts src/rooms/forest-objectives.test.ts src/rooms/sword-tree-concurrency.test.ts src/rooms/sword-gap-geometry.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/gear-progression.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts src/rooms/guild-store.test.ts
+
+      - name: Learn skills anywhere without weakening progression safeguards
+        working-directory: combat-verify
+        env:
+          MONTRA_WORLD_EXPANSION: '1'
+        run: npx tsx --test src/rooms/skill-learning-location.test.ts
 
       - name: Occult book rules
         working-directory: combat-verify
@@ -770,6 +776,7 @@ jobs:
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14215) 2>/dev/null; then break; fi; sleep 0.25; done
           timeout 60s node advanced-class-integration.mjs || { cat advanced-server.log; exit 1; }
+          timeout 180s node mixed-hotbar-integration.mjs || { cat advanced-server.log; exit 1; }
 
       - name: Isolated class skill ranks and save compatibility
         working-directory: combat-verify
@@ -782,6 +789,27 @@ jobs:
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14213) 2>/dev/null; then break; fi; sleep 0.25; done
           timeout 60s node class-rank-integration.mjs || { cat class-rank-server.log; exit 1; }
+
+      - name: Field skill learning persists with JSON and SQLite saves
+        working-directory: combat-verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          export MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0
+          for economy in 0 1; do
+            export MONTRA_ECONOMY_ENABLED="$economy" PORT="$((14241 + economy))"
+            export MONTRA_TEST_URL="http://127.0.0.1:$PORT"
+            export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-class-rank-test-XXXXXX)"
+            node --import tsx src/index.ts > "skill-learning-$economy-server.log" 2>&1 &
+            SERVER_PID=$!
+            trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+            for attempt in $(seq 1 60); do if (echo > "/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then break; fi; sleep 0.25; done
+            timeout 90s node skill-learning-integration.mjs || { cat "skill-learning-$economy-server.log"; exit 1; }
+            kill "$SERVER_PID"
+            wait "$SERVER_PID" 2>/dev/null || true
+            rm -rf "$MONTRA_CHARACTER_DIR"
+            trap - EXIT
+          done
 
       - name: Isolated character status and support ranks
         working-directory: combat-verify

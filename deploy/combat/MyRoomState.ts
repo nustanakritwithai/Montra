@@ -1,3 +1,4 @@
+import {MIXED_SKILLS_ENABLED} from "../SkillHotbar.js";
 import { Encoder, schema, t, type SchemaType } from "@colyseus/schema";
 
 // The initial state carries all atlas and character skill definitions.
@@ -53,6 +54,8 @@ export const Player = schema({
   mana: t.number().default(120),
   maxMana: t.number().default(120),
   gearLook: t.string().default(""), // append-only: visible worn gear "slot=family:tier;…", never bag contents
+  skillHotbarVersion: t.number().default(MIXED_SKILLS_ENABLED?1:0),
+  skillHotbarData: t.string().default(""),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;

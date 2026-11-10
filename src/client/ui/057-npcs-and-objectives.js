@@ -253,7 +253,7 @@
     if(!cast.hidden){cast.textContent="ลอง "+goal.trial.name;cast.onclick=()=>tryFieldTechnique(goal.trial);}
 
     if(training){
-      names.textContent="มี "+training.points+" แต้มวิชาแกน · ใช้ 1 แต้มที่ศาลหมู่บ้านหลังพ้นการต่อสู้ · "+training.choices.map(s=>s.name+" ขั้น "+s.rank).join(" / ");
+      names.textContent="มี "+training.points+" แต้มวิชาแกน · ใช้ 1 แต้มได้ทุกที่หลังพ้นการต่อสู้ 5 วินาที · "+training.choices.map(s=>s.name+" ขั้น "+s.rank).join(" / ");
       book.onclick=openFieldTraining;
     }else if(lesson)names.textContent="เปิดตำราเพื่อดูขั้นปัจจุบันและแต้มคงเหลือ";
     if(lesson)names.textContent+=" · แนะนำที่ Lv."+lesson.level+" "+lesson.name;
