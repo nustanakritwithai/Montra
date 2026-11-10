@@ -504,13 +504,16 @@
       if (p.tier >= 7) { k.box(.51, 1.364, .046, .22, .07, .008, p.trim); k.ball(.51, 1.364, .062, .022, p.glow || amuletGlow, 6); }
       return [["LeftForeArm", k.take()]];
     },
-    veil(p) { // Blade: a dark cloth veil over the lower face, tails at the nape.
+    veil(p, a) { // Blade: a dark cloth veil over the lower face, tied at the nape.
       const k = gearKit(), cloth = gearMat("shadow veil", "#1d1c22");
-      // Face at mouth height: half-width ~.07, front ~.097 (centre z ~.013); the veil runs from under the nose to the chin.
-      k.cyl(0, 1.553, .012, .062, .158, .15, cloth, 16).scaling.z = 1.3; k.box(0, 1.56, -.088, .04, .02, .012, cloth); // knot; the tail is cloth
-      // Tier 5+: a gold edge along the top of the veil; tier 7+: a glowing bead at the knot and a gold drop.
-      if (p.tier >= 5) k.cyl(0, 1.585, .012, .006, .16, .16, p.trim, 16).scaling.z = 1.3;
-      if (p.tier >= 7) { k.ball(0, 1.56, -.098, .02, p.glow || amuletGlow, 6); k.cyl(0, 1.52, -.098, .04, .012, 0, p.trim, 5); }
+      // Players wear a simulated cloth mask (gearCloth: it hangs from the nose bridge and drapes over the
+      // mouth and chin); NPCs and previews keep the simple rigid wrap. The knot and the tier pieces are rigid.
+      const rigid = !a || a.npc;
+      if (rigid) k.cyl(0, 1.553, .012, .062, .158, .15, cloth, 16).scaling.z = 1.3;
+      k.box(0, 1.585, -.088, .04, .02, .012, cloth); // knot; the tails are cloth
+      // Tier 5+: a gold edge along the top of the veil (on the knot for the cloth mask); tier 7+: a glowing bead at the knot and a gold drop.
+      if (p.tier >= 5) { if (rigid) k.cyl(0, 1.585, .012, .006, .16, .16, p.trim, 16).scaling.z = 1.3; else k.box(0, 1.585, -.095, .046, .008, .004, p.trim); }
+      if (p.tier >= 7) { k.ball(0, 1.585, -.098, .02, p.glow || amuletGlow, 6); k.cyl(0, 1.545, -.098, .04, .012, 0, p.trim, 5); }
       return [["Head", k.take()]];
     },
     shield(p) { // Sentinel: round rattan dang with a brass boss, on the left forearm.
@@ -707,7 +710,7 @@
     }
     return out;
   }
-  function buildGearSlot(slot, family, tier) {
+  function buildGearSlot(slot, family, tier, avatar) {
     [family, tier] = normalizeGearLook(slot, family, tier);
     let weight = null, m;
     if ((m = /^arm_(cloth|hide|medium|heavy)_/.exec(family))) weight = m[1];
@@ -716,7 +719,7 @@
     if (slot === "leftRing" || slot === "rightRing") return ringBuilder(family, slot === "leftRing" ? 1 : -1);
     if (slot === "leftEar" || slot === "rightEar") return earringBuilder(family, slot === "leftEar" ? 1 : -1);
     if (slot === "neck") return accessoryBuilder(family, p, true);
-    if (slot === "offHand") return (m = /^off_([a-z]+)$/.exec(family)) && OFFHAND_BUILDERS[m[1]] ? OFFHAND_BUILDERS[m[1]](p) : [];
+    if (slot === "offHand") return (m = /^off_([a-z]+)$/.exec(family)) && OFFHAND_BUILDERS[m[1]] ? OFFHAND_BUILDERS[m[1]](p, avatar) : [];
     if (weight) {
       if (slot === "leftHand" || slot === "rightHand") return ARMOR_BUILDERS.hand(weight, p, slot === "leftHand" ? 1 : -1);
       return ARMOR_BUILDERS[slot] ? ARMOR_BUILDERS[slot](weight, p) : [];
@@ -742,7 +745,7 @@
       have?.cloths?.forEach(cloth => disposeCloth(avatar, cloth));
       delete avatar.gearParts[slot];
       if (!next) continue;
-      const meshes = buildGearSlot(slot, next.family, next.tier).map(([bone, parts]) => gearOnBone(avatar.skin.nodes, bone, parts, "gear " + slot)).filter(Boolean);
+      const meshes = buildGearSlot(slot, next.family, next.tier, avatar).map(([bone, parts]) => gearOnBone(avatar.skin.nodes, bone, parts, "gear " + slot)).filter(Boolean);
       avatar.gearParts[slot] = { key, meshes, cloths: gearCloth(avatar, slot, next.family, next.tier) };
     }
     // A worn cuirass or helmet replaces the ritual shawl and headband of the base outfit.
@@ -878,6 +881,11 @@
     const paths = rows.map(row => row.map(() => new B.Vector3()));
     const mesh = B.MeshBuilder.CreateRibbon("cloth " + name, { pathArray: paths, closePath: !!spec.closed, sideOrientation: B.Mesh.DOUBLESIDE, updatable: true }, scene);
     mesh.parent = a.node; mesh.material = clothMaterial(material); mesh.isPickable = false; mesh.alwaysSelectAsActiveMesh = true;
+    // The ribbon is created from collapsed paths, so its own UVs are all zero: lay them out on the grid
+    // (u across, v down; the double-sided copy repeats them) so textured cloth shows its weave.
+    { const nv = mesh.getTotalVertices(), side = nv / 2, per = side / R, uv = new Float32Array(nv * 2);
+      for (let sd = 0; sd < 2; sd++) for (let r = 0; r < R; r++) for (let c = 0; c < per; c++) { const i = (sd * side + r * per + c) * 2; uv[i] = c / Math.max(1, per - 1); uv[i + 1] = r / Math.max(1, R - 1); }
+      if (Number.isInteger(per)) mesh.setVerticesData(B.VertexBuffer.UVKind, uv, false); }
     const cloth = { name, spec, bone, rest, links, R, C, n, pos: new Float32Array(n * 3), prev: new Float32Array(n * 3), paths, mesh, visible, acc: 0, ready: false };
     (a.cloths ||= []).push(cloth);
     return cloth;
@@ -1027,13 +1035,48 @@
     for (const side of [-1, 1]) makeCloth(a, "jar talisman", { bone: "Hips", pinRows: 1, bend: .8, stretch: 1, gravity: .7, wind: .6, drag: .94,
       colliders: [[jx, jy, jz, .075]], rows: ribbonTail(jx + side * .05 - .014, jx + side * .05 + .014, jy + .06, jz + .07, .13, 4, .01) }, clothPaper, jarOn);
   }
+  // Woven veil fabric: dark indigo with a visible weave, darker fold streaks and a stitched hem, so the mask
+  // reads as cloth even at rest (a flat black material looked like a solid plate).
+  let veilFabricMat = null;
+  function veilFabric() {
+    if (veilFabricMat) return veilFabricMat;
+    const tex = paintTexture("veil fabric", 128, (c, S) => {
+      c.fillStyle = "#3d4260"; c.fillRect(0, 0, S, S);
+      for (let i = 0; i < S; i += 2) { c.fillStyle = i % 4 ? "rgba(255,255,255,.09)" : "rgba(0,0,0,.18)"; c.fillRect(i, 0, 1, S); c.fillRect(0, i, S, 1); }
+      for (let k = 0; k < 7; k++) { const x = (k + .5) / 7 * S, g = c.createLinearGradient(x - 9, 0, x + 9, 0);
+        g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(.5, "rgba(0,0,0,.5)"); g.addColorStop(1, "rgba(0,0,0,0)"); c.fillStyle = g; c.fillRect(x - 9, 0, 18, S); }
+      for (let i = 0; i < 220; i++) { c.fillStyle = `rgba(${i % 2 ? "255,255,255,.05" : "0,0,0,.10"})`; c.fillRect((i * 37) % S, (i * 53) % S, 2, 6); } // slubs in the weave
+      c.fillStyle = "rgba(255,255,255,.07)"; c.fillRect(0, 0, S, 5);
+      c.strokeStyle = "rgba(150,120,90,.45)"; c.setLineDash([3, 3]); c.lineWidth = 1;
+      for (const y of [3, S - 4]) { c.beginPath(); c.moveTo(0, y); c.lineTo(S, y); c.stroke(); }
+    });
+    const m = mat("veil fabric", "#ffffff"); m.diffuseTexture = tex; m.specularColor = new B.Color3(.05, .05, .07); m.specularPower = 12;
+    return veilFabricMat = m;
+  }
   // Cloth that comes with worn gear: the veil tail, a cloth-weight skirt and the talisman on a held spirit jar.
   function gearCloth(a, slot, family, tier) {
     if (a.npc) return [];
     const out = [];
-    if (slot === "offHand" && family === "off_veil")
-      out.push(makeCloth(a, "veil tail", { bone: "Head", pinRows: 1, bend: .45, wind: 1.1, pad: .01, rows: ribbonTail(-.022, .022, 1.56, -.092, .18, 5, -.02) },
-        clothMaterial(gearMat("shadow veil", "#1d1c22")), null));
+    if (slot === "offHand" && family === "off_veil") {
+      const veilCloth = clothMaterial(veilFabric());
+      out.push(makeCloth(a, "veil tail", { bone: "Head", pinRows: 1, bend: .45, wind: 1.1, pad: .01, rows: ribbonTail(-.022, .022, 1.585, -.092, .18, 5, -.02) }, veilCloth, null));
+      // The mask: tied across the nose bridge and round under the ears to the knot, falling over the mouth
+      // and chin. Spheres on the nose, mouth and chin keep it draped over the face rather than through it.
+      out.push(makeCloth(a, "veil mask", { bone: "Head", pinRows: 1, bend: .25, shear: .4, drag: .96, wind: .55, air: .5, pad: .006,
+        colliders: [[0, 1.598, .1, .016], [0, 1.568, .082, .022], [0, 1.541, .07, .028], [-.03, 1.57, .07, .03], [.03, 1.57, .07, .03]],
+        rows: clothGrid(15, 7, (u, v) => {
+          // From the tie line (nose bridge, then down under the ears) to a hem tucked in under the chin,
+          // narrowing toward the neck, with soft pleats that deepen toward the hem.
+          const th = (u - .5) * 2 * 1.62, ath = Math.abs(th), front = Math.max(0, Math.cos(th));
+          const yTop = 1.612 - .03 * Math.min(1, Math.max(0, (ath - .87) / .75));
+          // Bandana cut: the hem dips to a point at the throat and rises toward the ears.
+          const a = .092 - .024 * v, b = .106 - .026 * v;
+          const x0 = a * Math.sin(th), nose = .019 * Math.exp(-((x0 / .013) ** 2)) * (1 - v * .7);
+          const pleat = .017 * v * Math.sin(u * Math.PI * 5) * front;
+          const r = Math.hypot(x0, b * Math.cos(th) + nose) || 1;
+          return [x0 + pleat * x0 / r, yTop - (.07 + .055 * front * front) * v, b * Math.cos(th) + nose + pleat * (b * Math.cos(th) + nose) / r];
+        }) }, veilCloth, null));
+    }
     if (slot === "offHand" && family === "off_jar")
       out.push(makeCloth(a, "jar talisman", { bone: "LeftHand", pinRows: 1, bend: .8, gravity: .7, wind: .6, drag: .94, colliders: [[.665, 1.339, -.052, .045]],
         rows: ribbonTail(.653, .677, 1.386, -.035, .1, 4, -.012) }, clothPaper || clothMaterial(gearMat("talisman paper cloth", "#e8d9a8", "#2a2210")), null));
