@@ -44,6 +44,7 @@
   }
   const errors = {invalid_account_details:"ชื่อผู้ใช้ต้องเป็น a-z, 0-9 หรือ _ ยาว 3–24 ตัว และรหัสผ่านยาว 15–128 ตัว",invalid_credentials:"ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",account_unavailable:"ชื่อผู้ใช้ไม่ว่าง หรือระบบยังไม่พร้อม",legacy_already_linked:"รหัสตัวละครเดิมนี้ผูกกับบัญชีแล้ว",invalid_legacy_key:"รหัสกู้คืนตัวละครเดิมไม่ถูกต้อง",invalid_recovery:"รหัสกู้บัญชีไม่ถูกต้อง",invalid_guest_key:"รหัสแขกไม่ถูกต้องหรือผูกบัญชีแล้ว",guest_required:"กรุณาเข้าสู่ระบบแขกอีกครั้ง",character_online:"บัญชียังออนไลน์อยู่ กรุณาปิดเกมในแท็บหรืออุปกรณ์อื่น แล้วลองใหม่",character_in_guild:"กรุณาออกจากกิลด์หรือโอนตำแหน่งหัวหน้าก่อนลบตัวละคร",character_has_listings:"กรุณายกเลิกรายการฝากขายทั้งหมดก่อนลบตัวละคร",confirm_name_mismatch:"ชื่อตัวละครไม่ตรง กรุณาลองใหม่",slot_changed:"ช่องตัวละครเปลี่ยนไปแล้ว กรุณาโหลดใหม่",delete_failed:"ลบยังไม่เสร็จ กรุณาลองโหลดรายการอีกครั้ง",try_later:"ลองหลายครั้งเกินไป กรุณารอสักครู่",login_required:"กรุณาเข้าสู่ระบบอีกครั้ง"};
   errors.character_has_city_claims="กรุณารับทรัพย์สินกิลด์เดิมให้ครบก่อนลบตัวละคร";
+  errors.character_has_city_job="กรุณารับผลผลิตจากโรงงานสาธารณะก่อนลบตัวละคร";
   async function api(route, body, session="") {
     const response=await fetch(server+"/montra/account/"+route,{method:body ? "POST":"GET",cache:"no-store",headers:{...(body?{"Content-Type":"application/json"}:{}),...(session?{Authorization:"Bearer "+session}:{})},...(body?{body:JSON.stringify(body)}:{})});
     const data=await response.json().catch(()=>({}));

@@ -85,7 +85,7 @@
     const ready=guildReady(),roles=room?.state?.guildRolesAvailable===true;
     if($("guildCityProduction")){
       $("guildCityProduction").hidden=!cityRecoveryReady();
-      $("guildCityProduction").textContent=guildState?"คลังเมืองและโรงงาน":"รับทรัพย์สินกิลด์เดิม";
+      $("guildCityProduction").textContent=guildState || room?.state?.cityWorkshopSupported?"คลังเมืองและโรงงาน":"รับทรัพย์สินกิลด์เดิม";
     }
     const commander=guildState && guildState.ownId===guildState.leaderId;
     const own=guildState?.members.find(m=>m.id===guildState.ownId);
@@ -258,20 +258,23 @@
     $("guildLeave").onclick=()=>{if(guildReady() && window.confirm("ออกจากกิลด์ใช่หรือไม่"))room.send("guild_leave",{});};
     renderGuild();if(guildReady()){room.send("get_guild",{});if(!guildState)room.send("guild_search",{query:""});}
   }
-  const cityRawItems=["mat_raw_wood_1","mat_raw_stone_1"];
   const cityProduct="mat_metal_1";
+  const cityAssets=["gold",cityProduct,"mat_raw_wood_1","mat_raw_stone_1","mat_raw_stone_2","mat_metal_2"];
   let cityState=null, cityClaims=null, cityPending=null, cityStatus="", cityReceivedAt=0;
-  let cityReplyTimer=0, cityJobTimer=0, cityPolledJob=null;
+  let cityWorkshop=null, cityWorkshopReceivedAt=0;
+  let cityPurchase=null;
+  let cityReplyTimer=0, cityJobTimer=0;
+  const cityPolledTimers=new Map();
   function cityRecoveryReady(){return economyReady() && room.state.cityRecoveryAvailable===true;}
   function resetCityProduction(){
-    cityState=null;cityClaims=null;cityPending=null;cityStatus="";cityPolledJob=null;
+    cityState=null;cityWorkshop=null;cityPurchase=null;cityClaims=null;cityPending=null;cityStatus="";cityPolledTimers.clear();
     clearTimeout(cityReplyTimer);clearTimeout(cityJobTimer);
     renderCityProduction();
   }
   function refreshCityProduction(){
     if(!cityRecoveryReady())return;
     try{
-      if(guildState)room.send("get_city_production",{});
+      if(guildState || room.state.cityWorkshopSupported===true)room.send("get_city_production",{});
       room.send("get_city_disband_claims",{});
     }catch(_){cityStatus="เชื่อมต่อไม่ได้ · กรุณารีเฟรช";renderCityProduction();}
   }
@@ -282,15 +285,28 @@
         !Array.isArray(data?.listings) || !Number.isFinite(data.serverNow))return;
     cityState=data;cityReceivedAt=performance.now();renderCityProduction();
   }
+  function cityReceiveWorkshop(data){
+    if(!Number.isFinite(data?.serverNow) || !Array.isArray(data.inputs) || data.inputs.length!==2 || !data.output)return;
+    cityWorkshop=data;cityWorkshopReceivedAt=performance.now();renderCityProduction();
+  }
+  function cityReceivePurchase(data){
+    if(!Number.isFinite(data?.serverNow) || data.item!==cityProduct)return;
+    cityPurchase=data;renderCityProduction();
+  }
   function cityReceiveClaims(data){
     if(!Array.isArray(data?.assets))return;
     cityClaims=data.assets.filter(a=>a && typeof a.guildId==="string" && typeof a.name==="string" &&
-      ["gold",cityProduct,...cityRawItems].includes(a.item) && cityPositive(a.amount));
+      cityAssets.includes(a.item) && cityPositive(a.amount));
     renderCityProduction();
   }
   function cityReceiveResult(data){
     if(!cityPending || data?.requestId!==cityPending.payload.requestId)return;
     const notices={deposit:"ฝากวัตถุดิบแล้ว",build:"ปรับระดับโรงงานแล้ว",start:"เริ่มผลิตแล้ว",
+      warehouse_start:"เปิดโครงการขยายคลังแล้ว",warehouse_contribute:"สมทบวัสดุแล้ว",warehouse_allocate:"จัดสรรวัสดุจากคลังแล้ว",
+      workshop_start:"ฝากผลิตแล้ว · รับผลผลิตเมื่อครบเวลา",workshop_claim:"รับผลผลิตเข้ากระเป๋าแล้ว",
+      purchase_open:"เปิดใบสั่งซื้อแล้ว · กันทองและพื้นที่คลังเรียบร้อย",
+      purchase_cancel:"ยกเลิกแล้ว · คืนทองส่วนที่ยังไม่ได้ใช้",
+      purchase_fill:"ส่งวัตถุดิบแล้ว · ได้รับ "+(data.gold ?? 0)+" ทอง",
       start_fast:"เริ่มเร่งผลิตแล้ว",list:"ตั้งขายในตลาดโลกแล้ว",cancel:"คืนสินค้าเข้าคลังแล้ว",
       reclaim:"รับของเข้ากระเป๋าแล้ว",disband:"ยุบกิลด์แล้ว · รับทรัพย์สินได้ด้านล่าง",claim_disband:"รับทรัพย์สินแล้ว"};
     clearTimeout(cityReplyTimer);cityPending=null;
@@ -307,8 +323,23 @@
       else cityPending=null;
     }
     const reasons={city_unavailable:"ระบบเมืองยังไม่พร้อม",city_not_member:"ตัวละครนี้ไม่มีกิลด์",
-      city_not_owner:"กิลด์ของคุณไม่ได้ครองเมืองแล้ว",city_location:"ไปที่เมืองและยืนบนพื้นก่อน",
+      city_not_owner:"กิลด์ของคุณไม่ได้ครองเมืองแล้ว",city_location:"ไปยังเมืองที่ต้องการทำรายการและยืนบนพื้นก่อน",
+      city_item_not_accepted:"คลังเมืองนี้ไม่รับวัสดุชนิดนี้",
       city_ownership_changed:"เมืองเปลี่ยนเจ้าของแล้ว · กรุณารีเฟรช",city_officer_required:"เฉพาะผู้บัญชาการหรือนายทหาร",
+      city_construction_unavailable:"โครงการก่อสร้างยังไม่เปิดใช้งาน",city_construction_location:"ไปที่ลานด้านเหนือของคลังข้าวหลวง",
+      city_commander_required:"ผู้บัญชาการเท่านั้นที่เปิดโครงการได้",city_construction_siege:"พักการก่อสร้างระหว่างศึก",
+      city_warehouse_complete:"เมืองนี้ขยายคลังแล้ว",city_project_exists:"มีโครงการขยายคลังอยู่แล้ว",
+      city_project_unavailable:"โครงการไม่ได้อยู่ในช่วงรับวัสดุ",city_project_surplus:"จำนวนเกินยอดที่โครงการยังต้องการ · กรุณารีเฟรช",
+      city_workshop_disabled:"โรงงานสาธารณะพักรับงานใหม่",city_workshop_locked:"เมืองต้องขยายคลังและมีโรงงานก่อน",
+      city_workshop_location:"ไปที่เวียงปากน้ำสามลานและยืนบนพื้นก่อนฝากผลิต",
+      city_workshop_siege:"โรงงานสาธารณะพักรับงานใหม่ระหว่างศึก",city_workshop_pending:"รับผลผลิตงานเดิมก่อนฝากงานใหม่",
+      city_workshop_full:"คิวผลิตเต็ม · กรุณารีเฟรชเพื่อตรวจคิว",city_workshop_funds:"ทองในกระเป๋าไม่พอจ่ายค่าบริการ",
+      city_workshop_job_missing:"ไม่พบงานผลิตนี้ · กรุณารีเฟรช",city_workshop_not_ready:"งานยังไม่ครบเวลา",
+      city_purchase_disabled:"ตลาดพักการเปิดใบสั่งซื้อและรับของ",
+      city_purchase_location:"ไปที่ด่านผนึกจันทราและยืนบนพื้นก่อนเปิดใบสั่งซื้อ",
+      city_purchase_siege:"พักใบสั่งซื้อระหว่างศึก",city_purchase_exists:"ด่านมีใบสั่งซื้อเปิดอยู่แล้ว",
+      city_purchase_missing:"ใบสั่งซื้อปิดแล้วหรือเปลี่ยนไป · กรุณารีเฟรช",
+      city_purchase_quantity:"จำนวนเกินยอดที่ยังรับ · กรุณารีเฟรช",
       city_stock_short:"วัตถุดิบหรือสินค้าในคลังไม่พอ",city_storage_full:"พื้นที่คลังเมืองไม่พอ",
       city_job_running:"โรงงานกำลังผลิตอยู่",city_factory_required:"ต้องสร้างโรงงานก่อน",city_factory_max:"โรงงานถึงระดับสูงสุดแล้ว",
       city_market_funds:"ทองตลาดกิลด์ไม่พอ",city_disband_unavailable:"ยืนยันได้เมื่อผู้บัญชาการเป็นสมาชิกคนสุดท้าย",
@@ -339,20 +370,138 @@
     cityPending={target:room,payload:{requestId:economyRequestId(),action,...fields}};
     transmitCityProduction();
   }
+  function cityAmountForm(target,label,fields,run,disabled){
+    const form=marketText("form","guild-actions");
+    const inputs=fields.map(([caption,max])=>{
+      const field=marketText("label","field",caption),input=document.createElement("input");
+      input.type="number";input.inputMode="numeric";input.min="1";input.max=String(max);input.value="1";
+      input.required=true;input.disabled=disabled;field.append(input);form.append(field);return input;
+    });
+    const send=marketText("button","secondary",label);
+    send.type="submit";send.disabled=disabled;form.append(send);
+    form.onsubmit=event=>{event.preventDefault();run(...inputs.map(input=>input.valueAsNumber));};
+    target.append(form);return inputs;
+  }
+  function cityBagForm(target,caption,label,slots,limit,send,locked){
+    const field=marketText("label","field",caption),select=document.createElement("select");
+    for(const {item,slot} of slots){
+      const choice=marketText("option","",economyItemName(item));choice.value=String(slot);select.append(choice);
+    }
+    select.disabled=locked;field.append(select);target.append(field);
+    const selected=()=>slots.find(entry=>entry.slot===Number(select.value));
+    const [quantity]=cityAmountForm(target,label,[["จำนวน",Math.min(limit,slots[0].item.quantity)]],amount=>{
+      const choice=selected();
+      if(choice)send({slot:choice.slot,item:choice.item.itemId,amount});
+    },locked);
+    select.onchange=()=>{
+      quantity.max=String(Math.min(limit,selected().item.quantity));quantity.value="1";quantity.oninput?.();
+    };
+    return quantity;
+  }
+  function refreshCityPurchase(){
+    if(!cityRecoveryReady() || room.state.cityPurchaseSupported!==true)return;
+    try{room.send("get_city_purchase_orders",{});}
+    catch(_){cityStatus="เชื่อมต่อไม่ได้ · กรุณารีเฟรช";renderCityProduction();}
+  }
+  function openCityPurchase(){
+    cityPurchase=null;
+    if(!cityPending)cityStatus="";
+    openDrawer("cityPurchase","ใบสั่งซื้อกิลด์",
+      '<div class="guild-actions"><button id="cityBack" class="secondary" type="button">← ตลาดโลก</button>'+
+      '<button id="cityRefresh" class="secondary" type="button">รีเฟรช</button></div>'+
+      '<p id="cityStatus" class="note" role="status"></p><div id="cityProductionContent"></div>');
+    $("cityBack").onclick=openEconomy;
+    $("cityRefresh").onclick=()=>{if(!cityPending)cityStatus="";refreshCityPurchase();renderCityProduction();};
+    renderCityProduction();refreshCityPurchase();
+  }
+  function renderCityPurchase(){
+    const body=$("cityProductionContent"),ready=cityRecoveryReady() && room.state.cityPurchaseSupported===true;
+    if(!body)return;
+    $("cityRefresh").disabled=!ready;
+    $("cityStatus").textContent=cityStatus || (ready?"":"เชื่อมต่อกับตลาดโลกเพื่อดูใบสั่งซื้อ");
+    body.replaceChildren();
+    const note=text=>body.append(marketText("p","note",text));
+    const button=(label,run,disabled=false)=>{
+      const control=marketText("button","secondary",label);
+      control.type="button";control.onclick=run;control.disabled=disabled;body.append(control);
+    };
+    if(cityPending && !cityPending.waiting)button("ส่งคำขอเดิมซ้ำ",transmitCityProduction,!ready);
+    if(!ready)return;
+    if(!cityPurchase){note("กำลังโหลดใบสั่งซื้อ…");return;}
+    const {open,manage,enabled,siege,atMoon,maxAmount,maxUnitPrice,item}=cityPurchase,locked=!!cityPending;
+    const itemName=cityItemName(item);
+    body.append(marketText("h3","cp-h","ด่านผนึกจันทรา · รับซื้อ "+itemName));
+    if(!enabled)note("ตลาดพักการเปิดใบสั่งซื้อและรับของ");
+    else if(siege)note("พักเปิดใบและรับของระหว่างศึก");
+    if(open){
+      note("กิลด์ "+open.guild+" · ยังรับ "+open.remaining+" / "+open.amount+" ชิ้น · "+open.unitPrice+" ทองต่อชิ้น");
+      note("หมดอายุ "+new Date(open.expiresAt).toLocaleString("th-TH"));
+      if(enabled && !siege){
+        const slots=(inventoryState?.slots || []).flatMap((stack,slot)=>
+          stack?.itemId===item && !stack.bound ? [{item:stack,slot}] : []);
+        if(slots.length){
+          const quantity=cityBagForm(body,"แร่ในกระเป๋า","ส่งของและรับทอง",slots,open.remaining,({slot,amount})=>{
+            if(cityPositive(amount,open.remaining))sendCityProduction("purchase_fill",{orderId:open.id,slot,amount});
+          },locked);
+          const total=marketText("p","note");body.append(total);
+          quantity.oninput=()=>{total.textContent=cityPositive(quantity.valueAsNumber,Number(quantity.max))?
+            "รับ "+(quantity.valueAsNumber*open.unitPrice)+" ทองเมื่อส่งสำเร็จ":"";};
+          quantity.oninput();
+        } else note("ต้องมี "+itemName+" ในกระเป๋าเพื่อส่งของ");
+      }
+      if(cityPurchase.canCancel)button("ยกเลิกใบสั่งซื้อ",()=>{
+        if(window.confirm("ยกเลิกใบสั่งซื้อและคืนทองส่วนที่ยังไม่ได้ใช้หรือไม่"))sendCityProduction("purchase_cancel",{orderId:open.id});
+      },locked);
+      return;
+    }
+    note("ยังไม่มีใบสั่งซื้อเปิดอยู่");
+    if(!manage || !enabled || siege)return;
+    note("ทองตลาดพร้อมใช้ "+manage.gold+" ทอง · คลังว่าง "+manage.free+" ชิ้น");
+    if(!atMoon){note("ไปที่ด่านผนึกจันทรา ยืนบนพื้นแล้วกดรีเฟรชเพื่อเปิดใบ");return;}
+    if(manage.free<=0 || manage.gold<=0)return;
+    const max=Math.min(maxAmount,manage.free),maxPrice=Math.min(maxUnitPrice,manage.gold);
+    const [quantity,price]=cityAmountForm(body,"เปิดใบสั่งซื้อ",[["จำนวน",max],["ทองต่อชิ้น",maxPrice]],(amount,unitPrice)=>{
+      if(cityPositive(amount,max) && cityPositive(unitPrice,maxPrice) && amount*unitPrice<=manage.gold)
+        sendCityProduction("purchase_open",{epoch:manage.epoch,amount,unitPrice});
+    },locked);
+    const total=marketText("p","note");body.append(total);
+    const quote=()=>{
+      const gold=quantity.valueAsNumber*price.valueAsNumber;
+      total.textContent=Number.isFinite(gold)?"กัน "+gold+" ทอง · อายุ 24 ชั่วโมง"+(gold>manage.gold?" · ทองตลาดไม่พอ":""):"";
+    };
+    quantity.oninput=price.oninput=quote;quote();
+  }
   function updateCityCountdown(){
     clearTimeout(cityJobTimer);
-    const clock=$("cityJobClock"),job=cityState?.job;
-    if(drawerActive!=="cityProduction" || !clock || !job)return;
-    const remaining=Math.max(0,job.readyAt-cityState.serverNow-(performance.now()-cityReceivedAt));
-    clock.textContent=remaining>0 ? "กำลังผลิต · เหลือ "+Math.ceil(remaining/1000)+" วินาที" : "ครบเวลาแล้ว · กำลังตรวจผลผลิต";
-    if(remaining>0)cityJobTimer=setTimeout(updateCityCountdown,Math.min(1000,remaining));
-    else if(cityPolledJob!==job.id && cityRecoveryReady()){
-      cityPolledJob=job.id;
-      try{room.send("get_city_production",{});}catch(_){clock.textContent="ครบเวลาแล้ว · กดรีเฟรชเพื่อตรวจผลผลิต";}
+    if(drawerActive!=="cityProduction")return;
+    const {job,construction,epoch,serverNow}=cityState || {};
+    let nextTick=Infinity,refresh=false;
+    for(const [id,readyAt,key,label,held] of [
+      ["cityJobClock",job?.readyAt,job?.id,"กำลังผลิต",false],
+      ["cityConstructionClock",construction?.readyAt,epoch,"กำลังก่อสร้าง",construction?.siege]
+    ]){
+      const clock=$(id);
+      if(!clock || !Number.isFinite(readyAt))continue;
+      if(held){clock.textContent="พักก่อสร้าง · รอผลศึก";continue;}
+      const remaining=Math.max(0,readyAt-serverNow-(performance.now()-cityReceivedAt));
+      clock.textContent=remaining>0 ? label+" · เหลือ "+Math.ceil(remaining/1000)+" วินาที" : "ครบเวลาแล้ว · กำลังตรวจผล";
+      if(remaining>0)nextTick=Math.min(nextTick,remaining,1000);
+      else if(cityPolledTimers.get(id)!==key && cityRecoveryReady()){
+        cityPolledTimers.set(id,key);refresh=true;
+      }
     }
+    const workshopClock=$("cityWorkshopClock"),workshopJob=cityWorkshop?.job;
+    if(workshopClock && workshopJob){
+      const remaining=Math.max(0,workshopJob.readyAt-cityWorkshop.serverNow-(performance.now()-cityWorkshopReceivedAt));
+      workshopClock.textContent=remaining>0 ? "กำลังผลิต · เหลือ "+Math.ceil(remaining/1000)+" วินาที" : "พร้อมรับผลผลิต";
+      $("cityWorkshopClaim").disabled=remaining>0 || !!cityPending || !cityRecoveryReady();
+      if(remaining>0)nextTick=Math.min(nextTick,remaining,1000);
+    }
+    if(Number.isFinite(nextTick))cityJobTimer=setTimeout(updateCityCountdown,nextTick);
+    if(refresh)try{room.send("get_city_production",{});}catch(_){cityStatus="เชื่อมต่อไม่ได้ · กรุณารีเฟรช";$("cityStatus").textContent=cityStatus;}
   }
   function openCityProduction(){
-    openDrawer("cityProduction",guildState?"คลังเมืองและโรงงาน":"ทรัพย์สินกิลด์เดิม",
+    openDrawer("cityProduction",guildState || room?.state?.cityWorkshopSupported?"คลังเมืองและโรงงาน":"ทรัพย์สินกิลด์เดิม",
       '<div class="guild-actions"><button id="cityBack" class="secondary" type="button">← กิลด์</button>'+
       '<button id="cityRefresh" class="secondary" type="button">รีเฟรช</button></div>'+
       '<p id="cityStatus" class="note" role="status"></p><div id="cityProductionContent"></div>');
@@ -361,6 +510,7 @@
     renderCityProduction();refreshCityProduction();
   }
   function renderCityProduction(){
+    if(drawerActive==="cityPurchase"){renderCityPurchase();return;}
     if(drawerActive!=="cityProduction" || !$("cityProductionContent"))return;
     const body=$("cityProductionContent"),ready=cityRecoveryReady(),status=$("cityStatus");
     const state=guildState && cityState?.guildId===guildState.id ? cityState : null;
@@ -378,54 +528,99 @@
       section.append(marketText("h3","cp-h",title));body.append(section);return section;
     };
     const note=(target,text)=>target.append(marketText("p","note",text));
-    const submit=(target,label,fields,run,disabled=locked)=>{
-      const form=marketText("form","guild-actions");
-      const inputs=fields.map(([caption,max])=>{
-        const field=marketText("label","field",caption);
-        const input=document.createElement("input");
-        input.type="number";input.inputMode="numeric";input.min="1";input.max=String(max);input.value="1";
-        input.required=true;input.disabled=disabled;field.append(input);form.append(field);return input;
-      });
-      const send=marketText("button","secondary",label);
-      send.type="submit";send.disabled=disabled;form.append(send);
-      form.onsubmit=event=>{event.preventDefault();run(...inputs.map(input=>input.valueAsNumber));};
-      target.append(form);return inputs;
-    };
+    const submit=(target,label,fields,run,disabled=locked)=>cityAmountForm(target,label,fields,run,disabled);
+    const submitBag=(target,caption,label,slots,limit,send)=>cityBagForm(target,caption,label,slots,limit,send,locked);
     if(cityPending && !cityPending.waiting)body.append(button("ส่งคำขอเดิมซ้ำ",transmitCityProduction,!ready));
     if(!ready)return;
+    if(cityWorkshop?.enabled || cityWorkshop?.job){
+      const workshop=cityWorkshop,section=group("โรงงานสาธารณะเวียงปากน้ำสามลาน");
+      if(workshop.job){
+        const job=workshop.job,clock=marketText("p","note"),claim=button("รับผลผลิต · "+cityItemName(job.item)+" × "+job.quantity,
+          ()=>sendCityProduction("workshop_claim",{jobId:job.id}),true);
+        clock.id="cityWorkshopClock";claim.id="cityWorkshopClaim";section.append(clock,claim);
+      } else if(!workshop.unlocked)note(section,"เปิดเมื่อเมืองขยายคลังและมีโรงงาน");
+      else {
+        note(section,workshop.inputs.map(input=>cityItemName(input.item)+" × "+input.amount).join(" + ")+" → "+
+          cityItemName(workshop.output.item)+" × "+workshop.output.quantity);
+        note(section,"ค่าบริการ "+workshop.fee+" ทองเข้ากิลด์ผู้ครองเมือง · "+workshop.durationMs/1000+" วินาที · คิว "+workshop.used+" / "+workshop.slots);
+        if(workshop.siege)note(section,"พักรับงานใหม่ระหว่างศึก");
+        else if(!workshop.atCity)note(section,"ไปที่เวียงปากน้ำสามลาน ยืนบนพื้นแล้วกดรีเฟรชเพื่อฝากผลิต");
+        else if(workshop.used>=workshop.slots)note(section,"คิวเต็ม · กดรีเฟรชเพื่อตรวจคิว");
+        else {
+          const choices=workshop.inputs.map(input=>(inventoryState?.slots || []).flatMap((item,slot)=>
+            item?.itemId===input.item && !item.bound && item.quantity>=input.amount ? [{item,slot}] : []));
+          if(choices.some(slots=>!slots.length))note(section,"เตรียมวัสดุแต่ละชนิดให้ครบในช่องกระเป๋า");
+          else {
+            const picks=choices.map((slots,i)=>{
+              const field=marketText("label","field",cityItemName(workshop.inputs[i].item)),select=document.createElement("select");
+              for(const {item,slot} of slots){
+                const option=marketText("option","",economyItemName(item));option.value=String(slot);select.append(option);
+              }
+              select.disabled=locked;field.append(select);section.append(field);return select;
+            });
+            section.append(button("ฝากผลิต",()=>sendCityProduction("workshop_start",{
+              epoch:workshop.epoch,woodSlot:Number(picks[0].value),stoneSlot:Number(picks[1].value)
+            }),locked));
+          }
+        }
+      }
+    }
     if(guildState && !state)note(body,"กำลังโหลดคลังเมือง…");
     if(state){
-      const summary=group(typeof state.siteName==="string"?state.siteName:"เวียงปากน้ำสามลาน");
+      const summary=group(state.cityName || "เวียงปากน้ำสามลาน");
       note(summary,"ทองตลาด "+state.marketGold+" หน่วย");
+      if(state.miningSite && state.site!==state.miningSite){
+        note(summary,"ด่านผนึกจันทรามีคลังและสายผลิตแร่เหล็กชั้น 2 · เดินทางไปที่ด่านเพื่อดูและใช้ระบบ");
+        summary.append(button("ดูเส้นทางไปด่านผนึกจันทรา",()=>openStrategicMap(state.miningSite)));
+      }
       if(!enabled)note(summary,"พักการรับวัตถุดิบและการผลิตใหม่ชั่วคราว");
       if(state.epoch===null)note(summary,"กิลด์ของคุณยังไม่ได้ครองเมืองนี้");
       else {
         const {epoch}=state;
         const local=enabled && state.atCity;
         const inputs=state.recipe.inputs;
+        const inputIds=inputs.map(input=>input.item),output=state.recipe.output;
         const stock=id=>state.stock.find(row=>row.item===id)?.quantity || 0;
         note(summary,"คลัง "+state.used+" / "+state.capacity+" ชิ้น · โรงงานระดับ "+state.level);
         const list=marketText("ul","note");
-        for(const id of [...cityRawItems,cityProduct])list.append(marketText("li","",cityItemName(id)+" × "+stock(id)));
+        for(const id of [...inputIds,output])list.append(marketText("li","",cityItemName(id)+" × "+stock(id)));
         summary.append(list);
         if(!state.atCity && enabled)note(summary,"ไปที่เมืองและยืนบนพื้นเพื่อฝาก ผลิต หรือตั้งขาย");
+        const bagSlots=(inventoryState?.slots || []).flatMap((item,slot)=>item && !item.bound ? [{item,slot}] : []);
         if(local){
-          const slots=(inventoryState?.slots || []).flatMap((item,slot)=>
-            item && !item.bound && cityRawItems.includes(item.itemId) ? [{item,slot}] : []);
-          if(slots.length){
-            const field=marketText("label","field","วัตถุดิบในกระเป๋า"),select=document.createElement("select");
-            for(const {item,slot} of slots){
-              const choice=marketText("option","",economyItemName(item));choice.value=String(slot);select.append(choice);
+          const slots=bagSlots.filter(entry=>inputIds.includes(entry.item.itemId));
+          if(slots.length)submitBag(summary,"วัตถุดิบในกระเป๋า","ฝากวัตถุดิบ",slots,99,
+            fields=>sendCityProduction("deposit",{epoch,...fields}));
+          else note(summary,"วัสดุที่ฝากได้ · "+inputIds.map(cityItemName).join(" และ "));
+        }
+        const project=state.construction;
+        if(project){
+          const construction=group("โครงการขยายคลังเมือง");
+          if(project.complete)note(construction,"ก่อสร้างเสร็จแล้ว · คลังจุ "+project.capacity+" ชิ้น");
+          else {
+            const canWork=local && project.atPlot && !project.siege;
+            note(construction,"เพิ่มความจุจาก "+state.capacity+" เป็น "+project.capacity+" ชิ้น · ใช้เวลา "+project.durationMs/60_000+" นาทีเมื่อวัสดุครบ");
+            note(construction,"จุดก่อสร้าง "+project.plot+" ใกล้จุดคลังเสบียงบนแผนที่");
+            if(project.siege)note(construction,"พักการรับวัสดุระหว่างศึก");
+            else if(!project.atPlot)note(construction,"ไปที่ลานแล้วกดรีเฟรชเพื่อทำรายการ");
+            if(!project.status && project.commander){
+              construction.append(button("เปิดโครงการขยายคลัง",()=>sendCityProduction("warehouse_start",{epoch}),locked||!canWork));
             }
-            select.disabled=locked;field.append(select);summary.append(field);
-            const [amount]=submit(summary,"ฝากวัตถุดิบ",[["จำนวน",slots[0].item.quantity]],quantity=>{
-              const choice=slots.find(entry=>entry.slot===Number(select.value));
-              if(choice)sendCityProduction("deposit",{epoch,slot:choice.slot,item:choice.item.itemId,amount:quantity});
-            });
-            select.onchange=()=>{
-              amount.max=String(slots.find(entry=>entry.slot===Number(select.value)).item.quantity);amount.value="1";
-            };
-          } else note(summary,"กระเป๋าไม่มีไม้ดิบหรือหินดิบชั้น 1 สำหรับฝาก");
+            if(project.status==="building"){
+              const clock=marketText("p","note");clock.id="cityConstructionClock";construction.append(clock);
+            }
+            if(project.status==="collecting")note(construction,"วัสดุที่สมทบจะเป็นทรัพย์สินของกิลด์");
+            for(const {item,amount,reserved} of project.materials){
+              const name=cityItemName(item),needed=amount-reserved;
+              note(construction,name+" · "+reserved+" / "+amount);
+              if(project.status!=="collecting" || !canWork || needed<=0)continue;
+              const slots=bagSlots.filter(entry=>entry.item.itemId===item);
+              if(slots.length)submitBag(construction,name+" ในกระเป๋า","สมทบ "+name,slots,needed,
+                fields=>sendCityProduction("warehouse_contribute",{epoch,...fields}));
+              if(state.officer && stock(item)>0)submit(construction,"จัดสรรจากคลัง · "+name,[["จำนวน",Math.min(needed,stock(item))]],
+                amount=>sendCityProduction("warehouse_allocate",{epoch,item,amount}));
+            }
+          }
         }
         const factory=group("โรงงาน");
         note(factory,inputs.map(i=>cityItemName(i.item)+" × "+i.amount).join(" + ")+" → "+cityItemName(state.recipe.output));
@@ -433,8 +628,8 @@
         if(local && state.officer){
           const actions=marketText("div","guild-actions");
           if(state.costs){
-            const cost=cityItemName(cityRawItems[0])+" × "+state.costs.wood+" + "+cityItemName(cityRawItems[1])+" × "+state.costs.stone;
-            const affordable=stock(cityRawItems[0])>=state.costs.wood && stock(cityRawItems[1])>=state.costs.stone;
+            const cost=cityItemName(inputIds[0])+" × "+state.costs.wood+" + "+cityItemName(inputIds[1])+" × "+state.costs.stone;
+            const affordable=stock(inputIds[0])>=state.costs.wood && stock(inputIds[1])>=state.costs.stone;
             actions.append(button((state.level?"อัปเกรดโรงงาน":"สร้างโรงงาน")+" · "+cost,()=>sendCityProduction("build",{epoch}),locked||!affordable));
           }
           if(state.level && !state.job){
@@ -444,7 +639,7 @@
             if(rush)actions.append(button("เร่งผลิต · "+rush.gold+" ทอง",()=>sendCityProduction("start_fast",{epoch}),locked||!materials||state.marketGold<rush.gold));
           }
           factory.append(actions);
-          if(stock(cityProduct)>0)submit(factory,"ตั้งขายในตลาดโลก",[["จำนวนสินค้า",Math.min(99,stock(cityProduct))],["ราคารวม (ทอง)",1_000_000_000]],
+          if(stock(output)>0)submit(factory,"ตั้งขายในตลาดโลก",[["จำนวนสินค้า",Math.min(99,stock(output))],["ราคารวม (ทอง)",1_000_000_000]],
             (amount,price)=>sendCityProduction("list",{epoch,amount,price}));
         }
       }
@@ -452,7 +647,7 @@
       if(!state.listings.length)note(listed,"ยังไม่มีประกาศที่เปิดอยู่");
       for(const listing of state.listings){
         const line=marketText("div","gd-fort");
-        line.append(marketText("span","",cityItemName(cityProduct)+" × "+listing.quantity+" · "+listing.price+" ทอง"));
+        line.append(marketText("span","",cityItemName(listing.item || cityProduct)+" × "+listing.quantity+" · "+listing.price+" ทอง"));
         if(state.officer)line.append(button("ยกเลิกขาย",()=>sendCityProduction("cancel",{listingId:listing.id}),locked));
         listed.append(line);
       }
@@ -465,9 +660,9 @@
             amount=>sendCityProduction("reclaim",{epoch:row.epoch,item:row.item,amount}));
         }
       }
-      if(state.canDisband && (state.used || state.marketGold || state.reclaim.length || state.listings.length || state.job)){
+      if(state.canDisband && (state.hasAssets || state.used || state.marketGold || state.reclaim.length || state.listings.length || state.job || state.constructionReserved)){
         const disband=group("ยุบกิลด์");
-        note(disband,"ปิดงานผลิตและประกาศขาย แล้วเก็บทรัพย์สินที่เหลือไว้ให้ตัวละครนี้รับคืน");
+        note(disband,"ปิดงานก่อสร้าง งานผลิต และประกาศขาย แล้วเก็บทรัพย์สินที่เหลือไว้ให้ตัวละครนี้รับคืน");
         disband.append(button("ยืนยันยุบกิลด์",()=>{
           if(guildState?.id===state.guildId && window.confirm("ยุบกิลด์ "+guildState.name+" และปิดงานผลิตกับประกาศขายทั้งหมดหรือไม่")){
             sendCityProduction("disband",{guildId:state.guildId});

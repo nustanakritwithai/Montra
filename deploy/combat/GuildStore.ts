@@ -91,7 +91,7 @@ export class GuildStore {
   }
   settleCityDisband(economy: EconomyStore, disband: CityDisband): void {
     // The market seal is idempotent by guild ID. Keep the intent if either database fails.
-    economy.closeCityGuild(disband,(previous,site)=>this.war.government.cityOwnership(previous,site));
+    economy.closeCityGuild(disband, (previous, site) => this.war.government.cityOwnership(previous, site));
     this.transaction(() => {
       this.db.prepare(`DELETE FROM guilds WHERE id=? AND EXISTS
         (SELECT 1 FROM guild_city_disbands WHERE guild=? AND actor=?)`).run(disband.guild, disband.guild, disband.actor);

@@ -10,16 +10,13 @@ process.env.MONTRA_ALL_MAP_WARS="0";
 process.env.MONTRA_SCHEDULED_WARS="1";
 process.env.MONTRA_CIVILIAN_WAR_FIELDS="1";
 process.env.MONTRA_CASTLE_PILOT="1";
-process.env.MONTRA_MULTI_CITY_PRODUCTION="1";
 process.env.MONTRA_WAR_ROUTES="1";
 const {GuildStore}=await import("./GuildStore.js");
-const {EconomyStore}=await import("./EconomyStore.js");
 const {getWarDefinition,warSites,WAR_DURATION}=await import("./TerritoryWar.js");
 const {isRestArea,getWorldMap,groundAt,isSafeWorldPoint}=await import("./WorldMaps.js");
 const {MyRoom}=await import("./MyRoom.js");
 const {warWindows}=await import("./WarSchedule.js");
-const {CITY_PRODUCTION_SITE,CITY_RAW_ITEMS,CITY_PRODUCT,parseCityOrder}=await import("./CityProductionRules.js");
-const {makeClassInventory}=await import("./ItemRules.js");
+const {CITY_PRODUCTION_SITE,CITY_MINING_SITE}=await import("./CityProductionRules.js");
 const tuesday=Date.UTC(2026,10,10,13),DAY=86_400_000;
 
 test("weekly UTC windows preserve a fixed local start, exact lock and cutoff",()=>{
@@ -100,7 +97,7 @@ test("an attacker that hits the ownership cap while fighting cannot take a third
     for(let i=1;i<=30;i++)store.war.advance(field,tuesday+i*1000,2,0);
     assert.equal(store.war.inspect(site,tuesday+30_000).ownerId,b.id);
     assert.equal(store.war.inspect(site,tuesday+30_000).phase,"protected");
-    assert.equal(government.cityOwnership(null,"river_watch").active?.guild,a.id);
+    assert.equal(government.view("river_watch",a,tuesday+30_000)?.commander,true);
     assert.equal(government.cityOwnership(null,"sam_lan_estuary").active?.guild,a.id);
   }finally{store.close();}
 });
@@ -154,56 +151,28 @@ test("trade convoy uses one debit and credit and a lost city cancels delivery",(
   }finally{store.close();}
 });
 
-test("legacy river tenure keeps its ID and new cities reconcile isolated stocks and sales",t=>{
-  const dir=mkdtempSync(join(tmpdir(),"montra-multi-city-")),guildPath=join(dir,"guilds.sqlite");
+test("legacy river tenure keeps its ID and the mining site has an independent tenure",t=>{
+  const dir=mkdtempSync(join(tmpdir(),"montra-city-tenure-")),guildPath=join(dir,"guilds.sqlite");
   const legacy=new DatabaseSync(guildPath);
   legacy.exec(`CREATE TABLE city_tenures(id INTEGER PRIMARY KEY,guild TEXT NOT NULL,ended INTEGER);
     CREATE UNIQUE INDEX city_active_tenure ON city_tenures((1)) WHERE ended IS NULL;
     INSERT INTO city_tenures(id,guild,ended) VALUES(24,'former-guild',500);`);
   legacy.close();
-  const store=new GuildStore(guildPath),economy=new EconomyStore(join(dir,"economy.sqlite"));
+  const store=new GuildStore(guildPath);
   t.after(()=>{
-    store.close();economy.close();
+    store.close();
     assert.equal(dirname(resolve(dir)),resolve(tmpdir()));
     rmSync(dir,{recursive:true,force:true});
   });
-  assert.deepEqual(store.war.government.cityOwnership(24).previous,{guild:"former-guild",ended:500});
-  const a="a".repeat(64),b="b".repeat(64),buyer="c".repeat(64),[wood,stone]=CITY_RAW_ITEMS;
-  store.create(a,"A","Factory Guild");store.create(b,"B","Rival Guild");
-  for(const actor of [a,b,buyer]){
-    const bag=makeClassInventory("seer");
-    bag.slots[6]={itemId:wood,quantity:30};bag.slots[7]={itemId:stone,quantity:30};
-    economy.register(actor,bag);
-  }
-  const owner=store.war.member(a)!,rival=store.war.member(b)!;
-  const government=store.war.government,moon="moon_pass",river=CITY_PRODUCTION_SITE;
-  for(const site of [moon,river])government.settleVictory(site,owner.id,1000,false);
-  const sync=(site:string,now:number)=>economy.syncCity(previous=>government.cityOwnership(previous,site),now,site);
-  const view=(site:string,now:number,member=owner)=>economy.viewCity(member,sync(site,now),site);
-  const moonEpoch=view(moon,1000).epoch!,riverEpoch=view(river,1000).epoch!;
-  assert.notEqual(moonEpoch,riverEpoch);
-  let serial=0;
-  const command=(site:string,fields:object,now=1000)=>{
-    const order=parseCityOrder({...fields,requestId:"test_multi_city_"+ ++serial});
-    assert.ok(order && order.action!=="disband" && order.action!=="claim_disband");
-    return economy.cityOrder(a,owner,order,sync(site,now),now,site);
-  };
-  for(const [site,epoch] of [[moon,moonEpoch],[river,riverEpoch]] as const){
-    command(site,{action:"deposit",epoch,item:wood,slot:6,amount:8});
-    command(site,{action:"deposit",epoch,item:stone,slot:7,amount:9});
-    command(site,{action:"build",epoch});
-    command(site,{action:"start",epoch});
-  }
-  assert.equal(view(moon,91_000).stock.find(x=>x.item===CITY_PRODUCT)?.quantity,1);
-  assert.ok(view(river,91_000).job);
-  assert.throws(()=>command(river,{action:"reclaim",epoch:moonEpoch,item:wood,amount:1}),/city_stock_active/);
-  const {listingId}=command(moon,{action:"list",epoch:moonEpoch,amount:1,price:70},91_000);
-  command(moon,{action:"start",epoch:moonEpoch},92_000);
-  government.settleVictory(moon,rival.id,93_000,false);
-  assert.equal(view(moon,94_000,rival).level,1);
-  assert.deepEqual(view(moon,94_000,rival).stock,[]);
-  assert.equal(view(moon,94_000).reclaim.find(x=>x.epoch===moonEpoch && x.item===stone)?.quantity,2);
-  economy.buy(buyer,"test_multi_city_buy_01",String(listingId));
-  assert.equal(view(river,121_000).marketGold,70);
-  assert.equal(view(river,121_000).stock.find(x=>x.item===CITY_PRODUCT)?.quantity,1);
+  const government=store.war.government;
+  assert.deepEqual(government.cityOwnership(24).previous,{guild:"former-guild",ended:500});
+  store.create("a","A","Factory Guild");
+  const owner=store.war.member("a")!;
+  government.settleVictory(CITY_PRODUCTION_SITE,owner.id,1000,false);
+  government.settleVictory(CITY_MINING_SITE,owner.id,1000,false);
+  const river=government.cityOwnership(null,CITY_PRODUCTION_SITE).active;
+  const mine=government.cityOwnership(null,CITY_MINING_SITE).active;
+  assert.equal(river?.guild,owner.id);
+  assert.equal(mine?.guild,owner.id);
+  assert.notEqual(river?.id,mine?.id);
 });

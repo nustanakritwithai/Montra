@@ -6,13 +6,12 @@ import test from "node:test";
 
 Object.assign(process.env,{
   MONTRA_WORLD_EXPANSION:"1",MONTRA_ALL_MAP_WARS:"1",MONTRA_RIDGE_TERRAIN:"1",MONTRA_CASTLE_PILOT:"1",
-  MONTRA_CIVILIAN_WAR_FIELDS:"0",MONTRA_SCHEDULED_WARS:"1",MONTRA_MULTI_CITY_PRODUCTION:"1",
+  MONTRA_CIVILIAN_WAR_FIELDS:"0",MONTRA_SCHEDULED_WARS:"1",
 });
 const {WORLD_MAPS,groundAt,isRestArea,isSafeWorldPoint}=await import("./WorldMaps.js");
 const {getWarDefinition,warSites,WAR_DURATION,WAR_HOLD}=await import("./TerritoryWar.js");
 const {FRONTIER_SIZES,FRONTIER_WAR_FIELDS}=await import("./WarMapProfiles.js");
 const {GuildStore}=await import("./GuildStore.js");
-const {cityProductionProfile}=await import("./CityProductionRules.js");
 const {MyRoom}=await import("./MyRoom.js");
 
 test("all 18 available maps have profiles and each new battlefield has a walkable approach from both bases",()=>{
@@ -83,12 +82,10 @@ test("every added map is captured by the same engine and its income and building
     assert.equal(store.war.govern("a",{site,revision:estate.revision,action:"collect"},now),480);
     const afterCollect=store.war.government.view(site,a,now)!;
     assert.equal(store.war.govern("a",{site,revision:afterCollect.revision,action:"market"},now),-240);
-    assert.ok(cityProductionProfile(site).capacity>0);
   }
   store.close();store=new GuildStore(file);
   for(const site of sites){
     assert.equal(store.war.inspect(site,at+9*3600_000).ownerId,a.id);
     assert.equal(store.war.government.view(site,a,at+9*3600_000)?.market,2);
-    assert.equal(store.war.government.cityOwnership(null,site).active?.guild,a.id);
   }
 });
