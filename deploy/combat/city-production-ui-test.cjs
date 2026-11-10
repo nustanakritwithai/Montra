@@ -24,7 +24,7 @@ function node(tag = "div") {
   };
 }
 
-function fixture({enabled = true, recovery = true, member = true, workshopSupported = false, purchaseSupported = false} = {}) {
+function fixture({enabled = true, recovery = true, member = true, workshopSupported = false, purchaseSupported = false, missionSupported = false} = {}) {
   const nodes = {}, wire = [], timers = new Map();
   let serial = 0, now = 100;
   const walk = el => [el, ...el.children.flatMap(walk)];
@@ -32,7 +32,7 @@ function fixture({enabled = true, recovery = true, member = true, workshopSuppor
   const ctx = {
     $, document: {createElement: node}, performance: {now: () => now},
     room: {state: {cityProductionAvailable: enabled, cityRecoveryAvailable: recovery,
-      cityWorkshopSupported: workshopSupported, cityPurchaseSupported: purchaseSupported},
+      cityWorkshopSupported: workshopSupported, cityPurchaseSupported: purchaseSupported, cityMissionSupported: missionSupported},
       send(command, payload) { wire.push({command, payload: plain(payload)}); }},
     guildState: member ? {id: "guild-1", name: "สามลาน"} : null,
     inventoryState: {slots: [{itemId: wood, quantity: 10}, {itemId: stone, quantity: 6}]},
@@ -252,4 +252,27 @@ test("officers can open only on site and cancel a paused order", () => {
   f.ctx.cityReceivePurchase({...purchase,enabled:false,canCancel:true});
   f.button("ยกเลิกใบสั่งซื้อ").onclick();
   assert.equal(f.wire.at(-1).payload.action,"purchase_cancel");
+});
+
+test("the mission board distinguishes accepting, gathering and handing in a public job", () => {
+  const f=fixture({member:false,missionSupported:true}), item="mat_raw_stone_2";
+  f.ctx.openCityMission();
+  assert.equal(f.wire.at(-1).command,"get_city_missions");
+  const mission={id:"work",name:"กิลด์จันทรา",audience:"public",slots:1,remaining:1,reward:15,expiresAt:2_000_000,
+    canAccept:true,progress:null};
+  const board={enabled:true,required:3,item,serverNow:1_000_000};
+  f.ctx.cityReceiveMission({...board,missions:[mission]});
+  f.button("รับงาน").onclick();
+  const accepted=f.wire.at(-1).payload;
+  assert.equal(accepted.action,"mission_accept");
+  f.ctx.cityReceiveResult(accepted);
+  f.ctx.inventoryState.slots.push({itemId:item,quantity:3});
+  f.ctx.cityReceiveMission({...board,missions:[{...mission,progress:2}]});
+  assert.equal(f.button("ส่งงานและรับทอง").disabled,true);
+  f.ctx.cityReceiveMission({...board,siege:true,missions:[{...mission,progress:3}]});
+  assert.equal(f.button("ส่งงานและรับทอง").disabled,true);
+  f.ctx.cityReceiveMission({...board,missions:[{...mission,progress:3}]});
+  f.button("ส่งงานและรับทอง").onclick();
+  const submitted=f.wire.at(-1).payload;
+  assert.deepEqual(submitted,{requestId:submitted.requestId,action:"mission_submit",missionId:"work"});
 });

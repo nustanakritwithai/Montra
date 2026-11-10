@@ -9,6 +9,7 @@ export const CITY_CONSTRUCTION_ENABLED = process.env.MONTRA_CITY_CONSTRUCTION ==
 export const CITY_WORKSHOP_ENABLED = process.env.MONTRA_CITY_WORKSHOP === "1";
 export const CITY_MINING_ENABLED = process.env.MONTRA_CITY_MINING === "1";
 export const CITY_PURCHASE_ENABLED = process.env.MONTRA_CITY_PURCHASE_ORDERS === "1";
+export const CITY_MISSIONS_ENABLED = process.env.MONTRA_CITY_MISSIONS === "1";
 export const CITY_RAW_ITEMS = ["mat_raw_wood_1", "mat_raw_stone_1"] as const;
 export const CITY_PRODUCT = "mat_metal_1";
 export const CITY_MINING_ORE = "mat_raw_stone_2";
@@ -38,6 +39,11 @@ export const CITY_WORKSHOP_SLOTS = 4;
 export const CITY_PURCHASE_AMOUNT = 20;
 export const CITY_PURCHASE_MAX_PRICE = 1_000_000;
 export const CITY_PURCHASE_DURATION_MS = 86_400_000;
+export const CITY_MISSION_ORE_COUNT = 3;
+export const CITY_MISSION_POST_LIMIT = 3;
+export const CITY_MISSION_WORKERS = 5;
+export const CITY_MISSION_MAX_REWARD = 1_000_000;
+export const CITY_MISSION_HOURS = [1, 6, 24] as const;
 export const CITY_LINES = {
   [CITY_PRODUCTION_SITE]: {inputs: CITY_RAW_ITEMS, output: CITY_PRODUCT, recipe: CITY_RECIPE},
   [CITY_MINING_SITE]: {inputs: [CITY_PRODUCT, CITY_MINING_ORE], output: CITY_MINING_PRODUCT,
@@ -59,6 +65,10 @@ export type CityPurchaseOrder = {requestId: string} & (
   {action: "purchase_cancel"; orderId: string} |
   {action: "purchase_fill"; orderId: string; slot: number; amount: number}
 );
+export type CityMissionOrder = {requestId: string} & (
+  {action: "mission_open"; epoch: number; audience: "guild" | "public"; slots: number; reward: number; hours: number} |
+  {action: "mission_accept" | "mission_submit" | "mission_abandon" | "mission_cancel"; missionId: string}
+);
 
 export type CityFactoryOrder = {requestId: string} & (
   WarehouseOrder |
@@ -68,7 +78,7 @@ export type CityFactoryOrder = {requestId: string} & (
   {action: "cancel"; listingId: string} |
   {action: "reclaim"; epoch: number; item: CityItem; amount: number}
 );
-export type CityOrder = CityFactoryOrder | CityWorkshopOrder | CityPurchaseOrder | ({requestId: string} & (
+export type CityOrder = CityFactoryOrder | CityWorkshopOrder | CityPurchaseOrder | CityMissionOrder | ({requestId: string} & (
   {action: "disband"; guildId: string} |
   {action: "claim_disband"; guildId: string; item: CityAsset; amount: number}
 ));
@@ -91,6 +101,11 @@ export function isCityPurchaseOrder(order: CityOrder): order is CityPurchaseOrde
   return order.action === "purchase_open" || order.action === "purchase_cancel" || order.action === "purchase_fill";
 }
 
+export function isCityMissionOrder(order: CityOrder): order is CityMissionOrder {
+  return order.action === "mission_open" || order.action === "mission_accept" || order.action === "mission_submit" ||
+    order.action === "mission_abandon" || order.action === "mission_cancel";
+}
+
 export function parseCityOrder(input: unknown): CityOrder | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
   const order = input as Record<string, unknown>;
@@ -108,6 +123,8 @@ export function parseCityOrder(input: unknown): CityOrder | null {
     return keys("jobId") && uuid(order.jobId) ? order as CityOrder : null;
   if (order.action === "purchase_cancel")
     return keys("orderId") && uuid(order.orderId) ? order as CityOrder : null;
+  if (order.action === "mission_accept" || order.action === "mission_submit" || order.action === "mission_abandon" ||
+      order.action === "mission_cancel") return keys("missionId") && uuid(order.missionId) ? order as CityOrder : null;
   if (order.action === "purchase_fill")
     return keys("orderId", "slot", "amount") && uuid(order.orderId) && integer(order.slot, 0, 11) &&
       integer(order.amount, 1, CITY_PURCHASE_AMOUNT) ? order as CityOrder : null;
@@ -119,6 +136,10 @@ export function parseCityOrder(input: unknown): CityOrder | null {
       integer(order.amount, 1, order.item === "gold" ? 1_000_000_000 : 99) ? order as CityOrder : null;
   if (!integer(order.epoch, 1)) return null;
   switch (order.action) {
+    case "mission_open":
+      return keys("epoch", "audience", "slots", "reward", "hours") &&
+        (order.audience === "guild" || order.audience === "public") && integer(order.slots, 1, CITY_MISSION_WORKERS) &&
+        integer(order.reward, 1, CITY_MISSION_MAX_REWARD) && CITY_MISSION_HOURS.some(hours => hours === order.hours) ? order as CityOrder : null;
     case "purchase_open":
       return keys("epoch", "amount", "unitPrice") && integer(order.amount, 1, CITY_PURCHASE_AMOUNT) &&
         integer(order.unitPrice, 1, CITY_PURCHASE_MAX_PRICE) ? order as CityOrder : null;

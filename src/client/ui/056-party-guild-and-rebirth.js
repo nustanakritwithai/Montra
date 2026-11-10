@@ -262,12 +262,12 @@
   const cityAssets=["gold",cityProduct,"mat_raw_wood_1","mat_raw_stone_1","mat_raw_stone_2","mat_metal_2"];
   let cityState=null, cityClaims=null, cityPending=null, cityStatus="", cityReceivedAt=0;
   let cityWorkshop=null, cityWorkshopReceivedAt=0;
-  let cityPurchase=null;
+  let cityPurchase=null, cityMission=null;
   let cityReplyTimer=0, cityJobTimer=0;
   const cityPolledTimers=new Map();
   function cityRecoveryReady(){return economyReady() && room.state.cityRecoveryAvailable===true;}
   function resetCityProduction(){
-    cityState=null;cityWorkshop=null;cityPurchase=null;cityClaims=null;cityPending=null;cityStatus="";cityPolledTimers.clear();
+    cityState=null;cityWorkshop=null;cityPurchase=null;cityMission=null;cityClaims=null;cityPending=null;cityStatus="";cityPolledTimers.clear();
     clearTimeout(cityReplyTimer);clearTimeout(cityJobTimer);
     renderCityProduction();
   }
@@ -293,6 +293,10 @@
     if(!Number.isFinite(data?.serverNow) || data.item!==cityProduct)return;
     cityPurchase=data;renderCityProduction();
   }
+  function cityReceiveMission(data){
+    if(!Number.isFinite(data?.serverNow) || !Array.isArray(data.missions))return;
+    cityMission=data;renderCityProduction();
+  }
   function cityReceiveClaims(data){
     if(!Array.isArray(data?.assets))return;
     cityClaims=data.assets.filter(a=>a && typeof a.guildId==="string" && typeof a.name==="string" &&
@@ -307,6 +311,9 @@
       purchase_open:"เปิดใบสั่งซื้อแล้ว · กันทองและพื้นที่คลังเรียบร้อย",
       purchase_cancel:"ยกเลิกแล้ว · คืนทองส่วนที่ยังไม่ได้ใช้",
       purchase_fill:"ส่งวัตถุดิบแล้ว · ได้รับ "+(data.gold ?? 0)+" ทอง",
+      mission_open:"เปิดภารกิจแล้ว · กันค่าจ้างและพื้นที่คลังเรียบร้อย",mission_accept:"รับงานแล้ว · ไปเก็บแร่ที่ลานแต่งแร่",
+      mission_submit:"ส่งงานแล้ว · ได้รับ "+(data.gold ?? 0)+" ทอง",mission_cancel:"ปิดภารกิจแล้ว · คืนค่าจ้างส่วนที่ยังไม่ได้ใช้",
+      mission_abandon:"คืนงานแล้ว · แร่ที่เก็บยังอยู่ในกระเป๋า",
       start_fast:"เริ่มเร่งผลิตแล้ว",list:"ตั้งขายในตลาดโลกแล้ว",cancel:"คืนสินค้าเข้าคลังแล้ว",
       reclaim:"รับของเข้ากระเป๋าแล้ว",disband:"ยุบกิลด์แล้ว · รับทรัพย์สินได้ด้านล่าง",claim_disband:"รับทรัพย์สินแล้ว"};
     clearTimeout(cityReplyTimer);cityPending=null;
@@ -340,6 +347,12 @@
       city_purchase_siege:"พักใบสั่งซื้อระหว่างศึก",city_purchase_exists:"ด่านมีใบสั่งซื้อเปิดอยู่แล้ว",
       city_purchase_missing:"ใบสั่งซื้อปิดแล้วหรือเปลี่ยนไป · กรุณารีเฟรช",
       city_purchase_quantity:"จำนวนเกินยอดที่ยังรับ · กรุณารีเฟรช",
+      city_mission_disabled:"กระดานภารกิจพักเปิดงานใหม่และส่งงาน",city_mission_location:"ไปยืนบนพื้นในด่านผนึกจันทราก่อนเปิดงาน",
+      city_mission_siege:"พักรับและส่งงานระหว่างศึก",city_mission_limit:"กระดานมีประกาศเต็มแล้ว",
+      city_mission_missing:"ภารกิจปิดแล้ว · กรุณารีเฟรช",city_mission_guild_only:"งานนี้รับเฉพาะสมาชิกกิลด์",
+      city_mission_active:"ตัวละครมีงานค้างอยู่แล้ว",city_mission_done:"ตัวละครเคยส่งงานประกาศนี้แล้ว",
+      city_mission_full:"งานมีคนรับครบแล้ว · กรุณารีเฟรช",city_mission_progress:"ต้องเก็บแร่ที่ลานแต่งแร่ให้ครบหลังรับงาน",
+      city_mission_ore_short:"แร่ในกระเป๋าไม่พอส่งงาน",
       city_stock_short:"วัตถุดิบหรือสินค้าในคลังไม่พอ",city_storage_full:"พื้นที่คลังเมืองไม่พอ",
       city_job_running:"โรงงานกำลังผลิตอยู่",city_factory_required:"ต้องสร้างโรงงานก่อน",city_factory_max:"โรงงานถึงระดับสูงสุดแล้ว",
       city_market_funds:"ทองตลาดกิลด์ไม่พอ",city_disband_unavailable:"ยืนยันได้เมื่อผู้บัญชาการเป็นสมาชิกคนสุดท้าย",
@@ -405,14 +418,90 @@
   }
   function openCityPurchase(){
     cityPurchase=null;
+    openCityBoard("cityPurchase","ใบสั่งซื้อกิลด์",refreshCityPurchase);
+  }
+  function openCityMission(){
+    cityMission=null;
+    openCityBoard("cityMission","กระดานภารกิจเมือง",refreshCityMission);
+  }
+  function openCityBoard(drawer,title,refresh){
     if(!cityPending)cityStatus="";
-    openDrawer("cityPurchase","ใบสั่งซื้อกิลด์",
+    openDrawer(drawer,title,
       '<div class="guild-actions"><button id="cityBack" class="secondary" type="button">← ตลาดโลก</button>'+
       '<button id="cityRefresh" class="secondary" type="button">รีเฟรช</button></div>'+
       '<p id="cityStatus" class="note" role="status"></p><div id="cityProductionContent"></div>');
     $("cityBack").onclick=openEconomy;
-    $("cityRefresh").onclick=()=>{if(!cityPending)cityStatus="";refreshCityPurchase();renderCityProduction();};
-    renderCityProduction();refreshCityPurchase();
+    $("cityRefresh").onclick=()=>{if(!cityPending)cityStatus="";refresh();renderCityProduction();};
+    renderCityProduction();refresh();
+  }
+  function refreshCityMission(){
+    if(!cityRecoveryReady() || room.state.cityMissionSupported!==true)return;
+    try{room.send("get_city_missions",{});}
+    catch(_){cityStatus="เชื่อมต่อไม่ได้ · กรุณารีเฟรช";renderCityProduction();}
+  }
+  function renderCityMission(){
+    const body=$("cityProductionContent"),ready=cityRecoveryReady() && room.state.cityMissionSupported===true;
+    if(!body)return;
+    $("cityRefresh").disabled=!ready;
+    $("cityStatus").textContent=cityStatus || (ready?"":"เชื่อมต่อกับตลาดโลกเพื่อดูกระดานภารกิจ");
+    body.replaceChildren();
+    const note=(target,label)=>target.append(marketText("p","note",label));
+    const locked=!!cityPending;
+    const button=(target,label,run,disabled=locked)=>{
+      const control=marketText("button","secondary",label);control.type="button";
+      control.onclick=run;control.disabled=disabled;target.append(control);
+    };
+    if(cityPending && !cityPending.waiting)button(body,"ส่งคำขอเดิมซ้ำ",transmitCityProduction,!ready);
+    if(!ready)return;
+    if(!cityMission){note(body,"กำลังโหลดภารกิจ…");return;}
+    const {missions,manage,enabled,siege,atMoon,item,required,maxSlots,maxReward,hours}=cityMission;
+    const ore=(inventoryState?.slots || []).reduce((sum,stack)=>sum+(stack?.itemId===item && !stack.bound?stack.quantity:0),0);
+    body.append(marketText("h3","cp-h","ด่านผนึกจันทรา"));
+    note(body,"เก็บ "+cityItemName(item)+" "+required+" ชิ้นที่ลานแต่งแร่หลังรับงาน แล้วส่งจากกระเป๋าเข้าคลังด่าน");
+    if(siege || !enabled)note(body,siege?"พักเปิด รับ และส่งงานระหว่างศึก":"กระดานพักเปิด รับ และส่งงาน");
+    if(!missions.length)note(body,"ยังไม่มีภารกิจที่เปิดให้ตัวละครนี้");
+    for(const mission of missions){
+      const card=marketText("section","gx-page");body.append(card);
+      card.append(marketText("h3","cp-h","งานเก็บแร่ · "+mission.name));
+      note(card,(mission.audience==="guild"?"เฉพาะสมาชิกกิลด์":"เปิดให้ทุกคน")+" · "+mission.reward+" ทอง · ว่าง "+mission.remaining+" / "+mission.slots);
+      note(card,"หมดอายุ "+new Date(mission.expiresAt).toLocaleString("th-TH"));
+      if(mission.progress!==null){
+        note(card,"เก็บแล้ว "+mission.progress+" / "+required+" ชิ้น · ในกระเป๋า "+ore+" ชิ้น");
+        button(card,"ส่งงานและรับทอง",()=>sendCityProduction("mission_submit",{missionId:mission.id}),
+          locked || !enabled || siege || mission.progress<required || ore<required);
+        button(card,"คืนงาน",()=>sendCityProduction("mission_abandon",{missionId:mission.id}));
+      } else if(enabled && !siege && mission.canAccept) {
+        button(card,"รับงาน",()=>sendCityProduction("mission_accept",{missionId:mission.id}));
+      }
+      if(mission.canCancel)button(card,"ปิดประกาศ",()=>{
+        if(window.confirm("ปิดประกาศและคืนค่าจ้างที่ยังไม่ได้ใช้หรือไม่"))sendCityProduction("mission_cancel",{missionId:mission.id});
+      });
+    }
+    if(!manage || !manage.canPost || !enabled || siege)return;
+    note(body,"ทองตลาดพร้อมใช้ "+manage.gold+" ทอง · คลังว่าง "+manage.free+" ชิ้น");
+    if(!atMoon){note(body,"ไปที่ด่านผนึกจันทรา ยืนบนพื้นแล้วกดรีเฟรชเพื่อเปิดงาน");return;}
+    const max=Math.min(maxSlots,Math.floor(manage.free/required)), rewardMax=Math.min(maxReward,manage.gold);
+    if(max<1 || rewardMax<1)return;
+    const select=(label,choices)=>{
+      const field=marketText("label","field",label),input=document.createElement("select");
+      for(const [value,text] of choices){
+        const option=marketText("option","",text);option.value=String(value);input.append(option);
+      }
+      input.disabled=locked;field.append(input);body.append(field);return input;
+    };
+    const audience=select("ผู้รับงาน",[["public","ผู้เล่นทุกคน"],["guild","เฉพาะสมาชิกกิลด์"]]);
+    const duration=select("อายุประกาศ",hours.map(h=>[h,h+" ชั่วโมง"]));
+    const [slots,reward]=cityAmountForm(body,"เปิดภารกิจ",[["จำนวนคน",max],["ค่าจ้างต่อคน",rewardMax]],(count,gold)=>{
+      if(cityPositive(count,max) && cityPositive(gold,rewardMax) && count*gold<=manage.gold)
+        sendCityProduction("mission_open",{epoch:manage.epoch,audience:audience.value,slots:count,reward:gold,hours:Number(duration.value)});
+    },locked);
+    const quote=marketText("p","note");body.append(quote);
+    const update=()=>{
+      const count=slots.valueAsNumber,gold=reward.valueAsNumber;
+      quote.textContent=cityPositive(count,max) && cityPositive(gold,rewardMax)?
+        "กัน "+(count*gold)+" ทอง · พื้นที่ "+(count*required)+" ชิ้น"+(count*gold>manage.gold?" · ทองตลาดไม่พอ":""):"";
+    };
+    slots.oninput=reward.oninput=update;update();
   }
   function renderCityPurchase(){
     const body=$("cityProductionContent"),ready=cityRecoveryReady() && room.state.cityPurchaseSupported===true;
@@ -511,6 +600,7 @@
   }
   function renderCityProduction(){
     if(drawerActive==="cityPurchase"){renderCityPurchase();return;}
+    if(drawerActive==="cityMission"){renderCityMission();return;}
     if(drawerActive!=="cityProduction" || !$("cityProductionContent"))return;
     const body=$("cityProductionContent"),ready=cityRecoveryReady(),status=$("cityStatus");
     const state=guildState && cityState?.guildId===guildState.id ? cityState : null;
