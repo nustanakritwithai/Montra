@@ -558,7 +558,7 @@
     const k = gearKit(), gold = gearMat("gold trim", "#c9a24a", "#2a1d06", .4);
     if (BOSS_NECK[family]) { BOSS_NECK[family](k, bossMetal()); return [["Chest", k.take()]]; }
     if (neck || /^acc_(torc|gorget|fang|spell|shrine|rift|boss)/.test(family)) {
-      if (family === "acc_gorget") { k.cyl(0, 1.462, -.004, .05, .166, .205, p.main, 16).scaling.z = .92; k.cyl(0, 1.438, -.004, .01, .21, .21, gold, 16).scaling.z = .92; } // sized for the fuller neck
+      if (family === "acc_gorget") { k.cyl(0, 1.462, -.004, .05, .15, .19, p.main, 16).scaling.z = .9; k.cyl(0, 1.438, -.004, .01, .195, .195, gold, 16).scaling.z = .9; }
       else {
         for (let i = 0; i <= 10; i++) { const t = i / 5 - 1, y = 1.455 - (1 - t * t) * .1; k.ball(t * .085, y, .07 + (1 - t * t) * .04, .022, family === "acc_torc" ? gold : beadMat, 4); }
         const pend = family === "acc_fang" ? k.cyl(0, 1.33, .115, .07, 0, .03, gearMat("bone fang", "#e8dcc2"), 6) : k.ball(0, 1.345, .118, .045, family === "acc_spell" ? gearMat("spell gem", GEM.spell, "#0a1630", .5) : amuletGlow, 8);
