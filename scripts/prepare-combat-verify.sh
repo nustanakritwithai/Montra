@@ -137,6 +137,7 @@ cp deploy/combat/party-manager.test.ts combat-verify/src/rooms/party-manager.tes
 cp deploy/combat/party-experience.test.ts combat-verify/src/rooms/party-experience.test.ts
 cp deploy/combat/party-integration.mjs combat-verify/party-integration.mjs
 cp deploy/combat/EconomyStore.ts combat-verify/src/rooms/EconomyStore.ts
+cp deploy/combat/CityProduction.ts deploy/combat/CityProductionRules.ts deploy/combat/city-production.test.ts combat-verify/src/rooms/
 cp deploy/combat/Fishing.ts deploy/combat/fishing.test.ts combat-verify/src/rooms/
 cp deploy/combat/central-market.test.ts combat-verify/src/rooms/central-market.test.ts
 cp deploy/combat/central-market-integration.mjs combat-verify/central-market-integration.mjs

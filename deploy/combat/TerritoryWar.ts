@@ -74,9 +74,9 @@ export class TerritoryWar {
     try {const value=work();this.db.exec("COMMIT");return value;}
     catch(e){this.db.exec("ROLLBACK");throw e;}
   }
-  member(character:string):WarMember|undefined {
-    const row=this.db.prepare("SELECT g.id,g.leader=m.character_id AS commander,m.rank FROM guild_members m JOIN guilds g ON g.id=m.guild_id WHERE m.character_id=?").get(character) as {id:string;commander:number;rank:string}|undefined;
-    return row && {id:row.id,officer:!!row.commander || row.rank==="officer",commander:!!row.commander};
+  member(character:string):(WarMember & {name:string;commander:boolean})|undefined {
+    const row=this.db.prepare("SELECT g.id,g.name,g.leader=m.character_id AS commander,m.rank FROM guild_members m JOIN guilds g ON g.id=m.guild_id WHERE m.character_id=?").get(character) as {id:string;name:string;commander:number;rank:string}|undefined;
+    return row && {id:row.id,name:row.name,officer:!!row.commander || row.rank==="officer",commander:!!row.commander};
   }
   private guildName(id:string|null|undefined):string|null {
     if(!id)return null;

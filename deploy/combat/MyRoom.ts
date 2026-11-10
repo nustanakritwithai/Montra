@@ -75,6 +75,7 @@ import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js"
 import { parseSellMaterial, parseSalvage, parseCraft, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseMarketBrowse, parseAuctionCreate, parseAuctionBid, parseAuctionAction, parseAuctionCredit, parseStarterSupply, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
+import {CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE, parseCityOrder, type CityOrder} from "./CityProductionRules.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
 import type { MonsterTier } from "./MonsterProfiles.js";
@@ -3330,6 +3331,39 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("economy_error",{reason});
     }
   }
+  private cityProductionAction(client: Client, order?: CityOrder): void {
+    const id = client.sessionId;
+    const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
+    if (!CITY_PRODUCTION_ENABLED || !WORLD_EXPANSION || this.field) return fail("city_unavailable");
+    if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
+    const actor = this.economyId(client);
+    if (!actor) return;
+    const player = this.state.players.get(id)!;
+    const atCity = player.mapId === CITY_PRODUCTION_SITE && !player.flying && !this.climbs.has(id) && onMapGround(player);
+    const needsCity = order && order.action !== "cancel" && order.action !== "reclaim";
+    if (needsCity && !atCity) return fail("city_location");
+    try {
+      const war = guildStore().war, member = war.member(actor);
+      if (!member) return fail("city_not_member");
+      const now = Date.now(), store = characterStore.economy;
+      const ownership = store.syncCity(previous => war.government.cityOwnership(previous), now);
+      if (order) {
+        const result = store.cityOrder(actor, member, order, ownership, now);
+        if (order.action === "deposit" || order.action === "reclaim") this.syncEconomy(client, actor);
+        client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
+      }
+      client.send("city_production_state", {site: CITY_PRODUCTION_SITE, atCity, ...store.viewCity(member, ownership)});
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "";
+      const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",
+        "inventory_full", "listing_unavailable", "listing_limit", "request_id_conflict", "invalid_request_id"];
+      if (reason === "city_ownership_unavailable" || (!reason.startsWith("city_") && !expected.includes(reason))) {
+        console.error("MONTRA city production action failed", error);
+        return fail("city_unavailable");
+      }
+      fail(reason);
+    }
+  }
   private sendResourceMap(client:Client,view:ReturnType<typeof characterStore.economy.resourceMap>){
     this.resourceView.set(client,{mapId:view.mapId,stock:view.nodes.map(n=>n.stock)});
     if(view.nodes.length<=40){client.send("world_resources",view);return;}
@@ -3756,6 +3790,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     territory_gate:(client:Client,message:unknown)=>this.useCityGate(client,message),
     territory_camp:(client:Client,message:unknown)=>this.orderCamp(client,message),
     territory_supply:(client:Client,message:unknown)=>this.orderWarCargo(client,message),
+    get_city_production:(client:Client,message:unknown)=>{
+      if (parseEmptyCommand(message)) this.cityProductionAction(client);
+    },
+    city_production:(client:Client,message:unknown)=>{
+      const order = parseCityOrder(message);
+      if (order) this.cityProductionAction(client, order);
+      else client.send("city_production_error", {reason: "city_invalid_request", requestId: null});
+    },
     get_territories:(client:Client,message:unknown)=>{
       if(parseEmptyCommand(message) && this.warClients.has(client.sessionId) && this.gates.get(client.sessionId)?.guild.consume(this.simulatedMs))this.warSent.delete(client.sessionId);
     },
@@ -3941,7 +3983,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     market_list: (client:Client, message:unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client,"invalid_economy_request");
-      this.economyAction(client,id=>client.send("market_state",{listings:characterStore.economy.list(id).map(x=>({id:x.id,seller:x.seller.slice(0,12),item:x.item,price:x.price}))}));
+      this.economyAction(client,id=>client.send("market_state",{listings:characterStore.economy.list(id).map(x=>({id:x.id,
+        seller:x.sellerGuild?x.seller:x.seller.slice(0,12),...(x.sellerGuild?{sellerGuild:x.sellerGuild}:{}),item:x.item,price:x.price}))}));
     },
     market_create: (client:Client, message:unknown) => {
       const order=parseMarketCreate(message); if (!order) return this.reject(client,"invalid_economy_request");
@@ -5175,6 +5218,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       await this.setPrivate(true);
     }
     this.state.territoryWarAvailable=WORLD_EXPANSION;
+    if (CITY_PRODUCTION_ENABLED && WORLD_EXPANSION && characterStore.economyEnabled && !this.field)
+      characterStore.economy.startCityProductionSweeper(previous => guildStore().war.government.cityOwnership(previous));
     this.state.forestObjectivesAvailable=WORLD_EXPANSION && !this.field;
     if(WORLD_EXPANSION && !this.field && process.env.MONTRA_DIRECTOR_ENABLED!=="0")worldDirector.restore();
     if (characterStore.economyEnabled) this.state.craftRecipe = JSON.stringify(SHRINE_RECIPE);

@@ -10,6 +10,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { PERSONAL_ITEMS, personalItem, type BodySlot, type BodyItemId, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack, type WeaponItemId } from "./ItemRules.js";
 import type {SalvageOrder} from "./EconomyRules.js";
+import {CityProduction} from "./CityProduction.js";
+import {type CityMember, type CityOrder, type CityOwnership} from "./CityProductionRules.js";
 
 export const STARTER_GOLD = 1000;
 const MAX_GOLD = 1_000_000_000;
@@ -36,7 +38,7 @@ function marketItemIds(query:string,category:MarketCategory):string[]|null {
   }).map(([id])=>id);
 }
 type Account = { gold: number; inventory: InventorySnapshot };
-type Listing = { id: string; seller: string; item: InventoryStack; price: number; state: string };
+type Listing = { id: string; seller: string; sellerGuild?: string; item: InventoryStack; price: number; state: string };
 export type TradeOffer = { slot: number | null; amount: number; gold: number };
 
 function characterId(id: string): void { if (!/^[a-f0-9]{64}$/.test(id)) throw new Error("invalid_character_id"); }
@@ -112,12 +114,13 @@ function spendForgeCopies(bag:InventorySnapshot,gear:string,qty:number){
 
 export class EconomyStore {
   private readonly db: DatabaseSync;
+  private readonly city: CityProduction;
   private auctionTimer:ReturnType<typeof setInterval>|undefined;
+  private cityTimer:ReturnType<typeof setInterval>|undefined;
   constructor(file:string,private readonly forgeDraw?:()=>number) {
     this.db = new DatabaseSync(file);
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;
       CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY, gold INTEGER NOT NULL, inventory TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS listings(id TEXT PRIMARY KEY, seller TEXT NOT NULL REFERENCES accounts(id), item TEXT NOT NULL, price INTEGER NOT NULL, state TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS receipts(request_id TEXT PRIMARY KEY, actor TEXT NOT NULL, kind TEXT NOT NULL, intent TEXT NOT NULL, result TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS characters(id TEXT PRIMARY KEY, snapshot TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS resource_stock(map TEXT NOT NULL,node TEXT NOT NULL,stock INTEGER NOT NULL,nextAt INTEGER NOT NULL,PRIMARY KEY(map,node));
@@ -131,9 +134,30 @@ export class EconomyStore {
       CREATE TABLE IF NOT EXISTS auction_credits(actor TEXT PRIMARY KEY,amount INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS starter_supply_used(actor TEXT NOT NULL,day TEXT NOT NULL,item TEXT NOT NULL,quantity INTEGER NOT NULL,PRIMARY KEY(actor,day,item));
       CREATE TABLE IF NOT EXISTS starter_supply_world(day TEXT NOT NULL,item TEXT NOT NULL,quantity INTEGER NOT NULL,PRIMARY KEY(day,item));
-      CREATE INDEX IF NOT EXISTS listings_state ON listings(state);
-      CREATE INDEX IF NOT EXISTS listings_seller_state ON listings(seller,state);
     `);
+    this.initListings();
+    this.city = new CityProduction(this.db);
+  }
+  private initListings(): void {
+    const schema = `CREATE TABLE IF NOT EXISTS listings (
+      id TEXT PRIMARY KEY, seller TEXT REFERENCES accounts(id), item TEXT NOT NULL, price INTEGER NOT NULL, state TEXT NOT NULL,
+      seller_guild TEXT, seller_name TEXT, city_epoch INTEGER,
+      CHECK((seller IS NOT NULL AND seller_guild IS NULL AND seller_name IS NULL AND city_epoch IS NULL)
+        OR (seller IS NULL AND seller_guild IS NOT NULL AND seller_name IS NOT NULL AND city_epoch IS NOT NULL)));`;
+    this.transaction(() => {
+      const columns = this.db.prepare("PRAGMA table_info(listings)").all();
+      if (columns.length && !columns.some(column => column.name === "seller_guild")) {
+        this.db.exec("ALTER TABLE listings RENAME TO listings_legacy");
+        this.db.exec(schema);
+        this.db.exec(`INSERT INTO listings(rowid,id,seller,item,price,state)
+          SELECT rowid,id,seller,item,price,state FROM listings_legacy;
+          DROP TABLE listings_legacy;`);
+      } else this.db.exec(schema);
+      this.db.exec(`CREATE INDEX IF NOT EXISTS listings_state ON listings(state);
+        CREATE INDEX IF NOT EXISTS listings_seller_state ON listings(seller,state);
+        CREATE INDEX IF NOT EXISTS listings_guild_state ON listings(seller_guild,state) WHERE seller_guild IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS listings_city_open ON listings(city_epoch) WHERE state='open' AND city_epoch IS NOT NULL;`);
+    });
   }
   startAuctionSweeper():void {
     if(this.auctionTimer)return;
@@ -141,7 +165,59 @@ export class EconomyStore {
     this.auctionTimer=setInterval(()=>{try{this.settleExpiredAuctions();}catch(error){console.error("MONTRA auction settlement failed",error);}},15000);
     this.auctionTimer.unref();
   }
-  close(): void { if(this.auctionTimer)clearInterval(this.auctionTimer);this.auctionTimer=undefined;this.db.close(); }
+  close(): void {
+    if (this.auctionTimer) clearInterval(this.auctionTimer);
+    if (this.cityTimer) clearInterval(this.cityTimer);
+    this.auctionTimer = this.cityTimer = undefined;
+    this.db.close();
+  }
+  startCityProductionSweeper(readOwnership: (previous: number | null, now: number) => CityOwnership): void {
+    if (this.cityTimer) return;
+    const sweep = () => {
+      const now = Date.now();
+      try { this.syncCity(readOwnership, now); }
+      catch (error) { console.error("MONTRA city production settlement failed", error); }
+    };
+    sweep();
+    this.cityTimer = setInterval(sweep, 5000);
+    this.cityTimer.unref();
+  }
+  syncCity(readOwnership: (previous: number | null, now: number) => CityOwnership, now: number): CityOwnership {
+    const ownership = readOwnership(this.city.epoch(), now);
+    this.transaction(() => this.city.reconcile(ownership, now));
+    return ownership;
+  }
+  viewCity(member: CityMember, ownership: CityOwnership) {
+    return this.city.view(member, ownership);
+  }
+  cityOrder(actor: string, member: CityMember, order: CityOrder, ownership: CityOwnership, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once<Record<string, number | string>>(actor, order.requestId, "city_production", intent, () => {
+      if (order.action === "cancel") return this.city.cancel(member, order.listingId);
+      if (order.action === "reclaim") {
+        const account = this.account(actor);
+        this.city.reclaim(order.epoch, member, order.item, order.amount);
+        account.inventory = add(account.inventory, {itemId: order.item, quantity: order.amount});
+        this.put(actor, account);
+        return {quantity: order.amount};
+      }
+      this.city.requireCity(member, order.epoch, ownership);
+      switch (order.action) {
+        case "build": return this.city.build(order.epoch, member);
+        case "start": return this.city.start(order.epoch, member, now);
+        case "list": return this.city.list(order.epoch, member, order.amount, order.price);
+        case "deposit": {
+          const account = this.account(actor);
+          if (account.inventory.slots[order.slot]?.itemId !== order.item) throw Error("item_unavailable");
+          const removed = take(account.inventory, order.slot, order.amount);
+          this.city.deposit(order.epoch, member, order.item, order.amount);
+          account.inventory = removed.inventory;
+          this.put(actor, account);
+          return {quantity: order.amount};
+        }
+      }
+    });
+  }
   catchFish(actor:string,request:string,item:FishItem){
     return this.once(actor,request,"fish",{item},()=>{
       const account=this.account(actor);
@@ -304,11 +380,12 @@ export class EconomyStore {
   }
   list(id?: string): Listing[] {
     if (id !== undefined) characterId(id);
-    const latest=this.db.prepare("SELECT id,seller,item,price,state FROM listings WHERE state='open' ORDER BY rowid DESC LIMIT 100").all();
-    const own=id ? this.db.prepare("SELECT id,seller,item,price,state FROM listings WHERE state='open' AND seller=? ORDER BY rowid DESC").all(id) : [];
+    const latest=this.db.prepare("SELECT id,seller,seller_guild,seller_name,item,price,state FROM listings WHERE state='open' ORDER BY rowid DESC LIMIT 100").all();
+    const own=id ? this.db.prepare("SELECT id,seller,seller_guild,seller_name,item,price,state FROM listings WHERE state='open' AND seller=? ORDER BY rowid DESC").all(id) : [];
     const seen=new Set<string>();
     return [...own,...latest].filter(row=>{const key=String(row.id); if (seen.has(key)) return false; seen.add(key); return true;}).map(row => ({
-      id: String(row.id), seller: String(row.seller), item: JSON.parse(String(row.item)) as InventoryStack,
+      id: String(row.id), seller: String(row.seller_name ?? row.seller), item: JSON.parse(String(row.item)) as InventoryStack,
+      ...(typeof row.seller_guild === "string" ? {sellerGuild: row.seller_guild} : {}),
       price: Number(row.price), state: String(row.state),
     }));
   }
@@ -318,9 +395,11 @@ export class EconomyStore {
     if(before!==null){where.push("rowid<?");args.push(before);}
     if(ownOnly){where.push("seller=?");args.push(id);}
     if(ids){where.push(`json_extract(item,'$.itemId') IN (${ids.map(()=>"?").join(",")})`);args.push(...ids);}
-    const rows=this.db.prepare(`SELECT rowid AS seq,id,seller,item,price FROM listings WHERE ${where.join(" AND ")} ORDER BY rowid DESC LIMIT 31`).all(...args);
+    const rows=this.db.prepare(`SELECT rowid AS seq,id,seller,seller_guild,seller_name,item,price FROM listings WHERE ${where.join(" AND ")} ORDER BY rowid DESC LIMIT 31`).all(...args);
     const page=rows.slice(0,30);
-    return {listings:page.map(row=>({id:String(row.id),seller:String(row.seller).slice(0,12),isMine:row.seller===id,item:JSON.parse(String(row.item)) as InventoryStack,price:Number(row.price)})),nextCursor:rows.length>30?Number(page[page.length-1].seq):null};
+    return {listings:page.map(row=>({id:String(row.id),seller:typeof row.seller_name==="string"?row.seller_name:String(row.seller).slice(0,12),
+      ...(typeof row.seller_guild==="string"?{sellerGuild:row.seller_guild}:{}),
+      isMine:row.seller===id,item:JSON.parse(String(row.item)) as InventoryStack,price:Number(row.price)})),nextCursor:rows.length>30?Number(page[page.length-1].seq):null};
   }
 
   /** NPC reserve has both a per-character and a shared daily limit; resets at 00:00 UTC. */
@@ -609,14 +688,20 @@ export class EconomyStore {
   }
   buy(id: string, request: string, listingId: string): { listingId: string } {
     return this.once(id, request, "buy", { listingId }, () => {
-      const row = this.db.prepare("SELECT seller,item,price,state FROM listings WHERE id=?").get(listingId);
-      if (!row || row.state !== "open" || typeof row.seller !== "string" || typeof row.price !== "number") throw new Error("listing_unavailable");
+      const row = this.db.prepare("SELECT seller,seller_guild,item,price,state FROM listings WHERE id=?").get(listingId);
+      if (!row || row.state !== "open" || typeof row.price !== "number") throw new Error("listing_unavailable");
       if (row.seller === id) throw new Error("cannot_buy_own_listing");
-      const buyer = this.account(id), seller = this.account(row.seller);
+      const buyer = this.account(id);
       if (buyer.gold < row.price) throw new Error("insufficient_gold");
       buyer.inventory = add(buyer.inventory, JSON.parse(String(row.item)) as InventoryStack);
-      buyer.gold -= row.price; seller.gold += row.price;
-      this.put(id,buyer); this.put(row.seller,seller);
+      buyer.gold -= row.price;
+      this.put(id,buyer);
+      if (typeof row.seller === "string") {
+        const seller = this.account(row.seller);
+        seller.gold += row.price;
+        this.put(row.seller,seller);
+      } else if (typeof row.seller_guild === "string") this.city.creditSale(listingId, row.seller_guild, row.price);
+      else throw Error("listing_unavailable");
       this.db.prepare("UPDATE listings SET state='sold' WHERE id=?").run(listingId);
       return { listingId };
     });

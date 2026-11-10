@@ -127,6 +127,7 @@
     "card_socket",
     "cast_class_skill",
     "chat",
+    "city_production",
     "claim_forge_copy",
     "climb",
     "craft_weapon",
@@ -142,6 +143,7 @@
     "forge_weapon",
     "get_character_slots",
     "get_character_status",
+    "get_city_production",
     "get_director_event",
     "get_economy",
     "get_forest_objective",
@@ -380,6 +382,9 @@
     "character_status",
     "chat_message",
     "chat_report_result",
+    "city_production_error",
+    "city_production_result",
+    "city_production_state",
     "class_skill_used",
     "climb_finished",
     "climb_started",
@@ -492,6 +497,6 @@
     "MyRoomState.ts": "a146365638e51a0ddd7318051b1e66548ef68954c68fb1133d0c604ad2dc8594",
     "CharacterStore.ts": "ad9e55b93a38dd33796a4966f435e91b146cf64d6cc00a043c2997d7e7763dbe",
     "AccountStore.ts": "39f50bb2aac688f4e03cb78ca3a556b05a1d1745d6797d9339de666bb07d152e",
-    "EconomyStore.ts": "c16abe74eed5b9085bb3cf10c3dc15de64d89b20bbe314a9ab59eae0a6b0771a"
+    "EconomyStore.ts": "6631bb708544312303c851e1626cc2dabe346c6c8812c3122eeade21b599e28b"
   }
 }

@@ -128,6 +128,8 @@ $files = @(
   @{ Name = "GuildStore.ts"; Target = "src\rooms\GuildStore.ts"; Check = "class GuildStore" },
   @{ Name = "PartyManager.ts"; Target = "src\rooms\PartyManager.ts"; Check = "class PartyManager" },
   @{ Name = "EconomyStore.ts"; Target = "src\rooms\EconomyStore.ts"; Check = "class EconomyStore" },
+  @{ Name = "CityProduction.ts"; Target = "src\rooms\CityProduction.ts"; Check = "class CityProduction" },
+  @{ Name = "CityProductionRules.ts"; Target = "src\rooms\CityProductionRules.ts"; Check = "parseCityOrder" },
   @{ Name = "EconomyRules.ts"; Target = "src\rooms\EconomyRules.ts"; Check = "parseMarketCreate" },
   @{ Name = "MonsterRRT.ts"; Target = "src\rooms\MonsterRRT.ts"; Check = "class MonsterRRTNavigator" },
   @{ Name = "CharacterStore.ts"; Target = "src\rooms\CharacterStore.ts"; Check = "inventory_record_missing" },
