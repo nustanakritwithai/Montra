@@ -1,11 +1,14 @@
 import {randomUUID} from "node:crypto";
 import type {DatabaseSync} from "node:sqlite";
 import {
-  CITY_CAPACITY, CITY_DURATION_MS, CITY_FACTORY_COSTS, CITY_LINES, CITY_MINING_SITE, CITY_PRODUCT, CITY_PRODUCTION_SITE,
+  CITY_CAPACITY, CITY_DURATION_MS, CITY_FACTORY_COSTS, CITY_LINES, CITY_MINING_ORE, CITY_MINING_SITE,
+  CITY_MISSION_HOURS, CITY_MISSION_MAX_REWARD, CITY_MISSION_ORE_COUNT, CITY_MISSION_POST_LIMIT, CITY_MISSION_WORKERS,
+  CITY_POLICY_COOLDOWN_MS, CITY_POLICY_PURCHASE_AMOUNT, CITY_POLICY_SPEED,
+  CITY_PRODUCT, CITY_PRODUCTION_SITE,
   CITY_PURCHASE_AMOUNT, CITY_PURCHASE_DURATION_MS, CITY_PURCHASE_MAX_PRICE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_RUSH_GOLD, CITY_SITES,
   CITY_WAREHOUSE_CAPACITY, CITY_WAREHOUSE_DURATION_MS, CITY_WAREHOUSE_MATERIALS,
   CITY_WORKSHOP_FEE, CITY_WORKSHOP_SLOTS,
-  type CityAsset, type CityDisband, type CityItem, type CityMember, type CityOwnership, type CitySite,
+  type CityAsset, type CityDisband, type CityItem, type CityMember, type CityMissionOrder, type CityOwnership, type CityPolicy, type CitySite,
 } from "./CityProductionRules.js";
 
 type Job = {id: string; site: CitySite; product: CityItem; epoch: number; guild: string; ready: number;
@@ -23,6 +26,21 @@ type PurchaseOrder = {
   id: string; epoch: number; guild: string; name: string; amount: number;
   remaining: number; unitPrice: number; expiresAt: number;
 };
+type Mission = {id: string; epoch: number; guild: string; name: string; audience: "guild" | "public";
+  slots: number; completed: number; reward: number; expires: number};
+type Policy = {mode: CityPolicy; changed: number};
+type Treasury = {sales: number; workshops: number; rushPaid: number; rushHeld: number; purchasePaid: number;
+  purchaseHeld: number; missionPaid: number; missionHeld: number};
+type Release = {guild: string; gold: number};
+const purchaseTable = `CREATE TABLE IF NOT EXISTS city_purchase_orders (
+  id TEXT PRIMARY KEY, epoch INTEGER NOT NULL, guild TEXT NOT NULL, name TEXT NOT NULL,
+  amount INTEGER NOT NULL CHECK(amount BETWEEN 1 AND ${CITY_POLICY_PURCHASE_AMOUNT}),
+  remaining INTEGER NOT NULL CHECK(remaining BETWEEN 0 AND amount),
+  unit_price INTEGER NOT NULL CHECK(unit_price BETWEEN 1 AND ${CITY_PURCHASE_MAX_PRICE}),
+  expires INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('open','filled','expired','cancelled')),
+  CHECK((remaining=0)=(state='filled')));`;
+const purchaseIndexes = `CREATE UNIQUE INDEX IF NOT EXISTS city_purchase_one_open ON city_purchase_orders((1)) WHERE state='open';
+  CREATE INDEX IF NOT EXISTS city_purchase_guild ON city_purchase_orders(guild);`;
 
 export class CityProduction {
   constructor(private readonly db: DatabaseSync) {
@@ -57,15 +75,30 @@ export class CityProduction {
       CREATE UNIQUE INDEX IF NOT EXISTS city_workshop_one_job ON city_workshop_jobs(actor) WHERE claimed=0;
       CREATE INDEX IF NOT EXISTS city_workshop_running ON city_workshop_jobs(ready) WHERE claimed=0;
       CREATE INDEX IF NOT EXISTS city_workshop_revenue ON city_workshop_jobs(guild);
-      CREATE TABLE IF NOT EXISTS city_purchase_orders (
+      ${purchaseTable}
+      ${purchaseIndexes}
+      CREATE TABLE IF NOT EXISTS city_economic_policies (
+        epoch INTEGER PRIMARY KEY, guild TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('industry','procurement')),
+        changed INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS city_treasury_events (
+        seq INTEGER PRIMARY KEY, guild TEXT NOT NULL, at INTEGER NOT NULL, kind TEXT NOT NULL,
+        gold INTEGER NOT NULL CHECK(gold>=0));
+      CREATE INDEX IF NOT EXISTS city_treasury_recent ON city_treasury_events(guild,seq DESC);
+      CREATE TABLE IF NOT EXISTS city_missions (
         id TEXT PRIMARY KEY, epoch INTEGER NOT NULL, guild TEXT NOT NULL, name TEXT NOT NULL,
-        amount INTEGER NOT NULL CHECK(amount BETWEEN 1 AND ${CITY_PURCHASE_AMOUNT}),
-        remaining INTEGER NOT NULL CHECK(remaining BETWEEN 0 AND amount),
-        unit_price INTEGER NOT NULL CHECK(unit_price BETWEEN 1 AND ${CITY_PURCHASE_MAX_PRICE}),
-        expires INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('open','filled','expired','cancelled')),
-        CHECK((remaining=0)=(state='filled')));
-      CREATE UNIQUE INDEX IF NOT EXISTS city_purchase_one_open ON city_purchase_orders((1)) WHERE state='open';
-      CREATE INDEX IF NOT EXISTS city_purchase_guild ON city_purchase_orders(guild);
+        audience TEXT NOT NULL CHECK(audience IN ('guild','public')),
+        slots INTEGER NOT NULL CHECK(slots BETWEEN 1 AND ${CITY_MISSION_WORKERS}),
+        completed INTEGER NOT NULL DEFAULT 0 CHECK(completed BETWEEN 0 AND slots),
+        reward INTEGER NOT NULL CHECK(reward BETWEEN 1 AND ${CITY_MISSION_MAX_REWARD}),
+        expires INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('open','closed')),
+        CHECK(state<>'open' OR completed<slots));
+      CREATE INDEX IF NOT EXISTS city_mission_guild ON city_missions(guild);
+      CREATE INDEX IF NOT EXISTS city_mission_open_epoch ON city_missions(epoch) WHERE state='open';
+      CREATE TABLE IF NOT EXISTS city_mission_workers (
+        mission TEXT NOT NULL REFERENCES city_missions(id), actor TEXT NOT NULL,
+        progress INTEGER NOT NULL DEFAULT 0 CHECK(progress BETWEEN 0 AND ${CITY_MISSION_ORE_COUNT}),
+        state TEXT NOT NULL CHECK(state IN ('active','complete','cancelled')), PRIMARY KEY(mission,actor));
+      CREATE UNIQUE INDEX IF NOT EXISTS city_mission_one_active ON city_mission_workers(actor) WHERE state='active';
       CREATE TABLE IF NOT EXISTS guild_market_gold (
         listing TEXT PRIMARY KEY REFERENCES listings(id), guild TEXT NOT NULL,
         amount INTEGER NOT NULL CHECK(amount>0));
@@ -87,6 +120,22 @@ export class CityProduction {
       ["product", `TEXT NOT NULL DEFAULT '${CITY_PRODUCT}'`],
     ]) {
       if (!columns.has(name)) db.exec(`ALTER TABLE city_jobs ADD COLUMN ${name} ${definition}`);
+    }
+    const purchaseSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='city_purchase_orders'").get()?.sql;
+    if (typeof purchaseSql === "string" && purchaseSql.includes(`CHECK(amount BETWEEN 1 AND ${CITY_PURCHASE_AMOUNT})`)) {
+      db.exec("SAVEPOINT city_purchase_limit");
+      try {
+        db.exec(`ALTER TABLE city_purchase_orders RENAME TO city_purchase_orders_old;
+          ${purchaseTable}
+          INSERT INTO city_purchase_orders(id,epoch,guild,name,amount,remaining,unit_price,expires,state)
+            SELECT id,epoch,guild,name,amount,remaining,unit_price,expires,state FROM city_purchase_orders_old;
+          DROP TABLE city_purchase_orders_old;
+          ${purchaseIndexes}
+          RELEASE city_purchase_limit;`);
+      } catch (error) {
+        db.exec("ROLLBACK TO city_purchase_limit; RELEASE city_purchase_limit");
+        throw error;
+      }
     }
   }
 
@@ -115,7 +164,7 @@ export class CityProduction {
       if (job && job.ready <= cutoff) {
         this.completeJob(job);
       } else if (job && epoch !== active) {
-        this.cancelJob(job);
+        this.cancelJob(job, cutoff);
       }
       if (site === CITY_PRODUCTION_SITE) {
         const siege = "ended" in owner ? owner.siegeStarted : ownership.siegeStarted;
@@ -125,31 +174,97 @@ export class CityProduction {
     if (epoch !== active)
       this.db.prepare("UPDATE city_factory_sites SET epoch=?,guild=? WHERE site=?").run(active, ownership.active?.guild ?? null, site);
     if (site === CITY_MINING_SITE) {
-      this.db.prepare("UPDATE city_purchase_orders SET state='cancelled' WHERE state='open' AND epoch IS NOT ?").run(active);
-      this.db.prepare("UPDATE city_purchase_orders SET state='expired' WHERE state='open' AND expires<=?").run(now);
+      this.released("purchase_release", now, this.db.prepare(`UPDATE city_purchase_orders
+        SET state=CASE WHEN epoch IS NOT ? THEN 'cancelled' ELSE 'expired' END
+        WHERE state='open' AND (epoch IS NOT ? OR expires<=?) RETURNING guild,remaining*unit_price AS gold`).all(active, active, now) as Release[]);
+      this.released("mission_release", now, this.db.prepare(`UPDATE city_missions SET state='closed'
+        WHERE state='open' AND (epoch IS NOT ? OR expires<=?) RETURNING guild,(slots-completed)*reward AS gold`).all(active, now) as Release[]);
+      this.releaseClosedMissions();
     }
   }
 
   private completeJob(job: Job): void {
     this.add(job.epoch, job.guild, job.product, job.quantity);
     this.db.prepare("UPDATE city_jobs SET status='complete' WHERE id=?").run(job.id);
+    if (job.fee) this.treasuryEvent(job.guild, job.ready, "rush_paid", job.fee);
   }
 
-  private cancelJob(job: Job): void {
+  private cancelJob(job: Job, at: number): void {
     const [first, second] = CITY_LINES[job.site].inputs;
     this.add(job.epoch, job.guild, first, job.wood);
     this.add(job.epoch, job.guild, second, job.stone);
     this.db.prepare("UPDATE city_jobs SET status='cancelled' WHERE id=?").run(job.id);
+    if (job.fee) this.treasuryEvent(job.guild, at, "rush_release", job.fee);
+  }
+
+  private treasury(guild: string) {
+    const values = this.db.prepare(`SELECT
+      (SELECT coalesce(sum(amount),0) FROM guild_market_gold WHERE guild=?) AS sales,
+      (SELECT coalesce(sum(fee),0) FROM city_workshop_jobs WHERE guild=?) AS workshops,
+      (SELECT coalesce(sum(fee),0) FROM city_jobs WHERE guild=? AND status='complete') AS rushPaid,
+      (SELECT coalesce(sum(fee),0) FROM city_jobs WHERE guild=? AND status='running') AS rushHeld,
+      (SELECT coalesce(sum((amount-remaining)*unit_price),0) FROM city_purchase_orders WHERE guild=?) AS purchasePaid,
+      (SELECT coalesce(sum(remaining*unit_price),0) FROM city_purchase_orders WHERE guild=? AND state='open') AS purchaseHeld,
+      (SELECT coalesce(sum(completed*reward),0) FROM city_missions WHERE guild=?) AS missionPaid,
+      (SELECT coalesce(sum((slots-completed)*reward),0) FROM city_missions WHERE guild=? AND state='open') AS missionHeld`)
+      .get(guild, guild, guild, guild, guild, guild, guild, guild) as Treasury;
+    const earned = values.sales + values.workshops;
+    const paid = values.rushPaid + values.purchasePaid + values.missionPaid;
+    const held = values.rushHeld + values.purchaseHeld + values.missionHeld;
+    return {...values, earned, paid, held, available: earned - paid - held};
   }
 
   private marketGold(guild: string): number {
-    const row = this.db.prepare(`SELECT
-      (SELECT coalesce(sum(amount),0) FROM guild_market_gold WHERE guild=?) +
-      (SELECT coalesce(sum(fee),0) FROM city_workshop_jobs WHERE guild=?) -
-      (SELECT coalesce(sum(fee),0) FROM city_jobs WHERE guild=? AND status<>'cancelled') -
-      (SELECT coalesce(sum((CASE WHEN state='open' THEN amount ELSE amount-remaining END)*unit_price),0)
-        FROM city_purchase_orders WHERE guild=?) AS amount`).get(guild, guild, guild, guild);
-    return Number(row?.amount);
+    return this.treasury(guild).available;
+  }
+
+  private treasuryEvent(guild: string, at: number, kind: string, gold: number): void {
+    this.db.prepare("INSERT INTO city_treasury_events(guild,at,kind,gold) VALUES(?,?,?,?)").run(guild, at, kind, gold);
+  }
+
+  private released(kind: string, now: number, rows: Release[]): void {
+    for (const {guild, gold} of rows) if (gold) this.treasuryEvent(guild, now, kind, gold);
+  }
+
+  private policy(epoch: number | null): Policy | undefined {
+    return this.db.prepare("SELECT mode,changed FROM city_economic_policies WHERE epoch=?").get(epoch) as Policy | undefined;
+  }
+
+  private purchaseLimit(epoch: number | null): number {
+    return this.policy(epoch)?.mode === "procurement" ? CITY_POLICY_PURCHASE_AMOUNT : CITY_PURCHASE_AMOUNT;
+  }
+
+  private productionDuration(site: CitySite, epoch: number | null, level: Factory["level"], rush = false): number {
+    const factor = site === CITY_MINING_SITE && this.policy(epoch)?.mode === "industry" ? CITY_POLICY_SPEED : 1;
+    return Math.round(CITY_DURATION_MS[level] * factor / (rush ? 2 : 1));
+  }
+
+  governanceView(member: CityMember, ownership: CityOwnership) {
+    this.requireOfficer(member);
+    const active = ownership.active;
+    if (!active || active.guild !== member.id || this.closureActor(member.id)) throw Error("city_not_owner");
+    const policy = this.policy(active.id);
+    return {
+      site: CITY_MINING_SITE, epoch: active.id, policy: policy?.mode ?? null,
+      nextAt: policy ? policy.changed + CITY_POLICY_COOLDOWN_MS : 0,
+      commander: member.commander === true, siege: ownership.siegeStarted !== undefined,
+      treasury: this.treasury(member.id), used: this.used(active.id), capacity: this.capacity(CITY_MINING_SITE),
+      stock: this.db.prepare("SELECT item,quantity FROM city_stock WHERE guild=? AND epoch=? ORDER BY item").all(member.id, active.id),
+      history: this.db.prepare("SELECT at,kind,gold FROM city_treasury_events WHERE guild=? ORDER BY seq DESC LIMIT 25").all(member.id),
+    };
+  }
+
+  setPolicy(member: CityMember, ownership: CityOwnership, epoch: number, mode: CityPolicy, now: number) {
+    if (!member.commander) throw Error("city_commander_required");
+    this.requireCity(member, epoch, ownership, CITY_MINING_SITE);
+    if (ownership.siegeStarted !== undefined) throw Error("city_policy_siege");
+    const current = this.policy(epoch);
+    if (current?.mode === mode) return {policy: mode, nextAt: current.changed + CITY_POLICY_COOLDOWN_MS};
+    if (current && now < current.changed + CITY_POLICY_COOLDOWN_MS) throw Error("city_policy_cooldown");
+    this.db.prepare(`INSERT INTO city_economic_policies(epoch,guild,mode,changed) VALUES(?,?,?,?)
+      ON CONFLICT(epoch) DO UPDATE SET mode=excluded.mode,changed=excluded.changed`).run(epoch, member.id, mode, now);
+    this.treasuryEvent(member.id, now, "policy_"+mode, 0);
+    return {policy: mode, nextAt: now + CITY_POLICY_COOLDOWN_MS};
   }
 
   requireCity(member: CityMember, epoch: number, ownership: CityOwnership, site: CitySite): void {
@@ -176,7 +291,7 @@ export class CityProduction {
     const order = this.openPurchase();
     const officer = member?.officer && !this.closureActor(member.id) ? member : null;
     return {
-      site: CITY_MINING_SITE, item: CITY_PRODUCT, maxAmount: CITY_PURCHASE_AMOUNT, maxUnitPrice: CITY_PURCHASE_MAX_PRICE,
+      site: CITY_MINING_SITE, item: CITY_PRODUCT, maxAmount: this.purchaseLimit(active?.id ?? null), maxUnitPrice: CITY_PURCHASE_MAX_PRICE,
       siege: ownership.siegeStarted !== undefined, canCancel: !!order && officer?.id === order.guild,
       open: order ? {id: order.id, guild: order.name, amount: order.amount, remaining: order.remaining,
         unitPrice: order.unitPrice, expiresAt: order.expiresAt} : null,
@@ -189,6 +304,7 @@ export class CityProduction {
     this.requireOfficer(member);
     this.requireCity(member, epoch, ownership, CITY_MINING_SITE);
     if (ownership.siegeStarted !== undefined) throw Error("city_purchase_siege");
+    if (amount > this.purchaseLimit(epoch)) throw Error("city_purchase_policy_limit");
     if (this.hasOpenPurchase()) throw Error("city_purchase_exists");
     const reserved = amount * unitPrice;
     if (this.marketGold(member.id) < reserved) throw Error("city_market_funds");
@@ -196,15 +312,18 @@ export class CityProduction {
     const orderId = randomUUID(), expiresAt = now + CITY_PURCHASE_DURATION_MS;
     this.db.prepare(`INSERT INTO city_purchase_orders(id,epoch,guild,name,amount,remaining,unit_price,expires,state)
       VALUES(?,?,?,?,?,?,?,?,'open')`).run(orderId, epoch, member.id, member.name, amount, amount, unitPrice, expiresAt);
+    this.treasuryEvent(member.id, now, "purchase_hold", reserved);
     return {orderId, reserved, expiresAt};
   }
 
-  purchaseCancel(member: CityMember, orderId: string) {
+  purchaseCancel(member: CityMember, orderId: string, now: number) {
     this.requireOfficer(member);
     const order = this.openPurchase();
     if (!order || order.id !== orderId || order.guild !== member.id) throw Error("city_purchase_missing");
     this.db.prepare("UPDATE city_purchase_orders SET state='cancelled' WHERE id=?").run(orderId);
-    return {orderId, released: order.remaining * order.unitPrice};
+    const released = order.remaining * order.unitPrice;
+    this.treasuryEvent(member.id, now, "purchase_release", released);
+    return {orderId, released};
   }
 
   purchaseFill(orderId: string, amount: number, ownership: CityOwnership, now: number) {
@@ -218,7 +337,120 @@ export class CityProduction {
     this.add(order.epoch, order.guild, CITY_PRODUCT, amount);
     this.db.prepare("UPDATE city_purchase_orders SET remaining=?,state=? WHERE id=?")
       .run(remaining, remaining ? "open" : "filled", orderId);
-    return {orderId, amount, gold: amount * order.unitPrice, remaining};
+    const gold = amount * order.unitPrice;
+    this.treasuryEvent(order.guild, now, "purchase_paid", gold);
+    return {orderId, amount, gold, remaining};
+  }
+
+  private releaseClosedMissions(): void {
+    this.db.prepare(`UPDATE city_mission_workers SET state='cancelled' WHERE state='active'
+      AND EXISTS (SELECT 1 FROM city_missions WHERE id=city_mission_workers.mission AND state='closed')`).run();
+  }
+
+  private activeMission(actor: string) {
+    return this.db.prepare(`SELECT mission AS id,progress FROM city_mission_workers
+      WHERE actor=? AND state='active'`).get(actor) as {id: string; progress: number} | undefined;
+  }
+
+  hasOpenMission(): boolean {
+    return Boolean(this.db.prepare("SELECT 1 FROM city_missions WHERE state='open' LIMIT 1").get());
+  }
+
+  missionView(actor: string, member: CityMember | undefined, ownership: CityOwnership) {
+    const active = ownership.active, own = this.activeMission(actor);
+    const officer = member?.officer && !this.closureActor(member.id) ? member : null;
+    const rows = this.db.prepare(`SELECT m.*,
+      (SELECT count(*) FROM city_mission_workers w WHERE w.mission=m.id AND w.state IN ('active','complete')) AS assigned,
+      EXISTS(SELECT 1 FROM city_mission_workers w WHERE w.mission=m.id AND w.actor=?) AS participated
+      FROM city_missions m WHERE m.state='open' ORDER BY m.rowid DESC`).all(actor) as (Mission & {assigned: number; participated: number})[];
+    return {
+      site: CITY_MINING_SITE, item: CITY_MINING_ORE, required: CITY_MISSION_ORE_COUNT, maxSlots: CITY_MISSION_WORKERS,
+      maxReward: CITY_MISSION_MAX_REWARD, hours: CITY_MISSION_HOURS, siege: ownership.siegeStarted !== undefined,
+      manage: active && active.guild === officer?.id ? {
+        epoch: active.id, gold: this.marketGold(active.guild), free: Math.max(0, this.capacity(CITY_MINING_SITE) - this.used(active.id)),
+        canPost: rows.length < CITY_MISSION_POST_LIMIT,
+      } : null,
+      missions: rows.filter(row => row.audience === "public" || row.guild === member?.id || row.id === own?.id)
+        .map(row => ({id: row.id, name: row.name, audience: row.audience, slots: row.slots, remaining: row.slots - row.assigned,
+          reward: row.reward, expiresAt: row.expires, canCancel: officer?.id === row.guild,
+          canAccept: !own && !row.participated && row.assigned < row.slots, progress: own?.id === row.id ? own.progress : null})),
+    };
+  }
+
+  missionOpen(member: CityMember, ownership: CityOwnership, order: Extract<CityMissionOrder, {action: "mission_open"}>, now: number) {
+    this.requireOfficer(member);
+    this.requireCity(member, order.epoch, ownership, CITY_MINING_SITE);
+    if (ownership.siegeStarted !== undefined) throw Error("city_mission_siege");
+    if (Number(this.db.prepare("SELECT count(*) AS n FROM city_missions WHERE state='open'").get()?.n) >= CITY_MISSION_POST_LIMIT)
+      throw Error("city_mission_limit");
+    const reserved = order.reward * order.slots;
+    if (this.marketGold(member.id) < reserved) throw Error("city_market_funds");
+    if (this.used(order.epoch) + CITY_MISSION_ORE_COUNT * order.slots > this.capacity(CITY_MINING_SITE))
+      throw Error("city_storage_full");
+    const missionId = randomUUID(), expiresAt = now + order.hours * 3_600_000;
+    this.db.prepare(`INSERT INTO city_missions(id,epoch,guild,name,audience,slots,reward,expires,state)
+      VALUES(?,?,?,?,?,?,?,?,'open')`).run(missionId, order.epoch, member.id, member.name, order.audience, order.slots, order.reward, expiresAt);
+    this.treasuryEvent(member.id, now, "mission_hold", reserved);
+    return {missionId, reserved, expiresAt};
+  }
+
+  private mission(missionId: string): Mission | undefined {
+    return this.db.prepare("SELECT * FROM city_missions WHERE id=? AND state='open'").get(missionId) as Mission | undefined;
+  }
+
+  private availableMission(missionId: string, ownership: CityOwnership, now: number): Mission {
+    const mission = this.mission(missionId), owner = ownership.active;
+    if (!mission || mission.expires <= now || owner?.id !== mission.epoch || owner.guild !== mission.guild ||
+        this.closureActor(mission.guild)) throw Error("city_mission_missing");
+    if (ownership.siegeStarted !== undefined) throw Error("city_mission_siege");
+    return mission;
+  }
+
+  missionAccept(actor: string, member: CityMember | undefined, missionId: string, ownership: CityOwnership, now: number) {
+    const mission = this.availableMission(missionId, ownership, now);
+    if (mission.audience === "guild" && member?.id !== mission.guild) throw Error("city_mission_guild_only");
+    if (this.activeMission(actor)) throw Error("city_mission_active");
+    if (this.db.prepare("SELECT 1 FROM city_mission_workers WHERE mission=? AND actor=?").get(missionId, actor))
+      throw Error("city_mission_done");
+    const slots = this.db.prepare("SELECT count(*) AS n FROM city_mission_workers WHERE mission=? AND state IN ('active','complete')").get(missionId);
+    if (Number(slots?.n) >= mission.slots) throw Error("city_mission_full");
+    this.db.prepare("INSERT INTO city_mission_workers(mission,actor,state) VALUES(?,?,'active')").run(missionId, actor);
+    return {missionId};
+  }
+
+  recordMissionHarvest(actor: string, quantity: number, now: number): void {
+    this.db.prepare(`UPDATE city_mission_workers SET progress=min(progress+?,?)
+      WHERE actor=? AND state='active' AND progress<? AND mission IN
+      (SELECT id FROM city_missions WHERE state='open' AND expires>?)`)
+      .run(quantity, CITY_MISSION_ORE_COUNT, actor, CITY_MISSION_ORE_COUNT, now);
+  }
+
+  missionSubmit(actor: string, missionId: string, ownership: CityOwnership, now: number) {
+    const mission = this.availableMission(missionId, ownership, now), worker = this.activeMission(actor);
+    if (worker?.id !== missionId || worker.progress < CITY_MISSION_ORE_COUNT) throw Error("city_mission_progress");
+    this.add(mission.epoch, mission.guild, CITY_MINING_ORE, CITY_MISSION_ORE_COUNT);
+    this.db.prepare("UPDATE city_mission_workers SET state='complete' WHERE actor=? AND mission=?").run(actor, missionId);
+    this.db.prepare(`UPDATE city_missions SET completed=completed+1,
+      state=CASE WHEN completed+1=slots THEN 'closed' ELSE 'open' END WHERE id=?`).run(missionId);
+    this.treasuryEvent(mission.guild, now, "mission_paid", mission.reward);
+    return {missionId, gold: mission.reward, amount: CITY_MISSION_ORE_COUNT};
+  }
+
+  missionAbandon(actor: string, missionId: string) {
+    const removed = this.db.prepare("DELETE FROM city_mission_workers WHERE actor=? AND mission=? AND state='active'").run(actor, missionId);
+    if (!removed.changes) throw Error("city_mission_missing");
+    return {missionId};
+  }
+
+  missionCancel(member: CityMember, missionId: string, now: number) {
+    this.requireOfficer(member);
+    const mission = this.mission(missionId);
+    if (mission?.guild !== member.id) throw Error("city_mission_missing");
+    this.db.prepare("UPDATE city_missions SET state='closed' WHERE id=?").run(missionId);
+    this.releaseClosedMissions();
+    const released = (mission.slots - mission.completed) * mission.reward;
+    this.treasuryEvent(member.id, now, "mission_release", released);
+    return {missionId, released};
   }
 
   private capacity(site: CitySite): number {
@@ -263,6 +495,7 @@ export class CityProduction {
     const jobId = randomUUID(), readyAt = now + view.durationMs;
     this.db.prepare(`INSERT INTO city_workshop_jobs(id,actor,epoch,guild,ready,item,quantity,fee)
       VALUES(?,?,?,?,?,?,?,?)`).run(jobId, actor, epoch, owner.guild, readyAt, CITY_PRODUCT, CITY_RECIPE.quantity, CITY_WORKSHOP_FEE);
+    this.treasuryEvent(owner.guild, now, "workshop_income", CITY_WORKSHOP_FEE);
     return {jobId, readyAt, fee: CITY_WORKSHOP_FEE};
   }
 
@@ -324,7 +557,9 @@ export class CityProduction {
     const listed = this.db.prepare(`SELECT coalesce(sum(json_extract(item,'$.quantity')),0) AS total
       FROM listings WHERE city_epoch=? AND state='open'`).get(epoch);
     const ordered = this.db.prepare("SELECT remaining FROM city_purchase_orders WHERE epoch=? AND state='open'").get(epoch);
-    return Number(stock?.total) + Number(listed?.total) + (this.running(epoch)?.quantity ?? 0) + Number(ordered?.remaining ?? 0);
+    const missions = this.db.prepare("SELECT coalesce(sum(slots-completed),0) AS slots FROM city_missions WHERE epoch=? AND state='open'").get(epoch);
+    return Number(stock?.total) + Number(listed?.total) + (this.running(epoch)?.quantity ?? 0) +
+      Number(ordered?.remaining ?? 0) + Number(missions?.slots ?? 0) * CITY_MISSION_ORE_COUNT;
   }
 
   private add(epoch: number, guild: string, item: CityItem, amount: number): void {
@@ -372,9 +607,10 @@ export class CityProduction {
     const {recipe, output} = CITY_LINES[site];
     this.consumeRaw(epoch, member.id, recipe, site);
     if (this.used(epoch) + recipe.quantity > this.capacity(site)) throw Error("city_storage_full");
-    const jobId = randomUUID(), readyAt = now + (rush ? CITY_DURATION_MS[level] / 2 : CITY_DURATION_MS[level]);
+    const jobId = randomUUID(), readyAt = now + this.productionDuration(site, epoch, level, rush);
     this.db.prepare(`INSERT INTO city_jobs(id,epoch,guild,ready,wood,stone,quantity,status,fee,site,product)
       VALUES(?,?,?,?,?,?,?,'running',?,?,?)`).run(jobId, epoch, member.id, readyAt, recipe.wood, recipe.stone, recipe.quantity, fee, site, output);
+    if (fee) this.treasuryEvent(member.id, now, "rush_hold", fee);
     return {jobId, readyAt, fee};
   }
 
@@ -403,6 +639,7 @@ export class CityProduction {
 
   creditSale(listingId: string, guild: string, amount: number): void {
     this.db.prepare("INSERT INTO guild_market_gold(listing,guild,amount) VALUES(?,?,?)").run(listingId, guild, amount);
+    this.treasuryEvent(guild, Date.now(), "sale_income", amount);
   }
 
   reclaim(epoch: number, member: CityMember, item: CityItem, amount: number): void {
@@ -416,8 +653,9 @@ export class CityProduction {
       UNION ALL SELECT 1 FROM city_jobs WHERE guild=? AND status='running'
       UNION ALL SELECT 1 FROM listings WHERE seller_guild=? AND state='open'
       UNION ALL SELECT 1 FROM city_purchase_orders WHERE guild=? AND state='open'
+      UNION ALL SELECT 1 FROM city_missions WHERE guild=? AND state='open'
       UNION ALL SELECT 1 FROM city_warehouse_projects
-        WHERE guild=? AND status IN ('collecting','building') AND wood+stone+metal>0 LIMIT 1`).get(guild, guild, guild, guild, guild))
+        WHERE guild=? AND status IN ('collecting','building') AND wood+stone+metal>0 LIMIT 1`).get(guild, guild, guild, guild, guild, guild))
       || this.marketGold(guild) > 0;
   }
 
@@ -442,7 +680,7 @@ export class CityProduction {
       if (owner?.guild !== guild || job.epoch !== this.epoch(job.site)) throw Error("city_ownership_unavailable");
       const cutoff = "ended" in owner ? Math.min(requested, owner.ended) : requested;
       if (job.ready <= cutoff) this.completeJob(job);
-      else this.cancelJob(job);
+      else this.cancelJob(job, cutoff);
     }
     const epoch = this.epoch(CITY_PRODUCTION_SITE);
     if (epoch !== null && this.warehouseProject(epoch)?.guild === guild) {
@@ -461,7 +699,11 @@ export class CityProduction {
       FROM listings WHERE seller_guild=? AND state='open' GROUP BY json_extract(item,'$.itemId')`)
       .all(guild) as Pick<GuildListing, "item" | "quantity">[];
     for (const {item, quantity} of listed) assets.set(item, (assets.get(item) ?? 0) + quantity);
-    this.db.prepare("UPDATE city_purchase_orders SET state='cancelled' WHERE guild=? AND state='open'").run(guild);
+    this.released("purchase_release", requested, this.db.prepare(`UPDATE city_purchase_orders SET state='cancelled'
+      WHERE guild=? AND state='open' RETURNING guild,remaining*unit_price AS gold`).all(guild) as Release[]);
+    this.released("mission_release", requested, this.db.prepare(`UPDATE city_missions SET state='closed'
+      WHERE guild=? AND state='open' RETURNING guild,(slots-completed)*reward AS gold`).all(guild) as Release[]);
+    this.releaseClosedMissions();
     assets.set("gold", this.marketGold(guild));
     this.db.prepare("INSERT INTO city_guild_closures(guild,actor,name,closed) VALUES(?,?,?,?)").run(guild, actor, name, requested);
     const award = this.db.prepare("INSERT INTO city_disband_assets(guild,item,awarded) VALUES(?,?,?)");
@@ -520,8 +762,8 @@ export class CityProduction {
       },
       costs: level === 2 ? null : CITY_FACTORY_COSTS[level],
       recipe: {inputs: [{item: inputs[0], amount: recipe.wood}, {item: inputs[1], amount: recipe.stone}],
-        output, amount: recipe.quantity, durationMs: CITY_DURATION_MS[level],
-        rush: level ? {gold: CITY_RUSH_GOLD, durationMs: CITY_DURATION_MS[level] / 2} : null},
+        output, amount: recipe.quantity, durationMs: this.productionDuration(site, epoch, level),
+        rush: level ? {gold: CITY_RUSH_GOLD, durationMs: this.productionDuration(site, epoch, level, true)} : null},
     };
   }
 }

@@ -12,8 +12,9 @@ import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem
 import type {HomeAction, SalvageOrder} from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
 import {
-  CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES, isWarehouseOrder,
-  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityMember, type CityOrder, type CityOwnership, type CityPurchaseOrder, type CitySite,
+  CITY_MINING_ORE, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES, isWarehouseOrder,
+  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityMember, type CityMissionOrder, type CityOrder,
+  type CityOwnership, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
   type CityWorkshopOrder,
 } from "./CityProductionRules.js";
 
@@ -230,6 +231,42 @@ export class EconomyStore {
   hasOpenCityPurchase(): boolean {
     return this.city.hasOpenPurchase();
   }
+  hasOpenCityMission(): boolean {
+    return this.city.hasOpenMission();
+  }
+  viewCityMissions(actor: string, member: CityMember | undefined, ownership: CityOwnership) {
+    return this.city.missionView(actor, member, ownership);
+  }
+  viewCityGovernance(member: CityMember, ownership: CityOwnership) {
+    return this.city.governanceView(member, ownership);
+  }
+  setCityPolicy(actor: string, member: CityMember, order: CityPolicyOrder, ownership: CityOwnership, now: number) {
+    return this.once(actor, order.requestId, "city_policy", {epoch: order.epoch, policy: order.policy}, () => {
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      return this.city.setPolicy(member, ownership, order.epoch, order.policy, now);
+    });
+  }
+  cityMissionOrder(actor: string, member: CityMember | undefined, order: CityMissionOrder,
+    ownership: CityOwnership, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once<Record<string, number | string>>(actor, order.requestId, "city_mission", intent, () => {
+      if (order.action === "mission_accept") return this.city.missionAccept(actor, member, order.missionId, ownership, now);
+      if (order.action === "mission_abandon") return this.city.missionAbandon(actor, order.missionId);
+      if (order.action === "mission_submit") {
+        const account = this.account(actor);
+        const result = this.city.missionSubmit(actor, order.missionId, ownership, now);
+        if (account.gold + result.gold > MAX_GOLD) throw Error("city_wallet_full");
+        consume(account, CITY_MINING_ORE, result.amount, "city_mission_ore_short");
+        account.gold += result.gold;
+        this.put(actor, account);
+        return result;
+      }
+      if (!member) throw Error("city_not_member");
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      if (order.action === "mission_open") return this.city.missionOpen(member, ownership, order, now);
+      return this.city.missionCancel(member, order.missionId, now);
+    });
+  }
   cityPurchaseOrder(actor: string, member: CityMember | undefined, order: CityPurchaseOrder,
     ownership: CityOwnership, now: number) {
     const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
@@ -246,7 +283,7 @@ export class EconomyStore {
       }
       if (!member) throw Error("city_not_member");
       if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
-      if (order.action === "purchase_cancel") return this.city.purchaseCancel(member, order.orderId);
+      if (order.action === "purchase_cancel") return this.city.purchaseCancel(member, order.orderId, now);
       return this.city.purchaseOpen(member, ownership, order.epoch, order.amount, order.unitPrice, now);
     });
   }
@@ -416,6 +453,8 @@ export class EconomyStore {
       this.db.prepare("INSERT OR REPLACE INTO resource_stock VALUES(?,?,?,?)").run(n.mapId,n.id,s.stock-quantity,nextAt);
       this.db.prepare("INSERT OR REPLACE INTO resource_periods VALUES(?,?,?)").run(n.mapId,n.id,period);
       this.db.prepare("INSERT OR REPLACE INTO resource_workers VALUES(?,?)").run(actor,now);
+      if (n.mapId === CITY_MINING_SITE && item === CITY_MINING_ORE && n.id.startsWith(CITY_MINING_SITE+"/moon-ore-"))
+        this.city.recordMissionHarvest(actor,quantity,now);
       return {item,quantity,...(equipped?{tool:equipped.name}:{})};
     });
   }
@@ -508,6 +547,7 @@ export class EconomyStore {
       this.db.prepare("DELETE FROM auction_credits WHERE actor=?").run(id);
       this.db.prepare("DELETE FROM starter_supply_used WHERE actor=?").run(id);
       this.db.prepare("DELETE FROM receipts WHERE actor=?").run(id);
+      this.db.prepare("DELETE FROM city_mission_workers WHERE actor=? AND state='active'").run(id);
       this.db.prepare("DELETE FROM characters WHERE id=?").run(id);
       this.db.prepare("DELETE FROM accounts WHERE id=?").run(id);
     });
