@@ -54,7 +54,7 @@
     const picked = targetedSkill; setTargetedSkill(null);
     const selected = {sword:selectedSwordSkill, muay:selectedMuaySkill, occult:selectedOccultSkill,
       blade:selectedBladeSkill, sentinel:selectedSentinelSkill}[picked];
-    const source=document.querySelector('.learned-bar[data-skill-bank="advanced"] #advancedHotbar:not([hidden])') || document.querySelector('.learned-bar:not([data-skill-bank="advanced"]) .sword-hotbar:not([hidden])');
+    const source=document.querySelector('.learned-bar .sword-hotbar:not([hidden])');
     if(!selected || !Array.from(source?.querySelectorAll("button[data-skill-id]") || []).some(b=>b.dataset.skillId===selected && !b.disabled))return;
     if(picked==="sentinel"){
       const node=sentinelBookState?.lessons?.[selectedSentinelSkill],monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;

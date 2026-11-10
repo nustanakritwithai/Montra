@@ -6,6 +6,8 @@ node scripts/build-client.mjs --prepare
 rm -rf combat-verify/src
 mkdir -p combat-verify/src/rooms/schema
 cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
+cp deploy/combat/SkillHotbar.ts deploy/combat/skill-hotbar.test.ts deploy/combat/skill-hotbar-disabled.test.ts deploy/combat/rebirth-hotbar-room.test.ts combat-verify/src/rooms/
+cp deploy/combat/mixed-hotbar-integration.mjs combat-verify/
 cp deploy/combat/AccountStore.ts deploy/combat/AccountService.ts deploy/combat/AccountRoutes.ts deploy/combat/account-store.test.ts combat-verify/src/rooms/
 cp deploy/combat/account-integration.mjs combat-verify/account-integration.mjs
 cp deploy/combat/hunting-rebirth-integration.mjs deploy/combat/mastery-save-integration.mjs combat-verify/
@@ -68,6 +70,7 @@ cp deploy/combat/blade-book-integration.mjs combat-verify/blade-book-integration
 cp deploy/combat/blade-depth-integration.mjs combat-verify/blade-depth-integration.mjs
 cp deploy/combat/blade-core-check.mjs combat-verify/blade-core-check.mjs
 cp deploy/combat/class-rank-integration.mjs combat-verify/class-rank-integration.mjs
+cp deploy/combat/skill-learning-integration.mjs combat-verify/skill-learning-integration.mjs
 cp deploy/combat/class-skills-contract-integration.mjs combat-verify/class-skills-contract-integration.mjs
 cp deploy/combat/status-support-integration.mjs combat-verify/status-support-integration.mjs
 cp deploy/combat/skill-ranks.test.ts combat-verify/src/rooms/skill-ranks.test.ts
@@ -179,6 +182,7 @@ cp deploy/combat/item-rules.test.ts combat-verify/src/rooms/item-rules.test.ts
 cp deploy/combat/height-rules.test.ts combat-verify/src/rooms/height-rules.test.ts
 cp deploy/combat/monster-rrt.test.ts combat-verify/src/rooms/monster-rrt.test.ts
 cp deploy/combat/character-store.test.ts combat-verify/src/rooms/character-store.test.ts
+cp deploy/combat/skill-learning-location.test.ts combat-verify/src/rooms/
 cp deploy/combat/sword-tree-concurrency.test.ts combat-verify/src/rooms/sword-tree-concurrency.test.ts
 cp deploy/combat/sword-gap-geometry.test.ts combat-verify/src/rooms/sword-gap-geometry.test.ts
 cp deploy/combat/smoke-test.mjs combat-verify/smoke-test.mjs

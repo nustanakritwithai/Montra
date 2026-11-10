@@ -1,3 +1,4 @@
+import {validateMixedSkillLoadouts,type MixedSkillLoadouts} from './SkillHotbar.js';
 /**
  * MONTRA S2 — durable guest characters (server only).
  * Browser sends a 256-bit bearer token; ONLY a SHA-256 digest appears on disk.
@@ -60,6 +61,7 @@ export type CharacterSnapshot = {
   directorClaims?: string[];
   classSkillReadyAt?: number;
   talismanReadyAt?: number;
+  mixedSkillLoadouts?: MixedSkillLoadouts;
   swordTree?: SwordTree;
   muayWrapGranted?: boolean;
   muayCooldowns?: MuayCooldowns;
@@ -164,6 +166,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
   const occultBook = value.occultBook === undefined ? undefined : validateOccultBook(value.occultBook,Math.max(learning("seer"),learning("mender")));
   const bladeBook = value.bladeBook === undefined ? undefined : validateBladeBook(value.bladeBook,learning("blade"));
   const sentinelBook = value.sentinelBook === undefined ? undefined : validateSentinelBook(value.sentinelBook,learning("sentinel"));
+  const mixedSkillLoadouts=value.mixedSkillLoadouts===undefined?undefined:validateMixedSkillLoadouts(value.mixedSkillLoadouts,{swordTree,muayBook,bladeBook,sentinelBook,occultBook});
   if (value.inventory !== undefined) validateInventory(value.inventory);
   const statAllocations = value.statAllocations === undefined ? emptyAllocations() :
     validateAllocations(value.statAllocations, value.level as number);
@@ -175,7 +178,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
   }
   if(value.mapId===CASTLE_ID && !getWorldMap(CASTLE_ID)){
     const exit=getWorldMap("fallen_city") ?? getWorldMap(DEFAULT_MAP_ID)!;
-    return {...(value as CharacterSnapshot),...exit.spawn,mapId:exit.id,statAllocations,swordTree,muayCooldowns,muayBook,occultBook,bladeBook,sentinelBook};
+    return {...(value as CharacterSnapshot),...exit.spawn,mapId:exit.id,statAllocations,mixedSkillLoadouts,swordTree,muayCooldowns,muayBook,occultBook,bladeBook,sentinelBook};
   }
   if (value.mapId !== undefined &&
       (typeof value.mapId !== "string" || !getWorldMap(value.mapId))) {
@@ -184,7 +187,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
   // Only unmarked castle saves use the previous 2 km coordinate system.
   const location=value.mapId===CASTLE_ID && value.castleLayout===undefined
     ? {x:value.x*35/100,z:value.z*35/100,castleLayout:2 as const} : {};
-  return { ...(value as CharacterSnapshot), ...location, mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, swordTree, muayCooldowns, muayBook, occultBook, bladeBook, sentinelBook };
+  return { ...(value as CharacterSnapshot), ...location, mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, mixedSkillLoadouts, swordTree, muayCooldowns, muayBook, occultBook, bladeBook, sentinelBook };
 }
 
 export class CharacterStore {

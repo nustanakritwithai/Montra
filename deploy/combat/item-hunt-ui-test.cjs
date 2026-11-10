@@ -108,7 +108,7 @@ me.level=12;bag.slots=[{itemId:"fragment",quantity:1},{itemId:"hide",quantity:1}
 g=field.goal();assert.match(g.progress,/1\/3/);field.draw(g);assert.equal(context.tracked.id,"hide");
 get("fieldGoalRecipe").onclick();assert.deepEqual(context.opened,["boss","12","amulet"]);
 context.room.sessionId="hunter";context.fieldTrainingTip={session:"hunter",path:me.pathId,points:1,choices:[{name:"หมัด",rank:1}]};
-bag.slots=[];g=field.goal();assert(g.trainingOnly);field.draw(g);assert.match(get("fieldTrainingNames").textContent,/ศาลหมู่บ้าน.*หมัด ขั้น 1/);
+bag.slots=[];g=field.goal();assert(g.trainingOnly);assert.equal(g.to,undefined,"learning guidance must not route to shrine");assert.match(g.step,/ได้ทุกที่/);field.draw(g);assert.match(get("fieldTrainingNames").textContent,/ได้ทุกที่.*5 วินาที.*หมัด ขั้น 1/);
 assert.equal(get("fieldTrainingBook").hidden,false);context.room.sessionId="other";assert.equal(field.goal(),null);
 console.log("PASS starter copy supplies, recipe links, spare-copy forge eligibility, boss supplies and character-scoped training");
 

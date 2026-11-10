@@ -117,6 +117,7 @@ $files = @(
   @{ Name = "BuffLedger.ts"; Target = "src\rooms\BuffLedger.ts"; Check = "class BuffLedger" },
   @{ Name = "StatModifiers.ts"; Target = "src\rooms\StatModifiers.ts"; Check = "calculateModifiedStats" },
   @{ Name = "BalanceEstimates.ts"; Target = "src\rooms\BalanceEstimates.ts"; Check = "estimateEncounter" },
+  @{ Name = "SkillHotbar.ts"; Target = "src\rooms\SkillHotbar.ts"; Check = "validateMixedSkillLoadouts" },
   @{ Name = "SkillCatalog.ts"; Target = "src\rooms\SkillCatalog.ts"; Check = "POSSESSION_MODIFIER" },
   @{ Name = "buff-integration.mjs"; Target = "montra-buff-integration.mjs"; Check = "montra-buff-test-" },
   @{ Name = "MonsterProfiles.ts"; Target = "src\rooms\MonsterProfiles.ts"; Check = "monsterReward" },

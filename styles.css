@@ -5170,28 +5170,27 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 /* The desktop HUD zoom makes the quest panel taller: start the collected-item feed below it. */
 @media (min-width: 900px) and (min-height: 521px) { #lootFeed.loot-feed { top: calc(max(8px, env(safe-area-inset-top)) + 206px); } }
 
-/* Core and learned banks share the same four-button footprint. */
-.learned-bar[data-skill-bank="advanced"] > .sword-hotbar:not(#advancedHotbar) { display: none !important; }
-.learned-bar .skill-bank-toggle, .learned-bar .skill-loadout-button { position: absolute; pointer-events: auto; min-height: 44px; padding: 6px 10px; border: 1px solid #d5b474; border-radius: 10px; background: #182b27f5; color: #fff0cb; font-size: 12px; font-weight: 700; white-space: nowrap; }
-.learned-bar .skill-bank-toggle { right: 58px; top: -46px; }
-.learned-bar .skill-loadout-button { right: 0; top: -46px; }
-.learned-bar[data-arc] .skill-bank-toggle { right: 64px; top: auto; bottom: -6px; min-height: 44px; font-size: 11px; padding: 4px 7px; }
-.learned-bar[data-arc] .skill-loadout-button { right: 0; top: auto; bottom: 80px; min-width: 44px; padding: 4px; font-size: 11px; }
+/* Core and learned skills share the existing four-button footprint. */
 .skill-loadout { display: grid; gap: 12px; }
 .skill-loadout h3, .skill-loadout p { margin: 0; }
-.skill-bank-choices { display: flex; gap: 8px; }
-.skill-bank-choices button { flex: 1; min-height: 44px; }
-.skill-bank-choices button[aria-pressed="true"] { border: 2px solid #edca7d; background: #365241; color: #fff5dc; }
 .loadout-core { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
 .loadout-core span { padding: 9px; background: #14251f; border: 1px solid #53674d; border-radius: 8px; overflow-wrap: anywhere; }
 .loadout-slot { display: grid; grid-template-columns: 52px minmax(0,1fr); align-items: center; gap: 8px; }
 .loadout-slot select { width: 100%; min-width: 0; min-height: 48px; padding: 8px; font-size: 16px; color: #fff1cf; background: #14251f; border: 1px solid #9b865e; border-radius: 8px; }
 .skill-loadout > button, #classSkillLoadout { min-height: 44px; }
 /* Advanced catalogs include skills without dedicated artwork: keep a readable glyph and name. */
-#advancedHotbar .glyph { font-size: 22px !important; color: #fff0c4; text-shadow: 0 1px 3px #000; }
-#advancedHotbar .field-slot:not(.empty-slot) .glyph { box-sizing: border-box; padding-bottom: 14px; }
-.learned-bar[data-arc] #advancedHotbar .field-skill-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; position: absolute; top: auto; bottom: 4px; left: 50%; width: 44px; max-width: 44px; max-height: 20px; padding: 0 1px; border-radius: 3px; background: #101c17db; font-size: 9px !important; line-height: 1.05 !important; white-space: normal; overflow-wrap: anywhere; text-align: center; }
-.learned-bar[data-arc] #advancedHotbar .empty-slot .field-skill-name { display: none; }
+[data-mixed-hotbar="true"] .glyph { font-size: 22px !important; color: #fff0c4; text-shadow: 0 1px 3px #000; }
+[data-mixed-hotbar="true"] .field-slot:not(.empty-slot) .glyph { box-sizing: border-box; padding-bottom: 14px; }
+.learned-bar[data-arc] [data-mixed-hotbar="true"] .field-skill-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; position: absolute; top: auto; bottom: 4px; left: 50%; width: 44px; max-width: 44px; max-height: 20px; padding: 0 1px; border-radius: 3px; background: #101c17db; font-size: 9px !important; line-height: 1.05 !important; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+.learned-bar[data-arc] [data-mixed-hotbar="true"] .empty-slot .field-skill-name { display: none; }
+
+/* Keep the menu entry available without taking room from the combat arc. */
+.map-flyout { max-height: calc(100dvh - 220px); overflow-y: auto; flex-shrink: 0; }
+.map-flyout .map-sub { flex-shrink: 0; }
+.map-flyout .map-sub[hidden] { display: none; }
+.map-sub[data-menu-source="skillLoadoutButton"] { min-height: 50px; }
+
+#game .top-hud:has(.map-flyout:not([hidden])) { z-index: 12; }
 /* ========================================================
    MONTRA Comprehensive 26-Skill SVG Engine & Book Icons
    ======================================================== */

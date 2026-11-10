@@ -9,16 +9,21 @@
   { const nav = document.querySelector(".map-shortcuts"), menuBtn = $("fieldMenuButton");
     if (nav && menuBtn) {
       const fly = document.createElement("div"); fly.className = "map-flyout"; fly.hidden = true; fly.setAttribute("role", "menu"); nav.after(fly);
-      const items = [["quickSkills", "⚡", "ผังวิชาสกิล"], ["menuCharacter", "๛", "ตัวละคร"], ["menuGuild", "⚑", "กิลด์"], ["marketButton", "♢", "ตลาด"], ["menuQuest", "◇", "ภารกิจ"],
+      const items = [["quickSkills", "⚡", "ผังวิชาสกิล"], ["skillLoadoutButton", "✧", "จัดสกิล"], ["menuCharacter", "๛", "ตัวละคร"], ["menuGuild", "⚑", "กิลด์"], ["marketButton", "♢", "ตลาด"], ["menuQuest", "◇", "ภารกิจ"],
         ["modeButton", "◎", "ออนไลน์"], ["helpButton", "?", "ตั้งค่า"], [null, "☰", "เมนูทั้งหมด"]];
       const close = () => { fly.hidden = true; menuBtn.setAttribute("aria-expanded", "false"); menuBtn.classList.remove("open"); };
       items.forEach(([id, glyph, label], i) => {
         const src = id && $(id); if (id && !src) return;
         const b = document.createElement("button"); b.type = "button"; b.className = "map-sub"; b.setAttribute("role", "menuitem"); b.style.setProperty("--i", i);
-        const iconMap = { quickSkills: "skills", menuCharacter: "character", menuGuild: "guild", marketButton: "market", menuQuest: "quest", modeButton: "account", helpButton: "settings" };
+        const iconMap = { quickSkills: "skills", skillLoadoutButton: "skills", menuCharacter: "character", menuGuild: "guild", marketButton: "market", menuQuest: "quest", modeButton: "account", helpButton: "settings" };
         const iconKey = id ? (iconMap[id] || "menu") : "menu";
         b.innerHTML = `<span class="drawer-nav-icon" data-menu-icon="${iconKey}" aria-hidden="true">${glyph}</span><em>${label}</em><b hidden></b>`;
-        b.onclick = () => { close(); if (src) src.click(); else openFieldMenu(); };
+        b.dataset.menuSource = id || "fieldMenu";
+        b.onclick = () => { if (id === "skillLoadoutButton" && (src.hidden || src.disabled)) return; close(); menuBtn.focus({preventScroll:true}); if (src) src.click(); else openFieldMenu(); };
+        if (id === "skillLoadoutButton") {
+          const sync = () => { b.hidden = src.hidden; b.disabled = src.disabled; };
+          new MutationObserver(sync).observe(src, {attributes:true, attributeFilter:["hidden", "disabled"]}); sync();
+        }
         fly.append(b);
         const badge = src?.querySelector("b"); if (badge) { const sync = () => { const mine = b.querySelector("b"); mine.hidden = badge.hidden; mine.textContent = badge.textContent; };
           new MutationObserver(sync).observe(badge, { attributes: true, childList: true, characterData: true, subtree: true }); sync(); }
@@ -26,7 +31,7 @@
       menuBtn.setAttribute("aria-expanded", "false");
       menuBtn.onclick = e => { e.stopPropagation(); const open = fly.hidden; fly.hidden = !open; menuBtn.setAttribute("aria-expanded", String(open)); menuBtn.classList.toggle("open", open); if (open) SFX("open"); };
       document.addEventListener("pointerdown", e => { if (!fly.hidden && !fly.contains(e.target) && e.target !== menuBtn && !menuBtn.contains(e.target)) close(); }, true);
-      addEventListener("keydown", e => { if (e.key === "Escape" && !fly.hidden) close(); });
+      addEventListener("keydown", e => { if (e.key === "Escape" && !fly.hidden) { close(); menuBtn.focus({preventScroll:true}); } });
     } }
   $("menuBag").onclick=openBag;
   $("menuChat").onclick=openChat;

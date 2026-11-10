@@ -1,3 +1,4 @@
+import {MIXED_SKILLS_ENABLED,hotbarState,hotbarSchool,availableHotbarSlot,validateHotbarSlots,validateMixedSkillLoadouts,type MixedSkillLoadouts,type HotbarBooks} from './SkillHotbar.js';
 import { FORGE_CATALOG } from "./ForgeRules.js";
 import { accounts } from "./AccountService.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
@@ -215,6 +216,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private parties = new PartyManager();
   private buffs = new BuffBook();
   private effects = new BuffLedger();
+  private mixedSkillLoadouts = new Map<string,MixedSkillLoadouts>();
   private swordTrees = new Map<string, SwordTree>();
   private muayCooldowns = new Map<string, MuayCooldowns>();
   private muayMoveIntent = new Map<string,{x:number;z:number}>();
@@ -359,6 +361,25 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
+  private canLearnSkillsNow(client:Client):boolean {
+    const id=client.sessionId;
+    // Field learning must not turn the durable-save freeze into an escape from
+    // pursuit, or capture a position halfway through a vertical/dash transition.
+    if(this.climbs.has(id) || this.flightTransitions.has(id) || this.activeDashes.has(id)) {
+      this.reject(client,"character_busy");return false;
+    }
+    const pendingAttack=this.sentinelWindups.has(id) || this.bladeWindups.has(id) ||
+      this.muayCoreSequences.has(id) || this.swordCoreSequences.has(id) ||
+      [...this.sentinelWindups.values(),...this.bladeWindups.values(),
+        ...this.muayCoreSequences.values(),...this.swordCoreSequences.values()].some(attack=>attack.targetId===id);
+    const engaged=pendingAttack || this.attackTargets.has(id) || [...this.attackTargets.values()].includes(id) ||
+      this.state.monster.targetId===id || this.forest.engaged(id);
+    if(engaged || this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs) {
+      this.reject(client,"skill_learning_in_combat");return false;
+    }
+    return true;
+  }
+
   private playerBuild(player: Player): CharacterBuild | null {
     const base = {path: player.pathId, ancestry: player.ancestryId};
     // Keep default talents readable by builds predating the selection.
@@ -417,6 +438,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(player.pathId==="sentinel" && !this.sentinelBooks.has(id))this.sentinelBooks.set(id,newSentinelBook());
       this.lastPvpMs.delete(id);this.hpRegenRemainder.delete(id);this.masteryScales.delete(player);
       this.applyStats(id,player,emptyAllocations());player.hp=player.maxHp;player.stamina=player.maxStamina;player.mana=player.maxMana;
+      this.syncSkillHotbar(id);
       try {client.send("inventory_state",next.inventory);client.send("rebirth_complete",{});this.sendRebirthState(client);} catch { /* already disconnected */ }
     },error=>{console.error("MONTRA rebirth save failed",error);this.reject(client,"rebirth_save_failed");})
       .finally(()=>{this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
@@ -735,6 +757,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(build.path==="blade" && !this.bladeBooks.has(id))this.bladeBooks.set(id,newBladeBook());
       if(build.path==="sentinel" && !this.sentinelBooks.has(id))this.sentinelBooks.set(id,newSentinelBook());
       this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
+      this.syncSkillHotbar(id);
       client.send("build_selected", selection);
       if (isOccultPath(build.path)) this.sendOccultBook(client);
     }, error => {
@@ -780,11 +803,56 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
 
+  private hotbarBooks(id:string):HotbarBooks {return {swordTree:this.swordTrees.get(id),muayBook:this.muayBooks.get(id),bladeBook:this.bladeBooks.get(id),sentinelBook:this.sentinelBooks.get(id),occultBook:this.occultBooks.get(id)};}
+  private syncSkillHotbar(id:string):void {
+    const player=this.state.players.get(id);if(!player)return;
+    const books=this.hotbarBooks(id),saved=this.mixedSkillLoadouts.get(id);
+    if(saved)this.mixedSkillLoadouts.set(id,validateMixedSkillLoadouts(saved,books));
+    player.skillHotbarVersion=MIXED_SKILLS_ENABLED?1:0;
+    player.skillHotbarData=JSON.stringify({...hotbarState(player.pathId,books,MIXED_SKILLS_ENABLED?this.mixedSkillLoadouts.get(id):undefined),version:player.skillHotbarVersion});
+  }
+  private configuredHotbar(id:string) {
+    if(!MIXED_SKILLS_ENABLED)return undefined;
+    const player=this.state.players.get(id);if(!player)return undefined;
+    return this.mixedSkillLoadouts.get(id)?.loadouts[player.pathId+':'+hotbarSchool(player.pathId,this.hotbarBooks(id))];
+  }
+  private advancedEquipped(id:string,skill:string,legacy:boolean):boolean {
+    const slots=this.configuredHotbar(id);return slots?slots.some(s=>s?.kind==='advanced'&&s.id===skill):legacy;
+  }
+  private hotbarCastAllowed(client:Client,message:unknown,kind:'core'|'advanced'):boolean {
+    const slots=this.configuredHotbar(client.sessionId);if(!slots)return true;
+    const skill=(message as {skillId?:unknown}|null)?.skillId;
+    if(slots.some(s=>s?.kind===kind&&s.id===skill))return true;
+    this.reject(client,'skill_hotbar_locked');return false;
+  }
+  private changeSkillHotbar(client:Client,message:unknown):void {
+    if(!MIXED_SKILLS_ENABLED)return this.reject(client,"skill_hotbar_unavailable");
+    if(!message||typeof message!=='object'||Array.isArray(message))return this.reject(client,'invalid_skill_hotbar');
+    const input=message as Record<string,unknown>;
+    if(Object.keys(input).length!==4||input.version!==1||typeof input.pathId!=='string'||typeof input.school!=='string')return this.reject(client,'invalid_skill_hotbar');
+    const id=client.sessionId,player=this.buildPlayer(client,'swordTree');if(!player)return;
+    const books=this.hotbarBooks(id);
+    if(input.pathId!==player.pathId||input.school!==hotbarSchool(player.pathId,books))return this.reject(client,'skill_hotbar_locked');
+    let slots;try{slots=validateHotbarSlots(input.slots,player.pathId);}catch{return this.reject(client,'invalid_skill_hotbar');}
+    if(slots.some(slot=>!availableHotbarSlot(player.pathId,input.school as string,slot,books)))return this.reject(client,'skill_hotbar_locked');
+    if(player.pathId!=='phutthaisawan'&&(player.mapId!==DEFAULT_MAP_ID||!onMapGround(player)||Math.hypot(player.x,player.z)>6||this.simulatedMs-(this.lastCombatMs.get(id)??-Infinity)<PROGRESSION.combatQuietMs))return this.reject(client,'skill_hotbar_needs_shrine');
+    const snapshot=this.captureCharacterSnapshot(id);if(!snapshot)return this.reject(client,'build_unavailable');
+    const next:MixedSkillLoadouts={version:1,loadouts:{...this.mixedSkillLoadouts.get(id)?.loadouts,[player.pathId+':'+input.school]:slots}};
+    const freezes=player.pathId!=='phutthaisawan';if(freezes)this.pendingWarps.add(id);
+    const task=characterStore.save({...snapshot,mixedSkillLoadouts:next}).then(()=>{
+      this.mixedSkillLoadouts.set(id,next);this.syncSkillHotbar(id);
+      if(isOccultPath(player.pathId)){if(player.possessionActive&&!this.canPrepareSpirit(id,player.pathId,true))this.endPossession(id,'loadout_changed');if(this.state.summons.has(id)&&!this.canPrepareSpirit(id,player.pathId,false))this.despawnSummon(id,'loadout_changed');}
+      try{client.send('skill_hotbar_changed',JSON.parse(player.skillHotbarData));}catch(error){console.warn('MONTRA hotbar confirmation not delivered',error);}
+    },error=>{console.error('MONTRA hotbar save failed',error);this.reject(client,'skill_hotbar_save_failed');}).finally(()=>{if(freezes)this.pendingWarps.delete(id);this.pendingItemUses.delete(id);});
+    this.pendingItemUses.set(id,task);
+  }
+
   private changeSwordTree(client: Client, message: unknown, action: "learn" | "upgrade" | "school" | "reset" | "equip"): void {
     if (!message || typeof message !== "object" || Array.isArray(message)) return this.reject(client, "invalid_sword_tree");
     const field = action === "learn" || action === "upgrade" ? "skillId" : "school";
     const input = message as Record<string, unknown>;
     const keys=Object.keys(input);
+    if (action === "equip" && this.configuredHotbar(client.sessionId)) return this.reject(client,"skill_hotbar_use_unified");
     if (action === "equip") {
       if (keys.length!==2 || !Number.isInteger(input.slot) || (input.slot as number)<0 || (input.slot as number)>2 ||
           (input.skillId!==null && typeof input.skillId!=="string")) return this.reject(client,"invalid_sword_tree");
@@ -796,7 +864,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=client.sessionId, player=this.buildPlayer(client,"swordTree"), tree=this.swordTrees.get(id);
     if (!player || !tree) return;
     if (player.pathId !== "phutthaisawan") return this.reject(client, "sword_class_required");
-    if (action !== "equip" && (player.mapId !== DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
+    const learning=action==="learn" || action==="upgrade";
+    if(learning && !this.canLearnSkillsNow(client))return;
+    if (!learning && action !== "equip" && (player.mapId !== DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
         this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)) {
       return this.reject(client,"sword_tree_needs_shrine");
     }
@@ -851,7 +921,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (action==="equip") committed.loadouts=next.loadouts;
       this.swordTrees.set(id,committed);
       if (action === "school" || action === "reset") { this.swordGuards.delete(id); this.swordCombos.delete(id); }
-      player.swordTreeData=JSON.stringify(committed);
+      player.swordTreeData=JSON.stringify(committed);this.syncSkillHotbar(id);
       try {
         client.send("sword_tree_changed",{action,id:value});
         if(player.level>=26 && (action==="learn" || action==="upgrade" || action==="reset"))
@@ -882,7 +952,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const player=this.state.players.get(id), book=this.muayBooks.get(id);
     if (!player || player.pathId!=="muay_boran" || !book) return;
     book.training[field]=Math.min(1_000_000,book.training[field]+1);
-    player.muayBookData=JSON.stringify(book);
+    this.syncSkillHotbar(id);player.muayBookData=JSON.stringify(book);
   }
   private recordMuayMastery(id:string,school:MuaySchool,technique:boolean,sequence:boolean):void {
     const player=this.state.players.get(id),book=this.muayBooks.get(id);
@@ -890,7 +960,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const mastery=book.mastery[school];
     if(technique)mastery.technique=Math.min(1_000_000,mastery.technique+1);
     if(sequence)mastery.sequences=Math.min(1_000_000,mastery.sequences+1);
-    player.muayBookData=JSON.stringify(book);
+    this.syncSkillHotbar(id);player.muayBookData=JSON.stringify(book);
   }
 
   private clearMuayCombo(id:string):void {
@@ -1073,6 +1143,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private sendBladeBook(client:Client):void {
+    this.syncSkillHotbar(client.sessionId);
     const player=this.state.players.get(client.sessionId),book=this.bladeBooks.get(client.sessionId);
     if (!player || !book || player.pathId!=="blade") return;
     try { client.send("blade_book_state",{book,core:BLADE_CORE,coreLevels:MUAY_CORE_LEVELS,corePointLevels:MUAY_CORE_POINT_LEVELS,coreProgress:Array.from({length:MUAY_CORE_LEVELS.length+1},(_,rank)=>bladeCoreProgress(rank)),lessons:BLADE_LESSONS,practiceLabels:BLADE_PRACTICE_LABELS,points:bladePoints(this.learningLevel(client.sessionId,player)),rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:BLADE_RANKABLE_SKILLS}); }
@@ -1080,6 +1151,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private sendSentinelBook(client:Client):void {
+    this.syncSkillHotbar(client.sessionId);
     const player=this.state.players.get(client.sessionId),book=this.sentinelBooks.get(client.sessionId);
     if(!player || player.pathId!=="sentinel" || !book)return;
     try{client.send("sentinel_book_state",{book,core:SENTINEL_CORE,coreLevels:MUAY_CORE_LEVELS,corePointLevels:MUAY_CORE_POINT_LEVELS,coreProgress:Array.from({length:MUAY_CORE_LEVELS.length+1},(_,rank)=>sentinelCoreProgress(rank)),lessons:SENTINEL_LESSONS,practiceLabels:SENTINEL_PRACTICE_LABELS,points:sentinelPoints(this.learningLevel(client.sessionId,player)),rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SENTINEL_RANKABLE_SKILLS});}
@@ -1096,6 +1168,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private changeSentinelBook(client:Client,message:unknown):void {
     if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_sentinel_book");
     const input=message as Record<string,unknown>,keys=Object.keys(input),action=input.action;
+    if((message as {action?:unknown}).action==="equip" && this.configuredHotbar(client.sessionId))return this.reject(client,"skill_hotbar_use_unified");
     if(action==="learn" || action==="upgrade" || action==="core_upgrade") {if(keys.length!==2 || typeof input.skillId!=="string")return this.reject(client,"invalid_sentinel_book");}
     else if(action==="equip") {if(keys.length!==3 || !Number.isInteger(input.slot) || (input.slot as number)<0 || (input.slot as number)>3 || (input.skillId!==null && typeof input.skillId!=="string"))return this.reject(client,"invalid_sentinel_book");}
     else if(action==="reset" || action==="core_reset") {if(keys.length!==1)return this.reject(client,"invalid_sentinel_book");}
@@ -1104,7 +1177,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!player)return;
     if(player.pathId!=="sentinel")return this.reject(client,"sentinel_class_required");
     if(!book)return this.reject(client,"build_unavailable");
-    if(player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 || this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)return this.reject(client,"sentinel_book_needs_shrine");
+    const learning=action==="learn" || action==="upgrade" || action==="core_upgrade";
+    if(learning && !this.canLearnSkillsNow(client))return;
+    if(!learning && (player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
+        this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs))
+      return this.reject(client,"sentinel_book_needs_shrine");
     const next=validateSentinelBook(book,this.learningLevel(client.sessionId,player));
     if(action==="core_upgrade"){
       const skillId=input.skillId as SentinelCoreId;
@@ -1269,7 +1346,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const actor=this.spellCaster(client),book=this.sentinelBooks.get(id);
     if(!actor || !book)return;
     if(actor.pathId!=="sentinel" || !this.persistentCharacters.has(id))return this.reject(client,"sentinel_class_required");
-    if(!book.learned.includes(skillId) || !book.slots.includes(skillId) || skill.effect==="passive")return this.reject(client,"sentinel_skill_locked");
+    if(!book.learned.includes(skillId) || !this.advancedEquipped(id,skillId,book.slots.includes(skillId)) || skill.effect==="passive")return this.reject(client,"sentinel_skill_locked");
     if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
     if(actor.flying || !onMapGround(actor) || isRestArea(actor.mapId,actor))return this.reject(client,"sentinel_location");
     if(Date.now()<(book.cooldowns[skillId] ?? 0))return this.reject(client,"sentinel_cooldown");
@@ -1366,7 +1443,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=client.sessionId,player=this.spellCaster(client),book=this.bladeBooks.get(id);
     if(!player || !book) return;
     if(player.pathId!=="blade" || !this.persistentCharacters.has(id)) return this.reject(client,"blade_class_required");
-    if(!book.learned.includes("cloak") || !book.slots.includes("cloak")) return this.reject(client,"blade_skill_locked");
+    if(!book.learned.includes("cloak") || !this.advancedEquipped(id,"cloak",book.slots.includes("cloak"))) return this.reject(client,"blade_skill_locked");
     if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id)) return this.reject(client,"character_busy");
     if(this.bladeCloaks.has(id)) return this.reject(client,"blade_cloak_active");
     if(player.flying || !onMapGround(player) || isRestArea(player.mapId,player)) return this.reject(client,"blade_cloak_location");
@@ -1483,7 +1560,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!player || !book)return;
     if(player.pathId!=="blade" || !this.persistentCharacters.has(id))return this.reject(client,"blade_class_required");
     if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
-    if(!book.learned.includes(skillId) || !book.slots.includes(skillId) || skill.effect==="passive")return this.reject(client,"blade_skill_locked");
+    if(!book.learned.includes(skillId) || !this.advancedEquipped(id,skillId,book.slots.includes(skillId)) || skill.effect==="passive")return this.reject(client,"blade_skill_locked");
     if(player.flying || !onMapGround(player) || isRestArea(player.mapId,player))return this.reject(client,"blade_cloak_location");
     if(this.bladeWindups.has(id))return this.reject(client,"blade_windup_active");
     const now=Date.now();if(now<(book.cooldowns[skillId] ?? 0))return this.reject(client,"blade_cooldown");
@@ -1575,6 +1652,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private changeBladeBook(client:Client,message:unknown):void {
     if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_blade_book");
     const input=message as Record<string,unknown>,keys=Object.keys(input),action=input.action;
+    if((message as {action?:unknown}).action==="equip" && this.configuredHotbar(client.sessionId))return this.reject(client,"skill_hotbar_use_unified");
     if (action==="learn" || action==="upgrade" || action==="core_upgrade") {
       if(keys.length!==2 || typeof input.skillId!=="string") return this.reject(client,"invalid_blade_book");
     } else if(action==="equip") {
@@ -1588,8 +1666,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(player.pathId!=="blade") return this.reject(client,"blade_class_required");
     if(!book) return this.reject(client,"build_unavailable");
     if(this.bladeCloaks.has(id) || this.bladeWindups.has(id) || this.bladeCasts.has(id)) return this.reject(client,"character_busy");
-    if(player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
-        this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)
+    const learning=action==="learn" || action==="upgrade" || action==="core_upgrade";
+    if(learning && !this.canLearnSkillsNow(client))return;
+    if(!learning && (player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
+        this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs))
       return this.reject(client,"blade_book_needs_shrine");
     const next=validateBladeBook(book,this.learningLevel(client.sessionId,player));
     if(action==="core_upgrade") {
@@ -1651,6 +1731,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private sendOccultBook(client:Client):void {
+    this.syncSkillHotbar(client.sessionId);
     const player=this.state.players.get(client.sessionId),book=this.occultBooks.get(client.sessionId);
     if (!player || !book || !isOccultPath(player.pathId)) return;
     try {
@@ -1700,6 +1781,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private changeOccultBook(client:Client,message:unknown):void {
     if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_occult_book");
     const input=message as Record<string,unknown>,keys=Object.keys(input),action=input.action;
+    if((message as {action?:unknown}).action==="equip" && this.configuredHotbar(client.sessionId))return this.reject(client,"skill_hotbar_use_unified");
     if (action==="learn" || action==="upgrade" || action==="core_upgrade") {
       if (keys.length!==2 || typeof input.skillId!=="string") return this.reject(client,"invalid_occult_book");
     } else if (action==="equip") {
@@ -1711,8 +1793,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=client.sessionId,player=this.buildPlayer(client,"occult"),book=this.occultBooks.get(id);
     if (!player || !book) return;
     if (!isOccultPath(player.pathId)) return this.reject(client,"occult_class_required");
-    if (player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
-        this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)
+    const learning=action==="learn" || action==="upgrade" || action==="core_upgrade";
+    if(learning && !this.canLearnSkillsNow(client))return;
+    if(!learning && (player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
+        this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs))
       return this.reject(client,"occult_book_needs_shrine");
     const path=player.pathId,next=validateOccultBook(book,Math.max(classLearningLevel(this.rebirthStates.get(client.sessionId),"seer",player.level),classLearningLevel(this.rebirthStates.get(client.sessionId),"mender",player.level)));
     if(action==="core_upgrade") {
@@ -1905,7 +1989,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!caster || !book) return;
     if (!isOccultPath(caster.pathId)) return this.reject(client,"occult_class_required");
     const path=caster.pathId;
-    if (lesson.path!==path || !book.learned[path].includes(skillId) || !book.loadouts[path].includes(skillId))
+    if (lesson.path!==path || !book.learned[path].includes(skillId) || !this.advancedEquipped(id,skillId,book.loadouts[path].includes(skillId)))
       return this.reject(client,"occult_skill_locked");
     if (Date.now()<(book.cooldowns[skillId] ?? 0)) return this.reject(client,"occult_cooldown");
     if (caster.mana<lesson.stamina) return this.reject(client,"insufficient_mana");
@@ -2153,6 +2237,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private changeMuayBook(client:Client,message:unknown):void {
     if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"invalid_muay_book");
     const input=message as Record<string,unknown>, keys=Object.keys(input), action=input.action;
+    if((message as {action?:unknown}).action==="equip" && this.configuredHotbar(client.sessionId))return this.reject(client,"skill_hotbar_use_unified");
     if(action==="learn" || action==="upgrade" || action==="core_upgrade") {
       if(keys.length!==2 || typeof input.skillId!=="string")return this.reject(client,"invalid_muay_book");
     } else if(action==="school") {
@@ -2165,8 +2250,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=client.sessionId, player=this.buildPlayer(client), book=this.muayBooks.get(id);
     if(!player || !book)return;
     if(player.pathId!=="muay_boran")return this.reject(client,"muay_class_required");
-    if(player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
-      this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)return this.reject(client,"muay_book_needs_shrine");
+    const learning=action==="learn" || action==="upgrade" || action==="core_upgrade";
+    if(learning && !this.canLearnSkillsNow(client))return;
+    if(!learning && (player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
+        this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs))
+      return this.reject(client,"muay_book_needs_shrine");
     const next:MuayBook={learned:[...book.learned],training:{...book.training},mastery:{chaiya:{...book.mastery.chaiya},korat:{...book.mastery.korat},lopburi:{...book.mastery.lopburi},thasao:{...book.mastery.thasao}},school:book.school,slots:[...book.slots],
       loadouts:{chaiya:[...book.loadouts.chaiya],korat:[...book.loadouts.korat],lopburi:[...book.loadouts.lopburi],thasao:[...book.loadouts.thasao]},...(book.ranks?{ranks:{...book.ranks}}:{}),...(book.coreRanks?{coreRanks:{...book.coreRanks}}:{})};
     if(action==="core_upgrade") {
@@ -2224,7 +2312,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!snapshot)return this.reject(client,"build_unavailable");
     this.pendingWarps.add(id);
     const task=characterStore.save({...snapshot,muayBook:next}).then(()=>{
-      this.muayBooks.set(id,next);player.muayBookData=JSON.stringify(next);
+      this.muayBooks.set(id,next);this.syncSkillHotbar(id);player.muayBookData=JSON.stringify(next);
       if(action==="school" || action==="reset") {this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");this.clearMuayCombo(id);this.sendSwordNotice(client,"muay_counter_cleared",{});}
       try {
         client.send("muay_book_changed",{action});
@@ -2507,7 +2595,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!wearsWraps(equippedWeaponId(this.inventories.get(id)))) return this.reject(client,"muay_wrap_required");
     const book=this.muayBooks.get(id);
     if (!book) return this.reject(client,"muay_class_required");
-    if (!book.slots.includes(skillId) || !book.learned.includes(skillId as MuayLessonId) || (!isMuayFoundation(skillId) && MUAY_LESSONS[skillId as MuayLessonId].school!==book.school)) return this.reject(client,"muay_skill_locked");
+    if (!this.advancedEquipped(id,skillId,book.slots.includes(skillId)) || !book.learned.includes(skillId as MuayLessonId) || (!isMuayFoundation(skillId) && MUAY_LESSONS[skillId as MuayLessonId].school!==book.school)) return this.reject(client,"muay_skill_locked");
     if (player.flying || !onMapGround(player)) return this.reject(client,"flying");
     if (isRestArea(player.mapId,player)) return this.reject(client,"muay_safe_area");
     const now=Date.now();
@@ -2624,7 +2712,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const id=client.sessionId,player=this.buildPlayer(client,"swordTree"),tree=this.swordTrees.get(id);
     if(!player || !tree)return;
     if(player.pathId!=="phutthaisawan")return this.reject(client,"sword_class_required");
-    if(player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 || this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)return this.reject(client,"sword_tree_needs_shrine");
+    if(action==="upgrade" && !this.canLearnSkillsNow(client))return;
+    if(action!=="upgrade" && (player.mapId!==DEFAULT_MAP_ID || !onMapGround(player) || Math.hypot(player.x,player.z)>6 ||
+        this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs))
+      return this.reject(client,"sword_tree_needs_shrine");
     const next:SwordTree={...tree,cooldowns:{...tree.cooldowns},coreRanks:{...tree.coreRanks}};
     if(action==="upgrade") {
       const skillId=input.skillId as SwordCoreId;
@@ -4065,17 +4156,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!build) return this.reject(client, "invalid_build");
       this.selectBuild(client, build);
     },
+    skill_hotbar_set: (client:Client,message:unknown)=>this.changeSkillHotbar(client,message),
     sword_tree_learn: (client: Client, message: unknown) => this.changeSwordTree(client, message, "learn"),
     sword_tree_upgrade: (client: Client, message: unknown) => this.changeSwordTree(client, message, "upgrade"),
     sword_tree_school: (client: Client, message: unknown) => this.changeSwordTree(client, message, "school"),
     sword_tree_reset: (client: Client, message: unknown) => this.changeSwordTree(client, message, "reset"),
     sword_tree_equip: (client: Client, message: unknown) => this.changeSwordTree(client, message, "equip"),
     sword_core_book: (client: Client, message: unknown) => this.changeSwordCore(client, message),
-    sword_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castSwordCore(client, message);},
+    sword_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castSwordCore(client, message);},
     // Keep the legacy protocol for older clients while the current HUD uses four core skills.
-    sword_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castSwordSkill(client, message);},
-    muay_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castMuaySkill(client, message);},
-    muay_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castMuayCore(client, message);},
+    sword_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castSwordSkill(client, message);},
+    muay_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castMuaySkill(client, message);},
+    muay_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castMuayCore(client, message);},
     grapple_escape: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.escapeMuayGrapple(client, message);},
     grapple_counter: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.counterMuayGrapple(client, message);},
     muay_book: (client: Client, message: unknown) => this.changeMuayBook(client, message),
@@ -4087,9 +4179,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendOccultBook(client);
     },
     occult_book: (client: Client, message: unknown) => this.changeOccultBook(client,message),
-    occult_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castOccultSkill(client,message);},
-    seer_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castSeerCore(client,message);},
-    mender_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castMenderCore(client,message);},
+    occult_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castOccultSkill(client,message);},
+    seer_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castSeerCore(client,message);},
+    mender_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castMenderCore(client,message);},
     blade_book_get: (client: Client, message: unknown) => {
       if(!parseEmptyCommand(message)) return this.reject(client,"invalid_blade_book");
       const player=this.buildPlayer(client,"occult");
@@ -4098,8 +4190,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendBladeBook(client);
     },
     blade_book: (client: Client, message: unknown) => this.changeBladeBook(client,message),
-    blade_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castBladeSkill(client,message);},
-    blade_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.castBladeCore(client,message);},
+    blade_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castBladeSkill(client,message);},
+    blade_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castBladeCore(client,message);},
     sentinel_book_get: (client:Client,message:unknown) => {
       if(!parseEmptyCommand(message))return this.reject(client,"invalid_sentinel_book");
       const player=this.buildPlayer(client,"occult");if(!player)return;
@@ -4107,8 +4199,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendSentinelBook(client);
     },
     sentinel_book: (client:Client,message:unknown) => this.changeSentinelBook(client,message),
-    sentinel_skill: (client:Client,message:unknown) => {if(!this.blockMounted(client))this.castSentinelSkill(client,message);},
-    sentinel_core_skill: (client:Client,message:unknown) => {if(!this.blockMounted(client))this.castSentinelCore(client,message);},
+    sentinel_skill: (client:Client,message:unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castSentinelSkill(client,message);},
+    sentinel_core_skill: (client:Client,message:unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castSentinelCore(client,message);},
     cast_class_skill: (client: Client, message: unknown) => {
       if(this.blockMounted(client))return;
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_build");
@@ -4541,7 +4633,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!isOccultPath(player.pathId))return this.reject(client,"occult_class_required");
       if(!this.gates.get(id)?.possession.consume(this.simulatedMs))return this.reject(client,"possession_rate_limited");
       if(player.possessionActive){this.endPossession(id,"cancelled");return;}
-      if(!this.legacyCombatRoom() && !this.canPrepareSpirit(id,player.pathId,true))return this.reject(client,"occult_skill_locked");
+      if((!this.legacyCombatRoom() || this.configuredHotbar(id)) && !this.canPrepareSpirit(id,player.pathId,true))return this.reject(client,"occult_skill_locked");
       if(POSSESSION_BUFF.requiresSummon && !this.state.summons.has(id))return this.reject(client,"possession_needs_summon");
       if(possessionCoolingDown(this.persistentCharacters.get(id)))return this.reject(client,"possession_cooldown");
       if(player.mana<15)return this.reject(client,"insufficient_mana");
@@ -4740,10 +4832,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
   private canPrepareSpirit(id:string, path:OccultPath, tranceOnly:boolean):boolean {
     const book=this.occultBooks.get(id);
-    if(path==="seer" && !tranceOnly)return Boolean(book);
-    return Boolean(book?.loadouts[path].some(skill=>skill && book.learned[path].includes(skill) &&
-      (tranceOnly ? OCCULT_LESSONS[skill].effect==="trance" :
-      ["spirit","spirit_bind","spirit_heal","spirit_ward","trance"].includes(OCCULT_LESSONS[skill].effect))));
+    const mixed=this.configuredHotbar(id);
+    if(path==="seer" && !tranceOnly && (!mixed || mixed.some(slot=>slot?.kind==="core"&&slot.id==="seer_pot")))return Boolean(book);
+    const slots=mixed?mixed.filter(slot=>slot?.kind==="advanced").map(slot=>slot!.id):book?.loadouts[path];
+    return Boolean(slots?.some(skill=>skill && book?.learned[path].some(id=>id===skill) &&
+      (tranceOnly ? OCCULT_LESSONS[skill as OccultSkillId].effect==="trance" :
+      ["spirit","spirit_bind","spirit_heal","spirit_ward","trance"].includes(OCCULT_LESSONS[skill as OccultSkillId].effect))));
   }
   private summonSpirit(client: Client, message: unknown, kind: "guardian" | "pot_spirit") {
     if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
@@ -4754,7 +4848,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const owner = this.state.players.get(id);
     if (!owner || !owner.alive) return this.reject(client, "not_alive");
     if (!isOccultPath(owner.pathId)) return this.reject(client, "occult_class_required");
-    if (!this.legacyCombatRoom() && (kind!=="pot_spirit" || !this.canPrepareSpirit(id,owner.pathId,false))) return this.reject(client,"occult_skill_locked");
+    if ((!this.legacyCombatRoom() || this.configuredHotbar(id)) && (kind!=="pot_spirit" || !this.canPrepareSpirit(id,owner.pathId,false))) return this.reject(client,"occult_skill_locked");
     if (owner.possessionActive) return this.reject(client, "possession_active");
     if (this.state.summons.has(id)) return this.reject(client, "summon_limit");
     if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) {
@@ -5825,6 +5919,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       directorClaims: this.directorClaims.get(id),
       classSkillReadyAt: player.classSkillReadyAt,
       talismanReadyAt: player.talismanReadyAt,
+      mixedSkillLoadouts: this.mixedSkillLoadouts.get(id),
       swordTree: this.swordTrees.get(id),
       muayCooldowns: this.muayCooldowns.get(id),
       muayBook: this.muayBooks.get(id),
@@ -5979,6 +6074,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         mana: Math.min(saved?.mana ?? initialMaxMana,initialMaxMana),
       });
 
+      if(saved?.mixedSkillLoadouts)this.mixedSkillLoadouts.set(client.sessionId,saved.mixedSkillLoadouts);
       this.swordTrees.set(client.sessionId, saved?.swordTree ?? newSwordTree());
       this.muayCooldowns.set(client.sessionId, saved?.muayCooldowns ?? {});
       this.muayBooks.set(client.sessionId, saved?.muayBook ?? newMuayBook());
@@ -5997,7 +6093,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const restoredScales=this.masteryScales.get(player)!;
       player.hp=Math.min(player.maxHp,normalizedHp>0?normalizedHp*(saved?.masteryVitals?restoredScales.hp:1):player.maxHp);
       player.mana=Math.min(player.maxMana,(saved?.mana??initialMaxMana)*(saved?.masteryVitals?restoredScales.mana:1));
-      this.state.players.set(client.sessionId, player);
+      this.state.players.set(client.sessionId, player);this.syncSkillHotbar(client.sessionId);
       client.view=new StateView();
       this.syncPlayerViews();
       if((options as Record<string,unknown>)?.warVersion===1)this.warClients.add(client.sessionId);
@@ -6126,6 +6222,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.directorClaims.delete(id);
       this.forestDefenses.delete(id);
       this.forestEscorts.delete(id);
+      this.mixedSkillLoadouts.delete(id);
       this.swordTrees.delete(id);
       this.muayCooldowns.delete(id);
       this.muayCombos.delete(id);

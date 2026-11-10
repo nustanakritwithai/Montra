@@ -352,13 +352,14 @@
     return candidates.find(t=>t.school===muaySchoolOf({local:true})) ?? candidates[0];
   }
   function openFieldDeepTraining(){
+    if(typeof mixedSkillData==="function" && mixedSkillData())return openUnifiedSkillBook();
     const kind=fieldSkillKind();if(mode!=="live" || !room || !kind)return;
     const trial=journeyNotesForPlayer().trial;
     const course=gearGuides?.journey?.course, suggested=fieldTechnique(course);
     if(trial?.deep || suggested)skillGraphSel[kind]=trial?.deep?trial.id:suggested.id;
     openClassBookDrawer("fieldSkills","ผังสกิล · วิชาแกนและวิชาเสริม",'<button id="fieldCoreBook" type="button" class="secondary">กลับไปวิชาแกน</button><p id="fieldRankHelp" class="note"></p><div id="fieldSkillGraph" aria-live="polite"></div>');
     $("fieldCoreBook").onclick=openClassSkillBook;
-    $("fieldRankHelp").textContent="ดูวิชาเสริมได้ตั้งแต่ Lv.1 · แต้มสายแยกจากแต้มวิชาแกน · เรียนหรืออัปขั้นใช้ 1 แต้มเมื่อครบเงื่อนไขของวิชานั้น · แถบสกิลหลักยังใช้วิชาแกน 4 ช่อง วิชาเสริมยังไม่แสดงบนแถบนี้";
+    $("fieldRankHelp").textContent="ดูวิชาเสริมได้ตั้งแต่ Lv.1 · แต้มสายแยกจากแต้มวิชาแกน · เรียนหรืออัปขั้นใช้ 1 แต้มเมื่อครบเงื่อนไขของวิชานั้น · เซิร์ฟเวอร์ที่รองรับให้เลือกวิชาแกนและวิชาเสริมรวมใน 4 ช่องเดิม";
     if(["blade","sentinel","occult"].includes(kind))room.send(kind+"_book_get",{});
     $("fieldSkillGraph").textContent="กำลังอ่านตำราของตัวละคร…";skillGraphKey="";renderSkillGraph(kind,$("fieldSkillGraph"));
   }
@@ -435,10 +436,8 @@
     }
     const trainingBand=journey?.course?.band ?? (player.level>=45 && player.level<=49?45:player.level>=35 && player.level<=39?35:0);
     if(!selected && ((player.level>=13 && player.level<=17) || (player.level>=23 && player.level<=25) || (trainingBand && notes.savedTraining!==trainingBand)) && currentFieldTraining()){
-      const village="ritual_village",route=activeMapId!==village && worldDefinitions?.[village]?travelRoute(worldDefinitions,activeMapId,village):[];
-      const gate=worldDefinitions?.[activeMapId]?.portals.find(p=>p.targetMapId===route[1]);
-      return {title:"ฝึกวิชาประจำอาชีพ",step:(gate?"ไปประตู "+worldDefinitions[route[1]].name+" · ":"")+"ใช้แต้มที่ศาลหมู่บ้านหลังพ้นการต่อสู้",
-        progress:currentFieldTraining().points+" แต้มวิชาแกน",trainingOnly:true,trainingBand,to:activeMapId===village?{x:0,z:0}:gate};
+      return {title:"ฝึกวิชาประจำอาชีพ",step:"ใช้แต้มได้ทุกที่หลังพ้นการต่อสู้ 5 วินาที · แตะดูวิชาที่ฝึกได้",
+        progress:currentFieldTraining().points+" แต้มวิชาแกน",trainingOnly:true,trainingBand};
     }
     if(selected && personalItems[boss.gear]?.recipe?.some(i=>i.item===boss.fragment)){
       const inputs=fieldRecipeProgress(boss.gear),f=inputs.find(i=>i.id===boss.fragment),nav=journeyDirection(boss.camp);
@@ -476,7 +475,7 @@
       if(boss && !(player.level<=25 && notes.bossSkipped))
         return {title:"ทางเลือก · "+boss.camp.monster,step:"ดูเป้าบอสหรือกลับไปล่ามอนทั่วไป",progress:personalItems[boss.gear].name,bossInvite:true,bossGear:boss.gear};
       const training=currentFieldTraining();
-      if(training)return {title:"ฝึกวิชาประจำอาชีพ",step:"กลับศาลหมู่บ้านหลังพ้นการต่อสู้ · แตะดูวิชาที่ฝึกได้",progress:training.points+" แต้มวิชา",trainingOnly:true};
+      if(training)return {title:"ฝึกวิชาประจำอาชีพ",step:"ใช้แต้มได้ทุกที่หลังพ้นการต่อสู้ 5 วินาที · แตะดูวิชาที่ฝึกได้",progress:training.points+" แต้มวิชา",trainingOnly:true};
       return journey && player.level<=25?fieldLevelingGoal(player,journey,player.level<10?10:player.level<20?20:26):null;
     }
     const inputs=fieldRecipeProgress(recipe),f=inputs.find(i=>i.id===fragment.itemId);

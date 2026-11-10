@@ -32,7 +32,12 @@
   function skillLearningLevel(me){
     return me && gearGuides?.path===me.pathId && gearGuides?.level===me.level?(gearGuides.learningLevel??me.level):(me?.level??1);
   }
-  function skillGraphModel(kind) {
+  function skillGraphModel(kind){
+    const model=classSkillGraphModel(kind),mixed=typeof mixedSkillData==="function"?mixedSkillData():null;
+    if(!model || !mixed)return model;
+    return {...model,slotCount:4,nodes:model.nodes.map(n=>({...n,slot:mixed.slots.findIndex(s=>s?.kind==="advanced" && s.id===n.id)})),equip:(id,slot)=>equipMixedSkill("advanced",id,slot),key:[model.key,mixed]};
+  }
+  function classSkillGraphModel(kind) {
     const me = ownServerCharacter(); if (!me) return null;
     const lv = skillLearningLevel(me);
     if (kind === "sword") {
@@ -191,20 +196,20 @@
           <button type="button" class="sg-up" data-sg-upgrade="${sgEsc(n.id)}" ${can ? "" : "disabled"}>${pts < 1 ? "แต้มไม่พอ" : "อัปขั้น · 1 แต้ม"}</button>` : `<p class="sg-passive">ขั้นสูงสุดแล้ว</p>`}</div>`;
       }
       const learnBtn = n.learned ? "" : `<button type="button" class="primary" data-sg-learn="${sgEsc(n.id)}" ${n._state === "ready" ? "" : "disabled"}>${pts < 1 ? "แต้มไม่พอ" : n._state === "ready" ? "เรียน · 1 แต้ม" : "ยังเรียนไม่ได้"}</button>`;
-      const slotBtns = n.canEquip && !n.passive ? `<div class="sg-slots"><span>${advanced ? "ช่องลัดวิชาเสริม" : "ช่องลัด"}</span>${Array.from({ length: model.slotCount }, (_, i) => `<button type="button" data-sg-equip="${i}" class="${n.slot === i ? "on" : ""}">${i + 1}</button>`).join("")}</div>` : n.learned && n.passive ? `<p class="sg-passive">ติดตัวแล้ว · ทำงานเองตลอด</p>` : "";
+      const slotBtns = n.canEquip && !n.passive ? `<div class="sg-slots"><span>${model.slotCount===4 && typeof mixedSkillData==="function" && mixedSkillData() ? "ช่องสกิล" : advanced ? "ช่องลัดวิชาเสริม" : "ช่องลัด"}</span>${Array.from({ length: model.slotCount }, (_, i) => `<button type="button" data-sg-equip="${i}" class="${n.slot === i ? "on" : ""}">${i + 1}</button>`).join("")}</div>` : n.learned && n.passive ? `<p class="sg-passive">ติดตัวแล้ว · ทำงานเองตลอด</p>` : "";
       detail = `<div class="sg-detail"><div class="sg-dh"><span class="sg-orb sm ${n._state}">${SG_GLYPH[n.effect] || "✦"}</span><div><strong>${sgEsc(n.name)}</strong><small>${sgEsc(sgCombatLine(n))}</small></div></div>
         <p>${sgEsc(n.description || "")}</p>${n.checks.length ? `<ul class="sg-checks">${n.checks.map(c => `<li class="${c.ok ? "ok" : "no"}">${c.ok ? "✓" : "✗"} ${sgEsc(c.label)}</li>`).join("")}</ul>` : ""}
         ${!n.learned && missing.some(c => /^ใช้สำนัก/.test(c.label)) ? `<p class="note">เลือกใช้สำนักนี้ที่หัวคอลัมน์ก่อน (ทำได้ที่ลานพัก)</p>` : ""}${learnBtn}${rankHtml}${slotBtns}</div>`;
     }
     const me = ownServerCharacter(), cls = SG_CLASS[me?.pathId] || { name: model.title, role: "", glyph: "✦", tone: "gold" };
     const activeLane = L.lanes.find(l => l.active), learnedN = model.nodes.filter(x => x.learned && !x.basic).length, totalN = model.nodes.filter(x => !x.basic).length;
-    const coreTree = core ? `<section class="sg-core-tree" aria-label="วิชาแกนที่เชื่อมกับผังวิชาเสริม"><div class="sg-core-heading"><strong>วิชาแกน 4 ช่อง</strong><span>แต้มแกน ${core.available} / ${core.points}</span></div><div class="sg-core-nodes">${core.ids.map(id =>
+    const coreTree = core ? `<section class="sg-core-tree" aria-label="วิชาแกนที่เชื่อมกับผังวิชาเสริม"><div class="sg-core-heading"><strong>วิชาแกน</strong><span>แต้มแกน ${core.available} / ${core.points}</span></div><div class="sg-core-nodes">${core.ids.map(id =>
       `<button type="button" data-sg-core="${sgEsc(id)}" aria-label="${sgEsc(core.catalog.core[id].name)} ขั้น ${Number(core.ranks[id] || 0)}"><span class="kg-glyph" data-skill-glyph="${sgEsc(id)}">✦</span><strong>${sgEsc(core.catalog.core[id].name)}</strong><small>ขั้น ${Number(core.ranks[id] || 0)}/${core.levels.length}</small></button>`).join("")}</div><div class="sg-tree-join">${sgEsc(cls.name)} · วิชาอาชีพเดียวกัน</div></section>` : "";
     container.innerHTML = `<div class="sg-wrap${advanced ? " sg-advanced" : ""}" data-tone="${cls.tone}"><div class="sg-banner"><span class="sg-crest">${cls.glyph}</span><div class="sg-title"><small>${sgEsc(cls.role)} · Lv.${lvNow}</small><strong>${sgEsc(cls.name)}</strong><em>${activeLane ? "สำนัก" + sgEsc(activeLane.name) + " · " : ""}เรียนแล้ว ${learnedN}/${totalN} วิชาเสริม</em></div><div class="sg-points"><b>${pts}</b><span>${advanced ? "แต้มสาย" : "แต้มวิชา"}</span></div></div>
       <div class="sg-sum">ใช้ไป ${1 + Math.floor((Math.min(lvNow,100)-1)/2) - pts} / ${1 + Math.floor((Math.min(lvNow,100)-1)/2)} แต้ม · ${model.summary.map(sgEsc).join(" · ")}</div>
       ${advanced ? '<p class="note sg-tree-key">เส้นประเชื่อมวิชาอาชีพเดียวกัน ไม่ใช่เงื่อนไขปลดล็อก · เส้นทึบคือวิชาที่ต้องเรียนก่อน · แตะวิชาแกนหรือวิชาเสริมเพื่อดูรายละเอียด</p>' : ""}${coreTree}
       <div class="sg-view"><div class="sg-sizer"><div class="sg-canvas" style="width:${L.width}px;height:${L.height}px;--sgw:${L.W - 4}px">${lanesHtml}<svg class="sg-edges" aria-hidden="true" width="${L.width}" height="${L.height}">${groupEdges}${edges.join("")}</svg>${nodesHtml}</div></div></div>
-      ${detail}<p class="note">เรียน จัดช่อง${advanced ? "วิชาเสริม" : ""} และเปลี่ยนสำนักที่ลานพักหลังพ้นการต่อสู้ 5 วินาที</p><button type="button" class="secondary" data-sg-reset>คืนแต้ม${advanced ? "สาย" : ""}</button></div>`;
+      ${detail}<p class="note">เรียนและอัปขั้นได้ทุกที่หลังพ้นการต่อสู้ 5 วินาที · เปลี่ยนสำนักและคืนแต้มที่ลานพัก · ${kind==="sword"?"นักดาบจัดช่องได้ทุกที่":"จัดช่องที่ลานพัก"}</p><button type="button" class="secondary" data-sg-reset>คืนแต้ม${advanced ? "สาย" : ""}</button></div>`;
     const v = container.querySelector(".sg-view"), s = skillGraphScroll[kind];
     // Fit the whole graph to the drawer width when it is a little wider (down to 72%), scroll beyond that.
     const fit = Math.max(.8, Math.min(1, (v.clientWidth - 2) / L.width)), sizer = v.querySelector(".sg-sizer"), canvas = v.querySelector(".sg-canvas");
@@ -511,6 +516,13 @@
       }
     }
 
+    let equipBox=$("skillModalEquip");
+    const mixed=typeof mixedSkillData==="function"?mixedSkillData():null;
+    if(!equipBox && mixed){equipBox=document.createElement("div");equipBox.id="skillModalEquip";equipBox.className="sg-slots";$("skillModalUpgradeBtn")?.parentNode?.append(equipBox);}
+    if(equipBox){equipBox.hidden=!mixed;if(mixed){
+      equipBox.innerHTML='<span>เลือกใช้ในช่อง</span>'+[0,1,2,3].map(i=>'<button type="button" data-core-equip="'+i+'" class="'+(mixed.slots[i]?.kind==="core" && mixed.slots[i].id===skillId?'on':'')+'" '+(skillLoadoutPending?'disabled':'')+'>'+(i+1)+'</button>').join('');
+      const owner=activeSkillModalOwner;equipBox.querySelectorAll('[data-core-equip]').forEach(b=>b.onclick=()=>{if(isCurrentClassSkillBook(owner) && activeSkillModalId===skillId && mixedSkillData()?.school===mixed.school)equipMixedSkill('core',skillId,Number(b.dataset.coreEquip));});
+    }}
     const upBtn = $("skillModalUpgradeBtn");
     if (upBtn) {
       upBtn.onclick = null;
@@ -537,6 +549,7 @@
   }
 
   function openSwordTree() {
+    if(typeof mixedSkillData==="function" && mixedSkillData())return openUnifiedSkillBook();
     const data = swordData();
     if (!data?.catalog?.core) return toast(mode === "live" && ownServerCharacter()?.pathId !== "phutthaisawan"
       ? "เลือกอาชีพนักดาบก่อน" : "กำลังรอตำราวิชาดาบจากเซิร์ฟเวอร์");
@@ -586,7 +599,7 @@
           '<circle data-kg-center fill="none" stroke="rgba(255,215,0,.2)" />' +
           ids.map((id, i) => '<path data-kg-edge="' + id + '" class="kg-edge ' + (states[i] === 'learned' ? 'on' : states[i]) + '" />').join('') + '</svg>' + nodes + '</div>' +
       '<div class="st-footer-actions"><button type="button" class="secondary" id="' + CORE_GRAPH_RESET_IDS[path] + '" ' + (spent ? '' : 'disabled') + '>คืนแต้มวิชา (' + spent + ' แต้ม)</button>' +
-        '<p class="note">ใช้ทั้ง 4 วิชาในช่องเดิม · จัดแต้มที่ลานพักหลังพ้นการต่อสู้ 5 วินาที · เซิร์ฟเวอร์ตรวจเงื่อนไขก่อนอัปขั้น</p></div></div>';
+        '<p class="note">ใช้ทั้ง 4 วิชาในช่องเดิม · อัปขั้นได้ทุกที่หลังพ้นการต่อสู้ 5 วินาที · คืนแต้มที่ลานพัก · เซิร์ฟเวอร์ตรวจเงื่อนไขก่อนอัปขั้น</p></div></div>';
     container.querySelectorAll('.kg-node').forEach(button => button.onclick = () => {
       if (!isCurrentClassSkillBook(model.owner)) return;
       SFX('tap'); openSkillDetailModal(button.dataset.skillId);
