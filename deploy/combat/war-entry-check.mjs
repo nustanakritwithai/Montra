@@ -4,6 +4,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 const dir=mkdtempSync(path.join(tmpdir(),'montra-war-entry-'));
 process.env.MONTRA_CHARACTER_DIR=dir;process.env.MONTRA_WORLD_EXPANSION='1';process.env.MONTRA_ECONOMY_ENABLED='0';
+process.env.MONTRA_HUNT_EVENTS='0';process.env.MONTRA_DIRECTOR_PERSIST='0';
 const {MyRoom}=await import('./src/rooms/MyRoom.ts');
 const {Player}=await import('./src/rooms/schema/MyRoomState.ts');
 const {guildStore}=await import('./src/rooms/GuildStore.ts');
@@ -21,6 +22,9 @@ const room=new MyRoom(),low=new Player({pathId:'muay_boran',ancestryId:'woodland
 const high=new Player({pathId:'blade',mapId:'moon_pass',x:fort.x+1,y:groundAt('moon_pass',fort.x+1,fort.z),z:fort.z,alive:true,level:100,hp:1800,maxHp:1800});
 room.field={site:'moon_pass',seq:1};room.battleActive=true;room.state.players.set('low123',low);room.state.players.set('high12',high);
 room.warSeats.set('low123',{guild:member.id,side:'attack',camp:0});room.warSeats.set('high12',{guild:'other',side:'defend',camp:0});
+const returnPoint={mapId:'ritual_village',x:-12,y:0,z:3};
+room.warCivilianPositions.set('low123',returnPoint);
+room.warCivilianPositions.set('high12',{...returnPoint,x:-11});
 room.persistentCharacters.set('low123',character);room.inventories.set('low123',makeStarterInventory());room.clients.push(client);room.broadcast=()=>{};
 try{
   assert.equal(room.swordGuardDamage('low123',high,100),28,'low level receives scaled direct PvP damage');
@@ -54,6 +58,7 @@ try{
   await saveOriginal(saved[0]);
   const restored=(await characterStore.loadOrCreateById(character,{x:0,z:0})).character;
   assert.equal(restored.experience,3,'war EXP survives a real character save and load');
+  assert.deepEqual({mapId:restored.mapId,x:restored.x,y:restored.y,z:restored.z},returnPoint,'war save returns to the civilian position');
   const veteranSave=saved.find(snapshot=>snapshot.id===veteran);assert.ok(veteranSave);
   await saveOriginal(veteranSave);
   const restoredVeteran=(await characterStore.loadOrCreateById(veteran,{x:0,z:0})).character;
