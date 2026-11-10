@@ -10,7 +10,7 @@
       const mesh=shape==="box"?B.MeshBuilder.CreateBox(name,{size:1},scene):B.MeshBuilder.CreateSphere(name,{diameter:1,segments:8},scene);
       mesh.parent=parent;mesh.position.set(...position);mesh.scaling.set(...scale);mesh.material=material;mesh.isPickable=false;return mesh;
     };
-    part("horse body","sphere",[0,1.12,0],[.92,.78,1.8],horseCoat);
+    part("horse body","sphere",[0,1.12,0],[.76,.78,1.8],horseCoat);
     const neck=part("horse neck","box",[0,1.42,-.78],[.38,.83,.45],horseCoat);neck.rotation.x=-.4;
     const head=part("horse head","sphere",[0,1.72,-1.08],[.43,.46,.68],horseCoat);head.rotation.x=-.18;
     for(const side of [-1,1])part("horse eye","sphere",[side*.213,1.78,-1.18],[.068,.068,.068],horseEye);
@@ -20,7 +20,9 @@
     part("horse saddle","box",[0,1.53,.05],[.64,.13,.67],horseLeather);
     part("horse saddle gold","box",[0,1.55,.05],[.68,.06,.71],horseGold);
     part("horse saddle front","box",[0,1.64,-.24],[.58,.12,.15],horseDark);
-    part("horse bridle gold","box",[0,1.68,-1.02],[.46,.06,.22],horseGold);
+    const bridle=part("horse bridle gold","box",[0,1.68,-1.02],[.46,.06,.22],horseGold);
+    // Reins: two thin straps from the bit to the rider's hands, re-laid each pose (updateReins).
+    const reins=[-1,1].map(()=>{const r=B.MeshBuilder.CreateBox("horse rein",{size:1},scene);r.material=horseDark;r.isPickable=false;r.setEnabled(false);return r;});
     const tail=part("horse tail","box",[0,1.13,1.02],[.18,.65,.18],horseDark);tail.rotation.x=.35;
     const legs=[];
     for(const x of [-.3,.3])for(const z of [-.58,.58]){
@@ -30,7 +32,23 @@
       legs.push(pivot);
     }
     root.setEnabled(false);
-    return {root,legs,tail};
+    return {root,legs,tail,bridle,reins};
+  }
+  // Lay each rein from the bit (either side of the bridle) to the matching hand; hidden when not riding.
+  const _reinA = new B.Vector3(), _reinB = new B.Vector3();
+  function updateReins(a) {
+    const h = a.horse; if (!h?.reins) return;
+    const on = !!a.mounted && h.root.isEnabled() && a.skin?.nodes;
+    h.reins.forEach((r, i) => {
+      r.setEnabled(!!on); if (!on) return;
+      const hand = a.skin.nodes[i ? "RightHand" : "LeftHand"]; if (!hand) { r.setEnabled(false); return; }
+      hand.computeWorldMatrix(true); _reinB.copyFrom(hand.getAbsolutePosition());
+      h.bridle.computeWorldMatrix(true);
+      B.Vector3.TransformCoordinatesToRef(new B.Vector3((i ? -1 : 1) * .5, -.2, -.1), h.bridle.getWorldMatrix(), _reinA);
+      const len = B.Vector3.Distance(_reinA, _reinB); if (!(len > .01)) { r.setEnabled(false); return; }
+      r.position.copyFrom(_reinA).addInPlace(_reinB).scaleInPlace(.5);
+      r.scaling.set(.025, .012, len); r.lookAt(_reinB);
+    });
   }
   // Server state per avatar; a revival plays the get-up action.
   function noteAvatarState(a, p) {
@@ -216,6 +234,27 @@
       set("LeftArm", -.58, .35, -1.12); set("LeftForeArm", 0, -2.0, 0);
     }
     add("Chest", breath * .03 * idle, 0, 0); add("LeftShoulder", 0, 0, breath * .025 * idle); add("RightShoulder", 0, 0, -breath * .025 * idle);
+    // ---- Idle life over the stance: slow weight shifts from foot to foot, deeper breathing, a look
+    // round now and then, a little arm sway, and every ~13 s a shoulder roll and neck stretch. Each
+    // character runs on its own phase so a crowd never moves in step.
+    if (idle > .01 && grounded && !a.mounted && !(a.action && now < a.action.end)) {
+      const w = idle, T = t + (a.idlePhase ??= [...String(a.id || "")].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 9973, 7) / 9973 * 60);
+      const ws = Math.sin(T * .9) * .6 + Math.sin(T * .37 + 1.1) * .4;          // -1 left foot .. 1 right foot
+      off[0] += ws * .014 * w; add("Hips", 0, 0, ws * .028 * w); add("Spine", 0, 0, -ws * .018 * w); add("Chest", 0, 0, -ws * .012 * w);
+      add(ws > 0 ? "LeftLeg" : "RightLeg", Math.abs(ws) * .07 * w, 0, 0); off[1] -= Math.abs(ws) * .004 * w;
+      const br = Math.sin(T * 1.55);
+      add("Spine1", br * .014 * w, 0, 0); add("Chest", br * .018 * w, 0, 0);
+      add("LeftShoulder", 0, 0, br * .012 * w); add("RightShoulder", 0, 0, -br * .012 * w);
+      const look = Math.sin(T * .23) * Math.sin(T * .11 + 1.3);
+      add("Neck", Math.sin(T * .41) * .03 * w, look * .24 * w, 0); add("Head", Math.sin(T * .37 + .5) * .035 * w, look * .2 * w, Math.sin(T * .29) * .03 * w);
+      add("LeftForeArm", 0, Math.sin(T * 1.3) * .035 * w, 0); add("RightForeArm", 0, -Math.sin(T * 1.3 + .8) * .035 * w, 0);
+      const u = (((T % 13) + 13) % 13) / 1.9;
+      if (u < 1) {
+        const e = Math.sin(u * Math.PI), r = Math.sin(u * Math.PI * 2);
+        add("LeftShoulder", 0, 0, -.09 * e * r * w); add("RightShoulder", 0, 0, .09 * e * Math.sin(u * Math.PI * 2 + 1) * w);
+        add("Neck", 0, 0, .2 * e * r * w); add("Head", -.07 * e * w, 0, .06 * e * r * w); add("Chest", -.03 * e * w, 0, 0);
+      }
+    }
     // ---- Locomotion blends over the stance: pelvis turns with the stride,
     // the chest counter-twists, the hip drops over the swinging leg.
     if (m > .001) {
@@ -626,12 +665,15 @@
     } else if (act && now >= act.end) a.action = null;
     if (a.mounted && !dead) {
       // Seated pose is visual only; collision and position remain on the server.
-      set("Hips",0,0,0);off[0]=0;off[1]=-.03;off[2]=0;
-      set("Spine",.05,0,0);set("Spine1",.05,0,0);set("Chest",.03,0,0);
-      set("LeftUpLeg",-1.0,0,.34);set("RightUpLeg",-1.0,0,-.34);
-      set("LeftLeg",1.05,0,0);set("RightLeg",1.05,0,0);
-      set("LeftArm",-.55,0,-.65);set("RightArm",-.55,0,.65);
-      set("LeftForeArm",0,-.45,0);set("RightForeArm",0,.45,0);
+      // Upright seat, legs astride the barrel (thighs forward and out, shins hanging back along the
+      // flanks), upper arms down at the sides and forearms forward to the reins over the withers.
+      set("Hips",.08,0,0);off[0]=0;off[1]=-.03;off[2]=0;
+      set("Spine",.04,0,0);set("Spine1",.04,0,0);set("Chest",.02,0,0);
+      set("LeftUpLeg",-.78,0,.52);set("RightUpLeg",-.78,0,-.52);
+      set("LeftLeg",.95,0,-.16);set("RightLeg",.95,0,.16);
+      set("LeftFoot",-.25,0,0);set("RightFoot",-.25,0,0);
+      set("LeftArm",-.62,.12,-1.05);set("RightArm",-.62,-.12,1.05);
+      set("LeftForeArm",0,-1.25,0);set("RightForeArm",0,1.25,0);
     }
     if (!dead) {
       // Gaze stays on the opponent: neck and head undo most of the torso twist and bend.
@@ -657,6 +699,7 @@
     const o = cur.off || (cur.off = off.slice());
     for (let i = 0; i < 3; i++) o[i] += (off[i] - o[i]) * blend;
     n.Hips.position.set(a.skin.rest.hipsX + o[0], a.skin.rest.hipsY + o[1], a.skin.rest.hipsZ + o[2]);
+    updateReins(a);
     if (a.skin.holder) a.skin.holder.rotation.y = Math.PI + (a.mounted ? 0 : spin); // whole-body turns (sweep, dance)
     // Hands: grip what is held, clench for Muay Thai and shields, open for casting, wai and rallies, relax otherwise.
     {
