@@ -248,7 +248,12 @@
     $("craftHome").onclick=openSmith;$("craftBag").onclick=openBag;
     for(const id of ["benchGroup","benchLevel","benchRecipe"])$(id).onchange=()=>{benchTrail.length=0;craftRecipeTarget=null;craftComingSoon="";craftRecipePage=id==="benchRecipe"?Math.max(0,Math.floor([...$("benchRecipe").options].findIndex(o=>o.value===$("benchRecipe").value)/6)):0;renderCraftingPage();if(id==="benchRecipe")openCraftRecipePopup();else closeCraftRecipePopup();};
     for(const category of ["all","food","medicine","weapons","armor","materials","furniture"])$("ckCategory-"+category).onclick=()=>{
-      craftComingSoon=["food","furniture"].includes(category)?category:"";
+      const homeCategory = category === "food" || category === "furniture";
+      if (homeCategory && typeof homeMapTemplate !== "undefined" && homeMapTemplate) {
+        openHomePanel();
+        return;
+      }
+      craftComingSoon=homeCategory?category:"";
       if(!craftComingSoon){$("benchGroup").value=category;craftPagePosition=null;benchTrail.length=0;craftRecipeTarget=null;craftRecipePage=0;}
       renderCraftingPage();
     };
@@ -423,4 +428,319 @@
     $("bagOpenCraft").onclick=()=>openCraftingPage();
     bindBagControls();
     renderBag();
+  }
+
+  const homeRecipeIds = ["furniture_stool","furniture_kitchen","furniture_lantern",
+    "furniture_plank_floor","furniture_wood_wall","furniture_doorway",
+    "food_herbal_fish_soup","food_grilled_fish","food_spirit_stew"];
+  let homeSnapshot = null, homeNeeds = null, homePending = null, homeNotice = "";
+  let homeCell = null, homeMoveFrom = null, homeReadAt = 0, homeHarvestTimer = null;
+  let homeBuildLayer = "furniture", homeRotation = 0;
+  let homeSceneRoot = null, homeSceneKey = "", homeMaterials = null;
+
+  function isPrivateHomeMap(id) {
+    return typeof id === "string" && /^personal_home_[a-f0-9]{32}$/.test(id);
+  }
+
+  function resetHomeClient() {
+    clearTimeout(homePending?.timer);
+    clearTimeout(homeHarvestTimer);
+    homeSnapshot = homeNeeds = homePending = homeCell = homeMoveFrom = null;
+    homeNotice = ""; homeReadAt = 0; homeSceneKey = "";
+    homeBuildLayer = "furniture"; homeRotation = 0;
+    homeSceneRoot?.dispose(); homeSceneRoot = null;
+  }
+
+  function readHomeState(includeNeeds = false, force = false) {
+    if (!economyReady() || !homeMapTemplate || (!force && Date.now()-homeReadAt<350)) return;
+    homeReadAt = Date.now();
+    try {
+      room.send("get_home",{});
+      if (includeNeeds) {
+        room.send("get_needs",{});
+        room.send("get_inventory",{});
+      }
+    } catch (_) {
+      homeNotice = "โหลดข้อมูลเรือนไม่สำเร็จ";
+      renderHomePanel();
+    }
+  }
+
+  function sendHomeAction(command, payload = {}, useRequestId = true) {
+    if (!economyReady() || !homeMapTemplate || homePending || economyPending || itemUsePending) return;
+    const target = room;
+    const requestId = useRequestId ? economyRequestId() : null;
+    const action = {target,requestId,command,slot:payload.slot};
+    action.timer = setTimeout(() => {
+      if (homePending !== action) return;
+      homePending = null;
+      homeNotice = "ยังไม่ได้รับผลจากเซิร์ฟเวอร์ · รีเฟรชเพื่อดูสถานะล่าสุด";
+      renderHomePanel();
+    }, 8000);
+    homePending = action;
+    homeNotice = "กำลังส่งคำขอ…";
+    try {
+      target.send(command,requestId ? {...payload,requestId} : payload);
+    } catch (_) {
+      finishHomeAction(null,command,"ส่งคำขอไม่สำเร็จ");
+    }
+    renderHomePanel();
+  }
+
+  function finishHomeAction(requestId, command, notice) {
+    const pending = homePending;
+    if (!pending || pending.target !== room || (command && pending.command !== command) ||
+        (requestId !== null && pending.requestId !== requestId)) return false;
+    clearTimeout(pending.timer);
+    homePending = null; homeNotice = notice;
+    renderHomePanel();
+    return true;
+  }
+
+  function finishHomeItemUse(slot) {
+    if (homePending?.slot === slot) finishHomeAction(null,"use_item","อัปเดตความอิ่มและน้ำแล้ว");
+  }
+
+  function homeCommandError(reason) {
+    const errors = {
+      home_required:"ซื้อเรือนส่วนตัวก่อน", home_unavailable:"เรือนส่วนตัวยังใช้ไม่ได้",
+      home_village_required:"กลับมาที่เขตพักในหมู่บ้านเพื่อเข้าเรือน",
+      home_build_location:"เข้าเรือนส่วนตัวก่อนสร้าง จัดวาง หรือทำสวน",
+      home_wall_blocked:"ขยับออกจากตำแหน่งผนังก่อนวางหรือหมุน",
+      home_level_unavailable:"อัปเกรดถึงระดับสูงสุดแล้ว",
+      home_cell_invalid:"ตำแหน่งนี้อยู่นอกพื้นที่จัดวาง", home_cell_occupied:"ช่องนี้มีเฟอร์นิเจอร์แล้ว",
+      home_furniture_unavailable:"ไม่มีเฟอร์นิเจอร์ชิ้นนี้ในตำแหน่งที่เลือก",
+      garden_occupied:"แปลงนี้มีต้นไม้อยู่แล้ว", garden_not_ready:"ผลผลิตยังไม่พร้อมเก็บ",
+      garden_water_unavailable:"แปลงนี้รดน้ำไม่ได้", garden_plot_invalid:"แปลงนี้ยังไม่เปิด",
+      cooking_level_required:"ระดับทำอาหารยังไม่ถึง", cooking_kitchen_required:"วางเตาครัวในเรือนก่อน",
+      needs_full:"ยังอิ่มหรือดื่มน้ำเพียงพอ", water_cooldown:"รอสักครู่ก่อนตักน้ำอีกครั้ง",
+      water_unavailable:"ยืนบนพื้นใกล้ลานกลางหมู่บ้านก่อนตักน้ำ",
+      insufficient_gold:"ทองไม่พอ", inventory_full:"กระเป๋าเต็ม", item_cooldown:"รอก่อนใช้ไอเท็มอีกครั้ง",
+      craft_missing_material:"วัตถุดิบไม่ครบ", character_busy:"ตัวละครกำลังทำรายการอื่น",
+      warp_cooldown:"รอสักครู่ก่อนเดินทางอีกครั้ง", combat_locked:"ออกจากการต่อสู้ก่อนเดินทาง",
+      movement_busy:"หยุดการเคลื่อนไหวพิเศษก่อนเดินทาง",
+    };
+    return finishHomeAction(null,null,errors[reason] || "ทำรายการไม่สำเร็จ · ตรวจสถานะก่อนลองใหม่");
+  }
+
+  function applyHomeState(payload) {
+    if (!Number.isInteger(payload?.level) || payload.level<0 || payload.level>2 ||
+        !Array.isArray(payload.furniture) || !Array.isArray(payload.garden)) return;
+    homeSnapshot = {...payload, receivedAt:Date.now()};
+    if (typeof payload.requestId === "string" && finishHomeAction(payload.requestId,"home_action","บันทึกเรือนแล้ว")) homeMoveFrom = null;
+    renderHomeScene();
+    renderHomePanel();
+  }
+
+  function openHomePanel() {
+    homeNotice = "";
+    openDrawer("home","เรือนส่วนตัว",
+      '<section id="homePanel" class="home-panel"><p id="homeSummary"></p><p id="homeNotice" role="status"></p><div id="homeControls"></div></section>');
+    renderHomePanel();
+    readHomeState(true);
+  }
+
+  function renderHomePanel() {
+    clearTimeout(homeHarvestTimer);
+    if (drawerActive !== "home" || !$("homeControls")) return;
+    const controls = $("homeControls"), own = ownServerCharacter(), available = economyReady() && homeMapTemplate;
+    const focus = document.activeElement?.dataset?.homeFocus;
+    const restoreFocus = () => {
+      if (focus) [...controls.querySelectorAll("button")].find(el=>el.dataset.homeFocus===focus && !el.disabled)?.focus({preventScroll:true});
+    };
+    const inHome = available && isPrivateHomeMap(own?.mapId);
+    const level = homeSnapshot?.level ?? 0;
+    controls.replaceChildren();
+    $("homeNotice").textContent = homeNotice;
+    $("homeSummary").textContent = !available ? "เรือนส่วนตัวต้องใช้เซิร์ฟเวอร์ออนไลน์รุ่นที่รองรับ" :
+      !homeSnapshot ? "กำลังอ่านข้อมูลเรือนจากเซิร์ฟเวอร์…" :
+      level ? "เรือนระดับ "+level+(inHome?" · อยู่ในเรือนของคุณ":" · เข้าเรือนจากเขตพักหมู่บ้าน") :
+      "ซื้อเรือนจากเขตพักในหมู่บ้านเพื่อเริ่มจัดเรือนและทำสวน";
+    if (!available) return;
+
+    function button(host, label, action, disabled = false, key = label) {
+      const el = document.createElement("button");
+      el.type="button"; el.textContent=label; el.dataset.homeFocus=String(key);
+      el.disabled=disabled || Boolean(homePending);
+      el.onclick=action; host.append(el);
+      return el;
+    }
+    function section(title) {
+      const group=document.createElement("section"), heading=document.createElement("h3");
+      heading.textContent=title; group.append(heading); controls.append(group);
+      return group;
+    }
+    const act = (action, props={}) => sendHomeAction("home_action",{action,...props});
+    button(controls,"รีเฟรชข้อมูล",()=>readHomeState(true));
+    if (homeSnapshot && level===0) button(controls,"ซื้อเรือน · 100 ทอง",()=>act("buy"),own?.mapId!=="ritual_village");
+    if (level && !inHome) button(controls,"เข้าเรือน",()=>sendHomeAction("enter_home",{},false),own?.mapId!=="ritual_village");
+    if (inHome) {
+      button(controls,"กลับหมู่บ้าน",()=>sendHomeAction("leave_home",{},false));
+      if (level===1) button(controls,"อัปเกรดเรือน · 200 ทอง",()=>act("upgrade"));
+    }
+
+    const needs=section("ความหิวและกระหาย");
+    const meters=document.createElement("p");
+    meters.textContent=homeNeeds ? "ความอิ่ม "+homeNeeds.food+" / 100 · น้ำ "+homeNeeds.water+" / 100" : "กำลังอ่านค่าความอิ่มและน้ำ…";
+    needs.append(meters);
+    if (own?.mapId==="ritual_village") button(needs,"ตักน้ำที่ลานหมู่บ้าน",()=>sendHomeAction("collect_water"),Math.hypot(own.x,own.z)>6);
+    const slots=inventoryState?.slots ?? [];
+    for(const [slot,item] of slots.entries()) {
+      const def=personalItems[item?.itemId];
+      if (!def?.nutrition) continue;
+      button(needs,(def.food?"กิน ":"ดื่ม ")+def.name+" × "+item.quantity,()=>sendHomeAction("use_item",{slot},false),false,"use-"+slot);
+    }
+    if (!inHome || !level) {restoreFocus();return;}
+
+    const interior=section("จัดเรือน");
+    if (Array.isArray(homeSnapshot.parts)) {
+      const layers=document.createElement("div");
+      layers.setAttribute("role","group");layers.setAttribute("aria-label","ชั้นก่อสร้าง");
+      interior.append(layers);
+      for(const [layer,label] of [["furniture","เฟอร์นิเจอร์"],["floor","พื้น"],["structure","ผนังและประตู"]]){
+        const tab=button(layers,label,()=>{
+          homeBuildLayer=layer;homeCell=homeMoveFrom=null;homeRotation=0;renderHomePanel();
+        },false,"layer-"+layer);
+        tab.setAttribute("aria-pressed",String(homeBuildLayer===layer));
+      }
+    }
+    const structural=homeBuildLayer==="structure";
+    const furnitureLayer=homeBuildLayer==="furniture";
+    const grid=document.createElement("div");
+    grid.className="home-grid"; grid.style.setProperty("--home-width",String(homeSnapshot.width));
+    grid.setAttribute("role","group");grid.setAttribute("aria-label","ผังจัดวางเฟอร์นิเจอร์");
+    interior.append(grid);
+    const entries = furnitureLayer ? homeSnapshot.furniture : (homeSnapshot.parts??[]).filter(part=>part.layer===homeBuildLayer);
+    const placed = new Map(entries.map(entry=>[entry.cell,entry]));
+    for(let row=0;row<homeSnapshot.width;row++)for(let col=0;col<homeSnapshot.width;col++){
+      const cell=row*homeSnapshot.stride+col, entry=placed.get(cell);
+      const name=entry ? personalItems[entry.itemId]?.name || "ชิ้นส่วนที่วางแล้ว" : "ช่องว่าง";
+      const tile=button(grid,entry ? name : "·",()=>{
+        if(homeMoveFrom!==null && homeMoveFrom!==cell && !placed.has(cell)) {
+          if (furnitureLayer) act("move",{from:homeMoveFrom,cell});
+          else act("move_part",{layer:homeBuildLayer,from:homeMoveFrom,cell,rotation:homeRotation});
+          return;
+        }
+        homeCell=cell;
+        if (entry && structural) homeRotation=entry.rotation??0;
+        renderHomePanel();
+      },false,"cell-"+cell);
+      tile.setAttribute("aria-label","แถว "+(row+1)+" ช่อง "+(col+1)+" · "+name);
+      tile.setAttribute("aria-pressed",String(homeCell===cell));
+    }
+    if(homeMoveFrom!==null) button(interior,"ยกเลิกย้าย",()=>{homeMoveFrom=null;renderHomePanel();});
+    if (structural && (homeMoveFrom!==null || (homeCell!==null && !placed.has(homeCell)))) {
+      button(interior,homeRotation?"แนวตั้ง":"แนวนอน",()=>{homeRotation=1-homeRotation;renderHomePanel();},false,"part-rotation");
+    }
+    if(homeCell!==null && placed.has(homeCell)) {
+      button(interior,"ย้ายไปช่องว่าง",()=>{homeMoveFrom=homeCell;homeNotice="เลือกช่องว่างบนผัง";renderHomePanel();});
+      if (structural) button(interior,"หมุนชิ้นส่วน",()=>act("move_part",{
+        layer:homeBuildLayer,from:homeCell,cell:homeCell,rotation:1-(placed.get(homeCell).rotation??0),
+      }));
+      button(interior,"เก็บเข้ากระเป๋า",()=>furnitureLayer?
+        act("remove",{cell:homeCell}):act("remove_part",{layer:homeBuildLayer,cell:homeCell}));
+    } else if(homeCell!==null) {
+      for(const itemId of homeRecipeIds){
+        const recipe=personalItems[itemId];
+        if (!recipe?.furniture || (recipe.homeLayer??"furniture")!==homeBuildLayer || !slots.some(item=>item?.itemId===itemId)) continue;
+        button(interior,"วาง "+recipe.name,()=>furnitureLayer?
+          act("place",{itemId,cell:homeCell}):act("place_part",{itemId,cell:homeCell,rotation:homeRotation}));
+      }
+    }
+
+    const garden=section("สวนสมุนไพร");
+    const now=homeSnapshot.serverNow+Math.max(0,Date.now()-homeSnapshot.receivedAt);
+    const crops=new Map(homeSnapshot.garden.map(crop=>[crop.plot,crop]));
+    for(let plot=0;plot<homeSnapshot.plotCount;plot++){
+      const crop=crops.get(plot), label="แปลง "+(plot+1);
+      if(!crop) button(garden,label+" · ปลูก",()=>act("plant",{plot}));
+      else if(crop.readyAt===null) button(garden,label+" · รดน้ำ",()=>act("water",{plot}));
+      else button(garden,label+(crop.readyAt<=now?" · เก็บเกี่ยว":" · กำลังโต"),()=>act("harvest",{plot}),crop.readyAt>now,"plot-"+plot);
+    }
+
+    const nextHarvest = Math.min(...homeSnapshot.garden.filter(crop=>crop.readyAt>now).map(crop=>crop.readyAt));
+    if (Number.isFinite(nextHarvest)) homeHarvestTimer = setTimeout(renderHomePanel, Math.max(50,nextHarvest-now+10));
+
+    const kitchen=section("งานช่างและครัว");
+    const info=document.createElement("p");
+    info.textContent="ทำอาหารระดับ "+homeSnapshot.cooking.level+" · "+homeSnapshot.cooking.xp+" XP · "+(homeSnapshot.cooking.kitchen?"มีเตาครัว":"วางเตาครัวเพื่อใช้สูตรขั้นสูง");
+    kitchen.append(info);
+    for(const recipeId of homeRecipeIds){
+      const recipe=personalItems[recipeId];
+      if(!recipe?.recipe) continue;
+      const required=recipe.cookingLevel??1;
+      const supplies=recipe.recipe.map(part=>(personalItems[part.item]?.name||part.item)+" × "+part.qty);
+      const locked=homeSnapshot.cooking.level<required || (required>1 && !homeSnapshot.cooking.kitchen);
+      const cook=button(kitchen,(recipe.food?"ทำ ":"สร้าง ")+recipe.name+(locked?" · ต้องการระดับ "+required+" และเตาครัว":""),()=>sendHomeAction("craft_weapon",{recipeId}),locked);
+      const terms=document.createElement("small");
+      terms.textContent=supplies.join(" · ")+(recipe.craftGold?" · "+recipe.craftGold+" ทอง":"");
+      kitchen.append(terms);
+      cook.title=terms.textContent;
+    }
+    restoreFocus();
+  }
+
+  function renderHomeScene() {
+    if (!isPrivateHomeMap(activeMapId)) return;
+    const data=homeSnapshot;
+    const key=JSON.stringify([activeMapId,data?.level,data?.furniture,data?.parts,data?.garden]);
+    if (homeSceneRoot && !homeSceneRoot.isDisposed() && homeSceneKey===key) return;
+    homeSceneRoot?.dispose();
+    homeSceneKey=key;
+    homeSceneRoot=new B.TransformNode("private-home",scene);
+    homeSceneRoot.parent=expansionRoot;
+    homeMaterials ||= {
+      fence:mat("home fence","#80613e"), floor:mat("home tile","#e2c995"), soil:mat("home soil","#694735"),
+      herb:mat("home herb","#82a851"), stove:mat("home stove","#69564b"), lamp:mat("home lamp","#e4ac4a"),
+      planks:mat("home planks","#99683d"), wall:mat("home wall","#725035"),
+    };
+    function block(name,x,z,y,w,h,d,material) {
+      const mesh=B.MeshBuilder.CreateBox(name,{width:w,height:h,depth:d},scene);
+      mesh.parent=homeSceneRoot;mesh.position.set(x,y,z);mesh.material=homeMaterials[material];mesh.isPickable=false;
+    }
+    block("home boundary",-9.5,0,.45,.16,.9,19,"fence");
+    block("home boundary",9.5,0,.45,.16,.9,19,"fence");
+    block("home boundary",0,-9.5,.45,19,.9,.16,"fence");
+    block("home entrance",0,8.4,.025,2.7,.05,1.8,"floor");
+    const width=data?.width || 4, stride=data?.stride || 8;
+    const grid=homeMapTemplate?.buildGrid ?? {originX:-5,originZ:-3.8,step:1.35,wallWidth:1.32,wallDepth:.2,wallHeight:2.1};
+    const position=cell=>({x:grid.originX+(cell%stride)*grid.step,z:grid.originZ+Math.floor(cell/stride)*grid.step});
+    for(let row=0;row<width;row++)for(let col=0;col<width;col++){
+      const {x,z}=position(row*stride+col);
+      block("home tile",x,z,.02,grid.step-.11,.04,grid.step-.11,"floor");
+    }
+    for(const part of data?.parts ?? []){
+      const {x,z}=position(part.cell);
+      if (part.layer==="floor") {
+        block("plank floor",x,z,.062,grid.step-.04,.035,grid.step-.04,"planks");
+        continue;
+      }
+      const rotated=part.rotation===1;
+      const timber=(name,offset,y,w,h,d)=>block(name,x+(rotated?0:offset),z+(rotated?offset:0),
+        y,rotated?d:w,h,rotated?w:d,"wall");
+      if (part.itemId==="furniture_wood_wall") {
+        timber("wood wall",0,grid.wallHeight/2,grid.wallWidth,grid.wallHeight,grid.wallDepth);
+      } else if (part.itemId==="furniture_doorway") {
+        const post=grid.wallWidth/2-.09, height=grid.wallHeight;
+        timber("doorway post",-post,height/2,.16,height,grid.wallDepth);
+        timber("doorway post",post,height/2,.16,height,grid.wallDepth);
+        timber("doorway lintel",0,height-.10,grid.wallWidth,.20,grid.wallDepth);
+      }
+    }
+    for(const item of data?.furniture ?? []){
+      const {x,z}=position(item.cell);
+      if(item.itemId==="furniture_lantern"){
+        block("lantern base",x,z,.28,.15,.56,.15,"fence");
+        block("lantern",x,z,.7,.38,.32,.38,"lamp");
+      } else {
+        const kitchen=item.itemId==="furniture_kitchen";
+        block(kitchen?"home kitchen":"home stool",x,z,kitchen ? .38 : .26,kitchen ? .98 : .73,kitchen ? .76 : .52,.68,kitchen?"stove":"fence");
+      }
+    }
+    const planted=new Set((data?.garden ?? []).map(crop=>crop.plot));
+    for(let plot=0;plot<(data?.plotCount??2);plot++){
+      const x=-5+plot*2.7;
+      block("garden bed",x,-7.3,.09,1.8,.18,1.7,"soil");
+      if(planted.has(plot)) block("garden herbs",x,-7.3,.28,.44,.43,.44,"herb");
+    }
   }

@@ -7,14 +7,22 @@ import type {FishItem} from "./Fishing.js";
 /** Single-process transactional economy. This store must own inventories before it is wired to gameplay. */
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
-import { PERSONAL_ITEMS, personalItem, type BodySlot, type BodyItemId, type PersonalId } from "./PersonalItems.js";
+import { PERSONAL_ITEMS, personalItem, type BodySlot, type BodyItemId, type FurnitureId, type HomePartId, type ItemStats, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack, type WeaponItemId } from "./ItemRules.js";
-import type {SalvageOrder} from "./EconomyRules.js";
+import type {HomeAction, SalvageOrder} from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
 import {type CityDisband, type CityFactoryOrder, type CityMember, type CityOrder, type CityOwnership} from "./CityProductionRules.js";
 
 export const STARTER_GOLD = 1000;
 const MAX_GOLD = 1_000_000_000;
+const HUNGER_POINT_MS = 240_000;
+const THIRST_POINT_MS = 120_000;
+const GARDEN_GROWTH_MS = 120_000;
+const HOME_PRICES = [0, 100, 200] as const;
+
+function cookingLevel(xp: number) {
+  return xp >= 15 ? 3 : xp >= 5 ? 2 : 1;
+}
 export const STARTER_SUPPLIES = Object.freeze({
   health_potion:{price:15,dailyLimit:20,worldLimit:500},
   mat_raw_wood_1:{price:10,dailyLimit:20,worldLimit:500},
@@ -83,7 +91,7 @@ function add(inventory: InventorySnapshot, item: InventoryStack): InventorySnaps
   return validateInventory({ ...original, slots });
 }
 
-function consume(account:Account,item:string,qty:number){
+function consume(account:Account,item:string,qty:number,missingMaterial="craft_missing_material"){
   for(const [slot,stack] of account.inventory.slots.entries()){
     if(stack?.itemId!==item)continue;
     const used=Math.min(qty,stack.quantity);
@@ -91,7 +99,7 @@ function consume(account:Account,item:string,qty:number){
     qty-=used;
     if(!qty)return;
   }
-  throw Error("craft_missing_material");
+  throw Error(missingMaterial);
 }
 
 function receiveCraft(bag:InventorySnapshot,item:InventoryStack){
@@ -135,6 +143,24 @@ export class EconomyStore {
       CREATE TABLE IF NOT EXISTS auction_credits(actor TEXT PRIMARY KEY,amount INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS starter_supply_used(actor TEXT NOT NULL,day TEXT NOT NULL,item TEXT NOT NULL,quantity INTEGER NOT NULL,PRIMARY KEY(actor,day,item));
       CREATE TABLE IF NOT EXISTS starter_supply_world(day TEXT NOT NULL,item TEXT NOT NULL,quantity INTEGER NOT NULL,PRIMARY KEY(day,item));
+      CREATE TABLE IF NOT EXISTS cooking(
+        actor TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE, xp INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS needs(
+        actor TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+        food REAL NOT NULL, water REAL NOT NULL, updated_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS homes(
+        actor TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE, level INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS furniture(
+        actor TEXT NOT NULL REFERENCES homes(actor) ON DELETE CASCADE,
+        cell INTEGER NOT NULL, item TEXT NOT NULL, PRIMARY KEY(actor,cell));
+      CREATE TABLE IF NOT EXISTS home_parts(
+        actor TEXT NOT NULL REFERENCES homes(actor) ON DELETE CASCADE, cell INTEGER NOT NULL,
+        layer TEXT NOT NULL, item TEXT NOT NULL, rotation INTEGER NOT NULL, PRIMARY KEY(actor,cell,layer));
+      CREATE TABLE IF NOT EXISTS garden(
+        actor TEXT NOT NULL REFERENCES homes(actor) ON DELETE CASCADE,
+        plot INTEGER NOT NULL, ready_at INTEGER, PRIMARY KEY(actor,plot));
+      CREATE TABLE IF NOT EXISTS water_supply(
+        actor TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE, ready_at INTEGER NOT NULL);
     `);
     this.initListings();
     this.city = new CityProduction(this.db);
@@ -347,7 +373,7 @@ export class EconomyStore {
     goldAmount(row.gold);
     return { gold: row.gold, inventory: validateInventory(JSON.parse(row.inventory) as unknown) };
   }
-  private put(id: string, account: Account): void {
+  private put(id: string, account: Account, health?: {hp: number; mana: number}): void {
     this.requireSettledMonsterReward(id);
     goldAmount(account.gold);
     this.db.prepare("UPDATE accounts SET gold=?, inventory=? WHERE id=?").run(account.gold, JSON.stringify(validateInventory(account.inventory)), id);
@@ -355,6 +381,7 @@ export class EconomyStore {
     if (row && typeof row.snapshot === "string") {
       const snapshot = JSON.parse(row.snapshot) as Record<string, unknown>;
       snapshot.inventory = account.inventory;
+      if (health) Object.assign(snapshot, health);
       this.db.prepare("UPDATE characters SET snapshot=? WHERE id=?").run(JSON.stringify(snapshot), id);
     }
   }
@@ -616,6 +643,7 @@ export class EconomyStore {
     if(!def?.recipe)throw Error("invalid_recipe");
     return this.once(id,request,"craft",{recipe:output},()=>{
       if(level<(def.level??1))throw Error("item_level_required");
+      this.checkCooking(id, output);
       const account=this.account(id),cost=def.craftGold!;
       if(account.gold<cost)throw Error("insufficient_gold");
       for(const ingredient of def.recipe!)consume(account,ingredient.item,ingredient.qty);
@@ -624,8 +652,203 @@ export class EconomyStore {
       account.inventory=received.inventory;
       account.gold-=cost;
       this.put(id,account);
+      this.creditCooking(id, output);
       return {itemId:output,spentGold:cost,banked:received.banked};
     });
+  }
+
+  cookingState(id: string) {
+    characterId(id);
+    const xp = Number(this.db.prepare("SELECT xp FROM cooking WHERE actor=?").get(id)?.xp ?? 0);
+    return {xp, level: cookingLevel(xp), kitchen: Boolean(this.db.prepare(
+      "SELECT 1 FROM furniture WHERE actor=? AND item='furniture_kitchen' LIMIT 1",
+    ).get(id))};
+  }
+
+  private checkCooking(id: string, itemId: string) {
+    const required = personalItem(itemId)?.cookingLevel;
+    if (!required || required === 1) return;
+    const state = this.cookingState(id);
+    if (state.level < required) throw Error("cooking_level_required");
+    if (!state.kitchen) throw Error("cooking_kitchen_required");
+  }
+
+  private creditCooking(id: string, itemId: string) {
+    if (!personalItem(itemId)?.food) return;
+    this.db.prepare(
+      "INSERT INTO cooking VALUES(?,1) ON CONFLICT(actor) DO UPDATE SET xp=MIN(15,cooking.xp+1)",
+    ).run(id);
+  }
+
+  private needValues(id: string, now: number) {
+    characterId(id);
+    const row = this.db.prepare("SELECT food,water,updated_at FROM needs WHERE actor=?").get(id);
+    if (!row) {
+      this.db.prepare("INSERT INTO needs VALUES(?,100,100,?)").run(id, now);
+      return {food: 100, water: 100, updatedAt: now};
+    }
+    const updatedAt = Number(row.updated_at), elapsed = Math.max(0, now - updatedAt);
+    return {food: Math.max(0, Number(row.food) - elapsed / HUNGER_POINT_MS),
+      water: Math.max(0, Number(row.water) - elapsed / THIRST_POINT_MS), updatedAt: Math.max(now, updatedAt)};
+  }
+
+  needsState(id: string, now = Date.now()) {
+    const {food, water, updatedAt} = this.needValues(id, now);
+    return {food: Math.ceil(food), water: Math.ceil(water), max: 100, serverNow: now,
+      hungryAt: Math.round(updatedAt + food * HUNGER_POINT_MS), thirstyAt: Math.round(updatedAt + water * THIRST_POINT_MS)};
+  }
+
+  consumeNutrition(id: string, slot: number, expected: string, health: {hp: number; mana: number},
+                   recovered: boolean, now = Date.now()) {
+    return this.transaction(() => {
+      const account = this.account(id), item = account.inventory.slots[slot];
+      const nutrition = personalItem(expected)?.nutrition;
+      if (!nutrition || item?.itemId !== expected) throw Error("item_unavailable");
+      const current = this.needValues(id, now);
+      const food = Math.min(100, current.food + (nutrition.food ?? 0));
+      const water = Math.min(100, current.water + (nutrition.water ?? 0));
+      if (Math.ceil(food) === Math.ceil(current.food) && Math.ceil(water) === Math.ceil(current.water) && !recovered) throw Error("needs_full");
+      account.inventory = take(account.inventory, slot, 1).inventory;
+      this.put(id, account, health);
+      this.db.prepare("UPDATE needs SET food=?,water=?,updated_at=? WHERE actor=?")
+        .run(food, water, current.updatedAt, id);
+      return this.needsState(id, now);
+    });
+  }
+
+  collectWater(id: string, request: string, now = Date.now()) {
+    return this.once(id, request, "collect_water", {}, () => {
+      const prior = Number(this.db.prepare("SELECT ready_at FROM water_supply WHERE actor=?").get(id)?.ready_at ?? 0);
+      if (now < prior) throw Error("water_cooldown");
+      const account = this.account(id), readyAt = now + 15_000, itemId = "drink_clean_water";
+      account.inventory = add(account.inventory, {itemId, quantity: 1});
+      this.put(id, account);
+      this.db.prepare("INSERT INTO water_supply VALUES(?,?) ON CONFLICT(actor) DO UPDATE SET ready_at=excluded.ready_at")
+        .run(id, readyAt);
+      return {itemId, quantity: 1, readyAt};
+    });
+  }
+
+  homeState(id: string, now = Date.now()) {
+    characterId(id);
+    const level = Number(this.db.prepare("SELECT level FROM homes WHERE actor=?").get(id)?.level ?? 0);
+    const furniture = this.db.prepare("SELECT cell,item AS itemId FROM furniture WHERE actor=? ORDER BY cell").all(id);
+    const parts = this.db.prepare("SELECT cell,layer,item AS itemId,rotation FROM home_parts WHERE actor=? ORDER BY cell,layer")
+      .all(id).map(row=>({cell:Number(row.cell),layer:row.layer as "floor" | "structure",
+        itemId:String(row.itemId),rotation:Number(row.rotation) as 0 | 1}));
+    const garden = this.db.prepare("SELECT plot,ready_at AS readyAt FROM garden WHERE actor=? ORDER BY plot").all(id);
+    return {level, width: level === 2 ? 8 : level === 1 ? 4 : 0, stride: 8, plotCount: level * 2,
+      furniture, parts, garden, serverNow: now, cooking: this.cookingState(id)};
+  }
+
+  homeAction(id: string, order: HomeAction, now = Date.now(), mayPlaceWall?: (cell:number,rotation:0|1)=>boolean) {
+    const {requestId, ...intent} = order;
+    return this.once(id, requestId, "home_action", intent, () => {
+      const account = this.account(id), level = Number(this.db.prepare("SELECT level FROM homes WHERE actor=?").get(id)?.level ?? 0);
+      if (order.action === "buy" || order.action === "upgrade") {
+        const targetLevel = order.action === "buy" ? 1 : 2;
+        if (level !== targetLevel - 1) throw Error("home_level_unavailable");
+        const cost = HOME_PRICES[targetLevel];
+        if (account.gold < cost) throw Error("insufficient_gold");
+        account.gold -= cost;
+        this.put(id, account);
+        this.db.prepare("INSERT INTO homes VALUES(?,?) ON CONFLICT(actor) DO UPDATE SET level=excluded.level").run(id,targetLevel);
+      } else {
+        if (level === 0) throw Error("home_required");
+        if ("plot" in order) this.tendGarden(id, order, level, account, now);
+        else if (order.action === "place_part" || order.action === "move_part" || order.action === "remove_part") {
+          this.arrangeHomePart(id,order,level,account,mayPlaceWall);
+        } else if ("cell" in order) this.arrangeFurniture(id, order, level, account);
+      }
+      return {action: order.action};
+    });
+  }
+
+  private requireHomeCell(cell: number, level: number) {
+    const width = level === 1 ? 4 : 8;
+    if (!Number.isInteger(cell) || cell < 0 || cell % 8 >= width || Math.floor(cell / 8) >= width) throw Error("home_cell_invalid");
+  }
+
+  private arrangeFurniture(id: string, order: Extract<HomeAction,{action:"place"|"move"|"remove"}>, level: number, account: Account) {
+    const {cell} = order;
+    this.requireHomeCell(cell,level);
+    const furnitureAt = (index: number) => this.db.prepare("SELECT item FROM furniture WHERE actor=? AND cell=?").get(id,index)?.item;
+    if (order.action === "remove") {
+      const itemId = furnitureAt(cell);
+      if (typeof itemId !== "string" || !personalItem(itemId)?.furniture) throw Error("home_furniture_unavailable");
+      account.inventory = add(account.inventory, {itemId: itemId as FurnitureId, quantity: 1});
+      this.put(id, account);
+      this.db.prepare("DELETE FROM furniture WHERE actor=? AND cell=?").run(id,cell);
+      return;
+    }
+    if (furnitureAt(cell) || this.db.prepare("SELECT 1 FROM home_parts WHERE actor=? AND cell=? AND layer='structure'").get(id,cell)) {
+      throw Error("home_cell_occupied");
+    }
+    if (order.action === "move") {
+      if (!furnitureAt(order.from)) throw Error("home_furniture_unavailable");
+      this.db.prepare("UPDATE furniture SET cell=? WHERE actor=? AND cell=?").run(cell,id,order.from);
+      return;
+    }
+    if (!personalItem(order.itemId)?.furniture || personalItem(order.itemId)?.homeLayer) throw Error("home_furniture_unavailable");
+    consume(account, order.itemId, 1, "home_furniture_unavailable");
+    this.put(id, account);
+    this.db.prepare("INSERT INTO furniture VALUES(?,?,?)").run(id,cell,order.itemId);
+  }
+
+  private arrangeHomePart(id: string, order: Extract<HomeAction,{action:"place_part"|"move_part"|"remove_part"}>,
+                          level: number, account: Account, mayPlaceWall?: (cell:number,rotation:0|1)=>boolean) {
+    const {cell} = order;
+    this.requireHomeCell(cell,level);
+    const layer = order.action === "place_part" ? personalItem(order.itemId)?.homeLayer : order.layer;
+    if (!layer) throw Error("home_furniture_unavailable");
+    const at = (index:number) => this.db.prepare("SELECT item FROM home_parts WHERE actor=? AND cell=? AND layer=?")
+      .get(id,index,layer)?.item;
+    if (order.action === "remove_part") {
+      const itemId = at(cell);
+      if (typeof itemId !== "string" || personalItem(itemId)?.homeLayer !== layer) throw Error("home_furniture_unavailable");
+      account.inventory = add(account.inventory,{itemId:itemId as HomePartId,quantity:1});
+      this.put(id,account);
+      this.db.prepare("DELETE FROM home_parts WHERE actor=? AND cell=? AND layer=?").run(id,cell,layer);
+      return;
+    }
+    if (order.action === "place_part" || order.from !== cell) {
+      if (at(cell) || (layer === "structure" &&
+          this.db.prepare("SELECT 1 FROM furniture WHERE actor=? AND cell=?").get(id,cell))) throw Error("home_cell_occupied");
+    }
+    const itemId = order.action === "place_part" ? order.itemId : at(order.from);
+    if (typeof itemId !== "string" || personalItem(itemId)?.homeLayer !== layer) throw Error("home_furniture_unavailable");
+    const rotation = layer === "structure" ? order.rotation : 0;
+    if (itemId === "furniture_wood_wall" && mayPlaceWall && !mayPlaceWall(cell,rotation)) throw Error("home_wall_blocked");
+    if (order.action === "move_part") {
+      this.db.prepare("UPDATE home_parts SET cell=?,rotation=? WHERE actor=? AND cell=? AND layer=?")
+        .run(cell,rotation,id,order.from,layer);
+      return;
+    }
+    consume(account,itemId,1,"home_furniture_unavailable");
+    this.put(id,account);
+    this.db.prepare("INSERT INTO home_parts VALUES(?,?,?,?,?)").run(id,cell,layer,itemId,rotation);
+  }
+
+  private tendGarden(id: string, order: Extract<HomeAction,{plot:number}>, level: number, account: Account, now: number) {
+    const {plot} = order;
+    if (!Number.isInteger(plot) || plot < 0 || plot >= level * 2) throw Error("garden_plot_invalid");
+    const crop = this.db.prepare("SELECT ready_at FROM garden WHERE actor=? AND plot=?").get(id,plot);
+    if (order.action === "plant") {
+      if (crop) throw Error("garden_occupied");
+      consume(account, "mat_herb_1", 1);
+      this.put(id, account);
+      this.db.prepare("INSERT INTO garden VALUES(?,?,NULL)").run(id,plot);
+    } else if (order.action === "water") {
+      if (!crop || crop.ready_at !== null) throw Error("garden_water_unavailable");
+      consume(account, "drink_clean_water", 1);
+      this.put(id, account);
+      this.db.prepare("UPDATE garden SET ready_at=? WHERE actor=? AND plot=?").run(now + GARDEN_GROWTH_MS,id,plot);
+    } else {
+      if (!crop || crop.ready_at === null || now < Number(crop.ready_at)) throw Error("garden_not_ready");
+      account.inventory = add(account.inventory, {itemId: "mat_herb_1", quantity: 3});
+      this.put(id, account);
+      this.db.prepare("DELETE FROM garden WHERE actor=? AND plot=?").run(id,plot);
+    }
   }
 
   sellMaterial(id:string,request:string,slot:number,expected:string,quantity:number){

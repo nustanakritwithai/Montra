@@ -5,8 +5,11 @@ import path from "node:path";
 import os from "node:os";
 import { EconomyStore, STARTER_GOLD } from "./EconomyStore.js";
 import { BODY_SLOTS, PERSONAL_ITEMS, personalItem, equipPositions, monsterCardDrop, type BodyItemId } from "./PersonalItems.js";
+import { DatabaseSync } from "node:sqlite";
+import { createHash } from "node:crypto";
+import { parseHomeAction } from "./EconomyRules.js";
 import { parseSocketOrder, type SocketOrder } from "./CardSockets.js";
-import { makeClassInventory, makeStarterInventory, equipBody, equippedStats, parseBodyCommand, validateInventory, equipInventoryWeapon, practiceLoot } from "./ItemRules.js";
+import { makeClassInventory, makeStarterInventory, equipBody, equippedStats, parseBodyCommand, validateInventory, equipInventoryWeapon, practiceLoot, useInventoryItem } from "./ItemRules.js";
 
 const a = "a".repeat(64), b = "b".repeat(64), c = "c".repeat(64);
 const request = (n: number) => "request_" + String(n).padStart(16, "0");
@@ -85,6 +88,138 @@ test("practice equipment preserves ownership, recipe costs and receipts", () => 
     assert.equal(retry.id,"arm_hide_chest_1");
     assert.equal(practiceLoot(retry.bag,"blade").bag.slots.filter(s=>s?.itemId==="arm_hide_chest_1").length,1);
   } finally {store.close();}
+});
+
+test("home ownership, kitchen, furniture and watered crops survive restart and keep assets private",()=>{
+  const {dir,file,store:initial} = setup();
+  let store=initial;
+  const now=1_900_000_000_000;
+  try {
+    const bag=makeStarterInventory();
+    const materials=[["mat_wood_1",3],["mat_raw_stone_1",3],["mat_fish_common",5],["mat_fish_silver",1],
+      ["mat_charcoal_1",1],["mat_herb_1",8]] as const;
+    materials.forEach(([itemId,quantity],index)=>{bag.slots[4+index]={itemId,quantity};});
+    store.saveCharacter(a,{inventory:bag},bag);
+    const home=(n:number,action:string,extra:object={})=>{
+      const order=parseHomeAction({requestId:request(n),action,...extra});
+      assert(order);
+      return store.homeAction(a,order,now);
+    };
+    assert.throws(()=>home(600,"plant",{plot:0}),/home_required/);
+    assert.throws(()=>store.craftPersonal(a,request(601),"food_grilled_fish"),/cooking_level_required/);
+    for (let serving=0; serving<5; serving++) store.craftPersonal(a,request(630+serving),"food_herbal_fish_soup");
+    assert.equal(store.cookingState(a).level,2);
+    assert.throws(()=>store.craftPersonal(a,request(601),"food_grilled_fish"),/cooking_kitchen_required/);
+    home(603,"buy");
+    home(603,"buy");
+    store.craftPersonal(a,request(604),"furniture_kitchen");
+    assert.throws(()=>home(605,"place",{itemId:"furniture_kitchen",cell:4}),/home_cell_invalid/);
+    home(606,"place",{itemId:"furniture_kitchen",cell:1});
+    home(607,"move",{from:1,cell:2});
+    assert.equal(store.cookingState(a).kitchen,true);
+    store.craftPersonal(a,request(601),"food_grilled_fish");
+    home(608,"plant",{plot:0});
+    assert.throws(()=>home(609,"harvest",{plot:0}),/garden_not_ready/);
+    store.collectWater(a,request(610),now);
+    home(611,"water",{plot:0});
+    assert.throws(()=>home(612,"water",{plot:0}),/garden_water_unavailable/);
+    store.close();
+    store=new EconomyStore(file);
+    assert.deepEqual(store.homeState(a,now).furniture.map(({cell,itemId})=>[cell,itemId]),[[2,"furniture_kitchen"]]);
+    assert.deepEqual(store.homeState(b,now).furniture,[]);
+    assert.equal(store.homeState(b,now).level,0);
+    assert.equal(store.homeState(a,now).garden[0].readyAt,now+120_000);
+    const harvest=parseHomeAction({requestId:request(609),action:"harvest",plot:0})!;
+    const before=store.getAccount(a).inventory.slots.find(s=>s?.itemId==="mat_herb_1")?.quantity ?? 0;
+    store.homeAction(a,harvest,now+120_000);
+    store.homeAction(a,harvest,now+120_000);
+    assert.equal(store.getAccount(a).inventory.slots.find(s=>s?.itemId==="mat_herb_1")?.quantity,before+3);
+    home(613,"upgrade");
+    assert.equal(store.homeState(a,now).plotCount,4);
+    home(614,"remove",{cell:2});
+    assert.equal(store.cookingState(a).kitchen,false);
+    assert.equal(store.getAccount(a).gold,STARTER_GOLD-317);
+  } finally {store.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test("home parts layer independently, reject unsafe walls, and return to inventory after restart",()=>{
+  const {dir,file,store:initial}=setup();
+  let store=initial;
+  const now=1_900_000_000_000;
+  try {
+    const bag=makeStarterInventory();
+    bag.slots[4]={itemId:"furniture_plank_floor",quantity:1};
+    bag.slots[5]={itemId:"furniture_wood_wall",quantity:1};
+    bag.slots[6]={itemId:"furniture_stool",quantity:1};
+    bag.slots[7]={itemId:"furniture_doorway",quantity:1};
+    store.saveCharacter(a,{inventory:bag},bag);
+    const perform=(n:number,action:string,props:object={},mayPlaceWall?: (cell:number,rotation:0|1)=>boolean)=>{
+      const order=parseHomeAction({requestId:request(n),action,...props});
+      assert(order);
+      return store.homeAction(a,order,now,mayPlaceWall);
+    };
+    perform(710,"buy");
+    perform(711,"place",{itemId:"furniture_stool",cell:1});
+    assert.equal(parseHomeAction({requestId:request(712),action:"place",itemId:"furniture_wood_wall",cell:1}),null);
+    perform(712,"place_part",{itemId:"furniture_plank_floor",cell:1,rotation:0});
+    assert.throws(()=>perform(713,"place_part",{itemId:"furniture_wood_wall",cell:1,rotation:0}),/home_cell_occupied/);
+    assert.throws(()=>perform(714,"place_part",{itemId:"furniture_wood_wall",cell:2,rotation:0},()=>false),/home_wall_blocked/);
+    assert.equal(store.getAccount(a).inventory.slots[5]?.quantity,1);
+    perform(714,"place_part",{itemId:"furniture_wood_wall",cell:2,rotation:0},()=>true);
+    perform(714,"place_part",{itemId:"furniture_wood_wall",cell:2,rotation:0},()=>false);
+    perform(715,"move_part",{layer:"structure",from:2,cell:2,rotation:1});
+    perform(716,"place_part",{itemId:"furniture_doorway",cell:3,rotation:0});
+    store.close();
+    store=new EconomyStore(file);
+    assert.equal(store.homeState(a).furniture[0].cell,1);
+    assert.deepEqual(store.homeState(a).parts.map(p=>[p.layer,p.cell,p.rotation]),[
+      ["floor",1,0],["structure",2,1],["structure",3,0],
+    ]);
+    assert.deepEqual(store.homeState(b).parts,[]);
+    const full=store.getAccount(a).inventory;
+    full.slots=full.slots.map(item=>item??{itemId:"mat_fiber_1",quantity:99});
+    store.saveCharacter(a,{inventory:full},full);
+    assert.throws(()=>perform(717,"remove_part",{layer:"structure",cell:2}),/inventory_full/);
+    assert.equal(store.homeState(a).parts.length,3);
+    const free=full.slots.findIndex(item=>item?.itemId==="mat_fiber_1");
+    store.listItem(a,request(718),free,99,1);
+    perform(717,"remove_part",{layer:"structure",cell:2});
+    perform(717,"remove_part",{layer:"structure",cell:2});
+    assert.equal(store.homeState(a).parts.length,2);
+    assert.equal(store.getAccount(a).inventory.slots[free]?.itemId,"furniture_wood_wall");
+  } finally {store.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test("needs decay across restart, drinking consumes one item, and supply retries do not grant twice",()=>{
+  const {dir,file,store:initial}=setup();
+  let store=initial;
+  const now=1_900_000_000_000;
+  try {
+    assert.equal(store.needsState(a,now).water,100);
+    const collected=store.collectWater(a,request(620),now);
+    assert.deepEqual(store.collectWater(a,request(620),now+1),collected);
+    assert.throws(()=>store.collectWater(a,request(621),now+1),/water_cooldown/);
+    const slot=store.getAccount(a).inventory.slots.findIndex(s=>s?.itemId==="drink_clean_water");
+    assert.throws(()=>store.consumeNutrition(a,slot,"drink_clean_water",{hp:50,mana:10},false,now),/needs_full/);
+    store.close();
+    store=new EconomyStore(file);
+    const later=now+60*120_000;
+    const hungry=store.needsState(a,later);
+    assert.equal(hungry.food,70);
+    assert.equal(hungry.water,40);
+    const restored=store.consumeNutrition(a,slot,"drink_clean_water",{hp:50,mana:10},false,later);
+    assert.equal(restored.water,75);
+    assert.equal(restored.food,70);
+    assert.equal(store.getAccount(a).inventory.slots[slot],null);
+    const bag = store.getAccount(a).inventory;
+    bag.slots[slot] = {itemId:"food_herbal_fish_soup",quantity:1};
+    store.saveCharacter(a,{inventory:bag,hp:50,mana:10},bag);
+    const fed = store.consumeNutrition(a,slot,"food_herbal_fish_soup",{hp:75,mana:10},true,later);
+    assert.equal(fed.food,90);
+    assert.equal(fed.water,83);
+    assert.deepEqual(store.getCharacter(a),{inventory:store.getAccount(a).inventory,hp:75,mana:10});
+    assert.equal(store.needsState(b,later).water,100);
+  } finally {store.close();rmSync(dir,{recursive:true,force:true});}
 });
 
 test("a necklace, two earrings and two rings may be crafted, worn together and removed by side", () => {

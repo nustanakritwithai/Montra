@@ -198,7 +198,7 @@
       const client = new window.Colyseus.Client(endpoint);
       const accountSession = window.MontraEntry?.session();
       if (!accountSession) throw new Error("กรุณาเข้าสู่ระบบก่อน");
-      const opts={accountSession,characterSlot:requestedSlot,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1};
+      const opts={accountSession,characterSlot:requestedSlot,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1,homeVersion:1};
       let transferFailed=false;
       if(transfer?.roomId){
         try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
@@ -214,6 +214,7 @@
       cancelForgeAnimation(false,true);finishEconomyPending(true);
       clearCombatVfx();
       room = joined;
+      resetHomeClient();
       clearChatHistory(true);
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; resetCentralMarket(); tradeUnread=false; updateTradeBadge();
       partyState=null; partyInvitation=null; partyUnread=false;
@@ -435,6 +436,17 @@
         if(message?.reason==="party_invite_expired") partyInvitation=null;
         toast(reasons[message?.reason] || "ทำรายการปาร์ตี้ไม่สำเร็จ");renderParty();
       });
+      joined.onMessage("home_state", message => {
+        if (room === joined) applyHomeState(message);
+      });
+      joined.onMessage("needs_state", message => {
+        if (room !== joined || !Number.isFinite(message?.food) || !Number.isFinite(message?.water)) return;
+        homeNeeds = message;
+        renderHomePanel();
+      });
+      joined.onMessage("water_collected", message => {
+        if (room === joined) finishHomeAction(message?.requestId,"collect_water","เก็บน้ำเข้ากระเป๋าแล้ว");
+      });
       joined.onMessage("economy_state", message => {
         if (room !== joined || !Number.isSafeInteger(message?.gold) || message.gold < 0) return;
         economyGold=message.gold; renderEconomy(); renderBag();
@@ -467,7 +479,8 @@
       });
       joined.onMessage("craft_result", result => {
         if (room !== joined) return;
-        finishEconomyPending();
+        if (typeof finishHomeAction === "function" && finishHomeAction(result?.requestId,"craft_weapon","สร้างไอเท็มแล้ว")) readHomeState(false,true);
+        else finishEconomyPending();
         const item=bagMeta(result.itemId);
         craftResultRoom=joined;
         craftResultMessage=result.banked?"เก็บ"+(item?.name||"ของซ้ำ")+" เข้าคลังช่าง 1 ชิ้น":item?.station==="kiln"?benchAction(item)+"สำเร็จ · ได้ "+item.name+" × 1":"คราฟต์"+(item?.name || "ไอเทม")+"สำเร็จ · ใช้ "+result.spentGold+" ทอง";
@@ -568,6 +581,7 @@
       });
       joined.onMessage("economy_error", message => {
         if (room !== joined) return;
+        if (typeof homeCommandError === "function" && homeCommandError(message?.reason)) return;
         if(economyPendingRequest?.command==="forge_weapon")failForgeAnimation("คำขอถูกปฏิเสธ · ตรวจอุปกรณ์และค่าใช้จ่ายอีกครั้ง");
         finishEconomyPending(true);
         const reasons={forge_downgrade_unconfirmed:"กรุณารีเฟรชแล้วตรวจโอกาสลดขั้นก่อนยืนยัน",forge_stock_changed:"ยอดของสำรองเปลี่ยนแล้ว · ตรวจคลังช่างอีกครั้ง",forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
@@ -1328,6 +1342,7 @@
       });
       joined.onMessage("item_used", event => {
         if (room !== joined) return;
+        if (typeof finishHomeItemUse === "function") finishHomeItemUse(event?.slot);
         playAction(getLocalAvatar(), "drink");
         if (Number(event?.healed) > 0) { floatAtPlayer(localId, "+" + Math.round(event.healed), "heal", { big: true, drift: 0 }); auraFx(getLocalAvatar(), "heal"); }
         toast((personalItems[event?.itemId]?.name || "ใช้ยาเลือดแล้ว")+" · +"+(event?.restoredMana?Math.round(event.restoredMana)+" MP":Number(event?.healed||0)+" HP"));
@@ -1353,6 +1368,7 @@
       joined.onMessage("skill_hotbar_changed",()=>{if(room===joined){skillLoadoutKey="";syncAdvancedSkillUI();}});
       joined.onMessage("command_rejected", info => {
         if (room !== joined) return;
+        if (typeof homeCommandError === "function" && homeCommandError(info?.reason)) return;
         if(info?.reason==="skill_learning_in_combat"){toast("รอให้พ้นการต่อสู้ 5 วินาทีก่อนเรียนหรืออัปขั้น · ทำได้ทุกที่");return;}
         if(typeof info?.reason==="string" && (info.reason.startsWith("skill_hotbar_") || info.reason==="invalid_skill_hotbar")){
           skillLoadoutPending=null;skillLoadoutKey="";syncAdvancedSkillUI();
@@ -1493,11 +1509,16 @@
       });
       joined.onMessage("warp_complete", () => {
         if(room!==joined)return;
+        if (typeof finishHomeAction === "function" &&
+            (finishHomeAction(null,"enter_home","") || finishHomeAction(null,"leave_home",""))) closeDrawer();
         clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
         toast("เดินทางสำเร็จ");playAction(getLocalAvatar(),"arrive");
       });
       joined.onMessage("warp_failed", () => {
         if(room!==joined)return;
+        if (typeof finishHomeAction === "function") {
+          finishHomeAction(null,"enter_home","เดินทางไม่สำเร็จ") || finishHomeAction(null,"leave_home","เดินทางไม่สำเร็จ");
+        }
         cancelQuestNavigation("หยุดนำทาง · เดินทางไม่สำเร็จ",false);
         clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
         toast("บันทึกไม่สำเร็จ · ยังอยู่แผนที่เดิม");
