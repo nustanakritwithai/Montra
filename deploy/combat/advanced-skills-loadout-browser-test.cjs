@@ -9,7 +9,16 @@ const barIds={phutthaisawan:'swordHotbar',muay_boran:'muayHotbar',blade:'bladeHo
 const coreCommands={phutthaisawan:'sword_core_skill',muay_boran:'muay_core_skill',blade:'blade_core_skill',sentinel:'sentinel_core_skill',seer:'seer_core_skill',mender:'mender_core_skill'};
 function fixture(){
  const base=require('./class-skills-entry-browser-test.cjs').fixture();
- base.html=base.html.replace('<div id="toast"></div>','<div id="toast" class="toast"></div>');
+ const index=read('index.html'),between=(source,start,end)=>{const a=source.indexOf(start),b=source.indexOf(end,a);assert(a>=0&&b>a,start);return source.slice(a,b);};
+ base.html=index.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/\.\/styles\.css\?v=[^" ]+/,'/styles.css').replace('</body>','<script src="/fixture.js"></script></body>');
+ base.script+=`\nconst hudSet=(el,key,value)=>{el.textContent=value;},updateFieldAlerts=()=>{};
+ ${between(read('src/client/ui/042-vitals-chat-and-status.js'),'  // ---- Layout moves:', '  // ---- Status boxes:')}
+ ${between(read('src/client/ui/046-drawers-and-chat.js'),'  const journalOrigins=', '  function setFieldUtility(')}
+ ${between(read('src/client/input/058-field-control-bindings.js'),'  // Under the minimap', '  $("menuBag").onclick=')}
+ $('drawerMenuBack').onclick=openFieldMenu;
+ $('loading').hidden=true;$('accountEntry').hidden=true;
+ ui.quest=$('quest');
+ `;
  const input=read('src/client/input/039-movement-flight-and-climbing.js'),cast=input.slice(input.indexOf('  function castAtTarget('),input.indexOf('  function updateFlightButton('));
  base.script=base.script.replace('const monsterForSpell=()=>null,castAtTarget=()=>{};',`const monsterForSpell=id=>id==='monster-test'?room.state.monster:null;let selectedSentinelSkill='',selectedPkTargetId='';const syncPKHud=()=>{};${cast}`);
  const ackLine=read('src/client/network/044-state-sync-and-connection.js').split('\n').find(line=>line.includes('joined.onMessage("skill_hotbar_changed"'));
@@ -39,6 +48,17 @@ Object.assign(fixture,{
  return base;
 }
 async function inside(page,selector){const r=await page.locator(selector).evaluate(e=>{e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,bottom:r.bottom,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button,select')===e};});assert(r.w>=40&&r.h>=40,selector+' touch size '+JSON.stringify(r));assert(r.x>=0&&r.right<=page.viewportSize().width+1&&r.y>=0&&r.bottom<=page.viewportSize().height+1,selector+' viewport '+JSON.stringify(r));assert(r.hit,selector+' not occluded '+JSON.stringify(r));}
+async function openMenuLoadout(page,mobile){
+ assert.equal(await page.locator('.learned-bar #skillLoadoutButton').count(),0,'configuration removed from combat arc');
+ assert.equal(await page.locator('#menu-character #skillLoadoutButton').count(),1,'one canonical menu tile');
+ await page.locator('#fieldMenuButton').click();
+ const selector='.map-flyout [data-menu-source="skillLoadoutButton"]';
+ await inside(page,selector);
+ if(mobile)await page.locator(selector).tap();else{await page.locator(selector).focus();await page.keyboard.press('Enter');}
+ assert.equal(await page.locator('.map-flyout').isVisible(),false,'entry collapses flyout');
+ assert.equal(await page.locator('#fieldMenuButton').getAttribute('aria-expanded'),'false');
+ assert.equal(await page.locator('#skillLoadoutBody').isVisible(),true,'same loadout drawer');
+}
 async function main(){
  const {chromium}=require('playwright'),f=fixture(),out=process.env.MONTRA_ADVANCED_EVIDENCE||'/tmp/montra-mixed-browser-evidence';fs.mkdirSync(out,{recursive:true});
  const report={cases:[],catalogRoutes:[],coreRoutes:[],errors:[],limits:'Production DOM/functions/CSS with synthetic authoritative snapshots. Chromium emulation, not a physical phone or live production character. Network/save acknowledgment durability is verified separately by mixed-hotbar-integration.mjs.'};
@@ -51,9 +71,14 @@ async function main(){
    const id=examples[job],bar='#'+barIds[job],button=bar+' [data-skill-id="'+id+'"]';await page.evaluate(({job,id})=>fixture.setup(job,id),{job,id});
    assert.equal(await page.locator('#advancedHotbar,#skillBankToggle').count(),0,'no new bank or bar');
    assert.equal(await page.locator(bar+' button').count(),4,'existing four buttons');
-   await inside(page,'#skillLoadoutButton');await page.locator('#skillLoadoutButton').click();
+   await openMenuLoadout(page,mobile);
    assert.equal(await page.locator('[data-loadout-slot]').count(),4,'one mixed four-slot configuration');
    await inside(page,'[data-loadout-slot="0"]');
+   await page.locator('#drawerMenuBack').click();
+   await inside(page,'#skillLoadoutButton');
+   assert.equal(await page.locator('[data-journal-tab="character"]').getAttribute('aria-pressed'),'true');
+   await page.locator('#skillLoadoutButton').click();
+   assert.equal(await page.locator('[data-loadout-slot]').count(),4,'menu tile keeps the same loadout');
    const initial=await page.evaluate(()=>structuredClone(fixture.mixed()));const book=await page.evaluate(()=>structuredClone(fixture.advanced().book));
    await page.locator('[data-loadout-slot="1"]').selectOption('advanced:'+id);
    const equip=await page.evaluate(()=>fixture.wire.at(-1));const desired=structuredClone(initial);desired.slots[1]={kind:'advanced',id};
@@ -72,7 +97,7 @@ async function main(){
    assert.equal(await page.evaluate(()=>fixture.wire.at(-1).payload.slots[3]),null);
    await page.evaluate(()=>fixture.expirePending());assert.equal(await page.locator('[data-loadout-slot="3"]').isDisabled(),false,'timeout releases controls');
    assert.deepEqual(await page.evaluate(()=>fixture.mixed().slots),moved.payload.slots,'timeout never mutates authority');
-   await page.locator('#loadoutPlay').click();await inside(page,button);
+   await page.locator('#loadoutPlay').click();assert.equal(await page.locator('#fieldMenuButton').evaluate(el=>el===document.activeElement),true,'close restores visible menu opener');await inside(page,button);
    await page.evaluate(()=>fixture.wire.length=0);if(mobile)await page.locator(button).tap();else await page.locator(button).click();
    const sent=await page.evaluate(()=>fixture.wire.at(-1));assert.equal(sent?.command,commands[job],job+' advanced command');assert.equal(sent.payload.skillId,id);
    await page.evaluate(()=>fixture.wire.length=0);await page.keyboard.press('3');assert.equal(await page.evaluate(()=>fixture.wire.at(-1)?.command),commands[job],'number key uses mixed slot');
@@ -80,9 +105,11 @@ async function main(){
    await page.evaluate(id=>{fixture.cooldown(id,0);fixture.own().mana=0;fixture.tickLoadout();},id);assert(await page.locator(button).isDisabled(),'mana');
    await page.evaluate(()=>{fixture.own().mana=300;fixture.own().stunned=true;fixture.tickLoadout();});assert(await page.locator(button).isDisabled(),'stun');
    await page.evaluate(()=>{fixture.own().stunned=false;fixture.tickLoadout();});
-   await page.screenshot({path:path.join(out,width+'-'+job+'-mixed.png')});await page.locator('#skillLoadoutButton').click();await page.screenshot({path:path.join(out,width+'-'+job+'-config.png')});
+   await page.screenshot({animations:'disabled',path:path.join(out,width+'-'+job+'-mixed.png')});await openMenuLoadout(page,mobile);await page.screenshot({animations:'disabled',path:path.join(out,width+'-'+job+'-config.png')});
    await page.evaluate(()=>{fixture.stale();fixture.setMode('demo');fixture.tickLoadout();fixture.wire.length=0;fixture.invokeStale();});assert.deepEqual(await page.evaluate(()=>fixture.wire),[],'stale owner callbacks cannot send');
-   await page.evaluate(({job,id})=>{fixture.setup(job,id);fixture.legacy();},{job,id});assert.equal(await page.locator(bar+' [data-skill-id]').count(),4,'old server retains four core buttons');assert.equal(await page.locator('#skillLoadoutButton').isVisible(),false,'old server hides mixed config');
+   await page.evaluate(({job,id})=>{fixture.setup(job,id);fixture.legacy();},{job,id});assert.equal(await page.locator(bar+' [data-skill-id]').count(),4,'old server retains four core buttons');assert.equal(await page.locator('#skillLoadoutButton').evaluate(el=>el.hidden),true,'old server hides mixed config');
+   await page.locator('#fieldMenuButton').click();assert.equal(await page.locator('[data-menu-source="skillLoadoutButton"]').isVisible(),false,'legacy flyout entry also hidden');
+   await page.keyboard.press('Escape');assert.equal(await page.locator('#fieldMenuButton').evaluate(el=>el===document.activeElement),true,'Escape restores menu focus');
    report.cases.push({width,height,job,command:sent.command});
   }
   if(width===390){
@@ -111,6 +138,34 @@ async function main(){
    await page.evaluate(()=>fixture.spiritState(false,false));await page.locator('#occultHotbar [data-skill-id="seer_spirit"]').click();assert.deepEqual(await page.evaluate(()=>fixture.wire),[{command:'pot_summon',payload:{}}]);
    await page.evaluate(()=>fixture.spiritState(false,true));await page.locator('#occultHotbar [data-skill-id="seer_spirit"]').click();assert.equal(await page.evaluate(()=>fixture.wire.at(-1)?.command),'occult_skill');
   }
+  // Real menu interruption/reentry, keyboard and clipped-list navigation.
+  await page.evaluate(()=>fixture.setup('phutthaisawan','flowing_blades'));
+  await page.locator('#fieldMenuButton').click();
+  await page.screenshot({animations:'disabled',path:path.join(out,width+'-skill-menu.png')});
+  const entry=page.locator('[data-menu-source="skillLoadoutButton"]');
+  await page.evaluate(()=>document.getElementById('skillLoadoutButton').disabled=true);
+  assert.equal(await entry.isDisabled(),true,'proxy tracks disabled state while open');
+  await page.evaluate(()=>document.getElementById('skillLoadoutButton').disabled=false);
+  await entry.focus();await page.keyboard.press('Space');
+  assert.equal(await page.locator('#skillLoadoutBody').isVisible(),true,'Space opens loadout');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#drawer').isVisible(),false);
+  assert.equal(await page.locator('#fieldMenuButton').evaluate(el=>el===document.activeElement),true);
+  await page.locator('#fieldMenuButton').click();
+  await page.locator('[data-menu-source="fieldMenu"]').scrollIntoViewIfNeeded();
+  await page.locator('[data-menu-source="fieldMenu"]').click();
+  await inside(page,'#skillLoadoutButton');
+  await page.screenshot({animations:'disabled',path:path.join(out,width+'-skill-menu-panel.png')});
+  await page.locator('#skillLoadoutButton').click();await page.locator('#loadoutLearn').click();
+  assert.equal(await page.locator('#fieldSkillGraph').isVisible(),true,'learn keeps existing graph');
+  await page.locator('#drawerClose').click();
+  await page.locator('#fieldMenuButton').click();
+  await page.locator('#world').click({position:{x:10,y:Math.floor(height/2)}});
+  assert.equal(await page.locator('.map-flyout').isVisible(),false,'outside pointer dismisses menu');
+  await page.evaluate(()=>{fixture.setMode('demo');fixture.tickLoadout();});
+  await page.locator('#fieldMenuButton').click();
+  assert.equal(await entry.isVisible(),false,'demo never offers loadout');
+  await page.keyboard.press('Escape');
   await context.close();
  }
  assert.equal(report.cases.length,24);assert.equal(report.catalogRoutes.length,116);assert.equal(report.coreRoutes.length,24);assert.deepEqual(report.errors,[]);
