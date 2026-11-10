@@ -22,16 +22,77 @@ IDs remain available. It is not a new economy or a database migration.
   refreshes, shrine recipe and nested ingredient/back navigation remain intact.
 - Material tracking uses the existing hunt buttons; it is not a new source list.
 
-## Unsupported features
+## Cooking
 
-No cooking recipes, cooking skill/EXP, recipe-learning system, cooking station
-requirement, timed crafting, ST crafting cost, published quality distribution,
-queue or batch-craft API exists in this repository's crafting contract. Food,
-furniture and the skill/quality/time/ST/queue indicators say **เร็วๆ นี้**. No
-probabilities, skill levels, timers or queue capacities are fabricated. The API
-makes one item per request; there is no quantity selector or automatic repeats.
-The decorative village houses and territory estate are not a player house/garden
-system, so the seven house tabs and day/water/season strip are deliberately omitted.
+The catalog advertises the required cooking level and food and water restoration.
+Herbal fish soup starts at level 1, grilled fish unlocks at level 2, and spirit
+stew unlocks at level 3. The advanced recipes require a placed home kitchen.
+Each successful serving grants one cooking XP. Levels 2 and 3 start at 5 and
+15 XP respectively.
+
+## Private home and garden
+
+Send `get_home` with an empty object to receive the active character's
+`home_state` with ownership level, interior width, grid stride, furniture,
+garden plots and cooking state. Open **เรือนส่วนตัว** from the player menu.
+Buy and enter from a rest area in the ritual village. The server places each
+owner in a separate map, saves their location, and hides other players in
+that map. The return button leads back to the village.
+
+The client advertises `homeVersion: 1` at join. It builds the private scene
+from `worldDefinition.homeMap`, which is a shared geometry template rather
+than a public destination. `enter_home` and `leave_home` accept empty objects
+and use the standard warp confirmation. The server derives the destination
+from the active character. Clients without that capability resume in the village.
+
+Send `home_action` with `requestId` and one action. The reply is the latest
+`home_state` with that request ID. Upgrade, furniture and garden actions require the owner
+to be inside their home. Furniture crafting and advanced cooking also require
+the home map.
+
+- `buy` costs 100 gold and grants a 4×4 interior and two garden plots.
+  `upgrade` costs 200 gold and expands the interior to 8×8 with four plots.
+- `place` accepts `itemId` and `cell`. `move` accepts `from` and `cell`.
+  `remove` accepts `cell` and returns the item to inventory. Cell numbers
+  use a fixed stride of 8 at both house levels. The server rejects collisions.
+- Craft plank floor, wood wall and doorway in the home. In the placement
+  grid, choose **พื้น** or **ผนังและประตู**. Floors are a separate layer
+  and can sit under furniture. A doorway is passable, while a wall blocks
+  walking. Rotate a wall or doorway from its occupied cell.
+- The `parts` array contains `cell`, `layer`, `itemId` and `rotation`.
+  `place_part` accepts `itemId`, `cell` and `rotation`.
+  `move_part` accepts `layer`, `from`, `cell` and `rotation`; the
+  source and target may be the same cell for rotation. `remove_part`
+  accepts `layer` and `cell`. Rotation is 0 for horizontal or 1 for vertical.
+  The server sends the grid geometry in `worldDefinition.homeMap.buildGrid`.
+- `plant`, `water` and `harvest` accept `plot`. Planting uses one tier-one
+  herb. Watering uses one clean water and sets `readyAt` to two minutes
+  later. Harvesting returns three herbs. A full bag preserves the harvest.
+
+## Hunger and thirst
+
+Send `get_needs` to read `needs_state`, which includes current food and
+water, maximum 100, server time and depletion times. Food falls one point
+per four minutes. Water falls one point per two minutes. Both continue
+while the character is offline. If either meter is empty, stamina recovery
+is 60% of its usual rate. Empty meters cause no HP loss.
+
+`collect_water` accepts `{requestId}` while grounded within six units of
+the ritual village plaza at (0, 0). It grants one clean water and replies
+with `water_collected`. The collection cooldown is 15 seconds per
+character. Use food and water with the normal `use_item` slot command.
+The server persists the item, HP or mana recovery and both meters together.
+
+## Client controls
+
+The private home menu contains the furniture grid, garden actions, recipes,
+hunger and thirst, and the return button. The live scene shows the furniture
+and crops after server confirmation. The Food and Furniture tabs open this
+menu on supported servers. A placed kitchen unlocks advanced station recipes
+once the character reaches the required cooking level.
+
+Back up character and economy data before releasing the recipe. Once an item is
+crafted, a rollback build must also recognize its item ID in saved inventory.
 
 ## Verification
 

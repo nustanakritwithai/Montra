@@ -289,6 +289,7 @@
   function renderBag() {
     if (drawerActive === "forge") { renderForgePage(); return; }
     if (drawerActive === "crafting") { renderCraftingPage(); return; }
+    if (drawerActive === "home") { renderHomePanel(); return; }
     if (drawerActive !== "bag" && drawerActive !== "character") return;
     renderLootHistory();
     const slots = currentBagSlots();

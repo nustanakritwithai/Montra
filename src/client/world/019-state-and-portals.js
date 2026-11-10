@@ -1,15 +1,20 @@
+  let homeMapTemplate = null;
   function syncWorldDefinition(state, mapId=activeMapId) {
     const key=state?.worldDefinition || "";
     if(key!==worldDefinitionKey){
-      let definitions=null;
+      let definitions=null, home=null;
       if(key){try{const data=JSON.parse(key);
         if(data.version!==1||!data.maps?.ritual_village||!data.maps?.forbidden_forest)throw Error("unsupported map definition");
-        for(const map of Object.values(data.maps)){
+        if (data.homeMap?.id === "personal_home") home=data.homeMap;
+        for(const map of [...Object.values(data.maps), ...(home?[home]:[])]){
           const b=map.bounds;
           if(!b||![b.minX,b.maxX,b.minZ,b.maxZ].every(Number.isFinite)||b.maxX<=b.minX||b.maxZ<=b.minZ||b.maxX-b.minX>2000||b.maxZ-b.minZ>2000)throw Error("invalid map bounds");
         }definitions=data.maps;
       }catch(error){console.error("MONTRA map definition",error);toast("อ่านข้อมูลแผนที่ไม่สำเร็จ");return;}}
-      worldDefinitionKey=key;worldDefinitions=definitions;expandedMapKey="";
+      worldDefinitionKey=key;worldDefinitions=definitions;homeMapTemplate=home;expandedMapKey="";
+    }
+    if (homeMapTemplate && isPrivateHomeMap(mapId) && !Object.hasOwn(worldDefinitions,mapId)) {
+      Object.defineProperty(worldDefinitions,mapId,{value:{...homeMapTemplate,id:mapId},configurable:true});
     }
     switchWorld(mapId);
     const buildKey=worldDefinitionKey+":"+activeMapId;
@@ -34,6 +39,12 @@
       t.uScale=reliefFloor?45/groundTile:(bounds.maxX-bounds.minX)/groundTile;t.vScale=reliefFloor?45/groundTile:(bounds.maxZ-bounds.minZ)/groundTile;}
     const map=worldDefinitions?.[activeMapId];alignVillage(worldDefinitions?.ritual_village?.terrain);
     ground.setEnabled(!map?.terrain);if(!map)return;
+    if (isPrivateHomeMap(activeMapId)) {
+      renderHomeScene();
+      readHomeState();
+      renderHomePanel();
+      return;
+    }
     buildServiceNpcs(map);
     for(const p of map.portals||[])addLightSpot(p.x,2.6,p.z,"#7ff5e0",1.25);
     // Soft occlusion where trees, rocks, buildings and walls meet the ground.

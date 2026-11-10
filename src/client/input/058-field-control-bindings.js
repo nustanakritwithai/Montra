@@ -34,6 +34,7 @@
       addEventListener("keydown", e => { if (e.key === "Escape" && !fly.hidden) { close(); menuBtn.focus({preventScroll:true}); } });
     } }
   $("menuBag").onclick=openBag;
+  $("menuHome").onclick=openHomePanel;
   $("menuChat").onclick=openChat;
   $("noticeParty").onclick=openParty;
   $("noticeGuild").onclick=openGuild;
@@ -65,6 +66,15 @@
   }
   $("mountButton").onclick=toggleFieldMount;
   $("menuMount").onclick=()=>{closeDrawer();toggleFieldMount();};
+  let ghostPotState = null;
+  $("menuGhostPot")?.addEventListener("click", () => {
+    if (mode !== "live" || !room || !ghostPotState) return;
+    const targetId = selectedForestTarget || (hudTarget.until > performance.now() ? hudTarget.id : null);
+    if (!ghostPotState.ghost && !targetId) return toast("เลือกผีที่อยู่ใกล้ก่อนใช้หม้ออาคม");
+    const action = ghostPotState.active ? "recall" : ghostPotState.ghost ? "summon" : "capture";
+    room.send("ghost_pot", action === "capture" ? {action, targetId} : {action});
+    closeDrawer();
+  });
   function triggerWarBanner() {
     if (window.MontraBanner?.plantBanner) {
       window.MontraBanner.plantBanner();

@@ -11,6 +11,7 @@ import {RIVER_CITY,riverNodes,riverPosts,riverSupplied} from "./RiverCity.js";
 import {CASTLE_ID,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
 import { Encoder, StateView } from "@colyseus/schema";
 import { randomUUID,randomInt } from "node:crypto";
+import {ghostPotConfig, LegacyGhostWorker, POT_CAPTURE_PROFILE, rollPotCapture, type PotGhost} from "./LegacyGhostPot.js";
 import {FISH_BITE_DELAY,FISH_DURATION,advanceFishing,fishItem,pullFish,validateFishingPosition,type FishingSession} from "./Fishing.js";
 import {
   CHARACTER_SAVE_INTERVAL_MS, characterStore, characterIdFromToken,
@@ -53,10 +54,10 @@ import {guideAnswer,type GuideWar} from "./GuideAnswers.js";
 import {questChoices,questAdvice,preferredQuestId,type QuestChoice} from "./QuestAdvisor.js";
 import { isAtlasMap } from "./WorldAtlas.js";
 import { TEMPLE_ID } from "./TempleMap.js";
-import { DEFAULT_MAP_ID, getWorldMap, groundAt, surfaceLayer, meleeHeightBlocked, onMapGround, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, VILLAGE_ARRIVALS, WORLD_ROOM_CAPACITY, WORLD_MAPS, WORLD_EXPANSION } from "./WorldMaps.js";
+import { DEFAULT_MAP_ID, HOME_MAP, HOME_BUILD_GRID, homeMapId, homeWallBlocks, isHomeMap, getWorldMap, groundAt, surfaceLayer, meleeHeightBlocked, onMapGround, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, VILLAGE_ARRIVALS, WORLD_ROOM_CAPACITY, WORLD_MAPS, WORLD_EXPANSION, type WorldPortal } from "./WorldMaps.js";
 import { provinceShotClear, segmentIntersectsExpandedWall } from "./WorldMaps.js";
 import { crestCorners, onRampart, wallRing } from "./StrategicProvinces.js";
-import { checkWarp, WARP_COMBAT_LOCK_MS } from "./WarpRules.js";
+import { checkWarp, checkWarpDestination, type WarpContext, WARP_COMBAT_LOCK_MS } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { saveBugReport } from "./BugReports.js";
 import { BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCooldown } from "./Buffs.js";
@@ -74,7 +75,7 @@ import {dynamicBalanceRevision} from "./DynamicBalance.js";
 import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
 import {personalGearGuides} from "./GearGuides.js";
 import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js";
-import { parseSellMaterial, parseSalvage, parseCraft, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseMarketBrowse, parseAuctionCreate, parseAuctionBid, parseAuctionAction, parseAuctionCredit, parseStarterSupply, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
+import { parseSellMaterial, parseSalvage, parseCraft, parseHomeAction, parseEconomyRequest, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseMarketBrowse, parseAuctionCreate, parseAuctionBid, parseAuctionAction, parseAuctionCredit, parseStarterSupply, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import {CITY_PRODUCTION_ENABLED,CITY_PRODUCTION_SITE,CITY_PRODUCTION_SITES,MULTI_CITY_PRODUCTION_ENABLED,parseCityOrder,type CityOrder} from "./CityProductionRules.js";
@@ -94,7 +95,7 @@ import { ForestEncounters } from "./ForestEncounters.js";
 import { mapsWithServiceNpcs, serviceNpcsFor } from "./ServiceNpcs.js";
 
 const mapsWithServices=mapsWithServiceNpcs();
-const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices}):"";
+const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices,homeMap:characterStore.economyEnabled?{...HOME_MAP,buildGrid:HOME_BUILD_GRID}:undefined}):"";
 function cityProductionAvailableAt(site:string):boolean {
   return site===CITY_PRODUCTION_SITE || MULTI_CITY_PRODUCTION_ENABLED &&
     CITY_PRODUCTION_SITES.includes(site) && !!getWarDefinition(site);
@@ -119,7 +120,7 @@ for(const site of Object.keys(warSites)){
   const arena=getWarDefinition(site)?.isolated,map=WORLD_MAPS[site];
   if(!arena || !map)continue;
   const restAreas=[{...arena.attack,radius:4,name:"ฐานฝ่ายบุก"},{...arena.defend,radius:4,name:"ฐานฝ่ายรับ"}];
-  const strategic=map.strategic && {...map.strategic,safeRoads:[],relay:arena.relay,sites:[arena.flag]};
+  const strategic=map.strategic && {...map.strategic,safeRoads:[] as number[],relay:arena.relay,sites:[arena.flag]};
   isolatedBattleWorldDefinitions.set(site,encodeBattleWorld({
     ...WORLD_MAPS,[site]:{...map,strategic,battlefield:true,portals:[],restAreas,camps:[],boss:undefined,guardian:undefined},
   }));
@@ -166,6 +167,14 @@ type TradeSession = { id:string; a:string; b:string; expires:number; offers:Reco
 export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients:number = WORLD_ROOM_CAPACITY;
   state = new MyRoomState();
+
+  private readonly ghostConfig = ghostPotConfig();
+  private ghostWorker?: LegacyGhostWorker;
+  private readonly ghostPots = new Map<string, PotGhost>();
+  private readonly ghostGenerations = new Map<string, number>();
+  private readonly ghostControlPending = new Set<string>();
+  private readonly ghostCaptureTargets = new Set<string>();
+  private readonly ghostCaptureReadyAt = new Map<string, number>();
 
   private forest = new ForestEncounters(this.state.monsters);
   private getMonster(id:string): Monster | undefined { return id === RULES.monsterId ? this.state.monster : this.state.monsters.get(id); }
@@ -315,13 +324,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastSummonAttackAt = new Map<string, number>();
   private climbs = new Map<string, WorldPoint>();
   private flightTransitions = new Map<string, { targetY: number; landing: boolean }>();
+  private readonly needs = new Map<string, {hungryAt: number; thirstyAt: number}>();
+  private readonly homeClients = new Set<string>();
+  private readonly homeWalls = new Map<string, {cell:number;rotation:0|1}[]>();
 
   private syncPlayerViews():void {
     for(const client of this.clients) {
       if(!client.view) continue;
       const allies=this.parties.get(client.sessionId)?.members;
+      const viewerMap=this.state.players.get(client.sessionId)?.mapId;
       for(const [id,player] of this.state.players) {
-        const canSee=id===client.sessionId || !this.bladeCloaks.has(id) || Boolean(allies?.includes(id));
+        const privateMap=isHomeMap(player.mapId) || Boolean(viewerMap && isHomeMap(viewerMap));
+        const canSee=id===client.sessionId || (!privateMap && (!this.bladeCloaks.has(id) || Boolean(allies?.includes(id))));
         const visible=client.view.has(player);
         if(canSee && !visible)client.view.add(player);
         else if(!canSee && visible)client.view.remove(player);
@@ -2044,6 +2058,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return this.reject(client,"occult_curse_required");
       if (lesson.effect==="spirit" || lesson.effect==="spirit_bind") {
         const spirit=this.state.summons.get(id);
+        if (spirit?.kind === "captured_ghost") return this.reject(client, "occult_skill_locked");
         if (!spirit || spirit.kind!=="pot_spirit") return this.reject(client,"possession_needs_summon");
         if (distance3d(caster,target)>RULES.summonEngageDistance) return this.reject(client,"occult_out_of_range");
         if (!this.bodyPathClear(caster.mapId,spirit,target)) return this.reject(client,"occult_blocked");
@@ -3353,7 +3368,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_downgrade_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","forge_stock_changed","craft_missing_shard","craft_missing_material","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level","starter_supply_limit","invalid_auction_duration","auction_limit","auction_bid_limit","auction_unavailable","cannot_bid_own_auction","auction_bid_too_low","auction_claim_unavailable","auction_cancel_unavailable","auction_credit_unavailable"];
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_downgrade_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","forge_stock_changed","craft_missing_shard","craft_missing_material","cooking_level_required","cooking_kitchen_required",
+        "home_level_unavailable","home_required","home_unavailable","home_village_required","home_build_location","home_wall_blocked","home_cell_invalid","home_cell_occupied","home_furniture_unavailable",
+        "garden_plot_invalid","garden_occupied","garden_water_unavailable","garden_not_ready",
+        "needs_full","water_unavailable","water_cooldown","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level","starter_supply_limit","invalid_auction_duration","auction_limit","auction_bid_limit","auction_unavailable","cannot_bid_own_auction","auction_bid_too_low","auction_claim_unavailable","auction_cancel_unavailable","auction_credit_unavailable"];
       const reason=error instanceof Error && (allowed.includes(error.message)||["resource_ground","resource_range","resource_cooldown","resource_empty","fish_water","fish_ground","fish_range","fish_blocked","fish_interrupted","fish_expired","fish_pending","fish_no_pending"].includes(error.message)) ? error.message : "economy_failed";
       if(reason==="fish_pending")client.send("fish_pending",{item:characterStore.economy.pendingFish(id)});
       if(reason==="fish_no_pending")client.send("fish_pending",{item:null});
@@ -3826,7 +3844,125 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(signature!==this.warSent.get(c.sessionId)){c.send("territory_state",payload);this.warSent.set(c.sessionId,signature);}
     }
   }
+  private sendGhostPot(client: Client, status: string) {
+    const id = client.sessionId;
+    client.send("ghost_pot_state", {
+      ghost: this.ghostPots.get(id) ?? null,
+      active: this.ghostGenerations.has(id),
+      status,
+    });
+  }
+
+  private resetGhostWorker(worker: LegacyGhostWorker) {
+    if (this.ghostWorker !== worker) return;
+    this.ghostWorker = undefined;
+    worker.close();
+    for (const owner of this.ghostGenerations.keys()) this.despawnSummon(owner, "ghost_worker_unavailable");
+  }
+
+  private async handleGhostPot(client: Client, message: unknown) {
+    const config = this.ghostConfig, id = client.sessionId, owner = this.state.players.get(id);
+    if (!config || this.field || !characterStore.economyEnabled || !owner || !this.persistentCharacters.has(id))
+      return this.reject(client, "ghost_pot_unavailable");
+    if (!message || typeof message !== "object" || Array.isArray(message)) return this.reject(client, "invalid_ghost_pot");
+    const input = message as {action?: unknown; targetId?: unknown};
+    if (Object.keys(input).some(key => key !== "action" && key !== "targetId"))
+      return this.reject(client, "invalid_ghost_pot");
+    if (input.action === "read" && input.targetId === undefined) return this.sendGhostPot(client, "ready");
+    if (!owner.alive || owner.mounted || owner.possessionActive || this.pendingWarps.has(id) ||
+        this.pendingCharacterLeaves.has(id) || this.pendingItemUses.has(id) || this.pendingRewards.has(id) ||
+        this.ghostControlPending.has(id)) return this.reject(client, "ghost_pot_busy");
+    if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) return this.reject(client, "ghost_pot_busy");
+
+    const ghost = this.ghostPots.get(id);
+    if (input.action === "capture") {
+      if (ghost || this.state.summons.has(id)) return this.reject(client, "ghost_pot_occupied");
+      if (typeof input.targetId !== "string" || input.targetId.length > 96) return this.reject(client, "invalid_ghost_pot");
+      const targetId = input.targetId, target = this.getMonster(targetId);
+      if (!target?.alive || target.hp <= 0 || target.tier !== "normal" || target.level > 60 ||
+          target.mapId !== owner.mapId || distance3d(owner, target) > 8 || !this.bodyPathClear(owner.mapId, owner, target))
+        return this.reject(client, "ghost_target_unavailable");
+      if (this.ghostCaptureTargets.has(targetId) || this.simulatedMs < (this.ghostCaptureReadyAt.get(id) ?? 0))
+        return this.reject(client, "ghost_pot_busy");
+      this.ghostCaptureReadyAt.set(id, this.simulatedMs + 3000);
+      this.ghostCaptureTargets.add(targetId);
+      const task = (async () => {
+        try {
+          const hp = target.hp, hitSeq = target.hitSeq;
+          const caught = await rollPotCapture(config.capture, {hp, maxHp: target.maxHp, level: target.level}, owner.level);
+          if (!owner.alive || !target.alive || target.hitSeq !== hitSeq || target.hp !== hp ||
+              this.getMonster(targetId) !== target || this.pendingCharacterLeaves.has(id) ||
+              owner.mapId !== target.mapId || distance3d(owner, target) > 8 ||
+              !this.bodyPathClear(owner.mapId, owner, target)) return this.sendGhostPot(client, "target_changed");
+          if (!caught) return this.sendGhostPot(client, "escaped");
+          const snapshot = this.captureCharacterSnapshot(id);
+          if (!snapshot) return this.sendGhostPot(client, "unavailable");
+          const captured = {instanceId: randomUUID(), name: (target.displayName || "ผี").slice(0, 80), level: target.level};
+          // Economy-mode saves commit synchronously to SQLite before resolving.
+          // The pot becomes occupied only after the character snapshot commits.
+          await characterStore.save({...snapshot, ghostPot: captured});
+          this.ghostPots.set(id, captured);
+          this.killMonster(id, targetId, false);
+          this.sendGhostPot(client, "captured");
+        } catch (error) {
+          console.error("MONTRA ghost capture failed", error);
+          this.sendGhostPot(client, "unavailable");
+        } finally {
+          this.ghostCaptureTargets.delete(targetId);
+          this.pendingItemUses.delete(id);
+        }
+      })();
+      this.pendingItemUses.set(id, task);
+      return task;
+    }
+
+    const kind = input.action;
+    if ((kind !== "summon" && kind !== "recall") || input.targetId !== undefined)
+      return this.reject(client, "invalid_ghost_pot");
+    if (!ghost) return this.reject(client, "ghost_pot_empty");
+    const generation = this.ghostGenerations.get(id);
+    if (kind === "summon" ? this.state.summons.has(id) : !generation)
+      return this.reject(client, "ghost_pot_busy");
+    const zone = owner.mapId, position = {x: owner.x, y: owner.y, z: owner.z};
+    const worker = this.ghostWorker ??= new LegacyGhostWorker(config.worker);
+    this.ghostControlPending.add(id);
+    try {
+      const reply = await worker.send({owner: id, position, ghost: {...ghost, speciesId: POT_CAPTURE_PROFILE}, command: {
+        commandId: randomUUID(), instanceId: ghost.instanceId, zone, kind,
+        ...(kind === "summon" ? {targetPoint: position} : {expectedActiveGeneration: generation}),
+      }});
+      if (this.ghostWorker !== worker) return;
+      if (!reply.accepted) return this.sendGhostPot(client, "unavailable");
+      if (kind === "recall") {
+        this.despawnSummon(id, "ghost_recalled");
+        return this.sendGhostPot(client, "recalled");
+      }
+      const active = reply.active;
+      if (!active || !Number.isSafeInteger(active.generation) || ![active.x, active.y, active.z].every(Number.isFinite))
+        throw new Error("invalid_ghost_worker_actor");
+      if (this.state.players.get(id) !== owner || !owner.alive || owner.mapId !== zone ||
+          this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) || owner.mounted ||
+          owner.possessionActive || this.state.summons.has(id)) {
+        await worker.send({owner: id, disconnect: true});
+        return;
+      }
+      this.ghostGenerations.set(id, active.generation);
+      this.state.summons.set(id, new SummonedGuardian({
+        ownerId: id, kind: "captured_ghost", x: active.x, y: active.y, z: active.z, facing: owner.facing,
+      }));
+      this.broadcast("summon_spawn", {ownerId: id, kind: "captured_ghost"}, {afterNextPatch: true});
+      this.sendGhostPot(client, "summoned");
+    } catch (error) {
+      console.error("MONTRA ghost worker failed", error);
+      this.resetGhostWorker(worker);
+      this.sendGhostPot(client, "unavailable");
+    } finally {
+      this.ghostControlPending.delete(id);
+    }
+  }
+
   messages = {
+    ghost_pot: (client: Client, message: unknown) => this.handleGhostPot(client, message),
     ask_npc_guide:(client:Client,message:unknown)=>this.askNpcGuide(client,message),
     get_director_event:(client:Client,message:unknown)=>{
       if(!parseEmptyCommand(message) || !WORLD_EXPANSION || this.field || !this.persistentCharacters.has(client.sessionId) || process.env.MONTRA_DIRECTOR_ENABLED==="0")return;
@@ -4189,10 +4325,44 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if(deliver) peer.send("chat_message",event);
       }
     },
+    enter_home: (client: Client, message: unknown) => this.travelHome(client, message, true),
+    leave_home: (client: Client, message: unknown) => this.travelHome(client, message, false),
+    get_home: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_economy_request");
+      this.economyAction(client, id => client.send("home_state", characterStore.economy.homeState(id)));
+    },
+    home_action: (client: Client, message: unknown) => {
+      const order = parseHomeAction(message);
+      if (!order) return this.reject(client, "invalid_economy_request");
+      this.economyAction(client, id => {
+        if (!this.homeClients.has(client.sessionId) || this.field) throw Error("home_unavailable");
+        const player = this.state.players.get(client.sessionId)!;
+        if (order.action === "buy") {
+          if (player.mapId !== DEFAULT_MAP_ID || !isRestArea(player.mapId, player) || !onMapGround(player)) throw Error("home_village_required");
+        } else if (!this.inOwnedHome(client.sessionId,id)) throw Error("home_build_location");
+        const store = characterStore.economy;
+        store.homeAction(id, order, Date.now(), (cell,rotation) =>
+          !homeWallBlocks(cell,rotation,player) && !homeWallBlocks(cell,rotation,HOME_MAP.spawn));
+        const home = store.homeState(id);
+        if (isHomeMap(player.mapId)) this.cacheHomeWalls(player.mapId,home.parts);
+        this.syncEconomy(client, id);
+        client.send("home_state", {...home, requestId: order.requestId});
+      });
+    },
+    get_needs: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_economy_request");
+      this.economyAction(client, id => {
+        const state = characterStore.economy.needsState(id);
+        this.needs.set(client.sessionId, state);
+        client.send("needs_state", state);
+      });
+    },
+    collect_water: (client: Client, message: unknown) => this.collectWater(client, message),
     craft_weapon: (client: Client, message: unknown) => {
       const order = parseCraft(message);
       if (!order) return this.reject(client, "invalid_economy_request");
       this.economyAction(client, id => {
+        this.requireHomeRecipe(client.sessionId,id,order.recipeId);
         const result = order.recipeId===SHRINE_GLAIVE ? characterStore.economy.craftShrineGlaive(id,order.requestId) : characterStore.economy.craftPersonal(id,order.requestId,order.recipeId,this.state.players.get(client.sessionId)!.level);
         this.syncEconomy(client, id);
         client.send("craft_result", {requestId: order.requestId, ...result});
@@ -4390,8 +4560,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         lastWarpMs: this.lastWarpMs.get(id) ?? -Infinity, nowMs: this.simulatedMs,
       });
       if ("reason" in result) return this.reject(client, result.reason);
-      const snapshot = this.captureCharacterSnapshot(id);
-      if (!snapshot) return this.reject(client, "character_not_persistent");
       const portal = result.portal;
       if(getWorldMap(portal.targetMapId)?.reliefLabels && !isAtlasMap(portal.targetMapId) && !this.originalReliefClients.has(id))return this.reject(client,"world_client_update_required");
       if(isAtlasMap(portal.targetMapId) && getWorldMap(portal.targetMapId)?.terrain && !this.reliefClients.has(id))return this.reject(client,"world_client_update_required");
@@ -4401,56 +4569,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(getWorldMap(portal.targetMapId)?.strategic && !this.provinceClients.has(id))return this.reject(client,"world_client_update_required");
       if(isAtlasMap(portal.targetMapId) && !this.atlasClients.has(id))return this.reject(client,"world_client_update_required");
       if(portal.targetMapId===TEMPLE_ID && !this.templeClients.has(id))return this.reject(client,"world_client_update_required");
-      const destination = { ...snapshot, mapId: portal.targetMapId, ...portal.targetSpawn,
-        updatedAt: new Date().toISOString() };
-      // Freeze the actor during disk I/O. All other save paths wait for this
-      // shared item/character mutation lock before taking their snapshots.
-      this.pendingWarps.add(id);
-      const task = (async () => {
-        try {
-          try {
-            await characterStore.save(destination);
-          } catch (error) {
-            console.error("MONTRA warp save failed:", id, error);
-            try { client.send("warp_failed", { reason: "disk_write_failed" }); } catch { /* disconnected */ }
-            return;
-          }
-          const current = this.state.players.get(id);
-          if (!current) return;
-          this.dismount(id,"warp");
-          // Once the durable write succeeds, commit the destination before
-          // any optional notifications so a disconnected client cannot turn
-          // a committed warp into a misleading disk-failure result.
-          current.mapId = portal.targetMapId;
-          current.x = portal.targetSpawn.x; current.y = portal.targetSpawn.y; current.z = portal.targetSpawn.z;
-          current.targetId = ""; current.combatState = "idle"; current.flying = false;
-          if(this.swordCoreStances.delete(id))this.sendSwordNotice(client,"sword_stance_end",{});
-          if(this.sentinelCoreStances.delete(id))this.sendSwordNotice(client,"sentinel_core_end",{});
-          this.swordCoreSequences.delete(id);
-          if(current.pathId==="muay_boran"){this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");this.sendSwordNotice(client,"muay_counter_cleared",{});}
-          this.clearMuayCombo(id);
-          this.clearMuayCombosForTarget(id);
-          this.clearGrappleCountersFor(id,"warp");
-          this.destinations.delete(id);
-          this.attackTargets.delete(id);
-          for (const [otherId, targetId] of this.attackTargets) {
-            if (targetId === id) {
-              const other = this.state.players.get(otherId);
-              if (other) this.endAttack(otherId, other);
-            }
-          }
-          if (this.state.monster.targetId === id) this.state.monster.targetId = "";
-          this.forest.clearTarget(id);
-          this.despawnSummon(id, "warp");
-          this.playerSpawn.set(id, getSafeMapSpawn(portal.targetMapId));
-          this.lastWarpMs.set(id, this.simulatedMs);
-          try { client.send("warp_complete", { mapId: current.mapId }); } catch { /* disconnected */ }
-        } finally {
-          this.pendingWarps.delete(id);
-          this.pendingItemUses.delete(id);
-        }
-      })();
-      this.pendingItemUses.set(id, task);
+      this.commitWarp(client, portal);
     },
     equip_weapon: (client:Client,message:unknown)=>this.equipItem(client,message,false),
     equip_gear: (client:Client,message:unknown)=>this.equipItem(client,message,true),
@@ -4506,6 +4625,25 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       if (this.pendingItemUses.has(id)) return this.reject(client, "item_busy");
       if (this.simulatedMs < (this.itemUseReadyAt.get(id) ?? -Infinity)) return this.reject(client, "item_cooldown");
+      const selected = inventory.slots[slot];
+      const nutrition = personalItem(selected?.itemId);
+      if (characterStore.economyEnabled && selected && nutrition?.nutrition) {
+        this.economyAction(client, character => {
+          const hp = Math.min(player.maxHp, player.hp + (nutrition.healHp ?? 0));
+          const mana = Math.min(player.maxMana, player.mana + (nutrition.healMana ?? 0));
+          const healed = hp - player.hp, restoredMana = mana - player.mana;
+          const state = characterStore.economy.consumeNutrition(character, slot, selected.itemId, {hp, mana},
+            healed > 0 || restoredMana > 0);
+          this.needs.set(id, state);
+          player.hp = hp;
+          player.mana = mana;
+          this.itemUseReadyAt.set(id, this.simulatedMs + 14_000);
+          this.syncEconomy(client, character);
+          client.send("needs_state", state);
+          client.send("item_used", {slot, itemId: selected.itemId, healed, restoredMana, hp: player.hp});
+        });
+        return;
+      }
       const result = useInventoryItem(
         inventory, slot, player.hp, player.maxHp, player.alive,player.level,player.mana,player.maxMana);
       // The Windows VPS build uses different TS strictness from CI.
@@ -4795,7 +4933,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!this.gates.get(id)?.possession.consume(this.simulatedMs))return this.reject(client,"possession_rate_limited");
       if(player.possessionActive){this.endPossession(id,"cancelled");return;}
       if((!this.legacyCombatRoom() || this.configuredHotbar(id)) && !this.canPrepareSpirit(id,player.pathId,true))return this.reject(client,"occult_skill_locked");
-      if(POSSESSION_BUFF.requiresSummon && !this.state.summons.has(id))return this.reject(client,"possession_needs_summon");
+      if(POSSESSION_BUFF.requiresSummon && (!this.state.summons.has(id) || this.state.summons.get(id)?.kind === "captured_ghost"))return this.reject(client,"possession_needs_summon");
       if(possessionCoolingDown(this.persistentCharacters.get(id)))return this.reject(client,"possession_cooldown");
       if(player.mana<15)return this.reject(client,"insufficient_mana");
       const result=this.buffs.activate(id,this.simulatedMs);
@@ -4897,6 +5035,121 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.broadcast("combat_hit", {attackerId:id, targetId:target.id, damage, hp:target.hp,
       maxHp:target.maxHp, hitSeq:target.hitSeq, source}, {afterNextPatch:true});
     if (target.hp === 0) this.killMonster(id, target.id);
+  }
+
+  private commitWarp(client: Client, portal: WorldPortal) {
+    const id = client.sessionId;
+    const snapshot = this.captureCharacterSnapshot(id);
+    if (!snapshot) return this.reject(client, "character_not_persistent");
+    const destination = { ...snapshot, mapId: portal.targetMapId, ...portal.targetSpawn,
+      updatedAt: new Date().toISOString() };
+    // Freeze the actor during disk I/O. All other save paths wait for this
+    // shared item/character mutation lock before taking their snapshots.
+    this.pendingWarps.add(id);
+    const task = (async () => {
+      try {
+        try {
+          await characterStore.save(destination);
+        } catch (error) {
+          console.error("MONTRA warp save failed:", id, error);
+          try { client.send("warp_failed", { reason: "disk_write_failed" }); } catch { /* disconnected */ }
+          return;
+        }
+        const current = this.state.players.get(id);
+        if (!current) return;
+        this.dismount(id,"warp");
+        // Once the durable write succeeds, commit the destination before
+        // any optional notifications so a disconnected client cannot turn
+        // a committed warp into a misleading disk-failure result.
+        current.mapId = portal.targetMapId;
+        current.x = portal.targetSpawn.x; current.y = portal.targetSpawn.y; current.z = portal.targetSpawn.z;
+        if (isHomeMap(snapshot.mapId ?? "") || isHomeMap(current.mapId)) this.syncPlayerViews();
+        current.targetId = ""; current.combatState = "idle"; current.flying = false;
+        if(this.swordCoreStances.delete(id))this.sendSwordNotice(client,"sword_stance_end",{});
+        if(this.sentinelCoreStances.delete(id))this.sendSwordNotice(client,"sentinel_core_end",{});
+        this.swordCoreSequences.delete(id);
+        if(current.pathId==="muay_boran"){this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");this.sendSwordNotice(client,"muay_counter_cleared",{});}
+        this.clearMuayCombo(id);
+        this.clearMuayCombosForTarget(id);
+        this.clearGrappleCountersFor(id,"warp");
+        this.destinations.delete(id);
+        this.attackTargets.delete(id);
+        for (const [otherId, targetId] of this.attackTargets) {
+          if (targetId === id) {
+            const other = this.state.players.get(otherId);
+            if (other) this.endAttack(otherId, other);
+          }
+        }
+        if (this.state.monster.targetId === id) this.state.monster.targetId = "";
+        this.forest.clearTarget(id);
+        this.despawnSummon(id, "warp");
+        this.playerSpawn.set(id, getSafeMapSpawn(portal.targetMapId));
+        this.lastWarpMs.set(id, this.simulatedMs);
+        try { client.send("warp_complete", { mapId: current.mapId }); } catch { /* disconnected */ }
+      } finally {
+        this.pendingWarps.delete(id);
+        this.pendingItemUses.delete(id);
+      }
+    })();
+    this.pendingItemUses.set(id, task);
+  }
+
+  private cacheHomeWalls(mapId: string, parts: {itemId:string;cell:number;rotation:0|1}[]) {
+    const walls = parts.filter(part=>part.itemId==="furniture_wood_wall");
+    if (walls.length) this.homeWalls.set(mapId,walls);
+    else this.homeWalls.delete(mapId);
+  }
+
+  private inOwnedHome(id: string, character: string) {
+    return this.state.players.get(id)?.mapId === homeMapId(character);
+  }
+
+  private travelHome(client: Client, message: unknown, entering: boolean) {
+    if (!parseEmptyCommand(message)) return this.reject(client, "invalid_portal_request");
+    const id = client.sessionId, player = this.state.players.get(id), character = this.persistentCharacters.get(id);
+    if (!player || !character || !this.homeClients.has(id) || this.field) return this.reject(client, "home_unavailable");
+    if (this.pendingItemUses.has(id) || this.pendingWarps.has(id) || this.pendingRewards.has(id) ||
+        this.pendingCharacterLeaves.has(id)) return this.reject(client,"character_busy");
+    if (this.bladeWindups.has(id) || this.bladeCasts.has(id) || this.bladeCloaks.has(id) ||
+        this.sentinelStuns.has(id) || this.sentinelWindups.has(id) || this.muayControlled(id)) return this.reject(client,"movement_busy");
+    if (entering) {
+      if (player.mapId !== DEFAULT_MAP_ID || !isRestArea(DEFAULT_MAP_ID,player)) return this.reject(client,"home_village_required");
+      const home = characterStore.economy.homeState(character);
+      if (!home.level) return this.reject(client,"home_required");
+      this.cacheHomeWalls(homeMapId(character),home.parts);
+    } else if (!this.inOwnedHome(id,character)) return this.reject(client,"home_unavailable");
+    const destination = entering ? homeMapId(character) : DEFAULT_MAP_ID;
+    const portal: WorldPortal = {id:entering?"enter_home":"leave_home", x:player.x, z:player.z,
+      targetMapId:destination, targetSpawn:entering?HOME_MAP.spawn:getSafeMapSpawn(DEFAULT_MAP_ID)};
+    const engaged = this.attackTargets.has(id) || this.state.monster.targetId === id || this.forest.engaged(id) ||
+      [...this.attackTargets.values()].includes(id);
+    const context: WarpContext = {
+      mapId: player.mapId, position:player, alive:player.alive, flying:player.flying, climbing:this.climbs.has(id),
+      dashing:this.activeDashes.has(id), changingHeight:this.flightTransitions.has(id),
+      lastCombatMs:engaged?this.simulatedMs:(this.lastCombatMs.get(id)??-Infinity),
+      lastWarpMs:this.lastWarpMs.get(id)??-Infinity, nowMs:this.simulatedMs,
+    };
+    const result = checkWarpDestination(portal, context);
+    if ("reason" in result) return this.reject(client,result.reason);
+    this.commitWarp(client,result.portal);
+  }
+
+  private requireHomeRecipe(id: string, character: string, recipeId: string) {
+    const item = personalItem(recipeId);
+    if ((item?.furniture || (item?.cookingLevel ?? 1) > 1) && !this.inOwnedHome(id,character)) throw Error("home_build_location");
+  }
+
+  private collectWater(client: Client, message: unknown) {
+    const request = parseEconomyRequest(message);
+    if (!request) return this.reject(client,"invalid_economy_request");
+    this.economyAction(client,id => {
+      const player = this.state.players.get(client.sessionId)!;
+      if (this.field || player.flying || player.mounted || !onMapGround(player) ||
+          player.mapId !== DEFAULT_MAP_ID || Math.hypot(player.x,player.z)>6) throw Error("water_unavailable");
+      const result = characterStore.economy.collectWater(id, request);
+      this.syncEconomy(client,id);
+      client.send("water_collected",{requestId:request,...result});
+    });
   }
 
   private applyTalisman(client: Client, message: unknown) {
@@ -5046,7 +5299,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.spiritNavigators.delete(ownerId);
     this.occultSpiritOrders.delete(ownerId);
     this.occultSpiritPracticed.delete(ownerId);
-    if (!this.state.summons.has(ownerId)) return;
+    const summon = this.state.summons.get(ownerId);
+    if (!summon) return;
+    if (summon.kind === "captured_ghost") {
+      this.ghostGenerations.delete(ownerId);
+      const worker = this.ghostWorker;
+      if (worker) void worker.send({owner: ownerId, disconnect: true}).catch(() => this.resetGhostWorker(worker));
+      this.clients.find(client => client.sessionId === ownerId)?.send("ghost_pot_state", {
+        ghost: this.ghostPots.get(ownerId) ?? null, active: false, status: "ready",
+      });
+    }
     this.state.summons.delete(ownerId);
     this.lastSummonAttackAt.delete(ownerId);
     this.broadcast("summon_despawn", { ownerId, reason },
@@ -5108,7 +5370,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return isWorldSegmentClear(mapId,from,to,this.closedGatesFor(mapId));
   }
   private bodyPathClear(mapId: string, from: WorldPoint, target: WorldPoint) {
-    return provinceShotClear(WORLD_MAPS[mapId],{x:from.x,y:from.y+1,z:from.z},{x:target.x,y:target.y+1,z:target.z},this.closedGatesFor(mapId));
+    return provinceShotClear(getWorldMap(mapId)!,{x:from.x,y:from.y+1,z:from.z},{x:target.x,y:target.y+1,z:target.z},this.closedGatesFor(mapId));
   }
 
   /** Uses the same bounded RRT navigation family as the player bot, without a bot account. */
@@ -5145,7 +5407,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
 
       const distanceToOwner = distance3d(guardian, owner);
-      const candidate = distanceToOwner <= RULES.summonLeashDistance
+      const candidate = guardian.kind !== "captured_ghost" && distanceToOwner <= RULES.summonLeashDistance
         ? this.findSummonTarget(ownerId, owner, guardian) : null;
 
       if (candidate) {
@@ -5322,6 +5584,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   async onCreate(options?:{warRoomKey?:string;field?:Battlefield}) {
+    this.state.ghostPotAvailable = Boolean(this.ghostConfig && characterStore.economyEnabled && !options?.field);
     let cardRevision=dynamicBalanceRevision();
     this.clock.setInterval(()=>{
       const next=dynamicBalanceRevision();if(next===cardRevision)return;cardRevision=next;
@@ -5471,6 +5734,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private updateResources(dt: number): void {
+    const now = Date.now();
     for (const [id, player] of this.state.players) {
       if (!player.alive || this.pendingWarps.has(id)) continue;
       this.refreshMastery(id);
@@ -5482,7 +5746,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const healed = Math.floor(pending + 1e-9);
       player.hp = Math.min(player.maxHp, player.hp + healed);
       this.hpRegenRemainder.set(id, player.hp >= player.maxHp ? 0 : pending - healed);
-      player.stamina = Math.min(player.maxStamina, player.stamina + ((fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut)+(this.extraStaminaRegen.get(player)??0)) * recovery * dt);
+      const needs = this.needs.get(id);
+      const nutritionRegen = needs && (now >= needs.hungryAt || now >= needs.thirstyAt) ? 0.6 : 1;
+      const staminaRegen = (fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut) +
+        (this.extraStaminaRegen.get(player) ?? 0);
+      player.stamina = Math.min(player.maxStamina, player.stamina + staminaRegen * nutritionRegen * recovery * dt);
       const manaFighting = fighting || this.simulatedMs < (this.supportManaCombatUntil.get(id) ?? 0);
       const manaRegen = manaFighting ? PROGRESSION.manaRegenIn : Math.max(PROGRESSION.manaRegenOut, player.maxMana / 20)+(this.extraRestManaRegen.get(player)??0);
       player.mana = Math.min(player.maxMana, player.mana + manaRegen * recovery * dt);
@@ -5536,6 +5804,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private canOccupy(x: number, z: number, feetY: number, flying = false, mapId = DEFAULT_MAP_ID): boolean {
+    if (this.homeWalls.get(mapId)?.some(wall=>homeWallBlocks(wall.cell,wall.rotation,{x,z}))) return false;
     const map=getWorldMap(mapId);
     if(mapId!==DEFAULT_MAP_ID || map?.terrain){
       const r=map?.strategic?.rampart;
@@ -5837,7 +6106,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }, { afterNextPatch: true });
   }
 
-  private killMonster(winnerId: string, targetId: string = RULES.monsterId) {
+  private killMonster(winnerId: string, targetId: string = RULES.monsterId, award = true) {
     this.releaseMuayFor(targetId,"knockout");
     if (targetId !== RULES.monsterId) {
       const m=this.state.monsters.get(targetId);
@@ -5847,8 +6116,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const eligible=Boolean(!this.field && process.env.MONTRA_HUNT_EVENTS!=='0' && winner?.alive && this.persistentCharacters.has(winnerId) &&
         !this.pendingWarps.has(winnerId) && winner.mapId===m.mapId && winner.level<PROGRESSION.maxLevel && Math.abs(winner.level-m.level)<=5 && distance3d(winner,m)<=PARTY_XP_RADIUS);
       this.clearMuayCombosForTarget(targetId);
-      this.awardMonsterExperience(winnerId,m,profile.tier);
-      huntEventDirector.recordKill(m.mapId,profile.tier,eligible);
+      if (award) {
+        this.awardMonsterExperience(winnerId,m,profile.tier);
+        huntEventDirector.recordKill(m.mapId,profile.tier,eligible);
+      }
       for(const [id,target] of this.attackTargets) if(target===targetId){const p=this.state.players.get(id);if(p)this.endAttack(id,p);}
       return;
     }
@@ -5863,7 +6134,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     monster.targetId = "";
     this.monsterRespawnAt = this.simulatedMs + RULES.monsterRespawnMs;
     this.monsterReturning = false;
-    this.awardMonsterExperience(winnerId);
+    if (award) this.awardMonsterExperience(winnerId);
 
     // Only cancel PvE attacks on this monster. Concurrent Free PK fights
     // must continue even when someone else defeats the ghost.
@@ -6106,6 +6377,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // The civilian snapshot already uses the stored height coordinate system.
       y:civilian?.y??(player.flying ? FLIGHT.altitude : getWorldMap(player.mapId)?.reliefLabels ? (isOnPlatform(surfaceLayer(player))?FORT.height:0) : player.y),
       z:civilian?.z??player.z,
+      ghostPot: this.ghostPots.get(id),
       inventory, updatedAt: new Date().toISOString(),
     };
   }
@@ -6167,7 +6439,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const allocations = saved?.statAllocations ?? emptyAllocations();
       const initialStats = equippedStats(calculateStats(saved?.level ?? 1, allocations),saved?.inventory);
       const initialMaxMana=gearMana(saved?.level??1,saved?.inventory).max;
-      const mapId = saved?.mapId ?? DEFAULT_MAP_ID;
+      const homeReady = WORLD_EXPANSION && characterStore.economyEnabled &&
+        (options as {homeVersion?:unknown}|undefined)?.homeVersion === 1;
+      const savedMapId = saved?.mapId ?? DEFAULT_MAP_ID;
+      const savedHome = isHomeMap(savedMapId) && !this.field && homeReady && characterId &&
+        savedMapId === homeMapId(characterId) ? characterStore.economy.homeState(characterId) : null;
+      if (savedHome?.level) this.cacheHomeWalls(savedMapId,savedHome.parts);
+      const mapId = (isHomeMap(savedMapId) || savedMapId === HOME_MAP.id) && !savedHome?.level ? DEFAULT_MAP_ID : savedMapId;
       const provinceReady=(options as {provinceVersion?:unknown}|undefined)?.provinceVersion===1;
       const castleReady=(options as {castleVersion?:unknown}|undefined)?.castleVersion===2;
       const riverReady=(options as {riverCityVersion?:unknown}|undefined)?.riverCityVersion===1;
@@ -6190,7 +6468,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // Atlas saves keep the pre-relief ground/flight layer on disk; project onto the current surface at admission.
       const restoreFlight = Boolean(saved && (!map.terrain || !map.region?.noFlight) && isFlightAltitude(saved.y));
       const savedY=saved ? saved.y+(map.reliefLabels?groundAt(mapId,saved.x,saved.z):0) : 0;
-      let validPosition = saved && (!map.terrain || isSafeWorldPoint(map,{...saved,y:savedY})) && this.canOccupy(
+      let validPosition = saved && mapId === savedMapId && (!map.terrain || isSafeWorldPoint(map,{...saved,y:savedY})) && this.canOccupy(
         saved.x, saved.z, savedY-groundAt(mapId,saved.x,saved.z), restoreFlight, mapId);
       let safeSpawn = mapId === DEFAULT_MAP_ID ? { ...spawn, y: 0 } : getSafeMapSpawn(mapId);
       if(this.field){
@@ -6276,6 +6554,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if((options as Record<string,unknown>)?.warVersion===1)this.warClients.add(client.sessionId);
       if(originalReady)this.originalReliefClients.add(client.sessionId);
       if(reliefReady)this.reliefClients.add(client.sessionId);
+      if(homeReady)this.homeClients.add(client.sessionId);
       if(terrainReady)this.terrainClients.add(client.sessionId);
       if(riverReady)this.riverClients.add(client.sessionId);
       if(castleReady)this.castleClients.add(client.sessionId);
@@ -6285,7 +6564,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(templeReady)this.templeClients.add(client.sessionId);
       if (characterId && accountId && slotIds) {
         if (!saved?.inventory) throw new Error("inventory_migration_missing");
+        if (characterStore.economyEnabled) this.needs.set(client.sessionId, characterStore.economy.needsState(characterId));
         this.persistentCharacters.set(client.sessionId, characterId);
+        if (saved.ghostPot) this.ghostPots.set(client.sessionId, saved.ghostPot);
         this.guildSubscriptions.set(client.sessionId,subscribeGuild(characterId,()=>this.sendGuild(client,characterId)));
         this.inventories.set(client.sessionId, saved.inventory);
         this.activeGuestAccounts.set(client.sessionId, accountId);
@@ -6347,6 +6628,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.restApproachClients.delete(id);
     this.provinceClients.delete(id);
     this.leaveParty(id);
+    this.needs.delete(id);
+    this.homeClients.delete(id);
+    const homeOwner = this.persistentCharacters.get(id);
+    if (homeOwner) this.homeWalls.delete(homeMapId(homeOwner));
     const guildCharacter=this.persistentCharacters.get(id);
     if(guildCharacter){this.guildSubscriptions.get(id)?.();this.guildSubscriptions.delete(id);notifyGuilds();}
     for(const [inviteId,invite] of this.guildInvites)if(invite.from===id || invite.to===id){
@@ -6424,6 +6709,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.swordGuards.delete(id);
       this.hpRegenRemainder.delete(id);
       this.inventories.delete(id);
+      this.ghostPots.delete(id);
+      this.ghostCaptureReadyAt.delete(id);
       this.itemUseReadyAt.delete(id);
       this.lastInventoryReadMs.delete(id);
       this.lastStatusReadMs.delete(id);
@@ -6440,12 +6727,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   async onDispose() {
+    const worker = this.ghostWorker;
+    this.ghostWorker = undefined;
+    worker?.close();
     huntEventDirector.forget(this.roomId);
     if(this.field)battleRooms.delete(this.field.seq);
     this.buffs.clear();
     this.effects.clear();
     this.trades.clear();
     this.parties.clear();
+    this.needs.clear();
+    this.homeClients.clear();
+    this.homeWalls.clear();
     this.guildInvites.clear();
     for(const unsubscribe of this.guildSubscriptions.values())unsubscribe();
     this.guildSubscriptions.clear();

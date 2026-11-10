@@ -266,3 +266,12 @@
 .ck-popup-footer { flex:none; padding:8px 12px 10px; border-top:1px solid var(--ck-line); background:#17291d; }
 .ck-popup-footer .status-line { margin:0 0 6px; font-size:12px; }
 .ck-popup-footer #benchCraft { margin-top:0; }
+
+.home-panel { display:grid;gap:10px; }
+.home-panel section { display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:12px; }
+.home-panel section h3,.home-panel section p,.home-panel section small { flex-basis:100%;margin:0; }
+.home-panel button { margin:3px;min-height:40px; }
+.home-panel small { opacity:.85; }
+.home-grid { flex-basis:100%;display:grid;grid-template-columns:repeat(var(--home-width,4),minmax(0,1fr));gap:3px; }
+.home-panel .home-grid button { min-height:38px;min-width:0;padding:2px;margin:0;overflow-wrap:anywhere;font-size:.7rem; }
+.home-grid button[aria-pressed="true"] { outline:2px solid #edc76f;outline-offset:-2px; }

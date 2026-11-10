@@ -47,7 +47,7 @@
     (menu ? $("fieldMenu").querySelector("[data-journal-tab][aria-pressed=true]") : $("drawerMenuBack")).focus({preventScroll:true});
   }
   const journalOrigins={
-    skillLoadout:"character",bag:"character",smith:"character",forge:"character",crafting:"character",character:"character",npc:"character",swordTree:"character",muayBook:"character",bladeBook:"character",sentinelBook:"character",occultBook:"character",
+    home:"character",skillLoadout:"character",bag:"character",smith:"character",forge:"character",crafting:"character",character:"character",npc:"character",swordTree:"character",muayBook:"character",bladeBook:"character",sentinelBook:"character",occultBook:"character",
     map:"travel",quest:"travel",war:"travel",strategy:"travel",chat:"social",party:"social",guild:"social",cityProduction:"social",economy:"social",help:"system"
   };
   function showJournalSection(section) {

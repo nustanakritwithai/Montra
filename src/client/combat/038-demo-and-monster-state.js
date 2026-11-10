@@ -126,6 +126,7 @@
     resetCityProduction();
     clearChatHistory(true);
     switchWorld("ritual_village");
+    if (typeof resetHomeClient === "function") resetHomeClient();
     syncWorldDefinition(null);syncForestMonsters(null);
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
     inventoryState = null; personalItems=Object.create(null);cardDrill=null;gearGuides=null;resources=null;clearResourceView();

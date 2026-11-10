@@ -1,5 +1,5 @@
 import { readForged, birthForge, applyForgeRatings, forgeStamp, type Forged } from "./ForgeRules.js";
-import { MAX_FORGE_COPIES, BOSS_GEAR_CHANCE, bossTreasure, personalItem, startingWeapon, firstChest, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId } from "./PersonalItems.js";
+import { MAX_FORGE_COPIES, BOSS_GEAR_CHANCE, bossTreasure, personalItem, startingWeapon, firstChest, isBodySlot, equipPositions, isCardId, type CardId, type BodyItemId, type BodySlot, SALVE_ID, withEquipmentStats, type ChestId, type PracticeWeapon, type PersonalId, type MaterialId, type FoodId, type DrinkId, type FurnitureId } from "./PersonalItems.js";
 import {MAX_LOOT_MISSES,STARTER_HUNT,isStarterHuntMob,rollMonsterLoot} from "./MonsterLoot.js";
 import {dynamicDropChance} from "./DynamicBalance.js";
 import {randomInt} from "node:crypto";
@@ -34,7 +34,7 @@ export const SHRINE_RECIPE = Object.freeze({
 });
 type LegacyWeapon = typeof STARTER_WEAPON_IDS[number] | typeof SHRINE_GLAIVE | typeof MUAY_WRAP_ID;
 export type WeaponItemId = LegacyWeapon | PracticeWeapon;
-export type StackableId = typeof POTION_ID | typeof SHRINE_SHARD | SalveId | BrewId | FieldToolId | MaterialId | CatalystId | CardId;
+export type StackableId = typeof POTION_ID | typeof SHRINE_SHARD | SalveId | BrewId | FoodId | DrinkId | FurnitureId | FieldToolId | MaterialId | CatalystId | CardId;
 export function isStackableItem(value: unknown): value is StackableId {
   const kind=personalItem(value)?.kind;
   return value===POTION_ID || value===SHRINE_SHARD || kind==="consumable" || kind==="material" || kind==="catalyst" || kind==="card" || kind==="tool";
@@ -56,7 +56,7 @@ export type InventorySnapshot = {
   forgeCopies?:Record<string,number>;
 };
 export type ItemUseResult =
-  | { ok: true; inventory: InventorySnapshot; healed: number; restoredMana:number; hp: number; itemId: typeof POTION_ID | SalveId | BrewId }
+  | { ok: true; inventory: InventorySnapshot; healed: number; restoredMana:number; hp: number; itemId: typeof POTION_ID | SalveId | BrewId | FoodId }
   | { ok: false; reason: "item_unavailable" | "hp_full" | "mana_full" | "not_alive" | "not_consumable" | "item_level_required" };
 export type EquipWeaponResult =
   | { ok: true; inventory: InventorySnapshot; weaponId: WeaponItemId | null }
@@ -519,6 +519,7 @@ export function useInventoryItem(
   const def=personalItem(item.itemId);
   if(item.itemId!==POTION_ID && def?.kind!=="consumable")return {ok:false,reason:"not_consumable"};
   if((def?.level??1)>level)return {ok:false,reason:"item_level_required"};
+  if(def?.nutrition && !def.healHp && !def.healMana)return {ok:false,reason:"not_consumable"};
   if(def?.healMana && mana>=maxMana)return {ok:false,reason:"mana_full"};
   if(!def?.healMana && hp>=maxHp)return {ok:false,reason:"hp_full"};
   const healed=def?.healMana?0:Math.min(def?.healHp??POTION_HEAL,maxHp-hp);
@@ -527,7 +528,7 @@ export function useInventoryItem(
   slots[slot] = item.quantity === 1
     ? null : { itemId: item.itemId, quantity: item.quantity - 1 };
   return {
-    ok: true, healed,restoredMana,hp: hp + healed, itemId: item.itemId as SalveId|BrewId|typeof POTION_ID,
+    ok: true, healed,restoredMana,hp: hp + healed, itemId: item.itemId as SalveId|BrewId|FoodId|typeof POTION_ID,
     inventory: { ...original, slots },
   };
 }
