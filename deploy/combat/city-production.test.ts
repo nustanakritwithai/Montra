@@ -12,7 +12,7 @@ import {
   CITY_WORKSHOP_FEE, CITY_WORKSHOP_SLOTS,
   CITY_MINING_ENABLED, CITY_MINING_ORE, CITY_MINING_PRODUCT, CITY_MINING_SITE, CITY_PRODUCTION_ENABLED, type CitySite,
   CITY_HAUL_DURATION_MS, CITY_POLICY_COOLDOWN_MS, CITY_PURCHASE_DURATION_MS,
-  isCityHaulOrder, isCityMissionOrder, isCityPurchaseOrder, type CityPolicy,
+  isCityHaulOrder, isCityMissionOrder, isCityPurchaseOrder, isCitySupplyOrder, type CityPolicy,
 } from "./CityProductionRules.js";
 import {RIVER_WAR_DURATION} from "./RiverCity.js";
 import {WAR_DURATION, WAR_PROTECTION} from "./TerritoryWar.js";
@@ -60,7 +60,7 @@ function fixture(t: TestContext) {
     const parsed = parseCityOrder({...fields, requestId});
     assert.ok(parsed && parsed.action !== "disband" && parsed.action !== "claim_disband" &&
       parsed.action !== "workshop_start" && parsed.action !== "workshop_claim" &&
-      !isCityPurchaseOrder(parsed) && !isCityMissionOrder(parsed) && !isCityHaulOrder(parsed) && parsed.action !== "policy_set");
+      !isCityPurchaseOrder(parsed) && !isCityMissionOrder(parsed) && !isCityHaulOrder(parsed) && !isCitySupplyOrder(parsed) && parsed.action !== "policy_set");
     return economy.cityOrder(actor, guildMember(actor), parsed, sync(now, site), now, site);
   };
   const view = (actor: string, now = 1000, site: CitySite = CITY_PRODUCTION_SITE) => economy.viewCity(guildMember(actor), sync(now, site), site);
@@ -715,6 +715,125 @@ function governanceFixture(t: TestContext) {
       f.sync(now,CITY_MINING_SITE),now);
   return {...f,get economy(){return f.economy;},get guild(){return f.guild;},summary,choose};
 }
+
+function supplyFixture(t: TestContext) {
+  const f = governanceFixture(t), moon = CITY_MINING_SITE;
+  const supplies = f.economy.getAccount(leader).inventory;
+  supplies.slots[0] = {itemId:CITY_MINING_ORE, quantity:99};
+  supplies.slots[2] = {itemId:CITY_PRODUCT, quantity:20};
+  f.economy.saveCharacter(leader, {}, supplies);
+  f.mine({action:"deposit", item:CITY_MINING_ORE, slot:0, amount:24}, f.now);
+  f.mine({action:"deposit", item:CITY_PRODUCT, slot:2, amount:12}, f.now);
+  let now = f.now;
+  for (let batch = 0; batch < 3; batch++) now = Number(f.mine({action:"start"}, now).readyAt);
+  const owner = f.guildMember(leader).id, siege = 1_000 + WAR_PROTECTION, end = siege + WAR_DURATION;
+  const guildDb = new DatabaseSync(f.guildFile);
+  try {
+    guildDb.prepare("INSERT INTO territory_battles(site,attacker,started,sample,ended,winner) VALUES(?,?,?,?,?,?)")
+      .run(moon, owner, 1, 1_000, 1_000, owner);
+  } finally {guildDb.close();}
+  const order = (fields: object, at = now, actor = leader, requestId = f.request()) => {
+    const parsed = parseCityOrder({epoch:f.moonEpoch, ...fields, requestId});
+    assert.ok(parsed && isCitySupplyOrder(parsed));
+    return f.economy.citySupplyOrder(actor, f.guildMember(actor), parsed, f.sync(at, moon), at);
+  };
+  const prepare = (requestId = f.request()) => String(order({action:"supply_reserve"}, now, leader, requestId).supplyId);
+  const startSiege = () => f.guild.war.start(moon, f.guildMember(rival), siege);
+  const defend = (breached: boolean) => {
+    if (breached) {
+      const db = new DatabaseSync(f.guildFile);
+      try {db.prepare("UPDATE territory_battles SET gate_hp=0,gates_json=NULL WHERE site=? AND ended IS NULL").run(moon);}
+      finally {db.close();}
+    }
+    assert.equal(f.guild.war.inspect(moon, end).ownerId, owner);
+  };
+  const finish = (at = end) => f.economy.finishCitySupplyRepairs(pending => f.guild.war.government.repairWithCitySupply(pending, at));
+  return {...f, get economy(){return f.economy;}, get guild(){return f.guild;}, now, siege, end, order, prepare, startSiege, defend, finish};
+}
+
+test("city supplies reserve stock without freeing capacity and speed up only a new post-defense batch", t => {
+  const f = supplyFixture(t);
+  const initial = f.miningStock(f.now), requestId = f.request();
+  assert.throws(() => f.order({action:"supply_reserve"}, f.now, member), /city_commander_required/);
+  assert.equal(parseCityOrder({action:"supply_reserve", epoch:f.moonEpoch, amount:1, requestId}), null);
+  const supplyId = f.prepare(requestId);
+  assert.equal(f.prepare(requestId), supplyId);
+  assert.throws(() => f.prepare(), /city_supply_exists/);
+  assert.equal(f.miningStock(f.now).used, initial.used);
+  assert.equal(f.miningStock(f.now).stock.find(row => row.item === CITY_MINING_PRODUCT), undefined);
+  assert.equal(f.summary(leader, f.now).supply.canRecover, false);
+  assert.throws(() => f.order({action:"supply_recover", supplyId}), /city_supply_defense/);
+  f.choose("industry", f.now);
+  f.startSiege();
+  assert.throws(() => f.order({action:"supply_cancel", supplyId}, f.siege+1), /city_supply_siege/);
+  f.defend(false);
+  assert.equal(f.summary(leader, f.end).supply.canRepair, false);
+  assert.throws(() => f.order({action:"supply_repair", supplyId}, f.end), /city_supply_no_damage/);
+  const ordinary = f.mine({action:"start"}, f.end);
+  assert.equal(Number(ordinary.readyAt)-f.end, 102_000);
+  assert.throws(() => f.order({action:"supply_recover", supplyId}, f.end), /city_job_running/);
+  assert.equal(f.summary(leader, f.end).supply.status, "held");
+  const after = Number(ordinary.readyAt);
+  const recovery = f.order({action:"supply_recover", supplyId}, after);
+  assert.equal(Number(recovery.readyAt)-after, 51_000);
+  assert.equal(f.summary(leader, after).supply.status, null);
+  assert.throws(() => f.order({action:"supply_recover", supplyId}, after), /city_supply_missing/);
+});
+
+test("a supply repair receipt survives a crash between databases without applying repairs twice", t => {
+  const f = supplyFixture(t), moon = CITY_MINING_SITE;
+  const supplyId = f.prepare();
+  f.startSiege();
+  f.defend(true);
+  const before = f.guild.war.government.view(moon, f.guildMember(leader), f.end)!;
+  assert.equal(before.damaged, true);
+  const repair = {action:"supply_repair", supplyId}, requestId = f.request();
+  f.order(repair, f.end, leader, requestId);
+  assert.throws(() => f.economy.finishCitySupplyRepairs(pending => {
+    assert.equal(f.guild.war.government.repairWithCitySupply(pending, f.end), true);
+    throw Error("fixture crash after guild commit");
+  }), /fixture crash/);
+  assert.equal(f.summary(leader, f.end).supply.status, "repair_pending");
+  f.restart();
+  f.finish();
+  assert.deepEqual(f.order(repair, f.end, leader, requestId), {supplyId});
+  assert.equal(f.economy.citySupplyRepairSucceeded(supplyId), true);
+  assert.equal(f.summary(leader, f.end).supply.status, null);
+  const after = f.guild.war.government.view(moon, f.guildMember(leader), f.end)!;
+  assert.equal(after.damaged, false);
+  assert.equal(after.revision, before.revision+1);
+  assert.equal(after.balance, before.balance);
+});
+
+test("a lost tenure refunds an accepted repair that could not apply, without spending another guild's stock", t => {
+  const f = supplyFixture(t), moon = CITY_MINING_SITE, initial = f.miningStock(f.now);
+  const supplyId = f.prepare();
+  f.startSiege();
+  f.defend(true);
+  f.order({action:"supply_repair", supplyId}, f.end);
+  f.capture(rival, f.end+1, moon);
+  f.finish(f.end+1);
+  f.restart();
+  assert.equal(f.economy.citySupplyRepairSucceeded(supplyId), false);
+  assert.equal(f.view(rival, f.end+1, moon).used, 0);
+  const assets = f.miningStock(f.end+1).reclaim;
+  for (const item of [CITY_MINING_ORE, CITY_MINING_PRODUCT])
+    assert.equal(assets.find(row => row.item===item)?.quantity, initial.stock.find(row => row.item===item)?.quantity);
+});
+
+test("cancelling or disbanding returns the held supply materials once", t => {
+  const f = supplyFixture(t), initial = f.miningStock(f.now);
+  const supplyId = f.prepare();
+  f.order({action:"supply_cancel", supplyId});
+  assert.deepEqual(f.miningStock(f.now).stock, initial.stock);
+  f.prepare();
+  f.guild.leave(member);
+  const guildId = f.guildMember(leader).id;
+  f.guild.settleCityDisband(f.economy, f.guild.beginCityDisband(leader, guildId, f.now+1));
+  const claims = f.economy.cityDisbandClaims(leader);
+  for (const item of [CITY_MINING_ORE, CITY_MINING_PRODUCT])
+    assert.equal(claims.find(row => row.item===item)?.amount, initial.stock.find(row => row.item===item)?.quantity);
+});
 
 function haulFixture(t: TestContext) {
   const f = purchaseFixture(t);

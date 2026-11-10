@@ -323,6 +323,26 @@ test("the freight board sends the selected scope, destination tenure and deliver
   assert.equal(f.wire.at(-1).payload.haulId,"freight");
 });
 
+test("the city hall only permits spending reserved supplies after defense and binds the request to the set", () => {
+  const f=fixture({governanceAvailable:true});
+  f.state({site:"moon_pass",miningSite:"moon_pass"});
+  f.button("ศาลาว่าการเมือง").onclick();
+  const state={serverNow:1_000_000,epoch:2,nextAt:2_000_000,atMoon:true,commander:true,stock:[],history:[],used:9,capacity:60,
+    treasury:{available:30,held:0,missionHeld:0,purchaseHeld:0,rushHeld:0,earned:30,paid:0},supplyEnabled:true};
+  const supply={id:"reserve-1",status:"held",materials:[{item:"mat_metal_2",amount:3,stock:0}]};
+  f.ctx.cityReceiveGovernance({...state,supply});
+  assert.equal(f.button("ซ่อมประตูหลังศึก").disabled,true);
+  assert.equal(f.button("เริ่มผลิตด้วยเสบียง").disabled,true);
+  f.ctx.cityReceiveGovernance({...state,siege:true,supply:{...supply,canRepair:true,canRecover:true}});
+  assert.equal(f.button("ซ่อมประตูหลังศึก").disabled,true);
+  assert.equal(f.button("คืนเสบียงเข้าคลัง").disabled,true);
+  f.ctx.cityReceiveGovernance({...state,supply:{...supply,canRepair:true,canRecover:true}});
+  assert.equal(f.button("ซ่อมประตูหลังศึก").disabled,false);
+  f.button("ซ่อมประตูหลังศึก").onclick();
+  const request=f.wire.at(-1).payload;
+  assert.deepEqual(request,{requestId:request.requestId,action:"supply_repair",epoch:2,supplyId:"reserve-1"});
+});
+
 test("city hall shows reserved gold and only enables an on-site commander after the cooldown", () => {
   const f=fixture({governanceAvailable:true});
   f.state({site:"moon_pass",miningSite:"moon_pass"});

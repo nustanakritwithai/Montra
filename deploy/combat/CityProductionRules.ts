@@ -12,6 +12,7 @@ export const CITY_MINING_CONSTRUCTION_ENABLED = process.env.MONTRA_CITY_MINING_C
 export const CITY_PURCHASE_ENABLED = process.env.MONTRA_CITY_PURCHASE_ORDERS === "1";
 export const CITY_MISSIONS_ENABLED = process.env.MONTRA_CITY_MISSIONS === "1";
 export const CITY_GOVERNANCE_ENABLED = process.env.MONTRA_CITY_GOVERNANCE === "1";
+export const CITY_SUPPLY_ENABLED = process.env.MONTRA_CITY_SUPPLY_RESERVE === "1";
 export const CITY_HAUL_ENABLED = process.env.MONTRA_CITY_HAULS === "1";
 export const CITY_RAW_ITEMS = ["mat_raw_wood_1", "mat_raw_stone_1"] as const;
 export const CITY_PRODUCT = "mat_metal_1";
@@ -61,6 +62,10 @@ export const CITY_MISSION_MAX_REWARD = 1_000_000;
 export const CITY_MISSION_HOURS = [1, 6, 24] as const;
 export const CITY_HAUL_AMOUNT = 12;
 export const CITY_HAUL_DURATION_MS = 86_400_000;
+export const CITY_SUPPLY_MATERIALS = [
+  {item: CITY_MINING_ORE, amount: 6}, {item: CITY_MINING_PRODUCT, amount: 3},
+] as const;
+export const CITY_SUPPLY_RECOVERY_SPEED = .5;
 export const CITY_LINES = {
   [CITY_PRODUCTION_SITE]: {inputs: CITY_RAW_ITEMS, output: CITY_PRODUCT, recipe: CITY_RECIPE},
   [CITY_MINING_SITE]: {inputs: [CITY_PRODUCT, CITY_MINING_ORE], output: CITY_MINING_PRODUCT,
@@ -87,6 +92,11 @@ export type CityMissionOrder = {requestId: string} & (
   {action: "mission_accept" | "mission_submit" | "mission_abandon" | "mission_cancel"; missionId: string}
 );
 export type CityPolicyOrder = {requestId: string; action: "policy_set"; epoch: number; policy: CityPolicy};
+export type CitySupplyOrder = {requestId: string; epoch: number} & (
+  {action: "supply_reserve"} |
+  {action: "supply_cancel" | "supply_repair" | "supply_recover"; supplyId: string}
+);
+export type CitySupplyRepair = {id: string; epoch: number; guild: string; battle: number};
 export type CityHaulOrder = {requestId: string} & (
   {action: "haul_open"; epoch: number; destination: CitySite; destinationEpoch: number;
     amount: number; reward: number; audience: "guild" | "public"} |
@@ -101,7 +111,7 @@ export type CityFactoryOrder = {requestId: string} & (
   {action: "cancel"; listingId: string} |
   {action: "reclaim"; epoch: number; item: CityItem; amount: number}
 );
-export type CityOrder = CityFactoryOrder | CityWorkshopOrder | CityPurchaseOrder | CityMissionOrder | CityPolicyOrder | CityHaulOrder | ({requestId: string} & (
+export type CityOrder = CityFactoryOrder | CityWorkshopOrder | CityPurchaseOrder | CityMissionOrder | CityPolicyOrder | CitySupplyOrder | CityHaulOrder | ({requestId: string} & (
   {action: "disband"; guildId: string} |
   {action: "claim_disband"; guildId: string; item: CityAsset; amount: number}
 ));
@@ -113,6 +123,7 @@ export type CityOwnership = {
   active: CityTenure | null;
   previous: {guild: string; ended: number; siegeStarted?: number} | null;
   siegeStarted?: number;
+  defense?: {seq: number; started: number; damaged: boolean};
 };
 export type CityOwnerships = Readonly<Record<CitySite, CityOwnership>>;
 
@@ -132,6 +143,11 @@ export function isCityPurchaseOrder(order: CityOrder): order is CityPurchaseOrde
 export function isCityMissionOrder(order: CityOrder): order is CityMissionOrder {
   return order.action === "mission_open" || order.action === "mission_accept" || order.action === "mission_submit" ||
     order.action === "mission_abandon" || order.action === "mission_cancel";
+}
+
+export function isCitySupplyOrder(order: CityOrder): order is CitySupplyOrder {
+  return order.action === "supply_reserve" || order.action === "supply_cancel" ||
+    order.action === "supply_repair" || order.action === "supply_recover";
 }
 
 export function isCityHaulOrder(order: CityOrder): order is CityHaulOrder {
@@ -172,6 +188,12 @@ export function parseCityOrder(input: unknown): CityOrder | null {
       integer(order.amount, 1, order.item === "gold" ? 1_000_000_000 : 99) ? order as CityOrder : null;
   if (!integer(order.epoch, 1)) return null;
   switch (order.action) {
+    case "supply_reserve":
+      return keys("epoch") ? order as CityOrder : null;
+    case "supply_cancel":
+    case "supply_repair":
+    case "supply_recover":
+      return keys("epoch", "supplyId") && uuid(order.supplyId) ? order as CityOrder : null;
     case "haul_open":
       return keys("epoch", "destination", "destinationEpoch", "amount", "reward", "audience") &&
         CITY_SITES.some(site => site === order.destination) && integer(order.destinationEpoch, 1) &&

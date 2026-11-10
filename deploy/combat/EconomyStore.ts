@@ -15,7 +15,7 @@ import {
   CITY_MINING_ORE, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
   CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMember, type CityMissionOrder, type CityOrder,
   type CityOwnership, type CityOwnerships, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
-  type CityWorkshopOrder,
+  type CitySupplyOrder, type CitySupplyRepair, type CityWorkshopOrder,
 } from "./CityProductionRules.js";
 
 export const STARTER_GOLD = 1000;
@@ -265,6 +265,22 @@ export class EconomyStore {
       if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
       return this.city.setPolicy(member, ownership, order.epoch, order.policy, now);
     });
+  }
+  citySupplyOrder(actor: string, member: CityMember, order: CitySupplyOrder, ownership: CityOwnership, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once(actor, order.requestId, "city_supply", intent, () => {
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      return this.city.supplyOrder(member, order, ownership, now);
+    });
+  }
+  finishCitySupplyRepairs(repair: (pending: CitySupplyRepair) => boolean): void {
+    for (const pending of this.city.pendingSupplyRepairs()) {
+      const repaired = repair(pending);
+      this.transaction(() => this.city.finishSupplyRepair(pending.id, repaired));
+    }
+  }
+  citySupplyRepairSucceeded(id: string): boolean {
+    return this.city.supplyRepairSucceeded(id);
   }
   cityMissionOrder(actor: string, member: CityMember | undefined, order: CityMissionOrder,
     ownership: CityOwnership, now: number) {

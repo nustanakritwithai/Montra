@@ -324,6 +324,9 @@
       haul_cancel:"ยกเลิกงานขนเสบียงแล้ว · คืนสินค้าและค่าจ้าง",haul_abandon:"คืนงานขนเสบียงแล้ว",
       haul_pickup:"รับเสบียงแล้ว · เดินทางไปส่งที่เมืองปลายทาง",haul_deliver:"ส่งเสบียงแล้ว · ได้รับ "+(data.gold ?? 0)+" ทอง",
       policy_set:"บันทึกนโยบายเมืองแล้ว · ใช้กับรายการใหม่",
+      supply_reserve:"กันเสบียงเตรียมเมืองแล้ว",supply_cancel:"คืนเสบียงเข้าคลังเมืองแล้ว",
+      supply_repair:data.repaired?"ใช้เสบียงซ่อมความเสียหายของเมืองแล้ว":"ซ่อมเมืองไม่ได้ · คืนเสบียงแล้ว",
+      supply_recover:"ใช้เสบียงเริ่มงานผลิตแบบฟื้นตัวแล้ว · ใช้เวลาครึ่งหนึ่ง",
       start_fast:"เริ่มเร่งผลิตแล้ว",list:"ตั้งขายในตลาดโลกแล้ว",cancel:"คืนสินค้าเข้าคลังแล้ว",
       reclaim:"รับของเข้ากระเป๋าแล้ว",disband:"ยุบกิลด์แล้ว · รับทรัพย์สินได้ด้านล่าง",claim_disband:"รับทรัพย์สินแล้ว"};
     clearTimeout(cityReplyTimer);cityPending=null;
@@ -368,6 +371,14 @@
       city_haul_siege:"พักงานขนเสบียงระหว่างศึก",city_haul_missing:"งานขนเสบียงปิดแล้ว · กรุณารีเฟรช",
       city_haul_exists:"เมืองนี้มีงานขนเสบียงค้างอยู่แล้ว",city_haul_active:"ตัวละครกำลังขนเสบียงอยู่",
       city_haul_state:"สถานะงานเปลี่ยนแล้ว · กรุณารีเฟรช",city_haul_courier:"ผู้ที่รับเสบียงเท่านั้นที่ส่งหรือคืนงานได้",
+      city_supply_disabled:"พักการกันและใช้เสบียงเตรียมเมือง",
+      city_supply_location:"ไปยืนบนพื้นในด่านผนึกจันทราเพื่อจัดการเสบียง",
+      city_supply_siege:"เสบียงเตรียมเมืองถูกล็อกระหว่างศึก",
+      city_supply_exists:"กิลด์กันเสบียงไว้แล้วหนึ่งชุด",
+      city_supply_missing:"รายการเสบียงเปลี่ยนแล้ว · กรุณารีเฟรช",
+      city_supply_defense:"ต้องป้องกันด่านสำเร็จหลังกันเสบียงก่อน",
+      city_supply_no_damage:"เมืองไม่มีความเสียหายที่ต้องซ่อม",
+      city_supply_pending:"ระบบกำลังยืนยันการซ่อมเมือง · กรุณารีเฟรช",
       city_policy_disabled:"ศาลาว่าการยังไม่เปิด",city_policy_location:"ไปยืนบนพื้นในด่านผนึกจันทราก่อนเปลี่ยนนโยบาย",
       city_policy_siege:"พักเปลี่ยนนโยบายระหว่างศึก",city_policy_cooldown:"เปลี่ยนนโยบายได้ทุก 24 ชั่วโมง · กรุณารีเฟรช",
       city_purchase_policy_limit:"จำนวนเกินเพดานตามนโยบายเมือง · กรุณารีเฟรช",
@@ -505,6 +516,31 @@
     const storage=group("คลังจันทรา");
     note(storage,"ใช้ "+used+" / "+capacity+" ชิ้น รวมพื้นที่ที่กันไว้");
     for(const row of stock)note(storage,cityItemName(row.item)+" × "+row.quantity);
+    const {supply,supplyEnabled}=cityGovernance;
+    if(supply && (supplyEnabled || supply.status)){
+      const reserve=group("เสบียงเตรียมเมือง");
+      const cost=supply.materials.map(material=>cityItemName(material.item)+" × "+material.amount).join(" + ");
+      const busy=!!cityPending || !atMoon || siege;
+      note(reserve,(supply.status?"กันไว้แล้ว · ":"ต่อชุด · ")+cost);
+      if(siege)note(reserve,"พักจัดการเสบียงระหว่างศึก");
+      else if(!atMoon)note(reserve,"ไปยืนบนพื้นในด่านแล้วกดรีเฟรชเพื่อจัดการเสบียง");
+      if(supply.status==="repair_pending")note(reserve,"กำลังยืนยันการซ่อมเมือง");
+      else if(supply.status==="held"){
+        note(reserve,supply.canRecover?"ป้องกันด่านสำเร็จแล้ว · เลือกใช้เสบียงหนึ่งครั้ง":"รอป้องกันด่านสำเร็จในศึกที่เริ่มหลังกันเสบียง");
+        if(commander){
+          const fields={epoch,supplyId:supply.id};
+          if(supplyEnabled){
+            button(reserve,"ซ่อมประตูหลังศึก",()=>sendCityProduction("supply_repair",fields),busy || !supply.canRepair);
+            button(reserve,"เริ่มผลิตด้วยเสบียง",()=>sendCityProduction("supply_recover",fields),busy || !supply.canRecover);
+          }
+          button(reserve,"คืนเสบียงเข้าคลัง",()=>sendCityProduction("supply_cancel",fields),busy);
+        }
+      }else if(commander && supplyEnabled){
+        const enough=supply.materials.every(material=>material.stock>=material.amount);
+        button(reserve,"กันเสบียงเตรียมเมือง",()=>sendCityProduction("supply_reserve",{epoch}),busy || !enough);
+        if(!enough)note(reserve,"เตรียมวัสดุในคลังด่านให้ครบ");
+      }
+    }
     const activity=group("ประวัติล่าสุด");
     note(activity,"แสดงรายการตั้งแต่มีศาลาว่าการ ส่วนยอดสะสมรวมธุรกรรมเดิมด้วย");
     for(const row of history)if(cityTreasuryLabels[row.kind])
