@@ -114,6 +114,36 @@ def paint(S, HEAD_V, Y_TOP, Y_BOT, base_r, sculpt, almond, EYE_X, EYE_Y, EYE_PAT
     col = col * (1 - .6 * car[..., None]) + .6 * car[..., None] * rgb('#b06a62')
     col = np.where(alm[..., None] > .5, rgb('#2a1a16'), col)
 
+    # ---- the reference portrait, projected onto the sculpted face ----
+    import os
+    if os.environ.get('FACE_PHOTO'):
+        from photo_project import Projector
+        from lm import PHOTO_LM, MODEL_LM
+        def surf(x, y):
+            x, y = float(x), float(y)
+            th = np.arcsin(np.clip(x / .09, -1, 1))
+            for _ in range(4):
+                r = base_r(np.array([th]), y)[0]; th = np.arcsin(np.clip(x / r, -1, 1))
+            rr = r + sculpt(np.array([x], float), np.array([y], float), 1.0)[0] + .0105 * almond(np.array([x], float), np.array([y], float))[0]
+            return np.array([rr * np.sin(th), y, rr * np.cos(th)])
+        pairs = [(surf(*MODEL_LM[k]), PHOTO_LM[k]) for k in PHOTO_LM]
+        prj = Projector(os.environ['FACE_PHOTO'], pairs)
+        print('landmark fit error px', prj.err.round(1))
+        RS = R + sculpt(X, Y, front)
+        PX = -np.abs(RS * np.sin(TH)); PZ = RS * np.cos(TH)            # mirror to his right side (seen in the photo)
+        photo, _ = prj.sample(np.stack([PX, Y, PZ], -1))
+        # take out most of the photo's own broad lighting (the game lights the head), keep local detail
+        lum = photo.mean(2)
+        blur = np.asarray(Image.fromarray((lum * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(28)), np.float32) / 255
+        target = col.mean(2).mean()
+        photo = np.clip(photo * ((target / np.maximum(blur, .05)) ** .55)[..., None], 0, 1)
+        pm = sm(80, 64, ATH) * sm(1.524, 1.536, Y) * sm(1.703, 1.688, Y)
+        # match the painted skin round the sides (and the ears) to the photo's skin tone
+        zone = (ATH > 35) & (ATH < 60) & (Y > 1.56) & (Y < 1.62)
+        ratio = photo[zone].mean(0) / np.maximum(col[zone].mean(0), 1e-3)
+        col = col * ratio; skin = skin * ratio
+        col = col * (1 - pm[..., None]) + pm[..., None] * photo
+        lip = lip * (1 - pm)
     # hair with a natural hairline (slight M, temples, sideburns, above the ears, nape)
     pts = np.array([(0, 1.690), (22, 1.692), (38, 1.701), (52, 1.693), (64, 1.668), (74, 1.624), (84, 1.614),
                     (90, 1.651), (106, 1.654), (118, 1.605), (140, 1.566), (180, 1.560)])

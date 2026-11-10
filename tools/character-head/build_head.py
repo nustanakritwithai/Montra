@@ -1,6 +1,7 @@
 # Rebuild the head of thai-male.glb: sculpted face, eyeballs, ears, and a dedicated high-res face area.
 # Usage: python3 tools/character-head/build_head.py tools/character-head/thai-male-source.glb assets/characters/thai-male.glb
-# Needs numpy and Pillow. thai-male-source.glb is the original body with the old flat head; the output replaces
+# Needs numpy and Pillow. Set FACE_PHOTO=tools/character-head/face-reference.jpg to project the reference
+# portrait onto the face (landmarks in lm.py); without it the face is fully painted. thai-male-source.glb is the original body with the old flat head; the output replaces
 # its head with a sculpted one (nose, brows, cheekbones, lips, eyeballs, ears) and a 1024px atlas whose top
 # part is the painted face (paint_face.py). The body keeps its UVs, moved into the lower half of the atlas.
 import json, struct, sys, io, math
