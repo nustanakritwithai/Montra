@@ -198,7 +198,7 @@
     });
     for(const [id,mesh] of forestMonsters)if(!seen.has(id)){mesh.metadata?.ghost?.rig?.metadata?.skeletons?.forEach(s=>s.dispose());mesh.dispose();forestMonsters.delete(id);}
     const me=ownServerCharacter(),map=worldDefinitions?.[activeMapId];
-    const area=map?.strategic?.kind==="capital" || map?.restAreas?.some(a=>me&&Math.hypot(me.x-a.x,me.z-a.z)<=a.radius) ||
+    const area=(!map?.battlefield && map?.strategic?.kind==="capital") || map?.restAreas?.some(a=>me&&Math.hypot(me.x-a.x,me.z-a.z)<=a.radius) ||
       (me && map?.strategic?.safeRoads?.some(index=>map.paths[index].some((b,i,route)=>{
         if(!i)return false;const a=route[i-1],dx=b.x-a.x,dz=b.z-a.z;
         const t=Math.max(0,Math.min(1,((me.x-a.x)*dx+(me.z-a.z)*dz)/(dx*dx+dz*dz)));

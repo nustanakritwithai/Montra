@@ -5,7 +5,44 @@ import {tmpdir} from "node:os";
 import {mkdtempSync,rmSync} from "node:fs";
 import {DatabaseSync} from "node:sqlite";
 import {GuildStore} from "./GuildStore.js";
-import {WAR_PROTECTION,WAR_DURATION,WAR_HOLD,warEntryDamageFactor,warParticipationExperience} from "./TerritoryWar.js";
+import {WAR_PROTECTION,WAR_DURATION,WAR_HOLD,getWarDefinition,warSites,warEntryDamageFactor,warParticipationExperience} from "./TerritoryWar.js";
+import {CASTLE_DURATION,CASTLE_ENABLED,CASTLE_ID,CASTLE_SEATS} from "./CastlePilot.js";
+import {RIVER_CITY,RIVER_WAR_DURATION,riverNodes} from "./RiverCity.js";
+
+test("only registered battle sites admit guild wars, with independent profiles",()=>{
+  const expected=["moon_pass","river_watch",RIVER_CITY,...(CASTLE_ENABLED?[CASTLE_ID]:[])];
+  assert.deepEqual(Object.keys(warSites).sort(),expected.sort());
+  for(const id of ["moon_pass","river_watch"]){
+    const rules=getWarDefinition(id)!;
+    assert.equal(rules.mode,"banner");
+    assert.equal(rules.durationMs,WAR_DURATION);
+    assert.equal(rules.seatsPerSide,5);
+    assert.deepEqual(rules.entry,warSites[id]);
+  }
+  const river=getWarDefinition(RIVER_CITY)!;
+  assert.equal(river.mode,"river");
+  assert.equal(river.durationMs,RIVER_WAR_DURATION);
+  assert.equal(river.seatsPerSide,5);
+  assert.deepEqual(river.entry,riverNodes.A);
+  assert.notDeepEqual(river.entry,warSites[RIVER_CITY]);
+  const castle=getWarDefinition(CASTLE_ID);
+  if(CASTLE_ENABLED){
+    assert.equal(castle?.mode,"castle");
+    assert.equal(castle?.durationMs,CASTLE_DURATION);
+    assert.equal(castle?.seatsPerSide,CASTLE_SEATS);
+    assert.deepEqual(castle?.entry,warSites[CASTLE_ID]);
+  }else assert.equal(castle,undefined);
+
+  const store=new GuildStore(":memory:");
+  try{
+    store.create("a","A","Moon");
+    const member=store.war.member("a")!;
+    for(const id of ["ritual_village","mantra_capital","fallen_city","twin_neck_pass","bound_temple","bamboo_frontier","__proto__"]){
+      assert.equal(getWarDefinition(id),undefined);
+      assert.throws(()=>store.war.start(id,member,0),/war_unknown/);
+    }
+  }finally{store.close();}
+});
 
 test("early level damage scaling and war participation EXP stay bounded",()=>{
   assert.equal(warEntryDamageFactor(1,1),1);

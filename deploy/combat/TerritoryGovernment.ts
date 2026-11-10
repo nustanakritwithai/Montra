@@ -9,7 +9,7 @@ type Focus="balanced"|"trade"|"storage";
 type Action=Building|"collect"|"repair"|"focus_balanced"|"focus_trade"|"focus_storage";
 export type GovernmentOrder={site:string;revision:number;action:Action};
 type Member={id:string;officer:boolean;commander?:boolean};
-type Estate={site:string;owner:string|null;settled:number;ticks:number;revision:number;market:number;warehouse:number;workshop:number;damaged:number;focus:Focus};
+type Estate={site:string;owner:string|null;settled:number;ticks:number;revision:number;market:number;warehouse:number;workshop:number;damaged:number;focus:Focus;upkeep:number};
 
 export function parseGovernmentOrder(input:unknown):GovernmentOrder|null {
   if(!input || typeof input!=="object" || Array.isArray(input))return null;
@@ -20,9 +20,10 @@ export function parseGovernmentOrder(input:unknown):GovernmentOrder|null {
   return {site:r.site,revision:r.revision,action:r.action as Action};
 }
 function terms(e:Estate){
-  const base=60+(e.market-1)*15,rate=e.focus==="trade"?Math.round(base*1.2):base;
+  const base=60+(e.market-1)*15,grossRate=e.focus==="trade"?Math.round(base*1.2):base;
+  const upkeep=e.upkeep?10+2*(e.market+e.warehouse+e.workshop-3):0,rate=grossRate-upkeep;
   const hours=8+(e.damaged?0:(e.warehouse-1)*4)+(e.focus==="storage" && !e.damaged?4:0);
-  return {rate,hours,cap:rate*hours,repairCost:60-(e.workshop-1)*20};
+  return {rate,grossRate,upkeep,hours,cap:rate*hours,repairCost:60-(e.workshop-1)*20};
 }
 function earned(e:Estate,now:number){
   const {rate,cap}=terms(e);
@@ -46,8 +47,11 @@ export class TerritoryGovernment {
         guild TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE, site TEXT NOT NULL, at INTEGER NOT NULL,
         reason TEXT NOT NULL, delta INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS guild_treasury_history ON guild_treasury_entries(guild,seq);`);
-    if(!db.prepare("PRAGMA table_info(territory_estates)").all().some(c=>c.name==="focus"))
+    const columns=db.prepare("PRAGMA table_info(territory_estates)").all();
+    if(!columns.some(c=>c.name==="focus"))
       db.exec("ALTER TABLE territory_estates ADD COLUMN focus TEXT NOT NULL DEFAULT 'balanced'");
+    if(!columns.some(c=>c.name==="upkeep"))
+      db.exec("ALTER TABLE territory_estates ADD COLUMN upkeep INTEGER NOT NULL DEFAULT 0 CHECK(upkeep IN (0,1))");
     // An existing owner starts at deployment. Never mint pre-feature revenue on first visit or restart.
     db.prepare(`INSERT OR IGNORE INTO territory_estates(site,owner,settled)
       SELECT b.site,g.id,? FROM territory_battles b LEFT JOIN guilds g
@@ -127,18 +131,23 @@ export class TerritoryGovernment {
     this.book(guild,site,at,amount*HOUR,"war_supply");
     return amount;
   }
+  bookRoute(guild:string,site:string,at:number,amount:number):void {
+    this.book(guild,site,at,amount*HOUR,amount>0?"route_delivery":"route_dispatch");
+  }
+
   // Called in the same transaction as the battle result.
-  settleVictory(site:string,winner:string|null,ended:number,breached:boolean){
+  settleVictory(site:string,winner:string|null,ended:number,breached:boolean,scheduled=false){
     const e=this.estate(site);
     if(!e){
-      this.db.prepare("INSERT INTO territory_estates(site,owner,settled,damaged) VALUES(?,?,?,?)").run(site,winner,ended,Number(breached));
+      this.db.prepare("INSERT INTO territory_estates(site,owner,settled,damaged,upkeep) VALUES(?,?,?,?,?)")
+        .run(site,winner,ended,Number(breached),Number(scheduled));
       return;
     }
     const at=Math.max(ended,e.settled),ticks=e.owner?earned(e,ended):0;
     const changed=e.owner!==winner;
     if(changed && e.owner)this.book(e.owner,site,ended,ticks,"handover");
-    this.db.prepare(`UPDATE territory_estates SET owner=?,settled=?,ticks=?,revision=revision+1,damaged=max(damaged,?) WHERE site=?`)
-      .run(winner,at,changed?0:ticks,Number(breached),site);
+    this.db.prepare(`UPDATE territory_estates SET owner=?,settled=?,ticks=?,revision=revision+1,damaged=max(damaged,?),upkeep=max(upkeep,?) WHERE site=?`)
+      .run(winner,at,changed?0:ticks,Number(breached),Number(scheduled),site);
   }
   view(site:string,member:Member|null|undefined,now:number){
     if(!member)return;
