@@ -399,6 +399,7 @@
       });
       joined.onMessage("city_production_state", data=>{if(room===joined)cityReceiveState(data);});
       joined.onMessage("city_workshop_state", data=>{if(room===joined)cityReceiveWorkshop(data);});
+      joined.onMessage("city_purchase_state", data=>{if(room===joined)cityReceivePurchase(data);});
       joined.onMessage("city_production_result", data=>{if(room===joined)cityReceiveResult(data);});
       joined.onMessage("city_production_error", data=>{if(room===joined)cityReceiveError(data);});
       joined.onMessage("city_disband_claims", data=>{if(room===joined)cityReceiveClaims(data);});
@@ -1297,7 +1298,7 @@
         const equipmentSockets=Object.fromEntries(Object.entries(payload.equipmentSockets||{}).filter(([key,card])=>equipment[key] && (card===null || personalItems[card]?.kind==="card")));
         observeLootInventory(payload);
         inventoryState={version:1,slots,equippedWeaponSlot,equipment,equipmentSockets,equipmentForges:payload.equipmentForges||{},forgeCopies:payload.forgeCopies||{},starterHuntKills:payload.starterHuntKills??0};
-        if(drawerActive==="cityProduction")renderCityProduction();
+        if(drawerActive==="cityProduction" || drawerActive==="cityPurchase")renderCityProduction();
         refreshOpenFieldQuest();
         itemUsePending = false;
         renderBag();

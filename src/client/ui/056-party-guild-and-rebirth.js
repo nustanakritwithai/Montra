@@ -262,11 +262,12 @@
   const cityAssets=["gold",cityProduct,"mat_raw_wood_1","mat_raw_stone_1","mat_raw_stone_2","mat_metal_2"];
   let cityState=null, cityClaims=null, cityPending=null, cityStatus="", cityReceivedAt=0;
   let cityWorkshop=null, cityWorkshopReceivedAt=0;
+  let cityPurchase=null;
   let cityReplyTimer=0, cityJobTimer=0;
   const cityPolledTimers=new Map();
   function cityRecoveryReady(){return economyReady() && room.state.cityRecoveryAvailable===true;}
   function resetCityProduction(){
-    cityState=null;cityWorkshop=null;cityClaims=null;cityPending=null;cityStatus="";cityPolledTimers.clear();
+    cityState=null;cityWorkshop=null;cityPurchase=null;cityClaims=null;cityPending=null;cityStatus="";cityPolledTimers.clear();
     clearTimeout(cityReplyTimer);clearTimeout(cityJobTimer);
     renderCityProduction();
   }
@@ -288,6 +289,10 @@
     if(!Number.isFinite(data?.serverNow) || !Array.isArray(data.inputs) || data.inputs.length!==2 || !data.output)return;
     cityWorkshop=data;cityWorkshopReceivedAt=performance.now();renderCityProduction();
   }
+  function cityReceivePurchase(data){
+    if(!Number.isFinite(data?.serverNow) || data.item!==cityProduct)return;
+    cityPurchase=data;renderCityProduction();
+  }
   function cityReceiveClaims(data){
     if(!Array.isArray(data?.assets))return;
     cityClaims=data.assets.filter(a=>a && typeof a.guildId==="string" && typeof a.name==="string" &&
@@ -299,6 +304,9 @@
     const notices={deposit:"ฝากวัตถุดิบแล้ว",build:"ปรับระดับโรงงานแล้ว",start:"เริ่มผลิตแล้ว",
       warehouse_start:"เปิดโครงการขยายคลังแล้ว",warehouse_contribute:"สมทบวัสดุแล้ว",warehouse_allocate:"จัดสรรวัสดุจากคลังแล้ว",
       workshop_start:"ฝากผลิตแล้ว · รับผลผลิตเมื่อครบเวลา",workshop_claim:"รับผลผลิตเข้ากระเป๋าแล้ว",
+      purchase_open:"เปิดใบสั่งซื้อแล้ว · กันทองและพื้นที่คลังเรียบร้อย",
+      purchase_cancel:"ยกเลิกแล้ว · คืนทองส่วนที่ยังไม่ได้ใช้",
+      purchase_fill:"ส่งวัตถุดิบแล้ว · ได้รับ "+(data.gold ?? 0)+" ทอง",
       start_fast:"เริ่มเร่งผลิตแล้ว",list:"ตั้งขายในตลาดโลกแล้ว",cancel:"คืนสินค้าเข้าคลังแล้ว",
       reclaim:"รับของเข้ากระเป๋าแล้ว",disband:"ยุบกิลด์แล้ว · รับทรัพย์สินได้ด้านล่าง",claim_disband:"รับทรัพย์สินแล้ว"};
     clearTimeout(cityReplyTimer);cityPending=null;
@@ -327,6 +335,11 @@
       city_workshop_siege:"โรงงานสาธารณะพักรับงานใหม่ระหว่างศึก",city_workshop_pending:"รับผลผลิตงานเดิมก่อนฝากงานใหม่",
       city_workshop_full:"คิวผลิตเต็ม · กรุณารีเฟรชเพื่อตรวจคิว",city_workshop_funds:"ทองในกระเป๋าไม่พอจ่ายค่าบริการ",
       city_workshop_job_missing:"ไม่พบงานผลิตนี้ · กรุณารีเฟรช",city_workshop_not_ready:"งานยังไม่ครบเวลา",
+      city_purchase_disabled:"ตลาดพักการเปิดใบสั่งซื้อและรับของ",
+      city_purchase_location:"ไปที่ด่านผนึกจันทราและยืนบนพื้นก่อนเปิดใบสั่งซื้อ",
+      city_purchase_siege:"พักใบสั่งซื้อระหว่างศึก",city_purchase_exists:"ด่านมีใบสั่งซื้อเปิดอยู่แล้ว",
+      city_purchase_missing:"ใบสั่งซื้อปิดแล้วหรือเปลี่ยนไป · กรุณารีเฟรช",
+      city_purchase_quantity:"จำนวนเกินยอดที่ยังรับ · กรุณารีเฟรช",
       city_stock_short:"วัตถุดิบหรือสินค้าในคลังไม่พอ",city_storage_full:"พื้นที่คลังเมืองไม่พอ",
       city_job_running:"โรงงานกำลังผลิตอยู่",city_factory_required:"ต้องสร้างโรงงานก่อน",city_factory_max:"โรงงานถึงระดับสูงสุดแล้ว",
       city_market_funds:"ทองตลาดกิลด์ไม่พอ",city_disband_unavailable:"ยืนยันได้เมื่อผู้บัญชาการเป็นสมาชิกคนสุดท้าย",
@@ -356,6 +369,107 @@
     if(cityPending || !cityRecoveryReady())return;
     cityPending={target:room,payload:{requestId:economyRequestId(),action,...fields}};
     transmitCityProduction();
+  }
+  function cityAmountForm(target,label,fields,run,disabled){
+    const form=marketText("form","guild-actions");
+    const inputs=fields.map(([caption,max])=>{
+      const field=marketText("label","field",caption),input=document.createElement("input");
+      input.type="number";input.inputMode="numeric";input.min="1";input.max=String(max);input.value="1";
+      input.required=true;input.disabled=disabled;field.append(input);form.append(field);return input;
+    });
+    const send=marketText("button","secondary",label);
+    send.type="submit";send.disabled=disabled;form.append(send);
+    form.onsubmit=event=>{event.preventDefault();run(...inputs.map(input=>input.valueAsNumber));};
+    target.append(form);return inputs;
+  }
+  function cityBagForm(target,caption,label,slots,limit,send,locked){
+    const field=marketText("label","field",caption),select=document.createElement("select");
+    for(const {item,slot} of slots){
+      const choice=marketText("option","",economyItemName(item));choice.value=String(slot);select.append(choice);
+    }
+    select.disabled=locked;field.append(select);target.append(field);
+    const selected=()=>slots.find(entry=>entry.slot===Number(select.value));
+    const [quantity]=cityAmountForm(target,label,[["จำนวน",Math.min(limit,slots[0].item.quantity)]],amount=>{
+      const choice=selected();
+      if(choice)send({slot:choice.slot,item:choice.item.itemId,amount});
+    },locked);
+    select.onchange=()=>{
+      quantity.max=String(Math.min(limit,selected().item.quantity));quantity.value="1";quantity.oninput?.();
+    };
+    return quantity;
+  }
+  function refreshCityPurchase(){
+    if(!cityRecoveryReady() || room.state.cityPurchaseSupported!==true)return;
+    try{room.send("get_city_purchase_orders",{});}
+    catch(_){cityStatus="เชื่อมต่อไม่ได้ · กรุณารีเฟรช";renderCityProduction();}
+  }
+  function openCityPurchase(){
+    cityPurchase=null;
+    if(!cityPending)cityStatus="";
+    openDrawer("cityPurchase","ใบสั่งซื้อกิลด์",
+      '<div class="guild-actions"><button id="cityBack" class="secondary" type="button">← ตลาดโลก</button>'+
+      '<button id="cityRefresh" class="secondary" type="button">รีเฟรช</button></div>'+
+      '<p id="cityStatus" class="note" role="status"></p><div id="cityProductionContent"></div>');
+    $("cityBack").onclick=openEconomy;
+    $("cityRefresh").onclick=()=>{if(!cityPending)cityStatus="";refreshCityPurchase();renderCityProduction();};
+    renderCityProduction();refreshCityPurchase();
+  }
+  function renderCityPurchase(){
+    const body=$("cityProductionContent"),ready=cityRecoveryReady() && room.state.cityPurchaseSupported===true;
+    if(!body)return;
+    $("cityRefresh").disabled=!ready;
+    $("cityStatus").textContent=cityStatus || (ready?"":"เชื่อมต่อกับตลาดโลกเพื่อดูใบสั่งซื้อ");
+    body.replaceChildren();
+    const note=text=>body.append(marketText("p","note",text));
+    const button=(label,run,disabled=false)=>{
+      const control=marketText("button","secondary",label);
+      control.type="button";control.onclick=run;control.disabled=disabled;body.append(control);
+    };
+    if(cityPending && !cityPending.waiting)button("ส่งคำขอเดิมซ้ำ",transmitCityProduction,!ready);
+    if(!ready)return;
+    if(!cityPurchase){note("กำลังโหลดใบสั่งซื้อ…");return;}
+    const {open,manage,enabled,siege,atMoon,maxAmount,maxUnitPrice,item}=cityPurchase,locked=!!cityPending;
+    const itemName=cityItemName(item);
+    body.append(marketText("h3","cp-h","ด่านผนึกจันทรา · รับซื้อ "+itemName));
+    if(!enabled)note("ตลาดพักการเปิดใบสั่งซื้อและรับของ");
+    else if(siege)note("พักเปิดใบและรับของระหว่างศึก");
+    if(open){
+      note("กิลด์ "+open.guild+" · ยังรับ "+open.remaining+" / "+open.amount+" ชิ้น · "+open.unitPrice+" ทองต่อชิ้น");
+      note("หมดอายุ "+new Date(open.expiresAt).toLocaleString("th-TH"));
+      if(enabled && !siege){
+        const slots=(inventoryState?.slots || []).flatMap((stack,slot)=>
+          stack?.itemId===item && !stack.bound ? [{item:stack,slot}] : []);
+        if(slots.length){
+          const quantity=cityBagForm(body,"แร่ในกระเป๋า","ส่งของและรับทอง",slots,open.remaining,({slot,amount})=>{
+            if(cityPositive(amount,open.remaining))sendCityProduction("purchase_fill",{orderId:open.id,slot,amount});
+          },locked);
+          const total=marketText("p","note");body.append(total);
+          quantity.oninput=()=>{total.textContent=cityPositive(quantity.valueAsNumber,Number(quantity.max))?
+            "รับ "+(quantity.valueAsNumber*open.unitPrice)+" ทองเมื่อส่งสำเร็จ":"";};
+          quantity.oninput();
+        } else note("ต้องมี "+itemName+" ในกระเป๋าเพื่อส่งของ");
+      }
+      if(cityPurchase.canCancel)button("ยกเลิกใบสั่งซื้อ",()=>{
+        if(window.confirm("ยกเลิกใบสั่งซื้อและคืนทองส่วนที่ยังไม่ได้ใช้หรือไม่"))sendCityProduction("purchase_cancel",{orderId:open.id});
+      },locked);
+      return;
+    }
+    note("ยังไม่มีใบสั่งซื้อเปิดอยู่");
+    if(!manage || !enabled || siege)return;
+    note("ทองตลาดพร้อมใช้ "+manage.gold+" ทอง · คลังว่าง "+manage.free+" ชิ้น");
+    if(!atMoon){note("ไปที่ด่านผนึกจันทรา ยืนบนพื้นแล้วกดรีเฟรชเพื่อเปิดใบ");return;}
+    if(manage.free<=0 || manage.gold<=0)return;
+    const max=Math.min(maxAmount,manage.free),maxPrice=Math.min(maxUnitPrice,manage.gold);
+    const [quantity,price]=cityAmountForm(body,"เปิดใบสั่งซื้อ",[["จำนวน",max],["ทองต่อชิ้น",maxPrice]],(amount,unitPrice)=>{
+      if(cityPositive(amount,max) && cityPositive(unitPrice,maxPrice) && amount*unitPrice<=manage.gold)
+        sendCityProduction("purchase_open",{epoch:manage.epoch,amount,unitPrice});
+    },locked);
+    const total=marketText("p","note");body.append(total);
+    const quote=()=>{
+      const gold=quantity.valueAsNumber*price.valueAsNumber;
+      total.textContent=Number.isFinite(gold)?"กัน "+gold+" ทอง · อายุ 24 ชั่วโมง"+(gold>manage.gold?" · ทองตลาดไม่พอ":""):"";
+    };
+    quantity.oninput=price.oninput=quote;quote();
   }
   function updateCityCountdown(){
     clearTimeout(cityJobTimer);
@@ -396,6 +510,7 @@
     renderCityProduction();refreshCityProduction();
   }
   function renderCityProduction(){
+    if(drawerActive==="cityPurchase"){renderCityPurchase();return;}
     if(drawerActive!=="cityProduction" || !$("cityProductionContent"))return;
     const body=$("cityProductionContent"),ready=cityRecoveryReady(),status=$("cityStatus");
     const state=guildState && cityState?.guildId===guildState.id ? cityState : null;
@@ -413,34 +528,8 @@
       section.append(marketText("h3","cp-h",title));body.append(section);return section;
     };
     const note=(target,text)=>target.append(marketText("p","note",text));
-    const submit=(target,label,fields,run,disabled=locked)=>{
-      const form=marketText("form","guild-actions");
-      const inputs=fields.map(([caption,max])=>{
-        const field=marketText("label","field",caption);
-        const input=document.createElement("input");
-        input.type="number";input.inputMode="numeric";input.min="1";input.max=String(max);input.value="1";
-        input.required=true;input.disabled=disabled;field.append(input);form.append(field);return input;
-      });
-      const send=marketText("button","secondary",label);
-      send.type="submit";send.disabled=disabled;form.append(send);
-      form.onsubmit=event=>{event.preventDefault();run(...inputs.map(input=>input.valueAsNumber));};
-      target.append(form);return inputs;
-    };
-    const submitBag=(target,caption,label,slots,limit,send)=>{
-      const field=marketText("label","field",caption),select=document.createElement("select");
-      for(const {item,slot} of slots){
-        const choice=marketText("option","",economyItemName(item));choice.value=String(slot);select.append(choice);
-      }
-      select.disabled=locked;field.append(select);target.append(field);
-      const selected=()=>slots.find(entry=>entry.slot===Number(select.value));
-      const [quantity]=submit(target,label,[["จำนวน",Math.min(limit,slots[0].item.quantity)]],amount=>{
-        const choice=selected();
-        if(choice)send({slot:choice.slot,item:choice.item.itemId,amount});
-      });
-      select.onchange=()=>{
-        quantity.max=String(Math.min(limit,selected().item.quantity));quantity.value="1";
-      };
-    };
+    const submit=(target,label,fields,run,disabled=locked)=>cityAmountForm(target,label,fields,run,disabled);
+    const submitBag=(target,caption,label,slots,limit,send)=>cityBagForm(target,caption,label,slots,limit,send,locked);
     if(cityPending && !cityPending.waiting)body.append(button("ส่งคำขอเดิมซ้ำ",transmitCityProduction,!ready));
     if(!ready)return;
     if(cityWorkshop?.enabled || cityWorkshop?.job){

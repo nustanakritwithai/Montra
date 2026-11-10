@@ -24,14 +24,15 @@ function node(tag = "div") {
   };
 }
 
-function fixture({enabled = true, recovery = true, member = true, workshopSupported = false} = {}) {
+function fixture({enabled = true, recovery = true, member = true, workshopSupported = false, purchaseSupported = false} = {}) {
   const nodes = {}, wire = [], timers = new Map();
   let serial = 0, now = 100;
   const walk = el => [el, ...el.children.flatMap(walk)];
   const $ = id => nodes[id] || (nodes.cityProductionContent && walk(nodes.cityProductionContent).find(el => el.id === id));
   const ctx = {
     $, document: {createElement: node}, performance: {now: () => now},
-    room: {state: {cityProductionAvailable: enabled, cityRecoveryAvailable: recovery, cityWorkshopSupported: workshopSupported},
+    room: {state: {cityProductionAvailable: enabled, cityRecoveryAvailable: recovery,
+      cityWorkshopSupported: workshopSupported, cityPurchaseSupported: purchaseSupported},
       send(command, payload) { wire.push({command, payload: plain(payload)}); }},
     guildState: member ? {id: "guild-1", name: "สามลาน"} : null,
     inventoryState: {slots: [{itemId: wood, quantity: 10}, {itemId: stone, quantity: 6}]},
@@ -40,6 +41,7 @@ function fixture({enabled = true, recovery = true, member = true, workshopSuppor
     economyRequestId: () => "request_city_ui_"+ ++serial,
     marketText: (tag, _className, text) => Object.assign(node(tag), {textContent: text || ""}),
     openGuild() {},
+    openEconomy() {},
     openDrawer(name) {
       ctx.drawerActive = name;
       for (const id of ["cityBack","cityRefresh","cityStatus","cityProductionContent"]) nodes[id] = node();
@@ -212,4 +214,42 @@ test("the Moon Pass panel uses its recipe, bag slots and real market item", () =
   assert.deepEqual(sent,{requestId:sent.requestId,action:"deposit",epoch:2,slot:1,item:ore,amount:2});
   const listed=f.nodes.cityProductionContent.children.find(group=>group.children[0].textContent==="ประกาศขายของกิลด์");
   assert.match(listed.children[1].children[0].textContent,/mat_metal_2/);
+});
+
+const purchase={item:metal,enabled:true,atMoon:false,siege:false,maxAmount:20,maxUnitPrice:1_000_000,serverNow:1_000_000,
+  open:{id:"moon-order",guild:"ช่างจันทรา",remaining:3,amount:5,unitPrice:20,expiresAt:2_000_000}};
+
+test("market sellers can send partial quantities and resend the same request after a timeout", () => {
+  const f=fixture({member:false,purchaseSupported:true});
+  f.ctx.inventoryState.slots.push({itemId:metal,quantity:2});
+  f.ctx.openCityPurchase();
+  assert.equal(f.wire.at(-1).command,"get_city_purchase_orders");
+  f.ctx.cityReceivePurchase({...purchase,siege:true});
+  assert.equal(f.button("ส่งของและรับทอง"),undefined);
+  f.ctx.cityReceivePurchase(purchase);
+  assert.equal(f.button("ยกเลิกใบสั่งซื้อ"),undefined);
+  f.submit("ส่งของและรับทอง",2);
+  const sent=f.wire.at(-1);
+  assert.deepEqual(sent.payload,{requestId:sent.payload.requestId,action:"purchase_fill",orderId:"moon-order",slot:2,amount:2});
+  [...f.timers.values()].find(timer=>timer.delay===6000).fn();
+  f.button("ส่งคำขอเดิมซ้ำ").onclick();
+  assert.deepEqual(f.wire.at(-1),sent);
+  f.ctx.cityReceiveResult({...sent.payload,gold:40});
+  assert.match(f.nodes.cityStatus.textContent,/40 ทอง/);
+});
+
+test("officers can open only on site and cancel a paused order", () => {
+  const f=fixture({purchaseSupported:true});
+  f.ctx.openCityPurchase();
+  const owner={...purchase,open:null,manage:{epoch:3,free:10,gold:100}};
+  f.ctx.cityReceivePurchase(owner);
+  assert.equal(f.button("เปิดใบสั่งซื้อ"),undefined);
+  f.ctx.cityReceivePurchase({...owner,atMoon:true});
+  f.submit("เปิดใบสั่งซื้อ",4,15);
+  const sent=f.wire.at(-1).payload;
+  assert.deepEqual(sent,{requestId:sent.requestId,action:"purchase_open",epoch:3,amount:4,unitPrice:15});
+  f.ctx.cityReceiveResult(sent);
+  f.ctx.cityReceivePurchase({...purchase,enabled:false,canCancel:true});
+  f.button("ยกเลิกใบสั่งซื้อ").onclick();
+  assert.equal(f.wire.at(-1).payload.action,"purchase_cancel");
 });

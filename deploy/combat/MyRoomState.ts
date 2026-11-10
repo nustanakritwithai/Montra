@@ -142,6 +142,7 @@ export const MyRoomState = schema({
   cityProductionAvailable: t.boolean().default(false),
   cityRecoveryAvailable: t.boolean().default(false),
   cityWorkshopSupported: t.boolean().default(false),
+  cityPurchaseSupported: t.boolean().default(false),
   extendedChatAvailable: t.boolean().default(true),
   buffsAvailable: t.boolean().default(true),
   forgeCatalog: t.string().default(""),

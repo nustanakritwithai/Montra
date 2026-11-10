@@ -13,7 +13,7 @@ import type {SalvageOrder} from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
 import {
   CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES, isWarehouseOrder,
-  type CityDisband, type CityFactoryOrder, type CityMember, type CityOrder, type CityOwnership, type CitySite,
+  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityMember, type CityOrder, type CityOwnership, type CityPurchaseOrder, type CitySite,
   type CityWorkshopOrder,
 } from "./CityProductionRules.js";
 
@@ -197,6 +197,32 @@ export class EconomyStore {
   }
   viewCityWorkshop(actor: string, ownership: CityOwnership, now: number) {
     return this.city.workshopView(actor, ownership, now);
+  }
+  viewCityPurchase(member: CityMember | undefined, ownership: CityOwnership) {
+    return this.city.purchaseView(member, ownership);
+  }
+  hasOpenCityPurchase(): boolean {
+    return this.city.hasOpenPurchase();
+  }
+  cityPurchaseOrder(actor: string, member: CityMember | undefined, order: CityPurchaseOrder,
+    ownership: CityOwnership, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once<Record<string, number | string>>(actor, order.requestId, "city_purchase", intent, () => {
+      if (order.action === "purchase_fill") {
+        const account = this.account(actor);
+        if (account.inventory.slots[order.slot]?.itemId !== CITY_PRODUCT) throw Error("item_unavailable");
+        const result = this.city.purchaseFill(order.orderId, order.amount, ownership, now);
+        if (account.gold + result.gold > MAX_GOLD) throw Error("city_wallet_full");
+        account.inventory = take(account.inventory, order.slot, order.amount).inventory;
+        account.gold += result.gold;
+        this.put(actor, account);
+        return result;
+      }
+      if (!member) throw Error("city_not_member");
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      if (order.action === "purchase_cancel") return this.city.purchaseCancel(member, order.orderId);
+      return this.city.purchaseOpen(member, ownership, order.epoch, order.amount, order.unitPrice, now);
+    });
   }
   hasCityWorkshopJob(actor: string): boolean {
     return this.city.hasWorkshopJob(actor);
