@@ -98,6 +98,21 @@ import {
 import { ForestEncounters } from "./ForestEncounters.js";
 import { mapsWithServiceNpcs, serviceNpcsFor } from "./ServiceNpcs.js";
 
+type AdvancedSkillFamily = "sword" | "muay" | "blade" | "sentinel" | "occult";
+const REPLACEMENT_SKILL_FAMILIES = {
+  flowing_blades: "sword",
+  chaiya_advanced_counter: "muay",
+  shadow_cut: "blade",
+  firm_guard: "sentinel",
+  seer_ash_rice: "occult",
+  mender_deep_heal: "occult",
+} as const satisfies Record<string,AdvancedSkillFamily>;
+
+function replacementSkillFamily(skillId:unknown):AdvancedSkillFamily|undefined {
+  if(typeof skillId==="string" && Object.hasOwn(REPLACEMENT_SKILL_FAMILIES,skillId))
+    return REPLACEMENT_SKILL_FAMILIES[skillId as keyof typeof REPLACEMENT_SKILL_FAMILIES];
+}
+
 type DefaultMonsterHit = Readonly<{sequence:number;targetId:string;target:Player}>;
 type RewardPrey = Readonly<Pick<Monster,"id"|"mapId"|"level"|"x"|"y"|"z">>;
 type MonsterDefeat = Readonly<{winnerId:string;monster:Monster;prey:RewardPrey;hitSeq:number}>;
@@ -508,67 +523,54 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       try {transport.probeResult(client,seq.value);}catch{}
       return;
     }
-    if(action.value==="firm_guard"){
-      if(keys.length!==2 || !this.prototypeGameplayAllowed(client.sessionId) || gate.reserve(seq.value)!=="accepted" || this.blockMounted(client))return;
-      if(this.hotbarCastAllowed(client,{skillId:"firm_guard"},"advanced"))this.castSentinelSkill(client,{skillId:"firm_guard"},seq.value as number);
+    const skillId=action.value==="shadow_cut_return"?"shadow_cut":action.value;
+    const family=replacementSkillFamily(skillId);
+    if(!family || !this.prototypeGameplayAllowed(client.sessionId))return;
+    if(action.value==="firm_guard" || action.value==="shadow_cut_return"){
+      if(keys.length===2 && gate.reserve(seq.value)==="accepted")
+        this.dispatchAdvancedSkill(client,{skillId},family,seq.value);
       return;
     }
-    if(action.value==="shadow_cut_return"){
-      if(keys.length!==2 || !this.prototypeGameplayAllowed(client.sessionId) || gate.reserve(seq.value)!=="accepted")return;
-      this.castPrototypeShadow(client,undefined,seq.value as number);return;
-    }
-    if(action.value!=="flowing_blades" && action.value!=="chaiya_advanced_counter" && action.value!=="shadow_cut" && action.value!=="seer_ash_rice" && action.value!=="mender_deep_heal")return;
     const target=Object.getOwnPropertyDescriptor(message,"targetId");
-    if(keys.length!==3 || !target || !("value" in target) || typeof target.value!=="string" || !target.value || target.value.length>256 || !this.prototypeGameplayAllowed(client.sessionId))return;
-    if(gate.reserve(seq.value)!=="accepted")return;
-    if(action.value==="shadow_cut")this.castPrototypeShadow(client,target.value,seq.value as number);
-    else if(action.value==="seer_ash_rice" || action.value==="mender_deep_heal"){
-      const message={skillId:action.value,targetId:target.value};
-      if(!this.blockMounted(client) && this.hotbarCastAllowed(client,message,"advanced"))this.castOccultSkill(client,message,seq.value as number);
-    } else this.castPrototypeSkill(client,action.value,target.value,seq.value as number);
+    if(keys.length!==3 || !target || !("value" in target) || typeof target.value!=="string" || !target.value || target.value.length>256)return;
+    if(gate.reserve(seq.value)==="accepted")this.dispatchAdvancedSkill(client,{skillId,targetId:target.value},family,seq.value);
   }
-  private castPrototypeShadow(client:Client,targetId:string|undefined,seq:number):void {
-    const id=client.sessionId,skillId="shadow_cut",skill=BLADE_LESSONS.shadow_cut;
-    if(!this.prototypeGameplayAllowed(id) || this.blockMounted(client) || !this.hotbarCastAllowed(client,{skillId},"advanced"))return;
-    if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
-    const player=this.spellCaster(client),book=this.bladeBooks.get(id);
-    if(!player || !book)return;
-    if(player.pathId!=="blade" || !this.persistentCharacters.has(id))return this.reject(client,"blade_class_required");
-    if(!book.learned.includes(skillId) || !this.advancedEquipped(id,skillId,book.slots.includes(skillId)))return this.reject(client,"blade_skill_locked");
-    if(player.flying || !onMapGround(player) || isRestArea(player.mapId,player))return this.reject(client,"blade_cloak_location");
-    const state=this.prototypeShadows.get(id)??newShadowCutState();this.prototypeShadows.set(id,state);
+
+  private dispatchAdvancedSkill(client:Client,message:unknown,family:AdvancedSkillFamily,sequence?:number):void {
+    const skillId=(message as {skillId?:unknown}|null)?.skillId;
+    const replacement=replacementSkillFamily(skillId)===family;
+    if(sequence===undefined){
+      if(replacement && this.prototypeGameplayEnabled())return this.reject(client,"prototype_protocol_required");
+    } else if(!replacement || !this.prototypeGameplayAllowed(client.sessionId))return;
+    if(this.blockMounted(client) || !this.hotbarCastAllowed(client,message,"advanced"))return;
+    switch(family){
+      case "sword": return this.castSwordSkill(client,message,sequence);
+      case "muay": return this.castMuaySkill(client,message,sequence);
+      case "blade": return this.castBladeSkill(client,message,sequence);
+      case "sentinel": return this.castSentinelSkill(client,message,sequence);
+      case "occult": return this.castOccultSkill(client,message,sequence);
+    }
+  }
+
+  private prototypeShadowFor(id:string):ShadowCutState {
+    const state=this.prototypeShadows.get(id)??newShadowCutState();
+    this.prototypeShadows.set(id,state);
     if(state.mark && this.simulatedMs>=state.mark.until)this.endPrototypeShadow(id,state,"expired");
-    if(targetId===undefined){
-      const mark=state.mark;
-      const result=returnShadowCut(state,{point:{x:player.x,y:player.y,z:player.z,mapId:player.mapId},alive:player.alive,eligible:true},this.simulatedMs,seq,(from,to)=>this.prototypeShadowPathClear(player,from,to));
-      if(!result){
-        if(mark && !state.mark)this.publishPrototypeShadowEnd(id,mark,"invalidated");
-        return this.reject(client,"prototype_return_unavailable");
-      }
-      this.startSkillAction(id,player,"idle");this.destinations.delete(id);this.attackTargets.delete(id);player.targetId="";
-      this.moveOnSurface(player,result.x,result.z);
-      if(mark)this.prototypeShadowNotice("return",id,"",seq,mark,{destination:{x:player.x,y:player.y,z:player.z,mapId:player.mapId}});return;
-    }
-    if(state.mark)return this.reject(client,"prototype_shadow_active");
-    const now=Date.now();if(now<(book.cooldowns[skillId]??0))return this.reject(client,"blade_cooldown");
-    if(player.mana<skill.stamina)return this.reject(client,"insufficient_mana");
-    const order=parseAttackCommand({targetId}) ?? parsePkTargetCommand({targetId});
-    const monster=order?this.getMonster(targetId):undefined,target=monster ?? (order?this.state.players.get(targetId):undefined);
-    if(!order || !target?.alive || targetId===id || !this.sameCombatMap(id,targetId) || (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))))return this.reject(client,"target_unavailable");
-    if(distance3d(player,target)>skill.range || Math.abs(player.y-target.y)>1.1)return this.reject(client,"blade_out_of_range");
-    if(!this.bodyPathClear(player.mapId,player,target))return this.reject(client,"blade_blocked");
-    if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[],true))return;
-    const origin={x:player.x,y:player.y,z:player.z,mapId:player.mapId};
-    if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[]))return;
-    book.cooldowns[skillId]=now+skill.cooldownMs;
-    const ambush=this.endBladeCloak(id,"attack");
-    const hit=this.bladeDamage(id,targetId,skill.power*(monster?skillRankMultiplier(book.ranks,skillId):1)*(ambush?(monster?1.5:1.2):1));
-    if(hit && player.alive && player.pathId==="blade" && player.mapId===origin.mapId && !this.pendingWarps.has(id)){
-      if(ambush)this.recordBladeOpening(id,Boolean(monster));
-      if(markShadowCut(state,{point:origin,alive:true,eligible:true},this.simulatedMs,seq) && state.mark)this.prototypeShadowNotice("marked",id,targetId,seq,state.mark);
-    }
-    this.sendBladeBook(client);void this.saveCharacter(id);
+    return state;
   }
+
+  private returnPrototypeShadow(client:Client,player:Player,state:ShadowCutState,seq:number):void {
+    const id=client.sessionId,mark=state.mark;
+    const result=returnShadowCut(state,{point:{x:player.x,y:player.y,z:player.z,mapId:player.mapId},alive:player.alive,eligible:true},this.simulatedMs,seq,(from,to)=>this.prototypeShadowPathClear(player,from,to));
+    if(!result){
+      if(mark && !state.mark)this.publishPrototypeShadowEnd(id,mark,"invalidated");
+      return this.reject(client,"prototype_return_unavailable");
+    }
+    this.startSkillAction(id,player,"idle");this.destinations.delete(id);this.attackTargets.delete(id);player.targetId="";
+    this.moveOnSurface(player,result.x,result.z);
+    if(mark)this.prototypeShadowNotice("return",id,"",seq,mark,{destination:{x:player.x,y:player.y,z:player.z,mapId:player.mapId}});
+  }
+
   private prototypeShadowView(playerId:string,mark:ShadowMark):PrototypeShadowView {
     return {playerId,markSeq:mark.sequence,origin:{...mark.point},startedAtServerMs:mark.until-SHADOW_CUT_TRIAL.durationMs,
       expiresAtServerMs:mark.until,durationMs:SHADOW_CUT_TRIAL.durationMs};
@@ -613,50 +615,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(step.blocked || step.moved<1e-7)return false;pos={x:step.x,z:step.z};moved+=step.moved;
     }
     return Math.hypot(pos.x-to.x,pos.z-to.z)<0.001;
-  }
-  private castPrototypeSkill(client:Client,skillId:"flowing_blades"|"chaiya_advanced_counter",targetId:string,seq:number):void {
-    const id=client.sessionId;
-    if(!this.prototypeGameplayAllowed(id) || this.blockMounted(client) || !this.hotbarCastAllowed(client,{skillId},"advanced"))return;
-    if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
-    const player=this.spellCaster(client);if(!player)return;
-    const sword=skillId==="flowing_blades",tree=this.swordTrees.get(id),book=this.muayBooks.get(id),cooldowns=this.muayCooldowns.get(id);
-    if(sword) {
-      if(player.pathId!=="phutthaisawan" || !wearsTwinSwords(equippedWeaponId(this.inventories.get(id))) || !tree || !tree.learned.includes(skillId) || !this.advancedEquipped(id,skillId,tree.loadouts[tree.school].includes(skillId)))return this.reject(client,"sword_skill_locked");
-    } else {
-      if(player.pathId!=="muay_boran" || !wearsWraps(equippedWeaponId(this.inventories.get(id))) || !book || !cooldowns || book.school!=="chaiya" || !book.learned.includes(skillId) || !this.advancedEquipped(id,skillId,book.slots.includes(skillId)))return this.reject(client,"muay_skill_locked");
-    }
-    if(player.flying || !onMapGround(player) || isRestArea(player.mapId,player))return this.reject(client,"prototype_unavailable");
-    const order=parseAttackCommand({targetId}) ?? parsePkTargetCommand({targetId});
-    const monster=order ? this.getMonster(targetId) : undefined;
-    const target=monster ?? (order ? this.state.players.get(targetId):undefined);
-    const skill=sword?SWORD_NODES.flowing_blades:MUAY_SKILLS.chaiya_advanced_counter;
-    if(!order || !target?.alive || targetId===id || !this.sameCombatMap(id,targetId) || (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))))return this.reject(client,"target_unavailable");
-    if(distance3d(player,target)>skill.range || Math.abs(player.y-target.y)>1.1 || !this.bodyPathClear(player.mapId,player,target))return this.reject(client,"prototype_out_of_range");
-    const wallNow=Date.now(), flow=advanceFlowing(this.prototypeFlowing.get(id)??newFlowingState(),this.simulatedMs);
-    if(sword) {
-      const follow=!!flow.pending;
-      if(!follow && wallNow<(tree!.cooldowns[skillId] ?? 0))return this.reject(client,"sword_skill_cooldown");
-      const result=useFlowing(flow,this.simulatedMs,seq,targetId,true);
-      if(result.action==="none"){this.prototypeFlowing.set(id,result.state);return this.reject(client,result.reason??"prototype_unavailable");}
-      if(result.action==="first" && !this.spendSkillMana(client,player,skill.stamina,[targetId],[],true))return;
-      if(result.action==="first" && !this.spendSkillMana(client,player,skill.stamina,[targetId],[]))return;
-      this.prototypeFlowing.set(id,result.state);
-      if(result.action==="first"){tree!.cooldowns[skillId]=wallNow+skill.cooldownMs;player.swordTreeData=JSON.stringify(tree);}
-      if(this.prototypeAttack(id,player,target,targetId,monster,skillId))this.prototypeNotice(result.action,id,targetId,skillId);
-    } else {
-      const guard=this.swordGuards.get(id),opp=this.prototypeOpportunities.get(id);
-      if(wallNow<(cooldowns![skillId]??0))return this.reject(client,"muay_cooldown");
-      if(!guard || this.simulatedMs>=guard.counterUntil || !validChaiyaOpportunity(opp,targetId,this.simulatedMs))return this.reject(client,"muay_counter_required");
-      if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[],true))return;
-      if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[]))return;
-      this.prototypeOpportunities.delete(id);guard.counterUntil=0;
-      cooldowns![skillId]=wallNow+skill.cooldownMs;player.muayData=JSON.stringify(cooldowns);
-      if(!this.prototypeAttack(id,player,target,targetId,monster,skillId)){void this.saveCharacter(id);return;}
-      const granted=grantChaiyaDebuff(this.prototypeCounters.get(id)??newCounterCursor(),this.prototypeDebuffs.get(targetId),this.simulatedMs,seq,id,targetId,monster?.tier==="normal"?"normal_monster":monster?"boss":"player",true,target.alive,opp);
-      this.prototypeCounters.set(id,granted.cursor);if(granted.debuff)this.prototypeDebuffs.set(targetId,granted.debuff);
-      this.prototypeNotice("counter",id,targetId,skillId);
-    }
-    void this.saveCharacter(id);
   }
   private prototypeAttack(id:string,player:Player,target:Monster|Player,targetId:string,monster:Monster|undefined,skillId:"flowing_blades"|"chaiya_advanced_counter"):boolean {
     if(!player.alive || !target.alive)return false;
@@ -1874,7 +1832,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       Object.keys(input).some(k=>k!=="skillId" && k!=="targetId") || (input.targetId!==undefined && typeof input.targetId!=="string"))
       return this.reject(client,"invalid_sentinel_skill");
     const id=client.sessionId,skillId=input.skillId as SentinelSkillId,skill:SentinelLesson=SENTINEL_LESSONS[skillId];
-    if(skillId==="firm_guard" && this.prototypeGameplayEnabled() && prototypeSequence===undefined)return this.reject(client,"prototype_protocol_required");
     const actor=this.spellCaster(client),book=this.sentinelBooks.get(id);
     if(!actor || !book)return;
     if(actor.pathId!=="sentinel" || !this.persistentCharacters.has(id))return this.reject(client,"sentinel_class_required");
@@ -1972,8 +1929,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(assisted)this.recordSentinelPractice(id,"assist");
     } else if(skill.effect==="intercept")this.sentinelInterceptions.set(targetId,{ownerId:id,until:this.simulatedMs+6000,fraction:skill.power});
     this.sendSentinelBook(client);
-    this.broadcast("sentinel_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
     if(firmGuard)this.prototypeNotice("braced",id,id,skillId);
+    else this.broadcast("sentinel_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
@@ -2090,7 +2047,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     void this.saveCharacter(id);
   }
 
-  private castBladeSkill(client:Client,message:unknown):void {
+  private castBladeSkill(client:Client,message:unknown,prototypeSequence?:number):void {
     if(!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_blade_skill");
     const input=message as Record<string,unknown>,keys=Object.keys(input);
     if(typeof input.skillId!=="string" || !Object.hasOwn(BLADE_LESSONS,input.skillId) ||
@@ -2105,6 +2062,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!book.learned.includes(skillId) || !this.advancedEquipped(id,skillId,book.slots.includes(skillId)) || skill.effect==="passive")return this.reject(client,"blade_skill_locked");
     if(player.flying || !onMapGround(player) || isRestArea(player.mapId,player))return this.reject(client,"blade_cloak_location");
     if(this.bladeWindups.has(id))return this.reject(client,"blade_windup_active");
+    const shadow=prototypeSequence===undefined?undefined:this.prototypeShadowFor(id);
+    if(shadow && prototypeSequence!==undefined){
+      if(input.targetId===undefined)return this.returnPrototypeShadow(client,player,shadow,prototypeSequence);
+      if(shadow.mark)return this.reject(client,"prototype_shadow_active");
+    }
     const now=Date.now();if(now<(book.cooldowns[skillId] ?? 0))return this.reject(client,"blade_cooldown");
     if(player.mana<skill.stamina)return this.reject(client,"insufficient_mana");
     const targeted=["approach","strike","consume","windup","counter"].includes(skill.effect);
@@ -2148,18 +2110,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.endBladeCloak(id,"attack");this.startSkillAction(id,player,"attacking");
       this.bladeWindups.set(id,{targetId,until:this.simulatedMs+800,power:skill.power*(monster?skillRankMultiplier(book.ranks,skillId):1)*(cloaked?(monster?1.5:1.2):1),ambush:cloaked});
     } else if(target && skill.effect!=="approach") {
+      const origin=shadow?{x:player.x,y:player.y,z:player.z,mapId:player.mapId}:undefined;
       const ambush=this.endBladeCloak(id,"attack");
       const hit=this.bladeDamage(id,targetId,skill.power*(monster?skillRankMultiplier(book.ranks,skillId):1)*(ambush?(monster?1.5:1.2):1));
-      if(hit){
+      if(hit && (!origin || (player.alive && player.pathId==="blade" && player.mapId===origin.mapId && !this.pendingWarps.has(id)))){
         if(ambush)this.recordBladeOpening(id,Boolean(monster));
+        if(shadow && origin && prototypeSequence!==undefined &&
+          markShadowCut(shadow,{point:origin,alive:true,eligible:true},this.simulatedMs,prototypeSequence) && shadow.mark)
+          this.prototypeShadowNotice("marked",id,targetId,prototypeSequence,shadow.mark);
         if(skillId==="hidden_edge"){this.bladeMarks.set(id,{targetId,until:this.simulatedMs+8000});this.sendSwordNotice(client,"blade_mark_state",{active:true,targetId,durationMs:8000});if(monster)this.recordBladePractice(id,"mark");}
         if(skill.effect==="consume"){this.clearBladeMark(id);if(monster){this.recordBladePractice(id,"mark");this.recordBladePractice(id,"combo");}}
         if(skill.effect==="counter" && guard)guard.counterUntil=0;
       }
     }
     this.sendBladeBook(client);
-    if(skill.effect!=="approach" || !cloaked)this.broadcast("blade_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
-    else this.sendSwordNotice(client,"blade_skill_used",{playerId:id,skillId});
+    if(!shadow){
+      if(skill.effect!=="approach" || !cloaked)this.broadcast("blade_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
+      else this.sendSwordNotice(client,"blade_skill_used",{playerId:id,skillId});
+    }
     void this.saveCharacter(id);
   }
 
@@ -2527,7 +2495,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         (keys.length===2 && (typeof input.targetId!=="string" || !Object.hasOwn(input,"targetId"))) ||
         !Object.hasOwn(OCCULT_LESSONS,input.skillId)) return this.reject(client,"invalid_occult_skill");
     const id=client.sessionId,skillId=input.skillId as OccultSkillId,lesson:OccultLesson=OCCULT_LESSONS[skillId];
-    if((skillId==="seer_ash_rice" || skillId==="mender_deep_heal") && this.prototypeGameplayEnabled() && prototypeSequence===undefined)return this.reject(client,"prototype_protocol_required");
     const caster=this.spellCaster(client),book=this.occultBooks.get(id);
     if (!caster || !book) return;
     if (!isOccultPath(caster.pathId)) return this.reject(client,"occult_class_required");
@@ -2612,7 +2579,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.rescueNotice(talisman,"placed");
       return;
     }
-    if(prototypeSequence!==undefined && monster){
+    if(prototypeSequence!==undefined && skillId==="seer_ash_rice"){
+      if(!monster)return this.reject(client,"target_unavailable");
       const position={x:monster.x,y:groundAt(caster.mapId,monster.x,monster.z),z:monster.z};
       if(this.field || caster.flying || !onMapGround(caster) || !this.persistentCharacters.has(id) ||
         this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
@@ -3176,7 +3144,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for(const [id,follow] of this.muayCoreFollowups)if(this.simulatedMs>=follow.until)this.muayCoreFollowups.delete(id);
   }
 
-  private castMuaySkill(client:Client, message:unknown):void {
+  private castMuaySkill(client:Client, message:unknown,prototypeSequence?:number):void {
     if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_muay_skill");
     const input=message as Record<string,unknown>;
     if (typeof input.skillId!=="string" || !Object.hasOwn(MUAY_SKILLS,input.skillId) ||
@@ -3214,6 +3182,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))) return this.reject(client,"target_unavailable");
       if (distance3d(player,target)>skill.range || Math.abs(player.y-target.y)>1.1) return this.reject(client,"muay_out_of_range");
       if (!this.bodyPathClear(player.mapId,player,target)) return this.reject(client,"muay_blocked");
+    }
+    if(prototypeSequence!==undefined){
+      if(!target)return this.reject(client,"invalid_muay_target");
+      const opportunity=this.prototypeOpportunities.get(id);
+      if(!guard || !validChaiyaOpportunity(opportunity,targetId,this.simulatedMs))return this.reject(client,"muay_counter_required");
+      if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[]))return;
+      this.prototypeOpportunities.delete(id);guard.counterUntil=0;
+      cooldowns[skillId]=now+skill.cooldownMs;player.muayData=JSON.stringify(cooldowns);
+      if(this.prototypeAttack(id,player,target,targetId,monster,"chaiya_advanced_counter")){
+        const granted=grantChaiyaDebuff(this.prototypeCounters.get(id)??newCounterCursor(),this.prototypeDebuffs.get(targetId),this.simulatedMs,prototypeSequence,id,targetId,monster?.tier==="normal"?"normal_monster":monster?"boss":"player",true,target.alive,opportunity);
+        this.prototypeCounters.set(id,granted.cursor);if(granted.debuff)this.prototypeDebuffs.set(targetId,granted.debuff);
+        this.prototypeNotice("counter",id,targetId,skillId);
+      }
+      void this.saveCharacter(id);return;
     }
     const followup=MUAY_FOLLOWUPS[book.school],opening=this.muayFollowups.get(id);
     if(skillId===followup.finisher && (!opening || opening.school!==book.school || opening.targetId!==targetId || this.simulatedMs>=opening.until))
@@ -3260,6 +3242,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.clearMuayDefense(id,"cancelled");
       const duration=skill.effect==="guard" ? (skillId==="chaiya_cover" ? 1800 : 1200) : skill.effect==="parry" ? 600 : 450;
       const until=this.simulatedMs+duration;
+      this.prototypeOpportunities.delete(id);
       this.swordGuards.set(id,{until,factor:skill.power,direction:true,counterUntil:0});
       if(skill.effect!=="guard") {
         this.muayDefenseWindows.set(id,{kind:skill.effect,until});
@@ -3268,7 +3251,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendSwordNotice(client,"muay_counter_cleared",{});
     } else if (target && skill.effect!=="grapple") {
       player.facing=facingTo(target.x-player.x,target.z-player.z);
-      if (isCounter && guard) { guard.counterUntil=0; this.sendSwordNotice(client,"muay_counter_cleared",{}); }
+      if (isCounter && guard) {
+        guard.counterUntil=0;
+        this.prototypeOpportunities.delete(id);
+        this.sendSwordNotice(client,"muay_counter_cleared",{});
+      }
       this.recordCombat(id,targetId);
       this.recordMuayTraining(id,"strikes");
       const pvp=!monster,comboMultiplier=this.advanceMuaySkillCombo(id,book.school,targetId,skillId as Exclude<MuaySkillId,"guard"|"parry"|"evade"|"grapple"|"chaiya_cover">,pvp);
@@ -3436,23 +3423,29 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for(const [id,stance] of this.swordCoreStances)if(this.simulatedMs>=stance.until || !this.state.players.get(id)?.alive)this.swordCoreStances.delete(id);
   }
 
-  private castSwordSkill(client:Client, message:unknown):void {
+  private castSwordSkill(client:Client, message:unknown,prototypeSequence?:number):void {
     if (!message || typeof message!=="object" || Array.isArray(message)) return this.reject(client,"invalid_sword_skill");
     const input=message as Record<string,unknown>, keys=Object.keys(input);
     if (typeof input.skillId!=="string" || !Object.hasOwn(SWORD_NODES,input.skillId) ||
         keys.some(key=>key!=="skillId" && key!=="targetId") ||
         (input.targetId!==undefined && typeof input.targetId!=="string")) return this.reject(client,"invalid_sword_skill");
     const id=client.sessionId, skillId=input.skillId, skill=SWORD_NODES[skillId];
+    if(prototypeSequence!==undefined && (this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id)))
+      return this.reject(client,"character_busy");
     const player=this.spellCaster(client), tree=this.swordTrees.get(id);
     if (!player || !tree) return;
     if (player.pathId!=="phutthaisawan" || !wearsTwinSwords(equippedWeaponId(this.inventories.get(id))))
       return this.reject(client,"sword_weapon_required");
     if (!tree.learned.includes(skillId) || (skill.school!=="common" && skill.school!==tree.school) || skill.effect==="passive")
       return this.reject(client,"sword_skill_locked");
+    const replacementFlow=prototypeSequence===undefined?undefined:advanceFlowing(this.prototypeFlowing.get(id)??newFlowingState(),this.simulatedMs);
+    if(replacementFlow && !this.advancedEquipped(id,skillId,tree.loadouts[tree.school].includes(skillId)))
+      return this.reject(client,"sword_skill_locked");
     if (player.flying) return this.reject(client,"flying");
+    if(replacementFlow && (!onMapGround(player) || isRestArea(player.mapId,player)))return this.reject(client,"prototype_unavailable");
     const now=Date.now();
-    if (now<(tree.cooldowns[skillId] ?? 0)) return this.reject(client,"sword_skill_cooldown");
-    if (player.mana<skill.stamina) return this.reject(client,"insufficient_mana");
+    if (!replacementFlow?.pending && now<(tree.cooldowns[skillId] ?? 0)) return this.reject(client,"sword_skill_cooldown");
+    if (!replacementFlow && player.mana<skill.stamina) return this.reject(client,"insufficient_mana");
     const guard=this.swordGuards.get(id);
     if (skill.effect==="counter" && (!guard || this.simulatedMs>=guard.counterUntil)) return this.reject(client,"sword_counter_required");
     const combo=this.swordCombos.get(id);
@@ -3466,9 +3459,26 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       monster=this.getMonster(targetId);
       target=monster ?? this.state.players.get(targetId);
       if (!target?.alive || targetId===id || !this.sameCombatMap(id,targetId)) return this.reject(client,"target_unavailable");
+      if(replacementFlow && !monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId)))
+        return this.reject(client,"target_unavailable");
       if (skill.effect==="area" && !monster) return this.reject(client,"invalid_sword_target");
       if (distance3d(player,target)>skill.range || Math.abs(player.y-target.y)>1.1) return this.reject(client,"sword_out_of_range");
       if (!this.bodyPathClear(player.mapId,player,target)) return this.reject(client,"sword_blocked");
+    }
+    if(prototypeSequence!==undefined){
+      if(!replacementFlow || !target)return this.reject(client,"invalid_sword_target");
+      const result=useFlowing(replacementFlow,this.simulatedMs,prototypeSequence,targetId,true);
+      if(result.action==="none"){
+        this.prototypeFlowing.set(id,result.state);
+        return this.reject(client,result.reason??"prototype_unavailable");
+      }
+      if(result.action==="first"){
+        if(!this.spendSkillMana(client,player,skill.stamina,[targetId],[]))return;
+        tree.cooldowns[skillId]=now+skill.cooldownMs;player.swordTreeData=JSON.stringify(tree);
+      }
+      this.prototypeFlowing.set(id,result.state);
+      if(this.prototypeAttack(id,player,target,targetId,monster,"flowing_blades"))this.prototypeNotice(result.action,id,targetId,skillId);
+      void this.saveCharacter(id);return;
     }
     const supportTargets:Array<[string,Player]>=skill.effect==="support"?(this.parties.get(id)?.members??[id]).map(member=>[member,this.state.players.get(member)] as const)
       .filter((entry):entry is [string,Player]=>Boolean(entry[1]?.alive && entry[1].mapId===player.mapId && !this.pendingWarps.has(entry[0]) && distance3d(player,entry[1])<=skill.range && this.bodyPathClear(player.mapId,player,entry[1]) && (this.effects.modifiers(entry[0]).length<STACKING_RULES.maxModifiers || this.effects.modifiers(entry[0]).some(effect=>effect.id===skillId && effect.sourceId===id)))):[];
@@ -4844,8 +4854,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     sword_core_book: (client: Client, message: unknown) => this.changeSwordCore(client, message),
     sword_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castSwordCore(client, message);},
     // Keep the legacy protocol for older clients while the current HUD uses four core skills.
-    sword_skill: (client: Client, message: unknown) => {if(this.prototypeGameplayEnabled() && (message as {skillId?:unknown}|null)?.skillId==="flowing_blades")return this.reject(client,"prototype_protocol_required");if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castSwordSkill(client, message);},
-    muay_skill: (client: Client, message: unknown) => {if(this.prototypeGameplayEnabled() && (message as {skillId?:unknown}|null)?.skillId==="chaiya_advanced_counter")return this.reject(client,"prototype_protocol_required");if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castMuaySkill(client, message);},
+    sword_skill: (client:Client,message:unknown) => this.dispatchAdvancedSkill(client,message,"sword"),
+    muay_skill: (client:Client,message:unknown) => this.dispatchAdvancedSkill(client,message,"muay"),
     muay_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castMuayCore(client, message);},
     grapple_escape: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.escapeMuayGrapple(client, message);},
     grapple_counter: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.counterMuayGrapple(client, message);},
@@ -4858,7 +4868,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendOccultBook(client);
     },
     occult_book: (client: Client, message: unknown) => this.changeOccultBook(client,message),
-    occult_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castOccultSkill(client,message);},
+    occult_skill: (client:Client,message:unknown) => this.dispatchAdvancedSkill(client,message,"occult"),
     seer_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castSeerCore(client,message);},
     mender_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castMenderCore(client,message);},
     blade_book_get: (client: Client, message: unknown) => {
@@ -4869,7 +4879,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendBladeBook(client);
     },
     blade_book: (client: Client, message: unknown) => this.changeBladeBook(client,message),
-    blade_skill: (client: Client, message: unknown) => {if(this.prototypeGameplayEnabled() && (message as {skillId?:unknown}|null)?.skillId==="shadow_cut")return this.reject(client,"prototype_protocol_required");if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castBladeSkill(client,message);},
+    blade_skill: (client:Client,message:unknown) => this.dispatchAdvancedSkill(client,message,"blade"),
     blade_core_skill: (client: Client, message: unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castBladeCore(client,message);},
     sentinel_book_get: (client:Client,message:unknown) => {
       if(!parseEmptyCommand(message))return this.reject(client,"invalid_sentinel_book");
@@ -4878,7 +4888,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sendSentinelBook(client);
     },
     sentinel_book: (client:Client,message:unknown) => this.changeSentinelBook(client,message),
-    sentinel_skill: (client:Client,message:unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'advanced')&&this.castSentinelSkill(client,message);},
+    sentinel_skill: (client:Client,message:unknown) => this.dispatchAdvancedSkill(client,message,"sentinel"),
     sentinel_core_skill: (client:Client,message:unknown) => {if(!this.blockMounted(client))this.hotbarCastAllowed(client,message,'core')&&this.castSentinelCore(client,message);},
     cast_class_skill: (client: Client, message: unknown) => {
       if(this.blockMounted(client))return;

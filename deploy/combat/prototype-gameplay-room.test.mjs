@@ -22,8 +22,9 @@ function fixture(path,confirm=true){
 }
 test('stage first and follow-up charge once, replay is rejected, legacy command denied',wrap(()=>{
  const {r,p,m,client,events,send}=fixture('phutthaisawan');const tree=newSwordTree();tree.learned=['rhythm','flowing_blades'];tree.loadouts.phutthaisawan[0]='flowing_blades';r.swordTrees.set('a',tree);
- assert.equal(events[0].data.gameplayEnabled,true);send('flowing_blades',1);assert.equal(p.mana,76);const first=m.hp,cd=tree.cooldowns.flowing_blades;assert.ok(cd>Date.now());
- r.simulatedMs=350;send('flowing_blades',1);assert.equal(m.hp,first);send('flowing_blades',2);assert.ok(m.hp<first);assert.equal(p.mana,76);assert.equal(tree.cooldowns.flowing_blades,cd);
+ assert.equal(events[0].data.gameplayEnabled,true);send('flowing_blades',1);assert.equal(p.mana,76);assert.equal(m.hitSeq,1);const first=m.hp,cd=tree.cooldowns.flowing_blades;assert.ok(cd>Date.now());
+ r.simulatedMs=350;send('flowing_blades',1);assert.equal(m.hp,first);send('flowing_blades',2);assert.ok(m.hp<first);assert.equal(p.mana,76);assert.equal(tree.cooldowns.flowing_blades,cd);assert.equal(m.hitSeq,2);
+ assert.equal(events.some(e=>e.type==='sword_skill_used'),false);
  r.messages.sword_skill(client,{skillId:'flowing_blades',targetId:m.id});assert.ok(events.some(e=>e.type==='command_rejected' && e.data.reason==='prototype_protocol_required'));
 }));
 test('counter records blocked monster, rejects another, one physical mark and cleanup',wrap(()=>{
@@ -154,6 +155,9 @@ test('Firm Guard commits one cast and one complete default-monster hit per serve
  cast(1);cast(1);
  assert.equal(p.mana,78);
  assert.ok(book.cooldowns.firm_guard>Date.now());
+ assert.equal(r.swordGuards.has('a'),false);
+ assert.equal(events.filter(e=>e.type==='prototype_skill_v1' && e.data.phase==='braced').length,1);
+ assert.equal(events.some(e=>e.type==='sentinel_skill_used'),false);
  let hit;
  const resolve=r.resolveDefaultMonsterHit.bind(r);
  r.resolveDefaultMonsterHit=event=>{hit=event;resolve(event);};
@@ -276,4 +280,60 @@ test('unconfirmed participants cannot bypass prototype admission with legacy com
   r.messages[command](client,{skillId,targetId:m.id});
  }
  assert.equal(events.filter(e=>e.type==='command_rejected'&&e.data.reason==='prototype_protocol_required').length,calls.length);
+}));
+
+test('a legacy Chaiya counter consumes the same block opportunity as the replacement',wrap(()=>{
+ const {r,p,m,client,events,send}=fixture('muay_boran');
+ const book=newMuayBook();book.learned=['counter','chaiya_advanced_counter'];book.slots[0]='counter';book.slots[1]='chaiya_advanced_counter';
+ r.muayBooks.set('a',book);r.muayCooldowns.set('a',{});
+ r.swordGuards.set('a',{until:1200,factor:.5,direction:true,counterUntil:0});
+ r.directGuardDamage('a',m,100);
+ assert.equal(r.prototypeOpportunities.get('a')?.attackerId,m.id);
+ r.messages.muay_skill(client,{skillId:'counter',targetId:m.id});
+ assert.ok(events.some(e=>e.type==='muay_skill_used'&&e.data.skillId==='counter'));
+ const mana=p.mana,hp=m.hp;
+ r.swordGuardDamage('a',m,100,0,undefined,false,'dot');
+ send('chaiya_advanced_counter',1);
+ assert.equal(p.mana,mana);
+ assert.equal(m.hp,hp);
+ assert.equal(r.prototypeDebuffs.has(m.id),false);
+ r.simulatedMs=20;r.directGuardDamage('a',m,100);
+ send('chaiya_advanced_counter',2);
+ assert.equal(p.mana,mana-24);assert.ok(m.hp<hp);assert.ok(r.prototypeDebuffs.has(m.id));
+}));
+
+test('each of the six IDs routes to exactly one version, while other IDs keep their normal command',wrap(()=>{
+ const {r,client,events,m}=fixture('phutthaisawan');
+ r.prototypeBuckets.set('a',{consume:()=>true});
+ const families=[
+  ['sword','castSwordSkill','flowing_blades'],['muay','castMuaySkill','chaiya_advanced_counter'],
+  ['blade','castBladeSkill','shadow_cut'],['sentinel','castSentinelSkill','firm_guard'],
+  ['occult','castOccultSkill','seer_ash_rice'],['occult','castOccultSkill','mender_deep_heal']
+ ];
+ const routed=[];
+ for(const [,method] of families)r[method]=(_client,message,sequence)=>routed.push({method,message,sequence});
+ let seq=0;
+ for(const [family,method,skillId] of families){
+  r.simulatedMs+=1000;
+  const targets=skillId==='firm_guard'?{}:{targetId:m.id};
+  const message={skillId,...targets};
+  r.messages[family+'_skill'](client,message);
+  assert.equal(routed.length,seq);
+  r.messages.prototype_protocol_v1(client,{action:skillId,seq:++seq,...targets});
+  assert.deepEqual(routed.at(-1),{method,message,sequence:seq});
+  assert.equal(routed.length,seq);
+ }
+ assert.equal(events.filter(e=>e.type==='command_rejected'&&e.data.reason==='prototype_protocol_required').length,6);
+ const twinCut={skillId:'twin_cut',targetId:m.id};
+ r.messages.prototype_protocol_v1(client,{action:'twin_cut',seq:++seq,targetId:m.id});
+ assert.equal(routed.length,6);
+ r.messages.sword_skill(client,twinCut);
+ assert.deepEqual(routed.at(-1),{method:'castSwordSkill',message:twinCut,sequence:undefined});
+ process.env.MONTRA_PROTOTYPE_GAMEPLAY='0';
+ for(const [family,method,skillId] of families){
+  const message={skillId,targetId:m.id};
+  r.messages[family+'_skill'](client,message);
+  assert.deepEqual(routed.at(-1),{method,message,sequence:undefined});
+ }
+ assert.equal(routed.length,13);
 }));

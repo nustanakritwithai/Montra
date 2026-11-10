@@ -9,6 +9,25 @@ Do not enable this in production.
 The provisional rules retain the existing IDs: `flowing_blades`,
 `chaiya_advanced_counter`, `shadow_cut`, `firm_guard`, `seer_ash_rice`, and
 `mender_deep_heal`. They represent experimental mechanics, not balanced values.
+In the verification room, each of these IDs selects the replacement effect
+after the shared class, loadout and target validation. The former effect is
+reachable only through the existing command in rooms with the replacement
+disabled. IDs, prerequisites, cooldown keys and saved loadouts remain stable.
+
+| Skill ID | Former effect | Replacement effect |
+| --- | --- | --- |
+| `flowing_blades` | Two automatic strikes | One strike with a timed follow-up or guard |
+| `chaiya_advanced_counter` | Ordinary counter | Counter against the attacker just blocked, with a mark on eligible monsters |
+| `shadow_cut` | Single strike | The same hit with a temporary return point |
+| `firm_guard` | Personal guard | Directional guard for self or one eligible ally |
+| `seer_ash_rice` | Immediate hit | Armed trap |
+| `mender_deep_heal` | Immediate heal | Ward that heals after damage or at expiry |
+
+Related skills with distinct IDs retain their own effects and prerequisites.
+A regular Chaiya counter consumes the same block opportunity as the
+replacement. Replacing the guard or taking subsequent damage over time
+cannot restore the spent opportunity.
+
 The independent rule tests exercise bounded transient state. They do not prove
 end-to-end gameplay, persistence compatibility, multiplayer, visual feedback,
 performance, mobile usability, or a safe rollout.
