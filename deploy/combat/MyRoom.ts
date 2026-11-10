@@ -93,6 +93,13 @@ import { mapsWithServiceNpcs, serviceNpcsFor } from "./ServiceNpcs.js";
 
 const mapsWithServices=mapsWithServiceNpcs();
 const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices}):"";
+function syncCityProduction(now: number) {
+  const guilds = guildStore(), store = characterStore.economy;
+  const pending = guilds.pendingCityDisbands();
+  for (const disband of pending) guilds.settleCityDisband(store, disband);
+  if (pending.length) notifyGuilds();
+  return store.syncCity(previous => guilds.war.government.cityOwnership(previous), now);
+}
 const battlefieldWorldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:WORLD_MAPS},
   (key,value)=>key==="boss" && value?.id?.startsWith("boss_")?undefined:value):"";
 const swordTreeCatalog=JSON.stringify({core:SWORD_CORE,coreLevels:MUAY_CORE_LEVELS,corePointLevels:MUAY_CORE_POINT_LEVELS,coreManaPerRank:1,coreProgress:Array.from({length:9},(_,rank)=>swordCoreProgress(rank)),schools:SWORD_SCHOOLS,nodes:SWORD_NODES,pvpDamage:SWORD_PVP_DAMAGE_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SWORD_RANKABLE_SKILLS});
@@ -3258,7 +3265,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const reasons=["guild_already_member","guild_name_taken","guild_leader_only","guild_full",
         "guild_not_member","guild_transfer_first","guild_invalid_member","guild_invite_expired","guild_invalid_target",
         "guild_officer_required","guild_invalid_assignment","guild_squad_required","guild_squad_full","guild_squad_leader_exists",
-        "guild_not_found","guild_application_exists","guild_applications_full","guild_application_missing"];
+        "guild_not_found","guild_application_exists","guild_applications_full","guild_application_missing",
+        "guild_city_assets","guild_city_disband_pending"];
       const reason=error instanceof Error && reasons.includes(error.message)?error.message:"guild_error";
       if(reason==="guild_error")console.error("MONTRA guild action failed",error);
       client.send("guild_error",{reason});
@@ -3331,28 +3339,50 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("economy_error",{reason});
     }
   }
-  private cityProductionAction(client: Client, order?: CityOrder): void {
+  private cityProductionAction(client: Client, order?: CityOrder, claimsOnly = false): void {
     const id = client.sessionId;
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
-    if (!CITY_PRODUCTION_ENABLED || !WORLD_EXPANSION || this.field) return fail("city_unavailable");
+    const recovery = claimsOnly || order?.action === "disband" || order?.action === "claim_disband";
+    if (this.field || (!recovery && (!CITY_PRODUCTION_ENABLED || !WORLD_EXPANSION))) return fail("city_unavailable");
     if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
     const actor = this.economyId(client);
     if (!actor) return;
     const player = this.state.players.get(id)!;
     const atCity = player.mapId === CITY_PRODUCTION_SITE && !player.flying && !this.climbs.has(id) && onMapGround(player);
-    const needsCity = order && order.action !== "cancel" && order.action !== "reclaim";
+    const needsCity = order && !recovery && order.action !== "cancel" && order.action !== "reclaim";
     if (needsCity && !atCity) return fail("city_location");
     try {
-      const war = guildStore().war, member = war.member(actor);
+      const now = Date.now(), store = characterStore.economy, guilds = guildStore();
+      if (recovery) {
+        if (order?.action === "disband") {
+          store.startCityProductionSweeper(syncCityProduction);
+          if (guilds.cityDisbandPending(order.guildId) || guilds.war.member(actor)?.id === order.guildId ||
+              !store.cityDisbandClosed(actor, order.guildId)) {
+            const disband = guilds.beginCityDisband(actor, order.guildId, now);
+            guilds.settleCityDisband(store, disband);
+            notifyGuilds();
+          }
+          client.send("city_production_result", {requestId: order.requestId, action: order.action, guildId: order.guildId});
+        } else if (order?.action === "claim_disband") {
+          if (guilds.cityDisbandPending(order.guildId)) return fail("city_disband_pending");
+          const result = store.claimCityDisband(actor, order);
+          this.syncEconomy(client, actor);
+          client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
+        }
+        const assets = store.cityDisbandClaims(actor).filter(asset => !guilds.cityDisbandPending(asset.guildId));
+        client.send("city_disband_claims", {assets});
+        return;
+      }
+      const ownership = syncCityProduction(now);
+      const member = guilds.war.member(actor);
       if (!member) return fail("city_not_member");
-      const now = Date.now(), store = characterStore.economy;
-      const ownership = store.syncCity(previous => war.government.cityOwnership(previous), now);
       if (order) {
         const result = store.cityOrder(actor, member, order, ownership, now);
         if (order.action === "deposit" || order.action === "reclaim") this.syncEconomy(client, actor);
         client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
       }
-      client.send("city_production_state", {site: CITY_PRODUCTION_SITE, atCity, ...store.viewCity(member, ownership)});
+      client.send("city_production_state", {site: CITY_PRODUCTION_SITE, atCity, guildId: member.id,
+        canDisband: member.commander && guilds.canDisbandCityGuild(actor, member.id), ...store.viewCity(member, ownership)});
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
       const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",
@@ -3793,6 +3823,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     get_city_production:(client:Client,message:unknown)=>{
       if (parseEmptyCommand(message)) this.cityProductionAction(client);
     },
+    get_city_disband_claims:(client:Client,message:unknown)=>{
+      if (parseEmptyCommand(message)) this.cityProductionAction(client, undefined, true);
+    },
     city_production:(client:Client,message:unknown)=>{
       const order = parseCityOrder(message);
       if (order) this.cityProductionAction(client, order);
@@ -3884,7 +3917,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     guild_leave: (client:Client,message:unknown) => {
       if(!parseEmptyCommand(message))return this.reject(client,"guild_invalid_request");
-      this.guildAction(client,character=>{guildStore().leave(character);notifyGuilds();});
+      this.guildAction(client,character=>{
+        guildStore().leave(character, guild => characterStore.economyEnabled && characterStore.economy.hasCityAssets(guild));
+        notifyGuilds();
+      });
     },
     guild_assign: (client:Client,message:unknown) => {
       if(!message || typeof message!=="object" || Array.isArray(message))return this.reject(client,"guild_invalid_request");
@@ -5218,8 +5254,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       await this.setPrivate(true);
     }
     this.state.territoryWarAvailable=WORLD_EXPANSION;
-    if (CITY_PRODUCTION_ENABLED && WORLD_EXPANSION && characterStore.economyEnabled && !this.field)
-      characterStore.economy.startCityProductionSweeper(previous => guildStore().war.government.cityOwnership(previous));
+    if (characterStore.economyEnabled && !this.field &&
+        ((CITY_PRODUCTION_ENABLED && WORLD_EXPANSION) || guildStore().pendingCityDisbands().length))
+      characterStore.economy.startCityProductionSweeper(syncCityProduction);
     this.state.forestObjectivesAvailable=WORLD_EXPANSION && !this.field;
     if(WORLD_EXPANSION && !this.field && process.env.MONTRA_DIRECTOR_ENABLED!=="0")worldDirector.restore();
     if (characterStore.economyEnabled) this.state.craftRecipe = JSON.stringify(SHRINE_RECIPE);

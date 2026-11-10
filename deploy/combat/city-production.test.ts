@@ -47,7 +47,7 @@ function fixture(t: TestContext) {
   };
   const order = (actor: string, fields: object, now = 1000, requestId = request()) => {
     const parsed = parseCityOrder({...fields, requestId});
-    assert.ok(parsed);
+    assert.ok(parsed && parsed.action !== "disband" && parsed.action !== "claim_disband");
     return economy.cityOrder(actor, guildMember(actor), parsed, sync(now), now);
   };
   const view = (actor: string, now = 1000) => economy.viewCity(guildMember(actor), sync(now));
@@ -61,8 +61,120 @@ function fixture(t: TestContext) {
   const epoch = view(leader).epoch!;
   const deposit = (actor: string, slot: number, amount: number, requestId?: string) =>
     order(actor, {action: "deposit", epoch, item: CITY_RAW_ITEMS[slot], slot, amount}, 1000, requestId);
-  return {get economy() { return economy; }, economyFile, capture, request, order, view, restart, epoch, deposit};
+  return {get economy() { return economy; }, get guild() { return guild; }, guildFile, economyFile,
+    capture, request, order, view, restart, epoch, deposit};
 }
+
+test("only officers can spend market gold to rush production, and interrupted jobs refund the fee", t => {
+  const f = fixture(t), {epoch} = f;
+  f.deposit(leader, 0, 15);
+  f.deposit(leader, 1, 15);
+  f.order(leader, {action: "build", epoch});
+  assert.throws(() => f.order(leader, {action: "start_fast", epoch}), /city_market_funds/);
+  f.order(leader, {action: "start", epoch});
+  const {listingId} = f.order(leader, {action: "list", epoch, amount: 1, price: 70}, 121_000);
+  f.economy.buy(member, f.request(), String(listingId));
+  assert.throws(() => f.order(member, {action: "start_fast", epoch}, 121_000), /city_officer_required/);
+  const requestId = f.request();
+  const rush = f.order(leader, {action: "start_fast", epoch}, 122_000, requestId);
+  assert.deepEqual(f.order(leader, {action: "start_fast", epoch}, 122_001, requestId), rush);
+  assert.equal(rush.readyAt, 182_000);
+  assert.equal(rush.fee, 15);
+  assert.equal(f.view(leader, 122_001).marketGold, 55);
+  f.order(leader, {action: "start_fast", epoch}, 182_000);
+  assert.equal(f.view(leader, 182_001).marketGold, 40);
+  f.capture(rival, 183_000);
+  f.restart();
+  assert.equal(f.view(leader, 250_000).marketGold, 55);
+  assert.equal(f.view(leader, 250_000).reclaim.find(x => x.item === CITY_PRODUCT)?.quantity, 1);
+});
+
+test("an existing running job is kept and gets a zero fee on upgrade", t => {
+  const f = fixture(t), {epoch} = f;
+  f.deposit(leader, 0, 8);
+  f.deposit(leader, 1, 8);
+  f.order(leader, {action: "build", epoch});
+  const job = f.order(leader, {action: "start", epoch});
+  const legacy = new DatabaseSync(f.economyFile);
+  try { legacy.exec("ALTER TABLE city_jobs DROP COLUMN fee"); }
+  finally { legacy.close(); }
+  f.restart();
+  assert.deepEqual(f.view(leader, 1001).job, {id: job.jobId, readyAt: job.readyAt, fee: 0});
+  assert.equal(f.view(leader, 121_000).stock.find(x => x.item === CITY_PRODUCT)?.quantity, 1);
+});
+
+test("guild disband recovers after both failure boundaries and pays only the final commander", t => {
+  const f = fixture(t), {epoch} = f;
+  const guildId = f.guild.war.member(leader)!.id;
+  f.deposit(leader, 0, 20);
+  f.deposit(leader, 1, 20);
+  f.order(leader, {action: "build", epoch});
+  assert.throws(() => f.guild.beginCityDisband(leader, guildId, 1000), /city_disband_unavailable/);
+  f.order(leader, {action: "start", epoch});
+  const sold = f.order(leader, {action: "list", epoch, amount: 1, price: 70}, 121_000);
+  f.economy.buy(member, f.request(), String(sold.listingId));
+  f.order(leader, {action: "start", epoch}, 122_000);
+  const open = f.order(leader, {action: "list", epoch, amount: 1, price: 40}, 242_000);
+  f.order(leader, {action: "start_fast", epoch}, 243_000);
+  f.guild.leave(member);
+  assert.throws(() => f.guild.leave(leader, guild => f.economy.hasCityAssets(guild)), /guild_city_assets/);
+  assert.throws(() => f.guild.beginCityDisband(rival, guildId, 244_000), /city_disband_unavailable/);
+  f.guild.beginCityDisband(leader, guildId, 244_000);
+  assert.throws(() => f.guild.add(leader, member, "ผู้สมัคร"), /guild_city_disband_pending/);
+  assert.throws(() => f.guild.leave(leader), /guild_city_disband_pending/);
+  f.restart();
+  const [pending] = f.guild.pendingCityDisbands();
+  assert.equal(pending.requested, 244_000);
+
+  const marketFault = new DatabaseSync(f.economyFile);
+  try {
+    marketFault.exec("CREATE TRIGGER reject_award BEFORE INSERT ON city_disband_assets BEGIN SELECT RAISE(ABORT, 'award failed'); END;");
+    assert.throws(() => f.guild.settleCityDisband(f.economy, pending), /award failed/);
+    assert.equal(f.economy.cityDisbandClaims(leader).length, 0);
+    assert.equal(f.economy.list()[0]?.id, open.listingId);
+    assert.equal(f.guild.cityDisbandPending(guildId), true);
+    marketFault.exec("DROP TRIGGER reject_award");
+  } finally { marketFault.close(); }
+
+  const guildFault = new DatabaseSync(f.guildFile);
+  try {
+    guildFault.exec("CREATE TRIGGER reject_disband BEFORE DELETE ON guilds BEGIN SELECT RAISE(ABORT, 'disband failed'); END;");
+    assert.throws(() => f.guild.settleCityDisband(f.economy, pending), /disband failed/);
+    assert.equal(f.economy.cityDisbandClosed(leader, guildId), true);
+    assert.equal(f.guild.cityDisbandPending(guildId), true);
+    assert.throws(() => f.economy.buy(member, f.request(), String(open.listingId)), /listing_unavailable/);
+    guildFault.exec("DROP TRIGGER reject_disband");
+  } finally { guildFault.close(); }
+
+  f.restart();
+  f.guild.settleCityDisband(f.economy, f.guild.pendingCityDisbands()[0]);
+  f.guild.settleCityDisband(f.economy, pending);
+  assert.equal(f.guild.hasMember(leader), false);
+  assert.equal(f.guild.pendingCityDisbands().length, 0);
+  const assets = Object.fromEntries(f.economy.cityDisbandClaims(leader).map(row => [row.item, row.amount]));
+  assert.deepEqual(assets, {gold: 70, [CITY_PRODUCT]: 1, [wood]: 13, [stone]: 11});
+  assert.deepEqual(f.economy.cityDisbandClaims(rival), []);
+  const claim = {action: "claim_disband", guildId, item: "gold", amount: 25, requestId: f.request()} as const;
+  assert.throws(() => f.economy.claimCityDisband(rival, {...claim, requestId: f.request()}), /city_claim_unavailable/);
+  f.economy.claimCityDisband(leader, claim);
+  f.restart();
+  f.economy.claimCityDisband(leader, claim);
+  assert.equal(f.economy.getAccount(leader).gold, 1025);
+  assert.throws(() => f.economy.eraseCharacter(leader), /character_has_city_claims/);
+
+  const held = {action: "claim_disband", guildId, item: CITY_PRODUCT, amount: 1, requestId: f.request()} as const;
+  const original = f.economy.getAccount(leader).inventory;
+  f.economy.saveCharacter(leader, {}, bag(true));
+  assert.throws(() => f.economy.claimCityDisband(leader, held), /inventory_full/);
+  assert.equal(f.economy.cityDisbandClaims(leader).find(row => row.item === CITY_PRODUCT)?.amount, 1);
+  f.economy.saveCharacter(leader, {}, original);
+  f.economy.claimCityDisband(leader, held);
+  f.economy.claimCityDisband(leader, {...claim, amount: 45, requestId: f.request()});
+  f.economy.claimCityDisband(leader, {...held, item: wood, amount: 13, requestId: f.request()});
+  f.economy.claimCityDisband(leader, {...held, item: stone, amount: 11, requestId: f.request()});
+  assert.equal(f.economy.hasCityDisbandClaims(leader), false);
+  assert.equal(f.economy.getAccount(leader).gold, 1070);
+});
 
 test("members can deposit once, capacity is reserved, and only officers can operate the factory", t => {
   const f = fixture(t), {epoch} = f;

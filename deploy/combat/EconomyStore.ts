@@ -11,7 +11,7 @@ import { PERSONAL_ITEMS, personalItem, type BodySlot, type BodyItemId, type Pers
 import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack, type WeaponItemId } from "./ItemRules.js";
 import type {SalvageOrder} from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
-import {type CityMember, type CityOrder, type CityOwnership} from "./CityProductionRules.js";
+import {type CityDisband, type CityFactoryOrder, type CityMember, type CityOrder, type CityOwnership} from "./CityProductionRules.js";
 
 export const STARTER_GOLD = 1000;
 const MAX_GOLD = 1_000_000_000;
@@ -171,11 +171,11 @@ export class EconomyStore {
     this.auctionTimer = this.cityTimer = undefined;
     this.db.close();
   }
-  startCityProductionSweeper(readOwnership: (previous: number | null, now: number) => CityOwnership): void {
+  startCityProductionSweeper(sweepCity: (now: number) => void): void {
     if (this.cityTimer) return;
     const sweep = () => {
       const now = Date.now();
-      try { this.syncCity(readOwnership, now); }
+      try { sweepCity(now); }
       catch (error) { console.error("MONTRA city production settlement failed", error); }
     };
     sweep();
@@ -190,9 +190,42 @@ export class EconomyStore {
   viewCity(member: CityMember, ownership: CityOwnership) {
     return this.city.view(member, ownership);
   }
-  cityOrder(actor: string, member: CityMember, order: CityOrder, ownership: CityOwnership, now: number) {
+  hasCityAssets(guild: string): boolean {
+    return this.city.hasAssets(guild);
+  }
+  cityDisbandClosed(actor: string, guild: string): boolean {
+    return this.city.closureActor(guild) === actor;
+  }
+  closeCityGuild(disband: CityDisband, readOwnership: (previous: number | null) => CityOwnership): void {
+    const ownership = readOwnership(this.city.epoch());
+    this.transaction(() => {
+      this.account(disband.actor);
+      this.city.disband(disband, ownership);
+    });
+  }
+  cityDisbandClaims(actor: string) {
+    return this.city.claims(actor);
+  }
+  hasCityDisbandClaims(actor: string): boolean {
+    return this.city.hasClaims(actor);
+  }
+  claimCityDisband(actor: string, order: Extract<CityOrder, {action: "claim_disband"}>) {
+    const {requestId, guildId, item, amount} = order;
+    return this.once(actor, requestId, "city_disband_claim", {guildId, item, amount}, () => {
+      const account = this.account(actor);
+      this.city.claim(actor, guildId, item, amount);
+      if (item === "gold") {
+        if (account.gold + amount > MAX_GOLD) throw Error("city_wallet_full");
+        account.gold += amount;
+      } else account.inventory = add(account.inventory, {itemId: item, quantity: amount});
+      this.put(actor, account);
+      return {guildId, item, amount};
+    });
+  }
+  cityOrder(actor: string, member: CityMember, order: CityFactoryOrder, ownership: CityOwnership, now: number) {
     const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
     return this.once<Record<string, number | string>>(actor, order.requestId, "city_production", intent, () => {
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
       if (order.action === "cancel") return this.city.cancel(member, order.listingId);
       if (order.action === "reclaim") {
         const account = this.account(actor);
@@ -204,7 +237,8 @@ export class EconomyStore {
       this.city.requireCity(member, order.epoch, ownership);
       switch (order.action) {
         case "build": return this.city.build(order.epoch, member);
-        case "start": return this.city.start(order.epoch, member, now);
+        case "start":
+        case "start_fast": return this.city.start(order.epoch, member, now, order.action === "start_fast");
         case "list": return this.city.list(order.epoch, member, order.amount, order.price);
         case "deposit": {
           const account = this.account(actor);
@@ -370,6 +404,7 @@ export class EconomyStore {
     characterId(id);
     this.transaction(()=>{
       if(this.hasOpenListings(id))throw new Error("character_has_listings");
+      if(this.hasCityDisbandClaims(id))throw new Error("character_has_city_claims");
       this.db.prepare("DELETE FROM listings WHERE seller=?").run(id);
       this.db.prepare("DELETE FROM auction_credits WHERE actor=?").run(id);
       this.db.prepare("DELETE FROM starter_supply_used WHERE actor=?").run(id);

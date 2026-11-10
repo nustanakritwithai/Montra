@@ -6,6 +6,7 @@ export const CITY_RAW_ITEMS = ["mat_raw_wood_1", "mat_raw_stone_1"] as const;
 export const CITY_PRODUCT = "mat_metal_1";
 export const CITY_ITEMS = [...CITY_RAW_ITEMS, CITY_PRODUCT] as const;
 export type CityItem = typeof CITY_ITEMS[number];
+export type CityAsset = CityItem | "gold";
 
 export const CITY_FACTORY_COSTS = [
   {wood: 5, stone: 5},
@@ -14,14 +15,19 @@ export const CITY_FACTORY_COSTS = [
 export const CITY_RECIPE = {wood: 1, stone: 2, quantity: 1};
 export const CITY_CAPACITY = 60;
 export const CITY_DURATION_MS = [0, 120_000, 60_000] as const;
+export const CITY_RUSH_GOLD = 15;
 
 export type CityOrder = {requestId: string} & (
-  {action: "build" | "start"; epoch: number} |
+  {action: "build" | "start" | "start_fast"; epoch: number} |
   {action: "deposit"; epoch: number; slot: number; item: typeof CITY_RAW_ITEMS[number]; amount: number} |
   {action: "list"; epoch: number; amount: number; price: number} |
   {action: "cancel"; listingId: string} |
-  {action: "reclaim"; epoch: number; item: CityItem; amount: number}
+  {action: "reclaim"; epoch: number; item: CityItem; amount: number} |
+  {action: "disband"; guildId: string} |
+  {action: "claim_disband"; guildId: string; item: CityAsset; amount: number}
 );
+export type CityFactoryOrder = Exclude<CityOrder, {action: "disband" | "claim_disband"}>;
+export type CityDisband = {guild: string; actor: string; name: string; requested: number};
 
 export type CityMember = {id: string; name: string; officer: boolean};
 export type CityTenure = {id: number; guild: string};
@@ -35,15 +41,22 @@ export function parseCityOrder(input: unknown): CityOrder | null {
     Object.keys(order).length === fields.length + 2 && fields.every(field => Object.hasOwn(order, field));
   const integer = (value: unknown, min: number, max = Number.MAX_SAFE_INTEGER): value is number =>
     typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max;
+  const uuid = (value: unknown): value is string => typeof value === "string" &&
+    /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value);
 
   if (order.action === "cancel")
-    return keys("listingId") && typeof order.listingId === "string" &&
-      /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(order.listingId)
-      ? order as CityOrder : null;
+    return keys("listingId") && uuid(order.listingId) ? order as CityOrder : null;
+  if (order.action === "disband")
+    return keys("guildId") && uuid(order.guildId) ? order as CityOrder : null;
+  if (order.action === "claim_disband")
+    return keys("guildId", "item", "amount") && uuid(order.guildId) &&
+      (order.item === "gold" || CITY_ITEMS.some(item => item === order.item)) &&
+      integer(order.amount, 1, order.item === "gold" ? 1_000_000_000 : 99) ? order as CityOrder : null;
   if (!integer(order.epoch, 1)) return null;
   switch (order.action) {
     case "build":
     case "start":
+    case "start_fast":
       return keys("epoch") ? order as CityOrder : null;
     case "deposit":
       return keys("epoch", "slot", "item", "amount") && integer(order.slot, 0, 11) &&
