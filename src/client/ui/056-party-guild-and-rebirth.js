@@ -307,7 +307,7 @@
       else cityPending=null;
     }
     const reasons={city_unavailable:"ระบบเมืองยังไม่พร้อม",city_not_member:"ตัวละครนี้ไม่มีกิลด์",
-      city_not_owner:"กิลด์ของคุณไม่ได้ครองเมืองแล้ว",city_location:"ไปที่เวียงปากน้ำสามลานและยืนบนพื้นก่อน",
+      city_not_owner:"กิลด์ของคุณไม่ได้ครองเมืองแล้ว",city_location:"ไปที่เมืองและยืนบนพื้นก่อน",
       city_ownership_changed:"เมืองเปลี่ยนเจ้าของแล้ว · กรุณารีเฟรช",city_officer_required:"เฉพาะผู้บัญชาการหรือนายทหาร",
       city_stock_short:"วัตถุดิบหรือสินค้าในคลังไม่พอ",city_storage_full:"พื้นที่คลังเมืองไม่พอ",
       city_job_running:"โรงงานกำลังผลิตอยู่",city_factory_required:"ต้องสร้างโรงงานก่อน",city_factory_max:"โรงงานถึงระดับสูงสุดแล้ว",
@@ -395,7 +395,7 @@
     if(!ready)return;
     if(guildState && !state)note(body,"กำลังโหลดคลังเมือง…");
     if(state){
-      const summary=group("เวียงปากน้ำสามลาน");
+      const summary=group(typeof state.siteName==="string"?state.siteName:"เวียงปากน้ำสามลาน");
       note(summary,"ทองตลาด "+state.marketGold+" หน่วย");
       if(!enabled)note(summary,"พักการรับวัตถุดิบและการผลิตใหม่ชั่วคราว");
       if(state.epoch===null)note(summary,"กิลด์ของคุณยังไม่ได้ครองเมืองนี้");

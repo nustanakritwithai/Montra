@@ -81,3 +81,6 @@
 #cityProductionContent .guild-actions input { width: 100%; min-width: 0; font-size: 16px; }
 #cityProductionContent .gd-fort { flex-wrap: wrap; justify-content: space-between; overflow-wrap: anywhere; }
 
+
+#warRoster .war-roster-choice{display:flex;align-items:center;gap:10px;min-height:40px;margin:0;padding:2px 8px}
+#warRoster .war-roster-choice input{flex:none;width:18px;height:18px;min-height:18px;margin:0}

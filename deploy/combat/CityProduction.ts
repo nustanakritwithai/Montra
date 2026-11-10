@@ -1,7 +1,7 @@
 import {randomUUID} from "node:crypto";
 import type {DatabaseSync} from "node:sqlite";
 import {
-  CITY_CAPACITY, CITY_DURATION_MS, CITY_FACTORY_COSTS, CITY_PRODUCT, CITY_RAW_ITEMS, CITY_RECIPE, CITY_RUSH_GOLD,
+  CITY_FACTORY_COSTS, CITY_PRODUCT, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RUSH_GOLD, cityProductionProfile,
   type CityAsset, type CityDisband, type CityItem, type CityMember, type CityOwnership,
 } from "./CityProductionRules.js";
 
@@ -17,6 +17,9 @@ export class CityProduction {
         id INTEGER PRIMARY KEY CHECK(id=1), epoch INTEGER, guild TEXT, level INTEGER NOT NULL CHECK(level BETWEEN 0 AND 2),
         CHECK((epoch IS NULL)=(guild IS NULL)));
       INSERT OR IGNORE INTO city_factory(id,level) VALUES(1,0);
+      CREATE TABLE IF NOT EXISTS city_other_factories(
+        site TEXT PRIMARY KEY, epoch INTEGER UNIQUE, guild TEXT, level INTEGER NOT NULL CHECK(level BETWEEN 0 AND 2),
+        CHECK((epoch IS NULL)=(guild IS NULL)));
       CREATE TABLE IF NOT EXISTS city_stock (
         epoch INTEGER NOT NULL, guild TEXT NOT NULL, item TEXT NOT NULL,
         quantity INTEGER NOT NULL CHECK(quantity>0), PRIMARY KEY(epoch,item));
@@ -42,12 +45,32 @@ export class CityProduction {
       db.exec("ALTER TABLE city_jobs ADD COLUMN fee INTEGER NOT NULL DEFAULT 0 CHECK(fee>=0)");
   }
 
-  private factory(): Factory {
-    return this.db.prepare("SELECT epoch,guild,level FROM city_factory WHERE id=1").get() as Factory;
+  private factory(site:string): Factory {
+    const row=site===CITY_PRODUCTION_SITE
+      ? this.db.prepare("SELECT epoch,guild,level FROM city_factory WHERE id=1").get()
+      : this.db.prepare("SELECT epoch,guild,level FROM city_other_factories WHERE site=?").get(site);
+    return row ? row as Factory : {epoch:null,guild:null,level:0};
   }
 
-  epoch(): number | null {
-    return this.factory().epoch;
+  private saveFactory(site:string,factory:Factory):void {
+    const {epoch,guild,level}=factory;
+    if(site===CITY_PRODUCTION_SITE){
+      this.db.prepare("UPDATE city_factory SET epoch=?,guild=?,level=? WHERE id=1").run(epoch,guild,level);
+    }else{
+      this.db.prepare(`INSERT INTO city_other_factories(site,epoch,guild,level) VALUES(?,?,?,?)
+        ON CONFLICT(site) DO UPDATE SET epoch=excluded.epoch,guild=excluded.guild,level=excluded.level`)
+        .run(site,epoch,guild,level);
+    }
+  }
+
+  epoch(site=CITY_PRODUCTION_SITE): number | null {
+    return this.factory(site).epoch;
+  }
+
+  private activeFactorySite(epoch:number):string|undefined {
+    if(this.epoch()===epoch)return CITY_PRODUCTION_SITE;
+    const row=this.db.prepare("SELECT site FROM city_other_factories WHERE epoch=?").get(epoch);
+    return typeof row?.site==="string"?row.site:undefined;
   }
 
   private running(epoch: number): Job | undefined {
@@ -55,8 +78,8 @@ export class CityProduction {
   }
 
   /** The caller holds the economy write transaction. Use the committed handover time on catch-up. */
-  reconcile(ownership: CityOwnership, now: number): void {
-    const {epoch, guild} = this.factory();
+  reconcile(ownership: CityOwnership, now: number, site=CITY_PRODUCTION_SITE): void {
+    const {epoch,guild,level}=this.factory(site);
     const active = ownership.active?.id ?? null;
     if (epoch !== null) {
       const owner = epoch === active ? ownership.active : ownership.previous;
@@ -70,7 +93,7 @@ export class CityProduction {
       }
     }
     if (epoch !== active)
-      this.db.prepare("UPDATE city_factory SET epoch=?,guild=? WHERE id=1").run(active, ownership.active?.guild ?? null);
+      this.saveFactory(site,{epoch:active,guild:ownership.active?.guild ?? null,level});
   }
 
   private completeJob(job: Job): void {
@@ -91,9 +114,9 @@ export class CityProduction {
     return Number(row?.amount);
   }
 
-  requireCity(member: CityMember, epoch: number, ownership: CityOwnership): void {
+  requireCity(member: CityMember, epoch: number, ownership: CityOwnership, site:string): void {
     if (ownership.active?.guild !== member.id) throw Error("city_not_owner");
-    if (ownership.active.id !== epoch) throw Error("city_ownership_changed");
+    if (ownership.active.id !== epoch || this.epoch(site)!==epoch) throw Error("city_ownership_changed");
   }
 
   private requireOfficer(member: CityMember): void {
@@ -121,8 +144,8 @@ export class CityProduction {
     if (!reduced) throw Error("city_stock_short");
   }
 
-  deposit(epoch: number, member: CityMember, item: typeof CITY_RAW_ITEMS[number], amount: number): void {
-    if (this.used(epoch) + amount > CITY_CAPACITY) throw Error("city_storage_full");
+  deposit(epoch: number, member: CityMember, item: typeof CITY_RAW_ITEMS[number], amount: number, site:string): void {
+    if (this.used(epoch) + amount > cityProductionProfile(site).capacity) throw Error("city_storage_full");
     this.add(epoch, member.id, item, amount);
   }
 
@@ -131,27 +154,27 @@ export class CityProduction {
     this.take(epoch, guild, CITY_RAW_ITEMS[1], costs.stone);
   }
 
-  build(epoch: number, member: CityMember): {level: number} {
+  build(epoch: number, member: CityMember, site:string): {level: number} {
     this.requireOfficer(member);
-    const level = this.factory().level;
+    const factory=this.factory(site),{level}=factory;
     if (level === 2) throw Error("city_factory_max");
     this.consumeRaw(epoch, member.id, CITY_FACTORY_COSTS[level]);
-    this.db.prepare("UPDATE city_factory SET level=? WHERE id=1").run(level + 1);
+    this.saveFactory(site,{...factory,level:level===0?1:2});
     return {level: level + 1};
   }
 
-  start(epoch: number, member: CityMember, now: number, rush: boolean): {jobId: string; readyAt: number; fee: number} {
+  start(epoch: number, member: CityMember, now: number, rush: boolean, site:string): {jobId: string; readyAt: number; fee: number} {
     this.requireOfficer(member);
-    const level = this.factory().level;
+    const {level}=this.factory(site),{recipe,capacity,durationMs}=cityProductionProfile(site);
     if (!level) throw Error("city_factory_required");
     if (this.running(epoch)) throw Error("city_job_running");
     const fee = rush ? CITY_RUSH_GOLD : 0;
     if (rush && this.marketGold(member.id) < fee) throw Error("city_market_funds");
-    this.consumeRaw(epoch, member.id, CITY_RECIPE);
-    if (this.used(epoch) + CITY_RECIPE.quantity > CITY_CAPACITY) throw Error("city_storage_full");
-    const jobId = randomUUID(), readyAt = now + (rush ? CITY_DURATION_MS[level] / 2 : CITY_DURATION_MS[level]);
+    this.consumeRaw(epoch, member.id, recipe);
+    if (this.used(epoch) + recipe.quantity > capacity) throw Error("city_storage_full");
+    const jobId = randomUUID(), readyAt = now + (rush ? durationMs[level] / 2 : durationMs[level]);
     this.db.prepare(`INSERT INTO city_jobs(id,epoch,guild,ready,wood,stone,quantity,status,fee)
-      VALUES(?,?,?,?,?,?,?,'running',?)`).run(jobId, epoch, member.id, readyAt, CITY_RECIPE.wood, CITY_RECIPE.stone, CITY_RECIPE.quantity, fee);
+      VALUES(?,?,?,?,?,?,?,'running',?)`).run(jobId, epoch, member.id, readyAt, recipe.wood, recipe.stone, recipe.quantity, fee);
     return {jobId, readyAt, fee};
   }
 
@@ -182,7 +205,7 @@ export class CityProduction {
 
   reclaim(epoch: number, member: CityMember, item: CityItem, amount: number): void {
     this.requireOfficer(member);
-    if (this.epoch() === epoch) throw Error("city_stock_active");
+    if (this.activeFactorySite(epoch)) throw Error("city_stock_active");
     this.take(epoch, member.id, item, amount);
   }
 
@@ -199,7 +222,7 @@ export class CityProduction {
   }
 
   /** The guild store has recorded the irrevocable intent. The caller holds the economy transaction. */
-  disband(disband: CityDisband, ownership: CityOwnership): void {
+  disband(disband: CityDisband, readOwnership:(previous:number|null,site:string)=>CityOwnership): void {
     const {guild, actor, name, requested} = disband;
     const closedBy = this.closureActor(guild);
     if (closedBy !== undefined) {
@@ -208,8 +231,11 @@ export class CityProduction {
     }
     const running = this.db.prepare("SELECT * FROM city_jobs WHERE guild=? AND status='running'").all(guild) as Job[];
     for (const job of running) {
-      const owner = ownership.active?.id === job.epoch ? ownership.active : ownership.previous;
-      if (owner?.guild !== guild || job.epoch !== this.epoch()) throw Error("city_ownership_unavailable");
+      const site=this.activeFactorySite(job.epoch);
+      if(!site)throw Error("city_ownership_unavailable");
+      const ownership=readOwnership(job.epoch,site);
+      const owner=ownership.active?.id===job.epoch?ownership.active:ownership.previous;
+      if(owner?.guild!==guild)throw Error("city_ownership_unavailable");
       const cutoff = "ended" in owner ? Math.min(requested, owner.ended) : requested;
       if (job.ready <= cutoff) this.completeJob(job);
       else this.cancelJob(job);
@@ -247,26 +273,28 @@ export class CityProduction {
     if (!updated.changes) throw Error("city_claim_unavailable");
   }
 
-  view(member: CityMember, ownership: CityOwnership) {
-    const {epoch, level} = this.factory();
+  view(member: CityMember, ownership: CityOwnership, site=CITY_PRODUCTION_SITE) {
+    const {epoch,level}=this.factory(site),{recipe,capacity,durationMs}=cityProductionProfile(site);
     const ownEpoch = ownership.active?.guild === member.id ? epoch : null;
     const stock = this.db.prepare(`SELECT epoch,item,quantity FROM city_stock
       WHERE guild=? AND epoch=? ORDER BY item`).all(member.id, ownEpoch) as Stock[];
     const reclaim = this.db.prepare(`SELECT epoch,item,quantity FROM city_stock
-      WHERE guild=? AND epoch IS NOT ? ORDER BY epoch,item LIMIT 60`).all(member.id, epoch) as Stock[];
+      WHERE guild=? AND NOT EXISTS (SELECT 1 FROM city_factory f WHERE f.epoch=city_stock.epoch)
+        AND NOT EXISTS (SELECT 1 FROM city_other_factories f WHERE f.epoch=city_stock.epoch)
+      ORDER BY epoch,item LIMIT 60`).all(member.id) as Stock[];
     const listings = this.db.prepare(`SELECT id,seller_guild AS guild,seller_name AS name,city_epoch AS epoch,
       json_extract(item,'$.quantity') AS quantity,price FROM listings WHERE seller_guild=? AND state='open' ORDER BY rowid DESC`)
       .all(member.id) as GuildListing[];
     const job = ownEpoch === null ? undefined : this.running(ownEpoch);
     return {
       epoch: ownEpoch, level, stock: stock.map(row => ({...row})), reclaim: reclaim.map(row => ({...row})),
-      listings: listings.map(row => ({...row})), capacity: CITY_CAPACITY,
+      listings: listings.map(row => ({...row})), capacity,
       used: ownEpoch === null ? 0 : this.used(ownEpoch), marketGold: this.marketGold(member.id),
       officer: member.officer, job: job ? {id: job.id, readyAt: job.ready, fee: job.fee} : null,
       costs: level === 2 ? null : CITY_FACTORY_COSTS[level],
-      recipe: {inputs: [{item: CITY_RAW_ITEMS[0], amount: CITY_RECIPE.wood}, {item: CITY_RAW_ITEMS[1], amount: CITY_RECIPE.stone}],
-        output: CITY_PRODUCT, amount: CITY_RECIPE.quantity, durationMs: CITY_DURATION_MS[level],
-        rush: level ? {gold: CITY_RUSH_GOLD, durationMs: CITY_DURATION_MS[level] / 2} : null},
+      recipe: {inputs: [{item: CITY_RAW_ITEMS[0], amount: recipe.wood}, {item: CITY_RAW_ITEMS[1], amount: recipe.stone}],
+        output: CITY_PRODUCT, amount: recipe.quantity, durationMs: durationMs[level],
+        rush: level ? {gold: CITY_RUSH_GOLD, durationMs: durationMs[level] / 2} : null},
     };
   }
 }

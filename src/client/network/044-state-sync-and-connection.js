@@ -276,7 +276,7 @@
         if(drawerActive==="strategy"){updateAtlasOwner();updateAtlasWarTimes();}
         if(drawerActive==="guild")renderGuild();
         const local=message.local;
-        if(local?.site===activeMapId){
+        if(local?.site===activeMapId && (!local.civic || local.inField)){
           const title=ui.quest.querySelector("strong");
           const fighting=local.inField && local.phase==="battle";
           ui.quest.classList.toggle("war-hud",fighting);
@@ -299,6 +299,12 @@
       joined.onMessage("territory_error",message=>{
         if(room!==joined)return;
         toast(activeMapId==="sam_lan_estuary" && message?.reason==="war_flag"?"เดินเข้าค่ายใต้ A เพื่อเปิดศึก":warErrors[message?.reason] || "ทำรายการที่ด่านไม่ได้ในขณะนี้");
+      });
+      joined.onMessage("territory_registered",message=>{
+        if(room===joined)toast(message?.schedule?.memberIds?.length?"บันทึกรายชื่อศึกแล้ว":"ถอนการลงทะเบียนศึกแล้ว");
+      });
+      joined.onMessage("territory_route_result",message=>{
+        if(room===joined)toast(message?.status==="delivered"?"ส่งขบวนเสบียงแล้ว":message?.status==="cancelled"?"ยุติขบวนเสบียงแล้ว":"ออกขบวนเสบียงแล้ว");
       });
       joined.onMessage("territory_governed",message=>{
         if(room!==joined || !Number.isFinite(message?.delta))return;

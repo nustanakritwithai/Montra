@@ -1,7 +1,9 @@
 import {RIVER_CITY} from "./RiverCity.js";
+import {ALL_MAP_WARS_ENABLED,FRONTIER_WAR_FIELDS} from "./WarMapProfiles.js";
 
 export const CITY_PRODUCTION_SITE = RIVER_CITY;
 export const CITY_PRODUCTION_ENABLED = process.env.MONTRA_CITY_PRODUCTION === "1";
+export const MULTI_CITY_PRODUCTION_ENABLED = process.env.MONTRA_MULTI_CITY_PRODUCTION === "1";
 export const CITY_RAW_ITEMS = ["mat_raw_wood_1", "mat_raw_stone_1"] as const;
 export const CITY_PRODUCT = "mat_metal_1";
 export const CITY_ITEMS = [...CITY_RAW_ITEMS, CITY_PRODUCT] as const;
@@ -16,6 +18,30 @@ export const CITY_RECIPE = {wood: 1, stone: 2, quantity: 1};
 export const CITY_CAPACITY = 60;
 export const CITY_DURATION_MS = [0, 120_000, 60_000] as const;
 export const CITY_RUSH_GOLD = 15;
+
+type CityProfile = {
+  capacity:number; durationMs:readonly [number,number,number]; recipe:{wood:number;stone:number;quantity:number};
+};
+const defaultProfile:CityProfile={capacity:CITY_CAPACITY,durationMs:CITY_DURATION_MS,recipe:CITY_RECIPE};
+const profiles:Readonly<Record<string,CityProfile>>={
+  [RIVER_CITY]:defaultProfile,
+  moon_pass:{capacity:60,durationMs:[0,90_000,45_000],recipe:{wood:1,stone:2,quantity:1}},
+  river_watch:{capacity:80,durationMs:[0,150_000,75_000],recipe:{wood:1,stone:2,quantity:1}},
+  mantra_capital:{capacity:90,durationMs:[0,120_000,60_000],recipe:{wood:1,stone:2,quantity:1}},
+  ritual_village:{capacity:45,durationMs:[0,180_000,90_000],recipe:{wood:1,stone:1,quantity:1}},
+  tri_wiang_castle:{capacity:75,durationMs:[0,150_000,75_000],recipe:{wood:1,stone:2,quantity:1}},
+};
+const frontierProfiles:Readonly<Record<"small"|"medium"|"large",CityProfile>>={
+  small:{capacity:40,durationMs:[0,150_000,75_000],recipe:CITY_RECIPE},
+  medium:defaultProfile,
+  large:{capacity:80,durationMs:[0,100_000,50_000],recipe:CITY_RECIPE},
+};
+export const CITY_PRODUCTION_SITES=[...Object.keys(profiles),...(ALL_MAP_WARS_ENABLED?Object.keys(FRONTIER_WAR_FIELDS):[])];
+export function cityProductionProfile(site:string):CityProfile {
+  if(Object.hasOwn(profiles,site))return profiles[site];
+  if(Object.hasOwn(FRONTIER_WAR_FIELDS,site))return frontierProfiles[FRONTIER_WAR_FIELDS[site].size];
+  throw Error("city_location");
+}
 
 export type CityOrder = {requestId: string} & (
   {action: "build" | "start" | "start_fast"; epoch: number} |

@@ -2,11 +2,13 @@ import {MIXED_SKILLS_ENABLED,hotbarState,hotbarSchool,availableHotbarSlot,valida
 import { FORGE_CATALOG } from "./ForgeRules.js";
 import { accounts } from "./AccountService.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
-import { WAR_SIDE_SIZE, WAR_HOLD, WAR_PARTICIPATION_INTERVAL_MS, WAR_SUPPLY_INTERVAL_MS, warSites, warEntryDamageFactor, warParticipationExperience, type Battlefield, type WarSide } from "./TerritoryWar.js";
+import { WAR_PARTICIPATION_INTERVAL_MS, WAR_SUPPLY_INTERVAL_MS, warSites, getWarDefinition, warEntryDamageFactor, warParticipationExperience, type Battlefield, type WarSide } from "./TerritoryWar.js";
 import {parseGovernmentOrder} from "./TerritoryGovernment.js";
+import {parseWarRegistration,SCHEDULED_WARS_ENABLED} from "./WarSchedule.js";
+import {parseRouteOrder} from "./WarRoutes.js";
 import { RIDGE_PASS } from "./GroundTerrain.js";
 import {RIVER_CITY,riverNodes,riverPosts,riverSupplied} from "./RiverCity.js";
-import {CASTLE_ID,CASTLE_SEATS,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
+import {CASTLE_ID,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
 import { Encoder, StateView } from "@colyseus/schema";
 import { randomUUID,randomInt } from "node:crypto";
 import {FISH_BITE_DELAY,FISH_DURATION,advanceFishing,fishItem,pullFish,validateFishingPosition,type FishingSession} from "./Fishing.js";
@@ -75,7 +77,7 @@ import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js"
 import { parseSellMaterial, parseSalvage, parseCraft, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseMarketBrowse, parseAuctionCreate, parseAuctionBid, parseAuctionAction, parseAuctionCredit, parseStarterSupply, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
-import {CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE, parseCityOrder, type CityOrder} from "./CityProductionRules.js";
+import {CITY_PRODUCTION_ENABLED,CITY_PRODUCTION_SITE,CITY_PRODUCTION_SITES,MULTI_CITY_PRODUCTION_ENABLED,parseCityOrder,type CityOrder} from "./CityProductionRules.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
 import type { MonsterTier } from "./MonsterProfiles.js";
@@ -93,15 +95,35 @@ import { mapsWithServiceNpcs, serviceNpcsFor } from "./ServiceNpcs.js";
 
 const mapsWithServices=mapsWithServiceNpcs();
 const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices}):"";
-function syncCityProduction(now: number) {
+function cityProductionAvailableAt(site:string):boolean {
+  return site===CITY_PRODUCTION_SITE || MULTI_CITY_PRODUCTION_ENABLED &&
+    CITY_PRODUCTION_SITES.includes(site) && !!getWarDefinition(site);
+}
+function syncCityProduction(now:number,requested?:string) {
   const guilds = guildStore(), store = characterStore.economy;
   const pending = guilds.pendingCityDisbands();
   for (const disband of pending) guilds.settleCityDisband(store, disband);
   if (pending.length) notifyGuilds();
-  return store.syncCity(previous => guilds.war.government.cityOwnership(previous), now);
+  const government=guilds.war.government,sites=requested?[requested]:government.citySites();
+  return sites.map(site=>{
+    if(getWarDefinition(site))guilds.war.inspect(site,now);
+    return store.syncCity(previous=>government.cityOwnership(previous,site),now,site);
+  })[0];
 }
-const battlefieldWorldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:WORLD_MAPS},
-  (key,value)=>key==="boss" && value?.id?.startsWith("boss_")?undefined:value):"";
+function encodeBattleWorld(maps:Readonly<Record<string,unknown>>):string {
+  return JSON.stringify({version:1,maps},(key,value)=>key==="boss" && value?.id?.startsWith("boss_")?undefined:value);
+}
+const battlefieldWorldDefinition=WORLD_EXPANSION?encodeBattleWorld(WORLD_MAPS):"";
+const isolatedBattleWorldDefinitions=new Map<string,string>();
+for(const site of Object.keys(warSites)){
+  const arena=getWarDefinition(site)?.isolated,map=WORLD_MAPS[site];
+  if(!arena || !map)continue;
+  const restAreas=[{...arena.attack,radius:4,name:"ฐานฝ่ายบุก"},{...arena.defend,radius:4,name:"ฐานฝ่ายรับ"}];
+  const strategic=map.strategic && {...map.strategic,safeRoads:[],relay:arena.relay,sites:[arena.flag]};
+  isolatedBattleWorldDefinitions.set(site,encodeBattleWorld({
+    ...WORLD_MAPS,[site]:{...map,strategic,battlefield:true,portals:[],restAreas,camps:[],boss:undefined,guardian:undefined},
+  }));
+}
 const swordTreeCatalog=JSON.stringify({core:SWORD_CORE,coreLevels:MUAY_CORE_LEVELS,corePointLevels:MUAY_CORE_POINT_LEVELS,coreManaPerRank:1,coreProgress:Array.from({length:9},(_,rank)=>swordCoreProgress(rank)),schools:SWORD_SCHOOLS,nodes:SWORD_NODES,pvpDamage:SWORD_PVP_DAMAGE_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SWORD_RANKABLE_SKILLS});
 const muayBookCatalog=JSON.stringify({core:MUAY_CORE,coreLevels:MUAY_CORE_LEVELS,corePointLevels:MUAY_CORE_POINT_LEVELS,coreManaPerRank:MUAY_CORE_MANA_PER_RANK,coreProgress:Array.from({length:MUAY_CORE_LEVELS.length+1},(_,rank)=>muayCoreProgress(rank)),skills:MUAY_SKILLS,lessons:MUAY_LESSONS,base:MUAY_BASE_SKILLS,schools:MUAY_SCHOOLS,combos:MUAY_COMBOS,followups:MUAY_FOLLOWUPS,masteryGuides:MUAY_MASTERY_GUIDES,masteryLabels:MUAY_MASTERY_LABELS,masteryRequirements:MUAY_MASTERY_REQUIREMENTS,pvpDamage:MUAY_PVP_DAMAGE_MULTIPLIER,pvpCombo:MUAY_PVP_COMBO_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:MUAY_RANKABLE_SKILLS});
 // Reserve static UTF-8 catalogs separately from player/monster replication.
@@ -150,6 +172,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private simulatedMs = 0;
   private field?:Battlefield;
   private warSeats=new Map<string,{guild:string;side:WarSide;camp:number}>();
+  private warCivilianPositions=new Map<string,Pick<CharacterSnapshot,"mapId"|"x"|"y"|"z">>();
   private warParticipation=new Map<string,{sample:number;activeMs:number;supplyMs:number;lastAction:number;lastObjective:number;lastSupport?:number}>();
   private warCargo=new Map<string,{seq:number;token:string;x:number;z:number;started:number}>();
   private warClients=new Set<string>();
@@ -330,15 +353,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private sameCombatMap(ownerId: string, targetId: string, allowConcealed=false, allowProtected=false): boolean {
     const owner = this.state.players.get(ownerId);
     if (!owner || this.pendingWarps.has(ownerId) || this.pendingWarps.has(targetId)) return false;
-    if (isRestArea(owner.mapId, owner)) return false;
+    if (this.isProtectedArea(owner.mapId, owner)) return false;
     const monster = this.getMonster(targetId);
-    if (monster) return owner.mapId === monster.mapId && !isRestArea(monster.mapId, monster);
+    if (monster) return owner.mapId === monster.mapId && !this.isProtectedArea(monster.mapId, monster);
     if(!allowProtected && this.priestProtected(targetId))return false;
     if(this.field && (!this.battleActive || this.warSeats.get(ownerId)?.side===this.warSeats.get(targetId)?.side))return false;
     if (!this.field && this.parties.get(ownerId)?.members.includes(targetId)) return false;
     const target = this.state.players.get(targetId);
     if(!allowConcealed && target && this.bladeHiddenFrom(ownerId,targetId)) return false;
-    return Boolean(target && target.mapId === owner.mapId && !isRestArea(target.mapId,target));
+    return Boolean(target && target.mapId === owner.mapId && !this.isProtectedArea(target.mapId,target));
   }
 
   private blockMounted(client:Client):boolean {
@@ -1133,9 +1156,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     const dx=target.x-player.x,dz=target.z-player.z,length=Math.hypot(dx,dz), nx=length>0.001 ? dx/length : -Math.sin(player.facing),nz=length>0.001 ? dz/length : -Math.cos(player.facing);
     const next={x:target.x+nx*1.5,y:target.y,z:target.z+nz*1.5},map=getWorldMap(target.mapId);
-    if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(target),false,target.mapId) || isRestArea(target.mapId,next) || !this.bodyPathClear(target.mapId,target,next) ||
+    if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(target),false,target.mapId) || this.isProtectedArea(target.mapId,next) || !this.bodyPathClear(target.mapId,target,next) ||
       (monster && (monster.id===RULES.monsterId ? !isMonsterSegmentClear(monster,next) : !this.forest.canDisplace(monster.id,next))))return this.reject(client,"muay_throw_blocked");
-    const sweep=advanceDash(target,{dx:nx,dz:nz},1.5,(x,z)=>this.canOccupy(x,z,surfaceLayer(target),false,target.mapId) && !isRestArea(target.mapId,{x,z}),map.bounds);
+    const sweep=advanceDash(target,{dx:nx,dz:nz},1.5,(x,z)=>this.canOccupy(x,z,surfaceLayer(target),false,target.mapId) && !this.isProtectedArea(target.mapId,{x,z}),map.bounds);
     if(sweep.blocked || sweep.moved<1.4999)return this.reject(client,"muay_throw_blocked");
     this.moveOnSurface(target,next.x,next.z);
     this.releaseMuayGrapple(id,"thrown");this.recordCombat(id,hold.targetId);this.recordMuayTraining(id,"strikes");
@@ -1288,7 +1311,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const actor=this.spellCaster(client),book=this.sentinelBooks.get(id);
     if(!actor || !book)return;
     if(actor.pathId!=="sentinel" || !this.persistentCharacters.has(id))return this.reject(client,"sentinel_class_required");
-    if(actor.flying || !onMapGround(actor) || isRestArea(actor.mapId,actor))return this.reject(client,"sentinel_location");
+    if(actor.flying || !onMapGround(actor) || this.isProtectedArea(actor.mapId,actor))return this.reject(client,"sentinel_location");
     if(Date.now()<(book.cooldowns[skillId] ?? 0))return this.reject(client,"sentinel_cooldown");
     const rank=book.coreRanks?.[skillId] ?? 0,p=sentinelCoreProgress(rank),cost=skill.stamina+rank;
     if(actor.mana<cost)return this.reject(client,"insufficient_mana");
@@ -1356,7 +1379,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(actor.pathId!=="sentinel" || !this.persistentCharacters.has(id))return this.reject(client,"sentinel_class_required");
     if(!book.learned.includes(skillId) || !this.advancedEquipped(id,skillId,book.slots.includes(skillId)) || skill.effect==="passive")return this.reject(client,"sentinel_skill_locked");
     if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
-    if(actor.flying || !onMapGround(actor) || isRestArea(actor.mapId,actor))return this.reject(client,"sentinel_location");
+    if(actor.flying || !onMapGround(actor) || this.isProtectedArea(actor.mapId,actor))return this.reject(client,"sentinel_location");
     if(Date.now()<(book.cooldowns[skillId] ?? 0))return this.reject(client,"sentinel_cooldown");
     if(actor.mana<skill.stamina)return this.reject(client,"insufficient_mana");
     if(skill.effect==="counter" && this.simulatedMs>=(this.sentinelCounters.get(id) ?? 0))return this.reject(client,"sentinel_counter_required");
@@ -1393,8 +1416,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       next={x:actor.x+vx*travel,y:actor.y,z:actor.z+vz*travel};
       next.y=groundAt(actor.mapId,next.x,next.z)+surfaceLayer(actor);
       const map=getWorldMap(actor.mapId);
-      if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(actor),false,actor.mapId) || isRestArea(actor.mapId,next) || !this.bodyPathClear(actor.mapId,actor,next))return this.reject(client,"sentinel_blocked");
-      if(travel>0.00001){const sweep=advanceDash(actor,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,surfaceLayer(actor),false,actor.mapId) && !isRestArea(actor.mapId,{x,z}),map.bounds);
+      if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(actor),false,actor.mapId) || this.isProtectedArea(actor.mapId,next) || !this.bodyPathClear(actor.mapId,actor,next))return this.reject(client,"sentinel_blocked");
+      if(travel>0.00001){const sweep=advanceDash(actor,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,surfaceLayer(actor),false,actor.mapId) && !this.isProtectedArea(actor.mapId,{x,z}),map.bounds);
         if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"sentinel_blocked");}
     }
     if(!this.spendSkillMana(client,actor,skill.stamina,offensive?[targetId]:[],allies.map(([member])=>member)))return;book.cooldowns[skillId]=Date.now()+skill.cooldownMs;
@@ -1454,7 +1477,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!book.learned.includes("cloak") || !this.advancedEquipped(id,"cloak",book.slots.includes("cloak"))) return this.reject(client,"blade_skill_locked");
     if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id)) return this.reject(client,"character_busy");
     if(this.bladeCloaks.has(id)) return this.reject(client,"blade_cloak_active");
-    if(player.flying || !onMapGround(player) || isRestArea(player.mapId,player)) return this.reject(client,"blade_cloak_location");
+    if(player.flying || !onMapGround(player) || this.isProtectedArea(player.mapId,player)) return this.reject(client,"blade_cloak_location");
     if(this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<2000) return this.reject(client,"blade_cloak_combat");
     const lesson=BLADE_LESSONS.cloak;
     if(Date.now()<(book.cooldowns.cloak ?? 0)) return this.reject(client,"blade_cooldown");
@@ -1509,7 +1532,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const player=this.spellCaster(client),book=this.bladeBooks.get(id);
     if(!player || !book)return;
     if(player.pathId!=="blade" || !this.persistentCharacters.has(id))return this.reject(client,"blade_class_required");
-    if(player.flying || !onMapGround(player) || isRestArea(player.mapId,player))return this.reject(client,"blade_cloak_location");
+    if(player.flying || !onMapGround(player) || this.isProtectedArea(player.mapId,player))return this.reject(client,"blade_cloak_location");
     if(this.bladeWindups.has(id) || this.bladeCasts.has(id))return this.reject(client,"blade_windup_active");
     if(Date.now()<(book.cooldowns[skillId] ?? 0))return this.reject(client,"blade_cooldown");
     const rank=book.coreRanks?.[skillId] ?? 0,p=bladeCoreProgress(rank),cost=skill.stamina+rank;
@@ -1546,7 +1569,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(hit && skillId==="blade_withdraw" && player.alive){
         const dx=player.x-target.x,dz=player.z-target.z,length=Math.hypot(dx,dz),map=getWorldMap(player.mapId);
         if(map){const direction=length>.001?{dx:dx/length,dz:dz/length}:{dx:-Math.sin(player.facing),dz:-Math.cos(player.facing)};
-          const sweep=advanceDash(player,direction,p.blade_withdraw.distance,(x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !isRestArea(player.mapId,{x,z}) && this.bodyPathClear(player.mapId,player,{x,y:player.y,z}),map.bounds);
+          const sweep=advanceDash(player,direction,p.blade_withdraw.distance,(x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !this.isProtectedArea(player.mapId,{x,z}) && this.bodyPathClear(player.mapId,player,{x,y:player.y,z}),map.bounds);
           if(sweep.moved>0){this.moveOnSurface(player,sweep.x,sweep.z);this.bladeRetreatUntil.set(id,this.simulatedMs+500);}
         }
       }
@@ -1569,7 +1592,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(player.pathId!=="blade" || !this.persistentCharacters.has(id))return this.reject(client,"blade_class_required");
     if(this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id))return this.reject(client,"character_busy");
     if(!book.learned.includes(skillId) || !this.advancedEquipped(id,skillId,book.slots.includes(skillId)) || skill.effect==="passive")return this.reject(client,"blade_skill_locked");
-    if(player.flying || !onMapGround(player) || isRestArea(player.mapId,player))return this.reject(client,"blade_cloak_location");
+    if(player.flying || !onMapGround(player) || this.isProtectedArea(player.mapId,player))return this.reject(client,"blade_cloak_location");
     if(this.bladeWindups.has(id))return this.reject(client,"blade_windup_active");
     const now=Date.now();if(now<(book.cooldowns[skillId] ?? 0))return this.reject(client,"blade_cooldown");
     if(player.mana<skill.stamina)return this.reject(client,"insufficient_mana");
@@ -1597,8 +1620,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const length=Math.hypot(dx,dz),travel=skill.effect==="approach" ? Math.max(0,length-1.7) : 1.2;
       const vx=length>0.001?dx/length:0,vz=length>0.001?dz/length:0;
       const next={x:player.x+vx*travel,y:player.y,z:player.z+vz*travel},map=getWorldMap(player.mapId);
-      if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"blade_blocked");
-      if(travel>0.00001){const sweep=advanceDash(player,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !isRestArea(player.mapId,{x,z}),map.bounds);
+      if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || this.isProtectedArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"blade_blocked");
+      if(travel>0.00001){const sweep=advanceDash(player,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !this.isProtectedArea(player.mapId,{x,z}),map.bounds);
         if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"blade_blocked");}
       this.startSkillAction(id,player,"idle");this.moveOnSurface(player,next.x,next.z);
     }
@@ -1634,7 +1657,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for(const [id,until] of this.bladeCasts)if(this.simulatedMs>=until){
       this.bladeCasts.delete(id);
       const player=this.state.players.get(id),client=this.clients.find(c=>c.sessionId===id);
-      if(!player?.alive || player.pathId!=="blade" || !client || this.pendingWarps.has(id) || isRestArea(player.mapId,player)){
+      if(!player?.alive || player.pathId!=="blade" || !client || this.pendingWarps.has(id) || this.isProtectedArea(player.mapId,player)){
         if(player?.alive)player.combatState="idle";
         continue;
       }
@@ -1887,7 +1910,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const caster=this.spellCaster(client),book=this.occultBooks.get(id);
     if(!caster || !book)return;
     if(caster.pathId!=="seer")return this.reject(client,"occult_wrong_path");
-    if(isRestArea(caster.mapId,caster))return this.reject(client,"occult_blocked");
+    if(this.isProtectedArea(caster.mapId,caster))return this.reject(client,"occult_blocked");
     if(skillId==="seer_binding"){
       const previous=[...this.seerBindings].find(([,binding])=>binding.ownerId===id);
       if(previous){this.releaseSeerBinding(previous[0],"released");return;}
@@ -2441,7 +2464,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!link || !victim)return damage;
     const owner=this.state.players.get(link.ownerId),party=this.parties.get(id);
     if(this.simulatedMs>=link.until || !owner?.alive || owner.pathId!=="sentinel" || !party?.members.includes(link.ownerId) ||
-       owner.mapId!==victim.mapId || distance3d(owner,victim)>6 || isRestArea(owner.mapId,owner) ||
+       owner.mapId!==victim.mapId || distance3d(owner,victim)>6 || this.isProtectedArea(owner.mapId,owner) ||
        this.pendingWarps.has(link.ownerId) || this.pendingItemUses.has(link.ownerId) || this.pendingRewards.has(link.ownerId) ||
        this.pendingCharacterLeaves.has(link.ownerId)){
       this.sentinelInterceptions.delete(id);return damage;
@@ -2506,7 +2529,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const actor=this.spellCaster(client),book=this.muayBooks.get(id),cooldowns=this.muayCooldowns.get(id);
     if(!actor || !book || !cooldowns)return;
     if(actor.pathId!=="muay_boran" || !wearsWraps(equippedWeaponId(this.inventories.get(id))))return this.reject(client,"muay_wrap_required");
-    if(actor.flying || !onMapGround(actor) || isRestArea(actor.mapId,actor))return this.reject(client,"muay_safe_area");
+    if(actor.flying || !onMapGround(actor) || this.isProtectedArea(actor.mapId,actor))return this.reject(client,"muay_safe_area");
     if(this.muayCoreSequences.has(id))return this.reject(client,"muay_controlled");
     const rank=book.coreRanks?.[skillId] ?? 0,progress=muayCoreProgress(rank),follow=this.muayCoreFollowups.get(id);
     if(skillId==="lopburi" && follow && this.simulatedMs<follow.until) {
@@ -2539,7 +2562,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const dir={dx:intent.x/length,dz:intent.z/length},map=getWorldMap(actor.mapId)!;
       let position={x:actor.x,z:actor.z},total=0;
       while(total+.00001<travel) {
-        const step=advanceDash(position,dir,travel-total,(x,z)=>this.canOccupy(x,z,surfaceLayer(actor),false,actor.mapId) && !isRestArea(actor.mapId,{x,z}),map.bounds);
+        const step=advanceDash(position,dir,travel-total,(x,z)=>this.canOccupy(x,z,surfaceLayer(actor),false,actor.mapId) && !this.isProtectedArea(actor.mapId,{x,z}),map.bounds);
         position={x:step.x,z:step.z};total+=step.moved;
         if(step.blocked || step.moved<.00001)break;
       }
@@ -2605,7 +2628,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!book) return this.reject(client,"muay_class_required");
     if (!this.advancedEquipped(id,skillId,book.slots.includes(skillId)) || !book.learned.includes(skillId as MuayLessonId) || (!isMuayFoundation(skillId) && MUAY_LESSONS[skillId as MuayLessonId].school!==book.school)) return this.reject(client,"muay_skill_locked");
     if (player.flying || !onMapGround(player)) return this.reject(client,"flying");
-    if (isRestArea(player.mapId,player)) return this.reject(client,"muay_safe_area");
+    if (this.isProtectedArea(player.mapId,player)) return this.reject(client,"muay_safe_area");
     const now=Date.now();
     if (now<(cooldowns[skillId] ?? 0)) return this.reject(client,"muay_cooldown");
     if (player.mana<skill.stamina) return this.reject(client,"insufficient_mana");
@@ -2630,8 +2653,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(skill.effect==="evade") {
       const dx=Math.sin(player.facing),dz=Math.cos(player.facing),distance=1.2;
       const next={x:player.x+dx*distance,y:player.y,z:player.z+dz*distance},map=getWorldMap(player.mapId);
-      if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"muay_blocked");
-      const sweep=advanceDash(player,{dx,dz},distance,(x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !isRestArea(player.mapId,{x,z}),map.bounds);
+      if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || this.isProtectedArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"muay_blocked");
+      const sweep=advanceDash(player,{dx,dz},distance,(x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !this.isProtectedArea(player.mapId,{x,z}),map.bounds);
       if(sweep.blocked || sweep.moved+0.00001<distance)return this.reject(client,"muay_blocked");
       this.startSkillAction(id,player,"idle");
       this.moveOnSurface(player,next.x,next.z);
@@ -2640,8 +2663,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(skill.effect==="retreat_strike" && target) {
       const dx=player.x-target.x,dz=player.z-target.z,length=Math.hypot(dx,dz),vx=length>0.001?dx/length:Math.sin(player.facing),vz=length>0.001?dz/length:Math.cos(player.facing),travel=1.2;
       const next={x:player.x+vx*travel,y:player.y,z:player.z+vz*travel},map=getWorldMap(player.mapId);
-      if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"muay_blocked");
-      const sweep=advanceDash(player,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !isRestArea(player.mapId,{x,z}),map.bounds);
+      if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || this.isProtectedArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next))return this.reject(client,"muay_blocked");
+      const sweep=advanceDash(player,{dx:vx,dz:vz},travel,(x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !this.isProtectedArea(player.mapId,{x,z}),map.bounds);
       if(sweep.blocked || sweep.moved+0.00001<travel)return this.reject(client,"muay_blocked");
       retreatPoint=next;
     }
@@ -2649,11 +2672,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const dx=target.x-player.x,dz=target.z-player.z,distance=Math.hypot(dx,dz),move=Math.max(0,distance-1.7);
       const side=skill.effect==="sidestep" || skill.effect==="counter_sidestep" ? (skillId==="lopburi_reverse" ? -0.8 : 0.8) : 0, divisor=Math.max(distance,0.001);
       const next={x:player.x+(dx*move-dz*side)/divisor,y:player.y,z:player.z+(dz*move+dx*side)/divisor};
-      if (!this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || isRestArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next)) return this.reject(client,"muay_blocked");
+      if (!this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || this.isProtectedArea(player.mapId,next) || !this.bodyPathClear(player.mapId,player,next)) return this.reject(client,"muay_blocked");
       const vx=next.x-player.x,vz=next.z-player.z,travel=Math.hypot(vx,vz);
       if (travel>0.00001) {
         const sweep=advanceDash(player,{dx:vx/travel,dz:vz/travel},travel,
-          (x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !isRestArea(player.mapId,{x,z}),getWorldMap(player.mapId)!.bounds);
+          (x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !this.isProtectedArea(player.mapId,{x,z}),getWorldMap(player.mapId)!.bounds);
         if (sweep.blocked || sweep.moved+0.00001<travel) return this.reject(client,"muay_blocked");
       }
       muayMoved=travel>0.1;
@@ -2777,7 +2800,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const actor=this.spellCaster(client),tree=this.swordTrees.get(id);
     if(!actor || !tree)return;
     if(actor.pathId!=="phutthaisawan" || !wearsTwinSwords(equippedWeaponId(this.inventories.get(id))))return this.reject(client,"sword_weapon_required");
-    if(actor.flying || !onMapGround(actor) || isRestArea(actor.mapId,actor))return this.reject(client,"sword_blocked");
+    if(actor.flying || !onMapGround(actor) || this.isProtectedArea(actor.mapId,actor))return this.reject(client,"sword_blocked");
     if(Date.now()<(tree.cooldowns[skillId] ?? 0))return this.reject(client,"sword_skill_cooldown");
     const rank=tree.coreRanks?.[skillId] ?? 0,progress=swordCoreProgress(rank),mana=skill.stamina+rank;
     if(actor.mana<mana)return this.reject(client,"insufficient_mana");
@@ -2800,7 +2823,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(travel>.001) {
         const direction={dx:dx/length,dz:dz/length},map=getWorldMap(actor.mapId)!;
         let position={x:actor.x,z:actor.z},total=0;
-        while(total+.00001<travel){const step=advanceDash(position,direction,travel-total,(x,z)=>this.canOccupy(x,z,surfaceLayer(actor),false,actor.mapId) && !isRestArea(actor.mapId,{x,z}),map.bounds);position={x:step.x,z:step.z};total+=step.moved;if(step.blocked || step.moved<.00001)break;}
+        while(total+.00001<travel){const step=advanceDash(position,direction,travel-total,(x,z)=>this.canOccupy(x,z,surfaceLayer(actor),false,actor.mapId) && !this.isProtectedArea(actor.mapId,{x,z}),map.bounds);position={x:step.x,z:step.z};total+=step.moved;if(step.blocked || step.moved<.00001)break;}
         if(total+.05<travel)return this.reject(client,"sword_blocked");
         this.moveOnSurface(actor,position.x,position.z);
       }
@@ -2882,12 +2905,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const move=Math.max(0,distance-1.7);
       const side=skillId==="circle_step" || skillId==="riposte" ? 0.8 : 0;
       const next={x:player.x+(dx*move-dz*side)/Math.max(distance,0.001),y:player.y,z:player.z+(dz*move+dx*side)/Math.max(distance,0.001)};
-      if (!this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || isRestArea(player.mapId,next) ||
+      if (!this.canOccupy(next.x,next.z,surfaceLayer(player),false,player.mapId) || this.isProtectedArea(player.mapId,next) ||
           !this.bodyPathClear(player.mapId,player,next)) return this.reject(client,"sword_blocked");
       const travelX=next.x-player.x, travelZ=next.z-player.z, travel=Math.hypot(travelX,travelZ);
       if (travel>0.00001) {
         const sweep=advanceDash(player,{dx:travelX/travel,dz:travelZ/travel},travel,
-          (x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !isRestArea(player.mapId,{x,z}),
+          (x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId) && !this.isProtectedArea(player.mapId,{x,z}),
           getWorldMap(player.mapId)!.bounds);
         if (sweep.blocked || sweep.moved+0.00001<travel) return this.reject(client,"sword_blocked");
       }
@@ -3339,7 +3362,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("economy_error",{reason});
     }
   }
-  private cityProductionAction(client: Client, order?: CityOrder, claimsOnly = false): void {
+  private cityProductionAction(client: Client, order?: CityOrder, claimsOnly = false, requestedSite?:string): void {
     const id = client.sessionId;
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
     const recovery = claimsOnly || order?.action === "disband" || order?.action === "claim_disband";
@@ -3349,8 +3372,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const actor = this.economyId(client, fail);
     if (!actor) return;
     const player = this.state.players.get(id)!;
-    const atCity = player.mapId === CITY_PRODUCTION_SITE && !player.flying && !this.climbs.has(id) && onMapGround(player);
-    if (needsCity && !atCity) return fail("city_location");
+    const site=requestedSite??(cityProductionAvailableAt(player.mapId)?player.mapId:CITY_PRODUCTION_SITE);
+    if(!cityProductionAvailableAt(site))return fail("city_location");
+    const atCity=player.mapId===site && !player.flying && !this.climbs.has(id) && onMapGround(player) &&
+      !this.pendingWarps.has(id) && !this.pendingCharacterLeaves.has(id);
+    if(needsCity && !atCity)return fail("city_location");
     try {
       const now = Date.now(), store = characterStore.economy, guilds = guildStore();
       if (recovery) {
@@ -3373,16 +3399,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         client.send("city_disband_claims", {assets});
         return;
       }
-      const ownership = syncCityProduction(now);
+      if(order?.action==="reclaim")syncCityProduction(now);
+      const ownership=syncCityProduction(now,site);
       const member = guilds.war.member(actor);
       if (!member) return fail("city_not_member");
       if (order) {
-        const result = store.cityOrder(actor, member, order, ownership, now);
+        const result = store.cityOrder(actor,member,order,ownership,now,site);
         if (order.action === "deposit" || order.action === "reclaim") this.syncEconomy(client, actor);
         client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
       }
-      client.send("city_production_state", {site: CITY_PRODUCTION_SITE, atCity, guildId: member.id, serverNow: now,
-        canDisband: member.commander && guilds.canDisbandCityGuild(actor, member.id), ...store.viewCity(member, ownership)});
+      client.send("city_production_state",{site,siteName:getWorldMap(site)?.name,atCity,guildId:member.id,serverNow:now,
+        canDisband:member.commander && guilds.canDisbandCityGuild(actor,member.id),...store.viewCity(member,ownership,site)});
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
       const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",
@@ -3448,6 +3475,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
+  private isProtectedArea(mapId:string,point:{x:number;z:number}):boolean {
+    const arena=this.field?.site===mapId?getWarDefinition(mapId)?.isolated:undefined;
+    return arena?[arena.attack,arena.defend].some(spawn=>planarDistance(point,spawn)<=4):isRestArea(mapId,point);
+  }
+
   private async enterTerritory(client:Client,start:boolean,message:unknown){
     const id=client.sessionId,p=this.state.players.get(id),character=this.persistentCharacters.get(id);
     if(!p || !character || !WORLD_EXPANSION || this.field || !this.warClients.has(id) ||
@@ -3459,26 +3491,30 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(p.mapId!==CASTLE_ID || !request || Object.keys(request).length!==1 || !(legacy?[2,4,5]:musterNodes).includes(request.objectiveId!))return this.reject(client,"invalid_request");
       point=request.objectiveId!;
     }
-    const fort=p.mapId===RIVER_CITY?riverNodes.A:warSites[p.mapId];
-    if(!fort || !p.alive || p.flying || this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
+    const rules=getWarDefinition(p.mapId);
+    if(!rules || !p.alive || p.flying || this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
        this.attackTargets.has(id) || [...this.attackTargets.values()].includes(id) ||
        this.simulatedMs-(this.lastCombatMs.get(id)??-Infinity)<WARP_COMBAT_LOCK_MS)
       return client.send("territory_error",{reason:"war_busy"});
     try{
       const war=guildStore().war,member=war.member(character);
       if(!member)throw Error("war_guild");
-      if(start && planarDistance(p,fort)>5)throw Error("war_flag");
-      const now=Date.now(),field=start?war.start(p.mapId,member,now):{site:p.mapId,seq:war.inspect(p.mapId,now).seq};
-      const side=war.side(field,member,now);
+      if(start && planarDistance(p,rules.entry)>5)throw Error("war_flag");
+      const now=Date.now();
+      if(!start)war.openScheduled(p.mapId,now);
+      const field=start?war.start(p.mapId,member,now):{site:p.mapId,seq:war.inspect(p.mapId,now).seq};
+      const side=war.side(field,member,now,false,character);
       const roomId=await battleRoom(field);
       if(!this.clients.includes(client) || !p.alive || p.mapId!==field.site)return;
       const ticket=randomUUID();
       for(const [who,entry] of admissions)if(entry.expires<=Date.now())admissions.delete(who);
       const target=matchMaker.getLocalRoomById(roomId);
       if(!(target instanceof MyRoom))throw Error("war_unavailable");
-      const occupied=[...target.warSeats.values()].filter(s=>s.side===side).length;
-      const reserved=[...admissions].filter(([who,s])=>who!==character && s.roomId===roomId && s.side===side).length;
-      if(occupied+reserved>=(field.site===CASTLE_ID?CASTLE_SEATS:WAR_SIDE_SIZE))throw Error("war_side_full");
+      if(rules.seatsPerSide!==null){
+        const occupied=[...target.warSeats.values()].filter(s=>s.side===side).length;
+        const reserved=[...admissions].filter(([who,s])=>who!==character && s.roomId===roomId && s.side===side).length;
+        if(occupied+reserved>=rules.seatsPerSide)throw Error("war_side_full");
+      }
       admissions.set(character,{roomId,ticket,side,point,guild:member.id,expires:Date.now()+30_000});
       client.send("territory_transfer",{roomId,ticket});
     }catch(error){
@@ -3488,7 +3524,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
   private useCityGate(client:Client,message:unknown){
-    if(!this.field)return;
+    if(!this.field || getWarDefinition(this.field.site)?.isolated)return;
     const castle=this.field.site===CASTLE_ID;
     const req=message as {gateId?:string;repair?:boolean}|null;
     const river=this.field.site===RIVER_CITY;
@@ -3540,8 +3576,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
   private nearWarObjective(p:Player):boolean {
     const field=this.field;if(!field)return false;
-    const strategic=WORLD_MAPS[field.site]?.strategic,relay=strategic?.relay;
-    if(strategic?.rampart?.gates.some(gate=>segmentIntersectsExpandedWall(p,p,gate.box,3.5)))return true;
+    const rules=getWarDefinition(field.site),relay=rules?.relay;
+    if(!rules?.isolated && WORLD_MAPS[field.site]?.strategic?.rampart?.gates.some(gate=>segmentIntersectsExpandedWall(p,p,gate.box,3.5)))return true;
     return field.site===CASTLE_ID ? castleObjectives.some(node=>planarDistance(p,node)<=CAPTURE_RADIUS) || forwardCamps.some(camp=>planarDistance(p,camp)<=CAPTURE_RADIUS)
       : field.site===RIVER_CITY ? riverPosts.some(post=>planarDistance(p,post)<=4)
       : Boolean(warSites[field.site] && planarDistance(p,warSites[field.site])<=5 || relay && planarDistance(p,relay)<=relay.radius);
@@ -3613,7 +3649,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
   private fieldCensus(){
     let attack=0,defend=0;
-    const field=this.field,relay=field && WORLD_MAPS[field.site].strategic?.relay;
+    const field=this.field,relay=field && getWarDefinition(field.site)?.relay;
     const relayHolders={attack:0,defend:0};
     const riverPresence=field?.site===RIVER_CITY?riverPosts.map(()=>({attack:0,defend:0})):undefined;
     const counts=field?.site===CASTLE_ID?castleObjectives.map(()=>({attack:0,defend:0})):undefined;
@@ -3664,7 +3700,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const war=guildStore().war,now=Date.now();
     try{
       const member=war.member(character);
-      if(!member || member.id!==seat.guild || war.side(field,member,now)!==seat.side)throw Error("war_supply_side");
+      if(!member || member.id!==seat.guild || war.side(field,member,now,false,character)!==seat.side)throw Error("war_supply_side");
       if((message as {action:string}).action==="pickup"){
         if(this.warCargo.has(id))throw Error("war_supply_carrying");
         if(now<war.supplyReadyAt(field,character))throw Error("war_supply_cooldown");
@@ -3733,7 +3769,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       war.advance(this.field,now,attack,defend,counts,this.previousPilotSample,relaySide,riverPresence);
       if(counts)this.previousPilotSample=now;
     }
-    const states=Object.fromEntries(Object.keys(warSites).map(site=>[site,war.inspect(site,now)]));
+    const states=Object.fromEntries(Object.keys(warSites).map(site=>{
+      war.openScheduled(site,now);
+      return [site,war.inspect(site,now)];
+    }));
     if(this.field){
       const s=states[this.field.site];this.battleActive=s.seq===this.field.seq && s.phase==="battle";
       const gates=s.river?.gates ?? s.pilot?.gates ?? s.gates;
@@ -3758,8 +3797,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const view=ownBattle?s?.pilot:undefined;
       const visiblePilot=view?.throne && s.phase==="battle"?{...view,points:view.points.map(point=>
         point.id>=4 && (!inField || !p.alive || planarDistance(p,castleObjectives[point.id-1])>18)?{...point,progress:0}:point)}:view;
-      const local=s?{site:p.mapId,phase:ownBattle?s.phase:"finished",owner:s.owner,attackName:s.attackName,defendName:s.defendName,
-        progress:Math.trunc(s.progress),goal:WAR_HOLD,seconds:s.seconds,attack,defend,inField,side:this.warSeats.get(c.sessionId)?.side,
+      const rules=getWarDefinition(p.mapId),arena=rules?.isolated;
+      const local=s?{site:p.mapId,civic:arena && {flag:arena.flag,relay:arena.relay,
+        durationMs:rules.durationMs,seatsPerSide:rules.seatsPerSide},phase:ownBattle?s.phase:"finished",owner:s.owner,attackName:s.attackName,defendName:s.defendName,
+        progress:Math.trunc(s.progress),goal:s.goal,seconds:s.seconds,attack,defend,inField,side:this.warSeats.get(c.sessionId)?.side,
         pilot:visiblePilot,river:inField && ownBattle && s.river?{...s.river,supplied:seat && riverSupplied(s.river,seat.side)}:undefined,
         supply:supply?{...supply,selected:seat!.camp,atBase:this.canMarch(c.sessionId)}:undefined,
         cargo:inField && this.battleActive && seat && character && member?.id===seat.guild?{
@@ -3770,14 +3811,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           progressSeconds:Math.floor((this.warParticipation.get(c.sessionId)?.activeMs ?? 0)/1000),
           supportActive:this.simulatedMs-(this.warParticipation.get(c.sessionId)?.lastSupport ?? -Infinity)<=10_000,
           goalSeconds:WAR_PARTICIPATION_INTERVAL_MS/1000}:undefined,
-        relay:inField && ownBattle && this.battleActive && WORLD_MAPS[p.mapId].strategic?.relay?{side:relaySide,contested}:undefined,
+        relay:inField && ownBattle && this.battleActive && getWarDefinition(p.mapId)?.relay?{side:relaySide,contested}:undefined,
         government:!inField && member && member.id===s.ownerId?war.government.view(p.mapId,member,now):undefined,
         gateHp:s.gateHp,gateClosed:inField && this.battleActive && !s.river && !s.pilot && this.closedFieldGates.size>0,
         gates:inField && !s.river && !s.pilot?s.gates:undefined,
         canStart:!inField && s.phase==="open" && member?.officer===true && member.id!==s.ownerId,
-        canJoin:!inField && s.phase==="battle" && !!member && (member.id===s.attacker || member.id===s.defender || (!s.owner && !s.defendName && member.officer))}:null;
-      const engagements=!inField && member ? Object.entries(states).filter(([,state])=>state.phase==="battle" && (state.attacker===member.id || state.defender===member.id)).map(([site,state])=>({site,side:state.attacker===member.id?"attack":"defend"})) : [];
-      const payload={owners,local,teams,engagements,warTimes,serverNow:now},signature=JSON.stringify({owners,local,teams,engagements,warTimes});
+        canJoin:!inField && s.phase==="battle" && !!member && war.rosterAllows(s.seq,member,character) && (member.id===s.attacker || member.id===s.defender || (!s.owner && !s.defendName && member.officer))}:null;
+      const engagements=!inField && member ? Object.entries(states).filter(([,state])=>state.phase==="battle" && war.rosterAllows(state.seq,member,character) && (state.attacker===member.id || state.defender===member.id)).map(([site,state])=>({site,side:state.attacker===member.id?"attack":"defend"})) : [];
+      const schedule=!inField && SCHEDULED_WARS_ENABLED?Object.fromEntries(Object.keys(warSites)
+        .map(site=>[site,war.scheduleView(site,now,member)])):undefined;
+      const routes=!inField && character?war.routeView(character,p.mapId,now):undefined;
+      const payload={owners,local,teams,engagements,warTimes,schedule,routes,serverNow:now};
+      const signature=JSON.stringify({owners,local,teams,engagements,warTimes,schedule,routes});
       if(signature!==this.warSent.get(c.sessionId)){c.send("territory_state",payload);this.warSent.set(c.sessionId,signature);}
     }
   }
@@ -3821,7 +3866,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     territory_camp:(client:Client,message:unknown)=>this.orderCamp(client,message),
     territory_supply:(client:Client,message:unknown)=>this.orderWarCargo(client,message),
     get_city_production:(client:Client,message:unknown)=>{
-      if (parseEmptyCommand(message)) this.cityProductionAction(client);
+      if(parseEmptyCommand(message)){this.cityProductionAction(client);return;}
+      const value=message as {site?:unknown}|null;
+      if(value && typeof value==="object" && Object.keys(value).length===1 && typeof value.site==="string")
+        this.cityProductionAction(client,undefined,false,value.site);
     },
     get_city_disband_claims:(client:Client,message:unknown)=>{
       if (parseEmptyCommand(message)) this.cityProductionAction(client, undefined, true);
@@ -3833,6 +3881,40 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     get_territories:(client:Client,message:unknown)=>{
       if(parseEmptyCommand(message) && this.warClients.has(client.sessionId) && this.gates.get(client.sessionId)?.guild.consume(this.simulatedMs))this.warSent.delete(client.sessionId);
+    },
+    territory_route:(client:Client,message:unknown)=>{
+      const id=client.sessionId,p=this.state.players.get(id),character=this.persistentCharacters.get(id),order=parseRouteOrder(message);
+      if(!order)return this.reject(client,"invalid_request");
+      if(!WORLD_EXPANSION || this.field || !character || !p?.alive || p.flying || !onMapGround(p) ||
+        this.climbs.has(id) || this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) || !this.warClients.has(id))
+        return client.send("territory_error",{reason:"war_route_unavailable"});
+      if(!this.gates.get(id)?.guild.consume(this.simulatedMs))return this.reject(client,"guild_rate_limited");
+      try{
+        const route=guildStore().war.routeOrder(character,p.mapId,order,Date.now());
+        client.send("territory_route_result",route);
+        this.warSent.delete(id);this.nextWarSample=0;
+        notifyGuilds();
+      }catch(error){
+        const reason=error instanceof Error?error.message:"";
+        if(!reason.startsWith("war_"))console.error("MONTRA route",error);
+        client.send("territory_error",{reason:reason.startsWith("war_")?reason:"war_unavailable"});
+      }
+    },
+    territory_register:(client:Client,message:unknown)=>{
+      const id=client.sessionId,character=this.persistentCharacters.get(id),order=parseWarRegistration(message);
+      if(!order)return this.reject(client,"invalid_request");
+      if(!WORLD_EXPANSION || this.field || !character || this.pendingCharacterLeaves.has(id) || !this.warClients.has(id))
+        return client.send("territory_error",{reason:"war_schedule_unavailable"});
+      if(!this.gates.get(id)?.guild.consume(this.simulatedMs))return this.reject(client,"guild_rate_limited");
+      try{
+        const schedule=guildStore().war.register(character,order,Date.now());
+        client.send("territory_registered",{site:order.site,schedule});
+        this.warSent.delete(id);this.nextWarSample=0;
+      }catch(error){
+        const reason=error instanceof Error?error.message:"";
+        if(!reason.startsWith("war_"))console.error("MONTRA registration",error);
+        client.send("territory_error",{reason:reason.startsWith("war_")?reason:"war_unavailable"});
+      }
     },
     territory_start:(client:Client,message:unknown)=>{void this.enterTerritory(client,true,message);},
     territory_join:(client:Client,message:unknown)=>{void this.enterTerritory(client,false,message);},
@@ -4503,7 +4585,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.activeDashes.has(id)) return this.reject(client, "dashing");
       if (this.flightTransitions.has(id)) return this.reject(client, "flight_in_progress");
       const flightMap=getWorldMap(player.mapId);
-      if (!player.flying && (flightMap?.region?.noFlight || flightMap?.strategic?.kind==="territory")) return this.reject(client, "flight_forbidden");
+      if (!player.flying && (this.field?.site===player.mapId || flightMap?.region?.noFlight || flightMap?.strategic?.kind==="territory")) return this.reject(client, "flight_forbidden");
       if (!this.gates.get(id)?.flight.consume(this.simulatedMs)) {
         return this.reject(client, "flight_rate_limited");
       }
@@ -4689,7 +4771,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       // During a wind-up only change the next basic target, never the skill already in flight.
       if (this.basicAttackPaused(attackerId)) return;
-      if (isRestArea(attacker.mapId,attacker) || distance3d(attacker, target) > attackRange) {
+      if (this.isProtectedArea(attacker.mapId,attacker) || distance3d(attacker, target) > attackRange) {
         attacker.combatState = "approaching";
         client.send("combat_notice", { reason: "approaching" });
       } else {
@@ -5002,7 +5084,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (fromPot && !reachable(target)) continue;
       return { targetId, target };
     }
-    if (!fromPot || isRestArea(owner.mapId, owner)) return null;
+    if (!fromPot || this.isProtectedArea(owner.mapId, owner)) return null;
 
     // With no combat order the pot spirit hunts the nearest reachable monster.
     let nearest: Monster | undefined;
@@ -5048,7 +5130,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     if(!state.waypoint)return;
     const next=stepTowards(guardian,state.waypoint,RULES.summonMoveSpeed*dt),y=groundAt(owner.mapId,next.x,next.z);
-    if(!this.canOccupy(next.x,next.z,0,false,owner.mapId) || (isRestArea(owner.mapId,next) && !isRestArea(owner.mapId,owner) && !isRestArea(owner.mapId,guardian)) || Math.abs(y-guardian.y)>.6 ||
+    if(!this.canOccupy(next.x,next.z,0,false,owner.mapId) || (this.isProtectedArea(owner.mapId,next) && !this.isProtectedArea(owner.mapId,owner) && !this.isProtectedArea(owner.mapId,guardian)) || Math.abs(y-guardian.y)>.6 ||
       !this.combatSegmentClear(owner.mapId,guardian,{x:next.x,y,z:next.z}) || !this.bodyPathClear(owner.mapId,guardian,{x:next.x,y,z:next.z})){state.waypoint=null;state.forceDetour=true;state.nav.clear();return;}
     guardian.x=next.x;guardian.y=y;guardian.z=next.z;
   }
@@ -5249,13 +5331,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     },3000);
     if(options?.warRoomKey===warRoomKey && options.field){
+      const rules=getWarDefinition(options.field.site);
+      if(!rules)throw Error("war_unknown");
       this.field=options.field;
-      if(this.field.site===CASTLE_ID)this.maxClients=CASTLE_SEATS*2;
+      guildStore().war.resumeScheduledField(this.field,Date.now());
+      this.maxClients=rules.seatsPerSide===null?Infinity:rules.seatsPerSide*2;
       await this.setPrivate(true);
     }
     this.state.territoryWarAvailable=WORLD_EXPANSION;
     if (characterStore.economyEnabled && !this.field &&
-        ((CITY_PRODUCTION_ENABLED && WORLD_EXPANSION) || guildStore().pendingCityDisbands().length))
+        ((CITY_PRODUCTION_ENABLED && WORLD_EXPANSION) || guildStore().pendingCityDisbands().length ||
+          guildStore().war.government.citySites().length>1))
       characterStore.economy.startCityProductionSweeper(syncCityProduction);
     this.state.forestObjectivesAvailable=WORLD_EXPANSION && !this.field;
     if(WORLD_EXPANSION && !this.field && process.env.MONTRA_DIRECTOR_ENABLED!=="0")worldDirector.restore();
@@ -5267,9 +5353,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.cityProductionAvailable = this.state.cityRecoveryAvailable && WORLD_EXPANSION && CITY_PRODUCTION_ENABLED;
     if(characterStore.economyEnabled && !this.field)this.clock.setInterval(()=>this.sendResources(),5000);
     if(characterStore.economyEnabled)this.clock.setInterval(()=>this.tickFishing(),500);
-    this.forest.initialize(!this.field);
+    if(!this.field || !isolatedBattleWorldDefinitions.has(this.field.site))this.forest.initialize(!this.field);
     if(!this.field && WORLD_EXPANSION)this.clock.setInterval(()=>this.sampleHuntEvent(),10_000);
-    this.state.worldDefinition=this.field?battlefieldWorldDefinition:worldDefinition;
+    this.state.worldDefinition=this.field
+      ? isolatedBattleWorldDefinitions.get(this.field.site)??battlefieldWorldDefinition : worldDefinition;
     this.state.swordTreeCatalog = swordTreeCatalog;
     this.state.muayBookCatalog = muayBookCatalog;
     this.state.monster.id = RULES.monsterId;
@@ -5327,7 +5414,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updateBladeEffects();
     for(const [id,until] of this.bladeCloaks) {
       const player=this.state.players.get(id);
-      if(!player?.alive || player.pathId!=="blade" || isRestArea(player.mapId,player))this.endBladeCloak(id,"safe_area");
+      if(!player?.alive || player.pathId!=="blade" || this.isProtectedArea(player.mapId,player))this.endBladeCloak(id,"safe_area");
       else if(this.simulatedMs>=until)this.endBladeCloak(id,"expired");
     }
     this.updateTerritory();
@@ -5533,7 +5620,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           this.endAttack(sessionId, player);
           continue;
         }
-        const inRestArea=isMonster && isRestArea(player.mapId,player);
+        const inRestArea=isMonster && this.isProtectedArea(player.mapId,player);
         const clearShot = !ranged || this.combatSegmentClear(player.mapId,player,target);
         if (!inRestArea && distance <= attackRange && clearShot) {
           player.combatState = "attacking";
@@ -5623,7 +5710,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       if(!isMonster && this.priestProtected(targetId))continue;
 
-      if (isMonster && isRestArea(attacker.mapId,attacker)) continue;
+      if (isMonster && this.isProtectedArea(attacker.mapId,attacker)) continue;
       const ranged = isOccultPath(attacker.pathId);
       const range = ranged ? FORT.rangedRange : isMonster ? RULES.playerAttackRange : RULES.pkAttackRange;
       if (distance3d(attacker,target)>range+.00001 || !this.combatSegmentClear(attacker.mapId,attacker,target))continue;
@@ -5809,14 +5896,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // Keep an existing target if it is alive and remains in the combat area.
     let targetId = monster.targetId;
     let target = targetId ? this.state.players.get(targetId) : undefined;
-    if (!target || !target.alive || this.pendingWarps.has(targetId) || (this.bladeCloaks.has(targetId) && planarDistance(monster,target)>(this.bladeBooks.get(targetId)?.learned.includes("quiet_step")?0.75:1.5)) || target.mapId !== DEFAULT_MAP_ID || isRestArea(target.mapId,target) || !onMapGround(target) ||
+    if (!target || !target.alive || this.pendingWarps.has(targetId) || (this.bladeCloaks.has(targetId) && planarDistance(monster,target)>(this.bladeBooks.get(targetId)?.learned.includes("quiet_step")?0.75:1.5)) || target.mapId !== DEFAULT_MAP_ID || this.isProtectedArea(target.mapId,target) || !onMapGround(target) ||
         planarDistance(monster, target) > RULES.monsterGiveUpRadius) {
       target = undefined;
       targetId = "";
     }
     const taunt=this.sentinelLegacyTaunt,forced=this.state.players.get(taunt.ownerId);
     if(this.simulatedMs<taunt.until && forced?.alive && forced.mapId===DEFAULT_MAP_ID &&
-       !this.pendingWarps.has(taunt.ownerId) && !isRestArea(forced.mapId,forced) &&
+       !this.pendingWarps.has(taunt.ownerId) && !this.isProtectedArea(forced.mapId,forced) &&
        onMapGround(forced) && !this.bladeCloaks.has(taunt.ownerId) && planarDistance(monster,forced)<=RULES.monsterGiveUpRadius){
       target=forced;targetId=taunt.ownerId;
     }else if(this.simulatedMs>=taunt.until || !forced?.alive){taunt.ownerId="";taunt.until=0;}
@@ -5825,7 +5912,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!target) {
       let nearest: number = RULES.monsterAggroRadius;
       for (const [id, player] of this.state.players) {
-        if (!player.alive || this.pendingWarps.has(id) || (this.bladeCloaks.has(id) && planarDistance(monster,player)>(this.bladeBooks.get(id)?.learned.includes("quiet_step")?0.75:1.5)) || player.mapId !== DEFAULT_MAP_ID || isRestArea(player.mapId,player) || !onMapGround(player)) continue;
+        if (!player.alive || this.pendingWarps.has(id) || (this.bladeCloaks.has(id) && planarDistance(monster,player)>(this.bladeBooks.get(id)?.learned.includes("quiet_step")?0.75:1.5)) || player.mapId !== DEFAULT_MAP_ID || this.isProtectedArea(player.mapId,player) || !onMapGround(player)) continue;
         const distance = planarDistance(monster, player);
         if (distance < nearest) {
           nearest = distance;
@@ -5874,7 +5961,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const dx = waypoint.x-monster.x;
     const dz = waypoint.z-monster.z;
     const next = stepTowards(monster, waypoint, step);
-    if (!next.moved || isRestArea(DEFAULT_MAP_ID,next) || !isMonsterSegmentClear(monster, next)) return;
+    if (!next.moved || this.isProtectedArea(DEFAULT_MAP_ID,next) || !isMonsterSegmentClear(monster, next)) return;
 
     monster.facing = facingTo(dx,dz);
     monster.x = clampToMap(next.x);
@@ -5883,9 +5970,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private monsterAttack(targetId: string, target: Player) {
-    if (isRestArea(DEFAULT_MAP_ID,this.state.monster)) return;
+    if (this.isProtectedArea(DEFAULT_MAP_ID,this.state.monster)) return;
     if (this.priestProtected(targetId)) return;
-    if (!target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID || isRestArea(target.mapId,target)) return;
+    if (!target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID || this.isProtectedArea(target.mapId,target)) return;
     if (distance3d(this.state.monster, target) > RULES.monsterAttackRange) return;
     if (this.simulatedMs - this.lastMonsterAttackMs < RULES.monsterAttackCooldownMs) return;
     this.lastMonsterAttackMs = this.simulatedMs;
@@ -5957,7 +6044,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private canPursueBasic(id:string, player:Player, targetId:string, monster:Monster|undefined):boolean {
     // A PvE order can walk out of a rest area. Only the damage check requires both sides outside.
     if (!monster || !this.restApproachClients.has(id))return this.sameCombatMap(id,targetId,false,true);
-    return !this.pendingWarps.has(id) && player.mapId===monster.mapId && !isRestArea(monster.mapId,monster);
+    return !this.pendingWarps.has(id) && player.mapId===monster.mapId && !this.isProtectedArea(monster.mapId,monster);
   }
 
   private startSkillAction(id:string, player:Player, state:"idle"|"attacking") {
@@ -5988,6 +6075,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const player = this.state.players.get(id);
     const inventory = inventoryOverride ?? this.inventories.get(id);
     if (!characterId || !player || !inventory) return null;
+    const civilian=this.warCivilianPositions.get(id);
+    if(this.field && !civilian)return null;
     const scales=this.masteryScales.get(player)??{hp:1,mana:1};
     const pvpUntil=this.masteryMode(id)==="pvp"?Date.now()+Math.ceil(this.field?PROGRESSION.combatQuietMs:Math.max(0,PROGRESSION.combatQuietMs-(this.simulatedMs-(this.lastPvpMs.get(id)??-Infinity)))):0;
     const vitals=encodeMasteryVitals(hpOverride??player.hp,manaOverride??player.mana,scales.hp,scales.mana,pvpUntil);
@@ -5995,7 +6084,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       version: 1, id: characterId, name: player.characterName,
       level: player.level, experience: player.experience,
       pkKills: player.pkKills, pkDeaths: player.pkDeaths,
-      mapId: player.mapId,
+      mapId:civilian?.mapId??player.mapId,
       statAllocations: this.statAllocations.get(id) ?? emptyAllocations(),
       build: this.playerBuild(player) ?? undefined,
       rebirth: this.rebirthStates.get(id),
@@ -6013,10 +6102,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       muayWrapGranted: this.muayWrapGranted.has(id),
       stamina: player.stamina,
       ...vitals,
-      x: player.x,
-      // Keep stable flight altitude when a transition is mid-flight.
-      y: player.flying ? FLIGHT.altitude : getWorldMap(player.mapId)?.reliefLabels ? (isOnPlatform(surfaceLayer(player))?FORT.height:0) : player.y,
-      z: player.z,
+      x:civilian?.x??player.x,
+      // The civilian snapshot already uses the stored height coordinate system.
+      y:civilian?.y??(player.flying ? FLIGHT.altitude : getWorldMap(player.mapId)?.reliefLabels ? (isOnPlatform(surfaceLayer(player))?FORT.height:0) : player.y),
+      z:civilian?.z??player.z,
       inventory, updatedAt: new Date().toISOString(),
     };
   }
@@ -6061,7 +6150,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try {
       // Reserve before the asynchronous save lookup so simultaneous arrivals get different starts.
       const reserved = [...this.playerSpawn.values()];
-      const spawn = this.field?.site===CASTLE_ID ? VILLAGE_ARRIVALS[0] : VILLAGE_ARRIVALS.find(p => !reserved.some(other => other.x === p.x && other.z === p.z));
+      const spawn = this.field ? VILLAGE_ARRIVALS[0] : VILLAGE_ARRIVALS.find(p => !reserved.some(other => other.x === p.x && other.z === p.z));
       if (!spawn) throw new Error("world_room_full");
       this.playerSpawn.set(client.sessionId, spawn);
       const setup = fields.characterSetup && typeof fields.characterSetup === "object" && !Array.isArray(fields.characterSetup)
@@ -6106,20 +6195,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       let safeSpawn = mapId === DEFAULT_MAP_ID ? { ...spawn, y: 0 } : getSafeMapSpawn(mapId);
       if(this.field){
         const credential=characterId && admissions.get(characterId),war=guildStore().war,member=characterId && war.member(characterId);
-        if(!credential || credential.roomId!==this.roomId || credential.expires<=Date.now() ||
+        if(!saved || !credential || credential.roomId!==this.roomId || credential.expires<=Date.now() ||
            credential.ticket!==(options as Record<string,unknown>)?.warTicket || !member || mapId!==this.field.site)throw Error("war_admission");
-        const side=war.side(this.field,member,Date.now());
+        const side=war.side(this.field,member,Date.now(),false,characterId!);
         if(side!==credential.side || member.id!==credential.guild)throw Error("war_admission");
         const sideSize=[...this.warSeats.values()].filter(s=>s.side===side).length;
-        if(sideSize>=(mapId===CASTLE_ID?CASTLE_SEATS:WAR_SIDE_SIZE))throw Error("war_side_full");
-        war.side(this.field,member,Date.now(),true);admissions.delete(characterId!);
+        const rules=getWarDefinition(this.field.site)!;
+        if(rules.seatsPerSide!==null && sideSize>=rules.seatsPerSide)throw Error("war_side_full");
+        war.side(this.field,member,Date.now(),true,characterId!);admissions.delete(characterId!);
         const seat={guild:member.id,side,camp:0};
         this.warSeats.set(client.sessionId,seat);
-        if(mapId===CASTLE_ID){
+        this.warCivilianPositions.set(client.sessionId,{mapId,x:saved.x,y:saved.y,z:saved.z});
+        if(rules.isolated){
+          safeSpawn={...rules.isolated[side],y:0};
+        }else if(rules.mode==="castle"){
           const defended=war.inspect(mapId,Date.now()).pilot?.throne?.defended;
           safeSpawn=pilotSpawn(war.muster(this.field,characterId!,credential.point),side,sideSize,defended);
           seat.camp=war.campPreference(this.field,characterId!);
-        }else if(mapId===RIVER_CITY){
+        }else if(rules.mode==="river"){
           const node=side==="attack"?riverNodes.A:riverNodes.D;
           safeSpawn={x:node.x+sideSize*.6-1.2,y:0,z:node.z};
         }else{
@@ -6227,6 +6320,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     } catch (error) {
       this.warSeats.delete(client.sessionId);this.warClients.delete(client.sessionId);
       this.playerSpawn.delete(client.sessionId);
+      this.warCivilianPositions.delete(client.sessionId);
       if (accountId) releaseCharacter(accountId, client.sessionId);
       throw error;
     }
@@ -6335,6 +6429,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.lastStatusReadMs.delete(id);
       this.lastWeaponEquipMs.delete(id);
       this.playerSpawn.delete(id);
+      this.warCivilianPositions.delete(id);
       this.pendingCharacterLeaves.delete(id);
       this.persistentCharacters.delete(id);
       this.guestSlotIds.delete(id);
@@ -6411,6 +6506,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.pendingWarps.clear();
     this.playerRespawnAt.clear();
     this.playerSpawn.clear();
+    this.warCivilianPositions.clear();
     this.gates.clear();
     this.lastRejectNoticeMs.clear();
     this.monsterNavigator.clear();

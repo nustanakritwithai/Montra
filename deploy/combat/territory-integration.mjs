@@ -12,7 +12,7 @@ async function seed(i){
   const id=createHash("sha256").update(token(i)).digest("hex"),slots=Array(12).fill(null);
   slots[0]={itemId:"health_potion",quantity:2};slots[1]={itemId:"ritual_dagger",quantity:1};
   await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"War"+i,level:12,experience:0,pkKills:0,pkDeaths:0,
-    x:i===2?0:12,y:0,z:i===2?26:-36,hp:416,mapId:"moon_pass",build:{path:"seer",ancestry:"woodland"},
+    x:i===2?0:12,y:0,z:i===2?26:i===1?-33:-36,hp:416,mapId:"moon_pass",build:{path:"seer",ancestry:"woodland"},
     occultBook:{learned:{seer:["seer_mark","seer_curse"],mender:[]},loadouts:{seer:["seer_curse",null,null,null],mender:[null,null,null,null]},training:{seer:0,mender:0},cooldowns:{}},
     inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
 }
@@ -40,7 +40,9 @@ try{
   if(process.env.MONTRA_WAR_STAGE==="read"){
     const c=await join(1);const s=await event(c,"territory_state");
     assert.equal(s.owners.moon_pass,"Moon Banner");assert.equal(s.local.phase,"protected");
-    assert.equal(s.local.seconds,0);assert.ok(!JSON.stringify(s).match(/ended|nextAttack|unlock|cooldown/i));
+    assert.equal(s.local.seconds,0);
+    assert.deepEqual([c.me().x,c.me().z],[12,-33],"civilian position survives the war");
+    assert.ok(!JSON.stringify(s).match(/ended|nextAttack|unlock|cooldown/i));
     console.log("PASS restart preserves public owner and private cooldown");
   }else{
     for(let i=1;i<=8;i++)await seed(i);
@@ -52,6 +54,7 @@ try{
       const invite=await event(m,"guild_invitation");await send(m,"guild_accept",{inviteId:invite.inviteId},"guild_state",s=>s?.name==="Moon Banner");
       allies.push(m);await sleep(550);
     }
+    await event(a,"territory_state",s=>s.local?.canStart===true);
     await send(b,"territory_start",{},"territory_error",s=>s.reason==="war_flag");
     const attacker=await transfer(a,"territory_start");
     await assert.rejects(join(9,attacker.r.roomId,"forged"),/war_admission/);
@@ -109,7 +112,10 @@ try{
       await sleep(1100);
     }
     await walk(attacker,12,-36);
-    await event(attacker,"territory_state",s=>s.local?.progress>0);
+    // The defender can bank negative progress while entering and leaving the fort earlier.
+    // The attacker must first erase that lead before the displayed score becomes positive.
+    await event(attacker,"territory_state",s=>s.local?.attack===1 && s.local?.defend===0);
+    await event(attacker,"territory_state",s=>s.local?.progress>0,25000);
     const win=await event(attacker,"territory_state",s=>s.owners.moon_pass==="Moon Banner",75000);
     assert.equal(win.local.phase,"protected");assert.equal(win.owners.river_watch,null);
     const publicState=await event(outsider,"territory_state",s=>s.owners.moon_pass==="Moon Banner");
